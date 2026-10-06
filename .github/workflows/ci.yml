@@ -117,13 +117,39 @@ jobs:
           cache-from: type=gha,scope=${{ matrix.name }}
           cache-to: type=gha,mode=max,scope=${{ matrix.name }}
 
-# ─────────────────────────────────────────────────────────────────────────────
-# 배포는 아직 없음 (서버를 정하면 아래 job 을 추가)
-#
-#   deploy:
-#     needs: docker
-#     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-#     steps: ssh 로 VM 접속 → 레포의 docker-compose.yml · Caddyfile · .env 가 있는 폴더에서
-#            docker compose pull server web && docker compose up -d --no-build
-#   (.env 에 SERVER_IMAGE=ghcr.io/<owner>/<repo>-server:latest, WEB_IMAGE=…-web:latest 지정)
-# ─────────────────────────────────────────────────────────────────────────────
+  # ── 서버에 반영: 새 이미지가 올라간 뒤 서버에 접속해서 이미지를 받아 다시 띄움 (scripts/deploy.sh) ──
+  # 저장소 Settings → Secrets and variables → Actions 에 아래 값이 있어야 동작 (DEPLOY_HOST 가 없으면 건너뜀)
+  #   Variables: DEPLOY_HOST (서버 IP 또는 도메인), DEPLOY_USER (기본 ubuntu), DEPLOY_PATH (기본 app = ~/app)
+  #   Secrets:   DEPLOY_SSH_KEY (배포 전용 개인키. 공개키는 서버 ~/.ssh/authorized_keys 에)
+  deploy:
+    runs-on: ubuntu-latest
+    needs: docker
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.DEPLOY_HOST != ''
+    permissions:
+      contents: read
+      packages: read
+    concurrency:
+      group: deploy
+      cancel-in-progress: false
+    env:
+      TARGET: ${{ vars.DEPLOY_USER || 'ubuntu' }}@${{ vars.DEPLOY_HOST }}
+      APP_DIR: ${{ vars.DEPLOY_PATH || 'app' }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: SSH 준비
+        env:
+          KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          HOST: ${{ vars.DEPLOY_HOST }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "$HOST" > ~/.ssh/known_hosts
+      - name: 설정 파일·스크립트 복사
+        run: scp -i ~/.ssh/deploy_key -r docker-compose.yml Caddyfile scripts "$TARGET:$APP_DIR/"
+      # 이번 실행의 토큰으로만 이미지를 받음 (표준 입력으로 넘겨서 서버에 남기지 않음)
+      - name: 이미지 받아 다시 띄우기
+        env:
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: ssh -i ~/.ssh/deploy_key "$TARGET" "GHCR_USER='$GHCR_USER' bash '$APP_DIR/scripts/deploy.sh'" <<< "$GHCR_TOKEN"

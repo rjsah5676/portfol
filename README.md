@@ -71,7 +71,17 @@ npm run import:firestore -- --admin-email <관리자 이메일> --admin-password
 
 CI(`.github/workflows/ci.yml`): push·PR 마다 서버 테스트 + 프론트 린트·타입·빌드, main 에 push 되면 Docker 이미지 두 개(`ghcr.io/<계정>/<레포>-server`, `-web`)를 올림.
 이미지를 받아 쓰려면 `.env` 에 `SERVER_IMAGE`, `WEB_IMAGE` 를 적고 `docker compose pull && docker compose up -d --no-build`.
-서버에 자동으로 배포하는 단계는 아직 없음(워크플로 맨 아래 주석 참고).
+
+### 자동 배포
+
+main 에 push → 이미지가 올라간 뒤 `deploy` job 이 서버에 접속해 `scripts/deploy.sh` 를 실행(이미지 받기 → 바뀐 컨테이너만 다시 띄움).
+저장소 Settings → Secrets and variables → Actions 에 `DEPLOY_HOST`(Variable), `DEPLOY_SSH_KEY`(Secret)가 있어야 동작하고, 없으면 건너뜀.
+다시 띄우는 몇 초 동안 접속이 끊기고(자동 재연결), 진행 중이던 스케치·격투 방은 사라짐.
+
+### 백업
+
+`scripts/backup-db.sh` 가 DB 전체를 `~/backups` 에 뜨고 14일 지난 것은 지움. 매일 돌리는 등록 방법과 되돌리는 명령은 파일 맨 위 주석.
+백업 파일이 같은 서버에 있으므로 서버 자체가 날아가는 경우까지 대비하려면 Lightsail 스냅샷도 같이 켤 것.
 
 ## 참고
 
