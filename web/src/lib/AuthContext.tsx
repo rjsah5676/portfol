@@ -38,6 +38,8 @@ export interface Profile {
   visits: number;
   /** 지금까지 한 게임 수 */
   plays: number;
+  /** 직접 올린 프로필 사진 주소 ("/api/avatars/…", 없으면 null → 로그인 계정의 사진) */
+  avatar: string | null;
 }
 
 interface AuthState {
@@ -57,6 +59,8 @@ interface AuthState {
   setNick(nick: string): Promise<void>;
   /** 프로필(방문·게임 수)을 다시 받아옴 */
   refresh(): Promise<void>;
+  /** 프로필 사진 올리기 (null 이면 올린 사진을 지움) */
+  setAvatar(photo: Blob | null): Promise<void>;
 }
 
 const noop = async () => {};
@@ -70,6 +74,7 @@ const AuthContext = createContext<AuthState>({
   logout: noop,
   setNick: noop,
   refresh: noop,
+  setAvatar: noop,
 });
 
 interface Me {
@@ -156,6 +161,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setMe((m) => ({ admin: m?.admin ?? false, profile: res.profile }));
   }, []);
 
+  const setAvatar = useCallback(async (photo: Blob | null) => {
+    const res = await api<{ profile: Profile | null }>("/api/me/avatar", {
+      method: photo ? "PUT" : "DELETE",
+      auth: true,
+      ...(photo && { blob: photo }),
+    });
+    setMe((m) => ({ admin: m?.admin ?? false, profile: res.profile }));
+  }, []);
+
   const refresh = useCallback(async () => {
     const cur = auth.currentUser;
     if (!cur || cur.isAnonymous) return;
@@ -178,8 +192,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       logout,
       setNick,
       refresh,
+      setAvatar,
     };
-  }, [account, me, loading, login, logout, setNick, refresh]);
+  }, [account, me, loading, login, logout, setNick, refresh, setAvatar]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

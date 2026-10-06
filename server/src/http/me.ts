@@ -1,6 +1,7 @@
-import { Router, type Request } from "express";
+import express, { Router, type Request } from "express";
 import type { Deps } from "../deps";
 import { unauthenticated } from "../errors";
+import { AVATAR_MAX_BYTES, AVATAR_TYPES } from "../users";
 import { BOARDS } from "./rankings";
 import { h, ms, userOf } from "./util";
 
@@ -8,6 +9,8 @@ import { h, ms, userOf } from "./util";
  * 로그인한 사람 자신의 정보.
  *   GET /api/me            누구로 로그인했는지 + 프로필(별명·방문 횟수). 별명을 아직 안 정했으면 profile = null
  *   PUT /api/me/nick       별명 정하기(가입) · 바꾸기  { nick }
+ *   PUT /api/me/avatar     프로필 사진 올리기 (본문 = 사진 파일 그대로, JPG · PNG · WebP)
+ *   DELETE /api/me/avatar  올린 사진 지우기 (로그인 계정의 사진으로 돌아감)
  *   GET /api/me/summary    내 정보 페이지용: 게임별 최고 기록과 순위, 전적
  */
 export function meRouter({ db, auth, users }: Deps): Router {
@@ -37,6 +40,16 @@ export function meRouter({ db, auth, users }: Deps): Router {
   r.put(
     "/nick",
     h(async (req) => ({ profile: await users.setNick(await me(req), (req.body as { nick?: unknown } | undefined)?.nick) }))
+  );
+
+  r.put(
+    "/avatar",
+    express.raw({ type: AVATAR_TYPES, limit: AVATAR_MAX_BYTES + 1024 }),
+    h(async (req) => ({ profile: await users.setAvatar(await me(req), req.body) }))
+  );
+  r.delete(
+    "/avatar",
+    h(async (req) => ({ profile: await users.clearAvatar(await me(req)) }))
   );
 
   r.get(

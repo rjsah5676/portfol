@@ -70,6 +70,33 @@ describe("내 정보 · 별명", () => {
     expect(await visits()).toBe(1);
   });
 
+  it("프로필 사진: 올리면 주소가 생기고 누구나 볼 수 있음, 지우면 없어짐. 사진이 아닌 파일·큰 파일·비회원은 거절", async () => {
+    const token = await member("av1", "사진회원");
+    const put = (body: Buffer, type: string, t = token) =>
+      fetch(`${s.url}/api/me/avatar`, { method: "PUT", headers: { Authorization: `Bearer ${t}`, "Content-Type": type }, body: new Uint8Array(body) });
+    const png = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(64, 7)]);
+    const res = await put(png, "image/png");
+    expect(res.status).toBe(200);
+    const { profile } = (await res.json()) as any;
+    expect(profile.avatar).toMatch(/^\/api\/avatars\/av1\?v=\d+$/);
+    expect((await s.http("/api/me", { token })).body.profile.avatar).toBe(profile.avatar);
+    // 로그인 없이도 받아짐, 형식은 파일 내용 기준
+    const img = await fetch(s.url + profile.avatar);
+    expect(img.status).toBe(200);
+    expect(img.headers.get("content-type")).toBe("image/png");
+    expect(img.headers.get("cache-control")).toContain("immutable");
+    expect(Buffer.from(await img.arrayBuffer()).equals(png)).toBe(true);
+    // 거절: 사진이 아닌 내용(형식만 사진이라고 적음) · 너무 큼 · 별명 없는 회원 · 익명
+    expect((await put(Buffer.from("<script>alert(1)</script>"), "image/png")).status).toBe(400);
+    expect((await put(Buffer.concat([png, Buffer.alloc(210_000)]), "image/png")).status).toBeGreaterThanOrEqual(400);
+    expect((await put(png, "image/png", await memberToken("av-nonick"))).status).toBe(400);
+    expect((await put(png, "image/png", await s.token("av-anon"))).status).toBe(403);
+    // 지우기
+    const del = await s.http("/api/me/avatar", { method: "DELETE", token });
+    expect(del.body.profile.avatar).toBeNull();
+    expect((await fetch(`${s.url}/api/avatars/av1`)).status).toBe(404);
+  });
+
   it("관리자 계정은 처음 들어올 때 정해 둔 별명(이건모)이 자동으로 붙음", async () => {
     const res = await s.http("/api/me", { token: await s.adminToken() });
     expect(res.body).toMatchObject({ anonymous: false, admin: true, profile: { nick: "이건모" } });

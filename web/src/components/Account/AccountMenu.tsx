@@ -5,49 +5,18 @@ import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import Modal from "@/components/Modal/Modal";
 import { useModal } from "@/components/Modal/ModalProvider";
-import { useAuth, type Profile } from "@/lib/AuthContext";
+import { useAuth } from "@/lib/AuthContext";
+import Avatar from "./Avatar";
 import NickForm from "./NickForm";
 
 /*
  * 상단 오른쪽: login 글자 → (로그인 후) 관리자 링크 · 내 별명.
- * 별명에 마우스를 올리면(터치 기기는 누르면) 아래로 작은 메뉴가 열림: 이름(→ 내 정보) · 로그아웃 · 방문·게임 수.
+ * 사진·별명을 누르면 내 정보(/me). 마우스를 올리면(터치 기기는 옆의 ▾ 를 누르면) 아래로 작은 메뉴: 로그아웃 · 방문·게임 수.
  * Google 로 처음 로그인하면 별명을 정하는 창이 뜸 (닫아도 "별명 정하기"로 다시 열 수 있음).
  */
 
 const KR = "font-['Nanum_Gothic',sans-serif]";
 const hoverable = () => window.matchMedia("(hover: hover) and (pointer: fine)").matches;
-
-/** 프로필 동그라미: Google 계정 사진, 없거나 못 불러오면 별명 첫 글자 (관리자가 붙여 준 꾸밈이 있으면 그걸로) */
-function Avatar({
-  profile,
-  photo,
-  size,
-}: {
-  profile: Profile;
-  photo: string | null;
-  size: "sm" | "lg";
-}) {
-  const [broken, setBroken] = useState("");
-  const box = size === "sm" ? "h-7 w-7 text-xs" : "h-11 w-11 text-lg";
-  if (photo && broken !== photo)
-    return (
-      <img
-        src={photo}
-        alt=""
-        referrerPolicy="no-referrer"
-        onError={() => setBroken(photo)}
-        className={`shrink-0 rounded-full object-cover ${box}`}
-      />
-    );
-  return (
-    <span
-      aria-hidden="true"
-      className={`flex shrink-0 items-center justify-center rounded-full bg-[linear-gradient(135deg,#6C63FF,#2DD4BF)] ${KR} font-bold text-white ${box}`}
-    >
-      {profile.badge ?? [...profile.nick][0]}
-    </span>
-  );
-}
 
 /** 가입한 날부터 오늘까지 며칠째인지 (가입한 날 = 1일째) */
 const daysSince = (ms: number) => Math.max(1, Math.floor((Date.now() - ms) / 86_400_000) + 1);
@@ -163,29 +132,38 @@ export default function AccountMenu() {
                 hoverTimer.current = setTimeout(() => setOpen(false), 200);
               }}
             >
-              <button
-                type="button"
-                aria-haspopup="menu"
-                aria-expanded={open}
-                // 마우스는 올리면 열리므로 누를 때는 열어 두기만, 터치 기기는 누를 때마다 열고 닫음
-                onClick={() => setOpen((o) => (hoverable() ? true : !o))}
-                className={`group flex cursor-pointer items-center gap-2 py-1 transition-colors ${
-                  open || path === "/me" ? "text-white" : "text-white/75 hover:text-white"
-                }`}
-              >
-                <Avatar profile={profile} photo={account.photoURL} size="sm" />
-                <span className={`max-w-[6.5rem] truncate ${KR}`}>{profile.nick}</span>
-                <svg
-                  viewBox="0 0 12 12"
-                  className={`h-3 w-3 text-white/35 transition-transform ${open ? "rotate-180" : ""}`}
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  aria-hidden="true"
+              <div className="flex items-center">
+                <Link
+                  href="/me"
+                  title="내 정보"
+                  className={`flex items-center gap-2 py-1 transition-colors ${
+                    open || path === "/me" ? "text-white" : "text-white/75 hover:text-white"
+                  }`}
                 >
-                  <path d="M2.5 4.5L6 8L9.5 4.5" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              </button>
+                  <Avatar profile={profile} photo={account.photoURL} size="sm" />
+                  <span className={`max-w-[6.5rem] truncate ${KR}`}>{profile.nick}</span>
+                </Link>
+                <button
+                  type="button"
+                  aria-label="계정 메뉴"
+                  aria-haspopup="menu"
+                  aria-expanded={open}
+                  // 마우스는 올리면 열리므로 누를 때는 열어 두기만, 터치 기기는 누를 때마다 열고 닫음
+                  onClick={() => setOpen((o) => (hoverable() ? true : !o))}
+                  className="cursor-pointer py-2 pr-1 pl-1.5 text-white/35 transition-colors hover:text-white"
+                >
+                  <svg
+                    viewBox="0 0 12 12"
+                    className={`h-3 w-3 transition-transform ${open ? "rotate-180" : ""}`}
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    aria-hidden="true"
+                  >
+                    <path d="M2.5 4.5L6 8L9.5 4.5" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </button>
+              </div>
 
               {open && (
                 // pt-2: 버튼과 메뉴 사이로 마우스가 지나가도 안 닫히게 빈틈 없이 붙임

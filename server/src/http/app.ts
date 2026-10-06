@@ -46,6 +46,22 @@ export function createApp(deps: Deps, hooks: Pick<AdminHooks, "roomsDeleted">) {
     );
   }
 
+  // 회원이 올린 프로필 사진 (주소에 올린 시각이 붙어 있어서 오래 캐시해도 됨)
+  app.get("/api/avatars/:uid", (req, res, next) => {
+    deps.users
+      .avatarOf(String(req.params.uid))
+      .then((a) => {
+        if (!a) return void res.status(404).json({ error: { code: "NOT_FOUND", message: "찾을 수 없습니다." } });
+        res.set({
+          "Content-Type": a.type,
+          "X-Content-Type-Options": "nosniff",
+          "Cache-Control": req.query.v ? "public, max-age=31536000, immutable" : "public, max-age=300",
+        });
+        res.end(a.data);
+      })
+      .catch(next);
+  });
+
   const site = siteRouter(deps);
   app.use("/api/rankings", rankingsRouter(deps));
   app.use("/api/me", meRouter(deps));

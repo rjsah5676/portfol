@@ -4,6 +4,8 @@ import { ApiError, toApiError } from "./errors";
 interface Options {
   method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   body?: unknown;
+  /** 파일을 그대로 보낼 때 (body 대신). Content-Type 은 파일 형식 */
+  blob?: Blob;
   /** 로그인 토큰을 같이 보냄 (관리자 전용 요청) */
   auth?: boolean;
   /**
@@ -26,16 +28,17 @@ async function bearer(): Promise<Record<string, string>> {
 /** 백엔드 REST 호출. 2xx가 아니면 ApiError (서버에 못 닿으면 code = "NETWORK") */
 export async function api<T = void>(
   path: string,
-  { method = "GET", body, auth = false, next, timeoutMs }: Options = {}
+  { method = "GET", body, blob, auth = false, next, timeoutMs }: Options = {}
 ): Promise<T> {
   const headers: Record<string, string> = auth ? await bearer() : {};
-  if (body !== undefined) headers["Content-Type"] = "application/json";
+  if (blob) headers["Content-Type"] = blob.type;
+  else if (body !== undefined) headers["Content-Type"] = "application/json";
   let res: Response;
   try {
     res = await fetch(`${API_URL}${path}`, {
       method,
       headers,
-      body: body === undefined ? undefined : JSON.stringify(body),
+      body: blob ?? (body === undefined ? undefined : JSON.stringify(body)),
       ...(next ? { next } : {}),
       ...(timeoutMs ? { signal: AbortSignal.timeout(timeoutMs) } : {}),
     });

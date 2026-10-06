@@ -1,3 +1,4 @@
+import { Binary } from "mongodb";
 import type { AuthUser } from "./auth";
 import type { Config } from "./config";
 import type { Database } from "./db";
@@ -44,6 +45,8 @@ export interface UserDoc {
   /** 방문 횟수 (마지막으로 센 뒤 한동안은 다시 안 셈) */
   visits?: number;
   lastVisitAt?: Date;
+  /** 직접 올린 프로필 사진 (없으면 로그인 계정의 사진을 씀). at = 올린 시각 — 주소에 붙여 캐시를 가름 */
+  avatar?: { type: string; data?: Binary; at: number };
   stats?: UserStats;
 }
 
@@ -54,7 +57,21 @@ export interface Profile {
   visits: number;
   /** 지금까지 한 게임 수 (랭킹 게임 시작 + 온라인 대국·스케치·격투) */
   plays: number;
+  /** 직접 올린 프로필 사진 주소 (없으면 null) */
+  avatar: string | null;
 }
+
+/** 프로필 사진: 브라우저가 256px 로 줄여서 보내므로 넉넉히 200KB 까지 */
+export const AVATAR_MAX_BYTES = 200_000;
+export const AVATAR_TYPES = ["image/webp", "image/jpeg", "image/png"];
+/** 파일 앞머리로 실제 형식을 확인 (보낸 쪽이 적은 형식은 믿지 않음) */
+function imageType(b: Buffer): string | null {
+  if (b.length > 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return "image/jpeg";
+  if (b.length > 8 && b.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return "image/png";
+  if (b.length > 12 && b.toString("latin1", 0, 4) === "RIFF" && b.toString("latin1", 8, 12) === "WEBP") return "image/webp";
+  return null;
+}
+export const avatarPath = (uid: string, at: number) => `/api/avatars/${encodeURIComponent(uid)}?v=${at}`;
 
 /** 이 시간 안에 다시 들어온 것은 같은 방문으로 침 */
 const VISIT_GAP_MS = 30 * 60_000;
@@ -63,12 +80,13 @@ const sum = (o: Record<string, number | undefined> = {}) => Object.values(o).red
 const playsOf = (s: UserStats = {}) =>
   sum(s.plays) + Object.values(s.online ?? {}).reduce((a, r) => a + sum(r), 0) + (s.sketch?.games ?? 0) + (s.fight?.matches ?? 0);
 
-const toProfile = (d: UserDoc): Profile => ({
+const toProfile = (uid: string, d: UserDoc): Profile => ({
   nick: d.nick,
   badge: d.badge ?? null,
   createdAt: d.createdAt.getTime(),
   visits: d.visits ?? 0,
   plays: playsOf(d.stats),
+  avatar: d.avatar ? avatarPath(uid, d.avatar.at) : null,
 });
 
 /** 입력한 이름에서 표시 글자·제어 문자를 걷어냄 */
@@ -94,7 +112,8 @@ export function createUsers(db: Database, cfg: Pick<Config, "adminNick">) {
   const adminKey = cfg.adminNick.toLowerCase();
 
   async function docOf(uid: string): Promise<UserDoc | null> {
-    const d = (await col.findOne({ _id: uid })) as UserDoc | null;
+    // 사진 본문은 프로필을 읽을 때마다 가져올 필요가 없어서 뺌
+    const d = (await col.findOne({ _id: uid }, { projection: { "avatar.data": 0 } })) as UserDoc | null;
     cache.set(uid, d?.nick ?? null);
     if (cache.size > 20_000) cache.clear();
     return d;
@@ -131,7 +150,7 @@ export function createUsers(db: Database, cfg: Pick<Config, "adminNick">) {
           d = null; // 별명이 이미 쓰이고 있으면 직접 정하게 둠
         }
       }
-      return d ? toProfile(d) : null;
+      return d ? toProfile(user.uid, d) : null;
     },
 
     /** 별명 정하기(가입) · 바꾸기 */
@@ -158,7 +177,36 @@ export function createUsers(db: Database, cfg: Pick<Config, "adminNick">) {
       cache.set(user.uid, nick);
       await syncNames(user.uid, nick);
       renameHooks.forEach((f) => f(user.uid, nick));
-      return toProfile({ ...(cur ?? { email: user.email, createdAt: now, visits: 1 }), nick, nickKey, updatedAt: now } as UserDoc);
+      return toProfile(user.uid, { ...(cur ?? { email: user.email, createdAt: now, visits: 1 }), nick, nickKey, updatedAt: now } as UserDoc);
+    },
+
+    /** 프로필 사진 올리기 (별명을 정한 회원만). 형식은 파일 앞머리로 확인 */
+    async setAvatar(user: AuthUser, body: unknown): Promise<Profile> {
+      if (user.anonymous) throw forbidden("로그인이 필요합니다.");
+      if (!Buffer.isBuffer(body) || body.length === 0) throw bad("사진 파일을 보내주세요. (JPG · PNG · WebP)");
+      if (body.length > AVATAR_MAX_BYTES) throw bad("사진이 너무 커요.");
+      const type = imageType(body);
+      if (!type) throw bad("JPG · PNG · WebP 사진만 올릴 수 있어요.");
+      const at = Date.now();
+      const r = await col.updateOne({ _id: user.uid }, { $set: { avatar: { type, data: new Binary(body), at }, updatedAt: new Date(at) } });
+      if (!r.matchedCount) throw bad("별명을 먼저 정해주세요.");
+      return toProfile(user.uid, (await docOf(user.uid))!);
+    },
+
+    /** 올린 사진 지우기 → 로그인 계정의 사진으로 돌아감 */
+    async clearAvatar(user: AuthUser): Promise<Profile | null> {
+      if (user.anonymous) throw forbidden("로그인이 필요합니다.");
+      await col.updateOne({ _id: user.uid }, { $unset: { avatar: "" } });
+      const d = await docOf(user.uid);
+      return d ? toProfile(user.uid, d) : null;
+    },
+
+    /** 프로필 사진 파일 (누구나 볼 수 있음) */
+    async avatarOf(uid: string): Promise<{ type: string; data: Buffer } | null> {
+      const d = (await col.findOne({ _id: uid }, { projection: { avatar: 1 } })) as Pick<UserDoc, "avatar"> | null;
+      const a = d?.avatar;
+      if (!a?.data) return null;
+      return { type: a.type, data: Buffer.from(a.data.buffer) };
     },
 
     /** 방문 한 번 세기 (회원만). 마지막으로 센 지 30분이 안 됐으면 그대로 */

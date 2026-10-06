@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import Faded from "@/components/Faded";
+import AvatarForm from "@/components/Account/AvatarForm";
 import NickForm from "@/components/Account/NickForm";
 import { useAuth } from "@/lib/AuthContext";
 import { pointsOf } from "@/lib/aiScore";
@@ -145,6 +146,13 @@ export default function MyPage() {
             </button>
           </div>
         </div>
+
+        {profile && (
+          <section className={card}>
+            <div className={label}>프로필 사진</div>
+            <AvatarForm />
+          </section>
+        )}
 
         <section className={card}>
           <div className={label}>{profile ? "별명 바꾸기" : "별명 정하기"}</div>
