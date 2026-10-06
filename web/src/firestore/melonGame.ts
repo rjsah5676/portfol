@@ -7,6 +7,8 @@ const BOARD = "score";
 export interface MelonScore {
   id: string;
   name: string;
+  /** 회원의 기록인지 */
+  member: boolean;
   score: number;
   /** 달성 일자 (예전 기록은 없을 수 있음) */
   createdAt: Date | null;
@@ -16,6 +18,7 @@ export interface MelonScore {
 export interface MelonScoreRow {
   id: string;
   name: string;
+  member?: boolean;
   score: number;
   createdAt: number | null;
 }
@@ -23,6 +26,7 @@ export const MELON_SCORES_PATH = `/api/rankings/${BOARD}`;
 export const toMelonScore = (x: MelonScoreRow): MelonScore => ({
   id: x.id,
   name: x.name,
+  member: !!x.member,
   score: x.score,
   createdAt: toDate(x.createdAt),
 });

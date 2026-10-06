@@ -1,5 +1,6 @@
 "use client";
 
+import Nick from "@/components/Nick";
 import { useEffect, useRef, useState } from "react";
 import { CHAT_MAX, subscribeChat, type ChatMsg } from "@/realtime/sketch";
 
@@ -52,7 +53,9 @@ export default function SketchChat({
             </p>
           ) : (
             <p key={m.id} className="break-all text-white/80">
-              <span className={m.uid === uid ? "text-[#A9A3FF]" : "text-white/45"}>{m.nick}</span>{" "}
+              <span className={m.uid === uid ? "text-[#A9A3FF]" : "text-white/45"}>
+                <Nick name={m.nick} />
+              </span>{" "}
               {m.text}
             </p>
           )

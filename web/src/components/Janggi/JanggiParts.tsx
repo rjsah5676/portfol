@@ -1,5 +1,6 @@
 "use client";
 
+import Nick from "@/components/Nick";
 import { PieceGlyph, SIDE_COLOR } from "./JanggiBoard";
 import type { Color } from "@/lib/janggi/engine";
 
@@ -55,7 +56,7 @@ export function SideBar({
             {SIDE_KO[color]}
           </span>
           <span className="truncate font-['Nanum_Gothic',sans-serif] text-sm text-white/90">
-            {name}
+            <Nick name={name} />
           </span>
           <span className="shrink-0 font-mono text-[11px] text-white/40">{fmtScore(score)}점</span>
         </div>

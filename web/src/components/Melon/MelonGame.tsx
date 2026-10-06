@@ -29,6 +29,8 @@ import {
 } from "@/firestore/melonGame";
 import { useInitial } from "@/lib/api/InitialData";
 import { beginRun } from "@/lib/api/rankRun";
+import Nick from "@/components/Nick";
+import { useAutoRank } from "@/lib/useAutoRank";
 import {
   CELL,
   COLS,
@@ -581,6 +583,9 @@ export default function MelonGame() {
     }
   };
 
+  // 회원은 이름을 묻지 않고 끝나면 바로 등록 (서버가 내 최고 기록만 남김)
+  const auto = useAutoRank(phase === "over", (nick) => addMelonScore(nick, score).then(loadRanks));
+
   const secLeft = Math.max(0, (timeLeft / TIME_STEP) * (TICK_MS / 1000));
   const ratio = Math.max(0, Math.min(1, timeLeft / TIME_START));
   const low = phase === "play" && secLeft <= 10;
@@ -609,7 +614,9 @@ export default function MelonGame() {
           desc="합이 10·20이 되게 묶어 터뜨리는 2분 타임어택"
           guide={MELON_GUIDE}
           rank={{
-            top: ranks?.slice(0, 3).map((r) => ({ name: r.name, value: `${r.score}점` })),
+            top: ranks
+              ?.slice(0, 3)
+              .map((r) => ({ name: r.name, member: r.member, value: `${r.score}점` })),
             open: rankOpen,
             onOpenChange: setRankOpen,
             render: () =>
@@ -632,7 +639,11 @@ export default function MelonGame() {
                             <span className="text-white/35">{i + 1}</span>
                           )}
                         </span>
-                        <span className="flex-1 truncate text-white/85">{r.name}</span>
+                        <Nick
+                          name={r.name}
+                          guest={!r.member}
+                          className="flex-1 truncate text-white/85"
+                        />
                         <span className="w-14 text-right text-[#B6F36A] tabular-nums">
                           {r.score}점
                         </span>
@@ -785,7 +796,18 @@ export default function MelonGame() {
                   {score}
                   <span className="ml-1 text-2xl text-[#A3B98F]">점</span>
                 </div>
-                {qualifies && submitState !== "done" && (
+                {auto.member && auto.state !== "idle" && (
+                  <p
+                    className={`text-base ${auto.state === "error" ? "text-[#FF6B8A]" : "text-[#5BB53C]"}`}
+                  >
+                    {auto.state === "sending"
+                      ? "기록을 올리는 중…"
+                      : auto.state === "done"
+                        ? "내 기록에 반영했어요!"
+                        : "기록을 올리지 못했어요."}
+                  </p>
+                )}
+                {!auto.member && qualifies && submitState !== "done" && (
                   <form
                     className="flex flex-col items-center gap-2"
                     onSubmit={(e) => {

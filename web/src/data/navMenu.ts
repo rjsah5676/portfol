@@ -1,5 +1,4 @@
 import type { StaticImageData } from "next/image";
-import imgProject from "@/img/menu/project.jpg";
 import imgStudy from "@/img/menu/study.jpg";
 import imgRetro from "@/img/menu/retro.jpg";
 import imgMelongame from "@/img/menu/melongame.jpg";
@@ -29,6 +28,8 @@ export interface NavMenuItem {
   icon: string;
   /** 목록 페이지 카드 썸네일 (각 페이지 화면 캡처) */
   image: StaticImageData;
+  /** 메인에서 크게 보여 줄 항목 */
+  featured?: boolean;
 }
 
 export interface NavGroup {
@@ -44,19 +45,13 @@ export interface NavGroup {
 
 export const NAV_GROUPS: NavGroup[] = [
   {
-    key: "project",
-    label: "project",
+    // 프로젝트 목록(포트폴리오)은 메뉴에서 빼서 푸터에 둠 — /portfolio
+    key: "study",
+    label: "study",
     href: "/works",
-    title: "Project",
-    desc: "만든 것들과, 만들면서 공부하고 배운 것들.",
+    title: "Study",
+    desc: "공부하면서 정리한 개념과, 프로젝트에서 직접 겪고 배운 것들.",
     items: [
-      {
-        href: "/project",
-        image: imgProject,
-        label: "프로젝트",
-        desc: "팀·개인 프로젝트 모음",
-        icon: "🗂️",
-      },
       {
         href: "/study",
         image: imgStudy,
@@ -93,6 +88,7 @@ export const NAV_GROUPS: NavGroup[] = [
         label: "BEAT DASH",
         desc: "4키 리듬게임, 곡·난이도별 랭킹",
         icon: "🎹",
+        featured: true,
       },
       {
         href: "/games/fight",
@@ -100,6 +96,7 @@ export const NAV_GROUPS: NavGroup[] = [
         label: "PIXEL FIGHT",
         desc: "1:1 플랫폼 격투, AI 모드 · 2인 모드 · 온라인 모드",
         icon: "🥊",
+        featured: true,
       },
       {
         href: "/games/sketch",

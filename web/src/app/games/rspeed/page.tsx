@@ -13,7 +13,8 @@ import {
   type ReactionScoreRow,
 } from "@/firestore/reactionGame";
 import { useInitial } from "@/lib/api/InitialData";
-import { beginRun } from "@/lib/api/rankRun";
+import { beginRun, RANK_NAME_MAX } from "@/lib/api/rankRun";
+import { useAutoRank } from "@/lib/useAutoRank";
 
 const ROUNDS = 5;
 const MIN_DELAY = 1500;
@@ -29,7 +30,12 @@ function RankBox({ list, highlight }: { list: ReactionScore[]; highlight?: numbe
   return (
     <div className="mx-auto mb-10 max-w-sm rounded-2xl border border-white/10 bg-[#1C1E24] p-3 text-left">
       <RankList
-        rows={list.map((r) => ({ name: r.name, value: `${r.score}ms`, date: r.createdAt }))}
+        rows={list.map((r) => ({
+          name: r.name,
+          member: r.member,
+          value: `${r.score}ms`,
+          date: r.createdAt,
+        }))}
         highlight={highlight}
       />
     </div>
@@ -136,8 +142,8 @@ export default function RspeedPage() {
   const best = results.length ? Math.min(...results) : 0;
   const isRanked = phase === "done" && (list.length < 10 || avg < list[list.length - 1].score);
 
-  async function submitScore() {
-    const trimmed = name.trim();
+  async function submitScore(as = name) {
+    const trimmed = as.trim();
     if (!trimmed || trimmed.length > 20 || submitting || submittedRank !== undefined) return;
     setSubmitting(true);
     try {
@@ -153,6 +159,9 @@ export default function RspeedPage() {
     }
   }
 
+  // 회원은 이름을 묻지 않고 5회가 끝나면 바로 등록 (서버가 내 최고 기록만 남김)
+  const auto = useAutoRank(phase === "done", (nick) => submitScore(nick));
+
   const header = (
     <GameHeader
       icon="⚡"
@@ -162,11 +171,18 @@ export default function RspeedPage() {
       desc="파란색이 되는 순간 클릭, 5회 평균"
       guide={REACTION_GUIDE}
       rank={{
-        top: list.slice(0, 3).map((r) => ({ name: r.name, value: `${r.score}ms` })),
+        top: list
+          .slice(0, 3)
+          .map((r) => ({ name: r.name, member: r.member, value: `${r.score}ms` })),
         sub: "5회 평균",
         render: () => (
           <RankList
-            rows={list.map((r) => ({ name: r.name, value: `${r.score}ms`, date: r.createdAt }))}
+            rows={list.map((r) => ({
+              name: r.name,
+              member: r.member,
+              value: `${r.score}ms`,
+              date: r.createdAt,
+            }))}
             skip={3}
           />
         ),
@@ -193,7 +209,7 @@ export default function RspeedPage() {
             ))}
           </div>
 
-          {isRanked && submittedRank === undefined && (
+          {!auto.member && isRanked && submittedRank === undefined && (
             <div className="mb-8">
               <p className="mb-4 font-['Nanum_Gothic',sans-serif] text-white/70">
                 10위 안에 들었어요! 이름을 입력해주세요.
@@ -207,7 +223,8 @@ export default function RspeedPage() {
               >
                 <input
                   value={name}
-                  maxLength={20}
+                  maxLength={RANK_NAME_MAX}
+                  placeholder={`이름 (${RANK_NAME_MAX}자)`}
                   onChange={(e) => setName(e.target.value)}
                   className="w-36 rounded-full border border-white/10 bg-[#1C1E24] px-4 py-2 text-center text-white focus:border-[#6C63FF]/50 focus:outline-none"
                 />

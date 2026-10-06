@@ -23,6 +23,8 @@ const TIMEOUT_MS = 12_000;
 let socket: Socket | null = null;
 /** 지금 연결에서 서버가 알고 있는 내 uid */
 let authedUid: string | null = null;
+/** 그때 익명 계정이었는지 (익명 → Google 로그인으로 바뀌면 uid 는 같아도 서버에 다시 알려야 함) */
+let authedAnon = false;
 /** 연결이 바뀔 때마다 +1 (옛 연결의 응답을 구분) */
 let connId = 0;
 /** 요청 순서를 지키기 위한 줄 */
@@ -113,10 +115,11 @@ function sync(): Promise<void> {
     }
     await waitConnect(s);
     const user = auth.currentUser;
-    if (user && authedUid !== user.uid) {
+    if (user && (authedUid !== user.uid || authedAnon !== user.isAnonymous)) {
       const res = await emitAck<{ uid: string }>("auth", await user.getIdToken());
       if (!res.ok) throw toApiError(res.e);
       authedUid = user.uid;
+      authedAnon = user.isAnonymous;
     }
   };
   const p = chain.then(run, run);

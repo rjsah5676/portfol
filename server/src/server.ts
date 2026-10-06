@@ -9,6 +9,7 @@ import { registerFight } from "./games/fight";
 import { registerSketch } from "./games/sketch";
 import { createApp } from "./http/app";
 import { Gateway } from "./realtime/gateway";
+import { createUsers } from "./users";
 import { createWebNotifier, type WebNotifier } from "./webNotify";
 
 export interface AppServer {
@@ -28,7 +29,10 @@ export async function createAppServer(
   const auth = overrides.auth ?? createAuth(cfg);
   const http = createHttpServer();
   const gateway = new Gateway(http, cfg, auth);
-  const deps: Deps = { cfg, db, auth, gateway, web: overrides.web ?? createWebNotifier(cfg) };
+  const users = createUsers(db, cfg);
+  gateway.nickOf = (user) => users.nickOf(user);
+  users.onRename((uid, nick) => gateway.setNick(uid, nick));
+  const deps: Deps = { cfg, db, auth, gateway, users, web: overrides.web ?? createWebNotifier(cfg) };
 
   const board = registerBoardGames(deps);
   const sketch = registerSketch(deps);

@@ -22,6 +22,14 @@ interface Entry {
 
 const EXTRA: Entry[] = [
   { href: "/", label: "홈", desc: "메인", icon: "🏠", group: "site" },
+  {
+    href: "/portfolio",
+    label: "Portfolio",
+    desc: "팀·개인 프로젝트와 게임",
+    icon: "🗂️",
+    group: "site",
+    keywords: "포트폴리오 프로젝트 project mimyo airboard kickeat artpart ohsori beat dash pixel fight",
+  },
   { href: "/about", label: "About", desc: "소개·걸어온 길", icon: "👋", group: "site" },
   { href: "/archive", label: "아카이브", desc: "작업 기록 타임라인", icon: "🗓️", group: "site" },
   { href: "/guest", label: "방명록", desc: "한마디 남기기", icon: "📮", group: "site" },

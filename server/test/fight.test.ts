@@ -32,7 +32,7 @@ describe("로비 · 방", () => {
     const a = await user("a");
     const id = await create(a, "  한판  ");
     const row = (await lobby.wait((e) => e.d.some((r: any) => r.id === id))).d.find((r: any) => r.id === id);
-    expect(row).toMatchObject({ name: "한판", host: "방장", count: 0, playing: false });
+    expect(row).toMatchObject({ name: "한판", host: "◦방장", count: 0, playing: false });
     expect(row.createdAt).toBeTypeOf("number");
     await join(a, id, "에이");
     await lobby.wait((e) => e.d.find((r: any) => r.id === id)?.count === 1);
@@ -58,8 +58,8 @@ describe("자리", () => {
     const { a, b, id } = await duel();
     const room = await peek(id);
     expect(room.seats).toEqual({ 0: a.uid, 1: b.uid });
-    expect(room.players[a.uid!]).toMatchObject({ nick: "에이", seat: 0, ch: 0, ready: false });
-    expect(room.players[b.uid!]).toMatchObject({ nick: "비", seat: 1 });
+    expect(room.players[a.uid!]).toMatchObject({ nick: "◦에이", seat: 0, ch: 0, ready: false });
+    expect(room.players[b.uid!]).toMatchObject({ nick: "◦비", seat: 1 });
     expect(room.meta.hostUid).toBe(a.uid);
     await expect(join(await user("c"), id, "씨")).rejects.toMatchObject({ code: "ROOM_FULL", message: "room full" });
     // 이미 앉아 있는 사람이 다시 들어오면 같은 자리
@@ -129,7 +129,7 @@ describe("대기실", () => {
     const chat = await b.sub("fight.chat", { id });
     expect(chat.data).toEqual([]);
     await a.rpc("fight.sendChat", { id, nick: "에이", text: "ㄱㄱ" });
-    expect((await chat.wait((e) => e.t === "add")).d).toMatchObject({ uid: a.uid, nick: "에이", text: "ㄱㄱ" });
+    expect((await chat.wait((e) => e.t === "add")).d).toMatchObject({ uid: a.uid, nick: "◦에이", text: "ㄱㄱ" });
     const w = await user("w");
     await expect(w.rpc("fight.sendChat", { id, nick: "w", text: "hi" })).rejects.toMatchObject({ code: "FORBIDDEN" });
     expect((await w.sub("fight.chat", { id })).data).toHaveLength(1);
@@ -224,7 +224,7 @@ describe("관전", () => {
     const sub = await a.sub("fight.room", { id });
     const w = await user("w");
     await w.rpc("fight.watchJoin", { id, nick: "구경" });
-    expect((await sub.wait((e) => e.d.watchers[w.uid!])).d.watchers[w.uid!]).toMatchObject({ nick: "구경" });
+    expect((await sub.wait((e) => e.d.watchers[w.uid!])).d.watchers[w.uid!]).toMatchObject({ nick: "◦구경" });
     await w.rpc("fight.watchLeave", { id });
     await sub.wait((e) => !e.d.watchers[w.uid!]);
     const w2 = await user("w2");

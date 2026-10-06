@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import Faded from "@/components/Faded";
+import Nick from "@/components/Nick";
 import { useAuth } from "@/lib/AuthContext";
 import { useModal } from "@/components/Modal/ModalProvider";
 import {
@@ -107,7 +108,9 @@ function Note({
           {entry.contents}
         </p>
         <div className="mt-3 flex items-end justify-between gap-3">
-          <span className={`${hand} truncate text-lg font-bold text-black/60`}>— {entry.name}</span>
+          <span className={`${hand} truncate text-lg font-bold text-black/60`}>
+            — <Nick name={entry.name} guest={!entry.member} tone="paper" />
+          </span>
           <span className="shrink-0 font-mono text-[10px] text-black/35">
             {dateLabel(entry, localDate)}
           </span>
@@ -118,7 +121,9 @@ function Note({
 }
 
 export default function GuestPage() {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
+  // 회원은 이름 칸에 별명이 고정으로 들어감
+  const nick = profile?.nick ?? null;
   const modal = useModal();
   // 서버가 미리 읽어둔 목록으로 시작 (layout.tsx) → 첫 화면부터 메모가 보이고, 이후 실시간 구독이 이어받음
   const initial = useInitial<GuestEntry[]>("entries");
@@ -150,7 +155,8 @@ export default function GuestPage() {
   );
 
   const visible = useMemo(() => list.slice(0, shown), [list, shown]);
-  const canSubmit = name.trim() !== "" && contents.trim() !== "" && !sending;
+  const author = nick ?? name;
+  const canSubmit = author.trim() !== "" && contents.trim() !== "" && !sending;
 
   async function submit() {
     if (!canSubmit) return;
@@ -158,7 +164,7 @@ export default function GuestPage() {
     setError("");
     try {
       const id = await addGuestEntry({
-        name: name.trim().slice(0, NAME_MAX),
+        name: author.trim().slice(0, NAME_MAX),
         contents: contents.trim().slice(0, CONTENTS_MAX),
         color,
       });
@@ -232,7 +238,8 @@ export default function GuestPage() {
             <div className="mt-3 flex items-center gap-2">
               <span className={`${hand} text-lg text-black/50`}>—</span>
               <input
-                value={name}
+                value={author}
+                readOnly={!!nick}
                 maxLength={NAME_MAX}
                 onChange={(e) => setName(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && submit()}

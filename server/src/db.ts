@@ -65,7 +65,11 @@ export async function connectDatabase(cfg: Config): Promise<Database> {
 
 async function ensureIndexes({ db }: Database) {
   const tasks: Promise<unknown>[] = [];
-  const idx = (col: string, keys: Record<string, 1 | -1>, options: { expireAfterSeconds?: number } = {}) =>
+  const idx = (
+    col: string,
+    keys: Record<string, 1 | -1>,
+    options: { expireAfterSeconds?: number; unique?: boolean } = {}
+  ) =>
     // 인덱스는 성능용이라 실패해도 서버는 뜨게 함
     tasks.push(
       db
@@ -87,6 +91,9 @@ async function ensureIndexes({ db }: Database) {
   idx("rank_tickets", { uid: 1, createdAt: -1 });
   idx("rank_tickets", { createdAt: 1 }, { expireAfterSeconds: 8 * 24 * 60 * 60 });
   idx("guest", { id: -1 });
+  idx("guest", { uid: 1 });
+  // 별명은 대소문자 구분 없이 하나뿐
+  idx("users", { nickKey: 1 }, { unique: true });
   idx("inquiries", { createdAt: -1 });
   for (const c of ROOM_COLLECTIONS) {
     idx(c, { updatedAt: -1 });

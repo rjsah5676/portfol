@@ -21,9 +21,9 @@ interface Section {
 const SECTIONS: Record<string, Section> = {
   "": { label: "fullstack developer", accent: "#8B84FF" },
   about: { label: "about", accent: "#8B84FF" },
-  project: { label: "project", accent: "#8B84FF" },
-  infoPage: { label: "project", accent: "#8B84FF" },
-  works: { label: "works", accent: "#8B84FF" },
+  portfolio: { label: "portfolio", accent: "#8B84FF" },
+  infoPage: { label: "portfolio", accent: "#8B84FF" },
+  works: { label: "study", accent: "#8B84FF" },
   archive: { label: "archive", accent: "#8B84FF" },
   study: { label: "study note", accent: "#8B84FF" },
   retro: { label: "retrospective", accent: "#2DD4BF" },

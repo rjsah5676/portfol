@@ -27,7 +27,7 @@ function Card({ children }: { children: React.ReactNode }) {
 
 export default function AdminLoginPage() {
   const router = useRouter();
-  const { user, loading } = useAuth();
+  const { user, loading, account, login, logout } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -45,7 +45,7 @@ export default function AdminLoginPage() {
     setSubmitting(true);
     try {
       await signInWithEmailAndPassword(auth, email, password);
-      router.push("/admin/");
+      // 관리자인지는 서버가 확인함 → 확인되면 위의 effect 가 대시보드로 보냄
     } catch (err) {
       console.error(err);
       setError("이메일 또는 비밀번호를 확인해주세요.");
@@ -61,12 +61,35 @@ export default function AdminLoginPage() {
     return <p className="pt-24 text-center font-mono text-sm text-white/40">대시보드로 이동 중…</p>;
   }
 
+  // 로그인은 했지만 관리자 계정이 아님
+  if (account) {
+    return (
+      <Card>
+        <h1 className="font-mono text-lg font-bold text-white">관리자 전용</h1>
+        <p className="mt-1 mb-6 font-['Nanum_Gothic',sans-serif] text-xs leading-relaxed text-white/40">
+          지금 로그인한 계정은 관리자가 아니에요.
+        </p>
+        <button type="button" onClick={logout} className={primaryBtn}>
+          로그아웃
+        </button>
+      </Card>
+    );
+  }
+
   return (
     <Card>
       <h1 className="font-mono text-lg font-bold text-white">관리자 로그인</h1>
       <p className="mt-1 mb-6 font-['Nanum_Gothic',sans-serif] text-xs text-white/40">
         글 작성·방명록 관리는 관리자만 할 수 있어요.
       </p>
+      {/* 관리자 Google 계정으로 로그인하면 바로 관리자 (상단의 로그인 버튼과 같은 동작) */}
+      <button
+        type="button"
+        onClick={() => login().catch(() => setError("로그인하지 못했어요. 다시 시도해주세요."))}
+        className={`${primaryBtn} mb-5`}
+      >
+        Google 계정으로 로그인
+      </button>
       <form onSubmit={handleLogin} className="flex flex-col gap-3">
         <input
           type="email"

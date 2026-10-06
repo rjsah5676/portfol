@@ -3,7 +3,9 @@
 import { useEffect, useState, type ReactNode } from "react";
 import RankList from "./RankList";
 import { addAIRank, getAIRanks, type AIRankColl, type AIRankRow } from "@/firestore/aiRankings";
+import { RANK_NAME_MAX } from "@/lib/api/rankRun";
 import { clockLabel, pointsOf, type ScoreResult } from "@/lib/aiScore";
+import { useAutoRank } from "@/lib/useAutoRank";
 
 /*
  * 체스·장기·오목 AI 랭킹 모드 공통 UI: 내 차례 시간 재기, 랭킹 모드 스위치, 기록 등록, 순위표.
@@ -98,12 +100,12 @@ export function RankSubmit({
       setName(localStorage.getItem(NAME_KEY) ?? "");
     } catch {}
   }, []);
-  const submit = async () => {
-    const n = name.trim().slice(0, 12);
+  const submit = async (as = name) => {
+    const n = as.trim().slice(0, 12);
     if (!n || state === "sending" || state === "done") return;
     setState("sending");
     try {
-      localStorage.setItem(NAME_KEY, n);
+      if (!auto.member) localStorage.setItem(NAME_KEY, n);
     } catch {}
     try {
       await addAIRank(coll, { name: n, score: result.score, ...entry });
@@ -113,6 +115,8 @@ export function RankSubmit({
       setState("error");
     }
   };
+  // 회원은 이름을 묻지 않고 이기면 바로 등록 (이미 올린 판은 다시 올리지 않음)
+  const auto = useAutoRank(!done, (nick) => submit(nick));
   return (
     <div className="rounded-xl border border-[#FDE047]/30 bg-[#FDE047]/[0.06] px-4 py-3">
       <div className="flex items-baseline justify-between gap-2">
@@ -139,19 +143,23 @@ export function RankSubmit({
         <p className="mt-2.5 font-['Nanum_Gothic',sans-serif] text-xs text-[#FDE047]/90">
           등록했어요!
         </p>
+      ) : auto.member ? (
+        <p className="mt-2.5 font-['Nanum_Gothic',sans-serif] text-xs text-white/50">
+          {state === "error" ? "" : "기록을 올리는 중…"}
+        </p>
       ) : (
         <div className="mt-2.5 flex gap-1.5">
           <input
             value={name}
-            maxLength={12}
-            placeholder="이름"
+            maxLength={RANK_NAME_MAX}
+            placeholder={`이름 (${RANK_NAME_MAX}자)`}
             onChange={(e) => setName(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && submit()}
             className="min-w-0 flex-1 rounded-full border border-white/10 bg-[#1C1E24] px-3 py-1.5 font-['Nanum_Gothic',sans-serif] text-sm text-white focus:border-[#FDE047]/50 focus:outline-none"
           />
           <button
             type="button"
-            onClick={submit}
+            onClick={() => submit()}
             disabled={!name.trim() || state === "sending"}
             className="cursor-pointer rounded-full bg-[#FDE047]/90 px-4 py-1.5 font-mono text-xs font-bold text-[#1C1E24] hover:bg-[#FDE047] disabled:cursor-not-allowed disabled:opacity-40"
           >
@@ -230,6 +238,7 @@ export function RankBoard({
         <RankList
           rows={rows.map((r) => ({
             name: r.name,
+            member: r.member,
             value: pointsOf(r.score).toLocaleString(),
             sub: (
               <>

@@ -7,6 +7,8 @@ const BOARD = "minesweeper_rankings";
 export interface MineRanking {
   id: string;
   name: string;
+  /** 회원의 기록인지 */
+  member: boolean;
   time: number;
   /** 달성 일자 (예전 기록은 없을 수 있음) */
   createdAt: Date | null;
@@ -16,6 +18,7 @@ export interface MineRanking {
 export interface MineRankingRow {
   id: string;
   name: string;
+  member?: boolean;
   time: number;
   createdAt: number | null;
 }
@@ -23,6 +26,7 @@ export const MINE_RANKINGS_PATH = `/api/rankings/${BOARD}`;
 export const toMineRanking = (x: MineRankingRow): MineRanking => ({
   id: x.id,
   name: x.name,
+  member: !!x.member,
   time: x.time,
   createdAt: toDate(x.createdAt),
 });

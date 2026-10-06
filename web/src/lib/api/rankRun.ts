@@ -12,6 +12,9 @@ import { api } from "./http";
  * board = 랭킹 이름 (리듬게임은 "rhythm:곡id_난이도").
  * 티켓은 localStorage 에도 둬서, 새로고침한 뒤 이어 하는 판(AI 대국)도 등록할 수 있음.
  */
+/** 랭킹에 적는 이름 길이 (서버 RANK_NAME_MAX 와 같은 값 — 회원 별명 최대 길이) */
+export const RANK_NAME_MAX = 10;
+
 const storeKey = (board: string) => `rank-ticket:${board}`;
 const pending = new Map<string, Promise<string | null>>();
 /** 랭킹별로 몇 번째 판인지 (늦게 도착한 옛 판의 티켓을 구분) */
@@ -76,10 +79,13 @@ async function ticketOf(board: string): Promise<string | undefined> {
  */
 export async function submitRun(board: string, path: string, body: object): Promise<string> {
   await signIn();
+  // 이름은 어디서 입력받았든(입력 칸·prompt) 여기서 한 번 더 길이를 맞춤
+  const typed = (body as { name?: unknown }).name;
+  const name = typeof typed === "string" ? typed.trim().slice(0, RANK_NAME_MAX) : undefined;
   const res = await api<{ id: string }>(path, {
     method: "POST",
     auth: true,
-    body: { ...body, ticket: await ticketOf(board) },
+    body: { ...body, ...(name !== undefined && { name }), ticket: await ticketOf(board) },
   });
   // 티켓은 한 번만 쓸 수 있음
   pending.delete(board);

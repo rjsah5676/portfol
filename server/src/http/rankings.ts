@@ -24,13 +24,15 @@ import { h, ms, userOf } from "./util";
  *   3) 값끼리 맞는지: AI 대국 점수는 같은 공식으로 다시 계산, 리듬게임은 채보(노트 수)와 비교
  */
 
-const name = (max: number) => z.string().min(1).max(max);
+/** 랭킹에 적는 이름 길이 (회원 별명 최대 길이와 같음). 예전에 더 길게 들어간 기록은 그대로 둠 */
+export const RANK_NAME_MAX = 10;
+const name = z.string().min(1).max(RANK_NAME_MAX);
 const int = z.number().int();
 
 /** 체스·장기·오목·격투 AI 랭킹 공통 (rules의 validAIRank) */
 const aiRank = (maxScore: number) =>
   z.strictObject({
-    name: name(12),
+    name,
     score: int.gt(1_000_000).max(maxScore),
     opp: z.string().max(20),
     moves: int.min(2).max(1000),
@@ -80,19 +82,19 @@ export const BOARDS: Record<string, Board> = {
   // 한 판은 정해진 시간(약 2분)이 다 지나야 끝남
   score: {
     sort: { score: -1 },
-    schema: z.strictObject({ name: name(20), score: int.min(0).max(252) }),
+    schema: z.strictObject({ name, score: int.min(0).max(252) }),
     minSec: () => MELON_SEC,
   },
   // 지뢰찾기 (클리어 시간, 초)
   minesweeper_rankings: {
     sort: { time: 1 },
-    schema: z.strictObject({ name: name(20), time: z.number().min(10).max(86400) }),
+    schema: z.strictObject({ name, time: z.number().min(10).max(86400) }),
     minSec: (d) => d.time,
   },
   // 반응속도 (5회 평균, ms). 한 번마다 1.5초 이상 기다렸다 누르고, 100ms 보다 빠르면 무효
   reaction: {
     sort: { score: 1 },
-    schema: z.strictObject({ name: name(20), score: z.number().min(80).max(10000) }),
+    schema: z.strictObject({ name, score: z.number().min(80).max(10000) }),
     minSec: (d) => 5 * (1.5 + d.score / 1000),
     check: (d) => d.score >= 100,
   },
@@ -131,7 +133,7 @@ export const BOARDS: Record<string, Board> = {
 
 const CHART_RE = /^[a-z0-9-]+_(easy|normal|hard|expert|nightmare)$/;
 const rhythmSchema = z.strictObject({
-  name: name(12),
+  name,
   score: int.min(0).max(1_000_000),
   acc: z.number().min(0).max(100),
   maxCombo: int.min(0).max(5000),
@@ -183,7 +185,7 @@ interface Ticket {
   used: boolean;
 }
 
-export function rankingsRouter({ db, auth }: Deps): Router {
+export function rankingsRouter({ db, auth, users }: Deps): Router {
   const r = Router();
   const tickets = db.col<Ticket>("rank_tickets");
   // 같은 사람의 등록이 겹쳐도 "기존 기록 확인 → 저장"이 섞이지 않게
@@ -204,7 +206,11 @@ export function rankingsRouter({ db, auth }: Deps): Router {
     const user = await userOf(auth, req);
     if (!user) throw unauthenticated();
     const { ticket, ...body } = (req.body ?? {}) as Record<string, unknown>;
+    // 회원은 별명으로 등록 (보낸 이름은 무시). 비회원은 적은 이름 그대로 — member 표시가 없는 기록이 비회원 기록
+    const nick = await users.nickOf(user);
+    if (nick) body.name = nick;
     const data = board.schema.parse(body) as Data;
+    const owner = nick ? { uid: user.uid, member: true } : { uid: user.uid };
 
     const now = Date.now();
     const t =
@@ -234,7 +240,7 @@ export function rankingsRouter({ db, auth }: Deps): Router {
       const mine = await db.col(col).findOne({ ...scope, uid: user.uid });
       if (!mine) {
         const _id = newId();
-        await db.col(col).insertOne({ _id, ...scope, ...data, uid: user.uid, createdAt: new Date() });
+        await db.col(col).insertOne({ _id, ...scope, ...data, ...owner, createdAt: new Date() });
         return { id: _id };
       }
       // 이미 올린 기록보다 좋을 때만 바꿈 (dir -1 = 클수록 좋음, 1 = 작을수록 좋음)
@@ -242,7 +248,7 @@ export function rankingsRouter({ db, auth }: Deps): Router {
       if (!better) return { id: mine._id, kept: true };
       await db
         .col(col)
-        .replaceOne({ _id: mine._id }, { ...scope, ...data, uid: user.uid, createdAt: new Date() });
+        .replaceOne({ _id: mine._id }, { ...scope, ...data, ...owner, createdAt: new Date() });
       return { id: mine._id };
     });
   }
@@ -262,6 +268,8 @@ export function rankingsRouter({ db, auth }: Deps): Router {
         throw new AppError("RATE_LIMITED", "요청이 너무 많습니다. 잠시 후 다시 시도해주세요.", 429);
       const _id = newId() + newId();
       await tickets.insertOne({ _id, uid: user.uid, board: key, createdAt: new Date(), used: false });
+      // 회원이면 그 게임을 몇 판 했는지 세어 둠 (내 정보 페이지용. 리듬게임은 곡 구분 없이)
+      if (!user.anonymous) users.bump(user.uid, { [`stats.plays.${key.split(":")[0]}`]: 1 });
       return { ticket: _id };
     })
   );

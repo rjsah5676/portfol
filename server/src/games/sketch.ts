@@ -199,7 +199,7 @@ export interface SketchOptions {
   sweepIntervalMs?: number;
 }
 
-export function registerSketch({ gateway }: Deps, opts: SketchOptions = {}) {
+export function registerSketch({ gateway, users }: Deps, opts: SketchOptions = {}) {
   const rooms = new Map<string, Room>();
   const emptyRoomTtl = opts.emptyRoomTtlMs ?? 30 * 60_000;
 
@@ -254,6 +254,9 @@ export function registerSketch({ gateway }: Deps, opts: SketchOptions = {}) {
     if (room.chat.length > CHAT_KEEP) room.chat.splice(0, room.chat.length - CHAT_KEEP);
     gateway.emit(chatKey(room.id), "add", full);
   }
+  /** 방에 등록된 그 사람의 이름 (없으면 fallback) */
+  const nameIn = (room: Room, uid: string, fallback: string) =>
+    room.players[uid]?.nick ?? room.scores[uid]?.nick ?? fallback;
   const systemChat = (room: Room, text: string) => pushChat(room, { uid: "", nick: "", text, kind: "system" });
 
   function setWords(room: Room, words: Words | null) {
@@ -419,7 +422,7 @@ export function registerSketch({ gateway }: Deps, opts: SketchOptions = {}) {
     const room: Room = {
       id,
       meta: {
-        name: o.name.trim().slice(0, 20) || `${o.nick}의 방`,
+        name: o.name.trim().slice(0, 20) || `${ctx.nick ?? o.nick}의 방`,
         hostUid: uid,
         max: Math.min(8, Math.max(2, o.max)),
         turnMode: o.turnMode,
@@ -480,8 +483,10 @@ export function registerSketch({ gateway }: Deps, opts: SketchOptions = {}) {
 
   const joinSchema = z.object({ id: roomId, nick: nickSchema, joinedAt: z.number().finite().optional(), rejoin: z.boolean().default(false) });
   gateway.rpc("sketch.join", (ctx, raw) => {
-    const { id, nick, joinedAt, rejoin } = joinSchema.parse(raw);
+    const { id, nick: typed, joinedAt, rejoin } = joinSchema.parse(raw);
     const uid = ctx.uid;
+    // 이름은 서버가 정함: 회원이면 별명, 아니면 적은 이름에 비회원 표시
+    const nick = ctx.name(typed);
     const room = getRoom(id);
     if (room.kicked[uid] !== undefined) throw forbidden("방장이 이 방에서 내보냈어요.");
     if (room.meta.locked && room.meta.hostUid !== uid && !room.access.has(uid)) throw forbidden("비밀번호가 필요한 방입니다.");
@@ -508,7 +513,7 @@ export function registerSketch({ gateway }: Deps, opts: SketchOptions = {}) {
     const uid = ctx.uid;
     const room = rooms.get(id);
     if (!room || !room.players[uid]) return null;
-    if (nick) systemChat(room, `${nick}님이 나갔어요.`);
+    if (nick) systemChat(room, `${room.players[uid].nick}님이 나갔어요.`);
     removePlayer(room, uid);
     return null;
   });
@@ -590,7 +595,10 @@ export function registerSketch({ gateway }: Deps, opts: SketchOptions = {}) {
     const list = orderedPlayers(room);
     if (list.length < 2) return null;
     room.scores = {};
-    for (const p of list) room.scores[p.uid] = { nick: p.nick, score: 0 };
+    for (const p of list) {
+      room.scores[p.uid] = { nick: p.nick, score: 0 };
+      users.bump(p.uid, { "stats.sketch.games": 1 });
+    }
     const first = list[0].uid;
     room.state = emptyState();
     beginTurn(room, { ...newTurn(room, first, 1), drawn: { [first]: 1 } });
@@ -649,11 +657,13 @@ export function registerSketch({ gateway }: Deps, opts: SketchOptions = {}) {
    */
   const correctSchema = z.object({
     id: roomId,
-    guess: z.object({ uid: z.string().min(1).max(128), nick: z.string().max(10), turnId: z.string().max(40) }),
+    guess: z.object({ uid: z.string().min(1).max(128), nick: z.string().max(12), turnId: z.string().max(40) }),
   });
   gateway.rpc("sketch.markCorrect", (ctx, raw) => {
-    const { id, guess } = correctSchema.parse(raw);
+    const { id, guess: sent } = correctSchema.parse(raw);
     const { room, uid: drawer } = asDrawer(ctx, id);
+    // 맞힌 사람의 이름은 방에 등록된 것을 씀
+    const guess = { ...sent, nick: nameIn(room, sent.uid, sent.nick) };
     const cur = room.state;
     if (cur.turnId !== guess.turnId || cur.phase !== "drawing") return null;
     if (cur.correct[guess.uid] !== undefined || guess.uid === drawer) return null;
@@ -672,6 +682,9 @@ export function registerSketch({ gateway }: Deps, opts: SketchOptions = {}) {
     };
     add(guess.uid, guess.nick, pts);
     add(drawer, cur.drawerNick, drawerPts);
+    // 회원이면 전적에 반영 (비회원 uid 는 무시됨)
+    users.bump(guess.uid, { "stats.sketch.correct": 1, "stats.sketch.points": pts });
+    users.bump(drawer, { "stats.sketch.points": drawerPts });
     changed(room);
     pushChat(room, {
       uid: guess.uid,
@@ -775,7 +788,7 @@ export function registerSketch({ gateway }: Deps, opts: SketchOptions = {}) {
   gateway.rpc("sketch.sendChat", (ctx, raw) => {
     const { id, nick, text, cid } = chatSchema.parse(raw);
     const { room, uid } = asPlayer(ctx, id);
-    pushChat(room, { id: isClientId(cid) ? cid : undefined, uid, nick, text, kind: "msg" });
+    pushChat(room, { id: isClientId(cid) ? cid : undefined, uid, nick: nameIn(room, uid, ctx.name(nick)), text, kind: "msg" });
     return null;
   });
 
@@ -793,7 +806,7 @@ export function registerSketch({ gateway }: Deps, opts: SketchOptions = {}) {
     const { id, nick, text, turnId } = guessSchema.parse(raw);
     const { room, uid } = asPlayer(ctx, id);
     if (room.guesses.length >= MAX_GUESSES) room.guesses.shift();
-    const g: Guess = { id: orderedId(), uid, nick, text, turnId, ts: Date.now() };
+    const g: Guess = { id: orderedId(), uid, nick: nameIn(room, uid, ctx.name(nick)), text, turnId, ts: Date.now() };
     room.guesses.push(g);
     gateway.emit(guessesKey(id), "add", g);
     return null;
@@ -807,11 +820,11 @@ export function registerSketch({ gateway }: Deps, opts: SketchOptions = {}) {
   });
 
   /** 오답은 그리는 사람이 대신 채팅에 올려줌 */
-  const relaySchema = z.object({ id: roomId, guess: z.object({ uid: z.string().max(128), nick: z.string().max(10), text: z.string().min(1).max(100) }) });
+  const relaySchema = z.object({ id: roomId, guess: z.object({ uid: z.string().max(128), nick: z.string().max(12), text: z.string().min(1).max(100) }) });
   gateway.rpc("sketch.relayGuess", (ctx, raw) => {
     const { id, guess } = relaySchema.parse(raw);
     const { room } = asDrawer(ctx, id);
-    pushChat(room, { uid: guess.uid, nick: guess.nick, text: guess.text, kind: "msg" });
+    pushChat(room, { uid: guess.uid, nick: nameIn(room, guess.uid, guess.nick), text: guess.text, kind: "msg" });
     return null;
   });
 

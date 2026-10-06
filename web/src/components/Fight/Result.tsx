@@ -4,6 +4,7 @@
  */
 import { useEffect, useState, type CSSProperties } from "react";
 import { addAIRank, type AIRankColl } from "@/firestore/aiRankings";
+import { RANK_NAME_MAX } from "@/lib/api/rankRun";
 import { clockLabel, type ScoreResult } from "@/lib/aiScore";
 import { GOLD, Gtext, HUD_FONT, INK, PANEL, Trim } from "./Hud";
 
@@ -215,8 +216,8 @@ function RankBox({ r }: { r: ResultRank }) {
         <div style={{ marginTop: "0.8cqw", display: "flex", gap: "0.8cqw" }}>
           <input
             value={name}
-            maxLength={12}
-            placeholder="이름 (12자)"
+            maxLength={RANK_NAME_MAX}
+            placeholder={`이름 (${RANK_NAME_MAX}자)`}
             onChange={(e) => setName(e.target.value)}
             onKeyDown={(e) => {
               e.stopPropagation();

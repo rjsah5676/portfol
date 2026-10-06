@@ -11,6 +11,7 @@ import { loadSheet } from "@/lib/fight/sprites";
 import { sfxUi } from "@/lib/fight/sfx";
 import { keyText } from "./KeyCap";
 import { useChessUser } from "@/components/Chess/useChessUser";
+import Nick from "@/components/Nick";
 import {
   cleanupEmptyRoom,
   createRoom,
@@ -92,6 +93,7 @@ export default function Online({
         onNick={() => setNick("")}
         onBack={onExit}
         onEnter={(id) => setSession(new RoomSession(id, uid, nick))}
+        onWatch={(id) => setWatch(new WatchSession(id, uid, nick))}
       />
     );
   })();
@@ -153,12 +155,15 @@ function Lobby({
   onNick,
   onBack,
   onEnter,
+  onWatch,
 }: {
   uid: string;
   nick: string;
   onNick: () => void;
   onBack: () => void;
   onEnter: (id: string) => void;
+  /** 꽉 찼거나 대전 중인 방 → 관전 */
+  onWatch: (id: string) => void;
 }) {
   const [rooms, setRooms] = useState<LobbyRoom[] | null>(null);
   const [name, setName] = useState("");
@@ -224,7 +229,7 @@ function Lobby({
         <div className="flex min-h-0 flex-1 flex-col rounded-[1cqw] bg-black/50 p-[1cqw] backdrop-blur-[2px]">
           <div className={`${KR} mb-[0.6cqw] flex items-center justify-between text-[1.2cqw] text-white/50`}>
             <span>열린 방 {rooms ? rooms.length : ""}</span>
-            <span className="text-white/35">한 방에 2명</span>
+            <span className="text-white/35">한 방에 2명 · 꽉 찬 방·대전 중인 방은 관전</span>
           </div>
           <div className="thin-scroll flex min-h-0 flex-1 flex-col gap-[0.6cqw] overflow-y-auto pr-[0.4cqw]">
             {rooms === null ? (
@@ -237,23 +242,27 @@ function Lobby({
             ) : (
               rooms.map((r) => {
                 const full = r.count >= 2;
-                // 관전은 뺌 (따라잡기가 무겁고 끊김이 심해서) — 꽉 찬 방·대전 중인 방은 못 들어감
-                const closed = full || r.playing;
+                // 꽉 찼거나 대전 중인 방은 자리에 앉는 대신 관전으로 들어감
+                const watchable = full || (r.playing && r.count > 0);
                 return (
                   <button
                     key={r.id}
                     type="button"
-                    disabled={closed}
-                    onClick={() => onEnter(r.id)}
+                    onClick={() => (watchable ? onWatch(r.id) : onEnter(r.id))}
                     className="flex w-full cursor-pointer items-center justify-between gap-[1cqw] rounded-[0.6cqw] border border-white/10 bg-white/[0.04] px-[1.2cqw] py-[0.8cqw] text-left transition-colors hover:border-[#FDE047]/60 disabled:cursor-not-allowed disabled:opacity-45"
                   >
                     <span className="min-w-0">
                       <span className={`${KR} block truncate text-[1.4cqw] font-bold text-white`}>{r.name}</span>
                       <span className={`${KR} text-[1.05cqw] text-white/40`}>
-                        방장 {r.host} · {r.playing ? "대전 중" : full ? "꽉 참" : r.count === 0 ? "비어 있음" : "상대 기다리는 중"}
+                        방장 <Nick name={r.host} /> · {r.playing ? "대전 중" : full ? "꽉 참" : r.count === 0 ? "비어 있음" : "상대 기다리는 중"}
                       </span>
                     </span>
                     <span className="flex shrink-0 items-center gap-[0.8cqw]">
+                      {watchable && (
+                        <span className={`${KR} rounded-full bg-[#22D3EE]/20 px-[0.9cqw] py-[0.2cqw] text-[1.1cqw] font-bold text-[#67E8F9]`}>
+                          👁 관전
+                        </span>
+                      )}
                       <span className={`font-mono text-[1.5cqw] font-black ${full ? "text-[#F87171]" : "text-[#FDE047]"}`}>
                         {r.count}/2
                       </span>
@@ -288,9 +297,6 @@ function Lobby({
           >
             ⚡ 빠른 입장
           </button>
-          <div className={`${KR} text-[1.05cqw] leading-relaxed text-white/40`}>
-            상대를 기다리는 방에 바로 들어가요. 서로 직접 연결(P2P)해서 싸우고, 연결이 안 되면 서버를 거쳐요(조금 느림).
-          </div>
         </div>
       </div>
     </div>
@@ -381,7 +387,7 @@ function WatchRoom({
                   ?
                 </div>
               )}
-              <div className={`${KR} text-[1.5cqw] font-bold text-white`}>{p?.nick ?? "빈자리"}</div>
+              <div className={`${KR} text-[1.5cqw] font-bold text-white`}>{p ? <Nick name={p.nick} /> : "빈자리"}</div>
               <div className={`${KR} text-[1.1cqw]`} style={{ color: p?.ready ? "#4ADE80" : "rgba(255,255,255,0.45)" }}>
                 {p ? (p.ready ? "준비 완료" : c ? c.name : "랜덤") : ""}
               </div>
@@ -638,7 +644,7 @@ function Room({
                   {sd === 0 ? "1P" : "2P"}
                 </span>
                 <span className={`${KR} truncate text-[1.5cqw] font-bold text-white drop-shadow-[0_0.2cqw_0_#000]`}>
-                  {p ? p.nick : "빈자리"}
+                  {p ? <Nick name={p.nick} /> : "빈자리"}
                   {mine && <span className="ml-[0.4cqw] text-[1.1cqw] text-[#FDE047]">(나)</span>}
                   {p && room.hostUid === p.uid && <span className="ml-[0.4cqw] text-[1.1cqw]">👑</span>}
                 </span>
@@ -692,7 +698,7 @@ function Room({
             {s.chat.length === 0 && <p className="text-white/30">채팅</p>}
             {s.chat.map((m) => (
               <p key={m.id} className="break-all text-white/80">
-                <span className={m.uid === s.uid ? "text-[#A9A3FF]" : "text-white/45"}>{m.nick}</span> {m.text}
+                <span className={m.uid === s.uid ? "text-[#A9A3FF]" : "text-white/45"}><Nick name={m.nick} /></span> {m.text}
               </p>
             ))}
           </div>

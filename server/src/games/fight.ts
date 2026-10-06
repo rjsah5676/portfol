@@ -108,7 +108,7 @@ export interface FightOptions {
   sweepIntervalMs?: number;
 }
 
-export function registerFight({ gateway }: Deps, opts: FightOptions = {}) {
+export function registerFight({ gateway, users }: Deps, opts: FightOptions = {}) {
   const rooms = new Map<string, Room>();
   const emptyRoomTtl = opts.emptyRoomTtlMs ?? 30 * 60_000;
 
@@ -274,9 +274,10 @@ export function registerFight({ gateway }: Deps, opts: FightOptions = {}) {
     const now = Date.now();
     const room: Room = {
       id: newId(),
-      name: o.name.trim().slice(0, 20) || `${o.nick}의 방`,
+      name: o.name.trim().slice(0, 20) || `${ctx.nick ?? o.nick}의 방`,
       hostUid: uid,
-      hostNick: o.nick,
+      // 이름은 서버가 정함: 회원이면 별명, 아니면 적은 이름에 비회원 표시
+      hostNick: ctx.name(o.nick),
       createdAt: now,
       seats: ["", ""],
       players: {},
@@ -310,7 +311,7 @@ export function registerFight({ gateway }: Deps, opts: FightOptions = {}) {
     room.seats[seat] = uid;
     const now = Date.now();
     room.players[uid] = {
-      nick: o.nick,
+      nick: ctx.name(o.nick),
       seat,
       ch: o.ch,
       ready: false,
@@ -407,7 +408,7 @@ export function registerFight({ gateway }: Deps, opts: FightOptions = {}) {
   gateway.rpc("fight.sendChat", (ctx, raw) => {
     const o = z.object({ id: roomId, nick: z.string().max(10), text: z.string().min(1).max(100) }).parse(raw);
     const { room, uid } = asPlayer(ctx, o.id);
-    const msg: ChatMsg = { id: orderedId(), uid, nick: o.nick, text: o.text, ts: Date.now() };
+    const msg: ChatMsg = { id: orderedId(), uid, nick: room.players[uid]?.nick ?? ctx.name(o.nick), text: o.text, ts: Date.now() };
     room.chat.push(msg);
     if (room.chat.length > CHAT_KEEP) room.chat.splice(0, room.chat.length - CHAT_KEEP);
     gateway.emit(chatKey(room.id), "add", msg);
@@ -437,6 +438,8 @@ export function registerFight({ gateway }: Deps, opts: FightOptions = {}) {
     room.watchMatch = match;
     room.state = { ...room.state, phase: "play", match, chars: o.chars, map: o.map, delay: o.delay, maxRb: o.maxRb };
     changed(room);
+    // 회원이면 온라인 경기 수를 세어 둠 (승패는 서버가 알 수 없어서 경기 수만)
+    for (const seat of room.seats) if (seat) users.bump(seat, { "stats.fight.matches": 1 });
     return match;
   });
 
@@ -484,7 +487,7 @@ export function registerFight({ gateway }: Deps, opts: FightOptions = {}) {
 
   // ───────────── 관전 ─────────────
 
-  /** 선수: 내 확정 입력 0.5초치 */
+  /** 선수: 내 확정 입력 0.25초치 */
   gateway.rpc("fight.watchChunk", (ctx, raw) => {
     const o = z
       .object({ id: roomId, match: z.string().max(40), n: z.number().int().min(0), f: z.number(), i: z.string().max(400) })
@@ -504,7 +507,7 @@ export function registerFight({ gateway }: Deps, opts: FightOptions = {}) {
     const uid = ctx.uid;
     const room = rooms.get(o.id);
     if (!room) return null;
-    room.watchers[uid] = { nick: o.nick, at: Date.now() };
+    room.watchers[uid] = { nick: ctx.name(o.nick), at: Date.now() };
     room.watcherOwners.set(uid, ctx.socket.id);
     changed(room);
     return null;

@@ -417,7 +417,7 @@ const entries: ArchiveEntry[] = [
       "GM Movie·Unity 게임 제외, 영천시 프로젝트 기술 태그를 실제 구조(JSP + JDBC)에 맞게 정정",
       "플로팅 버튼 SVG 아이콘화, 아카이브 더보기·정렬 추가, 한글 고정폭 폰트 폴백(Nanum Gothic Coding) 적용",
     ],
-    href: "/project/",
+    href: "/portfolio/",
   },
   {
     sort: "2026-09-28c",
@@ -571,7 +571,7 @@ const entries: ArchiveEntry[] = [
       "실시간 채팅·음성채팅을 제공하는 커뮤니티 사이트 개인 프로젝트",
       "Next.js, Express, WebRTC, Tailwind CSS, MongoDB 사용, ohsori.my로 서비스 배포",
     ],
-    href: "/project/",
+    href: "/portfolio/",
   },
   {
     sort: "2025-05-17",
@@ -714,7 +714,7 @@ const entries: ArchiveEntry[] = [
       "프로젝트별 이미지 슬라이드, 반응형 레이아웃 적용",
       "헤더 디자인 재작업",
     ],
-    href: "/project/",
+    href: "/portfolio/",
   },
   {
     sort: "2024-02-26",
@@ -741,7 +741,6 @@ const entries: ArchiveEntry[] = [
       "세무 신고서 작성 및 조회 기능을 제공하는 웹 사이트",
       "JSP, Spring, JavaScript, MySQL 사용",
     ],
-    href: "/infoPage/2/",
   },
   {
     sort: "2021-08-07",

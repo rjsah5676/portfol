@@ -88,4 +88,5 @@ main 에 push → 이미지가 올라간 뒤 `deploy` job 이 서버에 접속�
 - 서버는 프로세스 하나로 띄우는 것을 전제로 함 (방 상태·구독이 메모리에 있음). 여러 대로 늘리려면 socket.io 어댑터와 방 상태 공유가 필요.
 - `web/.github/`, `web/firebase.json`, `web/*.rules` 는 예전 Firebase 배포용 파일. 이 레포에서는 동작하지 않음(지워도 됨).
 - 서버가 `web/src` 의 일부를 직접 가져다 씀 → 고치면 서버도 같이 바뀜: 장기·오목 규칙(`lib/{janggi,omok}/engine.ts`), AI 대국 점수 공식(`lib/aiScore.ts`), 멜론게임 한 판 길이(`lib/melon/logic.ts`), 리듬게임 채보(`data/rhythm/*.json`). 리듬게임 곡을 추가하면 `server/src/http/rhythmCharts.ts` 에도 추가(빠뜨리면 테스트가 실패).
+- 회원: Google 로그인(Firebase Auth) + 별명(중복 불가, 한글·영문·숫자 2~10자, `users` 컬렉션). 회원은 랭킹·방명록·온라인 게임에 별명이 자동으로 들어가고(끝난 게임은 자동 등록), 비회원이 적은 이름에는 GUEST 표시가 붙음 — 온라인 게임은 서버가 이름 앞에 `◦` 를 붙이고(server 의 users 모듈), 랭킹·방명록은 기록의 `member` 값으로 구분(web 의 Nick 컴포넌트). 관리자 이메일로 로그인하면 관리자이고 별명은 `ADMIN_NICK`. Firebase 콘솔 → Authentication → 로그인 방법에서 Google 을 켜야 함.
 - 랭킹 등록: 로그인(익명) + 게임을 시작할 때 받은 1회용 티켓이 있어야 하고, 한 사람은 랭킹마다 가장 좋은 기록 하나만 남음. 서버는 티켓을 받은 뒤 지난 시간과 값의 앞뒤가 맞는지 확인(`server/src/http/rankings.ts`). 점수 자체는 브라우저에서 계산되므로 요청만 꾸며 넣는 것을 막는 수준. 새 게임에 랭킹을 붙일 때는 시작 시점에 `beginRun(랭킹 이름)` 을 부르고 `submitRun` 으로 등록(`web/src/lib/api/rankRun.ts`).

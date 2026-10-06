@@ -1,5 +1,6 @@
 "use client";
 
+import Nick from "@/components/Nick";
 import { useEffect, useMemo, useState } from "react";
 import { useModal } from "@/components/Modal/ModalProvider";
 import {
@@ -243,9 +244,13 @@ export default function ChessLobby({ uid, nick, onChangeNick, onEnter }: Props) 
                   </span>
                 </span>
                 <span className="order-3 col-span-2 truncate text-xs text-white/40 sm:order-none sm:col-span-1">
-                  <span className="text-white/70">♔ {r.whiteName || "—"}</span>
+                  <span className="text-white/70">
+                    ♔ {r.whiteName ? <Nick name={r.whiteName} /> : "—"}
+                  </span>
                   {"  vs  "}
-                  <span className="text-white/70">♚ {r.blackName || "—"}</span>
+                  <span className="text-white/70">
+                    ♚ {r.blackName ? <Nick name={r.blackName} /> : "—"}
+                  </span>
                   <span className="ml-2 sm:hidden">· {timeLabel(r)}</span>
                 </span>
                 <span className="hidden font-mono text-xs text-white/40 sm:block">

@@ -1,5 +1,6 @@
 "use client";
 
+import Nick, { plainName } from "@/components/Nick";
 import { useEffect, useMemo, useRef, useState } from "react";
 import SketchCanvas from "@/components/Sketch/SketchCanvas";
 import SketchChat from "@/components/Sketch/SketchChat";
@@ -280,11 +281,14 @@ export default function SketchRoom({
       </div>
     ) : (
       <p className="font-['Nanum_Gothic',sans-serif] text-white/70">
-        <b className="text-white">{state.drawerNick}</b>님이 제시어를 고르는 중… ({sec})
+        <b className="text-white">
+          <Nick name={state.drawerNick} />
+        </b>
+        님이 제시어를 고르는 중… ({sec})
       </p>
     );
   } else if (state.phase === "reveal") {
-    const got = Object.keys(state.correct ?? {}).map((u) => room.scores[u]?.nick ?? "?");
+    const got = Object.keys(state.correct ?? {}).map((u) => plainName(room.scores[u]?.nick ?? "?"));
     overlay = (
       <div className="flex flex-col items-center gap-2 text-center">
         <div className="font-mono text-xs text-white/50">정답</div>
@@ -309,7 +313,7 @@ export default function SketchRoom({
               }`}
             >
               <span>
-                {i + 1}. {p.nick}
+                {i + 1}. <Nick name={p.nick} />
               </span>
               <span>{p.score}</span>
             </li>
@@ -381,7 +385,9 @@ export default function SketchRoom({
               </span>
             ))}
           {state.phase === "choosing" && (
-            <span className="text-sm text-white/60">{state.drawerNick}님 차례</span>
+            <span className="text-sm text-white/60">
+              <Nick name={state.drawerNick} />님 차례
+            </span>
           )}
         </div>
         {(state.phase === "drawing" || state.phase === "choosing") && (
@@ -436,7 +442,7 @@ export default function SketchRoom({
                   <span className="min-w-0 truncate text-white/85">
                     {p.uid === leader && "👑 "}
                     {drawingThis && "✏️ "}
-                    {p.nick}
+                    <Nick name={p.nick} />
                     {p.uid === uid && <span className="text-white/35"> (나)</span>}
                   </span>
                   <span className="flex shrink-0 items-center gap-1 text-white/50">

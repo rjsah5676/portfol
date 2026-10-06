@@ -4,9 +4,12 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import Modal from "@/components/Modal/Modal";
 import GuideView, { type GuideDoc } from "@/components/GuideView";
 import HintBubble, { markHintSeen } from "@/components/HintBubble";
+import Nick from "@/components/Nick";
 
 export interface TopEntry {
   name: string;
+  /** 회원의 기록인지 (아니면 이름 앞에 GUEST 표시) */
+  member?: boolean;
   /** 표시할 기록 (예: "132점", "45.2s") */
   value: string;
   /** 작은 설명 (예: "vs 이순신(5단)") */
@@ -221,7 +224,7 @@ function TopTicker({ top }: { top: TopEntry[] }) {
       key={i}
       className="rank-tick hidden w-[10.5rem] truncate text-left text-[11px] text-[#FDE68A]/70 @3xl:inline-block"
     >
-      {MEDAL[i % list.length]} {e.name} · {e.value}
+      {MEDAL[i % list.length]} <Nick name={e.name} guest={!e.member} /> · {e.value}
     </span>
   );
 }
@@ -244,7 +247,7 @@ function Podium({ top }: { top: TopEntry[] }) {
             <div className={`text-center ${n === 0 ? "rank-crown" : ""}`}>
               <div className={n === 0 ? "text-3xl" : "text-2xl"}>{MEDAL[n]}</div>
               <div className="mt-0.5 max-w-full truncate px-1 text-sm font-bold text-white">
-                {e.name}
+                <Nick name={e.name} guest={!e.member} />
               </div>
               <div className="font-mono text-xs tabular-nums" style={{ color: st.ring }}>
                 {e.value}

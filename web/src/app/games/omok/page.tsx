@@ -131,6 +131,7 @@ function OmokApp() {
           sub: "AI 랭킹전",
           top: top.map((r) => ({
             name: r.name,
+            member: r.member,
             value: pointsOf(r.score).toLocaleString(),
             sub: `vs ${omokOppLabel(r.opp)}`,
           })),

@@ -1,5 +1,6 @@
 "use client";
 
+import Nick from "@/components/Nick";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { janggiSoundInfo, useMoveSound } from "@/hooks/useMoveSound";
 import JanggiBoard from "./JanggiBoard";
@@ -842,7 +843,11 @@ export default function JanggiRoomView({
               ) : room.rematch ? (
                 <>
                   <span className="font-mono text-xs text-[#9BE7FF]">상대가 한 판 더 원해요</span>
-                  <button type="button" onClick={() => run(requestRematch(roomId, uid))} className={primaryBtn}>
+                  <button
+                    type="button"
+                    onClick={() => run(requestRematch(roomId, uid))}
+                    className={primaryBtn}
+                  >
                     ↻ 다시 하기
                   </button>
                   <button type="button" onClick={() => run(cancelRematch(roomId))} className={btn}>
@@ -850,7 +855,11 @@ export default function JanggiRoomView({
                   </button>
                 </>
               ) : (
-                <button type="button" onClick={() => run(requestRematch(roomId, uid))} className={primaryBtn}>
+                <button
+                  type="button"
+                  onClick={() => run(requestRematch(roomId, uid))}
+                  className={primaryBtn}
+                >
                   ↻ 다시 하기 (선후 교대)
                 </button>
               )}
@@ -895,7 +904,12 @@ export default function JanggiRoomView({
           {/* 관전자 */}
           <div className="px-1 font-mono text-[11px] text-white/35">
             관전 {specNames.length}/{MAX_SPECTATORS}
-            {specNames.length > 0 && ` · ${specNames.map(([, n]) => n).join(", ")}`}
+            {specNames.map(([id, n], i) => (
+              <span key={id}>
+                {i === 0 ? " · " : ", "}
+                <Nick name={n} />
+              </span>
+            ))}
           </div>
           {me && playing && (
             <p className="px-1 font-['Nanum_Gothic',sans-serif] text-[11px] leading-relaxed text-white/30">

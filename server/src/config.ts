@@ -16,6 +16,8 @@ export interface Config {
   /** Firebase ID 토큰 서명 검증용 공개키(JWKS) 주소 */
   authJwksUrl: string;
   adminEmails: string[];
+  /** 관리자 계정이 처음 로그인할 때 자동으로 붙는 별명 (다른 사람은 못 씀) */
+  adminNick: string;
   /** 프록시(Caddy·nginx 등) 뒤에 둘 때 X-Forwarded-For를 믿을 단계 수 */
   trustProxy: number;
   /** 글이 바뀌면 프론트(Next 서버)에 캐시를 비우라고 알릴 주소 (예: http://web:3000/internal/revalidate/). 비우면 알리지 않음 */
@@ -57,6 +59,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       env.AUTH_JWKS_URL?.trim() ||
       "https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com",
     adminEmails: list(env.ADMIN_EMAILS).length ? list(env.ADMIN_EMAILS) : ["rjsah5676@gmail.com"],
+    adminNick: env.ADMIN_NICK?.trim() || "이건모",
     trustProxy: Number(env.TRUST_PROXY) || 0,
     webRevalidateUrl: env.WEB_REVALIDATE_URL?.trim() ?? "",
     revalidateSecret: env.REVALIDATE_SECRET?.trim() ?? "",

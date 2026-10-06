@@ -1,5 +1,6 @@
 "use client";
 
+import Nick from "@/components/Nick";
 import { StoneDot } from "./OmokBoard";
 import type { Color } from "@/lib/omok/engine";
 
@@ -38,7 +39,7 @@ export function SideBar({
           <StoneDot white={color === "b"} size={20} />
         </span>
         <span className="truncate font-['Nanum_Gothic',sans-serif] text-sm text-white/90">
-          {name}
+          <Nick name={name} />
         </span>
         <span className="shrink-0 font-mono text-[11px] text-white/40">{SIDE_KO[color]}</span>
       </div>

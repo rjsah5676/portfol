@@ -62,7 +62,7 @@ describe("방 만들기 · 로비", () => {
       hostUid: host.uid,
       whiteUid: "",
       blackUid: host.uid,
-      blackName: "방장",
+      blackName: "◦방장",
       status: "waiting",
       moves: [],
       fen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
@@ -128,7 +128,7 @@ describe("착석 · 시작 · 퇴장", () => {
     await expect(third.rpc("board.joinAsPlayer", { ...ref, nick: "x" })).rejects.toMatchObject({ message: "빈 자리가 없습니다." });
 
     const sub = await guest.sub("board.room", ref);
-    expect(sub.data).toMatchObject({ blackUid: guest.uid, blackName: "상대", status: "waiting" });
+    expect(sub.data).toMatchObject({ blackUid: guest.uid, blackName: "◦상대", status: "waiting" });
     await host.rpc("board.startGame", ref);
     const ev = await sub.wait((e) => e.d?.status === "playing");
     expect(ev.d.turnStartedAt).toBeTypeOf("number");
@@ -297,9 +297,9 @@ describe("대국", () => {
     expect(await room()).toMatchObject({
       status: "playing",
       whiteUid: guest.uid,
-      whiteName: "상대",
+      whiteName: "◦상대",
       blackUid: host.uid,
-      blackName: "방장",
+      blackName: "◦방장",
       moves: [],
       result: "",
       reason: "",
@@ -352,7 +352,7 @@ describe("접속 상태 · 승리 선언", () => {
     expect(pres.data).toEqual({});
     await host.rpc("board.beat", { ...ref, name: "방장", bumpRoom: true });
     const ev = await pres.wait((e) => e.t === "presence");
-    expect(ev.d[host.uid!]).toMatchObject({ name: "방장" });
+    expect(ev.d[host.uid!]).toMatchObject({ name: "◦방장" });
     expect(Math.abs(ev.d[host.uid!].lastSeen - Date.now())).toBeLessThan(5000);
     expect((await room.wait()).d.updatedAt).toBeGreaterThanOrEqual(room.data.updatedAt);
     // 참가자가 아닌 사람의 하트비트는 기록하지 않음
@@ -427,7 +427,7 @@ describe("채팅", () => {
     expect(chat.data).toEqual([]);
     await host.rpc("board.sendChat", { ...ref, name: "방장", text: "  안녕  ", cid: "AbCdEfGhIjKlMnOpQrSt" });
     const ev = await chat.wait((e) => e.t === "add");
-    expect(ev.d).toMatchObject({ id: "AbCdEfGhIjKlMnOpQrSt", uid: host.uid, name: "방장", text: "안녕" });
+    expect(ev.d).toMatchObject({ id: "AbCdEfGhIjKlMnOpQrSt", uid: host.uid, name: "◦방장", text: "안녕" });
     expect(ev.d.at).toBeTypeOf("number");
     await guest.rpc("board.sendChat", { ...ref, name: "상대", text: "x".repeat(300) });
     expect((await chat.wait((e) => e.t === "add")).d.text).toHaveLength(200);
@@ -436,7 +436,7 @@ describe("채팅", () => {
     });
     // 나중에 구독한 사람은 오래된 것부터 받음
     const later = (await (await user("y")).sub("board.chat", ref)).data;
-    expect(later.map((m: any) => m.name)).toEqual(["방장", "상대"]);
+    expect(later.map((m: any) => m.name)).toEqual(["◦방장", "◦상대"]);
   });
 });
 

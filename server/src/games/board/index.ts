@@ -79,7 +79,7 @@ const randomKey = () => newId(24);
 
 const noRoom = () => new AppError("NO_ROOM", "방이 존재하지 않습니다.", 404);
 
-export function registerBoardGames({ db, gateway }: Deps) {
+export function registerBoardGames({ db, gateway, users }: Deps) {
   const mutex = new KeyedMutex();
   const privates = db.col<PrivateDoc>("board_private");
   const chats = db.col<ChatDoc>("board_chat");
@@ -109,6 +109,14 @@ export function registerBoardGames({ db, gateway }: Deps) {
      * 방 하나를 읽고 → fn이 바꿀 내용을 돌려주면 → 저장하고 구독자에게 알림.
      * 같은 방에 대한 요청은 순서대로 하나씩만 실행됨. fn이 null/undefined면 아무것도 안 바꿈.
      */
+    /** 대국이 끝남 → 회원의 전적에 반영 (서로 한 수 이상 둔 판만) */
+    function recordResult(room: RoomDoc) {
+      if (!room.result || room.moves.length < 2 || !room.whiteUid || !room.blackUid) return;
+      const of = (mine: "1-0" | "0-1") => (room.result === "1/2-1/2" ? "d" : room.result === mine ? "w" : "l");
+      users.bump(room.whiteUid, { [`stats.online.${g}.${of("1-0")}`]: 1 });
+      users.bump(room.blackUid, { [`stats.online.${g}.${of("0-1")}`]: 1 });
+    }
+
     function mutate(
       id: string,
       fn: (room: RoomDoc, now: Date) => Partial<RoomDoc> | null | void | Promise<Partial<RoomDoc> | null | void>
@@ -122,6 +130,7 @@ export function registerBoardGames({ db, gateway }: Deps) {
         const { _id: _omit, ...set } = { ...patch, v: next.v } as Partial<RoomDoc>;
         await rooms.updateOne({ _id: id }, { $set: set });
         gateway.emit(roomKey(id), "room", toWire(next));
+        if (room.status !== "ended" && next.status === "ended") recordResult(next);
         lobby.publish();
         return next;
       });
@@ -722,12 +731,12 @@ export function registerBoardGames({ db, gateway }: Deps) {
   function roomRpc<S extends z.ZodRawShape>(
     name: string,
     extra: S,
-    fn: (game: ReturnType<typeof makeGame>, uid: string, id: string, args: z.infer<z.ZodObject<S>>) => unknown
+    fn: (game: ReturnType<typeof makeGame>, uid: string, id: string, args: z.infer<z.ZodObject<S>>, ctx: Ctx) => unknown
   ) {
     const schema = roomRef.extend(extra);
     gateway.rpc(`board.${name}`, async (ctx: Ctx, raw) => {
       const args = schema.parse(raw) as { g: GameKey; id: string } & z.infer<z.ZodObject<S>>;
-      await fn(games[args.g], ctx.uid, args.id, args);
+      await fn(games[args.g], ctx.uid, args.id, args, ctx);
       return null;
     });
   }
@@ -750,7 +759,8 @@ export function registerBoardGames({ db, gateway }: Deps) {
   });
   gateway.rpc("board.createRoom", (ctx, raw) => {
     const { g, ...input } = createSchema.parse(raw);
-    return games[g].createRoom(ctx.uid, input);
+    // 이름은 서버가 정함: 회원이면 별명, 아니면 적은 이름에 비회원 표시
+    return games[g].createRoom(ctx.uid, { ...input, nick: ctx.name(input.nick, 20) });
   });
 
   gateway.rpc("board.hasRoomAccess", (ctx, raw) => {
@@ -765,8 +775,8 @@ export function registerBoardGames({ db, gateway }: Deps) {
   roomRpc("unlockRoom", { password: z.string().max(100).optional(), invite: z.string().max(100).optional() }, (game, uid, id, a) =>
     game.unlockRoom(uid, id, { password: a.password, invite: a.invite })
   );
-  roomRpc("joinAsPlayer", { nick }, (game, uid, id, a) => game.joinAsPlayer(uid, id, a.nick));
-  roomRpc("joinAsSpectator", { nick }, (game, uid, id, a) => game.joinAsSpectator(uid, id, a.nick));
+  roomRpc("joinAsPlayer", { nick }, (game, uid, id, a, ctx) => game.joinAsPlayer(uid, id, ctx.name(a.nick, 20)));
+  roomRpc("joinAsSpectator", { nick }, (game, uid, id, a, ctx) => game.joinAsSpectator(uid, id, ctx.name(a.nick, 20)));
   roomRpc("startGame", {}, (game, uid, id) => game.startGame(uid, id));
   roomRpc("leaveRoom", {}, (game, uid, id) => game.leaveRoom(uid, id));
   roomRpc("makeMove", { move: z.string().min(1).max(12) }, (game, uid, id, a) => game.makeMove(uid, id, a.move));
@@ -784,11 +794,11 @@ export function registerBoardGames({ db, gateway }: Deps) {
   roomRpc("resumeGame", {}, (game, uid, id) => game.resumeGame(uid, id));
   roomRpc("addTime", { color: z.enum(["w", "b"]) }, (game, uid, id, a) => game.addTime(uid, id, a.color));
   roomRpc("expirePausedGame", {}, (game, uid, id) => game.expirePausedGame(uid, id));
-  roomRpc("beat", { name: nick, bumpRoom: z.boolean().default(false) }, (game, uid, id, a) =>
-    game.beat(uid, id, a.name, a.bumpRoom)
+  roomRpc("beat", { name: nick, bumpRoom: z.boolean().default(false) }, (game, uid, id, a, ctx) =>
+    game.beat(uid, id, ctx.name(a.name, 20), a.bumpRoom)
   );
-  roomRpc("sendChat", { name: z.string().max(40), text: z.string().max(1000), cid: z.unknown().optional() }, (game, uid, id, a) =>
-    game.sendChat(uid, id, a.name, a.text, a.cid)
+  roomRpc("sendChat", { name: z.string().max(40), text: z.string().max(1000), cid: z.unknown().optional() }, (game, uid, id, a, ctx) =>
+    game.sendChat(uid, id, ctx.name(a.name, 19), a.text, a.cid)
   );
 
   return {

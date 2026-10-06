@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import Link from "next/link";
 import HintBubble from "@/components/HintBubble";
+import SiteLinks, { type SiteLink } from "@/components/SiteLinks";
 
 export interface AboutProject {
   idx: number;
@@ -134,7 +135,7 @@ const JOURNEY: { year: string; title: string; body: string }[] = [
   {
     year: "2022",
     title: "아주대학교 소프트웨어학과 졸업",
-    body: "졸업 무렵 팀 프로젝트로 영천시 세무조사 홈페이지(JSP·MySQL)를 만들었습니다.",
+    body: "학부 과정을 마치고 졸업했습니다.",
   },
   {
     year: "2025",
@@ -357,7 +358,7 @@ function Hero({ photos }: { photos: AboutProject[] }) {
             style={{ "--d": "1250ms" } as CSSProperties}
           >
             <Link
-              href="/project/"
+              href="/portfolio/"
               className="group rounded-full bg-[#6C63FF] px-6 py-2.5 font-mono text-sm text-white shadow-[0_8px_30px_-8px_rgba(108,99,255,0.8)] transition-all hover:-translate-y-0.5 hover:bg-[#5b52f0]"
             >
               프로젝트 보기{" "}
@@ -431,6 +432,89 @@ function Hero({ photos }: { photos: AboutProject[] }) {
       >
         <span className="ab-scroll-dot h-2 w-1 rounded-full bg-white/70" />
       </a>
+    </section>
+  );
+}
+
+/** 한눈에 보는 프로필 (예전 메인 화면에 있던 것): 인사 · 사진 · 지금 하는 일 · 학교 · 바깥 링크 */
+function Profile({ photo, sites }: { photo: string; sites: SiteLink[] }) {
+  const [ref, inView] = useInView<HTMLDivElement>(0.15);
+  const greeting = "hello, world";
+  const [typed, setTyped] = useState(0);
+  useEffect(() => {
+    if (!inView || typed >= greeting.length) return;
+    const id = setTimeout(() => setTyped((v) => v + 1), typed === 0 ? 500 : 70);
+    return () => clearTimeout(id);
+  }, [inView, typed]);
+
+  // 화면에 들어오면 타일이 차례로 올라옴 (about.css 의 .mn-tile)
+  const tile = (i: number, className: string) => ({
+    onPointerMove: trackSpot,
+    className: `${inView ? "mn-tile" : "opacity-0"} ab-spot overflow-hidden rounded-3xl border border-white/10 bg-[#1A1B20] ${className}`,
+    style: { "--i": i } as CSSProperties,
+  });
+  const label = "mb-3 font-mono text-xs text-white/35";
+  const value = "font-['Nanum_Gothic',sans-serif] text-sm leading-relaxed break-keep text-white/85";
+
+  return (
+    <section className="mx-auto max-w-5xl px-4 pt-20 sm:px-6">
+      <div ref={ref} className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-4">
+        <div {...tile(0, "col-span-2 p-6 sm:p-8 md:row-span-2")}>
+          <div className="font-mono text-sm text-[#8B84FF]">
+            <span className="text-white/30">$ echo </span>
+            {greeting.slice(0, typed)}
+            <span className="ab-caret" />
+          </div>
+          <h2 className="mt-6 font-mono text-4xl font-bold text-white sm:text-5xl">이건모</h2>
+          <p className="mt-2 font-mono text-sm text-white/40">Lee Gunmo · Fullstack Developer</p>
+          <p className="mt-6 max-w-sm font-['Nanum_Gothic',sans-serif] leading-relaxed break-keep text-white/65">
+            화면부터 서버, 데이터베이스까지 이어서 만듭니다. 문제는 원인까지 따라가서 고치고, 배운
+            것은 기록으로 남깁니다.
+          </p>
+        </div>
+
+        <div {...tile(1, "relative col-span-2 aspect-[586/532] md:row-span-2 md:aspect-auto")}>
+          <img
+            src={photo}
+            alt="이건모 프로필 사진"
+            className="mn-kenburns absolute inset-0 h-full w-full object-cover"
+            draggable={false}
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+          <div className="absolute right-4 bottom-4 left-4 flex items-end justify-between gap-3">
+            <span className="font-mono text-xs text-white/80">Seize the day.</span>
+            <span className="rounded-full bg-black/40 px-2.5 py-1 font-mono text-[10px] text-white/70 backdrop-blur">
+              Seongnam, KR
+            </span>
+          </div>
+        </div>
+
+        <div {...tile(2, "p-5 sm:p-6")}>
+          <div className={`${label} flex items-center gap-1.5`}>
+            <span className="relative flex h-1.5 w-1.5">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-70" />
+              <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-400" />
+            </span>
+            now
+          </div>
+          <div className={value}>커머스 플랫폼 풀스택 개발</div>
+        </div>
+
+        <div {...tile(3, "p-5 sm:p-6")}>
+          <div className={label}>edu</div>
+          <div className={value}>아주대학교 소프트웨어학과</div>
+        </div>
+
+        <div
+          {...tile(
+            4,
+            "col-span-2 flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6"
+          )}
+        >
+          <span className="font-mono text-xs text-white/35">elsewhere</span>
+          <SiteLinks sites={sites} />
+        </div>
+      </div>
     </section>
   );
 }
@@ -659,7 +743,7 @@ function Projects({ projects }: { projects: AboutProject[] }) {
             </Link>
           ))}
           <Link
-            href="/project/"
+            href="/portfolio/"
             className="flex w-40 shrink-0 snap-start items-center justify-center rounded-2xl border border-dashed border-white/15 font-mono text-sm text-white/50 transition-colors hover:border-[#6C63FF]/60 hover:text-white"
           >
             전체 보기 →
@@ -888,10 +972,10 @@ function Outro() {
       <Reveal delay={150}>
         <div className="mt-10 flex flex-wrap justify-center gap-3">
           <Link
-            href="/works/"
+            href="/portfolio/"
             className="rounded-full bg-[#6C63FF] px-6 py-2.5 font-mono text-sm text-white transition-colors hover:bg-[#5b52f0]"
           >
-            프로젝트 · 공부 기록
+            포트폴리오
           </Link>
           <Link
             href="/archive/"
@@ -913,7 +997,15 @@ function Outro() {
   );
 }
 
-export default function AboutLanding({ projects }: { projects: AboutProject[] }) {
+export default function AboutLanding({
+  projects,
+  photo,
+  sites,
+}: {
+  projects: AboutProject[];
+  photo: string;
+  sites: SiteLink[];
+}) {
   // 히어로 사진 스택: 이미지가 화면 캡처인 대표 프로젝트 3개
   const heroPhotos = [10, 11, 1]
     .map((idx) => projects.find((p) => p.idx === idx))
@@ -922,6 +1014,7 @@ export default function AboutLanding({ projects }: { projects: AboutProject[] })
     <div className="overflow-x-clip">
       <Hero photos={heroPhotos} />
       <Marquee />
+      <Profile photo={photo} sites={sites} />
       <Numbers />
       <Terminal />
       <Traits />

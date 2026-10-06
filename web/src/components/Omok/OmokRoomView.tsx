@@ -1,5 +1,6 @@
 "use client";
 
+import Nick from "@/components/Nick";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { omokSoundInfo, useMoveSound } from "@/hooks/useMoveSound";
 import OmokBoard, { StoneDot } from "./OmokBoard";
@@ -837,7 +838,12 @@ export default function OmokRoomView({
           {/* 관전자 */}
           <div className="px-1 font-mono text-[11px] text-white/35">
             관전 {specNames.length}/{MAX_SPECTATORS}
-            {specNames.length > 0 && ` · ${specNames.map(([, n]) => n).join(", ")}`}
+            {specNames.map(([id, n], i) => (
+              <span key={id}>
+                {i === 0 ? " · " : ", "}
+                <Nick name={n} />
+              </span>
+            ))}
           </div>
           {me && playing && (
             <p className="px-1 font-['Nanum_Gothic',sans-serif] text-[11px] leading-relaxed text-white/30">

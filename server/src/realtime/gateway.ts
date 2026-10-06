@@ -3,6 +3,7 @@ import { Server, type Socket } from "socket.io";
 import type { Auth, AuthUser } from "../auth";
 import type { Config } from "../config";
 import { AppError, bad, forbidden, toWireError, unauthenticated } from "../errors";
+import { displayName } from "../users";
 
 /*
  * 실시간 게이트웨이 (socket.io)
@@ -26,6 +27,10 @@ export interface Ctx {
   user: AuthUser | null;
   /** 로그인한 사용자의 uid (로그인 전이면 UNAUTHENTICATED 오류) */
   readonly uid: string;
+  /** 회원의 별명 (비회원이면 null) */
+  readonly nick: string | null;
+  /** 화면에 보일 내 이름: 회원이면 별명, 아니면 입력한 이름에 비회원 표시를 붙인 것 */
+  name(typed: string, max?: number): string;
   requireAdmin(): void;
 }
 
@@ -42,6 +47,7 @@ export interface Channel {
 
 interface SocketData {
   user: AuthUser | null;
+  nick: string | null;
   /** 구독 키 → { 채널 이름, 같은 키를 몇 번 구독했는지 } */
   subs: Map<string, { ch: string; n: number }>;
   chain: Promise<unknown>;
@@ -58,6 +64,8 @@ export class Gateway {
   private rpcs = new Map<string, RpcHandler>();
   private channels = new Map<string, Channel>();
   private disconnectHooks: ((ctx: Ctx) => MaybePromise<void>)[] = [];
+  /** 로그인한 사용자의 별명을 찾는 방법 (server.ts 에서 연결) */
+  nickOf: (user: AuthUser) => Promise<string | null> = async () => null;
 
   constructor(http: HttpServer, cfg: Config, private auth: Auth) {
     this.io = new Server(http, {
@@ -71,6 +79,7 @@ export class Gateway {
     this.io.use(async (socket, next) => {
       const data = socket.data as SocketData;
       data.user = null;
+      data.nick = null;
       data.subs = new Map();
       data.chain = Promise.resolve();
       data.rate = { at: 0, n: 0 };
@@ -134,6 +143,14 @@ export class Gateway {
     }
   }
 
+  /** 별명이 생기거나 바뀜 → 그 사람의 접속 중인 연결에 반영 */
+  setNick(uid: string, nick: string) {
+    for (const socket of this.io.sockets.sockets.values()) {
+      const data = socket.data as SocketData;
+      if (data.user?.uid === uid) data.nick = nick;
+    }
+  }
+
   userOf(socket: Socket): AuthUser | null {
     return (socket.data as SocketData).user;
   }
@@ -148,6 +165,12 @@ export class Gateway {
       get uid() {
         if (!data.user) throw unauthenticated();
         return data.user.uid;
+      },
+      get nick() {
+        return data.nick;
+      },
+      name(typed, max) {
+        return displayName(data.nick, typed, max);
       },
       requireAdmin() {
         if (!data.user) throw unauthenticated();
@@ -217,6 +240,7 @@ export class Gateway {
         // 다른 사람으로 바뀌는 건 새 연결로만 (이전 사용자의 구독·자리가 섞이지 않게)
         if (data.user && data.user.uid !== user.uid) throw new AppError("REAUTH", "다시 연결해야 합니다.", 409);
         data.user = user;
+        data.nick = await this.nickOf(user).catch(() => null);
         return { uid: user.uid };
       })
     );

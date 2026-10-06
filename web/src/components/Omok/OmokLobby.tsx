@@ -1,5 +1,6 @@
 "use client";
 
+import Nick from "@/components/Nick";
 import { useEffect, useMemo, useState } from "react";
 import { timeLabel, useActiveRoomPrompt } from "@/components/Chess/ChessLobby";
 import { BOARD_NS, RULES, RULE_LABEL, type BoardN, type Rule } from "@/lib/omok/engine";
@@ -233,9 +234,9 @@ export default function OmokLobby({ uid, nick, onChangeNick, onEnter }: Props) {
                   </span>
                 </span>
                 <span className="order-3 col-span-2 truncate text-xs text-white/40 sm:order-none sm:col-span-1">
-                  <span className="text-white/75">● {r.whiteName || "—"}</span>
+                  <span className="text-white/75">● {r.whiteName ? <Nick name={r.whiteName} /> : "—"}</span>
                   {"  vs  "}
-                  <span className="text-white/55">○ {r.blackName || "—"}</span>
+                  <span className="text-white/55">○ {r.blackName ? <Nick name={r.blackName} /> : "—"}</span>
                   <span className="ml-2 sm:hidden">
                     · {timeLabel(r)} · {RULE_LABEL[parseRule(r.variant)]} · {parseBoardN(r.variant)}
                     줄

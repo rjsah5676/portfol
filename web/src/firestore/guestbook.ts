@@ -8,6 +8,8 @@ export interface GuestEntry {
   docId: string;
   id: number;
   name: string;
+  /** 회원이 쓴 글인지 (아니면 이름 앞에 GUEST 표시) */
+  member?: boolean;
   contents: string;
   date: string;
   /** 예전 글에는 없음 → id 기준으로 색 배정 */
@@ -50,8 +52,10 @@ export async function addGuestEntry({
   const pad = (n: number) => String(n).padStart(2, "0");
   const id = now.getTime();
   const date = `${now.getFullYear()}년 ${now.getMonth() + 1}월 ${now.getDate()}일  ${now.getHours()}:${pad(now.getMinutes())}`;
+  // 로그인해 있으면 같이 알림 → 회원이 쓴 글은 서버가 별명으로 저장
   await api("/api/guest", {
     method: "POST",
+    auth: true,
     body: { name, contents, id, date, color: color ?? "lavender" },
   });
   return id;

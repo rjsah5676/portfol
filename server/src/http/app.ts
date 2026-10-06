@@ -4,6 +4,7 @@ import { rateLimit } from "express-rate-limit";
 import type { Deps } from "../deps";
 import { toWireError } from "../errors";
 import { adminRouter, type AdminHooks } from "./admin";
+import { meRouter } from "./me";
 import { rankingsRouter } from "./rankings";
 import { siteRouter } from "./site";
 import { studyPostsRouter } from "./studyPosts";
@@ -47,6 +48,7 @@ export function createApp(deps: Deps, hooks: Pick<AdminHooks, "roomsDeleted">) {
 
   const site = siteRouter(deps);
   app.use("/api/rankings", rankingsRouter(deps));
+  app.use("/api/me", meRouter(deps));
   app.use("/api/study-posts", studyPostsRouter(deps));
   app.use("/api/admin", adminRouter(deps, { guestChanged: site.publishGuest, roomsDeleted: hooks.roomsDeleted }));
   app.use("/api", site.router);

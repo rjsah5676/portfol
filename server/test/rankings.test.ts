@@ -50,6 +50,10 @@ describe("랭킹: 조회·형식", () => {
     expect(await status("v", "score", { name: "a", score: 253 })).toBe(400);
     expect(await status("v", "score", { name: "a", score: 1.5 })).toBe(400);
     expect(await status("v", "score", { name: "", score: 1 })).toBe(400);
+    // 이름은 10자까지 (랭킹 종류와 상관없이)
+    expect(await status("v", "score", { name: "가".repeat(11), score: 1 })).toBe(400);
+    expect(await status("v", "minesweeper_rankings", { name: "a".repeat(11), time: 30 })).toBe(400);
+    expect(await status("v10", "reaction", { name: "가".repeat(10), score: 300 })).toBe(200);
     expect(await status("v", "score", { name: "a", score: 1, extra: 1 })).toBe(400);
     expect(await status("v", "reaction", { name: "a", score: 79 })).toBe(400);
     expect(await status("v", "minesweeper_rankings", { name: "a", time: 9 })).toBe(400);

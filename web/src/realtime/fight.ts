@@ -625,12 +625,12 @@ export class FightNet {
 
 // ───────────── 관전 ─────────────
 
-/** 관전 기록 한 묶음의 프레임 수 (0.5초) */
-const LOG_CHUNK = 30;
+/** 관전 기록 한 묶음의 프레임 수 (0.25초) */
+const LOG_CHUNK = 15;
 const enc = (xs: number[]) => xs.map((x) => x.toString(36)).join(",");
 const dec = (v: string) => (v ? v.split(",").map((x) => parseInt(x, 36) || 0) : []);
 
-/** 선수: 내 확정 입력을 관전용으로 0.5초치씩 올림 (확정 입력은 바뀌지 않아서 관전자는 그대로 다시 돌리면 됨) */
+/** 선수: 내 확정 입력을 관전용으로 0.25초치씩 올림 (확정 입력은 바뀌지 않아서 관전자는 그대로 다시 돌리면 됨) */
 export class InputLog {
   private buf: number[] = [];
   private from: number;

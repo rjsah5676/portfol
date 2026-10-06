@@ -2,7 +2,7 @@ import Link from "next/link";
 import Faded from "@/components/Faded";
 import { getNavGroup } from "@/data/navMenu";
 
-// nav 대제목(project/games/tools/devtools)을 누르면 나오는 하위 메뉴 격자 페이지
+// nav 대제목(study/games/tools/devtools)을 누르면 나오는 하위 메뉴 격자 페이지
 export default function MenuHub({ group }: { group: string }) {
   const g = getNavGroup(group);
   return (

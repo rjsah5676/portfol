@@ -13,6 +13,7 @@ import {
 } from "@/firestore/minesweeperRankings";
 import { useInitial } from "@/lib/api/InitialData";
 import { beginRun, prepareRuns } from "@/lib/api/rankRun";
+import { useNick } from "@/lib/AuthContext";
 import { playChord, playExplosion, playFlag, playReveal } from "@/lib/sfx";
 import endBgmSrc from "@/sounds/melongame/endbgm.mp3";
 import "@/css/minesweeper.css";
@@ -81,6 +82,7 @@ export default function Minesweeper() {
   }, [isPortrait, initialized, dims]);
   const [pressingCell, setPressingCell] = useState<{ row: number; col: number } | null>(null);
   const [startTime, setStartTime] = useState<number | null>(null);
+  const nick = useNick();
   const [timer, setTimer] = useState<number | string>(0);
   // 서버가 미리 읽어둔 랭킹으로 시작 (layout.tsx) → 첫 화면부터 순위가 보임. 없으면 아래에서 읽어옴
   const initialRanks = useInitial<MineRankingRow[]>("rankings");
@@ -101,11 +103,12 @@ export default function Minesweeper() {
   useEffect(() => {
     if (win && startTime) {
       const clearTime = ((Date.now() - startTime) / 1000).toFixed(2);
-      const name = prompt(`🎉 ${clearTime}s 클리어! 이름을 입력하세요:`);
+      // 회원은 이름을 묻지 않고 별명으로 바로 등록
+      const name = nick ?? prompt(`🎉 ${clearTime}s 클리어! 이름을 입력하세요:`);
       if (name) {
-        addRanking(name, parseFloat(clearTime)).catch((e) =>
-          alert(e instanceof Error ? e.message : "기록을 등록하지 못했습니다.")
-        );
+        addRanking(name, parseFloat(clearTime))
+          .then(() => getTopRankings(10).then(setRankings))
+          .catch((e) => alert(e instanceof Error ? e.message : "기록을 등록하지 못했습니다."));
       }
     }
   }, [win]);
@@ -362,13 +365,22 @@ export default function Minesweeper() {
         className="w-full max-w-[848px]"
         guide={MINE_GUIDE}
         rank={{
-          top: rankings.slice(0, 3).map((r) => ({ name: r.name, value: `${r.time}s` })),
+          top: rankings.slice(0, 3).map((r) => ({
+            name: r.name,
+            member: r.member,
+            value: `${r.time}s`,
+          })),
           sub: "클리어 시간",
           open: rankOpen,
           onOpenChange: setRankOpen,
           render: () => (
             <RankList
-              rows={rankings.map((r) => ({ name: r.name, value: `${r.time}s`, date: r.createdAt }))}
+              rows={rankings.map((r) => ({
+                name: r.name,
+                member: r.member,
+                value: `${r.time}s`,
+                date: r.createdAt,
+              }))}
               skip={3}
             />
           ),

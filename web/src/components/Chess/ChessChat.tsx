@@ -1,5 +1,6 @@
 "use client";
 
+import Nick from "@/components/Nick";
 import { useEffect, useRef, useState } from "react";
 import {
   CHAT_MAX,
@@ -109,7 +110,7 @@ export default function ChessChat({
                     title={role === "spectator" ? "관전" : marks[role][1]}
                   >
                     {role === "spectator" ? "" : marks[role][0]}
-                    {m.name}
+                    <Nick name={m.name} />
                   </span>
                   <span className="font-['Nanum_Gothic',sans-serif] text-white/80">{m.text}</span>
                   <span className="ml-1.5 font-mono text-[10px] text-white/25">

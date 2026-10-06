@@ -4,7 +4,7 @@ import type { Deps } from "../deps";
 import { notFound } from "../errors";
 import { newId } from "../ids";
 import { liveList } from "../realtime/liveList";
-import { h, ms, requireAdmin } from "./util";
+import { h, ms, requireAdmin, userOf } from "./util";
 
 /*
  * 사이트 공통 데이터: 방명록 · 문의 · 방문자 수
@@ -36,13 +36,13 @@ const inquirySchema = z.strictObject({
 
 const DATE_KEY = /^\d{4}-\d{2}-\d{2}$/;
 
-export function siteRouter({ db, auth, gateway }: Deps) {
+export function siteRouter({ db, auth, gateway, users }: Deps) {
   const r = Router();
 
   // ── 방명록 ──
   const guest = liveList(gateway, "guest", async () => {
     const docs = await db.col("guest").find({}).sort({ id: -1 }).limit(300).toArray();
-    return docs.map(({ _id, ...rest }) => ({ ...rest, docId: _id }));
+    return docs.map(({ _id, uid: _uid, ...rest }) => ({ ...rest, docId: _id }));
   });
   gateway.channel("guest", { key: () => guest.key, snapshot: () => guest.load() });
 
@@ -54,8 +54,12 @@ export function siteRouter({ db, auth, gateway }: Deps) {
     "/guest",
     h(async (req) => {
       const data = guestSchema.parse(req.body);
+      // 회원이 쓰면 별명으로 (적은 이름은 무시), member 표시가 없는 글이 비회원 글
+      const user = await userOf(auth, req);
+      const nick = await users.nickOf(user);
+      const owner = nick ? { name: nick, uid: user!.uid, member: true } : {};
       const _id = newId();
-      await db.col("guest").insertOne({ _id, ...data });
+      await db.col("guest").insertOne({ _id, ...data, ...owner });
       guest.publish();
       return { docId: _id };
     })

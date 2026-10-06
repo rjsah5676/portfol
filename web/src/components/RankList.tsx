@@ -1,8 +1,11 @@
 import type { ReactNode } from "react";
 import { rankDateLabel } from "@/lib/rankDate";
+import Nick from "./Nick";
 
 export interface RankRow {
   name: string;
+  /** 회원의 기록인지 (아니면 이름 앞에 GUEST 표시) */
+  member?: boolean;
   /** 표시할 기록 (예: "123ms", "45.2s") */
   value: string;
   /** 이름 아래 작은 설명 (예: "vs 1600 · 32수") */
@@ -44,7 +47,7 @@ export default function RankList({
               {i + 1}
             </span>
             <span className="min-w-0 text-left font-['Nanum_Gothic',sans-serif]">
-              <span className="block truncate text-white/85">{r.name}</span>
+              <Nick name={r.name} guest={!r.member} className="block truncate text-white/85" />
               {r.sub && <span className="block truncate text-[10px] text-white/35">{r.sub}</span>}
             </span>
             <span className="text-right text-white tabular-nums">{r.value}</span>

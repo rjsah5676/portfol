@@ -34,7 +34,7 @@ async function roomWith(n: number, o: Partial<typeof OPTS> = {}) {
 async function toDrawing(id: string, drawer: TestClient, word = "사과") {
   const state = (await peek(id)).state;
   await drawer.rpc("sketch.setChoices", { id, turnId: state.turnId, choices: [{ word, level: 1 }, { word: "배", level: 0 }] });
-  await drawer.rpc("sketch.chooseWord", { id, turnId: state.turnId, word, hint: "○○", level: 1 });
+  await drawer.rpc("sketch.chooseWord", { id, turnId: state.turnId, word, hint: "◦◦", level: 1 });
   return state.turnId as string;
 }
 
@@ -83,7 +83,7 @@ describe("입장 · 퇴장", () => {
     const { host, others, id } = await roomWith(2, { max: 2 });
     const room = await peek(id);
     expect(Object.keys(room.players).sort()).toEqual([host.uid, others[0].uid].sort());
-    expect(room.scores[others[0].uid!]).toEqual({ nick: "참가1", score: 0 });
+    expect(room.scores[others[0].uid!]).toEqual({ nick: "◦참가1", score: 0 });
     await expect(join(await user("late"), id, "늦음")).rejects.toMatchObject({ code: "ROOM_FULL" });
     // 이미 있던 사람이 다시 들어오는 건 됨
     await join(others[0], id, "참가1");
@@ -113,7 +113,7 @@ describe("입장 · 퇴장", () => {
     const { host, others, id } = await roomWith(2);
     const chat = await host.sub("sketch.chat", { id });
     await others[0].rpc("sketch.leave", { id, nick: "참가1" });
-    expect((await chat.wait((e) => e.t === "add")).d).toMatchObject({ kind: "system", uid: "", text: "참가1님이 나갔어요." });
+    expect((await chat.wait((e) => e.t === "add")).d).toMatchObject({ kind: "system", uid: "", text: "◦참가1님이 나갔어요." });
   });
 
   it("빈 방 정리: 사람이 있으면 그대로, 없으면 삭제되고 구독자는 null 을 받음", async () => {
@@ -157,7 +157,7 @@ describe("비밀번호 방 · 강퇴", () => {
     await expect(b.rpc("sketch.kick", { id, target: a.uid })).rejects.toMatchObject({ code: "FORBIDDEN" });
     await host.rpc("sketch.kick", { id, target: a.uid });
     const room = await peek(id);
-    expect(room.kicked[a.uid!]).toBe("참가1");
+    expect(room.kicked[a.uid!]).toBe("◦참가1");
     expect(room.players[a.uid!]).toBeUndefined();
     expect(room.scores[a.uid!]).toBeUndefined();
     await expect(join(a, id, "참가1")).rejects.toMatchObject({ code: "FORBIDDEN" });
@@ -178,7 +178,7 @@ describe("진행", () => {
     const chat = await g.host.sub("sketch.chat", { id: g.id });
     await g.host.rpc("sketch.startGame", { id: g.id });
     const st = (await peek(g.id)).state;
-    expect(st).toMatchObject({ phase: "choosing", turnNo: 1, drawer: g.host.uid, drawerNick: "방장", drawn: { [g.host.uid!]: 1 } });
+    expect(st).toMatchObject({ phase: "choosing", turnNo: 1, drawer: g.host.uid, drawerNick: "◦방장", drawn: { [g.host.uid!]: 1 } });
     expect(st.turnId).not.toBe("");
     expect(st.endsAt - Date.now()).toBeGreaterThan(13_000);
     expect((await chat.wait((e) => e.d?.kind === "system")).d.text).toContain("게임 시작!");
@@ -196,15 +196,15 @@ describe("진행", () => {
     expect(words.data).toBeNull();
     await host.rpc("sketch.setChoices", { id, turnId, choices: [{ word: "사과", level: 1 }, { word: "배", level: 0 }] });
     expect((await words.wait((e) => e.t === "value")).d).toEqual({ turnId, choices: ["사과", "배"], levels: [1, 0] });
-    await host.rpc("sketch.chooseWord", { id, turnId, word: "사과", hint: "○○", level: 1 });
+    await host.rpc("sketch.chooseWord", { id, turnId, word: "사과", hint: "◦◦", level: 1 });
     expect((await words.wait((e) => e.d?.word)).d.word).toBe("사과");
     const st = (await peek(id)).state;
-    expect(st).toMatchObject({ phase: "drawing", hint: "○○", level: 1 });
+    expect(st).toMatchObject({ phase: "drawing", hint: "◦◦", level: 1 });
     expect(st.endsAt - Date.now()).toBeGreaterThan(58_000);
     // 방 상태에는 정답이 실려 나가지 않음
     expect(JSON.stringify(await peek(id))).not.toContain("사과");
-    await host.rpc("sketch.setHint", { id, turnId, hint: "사○" });
-    expect((await peek(id)).state.hint).toBe("사○");
+    await host.rpc("sketch.setHint", { id, turnId, hint: "사◦" });
+    expect((await peek(id)).state.hint).toBe("사◦");
   });
 
   it("그림: 그리는 사람만 올리고 참가자에게 전달, 되돌리기·전체 지우기, 늦게 본 사람은 처음부터 받음", async () => {
@@ -239,9 +239,9 @@ describe("진행", () => {
     await expect(a.sub("sketch.guesses", { id })).rejects.toMatchObject({ code: "FORBIDDEN" });
     const guesses = await host.sub("sketch.guesses", { id });
     const chat = await b.sub("sketch.chat", { id });
-    await a.rpc("sketch.sendGuess", { id, nick: "참가1", text: "사 과", turnId });
+    await a.rpc("sketch.sendGuess", { id, nick: "◦참가1", text: "사 과", turnId });
     const g = (await guesses.wait((e) => e.t === "add")).d;
-    expect(g).toMatchObject({ uid: a.uid, nick: "참가1", text: "사 과", turnId });
+    expect(g).toMatchObject({ uid: a.uid, nick: "◦참가1", text: "사 과", turnId });
     // 채팅에는 안 올라감
     expect(chat.events.filter((e) => e.d?.text === "사 과")).toEqual([]);
     await host.rpc("sketch.removeGuess", { id, guessId: g.id });
@@ -260,7 +260,7 @@ describe("진행", () => {
     expect(room.scores[a.uid!].score).toBe(ptsA);
     expect(room.scores[host.uid!].score).toBe(Math.round((ptsA - 30) / 2));
     const msg = (await chat.wait((e) => e.d?.kind === "correct")).d;
-    expect(msg.text).toBe(`참가1님이 제일 먼저 정답을 맞혔어요! (+${ptsA} 🥇) · 그린 사람 +${Math.round((ptsA - 30) / 2)}`);
+    expect(msg.text).toBe(`◦참가1님이 제일 먼저 정답을 맞혔어요! (+${ptsA} 🥇) · 그린 사람 +${Math.round((ptsA - 30) / 2)}`);
 
     // 같은 사람을 또 처리해도 한 번만 반영
     await host.rpc("sketch.markCorrect", { id, guess: { uid: a.uid, nick: "참가1", turnId } });
@@ -273,7 +273,7 @@ describe("진행", () => {
 
     // 오답은 그리는 사람이 채팅으로 넘겨줌
     await host.rpc("sketch.relayGuess", { id, guess: { uid: b.uid, nick: "참가2", text: "바나나" } });
-    expect((await chat.wait((e) => e.d?.text === "바나나")).d).toMatchObject({ kind: "msg", uid: b.uid, nick: "참가2" });
+    expect((await chat.wait((e) => e.d?.text === "바나나")).d).toMatchObject({ kind: "msg", uid: b.uid, nick: "◦참가2" });
   });
 
   it("차례 종료 → 정답 공개·사용 단어 기록 → 다음 차례는 입장 순서, 모두 그리면 게임 끝", async () => {
@@ -300,7 +300,7 @@ describe("진행", () => {
       phase: "choosing",
       turnNo: 2,
       drawer: a.uid,
-      drawerNick: "참가1",
+      drawerNick: "◦참가1",
       correct: {},
       firstCorrect: "",
       drawn: { [host.uid!]: 1, [a.uid!]: 1 },
@@ -362,9 +362,9 @@ describe("채팅", () => {
     await expect(outsider.sub("sketch.chat", { id })).rejects.toMatchObject({ code: "FORBIDDEN" });
     await expect(outsider.rpc("sketch.sendChat", { id, nick: "x", text: "hi" })).rejects.toMatchObject({ code: "FORBIDDEN" });
     const chat = await host.sub("sketch.chat", { id });
-    await others[0].rpc("sketch.sendChat", { id, nick: "참가1", text: "안녕" });
+    await others[0].rpc("sketch.sendChat", { id, nick: "◦참가1", text: "안녕" });
     const m = (await chat.wait((e) => e.t === "add")).d;
-    expect(m).toMatchObject({ uid: others[0].uid, nick: "참가1", text: "안녕", kind: "msg" });
+    expect(m).toMatchObject({ uid: others[0].uid, nick: "◦참가1", text: "안녕", kind: "msg" });
     expect(m.ts).toBeTypeOf("number");
     await others[0].rpc("sketch.systemChat", { id, text: "참가1님이 들어왔어요." });
     const later = (await others[0].sub("sketch.chat", { id })).data;
@@ -383,7 +383,7 @@ describe("오래 비어 있는 방", () => {
     const http = createServer();
     const cfg = loadConfig({ NODE_ENV: "test", PORT: "0" });
     const gateway = new Gateway(http, cfg, { verify: async (t) => ({ uid: t, email: null, anonymous: true, admin: false }) });
-    const sk = registerSketch({ cfg, gateway, auth: null as never, db: null as never, web: null as never }, { emptyRoomTtlMs: 30, sweepIntervalMs: 20 });
+    const sk = registerSketch({ cfg, gateway, auth: null as never, db: null as never, web: null as never, users: { bump() {} } as never }, { emptyRoomTtlMs: 30, sweepIntervalMs: 20 });
     await new Promise<void>((r) => http.listen(0, r));
     const { io } = await import("socket.io-client");
     const port = (http.address() as { port: number }).port;

@@ -1,5 +1,9 @@
 import AboutLanding, { type AboutProject } from "@/components/About/AboutLanding";
+import type { SiteLink } from "@/components/SiteLinks";
 import { allProjects } from "@/data/projects";
+import githubIcon from "@/img/Page/info/github.png";
+import acmicpcIcon from "@/img/Page/info/acmicpc_small.png";
+import meImg from "@/img/Page/info/me.webp";
 import { pageMeta } from "@/lib/seo";
 import "@/css/Page/about.css";
 
@@ -21,6 +25,11 @@ const projects: AboutProject[] = allProjects.map((p) => ({
   img: p.imgLink.src,
 }));
 
+const sites: SiteLink[] = [
+  { icon: githubIcon, label: "GitHub", href: "https://github.com/rjsah5676" },
+  { icon: acmicpcIcon, label: "BAEKJOON", href: "https://www.acmicpc.net/user/rjsah5676" },
+];
+
 export default function AboutPage() {
-  return <AboutLanding projects={projects} />;
+  return <AboutLanding projects={projects} photo={meImg.src} sites={sites} />;
 }

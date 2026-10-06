@@ -14,6 +14,7 @@ import { sfxUi } from "@/lib/fight/sfx";
 import { KeyCap, keyText } from "./KeyCap";
 import PatchNotes, { LATEST } from "./PatchNotes";
 import { SettingsModal } from "./Settings";
+import TechGuide from "./TechGuide";
 
 export type Mode = "ai" | "2p" | "online" | "practice";
 export interface Setup {
@@ -26,6 +27,15 @@ export interface Setup {
   /** 랜덤 맵을 고를 때 섞기 연출로 뽑힌 맵 (이번 판 시작에만 씀, 저장 안 함) */
   rolled?: number;
 }
+
+/** 메인 화면의 모드 칸 (← → 로 고르는 순서) */
+const MODE_TILES: readonly (readonly [Mode, string, string])[] = [
+  ["ai", "AI 대전", "CPU와 1:1"],
+  ["2p", "2인 대전", "한 키보드로 둘이서"],
+  ["online", "온라인 대전", "방 만들고 1:1 · 관전"],
+  ["practice", "연습 모드", "허수아비로 콤보 연습"],
+];
+const MODES = MODE_TILES.map(([m]) => m);
 
 const face = (c: CharDef) => `/fight/art/${c.id}-face.webp`;
 const art = (c: CharDef) => `/fight/art/${c.id}.webp`;
@@ -201,6 +211,7 @@ export default function Select({
   const [opts, setOpts] = useState(false);
   const [stage, setStage] = useState<"mode" | "char" | "map" | "vs">(entry);
   const [notes, setNotes] = useState(false);
+  const [guide, setGuide] = useState(false);
   const [lock, setLock] = useState<[boolean, boolean]>([false, false]);
   const [mapCur, setMapCur] = useState(setup.map);
   /** 캐릭터 칸 커서가 '랜덤'에 있나 (쪽마다) */
@@ -370,7 +381,12 @@ export default function Select({
       if (!any) return;
       e.preventDefault();
       if (stage === "mode") {
-        if (p1.ok || p2.ok) toChars();
+        // ← → (A · D) 로 모드 고르기, Enter(J · Space) 로 시작
+        const d = p1.l || p2.l ? -1 : p1.r || p2.r ? 1 : 0;
+        if (d) {
+          sfxUi("move");
+          setSetup((s) => ({ ...s, mode: MODES[(MODES.indexOf(s.mode) + d + MODES.length) % MODES.length] }));
+        } else if (p1.ok || p2.ok) toChars();
         else if (p1.no) onBack?.();
         return;
       }
@@ -470,32 +486,38 @@ export default function Select({
           </button>
           {notes && <PatchNotes onClose={() => setNotes(false)} />}
 
-          {/* 왼쪽 위: 설정 */}
-          {settings && (
+          {/* 왼쪽 위: 설정 · 기술 가이드 */}
+          <div className="absolute top-[2.2cqw] left-[2cqw] flex gap-[0.8cqw]">
+            {settings && (
+              <button
+                type="button"
+                onClick={() => {
+                  sfxUi("ok");
+                  setOpts(true);
+                }}
+                className={`${KR} flex cursor-pointer items-center gap-[0.6cqw] rounded-full border-[0.15cqw] border-[#F2C35B]/70 bg-[#140A24]/75 px-[1.3cqw] py-[0.45cqw] text-[1.2cqw] font-bold text-[#FFE9A8] backdrop-blur-[3px] transition-colors hover:bg-[#2B1840]/90`}
+              >
+                ⚙ 설정
+              </button>
+            )}
             <button
               type="button"
               onClick={() => {
                 sfxUi("ok");
-                setOpts(true);
+                setGuide(true);
               }}
-              className={`${KR} absolute top-[2.2cqw] left-[2cqw] flex cursor-pointer items-center gap-[0.6cqw] rounded-full border-[0.15cqw] border-[#F2C35B]/70 bg-[#140A24]/75 px-[1.3cqw] py-[0.45cqw] text-[1.2cqw] font-bold text-[#FFE9A8] backdrop-blur-[3px] transition-colors hover:bg-[#2B1840]/90`}
+              className={`${KR} flex cursor-pointer items-center gap-[0.6cqw] rounded-full border-[0.15cqw] border-[#F2C35B]/70 bg-[#140A24]/75 px-[1.3cqw] py-[0.45cqw] text-[1.2cqw] font-bold text-[#FFE9A8] backdrop-blur-[3px] transition-colors hover:bg-[#2B1840]/90`}
             >
-              ⚙ 설정
+              📖 기술 가이드
             </button>
-          )}
+          </div>
+          {guide && <TechGuide onClose={() => setGuide(false)} />}
           {opts && settings && <SettingsModal onClose={() => setOpts(false)}>{settings}</SettingsModal>}
 
           {/* 아래 돌바닥 위: 모드 · 난이도 · 시작 */}
-          <div className="absolute inset-x-0 bottom-0 flex flex-col items-center gap-[1.5cqw] pb-[3.6cqw]">
+          <div className="absolute inset-x-0 bottom-0 flex flex-col items-center gap-[1.5cqw] pb-[2.2cqw]">
             <div className="flex gap-[1.4cqw]">
-              {(
-                [
-                  ["ai", "AI 대전", "CPU와 1:1"],
-                  ["2p", "2인 대전", "한 키보드로 둘이서"],
-                  ["online", "온라인 대전", "방 만들고 1:1"],
-                  ["practice", "연습 모드", "허수아비로 콤보 연습"],
-                ] as const
-              ).map(([m, label, sub]) => {
+              {MODE_TILES.map(([m, label, sub]) => {
                 const on = setup.mode === m;
                 return (
                   <button
@@ -549,6 +571,9 @@ export default function Select({
             >
               시작하기
             </button>
+            <div className={`${KR} -mt-[0.5cqw] text-[1.05cqw] text-[#FFE3B0]/55 [@media(pointer:coarse)]:hidden`}>
+              ← → 모드 고르기 · Enter 시작
+            </div>
           </div>
         </>
       )}

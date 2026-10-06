@@ -1,0 +1,76 @@
+/* 포트폴리오 목록: 이름을 포스터 출연진처럼 크게 쌓음 */
+
+/* 이름용 글꼴 (라틴 글자만 담은 작은 파일. 라이선스: src/fonts/BigShouldersDisplay-OFL.txt) */
+@font-face {
+  font-family: "Big Shoulders Display";
+  src: url("../../fonts/BigShouldersDisplay-ExtraBold.woff2") format("woff2");
+  font-weight: 800;
+  font-style: normal;
+  font-display: swap;
+}
+
+.pf-name {
+  font-family: "Big Shoulders Display", "Black Han Sans", Impact, sans-serif;
+  font-weight: 800;
+  line-height: 0.9;
+  letter-spacing: 0.01em;
+  text-transform: uppercase;
+}
+
+/* 고르지 않은 이름은 테두리만, 고른 이름은 속을 채움 */
+.pf-row .pf-name {
+  color: transparent;
+  -webkit-text-stroke: 1px rgba(255, 255, 255, 0.3);
+  transition:
+    color 0.25s ease,
+    -webkit-text-stroke-color 0.25s ease,
+    translate 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.pf-row[data-on="true"] .pf-name {
+  color: #fff;
+  -webkit-text-stroke-color: #fff;
+  translate: 0.12em 0;
+}
+.pf-row:focus-visible {
+  outline: 2px solid #8b84ff;
+  outline-offset: 6px;
+  border-radius: 4px;
+}
+
+/* 미리보기: 화면 캡처는 겹쳐 두고 고른 것만 보이게 */
+.pf-shot {
+  opacity: 0;
+  transform: scale(1.03);
+  transition:
+    opacity 0.35s ease,
+    transform 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.pf-shot[data-on="true"] {
+  opacity: 1;
+  transform: none;
+}
+.pf-info {
+  animation: pf-info-in 0.35s ease both;
+}
+@keyframes pf-info-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pf-row .pf-name,
+  .pf-shot {
+    transition: none;
+  }
+  .pf-row[data-on="true"] .pf-name {
+    translate: none;
+  }
+  .pf-shot {
+    transform: none;
+  }
+  .pf-info {
+    animation: none;
+  }
+}

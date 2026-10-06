@@ -1,6 +1,6 @@
 import type { MetadataRoute } from "next";
 import { SITE_URL } from "@/lib/seo";
-import { allProjects } from "@/data/projects";
+import { detailProjects } from "@/data/projects";
 import { loadFoods } from "@/lib/foodServer";
 import { getAllStudyPosts, parseStudyDate, postPath } from "@/firestore/studyPosts";
 
@@ -13,7 +13,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const pages: { path: string; priority: number; changeFrequency: "weekly" | "monthly" }[] = [
     { path: "/", priority: 1, changeFrequency: "monthly" },
     { path: "/about/", priority: 0.9, changeFrequency: "monthly" },
-    { path: "/project/", priority: 0.9, changeFrequency: "monthly" },
+    { path: "/portfolio/", priority: 0.9, changeFrequency: "monthly" },
     { path: "/works/", priority: 0.6, changeFrequency: "monthly" },
     { path: "/games/", priority: 0.6, changeFrequency: "monthly" },
     { path: "/tools/", priority: 0.6, changeFrequency: "monthly" },
@@ -47,7 +47,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       changeFrequency: p.changeFrequency,
       priority: p.priority,
     })),
-    ...allProjects.map((p) => ({
+    ...detailProjects.map((p) => ({
       url: `${SITE_URL}/infoPage/${p.idx}/`,
       changeFrequency: "monthly" as const,
       priority: 0.8,

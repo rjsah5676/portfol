@@ -9,11 +9,13 @@ const chartPath = (songId: string, diff: string) =>
 /** 게임을 시작할 때 beginRun 에 넘기는 랭킹 이름 */
 export const rhythmBoard = (songId: string, diff: string) => `rhythm:${songId}_${diff}`;
 
-export const RHYTHM_NAME_MAX = 12;
+export const RHYTHM_NAME_MAX = 10;
 
 export interface RhythmRanking {
   id: string;
   name: string;
+  /** 회원의 기록인지 */
+  member: boolean;
   score: number;
   acc: number;
   maxCombo: number;
@@ -37,6 +39,7 @@ export async function getRhythmTop(
   return rows.map((x) => ({
     id: x.id,
     name: String(x.name ?? ""),
+    member: !!x.member,
     score: Number(x.score ?? 0),
     acc: Number(x.acc ?? 0),
     maxCombo: Number(x.maxCombo ?? 0),
@@ -49,7 +52,7 @@ export async function getRhythmTop(
 export async function addRhythmRanking(
   songId: string,
   diff: string,
-  r: Omit<RhythmRanking, "id" | "createdAt">
+  r: Omit<RhythmRanking, "id" | "createdAt" | "member">
 ): Promise<string> {
   return submitRun(rhythmBoard(songId, diff), chartPath(songId, diff), {
     name: r.name.trim().slice(0, RHYTHM_NAME_MAX),

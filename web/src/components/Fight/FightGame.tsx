@@ -50,9 +50,11 @@ import TouchControls, { loadMoveMode, saveMoveMode, type MoveMode } from "./Touc
 import { PauseMenu, SettingsBody } from "./Settings";
 import { fightScore } from "@/lib/aiScore";
 import { beginRun } from "@/lib/api/rankRun";
+import { useNick } from "@/lib/AuthContext";
+import { plainName } from "@/components/Nick";
 import Online, { type MatchCfg } from "./Online";
 import { OnlineMatch } from "./onlineMatch";
-import { WatchFeed, type RoomSession, type WatchSession } from "@/realtime/fight";
+import { InputLog, WatchFeed, type RoomSession, type WatchSession } from "@/realtime/fight";
 
 
 const SAVE_KEY = "fight:setup";
@@ -64,8 +66,6 @@ const BGM_MAX = 0.5;
 
 const btn =
   "cursor-pointer rounded-full border border-white/15 px-3 py-1.5 font-mono text-xs whitespace-nowrap text-white/75 transition-colors hover:border-[#6C63FF]/60 hover:text-white disabled:cursor-not-allowed disabled:opacity-30";
-const primaryBtn =
-  "cursor-pointer rounded-full bg-[#6C63FF] px-4 py-1.5 font-mono text-xs whitespace-nowrap text-white transition-colors hover:bg-[#5b52f0] disabled:cursor-not-allowed disabled:opacity-40";
 
 interface Hud {
   ch: [number, number];
@@ -115,6 +115,16 @@ const KR = "font-['Nanum_Gothic',sans-serif]";
 export default function FightGame({ onRanked }: { onRanked?: () => void }) {
   const [setup, setSetup] = useState<Setup>({ mode: "ai", c1: 0, c2: 1, level: 2, map: -1 });
   const [playing, setPlaying] = useState(false);
+  // 내 이름: 회원이면 별명, 비회원이면 온라인 대전에서 적어 둔 닉네임 (없으면 빈 값 → "1P")
+  const memberNick = useNick();
+  const [guestNick, setGuestNick] = useState("");
+  useEffect(() => {
+    try {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- 저장해 둔 닉네임 읽기 (경기 시작 때마다)
+      setGuestNick(localStorage.getItem("chess_nick") ?? "");
+    } catch {}
+  }, [playing]);
+  const myName = memberNick ?? guestNick;
   const [paused, setPaused] = useState(false);
   const [hud, setHud] = useState<Hud | null>(null);
   const [muted, setMuted] = useState(false);
@@ -344,8 +354,8 @@ export default function FightGame({ onRanked }: { onRanked?: () => void }) {
           setup.map < 0 && setup.rolled !== undefined && MAPS[setup.rolled] ? setup.rolled : pickMap()
         );
     const net = ol && !watching ? sessRef.current?.net : null;
-    // 관전용 입력 기록 올리기는 관전을 빼면서 안 함
-    const log = null;
+    // 관전용: 내 확정 입력을 서버에 조금씩 올림 (관전자는 두 선수 입력으로 같은 경기를 다시 돌림)
+    const log = ol && net && sessRef.current ? new InputLog(sessRef.current.id, ol.match, ol.seat, ol.delay) : null;
     let om = ol && net ? new OnlineMatch(s, ol.seat, net, ol.match, ol.delay, ol.maxRb, log) : null;
     if (om) s = om.state;
     // 관전: 두 선수 입력 기록을 받아 그대로 다시 돌림 (wf = 다음에 돌릴 프레임)
@@ -423,7 +433,8 @@ export default function FightGame({ onRanked }: { onRanked?: () => void }) {
         r.draw(s);
         return;
       }
-      if (ol && (netDead || !om)) {
+      // 온라인 선수인데 상대와 연결이 없으면 멈춘 화면만 (관전은 연결 없이 입력 기록으로 돌림)
+      if (ol && !watching && (netDead || !om)) {
         r.draw(s);
         return;
       }
@@ -435,11 +446,14 @@ export default function FightGame({ onRanked }: { onRanked?: () => void }) {
       if (feed && !doneReported) {
         const lag = feed.ready - wf;
         if (lag > 180) {
-          // 늦게 들어옴: 앞부분은 소리·효과 없이 빨리 돌려서 따라잡음
-          const n = Math.min(lag - 60, 900);
-          for (let k = 0; k < n && s.phase !== "over"; k++) {
+          // 늦게 들어옴: 앞부분은 소리·효과 없이 빨리 돌려서 따라잡음.
+          // 한 화면에 쓰는 시간을 6ms 로 묶어서, 오래 진행된 경기에 들어가도 화면이 멈추지 않게 함
+          const until = performance.now() + 6;
+          let n = lag - 30;
+          while (n-- > 0 && s.phase !== "over") {
             step(s, feed.input(wf));
             wf++;
+            if ((n & 15) === 0 && performance.now() > until) break;
           }
           feed.drop(wf - 2);
           setWatch("catchup");
@@ -447,8 +461,8 @@ export default function FightGame({ onRanked }: { onRanked?: () => void }) {
           acc = 0;
           return;
         }
-        // 입력이 0.5초치씩 오니까 조금 모아 두고 재생, 많이 밀리면 살짝 빠르게
-        if (buffering && lag >= 40) buffering = false;
+        // 입력이 0.25초치씩 오니까 조금 모아 두고 재생, 밀린 만큼 조금씩 빠르게 (최대 1.25배 — 티 나지 않게)
+        if (buffering && lag >= 24) buffering = false;
         if (!buffering && lag < 0) ((buffering = true), (waitSince = now));
         if (buffering) {
           const rm = wsessRef.current?.room;
@@ -459,7 +473,7 @@ export default function FightGame({ onRanked }: { onRanked?: () => void }) {
           return;
         }
         setWatch("");
-        acc += lag > 90 ? dt * 0.5 : 0;
+        acc += dt * Math.min(0.25, Math.max(0, (lag - 30) / 240));
       }
       acc += dt;
       let steps = 0;
@@ -695,6 +709,20 @@ export default function FightGame({ onRanked }: { onRanked?: () => void }) {
   if (!playing) {
     return (
       <div ref={rootRef} className={rootCls}>
+        {/* 전체화면 권장 (전체화면에선 .fs-screen 만 보임) */}
+        <button
+          type="button"
+          onClick={toggleFs}
+          className="mb-3 flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl border border-[#FF8A3D]/45 bg-[linear-gradient(90deg,rgba(255,138,61,0.18),rgba(224,48,106,0.18))] px-4 py-2 font-['Nanum_Gothic',sans-serif] text-[13px] text-white/85 shadow-[0_0_24px_-6px_rgba(255,138,61,0.55)] transition-colors hover:border-[#FF8A3D] hover:text-white"
+        >
+          <span className="rounded-md bg-[#FF8A3D] px-1.5 py-0.5 font-mono text-[11px] font-bold text-white">
+            ⛶
+          </span>
+          <b className="font-bold text-white">전체화면 플레이 권장</b>
+          <span className="text-white/55">
+            — 여기를 누르면 전체화면으로 (Esc = 일시정지, 나올 땐 일시정지 메뉴나 ✕)
+          </span>
+        </button>
         <div className="fs-screen relative isolate [container-type:inline-size]">
           {onlineOn ? (
             <Online
@@ -728,14 +756,6 @@ export default function FightGame({ onRanked }: { onRanked?: () => void }) {
           )}
           {fsBtn()}
         </div>
-        <div className="mt-3 flex flex-wrap items-center gap-1.5">
-          <button type="button" onClick={toggleFs} className={primaryBtn}>
-            ⛶ 전체화면
-          </button>
-          <span className="font-['Nanum_Gothic',sans-serif] text-[11px] text-white/35">
-            전체화면에선 Esc = 일시정지, 나올 땐 일시정지 메뉴나 ✕
-          </span>
-        </div>
         <HowTo mode={setup.mode} />
       </div>
     );
@@ -743,11 +763,12 @@ export default function FightGame({ onRanked }: { onRanked?: () => void }) {
 
   const ol = olCfg;
   const watching = !!ol?.spectate;
+  // 화면 위 이름: 온라인은 서로의 이름, 혼자 할 때는 내 이름(회원 별명, 비회원은 온라인에서 쓰던 닉네임이 있으면 그것)
   const names: [string, string] = watching
-    ? [ol!.names[0], ol!.names[1]]
+    ? [plainName(ol!.names[0]), plainName(ol!.names[1])]
     : ol
-    ? [ol.names[0] + (ol.seat === 0 ? " (나)" : ""), ol.names[1] + (ol.seat === 1 ? " (나)" : "")]
-    : ["1P", setup.mode === "ai" ? `CPU ${level.name}` : setup.mode === "practice" ? "허수아비" : "2P"];
+    ? [plainName(ol.names[0]) + (ol.seat === 0 ? " (나)" : ""), plainName(ol.names[1]) + (ol.seat === 1 ? " (나)" : "")]
+    : [setup.mode === "2p" ? "1P" : myName || "1P", setup.mode === "ai" ? `CPU ${level.name}` : setup.mode === "practice" ? "허수아비" : "2P"];
   const meSeat = ol?.seat ?? 0;
 
   let banner: { kind: BannerKind; text: string; name?: string; nameColor?: string } | null = null;

@@ -1,5 +1,7 @@
 "use client";
 
+import Nick from "@/components/Nick";
+import { useAutoRank } from "@/lib/useAutoRank";
 import { rankDateLabel } from "@/lib/rankDate";
 import { useEffect, useState } from "react";
 import {
@@ -48,7 +50,7 @@ function List({
             {i + 1}
           </span>
           <span className="min-w-0 flex-1 truncate font-['Nanum_Gothic',sans-serif] text-white/85">
-            {r.name}
+            <Nick name={r.name} guest={!r.member} />
           </span>
           {r.ap ? (
             <span className={`${game ? "text-[0.85cqw]" : "text-[10px]"} text-[#7DF9FF]`}>AP</span>
@@ -106,7 +108,7 @@ function GameList({ list, highlight }: { list: RhythmRanking[]; highlight?: stri
               <span className="skew-x-12">{i + 1}</span>
             </span>
             <span className="min-w-0 flex-1 truncate font-['Nanum_Gothic',sans-serif] text-[1.15cqw] font-bold text-white/90">
-              {r.name}
+              <Nick name={r.name} guest={!r.member} />
             </span>
             {(r.ap || r.fc) && (
               <span
@@ -219,8 +221,8 @@ export function SubmitRanking({
     } catch {}
   }, []);
 
-  const submit = async () => {
-    const n = name.trim();
+  const submit = async (as = name) => {
+    const n = as.trim();
     if (!n || status === "saving" || status === "done") return;
     setStatus("saving");
     try {
@@ -243,6 +245,12 @@ export function SubmitRanking({
       setStatus("error");
     }
   };
+
+  // 회원은 이름을 묻지 않고 결과가 나오면 바로 등록 (서버가 곡·난이도별 내 최고 기록만 남김)
+  useAutoRank(true, async (nick) => {
+    setName(nick);
+    await submit(nick);
+  });
 
   const myRank = top && myId ? top.list.findIndex((r) => r.id === myId) : -1;
 
