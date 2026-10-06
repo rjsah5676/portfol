@@ -301,29 +301,42 @@ export async function analyzeAudio(
   await tick();
   const EH = 32;
   const env = new Float32Array(Math.floor(x.length / EH));
+  const envP = new Float32Array(env.length);
   {
+    // env: 전체 에너지(가짜 피크 거르기용) / envP: 프리엠퍼시스(x[i] − 0.95·x[i−1])로 저역을 누른 에너지(어택 시각용).
+    // 전체 에너지로 시각을 재면 베이스·사이드체인 스웰이 드럼보다 20~40ms 먼저 올라와 타격이 그만큼 앞으로 잡혔음
+    // (16분이 옆 32분 칸으로 가서 채보기가 버림 → 빠른 곡에서 타격이 많은데 노트가 비던 원인)
     const cum = new Float64Array(x.length + 1);
-    for (let i = 0; i < x.length; i++) cum[i + 1] = cum[i] + x[i] * x[i];
+    const cumP = new Float64Array(x.length + 1);
+    for (let i = 0; i < x.length; i++) {
+      const d = x[i] - 0.95 * (x[i - 1] ?? 0);
+      cum[i + 1] = cum[i] + x[i] * x[i];
+      cumP[i + 1] = cumP[i] + d * d;
+    }
     for (let j = 0; j < env.length; j++) {
       const a = Math.max(0, j * EH - 64);
       const b = Math.min(x.length, j * EH + 64);
       env[j] = Math.log(1e-9 + (cum[b] - cum[a]) / Math.max(1, b - a));
+      envP[j] = Math.log(1e-9 + (cumP[b] - cumP[a]) / Math.max(1, b - a));
     }
   }
-  /** 어택 지점과 그 순간의 에너지 상승폭(로그) — 진짜 타격은 확 올라가고, 울림 꼬리의 가짜 피크는 거의 안 올라감 */
+  /** 어택 지점(프리엠퍼시스 에너지가 가장 가파르게 오르는 곳)과 그 창 안의 전체 에너지 상승폭(로그) —
+   *  진짜 타격은 확 올라가고, 울림 꼬리의 가짜 피크는 거의 안 올라감 */
   const refine = (t: number) => {
     const a = Math.max(2, Math.floor(((t - 0.03) * SR) / EH));
     const b = Math.min(env.length - 3, Math.ceil(((t + 0.015) * SR) / EH));
     let best = -Infinity;
+    let rise = -Infinity;
     let at = t;
     for (let j = a; j <= b; j++) {
-      const d = env[j + 2] - env[j - 2];
-      if (d > best) {
-        best = d;
+      const dP = envP[j + 2] - envP[j - 2];
+      if (dP > best) {
+        best = dP;
         at = (j * EH) / SR;
       }
+      rise = Math.max(rise, env[j + 2] - env[j - 2]);
     }
-    return { at, rise: best };
+    return { at, rise };
   };
 
   // ── 타격 후보: 지역 최대 + 적응형 문턱 ──
@@ -672,10 +685,21 @@ function alignWithBeats(beats: number[], raw: Onset[], beatSec: number, div: num
 
   // 세분 격자라 칸이 좁음: 칸 간격의 42% 안이면 스냅 (127BPM 32분이면 ±25ms)
   const tol = Math.min(0.035, (beatSec / div) * 0.42);
+  // 굵은 칸(16분·셋잇단 8분 = 짝수 칸) 우선: 연주가 20ms쯤 흔들린 16분이 옆 32분 칸으로 가면
+  // 채보기가 '32분 자리'로 보고 거의 안 쓴다(빠른 곡에서 타격이 많은데 노트가 비던 원인).
+  // 굵은 칸에서 굵은 칸 간격의 30%(최대 30ms) 안이면 굵은 칸으로, 아니면 가까운 잔 칸으로
+  const coarseTol = Math.min(0.03, (beatSec / div) * 2 * 0.3);
   const byGrid = new Map<number, Onset>();
   const offGrid: Onset[] = [];
   for (const o of raw) {
-    const gi = nearestIdx(grid, o.t);
+    let gi = nearestIdx(grid, o.t);
+    if (gi % 2 !== 0) {
+      const c =
+        Math.abs(o.t - (grid[gi - 1] ?? -1e9)) <= Math.abs(o.t - (grid[gi + 1] ?? 1e9))
+          ? gi - 1
+          : gi + 1;
+      if (grid[c] !== undefined && Math.abs(o.t - grid[c]) <= coarseTol) gi = c;
+    }
     if (Math.abs(o.t - grid[gi]) <= tol) {
       const prev = byGrid.get(gi);
       if (!prev) byGrid.set(gi, { ...o, t: grid[gi], grid: gi });

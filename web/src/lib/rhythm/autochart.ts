@@ -355,12 +355,16 @@ export function makeAutoChart(
   const dense = diff === "hard" || diff === "expert";
   const factorOf = (b: number) => {
     const I = intensity[Math.max(0, Math.min(nBars - 1, b))];
-    // osu 랭크 채보는 가장 빽빽한 구간이 보통 구간의 1.2배 정도 — 세기 차이를 밀도에 너무 크게 옮기지 않음
-    let f = dense ? 0.85 + 0.3 * I : 0.75 + 0.4 * I;
-    if (I < 0.15) f *= 0.85; // 브레이크
+    // 세기 → 밀도를 가파르게: 곡의 기승전결을 그대로 따라가야 '곡과 맞는' 채보가 됨.
+    // (osu 랭크 채보도 그렇다 — xi「Aragami」Another는 조용한 마디 4~8개, 터지는 마디 24~30개로 4배 차이.
+    //  한때 전체 평균 통계에 맞추려 0.85+0.3I로 눌렀더니 벌스·브레이크까지 꽉 차서 맛이 없어졌음)
+    let f = dense ? 0.15 + 1.15 * I : 0.35 + 0.8 * I;
+    if (I < 0.15) f *= 0.8; // 브레이크
     if (buildBar(b)) f *= 1.25; // 빌드업
     return f;
   };
+  /** 마디별 목표 노트 수 (밀도 규칙 × 세기) */
+  const barTarget = (b: number) => Math.max(1, Math.round(R.nps * barSec * factorOf(b)));
 
   // 1) 강한 것부터 간격을 지키며 고르기 — 마디마다 목표 개수를 따로 둬서
   //    세기에 따라 밀도가 오르내리고, 조용하지만 빽빽한 구간도 큰 소리 구간에 밀리지 않게
@@ -369,8 +373,7 @@ export function makeAutoChart(
   const picked: Onset[] = [];
   for (const { o } of cands) {
     const b = barOf(o.t);
-    const target = Math.max(1, Math.round(R.nps * barSec * factorOf(b)));
-    if ((perBar.get(b) ?? 0) >= target) continue;
+    if ((perBar.get(b) ?? 0) >= barTarget(b)) continue;
     if (tooClose(taken, o.t, R.minGap)) continue;
     let i = taken.findIndex((t) => t > o.t);
     if (i < 0) i = taken.length;
@@ -417,12 +420,18 @@ export function makeAutoChart(
   }
 
   // 1.5) 격자 채우기 — 어려움은 센 마디를 8분으로, 매우 어려움은 아주 센 마디를 16분으로 (fill이 클수록 더 넓게)
-  if (diff !== "nightmare" && (tweak.fill ?? 0) > 0) {
+  //      + 소리가 꽉 차서 타격이 따로 안 잡히는 마디(벽)는 fill이 0이어도 마디 목표까지 격자로 채움
+  //        (Aragami 15~24초처럼 제일 센 구간이 오히려 비던 문제)
+  if (diff !== "nightmare" && (diff === "hard" || diff === "expert" || (tweak.fill ?? 0) > 0)) {
     // fill 1을 넘으면(1~1.6) 어지간한 마디까지 다 채움
     const fill = Math.min(1.6, tweak.fill ?? 0);
     // 채우기 양이 fill에 따라 이어지게(0에서 살짝만 올려도 센 마디가 한꺼번에 채워지며 노트가 50% 뛰던 것):
-    // fill이 커질수록 가장 센 마디부터 차츰 더 조용한 마디까지, 브레이크(0.15 미만)만 빼고
-    const loudT = Math.max(0.15, 0.95 - fill);
+    // fill이 커질수록 가장 센 마디부터 차츰 더 넓게 — 단 조용한 마디(0.45 미만)는 안 채움 (벌스까지 꽉 차면 맛없음)
+    const loudT = fill > 0 ? Math.max(0.45, 0.95 - fill) : 2;
+    // 벽 마디: 세기 0.8 이상인데 고른 타격이 목표의 3/4도 안 되면 목표까지
+    const wallT = 0.8;
+    const barCount = new Map<number, number>();
+    for (const o of picked) barCount.set(barOf(o.t), (barCount.get(barOf(o.t)) ?? 0) + 1);
     // 보통은 8분까지만, 어려움은 8분(채우기가 1을 넘으면 아주 센 마디만 16분), 매우 어려움은 아주 센 마디만 16분
     const fullT =
       diff === "expert"
@@ -440,8 +449,11 @@ export function makeAutoChart(
     for (let k = 0; k < Math.ceil(an.duration / beatSec); k++) {
       const t0 = beatT(k);
       if (t0 > lastPick) break;
-      const I = intensity[Math.max(0, Math.min(nBars - 1, barOf(t0)))];
-      if (I < loudT) continue;
+      const b = barOf(t0);
+      const I = intensity[Math.max(0, Math.min(nBars - 1, b))];
+      const cap = barTarget(b);
+      const wall = dense && I >= wallT && (barCount.get(b) ?? 0) < cap * 0.75;
+      if (I < loudT && !wall) continue;
       // 12/8(셋잇단 격자)은 점4분을 3·6으로 나눠야 곡 박자에 맞음
       // 잘게 나눈 칸이 너무 촘촘하면(90ms 미만) 한 단계 덜 나눔
       const fine = an.div === 12 ? 6 : 4;
@@ -449,12 +461,15 @@ export function makeAutoChart(
       const sub = diff === "easy" ? 1 : I >= fullT && beatSec / fine >= 0.08 ? fine : fine / 2;
       const t1 = beatT(k + 1);
       for (let i = 0; i < sub; i++) {
+        // 마디 목표(벽 마디는 목표, 채우기는 목표의 1+fill배)를 넘기지 않음 — 세기 차이가 채우기로 뭉개지지 않게
+        if ((barCount.get(b) ?? 0) >= cap * (I >= loudT ? 1 + fill : 1)) break;
         const t = t0 + (i * (t1 - t0)) / sub;
         if (tooClose(have, t, R.minGap)) continue;
         let j = have.findIndex((x) => x > t);
         if (j < 0) j = have.length;
         have.splice(j, 0, t);
         added.push({ t, s: 0.3, low: 0.3, mid: 0.3, high: 0.3, cen: nearestCen(an, t), grid: -1 });
+        barCount.set(b, (barCount.get(b) ?? 0) + 1);
       }
     }
     picked.push(...added);
@@ -512,8 +527,8 @@ export function makeAutoChart(
         ...NIGHTMARE_DEFAULT,
         ...tweak.nightmare,
         // 채우기가 클수록 덜 센 마디까지
-        loud: (tweak.nightmare?.loud ?? NIGHTMARE_DEFAULT.loud) - 0.3 * (tweak.fill ?? 0),
-        full: (tweak.nightmare?.full ?? NIGHTMARE_DEFAULT.full) - 0.3 * (tweak.fill ?? 0),
+        loud: (tweak.nightmare?.loud ?? NIGHTMARE_DEFAULT.loud) - 0.15 * (tweak.fill ?? 0),
+        full: (tweak.nightmare?.full ?? NIGHTMARE_DEFAULT.full) - 0.15 * (tweak.fill ?? 0),
       },
       {
         beatSec,
@@ -575,13 +590,15 @@ export function makeAutoChart(
         if (!byBar.has(b)) byBar.set(b, []);
         byBar.get(b)!.push(i);
       }
+      // 마디 몫은 세기에 따라 (센 마디에 더, 조용한 마디엔 덜 — 전체 비율은 그대로)
+      const cw = chordWeight(byBar, (b) => intensity[Math.max(0, Math.min(nBars - 1, b))]);
       // 반올림 찌꺼기는 마디를 넘기며 이월 (비율이 전체로는 맞게)
       let carry2 = 0;
       let carry3 = 0;
       for (const b of [...byBar.keys()].sort((x, y) => x - y)) {
         const list = byBar.get(b)!.sort((x, y) => picked[y].s - picked[x].s);
-        const want2 = list.length * twoRate + carry2;
-        const want3 = list.length * threeRate + carry3;
+        const want2 = list.length * twoRate * cw(b) + carry2;
+        const want3 = list.length * threeRate * cw(b) + carry3;
         const two = Math.min(list.length, Math.round(want2));
         const three = Math.min(two, Math.round(want3));
         carry2 = want2 - two;
@@ -938,6 +955,22 @@ function addLongNotes(
  * 레인은 음색이 아니라 전부 패턴(계단·연타·트릴…)으로 깖. 쉼이 2박 넘게 없으면 한 스트림으로 봐서
  * 거의 모든 노트가 알아볼 수 있는 패턴 안에 들어감.
  */
+/**
+ * 동시치기 마디 몫의 가중치: 센 마디 1.3배, 조용한 마디 0.4배쯤 (0.4 + 0.9·세기), 전체 평균은 1이 되게 정규화.
+ * osu 랭크 채보는 동시치기가 코러스·드롭에 몰리고 벌스는 단노트 위주라 — 고르게 뿌리면 밋밋함
+ */
+function chordWeight<T>(byBar: Map<number, T[]>, intensity: (b: number) => number) {
+  let total = 0;
+  let wsum = 0;
+  const w = (b: number) => 0.4 + 0.9 * intensity(b);
+  for (const [b, list] of byBar) {
+    total += list.length;
+    wsum += list.length * w(b);
+  }
+  const scale = wsum > 0 ? total / wsum : 1;
+  return (b: number) => w(b) * scale;
+}
+
 function nightmareNotes(
   an: Analysis,
   picked: Onset[],
@@ -1034,13 +1067,14 @@ function nightmareNotes(
         if (!byBar.has(b)) byBar.set(b, []);
         byBar.get(b)!.push(t);
       }
+      const cw = chordWeight(byBar, intensity);
       let carry2 = 0;
       let carry3 = 0;
       for (const b of [...byBar.keys()].sort((x, y) => x - y)) {
         const list = byBar.get(b)!;
         const have = list.filter((t) => slots.get(t)! >= 2).length;
-        const want2 = list.length * twoRate + carry2;
-        const want3 = list.length * threeRate + carry3;
+        const want2 = list.length * twoRate * cw(b) + carry2;
+        const want3 = list.length * threeRate * cw(b) + carry3;
         const two = Math.min(list.length, Math.round(want2));
         const three = Math.min(two, Math.round(want3));
         carry2 = want2 - two;
@@ -1153,9 +1187,8 @@ export function makeAutoCharts(
     let nm: Required<NightmareTweak> = { ...NIGHTMARE_DEFAULT, ...(base.nightmare ?? {}) };
     let best: Chart | null = null;
     let bestRaw = 0;
-    // 레벨이 맞은 뒤에도 밀도를 조금씩 올려 보며 같은 레벨에서 가장 빽빽한 채보를 고름
-    // (osu 랭크 채보는 같은 별점에서 우리보다 노트가 많음 — 동시치기·잭 같은 '튀는 자리'가 적어서)
-    let hit = 0;
+    // 레벨이 맞으면 거기서 멈춤 (맞은 뒤에도 밀도를 올려 '같은 레벨에서 가장 빽빽한' 채보를 고르던 적이 있는데,
+    // 별점은 세기 차이가 없는 평평한 채보일수록 같은 레벨에 노트가 많이 들어가서 벽 채보가 됐음 — Monarch 맛없어짐)
     // 시도 기록: 목표를 못 맞추면 아래·위로 가장 가까운 두 시도 사이를 더 잘게 나눠 봄
     const tried: { density: number; fill: number; raw: number; n: number }[] = [];
     const consider = (chart: Chart, raw: number) => {
@@ -1188,16 +1221,7 @@ export function makeAutoCharts(
         d === "nightmare" && base.level === undefined
           ? miss <= 0 && miss >= -tol
           : Math.abs(miss) <= tol;
-      if (ok || hit > 0) {
-        if (hit >= 3 || (hit > 0 && !ok)) break;
-        hit++;
-        if (d === "nightmare") nm = { ...nm, loud: nm.loud - 0.03, full: nm.full - 0.03 };
-        else {
-          density *= 1.1;
-          fill = Math.min(1.6, fill + 0.05);
-        }
-        continue;
-      }
+      if (ok) break;
       // 레벨은 밀도에 거의 비례 → 비율로 맞춰 감 (한 번에 너무 크게는 안 움직임)
       const ratio = Math.min(1.6, Math.max(0.6, target / Math.max(1, raw)));
       density *= ratio;
@@ -1211,7 +1235,7 @@ export function makeAutoCharts(
         nm = {
           ...nm,
           full: Math.max(0.3, Math.min(1.05, nm.full + 0.06 * k)),
-          loud: Math.max(0.2, Math.min(1, nm.loud + 0.05 * k)),
+          loud: Math.max(0.3, Math.min(1, nm.loud + 0.05 * k)),
           burstEvery: miss > 0 ? Math.min(16, nm.burstEvery * 2) : nm.burstEvery,
         };
       }
