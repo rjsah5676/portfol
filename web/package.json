@@ -1,0 +1,45 @@
+{
+  "name": "gmlee",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "foods": "node scripts/build-foods.mjs",
+    "rhythm-chart": "node scripts/build-rhythm-chart.mjs",
+    "predeploy": "npm run build",
+    "deploy": "gh-pages -d build"
+  },
+  "dependencies": {
+    "animejs": "^3.2.2",
+    "chess.js": "^1.4.0",
+    "firebase": "^12.19.0",
+    "jquery": "^4.0.0",
+    "jquery-ui-dist": "^1.13.3",
+    "next": "^16.3.5",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "react-quill-new": "^3.8.3",
+    "sql-formatter": "^15.9.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.3.3",
+    "@types/animejs": "^3.1.13",
+    "@types/jquery": "^4.0.1",
+    "@types/jqueryui": "^1.12.24",
+    "@types/node": "^22.10.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "^16.3.6",
+    "eslint-config-prettier": "^10.1.8",
+    "gh-pages": "^6.3.0",
+    "prettier": "^3.9.8",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^6.0.3"
+  }
+}

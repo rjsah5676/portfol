@@ -1,0 +1,20 @@
+@import url("https://fonts.googleapis.com/css2?family=Gaegu:wght@400;700&display=swap");
+
+/* 새로 붙인 메모가 위에서 툭 떨어지듯 붙는 효과 (--r: 메모 기울기) */
+@keyframes note-drop {
+  0% {
+    opacity: 0;
+    transform: translateY(-18px) rotate(calc(var(--r) - 6deg)) scale(1.06);
+  }
+  70% {
+    opacity: 1;
+    transform: translateY(2px) rotate(var(--r)) scale(0.99);
+  }
+  100% {
+    transform: rotate(var(--r));
+  }
+}
+
+.note-drop {
+  animation: note-drop 0.5s cubic-bezier(0.2, 0.9, 0.3, 1.2) backwards;
+}

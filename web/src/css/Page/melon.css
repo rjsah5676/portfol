@@ -1,0 +1,73 @@
+/* 멜론 게임 연출 */
+@keyframes melon-float {
+  0%,
+  100% {
+    transform: translateY(0) rotate(-4deg);
+  }
+  50% {
+    transform: translateY(-10px) rotate(4deg);
+  }
+}
+.melon-float {
+  animation: melon-float 3.2s ease-in-out infinite;
+}
+
+/* 점수가 오를 때 톡 */
+@keyframes melon-bump {
+  0% {
+    transform: scale(1.35);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+.melon-bump {
+  display: inline-block;
+  animation: melon-bump 0.25s ease-out;
+}
+
+/* 결과 점수 등장 */
+@keyframes melon-pop {
+  0% {
+    transform: scale(0.4);
+    opacity: 0;
+  }
+  70% {
+    transform: scale(1.12);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+.melon-pop {
+  animation: melon-pop 0.5s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+}
+
+/* 제목: 하얀 테두리 + 아래 그림자로 통통하게 */
+.melon-title {
+  text-shadow:
+    3px 3px 0 #fff,
+    -3px 3px 0 #fff,
+    3px -3px 0 #fff,
+    -3px -3px 0 #fff,
+    0 7px 0 rgba(124, 196, 90, 0.35);
+}
+
+/* 10초 남았을 때 시간 글자 흔들림 */
+@keyframes melon-shake {
+  0%,
+  100% {
+    transform: rotate(0);
+  }
+  25% {
+    transform: rotate(-8deg);
+  }
+  75% {
+    transform: rotate(8deg);
+  }
+}
+.melon-shake {
+  display: inline-block;
+  animation: melon-shake 0.5s ease-in-out infinite;
+}

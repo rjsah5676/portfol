@@ -1,0 +1,126 @@
+.center {
+  z-index: 100;
+  position: fixed;
+  margin: auto;
+  top: 85%;
+  right: 5%;
+}
+
+.menu {
+  z-index: 99999;
+  width: 70px;
+  height: 70px;
+  color: white;
+}
+
+.item {
+  box-shadow: 1px 1px 1px 1px rgba(0, 0, 0, 0.4);
+  position: absolute;
+  left: 0px;
+  top: 0px;
+  width: 70px;
+  height: 70px;
+  background-color: #1c1e24;
+  border: 1px solid rgba(108, 99, 255, 0.35);
+  -moz-border-radius: 50%;
+  -webkit-border-radius: 50%;
+  border-radius: 50%;
+  cursor: pointer;
+  text-align: center;
+  line-height: 40px;
+}
+
+i {
+  font-size: 24px;
+  color: #222222;
+}
+
+/*
+.item span {
+  position: absolute;
+  top: 60%;
+  margin-top: 10px;
+  padding: 0px 10px 0px 10px;
+  font-size: 14px;
+  font-weight: 1000;
+  white-space: nowrap;
+  color: #000;
+  border-radius: 50px;
+  background-color: #fff;
+  box-shadow: 0 15px 35px rgba(50, 50, 93, 0.1), 0 5px 15px rgba(0, 0, 0, 0.07);
+  pointer-events: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  opacity: 0;
+  transition: all 0.2s ease-in-out;
+}
+*/
+
+.item span {
+  display: none;
+}
+
+/* 아이콘은 QuickMenu에서 SVG로 주입 */
+.item {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #8b84ff;
+  box-shadow:
+    0 8px 20px rgba(0, 0, 0, 0.35),
+    0 2px 5px rgba(0, 0, 0, 0.3);
+  transition:
+    border-color 0.2s,
+    color 0.2s;
+}
+
+.item:hover {
+  border-color: rgba(139, 132, 255, 0.8);
+  color: #fff;
+}
+
+.item svg {
+  width: 44%;
+  height: 44%;
+  pointer-events: none;
+}
+
+/* 메뉴 토글 버튼은 강조색, 펼치면 햄버거 -> X */
+#list {
+  background-color: #6c63ff;
+  border-color: #6c63ff;
+  color: #fff;
+}
+
+#list:hover {
+  background-color: #5b52f0;
+}
+
+#list svg line {
+  transform-origin: 12px 12px;
+  transition:
+    transform 0.25s ease,
+    opacity 0.2s ease;
+}
+
+#list.open .line-top {
+  transform: rotate(45deg) translateY(5px);
+}
+
+#list.open .line-mid {
+  opacity: 0;
+}
+
+#list.open .line-bottom {
+  transform: rotate(-45deg) translateY(-5px);
+}
+
+/* 모바일에선 플로팅 버튼 축소 (QuickMenu 래퍼 크기와 맞춤) */
+@media (max-width: 639px) {
+  .item {
+    width: 52px;
+    height: 52px;
+  }
+}

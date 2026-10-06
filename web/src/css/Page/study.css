@@ -1,0 +1,210 @@
+/* Quill 에디터로 작성된 글 본문(dangerouslySetInnerHTML)에 들어가는 이미지 규칙.
+   JSX가 직접 렌더링하는 게 아니라 저장된 HTML을 그대로 꽂는 거라 Tailwind로
+   못 건드려서 최소한만 여기 남겨둠. */
+.quill-content img {
+  max-width: 100%;
+  max-height: 500px;
+  height: auto;
+  display: block;
+  object-fit: contain;
+  border-radius: 8px;
+  margin-top: 1rem;
+  margin-bottom: 1rem;
+}
+
+.quill-content p {
+  margin-bottom: 1rem;
+}
+
+/* 글 본문 타이포그래피 — Tailwind preflight가 제목·목록 스타일을 지워서 Quill 출력에 맞춰 다시 지정.
+   Quill 2는 목록을 <ol><li data-list="bullet|ordered"><span class="ql-ui"/>…로,
+   코드 블록을 .ql-code-block-container로 저장함 (예전 <ul>/<pre> 글도 같이 대응) */
+.quill-content h1,
+.quill-content h2 {
+  margin: 2.4rem 0 0.9rem;
+  color: #fff;
+  font-weight: 700;
+  line-height: 1.4;
+}
+.quill-content h1 {
+  font-size: 1.5rem;
+}
+.quill-content h2 {
+  font-size: 1.2rem;
+  padding-bottom: 0.45rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+.quill-content > :first-child {
+  margin-top: 0;
+}
+.quill-content strong {
+  color: #fff;
+}
+.quill-content a {
+  color: #8b84ff;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.quill-content blockquote {
+  margin: 1rem 0;
+  padding: 0.85rem 1rem;
+  border-left: 3px solid #6c63ff;
+  border-radius: 0 8px 8px 0;
+  background: rgba(108, 99, 255, 0.08);
+  color: rgba(255, 255, 255, 0.82);
+}
+
+/* 비교표 - Quill 2 table 포맷(<table><tbody><tr><td data-row>), 첫 행은 헤더처럼 */
+.quill-content table,
+.quill-dark .ql-editor table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  margin: 1.1rem 0 1.4rem;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+.quill-content td,
+.quill-dark .ql-editor td {
+  min-width: 6.5rem;
+  padding: 0.55rem 0.8rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  vertical-align: top;
+  line-height: 1.55;
+}
+.quill-content tr:first-child td,
+.quill-dark .ql-editor tr:first-child td {
+  background: rgba(108, 99, 255, 0.14);
+  color: #fff;
+  white-space: nowrap;
+}
+.quill-content tr:not(:first-child) td:first-child {
+  color: rgba(255, 255, 255, 0.92);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.quill-content tr:nth-child(even) td {
+  background: rgba(255, 255, 255, 0.02);
+}
+.quill-content code {
+  padding: 0.1em 0.35em;
+  border-radius: 4px;
+  background: rgba(108, 99, 255, 0.14);
+  color: #c9c5ff;
+  font-family: "JetBrains Mono", "Nanum Gothic Coding", ui-monospace, monospace;
+  font-size: 0.88em;
+}
+.quill-content pre,
+.quill-content .ql-code-block-container {
+  margin: 1.2rem 0;
+  padding: 1rem 1.1rem;
+  overflow-x: auto;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  background: #16171c;
+  color: #e7e7ea;
+  font-family: "JetBrains Mono", "Nanum Gothic Coding", ui-monospace, monospace;
+  font-size: 13px;
+  line-height: 1.7;
+  white-space: pre;
+}
+.quill-content .ql-code-block {
+  white-space: pre;
+}
+.quill-content ol,
+.quill-content ul {
+  margin: 0.4rem 0 1.1rem;
+  padding-left: 1.4rem;
+  counter-reset: ql-list;
+}
+.quill-content li {
+  margin: 0.3rem 0;
+}
+.quill-content ul > li {
+  list-style: disc;
+}
+.quill-content ol > li:not([data-list]) {
+  list-style: decimal;
+}
+.quill-content li[data-list] {
+  position: relative;
+  list-style: none;
+}
+.quill-content li[data-list="ordered"] {
+  counter-increment: ql-list;
+}
+.quill-content li[data-list] > .ql-ui {
+  position: absolute;
+  left: -1.4rem;
+  width: 1.1rem;
+  text-align: right;
+  color: #8b84ff;
+}
+.quill-content li[data-list="bullet"] > .ql-ui::before {
+  content: "•";
+}
+.quill-content li[data-list="ordered"] > .ql-ui::before {
+  content: counter(ql-list) ".";
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 0.85em;
+}
+
+/* react-quill의 기본 snow 테마가 흰 배경이라 다크 사이트랑 안 맞아서 오버라이드.
+   Quill 내부 클래스라 Tailwind로 못 건드림. */
+.quill-dark .ql-toolbar {
+  background: #1c1e24;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+  border-top-left-radius: 0.5rem;
+  border-top-right-radius: 0.5rem;
+}
+.quill-dark .ql-container {
+  background: #16171c;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+  border-bottom-left-radius: 0.5rem;
+  border-bottom-right-radius: 0.5rem;
+  min-height: 280px;
+  font-family: "Nanum Gothic", sans-serif;
+  font-size: 15px;
+}
+.quill-dark .ql-editor {
+  color: #e7e7ea;
+  min-height: 280px;
+}
+.quill-dark .ql-editor.ql-blank::before {
+  color: rgba(255, 255, 255, 0.3);
+  font-style: normal;
+}
+.quill-dark .ql-stroke {
+  stroke: rgba(255, 255, 255, 0.6);
+}
+.quill-dark .ql-fill {
+  fill: rgba(255, 255, 255, 0.6);
+}
+.quill-dark .ql-picker {
+  color: rgba(255, 255, 255, 0.6);
+}
+.quill-dark .ql-picker-options {
+  background: #1c1e24;
+}
+
+/* 프로젝트 회고 본문: 개인 공부(보라)와 구분되게 민트 톤 */
+.retro-post .quill-content h2 {
+  border-bottom-color: rgba(45, 212, 191, 0.18);
+}
+.retro-post .quill-content h2::before {
+  content: "# ";
+  color: #2dd4bf;
+}
+.retro-post .quill-content blockquote {
+  border-left-color: #2dd4bf;
+  background: rgba(45, 212, 191, 0.07);
+}
+.retro-post .quill-content code {
+  background: rgba(45, 212, 191, 0.12);
+}
+.retro-post .quill-content a {
+  color: #5eead4;
+}
+.retro-post .quill-content li > .ql-ui::before {
+  color: #2dd4bf;
+}

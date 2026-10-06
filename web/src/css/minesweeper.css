@@ -1,0 +1,181 @@
+.minesweeper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-top: 24px;
+  padding: 0 1rem;
+  font-family: "JetBrains Mono", monospace;
+}
+
+.mine-grid {
+  position: relative;
+  display: inline-block;
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  overflow: hidden;
+  background: #16171c;
+}
+
+.mine-row {
+  display: flex;
+}
+
+.cell {
+  width: 28px;
+  height: 28px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  user-select: none;
+  background-color: #2a2c33;
+  transition: background-color 0.1s;
+}
+
+.cell.even {
+  background-color: #26282f;
+}
+
+.cell:not(.open):hover {
+  background-color: #35373f;
+}
+
+.cell.open {
+  background: #1a1c22;
+  border: 1px solid rgba(255, 255, 255, 0.03);
+  cursor: default;
+}
+
+.cell.open:hover {
+  background-color: #1a1c22;
+  cursor: default;
+}
+
+.cell.highlight:not(.open) {
+  background-color: #3c3550;
+}
+
+.top-info {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 16px;
+  gap: 16px;
+  width: 100%;
+  max-width: 700px;
+}
+
+.top-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  width: 100%;
+  max-width: 700px;
+  gap: 12px;
+}
+
+#mine-left,
+#mine-right {
+  flex: 1 1 220px;
+  font-size: 13px;
+  line-height: 1.7;
+  color: rgba(255, 255, 255, 0.6);
+  background-color: #1c1e24;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 12px 14px;
+  box-sizing: border-box;
+  border-radius: 8px;
+}
+
+.status-row {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+  max-width: 200px;
+  gap: 10px;
+  margin: 0 auto;
+}
+
+.status-box {
+  width: 48%;
+  text-align: center;
+  font-weight: 600;
+  font-size: 15px;
+  color: #fff;
+  background-color: #1c1e24;
+  border: 1px solid rgba(108, 99, 255, 0.25);
+  padding: 8px;
+  border-radius: 8px;
+}
+#mine-title {
+  font-weight: 600;
+  color: #8b84ff;
+  margin-bottom: 5px;
+}
+
+.message-overlay {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 24px;
+  font-weight: bold;
+  color: white;
+  background-color: rgba(18, 18, 18, 0.9);
+  border: 1px solid rgba(108, 99, 255, 0.3);
+  padding: 20px 32px;
+  border-radius: 12px;
+  text-align: center;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.number-1 {
+  color: #5b9bff;
+}
+.number-2 {
+  color: #4cd17a;
+}
+.number-3 {
+  color: #ff6b6b;
+}
+.number-4 {
+  color: #8f7bff;
+}
+.number-5 {
+  color: #ff8a5c;
+}
+.number-6 {
+  color: #4ecdc4;
+}
+.number-7 {
+  color: #e7e7ea;
+}
+
+/* 모바일: 칸을 키우고(26px) 판은 안에서 밀어서·두 손가락으로 벌려서 봄 */
+@media (max-width: 768px) {
+  .mine-viewport {
+    width: 100%;
+    max-width: calc(100vw - 2rem);
+    max-height: 72dvh;
+    overflow: auto;
+    overscroll-behavior: contain;
+    touch-action: pan-x pan-y pinch-zoom;
+    -webkit-overflow-scrolling: touch;
+    border-radius: 8px;
+  }
+  .mine-grid {
+    display: inline-block;
+  }
+  .cell {
+    width: 26px;
+    height: 26px;
+    font-size: 14px;
+  }
+}

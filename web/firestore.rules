@@ -1,0 +1,555 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // 사이트 관리자(본인) 여부 - Firebase Auth 이메일로 판별.
+    // 콘솔에서 이 이메일로 계정을 만들어야 글쓰기/수정/삭제가 동작함.
+    function isAdmin() {
+      return request.auth != null && request.auth.token.email == 'rjsah5676@gmail.com';
+    }
+
+    // 방명록: 누구나 읽고 쓸 수 있되, 형식은 제한 (스팸/도배 최소화용 기본 방어)
+    match /guest/{entryId} {
+      allow read: if true;
+      allow create: if request.resource.data.keys().hasOnly(['name', 'contents', 'id', 'date', 'color'])
+                    && request.resource.data.name is string
+                    && request.resource.data.name.size() <= 20
+                    && request.resource.data.contents is string
+                    && request.resource.data.contents.size() <= 50
+                    && (!('color' in request.resource.data)
+                        || request.resource.data.color in ['lavender', 'yellow', 'mint', 'pink', 'sky']);
+      allow update, delete: if isAdmin();
+    }
+
+    // 공부 게시글: 읽기는 공개, 쓰기/수정/삭제는 관리자만
+    match /studyPosts/{postId} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
+    }
+
+    // 랭킹 달성 일자: 없으면 통과(예전 클라이언트), 있으면 서버 시각(serverTimestamp)만
+    function validCreatedAt() {
+      return !('createdAt' in request.resource.data)
+          || request.resource.data.createdAt == request.time;
+    }
+
+    // 랭킹 공통: 이름 1~20자
+    function validRankName() {
+      return request.resource.data.name is string
+          && request.resource.data.name.size() > 0
+          && request.resource.data.name.size() <= 20;
+    }
+
+    // 지뢰찾기 랭킹 (클리어 시간, 초) - 비정상적으로 빠른/느린 기록 차단
+    match /minesweeper_rankings/{entryId} {
+      allow read: if true;
+      allow create: if request.resource.data.keys().hasOnly(['name', 'time', 'createdAt'])
+                    && validCreatedAt()
+                    && validRankName()
+                    && request.resource.data.time is number
+                    && request.resource.data.time >= 10
+                    && request.resource.data.time <= 86400;
+      allow update, delete: if isAdmin();
+    }
+
+    // 리듬게임 랭킹 - 곡·난이도별 서브컬렉션 (rhythm_rankings/{곡_난이도}/scores)
+    match /rhythm_rankings/{chartId}/scores/{entryId} {
+      allow read: if true;
+      allow create: if chartId.matches('^[a-z0-9-]+_(easy|normal|hard|expert|nightmare)$')
+                    && request.resource.data.keys().hasOnly(['name', 'score', 'acc', 'maxCombo', 'fc', 'ap', 'createdAt'])
+                    && request.resource.data.keys().hasAll(['name', 'score', 'acc', 'maxCombo', 'fc', 'ap', 'createdAt'])
+                    && validRankName()
+                    && request.resource.data.name.size() <= 12
+                    && request.resource.data.score is int
+                    && request.resource.data.score >= 0
+                    && request.resource.data.score <= 1000000
+                    && request.resource.data.acc is number
+                    && request.resource.data.acc >= 0
+                    && request.resource.data.acc <= 100
+                    && request.resource.data.maxCombo is int
+                    && request.resource.data.maxCombo >= 0
+                    && request.resource.data.maxCombo <= 5000
+                    && request.resource.data.fc is bool
+                    && request.resource.data.ap is bool
+                    && request.resource.data.createdAt == request.time;
+      allow update, delete: if isAdmin();
+    }
+
+    // 반응속도 게임 랭킹 (5회 평균, ms) - 사람이 낼 수 없는 기록 차단
+    match /reaction/{entryId} {
+      allow read: if true;
+      allow create: if request.resource.data.keys().hasOnly(['name', 'score', 'createdAt'])
+                    && validCreatedAt()
+                    && validRankName()
+                    && request.resource.data.score is number
+                    && request.resource.data.score >= 80
+                    && request.resource.data.score <= 10000;
+      allow update, delete: if isAdmin();
+    }
+
+    // 멜론게임 랭킹 (지운 멜론 수, 판 전체가 21x12=252개)
+    match /score/{entryId} {
+      allow read: if true;
+      allow create: if request.resource.data.keys().hasOnly(['name', 'score', 'createdAt'])
+                    && validCreatedAt()
+                    && validRankName()
+                    && request.resource.data.score is int
+                    && request.resource.data.score >= 0
+                    && request.resource.data.score <= 252;
+      allow update, delete: if isAdmin();
+    }
+
+    // 체스·장기·오목 AI 랭킹 모드 (이긴 판만). score = 상대 단계 × 1,000,000 + 판 점수 — 범위만 검사
+    function validAIRank(maxScore) {
+      let d = request.resource.data;
+      return d.keys().hasOnly(['name', 'score', 'opp', 'moves', 'seconds', 'lead', 'createdAt'])
+          && d.keys().hasAll(['name', 'score', 'opp', 'moves', 'seconds', 'lead', 'createdAt'])
+          && validRankName()
+          && d.name.size() <= 12
+          && d.score is int && d.score > 1000000 && d.score <= maxScore
+          && d.opp is string && d.opp.size() <= 20
+          && d.moves is int && d.moves >= 2 && d.moves <= 1000
+          && d.seconds is int && d.seconds >= 0 && d.seconds <= 86400
+          && d.lead is number && d.lead >= 0 && d.lead <= 100
+          && d.createdAt == request.time;
+    }
+    match /chess_ai_rankings/{entryId} {
+      allow read: if true;
+      allow create: if validAIRank(7000000)
+                    && request.resource.data.opp in ['400', '800', '1200', '1600', '2000', '2400']
+                    && math.floor(request.resource.data.score / 1000000)
+                       == {'400': 1, '800': 2, '1200': 3, '1600': 4, '2000': 5, '2400': 6}.get(request.resource.data.opp, 0);
+      allow update, delete: if isAdmin();
+    }
+    match /janggi_ai_rankings/{entryId} {
+      allow read: if true;
+      allow create: if validAIRank(13000000)
+                    && math.floor(request.resource.data.score / 1000000)
+                       == {'jangyeongsil': 1, 'heojun': 2, 'kimjeongho': 3, 'jeongyakyong': 4,
+                           'hwanghui': 5, 'gyebaek': 6, 'kimyusin': 7, 'euljimundeok': 8,
+                           'yeongaesomun': 9, 'gangamchan': 10, 'gwanggaeto': 11,
+                           'yisunsin': 12}.get(request.resource.data.opp, 0);
+      allow update, delete: if isAdmin();
+    }
+
+    match /omok_ai_rankings/{entryId} {
+      allow read: if true;
+      allow create: if validAIRank(9000000)
+                    && math.floor(request.resource.data.score / 1000000)
+                       == {'sprout': 1, 'kid': 2, 'playground': 3, 'grandpa': 4,
+                           'gunmo': 5, 'pcbang': 6, 'master': 7, 'alpha': 8}.get(request.resource.data.opp, 0);
+      allow update, delete: if isAdmin();
+    }
+
+    // 격투 AI 대전 (opp = AI 단계 1~6, moves = 적중 수, lead = 남은 체력 %)
+    // opp = "AI단계" 또는 "AI단계:내캐릭터>상대캐릭터" (예: "3:kai>igna")
+    match /fight_ai_rankings/{entryId} {
+      allow read: if true;
+      allow create: if validAIRank(7000000)
+                    && request.resource.data.opp.matches('^[1-6](:[a-z]+>[a-z]+)?$')
+                    && math.floor(request.resource.data.score / 1000000) == int(request.resource.data.opp[0:1]);
+      allow update, delete: if isAdmin();
+    }
+
+    // 스케치 퀴즈 (메뉴에서 내림) - 기존 데이터 읽기만 허용, 새 쓰기는 차단
+    match /sketch_user/{entryId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    match /sketch_user_room/{entryId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    match /sketch_user_chat/{entryId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // 온라인 체스 - 익명 Auth uid로 좌석 식별
+    match /chess_rooms/{roomId} {
+      function signedIn() {
+        return request.auth != null;
+      }
+      function isPlayerOf(d) {
+        return signedIn() && (d.whiteUid == request.auth.uid || d.blackUid == request.auth.uid);
+      }
+      function changed() {
+        return request.resource.data.diff(resource.data).affectedKeys();
+      }
+      function specOk() {
+        return request.resource.data.spectators.size() <= 2;
+      }
+      // 비밀번호 방: 비번/초대키를 맞혀 access 문서가 있는 사람만 앉거나 관전 가능
+      function canEnter(d) {
+        return d.get('locked', false) != true
+            || exists(/databases/$(database)/documents/chess_rooms/$(roomId)/access/$(request.auth.uid));
+      }
+
+      allow read: if true;
+      allow create: if signedIn()
+                    && request.resource.data.hostUid == request.auth.uid
+                    && request.resource.data.name is string
+                    && request.resource.data.name.size() > 0
+                    && request.resource.data.name.size() <= 20
+                    && request.resource.data.status == 'waiting'
+                    && isPlayerOf(request.resource.data)
+                    && request.resource.data.spectators.size() == 0;
+      allow update: if signedIn() && specOk() && (
+                      // 대국자: 좌석/방장 정보는 변경 불가
+                      (isPlayerOf(resource.data)
+                        && !changed().hasAny(['hostUid', 'whiteUid', 'blackUid', 'createdAt', 'locked'])
+                        // 일시정지/재개는 방장만
+                        && (!changed().hasAny(['pausedAt']) || resource.data.hostUid == request.auth.uid)
+                        && !(resource.data.status == 'waiting' && request.resource.data.status == 'playing'
+                             && resource.data.hostUid != request.auth.uid))
+                      // 다시 하기: 끝난 방에서 대국자가 흑백(선후)을 맞바꿔 바로 새 대국 시작
+                      || (isPlayerOf(resource.data)
+                        && resource.data.status == 'ended'
+                        && request.resource.data.status == 'playing'
+                        && request.resource.data.whiteUid == resource.data.blackUid
+                        && request.resource.data.blackUid == resource.data.whiteUid
+                        && request.resource.data.whiteName == resource.data.blackName
+                        && request.resource.data.blackName == resource.data.whiteName
+                        && request.resource.data.moves.size() == 0
+                        && !changed().hasAny(['hostUid', 'createdAt', 'locked', 'spectators']))
+                      // 대기방 빈 자리 착석 (본인 uid로만, 시작은 방장이)
+                      || (resource.data.status == 'waiting'
+                        && request.resource.data.status == 'waiting'
+                        && canEnter(resource.data)
+                        && changed().hasOnly(['whiteUid', 'whiteName', 'blackUid', 'blackName', 'updatedAt', 'spectators'])
+                        && ((resource.data.whiteUid == '' && request.resource.data.whiteUid == request.auth.uid
+                              && request.resource.data.blackUid == resource.data.blackUid)
+                          || (resource.data.blackUid == '' && request.resource.data.blackUid == request.auth.uid
+                              && request.resource.data.whiteUid == resource.data.whiteUid)))
+                      // 대기방에서 참가자(방장 제외)가 자기 자리 비우고 나가기
+                      || (resource.data.status == 'waiting'
+                        && request.resource.data.status == 'waiting'
+                        && resource.data.hostUid != request.auth.uid
+                        && changed().hasOnly(['whiteUid', 'whiteName', 'blackUid', 'blackName', 'updatedAt'])
+                        && ((resource.data.whiteUid == request.auth.uid && request.resource.data.whiteUid == ''
+                              && request.resource.data.blackUid == resource.data.blackUid)
+                          || (resource.data.blackUid == request.auth.uid && request.resource.data.blackUid == ''
+                              && request.resource.data.whiteUid == resource.data.whiteUid)))
+                      // 관전자 입장/퇴장 (최대 2명)
+                      || (changed().hasOnly(['spectators']) && canEnter(resource.data))
+                    );
+      allow delete: if isAdmin();
+
+      // 비밀번호 해시(lock: 아무도 못 읽음)와 초대키(invite: 참가자만 읽음 — 초대 링크용)
+      match /private/{docId} {
+        allow read: if docId == 'invite' && signedIn()
+                    && (isPlayerOf(get(/databases/$(database)/documents/chess_rooms/$(roomId)).data)
+                        || request.auth.uid in get(/databases/$(database)/documents/chess_rooms/$(roomId)).data.spectators);
+        allow create: if signedIn()
+                      && getAfter(/databases/$(database)/documents/chess_rooms/$(roomId)).data.hostUid == request.auth.uid;
+        allow delete: if isAdmin();
+      }
+
+      // 비번/초대키를 맞힌 사람 표시 — key가 lock의 해시나 초대키와 같아야 생성됨
+      match /access/{uid} {
+        allow read: if signedIn() && request.auth.uid == uid;
+        allow create: if signedIn() && request.auth.uid == uid && (
+                        (getAfter(/databases/$(database)/documents/chess_rooms/$(roomId)).data.hostUid == request.auth.uid
+                          && request.resource.data.key == getAfter(/databases/$(database)/documents/chess_rooms/$(roomId)/private/lock).data.pw)
+                        || request.resource.data.key == get(/databases/$(database)/documents/chess_rooms/$(roomId)/private/lock).data.pw
+                        || request.resource.data.key == get(/databases/$(database)/documents/chess_rooms/$(roomId)/private/lock).data.invite);
+        allow delete: if isAdmin();
+      }
+
+      match /presence/{uid} {
+        allow read: if true;
+        allow write: if request.auth != null && request.auth.uid == uid;
+        allow delete: if isAdmin(); // 관리자 페이지에서 방 삭제 시 같이 정리
+      }
+
+      // 채팅: 읽기는 누구나, 쓰기는 이 방의 대국자·관전자 본인만
+      match /chat/{msgId} {
+        allow read: if true;
+        allow create: if request.auth != null
+                      && request.resource.data.keys().hasOnly(['uid', 'name', 'text', 'createdAt'])
+                      && request.resource.data.uid == request.auth.uid
+                      && request.resource.data.name is string
+                      && request.resource.data.name.size() <= 20
+                      && request.resource.data.text is string
+                      && request.resource.data.text.size() > 0
+                      && request.resource.data.text.size() <= 200
+                      && request.resource.data.createdAt == request.time
+                      && (get(/databases/$(database)/documents/chess_rooms/$(roomId)).data.whiteUid == request.auth.uid
+                          || get(/databases/$(database)/documents/chess_rooms/$(roomId)).data.blackUid == request.auth.uid
+                          || request.auth.uid in get(/databases/$(database)/documents/chess_rooms/$(roomId)).data.spectators);
+        allow update: if false;
+        allow delete: if isAdmin();
+      }
+    }
+
+    // 온라인 장기 - 체스와 같은 방 구조 (white = 초, black = 한)
+    match /janggi_rooms/{roomId} {
+      function signedIn() {
+        return request.auth != null;
+      }
+      function isPlayerOf(d) {
+        return signedIn() && (d.whiteUid == request.auth.uid || d.blackUid == request.auth.uid);
+      }
+      function changed() {
+        return request.resource.data.diff(resource.data).affectedKeys();
+      }
+      function specOk() {
+        return request.resource.data.spectators.size() <= 2;
+      }
+      // 비밀번호 방: 비번/초대키를 맞혀 access 문서가 있는 사람만 앉거나 관전 가능
+      function canEnter(d) {
+        return d.get('locked', false) != true
+            || exists(/databases/$(database)/documents/janggi_rooms/$(roomId)/access/$(request.auth.uid));
+      }
+
+      allow read: if true;
+      allow create: if signedIn()
+                    && request.resource.data.hostUid == request.auth.uid
+                    && request.resource.data.name is string
+                    && request.resource.data.name.size() > 0
+                    && request.resource.data.name.size() <= 20
+                    && request.resource.data.status == 'waiting'
+                    && isPlayerOf(request.resource.data)
+                    && request.resource.data.spectators.size() == 0;
+      allow update: if signedIn() && specOk() && (
+                      // 대국자: 좌석/방장 정보는 변경 불가
+                      (isPlayerOf(resource.data)
+                        && !changed().hasAny(['hostUid', 'whiteUid', 'blackUid', 'createdAt', 'locked'])
+                        // 일시정지/재개는 방장만
+                        && (!changed().hasAny(['pausedAt']) || resource.data.hostUid == request.auth.uid)
+                        && !(resource.data.status == 'waiting' && request.resource.data.status == 'playing'
+                             && resource.data.hostUid != request.auth.uid))
+                      // 다시 하기: 끝난 방에서 대국자가 흑백(선후)을 맞바꿔 바로 새 대국 시작
+                      || (isPlayerOf(resource.data)
+                        && resource.data.status == 'ended'
+                        && request.resource.data.status == 'playing'
+                        && request.resource.data.whiteUid == resource.data.blackUid
+                        && request.resource.data.blackUid == resource.data.whiteUid
+                        && request.resource.data.whiteName == resource.data.blackName
+                        && request.resource.data.blackName == resource.data.whiteName
+                        && request.resource.data.moves.size() == 0
+                        && !changed().hasAny(['hostUid', 'createdAt', 'locked', 'spectators']))
+                      // 대기방 빈 자리 착석 (본인 uid로만, 시작은 방장이)
+                      || (resource.data.status == 'waiting'
+                        && request.resource.data.status == 'waiting'
+                        && canEnter(resource.data)
+                        && changed().hasOnly(['whiteUid', 'whiteName', 'blackUid', 'blackName', 'updatedAt', 'spectators'])
+                        && ((resource.data.whiteUid == '' && request.resource.data.whiteUid == request.auth.uid
+                              && request.resource.data.blackUid == resource.data.blackUid)
+                          || (resource.data.blackUid == '' && request.resource.data.blackUid == request.auth.uid
+                              && request.resource.data.whiteUid == resource.data.whiteUid)))
+                      // 대기방에서 참가자(방장 제외)가 자기 자리 비우고 나가기
+                      || (resource.data.status == 'waiting'
+                        && request.resource.data.status == 'waiting'
+                        && resource.data.hostUid != request.auth.uid
+                        && changed().hasOnly(['whiteUid', 'whiteName', 'blackUid', 'blackName', 'updatedAt'])
+                        && ((resource.data.whiteUid == request.auth.uid && request.resource.data.whiteUid == ''
+                              && request.resource.data.blackUid == resource.data.blackUid)
+                          || (resource.data.blackUid == request.auth.uid && request.resource.data.blackUid == ''
+                              && request.resource.data.whiteUid == resource.data.whiteUid)))
+                      // 관전자 입장/퇴장 (최대 2명)
+                      || (changed().hasOnly(['spectators']) && canEnter(resource.data))
+                    );
+      allow delete: if isAdmin();
+
+      // 비밀번호 해시(lock: 아무도 못 읽음)와 초대키(invite: 참가자만 읽음 — 초대 링크용)
+      match /private/{docId} {
+        allow read: if docId == 'invite' && signedIn()
+                    && (isPlayerOf(get(/databases/$(database)/documents/janggi_rooms/$(roomId)).data)
+                        || request.auth.uid in get(/databases/$(database)/documents/janggi_rooms/$(roomId)).data.spectators);
+        allow create: if signedIn()
+                      && getAfter(/databases/$(database)/documents/janggi_rooms/$(roomId)).data.hostUid == request.auth.uid;
+        allow delete: if isAdmin();
+      }
+
+      // 비번/초대키를 맞힌 사람 표시 — key가 lock의 해시나 초대키와 같아야 생성됨
+      match /access/{uid} {
+        allow read: if signedIn() && request.auth.uid == uid;
+        allow create: if signedIn() && request.auth.uid == uid && (
+                        (getAfter(/databases/$(database)/documents/janggi_rooms/$(roomId)).data.hostUid == request.auth.uid
+                          && request.resource.data.key == getAfter(/databases/$(database)/documents/janggi_rooms/$(roomId)/private/lock).data.pw)
+                        || request.resource.data.key == get(/databases/$(database)/documents/janggi_rooms/$(roomId)/private/lock).data.pw
+                        || request.resource.data.key == get(/databases/$(database)/documents/janggi_rooms/$(roomId)/private/lock).data.invite);
+        allow delete: if isAdmin();
+      }
+
+      match /presence/{uid} {
+        allow read: if true;
+        allow write: if request.auth != null && request.auth.uid == uid;
+        allow delete: if isAdmin(); // 관리자 페이지에서 방 삭제 시 같이 정리
+      }
+
+      // 채팅: 읽기는 누구나, 쓰기는 이 방의 대국자·관전자 본인만
+      match /chat/{msgId} {
+        allow read: if true;
+        allow create: if request.auth != null
+                      && request.resource.data.keys().hasOnly(['uid', 'name', 'text', 'createdAt'])
+                      && request.resource.data.uid == request.auth.uid
+                      && request.resource.data.name is string
+                      && request.resource.data.name.size() <= 20
+                      && request.resource.data.text is string
+                      && request.resource.data.text.size() > 0
+                      && request.resource.data.text.size() <= 200
+                      && request.resource.data.createdAt == request.time
+                      && (get(/databases/$(database)/documents/janggi_rooms/$(roomId)).data.whiteUid == request.auth.uid
+                          || get(/databases/$(database)/documents/janggi_rooms/$(roomId)).data.blackUid == request.auth.uid
+                          || request.auth.uid in get(/databases/$(database)/documents/janggi_rooms/$(roomId)).data.spectators);
+        allow update: if false;
+        allow delete: if isAdmin();
+      }
+    }
+
+    // 온라인 오목 - 장기와 같은 방 구조 (white = 흑(선수), black = 백)
+    match /omok_rooms/{roomId} {
+      function signedIn() {
+        return request.auth != null;
+      }
+      function isPlayerOf(d) {
+        return signedIn() && (d.whiteUid == request.auth.uid || d.blackUid == request.auth.uid);
+      }
+      function changed() {
+        return request.resource.data.diff(resource.data).affectedKeys();
+      }
+      function specOk() {
+        return request.resource.data.spectators.size() <= 2;
+      }
+      // 비밀번호 방: 비번/초대키를 맞혀 access 문서가 있는 사람만 앉거나 관전 가능
+      function canEnter(d) {
+        return d.get('locked', false) != true
+            || exists(/databases/$(database)/documents/omok_rooms/$(roomId)/access/$(request.auth.uid));
+      }
+
+      allow read: if true;
+      allow create: if signedIn()
+                    && request.resource.data.hostUid == request.auth.uid
+                    && request.resource.data.name is string
+                    && request.resource.data.name.size() > 0
+                    && request.resource.data.name.size() <= 20
+                    && request.resource.data.status == 'waiting'
+                    && isPlayerOf(request.resource.data)
+                    && request.resource.data.spectators.size() == 0;
+      allow update: if signedIn() && specOk() && (
+                      // 대국자: 좌석/방장 정보는 변경 불가
+                      (isPlayerOf(resource.data)
+                        && !changed().hasAny(['hostUid', 'whiteUid', 'blackUid', 'createdAt', 'locked'])
+                        // 일시정지/재개는 방장만
+                        && (!changed().hasAny(['pausedAt']) || resource.data.hostUid == request.auth.uid)
+                        && !(resource.data.status == 'waiting' && request.resource.data.status == 'playing'
+                             && resource.data.hostUid != request.auth.uid))
+                      // 다시 하기: 끝난 방에서 대국자가 흑백(선후)을 맞바꿔 바로 새 대국 시작
+                      || (isPlayerOf(resource.data)
+                        && resource.data.status == 'ended'
+                        && request.resource.data.status == 'playing'
+                        && request.resource.data.whiteUid == resource.data.blackUid
+                        && request.resource.data.blackUid == resource.data.whiteUid
+                        && request.resource.data.whiteName == resource.data.blackName
+                        && request.resource.data.blackName == resource.data.whiteName
+                        && request.resource.data.moves.size() == 0
+                        && !changed().hasAny(['hostUid', 'createdAt', 'locked', 'spectators']))
+                      // 대기방 빈 자리 착석 (본인 uid로만, 시작은 방장이)
+                      || (resource.data.status == 'waiting'
+                        && request.resource.data.status == 'waiting'
+                        && canEnter(resource.data)
+                        && changed().hasOnly(['whiteUid', 'whiteName', 'blackUid', 'blackName', 'updatedAt', 'spectators'])
+                        && ((resource.data.whiteUid == '' && request.resource.data.whiteUid == request.auth.uid
+                              && request.resource.data.blackUid == resource.data.blackUid)
+                          || (resource.data.blackUid == '' && request.resource.data.blackUid == request.auth.uid
+                              && request.resource.data.whiteUid == resource.data.whiteUid)))
+                      // 대기방에서 참가자(방장 제외)가 자기 자리 비우고 나가기
+                      || (resource.data.status == 'waiting'
+                        && request.resource.data.status == 'waiting'
+                        && resource.data.hostUid != request.auth.uid
+                        && changed().hasOnly(['whiteUid', 'whiteName', 'blackUid', 'blackName', 'updatedAt'])
+                        && ((resource.data.whiteUid == request.auth.uid && request.resource.data.whiteUid == ''
+                              && request.resource.data.blackUid == resource.data.blackUid)
+                          || (resource.data.blackUid == request.auth.uid && request.resource.data.blackUid == ''
+                              && request.resource.data.whiteUid == resource.data.whiteUid)))
+                      // 관전자 입장/퇴장 (최대 2명)
+                      || (changed().hasOnly(['spectators']) && canEnter(resource.data))
+                    );
+      allow delete: if isAdmin();
+
+      // 비밀번호 해시(lock: 아무도 못 읽음)와 초대키(invite: 참가자만 읽음 — 초대 링크용)
+      match /private/{docId} {
+        allow read: if docId == 'invite' && signedIn()
+                    && (isPlayerOf(get(/databases/$(database)/documents/omok_rooms/$(roomId)).data)
+                        || request.auth.uid in get(/databases/$(database)/documents/omok_rooms/$(roomId)).data.spectators);
+        allow create: if signedIn()
+                      && getAfter(/databases/$(database)/documents/omok_rooms/$(roomId)).data.hostUid == request.auth.uid;
+        allow delete: if isAdmin();
+      }
+
+      // 비번/초대키를 맞힌 사람 표시 — key가 lock의 해시나 초대키와 같아야 생성됨
+      match /access/{uid} {
+        allow read: if signedIn() && request.auth.uid == uid;
+        allow create: if signedIn() && request.auth.uid == uid && (
+                        (getAfter(/databases/$(database)/documents/omok_rooms/$(roomId)).data.hostUid == request.auth.uid
+                          && request.resource.data.key == getAfter(/databases/$(database)/documents/omok_rooms/$(roomId)/private/lock).data.pw)
+                        || request.resource.data.key == get(/databases/$(database)/documents/omok_rooms/$(roomId)/private/lock).data.pw
+                        || request.resource.data.key == get(/databases/$(database)/documents/omok_rooms/$(roomId)/private/lock).data.invite);
+        allow delete: if isAdmin();
+      }
+
+      match /presence/{uid} {
+        allow read: if true;
+        allow write: if request.auth != null && request.auth.uid == uid;
+        allow delete: if isAdmin(); // 관리자 페이지에서 방 삭제 시 같이 정리
+      }
+
+      // 채팅: 읽기는 누구나, 쓰기는 이 방의 대국자·관전자 본인만
+      match /chat/{msgId} {
+        allow read: if true;
+        allow create: if request.auth != null
+                      && request.resource.data.keys().hasOnly(['uid', 'name', 'text', 'createdAt'])
+                      && request.resource.data.uid == request.auth.uid
+                      && request.resource.data.name is string
+                      && request.resource.data.name.size() <= 20
+                      && request.resource.data.text is string
+                      && request.resource.data.text.size() > 0
+                      && request.resource.data.text.size() <= 200
+                      && request.resource.data.createdAt == request.time
+                      && (get(/databases/$(database)/documents/omok_rooms/$(roomId)).data.whiteUid == request.auth.uid
+                          || get(/databases/$(database)/documents/omok_rooms/$(roomId)).data.blackUid == request.auth.uid
+                          || request.auth.uid in get(/databases/$(database)/documents/omok_rooms/$(roomId)).data.spectators);
+        allow update: if false;
+        allow delete: if isAdmin();
+      }
+    }
+
+    // 문의 (플로팅 버튼) - 작성은 누구나(형식 검증), 조회·읽음 처리·삭제는 관리자만
+    match /inquiries/{inquiryId} {
+      allow create: if request.resource.data.keys().hasOnly(['name', 'email', 'phone', 'message', 'read', 'createdAt'])
+                    && request.resource.data.name is string
+                    && request.resource.data.name.size() > 0
+                    && request.resource.data.name.size() <= 30
+                    && request.resource.data.email is string
+                    && request.resource.data.email.size() <= 100
+                    && request.resource.data.email.matches('^[^@\\s]+@[^@\\s]+[.][^@\\s]+$')
+                    && request.resource.data.phone is string
+                    && request.resource.data.phone.size() <= 20
+                    && request.resource.data.message is string
+                    && request.resource.data.message.size() > 0
+                    && request.resource.data.message.size() <= 1000
+                    && request.resource.data.read == false
+                    && request.resource.data.createdAt == request.time;
+      allow read, update, delete: if isAdmin();
+    }
+
+    // 방문자 카운터 (footer today/total) - 누구나 읽기, 쓰기는 count를 정확히 +1 하는 것만 허용
+    match /siteStats/{docId} {
+      allow read: if true;
+      allow create: if request.resource.data.keys().hasOnly(['count'])
+                    && request.resource.data.count == 1;
+      allow update: if (request.resource.data.keys().hasOnly(['count'])
+                    && request.resource.data.count == resource.data.count + 1)
+                    || isAdmin(); // 관리자 페이지에서 수치 보정
+      allow delete: if isAdmin();
+    }
+
+    // 그 외 컬렉션은 기본적으로 전부 차단
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

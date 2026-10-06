@@ -1,0 +1,394 @@
+/* ───────── About 랜딩 ───────── */
+
+/* 스크롤 등장 */
+.ab-reveal {
+  opacity: 0;
+  transform: translateY(28px);
+  transition:
+    opacity 0.9s cubic-bezier(0.22, 1, 0.36, 1),
+    transform 0.9s cubic-bezier(0.22, 1, 0.36, 1);
+  transition-delay: var(--d, 0ms);
+}
+.ab-reveal.ab-in {
+  opacity: 1;
+  transform: none;
+}
+.ab-reveal-left {
+  transform: translateX(-28px);
+}
+.ab-reveal-right {
+  transform: translateX(28px);
+}
+
+/* 히어로 배경: 떠다니는 빛 + 점 격자 */
+.ab-hero {
+  --mx: 0;
+  --my: 0;
+}
+.ab-blob {
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(70px);
+  opacity: 0.55;
+  will-change: transform;
+}
+.ab-blob-1 {
+  width: 420px;
+  height: 420px;
+  background: #6c63ff;
+  top: -120px;
+  left: -80px;
+  animation: ab-float-1 16s ease-in-out infinite;
+  translate: calc(var(--mx) * 30px) calc(var(--my) * 30px);
+}
+.ab-blob-2 {
+  width: 360px;
+  height: 360px;
+  background: #2dd4bf;
+  bottom: -140px;
+  right: -60px;
+  opacity: 0.25;
+  animation: ab-float-2 19s ease-in-out infinite;
+  translate: calc(var(--mx) * -40px) calc(var(--my) * -40px);
+}
+.ab-blob-3 {
+  width: 260px;
+  height: 260px;
+  background: #f472b6;
+  top: 35%;
+  left: 55%;
+  opacity: 0.18;
+  animation: ab-float-1 22s ease-in-out infinite reverse;
+  translate: calc(var(--mx) * 20px) calc(var(--my) * -20px);
+}
+@keyframes ab-float-1 {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  50% {
+    transform: translate(60px, 40px) scale(1.12);
+  }
+}
+@keyframes ab-float-2 {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  50% {
+    transform: translate(-50px, -30px) scale(0.92);
+  }
+}
+.ab-grid {
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(rgba(255, 255, 255, 0.09) 1px, transparent 1px);
+  background-size: 26px 26px;
+  mask-image: radial-gradient(ellipse 70% 60% at 50% 40%, #000 30%, transparent 75%);
+}
+
+/* 헤드라인 단어별 등장 */
+.ab-word {
+  display: inline-block;
+  opacity: 0;
+  transform: translateY(0.6em) rotate(2deg);
+  filter: blur(6px);
+  animation: ab-word-in 0.9s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation-delay: var(--d, 0ms);
+}
+@keyframes ab-word-in {
+  to {
+    opacity: 1;
+    transform: none;
+    filter: none;
+  }
+}
+.ab-fade-up {
+  opacity: 0;
+  animation: ab-fade-up 1s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation-delay: var(--d, 0ms);
+}
+@keyframes ab-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* 그라데이션이 흐르는 이름 */
+.ab-gradient-text {
+  background: linear-gradient(90deg, #a9a3ff, #6c63ff, #2dd4bf, #a9a3ff);
+  background-size: 300% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: ab-shine 6s linear infinite;
+}
+@keyframes ab-shine {
+  to {
+    background-position: 300% 0;
+  }
+}
+
+/* 역할 문구 교체 */
+.ab-role {
+  display: inline-block;
+  animation: ab-role-in 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+}
+@keyframes ab-role-in {
+  from {
+    opacity: 0;
+    transform: translateY(60%);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.ab-caret {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  margin-left: 4px;
+  vertical-align: -0.12em;
+  background: #8b84ff;
+  animation: ab-blink 1s steps(1) infinite;
+}
+@keyframes ab-blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+/* 아바타 회전 링 */
+.ab-ring {
+  background: conic-gradient(from 0deg, #6c63ff, #2dd4bf, #f472b6, #6c63ff);
+  animation: ab-spin 8s linear infinite;
+}
+@keyframes ab-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* 프로젝트 사진 스택 */
+.ab-stack-card {
+  transition:
+    transform 0.7s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.7s;
+  animation: ab-bob 7s ease-in-out infinite;
+  animation-delay: var(--bob, 0s);
+}
+@keyframes ab-bob {
+  0%,
+  100% {
+    translate: 0 0;
+  }
+  50% {
+    translate: 0 -10px;
+  }
+}
+.ab-stack:hover .ab-stack-card:nth-child(1) {
+  transform: rotate(-14deg) translate(-70px, 10px);
+}
+.ab-stack:hover .ab-stack-card:nth-child(2) {
+  transform: rotate(0deg) translate(0, -24px) scale(1.04);
+}
+.ab-stack:hover .ab-stack-card:nth-child(3) {
+  transform: rotate(14deg) translate(70px, 10px);
+}
+
+/* 스크롤 안내 */
+.ab-scroll-dot {
+  animation: ab-scroll 1.8s ease-in-out infinite;
+}
+@keyframes ab-scroll {
+  0% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  80% {
+    transform: translateY(14px);
+    opacity: 0;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* 기술 마키 */
+.ab-marquee {
+  mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+}
+.ab-marquee-track {
+  display: flex;
+  width: max-content;
+  animation: ab-marquee var(--dur, 40s) linear infinite;
+}
+.ab-marquee-track.ab-reverse {
+  animation-direction: reverse;
+}
+.ab-marquee:hover .ab-marquee-track {
+  animation-play-state: paused;
+}
+@keyframes ab-marquee {
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+/* 마우스 따라가는 카드 테두리 빛 */
+.ab-spot {
+  position: relative;
+  --x: 50%;
+  --y: 50%;
+}
+.ab-spot::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: radial-gradient(
+    260px circle at var(--x) var(--y),
+    rgba(139, 132, 255, 0.75),
+    transparent 60%
+  );
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  opacity: 0;
+  transition: opacity 0.3s;
+  pointer-events: none;
+}
+.ab-spot::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(
+    320px circle at var(--x) var(--y),
+    rgba(108, 99, 255, 0.1),
+    transparent 60%
+  );
+  opacity: 0;
+  transition: opacity 0.3s;
+  pointer-events: none;
+}
+.ab-spot:hover::before,
+.ab-spot:hover::after {
+  opacity: 1;
+}
+
+/* 타임라인 */
+.ab-timeline-fill {
+  transform-origin: top;
+  transform: scaleY(var(--p, 0));
+}
+.ab-dot {
+  transition:
+    background-color 0.4s,
+    box-shadow 0.4s,
+    transform 0.4s;
+}
+.ab-dot.ab-dot-on {
+  background: #6c63ff;
+  box-shadow: 0 0 0 6px rgba(108, 99, 255, 0.18);
+  transform: scale(1.1);
+}
+
+/* 터미널 타이핑 줄 */
+.ab-type-line {
+  opacity: 0;
+  transform: translateX(-6px);
+  transition:
+    opacity 0.35s,
+    transform 0.35s;
+}
+.ab-type-line.ab-shown {
+  opacity: 1;
+  transform: none;
+}
+
+/* Q&A 펼침 */
+.ab-qa-body {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.ab-qa-body.ab-open {
+  grid-template-rows: 1fr;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ab-reveal,
+  .ab-word,
+  .ab-fade-up,
+  .ab-type-line {
+    opacity: 1 !important;
+    transform: none !important;
+    filter: none !important;
+    animation: none !important;
+    transition: none !important;
+  }
+  .ab-blob,
+  .ab-ring,
+  .ab-stack-card,
+  .ab-marquee-track,
+  .ab-gradient-text,
+  .ab-scroll-dot {
+    animation: none !important;
+  }
+}
+
+/* ───────── 메인: 벤토 그리드 ───────── */
+.mn-tile {
+  opacity: 0;
+  animation: mn-tile-in 0.8s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation-delay: calc(var(--i, 0) * 70ms + 100ms);
+  transition:
+    translate 0.4s cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 0.3s;
+}
+/* 등장 애니메이션이 transform을 쥐고 있어서 hover는 translate 속성으로 */
+.mn-tile:hover {
+  translate: 0 -3px;
+  border-color: rgba(108, 99, 255, 0.35);
+}
+@keyframes mn-tile-in {
+  from {
+    opacity: 0;
+    transform: translateY(18px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+/* 사진이 천천히 확대·이동 */
+.mn-kenburns {
+  animation: mn-kenburns 18s ease-in-out infinite alternate;
+}
+@keyframes mn-kenburns {
+  from {
+    transform: scale(1.02) translate(0, 0);
+  }
+  to {
+    transform: scale(1.12) translate(-2%, -2%);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mn-tile {
+    opacity: 1;
+    animation: none;
+  }
+  .mn-kenburns {
+    animation: none;
+  }
+}

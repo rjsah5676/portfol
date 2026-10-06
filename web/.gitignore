@@ -1,0 +1,38 @@
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+# dependencies
+/node_modules
+/.pnp
+.pnp.js
+
+# testing
+/coverage
+
+# production
+/build
+/.next
+/out
+
+# misc
+.DS_Store
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# typescript
+*.tsbuildinfo
+
+# firebase cli 배포 캐시 / IDE 설정
+.firebase/
+.idea/
+
+# 식약처 영양성분 원본 CSV (npm run foods 로 public/data/foods.json 생성)
+/data/raw/
+
+# Claude가 만든 스샷·원본 시트 (작업용, 커밋 안 함)
+/Claude outputs/

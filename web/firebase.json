@@ -1,0 +1,44 @@
+{
+  "hosting": {
+    "public": "build",
+    "redirects": [
+      {
+        "source": "/melongame{,/**}",
+        "destination": "https://rjsah5676.github.io/games/melongame/",
+        "type": 301
+      },
+      {
+        "source": "/rspeed{,/**}",
+        "destination": "https://rjsah5676.github.io/games/rspeed/",
+        "type": 301
+      },
+      {
+        "source": "/mine{,/**}",
+        "destination": "https://rjsah5676.github.io/games/mine/",
+        "type": 301
+      },
+      {
+        "source": "/sketch{,/**}",
+        "destination": "https://rjsah5676.github.io/games/sketch/",
+        "type": 301
+      },
+      { "source": "/:path*", "destination": "https://rjsah5676.github.io/:path*", "type": 301 }
+    ],
+    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+    "rewrites": [
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ]
+  },
+  "firestore": {
+    "rules": "firestore.rules"
+  },
+  "storage": {
+    "rules": "storage.rules"
+  },
+  "database": {
+    "rules": "database.rules.json"
+  }
+}

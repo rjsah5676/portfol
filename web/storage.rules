@@ -1,0 +1,10 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // 이 앱은 Firebase Storage를 전혀 사용하지 않음(코드 전체에 getStorage/업로드 호출 없음).
+    // 기존엔 누구나 read/write 가능하게 완전히 열려있었음 - 전체 차단으로 변경.
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

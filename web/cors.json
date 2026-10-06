@@ -1,0 +1,7 @@
+[
+  {
+    "origin": ["http://localhost:3000", "https://rjsah5676.github.io"],
+    "method": ["GET", "POST", "PUT", "DELETE"],
+    "maxAgeSeconds": 3600
+  }
+]
