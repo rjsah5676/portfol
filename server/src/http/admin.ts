@@ -3,11 +3,23 @@ import { z } from "zod";
 import { RANK_COLLECTIONS, ROOM_COLLECTIONS } from "../db";
 import type { Deps } from "../deps";
 import { bad } from "../errors";
-import { h, requireAdmin } from "./util";
+import { h, ms, requireAdmin } from "./util";
 
 /*
- * 관리자 페이지 "데이터" 탭용 범용 조회·수정·삭제.
- * 경로는 기존 Firestore 컬렉션 경로 표기를 그대로 받음 ("score", "rhythm_rankings/{곡_난이도}/scores" …).
+ * 관리자 페이지용 (전부 관리자 토큰 필요).
+ *
+ * 한눈에 보기
+ *   GET    /api/admin/overview                      방문자·회원·문의·글·랭킹·방·서버 상태 + 최근 활동
+ * 회원
+ *   GET    /api/admin/users?q=&limit=&skip=         목록 (별명·이메일로 찾기)
+ *   PATCH  /api/admin/users/:uid   { nick?, badge? } 별명 · 꾸밈(이모지 등) 바꾸기
+ *   DELETE /api/admin/users/:uid/avatar             올린 프로필 사진 지우기
+ *   DELETE /api/admin/users/:uid?records=1          회원 지우기 (records=1 이면 랭킹·방명록도)
+ * 열려 있는 방 (서버 메모리: 스케치 퀴즈 · 격투)
+ *   GET    /api/admin/live
+ *   POST   /api/admin/live/close   { game, id }
+ * 데이터 (범용 조회·수정·삭제) — 경로는 기존 Firestore 컬렉션 경로 표기를 그대로 받음
+ *   ("score", "rhythm_rankings/{곡_난이도}/scores" …)
  *   GET    /api/admin/docs?path=…
  *   PUT    /api/admin/docs           { path, id, data }   문서 전체 교체
  *   POST   /api/admin/docs/delete    { path, ids }
@@ -23,6 +35,7 @@ const TOP_LEVEL = new Set<string>([
   "siteStats",
   "studyPosts",
   "inquiries",
+  "rank_tickets",
   // 메뉴에서 내린 예전 스케치 퀴즈 데이터
   "sketch_user",
   "sketch_user_room",
@@ -68,18 +81,166 @@ export function decode(v: unknown): unknown {
 
 const ids = z.array(z.string().min(1)).max(2000);
 
+/** 서버 메모리에만 있는 방 (스케치 퀴즈 · 격투) */
+export interface LiveRoom {
+  id: string;
+  name: string;
+  status: string;
+  players: string[];
+  createdAt: number;
+}
+export type LiveGame = "sketch" | "fight";
+
 export interface AdminHooks {
   /** 방명록이 바뀜 → 구독자에게 다시 보냄 */
   guestChanged(): void;
   /** 대국방이 지워짐 → 로비·방 구독자에게 알림 */
   roomsDeleted(coll: string, ids: string[]): void;
+  /** 지금 열려 있는 스케치 · 격투 방 */
+  liveRooms(): Record<LiveGame, LiveRoom[]>;
+  /** 방 닫기 (없는 방이면 false) */
+  closeLiveRoom(game: LiveGame, id: string): boolean;
 }
 
-export function adminRouter({ db, auth, web }: Deps, hooks: AdminHooks): Router {
+/** 한국 시간 기준 날짜 (방문자 수의 일별 키와 같은 형식) */
+const kstDate = (t: number) => new Date(t + 9 * 3600_000).toISOString().slice(0, 10);
+const DAY = 86_400_000;
+const startedAt = Date.now();
+
+export function adminRouter({ db, auth, web, users, gateway, cfg }: Deps, hooks: AdminHooks): Router {
   const r = Router();
   r.use((req, _res, next) => {
     requireAdmin(auth, req).then(() => next(), next);
   });
+
+  // ───────────── 한눈에 보기 ─────────────
+
+  r.get(
+    "/overview",
+    h(async () => {
+      const now = Date.now();
+      const days = Array.from({ length: 14 }, (_, i) => kstDate(now - (13 - i) * DAY));
+      const stats = db.col<{ count: number }>("siteStats");
+      const count = (c: string, filter: Record<string, unknown> = {}) => db.col(c).countDocuments(filter);
+      const latest = (c: string, n: number, sort: Record<string, 1 | -1> = { createdAt: -1 }) =>
+        db.col(c).find({}).sort(sort).limit(n).toArray();
+
+      const [total, daily, members, inqTotal, inqUnread, posts, guestTotal, rankCounts, rhythmCount, roomCounts, lastGuest, lastInq, lastRanks] =
+        await Promise.all([
+          stats.findOne({ _id: "total" }),
+          stats.find({ _id: { $in: days.map((d) => `daily_${d}`) } }).toArray(),
+          users.adminRecent(5),
+          count("inquiries"),
+          count("inquiries", { read: false }),
+          db.col("studyPosts").find({}, { projection: { section: 1 } }).toArray(),
+          count("guest"),
+          Promise.all(RANK_COLLECTIONS.map(async (c) => [c, await count(c)] as const)),
+          count("rhythm_rankings"),
+          Promise.all(
+            ROOM_COLLECTIONS.map(async (c) => [c, { total: await count(c), playing: await count(c, { status: "playing" }), waiting: await count(c, { status: "waiting" }) }] as const)
+          ),
+          latest("guest", 4, { id: -1 }),
+          latest("inquiries", 4),
+          Promise.all([...RANK_COLLECTIONS, "rhythm_rankings"].map(async (c) => (await latest(c, 3)).map((d) => ({ ...d, board: c })))),
+        ]);
+
+      const byDay = new Map(daily.map((d) => [String(d._id).slice(6), d.count ?? 0]));
+      const live = hooks.liveRooms();
+      const liveOf = (rooms: LiveRoom[]) => ({ rooms: rooms.length, players: rooms.reduce((a, x) => a + x.players.length, 0) });
+
+      // 최근 활동: 가입 · 방명록 · 문의 · 랭킹 등록을 시간순으로 섞음
+      type Act = { kind: "member" | "guest" | "inquiry" | "rank"; at: number; who: string; text: string };
+      const acts: Act[] = [
+        ...members.recent.map((m) => ({ kind: "member" as const, at: m.createdAt, who: m.nick, text: "가입" })),
+        ...lastGuest.map((g) => ({ kind: "guest" as const, at: Number(g.id) || 0, who: String(g.name ?? ""), text: String(g.contents ?? "") })),
+        ...lastInq.map((q) => ({ kind: "inquiry" as const, at: ms(q.createdAt) ?? 0, who: String(q.name ?? ""), text: String(q.message ?? "").slice(0, 80) })),
+        ...lastRanks.flat().map((x) => {
+          const d = x as Record<string, unknown>;
+          return { kind: "rank" as const, at: ms(d.createdAt) ?? 0, who: String(d.name ?? ""), text: d.board === "rhythm_rankings" ? `rhythm:${String(d.chart ?? "")}` : String(d.board) };
+        }),
+      ]
+        .filter((a) => a.at > 0)
+        .sort((a, b) => b.at - a.at)
+        .slice(0, 14);
+
+      const mem = process.memoryUsage();
+      return {
+        visitors: {
+          total: total?.count ?? 0,
+          today: byDay.get(days[13]) ?? 0,
+          daily: days.map((date) => ({ date, count: byDay.get(date) ?? 0 })),
+        },
+        members: { total: members.total, recent: members.recent },
+        inquiries: { total: inqTotal, unread: inqUnread },
+        posts: { total: posts.length, retro: posts.filter((p) => p.section === "retro").length },
+        guest: { total: guestTotal },
+        rankings: { ...Object.fromEntries(rankCounts), rhythm_rankings: rhythmCount },
+        rooms: Object.fromEntries(roomCounts),
+        live: { sketch: liveOf(live.sketch), fight: liveOf(live.fight) },
+        server: {
+          env: cfg.env,
+          startedAt,
+          connections: gateway.connections(),
+          node: process.version,
+          memoryMb: Math.round(mem.rss / 1048576),
+        },
+        activity: acts,
+      };
+    })
+  );
+
+  // ───────────── 회원 ─────────────
+
+  r.get(
+    "/users",
+    h(async (req) => {
+      const q = z
+        .object({ q: z.string().max(100).optional(), limit: z.coerce.number().int().min(1).max(200).optional(), skip: z.coerce.number().int().min(0).optional() })
+        .parse(req.query);
+      return users.adminList(q);
+    })
+  );
+  r.patch(
+    "/users/:uid",
+    h(async (req) => {
+      const patch = z.strictObject({ nick: z.string().max(40).optional(), badge: z.string().max(40).nullable().optional() }).parse(req.body);
+      const user = await users.adminUpdate(String(req.params.uid), patch);
+      // 별명이 바뀌면 방명록의 이름도 같이 바뀜
+      if (patch.nick !== undefined) hooks.guestChanged();
+      return user;
+    })
+  );
+  r.delete(
+    "/users/:uid/avatar",
+    h(async (req) => {
+      await users.adminClearAvatar(String(req.params.uid));
+    })
+  );
+  r.delete(
+    "/users/:uid",
+    h(async (req) => {
+      const res = await users.adminRemove(String(req.params.uid), req.query.records === "1");
+      // 방명록의 이름 표시가 바뀌었을 수 있음
+      hooks.guestChanged();
+      return res;
+    })
+  );
+
+  // ───────────── 열려 있는 방 (스케치 · 격투) ─────────────
+
+  r.get(
+    "/live",
+    h(() => hooks.liveRooms())
+  );
+  r.post(
+    "/live/close",
+    h(async (req) => {
+      const body = z.strictObject({ game: z.enum(["sketch", "fight"]), id: z.string().min(1).max(80) }).parse(req.body);
+      return { closed: hooks.closeLiveRoom(body.game, body.id) };
+    })
+  );
+
+  // ───────────── 데이터 (범용) ─────────────
 
   r.get(
     "/docs",

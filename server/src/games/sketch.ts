@@ -5,6 +5,7 @@ import { AppError, bad, forbidden } from "../errors";
 import { isClientId, newId, orderedId } from "../ids";
 import type { Ctx } from "../realtime/gateway";
 import { GUEST_MARK } from "../users";
+import type { LiveRoom } from "../http/admin";
 
 /*
  * 스케치 퀴즈 (실시간 그림 퀴즈)
@@ -843,6 +844,22 @@ export function registerSketch({ gateway, users }: Deps, opts: SketchOptions = {
   return {
     close() {
       clearInterval(sweep);
+    },
+    /** (관리자) 지금 열려 있는 방 */
+    adminList(): LiveRoom[] {
+      return [...rooms.values()].map((r) => ({
+        id: r.id,
+        name: r.meta.name,
+        status: r.state.phase,
+        players: Object.values(r.players).map((p) => p.nick),
+        createdAt: r.meta.createdAt,
+      }));
+    },
+    /** (관리자) 방 닫기 — 안에 있던 사람들은 로비로 나가짐 */
+    adminClose(id: string): boolean {
+      const room = rooms.get(id);
+      if (room) removeRoom(room);
+      return !!room;
     },
   };
 }

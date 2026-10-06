@@ -102,13 +102,36 @@ export function displayName(nick: string | null | undefined, typed: string, max 
   return GUEST_MARK + (clean(typed).slice(0, max) || "익명");
 }
 
+/** 꾸밈(배지): 관리자가 특별한 회원에게 붙여 주는 짧은 표시 (이모지 등) */
+const BADGE_MAX = 8;
+
+/** 관리자 화면에 내보내는 회원 한 줄 */
+export interface AdminUser extends Profile {
+  uid: string;
+  email: string | null;
+  updatedAt: number;
+  lastVisitAt: number | null;
+  stats: UserStats;
+}
+const toAdmin = (uid: string, d: UserDoc): AdminUser => ({
+  uid,
+  ...toProfile(uid, d),
+  email: d.email ?? null,
+  updatedAt: d.updatedAt?.getTime() ?? d.createdAt.getTime(),
+  lastVisitAt: d.lastVisitAt?.getTime() ?? null,
+  stats: d.stats ?? {},
+});
+const escapeRe = (v: string) => v.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+/** 회원의 이름이 저장되는 곳 (별명이 바뀌면 같이 바뀌고, 회원을 지울 때 같이 정리) */
+const NAME_COLLECTIONS = [...RANK_COLLECTIONS, "rhythm_rankings", "guest"];
+
 export type Users = ReturnType<typeof createUsers>;
 
 export function createUsers(db: Database, cfg: Pick<Config, "adminNick">) {
   const col = db.col<UserDoc>("users");
   /** uid → 별명 (없으면 null). 요청마다 DB 를 읽지 않게 기억해 둠 */
   const cache = new Map<string, string | null>();
-  const renameHooks: ((uid: string, nick: string) => void)[] = [];
+  const renameHooks: ((uid: string, nick: string | null) => void)[] = [];
   const adminKey = cfg.adminNick.toLowerCase();
 
   async function docOf(uid: string): Promise<UserDoc | null> {
@@ -122,7 +145,7 @@ export function createUsers(db: Database, cfg: Pick<Config, "adminNick">) {
   /** 이름이 저장된 곳(랭킹·방명록)을 새 별명으로 맞춤. 가입 전에 익명으로 남긴 기록도 내 것이 됨 */
   async function syncNames(uid: string, nick: string) {
     const set = { $set: { name: nick, member: true } };
-    await Promise.all([...RANK_COLLECTIONS, "rhythm_rankings", "guest"].map((c) => db.col(c).updateMany({ uid }, set)));
+    await Promise.all(NAME_COLLECTIONS.map((c) => db.col(c).updateMany({ uid }, set)));
   }
 
   return {
@@ -222,8 +245,94 @@ export function createUsers(db: Database, cfg: Pick<Config, "adminNick">) {
     },
 
     /** 별명이 생기거나 바뀌었을 때 (접속 중인 소켓의 이름을 바꾸는 데 씀) */
-    onRename(fn: (uid: string, nick: string) => void) {
+    onRename(fn: (uid: string, nick: string | null) => void) {
       renameHooks.push(fn);
+    },
+
+    // ───────────── 관리자 ─────────────
+
+    /** (관리자) 회원 목록: 별명·이메일로 찾기, 최근 가입 순 */
+    async adminList(opts: { q?: string; limit?: number; skip?: number } = {}): Promise<{ total: number; items: AdminUser[] }> {
+      const q = (opts.q ?? "").trim();
+      const filter = q
+        ? { $or: [{ nickKey: { $regex: escapeRe(q.toLowerCase()) } }, { email: { $regex: escapeRe(q), $options: "i" } }] }
+        : {};
+      const [total, docs] = await Promise.all([
+        col.countDocuments(filter),
+        col
+          .find(filter, { projection: { "avatar.data": 0 } })
+          .sort({ createdAt: -1 })
+          .skip(opts.skip ?? 0)
+          .limit(opts.limit ?? 100)
+          .toArray(),
+      ]);
+      return { total, items: docs.map((d) => toAdmin(String(d._id), d as unknown as UserDoc)) };
+    },
+
+    /** (관리자) 별명 · 꾸밈 바꾸기. 별명 규칙(글자·길이·중복)은 그대로, 예약어만 허용 */
+    async adminUpdate(uid: string, patch: { nick?: string; badge?: string | null }): Promise<AdminUser> {
+      const cur = await docOf(uid);
+      if (!cur) throw new AppError("NOT_FOUND", "없는 회원이에요.", 404);
+      const set: Record<string, unknown> = { updatedAt: new Date() };
+      const unset: Record<string, string> = {};
+      let renamed: string | null = null;
+      if (patch.nick !== undefined && patch.nick.trim() !== cur.nick) {
+        const nick = patch.nick.trim();
+        if (!NICK_RE.test(nick)) throw bad("별명은 한글·영문·숫자 2~10자로 정해주세요. (이모지·공백·기호는 쓸 수 없어요)");
+        const nickKey = nick.toLowerCase();
+        if (await col.findOne({ nickKey, _id: { $ne: uid } })) throw new AppError("NICK_TAKEN", "이미 다른 사람이 쓰고 있는 별명이에요.", 409);
+        Object.assign(set, { nick, nickKey });
+        renamed = nick;
+      }
+      if (patch.badge !== undefined) {
+        const badge = (patch.badge ?? "").trim();
+        if ([...badge].length > BADGE_MAX) throw bad(`꾸밈은 ${BADGE_MAX}자까지예요.`);
+        if (badge) set.badge = badge;
+        else unset.badge = "";
+      }
+      try {
+        const update = { $set: set, ...(Object.keys(unset).length && { $unset: unset }) };
+        await col.updateOne({ _id: uid }, update as Parameters<typeof col.updateOne>[1]);
+      } catch (e) {
+        if ((e as { code?: number }).code === 11000) throw new AppError("NICK_TAKEN", "이미 다른 사람이 쓰고 있는 별명이에요.", 409);
+        throw e;
+      }
+      if (renamed) {
+        cache.set(uid, renamed);
+        await syncNames(uid, renamed);
+        renameHooks.forEach((f) => f(uid, renamed));
+      }
+      return toAdmin(uid, (await docOf(uid))!);
+    },
+
+    /** (관리자) 올린 프로필 사진 지우기 */
+    async adminClearAvatar(uid: string): Promise<void> {
+      await col.updateOne({ _id: uid }, { $unset: { avatar: "" } });
+    },
+
+    /**
+     * (관리자) 회원 지우기. 로그인 계정(Firebase)은 그대로라 다시 들어오면 별명부터 새로 정하게 됨.
+     * records = true 면 그 사람의 랭킹·방명록도 지우고, 아니면 기록은 남기되 회원 표시만 뗌.
+     */
+    async adminRemove(uid: string, records: boolean): Promise<{ removed: boolean }> {
+      const r = await col.deleteOne({ _id: uid });
+      cache.set(uid, null);
+      await Promise.all(
+        NAME_COLLECTIONS.map((c) =>
+          records ? db.col(c).deleteMany({ uid }) : db.col(c).updateMany({ uid }, { $unset: { member: "" } })
+        )
+      );
+      renameHooks.forEach((f) => f(uid, null));
+      return { removed: r.deletedCount > 0 };
+    },
+
+    /** (관리자) 회원 수와 최근 가입한 사람들 */
+    async adminRecent(limit = 5): Promise<{ total: number; recent: AdminUser[] }> {
+      const [total, docs] = await Promise.all([
+        col.countDocuments({}),
+        col.find({}, { projection: { "avatar.data": 0 } }).sort({ createdAt: -1 }).limit(limit).toArray(),
+      ]);
+      return { total, recent: docs.map((d) => toAdmin(String(d._id), d as unknown as UserDoc)) };
     },
 
     /** 기록 숫자 올리기 (회원만 — 없는 uid 면 아무 일도 없음). 예: bump(uid, { "stats.online.chess.w": 1 }) */

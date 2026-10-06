@@ -9,7 +9,7 @@ import { rankingsRouter } from "./rankings";
 import { siteRouter } from "./site";
 import { studyPostsRouter } from "./studyPosts";
 
-export function createApp(deps: Deps, hooks: Pick<AdminHooks, "roomsDeleted">) {
+export function createApp(deps: Deps, hooks: Omit<AdminHooks, "guestChanged">) {
   const { cfg } = deps;
   const app = express();
   app.disable("x-powered-by");
@@ -66,7 +66,7 @@ export function createApp(deps: Deps, hooks: Pick<AdminHooks, "roomsDeleted">) {
   app.use("/api/rankings", rankingsRouter(deps));
   app.use("/api/me", meRouter(deps));
   app.use("/api/study-posts", studyPostsRouter(deps));
-  app.use("/api/admin", adminRouter(deps, { guestChanged: site.publishGuest, roomsDeleted: hooks.roomsDeleted }));
+  app.use("/api/admin", adminRouter(deps, { guestChanged: site.publishGuest, ...hooks }));
   app.use("/api", site.router);
 
   app.use("/api", (_req, res) => {

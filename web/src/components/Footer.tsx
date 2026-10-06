@@ -5,7 +5,7 @@ import ContactButton from "./ContactButton";
 
 export default function Footer() {
   return (
-    <footer className="mt-32 flex flex-col gap-10 border-t border-white/5 pt-10 pb-10">
+    <footer id="site-footer" className="mt-32 flex flex-col gap-10 border-t border-white/5 pt-10 pb-10">
       <FooterWidgets />
       {/* 포트폴리오·소개·기록·방명록 (상단에는 로그인만 둠) */}
       <nav

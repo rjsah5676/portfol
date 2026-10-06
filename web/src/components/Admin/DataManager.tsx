@@ -30,6 +30,8 @@ interface Source {
   /** false면 편집 버튼 숨김 (규칙상 관리자 update 불가) */
   editable: boolean;
   note?: string;
+  /** 대국 방 컬렉션이면: 지울 때 채팅·접속기록까지 같이 지움 */
+  rooms?: string;
 }
 
 const DIFFS = ["easy", "normal", "hard", "expert", "nightmare"];
@@ -94,9 +96,27 @@ const SOURCES: Source[] = [
     editable: true,
   },
   {
+    key: "omokAI",
+    label: "오목 AI",
+    group: "랭킹",
+    path: () => "omok_ai_rankings",
+    columns: ["name", "score", "opp", "moves", "seconds", "lead", "createdAt"],
+    sort: ["score", "desc"],
+    editable: true,
+  },
+  {
+    key: "fightAI",
+    label: "격투 AI",
+    group: "랭킹",
+    path: () => "fight_ai_rankings",
+    columns: ["name", "score", "opp", "moves", "seconds", "lead", "createdAt"],
+    sort: ["score", "desc"],
+    editable: true,
+  },
+  {
     key: "guest",
     label: "방명록",
-    group: "사이트",
+    group: "방명록",
     path: () => "guest",
     columns: ["name", "contents", "date", "color"],
     sort: ["id", "desc"],
@@ -105,7 +125,7 @@ const SOURCES: Source[] = [
   {
     key: "siteStats",
     label: "방문자 수",
-    group: "사이트",
+    group: "방문자",
     path: () => "siteStats",
     columns: ["count"],
     sort: ["__id", "desc"],
@@ -115,7 +135,8 @@ const SOURCES: Source[] = [
   {
     key: "chess",
     label: "체스방",
-    group: "사이트",
+    group: "대국 방",
+    rooms: "chess_rooms",
     path: () => "chess_rooms",
     columns: ["name", "status", "whiteName", "blackName", "result", "updatedAt"],
     sort: ["updatedAt", "desc"],
@@ -125,17 +146,59 @@ const SOURCES: Source[] = [
   {
     key: "janggi",
     label: "장기방",
-    group: "사이트",
+    group: "대국 방",
+    rooms: "janggi_rooms",
     path: () => "janggi_rooms",
     columns: ["name", "status", "whiteName", "blackName", "result", "updatedAt"],
     sort: ["updatedAt", "desc"],
     editable: false,
     note: "white = 초, black = 한 · 삭제 시 채팅·접속기록(하위 컬렉션)도 같이 삭제",
   },
+  {
+    key: "omok",
+    label: "오목방",
+    group: "대국 방",
+    rooms: "omok_rooms",
+    path: () => "omok_rooms",
+    columns: ["name", "status", "whiteName", "blackName", "result", "updatedAt"],
+    sort: ["updatedAt", "desc"],
+    editable: false,
+    note: "삭제 시 채팅·접속기록도 같이 삭제",
+  },
+  {
+    key: "tickets",
+    label: "랭킹 티켓",
+    group: "기타",
+    path: () => "rank_tickets",
+    columns: ["uid", "board", "used", "createdAt"],
+    sort: ["createdAt", "desc"],
+    editable: false,
+    note: "게임을 시작할 때 발급되는 1회용 티켓 · 8일 뒤 자동 삭제",
+  },
+  {
+    key: "inquiriesRaw",
+    label: "문의 (원본)",
+    group: "기타",
+    path: () => "inquiries",
+    columns: ["name", "email", "read", "createdAt"],
+    sort: ["createdAt", "desc"],
+    editable: true,
+    note: "읽고 답하는 건 문의함에서",
+  },
+  {
+    key: "postsRaw",
+    label: "글 (원본)",
+    group: "기타",
+    path: () => "studyPosts",
+    columns: ["title", "section", "category", "date"],
+    sort: ["date", "desc"],
+    editable: true,
+    note: "쓰고 고치는 건 글 구역에서 · 여기서 고쳐도 사이트에 바로 반영",
+  },
   ...["sketch_user", "sketch_user_room", "sketch_user_chat"].map<Source>((c) => ({
     key: c,
     label: c,
-    group: "레거시",
+    group: "기타",
     path: () => c,
     columns: [],
     sort: ["__id", "asc"],
@@ -157,10 +220,15 @@ const dangerBtn =
 
 const valueOf = (d: AdminDoc, col: string) => (col === "__id" ? d.id : d.data[col]);
 
-export default function DataManager() {
+/** groups 를 주면 그 묶음의 데이터만 고를 수 있음 (관리자 화면의 구역별로 나눠 씀) */
+export default function DataManager({ groups: only }: { groups?: string[] } = {}) {
   const modal = useModal();
-  const [srcKey, setSrcKey] = useState(SOURCES[0].key);
-  const src = SOURCES.find((s) => s.key === srcKey)!;
+  const sources = useMemo(
+    () => (only ? SOURCES.filter((s) => only.includes(s.group)) : SOURCES),
+    [only]
+  );
+  const [srcKey, setSrcKey] = useState(sources[0].key);
+  const src = sources.find((s) => s.key === srcKey) ?? sources[0];
   const [sub, setSub] = useState(RHYTHM_CHARTS[0]?.value ?? "");
   const path = src.path(sub);
 
@@ -193,7 +261,7 @@ export default function DataManager() {
   }, [load]);
 
   const selectSource = (key: string) => {
-    const next = SOURCES.find((s) => s.key === key)!;
+    const next = sources.find((s) => s.key === key)!;
     setSrcKey(key);
     setSort(next.sort);
     setSelected(new Set());
@@ -252,8 +320,7 @@ export default function DataManager() {
     if (!ok) return;
     setBusy(true);
     try {
-      if (src.key === "chess") await removeChessRooms(ids);
-      else if (src.key === "janggi") await removeChessRooms(ids, "janggi_rooms");
+      if (src.rooms) await removeChessRooms(ids, src.rooms);
       else await removeDocs(path, ids);
       setSelected(new Set());
       if (editing && ids.includes(editing.id)) setEditing(null);
@@ -288,17 +355,19 @@ export default function DataManager() {
     }
   };
 
-  const groups = [...new Set(SOURCES.map((s) => s.group))];
+  const groups = [...new Set(sources.map((s) => s.group))];
   const isRanking = src.group === "랭킹";
 
   return (
     <div>
-      {/* 컬렉션 선택 */}
-      <div className="mb-4 flex flex-col gap-2">
+      {/* 컬렉션 선택 (하나뿐이면 숨김) */}
+      <div className={`mb-4 flex flex-col gap-2 ${sources.length === 1 ? "hidden" : ""}`}>
         {groups.map((g) => (
           <div key={g} className="flex flex-wrap items-center gap-1.5">
-            <span className="w-14 shrink-0 font-mono text-[11px] text-white/30">{g}</span>
-            {SOURCES.filter((s) => s.group === g).map((s) => (
+            {groups.length > 1 && (
+              <span className="w-14 shrink-0 font-mono text-[11px] text-white/30">{g}</span>
+            )}
+            {sources.filter((s) => s.group === g).map((s) => (
               <button
                 key={s.key}
                 type="button"

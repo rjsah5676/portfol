@@ -55,6 +55,95 @@ export async function removeChessRooms(ids: string[], coll = "chess_rooms"): Pro
   }
 }
 
+// ── 한눈에 보기 · 회원 · 열려 있는 방 (서버: server/src/http/admin.ts) ──
+
+export interface AdminUser {
+  uid: string;
+  nick: string;
+  /** 관리자가 붙여 준 꾸밈 (이모지 등) */
+  badge: string | null;
+  email: string | null;
+  createdAt: number;
+  updatedAt: number;
+  visits: number;
+  lastVisitAt: number | null;
+  plays: number;
+  /** 직접 올린 프로필 사진 주소 */
+  avatar: string | null;
+  stats: {
+    plays?: Record<string, number>;
+    online?: Record<string, { w?: number; l?: number; d?: number }>;
+    sketch?: { correct?: number; points?: number; games?: number };
+    fight?: { matches?: number };
+  };
+}
+
+export interface AdminActivity {
+  kind: "member" | "guest" | "inquiry" | "rank";
+  at: number;
+  who: string;
+  text: string;
+}
+
+export interface AdminOverview {
+  visitors: { total: number; today: number; daily: { date: string; count: number }[] };
+  members: { total: number; recent: AdminUser[] };
+  inquiries: { total: number; unread: number };
+  posts: { total: number; retro: number };
+  guest: { total: number };
+  /** 랭킹 이름 → 기록 수 */
+  rankings: Record<string, number>;
+  /** 대국 방 컬렉션 → 수 */
+  rooms: Record<string, { total: number; playing: number; waiting: number }>;
+  live: Record<LiveGame, { rooms: number; players: number }>;
+  server: { env: string; startedAt: number; connections: number; node: string; memoryMb: number };
+  activity: AdminActivity[];
+}
+
+export type LiveGame = "sketch" | "fight";
+export interface LiveRoom {
+  id: string;
+  name: string;
+  status: string;
+  players: string[];
+  createdAt: number;
+}
+
+export const getOverview = () => api<AdminOverview>("/api/admin/overview", { auth: true });
+
+export const listUsers = (q = "") =>
+  api<{ total: number; items: AdminUser[] }>(
+    `/api/admin/users?limit=200${q ? `&q=${encodeURIComponent(q)}` : ""}`,
+    { auth: true }
+  );
+
+export const updateUser = (uid: string, patch: { nick?: string; badge?: string | null }) =>
+  api<AdminUser>(`/api/admin/users/${encodeURIComponent(uid)}`, {
+    method: "PATCH",
+    body: patch,
+    auth: true,
+  });
+
+export const clearUserAvatar = (uid: string) =>
+  api(`/api/admin/users/${encodeURIComponent(uid)}/avatar`, { method: "DELETE", auth: true });
+
+/** records = true 면 그 사람의 랭킹·방명록도 같이 지움 */
+export const removeUser = (uid: string, records: boolean) =>
+  api<{ removed: boolean }>(
+    `/api/admin/users/${encodeURIComponent(uid)}${records ? "?records=1" : ""}`,
+    { method: "DELETE", auth: true }
+  );
+
+export const getLiveRooms = () =>
+  api<Record<LiveGame, LiveRoom[]>>("/api/admin/live", { auth: true });
+
+export const closeLiveRoom = (game: LiveGame, id: string) =>
+  api<{ closed: boolean }>("/api/admin/live/close", {
+    method: "POST",
+    body: { game, id },
+    auth: true,
+  });
+
 // ── JSON 편집용 직렬화: Timestamp는 {"__timestamp": ISO}로 바꿔서 보여주고 저장 시 되돌림 ──
 // (서버와 주고받을 때도 같은 표기를 씀)
 

@@ -126,6 +126,7 @@ export default function Nav() {
 
   return (
     <nav
+      id="site-nav"
       ref={navRef}
       className="sticky top-14 z-30 border-b border-white/10 bg-[#121212]"
       onMouseLeave={() => {

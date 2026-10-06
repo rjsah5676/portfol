@@ -143,8 +143,13 @@ export class Gateway {
     }
   }
 
-  /** 별명이 생기거나 바뀜 → 그 사람의 접속 중인 연결에 반영 */
-  setNick(uid: string, nick: string) {
+  /** 지금 붙어 있는 연결 수 (관리자 화면) */
+  connections(): number {
+    return this.io.sockets.sockets.size;
+  }
+
+  /** 별명이 생기거나 바뀜(null = 회원이 아니게 됨) → 그 사람의 접속 중인 연결에 반영 */
+  setNick(uid: string, nick: string | null) {
     for (const socket of this.io.sockets.sockets.values()) {
       const data = socket.data as SocketData;
       if (data.user?.uid === uid) data.nick = nick;

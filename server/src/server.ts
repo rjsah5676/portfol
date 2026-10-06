@@ -37,7 +37,15 @@ export async function createAppServer(
   const board = registerBoardGames(deps);
   const sketch = registerSketch(deps);
   const fight = registerFight(deps);
-  http.on("request", createApp(deps, { roomsDeleted: board.roomsDeleted }));
+  const live = { sketch, fight };
+  http.on(
+    "request",
+    createApp(deps, {
+      roomsDeleted: board.roomsDeleted,
+      liveRooms: () => ({ sketch: sketch.adminList(), fight: fight.adminList() }),
+      closeLiveRoom: (game, id) => live[game].adminClose(id),
+    })
+  );
 
   return {
     http,
