@@ -49,7 +49,10 @@ export const metadata: Metadata = {
     description: SITE_DESCRIPTION,
     images: [OG_IMAGE.url],
   },
-  verification: { google: "oVNyOQyb1ni35GEelDyRoA9GKgFbBu6JjwxYFAegc9A" },
+  verification: {
+    google: "oVNyOQyb1ni35GEelDyRoA9GKgFbBu6JjwxYFAegc9A",
+    other: { "naver-site-verification": "c671c1b988d106c19f15f2ca9459ad070be1acd5" },
+  },
   icons: {
     icon: "/favicon.ico",
   },
