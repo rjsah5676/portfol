@@ -47,6 +47,8 @@ export interface Result {
   steady: boolean;
   /** HP가 바닥나서 중간에 끝남 */
   failed: boolean;
+  /** 분석 모드(자동 연주)로 친 판 — 기록·랭킹에 안 올림 */
+  auto?: boolean;
 }
 
 /**
@@ -174,6 +176,8 @@ interface Props {
   onToggleFs: () => void;
   /** 휴대폰 세로: 레인만 세로 화면 가득 (위에 점수 띠) */
   portrait?: boolean;
+  /** 분석 모드(관리자): 채보를 올퍼펙으로 자동 연주 — 채보가 곡과 맞는지 타격음과 함께 감상. 기록·랭킹 없음 */
+  autoplay?: boolean;
 }
 
 export default function Stage({
@@ -199,6 +203,7 @@ export default function Stage({
   fs,
   onToggleFs,
   portrait = false,
+  autoplay = false,
 }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -255,10 +260,12 @@ export default function Stage({
     let autoOffset = auto.offset;
     const tracker = new AutoSyncTracker(auto.judge);
     const offsetSec = () => (sync + autoOffset) / 1000;
-    const judgeSec = () => tracker.judge / 1000;
+    // 분석 모드(자동 연주)는 손 지연이 없으니 타격 싱크 0
+    const judgeSec = () => (autoplay ? 0 : tracker.judge / 1000);
     /** 자동 싱크 값을 부모에 돌려줌 (일시정지·끝·나갈 때만 — 치는 동안 저장하면 끊김) */
     let reported: AutoSyncState | null = null;
     const reportAuto = () => {
+      if (autoplay) return; // 자동 연주엔 입력이 없어 보정할 게 없음
       const next = splitSync(
         tracker.judge,
         autoOffset,
@@ -795,13 +802,18 @@ export default function Stage({
         y0 + 50,
         tw
       );
+      if (autoplay) {
+        g.fillStyle = "#FDE68A";
+        g.font = `800 12px ${KR_FONT}`;
+        g.fillText("🔍 분석 모드 · 자동 연주", tx, y0 + 70, tw);
+      }
       if (sec) {
         g.fillStyle = song.color;
         g.font = `800 12px ${mono}`;
         g.fillText(
           `▶ ${sec.toUpperCase()}`,
           infoWide ? tx : ib.x + 20,
-          infoWide ? y0 + 70 : titleY + 34,
+          infoWide ? y0 + (autoplay ? 90 : 70) : titleY + 34,
           infoWide ? tw : ib.w - 40
         );
       }
@@ -1280,6 +1292,7 @@ export default function Stage({
       running = false;
       const acc = engine.accuracy;
       onFinish({
+        auto: autoplay || undefined,
         failed,
         songId: song.id,
         diff,
@@ -1352,6 +1365,7 @@ export default function Stage({
       }
       measureFrame(ts);
       const t = smoothNow(ts);
+      if (autoplay) autoStep(t);
       // 싱크가 잡히기 전(처음 몇 탭·곡 초반)엔 HP가 바닥나도 안 끝남 — 지연이 큰 기기는 첫 보정 전에 다 MISS라 죽어 버려서
       engine.noFail = !!song.practice || (tracker.grace && t < AUTO_SYNC.graceSec);
       engine.update(t - judgeSec()); // 지나간 노트 미스 처리도 타격 싱크 기준
@@ -1448,14 +1462,38 @@ export default function Stage({
       const st = Number.isFinite(stamp) && stamp <= pn + 1 && pn - stamp < 200 ? stamp : pn;
       return st / 1000 + clockBase;
     };
-    const press = (lane: number, stamp = NaN) => {
-      if (!running) return;
-      if (live.hit > 0) {
-        const src = ctx.createBufferSource();
-        src.buffer = hitBuf;
-        src.connect(hitGain);
-        src.start();
+    const playHit = () => {
+      if (live.hit <= 0) return;
+      const src = ctx.createBufferSource();
+      src.buffer = hitBuf;
+      src.connect(hitGain);
+      src.start();
+    };
+    // ── 분석 모드: 노트 시각에 딱 맞춰 누르고(올퍼펙) 롱노트는 끝까지 — 타격음도 그대로 ──
+    let autoNext = 0;
+    const autoOrder = autoplay
+      ? engine.notes.map((_, i) => i).sort((a, b) => engine.notes[a].t - engine.notes[b].t)
+      : [];
+    /** 단노트는 80ms 뒤에 떼서 패드 불빛이 보이게 */
+    const autoRelease = [Infinity, Infinity, Infinity, Infinity];
+    const autoStep = (t: number) => {
+      const notes = engine.notes;
+      while (autoNext < autoOrder.length && notes[autoOrder[autoNext]].t <= t) {
+        const n = notes[autoOrder[autoNext++]];
+        if (engine.pressed[n.lane]) engine.release(n.lane, n.t - 0.001);
+        engine.press(n.lane, n.t);
+        playHit();
+        autoRelease[n.lane] = n.end ? n.end : n.t + 0.08;
       }
+      for (let l = 0; l < 4; l++)
+        if (t >= autoRelease[l]) {
+          engine.release(l, autoRelease[l]);
+          autoRelease[l] = Infinity;
+        }
+    };
+    const press = (lane: number, stamp = NaN) => {
+      if (!running || autoplay) return;
+      playHit();
       const t = eventTime(stamp);
       const tj = t - judgeSec();
       engine.press(lane, tj);
@@ -1463,7 +1501,7 @@ export default function Stage({
       if (d !== null) autoSyncTap(d);
     };
     const release = (lane: number, stamp = NaN) => {
-      if (!running) return;
+      if (!running || autoplay) return;
       engine.release(lane, eventTime(stamp) - judgeSec());
     };
 

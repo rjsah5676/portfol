@@ -219,6 +219,8 @@ export default function ResultScreen({
             <br />
             최고 기록은 이 브라우저에만 저장돼요.
           </Note>
+        ) : result.auto ? (
+          <Note>분석 모드(자동 연주)라 기록·랭킹에 올라가지 않아요.</Note>
         ) : result.failed ? (
           <Note>끝까지 살아남아야 랭킹에 올릴 수 있어요.</Note>
         ) : (

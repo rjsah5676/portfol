@@ -28,6 +28,7 @@ import { makeAutoCharts } from "@/lib/rhythm/autochart";
 import { displayBpm } from "@/lib/rhythm/analyze";
 import type { CustomTrack } from "./CustomMusic";
 import { CUSTOM_COVER } from "./SongCarousel";
+import { useAuth } from "@/lib/AuthContext";
 import GameHeader from "@/components/GameHeader";
 import { RHYTHM_GUIDE } from "@/data/gameGuides";
 import TitleScreen from "./TitleScreen";
@@ -123,6 +124,10 @@ export default function RhythmGame() {
     field: "left",
   });
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // 분석 모드(관리자만): 채보를 올퍼펙으로 자동 연주해서 곡과 맞는지 감상. 기록·랭킹에 안 올림
+  const { admin } = useAuth();
+  const [analyze, setAnalyze] = useState(false);
+  const autoplay = admin && analyze;
   /** 자동 싱크(사용자에겐 안 보임): 기기·입력 방식별 프로필로 저장. 플레이 시작 때 불러오고 판이 끝나면 저장 */
   const autoKey = useRef("");
   const [auto, setAuto] = useState<AutoSyncState>({ judge: 0, offset: 0 });
@@ -494,9 +499,9 @@ export default function RhythmGame() {
     (r: Result) => {
       const key = `${r.songId}:${r.diff}`;
       const prev = best[key];
-      // 중간에 죽은 판은 기록에 안 남김
-      const newBest = !r.failed && (!prev || r.score > prev.score);
-      if (!r.failed && (newBest || (r.fc && !prev?.fc) || (r.ap && !prev?.ap))) {
+      // 중간에 죽은 판·자동 연주(분석 모드)는 기록에 안 남김
+      const newBest = !r.failed && !r.auto && (!prev || r.score > prev.score);
+      if (!r.failed && !r.auto && (newBest || (r.fc && !prev?.fc) || (r.ap && !prev?.ap))) {
         const next = {
           ...best,
           [key]: {
@@ -615,6 +620,8 @@ export default function RhythmGame() {
               blocked={settingsOpen}
               fs={fs}
               onToggleFs={toggleFs}
+              analyze={admin ? analyze : undefined}
+              onAnalyze={setAnalyze}
             />
           )}
           {screen === "play" && play && chart && (
@@ -639,6 +646,7 @@ export default function RhythmGame() {
               fs={fs}
               onToggleFs={toggleFs}
               portrait={portrait}
+              autoplay={autoplay}
               onFinish={finish}
               onQuit={toSelect}
               onRestart={() =>

@@ -39,6 +39,8 @@ export default function SongSelect({
   blocked,
   fs,
   onToggleFs,
+  analyze,
+  onAnalyze,
 }: {
   songs: Song[];
   sel: number;
@@ -63,6 +65,9 @@ export default function SongSelect({
   blocked: boolean;
   fs: boolean;
   onToggleFs: () => void;
+  /** 분석 모드(관리자만 값이 옴): 자동 연주로 채보 감상 */
+  analyze?: boolean;
+  onAnalyze?: (on: boolean) => void;
 }) {
   // 내 음악: 재킷을 눌러도 파일 고르기
   const pickRef = useRef<(() => void) | null>(null);
@@ -201,6 +206,23 @@ export default function SongSelect({
           <span className={`${KR} text-[1.1cqw] text-white/45`}>곡 선택</span>
         </div>
         <div className="flex items-center gap-[0.6cqw]">
+          {analyze !== undefined && (
+            <button
+              type="button"
+              onClick={() => {
+                onAnalyze?.(!analyze);
+                sfx("ui-move", 0.6);
+              }}
+              title="관리자: 채보를 올퍼펙으로 자동 연주해서 곡과 맞는지 감상 (기록·랭킹 없음)"
+              className={`flex cursor-pointer items-center gap-[0.4cqw] rounded-[0.6cqw] border px-[1cqw] py-[0.35cqw] font-['Nanum_Gothic',sans-serif] text-[1.1cqw] font-bold transition-colors ${
+                analyze
+                  ? "border-[#F59E0B] bg-[#F59E0B]/25 text-[#FDE68A]"
+                  : "border-white/15 bg-white/5 text-white/75 hover:border-white/40 hover:text-white"
+              }`}
+            >
+              🔍 분석 모드{analyze ? " ON" : ""}
+            </button>
+          )}
           <TopBtn onClick={onSettings}>
             ⚙ 설정 <K>S</K>
           </TopBtn>
