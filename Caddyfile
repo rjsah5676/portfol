@@ -1,0 +1,21 @@
+# 사이트 앞단 프록시: 한 주소로 받아서 /api, /socket.io 는 백엔드(Express)로, 나머지는 프론트(Next)로 넘김.
+# SITE_ADDRESS 에 도메인(예: gunmo.my)을 주면 Caddy 가 HTTPS 인증서를 자동으로 받아 갱신함
+# (80·443 포트가 열려 있고 도메인이 이 서버를 가리켜야 함). 기본값 :80 은 HTTP 로만 받음(로컬 확인용).
+{$SITE_ADDRESS::80} {
+	encode zstd gzip
+
+	# 백엔드가 프론트에 캐시 갱신을 알리는 주소 — 서버끼리만 쓰므로 바깥에서는 막음
+	@internal path /internal/*
+	respond @internal 404
+
+	# API 와 실시간 연결(웹소켓)은 백엔드로
+	@backend path /api/* /socket.io/*
+	reverse_proxy @backend server:4000
+
+	reverse_proxy web:3000
+}
+
+# www 로 들어오면 대표 주소로 보냄 (쓰려면 주석을 풀고 도메인을 맞출 것)
+# www.gunmo.my {
+# 	redir https://gunmo.my{uri} permanent
+# }

@@ -1,15 +1,10 @@
-import {
-  collection,
-  doc,
-  addDoc,
-  updateDoc,
-  deleteDoc,
-  getDoc,
-  getDocsFromServer,
-} from "firebase/firestore";
-import { db } from "../firebase";
+import { ApiError } from "@/lib/api/errors";
+import { api } from "@/lib/api/http";
 
-const COLLECTION = "studyPosts";
+// 이 파일은 Next 서버(Node)에서도 실행됨 — Firebase나 소켓 모듈을 여기서 직접 import하지 말 것
+// (로그인 토큰이 필요한 쓰기 요청에서만 http.ts가 Firebase를 불러옴)
+const BASE = "/api/study-posts";
+const pathOf = (id: string) => `${BASE}/${encodeURIComponent(id)}`;
 
 export const STUDY_CATEGORIES = [
   "Java",
@@ -103,35 +98,52 @@ export function toListItem(post: StudyPost): StudyPostListItem {
   };
 }
 
-// 빌드 시(generateStaticParams/페이지/사이트맵)에서 여러 번 불리므로 한 번만 가져오게 메모.
-// getDocs는 서버에 못 붙으면 에러 없이 빈 결과(캐시)로 resolve해버려서, CI 네트워크가 한 번 삐끗하면
-// 글 0개로 배포될 수 있음 -> getDocsFromServer로 서버 응답이 아니면 throw해서 빌드를 실패시킴.
-let allPostsPromise: Promise<StudyPost[]> | null = null;
-export function getAllStudyPosts(): Promise<StudyPost[]> {
-  allPostsPromise ??= getDocsFromServer(collection(db, COLLECTION)).then((snapshot) =>
-    snapshot.docs
-      .map((d) => ({ id: d.id, ...d.data() }) as StudyPost)
-      .sort(
-        (a, b) =>
-          (parseStudyDate(b.date)?.getTime() ?? 0) - (parseStudyDate(a.date)?.getTime() ?? 0)
-      )
+/** 글이 바뀌면 Next 서버가 받아둔 목록을 비울 때 쓰는 캐시 이름 (app/internal/revalidate) */
+export const STUDY_POSTS_TAG = "study-posts";
+
+// 글 목록·글 페이지·사이트맵이 같이 씀. Next 서버에서는 받아온 목록을 잠깐(60초) 다시 쓰고,
+// 관리자가 글을 쓰거나 고치면 백엔드가 Next에 알려서 바로 비움 → 다음 요청부터 새 글이 보임.
+// (알림 설정이 없어도 60초 안에는 반영됨. 브라우저에서 부르면 캐시 없이 매번 조회)
+// 개발 서버(npm run dev)에서는 캐시 없이 매번 새로 읽음.
+// 서버에 못 닿으면 api()가 throw → 빈 목록으로 조용히 넘어가지 않고 오류 페이지가 됨.
+const POSTS_CACHE = {
+  revalidate: process.env.NODE_ENV === "development" ? 0 : 60,
+  tags: [STUDY_POSTS_TAG],
+};
+
+export async function getAllStudyPosts(): Promise<StudyPost[]> {
+  const posts = await api<StudyPost[]>(BASE, { next: POSTS_CACHE });
+  return [...posts].sort(
+    (a, b) => (parseStudyDate(b.date)?.getTime() ?? 0) - (parseStudyDate(a.date)?.getTime() ?? 0)
   );
-  return allPostsPromise;
 }
 
 export async function getSectionPosts(section: StudySection): Promise<StudyPost[]> {
   return (await getAllStudyPosts()).filter((p) => sectionOf(p) === section);
 }
 
-// 캐시(메모) 없이 항상 서버에서 새로 조회 — 관리자 일괄 작업용
+// 캐시 없이 항상 새로 조회 — 관리자 일괄 작업용
 export async function fetchStudyPostsLive(): Promise<StudyPost[]> {
-  const snapshot = await getDocsFromServer(collection(db, COLLECTION));
-  return snapshot.docs.map((d) => ({ id: d.id, ...d.data() }) as StudyPost);
+  return api<StudyPost[]>(BASE);
 }
 
 export async function getStudyPost(id: string): Promise<StudyPost | null> {
-  const snapshot = await getDoc(doc(db, COLLECTION, id));
-  return snapshot.exists() ? ({ id: snapshot.id, ...snapshot.data() } as StudyPost) : null;
+  try {
+    return await api<StudyPost>(pathOf(id));
+  } catch (e) {
+    if (e instanceof ApiError && e.status === 404) return null;
+    throw e;
+  }
+}
+
+// 글 페이지(서버 렌더링)용: 목록과 같은 캐시 규칙 (60초, 글이 바뀌면 바로 비움)
+export async function getStudyPostCached(id: string): Promise<StudyPost | null> {
+  try {
+    return await api<StudyPost>(pathOf(id), { next: POSTS_CACHE });
+  } catch (e) {
+    if (e instanceof ApiError && e.status === 404) return null;
+    throw e;
+  }
 }
 
 export async function addStudyPost({
@@ -141,15 +153,23 @@ export async function addStudyPost({
   date,
   section = "study",
 }: StudyPostInput): Promise<string> {
-  const ref = await addDoc(collection(db, COLLECTION), { title, content, category, date, section });
-  return ref.id;
+  const res = await api<{ id: string }>(BASE, {
+    method: "POST",
+    body: { title, content, category, date, section },
+    auth: true,
+  });
+  return res.id;
 }
 
 export async function updateStudyPost(
   id: string,
   { title, content, category, date, section = "study" }: StudyPostInput
 ): Promise<void> {
-  await updateDoc(doc(db, COLLECTION, id), { title, content, category, date, section });
+  await api(pathOf(id), {
+    method: "PUT",
+    body: { title, content, category, date, section },
+    auth: true,
+  });
 }
 
 // 일괄 등록 페이지에서 기존 글(문서 id = URL 유지)의 작성일·구분만 맞출 때
@@ -157,9 +177,13 @@ export async function updateStudyPostMeta(
   id: string,
   meta: { date: string; section: StudySection }
 ): Promise<void> {
-  await updateDoc(doc(db, COLLECTION, id), meta);
+  await api(pathOf(id), {
+    method: "PATCH",
+    body: { date: meta.date, section: meta.section },
+    auth: true,
+  });
 }
 
 export async function deleteStudyPost(id: string): Promise<void> {
-  await deleteDoc(doc(db, COLLECTION, id));
+  await api(pathOf(id), { method: "DELETE", auth: true });
 }

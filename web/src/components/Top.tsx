@@ -24,7 +24,7 @@ export default function Top() {
           className="flex items-center gap-2 font-mono text-sm font-medium tracking-tight text-white/90 transition-colors hover:text-[#8B84FF]"
         >
           <img src={logoMark.src} alt="" className="h-6 w-6 rounded-md" />
-          <span className="hidden sm:inline">gunmo.dev</span>
+          <span className="hidden sm:inline">gunmo.my</span>
         </Link>
         <div className="flex items-center gap-3 font-mono text-xs sm:gap-6 sm:text-sm">
           <Link href="/about" className={linkClass(isAbout)}>

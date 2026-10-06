@@ -9,7 +9,10 @@ import {
   getTopReactionScores,
   addReactionScore,
   type ReactionScore,
+  toReactionScore,
+  type ReactionScoreRow,
 } from "@/firestore/reactionGame";
+import { useInitial } from "@/lib/api/InitialData";
 
 const ROUNDS = 5;
 const MIN_DELAY = 1500;
@@ -35,7 +38,11 @@ function RankBox({ list, highlight }: { list: ReactionScore[]; highlight?: numbe
 export default function RspeedPage() {
   const [phase, setPhase] = useState<Phase>("idle");
   const [results, setResults] = useState<number[]>([]);
-  const [list, setList] = useState<ReactionScore[]>([]);
+  // 서버가 미리 읽어둔 랭킹으로 시작 (layout.tsx) → 첫 화면부터 순위가 보임. 없으면 아래에서 읽어옴
+  const initialRanks = useInitial<ReactionScoreRow[]>("rankings");
+  const [list, setList] = useState<ReactionScore[]>(() =>
+    (initialRanks ?? []).map(toReactionScore)
+  );
   const [name, setName] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [submittedRank, setSubmittedRank] = useState<number | undefined>();

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import Faded from "@/components/Faded";
 import { useAuth } from "@/lib/AuthContext";
 import { useModal } from "@/components/Modal/ModalProvider";
@@ -12,6 +12,7 @@ import {
   type GuestEntry,
   type NoteColor,
 } from "@/firestore/guestbook";
+import { useInitial } from "@/lib/api/InitialData";
 import "@/css/guest.css";
 
 const NAME_MAX = 12;
@@ -35,22 +36,40 @@ const colorOf = (e: GuestEntry): NoteColor =>
 /** id 기준으로 항상 같은 기울기 (-2.4° ~ 2.4°) */
 const tiltOf = (id: number) => ((Math.abs(id) % 7) - 3) * 0.8;
 
-function dateLabel(e: GuestEntry) {
+function dateLabel(e: GuestEntry, local: boolean) {
   // id가 타임스탬프인 글은 날짜만 짧게, 예전 글은 저장된 문자열 그대로
   if (e.id > 1e12) {
-    const d = new Date(e.id);
-    return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, "0")}.${String(d.getDate()).padStart(2, "0")}`;
+    const p = (n: number) => String(n).padStart(2, "0");
+    if (local) {
+      const d = new Date(e.id);
+      return `${d.getFullYear()}.${p(d.getMonth() + 1)}.${p(d.getDate())}`;
+    }
+    // 서버에서 그린 첫 화면: 서버 시간대와 상관없이 한국 시간 기준 (브라우저 첫 렌더와 글자가 같아야 함)
+    const k = new Date(e.id + 9 * 3600_000);
+    return `${k.getUTCFullYear()}.${p(k.getUTCMonth() + 1)}.${p(k.getUTCDate())}`;
   }
   return e.date;
 }
 
+const noop = () => () => {};
+/** 브라우저에 붙은(hydrate) 뒤에만 true — 그때부터 날짜를 보는 사람의 시간대로 표시 */
+const useHydrated = () =>
+  useSyncExternalStore(
+    noop,
+    () => true,
+    () => false
+  );
+
 function Note({
   entry,
   isNew,
+  localDate,
   onDelete,
 }: {
   entry: GuestEntry;
   isNew: boolean;
+  /** 날짜를 보는 사람의 시간대로 표시 (서버 렌더 때는 false) */
+  localDate: boolean;
   onDelete?: () => void;
 }) {
   return (
@@ -89,7 +108,9 @@ function Note({
         </p>
         <div className="mt-3 flex items-end justify-between gap-3">
           <span className={`${hand} truncate text-lg font-bold text-black/60`}>— {entry.name}</span>
-          <span className="shrink-0 font-mono text-[10px] text-black/35">{dateLabel(entry)}</span>
+          <span className="shrink-0 font-mono text-[10px] text-black/35">
+            {dateLabel(entry, localDate)}
+          </span>
         </div>
       </article>
     </div>
@@ -99,8 +120,11 @@ function Note({
 export default function GuestPage() {
   const { user } = useAuth();
   const modal = useModal();
-  const [list, setList] = useState<GuestEntry[]>([]);
-  const [loaded, setLoaded] = useState(false);
+  // 서버가 미리 읽어둔 목록으로 시작 (layout.tsx) → 첫 화면부터 메모가 보이고, 이후 실시간 구독이 이어받음
+  const initial = useInitial<GuestEntry[]>("entries");
+  const hydrated = useHydrated();
+  const [list, setList] = useState<GuestEntry[]>(initial ?? []);
+  const [loaded, setLoaded] = useState(initial !== undefined);
   const [shown, setShown] = useState(PAGE);
   const [name, setName] = useState("");
   const [contents, setContents] = useState("");
@@ -264,6 +288,7 @@ export default function GuestPage() {
                   key={e.docId}
                   entry={e}
                   isNew={e.id === newId}
+                  localDate={hydrated}
                   onDelete={user ? () => remove(e) : undefined}
                 />
               ))}

@@ -1,0 +1,13 @@
+import { defineConfig } from "tsup";
+
+// 서버 소스 + web/src/lib의 순수 게임 엔진(장기·오목)을 한 파일로 묶음. node_modules는 그대로 둠(런타임에 설치된 것 사용).
+export default defineConfig({
+  entry: ["src/index.ts"],
+  format: ["esm"],
+  target: "node22",
+  platform: "node",
+  outDir: "dist",
+  clean: true,
+  sourcemap: true,
+  splitting: false,
+});

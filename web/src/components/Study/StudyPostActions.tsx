@@ -20,7 +20,7 @@ export default function StudyPostActions({
       <DeleteButton
         postId={postId}
         onDeleteSuccess={() => {
-          alert("삭제되었습니다. 사이트 반영은 재배포 후 적용됩니다.");
+          alert("삭제되었습니다.");
           router.push(listPath);
         }}
       />

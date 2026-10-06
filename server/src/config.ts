@@ -1,0 +1,64 @@
+import os from "node:os";
+import path from "node:path";
+
+/** 환경변수 → 설정. 값이 없으면 로컬 개발에 맞는 기본값. */
+export interface Config {
+  env: "development" | "production" | "test";
+  port: number;
+  /** 비어 있으면 개발 모드에서 내장 MongoDB(mongodb-memory-server)를 띄움 */
+  mongoUri: string;
+  /** 내장 MongoDB 의 데이터 폴더. 기본은 사용자 홈 아래 (레포가 OneDrive 같은 동기화 폴더에 있어도 DB 파일이 동기화에 걸리지 않게) */
+  mongoDataDir: string;
+  mongoDb: string;
+  /** 허용할 프론트 주소. "*" = 전부 허용 */
+  corsOrigins: string[] | "*";
+  firebaseProjectId: string;
+  /** Firebase ID 토큰 서명 검증용 공개키(JWKS) 주소 */
+  authJwksUrl: string;
+  adminEmails: string[];
+  /** 프록시(Caddy·nginx 등) 뒤에 둘 때 X-Forwarded-For를 믿을 단계 수 */
+  trustProxy: number;
+  /** 글이 바뀌면 프론트(Next 서버)에 캐시를 비우라고 알릴 주소 (예: http://web:3000/internal/revalidate/). 비우면 알리지 않음 */
+  webRevalidateUrl: string;
+  /** 그 요청에 실어 보내는 공유 비밀값 (프론트의 REVALIDATE_SECRET 과 같아야 함) */
+  revalidateSecret: string;
+}
+
+const list = (v: string | undefined) =>
+  (v ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+/** server/.env 가 있으면 읽음. 셸·Docker 에서 이미 지정한 환경변수는 그대로 둠 */
+export function loadDotEnv(): void {
+  try {
+    process.loadEnvFile();
+  } catch {
+    // .env 없음 → 기본값으로
+  }
+}
+
+export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
+  const mode =
+    env.NODE_ENV === "production" ? "production" : env.NODE_ENV === "test" ? "test" : "development";
+  const origins = list(env.CORS_ORIGINS);
+  return {
+    env: mode,
+    // PORT=0 이면 빈 포트를 아무거나 씀 (테스트용)
+    port: env.PORT?.trim() && Number.isInteger(Number(env.PORT)) ? Number(env.PORT) : 4000,
+    mongoUri: env.MONGODB_URI?.trim() ?? "",
+    mongoDataDir: env.MONGO_DATA_DIR?.trim() || path.join(os.homedir(), ".portfolio-dev", "mongo"),
+    mongoDb: env.MONGODB_DB?.trim() || "portfolio",
+    // 운영에서는 반드시 지정. 개발에서는 비워두면 전부 허용(로컬 포트가 바뀌어도 되게)
+    corsOrigins: origins.includes("*") ? "*" : origins.length ? origins : mode === "production" ? [] : "*",
+    firebaseProjectId: env.FIREBASE_PROJECT_ID?.trim() || "gunmo-portfolio",
+    authJwksUrl:
+      env.AUTH_JWKS_URL?.trim() ||
+      "https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com",
+    adminEmails: list(env.ADMIN_EMAILS).length ? list(env.ADMIN_EMAILS) : ["rjsah5676@gmail.com"],
+    trustProxy: Number(env.TRUST_PROXY) || 0,
+    webRevalidateUrl: env.WEB_REVALIDATE_URL?.trim() ?? "",
+    revalidateSecret: env.REVALIDATE_SECRET?.trim() ?? "",
+  };
+}

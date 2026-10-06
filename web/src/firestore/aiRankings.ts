@@ -1,13 +1,4 @@
-import {
-  addDoc,
-  collection,
-  getDocs,
-  limit,
-  orderBy,
-  query,
-  serverTimestamp,
-} from "firebase/firestore";
-import { db } from "../firebase";
+import { api } from "@/lib/api/http";
 import { toDate } from "@/lib/rankDate";
 
 /**
@@ -32,23 +23,29 @@ export interface AIRankRow extends AIRankEntry {
   createdAt: Date | null;
 }
 
+interface Row extends AIRankEntry {
+  id: string;
+  createdAt: number | null;
+}
+
 export async function getAIRanks(coll: AIRankColl, count = 10): Promise<AIRankRow[]> {
-  const snap = await getDocs(query(collection(db, coll), orderBy("score", "desc"), limit(count)));
-  return snap.docs.map((d) => {
-    const x = d.data();
-    return {
-      id: d.id,
-      name: x.name,
-      score: x.score,
-      opp: String(x.opp),
-      moves: x.moves,
-      seconds: x.seconds,
-      lead: x.lead,
-      createdAt: toDate(x.createdAt),
-    };
-  });
+  const rows = await api<Row[]>(`/api/rankings/${coll}?limit=${count}`);
+  return rows.map((x) => ({
+    id: x.id,
+    name: x.name,
+    score: x.score,
+    opp: String(x.opp),
+    moves: x.moves,
+    seconds: x.seconds,
+    lead: x.lead,
+    createdAt: toDate(x.createdAt),
+  }));
 }
 
 export async function addAIRank(coll: AIRankColl, e: AIRankEntry): Promise<void> {
-  await addDoc(collection(db, coll), { ...e, createdAt: serverTimestamp() });
+  const { name, score, opp, moves, seconds, lead } = e;
+  await api(`/api/rankings/${coll}`, {
+    method: "POST",
+    body: { name, score, opp, moves, seconds, lead },
+  });
 }

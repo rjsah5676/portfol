@@ -1,0 +1,14 @@
+node_modules
+.next
+build
+out
+.git
+.github
+.firebase
+.idea
+.env
+.env.*
+!.env.example
+*.tsbuildinfo
+npm-debug.log*
+Claude outputs

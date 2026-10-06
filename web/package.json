@@ -11,8 +11,7 @@
     "format:check": "prettier --check .",
     "foods": "node scripts/build-foods.mjs",
     "rhythm-chart": "node scripts/build-rhythm-chart.mjs",
-    "predeploy": "npm run build",
-    "deploy": "gh-pages -d build"
+    "seo:audit": "node scripts/seo-audit.mjs"
   },
   "dependencies": {
     "animejs": "^3.2.2",
@@ -24,6 +23,7 @@
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "react-quill-new": "^3.8.3",
+    "socket.io-client": "^4.8.4",
     "sql-formatter": "^15.9.0"
   },
   "devDependencies": {

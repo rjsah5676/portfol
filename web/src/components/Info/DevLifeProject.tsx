@@ -334,7 +334,7 @@ export default function DevLifeProject() {
           2021.07 – 운영 중
         </span>
         <LinkPill href="https://github.com/rjsah5676/rjsah5676.github.io">GitHub ↗</LinkPill>
-        <LinkPill href="https://rjsah5676.github.io/">사이트 ↗</LinkPill>
+        <LinkPill href="https://gunmo.my/">사이트 ↗</LinkPill>
       </div>
 
       <div className="mt-8">

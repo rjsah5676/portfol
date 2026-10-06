@@ -1,0 +1,28 @@
+# 의존성
+node_modules/
+
+# 빌드 결과물
+web/build/
+web/.next/
+web/out/
+server/dist/
+*.tsbuildinfo
+
+# 로컬 DB (내장 MongoDB 데이터)
+server/.data/
+
+# 환경변수 (예시 파일만 커밋)
+.env
+.env.*
+!.env.example
+
+# 로그
+*.log
+npm-debug.log*
+
+# OS · 에디터
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/

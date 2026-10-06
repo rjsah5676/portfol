@@ -1,36 +1,17 @@
-import {
-  addDoc,
-  collection,
-  deleteDoc,
-  deleteField,
-  doc,
-  getDoc,
-  getDocs,
-  limit,
-  onSnapshot,
-  orderBy,
-  query,
-  runTransaction,
-  serverTimestamp,
-  setDoc,
-  updateDoc,
-  where,
-  writeBatch,
-  type Timestamp,
-  type Transaction,
-} from "firebase/firestore";
-import { db } from "../firebase";
-import { hashPassword, randomKey, WrongPasswordError } from "@/lib/roomLock";
+import { ApiError } from "@/lib/api/errors";
+import { rpc, serverNow as socketServerNow, setServerTime, subscribe } from "@/lib/api/socket";
+import { toTimestamp, type Timestamp } from "@/lib/api/timestamp";
+import { WrongPasswordError } from "@/lib/roomLock";
 
 /*
  * 2인 대국 게임 공통 방 시스템 (체스·장기가 같이 씀)
  *
- * - 정적 호스팅이라 소켓 서버 대신 Firestore onSnapshot 으로 실시간 동기화.
+ * - 방 상태는 백엔드 서버가 들고 있고(MongoDB), 소켓 구독으로 실시간 동기화.
  * - 익명 Auth uid 로 좌석을 식별 → 같은 브라우저면 창을 닫았다 와도 자리 그대로 복귀.
- * - 방 문서({collection}/{id}) : 대국 상태 전체. 수 두기/무르기 등은 전부 트랜잭션.
- * - 접속 상태({collection}/{id}/presence/{uid}) : 하트비트. 방 문서와 분리해서
- *   하트비트마다 로비 리스너까지 깨우지 않도록 함.
- * - 게임 규칙(수 검증·종료 판정)만 BoardRoomConfig로 받아서 끼움.
+ * - 수 두기/무르기/시계 등은 전부 서버가 검증하고 처리 (server/src/games/board).
+ *   여기서는 요청을 보내고, 서버가 알려주는 방 상태를 화면에 넘겨줌.
+ * - 접속 상태는 하트비트(beat)로 따로 관리.
+ * - 게임 규칙(BoardRoomConfig)은 화면에서 기보를 다시 둬 보는 데만 쓰임.
  *   좌석 이름은 체스 기준 white/black (장기는 white = 초(선), black = 한).
  */
 
@@ -94,12 +75,11 @@ export const PAUSE_LIMIT_MS = 2 * 60 * 60_000;
 export const ADD_TIME_MS = 30_000;
 
 // ───────────────────── 서버 시각 보정 ─────────────────────
-// 클라이언트 시계가 틀어져 있으면 시간제 대국에서 남은 시간이 엉망이 되므로,
-// 내 presence 문서의 serverTimestamp 와 로컬 시각 차이로 오프셋을 잡아둠.
-let serverOffset = 0;
-export const serverNow = () => Date.now() + serverOffset;
+// 클라이언트 시계가 틀어져 있으면 시간제 대국에서 남은 시간이 엉망이 되므로 서버 시계 기준으로 계산.
+// (보정값은 소켓 연결이 서버와 시각을 주고받아 잡음 → lib/api/socket)
+export const serverNow = () => socketServerNow();
 export function syncServerOffset(serverMs: number) {
-  serverOffset = serverMs - Date.now();
+  setServerTime(serverMs);
 }
 
 // ───────────────────── 순수 헬퍼 ─────────────────────
@@ -182,7 +162,7 @@ export interface ChatMessage {
 }
 
 export interface BoardRoomConfig<G, R extends string> {
-  /** Firestore 컬렉션 ("chess_rooms") */
+  /** 방 컬렉션 이름 ("chess_rooms") — 서버에서 게임을 구분하는 데 씀 */
   collection: string;
   /** 페이지 경로 (초대 링크용, "/games/chess/") */
   path: string;
@@ -199,14 +179,21 @@ export interface BoardRoomConfig<G, R extends string> {
 
 export function createBoardRooms<G, R extends string>(cfg: BoardRoomConfig<G, R>) {
   type Room = BoardRoom<R>;
-  const ROOMS = cfg.collection;
-  const roomRef = (id: string) => doc(db, ROOMS, id);
-  const presenceRef = (roomId: string, uid: string) => doc(db, ROOMS, roomId, "presence", uid);
+  /** 서버에서 쓰는 게임 이름 ("chess_rooms" → "chess") */
+  const g = cfg.collection.replace(/_rooms$/, "");
 
-  function normalize(id: string, data: Record<string, unknown>): Room {
-    const d = data as Partial<Room>;
+  /** 서버가 보낸 방(시각 = ms 숫자)을 화면용으로 */
+  function normalize(data: Record<string, unknown>): Room {
+    const d = data as Partial<
+      Omit<Room, "turnStartedAt" | "pausedAt" | "createdAt" | "updatedAt">
+    > & {
+      turnStartedAt?: number | null;
+      pausedAt?: number | null;
+      createdAt?: number | null;
+      updatedAt?: number | null;
+    };
     return {
-      id,
+      id: d.id ?? "",
       name: d.name ?? "",
       hostUid: d.hostUid ?? "",
       whiteUid: d.whiteUid ?? "",
@@ -221,35 +208,53 @@ export function createBoardRooms<G, R extends string>(cfg: BoardRoomConfig<G, R>
       fen: d.fen ?? cfg.initialFen(d.variant ?? ""),
       whiteMs: d.whiteMs ?? 0,
       blackMs: d.blackMs ?? 0,
-      turnStartedAt: d.turnStartedAt ?? null,
+      turnStartedAt: toTimestamp(d.turnStartedAt),
       result: d.result ?? "",
       reason: d.reason ?? "",
       undoReq: d.undoReq ?? null,
       drawOffer: d.drawOffer ?? "",
       rematch: d.rematch ?? "",
-      pausedAt: d.pausedAt ?? null,
+      pausedAt: toTimestamp(d.pausedAt),
       spectators: d.spectators ?? {},
       locked: d.locked === true,
-      createdAt: d.createdAt ?? null,
-      updatedAt: d.updatedAt ?? null,
+      createdAt: toTimestamp(d.createdAt),
+      updatedAt: toTimestamp(d.updatedAt),
     };
   }
 
-  async function readRoom(tx: Transaction, id: string): Promise<Room> {
-    const snap = await tx.get(roomRef(id));
-    if (!snap.exists()) throw new Error("방이 존재하지 않습니다.");
-    return normalize(snap.id, snap.data());
+  /** 방 하나에 대한 요청 */
+  const call = <T = null>(name: string, roomId: string, extra?: Record<string, unknown>) =>
+    rpc<T>(`board.${name}`, { g, id: roomId, ...extra }).catch(rethrow);
+
+  /** 서버 오류 → 화면이 기대하는 오류 */
+  function rethrow(e: unknown): never {
+    if (e instanceof ApiError && e.code === "ACTIVE_ROOM" && e.data)
+      throw new ActiveRoomError(normalize(e.data as Record<string, unknown>));
+    throw e;
   }
 
   // ───────────────────── 구독 ─────────────────────
 
+  /** 최근 갱신된 방 40개 */
   function subscribeRooms(cb: (rooms: Room[]) => void, onError?: (e: Error) => void) {
-    const q = query(collection(db, ROOMS), orderBy("updatedAt", "desc"), limit(40));
-    return onSnapshot(
-      q,
-      { includeMetadataChanges: false },
-      (snap) => cb(snap.docs.map((d) => normalize(d.id, d.data({ serverTimestamps: "estimate" })))),
-      onError
+    type Snap = { s: number; list: Record<string, unknown>[] };
+    let last = 0;
+    const apply = (snap: Snap) => {
+      // 늦게 도착한 옛 목록은 버림 (s = 서버 조회 순번)
+      if (snap.s < last) return;
+      last = snap.s;
+      cb(snap.list.map(normalize));
+    };
+    return subscribe<Snap>(
+      "board.lobby",
+      { g },
+      {
+        onSnapshot: apply,
+        onEvent: (type, data) => {
+          if (type === "list") apply(data as Snap);
+        },
+        onError,
+      }
     );
   }
 
@@ -258,68 +263,73 @@ export function createBoardRooms<G, R extends string>(cfg: BoardRoomConfig<G, R>
     cb: (room: Room | null) => void,
     onError?: (e: Error) => void
   ) {
-    return onSnapshot(
-      roomRef(id),
-      (snap) =>
-        cb(snap.exists() ? normalize(snap.id, snap.data({ serverTimestamps: "estimate" })) : null),
-      onError
+    type Wire = (Record<string, unknown> & { v?: number }) | null;
+    let lastV = -1;
+    const apply = (data: Wire, fresh: boolean) => {
+      if (!data) {
+        lastV = -1;
+        cb(null);
+        return;
+      }
+      // v = 방이 바뀔 때마다 +1 → 늦게 도착한 옛 상태는 버림
+      const v = data.v ?? 0;
+      if (!fresh && v < lastV) return;
+      lastV = v;
+      cb(normalize(data));
+    };
+    return subscribe<Wire>(
+      "board.room",
+      { g, id },
+      {
+        onSnapshot: (data) => apply(data, true),
+        onEvent: (type, data) => {
+          if (type === "room") apply(data as Wire, false);
+        },
+        onError,
+      }
     );
   }
 
   function subscribePresence(
     roomId: string,
-    myUid: string | null,
+    // 예전에는 내 하트비트로 서버 시각을 맞추느라 필요했음 (지금은 소켓 계층이 맞춤)
+    _myUid: string | null,
     cb: (p: Record<string, Presence>) => void
   ) {
-    return onSnapshot(collection(db, ROOMS, roomId, "presence"), (snap) => {
-      // 오프셋은 "방금 서버가 확정해준 내 하트비트"로만 계산해야 함.
-      // (다른 사람 하트비트로 스냅샷이 올 때 예전 내 lastSeen 으로 맞추면 시계가 뒤로 밀림)
-      snap.docChanges().forEach((c) => {
-        if (c.doc.id !== myUid || c.type === "removed" || c.doc.metadata.hasPendingWrites) return;
-        const ts = c.doc.data().lastSeen as Timestamp | null;
-        if (ts) syncServerOffset(ts.toMillis());
-      });
+    type Wire = Record<string, { name?: string; lastSeen?: number }>;
+    const apply = (data: Wire) => {
       const out: Record<string, Presence> = {};
-      snap.docs.forEach((d) => {
-        const data = d.data({ serverTimestamps: "estimate" });
-        const ts = data.lastSeen as Timestamp | null;
-        out[d.id] = { name: data.name ?? "", lastSeen: ts ? ts.toMillis() : serverNow() };
-      });
+      for (const [uid, p] of Object.entries(data ?? {}))
+        out[uid] = { name: p.name ?? "", lastSeen: p.lastSeen ?? serverNow() };
       cb(out);
-    });
+    };
+    return subscribe<Wire>(
+      "board.presence",
+      { g, id: roomId },
+      {
+        onSnapshot: apply,
+        onEvent: (type, data) => {
+          if (type === "presence") apply(data as Wire);
+        },
+      }
+    );
   }
 
-  async function beat(roomId: string, uid: string, name: string, bumpRoom = false) {
-    await setDoc(presenceRef(roomId, uid), { name, lastSeen: serverTimestamp() });
-    // 대기방은 로비에서 "살아있는 방"인지 판단하려고 updatedAt 도 갱신
-    if (bumpRoom) await updateDoc(roomRef(roomId), { updatedAt: serverTimestamp() });
+  async function beat(roomId: string, _uid: string, name: string, bumpRoom = false) {
+    // 대기방은 로비에서 "살아있는 방"인지 판단하려고 방의 updatedAt 도 갱신 (bumpRoom)
+    await call("beat", roomId, { name, bumpRoom });
   }
 
   // ───────────────────── 방 생성/참여/퇴장 ─────────────────────
 
   /** 내가 대국자로 앉아있는 대기/진행중 방 (방 중복 생성·참여 방지용) */
-  async function findMyActiveRoom(uid: string): Promise<Room | null> {
-    const snaps = await Promise.all(
-      (["whiteUid", "blackUid"] as const).map((f) =>
-        getDocs(query(collection(db, ROOMS), where(f, "==", uid)))
-      )
-    );
-    const rooms = snaps
-      .flatMap((s) => s.docs.map((d) => normalize(d.id, d.data())))
-      .filter((r) => {
-        if (isPauseExpired(r)) {
-          expirePausedGame(r.id).catch(() => {});
-          return false;
-        }
-        return r.status === "waiting" || r.status === "playing";
-      })
-      .sort((a, b) => (b.updatedAt?.toMillis() ?? 0) - (a.updatedAt?.toMillis() ?? 0));
-    return rooms[0] ?? null;
+  async function findMyActiveRoom(_uid: string): Promise<Room | null> {
+    const room = await rpc<Record<string, unknown> | null>("board.findMyActiveRoom", { g });
+    return room ? normalize(room) : null;
   }
 
   async function createRoom({
     name,
-    uid,
     nick,
     color,
     timeMin,
@@ -327,49 +337,17 @@ export function createBoardRooms<G, R extends string>(cfg: BoardRoomConfig<G, R>
     password = "",
     variant = "",
   }: CreateRoomInput): Promise<string> {
-    const active = await findMyActiveRoom(uid);
-    if (active) throw new ActiveRoomError(active);
-    const myColor: Color = color === "r" ? (Math.random() < 0.5 ? "w" : "b") : color;
-    const ms = timeMin * 60_000;
-    const ref = doc(collection(db, ROOMS));
-    const locked = password.trim() !== "";
-    const batch = writeBatch(db);
-    batch.set(ref, {
-      name: name.trim().slice(0, 20),
-      hostUid: uid,
-      whiteUid: myColor === "w" ? uid : "",
-      whiteName: myColor === "w" ? nick : "",
-      blackUid: myColor === "b" ? uid : "",
-      blackName: myColor === "b" ? nick : "",
+    // 비밀번호는 서버가 방 id와 섞어 해시로만 저장 (평문은 저장하지 않음)
+    return rpc<string>("board.createRoom", {
+      g,
+      name,
+      nick,
+      color,
       timeMin,
       incSec,
-      status: "waiting",
-      moves: [],
+      password,
       variant,
-      fen: cfg.initialFen(variant),
-      whiteMs: ms,
-      blackMs: ms,
-      turnStartedAt: null,
-      pausedAt: null,
-      result: "",
-      reason: "",
-      undoReq: null,
-      drawOffer: "",
-      spectators: {},
-      locked,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    });
-    // 초대키는 참가자만 읽을 수 있고(초대 링크용), 비밀번호 해시는 아무도 못 읽음(규칙에서만 비교)
-    const invite = randomKey();
-    batch.set(doc(db, ROOMS, ref.id, "private", "invite"), { key: invite });
-    if (locked) {
-      const pw = await hashPassword(ref.id, password.trim());
-      batch.set(doc(db, ROOMS, ref.id, "private", "lock"), { pw, invite });
-      batch.set(doc(db, ROOMS, ref.id, "access", uid), { key: pw });
-    }
-    await batch.commit();
-    return ref.id;
+    }).catch(rethrow);
   }
 
   // ───────────────────── 비밀번호 방 ─────────────────────
@@ -378,245 +356,85 @@ export function createBoardRooms<G, R extends string>(cfg: BoardRoomConfig<G, R>
   async function hasRoomAccess(room: Room, uid: string): Promise<boolean> {
     if (!room.locked || colorOf(room, uid) || room.spectators[uid] !== undefined) return true;
     try {
-      return (await getDoc(doc(db, ROOMS, room.id, "access", uid))).exists();
+      return await rpc<boolean>("board.hasRoomAccess", { g, id: room.id });
     } catch {
       return false;
     }
   }
 
-  /** 비밀번호나 초대키로 권한 얻기 — 틀리면 규칙에서 거부됨 */
+  /** 비밀번호나 초대키로 권한 얻기 — 틀리면 서버에서 거부됨 */
   async function unlockRoom(
     roomId: string,
-    uid: string,
+    _uid: string,
     cred: { password?: string; invite?: string }
   ) {
-    const key = cred.invite ?? (await hashPassword(roomId, cred.password ?? ""));
     try {
-      await setDoc(doc(db, ROOMS, roomId, "access", uid), { key });
+      await rpc("board.unlockRoom", {
+        g,
+        id: roomId,
+        ...(cred.invite !== undefined
+          ? { invite: cred.invite }
+          : { password: cred.password ?? "" }),
+      });
     } catch {
       throw new WrongPasswordError();
     }
   }
 
-  /** 초대 링크 (참가자만 초대키를 읽을 수 있음, 예전 방은 키 없이) */
+  /** 초대 링크 (참가자만 초대키를 받을 수 있음, 못 받으면 키 없이) */
   async function inviteLink(roomId: string): Promise<string> {
     let key = "";
     try {
-      key =
-        ((await getDoc(doc(db, ROOMS, roomId, "private", "invite"))).data()?.key as string) ?? "";
+      key = (await rpc<string>("board.inviteKey", { g, id: roomId })) ?? "";
     } catch {
       key = "";
     }
     return `${location.origin}${cfg.path}?room=${roomId}${key ? `&k=${key}` : ""}`;
   }
 
-  async function joinAsPlayer(roomId: string, uid: string, nick: string) {
-    const active = await findMyActiveRoom(uid);
-    if (active && active.id !== roomId) throw new ActiveRoomError(active);
-    await runTransaction(db, async (tx) => {
-      const room = await readRoom(tx, roomId);
-      if (colorOf(room, uid)) return;
-      if (room.status !== "waiting") throw new Error("이미 대국이 시작된 방입니다.");
-      const seat: Color | null = !room.whiteUid ? "w" : !room.blackUid ? "b" : null;
-      if (!seat) throw new Error("빈 자리가 없습니다.");
-      const spectators = { ...room.spectators };
-      delete spectators[uid];
-      tx.update(roomRef(roomId), {
-        ...(seat === "w" ? { whiteUid: uid, whiteName: nick } : { blackUid: uid, blackName: nick }),
-        spectators,
-        updatedAt: serverTimestamp(),
-      });
-    });
+  async function joinAsPlayer(roomId: string, _uid: string, nick: string) {
+    await call("joinAsPlayer", roomId, { nick });
   }
 
   /** 방장만 시작 가능. 두 자리가 다 찼을 때 백 시계부터 돌아감 */
-  async function startGame(roomId: string, uid: string) {
-    await runTransaction(db, async (tx) => {
-      const room = await readRoom(tx, roomId);
-      if (room.hostUid !== uid) throw new Error("방장만 시작할 수 있습니다.");
-      if (room.status !== "waiting") return;
-      if (!room.whiteUid || !room.blackUid) throw new Error("상대가 아직 입장하지 않았습니다.");
-      tx.update(roomRef(roomId), {
-        status: "playing",
-        turnStartedAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      });
-    });
+  async function startGame(roomId: string, _uid: string) {
+    await call("startGame", roomId);
   }
 
-  async function joinAsSpectator(roomId: string, uid: string, nick: string) {
-    await runTransaction(db, async (tx) => {
-      const room = await readRoom(tx, roomId);
-      if (colorOf(room, uid) || room.spectators[uid] !== undefined) return;
-      const spectators = { ...room.spectators };
-      // 창만 닫고 사라진 관전자는 자리 비워줌
-      const others = Object.keys(spectators);
-      const snaps = await Promise.all(others.map((u) => tx.get(presenceRef(roomId, u))));
-      snaps.forEach((s, i) => {
-        const ts = s.exists() ? (s.data().lastSeen as Timestamp | null) : null;
-        if (!ts || serverNow() - ts.toMillis() > OFFLINE_AFTER_MS * 1.5)
-          delete spectators[others[i]];
-      });
-      if (Object.keys(spectators).length >= MAX_SPECTATORS)
-        throw new Error("관전 인원이 가득 찼습니다. (최대 2명)");
-      spectators[uid] = nick;
-      tx.update(roomRef(roomId), { spectators });
-    });
+  async function joinAsSpectator(roomId: string, _uid: string, nick: string) {
+    await call("joinAsSpectator", roomId, { nick });
   }
 
   /** 대국 중인 플레이어는 나가도 자리가 유지됨 (다시 들어오면 이어서 진행) */
-  async function leaveRoom(room: Room, uid: string) {
-    const color = colorOf(room, uid);
-    if (!color) {
-      if (room.spectators[uid] !== undefined) {
-        await updateDoc(roomRef(room.id), { [`spectators.${uid}`]: deleteField() });
-      }
-      await deleteDoc(presenceRef(room.id, uid)).catch(() => {});
-      return;
-    }
-    if (room.status === "waiting") {
-      // 방장이 나가면 방 닫힘, 참가자가 나가면 자리만 비움
-      await updateDoc(
-        roomRef(room.id),
-        room.hostUid === uid
-          ? { status: "closed", updatedAt: serverTimestamp() }
-          : {
-              ...(color === "w"
-                ? { whiteUid: "", whiteName: "" }
-                : { blackUid: "", blackName: "" }),
-              updatedAt: serverTimestamp(),
-            }
-      );
-      await deleteDoc(presenceRef(room.id, uid)).catch(() => {});
-    }
+  async function leaveRoom(room: Room, _uid: string) {
+    await call("leaveRoom", room.id);
   }
 
   // ───────────────────── 대국 ─────────────────────
 
-  async function makeMove(roomId: string, uid: string, uci: string) {
-    await runTransaction(db, async (tx) => {
-      const room = await readRoom(tx, roomId);
-      const me = colorOf(room, uid);
-      if (room.status !== "playing" || !me) throw new Error("대국 중이 아닙니다.");
-      if (room.pausedAt) throw new Error("일시정지 중입니다.");
-      if (turnOf(room) !== me) throw new Error("내 차례가 아닙니다.");
-
-      const game = cfg.replay(room.moves, room.variant);
-      const timed = room.timeMin > 0;
-      const clock = liveClock(room);
-
-      if (timed && clock[me] <= 0) {
-        tx.update(roomRef(roomId), {
-          status: "ended",
-          result: cfg.timeoutResult(game, me),
-          reason: "timeout",
-          whiteMs: clock.w,
-          blackMs: clock.b,
-          updatedAt: serverTimestamp(),
-        });
-        return;
-      }
-
-      cfg.play(game, uci); // 불법수면 throw
-      if (timed) clock[me] += room.incSec * 1000;
-      const end = cfg.endState(game);
-
-      tx.update(roomRef(roomId), {
-        moves: [...room.moves, uci],
-        fen: cfg.fenOf(game),
-        whiteMs: clock.w,
-        blackMs: clock.b,
-        turnStartedAt: serverTimestamp(),
-        undoReq: null,
-        drawOffer: "",
-        updatedAt: serverTimestamp(),
-        ...(end ? { status: "ended", ...end } : {}),
-      });
-    });
+  async function makeMove(roomId: string, _uid: string, uci: string) {
+    await call("makeMove", roomId, { move: uci });
   }
 
-  /** 수를 두는 쪽의 시간이 0이 된 걸 본 쪽(누구든)이 호출 */
+  /** 수를 두는 쪽의 시간이 0이 된 걸 본 대국자가 호출 */
   async function claimTimeout(roomId: string) {
-    await runTransaction(db, async (tx) => {
-      const room = await readRoom(tx, roomId);
-      if (room.status !== "playing" || room.timeMin <= 0 || room.pausedAt) return;
-      const clock = liveClock(room);
-      const t = turnOf(room);
-      if (clock[t] > 0) return;
-      tx.update(roomRef(roomId), {
-        status: "ended",
-        result: cfg.timeoutResult(cfg.replay(room.moves, room.variant), t),
-        reason: "timeout",
-        whiteMs: clock.w,
-        blackMs: clock.b,
-        updatedAt: serverTimestamp(),
-      });
-    });
+    await call("claimTimeout", roomId);
   }
 
-  async function claimAbandon(roomId: string, uid: string) {
-    await runTransaction(db, async (tx) => {
-      const room = await readRoom(tx, roomId);
-      const me = colorOf(room, uid);
-      if (room.status !== "playing" || !me) return;
-      if (room.pausedAt) throw new Error("일시정지 중에는 승리 선언을 할 수 없습니다.");
-      const oppUid = me === "w" ? room.blackUid : room.whiteUid;
-      const p = await tx.get(presenceRef(roomId, oppUid));
-      const ts = p.exists() ? (p.data().lastSeen as Timestamp | null) : null;
-      if (ts && serverNow() - ts.toMillis() < ABANDON_AFTER_MS)
-        throw new Error("상대가 아직 접속 중입니다.");
-      const clock = liveClock(room);
-      tx.update(roomRef(roomId), {
-        status: "ended",
-        result: winFor(me),
-        reason: "abandon",
-        whiteMs: clock.w,
-        blackMs: clock.b,
-        updatedAt: serverTimestamp(),
-      });
-    });
+  async function claimAbandon(roomId: string, _uid: string) {
+    await call("claimAbandon", roomId);
   }
 
-  async function resign(roomId: string, uid: string) {
-    await runTransaction(db, async (tx) => {
-      const room = await readRoom(tx, roomId);
-      const me = colorOf(room, uid);
-      if (room.status !== "playing" || !me) return;
-      const clock = liveClock(room);
-      tx.update(roomRef(roomId), {
-        status: "ended",
-        result: winFor(other(me)),
-        reason: "resign",
-        whiteMs: clock.w,
-        blackMs: clock.b,
-        updatedAt: serverTimestamp(),
-      });
-    });
+  async function resign(roomId: string, _uid: string) {
+    await call("resign", roomId);
   }
 
-  async function offerDraw(roomId: string, uid: string) {
-    await updateDoc(roomRef(roomId), { drawOffer: uid });
+  async function offerDraw(roomId: string, _uid: string) {
+    await call("offerDraw", roomId);
   }
 
-  async function respondDraw(roomId: string, uid: string, accept: boolean) {
-    await runTransaction(db, async (tx) => {
-      const room = await readRoom(tx, roomId);
-      if (room.status !== "playing" || !room.drawOffer || room.drawOffer === uid) return;
-      if (!accept) {
-        tx.update(roomRef(roomId), { drawOffer: "" });
-        return;
-      }
-      const clock = liveClock(room);
-      tx.update(roomRef(roomId), {
-        status: "ended",
-        result: "1/2-1/2",
-        reason: "agreement",
-        drawOffer: "",
-        whiteMs: clock.w,
-        blackMs: clock.b,
-        updatedAt: serverTimestamp(),
-      });
-    });
+  async function respondDraw(roomId: string, _uid: string, accept: boolean) {
+    await call("respondDraw", roomId, { accept });
   }
 
   // ───────────────────── 다시 하기 ─────────────────────
@@ -625,42 +443,13 @@ export function createBoardRooms<G, R extends string>(cfg: BoardRoomConfig<G, R>
    * 끝난 방에서 같은 상대와 바로 한 판 더 (방 새로 만들 필요 없음).
    * 한쪽이 누르면 신청, 다른 쪽도 누르면 흑백(선후)을 바꿔 바로 새 대국 시작.
    */
-  async function requestRematch(roomId: string, uid: string) {
-    await runTransaction(db, async (tx) => {
-      const room = await readRoom(tx, roomId);
-      const me = colorOf(room, uid);
-      if (room.status !== "ended" || !me) return;
-      if (!room.whiteUid || !room.blackUid) throw new Error("상대가 나갔습니다.");
-      if (!room.rematch || room.rematch === uid) {
-        tx.update(roomRef(roomId), { rematch: uid, updatedAt: serverTimestamp() });
-        return;
-      }
-      const ms = room.timeMin * 60_000;
-      tx.update(roomRef(roomId), {
-        whiteUid: room.blackUid,
-        whiteName: room.blackName,
-        blackUid: room.whiteUid,
-        blackName: room.whiteName,
-        status: "playing",
-        moves: [],
-        fen: cfg.initialFen(room.variant),
-        whiteMs: ms,
-        blackMs: ms,
-        turnStartedAt: serverTimestamp(),
-        pausedAt: null,
-        result: "",
-        reason: "",
-        undoReq: null,
-        drawOffer: "",
-        rematch: "",
-        updatedAt: serverTimestamp(),
-      });
-    });
+  async function requestRematch(roomId: string, _uid: string) {
+    await call("requestRematch", roomId);
   }
 
   /** 다시 하기 신청 취소 / 거절 */
   async function cancelRematch(roomId: string) {
-    await updateDoc(roomRef(roomId), { rematch: "" });
+    await call("cancelRematch", roomId);
   }
 
   // ───────────────────── 무르기 ─────────────────────
@@ -668,148 +457,120 @@ export function createBoardRooms<G, R extends string>(cfg: BoardRoomConfig<G, R>
   async function requestUndo(room: Room, uid: string) {
     const me = colorOf(room, uid);
     if (!me || room.status !== "playing" || undoPlies(room, me) === 0) return;
-    await updateDoc(roomRef(room.id), { undoReq: { uid, ply: room.moves.length } });
+    await call("requestUndo", room.id);
   }
 
   async function cancelUndo(roomId: string) {
-    await updateDoc(roomRef(roomId), { undoReq: null });
+    await call("cancelUndo", roomId);
   }
 
-  async function respondUndo(roomId: string, uid: string, accept: boolean) {
-    await runTransaction(db, async (tx) => {
-      const room = await readRoom(tx, roomId);
-      const req = room.undoReq;
-      if (room.status !== "playing" || !req || req.uid === uid) return;
-      if (room.pausedAt) throw new Error("일시정지 중입니다.");
-      const reqColor = colorOf(room, req.uid);
-      if (!accept || !reqColor || req.ply !== room.moves.length) {
-        tx.update(roomRef(roomId), { undoReq: null });
-        return;
-      }
-      const plies = undoPlies(room, reqColor);
-      if (plies === 0) {
-        tx.update(roomRef(roomId), { undoReq: null });
-        return;
-      }
-      // 지금까지 흐른 시간은 현재 차례인 쪽에서 정산하고 되돌림
-      const clock = liveClock(room);
-      const moves = room.moves.slice(0, room.moves.length - plies);
-      tx.update(roomRef(roomId), {
-        moves,
-        fen: cfg.fenOf(cfg.replay(moves, room.variant)),
-        whiteMs: clock.w,
-        blackMs: clock.b,
-        turnStartedAt: serverTimestamp(),
-        undoReq: null,
-        drawOffer: "",
-        updatedAt: serverTimestamp(),
-      });
-    });
+  async function respondUndo(roomId: string, _uid: string, accept: boolean) {
+    await call("respondUndo", roomId, { accept });
   }
 
   // ───────────────────── 방장 전용: 일시정지 / 시간 추가 ─────────────────────
 
-  async function hostTx(roomId: string, uid: string, fn: (room: Room, tx: Transaction) => void) {
-    await runTransaction(db, async (tx) => {
-      const room = await readRoom(tx, roomId);
-      if (room.hostUid !== uid) throw new Error("방장만 할 수 있습니다.");
-      if (room.status !== "playing") throw new Error("대국 중이 아닙니다.");
-      fn(room, tx);
-    });
+  async function pauseGame(roomId: string, _uid: string) {
+    await call("pauseGame", roomId);
   }
 
-  async function pauseGame(roomId: string, uid: string) {
-    await hostTx(roomId, uid, (room, tx) => {
-      if (room.pausedAt) return;
-      const clock = liveClock(room); // 지금까지 흐른 시간 정산 후 멈춤
-      tx.update(roomRef(roomId), {
-        whiteMs: clock.w,
-        blackMs: clock.b,
-        pausedAt: serverTimestamp(),
-        undoReq: null,
-        drawOffer: "",
-        updatedAt: serverTimestamp(),
-      });
-    });
+  async function resumeGame(roomId: string, _uid: string) {
+    await call("resumeGame", roomId);
   }
 
-  async function resumeGame(roomId: string, uid: string) {
-    await hostTx(roomId, uid, (room, tx) => {
-      if (!room.pausedAt) return;
-      if (isPauseExpired(room)) throw new Error("일시정지가 2시간을 넘어 대국이 종료되었습니다.");
-      tx.update(roomRef(roomId), {
-        pausedAt: null,
-        turnStartedAt: serverTimestamp(), // 재개 시점부터 다시 계산
-        updatedAt: serverTimestamp(),
-      });
-    });
+  /** 방장이 자신 또는 상대 시계에 시간 추가 (한 번에 ADD_TIME_MS) */
+  async function addTime(roomId: string, _uid: string, color: Color) {
+    await call("addTime", roomId, { color });
   }
 
-  /** 방장이 자신 또는 상대 시계에 시간 추가 */
-  async function addTime(roomId: string, uid: string, color: Color, ms = ADD_TIME_MS) {
-    await hostTx(roomId, uid, (room, tx) => {
-      if (room.timeMin <= 0) throw new Error("무제한 대국입니다.");
-      const clock = liveClock(room);
-      clock[color] += ms;
-      tx.update(roomRef(roomId), {
-        whiteMs: clock.w,
-        blackMs: clock.b,
-        // 진행중이면 정산한 시점부터 다시 흐르게
-        ...(room.pausedAt ? {} : { turnStartedAt: serverTimestamp() }),
-        updatedAt: serverTimestamp(),
-      });
-    });
-  }
-
-  /** 2시간 넘게 멈춘 대국 종료 (대국자 누구든 호출, 조건은 트랜잭션에서 재확인) */
+  /** 2시간 넘게 멈춘 대국 종료 (대국자 누구든 호출, 조건은 서버에서 재확인) */
   async function expirePausedGame(roomId: string) {
-    await runTransaction(db, async (tx) => {
-      const room = await readRoom(tx, roomId);
-      if (!isPauseExpired(room)) return;
-      tx.update(roomRef(roomId), {
-        status: "ended",
-        result: "1/2-1/2",
-        reason: "paused",
-        updatedAt: serverTimestamp(),
-      });
-    });
+    await call("expirePausedGame", roomId);
   }
 
   // ───────────────────── 채팅 ─────────────────────
-  // {collection}/{id}/chat/{autoId} : 대국자·관전자만 쓰기 (firestore.rules), 읽기는 누구나
+  // 대국자·관전자만 쓰기, 읽기는 누구나 (서버에서 검사)
+
+  type ChatWire = Omit<ChatMessage, "pending">;
+  /** 지금 이 페이지에서 열려 있는 채팅 구독 (방별) — 내가 보낸 메시지를 보내는 즉시 띄우려고 */
+  const chatViews = new Map<string, Set<ChatView>>();
+  interface ChatView {
+    /** 서버가 확정해 준 메시지 (오래된 것부터) */
+    confirmed: ChatWire[];
+    /** 보냈지만 아직 확정 안 된 내 메시지 */
+    pending: ChatWire[];
+    emit(): void;
+  }
 
   function subscribeChat(roomId: string, cb: (list: ChatMessage[]) => void) {
-    const q = query(
-      collection(db, ROOMS, roomId, "chat"),
-      orderBy("createdAt", "desc"),
-      limit(CHAT_LIMIT)
+    const view: ChatView = {
+      confirmed: [],
+      pending: [],
+      emit() {
+        const list: ChatMessage[] = [
+          ...view.confirmed.map((m) => ({ ...m, pending: false })),
+          ...view.pending.map((m) => ({ ...m, pending: true })),
+        ];
+        cb(list.slice(-CHAT_LIMIT));
+      },
+    };
+    let set = chatViews.get(roomId);
+    if (!set) chatViews.set(roomId, (set = new Set()));
+    set.add(view);
+
+    const confirm = (m: ChatWire) => {
+      view.pending = view.pending.filter((p) => p.id !== m.id);
+      if (view.confirmed.some((c) => c.id === m.id)) return;
+      view.confirmed = [...view.confirmed, m].slice(-CHAT_LIMIT);
+    };
+    const unsub = subscribe<ChatWire[]>(
+      "board.chat",
+      { g, id: roomId },
+      {
+        onSnapshot: (list) => {
+          view.confirmed = [];
+          (list ?? []).forEach(confirm);
+          view.emit();
+        },
+        onEvent: (type, data) => {
+          if (type !== "add") return;
+          confirm(data as ChatWire);
+          view.emit();
+        },
+      }
     );
-    return onSnapshot(q, (snap) => {
-      const list = snap.docs.map((d) => {
-        const data = d.data({ serverTimestamps: "estimate" });
-        const ts = data.createdAt as Timestamp | null;
-        return {
-          id: d.id,
-          uid: String(data.uid ?? ""),
-          name: String(data.name ?? ""),
-          text: String(data.text ?? ""),
-          at: ts ? ts.toMillis() : serverNow(),
-          pending: d.metadata.hasPendingWrites,
-        };
-      });
-      cb(list.reverse());
-    });
+    return () => {
+      unsub();
+      set.delete(view);
+      if (!set.size) chatViews.delete(roomId);
+    };
   }
 
   async function sendChat(roomId: string, uid: string, name: string, text: string) {
     const t = text.trim().slice(0, CHAT_MAX);
     if (!t) return;
-    await addDoc(collection(db, ROOMS, roomId, "chat"), {
+    // 보내는 즉시 흐리게(pending) 띄우고, 서버가 같은 id로 확정해 주면 진하게 바뀜
+    const msg: ChatWire = {
+      id: newChatId(),
       uid,
       name: name.slice(0, 20),
       text: t,
-      createdAt: serverTimestamp(),
-    });
+      at: serverNow(),
+    };
+    const views = [...(chatViews.get(roomId) ?? [])];
+    for (const v of views) {
+      v.pending = [...v.pending, msg];
+      v.emit();
+    }
+    try {
+      await call("sendChat", roomId, { name: msg.name, text: t, cid: msg.id });
+    } catch (e) {
+      for (const v of views) {
+        v.pending = v.pending.filter((p) => p.id !== msg.id);
+        v.emit();
+      }
+      throw e;
+    }
   }
 
   return {
@@ -844,4 +605,13 @@ export function createBoardRooms<G, R extends string>(cfg: BoardRoomConfig<G, R>
     subscribeChat,
     sendChat,
   };
+}
+
+const ID_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+/** 채팅 메시지 id (영숫자 20자) — 보낸 쪽에서 정해야 서버 확정본과 짝을 맞출 수 있음 */
+function newChatId(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(20));
+  let s = "";
+  for (const b of bytes) s += ID_CHARS[b % ID_CHARS.length];
+  return s;
 }

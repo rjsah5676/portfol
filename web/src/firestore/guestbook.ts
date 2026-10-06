@@ -1,16 +1,5 @@
-import {
-  addDoc,
-  collection,
-  deleteDoc,
-  doc,
-  limit,
-  onSnapshot,
-  orderBy,
-  query,
-} from "firebase/firestore";
-import { db } from "../firebase";
-
-const COLLECTION = "guest";
+import { api } from "@/lib/api/http";
+import { subscribe } from "@/lib/api/socket";
 
 export const NOTE_COLORS = ["lavender", "yellow", "mint", "pink", "sky"] as const;
 export type NoteColor = (typeof NOTE_COLORS)[number];
@@ -25,18 +14,31 @@ export interface GuestEntry {
   color?: NoteColor;
 }
 
-/** 실시간 구독 (다른 사람이 남긴 메모도 바로 붙음) */
+/** 서버가 보내는 목록 (s = 조회 순번, 클수록 최신) */
+interface Snapshot {
+  s: number;
+  list: GuestEntry[];
+}
+
+/** 실시간 구독 (다른 사람이 남긴 메모도 바로 붙음) — 최신 300개 */
 export function subscribeGuestEntries(
   cb: (entries: GuestEntry[]) => void,
   onError?: (e: Error) => void
 ) {
-  const q = query(collection(db, COLLECTION), orderBy("id", "desc"), limit(300));
-  return onSnapshot(
-    q,
-    (snap) =>
-      cb(snap.docs.map((d) => ({ ...(d.data() as Omit<GuestEntry, "docId">), docId: d.id }))),
-    onError
-  );
+  let last = 0;
+  const apply = (snap: Snapshot) => {
+    // 늦게 도착한 옛 목록은 버림
+    if (snap.s < last) return;
+    last = snap.s;
+    cb(snap.list);
+  };
+  return subscribe<Snapshot>("guest", null, {
+    onSnapshot: apply,
+    onEvent: (type, data) => {
+      if (type === "list") apply(data as Snapshot);
+    },
+    onError,
+  });
 }
 
 export async function addGuestEntry({
@@ -48,17 +50,14 @@ export async function addGuestEntry({
   const pad = (n: number) => String(n).padStart(2, "0");
   const id = now.getTime();
   const date = `${now.getFullYear()}년 ${now.getMonth() + 1}월 ${now.getDate()}일  ${now.getHours()}:${pad(now.getMinutes())}`;
-  await addDoc(collection(db, COLLECTION), {
-    name,
-    contents,
-    id,
-    date,
-    color: color ?? "lavender",
+  await api("/api/guest", {
+    method: "POST",
+    body: { name, contents, id, date, color: color ?? "lavender" },
   });
   return id;
 }
 
-/** 관리자 전용 (보안 규칙에서 isAdmin 검사) */
+/** 관리자 전용 (서버에서 관리자 토큰 검사) */
 export async function deleteGuestEntry(docId: string): Promise<void> {
-  await deleteDoc(doc(db, COLLECTION, docId));
+  await api(`/api/guest/${encodeURIComponent(docId)}`, { method: "DELETE", auth: true });
 }

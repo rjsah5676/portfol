@@ -20,7 +20,14 @@ import GameHeader from "@/components/GameHeader";
 import { MELON_GUIDE } from "@/data/gameGuides";
 import { lockScroll } from "@/lib/scrollLock";
 import { rankDateLabel } from "@/lib/rankDate";
-import { getTopMelonScores, addMelonScore, type MelonScore } from "@/firestore/melonGame";
+import {
+  getTopMelonScores,
+  addMelonScore,
+  toMelonScore,
+  type MelonScore,
+  type MelonScoreRow,
+} from "@/firestore/melonGame";
+import { useInitial } from "@/lib/api/InitialData";
 import {
   CELL,
   COLS,
@@ -122,7 +129,11 @@ export default function MelonGame() {
   const [ready, setReady] = useState(false);
   const [vol, setVol] = useState<Volume>(DEFAULT_VOL);
   const [volOpen, setVolOpen] = useState(false);
-  const [ranks, setRanks] = useState<MelonScore[] | null>(null);
+  // 서버가 미리 읽어둔 랭킹으로 시작 (games/melongame/layout.tsx). 없으면 아래에서 읽어옴
+  const initialRanks = useInitial<MelonScoreRow[]>("rankings");
+  const [ranks, setRanks] = useState<MelonScore[] | null>(() =>
+    initialRanks ? initialRanks.map(toMelonScore) : null
+  );
   const [name, setName] = useState("");
   const [submitState, setSubmitState] = useState<"idle" | "sending" | "done" | "error">("idle");
 

@@ -4,7 +4,14 @@ import RankList from "@/components/RankList";
 import GameHeader from "@/components/GameHeader";
 import { MINE_GUIDE } from "@/data/gameGuides";
 import { useState, useEffect, useRef } from "react";
-import { getTopRankings, addRanking, type MineRanking } from "@/firestore/minesweeperRankings";
+import {
+  getTopRankings,
+  addRanking,
+  toMineRanking,
+  type MineRanking,
+  type MineRankingRow,
+} from "@/firestore/minesweeperRankings";
+import { useInitial } from "@/lib/api/InitialData";
 import { playChord, playExplosion, playFlag, playReveal } from "@/lib/sfx";
 import endBgmSrc from "@/sounds/melongame/endbgm.mp3";
 import "@/css/minesweeper.css";
@@ -74,7 +81,11 @@ export default function Minesweeper() {
   const [pressingCell, setPressingCell] = useState<{ row: number; col: number } | null>(null);
   const [startTime, setStartTime] = useState<number | null>(null);
   const [timer, setTimer] = useState<number | string>(0);
-  const [rankings, setRankings] = useState<MineRanking[]>([]);
+  // 서버가 미리 읽어둔 랭킹으로 시작 (layout.tsx) → 첫 화면부터 순위가 보임. 없으면 아래에서 읽어옴
+  const initialRanks = useInitial<MineRankingRow[]>("rankings");
+  const [rankings, setRankings] = useState<MineRanking[]>(() =>
+    (initialRanks ?? []).map(toMineRanking)
+  );
   const flaggedCount = flagged.flat().filter((v) => v).length;
   const remainingMines = MINES - flaggedCount;
 

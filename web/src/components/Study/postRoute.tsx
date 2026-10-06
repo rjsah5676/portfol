@@ -7,9 +7,11 @@ import RetroBrowser from "@/components/Study/RetroBrowser";
 import StudyPostActions from "@/components/Study/StudyPostActions";
 import {
   getSectionPosts,
+  getStudyPostCached,
   parseStudyDate,
   postPath,
   SECTION_META,
+  sectionOf,
   toListItem,
   toPlainText,
   type StudySection,
@@ -17,7 +19,8 @@ import {
 import { pageMeta, SITE_URL } from "@/lib/seo";
 
 // /study 와 /retro 가 같은 컬렉션(studyPosts)을 section 필드로 나눠 씀.
-// 라우트 파일은 이 팩토리 결과만 export (dynamicParams 같은 세그먼트 설정은 각 파일에 리터럴로)
+// 라우트 파일은 이 팩토리 결과만 export (dynamic 같은 세그먼트 설정은 각 파일에 리터럴로)
+// 목록·글 페이지 모두 요청 때 서버에서 그림(SSR) → 새 글·수정이 재배포 없이 반영됨.
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -38,15 +41,10 @@ export function makeListPage(section: StudySection) {
 export function makePostPage(section: StudySection) {
   const meta = SECTION_META[section];
 
+  // 글 하나만 서버에서 읽음 (다른 구분의 글 id로 들어오면 없는 글로 처리 — 주소가 두 개 생기지 않게)
   async function findPost(id: string) {
-    return (await getSectionPosts(section)).find((p) => p.id === id);
-  }
-
-  async function generateStaticParams() {
-    const posts = await getSectionPosts(section);
-    // 정적 export는 빈 배열이면 빌드 에러가 나서, 글이 없을 땐 404용 자리만 하나 만듦
-    if (posts.length === 0) return [{ id: "_" }];
-    return posts.map((p) => ({ id: p.id }));
+    const post = await getStudyPostCached(id);
+    return post && sectionOf(post) === section ? post : undefined;
   }
 
   async function generateMetadata({ params }: Params): Promise<Metadata> {
@@ -132,5 +130,5 @@ export function makePostPage(section: StudySection) {
     );
   }
 
-  return { generateStaticParams, generateMetadata, Page };
+  return { generateMetadata, Page };
 }

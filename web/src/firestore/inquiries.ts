@@ -1,20 +1,8 @@
-import {
-  addDoc,
-  collection,
-  deleteDoc,
-  doc,
-  limit,
-  onSnapshot,
-  orderBy,
-  query,
-  serverTimestamp,
-  updateDoc,
-  type Timestamp,
-} from "firebase/firestore";
-import { db } from "../firebase";
+import { api } from "@/lib/api/http";
+import { subscribe } from "@/lib/api/socket";
+import { toTimestamp, type Timestamp } from "@/lib/api/timestamp";
 
-// 방문자 문의 (플로팅 버튼 → 문의하기). 쓰기는 누구나, 조회·수정·삭제는 관리자만 (firestore.rules)
-const COLLECTION = "inquiries";
+// 방문자 문의 (플로팅 버튼 → 문의하기). 쓰기는 누구나, 조회·수정·삭제는 관리자만 (서버에서 검사)
 
 export const INQUIRY_LIMITS = { name: 30, email: 100, phone: 20, message: 1000 } as const;
 
@@ -35,44 +23,63 @@ export interface Inquiry extends InquiryInput {
 export const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
 export async function addInquiry({ name, email, phone, message }: InquiryInput): Promise<void> {
-  await addDoc(collection(db, COLLECTION), {
-    name: name.trim().slice(0, INQUIRY_LIMITS.name),
-    email: email.trim().slice(0, INQUIRY_LIMITS.email),
-    phone: phone.trim().slice(0, INQUIRY_LIMITS.phone),
-    message: message.trim().slice(0, INQUIRY_LIMITS.message),
-    read: false,
-    createdAt: serverTimestamp(),
+  await api("/api/inquiries", {
+    method: "POST",
+    body: {
+      name: name.trim().slice(0, INQUIRY_LIMITS.name),
+      email: email.trim().slice(0, INQUIRY_LIMITS.email),
+      phone: phone.trim().slice(0, INQUIRY_LIMITS.phone),
+      message: message.trim().slice(0, INQUIRY_LIMITS.message),
+    },
   });
+}
+
+interface Row extends InquiryInput {
+  id: string;
+  read: boolean;
+  createdAt: number | null;
+}
+/** 서버가 보내는 목록 (s = 조회 순번, 클수록 최신) */
+interface Snapshot {
+  s: number;
+  list: Row[];
 }
 
 /** 관리자 전용: 실시간 구독 (최신순) */
 export function subscribeInquiries(cb: (list: Inquiry[]) => void, onError?: (e: Error) => void) {
-  const q = query(collection(db, COLLECTION), orderBy("createdAt", "desc"), limit(300));
-  return onSnapshot(
-    q,
-    (snap) =>
-      cb(
-        snap.docs.map((d) => {
-          const data = d.data({ serverTimestamps: "estimate" });
-          return {
-            id: d.id,
-            name: data.name ?? "",
-            email: data.email ?? "",
-            phone: data.phone ?? "",
-            message: data.message ?? "",
-            read: !!data.read,
-            createdAt: (data.createdAt as Timestamp) ?? null,
-          };
-        })
-      ),
-    onError
-  );
+  let last = 0;
+  const apply = (snap: Snapshot) => {
+    if (snap.s < last) return;
+    last = snap.s;
+    cb(
+      snap.list.map((d) => ({
+        id: d.id,
+        name: d.name ?? "",
+        email: d.email ?? "",
+        phone: d.phone ?? "",
+        message: d.message ?? "",
+        read: !!d.read,
+        createdAt: toTimestamp(d.createdAt),
+      }))
+    );
+  };
+  return subscribe<Snapshot>("inquiries", null, {
+    onSnapshot: apply,
+    onEvent: (type, data) => {
+      if (type === "list") apply(data as Snapshot);
+    },
+    onError,
+  });
 }
 
 export async function setInquiryRead(id: string, read: boolean): Promise<void> {
-  await updateDoc(doc(db, COLLECTION, id), { read });
+  await api(`/api/inquiries/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    body: { read },
+    auth: true,
+  });
 }
 
 export async function deleteInquiry(id: string): Promise<void> {
-  await deleteDoc(doc(db, COLLECTION, id));
+  await api(`/api/inquiries/${encodeURIComponent(id)}`, { method: "DELETE", auth: true });
 }

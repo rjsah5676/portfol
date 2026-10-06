@@ -1,48 +1,33 @@
+import { ApiError } from "@/lib/api/errors";
 import {
-  get,
-  limitToLast,
-  onChildAdded,
-  onDisconnect,
-  onValue,
-  push,
-  query,
-  ref,
-  remove,
-  set,
-  update,
-} from "firebase/database";
-import { rtdb } from "@/firebase";
+  onConnection,
+  rpc,
+  serverNow as socketServerNow,
+  subscribe,
+  watchServerTime,
+} from "@/lib/api/socket";
 
 /*
- * 픽셀 격투 온라인 대전 — Firebase Realtime Database (대기실·신호) + WebRTC (경기 입력)
+ * 픽셀 격투 온라인 대전 — 백엔드 서버 (대기실·신호) + WebRTC (경기 입력)
  *
- *  fight/lobby/{room}              로비 목록 요약
- *  fight/rooms/{room}/meta         방 이름·방장
- *  fight/rooms/{room}/seats/{0|1}  자리 주인 uid (규칙에서 빈자리만 차지 → 최대 2명)
- *  fight/rooms/{room}/players/{uid} 닉네임·자리·고른 캐릭터·준비 (끊기면 onDisconnect로 자동 삭제)
- *  fight/rooms/{room}/state        대기(wait) / 경기(play: 매치 id·캐릭터·맵·입력 지연)
- *  fight/rooms/{room}/chat         대기실 채팅
- *  fight/sig/{room}/{pair}         WebRTC 연결 정보 교환 (offer/answer)
- *  fight/relay/{room}/{seat}       P2P가 안 될 때 입력 중계 (느리지만 됨)
- *  fight/watch/{room}/{match}/{seat}/{n}  관전용 입력 기록 (각자 자기 확정 입력을 0.5초치씩)
- *  fight/rooms/{room}/watchers/{uid}      관전 중인 사람 (끊기면 자동 삭제)
+ * 서버(server/src/games/fight.ts)가 맡는 것
+ *  - 로비 목록, 방 이름·방장
+ *  - 자리 0|1 (빈자리만 차지 → 최대 2명), 선수별 닉네임·고른 캐릭터·준비 (끊기면 서버가 자동으로 뺌)
+ *  - 방 상태: 대기(wait) / 경기(play: 매치 id·캐릭터·맵·입력 지연)
+ *  - 대기실 채팅
+ *  - WebRTC 연결 정보 교환 (offer/answer)
+ *  - P2P가 안 될 때 입력 중계 (느리지만 됨)
+ *  - 관전용 입력 기록 (각자 자기 확정 입력을 0.5초치씩), 관전 중인 사람 (끊기면 자동 삭제)
  *
  * 경기 중 입력은 P2P 데이터 채널(순서·재전송 없음, 아직 확인 안 된 입력을 매번 같이 보냄)로 주고받고,
  * 롤백 넷코드(lib/fight/rollback.ts)가 늦게 온 입력을 되감아서 맞춤.
  */
 
-const r = (path: string) => ref(rtdb(), `fight/${path}`);
-
-let serverOffset = 0;
-let offsetOn = false;
+/** 서버 시계 보정 시작 (소켓 연결이 서버와 시각을 주고받아 맞춤) */
 export function watchServerOffset() {
-  if (offsetOn) return;
-  offsetOn = true;
-  onValue(ref(rtdb(), ".info/serverTimeOffset"), (s) => {
-    serverOffset = Number(s.val() ?? 0);
-  });
+  watchServerTime();
 }
-export const serverNow = () => Date.now() + serverOffset;
+export const serverNow = () => socketServerNow();
 
 export interface LobbyRoom {
   id: string;
@@ -99,39 +84,24 @@ const EMPTY_STATE: RoomState = { phase: "wait", match: "", chars: [0, 1], map: 0
 // ───────────── 로비 ─────────────
 
 export function subscribeLobby(cb: (rooms: LobbyRoom[]) => void) {
-  return onValue(r("lobby"), (s) => {
-    const v = (s.val() ?? {}) as Record<string, Omit<LobbyRoom, "id">>;
-    cb(
-      Object.entries(v)
-        .map(([id, x]) => ({ id, ...x }))
-        .sort((a, b) => a.count - b.count || b.createdAt - a.createdAt)
-    );
+  const apply = (list: LobbyRoom[]) =>
+    cb([...(list ?? [])].sort((a, b) => a.count - b.count || b.createdAt - a.createdAt));
+  return subscribe<LobbyRoom[]>("fight.lobby", null, {
+    onSnapshot: apply,
+    onEvent: (type, data) => {
+      if (type === "list") apply(data as LobbyRoom[]);
+    },
   });
 }
 
-export async function createRoom(uid: string, nick: string, name: string): Promise<string> {
-  const id = push(r("lobby")).key!;
-  const now = serverNow();
-  const nm = name.trim().slice(0, 20) || `${nick}의 방`;
-  await update(r(""), {
-    [`rooms/${id}/meta`]: { name: nm, hostUid: uid, createdAt: now },
-    [`rooms/${id}/state`]: EMPTY_STATE,
-    [`lobby/${id}`]: { name: nm, host: nick, count: 0, playing: false, createdAt: now },
-  });
-  return id;
+/** 방 만들기 → 방 id (이름을 비우면 "닉네임의 방") */
+export async function createRoom(_uid: string, nick: string, name: string): Promise<string> {
+  return rpc<string>("fight.createRoom", { nick, name });
 }
 
-/** 아무도 없는 방 정리 */
+/** 아무도 없는 방 정리 — 선수가 있으면 서버가 지우지 않음 */
 export async function cleanupEmptyRoom(roomId: string) {
-  const players = await get(r(`rooms/${roomId}/players`)).catch(() => null);
-  if (!players || players.exists()) return;
-  await update(r(""), {
-    [`rooms/${roomId}`]: null,
-    [`lobby/${roomId}`]: null,
-    [`sig/${roomId}`]: null,
-    [`relay/${roomId}`]: null,
-    [`watch/${roomId}`]: null,
-  }).catch(() => {});
+  await rpc("fight.cleanupEmptyRoom", { id: roomId }).catch(() => {});
 }
 
 // ───────────── 입장·퇴장 ─────────────
@@ -212,82 +182,87 @@ export class RoomSession {
   }
   private async doJoin(ch: number) {
     this.ch = ch;
-    const snap = await get(r(`rooms/${this.id}`));
-    const room = normalize(this.id, snap.val());
-    if (!room) throw new Error("no room");
-    // 끊겼다 다시 온 경우 원래 자리
-    const order: (0 | 1)[] =
-      room.seats[1] === this.uid ? [1, 0] : room.seats[0] === this.uid ? [0, 1] : room.seats[0] ? [1, 0] : [0, 1];
-    let ok = false;
-    let tried = false;
-    let lastErr: unknown = null;
-    for (const seat of order) {
-      const owner = room.seats[seat];
-      if (owner && owner !== this.uid && room.players[owner]) continue;
-      tried = true;
-      try {
-        await this.takeSeat(seat, !!owner && owner !== this.uid);
-        ok = true;
-        break;
-      } catch (e) {
-        // 다른 사람이 먼저 앉았을 수도 → 다음 자리
-        lastErr = e;
-        console.error("[fight] 자리 잡기 실패", e);
-      }
+    if (!this.joinedAt) this.joinedAt = serverNow();
+    // 자리 고르기는 서버가 한 번에 처리: 끊겼다 다시 온 경우 원래 자리, 아니면 빈자리(주인이 방에 없는 자리 포함)
+    // 이 연결이 끊기면 서버가 자리·선수 항목을 자동으로 지움
+    try {
+      const res = await rpc<{ seat: 0 | 1 }>("fight.join", {
+        id: this.id,
+        nick: this.nick,
+        ch: this.ch,
+        joinedAt: this.joinedAt,
+      });
+      this.seat = res.seat;
+    } catch (e) {
+      if (e instanceof ApiError && e.code === "ROOM_FULL") throw new RoomFullError();
+      if (e instanceof ApiError && e.code === "NO_ROOM") throw new Error("no room");
+      console.error("[fight] 자리 잡기 실패", e);
+      throw e;
     }
-    if (!ok) {
-      if (!tried) throw new RoomFullError();
-      throw lastErr ?? new Error("join failed");
-    }
+    type Wire = Record<string, unknown> | null;
+    /** 화면에 이미 넣은 채팅 — 다시 연결돼 목록을 새로 받아도 두 번 넣지 않게 */
+    const seenChat = new Set<string>();
+    const addChat = (m: ChatMsg) => {
+      if (seenChat.has(m.id)) return false;
+      seenChat.add(m.id);
+      this.chat = [...this.chat.slice(-39), m];
+      return true;
+    };
     this.unsubs.push(
-      onValue(
-        r(`rooms/${this.id}`),
-        (s) => this.onRoom(normalize(this.id, s.val())),
-        () => this.onRoom(null)
+      subscribe<Wire>(
+        "fight.room",
+        { id: this.id },
+        {
+          onSnapshot: (v) => this.onRoom(normalize(this.id, v)),
+          onEvent: (type, data) => {
+            if (type === "room") this.onRoom(normalize(this.id, data as Wire));
+          },
+          onError: () => this.onRoom(null),
+        }
       ),
-      onChildAdded(query(r(`rooms/${this.id}/chat`), limitToLast(40)), (s) => {
-        const v = s.val() as Omit<ChatMsg, "id">;
-        this.chat = [...this.chat.slice(-39), { id: s.key!, ...v }];
-        this.emit();
-      }),
+      subscribe<ChatMsg[]>(
+        "fight.chat",
+        { id: this.id },
+        {
+          onSnapshot: (list) => {
+            let added = false;
+            for (const m of list ?? []) added = addChat(m) || added;
+            if (added) this.emit();
+          },
+          onEvent: (type, data) => {
+            if (type === "add" && addChat(data as ChatMsg)) this.emit();
+          },
+        }
+      ),
       // 잠깐 끊겼다 다시 연결되면 자리 복구
-      onValue(ref(rtdb(), ".info/connected"), (s) => {
-        if (s.val() === true && this.joinedAt && !this.closed && !this.me) this.takeSeat(this.seat, false).catch(() => {});
+      onConnection((connected) => {
+        if (connected && this.joinedAt && !this.closed && !this.me) this.takeSeat(this.seat).catch(() => {});
       })
     );
   }
 
-  private async takeSeat(seat: 0 | 1, clearStale: boolean) {
-    if (clearStale) await remove(r(`rooms/${this.id}/seats/${seat}`));
+  /** 정해진 자리에 (다시) 앉기 — 그 사이 다른 사람이 앉았으면 실패 */
+  private async takeSeat(seat: 0 | 1) {
     if (!this.joinedAt) this.joinedAt = serverNow();
-    await update(r(`rooms/${this.id}`), {
-      [`seats/${seat}`]: this.uid,
-      [`players/${this.uid}`]: { nick: this.nick, seat, ch: this.ch, ready: false, joinedAt: this.joinedAt },
+    await rpc("fight.takeSeat", {
+      id: this.id,
+      seat,
+      nick: this.nick,
+      ch: this.ch,
+      joinedAt: this.joinedAt,
     });
     this.seat = seat;
-    // 끊기면 자리·플레이어 자동 삭제 — 자리를 차지한 뒤에 예약해야 규칙(내 자리만 지울 수 있음)을 통과함
-    await onDisconnect(r(`rooms/${this.id}`)).update({ [`seats/${seat}`]: null, [`players/${this.uid}`]: null });
   }
 
   private onRoom(room: OnlineRoom | null) {
     if (this.closed) return;
-    const prev = this.room;
     this.room = room;
     if (!room) {
       this.lost = "방이 없어졌어요";
       this.emit();
       return;
     }
-    // 방장이 나갔으면 남은 사람이 이어받음
-    if (!room.players[room.hostUid] && room.players[this.uid]) {
-      set(r(`rooms/${this.id}/meta/hostUid`), this.uid).catch(() => {});
-    }
-    // 로비 요약 갱신 (인원·경기 중)
-    const count = Object.keys(room.players).length;
-    const playing = room.state.phase === "play";
-    if (room.players[this.uid] && (!prev || Object.keys(prev.players).length !== count || (prev.state.phase === "play") !== playing)) {
-      update(r(`lobby/${this.id}`), { count, playing, name: room.name }).catch(() => {});
-    }
+    // (방장이 나갔을 때 남은 사람이 이어받는 것과 로비 요약 갱신은 서버가 자리 변동 때 처리함)
     // 상대가 바뀌면 P2P 다시 연결
     const foe = room.seats[1 - this.seat];
     const pair = foe && room.players[foe] ? (this.seat === 0 ? `${this.uid}_${foe}` : `${foe}_${this.uid}`) : "";
@@ -300,18 +275,18 @@ export class RoomSession {
 
   async setChar(ch: number) {
     this.ch = ch;
-    await update(r(`rooms/${this.id}/players/${this.uid}`), { ch }).catch(() => {});
+    await rpc("fight.setChar", { id: this.id, ch }).catch(() => {});
   }
   async setReady(ready: boolean) {
-    await update(r(`rooms/${this.id}/players/${this.uid}`), { ready }).catch(() => {});
+    await rpc("fight.setReady", { id: this.id, ready }).catch(() => {});
   }
   async setPick(pick: number) {
-    await update(r(`rooms/${this.id}/state`), { pick }).catch(() => {});
+    await rpc("fight.setPick", { id: this.id, pick }).catch(() => {});
   }
   async sendChat(text: string) {
     const t = text.trim().slice(0, 100);
     if (!t) return;
-    await push(r(`rooms/${this.id}/chat`), { uid: this.uid, nick: this.nick, text: t, ts: serverNow() }).catch(() => {});
+    await rpc("fight.sendChat", { id: this.id, nick: this.nick, text: t }).catch(() => {});
   }
 
   /** 방장: 둘 다 준비되면 경기 시작 (랜덤 캐릭터·맵은 여기서 정함, 입력 지연은 연결 상태로) */
@@ -328,15 +303,13 @@ export class RoomSession {
     // 왕복 시간의 절반만큼은 입력 지연으로 가리고, 나머지는 되감기로
     const delay = p2p ? Math.min(4, Math.max(2, Math.round(rtt / 2 / 16.7))) : 5;
     const maxRb = p2p ? 12 : 24;
-    const match = push(r(`rooms/${this.id}/chat`)).key!; // 고유 id만 씀
-    // 지난 경기 관전 기록 정리
-    await remove(r(`watch/${this.id}`)).catch(() => {});
-    await update(r(`rooms/${this.id}/state`), { phase: "play", match, chars, map, delay, maxRb });
+    // 매치 id 발급과 지난 경기 관전 기록 정리는 서버가 함
+    await rpc("fight.startMatch", { id: this.id, chars, map, delay, maxRb });
   }
   /** 경기가 끝나면 대기실 상태로 */
   async endMatch(match: string) {
     if (this.room?.state.match !== match || this.room.state.phase !== "play") return;
-    await update(r(`rooms/${this.id}/state`), { phase: "wait" }).catch(() => {});
+    await rpc("fight.endMatch", { id: this.id, match }).catch(() => {});
   }
 
   async leave() {
@@ -346,11 +319,8 @@ export class RoomSession {
     this.unsubs = [];
     this.net?.close();
     this.net = null;
-    try {
-      await onDisconnect(r(`rooms/${this.id}`)).cancel();
-      await update(r(`rooms/${this.id}`), { [`seats/${this.seat}`]: null, [`players/${this.uid}`]: null });
-    } catch {}
-    await cleanupEmptyRoom(this.id);
+    // 자리를 비우고, 아무도 안 남았으면 서버가 방을 정리함
+    await rpc("fight.leave", { id: this.id }).catch(() => {});
   }
 }
 
@@ -385,6 +355,12 @@ export interface Packet {
   /** 확정된 프레임 hf의 상태 해시 hh (서로 같아야 함) */
   hf?: number;
   hh?: number;
+}
+
+/** WebRTC 연결 정보 한 조각 (n = 제안 구분용 임시 값) */
+interface SigPart {
+  n: string;
+  sdp: string;
 }
 
 export class FightNet {
@@ -425,10 +401,18 @@ export class FightNet {
     }
     // 중계 채널은 처음부터 듣고 있음 (상대가 먼저 중계로 넘어갔을 수도)
     this.unsubs.push(
-      onValue(r(`relay/${room}/${1 - seat}`), (s) => {
-        const v = s.val() as string | null;
-        if (v) this.recv(v);
-      })
+      subscribe<string | null>(
+        "fight.relay",
+        { id: room, seat: 1 - seat },
+        {
+          onSnapshot: (v) => {
+            if (v) this.recv(v);
+          },
+          onEvent: (type, data) => {
+            if (type === "value" && data) this.recv(data as string);
+          },
+        }
+      )
     );
     // 대기실에서 0.5초마다 신호 (왕복 시간·연결 확인)
     const hb = setInterval(() => performance.now() - this.lastIn > 300 && this.send({ k: "hb" }), 500);
@@ -446,8 +430,30 @@ export class FightNet {
     return this.lastRecv > 0 && performance.now() - this.lastRecv < 4000;
   }
 
-  private sig(path?: string) {
-    return r(`sig/${this.room}/${this.pair}${path ? `/${path}` : ""}`);
+  /**
+   * 연결 정보(offer 또는 answer) 중 한쪽이 바뀔 때마다 알림 (구독하자마자 현재 값으로 한 번).
+   * 같은 값이 다시 와도(다시 연결됐을 때 등) 또 부르지 않음.
+   */
+  private watchSig(part: "offer" | "answer", cb: (v: SigPart | null) => void) {
+    type SigValue = { offer?: SigPart; answer?: SigPart } | null;
+    let last: string | undefined;
+    const apply = (v: SigValue) => {
+      const cur = v?.[part] ?? null;
+      const key = JSON.stringify(cur);
+      if (key === last) return;
+      last = key;
+      cb(cur);
+    };
+    return subscribe<SigValue>(
+      "fight.sig",
+      { id: this.room, pair: this.pair },
+      {
+        onSnapshot: apply,
+        onEvent: (type, data) => {
+          if (type === "value") apply(data as SigValue);
+        },
+      }
+    );
   }
 
   private async waitIce(pc: RTCPeerConnection) {
@@ -501,18 +507,20 @@ export class FightNet {
       await this.waitIce(pc);
       if (this.closed) return;
       this.nonce = Math.random().toString(36).slice(2, 10);
-      await set(this.sig(), { offer: { n: this.nonce, sdp: pc.localDescription!.sdp } });
+      await rpc("fight.sigOffer", {
+        id: this.room,
+        pair: this.pair,
+        offer: { n: this.nonce, sdp: pc.localDescription!.sdp },
+      });
       this.unsubs.push(
-        onValue(this.sig("answer"), (s) => {
-          const v = s.val() as { n: string; sdp: string } | null;
+        this.watchSig("answer", (v) => {
           if (!v || v.n !== this.nonce || pc.remoteDescription) return;
           pc.setRemoteDescription({ type: "answer", sdp: v.sdp }).catch(() => this.toRelay());
         })
       );
     } else {
       this.unsubs.push(
-        onValue(this.sig("offer"), async (s) => {
-          const v = s.val() as { n: string; sdp: string } | null;
+        this.watchSig("offer", async (v) => {
           if (!v || v.n === this.nonce || this.closed) return;
           this.nonce = v.n;
           const pc = this.newPc();
@@ -522,7 +530,11 @@ export class FightNet {
             await pc.setLocalDescription(await pc.createAnswer());
             await this.waitIce(pc);
             if (this.closed || this.nonce !== v.n) return;
-            await set(this.sig("answer"), { n: v.n, sdp: pc.localDescription!.sdp });
+            await rpc("fight.sigAnswer", {
+              id: this.room,
+              pair: this.pair,
+              answer: { n: v.n, sdp: pc.localDescription!.sdp },
+            });
           } catch {
             this.toRelay();
           }
@@ -595,7 +607,7 @@ export class FightNet {
     this.relaySentAt = now;
     const raw = this.relayPending;
     this.relayPending = null;
-    set(r(`relay/${this.room}/${this.seat}`), raw).catch(() => {});
+    rpc("fight.relay", { id: this.room, v: raw }).catch(() => {});
   }
 
   close() {
@@ -639,8 +651,14 @@ export class InputLog {
   }
   flush() {
     if (!this.buf.length) return;
-    const v = { f: this.from, i: enc(this.buf) };
-    set(r(`watch/${this.room}/${this.match}/${this.seat}/${this.n}`), v).catch(() => {});
+    // 어느 자리 기록인지는 서버가 보낸 사람의 자리로 정함
+    rpc("fight.watchChunk", {
+      id: this.room,
+      match: this.match,
+      n: this.n,
+      f: this.from,
+      i: enc(this.buf),
+    }).catch(() => {});
     this.n++;
     this.from += this.buf.length;
     this.buf = [];
@@ -661,15 +679,26 @@ export class WatchFeed {
     }
     this.seq = [delay - 1, delay - 1];
     for (const seat of [0, 1] as const) {
+      type Chunk = { f?: number; i?: string } | null;
+      const add = (v: Chunk) => {
+        if (!v || typeof v.f !== "number") return;
+        const xs = dec(v.i ?? "");
+        const m = this.logs[seat];
+        xs.forEach((x, k) => m.set(v.f! + k, x));
+        while (m.has(this.seq[seat] + 1)) this.seq[seat]++;
+      };
       this.unsubs.push(
-        onChildAdded(r(`watch/${room}/${match}/${seat}`), (s) => {
-          const v = s.val() as { f?: number; i?: string } | null;
-          if (!v || typeof v.f !== "number") return;
-          const xs = dec(v.i ?? "");
-          const m = this.logs[seat];
-          xs.forEach((x, k) => m.set(v.f! + k, x));
-          while (m.has(this.seq[seat] + 1)) this.seq[seat]++;
-        })
+        // 구독하면 지금까지 쌓인 기록부터 받고, 이후 올라오는 조각이 이어서 옴
+        subscribe<Chunk[]>(
+          "fight.watch",
+          { id: room, match, seat },
+          {
+            onSnapshot: (list) => (list ?? []).forEach(add),
+            onEvent: (type, data) => {
+              if (type === "add") add(data as Chunk);
+            },
+          }
+        )
       );
     }
   }
@@ -705,22 +734,28 @@ export class WatchSession {
     this.id = id;
     this.uid = uid;
     this.nick = nick;
-    const me = r(`rooms/${id}/watchers/${uid}`);
-    set(me, { nick: nick.slice(0, 10), at: serverNow() })
-      .then(() => onDisconnect(me).remove())
-      .catch(() => {});
+    // 관전 중 표시 — 이 연결이 끊기면 서버가 자동으로 지움
+    rpc("fight.watchJoin", { id, nick: nick.slice(0, 10) }).catch(() => {});
+    type Wire = Record<string, unknown> | null;
+    const apply = (v: Wire) => {
+      if (this.closed) return;
+      this.room = normalize(id, v);
+      if (!this.room || Object.keys(this.room.players).length === 0) this.lost = "방이 없어졌어요";
+      this.emit();
+    };
     this.unsubs.push(
-      onValue(
-        r(`rooms/${id}`),
-        (s) => {
-          if (this.closed) return;
-          this.room = normalize(id, s.val());
-          if (!this.room || Object.keys(this.room.players).length === 0) this.lost = "방이 없어졌어요";
-          this.emit();
-        },
-        () => {
-          this.lost = "방을 볼 수 없어요";
-          this.emit();
+      subscribe<Wire>(
+        "fight.room",
+        { id },
+        {
+          onSnapshot: apply,
+          onEvent: (type, data) => {
+            if (type === "room") apply(data as Wire);
+          },
+          onError: () => {
+            this.lost = "방을 볼 수 없어요";
+            this.emit();
+          },
         }
       )
     );
@@ -743,8 +778,6 @@ export class WatchSession {
     this.closed = true;
     this.unsubs.forEach((f) => f());
     this.unsubs = [];
-    const me = r(`rooms/${this.id}/watchers/${this.uid}`);
-    onDisconnect(me).cancel().catch(() => {});
-    remove(me).catch(() => {});
+    rpc("fight.watchLeave", { id: this.id }).catch(() => {});
   }
 }

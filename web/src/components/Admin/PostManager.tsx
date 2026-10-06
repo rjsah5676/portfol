@@ -92,7 +92,7 @@ export default function PostManager({
         ))}
       </div>
       <p className="mb-3 font-['Nanum_Gothic',sans-serif] text-xs text-white/35">
-        작성·수정·삭제는 바로 저장되고, 사이트 목록에는 재배포 후 반영됩니다.
+        작성·수정·삭제는 바로 저장되고, 사이트에도 바로 반영됩니다.
       </p>
 
       {!loaded ? (

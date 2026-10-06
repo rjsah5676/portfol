@@ -4,8 +4,8 @@ import { allProjects } from "@/data/projects";
 import { loadFoods } from "@/lib/foodServer";
 import { getAllStudyPosts, parseStudyDate, postPath } from "@/firestore/studyPosts";
 
-// output: "export"에서는 빌드 시 정적 파일(sitemap.xml)로 생성돼야 함
-export const dynamic = "force-static";
+// 요청 때 만듦 → 새 글이 재배포 없이 사이트맵에 들어감 (글 목록은 서버 캐시를 같이 씀)
+export const dynamic = "force-dynamic";
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const studyPosts = await getAllStudyPosts();

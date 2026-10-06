@@ -1,19 +1,9 @@
-import {
-  addDoc,
-  collection,
-  getDocs,
-  limit,
-  orderBy,
-  query,
-  serverTimestamp,
-} from "firebase/firestore";
-import { db } from "../firebase";
-import { fillCreateTimes, toDate } from "@/lib/rankDate";
+import { api } from "@/lib/api/http";
+import { toDate } from "@/lib/rankDate";
 
-// 곡·난이도별로 서브컬렉션을 나눠서 score 하나로만 정렬 (복합 인덱스 불필요)
-// rhythm_rankings/{songId}_{diff}/scores/{autoId}
-const scoresOf = (songId: string, diff: string) =>
-  collection(db, "rhythm_rankings", `${songId}_${diff}`, "scores");
+// 곡·난이도별로 따로 줄 세움: /api/rankings/rhythm/{songId}_{diff}
+const chartPath = (songId: string, diff: string) =>
+  `/api/rankings/rhythm/${encodeURIComponent(`${songId}_${diff}`)}`;
 
 export const RHYTHM_NAME_MAX = 12;
 
@@ -29,26 +19,27 @@ export interface RhythmRanking {
   createdAt: Date | null;
 }
 
+type Row = Partial<Omit<RhythmRanking, "id" | "createdAt">> & {
+  id: string;
+  createdAt: number | null;
+};
+
 export async function getRhythmTop(
   songId: string,
   diff: string,
   count = 10
 ): Promise<RhythmRanking[]> {
-  const snap = await getDocs(query(scoresOf(songId, diff), orderBy("score", "desc"), limit(count)));
-  const rows = snap.docs.map((d) => {
-    const x = d.data();
-    return {
-      id: d.id,
-      name: String(x.name ?? ""),
-      score: Number(x.score ?? 0),
-      acc: Number(x.acc ?? 0),
-      maxCombo: Number(x.maxCombo ?? 0),
-      fc: !!x.fc,
-      ap: !!x.ap,
-      createdAt: toDate(x.createdAt),
-    };
-  });
-  return fillCreateTimes(`rhythm_rankings/${songId}_${diff}/scores`, rows);
+  const rows = await api<Row[]>(`${chartPath(songId, diff)}?limit=${count}`);
+  return rows.map((x) => ({
+    id: x.id,
+    name: String(x.name ?? ""),
+    score: Number(x.score ?? 0),
+    acc: Number(x.acc ?? 0),
+    maxCombo: Number(x.maxCombo ?? 0),
+    fc: !!x.fc,
+    ap: !!x.ap,
+    createdAt: toDate(x.createdAt),
+  }));
 }
 
 export async function addRhythmRanking(
@@ -56,14 +47,16 @@ export async function addRhythmRanking(
   diff: string,
   r: Omit<RhythmRanking, "id" | "createdAt">
 ): Promise<string> {
-  const ref = await addDoc(scoresOf(songId, diff), {
-    name: r.name.trim().slice(0, RHYTHM_NAME_MAX),
-    score: Math.round(r.score),
-    acc: Math.round(r.acc * 100) / 100,
-    maxCombo: Math.round(r.maxCombo),
-    fc: r.fc,
-    ap: r.ap,
-    createdAt: serverTimestamp(),
+  const res = await api<{ id: string }>(chartPath(songId, diff), {
+    method: "POST",
+    body: {
+      name: r.name.trim().slice(0, RHYTHM_NAME_MAX),
+      score: Math.round(r.score),
+      acc: Math.round(r.acc * 100) / 100,
+      maxCombo: Math.round(r.maxCombo),
+      fc: r.fc,
+      ap: r.ap,
+    },
   });
-  return ref.id;
+  return res.id;
 }

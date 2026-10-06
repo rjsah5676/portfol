@@ -75,10 +75,10 @@ export default function StudyWriteForm() {
     try {
       if (isEdit) {
         await updateStudyPost(postId!, { title, content, category, section, date: formattedDate });
-        alert("글이 수정되었습니다! 사이트 반영은 재배포 후 적용됩니다.");
+        alert("글이 수정되었습니다!");
       } else {
         await addStudyPost({ title, content, category, section, date: formattedDate });
-        alert("글이 저장되었습니다! 사이트 반영은 재배포 후 적용됩니다.");
+        alert("글이 저장되었습니다!");
       }
 
       router.push("/admin/?tab=posts");

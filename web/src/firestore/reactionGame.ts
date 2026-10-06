@@ -1,40 +1,36 @@
-import {
-  collection,
-  addDoc,
-  getDocs,
-  orderBy,
-  limit,
-  query,
-  serverTimestamp,
-} from "firebase/firestore";
-import { db } from "../firebase";
-import { fillCreateTimes, toDate } from "@/lib/rankDate";
+import { api } from "@/lib/api/http";
+import { toDate } from "@/lib/rankDate";
 
-const COLLECTION = "reaction";
+const BOARD = "reaction";
 
 export interface ReactionScore {
   id: string;
   name: string;
   score: number;
-  /** 달성 일자 (예전 기록은 없음) */
+  /** 달성 일자 (예전 기록은 없을 수 있음) */
   createdAt: Date | null;
 }
 
+/** 서버 응답 한 줄 (날짜는 ms) */
+export interface ReactionScoreRow {
+  id: string;
+  name: string;
+  score: number;
+  createdAt: number | null;
+}
+export const REACTION_SCORES_PATH = `/api/rankings/${BOARD}`;
+export const toReactionScore = (x: ReactionScoreRow): ReactionScore => ({
+  id: x.id,
+  name: x.name,
+  score: x.score,
+  createdAt: toDate(x.createdAt),
+});
+
 export async function getTopReactionScores(count = 10): Promise<ReactionScore[]> {
-  const q = query(collection(db, COLLECTION), orderBy("score", "asc"), limit(count));
-  const snapshot = await getDocs(q);
-  const rows = snapshot.docs.map((d) => {
-    const x = d.data();
-    return {
-      id: d.id,
-      name: x.name,
-      score: x.score,
-      createdAt: toDate(x.createdAt),
-    } as ReactionScore;
-  });
-  return fillCreateTimes(COLLECTION, rows);
+  const rows = await api<ReactionScoreRow[]>(`${REACTION_SCORES_PATH}?limit=${count}`);
+  return rows.map(toReactionScore);
 }
 
 export async function addReactionScore(name: string, score: number): Promise<void> {
-  await addDoc(collection(db, COLLECTION), { name, score, createdAt: serverTimestamp() });
+  await api(REACTION_SCORES_PATH, { method: "POST", body: { name, score } });
 }

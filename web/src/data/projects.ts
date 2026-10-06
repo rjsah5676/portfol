@@ -81,7 +81,7 @@ export const personalProjects: Project[] = [
     title: "[Gunmo's Dev Life]",
     desc: "2021년부터 운영 중인 개인 포트폴리오 사이트. Next.js·TypeScript로 전면 리뉴얼",
     tech: ["Next.js", "TypeScript", "Tailwind", "Firebase"],
-    secondLink: "https://rjsah5676.github.io/",
+    secondLink: "https://gunmo.my/",
   },
   {
     idx: 5,

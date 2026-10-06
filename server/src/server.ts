@@ -1,0 +1,54 @@
+import { createServer as createHttpServer, type Server as HttpServer } from "node:http";
+import type { AddressInfo } from "node:net";
+import { createAuth, type Auth } from "./auth";
+import type { Config } from "./config";
+import { connectDatabase, type Database } from "./db";
+import type { Deps } from "./deps";
+import { registerBoardGames } from "./games/board";
+import { registerFight } from "./games/fight";
+import { registerSketch } from "./games/sketch";
+import { createApp } from "./http/app";
+import { Gateway } from "./realtime/gateway";
+import { createWebNotifier, type WebNotifier } from "./webNotify";
+
+export interface AppServer {
+  http: HttpServer;
+  deps: Deps;
+  /** 실제로 열린 포트 (PORT=0이면 빈 포트) */
+  listen(): Promise<number>;
+  close(): Promise<void>;
+}
+
+/** HTTP API + 실시간 게이트웨이를 한 포트에 올림. 테스트에서는 auth·db를 바꿔 끼울 수 있음 */
+export async function createAppServer(
+  cfg: Config,
+  overrides: { auth?: Auth; db?: Database; web?: WebNotifier } = {}
+): Promise<AppServer> {
+  const db = overrides.db ?? (await connectDatabase(cfg));
+  const auth = overrides.auth ?? createAuth(cfg);
+  const http = createHttpServer();
+  const gateway = new Gateway(http, cfg, auth);
+  const deps: Deps = { cfg, db, auth, gateway, web: overrides.web ?? createWebNotifier(cfg) };
+
+  const board = registerBoardGames(deps);
+  const sketch = registerSketch(deps);
+  const fight = registerFight(deps);
+  http.on("request", createApp(deps, { roomsDeleted: board.roomsDeleted }));
+
+  return {
+    http,
+    deps,
+    listen: () =>
+      new Promise((resolve, reject) => {
+        http.once("error", reject);
+        http.listen(cfg.port, () => resolve((http.address() as AddressInfo).port));
+      }),
+    async close() {
+      sketch.close();
+      fight.close();
+      await gateway.close();
+      await new Promise<void>((res) => http.close(() => res()));
+      if (!overrides.db) await db.close();
+    },
+  };
+}

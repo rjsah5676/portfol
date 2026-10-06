@@ -1,0 +1,88 @@
+# 전체 구성: 프록시(Caddy) → 프론트(Next) / 백엔드(Express) → MongoDB
+#
+#   로컬에서 DB만:   docker compose up -d mongo      → server/.env 에 MONGODB_URI=mongodb://localhost:27017
+#   전부 띄우기:     docker compose up -d --build    → http://localhost (SITE_ADDRESS 를 안 줬을 때)
+#   운영:            이 파일 옆 .env 에 SITE_ADDRESS=gunmo.my, REVALIDATE_SECRET=<아무 긴 문자열> 등을 적고 실행
+#
+# ${VAR:-기본값} 은 이 파일 옆의 .env(레포 루트) 또는 셸 환경변수에서 읽음. 예시는 .env.example
+
+name: portfolio
+
+services:
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    # 인증 없이 띄우므로 바깥에서 접속하지 못하게 이 기기(localhost)에만 연다
+    ports:
+      - "127.0.0.1:27017:27017"
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+
+  # 백엔드: API + 실시간(웹소켓)
+  server:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    image: ${SERVER_IMAGE:-portfolio-server}
+    restart: unless-stopped
+    depends_on:
+      mongo:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: "4000"
+      MONGODB_URI: mongodb://mongo:27017
+      MONGODB_DB: ${MONGODB_DB:-portfolio}
+      # 브라우저는 프록시를 거쳐 같은 주소로 부르지만, 다른 주소에서도 부르게 하려면 여기에 추가 (쉼표로 여러 개)
+      CORS_ORIGINS: ${CORS_ORIGINS:-https://gunmo.my}
+      FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID:-gunmo-portfolio}
+      ADMIN_EMAILS: ${ADMIN_EMAILS:-rjsah5676@gmail.com}
+      # 프록시(Caddy) 한 단계 뒤에 있음 → 요청 횟수 제한이 실제 접속자 IP 기준으로 걸림
+      TRUST_PROXY: "1"
+      # 글이 바뀌면 프론트에 알려서 캐시를 바로 비움 (비밀값이 비어 있으면 알리지 않고, 프론트가 1분마다 스스로 갱신)
+      WEB_REVALIDATE_URL: http://web:3000/internal/revalidate/
+      REVALIDATE_SECRET: ${REVALIDATE_SECRET:-}
+
+  # 프론트: Next.js 서버 (글·방명록 등을 요청 때 서버에서 그림)
+  web:
+    build:
+      context: web
+      args:
+        NEXT_PUBLIC_API_URL: /
+        NEXT_PUBLIC_SITE_URL: ${SITE_URL:-https://gunmo.my}
+    image: ${WEB_IMAGE:-portfolio-web}
+    restart: unless-stopped
+    depends_on:
+      - server
+    environment:
+      # 서버에서 페이지를 그릴 때 백엔드를 부르는 내부 주소
+      API_URL: http://server:4000
+      REVALIDATE_SECRET: ${REVALIDATE_SECRET:-}
+
+  # 바깥에서 들어오는 유일한 입구 (HTTPS 인증서 자동 발급)
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    depends_on:
+      - web
+      - server
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:-:80}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+
+volumes:
+  mongo-data:
+  caddy-data:
+  caddy-config:

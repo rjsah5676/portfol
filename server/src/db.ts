@@ -1,0 +1,88 @@
+import { mkdirSync } from "node:fs";
+import path from "node:path";
+import { MongoClient, type Collection, type Db, type Document } from "mongodb";
+import type { Config } from "./config";
+
+/** 모든 문서는 문자열 _id (기존 Firestore 문서 id를 그대로 옮겨오기 위해) */
+export type Doc<T = Document> = T & { _id: string };
+
+export interface Database {
+  client: MongoClient;
+  db: Db;
+  col<T extends Document = Document>(name: string): Collection<Doc<T>>;
+  close(): Promise<void>;
+}
+
+/** 점수 하나로 줄 세우는 랭킹 컬렉션 (이름은 기존 Firestore 컬렉션 그대로) */
+export const RANK_COLLECTIONS = [
+  "score",
+  "minesweeper_rankings",
+  "reaction",
+  "chess_ai_rankings",
+  "janggi_ai_rankings",
+  "omok_ai_rankings",
+  "fight_ai_rankings",
+] as const;
+export const ROOM_COLLECTIONS = ["chess_rooms", "janggi_rooms", "omok_rooms"] as const;
+
+/**
+ * DB 연결. MONGODB_URI가 없고 개발 모드면 내장 MongoDB를 띄움
+ * (첫 실행 때 mongod 바이너리를 내려받고, 데이터는 cfg.mongoDataDir 에 남음).
+ */
+export async function connectDatabase(cfg: Config): Promise<Database> {
+  let uri = cfg.mongoUri;
+  let stopEmbedded: (() => Promise<unknown>) | null = null;
+
+  if (!uri) {
+    if (cfg.env === "production") throw new Error("MONGODB_URI가 필요합니다.");
+    const { MongoMemoryServer } = await import("mongodb-memory-server");
+    const dbPath = path.resolve(cfg.mongoDataDir);
+    mkdirSync(dbPath, { recursive: true });
+    const embedded = await MongoMemoryServer.create({
+      instance: { dbPath, storageEngine: "wiredTiger" },
+    });
+    uri = embedded.getUri();
+    // doCleanup:false → 종료해도 데이터 폴더는 지우지 않음
+    stopEmbedded = () => embedded.stop({ doCleanup: false });
+    console.log(`[db] 내장 MongoDB 사용 (${dbPath})`);
+  }
+
+  const client = new MongoClient(uri, { serverSelectionTimeoutMS: 8000 });
+  await client.connect();
+  const db = client.db(cfg.mongoDb);
+  const database: Database = {
+    client,
+    db,
+    col: (name) => db.collection(name),
+    async close() {
+      await client.close().catch(() => {});
+      await stopEmbedded?.().catch(() => {});
+    },
+  };
+  await ensureIndexes(database);
+  return database;
+}
+
+async function ensureIndexes({ db }: Database) {
+  const tasks: Promise<unknown>[] = [];
+  const idx = (col: string, keys: Record<string, 1 | -1>) =>
+    // 인덱스는 성능용이라 실패해도 서버는 뜨게 함
+    tasks.push(db.collection(col).createIndex(keys).catch((e) => console.warn(`[db] index ${col}`, e)));
+
+  idx("score", { score: -1 });
+  idx("minesweeper_rankings", { time: 1 });
+  idx("reaction", { score: 1 });
+  for (const c of ["chess_ai_rankings", "janggi_ai_rankings", "omok_ai_rankings", "fight_ai_rankings"])
+    idx(c, { score: -1 });
+  idx("rhythm_rankings", { chart: 1, score: -1 });
+  idx("guest", { id: -1 });
+  idx("inquiries", { createdAt: -1 });
+  for (const c of ROOM_COLLECTIONS) {
+    idx(c, { updatedAt: -1 });
+    idx(c, { whiteUid: 1 });
+    idx(c, { blackUid: 1 });
+  }
+  idx("board_chat", { room: 1, createdAt: -1 });
+  idx("board_presence", { room: 1 });
+  await Promise.all(tasks);
+}

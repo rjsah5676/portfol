@@ -1,0 +1,12 @@
+# 서버 이미지 빌드(컨텍스트 = 레포 루트)에 필요한 것만 보냄:
+#   server/ (소스·package.json·lock) + web/src/lib/{janggi,omok}/engine.ts
+# 전부 제외한 뒤 필요한 것만 다시 포함
+*
+
+!server/package.json
+!server/package-lock.json
+!server/tsconfig.json
+!server/tsup.config.ts
+!server/src
+!web/src/lib/janggi/engine.ts
+!web/src/lib/omok/engine.ts

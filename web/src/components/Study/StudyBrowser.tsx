@@ -39,7 +39,7 @@ function PostCard({ post, showCategory }: { post: StudyPostListItem; showCategor
   );
 }
 
-// 목록 데이터는 빌드 시점에 받아온 것(정적) — 새 글은 재배포 후 반영됨.
+// 목록 데이터는 페이지를 그릴 때 서버가 받아 넣어준 것 — 새 글도 바로 보임.
 // useSearchParams를 쓰면 정적 export에서 이 컴포넌트 전체가 클라이언트 렌더링으로 빠져서
 // HTML에 글 링크가 안 남음(SEO 손해) -> ?category는 마운트 후 location에서 읽음
 export default function StudyBrowser({

@@ -1,0 +1,29 @@
+{
+  "name": "portfolio",
+  "version": "0.1.0",
+  "private": true,
+  "description": "포트폴리오 사이트 (web: Next.js, server: Express + socket.io + MongoDB)",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "setup": "npm ci && npm ci --prefix web && npm ci --prefix server",
+    "dev": "concurrently --kill-others --names server,web --prefix-colors cyan,magenta \"npm run dev:server\" \"npm run dev:web\"",
+    "dev:web": "npm run dev --prefix web",
+    "dev:server": "npm run dev --prefix server",
+    "build": "npm run build:server && npm run build:web",
+    "build:web": "npm run build --prefix web",
+    "build:server": "npm run build --prefix server",
+    "start": "concurrently --kill-others --names server,web --prefix-colors cyan,magenta \"npm run start:server\" \"npm run start:web\"",
+    "start:server": "npm run start --prefix server",
+    "start:web": "npm run start --prefix web",
+    "test": "npm run test --prefix server",
+    "typecheck": "npm run typecheck --prefix server && npm exec --prefix web -- tsc --noEmit -p web",
+    "lint": "npm run lint --prefix web",
+    "import:firestore": "npm run import:firestore --prefix server --",
+    "seo:audit": "npm run seo:audit --prefix web --"
+  },
+  "devDependencies": {
+    "concurrently": "^10.0.5"
+  }
+}
