@@ -297,7 +297,6 @@ export default function DevLifeProject() {
         <span className="rounded-full border border-white/10 px-3 py-1 text-white/50">
           2021.07 – 운영 중
         </span>
-        <LinkPill href="https://github.com/rjsah5676/gunmo.my">GitHub ↗</LinkPill>
         <LinkPill href="https://gunmo.my/">사이트 ↗</LinkPill>
       </div>
 

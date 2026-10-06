@@ -6,11 +6,11 @@ import { SECTION_META, postPath, type StudySection } from "@/firestore/studyPost
 /*
  * 메인: 상단 메뉴(study · games · tools · devtools)에 있는 것들을 한 화면에 펼쳐 보여 줌.
  * 메뉴 데이터(data/navMenu)를 그대로 읽으므로 항목을 더하거나 빼면 여기도 같이 바뀜.
- * 구역마다 담긴 것이 달라서 보여 주는 방식도 다름:
- *   study     글이 주인공 → 최근 글 제목
+ * 구역마다 담긴 것이 달라서 보여 주는 방식도 다름 (위에서부터):
  *   games     화면이 주인공 → 큰 캡처 둘 + 나머지는 작은 캡처
  *   tools     작은 캡처 + 설명 한 줄
  *   devtools  이름과 하는 일 (변환기라 글자로 충분)
+ *   study     글이 주인공 → 최근 글 제목
  * 소개(이건모)는 /about 으로 옮김.
  */
 
@@ -221,6 +221,9 @@ function RowGroup({ group, thumb }: { group: NavGroup; thumb: boolean }) {
 
 // ───────── 페이지 ─────────
 
+/** 메인에서 보여 주는 순서: 눈으로 보는 것(게임·도구) 먼저, 읽는 것(study)은 맨 아래 */
+const ORDER = [...NAV_GROUPS.filter((g) => g.key !== "study"), ...NAV_GROUPS.filter((g) => g.key === "study")];
+
 export default function HomeHub({ posts }: { posts: HomePosts | null }) {
   const study = getNavGroup("study");
   const games = getNavGroup("games");
@@ -237,7 +240,7 @@ export default function HomeHub({ posts }: { posts: HomePosts | null }) {
           공부한 것을 정리하고, 게임과 도구를 만들어 올려 두는 곳입니다.
         </p>
         <nav aria-label="구역 바로 가기" className="flex flex-wrap gap-x-6 gap-y-2 font-mono text-sm">
-          {NAV_GROUPS.map((g) => (
+          {ORDER.map((g) => (
             <a
               key={g.key}
               href={`#${g.key}`}
@@ -252,14 +255,6 @@ export default function HomeHub({ posts }: { posts: HomePosts | null }) {
           ))}
         </nav>
       </div>
-
-      <Section group={study}>
-        <div className="grid gap-x-12 gap-y-12 md:grid-cols-2">
-          {study.items.map((item) => (
-            <StudyColumn key={item.href} item={item} posts={posts?.[sectionOfHref(item.href)]} />
-          ))}
-        </div>
-      </Section>
 
       <Section group={games}>
         <div className="grid gap-4 sm:grid-cols-2">
@@ -278,6 +273,14 @@ export default function HomeHub({ posts }: { posts: HomePosts | null }) {
         <RowGroup group={getNavGroup("tools")} thumb />
         <RowGroup group={getNavGroup("devtools")} thumb={false} />
       </div>
+
+      <Section group={study}>
+        <div className="grid gap-x-12 gap-y-12 md:grid-cols-2">
+          {study.items.map((item) => (
+            <StudyColumn key={item.href} item={item} posts={posts?.[sectionOfHref(item.href)]} />
+          ))}
+        </div>
+      </Section>
 
       {/* 만든 사람 쪽으로 */}
       <div className="flex flex-col gap-5 border-t border-white/10 py-10 sm:flex-row sm:items-center sm:justify-between">

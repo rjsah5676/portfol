@@ -4,6 +4,7 @@ import type { Deps } from "../deps";
 import { AppError, bad, forbidden } from "../errors";
 import { isClientId, newId, orderedId } from "../ids";
 import type { Ctx } from "../realtime/gateway";
+import { GUEST_MARK } from "../users";
 
 /*
  * 스케치 퀴즈 (실시간 그림 퀴즈)
@@ -123,6 +124,8 @@ const FIRST_BONUS = 30;
 const LEVEL_BONUS = [1, 1.2, 1.5];
 /** 정답 비교용 (공백 제거, 소문자) — web/src/lib/sketch/words.ts 의 normalizeAnswer 와 같은 식 */
 const normalizeAnswer = (s: string) => s.replace(/\s+/g, "").toLowerCase();
+/** 안내 문장에 넣는 이름: 비회원 표시(◦)는 뺌 — 문장은 화면에서 그대로 글자로 나가므로 */
+const plain = (nick: string) => nick.replaceAll(GUEST_MARK, "");
 
 const CHAT_KEEP = 200;
 const CHAT_SNAPSHOT = 80;
@@ -513,7 +516,7 @@ export function registerSketch({ gateway, users }: Deps, opts: SketchOptions = {
     const uid = ctx.uid;
     const room = rooms.get(id);
     if (!room || !room.players[uid]) return null;
-    if (nick) systemChat(room, `${room.players[uid].nick}님이 나갔어요.`);
+    if (nick) systemChat(room, `${plain(room.players[uid].nick)}님이 나갔어요.`);
     removePlayer(room, uid);
     return null;
   });
@@ -549,7 +552,7 @@ export function registerSketch({ gateway, users }: Deps, opts: SketchOptions = {
     const kickedUser = (c: Ctx) => c.user?.uid === target;
     gateway.revoke(chatKey(id), kickedUser);
     gateway.revoke(strokesKey(id, room.strokesTurn), kickedUser);
-    systemChat(room, `${nick}님을 내보냈어요.`);
+    systemChat(room, `${plain(nick)}님을 내보냈어요.`);
     return null;
   });
 
@@ -689,7 +692,7 @@ export function registerSketch({ gateway, users }: Deps, opts: SketchOptions = {
     pushChat(room, {
       uid: guess.uid,
       nick: guess.nick,
-      text: `${guess.nick}님이 ${first ? "제일 먼저 " : ""}정답을 맞혔어요! (+${pts}${first ? " 🥇" : ""}) · 그린 사람 +${drawerPts}`,
+      text: `${plain(guess.nick)}님이 ${first ? "제일 먼저 " : ""}정답을 맞혔어요! (+${pts}${first ? " 🥇" : ""}) · 그린 사람 +${drawerPts}`,
       kind: "correct",
     });
     return null;

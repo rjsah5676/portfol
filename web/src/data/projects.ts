@@ -99,7 +99,6 @@ export const personalProjects: Project[] = [
     idx: 4,
     name: "Gunmo's Dev Life",
     imgLink: devlifeImg,
-    gitLink: "https://github.com/rjsah5676/gunmo.my",
     title: "[Gunmo's Dev Life]",
     desc: "2021년부터 운영 중인 이 사이트(gunmo.my). 정적 사이트에서 Next.js 서버 + Express·MongoDB 백엔드로 옮겨 직접 서버에 올려 운영",
     tech: ["Next.js", "TypeScript", "Express", "socket.io", "MongoDB", "Docker"],

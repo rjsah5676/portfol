@@ -113,7 +113,7 @@ describe("입장 · 퇴장", () => {
     const { host, others, id } = await roomWith(2);
     const chat = await host.sub("sketch.chat", { id });
     await others[0].rpc("sketch.leave", { id, nick: "참가1" });
-    expect((await chat.wait((e) => e.t === "add")).d).toMatchObject({ kind: "system", uid: "", text: "◦참가1님이 나갔어요." });
+    expect((await chat.wait((e) => e.t === "add")).d).toMatchObject({ kind: "system", uid: "", text: "참가1님이 나갔어요." });
   });
 
   it("빈 방 정리: 사람이 있으면 그대로, 없으면 삭제되고 구독자는 null 을 받음", async () => {
@@ -260,7 +260,7 @@ describe("진행", () => {
     expect(room.scores[a.uid!].score).toBe(ptsA);
     expect(room.scores[host.uid!].score).toBe(Math.round((ptsA - 30) / 2));
     const msg = (await chat.wait((e) => e.d?.kind === "correct")).d;
-    expect(msg.text).toBe(`◦참가1님이 제일 먼저 정답을 맞혔어요! (+${ptsA} 🥇) · 그린 사람 +${Math.round((ptsA - 30) / 2)}`);
+    expect(msg.text).toBe(`참가1님이 제일 먼저 정답을 맞혔어요! (+${ptsA} 🥇) · 그린 사람 +${Math.round((ptsA - 30) / 2)}`);
 
     // 같은 사람을 또 처리해도 한 번만 반영
     await host.rpc("sketch.markCorrect", { id, guess: { uid: a.uid, nick: "참가1", turnId } });
