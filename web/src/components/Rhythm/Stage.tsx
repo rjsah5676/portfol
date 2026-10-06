@@ -336,6 +336,8 @@ export default function Stage({
     let k = 1; // 캔버스 픽셀 / 논리 좌표
     /** 그리기 품질 단계 (프레임이 떨어지면 내려감, measureFrame) */
     let quality = 3;
+    /** 최근 프레임 통계 (분석 모드 HUD에 표시) */
+    let perfInfo: { fps: number; p90: number; work90: number; hz: number } | null = null;
     const rebuild = () => {
       buildStatic();
       buildGear();
@@ -707,6 +709,57 @@ export default function Stage({
     let breakFrom = 0;
 
     /** 휴대폰 세로: 위쪽 띠에 곡·점수·정확도·HP·진행 */
+    // 콤보 글자 그림 캐시: "COMBO" 라벨 + 큰 숫자(테두리·은색/금색 광택). 숫자·금빛이 같으면 재사용
+    const comboFont = "Impact, 'Arial Narrow', 'Arial Black', sans-serif";
+    const comboCache = new Map<string, { c: HTMLCanvasElement; w: number; h: number }>();
+    const comboSprite = (txt: string, gold: boolean) => {
+      const key = `${txt}|${gold ? 1 : 0}|${k.toFixed(2)}`;
+      let sp = comboCache.get(key);
+      if (sp) return sp;
+      if (comboCache.size > 12) comboCache.clear();
+      const size = 72;
+      const w = Math.max(160, txt.length * size * 0.6 + 40);
+      const h = size + 60;
+      const c = document.createElement("canvas");
+      c.width = Math.ceil(w * k);
+      c.height = Math.ceil(h * k);
+      const b = c.getContext("2d")!;
+      b.scale(k, k);
+      b.translate(w / 2, h / 2 + 10);
+      b.textAlign = "center";
+      b.textBaseline = "middle";
+      // COMBO 글자도 숫자와 같은 글꼴·은색
+      b.font = `20px ${comboFont}`;
+      (b as CanvasRenderingContext2D & { letterSpacing?: string }).letterSpacing = "6px";
+      b.lineWidth = 4;
+      b.lineJoin = "round";
+      b.strokeStyle = "rgba(10,10,20,0.75)";
+      b.strokeText("COMBO", 3, -size / 2 - 8);
+      const lg = b.createLinearGradient(0, -size / 2 - 18, 0, -size / 2 + 2);
+      lg.addColorStop(0, "#FFFFFF");
+      lg.addColorStop(1, "#94A3B8");
+      b.fillStyle = lg;
+      b.fillText("COMBO", 3, -size / 2 - 8);
+      (b as CanvasRenderingContext2D & { letterSpacing?: string }).letterSpacing = "0px";
+      b.font = `${size}px ${comboFont}`;
+      b.lineWidth = 5;
+      b.strokeText(txt, 0, 4);
+      const gr = b.createLinearGradient(0, -size / 2, 0, size / 2);
+      gr.addColorStop(0, "#FFFFFF");
+      gr.addColorStop(0.45, gold ? "#FDE68A" : "#E2E8F0");
+      gr.addColorStop(0.5, gold ? "#D97706" : "#94A3B8");
+      gr.addColorStop(1, gold ? "#FEF3C7" : "#CBD5E1");
+      b.fillStyle = gr;
+      b.fillText(txt, 0, 4);
+      sp = { c, w, h };
+      comboCache.set(key, sp);
+      return sp;
+    };
+    /** 프레임 통계 한 줄(분석 모드): fps/주사율 · 프레임 간격 p90 · 그리기 시간 p90 · 품질 · 간격 고정 · 캔버스 픽셀 */
+    const perfStr = () =>
+      perfInfo
+        ? `${perfInfo.fps.toFixed(0)}/${perfInfo.hz.toFixed(0)}fps · p90 ${perfInfo.p90.toFixed(0)}ms · js ${perfInfo.work90.toFixed(1)}ms · Q${quality}${pace === 2 ? "·½" : ""} · ${canvas.width}×${canvas.height}`
+        : "";
     const drawHudPortrait = (t: number) => {
       const x0 = 28 + (HUD_H - 56) + 18;
       const right = CW - 30;
@@ -753,6 +806,11 @@ export default function Stage({
       g.fillRect(x0, 138, right - x0, 4);
       g.fillStyle = song.color;
       g.fillRect(x0, 138, (right - x0) * prog, 4);
+      if (autoplay && perfInfo) {
+        g.fillStyle = "rgba(253,230,138,0.85)";
+        g.font = `700 11px ${mono}`;
+        g.fillText(perfStr(), x0, 148);
+      }
     };
 
     /** 바닥(배경·레인 판·정보판) + 박자 빛 + 정보판 글자 */
@@ -834,6 +892,12 @@ export default function Stage({
       g.font = `600 11px ${mono}`;
       g.textAlign = "right";
       g.fillText(`${fmtTime(Math.max(0, t))} / ${fmtTime(songEnd + 2.5)}`, px0 + pw, py - 16);
+      if (autoplay && perfInfo) {
+        // 프레임 통계 (분석 모드): 진행 바 위 왼쪽, 시간 글자와 안 겹치게 폭 제한
+        g.fillStyle = "rgba(253,230,138,0.8)";
+        g.textAlign = "left";
+        g.fillText(perfStr(), px0, py - 16, pw - 90);
+      }
 
       // ── 점수판: 글꼴을 모두 굵은 기울임(disp)으로 맞춤 ──
       const sb = scoreBox;
@@ -1057,12 +1121,20 @@ export default function Stage({
         const cx = f.lane * laneW + laneW / 2;
         const fade = 1 - p;
         const beamH = H * (f.big ? 0.55 : 0.4) * (0.6 + 0.4 * Math.min(1, p * 4));
-        const beam = g.createLinearGradient(0, judgeY, 0, judgeY - beamH);
-        beam.addColorStop(0, `${col}${hex2(0.65 * fade * fade)}`);
-        beam.addColorStop(1, `${col}00`);
-        g.fillStyle = beam;
+        // 빛기둥 그라데이션은 색마다 한 번만 만들고(높이 H), 높이·밝기는 변환·투명도로
+        g.fillStyle = cachedGrad(`beam${col}`, () => {
+          const beam = g.createLinearGradient(0, 0, 0, -H);
+          beam.addColorStop(0, `${col}a6`);
+          beam.addColorStop(1, `${col}00`);
+          return beam;
+        });
         const bw = laneW * (0.9 - 0.3 * p);
-        g.fillRect(cx - bw / 2, judgeY - beamH, bw, beamH);
+        g.save();
+        g.translate(cx, judgeY);
+        g.scale(1, beamH / H);
+        g.globalAlpha = fade * fade;
+        g.fillRect(-bw / 2, -H, bw, H);
+        g.restore();
         if (ready(hitImg) && age >= 0) {
           const fr = Math.min(5, Math.floor(age / 0.05));
           if (age < 0.3) {
@@ -1166,48 +1238,16 @@ export default function Stage({
         g.drawImage(ringImg, fr * cell, 0, cell, cell, W / 2 - sz / 2, cyC - sz / 2, sz, sz);
         g.restore();
       }
-      const comboFont = "Impact, 'Arial Narrow', 'Arial Black', sans-serif";
       if (engine.combo >= 2) {
         const bump = Math.max(0, 1 - (t - comboAt) / 0.1);
         const gold = Math.max(0, 1 - ringAge / 0.6); // 50콤보마다 잠깐 금빛
-        const cc = engine.combo;
-        const size = 72;
-        const txt = String(cc);
+        // 테두리 글자(strokeText)는 매 프레임 그리면 무거워서 숫자가 바뀔 때만 그려 둔 그림을 찍음
+        const sp = comboSprite(String(engine.combo), gold > 0);
         g.save();
         g.globalAlpha = 0.65; // 노트가 비쳐 보이게
         g.translate(W / 2, cyC);
         g.scale(1 + 0.1 * bump, 1 + 0.1 * bump);
-        g.textAlign = "center";
-        g.textBaseline = "middle";
-        // COMBO 글자도 숫자와 같은 글꼴·은색
-        g.font = `20px ${comboFont}`;
-        (g as CanvasRenderingContext2D & { letterSpacing?: string }).letterSpacing = "6px";
-        g.lineWidth = 4;
-        g.lineJoin = "round";
-        g.strokeStyle = "rgba(10,10,20,0.75)";
-        g.strokeText("COMBO", 3, -size / 2 - 8);
-        g.fillStyle = cachedGrad("comboLabel", () => {
-          const lg = g.createLinearGradient(0, -size / 2 - 18, 0, -size / 2 + 2);
-          lg.addColorStop(0, "#FFFFFF");
-          lg.addColorStop(1, "#94A3B8");
-          return lg;
-        });
-        g.fillText("COMBO", 3, -size / 2 - 8);
-        (g as CanvasRenderingContext2D & { letterSpacing?: string }).letterSpacing = "0px";
-        g.font = `${size}px ${comboFont}`;
-        g.lineJoin = "round";
-        g.lineWidth = 5;
-        g.strokeStyle = "rgba(10,10,20,0.75)";
-        g.strokeText(txt, 0, 4);
-        g.fillStyle = cachedGrad(gold > 0 ? "comboGold" : "comboSilver", () => {
-          const gr = g.createLinearGradient(0, -size / 2, 0, size / 2);
-          gr.addColorStop(0, "#FFFFFF");
-          gr.addColorStop(0.45, gold > 0 ? "#FDE68A" : "#E2E8F0");
-          gr.addColorStop(0.5, gold > 0 ? "#D97706" : "#94A3B8");
-          gr.addColorStop(1, gold > 0 ? "#FEF3C7" : "#CBD5E1");
-          return gr;
-        });
-        g.fillText(txt, 0, 4);
+        g.drawImage(sp.c, -sp.w / 2, -sp.h / 2, sp.w, sp.h);
         g.restore();
       } else if (t - breakAt < 0.6 && breakFrom >= 20) {
         // 콤보 끊김: 숫자가 붉게 흔들리며 떨어짐
@@ -1327,32 +1367,65 @@ export default function Stage({
     };
     let prevCombo = 0;
     // 프레임 시간 측정 → 무거우면 효과를 한 단계씩 내림 (quality: 3 전부 · 2 박자 빛 끔 · 1 불꽃 절반·그림자 끔 · 0 해상도도 낮춤)
+    //
+    // 프레임 고정(pace): 90·120Hz 화면에서 한 프레임 그리기가 주사 간격(8.3ms)에 아슬아슬하면 8·17·8·17ms로 들쭉날쭉
+    // 그려져서 눈이 따라가는 노트가 둘로 보인다(분신). 그럴 땐 한 칸씩 건너뛰어 2배 간격(60fps)으로 고르게 그리는 게
+    // 훨씬 매끄럽다 — 60Hz 화면은 30fps가 너무 낮으니 효과를 먼저 내리고, 그래도 안 되면 그때 고정.
     const frameDt: number[] = [];
+    const frameWork: number[] = [];
     let baseDt = 0;
     let lastFrameAt = 0;
     let qualityHold = 0;
-    const measureFrame = (ts: number) => {
+    /** 그리는 간격(주사 간격의 배수): 1 매 프레임, 2 한 칸 건너 */
+    let pace = 1;
+    let paceHold = 0;
+    let skipDraw = false;
+    const measureFrame = (ts: number, workMs: number) => {
       if (lastFrameAt) {
         const dt = ts - lastFrameAt;
         if (dt < 200) frameDt.push(dt);
       }
       lastFrameAt = ts;
+      frameWork.push(workMs);
       if (frameDt.length < 90) return;
       const sorted = [...frameDt].sort((a, b) => a - b);
       // 주사율: 처음 90프레임 중 빠른 쪽 10% 지점 (60Hz ≈ 16.7, 120Hz ≈ 8.3)
       if (!baseDt) baseDt = Math.max(4, Math.min(20, sorted[Math.floor(sorted.length * 0.1)]));
       const p90 = sorted[Math.floor(sorted.length * 0.9)];
+      const work = [...frameWork].sort((a, b) => a - b);
+      const work90 = work[Math.floor(work.length * 0.9)];
       frameDt.length = 0;
+      frameWork.length = 0;
       qualityHold++;
-      if (p90 > baseDt * 1.35 && quality > 0) {
-        quality--;
-        qualityHold = 0;
-        if (quality === 0) resize(true);
-      } else if (p90 < baseDt * 1.08 && quality < 3 && qualityHold >= 4) {
-        // 4번(약 6초) 연속 가벼우면 한 단계 되돌림
-        quality++;
-        qualityHold = 0;
-        if (quality === 1) resize(true);
+      paceHold++;
+      perfInfo = {
+        fps: 1000 / (sorted[Math.floor(sorted.length / 2)] || 16.7),
+        p90,
+        work90,
+        hz: 1000 / baseDt,
+      };
+      const want = baseDt * pace;
+      const highHz = baseDt <= 11; // 90Hz 이상
+      if (p90 > want * 1.35) {
+        // 떨어짐: 고주사율은 먼저 간격 고정, 60Hz는 효과부터
+        if (pace === 1 && (highHz || quality === 0)) {
+          pace = 2;
+          paceHold = 0;
+        } else if (quality > 0) {
+          quality--;
+          qualityHold = 0;
+          if (quality === 0) resize(true);
+        }
+      } else if (p90 < want * 1.08) {
+        // 4번(약 6초) 연속 가벼우면 한 단계 되돌림 — 간격 고정은 그리는 시간이 주사 간격의 절반도 안 돼야 풂
+        if (pace === 2 && paceHold >= 4 && work90 < baseDt * 0.45) {
+          pace = 1;
+          paceHold = 0;
+        } else if (quality < 3 && qualityHold >= 4) {
+          quality++;
+          qualityHold = 0;
+          if (quality === 1) resize(true);
+        }
       }
     };
     const frame = (ts: number) => {
@@ -1363,7 +1436,7 @@ export default function Stage({
         onRestart();
         return;
       }
-      measureFrame(ts);
+      const workStart = performance.now();
       const t = smoothNow(ts);
       if (autoplay) autoStep(t);
       // 싱크가 잡히기 전(처음 몇 탭·곡 초반)엔 HP가 바닥나도 안 끝남 — 지연이 큰 기기는 첫 보정 전에 다 MISS라 죽어 버려서
@@ -1413,7 +1486,13 @@ export default function Stage({
       }
       prevCombo = cc;
       if (engine.dead) return fail(t);
-      draw(t);
+      // 간격 고정 중엔 한 칸 건너 그림 (판정·효과 계산은 매 프레임)
+      if (pace === 2 && skipDraw) skipDraw = false;
+      else {
+        draw(t);
+        skipDraw = true;
+        measureFrame(ts, performance.now() - workStart);
+      }
       if (engine.done && t > Math.max(engine.lastTime + 1.2, songEnd)) return finish();
       raf = requestAnimationFrame(frame);
     };
@@ -1904,10 +1983,6 @@ const fmtTime = (s: number) =>
   `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 
 /** 0~1 투명도 → "#rrggbb" 뒤에 붙일 두 자리 16진수 */
-const hex2 = (a: number) =>
-  Math.round(Math.max(0, Math.min(1, a)) * 255)
-    .toString(16)
-    .padStart(2, "0");
 
 // ───────────────────────── 카운트다운 ─────────────────────────
 
