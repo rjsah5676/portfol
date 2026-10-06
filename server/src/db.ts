@@ -65,9 +65,14 @@ export async function connectDatabase(cfg: Config): Promise<Database> {
 
 async function ensureIndexes({ db }: Database) {
   const tasks: Promise<unknown>[] = [];
-  const idx = (col: string, keys: Record<string, 1 | -1>) =>
+  const idx = (col: string, keys: Record<string, 1 | -1>, options: { expireAfterSeconds?: number } = {}) =>
     // 인덱스는 성능용이라 실패해도 서버는 뜨게 함
-    tasks.push(db.collection(col).createIndex(keys).catch((e) => console.warn(`[db] index ${col}`, e)));
+    tasks.push(
+      db
+        .collection(col)
+        .createIndex(keys, options)
+        .catch((e) => console.warn(`[db] index ${col}`, e))
+    );
 
   idx("score", { score: -1 });
   idx("minesweeper_rankings", { time: 1 });
@@ -75,6 +80,12 @@ async function ensureIndexes({ db }: Database) {
   for (const c of ["chess_ai_rankings", "janggi_ai_rankings", "omok_ai_rankings", "fight_ai_rankings"])
     idx(c, { score: -1 });
   idx("rhythm_rankings", { chart: 1, score: -1 });
+  // 한 사람당 기록 하나: 등록할 때 그 사람의 기존 기록을 찾음
+  for (const c of RANK_COLLECTIONS) idx(c, { uid: 1 });
+  idx("rhythm_rankings", { chart: 1, uid: 1 });
+  // 랭킹 티켓: 사람별 최근 발급 수 확인, 8일 지나면 자동 삭제(유효 기간 7일)
+  idx("rank_tickets", { uid: 1, createdAt: -1 });
+  idx("rank_tickets", { createdAt: 1 }, { expireAfterSeconds: 8 * 24 * 60 * 60 });
   idx("guest", { id: -1 });
   idx("inquiries", { createdAt: -1 });
   for (const c of ROOM_COLLECTIONS) {

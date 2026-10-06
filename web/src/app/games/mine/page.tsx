@@ -12,6 +12,7 @@ import {
   type MineRankingRow,
 } from "@/firestore/minesweeperRankings";
 import { useInitial } from "@/lib/api/InitialData";
+import { beginRun, prepareRuns } from "@/lib/api/rankRun";
 import { playChord, playExplosion, playFlag, playReveal } from "@/lib/sfx";
 import endBgmSrc from "@/sounds/melongame/endbgm.mp3";
 import "@/css/minesweeper.css";
@@ -102,7 +103,9 @@ export default function Minesweeper() {
       const clearTime = ((Date.now() - startTime) / 1000).toFixed(2);
       const name = prompt(`🎉 ${clearTime}s 클리어! 이름을 입력하세요:`);
       if (name) {
-        addRanking(name, parseFloat(clearTime));
+        addRanking(name, parseFloat(clearTime)).catch((e) =>
+          alert(e instanceof Error ? e.message : "기록을 등록하지 못했습니다.")
+        );
       }
     }
   }, [win]);
@@ -110,6 +113,9 @@ export default function Minesweeper() {
   useEffect(() => {
     getTopRankings(10).then(setRankings);
   }, [win]);
+
+  // 첫 판의 랭킹 티켓을 바로 받을 수 있게 미리 로그인
+  useEffect(prepareRuns, []);
 
   useEffect(() => {
     const handleMouseUp = () => setPressingCell(null);
@@ -158,6 +164,8 @@ export default function Minesweeper() {
       const { board: newBoard } = generateNoGuessBoard(r, c, ROWS, COLS, MINES);
       setBoard(newBoard);
       setStartTime(Date.now());
+      // 랭킹 등록용: 서버도 이 판이 지금 시작됐다는 걸 알게 함
+      beginRun("minesweeper_rankings");
 
       const newVisible = visible.map((row) => [...row]);
       const tempBoard = newBoard;

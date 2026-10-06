@@ -1,4 +1,5 @@
 import { api } from "@/lib/api/http";
+import { submitRun } from "@/lib/api/rankRun";
 import { toDate } from "@/lib/rankDate";
 
 const BOARD = "reaction";
@@ -31,6 +32,7 @@ export async function getTopReactionScores(count = 10): Promise<ReactionScore[]>
   return rows.map(toReactionScore);
 }
 
-export async function addReactionScore(name: string, score: number): Promise<void> {
-  await api(REACTION_SCORES_PATH, { method: "POST", body: { name, score } });
+/** 등록하고, 랭킹에 올라가 있는 내 기록의 id 를 돌려줌 */
+export async function addReactionScore(name: string, score: number): Promise<string> {
+  return submitRun(BOARD, REACTION_SCORES_PATH, { name, score });
 }

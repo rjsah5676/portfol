@@ -19,6 +19,7 @@ import { DEFAULT_JANGGI_BOT, JANGGI_BOTS, type JanggiBot } from "./janggiBots";
 import { SpeechBubble, useBotTalk } from "@/lib/botTalk";
 import { scrollToGameTop } from "@/components/GameHeader";
 import { clockLabel, janggiScore } from "@/lib/aiScore";
+import { beginRun } from "@/lib/api/rankRun";
 import {
   NEW_CLOCK,
   RankSubmit,
@@ -228,6 +229,7 @@ export default function JanggiAIGame({ hangul }: { hangul: boolean }) {
     setClock(NEW_CLOCK);
     setHint(null);
     setHints(0);
+    if (ranked) beginRun("janggi_ai_rankings");
     setMoves([]);
     say("greet");
   };
@@ -298,6 +300,7 @@ export default function JanggiAIGame({ hangul }: { hangul: boolean }) {
               setHint(null);
               setHints(0);
               setTimeout(scrollToGameTop, 50);
+              if (ranked) beginRun("janggi_ai_rankings");
               setMoves([]);
               say("greet");
             }}

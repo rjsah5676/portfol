@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 # 서버 이미지. 빌드 컨텍스트는 레포 루트:
 #   docker build -f server/Dockerfile -t portfolio-server .
-# (서버가 web/src/lib 의 장기·오목 엔진을 상대 경로로 import 해서 server/ 만으로는 빌드할 수 없음)
+# (서버가 web/src 의 게임 규칙·점수 계산·채보를 상대 경로로 import 해서 server/ 만으로는 빌드할 수 없음)
 
 # ── 1) 빌드: 의존성 전체 설치 → tsup 으로 dist/index.js 한 파일로 묶음 ──
 FROM node:24-slim AS build
@@ -13,6 +13,10 @@ COPY server/tsconfig.json server/tsup.config.ts ./
 COPY server/src ./src
 COPY web/src/lib/janggi/engine.ts /repo/web/src/lib/janggi/engine.ts
 COPY web/src/lib/omok/engine.ts /repo/web/src/lib/omok/engine.ts
+# 랭킹 기록 검증용: 점수 공식, 멜론게임 한 판 길이, 리듬게임 채보
+COPY web/src/lib/aiScore.ts /repo/web/src/lib/aiScore.ts
+COPY web/src/lib/melon/logic.ts /repo/web/src/lib/melon/logic.ts
+COPY web/src/data/rhythm /repo/web/src/data/rhythm
 RUN npm run build
 
 # ── 2) 실행: 운영 의존성 + dist 만 ──

@@ -1,9 +1,13 @@
 import { api } from "@/lib/api/http";
+import { submitRun } from "@/lib/api/rankRun";
 import { toDate } from "@/lib/rankDate";
 
 // 곡·난이도별로 따로 줄 세움: /api/rankings/rhythm/{songId}_{diff}
 const chartPath = (songId: string, diff: string) =>
   `/api/rankings/rhythm/${encodeURIComponent(`${songId}_${diff}`)}`;
+
+/** 게임을 시작할 때 beginRun 에 넘기는 랭킹 이름 */
+export const rhythmBoard = (songId: string, diff: string) => `rhythm:${songId}_${diff}`;
 
 export const RHYTHM_NAME_MAX = 12;
 
@@ -47,16 +51,12 @@ export async function addRhythmRanking(
   diff: string,
   r: Omit<RhythmRanking, "id" | "createdAt">
 ): Promise<string> {
-  const res = await api<{ id: string }>(chartPath(songId, diff), {
-    method: "POST",
-    body: {
-      name: r.name.trim().slice(0, RHYTHM_NAME_MAX),
-      score: Math.round(r.score),
-      acc: Math.round(r.acc * 100) / 100,
-      maxCombo: Math.round(r.maxCombo),
-      fc: r.fc,
-      ap: r.ap,
-    },
+  return submitRun(rhythmBoard(songId, diff), chartPath(songId, diff), {
+    name: r.name.trim().slice(0, RHYTHM_NAME_MAX),
+    score: Math.round(r.score),
+    acc: Math.round(r.acc * 100) / 100,
+    maxCombo: Math.round(r.maxCombo),
+    fc: r.fc,
+    ap: r.ap,
   });
-  return res.id;
 }

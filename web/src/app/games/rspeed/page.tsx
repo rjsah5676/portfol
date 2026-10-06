@@ -13,6 +13,7 @@ import {
   type ReactionScoreRow,
 } from "@/firestore/reactionGame";
 import { useInitial } from "@/lib/api/InitialData";
+import { beginRun } from "@/lib/api/rankRun";
 
 const ROUNDS = 5;
 const MIN_DELAY = 1500;
@@ -87,6 +88,10 @@ export default function RspeedPage() {
   const press = (timeStamp: number) => {
     switch (phase) {
       case "idle":
+        // 5회 중 첫 회를 시작할 때 (랭킹 등록용)
+        beginRun("reaction");
+        startRound();
+        break;
       case "early":
       case "result":
         startRound();
@@ -136,10 +141,13 @@ export default function RspeedPage() {
     if (!trimmed || trimmed.length > 20 || submitting || submittedRank !== undefined) return;
     setSubmitting(true);
     try {
-      await addReactionScore(trimmed, avg);
+      // 한 사람당 가장 좋은 기록 하나만 남음 → 돌아온 id 가 랭킹에 있는 내 기록
+      const id = await addReactionScore(trimmed, avg);
       const top = await getTopReactionScores(10);
       setList(top);
-      setSubmittedRank(top.findIndex((s) => s.name === trimmed && s.score === avg));
+      setSubmittedRank(top.findIndex((s) => s.id === id));
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "기록을 등록하지 못했습니다.");
     } finally {
       setSubmitting(false);
     }

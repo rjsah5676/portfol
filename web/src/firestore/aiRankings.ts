@@ -1,4 +1,5 @@
 import { api } from "@/lib/api/http";
+import { submitRun } from "@/lib/api/rankRun";
 import { toDate } from "@/lib/rankDate";
 
 /**
@@ -44,8 +45,5 @@ export async function getAIRanks(coll: AIRankColl, count = 10): Promise<AIRankRo
 
 export async function addAIRank(coll: AIRankColl, e: AIRankEntry): Promise<void> {
   const { name, score, opp, moves, seconds, lead } = e;
-  await api(`/api/rankings/${coll}`, {
-    method: "POST",
-    body: { name, score, opp, moves, seconds, lead },
-  });
+  await submitRun(coll, `/api/rankings/${coll}`, { name, score, opp, moves, seconds, lead });
 }

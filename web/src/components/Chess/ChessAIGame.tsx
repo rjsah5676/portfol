@@ -10,6 +10,7 @@ import { replay, uciToMove, type Color } from "@/firestore/chessGame";
 import { SpeechBubble, useBotTalk } from "@/lib/botTalk";
 import { scrollToGameTop } from "@/components/GameHeader";
 import { chessScore, clockLabel } from "@/lib/aiScore";
+import { beginRun } from "@/lib/api/rankRun";
 import {
   NEW_CLOCK,
   RankSubmit,
@@ -262,6 +263,7 @@ export default function ChessAIGame() {
     setHint(null);
     setHints(0);
     newGame();
+    if (ranked) beginRun("chess_ai_rankings");
     setMoves([]);
     say("greet");
   };
@@ -277,6 +279,7 @@ export default function ChessAIGame() {
       setHints(0);
       setTimeout(scrollToGameTop, 50);
       newGame();
+      if (ranked) beginRun("chess_ai_rankings");
       setMoves([]);
       say("greet");
     };

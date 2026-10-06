@@ -23,17 +23,25 @@ export function createApp(deps: Deps, hooks: Pick<AdminHooks, "roomsDeleted">) {
   });
 
   // 도배 방지: 쓰기 요청은 IP당 분당 60회 (테스트에서는 끔)
+  // 랭킹 티켓은 게임을 시작할 때마다 받으므로 따로 넉넉하게 (사람별 제한은 rankings.ts)
   if (cfg.env !== "test") {
-    app.use(
-      "/api",
+    const limiter = (limit: number, skip: (req: express.Request) => boolean) =>
       rateLimit({
         windowMs: 60_000,
-        limit: 60,
+        limit,
         standardHeaders: "draft-8",
         legacyHeaders: false,
-        skip: (req) => req.method === "GET" || req.method === "OPTIONS",
+        skip,
         message: { error: { code: "RATE_LIMITED", message: "요청이 너무 많습니다. 잠시 후 다시 시도해주세요." } },
-      })
+      });
+    const TICKETS = "/rankings/tickets";
+    app.use(
+      "/api",
+      limiter(60, (req) => req.method === "GET" || req.method === "OPTIONS" || req.path === TICKETS)
+    );
+    app.use(
+      "/api",
+      limiter(300, (req) => req.path !== TICKETS || req.method === "OPTIONS")
     );
   }
 

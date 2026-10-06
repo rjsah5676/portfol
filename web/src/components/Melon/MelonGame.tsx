@@ -28,6 +28,7 @@ import {
   type MelonScoreRow,
 } from "@/firestore/melonGame";
 import { useInitial } from "@/lib/api/InitialData";
+import { beginRun } from "@/lib/api/rankRun";
 import {
   CELL,
   COLS,
@@ -452,6 +453,7 @@ export default function MelonGame() {
     setSubmitState("idle");
     phaseRef.current = "play";
     setPhase("play");
+    beginRun("score");
     const a = audio.current;
     if (a) {
       a.end.pause();

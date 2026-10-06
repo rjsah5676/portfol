@@ -49,6 +49,7 @@ import ResultPanel from "./Result";
 import TouchControls, { loadMoveMode, saveMoveMode, type MoveMode } from "./Touch";
 import { PauseMenu, SettingsBody } from "./Settings";
 import { fightScore } from "@/lib/aiScore";
+import { beginRun } from "@/lib/api/rankRun";
 import Online, { type MatchCfg } from "./Online";
 import { OnlineMatch } from "./onlineMatch";
 import { WatchFeed, type RoomSession, type WatchSession } from "@/realtime/fight";
@@ -380,6 +381,9 @@ export default function FightGame({ onRanked }: { onRanked?: () => void }) {
     let doneReported = false;
     setResult(null);
     setSubmitted(false);
+    // AI 대전은 이기면 랭킹에 올릴 수 있음 → 경기를 시작할 때 서버에 알림
+    const ranked = setup.mode === "ai" && !ol;
+    if (ranked) beginRun("fight_ai_rankings");
     Promise.all([loadSheet(CHARS[s.p[0].ch].id), loadSheet(CHARS[s.p[1].ch].id)])
       .then(([a, b]) => {
         r.sheets = [a, b];
@@ -394,6 +398,7 @@ export default function FightGame({ onRanked }: { onRanked?: () => void }) {
       doneReported = false;
       setResult(null);
       setSubmitted(false);
+      if (ranked) beginRun("fight_ai_rankings");
     };
 
     const onResize = () => r.resize();

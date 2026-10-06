@@ -34,6 +34,8 @@ import TitleScreen from "./TitleScreen";
 import SongSelect from "./SongSelect";
 import SettingsModal, { LANE_MODS, type LaneMod, type Settings } from "./SettingsModal";
 import ResultScreen from "./ResultScreen";
+import { beginRun } from "@/lib/api/rankRun";
+import { rhythmBoard } from "@/firestore/rhythmRankings";
 
 const SETTINGS_KEY = "rhythm_settings";
 /** 저장 설정 버전 — 2: 노트 모양 기본값을 메탈로 바꾼 뒤 (그 전에 저장된 설정은 한 번 메탈로) */
@@ -440,6 +442,8 @@ export default function RhythmGame() {
     setErr("");
     setLoading(true);
     setSettingsOpen(false);
+    // 랭킹 등록용 (직접 넣은 곡은 랭킹이 없음)
+    if (!isCustom) beginRun(rhythmBoard(song.id, diff));
     // 휴대폰: 플레이는 늘 레인만 세로 화면 가득 — 전체화면으로 켜고 세로로 고정 (되는 브라우저만)
     const coarse = window.matchMedia("(pointer: coarse)").matches;
     setPortrait(coarse);
@@ -484,7 +488,7 @@ export default function RhythmGame() {
       setLoading(false);
       setLaunching(false);
     }
-  }, [loading, customSel, isCustom, enterFs, screen, stopPreview, track, song]);
+  }, [loading, customSel, isCustom, enterFs, screen, stopPreview, track, song, diff]);
 
   const finish = useCallback(
     (r: Result) => {

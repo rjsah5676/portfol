@@ -1,4 +1,5 @@
 import { api } from "@/lib/api/http";
+import { submitRun } from "@/lib/api/rankRun";
 import { toDate } from "@/lib/rankDate";
 
 const BOARD = "minesweeper_rankings";
@@ -32,5 +33,5 @@ export async function getTopRankings(count = 10): Promise<MineRanking[]> {
 }
 
 export async function addRanking(name: string, time: number): Promise<void> {
-  await api(MINE_RANKINGS_PATH, { method: "POST", body: { name, time } });
+  await submitRun(BOARD, MINE_RANKINGS_PATH, { name, time });
 }

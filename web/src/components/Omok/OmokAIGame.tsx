@@ -24,6 +24,7 @@ import { DEFAULT_OMOK_BOT, OMOK_BOTS, type OmokBot } from "./omokBots";
 import { SpeechBubble, useBotTalk } from "@/lib/botTalk";
 import { scrollToGameTop } from "@/components/GameHeader";
 import { clockLabel, omokScore } from "@/lib/aiScore";
+import { beginRun } from "@/lib/api/rankRun";
 import {
   NEW_CLOCK,
   RankSubmit,
@@ -251,6 +252,7 @@ export default function OmokAIGame({ numbers }: { numbers: boolean }) {
     setHint(null);
     setHints(0);
     setWarn("");
+    if (ranked) beginRun("omok_ai_rankings");
     setMoves([]);
     say("greet");
   };
@@ -341,6 +343,7 @@ export default function OmokAIGame({ numbers }: { numbers: boolean }) {
               setWarn("");
               if (ranked) setSettings((s) => ({ ...s, rule: "renju", n: 15 }));
               setTimeout(scrollToGameTop, 50);
+              if (ranked) beginRun("omok_ai_rankings");
               setMoves([]);
               say("greet");
             }}

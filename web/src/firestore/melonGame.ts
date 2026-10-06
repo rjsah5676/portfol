@@ -1,4 +1,5 @@
 import { api } from "@/lib/api/http";
+import { submitRun } from "@/lib/api/rankRun";
 import { toDate } from "@/lib/rankDate";
 
 const BOARD = "score";
@@ -32,5 +33,5 @@ export async function getTopMelonScores(count = 10): Promise<MelonScore[]> {
 }
 
 export async function addMelonScore(name: string, score: number): Promise<void> {
-  await api(MELON_SCORES_PATH, { method: "POST", body: { name, score } });
+  await submitRun(BOARD, MELON_SCORES_PATH, { name, score });
 }
