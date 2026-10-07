@@ -177,17 +177,17 @@ export function RankSubmit({
 }
 
 /** 1~3위 미리보기용 (헤더 랭킹 버튼·시상대) */
-export function useAIRankTop(coll: AIRankColl) {
+export function useAIRankTop(coll: AIRankColl, ch?: string) {
   const [top, setTop] = useState<AIRankRow[]>([]);
   useEffect(() => {
     let alive = true;
-    getAIRanks(coll, 3)
+    getAIRanks(coll, 3, ch)
       .then((r) => alive && setTop(r))
       .catch(() => {});
     return () => {
       alive = false;
     };
-  }, [coll]);
+  }, [coll, ch]);
   return top;
 }
 
@@ -199,6 +199,7 @@ export function RankBoard({
   vs = true,
   bare = false,
   skip = 0,
+  ch,
 }: {
   coll: AIRankColl;
   oppLabel: (opp: string) => ReactNode;
@@ -209,18 +210,20 @@ export function RankBoard({
   bare?: boolean;
   /** 위쪽 몇 등 빼기 (시상대로 따로 보여 줄 때) */
   skip?: number;
+  /** 격투 AI: 내 캐릭터별 순위 */
+  ch?: string;
 }) {
   const [rows, setRows] = useState<AIRankRow[] | null>(null);
   const [failed, setFailed] = useState(false);
   useEffect(() => {
     let alive = true;
-    getAIRanks(coll)
-      .then((r) => alive && setRows(r))
+    getAIRanks(coll, 10, ch)
+      .then((r) => alive && (setRows(r), setFailed(false)))
       .catch(() => alive && setFailed(true));
     return () => {
       alive = false;
     };
-  }, [coll, refresh]);
+  }, [coll, refresh, ch]);
   return (
     <div className={bare ? "" : "rounded-xl border border-white/10 bg-[#1C1E24] p-3"}>
       {bare ? (

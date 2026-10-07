@@ -26,6 +26,10 @@ export interface RankSpec {
   sub?: string;
   /** 모달 내용 (열릴 때만 그림) */
   render: () => ReactNode;
+  /** 시상대 위에 그릴 것 (순위 나누는 탭 등) */
+  head?: () => ReactNode;
+  /** 모달 시상대만 top 대신 이걸로 (버튼의 1~3위는 그대로 top) */
+  podium?: TopEntry[] | null;
   /** 밖에서 열고 닫기 (결과 화면의 "랭킹 보기" 등) */
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
@@ -200,7 +204,8 @@ export default function GameHeader({
         >
           {rankOpen && (
             <>
-              {!!rank.top?.length && <Podium top={rank.top} />}
+              {rank.head?.()}
+              {!!(rank.podium ?? rank.top)?.length && <Podium top={(rank.podium ?? rank.top)!} />}
               {rank.render()}
             </>
           )}

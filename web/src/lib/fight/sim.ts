@@ -491,7 +491,7 @@ const cloneF = (f: Fighter): Fighter => ({ ...f, hist: f.hist.slice() });
  * 이 빌드의 게임 데이터 지문 (캐릭터 성능·맵) — 온라인에서 서로 다른 빌드끼리 붙었는지 확인.
  * 계산 방식(sim.ts)만 바꿨을 땐 SIM_REV를 올릴 것.
  */
-const SIM_REV = 3;
+const SIM_REV = 4;
 export const BUILD_ID = (() => {
   const str = SIM_REV + JSON.stringify(CHARS.map((c) => [c.hp, c.walk, c.jumpVx, c.dash, c.cd, c.glide, c.hurt, c.width, c.moves])) + JSON.stringify(MAPS.map((m) => [m.plats, m.spawn]));
   let h = 2166136261;
@@ -1295,6 +1295,9 @@ function physics(s: State, i: number) {
   const map = mapOf(s);
   const m = moveOf(f);
   if (f.inv > 0) f.inv--;
+  // 안 떠 있으면 띄워진 시간은 0 — 땅에 서 있을 땐 아래까지 안 내려가서, 긴 공중 콤보 뒤 남은 값 때문에
+  // 다음에 띄울 때(잡기 등) 처음부터 무거운 중력으로 낮게 뜨던 것
+  if (!f.float) f.floatT = 0;
   if (f.trapT > 0) {
     // 방울 안: 천천히 떠오르다 멈춤 (중력 없음)
     f.vx = 0;

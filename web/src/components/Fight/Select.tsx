@@ -555,9 +555,13 @@ export default function Select({
                     setSetup((s) => ({ ...s, level: i }));
                   }}
                   className={`${KR} cursor-pointer rounded-full border px-[1.1cqw] py-[0.35cqw] text-[1.2cqw] transition-colors ${
-                    setup.level === i
-                      ? "border-[#FFC86B] bg-[#FFC86B] font-bold text-[#2A0E3A]"
-                      : "border-white/10 bg-[#140A24]/65 text-white/65 hover:border-[#FFC86B]/50 hover:text-white"
+                    l.look
+                      ? setup.level === i
+                        ? "border-[#FF4D6D] bg-[#FF4D6D] font-bold text-white shadow-[0_0_1.2cqw_rgba(255,77,109,0.6)]"
+                        : "border-[#FF4D6D]/40 bg-[#2A0A1A]/70 font-bold text-[#FF8FA3] hover:border-[#FF4D6D] hover:text-white"
+                      : setup.level === i
+                        ? "border-[#FFC86B] bg-[#FFC86B] font-bold text-[#2A0E3A]"
+                        : "border-white/10 bg-[#140A24]/65 text-white/65 hover:border-[#FFC86B]/50 hover:text-white"
                   }`}
                 >
                   {l.name}

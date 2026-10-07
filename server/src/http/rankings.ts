@@ -6,6 +6,7 @@ import {
   janggiScore,
   omokScore,
 } from "../../../web/src/lib/aiScore";
+import { CHARS } from "../../../web/src/lib/fight/chars";
 import { TOTAL_SEC as MELON_SEC } from "../../../web/src/lib/melon/logic";
 import type { Deps } from "../deps";
 import { AppError, bad, notFound, unauthenticated } from "../errors";
@@ -96,12 +97,20 @@ interface Board {
   minSec: (d: Data) => number;
   /** 값끼리 맞는지 (틀리면 거절) */
   check?: (d: Data) => boolean;
+  /**
+   * 한 사람이 여러 기록을 가질 때 나누는 기준 (격투: 내 캐릭터마다 하나).
+   * 이 값으로 걸러 보면 그 안의 순위, 안 거르면(전체) 사람마다 가장 좋은 기록 하나씩.
+   */
+  split?: { field: string; of: (d: Data) => string; valid: (v: string) => boolean };
 }
 
 /** AI 대국: 상대 단계 */
 const tierOf = (d: Data) => Math.floor(d.score / 1_000_000);
 /** AI 대국의 seconds = 내 차례에 쓴 시간(체스·장기·오목) 또는 경기 시간(격투) */
 const aiSec = (d: Data) => d.seconds;
+
+/** 격투 opp "3:kai>igna" → 내 캐릭터 "kai" (예전 기록 "3" 은 "") */
+export const fightCh = (opp: string) => opp.split(":")[1]?.split(">")[0] ?? "";
 
 export const BOARDS: Record<string, Board> = {
   // 멜론게임 (지운 멜론 수, 판 전체 21x12=252개)
@@ -154,17 +163,18 @@ export const BOARDS: Record<string, Board> = {
           omokScore(tierOf(d), d.moves, d.seconds, white).score === d.score,
       ),
   },
-  // opp = "AI단계" 또는 "AI단계:내캐릭터>상대캐릭터" (예: "3:kai>igna")
+  // opp = "AI단계" 또는 "AI단계:내캐릭터>상대캐릭터" (예: "3:kai>igna"). 내 캐릭터마다 기록 하나 (ch)
   fight_ai_rankings: {
     sort: { score: -1 },
-    schema: aiRank(7_000_000).refine(
+    schema: aiRank(8_000_000).refine(
       (d) =>
-        /^[1-6](:[a-z]+>[a-z]+)?$/.test(d.opp) &&
+        /^[1-7](:[a-z]+>[a-z]+)?$/.test(d.opp) &&
         Math.floor(d.score / 1_000_000) === Number(d.opp[0]),
     ),
     minSec: aiSec,
     // lead = 남은 체력(%)
     check: (d) => fightScore(tierOf(d), d.lead, d.seconds).score === d.score,
+    split: { field: "ch", of: (d) => fightCh(String(d.opp)), valid: (v) => CHARS.some((c) => c.id === v) },
   },
 };
 
@@ -415,8 +425,9 @@ export function rankingsRouter({ db, auth, users }: Deps): Router {
       throw rejected();
     }
 
+    if (board.split) scope = { ...scope, [board.split.field]: board.split.of(data) };
     const [field, dir] = Object.entries(board.sort)[0];
-    return mutex.run(`${col}:${scope.chart ?? ""}:${user.uid}`, async () => {
+    return mutex.run(`${col}:${JSON.stringify(scope)}:${user.uid}`, async () => {
       const mine = await db.col(col).findOne({ ...scope, uid: user.uid });
       if (!mine) {
         const _id = newId();
@@ -514,14 +525,33 @@ export function rankingsRouter({ db, auth, users }: Deps): Router {
   r.get(
     "/:board",
     h(async (req) => {
-      const board = BOARDS[String(req.params.board)];
+      const key = String(req.params.board);
+      const board = Object.hasOwn(BOARDS, key) ? BOARDS[key] : null;
       if (!board) throw notFound();
-      const docs = await db
-        .col(String(req.params.board))
-        .find({})
-        .sort(board.sort)
-        .limit(limitOf(req.query.limit))
-        .toArray();
+      const limit = limitOf(req.query.limit);
+      const sp = board.split;
+      if (sp && req.query[sp.field] !== undefined) {
+        // 나눈 순위 (예: ?ch=kai)
+        const v = String(req.query[sp.field]);
+        if (!sp.valid(v)) throw bad();
+        const docs = await db.col(key).find({ [sp.field]: v }).sort(board.sort).limit(limit).toArray();
+        return rows(db, docs);
+      }
+      if (sp) {
+        // 전체: 사람마다 가장 좋은 기록 하나씩
+        const docs = await db
+          .col(key)
+          .aggregate([
+            { $sort: board.sort },
+            { $group: { _id: { $ifNull: ["$uid", "$_id"] }, doc: { $first: "$$ROOT" } } },
+            { $replaceRoot: { newRoot: "$doc" } },
+            { $sort: { ...board.sort, _id: 1 } },
+            { $limit: limit },
+          ])
+          .toArray();
+        return rows(db, docs);
+      }
+      const docs = await db.col(key).find({}).sort(board.sort).limit(limit).toArray();
       return rows(db, docs);
     }),
   );

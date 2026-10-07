@@ -4,7 +4,7 @@
  * 오프라인 전용이라 결정론일 필요는 없지만, 같은 시드면 같은 행동을 하도록 자체 난수를 씀.
  */
 import { CHARS, SUB, type MoveDef } from "./chars";
-import { IN, VIEW_H, isAir, mapOf, platBelow, type Fighter, type State } from "./sim";
+import { IN, VIEW_H, clone, isAir, mapOf, platBelow, step, type Fighter, type State } from "./sim";
 import type { Plat } from "./maps";
 
 export interface AILevel {
@@ -22,6 +22,14 @@ export interface AILevel {
   aggro: number;
   /** 프레임당 필살기(탄) 쓸 확률 */
   special: number;
+  /** 잡기 풀 확률 (없으면 block × 0.8) */
+  tech?: number;
+  /** 저스트 가드 노릴 확률 (없으면 combo × 0.6) */
+  just?: number;
+  /** 끼어들기: 상대 기술이 나오기 전에 더 빠른 약으로 먼저 때림 */
+  interrupt?: number;
+  /** 내다보기(프레임): 상대가 기술을 쓰거나 빈틈일 때, 할 수 있는 행동을 미리 돌려 보고 가장 나은 걸 고름 */
+  look?: number;
 }
 
 export const AI_LEVELS: AILevel[] = [
@@ -85,6 +93,20 @@ export const AI_LEVELS: AILevel[] = [
     aggro: 0.72,
     special: 0.02,
   },
+  {
+    id: "7",
+    name: "지존",
+    react: 1,
+    block: 1,
+    combo: 1,
+    antiAir: 1,
+    aggro: 0.8,
+    special: 0.025,
+    tech: 1,
+    just: 0.9,
+    interrupt: 0.85,
+    look: 28,
+  },
 ];
 
 function rng(seed: number) {
@@ -126,6 +148,9 @@ export class FightAI {
   private comboDecision: boolean | null = null;
   private techDecision: boolean | null = null;
   private gcDecision: boolean | null = null;
+  private cutDecision: boolean | null = null;
+  /** 내다보고 고른 입력 (남은 프레임) */
+  private plan: number[] = [];
   /** 대시 입력 (톡·떼고·톡) 남은 프레임 */
   private dashSeq: number[] = [];
   /** 낭떠러지 건너가는 중: 목표 발판 (2단 점프 + 공중 대시로) */
@@ -185,6 +210,11 @@ export class FightAI {
       out = this.dashSeq.shift()!;
       return finish();
     }
+    if (f.st === "hit" || f.st === "down" || f.st === "ko") this.plan = [];
+    if (this.plan.length) {
+      out = this.plan.shift()!;
+      return finish();
+    }
 
     // ── 비눗방울에 갇힘: 연타로 탈출 (단계가 높을수록 빠르게) ──
     if (f.trapT > 0) {
@@ -193,7 +223,7 @@ export class FightAI {
     }
     // ── 잡혔다: 풀기 (단계별 확률) ──
     if (f.grabbed > 0) {
-      if (this.techDecision === null) this.techDecision = this.r() < L.block * 0.8;
+      if (this.techDecision === null) this.techDecision = this.r() < (L.tech ?? L.block * 0.8);
       if (this.techDecision) out = IN.A | IN.B;
       return finish();
     }
@@ -260,6 +290,7 @@ export class FightAI {
     } else {
       this.sawAtk = -1;
       this.blockDecision = null;
+      this.cutDecision = null;
       this.justPlan = -1;
     }
     const oJumpIn = isAir(s, o) && dy > 20 && dy < 120 && dist < 90 && o.vh < 0;
@@ -344,6 +375,19 @@ export class FightAI {
     }
     const projDist = incoming ? Math.abs(incoming.x - f.x) / SUB : 999;
 
+    // ── 내다보기 (지존): 상대가 기술을 쓰거나 빈틈이면 할 수 있는 행동을 다 돌려 보고 고름 ──
+    if (L.look && (free || blocking) && !air && dist < 160 && Math.abs(dy) < 60) {
+      const hot = oAtk || o.st === "hit" || o.st === "down" || (o.st === "atk" && !o.hit) || (incoming && projDist < 140) || oJumpIn;
+      if (hot) {
+        const best = this.lookAhead(s, me, L.look, faceOk, toward, away);
+        if (best) {
+          this.plan = best.slice(1, 6);
+          out = best[0];
+          return finish();
+        }
+      }
+    }
+
     // ── 막는 중: 가드 반격 / 막은 뒤 반격(프레임 이득) ──
     if (blocking && !air) {
       if (f.stun > 0) {
@@ -373,12 +417,20 @@ export class FightAI {
     }
 
     if ((free || blocking) && !air) {
+      // 끼어들기 (지존): 상대 기술이 나오기 전에 내 약이 먼저 닿으면 먼저 때림
+      if (L.interrupt && free && om && oAtk && noticed(this.sawAtk) && aligned && dist < lReach && faceOk && om.startup - o.t > c.moves.L.startup + 1) {
+        if (this.cutDecision === null) this.cutDecision = this.r() < L.interrupt;
+        if (this.cutDecision) {
+          press(IN.A);
+          return finish();
+        }
+      }
       // 막기 (↓): 상대 공격을 알아챘고, 닿을 거리면 — 고수는 판정 직전에 올려 저스트 가드
       const reach = om ? reachOf(om, 18) : 0;
       if (oAtk && noticed(this.sawAtk) && aligned && (dist < reach || o.mv === "X")) {
         if (this.blockDecision === null) {
           this.blockDecision = this.r() < L.block;
-          this.justPlan = this.r() < L.combo * 0.6 ? 2 + Math.floor(this.r() * 3) : -1;
+          this.justPlan = this.r() < (L.just ?? L.combo * 0.6) ? 2 + Math.floor(this.r() * 3) : -1;
         }
         if (this.blockDecision) {
           const untilHit = om!.startup - o.t;
@@ -599,6 +651,45 @@ export class FightAI {
       }
     }
     return finish();
+  }
+
+  /** 후보 입력열을 각각 W프레임 돌려 보고 (상대는 지금 누른 방향만 유지) 손익이 가장 좋은 걸 돌려줌 */
+  private lookAhead(s: State, me: 0 | 1, W: number, faceOk: boolean, toward: number, away: number): number[] | null {
+    const f = s.p[me];
+    const o = s.p[1 - me];
+    const held = (o.hist[o.hist.length - 1] & (IN.L | IN.R | IN.D)) | (o.st === "block" ? IN.D : 0);
+    const seq = (first: number[], rest: number) => {
+      const a = first.slice();
+      while (a.length < W) a.push(rest);
+      return a;
+    };
+    const cands: number[][] = [seq([], IN.D), seq([], 0), seq([], away), seq([IN.J | away], away), seq([IN.J | toward], toward)];
+    if (faceOk) {
+      for (const b of [IN.A, IN.B, IN.C, IN.A | IN.B]) cands.push(seq([b, 0, 0], IN.D));
+      if (f.meter >= 100) cands.push(seq([IN.X, 0, 0], IN.D));
+      if (f.st === "block" && f.stun > 0 && f.meter >= 25) cands.push(seq([IN.D | IN.B, IN.D, IN.D], IN.D));
+      cands.push(seq([0, toward, toward, IN.B], IN.D));
+    }
+    let best: number[] | null = null;
+    let bestV = -Infinity;
+    for (const c of cands) {
+      const t = clone(s);
+      const my0 = t.p[me].hp,
+        op0 = t.p[1 - me].hp;
+      let v = 0;
+      for (let k = 0; k < W; k++) {
+        step(t, me === 0 ? [c[k], held] : [held, c[k]]);
+        if (t.phase !== "fight") break;
+      }
+      const dealt = op0 - t.p[1 - me].hp,
+        took = my0 - t.p[me].hp;
+      v = dealt - took * 1.3;
+      // 맞았거나 넘어진 채 끝나면 감점, 상대가 경직 중이면 가점 (이어 갈 수 있음)
+      if (t.p[me].st === "hit" || t.p[me].st === "down") v -= 40;
+      if (t.p[1 - me].st === "hit" || t.p[1 - me].st === "down") v += 20;
+      if (v > bestV + 0.5) ((bestV = v), (best = c));
+    }
+    return best;
   }
 
   private decide(s: State, me: 0 | 1, dist: number, lReach: number, hReach: number, oReach: number) {

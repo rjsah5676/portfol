@@ -60,6 +60,7 @@ export async function connectDatabase(cfg: Config): Promise<Database> {
     },
   };
   await ensureIndexes(database);
+  await migrate(database);
   return database;
 }
 
@@ -84,6 +85,9 @@ async function ensureIndexes({ db }: Database) {
   for (const c of ["chess_ai_rankings", "janggi_ai_rankings", "omok_ai_rankings", "fight_ai_rankings"])
     idx(c, { score: -1 });
   idx("rhythm_rankings", { chart: 1, score: -1 });
+  // 격투 AI: 내 캐릭터마다 기록 하나 (캐릭터별 순위)
+  idx("fight_ai_rankings", { ch: 1, score: -1 });
+  idx("fight_ai_rankings", { uid: 1, ch: 1 });
   // 한 사람당 기록 하나: 등록할 때 그 사람의 기존 기록을 찾음
   for (const c of RANK_COLLECTIONS) idx(c, { uid: 1 });
   idx("rhythm_rankings", { chart: 1, uid: 1 });
@@ -103,4 +107,24 @@ async function ensureIndexes({ db }: Database) {
   idx("board_chat", { room: 1, createdAt: -1 });
   idx("board_presence", { room: 1 });
   await Promise.all(tasks);
+}
+
+/** 예전 형식 데이터 고치기 (몇 번 돌아도 같음) */
+async function migrate({ db }: Database) {
+  // 격투 AI 기록에 내 캐릭터(ch) 채우기: opp "3:kai>igna" → "kai", 캐릭터 없는 예전 기록 "3" → ""
+  await db
+    .collection("fight_ai_rankings")
+    .updateMany({ ch: { $exists: false } }, [
+      {
+        $set: {
+          ch: {
+            $ifNull: [
+              { $arrayElemAt: [{ $split: [{ $ifNull: [{ $arrayElemAt: [{ $split: ["$opp", ":"] }, 1] }, ""] }, ">"] }, 0] },
+              "",
+            ],
+          },
+        },
+      },
+    ])
+    .catch((e) => console.warn("[db] migrate fight_ai_rankings.ch", e));
 }

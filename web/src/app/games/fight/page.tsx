@@ -6,6 +6,7 @@ import GameHeader from "@/components/GameHeader";
 import FightGame from "@/components/Fight/FightGame";
 import { FIGHT_GUIDE } from "@/data/gameGuides";
 import { RankBoard, useAIRankTop } from "@/components/AIRank";
+import type { AIRankRow } from "@/firestore/aiRankings";
 import { AI_LEVELS } from "@/lib/fight/ai";
 import { pointsOf } from "@/lib/aiScore";
 import { CHARS } from "@/lib/fight/chars";
@@ -24,8 +25,47 @@ const oppLabel = (opp: string): ReactNode => {
   );
 };
 
+const topRows = (rows: AIRankRow[]) =>
+  rows.map((r) => ({
+    name: r.name,
+    member: r.member,
+    avatar: r.avatar,
+    value: pointsOf(r.score).toLocaleString(),
+    sub: oppLabel(r.opp),
+  }));
+
+/** 랭킹 나누기: 전체(사람마다 가장 좋은 기록 하나) · 내 캐릭터별 */
+function ChTabs({ ch, setCh }: { ch: string; setCh: (c: string) => void }) {
+  const tabs = [{ id: "", name: "전체" }, ...CHARS.map((c) => ({ id: c.id, name: c.name }))];
+  return (
+    <div className="mb-3">
+      <div className="flex flex-wrap gap-1.5">
+        {tabs.map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            onClick={() => setCh(t.id)}
+            className={`cursor-pointer rounded-full border px-3 py-1 text-xs transition-colors ${
+              ch === t.id
+                ? "border-[#FF8A3D] bg-[#FF8A3D] font-bold text-[#2A0E3A]"
+                : "border-white/10 bg-white/[0.03] text-white/60 hover:border-[#FF8A3D]/50 hover:text-white"
+            }`}
+          >
+            {t.name}
+          </button>
+        ))}
+      </div>
+      <p className="mt-1.5 px-1 text-[11px] text-white/35">
+        {ch ? "그 캐릭터로 이긴 기록 — 한 사람당 하나" : "모든 캐릭터 — 한 사람당 가장 좋은 기록 하나"}
+      </p>
+    </div>
+  );
+}
+
 export default function FightPage() {
   const top = useAIRankTop("fight_ai_rankings");
+  const [ch, setCh] = useState("");
+  const chTop = useAIRankTop("fight_ai_rankings", ch || undefined);
   const [refresh, setRefresh] = useState(0);
   return (
     <Faded>
@@ -39,13 +79,9 @@ export default function FightPage() {
           guide={FIGHT_GUIDE}
           rank={{
             sub: "AI 대전",
-            top: top.map((r) => ({
-              name: r.name,
-              member: r.member,
-              avatar: r.avatar,
-              value: pointsOf(r.score).toLocaleString(),
-              sub: oppLabel(r.opp),
-            })),
+            top: topRows(top),
+            podium: ch ? topRows(chTop) : null,
+            head: () => <ChTabs ch={ch} setCh={setCh} />,
             render: () => (
               <RankBoard
                 coll="fight_ai_rankings"
@@ -54,6 +90,7 @@ export default function FightPage() {
                 bare
                 skip={3}
                 refresh={refresh}
+                ch={ch || undefined}
               />
             ),
           }}

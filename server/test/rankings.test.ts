@@ -179,6 +179,27 @@ describe("랭킹: AI 대국", () => {
     expect(await status("a10", "fight_ai_rankings", { ...base, lead: 80, score: fight, opp: "4" })).toBe(400);
   });
 
+  it("격투: 지존(7단계)까지, 내 캐릭터마다 기록 하나 · 전체는 사람마다 가장 좋은 것", async () => {
+    const f = (tier: number, hp: number) => ({ ...base, lead: hp, score: fightScore(tier, hp, 100).score });
+    expect(await status("fc1", "fight_ai_rankings", { ...f(7, 50), opp: "7:kai>igna" })).toBe(200);
+    expect(await status("fc1", "fight_ai_rankings", { ...f(8, 50), opp: "8:kai>igna" })).toBe(400);
+    expect(await status("fc1", "fight_ai_rankings", { ...f(2, 50), opp: "2:igna>kai" })).toBe(200);
+    // 같은 캐릭터로 더 낮은 기록은 안 바뀜
+    expect(await status("fc1", "fight_ai_rankings", { ...f(1, 50), opp: "1:kai>igna" })).toBe(200);
+    expect(await status("fc2", "fight_ai_rankings", { ...f(5, 50), opp: "5:igna>zena" })).toBe(200);
+    const get = async (q: string) => (await s.http(`/api/rankings/fight_ai_rankings${q}`)).body as { opp: string; ch: string }[];
+    expect((await get("?ch=kai")).filter((r) => r.ch === "kai").map((r) => r.opp)).toContain("7:kai>igna");
+    expect((await get("?ch=kai")).some((r) => r.opp === "1:kai>igna")).toBe(false);
+    expect((await get("?ch=igna")).map((r) => r.opp).slice(0, 2)).toEqual(["5:igna>zena", "2:igna>kai"]);
+    expect((await s.http("/api/rankings/fight_ai_rankings?ch=nobody")).status).toBe(400);
+    // 전체: fc1은 가장 좋은 기록(지존 카이) 하나만
+    const all = await get("");
+    expect(all.filter((r) => r.opp.endsWith(">igna") || r.opp.endsWith(">kai") || r.opp.endsWith(">zena")).map((r) => r.opp)).toEqual(
+      expect.arrayContaining(["7:kai>igna", "5:igna>zena"])
+    );
+    expect(all.some((r) => r.opp === "2:igna>kai")).toBe(false);
+  });
+
   it("내가 쓴 시간보다 대국이 짧을 수는 없음", async () => {
     const body = { ...base, seconds: 300, score: chessScore(1, 5, 30, 300).score, opp: "400" };
     expect(await status("at1", "chess_ai_rankings", body, 100)).toBe(400);

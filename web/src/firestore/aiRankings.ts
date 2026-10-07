@@ -35,8 +35,9 @@ interface Row extends AIRankEntry {
   createdAt: number | null;
 }
 
-export async function getAIRanks(coll: AIRankColl, count = 10): Promise<AIRankRow[]> {
-  const rows = await api<Row[]>(`/api/rankings/${coll}?limit=${count}`);
+/** ch: 격투 AI만 — 내 캐릭터별 순위 (없으면 전체: 사람마다 가장 좋은 기록 하나) */
+export async function getAIRanks(coll: AIRankColl, count = 10, ch?: string): Promise<AIRankRow[]> {
+  const rows = await api<Row[]>(`/api/rankings/${coll}?limit=${count}${ch ? `&ch=${encodeURIComponent(ch)}` : ""}`);
   return rows.map((x) => ({
     id: x.id,
     name: x.name,

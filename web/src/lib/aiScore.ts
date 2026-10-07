@@ -68,7 +68,7 @@ export function omokScore(tier: number, moves: number, seconds: number, asWhite:
   return combine(tier, parts);
 }
 
-/** 격투: tier = AI 단계(1~6), 남은 체력이 많을수록, 3분 안에 빨리 끝낼수록 */
+/** 격투: tier = AI 단계(1~7), 남은 체력이 많을수록, 3분 안에 빨리 끝낼수록 */
 export function fightScore(tier: number, hpPct: number, seconds: number) {
   return combine(tier, [
     { label: "남은 체력", detail: `${hpPct}%`, factor: 1 + Math.max(0, hpPct) / 100 },

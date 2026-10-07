@@ -62,11 +62,15 @@ export function meRouter({ db, auth, users }: Deps): Router {
       // 랭킹마다 내 기록 하나 + 그보다 좋은 기록 수로 순위를 셈
       const records = (
         await Promise.all(
-          Object.entries(BOARDS).map(async ([board, { sort }]) => {
-            const mine = await db.col(board).findOne({ uid: user.uid });
+          Object.entries(BOARDS).map(async ([board, { sort, split }]) => {
+            // 한 사람이 여러 기록을 가질 수 있으면(격투: 캐릭터마다) 가장 좋은 것, 순위는 그보다 좋은 기록을 가진 사람 수로
+            const mine = await db.col(board).findOne({ uid: user.uid }, { sort });
             if (!mine) return null;
             const [field, dir] = Object.entries(sort)[0];
-            const better = await db.col(board).countDocuments({ [field]: dir === -1 ? { $gt: mine[field] } : { $lt: mine[field] } });
+            const filter = { [field]: dir === -1 ? { $gt: mine[field] } : { $lt: mine[field] } };
+            const better = split
+              ? (await db.col(board).distinct("uid", filter)).length
+              : await db.col(board).countDocuments(filter);
             const { _id, uid: _uid, createdAt, ...data } = mine;
             return { board, id: _id, rank: better + 1, ...data, createdAt: ms(createdAt) };
           })
