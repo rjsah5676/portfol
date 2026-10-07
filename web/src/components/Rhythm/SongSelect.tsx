@@ -69,7 +69,6 @@ export default function SongSelect({
   analyze?: boolean;
   onAnalyze?: (on: boolean) => void;
 }) {
-  // 랭킹 패널: 곡 랭킹 / 회원 BP 랭킹
   // 내 음악: 재킷을 눌러도 파일 고르기
   const pickRef = useRef<(() => void) | null>(null);
   const custom = sel === songs.length;
@@ -81,6 +80,12 @@ export default function SongSelect({
   const b = song ? best[bestKey(diff)] : undefined;
   const diffInfo = DIFFICULTIES.find((d) => d.key === diff)!;
   const curChart = chartOf(diff);
+
+  // 고른 곡의 플레이 배경을 미리 받아 둠 (시작할 때 빈 화면 없이)
+  const bgUrl = custom ? undefined : song?.bg;
+  useEffect(() => {
+    if (bgUrl) new Image().src = bgUrl;
+  }, [bgUrl]);
 
   // 곡 검색: 글자가 바뀔 때마다(0.25초 디바운스) 목록 자체를 걸러 냄
   const [q, setQ] = useState("");

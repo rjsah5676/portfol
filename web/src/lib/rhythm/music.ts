@@ -340,6 +340,8 @@ function audioSong(
     sound: { lead: "sine", arp: "sine", delaySteps: 0 },
     beatOffset: data.beatOffset,
     audio,
+    // 플레이 배경: 재킷을 16:9로 넓힌 그림 (public/rhythm/bg/곡id.webp)
+    bg: `/rhythm/bg/${id}.webp`,
     charts,
     ...extra,
   };
