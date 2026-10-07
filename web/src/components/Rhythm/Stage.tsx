@@ -221,13 +221,14 @@ export default function Stage({
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
-  // 뮤직비디오 배경: 데스크탑(마우스)·가로 화면에서만 — 폰·내장그래픽은 합성 부담이 커서. 프레임이 떨어지면 자동으로 끔
-  const useVideo =
+  // 커버·뮤비 배경은 캔버스 뒤 HTML 요소로 (재킷은 CSS blur — 캔버스로 흐리면 화질이 깨지고 사파리는 filter가 안 됨).
+  // 데스크탑(마우스)·가로 화면에서만 — 캔버스가 투명해져 합성 부담이 조금 늘어서 폰은 무대 그림 그대로. 뮤비는 프레임이 떨어지면 자동으로 끔
+  const domBg =
     bg === "cover" &&
-    !!song.video &&
     !portrait &&
     typeof window !== "undefined" &&
     window.matchMedia("(pointer: fine)").matches;
+  const useVideo = domBg && !!song.video;
   const [paused, setPaused] = useState(false);
   // 일시정지 화면의 지금까지 점수·정확도·랭크
   const [pauseStats, setPauseStats] = useState<{
@@ -268,8 +269,8 @@ export default function Stage({
     const canvas = canvasRef.current!;
     const wrap = wrapRef.current!;
     // desynchronized는 쓰지 않음: 모바일(특히 안드로이드)에서 화면이 찢어지고 깜빡임
-    // 뮤비가 뒤에 깔릴 땐 캔버스를 투명하게 (바닥 그림이 반투명이라 영상이 비침)
-    const g = canvas.getContext("2d", { alpha: useVideo })!;
+    // 커버·뮤비가 뒤에 깔릴 땐 캔버스를 투명하게 (바닥 그림이 반투명이라 뒤가 비침)
+    const g = canvas.getContext("2d", { alpha: domBg })!;
     const video = useVideo ? videoRef.current : null;
     let videoOff = false;
     const beatSec = 60 / song.bpm;
@@ -396,32 +397,9 @@ export default function Stage({
     let staticLayer: HTMLCanvasElement | null = null;
     const buildStatic = () => {
       const { c, b } = layer(CW, CH);
-      if (useVideo) {
-        // 영상 위에 어두운 막만 (영상은 <video>가 뒤에서 재생)
-        b.fillStyle = "rgba(4,5,14,0.5)";
-        b.fillRect(0, 0, CW, CH);
-      } else if (bg === "cover" && ready(coverImg)) {
-        // 재킷을 크게 흐려서 (작게 줄였다 키우면 블러 — canvas filter는 사파리가 안 됨)
-        // 160px 폭으로 줄였다 키우면 살짝만 흐려져 그림이 보임 (너무 흐리면 뭔지 안 보여서)
-        const tiny = document.createElement("canvas");
-        tiny.width = 160;
-        tiny.height = Math.max(1, Math.round((160 * CH) / CW));
-        const tb = tiny.getContext("2d")!;
-        const sc = Math.max(
-          tiny.width / coverImg.naturalWidth,
-          tiny.height / coverImg.naturalHeight
-        );
-        tb.drawImage(
-          coverImg,
-          (tiny.width - coverImg.naturalWidth * sc) / 2,
-          (tiny.height - coverImg.naturalHeight * sc) / 2,
-          coverImg.naturalWidth * sc,
-          coverImg.naturalHeight * sc
-        );
-        b.imageSmoothingEnabled = true;
-        b.imageSmoothingQuality = "high";
-        b.drawImage(tiny, -CW * 0.03, -CH * 0.03, CW * 1.06, CH * 1.06);
-        b.fillStyle = "rgba(4,5,14,0.38)";
+      if (domBg) {
+        // 재킷·영상은 뒤의 HTML 요소가 보여 주고, 여기엔 어두운 막만
+        b.fillStyle = useVideo ? "rgba(4,5,14,0.5)" : "rgba(4,5,14,0.42)";
         b.fillRect(0, 0, CW, CH);
       } else {
         if (ready(bgImg)) {
@@ -868,7 +846,7 @@ export default function Stage({
 
     /** 바닥(배경·레인 판·정보판) + 박자 빛 + 정보판 글자 */
     const drawBackdrop = (t: number, pulse: number) => {
-      if (useVideo) g.clearRect(0, 0, CW, CH); // 투명 캔버스: 지난 프레임을 지워야 영상이 비침
+      if (domBg) g.clearRect(0, 0, CW, CH); // 투명 캔버스: 지난 프레임을 지워야 뒤가 비침
       if (staticLayer) g.drawImage(staticLayer, 0, 0, CW, CH);
       else {
         g.fillStyle = "#070814";
@@ -1891,6 +1869,20 @@ export default function Stage({
       ref={wrapRef}
       className={`absolute inset-0 overflow-hidden ${portrait ? "flex items-center justify-center bg-black" : ""}`}
     >
+      {domBg && !useVideo && (
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0"
+          style={{
+            backgroundImage: `url(${JSON.stringify(coverOf(song))})`,
+            backgroundSize: "cover",
+            backgroundPosition: "center",
+            // 흐림 가장자리가 비치지 않게 살짝 키움
+            transform: "scale(1.06)",
+            filter: "blur(14px) saturate(1.1)",
+          }}
+        />
+      )}
       {useVideo && (
         <video
           ref={videoRef}
