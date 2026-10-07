@@ -42,7 +42,7 @@ const pill = `${KR} cursor-pointer rounded-full bg-black/50 px-[1.4cqw] py-[0.5c
 const field = `${KR} min-w-0 rounded-[0.6cqw] border border-white/15 bg-black/55 px-[1cqw] py-[0.6cqw] text-[1.3cqw] text-white placeholder:text-white/30 focus:border-[#FDE047]/60 focus:outline-none`;
 const bigBtn = `${KR} cursor-pointer whitespace-nowrap rounded-full bg-[#E8344E] px-[2.6cqw] py-[0.7cqw] text-[1.5cqw] font-extrabold text-white shadow-[0_0.3cqw_0_#7A1020] transition-transform hover:scale-105 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:scale-100`;
 /** 랭크전 버튼 (노랑) · 수락 버튼 (초록) — bigBtn 과 색만 다름 */
-const rankBtn = bigBtn.replace("bg-[#E8344E]", "bg-[#F59E0B]").replace("text-white", "text-[#2A0E3A]").replace("#7A1020", "#7C4A03");
+const rankBtn = `${KR} cursor-pointer rounded-full border-[0.2cqw] border-[#FDE047]/80 bg-black/40 px-[2.6cqw] py-[0.6cqw] text-[1.4cqw] font-bold whitespace-nowrap text-[#FDE047] transition-colors hover:bg-[#FDE047] hover:text-black disabled:cursor-not-allowed disabled:border-white/30 disabled:text-white/40 disabled:hover:bg-black/40`;
 const okBtn = bigBtn.replace("bg-[#E8344E]", "bg-[#22C55E]").replace("#7A1020", "#14532D");
 
 export interface MatchCfg {
@@ -416,12 +416,11 @@ function Lobby({
         </div>
         <div className="flex w-[30cqw] flex-col gap-[1.2cqw]">
         {/* 랭크전 */}
-        <div className="flex flex-col gap-[0.7cqw] rounded-[1cqw] border-[0.2cqw] border-[#FDE047]/45 bg-[linear-gradient(135deg,rgba(253,224,71,0.16),rgba(232,52,78,0.14))] p-[1.3cqw] backdrop-blur-[2px]">
+        <div className="flex flex-col gap-[1cqw] rounded-[1cqw] bg-black/50 p-[1.4cqw] backdrop-blur-[2px]">
           <div className="flex items-baseline justify-between">
-            <span className={`${KR} text-[1.6cqw] font-extrabold text-white`}>⚔ 랭크전</span>
-            <span className={`${KR} text-[1cqw] text-white/50`}>회원끼리 자동 매칭</span>
+            <span className={`${KR} text-[1.5cqw] font-extrabold text-white`}>랭크전</span>
+            <span className={`${KR} text-[1.05cqw] text-white/40`}>회원 · 자동 매칭 · 맵 랜덤</span>
           </div>
-          <div className={`${KR} text-[1.05cqw] leading-relaxed text-white/60`}>맵은 랜덤, 캐릭터는 골라요. 이기면 레이팅이 올라요.</div>
           <button type="button" disabled={!member} onClick={onRank} className={rankBtn}>
             {member ? "랭크전 찾기" : "회원만 할 수 있어요"}
           </button>
