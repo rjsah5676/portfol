@@ -380,9 +380,15 @@ export default function SettingsModal({
               </div>
               {calibrate && (
                 <>
-                  <SyncCalibrate sync={settings.sync} hitSound={settings.hitSound} />
+                  <SyncCalibrate
+                    sync={settings.sync}
+                    hitSound={settings.hitSound}
+                    speed={settings.speed}
+                    skin={settings.skin}
+                  />
                   <p className="mt-[0.5cqw] font-['Nanum_Gothic',sans-serif] text-[1cqw] leading-relaxed text-white/45">
-                    띡 소리가 날 때 노트가 분홍 줄에 딱 닿아야 해요. 노트가 소리보다{" "}
+                    FREEDOM DiVE 하이라이트가 실제 HARD 채보·내 노트 속도로 돌아요. 타격음이 나는
+                    순간 노트가 분홍 줄에 닿아야 해요. 노트가 음악보다{" "}
                     <b className="text-white/70">먼저</b> 닿으면 <b className="text-white/70">+</b>,{" "}
                     <b className="text-white/70">늦게</b> 닿으면 <b className="text-white/70">−</b>
                     로 움직여 보세요. 여기서 맞춘 값이 그대로 플레이에 쓰여요 (블루투스 이어폰이라면
