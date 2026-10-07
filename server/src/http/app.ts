@@ -62,6 +62,14 @@ export function createApp(deps: Deps, hooks: Omit<AdminHooks, "guestChanged">) {
       .catch(next);
   });
 
+  // 꾸밈이 붙은 회원들 (별명 → 꾸밈). 랭킹·방명록·게임에서 이름 옆에 보여 줌
+  app.get("/api/badges", (_req, res, next) => {
+    deps.users
+      .badges()
+      .then((b) => res.set("Cache-Control", "public, max-age=30").json(b))
+      .catch(next);
+  });
+
   const site = siteRouter(deps);
   app.use("/api/rankings", rankingsRouter(deps));
   app.use("/api/me", meRouter(deps));

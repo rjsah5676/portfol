@@ -10,6 +10,7 @@ import {
   updateUser,
   type AdminUser,
 } from "@/firestore/adminData";
+import { refreshBadges } from "@/lib/badges";
 import { ago, BOARD_LABEL } from "./Overview";
 
 /*
@@ -68,6 +69,7 @@ function Detail({
     setError("");
     try {
       onSaved(await updateUser(user.uid, { nick: nick.trim(), badge: badge.trim() || null }));
+      refreshBadges(true); // 랭킹·방명록의 이름 옆 꾸밈도 바로 바뀌게
     } catch (e) {
       setError(e instanceof Error ? e.message : "저장하지 못했어요.");
     } finally {

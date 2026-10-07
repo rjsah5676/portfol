@@ -141,7 +141,10 @@ export default function AccountMenu() {
                   }`}
                 >
                   <Avatar profile={profile} photo={account.photoURL} size="sm" />
-                  <span className={`max-w-[6.5rem] truncate ${KR}`}>{profile.nick}</span>
+                  <span className={`max-w-[6.5rem] truncate ${KR}`}>
+                    {profile.badge && <span className="mr-1">{profile.badge}</span>}
+                    {profile.nick}
+                  </span>
                 </Link>
                 <button
                   type="button"
@@ -185,6 +188,7 @@ export default function AccountMenu() {
                           <span
                             className={`block truncate text-[15px] font-bold text-white underline-offset-4 group-hover:underline ${KR}`}
                           >
+                            {profile.badge && <span className="mr-1">{profile.badge}</span>}
                             {profile.nick}
                           </span>
                           {account.email && (

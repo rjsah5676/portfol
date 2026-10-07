@@ -326,6 +326,12 @@ export function createUsers(db: Database, cfg: Pick<Config, "adminNick">) {
       return { removed: r.deletedCount > 0 };
     },
 
+    /** 꾸밈이 붙은 회원들: 별명 → 꾸밈 (이름을 보여 주는 화면이 별명 옆에 붙임) */
+    async badges(): Promise<Record<string, string>> {
+      const docs = await col.find({ badge: { $exists: true } }, { projection: { nick: 1, badge: 1 } }).limit(1000).toArray();
+      return Object.fromEntries(docs.filter((d) => d.badge).map((d) => [d.nick, d.badge as string]));
+    },
+
     /** (관리자) 회원 수와 최근 가입한 사람들 */
     async adminRecent(limit = 5): Promise<{ total: number; recent: AdminUser[] }> {
       const [total, docs] = await Promise.all([

@@ -56,7 +56,7 @@ function Section({ group, children }: { group: NavGroup; children: ReactNode }) 
         </div>
         <Link
           href={`${group.href}/`}
-          className="font-mono text-sm text-white/45 underline-offset-4 transition-colors hover:text-[color:var(--accent)] hover:underline"
+          className="shrink-0 font-mono text-sm text-[color:var(--accent)] underline decoration-current/35 underline-offset-4 transition-colors hover:decoration-current"
         >
           {group.label} 전체 보기
         </Link>
@@ -204,7 +204,7 @@ function RowGroup({ group, thumb }: { group: NavGroup; thumb: boolean }) {
         </h2>
         <Link
           href={`${group.href}/`}
-          className="font-mono text-sm text-white/45 underline-offset-4 transition-colors hover:text-[color:var(--accent)] hover:underline"
+          className="shrink-0 font-mono text-sm text-[color:var(--accent)] underline decoration-current/35 underline-offset-4 transition-colors hover:decoration-current"
         >
           전체 보기
         </Link>

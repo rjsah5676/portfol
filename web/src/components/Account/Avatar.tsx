@@ -12,7 +12,7 @@ const SIZE = {
 
 /**
  * 프로필 동그라미: 직접 올린 사진 → 로그인 계정(Google)의 사진 → 별명 첫 글자 순으로.
- * (관리자가 붙여 준 꾸밈이 있으면 첫 글자 대신 그걸 보여 줌)
+ * (관리자가 붙여 준 꾸밈은 별명 앞에 따로 보여 줌)
  */
 export default function Avatar({
   profile,
@@ -41,7 +41,7 @@ export default function Avatar({
       aria-hidden="true"
       className={`flex shrink-0 items-center justify-center rounded-full bg-[linear-gradient(135deg,#6C63FF,#2DD4BF)] font-['Nanum_Gothic',sans-serif] font-bold text-white ${SIZE[size]}`}
     >
-      {profile.badge ?? [...profile.nick][0]}
+      {[...profile.nick][0]}
     </span>
   );
 }

@@ -84,8 +84,11 @@ describe("관리자: 회원", () => {
     const patch = (body: object) => s.http("/api/admin/users/mu1", { method: "PATCH", token: admin, body });
     expect((await patch({ badge: "👑" })).body).toMatchObject({ nick: "원래별명", badge: "👑" });
     expect((await s.http("/api/me", { token })).body.profile.badge).toBe("👑");
+    // 꾸밈은 누구나 받아 갈 수 있음 (랭킹·방명록에서 별명 옆에 보여 줌)
+    expect((await s.http("/api/badges")).body).toMatchObject({ 원래별명: "👑" });
     expect((await patch({ badge: "가".repeat(9) })).status).toBe(400);
     expect((await patch({ badge: null })).body.badge).toBeNull();
+    expect((await s.http("/api/badges")).body).not.toHaveProperty("원래별명");
     // 별명: 이모지 · 중복은 관리자도 안 됨, 바꾸면 그 사람 랭킹 이름도 같이
     expect((await patch({ nick: "별명😀" })).status).toBe(400);
     expect((await patch({ nick: "다른사람" })).status).toBe(409);

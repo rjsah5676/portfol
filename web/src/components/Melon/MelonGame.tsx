@@ -593,7 +593,7 @@ export default function MelonGame() {
   // 귀여운 파스텔 톤: 크림 바탕 + 민트 판 + 통통한 버튼(아래 그림자)
   const jua = "font-['Jua',sans-serif]";
   const chunky =
-    "cursor-pointer rounded-full px-5 py-1.5 text-base sm:px-7 sm:py-2.5 sm:text-xl transition-transform active:translate-y-[3px] disabled:cursor-default disabled:opacity-50";
+    "cursor-pointer rounded-full px-4 py-1.5 text-base whitespace-nowrap sm:px-7 sm:py-2.5 sm:text-xl transition-transform active:translate-y-[3px] disabled:cursor-default disabled:opacity-50";
   const greenBtn = `${chunky} ${jua} bg-[#7ED957] text-white shadow-[0_4px_0_#4FA834] hover:brightness-105 active:shadow-[0_1px_0_#4FA834]`;
   const plainBtn = `${chunky} ${jua} bg-white text-[#6B8F4E] shadow-[0_4px_0_#CFE3BF] active:shadow-[0_1px_0_#CFE3BF]`;
   const card = "rounded-[22px] border-[3px] border-[#D6EEC4] bg-[#FFFDF4]";
@@ -843,7 +843,7 @@ export default function MelonGame() {
                 {submitState === "done" && (
                   <p className="text-base text-[#5BB53C]">랭킹에 등록했어요!</p>
                 )}
-                <div className="mt-1 flex gap-2 sm:mt-2 sm:gap-2.5">
+                <div className="mt-1 flex flex-wrap justify-center gap-x-1.5 gap-y-2.5 sm:mt-2 sm:gap-2.5">
                   <button type="button" onClick={start} className={greenBtn}>
                     다시하기
                   </button>
