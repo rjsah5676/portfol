@@ -147,7 +147,7 @@ export default function BojProject() {
           2016.06 –
         </span>
         <LinkPill href="https://github.com/rjsah5676/ACMICPC">GitHub ↗</LinkPill>
-        <LinkPill href="https://www.acmicpc.net/user/rjsah5676">백준 프로필 ↗</LinkPill>
+        <LinkPill href="https://solved.ac/rjsah5676">solved.ac 프로필 ↗</LinkPill>
       </div>
 
       <StatGrid

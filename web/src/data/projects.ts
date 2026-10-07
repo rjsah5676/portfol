@@ -115,7 +115,7 @@ export const personalProjects: Project[] = [
     desc: "알고리즘을 배우기 위해 문제를 푼 사이트 입니다.",
     tech: ["C++", "Java", "Python"],
     period: "2016.06 –",
-    secondLink: "https://solved.ac/profile/rjsah5676",
+    secondLink: "https://solved.ac/rjsah5676",
     secondLabel: "solved.ac",
   },
 ];

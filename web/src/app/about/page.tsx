@@ -27,7 +27,7 @@ const projects: AboutProject[] = allProjects.map((p) => ({
 
 const sites: SiteLink[] = [
   { icon: githubIcon, label: "GitHub", href: "https://github.com/rjsah5676" },
-  { icon: acmicpcIcon, label: "BAEKJOON", href: "https://www.acmicpc.net/user/rjsah5676" },
+  { icon: acmicpcIcon, label: "BAEKJOON", href: "https://solved.ac/rjsah5676" },
 ];
 
 export default function AboutPage() {

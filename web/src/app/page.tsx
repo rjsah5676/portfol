@@ -21,7 +21,7 @@ const jsonLd = {
       image: `${SITE_URL}${meImg.src}`,
       alumniOf: { "@type": "CollegeOrUniversity", name: "아주대학교" },
       knowsAbout: ["React", "Next.js", "TypeScript", "Spring Boot", "Node.js", "MySQL"],
-      sameAs: ["https://github.com/rjsah5676", "https://www.acmicpc.net/user/rjsah5676"],
+      sameAs: ["https://github.com/rjsah5676", "https://solved.ac/rjsah5676"],
     },
     {
       "@type": "WebSite",
