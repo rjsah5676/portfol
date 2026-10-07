@@ -122,12 +122,12 @@ describe("Firestore → MongoDB 이전", () => {
     // ── 서버 API로 읽기 ──
     const scores = (await s.http("/api/rankings/score")).body;
     expect(scores).toEqual([
-      { id: "a1", name: "건모", score: 200, createdAt: Date.parse("2026-10-01T00:00:00Z") },
-      { id: "a2", name: "옛날", score: 120, createdAt: Date.parse("2021-07-08T09:10:11Z") },
+      { id: "a1", name: "건모", score: 200, avatar: null, createdAt: Date.parse("2026-10-01T00:00:00Z") },
+      { id: "a2", name: "옛날", score: 120, avatar: null, createdAt: Date.parse("2021-07-08T09:10:11Z") },
     ]);
     expect((await s.http("/api/rankings/minesweeper_rankings")).body[0]).toMatchObject({ id: "m1", time: 41.25 });
     expect((await s.http("/api/rankings/rhythm/jilju_hard")).body).toEqual([
-      { id: "r1", name: "건모", score: 987654, acc: 98.76, maxCombo: 432, fc: true, ap: false, createdAt: Date.parse("2026-10-02T00:00:00Z") },
+      { id: "r1", name: "건모", score: 987654, acc: 98.76, maxCombo: 432, fc: true, ap: false, avatar: null, createdAt: Date.parse("2026-10-02T00:00:00Z") },
     ]);
     expect((await s.http("/api/guest")).body).toEqual([
       { docId: "g1", name: "방문자", contents: "안녕하세요", id: 1790000000000, date: "2026년 9월 21일  23:13", color: "mint" },
