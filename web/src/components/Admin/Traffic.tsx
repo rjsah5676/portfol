@@ -445,7 +445,11 @@ export default function Traffic() {
                             <span className="inline-flex items-center gap-1.5">
                               <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: src.color }} />
                               <span className="text-white/85">{r.source === "direct" ? src.label : r.site || src.label}</span>
-                              {r.member && <span className="rounded bg-[#8B84FF]/20 px-1 text-[10px] text-[#B8B3FF]">회원</span>}
+                              {r.member && (
+                                <span className="rounded bg-[#8B84FF]/20 px-1 text-[10px] text-[#B8B3FF]" title="로그인한 회원">
+                                  {r.nick || "회원"}
+                                </span>
+                              )}
                               {r.returning && <span className="text-[10px] text-white/35">재방문</span>}
                               {r.cloud && (
                                 <span className="rounded bg-[#FB923C]/20 px-1 text-[10px] text-[#FDBA74]" title="클라우드(데이터센터) IP — 봇 의심">

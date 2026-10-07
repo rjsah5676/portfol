@@ -50,6 +50,7 @@ export function trackRouter({ auth, users, traffic, cfg }: Deps) {
       if (input.path.startsWith("/admin")) return;
       const user = await userOf(auth, req);
       if (user?.admin) return;
+      // 회원이면 uid 를 남김 (관리자 화면에서 지금 별명으로 보여 줌)
       const member = !!(await users.nickOf(user));
       const host = req.hostname?.toLowerCase() ?? "";
       const ownHosts = [...new Set([host, host.replace(/^www\./, ""), `www.${host.replace(/^www\./, "")}`, ...configured])];
@@ -57,6 +58,7 @@ export function trackRouter({ auth, users, traffic, cfg }: Deps) {
         ip: cleanIp(req.ip),
         ua: String(req.headers["user-agent"] ?? ""),
         member,
+        uid: member ? user!.uid : undefined,
         ownHosts,
       });
     })

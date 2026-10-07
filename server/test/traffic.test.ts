@@ -162,7 +162,9 @@ describe("유입 기록 API", () => {
     const token = await s.token("tm1", { email: "tm1@example.com" });
     expect((await s.http("/api/me/nick", { method: "PUT", token, body: { nick: "유입회원" } })).status).toBe(200);
     expect(await track({ sid: "sess_member01", path: "/about/", entry: true, returning: false }, WIN_CHROME, token)).toBe(204);
-    expect(await s.db.col("traffic_hits").findOne({ sid: "sess_member01" })).toMatchObject({ member: true });
+    expect(await s.db.col("traffic_hits").findOne({ sid: "sess_member01" })).toMatchObject({ member: true, uid: "tm1" });
+    // 비회원 기록에는 uid 없음
+    expect((await s.db.col("traffic_hits").findOne({ sid: "sess_abcdef01" }))?.uid).toBeUndefined();
   });
 
   it("관리자 집계: 기간 · 항목 · 히트맵 · 최근 유입(IP 포함), 개요의 오늘 유입", async () => {
@@ -182,6 +184,8 @@ describe("유입 기록 API", () => {
     expect(body.heat).toHaveLength(7);
     expect(body.heat.flat().reduce((x: number, y: number) => x + y, 0)).toBe(3);
     expect(body.recent).toHaveLength(3);
+    expect(body.recent.find((r: any) => r.member)).toMatchObject({ nick: "유입회원" });
+    expect(body.recent.filter((r: any) => !r.member).every((r: any) => r.nick === "")).toBe(true);
     const naver = body.recent.find((r: any) => r.site === "Naver");
     expect(naver).toMatchObject({ source: "search", term: "gunmo", pages: 2, ip: "127.0.0.1", device: "mobile" });
 
@@ -234,6 +238,18 @@ describe("유입 기록 API", () => {
     expect((await s.db.col("traffic_hits").findOne({ sid: "sess_cloud004" }))?.cloud).toBe("AWS");
     await s.db.col("traffic_hits").deleteMany({ _id: { $in: ["c1", "c2", "c3"] } });
     await s.db.col("traffic_hits").deleteMany({ sid: "sess_cloud004" });
+  });
+
+  it("회원을 지우면 유입 기록의 uid 도 뗌", async () => {
+    const token = await s.token("tm2", { email: "tm2@example.com" });
+    expect((await s.http("/api/me/nick", { method: "PUT", token, body: { nick: "지울회원" } })).status).toBe(200);
+    expect(await track({ sid: "sess_member02", path: "/", entry: true, returning: false }, WIN_CHROME, token)).toBe(204);
+    expect((await s.db.col("traffic_hits").findOne({ sid: "sess_member02" }))?.uid).toBe("tm2");
+    expect((await s.http("/api/admin/users/tm2", { method: "DELETE", token: admin })).status).toBe(200);
+    const doc = await s.db.col("traffic_hits").findOne({ sid: "sess_member02" });
+    expect(doc?.uid).toBeUndefined();
+    expect(doc?.member).toBe(true);
+    await s.db.col("traffic_hits").deleteMany({ sid: "sess_member02" });
   });
 
   it("정리 작업: 30일 지난 원본 IP 를 지움", async () => {

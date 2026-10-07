@@ -340,6 +340,8 @@ export function createUsers(db: Database, cfg: Pick<Config, "adminNick">) {
           records ? db.col(c).deleteMany({ uid }) : db.col(c).updateMany({ uid }, { $unset: { member: "" } })
         )
       );
+      // 유입 기록에 남은 회원 표시(uid)도 뗌
+      await db.col("traffic_hits").updateMany({ uid }, { $unset: { uid: "" } });
       renameHooks.forEach((f) => f(uid, null));
       return { removed: r.deletedCount > 0 };
     },

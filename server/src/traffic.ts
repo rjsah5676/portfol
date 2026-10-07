@@ -286,6 +286,8 @@ export interface HitDoc {
   region: string;
   city: string;
   member: boolean;
+  /** 회원 uid (회원을 지우면 같이 지움) */
+  uid?: string;
   /** 클라우드 업체 이름 (아니면 "", 대역 목록이 없어 못 본 건 필드 없음) */
   cloud?: string;
   /** 하루 단위 순방문자 해시 */
@@ -295,8 +297,16 @@ export interface HitDoc {
   ua: string;
 }
 
+export interface RecordCtx {
+  ip: string;
+  ua: string;
+  member: boolean;
+  uid?: string;
+  ownHosts: string[];
+}
+
 export interface Traffic {
-  record(input: HitInput, ctx: { ip: string; ua: string; member: boolean; ownHosts: string[] }): Promise<boolean>;
+  record(input: HitInput, ctx: RecordCtx): Promise<boolean>;
   summary(day: string): Promise<DaySummary>;
   range(from: string, to: string, opts?: { human?: boolean }): Promise<RangeReport>;
   today(): Promise<{ entries: number; uniques: number; hits: number; top: [string, number][] }>;
@@ -340,7 +350,7 @@ export function createTraffic(
       throw e;
     }));
 
-  async function record(input: HitInput, ctx: { ip: string; ua: string; member: boolean; ownHosts: string[] }) {
+  async function record(input: HitInput, ctx: RecordCtx) {
     if (isBotUa(ctx.ua)) return false;
     await cloudLoad;
     const now = Date.now();
@@ -381,6 +391,7 @@ export function createTraffic(
       region: geo?.region ?? "",
       city: geo?.city ?? "",
       member: ctx.member,
+      ...(ctx.member && ctx.uid ? { uid: ctx.uid } : {}),
       ...(cloudOf !== null ? { cloud: cloudOf } : {}),
       vh,
       ...(ctx.ip ? { ip: ctx.ip } : {}),
@@ -428,6 +439,16 @@ export function createTraffic(
       ? await hits.aggregate<{ _id: string; n: number }>([{ $match: { sid: { $in: sids } } }, { $group: { _id: "$sid", n: { $sum: 1 } } }]).toArray()
       : [];
     const pagesOf = new Map(pageCounts.map((p) => [p._id, p.n]));
+    // 회원은 지금 별명으로
+    const uids = [...new Set(recentDocs.map((d) => d.uid).filter((u): u is string => !!u))];
+    const nicks = uids.length
+      ? new Map(
+          (await db.col<{ nick?: string }>("users").find({ _id: { $in: uids } }, { projection: { nick: 1 } }).toArray()).map((u) => [
+            u._id,
+            u.nick ?? "",
+          ])
+        )
+      : new Map<string, string>();
 
     return {
       from,
@@ -462,6 +483,7 @@ export function createTraffic(
         city: d.city,
         ip: d.ip ?? "",
         member: d.member,
+        nick: d.uid ? (nicks.get(d.uid) ?? "") : "",
         returning: d.returning,
         cloud: d.cloud ?? "",
       })),
@@ -612,6 +634,8 @@ export interface RangeReport {
     city: string;
     ip: string;
     member: boolean;
+    /** 회원 별명 (지금 이름, 지워진 회원은 "") */
+    nick: string;
     returning: boolean;
     /** 클라우드 업체 ("" = 아님) */
     cloud: string;

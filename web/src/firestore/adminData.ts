@@ -165,6 +165,8 @@ export interface TrafficReport {
     /** 원본 IP (30일 지나면 빈 값) */
     ip: string;
     member: boolean;
+    /** 회원 별명 (지금 이름, 지워진 회원은 "") */
+    nick: string;
     returning: boolean;
     /** 클라우드 업체 ("" = 아님) */
     cloud: string;
