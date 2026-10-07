@@ -167,8 +167,17 @@ const BASE: Pattern[] = [
     w: 0.9,
     minLen: 8,
     tier: 2,
+    wBy: { explus: 5 },
   },
-  { name: "jack-trill", family: "jack", steps: [0, 0, 3, 3], w: 0.6, minLen: 4, tier: 3 },
+  {
+    name: "jack-trill",
+    family: "jack",
+    steps: [0, 0, 3, 3],
+    w: 0.6,
+    minLen: 4,
+    tier: 3,
+    wBy: { explus: 5 },
+  },
   {
     name: "triangle",
     family: "zigzag",

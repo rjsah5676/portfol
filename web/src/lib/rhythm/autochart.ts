@@ -134,7 +134,8 @@ const AUTO_RULES: Record<Difficulty, AutoRule> = {
     jackRun: 4,
     ln: { ratio: 0.03, lens: [1, 1, 1, 1.5], maxSec: 0.7, onBeat: 0.63 },
   },
-  // EX+ (Lv19~21): 나이트메어 경로 그대로, 더 촘촘하게 — 32분 연타·16분 벽이 더 자주, 동시치기 더 두껍게
+  // EX+ (Lv19~21): 나이트메어 경로 그대로. osu 랭크 4.75~5.5성 104개 기준 — 초당 15.4(p10 8 · p90 21, 조용한 데는 여전히 비움),
+  // 동시치기 43%(3개 7.7%), 잭 15%, 롱노트 7.5%, 32분은 3%뿐 → 32분 연타보다 잭·3개 동시치기·롱노트로 어려움을 올림
   explus: {
     nps: 15,
     minGap: 0.058,
@@ -143,11 +144,11 @@ const AUTO_RULES: Record<Difficulty, AutoRule> = {
     floor: 0.03,
     chord: { every: 2, need: 0.3 },
     holdBeats: 1.25,
-    thick: [1.65, 1.25, 1.1],
-    tri: 0.3,
-    jackAllow: 0.6,
-    jackRun: 5,
-    ln: { ratio: 0.03, lens: [1, 1, 1, 1.5], maxSec: 0.7, onBeat: 0.63 },
+    thick: [1.9, 1.45, 1.15],
+    tri: 0.45,
+    jackAllow: 0.9,
+    jackRun: 6,
+    ln: { ratio: 0.07, lens: [1, 1, 1, 1.5, 2], maxSec: 1, onBeat: 0.63 },
   },
 };
 /** 나이트메어 경로(패턴으로만 레인을 깖)를 쓰는 난이도 */
@@ -181,16 +182,16 @@ const NIGHTMARE_DEFAULT: Required<NightmareTweak> = {
   burstEvery: 8,
   burstSub: 6,
 };
-/** EX+ 기본: 웬만한 마디는 8분, 센 마디는 16분 꽉, 2마디마다 32분 연타 */
+/** EX+ 기본: 센 마디 8분·아주 센 마디 16분 꽉은 나이트메어와 비슷한 문턱(기승전결 유지), 4마디마다 16분 셋잇단 연타 */
 const EXPLUS_DEFAULT: Required<NightmareTweak> = {
-  loud: 0.3,
-  full: 0.55,
+  loud: 0.45,
+  full: 0.6,
   loudSub: 2,
   fullSub: 4,
   chordLoud: 1,
-  chordFull: 2,
-  burstEvery: 2,
-  burstSub: 8,
+  chordFull: 1,
+  burstEvery: 4,
+  burstSub: 6,
 };
 const nmDefault = (d: Difficulty) => (d === "explus" ? EXPLUS_DEFAULT : NIGHTMARE_DEFAULT);
 
@@ -1436,7 +1437,7 @@ export function makeAutoCharts(
         nm = {
           ...nm,
           full: Math.max(0.3, Math.min(1.05, nm.full + 0.06 * k)),
-          loud: Math.max(d === "explus" ? 0.15 : 0.3, Math.min(1, nm.loud + 0.05 * k)),
+          loud: Math.max(0.3, Math.min(1, nm.loud + 0.05 * k)),
           burstEvery: miss > 0 ? Math.min(16, nm.burstEvery * 2) : nm.burstEvery,
         };
       }
