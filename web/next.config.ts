@@ -28,6 +28,15 @@ const nextConfig: NextConfig = {
   // 모르기 때문에, melongame/minesweeper 등에서 쓰는 효과음 import를 위해 등록.
   turbopack: {
     root: path.join(__dirname),
+    // 화면 확인용(POKER_E2E=1): Firebase 로그인을 가짜로 바꿔 끼움 (server/scripts/dev-fake.ts 와 짝)
+    ...(process.env.POKER_E2E
+      ? {
+          resolveAlias: {
+            "firebase/auth": "./src/dev/fakeFirebaseAuth.ts",
+            "@/firebase": "./src/dev/fakeFirebase.ts",
+          },
+        }
+      : {}),
     rules: {
       "*.mp3": {
         type: "asset",

@@ -84,6 +84,8 @@ export function siteRouter({ db, auth, gateway, users }: Deps) {
       message: d.message ?? "",
       read: !!d.read,
       createdAt: ms(d.createdAt),
+      uid: d.uid ?? null,
+      nick: d.nick ?? null,
     }));
   });
   gateway.channel("inquiries", {
@@ -98,7 +100,10 @@ export function siteRouter({ db, auth, gateway, users }: Deps) {
     "/inquiries",
     h(async (req) => {
       const data = inquirySchema.parse(req.body);
-      await db.col("inquiries").insertOne({ _id: newId(), ...data, read: false, createdAt: new Date() });
+      // 로그인한 상태로 남기면 누구인지(회원 uid · 별명)를 같이 저장
+      const user = await userOf(auth, req);
+      const member = user ? { uid: user.uid, nick: await users.nickByUid(user.uid) } : {};
+      await db.col("inquiries").insertOne({ _id: newId(), ...data, ...member, read: false, createdAt: new Date() });
       inquiries.publish();
     })
   );

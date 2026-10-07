@@ -18,6 +18,9 @@ export interface Inquiry extends InquiryInput {
   id: string;
   read: boolean;
   createdAt: Timestamp | null;
+  /** 로그인한 채로 남겼으면 회원 uid · 별명 */
+  uid: string | null;
+  nick: string | null;
 }
 
 export const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
@@ -25,6 +28,8 @@ export const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 export async function addInquiry({ name, email, phone, message }: InquiryInput): Promise<void> {
   await api("/api/inquiries", {
     method: "POST",
+    // 로그인한 상태면 토큰을 같이 보내서 누구인지 남김 (안 했으면 그냥 익명)
+    auth: true,
     body: {
       name: name.trim().slice(0, INQUIRY_LIMITS.name),
       email: email.trim().slice(0, INQUIRY_LIMITS.email),
@@ -38,6 +43,8 @@ interface Row extends InquiryInput {
   id: string;
   read: boolean;
   createdAt: number | null;
+  uid?: string | null;
+  nick?: string | null;
 }
 /** 서버가 보내는 목록 (s = 조회 순번, 클수록 최신) */
 interface Snapshot {
@@ -60,6 +67,8 @@ export function subscribeInquiries(cb: (list: Inquiry[]) => void, onError?: (e: 
         message: d.message ?? "",
         read: !!d.read,
         createdAt: toTimestamp(d.createdAt),
+        uid: d.uid ?? null,
+        nick: d.nick ?? null,
       }))
     );
   };

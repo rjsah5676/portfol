@@ -5,11 +5,17 @@ import type { PokerEvent, ResultWire, SevenPlayer as SevenPlayerWire, SevenView 
 import type { Brain, Cue } from "../personas";
 import { RoundError, type BotMove, type GameDef, type Round, type RoundSeat, type StartOptions, type Step } from "../round";
 import { chooseSeven, decideSeven, type SevenBotView } from "./bots";
-import { SevenError, SevenHand, type SevenAct } from "./engine";
+import { SevenError, SevenHand, type SevenAct, type SevenLegal } from "./engine";
 
 /* 7포커 엔진을 테이블이 쓰는 모양(Round)으로 감쌈 */
 
-const ACTS: SevenAct[] = ["die", "check", "call", "bbing", "ddadang", "quarter", "half", "full"];
+// 풀(팟만큼)은 게임에서 뺐음 (엔진은 지원하지만 고를 수 없음)
+const ACTS: SevenAct[] = ["die", "call", "bbing", "ddadang", "quarter", "half"];
+/** 게임에서 고를 수 있는 베팅만 */
+const offered = (lg: SevenLegal): SevenLegal => {
+  const { full: _full, ...bets } = lg.bets;
+  return { toCall: lg.toCall, bets };
+};
 
 class SevenRound implements Round {
   private last = new Map<number, { a: string; amt: number }>();
@@ -54,7 +60,7 @@ class SevenRound implements Round {
     const item = this.guard(() => this.hand.act(seat, type));
     const p = this.hand.player(seat)!;
     const a = item.allIn && item.add > 0 ? "allin" : type;
-    this.last.set(seat, { a, amt: type === "die" || type === "check" ? 0 : p.bet });
+    this.last.set(seat, { a, amt: type === "die" ? 0 : p.bet });
     const ev: PokerEvent[] = [{ t: "act", seat, a, amt: item.add, allIn: item.allIn }];
     if (this.hand.phase === "done") ev.push(...this.finish());
     return ev;
@@ -78,7 +84,8 @@ class SevenRound implements Round {
       this.guard(() => this.hand.autoChoose(seat));
       return [];
     }
-    return this.bet(seat, !fold && this.hand.legal(seat).canCheck ? "check" : "die");
+    // 시간이 다 되면 죽음 (체크가 없으므로)
+    return this.bet(seat, "die");
   }
 
   step(): Step {
@@ -155,7 +162,7 @@ class SevenRound implements Round {
       players,
       toAct,
       deadline: waiting ? deadline : 0,
-      legal: toAct >= 0 ? h.legal(toAct) : null,
+      legal: toAct >= 0 ? offered(h.legal(toAct)) : null,
       result: this.result,
     };
   }
@@ -181,7 +188,7 @@ class SevenRound implements Round {
       round: h.round,
       pot: h.pot,
       ante: h.ante,
-      legal: h.legal(seat),
+      legal: offered(h.legal(seat)),
       players: h.players.map((p) => ({
         seat: p.seat,
         key: keyOf.get(p.seat) ?? `seat:${p.seat}`,

@@ -1,5 +1,5 @@
 import type { Card } from "./cards";
-import type { BotId, GameKind, TierId } from "./rules";
+import type { CharId, Emote, GameKind, TierId } from "./rules";
 
 /*
  * 서버 ↔ 화면이 주고받는 포커 테이블 데이터 (server/src/games/poker 가 만들고 components/Poker 가 그림)
@@ -18,10 +18,11 @@ export interface LobbyTable {
   game: GameKind;
   tier: TierId;
   locked: boolean;
-  /** 앉아 있는 사람 수 · 봇 수 · 전체 자리 */
-  humans: number;
-  bots: number;
+  /** 앉아 있는 수 · 전체 자리 */
+  players: number;
   max: number;
+  /** 유저봇이 들어올 수 있는 방인지 */
+  bots: boolean;
   createdAt: number;
 }
 
@@ -31,22 +32,30 @@ export interface Wallet {
   reviveUsed: number;
   /** 지금 앉아 있는 테이블 (없으면 null) */
   table: string | null;
+  /** 내 캐릭터 */
+  char: CharId;
+  /** 방금 칩이 바닥나서 기본 칩을 자동으로 받았으면 (알림용, 그때 한 번만 옴) */
+  revived?: { amount: number; left: number };
 }
 
 export interface SeatWire {
   seat: number;
-  /** 사람이면 uid, 봇이면 "" */
+  /** 사람이면 uid, 유저봇이면 "" (화면에서는 구분하지 않음) */
   uid: string;
-  bot: BotId | null;
   name: string;
-  /** 직접 올린 프로필 사진 주소 (없으면 null) */
-  avatar: string | null;
+  char: CharId;
   /** 손에 든 칩 (판 중에는 이미 건 돈을 뺀 나머지) */
   stack: number;
   /** in 이번 판 참가 · wait 다음 판부터 · out 자리 비움 */
   status: "in" | "wait" | "out";
   /** 접속이 끊김 */
   away: boolean;
+  /** 나가기 예약 (이번 판 끝나면 나감) */
+  exit?: boolean;
+  /** 이 방에서: 친 판 수 · 이긴 판 수 · 딴 돈 (앉은 뒤 증감) */
+  hands: number;
+  wins: number;
+  net: number;
 }
 
 /** 테이블에서 일어난 일 (효과음 · 움직임 · 기록에 씀). 상태(TableWire)만 봐도 화면은 그릴 수 있음 */
@@ -64,6 +73,7 @@ export type PokerEvent =
   | { t: "refund"; seat: number; amt: number }
   | { t: "win"; seat: number; amt: number; name: string | null }
   | { t: "say"; seat: number; text: string }
+  | { t: "emote"; seat: number; emote: Emote }
   | { t: "sit"; seat: number; name: string }
   | { t: "leave"; seat: number; name: string; why: "leave" | "bust" | "cut" | "idle" | "cashout" };
 
@@ -137,8 +147,8 @@ export type HoldemAction = { a: "fold" | "check" | "call" } | { a: "raise"; amt:
 
 export type SevenBet = "bbing" | "ddadang" | "quarter" | "half" | "full";
 
+/** 7포커에는 체크가 없음: 받을 돈이 없어도 삥(또는 그 이상)을 걸거나 죽어야 함 */
 export interface SevenLegal {
-  canCheck: boolean;
   /** 콜하려면 낼 돈 (0 이면 콜 없음) */
   toCall: number;
   /** 걸 수 있는 베팅 → 그때 낼 돈 (올인이면 가진 돈 전부) */
@@ -176,7 +186,7 @@ export interface SevenView {
 }
 
 export type SevenAction =
-  | { a: "die" | "check" | "call" | SevenBet }
+  | { a: "die" | "call" | SevenBet }
   /** 받은 4장 중 버릴 카드와 펼 카드의 위치 (0~3, 서로 달라야 함) */
   | { a: "choose"; discard: number; open: number };
 
@@ -188,6 +198,7 @@ export interface TableWire {
   game: GameKind;
   tier: TierId;
   locked: boolean;
+  bots: boolean;
   seats: (SeatWire | null)[];
   handNo: number;
   /** 판이 진행 중이면 그 판의 공개 상태 (끝난 직후에는 result 가 채워진 채로 잠깐 남음) */
@@ -211,9 +222,13 @@ export interface MyHand {
 
 export interface ChatMsg {
   id: string;
+  /** 사람이면 uid, 유저봇이면 "" */
   uid: string;
   name: string;
+  char: CharId;
+  /** 글 또는 이모티콘 (둘 중 하나) */
   text: string;
+  emote?: Emote;
   ts: number;
 }
 
@@ -221,5 +236,5 @@ export interface RankRow {
   nick: string;
   money: number;
   hands: number;
-  avatar: string | null;
+  char: CharId;
 }

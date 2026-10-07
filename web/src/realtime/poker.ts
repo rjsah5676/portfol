@@ -1,7 +1,7 @@
 import { api } from "@/lib/api/http";
 import { rpc, serverNow, subscribe, watchServerTime } from "@/lib/api/socket";
 import type { ApiError } from "@/lib/api/errors";
-import type { GameKind, TierId } from "@/lib/poker/rules";
+import type { CharId, Emote, GameKind, TierId } from "@/lib/poker/rules";
 import type { ChatMsg, HoldemAction, LobbyTable, MyHand, RankRow, SevenAction, TableWire, Wallet } from "@/lib/poker/types";
 
 /*
@@ -69,14 +69,19 @@ export const subscribeMyHand = (id: string, cb: (h: MyHand | null) => void) =>
   );
 
 export const quickJoin = (game: GameKind, tier: TierId) => rpc<string>("poker.quick", { game, tier });
-export const createTable = (o: { game: GameKind; tier: TierId; name: string; bots: number; password: string }) =>
+export const createTable = (o: { game: GameKind; tier: TierId; name: string; bots: boolean; password: string }) =>
   rpc<string>("poker.create", o);
 export const sit = (id: string, password?: string) => rpc<{ seat: number }>("poker.sit", { id, password });
 export const leave = (id: string) => rpc("poker.leave", { id });
 export const act = (id: string, hand: number, action: HoldemAction | SevenAction) =>
   rpc("poker.act", { id, hand, ...action });
 export const setSitOut = (id: string, out: boolean) => rpc("poker.sitout", { id, out });
+/** 나가기 예약 켜기/끄기. 판에 안 끼어 있으면 바로 나가고 left = true */
+export const setExit = (id: string, on: boolean) => rpc<{ left: boolean }>("poker.exit", { id, on });
 export const sendChat = (id: string, text: string) => rpc("poker.chat", { id, text });
+export const sendEmote = (id: string, emote: Emote) => rpc("poker.emote", { id, emote });
+/** 내 캐릭터 고르기 (지갑 구독으로 바뀐 값이 옴) */
+export const setChar = (char: CharId) => rpc("poker.char", { char });
 export const revive = () => rpc<Wallet>("poker.revive");
 
 /** 자금 순위 (한 판이라도 친 회원, 보유금액 순) */

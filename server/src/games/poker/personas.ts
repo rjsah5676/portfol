@@ -1,12 +1,12 @@
-import type { BotId, TierId } from "../../../../web/src/lib/poker/rules";
+import type { CharId, TierId } from "../../../../web/src/lib/poker/rules";
 
 /*
- * 봇 4명의 성격. 숫자 하나하나가 "이 사람은 이렇게 친다"는 뜻이고, 홀덤·7포커 봇이 같이 씀.
+ * 유저봇의 성격. 봇마다 앉을 때 난수로 새로 뽑아서 같은 봇은 둘도 없음.
+ * 숫자 하나하나가 "이 사람은 이렇게 친다"는 뜻이고, 홀덤·7포커 봇이 같이 씀.
  * 봇은 사람과 똑같은 정보만 봄: 자기 패, 바닥에 깔린 카드, 남들이 한 행동. 남의 패·덱은 넘겨받지 않음.
  */
 
 export interface Persona {
-  id: BotId;
   /** 들어오는 패의 폭 (1 = 정석, 클수록 아무 패나 침) */
   loose: number;
   /** 들어올 때 레이즈로 여는 비율 (낮으면 콜로 따라 들어옴) */
@@ -35,16 +35,43 @@ export interface Persona {
   chatty: number;
 }
 
-export const PERSONAS: Record<BotId, Persona> = {
-  // 계산형: 정석에 가깝게, 균형 잡힌 빈도
-  gunmo: { id: "gunmo", loose: 1.0, raiseShare: 0.88, reraise: 1.0, cbet: 1.0, bluff: 0.9, semiBluff: 0.28, callMargin: 0.01, valueShift: 0, slowplay: 0.08, sizing: 1.0, tilt: 0.05, pace: 1.0, chatty: 0.3 },
-  // 끈질긴 콜러: 넓게 따라 들어오고 잘 안 죽음. 레이즈는 진짜 셀 때만
-  chunhee: { id: "chunhee", loose: 1.5, raiseShare: 0.3, reraise: 0.4, cbet: 0.55, bluff: 0.25, semiBluff: 0.1, callMargin: -0.07, valueShift: 0.05, slowplay: 0.12, sizing: 0.85, tilt: 0.5, pace: 0.95, chatty: 0.55 },
-  // 노련한 타이트: 좁게 들어오고, 덫을 놓고, 아주 가끔 크게 속임
-  deokpal: { id: "deokpal", loose: 0.66, raiseShare: 0.8, reraise: 0.7, cbet: 0.8, bluff: 0.45, semiBluff: 0.15, callMargin: 0.04, valueShift: 0.02, slowplay: 0.34, sizing: 1.1, tilt: -0.4, pace: 1.35, chatty: 0.4 },
-  // 공격형: 넓게 열고, 자주 올리고, 계속 누름
-  yeonseo: { id: "yeonseo", loose: 1.45, raiseShare: 0.92, reraise: 1.9, cbet: 1.3, bluff: 1.6, semiBluff: 0.45, callMargin: -0.02, valueShift: -0.04, slowplay: 0.04, sizing: 1.2, tilt: 0.8, pace: 0.75, chatty: 0.6 },
-};
+/** 성격의 뼈대 4가지. 실제 봇은 이 중 하나 근처에서 흔들린 값 */
+const ARCHETYPES: Persona[] = [
+  // 정석
+  { loose: 1.0, raiseShare: 0.88, reraise: 1.0, cbet: 1.0, bluff: 0.9, semiBluff: 0.28, callMargin: 0.01, valueShift: 0, slowplay: 0.08, sizing: 1.0, tilt: 0.05, pace: 1.0, chatty: 0.3 },
+  // 끈질긴 콜러
+  { loose: 1.5, raiseShare: 0.3, reraise: 0.4, cbet: 0.55, bluff: 0.25, semiBluff: 0.1, callMargin: -0.07, valueShift: 0.05, slowplay: 0.12, sizing: 0.85, tilt: 0.5, pace: 0.95, chatty: 0.55 },
+  // 타이트, 덫
+  { loose: 0.66, raiseShare: 0.8, reraise: 0.7, cbet: 0.8, bluff: 0.45, semiBluff: 0.15, callMargin: 0.04, valueShift: 0.02, slowplay: 0.34, sizing: 1.1, tilt: -0.4, pace: 1.35, chatty: 0.4 },
+  // 공격형
+  { loose: 1.45, raiseShare: 0.92, reraise: 1.9, cbet: 1.3, bluff: 1.6, semiBluff: 0.45, callMargin: -0.02, valueShift: -0.04, slowplay: 0.04, sizing: 1.2, tilt: 0.8, pace: 0.75, chatty: 0.6 },
+];
+
+const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
+
+/** 성격을 난수로 하나 뽑음: 뼈대 둘을 섞고 항목마다 조금씩 흔듦 */
+export function randomPersona(rand: () => number = Math.random): Persona {
+  const a = ARCHETYPES[Math.floor(rand() * ARCHETYPES.length)];
+  const b = ARCHETYPES[Math.floor(rand() * ARCHETYPES.length)];
+  const w = rand() * 0.5; // b 쪽 비중 (0~0.5)
+  const mix = (k: keyof Persona, jitter: number, lo: number, hi: number) =>
+    clamp(a[k] * (1 - w) + b[k] * w + (rand() * 2 - 1) * jitter, lo, hi);
+  return {
+    loose: mix("loose", 0.2, 0.5, 2.0),
+    raiseShare: mix("raiseShare", 0.12, 0.1, 1),
+    reraise: mix("reraise", 0.25, 0.2, 2.5),
+    cbet: mix("cbet", 0.15, 0.3, 1.6),
+    bluff: mix("bluff", 0.25, 0.1, 2.0),
+    semiBluff: mix("semiBluff", 0.08, 0.03, 0.6),
+    callMargin: mix("callMargin", 0.02, -0.1, 0.08),
+    valueShift: mix("valueShift", 0.02, -0.08, 0.08),
+    slowplay: mix("slowplay", 0.06, 0, 0.45),
+    sizing: mix("sizing", 0.1, 0.7, 1.4),
+    tilt: mix("tilt", 0.2, -0.8, 1.0),
+    pace: mix("pace", 0.2, 0.55, 1.6),
+    chatty: mix("chatty", 0.15, 0.05, 0.8),
+  };
+}
 
 /** 단계별 실력: 동네판 봇은 읽기가 거칠고 실수가 있고, VIP 봇은 상대 성향까지 반영 */
 export interface Skill {
@@ -63,24 +90,49 @@ export const SKILL: Record<TierId, Skill> = {
   3: { sims: 400, noise: 0.012, read: 1, adapt: 1 },
 };
 
+/** 같은 단계 안에서도 봇마다 실력이 조금씩 다름 */
+export function randomSkill(tier: TierId, rand: () => number = Math.random): Skill {
+  const s = SKILL[tier];
+  const f = 0.7 + rand() * 0.6;
+  return { sims: s.sims, noise: clamp(s.noise * (2 - f), 0.005, 0.12), read: clamp(s.read * f, 0, 1), adapt: clamp(s.adapt * f, 0, 1) };
+}
+
 /** 봇 한 명의 테이블 안 상태 (자리에 앉아 있는 동안 유지) */
 export interface Brain {
-  id: BotId;
+  /** 상대 기록용 열쇠 ("bot:" + 고유값) */
+  key: string;
+  /** 말투 · 그림 */
+  char: CharId;
   persona: Persona;
   skill: Skill;
   /** 흔들림 (0~1). 크게 잃으면 오르고 판마다 가라앉음 */
   heat: number;
   /** 상대별 앙금: 나한테 블러프를 보여 준 사람은 다음에 더 잘 받아줌 */
   grudge: Map<string, number>;
+  /** 이 테이블에서 친 판 수 · 이만큼 치면 일어남 */
+  hands: number;
+  stayHands: number;
   rand: () => number;
 }
 
-export function newBrain(id: BotId, tier: TierId, rand: () => number = Math.random): Brain {
-  return { id, persona: PERSONAS[id], skill: SKILL[tier], heat: 0, grudge: new Map(), rand };
+let seq = 0;
+export function newBrain(char: CharId, tier: TierId, rand: () => number = Math.random, persona = randomPersona(rand)): Brain {
+  return {
+    key: `bot:${Date.now().toString(36)}${(seq++).toString(36)}`,
+    char,
+    persona,
+    skill: randomSkill(tier, rand),
+    heat: 0,
+    grudge: new Map(),
+    hands: 0,
+    stayHands: 8 + Math.floor(rand() * 30),
+    rand,
+  };
 }
 
 /** 판이 끝날 때: 흔들림을 가라앉히고, 크게 잃었으면 올림 (lossBB = 이번 판에 잃은 돈 / 기준 판돈) */
 export function coolDown(b: Brain, lossBB: number) {
+  b.hands++;
   b.heat *= 0.8;
   if (lossBB >= 25) b.heat = Math.min(1, b.heat + Math.min(0.6, lossBB / 120) + 0.15);
   for (const [k, v] of b.grudge) {
@@ -100,7 +152,7 @@ export function moodOf(b: Brain): Persona {
   return { ...p, loose: p.loose * (1 + 0.45 * h), bluff: p.bluff * (1 + 0.7 * h), callMargin: p.callMargin - 0.05 * h };
 }
 
-// ───────────── 대사 ─────────────
+// ───────────── 대사 (캐릭터 말투) ─────────────
 
 export type Cue =
   | "sit"
@@ -119,87 +171,112 @@ export type Cue =
   | "bust"
   | "humanAllin"
   | "humanBluffShown"
-  | "cashout";
+  | "cashout"
+  | "leave";
 
-const LINES: Record<BotId, Partial<Record<Cue, string[]>>> = {
-  gunmo: {
-    sit: ["안녕하세요, 잘 부탁드립니다.", "한 판 배우러 왔습니다."],
-    raise: ["레이즈하겠습니다.", "여긴 올리는 게 맞아요."],
-    bigRaise: ["기댓값이 플러스라서요.", "이 사이즈가 맞습니다."],
-    allin: ["올인입니다. 계산은 끝났어요.", "전부 넣겠습니다."],
-    call: ["팟 오즈가 맞네요. 콜.", "콜할게요."],
-    heroCall: ["블러프 빈도가 높아 보여서요. 콜.", "이건 받아야 하는 자리예요."],
-    fold: ["이건 접겠습니다.", "폴드요."],
-    bigFold: ["아깝지만 숫자가 안 나와요.", "여기선 접는 게 맞습니다."],
-    win: ["감사합니다.", "잘 먹겠습니다."],
-    bigWin: ["오늘 빌드가 잘 되네요.", "예상한 범위 안이었어요."],
-    lose: ["나이스 핸드.", "잘 치셨어요."],
-    badBeat: ["…확률은 확률일 뿐이죠.", "롤백하고 싶네요."],
-    bust: ["재배포하고 오겠습니다.", "잠깐 자금 좀 채워 올게요."],
-    humanAllin: ["흠, 올인이라…", "잠깐만요, 계산 좀 할게요."],
-    humanBluffShown: ["아, 블러프였군요. 기록해 둘게요.", "다음엔 받아 드리겠습니다."],
-    cashout: ["오늘은 여기까지 하겠습니다."],
-  },
-  chunhee: {
-    sit: ["아이고, 자리 있네. 같이 좀 칩시다.", "오늘은 좀 따 볼까."],
-    raise: ["이번엔 좀 올려 볼게.", "받아 봐."],
-    bigRaise: ["이건 진짜야, 알아서 해.", "내가 올릴 땐 이유가 있어."],
-    allin: ["에라, 다 넣는다!", "올인! 볼 테면 봐."],
-    call: ["일단 보고 얘기하자. 콜.", "궁금해서 못 죽겠네. 콜.", "따라갈게."],
-    heroCall: ["뻥인 거 다 알아. 콜!", "죽으면 잠이 안 와서 말이지. 콜."],
-    fold: ["이번엔 쉴게.", "에이, 죽어."],
-    bigFold: ["아이고 아까워라… 죽는다.", "이건 못 따라가겠네."],
-    win: ["거 봐, 따라가길 잘했지.", "잘 먹을게~"],
-    bigWin: ["오늘 저녁은 내가 쏜다!", "이 맛에 치는 거지."],
-    lose: ["아이고, 그걸 들고 있었어?", "다음 판, 다음 판."],
-    badBeat: ["어머, 마지막 장에 그게 떠?", "이건 좀 너무하다 얘."],
-    bust: ["돈 좀 찾아올게, 자리 맡아 놔.", "잠깐 나갔다 올게."],
-    humanAllin: ["어머, 화끈하네.", "진짜야? 얼굴 좀 보자."],
-    humanBluffShown: ["내 그럴 줄 알았어!", "다음부턴 다 받아 버릴 거야."],
-    cashout: ["많이 땄으니 오늘은 들어갈게."],
-  },
-  deokpal: {
-    sit: ["허허, 한 자리 끼겠네.", "오랜만에 손 좀 풀어 볼까."],
-    raise: ["올리겠네.", "값을 좀 쳐야지."],
-    bigRaise: ["패는 거짓말을 안 하지.", "이쯤은 받아야 구경하지."],
-    allin: ["다 걸겠네. 볼 텐가?", "허허, 올인일세."],
-    call: ["받지.", "한 번 보세."],
-    heroCall: ["그 벳은 냄새가 나는구먼. 받지.", "자네 손이 떨리던데. 콜."],
-    fold: ["쉬어 가지.", "이 패는 아닐세."],
-    bigFold: ["좋은 패도 버릴 줄 알아야지.", "오늘은 자네가 가져가게."],
-    check: ["급할 것 없네."],
-    win: ["허허, 고맙네.", "기다린 보람이 있구먼."],
-    bigWin: ["한 방이면 되는 걸세.", "판은 기다리는 사람 것이지."],
-    lose: ["잘 쳤네.", "그 패면 자네 것이지."],
-    badBeat: ["허허… 이런 날도 있는 게지.", "카드가 야속하구먼."],
-    bust: ["밑천 좀 가져오겠네.", "잠시 바람 좀 쐬고 오지."],
-    humanAllin: ["젊은 사람이 겁이 없구먼.", "허허, 급하기도 하지."],
-    humanBluffShown: ["허, 당했구먼. 기억해 두지.", "배짱 한번 좋네."],
-    cashout: ["딸 만큼 땄으니 일어나겠네."],
+const LINES: Record<CharId, Partial<Record<Cue, string[]>>> = {
+  jinwoo: {
+    sit: ["왔다. 한 판 붙자.", "자리 비었지? 들어간다.", "ㅎㅇ 오늘 다 가져간다"],
+    raise: ["올려.", "레이즈. 받아 봐.", "여기서 안 올리면 남자가 아니지"],
+    bigRaise: ["겁나면 죽어.", "자, 진짜 승부다.", "이거 받을 배짱 있어?"],
+    allin: ["올인!! 다 걸었다!", "전부 다 넣는다. 와 봐.", "승부!!"],
+    call: ["콜.", "받아.", "그 정도는 받지"],
+    heroCall: ["뻥이지? 콜.", "그 얼굴 다 보인다. 콜!", "너 지금 떨고 있어. 콜"],
+    fold: ["쳇, 다음 판.", "이건 패스.", "죽어 줄게. 이번만."],
+    bigFold: ["아… 아깝다. 죽는다.", "이건 못 받겠네… 젠장.", "다음 판에 두 배로 받는다"],
+    win: ["ㅋㅋ 잘 먹었다!", "이게 승부지!", "봤지? 이게 나야."],
+    bigWin: ["으하하하! 전부 내 거다!", "오늘 완전 불 붙었다!!", "누가 날 막아!"],
+    lose: ["큭… 잘 쳤다.", "다음엔 안 봐준다.", "아 뭐야 ㅋㅋ"],
+    badBeat: ["뭐?! 그게 왜 떠!!", "말도 안 돼… 리버 미쳤네", "으아아아 열받아!!"],
+    bust: ["돈 채워서 바로 온다. 기다려!", "잠깐 충전하고 복귀한다"],
+    humanAllin: ["오? 세게 나오네.", "올인? 재밌어지는데 ㅋㅋ", "좋아, 그 배짱 마음에 든다"],
+    humanBluffShown: ["아 뭐야 뻥이었어?! 다음엔 다 받아버린다", "하… 당했다. 기억했다 너"],
+    cashout: ["오늘 많이 땄으니 간다 ㅋㅋ", "수고~ 다음에 또 털러 온다"],
+    leave: ["나 간다. 수고들~", "밥 먹으러 감 ㅂㅂ", "다음에 또 붙자"],
   },
   yeonseo: {
-    sit: ["안녕하세요~ 살살 해 드릴게요.", "자리 있죠? 앉을게요!"],
-    raise: ["레이즈요~", "조금만 더 올릴게요."],
-    bigRaise: ["무서우면 죽어도 돼요 ㅎㅎ", "이번엔 진짜일 수도 있어요?"],
-    allin: ["올인~ 받을 수 있어요?", "전부요. 고민해 보세요 ㅎㅎ"],
-    call: ["콜이요.", "따라갈게요~"],
-    heroCall: ["거짓말 못 하시네요. 콜!", "그거 블러프죠? 콜."],
-    fold: ["이번 판은 양보할게요.", "폴드~"],
-    bigFold: ["아 진짜… 죽을게요.", "이번만 봐드리는 거예요."],
-    win: ["감사합니다~", "ㅎㅎ 잘 받을게요."],
-    bigWin: ["이거 맛있네요!", "오늘 좀 되는 날인가 봐요."],
-    lose: ["오, 잘 치시네요?", "다음 판에 받아 갈게요."],
-    badBeat: ["아니 그게 왜 떠요?!", "말도 안 돼…"],
-    bust: ["충전하고 올게요, 기다려요!", "금방 다시 올 거예요."],
-    humanAllin: ["오~ 세게 나오시네요.", "어, 쫄리는데요?"],
-    humanBluffShown: ["와, 속았다. 인정!", "이제 안 믿을 거예요."],
-    cashout: ["많이 땄으니까 저 먼저 갈게요~"],
+    sit: ["안녕하세요.", "잘 부탁드려요.", "한 자리 앉을게요."],
+    raise: ["올릴게요.", "레이즈.", "조금 더요."],
+    bigRaise: ["…이 정도면 되겠죠.", "받으실 건가요.", "생각할 시간 드릴게요."],
+    allin: ["올인이에요.", "전부 걸게요. 후회는 없어요.", "…다 넣을게요."],
+    call: ["콜.", "받을게요.", "네."],
+    heroCall: ["…블러프 같네요. 콜.", "손이 너무 빨랐어요. 콜.", "확인해 볼게요."],
+    fold: ["접을게요.", "다이.", "이번엔 쉬어요."],
+    bigFold: ["…아쉽지만 접어요.", "좋은 패인데… 다이.", "여기까지요."],
+    check: ["체크."],
+    win: ["감사합니다.", "잘 받았어요.", "운이 좋았네요."],
+    bigWin: ["…후. 감사합니다.", "기다린 보람이 있네요.", "이 판은 제 거였어요."],
+    lose: ["잘 치셨어요.", "그 패였군요.", "다음 판이요."],
+    badBeat: ["…마지막 장이라니.", "그럴 수도 있죠. …네.", "…(한숨)"],
+    bust: ["잠깐 다녀올게요.", "자금 좀 채우고 올게요."],
+    humanAllin: ["…올인이군요.", "흥미롭네요.", "조금만 생각할게요."],
+    humanBluffShown: ["…그랬군요. 기억할게요.", "다음엔 안 속아요."],
+    cashout: ["오늘은 여기까지 할게요.", "충분히 땄어요. 먼저 갈게요."],
+    leave: ["먼저 일어날게요.", "즐거웠어요.", "다음에 또 봬요."],
+  },
+  taeyang: {
+    sit: ["ㅎㅇㅎㅇ 형 왔다", "자리 있네? 끼자 끼자", "오 여기 돈 냄새 난다 ㅋㅋ"],
+    raise: ["올려올려~", "레이즈 ㄱㄱ", "쫄?"],
+    bigRaise: ["이건 진짜임 ㅋㅋ 아마도", "받을 수 있으면 받아 봐~", "형이 쏜다~"],
+    allin: ["올인!! 가즈아!!", "다 박는다 ㅋㅋㅋ", "인생 한 방이지~"],
+    call: ["콜~", "ㅇㅋ 받음", "그 정도야 뭐"],
+    heroCall: ["뻥 티 난다 ㅋㅋㅋ 콜", "야 너 그거 아무것도 없지? 콜", "형은 다 보여~ 콜"],
+    fold: ["에바 ㅋㅋ 죽을게", "패스~", "이번 판 쉼"],
+    bigFold: ["아… 이건 못 받겠다 ㅠ", "젠장 다이", "ㅅㅂ 아까워"],
+    win: ["ㅋㅋㅋㅋ 개꿀", "잘 먹었습니다~", "이게 되네 ㅋㅋ"],
+    bigWin: ["개이득!!! 오늘 치킨이다", "ㅋㅋㅋㅋㅋ 다 내 거", "야 이거 실화냐"],
+    lose: ["아 뭐야 ㅋㅋ", "ㅇㅈ 잘 쳤다", "운 좋네~"],
+    badBeat: ["아 ㅅㅂ 리버 뭔데", "이게 말이 됨?? 미친", "에바에바에바"],
+    bust: ["돈 뽑아 올게 ㅋㅋ 기다려", "알바비 들어오면 다시 옴"],
+    humanAllin: ["오~ 쎄게 나오네 ㅋㅋ", "올인? 간지 ㅇㅈ", "흠… 고민되네"],
+    humanBluffShown: ["아 당했다 ㅋㅋㅋ 인정", "ㅋㅋㅋ 다음엔 다 받는다"],
+    cashout: ["많이 땄으니 튄다 ㅋㅋ", "오늘 수익 굿~ 간다"],
+    leave: ["나 감 ㅂㅂ", "친구 불러서 감~", "다음에 또 봐 ㅋㅋ"],
+  },
+  jeongmin: {
+    sit: ["안녕하세요.", "한 자리 실례하겠습니다.", "잘 부탁드립니다."],
+    raise: ["레이즈하겠습니다.", "올리는 게 맞는 자리네요.", "레이즈."],
+    bigRaise: ["기댓값이 플러스입니다.", "이 사이즈가 정확해요.", "계산은 끝났습니다."],
+    allin: ["올인입니다.", "전부 넣겠습니다. 수치상 맞아요.", "…올인."],
+    call: ["팟 오즈가 맞네요. 콜.", "콜.", "받겠습니다."],
+    heroCall: ["블러프 빈도가 높아 보여서요. 콜.", "확률적으로 받아야 해요. 콜.", "…콜."],
+    fold: ["접겠습니다.", "다이.", "이건 아니네요."],
+    bigFold: ["숫자가 안 나와요. 접습니다.", "아쉽지만 폴드.", "여기선 접는 게 맞습니다."],
+    check: ["체크."],
+    win: ["감사합니다.", "예상 범위 안이었어요.", "잘 받겠습니다."],
+    bigWin: ["계산대로네요.", "…후, 수치가 맞았어요.", "이게 확률입니다."],
+    lose: ["잘 치셨어요.", "나이스 핸드.", "그 레인지였군요."],
+    badBeat: ["…확률은 확률일 뿐이죠.", "4%가 떴네요.", "…재계산이 필요하겠어요."],
+    bust: ["자금을 보충하고 오겠습니다.", "잠시 자리 비울게요."],
+    humanAllin: ["흠, 올인이라…", "잠깐 계산 좀 할게요.", "…흥미로운 선택이네요."],
+    humanBluffShown: ["블러프였군요. 기록해 두겠습니다.", "데이터에 반영할게요."],
+    cashout: ["목표 수익 달성. 일어나겠습니다.", "오늘은 여기까지 하겠습니다."],
+    leave: ["먼저 가 보겠습니다.", "수고하셨습니다.", "다음에 뵙죠."],
+  },
+  amy: {
+    sit: ["…앉을게. 딱히 너희랑 치고 싶어서는 아니거든.", "자리 비었네. 흥.", "안녕… 뭐, 잘 부탁해."],
+    raise: ["올릴 거야.", "레이즈. 뭐 어때서.", "흥, 올려."],
+    bigRaise: ["무서우면 죽어도 돼.", "이, 이건 진짜거든?!", "받을 수 있으면 받아 보든가."],
+    allin: ["오, 올인! 후회 안 해!", "전부 다! …떨리는 거 아니거든.", "올인이야. 봐 봐."],
+    call: ["콜.", "…받아 줄게.", "뭐, 콜."],
+    heroCall: ["그거 뻥이지? 다 보여. 콜!", "흥, 속을 줄 알고? 콜.", "콜! …틀리면 어쩌지"],
+    fold: ["이번 판은 양보해 줄게.", "다이. 딱히 무서워서는 아니야.", "…접을래."],
+    bigFold: ["아, 아까워… 다이.", "이번만 봐주는 거야!", "…흥. 죽어."],
+    win: ["당연하지. 흥.", "ㅎ, 잘 먹을게.", "별거 아니었어."],
+    bigWin: ["봤지?! …아니 딱히 기쁜 건 아니고.", "에헤헤… 아니 흠흠. 당연한 결과야.", "이, 이 정도는 기본이거든!"],
+    lose: ["…잘 쳤네. 인정.", "흥, 운이 좋았을 뿐이야.", "다음 판엔 안 봐줘."],
+    badBeat: ["뭐?! 그게 왜 떠?!", "말도 안 돼!! 으으…", "…울지 않아. 안 운다고."],
+    bust: ["돈 채워 올게! 기다리라고 한 건 아니야!", "잠깐… 금방 올 거야."],
+    humanAllin: ["오, 올인…? 흥, 겁 안 나거든.", "세, 세게 나오네…", "잠깐만. 생각 좀."],
+    humanBluffShown: ["속였어?! 두고 봐!", "…흥. 다음엔 다 받아 버릴 거야."],
+    cashout: ["많이 땄으니까 갈래. 흥.", "오늘은 여기까지. 고마운 거 아니야."],
+    leave: ["나 갈래. …안녕.", "먼저 가. 재밌었던 건 아니고.", "다음에 또… 아니 아무것도."],
   },
 };
 
 /** 상황에 맞는 한마디 (없거나 말수가 적으면 undefined). force 는 꼭 말해야 하는 상황 */
 export function line(b: Brain, cue: Cue, force = false): string | undefined {
-  const list = LINES[b.id][cue];
+  const list = LINES[b.char][cue];
   if (!list?.length) return undefined;
   if (!force && b.rand() > b.persona.chatty * 0.5) return undefined;
   return list[Math.floor(b.rand() * list.length)];

@@ -54,6 +54,8 @@ interface Rig {
   button: number;
   sb?: number;
   bb?: number;
+  /** 기본 판돈 (없으면 0) */
+  ante?: number;
   unit?: number;
   /** 자리 → "As Kd" */
   holes?: Record<number, string>;
@@ -89,6 +91,7 @@ function mk(o: Rig): Hand {
     button: o.button,
     sb: o.sb ?? 5,
     bb: o.bb ?? 10,
+    ante: o.ante,
     unit: o.unit,
     deck: rigDeck(o),
   });
@@ -797,6 +800,105 @@ describe("모자란 블라인드 (룰 2 · 9)", () => {
       { amount: 12, seats: [0, 1, 2] },
       { amount: 8, seats: [0, 1] },
     ]);
+  });
+});
+
+// ───────────── 앤티 ─────────────
+
+describe("앤티 (판을 시작할 때 전원이 냄)", () => {
+  it("앤티를 안 주면 0: 역사에 ante 가 없고 팟은 블라인드만", () => {
+    const h = mk({ stacks: { 0: 1000, 1: 1000, 2: 1000 }, button: 0 });
+    expect(h.ante).toBe(0);
+    expect(h.history.map((x) => x.type)).toEqual(["sb", "bb"]);
+    expect(h.pot).toBe(15);
+  });
+
+  it("전원이 블라인드 전에 앤티를 팟에 냄 — 콜 금액 · 최소 레이즈에는 안 셈", () => {
+    const h = mk({ stacks: { 0: 1000, 1: 1000, 2: 1000 }, button: 0, ante: 2, holes: { 0: "As Ah", 1: "7c 2d", 2: "8c 3d" }, board: "Ks Qd 9h 5c 4s" });
+    expect(h.ante).toBe(2);
+    // 앤티는 자리 순으로 먼저, 그다음 SB · BB
+    expect(h.history.map((x) => [x.seat, x.type, x.add, x.potBefore])).toEqual([
+      [0, "ante", 2, 0],
+      [1, "ante", 2, 2],
+      [2, "ante", 2, 4],
+      [1, "sb", 5, 6],
+      [2, "bb", 10, 11],
+    ]);
+    expect(h.pot).toBe(21);
+    // 앤티는 이번 라운드 벳이 아니라 invested 에만
+    expect(h.player(0)).toMatchObject({ stack: 998, bet: 0, invested: 2, allIn: false });
+    expect(h.player(1)).toMatchObject({ stack: 993, bet: 5, invested: 7 });
+    expect(h.player(2)).toMatchObject({ stack: 988, bet: 10, invested: 12 });
+    expect(h.currentBet).toBe(10);
+    expect(h.toAct).toBe(0);
+    expect(h.legal(0)).toMatchObject({ toCall: 10, canCheck: false, canRaise: true, minTo: 20 });
+    play(h, [
+      [0, "call"],
+      [1, "call"],
+    ]);
+    expect(h.legal(2)).toMatchObject({ toCall: 0, canCheck: true });
+    h.act(2, "check");
+    expect(h.phase).toBe("deal");
+    // 팟 = 앤티 6 + 콜 30, 전원 자격
+    expect(h.pot).toBe(36);
+    expect(h.players.map((p) => p.invested)).toEqual([12, 12, 12]);
+    expect(h.pots()).toEqual([{ amount: 36, seats: [0, 1, 2] }]);
+    runOutChecking(h);
+    expect(h.result!.won).toEqual({ 0: 36 });
+    expect(h.result!.delta).toEqual({ 0: 24, 1: -12, 2: -12 });
+    expectConserved(h);
+  });
+
+  it("앤티보다 적은 스택은 있는 만큼 내고 올인 (블라인드는 못 냄), 받는 사람 없는 몫은 돌아옴", () => {
+    // 헤즈업: 버튼(0)이 SB 인데 1 뿐 → 앤티로 1 을 내고 올인. BB 는 앤티 2 + 블라인드 10 중 1 만 받힘
+    const h = mk({ stacks: { 0: 1, 1: 1000 }, button: 0, ante: 2, holes: { 0: "As Ah", 1: "7c 2d" }, board: "Ks Qd 9h 5c 3s" });
+    expect(h.history.map((x) => [x.seat, x.type, x.add, x.allIn])).toEqual([
+      [0, "ante", 1, true],
+      [1, "ante", 2, false],
+      [0, "sb", 0, true],
+      [1, "bb", 10, false],
+    ]);
+    expect(h.player(0)).toMatchObject({ stack: 0, bet: 0, invested: 1, allIn: true });
+    // 베팅할 사람이 없음 → 바로 런아웃, 1번은 11 을 돌려받음
+    expect(h.phase).toBe("deal");
+    expect(h.toAct).toBe(-1);
+    expect(h.runout).toBe(true);
+    expect(h.player(1)).toMatchObject({ stack: 999, invested: 1 });
+    expect(h.pot).toBe(2);
+    expect(h.pots()).toEqual([{ amount: 2, seats: [0, 1] }]);
+    runOut(h);
+    expect(h.result!.won).toEqual({ 0: 2 });
+    expect(stacksOf(h)).toEqual({ 0: 2, 1: 999 });
+    expect(h.result!.delta).toEqual({ 0: 1, 1: -1 });
+    expectConserved(h);
+  });
+
+  it("3인, 한 명이 앤티로 올인: 그 사람은 사이드팟 자격이 없고 메인팟은 앤티 높이까지만", () => {
+    // 2번(BB)은 1 뿐. 0번(버튼)이 가장 센 패, 그다음 1번
+    const h = mk({ stacks: { 0: 1000, 1: 1000, 2: 1 }, button: 0, ante: 2, holes: { 0: "As Ah", 1: "Kc Kd", 2: "7c 2d" }, board: "Qs Jd 9h 5c 3s" });
+    expect(h.player(2)).toMatchObject({ stack: 0, bet: 0, invested: 1, allIn: true });
+    // BB 를 못 냈어도 콜 금액은 BB 전액
+    expect(h.currentBet).toBe(10);
+    expect(h.toAct).toBe(0);
+    expect(h.legal(0).toCall).toBe(10);
+    play(h, [
+      [0, "call"],
+      [1, "call"],
+    ]);
+    expect(h.phase).toBe("deal");
+    expect(h.players.map((p) => p.invested)).toEqual([12, 12, 1]);
+    expect(h.pots()).toEqual([
+      { amount: 3, seats: [0, 1, 2] },
+      { amount: 22, seats: [0, 1] },
+    ]);
+    runOutChecking(h);
+    expect(h.result!.pots).toEqual([
+      { amount: 3, seats: [0, 1, 2], winners: [0] },
+      { amount: 22, seats: [0, 1], winners: [0] },
+    ]);
+    expect(h.result!.won).toEqual({ 0: 25 });
+    expect(stacksOf(h)).toEqual({ 0: 1013, 1: 988, 2: 0 });
+    expectConserved(h);
   });
 });
 

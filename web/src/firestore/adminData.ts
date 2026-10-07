@@ -70,6 +70,8 @@ export interface AdminUser {
   plays: number;
   /** 직접 올린 프로필 사진 주소 */
   avatar: string | null;
+  /** 포커 칩 */
+  money: number;
   stats: {
     plays?: Record<string, number>;
     online?: Record<string, { w?: number; l?: number; d?: number }>;
@@ -183,7 +185,7 @@ export const listUsers = (q = "") =>
     { auth: true }
   );
 
-export const updateUser = (uid: string, patch: { nick?: string; badge?: string | null }) =>
+export const updateUser = (uid: string, patch: { nick?: string; badge?: string | null; money?: number }) =>
   api<AdminUser>(`/api/admin/users/${encodeURIComponent(uid)}`, {
     method: "PATCH",
     body: patch,

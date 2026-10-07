@@ -1,7 +1,7 @@
 import type { Database } from "../../db";
 import { AppError } from "../../errors";
-import { avatarPath, type UserDoc } from "../../users";
-import { REVIVE, START_MONEY, kstDay, type GameKind } from "../../../../web/src/lib/poker/rules";
+import type { UserDoc } from "../../users";
+import { REVIVE, START_MONEY, charOf, kstDay, type CharId, type GameKind } from "../../../../web/src/lib/poker/rules";
 import type { RankRow } from "../../../../web/src/lib/poker/types";
 
 /*
@@ -18,6 +18,8 @@ import type { RankRow } from "../../../../web/src/lib/poker/types";
 export interface WalletDoc {
   money: number;
   reviveUsed: number;
+  /** 고른 캐릭터 */
+  char: CharId;
 }
 
 export interface SettleEntry {
@@ -30,7 +32,7 @@ export interface SettleEntry {
   wonAmount: number;
 }
 
-type MoneyFields = Pick<UserDoc, "nick"> & { money?: number; revive?: { day: string; n: number }; avatar?: { at: number } };
+type MoneyFields = Pick<UserDoc, "nick"> & { money?: number; revive?: { day: string; n: number }; poker?: { char?: string } };
 
 export type Wallet = ReturnType<typeof createWallet>;
 
@@ -41,6 +43,7 @@ export function createWallet(db: Database, now: () => number = Date.now) {
   const toWallet = (d: MoneyFields): WalletDoc => ({
     money: d.money ?? START_MONEY,
     reviveUsed: d.revive && d.revive.day === kstDay(now()) ? d.revive.n : 0,
+    char: charOf(d.poker?.char),
   });
 
   /**
@@ -51,10 +54,10 @@ export function createWallet(db: Database, now: () => number = Date.now) {
     uids.length ? col.updateMany({ _id: { $in: uids }, money: { $exists: false } }, { $set: { money: START_MONEY } }) : Promise.resolve(null);
 
   async function get(uid: string): Promise<WalletDoc | null> {
-    let d = (await col.findOne({ _id: uid }, { projection: { nick: 1, money: 1, revive: 1 } })) as MoneyFields | null;
+    let d = (await col.findOne({ _id: uid }, { projection: { nick: 1, money: 1, revive: 1, "poker.char": 1 } })) as MoneyFields | null;
     if (d && d.money === undefined) {
       await materialize([uid]);
-      d = (await col.findOne({ _id: uid }, { projection: { nick: 1, money: 1, revive: 1 } })) as MoneyFields | null;
+      d = (await col.findOne({ _id: uid }, { projection: { nick: 1, money: 1, revive: 1, "poker.char": 1 } })) as MoneyFields | null;
     }
     return d ? toWallet(d) : null;
   }
@@ -103,7 +106,7 @@ export function createWallet(db: Database, now: () => number = Date.now) {
       if (!r.modifiedCount) {
         const w = await get(uid);
         if (!w) throw new AppError("NOT_MEMBER", "회원만 쓸 수 있어요.", 403);
-        if (w.money >= REVIVE.under) throw new AppError("NOT_BROKE", "보유금액이 500만 원 아래로 내려가면 받을 수 있어요.", 409);
+        if (w.money >= REVIVE.under) throw new AppError("NOT_BROKE", "칩이 500만 아래로 내려가면 받을 수 있어요.", 409);
         throw new AppError("REVIVE_LIMIT", "오늘 회생은 다 썼어요. 자정에 다시 채워져요.", 409);
       }
       return (await changed(uid))!;
@@ -139,7 +142,7 @@ export function createWallet(db: Database, now: () => number = Date.now) {
     /** 자금 순위: 한 판이라도 친 회원만 */
     async rank(limit = 50): Promise<RankRow[]> {
       const docs = await col
-        .find({ "stats.poker.hands": { $gte: 1 } }, { projection: { nick: 1, money: 1, "stats.poker.hands": 1, "avatar.at": 1 } })
+        .find({ "stats.poker.hands": { $gte: 1 } }, { projection: { nick: 1, money: 1, "stats.poker.hands": 1, "poker.char": 1 } })
         .sort({ money: -1 })
         .limit(limit)
         .toArray();
@@ -149,7 +152,7 @@ export function createWallet(db: Database, now: () => number = Date.now) {
           nick: u.nick,
           money: u.money ?? START_MONEY,
           hands: u.stats?.poker?.hands ?? 0,
-          avatar: u.avatar ? avatarPath(String(d._id), u.avatar.at) : null,
+          char: charOf(u.poker?.char),
         };
       });
     },

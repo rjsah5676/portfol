@@ -76,7 +76,7 @@ export async function startTestServer(over: { poker?: PokerOptions } = {}): Prom
     db,
     auth: createAuth(cfg, createLocalJWKSet({ keys: [jwk] })),
     // 포커: 카드 까는 뜸 · 봇 생각 시간을 거의 없앰 (사람의 제한 시간은 넉넉히)
-    poker: { speed: 0.004, actMs: 4000, choiceMs: 4000, sweepIntervalMs: 150, ...over.poker },
+    poker: { speed: 0.004, actMs: 4000, choiceMs: 4000, sweepIntervalMs: 150, autoRevive: false, lobbyBots: false, ...over.poker },
   });
   const port = await server.listen();
   const url = `http://127.0.0.1:${port}`;

@@ -1,41 +1,60 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { BOT_IDS, BOT_INFO, DEFAULT_BOTS, GAMES, REVIVE, TIERS, fmtWon, type GameKind, type Tier, type TierId } from "@/lib/poker/rules";
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { asset } from "@/lib/poker/assets";
+import { CHARS, CHAR_IDS, GAMES, TIERS, fmtShort, type CharId, type GameKind, type Tier, type TierId } from "@/lib/poker/rules";
 import type { LobbyTable, RankRow, Wallet } from "@/lib/poker/types";
-import { createTable, quickJoin, revive, subscribeLobby } from "@/realtime/poker";
-import { Money, Portrait } from "./parts";
+import { createTable, quickJoin, setChar, subscribeLobby } from "@/realtime/poker";
+import type { Orient } from "./layout";
+import PatchNotes, { LATEST } from "./PatchNotes";
+import { Money, PlayingCard, Profile } from "./parts";
 
 /*
- * 포커 로비: 내 돈 · 회생 → 게임 고르기(홀덤 / 7포커) → 판돈 3단계 중 하나로 바로 입장.
- * 아래에 열린 테이블 목록(친구와 같이 치려면 테이블을 직접 만들어 비밀번호를 걸 수 있음), 봇 소개, 자금 순위.
+ * ANIME POKER 로비 (무대 안): 내 돈 · 캐릭터 → 홀덤 / 7포커 → 판돈 3단계 → 바로 입장 / 방 만들기 / 열린 방 목록, 자금 순위.
  */
 
 const MODE_KEY = "poker_mode";
 
 function stakeLine(game: GameKind, t: Tier) {
-  return game === "holdem" ? `블라인드 ${fmtWon(t.sb)} / ${fmtWon(t.bb)}` : `기본 판돈 ${fmtWon(t.ante)}`;
+  return game === "holdem" ? `판돈 ${fmtShort(t.ante)} · 블라인드 ${fmtShort(t.sb)}/${fmtShort(t.bb)}` : `판돈 ${fmtShort(t.ante)}`;
 }
 
 export default function Lobby({
   wallet,
   rank,
   myNick,
+  o,
+  w,
+  h,
   onEnter,
   onWallet,
+  topRight,
 }: {
   wallet: Wallet;
   rank: RankRow[] | null;
   myNick: string;
+  o: Orient;
+  w: number;
+  h: number;
   onEnter: (id: string) => void;
   onWallet: (w: Wallet) => void;
+  topRight?: ReactNode;
 }) {
   const [game, setGameState] = useState<GameKind>("holdem");
+  const [tier, setTier] = useState<TierId>(1);
   const [tables, setTables] = useState<LobbyTable[] | null>(null);
   const [busy, setBusy] = useState("");
-  const [error, setError] = useState("");
-  const [creating, setCreating] = useState(false);
-  const [form, setForm] = useState({ tier: 1 as TierId, bots: DEFAULT_BOTS, name: "", password: "" });
+  const [sheet, setSheet] = useState<"" | "create" | "char" | "rank">("");
+  const [form, setForm] = useState({ name: "", password: "", bots: true });
+  const [menu, setMenu] = useState(false);
+  const [notes, setNotes] = useState(false);
+  const [toast, setToast] = useState<{ text: string; key: number } | null>(null);
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const say = (text: string) => {
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    setToast({ text, key: Date.now() });
+    toastTimer.current = setTimeout(() => setToast(null), 2400);
+  };
 
   useEffect(() => {
     try {
@@ -55,332 +74,431 @@ export default function Lobby({
   const run = async (key: string, fn: () => Promise<void>) => {
     if (busy) return;
     setBusy(key);
-    setError("");
     try {
       await fn();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "요청을 처리하지 못했어요. 잠시 후 다시 시도해주세요.");
+      say(e instanceof Error ? e.message : "요청을 처리하지 못했어요. 잠시 후 다시 시도해주세요.");
     } finally {
       setBusy("");
     }
   };
 
-  const canRevive = wallet.money < REVIVE.under && wallet.reviveUsed < REVIVE.perDay;
-  const reviveLeft = REVIVE.perDay - wallet.reviveUsed;
   const myRank = rank ? rank.findIndex((r) => r.nick === myNick) + 1 : 0;
-  const shown = (tables ?? []).filter((t) => t.game === game);
-  // 테이블 만들기: 봇 수는 그 게임의 자리 수에 맞추고(7포커는 3명까지), 입장컷이 안 되는 판돈으로는 만들지 않음
-  const maxBots = Math.min(4, GAMES[game].seats - 2);
-  const formBots = Math.min(form.bots, maxBots);
-  const canCreate = wallet.money >= TIERS[form.tier - 1].min;
+  // 고른 종목 · 판돈 단계의 방만
+  const shown = (tables ?? []).filter((t) => t.game === game && t.tier === tier);
+  const T = TIERS[tier - 1];
+  const locked = wallet.money < T.min;
+  const H = o === "h";
+  const bar = 44;
+  const info = CHARS[wallet.char];
 
-  return (
-    <div className="pk mx-auto max-w-5xl px-3 pb-24 sm:px-6">
-      {/* 내 돈 */}
-      <section className="mt-2 grid gap-px overflow-hidden rounded-2xl border border-[var(--pk-line)] bg-[var(--pk-line)] sm:grid-cols-[1.4fr_1fr]">
-        <div className="bg-[var(--pk-panel)] px-5 py-4 sm:px-6 sm:py-5">
-          <div className="text-xs text-white/45">보유금액</div>
-          <div className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-1">
-            <Money won={wallet.money} className="text-[2.6rem] leading-none text-[var(--pk-brass)] sm:text-[3.2rem]" />
-            <span className="text-sm text-white/40">원</span>
-            {myRank > 0 && <span className="rounded-full border border-white/10 px-2.5 py-0.5 text-xs text-white/60">자금 순위 {myRank}위</span>}
-          </div>
-          {wallet.table && (
-            <button
-              type="button"
-              onClick={() => onEnter(wallet.table!)}
-              className="mt-3 cursor-pointer rounded-full bg-[var(--pk-call)] px-4 py-1.5 text-sm font-bold text-[#06231c] hover:brightness-110"
-            >
-              앉아 있던 테이블로 돌아가기
-            </button>
-          )}
-        </div>
-        <div className="flex flex-col justify-center gap-2 bg-[var(--pk-panel)] px-5 py-4 sm:px-6">
-          <div className="flex items-center justify-between text-xs text-white/45">
-            <span>회생</span>
-            <span>
-              오늘 남은 횟수 <b className="text-white/80">{reviveLeft}</b> / {REVIVE.perDay}
+  // ── 조각들 ──
+  const top = (
+    <div className="absolute inset-x-0 top-0 z-30 flex items-center gap-[0.6em] px-[0.8em]" style={{ height: bar, background: "linear-gradient(180deg, rgba(0,0,0,0.85), rgba(0,0,0,0.35))", borderBottom: "1px solid rgba(214,175,92,0.25)" }}>
+      { }
+      <img src={asset.logo} alt="ANIME POKER" draggable={false} style={{ height: H ? bar - 8 : bar - 14, width: "auto" }} />
+      <span className="rounded-[4px] bg-[var(--pk-danger)] px-[0.45em] text-[0.62em] leading-[1.6em] font-extrabold tracking-wider">BETA</span>
+      <button type="button" onClick={() => setNotes(true)} className="pk-btn pk-btn-ghost flex h-[28px] items-center gap-[0.35em] px-[0.6em] text-[0.74em]">
+        패치노트
+        <span className="text-[#ffd84a]">{LATEST.split(" ")[0]}</span>
+      </button>
+      <span className="ml-auto flex items-center gap-[0.45em]">
+        {/* 내 정보 버튼 (누르면 메뉴: 캐릭터 · 순위 · 마이페이지) */}
+        <span className="relative hidden sm:flex">
+          <button type="button" onClick={() => setMenu((v) => !v)} aria-expanded={menu} className="pk-me-chip">
+            <Profile char={wallet.char} size={26} className="ring-2 ring-[var(--pk-brass)]" />
+            <span className="hidden max-w-[9em] truncate text-[0.8em] text-white/75 sm:inline">
+              <b className="text-white">{myNick}</b>님 어서오세요
             </span>
-          </div>
-          <button
-            type="button"
-            disabled={!canRevive || busy === "revive"}
-            onClick={() => run("revive", async () => onWallet(await revive()))}
-            className="cursor-pointer rounded-xl bg-[var(--pk-brass)] px-4 py-2.5 text-sm font-bold text-[#2a1e05] transition hover:brightness-110 disabled:cursor-not-allowed disabled:bg-white/[0.06] disabled:text-white/30"
-          >
-            {busy === "revive" ? "받는 중…" : `회생 받기 +${fmtWon(REVIVE.amount)}`}
+            <svg viewBox="0 0 12 12" className="h-[0.7em] w-[0.7em] text-white/60" fill="currentColor" aria-hidden>
+              <path d="M2 4l4 4 4-4z" />
+            </svg>
           </button>
-          <p className="text-[11px] leading-relaxed text-white/40">
-            {canRevive
-              ? "보유금액이 500만 원 아래라 지금 받을 수 있어요."
-              : reviveLeft <= 0
-                ? "오늘 회생은 다 썼어요. 자정에 다시 채워져요."
-                : `보유금액이 ${fmtWon(REVIVE.under)} 원 아래로 내려가면 받을 수 있어요.`}
-          </p>
-        </div>
-      </section>
-
-      {/* 게임 고르기 */}
-      <section className="mt-7">
-        <div role="tablist" aria-label="게임" className="grid grid-cols-2 gap-2">
-          {(Object.keys(GAMES) as GameKind[]).map((g) => {
-            const on = g === game;
-            return (
-              <button
-                key={g}
-                role="tab"
-                aria-selected={on}
-                type="button"
-                onClick={() => setGame(g)}
-                className={`cursor-pointer rounded-2xl border px-4 py-3 text-left transition sm:px-5 sm:py-4 ${
-                  on ? "border-[var(--pk-brass)] bg-[#2a2412]" : "border-[var(--pk-line)] bg-[var(--pk-panel)] hover:border-white/25"
-                }`}
-              >
-                <span className={`pk-title block text-2xl sm:text-3xl ${on ? "text-[var(--pk-brass)]" : "text-white/75"}`}>{GAMES[g].name}</span>
-                <span className="mt-1 block text-xs text-white/45 sm:text-[13px]">
-                  {GAMES[g].blurb} · {GAMES[g].seats}인
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      </section>
-
-      {/* 판돈 3단계 */}
-      <section className="mt-3 grid gap-3 sm:grid-cols-3">
-        {TIERS.map((t) => {
-          const short = t.min - wallet.money;
-          const locked = short > 0;
-          return (
-            <div key={t.id} className="flex flex-col overflow-hidden rounded-2xl border border-[var(--pk-line)] bg-[var(--pk-panel)]">
-              <div className="pk-felt relative h-24 px-4 py-3" data-tier={t.id}>
-                <div className="pk-title text-[1.7rem] leading-none text-white drop-shadow-[0_2px_3px_rgba(0,0,0,0.6)]">{t.name}</div>
-                <div className="mt-2 text-xs text-white/80 drop-shadow-[0_1px_2px_rgba(0,0,0,0.7)]">{t.blurb}</div>
-                <div className="absolute right-3 bottom-2 flex -space-x-2">
-                  {BOT_IDS.slice(0, 3).map((b) => (
-                    <Portrait key={b} bot={b} name="" size={26} className="ring-2 ring-black/40" />
-                  ))}
-                </div>
-              </div>
-              <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 px-4 py-3 text-[13px]">
-                <dt className="text-white/40">{game === "holdem" ? "블라인드" : "기본 판돈"}</dt>
-                <dd className="text-right text-white/85">{game === "holdem" ? `${fmtWon(t.sb)} / ${fmtWon(t.bb)}` : fmtWon(t.ante)}</dd>
-                <dt className="text-white/40">입장컷</dt>
-                <dd className={`text-right ${locked ? "text-[var(--pk-danger)]" : "text-white/85"}`}>보유 {fmtWon(t.min)} 이상</dd>
-                <dt className="text-white/40">봇 자금</dt>
-                <dd className="text-right text-white/85">{fmtWon(t.botMoney)}</dd>
-              </dl>
-              <div className="mt-auto px-4 pb-4">
-                <button
-                  type="button"
-                  disabled={locked || !!busy}
-                  onClick={() => run(`q${t.id}`, async () => onEnter(await quickJoin(game, t.id)))}
-                  className="w-full cursor-pointer rounded-xl bg-white px-4 py-2.5 text-sm font-bold text-[#15161a] transition hover:bg-[var(--pk-brass)] disabled:cursor-not-allowed disabled:bg-white/[0.06] disabled:text-white/35"
-                >
-                  {locked ? `${fmtWon(short)} 더 있어야 해요` : busy === `q${t.id}` ? "들어가는 중…" : "바로 입장"}
+          {menu && (
+            <>
+              <span className="fixed inset-0 z-40" onClick={() => setMenu(false)} />
+              <div className="pk-frame pk-pop absolute top-[calc(100%+6px)] right-0 z-50 grid w-[13em] gap-[0.3em] p-[0.45em] text-[0.82em]">
+                {(
+                  [
+                    ["캐릭터 변경", () => setSheet("char")],
+                    ["자금 순위", () => setSheet("rank")],
+                  ] as const
+                ).map(([label, fn]) => (
+                  <button key={label} type="button" onClick={() => (setMenu(false), fn())} className="pk-btn pk-btn-ghost px-[0.8em] py-[0.5em] text-left">
+                    {label}
+                  </button>
+                ))}
+                <button type="button" disabled className="pk-btn pk-btn-ghost flex items-center justify-between px-[0.8em] py-[0.5em] text-left">
+                  마이페이지 <span className="text-[0.8em] text-white/40">준비 중</span>
                 </button>
               </div>
-            </div>
-          );
-        })}
-      </section>
-      {error && (
-        <p role="alert" className="mt-3 rounded-xl border border-[var(--pk-danger)]/40 bg-[var(--pk-danger)]/10 px-4 py-2.5 text-sm text-[#ffb3b5]">
-          {error}
-        </p>
-      )}
+            </>
+          )}
+        </span>
+        {topRight}
+      </span>
+    </div>
+  );
 
-      {/* 열린 테이블 */}
-      <section className="mt-9">
-        <div className="mb-3 flex items-center justify-between gap-3">
-          <h2 className="text-base font-bold text-white">열린 {GAMES[game].name} 테이블</h2>
-          <button
-            type="button"
-            onClick={() => setCreating((v) => !v)}
-            className="cursor-pointer rounded-full border border-white/15 px-4 py-1.5 text-sm text-white/80 hover:border-white/40"
-          >
-            {creating ? "닫기" : "테이블 만들기"}
+  const me = (
+    <div className="pk-frame pk-me relative flex h-full flex-col overflow-hidden" style={{ "--c": info.color } as CSSProperties}>
+      {/* 뒷배경: 방 그림 + 캐릭터 색 빛 + 무늬 */}
+      <div className="absolute inset-0 bg-cover bg-center opacity-35" style={{ backgroundImage: `url(${asset.room("lobby", "v")})` }} />
+      <div className="pk-me-glow absolute inset-0" />
+      <div className="pk-me-rays absolute inset-0" />
+      { }
+      <img key={wallet.char} src={asset.full(wallet.char)} alt="" draggable={false} className="pk-idle-char pointer-events-none absolute left-1/2 h-[112%] w-auto -translate-x-1/2" style={{ top: "3%", maskImage: "linear-gradient(180deg,#000 50%,transparent 74%)", WebkitMaskImage: "linear-gradient(180deg,#000 50%,transparent 74%)", filter: "drop-shadow(0 0 18px rgba(0,0,0,0.6))" }} />
+      <div className="relative mt-auto grid gap-[0.45em] p-[0.7em]">
+        <div className="flex items-center gap-[0.5em]">
+          <div className="min-w-0 flex-1">
+            <div className="text-[1.05em] font-extrabold" style={{ color: info.color }}>
+              {info.name}
+            </div>
+            <div className="truncate text-[1.3em] leading-tight font-extrabold">{myNick}</div>
+          </div>
+          {myRank > 0 && (
+            <div className="flex shrink-0 flex-col items-center rounded-[8px] border border-[rgba(255,201,60,0.45)] bg-black/45 px-[0.7em] py-[0.2em] leading-tight">
+              <span className="text-[0.65em] text-white/55">순위</span>
+              <span className="text-[1.15em] font-extrabold text-[#ffd84a]">{myRank}위</span>
+            </div>
+          )}
+        </div>
+        {/* 보유 칩 */}
+        <div className="pk-wallet">
+          { }
+          <img src={asset.chip("gold", "stack")} alt="" draggable={false} className="h-[2em] w-[2em]" />
+          <div className="min-w-0">
+            <div className="text-[0.62em] text-white/50">보유 칩</div>
+            <Money won={wallet.money} className="text-[1.35em] leading-none text-[#ffd84a]" />
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-[0.35em]">
+          <button type="button" onClick={() => setSheet("char")} className="pk-btn pk-btn-ghost py-[0.45em] text-[0.78em]">
+            캐릭터 변경
+          </button>
+          <button type="button" onClick={() => setSheet("rank")} className="pk-btn pk-btn-ghost py-[0.45em] text-[0.78em]">
+            순위
           </button>
         </div>
+        <button type="button" onClick={() => say("스킨 변경은 구현 예정이에요")} className="pk-btn pk-btn-gold py-[0.45em] text-[0.82em]">
+          스킨 변경 <span className="font-normal opacity-70">· 준비 중</span>
+        </button>
+      </div>
+    </div>
+  );
 
-        {creating && (
-          <form
-            className="mb-4 grid gap-4 rounded-2xl border border-[var(--pk-line)] bg-[var(--pk-panel)] p-4 sm:p-5"
-            onSubmit={(e) => {
-              e.preventDefault();
-              if (!canCreate) return;
-              run("create", async () => onEnter(await createTable({ game, ...form, bots: formBots })));
-            }}
-          >
-            <div className="grid gap-4 sm:grid-cols-2">
-              <fieldset>
-                <legend className="mb-1.5 text-xs text-white/45">판돈</legend>
-                <div className="flex flex-wrap gap-1.5">
-                  {TIERS.map((t) => (
-                    <button
-                      key={t.id}
-                      type="button"
-                      aria-pressed={form.tier === t.id}
-                      disabled={wallet.money < t.min}
-                      onClick={() => setForm((f) => ({ ...f, tier: t.id }))}
-                      className={`cursor-pointer rounded-full px-3 py-1.5 text-sm transition disabled:cursor-not-allowed disabled:opacity-35 ${
-                        form.tier === t.id ? "bg-[var(--pk-brass)] font-bold text-[#2a1e05]" : "bg-white/[0.06] text-white/70 hover:bg-white/10"
-                      }`}
-                    >
-                      {t.name}
-                    </button>
-                  ))}
+  const mode = (
+    <div className="grid grid-cols-2 gap-[0.5em]" style={{ height: H ? "100%" : 112 }}>
+      {(["holdem", "seven"] as const).map((g) => (
+        <button key={g} type="button" aria-pressed={game === g} onClick={() => setGame(g)} className="pk-mode isolate flex h-full cursor-pointer flex-col">
+          {/* 펠트 위 카드: 홀덤 = 바닥 5장 + 내 패 2장, 7포커 = 7장 부채꼴 */}
+          <div className="relative min-h-0 flex-1 overflow-hidden" style={{ background: "radial-gradient(120% 90% at 50% 40%, #1f8a5b, #0b4a30 70%, #062a1b)" }}>
+            <div className="absolute inset-0 opacity-30" style={{ background: "repeating-linear-gradient(45deg, rgba(0,0,0,0.25) 0 2px, transparent 2px 5px)" }} />
+            <ModeCards game={g} h={H} />
+          </div>
+          <div className="flex items-baseline gap-[0.5em] border-t border-[rgba(214,175,92,0.3)] bg-black/70 px-[0.7em] py-[0.35em]">
+            <span className="text-[1.1em] font-extrabold">{GAMES[g].name}</span>
+            <span className="pk-frame-title text-[0.7em]">{g === "holdem" ? "TEXAS HOLD'EM" : "SEVEN POKER"}</span>
+            <span className="ml-auto rounded-[4px] bg-white/10 px-[0.45em] text-[0.8em] font-bold text-white/80">{GAMES[g].seats}인</span>
+          </div>
+        </button>
+      ))}
+    </div>
+  );
+
+  const tiers = (
+    <div className="grid h-full gap-[0.5em]" style={{ gridTemplateRows: H ? "1fr auto" : "auto auto" }}>
+      <div className="grid min-h-0 grid-cols-3 gap-[0.45em]">
+        {TIERS.map((t) => {
+          const lock = wallet.money < t.min;
+          const on = tier === t.id;
+          return (
+            <button key={t.id} type="button" aria-pressed={on} onClick={() => {
+                setTier(t.id);
+                if (lock) say(`${t.name}은 칩 ${fmtShort(t.min)}부터 앉을 수 있어요`);
+              }} className={`relative flex min-h-0 cursor-pointer flex-col overflow-hidden rounded-[8px] border-2 text-left transition ${on ? "border-[var(--pk-brass)] shadow-[0_0_14px_rgba(255,201,60,0.35)]" : "border-white/10 hover:border-white/30"}`}>
+              <div className="relative min-h-[3.2em] flex-1 overflow-hidden bg-cover bg-center" style={{ backgroundImage: `url(${asset.room(t.id, "h")})` }}>
+                <img src={asset.table(t.id, "h")} alt="" draggable={false} className="absolute inset-x-[6%] bottom-[-6%] w-[88%]" />
+                {lock && <span className="absolute inset-0 flex items-center justify-center bg-black/60 text-[1.3em]">🔒</span>}
+              </div>
+              <div className={`relative px-[0.55em] py-[0.35em] ${on ? "bg-[#2a2110]" : "bg-black/70"}`}>
+                <div className="text-[1.05em] font-extrabold">{t.name}</div>
+                <div className="text-[0.76em] leading-snug text-white/70">
+                  판돈 {fmtShort(t.ante)}
+                  {game === "holdem" && (
+                    <>
+                      <br />
+                      블라인드 {fmtShort(t.sb)}/{fmtShort(t.bb)}
+                    </>
+                  )}
                 </div>
-                <p className="mt-1.5 text-[11px] text-white/40">{stakeLine(game, TIERS[form.tier - 1])}</p>
-              </fieldset>
-              <fieldset>
-                <legend className="mb-1.5 text-xs text-white/45">같이 앉을 봇</legend>
-                <div className="flex flex-wrap gap-1.5">
-                  {[0, 1, 2, 3, 4]
-                    .filter((n) => n <= maxBots)
-                    .map((n) => (
-                      <button
-                        key={n}
-                        type="button"
-                        aria-pressed={formBots === n}
-                        onClick={() => setForm((f) => ({ ...f, bots: n }))}
-                        className={`cursor-pointer rounded-full px-3 py-1.5 text-sm transition ${
-                          formBots === n ? "bg-[var(--pk-brass)] font-bold text-[#2a1e05]" : "bg-white/[0.06] text-white/70 hover:bg-white/10"
-                        }`}
-                      >
-                        {n === 0 ? "없음" : `${n}명`}
-                      </button>
-                    ))}
+                <div className={`flex items-center gap-[0.25em] text-[0.78em] font-bold ${lock ? "text-[#ff8a8a]" : "text-[#e9c879]"}`}>
+                  <img src={asset.chip("gold", "top")} alt="" className="h-[1em] w-[1em]" />
+                  {fmtShort(t.min)}부터
                 </div>
-                <p className="mt-1.5 text-[11px] text-white/40">사람이 들어오면 봇이 자리를 비켜 줘요.</p>
-              </fieldset>
-            </div>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <label className="grid gap-1.5 text-xs text-white/45">
-                테이블 이름
-                <input
-                  value={form.name}
-                  maxLength={20}
-                  placeholder={`${myNick}의 테이블`}
-                  onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                  className="rounded-lg border border-white/10 bg-[#15171c] px-3 py-2 text-sm text-white placeholder:text-white/30 focus:border-[var(--pk-brass)] focus:outline-none"
-                />
-              </label>
-              <label className="grid gap-1.5 text-xs text-white/45">
-                비밀번호 (비우면 누구나 입장)
-                <input
-                  value={form.password}
-                  maxLength={20}
-                  autoComplete="off"
-                  onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
-                  className="rounded-lg border border-white/10 bg-[#15171c] px-3 py-2 text-sm text-white focus:border-[var(--pk-brass)] focus:outline-none"
-                />
-              </label>
-            </div>
-            <button
-              type="submit"
-              disabled={!!busy || !canCreate}
-              className="cursor-pointer rounded-xl bg-white py-2.5 text-sm font-bold text-[#15161a] hover:bg-[var(--pk-brass)] disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {busy === "create" ? "만드는 중…" : canCreate ? "테이블 만들고 앉기" : `보유금액이 ${TIERS[form.tier - 1].name} 입장컷(${fmtWon(TIERS[form.tier - 1].min)})보다 적어요`}
+              </div>
             </button>
-          </form>
-        )}
+          );
+        })}
+      </div>
+      <div className="flex gap-[0.4em]">
+        <button type="button" disabled={locked || !!busy} onClick={() => run("quick", async () => onEnter(await quickJoin(game, tier)))} className="pk-btn pk-btn-gold flex-1 py-[0.75em] text-[1.05em]">
+          {busy === "quick" ? "입장 중…" : locked ? `칩 ${fmtShort(T.min)}부터 입장 가능` : `${GAMES[game].name} · ${T.name} 바로 입장`}
+        </button>
+        <button type="button" disabled={locked} onClick={() => setSheet("create")} className="pk-btn pk-btn-ghost px-[1em] text-[0.85em]">
+          방 만들기
+        </button>
+      </div>
+    </div>
+  );
 
+  const rooms = (
+    <div className="pk-frame flex min-h-0 flex-1 flex-col overflow-hidden">
+      <div className="flex items-center gap-[0.5em] border-b border-[rgba(214,175,92,0.25)] bg-black/40 px-[0.8em] py-[0.5em]">
+        <span className="pk-frame-title">열린 방</span>
+        <span className="rounded-[4px] bg-white/10 px-[0.45em] text-[0.8em] font-bold text-white/80">
+          {GAMES[game].name} · {T.name} {shown.length}
+        </span>
+      </div>
+      <div className={`pk-scroll min-h-0 flex-1 overflow-y-auto p-[0.45em] ${tables !== null && shown.length === 0 ? "flex items-center justify-center" : "grid content-start gap-[0.35em]"}`}>
         {tables === null ? (
-          <p className="py-10 text-center text-sm text-white/30">불러오는 중…</p>
+          <p className="p-[1em] text-center text-[0.75em] text-white/40">불러오는 중…</p>
         ) : shown.length === 0 ? (
-          <p className="rounded-2xl border border-dashed border-white/10 py-10 text-center text-sm text-white/40">
-            지금 열린 테이블이 없어요. 위에서 판돈을 골라 바로 입장하면 봇과 함께 새 테이블이 열려요.
-          </p>
+          <div className="flex flex-col items-center gap-[0.5em] py-[1.5em] text-center">
+            <div className="flex -space-x-[0.6em] opacity-60">
+              {[48, 45, 50].map((c, i) => (
+                <PlayingCard key={c} card={c} w={40} style={{ transform: `rotate(${(i - 1) * 12}deg)` }} />
+              ))}
+            </div>
+            <p className="text-[0.92em] text-white/60">
+              아직 열린 {GAMES[game].name} · {T.name} 방이 없어요
+            </p>
+            <button type="button" disabled={locked} onClick={() => setSheet("create")} className="pk-btn pk-btn-ghost px-[1.2em] py-[0.45em] text-[0.88em]">
+              방 만들기
+            </button>
+          </div>
         ) : (
-          <ul className="grid gap-2 sm:grid-cols-2">
-            {shown.map((t) => {
-              const tier = TIERS[t.tier - 1];
-              const full = t.humans + t.bots >= t.max && t.bots === 0;
-              const short = wallet.money < tier.min;
-              return (
-                <li key={t.id}>
-                  <button
-                    type="button"
-                    disabled={full || short}
-                    onClick={() => onEnter(t.id)}
-                    className="flex w-full cursor-pointer items-center gap-3 rounded-xl border border-[var(--pk-line)] bg-[var(--pk-panel)] px-3 py-2.5 text-left transition hover:border-white/30 disabled:cursor-not-allowed disabled:opacity-45"
-                  >
-                    <span className="pk-felt h-10 w-10 shrink-0 rounded-lg" data-tier={t.tier} aria-hidden />
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm text-white">
-                        {t.locked && <span aria-label="비밀번호 있음">🔒 </span>}
-                        {t.name}
-                      </span>
-                      <span className="block text-[11px] text-white/40">
-                        {tier.name} · {stakeLine(t.game, tier)}
-                      </span>
+          shown.map((t) => {
+            const tt = TIERS[t.tier - 1];
+            const lock = wallet.money < tt.min;
+            const color = tt.id === 3 ? "#ff6f91" : tt.id === 2 ? "#4fc9e0" : "#8fd35f";
+            return (
+              <button key={t.id} type="button" disabled={lock || !!busy} onClick={() => onEnter(t.id)} className="group flex w-full cursor-pointer items-center gap-[0.6em] overflow-hidden rounded-[6px] border border-white/[0.08] bg-white/[0.03] py-[0.45em] pr-[0.55em] text-left hover:border-[rgba(214,175,92,0.5)] hover:bg-white/[0.06] disabled:cursor-not-allowed disabled:opacity-45" style={{ boxShadow: `inset 3px 0 0 ${color}` }}>
+                <div className="min-w-0 flex-1 pl-[0.7em]">
+                  <div className="flex items-center gap-[0.35em]">
+                    <span className="text-[0.74em] font-extrabold" style={{ color }}>
+                      {tt.name}
                     </span>
-                    <span className="shrink-0 text-right text-xs text-white/60">
-                      <span className="block">
-                        사람 <b className="text-white">{t.humans}</b> · 봇 {t.bots}
-                      </span>
-                      <span className="block text-white/35">{t.max}자리</span>
-                    </span>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </section>
-
-      {/* 봇 · 순위 */}
-      <div className="mt-9 grid gap-8 lg:grid-cols-[1.25fr_1fr]">
-        <section>
-          <h2 className="mb-3 text-base font-bold text-white">테이블에서 만날 사람들</h2>
-          <ul className="grid gap-2 sm:grid-cols-2">
-            {BOT_IDS.map((b) => (
-              <li key={b} className="flex gap-3 rounded-xl border border-[var(--pk-line)] bg-[var(--pk-panel)] p-3">
-                <Portrait bot={b} name={BOT_INFO[b].name} size={52} />
-                <div className="min-w-0">
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-[15px] font-bold text-white">{BOT_INFO[b].name}</span>
-                    <span className="text-xs text-white/40">
-                      {BOT_INFO[b].age}세 · {BOT_INFO[b].style}
-                    </span>
+                    {t.locked && <span className="text-[0.62em]">🔒</span>}
+                    {!t.bots && <span className="rounded-[3px] bg-white/10 px-[0.3em] text-[0.55em] text-white/60">친구방</span>}
                   </div>
-                  <p className="mt-0.5 text-xs leading-relaxed break-keep text-white/55">{BOT_INFO[b].line}</p>
+                  <div className="truncate text-[0.95em] font-bold">{t.name}</div>
+                  <div className="text-[0.72em] text-white/55">{stakeLine(t.game, tt)}</div>
                 </div>
-              </li>
-            ))}
-          </ul>
-          <p className="mt-2 text-[11px] text-white/35">판돈이 커질수록 봇도 더 정확하게 쳐요. 봇은 자기 패와 테이블에 보이는 것만 봐요.</p>
-        </section>
-        <section>
-          <h2 className="mb-3 text-base font-bold text-white">자금 순위</h2>
-          <RankTable rank={rank} myNick={myNick} limit={10} />
-        </section>
+                <div className="flex shrink-0 flex-col items-end gap-[0.25em]">
+                  <div className="flex gap-[3px]">
+                    {Array.from({ length: t.max }, (_, i) => (
+                      <span key={i} className="h-[7px] w-[7px] flex-none rounded-full" style={{ background: i < t.players ? color : "rgba(255,255,255,0.15)" }} />
+                    ))}
+                  </div>
+                  <span className="pk-btn pk-btn-call px-[0.8em] py-[0.2em] text-[0.76em]">{t.players >= t.max ? "가득" : "입장"}</span>
+                </div>
+              </button>
+            );
+          })
+        )}
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="absolute inset-0">
+      <div className="pk-bg" style={{ backgroundImage: `url(${asset.room("lobby", o)})`, filter: "brightness(0.5) saturate(0.85)" }} />
+      {top}
+      {H ? (
+        <div className="absolute inset-x-0 bottom-0 grid grid-cols-[27%_1fr_26%] gap-[0.7em] p-[0.8em]" style={{ top: bar }}>
+          {me}
+          <div className="grid min-h-0 grid-rows-[38%_1fr] gap-[0.7em]">
+            {mode}
+            <div className="pk-frame min-h-0 p-[0.6em]">{tiers}</div>
+          </div>
+          <div className="flex min-h-0 flex-col">{rooms}</div>
+        </div>
+      ) : (
+        <div className="absolute inset-x-0 bottom-0 flex flex-col gap-[0.55em] p-[0.6em]" style={{ top: bar }}>
+          {/* 세로판: 내 정보 한 줄 */}
+          <div className="pk-frame pk-me relative isolate flex items-center gap-[0.6em] overflow-hidden p-[0.5em]" style={{ "--c": info.color } as CSSProperties}>
+            <div className="pk-me-glow absolute inset-0 -z-10" />
+            <button type="button" onClick={() => setSheet("char")} className="shrink-0 cursor-pointer" aria-label="캐릭터 변경">
+              <Profile char={wallet.char} size={44} className="ring-2 ring-[var(--pk-brass)]" />
+            </button>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-baseline gap-[0.4em]">
+                <span className="truncate text-[1.1em] font-extrabold">{myNick}</span>
+                <span className="shrink-0 text-[0.8em] font-bold" style={{ color: info.color }}>
+                  {info.name}
+                </span>
+              </div>
+              <div className="flex items-center gap-[0.3em]">
+                { }
+                <img src={asset.chip("gold", "top")} alt="" className="h-[1.1em] w-[1.1em]" />
+                <Money won={wallet.money} className="text-[1.2em] text-[#ffd84a]" />
+              </div>
+            </div>
+            {myRank > 0 && (
+              <button type="button" onClick={() => setSheet("rank")} className="flex shrink-0 flex-col items-center rounded-[8px] border border-[rgba(255,201,60,0.45)] bg-black/45 px-[0.8em] py-[0.2em] leading-tight">
+                <span className="text-[0.68em] text-white/55">순위</span>
+                <span className="text-[1.2em] font-extrabold text-[#ffd84a]">{myRank}위</span>
+              </button>
+            )}
+          </div>
+          {mode}
+          <div className="pk-frame p-[0.6em]">{tiers}</div>
+          {rooms}
+        </div>
+      )}
+
+      {notes && <PatchNotes onClose={() => setNotes(false)} />}
+      {/* 알림 토스트 */}
+      {toast && (
+        <div key={toast.key} role="status" className="pk-toast" style={{ bottom: H ? 90 : 110 }}>
+          {toast.text}
+        </div>
+      )}
+
+      {/* 서랍들 */}
+      {sheet && (
+        <div className="absolute inset-0 z-40 flex items-end justify-center bg-black/65 sm:items-center" onClick={() => setSheet("")}>
+          <div className={`pk-frame pk-pop w-full ${H ? "max-w-[min(640px,80%)]" : ""} overflow-hidden`} style={{ maxHeight: h - 20 }} onClick={(e) => e.stopPropagation()}>
+            {sheet === "create" && (
+              <form
+                className="grid gap-[0.6em] p-[1em]"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  void run("create", async () => onEnter(await createTable({ game, tier, name: form.name, password: form.password, bots: form.bots })));
+                }}
+              >
+                <div className="pk-frame-title">
+                  {GAMES[game].name} · {T.name} 방 만들기
+                </div>
+                <input value={form.name} maxLength={20} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder={`방 이름 (${myNick}의 테이블)`} aria-label="방 이름" className="rounded-[6px] border border-white/15 bg-black/50 px-[0.7em] py-[0.55em] text-[0.9em] text-white placeholder:text-white/35 focus:border-[var(--pk-brass)] focus:outline-none" />
+                <input value={form.password} maxLength={40} onChange={(e) => setForm({ ...form, password: e.target.value })} placeholder="비밀번호 (비우면 공개 방)" aria-label="비밀번호" className="rounded-[6px] border border-white/15 bg-black/50 px-[0.7em] py-[0.55em] text-[0.9em] text-white placeholder:text-white/35 focus:border-[var(--pk-brass)] focus:outline-none" />
+                <label className="flex cursor-pointer items-center gap-[0.6em] rounded-[6px] bg-white/[0.05] px-[0.7em] py-[0.55em] text-[0.85em]">
+                  <input type="checkbox" checked={form.bots} onChange={(e) => setForm({ ...form, bots: e.target.checked })} className="h-[1.1em] w-[1.1em] accent-[var(--pk-brass)]" />
+                  <span>바로 입장 허용</span>
+                </label>
+                <div className="flex gap-[0.4em]">
+                  <button type="button" onClick={() => setSheet("")} className="pk-btn pk-btn-ghost px-[1em] py-[0.55em] text-[0.85em]">
+                    취소
+                  </button>
+                  <button type="submit" disabled={!!busy} className="pk-btn pk-btn-gold flex-1 py-[0.55em] text-[0.9em]">
+                    {busy === "create" ? "만드는 중…" : "만들고 앉기"}
+                  </button>
+                </div>
+              </form>
+            )}
+            {sheet === "char" && <CharSelect current={wallet.char} o={o} onPick={(c) => void run("char", async () => (await setChar(c), setSheet("")))} onClose={() => setSheet("")} />}
+            {sheet === "rank" && (
+              <div className="flex flex-col p-[0.9em]" style={{ maxHeight: h * 0.8 }}>
+                <div className="pk-frame-title mb-[0.4em]">순위</div>
+                <div className="pk-scroll min-h-0 overflow-y-auto">
+                  <RankTable rank={rank} myNick={myNick} />
+                </div>
+                <button type="button" onClick={() => setSheet("")} className="pk-btn pk-btn-ghost mt-[0.6em] py-[0.45em] text-[0.85em]">
+                  닫기
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** 모드 카드의 그림: 펠트 위에 그 게임처럼 카드를 늘어놓음 */
+function ModeCards({ game, h }: { game: "holdem" | "seven"; h: boolean }) {
+  const w = h ? 34 : 22;
+  if (game === "holdem")
+    return (
+      <div className="absolute inset-0 flex flex-col items-center justify-center gap-[8%]">
+        <div className="flex gap-[3px]">
+          {[48, 44, 21, 2, 40].map((c, i) => (
+            <PlayingCard key={c} card={c} w={w} style={{ transform: `translateY(${i === 2 ? 0 : 0}px)` }} />
+          ))}
+        </div>
+        <div className="flex">
+          {[36, 32].map((c, i) => (
+            <PlayingCard key={c} card={c} w={w * 1.15} win style={{ transform: `rotate(${i ? 8 : -8}deg)`, marginLeft: i ? -w * 0.35 : 0 }} />
+          ))}
+        </div>
+      </div>
+    );
+  const cards: (number | null)[] = [48, 49, 50, 51, 44, 45, null];
+  return (
+    <div className="absolute inset-0 flex items-center justify-center">
+      <div className="relative" style={{ width: w * 1.1, height: w * 1.1 * 1.4, marginTop: w * 0.5 }}>
+        {cards.map((c, i) => (
+          <PlayingCard key={i} card={c} w={w * 1.1} tier={3} win={i < 4} style={{ position: "absolute", top: 0, left: 0, transform: `rotate(${(i - 3) * 12}deg)`, transformOrigin: "50% 240%" }} />
+        ))}
       </div>
     </div>
   );
 }
 
-export function RankTable({ rank, myNick, limit }: { rank: RankRow[] | null; myNick?: string; limit?: number }) {
-  if (rank === null) return <p className="py-6 text-center text-sm text-white/30">불러오는 중…</p>;
-  if (!rank.length)
-    return <p className="rounded-xl border border-dashed border-white/10 py-8 text-center text-sm text-white/40">아직 한 판이라도 친 사람이 없어요. 첫 번째로 이름을 올려 보세요.</p>;
-  const list = limit ? rank.slice(0, limit) : rank;
+/** 캐릭터 고르기: 전신 5명 */
+function CharSelect({ current, o, onPick, onClose }: { current: CharId; o: Orient; onPick: (c: CharId) => void; onClose: () => void }) {
+  const [sel, setSel] = useState<CharId>(current);
+  const info = CHARS[sel];
   return (
-    <ol className="pk overflow-hidden rounded-xl border border-[var(--pk-line)]">
-      {list.map((r, i) => (
-        <li
-          key={r.nick}
-          className={`flex items-center gap-3 border-b border-[var(--pk-line)] px-3 py-2 last:border-b-0 ${r.nick === myNick ? "bg-[#2a2412]" : "bg-[var(--pk-panel)]"}`}
-        >
-          <span className={`pk-num w-6 text-center text-lg ${i < 3 ? "text-[var(--pk-brass)]" : "text-white/35"}`}>{i + 1}</span>
-          <Portrait bot={null} name={r.nick} avatar={r.avatar} size={28} />
-          <span className="min-w-0 flex-1 truncate text-sm text-white">{r.nick}</span>
-          <span className="text-[11px] text-white/35">{r.hands.toLocaleString()}판</span>
-          <Money won={r.money} className="text-lg text-white" />
-        </li>
-      ))}
+    <div className="flex flex-col gap-[0.6em] p-[0.9em]">
+      <div className="pk-frame-title">캐릭터</div>
+      <div className="flex items-end justify-center" style={{ height: o === "h" ? 260 : 220 }}>
+        {CHAR_IDS.map((c) => (
+          <button key={c} type="button" aria-pressed={sel === c} onClick={() => setSel(c)} className="pk-pick h-full min-w-0 flex-1 cursor-pointer">
+            { }
+            <img src={asset.full(c)} alt={CHARS[c].name} draggable={false} className="mx-auto h-full w-auto max-w-none object-contain" />
+          </button>
+        ))}
+      </div>
+      <div className="flex items-center gap-[0.6em] rounded-[8px] px-[0.7em] py-[0.45em]" style={{ background: `linear-gradient(90deg, ${info.color}55, transparent)` }}>
+        <Profile char={sel} size={36} />
+        <div>
+          <div className="text-[0.95em] font-extrabold">{info.name}</div>
+          <div className="text-[0.72em] text-white/65">{info.blurb}</div>
+        </div>
+      </div>
+      <div className="flex gap-[0.4em]">
+        <button type="button" onClick={onClose} className="pk-btn pk-btn-ghost px-[1em] py-[0.55em] text-[0.85em]">
+          취소
+        </button>
+        <button type="button" onClick={() => onPick(sel)} className="pk-btn pk-btn-gold flex-1 py-[0.55em] text-[0.9em]">
+          {sel === current ? "확인" : `${info.name}(으)로 변경`}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** 자금 순위 표 (로비 · 게임 머리말의 랭킹 모달에서 같이 씀) */
+export function RankTable({ rank, myNick, limit }: { rank: RankRow[] | null; myNick?: string; limit?: number }) {
+  if (rank === null) return <p className="py-6 text-center text-sm text-white/40">불러오는 중…</p>;
+  const rows = limit ? rank.slice(0, limit) : rank;
+  if (!rows.length) return <p className="py-6 text-center text-sm text-white/40">아직 한 판도 안 쳤어요. 첫 기록의 주인공이 되어 보세요.</p>;
+  return (
+    <ol className="divide-y divide-white/[0.07]">
+      {rows.map((r, i) => {
+        const me = myNick && r.nick === myNick;
+        return (
+          <li key={`${r.nick}-${i}`} className={`flex items-center gap-3 px-2 py-2 text-sm ${me ? "bg-[var(--pk-brass)]/10" : ""}`}>
+            <span className={`w-6 text-center font-bold ${i < 3 ? "text-[var(--pk-brass)]" : "text-white/40"}`}>{i + 1}</span>
+            <Profile char={r.char} size={30} />
+            <span className={`min-w-0 flex-1 truncate ${me ? "font-bold text-[var(--pk-brass)]" : "text-white/85"}`}>{r.nick}</span>
+            <span className="text-xs text-white/40">{r.hands.toLocaleString()}판</span>
+            <Money won={r.money} className="text-base text-white" />
+          </li>
+        );
+      })}
     </ol>
   );
 }

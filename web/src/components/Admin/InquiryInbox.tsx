@@ -99,6 +99,7 @@ export default function InquiryInbox({ items, loaded }: { items: Inquiry[]; load
                         className={`truncate font-['Nanum_Gothic',sans-serif] text-sm ${i.read ? "text-white/60" : "font-bold text-white"}`}
                       >
                         {i.name}
+                        {i.nick && <span className="ml-2 rounded-full bg-[#6C63FF]/25 px-2 py-0.5 text-[11px] font-bold text-[#b9b4ff]">회원 · {i.nick}</span>}
                         <span className="ml-2 font-mono text-xs font-normal text-white/35">
                           {i.email}
                         </span>

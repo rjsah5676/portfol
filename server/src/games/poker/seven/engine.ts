@@ -16,7 +16,8 @@ import { autoChoice, evaluateK, handNameK, openRank } from "../../../../../web/s
  */
 
 export type SevenBet = "bbing" | "ddadang" | "quarter" | "half" | "full";
-export type SevenAct = "die" | "check" | "call" | SevenBet;
+/** 체크는 없음: 받을 돈이 없어도 삥(또는 그 이상)을 걸거나 죽어야 함 (한게임 7포커) */
+export type SevenAct = "die" | "call" | SevenBet;
 export type SevenPhase = "choice" | "bet" | "deal" | "done";
 export const RAISES_PER_ROUND = 2;
 
@@ -40,7 +41,6 @@ export interface SevenPlayer {
 }
 
 export interface SevenLegal {
-  canCheck: boolean;
   toCall: number;
   bets: Partial<Record<SevenBet, number>>;
 }
@@ -159,7 +159,7 @@ export class SevenHand {
 
   legal(seat: number): SevenLegal {
     const p = this.player(seat);
-    if (!p || p.folded || p.allIn || this.phase !== "bet") return { canCheck: false, toCall: 0, bets: {} };
+    if (!p || p.folded || p.allIn || this.phase !== "bet") return { toCall: 0, bets: {} };
     const owed = this.owed(p);
     const toCall = Math.min(p.stack, owed);
     const bets: SevenLegal["bets"] = {};
@@ -175,7 +175,7 @@ export class SevenHand {
       bets.half = add(pot / 2);
       bets.full = add(pot);
     }
-    return { canCheck: owed === 0, toCall, bets };
+    return { toCall, bets };
   }
 
   pots(): { amount: number; seats: number[] }[] {
@@ -238,10 +238,8 @@ export class SevenHand {
     let add = 0;
     let aggressive = false;
     if (type === "die") return this.fold(p);
-    if (type === "check") {
-      if (!lg.canCheck) throw new SevenError("체크할 수 없습니다.");
-    } else if (type === "call") {
-      if (lg.canCheck || lg.toCall <= 0) throw new SevenError("콜할 금액이 없습니다.");
+    if (type === "call") {
+      if (lg.toCall <= 0) throw new SevenError("콜할 금액이 없습니다.");
       add = lg.toCall;
     } else {
       const amount = Object.hasOwn(lg.bets, type) ? lg.bets[type] : undefined;

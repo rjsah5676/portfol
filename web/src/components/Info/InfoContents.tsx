@@ -1,5 +1,6 @@
 import type { ComponentType } from "react";
 import AirboardProject from "./AirboardProject";
+import AnimePokerProject from "./AnimePokerProject";
 import ArtpartProject from "./ArtpartProject";
 import BeatDashProject from "./BeatDashProject";
 import BojProject from "./BojProject";
@@ -22,6 +23,7 @@ const PROJECT_PAGES: Record<number, ComponentType> = {
   11: OhsoriProject,
   12: BeatDashProject,
   13: PixelFightProject,
+  14: AnimePokerProject,
 };
 
 function InfoContents({ idx }: { idx: number }) {

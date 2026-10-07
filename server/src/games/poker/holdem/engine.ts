@@ -55,7 +55,7 @@ export interface Legal {
 export interface HistoryItem {
   street: Street;
   seat: number;
-  type: "sb" | "bb" | ActType;
+  type: "ante" | "sb" | "bb" | ActType;
   /** 벳·레이즈인지 (콜 금액보다 더 냄) */
   aggressive: boolean;
   /** 이 행동으로 낸 돈 */
@@ -104,6 +104,8 @@ export interface HandOptions {
   button: number;
   sb: number;
   bb: number;
+  /** 기본 판돈: 판 시작할 때 전원이 내는 돈 (팟에만 들어가고 콜 금액에는 안 셈) */
+  ante?: number;
   /** 섞어 둔 덱 (뒤에서부터 뽑음) */
   deck: Card[];
   /** 베팅 단위 (올인이 아니면 이 배수로만) */
@@ -117,6 +119,7 @@ export class Hand {
   readonly bbSeat: number;
   readonly sb: number;
   readonly bb: number;
+  readonly ante: number;
   readonly unit: number;
   board: Card[] = [];
   street: Street = 0;
@@ -143,6 +146,7 @@ export class Hand {
     if (new Set(o.seats.map((s) => s.seat)).size !== o.seats.length) throw new HandError("자리가 겹칩니다.");
     this.sb = o.sb;
     this.bb = o.bb;
+    this.ante = o.ante ?? 0;
     this.unit = o.unit ?? 1;
     this.lastRaise = o.bb;
     this.deck = o.deck.slice();
@@ -177,6 +181,7 @@ export class Hand {
       }
     }
 
+    if (this.ante > 0) for (const p of this.players) this.postAnte(p);
     this.post(this.sbSeat, this.sb, "sb");
     this.post(this.bbSeat, this.bb, "bb");
     // 블라인드를 다 못 냈어도 콜 금액은 BB 전액
@@ -396,6 +401,16 @@ export class Hand {
     const add = Math.min(blind, p.stack);
     this.pay(p, add);
     this.history.push({ street: 0, seat, type, aggressive: false, add, to: p.bet, potBefore, toCallBefore: 0, allIn: p.allIn });
+  }
+
+  /** 기본 판돈: 팟에 바로 들어감 (이번 라운드 벳이 아님) */
+  private postAnte(p: HandPlayer) {
+    const potBefore = this.pot;
+    const add = Math.min(this.ante, p.stack);
+    p.stack -= add;
+    p.invested += add;
+    if (p.stack === 0) p.allIn = true;
+    this.history.push({ street: 0, seat: p.seat, type: "ante", aggressive: false, add, to: 0, potBefore, toCallBefore: 0, allIn: p.allIn });
   }
 
   /** from 다음부터 돌면서 행동해야 하는 사람 (없으면 -1) */

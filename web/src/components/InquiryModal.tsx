@@ -1,8 +1,9 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Modal from "@/components/Modal/Modal";
 import { addInquiry, EMAIL_RE, INQUIRY_LIMITS } from "@/firestore/inquiries";
+import { useAuth } from "@/lib/AuthContext";
 
 const THROTTLE_KEY = "inquiry_last_sent";
 const THROTTLE_MS = 60_000;
@@ -21,6 +22,14 @@ export default function InquiryModal({ open, onClose }: { open: boolean; onClose
   const [done, setDone] = useState(false);
   const [error, setError] = useState("");
   const nameRef = useRef<HTMLInputElement>(null);
+  // 로그인한 회원이면 이름(별명) · 이메일을 미리 채워 둠 (비어 있을 때만)
+  const { account, profile } = useAuth();
+  useEffect(() => {
+    if (!open) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 열릴 때 한 번 회원 정보로 채움
+    if (profile?.nick) setName((v) => v || profile.nick);
+    if (account?.email) setEmail((v) => v || account.email!);
+  }, [open, account, profile]);
 
   const close = () => {
     onClose();

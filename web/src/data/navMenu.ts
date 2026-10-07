@@ -95,9 +95,10 @@ export const NAV_GROUPS: NavGroup[] = [
       {
         href: "/games/poker",
         image: imgPoker,
-        label: "온라인 포커",
-        desc: "홀덤 · 7포커, 가입하면 1억 — 봇 4명 또는 친구와",
+        label: "ANIME POKER",
+        desc: "애니풍 캐릭터와 즐기는 홀덤 · 7포커",
         icon: "♠",
+        featured: true,
       },
       {
         href: "/games/melongame",
@@ -105,6 +106,7 @@ export const NAV_GROUPS: NavGroup[] = [
         label: "멜론 게임",
         desc: "합이 10·20이 되게 묶어 지우는 2분 타임어택",
         icon: "🍈",
+        featured: true,
       },
       {
         href: "/games/sketch",

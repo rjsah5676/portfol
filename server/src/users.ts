@@ -130,6 +130,8 @@ export interface AdminUser extends Profile {
   updatedAt: number;
   lastVisitAt: number | null;
   stats: UserStats;
+  /** 포커 칩 */
+  money: number;
 }
 const toAdmin = (uid: string, d: UserDoc): AdminUser => ({
   uid,
@@ -138,6 +140,7 @@ const toAdmin = (uid: string, d: UserDoc): AdminUser => ({
   updatedAt: d.updatedAt?.getTime() ?? d.createdAt.getTime(),
   lastVisitAt: d.lastVisitAt?.getTime() ?? null,
   stats: d.stats ?? {},
+  money: d.money ?? 0,
 });
 const escapeRe = (v: string) => v.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 /** 회원의 이름이 저장되는 곳 (별명이 바뀌면 같이 바뀌고, 회원을 지울 때 같이 정리) */
@@ -287,8 +290,8 @@ export function createUsers(db: Database, cfg: Pick<Config, "adminNick">) {
       return { total, items: docs.map((d) => toAdmin(String(d._id), d as unknown as UserDoc)) };
     },
 
-    /** (관리자) 별명 · 꾸밈 바꾸기. 별명 규칙(글자·길이·중복)은 그대로, 예약어만 허용 */
-    async adminUpdate(uid: string, patch: { nick?: string; badge?: string | null }): Promise<AdminUser> {
+    /** (관리자) 별명 · 꾸밈 · 포커 칩 바꾸기. 별명 규칙(글자·길이·중복)은 그대로, 예약어만 허용 */
+    async adminUpdate(uid: string, patch: { nick?: string; badge?: string | null; money?: number }): Promise<AdminUser> {
       const cur = await docOf(uid);
       if (!cur) throw new AppError("NOT_FOUND", "없는 회원이에요.", 404);
       const set: Record<string, unknown> = { updatedAt: new Date() };
@@ -302,6 +305,7 @@ export function createUsers(db: Database, cfg: Pick<Config, "adminNick">) {
         Object.assign(set, { nick, nickKey });
         renamed = nick;
       }
+      if (patch.money !== undefined) set.money = Math.max(0, Math.floor(patch.money));
       if (patch.badge !== undefined) {
         const badge = (patch.badge ?? "").trim();
         if ([...badge].length > BADGE_MAX) throw bad(`꾸밈은 ${BADGE_MAX}자까지예요.`);

@@ -1,7 +1,7 @@
 import { Collection } from "mongodb";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { REVIVE, START_MONEY, TIERS, type GameKind } from "../../web/src/lib/poker/rules";
-import type { HoldemView, LobbyTable, MyHand, SevenView, TableWire, Wallet } from "../../web/src/lib/poker/types";
+import type { HoldemLegal, HoldemView, LobbyTable, MyHand, SevenLegal, SevenView, TableWire, Wallet } from "../../web/src/lib/poker/types";
 import { RpcError, sleep, startTestServer, type TestClient, type TestServer, type TestSub } from "./helpers";
 
 /*
@@ -12,6 +12,8 @@ import { RpcError, sleep, startTestServer, type TestClient, type TestServer, typ
  *
  * 테스트 DB 가 FerretDB 일 때의 주의: 같은 문서를 동시에 고치면 한쪽이 사라지고, 조건부 수정도 원자적이지 않음
  * (진짜 MongoDB 는 둘 다 원자적). 그래서 "동시에 눌러도 한 번만" 같은 확인은 FerretDB 에서는 건너뜀.
+ *
+ * 유저봇(bots: true 인 방)은 사람이 앉은 뒤에 하나씩 들어오고 수가 들쭉날쭉함. 봇이 끼어들면 안 되는 테스트는 bots: false 로 만듦.
  */
 
 let srv: TestServer;
@@ -110,7 +112,22 @@ interface Player {
   stop(): void;
 }
 
-/** 테이블을 보면서 자동으로 침 (poker.test.ts 의 play 와 같은 방식). 기본: 체크, 싸면 콜, 비싸면 죽음 */
+/** 기본 행동: 홀덤은 체크 · 싸면 콜 · 비싸면 폴드. 7포커는 체크가 없으니 받을 돈이 없으면 삥, 싸면 콜, 비싸면 다이 */
+function cheapAction(t: TableWire, seat: number): Record<string, unknown> {
+  const h = t.hand!;
+  const cheap = h.legal!.toCall <= (t.seats[seat]?.stack ?? 0) * 0.03;
+  if (h.game === "seven") {
+    const lg = h.legal as SevenLegal;
+    if (lg.toCall > 0) return { a: cheap ? "call" : "die" };
+    return { a: lg.bets.bbing !== undefined ? "bbing" : "die" };
+  }
+  const lg = h.legal as HoldemLegal;
+  return { a: lg.canCheck ? "check" : cheap ? "call" : "fold" };
+}
+/** 7포커에서 받을 돈이 없을 때의 가장 싼 행동 (체크가 없음) */
+const bbingOrDie = (h: SevenView) => ({ a: h.legal!.bets.bbing !== undefined ? "bbing" : "die" });
+
+/** 테이블을 보면서 자동으로 침 (poker.test.ts 의 play 와 같은 방식). 기본: cheapAction */
 async function play(who: { uid: string; c: TestClient }, id: string, policy: Policy = () => null, seen: TableWire[] = []): Promise<Player> {
   const table = await who.c.sub<{ table: TableWire } | null>("poker.table", { id });
   const me = await who.c.sub<MyHand | null>("poker.me", { id });
@@ -134,9 +151,7 @@ async function play(who: { uid: string; c: TestClient }, id: string, policy: Pol
     } else if (h.toAct === seat && !h.result) {
       mark = `${t.handNo}:${t.seq}`;
       if (mark === acted) return;
-      const lg = h.legal!;
-      const cheap = lg.toCall <= (t.seats[seat]?.stack ?? 0) * 0.03;
-      input = policy(t, seat) ?? { a: lg.canCheck ? "check" : cheap ? "call" : h.game === "seven" ? "die" : "fold" };
+      input = policy(t, seat) ?? cheapAction(t, seat);
     }
     if (!input || mark === acted) return;
     acted = mark;
@@ -191,7 +206,7 @@ async function leaveAll(id: string, ms: Member[]) {
 describe("회원 전용", () => {
   it("익명·별명 없는 계정·비로그인은 로비 목록 말고는 아무것도 못 함", async () => {
     const a = await member();
-    const id = await a.c.rpc<string>("poker.create", { game: "holdem", tier: 1, bots: 2 });
+    const id = await a.c.rpc<string>("poker.create", { game: "holdem", tier: 1, bots: true });
     const pa = await play(a, id);
     await a.c.rpc("poker.sit", { id });
     await until(() => (pa.state()?.handNo ?? 0) >= 1, "첫 판");
@@ -209,6 +224,8 @@ describe("회원 전용", () => {
       ["poker.wallet", undefined],
       ["poker.revive", undefined],
       ["poker.sitout", { id, out: true }],
+      ["poker.emote", { id, emote: "hi" }],
+      ["poker.char", { char: "amy" }],
     ];
     for (const [m, args] of calls) {
       // sitout 은 자리가 있어야 하므로 FORBIDDEN 으로 막힘
@@ -225,7 +242,7 @@ describe("회원 전용", () => {
       const lobby = await who.sub<LobbyTable[]>("poker.lobby");
       expect(lobby.data.some((t) => t.id === id)).toBe(true);
       // 목록에는 자리 수 같은 것만 (패·칩 없음)
-      expect(Object.keys(lobby.data[0]).sort()).toEqual(["bots", "createdAt", "game", "humans", "id", "locked", "max", "name", "tier"]);
+      expect(Object.keys(lobby.data[0]).sort()).toEqual(["bots", "createdAt", "game", "id", "locked", "max", "name", "players", "tier"]);
     }
     // 아무 일도 일어나지 않았음
     expect(pa.state()!.seats.filter((s) => s?.uid).map((s) => s!.uid)).toEqual([a.uid]);
@@ -237,7 +254,7 @@ describe("회원 전용", () => {
   it("남의 패·지갑 구독 키는 만들 수 없음 (요청에 uid 를 넣어도 내 것만 나옴)", async () => {
     const a = await member();
     const b = await member();
-    const id = await a.c.rpc<string>("poker.create", { game: "holdem", tier: 1, bots: 2 });
+    const id = await a.c.rpc<string>("poker.create", { game: "holdem", tier: 1, bots: true });
     const pa = await play(a, id);
     await a.c.rpc("poker.sit", { id });
 
@@ -270,11 +287,11 @@ describe("한 사람은 한 자리만", () => {
   it("두 탭에서 동시에 앉아도 자리는 하나 (같은 테이블 · 다른 테이블)", async () => {
     const a = await member();
     const a2 = await tab(a);
-    const x = await a.c.rpc<string>("poker.create", { game: "holdem", tier: 1, bots: 0 });
+    const x = await a.c.rpc<string>("poker.create", { game: "holdem", tier: 1, bots: false });
     // (한 사람이 새 테이블을 만들면 그 사람의 빈 테이블은 닫히므로, 나머지 테이블은 다른 사람이 만듦)
     const host = await member();
     const host2 = await member();
-    const y = await host.c.rpc<string>("poker.create", { game: "seven", tier: 1, bots: 0 });
+    const y = await host.c.rpc<string>("poker.create", { game: "seven", tier: 1, bots: false });
     const tx = await a.c.sub<{ table: TableWire }>("poker.table", { id: x });
     const ty = await a.c.sub<{ table: TableWire }>("poker.table", { id: y });
     const lastOf = (s: TestSub) => ([...s.events].reverse().find((e) => e.t === "state")?.d ?? s.data.table) as TableWire;
@@ -304,7 +321,7 @@ describe("한 사람은 한 자리만", () => {
     }
 
     // 앉기에 실패(돈 모자람)한 뒤에도 "앉는 중" 예약이 남지 않음
-    const vip = await host2.c.rpc<string>("poker.create", { game: "holdem", tier: 3, bots: 0 });
+    const vip = await host2.c.rpc<string>("poker.create", { game: "holdem", tier: 3, bots: false });
     expect(await code(a.c.rpc("poker.sit", { id: vip }))).toBe("NEED_MONEY");
     expect(await code(a.c.rpc("poker.sit", { id: x }))).toBe("OK");
     await a.c.rpc("poker.leave", { id: x });
@@ -334,7 +351,7 @@ describe("돈", () => {
   it("판 도중에는 회생을 받을 수 없고(조건 미달), 판 중의 칩은 DB 금액과 무관하게 그대로", async () => {
     const a = await member();
     await setMoney(a.uid, TIERS[0].min);
-    const id = await a.c.rpc<string>("poker.create", { game: "holdem", tier: 1, bots: 2 });
+    const id = await a.c.rpc<string>("poker.create", { game: "holdem", tier: 1, bots: true });
     let tried = null as Promise<string> | null;
     const seen: TableWire[] = [];
     const pa = await play(
@@ -363,7 +380,7 @@ describe("돈", () => {
     const a: Member = { uid, email, nick: "옛날회원", token: "", c };
     expect((await walletOf(a)).money).toBe(START_MONEY);
 
-    const id = await c.rpc<string>("poker.create", { game: "holdem", tier: 1, bots: 2 });
+    const id = await c.rpc<string>("poker.create", { game: "holdem", tier: 1, bots: true });
     const seen: TableWire[] = [];
     const pa = await play(a, id, () => ({ a: "fold" }), seen);
     await c.rpc("poker.sit", { id });
@@ -384,8 +401,8 @@ describe("돈", () => {
    */
   it("판을 잃고 나간 직후(정산 반영 전) 다른 테이블에 앉아도, 잃기 전 금액으로 칩을 받지 못함", async () => {
     const [a, b, c] = [await member(), await member(), await member()];
-    const X = await a.c.rpc<string>("poker.create", { game: "holdem", tier: 1, bots: 0 });
-    const Y = await c.c.rpc<string>("poker.create", { game: "holdem", tier: 1, bots: 0 });
+    const X = await a.c.rpc<string>("poker.create", { game: "holdem", tier: 1, bots: false });
+    const Y = await c.c.rpc<string>("poker.create", { game: "holdem", tier: 1, bots: false });
     const LOSS = 50_000_000;
     const BIG = 99_000_000;
     const seenX: TableWire[] = [];
@@ -450,9 +467,9 @@ describe("돈", () => {
     }
     await sleep(400);
 
-    // a 는 X 에서 5,000만을 잃었음
+    // a 는 X 에서 5,000만(+ 앤티)을 잃었음
     const lostAtX = -deltaSum(await auditsOf(X), a.uid);
-    expect(lostAtX).toBe(LOSS);
+    expect(lostAtX).toBe(LOSS + TIERS[0].ante);
     // Y 에서 판을 시작할 때의 칩은 그때 실제로 가진 돈(1억 − 5,000만)을 넘을 수 없음
     const stackAtY = startStack(seenY, a.uid, 1);
     if (stackAtY !== undefined) expect.soft(stackAtY, "Y 에서 판을 시작할 때 a 의 칩").toBeLessThanOrEqual(START_MONEY - LOSS);
@@ -465,7 +482,7 @@ describe("돈", () => {
 
   it("정산 반영이 늦어도, 같은 테이블에 나갔다 다시 앉는 것으로는 정산 전 금액을 칩으로 받지 못함", async () => {
     const [a, b] = [await member(), await member()];
-    const X = await a.c.rpc<string>("poker.create", { game: "holdem", tier: 1, bots: 0 });
+    const X = await a.c.rpc<string>("poker.create", { game: "holdem", tier: 1, bots: false });
     const LOSS = 50_000_000;
     const seen: TableWire[] = [];
     let resat: string | undefined;
@@ -501,8 +518,9 @@ describe("돈", () => {
       expect(resat).toBe("OK");
       await until(() => seen.some((t) => t.handNo >= 2 && t.hand && t.ev.some((e) => e.t === "hand")), "둘째 판 시작", 20_000);
       expect(startStack(seen, a.uid, 1)).toBe(START_MONEY);
-      expect(startStack(seen, a.uid, 2)).toBe(START_MONEY - LOSS);
-      expect(startStack(seen, b.uid, 2)).toBe(START_MONEY + LOSS);
+      // a 는 올린 5,000만과 앤티를 잃음
+      expect(startStack(seen, a.uid, 2)).toBe(START_MONEY - LOSS - TIERS[0].ante);
+      expect(startStack(seen, b.uid, 2)).toBe(START_MONEY + LOSS + TIERS[0].ante);
       pa.stop();
       pb.stop();
       await leaveAll(X, [a, b]);
@@ -517,7 +535,7 @@ describe("돈", () => {
 
   it("관리자가 판 도중에 테이블을 닫으면 그 판은 무효 — 돈은 끝난 판의 증감만", async () => {
     const [a, b] = [await member(), await member()];
-    const id = await a.c.rpc<string>("poker.create", { game: "holdem", tier: 1, bots: 0 });
+    const id = await a.c.rpc<string>("poker.create", { game: "holdem", tier: 1, bots: false });
     const token = await srv.adminToken();
     let closing = null as Promise<{ status: number; body: any }> | null;
     const policy: Policy = (t, seat) => {
@@ -549,7 +567,7 @@ describe("돈", () => {
       expect(await code(m.c.rpc("poker.sit", { id }))).toBe("NO_TABLE");
     }
     // 다른 테이블에 바로 앉을 수 있음 (자리에 묶여 있지 않음)
-    const other = await a.c.rpc<string>("poker.create", { game: "holdem", tier: 1, bots: 0 });
+    const other = await a.c.rpc<string>("poker.create", { game: "holdem", tier: 1, bots: false });
     expect(await code(a.c.rpc("poker.sit", { id: other }))).toBe("OK");
     await a.c.rpc("poker.leave", { id: other });
     pa.stop();
@@ -558,7 +576,7 @@ describe("돈", () => {
 
   it("판 도중에 회원이 지워져도(관리자) 서버는 멀쩡하고, 그 사람은 죽은 것으로 처리되며 자리가 비워짐", async () => {
     const [a, b] = [await member(), await member()];
-    const id = await a.c.rpc<string>("poker.create", { game: "holdem", tier: 1, bots: 0 });
+    const id = await a.c.rpc<string>("poker.create", { game: "holdem", tier: 1, bots: false });
     const token = await srv.adminToken();
     const from = logs.length;
     let removing = null as Promise<{ status: number; body: any }> | null;
@@ -582,9 +600,9 @@ describe("돈", () => {
     await until(() => !!pb.state() && !pb.state()!.seats.some((s) => s?.uid === a.uid), "지워진 회원의 자리가 비워짐", 20_000);
     await sleep(300);
     const hands = await auditsOf(id);
-    // b 는 a 가 넣은 3,000만을 가져감. 지워진 a 의 문서는 다시 생기지 않음
-    expect(deltaSum(hands, b.uid)).toBe(30_000_000);
-    expect(await moneyOf(b.uid)).toBe(START_MONEY + 30_000_000);
+    // b 는 a 가 넣은 3,000만(+ 앤티)을 가져감. 지워진 a 의 문서는 다시 생기지 않음
+    expect(deltaSum(hands, b.uid)).toBe(30_000_000 + TIERS[0].ante);
+    expect(await moneyOf(b.uid)).toBe(START_MONEY + 30_000_000 + TIERS[0].ante);
     expect(await users().findOne({ _id: a.uid })).toBeNull();
     expect(await code(a.c.rpc("poker.wallet"))).toBe("MEMBERS_ONLY");
     expect(await code(a.c.rpc("poker.sit", { id }))).toBe("MEMBERS_ONLY");
@@ -596,7 +614,7 @@ describe("돈", () => {
 
   it("행동 요청에 남의 자리·uid·금액을 끼워 넣어도 소용없고, 이상한 입력은 전부 깔끔하게 거절", async () => {
     const [a, b] = [await member(), await member()];
-    const id = await a.c.rpc<string>("poker.create", { game: "holdem", tier: 1, bots: 0 });
+    const id = await a.c.rpc<string>("poker.create", { game: "holdem", tier: 1, bots: false });
     const from = logs.length;
     const results: [string, string][] = [];
     let done = false;
@@ -668,9 +686,19 @@ describe("돈", () => {
       ["poker.create", { game: "holdem", tier: 4 }],
       ["poker.create", { game: "holdem", tier: "1" }],
       ["poker.create", { game: "blackjack", tier: 1 }],
+      // bots 는 "봇이 들어올 수 있는 방인지" (불리언) — 수는 못 정함
       ["poker.create", { game: "holdem", tier: 1, bots: 99 }],
+      ["poker.create", { game: "holdem", tier: 1, bots: 1 }],
       ["poker.create", { game: "holdem", tier: 1, bots: -1 }],
       ["poker.create", { game: "holdem", tier: 1, bots: 1.5 }],
+      ["poker.create", { game: "holdem", tier: 1, bots: "true" }],
+      ["poker.create", { game: "holdem", tier: 1, bots: null }],
+      ["poker.emote", { id, emote: "nope" }],
+      ["poker.emote", { id, emote: 1 }],
+      ["poker.emote", { emote: "hi" }],
+      ["poker.char", { char: "gunmo" }],
+      ["poker.char", { char: ["amy"] }],
+      ["poker.char", {}],
       ["poker.create", { game: "holdem", tier: 1, name: "가".repeat(41) }],
       ["poker.create", { game: "holdem", tier: 1, password: "p".repeat(41) }],
       ["poker.create", null],
@@ -707,12 +735,13 @@ const HOLDEM_KEYS = ["bb", "bbSeat", "board", "button", "currentBet", "deadline"
 const HOLDEM_PLAYER_KEYS = ["allIn", "bet", "cards", "folded", "invested", "last"];
 const SEVEN_KEYS = ["ante", "boss", "currentBet", "deadline", "game", "legal", "phase", "players", "pot", "pots", "result", "round", "toAct"];
 const SEVEN_PLAYER_KEYS = ["allIn", "bet", "cards", "chosen", "down", "folded", "invested", "last", "up"];
-const TABLE_KEYS = ["ev", "game", "hand", "handNo", "id", "locked", "name", "nextAt", "seats", "seq", "tier"];
+const TABLE_KEYS = ["bots", "ev", "game", "hand", "handNo", "id", "locked", "name", "nextAt", "seats", "seq", "tier"];
+const SEAT_KEYS = ["away", "char", "exit", "hands", "name", "net", "seat", "stack", "status", "uid", "wins"];
 
-/** 사람 둘 + 봇 둘이 여러 판을 치는 동안, 앉지 않은 구경꾼이 받은 것 전부를 모음 */
+/** 사람 둘 + (들어오고 나가는) 유저봇들이 여러 판을 치는 동안, 앉지 않은 구경꾼이 받은 것 전부를 모음 */
 async function watchGame(game: GameKind, policyA: (rnd: () => number) => Policy, policyB: Policy, enough: (seen: TableWire[]) => boolean) {
   const [a, b, o] = [await member(), await member(), await member()];
-  const id = await a.c.rpc<string>("poker.create", { game, tier: 1, bots: 2 });
+  const id = await a.c.rpc<string>("poker.create", { game, tier: 1, bots: true });
   const seen: TableWire[] = [];
   const raw: { k: string; t: string; d: any }[] = [];
   const watch = await o.c.sub<{ table: TableWire }>("poker.table", { id });
@@ -771,8 +800,12 @@ describe("숨은 정보", () => {
     );
     const byNo = new Map(g.hands.map((h) => [h.no, h]));
     let revealedEarly = 0;
+    let botSeen = false;
     for (const t of g.seen) {
       expect(Object.keys(t).sort()).toEqual(TABLE_KEYS);
+      // 자리에는 이름 · 캐릭터 · 칩만 (봇인지는 uid 가 "" 인 것으로만 드러남, 성격 같은 건 없음)
+      for (const s of t.seats) if (s) expect(Object.keys(s).sort()).toEqual(SEAT_KEYS);
+      if (t.seats.some((s) => s?.uid === "")) botSeen = true;
       const h = t.hand as HoldemView | null;
       if (!h) {
         expect(t.ev.some((e) => e.t === "show")).toBe(false);
@@ -801,11 +834,13 @@ describe("숨은 정보", () => {
       }
     }
     expect(revealedEarly).toBeGreaterThan(0);
+    expect(botSeen).toBe(true);
 
-    // 구경꾼의 "내 패" 구독은 비어 있고, 테이블 구독으로는 state · chat 말고는 안 옴
+    // 구경꾼의 "내 패" 구독은 비어 있고, 테이블 구독으로는 state · chat 말고는 안 옴 (봇의 한마디는 chat 으로 옴)
     expect(g.oMe.data).toBeNull();
     expect(g.raw.filter((m) => m.t === "hand")).toEqual([]);
-    expect([...new Set(g.raw.map((m) => m.t))].sort()).toEqual(["state"]);
+    expect([...new Set(g.raw.map((m) => m.t))].every((t) => t === "state" || t === "chat")).toBe(true);
+    expect(JSON.stringify(g.raw)).not.toMatch(/persona|brain|skill|"deck"/);
     // 앉은 사람은 자기 패만 받음
     for (const [who, p] of [
       [g.a, g.pa],
@@ -840,12 +875,12 @@ describe("숨은 정보", () => {
         const r = rnd();
         if (bets.length && r < 0.35) return { a: bets[Math.floor(rnd() * bets.length)] };
         if (lg.toCall > 0) return { a: r < 0.93 ? "call" : "die" };
-        return { a: "check" };
+        return bbingOrDie(h);
       },
       (t) => {
         const h = t.hand as SevenView;
         if (h.phase === "choice") return { a: "choose", discard: 2, open: 3 };
-        return { a: h.legal!.toCall > 0 ? "call" : "check" };
+        return h.legal!.toCall > 0 ? { a: "call" } : bbingOrDie(h);
       },
       (seen) => {
         const last = seen[seen.length - 1];
@@ -927,7 +962,7 @@ async function chaos(game: GameKind, seed: number, wantHands: number) {
     const from = logs.length;
     const rnd = lcg(seed);
     const ms = [await member(s), await member(s), await member(s)];
-    const id = await ms[0].c.rpc<string>("poker.create", { game, tier: 1, bots: 2 });
+    const id = await ms[0].c.rpc<string>("poker.create", { game, tier: 1, bots: true });
     const added = new Map<string, number>(ms.map((m) => [m.uid, 0]));
     const players: Player[] = [];
     const seen: TableWire[] = [];
@@ -955,7 +990,7 @@ async function chaos(game: GameKind, seed: number, wantHands: number) {
         const bets = Object.keys(h.legal!.bets);
         if (bets.length && r < 0.4) return { a: bets[Math.floor(rnd() * bets.length)] };
         if (h.legal!.toCall > 0) return { a: r < 0.9 ? "call" : "die" };
-        return { a: "check" };
+        return bbingOrDie(h);
       };
       players.push(await play(m, id, policy, i === 0 ? seen : []));
       await m.c.rpc("poker.sit", { id });
@@ -1027,12 +1062,15 @@ describe("멈추지 않음", () => {
 
   it("7포커: 카드 고르는 중에 사람이 전부 나가도 판은 끝나고 자리가 비워짐", async () => {
     const [a, b] = [await member(), await member()];
-    const id = await a.c.rpc<string>("poker.create", { game: "seven", tier: 1, bots: 2 });
+    const id = await a.c.rpc<string>("poker.create", { game: "seven", tier: 1, bots: true });
     let left = 0;
+    // 봇이 이 판에 끼어 있을 때(사람이 앉은 뒤에 들어오므로 첫 판은 둘만 칠 수 있음) 고르는 중에 둘 다 나감
     const leaveInChoice =
       (m: Member): Policy =>
       (t) => {
-        if ((t.hand as SevenView).phase === "choice") {
+        const h = t.hand as SevenView;
+        const botIn = t.seats.some((s) => s && s.uid === "" && h.players[s.seat]);
+        if (h.phase === "choice" && botIn) {
           left++;
           void m.c.rpc("poker.leave", { id });
           return { a: "noop" };
@@ -1049,10 +1087,12 @@ describe("멈추지 않음", () => {
     const hands = await auditsOf(id);
     expect(hands.length).toBeGreaterThanOrEqual(1);
     for (const h of hands) expect(h.who.reduce((s, w) => s + w.delta, 0)).toBe(0);
-    // 앤티만 잃음
+    // 나간 판(마지막 판): 봇이 끼어 있었고, 두 사람은 앤티만 잃음
+    const last = [...hands].sort((x, y) => x.no - y.no)[hands.length - 1];
+    expect(last.who.some((w) => w.uid === null)).toBe(true);
     for (const m of [a, b]) {
       expect(await moneyOf(m.uid)).toBe(START_MONEY + deltaSum(hands, m.uid));
-      expect(deltaSum(hands, m.uid)).toBeLessThanOrEqual(0);
+      expect(last.who.find((w) => w.uid === m.uid)?.delta).toBe(-TIERS[0].ante);
     }
     pa.stop();
     pb.stop();
@@ -1066,7 +1106,7 @@ describe("자원 남용", () => {
     const s = await startTestServer();
     try {
       const [bad, good] = [await member(s), await member(s)];
-      const made = await Promise.all(Array.from({ length: 230 }, () => code(bad.c.rpc("poker.create", { game: "holdem", tier: 1, bots: 4 }))));
+      const made = await Promise.all(Array.from({ length: 230 }, () => code(bad.c.rpc("poker.create", { game: "holdem", tier: 1, bots: true }))));
       const lobby = (await good.c.sub<LobbyTable[]>("poker.lobby")).data;
       // 새로 만들 때마다 그 사람의 빈 테이블은 닫힘 → 아무리 만들어도 남는 건 하나
       expect(made.every((r) => r === "OK")).toBe(true);
@@ -1096,7 +1136,7 @@ describe("자원 남용", () => {
 
   it("접속하지 않은 채(내 패 구독 없이) 앉기를 두 번 불러 '접속 중'으로 남을 수 없음 — 끊기면 자리에서 내려와야 함", async () => {
     const [a, w] = [await member(), await member()];
-    const id = await a.c.rpc<string>("poker.create", { game: "holdem", tier: 1, bots: 0 });
+    const id = await a.c.rpc<string>("poker.create", { game: "holdem", tier: 1, bots: false });
     const sub = await w.c.sub<{ table: TableWire }>("poker.table", { id });
     const seat = () => (([...sub.events].reverse().find((e) => e.t === "state")?.d ?? sub.data.table) as TableWire).seats.find((s) => s?.uid === a.uid);
     // 내 패 구독(= 접속 표시) 없이 앉으면 "끊김" 상태로 앉고, 그대로면 45초(테스트 서버에서는 0.18초) 뒤에 내려옴
@@ -1115,7 +1155,7 @@ describe("자원 남용", () => {
 
   it("채팅은 회원만 · 0.7초에 한 번 · 80자까지, 잠긴 테이블 비밀번호는 분당 10번까지만 시도", async () => {
     const [a, b] = [await member(), await member()];
-    const id = await a.c.rpc<string>("poker.create", { game: "holdem", tier: 1, bots: 0, password: "open sesame" });
+    const id = await a.c.rpc<string>("poker.create", { game: "holdem", tier: 1, bots: false, password: "open sesame" });
     const sub = await a.c.sub<{ table: TableWire; chat: unknown[] }>("poker.table", { id });
     expect(sub.data.table.locked).toBe(true);
     // 공개 상태에 비밀번호(해시)가 실려 나가지 않음
@@ -1159,7 +1199,7 @@ describe("규칙의 빈틈", () => {
     const s = await startTestServer({ poker: { speed: 0.05, sweepIntervalMs: 200 } });
     try {
       const [h, g] = [await member(s), await member(s)];
-      const id = await g.c.rpc<string>("poker.create", { game: "holdem", tier: 1, bots: 1 });
+      const id = await g.c.rpc<string>("poker.create", { game: "holdem", tier: 1, bots: true });
       const seen: TableWire[] = [];
       let played = 0;
       let posts = 0;
@@ -1206,18 +1246,19 @@ describe("순위", () => {
     const fresh = await member();
     // 앉기만 하고 판은 안 친 사람
     const sat = await member();
-    const id = await sat.c.rpc<string>("poker.create", { game: "holdem", tier: 1, bots: 0 });
+    const id = await sat.c.rpc<string>("poker.create", { game: "holdem", tier: 1, bots: false });
     await sat.c.rpc("poker.sit", { id });
     await sat.c.rpc("poker.leave", { id });
     await sleep(100);
     const r = await srv.http("/api/poker/rank");
     expect(r.status).toBe(200);
-    const list = r.body.list as { nick: string; money: number; hands: number; avatar: string | null }[];
+    const list = r.body.list as { nick: string; money: number; hands: number; char: string }[];
     expect(list.length).toBeGreaterThan(0);
     expect(list.length).toBeLessThanOrEqual(50);
     for (const x of list) {
-      expect(Object.keys(x).sort()).toEqual(["avatar", "hands", "money", "nick"]);
+      expect(Object.keys(x).sort()).toEqual(["char", "hands", "money", "nick"]);
       expect(x.hands).toBeGreaterThanOrEqual(1);
+      expect(typeof x.char).toBe("string");
     }
     for (const who of [fresh, sat]) expect(list.some((x) => x.nick === who.nick)).toBe(false);
     for (let i = 1; i < list.length; i++) expect(list[i - 1].money).toBeGreaterThanOrEqual(list[i].money);

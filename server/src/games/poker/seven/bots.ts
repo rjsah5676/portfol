@@ -117,14 +117,14 @@ export function decideSeven(v: SevenBotView, brain: Brain): SevenDecision {
   const p = moodOf(brain);
   const r = brain.rand;
   const me = v.players.find((x) => x.seat === v.seat)!;
-  const { toCall, canCheck, bets } = v.legal;
+  const { toCall, bets } = v.legal;
   const n = v.players.filter((x) => !x.folded && x.seat !== v.seat).length;
   const eq = clamp(equity(v, brain) + gauss(r) * brain.skill.noise, 0, 1);
   const last = v.round === 7;
   const think = (lo: number, hi: number) => Math.round((lo + (hi - lo) * r()) * p.pace);
 
-  /** 세기(0~1)에 맞는 베팅을 고름: 작은 것부터 삥/따당 · 쿼터 · 하프 · 풀 */
-  const order: SevenBet[] = ["bbing", "ddadang", "quarter", "half", "full"];
+  /** 세기(0~1)에 맞는 베팅을 고름: 작은 것부터 삥/따당 · 쿼터 · 하프 (풀은 게임에서 뺐음) */
+  const order: SevenBet[] = ["bbing", "ddadang", "quarter", "half"];
   const avail = order.filter((b) => bets[b] !== undefined);
   const pickBet = (s: number): SevenBet | undefined => {
     if (!avail.length) return undefined;
@@ -155,18 +155,22 @@ export function decideSeven(v: SevenBotView, brain: Brain): SevenDecision {
     return { type: "die", thinkMs: think(big ? 1600 : 800, big ? 3800 : 2000), cue: big && eq > 0.3 ? "bigFold" : "fold" };
   }
 
-  if (!canCheck) return { type: "die", thinkMs: think(600, 1200) };
-  if (avail.length) {
-    const valueThr = 0.6 + 0.05 * (n - 1) + p.valueShift;
-    if (eq >= valueThr) {
-      if (!last && eq > 0.85 && r() < p.slowplay) return { type: "check", thinkMs: think(1100, 2400), cue: "check" };
-      const b = pickBet(eq >= 0.85 ? (last ? 1 : 0.8) : eq >= 0.72 ? 0.55 : 0.2)!;
-      return { type: b, thinkMs: think(1200, 3000), cue: allIn(b) ? "allin" : "raise" };
-    }
-    if (eq < 0.4 && r() < 0.1 * p.bluff * (n === 1 ? 1 : 0.4) * (looksScary(me.up) ? 1.7 : 0.8)) {
-      const b = pickBet(0.55)!;
-      return { type: b, thinkMs: think(1500, 3400), cue: "bigRaise" };
-    }
+  // 받을 돈이 없음: 체크가 없으니 삥 이상을 걸거나 죽어야 함
+  if (!avail.length) return { type: "die", thinkMs: think(600, 1200) };
+  const valueThr = 0.6 + 0.05 * (n - 1) + p.valueShift;
+  if (eq >= valueThr) {
+    // 센 패를 숨길 때는 가장 작은 삥만
+    if (!last && eq > 0.85 && r() < p.slowplay) return { type: avail[0], thinkMs: think(1100, 2400) };
+    const b = pickBet(eq >= 0.85 ? (last ? 1 : 0.8) : eq >= 0.72 ? 0.55 : 0.2)!;
+    return { type: b, thinkMs: think(1200, 3000), cue: allIn(b) ? "allin" : "raise" };
   }
-  return { type: "check", thinkMs: think(700, 1800) };
+  if (eq < 0.4 && r() < 0.1 * p.bluff * (n === 1 ? 1 : 0.4) * (looksScary(me.up) ? 1.7 : 0.8)) {
+    const b = pickBet(0.55)!;
+    return { type: b, thinkMs: think(1500, 3400), cue: "bigRaise" };
+  }
+  // 삥 한 번 값으로 다음 장을 볼 만한지
+  const bbing = bets[avail[0]] ?? v.ante;
+  const need = bbing / (v.pot + bbing);
+  if (eq >= need + p.callMargin + 0.02 * (n - 1) + (last ? 0.08 : 0)) return { type: avail[0], thinkMs: think(700, 1800) };
+  return { type: "die", thinkMs: think(600, 1500), cue: "fold" };
 }

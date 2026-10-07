@@ -244,7 +244,8 @@ class HoldemRound implements Round {
 
 export const holdem: GameDef = {
   kind: "holdem",
-  minStack: (tier) => tier.bb,
+  // 한 판에 적어도 기본 판돈 + 빅블라인드는 있어야 함
+  minStack: (tier) => tier.ante + tier.bb,
   base: (tier) => tier.bb,
 
   start(o: StartOptions) {
@@ -260,6 +261,7 @@ export const holdem: GameDef = {
       button,
       sb: o.tier.sb,
       bb: o.tier.bb,
+      ante: o.tier.ante,
       deck: shuffledDeck(o.randInt),
       unit: UNIT,
     });
@@ -268,7 +270,7 @@ export const holdem: GameDef = {
     const base = round.botMove.bind(round);
     round.botMove = (seat, brain) => base(seat, brain, models);
     const ev: PokerEvent[] = [{ t: "hand", no: o.handNo }];
-    for (const h of hand.history) if (h.type === "sb" || h.type === "bb") ev.push({ t: "post", seat: h.seat, kind: h.type, amt: h.add });
+    for (const h of hand.history) if (h.type === "ante" || h.type === "sb" || h.type === "bb") ev.push({ t: "post", seat: h.seat, kind: h.type, amt: h.add });
     return { round, ev, pause: 1300 };
   },
 

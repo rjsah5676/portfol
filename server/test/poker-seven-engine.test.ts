@@ -3,7 +3,7 @@ import { RAISES_PER_ROUND, SevenError, SevenHand, type SevenAct, type SevenBet }
 import { chooseSeven, decideSeven, type SevenBotView } from "../src/games/poker/seven/bots";
 import { newBrain } from "../src/games/poker/personas";
 import { parseCards, shuffledDeck, type Card } from "../../web/src/lib/poker/cards";
-import { BOT_IDS, TIERS, UNIT, type TierId } from "../../web/src/lib/poker/rules";
+import { CHAR_IDS, TIERS, UNIT, type TierId } from "../../web/src/lib/poker/rules";
 import { KCAT, autoChoice, bestK, evaluateK, handNameK, kCategory, openRank } from "../../web/src/lib/poker/seven";
 
 /*
@@ -31,7 +31,9 @@ const SUIT_CH = "shdc";
 const sortedJoin = (xs: readonly number[]) => [...xs].sort((a, b) => a - b).join(",");
 
 const BET_TYPES: SevenBet[] = ["bbing", "ddadang", "quarter", "half", "full"];
-const ALL_ACTS: SevenAct[] = ["die", "check", "call", ...BET_TYPES];
+const ALL_ACTS: SevenAct[] = ["die", "call", ...BET_TYPES];
+/** 7포커에는 체크가 없음 — 엔진은 모르는 행동으로 거절해야 함 */
+const CHECK = "check" as unknown as SevenAct;
 
 // ───────────── 따로 만든 족보 판정 (룰 10 만 보고 씀 — seven.ts 와 독립) ─────────────
 
@@ -631,20 +633,24 @@ function runOut(h: SevenHand): number {
   }
   return n;
 }
-/** 이번 구를 전부 체크로 넘김 */
-function checkRound(h: SevenHand) {
+/** 지금 차례의 가장 싼 행동: 받을 돈이 있으면 콜, 없으면 삥 (체크가 없으므로 구마다 전원이 앤티만큼은 냄) */
+function cheapest(h: SevenHand): SevenAct {
+  return h.legal(h.toAct).toCall > 0 ? "call" : "bbing";
+}
+/** 이번 구를 가장 싸게 넘김: 첫 사람은 삥, 나머지는 콜 → 살아 있는 사람마다 앤티만큼 팟에 더함 */
+function bbingRound(h: SevenHand) {
   let guard = 0;
   while (h.phase === "bet") {
-    h.act(h.toAct, "check");
+    h.act(h.toAct, cheapest(h));
     if (++guard > 20) throw new Error("베팅이 끝나지 않음");
   }
 }
-/** 남은 구를 전부 체크로 넘기며 끝까지 */
-function checkDown(h: SevenHand) {
+/** 남은 구를 전부 삥·콜로 넘기며 끝까지 */
+function bbingDown(h: SevenHand) {
   let guard = 0;
   while (h.phase !== "done") {
     if (h.phase === "deal") h.advance();
-    else h.act(h.toAct, "check");
+    else h.act(h.toAct, cheapest(h));
     if (++guard > 80) throw new Error("끝나지 않음");
   }
 }
@@ -687,18 +693,19 @@ describe("덱 짜기 도우미", () => {
       { seat: 4, card: C("5h")[0], up: true },
       { seat: 6, card: C("5d")[0], up: true },
     ]);
-    checkRound(h);
+    bbingRound(h);
     h.advance();
     expect(sortedJoin(h.player(4)!.cards)).toBe(sortedJoin(C("Ks Kh Qd 5h 6h")));
     // 4번이 죽으면 6구부터는 1 · 6번만 받음
-    while (h.toAct !== 4) h.act(h.toAct, "check");
+    expect(h.toAct).toBe(1);
+    h.act(1, "bbing");
     h.act(4, "die");
-    checkRound(h);
+    bbingRound(h);
     expect(h.advance()).toEqual([
       { seat: 1, card: C("7s")[0], up: true },
       { seat: 6, card: C("7d")[0], up: true },
     ]);
-    checkDown(h);
+    bbingDown(h);
     expect(sortedJoin(h.player(1)!.cards)).toBe(sortedJoin(C("As Ah Kd 5s 6s 7s 8s")));
     expect(sortedJoin(h.player(6)!.cards)).toBe(sortedJoin(C("Qs Qh Jd 5d 6d 7d 8d")));
     expect(sortedJoin(h.player(4)!.cards)).toBe(sortedJoin(C("Ks Kh Qd 5h 6h")));
@@ -710,13 +717,14 @@ describe("덱 짜기 도우미", () => {
       h.advance();
       expect(h.boss).toBe(3);
       expect(h.toAct).toBe(3);
-      checkRound(h);
+      bbingRound(h);
     }
     h.advance();
     const ranked = [...h.result!.shows].sort((a, b) => b.score - a.score);
     expect(ranked.map((s) => s.seat)).toEqual([3, 5, 0, 8, 2]);
     expect(ranked.map((s) => s.name)).toEqual(["A 원페어", "K 탑", "K 탑", "K 탑", "K 탑"]);
-    expect(h.result!.won).toEqual({ 3: 500 });
+    // 앤티 500 + 네 구 × 다섯 명 × 삥 100
+    expect(h.result!.won).toEqual({ 3: 2500 });
     expectConserved(h);
   });
 });
@@ -759,7 +767,7 @@ describe("앤티 (룰 1)", () => {
     expect(() => mk({ stacks: { 0: 1000 } })).toThrow(SevenError);
     const h = mk({ stacks: { 0: 1000, 1: 1000, 2: 1000, 3: 1000, 4: 1000 } });
     chooseAll(h);
-    checkDown(h);
+    bbingDown(h);
     expectConserved(h);
     expect(h.result!.shows).toHaveLength(5);
   });
@@ -818,14 +826,24 @@ describe("한 판의 흐름 (룰 3)", () => {
       for (const d of dealt) expect(h.player(d.seat)!.cards[r - 1]).toBe(d.card);
       expect(h.phase).toBe("bet");
       expect(h.currentBet).toBe(0);
-      // 보스(0번)부터 자리 순으로
+      // 보스(0번)부터 자리 순으로. 체크가 없으니 보스는 삥(앤티만큼), 나머지는 콜
       for (const s of [0, 1, 2]) {
         expect(h.toAct).toBe(s);
-        expect(h.legal(s).canCheck).toBe(true);
-        h.act(s, "check");
+        const lg = h.legal(s);
+        expect(lg).not.toHaveProperty("canCheck");
+        if (s === 0) {
+          expect(lg.toCall).toBe(0);
+          expect(lg.bets.bbing).toBe(100);
+          rejects(h, () => h.act(s, "call"), "낼 게 없는데 콜");
+          h.act(s, "bbing");
+        } else {
+          expect(lg.toCall).toBe(100);
+          h.act(s, "call");
+        }
       }
       expect(h.phase).toBe("deal");
       expect(h.toAct).toBe(-1);
+      expect(h.pot).toBe(300 * (r - 2));
     }
     for (const p of h.players) {
       expect(p.cards).toHaveLength(7);
@@ -835,9 +853,10 @@ describe("한 판의 흐름 (룰 3)", () => {
     expect(h.phase).toBe("done");
     const r = h.result!;
     expect(r.showdown).toBe(true);
-    expect(r.pots).toEqual([{ amount: 300, seats: [0, 1, 2], winners: [0] }]);
-    expect(r.won).toEqual({ 0: 300 });
-    expect(r.delta).toEqual({ 0: 200, 1: -100, 2: -100 });
+    // 앤티 300 + 네 구 × 세 명 × 100
+    expect(r.pots).toEqual([{ amount: 1500, seats: [0, 1, 2], winners: [0] }]);
+    expect(r.won).toEqual({ 0: 1500 });
+    expect(r.delta).toEqual({ 0: 1000, 1: -500, 2: -500 });
     expect(r.shows).toHaveLength(3);
     for (const s of r.shows) {
       expect(s.cards).toHaveLength(7);
@@ -864,7 +883,7 @@ describe("보스 (룰 4)", () => {
       const out: number[] = [];
       while (h.phase === "bet") {
         out.push(h.toAct);
-        h.act(h.toAct, "check");
+        h.act(h.toAct, cheapest(h));
       }
       return out;
     };
@@ -885,8 +904,8 @@ describe("보스 (룰 4)", () => {
     expect(h.boss).toBe(6);
     expect(order()).toEqual([6, 1, 4]);
     h.advance();
-    // 쇼다운은 7장 전부: K 풀하우스(4) > A 트리플(1) … 9 트리플(6)
-    expect(h.result!.won).toEqual({ 4: 300 });
+    // 쇼다운은 7장 전부: K 풀하우스(4) > A 트리플(1) … 9 트리플(6). 팟은 앤티 300 + 네 구 × 세 명 × 삥 100
+    expect(h.result!.won).toEqual({ 4: 1500 });
     expectConserved(h);
   });
 
@@ -930,10 +949,11 @@ describe("보스 (룰 4)", () => {
     // 기본 판: 0번이 보스. 나머지의 편 카드는 6 → 8 → 10 → Q (전부 같은 숫자) 라 무늬로 갈림
     const h = start({ 0: 1000, 1: 1000, 2: 1000 }, 0, { gone: { 0: 5 } });
     expect(h.boss).toBe(0);
+    // 보스가 죽으면 그다음 사람이 첫 베팅 (삥 또는 다이)
     play(h, [
       [0, "die"],
-      [1, "check"],
-      [2, "check"],
+      [1, "bbing"],
+      [2, "call"],
     ]);
     h.advance();
     // 5구: 1번은 6♦ 8♣ T♠, 2번은 6♣ 8♠ T♥ → 가장 높은 카드(10)의 무늬: ♠ > ♥
@@ -942,8 +962,8 @@ describe("보스 (룰 4)", () => {
     expect(h.boss).toBe(1);
     expect(h.toAct).toBe(1);
     play(h, [
-      [1, "check"],
-      [2, "check"],
+      [1, "bbing"],
+      [2, "call"],
     ]);
     h.advance();
     // 6구: Q♥(1) vs Q♦(2) → ♦
@@ -957,15 +977,15 @@ describe("보스 (룰 4)", () => {
     expect(h.boss).toBe(1);
     expect(h.player(1)!.allIn).toBe(true);
     expect(h.toAct).toBe(2);
-    h.act(2, "check");
+    h.act(2, "bbing");
     expect(h.toAct).toBe(0);
-    h.act(0, "check");
+    h.act(0, "call");
     expect(h.phase).toBe("deal");
     // 보스가 끝자리면 첫 자리부터
     const g = start({ 0: 1000, 1: 1000, 2: 100 }, 2);
     expect(g.boss).toBe(2);
     expect(g.toAct).toBe(0);
-    g.act(0, "check");
+    g.act(0, "bbing");
     expect(g.toAct).toBe(1);
   });
 });
@@ -977,41 +997,41 @@ describe("베팅 금액 (룰 5)", () => {
     const h = start({ 0: 10000, 1: 10000, 2: 10000 }, 0);
     expect(h.pot).toBe(300);
     // 팟 300: 쿼터 75 → 70 → 앤티보다 작으니 100
-    expect(h.legal(0)).toEqual({ canCheck: true, toCall: 0, bets: { bbing: 100, quarter: 100, half: 150, full: 300 } });
+    expect(h.legal(0)).toEqual({ toCall: 0, bets: { bbing: 100, quarter: 100, half: 150, full: 300 } });
     expect(h.act(0, "bbing")).toMatchObject({ seat: 0, type: "bbing", add: 100, aggressive: true, potBefore: 300, allIn: false });
     expect(h.player(0)).toMatchObject({ stack: 9800, bet: 100, raises: 1 });
     expect(h.currentBet).toBe(100);
     // 1번: 100 을 받고, 콜한 뒤의 팟은 500
     expect(h.toAct).toBe(1);
-    expect(h.legal(1)).toEqual({ canCheck: false, toCall: 100, bets: { ddadang: 200, quarter: 220, half: 350, full: 600 } });
+    expect(h.legal(1)).toEqual({ toCall: 100, bets: { ddadang: 200, quarter: 220, half: 350, full: 600 } });
     h.act(1, "half");
     expect(h.player(1)).toMatchObject({ stack: 9550, bet: 350, raises: 1 });
     expect(h.currentBet).toBe(350);
     expect(h.pot).toBe(750);
     // 2번: 350 을 받음, 콜한 뒤의 팟 1100
-    expect(h.legal(2)).toEqual({ canCheck: false, toCall: 350, bets: { ddadang: 700, quarter: 620, half: 900, full: 1450 } });
+    expect(h.legal(2)).toEqual({ toCall: 350, bets: { ddadang: 700, quarter: 620, half: 900, full: 1450 } });
     h.act(2, "call");
     expect(h.player(2)).toMatchObject({ stack: 9550, bet: 350, raises: 0 });
     // 0번: 250 을 받음, 콜한 뒤의 팟 1350 → 쿼터 337.5 → 330, 하프 675 → 670
     expect(h.toAct).toBe(0);
-    expect(h.legal(0)).toEqual({ canCheck: false, toCall: 250, bets: { ddadang: 500, quarter: 580, half: 920, full: 1600 } });
+    expect(h.legal(0)).toEqual({ toCall: 250, bets: { ddadang: 500, quarter: 580, half: 920, full: 1600 } });
     h.act(0, "ddadang");
     expect(h.player(0)).toMatchObject({ stack: 9300, bet: 600, raises: 2 });
     // 1번: 250 을 받음, 콜한 뒤의 팟 1850
-    expect(h.legal(1)).toEqual({ canCheck: false, toCall: 250, bets: { ddadang: 500, quarter: 710, half: 1170, full: 2100 } });
+    expect(h.legal(1)).toEqual({ toCall: 250, bets: { ddadang: 500, quarter: 710, half: 1170, full: 2100 } });
     h.act(1, "full");
     expect(h.player(1)).toMatchObject({ stack: 7450, bet: 2450, raises: 2 });
     expect(h.pot).toBe(3700);
     // 2번: 2100 을 받음, 콜한 뒤의 팟 5800
-    expect(h.legal(2)).toEqual({ canCheck: false, toCall: 2100, bets: { ddadang: 4200, quarter: 3550, half: 5000, full: 7900 } });
+    expect(h.legal(2)).toEqual({ toCall: 2100, bets: { ddadang: 4200, quarter: 3550, half: 5000, full: 7900 } });
     h.act(2, "ddadang");
     expect(h.player(2)).toMatchObject({ stack: 5350, bet: 4550, raises: 1 });
     // 0번은 이미 두 번 올림 → 콜 · 다이만
     expect(h.toAct).toBe(0);
-    expect(h.legal(0)).toEqual({ canCheck: false, toCall: 3950, bets: {} });
+    expect(h.legal(0)).toEqual({ toCall: 3950, bets: {} });
     for (const t of BET_TYPES) rejects(h, () => h.act(0, t), `세 번째 ${t}`);
     h.act(0, "call");
-    expect(h.legal(1)).toEqual({ canCheck: false, toCall: 2100, bets: {} });
+    expect(h.legal(1)).toEqual({ toCall: 2100, bets: {} });
     for (const t of BET_TYPES) rejects(h, () => h.act(1, t), `세 번째 ${t}`);
     h.act(1, "call");
     // 모두 맞췄으니 끝 (2번은 한 번 더 올릴 수 있었지만 마지막에 올린 사람)
@@ -1027,7 +1047,7 @@ describe("베팅 금액 (룰 5)", () => {
       [0, 0],
     ]);
     // 팟 13950: 쿼터 3487.5 → 3480, 하프 6975 → 6970 인데 0번의 스택은 5350
-    expect(h.legal(0)).toEqual({ canCheck: true, toCall: 0, bets: { bbing: 100, quarter: 3480, half: 5350, full: 5350 } });
+    expect(h.legal(0)).toEqual({ toCall: 0, bets: { bbing: 100, quarter: 3480, half: 5350, full: 5350 } });
     expect(RAISES_PER_ROUND).toBe(2);
   });
 
@@ -1041,31 +1061,40 @@ describe("베팅 금액 (룰 5)", () => {
     ]);
     expect(h.players.map((p) => p.bet)).toEqual([300, 400]);
     expect(h.toAct).toBe(0);
-    expect(h.legal(0)).toEqual({ canCheck: false, toCall: 100, bets: {} });
+    expect(h.legal(0)).toEqual({ toCall: 100, bets: {} });
     rejects(h, () => h.act(0, "ddadang"));
     h.act(0, "call");
     expect(h.phase).toBe("deal");
     expect(h.pot).toBe(1000);
   });
 
-  it("체크 뒤에 벳이 나오면 다시 차례가 옴 (체크는 횟수에 안 들어감)", () => {
-    const h = start({ 0: 10000, 1: 10000, 2: 10000 }, 0);
-    play(h, [
-      [0, "check"],
-      [1, "check"],
-    ]);
-    expect(h.legal(2).bets.bbing).toBe(100);
-    h.act(2, "bbing");
-    expect(h.toAct).toBe(0);
-    expect(h.legal(0)).toEqual({ canCheck: false, toCall: 100, bets: { ddadang: 200, quarter: 220, half: 350, full: 600 } });
-    h.act(0, "ddadang");
+  it("체크가 없음: 받을 돈이 없어도 삥 이상을 걸거나 죽어야 함 (보스가 죽으면 다음 사람이 같은 처지)", () => {
+    const h = start({ 0: 10000, 1: 10000, 2: 10000 }, 0, { gone: { 0: 5 } });
+    // legal() 에 canCheck 가 없고, 체크는 모르는 행동 · 콜은 낼 게 없음
+    expect(h.legal(0)).toEqual({ toCall: 0, bets: { bbing: 100, quarter: 100, half: 150, full: 300 } });
+    rejects(h, () => h.act(0, CHECK), "체크");
+    rejects(h, () => h.act(0, "call"), "낼 게 없는데 콜");
+    h.act(0, "die");
+    // 1번도 아직 벳이 없음 → 삥 또는 다이
     expect(h.toAct).toBe(1);
-    h.act(1, "call");
+    expect(h.currentBet).toBe(0);
+    expect(h.legal(1)).toEqual({ toCall: 0, bets: { bbing: 100, quarter: 100, half: 150, full: 300 } });
+    rejects(h, () => h.act(1, CHECK), "체크");
+    rejects(h, () => h.act(1, "call"), "낼 게 없는데 콜");
+    h.act(1, "bbing");
+    // 2번: 100 을 받아야 함 (콜한 뒤의 팟 500)
     expect(h.toAct).toBe(2);
-    expect(h.legal(2).toCall).toBe(100);
+    expect(h.legal(2)).toEqual({ toCall: 100, bets: { ddadang: 200, quarter: 220, half: 350, full: 600 } });
+    rejects(h, () => h.act(2, CHECK), "벳을 받았는데 체크");
     h.act(2, "call");
     expect(h.phase).toBe("deal");
-    expect(h.pot).toBe(900);
+    expect(h.pot).toBe(500);
+    // 다음 구에도 마찬가지: 보스(1번)가 삥을 안 걸고 넘길 길은 없음
+    h.advance();
+    expect(h.toAct).toBe(1);
+    expect(h.legal(1).toCall).toBe(0);
+    expect(h.legal(1).bets.bbing).toBe(100);
+    rejects(h, () => h.act(1, CHECK), "체크");
   });
 
   it("단위 100: 쿼터 · 하프 · 풀은 단위로 내림, 그래도 앤티보다 작지는 않음", () => {
@@ -1080,7 +1109,7 @@ describe("베팅 금액 (룰 5)", () => {
   it("스택을 넘으면 올인으로 깎임", () => {
     const h = start({ 0: 10000, 1: 550, 2: 10000 }, 0);
     h.act(0, "bbing");
-    expect(h.legal(1)).toEqual({ canCheck: false, toCall: 100, bets: { ddadang: 200, quarter: 220, half: 350, full: 450 } });
+    expect(h.legal(1)).toEqual({ toCall: 100, bets: { ddadang: 200, quarter: 220, half: 350, full: 450 } });
     expect(h.act(1, "full")).toMatchObject({ add: 450, aggressive: true, allIn: true });
     expect(h.player(1)).toMatchObject({ stack: 0, bet: 450, allIn: true, raises: 1 });
     expect(h.currentBet).toBe(450);
@@ -1094,9 +1123,9 @@ describe("베팅 금액 (룰 5)", () => {
     ]) {
       const h = start({ 0: 10000, 1: stack, 2: 10000 }, 0);
       h.act(0, "full"); // 300
-      expect(h.legal(1)).toEqual({ canCheck: false, toCall, bets: {} });
+      expect(h.legal(1)).toEqual({ toCall, bets: {} });
       rejects(h, () => h.act(1, "ddadang"));
-      rejects(h, () => h.act(1, "check"));
+      rejects(h, () => h.act(1, CHECK));
       expect(h.act(1, "call")).toMatchObject({ add: toCall, aggressive: false, allIn: true });
       // 모자란 콜은 벳을 바꾸지 않음
       expect(h.currentBet).toBe(300);
@@ -1110,15 +1139,15 @@ describe("베팅 금액 (룰 5)", () => {
     const h = start({ 0: 10000, 1: 250, 2: 10000 }, 0);
     h.act(0, "bbing");
     // 1번은 150 뿐: 어떤 베팅이든 150 올인
-    expect(h.legal(1)).toEqual({ canCheck: false, toCall: 100, bets: { ddadang: 150, quarter: 150, half: 150, full: 150 } });
+    expect(h.legal(1)).toEqual({ toCall: 100, bets: { ddadang: 150, quarter: 150, half: 150, full: 150 } });
     h.act(1, "ddadang");
     expect(h.player(1)).toMatchObject({ stack: 0, bet: 150, allIn: true });
     expect(h.currentBet).toBe(150);
     // 2번: 150 을 받음, 콜한 뒤의 팟 700
-    expect(h.legal(2)).toEqual({ canCheck: false, toCall: 150, bets: { ddadang: 300, quarter: 320, half: 500, full: 850 } });
+    expect(h.legal(2)).toEqual({ toCall: 150, bets: { ddadang: 300, quarter: 320, half: 500, full: 850 } });
     h.act(2, "call");
     // 0번: 50 만 더 내면 됨. 따당은 50 + 50 이 아니라 50 + 앤티(올리는 폭은 앤티 이상), 콜한 뒤의 팟 750
-    expect(h.legal(0)).toEqual({ canCheck: false, toCall: 50, bets: { ddadang: 150, quarter: 230, half: 420, full: 800 } });
+    expect(h.legal(0)).toEqual({ toCall: 50, bets: { ddadang: 150, quarter: 230, half: 420, full: 800 } });
   });
 
   it("따당 = 받을 돈의 두 배 (받을 돈이 단위에 안 맞아도)", () => {
@@ -1137,7 +1166,7 @@ describe("베팅 금액 (룰 5)", () => {
     // 1번: 100 + 콜한 뒤의 팟 400 = 500 = 전부
     expect(h.legal(1).bets.full).toBe(500);
     h.act(1, "full");
-    expect(h.legal(0)).toEqual({ canCheck: false, toCall: 400, bets: {} });
+    expect(h.legal(0)).toEqual({ toCall: 400, bets: {} });
     for (const t of BET_TYPES) rejects(h, () => h.act(0, t));
     h.act(0, "call");
     expect(h.phase).toBe("deal");
@@ -1162,7 +1191,7 @@ describe("올인 · 사이드팟 · 돌려주기 (룰 6 · 7 · 8)", () => {
       expect(h.round).toBe(r);
       expect(h.phase).toBe("deal");
       expect(h.toAct).toBe(-1);
-      rejects(h, () => h.act(0, "check"));
+      rejects(h, () => h.act(0, "bbing"));
     }
     h.advance();
     expect(h.phase).toBe("done");
@@ -1186,11 +1215,11 @@ describe("올인 · 사이드팟 · 돌려주기 (룰 6 · 7 · 8)", () => {
     h.act(1, "full");
     expect(h.player(1)).toMatchObject({ stack: 0, bet: 300 });
     // 2번: 150 뿐
-    expect(h.legal(2)).toEqual({ canCheck: false, toCall: 150, bets: {} });
+    expect(h.legal(2)).toEqual({ toCall: 150, bets: {} });
     h.act(2, "call");
     // 0번: 300 까지만 (200 더), 올릴 수는 없음
     expect(h.toAct).toBe(0);
-    expect(h.legal(0)).toEqual({ canCheck: false, toCall: 200, bets: {} });
+    expect(h.legal(0)).toEqual({ toCall: 200, bets: {} });
     for (const t of BET_TYPES) rejects(h, () => h.act(0, t));
     h.act(0, "call");
     expect(h.phase).toBe("deal");
@@ -1213,7 +1242,7 @@ describe("올인 · 사이드팟 · 돌려주기 (룰 6 · 7 · 8)", () => {
     h.advance();
     expect(h.legal(0).bets.full).toBe(600);
     h.act(0, "full");
-    expect(h.legal(1)).toEqual({ canCheck: false, toCall: 100, bets: {} });
+    expect(h.legal(1)).toEqual({ toCall: 100, bets: {} });
     h.act(1, "call");
     // 600 중 100 만 받음 → 500 은 바로 돌아옴
     expect(h.phase).toBe("deal");
@@ -1234,7 +1263,7 @@ describe("올인 · 사이드팟 · 돌려주기 (룰 6 · 7 · 8)", () => {
     // 0번: 100 + 콜한 뒤의 팟 400 = 500
     expect(h.legal(0).bets.full).toBe(500);
     h.act(0, "full");
-    expect(h.legal(1)).toEqual({ canCheck: false, toCall: 200, bets: {} });
+    expect(h.legal(1)).toEqual({ toCall: 200, bets: {} });
     h.act(1, "call");
     expect(h.player(0)).toMatchObject({ stack: 9600, invested: 400 });
     runOut(h);
@@ -1264,10 +1293,10 @@ describe("올인 · 사이드팟 · 돌려주기 (룰 6 · 7 · 8)", () => {
     // 2번이 보스이자 가장 센 패(가장 짧은 스택). 그다음은 0번(K♦) > 1번(K♣), 3번(K♠)은 중간에 죽음
     const h = start({ 0: 5000, 1: 600, 2: 300, 3: 5000 }, 2, { gone: { 3: 6 } });
     expect(h.toAct).toBe(2);
-    expect(h.legal(2)).toEqual({ canCheck: true, toCall: 0, bets: { bbing: 100, quarter: 100, half: 200, full: 200 } });
+    expect(h.legal(2)).toEqual({ toCall: 0, bets: { bbing: 100, quarter: 100, half: 200, full: 200 } });
     h.act(2, "full"); // 200 올인
     expect(h.toAct).toBe(3);
-    expect(h.legal(3)).toEqual({ canCheck: false, toCall: 200, bets: { ddadang: 400, quarter: 400, half: 600, full: 1000 } });
+    expect(h.legal(3)).toEqual({ toCall: 200, bets: { ddadang: 400, quarter: 400, half: 600, full: 1000 } });
     h.act(3, "ddadang"); // 400
     h.act(0, "call");
     expect(h.legal(1)).toMatchObject({ toCall: 400, bets: { ddadang: 500, full: 500 } });
@@ -1284,7 +1313,7 @@ describe("올인 · 사이드팟 · 돌려주기 (룰 6 · 7 · 8)", () => {
     expect(h.toAct).toBe(3);
     h.act(3, "bbing");
     h.act(0, "ddadang");
-    expect(h.legal(1)).toEqual({ canCheck: false, toCall: 100, bets: {} });
+    expect(h.legal(1)).toEqual({ toCall: 100, bets: {} });
     h.act(1, "call");
     expect(h.toAct).toBe(3);
     expect(h.legal(3).toCall).toBe(100);
@@ -1401,12 +1430,13 @@ describe("한 명만 남으면 끝 (룰 9)", () => {
     expect(h.phase).toBe("deal");
     expect(h.advance().map((d) => d.seat)).toEqual([0, 2]);
     expect(h.toAct).toBe(0);
-    h.act(0, "check");
+    h.act(0, "bbing");
     expect(h.toAct).toBe(2);
-    h.act(2, "check");
-    checkDown(h);
-    expect(h.result!.pots).toEqual([{ amount: 300, seats: [0, 2], winners: [0] }]);
-    expect(stacksOf(h)).toEqual({ 0: 1200, 1: 900, 2: 900 });
+    h.act(2, "call");
+    bbingDown(h);
+    // 앤티 300 + 네 구 × 두 명 × 100. 죽은 1번은 앤티만 잃음
+    expect(h.result!.pots).toEqual([{ amount: 1100, seats: [0, 2], winners: [0] }]);
+    expect(stacksOf(h)).toEqual({ 0: 1600, 1: 900, 2: 500 });
     expectConserved(h);
   });
 
@@ -1460,8 +1490,9 @@ describe("한 명만 남으면 끝 (룰 9)", () => {
     expectConserved(h);
   });
 
-  it("체크할 수 있어도 죽을 수 있음", () => {
+  it("받을 돈이 없어도 죽을 수 있음 (삥 대신 다이)", () => {
     const h = start({ 0: 10000, 1: 10000 }, 0);
+    expect(h.legal(0).toCall).toBe(0);
     h.act(0, "die");
     expect(h.phase).toBe("done");
     expect(h.result!.won).toEqual({ 1: 200 });
@@ -1492,7 +1523,8 @@ describe("쇼다운은 한국식 족보로 (룰 10)", () => {
   const duel = (a: [string, string], b: [string, string]) => {
     const h = mk({ stacks: { 0: 1000, 1: 1000 }, dealt: { 0: a[0], 1: b[0] }, later: { 0: a[1], 1: b[1] } });
     chooseAll(h);
-    checkDown(h);
+    // 삥·콜로만 끝까지: 팟은 앤티 200 + 네 구 × 두 명 × 100 = 1000
+    bbingDown(h);
     expectConserved(h);
     expect(h.result!.showdown).toBe(true);
     expect(h.result!.shows.map((s) => s.cards.length)).toEqual([7, 7]);
@@ -1504,13 +1536,13 @@ describe("쇼다운은 한국식 족보로 (룰 10)", () => {
   it("백스트레이트 > K 스트레이트", () => {
     const r = duel(BACK, ["9s Td Jc 2c", "Qh Kd 2h 7s"]);
     expect(r.names).toEqual(["백스트레이트", "K 스트레이트"]);
-    expect(r.won).toEqual({ 0: 200 });
+    expect(r.won).toEqual({ 0: 1000 });
   });
 
   it("마운틴 > 백스트레이트", () => {
     const r = duel(BACK, ["Ts Jd Qc 2c", "Kh Ad 2h 7s"]);
     expect(r.names).toEqual(["백스트레이트", "마운틴"]);
-    expect(r.won).toEqual({ 1: 200 });
+    expect(r.won).toEqual({ 1: 1000 });
   });
 
   it("플러시 > 마운틴, 풀하우스 > 플러시", () => {
@@ -1524,19 +1556,19 @@ describe("쇼다운은 한국식 족보로 (룰 10)", () => {
   it("숫자가 다 같으면 무늬: K♠ 페어가 K♥ 페어를 이김 (나눠 갖지 않음)", () => {
     const r = duel(["Kh Kc Ah 4s", "9h 7d 3c 2d"], ["Ks Kd Ac 4h", "9s 7h 3d 2h"]);
     expect(r.names).toEqual(["K 원페어", "K 원페어"]);
-    expect(r.won).toEqual({ 1: 200 });
+    expect(r.won).toEqual({ 1: 1000 });
   });
 
   it("무늬보다 킥커가 먼저", () => {
     const r = duel(["Kh Kc Ah 4s", "9h 7d 3c 2d"], ["Ks Kd Qc 4h", "9s 7h 3d 2h"]);
-    expect(r.won).toEqual({ 0: 200 });
+    expect(r.won).toEqual({ 0: 1000 });
   });
 
   it("같은 스트레이트끼리는 맨 위 카드의 무늬", () => {
     // 5-6-7-8-9: 9♦ vs 9♥
     const r = duel(["5s 6d 7c Kc", "8h 9h 2s Jd"], ["5h 6c 7d Kd", "8s 9d 2h Js"]);
     expect(r.names).toEqual(["9 스트레이트", "9 스트레이트"]);
-    expect(r.won).toEqual({ 1: 200 });
+    expect(r.won).toEqual({ 1: 1000 });
   });
 });
 
@@ -1546,6 +1578,7 @@ describe("안 되는 행동은 예외, 상태는 그대로 (룰 12)", () => {
   it("고르는 중", () => {
     const h = mk({ stacks: { 0: 1000, 1: 1000, 2: 1000 } });
     for (const t of ALL_ACTS) if (t !== "die") rejects(h, () => h.act(0, t), `고르는 중 ${t}`);
+    rejects(h, () => h.act(0, CHECK), "고르는 중 체크 (체크는 없음)");
     rejects(h, () => h.advance(), "고르는 중 advance");
     rejects(h, () => h.choose(0, 1, 1), "같은 위치");
     rejects(h, () => h.choose(0, 4, 0), "범위 밖");
@@ -1565,6 +1598,7 @@ describe("안 되는 행동은 예외, 상태는 그대로 (룰 12)", () => {
   it("카드를 돌릴 차례 (deal)", () => {
     const h = table({ 0: 1000, 1: 1000 }, 0);
     for (const t of ALL_ACTS) rejects(h, () => h.act(0, t), `deal 중 ${t}`);
+    rejects(h, () => h.act(0, CHECK), "deal 중 체크");
     rejects(h, () => h.choose(0, 0, 1));
     rejects(h, () => h.autoChoose(1));
   });
@@ -1574,12 +1608,13 @@ describe("안 되는 행동은 예외, 상태는 그대로 (룰 12)", () => {
     for (const t of ALL_ACTS) rejects(h, () => h.act(1, t), `차례 아닌 ${t}`);
     for (const t of ALL_ACTS) rejects(h, () => h.act(2, t), `차례 아닌 ${t}`);
     rejects(h, () => h.act(0, "call"), "낼 게 없는데 콜");
+    rejects(h, () => h.act(0, CHECK), "체크는 없음 (받을 돈이 없어도)");
     rejects(h, () => h.act(0, "ddadang"), "벳이 없는데 따당");
     rejects(h, () => h.act(0, "raise" as SevenAct), "모르는 행동");
     rejects(h, () => h.advance(), "베팅 중 advance");
     rejects(h, () => h.choose(0, 0, 1), "베팅 중 고르기");
     h.act(0, "bbing");
-    rejects(h, () => h.act(1, "check"), "벳을 받았는데 체크");
+    rejects(h, () => h.act(1, CHECK), "벳을 받았는데 체크");
     rejects(h, () => h.act(1, "bbing"), "벳이 있는데 삥");
     rejects(h, () => h.act(0, "call"), "차례가 지남");
     h.act(1, "die");
@@ -1592,15 +1627,15 @@ describe("안 되는 행동은 예외, 상태는 그대로 (룰 12)", () => {
     const h = start({ 0: 10000, 1: 10000, 2: 10000 }, 0);
     h.act(0, "full");
     // 1번은 300 을 받아야 함. 돈을 안 내고 차례만 넘길 수 있으면 안 됨
-    for (const t of ["", "raise", "ante", "constructor", "toString", "__proto__", "hasOwnProperty", "valueOf"]) rejects(h, () => h.act(1, t as SevenAct), `"${t}"`);
+    for (const t of ["", "check", "raise", "ante", "constructor", "toString", "__proto__", "hasOwnProperty", "valueOf"]) rejects(h, () => h.act(1, t as SevenAct), `"${t}"`);
     expect(h.toAct).toBe(1);
     expect(h.history).toHaveLength(4);
   });
 
   it("끝난 뒤", () => {
     const h = start({ 0: 1000, 1: 1000 }, 0);
-    checkDown(h);
-    for (const s of [0, 1]) for (const t of ALL_ACTS) rejects(h, () => h.act(s, t), `끝난 뒤 ${t}`);
+    bbingDown(h);
+    for (const s of [0, 1]) for (const t of [...ALL_ACTS, CHECK]) rejects(h, () => h.act(s, t), `끝난 뒤 ${t}`);
     rejects(h, () => h.advance());
     rejects(h, () => h.choose(0, 0, 1));
     rejects(h, () => h.autoChoose(0));
@@ -1624,8 +1659,8 @@ interface RP {
   up: Card[];
   chosen: boolean;
 }
+/** 체크는 없음: 받을 돈이 없어도 걸거나 죽어야 함 */
 interface RefLegal {
-  canCheck: boolean;
   toCall: number;
   bets: Partial<Record<SevenBet, number>>;
 }
@@ -1718,7 +1753,7 @@ class Ref {
       bets.half = cap(part(2));
       bets.full = cap(part(1));
     }
-    return { canCheck: owes === 0, toCall: Math.min(p.stack, owes), bets };
+    return { toCall: Math.min(p.stack, owes), bets };
   }
 
   /** 룰 9 */
@@ -1741,16 +1776,14 @@ class Ref {
   act(seat: number, type: SevenAct, add: number) {
     if (type === "die") return this.die(seat);
     const p = this.p(seat);
-    if (type !== "check") {
-      const a = Math.min(add, p.stack);
-      p.stack -= a;
-      p.bet += a;
-      p.inv += a;
-      if (p.stack === 0) p.allIn = true;
-      if (type !== "call" && p.bet > this.curBet) {
-        this.curBet = p.bet;
-        p.raises++;
-      }
+    const a = Math.min(add, p.stack);
+    p.stack -= a;
+    p.bet += a;
+    p.inv += a;
+    if (p.stack === 0) p.allIn = true;
+    if (type !== "call" && p.bet > this.curBet) {
+      this.curBet = p.bet;
+      p.raises++;
     }
     p.acted = true;
     this.nextOrClose(seat);
@@ -2084,7 +2117,7 @@ function fuzz(cfg: FuzzCfg): FuzzOut {
         }
         const seat = waiting[ri(waiting.length)];
         const me = h.player(seat)!;
-        rejected("고르는 중 체크", () => h.act(seat, "check"));
+        rejected("고르는 중 체크", () => h.act(seat, CHECK));
         rejected("고르는 중 콜", () => h.act(seat, "call"));
         rejected("고르는 중 벳", () => h.act(seat, BET_TYPES[ri(5)]));
         rejected("고르는 중 advance", () => h.advance());
@@ -2184,9 +2217,12 @@ function fuzz(cfg: FuzzCfg): FuzzOut {
       const rl = ref.legal(seat);
       const owed = ref.owes(ref.p(seat));
       const offered = BET_TYPES.filter((t) => lg.bets[t] !== undefined);
-      // legal() 자체의 앞뒤
+      // legal() 자체의 앞뒤 (체크는 없음: canCheck 같은 칸이 있으면 안 됨)
+      if (Object.keys(lg).sort().join() !== "bets,toCall") viol("legal-self", `legal() 에 모르는 칸: ${Object.keys(lg)}`);
       if (lg.toCall > me.stack || lg.toCall < 0) viol("legal-self", `toCall ${lg.toCall} > stack ${me.stack}`);
-      if (lg.canCheck === lg.toCall > 0) viol("legal-self", `체크·콜 중 정확히 하나여야: canCheck ${lg.canCheck} toCall ${lg.toCall}`);
+      // 받을 돈이 없으면(= 아직 벳이 없음) 열린 베팅 중에 삥이 있어야 하고, 받을 돈이 있으면 삥은 없어야
+      if (lg.toCall === 0 && offered.length && lg.bets.bbing === undefined) viol("legal-self", `받을 돈이 없는데 삥이 안 열림: ${offered}`);
+      if (lg.toCall > 0 && lg.bets.bbing !== undefined) viol("legal-self", `받을 돈 ${lg.toCall} 이 있는데 삥이 열림`);
       for (const t of offered) {
         const a = lg.bets[t]!;
         if (!(a > owed) || a > me.stack || !Number.isInteger(a)) viol("legal-self", `${t} ${a}: 받을 돈 ${owed} 보다 커야 하고 스택 ${me.stack} 이하여야`);
@@ -2194,8 +2230,8 @@ function fuzz(cfg: FuzzCfg): FuzzOut {
       if (offered.length && (raised.get(seat) ?? 0) >= 2) viol("raise-cap", `자리 ${seat}: 이미 두 번 올렸는데 ${offered} 가 열려 있음`);
       // 스펙 기준과 비교
       let legalOk = true;
-      if (lg.toCall !== rl.toCall || lg.canCheck !== rl.canCheck) {
-        viol("legal-ref", `자리 ${seat}: toCall ${lg.toCall}/${rl.toCall} canCheck ${lg.canCheck}/${rl.canCheck} (엔진/기대)`);
+      if (lg.toCall !== rl.toCall) {
+        viol("legal-ref", `자리 ${seat}: toCall ${lg.toCall}/${rl.toCall} (엔진/기대)`);
         legalOk = false;
       }
       const wantTypes = BET_TYPES.filter((t) => rl.bets[t] !== undefined);
@@ -2221,13 +2257,13 @@ function fuzz(cfg: FuzzCfg): FuzzOut {
       rejected("없는 자리", () => h.act(99, "die"));
       rejected("베팅 중 advance", () => h.advance());
       rejected("베팅 중 고르기", () => h.choose(seat, 0, 1));
-      if (lg.canCheck) rejected("낼 게 없는데 콜", () => h.act(seat, "call"));
-      else rejected("벳을 받았는데 체크", () => h.act(seat, "check"));
+      if (lg.toCall === 0) rejected("낼 게 없는데 콜", () => h.act(seat, "call"));
+      rejected("체크 (체크는 없음)", () => h.act(seat, CHECK));
       for (const t of BET_TYPES) if (lg.bets[t] === undefined) rejected(`안 열린 베팅 ${t}`, () => h.act(seat, t));
       // 되는 행동: 복사본에서 전부 해 봄 (느려서 세 번에 한 번만 — 고른 행동은 어차피 아래에서 실제로 함)
       if (steps % 3 === 0) {
         accepted("다이", seat, "die");
-        accepted(lg.canCheck ? "체크" : "콜", seat, lg.canCheck ? "check" : "call");
+        if (lg.toCall > 0) accepted("콜", seat, "call");
         for (const t of offered) accepted(t, seat, t);
       }
       if (!legalOk) {
@@ -2235,16 +2271,17 @@ function fuzz(cfg: FuzzCfg): FuzzOut {
         break;
       }
 
-      // ── 되는 행동 중에서 무작위로 하나
+      // ── 되는 행동 중에서 무작위로 하나 (받을 돈이 없으면 콜은 없음 → 다이 또는 열린 베팅)
       const w = cfg.dieWeight ?? 1;
       const bw = cfg.betWeight ?? 1;
-      let pickAt = rng() * (w + 1 + bw * offered.length);
+      const cw = lg.toCall > 0 ? 1 : 0;
+      let pickAt = rng() * (w + cw + bw * offered.length);
       let type: SevenAct = "die";
-      if (pickAt >= w) {
+      if (pickAt >= w && cw + offered.length) {
         pickAt -= w;
-        type = pickAt < 1 ? (lg.canCheck ? "check" : "call") : offered[Math.min(offered.length - 1, Math.floor((pickAt - 1) / bw))];
+        type = pickAt < cw ? "call" : offered[Math.min(offered.length - 1, Math.floor((pickAt - cw) / bw))];
       }
-      const expAdd = type === "die" || type === "check" ? 0 : type === "call" ? rl.toCall : lg.bets[type as SevenBet]!;
+      const expAdd = type === "die" ? 0 : type === "call" ? rl.toCall : lg.bets[type as SevenBet]!;
       const isBet = (BET_TYPES as SevenAct[]).includes(type);
       log.push(`${seat}${type}${expAdd ? `(${expAdd})` : ""}`);
       const stack0 = me.stack;
@@ -2365,8 +2402,8 @@ const FUZZ_CATS: [cat: string, title: string][] = [
   ["stuck", "모든 판이 끝남 (멈춤·무한 반복 없음, toAct 는 행동할 수 있는 자리)"],
   ["deal", "카드가 스펙 순서대로 나감 · 겹치지 않음 · 고르면 엎 2 + 폄 1"],
   ["boss", "구마다 보스부터 (올인이면 그다음 사람)"],
-  ["legal-self", "legal() 의 앞뒤가 맞음 (toCall ≤ 스택, 체크·콜 중 하나, 베팅은 받을 돈 초과 · 스택 이하)"],
-  ["legal-ref", "legal() 의 toCall · canCheck · 열린 베팅 · 금액이 스펙과 같음 (따당 금액은 따로)"],
+  ["legal-self", "legal() 의 앞뒤가 맞음 (toCall ≤ 스택, canCheck 없음, 벳이 없을 때만 삥, 베팅은 받을 돈 초과 · 스택 이하)"],
+  ["legal-ref", "legal() 의 toCall · 열린 베팅 · 금액이 스펙과 같음 (따당 금액은 따로)"],
   ["ddadang", "따당 = 받을 돈 + max(앤티, 받을 돈)"],
   ["raise-cap", "한 사람이 한 구에 걸거나 올리는 건 두 번까지"],
   ["illegal", "안 되는 행동은 SevenError 를 내고 상태를 안 바꿈"],
@@ -2408,7 +2445,7 @@ function fuzzSuite(cfg: FuzzCfg, minimums: Record<string, number>) {
   });
 }
 
-// 단위 1, 아무 스택 (앤티보다 적은 스택 · 아주 큰 스택 포함), 행동은 고르게 (체크/콜 · 다이 · 열린 베팅 하나하나가 같은 확률)
+// 단위 1, 아무 스택 (앤티보다 적은 스택 · 아주 큰 스택 포함), 행동은 고르게 (콜 · 다이 · 열린 베팅 하나하나가 같은 확률)
 fuzzSuite(
   { name: "단위 1", seed: 1, hands: 3000, unit: 1, antes: [10, 1, 100, 7], unitStacks: false },
   { showdown: 1200, foldEnd: 600, choiceFold: 150, sidePots: 600, runout: 800, shortAnte: 600, refunds: 600, capped: 400, lone: 400, allInBoss: 150, huge: 400 },
@@ -2418,7 +2455,7 @@ fuzzSuite(
   { name: "단위 1 · 덜 죽음", seed: 4, hands: 2000, unit: 1, antes: [10, 100], unitStacks: false, dieWeight: 0.15, tiny: 0.05 },
   { showdown: 1200, sidePots: 800, capped: 600, refunds: 500, lone: 500 },
 );
-// 깊은 스택 · 체크/콜 위주: 7구까지 가는 베팅, 올인 없는 쇼다운
+// 깊은 스택 · 콜 위주 (잘 안 죽음): 7구까지 가는 베팅, 올인 없는 쇼다운
 fuzzSuite(
   { name: "단위 10 · 깊은 스택", seed: 6, hands: 1500, unit: 10, antes: [10, 100], unitStacks: true, dieWeight: 0.06, betWeight: 0.12, deep: true },
   { showdown: 800, foldEnd: 100, round7Bets: 800, capped: 300, sidePots: 150 },
@@ -2485,8 +2522,9 @@ function runBots(seed: number, hands: number): BotOut {
   const rng = mulberry32(seed);
   const ri = (n: number) => Math.floor(rng() * n);
   const v = new Map<string, string[]>();
-  const stats: Record<string, number> = { hands: 0, decisions: 0, chooses: 0, showdown: 0, die: 0, check: 0, call: 0, bet: 0, facingBet: 0, round7: 0, allInSeen: 0, capped: 0 };
-  for (const id of BOT_IDS) for (const t of [1, 2, 3]) stats[`${id}:${t}`] = 0;
+  // free = 받을 돈이 없을 때의 결정 (체크가 없으니 삥 이상 또는 다이)
+  const stats: Record<string, number> = { hands: 0, decisions: 0, chooses: 0, showdown: 0, die: 0, call: 0, bet: 0, facingBet: 0, free: 0, round7: 0, allInSeen: 0, capped: 0 };
+  for (const id of CHAR_IDS) for (const t of [1, 2, 3]) stats[`${id}:${t}`] = 0;
   let ms = 0;
   let maxMs = 0;
   const HIST_KEYS = ["add", "aggressive", "allIn", "potBefore", "round", "seat", "toCallBefore", "type"].join();
@@ -2503,7 +2541,7 @@ function runBots(seed: number, hands: number): BotOut {
     const deck = shuffledDeck(ri);
     const brains = new Map(
       seats.map((s, i) => {
-        const b = newBrain(BOT_IDS[(n + i) % BOT_IDS.length], tier, rng);
+        const b = newBrain(CHAR_IDS[(n + i) % CHAR_IDS.length], tier, rng);
         // 흔들린 상태도 섞음
         if (rng() < 0.3) b.heat = rng();
         return [s.seat, b] as const;
@@ -2512,7 +2550,7 @@ function runBots(seed: number, hands: number): BotOut {
     const log: string[] = [];
     const viol = (cat: string, msg: string) => {
       const list = v.get(cat) ?? [];
-      if (list.length < 3) list.push(`${msg}  [#${n}] tier=${tier} seats=${JSON.stringify(seats.map((s) => [s.seat, s.stack, brains.get(s.seat)!.id]))} acts=[${log.join(" ")}] deck=[${deck.join(",")}]`);
+      if (list.length < 3) list.push(`${msg}  [#${n}] tier=${tier} seats=${JSON.stringify(seats.map((s) => [s.seat, s.stack, brains.get(s.seat)!.char]))} acts=[${log.join(" ")}] deck=[${deck.join(",")}]`);
       v.set(cat, list);
     };
     const h = new SevenHand({ seats, ante, deck, unit: UNIT });
@@ -2576,19 +2614,20 @@ function runBots(seed: number, hands: number): BotOut {
       ms += dt;
       maxMs = Math.max(maxMs, dt);
       stats.decisions++;
-      stats[`${brain.id}:${n % 3 + 1}`]++;
+      stats[`${brain.char}:${n % 3 + 1}`]++;
       if (JSON.stringify(h) !== snap) viol("decide", "봇이 판을 건드림");
       const lg = view.legal;
       if (lg.toCall > 0) stats.facingBet++;
+      else stats.free++;
       if (h.round === 7) stats.round7++;
       if (h.players.some((p) => p.allIn)) stats.allInSeen++;
       if (!Object.keys(lg.bets).length) stats.capped++;
-      const legalNow = d.type === "die" || (d.type === "check" ? lg.canCheck : d.type === "call" ? lg.toCall > 0 : lg.bets[d.type as SevenBet] !== undefined);
+      // 체크는 없음: 봇이 "check" 를 내면 안 되고, 다이 아니면 legal() 에 있는 것만
+      if ((d.type as string) === "check") viol("no-check", `체크를 골랐음 (${brain.char}, legal ${JSON.stringify(lg)})`);
+      const legalNow = d.type === "die" || (d.type === "call" ? lg.toCall > 0 : lg.bets[d.type as SevenBet] !== undefined);
       if (!legalNow) viol("decide", `안 되는 행동을 고름: ${d.type} (legal ${JSON.stringify(lg)})`);
       if (!Number.isFinite(d.thinkMs) || d.thinkMs < 0) viol("decide", `thinkMs ${d.thinkMs}`);
-      // 체크할 수 있는데 죽는 건 손해
-      if (d.type === "die" && lg.canCheck) viol("fold-free", `체크할 수 있는데 죽음 (${brain.id})`);
-      stats[d.type === "die" || d.type === "check" || d.type === "call" ? d.type : "bet"]++;
+      stats[d.type === "die" || d.type === "call" ? d.type : "bet"]++;
       // 가끔은 봇의 결정 대신 아무 행동이나 해서 여러 상태를 만듦 (결정 자체는 위에서 복사본으로 확인)
       let type: SevenAct = d.type;
       if (legalNow && rng() < 0.15) {
@@ -2597,15 +2636,15 @@ function runBots(seed: number, hands: number): BotOut {
         } catch (e) {
           viol("decide", `엔진이 안 받음: ${d.type} → ${e}`);
         }
-        const options: SevenAct[] = [lg.canCheck ? "check" : "call", ...BET_TYPES.filter((t) => lg.bets[t] !== undefined)];
-        type = options[ri(options.length)];
+        const options: SevenAct[] = [...(lg.toCall > 0 ? (["call"] as SevenAct[]) : []), ...BET_TYPES.filter((t) => lg.bets[t] !== undefined)];
+        if (options.length) type = options[ri(options.length)];
       }
       try {
         h.act(seat, type);
         log.push(`${seat}${type}`);
       } catch (e) {
         viol("decide", `엔진이 안 받음: ${type} → ${e}`);
-        h.act(seat, lg.canCheck ? "check" : "die");
+        h.act(seat, "die");
       }
     }
     if (h.phase !== "done") viol("decide", "판이 안 끝남");
@@ -2623,7 +2662,7 @@ describe("봇 (공개된 정보만 보고 둠)", () => {
   it("decideSeven: 언제나 엔진에서 되는 행동 · 판을 건드리지 않음", () => none("decide"), T);
   it("chooseSeven: 서로 다른 0~3 위치", () => none("choose"), T);
   it("봇에게 준 정보에 남의 엎은 카드가 없음 (그래도 잘 둠)", () => none("leak"), T);
-  it("체크할 수 있을 때는 죽지 않음", () => none("fold-free"), T);
+  it("체크를 고르지 않음 (7포커에 체크는 없음)", () => none("no-check"), T);
   it(
     "한 번 생각하는 데 평균 50ms 미만",
     () => {
@@ -2634,13 +2673,13 @@ describe("봇 (공개된 정보만 보고 둠)", () => {
     T,
   );
   it(
-    "여러 상태를 실제로 지나감 (네 봇 × 세 단계)",
+    "여러 상태를 실제로 지나감 (다섯 캐릭터 × 세 단계)",
     () => {
       const s = run().stats;
       expect(s.decisions).toBeGreaterThanOrEqual(3000);
       expect(s.chooses).toBeGreaterThanOrEqual(3000);
-      for (const id of BOT_IDS) for (const t of [1, 2, 3]) expect(s[`${id}:${t}`], `${id}:${t}`).toBeGreaterThanOrEqual(100);
-      for (const k of ["die", "check", "call", "bet", "facingBet", "round7", "allInSeen", "capped", "showdown"]) expect(s[k], k).toBeGreaterThanOrEqual(50);
+      for (const id of CHAR_IDS) for (const t of [1, 2, 3]) expect(s[`${id}:${t}`], `${id}:${t}`).toBeGreaterThanOrEqual(100);
+      for (const k of ["die", "call", "bet", "facingBet", "free", "round7", "allInSeen", "capped", "showdown"]) expect(s[k], k).toBeGreaterThanOrEqual(50);
     },
     T,
   );
@@ -2664,12 +2703,12 @@ describe("봇 (공개된 정보만 보고 둠)", () => {
       for (let seat = 1; seat <= 4; seat++)
         for (let i = 0; i < 2; i++) history.push({ round: 4, seat, type: "ddadang", aggressive: true, add: 100, potBefore: 0, toCallBefore: 0, allIn: false });
       const toCall = 1000;
-      return { seat: 0, cards: C("Ks Kd 6h 2h"), round: 4, pot: Math.round(toCall / need - toCall), ante: 100, legal: { canCheck: false, toCall, bets: {} }, players, history };
+      return { seat: 0, cards: C("Ks Kd 6h 2h"), round: 4, pot: Math.round(toCall / need - toCall), ante: 100, legal: { toCall, bets: {} }, players, history };
     };
     const seen = (strongSeat: number) => {
       let best = 0;
       for (let need = 0.02; need < 0.5; need += 0.02) {
-        const brain = newBrain("gunmo", 3, mulberry32(7));
+        const brain = newBrain("jinwoo", 3, mulberry32(7));
         let calls = 0;
         for (let i = 0; i < 40; i++) if (decideSeven(view(strongSeat, need), brain).type === "call") calls++;
         if (calls >= 20) best = need;
@@ -2682,7 +2721,7 @@ describe("봇 (공개된 정보만 보고 둠)", () => {
   }, T);
 
   it("7구에 로열 스트레이트 플러시를 들고 벳을 받으면 죽지 않음", () => {
-    for (const id of BOT_IDS)
+    for (const id of CHAR_IDS)
       for (const tier of [1, 2, 3] as TierId[]) {
         const h = mk({
           stacks: { 0: 100000, 1: 100000 },
@@ -2692,7 +2731,7 @@ describe("봇 (공개된 정보만 보고 둠)", () => {
         chooseAll(h);
         for (let r = 4; r <= 6; r++) {
           h.advance();
-          checkRound(h);
+          bbingRound(h);
         }
         h.advance();
         // 9 페어를 펴 놓은 1번이 보스: 풀 벳

@@ -1,19 +1,24 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import NickForm from "@/components/Account/NickForm";
 import { useAuth } from "@/lib/AuthContext";
-import { BOT_IDS, BOT_INFO, REVIVE, START_MONEY, TIERS, fmtWon } from "@/lib/poker/rules";
+import { asset } from "@/lib/poker/assets";
+import { isMuted, setMuted } from "@/lib/poker/sfx";
+import { fmtShort, type CharId } from "@/lib/poker/rules";
 import type { RankRow, Wallet } from "@/lib/poker/types";
 import { getRank, subscribeWallet, watchClock } from "@/realtime/poker";
-import Lobby, { RankTable } from "./Lobby";
-import { Portrait } from "./parts";
+import type { Orient } from "./layout";
+import Lobby from "./Lobby";
+import { PlayingCard, useSize } from "./parts";
 import TableView from "./TableView";
 
 /*
- * 포커 페이지의 몸통. 회원만 칠 수 있음:
- *   로그인 전 → 소개 + 로그인 버튼 / 별명 전 → 별명 정하기 / 회원 → 로비, 주소에 ?t=<테이블> 이 있으면 그 테이블
+ * ANIME POKER 의 몸통 = 무대(stage). PIXEL FIGHT 처럼 하나의 게임 화면 안에서 로비 → 테이블이 바뀜.
+ *  - 무대는 자기 크기를 재서 세로판(폰) / 가로판(PC) 배치를 고름
+ *  - 전체화면 버튼: 진짜 전체화면(되는 브라우저) 또는 화면을 꽉 채우는 흉내 전체화면(아이폰 사파리)
+ *  - 회원만: 로그인 전 → 소개 + 로그인 / 별명 전 → 별명 정하기 / 회원 → 로비, 주소에 ?t=<테이블> 이 있으면 그 테이블
  */
 
 export function useRank(): RankRow[] | null {
@@ -34,6 +39,11 @@ export function useRank(): RankRow[] | null {
   return rank;
 }
 
+/** 가로 전체화면에서 무대를 그리는 기준 크기 */
+const DESIGN = { w: 1280, h: 720 };
+const isIOS = () => typeof navigator !== "undefined" && /iP(hone|ad|od)/.test(navigator.userAgent) && !("MSStream" in window);
+const isStandalone = () => typeof window !== "undefined" && (window.matchMedia("(display-mode: standalone)").matches || (navigator as Navigator & { standalone?: boolean }).standalone === true);
+
 export default function PokerApp({ rank }: { rank: RankRow[] | null }) {
   const router = useRouter();
   const params = useSearchParams();
@@ -42,6 +52,12 @@ export default function PokerApp({ rank }: { rank: RankRow[] | null }) {
   const [wallet, setWallet] = useState<Wallet | null>(null);
   const [failed, setFailed] = useState("");
   const [loginError, setLoginError] = useState("");
+  const [revived, setRevived] = useState<{ text: string; key: number } | null>(null);
+  useEffect(() => {
+    if (!revived) return;
+    const t = setTimeout(() => setRevived(null), 3200);
+    return () => clearTimeout(t);
+  }, [revived]);
   const nick = profile?.nick;
 
   useEffect(() => {
@@ -51,87 +67,311 @@ export default function PokerApp({ rank }: { rank: RankRow[] | null }) {
       (w) => {
         setWallet(w);
         setFailed("");
+        if (w?.revived) setRevived({ text: `기본 칩 ${fmtShort(w.revived.amount)}이 지급됐어요 · 오늘 ${w.revived.left}회 남았어요`, key: Date.now() });
       },
       (e) => setFailed(e.message)
     );
   }, [nick]);
 
+  // ── 무대 크기 · 전체화면 ──
+  const [stageRef, size] = useSize<HTMLDivElement>();
+  const rootRef = useRef<HTMLDivElement>(null);
+  const [fsReal, setFsReal] = useState(false);
+  const [pseudoFs, setPseudoFs] = useState(false);
+  const fs = fsReal || pseudoFs;
+  const standalone = typeof window !== "undefined" && isStandalone();
+  useEffect(() => {
+    const on = () => setFsReal(document.fullscreenElement === rootRef.current && !!rootRef.current);
+    document.addEventListener("fullscreenchange", on);
+    return () => document.removeEventListener("fullscreenchange", on);
+  }, []);
+  // 전체화면(가로 화면): 무대를 평소와 같은 1280×720 으로 그리고 화면에 맞게 통째로 키움 → 배치가 창 모드와 똑같음
+  const [scr, setScr] = useState({ w: 0, h: 0 });
+  useEffect(() => {
+    if (!fs) return;
+    const on = () => setScr({ w: window.innerWidth, h: window.innerHeight });
+    on();
+    window.addEventListener("resize", on);
+    return () => window.removeEventListener("resize", on);
+  }, [fs]);
+  const fit = fs && scr.w > scr.h * 1.2 ? Math.min(scr.w / DESIGN.w, scr.h / DESIGN.h) : 0;
+  // 무대 위에 사이트의 떠 있는 메뉴 버튼이 겹치지 않게
+  useEffect(() => {
+    document.body.classList.add("game-full");
+    return () => document.body.classList.remove("game-full");
+  }, []);
+  // 폰: 들어오면 무대가 사이트 메뉴 바로 아래에 오게 (무대 높이가 화면을 거의 다 쓰므로)
+  const stageEl = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const el = stageEl.current;
+    if (!el || window.innerWidth >= 640) return;
+    const id = setTimeout(() => el.scrollIntoView({ behavior: "smooth", block: "start" }), 250);
+    return () => clearTimeout(id);
+  }, [tableId]);
+  const toggleFs = () => {
+    const el = rootRef.current;
+    if (!el) return;
+    if (pseudoFs) return setPseudoFs(false);
+    if (document.fullscreenElement) return void document.exitFullscreen().catch(() => {});
+    if (typeof el.requestFullscreen === "function") el.requestFullscreen({ navigationUI: "hide" }).catch(() => setPseudoFs(true));
+    else setPseudoFs(true);
+  };
+  const o: Orient = size.w > size.h * 1.05 ? "h" : "v";
+  const topRight = (
+    <>
+      <Soon label="상점" icon={SHOP_ICON} gold />
+      <Soon label="옷장" icon={CLOSET_ICON} />
+      <Settings />
+      <button type="button" onClick={toggleFs} title={fs ? "전체화면 끝내기" : "전체화면"} className="pk-btn pk-btn-ghost flex h-[30px] w-[34px] items-center justify-center">
+        <svg viewBox="0 0 24 24" className="h-[16px] w-[16px]" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden>
+          {fs ? <path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5" /> : <path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" />}
+        </svg>
+      </button>
+    </>
+  );
+
   const go = (id: string | null) => router.push(id ? `/games/poker/?t=${id}` : "/games/poker/");
 
-  if (loading) return <p className="pk py-20 text-center text-sm text-white/40">로그인 상태를 확인하는 중…</p>;
+  let screen: ReactNode;
+  if (loading) screen = <Centered>로그인 상태를 확인하는 중…</Centered>;
+  else if (!account || !profile)
+    screen = <Intro o={o} account={!!account} loginError={loginError} onLogin={() => void login().catch(() => setLoginError("로그인하지 못했어요. 잠시 후 다시 시도해주세요."))} />;
+  else if (failed && !wallet) screen = <Centered tone="error">{failed}</Centered>;
+  else if (!wallet) screen = <Centered>지갑을 여는 중…</Centered>;
+  else if (tableId) screen = <TableView key={tableId} id={tableId} uid={account.uid} wallet={wallet} o={o} w={size.w} h={size.h} onExit={() => go(null)} onWallet={setWallet} topRight={topRight} />;
+  else screen = <Lobby wallet={wallet} rank={rank} myNick={profile.nick} o={o} w={size.w} h={size.h} onEnter={go} onWallet={setWallet} topRight={topRight} />;
 
-  if (!account || !profile) {
-    return (
-      <div className="pk mx-auto max-w-5xl px-3 pb-24 sm:px-6">
-        <section className="mt-2 overflow-hidden rounded-3xl border border-[var(--pk-line)]">
-          <div className="pk-felt relative px-6 py-10 sm:px-10 sm:py-14" data-tier="2">
-            <p className="pk-title text-[2.6rem] leading-[1.05] text-white drop-shadow-[0_3px_4px_rgba(0,0,0,0.5)] sm:text-6xl">
-              가입하면
-              <br />
-              <span className="pk-num text-[1.5em] text-[var(--pk-brass)]">{fmtWon(START_MONEY)}</span> 원
-            </p>
-            <p className="mt-4 max-w-md text-sm leading-relaxed break-keep text-white/85 sm:text-base">
-              홀덤과 7포커를 같은 돈으로 쳐요. 봇 네 명이 늘 앉아 있고, 친구와 테이블을 따로 열 수도 있어요. 다 잃어도 하루 {REVIVE.perDay}번, {fmtWon(REVIVE.amount)} 원씩 다시 받아요.
-            </p>
-            <div className="mt-6 max-w-sm">
-              {!account ? (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setLoginError("");
-                      login().catch(() => setLoginError("로그인하지 못했어요. 잠시 후 다시 시도해주세요."));
-                    }}
-                    className="cursor-pointer rounded-xl bg-white px-6 py-3 text-[15px] font-bold text-[#15161a] shadow-lg transition hover:bg-[var(--pk-brass)]"
-                  >
-                    Google로 로그인하고 시작하기
-                  </button>
-                  <p className="mt-2 text-xs text-white/70">회원만 칠 수 있어요. 진짜 돈이 아니라 이 사이트 안에서만 쓰는 게임 머니예요.</p>
-                  {loginError && <p className="mt-1 text-xs text-[#ffd0d0]">{loginError}</p>}
-                </>
-              ) : (
-                <div className="rounded-2xl bg-black/45 p-4">
-                  <p className="mb-2 text-sm text-white">별명을 정하면 바로 {fmtWon(START_MONEY)} 원이 들어와요.</p>
-                  <NickForm submitLabel="시작하기" />
-                </div>
-              )}
-            </div>
-            <div className="absolute right-5 bottom-5 hidden -space-x-3 sm:flex">
-              {BOT_IDS.map((b) => (
-                <Portrait key={b} bot={b} name={BOT_INFO[b].name} size={68} className="ring-4 ring-black/35" />
-              ))}
-            </div>
+  // 무대 크기: 전체화면이면 화면 전부, 아니면 PC 는 16:9 상자, 폰은 화면 높이에 맞춘 세로 상자
+  const outer = pseudoFs ? "fixed inset-0 z-[100] flex items-center justify-center overflow-hidden bg-black" : fsReal ? "flex h-full w-full items-center justify-center overflow-hidden bg-black" : "mx-auto w-full max-w-[min(1280px,calc((100dvh-150px)*16/9))] px-0 sm:px-3";
+  // (폰: 사이트 머리말 57px + 게임 메뉴 45px 아래부터 화면 끝까지)
+  const stageCls = fit ? "flex-none" : fs ? "h-full w-full" : "h-[calc(100dvh-104px)] min-h-[480px] w-full scroll-mt-[104px] sm:aspect-video sm:h-auto sm:min-h-0 sm:rounded-2xl sm:border sm:border-white/10";
+  return (
+    <div ref={rootRef} className={`pk ${outer}`}>
+      <div
+        ref={(el) => {
+          stageEl.current = el;
+          stageRef(el);
+        }}
+        className={`pk-stage ${stageCls}`}
+        style={fit ? { width: DESIGN.w, height: DESIGN.h, transform: `scale(${fit})`, transformOrigin: "center" } : undefined}
+        data-o={o}
+      >
+        {size.w > 0 && screen}
+        {revived && (
+          <div key={revived.key} role="status" className="pk-toast" style={{ bottom: o === "h" ? 90 : 120, animationDuration: "3.2s" }}>
+            {revived.text}
           </div>
-          <div className="grid gap-px bg-[var(--pk-line)] sm:grid-cols-3">
-            {TIERS.map((t) => (
-              <div key={t.id} className="bg-[var(--pk-panel)] px-5 py-4">
-                <div className="flex items-center gap-2">
-                  <span className="pk-felt h-5 w-5 rounded-full" data-tier={t.id} aria-hidden />
-                  <span className="pk-title text-lg text-white">{t.name}</span>
-                </div>
-                <p className="mt-1 text-xs leading-relaxed text-white/50">
-                  보유 {fmtWon(t.min)} 원부터 · 홀덤 블라인드 {fmtWon(t.sb)}/{fmtWon(t.bb)} · 7포커 판돈 {fmtWon(t.ante)}
-                </p>
-              </div>
-            ))}
-          </div>
-        </section>
-        <section className="mx-auto mt-9 max-w-xl">
-          <h2 className="mb-3 text-base font-bold text-white">자금 순위</h2>
-          <RankTable rank={rank} limit={10} />
-        </section>
+        )}
       </div>
-    );
-  }
+      {!fs && !standalone && isIOS() && (
+        <p className="mx-3 mt-2 text-center text-[11px] text-white/40 sm:mx-0">
+          아이폰은 사파리 공유 → <b className="text-white/60">홈 화면에 추가</b>하면 전체화면 앱처럼 할 수 있어요.
+        </p>
+      )}
+      {!fs && (
+        <p className="mx-3 mt-2 text-center text-[11px] text-white/30 sm:mx-0">
+          칩을 다 잃으셨다면 몰래 문의 한번 남겨주세요. 드릴수도?
+        </p>
+      )}
+    </div>
+  );
+}
 
-  if (failed && !wallet)
-    return (
-      <p role="alert" className="pk py-20 text-center text-sm text-[#ffb3b5]">
-        {failed}
+/** 준비 중인 기능 버튼 (상점 · 옷장): 누르면 "추가 예정" 안내 */
+function Soon({ label, icon, gold }: { label: string; icon: ReactNode; gold?: boolean }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <span className="relative flex">
+      <button type="button" onClick={() => setOpen((v) => !v)} aria-expanded={open} title={label} className={`pk-btn ${gold ? "pk-btn-gold" : "pk-btn-ghost"} flex h-[30px] items-center gap-[0.3em] px-[0.6em] text-[0.78em]`}>
+        <svg viewBox="0 0 24 24" className="h-[15px] w-[15px]" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+          {icon}
+        </svg>
+        <span className="hidden sm:inline">{label}</span>
+      </button>
+      {open && (
+        <>
+          <span className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div className="pk-frame pk-pop absolute top-[calc(100%+6px)] right-0 z-50 grid w-[14em] gap-[0.45em] p-[0.7em] text-[0.82em]">
+            <div className="flex items-center gap-[0.4em]">
+              <span className="pk-frame-title">{label}</span>
+              <span className="rounded-[4px] bg-white/10 px-[0.4em] text-[0.8em] text-white/70">준비 중</span>
+            </div>
+            <p className="leading-relaxed text-white/75">추가 예정 기능이에요. 조금만 기다려 주세요!</p>
+          </div>
+        </>
+      )}
+    </span>
+  );
+}
+const SHOP_ICON = (
+  <>
+    <path d="M5 8h14l-1.2 11.2a1 1 0 0 1-1 .8H7.2a1 1 0 0 1-1-.8z" />
+    <path d="M9 8V6.5a3 3 0 0 1 6 0V8" />
+  </>
+);
+const CLOSET_ICON = <path d="M12 6a2 2 0 1 1 2 2c-1 0-2 .7-2 1.6V10l8.4 5.6A1.5 1.5 0 0 1 19.6 18H4.4a1.5 1.5 0 0 1-.8-2.4L12 10" />;
+
+/** 설정 (톱니): 효과음 · 안내 */
+function Settings() {
+  const [open, setOpen] = useState(false);
+  const [mute, setMute] = useState(() => typeof window !== "undefined" && isMuted());
+  return (
+    <span className="relative flex">
+      <button type="button" onClick={() => setOpen((v) => !v)} aria-expanded={open} title="설정" className="pk-btn pk-btn-ghost flex h-[30px] w-[34px] items-center justify-center">
+        <svg viewBox="0 0 24 24" className="h-[16px] w-[16px]" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+          <circle cx="12" cy="12" r="3" />
+          <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" />
+        </svg>
+      </button>
+      {open && (
+        <div className="pk-frame pk-pop absolute top-[calc(100%+6px)] right-0 z-50 grid w-[14em] gap-[0.4em] p-[0.55em] text-[0.8em]">
+          <div className="pk-frame-title">설정</div>
+          <button
+            type="button"
+            onClick={() => {
+              setMuted(!mute);
+              setMute(!mute);
+            }}
+            className="pk-btn pk-btn-ghost flex items-center justify-between px-[0.7em] py-[0.45em]"
+          >
+            <span>효과음</span>
+            <span className={mute ? "text-white/40" : "text-[var(--pk-call)]"}>{mute ? "OFF" : "ON"}</span>
+          </button>
+          <p className="text-[0.85em] leading-relaxed text-white/45">BETA 버전 · 배경음악과 캐릭터 음성은 준비 중이에요.</p>
+        </div>
+      )}
+    </span>
+  );
+}
+
+function Centered({ children, tone }: { children: ReactNode; tone?: "error" }) {
+  return (
+    <div className="absolute inset-0 flex items-center justify-center bg-[#0b0c12] text-center">
+      <p role={tone ? "alert" : undefined} className={tone === "error" ? "text-[#ffb3b5]" : "text-white/50"}>
+        {children}
       </p>
-    );
-  if (!wallet) return <p className="pk py-20 text-center text-sm text-white/40">지갑을 여는 중…</p>;
+    </div>
+  );
+}
 
-  if (tableId) return <TableView key={tableId} id={tableId} uid={account.uid} wallet={wallet} onExit={() => go(null)} onWallet={setWallet} />;
-  return <Lobby wallet={wallet} rank={rank} myNick={profile.nick} onEnter={go} onWallet={setWallet} />;
+/** 타이틀 줄에서 캐릭터별 높이 보정 (전신 그림마다 서 있는 높이가 달라서, %) */
+const LIFT: Partial<Record<CharId, number>> = { jinwoo: -16, yeonseo: -13, amy: -12, taeyang: 4, jeongmin: 4 };
+
+/** 타이틀 테이블 위 소품: x,y = 가로 화면 %, vx,vy = 세로 화면 % (card: null = 뒷면) */
+const TABLE_PROPS: { x: number; y: number; vx: number; vy: number; r: number; card?: number | null; chip?: "red" | "gold" | "blue" | "black" | "green" }[] = [
+  { x: 14, y: 80, vx: 10, vy: 76, r: -24, card: 48 },
+  { x: 19, y: 86, vx: 18, vy: 82, r: -6, card: 47 },
+  { x: 26, y: 78, vx: 8, vy: 90, r: 14, card: null },
+  { x: 9, y: 92, vx: 26, vy: 92, r: 0, chip: "red" },
+  { x: 31, y: 90, vx: 30, vy: 74, r: 0, chip: "gold" },
+  { x: 74, y: 79, vx: 90, vy: 76, r: 18, card: 45 },
+  { x: 81, y: 86, vx: 82, vy: 83, r: 32, card: null },
+  { x: 87, y: 78, vx: 92, vy: 90, r: -12, card: 44 },
+  { x: 70, y: 91, vx: 72, vy: 92, r: 0, chip: "blue" },
+  { x: 92, y: 92, vx: 70, vy: 75, r: 0, chip: "black" },
+];
+
+/** 로그인 전 · 별명 전: 타이틀 화면 — 테이블 뒤에 5명이 둘러앉은 장면, 위 로고, 테이블 위 시작 칸 */
+function Intro({ o, account, loginError, onLogin }: { o: Orient; account: boolean; loginError: string; onLogin: () => void }) {
+  const h = o === "h";
+  // 가운데 진우, 바로 옆 여캐 둘, 바깥쪽 남캐 둘
+  const order: CharId[] = ["taeyang", "yeonseo", "jinwoo", "amy", "jeongmin"];
+  // 떠다니는 카드 · 칩 (위치 %, 크기, 지연)
+  // 떠다니는 카드 · 칩 (card: 카드 번호, null = 뒷면 / chip: 칩 색)
+  const floats: { x: number; y: number; s: number; d: number; r: number; card?: number | null; chip?: "red" | "gold" | "blue" }[] = [
+    { x: 6, y: 8, s: 1, d: 0, r: -18, card: 50 }, // A♦
+    { x: 22, y: 20, s: 0.7, d: 2.1, r: 0, chip: "red" },
+    { x: 3, y: 30, s: 0.75, d: 2.6, r: 22, card: null },
+    { x: 86, y: 20, s: 0.95, d: 1.2, r: 16, card: 44 }, // K♠
+    { x: 74, y: 30, s: 0.75, d: 0.6, r: 0, chip: "gold" },
+    { x: 93, y: 38, s: 0.6, d: 1.7, r: 0, chip: "blue" },
+  ];
+
+
+  return (
+    <div className="pk-intro absolute inset-0 overflow-hidden">
+      <div className="pk-bg" style={{ backgroundImage: `url(${asset.room(3, o)})`, filter: "brightness(0.55) saturate(1.1)" }} />
+      {/* 무대 조명 */}
+      <div className="pk-intro-spot absolute inset-0" />
+      {/* 떠다니는 카드 · 칩 */}
+      {floats.map((f, i) => (
+        <span key={i} className="pk-float pointer-events-none absolute z-[6]" style={{ left: `${f.x}%`, top: `${f.y}%`, animationDelay: `${f.d}s`, "--r": `${f.r}deg` } as CSSProperties}>
+          {f.chip ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={asset.chip(f.chip, "top")} alt="" draggable={false} style={{ width: (h ? 64 : 42) * f.s, height: (h ? 64 : 42) * f.s }} />
+          ) : (
+            <PlayingCard card={f.card ?? null} w={Math.round((h ? 62 : 40) * f.s)} tier={3} />
+          )}
+        </span>
+      ))}
+      {/* 캐릭터 줄 (가운데가 앞) — 아래는 테이블에 가려짐 */}
+      <div className="pointer-events-none absolute inset-x-0 flex items-end justify-center" style={{ bottom: h ? "-41%" : "8%" }}>
+        {order.map((c, i) => (
+           
+          <img
+            key={c}
+            src={asset.full(c)}
+            alt=""
+            draggable={false}
+            className="pk-intro-char h-auto"
+            style={{ width: h ? "23%" : "40%", marginLeft: i ? (h ? "-3%" : "-20%") : 0, zIndex: 5 - Math.abs(i - 2), transform: `translateY(${(LIFT[c] ?? 0) * (h ? 1 : 0.6) - Math.abs(i - 2) * (h ? 3 : 2)}%) scale(${(c === "jinwoo" ? 1.08 : 1) - Math.abs(i - 2) * 0.07})`, transformOrigin: "bottom", filter: `drop-shadow(0 0 14px rgba(0,0,0,0.8)) brightness(${1 - Math.abs(i - 2) * 0.1})`, animationDelay: `${0.1 + Math.abs(i - 2) * 0.12}s` }}
+          />
+        ))}
+      </div>
+      {/* 앞쪽 테이블 (캐릭터가 테이블 뒤에 둘러선 느낌) */}
+      { }
+      <img src={asset.table(1, "h")} alt="" draggable={false} className="pointer-events-none absolute left-1/2 z-10 max-w-none -translate-x-1/2" style={{ width: h ? "118%" : "230%", bottom: h ? "-44%" : "-12%" }} />
+      <div className="absolute inset-0 z-10" style={{ background: "linear-gradient(180deg, rgba(0,0,0,0.65), rgba(0,0,0,0) 30%, rgba(0,0,0,0) 70%, rgba(0,0,0,0.6))" }} />
+      {/* 테이블 위에 흩어진 카드 · 칩 */}
+      <div className="pointer-events-none absolute inset-0 z-[11]">
+        {TABLE_PROPS.map((p, i) => (
+          <span key={i} className="absolute" style={{ left: `${h ? p.x : p.vx}%`, top: `${h ? p.y : p.vy}%`, transform: `translate(-50%, -50%) rotate(${p.r}deg)`, filter: "drop-shadow(0 4px 6px rgba(0,0,0,0.55))" }}>
+            {p.card !== undefined ? (
+              <PlayingCard card={p.card} w={h ? 56 : 40} tier={3} />
+            ) : (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={asset.chip(p.chip!, "stack")} alt="" draggable={false} style={{ width: h ? 64 : 44, height: h ? 64 : 44 }} />
+            )}
+          </span>
+        ))}
+      </div>
+      {/* 로고 + 한 줄 소개 */}
+      <div className="absolute left-1/2 z-20 flex -translate-x-1/2 flex-col items-center" style={{ top: h ? "3%" : "5%", width: h ? "30%" : "84%" }}>
+        { }
+        <img src={asset.logo} alt="ANIME POKER" draggable={false} className="pk-intro-logo w-full drop-shadow-[0_8px_18px_rgba(0,0,0,0.85)]" />
+      </div>
+      {/* 게임 종류 (오른쪽 위) */}
+      <div className={`absolute z-20 flex gap-[0.4em] ${h ? "top-[3%] right-[2.5%] flex-col items-end" : "top-[27%] left-1/2 -translate-x-1/2 items-center"}`} style={{ fontSize: h ? "1.25em" : "0.95em" }}>
+        <span className="pk-intro-tag whitespace-nowrap">TEXAS HOLD&apos;EM</span>
+        <span className="pk-intro-tag whitespace-nowrap">SEVEN POKER</span>
+        <span className="rounded-[4px] bg-[var(--pk-danger)] px-[0.5em] text-[0.7em] leading-[1.7em] font-extrabold tracking-wider">BETA</span>
+      </div>
+      {/* 시작 칸 (테이블 위) */}
+      <div className="absolute left-1/2 z-20 w-[min(23em,88%)] -translate-x-1/2" style={{ bottom: h ? "7%" : "6%" }}>
+        <div className="pk-intro-panel text-center">
+          {!account ? (
+            <>
+              <p className="pk-title mb-[0.5em] text-[1.4em] text-white">오늘 테이블의 주인공은 너야</p>
+              <button type="button" onClick={onLogin} className="pk-btn pk-btn-gold pk-shine flex w-full items-center justify-center gap-[0.5em] py-[0.75em] text-[1em]">
+                <svg viewBox="0 0 24 24" className="h-[1.1em] w-[1.1em]" aria-hidden>
+                  <path fill="#4285F4" d="M23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.5h6.5a5.6 5.6 0 0 1-2.4 3.6v3h3.9c2.2-2.1 3.5-5.1 3.5-8.8z" />
+                  <path fill="#34A853" d="M12 24c3.2 0 6-1.1 8-2.9l-3.9-3c-1.1.7-2.5 1.2-4.1 1.2-3.1 0-5.8-2.1-6.7-5H1.3v3.1A12 12 0 0 0 12 24z" />
+                  <path fill="#FBBC05" d="M5.3 14.3a7.2 7.2 0 0 1 0-4.6V6.6h-4a12 12 0 0 0 0 10.8l4-3.1z" />
+                  <path fill="#EA4335" d="M12 4.8c1.8 0 3.3.6 4.6 1.8l3.4-3.4A12 12 0 0 0 1.3 6.6l4 3.1c.9-2.9 3.6-4.9 6.7-4.9z" />
+                </svg>
+                Google로 시작하기
+              </button>
+              <p className="mt-[0.5em] text-[0.68em] leading-relaxed text-white/50">실제 돈이 오가지 않는 게임이에요.</p>
+              {loginError && <p className="mt-[0.3em] text-[0.72em] text-[#ffb3b5]">{loginError}</p>}
+            </>
+          ) : (
+            <>
+              <p className="mb-[0.5em] text-[0.82em] text-white/85">별명을 정하면 시작할 수 있어요.</p>
+              <NickForm submitLabel="시작하기" />
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
 }

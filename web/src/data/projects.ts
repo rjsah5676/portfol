@@ -9,6 +9,7 @@ import bojImg from "@/img/Page/info/boj/categories.webp";
 import beatdashImg from "@/img/Page/info/beatdash/title.webp";
 import pixelfightImg from "@/img/Page/info/pixelfight/title.webp";
 import yoriJoriImg from "@/img/Page/info/YoriJori.png";
+import pokerImg from "@/img/Page/info/poker/title.webp";
 
 export interface Project {
   /** 상세 페이지 주소: /infoPage/<idx> */
@@ -115,7 +116,7 @@ export const personalProjects: Project[] = [
     desc: "알고리즘을 배우기 위해 문제를 푼 사이트 입니다.",
     tech: ["C++", "Java", "Python"],
     period: "2016.06 –",
-    secondLink: "https://solved.ac/rjsah5676",
+    secondLink: "https://solved.ac/profile/rjsah5676",
     secondLabel: "solved.ac",
   },
 ];
@@ -141,6 +142,16 @@ export const gameProjects: Project[] = [
     tech: ["TypeScript", "Canvas", "WebRTC", "socket.io"],
     period: "2026.10 –",
     playLink: "/games/fight/",
+  },
+  {
+    idx: 14,
+    name: "ANIME POKER",
+    imgLink: pokerImg,
+    title: "홀덤 · 7포커 [ANIME POKER]",
+    desc: "애니풍 캐릭터 5명과 치는 홀덤·7포커. 유저봇이 들락날락하는 실시간 테이블, 자금 순위",
+    tech: ["TypeScript", "socket.io", "React", "MongoDB"],
+    period: "2026.10 –",
+    playLink: "/games/poker/",
   },
 ];
 

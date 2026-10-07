@@ -30,11 +30,11 @@ export interface Tier {
   /** 홀덤 블라인드 */
   sb: number;
   bb: number;
-  /** 7포커 기본 판돈(앤티) = 삥 한 번 */
+  /** 기본 판돈(앤티): 판을 시작할 때 전원이 냄. 7포커에서는 삥 한 번의 크기이기도 함 */
   ante: number;
   /** 입장컷: 보유금액이 이만큼은 있어야 앉을 수 있음. 판이 끝났을 때 이 밑이면 자리에서 내려옴 */
   min: number;
-  /** 봇이 들고 앉는 돈 */
+  /** 봇이 들고 앉는 돈의 기준 (실제로는 이 근처에서 제각각) */
   botMoney: number;
 }
 
@@ -45,27 +45,39 @@ export const TIERS: Tier[] = [
 ];
 export const tierOf = (id: number): Tier => TIERS.find((t) => t.id === id) ?? TIERS[0];
 
-/** 테이블에 같이 앉는 봇 수의 기본값 (사람이 늘면 자리를 비켜 줌) */
-export const DEFAULT_BOTS = 3;
 /** 한 번 행동하는 데 주는 시간 */
-export const ACT_MS = 20_000;
+export const ACT_MS = 12_000;
 /** 접속이 끊긴 사람에게 주는 시간 */
-export const ACT_AWAY_MS = 6_000;
+export const ACT_AWAY_MS = 3_000;
 /** 7포커에서 버릴 카드·보여 줄 카드를 고르는 시간 */
-export const CHOICE_MS = 15_000;
+export const CHOICE_MS = 6_000;
 /** 시간 초과가 이만큼 이어지면 자리 비움으로 바뀜 */
 export const TIMEOUTS_TO_SITOUT = 2;
 /** 자리 비움이 이만큼 이어지면 자리에서 내려옴 */
 export const SITOUT_KICK_MS = 3 * 60_000;
 
-export type BotId = "gunmo" | "chunhee" | "deokpal" | "yeonseo";
-export const BOT_IDS: BotId[] = ["gunmo", "chunhee", "deokpal", "yeonseo"];
-export const BOT_INFO: Record<BotId, { name: string; age: number; style: string; line: string }> = {
-  gunmo: { name: "건모", age: 30, style: "계산형", line: "확률대로 치는 정석파. 근거 없는 콜은 안 한다." },
-  chunhee: { name: "춘희", age: 55, style: "끈질긴 콜러", line: "웬만해선 안 죽는다. 블러프는 여기서 잘 안 통한다." },
-  deokpal: { name: "덕팔", age: 69, style: "노련한 타이트", line: "잘 안 들어오지만, 들어오면 진짜다. 가끔 덫을 놓는다." },
-  yeonseo: { name: "연서", age: 26, style: "공격형", line: "레이즈가 기본. 압박으로 팟을 가져간다." },
+/*
+ * 캐릭터 5명. 회원은 하나를 골라 쓰고(겹쳐도 됨), 봇도 같은 캐릭터 중 하나로 앉음.
+ * 그림은 web/public/poker/char/{id}/ 에 (동작 8 · 표정 8 · 이모티콘 8 · 프로필 · 전신 · 컷인).
+ */
+export type CharId = "jinwoo" | "yeonseo" | "taeyang" | "jeongmin" | "amy";
+export const CHAR_IDS: CharId[] = ["jinwoo", "yeonseo", "taeyang", "jeongmin", "amy"];
+export const CHARS: Record<CharId, { name: string; color: string; blurb: string }> = {
+  jinwoo: { name: "진우", color: "#e5322d", blurb: "직진. 큰 베팅을 좋아하는 승부사" },
+  yeonseo: { name: "연서", color: "#4a6fd6", blurb: "표정이 없다. 침착하게 한 방을 노림" },
+  taeyang: { name: "태양", color: "#f28c28", blurb: "껄렁한 뻥카의 달인. 믿으면 안 됨" },
+  jeongmin: { name: "정민", color: "#8b5cf6", blurb: "확률대로 친다. 근거 없는 콜은 안 함" },
+  amy: { name: "에이미", color: "#38bdf8", blurb: "딱히 이기고 싶은 건 아니거든. 딱봐도 츤데레" },
 };
+export const charOf = (id: unknown): CharId => (CHAR_IDS.includes(id as CharId) ? (id as CharId) : "jinwoo");
+
+/** 동작(2.5D 포즈) · 표정 · 이모티콘 이름 — 파일 이름과 같음 */
+export const POSES = ["idle", "think", "check", "bet", "allin", "die", "win", "lose"] as const;
+export const FACES = ["idle", "smile", "think", "shock", "sad", "taunt", "angry", "joy"] as const;
+export const EMOTES = ["hi", "good", "lol", "cry", "angry", "huh", "tease", "wow"] as const;
+export type Pose = (typeof POSES)[number];
+export type Face = (typeof FACES)[number];
+export type Emote = (typeof EMOTES)[number];
 
 // ───────────── 금액 표기 ─────────────
 

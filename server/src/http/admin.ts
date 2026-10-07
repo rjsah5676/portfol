@@ -16,7 +16,7 @@ import { h, ms, requireAdmin } from "./util";
  *                                         &human=1 이면 클라우드(AWS·GCP 등) IP 유입을 뺌
  * 회원
  *   GET    /api/admin/users?q=&limit=&skip=         목록 (별명·이메일로 찾기)
- *   PATCH  /api/admin/users/:uid   { nick?, badge? } 별명 · 꾸밈(이모지 등) 바꾸기
+ *   PATCH  /api/admin/users/:uid   { nick?, badge?, money? } 별명 · 꾸밈 · 포커 칩 바꾸기 (칩은 테이블 밖일 때 바로, 앉아 있으면 다음 판부터)
  *   DELETE /api/admin/users/:uid/avatar             올린 프로필 사진 지우기
  *   DELETE /api/admin/users/:uid?records=1          회원 지우기 (records=1 이면 랭킹·방명록도)
  * 열려 있는 방 (서버 메모리: 스케치 퀴즈 · 격투)
@@ -230,7 +230,7 @@ export function adminRouter({ db, auth, web, users, gateway, cfg, traffic }: Dep
   r.patch(
     "/users/:uid",
     h(async (req) => {
-      const patch = z.strictObject({ nick: z.string().max(40).optional(), badge: z.string().max(40).nullable().optional() }).parse(req.body);
+      const patch = z.strictObject({ nick: z.string().max(40).optional(), badge: z.string().max(40).nullable().optional(), money: z.number().int().min(0).max(1e15).optional() }).parse(req.body);
       const user = await users.adminUpdate(String(req.params.uid), patch);
       // 별명이 바뀌면 방명록의 이름도 같이 바뀜
       if (patch.nick !== undefined) hooks.guestChanged();

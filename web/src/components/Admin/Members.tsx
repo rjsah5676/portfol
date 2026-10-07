@@ -57,18 +57,20 @@ function Detail({
   const modal = useModal();
   const [nick, setNick] = useState(user.nick);
   const [badge, setBadge] = useState(user.badge ?? "");
+  const [money, setMoney] = useState(String(user.money ?? 0));
   const [records, setRecords] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
-  const dirty = nick.trim() !== user.nick || badge.trim() !== (user.badge ?? "");
+  const moneyNum = Math.max(0, Math.floor(Number(money.replaceAll(",", "")) || 0));
+  const dirty = nick.trim() !== user.nick || badge.trim() !== (user.badge ?? "") || moneyNum !== (user.money ?? 0);
 
   const save = async () => {
     if (busy || !dirty) return;
     setBusy(true);
     setError("");
     try {
-      onSaved(await updateUser(user.uid, { nick: nick.trim(), badge: badge.trim() || null }));
+      onSaved(await updateUser(user.uid, { nick: nick.trim(), badge: badge.trim() || null, money: moneyNum }));
       refreshBadges(true); // 랭킹·방명록의 이름 옆 꾸밈도 바로 바뀌게
     } catch (e) {
       setError(e instanceof Error ? e.message : "저장하지 못했어요.");
@@ -176,9 +178,25 @@ function Detail({
               </div>
             </div>
           </div>
+          <label className="flex items-center gap-3">
+            <span className={`w-10 shrink-0 text-xs text-white/45 ${KR}`}>칩</span>
+            <input
+              value={money}
+              inputMode="numeric"
+              autoComplete="off"
+              spellCheck={false}
+              aria-label="포커 칩"
+              onChange={(e) => {
+                setMoney(e.target.value.replace(/[^\d,]/g, ""));
+                setError("");
+              }}
+              className={`${input} flex-1 font-mono`}
+            />
+            <span className={`shrink-0 text-xs text-white/40 ${KR}`}>{moneyNum.toLocaleString()}칩</span>
+          </label>
           <p className={`text-xs ${error ? "text-red-400" : "text-white/35"} ${KR}`}>
             {error ||
-              "별명을 바꾸면 이 사람의 랭킹·방명록 이름도 같이 바뀌어요. 꾸밈은 별명 앞에 붙어요 (8자까지)."}
+              "별명을 바꾸면 랭킹·방명록 이름도 같이 바뀌어요. 꾸밈은 별명 앞에 붙어요(8자까지). 칩은 테이블 밖일 때 바로, 앉아 있으면 다음 판부터 반영돼요."}
           </p>
           <div className="flex flex-wrap items-center gap-2">
             <button
