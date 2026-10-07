@@ -392,7 +392,7 @@ export function rankingsRouter({ db, auth, users }: Deps): Router {
       if (!bpCache || Date.now() - bpCache.at > 30_000) {
         const docs = await db
           .col("rhythm_rankings")
-          .find({})
+          .find({ member: true }) // BP는 회원만 (곡별 랭킹은 비회원도 그대로)
           .project({
             uid: 1,
             chart: 1,

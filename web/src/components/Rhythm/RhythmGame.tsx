@@ -594,7 +594,7 @@ export default function RhythmGame() {
             value: `${r.bp.toLocaleString("en-US")} BP`,
             sub: `${r.songs}곡`,
           })),
-          sub: "BP — 곡마다 가장 좋은 판 하나, 상위 20곡 합",
+          sub: "BP — 회원 랭킹 · 곡마다 가장 좋은 판 하나, 상위 20곡 합",
           open: rankOpen,
           onOpenChange: setRankOpen,
           render: () =>
@@ -610,7 +610,7 @@ export default function RhythmGame() {
                   sub: `${r.songs}곡${r.best ? ` · 최고 ${bpChartLabel(r.best.chart)} ${r.best.bp}` : ""}`,
                 }))}
                 skip={3}
-                empty="아직 BP 기록이 없어요. 곡을 끝까지 치면 쌓여요."
+                empty="아직 BP 기록이 없어요. 회원으로 곡을 끝까지 치면 쌓여요."
               />
             ),
         }}

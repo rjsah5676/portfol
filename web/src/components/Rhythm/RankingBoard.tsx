@@ -245,7 +245,7 @@ export function BpBoard({ refresh = 0 }: { refresh?: number }) {
   if (!top.list.length)
     return (
       <p className="py-[2cqw] text-center font-mono text-[1.1cqw] text-white/30">
-        아직 BP 기록이 없어요. 곡을 끝까지 치면 쌓여요.
+        아직 BP 기록이 없어요. 회원으로 곡을 끝까지 치면 쌓여요.
       </p>
     );
   return (
