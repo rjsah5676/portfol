@@ -402,9 +402,10 @@ export default function Stage({
         b.fillRect(0, 0, CW, CH);
       } else if (bg === "cover" && ready(coverImg)) {
         // 재킷을 크게 흐려서 (작게 줄였다 키우면 블러 — canvas filter는 사파리가 안 됨)
+        // 160px 폭으로 줄였다 키우면 살짝만 흐려져 그림이 보임 (너무 흐리면 뭔지 안 보여서)
         const tiny = document.createElement("canvas");
-        tiny.width = 24;
-        tiny.height = Math.max(1, Math.round((24 * CH) / CW));
+        tiny.width = 160;
+        tiny.height = Math.max(1, Math.round((160 * CH) / CW));
         const tb = tiny.getContext("2d")!;
         const sc = Math.max(
           tiny.width / coverImg.naturalWidth,
@@ -419,8 +420,8 @@ export default function Stage({
         );
         b.imageSmoothingEnabled = true;
         b.imageSmoothingQuality = "high";
-        b.drawImage(tiny, -CW * 0.08, -CH * 0.08, CW * 1.16, CH * 1.16);
-        b.fillStyle = "rgba(4,5,14,0.55)";
+        b.drawImage(tiny, -CW * 0.03, -CH * 0.03, CW * 1.06, CH * 1.06);
+        b.fillStyle = "rgba(4,5,14,0.38)";
         b.fillRect(0, 0, CW, CH);
       } else {
         if (ready(bgImg)) {
