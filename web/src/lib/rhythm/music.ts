@@ -407,14 +407,14 @@ const FREEDOMDIVE = audioSong(
 /*
  * 채보 다시 뽑기 (npm run rhythm-chart -- <id> ...) — --levels는 직접 쳐 보고 정한 레벨 (쉬움부터)
  *   fullcombo   --bpm-label 180 --boss '{"loud":0.5,"full":0.8,"burstEvery":8}' --levels 3,6,9,13,16
- *   jilju       --boss '{}' --tweak '{"hard":{"fill":0.3},"expert":{"fill":0.15}}' --levels 3,5,8,12   (나이트메어 자동 16)
+ *   jilju       --boss '{}' --tweak '{"hard":{"fill":0.3},"expert":{"fill":0.15}}' --levels 3,5,8,12,16   (나이트메어 자동 16)
  *   natsukasumi --boss '{}' --tweak '{"hard":{"fill":0.9},"expert":{"fill":1.3}}' --levels 2,4,7,12   (나이트메어 자동 17)
  *   rinkaku     --boss '{}' --tweak '{"expert":{"fill":0.4}}' --levels 2,4,8,12   (나이트메어 자동 15)
  *   newdim      --boss '{"loud":0.55,"full":0.85,"burstEvery":8}' --tweak '{"expert":{"fill":0.4}}' --levels 3,6,10,13,15
  *   monarch     --bpm-label 150 --boss '{"burstEvery":2}' --tweak '{"hard":{"fill":0.35},"expert":{"fill":0.3},"nightmare":{"fill":0.4}}' --levels 3,6,11,13,16
  *   velocity    --bpm-label 180 --boss '{"loud":0.45,"full":0.72,"burstEvery":4,"burstSub":6}' --explus '{}' --levels 3,6,11,14,17,20   (ULTIMA는 19)
  *   anima       --boss '{}' --explus '{}' --levels 3,6,9,13,17,20   (ULTIMA는 18)
- *   aragami     --boss '{}' --explus '{}' --levels 3,6,9,13,17,21   (ULTIMA는 18)
+ *   aragami     --boss '{}' --explus '{}' --levels 3,6,9,13,17,21   (ULTIMA는 19)
  *   freedomdive --boss '{}' --explus '{}' --levels 3,5,9,12,15,20   (ULTIMA는 17 — 222 BPM이라 16분 스트림이 한계)   (222 BPM 8분·16분이 꽉 차도 별점 12·15 — 그 위는 24분·잭이 필요)
  */
 // ───────────────────────── 연습곡 ─────────────────────────

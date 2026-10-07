@@ -61,6 +61,41 @@ interface AutoRule {
 //   (롱노트는 어려움부터 osu의 절반쯤으로 — 실제로 쳐보니 그대로는 많게 느껴짐. 짧은 롱노트는 빼고 최소 0.33초·거의 한 박부터)
 //   같은 별점이면 osu가 우리보다 노트가 많음 — 동시치기·잭·연타처럼 별점을 튀게 하는 자리가 적어서.
 //   그래서 레벨이 맞은 뒤에도 밀도를 올려 보며 같은 레벨에서 가장 빽빽한 채보를 고름(makeAutoCharts)
+/** 3.7) 잭 걷어내기 — 줄 단위로 훑으며 앞 줄과 겹치는 레인을 확률 문으로 거름 (notes는 시각순이어야 함) */
+function dejack(notes: Note[], beatSec: number, R: AutoRule, rnd: () => number) {
+  const fast = beatSec * 0.5 * 1.05; // 8분 이하 간격만 잭으로 침 (측정과 같은 기준)
+  // 줄(같은 시각 묶음)로 나눔
+  const rows: Note[][] = [];
+  for (const n of notes) {
+    const last = rows[rows.length - 1];
+    if (last && Math.abs(last[0].t - n.t) < 1e-6) last.push(n);
+    else rows.push([n]);
+  }
+  for (let i = 1; i < rows.length; i++) {
+    const prev = rows[i - 1];
+    const dt = rows[i][0].t - prev[0].t;
+    if (dt <= 0 || dt > fast) continue;
+    const prevLanes = new Set(prev.map((n) => n.lane));
+    for (const n of rows[i]) {
+      if (!prevLanes.has(n.lane) || rnd() < R.jackAllow) continue;
+      // 옆 레인 중: 이 줄에 없고, 앞 줄과도 안 겹치고, 그 레인의 직전 노트와 jackGap 이상 떨어진 곳
+      const mine = new Set(rows[i].map((m) => m.lane));
+      const lastAt = (l: number) => {
+        for (let k = i - 1; k >= 0 && rows[k][0].t > n.t - R.jackGap - 1e-6; k--)
+          if (rows[k].some((m) => m.lane === l)) return rows[k][0].t;
+        return -Infinity;
+      };
+      const cand = [1, -1, 2, -2, 3, -3]
+        .map((d) => n.lane + d)
+        .filter(
+          (l) =>
+            l >= 0 && l <= 3 && !mine.has(l) && !prevLanes.has(l) && n.t - lastAt(l) >= R.jackGap
+        );
+      if (cand.length) n.lane = cand[0];
+    }
+  }
+}
+
 const AUTO_RULES: Record<Difficulty, AutoRule> = {
   easy: {
     nps: 3,
@@ -72,7 +107,7 @@ const AUTO_RULES: Record<Difficulty, AutoRule> = {
     holdBeats: 2,
     thick: [1.02, 1, 1],
     tri: 0,
-    jackAllow: 0.04,
+    jackAllow: 0.01,
     jackRun: 2,
     ln: { ratio: 0.12, lens: [1, 1, 2, 2, 3], maxSec: 1, onBeat: 0.95 },
   },
@@ -86,7 +121,7 @@ const AUTO_RULES: Record<Difficulty, AutoRule> = {
     holdBeats: 1.5,
     thick: [1.05, 1.02, 1],
     tri: 0,
-    jackAllow: 0.08,
+    jackAllow: 0.02,
     jackRun: 2,
     ln: { ratio: 0.09, lens: [1, 1, 1, 2, 2], maxSec: 0.8, onBeat: 0.94 },
   },
@@ -101,7 +136,7 @@ const AUTO_RULES: Record<Difficulty, AutoRule> = {
     holdBeats: 1.5,
     thick: [1.37, 1.1, 1.05],
     tri: 0.04,
-    jackAllow: 0.2,
+    jackAllow: 0.1,
     jackRun: 3,
     ln: { ratio: 0.04, lens: [1, 1, 1.5, 2], maxSec: 0.9, onBeat: 0.81 },
   },
@@ -115,7 +150,7 @@ const AUTO_RULES: Record<Difficulty, AutoRule> = {
     holdBeats: 1.25,
     thick: [1.69, 1.2, 1.06],
     tri: 0.06,
-    jackAllow: 0.25,
+    jackAllow: 0.3,
     jackRun: 3,
     ln: { ratio: 0.04, lens: [1, 1, 1, 1.5, 2], maxSec: 0.8, onBeat: 0.69 },
   },
@@ -781,7 +816,7 @@ export function makeAutoChart(
     let paired = 0;
     if (patLanes && patLanes.length === 2) {
       const l2 = patLanes[1] === want ? patLanes[0] : patLanes[1];
-      if (l2 !== want && o.t - laneLast[l2] >= R.jackGap) {
+      if (l2 !== want && o.t - laneLast[l2] >= R.jackGap && (jackOk || !prevRow.has(l2))) {
         notes.push({ t: o.t, lane: l2 });
         laneLast[l2] = o.t;
         // 3개 동시치기 자리가 아니면 패턴 짝으로 끝
@@ -812,7 +847,9 @@ export function makeAutoChart(
       const ls = chordPartners(want, more, {
         avoid: prevRow,
         ok: (l) =>
-          o.t - laneLast[l] >= R.jackGap && !notes.some((m) => m.t === o.t && m.lane === l),
+          o.t - laneLast[l] >= R.jackGap &&
+          (jackOk || !prevRow.has(l)) &&
+          !notes.some((m) => m.t === o.t && m.lane === l),
         recent: chordHist,
         rnd,
       });
@@ -947,6 +984,12 @@ export function makeAutoChart(
     notes.push(...kept, ...copyAdded);
     notes.sort((x, y) => x.t - y.t || x.lane - y.lane);
   }
+
+  // 3.7) 잭 걷어내기: 어느 경로(레인 배정·패턴·동시치기 짝·마디 복사)로 생겼든, 완성된 줄에서
+  //      바로 앞 줄(8분 이하 간격)과 같은 레인인 노트는 난이도별 허용 확률(jackAllow)만큼만 남기고 옆 레인으로.
+  //      osu 랭크 측정: 빠른 연속 중 같은 레인이 보통 0% · 어려움 1.5% · 매우 어려움 5.8% — 우리는 13% 안팎이었음
+  //      (나이트메어·ULTIMA는 위의 전용 경로에서 패턴으로만 레인을 깔고, 비율도 osu와 비슷해 손대지 않음)
+  dejack(notes, beatSec, R, rnd);
 
   // 4) 롱노트: osu 랭크 채보처럼 노트의 일정 비율을 짧은 롱노트로 (정박·소리가 남는 자리부터)
   {
