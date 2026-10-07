@@ -22,7 +22,7 @@ import {
 } from "@/lib/rhythm/fx";
 import { audio, sfx } from "@/lib/rhythm/sfx";
 import HoldButton from "./HoldButton";
-import { COVERS_OPT, FIELD_POS, type Cover, type FieldPos } from "./Stage";
+import { BG_MODES, COVERS_OPT, FIELD_POS, type BgMode, type Cover, type FieldPos } from "./Stage";
 
 export type LaneMod = "none" | "mirror" | "random";
 export const LANE_MODS: { key: LaneMod; label: string; desc: string }[] = [
@@ -54,6 +54,8 @@ export interface Settings {
   cover: Cover;
   /** 레인 위치: 화면 왼쪽·가운데·오른쪽 */
   field: FieldPos;
+  /** 플레이 배경: 커버·뮤비 / 무대 */
+  bg: BgMode;
 }
 
 const signed = (n: number) => `${n > 0 ? "+" : ""}${n}`;
@@ -314,6 +316,23 @@ export default function SettingsModal({
                       type="button"
                       onClick={() => set({ cover: m.key })}
                       className={chip(settings.cover === m.key)}
+                    >
+                      {m.label}
+                    </button>
+                  ))}
+                </div>
+              </Row>
+              <Row
+                label="배경"
+                hint={BG_MODES.find((m) => m.key === settings.bg)!.desc || undefined}
+              >
+                <div className="flex flex-wrap gap-[0.6cqw]">
+                  {BG_MODES.map((m) => (
+                    <button
+                      key={m.key}
+                      type="button"
+                      onClick={() => set({ bg: m.key })}
+                      className={chip(settings.bg === m.key)}
                     >
                       {m.label}
                     </button>

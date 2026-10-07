@@ -11,6 +11,59 @@ export interface CustomTrack {
   analysis: Analysis;
   /** 파일에 들어 있던 앨범 사진 (object URL) */
   cover?: string;
+  /** 영상 파일을 넣었으면 그 영상 (object URL) — 플레이 배경에 뮤직비디오로 */
+  video?: string;
+}
+
+/** 영상 파일의 한 장면(20% 지점)을 재킷으로 — 못 뽑으면 null (4초 안에 안 되면 포기) */
+function frameCover(url: string): Promise<Blob | null> {
+  return new Promise((resolve) => {
+    const v = document.createElement("video");
+    v.muted = true;
+    v.playsInline = true;
+    v.preload = "auto";
+    v.src = url;
+    let done = false;
+    const finish = (b: Blob | null) => {
+      if (done) return;
+      done = true;
+      v.removeAttribute("src");
+      v.load();
+      resolve(b);
+    };
+    const timer = setTimeout(() => finish(null), 4000);
+    v.addEventListener("error", () => finish(null));
+    v.addEventListener("loadedmetadata", () => {
+      v.currentTime = Math.min(v.duration * 0.2, 60);
+    });
+    v.addEventListener("seeked", () => {
+      try {
+        const c = document.createElement("canvas");
+        const s = 800;
+        c.width = s;
+        c.height = s;
+        const g = c.getContext("2d")!;
+        const sc = Math.max(s / v.videoWidth, s / v.videoHeight);
+        g.drawImage(
+          v,
+          (s - v.videoWidth * sc) / 2,
+          (s - v.videoHeight * sc) / 2,
+          v.videoWidth * sc,
+          v.videoHeight * sc
+        );
+        c.toBlob(
+          (b) => {
+            clearTimeout(timer);
+            finish(b);
+          },
+          "image/jpeg",
+          0.85
+        );
+      } catch {
+        finish(null);
+      }
+    });
+  });
 }
 
 /** mp3(ID3v2 APIC/PIC)에 든 앨범 사진 꺼내기 — 없거나 못 읽으면 null */
@@ -67,6 +120,8 @@ function findCover(ab: ArrayBuffer): Blob | null {
 }
 
 const MAX_BYTES = 40 * 1024 * 1024;
+/** 영상(뮤직비디오) 파일은 더 크게 — 소리만 디코딩하고 영상은 그대로 재생 */
+const MAX_VIDEO_BYTES = 300 * 1024 * 1024;
 const MAX_SEC = 12 * 60;
 
 const fmt = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
@@ -104,12 +159,19 @@ export default function CustomMusic({
 
   const load = async (file: File) => {
     setErr("");
-    if (file.size > MAX_BYTES) return setErr("파일이 너무 커요 (40MB까지).");
+    const isVideo = file.type.startsWith("video/") || /\.(mp4|webm|mov|m4v)$/i.test(file.name);
+    if (file.size > (isVideo ? MAX_VIDEO_BYTES : MAX_BYTES))
+      return setErr(
+        isVideo ? "영상 파일이 너무 커요 (300MB까지)." : "파일이 너무 커요 (40MB까지)."
+      );
     setBusy({ ratio: 0, label: "파일 읽는 중" });
+    let videoUrl: string | undefined;
     try {
       const ctx = await getCtx();
       const raw = await file.arrayBuffer();
-      const pic = findCover(raw); // 디코딩하면 버퍼가 비워져서 먼저
+      const pic = isVideo ? null : findCover(raw); // 디코딩하면 버퍼가 비워져서 먼저
+      // 영상이면 소리 트랙만 디코딩해 분석하고, 영상은 그대로 플레이 배경에 (뮤직비디오)
+      if (isVideo) videoUrl = URL.createObjectURL(file);
       const buffer = await ctx.decodeAudioData(raw);
       if (buffer.duration > MAX_SEC) throw new Error("12분이 넘는 곡은 분석할 수 없어요.");
       if (buffer.duration < 15) throw new Error("15초보다 짧은 파일은 분석할 수 없어요.");
@@ -117,20 +179,24 @@ export default function CustomMusic({
       if (analysis.onsets.length < 20)
         throw new Error("박자를 찾지 못했어요. 다른 곡으로 해보세요.");
       const key = hashOf(`${file.name}:${file.size}:${buffer.duration.toFixed(2)}`);
+      const frame = videoUrl ? await frameCover(videoUrl) : null;
       if (track?.cover) URL.revokeObjectURL(track.cover);
+      if (track?.video) URL.revokeObjectURL(track.video);
       onTrack({
         key,
         name: file.name.replace(/\.[^.]+$/, ""),
         buffer,
         analysis,
-        cover: pic ? URL.createObjectURL(pic) : undefined,
+        cover: pic ? URL.createObjectURL(pic) : frame ? URL.createObjectURL(frame) : undefined,
+        video: videoUrl,
       });
     } catch (e) {
       console.error(e);
+      if (videoUrl) URL.revokeObjectURL(videoUrl);
       setErr(
         e instanceof Error && /분석|박자/.test(e.message)
           ? e.message
-          : "이 파일을 읽지 못했어요. mp3·wav·ogg·m4a 파일인지 확인해주세요."
+          : "이 파일을 읽지 못했어요. mp3·wav·ogg·m4a·mp4 파일인지 확인해주세요."
       );
     } finally {
       setBusy(null);
@@ -140,7 +206,7 @@ export default function CustomMusic({
     <input
       ref={inputRef}
       type="file"
-      accept="audio/*,.mp3,.wav,.ogg,.m4a"
+      accept="audio/*,video/mp4,video/webm,.mp3,.wav,.ogg,.m4a,.mp4,.webm,.m4v"
       className="hidden"
       onChange={(e) => {
         const f = e.target.files?.[0];
@@ -194,7 +260,7 @@ export default function CustomMusic({
                 눌러서 고르세요
               </p>
               <p className="font-mono text-[1.05cqw] text-white/40">
-                mp3 · wav · ogg · m4a · 12분 이하
+                mp3 · wav · ogg · m4a · mp4(뮤비는 배경에) · 12분 이하
               </p>
             </>
           )}

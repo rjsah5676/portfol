@@ -9,6 +9,7 @@
  * 옵션
  *   --bpm-label <n>   화면에 보일 BPM (분석기가 셔플로 잘못 보면 직접 지정)
  *   --boss '<json>'   보스곡: 나이트메어 난이도를 추가 (src/lib/rhythm/autochart의 NightmareTweak, {}면 기본값)
+ *   --explus '<json>' EX+(Lv19~21) 난이도를 추가 (같은 NightmareTweak, 기본은 더 촘촘) — --levels 6번째로 레벨 지정
  *   --hard-slots      쉬움·보통·어려움을 한 단계 위 규칙으로 (보스곡용: 대략 Lv6 / 11 / 14)
  *   --straight        분석기가 셋잇단(12/8)으로 잘못 볼 때 1.5배 템포 4/4로 강제
  *   --tweak '<json>'  난이도별 AutoTweak 덮어쓰기 (예: '{"expert":{"fill":0.6}}')
@@ -39,7 +40,8 @@ const ts = require("typescript");
 const argv = process.argv.slice(2);
 const id = argv.find(
   (a) =>
-    !a.startsWith("--") && !argv[argv.indexOf(a) - 1]?.match(/^--(bpm-label|boss|tweak|levels)$/)
+    !a.startsWith("--") &&
+    !argv[argv.indexOf(a) - 1]?.match(/^--(bpm-label|boss|tweak|levels|explus)$/)
 );
 if (!id) {
   console.error(
@@ -112,13 +114,20 @@ const tweaks = hardSlots
     }
   : {};
 if (bossArg !== undefined) tweaks.nightmare = { nightmare: JSON.parse(bossArg) };
+// --explus '<json>': EX+ (Lv19~21) 추가 — 나이트메어 경로의 NightmareTweak ({}면 기본값)
+const explusArg = opt("--explus");
+if (explusArg !== undefined) {
+  diffs.push("explus");
+  tweaks.explus = { nightmare: JSON.parse(explusArg) };
+}
 const tweakArg = opt("--tweak");
 if (tweakArg)
-  for (const [d, t] of Object.entries(JSON.parse(tweakArg))) tweaks[d] = { ...(tweaks[d] ?? {}), ...t };
+  for (const [d, t] of Object.entries(JSON.parse(tweakArg)))
+    tweaks[d] = { ...(tweaks[d] ?? {}), ...t };
 const levelsArg = opt("--levels");
 if (levelsArg)
   levelsArg.split(",").forEach((v, i) => {
-    const d = ["easy", "normal", "hard", "expert", "nightmare"][i];
+    const d = ["easy", "normal", "hard", "expert", "nightmare", "explus"][i];
     if (d && v.trim()) tweaks[d] = { ...(tweaks[d] ?? {}), level: Number(v) };
   });
 // --stats: 난이도별로 어떤 패턴을 얼마나 썼는지 (다양성 점검)

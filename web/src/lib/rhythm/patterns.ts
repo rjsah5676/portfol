@@ -48,7 +48,14 @@ export interface Pattern {
   mood?: [number, number];
 }
 
-const TIER: Record<Difficulty, number> = { easy: 0, normal: 1, hard: 2, expert: 3, nightmare: 4 };
+const TIER: Record<Difficulty, number> = {
+  easy: 0,
+  normal: 1,
+  hard: 2,
+  expert: 3,
+  nightmare: 4,
+  explus: 4,
+};
 /** 두 레인 트릴 가중치 배율: osu 랭크 채보 트릴 비율 보통 1% · 어려움 3% · 매우 어려움 5% (우리는 11·9·6%였음) */
 const TRILL_W: Partial<Record<Difficulty, number>> = {
   easy: 0.05,
@@ -349,7 +356,12 @@ export function assignPatterns(slots: Slot[], ctx: PatternCtx): Map<number, numb
   // 나이트메어도 2박: 거의 모든 노트를 패턴 안에 넣기 위해
   const maxGap =
     ctx.beatSec *
-    (ctx.diff === "easy" || ctx.diff === "normal" || ctx.diff === "nightmare" ? 2.1 : 1.05);
+    (ctx.diff === "easy" ||
+    ctx.diff === "normal" ||
+    ctx.diff === "nightmare" ||
+    ctx.diff === "explus"
+      ? 2.1
+      : 1.05);
   let i = 0;
   while (i < slots.length - 3) {
     let j = i;
@@ -444,7 +456,7 @@ function layStream(
         ? sub === 1
         : ctx.diff === "easy"
           ? false
-          : ctx.diff === "nightmare"
+          : ctx.diff === "nightmare" || ctx.diff === "explus"
             ? true
             : sub <= 2);
     const usable = (p: Pattern) =>

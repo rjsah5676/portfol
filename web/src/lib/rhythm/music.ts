@@ -91,6 +91,8 @@ export interface Song {
   practice?: boolean;
   /** 재킷 그림 주소 (내 음악: 파일에 든 앨범 사진, 없으면 기본 그림) */
   cover?: string;
+  /** 뮤직비디오(object URL) — 내 음악에 영상 파일을 넣었을 때. 플레이 배경에 어둡게 깔림 */
+  video?: string;
   /** 음원 파일로 재생하는 곡 (신스 렌더 대신 이 파일을 불러옴) */
   audio?: string;
   /** 음원 곡의 고정 채보 (미리 분석해 둔 것 — 모두 같은 채보로 쳐서 랭킹이 공정함). 나이트메어는 일부 곡만 */
@@ -401,14 +403,14 @@ const FREEDOMDIVE = audioSong(
 /*
  * 채보 다시 뽑기 (npm run rhythm-chart -- <id> ...) — --levels는 직접 쳐 보고 정한 레벨 (쉬움부터)
  *   fullcombo   --bpm-label 180 --boss '{"loud":0.5,"full":0.8,"burstEvery":8}' --levels 3,6,9,13,16
- *   jilju       --tweak '{"hard":{"fill":0.3},"expert":{"fill":0.15}}' --levels 3,5,8,12
- *   natsukasumi --tweak '{"hard":{"fill":0.9},"expert":{"fill":1.3}}' --levels 2,4,7,12
- *   rinkaku     --tweak '{"expert":{"fill":0.4}}' --levels 2,4,8,12
+ *   jilju       --boss '{}' --tweak '{"hard":{"fill":0.3},"expert":{"fill":0.15}}' --levels 3,5,8,12   (나이트메어 자동 16)
+ *   natsukasumi --boss '{}' --tweak '{"hard":{"fill":0.9},"expert":{"fill":1.3}}' --levels 2,4,7,12   (나이트메어 자동 17)
+ *   rinkaku     --boss '{}' --tweak '{"expert":{"fill":0.4}}' --levels 2,4,8,12   (나이트메어 자동 15)
  *   newdim      --boss '{"loud":0.55,"full":0.85,"burstEvery":8}' --tweak '{"expert":{"fill":0.4}}' --levels 3,6,10,13,15
  *   monarch     --bpm-label 150 --boss '{"burstEvery":2}' --tweak '{"hard":{"fill":0.35},"expert":{"fill":0.3},"nightmare":{"fill":0.4}}' --levels 3,6,11,13,16
- *   velocity    --bpm-label 180 --boss '{"loud":0.45,"full":0.72,"burstEvery":4,"burstSub":6}' --levels 3,6,11,14,17
- *   anima       --boss '{}' --levels 3,6,9,13,17
- *   aragami     --boss '{}' --levels 3,6,9,13,17   (어려움은 9까지 못 올라가 8)
+ *   velocity    --bpm-label 180 --boss '{"loud":0.45,"full":0.72,"burstEvery":4,"burstSub":6}' --explus '{}' --levels 3,6,11,14,17,20
+ *   anima       --boss '{}' --explus '{}' --levels 3,6,9,13,17,20
+ *   aragami     --boss '{}' --explus '{}' --levels 3,6,9,13,17,21   (EX+는 21까지 못 올라가 20)
  *   freedomdive --boss '{}' --levels 3,5,9,12,15   (222 BPM 8분·16분이 꽉 차도 별점 12·15 — 그 위는 24분·잭이 필요)
  */
 // ───────────────────────── 연습곡 ─────────────────────────

@@ -122,6 +122,7 @@ export default function RhythmGame() {
     lanes: "none",
     cover: "none",
     field: "left",
+    bg: "cover",
   });
   const [settingsOpen, setSettingsOpen] = useState(false);
   // 분석 모드(관리자만): 채보를 올퍼펙으로 자동 연주해서 곡과 맞는지 감상. 기록·랭킹에 안 올림
@@ -241,8 +242,9 @@ export default function RhythmGame() {
       track
         ? (makeAutoCharts(
             track.analysis,
-            DIFFICULTIES.map((d) => d.key)
-          ) as Record<Difficulty, ReturnType<typeof makeChart>>)
+            // EX+는 내장 보스곡 전용 (내 음악은 나이트메어까지)
+            DIFFICULTIES.filter((d) => d.key !== "explus").map((d) => d.key)
+          ) as Partial<Record<Difficulty, ReturnType<typeof makeChart>>>)
         : null,
     [track]
   );
@@ -262,6 +264,7 @@ export default function RhythmGame() {
       // 채보(노트) 색: 곡마다 랜덤 (같은 파일이면 늘 같은 색)
       color: CUSTOM_COLORS[parseInt(track.key, 36) % CUSTOM_COLORS.length],
       cover: track.cover ?? CUSTOM_COVER,
+      video: track.video,
       desc: "내 음악",
       beatOffset: a.beats[0] ?? 0,
       custom: true,
@@ -285,7 +288,10 @@ export default function RhythmGame() {
   const song = isCustom ? customSong! : builtinSong;
   // 고를 수 있는 난이도: 내 음악은 전부, 내장곡은 채보가 있는 것만 (나이트메어는 일부 곡만)
   const diffs = useMemo(
-    () => (customSel ? DIFFICULTIES : DIFFICULTIES.filter((d) => !!charts[builtinSong.id][d.key])),
+    () =>
+      customSel
+        ? DIFFICULTIES.filter((d) => d.key !== "explus")
+        : DIFFICULTIES.filter((d) => !!charts[builtinSong.id][d.key]),
     [customSel, charts, builtinSong.id]
   );
   const diff: Difficulty = diffs.some((d) => d.key === diffSel)
@@ -392,6 +398,7 @@ export default function RhythmGame() {
           lanes: LANE_MODS.some((k) => k.key === s.lanes) ? s.lanes : "none",
           cover: COVERS_OPT.some((k) => k.key === s.cover) ? s.cover : "none",
           field: FIELD_POS.some((k) => k.key === s.field) ? s.field : "left",
+          bg: s.bg === "stage" ? "stage" : "cover",
         });
         // 예전 설정(v2 이하)의 음악·타격 싱크는 자동 싱크가 들고 있던 값 → 자동 싱크 저장소로 옮김 (수동 싱크는 0부터)
         if ((Number(s.v) || 1) < 3 && (Number(s.offset) || Number(s.judge))) {
@@ -631,6 +638,7 @@ export default function RhythmGame() {
               diff={diff}
               chart={applyLaneMod(chart, settings.lanes, play.seed)}
               cover={settings.cover}
+              bg={settings.bg}
               buffer={play.buffer}
               ctx={play.ctx}
               speed={settings.speed}

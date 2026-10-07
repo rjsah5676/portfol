@@ -27,6 +27,7 @@ const LEVEL: Record<Difficulty, { sub: number; jack: number; chordEvery: number;
   hard: { sub: 2, jack: 3, chordEvery: 2, tap: 2 },
   expert: { sub: 1, jack: 4, chordEvery: 2, tap: 2 },
   nightmare: { sub: 1, jack: 4, chordEvery: 1, tap: 1 },
+  explus: { sub: 1, jack: 5, chordEvery: 1, tap: 1 },
 };
 
 const STAIRS = [0, 1, 2, 3, 2, 1];
@@ -47,10 +48,11 @@ const SHAPES: [number, number][] = [
   [1, 3],
 ];
 
-export function practiceCharts(bpm: number): Record<Difficulty, Chart> {
+export function practiceCharts(bpm: number): Partial<Record<Difficulty, Chart>> {
   const step = 60 / bpm / 4;
-  const out = {} as Record<Difficulty, Chart>;
+  const out: Partial<Record<Difficulty, Chart>> = {};
   for (const diff of Object.keys(LEVEL) as Difficulty[]) {
+    if (diff === "explus") continue; // 연습곡엔 EX+ 없음
     const L = LEVEL[diff];
     const notes: Note[] = [];
     let bar0 = 0;

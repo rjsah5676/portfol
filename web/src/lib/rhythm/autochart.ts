@@ -134,7 +134,24 @@ const AUTO_RULES: Record<Difficulty, AutoRule> = {
     jackRun: 4,
     ln: { ratio: 0.03, lens: [1, 1, 1, 1.5], maxSec: 0.7, onBeat: 0.63 },
   },
+  // EX+ (Lv19~21): 나이트메어 경로 그대로, 더 촘촘하게 — 32분 연타·16분 벽이 더 자주, 동시치기 더 두껍게
+  explus: {
+    nps: 15,
+    minGap: 0.058,
+    jackGap: 0.085,
+    pos: [1, 1, 1, 0.95, 0.6],
+    floor: 0.03,
+    chord: { every: 2, need: 0.3 },
+    holdBeats: 1.25,
+    thick: [1.65, 1.25, 1.1],
+    tri: 0.3,
+    jackAllow: 0.6,
+    jackRun: 5,
+    ln: { ratio: 0.03, lens: [1, 1, 1, 1.5], maxSec: 0.7, onBeat: 0.63 },
+  },
 };
+/** 나이트메어 경로(패턴으로만 레인을 깖)를 쓰는 난이도 */
+const isNm = (d: Difficulty) => d === "nightmare" || d === "explus";
 
 /** 나이트메어 채우기 설정 (곡별 손보기 가능) */
 export interface NightmareTweak {
@@ -164,6 +181,18 @@ const NIGHTMARE_DEFAULT: Required<NightmareTweak> = {
   burstEvery: 8,
   burstSub: 6,
 };
+/** EX+ 기본: 웬만한 마디는 8분, 센 마디는 16분 꽉, 2마디마다 32분 연타 */
+const EXPLUS_DEFAULT: Required<NightmareTweak> = {
+  loud: 0.3,
+  full: 0.55,
+  loudSub: 2,
+  fullSub: 4,
+  chordLoud: 1,
+  chordFull: 2,
+  burstEvery: 2,
+  burstSub: 8,
+};
+const nmDefault = (d: Difficulty) => (d === "explus" ? EXPLUS_DEFAULT : NIGHTMARE_DEFAULT);
 
 function nearestCen(an: Analysis, t: number) {
   let best = 0;
@@ -441,7 +470,7 @@ export function makeAutoChart(
   // 1.5) 격자 채우기 — 어려움은 센 마디를 8분으로, 매우 어려움은 아주 센 마디를 16분으로 (fill이 클수록 더 넓게)
   //      + 소리가 꽉 차서 타격이 따로 안 잡히는 마디(벽)는 fill이 0이어도 마디 목표까지 격자로 채움
   //        (Aragami 15~24초처럼 제일 센 구간이 오히려 비던 문제)
-  if (diff !== "nightmare" && (diff === "hard" || diff === "expert" || (tweak.fill ?? 0) > 0)) {
+  if (!isNm(diff) && (diff === "hard" || diff === "expert" || (tweak.fill ?? 0) > 0)) {
     // fill 1을 넘으면(1~1.6) 어지간한 마디까지 다 채움
     const fill = Math.min(1.6, tweak.fill ?? 0);
     // 채우기 양이 fill에 따라 이어지게(0에서 살짝만 올려도 센 마디가 한꺼번에 채워지며 노트가 50% 뛰던 것):
@@ -497,7 +526,7 @@ export function makeAutoChart(
 
   // 1.8) 어려움 이상: 리듬 고르게 — 간격이 직전 간격의 같음·2배·반이 아닌 걸로 갑자기 바뀌는 자리
   //      (osu 4★대 랭크 채보 4%, 손대기 전 우리 10~17%)를 사이에 박을 넣거나 약한 쪽을 빼서 정리
-  if (diff === "hard" || diff === "expert" || diff === "nightmare") {
+  if (diff === "hard" || diff === "expert" || isNm(diff)) {
     const fixed = regularizeRhythm(picked, R.minGap, (t) => nearestCen(an, t));
     picked.length = 0;
     picked.push(...fixed);
@@ -537,17 +566,18 @@ export function makeAutoChart(
     patCtx
   );
 
-  if (diff === "nightmare") {
+  if (isNm(diff)) {
     const shift = shiftMs / 1000;
+    const def = nmDefault(diff);
     const nm = nightmareNotes(
       an,
       picked,
       {
-        ...NIGHTMARE_DEFAULT,
+        ...def,
         ...tweak.nightmare,
         // 채우기가 클수록 덜 센 마디까지
-        loud: (tweak.nightmare?.loud ?? NIGHTMARE_DEFAULT.loud) - 0.15 * (tweak.fill ?? 0),
-        full: (tweak.nightmare?.full ?? NIGHTMARE_DEFAULT.full) - 0.15 * (tweak.fill ?? 0),
+        loud: (tweak.nightmare?.loud ?? def.loud) - 0.15 * (tweak.fill ?? 0),
+        full: (tweak.nightmare?.full ?? def.full) - 0.15 * (tweak.fill ?? 0),
       },
       {
         beatSec,
@@ -1258,7 +1288,7 @@ function nightmareNotes(
   // 나이트메어는 2박 쉼까지 한 스트림으로 (거의 전부 패턴 안에)
   const assigned = assignPatterns(
     times.map((t, i) => ({ t, cen: cen[i], count: slots.get(t)! })),
-    { ...ctx.patCtx, diff: "nightmare", chords: true }
+    { ...ctx.patCtx, chords: true }
   );
   const notes: Note[] = [];
   const laneLast = [-Infinity, -Infinity, -Infinity, -Infinity];
@@ -1301,9 +1331,19 @@ export const TARGET_LEVEL: Record<Difficulty, number> = {
   hard: 9,
   expert: 13,
   nightmare: 16,
+  explus: 20,
 };
 /** 목표에서 이만큼 벗어나도 됨 */
 const LEVEL_TOL = 1;
+/** 박당 노트 수 상한 (내장곡 기준: 매우 어려움 2.5~3.1, 나이트메어 3.4~4.5) */
+const NPB_CAP: Record<Difficulty, number> = {
+  easy: 1,
+  normal: 1.7,
+  hard: 2.7,
+  expert: 3.4,
+  nightmare: 4.6,
+  explus: 6,
+};
 
 /** 나이트메어 목표 레벨 — 빠른 곡은 더 높게 (체감 템포 170↑ 17, 200↑ 18) */
 const nightmareGoal = (an: Analysis) => {
@@ -1335,25 +1375,30 @@ export function makeAutoCharts(
     let density = base.density ?? 1;
     let fill = base.fill ?? 0;
     // 나이트메어는 밀도보다 16분 채우는 마디(full)·8분 마디(loud)·연타 간격으로 난이도가 정해짐
-    let nm: Required<NightmareTweak> = { ...NIGHTMARE_DEFAULT, ...(base.nightmare ?? {}) };
+    let nm: Required<NightmareTweak> = { ...nmDefault(d), ...(base.nightmare ?? {}) };
     let best: Chart | null = null;
     let bestRaw = 0;
     // 레벨이 맞으면 거기서 멈춤 (맞은 뒤에도 밀도를 올려 '같은 레벨에서 가장 빽빽한' 채보를 고르던 적이 있는데,
     // 별점은 세기 차이가 없는 평평한 채보일수록 같은 레벨에 노트가 많이 들어가서 벽 채보가 됐음 — Monarch 맛없어짐)
     // 시도 기록: 목표를 못 맞추면 아래·위로 가장 가까운 두 시도 사이를 더 잘게 나눠 봄
     const tried: { density: number; fill: number; raw: number; n: number }[] = [];
-    const consider = (chart: Chart, raw: number) => {
+    let bestOver = false;
+    const consider = (chart: Chart, raw: number, over = false) => {
       const dNew = Math.abs(raw - target);
       const dBest = Math.abs(bestRaw - target);
+      // 박당 상한을 넘은 채보는 안 넘은 게 하나라도 있으면 밀려남
+      if (best && over && !bestOver) return;
       // 같은 거리면 쉬운 쪽(직접 정한 레벨을 넘기지 않게), 같은 레벨이면 노트 많은 쪽
       if (
         !best ||
+        (bestOver && !over) ||
         dNew < dBest ||
         (dNew === dBest &&
           (raw < bestRaw || (raw === bestRaw && chart.notes.length > best.notes.length)))
       ) {
         best = chart;
         bestRaw = raw;
+        bestOver = over;
       }
     };
     for (let attempt = 0; attempt < 13; attempt++) {
@@ -1361,11 +1406,16 @@ export function makeAutoCharts(
       // 레벨은 난이도별 최저값으로 올려 놓은 값이라, 맞춰 갈 때는 별점 그대로 잼
       const raw = Math.round(starRating(chart.notes) * 4);
       tried.push({ density, fill, raw, n: chart.notes.length });
-      consider(chart, raw);
-      const miss = raw - target;
+      // 박당 노트 수 상한(자동 목표일 때): 별점은 느린 곡에서 16분을 넘는 밀도(동시치기·32분)로 채워야 나오는데
+      // 그건 같은 레벨의 빠른 곡보다 훨씬 어렵게 느껴짐 (147 BPM 곡 나이트메어 16이 180 BPM Lv17보다 어려웠음)
+      // → 넘으면 '너무 어려움'으로 보고 밀도를 내림 (레벨은 그만큼 낮게 나옴)
+      const npb = chart.notes.length / Math.max(1, (an.duration * displayBpm(an)) / 60);
+      const over = base.level === undefined && npb > NPB_CAP[d];
+      consider(chart, raw, over);
+      const miss = over ? Math.max(1, raw - target) : raw - target;
       if ((globalThis as { DEBUG_LV?: boolean }).DEBUG_LV)
         console.log(
-          `  ${d} 시도${attempt} 밀도x${density.toFixed(2)} 채우기${fill.toFixed(1)} → Lv${raw} 노트${chart.notes.length}`
+          `  ${d} 시도${attempt} 밀도x${density.toFixed(2)} 채우기${fill.toFixed(1)} → Lv${raw} 노트${chart.notes.length} 박당${npb.toFixed(2)}${over ? " 초과" : ""}`
         );
       // 나이트메어(자동 목표)는 목표보다 높게는 안 받음 — 이미 구간 가운데라 +1이면 체감이 확 어려워짐
       const ok =
@@ -1381,18 +1431,18 @@ export function makeAutoCharts(
       const step = 0.3 / (1 + attempt * 0.6);
       if (miss < 0 && canFill) fill = Math.min(1.6, fill + step);
       if (miss > 0 && fill > 0) fill = Math.max(0, fill - step);
-      if (d === "nightmare") {
+      if (isNm(d)) {
         const k = (Math.sign(miss) * Math.min(3, Math.abs(miss))) / (1 + attempt * 0.6);
         nm = {
           ...nm,
           full: Math.max(0.3, Math.min(1.05, nm.full + 0.06 * k)),
-          loud: Math.max(0.3, Math.min(1, nm.loud + 0.05 * k)),
+          loud: Math.max(d === "explus" ? 0.15 : 0.3, Math.min(1, nm.loud + 0.05 * k)),
           burstEvery: miss > 0 ? Math.min(16, nm.burstEvery * 2) : nm.burstEvery,
         };
       }
     }
     // 목표를 못 맞춘 채 아래(Lv-1)·위(Lv+1) 시도만 있으면 그 사이를 이등분해 가며 찾음 (밀도·채우기를 같이 보간)
-    if (d !== "nightmare" && bestRaw !== target) {
+    if (!isNm(d) && bestRaw !== target) {
       let lo = tried.filter((t) => t.raw < target).sort((a, b) => b.raw - a.raw || b.n - a.n)[0];
       let hi = tried.filter((t) => t.raw > target).sort((a, b) => a.raw - b.raw || a.n - b.n)[0];
       for (let k = 0; lo && hi && k < 4; k++) {

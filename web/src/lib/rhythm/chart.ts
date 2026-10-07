@@ -12,13 +12,15 @@
 import { starRating } from "./stars";
 import type { Kind, MusicEvent, Song } from "./music";
 
-export type Difficulty = "easy" | "normal" | "hard" | "expert" | "nightmare";
+export type Difficulty = "easy" | "normal" | "hard" | "expert" | "nightmare" | "explus";
 export const DIFFICULTIES: { key: Difficulty; label: string; color: string }[] = [
   { key: "easy", label: "쉬움", color: "#4ADE80" },
   { key: "normal", label: "보통", color: "#60A5FA" },
   { key: "hard", label: "어려움", color: "#F59E0B" },
   { key: "expert", label: "매우 어려움", color: "#F43F5E" },
   { key: "nightmare", label: "나이트메어", color: "#A855F7" },
+  // EX+: 나이트메어 위 (Lv19~21) — 일부 보스곡만
+  { key: "explus", label: "EX+", color: "#FACC15" },
 ];
 /** 내장곡에서 이 난이도가 있는지 (나이트메어는 일부 곡만) */
 export const hasDifficulty = (
@@ -109,6 +111,17 @@ const RULES: Record<Difficulty, Rule> = {
     maxPress: 3,
     fill: ["arp", "tom", "snare", "clap", "kick", "gtr"],
     chord: { kinds: ["crash", "kick", "snare", "clap"], prob: 0.9, onlyDownbeat: false },
+    notesDuringHold: true,
+  },
+  // (이벤트 채보엔 EX+가 없음 — 자동 채보 전용. 타입만 맞춤)
+  explus: {
+    grid: 1,
+    minGap: 0.05,
+    jackGap: 0.1,
+    holdMin: 4,
+    maxPress: 3,
+    fill: ["arp", "tom", "snare", "clap", "kick", "gtr"],
+    chord: { kinds: ["crash", "kick", "snare", "clap"], prob: 0.95, onlyDownbeat: false },
     notesDuringHold: true,
   },
 };
@@ -317,6 +330,7 @@ export const LEVEL_BANDS: Record<Difficulty, [number, number]> = {
   hard: [7, 11],
   expert: [12, 14],
   nightmare: [15, 18],
+  explus: [19, 21],
 };
 
 /** 정렬 + 판정 단위 수 + 레벨 계산 (자동 채보에서도 같이 씀) */

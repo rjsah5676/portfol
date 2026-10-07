@@ -27,6 +27,16 @@ export const COVERS_OPT: { key: Cover; label: string; desc: string }[] = [
   { key: "sudden", label: "서든", desc: "위쪽 30%가 가려져 노트를 미리 읽을 수 없어요" },
 ];
 export const KEY_LABELS = ["D", "F", "J", "K"];
+/** 플레이 배경: 커버(재킷을 흐리게 깔고, 뮤비가 있으면 영상) / 무대(기본 무대 사진) */
+export type BgMode = "cover" | "stage";
+export const BG_MODES: { key: BgMode; label: string; desc: string }[] = [
+  {
+    key: "cover",
+    label: "커버·뮤비",
+    desc: "곡 재킷을 흐리게, 영상 파일을 넣은 곡은 뮤직비디오를 어둡게 깔아요",
+  },
+  { key: "stage", label: "무대", desc: "기본 무대 그림" },
+];
 
 export interface Result {
   songId: string;
@@ -178,6 +188,8 @@ interface Props {
   portrait?: boolean;
   /** 분석 모드(관리자): 채보를 올퍼펙으로 자동 연주 — 채보가 곡과 맞는지 타격음과 함께 감상. 기록·랭킹 없음 */
   autoplay?: boolean;
+  /** 플레이 배경 (커버·뮤비 / 무대) */
+  bg?: BgMode;
 }
 
 export default function Stage({
@@ -204,9 +216,18 @@ export default function Stage({
   onToggleFs,
   portrait = false,
   autoplay = false,
+  bg = "cover",
 }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  // 뮤직비디오 배경: 데스크탑(마우스)·가로 화면에서만 — 폰·내장그래픽은 합성 부담이 커서. 프레임이 떨어지면 자동으로 끔
+  const useVideo =
+    bg === "cover" &&
+    !!song.video &&
+    !portrait &&
+    typeof window !== "undefined" &&
+    window.matchMedia("(pointer: fine)").matches;
   const [paused, setPaused] = useState(false);
   // 일시정지 화면의 지금까지 점수·정확도·랭크
   const [pauseStats, setPauseStats] = useState<{
@@ -247,7 +268,10 @@ export default function Stage({
     const canvas = canvasRef.current!;
     const wrap = wrapRef.current!;
     // desynchronized는 쓰지 않음: 모바일(특히 안드로이드)에서 화면이 찢어지고 깜빡임
-    const g = canvas.getContext("2d", { alpha: false })!;
+    // 뮤비가 뒤에 깔릴 땐 캔버스를 투명하게 (바닥 그림이 반투명이라 영상이 비침)
+    const g = canvas.getContext("2d", { alpha: useVideo })!;
+    const video = useVideo ? videoRef.current : null;
+    let videoOff = false;
     const beatSec = 60 / song.bpm;
     // 롱노트 누르는 동안 8분음표마다 콤보가 오름
     const engine = new Engine(chart, beatSec / 2);
@@ -372,17 +396,45 @@ export default function Stage({
     let staticLayer: HTMLCanvasElement | null = null;
     const buildStatic = () => {
       const { c, b } = layer(CW, CH);
-      if (ready(bgImg)) {
-        const sc = Math.max(CW / bgImg.naturalWidth, CH / bgImg.naturalHeight);
-        const iw = bgImg.naturalWidth * sc;
-        const ih = bgImg.naturalHeight * sc;
-        b.drawImage(bgImg, (CW - iw) / 2, (CH - ih) / 2, iw, ih);
+      if (useVideo) {
+        // 영상 위에 어두운 막만 (영상은 <video>가 뒤에서 재생)
+        b.fillStyle = "rgba(4,5,14,0.5)";
+        b.fillRect(0, 0, CW, CH);
+      } else if (bg === "cover" && ready(coverImg)) {
+        // 재킷을 크게 흐려서 (작게 줄였다 키우면 블러 — canvas filter는 사파리가 안 됨)
+        const tiny = document.createElement("canvas");
+        tiny.width = 24;
+        tiny.height = Math.max(1, Math.round((24 * CH) / CW));
+        const tb = tiny.getContext("2d")!;
+        const sc = Math.max(
+          tiny.width / coverImg.naturalWidth,
+          tiny.height / coverImg.naturalHeight
+        );
+        tb.drawImage(
+          coverImg,
+          (tiny.width - coverImg.naturalWidth * sc) / 2,
+          (tiny.height - coverImg.naturalHeight * sc) / 2,
+          coverImg.naturalWidth * sc,
+          coverImg.naturalHeight * sc
+        );
+        b.imageSmoothingEnabled = true;
+        b.imageSmoothingQuality = "high";
+        b.drawImage(tiny, -CW * 0.08, -CH * 0.08, CW * 1.16, CH * 1.16);
+        b.fillStyle = "rgba(4,5,14,0.55)";
+        b.fillRect(0, 0, CW, CH);
       } else {
-        b.fillStyle = "#070814";
+        if (ready(bgImg)) {
+          const sc = Math.max(CW / bgImg.naturalWidth, CH / bgImg.naturalHeight);
+          const iw = bgImg.naturalWidth * sc;
+          const ih = bgImg.naturalHeight * sc;
+          b.drawImage(bgImg, (CW - iw) / 2, (CH - ih) / 2, iw, ih);
+        } else {
+          b.fillStyle = "#070814";
+          b.fillRect(0, 0, CW, CH);
+        }
+        b.fillStyle = "rgba(4,5,14,0.35)";
         b.fillRect(0, 0, CW, CH);
       }
-      b.fillStyle = "rgba(4,5,14,0.35)";
-      b.fillRect(0, 0, CW, CH);
       // 레인 뒤 판: 노트가 무대 조명에 묻히지 않게
       const lane = b.createLinearGradient(0, laneTop, 0, judgeY);
       lane.addColorStop(0, "rgba(3,4,12,0.55)");
@@ -815,6 +867,7 @@ export default function Stage({
 
     /** 바닥(배경·레인 판·정보판) + 박자 빛 + 정보판 글자 */
     const drawBackdrop = (t: number, pulse: number) => {
+      if (useVideo) g.clearRect(0, 0, CW, CH); // 투명 캔버스: 지난 프레임을 지워야 영상이 비침
       if (staticLayer) g.drawImage(staticLayer, 0, 0, CW, CH);
       else {
         g.fillStyle = "#070814";
@@ -1327,6 +1380,7 @@ export default function Stage({
     let running = true;
     let finished = false;
     const finish = (failed = false) => {
+      video?.pause();
       if (finished) return;
       finished = true;
       running = false;
@@ -1415,6 +1469,12 @@ export default function Stage({
           quality--;
           qualityHold = 0;
           if (quality === 0) resize(true);
+          // 뮤비는 품질이 두 단계 내려가면 끔 (합성 부담 — 다시 켜지지 않음)
+          if (quality <= 1 && video && !videoOff) {
+            videoOff = true;
+            video.pause();
+            video.style.display = "none";
+          }
         }
       } else if (p90 < want * 1.08) {
         // 4번(약 6초) 연속 가벼우면 한 단계 되돌림 — 간격 고정은 그리는 시간이 주사 간격의 절반도 안 돼야 풂
@@ -1428,6 +1488,18 @@ export default function Stage({
         }
       }
     };
+    // 뮤비: 오디오 시계에 맞춰 재생 (판정과 무관, 보여주기만). 어긋나면(120ms↑) 자리 맞춤
+    const syncVideo = (t: number) => {
+      if (!video) return;
+      if (t < 0) {
+        if (!video.paused) video.pause();
+        if (video.readyState >= 1 && Math.abs(video.currentTime) > 0.05) video.currentTime = 0;
+        return;
+      }
+      if (video.readyState < 2) return;
+      if (video.paused) video.play().catch(() => {});
+      if (Math.abs(video.currentTime - t) > 0.12) video.currentTime = t;
+    };
     const frame = (ts: number) => {
       if (!running) return;
       if (rHoldAt !== null && performance.now() - rHoldAt >= R_HOLD_MS) {
@@ -1438,6 +1510,7 @@ export default function Stage({
       }
       const workStart = performance.now();
       const t = smoothNow(ts);
+      if (video && !videoOff) syncVideo(t);
       if (autoplay) autoStep(t);
       // 싱크가 잡히기 전(처음 몇 탭·곡 초반)엔 HP가 바닥나도 안 끝남 — 지연이 큰 기기는 첫 보정 전에 다 MISS라 죽어 버려서
       engine.noFail = !!song.practice || (tracker.grace && t < AUTO_SYNC.graceSec);
@@ -1504,6 +1577,7 @@ export default function Stage({
       if (failing) return;
       failing = true;
       running = false;
+      video?.pause();
       const a = ctx.currentTime;
       try {
         src.playbackRate.setValueAtTime(1, a);
@@ -1616,6 +1690,7 @@ export default function Stage({
       const t = now() - judgeSec();
       for (let l = 0; l < 4; l++) if (engine.pressed[l]) engine.release(l, t);
       ctx.suspend();
+      video?.pause();
       reportAuto();
       setPauseStats({
         score: engine.score,
@@ -1775,6 +1850,7 @@ export default function Stage({
       running = false;
       resuming = false;
       failing = false;
+      video?.pause();
       cancelAnimationFrame(raf);
       for (const o of beeps) {
         try {
@@ -1814,6 +1890,18 @@ export default function Stage({
       ref={wrapRef}
       className={`absolute inset-0 overflow-hidden ${portrait ? "flex items-center justify-center bg-black" : ""}`}
     >
+      {useVideo && (
+        <video
+          ref={videoRef}
+          src={song.video}
+          muted
+          playsInline
+          preload="auto"
+          disablePictureInPicture
+          className="pointer-events-none absolute inset-0 h-full w-full object-cover"
+          style={{ opacity: 0.55 }}
+        />
+      )}
       <canvas
         ref={canvasRef}
         className={`touch-none select-none ${portrait ? "block" : "absolute inset-0 h-full w-full"}`}

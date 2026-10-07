@@ -52,7 +52,7 @@ export default function SongSelect({
   best: Record<string, Best>;
   track: CustomTrack | null;
   onTrack: (t: CustomTrack | null) => void;
-  customCharts: Record<Difficulty, Chart> | null;
+  customCharts: Partial<Record<Difficulty, Chart>> | null;
   /** 지금 고른 곡 (내 음악인데 파일이 없으면 null) */
   song: Song | null;
   onStart: () => void;
@@ -467,7 +467,7 @@ export default function SongSelect({
           <span className={`${KR} truncate text-[1cqw] text-white/80`}>
             {track
               ? `${track.name} · ${custom ? "Enter로 시작" : "다시 고르면 이어서"}`
-              : "mp3를 넣으면 쉬움~나이트메어 채보를 바로 만들어 줘요"}
+              : "mp3나 뮤비(mp4)를 넣으면 쉬움~나이트메어 채보를 바로 만들어 줘요"}
           </span>
         </span>
         <span className="relative shrink-0">
