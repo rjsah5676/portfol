@@ -533,6 +533,9 @@ export default function FightGame({ onRanked }: { onRanked?: () => void }) {
               pracDmg = 0;
               pracHits = 0;
             }
+            // 허수아비가 낭떠러지로 떨어지면 처음 자리(시작 위치)로 — 보통 대전처럼 떨어진 자리 위에서 다시 내려오면
+            // 가만히 있는 허수아비는 또 떨어지기만 함
+            if (s.ev.some((e) => e.k === "fall" && e.p === 1)) s.p[1] = newMatch([s.p[0].ch, s.p[1].ch], s.map).p[1];
             for (let k = 0; k < 2; k++) s.p[k].hp = CHARS[s.p[k].ch].hp;
             s.p[0].meter = METER_MAX;
             s.timer = ROUND_SEC * 60;
