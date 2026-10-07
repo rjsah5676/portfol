@@ -264,6 +264,99 @@ interface Ticket {
   used: boolean;
 }
 
+/** BP 랭킹 한 줄 (uid는 서버 안에서만 — 밖으로 낼 때 뺌) */
+export interface BpRow {
+  uid: string;
+  id: string;
+  name: string;
+  member: boolean;
+  avatar: string | null;
+  bp: number;
+  songs: number;
+  best: { bp: number; chart: string; score: number } | null;
+}
+// 회원 BP 랭킹: 회원의 내장곡 기록 전부를 모아 곡마다 가장 높은 BP 하나씩, 상위 20곡 합. 30초 캐시 (리듬 기록이 올라오면 비움)
+let bpCache: { at: number; rows: BpRow[] } | null = null;
+export const clearBpCache = () => {
+  bpCache = null;
+};
+export async function bpBoard(db: Deps["db"]): Promise<BpRow[]> {
+  if (bpCache && Date.now() - bpCache.at <= 30_000) return bpCache.rows;
+  const docs = await db
+    .col("rhythm_rankings")
+    .find({ member: true }) // BP는 회원만 (곡별 랭킹은 비회원도 그대로)
+    .project({
+      uid: 1,
+      chart: 1,
+      score: 1,
+      name: 1,
+      member: 1,
+      createdAt: 1,
+    })
+    .toArray();
+  const byUid = new Map<
+    string,
+    {
+      name: string;
+      member: boolean;
+      at: number;
+      songs: Map<string, { bp: number; chart: string; score: number }>;
+    }
+  >();
+  for (const d of docs) {
+    const chart = String(d.chart);
+    const info = RHYTHM_CHARTS.get(chart);
+    if (!info) continue; // 연습곡·없어진 채보는 BP 없음
+    const bp = bpOf(info.level, Number(d.score) || 0);
+    const song = chart.slice(0, chart.lastIndexOf("_"));
+    const uid = String(d.uid);
+    const at = ms(d.createdAt) ?? 0;
+    let u = byUid.get(uid);
+    if (!u)
+      byUid.set(
+        uid,
+        (u = {
+          name: String(d.name ?? ""),
+          member: !!d.member,
+          at,
+          songs: new Map(),
+        }),
+      );
+    if (at >= u.at)
+      ((u.at = at),
+        (u.name = String(d.name ?? u.name)),
+        (u.member = !!d.member)); // 이름은 가장 최근 기록 기준
+    const cur = u.songs.get(song);
+    if (!cur || bp > cur.bp)
+      u.songs.set(song, { bp, chart, score: Number(d.score) || 0 });
+  }
+  const av = await avatarsOf(
+    db,
+    [...byUid.entries()].filter(([, u]) => u.member).map(([uid]) => uid),
+  );
+  const list = [...byUid.entries()]
+    .map(([uid, u]) => {
+      const top = [...u.songs.values()]
+        .sort((a, b) => b.bp - a.bp)
+        .slice(0, BP_TOP_SONGS);
+      return {
+        uid,
+        // uid는 그대로 내보내지 않음 (사진 주소에 들어가는 건 누구나 보는 사진이라 괜찮음)
+        id: `bp:${uid.slice(0, 8)}`,
+        name: u.name,
+        member: u.member,
+        avatar: (u.member && av.get(uid)) || null,
+        bp: top.reduce((s, x) => s + x.bp, 0),
+        songs: u.songs.size,
+        best: top[0] ?? null,
+      };
+    })
+    .filter((x) => x.bp > 0)
+    .sort((a, b) => b.bp - a.bp);
+  bpCache = { at: Date.now(), rows: list };
+  return list;
+}
+
 export function rankingsRouter({ db, auth, users }: Deps): Router {
   const r = Router();
   const tickets = db.col<Ticket>("rank_tickets");
@@ -384,88 +477,13 @@ export function rankingsRouter({ db, auth, users }: Deps): Router {
     }),
   );
 
-  // 회원 BP 랭킹: 회원의 내장곡 기록 전부를 모아 곡마다 가장 높은 BP 하나씩, 상위 20곡 합. 30초 캐시
-  let bpCache: { at: number; rows: Record<string, unknown>[] } | null = null;
   r.get(
     "/rhythm-bp",
-    h(async (req) => {
-      if (!bpCache || Date.now() - bpCache.at > 30_000) {
-        const docs = await db
-          .col("rhythm_rankings")
-          .find({ member: true }) // BP는 회원만 (곡별 랭킹은 비회원도 그대로)
-          .project({
-            uid: 1,
-            chart: 1,
-            score: 1,
-            name: 1,
-            member: 1,
-            createdAt: 1,
-          })
-          .toArray();
-        const byUid = new Map<
-          string,
-          {
-            name: string;
-            member: boolean;
-            at: number;
-            songs: Map<string, { bp: number; chart: string; score: number }>;
-          }
-        >();
-        for (const d of docs) {
-          const chart = String(d.chart);
-          const info = RHYTHM_CHARTS.get(chart);
-          if (!info) continue; // 연습곡·없어진 채보는 BP 없음
-          const bp = bpOf(info.level, Number(d.score) || 0);
-          const song = chart.slice(0, chart.lastIndexOf("_"));
-          const uid = String(d.uid);
-          const at = ms(d.createdAt) ?? 0;
-          let u = byUid.get(uid);
-          if (!u)
-            byUid.set(
-              uid,
-              (u = {
-                name: String(d.name ?? ""),
-                member: !!d.member,
-                at,
-                songs: new Map(),
-              }),
-            );
-          if (at >= u.at)
-            ((u.at = at),
-              (u.name = String(d.name ?? u.name)),
-              (u.member = !!d.member)); // 이름은 가장 최근 기록 기준
-          const cur = u.songs.get(song);
-          if (!cur || bp > cur.bp)
-            u.songs.set(song, { bp, chart, score: Number(d.score) || 0 });
-        }
-        const av = await avatarsOf(
-          db,
-          [...byUid.entries()].filter(([, u]) => u.member).map(([uid]) => uid),
-        );
-        const list = [...byUid.entries()]
-          .map(([uid, u]) => {
-            const top = [...u.songs.values()]
-              .sort((a, b) => b.bp - a.bp)
-              .slice(0, BP_TOP_SONGS);
-            return {
-              // uid는 그대로 내보내지 않음 (사진 주소에 들어가는 건 누구나 보는 사진이라 괜찮음)
-              id: `bp:${uid.slice(0, 8)}`,
-              name: u.name,
-              member: u.member,
-              avatar: (u.member && av.get(uid)) || null,
-              bp: top.reduce((s, x) => s + x.bp, 0),
-              songs: u.songs.size,
-              best: top[0] ?? null,
-            };
-          })
-          .filter((x) => x.bp > 0)
-          .sort((a, b) => b.bp - a.bp);
-        bpCache = { at: Date.now(), rows: list };
-      }
-      return bpCache.rows
+    h(async (req) =>
+      (await bpBoard(db))
         .slice(0, limitOf(req.query.limit))
-        .map((x, i) => ({ ...x, rank: i + 1 }));
-    }),
+        .map(({ uid: _uid, ...x }, i) => ({ ...x, rank: i + 1 })),
+    ),
   );
 
   r.get(
@@ -488,7 +506,7 @@ export function rankingsRouter({ db, auth, users }: Deps): Router {
     h((req) => {
       const chart = String(req.params.chart);
       if (!CHART_RE.test(chart)) throw bad();
-      bpCache = null;
+      clearBpCache();
       return submit(req, `rhythm:${chart}`, "rhythm_rankings", { chart });
     }),
   );

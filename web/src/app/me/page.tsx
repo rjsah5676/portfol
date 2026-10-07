@@ -8,6 +8,8 @@ import NickForm from "@/components/Account/NickForm";
 import { useAuth } from "@/lib/AuthContext";
 import { pointsOf } from "@/lib/aiScore";
 import { rankDateLabel, toDate } from "@/lib/rankDate";
+import { BP_TOP_SONGS, bpOf } from "@/lib/rhythm/bp";
+import { DIFFICULTIES } from "@/lib/rhythm/chart";
 import { getMySummary, type MyRecord, type MySummary } from "@/firestore/me";
 
 /*
@@ -37,13 +39,33 @@ const ONLINE: [string, string, string][] = [
   ["omok", "오목", "/games/omok"],
   ["fight", "격투", "/games/fight"],
 ];
-const DIFF_LABEL: Record<string, string> = {
-  easy: "쉬움",
-  normal: "보통",
-  hard: "어려움",
-  expert: "매우 어려움",
-  nightmare: "나이트메어",
+const DIFF = Object.fromEntries(DIFFICULTIES.map((d) => [d.key, d]));
+
+/** 비트대시 곡 정보 (제목 · 난이도별 레벨) */
+type SongInfo = { title: string; levels: Record<string, number> };
+/** BP에 들어가는 곡 한 줄: 곡마다 가장 높은 BP 하나 */
+type BpSong = {
+  id: string;
+  diff: string;
+  level: number;
+  score: number;
+  bp: number;
+  fc: boolean;
+  ap: boolean;
 };
+
+function DiffChip({ diff, level }: { diff: string; level?: number }) {
+  const d = DIFF[diff];
+  return (
+    <span
+      className="shrink-0 rounded px-1.5 py-px font-mono text-[10px] font-bold text-[#0b1020]"
+      style={{ background: d?.color ?? "#888" }}
+    >
+      {d?.label ?? diff}
+      {level != null && ` ${level}`}
+    </span>
+  );
+}
 
 function Stat({ name, value }: { name: string; value: string | number }) {
   return (
@@ -58,8 +80,8 @@ export default function MyPage() {
   const { loading, account, profile, admin, login, logout } = useAuth();
   const [data, setData] = useState<MySummary | null>(null);
   const [failed, setFailed] = useState(false);
-  /** 비트대시 곡 제목 (곡 데이터가 커서 기록이 있을 때만 불러옴) */
-  const [songs, setSongs] = useState<Record<string, string>>({});
+  /** 비트대시 곡 제목·레벨 (곡 데이터가 커서 기록이 있을 때만 불러옴) */
+  const [songs, setSongs] = useState<Record<string, SongInfo>>({});
 
   const nick = profile?.nick;
   useEffect(() => {
@@ -78,7 +100,21 @@ export default function MyPage() {
     if (!hasRhythm) return;
     let alive = true;
     import("@/lib/rhythm/music").then(
-      (m) => alive && setSongs(Object.fromEntries(m.SONGS.map((s) => [s.id, s.title])))
+      (m) =>
+        alive &&
+        setSongs(
+          Object.fromEntries(
+            m.SONGS.map((s) => [
+              s.id,
+              {
+                title: s.title,
+                levels: Object.fromEntries(
+                  Object.entries(s.charts ?? {}).map(([d, c]) => [d, c?.level ?? 0])
+                ),
+              },
+            ])
+          )
+        )
     );
     return () => {
       alive = false;
@@ -113,6 +149,25 @@ export default function MyPage() {
   const records = data?.records ?? [];
   const rhythm = data?.rhythm ?? [];
   const plays = stats.plays ?? {};
+  // 곡마다 가장 높은 BP 하나 → 높은 순 (상위 20곡이 합에 들어감). 레벨은 지금 채보 기준이라 서버와 같음
+  const bestBySong = new Map<string, BpSong>();
+  for (const r of rhythm) {
+    if (r.member === false) continue;
+    const cut = r.chart.lastIndexOf("_");
+    const id = r.chart.slice(0, cut);
+    const diff = r.chart.slice(cut + 1);
+    const level = songs[id]?.levels[diff];
+    if (!level) continue;
+    const bp = bpOf(level, r.score);
+    const cur = bestBySong.get(id);
+    if (!cur || bp > cur.bp)
+      bestBySong.set(id, { id, diff, level, score: r.score, bp, fc: r.fc, ap: r.ap });
+  }
+  const bpSongs = [...bestBySong.values()].sort((a, b) => b.bp - a.bp);
+  const bpTop = bpSongs.slice(0, BP_TOP_SONGS);
+  const bpSum = bpTop.reduce((s, x) => s + x.bp, 0);
+  const bpTotal = data?.bp?.total || bpSum;
+  const bpMax = bpTop[0]?.bp ?? 1;
 
   return (
     <Faded>
@@ -267,39 +322,127 @@ export default function MyPage() {
                   아직 기록이 없어요. 곡을 끝까지 치면 자동으로 등록돼요.
                 </p>
               ) : (
-                <ul className="flex flex-col divide-y divide-white/5">
-                  {rhythm.map((r) => {
-                    const cut = r.chart.lastIndexOf("_");
-                    const id = r.chart.slice(0, cut);
-                    const diff = r.chart.slice(cut + 1);
-                    return (
-                      <li key={r.id} className="flex items-center gap-3 py-2.5">
-                        <span className="w-12 shrink-0 text-center font-mono text-sm font-bold text-[#FDE047] tabular-nums">
-                          {r.rank}위
-                        </span>
-                        <span className="min-w-0 flex-1 truncate font-['Nanum_Gothic',sans-serif] text-sm text-white/85">
-                          {songs[id] ?? id}
-                          <span className="ml-2 text-[11px] text-white/35">
-                            {DIFF_LABEL[diff] ?? diff}
-                          </span>
-                        </span>
-                        {(r.ap || r.fc) && (
+                <>
+                  {/* BP 요약: 합 · 회원 순위 · 반영 곡 수 */}
+                  <div className="flex flex-wrap items-end gap-x-8 gap-y-3">
+                    <div className="flex flex-col">
+                      <span className="font-mono text-3xl font-bold text-[#FACC15] tabular-nums">
+                        {bpTotal.toLocaleString()}
+                        <span className="ml-1 text-sm text-[#FACC15]/60">BP</span>
+                      </span>
+                      <span className="font-['Nanum_Gothic',sans-serif] text-[11px] text-white/40">
+                        곡별 최고 BP 상위 {BP_TOP_SONGS}곡 합
+                      </span>
+                    </div>
+                    <Stat
+                      name="회원 BP 랭킹"
+                      value={data.bp?.rank ? `${data.bp.rank}위 / ${data.bp.of}명` : "-"}
+                    />
+                    <Stat name="반영된 곡" value={`${bpTop.length} / ${BP_TOP_SONGS}`} />
+                  </div>
+
+                  {/* 합을 곡별로 쪼갠 막대 (색 = 난이도) + 빈 칸 수 */}
+                  {bpTop.length > 0 && (
+                    <div className="mt-4 flex h-2.5 w-full gap-px overflow-hidden rounded-full bg-white/5">
+                      {bpTop.map((x) => (
+                        <span
+                          key={x.id}
+                          title={`${songs[x.id]?.title ?? x.id} ${x.bp} BP`}
+                          className="h-full"
+                          style={{ flex: x.bp, background: DIFF[x.diff]?.color ?? "#888" }}
+                        />
+                      ))}
+                    </div>
+                  )}
+                  {bpTop.length < BP_TOP_SONGS && (
+                    <p className="mt-2 font-['Nanum_Gothic',sans-serif] text-[11px] text-white/35">
+                      아직 {BP_TOP_SONGS - bpTop.length}곡 자리가 비어 있어요 — 안 친 곡을 끝까지
+                      치면 그대로 더해져요.
+                    </p>
+                  )}
+
+                  {/* 곡별 BP: 곡마다 가장 높은 판 하나 */}
+                  <div className="mt-5 mb-1 font-mono text-[11px] text-white/40">곡별 BP</div>
+                  <ul className="flex flex-col gap-1.5">
+                    {bpSongs.map((x, i) => {
+                      const counted = i < BP_TOP_SONGS;
+                      return (
+                        <li
+                          key={x.id}
+                          className={`relative flex items-center gap-3 overflow-hidden rounded-lg px-3 py-2 ${counted ? "" : "opacity-40"}`}
+                        >
+                          {/* 가장 높은 곡 대비 막대 */}
                           <span
-                            className={`shrink-0 font-mono text-[10px] ${r.ap ? "text-[#7DF9FF]" : "text-[#FDE047]"}`}
-                          >
-                            {r.ap ? "AP" : "FC"}
+                            aria-hidden
+                            className="absolute inset-y-0 left-0 rounded-lg"
+                            style={{
+                              width: `${(x.bp / bpMax) * 100}%`,
+                              background: `${DIFF[x.diff]?.color ?? "#888888"}22`,
+                            }}
+                          />
+                          <span className="relative w-5 shrink-0 text-right font-mono text-[11px] text-white/35 tabular-nums">
+                            {i + 1}
                           </span>
-                        )}
-                        <span className="shrink-0 font-mono text-sm text-white tabular-nums">
-                          {r.score.toLocaleString()}
-                        </span>
-                        <span className="w-14 shrink-0 text-right font-mono text-[11px] text-white/35 tabular-nums">
-                          {r.acc.toFixed(2)}%
-                        </span>
-                      </li>
-                    );
-                  })}
-                </ul>
+                          <span className="relative min-w-0 flex-1 truncate font-['Nanum_Gothic',sans-serif] text-sm text-white/85">
+                            {songs[x.id]?.title ?? x.id}
+                          </span>
+                          <span className="relative">
+                            <DiffChip diff={x.diff} level={x.level} />
+                          </span>
+                          {(x.ap || x.fc) && (
+                            <span
+                              className={`relative shrink-0 font-mono text-[10px] ${x.ap ? "text-[#7DF9FF]" : "text-[#FDE047]"}`}
+                            >
+                              {x.ap ? "AP" : "FC"}
+                            </span>
+                          )}
+                          <span className="relative hidden w-20 shrink-0 text-right font-mono text-xs text-white/45 tabular-nums sm:inline">
+                            {x.score.toLocaleString()}
+                          </span>
+                          <span className="relative w-14 shrink-0 text-right font-mono text-sm font-bold text-white tabular-nums">
+                            {x.bp}
+                          </span>
+                        </li>
+                      );
+                    })}
+                  </ul>
+
+                  {/* 기록 전체: 곡·난이도마다 곡 랭킹 순위 */}
+                  <div className="mt-6 mb-1 font-mono text-[11px] text-white/40">곡 랭킹 기록</div>
+                  <ul className="flex flex-col divide-y divide-white/5">
+                    {rhythm.map((r) => {
+                      const cut = r.chart.lastIndexOf("_");
+                      const id = r.chart.slice(0, cut);
+                      const diff = r.chart.slice(cut + 1);
+                      return (
+                        <li key={r.id} className="flex items-center gap-3 py-2.5">
+                          <span className="w-12 shrink-0 text-center font-mono text-sm font-bold text-[#FDE047] tabular-nums">
+                            {r.rank}위
+                          </span>
+                          <span className="min-w-0 flex-1 truncate font-['Nanum_Gothic',sans-serif] text-sm text-white/85">
+                            {songs[id]?.title ?? id}
+                            <span className="ml-2 align-middle">
+                              <DiffChip diff={diff} level={songs[id]?.levels[diff]} />
+                            </span>
+                          </span>
+                          {(r.ap || r.fc) && (
+                            <span
+                              className={`shrink-0 font-mono text-[10px] ${r.ap ? "text-[#7DF9FF]" : "text-[#FDE047]"}`}
+                            >
+                              {r.ap ? "AP" : "FC"}
+                            </span>
+                          )}
+                          <span className="shrink-0 font-mono text-sm text-white tabular-nums">
+                            {r.score.toLocaleString()}
+                          </span>
+                          <span className="w-14 shrink-0 text-right font-mono text-[11px] text-white/35 tabular-nums">
+                            {r.acc.toFixed(2)}%
+                          </span>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </>
               )}
             </section>
           </>

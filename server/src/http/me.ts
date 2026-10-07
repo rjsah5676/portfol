@@ -2,7 +2,7 @@ import express, { Router, type Request } from "express";
 import type { Deps } from "../deps";
 import { unauthenticated } from "../errors";
 import { AVATAR_MAX_BYTES, AVATAR_TYPES } from "../users";
-import { BOARDS } from "./rankings";
+import { BOARDS, bpBoard } from "./rankings";
 import { h, ms, userOf } from "./util";
 
 /*
@@ -11,7 +11,7 @@ import { h, ms, userOf } from "./util";
  *   PUT /api/me/nick       별명 정하기(가입) · 바꾸기  { nick }
  *   PUT /api/me/avatar     프로필 사진 올리기 (본문 = 사진 파일 그대로, JPG · PNG · WebP)
  *   DELETE /api/me/avatar  올린 사진 지우기 (로그인 계정의 사진으로 돌아감)
- *   GET /api/me/summary    내 정보 페이지용: 게임별 최고 기록과 순위, 전적
+ *   GET /api/me/summary    내 정보 페이지용: 게임별 최고 기록과 순위, 전적, 비트대시 BP 합·순위
  */
 export function meRouter({ db, auth, users }: Deps): Router {
   const r = Router();
@@ -83,7 +83,12 @@ export function meRouter({ db, auth, users }: Deps): Router {
         }))
       );
 
-      return { profile, stats: await users.statsOf(user.uid), records, rhythm };
+      // BP: 회원 BP 랭킹에서 내 줄 (곡별 BP는 rhythm 기록과 채보 레벨로 화면에서 계산)
+      const board = await bpBoard(db);
+      const at = board.findIndex((x) => x.uid === user.uid);
+      const bp = { total: at < 0 ? 0 : board[at].bp, rank: at < 0 ? null : at + 1, of: board.length };
+
+      return { profile, stats: await users.statsOf(user.uid), records, rhythm, bp };
     })
   );
 

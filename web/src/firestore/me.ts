@@ -25,6 +25,8 @@ export interface MyRhythmRecord {
   maxCombo: number;
   fc: boolean;
   ap: boolean;
+  /** 회원으로 친 기록인지 (BP는 회원 기록만) */
+  member?: boolean;
   rank: number;
   createdAt: number | null;
 }
@@ -43,6 +45,8 @@ export interface MySummary {
   stats?: MyStats;
   records?: MyRecord[];
   rhythm?: MyRhythmRecord[];
+  /** 비트대시 BP 합과 회원 BP 랭킹 순위 (기록이 없으면 rank null) */
+  bp?: { total: number; rank: number | null; of: number };
 }
 
 export const getMySummary = () => api<MySummary>("/api/me/summary", { auth: true });
