@@ -213,7 +213,7 @@ describe("유입 기록 API", () => {
     expect(before.total.entries).toBe(3);
     expect(before.cloud).toMatchObject({ entries: 0, loaded: false });
 
-    const t = createTraffic(s.db, { geo: false, cloud: true, fetchLists: async () => ({ lists: { AWS: ["34.240.0.0/13", "54.198.0.0/16"] }, errors: ["Azure: 막힘"] }) });
+    const t = createTraffic(s.db, { geo: false, cloud: true, fetchLists: async () => ({ lists: { AWS: ["34.240.0.0/13", "34.248.0.0/16", "54.198.0.0/16"] }, errors: ["Azure: 막힘"] }) });
     await t.maintain();
     const docs = await s.db.col("traffic_hits").find({ _id: { $in: ["c1", "c2", "c3"] } }).sort({ _id: 1 }).toArray();
     expect(docs.map((d) => d.cloud)).toEqual(["AWS", "", "AWS"]);
