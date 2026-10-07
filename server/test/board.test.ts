@@ -75,7 +75,8 @@ describe("방 만들기 · 로비", () => {
     });
     expect(typeof room.createdAt).toBe("number");
     // 비밀번호 관련 값은 방 데이터에 실려 나가지 않음
-    expect(JSON.stringify(room)).not.toMatch(/invite|pw|access/);
+    // (값 전체를 글자로 찾으면 랜덤 방 id 에 "pw" 같은 글자가 섞일 때 틀리게 실패함 → 키 이름으로 확인)
+    expect(Object.keys(room).filter((k) => /invite|pw|access/i.test(k))).toEqual([]);
   });
 
   it("없는 방 구독은 null, 로그인 없이 요청하면 UNAUTHENTICATED", async () => {

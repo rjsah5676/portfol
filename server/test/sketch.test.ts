@@ -67,7 +67,10 @@ describe("방 만들기 · 로비", () => {
     const room = await peek(id);
     expect(room.meta).toMatchObject({ max: 4, drawTime: 60, rounds: 1, hints: true, locked: false });
     expect(room.state.phase).toBe("waiting");
-    expect(JSON.stringify(room)).not.toMatch(/invite|"pw"|access/);
+    // 비밀번호 관련 키가 어디에도 없음 (값을 글자로 찾으면 랜덤 id 에 섞인 글자에 걸릴 수 있어서 키 이름만 봄)
+    const keys: string[] = [];
+    JSON.stringify(room, (k, v) => (keys.push(k), v));
+    expect(keys.filter((k) => /invite|^pw$|access/i.test(k))).toEqual([]);
   });
 
   it("설정 범위를 벗어나면 거절", async () => {
