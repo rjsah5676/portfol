@@ -42,7 +42,7 @@ services:
       # 브라우저는 프록시를 거쳐 같은 주소로 부르지만, 다른 주소에서도 부르게 하려면 여기에 추가 (쉼표로 여러 개)
       CORS_ORIGINS: ${CORS_ORIGINS:-https://gunmo.my}
       FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID:-gunmo-portfolio}
-      ADMIN_EMAILS: ${ADMIN_EMAILS:-rjsah5676@gmail.com}
+      ADMIN_EMAILS: ${ADMIN_EMAILS:-rjsah5676@gmail.com,cksqls9706@gmail.com}
       # 프록시(Caddy) 한 단계 뒤에 있음 → 요청 횟수 제한이 실제 접속자 IP 기준으로 걸림
       TRUST_PROXY: "1"
       # 글이 바뀌면 프론트에 알려서 캐시를 바로 비움 (비밀값이 비어 있으면 알리지 않고, 프론트가 1분마다 스스로 갱신)

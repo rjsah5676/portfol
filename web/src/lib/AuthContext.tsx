@@ -97,12 +97,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let alive = true;
     // 직전에 확인한 계정 (처음엔 아직 모름)
     let last: string | null = null;
+    // 프로필을 못 받아 다시 시도하려고 기다리는 중이면 그 타이머
+    let retry: ReturnType<typeof setTimeout> | undefined;
+    let reload = () => {};
     // 로그인·로그아웃뿐 아니라 익명 계정이 Google 계정으로 바뀐 것(uid 는 그대로)도 알아야 해서 토큰 기준으로 봄
     const off = onIdTokenChanged(auth, (u) => {
       const member = u && !u.isAnonymous ? u : null;
       const key = member ? member.uid : "";
       if (key === last) return;
       last = key;
+      clearTimeout(retry);
+      retry = undefined;
       setAccount(member);
       setMe(null);
       if (!member) {
@@ -110,13 +115,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
       setLoading(true);
-      api<Me>("/api/me", { auth: true })
-        .then((res) => alive && last === key && setMe(res))
-        .catch(() => {})
-        .finally(() => alive && last === key && setLoading(false));
+      // 받아올 때까지 다시 시도 (서버 재시작·잠깐 끊김을 "별명 없음"으로 착각해 별명 정하기 창을 띄우지 않게).
+      // 그동안은 확인 중(loading)으로 둠. 1·2·4·8·15초… 간격, 창으로 돌아오거나 인터넷이 다시 붙으면 바로.
+      let tries = 0;
+      const load = () => {
+        clearTimeout(retry);
+        retry = undefined;
+        api<Me>("/api/me", { auth: true })
+          .then((res) => {
+            if (!alive || last !== key) return;
+            setMe(res);
+            setLoading(false);
+          })
+          .catch(() => {
+            if (!alive || last !== key) return;
+            retry = setTimeout(load, Math.min(15_000, 1000 * 2 ** tries++));
+          });
+      };
+      reload = load;
+      load();
     });
+    const again = () => {
+      if (document.visibilityState === "visible" && retry) reload();
+    };
+    document.addEventListener("visibilitychange", again);
+    window.addEventListener("online", again);
     return () => {
       alive = false;
+      clearTimeout(retry);
+      document.removeEventListener("visibilitychange", again);
+      window.removeEventListener("online", again);
       off();
     };
   }, []);

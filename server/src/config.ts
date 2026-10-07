@@ -60,7 +60,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     authJwksUrl:
       env.AUTH_JWKS_URL?.trim() ||
       "https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com",
-    adminEmails: list(env.ADMIN_EMAILS).length ? list(env.ADMIN_EMAILS) : ["rjsah5676@gmail.com"],
+    adminEmails: list(env.ADMIN_EMAILS).length ? list(env.ADMIN_EMAILS) : ["rjsah5676@gmail.com", "cksqls9706@gmail.com"],
     adminNick: env.ADMIN_NICK?.trim() || "이건모",
     trustProxy: Number(env.TRUST_PROXY) || 0,
     webRevalidateUrl: env.WEB_REVALIDATE_URL?.trim() ?? "",
