@@ -260,7 +260,7 @@ export default function CustomMusic({
                 눌러서 고르세요
               </p>
               <p className="font-mono text-[1.05cqw] text-white/40">
-                mp3 · wav · ogg · m4a · mp4(뮤비는 배경에) · 12분 이하
+                mp3 · wav · ogg · m4a · mp4 · 12분 이하
               </p>
             </>
           )}
