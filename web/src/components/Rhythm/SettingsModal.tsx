@@ -184,7 +184,9 @@ export default function SettingsModal({
       className="absolute inset-0 z-40 flex items-center justify-center bg-[#05030f]/70 backdrop-blur-[3px] [animation:modal-fade_180ms_ease-out]"
       onPointerDown={(e) => e.target === e.currentTarget && close()}
     >
-      <div className="relative flex h-[46cqw] w-[74cqw] flex-col overflow-hidden rounded-[1.4cqw] border border-white/15 bg-[linear-gradient(160deg,#171431f2,#0b0a1cf5)] shadow-[0_0_4cqw_rgba(108,99,255,0.35)] [animation:modal-pop_220ms_ease-out]">
+      <div
+        className={`${calibrate ? "invisible" : ""} relative flex h-[46cqw] w-[74cqw] flex-col overflow-hidden rounded-[1.4cqw] border border-white/15 bg-[linear-gradient(160deg,#171431f2,#0b0a1cf5)] shadow-[0_0_4cqw_rgba(108,99,255,0.35)] [animation:modal-pop_220ms_ease-out]`}
+      >
         <div
           className="absolute top-0 left-[2cqw] h-[0.3cqw] w-[8cqw]"
           style={{ background: color }}
