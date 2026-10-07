@@ -7,6 +7,7 @@ import { audio, sfx } from "@/lib/rhythm/sfx";
 import { COVERS, coverOf, CUSTOM_COVER } from "./SongCarousel";
 import CustomMusic, { type CustomTrack } from "./CustomMusic";
 import { RankingBoard } from "./RankingBoard";
+import SpeakerIcon from "./SpeakerIcon";
 import { RankEmblem } from "./Stage";
 import type { Best } from "./RhythmGame";
 
@@ -36,6 +37,8 @@ export default function SongSelect({
   err,
   onBack,
   onSettings,
+  bgmMute,
+  onToggleBgm,
   blocked,
   fs,
   onToggleFs,
@@ -62,6 +65,9 @@ export default function SongSelect({
   err: string;
   onBack: () => void;
   onSettings: () => void;
+  /** 메뉴 배경음(미리 듣기 포함) 꺼짐 — B 키는 부모가 받음 */
+  bgmMute: boolean;
+  onToggleBgm: () => void;
   blocked: boolean;
   fs: boolean;
   onToggleFs: () => void;
@@ -229,6 +235,13 @@ export default function SongSelect({
               🔍 분석 모드{analyze ? " ON" : ""}
             </button>
           )}
+          <TopBtn onClick={onToggleBgm} title={bgmMute ? "배경음 켜기 (B)" : "배경음 끄기 (B)"}>
+            <SpeakerIcon
+              muted={bgmMute}
+              className={`h-[1.3cqw] w-[1.3cqw] ${bgmMute ? "text-white/40" : ""}`}
+            />
+            <K>B</K>
+          </TopBtn>
           <TopBtn onClick={onSettings}>
             ⚙ 설정 <K>S</K>
           </TopBtn>
@@ -639,6 +652,9 @@ export default function SongSelect({
             <K>M</K> 내 음악
           </span>
           <span>
+            <K>B</K> 배경음
+          </span>
+          <span>
             <K>Esc</K> 타이틀
           </span>
           {err && <span className="text-red-300">{err}</span>}
@@ -713,11 +729,21 @@ function K({ children }: { children: React.ReactNode }) {
   );
 }
 
-function TopBtn({ onClick, children }: { onClick: () => void; children: React.ReactNode }) {
+function TopBtn({
+  onClick,
+  title,
+  children,
+}: {
+  onClick: () => void;
+  title?: string;
+  children: React.ReactNode;
+}) {
   return (
     <button
       type="button"
       onClick={onClick}
+      title={title}
+      aria-label={title}
       className="flex cursor-pointer items-center gap-[0.4cqw] rounded-[0.6cqw] border border-white/15 bg-white/5 px-[1cqw] py-[0.35cqw] font-['Nanum_Gothic',sans-serif] text-[1.1cqw] font-bold text-white/75 transition-colors hover:border-white/40 hover:text-white"
     >
       {children}

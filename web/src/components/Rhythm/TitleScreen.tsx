@@ -5,6 +5,7 @@ import GuideView from "@/components/GuideView";
 import { RHYTHM_GUIDE } from "@/data/gameGuides";
 import { sfx } from "@/lib/rhythm/sfx";
 import PatchNotes, { LATEST } from "./PatchNotes";
+import SpeakerIcon from "./SpeakerIcon";
 
 const DISP = "font-['Arial_Black','Segoe_UI_Black',Impact,sans-serif] font-black italic";
 
@@ -14,6 +15,8 @@ export default function TitleScreen({
   onStart,
   onSettings,
   onRanking,
+  bgmMute,
+  onToggleBgm,
   fs,
   onToggleFs,
   blocked,
@@ -24,6 +27,9 @@ export default function TitleScreen({
   onSettings: () => void;
   /** 회원 BP 랭킹 (게임 머리말의 랭킹 창을 엶) */
   onRanking: () => void;
+  /** 메뉴 배경음 꺼짐 — B 키는 부모가 받음 */
+  bgmMute: boolean;
+  onToggleBgm: () => void;
   fs: boolean;
   onToggleFs: () => void;
   /** 설정 창이 떠 있으면 키 입력 무시 */
@@ -168,18 +174,37 @@ export default function TitleScreen({
         DFJK 4KEY · {entered ? "↑ ↓ 이동 · Enter 선택" : "BEAT DASH"}
       </div>
 
-      {/* 패치노트 (오른쪽 위) */}
-      <button
-        type="button"
-        onPointerDown={(e) => e.stopPropagation()}
-        onClick={() => setNotes(true)}
-        className="absolute top-[1.6cqw] right-[1.6cqw] z-10 flex cursor-pointer items-center gap-[0.6cqw] rounded-full border border-[#F472B6]/60 bg-[#0b0820]/75 px-[1.3cqw] py-[0.45cqw] font-['Nanum_Gothic',sans-serif] text-[1.2cqw] font-bold text-white backdrop-blur-[3px] transition-colors hover:border-[#F472B6] hover:bg-[#2a1240]/85"
-      >
-        📜 패치노트
-        <span className="font-mono text-[1cqw] font-normal text-white/55">
-          {LATEST.ver} · {LATEST.date.slice(5)}
-        </span>
-      </button>
+      {/* 오른쪽 위: 배경음 · 패치노트 */}
+      <div className="absolute top-[1.6cqw] right-[1.6cqw] z-10 flex items-center gap-[0.8cqw]">
+        {entered && (
+          <button
+            type="button"
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={onToggleBgm}
+            title={bgmMute ? "배경음 켜기 (B)" : "배경음 끄기 (B)"}
+            aria-label={bgmMute ? "배경음 켜기" : "배경음 끄기"}
+            className={`flex cursor-pointer items-center gap-[0.5cqw] rounded-full border bg-[#0b0820]/75 px-[1cqw] py-[0.45cqw] font-mono text-[1cqw] backdrop-blur-[3px] transition-colors hover:border-white/60 ${
+              bgmMute ? "border-white/20 text-white/45" : "border-white/35 text-white"
+            }`}
+          >
+            <SpeakerIcon muted={bgmMute} className="h-[1.5cqw] w-[1.5cqw]" />
+            <span className="rounded-[0.3cqw] border border-white/25 px-[0.4cqw] leading-none">
+              B
+            </span>
+          </button>
+        )}
+        <button
+          type="button"
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={() => setNotes(true)}
+          className="flex cursor-pointer items-center gap-[0.6cqw] rounded-full border border-[#F472B6]/60 bg-[#0b0820]/75 px-[1.3cqw] py-[0.45cqw] font-['Nanum_Gothic',sans-serif] text-[1.2cqw] font-bold text-white backdrop-blur-[3px] transition-colors hover:border-[#F472B6] hover:bg-[#2a1240]/85"
+        >
+          📜 패치노트
+          <span className="font-mono text-[1cqw] font-normal text-white/55">
+            {LATEST.ver} · {LATEST.date.slice(5)}
+          </span>
+        </button>
+      </div>
       {notes && <PatchNotes onClose={() => setNotes(false)} />}
 
       {guide && (

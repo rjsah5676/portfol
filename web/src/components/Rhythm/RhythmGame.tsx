@@ -41,6 +41,7 @@ import RankList from "@/components/RankList";
 import { bpChartLabel } from "./RankingBoard";
 
 const SETTINGS_KEY = "rhythm_settings";
+const BGM_MUTE_KEY = "rhythm_bgm_mute";
 /** 저장 설정 버전 — 2: 노트 모양 기본값을 메탈로 바꾼 뒤 (그 전에 저장된 설정은 한 번 메탈로) */
 const SETTINGS_VER = 3;
 const BEST_KEY = "rhythm_best";
@@ -330,10 +331,27 @@ export default function RhythmGame() {
       p.src.stop(t + fade + 0.02);
     } catch {}
   }, []);
+  // 메뉴 배경음(타이틀 BGM·곡 미리 듣기) 끄기 — 🔊 버튼 / B 키. 플레이 중 음악은 그대로
+  const [bgmMute, setBgmMute] = useState(false);
+  useEffect(() => {
+    try {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- 저장된 값 복원(마운트 1회)
+      setBgmMute(localStorage.getItem(BGM_MUTE_KEY) === "1");
+    } catch {}
+  }, []);
+  const toggleBgm = useCallback(() => {
+    setBgmMute((m) => {
+      try {
+        localStorage.setItem(BGM_MUTE_KEY, m ? "0" : "1");
+      } catch {}
+      return !m;
+    });
+    sfx("ui-move", 0.6);
+  }, []);
   const previewVol = settings.music;
   // 미리 듣기할 곡: 내장곡, 또는 내 음악(파일을 넣은 뒤)
   const previewSong = customSel ? (track ? customSong : null) : builtinSong;
-  const previewing = screen === "select" && entered && !!previewSong;
+  const previewing = screen === "select" && entered && !!previewSong && !bgmMute;
   useEffect(() => {
     if (!previewing) return;
     let alive = true;
@@ -379,7 +397,20 @@ export default function RhythmGame() {
   }, [previewing, previewSong, customSel, track, previewVol, stopPreview]);
 
   // 메뉴 BGM: 타이틀, 그리고 미리 듣기가 없는 화면(내 음악 고를 때)
-  const bgmOn = entered && (screen === "title" || (screen === "select" && customSel && !track));
+  const bgmOn =
+    entered && !bgmMute && (screen === "title" || (screen === "select" && customSel && !track));
+  // B 키: 타이틀·곡 선택에서 배경음 켜고 끄기 (입력칸·설정 창에선 안 받음)
+  useEffect(() => {
+    if (!entered || settingsOpen || (screen !== "title" && screen !== "select")) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.code !== "KeyB" || e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
+      if ((e.target as HTMLElement)?.closest?.("input, textarea")) return;
+      e.preventDefault();
+      toggleBgm();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [entered, settingsOpen, screen, toggleBgm]);
   useEffect(() => {
     if (bgmOn) playBgm(settings.music);
     else stopBgm();
@@ -639,6 +670,8 @@ export default function RhythmGame() {
               onStart={() => setScreen("select")}
               onSettings={() => setSettingsOpen(true)}
               onRanking={() => setRankOpen(true)}
+              bgmMute={bgmMute}
+              onToggleBgm={toggleBgm}
               fs={fs}
               onToggleFs={toggleFs}
               blocked={settingsOpen}
@@ -665,6 +698,8 @@ export default function RhythmGame() {
               err={err}
               onBack={() => setScreen("title")}
               onSettings={() => setSettingsOpen(true)}
+              bgmMute={bgmMute}
+              onToggleBgm={toggleBgm}
               blocked={settingsOpen}
               fs={fs}
               onToggleFs={toggleFs}
