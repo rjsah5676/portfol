@@ -399,7 +399,7 @@ export default function Stage({
       const { c, b } = layer(CW, CH);
       if (domBg) {
         // 재킷·영상은 뒤의 HTML 요소가 보여 주고, 여기엔 어두운 막만
-        b.fillStyle = useVideo ? "rgba(4,5,14,0.5)" : "rgba(4,5,14,0.42)";
+        b.fillStyle = useVideo ? "rgba(4,5,14,0.5)" : "rgba(4,5,14,0.36)";
         b.fillRect(0, 0, CW, CH);
       } else {
         if (ready(bgImg)) {
@@ -1878,8 +1878,8 @@ export default function Stage({
             backgroundSize: "cover",
             backgroundPosition: "center",
             // 흐림 가장자리가 비치지 않게 살짝 키움
-            transform: "scale(1.06)",
-            filter: "blur(14px) saturate(1.1)",
+            transform: "scale(1.03)",
+            filter: "blur(5px) saturate(1.1)",
           }}
         />
       )}
