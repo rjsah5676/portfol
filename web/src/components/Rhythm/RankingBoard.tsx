@@ -6,10 +6,14 @@ import { rankDateLabel } from "@/lib/rankDate";
 import { useEffect, useState } from "react";
 import {
   addRhythmRanking,
+  getBpTop,
   getRhythmTop,
   RHYTHM_NAME_MAX,
+  type BpRanking,
   type RhythmRanking,
 } from "@/firestore/rhythmRankings";
+import { SONGS } from "@/lib/rhythm/music";
+import { DIFFICULTIES } from "@/lib/rhythm/chart";
 import type { Result } from "./Stage";
 
 const NAME_KEY = "rhythm_name";
@@ -194,6 +198,88 @@ export function RankingBoard({
         <List list={top.list} />
       )}
     </div>
+  );
+}
+
+/** "곡id_난이도" → "곡 제목 · 난이도" */
+function chartLabel(chart: string) {
+  const i = chart.lastIndexOf("_");
+  const song = SONGS.find((s) => s.id === chart.slice(0, i));
+  const d = DIFFICULTIES.find((x) => x.key === chart.slice(i + 1));
+  return `${song?.title ?? chart.slice(0, i)} · ${d?.label ?? chart.slice(i + 1)}`;
+}
+
+/** 곡 선택 화면: 회원 BP 랭킹 (곡별 최고 BP 상위 20곡 합) */
+export function BpBoard({ refresh = 0 }: { refresh?: number }) {
+  const [state, setState] = useState<{ key: number; list: BpRanking[]; error: boolean } | null>(
+    null
+  );
+  useEffect(() => {
+    let alive = true;
+    getBpTop(20)
+      .then((list) => alive && setState({ key: refresh, list, error: false }))
+      .catch(() => alive && setState({ key: refresh, list: [], error: true }));
+    return () => {
+      alive = false;
+    };
+  }, [refresh]);
+  const top = state?.key === refresh ? state : null;
+  if (!top)
+    return (
+      <p className="py-[1.4cqw] text-center font-mono text-[1.05cqw] text-white/30">불러오는 중…</p>
+    );
+  if (top.error)
+    return (
+      <p className="py-[1.4cqw] text-center font-mono text-[1.05cqw] text-red-300/80">
+        랭킹을 불러오지 못했어요.
+      </p>
+    );
+  if (!top.list.length)
+    return (
+      <p className="py-[2cqw] text-center font-mono text-[1.1cqw] text-white/30">
+        아직 BP 기록이 없어요. 회원으로 곡을 클리어하면 쌓여요.
+      </p>
+    );
+  return (
+    <ol className="flex flex-col gap-[0.35cqw] py-[0.3cqw]">
+      {top.list.map((r, i) => {
+        const medal = MEDAL[i];
+        return (
+          <li
+            key={r.id}
+            className="relative flex items-center gap-[0.8cqw] overflow-hidden rounded-[0.5cqw] border border-white/[0.07] bg-white/[0.04] py-[0.35cqw] pr-[0.9cqw] pl-[0.4cqw] [animation:bd-slide-left_300ms_ease-out_backwards]"
+            style={{
+              animationDelay: `${i * 40}ms`,
+              ...(medal
+                ? { background: `linear-gradient(90deg, ${medal}26, rgba(255,255,255,0.03) 60%)` }
+                : null),
+            }}
+          >
+            <span
+              className={`${DISP} flex h-[2cqw] w-[2.6cqw] shrink-0 -skew-x-12 items-center justify-center rounded-[0.35cqw] text-[1.15cqw]`}
+              style={
+                medal
+                  ? { background: medal, color: "#1a1030", boxShadow: `0 0 0.8cqw ${medal}88` }
+                  : { background: "rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.6)" }
+              }
+            >
+              <span className="skew-x-12">{r.rank}</span>
+            </span>
+            <span className="min-w-0 flex-1 truncate font-['Nanum_Gothic',sans-serif] text-[1.15cqw] font-bold text-white/90">
+              <Nick name={r.name} guest={false} />
+              <span className="ml-[0.6cqw] font-normal text-[0.9cqw] text-white/40">
+                {r.songs}곡{r.best ? ` · 최고 ${chartLabel(r.best.chart)} ${r.best.bp}` : ""}
+              </span>
+            </span>
+            <span
+              className={`${DISP} w-[6cqw] shrink-0 text-right text-[1.25cqw] text-[#FDE68A] tabular-nums`}
+            >
+              {r.bp.toLocaleString("en-US")}
+            </span>
+          </li>
+        );
+      })}
+    </ol>
   );
 }
 

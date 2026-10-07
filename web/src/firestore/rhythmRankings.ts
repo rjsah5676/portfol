@@ -49,6 +49,31 @@ export async function getRhythmTop(
   }));
 }
 
+/** 회원 BP 랭킹 한 줄 */
+export interface BpRanking {
+  id: string;
+  rank: number;
+  name: string;
+  /** 곡별 최고 BP 상위 20곡 합 */
+  bp: number;
+  /** 기록이 있는 곡 수 */
+  songs: number;
+  /** 가장 높은 BP를 낸 채보 */
+  best: { bp: number; chart: string; score: number } | null;
+}
+
+export async function getBpTop(count = 20): Promise<BpRanking[]> {
+  const rows = await api<Partial<BpRanking>[]>(`/api/rankings/rhythm-bp?limit=${count}`);
+  return rows.map((x, i) => ({
+    id: String(x.id ?? i),
+    rank: Number(x.rank ?? i + 1),
+    name: String(x.name ?? ""),
+    bp: Number(x.bp ?? 0),
+    songs: Number(x.songs ?? 0),
+    best: x.best ?? null,
+  }));
+}
+
 export async function addRhythmRanking(
   songId: string,
   diff: string,

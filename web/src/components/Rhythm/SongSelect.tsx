@@ -6,7 +6,7 @@ import { DIFFICULTIES, type Chart, type Difficulty } from "@/lib/rhythm/chart";
 import { audio, sfx } from "@/lib/rhythm/sfx";
 import { COVERS, coverOf, CUSTOM_COVER } from "./SongCarousel";
 import CustomMusic, { type CustomTrack } from "./CustomMusic";
-import { RankingBoard } from "./RankingBoard";
+import { BpBoard, RankingBoard } from "./RankingBoard";
 import { RankEmblem } from "./Stage";
 import type { Best } from "./RhythmGame";
 
@@ -69,6 +69,8 @@ export default function SongSelect({
   analyze?: boolean;
   onAnalyze?: (on: boolean) => void;
 }) {
+  // 랭킹 패널: 곡 랭킹 / 회원 BP 랭킹
+  const [bpTab, setBpTab] = useState(false);
   // 내 음악: 재킷을 눌러도 파일 고르기
   const pickRef = useRef<(() => void) | null>(null);
   const custom = sel === songs.length;
@@ -388,13 +390,42 @@ export default function SongSelect({
         <div className="flex min-h-0 flex-1 flex-col rounded-[0.9cqw] border border-white/10 bg-black/45 px-[1.4cqw] py-[0.8cqw]">
           <div className="flex items-baseline justify-between gap-[1cqw]">
             <span className={`${DISP} text-[1.3cqw] tracking-[0.12em] text-white`}>
-              {custom ? "HOW IT WORKS" : practice ? "PRACTICE" : "RANKING"}
+              {custom ? "HOW IT WORKS" : practice ? "PRACTICE" : bpTab ? "BP RANKING" : "RANKING"}
             </span>
-            <span className={`${KR} text-[0.95cqw] text-white/45`}>
-              {custom || practice
-                ? "랭킹 없음 · 기록은 이 브라우저에만"
-                : `${diffInfo.label} TOP 10`}
-            </span>
+            {custom || practice ? (
+              <span className={`${KR} text-[0.95cqw] text-white/45`}>
+                랭킹 없음 · 기록은 이 브라우저에만
+              </span>
+            ) : (
+              <span className="flex items-center gap-[0.5cqw]">
+                {/* 곡 랭킹 ↔ 회원 BP 랭킹 (곡별 최고 BP 상위 20곡 합) */}
+                {(
+                  [
+                    [false, `${diffInfo.label} TOP 10`],
+                    [true, "BP"],
+                  ] as const
+                ).map(([on, label]) => (
+                  <button
+                    key={label}
+                    type="button"
+                    onClick={() => {
+                      setBpTab(on);
+                      sfx("ui-move", 0.5);
+                    }}
+                    title={
+                      on
+                        ? "회원 랭킹: 곡마다 가장 좋은 판의 BP, 상위 20곡 합"
+                        : "이 곡·난이도 TOP 10"
+                    }
+                    className={`${KR} cursor-pointer rounded-[0.4cqw] px-[0.6cqw] py-[0.1cqw] text-[0.95cqw] transition-colors ${
+                      bpTab === on ? "bg-white/15 text-white" : "text-white/45 hover:text-white/80"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </span>
+            )}
           </div>
           {(custom || practice) && (
             <ul
@@ -429,7 +460,7 @@ export default function SongSelect({
           )}
           {!custom && !practice && song && (
             <div className="bd-scroll mt-[0.4cqw] min-h-0 flex-1 overflow-y-auto">
-              <RankingBoard songId={song.id} diff={diff} label="" game />
+              {bpTab ? <BpBoard /> : <RankingBoard songId={song.id} diff={diff} label="" game />}
             </div>
           )}
         </div>

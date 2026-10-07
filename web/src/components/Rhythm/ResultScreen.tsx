@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import type { Song } from "@/lib/rhythm/music";
 import { DIFFICULTIES } from "@/lib/rhythm/chart";
+import { bpOf } from "@/lib/rhythm/bp";
 import { sfx, tick } from "@/lib/rhythm/sfx";
 import { coverOf } from "./SongCarousel";
 import { RankEmblem, type Result } from "./Stage";
@@ -29,6 +30,12 @@ export default function ResultScreen({
   starting: boolean;
 }) {
   const d = DIFFICULTIES.find((x) => x.key === result.diff)!;
+  // BP: 내장곡(랭킹 있는 곡)을 끝까지 쳤을 때만 — 곡별 최고 BP 상위 20곡 합이 회원 랭킹
+  const level = song.charts?.[result.diff]?.level;
+  const bp =
+    level !== undefined && !song.custom && !song.practice && !result.failed && !result.auto
+      ? bpOf(level, result.score)
+      : null;
   const banner = result.failed
     ? "failed"
     : result.ap
@@ -180,6 +187,12 @@ export default function ResultScreen({
               <span className="text-white/40">MAX COMBO </span>
               {Math.round(result.maxCombo * ease)}
             </span>
+            {bp !== null && (
+              <span title="BP: 레벨·점수로 환산한 점수. 곡마다 가장 좋은 판 하나, 상위 20곡 합이 회원 BP 랭킹">
+                <span className="text-white/40">BP </span>
+                <span className="text-[#FDE68A]">{Math.round(bp * ease)}</span>
+              </span>
+            )}
           </div>
         </div>
         <div className="flex flex-col gap-[0.5cqw]">

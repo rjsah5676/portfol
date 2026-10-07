@@ -19,8 +19,8 @@ export const DIFFICULTIES: { key: Difficulty; label: string; color: string }[] =
   { key: "hard", label: "어려움", color: "#F59E0B" },
   { key: "expert", label: "매우 어려움", color: "#F43F5E" },
   { key: "nightmare", label: "나이트메어", color: "#A855F7" },
-  // EX+: 나이트메어 위 (Lv19~21) — 일부 보스곡만
-  { key: "explus", label: "EX+", color: "#FACC15" },
+  // ULTIMA: 나이트메어 위 (Lv19~21) — 일부 보스곡만 (키는 explus 그대로: 랭킹·저장 설정 호환)
+  { key: "explus", label: "ULTIMA", color: "#FACC15" },
 ];
 /** 내장곡에서 이 난이도가 있는지 (나이트메어는 일부 곡만) */
 export const hasDifficulty = (

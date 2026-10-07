@@ -16,7 +16,7 @@ import velocity from "../../../web/src/data/rhythm/velocity.json";
  */
 interface SongData {
   bpm: number;
-  charts: Record<string, { units: number; notes: number[][] }>;
+  charts: Record<string, { level: number; units: number; notes: number[][] }>;
 }
 
 // 곡 id = 파일 이름 (web/src/lib/rhythm/music.ts 의 audioSong id 와 같음)
@@ -41,6 +41,8 @@ export interface ChartInfo {
   maxCombo: number;
   /** 마지막 노트가 끝나는 시각(초) — 이만큼은 지나야 곡이 끝남 */
   lastTime: number;
+  /** 레벨 (BP 계산) */
+  level: number;
 }
 
 /** "곡id_난이도" → 검증용 값 */
@@ -53,8 +55,14 @@ for (const [id, song] of Object.entries(SONGS)) {
     let lastTime = 0;
     for (const [t, , end] of chart.notes) {
       lastTime = Math.max(lastTime, end ?? t);
-      if (end) ticks += Math.max(0, Math.floor((end - t - tickSec * 0.5) / tickSec));
+      if (end)
+        ticks += Math.max(0, Math.floor((end - t - tickSec * 0.5) / tickSec));
     }
-    RHYTHM_CHARTS.set(`${id}_${diff}`, { units: chart.units, maxCombo: chart.units + ticks, lastTime });
+    RHYTHM_CHARTS.set(`${id}_${diff}`, {
+      units: chart.units,
+      maxCombo: chart.units + ticks,
+      lastTime,
+      level: chart.level,
+    });
   }
 }
