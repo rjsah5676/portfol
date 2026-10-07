@@ -327,16 +327,22 @@ export async function analyzeAudio(
     const b = Math.min(env.length - 3, Math.ceil(((t + 0.015) * SR) / EH));
     let best = -Infinity;
     let rise = -Infinity;
-    let at = t;
+    let jMax = a;
     for (let j = a; j <= b; j++) {
       const dP = envP[j + 2] - envP[j - 2];
       if (dP > best) {
         best = dP;
-        at = (j * EH) / SR;
+        jMax = j;
       }
       rise = Math.max(rise, env[j + 2] - env[j - 2]);
     }
-    return { at, rise };
+    // 어택 "시작"으로 당김: 가장 가파른 지점은 어택 중간이라, 실제 곡(믹스로 뭉개진 어택)에서 osu 매퍼가
+    // 귀로 찍는 시각보다 일관되게 ~21ms 늦었음 (osu 랭크 318쌍, 곡별 중앙값 −19~−27ms · MAD 2ms).
+    // 기울기가 최고점의 35% 밑으로 떨어지는 곳까지 왼쪽으로 (최대 25ms) — 또렷한 어택은 1~2칸이라 그대로
+    let j0 = jMax;
+    const lim = Math.max(a, jMax - 17); // 17칸 ≈ 25ms
+    while (j0 > lim && envP[j0 + 1] - envP[j0 - 3] >= best * 0.35) j0--;
+    return { at: ((j0 + 1) * EH) / SR, rise };
   };
 
   // ── 타격 후보: 지역 최대 + 적응형 문턱 ──
