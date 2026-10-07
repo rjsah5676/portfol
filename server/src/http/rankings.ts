@@ -6,7 +6,6 @@ import {
   janggiScore,
   omokScore,
 } from "../../../web/src/lib/aiScore";
-import { CHARS } from "../../../web/src/lib/fight/chars";
 import { TOTAL_SEC as MELON_SEC } from "../../../web/src/lib/melon/logic";
 import type { Deps } from "../deps";
 import { AppError, bad, notFound, unauthenticated } from "../errors";
@@ -174,7 +173,7 @@ export const BOARDS: Record<string, Board> = {
     minSec: aiSec,
     // lead = 남은 체력(%)
     check: (d) => fightScore(tierOf(d), d.lead, d.seconds).score === d.score,
-    split: { field: "ch", of: (d) => fightCh(String(d.opp)), valid: (v) => CHARS.some((c) => c.id === v) },
+    split: { field: "ch", of: (d) => fightCh(String(d.opp)), valid: (v) => /^[a-z]{2,16}$/.test(v) },
   },
 };
 

@@ -191,7 +191,7 @@ describe("랭킹: AI 대국", () => {
     expect((await get("?ch=kai")).filter((r) => r.ch === "kai").map((r) => r.opp)).toContain("7:kai>igna");
     expect((await get("?ch=kai")).some((r) => r.opp === "1:kai>igna")).toBe(false);
     expect((await get("?ch=igna")).map((r) => r.opp).slice(0, 2)).toEqual(["5:igna>zena", "2:igna>kai"]);
-    expect((await s.http("/api/rankings/fight_ai_rankings?ch=nobody")).status).toBe(400);
+    expect((await s.http("/api/rankings/fight_ai_rankings?ch=KAI")).status).toBe(400);
     // 전체: fc1은 가장 좋은 기록(지존 카이) 하나만
     const all = await get("");
     expect(all.filter((r) => r.opp.endsWith(">igna") || r.opp.endsWith(">kai") || r.opp.endsWith(">zena")).map((r) => r.opp)).toEqual(
