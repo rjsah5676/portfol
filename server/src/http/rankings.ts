@@ -14,12 +14,14 @@ import { KeyedMutex } from "../mutex";
 import { RHYTHM_CHARTS } from "./rhythmCharts";
 import { bpOf, BP_TOP_SONGS } from "./bp";
 import { avatarPath } from "../users";
+import { createFightRating } from "../games/fightRating";
 import { h, ms, userOf } from "./util";
 
 /*
  * 게임 랭킹. 컬렉션 이름과 값의 범위는 기존 firestore.rules 그대로.
  *   GET  /api/rankings/:board?limit=10
  *   GET  /api/rankings/rhythm/:chart?limit=10      (chart = 곡id_난이도)
+ *   GET  /api/rankings/fight-rating?limit=10      격투 온라인 레이팅 (회원끼리 경기만)
  *   GET  /api/rankings/rhythm-bp?limit=10          회원 BP 랭킹 (곡별 최고 BP 상위 20곡 합)
  *   POST /api/rankings/tickets  { board }           게임을 시작할 때: 1회용 티켓 발급 (로그인 필요)
  *   POST /api/rankings/:board   { …기록, ticket }   기록 등록 (로그인 필요)
@@ -369,6 +371,7 @@ export async function bpBoard(db: Deps["db"]): Promise<BpRow[]> {
 export function rankingsRouter({ db, auth, users }: Deps): Router {
   const r = Router();
   const tickets = db.col<Ticket>("rank_tickets");
+  const fightRating = createFightRating(db, users);
   // 같은 사람의 등록이 겹쳐도 "기존 기록 확인 → 저장"이 섞이지 않게
   const mutex = new KeyedMutex();
 
@@ -518,6 +521,16 @@ export function rankingsRouter({ db, auth, users }: Deps): Router {
       if (!CHART_RE.test(chart)) throw bad();
       clearBpCache();
       return submit(req, `rhythm:${chart}`, "rhythm_rankings", { chart });
+    }),
+  );
+
+  // 격투 온라인 레이팅 (회원끼리 경기만, games/fightRating.ts)
+  r.get(
+    "/fight-rating",
+    h(async (req) => {
+      const docs = await fightRating.top(limitOf(req.query.limit));
+      // 날짜 칸은 마지막 경기 시각
+      return rows(db, docs.map(({ updatedAt, ...d }) => ({ ...d, createdAt: updatedAt })));
     }),
   );
 

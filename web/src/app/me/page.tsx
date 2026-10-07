@@ -297,6 +297,17 @@ export default function MyPage() {
                           </span>
                         </span>
                       )}
+                      {key === "fight" && data.fightRating && (
+                        <span
+                          className="ml-auto rounded-full border border-[#FF8A3D]/35 bg-[#FF8A3D]/10 px-2.5 py-0.5 font-mono text-xs text-[#FFC9A3] tabular-nums"
+                          title={`최고 ${data.fightRating.peak} · 레이팅 경기 ${data.fightRating.n}판`}
+                        >
+                          레이팅 <b className="text-white">{data.fightRating.r}</b>
+                          <span className="ml-1.5 text-white/45">
+                            {data.fightRating.rank}위 / {data.fightRating.of}명
+                          </span>
+                        </span>
+                      )}
                     </div>
                   );
                 })}

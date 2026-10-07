@@ -1,6 +1,7 @@
 import express, { Router, type Request } from "express";
 import type { Deps } from "../deps";
 import { unauthenticated } from "../errors";
+import { createFightRating } from "../games/fightRating";
 import { AVATAR_MAX_BYTES, AVATAR_TYPES } from "../users";
 import { BOARDS, bpBoard } from "./rankings";
 import { h, ms, userOf } from "./util";
@@ -92,7 +93,10 @@ export function meRouter({ db, auth, users }: Deps): Router {
       const at = board.findIndex((x) => x.uid === user.uid);
       const bp = { total: at < 0 ? 0 : board[at].bp, rank: at < 0 ? null : at + 1, of: board.length };
 
-      return { profile, stats: await users.statsOf(user.uid), records, rhythm, bp };
+      // 격투 온라인 레이팅
+      const fightRating = await createFightRating(db, users).mine(user.uid);
+
+      return { profile, stats: await users.statsOf(user.uid), records, rhythm, bp, fightRating };
     })
   );
 

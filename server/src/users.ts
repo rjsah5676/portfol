@@ -127,7 +127,7 @@ const toAdmin = (uid: string, d: UserDoc): AdminUser => ({
 });
 const escapeRe = (v: string) => v.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 /** 회원의 이름이 저장되는 곳 (별명이 바뀌면 같이 바뀌고, 회원을 지울 때 같이 정리) */
-const NAME_COLLECTIONS = [...RANK_COLLECTIONS, "rhythm_rankings", "guest"];
+const NAME_COLLECTIONS = [...RANK_COLLECTIONS, "rhythm_rankings", "guest", "fight_ratings"];
 
 export type Users = ReturnType<typeof createUsers>;
 
@@ -343,6 +343,13 @@ export function createUsers(db: Database, cfg: Pick<Config, "adminNick">) {
         col.find({}, { projection: { "avatar.data": 0 } }).sort({ createdAt: -1 }).limit(limit).toArray(),
       ]);
       return { total, recent: docs.map((d) => toAdmin(String(d._id), d as unknown as UserDoc)) };
+    },
+
+    /** uid 로 별명 (비회원·별명 미설정이면 null) */
+    async nickByUid(uid: string): Promise<string | null> {
+      const hit = cache.get(uid);
+      if (hit !== undefined) return hit;
+      return (await docOf(uid))?.nick ?? null;
     },
 
     /** 기록 숫자 올리기 (회원만 — 없는 uid 면 아무 일도 없음). 예: bump(uid, { "stats.online.chess.w": 1 }) */

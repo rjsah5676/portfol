@@ -1,12 +1,14 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import Faded from "@/components/Faded";
 import GameHeader from "@/components/GameHeader";
 import FightGame from "@/components/Fight/FightGame";
 import { FIGHT_GUIDE } from "@/data/gameGuides";
 import { RankBoard, useAIRankTop } from "@/components/AIRank";
 import type { AIRankRow } from "@/firestore/aiRankings";
+import { getFightRatings, ratingSub, RATING_PLACEMENT, type FightRatingRow } from "@/firestore/fightRating";
+import RankList from "@/components/RankList";
 import { AI_LEVELS } from "@/lib/fight/ai";
 import { pointsOf } from "@/lib/aiScore";
 import { CHARS } from "@/lib/fight/chars";
@@ -62,10 +64,65 @@ function ChTabs({ ch, setCh }: { ch: string; setCh: (c: string) => void }) {
   );
 }
 
+/** 온라인 레이팅 순위 (모드를 바꿀 때마다 새로) */
+function useFightRatings(on: boolean) {
+  const [rows, setRows] = useState<FightRatingRow[] | null>(null);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    if (!on) return;
+    let alive = true;
+    getFightRatings(20)
+      .then((r) => alive && (setRows(r), setFailed(false)))
+      .catch(() => alive && setFailed(true));
+    return () => {
+      alive = false;
+    };
+  }, [on]);
+  return { rows, failed };
+}
+
+const ratingRows = (rows: FightRatingRow[]) =>
+  rows.map((r) => ({
+    name: r.name,
+    member: true,
+    avatar: r.avatar,
+    value: r.r.toLocaleString(),
+    sub: ratingSub(r),
+    date: r.at,
+  }));
+
+type RankMode = "ai" | "rating";
+
+/** 랭킹 종류: AI 대전 기록 · 온라인 레이팅 */
+function ModeTabs({ mode, setMode }: { mode: RankMode; setMode: (m: RankMode) => void }) {
+  const tabs: [RankMode, string][] = [
+    ["ai", "🤖 AI 대전"],
+    ["rating", "🌐 온라인 레이팅"],
+  ];
+  return (
+    <div className="mb-3 grid grid-cols-2 gap-1 rounded-xl border border-white/10 bg-white/[0.03] p-1">
+      {tabs.map(([m, name]) => (
+        <button
+          key={m}
+          type="button"
+          onClick={() => setMode(m)}
+          className={`cursor-pointer rounded-lg py-1.5 font-['Nanum_Gothic',sans-serif] text-sm transition-colors ${
+            mode === m ? "bg-[#FF8A3D]/90 font-bold text-[#2A0E3A]" : "text-white/60 hover:text-white"
+          }`}
+        >
+          {name}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export default function FightPage() {
   const top = useAIRankTop("fight_ai_rankings");
   const [ch, setCh] = useState("");
+  const [mode, setMode] = useState<RankMode>("ai");
   const chTop = useAIRankTop("fight_ai_rankings", ch || undefined);
+  const rating = useFightRatings(mode === "rating");
   const [refresh, setRefresh] = useState(0);
   return (
     <Faded>
@@ -78,21 +135,44 @@ export default function FightPage() {
           desc="도트 캐릭터 6명의 1:1 플랫폼 대전 — AI, 한 키보드 2인, 온라인"
           guide={FIGHT_GUIDE}
           rank={{
-            sub: "AI 대전",
+            sub: mode === "ai" ? "AI 대전" : "온라인 레이팅",
             top: topRows(top),
-            podium: ch ? topRows(chTop) : null,
-            head: () => <ChTabs ch={ch} setCh={setCh} />,
-            render: () => (
-              <RankBoard
-                coll="fight_ai_rankings"
-                oppLabel={oppLabel}
-                vs={false}
-                bare
-                skip={3}
-                refresh={refresh}
-                ch={ch || undefined}
-              />
+            podium: mode === "rating" ? ratingRows(rating.rows ?? []) : ch ? topRows(chTop) : null,
+            head: () => (
+              <>
+                <ModeTabs mode={mode} setMode={setMode} />
+                {mode === "ai" ? (
+                  <ChTabs ch={ch} setCh={setCh} />
+                ) : (
+                  <p className="mb-3 px-1 text-[11px] text-white/35">
+                    회원끼리 한 온라인 경기만 · 1000점에서 시작 · 강한 상대를 이길수록 많이 올라요 · 처음 {RATING_PLACEMENT}판은
+                    배치(크게 변함) · 같은 상대와는 하루 5판까지만 반영
+                  </p>
+                )}
+              </>
             ),
+            render: () =>
+              mode === "ai" ? (
+                <RankBoard
+                  coll="fight_ai_rankings"
+                  oppLabel={oppLabel}
+                  vs={false}
+                  bare
+                  skip={3}
+                  refresh={refresh}
+                  ch={ch || undefined}
+                />
+              ) : rating.failed ? (
+                <p className="py-3 font-mono text-xs text-white/30">랭킹을 불러오지 못했어요</p>
+              ) : !rating.rows ? (
+                <p className="py-3 font-mono text-xs text-white/30">불러오는 중…</p>
+              ) : (
+                <RankList
+                  rows={ratingRows(rating.rows)}
+                  skip={3}
+                  empty="아직 레이팅 경기가 없어요 — 회원끼리 온라인 대전을 해 보세요"
+                />
+              ),
           }}
         />
         <FightGame onRanked={() => setRefresh((n) => n + 1)} />

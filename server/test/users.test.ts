@@ -225,6 +225,28 @@ describe("회원 기록", () => {
 
     // 판 수: 격투는 시작한 경기 수(4)로만 셈 (승패 기록은 따로 안 더함)
     expect((await s.http("/api/me", { token: aToken })).body.profile.plays).toBe(4);
+
+    // 레이팅 (회원끼리): 1000에서 +20 → 기권으로 −22 → +20 (기록 안 한 판은 반영 안 함)
+    const ratingOf = async (t: string) => (await s.http("/api/me/summary", { token: t })).body.fightRating;
+    expect(await ratingOf(aToken)).toMatchObject({ r: 1018, n: 3, w: 2, l: 1, peak: 1020, rank: 1 });
+    expect(await ratingOf(bToken)).toMatchObject({ r: 982, n: 3, w: 1, l: 2, rank: 2 });
+    const board = (await s.http("/api/rankings/fight-rating")).body as { name: string; r: number; uid?: string }[];
+    expect(board.filter((x) => x.name.startsWith("격투")).map((x) => [x.name, x.r])).toEqual([
+      ["격투하나", 1018],
+      ["격투둘", 982],
+    ]);
+    expect(board[0].uid).toBeUndefined();
+
+    // 같은 두 사람끼리는 하루 5판까지만 반영 (6판째부터 전적만)
+    await b.rpc("fight.join", { id, nick: "b", ch: 0 });
+    for (let i = 0; i < 3; i++) {
+      m = await start();
+      await a.rpc("fight.result", { id, match: m, winner: 0 });
+      await b.rpc("fight.result", { id, match: m, winner: 0 });
+    }
+    await settle();
+    expect((await ratingOf(aToken)).n).toBe(5);
+    expect(await fightOf(aToken)).toEqual({ w: 5, l: 1 });
   });
 
   it("온라인 대국 결과가 전적에 쌓이고, 내 정보에 최고 기록·순위·판 수가 나옴", async () => {

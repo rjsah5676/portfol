@@ -5,6 +5,7 @@ import { newId, orderedId } from "../ids";
 import type { Ctx } from "../realtime/gateway";
 import type { LiveRoom } from "../http/admin";
 import { forfeit, newResult, onEnd, settle, type FightResult, type Outcome } from "./fightResult";
+import { createFightRating } from "./fightRating";
 
 /*
  * 픽셀 격투 온라인 대전
@@ -113,7 +114,8 @@ export interface FightOptions {
   sweepIntervalMs?: number;
 }
 
-export function registerFight({ gateway, users }: Deps, opts: FightOptions = {}) {
+export function registerFight({ gateway, users, db }: Deps, opts: FightOptions = {}) {
+  const rating = createFightRating(db, users);
   const rooms = new Map<string, Room>();
   const emptyRoomTtl = opts.emptyRoomTtlMs ?? 30 * 60_000;
 
@@ -204,6 +206,8 @@ export function registerFight({ gateway, users }: Deps, opts: FightOptions = {})
       const k = out === 2 ? "d" : out === seat ? "w" : "l";
       users.bump(uid, { [`stats.online.fight.${k}`]: 1 });
     }
+    // 둘 다 회원이면 레이팅도 (fightRating.ts)
+    rating.rate([r.uids[0], r.uids[1]], out).catch((e) => console.warn("[fight] 레이팅 저장 실패", e));
   }
   /** 경기에 나선 자리 (그 경기 선수가 아니면 -1) */
   const resultSeat = (room: Room, uid: string, match: string) =>
