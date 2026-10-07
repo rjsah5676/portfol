@@ -2,6 +2,7 @@ import type { Auth } from "./auth";
 import type { Config } from "./config";
 import type { Database } from "./db";
 import type { Gateway } from "./realtime/gateway";
+import type { Traffic } from "./traffic";
 import type { Users } from "./users";
 import type { WebNotifier } from "./webNotify";
 
@@ -13,6 +14,8 @@ export interface Deps {
   gateway: Gateway;
   /** 회원 별명·기록 */
   users: Users;
+  /** 유입 분석 기록·집계 */
+  traffic: Traffic;
   /** 프론트(Next 서버)에 알릴 것 */
   web: WebNotifier;
 }

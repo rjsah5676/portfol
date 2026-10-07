@@ -106,6 +106,10 @@ async function ensureIndexes({ db }: Database) {
   }
   idx("board_chat", { room: 1, createdAt: -1 });
   idx("board_presence", { room: 1 });
+  // 유입 분석: 날짜별 집계 · 최근 유입 · 세션별 페이지 수, 180일 지나면 자동 삭제
+  idx("traffic_hits", { day: 1, entry: 1, at: -1 });
+  idx("traffic_hits", { sid: 1 });
+  idx("traffic_hits", { at: 1 }, { expireAfterSeconds: 180 * 24 * 60 * 60 });
   await Promise.all(tasks);
 }
 

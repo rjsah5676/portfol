@@ -10,6 +10,8 @@ import { h, ms, requireAdmin } from "./util";
  *
  * 한눈에 보기
  *   GET    /api/admin/overview                      방문자·회원·문의·글·랭킹·방·서버 상태 + 최근 활동
+ * 유입 분석
+ *   GET    /api/admin/traffic?from=YYYY-MM-DD&to=YYYY-MM-DD   기간 집계 + 최근 유입 100건 (원본 IP 포함)
  * 회원
  *   GET    /api/admin/users?q=&limit=&skip=         목록 (별명·이메일로 찾기)
  *   PATCH  /api/admin/users/:uid   { nick?, badge? } 별명 · 꾸밈(이모지 등) 바꾸기
@@ -36,6 +38,8 @@ const TOP_LEVEL = new Set<string>([
   "studyPosts",
   "inquiries",
   "rank_tickets",
+  "traffic_hits",
+  "traffic_daily",
   // 메뉴에서 내린 예전 스케치 퀴즈 데이터
   "sketch_user",
   "sketch_user_room",
@@ -107,7 +111,11 @@ const kstDate = (t: number) => new Date(t + 9 * 3600_000).toISOString().slice(0,
 const DAY = 86_400_000;
 const startedAt = Date.now();
 
-export function adminRouter({ db, auth, web, users, gateway, cfg }: Deps, hooks: AdminHooks): Router {
+const DATE_KEY = /^\d{4}-\d{2}-\d{2}$/;
+/** 유입 분석에서 한 번에 볼 수 있는 기간 */
+export const TRAFFIC_MAX_DAYS = 366;
+
+export function adminRouter({ db, auth, web, users, gateway, cfg, traffic }: Deps, hooks: AdminHooks): Router {
   const r = Router();
   r.use((req, _res, next) => {
     requireAdmin(auth, req).then(() => next(), next);
@@ -125,7 +133,7 @@ export function adminRouter({ db, auth, web, users, gateway, cfg }: Deps, hooks:
       const latest = (c: string, n: number, sort: Record<string, 1 | -1> = { createdAt: -1 }) =>
         db.col(c).find({}).sort(sort).limit(n).toArray();
 
-      const [total, daily, members, inqTotal, inqUnread, posts, guestTotal, rankCounts, rhythmCount, roomCounts, lastGuest, lastInq, lastRanks] =
+      const [total, daily, members, inqTotal, inqUnread, posts, guestTotal, rankCounts, rhythmCount, roomCounts, lastGuest, lastInq, lastRanks, trafficToday] =
         await Promise.all([
           stats.findOne({ _id: "total" }),
           stats.find({ _id: { $in: days.map((d) => `daily_${d}`) } }).toArray(),
@@ -142,6 +150,7 @@ export function adminRouter({ db, auth, web, users, gateway, cfg }: Deps, hooks:
           latest("guest", 4, { id: -1 }),
           latest("inquiries", 4),
           Promise.all([...RANK_COLLECTIONS, "rhythm_rankings"].map(async (c) => (await latest(c, 3)).map((d) => ({ ...d, board: c })))),
+          traffic.today(),
         ]);
 
       const byDay = new Map(daily.map((d) => [String(d._id).slice(6), d.count ?? 0]));
@@ -170,6 +179,7 @@ export function adminRouter({ db, auth, web, users, gateway, cfg }: Deps, hooks:
           today: byDay.get(days[13]) ?? 0,
           daily: days.map((date) => ({ date, count: byDay.get(date) ?? 0 })),
         },
+        traffic: trafficToday,
         members: { total: members.total, recent: members.recent },
         inquiries: { total: inqTotal, unread: inqUnread },
         posts: { total: posts.length, retro: posts.filter((p) => p.section === "retro").length },
@@ -186,6 +196,19 @@ export function adminRouter({ db, auth, web, users, gateway, cfg }: Deps, hooks:
         },
         activity: acts,
       };
+    })
+  );
+
+  // ───────────── 유입 분석 ─────────────
+
+  r.get(
+    "/traffic",
+    h(async (req) => {
+      const q = z.object({ from: z.string().regex(DATE_KEY), to: z.string().regex(DATE_KEY) }).parse(req.query);
+      const span = (Date.parse(q.to) - Date.parse(q.from)) / DAY + 1;
+      if (!(span >= 1)) throw bad("시작일이 끝일보다 늦습니다.");
+      if (span > TRAFFIC_MAX_DAYS) throw bad(`최대 ${TRAFFIC_MAX_DAYS}일까지 볼 수 있습니다.`);
+      return traffic.range(q.from, q.to);
     })
   );
 

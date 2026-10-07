@@ -9,6 +9,7 @@ import { registerFight } from "./games/fight";
 import { registerSketch } from "./games/sketch";
 import { createApp } from "./http/app";
 import { Gateway } from "./realtime/gateway";
+import { createTraffic } from "./traffic";
 import { createUsers } from "./users";
 import { createWebNotifier, type WebNotifier } from "./webNotify";
 
@@ -32,7 +33,8 @@ export async function createAppServer(
   const users = createUsers(db, cfg);
   gateway.nickOf = (user) => users.nickOf(user);
   users.onRename((uid, nick) => gateway.setNick(uid, nick));
-  const deps: Deps = { cfg, db, auth, gateway, users, web: overrides.web ?? createWebNotifier(cfg) };
+  const traffic = createTraffic(db, { geo: cfg.trafficGeo });
+  const deps: Deps = { cfg, db, auth, gateway, users, traffic, web: overrides.web ?? createWebNotifier(cfg) };
 
   const board = registerBoardGames(deps);
   const sketch = registerSketch(deps);
@@ -47,6 +49,11 @@ export async function createAppServer(
     })
   );
 
+  // 유입 분석: 오래된 원본 IP 지우기 · 어제 집계 (시작 1분 뒤, 이후 매시간)
+  const maintain = () => void traffic.maintain().catch((e) => console.warn("[traffic]", e));
+  const timers =
+    cfg.env === "test" ? [] : [setTimeout(maintain, 60_000), setInterval(maintain, 3600_000)].map((t) => (t.unref(), t));
+
   return {
     http,
     deps,
@@ -56,6 +63,7 @@ export async function createAppServer(
         http.listen(cfg.port, () => resolve((http.address() as AddressInfo).port));
       }),
     async close() {
+      for (const t of timers) clearTimeout(t);
       sketch.close();
       fight.close();
       await gateway.close();

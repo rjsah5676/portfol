@@ -8,6 +8,7 @@ import { meRouter } from "./me";
 import { rankingsRouter } from "./rankings";
 import { siteRouter } from "./site";
 import { studyPostsRouter } from "./studyPosts";
+import { trackRouter } from "./track";
 
 export function createApp(deps: Deps, hooks: Omit<AdminHooks, "guestChanged">) {
   const { cfg } = deps;
@@ -36,9 +37,15 @@ export function createApp(deps: Deps, hooks: Omit<AdminHooks, "guestChanged">) {
         message: { error: { code: "RATE_LIMITED", message: "요청이 너무 많습니다. 잠시 후 다시 시도해주세요." } },
       });
     const TICKETS = "/rankings/tickets";
+    // 유입 기록은 페이지를 옮길 때마다 오므로 다른 쓰기 요청과 따로 셈
+    const TRACK = "/track";
     app.use(
       "/api",
-      limiter(60, (req) => req.method === "GET" || req.method === "OPTIONS" || req.path === TICKETS)
+      limiter(60, (req) => req.method === "GET" || req.method === "OPTIONS" || req.path === TICKETS || req.path === TRACK)
+    );
+    app.use(
+      "/api",
+      limiter(120, (req) => req.path !== TRACK || req.method === "OPTIONS")
     );
     app.use(
       "/api",
@@ -71,6 +78,7 @@ export function createApp(deps: Deps, hooks: Omit<AdminHooks, "guestChanged">) {
   });
 
   const site = siteRouter(deps);
+  app.use("/api", trackRouter(deps));
   app.use("/api/rankings", rankingsRouter(deps));
   app.use("/api/me", meRouter(deps));
   app.use("/api/study-posts", studyPostsRouter(deps));

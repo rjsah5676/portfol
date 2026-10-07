@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState, type ReactNode } from "react";
 import Avatar from "@/components/Account/Avatar";
 import { plainName } from "@/components/Nick";
 import { getOverview, type AdminActivity, type AdminOverview } from "@/firestore/adminData";
+import { siteLabel } from "@/components/Admin/Traffic";
 
 /*
  * 관리자 첫 화면: 사이트에서 지금 무슨 일이 있는지 한눈에.
@@ -183,6 +184,27 @@ export default function Overview({ onGo }: { onGo: (tab: string) => void }) {
             <span>{data.visitors.daily[0].date.slice(5).replace("-", ".")}</span>
             <span>오늘</span>
           </div>
+          {/* 오늘 유입 TOP 3 → 유입 분석 */}
+          <button
+            type="button"
+            onClick={() => onGo("traffic")}
+            className={`mt-5 flex w-full cursor-pointer flex-wrap items-baseline gap-x-4 gap-y-1 border-t border-white/[0.07] pt-4 text-left text-sm transition-colors hover:text-white ${KR}`}
+          >
+            <span className="font-mono text-xs text-[#8B84FF]">오늘 유입</span>
+            <span className="text-white/45">
+              <span className="font-mono text-white/90">{n(data.traffic.entries)}</span>회
+            </span>
+            {data.traffic.top.length === 0 ? (
+              <span className="text-white/30">아직 없어요</span>
+            ) : (
+              data.traffic.top.map(([k, c], i) => (
+                <span key={k} className="text-white/55">
+                  <span className="mr-1 font-mono text-[11px] text-white/30">{i + 1}</span>
+                  {siteLabel(k)} <span className="font-mono text-white/80">{n(c)}</span>
+                </span>
+              ))
+            )}
+          </button>
         </section>
 
         {/* 확인할 것 */}

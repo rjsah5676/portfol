@@ -24,6 +24,8 @@ export interface Config {
   webRevalidateUrl: string;
   /** 그 요청에 실어 보내는 공유 비밀값 (프론트의 REVALIDATE_SECRET 과 같아야 함) */
   revalidateSecret: string;
+  /** 유입 분석에서 IP로 국가·지역 찾기 (geoip-lite, 메모리 약 100MB). 기본은 켬, 테스트에서는 끔 */
+  trafficGeo: boolean;
 }
 
 const list = (v: string | undefined) =>
@@ -63,5 +65,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     trustProxy: Number(env.TRUST_PROXY) || 0,
     webRevalidateUrl: env.WEB_REVALIDATE_URL?.trim() ?? "",
     revalidateSecret: env.REVALIDATE_SECRET?.trim() ?? "",
+    trafficGeo: env.TRAFFIC_GEO?.trim() ? env.TRAFFIC_GEO.trim() !== "0" : mode !== "test",
   };
 }

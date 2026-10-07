@@ -87,6 +87,8 @@ export interface AdminActivity {
 
 export interface AdminOverview {
   visitors: { total: number; today: number; daily: { date: string; count: number }[] };
+  /** 오늘 유입 (유입 분석) — top: [유입처, 수] 많은 순 3개, "" = 직접 접속 */
+  traffic: { entries: number; uniques: number; hits: number; top: [string, number][] };
   members: { total: number; recent: AdminUser[] };
   inquiries: { total: number; unread: number };
   posts: { total: number; retro: number };
@@ -110,6 +112,62 @@ export interface LiveRoom {
 }
 
 export const getOverview = () => api<AdminOverview>("/api/admin/overview", { auth: true });
+
+// ── 유입 분석 (서버: server/src/traffic.ts) ──
+
+export type TrafficSource = "campaign" | "search" | "ai" | "social" | "referral" | "legacy" | "internal" | "direct";
+export type TrafficDim =
+  | "source"
+  | "site"
+  | "term"
+  | "campaign"
+  | "landing"
+  | "page"
+  | "device"
+  | "os"
+  | "browser"
+  | "inapp"
+  | "width"
+  | "country"
+  | "region"
+  | "lang";
+
+export interface TrafficReport {
+  from: string;
+  to: string;
+  days: { date: string; hits: number; entries: number; uniques: number; members: number }[];
+  /** uniques 는 날짜별 순방문자의 합 */
+  total: { hits: number; entries: number; uniques: number; members: number; returning: number; bounces: number };
+  /** 항목별 [값, 수] 많은 순 (page 는 페이지 본 수, 나머지는 유입 수) */
+  dims: Record<TrafficDim, [string, number][]>;
+  /** 요일(0=일) × 시(0~23) 유입 수, 한국 시간 */
+  heat: number[][];
+  recent: {
+    at: number;
+    source: TrafficSource;
+    site: string;
+    term: string;
+    campaign: string;
+    ref: string;
+    path: string;
+    pages: number;
+    device: string;
+    os: string;
+    browser: string;
+    inapp: string;
+    screen: string;
+    country: string;
+    region: string;
+    city: string;
+    /** 원본 IP (30일 지나면 빈 값) */
+    ip: string;
+    member: boolean;
+    returning: boolean;
+  }[];
+}
+
+export const getTraffic = (from: string, to: string) =>
+  api<TrafficReport>(`/api/admin/traffic?from=${from}&to=${to}`, { auth: true });
 
 export const listUsers = (q = "") =>
   api<{ total: number; items: AdminUser[] }>(

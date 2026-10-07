@@ -36,6 +36,10 @@ export default function Footer() {
           <img src={gitImg.src} alt="GitHub" className="h-4 w-auto" />
         </a>
         <span>© 2026 Gunmo Lee</span>
+        <span className="text-white/20">·</span>
+        <Link href="/privacy/" className="font-['Nanum_Gothic',sans-serif] transition-colors hover:text-white">
+          개인정보 처리방침
+        </Link>
       </div>
     </footer>
   );

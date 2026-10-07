@@ -9,6 +9,7 @@ import SiteSearch from "@/components/SiteSearch";
 import Footer from "@/components/Footer";
 import Contact from "@/components/Contact";
 import QuickMenu from "@/components/QuickMenu";
+import TrafficBeacon from "@/components/TrafficBeacon";
 import { AuthProvider } from "@/lib/AuthContext";
 import { ModalProvider } from "@/components/Modal/ModalProvider";
 import { SITE_URL, SITE_NAME, SITE_DESCRIPTION, OG_IMAGE } from "@/lib/seo";
@@ -85,6 +86,7 @@ export default function RootLayout({
             <Footer />
             <Contact />
             <QuickMenu />
+            <TrafficBeacon />
           </ModalProvider>
         </AuthProvider>
       </body>
