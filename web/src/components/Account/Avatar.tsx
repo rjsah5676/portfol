@@ -33,7 +33,7 @@ export default function Avatar({
         alt=""
         referrerPolicy="no-referrer"
         onError={() => setBroken(src)}
-        className={`shrink-0 rounded-full bg-white/10 object-cover ${SIZE[size]}`}
+        className={`max-w-none shrink-0 rounded-full bg-white/10 object-cover ${SIZE[size]}`}
       />
     );
   return (

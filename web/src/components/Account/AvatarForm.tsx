@@ -62,7 +62,7 @@ export default function AvatarForm() {
         onClick={() => fileRef.current?.click()}
         disabled={busy}
         aria-label="프로필 사진 바꾸기"
-        className="group relative cursor-pointer rounded-full disabled:cursor-default"
+        className="group relative shrink-0 cursor-pointer rounded-full disabled:cursor-default"
       >
         <Avatar profile={profile} photo={account.photoURL} size="xl" />
         <span className="absolute inset-0 flex items-center justify-center rounded-full bg-black/55 font-['Nanum_Gothic',sans-serif] text-xs text-white opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
