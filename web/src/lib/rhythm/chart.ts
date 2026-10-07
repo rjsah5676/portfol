@@ -337,8 +337,9 @@ export const LEVEL_BANDS: Record<Difficulty, [number, number]> = {
 export function finishChart(notes: Note[], diff: Difficulty = "normal"): Chart {
   notes.sort((a, b) => a.t - b.t || a.lane - b.lane);
   const units = notes.reduce((s, n) => s + (n.end ? 2 : 1), 0);
-  // 레벨 = osu!mania 별점 × 4 (stars.ts). 자동 채보가 구간 안으로 맞춰 뽑고, 살짝 벗어나면 구간 끝으로
-  const [lo, hi] = LEVEL_BANDS[diff];
-  const level = Math.max(lo, Math.min(hi, Math.round(starRating(notes) * 4)));
+  // 레벨 = osu!mania 별점 × 4 (stars.ts) 그대로. 난이도 구간(LEVEL_BANDS)은 자동 채보의 목표일 뿐,
+  // 못 미치거나 넘어도 나온 값을 그대로 표시 (예: 222 BPM 곡 ULTIMA가 17이면 17)
+  void diff;
+  const level = Math.max(1, Math.round(starRating(notes) * 4));
   return { notes, level, units };
 }
