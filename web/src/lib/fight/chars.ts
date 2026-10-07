@@ -181,8 +181,8 @@ const RAW: CharSrc[] = [
     name: "카이",
     title: "맨손 격투 · 바람",
     desc: "빠른 주먹·발차기로 붙어서 몰아치는 맨손 격투가",
-    hp: 1250, // 질풍권 띄우기 추가로 1350→1250
-    walk: 1240,
+    hp: 1160, // 질풍권 띄우기 추가로 1350→1250, 10.07 승률 분석(달인 74%)으로 →1160
+    walk: 1160, // 1240→1160
     jumpVx: 1050,
     dash: 2700,
     cd: 240, // 질풍권 경직 면역·기절로 140→240
@@ -193,7 +193,7 @@ const RAW: CharSrc[] = [
     winQuote: "그게 다야? 다음엔 좀 더 버텨 봐.",
     tagline: "RELENTLESS FIGHTER",
     difficulty: 2,
-    stats: { atk: 3, reach: 2, move: 5, control: 2, combo: 5, hp: 4 },
+    stats: { atk: 3, reach: 2, move: 5, control: 2, combo: 5, hp: 2 },
     idName: "질풍권",
     idDesc: "바람을 두르고 돌진하며 2연타 — 돌진하는 동안 경직 면역, 맞으면 기절",
     ultName: "천풍난무",
@@ -202,7 +202,7 @@ const RAW: CharSrc[] = [
     moves: {
       L: {
         // 약 (J): 제일 빠르고 짧은 경직 — J·J로 이어 치고 발차기·아이덴티티·필살기로 캔슬
-        startup: 3,
+        startup: 4, // 3→4 (10.07)
         active: 3,
         recovery: 5,
         dmg: 40, // 44→40 (카이가 기본기로 너무 셈)
@@ -310,7 +310,7 @@ const RAW: CharSrc[] = [
     walk: 1160,
     jumpVx: 980,
     dash: 2500,
-    cd: 66,
+    cd: 80, // 66→80 (10.07 화염구 견제가 너무 잦음)
     hurt: { x: -9, y: 60, w: 18, h: 60 },
     width: 18,
     color: "#FF6A2A",
@@ -431,7 +431,7 @@ const RAW: CharSrc[] = [
     name: "소영",
     title: "선생님 · 채찍",
     desc: "긴 채찍으로 거리를 지배하는 엄한 선생님. 붙으면 약함",
-    hp: 1210,
+    hp: 1280, // 1210→1280 (10.07 승률 35%)
     walk: 1020,
     jumpVx: 900,
     dash: 2300,
@@ -443,7 +443,7 @@ const RAW: CharSrc[] = [
     winQuote: "오늘 수업은 여기까지. 복습해 와.",
     tagline: "STRICT BUT KIND",
     difficulty: 3,
-    stats: { atk: 3, reach: 5, move: 2, control: 4, combo: 3, hp: 3 },
+    stats: { atk: 3, reach: 5, move: 2, control: 4, combo: 3, hp: 5 },
     idName: "지도편달",
     idDesc: "아주 긴 채찍으로 낚아채 바로 앞까지 끌어당김 — 맞히면 약 콤보·잡기가 확정으로 이어짐",
     ultName: "보충수업",
@@ -455,7 +455,7 @@ const RAW: CharSrc[] = [
         startup: 6,
         active: 3,
         recovery: 10,
-        dmg: 26,
+        dmg: 30, // 26→30 (10.07)
         chip: 0,
         hitstun: 13,
         blockstun: 8,
@@ -563,7 +563,7 @@ const RAW: CharSrc[] = [
     name: "릴리",
     title: "유치원생 · 우산과 물",
     desc: "우산으로 둥실 떠다니며 물방울을 띄우는 꼬마. 작아서 잘 안 맞음",
-    hp: 1170,
+    hp: 1210, // 1170→1210 (10.07)
     walk: 1120,
     jumpVx: 1050,
     dash: 2500,
@@ -576,7 +576,7 @@ const RAW: CharSrc[] = [
     winQuote: "헤헤~ 내가 이겼다! 우산 빌려줄까?",
     tagline: "KINDERGARTEN GIRL",
     difficulty: 2,
-    stats: { atk: 2, reach: 3, move: 3, control: 5, combo: 3, hp: 2 },
+    stats: { atk: 2, reach: 3, move: 3, control: 5, combo: 3, hp: 3 },
     idName: "비눗방울",
     idDesc: "느리고 오래 가는 큰 비눗방울로 길목을 막음 — 맞으면 갇혀서 둥실 떠오름 (때리면 터짐, 연타로 탈출, 갇힌 상대는 방울로 다시 못 가둠)",
     ultName: "장마 파도",
@@ -680,7 +680,7 @@ const RAW: CharSrc[] = [
     name: "제나",
     title: "창술 · 번개",
     desc: "번개 두른 창으로 중거리를 지배하는 장난꾸러기",
-    hp: 1140,
+    hp: 1200, // 1140→1200 (10.07 승률 25%)
     walk: 1120,
     jumpVx: 1000,
     dash: 2600,
@@ -692,7 +692,7 @@ const RAW: CharSrc[] = [
     winQuote: "찌릿했지? 다음엔 피뢰침 챙겨 와~",
     tagline: "THUNDER LANCER",
     difficulty: 2,
-    stats: { atk: 5, reach: 4, move: 3, control: 3, combo: 3, hp: 2 },
+    stats: { atk: 5, reach: 4, move: 3, control: 3, combo: 3, hp: 3 },
     idName: "뇌창",
     idDesc: "번개 창을 아주 빠르게 던짐. 맞으면 감전 — 잠깐 몸이 굳고, 한동안 느려지며 제나의 공격에 더 아프게 맞음",
     ultName: "천뢰강림",
@@ -702,7 +702,7 @@ const RAW: CharSrc[] = [
       L: {
         startup: 5,
         active: 3,
-        recovery: 9,
+        recovery: 7, // 9→7 (10.07)
         dmg: 38,
         chip: 0,
         hitstun: 13,
@@ -716,7 +716,7 @@ const RAW: CharSrc[] = [
       H: {
         startup: 11,
         active: 4,
-        recovery: 23,
+        recovery: 19, // 23→19 (10.07 헛치면 너무 크게 벌받음)
         dmg: 66,
         chip: 0,
         hitstun: 19,
