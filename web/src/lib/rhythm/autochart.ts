@@ -163,7 +163,7 @@ const AUTO_RULES: Record<Difficulty, AutoRule> = {
     floor: 0.04,
     chord: { every: 2, need: 0.35 },
     holdBeats: 1.25,
-    thick: [1.5, 1.15, 1.05],
+    thick: [1.31, 1.1, 1.03],
     tri: 0.25,
     jackAllow: 0.5,
     jackRun: 4,
@@ -202,6 +202,9 @@ export interface NightmareTweak {
   /** 박당 동시치기 수: 센 마디 / 아주 센 마디 */
   chordLoud?: number;
   chordFull?: number;
+  /** 아주 센 마디에서 동시치기를 앞 2박에 뭉침(점프스트림 + 뒤 2박 단노트 스트림) — 나이트메어만.
+   *  ULTIMA(osu 5성급)는 곡 전체가 점프스트림이라 안 뭉침 (뭉치면 별점 천장이 내려가 나메와 같은 레벨이 됨) */
+  cluster?: boolean;
   /** 몇 마디마다 마지막 박을 연타로 (아주 센 마디) */
   burstEvery?: number;
   /** 연타 등분 (8 = 32분, 6 = 16분 셋잇단 — 기본은 6: 32분은 빠른 곡에서 못 칠 만큼 촘촘) */
@@ -214,6 +217,7 @@ const NIGHTMARE_DEFAULT: Required<NightmareTweak> = {
   fullSub: 4,
   chordLoud: 1,
   chordFull: 2,
+  cluster: true,
   burstEvery: 8,
   burstSub: 6,
 };
@@ -225,6 +229,7 @@ const EXPLUS_DEFAULT: Required<NightmareTweak> = {
   fullSub: 4,
   chordLoud: 1,
   chordFull: 1,
+  cluster: false,
   burstEvery: 4,
   burstSub: 6,
 };
@@ -1256,10 +1261,20 @@ function nightmareNotes(
     const full = I >= P.full;
     const t1 = beatT(k + 1);
     const beatInBar = Math.round((t0 - (beats[0] ?? 0)) / beatSec) % 4;
-    const sub = full ? P.fullSub : P.loudSub;
-    const chords = full ? P.chordFull : P.chordLoud;
-    for (let c = 0; c < chords; c++) put(t0 + (c * (t1 - t0)) / chords, 2);
-    for (let i = 0; i < sub; i++) put(t0 + (i * (t1 - t0)) / sub, 1);
+    if (full && P.cluster && beatInBar < 2) {
+      // 점프스트림: 8분마다 동시치기, 사이 안 채움
+      for (let c = 0; c < P.chordFull; c++) put(t0 + (c * (t1 - t0)) / P.chordFull, 2);
+      for (let i = 0; i < P.loudSub; i++) put(t0 + (i * (t1 - t0)) / P.loudSub, 1);
+    } else if (full && P.cluster) {
+      // 단노트 스트림: 16분 채움 + 마디 가운데 박 하나만 동시치기
+      if (beatInBar === 2) put(t0, 2);
+      for (let i = 0; i < P.fullSub; i++) put(t0 + (i * (t1 - t0)) / P.fullSub, 1);
+    } else {
+      const sub = full ? P.fullSub : P.loudSub;
+      const chords = full ? P.chordFull : P.chordLoud;
+      for (let c = 0; c < chords; c++) put(t0 + (c * (t1 - t0)) / chords, 2);
+      for (let i = 0; i < sub; i++) put(t0 + (i * (t1 - t0)) / sub, 1);
+    }
     if (full && beatInBar === 3 && b % P.burstEvery === P.burstEvery - 1)
       for (let i = 0; i < P.burstSub; i++) put(t0 + (i * (t1 - t0)) / P.burstSub, 1, true);
   }

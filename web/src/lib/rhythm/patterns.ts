@@ -56,12 +56,15 @@ const TIER: Record<Difficulty, number> = {
   nightmare: 4,
   explus: 4,
 };
-/** 두 레인 트릴 가중치 배율: osu 랭크 채보 트릴 비율 보통 1% · 어려움 3% · 매우 어려움 5% (우리는 11·9·6%였음) */
+/** 두 레인 트릴 가중치 배율: osu 랭크 채보 트릴 비율 보통 1% · 어려움 3% · 매우 어려움 5% (우리는 11·9·6%였음).
+ *  나이트메어·ULTIMA도 낮게(osu 0.1%) — 한 손 성분은 앵커와 긴 한 손 조각 허용으로 채움 */
 const TRILL_W: Partial<Record<Difficulty, number>> = {
   easy: 0.05,
   normal: 0.08,
   hard: 0.3,
   expert: 0.7,
+  nightmare: 0.08,
+  explus: 0.08,
 };
 
 /** 기본 모양 — 좌우 반전·역방향은 아래에서 자동으로 만든다 */
@@ -145,7 +148,8 @@ const BASE: Pattern[] = [
     w: 1.6,
     minLen: 8,
     tier: 0,
-    wBy: { easy: 0.1, normal: 0.15, hard: 0.4 },
+    // 나이트메어·ULTIMA도 낮게: ABAB가 두 번 이어져 트릴 통계를 끌어올림 (osu 0.1%)
+    wBy: { easy: 0.1, normal: 0.15, hard: 0.4, nightmare: 0.25, explus: 0.25 },
   },
   // 앵커: 한 레인을 축으로 (D F D J D K) — 8분 이상 간격에서
   {
@@ -156,8 +160,17 @@ const BASE: Pattern[] = [
     w: 1.3,
     minLen: 6,
     tier: 2,
+    wBy: { nightmare: 2, explus: 2 },
   },
-  { name: "anchor-in", family: "anchor", steps: [1, 0, 1, 2, 1, 3], w: 1.0, minLen: 6, tier: 2 },
+  {
+    name: "anchor-in",
+    family: "anchor",
+    steps: [1, 0, 1, 2, 1, 3],
+    w: 1.0,
+    minLen: 6,
+    tier: 2,
+    wBy: { nightmare: 2, explus: 2 },
+  },
   // 잭(같은 레인 두 번): 연타 간격을 넘는 느린 간격에서만 통과되므로 자연히 어려움↑에서만
   {
     name: "jack-stair",
@@ -525,8 +538,11 @@ function layStream(
       cur = pick(cands, ctx.rnd);
       if (!cur) continue;
       kept = 0;
-      // 한 손 연타가 8개 넘게 이어지면 손을 바꿔 가며 (D F D F J K J K)
-      if (oneHand(cur) && len > 8) cur = PATTERNS.find((p) => p.name === "alt-switch")!;
+      // 한 손 연타가 8개 넘게 이어지면 손을 바꿔 가며 (D F D F J K J K).
+      // 나이트메어·ULTIMA는 안 바꿈 — 스트림이 길어 이 교체가 한 손 조각을 전부 지웠고(같은 손 연속 8% vs osu 16%),
+      // 조각은 어차피 몇 칸마다 돌아가며 바뀌어 한 손이 끝없이 이어지진 않음
+      if (oneHand(cur) && len > 8 && ctx.diff !== "nightmare" && ctx.diff !== "explus")
+        cur = PATTERNS.find((p) => p.name === "alt-switch")!;
       phase = bestOffset(cur, prevOf(out, a));
       remember(cur);
     }
