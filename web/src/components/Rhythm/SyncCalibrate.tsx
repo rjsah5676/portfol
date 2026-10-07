@@ -3,25 +3,24 @@
 import { useEffect, useRef, useState } from "react";
 import { audio } from "@/lib/rhythm/sfx";
 import { laneColors, makeHitSound, type HitSound, type Skin } from "@/lib/rhythm/fx";
-import { SONGS, type Song } from "@/lib/rhythm/music";
-import { DIFFICULTIES, type Difficulty } from "@/lib/rhythm/chart";
+import { SONGS } from "@/lib/rhythm/music";
+import { renderSong } from "@/lib/rhythm/synth";
 import { visibleSec } from "./Stage";
 import HoldButton from "./HoldButton";
 
 /**
  * 싱크 맞추기 (설정 → 싱크 → 들으면서 맞추기): 게임 화면 전체를 덮는 레이어에
- * 고른 내장곡의 하이라이트(가장 시끄러운 8마디, 소리로 찾음)를 실제 채보(나이트메어, 없으면 EX)·
- * 실제 레인 크기·내 노트 속도로 돌려 보여 준다. 음악·타격음은 같은 오디오 시계에 예약되고,
+ * 연습곡(패턴 연습)의 계단 구간 8마디를 실제 채보(HARD)·실제 레인 크기·내 노트 속도로 돌려 보여 준다.
+ * 반주가 신스라 박이 또렷하고 바로 만들어져 기다림이 없다. 음악·타격음은 같은 오디오 시계에 예약되고,
  * 노트는 게임과 똑같이 "싱크(ms)"만큼 늦게/일찍 줄에 닿는다 — 타격음과 음악이 겹칠 때까지
  * +·−를 움직이면 그 값이 그대로 플레이에 쓰인다. (치는 타이밍은 자동 싱크가 따로 맞춤)
  */
+/** 계단 구간: 준비 2마디 뒤 8마디 (practice.ts PRACTICE_SECTIONS) */
+const SKIP_BARS = 2;
 const BARS = 8;
 /** 실제 플레이 기어 비율 (Stage GEAR): 레인 4개 폭 = 화면 높이 × 0.449, 판정선 = 높이 × 0.828 */
 const LANE_W_R = (189 * 4) / 1683;
 const JUDGE_R = 1393 / 1683;
-
-const diffOf = (s: Song): Difficulty | null =>
-  s.charts?.nightmare ? "nightmare" : s.charts?.expert ? "expert" : s.charts?.hard ? "hard" : null;
 
 export default function SyncCalibrate({
   sync,
@@ -40,13 +39,9 @@ export default function SyncCalibrate({
 }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const songs = SONGS.filter((s) => s.audio && diffOf(s));
-  const [songId, setSongId] = useState("newdim");
-  /** 불러오기 끝난 곡 id (songId와 다르면 로딩 중) / 실패한 곡 id */
-  const [loadedId, setLoadedId] = useState<string | null>(null);
-  const [failedId, setFailedId] = useState<string | null>(null);
-  const loading = loadedId !== songId && failedId !== songId;
-  const failed = failedId === songId;
+  const [state, setState] = useState<"loading" | "on" | "failed">("loading");
+  const loading = state === "loading";
+  const failed = state === "failed";
   const live = useRef({ sync, speed });
   useEffect(() => {
     live.current = { sync, speed };
@@ -80,11 +75,10 @@ export default function SyncCalibrate({
     const ro = new ResizeObserver(resize);
     ro.observe(wrap);
 
-    const song = songs.find((s) => s.id === songId);
-    const diff = song ? diffOf(song) : null;
-    const chart = diff ? song!.charts![diff] : undefined;
-    if (!song?.audio || !chart) {
-      raf = requestAnimationFrame(() => setFailedId(songId));
+    const song = SONGS.find((s) => s.practice);
+    const chart = song?.charts?.hard;
+    if (!song || !chart) {
+      raf = requestAnimationFrame(() => setState("failed"));
       return () => {
         cancelAnimationFrame(raf);
         ro.disconnect();
@@ -92,35 +86,14 @@ export default function SyncCalibrate({
     }
     (async () => {
       try {
-        const [ctx, res] = await Promise.all([audio(), fetch(song.audio!)]);
-        const buf = await ctx.decodeAudioData(await res.arrayBuffer());
+        // 필요한 구간(준비 2 + 계단 8마디)까지만 합성 — 전체(52마디)를 만들면 쓸데없이 오래 걸림
+        const cutBars = SKIP_BARS + BARS + 1;
+        const cut = { ...song, bars: cutBars, duration: (cutBars * 4 * 60) / song.bpm };
+        const [ctx, buf] = await Promise.all([audio(), renderSong(cut)]);
         if (!alive) return;
-        setLoadedId(songId);
-        // 하이라이트: 마디 단위 음량이 가장 큰 8마디 — 분석기 없이 PCM 한 바퀴로
+        setState("on");
         const barSec = (60 / song.bpm) * 4;
-        const off = song.beatOffset ?? 0;
-        const pcm = buf.getChannelData(0);
-        const sr = buf.sampleRate;
-        const nBars = Math.floor((buf.duration - off) / barSec);
-        const barE: number[] = [];
-        for (let b = 0; b < nBars; b++) {
-          const i0 = Math.floor((off + b * barSec) * sr);
-          const i1 = Math.min(pcm.length, Math.floor((off + (b + 1) * barSec) * sr));
-          let e = 0;
-          for (let i = i0; i < i1; i += 8) e += pcm[i] * pcm[i];
-          barE.push(e / Math.max(1, (i1 - i0) / 8));
-        }
-        let bestBar = 0;
-        let bestE = -1;
-        for (let b = 0; b + BARS <= nBars; b++) {
-          let e = 0;
-          for (let k = 0; k < BARS; k++) e += barE[b + k];
-          if (e > bestE) {
-            bestE = e;
-            bestBar = b;
-          }
-        }
-        const A = off + bestBar * barSec;
+        const A = SKIP_BARS * barSec;
         const L = barSec * BARS;
         const notes = chart.notes
           .filter((n) => n.t >= A - 0.001 && n.t < A + L - 0.001)
@@ -218,7 +191,7 @@ export default function SyncCalibrate({
         };
         raf = requestAnimationFrame(frame);
       } catch {
-        if (alive) setFailedId(songId);
+        if (alive) setState("failed");
       }
     })();
     return () => {
@@ -227,13 +200,9 @@ export default function SyncCalibrate({
       ro.disconnect();
       stopAll();
     };
-    // 곡·타격음·스킨이 바뀌면 다시 시작 (싱크·속도는 ref로 바로 반영)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [songId, hitSound, skin]);
+    // 타격음·스킨이 바뀌면 다시 시작 (싱크·속도는 ref로 바로 반영)
+  }, [hitSound, skin]);
 
-  const song = songs.find((s) => s.id === songId);
-  const diff = song ? diffOf(song) : null;
-  const diffInfo = DIFFICULTIES.find((d) => d.key === diff);
   const KR = "font-['Nanum_Gothic',sans-serif]";
   const btn =
     "h-[3.2cqw] w-[3.2cqw] shrink-0 cursor-pointer rounded-full border border-white/25 bg-white/[0.06] font-mono text-[1.7cqw] text-white/85 transition-colors hover:border-[#A78BFA] hover:bg-[#A78BFA]/15 hover:text-white";
@@ -244,7 +213,7 @@ export default function SyncCalibrate({
         <div
           className={`${KR} absolute inset-0 flex items-center justify-center text-[1.4cqw] text-white/60`}
         >
-          {failed ? "음원을 불러오지 못했어요" : "하이라이트 찾는 중…"}
+          {failed ? "연습곡을 만들지 못했어요" : "연습곡 준비 중…"}
         </div>
       )}
       {/* 머리말 띠 */}
@@ -254,13 +223,7 @@ export default function SyncCalibrate({
             SYNC CHECK
           </span>
           <span className={`${KR} text-[1.1cqw] text-white/55`}>
-            {song?.title}
-            {diffInfo && (
-              <b className="ml-[0.6cqw]" style={{ color: diffInfo.color }}>
-                {diffInfo.label}
-              </b>
-            )}{" "}
-            하이라이트 · 내 노트 속도
+            패턴 연습 · 계단 구간 · 내 노트 속도
           </span>
         </div>
         <button
@@ -295,28 +258,6 @@ export default function SyncCalibrate({
           <span className="text-white/35"> (← → 키로도 5ms씩)</span>. 블루투스 이어폰이면 낀 채로
           맞추세요.
         </p>
-      </div>
-      {/* 오른쪽: 곡 고르기 */}
-      <div className="absolute top-1/2 right-[3cqw] w-[20cqw] -translate-y-1/2 rounded-[1cqw] border border-white/10 bg-[#0b0820]/85 p-[1.4cqw]">
-        <div className={`${KR} mb-[0.7cqw] text-[1cqw] font-bold tracking-wide text-[#A78BFA]`}>
-          곡 (가장 시끄러운 8마디)
-        </div>
-        <div className="flex flex-col gap-[0.35cqw]">
-          {songs.map((s) => (
-            <button
-              key={s.id}
-              type="button"
-              onClick={() => setSongId(s.id)}
-              className={`${KR} cursor-pointer truncate rounded-[0.5cqw] border px-[0.9cqw] py-[0.35cqw] text-left text-[1.05cqw] transition-colors ${
-                s.id === songId
-                  ? "border-[#A78BFA] bg-[#A78BFA]/20 font-bold text-white"
-                  : "border-transparent text-white/55 hover:bg-white/[0.06] hover:text-white"
-              }`}
-            >
-              {s.title}
-            </button>
-          ))}
-        </div>
       </div>
     </div>
   );
