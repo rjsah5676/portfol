@@ -366,6 +366,26 @@ export default function Stage({
     let quality = 3;
     /** 최근 프레임 통계 (분석 모드 HUD에 표시) */
     let perfInfo: { fps: number; p90: number; work90: number; hz: number } | null = null;
+    /** 프레임 통계 표시 — 분석 모드는 항상, 일반 플레이는 P 키로 (프레임 드랍 제보용) */
+    let showPerf = autoplay;
+    /** 브라우저가 쓰는 그래픽 장치 (하드웨어 가속이 꺼져 있으면 SwiftShader·Basic Render 등 소프트웨어) */
+    let gpuName = "";
+    const gpuInfo = () => {
+      if (gpuName) return gpuName;
+      try {
+        const gl = document.createElement("canvas").getContext("webgl");
+        if (!gl) return (gpuName = "WebGL 없음 — 하드웨어 가속 꺼짐?");
+        const ext = gl.getExtension("WEBGL_debug_renderer_info");
+        const r = String(gl.getParameter(ext ? ext.UNMASKED_RENDERER_WEBGL : gl.RENDERER));
+        gl.getExtension("WEBGL_lose_context")?.loseContext();
+        gpuName = /swiftshader|basic render|llvmpipe|software/i.test(r)
+          ? `소프트웨어 렌더링(하드웨어 가속 꺼짐) · ${r}`
+          : r.replace(/^ANGLE \((.*)\)$/, "$1");
+      } catch {
+        gpuName = "?";
+      }
+      return gpuName;
+    };
     const rebuild = () => {
       buildStatic();
       buildGear();
@@ -793,7 +813,7 @@ export default function Stage({
     const perfStr = () =>
       perfInfo
         ? `${perfInfo.fps.toFixed(0)}/${perfInfo.hz.toFixed(0)}fps · p90 ${perfInfo.p90.toFixed(0)}ms · js ${perfInfo.work90.toFixed(1)}ms · Q${quality}${pace === 2 ? "·½" : ""} · ${canvas.width}×${canvas.height}`
-        : "";
+        : "프레임 측정 중…";
     const drawHudPortrait = (t: number) => {
       const x0 = 28 + (HUD_H - 56) + 18;
       const right = CW - 30;
@@ -840,10 +860,11 @@ export default function Stage({
       g.fillRect(x0, 138, right - x0, 4);
       g.fillStyle = song.color;
       g.fillRect(x0, 138, (right - x0) * prog, 4);
-      if (autoplay && perfInfo) {
+      if (showPerf) {
         g.fillStyle = "rgba(253,230,138,0.85)";
         g.font = `700 11px ${mono}`;
         g.fillText(perfStr(), x0, 148);
+        g.fillText(gpuInfo(), x0, 162, right - x0);
       }
     };
 
@@ -927,11 +948,12 @@ export default function Stage({
       g.font = `600 11px ${mono}`;
       g.textAlign = "right";
       g.fillText(`${fmtTime(Math.max(0, t))} / ${fmtTime(songEnd + 2.5)}`, px0 + pw, py - 16);
-      if (autoplay && perfInfo) {
-        // 프레임 통계 (분석 모드): 진행 바 위 왼쪽, 시간 글자와 안 겹치게 폭 제한
+      if (showPerf) {
+        // 프레임 통계 (분석 모드·P 키): 진행 바 위 왼쪽, 시간 글자와 안 겹치게 폭 제한 + 그 위에 그래픽 장치
         g.fillStyle = "rgba(253,230,138,0.8)";
         g.textAlign = "left";
         g.fillText(perfStr(), px0, py - 16, pw - 90);
+        g.fillText(gpuInfo(), px0, py - 30, pw);
       }
 
       // ── 점수판: 글꼴을 모두 굵은 기울임(disp)으로 맞춤 ──
@@ -1742,6 +1764,11 @@ export default function Stage({
         if (e.repeat) return;
         if (running) rHoldAt = performance.now();
         else if (!resuming && !finished && !failing) onRestart();
+        return;
+      }
+      // P: 프레임 통계 켜고 끄기
+      if (e.code === "KeyP" && !e.repeat) {
+        showPerf = !showPerf;
         return;
       }
       if (e.code === "Escape") {

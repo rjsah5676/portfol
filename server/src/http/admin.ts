@@ -3,6 +3,7 @@ import { z } from "zod";
 import { RANK_COLLECTIONS, ROOM_COLLECTIONS } from "../db";
 import type { Deps } from "../deps";
 import { bad } from "../errors";
+import { clearBpCache } from "./rankings";
 import { h, ms, requireAdmin } from "./util";
 
 /*
@@ -288,6 +289,7 @@ export function adminRouter({ db, auth, web, users, gateway, cfg, traffic }: Dep
       delete data._id;
       await db.col(col).replaceOne({ _id: body.id, ...scope }, { ...data, ...scope }, { upsert: true });
       if (col === "guest") hooks.guestChanged();
+      if (col === "rhythm_rankings") clearBpCache(); // BP 랭킹 30초 캐시를 바로 비움
       if (col === "studyPosts") void web.postsChanged();
     })
   );
@@ -299,6 +301,7 @@ export function adminRouter({ db, auth, web, users, gateway, cfg, traffic }: Dep
       const { col, scope } = resolve(body.path);
       await db.col(col).deleteMany({ _id: { $in: body.ids }, ...scope });
       if (col === "guest") hooks.guestChanged();
+      if (col === "rhythm_rankings") clearBpCache();
       if (col === "studyPosts") void web.postsChanged();
       if ((ROOM_COLLECTIONS as readonly string[]).includes(col)) hooks.roomsDeleted(col, body.ids);
     })
