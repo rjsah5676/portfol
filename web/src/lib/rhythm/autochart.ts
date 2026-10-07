@@ -152,7 +152,7 @@ const AUTO_RULES: Record<Difficulty, AutoRule> = {
     tri: 0.06,
     jackAllow: 0.3,
     jackRun: 3,
-    ln: { ratio: 0.04, lens: [1, 1, 1, 1.5, 2], maxSec: 0.8, onBeat: 0.69 },
+    ln: { ratio: 0.08, lens: [1, 1, 1, 1.5, 2], maxSec: 0.8, onBeat: 0.69 },
   },
   // 나이트메어: 매우 어려움보다 촘촘하게 고른 뒤, 센 마디는 16분으로 꽉 채우고 패턴으로만 레인을 깖 (아래 nightmareNotes)
   nightmare: {
@@ -167,7 +167,7 @@ const AUTO_RULES: Record<Difficulty, AutoRule> = {
     tri: 0.25,
     jackAllow: 0.5,
     jackRun: 4,
-    ln: { ratio: 0.03, lens: [1, 1, 1, 1.5], maxSec: 0.7, onBeat: 0.63 },
+    ln: { ratio: 0.105, lens: [1, 1, 1, 1.5], maxSec: 0.7, onBeat: 0.63 },
   },
   // EX+ (Lv19~21): 나이트메어 경로 그대로. osu 랭크 4.75~5.5성 104개 기준 — 초당 15.4(p10 8 · p90 21, 조용한 데는 여전히 비움),
   // 동시치기 43%(3개 7.7%), 잭 15%, 롱노트 7.5%, 32분은 3%뿐 → 32분 연타보다 잭·3개 동시치기·롱노트로 어려움을 올림
@@ -183,7 +183,7 @@ const AUTO_RULES: Record<Difficulty, AutoRule> = {
     tri: 0.45,
     jackAllow: 0.9,
     jackRun: 6,
-    ln: { ratio: 0.07, lens: [1, 1, 1, 1.5, 2], maxSec: 1, onBeat: 0.63 },
+    ln: { ratio: 0.1, lens: [1, 1, 1, 1.5, 2], maxSec: 1, onBeat: 0.63 },
   },
 };
 /** 나이트메어 경로(패턴으로만 레인을 깖)를 쓰는 난이도 */

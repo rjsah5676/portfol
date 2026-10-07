@@ -406,7 +406,7 @@ const FREEDOMDIVE = audioSong(
 
 /*
  * 채보 다시 뽑기 (npm run rhythm-chart -- <id> ...) — --levels는 직접 쳐 보고 정한 레벨 (쉬움부터)
- *   fullcombo   --bpm-label 180 --boss '{"loud":0.5,"full":0.8,"burstEvery":8}' --levels 3,6,9,13,16
+ *   fullcombo   --bpm-label 180 --boss '{"loud":0.48,"full":0.78}' --levels 3,6,9,13,16
  *   jilju       --boss '{}' --tweak '{"hard":{"fill":0.3},"expert":{"fill":0.15}}' --levels 3,5,8,12,16   (나이트메어 자동 16)
  *   natsukasumi --boss '{}' --tweak '{"hard":{"fill":0.9},"expert":{"fill":1.3}}' --levels 2,4,7,12   (나이트메어 자동 17)
  *   rinkaku     --boss '{}' --tweak '{"expert":{"fill":0.4}}' --levels 2,4,8,12   (나이트메어 자동 15)
