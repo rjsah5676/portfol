@@ -38,6 +38,14 @@ export interface MyStats {
   online?: Record<string, { w?: number; l?: number; d?: number }>;
   sketch?: { correct?: number; points?: number; games?: number };
   fight?: { matches?: number };
+  /** 포커: 친 판 수 · 이긴 판 · 한 판에 가장 크게 먹은 돈 */
+  poker?: {
+    games?: number;
+    hands?: number;
+    best?: number;
+    holdem?: { hands?: number; wins?: number };
+    seven?: { hands?: number; wins?: number };
+  };
 }
 
 export interface MySummary {
@@ -49,6 +57,8 @@ export interface MySummary {
   bp?: { total: number; rank: number | null; of: number };
   /** 격투 온라인 레이팅 (회원끼리 경기, 한 판도 없으면 null) */
   fightRating?: { r: number; n: number; w: number; l: number; d: number; peak: number; rank: number; of: number } | null;
+  /** 포커 자금 */
+  money?: number;
 }
 
 export const getMySummary = () => api<MySummary>("/api/me/summary", { auth: true });

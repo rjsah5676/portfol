@@ -85,7 +85,7 @@ export function decode(v: unknown): unknown {
 
 const ids = z.array(z.string().min(1)).max(2000);
 
-/** 서버 메모리에만 있는 방 (스케치 퀴즈 · 격투) */
+/** 서버 메모리에만 있는 방 (스케치 퀴즈 · 격투 · 포커) */
 export interface LiveRoom {
   id: string;
   name: string;
@@ -93,14 +93,14 @@ export interface LiveRoom {
   players: string[];
   createdAt: number;
 }
-export type LiveGame = "sketch" | "fight";
+export type LiveGame = "sketch" | "fight" | "poker";
 
 export interface AdminHooks {
   /** 방명록이 바뀜 → 구독자에게 다시 보냄 */
   guestChanged(): void;
   /** 대국방이 지워짐 → 로비·방 구독자에게 알림 */
   roomsDeleted(coll: string, ids: string[]): void;
-  /** 지금 열려 있는 스케치 · 격투 방 */
+  /** 지금 열려 있는 스케치 · 격투 방 · 포커 테이블 */
   liveRooms(): Record<LiveGame, LiveRoom[]>;
   /** 방 닫기 (없는 방이면 false) */
   closeLiveRoom(game: LiveGame, id: string): boolean;
@@ -186,7 +186,7 @@ export function adminRouter({ db, auth, web, users, gateway, cfg, traffic }: Dep
         guest: { total: guestTotal },
         rankings: { ...Object.fromEntries(rankCounts), rhythm_rankings: rhythmCount },
         rooms: Object.fromEntries(roomCounts),
-        live: { sketch: liveOf(live.sketch), fight: liveOf(live.fight) },
+        live: { sketch: liveOf(live.sketch), fight: liveOf(live.fight), poker: liveOf(live.poker) },
         server: {
           env: cfg.env,
           startedAt,
@@ -258,7 +258,7 @@ export function adminRouter({ db, auth, web, users, gateway, cfg, traffic }: Dep
   r.post(
     "/live/close",
     h(async (req) => {
-      const body = z.strictObject({ game: z.enum(["sketch", "fight"]), id: z.string().min(1).max(80) }).parse(req.body);
+      const body = z.strictObject({ game: z.enum(["sketch", "fight", "poker"]), id: z.string().min(1).max(80) }).parse(req.body);
       return { closed: hooks.closeLiveRoom(body.game, body.id) };
     })
   );

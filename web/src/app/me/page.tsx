@@ -7,6 +7,7 @@ import AvatarForm from "@/components/Account/AvatarForm";
 import NickForm from "@/components/Account/NickForm";
 import { useAuth } from "@/lib/AuthContext";
 import { pointsOf } from "@/lib/aiScore";
+import { fmtWon } from "@/lib/poker/rules";
 import { rankDateLabel, toDate } from "@/lib/rankDate";
 import { BP_TOP_SONGS, bpOf } from "@/lib/rhythm/bp";
 import { DIFFICULTIES } from "@/lib/rhythm/chart";
@@ -39,6 +40,9 @@ const ONLINE: [string, string, string][] = [
   ["omok", "오목", "/games/omok"],
   ["fight", "격투", "/games/fight"],
 ];
+/** "120판 · 이긴 판 31" */
+const pokerLine = (s?: { hands?: number; wins?: number }) =>
+  s?.hands ? `${s.hands.toLocaleString()}판 · 이긴 판 ${(s.wins ?? 0).toLocaleString()}` : "-";
 const DIFF = Object.fromEntries(DIFFICULTIES.map((d) => [d.key, d]));
 
 /** 비트대시 곡 정보 (제목 · 난이도별 레벨) */
@@ -269,6 +273,20 @@ export default function MyPage() {
                   })}
                 </ul>
               )}
+            </section>
+
+            <section className={card}>
+              <div className={label}>
+                <Link href="/games/poker" className="transition-colors hover:text-white">
+                  포커
+                </Link>
+              </div>
+              <div className="flex flex-wrap gap-x-8 gap-y-4">
+                <Stat name="보유금액 (원)" value={fmtWon(data.money ?? 0)} />
+                <Stat name="홀덤" value={pokerLine(stats.poker?.holdem)} />
+                <Stat name="7포커" value={pokerLine(stats.poker?.seven)} />
+                <Stat name="한 판에 가장 크게 먹은 돈" value={stats.poker?.best ? fmtWon(stats.poker.best) : "-"} />
+              </div>
             </section>
 
             <section className={card}>

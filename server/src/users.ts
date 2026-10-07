@@ -4,6 +4,7 @@ import type { Config } from "./config";
 import type { Database } from "./db";
 import { RANK_COLLECTIONS } from "./db";
 import { AppError, bad, forbidden } from "./errors";
+import { START_MONEY } from "../../web/src/lib/poker/rules";
 
 /*
  * 회원 = Google 등으로 로그인(익명 아님)하고 별명을 정한 사람. users 컬렉션에 uid 로 한 줄씩.
@@ -31,6 +32,14 @@ export interface UserStats {
   sketch?: { correct?: number; points?: number; games?: number };
   /** 격투 온라인 경기 수 */
   fight?: { matches?: number };
+  /** 포커: 앉은 횟수 · 친 판 수(전체, 게임별) · 이긴 판 · 한 판에 가장 크게 먹은 돈 */
+  poker?: {
+    games?: number;
+    hands?: number;
+    best?: number;
+    holdem?: { hands?: number; wins?: number };
+    seven?: { hands?: number; wins?: number };
+  };
 }
 
 export interface UserDoc {
@@ -48,6 +57,10 @@ export interface UserDoc {
   /** 직접 올린 프로필 사진 (없으면 로그인 계정의 사진을 씀). at = 올린 시각 — 주소에 붙여 캐시를 가름 */
   avatar?: { type: string; data?: Binary; at: number };
   stats?: UserStats;
+  /** 포커 자금 (가입할 때 START_MONEY). 바꾸는 건 games/poker/wallet.ts 만 */
+  money?: number;
+  /** 오늘 받은 회생 횟수 (day = 한국 시간 날짜) */
+  revive?: { day: string; n: number };
 }
 
 export interface Profile {
@@ -82,7 +95,8 @@ const playsOf = (s: UserStats = {}) =>
   sum(s.plays) +
   Object.entries(s.online ?? {}).reduce((a, [g, r]) => a + (g === "fight" ? 0 : sum(r)), 0) +
   (s.sketch?.games ?? 0) +
-  (s.fight?.matches ?? 0);
+  (s.fight?.matches ?? 0) +
+  (s.poker?.games ?? 0);
 
 const toProfile = (uid: string, d: UserDoc): Profile => ({
   nick: d.nick,
@@ -167,7 +181,7 @@ export function createUsers(db: Database, cfg: Pick<Config, "adminNick">) {
       let d = await docOf(user.uid);
       if (!d && user.admin) {
         const now = new Date();
-        d = { nick: cfg.adminNick, nickKey: adminKey, email: user.email, createdAt: now, updatedAt: now, visits: 1, lastVisitAt: now };
+        d = { nick: cfg.adminNick, nickKey: adminKey, email: user.email, createdAt: now, updatedAt: now, visits: 1, lastVisitAt: now, money: START_MONEY };
         try {
           await col.insertOne({ _id: user.uid, ...d });
           cache.set(user.uid, d.nick);
@@ -196,7 +210,7 @@ export function createUsers(db: Database, cfg: Pick<Config, "adminNick">) {
       const cur = await docOf(user.uid);
       try {
         if (cur) await col.updateOne({ _id: user.uid }, { $set: { nick, nickKey, updatedAt: now } });
-        else await col.insertOne({ _id: user.uid, nick, nickKey, email: user.email, createdAt: now, updatedAt: now, visits: 1, lastVisitAt: now });
+        else await col.insertOne({ _id: user.uid, nick, nickKey, email: user.email, createdAt: now, updatedAt: now, visits: 1, lastVisitAt: now, money: START_MONEY });
       } catch (e) {
         if ((e as { code?: number }).code === 11000) throw taken();
         throw e;
@@ -355,6 +369,12 @@ export function createUsers(db: Database, cfg: Pick<Config, "adminNick">) {
     /** 기록 숫자 올리기 (회원만 — 없는 uid 면 아무 일도 없음). 예: bump(uid, { "stats.online.chess.w": 1 }) */
     bump(uid: string, inc: Record<string, number>) {
       col.updateOne({ _id: uid }, { $inc: inc }).catch((e) => console.warn("[users] 기록 저장 실패", e));
+    },
+
+    /** 포커 자금 (내 정보 화면용) */
+    async moneyOf(uid: string): Promise<number> {
+      const d = (await col.findOne({ _id: uid }, { projection: { money: 1 } })) as Pick<UserDoc, "money"> | null;
+      return d?.money ?? START_MONEY;
     },
 
     async statsOf(uid: string): Promise<UserStats> {

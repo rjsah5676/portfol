@@ -9,7 +9,7 @@ server/   Express 5 + socket.io + MongoDB — API·실시간(게임 방·채팅�
 
 - Firebase 는 **로그인(Auth)만** 계속 씀 (게임용 익명 로그인, 관리자 이메일 로그인). 서버가 Firebase 토큰을 검증.
 - Firestore / Realtime Database 는 더 이상 쓰지 않음 → MongoDB + 웹소켓.
-- 체스·장기·오목 방은 DB 에 저장(서버를 재시작해도 이어짐). 스케치 퀴즈·격투 방은 서버 메모리(재시작하면 사라짐).
+- 체스·장기·오목 방은 DB 에 저장(서버를 재시작해도 이어짐). 스케치 퀴즈·격투 방·포커 테이블은 서버 메모리(재시작하면 사라짐).
 
 ## 로컬 실행
 
@@ -89,4 +89,11 @@ main 에 push → 이미지가 올라간 뒤 `deploy` job 이 서버에 접속�
 - `web/.github/`, `web/firebase.json`, `web/*.rules` 는 예전 Firebase 배포용 파일. 이 레포에서는 동작하지 않음(지워도 됨).
 - 서버가 `web/src` 의 일부를 직접 가져다 씀 → 고치면 서버도 같이 바뀜: 장기·오목 규칙(`lib/{janggi,omok}/engine.ts`), AI 대국 점수 공식(`lib/aiScore.ts`), 멜론게임 한 판 길이(`lib/melon/logic.ts`), 리듬게임 채보(`data/rhythm/*.json`). 리듬게임 곡을 추가하면 `server/src/http/rhythmCharts.ts` 에도 추가(빠뜨리면 테스트가 실패).
 - 회원: Google 로그인(Firebase Auth) + 별명(중복 불가, 한글·영문·숫자 2~10자, `users` 컬렉션). 회원은 랭킹·방명록·온라인 게임에 별명이 자동으로 들어가고(끝난 게임은 자동 등록), 비회원이 적은 이름에는 GUEST 표시가 붙음 — 온라인 게임은 서버가 이름 앞에 `◦` 를 붙이고(server 의 users 모듈), 랭킹·방명록은 기록의 `member` 값으로 구분(web 의 Nick 컴포넌트). 관리자 이메일로 로그인하면 관리자이고 별명은 `ADMIN_NICK`. Firebase 콘솔 → Authentication → 로그인 방법에서 Google 을 켜야 함.
+- 포커(홀덤 · 7포커, `/games/poker`): 회원 전용. 돈은 `users.money` 하나를 두 게임이 같이 씀 — 가입하면 1억, 보유금액이 500만 미만이면 하루 10번 1,000만 회생.
+  - 숫자(판돈 3단계 · 입장컷 · 봇 자금 · 회생 · 제한 시간)는 전부 `web/src/lib/poker/rules.ts` 한 곳. 서버도 이 파일을 가져다 씀.
+  - 테이블은 서버 메모리, 돈만 DB. 앉으면 가진 돈 전부가 칩이고 **판이 끝날 때 증감만** DB 에 반영(`server/src/games/poker/wallet.ts`). 판 도중에 서버가 내려가거나 관리자가 테이블을 닫으면 그 판은 없던 일(돈 그대로). 한 사람은 한 테이블에만 앉을 수 있고, 정산이 DB 에 써질 때까지는 다른 테이블에 못 앉음.
+  - 브라우저가 보내는 건 행동(콜 · 레이즈 얼마 · 카드 고르기)뿐이고 규칙 검사는 서버 엔진(`games/poker/holdem/engine.ts`, `seven/engine.ts`)이 함. 남의 패는 쇼다운 전까지 어떤 응답에도 안 실림(내 패는 `poker.me` 구독으로 본인에게만).
+  - 봇 4명(건모 · 춘희 · 덕팔 · 연서)의 성격은 `games/poker/personas.ts`, 판단은 `holdem/bots.ts` · `seven/bots.ts`. 봇도 자기 패와 공개 정보만 받음. 캐릭터 그림은 임시(SVG) — `web/src/components/Poker/parts.tsx` 의 `BotFace` 만 바꾸면 됨.
+  - 핸드 기록은 `poker_hands` 컬렉션에 30일. 자금 순위는 한 판이라도 친 회원만(`GET /api/poker/rank`).
+  - 알려진 한계: 쉬었다 돌아오는 사람에게 블라인드를 물리는 규칙이 아직 없음(홀덤). 둘이 짜고 한쪽이 일부러 잃어 주는 것(칩 덤핑)은 막지 않음 — 회생이 하루 1억까지라 순위를 부풀릴 수 있음.
 - 랭킹 등록: 로그인(익명) + 게임을 시작할 때 받은 1회용 티켓이 있어야 하고, 한 사람은 랭킹마다 가장 좋은 기록 하나만 남음. 서버는 티켓을 받은 뒤 지난 시간과 값의 앞뒤가 맞는지 확인(`server/src/http/rankings.ts`). 점수 자체는 브라우저에서 계산되므로 요청만 꾸며 넣는 것을 막는 수준. 새 게임에 랭킹을 붙일 때는 시작 시점에 `beginRun(랭킹 이름)` 을 부르고 `submitRun` 으로 등록(`web/src/lib/api/rankRun.ts`).

@@ -1,0 +1,162 @@
+import type { Database } from "../../db";
+import { AppError } from "../../errors";
+import { avatarPath, type UserDoc } from "../../users";
+import { REVIVE, START_MONEY, kstDay, type GameKind } from "../../../../web/src/lib/poker/rules";
+import type { RankRow } from "../../../../web/src/lib/poker/types";
+
+/*
+ * 포커 자금 (회원의 users 문서에 money 로 저장).
+ *
+ * 돈이 바뀌는 길은 셋뿐이고 전부 서버 안에서만 일어남
+ *   1) 가입할 때 START_MONEY (users.ts 가 넣음. 그 전에 가입한 회원은 서버가 뜰 때 채움)
+ *   2) 회생: 조건(보유금액 · 오늘 횟수)을 DB 가 한 번에 확인하고 올림
+ *   3) 판이 끝났을 때 딴 만큼 · 잃은 만큼 ($inc). 한 판의 증감 합은 0 (봇 몫 제외)
+ * 브라우저는 금액을 보내지 않음 — 보내는 건 "콜", "레이즈 얼마" 같은 행동뿐이고 그것도 서버가 규칙대로 검사.
+ * 판 도중의 칩은 서버 메모리에만 있어서, 판이 끝나기 전에 서버가 꺼지면 그 판은 없던 일이 됨(DB 의 돈은 그대로).
+ */
+
+export interface WalletDoc {
+  money: number;
+  reviveUsed: number;
+}
+
+export interface SettleEntry {
+  uid: string;
+  delta: number;
+  game: GameKind;
+  /** 팟을 가져갔는지 */
+  won: boolean;
+  /** 가져간 돈 (가장 크게 먹은 판 기록용) */
+  wonAmount: number;
+}
+
+type MoneyFields = Pick<UserDoc, "nick"> & { money?: number; revive?: { day: string; n: number }; avatar?: { at: number } };
+
+export type Wallet = ReturnType<typeof createWallet>;
+
+export function createWallet(db: Database, now: () => number = Date.now) {
+  const col = db.col<UserDoc>("users");
+  const listeners: ((uid: string, w: WalletDoc) => void)[] = [];
+
+  const toWallet = (d: MoneyFields): WalletDoc => ({
+    money: d.money ?? START_MONEY,
+    reviveUsed: d.revive && d.revive.day === kstDay(now()) ? d.revive.n : 0,
+  });
+
+  /**
+   * money 가 아직 없는 회원 문서에 시작 자금을 실제로 써 넣음 (조건부라 여러 번 불러도 한 번만).
+   * 필드가 없는 채로 $inc 하면 "1억 + 증감"이 아니라 증감만 남으므로, 돈을 건드리기 전에 반드시 거침.
+   */
+  const materialize = (uids: string[]) =>
+    uids.length ? col.updateMany({ _id: { $in: uids }, money: { $exists: false } }, { $set: { money: START_MONEY } }) : Promise.resolve(null);
+
+  async function get(uid: string): Promise<WalletDoc | null> {
+    let d = (await col.findOne({ _id: uid }, { projection: { nick: 1, money: 1, revive: 1 } })) as MoneyFields | null;
+    if (d && d.money === undefined) {
+      await materialize([uid]);
+      d = (await col.findOne({ _id: uid }, { projection: { nick: 1, money: 1, revive: 1 } })) as MoneyFields | null;
+    }
+    return d ? toWallet(d) : null;
+  }
+
+  const changed = async (uid: string) => {
+    const w = await get(uid);
+    if (w) listeners.forEach((f) => f(uid, w));
+    return w;
+  };
+
+  return {
+    /** 서버가 뜰 때: 예전에 가입해서 money 가 없는 회원에게 시작 자금을 채움 (여러 번 불러도 한 번만 적용됨) */
+    async ensure() {
+      await col.updateMany({ money: { $exists: false } }, { $set: { money: START_MONEY } });
+    },
+
+    /** 내 자금 (회원이 아니면 null) */
+    get,
+
+    /** 여러 명의 보유금액 (판을 시작할 때 한 번에 읽음). 회원이 아닌 uid 는 빠짐 */
+    async moneyOf(uids: string[]): Promise<Map<string, number>> {
+      const out = new Map<string, number>();
+      if (!uids.length) return out;
+      await materialize(uids);
+      const docs = await col.find({ _id: { $in: uids } }, { projection: { money: 1 } }).toArray();
+      for (const d of docs) out.set(String(d._id), (d as MoneyFields).money ?? START_MONEY);
+      return out;
+    },
+
+    /**
+     * 회생. 보유금액이 기준 미만이고 오늘 횟수가 남았을 때만.
+     * 조건 확인과 지급을 updateOne 하나로 해서, 동시에 여러 번 눌러도 한 번만 들어감.
+     */
+    async revive(uid: string): Promise<WalletDoc> {
+      await materialize([uid]);
+      const day = kstDay(now());
+      const under = { _id: uid, money: { $lt: REVIVE.under } };
+      // 오늘 이미 받은 적이 있는 경우 → 횟수 +1
+      let r = await col.updateOne(
+        { ...under, "revive.day": day, "revive.n": { $lt: REVIVE.perDay } },
+        { $inc: { money: REVIVE.amount, "revive.n": 1 } }
+      );
+      // 오늘 처음인 경우 → 횟수를 1 로 새로 씀
+      if (!r.modifiedCount)
+        r = await col.updateOne({ ...under, "revive.day": { $ne: day } }, { $inc: { money: REVIVE.amount }, $set: { revive: { day, n: 1 } } });
+      if (!r.modifiedCount) {
+        const w = await get(uid);
+        if (!w) throw new AppError("NOT_MEMBER", "회원만 쓸 수 있어요.", 403);
+        if (w.money >= REVIVE.under) throw new AppError("NOT_BROKE", "보유금액이 500만 원 아래로 내려가면 받을 수 있어요.", 409);
+        throw new AppError("REVIVE_LIMIT", "오늘 회생은 다 썼어요. 자정에 다시 채워져요.", 409);
+      }
+      return (await changed(uid))!;
+    },
+
+    /** 판 정산: 사람마다 증감을 반영하고 기록(판 수 · 이긴 판 · 가장 크게 먹은 판)을 올림 */
+    async settle(entries: SettleEntry[]) {
+      if (!entries.length) return;
+      await materialize(entries.map((e) => e.uid));
+      await col.bulkWrite(
+        entries.map((e) => ({
+          updateOne: {
+            filter: { _id: e.uid },
+            update: {
+              $inc: {
+                money: e.delta,
+                "stats.poker.hands": 1,
+                [`stats.poker.${e.game}.hands`]: 1,
+                ...(e.won && { [`stats.poker.${e.game}.wins`]: 1 }),
+              },
+              ...(e.wonAmount > 0 && { $max: { "stats.poker.best": e.wonAmount } }),
+            },
+          },
+        })),
+        { ordered: false }
+      );
+      // 판을 시작할 때 가진 만큼만 걸 수 있어서 음수가 될 일은 없지만, 그사이 관리자가 금액을 고쳤을 때를 대비
+      const fixed = await col.updateMany({ _id: { $in: entries.map((e) => e.uid) }, money: { $lt: 0 } }, { $set: { money: 0 } });
+      if (fixed.modifiedCount) console.error("[poker] 보유금액이 음수가 되어 0 으로 맞춤 — 있어서는 안 되는 일", entries);
+      await Promise.all(entries.map((e) => changed(e.uid)));
+    },
+
+    /** 자금 순위: 한 판이라도 친 회원만 */
+    async rank(limit = 50): Promise<RankRow[]> {
+      const docs = await col
+        .find({ "stats.poker.hands": { $gte: 1 } }, { projection: { nick: 1, money: 1, "stats.poker.hands": 1, "avatar.at": 1 } })
+        .sort({ money: -1 })
+        .limit(limit)
+        .toArray();
+      return docs.map((d) => {
+        const u = d as unknown as MoneyFields & { stats?: { poker?: { hands?: number } } };
+        return {
+          nick: u.nick,
+          money: u.money ?? START_MONEY,
+          hands: u.stats?.poker?.hands ?? 0,
+          avatar: u.avatar ? avatarPath(String(d._id), u.avatar.at) : null,
+        };
+      });
+    },
+
+    /** 자금이 바뀌었을 때 (그 사람의 화면에 알림) */
+    onChange(fn: (uid: string, w: WalletDoc) => void) {
+      listeners.push(fn);
+    },
+  };
+}

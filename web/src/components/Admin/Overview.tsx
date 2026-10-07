@@ -240,6 +240,9 @@ export default function Overview({ onGo }: { onGo: (tab: string) => void }) {
             <Line label="픽셀 격투">
               {data.live.fight.rooms}방 · {data.live.fight.players}명
             </Line>
+            <Line label="포커">
+              {data.live.poker?.rooms ?? 0}테이블 · {data.live.poker?.players ?? 0}명
+            </Line>
             {Object.entries(data.rooms).map(([c, r]) => (
               <Line key={c} label={ROOM_LABEL[c] ?? c}>
                 <span className={r.playing ? "text-[#2DD4BF]" : ""}>대국 {r.playing}</span>

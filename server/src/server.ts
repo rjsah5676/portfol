@@ -6,6 +6,7 @@ import { connectDatabase, type Database } from "./db";
 import type { Deps } from "./deps";
 import { registerBoardGames } from "./games/board";
 import { registerFight } from "./games/fight";
+import { registerPoker, type PokerOptions } from "./games/poker";
 import { registerSketch } from "./games/sketch";
 import { createApp } from "./http/app";
 import { Gateway } from "./realtime/gateway";
@@ -24,7 +25,7 @@ export interface AppServer {
 /** HTTP API + 실시간 게이트웨이를 한 포트에 올림. 테스트에서는 auth·db를 바꿔 끼울 수 있음 */
 export async function createAppServer(
   cfg: Config,
-  overrides: { auth?: Auth; db?: Database; web?: WebNotifier } = {}
+  overrides: { auth?: Auth; db?: Database; web?: WebNotifier; poker?: PokerOptions } = {}
 ): Promise<AppServer> {
   const db = overrides.db ?? (await connectDatabase(cfg));
   const auth = overrides.auth ?? createAuth(cfg);
@@ -39,12 +40,14 @@ export async function createAppServer(
   const board = registerBoardGames(deps);
   const sketch = registerSketch(deps);
   const fight = registerFight(deps);
-  const live = { sketch, fight };
+  const poker = registerPoker(deps, overrides.poker);
+  const live = { sketch, fight, poker };
   http.on(
     "request",
     createApp(deps, {
       roomsDeleted: board.roomsDeleted,
-      liveRooms: () => ({ sketch: sketch.adminList(), fight: fight.adminList() }),
+      liveRooms: () => ({ sketch: sketch.adminList(), fight: fight.adminList(), poker: poker.adminList() }),
+      pokerRank: () => poker.wallet.rank(),
       closeLiveRoom: (game, id) => live[game].adminClose(id),
     })
   );
@@ -66,6 +69,7 @@ export async function createAppServer(
       for (const t of timers) clearTimeout(t);
       sketch.close();
       fight.close();
+      poker.close();
       await gateway.close();
       await new Promise<void>((res) => http.close(() => res()));
       if (!overrides.db) await db.close();

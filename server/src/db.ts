@@ -103,6 +103,9 @@ async function ensureIndexes({ db }: Database) {
   idx("guest", { uid: 1 });
   // 별명은 대소문자 구분 없이 하나뿐
   idx("users", { nickKey: 1 }, { unique: true });
+  // 포커: 자금 순위, 핸드 기록은 30일 뒤 자동 삭제
+  idx("users", { money: -1 });
+  idx("poker_hands", { at: 1 }, { expireAfterSeconds: 30 * 24 * 60 * 60 });
   idx("inquiries", { createdAt: -1 });
   for (const c of ROOM_COLLECTIONS) {
     idx(c, { updatedAt: -1 });

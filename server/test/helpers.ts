@@ -5,6 +5,7 @@ import { inject } from "vitest";
 import { createAuth } from "../src/auth";
 import { loadConfig } from "../src/config";
 import { connectDatabase, type Database } from "../src/db";
+import type { PokerOptions } from "../src/games/poker";
 import { createAppServer } from "../src/server";
 
 /*
@@ -59,7 +60,7 @@ export interface TestServer {
   close(): Promise<void>;
 }
 
-export async function startTestServer(): Promise<TestServer> {
+export async function startTestServer(over: { poker?: PokerOptions } = {}): Promise<TestServer> {
   const { publicKey, privateKey } = await generateKeyPair("RS256");
   const jwk = { ...(await exportJWK(publicKey)), kid: "test", alg: "RS256", use: "sig" };
   const cfg = loadConfig({
@@ -71,7 +72,12 @@ export async function startTestServer(): Promise<TestServer> {
     ADMIN_EMAILS: ADMIN_EMAIL,
   });
   const db = await connectDatabase(cfg);
-  const server = await createAppServer(cfg, { db, auth: createAuth(cfg, createLocalJWKSet({ keys: [jwk] })) });
+  const server = await createAppServer(cfg, {
+    db,
+    auth: createAuth(cfg, createLocalJWKSet({ keys: [jwk] })),
+    // 포커: 카드 까는 뜸 · 봇 생각 시간을 거의 없앰 (사람의 제한 시간은 넉넉히)
+    poker: { speed: 0.004, actMs: 4000, choiceMs: 4000, sweepIntervalMs: 150, ...over.poker },
+  });
   const port = await server.listen();
   const url = `http://127.0.0.1:${port}`;
   const clients = new Set<TestClient>();

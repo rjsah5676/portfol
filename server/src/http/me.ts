@@ -96,7 +96,7 @@ export function meRouter({ db, auth, users }: Deps): Router {
       // 격투 온라인 레이팅
       const fightRating = await createFightRating(db, users).mine(user.uid);
 
-      return { profile, stats: await users.statsOf(user.uid), records, rhythm, bp, fightRating };
+      return { profile, stats: await users.statsOf(user.uid), records, rhythm, bp, fightRating, money: await users.moneyOf(user.uid) };
     })
   );
 

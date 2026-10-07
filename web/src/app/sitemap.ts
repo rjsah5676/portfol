@@ -31,6 +31,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { path: "/games/fight/", priority: 0.5, changeFrequency: "monthly" },
     { path: "/games/rhythm/", priority: 0.5, changeFrequency: "monthly" },
     { path: "/games/sketch/", priority: 0.5, changeFrequency: "monthly" },
+    { path: "/games/poker/", priority: 0.5, changeFrequency: "monthly" },
     { path: "/devtools/json/", priority: 0.6, changeFrequency: "monthly" },
     { path: "/devtools/mybatis-log/", priority: 0.6, changeFrequency: "monthly" },
     { path: "/devtools/ddl-to-java/", priority: 0.6, changeFrequency: "monthly" },

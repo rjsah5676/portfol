@@ -10,6 +10,7 @@ import imgOmok from "@/img/menu/omok.jpg";
 import imgFight from "@/img/menu/fight.jpg";
 import imgRhythm from "@/img/menu/rhythm.jpg";
 import imgSketch from "@/img/menu/sketch.jpg";
+import imgPoker from "@/img/menu/poker.jpg";
 import imgLadder from "@/img/menu/ladder.jpg";
 import imgRoulette from "@/img/menu/roulette.jpg";
 import imgCalorie from "@/img/menu/calorie.jpg";
@@ -76,13 +77,6 @@ export const NAV_GROUPS: NavGroup[] = [
     desc: "직접 만든 브라우저 게임. 대부분 랭킹이 있습니다.",
     items: [
       {
-        href: "/games/melongame",
-        image: imgMelongame,
-        label: "멜론 게임",
-        desc: "합이 10·20이 되게 묶어 지우는 2분 타임어택",
-        icon: "🍈",
-      },
-      {
         href: "/games/rhythm",
         image: imgRhythm,
         label: "BEAT DASH",
@@ -97,6 +91,20 @@ export const NAV_GROUPS: NavGroup[] = [
         desc: "1:1 플랫폼 격투, AI 모드 · 2인 모드 · 온라인 모드",
         icon: "🥊",
         featured: true,
+      },
+      {
+        href: "/games/poker",
+        image: imgPoker,
+        label: "온라인 포커",
+        desc: "홀덤 · 7포커, 가입하면 1억 — 봇 4명 또는 친구와",
+        icon: "♠",
+      },
+      {
+        href: "/games/melongame",
+        image: imgMelongame,
+        label: "멜론 게임",
+        desc: "합이 10·20이 되게 묶어 지우는 2분 타임어택",
+        icon: "🍈",
       },
       {
         href: "/games/sketch",

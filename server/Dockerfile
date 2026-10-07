@@ -17,6 +17,8 @@ COPY web/src/lib/omok/engine.ts /repo/web/src/lib/omok/engine.ts
 COPY web/src/lib/aiScore.ts /repo/web/src/lib/aiScore.ts
 COPY web/src/lib/melon/logic.ts /repo/web/src/lib/melon/logic.ts
 COPY web/src/data/rhythm /repo/web/src/data/rhythm
+# 포커: 카드·족보·판돈 규칙 (서버와 화면이 같이 씀)
+COPY web/src/lib/poker /repo/web/src/lib/poker
 RUN npm run build
 
 # ── 2) 실행: 운영 의존성 + dist 만 ──

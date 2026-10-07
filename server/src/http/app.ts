@@ -10,7 +10,12 @@ import { siteRouter } from "./site";
 import { studyPostsRouter } from "./studyPosts";
 import { trackRouter } from "./track";
 
-export function createApp(deps: Deps, hooks: Omit<AdminHooks, "guestChanged">) {
+export interface AppHooks extends Omit<AdminHooks, "guestChanged"> {
+  /** 포커 자금 순위 */
+  pokerRank(): Promise<unknown>;
+}
+
+export function createApp(deps: Deps, { pokerRank, ...hooks }: AppHooks) {
   const { cfg } = deps;
   const app = express();
   app.disable("x-powered-by");
@@ -74,6 +79,13 @@ export function createApp(deps: Deps, hooks: Omit<AdminHooks, "guestChanged">) {
     deps.users
       .badges()
       .then((b) => res.set("Cache-Control", "public, max-age=30").json(b))
+      .catch(next);
+  });
+
+  // 포커 자금 순위: 한 판이라도 친 회원을 보유금액 순으로 (누구나 볼 수 있음)
+  app.get("/api/poker/rank", (_req, res, next) => {
+    pokerRank()
+      .then((list) => res.set("Cache-Control", "public, max-age=15").json({ list }))
       .catch(next);
   });
 

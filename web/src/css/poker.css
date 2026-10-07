@@ -1,0 +1,315 @@
+/*
+ * 포커(홀덤 · 7포커) 화면.
+ * 단계마다 판의 천이 다름: 동네판 = 국방색 모포, 하우스 = 청록 펠트, VIP룸 = 와인색 벨벳.
+ * 숫자(돈)는 Big Shoulders Display, 큰 한글은 Black Han Sans, 봇 대사는 Jua.
+ */
+
+@font-face {
+  font-family: "Big Shoulders Display";
+  src: url("../fonts/BigShouldersDisplay-ExtraBold.woff2") format("woff2");
+  font-weight: 800;
+  font-style: normal;
+  font-display: swap;
+}
+
+.pk {
+  --pk-ink: #101114;
+  --pk-panel: #1b1d22;
+  --pk-panel-2: #23262d;
+  --pk-line: rgba(255, 255, 255, 0.09);
+  --pk-brass: #e7b95b;
+  --pk-brass-deep: #b58a32;
+  --pk-call: #3cc8a6;
+  --pk-raise: #f0a23b;
+  --pk-fold: #8b8f99;
+  --pk-danger: #e5484d;
+  --pk-card: #f7f2e7;
+  --pk-card-ink: #17181c;
+  --pk-card-red: #d13b3b;
+  font-family: "Nanum Gothic", sans-serif;
+  color: #fff;
+}
+
+.pk-num {
+  font-family: "Big Shoulders Display", "Black Han Sans", sans-serif;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  font-variant-numeric: tabular-nums;
+}
+.pk-title {
+  font-family: "Black Han Sans", "Nanum Gothic", sans-serif;
+  font-weight: 400;
+  letter-spacing: 0.01em;
+}
+.pk-talk {
+  font-family: "Jua", "Nanum Gothic", sans-serif;
+}
+
+/* ───────────── 판의 천 ───────────── */
+
+.pk-felt {
+  --felt: #0f5e4b;
+  --felt-deep: #0a4235;
+  --rail: #1e1410;
+  --rail-edge: rgba(255, 255, 255, 0.07);
+  background:
+    radial-gradient(120% 90% at 50% 38%, rgba(255, 255, 255, 0.09), transparent 62%),
+    radial-gradient(100% 100% at 50% 50%, var(--felt), var(--felt-deep));
+}
+/* 동네판: 군용 모포 — 거친 짜임 + 가장자리의 짙은 줄 두 개 */
+.pk-felt[data-tier="1"] {
+  --felt: #5a6540;
+  --felt-deep: #434c2d;
+  --rail: #2b2618;
+  background:
+    repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.07) 0 1px, transparent 1px 3px),
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.035) 0 1px, transparent 1px 3px),
+    linear-gradient(90deg, transparent 0 7%, rgba(30, 34, 18, 0.5) 7% 9.5%, transparent 9.5% 11%, rgba(30, 34, 18, 0.5) 11% 13.5%, transparent 13.5% 86.5%, rgba(30, 34, 18, 0.5) 86.5% 89%, transparent 89% 90.5%, rgba(30, 34, 18, 0.5) 90.5% 93%, transparent 93%),
+    radial-gradient(100% 100% at 50% 45%, var(--felt), var(--felt-deep));
+}
+.pk-felt[data-tier="3"] {
+  --felt: #561830;
+  --felt-deep: #300b19;
+  --rail: #0d0c0e;
+  --rail-edge: rgba(231, 185, 91, 0.55);
+  background:
+    radial-gradient(120% 90% at 50% 35%, rgba(255, 190, 200, 0.1), transparent 60%),
+    radial-gradient(100% 100% at 50% 50%, var(--felt), var(--felt-deep));
+}
+
+/* 테이블: 경기장 트랙 모양 + 두툼한 테두리 */
+.pk-table {
+  border-radius: 9999px;
+  box-shadow:
+    inset 0 0 0 2px rgba(0, 0, 0, 0.35),
+    inset 0 0 70px rgba(0, 0, 0, 0.5),
+    0 0 0 9px var(--rail),
+    0 0 0 10px var(--rail-edge),
+    0 18px 40px -8px rgba(0, 0, 0, 0.7);
+}
+.pk-table::after {
+  /* 안쪽 베팅선 */
+  content: "";
+  position: absolute;
+  inset: 9%;
+  border-radius: inherit;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  pointer-events: none;
+}
+
+/* ───────────── 카드 ───────────── */
+
+.pk-card {
+  --w: 44px;
+  position: relative;
+  display: inline-block;
+  vertical-align: top;
+  flex: none;
+  width: var(--w);
+  aspect-ratio: 5 / 7;
+  border-radius: calc(var(--w) * 0.11);
+  background: var(--pk-card);
+  color: var(--pk-card-ink);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.6) inset,
+    0 0 0 1px rgba(0, 0, 0, 0.18),
+    0 3px 7px rgba(0, 0, 0, 0.4);
+  font-family: "Big Shoulders Display", "Black Han Sans", sans-serif;
+  font-weight: 800;
+  line-height: 1;
+  user-select: none;
+  overflow: hidden;
+}
+.pk-card[data-red="1"] {
+  color: var(--pk-card-red);
+}
+.pk-card .pk-card-rank {
+  position: absolute;
+  top: calc(var(--w) * 0.07);
+  left: calc(var(--w) * 0.1);
+  font-size: calc(var(--w) * 0.5);
+  letter-spacing: -0.04em;
+}
+.pk-card .pk-card-pip {
+  position: absolute;
+  top: calc(var(--w) * 0.56);
+  left: calc(var(--w) * 0.09);
+  font-size: calc(var(--w) * 0.3);
+  font-family: "Segoe UI Symbol", "Apple Symbols", "Noto Sans Symbols 2", sans-serif;
+}
+.pk-card .pk-card-suit {
+  position: absolute;
+  right: calc(var(--w) * 0.06);
+  bottom: calc(var(--w) * 0.02);
+  font-size: calc(var(--w) * 0.78);
+  font-family: "Segoe UI Symbol", "Apple Symbols", "Noto Sans Symbols 2", sans-serif;
+  opacity: 0.92;
+}
+/* 뒷면: 단계 색의 마름모 무늬 */
+.pk-card[data-back="1"] {
+  background:
+    repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.13) 0 2px, transparent 2px 7px),
+    repeating-linear-gradient(-45deg, rgba(255, 255, 255, 0.13) 0 2px, transparent 2px 7px),
+    linear-gradient(160deg, var(--back, #3b3f8f), var(--back-deep, #23265c));
+  box-shadow:
+    0 0 0 calc(var(--w) * 0.07) var(--pk-card) inset,
+    0 0 0 1px rgba(0, 0, 0, 0.25),
+    0 3px 7px rgba(0, 0, 0, 0.4);
+}
+.pk-card[data-dim="1"] {
+  filter: brightness(0.55) saturate(0.6);
+}
+.pk-card[data-win="1"] {
+  box-shadow:
+    0 0 0 2px var(--pk-brass),
+    0 0 16px 2px rgba(231, 185, 91, 0.65),
+    0 3px 7px rgba(0, 0, 0, 0.4);
+  transform: translateY(-12%);
+}
+.pk-card[data-pick="discard"] {
+  filter: grayscale(1) brightness(0.6);
+  transform: translateY(8%) rotate(-3deg);
+}
+.pk-card[data-pick="open"] {
+  box-shadow:
+    0 0 0 2px var(--pk-call),
+    0 0 14px 1px rgba(60, 200, 166, 0.6);
+  transform: translateY(-14%);
+}
+.pk-card {
+  transition:
+    transform 0.18s ease,
+    filter 0.18s ease,
+    box-shadow 0.18s ease;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .pk-deal {
+    animation: pk-deal 0.32s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+  }
+  .pk-pop {
+    animation: pk-pop 0.22s cubic-bezier(0.2, 0.9, 0.3, 1.3) backwards;
+  }
+  .pk-rise {
+    animation: pk-rise 0.9s ease-out forwards;
+  }
+  .pk-turn {
+    animation: pk-turn 1.4s ease-in-out infinite;
+  }
+}
+@keyframes pk-deal {
+  from {
+    opacity: 0;
+    transform: translateY(-40%) scale(0.7) rotate(-8deg);
+  }
+}
+@keyframes pk-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.7) translateY(6px);
+  }
+}
+@keyframes pk-rise {
+  0% {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  20% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-26px);
+  }
+}
+@keyframes pk-turn {
+  0%,
+  100% {
+    box-shadow: 0 0 0 2px var(--pk-brass), 0 0 0 0 rgba(231, 185, 91, 0.5);
+  }
+  50% {
+    box-shadow: 0 0 0 2px var(--pk-brass), 0 0 0 9px rgba(231, 185, 91, 0);
+  }
+}
+
+/* ───────────── 칩 ───────────── */
+
+.pk-chip {
+  --c: var(--pk-brass);
+  display: inline-block;
+  flex: none;
+  width: 1em;
+  height: 1em;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 50% 50%, var(--c) 0 38%, transparent 39%),
+    repeating-conic-gradient(#fff 0 12deg, var(--c) 12deg 45deg);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.45),
+    0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+/* 말풍선 꼬리 */
+.pk-bubble::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -5px;
+  width: 10px;
+  height: 10px;
+  background: inherit;
+  transform: translateX(-50%) rotate(45deg);
+  border-radius: 2px;
+}
+
+/* 레이즈 슬라이더 */
+.pk-range {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 28px;
+  background: transparent;
+  cursor: pointer;
+}
+.pk-range::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 3px;
+  background: linear-gradient(90deg, var(--pk-raise) var(--fill, 0%), rgba(255, 255, 255, 0.14) var(--fill, 0%));
+}
+.pk-range::-moz-range-track {
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.14);
+}
+.pk-range::-moz-range-progress {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--pk-raise);
+}
+.pk-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 22px;
+  height: 22px;
+  margin-top: -8px;
+  border-radius: 50%;
+  background: #fff;
+  border: 4px solid var(--pk-raise);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);
+}
+.pk-range::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  border: 4px solid var(--pk-raise);
+}
+.pk-range:focus-visible {
+  outline: 2px solid var(--pk-brass);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+.pk button:focus-visible,
+.pk a:focus-visible {
+  outline: 2px solid var(--pk-brass);
+  outline-offset: 2px;
+}
