@@ -491,7 +491,7 @@ const cloneF = (f: Fighter): Fighter => ({ ...f, hist: f.hist.slice() });
  * 이 빌드의 게임 데이터 지문 (캐릭터 성능·맵) — 온라인에서 서로 다른 빌드끼리 붙었는지 확인.
  * 계산 방식(sim.ts)만 바꿨을 땐 SIM_REV를 올릴 것.
  */
-const SIM_REV = 2;
+const SIM_REV = 3;
 export const BUILD_ID = (() => {
   const str = SIM_REV + JSON.stringify(CHARS.map((c) => [c.hp, c.walk, c.jumpVx, c.dash, c.cd, c.glide, c.hurt, c.width, c.moves])) + JSON.stringify(MAPS.map((m) => [m.plats, m.spawn]));
   let h = 2166136261;
@@ -1400,6 +1400,25 @@ function physics(s: State, i: number) {
   if (f.h < FALL_H) respawn(s, i);
 }
 
+/**
+ * 돌진 잡기로 잡은 뒤: 때린 쪽은 대시 힘으로 계속 미끄러져 나가는데 잡힌 쪽은 그 자리에서 떠올라,
+ * 때린 쪽이 상대를 지나쳐 버림(약 40px 뒤에 떠 있어 공중 콤보를 잇기 어려웠음) → 때린 쪽이 더 간 만큼 잡힌 쪽도 같이 옮김
+ */
+function carryDashGrab(s: State, x0: number[]) {
+  const map = mapOf(s);
+  for (let i = 0; i < 2; i++) {
+    const a = s.p[i],
+      d = s.p[1 - i];
+    if (a.st !== "atk" || a.mv !== "T" || a.lg !== 1 || !a.hit) continue;
+    if (d.st !== "hit" || !(d.grabbed > 0 || d.float === 1)) continue;
+    const dx = a.x - x0[i];
+    if (!dx) continue;
+    const px = d.x;
+    moveX(d, dx);
+    hitWall(map, d, px);
+  }
+}
+
 /** 두 캐릭터가 겹치지 않게 밀어냄 (높이가 비슷할 때만) */
 function separate(s: State) {
   const [a, b] = s.p;
@@ -1992,8 +2011,10 @@ export function step(s: State, input: [number, number]): State {
     for (let i = 0; i < 2; i++) settle(s, i, s.pt > 50 && s.roundWinner === i);
   }
 
+  const x0 = [s.p[0].x, s.p[1].x];
   physics(s, 0);
   physics(s, 1);
+  carryDashGrab(s, x0);
   separate(s);
 
   if (s.phase === "fight") {
