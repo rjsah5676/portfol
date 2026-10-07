@@ -190,7 +190,7 @@ describe("Firestore → MongoDB 이전", () => {
     const admin = await s.client("admin-uid", { email: "admin@example.com" });
     const inbox = (await admin.sub("inquiries")).data.list;
     expect(inbox).toEqual([
-      { id: "q1", name: "홍길동", email: "a@b.co", phone: "", message: "문의합니다", read: false, createdAt: Date.parse("2026-10-05T12:00:00Z") },
+      { id: "q1", name: "홍길동", email: "a@b.co", phone: "", message: "문의합니다", read: false, createdAt: Date.parse("2026-10-05T12:00:00Z"), uid: null, nick: null },
     ]);
   });
 

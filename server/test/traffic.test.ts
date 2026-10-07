@@ -206,6 +206,8 @@ describe("유입 기록 API", () => {
       { ...base, _id: "c2", sid: "sess_cloud002", ip: "121.134.1.1", vh: "c2" },
       { ...base, _id: "c3", sid: "sess_cloud003", ip: "54.198.174.208", vh: "c3", source: "referral", site: "gunmo-portfolio.firebaseapp.com", refHost: "gunmo-portfolio.firebaseapp.com" },
     ] as never);
+    // 앞 테스트가 이 날짜를 (빈 날로) 집계해 저장해 뒀을 수 있음 → 지우고 시작 (테스트끼리 서로 안 물리게)
+    await s.db.col("traffic_daily").deleteOne({ _id: day } as never);
     // 목록 없을 때 본 그날 집계 → 저장됨
     const before = (await s.http(`/api/admin/traffic?from=${day}&to=${day}&human=1`, { token: admin })).body;
     expect(before.total.entries).toBe(3);
