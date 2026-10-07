@@ -95,8 +95,13 @@ const FX_SETS: Record<string, Record<string, [number, number, boolean]>> = {
   },
 };
 /** 캐릭터 하나가 쓰는 그림 효과 파일 이름 전부 */
+/** 바닥에 남는 장판 그림 (fx/<이름>-0..3 반복, -in-0..1 나타나기, -out-0..1 꺼지기) — 이그나 업화주 불 장판 */
+const FLOOR_FX: Record<string, string> = { igna: "igna-floor" };
+const floorNames = (b: string) => [0, 1, 2, 3].map((k) => `${b}-${k}`).concat([`${b}-in-0`, `${b}-in-1`, `${b}-out-0`, `${b}-out-1`]);
+
 function fxNames(id: string): string[] {
   const out: string[] = [];
+  if (FLOOR_FX[id]) out.push(...floorNames(FLOOR_FX[id]));
   for (const [nm, d] of Object.entries(FX_SETS[id] ?? {})) for (let k = 0; k < d[0]; k++) out.push(`${id}-${nm}-${k}`);
   for (const a of Object.values(PROJ_ANIM[id] ?? {})) if (a) for (let k = 0; k < a[1]; k++) out.push(`${a[0]}-${k}`);
   const pa = PILLAR_ANIM[id];
@@ -776,7 +781,7 @@ export class FightRenderer {
   }
 
   /** 필살기 불기둥: 솟기 전엔 바닥에 경고 불씨, 솟으면 시트의 불기둥 그림을 크게 */
-  /** 이그나 업화주가 남긴 불 장판: 바닥에 깔린 잔불 + 일렁이는 불꽃 혀 (그림 없이 그림) */
+  /** 이그나 업화주가 남긴 불 장판: fx/igna-floor-* 그림 (못 불러왔으면 잔불 띠 + 일렁이는 불꽃 혀를 직접 그림) */
   private drawFloorFire(p: Proj, s: State) {
     const g = this.g;
     const fl = CHARS[s.p[p.o].ch].moves.X.summon!.floor!;
@@ -785,6 +790,23 @@ export class FightRenderer {
     const w = fl.w;
     // 나타날 때·꺼질 때 서서히
     const a = Math.min(1, p.t / 6, p.life / 20);
+    const fb = FLOOR_FX[CHARS[s.p[p.o].ch].id];
+    if (fb) {
+      // 그림: 처음 8프레임 나타나기 → 일렁임 반복(6프레임마다) → 마지막 12프레임 꺼지기
+      const name =
+        p.t < 8 ? `${fb}-in-${p.t < 4 ? 0 : 1}` : p.life < 12 ? `${fb}-out-${p.life >= 6 ? 0 : 1}` : `${fb}-${Math.floor(p.t / 6) % 4}`;
+      const im = fxImg(name);
+      if (im) {
+        // 그림 속 장판 띠가 가로 3.5%~97% · 바닥선이 위에서 94.8% → 띠가 판정 너비보다 조금 넓게, 바닥선을 발판에
+        const dw = (w * 1.12) / 0.935;
+        const dh = (dw * im.height) / im.width;
+        g.save();
+        g.globalAlpha = Math.min(1, p.t / 3, p.life / 6);
+        g.drawImage(im, x - dw / 2, y - dh * 0.948 + 2, dw, dh);
+        g.restore();
+        return;
+      }
+    }
     g.save();
     g.globalCompositeOperation = "lighter";
     // 바닥 잔불 띠
