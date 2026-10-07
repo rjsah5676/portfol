@@ -230,7 +230,7 @@ export const RHYTHM_GUIDE: GuideDoc = {
         <>
           <K>↑</K>
           <K>↓</K> 곡, <K>←</K>
-          <K>→</K> 난이도, <K>Enter</K> 시작. 쉬움부터 <B>나이트메어</B>, 일부 보스곡은 <B>ULTIMA</B>(Lv19~21)까지 곡마다 5~6단계. 노트가
+          <K>→</K> 난이도, <K>Enter</K> 시작. EASY부터 <B>NIGHTMARE</B>, 일부 보스곡은 <B>ULTIMA</B>(Lv19~21)까지 곡마다 5~6단계. 노트가
           아래 하얀 선에 닿을 때 <K>D</K>
           <K>F</K>
           <K>J</K>
@@ -244,7 +244,7 @@ export const RHYTHM_GUIDE: GuideDoc = {
       body: (
         <>
           곡 선택 오른쪽 맨 위 <B>MY MUSIC</B> 카드(<K>M</K>)에 노래 파일을 끌어다 놓으면 이 사이트만의{" "}
-          <B>채보 생성 알고리즘</B>이 드럼과 박자를 분석해 쉬움~나이트메어 5단계 채보를 바로 만들어
+          <B>채보 생성 알고리즘</B>이 드럼과 박자를 분석해 EASY~NIGHTMARE 5단계 채보를 바로 만들어
           줘요.
           <br />
           <B>본인 취향의 노래를 리듬게임으로 즐겨보세요!</B>
