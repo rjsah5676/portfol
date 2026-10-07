@@ -19,6 +19,8 @@ const BTN_CLIP = "polygon(0.9cqw 0, 100% 0, calc(100% - 0.9cqw) 100%, 0 100%)";
 
 export interface ResultBtn {
   label: string;
+  /** 버튼 아래 작은 설명 (긴 설명을 한 줄에 넣으면 판 밖으로 잘려서) */
+  sub?: string;
   onClick: () => void;
   primary?: boolean;
 }
@@ -108,6 +110,21 @@ function Btn({ b }: { b: ResultBtn }) {
         }}
       >
         {b.label}
+        {b.sub && (
+          <span
+            style={{
+              display: "block",
+              marginTop: "0.35cqw",
+              fontFamily: "'Nanum Gothic', sans-serif",
+              fontWeight: 700,
+              fontSize: "1.05cqw",
+              color: "rgba(255,255,255,0.75)",
+              textShadow: "none",
+            }}
+          >
+            {b.sub}
+          </span>
+        )}
       </span>
     </button>
   );

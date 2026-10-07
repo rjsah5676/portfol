@@ -61,6 +61,8 @@ const SAVE_KEY = "fight:setup";
 const MENU_BGM = "/fight/bgm-menu.mp3";
 const MUTE_KEY = "fight:mute";
 const VOL_KEY = "fight:vol";
+/** 관전: 받은 입력을 이만큼(프레임, 0.6초) 모아 두고 재생 */
+const WATCH_LAG = 36;
 /** 배경음악 최대 음량 (슬라이더 100%일 때) */
 const BGM_MAX = 0.5;
 
@@ -443,14 +445,14 @@ export default function FightGame({ onRanked }: { onRanked?: () => void }) {
         r.drawLoading();
         return;
       }
-      if (feed && !doneReported) {
+      if (feed && !doneReported && s.phase !== "over") {
         const lag = feed.ready - wf;
         if (lag > 180) {
           // 늦게 들어옴: 앞부분은 소리·효과 없이 빨리 돌려서 따라잡음.
           // 한 화면에 쓰는 시간을 6ms 로 묶어서, 오래 진행된 경기에 들어가도 화면이 멈추지 않게 함
           const until = performance.now() + 6;
           let n = lag - 30;
-          while (n-- > 0 && s.phase !== "over") {
+          while (n-- > 0 && (s.phase as State["phase"]) !== "over") {
             step(s, feed.input(wf));
             wf++;
             if ((n & 15) === 0 && performance.now() > until) break;
@@ -461,8 +463,10 @@ export default function FightGame({ onRanked }: { onRanked?: () => void }) {
           acc = 0;
           return;
         }
-        // 입력이 0.25초치씩 오니까 조금 모아 두고 재생, 밀린 만큼 조금씩 빠르게 (최대 1.25배 — 티 나지 않게)
-        if (buffering && lag >= 24) buffering = false;
+        // 입력이 0.25초치씩 오니까 WATCH_LAG 프레임쯤 모아 두고 재생. 선수 쪽은 서로 속도를 맞추느라 60fps보다 살짝 느리게
+        // 진행되기도 해서, 같은 속도로 재생하면 모아 둔 게 조금씩 줄어 몇 초마다 멈췄음 → 모아 둔 양에 맞춰 재생 속도를
+        // 0.85~1.3배로 조절해 늘 WATCH_LAG 근처를 유지 (멈추지 않게)
+        if (buffering && lag >= WATCH_LAG) buffering = false;
         if (!buffering && lag < 0) ((buffering = true), (waitSince = now));
         if (buffering) {
           const rm = wsessRef.current?.room;
@@ -473,7 +477,7 @@ export default function FightGame({ onRanked }: { onRanked?: () => void }) {
           return;
         }
         setWatch("");
-        acc += dt * Math.min(0.25, Math.max(0, (lag - 30) / 240));
+        acc += dt * Math.min(0.3, Math.max(-0.15, (lag - WATCH_LAG) / 150));
       }
       acc += dt;
       let steps = 0;
@@ -485,11 +489,24 @@ export default function FightGame({ onRanked }: { onRanked?: () => void }) {
         const prevMv = [s.p[0].mv, s.p[1].mv];
         // 이번 프레임에 소리·이펙트로 낼 이벤트 (온라인은 되감기로 새로 생긴 것까지)
         let evs: State["ev"] | null = null;
-        if (feed) {
-          if (wf > feed.ready) break;
+        if (feed && s.phase === "over") {
+          // 경기 끝: 결과는 정해졌으니 선수 입력 없이 승리 포즈·대사까지 진행 (선수가 먼저 나가 기록이 끊겨도)
+          step(s, [0, 0]);
+        } else if (feed) {
+          if (wf > feed.ready) {
+            // 받은 입력이 바닥남: 밀린 시간을 쌓아 두지 않음 (쌓아 두면 다음 묶음이 왔을 때 몰아서 빨리 감김)
+            acc = 0;
+            break;
+          }
           step(s, feed.input(wf));
           wf++;
           if (wf % 120 === 0) feed.drop(wf - 2);
+        } else if (om && s.phase === "over") {
+          // 온라인 경기 끝: 결과는 이미 확정(라운드가 끝난 건 170프레임 전이라 되감길 일 없음) →
+          // 상대 입력 없이 내 화면에서만 승리 포즈·대사까지 진행. 전엔 상대가 먼저 대기실로 나가면 입력이 끊겨
+          // 화면이 그 자리에서 멈춰 승리 대사가 안 떴음. 상대가 아직 경기 끝까지 못 갔을 수 있으니 내 입력은 계속 보내 줌
+          step(s, [0, 0]);
+          om.flush();
         } else if (om) {
           // 온라인: 앞서 있으면 한 프레임 쉬고, 상대 입력이 너무 늦으면 기다림 (되감기는 세션이 알아서)
           if (om.shouldWait()) continue;
@@ -937,10 +954,10 @@ export default function FightGame({ onRanked }: { onRanked?: () => void }) {
                 : ol
                 ? // 둘 다 같은 방 대기실로 감 — 한 판 더는 들어가면서 '준비'까지 눌러 줌. 방장은 상대가 준비하면 시작하는 쪽이라 하나만
                   sess?.isHost
-                  ? [{ label: "대기실로 (상대가 준비하면 시작)", onClick: () => toRoom(false), primary: true }]
+                  ? [{ label: "대기실로", sub: "상대가 준비하면 시작", onClick: () => toRoom(false), primary: true }]
                   : [
-                      { label: "↻ 한 판 더 (바로 준비)", onClick: () => toRoom(true), primary: true },
-                      { label: "대기실로 (준비는 나중에)", onClick: () => toRoom(false) },
+                      { label: "↻ 한 판 더", sub: "바로 준비", onClick: () => toRoom(true), primary: true },
+                      { label: "대기실로", sub: "준비는 나중에", onClick: () => toRoom(false) },
                     ]
                 : [
                     { label: "↻ 다시하기", onClick: () => restartRef.current(), primary: true },

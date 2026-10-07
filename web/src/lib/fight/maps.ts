@@ -118,4 +118,16 @@ export const MAPS: MapDef[] = [
     bgPlats: true,
     bgm: "/fight/bgm-skyscraper.mp3",
   },
+  {
+    // 그림: public/fight/bg/aurora.webp (원본 1672×941 → 판 ×0.689) — 넓은 1자 무대 하나, 양 끝 밖은 낭떠러지
+    // 발판 윗면은 그림의 돌판 윗면(뒤 모서리 y≈561 ~ 앞 모서리 y≈591)에서 발이 놓이는 줄 y≈580 → 648 - 580×0.689 ≈ 248
+    id: "aurora",
+    name: "오로라 빙상",
+    desc: "오로라 아래 얼어붙은 호수 위 넓은 1자 무대 — 발판은 하나뿐, 양 끝 밖은 낭떠러지",
+    plats: [{ x0: 100, x1: 1048, y: 248, solid: true, kind: "stone" }],
+    spawn: [380, 770],
+    respawn: [380, 770],
+    bg: "/fight/bg/aurora.webp",
+    bgPlats: true,
+  },
 ];
