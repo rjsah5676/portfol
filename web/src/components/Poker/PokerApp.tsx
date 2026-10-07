@@ -143,10 +143,22 @@ export default function PokerApp({ rank }: { rank: RankRow[] | null }) {
 
   // 무대 크기: 전체화면이면 화면 전부, 아니면 PC 는 16:9 상자, 폰은 화면 높이에 맞춘 세로 상자
   const outer = pseudoFs ? "fixed inset-0 z-[100] flex items-center justify-center overflow-hidden bg-black" : fsReal ? "flex h-full w-full items-center justify-center overflow-hidden bg-black" : "mx-auto w-full max-w-[min(1280px,calc((100dvh-150px)*16/9))] px-0 sm:px-3";
-  // (폰: 사이트 머리말 57px + 게임 메뉴 45px 아래부터 화면 끝까지)
-  const stageCls = fit ? "flex-none" : fs ? "h-full w-full" : "h-[calc(100dvh-104px)] min-h-[480px] w-full scroll-mt-[104px] sm:aspect-video sm:h-auto sm:min-h-0 sm:rounded-2xl sm:border sm:border-white/10";
+  // (폰: 사이트 머리말 57px + 게임 메뉴 45px + 전체화면 권장 띠 46px 아래부터 화면 끝까지)
+  const stageCls = fit ? "flex-none" : fs ? "h-full w-full" : "h-[calc(100dvh-150px)] min-h-[480px] w-full scroll-mt-[150px] sm:aspect-video sm:h-auto sm:min-h-0 sm:rounded-2xl sm:border sm:border-white/10";
   return (
     <div ref={rootRef} className={`pk ${outer}`}>
+      {/* 전체화면 권장 — 폰에서만 (PC 는 창 모드로도 충분) */}
+      {!fs && (
+        <button
+          type="button"
+          onClick={toggleFs}
+          className="mx-3 mb-2 flex h-[38px] w-[calc(100%-24px)] cursor-pointer items-center justify-center gap-2 overflow-hidden rounded-xl border border-[#D6AF5C]/50 bg-[linear-gradient(90deg,rgba(214,175,92,0.2),rgba(122,20,32,0.25))] px-3 py-2 font-['Nanum_Gothic',sans-serif] text-[12.5px] text-white/85 shadow-[0_0_24px_-6px_rgba(214,175,92,0.55)] transition-colors hover:border-[#D6AF5C] hover:text-white sm:hidden"
+        >
+          <span className="rounded-md bg-[#D6AF5C] px-1.5 py-0.5 font-mono text-[11px] font-bold text-[#2a1e05]">⛶</span>
+          <b className="font-bold text-white">전체화면 플레이 권장</b>
+          <span className="truncate text-white/55">— 누르면 전체화면</span>
+        </button>
+      )}
       <div
         ref={(el) => {
           stageEl.current = el;
