@@ -4,6 +4,7 @@ import { AppError, bad, forbidden } from "../errors";
 import { newId, orderedId } from "../ids";
 import type { Ctx } from "../realtime/gateway";
 import type { LiveRoom } from "../http/admin";
+import { forfeit, newResult, onEnd, settle, type FightResult, type Outcome } from "./fightResult";
 
 /*
  * 픽셀 격투 온라인 대전
@@ -14,6 +15,7 @@ import type { LiveRoom } from "../http/admin";
  *  - WebRTC 연결 정보(offer/answer) 전달
  *  - P2P 연결이 안 될 때 입력 중계 (느리지만 됨)
  *  - 관전용 입력 기록 (선수가 확정 입력을 0.5초치씩 올리면 관전자가 그대로 다시 돌림)
+ *  - 승패 기록 (두 선수가 본 결과를 맞춰 보고 회원 전적에 — fightResult.ts)
  * 방은 휘발성 데이터라 메모리에만 둠 (서버를 다시 띄우면 진행 중인 방은 사라짐).
  *
  * 구독 채널
@@ -84,6 +86,8 @@ interface Room {
   owners: Map<string, string>;
   watcherOwners: Map<string, string>;
   emptySince: number;
+  /** 이번 경기 승패 (회원 전적용) */
+  result: FightResult | null;
 }
 
 const emptyState = (): RoomState => ({ phase: "wait", match: "", chars: [0, 1], map: 0, pick: -1, delay: 2, maxRb: 10 });
@@ -167,6 +171,16 @@ export function registerFight({ gateway, users }: Deps, opts: FightOptions = {})
   function removePlayer(room: Room, uid: string) {
     const p = room.players[uid];
     if (!p) return;
+    // 경기에 나섰던 선수가 나감 → 남은 쪽이 결과를 알려 오거나 경기를 끝내면 그걸로 정함
+    // (경기가 끝난 직후 결과를 알리기 전에 나간 경우도 — 남은 쪽 신고로 정해지게)
+    const r = room.result;
+    if (r && !r.done) {
+      const seat = r.uids.indexOf(uid);
+      if (seat >= 0) {
+        r.gone[seat] = true;
+        record(room, settle(r));
+      }
+    }
     delete room.players[uid];
     room.owners.delete(uid);
     for (const seat of [0, 1] as const) if (room.seats[seat] === uid) room.seats[seat] = "";
@@ -179,6 +193,21 @@ export function registerFight({ gateway, users }: Deps, opts: FightOptions = {})
     for (const seat of [0, 1]) gateway.revoke(relayKey(room.id, seat), isGone);
     changed(room);
   }
+
+  /** 승패가 정해졌으면 회원 전적에 (비회원 uid 는 bump 가 알아서 무시) */
+  function record(room: Room, out: Outcome | "void" | null) {
+    const r = room.result;
+    if (!r || out === null || out === "void") return;
+    for (const seat of [0, 1] as const) {
+      const uid = r.uids[seat];
+      if (!uid) continue;
+      const k = out === 2 ? "d" : out === seat ? "w" : "l";
+      users.bump(uid, { [`stats.online.fight.${k}`]: 1 });
+    }
+  }
+  /** 경기에 나선 자리 (그 경기 선수가 아니면 -1) */
+  const resultSeat = (room: Room, uid: string, match: string) =>
+    room.result && room.result.match === match ? room.result.uids.indexOf(uid) : -1;
 
   function removeWatcher(room: Room, uid: string) {
     if (!room.watchers[uid]) return;
@@ -292,6 +321,7 @@ export function registerFight({ gateway, users }: Deps, opts: FightOptions = {})
       owners: new Map(),
       watcherOwners: new Map(),
       emptySince: now,
+      result: null,
     };
     rooms.set(room.id, room);
     changed(room);
@@ -319,6 +349,12 @@ export function registerFight({ gateway, users }: Deps, opts: FightOptions = {})
       joinedAt: Math.max(room.createdAt, Math.min(now, o.joinedAt ?? now)),
     };
     room.owners.set(uid, ctx.socket.id);
+    // 경기 중에 잠깐 끊겼다 돌아옴 → 나간 걸로 치지 않음
+    const r = room.result;
+    if (r && !r.done) {
+      const rs = r.uids.indexOf(uid);
+      if (rs >= 0) r.gone[rs] = false;
+    }
     // 방장이 방에 없으면(만든 직후 등) 지금 들어온 사람이 방장
     if (!room.players[room.hostUid]) room.hostUid = uid;
     changed(room);
@@ -438,10 +474,35 @@ export function registerFight({ gateway, users }: Deps, opts: FightOptions = {})
     room.watch = [[], []];
     room.watchMatch = match;
     room.state = { ...room.state, phase: "play", match, chars: o.chars, map: o.map, delay: o.delay, maxRb: o.maxRb };
+    room.result = newResult(match, [room.seats[0], room.seats[1]]);
     changed(room);
-    // 회원이면 온라인 경기 수를 세어 둠 (승패는 서버가 알 수 없어서 경기 수만)
+    // 회원이면 온라인 경기 수를 세어 둠 (승패는 끝난 뒤 fight.result 로)
     for (const seat of room.seats) if (seat) users.bump(seat, { "stats.fight.matches": 1 });
     return match;
+  });
+
+  /** 선수: 내가 본 경기 결과 (0 = 1P 승, 1 = 2P 승, 2 = 무승부) */
+  gateway.rpc("fight.result", (ctx, raw) => {
+    const o = z
+      .object({ id: roomId, match: z.string().max(40), winner: z.union([z.literal(0), z.literal(1), z.literal(2)]) })
+      .parse(raw);
+    const room = getRoom(o.id);
+    const seat = resultSeat(room, ctx.uid, o.match);
+    const r = room.result;
+    if (!r || seat < 0 || r.done || r.reports[seat] !== null) return null;
+    r.reports[seat] = o.winner;
+    record(room, settle(r));
+    return null;
+  });
+
+  /** 선수: 경기 중에 스스로 나감 (기권 — 내 패배) */
+  gateway.rpc("fight.forfeit", (ctx, raw) => {
+    const o = z.object({ id: roomId, match: z.string().max(40) }).parse(raw);
+    const room = getRoom(o.id);
+    const seat = resultSeat(room, ctx.uid, o.match);
+    if (!room.result || seat < 0) return null;
+    record(room, forfeit(room.result, seat as 0 | 1));
+    return null;
   });
 
   /** 경기가 끝나면 대기실 상태로 */
@@ -450,6 +511,7 @@ export function registerFight({ gateway, users }: Deps, opts: FightOptions = {})
     const { room } = asPlayer(ctx, o.id);
     if (room.state.match !== o.match || room.state.phase !== "play") return null;
     room.state = { ...room.state, phase: "wait" };
+    if (room.result?.match === o.match) record(room, onEnd(room.result));
     changed(room);
     return null;
   });

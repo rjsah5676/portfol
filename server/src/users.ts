@@ -25,7 +25,7 @@ const RESERVED = ["admin", "administrator", "관리자", "운영자", "운영진
 export interface UserStats {
   /** 랭킹 게임을 시작한 횟수 (랭킹 이름별) */
   plays?: Record<string, number>;
-  /** 온라인 대국 전적 (체스·장기·오목) */
+  /** 온라인 대국 전적 (체스·장기·오목·격투) */
   online?: Record<string, { w?: number; l?: number; d?: number }>;
   /** 스케치 퀴즈 */
   sketch?: { correct?: number; points?: number; games?: number };
@@ -77,8 +77,12 @@ export const avatarPath = (uid: string, at: number) => `/api/avatars/${encodeURI
 const VISIT_GAP_MS = 30 * 60_000;
 
 const sum = (o: Record<string, number | undefined> = {}) => Object.values(o).reduce<number>((a, b) => a + (b ?? 0), 0);
+// (격투는 시작한 경기 수 fight.matches 로 세므로 승패 기록 online.fight 는 빼고 — 두 번 세지 않게)
 const playsOf = (s: UserStats = {}) =>
-  sum(s.plays) + Object.values(s.online ?? {}).reduce((a, r) => a + sum(r), 0) + (s.sketch?.games ?? 0) + (s.fight?.matches ?? 0);
+  sum(s.plays) +
+  Object.entries(s.online ?? {}).reduce((a, [g, r]) => a + (g === "fight" ? 0 : sum(r)), 0) +
+  (s.sketch?.games ?? 0) +
+  (s.fight?.matches ?? 0);
 
 const toProfile = (uid: string, d: UserDoc): Profile => ({
   nick: d.nick,

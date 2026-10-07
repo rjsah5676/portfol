@@ -35,6 +35,7 @@ const ONLINE: [string, string, string][] = [
   ["chess", "체스", "/games/chess"],
   ["janggi", "장기", "/games/janggi"],
   ["omok", "오목", "/games/omok"],
+  ["fight", "격투", "/games/fight"],
 ];
 const DIFF_LABEL: Record<string, string> = {
   easy: "쉬움",
@@ -230,7 +231,7 @@ export default function MyPage() {
                         {name}
                       </Link>
                       {total === 0 ? (
-                        <span className="font-mono text-xs text-white/30">아직 둔 판이 없어요</span>
+                        <span className="font-mono text-xs text-white/30">아직 기록이 없어요</span>
                       ) : (
                         <span className="font-mono text-sm text-white/80 tabular-nums">
                           <b className="text-white">{s.w ?? 0}</b>승{" "}

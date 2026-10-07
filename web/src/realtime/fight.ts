@@ -307,6 +307,16 @@ export class RoomSession {
     await rpc("fight.startMatch", { id: this.id, chars, map, delay, maxRb });
   }
   /** 경기가 끝나면 대기실 상태로 */
+  /** 내가 본 경기 결과 (0 = 1P 승, 1 = 2P 승, 2 = 무승부) — 두 선수 결과가 맞으면 회원 전적에 */
+  async reportResult(match: string, winner: number) {
+    if (winner !== 0 && winner !== 1 && winner !== 2) return;
+    await rpc("fight.result", { id: this.id, match, winner }).catch(() => {});
+  }
+  /** 경기 중에 스스로 나감 (기권 — 내 패배로 기록) */
+  async forfeit(match: string) {
+    await rpc("fight.forfeit", { id: this.id, match }).catch(() => {});
+  }
+
   async endMatch(match: string) {
     if (this.room?.state.match !== match || this.room.state.phase !== "play") return;
     await rpc("fight.endMatch", { id: this.id, match }).catch(() => {});

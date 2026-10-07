@@ -372,6 +372,8 @@ export default function FightGame({ onRanked }: { onRanked?: () => void }) {
     let netDead = ol !== null && !om && !watching;
     if (netDead) setNetEnd("상대와 연결되지 않았어요");
     leaveMatchRef.current = (bye) => {
+      // 경기 중에 메뉴로 나감 = 기권 (상대가 먼저 나갔거나 연결이 끊긴 뒤엔 아님)
+      if (bye && om && ol && !watching && !doneReported && !netDead) sessRef.current?.forfeit(ol.match);
       om?.close(bye && !doneReported);
       om = null;
       feed?.close();
@@ -601,7 +603,11 @@ export default function FightGame({ onRanked }: { onRanked?: () => void }) {
             hits,
             hp: Math.round(hpRatio(s.p[me]) * 100),
           });
-          if (ol && !watching) sessRef.current?.endMatch(ol.match);
+          if (ol && !watching) {
+            // 내가 본 결과를 먼저 알리고(두 선수 결과가 맞으면 회원 전적에) 대기실 상태로
+            sessRef.current?.reportResult(ol.match, s.winner);
+            sessRef.current?.endMatch(ol.match);
+          }
           om?.flushLog();
         }
       }
