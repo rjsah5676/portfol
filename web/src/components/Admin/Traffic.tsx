@@ -7,7 +7,10 @@ import { getTraffic, type TrafficDim, type TrafficReport, type TrafficSource } f
  * 유입 분석: 사람들이 어디서 · 어떤 환경으로 들어왔는지.
  * 기간을 고르면 서버가 날짜별 집계를 합쳐서 줌 (지난 날짜는 저장된 집계, 오늘은 그때그때).
  * "유입" = 탭 하나에서 처음 연 페이지(세션), "페이지" = 본 페이지 수, "순방문자" = 날짜별 합.
+ * "클라우드 IP 빼기"(기본 켬): AWS·GCP 등 데이터센터 IP 에서 온 건 사람이 아닌 봇으로 보고 숫자에서 뺌.
  */
+
+const HUMAN_KEY = "admin.traffic.human";
 
 const KR = "font-['Nanum_Gothic',sans-serif]";
 const panel = "rounded-2xl border border-white/10 bg-[#1C1E24] p-5";
@@ -21,7 +24,7 @@ export const SOURCE: Record<TrafficSource, { label: string; color: string }> = {
   ai: { label: "AI", color: "#A78BFA" },
   referral: { label: "다른 사이트", color: "#60A5FA" },
   campaign: { label: "캠페인(UTM)", color: "#FBBF24" },
-  legacy: { label: "옛 주소(github.io)", color: "#FB923C" },
+  legacy: { label: "옛 주소", color: "#FB923C" },
   internal: { label: "사이트 안(새 탭)", color: "#94A3B8" },
   direct: { label: "직접 접속", color: "#64748B" },
 };
@@ -30,6 +33,7 @@ export const SOURCE: Record<TrafficSource, { label: string; color: string }> = {
 export const siteLabel = (k: string) => k || "직접 접속";
 
 const DIM_TITLE: Partial<Record<TrafficDim, string>> = {
+  cloud: "클라우드 IP (봇 의심)",
   site: "유입처",
   term: "검색어",
   campaign: "캠페인 (utm_campaign)",
@@ -150,6 +154,24 @@ export default function Traffic() {
   const [preset, setPreset] = useState<Preset>("7");
   const [custom, setCustom] = useState<[string, string]>(() => rangeOf("30"));
   const [todayKey] = useState(() => kstDate(Date.now()));
+  const [human, setHuman] = useState(true);
+  useEffect(() => {
+    try {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- 저장해 둔 선택(마운트 1회)
+      if (localStorage.getItem(HUMAN_KEY) === "0") setHuman(false);
+    } catch {
+      // 저장소 막힘 → 기본값
+    }
+  }, []);
+  const toggleHuman = () =>
+    setHuman((v) => {
+      try {
+        localStorage.setItem(HUMAN_KEY, v ? "0" : "1");
+      } catch {
+        // 무시
+      }
+      return !v;
+    });
   const [data, setData] = useState<TrafficReport | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -159,7 +181,7 @@ export default function Traffic() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      setData(await getTraffic(from, to));
+      setData(await getTraffic(from, to, human));
       setError("");
     } catch (e) {
       console.error(e);
@@ -167,7 +189,7 @@ export default function Traffic() {
     } finally {
       setLoading(false);
     }
-  }, [from, to]);
+  }, [from, to, human]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- 기간이 바뀔 때마다 조회
@@ -217,6 +239,10 @@ export default function Traffic() {
             />
           </span>
         )}
+        <label className={`ml-1 flex cursor-pointer items-center gap-1.5 text-xs text-white/60 select-none ${KR}`}>
+          <input type="checkbox" checked={human} onChange={toggleHuman} className="accent-[#6C63FF]" />
+          클라우드 IP 빼기
+        </label>
         <span className="ml-auto font-mono text-[11px] text-white/30">
           {from === to ? from : `${from} ~ ${to}`}
           {loading && " · 불러오는 중…"}
@@ -229,6 +255,27 @@ export default function Traffic() {
           새로고침
         </button>
       </div>
+
+      {data && (
+        <p className={`-mt-1 text-[11px] text-white/35 ${KR}`}>
+          {data.cloud.loaded ? (
+            <>
+              클라우드 IP 유입 <span className="font-mono text-white/70">{n(data.cloud.entries)}</span>건
+              {human ? " 뺐어요" : " 포함"}
+              <span className="text-white/25">
+                {" · 대역 "}
+                {Object.entries(data.cloud.counts)
+                  .map(([k, c]) => `${k} ${n(c)}`)
+                  .join(" · ")}
+                {data.cloud.updatedAt && ` · ${ago(data.cloud.updatedAt)} 갱신`}
+                {data.cloud.errors.length > 0 && ` · 실패: ${data.cloud.errors.map((e) => e.split(":")[0]).join(", ")}`}
+              </span>
+            </>
+          ) : (
+            "클라우드 대역 목록을 아직 못 받았어요 (서버가 켜지고 1분 뒤 받아요). 그 전 기록은 받은 뒤에 표시돼요."
+          )}
+        </p>
+      )}
 
       {error && <p className={`rounded-xl border border-red-400/30 bg-red-400/10 px-4 py-3 text-sm text-red-200 ${KR}`}>{error}</p>}
 
@@ -334,9 +381,10 @@ export default function Traffic() {
           </div>
 
           {/* 위치 */}
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className={`grid gap-4 ${human ? "md:grid-cols-2" : "md:grid-cols-3"}`}>
             <DimPanel dim="country" data={data} color="#60A5FA" />
             <DimPanel dim="region" data={data} color="#60A5FA" />
+            {!human && <DimPanel dim="cloud" data={data} color="#FB923C" />}
           </div>
 
           {/* 요일 × 시간 */}
@@ -399,6 +447,11 @@ export default function Traffic() {
                               <span className="text-white/85">{r.source === "direct" ? src.label : r.site || src.label}</span>
                               {r.member && <span className="rounded bg-[#8B84FF]/20 px-1 text-[10px] text-[#B8B3FF]">회원</span>}
                               {r.returning && <span className="text-[10px] text-white/35">재방문</span>}
+                              {r.cloud && (
+                                <span className="rounded bg-[#FB923C]/20 px-1 text-[10px] text-[#FDBA74]" title="클라우드(데이터센터) IP — 봇 의심">
+                                  {r.cloud}
+                                </span>
+                              )}
                             </span>
                             {extra && <div className="truncate text-white/45">“{extra}”</div>}
                             {r.ref && (
@@ -430,7 +483,8 @@ export default function Traffic() {
           </section>
 
           <p className={`text-[11px] leading-relaxed text-white/30 ${KR}`}>
-            봇 · 관리자 로그인 · 관리자 화면은 세지 않아요. 원본 IP는 30일, 방문 기록은 180일 뒤 지워지고 날짜별 집계만 남아요. 위치는
+            봇(브라우저 정보로 판별) · 관리자 로그인 · 관리자 화면은 세지 않아요. 진짜 브라우저처럼 들어오는 봇은 클라우드 IP(AWS · GCP · Azure ·
+            Oracle · DigitalOcean 공개 대역, 하루 한 번 갱신)로 표시해요. 원본 IP는 30일, 방문 기록은 180일 뒤 지워지고 날짜별 집계만 남아요. 위치는
             IP로 추정한 값이라 모바일 통신사 IP는 지역이 비는 경우가 많아요. This product includes GeoLite2 data created by MaxMind,
             available from https://www.maxmind.com.
           </p>

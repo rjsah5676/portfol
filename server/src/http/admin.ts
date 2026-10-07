@@ -13,6 +13,7 @@ import { h, ms, requireAdmin } from "./util";
  *   GET    /api/admin/overview                      방문자·회원·문의·글·랭킹·방·서버 상태 + 최근 활동
  * 유입 분석
  *   GET    /api/admin/traffic?from=YYYY-MM-DD&to=YYYY-MM-DD   기간 집계 + 최근 유입 100건 (원본 IP 포함)
+ *                                         &human=1 이면 클라우드(AWS·GCP 등) IP 유입을 뺌
  * 회원
  *   GET    /api/admin/users?q=&limit=&skip=         목록 (별명·이메일로 찾기)
  *   PATCH  /api/admin/users/:uid   { nick?, badge? } 별명 · 꾸밈(이모지 등) 바꾸기
@@ -205,11 +206,13 @@ export function adminRouter({ db, auth, web, users, gateway, cfg, traffic }: Dep
   r.get(
     "/traffic",
     h(async (req) => {
-      const q = z.object({ from: z.string().regex(DATE_KEY), to: z.string().regex(DATE_KEY) }).parse(req.query);
+      const q = z
+        .object({ from: z.string().regex(DATE_KEY), to: z.string().regex(DATE_KEY), human: z.enum(["0", "1"]).optional() })
+        .parse(req.query);
       const span = (Date.parse(q.to) - Date.parse(q.from)) / DAY + 1;
       if (!(span >= 1)) throw bad("시작일이 끝일보다 늦습니다.");
       if (span > TRAFFIC_MAX_DAYS) throw bad(`최대 ${TRAFFIC_MAX_DAYS}일까지 볼 수 있습니다.`);
-      return traffic.range(q.from, q.to);
+      return traffic.range(q.from, q.to, { human: q.human === "1" });
     })
   );
 

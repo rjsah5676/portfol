@@ -1,6 +1,7 @@
 import { createHmac, randomBytes } from "node:crypto";
 import { isbot } from "isbot";
 import UAParser from "ua-parser-js";
+import { createCloudIps, fetchCloudLists, type CloudIps } from "./cloudIps";
 import type { Database } from "./db";
 import { newId } from "./ids";
 
@@ -9,11 +10,12 @@ import { newId } from "./ids";
  *
  *   traffic_hits   페이지를 볼 때마다 한 줄. 180일 뒤 자동 삭제(TTL), 원본 IP 는 30일 뒤 지움
  *   traffic_daily  날짜별 집계 (오래 보관). 지난 날짜는 처음 볼 때 · 매시간 작업에서 만들어 둠
- *   traffic_meta   순방문자 해시에 쓰는 비밀값
+ *   traffic_meta   순방문자 해시에 쓰는 비밀값 · 클라우드 IP 대역 목록(하루 한 번 갱신)
  *
  * 세션 = 브라우저 탭 하나(sessionStorage id). 세션의 첫 페이지가 "유입"(entry).
  * 순방문자 = 하루 단위로 IP+브라우저를 해시한 값 (날짜가 바뀌면 같은 사람도 다른 값).
  * 기존 방문자 수(siteStats)와는 따로 셈.
+ * 클라우드(AWS·GCP·Azure 등) IP 에서 온 건 cloud 에 업체 이름을 적어 두고, 집계는 전체 · 사람(클라우드 뺀 것) 두 벌.
  */
 
 export const HITS = "traffic_hits";
@@ -24,7 +26,9 @@ export const HIT_TTL_DAYS = 180;
 export const IP_KEEP_DAYS = 30;
 const DAY = 86_400_000;
 /** 집계 형식이 바뀌면 올림 → 원본이 남아 있는 날짜는 다시 집계 */
-const SUMMARY_V = 1;
+const SUMMARY_V = 2;
+/** 클라우드 대역 목록을 다시 받는 간격 */
+const CLOUD_REFRESH_MS = DAY;
 /** 날짜별 집계에 남기는 항목 수 (항목마다) */
 const KEEP_TOP = 100;
 
@@ -68,8 +72,12 @@ const SOCIAL: [RegExp, string][] = [
   [/(^|\.)discord(app)?\.com$/, "Discord"],
   [/(^|\.)slack\.com$/, "Slack"],
 ];
-/** 옛 주소 (GitHub Pages) */
-const LEGACY = /^rjsah5676\.github\.io$/;
+/** 옛 주소 (GitHub Pages · Firebase Hosting) → 표시 이름 */
+const LEGACY: [RegExp, string][] = [
+  [/^rjsah5676\.github\.io$/, "github.io"],
+  [/^gunmo-portfolio\.(firebaseapp\.com|web\.app)$/, "firebase"],
+];
+const LEGACY_FIREBASE = /^gunmo-portfolio\.(firebaseapp\.com|web\.app)$/;
 
 /** 인앱 브라우저 (UA 안의 표시) */
 const INAPP: [RegExp, string][] = [
@@ -128,7 +136,7 @@ export function classify(ref: string, utm: Utm, ownHosts: string[], inapp: strin
     return social ? { source: "social", site: social, refHost } : { source: "direct", site: "", refHost };
   }
   if (ownHosts.includes(refHost)) return { source: "internal", site: "", refHost };
-  if (LEGACY.test(refHost)) return { source: "legacy", site: "github.io", refHost };
+  for (const [re, name] of LEGACY) if (re.test(refHost)) return { source: "legacy", site: name, refHost };
   for (const [re, name] of AI) if (re.test(refHost)) return { source: "ai", site: name, refHost };
   for (const [re, name, param] of SEARCH)
     if (re.test(refHost)) {
@@ -278,6 +286,8 @@ export interface HitDoc {
   region: string;
   city: string;
   member: boolean;
+  /** 클라우드 업체 이름 (아니면 "", 대역 목록이 없어 못 본 건 필드 없음) */
+  cloud?: string;
   /** 하루 단위 순방문자 해시 */
   vh: string;
   /** 원본 IP — IP_KEEP_DAYS 뒤 지움 */
@@ -288,15 +298,36 @@ export interface HitDoc {
 export interface Traffic {
   record(input: HitInput, ctx: { ip: string; ua: string; member: boolean; ownHosts: string[] }): Promise<boolean>;
   summary(day: string): Promise<DaySummary>;
-  range(from: string, to: string): Promise<RangeReport>;
+  range(from: string, to: string, opts?: { human?: boolean }): Promise<RangeReport>;
   today(): Promise<{ entries: number; uniques: number; hits: number; top: [string, number][] }>;
   /** 오래된 원본 IP 지우기 + 어제 집계 만들어 두기 */
   maintain(now?: number): Promise<void>;
 }
 
-export function createTraffic(db: Database, opts: { geo: boolean }): Traffic {
+export function createTraffic(
+  db: Database,
+  opts: { geo: boolean; cloud?: boolean; cloudIps?: CloudIps; fetchLists?: typeof fetchCloudLists }
+): Traffic {
   const hits = db.col<Omit<HitDoc, "_id">>(HITS);
   const daily = db.col<Omit<DaySummary, "_id">>(DAILY);
+  const meta = db.col<{ at: Date; lists: Record<string, string[]>; errors?: string[] }>(META);
+
+  // 클라우드 대역: 저장해 둔 목록을 먼저 읽고, 하루 지나면 maintain 에서 새로 받음
+  const cloud = opts.cloudIps ?? (opts.cloud ? createCloudIps() : null);
+  let cloudAt = 0;
+  let cloudErrors: string[] = [];
+  const cloudLoad = cloud
+    ? meta
+        .findOne({ _id: "cloud" })
+        .then((d) => {
+          if (d?.lists && !cloud.loaded()) {
+            cloud.set(d.lists);
+            cloudAt = d.at.getTime();
+            cloudErrors = d.errors ?? [];
+          }
+        })
+        .catch((e) => console.warn("[traffic] 클라우드 대역 읽기 실패", e))
+    : Promise.resolve();
 
   let secret: Promise<string> | null = null;
   const getSecret = () =>
@@ -311,6 +342,7 @@ export function createTraffic(db: Database, opts: { geo: boolean }): Traffic {
 
   async function record(input: HitInput, ctx: { ip: string; ua: string; member: boolean; ownHosts: string[] }) {
     if (isBotUa(ctx.ua)) return false;
+    await cloudLoad;
     const now = Date.now();
     const day = kstDate(now);
     const env = envOf(ctx.ua);
@@ -319,6 +351,7 @@ export function createTraffic(db: Database, opts: { geo: boolean }): Traffic {
       .update(`${day}|${ctx.ip}|${ctx.ua}`)
       .digest("hex")
       .slice(0, 20);
+    const cloudOf = cloud && ctx.ip ? cloud.lookup(ctx.ip) : null;
     const channel = input.entry ? classify(input.ref ?? "", input.utm ?? {}, ctx.ownHosts, env.inapp) : null;
     const doc: HitDoc = {
       _id: newId(),
@@ -348,6 +381,7 @@ export function createTraffic(db: Database, opts: { geo: boolean }): Traffic {
       region: geo?.region ?? "",
       city: geo?.city ?? "",
       member: ctx.member,
+      ...(cloudOf !== null ? { cloud: cloudOf } : {}),
       vh,
       ...(ctx.ip ? { ip: ctx.ip } : {}),
       ua: ctx.ua.slice(0, 400),
@@ -375,14 +409,17 @@ export function createTraffic(db: Database, opts: { geo: boolean }): Traffic {
     return s;
   }
 
-  async function range(from: string, to: string): Promise<RangeReport> {
+  async function range(from: string, to: string, { human = false } = {}): Promise<RangeReport> {
     const days = daysBetween(from, to);
-    const sums = await Promise.all(days.map((d) => summary(d)));
+    const full = await Promise.all(days.map((d) => summary(d)));
+    // 사람만: 날짜마다 클라우드를 뺀 집계 (예전 형식이라 없으면 전체)
+    const sums = human ? full.map((s) => ({ ...s, ...(s.human ?? {}) })) : full;
     const merged = mergeSummaries(sums);
+    const cloudEntries = full.reduce((a, s) => a + s.entries - (s.human?.entries ?? s.entries), 0);
 
     // 최근 유입 (원본이 남아 있는 것) + 세션별 본 페이지 수
     const recentDocs = (await hits
-      .find({ day: { $gte: from, $lte: to }, entry: true })
+      .find({ day: { $gte: from, $lte: to }, entry: true, ...(human ? { $or: [{ cloud: { $exists: false } }, { cloud: "" }] } : {}) })
       .sort({ at: -1 })
       .limit(100)
       .toArray()) as unknown as HitDoc[];
@@ -399,6 +436,13 @@ export function createTraffic(db: Database, opts: { geo: boolean }): Traffic {
       total: merged.total,
       dims: Object.fromEntries(Object.entries(merged.dims).map(([k, v]) => [k, v.slice(0, 30)])) as RangeReport["dims"],
       heat: merged.heat,
+      cloud: {
+        entries: cloudEntries,
+        loaded: !!cloud?.loaded(),
+        updatedAt: cloudAt || null,
+        counts: cloud?.counts() ?? {},
+        errors: cloudErrors,
+      },
       recent: recentDocs.map((d) => ({
         at: d.at.getTime(),
         source: d.source ?? "direct",
@@ -419,16 +463,69 @@ export function createTraffic(db: Database, opts: { geo: boolean }): Traffic {
         ip: d.ip ?? "",
         member: d.member,
         returning: d.returning,
+        cloud: d.cloud ?? "",
       })),
     };
   }
 
+  /** 오늘 (클라우드 뺀 사람 기준) */
   async function today() {
-    const s = await summary(kstDate(Date.now()));
+    const all = await summary(kstDate(Date.now()));
+    const s = all.human ?? all;
     return { entries: s.entries, uniques: s.uniques, hits: s.hits, top: s.dims.site.slice(0, 3) };
   }
 
+  /** 클라우드 대역을 새로 받고, 그동안 못 본 기록(원본 IP 가 남은 것)에 표시 */
+  async function refreshCloud(now: number) {
+    if (!cloud) return;
+    await cloudLoad;
+    if (cloud.loaded() && now - cloudAt < CLOUD_REFRESH_MS) return;
+    const { lists, errors } = await (opts.fetchLists ?? fetchCloudLists)();
+    if (!Object.keys(lists).length) {
+      cloudErrors = errors;
+      console.warn("[traffic] 클라우드 대역을 하나도 못 받음", errors);
+      return;
+    }
+    // 이번에 못 받은 업체는 예전 목록 유지
+    const prev = (await meta.findOne({ _id: "cloud" }))?.lists ?? {};
+    const merged = { ...prev, ...lists };
+    cloud.set(merged);
+    cloudAt = now;
+    cloudErrors = errors;
+    if (errors.length) console.warn("[traffic] 클라우드 대역 일부 실패", errors);
+    await meta.replaceOne({ _id: "cloud" }, { at: new Date(now), lists: merged, errors }, { upsert: true });
+  }
+
+  /** 대역 목록이 없을 때 들어온 기록에 클라우드 표시 → 바뀐 날짜는 집계를 다시 */
+  async function backfillCloud() {
+    if (!cloud?.loaded()) return;
+    const docs = await hits
+      .find({ cloud: { $exists: false }, ip: { $exists: true } }, { projection: { ip: 1, day: 1 } })
+      .limit(20_000)
+      .toArray();
+    if (!docs.length) return;
+    const days = new Set<string>();
+    const ops = docs.map((d) => {
+      const c = cloud.lookup(String(d.ip)) ?? "";
+      if (c) days.add(d.day);
+      return { updateOne: { filter: { _id: d._id }, update: { $set: { cloud: c } } } };
+    });
+    await hits.bulkWrite(ops, { ordered: false });
+    if (days.size) await daily.deleteMany({ _id: { $in: [...days] } });
+  }
+
+  /** 옛 Firebase 주소에서 온 걸 "다른 사이트"로 적어 둔 기록 → 옛 주소 */
+  async function fixLegacy() {
+    const old = await hits.find({ source: "referral", refHost: LEGACY_FIREBASE }, { projection: { day: 1 } }).toArray();
+    if (!old.length) return;
+    await hits.updateMany({ source: "referral", refHost: LEGACY_FIREBASE }, { $set: { source: "legacy", site: "firebase" } });
+    await daily.deleteMany({ _id: { $in: [...new Set(old.map((d) => d.day))] } });
+  }
+
   async function maintain(now = Date.now()) {
+    await refreshCloud(now).catch((e) => console.warn("[traffic] 클라우드 대역", e));
+    await backfillCloud();
+    await fixLegacy();
     await hits.updateMany(
       { at: { $lt: new Date(now - IP_KEEP_DAYS * DAY) }, ip: { $exists: true } },
       { $unset: { ip: "" } }
@@ -443,6 +540,7 @@ export function createTraffic(db: Database, opts: { geo: boolean }): Traffic {
 
 export const DIMS = [
   "source",
+  "cloud",
   "site",
   "term",
   "campaign",
@@ -459,9 +557,14 @@ export const DIMS = [
 ] as const;
 export type Dim = (typeof DIMS)[number];
 
-export interface DaySummary {
+export interface DaySummary extends DayCore {
   _id: string;
   v: number;
+  /** 클라우드 IP 를 뺀 집계 */
+  human?: DayCore;
+}
+
+export interface DayCore {
   /** 페이지 본 수 */
   hits: number;
   /** 유입(세션) 수 */
@@ -488,6 +591,8 @@ export interface RangeReport {
   dims: Record<Dim, [string, number][]>;
   /** 요일(0=일) × 시(0~23) 유입 수 */
   heat: number[][];
+  /** 클라우드 IP 유입 수(기간 전체) · 대역 목록 상태 */
+  cloud: { entries: number; loaded: boolean; updatedAt: number | null; counts: Record<string, number>; errors: string[] };
   recent: {
     at: number;
     source: Source;
@@ -508,6 +613,8 @@ export interface RangeReport {
     ip: string;
     member: boolean;
     returning: boolean;
+    /** 클라우드 업체 ("" = 아님) */
+    cloud: string;
   }[];
 }
 
@@ -516,6 +623,10 @@ const top = (m: Map<string, number>, n = KEEP_TOP): [string, number][] =>
 const add = (m: Map<string, number>, k: string, n = 1) => m.set(k, (m.get(k) ?? 0) + n);
 
 export function summarize(day: string, docs: HitDoc[]): DaySummary {
+  return { _id: day, v: SUMMARY_V, ...core(docs), human: core(docs.filter((h) => !h.cloud)) };
+}
+
+function core(docs: HitDoc[]): DayCore {
   const maps = Object.fromEntries(DIMS.map((d) => [d, new Map<string, number>()])) as Record<Dim, Map<string, number>>;
   const hours = Array<number>(24).fill(0);
   const perSession = new Map<string, number>();
@@ -534,6 +645,7 @@ export function summarize(day: string, docs: HitDoc[]): DaySummary {
     if (h.returning) returning++;
     hours[h.hour] = (hours[h.hour] ?? 0) + 1;
     add(maps.source, h.source ?? "direct");
+    if (h.cloud) add(maps.cloud, h.cloud);
     add(maps.site, h.source === "direct" || !h.source ? "" : h.site || h.source);
     if (h.term) add(maps.term, h.term);
     if (h.utm?.campaign) add(maps.campaign, h.utm.campaign);
@@ -552,8 +664,6 @@ export function summarize(day: string, docs: HitDoc[]): DaySummary {
   for (const sid of entrySids) if (perSession.get(sid) === 1) bounces++;
 
   return {
-    _id: day,
-    v: SUMMARY_V,
     hits: docs.length,
     entries,
     uniques: vhs.size,
@@ -565,7 +675,7 @@ export function summarize(day: string, docs: HitDoc[]): DaySummary {
   };
 }
 
-export function mergeSummaries(list: DaySummary[]) {
+export function mergeSummaries(list: (DayCore & { _id: string })[]) {
   const maps = Object.fromEntries(DIMS.map((d) => [d, new Map<string, number>()])) as Record<Dim, Map<string, number>>;
   const heat = Array.from({ length: 7 }, () => Array<number>(24).fill(0));
   const total = { hits: 0, entries: 0, uniques: 0, members: 0, returning: 0, bounces: 0 };

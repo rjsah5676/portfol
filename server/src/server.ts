@@ -34,7 +34,7 @@ export async function createAppServer(
   const users = createUsers(db, cfg);
   gateway.nickOf = (user) => users.nickOf(user);
   users.onRename((uid, nick) => gateway.setNick(uid, nick));
-  const traffic = createTraffic(db, { geo: cfg.trafficGeo });
+  const traffic = createTraffic(db, { geo: cfg.trafficGeo, cloud: cfg.trafficCloud });
   const deps: Deps = { cfg, db, auth, gateway, users, traffic, web: overrides.web ?? createWebNotifier(cfg) };
 
   const board = registerBoardGames(deps);

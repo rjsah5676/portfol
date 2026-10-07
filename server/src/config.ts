@@ -26,6 +26,8 @@ export interface Config {
   revalidateSecret: string;
   /** 유입 분석에서 IP로 국가·지역 찾기 (geoip-lite, 메모리 약 100MB). 기본은 켬, 테스트에서는 끔 */
   trafficGeo: boolean;
+  /** 유입 분석에서 클라우드(AWS·GCP·Azure 등) IP 표시 — 업체 공개 대역을 하루 한 번 받아 옴. 기본은 켬, 테스트에서는 끔 */
+  trafficCloud: boolean;
 }
 
 const list = (v: string | undefined) =>
@@ -66,5 +68,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     webRevalidateUrl: env.WEB_REVALIDATE_URL?.trim() ?? "",
     revalidateSecret: env.REVALIDATE_SECRET?.trim() ?? "",
     trafficGeo: env.TRAFFIC_GEO?.trim() ? env.TRAFFIC_GEO.trim() !== "0" : mode !== "test",
+    trafficCloud: env.TRAFFIC_CLOUD?.trim() ? env.TRAFFIC_CLOUD.trim() !== "0" : mode !== "test",
   };
 }

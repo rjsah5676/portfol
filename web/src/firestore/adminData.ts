@@ -118,6 +118,7 @@ export const getOverview = () => api<AdminOverview>("/api/admin/overview", { aut
 export type TrafficSource = "campaign" | "search" | "ai" | "social" | "referral" | "legacy" | "internal" | "direct";
 export type TrafficDim =
   | "source"
+  | "cloud"
   | "site"
   | "term"
   | "campaign"
@@ -142,6 +143,8 @@ export interface TrafficReport {
   dims: Record<TrafficDim, [string, number][]>;
   /** 요일(0=일) × 시(0~23) 유입 수, 한국 시간 */
   heat: number[][];
+  /** 클라우드(AWS·GCP 등) IP 유입 수 · 대역 목록 상태 */
+  cloud: { entries: number; loaded: boolean; updatedAt: number | null; counts: Record<string, number>; errors: string[] };
   recent: {
     at: number;
     source: TrafficSource;
@@ -163,11 +166,14 @@ export interface TrafficReport {
     ip: string;
     member: boolean;
     returning: boolean;
+    /** 클라우드 업체 ("" = 아님) */
+    cloud: string;
   }[];
 }
 
-export const getTraffic = (from: string, to: string) =>
-  api<TrafficReport>(`/api/admin/traffic?from=${from}&to=${to}`, { auth: true });
+/** human: 클라우드(AWS·GCP 등) IP 유입 빼기 */
+export const getTraffic = (from: string, to: string, human = false) =>
+  api<TrafficReport>(`/api/admin/traffic?from=${from}&to=${to}${human ? "&human=1" : ""}`, { auth: true });
 
 export const listUsers = (q = "") =>
   api<{ total: number; items: AdminUser[] }>(

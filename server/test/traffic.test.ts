@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { classify, envOf, kstDate, regionLabel, summarize, widthBucket, type HitDoc } from "../src/traffic";
+import { CLOUD_SOURCES, createCloudIps, fetchCloudLists } from "../src/cloudIps";
+import { classify, createTraffic, envOf, kstDate, regionLabel, summarize, widthBucket, type HitDoc } from "../src/traffic";
 import { startTestServer, type TestServer } from "./helpers";
 
 const IPHONE_KAKAO =
@@ -24,6 +25,8 @@ describe("유입 경로 분류", () => {
     expect(classify("https://t.co/abc", {}, OWN, "")).toMatchObject({ source: "social", site: "X" });
     expect(classify("https://l.instagram.com/", {}, OWN, "")).toMatchObject({ source: "social", site: "Instagram" });
     expect(classify("https://rjsah5676.github.io/", {}, OWN, "")).toMatchObject({ source: "legacy", site: "github.io" });
+    expect(classify("https://gunmo-portfolio.firebaseapp.com/", {}, OWN, "")).toMatchObject({ source: "legacy", site: "firebase" });
+    expect(classify("https://gunmo-portfolio.web.app/x", {}, OWN, "")).toMatchObject({ source: "legacy", site: "firebase" });
     expect(classify("https://gunmo.my/games/", {}, OWN, "")).toMatchObject({ source: "internal" });
     expect(classify("https://m.blog.naver.com/x/1", {}, OWN, "")).toMatchObject({ source: "referral", site: "blog.naver.com" });
     expect(classify("", {}, OWN, "")).toEqual({ source: "direct", site: "", refHost: "" });
@@ -59,6 +62,56 @@ describe("유입 경로 분류", () => {
     expect(s.dims.page).toHaveLength(3);
     expect(s.dims.region).toEqual([["서울", 2]]);
     expect(s.dims.lang).toEqual([["ko", 2]]);
+  });
+});
+
+describe("클라우드 IP", () => {
+  it("업체별 공개 목록 형식 읽기", () => {
+    const by = Object.fromEntries(CLOUD_SOURCES.map((x) => [x.name, x.parse]));
+    expect(by.AWS(JSON.stringify({ prefixes: [{ ip_prefix: "3.0.0.0/15" }], ipv6_prefixes: [{ ipv6_prefix: "2600:1f00::/24" }] }))).toEqual(["3.0.0.0/15", "2600:1f00::/24"]);
+    expect(by.GCP(JSON.stringify({ prefixes: [{ ipv4Prefix: "34.1.208.0/20" }, { ipv6Prefix: "2600:1900::/35" }] }))).toEqual(["34.1.208.0/20", "2600:1900::/35"]);
+    expect(by.Azure(JSON.stringify({ values: [{ name: "AzureCloud", properties: { addressPrefixes: ["4.144.0.0/12"] } }, { name: "Other", properties: { addressPrefixes: ["9.9.9.9/32"] } }] }))).toEqual(["4.144.0.0/12"]);
+    expect(by.Oracle(JSON.stringify({ regions: [{ cidrs: [{ cidr: "129.146.0.0/21" }] }] }))).toEqual(["129.146.0.0/21"]);
+    expect(by.DigitalOcean("5.101.96.0/21,NL,NL-NH,Amsterdam,1098 XH\n2a03:b0c0::/32,NL,,,\n")).toEqual(["5.101.96.0/21", "2a03:b0c0::/32"]);
+  });
+
+  it("IP → 업체 (IPv4 · IPv6 · 겹친 대역 · 목록 없음)", () => {
+    const c = createCloudIps();
+    expect(c.lookup("34.248.137.227")).toBeNull();
+    c.set({ AWS: ["34.240.0.0/13", "34.248.0.0/16", "54.198.0.0/16", "2600:1f00::/24", "bad", "1.2.3.4/40"], GCP: ["35.190.0.0/17"] });
+    expect(c.counts()).toEqual({ AWS: 4, GCP: 1 });
+    expect(c.lookup("34.248.137.227")).toBe("AWS");
+    expect(c.lookup("54.198.174.208")).toBe("AWS");
+    expect(c.lookup("35.190.1.1")).toBe("GCP");
+    expect(c.lookup("35.190.128.1")).toBe("");
+    expect(c.lookup("121.134.1.1")).toBe("");
+    expect(c.lookup("::ffff:34.248.1.1")).toBe("");
+    expect(c.lookup("2600:1f18:abcd::1")).toBe("AWS");
+    expect(c.lookup("2001:db8::1")).toBe("");
+    expect(c.lookup("not-ip")).toBe("");
+  });
+
+  it("받아오기: 실패한 업체는 빠지고 이유가 남음", async () => {
+    const r = await fetchCloudLists([
+      { name: "A", url: async () => "1.0.0.0/8", parse: (b) => [b] },
+      { name: "B", url: async () => { throw new Error("막힘"); }, parse: () => [] },
+      { name: "C", url: async () => "", parse: () => [] },
+    ]);
+    expect(r.lists).toEqual({ A: ["1.0.0.0/8"] });
+    expect(r.errors.sort()).toEqual(["B: 막힘", "C: 빈 목록"]);
+  });
+
+  it("하루 집계에 사람만(클라우드 뺀) 집계가 같이 붙음", () => {
+    const base = { day: "2026-10-02", returning: false, device: "desktop", os: "Linux", browser: "Chrome", inapp: "", sw: "~1920", lang: "en", tz: "", country: "IE", region: "", city: "", member: false, ua: "", hour: 20, at: new Date() } as const;
+    const s = summarize("2026-10-02", [
+      { ...base, _id: "1", sid: "a", entry: true, path: "/", source: "direct", site: "", vh: "x", cloud: "AWS" },
+      { ...base, _id: "2", sid: "b", entry: true, path: "/", source: "direct", site: "", vh: "y", cloud: "" },
+      { ...base, _id: "3", sid: "c", entry: true, path: "/", source: "direct", site: "", vh: "z" },
+    ] as HitDoc[]);
+    expect(s.entries).toBe(3);
+    expect(s.dims.cloud).toEqual([["AWS", 1]]);
+    expect(s.human).toMatchObject({ entries: 2, hits: 2 });
+    expect(s.human!.dims.cloud).toEqual([]);
   });
 });
 
@@ -139,6 +192,48 @@ describe("유입 기록 API", () => {
     const ov = (await s.http("/api/admin/overview", { token: admin })).body;
     expect(ov.traffic).toMatchObject({ entries: 3, hits: 4 });
     expect(ov.traffic.top).toHaveLength(3);
+  });
+
+  it("클라우드 IP 표시 · 사람만 보기 · 목록 받은 뒤 예전 기록에도 표시 · 옛 Firebase 주소 고치기", async () => {
+    const day = kstDate(Date.now() - 2 * 86_400_000);
+    const base = { at: new Date(Date.now() - 2 * 86_400_000), day, hour: 3, entry: true, returning: false, path: "/", source: "direct", site: "", device: "desktop", os: "Linux", browser: "Chrome", inapp: "", sw: "", lang: "", tz: "", country: "", region: "", city: "", member: false, ua: "" };
+    await s.db.col("traffic_hits").insertMany([
+      { ...base, _id: "c1", sid: "sess_cloud001", ip: "34.248.137.227", vh: "c1" },
+      { ...base, _id: "c2", sid: "sess_cloud002", ip: "121.134.1.1", vh: "c2" },
+      { ...base, _id: "c3", sid: "sess_cloud003", ip: "54.198.174.208", vh: "c3", source: "referral", site: "gunmo-portfolio.firebaseapp.com", refHost: "gunmo-portfolio.firebaseapp.com" },
+    ] as never);
+    // 목록 없을 때 본 그날 집계 → 저장됨
+    const before = (await s.http(`/api/admin/traffic?from=${day}&to=${day}&human=1`, { token: admin })).body;
+    expect(before.total.entries).toBe(3);
+    expect(before.cloud).toMatchObject({ entries: 0, loaded: false });
+
+    const t = createTraffic(s.db, { geo: false, cloud: true, fetchLists: async () => ({ lists: { AWS: ["34.240.0.0/13", "54.198.0.0/16"] }, errors: ["Azure: 막힘"] }) });
+    await t.maintain();
+    const docs = await s.db.col("traffic_hits").find({ _id: { $in: ["c1", "c2", "c3"] } }).sort({ _id: 1 }).toArray();
+    expect(docs.map((d) => d.cloud)).toEqual(["AWS", "", "AWS"]);
+    expect(docs[2]).toMatchObject({ source: "legacy", site: "firebase" });
+    expect((await s.db.col("traffic_meta").findOne({ _id: "cloud" }))?.lists.AWS).toHaveLength(2);
+
+    // 집계를 지우고 다시 만듦 → 전체 3 · 사람만 1
+    const all = (await t.range(day, day)).total.entries;
+    const human = await t.range(day, day, { human: true });
+    expect(all).toBe(3);
+    expect(human.total.entries).toBe(1);
+    expect(human.cloud).toMatchObject({ entries: 2, loaded: true, counts: { AWS: 2 }, errors: ["Azure: 막힘"] });
+    expect(human.recent.map((r) => r.ip)).toEqual(["121.134.1.1"]);
+    const full = await t.range(day, day);
+    expect(full.recent.filter((r) => r.cloud === "AWS")).toHaveLength(2);
+    expect(full.dims.source).toEqual(expect.arrayContaining([["legacy", 1]]));
+
+    // 새 traffic 객체도 저장된 목록으로 바로 표시 (다시 받지 않음)
+    let fetched = 0;
+    const t2 = createTraffic(s.db, { geo: false, cloud: true, fetchLists: async () => (fetched++, { lists: {}, errors: [] }) });
+    await t2.maintain();
+    expect(fetched).toBe(0);
+    await t2.record({ sid: "sess_cloud004", path: "/", entry: true, returning: false }, { ip: "34.248.1.1", ua: WIN_CHROME, member: false, ownHosts: OWN });
+    expect((await s.db.col("traffic_hits").findOne({ sid: "sess_cloud004" }))?.cloud).toBe("AWS");
+    await s.db.col("traffic_hits").deleteMany({ _id: { $in: ["c1", "c2", "c3"] } });
+    await s.db.col("traffic_hits").deleteMany({ sid: "sess_cloud004" });
   });
 
   it("정리 작업: 30일 지난 원본 IP 를 지움", async () => {
