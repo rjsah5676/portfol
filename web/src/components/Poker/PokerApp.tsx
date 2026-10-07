@@ -297,7 +297,6 @@ function Intro({ o, account, loginError, onLogin }: { o: Orient; account: boolea
       {floats.map((f, i) => (
         <span key={i} className="pk-float pointer-events-none absolute z-[6]" style={{ left: `${f.x}%`, top: `${f.y}%`, animationDelay: `${f.d}s`, "--r": `${f.r}deg` } as CSSProperties}>
           {f.chip ? (
-            // eslint-disable-next-line @next/next/no-img-element
             <img src={asset.chip(f.chip, "top")} alt="" draggable={false} style={{ width: (h ? 64 : 42) * f.s, height: (h ? 64 : 42) * f.s }} />
           ) : (
             <PlayingCard card={f.card ?? null} w={Math.round((h ? 62 : 40) * f.s)} tier={3} />
@@ -329,8 +328,7 @@ function Intro({ o, account, loginError, onLogin }: { o: Orient; account: boolea
             {p.card !== undefined ? (
               <PlayingCard card={p.card} w={h ? 56 : 40} tier={3} />
             ) : (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={asset.chip(p.chip!, "stack")} alt="" draggable={false} style={{ width: h ? 64 : 44, height: h ? 64 : 44 }} />
+                <img src={asset.chip(p.chip!, "stack")} alt="" draggable={false} style={{ width: h ? 64 : 44, height: h ? 64 : 44 }} />
             )}
           </span>
         ))}

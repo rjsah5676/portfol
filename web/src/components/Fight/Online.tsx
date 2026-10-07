@@ -625,8 +625,9 @@ function Room({
   const st = room?.state;
   const rank = room?.rank ?? null;
   // 랭크전 방이었는지 (방이 닫혀도 기억 — 취소 안내)
-  const wasRank = useRef(false);
-  if (rank) wasRank.current = true;
+  // (렌더 중 ref 를 고치면 안 되니 state 로 — 이전 렌더 정보를 남기는 React 권장 방식)
+  const [wasRank, setWasRank] = useState(false);
+  if (rank && !wasRank) setWasRank(true);
   // 랭크전 시작까지 남은 시간
   const [now, setNow] = useState(() => serverNow());
   useEffect(() => {
@@ -699,9 +700,9 @@ function Room({
     return (
       <div className="absolute inset-0 flex flex-col items-center justify-center gap-[1.4cqw]">
         <div className={`${KR} text-[2cqw] font-bold text-white`}>
-          {wasRank.current && !err ? "랭크전이 취소됐어요" : err || s.lost}
+          {wasRank && !err ? "랭크전이 취소됐어요" : err || s.lost}
         </div>
-        {wasRank.current && !err && (
+        {wasRank && !err && (
           <div className={`${KR} text-[1.3cqw] text-white/55`}>상대가 나갔거나 시간 안에 준비하지 않았어요 (레이팅 변화 없음)</div>
         )}
         <button type="button" onClick={leave} className={bigBtn}>

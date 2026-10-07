@@ -24,10 +24,8 @@ export default function Lobby({
   rank,
   myNick,
   o,
-  w,
   h,
   onEnter,
-  onWallet,
   topRight,
 }: {
   wallet: Wallet;

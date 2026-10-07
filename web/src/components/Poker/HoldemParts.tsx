@@ -77,7 +77,7 @@ export function HoldemBoard({ view, tier, sizes }: { view: HoldemView; tier: 1 |
   );
 }
 
-export function HoldemActions({ view, mySeat, myStack, busy, onAct, unitBB, o }: { view: HoldemView; mySeat: number; myStack: number; busy: boolean; onAct: (a: HoldemAction) => void; unitBB: number; o: "h" | "v" }) {
+export function HoldemActions({ view, mySeat, myStack, busy, onAct, unitBB }: { view: HoldemView; mySeat: number; myStack: number; busy: boolean; onAct: (a: HoldemAction) => void; unitBB: number; o: "h" | "v" }) {
   const lg = view.legal!;
   const myBet = view.players[mySeat]?.bet ?? 0;
   const steps = Math.max(0, Math.ceil((lg.maxTo - lg.minTo) / UNIT));

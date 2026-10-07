@@ -1221,7 +1221,7 @@ function ActionBar(props: {
   pre: string;
   onPre: (a: string) => void;
 }) {
-  const { o, u, me, sitState, password, setPassword, trySit, kicked, wallet, tier, onWallet, onExit, hv, sv, mySeat, liveHand, busy, doAct, table, actor, myTurn, frac, pre, onPre } = props;
+  const { o, u, me, sitState, password, setPassword, trySit, kicked, tier, onExit, hv, sv, mySeat, liveHand, busy, doAct, table, actor, myTurn, frac, pre, onPre } = props;
   if (sitState === "password")
     return (
       <form
