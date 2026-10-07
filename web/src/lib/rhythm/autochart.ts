@@ -352,6 +352,25 @@ export function makeAutoChart(
   const jump = (b: number) => (b > 0 ? intensity[b] - intensity[b - 1] : 0);
   const sectionStart = (b: number) => jump(b) >= 0.18 && intensity[b] >= 0.55;
   const buildBar = (b: number) => sectionStart(b + 1) || sectionStart(b + 2);
+  // 프레이즈(4마디·8마디) 위상: 구간이 터지는 마디가 가장 많이 걸리는 자리를 프레이즈 시작으로
+  // (osu 랭크 채보는 4마디 시작 정박에 동시치기를 다른 정박의 1.5~2.5배, 8마디 시작엔 더 몰아 둠 — 곡 구성이 손에 느껴지게)
+  let phrasePhase = 0;
+  {
+    let best = -1;
+    for (let k = 0; k < 4; k++) {
+      let v = 0;
+      for (let b = 0; b < nBars; b++) if (sectionStart(b)) v += b % 4 === k ? 1 : 0;
+      if (v > best) ((best = v), (phrasePhase = k));
+    }
+  }
+  /** 마디가 프레이즈 시작이면 2(8마디) · 1(4마디) · 0 */
+  const phraseRank = (b: number) =>
+    (b - phrasePhase) % 4 !== 0 ? 0 : (b - phrasePhase) % 8 === 0 ? 2 : 1;
+  /** 타격이 마디 첫 박(정박)에 있는지 */
+  const onDownbeat = (t: number) => {
+    const f = (t - bar0) / barSec;
+    return Math.abs(f - Math.round(f)) * barSec < 0.03;
+  };
   const dense = diff === "hard" || diff === "expert";
   const factorOf = (b: number) => {
     const I = intensity[Math.max(0, Math.min(nBars - 1, b))];
@@ -595,8 +614,14 @@ export function makeAutoChart(
       // 반올림 찌꺼기는 마디를 넘기며 이월 (비율이 전체로는 맞게)
       let carry2 = 0;
       let carry3 = 0;
+      // 프레이즈 시작 정박은 세기에 보너스(4마디 +0.25 · 8마디 +0.5)를 줘서 동시치기 몫을 먼저 받게
+      const sOf = (i: number) => {
+        const o = picked[i];
+        const pr = onDownbeat(o.t) ? phraseRank(barOf(o.t)) : 0;
+        return o.s + (pr === 2 ? 0.5 : pr === 1 ? 0.25 : 0);
+      };
       for (const b of [...byBar.keys()].sort((x, y) => x - y)) {
-        const list = byBar.get(b)!.sort((x, y) => picked[y].s - picked[x].s);
+        const list = byBar.get(b)!.sort((x, y) => sOf(y) - sOf(x));
         const want2 = list.length * twoRate * cw(b) + carry2;
         const want3 = list.length * threeRate * cw(b) + carry3;
         const two = Math.min(list.length, Math.round(want2));
@@ -666,6 +691,38 @@ export function makeAutoChart(
       hand(want) === hand(prev.lane)
     )
       want = hand(want) === 0 ? (want === 0 ? 2 : 3) : want === 2 ? 0 : 1;
+    // 트릴(A B A B) 피하기: osu 랭크 채보는 보통·어려움에서 같은 두 레인을 번갈아 치는 자리가 1~3%뿐인데
+    // 우리는 킥·스네어가 번갈면 음높이 순위가 그대로 레인이 돼 8~13%였음 → 보통·어려움은 거의 항상, 그 위는 반쯤 다른 레인으로
+    if (!dir && !patLanes && prev2 && prev && prev.t !== o.t && prev2.t !== prev.t) {
+      let prev3: Note | undefined;
+      for (let k = notes.length - 1; k >= 0; k--)
+        if (notes[k].t < prev2.t) {
+          prev3 = notes[k];
+          break;
+        }
+      const trillAvoid = diff === "normal" || diff === "hard" ? 0.9 : 0.5;
+      if (
+        prev3 &&
+        prev3.lane === prev.lane &&
+        prev2.lane === want &&
+        want !== prev.lane &&
+        o.t - prev3.t <= beatSec * 2 + 0.01 &&
+        rnd() < trillAvoid
+      ) {
+        const alt = [0, 1, 2, 3].filter((l) => l !== want && l !== prev.lane);
+        want = alt[Math.abs(want - alt[0]) <= Math.abs(want - alt[1]) ? 0 : 1];
+      }
+    }
+    // 손 번갈기: 단노트가 같은 손에 이어지면 조금은 다른 손으로 (osu 보통·어려움은 다음 노트가 다른 손일 비율 63~69%, 우리 56~63%)
+    if (
+      !dir &&
+      !patLanes &&
+      prev &&
+      prev.t !== o.t &&
+      hand(prev.lane) === hand(want) &&
+      rnd() < 0.25
+    )
+      want = hand(want) === 0 ? (want === 0 ? 2 : 3) : want === 2 ? 0 : 1;
     // 같은 레인 연타·같은 레인 연속(jackRun 넘게)은 옆 레인으로.
     // 바로 앞 줄과 같은 레인(잭)은 난이도별 확률(jackAllow)만큼만 남김 — osu 랭크 채보 비율에 맞춤
     const prevRow = new Set<number>();
@@ -705,8 +762,14 @@ export function makeAutoChart(
     // 동시치기 붙이기 — 3)에서 정한 개수 + 구간 진입(드롭·코러스) 첫 노트는 최소 1개
     const entry =
       R.chord !== null &&
-      sectionStart(barOf(o.t)) &&
-      (i === 0 || barOf(picked[i - 1].t) !== barOf(o.t));
+      ((sectionStart(barOf(o.t)) && (i === 0 || barOf(picked[i - 1].t) !== barOf(o.t))) ||
+        // 8마디 프레이즈 시작 정박도 최소 1개. 보통은 동시치기 몫이 적어(5%) 4마디 시작까지 — 그 몫을 프레이즈에 쓰는 셈
+        // (osu 보통 채보: 4마디 시작 정박 40%·8마디 50%가 동시치기, 다른 정박은 15%)
+        (onDownbeat(o.t) &&
+          (phraseRank(barOf(o.t)) === 2 ||
+            (diff === "normal" && phraseRank(barOf(o.t)) === 1 && o.s >= 0.65)) &&
+          (diff !== "normal" || o.s >= 0.4) &&
+          intensity[Math.max(0, Math.min(nBars - 1, barOf(o.t)))] >= 0.3));
     const more = Math.max(extra.get(i) ?? 0, entry ? 1 : 0) - paired;
     if (more > 0) {
       // 짝 레인: 거울(D+K·F+J)만 반복되지 않게 — 바로 앞 줄 레인·최근 동시치기 모양은 피함
@@ -729,6 +792,8 @@ export function makeAutoChart(
     }
   }
 
+  const copyDropped = new Set<Note>();
+  const copyAdded: Note[] = [];
   // 3.5) 프레이즈 반복: 마디 안 노트 배치(상대 시각)가 같은 마디는 먼저 나온 마디의 레인을 다시 씀
   //      — 음악이 반복되면 손 모양도 반복(외워 치는 재미). 다만 그대로가 아니라 홀수 번째 반복은
   //      좌우 반전으로, "같은 듯 다른" 변주가 되게 (사람 매퍼의 반복-변주 원칙)
@@ -739,31 +804,117 @@ export function makeAutoChart(
       if (!byBar.has(b)) byBar.set(b, []);
       byBar.get(b)!.push(n);
     }
-    const seen = new Map<string, { lanes: number[]; n: number }>();
+    // 원본 마디들: 칸(16분·셋잇단) 집합과 칸→레인들. 리듬이 거의 같으면(자카드 ≥ 0.75) 같은 칸의 레인을 가져옴
+    // (osu 랭크 채보: 음악이 같은 마디끼리 레인까지 같은 정도가 거울 포함 0.36~0.44, 우리는 0.27~0.34였음 —
+    //  꼭 같은 키일 때만 복사하던 걸 '거의 같은' 리듬까지 넓힘. 그대로가 아니라 홀수 번째는 좌우 반전)
+    const slotOf = (n: Note, b: number) =>
+      Math.round(((n.t - bar0 - b * barSec) / beatSec) * an.div);
+    const seen: { slots: Set<number>; lanes: Map<number, number[]>; n: number }[] = [];
+    const jac = (a: Set<number>, c: Set<number>) => {
+      let inter = 0;
+      for (const v of a) if (c.has(v)) inter++;
+      return inter / (a.size + c.size - inter);
+    };
     for (const [b, list] of [...byBar.entries()].sort((x, y) => x[0] - y[0])) {
       list.sort((x, y) => x.t - y.t || x.lane - y.lane);
-      const key = list
-        .map((n) => Math.round(((n.t - bar0 - b * barSec) / beatSec) * an.div))
-        .join(",");
+      const slots = new Set(list.map((n) => slotOf(n, b)));
       // 8분·16분으로 꽉 찬 마디는 리듬만으로는 다 똑같아 보여서(코러스 8마디가 전부 같은 키) 복사하면
       // 같은 손 모양이 끝없이 반복됨 → 이런 마디는 복사하지 않고 패턴 다양성에 맡김.
       // "프레이즈가 반복된다"고 볼 수 있는 건 리듬에 생김새가 있는(간격이 고르지 않은) 마디뿐
       const ts = [...new Set(list.map((n) => n.t))];
       const ivs = new Set(ts.slice(1).map((t, k) => Math.round((t - ts[k]) * 50)));
       const uniform = ts.length >= 6 && ivs.size <= 1;
-      const hit = seen.get(key);
-      if (!uniform && hit && hit.lanes.length === list.length && list.length >= 3 && hit.n < 3) {
+      if (uniform || slots.size < 3) continue;
+      let hit: (typeof seen)[number] | null = null;
+      let bestJ = 0.75;
+      for (const sdef of seen) {
+        if (sdef.n >= 3) continue;
+        const j = jac(sdef.slots, slots);
+        if (j >= bestJ) ((bestJ = j), (hit = sdef));
+      }
+      if (hit) {
         hit.n++;
-        const lanes = hit.n % 2 === 1 ? hit.lanes.map((l) => 3 - l) : hit.lanes;
-        // 복사했을 때 같은 시각에 같은 레인이 겹치면(동시치기) 복사 안 함
-        const clash = list.some((n, k) =>
-          list.some((m, k2) => k2 !== k && m.t === n.t && lanes[k2] === lanes[k])
-        );
-        if (!clash) list.forEach((n, k) => (n.lane = lanes[k]));
-      } else if (!uniform && list.length >= 3 && (!hit || hit.n >= 3))
-        // 처음 보는 리듬(또는 세 번 복사한 뒤)은 이 마디를 새 원본으로
-        seen.set(key, { lanes: list.map((n) => n.lane), n: 0 });
+        const mirror = hit.n % 2 === 1;
+        // 같은 칸에 있는 줄만 원본 레인으로 (줄의 노트 수가 같을 때), 나머지 줄은 그대로
+        const next = new Map<Note, number>();
+        const rows = new Map<number, Note[]>();
+        for (const n of list) {
+          const sl = slotOf(n, b);
+          if (!rows.has(sl)) rows.set(sl, []);
+          rows.get(sl)!.push(n);
+        }
+        const toAdd: Note[] = [];
+        const toDrop = new Set<Note>();
+        for (const [sl, row] of rows) {
+          const src = hit.lanes.get(sl);
+          if (!src || Math.abs(src.length - row.length) > 1) continue;
+          const lanes = (mirror ? src.map((l) => 3 - l) : src.slice()).sort((x, y) => x - y);
+          // 줄의 노트 수가 1개 차이면 원본에 맞춤 (동시치기 모양까지 같아야 '같은 프레이즈'로 느껴짐)
+          row.forEach((n, k) => {
+            if (k < lanes.length) next.set(n, lanes[k]);
+            else toDrop.add(n);
+          });
+          for (let k = row.length; k < lanes.length; k++)
+            toAdd.push({ t: row[0].t, lane: lanes[k] });
+        }
+        // 복사한 레인이 바로 앞·뒤 줄(연타 간격 안)과 같은 레인이면 그 마디는 복사 안 함
+        const laneAt = (n: Note) => next.get(n) ?? n.lane;
+        const all = [...(byBar.get(b - 1) ?? []), ...list, ...toAdd, ...(byBar.get(b + 1) ?? [])]
+          .filter((n) => !toDrop.has(n))
+          .sort((x, y) => x.t - y.t);
+        // 복사한 레인이 바로 앞·뒤 줄(연타 간격 안)과 같은 레인이면: 난이도별 잭 허용 확률만큼은 그대로 두고,
+        // 아니면 그 노트만 같은 줄에 없는 다른 레인으로 옮김 (옮길 데가 없으면 그 마디는 복사 안 함)
+        let bad = false;
+        // 바로 앞 줄(시각이 다른 가장 가까운 줄)과만 비교 — 간격과 상관없이 앞 줄과 같은 레인은 잭으로 셈 (레인 배정과 같은 기준)
+        for (let k = 1; k < all.length && !bad; k++) {
+          let p = k - 1;
+          while (p >= 0 && all[p].t === all[k].t) p--;
+          if (p < 0) continue;
+          const prevT = all[p].t;
+          for (let m = p; m >= 0 && all[m].t === prevT; m--) {
+            if (laneAt(all[m]) !== laneAt(all[k])) continue;
+            if (rnd() < R.jackAllow * 0.4) continue;
+            const mine = next.has(all[k]) ? all[k] : next.has(all[m]) ? all[m] : null;
+            if (!mine) continue; // 복사와 상관없이 원래 있던 잭
+            const rowLanes = new Set(all.filter((x) => x.t === mine.t).map(laneAt));
+            const other = mine === all[k] ? all[m] : all[k];
+            const free = [1, -1, 2, -2, 3, -3]
+              .map((d) => laneAt(mine) + d)
+              .filter((l) => l >= 0 && l <= 3 && !rowLanes.has(l) && l !== laneAt(other));
+            if (!free.length) {
+              bad = true;
+              break;
+            }
+            next.set(mine, free[0]);
+          }
+        }
+        if ((globalThis as { DEBUG_COPY?: boolean }).DEBUG_COPY)
+          console.log(
+            `copy bar ${b} j=${bestJ.toFixed(2)} rows ${rows.size} copied ${next.size} bad=${bad}`
+          );
+        if (!bad) {
+          for (const [n, l] of next) n.lane = l;
+          for (const n of toDrop) copyDropped.add(n);
+          copyAdded.push(...toAdd);
+          list.push(...toAdd);
+        }
+      } else {
+        const lanes = new Map<number, number[]>();
+        for (const n of list) {
+          const sl = slotOf(n, b);
+          if (!lanes.has(sl)) lanes.set(sl, []);
+          lanes.get(sl)!.push(n.lane);
+        }
+        seen.push({ slots, lanes, n: 0 });
+      }
     }
+  }
+
+  if (copyDropped.size || copyAdded.length) {
+    const kept = notes.filter((n) => !copyDropped.has(n));
+    notes.length = 0;
+    notes.push(...kept, ...copyAdded);
+    notes.sort((x, y) => x.t - y.t || x.lane - y.lane);
   }
 
   // 4) 롱노트: osu 랭크 채보처럼 노트의 일정 비율을 짧은 롱노트로 (정박·소리가 남는 자리부터)

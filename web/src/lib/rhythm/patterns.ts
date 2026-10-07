@@ -38,6 +38,8 @@ export interface Pattern {
   dir?: 1 | -1;
   /** 뽑힐 가중치 */
   w: number;
+  /** 난이도별 가중치 배율 (없으면 1) — 두 레인 트릴은 osu 랭크 보통·어려움에서 1~3%뿐이라 낮은 난이도에선 거의 안 씀 */
+  wBy?: Partial<Record<Difficulty, number>>;
   /** 이 길이 이상 구간에서만 */
   minLen: number;
   /** 이 난이도부터 (0 쉬움 … 4 나이트메어) */
@@ -47,6 +49,13 @@ export interface Pattern {
 }
 
 const TIER: Record<Difficulty, number> = { easy: 0, normal: 1, hard: 2, expert: 3, nightmare: 4 };
+/** 두 레인 트릴 가중치 배율: osu 랭크 채보 트릴 비율 보통 1% · 어려움 3% · 매우 어려움 5% (우리는 11·9·6%였음) */
+const TRILL_W: Partial<Record<Difficulty, number>> = {
+  easy: 0.05,
+  normal: 0.08,
+  hard: 0.3,
+  expert: 0.7,
+};
 
 /** 기본 모양 — 좌우 반전·역방향은 아래에서 자동으로 만든다 */
 const BASE: Pattern[] = [
@@ -68,6 +77,7 @@ const BASE: Pattern[] = [
     w: 1.8,
     minLen: 6,
     tier: 0,
+    wBy: { easy: 0.3, normal: 0.4, hard: 0.6 },
   },
   { name: "trill", family: "trill", steps: [0, 1, 3, 2], w: 2, minLen: 4, tier: 0 },
   { name: "split", family: "split", steps: [0, 2, 1, 3], dir: 1, w: 1.3, minLen: 4, tier: 0 },
@@ -93,10 +103,34 @@ const BASE: Pattern[] = [
     tier: 1,
   },
   // 두 레인 트릴: 양손(벌림·안쪽·바깥)은 길어도 괜찮고, 한 손(D F)은 짧게만
-  { name: "split-trill", family: "trill2", steps: [0, 2], w: 1.3, minLen: 4, tier: 0 },
-  { name: "inner-trill", family: "trill2", steps: [1, 2], w: 1.1, minLen: 4, tier: 0 },
-  { name: "outer-trill", family: "trill2", steps: [0, 3], w: 1.0, minLen: 4, tier: 0 },
-  { name: "alt-L", family: "alt", steps: [0, 1], w: 0.5, minLen: 4, tier: 0 },
+  {
+    name: "split-trill",
+    family: "trill2",
+    steps: [0, 2],
+    w: 1.3,
+    minLen: 4,
+    tier: 0,
+    wBy: TRILL_W,
+  },
+  {
+    name: "inner-trill",
+    family: "trill2",
+    steps: [1, 2],
+    w: 1.1,
+    minLen: 4,
+    tier: 0,
+    wBy: TRILL_W,
+  },
+  {
+    name: "outer-trill",
+    family: "trill2",
+    steps: [0, 3],
+    w: 1.0,
+    minLen: 4,
+    tier: 0,
+    wBy: TRILL_W,
+  },
+  { name: "alt-L", family: "alt", steps: [0, 1], w: 0.5, minLen: 4, tier: 0, wBy: TRILL_W },
   {
     name: "alt-switch",
     family: "alt",
@@ -104,6 +138,7 @@ const BASE: Pattern[] = [
     w: 1.6,
     minLen: 8,
     tier: 0,
+    wBy: { easy: 0.1, normal: 0.15, hard: 0.4 },
   },
   // 앵커: 한 레인을 축으로 (D F D J D K) — 8분 이상 간격에서
   {
@@ -451,7 +486,7 @@ function layStream(
       const cands = allowed
         .filter((p) => len >= p.minLen && (!cur || shapeOf(p) !== shapeOf(cur)))
         .map((p) => {
-          let w = p.w;
+          let w = p.w * (p.wBy?.[ctx.diff] ?? 1);
           if (p.dir && dir && p.dir !== dir) w *= 0.25; // 흐름과 반대 방향은 드물게
           if (p.mood) w *= p.mood[0] + (p.mood[1] - p.mood[0]) * I; // 동시치기는 센 구간에서
           if (p.chord && sub === 4) w *= 0.35; // 16분 동시치기 연타는 드물게
@@ -504,13 +539,15 @@ function layStream(
  * recent에 고른 모양을 쌓음 (최근 3개).
  */
 /** osu 랭크 4K 2노트 동시치기 모양 빈도(한 손 01·23, 양끝 03이 흔하고 가운데·대각은 덜) */
+// (osu 랭크 4K 2노트 동시치기: 한 손 01·23 45~49%, 양끝 03 18~25%, 대각 02·13 21%, 가운데 12 10%.
+//  모양 반복 벌점을 세게 주면 돌려 쓰느라 대각이 30%까지 늘어 — 벌점은 약하게, 가중치 차이를 크게)
 const PAIR_W: Record<string, number> = {
   "01": 1,
   "23": 1,
-  "03": 0.95,
-  "12": 0.5,
-  "02": 0.55,
-  "13": 0.55,
+  "03": 0.9,
+  "12": 0.4,
+  "02": 0.45,
+  "13": 0.45,
 };
 
 export function chordPartners(
@@ -528,11 +565,11 @@ export function chordPartners(
       const r = opts.recent;
       return (
         (opts.avoid.has(l) ? 3 : 0) +
-        (shape === r[r.length - 1] ? 2.5 : 0) +
-        (shape === r[r.length - 2] ? 2 : 0) +
-        (shape === r[r.length - 3] ? 0.8 : 0) +
-        (1 - (PAIR_W[shape] ?? 0.8)) * 1.5 +
-        opts.rnd() * 1.5
+        (shape === r[r.length - 1] ? 1.2 : 0) +
+        (shape === r[r.length - 2] ? 0.6 : 0) +
+        (shape === r[r.length - 3] ? 0.2 : 0) +
+        (1 - (PAIR_W[shape] ?? 0.8)) * 2.5 +
+        opts.rnd() * 1.2
       );
     };
     cands.sort((x, y) => score(x) - score(y));
