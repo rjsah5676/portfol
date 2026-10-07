@@ -129,5 +129,7 @@ export const MAPS: MapDef[] = [
     respawn: [380, 770],
     bg: "/fight/bg/aurora.webp",
     bgPlats: true,
+    // 「Crown of Permafrost」 (끝 무음 2초 자름, 음량 다른 맵 곡에 맞춤)
+    bgm: "/fight/bgm-aurora.mp3",
   },
 ];
