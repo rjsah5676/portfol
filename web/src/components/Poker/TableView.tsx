@@ -8,9 +8,10 @@ import { ACT_MS, CHARS, CHOICE_MS, EMOTES, FACES, GAMES, POSES, TIERS, fmtShort,
 import { bestK, kCategory } from "@/lib/poker/seven";
 import { sfx } from "@/lib/poker/sfx";
 import type { HoldemAction, HoldemView, MyHand, PokerEvent, SeatWire, SevenAction, SevenView, TableWire, Wallet } from "@/lib/poker/types";
+import { onConnection } from "@/lib/api/socket";
 import { act, leave, sendEmote, serverNow, setExit, setSitOut, sit, subscribeMyHand, subscribeTable } from "@/realtime/poker";
 import { HoldemActions, HoldemBoard, HoldemStage, holdemHint, holdemSeatCards } from "./HoldemParts";
-import { layoutFor, type Orient } from "./layout";
+import { COMPACT_RATIO, compactV, layoutFor, type Orient } from "./layout";
 import { Bet, CharSprite, CutIn, EmoteImg, FaceIcon, Money, PotChips, Profile, Rise, Suit, TimerRing } from "./parts";
 import { SevenActions, SevenStage, sevenHint, sevenSeatCards } from "./SevenParts";
 
@@ -498,6 +499,32 @@ export default function TableView({
     return () => clearTimeout(t);
   }, [myFolded]);
 
+  /** 내 연결이 끊겼다가 다시 붙는 중 (잠깐 끊긴 건 1.2초 뒤에야 표시) */
+  const [offline, setOffline] = useState(false);
+  useEffect(() => {
+    let tm: ReturnType<typeof setTimeout> | undefined;
+    const off = onConnection((c) => {
+      clearTimeout(tm);
+      if (c) setOffline(false);
+      else tm = setTimeout(() => setOffline(true), 1200);
+    });
+    return () => {
+      clearTimeout(tm);
+      off();
+    };
+  }, []);
+
+  /** 아래 행동 바의 실제 높이 (세로판에서 내 이름표 · 작은 버튼을 그 위에 붙임) */
+  const [actH, setActH] = useState(48);
+  const actObs = useRef<ResizeObserver | null>(null);
+  const actRef = useCallback((el: HTMLDivElement | null) => {
+    actObs.current?.disconnect();
+    if (!el) return;
+    const ro = new ResizeObserver(() => setActH(Math.round(el.offsetHeight)));
+    ro.observe(el);
+    actObs.current = ro;
+  }, []);
+
   /** 나가기: 앉아 있지 않으면 바로 로비로. 판 중이면 서버에 나가기 예약을 켜고/끄고, 판에 안 끼어 있으면 서버가 바로 내보냄 */
   const exit = async () => {
     if (!me) {
@@ -536,13 +563,18 @@ export default function TableView({
 
   const tier = TIERS[table.tier - 1];
   const n = table.seats.length;
-  const L = layoutFor(o, n);
   const hv = hand?.game === "holdem" ? (hand as HoldemView) : null;
   const sv = hand?.game === "seven" ? (hand as SevenView) : null;
-  const sizes: Sizes =
-    o === "h"
+  /** 세로판인데 덜 길쭉함(폰 · 전체화면 아님): 줄 단위 픽셀 배치 */
+  const C = o === "v" && h < w * COMPACT_RATIO ? compactV(w, h, n, table.game === "seven", table.game === "seven" ? 72 : 140) : null;
+  const L = C ? C.L : layoutFor(o, n);
+  const sizes: Sizes = C
+    ? { o, u, ...C.sizes }
+    : o === "h"
       ? { o, u, card: sv ? u * 6 : u * 6.2, heroCard: sv ? u * 9 : u * 11.5, boardCard: u * 9.5, face: u * 8.5 }
       : { o, u, card: sv ? u * 7.2 : u * 7, heroCard: sv ? u * 11.5 : u * 15, boardCard: u * 13.5, face: u * 12 };
+  /** 세로판: 내 이름표 아래 끝(무대 아래에서 px) — 행동 바 바로 위, 좁은 배치면 내 줄 */
+  const heroPlateBottom = C ? Math.max(h - C.heroBottom, actH + 14) : actH + 14;
   const base = table.game === "holdem" ? tier.bb : tier.ante;
   const totalMs = sv && sv.phase === "choice" ? CHOICE_MS : ACT_MS;
   const frac = deadline ? Math.max(0, Math.min(1, (deadline - now) / totalMs)) : 0;
@@ -598,11 +630,21 @@ export default function TableView({
   /** 그 자리의 건 돈이 놓이는 곳 (칩 날리기 시작점) */
   const betPoint = (seat: number) => {
     if (seat === mySeat) return { x: (L.heroX / 100) * boardW, y: (L.heroCards / 100) * h - 18 };
-    const sp = spotOf(seat);
+    const idx = (seat - Math.max(0, mySeat) + n) % n;
+    const sp = L.spots[idx];
     const x = Math.max(sprW * 0.5, Math.min(boardW - sprW * 0.5, px(sp.x)));
     const y = py(sp.y);
-    const f = sp.side === "top" ? 0.45 : 0.5;
-    return { x: x + (px(L.table.cx) - x) * f, y: y + (py(L.center.board) - y) * f };
+    if (H) {
+      const f = sp.side === "top" ? 0.45 : 0.5;
+      return { x: x + (px(L.table.cx) - x) * f, y: y + (py(L.center.board) - y) * f };
+    }
+    // 세로판: 건 돈이 그 사람 카드(= 족보)를 가리지 않게 카드가 없는 쪽에
+    const half = Math.max(84, sprW * 0.62) / 2;
+    const cardH = sizes.card * 1.4;
+    if (sp.side === "top") return { x, y: y + 52 + 4 + cardH + 14 }; // 카드 아래
+    const dir = sp.side === "left" ? 1 : -1;
+    if (C?.cardSide[idx] === "below") return { x: x + dir * (half + 22), y: y - 14 }; // 이름표 위 안쪽 (카드는 아래)
+    return { x: x + dir * half * 0.35, y: y + 52 + 14 }; // 카드가 옆이면 이름표 아래
   };
   /** 외침이 시작되는 곳: 그 캐릭터의 머리 근처 */
   const shoutFrom = (seat: number) => {
@@ -612,6 +654,15 @@ export default function TableView({
     if (sp.y >= 99) return { x, y: py(sp.y) - sizes.face * 1.6 };
     return { x, y: py(sp.y) - sprH * 0.78 };
   };
+  /** 세로판: 내 이름표 위에 서 있는 내 캐릭터 — 옆 아랫자리 묶음 아래 빈 곳만큼 (내 차례 기준 크기로 고정) */
+  const heroSprV = (() => {
+    if (H) return 0;
+    const sp1 = L.spots[1];
+    const above = C ? C.sideBottom + 4 : sp1 ? py(sp1.y) - 6 + 52 + 6 : bar + 8;
+    const refBottom = C ? h - C.heroBottom : sv ? 92 : 152;
+    const v = Math.min(h * 0.2, (h - refBottom - 58 - above) / 0.68);
+    return v >= 56 ? v : 0;
+  })();
   /** 메이드(트리플 이상): 키가 바뀔 때마다 터지는 효과가 한 번 재생됨 */
   const madeKey = myCat >= 3 ? `${table.handNo}:${myCat}` : "";
   const emote = (e: Emote) => {
@@ -641,8 +692,7 @@ export default function TableView({
           const bet = inHand && !res ? p!.bet : 0;
           const x = Math.max(sprW * 0.5, Math.min(boardW - sprW * 0.5, px(sp.x)));
           const y = py(sp.y);
-          const toward = (f: number) => ({ x: x + (px(L.table.cx) - x) * f, y: y + (py(L.center.board) - y) * f });
-          const betAt = toward(sp.side === "top" ? 0.45 : 0.5);
+          const betAt = betPoint(i);
           if (!s)
             return (
               <div key={i} className="absolute -translate-x-1/2 -translate-y-1/2" style={{ left: x, top: y - sizes.face * 0.3, zIndex: 5 }}>
@@ -665,7 +715,7 @@ export default function TableView({
           // 구경 중일 때 6시(내 자리였을 곳)에 오는 사람: 등을 보이는 그림이 없으니 캐릭터는 안 그림
           const hideSprite = sp.y >= 99;
           // 카드는 이름표 옆(테이블 안쪽), 위 자리는 아래
-          const cardSide = sp.side === "right" ? "left" : sp.side === "left" || o === "h" ? "right" : "below";
+          const cardSide = C?.cardSide[(i - Math.max(0, mySeat) + n) % n] === "below" ? "below" : sp.side === "right" ? "left" : sp.side === "left" || o === "h" ? "right" : "below";
           const waiting = isWaiting(i);
           return (
             <div key={i}>
@@ -696,8 +746,13 @@ export default function TableView({
                     <div className="pk-name truncate" style={{ maxWidth: Math.max(96, sprW * 0.8) }}>
                       {s.name}
                     </div>
-                    <div className="pk-stack pk-num whitespace-nowrap">{p?.allIn && !res ? <span className="text-[var(--pk-danger)]">ALL IN</span> : s.away ? <span className="text-white/45">끊김</span> : s.status === "out" && !live ? <span className="text-white/45">자리 비움</span> : <Money won={s.stack} />}</div>
-                    {p && !res && <div className="text-[0.64em] leading-tight whitespace-nowrap text-white/55">베팅 <Money won={p.invested} className="text-[1.1em] text-white/80" /></div>}
+                    <div className="pk-stack pk-num whitespace-nowrap">{p?.allIn && !res ? <span className="text-[var(--pk-danger)]">ALL IN</span> : s.status === "out" && !live ? <span className="text-white/45">자리 비움</span> : <Money won={s.stack} />}</div>
+                    {s.away ? (
+                      <span className="pk-net-mark pk-net-in">
+                        <i />
+                        연결 불안정…
+                      </span>
+                    ) : p && !res && <div className="text-[0.64em] leading-tight whitespace-nowrap text-white/55">베팅 <Money won={p.invested} className="text-[1.1em] text-white/80" /></div>}
                     {waiting && deadline > 0 && <span className="pk-plate-timer" style={{ transform: `scaleX(${frac})` }} />}
                     {waiting && counting && (
                       <span key={secLeft} className="pk-count-sm">
@@ -808,11 +863,14 @@ export default function TableView({
             isButton={!!hv && hv.button === mySeat}
             onStats={() => setStatSeat(mySeat)}
             madeKey={madeKey}
+            plateBottom={heroPlateBottom}
+            compact={!!C}
+            sprV={heroSprV}
             blind={hv && hv.street === 0 && !hv.result && (hv.sbSeat === mySeat || hv.bbSeat === mySeat) ? (hv.bbSeat === mySeat ? "BB" : "SB") : null}
           />
         )}
 
-        {res && winners.length > 0 && <WinBanner names={winners.map((x) => table.seats[x]?.name ?? "?")} hand={res.names[winners[0]]} mine={winners.includes(mySeat)} o={o} />}
+        {res && winners.length > 0 && <WinBanner names={winners.map((x) => table.seats[x]?.name ?? "?")} hand={res.names[winners[0]]} mine={winners.includes(mySeat)} o={o} top={C ? py(L.center.pot) - 6 : undefined} />}
         {info && !notice && (
           <div key={info.key} role="status" className="pk-toast" style={{ bottom: H ? 190 : 210 }} onAnimationEnd={() => setInfo(null)}>
             {info.text}
@@ -821,6 +879,13 @@ export default function TableView({
         {notice && (
           <div key={notice} role="alert" className="pk-toast pk-toast-stay" style={{ bottom: H ? 190 : 210 }}>
             {notice}
+          </div>
+        )}
+
+        {offline && (
+          <div role="status" className="pk-net-mark pk-net-top" style={{ top: bar + 8 }}>
+            <i />
+            연결 불안정… 다시 연결하는 중
           </div>
         )}
 
@@ -849,7 +914,7 @@ export default function TableView({
         ) : null}
 
         {/* 행동 바 */}
-        <div className="pk-actwrap absolute" data-turn={myTurn ? "1" : undefined} style={H ? { left: boardW * 0.48, right: 10, bottom: 10, zIndex: 30 } : { left: 8, right: 8, bottom: 8, zIndex: 30 }}>
+        <div ref={actRef} className="pk-actwrap absolute" data-turn={myTurn ? "1" : undefined} style={H ? { left: boardW * 0.48, right: 10, bottom: 10, zIndex: 30 } : { left: 8, right: 8, bottom: 8, zIndex: 30 }}>
           <ActionBar
             o={o}
             u={u}
@@ -883,13 +948,13 @@ export default function TableView({
 
         {/* 세로판: 오른쪽 아래 작은 버튼 (이모티콘 · 기록/족보) */}
         {!H && (
-          <div className="absolute right-[8px] flex flex-col gap-[6px]" style={{ bottom: myTurn ? (sv ? 196 : 186) : 56, zIndex: 31 }}>
+          <div className="absolute right-[8px] flex flex-col gap-[6px]" style={{ bottom: C?.btnAbove ? h - (L.heroCards / 100) * h + 6 : heroPlateBottom, zIndex: 31 }}>
             {me && (
-              <button type="button" onClick={() => setDrawer(drawer === "emote" ? "" : "emote")} className="pk-btn pk-btn-ghost h-[38px] w-[38px] text-[1.1em]" aria-label="이모티콘">
+              <button type="button" onClick={() => setDrawer(drawer === "emote" ? "" : "emote")} className={`pk-btn pk-btn-ghost text-[1.1em] ${C ? "h-[34px] w-[34px]" : "h-[38px] w-[38px]"}`} aria-label="이모티콘">
                 😊
               </button>
             )}
-            <button type="button" onClick={() => setDrawer(drawer === "info" ? "" : "info")} className="pk-btn pk-btn-ghost h-[38px] w-[38px] text-[0.72em]" aria-label="기록 · 족보">
+            <button type="button" onClick={() => setDrawer(drawer === "info" ? "" : "info")} className={`pk-btn pk-btn-ghost text-[0.72em] ${C ? "h-[34px] w-[34px]" : "h-[38px] w-[38px]"}`} aria-label="기록 · 족보">
               족보
             </button>
           </div>
@@ -1090,8 +1155,11 @@ function HeroArea(props: {
   blind: string | null;
   onStats: () => void;
   madeKey: string;
+  plateBottom: number;
+  compact: boolean;
+  sprV: number;
 }) {
-  const { me, p, hv, sv, liveHand, tier, sizes, L, boardW, h, base, hint, res, face, pose, waiting, frac, deadline, gain, bubble, emote, heroSprH, isButton, blind, onStats, madeKey } = props;
+  const { me, p, hv, sv, liveHand, tier, sizes, L, boardW, h, base, hint, res, face, pose, waiting, frac, deadline, gain, bubble, emote, heroSprH, isButton, blind, onStats, madeKey, plateBottom, compact, sprV } = props;
   const H = sizes.o === "h";
   const cards = !hv && !sv ? null : hv ? holdemSeatCards({ view: hv, seat: me.seat, hero: true, myHand: liveHand, tier, sizes, side: "top" }) : sevenSeatCards({ view: sv!, seat: me.seat, hero: true, myHand: liveHand, tier, sizes, side: "top" });
   const bet = p && !res ? p.bet : 0;
@@ -1113,7 +1181,7 @@ function HeroArea(props: {
         )}
       </div>
       {/* 내 정보 판: 이름 · 캐릭터 / 보유 칩 / 이번 판 베팅 · 상태 */}
-      <div role="button" tabIndex={0} onClick={onStats} onKeyDown={(e) => e.key === "Enter" && onStats()} className="pk-hero-hud cursor-pointer" data-turn={waiting ? "1" : undefined}>
+      <div role="button" tabIndex={0} onClick={onStats} onKeyDown={(e) => e.key === "Enter" && onStats()} className="pk-hero-hud cursor-pointer" data-turn={waiting ? "1" : undefined} style={compact ? { minWidth: "8em" } : undefined}>
         {me.exit && <span className="pk-exit-mark absolute -top-[1.1em] right-[0.4em]">나가기 예약</span>}
         <div className="flex items-baseline gap-[0.4em]">
           <span className="max-w-[8em] truncate text-[0.82em] font-extrabold text-white">{me.name}</span>
@@ -1153,9 +1221,14 @@ function HeroArea(props: {
           {plate}
         </div>
       ) : (
-        <div className="absolute left-[8px]" style={{ bottom: waiting ? (sv ? 196 : 186) : 56, zIndex: 9 }}>
+        <div className="absolute left-[8px]" style={{ bottom: plateBottom, zIndex: 9 }}>
+          {sprV > 0 && (
+            <div className={`pk-seat-sprite pointer-events-none absolute left-0 ${waiting ? "pk-seat-turn" : ""}`} style={{ bottom: `calc(100% - ${Math.round(sprV * 0.3)}px)` }}>
+              <CharSprite char={me.char} pose={pose} w={(sprV * 3) / 4} dim={dim} />
+            </div>
+          )}
           {emote && (
-            <div key={emote.key} className="pk-emote pointer-events-none absolute bottom-[calc(100%+4px)] left-0" style={{ zIndex: 45 }}>
+            <div key={emote.key} className="pk-emote pointer-events-none absolute left-0" style={{ zIndex: 45, bottom: sprV > 0 ? `calc(100% + ${Math.round(sprV * 0.45)}px)` : "calc(100% + 4px)" }}>
               <EmoteImg char={me.char} emote={emote.v} size={100} />
             </div>
           )}
@@ -1164,27 +1237,29 @@ function HeroArea(props: {
       )}
       {/* 내 카드 · 족보 · 건 돈 (테이블 앞쪽 가운데) */}
       <div className="absolute flex flex-col items-center gap-[0.4em]" style={{ left: (L.heroX / 100) * boardW, top: (L.heroCards / 100) * h, transform: "translateX(-50%)", zIndex: 14 }}>
-        {bet > 0 && <Bet won={bet} ratio={bet / base} size={Math.max(22, sizes.u * 3.4)} act={p?.last?.a} className="relative z-10 -mt-[1.6em]" />}
+        {bet > 0 && <Bet won={bet} ratio={bet / base} size={Math.max(22, sizes.u * 3.4)} act={p?.last?.a} className={compact ? "absolute top-[18%] right-[calc(100%+4px)] z-10" : "relative z-10 -mt-[1.6em]"} />}
         <div className="relative flex items-end">
           {madeKey && !res && <span key={`burst-${madeKey}`} className="pk-made-burst" aria-hidden />}
           {cards}
         </div>
-        {hint && !res && (
-          <span className={`pk-handtag pk-pop ${madeKey ? "pk-made" : ""}`}>
-            {madeKey ? "★ " : ""}
-            {hint}
-          </span>
-        )}
-        {p?.last && !res && <span key={p.last.a} className={`pk-acttag ${TAG_CLASS[p.last.a] ?? "bg-black/70"}`}>{ACT_LABEL[p.last.a] ?? p.last.a}</span>}
-        {res?.names[me.seat] && <span className={`pk-resulttag pk-pop ${won > 0 ? "pk-resulttag-win" : ""}`}>{res.names[me.seat]}</span>}
+        <div className={compact ? "flex items-center gap-[0.35em] whitespace-nowrap" : "contents"}>
+          {hint && !res && (
+            <span className={`pk-handtag pk-pop ${madeKey ? "pk-made" : ""}`}>
+              {madeKey ? "★ " : ""}
+              {hint}
+            </span>
+          )}
+          {p?.last && !res && <span key={p.last.a} className={`pk-acttag ${TAG_CLASS[p.last.a] ?? "bg-black/70"}`}>{ACT_LABEL[p.last.a] ?? p.last.a}</span>}
+          {res?.names[me.seat] && <span className={`pk-resulttag pk-pop ${won > 0 ? "pk-resulttag-win" : ""}`}>{res.names[me.seat]}</span>}
+        </div>
       </div>
     </>
   );
 }
 
-function WinBanner({ names, hand, mine, o }: { names: string[]; hand?: string; mine: boolean; o: Orient }) {
+function WinBanner({ names, hand, mine, o, top }: { names: string[]; hand?: string; mine: boolean; o: Orient; top?: number }) {
   return (
-    <div className="pk-banner pointer-events-none absolute inset-x-0 flex flex-col items-center py-[0.35em]" style={{ top: o === "v" ? "24%" : "9%", zIndex: 30, background: "linear-gradient(90deg, transparent, rgba(0,0,0,0.75) 25%, rgba(0,0,0,0.75) 75%, transparent)" }}>
+    <div className="pk-banner pointer-events-none absolute inset-x-0 flex flex-col items-center py-[0.35em]" style={{ top: top ?? (o === "v" ? "24%" : "9%"), zIndex: 30, background: "linear-gradient(90deg, transparent, rgba(0,0,0,0.75) 25%, rgba(0,0,0,0.75) 75%, transparent)" }}>
       <div className="pk-title text-[1.8em] leading-none" style={{ color: mine ? "#ffd23f" : "#fff", textShadow: "0 0 10px rgba(255,210,63,0.55), 0 2px 0 #3a1d00" }}>
         {mine ? "WIN!" : "WINNER"}
       </div>

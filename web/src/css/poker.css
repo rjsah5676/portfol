@@ -1178,6 +1178,48 @@
   white-space: nowrap;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.6);
 }
+/* 연결 불안정 표시 */
+.pk-net-mark {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3em;
+  margin-top: 0.2em;
+  padding: 0.08em 0.55em;
+  border-radius: 999px;
+  background: #3a2a06;
+  border: 1.5px solid #f5b83d;
+  color: #ffe2a3;
+  font-size: 0.66em;
+  font-weight: 800;
+  white-space: nowrap;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.6);
+  animation: pk-net 1.4s ease-in-out infinite;
+}
+.pk-net-mark > i {
+  display: inline-block;
+  width: 0.55em;
+  height: 0.55em;
+  border-radius: 999px;
+  background: #f5b83d;
+}
+.pk-net-in {
+  margin-top: 0.15em;
+  padding: 0 0.45em;
+  font-size: 0.6em;
+}
+.pk-net-top {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 38;
+  font-size: 0.85em;
+  padding: 0.25em 0.9em;
+}
+@keyframes pk-net {
+  50% {
+    opacity: 0.55;
+  }
+}
 /* 상태 안내 (기다리는 중 · 다음 판 …) */
 .pk-status {
   padding: 0.45em 1.2em;
