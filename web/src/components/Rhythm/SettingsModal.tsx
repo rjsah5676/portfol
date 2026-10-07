@@ -136,10 +136,29 @@ export default function SettingsModal({
   useEffect(() => {
     closeRef.current = close;
   });
+  // 싱크 맞추기 오버레이가 떠 있을 때의 키: Esc·S는 오버레이만 닫고, ← →는 싱크 ±5ms
+  const calRef = useRef(calibrate);
+  useEffect(() => {
+    calRef.current = calibrate;
+  }, [calibrate]);
   useEffect(() => {
     sfx("ui-open", 0.7);
     const onKey = (e: KeyboardEvent) => {
       if ((e.target as HTMLElement)?.closest?.("input[type=text], textarea")) return;
+      if (calRef.current) {
+        if (e.code === "Escape" || e.code === "KeyS") {
+          e.preventDefault();
+          e.stopPropagation();
+          setCalibrate(false);
+          sfx("ui-back", 0.7);
+        } else if (e.code === "ArrowLeft" || e.code === "ArrowRight") {
+          e.preventDefault();
+          e.stopPropagation();
+          const d = e.code === "ArrowLeft" ? -5 : 5;
+          setSettings((st) => ({ ...st, sync: Math.max(-400, Math.min(400, st.sync + d)) }));
+        }
+        return;
+      }
       if (e.code === "Escape" || e.code === "KeyS") {
         e.preventDefault();
         e.stopPropagation();
@@ -156,6 +175,8 @@ export default function SettingsModal({
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
+    // setSettings는 부모 useState의 setter라 안 바뀜
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
@@ -378,24 +399,6 @@ export default function SettingsModal({
                   초기화
                 </button>
               </div>
-              {calibrate && (
-                <>
-                  <SyncCalibrate
-                    sync={settings.sync}
-                    hitSound={settings.hitSound}
-                    speed={settings.speed}
-                    skin={settings.skin}
-                  />
-                  <p className="mt-[0.5cqw] font-['Nanum_Gothic',sans-serif] text-[1cqw] leading-relaxed text-white/45">
-                    FREEDOM DiVE 하이라이트가 실제 HARD 채보·내 노트 속도로 돌아요. 타격음이 나는
-                    순간 노트가 분홍 줄에 닿아야 해요. 노트가 음악보다{" "}
-                    <b className="text-white/70">먼저</b> 닿으면 <b className="text-white/70">+</b>,{" "}
-                    <b className="text-white/70">늦게</b> 닿으면 <b className="text-white/70">−</b>
-                    로 움직여 보세요. 여기서 맞춘 값이 그대로 플레이에 쓰여요 (블루투스 이어폰이라면
-                    꼭 이어폰을 낀 채로).
-                  </p>
-                </>
-              )}
             </>
           )}
 
@@ -440,6 +443,19 @@ export default function SettingsModal({
           ← → 탭 · Esc 닫기 · 바꾼 설정은 바로 저장돼요
         </div>
       </div>
+      {calibrate && (
+        <SyncCalibrate
+          sync={settings.sync}
+          onSync={(v) => set({ sync: v })}
+          onClose={() => {
+            setCalibrate(false);
+            sfx("ui-back", 0.7);
+          }}
+          hitSound={settings.hitSound}
+          speed={settings.speed}
+          skin={settings.skin}
+        />
+      )}
     </div>
   );
 }
