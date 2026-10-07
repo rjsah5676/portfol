@@ -91,6 +91,8 @@ export interface Song {
   practice?: boolean;
   /** 재킷 그림 주소 (내 음악: 파일에 든 앨범 사진, 없으면 기본 그림) */
   cover?: string;
+  /** 플레이 배경 전용 가로 그림(16:9, public 경로). 있으면 재킷 대신 이걸 꽉 채워 깔고 흐림 없음 */
+  bg?: string;
   /** 뮤직비디오(object URL) — 내 음악에 영상 파일을 넣었을 때. 플레이 배경에 어둡게 깔림 */
   video?: string;
   /** 음원 파일로 재생하는 곡 (신스 렌더 대신 이 파일을 불러옴) */

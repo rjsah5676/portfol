@@ -1872,7 +1872,19 @@ export default function Stage({
       ref={wrapRef}
       className={`absolute inset-0 overflow-hidden ${portrait ? "flex items-center justify-center bg-black" : ""}`}
     >
-      {domBg && !useVideo && (
+      {domBg && !useVideo && song.bg && (
+        /* 배경 전용 가로 그림: 그대로 꽉 채움 */
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0"
+          style={{
+            backgroundImage: `url(${JSON.stringify(song.bg)})`,
+            backgroundSize: "cover",
+            backgroundPosition: "center",
+          }}
+        />
+      )}
+      {domBg && !useVideo && !song.bg && (
         <>
           {/* 뒤: 화면을 꽉 채우는 짙게 흐린 사본 (재킷이 정사각이라 옆이 비는 자리 메움) */}
           <div
