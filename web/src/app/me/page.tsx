@@ -29,7 +29,6 @@ const BOARDS: Record<string, { name: string; href: string; value: (r: MyRecord) 
   chess_ai_rankings: { name: "체스 AI 랭킹전", href: "/games/chess", value: (r) => aiValue(r) },
   janggi_ai_rankings: { name: "장기 AI 랭킹전", href: "/games/janggi", value: (r) => aiValue(r) },
   omok_ai_rankings: { name: "오목 AI 랭킹전", href: "/games/omok", value: (r) => aiValue(r) },
-  fight_ai_rankings: { name: "픽셀 격투 AI", href: "/games/fight", value: (r) => aiValue(r) },
 };
 const aiValue = (r: MyRecord) =>
   `${Math.floor((r.score ?? 0) / 1_000_000)}단계 · ${pointsOf(r.score ?? 0).toLocaleString()}점`;
@@ -318,9 +317,9 @@ export default function MyPage() {
                       {key === "fight" && data.fightRating && (
                         <span
                           className="ml-auto rounded-full border border-[#FF8A3D]/35 bg-[#FF8A3D]/10 px-2.5 py-0.5 font-mono text-xs text-[#FFC9A3] tabular-nums"
-                          title={`최고 ${data.fightRating.peak} · 레이팅 경기 ${data.fightRating.n}판`}
+                          title={`랭크전 최고 ${data.fightRating.peak} · ${data.fightRating.n}판`}
                         >
-                          레이팅 <b className="text-white">{data.fightRating.r}</b>
+                          랭크 <b className="text-white">{data.fightRating.r}</b>
                           <span className="ml-1.5 text-white/45">
                             {data.fightRating.rank}위 / {data.fightRating.of}명
                           </span>

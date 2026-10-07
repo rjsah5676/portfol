@@ -2,7 +2,6 @@ import { Router, type Request } from "express";
 import { z } from "zod";
 import {
   chessScore,
-  fightScore,
   janggiScore,
   omokScore,
 } from "../../../web/src/lib/aiScore";
@@ -21,7 +20,8 @@ import { h, ms, userOf } from "./util";
  * 게임 랭킹. 컬렉션 이름과 값의 범위는 기존 firestore.rules 그대로.
  *   GET  /api/rankings/:board?limit=10
  *   GET  /api/rankings/rhythm/:chart?limit=10      (chart = 곡id_난이도)
- *   GET  /api/rankings/fight-rating?limit=10      격투 온라인 레이팅 (회원끼리 경기만)
+ *   GET  /api/rankings/fight-rating?limit=10      격투 랭크전 레이팅
+ *   GET  /api/rankings/fight-rank-stats           격투 랭크전 캐릭터 통계 (로그인했으면 내 캐릭터별 기록도)
  *   GET  /api/rankings/rhythm-bp?limit=10          회원 BP 랭킹 (곡별 최고 BP 상위 20곡 합)
  *   POST /api/rankings/tickets  { board }           게임을 시작할 때: 1회용 티켓 발급 (로그인 필요)
  *   POST /api/rankings/:board   { …기록, ticket }   기록 등록 (로그인 필요)
@@ -110,9 +110,6 @@ const tierOf = (d: Data) => Math.floor(d.score / 1_000_000);
 /** AI 대국의 seconds = 내 차례에 쓴 시간(체스·장기·오목) 또는 경기 시간(격투) */
 const aiSec = (d: Data) => d.seconds;
 
-/** 격투 opp "3:kai>igna" → 내 캐릭터 "kai" (예전 기록 "3" 은 "") */
-export const fightCh = (opp: string) => opp.split(":")[1]?.split(">")[0] ?? "";
-
 export const BOARDS: Record<string, Board> = {
   // 멜론게임 (지운 멜론 수, 판 전체 21x12=252개)
   // 한 판은 정해진 시간(약 2분)이 다 지나야 끝남
@@ -164,19 +161,7 @@ export const BOARDS: Record<string, Board> = {
           omokScore(tierOf(d), d.moves, d.seconds, white).score === d.score,
       ),
   },
-  // opp = "AI단계" 또는 "AI단계:내캐릭터>상대캐릭터" (예: "3:kai>igna"). 내 캐릭터마다 기록 하나 (ch)
-  fight_ai_rankings: {
-    sort: { score: -1 },
-    schema: aiRank(8_000_000).refine(
-      (d) =>
-        /^[1-7](:[a-z]+>[a-z]+)?$/.test(d.opp) &&
-        Math.floor(d.score / 1_000_000) === Number(d.opp[0]),
-    ),
-    minSec: aiSec,
-    // lead = 남은 체력(%)
-    check: (d) => fightScore(tierOf(d), d.lead, d.seconds).score === d.score,
-    split: { field: "ch", of: (d) => fightCh(String(d.opp)), valid: (v) => /^[a-z]{2,16}$/.test(v) },
-  },
+  // 격투 AI 랭킹(fight_ai_rankings)은 랭크전 도입(10.08)으로 없앰 — 컬렉션은 남겨 둠 (관리자 데이터 화면)
 };
 
 const CHART_RE = /^[a-z0-9-]+_(easy|normal|hard|expert|nightmare|explus)$/;
@@ -524,7 +509,14 @@ export function rankingsRouter({ db, auth, users }: Deps): Router {
     }),
   );
 
-  // 격투 온라인 레이팅 (회원끼리 경기만, games/fightRating.ts)
+  // 격투 랭크전 레이팅 · 캐릭터 통계 (games/fightRating.ts)
+  r.get(
+    "/fight-rank-stats",
+    h(async (req) => {
+      const user = await userOf(auth, req).catch(() => null);
+      return fightRating.stats(user?.uid);
+    }),
+  );
   r.get(
     "/fight-rating",
     h(async (req) => {

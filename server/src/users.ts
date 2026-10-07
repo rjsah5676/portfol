@@ -141,7 +141,7 @@ const toAdmin = (uid: string, d: UserDoc): AdminUser => ({
 });
 const escapeRe = (v: string) => v.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 /** 회원의 이름이 저장되는 곳 (별명이 바뀌면 같이 바뀌고, 회원을 지울 때 같이 정리) */
-const NAME_COLLECTIONS = [...RANK_COLLECTIONS, "rhythm_rankings", "guest", "fight_ratings"];
+const NAME_COLLECTIONS = [...RANK_COLLECTIONS, "rhythm_rankings", "guest", "fight_rank_ratings"];
 
 export type Users = ReturnType<typeof createUsers>;
 

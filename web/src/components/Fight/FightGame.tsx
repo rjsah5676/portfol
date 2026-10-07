@@ -48,8 +48,6 @@ import { scrollToGameTop } from "@/components/GameHeader";
 import ResultPanel from "./Result";
 import TouchControls, { loadMoveMode, saveMoveMode, type MoveMode } from "./Touch";
 import { PauseMenu, SettingsBody } from "./Settings";
-import { fightScore } from "@/lib/aiScore";
-import { beginRun } from "@/lib/api/rankRun";
 import { useNick } from "@/lib/AuthContext";
 import { plainName } from "@/components/Nick";
 import Online, { type MatchCfg } from "./Online";
@@ -114,7 +112,7 @@ function hudOf(s: State): Hud {
 
 const KR = "font-['Nanum_Gothic',sans-serif]";
 
-export default function FightGame({ onRanked }: { onRanked?: () => void }) {
+export default function FightGame() {
   const [setup, setSetup] = useState<Setup>({ mode: "ai", c1: 0, c2: 1, level: 2, map: -1 });
   const [playing, setPlaying] = useState(false);
   // 내 이름: 회원이면 별명, 비회원이면 온라인 대전에서 적어 둔 닉네임 (없으면 빈 값 → "1P")
@@ -144,7 +142,6 @@ export default function FightGame({ onRanked }: { onRanked?: () => void }) {
     hits: number;
     hp: number;
   } | null>(null);
-  const [submitted, setSubmitted] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [input] = useState(() => new FightInput());
   const pausedRef = useRef(false);
@@ -394,10 +391,6 @@ export default function FightGame({ onRanked }: { onRanked?: () => void }) {
     let raf = 0;
     let doneReported = false;
     setResult(null);
-    setSubmitted(false);
-    // AI 대전은 이기면 랭킹에 올릴 수 있음 → 경기를 시작할 때 서버에 알림
-    const ranked = setup.mode === "ai" && !ol;
-    if (ranked) beginRun("fight_ai_rankings");
     Promise.all([loadSheet(CHARS[s.p[0].ch].id), loadSheet(CHARS[s.p[1].ch].id)])
       .then(([a, b]) => {
         r.sheets = [a, b];
@@ -411,8 +404,6 @@ export default function FightGame({ onRanked }: { onRanked?: () => void }) {
       hits = 0;
       doneReported = false;
       setResult(null);
-      setSubmitted(false);
-      if (ranked) beginRun("fight_ai_rankings");
     };
 
     const onResize = () => r.resize();
@@ -935,31 +926,15 @@ export default function FightGame({ onRanked }: { onRanked?: () => void }) {
             seconds={result.seconds}
             hits={watching ? undefined : result.hits}
             hp={watching ? undefined : result.hp}
-            rank={
-              setup.mode === "ai" && !ol && result.win
-                ? {
-                    coll: "fight_ai_rankings",
-                    score: fightScore(setup.level + 1, result.hp, result.seconds),
-                    entry: {
-                      opp: `${setup.level + 1}:${CHARS[setup.c1].id}>${CHARS[setup.c2].id}`,
-                      moves: Math.max(2, result.hits),
-                      seconds: result.seconds,
-                      lead: result.hp,
-                    },
-                    done: submitted,
-                    onSaved: () => {
-                      setSubmitted(true);
-                      onRanked?.();
-                    },
-                  }
-                : undefined
-            }
             buttons={
               watching
                 ? [
                     { label: "👁 다음 경기 보기", onClick: toMenu, primary: true },
                     { label: "로비로", onClick: () => (toMenu(), setWsess(null)) },
                   ]
+                : ol && sess?.room?.rank
+                ? // 랭크전: 한 판뿐 → 대기실 화면에서 결과·레이팅 변화
+                  [{ label: "레이팅 결과 보기", sub: "랭크전 · 한 판 승부", onClick: () => toRoom(false), primary: true }]
                 : ol
                 ? // 둘 다 같은 방 대기실로 감 — 한 판 더는 들어가면서 '준비'까지 눌러 줌. 방장은 상대가 준비하면 시작하는 쪽이라 하나만
                   sess?.isHost

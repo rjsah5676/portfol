@@ -17,6 +17,8 @@ import { createFightRating } from "./fightRating";
  *  - P2P 연결이 안 될 때 입력 중계 (느리지만 됨)
  *  - 관전용 입력 기록 (선수가 확정 입력을 0.5초치씩 올리면 관전자가 그대로 다시 돌림)
  *  - 승패 기록 (두 선수가 본 결과를 맞춰 보고 회원 전적에 — fightResult.ts)
+ *  - 랭크전: 회원끼리 자동 매칭(큐) → 둘 다 수락하면 로비에 안 보이는 전용 방(맵은 서버가 랜덤, 캐릭터는 고름, 한 판만)
+ *    → 결과가 정해지면 레이팅·캐릭터 통계 (fightRating.ts). 일반 방 대전은 레이팅 없음
  * 방은 휘발성 데이터라 메모리에만 둠 (서버를 다시 띄우면 진행 중인 방은 사라짐).
  *
  * 구독 채널
@@ -26,6 +28,7 @@ import { createFightRating } from "./fightRating";
  *   fight.sig    { id, pair }          WebRTC 연결 정보 — 선수만
  *   fight.relay  { id, seat }          그 자리 선수의 마지막 입력 꾸러미 — 선수만
  *   fight.watch  { id, match, seat }   관전용 입력 기록
+ *   fight.rank                         내 랭크전 매칭 상태 (idle / queue / found / room)
  */
 
 interface Player {
@@ -89,7 +92,49 @@ interface Room {
   emptySince: number;
   /** 이번 경기 승패 (회원 전적용) */
   result: FightResult | null;
+  /** 랭크전 방 (매칭으로 만든 방: 로비에 안 보임, 두 사람만, 한 판만) */
+  rank: RankRoom | null;
 }
+interface RankRoom {
+  uids: [string, string];
+  /** 서버가 정한 맵 */
+  map: number;
+  /** 경기를 시작했나 (한 판만) */
+  used: boolean;
+  /** 결과를 기록했나 (한 번만) */
+  recorded: boolean;
+  /** 레이팅 반영 결과 (rated=false: 같은 상대와 하루 판 수를 넘음) — 계산이 끝나면 채워짐 */
+  result: { out: 0 | 1 | 2; rated: boolean; delta?: [number, number]; r?: [number, number] } | null;
+  /** 이때까지 시작 안 하면 방을 닫음 */
+  deadline: number;
+}
+
+/** 랭크전 매칭 상태 (fight.rank 채널) */
+type RankStatus =
+  | { s: "idle"; note?: string }
+  | { s: "queue"; since: number; note?: string }
+  | { s: "found"; id: string; deadline: number; accepted: boolean; opp: { nick: string; r: number; n: number }; me: { r: number; n: number } }
+  | { s: "room"; room: string };
+interface QEntry {
+  uid: string;
+  nick: string;
+  build: string;
+  maps: number;
+  socket: string;
+  since: number;
+}
+interface Pending {
+  id: string;
+  a: QEntry;
+  b: QEntry;
+  acc: Set<string>;
+  deadline: number;
+  timer: ReturnType<typeof setTimeout>;
+}
+/** 매칭되고 수락을 기다리는 시간 */
+const RANK_ACCEPT_MS = 15_000;
+/** 랭크전 방에서 경기를 시작해야 하는 시간 (캐릭터 고르고 준비) */
+const RANK_START_MS = 90_000;
 
 const emptyState = (): RoomState => ({ phase: "wait", match: "", chars: [0, 1], map: 0, pick: -1, delay: 2, maxRb: 10 });
 
@@ -135,9 +180,10 @@ export function registerFight({ gateway, users, db }: Deps, opts: FightOptions =
     players: r.players,
     state: r.state,
     watchers: r.watchers,
+    rank: r.rank ? { used: r.rank.used, result: r.rank.result, deadline: r.rank.deadline } : null,
   });
   const lobbyWire = () =>
-    [...rooms.values()].map((r) => ({
+    [...rooms.values()].filter((r) => !r.rank).map((r) => ({
       id: r.id,
       name: r.name,
       host: r.hostNick,
@@ -206,8 +252,21 @@ export function registerFight({ gateway, users, db }: Deps, opts: FightOptions =
       const k = out === 2 ? "d" : out === seat ? "w" : "l";
       users.bump(uid, { [`stats.online.fight.${k}`]: 1 });
     }
-    // 둘 다 회원이면 레이팅도 (fightRating.ts)
-    rating.rate([r.uids[0], r.uids[1]], out).catch((e) => console.warn("[fight] 레이팅 저장 실패", e));
+    // 랭크전이면 레이팅·캐릭터 통계 (fightRating.ts) — 결과는 방에 실어 보냄 (결과 화면에 점수 변화)
+    const rk = room.rank;
+    if (rk && !rk.recorded) {
+      rk.recorded = true;
+      const uids: [string, string] = [r.uids[0], r.uids[1]];
+      rating.logGame(uids, [room.state.chars[0], room.state.chars[1]], room.state.map, out).catch((e) => console.warn("[fight] 랭크전 기록 실패", e));
+      const done = (res: Awaited<ReturnType<typeof rating.rate>>) => {
+        rk.result = res ? { out, rated: true, delta: res.delta, r: res.r } : { out, rated: false };
+        if (rooms.has(room.id)) changed(room);
+      };
+      rating.rate(uids, out).then(done, (e) => {
+        console.warn("[fight] 레이팅 저장 실패", e);
+        done(null);
+      });
+    }
   }
   /** 경기에 나선 자리 (그 경기 선수가 아니면 -1) */
   const resultSeat = (room: Room, uid: string, match: string) =>
@@ -326,6 +385,7 @@ export function registerFight({ gateway, users, db }: Deps, opts: FightOptions =
       watcherOwners: new Map(),
       emptySince: now,
       result: null,
+      rank: null,
     };
     rooms.set(room.id, room);
     changed(room);
@@ -370,6 +430,13 @@ export function registerFight({ gateway, users, db }: Deps, opts: FightOptions =
     const o = joinSchema.parse(raw);
     const uid = ctx.uid;
     const room = getRoom(o.id);
+    // 랭크전 방은 매칭된 두 사람만, 정해진 자리에
+    if (room.rank) {
+      const seat = room.rank.uids.indexOf(uid);
+      if (seat < 0) throw new AppError("ROOM_FULL", "room full", 409);
+      sit(ctx, room, seat as 0 | 1, o);
+      return { seat };
+    }
     // 끊겼다 다시 온 경우 원래 자리부터
     const order: (0 | 1)[] =
       room.seats[1] === uid ? [1, 0] : room.seats[0] === uid ? [0, 1] : room.seats[0] ? [1, 0] : [0, 1];
@@ -383,6 +450,7 @@ export function registerFight({ gateway, users, db }: Deps, opts: FightOptions =
   gateway.rpc("fight.takeSeat", (ctx, raw) => {
     const o = joinSchema.extend({ seat: seatSchema }).parse(raw);
     const room = getRoom(o.id);
+    if (room.rank && room.rank.uids[o.seat] !== ctx.uid) throw new AppError("ROOM_FULL", "room full", 409);
     // 복구는 비어 있거나 내 자리일 때만 (그 사이 다른 사람이 앉았으면 실패)
     const owner = room.seats[o.seat];
     if (owner && owner !== ctx.uid) throw new AppError("ROOM_FULL", "room full", 409);
@@ -395,8 +463,8 @@ export function registerFight({ gateway, users, db }: Deps, opts: FightOptions =
     const uid = ctx.uid;
     if (!room) return null;
     removePlayer(room, uid);
-    // 나간 뒤 아무도 없으면 방 정리
-    if (!Object.keys(room.players).length) removeRoom(room);
+    // 나간 뒤 아무도 없으면 방 정리. 랭크전 방은 시작 전에 한 명이라도 나가면 취소
+    if (!Object.keys(room.players).length || (room.rank && !room.rank.used)) removeRoom(room);
     return null;
   });
 
@@ -412,6 +480,14 @@ export function registerFight({ gateway, users, db }: Deps, opts: FightOptions =
   gateway.onDisconnect((ctx) => {
     const uid = ctx.user?.uid;
     if (!uid) return;
+    // 랭크전 큐·매칭에서 빼기 (그 소켓으로 들어온 경우만)
+    const qi = queue.findIndex((q) => q.uid === uid && q.socket === ctx.socket.id);
+    if (qi >= 0) {
+      queue.splice(qi, 1);
+      rankStatus.delete(uid);
+    }
+    const pd = pendingOf(uid);
+    if (pd && (pd.a.uid === uid ? pd.a : pd.b).socket === ctx.socket.id) dropPending(pd, new Set([uid]), "상대 연결이 끊겨서 다시 찾는 중");
     for (const room of rooms.values()) {
       if (room.owners.get(uid) === ctx.socket.id) removePlayer(room, uid);
       if (room.watcherOwners.get(uid) === ctx.socket.id) removeWatcher(room, uid);
@@ -440,7 +516,7 @@ export function registerFight({ gateway, users, db }: Deps, opts: FightOptions =
   gateway.rpc("fight.setPick", (ctx, raw) => {
     const o = z.object({ id: roomId, pick: z.number().int().min(-1).max(999) }).parse(raw);
     const { room, uid } = asPlayer(ctx, o.id);
-    if (room.hostUid !== uid) throw forbidden();
+    if (room.hostUid !== uid || room.rank) throw forbidden();
     room.state = { ...room.state, pick: o.pick };
     changed(room);
     return null;
@@ -472,6 +548,12 @@ export function registerFight({ gateway, users, db }: Deps, opts: FightOptions =
     const { room, uid } = asPlayer(ctx, o.id);
     if (room.hostUid !== uid) throw forbidden();
     if (!room.players[room.seats[0]] || !room.players[room.seats[1]]) throw bad("상대가 없습니다.");
+    // 랭크전: 한 판만, 맵은 서버가 정한 것
+    if (room.rank) {
+      if (room.rank.used) throw bad("랭크전은 한 판만 해요.");
+      room.rank.used = true;
+      o.map = room.rank.map;
+    }
     // 지난 경기 관전 기록 정리
     for (const seat of [0, 1]) gateway.revoke(watchKey(room.id, room.watchMatch, seat));
     const match = orderedId();
@@ -573,7 +655,7 @@ export function registerFight({ gateway, users, db }: Deps, opts: FightOptions =
     const o = z.object({ id: roomId, nick: z.string().max(10) }).parse(raw);
     const uid = ctx.uid;
     const room = rooms.get(o.id);
-    if (!room) return null;
+    if (!room || room.rank) return null;
     room.watchers[uid] = { nick: ctx.name(o.nick), at: Date.now() };
     room.watcherOwners.set(uid, ctx.socket.id);
     changed(room);
@@ -586,12 +668,162 @@ export function registerFight({ gateway, users, db }: Deps, opts: FightOptions =
     return null;
   });
 
+  // ───────────── 랭크전 매칭 ─────────────
+  // 회원만. 큐에 들어온 순서대로 같은 빌드(게임 데이터 지문)끼리 바로 짝지음 (실력 상관없이 무조건 매칭)
+  // → 둘 다 수락하면 전용 방. 한쪽이 거절하거나 시간 안에 안 누르면, 수락한 쪽은 다시 큐 맨 앞으로
+
+  const rankKey = (uid: string) => `fight:rank:${uid}`;
+  const rankStatus = new Map<string, RankStatus>();
+  const queue: QEntry[] = [];
+  const pending = new Map<string, Pending>();
+  const pendingOf = (uid: string) => [...pending.values()].find((p) => p.a.uid === uid || p.b.uid === uid);
+
+  function setRank(uid: string, st: RankStatus) {
+    if (st.s === "idle" && !st.note) rankStatus.delete(uid);
+    else rankStatus.set(uid, st);
+    gateway.emit(rankKey(uid), "value", st);
+  }
+
+  gateway.channel("fight.rank", {
+    key: (ctx) => rankKey(ctx.uid),
+    snapshot: (ctx) => rankStatus.get(ctx.uid) ?? { s: "idle" },
+  });
+
+  function enqueue(e: QEntry, front = false, note?: string) {
+    const i = queue.findIndex((q) => q.uid === e.uid);
+    if (i >= 0) queue.splice(i, 1);
+    if (front) queue.unshift(e);
+    else queue.push(e);
+    setRank(e.uid, { s: "queue", since: e.since, note });
+    tryMatch();
+  }
+
+  function tryMatch() {
+    for (let i = 0; i < queue.length; i++) {
+      const j = queue.findIndex((q, k) => k > i && q.build === queue[i].build && q.uid !== queue[i].uid);
+      if (j < 0) continue;
+      const b = queue.splice(j, 1)[0];
+      const a = queue.splice(i, 1)[0];
+      void propose(a, b);
+      i--;
+    }
+  }
+
+  async function propose(a: QEntry, b: QEntry) {
+    const id = newId();
+    const deadline = Date.now() + RANK_ACCEPT_MS;
+    const p: Pending = { id, a, b, acc: new Set(), deadline, timer: setTimeout(() => expire(id), RANK_ACCEPT_MS + 500) };
+    pending.set(id, p);
+    const [ra, rb] = await Promise.all([rating.ratingOf(a.uid), rating.ratingOf(b.uid)]).catch(() => [
+      { r: 1000, n: 0 },
+      { r: 1000, n: 0 },
+    ]);
+    if (pending.get(id) !== p) return;
+    setRank(a.uid, { s: "found", id, deadline, accepted: false, opp: { nick: b.nick, ...rb }, me: ra });
+    setRank(b.uid, { s: "found", id, deadline, accepted: false, opp: { nick: a.nick, ...ra }, me: rb });
+  }
+
+  /** 매칭 취소: 거절·시간 초과·끊김. 수락했던 쪽(과 아직 안 정한 피해자)은 큐 맨 앞으로 */
+  function dropPending(p: Pending, losers: Set<string>, note: string) {
+    clearTimeout(p.timer);
+    pending.delete(p.id);
+    for (const e of [p.a, p.b]) {
+      if (losers.has(e.uid)) setRank(e.uid, { s: "idle" });
+      else enqueue(e, true, note);
+    }
+  }
+
+  function expire(id: string) {
+    const p = pending.get(id);
+    if (!p) return;
+    // 수락 안 누른 사람은 빠지고, 수락한 사람은 다시 찾기
+    const losers = new Set([p.a.uid, p.b.uid].filter((u) => !p.acc.has(u)));
+    dropPending(p, losers, "상대가 수락하지 않아 다시 찾는 중");
+  }
+
+  gateway.rpc("fight.rankQueue", (ctx, raw) => {
+    const o = z.object({ build: z.string().min(1).max(40), maps: z.number().int().min(1).max(99) }).parse(raw);
+    const uid = ctx.uid;
+    if (!ctx.nick) throw new AppError("MEMBERS_ONLY", "랭크전은 회원만 할 수 있어요.", 403);
+    if (pendingOf(uid)) return null;
+    enqueue({ uid, nick: ctx.nick, build: o.build, maps: o.maps, socket: ctx.socket.id, since: Date.now() });
+    return null;
+  });
+
+  gateway.rpc("fight.rankCancel", (ctx) => {
+    const uid = ctx.uid;
+    const i = queue.findIndex((q) => q.uid === uid);
+    if (i >= 0) queue.splice(i, 1);
+    const p = pendingOf(uid);
+    if (p) dropPending(p, new Set([uid]), "상대가 매칭을 취소해서 다시 찾는 중");
+    else setRank(uid, { s: "idle" });
+    return null;
+  });
+
+  gateway.rpc("fight.rankRespond", (ctx, raw) => {
+    const o = z.object({ id: z.string().max(40), accept: z.boolean() }).parse(raw);
+    const uid = ctx.uid;
+    const p = pending.get(o.id);
+    if (!p || (p.a.uid !== uid && p.b.uid !== uid)) return null;
+    if (!o.accept) {
+      dropPending(p, new Set([uid]), "상대가 거절해서 다시 찾는 중");
+      return null;
+    }
+    p.acc.add(uid);
+    const st = rankStatus.get(uid);
+    if (st?.s === "found") setRank(uid, { ...st, accepted: true });
+    if (p.acc.size < 2) return null;
+    clearTimeout(p.timer);
+    pending.delete(p.id);
+    const id = openRankRoom(p.a, p.b);
+    for (const e of [p.a, p.b]) {
+      gateway.emit(rankKey(e.uid), "value", { s: "room", room: id } satisfies RankStatus);
+      rankStatus.delete(e.uid);
+    }
+    return null;
+  });
+
+  /** 매칭된 두 사람의 전용 방 (맵은 여기서 랜덤, 두 사람 화면에 다 있는 맵 중에서) */
+  function openRankRoom(a: QEntry, b: QEntry) {
+    const now = Date.now();
+    const map = Math.floor(Math.random() * Math.min(a.maps, b.maps));
+    const room: Room = {
+      id: newId(),
+      name: "⚔ 랭크전",
+      hostUid: a.uid,
+      hostNick: a.nick,
+      createdAt: now,
+      seats: ["", ""],
+      players: {},
+      state: { ...emptyState(), pick: map },
+      watchers: {},
+      chat: [],
+      sig: new Map(),
+      relay: [null, null],
+      watch: [[], []],
+      watchMatch: "",
+      owners: new Map(),
+      watcherOwners: new Map(),
+      emptySince: now,
+      result: null,
+      rank: { uids: [a.uid, b.uid], map, used: false, recorded: false, result: null, deadline: now + RANK_START_MS },
+    };
+    rooms.set(room.id, room);
+    // 시간 안에 시작 못 하면 (한쪽이 안 들어오거나 준비를 안 함) 취소
+    setTimeout(() => {
+      if (rooms.get(room.id) === room && !room.rank!.used) removeRoom(room);
+    }, RANK_START_MS).unref?.();
+    return room.id;
+  }
+
   // ───────────── 오래 비어 있는 방 정리 ─────────────
 
   const sweep = setInterval(() => {
     const now = Date.now();
     for (const room of [...rooms.values()])
       if (!Object.keys(room.players).length && now - room.emptySince >= emptyRoomTtl) removeRoom(room);
+      // 랭크전 방: 다 끝났거나 시작 시간이 지났는데 아무도 없으면 정리
+      else if (room.rank && !Object.keys(room.players).length && now - room.emptySince >= 60_000) removeRoom(room);
   }, opts.sweepIntervalMs ?? 5 * 60_000);
   sweep.unref();
 

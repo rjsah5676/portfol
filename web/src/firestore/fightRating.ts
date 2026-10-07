@@ -1,7 +1,7 @@
 import { api } from "@/lib/api/http";
 import { toDate } from "@/lib/rankDate";
 
-/** 격투 온라인 레이팅 (서버 games/fightRating.ts — 회원끼리 경기만, Elo 1000에서 시작) */
+/** 격투 랭크전 레이팅 (서버 games/fightRating.ts — 랭크전(회원끼리 자동 매칭)만, Elo 1000에서 시작) */
 export interface FightRatingRow {
   id: string;
   name: string;
@@ -44,3 +44,20 @@ export function ratingSub(x: { n: number; w: number; l: number; d: number }) {
   const rate = total ? Math.round((x.w / total) * 100) : 0;
   return `${x.w}승 ${x.l}패${x.d ? ` ${x.d}무` : ""} · 승률 ${rate}%${x.n < RATING_PLACEMENT ? ` · 배치 ${x.n}/${RATING_PLACEMENT}` : ""}`;
 }
+
+/** 랭크전 캐릭터 통계 (c = CHARS 번호). vs: a가 b를 상대로 이긴 판(무승부 0.5) / 붙은 판 */
+export interface RankStats {
+  games: number;
+  chars: { c: number; w: number; l: number; d: number }[];
+  vs: { a: number; b: number; w: number; g: number }[];
+  /** 내 캐릭터별 기록 (로그인했을 때) */
+  mine?: { c: number; w: number; l: number; d: number }[];
+}
+
+export const getRankStats = () => api<RankStats>("/api/rankings/fight-rank-stats", { auth: true });
+
+/** 강세·약세 기준: 이 판 수 이상 붙었을 때만 */
+export const MATCHUP_MIN = 5;
+export type Tier = "strong" | "weak" | "even" | "few";
+export const tierOf = (rate: number, games: number): Tier =>
+  games < MATCHUP_MIN ? "few" : rate >= 0.55 ? "strong" : rate <= 0.45 ? "weak" : "even";

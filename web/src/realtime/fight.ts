@@ -77,6 +77,17 @@ export interface OnlineRoom {
   state: RoomState;
   /** 관전 중인 사람 uid → 닉네임 */
   watchers: Record<string, string>;
+  /** 랭크전 방이면 (맵은 서버가 정함, 한 판만) */
+  rank: RankRoomInfo | null;
+}
+
+export interface RankRoomInfo {
+  /** 경기를 이미 시작했나 */
+  used: boolean;
+  /** 결과·레이팅 변화 (rated=false: 같은 상대와 하루 판 수를 넘어 레이팅엔 반영 안 됨) */
+  result: { out: 0 | 1 | 2; rated: boolean; delta?: [number, number]; r?: [number, number] } | null;
+  /** 이때까지 경기를 시작 안 하면 방이 닫힘 (서버 시각) */
+  deadline: number;
 }
 
 const EMPTY_STATE: RoomState = { phase: "wait", match: "", chars: [0, 1], map: 0, pick: -1, delay: 2, maxRb: 10 };
@@ -127,8 +138,31 @@ function normalize(id: string, v: Record<string, unknown> | null): OnlineRoom | 
     players: Object.fromEntries(Object.entries(players).map(([uid, p]) => [uid, { uid, ...p }])),
     state: { ...st, chars: [st.chars?.[0] ?? 0, st.chars?.[1] ?? 1] },
     watchers: Object.fromEntries(Object.entries(watchers).map(([u, w]) => [u, String(w?.nick ?? "")])),
+    rank: (v.rank as RankRoomInfo | null) ?? null,
   };
 }
+
+// ───────────── 랭크전 매칭 ─────────────
+
+/** 내 랭크전 매칭 상태 (서버 games/fight.ts RankStatus) */
+export type RankStatus =
+  | { s: "idle"; note?: string }
+  | { s: "queue"; since: number; note?: string }
+  | { s: "found"; id: string; deadline: number; accepted: boolean; opp: { nick: string; r: number; n: number }; me: { r: number; n: number } }
+  | { s: "room"; room: string };
+
+export function subscribeRank(cb: (st: RankStatus) => void) {
+  return subscribe<RankStatus>("fight.rank", null, {
+    onSnapshot: (v) => cb(v ?? { s: "idle" }),
+    onEvent: (type, data) => {
+      if (type === "value") cb(data as RankStatus);
+    },
+  });
+}
+/** 큐에 들어가기 — build(게임 데이터 지문)가 같은 사람끼리만 짝지음, maps = 내 화면의 맵 수 */
+export const rankQueue = (build: string, maps: number) => rpc("fight.rankQueue", { build, maps });
+export const rankCancel = () => rpc("fight.rankCancel", {}).catch(() => {});
+export const rankRespond = (id: string, accept: boolean) => rpc("fight.rankRespond", { id, accept }).catch(() => {});
 
 /**
  * 방 하나에 들어가 있는 동안의 연결 (대기실 ↔ 경기 화면을 오가도 유지)

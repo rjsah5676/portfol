@@ -85,11 +85,12 @@ async function ensureIndexes({ db }: Database) {
   for (const c of ["chess_ai_rankings", "janggi_ai_rankings", "omok_ai_rankings", "fight_ai_rankings"])
     idx(c, { score: -1 });
   idx("rhythm_rankings", { chart: 1, score: -1 });
-  // 격투 온라인 레이팅: 사람마다 하나, 높은 순. 같은 두 사람 하루 판 수 세기(2일 지나면 자동 삭제)
-  idx("fight_ratings", { uid: 1 }, { unique: true });
-  idx("fight_ratings", { r: -1 });
-  idx("fight_rating_log", { pair: 1, at: -1 });
-  idx("fight_rating_log", { at: 1 }, { expireAfterSeconds: 2 * 24 * 60 * 60 });
+  // 격투 랭크전 레이팅: 사람마다 하나, 높은 순. 같은 두 사람 하루 판 수 세기(2일 지나면 자동 삭제). 경기 기록(캐릭터 통계)
+  idx("fight_rank_ratings", { uid: 1 }, { unique: true });
+  idx("fight_rank_ratings", { r: -1 });
+  idx("fight_rank_log", { pair: 1, at: -1 });
+  idx("fight_rank_log", { at: 1 }, { expireAfterSeconds: 2 * 24 * 60 * 60 });
+  idx("fight_rank_games", { uids: 1 });
   // 격투 AI: 내 캐릭터마다 기록 하나 (캐릭터별 순위)
   idx("fight_ai_rankings", { ch: 1, score: -1 });
   idx("fight_ai_rankings", { uid: 1, ch: 1 });

@@ -226,27 +226,77 @@ describe("회원 기록", () => {
     // 판 수: 격투는 시작한 경기 수(4)로만 셈 (승패 기록은 따로 안 더함)
     expect((await s.http("/api/me", { token: aToken })).body.profile.plays).toBe(4);
 
-    // 레이팅 (회원끼리): 1000에서 +20 → 기권으로 −22 → +20 (기록 안 한 판은 반영 안 함)
-    const ratingOf = async (t: string) => (await s.http("/api/me/summary", { token: t })).body.fightRating;
-    expect(await ratingOf(aToken)).toMatchObject({ r: 1018, n: 3, w: 2, l: 1, peak: 1020, rank: 1 });
-    expect(await ratingOf(bToken)).toMatchObject({ r: 982, n: 3, w: 1, l: 2, rank: 2 });
-    const board = (await s.http("/api/rankings/fight-rating")).body as { name: string; r: number; uid?: string }[];
-    expect(board.filter((x) => x.name.startsWith("격투")).map((x) => [x.name, x.r])).toEqual([
-      ["격투하나", 1018],
-      ["격투둘", 982],
-    ]);
-    expect(board[0].uid).toBeUndefined();
+    // 일반 방 대전은 레이팅이 없음
+    expect((await s.http("/api/me/summary", { token: aToken })).body.fightRating).toBeNull();
+  });
 
-    // 같은 두 사람끼리는 하루 5판까지만 반영 (6판째부터 전적만)
-    await b.rpc("fight.join", { id, nick: "b", ch: 0 });
-    for (let i = 0; i < 3; i++) {
-      m = await start();
-      await a.rpc("fight.result", { id, match: m, winner: 0 });
-      await b.rpc("fight.result", { id, match: m, winner: 0 });
-    }
-    await settle();
-    expect((await ratingOf(aToken)).n).toBe(5);
-    expect(await fightOf(aToken)).toEqual({ w: 5, l: 1 });
+  it("격투 랭크전: 회원만 큐, 매칭 → 둘 다 수락 → 전용 방(로비에 안 보임·맵은 서버가 정함·한 판만) → 레이팅·캐릭터 통계", async () => {
+    const aToken = await member("rk1", "랭크하나");
+    const bToken = await member("rk2", "랭크둘");
+    const a = await s.client("rk1", { email: "rk1@example.com" });
+    const b = await s.client("rk2", { email: "rk2@example.com" });
+    const g = await s.client("rkg");
+    await expect(g.rpc("fight.rankQueue", { build: "x", maps: 5 })).rejects.toMatchObject({ code: "MEMBERS_ONLY" });
+
+    const sa = await a.sub("fight.rank");
+    const sb = await b.sub("fight.rank");
+    expect(sa.data).toEqual({ s: "idle" });
+    await a.rpc("fight.rankQueue", { build: "x", maps: 5 });
+    expect((await sa.wait((e) => e.d.s === "queue")).d.s).toBe("queue");
+    // 빌드가 다르면 안 짝지음
+    await member("rk3", "랭크셋");
+    const c = await s.client("rk3", { email: "rk3@example.com" });
+    await c.rpc("fight.rankQueue", { build: "y", maps: 5 });
+    await b.rpc("fight.rankQueue", { build: "x", maps: 3 });
+    const fa = (await sa.wait((e) => e.d.s === "found")).d;
+    const fb = (await sb.wait((e) => e.d.s === "found")).d;
+    expect(fa.id).toBe(fb.id);
+    expect(fa.opp).toMatchObject({ nick: "랭크둘", r: 1000, n: 0 });
+
+    // 거절 → 거절한 쪽은 대기, 수락 안 한 상대도 다시 큐로
+    await b.rpc("fight.rankRespond", { id: fb.id, accept: false });
+    expect((await sb.wait((e) => e.d.s === "idle")).d.s).toBe("idle");
+    expect((await sa.wait((e) => e.d.s === "queue")).d.note).toContain("거절");
+    await b.rpc("fight.rankQueue", { build: "x", maps: 3 });
+    const f2 = (await sa.wait((e) => e.d.s === "found")).d;
+    await a.rpc("fight.rankRespond", { id: f2.id, accept: true });
+    await b.rpc("fight.rankRespond", { id: f2.id, accept: true });
+    const room = (await sa.wait((e) => e.d.s === "room")).d.room as string;
+    expect((await sb.wait((e) => e.d.s === "room")).d.room).toBe(room);
+
+    // 로비에 안 보이고, 다른 사람은 못 들어옴
+    const lobby = await g.sub("fight.lobby");
+    expect(lobby.data.some((r: any) => r.id === room)).toBe(false);
+    await expect(g.rpc("fight.join", { id: room, nick: "x", ch: 0 })).rejects.toMatchObject({ code: "ROOM_FULL" });
+    expect(await a.rpc("fight.join", { id: room, nick: "a", ch: 0 })).toEqual({ seat: 0 });
+    expect(await b.rpc("fight.join", { id: room, nick: "b", ch: 1 })).toEqual({ seat: 1 });
+    await expect(a.rpc("fight.setPick", { id: room, pick: 2 })).rejects.toBeTruthy();
+    const sub = await a.sub("fight.room", { id: room });
+    const mapPick = sub.data.state.pick as number;
+    expect(mapPick).toBeGreaterThanOrEqual(0);
+    expect(mapPick).toBeLessThan(3);
+    // 보낸 맵은 무시하고 서버가 정한 맵, 한 판만
+    const m = await a.rpc<string>("fight.startMatch", { id: room, chars: [0, 1], map: 4, delay: 2, maxRb: 12 });
+    expect((await sub.wait((e) => e.d.state.match === m)).d.state.map).toBe(mapPick);
+    await a.rpc("fight.result", { id: room, match: m, winner: 0 });
+    await b.rpc("fight.result", { id: room, match: m, winner: 0 });
+    const res = (await sub.wait((e) => e.d.rank?.result?.rated)).d.rank.result;
+    expect(res).toMatchObject({ out: 0, rated: true, delta: [20, -20], r: [1020, 980] });
+    await a.rpc("fight.endMatch", { id: room, match: m });
+    await expect(a.rpc("fight.startMatch", { id: room, chars: [0, 1], map: 0, delay: 2, maxRb: 12 })).rejects.toBeTruthy();
+
+    expect((await s.http("/api/me/summary", { token: aToken })).body.fightRating).toMatchObject({ r: 1020, n: 1, w: 1, rank: 1 });
+    expect((await s.http("/api/me/summary", { token: bToken })).body.fightRating).toMatchObject({ r: 980, n: 1, l: 1 });
+    const board = (await s.http("/api/rankings/fight-rating")).body as { name: string; r: number; uid?: string }[];
+    expect(board.filter((x) => x.name.startsWith("랭크")).map((x) => [x.name, x.r])).toEqual([
+      ["랭크하나", 1020],
+      ["랭크둘", 980],
+    ]);
+    const stats = (await s.http("/api/rankings/fight-rank-stats", { token: aToken })).body;
+    expect(stats.chars).toEqual(expect.arrayContaining([{ c: 0, w: 1, l: 0, d: 0 }, { c: 1, w: 0, l: 1, d: 0 }]));
+    expect(stats.vs).toEqual(expect.arrayContaining([{ a: 0, b: 1, w: 1, g: 1 }]));
+    expect(stats.mine).toEqual([{ c: 0, w: 1, l: 0, d: 0 }]);
+    void c;
   });
 
   it("온라인 대국 결과가 전적에 쌓이고, 내 정보에 최고 기록·순위·판 수가 나옴", async () => {

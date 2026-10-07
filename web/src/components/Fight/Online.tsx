@@ -2,11 +2,14 @@
 
 /**
  * 온라인 대전 화면 (16:9 판 안): 로비(방 목록·방 만들기) → 대기실(캐릭터·준비·맵·채팅) → 둘 다 준비되면 경기.
+ * 랭크전: 로비의 「⚔ 랭크전」 → 매칭 중 → 수락/거절 → 전용 대기실(맵 랜덤·캐릭터만 고름) → 한 판 → 레이팅 변화.
  * 방 연결(RoomSession)은 FightGame이 들고 있어서, 경기 화면에 갔다 와도 대기실 자리가 그대로.
  */
 import { useEffect, useReducer, useRef, useState } from "react";
 import { CHARS, type CharDef } from "@/lib/fight/chars";
 import { MAPS } from "@/lib/fight/maps";
+import { BUILD_ID } from "@/lib/fight/sim";
+import { useAuth } from "@/lib/AuthContext";
 import { loadSheet } from "@/lib/fight/sprites";
 import { sfxUi } from "@/lib/fight/sfx";
 import { keyText } from "./KeyCap";
@@ -15,6 +18,11 @@ import Nick from "@/components/Nick";
 import {
   cleanupEmptyRoom,
   createRoom,
+  rankCancel,
+  rankQueue,
+  rankRespond,
+  subscribeRank,
+  type RankStatus,
   RoomFullError,
   RoomSession,
   serverNow,
@@ -33,6 +41,9 @@ const SEAT_COL = ["#3B82F6", "#F43F5E"];
 const pill = `${KR} cursor-pointer rounded-full bg-black/50 px-[1.4cqw] py-[0.5cqw] text-[1.2cqw] text-white/75 hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-40`;
 const field = `${KR} min-w-0 rounded-[0.6cqw] border border-white/15 bg-black/55 px-[1cqw] py-[0.6cqw] text-[1.3cqw] text-white placeholder:text-white/30 focus:border-[#FDE047]/60 focus:outline-none`;
 const bigBtn = `${KR} cursor-pointer whitespace-nowrap rounded-full bg-[#E8344E] px-[2.6cqw] py-[0.7cqw] text-[1.5cqw] font-extrabold text-white shadow-[0_0.3cqw_0_#7A1020] transition-transform hover:scale-105 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:scale-100`;
+/** 랭크전 버튼 (노랑) · 수락 버튼 (초록) — bigBtn 과 색만 다름 */
+const rankBtn = bigBtn.replace("bg-[#E8344E]", "bg-[#F59E0B]").replace("text-white", "text-[#2A0E3A]").replace("#7A1020", "#7C4A03");
+const okBtn = bigBtn.replace("bg-[#E8344E]", "bg-[#22C55E]").replace("#7A1020", "#14532D");
 
 export interface MatchCfg {
   match: string;
@@ -71,7 +82,24 @@ export default function Online({
   onExit: () => void;
 }) {
   const { uid, nick, setNick, nickLoaded, error } = useChessUser();
+  const { profile } = useAuth();
   useEffect(() => watchServerOffset(), []);
+  // 랭크전 매칭 상태 (서버가 알려 줌) — 매칭돼서 둘 다 수락하면 그 방으로
+  const [rank, setRank] = useState<RankStatus>({ s: "idle" });
+  const [rankErr, setRankErr] = useState("");
+  useEffect(() => (uid ? subscribeRank(setRank) : undefined), [uid]);
+  useEffect(() => {
+    if (rank.s !== "room" || !uid || !nick) return;
+    setWatch(null);
+    setSession(new RoomSession(rank.room, uid, nick));
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 방으로 넘어갔으니 매칭 화면은 닫음
+    setRank({ s: "idle" });
+  }, [rank, uid, nick, setSession, setWatch]);
+  const startRank = () => {
+    setRankErr("");
+    sfxUi("ready");
+    rankQueue(String(BUILD_ID), MAPS.length).catch((e) => setRankErr(e?.message || "랭크전에 들어가지 못했어요"));
+  };
   // 초대 링크: 접속·닉네임이 준비되면 그 방으로
   const autoRef = useRef(false);
   useEffect(() => {
@@ -84,7 +112,17 @@ export default function Online({
     if (error) return <Center>{error}</Center>;
     if (!uid || !nickLoaded) return <Center>접속 중…</Center>;
     if (!nick) return <NickForm onSubmit={setNick} onBack={onExit} />;
-    if (session) return <Room key={session.id} s={session} played={played} onMatch={onMatch} onLeave={() => setSession(null)} />;
+    if (session)
+      return (
+        <Room
+          key={session.id}
+          s={session}
+          played={played}
+          onMatch={onMatch}
+          onLeave={() => setSession(null)}
+          onRankAgain={() => (setSession(null), startRank())}
+        />
+      );
     if (watch) return <WatchRoom key={watch.id} w={watch} played={played} onMatch={onMatch} onLeave={() => setWatch(null)} />;
     return (
       <Lobby
@@ -94,6 +132,9 @@ export default function Online({
         onBack={onExit}
         onEnter={(id) => setSession(new RoomSession(id, uid, nick))}
         onWatch={(id) => setWatch(new WatchSession(id, uid, nick))}
+        member={!!profile}
+        onRank={startRank}
+        rankErr={rankErr}
       />
     );
   })();
@@ -103,6 +144,99 @@ export default function Online({
       <img src={MENU_BG} alt="" className={`absolute inset-0 h-full w-full object-cover opacity-35 ${PX}`} />
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_20%,#0B0D14_90%)]" />
       {body}
+      {!session && (rank.s === "queue" || rank.s === "found") && <RankOverlay st={rank} />}
+    </div>
+  );
+}
+
+// ───────────── 랭크전 매칭 ─────────────
+
+/** 매칭 중 / 상대를 찾음(수락·거절) 화면 */
+function RankOverlay({ st }: { st: Extract<RankStatus, { s: "queue" | "found" }> }) {
+  const [now, setNow] = useState(() => serverNow());
+  useEffect(() => {
+    const t = setInterval(() => setNow(serverNow()), 250);
+    return () => clearInterval(t);
+  }, []);
+  // 찾았을 때 알림음 한 번
+  const foundId = st.s === "found" ? st.id : "";
+  useEffect(() => {
+    if (foundId) sfxUi("ready");
+  }, [foundId]);
+  // 키보드: 매칭 중 Esc 취소 / 찾았을 때 J·Enter 수락, Esc 거절
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (st.s === "queue" && e.code === "Escape") rankCancel();
+      else if (st.s === "found" && !st.accepted && (e.code === "KeyJ" || e.code === "Enter" || e.code === "Space")) rankRespond(st.id, true);
+      else if (st.s === "found" && !st.accepted && e.code === "Escape") rankRespond(st.id, false);
+      else return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [st]);
+  const mmss = (ms: number) => {
+    const t = Math.max(0, Math.floor(ms / 1000));
+    return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}`;
+  };
+  return (
+    <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/70 backdrop-blur-[3px]">
+      {st.s === "queue" ? (
+        <div className="flex flex-col items-center gap-[1.4cqw]">
+          <div className="relative h-[9cqw] w-[9cqw]">
+            <div className="absolute inset-0 animate-spin rounded-full border-[0.5cqw] border-white/10 border-t-[#FDE047]" />
+            <div className="absolute inset-0 flex items-center justify-center text-[3.6cqw]">⚔</div>
+          </div>
+          <div className="font-mono text-[2.6cqw] font-black tracking-[0.3em] text-white italic">MATCHING</div>
+          <div className={`${KR} text-[1.6cqw] font-bold text-white`}>매칭 중입니다…</div>
+          <div className="font-mono text-[1.6cqw] text-[#FDE047] tabular-nums">{mmss(now - st.since)}</div>
+          {st.note && <div className={`${KR} text-[1.2cqw] text-[#FCA5A5]`}>{st.note}</div>}
+          <button type="button" onClick={() => (sfxUi("back"), rankCancel())} className={pill}>
+            취소 (Esc)
+          </button>
+        </div>
+      ) : (
+        <div className="flex w-[44cqw] flex-col items-center gap-[1.2cqw] rounded-[1.2cqw] border-[0.2cqw] border-[#FDE047]/60 bg-[#14101F]/95 px-[3cqw] py-[2.4cqw] shadow-[0_0_4cqw_rgba(253,224,71,0.25)] [animation:modal-fade_250ms_ease-out]">
+          <div className="font-mono text-[2.4cqw] font-black tracking-[0.25em] text-[#FDE047] italic">MATCH FOUND</div>
+          <div className={`${KR} text-[1.4cqw] text-white/70`}>상대를 찾았어요!</div>
+          <div className="flex items-center gap-[2cqw]">
+            <div className="flex flex-col items-center">
+              <div className={`${KR} text-[1.2cqw] text-white/50`}>나</div>
+              <div className="font-mono text-[2cqw] font-black text-white tabular-nums">{st.me.r}</div>
+            </div>
+            <div className="font-mono text-[3cqw] font-black text-[#FDE047] italic">VS</div>
+            <div className="flex flex-col items-center">
+              <div className={`${KR} max-w-[16cqw] truncate text-[1.5cqw] font-bold text-white`}>
+                <Nick name={st.opp.nick} />
+              </div>
+              <div className="font-mono text-[2cqw] font-black text-white tabular-nums">
+                {st.opp.r}
+                {st.opp.n < 10 && <span className={`${KR} ml-[0.5cqw] text-[1cqw] font-normal text-white/45`}>배치 {st.opp.n}/10</span>}
+              </div>
+            </div>
+          </div>
+          <div className="h-[0.5cqw] w-full overflow-hidden rounded-full bg-white/10">
+            <div
+              className="h-full bg-[#FDE047] transition-[width] duration-200"
+              style={{ width: `${Math.max(0, Math.min(100, ((st.deadline - now) / 15_000) * 100))}%` }}
+            />
+          </div>
+          {st.accepted ? (
+            <div className={`${KR} text-[1.4cqw] text-[#4ADE80]`}>수락했어요 — 상대를 기다리는 중…</div>
+          ) : (
+            <div className="flex gap-[1.2cqw]">
+              <button type="button" onClick={() => (sfxUi("ready"), rankRespond(st.id, true))} className={`${okBtn} min-w-[12cqw]`}>
+                수락 (J)
+              </button>
+              <button type="button" onClick={() => (sfxUi("back"), rankRespond(st.id, false))} className={`${pill} min-w-[10cqw]`}>
+                거절 (Esc)
+              </button>
+            </div>
+          )}
+          <div className={`${KR} text-[1.05cqw] text-white/40`}>맵은 랜덤 · 캐릭터는 다음 화면에서 골라요 · {mmss(st.deadline - now)} 안에</div>
+        </div>
+      )}
     </div>
   );
 }
@@ -156,6 +290,9 @@ function Lobby({
   onBack,
   onEnter,
   onWatch,
+  member,
+  onRank,
+  rankErr,
 }: {
   uid: string;
   nick: string;
@@ -164,6 +301,10 @@ function Lobby({
   onEnter: (id: string) => void;
   /** 꽉 찼거나 대전 중인 방 → 관전 */
   onWatch: (id: string) => void;
+  /** 회원인가 (랭크전은 회원만) */
+  member: boolean;
+  onRank: () => void;
+  rankErr: string;
 }) {
   const [rooms, setRooms] = useState<LobbyRoom[] | null>(null);
   const [name, setName] = useState("");
@@ -273,8 +414,21 @@ function Lobby({
             )}
           </div>
         </div>
+        <div className="flex w-[30cqw] flex-col gap-[1.2cqw]">
+        {/* 랭크전 */}
+        <div className="flex flex-col gap-[0.7cqw] rounded-[1cqw] border-[0.2cqw] border-[#FDE047]/45 bg-[linear-gradient(135deg,rgba(253,224,71,0.16),rgba(232,52,78,0.14))] p-[1.3cqw] backdrop-blur-[2px]">
+          <div className="flex items-baseline justify-between">
+            <span className={`${KR} text-[1.6cqw] font-extrabold text-white`}>⚔ 랭크전</span>
+            <span className={`${KR} text-[1cqw] text-white/50`}>회원끼리 자동 매칭</span>
+          </div>
+          <div className={`${KR} text-[1.05cqw] leading-relaxed text-white/60`}>맵은 랜덤, 캐릭터는 골라요. 이기면 레이팅이 올라요.</div>
+          <button type="button" disabled={!member} onClick={onRank} className={rankBtn}>
+            {member ? "랭크전 찾기" : "회원만 할 수 있어요"}
+          </button>
+          {rankErr && <div className={`${KR} text-[1.05cqw] text-[#F87171]`}>{rankErr}</div>}
+        </div>
         {/* 만들기 */}
-        <div className="flex w-[30cqw] flex-col gap-[1cqw] rounded-[1cqw] bg-black/50 p-[1.4cqw] backdrop-blur-[2px]">
+        <div className="flex flex-1 flex-col gap-[1cqw] rounded-[1cqw] bg-black/50 p-[1.4cqw] backdrop-blur-[2px]">
           <div className={`${KR} text-[1.5cqw] font-extrabold text-white`}>방 만들기</div>
           <input
             value={name}
@@ -297,6 +451,7 @@ function Lobby({
           >
             ⚡ 빠른 입장
           </button>
+        </div>
         </div>
       </div>
     </div>
@@ -412,11 +567,14 @@ function Room({
   played,
   onMatch,
   onLeave,
+  onRankAgain,
 }: {
   s: RoomSession;
   played: Set<string>;
   onMatch: (cfg: MatchCfg) => void;
   onLeave: () => void;
+  /** 랭크전이 끝난 뒤 바로 다시 찾기 */
+  onRankAgain: () => void;
 }) {
   const [, force] = useReducer((n: number) => n + 1, 0);
   const [err, setErr] = useState("");
@@ -444,7 +602,9 @@ function Room({
     };
   }, [s]);
   // 주소에 방 표시 (초대 링크 = 지금 주소)
+  const isRank = !!s.room?.rank;
   useEffect(() => {
+    if (isRank) return;
     const u = new URL(window.location.href);
     u.searchParams.set("room", s.id);
     window.history.replaceState(null, "", u);
@@ -453,7 +613,7 @@ function Room({
       v.searchParams.delete("room");
       window.history.replaceState(null, "", v);
     };
-  }, [s.id]);
+  }, [s.id, isRank]);
   useEffect(() => {
     const el = chatRef.current;
     if (el) el.scrollTop = el.scrollHeight;
@@ -464,6 +624,17 @@ function Room({
   const foe = s.foe;
   const net = s.net;
   const st = room?.state;
+  const rank = room?.rank ?? null;
+  // 랭크전 방이었는지 (방이 닫혀도 기억 — 취소 안내)
+  const wasRank = useRef(false);
+  if (rank) wasRank.current = true;
+  // 랭크전 시작까지 남은 시간
+  const [now, setNow] = useState(() => serverNow());
+  useEffect(() => {
+    if (!rank || rank.used) return;
+    const t = setInterval(() => setNow(serverNow()), 500);
+    return () => clearInterval(t);
+  }, [rank]);
   const leave = () => {
     s.leave();
     onLeave();
@@ -528,13 +699,59 @@ function Room({
   if (err || s.lost)
     return (
       <div className="absolute inset-0 flex flex-col items-center justify-center gap-[1.4cqw]">
-        <div className={`${KR} text-[2cqw] font-bold text-white`}>{err || s.lost}</div>
+        <div className={`${KR} text-[2cqw] font-bold text-white`}>
+          {wasRank.current && !err ? "랭크전이 취소됐어요" : err || s.lost}
+        </div>
+        {wasRank.current && !err && (
+          <div className={`${KR} text-[1.3cqw] text-white/55`}>상대가 나갔거나 시간 안에 준비하지 않았어요 (레이팅 변화 없음)</div>
+        )}
         <button type="button" onClick={leave} className={bigBtn}>
           로비로
         </button>
       </div>
     );
   if (!joined || !room || !me) return <Center>입장 중…</Center>;
+
+  // 랭크전 한 판이 끝남 → 결과·레이팅 변화
+  if (rank?.used && st && (st.phase === "wait" || played.has(st.match)) && !vs) {
+    const res = rank.result;
+    const mySeat = s.seat;
+    const win = res ? (res.out === 2 ? null : res.out === mySeat) : undefined;
+    const d = res?.delta?.[mySeat];
+    return (
+      <div className="absolute inset-0 flex flex-col items-center justify-center gap-[1.4cqw]">
+        <div className="font-mono text-[2.2cqw] font-black tracking-[0.3em] text-white/70 italic">RANKED</div>
+        <div
+          className={`${KR} text-[4.4cqw] leading-none font-extrabold drop-shadow-[0_0.3cqw_0_#000]`}
+          style={{ color: win === true ? "#FDE047" : win === false ? "#F87171" : "#fff" }}
+        >
+          {win === undefined ? "결과 확인 중…" : win === null ? "무승부" : win ? "승리" : "패배"}
+        </div>
+        {res?.rated && res.r && d !== undefined ? (
+          <div className="flex items-baseline gap-[1cqw] font-mono tabular-nums">
+            <span className="text-[1.6cqw] text-white/55">{res.r[mySeat] - d}</span>
+            <span className="text-[1.6cqw] text-white/40">→</span>
+            <span className="text-[3.2cqw] font-black text-white">{res.r[mySeat]}</span>
+            <span className={`text-[2.2cqw] font-black ${d > 0 ? "text-[#4ADE80]" : d < 0 ? "text-[#F87171]" : "text-white/60"}`}>
+              {d > 0 ? `+${d}` : d}
+            </span>
+          </div>
+        ) : res && !res.rated ? (
+          <div className={`${KR} text-[1.3cqw] text-white/55`}>이번 판은 레이팅에 반영되지 않았어요 (같은 상대와는 하루 10판까지)</div>
+        ) : (
+          <div className={`${KR} text-[1.3cqw] text-white/55`}>{win === undefined ? "두 선수의 결과를 맞춰 보는 중이에요" : "레이팅 계산 중…"}</div>
+        )}
+        <div className="mt-[1cqw] flex gap-[1.2cqw]">
+          <button type="button" onClick={() => (s.leave(), onRankAgain())} className={rankBtn}>
+            ⚔ 다시 찾기
+          </button>
+          <button type="button" onClick={leave} className={pill}>
+            로비로
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (vs) {
     const cs = [CHARS[vs.chars[0]], CHARS[vs.chars[1]]];
@@ -607,9 +824,15 @@ function Room({
           <div className={`${KR} max-w-full truncate text-[2cqw] font-extrabold text-white drop-shadow-[0_0.2cqw_0_#000]`}>{room.name}</div>
           <div className={`${KR} text-[1.15cqw] ${badge.c}`}>● {badge.t}</div>
         </div>
-        <button type="button" onClick={copy} className={pill}>
-          {copied ? "복사됨!" : "🔗 초대 링크"}
-        </button>
+        {rank ? (
+          <span className={`${KR} rounded-full bg-black/50 px-[1.4cqw] py-[0.5cqw] text-[1.2cqw] text-[#FDE047] tabular-nums`}>
+            ⏱ {Math.max(0, Math.ceil((rank.deadline - now) / 1000))}초 안에 준비
+          </span>
+        ) : (
+          <button type="button" onClick={copy} className={pill}>
+            {copied ? "복사됨!" : "🔗 초대 링크"}
+          </button>
+        )}
       </div>
 
       {/* 양쪽 자리 */}
@@ -661,7 +884,7 @@ function Room({
                   <span className={`${KR} text-[1.2cqw] text-white/50`}>고르는 중…</span>
                 )
               ) : (
-                <span className={`${KR} text-[1.2cqw] text-white/45`}>초대 링크를 보내 보세요</span>
+                <span className={`${KR} text-[1.2cqw] text-white/45`}>{rank ? "상대가 들어오는 중…" : "초대 링크를 보내 보세요"}</span>
               )}
             </div>
           </div>
@@ -670,6 +893,16 @@ function Room({
 
       {/* 가운데: 맵 · 채팅 */}
       <div className="absolute top-[8.6cqw] left-1/2 z-10 flex h-[24cqw] w-[34cqw] -translate-x-1/2 flex-col gap-[0.8cqw]">
+        {rank ? (
+          <div className="flex h-[6.4cqw] items-center justify-center gap-[1cqw] rounded-[0.8cqw] bg-black/55 backdrop-blur-[2px]">
+            <span className="font-mono text-[3cqw] font-black text-white/70">?</span>
+            <span className={`${KR} text-[1.3cqw] leading-snug text-white/75`}>
+              <b className="text-white">랭크전</b> — 맵은 랜덤 (시작할 때 공개)
+              <br />
+              <span className="text-[1.05cqw] text-white/45">한 판 승부 · 나가면 취소 (경기 중엔 기권패)</span>
+            </span>
+          </div>
+        ) : (
         <div className="rounded-[0.8cqw] bg-black/55 p-[0.7cqw] backdrop-blur-[2px]">
           <div className={`${KR} mb-[0.4cqw] text-[1.05cqw] text-white/50`}>맵 {s.isHost ? "(방장이 고름)" : `— 방장이 고름`}</div>
           <div className="flex gap-[0.5cqw]">
@@ -693,6 +926,7 @@ function Room({
             ))}
           </div>
         </div>
+        )}
         <div className="flex min-h-0 flex-1 flex-col rounded-[0.8cqw] bg-black/55 backdrop-blur-[2px]">
           <div ref={chatRef} className={`thin-scroll min-h-0 flex-1 overflow-y-auto px-[0.9cqw] py-[0.5cqw] ${KR} text-[1.1cqw] leading-relaxed`}>
             {s.chat.length === 0 && <p className="text-white/30">채팅</p>}
