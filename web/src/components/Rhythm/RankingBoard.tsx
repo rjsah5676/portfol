@@ -1,6 +1,7 @@
 "use client";
 
 import Nick from "@/components/Nick";
+import RankAvatar from "@/components/RankAvatar";
 import { useAutoRank } from "@/lib/useAutoRank";
 import { rankDateLabel } from "@/lib/rankDate";
 import { useEffect, useState } from "react";
@@ -53,6 +54,12 @@ function List({
           >
             {i + 1}
           </span>
+          <RankAvatar
+            avatar={r.avatar}
+            name={r.name}
+            guest={!r.member}
+            size={game ? "game" : "sm"}
+          />
           <span className="min-w-0 flex-1 truncate font-['Nanum_Gothic',sans-serif] text-white/85">
             <Nick name={r.name} guest={!r.member} />
           </span>
@@ -111,6 +118,7 @@ function GameList({ list, highlight }: { list: RhythmRanking[]; highlight?: stri
             >
               <span className="skew-x-12">{i + 1}</span>
             </span>
+            <RankAvatar avatar={r.avatar} name={r.name} guest={!r.member} size="game" />
             <span className="min-w-0 flex-1 truncate font-['Nanum_Gothic',sans-serif] text-[1.15cqw] font-bold text-white/90">
               <Nick name={r.name} guest={!r.member} />
             </span>
@@ -202,7 +210,7 @@ export function RankingBoard({
 }
 
 /** "곡id_난이도" → "곡 제목 · 난이도" */
-function chartLabel(chart: string) {
+export function bpChartLabel(chart: string) {
   const i = chart.lastIndexOf("_");
   const song = SONGS.find((s) => s.id === chart.slice(0, i));
   const d = DIFFICULTIES.find((x) => x.key === chart.slice(i + 1));
@@ -237,7 +245,7 @@ export function BpBoard({ refresh = 0 }: { refresh?: number }) {
   if (!top.list.length)
     return (
       <p className="py-[2cqw] text-center font-mono text-[1.1cqw] text-white/30">
-        아직 BP 기록이 없어요. 회원으로 곡을 클리어하면 쌓여요.
+        아직 BP 기록이 없어요. 곡을 끝까지 치면 쌓여요.
       </p>
     );
   return (
@@ -265,10 +273,11 @@ export function BpBoard({ refresh = 0 }: { refresh?: number }) {
             >
               <span className="skew-x-12">{r.rank}</span>
             </span>
+            <RankAvatar avatar={r.avatar} name={r.name} guest={!r.member} size="game" />
             <span className="min-w-0 flex-1 truncate font-['Nanum_Gothic',sans-serif] text-[1.15cqw] font-bold text-white/90">
-              <Nick name={r.name} guest={false} />
+              <Nick name={r.name} guest={!r.member} />
               <span className="ml-[0.6cqw] font-normal text-[0.9cqw] text-white/40">
-                {r.songs}곡{r.best ? ` · 최고 ${chartLabel(r.best.chart)} ${r.best.bp}` : ""}
+                {r.songs}곡{r.best ? ` · 최고 ${bpChartLabel(r.best.chart)} ${r.best.bp}` : ""}
               </span>
             </span>
             <span

@@ -33,6 +33,7 @@ function RankBox({ list, highlight }: { list: ReactionScore[]; highlight?: numbe
         rows={list.map((r) => ({
           name: r.name,
           member: r.member,
+          avatar: r.avatar,
           value: `${r.score}ms`,
           date: r.createdAt,
         }))}
@@ -173,13 +174,19 @@ export default function RspeedPage() {
       rank={{
         top: list
           .slice(0, 3)
-          .map((r) => ({ name: r.name, member: r.member, value: `${r.score}ms` })),
+          .map((r) => ({
+            name: r.name,
+            member: r.member,
+            avatar: r.avatar,
+            value: `${r.score}ms`,
+          })),
         sub: "5회 평균",
         render: () => (
           <RankList
             rows={list.map((r) => ({
               name: r.name,
               member: r.member,
+              avatar: r.avatar,
               value: `${r.score}ms`,
               date: r.createdAt,
             }))}

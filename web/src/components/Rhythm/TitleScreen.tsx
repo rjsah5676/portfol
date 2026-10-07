@@ -13,6 +13,7 @@ export default function TitleScreen({
   onEnter,
   onStart,
   onSettings,
+  onRanking,
   fs,
   onToggleFs,
   blocked,
@@ -21,6 +22,8 @@ export default function TitleScreen({
   onEnter: () => void;
   onStart: () => void;
   onSettings: () => void;
+  /** 회원 BP 랭킹 (게임 머리말의 랭킹 창을 엶) */
+  onRanking: () => void;
   fs: boolean;
   onToggleFs: () => void;
   /** 설정 창이 떠 있으면 키 입력 무시 */
@@ -32,6 +35,7 @@ export default function TitleScreen({
   const items: { label: string; sub: string; run: () => void }[] = [
     { label: "GAME START", sub: "곡 고르기", run: onStart },
     { label: "SETTINGS", sub: "속도 · 싱크 · 레인 위치", run: onSettings },
+    { label: "RANKING", sub: "BP 랭킹 — 곡별 최고 BP 상위 20곡 합", run: onRanking },
     { label: "HOW TO PLAY", sub: "게임 가이드", run: () => setGuide(true) },
     { label: fs ? "WINDOW" : "FULLSCREEN", sub: fs ? "창모드로" : "전체화면으로", run: onToggleFs },
   ];

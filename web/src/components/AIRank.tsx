@@ -239,6 +239,7 @@ export function RankBoard({
           rows={rows.map((r) => ({
             name: r.name,
             member: r.member,
+            avatar: r.avatar,
             value: pointsOf(r.score).toLocaleString(),
             sub: (
               <>

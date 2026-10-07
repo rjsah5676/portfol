@@ -42,6 +42,7 @@ export default function FightPage() {
             top: top.map((r) => ({
               name: r.name,
               member: r.member,
+              avatar: r.avatar,
               value: pointsOf(r.score).toLocaleString(),
               sub: oppLabel(r.opp),
             })),

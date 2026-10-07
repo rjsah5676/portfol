@@ -16,6 +16,8 @@ export interface RhythmRanking {
   name: string;
   /** 회원의 기록인지 */
   member: boolean;
+  /** 회원이 올린 프로필 사진 주소 (없으면 null) */
+  avatar: string | null;
   score: number;
   acc: number;
   maxCombo: number;
@@ -40,6 +42,7 @@ export async function getRhythmTop(
     id: x.id,
     name: String(x.name ?? ""),
     member: !!x.member,
+    avatar: x.avatar ?? null,
     score: Number(x.score ?? 0),
     acc: Number(x.acc ?? 0),
     maxCombo: Number(x.maxCombo ?? 0),
@@ -54,6 +57,8 @@ export interface BpRanking {
   id: string;
   rank: number;
   name: string;
+  member: boolean;
+  avatar: string | null;
   /** 곡별 최고 BP 상위 20곡 합 */
   bp: number;
   /** 기록이 있는 곡 수 */
@@ -68,6 +73,8 @@ export async function getBpTop(count = 20): Promise<BpRanking[]> {
     id: String(x.id ?? i),
     rank: Number(x.rank ?? i + 1),
     name: String(x.name ?? ""),
+    member: !!x.member,
+    avatar: x.avatar ?? null,
     bp: Number(x.bp ?? 0),
     songs: Number(x.songs ?? 0),
     best: x.best ?? null,
@@ -77,7 +84,7 @@ export async function getBpTop(count = 20): Promise<BpRanking[]> {
 export async function addRhythmRanking(
   songId: string,
   diff: string,
-  r: Omit<RhythmRanking, "id" | "createdAt" | "member">
+  r: Omit<RhythmRanking, "id" | "createdAt" | "member" | "avatar">
 ): Promise<string> {
   return submitRun(rhythmBoard(songId, diff), chartPath(songId, diff), {
     name: r.name.trim().slice(0, RHYTHM_NAME_MAX),

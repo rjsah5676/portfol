@@ -368,6 +368,7 @@ export default function Minesweeper() {
           top: rankings.slice(0, 3).map((r) => ({
             name: r.name,
             member: r.member,
+            avatar: r.avatar,
             value: `${r.time}s`,
           })),
           sub: "클리어 시간",
@@ -378,6 +379,7 @@ export default function Minesweeper() {
               rows={rankings.map((r) => ({
                 name: r.name,
                 member: r.member,
+                avatar: r.avatar,
                 value: `${r.time}s`,
                 date: r.createdAt,
               }))}

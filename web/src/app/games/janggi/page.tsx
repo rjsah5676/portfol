@@ -132,6 +132,7 @@ function JanggiApp() {
           top: top.map((r) => ({
             name: r.name,
             member: r.member,
+            avatar: r.avatar,
             value: pointsOf(r.score).toLocaleString(),
             sub: `vs ${janggiOppLabel(r.opp)}`,
           })),

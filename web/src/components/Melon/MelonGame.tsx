@@ -30,6 +30,7 @@ import {
 import { useInitial } from "@/lib/api/InitialData";
 import { beginRun } from "@/lib/api/rankRun";
 import Nick from "@/components/Nick";
+import RankAvatar from "@/components/RankAvatar";
 import { useAutoRank } from "@/lib/useAutoRank";
 import {
   CELL,
@@ -616,7 +617,12 @@ export default function MelonGame() {
           rank={{
             top: ranks
               ?.slice(0, 3)
-              .map((r) => ({ name: r.name, member: r.member, value: `${r.score}점` })),
+              .map((r) => ({
+                name: r.name,
+                member: r.member,
+                avatar: r.avatar,
+                value: `${r.score}점`,
+              })),
             open: rankOpen,
             onOpenChange: setRankOpen,
             render: () =>
@@ -639,6 +645,7 @@ export default function MelonGame() {
                             <span className="text-white/35">{i + 1}</span>
                           )}
                         </span>
+                        <RankAvatar avatar={r.avatar} name={r.name} guest={!r.member} size="sm" />
                         <Nick
                           name={r.name}
                           guest={!r.member}

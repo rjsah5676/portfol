@@ -1,11 +1,14 @@
 import type { ReactNode } from "react";
 import { rankDateLabel } from "@/lib/rankDate";
 import Nick from "./Nick";
+import RankAvatar from "./RankAvatar";
 
 export interface RankRow {
   name: string;
   /** 회원의 기록인지 (아니면 이름 앞에 GUEST 표시) */
   member?: boolean;
+  /** 회원이 올린 프로필 사진 주소 (없으면 null·생략 — 비회원은 익명 실루엣) */
+  avatar?: string | null;
   /** 표시할 기록 (예: "123ms", "45.2s") */
   value: string;
   /** 이름 아래 작은 설명 (예: "vs 1600 · 32수") */
@@ -37,7 +40,7 @@ export default function RankList({
         i < skip ? null : (
           <li
             key={i}
-            className={`grid grid-cols-[1.5rem_minmax(0,1fr)_auto_3.75rem] items-center gap-2 rounded-md px-1.5 py-1 font-mono text-[13px] ${
+            className={`grid grid-cols-[1.5rem_1.75rem_minmax(0,1fr)_auto_3.75rem] items-center gap-2 rounded-md px-1.5 py-1 font-mono text-[13px] ${
               i === highlight ? "bg-[#6C63FF]/20" : ""
             }`}
           >
@@ -46,6 +49,7 @@ export default function RankList({
             >
               {i + 1}
             </span>
+            <RankAvatar avatar={r.avatar} name={r.name} guest={!r.member} size="sm" />
             <span className="min-w-0 text-left font-['Nanum_Gothic',sans-serif]">
               <Nick name={r.name} guest={!r.member} className="block truncate text-white/85" />
               {r.sub && <span className="block truncate text-[10px] text-white/35">{r.sub}</span>}

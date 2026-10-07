@@ -36,7 +36,9 @@ import SongSelect from "./SongSelect";
 import SettingsModal, { LANE_MODS, type LaneMod, type Settings } from "./SettingsModal";
 import ResultScreen from "./ResultScreen";
 import { beginRun } from "@/lib/api/rankRun";
-import { rhythmBoard } from "@/firestore/rhythmRankings";
+import { getBpTop, rhythmBoard, type BpRanking } from "@/firestore/rhythmRankings";
+import RankList from "@/components/RankList";
+import { bpChartLabel } from "./RankingBoard";
 
 const SETTINGS_KEY = "rhythm_settings";
 /** 저장 설정 버전 — 2: 노트 모양 기본값을 메탈로 바꾼 뒤 (그 전에 저장된 설정은 한 번 메탈로) */
@@ -125,6 +127,19 @@ export default function RhythmGame() {
     bg: "cover",
   });
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // 회원 BP 랭킹: 게임 머리말(랭킹 버튼·창)에 — 들어올 때와 판이 끝날 때마다 다시 불러옴
+  const [rankOpen, setRankOpen] = useState(false);
+  const [bpTop, setBpTop] = useState<BpRanking[] | null>(null);
+  const [bpRefresh, setBpRefresh] = useState(0);
+  useEffect(() => {
+    let alive = true;
+    getBpTop(100)
+      .then((list) => alive && setBpTop(list))
+      .catch(() => alive && setBpTop([]));
+    return () => {
+      alive = false;
+    };
+  }, [bpRefresh]);
   // 분석 모드(관리자만): 채보를 올퍼펙으로 자동 연주해서 곡과 맞는지 감상. 기록·랭킹에 안 올림
   const { admin } = useAuth();
   const [analyze, setAnalyze] = useState(false);
@@ -242,8 +257,7 @@ export default function RhythmGame() {
       track
         ? (makeAutoCharts(
             track.analysis,
-            // EX+는 내장 보스곡 전용 (내 음악은 나이트메어까지)
-            DIFFICULTIES.filter((d) => d.key !== "explus").map((d) => d.key)
+            DIFFICULTIES.map((d) => d.key)
           ) as Partial<Record<Difficulty, ReturnType<typeof makeChart>>>)
         : null,
     [track]
@@ -288,10 +302,7 @@ export default function RhythmGame() {
   const song = isCustom ? customSong! : builtinSong;
   // 고를 수 있는 난이도: 내 음악은 전부, 내장곡은 채보가 있는 것만 (나이트메어는 일부 곡만)
   const diffs = useMemo(
-    () =>
-      customSel
-        ? DIFFICULTIES.filter((d) => d.key !== "explus")
-        : DIFFICULTIES.filter((d) => !!charts[builtinSong.id][d.key]),
+    () => (customSel ? DIFFICULTIES : DIFFICULTIES.filter((d) => !!charts[builtinSong.id][d.key])),
     [customSel, charts, builtinSong.id]
   );
   const diff: Difficulty = diffs.some((d) => d.key === diffSel)
@@ -506,6 +517,7 @@ export default function RhythmGame() {
     (r: Result) => {
       const key = `${r.songId}:${r.diff}`;
       const prev = best[key];
+      if (!r.failed && !r.auto) setTimeout(() => setBpRefresh((n) => n + 1), 4000); // 랭킹 등록 뒤 BP 다시
       // 중간에 죽은 판·자동 연주(분석 모드)는 기록에 안 남김
       const newBest = !r.failed && !r.auto && (!prev || r.score > prev.score);
       if (!r.failed && !r.auto && (newBest || (r.fc && !prev?.fc) || (r.ap && !prev?.ap))) {
@@ -574,6 +586,34 @@ export default function RhythmGame() {
         accent="#EC4899"
         desc="DFJK 4키 리듬게임 — 곡·난이도별 랭킹, 내 mp3도 자동 채보"
         guide={RHYTHM_GUIDE}
+        rank={{
+          top: bpTop?.slice(0, 3).map((r) => ({
+            name: r.name,
+            member: r.member,
+            avatar: r.avatar,
+            value: `${r.bp.toLocaleString("en-US")} BP`,
+            sub: `${r.songs}곡`,
+          })),
+          sub: "BP — 곡마다 가장 좋은 판 하나, 상위 20곡 합",
+          open: rankOpen,
+          onOpenChange: setRankOpen,
+          render: () =>
+            bpTop === null ? (
+              <p className="py-3 font-mono text-xs text-white/30">불러오는 중…</p>
+            ) : (
+              <RankList
+                rows={bpTop.map((r) => ({
+                  name: r.name,
+                  member: r.member,
+                  avatar: r.avatar,
+                  value: `${r.bp.toLocaleString("en-US")} BP`,
+                  sub: `${r.songs}곡${r.best ? ` · 최고 ${bpChartLabel(r.best.chart)} ${r.best.bp}` : ""}`,
+                }))}
+                skip={3}
+                empty="아직 BP 기록이 없어요. 곡을 끝까지 치면 쌓여요."
+              />
+            ),
+        }}
       />
       {!fs && (
         <button
@@ -598,6 +638,7 @@ export default function RhythmGame() {
               onEnter={enter}
               onStart={() => setScreen("select")}
               onSettings={() => setSettingsOpen(true)}
+              onRanking={() => setRankOpen(true)}
               fs={fs}
               onToggleFs={toggleFs}
               blocked={settingsOpen}

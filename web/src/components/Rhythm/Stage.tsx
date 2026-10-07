@@ -6,7 +6,7 @@ import type { Chart, Difficulty } from "@/lib/rhythm/chart";
 import { Engine, HP_MAX, rankOf, type Judge } from "@/lib/rhythm/engine";
 import { AUTO_SYNC, AutoSyncTracker, splitSync, type AutoSyncState } from "@/lib/rhythm/autosync";
 import { DIFFICULTIES } from "@/lib/rhythm/chart";
-import { coverOf } from "./SongCarousel";
+import { coverOf, CUSTOM_COVER } from "./SongCarousel";
 import HoldButton from "./HoldButton";
 import {
   drawHead,
@@ -223,8 +223,11 @@ export default function Stage({
   const videoRef = useRef<HTMLVideoElement>(null);
   // 커버·뮤비 배경은 캔버스 뒤 HTML 요소로 (재킷은 CSS blur — 캔버스로 흐리면 화질이 깨지고 사파리는 filter가 안 됨).
   // 데스크탑(마우스)·가로 화면에서만 — 캔버스가 투명해져 합성 부담이 조금 늘어서 폰은 무대 그림 그대로. 뮤비는 프레임이 떨어지면 자동으로 끔
+  // 내 음악인데 파일에 재킷이 없으면(기본 그림) 무대 그림 그대로
+  const hasCover = !song.custom || (!!song.cover && song.cover !== CUSTOM_COVER);
   const domBg =
     bg === "cover" &&
+    (hasCover || !!song.video) &&
     !portrait &&
     typeof window !== "undefined" &&
     window.matchMedia("(pointer: fine)").matches;
@@ -1870,18 +1873,32 @@ export default function Stage({
       className={`absolute inset-0 overflow-hidden ${portrait ? "flex items-center justify-center bg-black" : ""}`}
     >
       {domBg && !useVideo && (
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-0"
-          style={{
-            backgroundImage: `url(${JSON.stringify(coverOf(song))})`,
-            backgroundSize: "cover",
-            backgroundPosition: "center",
-            // 흐림 가장자리가 비치지 않게 살짝 키움
-            transform: "scale(1.03)",
-            filter: "blur(5px) saturate(1.1)",
-          }}
-        />
+        <>
+          {/* 뒤: 화면을 꽉 채우는 짙게 흐린 사본 (재킷이 정사각이라 옆이 비는 자리 메움) */}
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-0"
+            style={{
+              backgroundImage: `url(${JSON.stringify(coverOf(song))})`,
+              backgroundSize: "cover",
+              backgroundPosition: "center",
+              transform: "scale(1.1)",
+              filter: "blur(28px) brightness(0.7)",
+            }}
+          />
+          {/* 앞: 재킷 전체가 잘리지 않게 (contain) 살짝만 흐림 */}
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-0"
+            style={{
+              backgroundImage: `url(${JSON.stringify(coverOf(song))})`,
+              backgroundSize: "contain",
+              backgroundRepeat: "no-repeat",
+              backgroundPosition: "center",
+              filter: "blur(4px) saturate(1.1)",
+            }}
+          />
+        </>
       )}
       {useVideo && (
         <video

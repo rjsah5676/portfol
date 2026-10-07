@@ -5,11 +5,14 @@ import Modal from "@/components/Modal/Modal";
 import GuideView, { type GuideDoc } from "@/components/GuideView";
 import HintBubble, { markHintSeen } from "@/components/HintBubble";
 import Nick from "@/components/Nick";
+import RankAvatar from "./RankAvatar";
 
 export interface TopEntry {
   name: string;
   /** 회원의 기록인지 (아니면 이름 앞에 GUEST 표시) */
   member?: boolean;
+  /** 회원이 올린 프로필 사진 주소 (없으면 null·생략) */
+  avatar?: string | null;
   /** 표시할 기록 (예: "132점", "45.2s") */
   value: string;
   /** 작은 설명 (예: "vs 이순신(5단)") */
@@ -246,6 +249,9 @@ function Podium({ top }: { top: TopEntry[] }) {
           <div key={n} className="flex w-1/3 max-w-[9.5rem] min-w-0 flex-col items-center">
             <div className={`text-center ${n === 0 ? "rank-crown" : ""}`}>
               <div className={n === 0 ? "text-3xl" : "text-2xl"}>{MEDAL[n]}</div>
+              <div className="mt-1 flex justify-center">
+                <RankAvatar avatar={e.avatar} name={e.name} guest={!e.member} size="lg" />
+              </div>
               <div className="mt-0.5 max-w-full truncate px-1 text-sm font-bold text-white">
                 <Nick name={e.name} guest={!e.member} />
               </div>

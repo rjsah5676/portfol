@@ -13,6 +13,7 @@ import { newId } from "../ids";
 import { KeyedMutex } from "../mutex";
 import { RHYTHM_CHARTS } from "./rhythmCharts";
 import { bpOf, BP_TOP_SONGS } from "./bp";
+import { avatarPath } from "../users";
 import { h, ms, userOf } from "./util";
 
 /*
@@ -210,6 +211,36 @@ const row = ({
   ...rest,
   createdAt: ms(createdAt),
 });
+/** 회원 uid → 프로필 사진 주소 (직접 올린 사진이 있는 회원만). 랭킹 줄에 사진을 붙이는 데 씀 */
+async function avatarsOf(
+  db: Deps["db"],
+  uids: string[],
+): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  const ids = [...new Set(uids)];
+  if (!ids.length) return out;
+  const docs = await db
+    .col("users")
+    .find({ _id: { $in: ids }, "avatar.at": { $exists: true } })
+    .project({ "avatar.at": 1 })
+    .toArray();
+  for (const d of docs) {
+    const at = (d.avatar as { at?: number } | undefined)?.at;
+    if (at) out.set(String(d._id), avatarPath(String(d._id), at));
+  }
+  return out;
+}
+/** 문서들 → 응답 줄 + avatar (회원이 올린 사진이 있으면 그 주소, 아니면 null) */
+async function rows(db: Deps["db"], docs: Record<string, unknown>[]) {
+  const av = await avatarsOf(
+    db,
+    docs.filter((d) => d.member).map((d) => String(d.uid)),
+  );
+  return docs.map((d) => ({
+    ...row(d),
+    avatar: (d.member && av.get(String(d.uid))) || null,
+  }));
+}
 
 /** 티켓을 받은 시각과 실제 게임 시작 사이의 오차(통신 지연 등) 허용치(초) */
 const SLACK_SEC = 3;
@@ -296,15 +327,13 @@ export function rankingsRouter({ db, auth, users }: Deps): Router {
       const mine = await db.col(col).findOne({ ...scope, uid: user.uid });
       if (!mine) {
         const _id = newId();
-        await db
-          .col(col)
-          .insertOne({
-            _id,
-            ...scope,
-            ...data,
-            ...owner,
-            createdAt: new Date(),
-          });
+        await db.col(col).insertOne({
+          _id,
+          ...scope,
+          ...data,
+          ...owner,
+          createdAt: new Date(),
+        });
         return { id: _id };
       }
       // 이미 올린 기록보다 좋을 때만 바꿈 (dir -1 = 클수록 좋음, 1 = 작을수록 좋음)
@@ -363,13 +392,21 @@ export function rankingsRouter({ db, auth, users }: Deps): Router {
       if (!bpCache || Date.now() - bpCache.at > 30_000) {
         const docs = await db
           .col("rhythm_rankings")
-          .find({ member: true })
-          .project({ uid: 1, chart: 1, score: 1, name: 1, createdAt: 1 })
+          .find({})
+          .project({
+            uid: 1,
+            chart: 1,
+            score: 1,
+            name: 1,
+            member: 1,
+            createdAt: 1,
+          })
           .toArray();
         const byUid = new Map<
           string,
           {
             name: string;
+            member: boolean;
             at: number;
             songs: Map<string, { bp: number; chart: string; score: number }>;
           }
@@ -386,21 +423,36 @@ export function rankingsRouter({ db, auth, users }: Deps): Router {
           if (!u)
             byUid.set(
               uid,
-              (u = { name: String(d.name ?? ""), at, songs: new Map() }),
+              (u = {
+                name: String(d.name ?? ""),
+                member: !!d.member,
+                at,
+                songs: new Map(),
+              }),
             );
-          if (at >= u.at) ((u.at = at), (u.name = String(d.name ?? u.name))); // 별명은 가장 최근 기록 기준
+          if (at >= u.at)
+            ((u.at = at),
+              (u.name = String(d.name ?? u.name)),
+              (u.member = !!d.member)); // 이름은 가장 최근 기록 기준
           const cur = u.songs.get(song);
           if (!cur || bp > cur.bp)
             u.songs.set(song, { bp, chart, score: Number(d.score) || 0 });
         }
-        const rows = [...byUid.entries()]
+        const av = await avatarsOf(
+          db,
+          [...byUid.entries()].filter(([, u]) => u.member).map(([uid]) => uid),
+        );
+        const list = [...byUid.entries()]
           .map(([uid, u]) => {
             const top = [...u.songs.values()]
               .sort((a, b) => b.bp - a.bp)
               .slice(0, BP_TOP_SONGS);
             return {
-              id: uid,
+              // uid는 그대로 내보내지 않음 (사진 주소에 들어가는 건 누구나 보는 사진이라 괜찮음)
+              id: `bp:${uid.slice(0, 8)}`,
               name: u.name,
+              member: u.member,
+              avatar: (u.member && av.get(uid)) || null,
               bp: top.reduce((s, x) => s + x.bp, 0),
               songs: u.songs.size,
               best: top[0] ?? null,
@@ -408,7 +460,7 @@ export function rankingsRouter({ db, auth, users }: Deps): Router {
           })
           .filter((x) => x.bp > 0)
           .sort((a, b) => b.bp - a.bp);
-        bpCache = { at: Date.now(), rows };
+        bpCache = { at: Date.now(), rows: list };
       }
       return bpCache.rows
         .slice(0, limitOf(req.query.limit))
@@ -427,7 +479,7 @@ export function rankingsRouter({ db, auth, users }: Deps): Router {
         .sort({ score: -1 })
         .limit(limitOf(req.query.limit))
         .toArray();
-      return docs.map(row);
+      return rows(db, docs);
     }),
   );
 
@@ -452,7 +504,7 @@ export function rankingsRouter({ db, auth, users }: Deps): Router {
         .sort(board.sort)
         .limit(limitOf(req.query.limit))
         .toArray();
-      return docs.map(row);
+      return rows(db, docs);
     }),
   );
 
