@@ -17,6 +17,7 @@ import {
 } from "@/lib/rhythm/autosync";
 import { HIT_SOUNDS, NOTE_SIZES, setNoteSize, SKINS } from "@/lib/rhythm/fx";
 import { audio, loadSfx, playBgm, setSfxVolume, sfx, stopBgm } from "@/lib/rhythm/sfx";
+import { accelSettingsUrl, gpuInfo } from "@/lib/rhythm/gpu";
 import Stage, {
   COVERS_OPT,
   FIELD_POS,
@@ -330,6 +331,13 @@ export default function RhythmGame() {
       p.gain.gain.linearRampToValueAtTime(0, t + fade);
       p.src.stop(t + fade + 0.02);
     } catch {}
+  }, []);
+  // 브라우저 하드웨어 가속이 꺼져 있으면 안내 (켜기 전엔 전체화면에서 프레임이 크게 떨어짐)
+  const [accelOff, setAccelOff] = useState<{ browser: string; url: string } | null>(null);
+  const [accelCopied, setAccelCopied] = useState(false);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 브라우저에서만 잴 수 있음(마운트 1회)
+    if (gpuInfo().software) setAccelOff(accelSettingsUrl());
   }, []);
   // 메뉴 배경음(타이틀 BGM·곡 미리 듣기) 끄기 — 🔊 버튼 / B 키. 플레이 중 음악은 그대로
   const [bgmMute, setBgmMute] = useState(false);
@@ -646,6 +654,34 @@ export default function RhythmGame() {
             ),
         }}
       />
+      {accelOff && !fs && (
+        <div className="mx-auto mb-2 flex w-full max-w-[min(1120px,calc((100dvh-190px)*16/9))] flex-wrap items-center justify-center gap-x-2 gap-y-1 rounded-xl border border-[#F59E0B]/60 bg-[#F59E0B]/12 px-4 py-2 font-['Nanum_Gothic',sans-serif] text-[13px] text-white/85">
+          <span className="rounded-md bg-[#F59E0B] px-1.5 py-0.5 font-mono text-[11px] font-bold text-[#1a1000]">
+            !
+          </span>
+          <b className="font-bold text-[#FDE68A]">브라우저 그래픽 가속이 꺼져 있어요</b>
+          <span className="text-white/60">
+            — 화면이 끊길 수 있어요. {accelOff.browser} 주소창에
+          </span>
+          <button
+            type="button"
+            onClick={() => {
+              navigator.clipboard
+                ?.writeText(accelOff.url.split(" ")[0])
+                .then(() => setAccelCopied(true))
+                .catch(() => {});
+            }}
+            title="주소 복사"
+            className="cursor-pointer rounded-md border border-white/20 bg-black/30 px-1.5 py-0.5 font-mono text-[12px] text-white transition-colors hover:border-white/50"
+          >
+            {accelOff.url}
+            <span className="ml-1.5 text-white/45">{accelCopied ? "복사됨" : "복사"}</span>
+          </button>
+          <span className="text-white/60">
+            → &lsquo;그래픽 가속 사용&rsquo; 켜고 브라우저 다시 시작
+          </span>
+        </div>
+      )}
       {!fs && (
         <button
           type="button"

@@ -7,6 +7,7 @@ import { Engine, HP_MAX, rankOf, type Judge } from "@/lib/rhythm/engine";
 import { AUTO_SYNC, AutoSyncTracker, splitSync, type AutoSyncState } from "@/lib/rhythm/autosync";
 import { DIFFICULTIES } from "@/lib/rhythm/chart";
 import { coverOf, CUSTOM_COVER } from "./SongCarousel";
+import { gpuInfo } from "@/lib/rhythm/gpu";
 import HoldButton from "./HoldButton";
 import {
   drawHead,
@@ -368,24 +369,13 @@ export default function Stage({
     let perfInfo: { fps: number; p90: number; work90: number; hz: number } | null = null;
     /** 프레임 통계 표시 — 분석 모드는 항상, 일반 플레이는 P 키로 (프레임 드랍 제보용) */
     let showPerf = autoplay;
-    /** 브라우저가 쓰는 그래픽 장치 (하드웨어 가속이 꺼져 있으면 SwiftShader·Basic Render 등 소프트웨어) */
-    let gpuName = "";
-    const gpuInfo = () => {
-      if (gpuName) return gpuName;
-      try {
-        const gl = document.createElement("canvas").getContext("webgl");
-        if (!gl) return (gpuName = "WebGL 없음 — 하드웨어 가속 꺼짐?");
-        const ext = gl.getExtension("WEBGL_debug_renderer_info");
-        const r = String(gl.getParameter(ext ? ext.UNMASKED_RENDERER_WEBGL : gl.RENDERER));
-        gl.getExtension("WEBGL_lose_context")?.loseContext();
-        gpuName = /swiftshader|basic render|llvmpipe|software/i.test(r)
-          ? `소프트웨어 렌더링(하드웨어 가속 꺼짐) · ${r}`
-          : r.replace(/^ANGLE \((.*)\)$/, "$1");
-      } catch {
-        gpuName = "?";
-      }
-      return gpuName;
-    };
+    /** 브라우저가 쓰는 그래픽 장치 (하드웨어 가속이 꺼져 있으면 소프트웨어 렌더링이라고 알려 줌) */
+    const gpu = gpuInfo();
+    const gpuLabel = gpu.software
+      ? `소프트웨어 렌더링(하드웨어 가속 꺼짐) · ${gpu.name}`
+      : gpu.name;
+    // 가속이 꺼져 있으면 처음부터 가장 가볍게 (낮은 해상도·효과 최소) — 프레임이 남으면 measureFrame이 다시 올림
+    if (gpu.software) quality = 0;
     const rebuild = () => {
       buildStatic();
       buildGear();
@@ -864,7 +854,7 @@ export default function Stage({
         g.fillStyle = "rgba(253,230,138,0.85)";
         g.font = `700 11px ${mono}`;
         g.fillText(perfStr(), x0, 148);
-        g.fillText(gpuInfo(), x0, 162, right - x0);
+        g.fillText(gpuLabel, x0, 162, right - x0);
       }
     };
 
@@ -953,7 +943,7 @@ export default function Stage({
         g.fillStyle = "rgba(253,230,138,0.8)";
         g.textAlign = "left";
         g.fillText(perfStr(), px0, py - 16, pw - 90);
-        g.fillText(gpuInfo(), px0, py - 30, pw);
+        g.fillText(gpuLabel, px0, py - 30, pw);
       }
 
       // ── 점수판: 글꼴을 모두 굵은 기울임(disp)으로 맞춤 ──
