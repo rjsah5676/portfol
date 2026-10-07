@@ -381,7 +381,10 @@ export async function analyzeAudio(
   }
   // 가짜 피크 제거: 센 타격들의 상승폭 중앙값의 35%도 안 올라간 건 울림 꼬리로 봄
   const riseRef = Math.min(0.8, median(rises.filter((_, i) => raw[i].s > 0.3)) * 0.35);
-  const kept = raw.filter((_, i) => rises[i] >= riseRef);
+  // 곡이 끝나고 잦아드는 꼬리(페이드아웃·잔향)의 타격은 버림 — 음량 비교라 아주 작은 소리도 타격으로 잡혀서
+  // "노래 다 끝났는데 노트가 뜸"(ANiMA 울티마: 마지막 타격 뒤 -40~-80dB 꼬리에 13개)
+  const end = audibleEnd(rms);
+  const kept = raw.filter((o, i) => rises[i] >= riseRef && o.t <= end);
 
   progress(0.9, "박자 격자에 맞추는 중");
   await tick();
@@ -392,6 +395,16 @@ export async function analyzeAudio(
     if (fast.div !== DIV_TRIPLET) aligned = fast;
   }
   return { duration: buffer.duration, ...aligned, rms };
+}
+
+/** 꼬리 문턱: 곡에서 큰 소리(음량 상위 5%)보다 28dB 넘게 작으면 끝난 것으로 봄 */
+const TAIL_DB = 28;
+/** 들리는 소리가 끝나는 시각(초): 큰 소리 대비 -28dB 위인 마지막 프레임 + 0.05초 */
+export function audibleEnd(rms: Float32Array): number {
+  const floor = (percentile(rms, 0.95) || 0) * Math.pow(10, -TAIL_DB / 20);
+  let f = rms.length - 1;
+  while (f > 0 && rms[f] <= floor) f--;
+  return f / FPS + 0.05;
 }
 
 /**
