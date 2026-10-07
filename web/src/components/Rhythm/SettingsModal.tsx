@@ -22,6 +22,7 @@ import {
 } from "@/lib/rhythm/fx";
 import { audio, sfx } from "@/lib/rhythm/sfx";
 import HoldButton from "./HoldButton";
+import SyncCalibrate from "./SyncCalibrate";
 import { BG_MODES, COVERS_OPT, FIELD_POS, type BgMode, type Cover, type FieldPos } from "./Stage";
 
 export type LaneMod = "none" | "mirror" | "random";
@@ -124,6 +125,8 @@ export default function SettingsModal({
   onClose: () => void;
 }) {
   const [tab, setTab] = useState<Tab>("play");
+  // 싱크 탭: 들으면서 맞추기 (박자 소리 + 떨어지는 노트)
+  const [calibrate, setCalibrate] = useState(false);
   const set = (p: Partial<Settings>) => setSettings((s) => ({ ...s, ...p }));
   const close = () => {
     sfx("ui-back", 0.7);
@@ -358,6 +361,16 @@ export default function SettingsModal({
                 </p>
                 <button
                   type="button"
+                  className={chip(calibrate)}
+                  onClick={() => {
+                    setCalibrate(!calibrate);
+                    sfx("ui-move", 0.5);
+                  }}
+                >
+                  🎧 들으면서 맞추기
+                </button>
+                <button
+                  type="button"
                   className={chip(false)}
                   disabled={settings.sync === 0}
                   onClick={() => set({ sync: 0 })}
@@ -365,6 +378,18 @@ export default function SettingsModal({
                   초기화
                 </button>
               </div>
+              {calibrate && (
+                <>
+                  <SyncCalibrate sync={settings.sync} hitSound={settings.hitSound} />
+                  <p className="mt-[0.5cqw] font-['Nanum_Gothic',sans-serif] text-[1cqw] leading-relaxed text-white/45">
+                    띡 소리가 날 때 노트가 분홍 줄에 딱 닿아야 해요. 노트가 소리보다{" "}
+                    <b className="text-white/70">먼저</b> 닿으면 <b className="text-white/70">+</b>,{" "}
+                    <b className="text-white/70">늦게</b> 닿으면 <b className="text-white/70">−</b>
+                    로 움직여 보세요. 여기서 맞춘 값이 그대로 플레이에 쓰여요 (블루투스 이어폰이라면
+                    꼭 이어폰을 낀 채로).
+                  </p>
+                </>
+              )}
             </>
           )}
 

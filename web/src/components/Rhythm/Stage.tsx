@@ -1369,6 +1369,7 @@ export default function Stage({
       if (finished) return;
       finished = true;
       running = false;
+      if (autoplay) autoSfxStop();
       const acc = engine.accuracy;
       onFinish({
         auto: autoplay || undefined,
@@ -1496,7 +1497,10 @@ export default function Stage({
       const workStart = performance.now();
       const t = smoothNow(ts);
       if (video && !videoOff) syncVideo(t);
-      if (autoplay) autoStep(t);
+      if (autoplay) {
+        autoSfxSchedule();
+        autoStep(t);
+      }
       // 싱크가 잡히기 전(처음 몇 탭·곡 초반)엔 HP가 바닥나도 안 끝남 — 지연이 큰 기기는 첫 보정 전에 다 MISS라 죽어 버려서
       engine.noFail = !!song.practice || (tracker.grace && t < AUTO_SYNC.graceSec);
       engine.update(t - judgeSec()); // 지나간 노트 미스 처리도 타격 싱크 기준
@@ -1563,6 +1567,7 @@ export default function Stage({
       failing = true;
       running = false;
       video?.pause();
+      if (autoplay) autoSfxStop();
       const a = ctx.currentTime;
       try {
         src.playbackRate.setValueAtTime(1, a);
@@ -1607,11 +1612,39 @@ export default function Stage({
       src.connect(hitGain);
       src.start();
     };
-    // ── 분석 모드: 노트 시각에 딱 맞춰 누르고(올퍼펙) 롱노트는 끝까지 — 타격음도 그대로 ──
+    // ── 분석 모드: 노트 시각에 딱 맞춰 누르고(올퍼펙) 롱노트는 끝까지 ──
     let autoNext = 0;
     const autoOrder = autoplay
       ? engine.notes.map((_, i) => i).sort((a, b) => engine.notes[a].t - engine.notes[b].t)
       : [];
+    // 분석 모드 타격음: 프레임에서 바로 틀면 출력 지연(블루투스 ~200ms)만큼 음악보다 늦게 들림 —
+    // 음악과 같은 오디오 시계에 미리 예약해서 샘플 단위로 맞춤 (일시정지는 ctx.suspend라 같이 멈췄다 같이 이어짐)
+    let autoSfxNext = 0;
+    const autoSfx: AudioBufferSourceNode[] = [];
+    const autoSfxSchedule = () => {
+      const horizon = ctx.currentTime + 0.8;
+      while (autoSfxNext < autoOrder.length) {
+        const n = engine.notes[autoOrder[autoSfxNext]];
+        const at = startAt + n.t + offsetSec();
+        if (at > horizon) break;
+        autoSfxNext++;
+        if (at < ctx.currentTime - 0.05) continue;
+        const sNode = ctx.createBufferSource();
+        sNode.buffer = hitBuf;
+        sNode.connect(hitGain);
+        sNode.start(Math.max(at, ctx.currentTime));
+        autoSfx.push(sNode);
+        if (autoSfx.length > 64) autoSfx.splice(0, 32); // 지난 것들은 버림 (멈출 일 있으면 최근 것만으로 충분)
+      }
+    };
+    const autoSfxStop = () => {
+      for (const sNode of autoSfx) {
+        try {
+          sNode.stop();
+        } catch {}
+      }
+      autoSfx.length = 0;
+    };
     /** 단노트는 80ms 뒤에 떼서 패드 불빛이 보이게 */
     const autoRelease = [Infinity, Infinity, Infinity, Infinity];
     const autoStep = (t: number) => {
@@ -1620,7 +1653,6 @@ export default function Stage({
         const n = notes[autoOrder[autoNext++]];
         if (engine.pressed[n.lane]) engine.release(n.lane, n.t - 0.001);
         engine.press(n.lane, n.t);
-        playHit();
         autoRelease[n.lane] = n.end ? n.end : n.t + 0.08;
       }
       for (let l = 0; l < 4; l++)
@@ -1842,6 +1874,7 @@ export default function Stage({
           o.stop();
         } catch {}
       }
+      autoSfxStop();
       if (!stopped) {
         stopped = true;
         try {
