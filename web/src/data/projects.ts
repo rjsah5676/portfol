@@ -138,7 +138,7 @@ export const gameProjects: Project[] = [
     name: "PIXEL FIGHT",
     imgLink: pixelfightImg,
     title: "1:1 플랫폼 격투 [PIXEL FIGHT]",
-    desc: "캐릭터 6명, AI·2인·온라인 대전. 온라인은 롤백 넷코드로 지연을 숨김",
+    desc: "캐릭터 6명, AI·2인·온라인 대전·랭크전(레이팅). 온라인은 롤백 넷코드로 지연을 숨김",
     tech: ["TypeScript", "Canvas", "WebRTC", "socket.io"],
     period: "2026.10 –",
     playLink: "/games/fight/",

@@ -732,13 +732,15 @@ export default function FightGame() {
           onClick={toggleFs}
           className="mb-3 flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl border border-[#FF8A3D]/45 bg-[linear-gradient(90deg,rgba(255,138,61,0.18),rgba(224,48,106,0.18))] px-4 py-2 font-['Nanum_Gothic',sans-serif] text-[13px] text-white/85 shadow-[0_0_24px_-6px_rgba(255,138,61,0.55)] transition-colors hover:border-[#FF8A3D] hover:text-white"
         >
-          <span className="rounded-md bg-[#FF8A3D] px-1.5 py-0.5 font-mono text-[11px] font-bold text-white">
+          <span className="shrink-0 rounded-md bg-[#FF8A3D] px-1.5 py-0.5 font-mono text-[11px] font-bold text-white">
             ⛶
           </span>
-          <b className="font-bold text-white">전체화면 플레이 권장</b>
-          <span className="text-white/55">
+          <b className="shrink-0 font-bold whitespace-nowrap text-white">전체화면 플레이 권장</b>
+          {/* 키보드 안내는 PC 에서만, 휴대폰은 짧게 (긴 문장이 좁은 화면에서 제목까지 끊어 놓던 것) */}
+          <span className="min-w-0 truncate text-white/55 [@media(pointer:coarse)]:hidden">
             — 여기를 누르면 전체화면으로 (Esc = 일시정지, 나올 땐 일시정지 메뉴나 ✕)
           </span>
+          <span className="hidden whitespace-nowrap text-white/55 [@media(pointer:coarse)]:inline">— 눌러서 크게</span>
         </button>
         <div className="fs-screen relative isolate [container-type:inline-size]">
           {onlineOn ? (
