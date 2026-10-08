@@ -580,7 +580,8 @@ export function registerPoker({ gateway, db, users }: Deps, opts: PokerOptions =
       if (s.leaving || (s.exitAfter && (!p || p.folded))) removeSeat(t, s, s.exitAfter === "idle" ? "idle" : "leave");
     }
     emit(t, ...says);
-    scheduleNext(t, showdown ? 3000 + 500 * Math.max(2, shown) + 1500 : 2400);
+    // (+1.5초: 승리 · 패배 대사를 다 듣고 다음 판으로)
+    scheduleNext(t, showdown ? 4500 + 500 * Math.max(2, shown) + 1500 : 3900);
   }
 
   function scheduleNext(t: Table, delay: number) {

@@ -438,7 +438,7 @@ function Settings() {
             </div>
           </div>
           <p className="border-t border-white/10 pt-[0.5em] text-[0.82em] leading-relaxed text-white/40">
-            BETA · 캐릭터 음성은 진우부터 하나씩 들어가요.
+            BETA · 캐릭터 음성은 하나씩 들어가는 중이에요.
           </p>
         </div>
       )}

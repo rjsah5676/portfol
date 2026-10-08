@@ -401,13 +401,18 @@ const BETS = new Set([
   "fold",
   "die",
   "allin-call",
+  "select",
 ]);
 /** 캐릭터 음성 (파일 있을 때만). big = 크게 외치는 버전(없으면 보통 버전) */
 export function playVoice(char: string, name: string, big = false) {
   const s = getSound();
   if (s.mute || s.voice <= 0) return;
   const key = `voice/${char}/${char}-${name}`;
-  const url = (big && fileOf(`${key}-big`)) || fileOf(key);
+  // 캐릭터 고를 때 대사(select)가 없으면 입장 인사로
+  const url =
+    (big && fileOf(`${key}-big`)) ||
+    fileOf(key) ||
+    (name === "select" ? fileOf(`voice/${char}/${char}-hello`) : null);
   if (!url) return;
   const c = ac();
   if (!c) return;

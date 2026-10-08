@@ -1256,7 +1256,7 @@ describe("순위", () => {
     expect(list.length).toBeGreaterThan(0);
     expect(list.length).toBeLessThanOrEqual(50);
     for (const x of list) {
-      expect(Object.keys(x).sort()).toEqual(["char", "hands", "money", "nick"]);
+      expect(Object.keys(x).sort()).toEqual(["avatar", "char", "hands", "money", "nick"]);
       expect(x.hands).toBeGreaterThanOrEqual(1);
       expect(typeof x.char).toBe("string");
     }

@@ -249,7 +249,7 @@ export function SevenActions({
   if (!lg || view.toAct !== mySeat) return null;
   const big =
     "pk-btn flex min-w-0 flex-1 flex-col items-center justify-center px-[0.2em] py-[0.55em] whitespace-nowrap";
-  // 순서: 다이 · 삥(또는 콜) · 따당 · 쿼터 · 하프 (그 순간 할 수 있는 것만)
+  // 순서: 다이 · 따당 · 삥(또는 콜) · 쿼터 · 하프 (그 순간 할 수 있는 것만)
   const buttons: { key: string; label: string; cls: string; amt?: number; act: SevenAction }[] = [];
   buttons.push({ key: "die", label: "다이", cls: "pk-btn-fold", act: { a: "die" } });
   const bet = (b: SevenBet) => {
@@ -264,8 +264,9 @@ export function SevenActions({
       act: { a: b },
     });
   };
+  bet("ddadang");
   bet("bbing");
-  // 콜은 삥 자리(두 번째)에 — 미리 행동 줄의 「삥/콜」과 같은 자리라 헷갈리지 않게
+  // 콜은 삥 자리(세 번째)에 — 미리 행동 줄의 「삥/콜」과 같은 자리라 헷갈리지 않게
   // 받을 돈이 가진 칩 이상이면 콜 = 있는 만큼 올인 (서버가 그렇게 처리, 남는 건 상대가 돌려받음)
   if (lg.toCall > 0)
     buttons.push({
@@ -275,7 +276,6 @@ export function SevenActions({
       amt: lg.toCall,
       act: { a: "call" },
     });
-  bet("ddadang");
   bet("quarter");
   bet("half");
   return (

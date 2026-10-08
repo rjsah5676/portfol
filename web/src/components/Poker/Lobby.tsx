@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { asset } from "@/lib/poker/assets";
+import { playVoice } from "@/lib/poker/sfx";
 import {
   CHARS,
   CHAR_IDS,
@@ -746,7 +747,10 @@ function CharSelect({
             key={c}
             type="button"
             aria-pressed={sel === c}
-            onClick={() => setSel(c)}
+            onClick={() => {
+              setSel(c);
+              playVoice(c, "select");
+            }}
             className="pk-pick h-full min-w-0 flex-1 cursor-pointer"
           >
             {}

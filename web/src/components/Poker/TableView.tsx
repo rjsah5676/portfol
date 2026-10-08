@@ -2486,8 +2486,8 @@ function ActionBar(props: {
             : ([
                 // 삥과 콜은 같은 순간에 있을 수 없는 행동 → 한 버튼 (받을 돈 없으면 삥, 있으면 콜)
                 ["die", "다이", "pk-btn-fold"],
-                ["callbbing", "삥 / 콜", "pk-btn-call"],
                 ["ddadang", "따당", "pk-btn-ddadang"],
+                ["callbbing", "삥 / 콜", "pk-btn-call"],
                 ["quarter", "쿼터", "pk-btn-quarter"],
                 ["half", "하프", "pk-btn-half"],
               ] as const)
