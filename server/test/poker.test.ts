@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { REVIVE, START_MONEY, TIERS, kstDay } from "../../web/src/lib/poker/rules";
+import { REVIVE, SKINS, START_MONEY, TIERS, kstDay } from "../../web/src/lib/poker/rules";
 import type { ChatMsg, LobbyTable, HoldemLegal, HoldemView, MyHand, SevenLegal, SevenView, TableWire, Wallet } from "../../web/src/lib/poker/types";
 import { RpcError, sleep, startTestServer, type TestClient, type TestServer, type TestSub } from "./helpers";
 
@@ -164,6 +164,52 @@ describe("회원 전용 · 자금", () => {
     expect((await a.c.rpc<Wallet>("poker.wallet")).table).toBeNull();
     await setMoney(a.uid, TIERS[2].min);
     expect(await a.c.rpc("poker.sit", { id })).toMatchObject({ seat: expect.any(Number) });
+  });
+
+  it("방 9단계: 판돈 · 입장컷이 계속 올라가고, 타짜 황금판도 입장컷만 채우면 앉음, 없는 단계는 거절", async () => {
+    for (let i = 1; i < TIERS.length; i++) {
+      expect(TIERS[i].ante).toBeGreaterThan(TIERS[i - 1].ante);
+      expect(TIERS[i].min).toBeGreaterThan(TIERS[i - 1].min);
+    }
+    const a = await member();
+    const err = await a.c.rpc("poker.create", { game: "seven", tier: 10, bots: true }).catch((e) => e as RpcError);
+    expect(err).toMatchObject({ code: "BAD_REQUEST" });
+    const id = await a.c.rpc<string>("poker.create", { game: "seven", tier: 9, bots: true });
+    await a.c.sub("poker.me", { id });
+    expect(await a.c.rpc("poker.sit", { id }).catch((e) => (e as RpcError).code)).toBe("NEED_MONEY");
+    await setMoney(a.uid, TIERS[8].min);
+    expect(await a.c.rpc("poker.sit", { id })).toMatchObject({ seat: expect.any(Number) });
+  });
+
+  it("상점 · 옷장: 10억 스킨은 돈이 모자라면 못 사고, 사면 칩이 빠지고 바로 입음, 앉은 자리 그림도 바뀜, 두 번은 못 삼", async () => {
+    const a = await member();
+    const sk = SKINS[0];
+    expect(await a.c.rpc("poker.buy", { skin: sk.id }).catch((e) => (e as RpcError).code)).toBe("NEED_MONEY");
+    await a.c.rpc("poker.char", { char: sk.char });
+    await setMoney(a.uid, sk.price + 5 * 10 ** 8);
+    // 앉아 있으면 못 삼
+    const id = await a.c.rpc<string>("poker.create", { game: "holdem", tier: 1, bots: true });
+    await a.c.sub("poker.me", { id });
+    await a.c.rpc("poker.sit", { id });
+    expect(await a.c.rpc("poker.buy", { skin: sk.id }).catch((e) => (e as RpcError).code)).toBe("SEATED");
+    await a.c.rpc("poker.leave", { id });
+    await until(async () => (await a.c.rpc<Wallet>("poker.wallet")).table === null, "자리에서 일어남");
+    const w = await a.c.rpc<Wallet>("poker.buy", { skin: sk.id });
+    expect(w.skins).toEqual([sk.id]);
+    expect(w.wear[sk.char]).toBe(sk.id);
+    expect(w.money).toBe(5 * 10 ** 8);
+    expect(await a.c.rpc("poker.buy", { skin: sk.id }).catch((e) => (e as RpcError).code)).toBe("OWNED");
+    // 앉으면 자리 그림 열쇠가 스킨
+    const sub = await a.c.sub<{ table: TableWire }>("poker.table", { id });
+    await a.c.rpc("poker.sit", { id });
+    const seatOf = () => (([...sub.events].reverse().find((e) => e.t === "state")?.d ?? sub.data?.table) as TableWire | undefined)?.seats.find((x) => x?.uid === a.uid);
+    await until(() => !!seatOf(), "앉음");
+    await until(() => seatOf()?.look === sk.id, "스킨 그림");
+    // 벗으면 기본, 남의 캐릭터 스킨은 못 입음
+    const w2 = await a.c.rpc<Wallet>("poker.wear", { char: sk.char, skin: null });
+    expect(w2.wear[sk.char]).toBeUndefined();
+    await until(() => seatOf()?.look === sk.char, "기본 그림");
+    expect(await a.c.rpc("poker.wear", { char: "jinwoo", skin: sk.id }).catch((e) => (e as RpcError).code)).toBe("BAD_REQUEST");
   });
 
   it("기본 칩 자동 지급: 칩이 바닥난 채로 접속하면 지갑에 받은 금액 · 남은 횟수가 같이 옴", async () => {
@@ -390,7 +436,8 @@ describe("강퇴 투표", () => {
   it("3판 이상 친 사람만 투표, 봇들이 따라 투표해 3표면 강퇴되고 한동안 못 앉음, 10판 지나면 표가 사라짐", async () => {
     const a = await member();
     const b = await member();
-    const id = await a.c.rpc<string>("poker.quick", { game: "holdem", tier: 1 });
+    // (바로 입장은 다른 테스트의 방에 들어갈 수 있어 자리가 모자랄 수 있음 → 새 방)
+    const id = await a.c.rpc<string>("poker.create", { game: "holdem", tier: 1, bots: true });
     const seenA: TableWire[] = [];
     const pa = await play(a, id, undefined, seenA);
     await a.c.rpc("poker.sit", { id });
@@ -435,12 +482,12 @@ describe("봇이 연 방", () => {
       const latest = () => [...sub.events].reverse().find((e) => e.t === "list")?.d ?? sub.data ?? [];
       await until(() => {
         const list = latest() as LobbyTable[];
-        // (1억으로 앉을 수 있는 방 — VIP룸은 3억부터)
-        const ok = (g: string) => list.some((t) => t.game === g && t.bots && !t.locked && t.players > 0 && t.players < t.max && t.tier !== 3);
+        // (1억으로 앉을 수 있는 방 — 동네판 · 하우스만)
+        const ok = (g: string) => list.some((t) => t.game === g && t.bots && !t.locked && t.players > 0 && t.players < t.max && t.tier <= 2);
         return ok("holdem") && ok("seven");
       }, "봇이 연 방이 로비에 보임", 15_000);
       // 바로 입장을 누르면 그 종목 · 단계의 봇 방으로 들어감 (새 방을 만들지 않음)
-      const room = (latest() as LobbyTable[]).find((t) => t.bots && t.players > 0 && t.players < t.max && t.tier !== 3)!;
+      const room = (latest() as LobbyTable[]).find((t) => t.bots && t.players > 0 && t.players < t.max && t.tier <= 2)!;
       expect(await c.rpc<string>("poker.quick", { game: room.game, tier: room.tier })).toBe(room.id);
       await c.sub("poker.me", { id: room.id });
       await c.rpc("poker.sit", { id: room.id });

@@ -1,14 +1,17 @@
 "use client";
 
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
-import { asset } from "@/lib/poker/assets";
+import { asset, roomTint } from "@/lib/poker/assets";
 import { playVoice } from "@/lib/poker/sfx";
 import {
   CHARS,
   CHAR_IDS,
   GAMES,
+  LEAGUES,
   TIERS,
   fmtShort,
+  lookOf,
+  skinOf,
   type CharId,
   type GameKind,
   type Tier,
@@ -19,6 +22,8 @@ import { createTable, quickJoin, setChar, subscribeLobby } from "@/realtime/poke
 import type { Orient } from "./layout";
 import MyPage from "./MyPage";
 import PatchNotes, { LATEST } from "./PatchNotes";
+import LobbyChar from "./LobbyChar";
+import Sheet from "./Sheet";
 import { Money, PlayingCard, Profile } from "./parts";
 
 /*
@@ -40,6 +45,7 @@ export default function Lobby({
   o,
   h,
   onEnter,
+  onCloset,
   topRight,
 }: {
   wallet: Wallet;
@@ -50,6 +56,7 @@ export default function Lobby({
   h: number;
   onEnter: (id: string) => void;
   onWallet: (w: Wallet) => void;
+  onCloset: () => void;
   topRight?: ReactNode;
 }) {
   const [game, setGameState] = useState<GameKind>("holdem");
@@ -62,9 +69,10 @@ export default function Lobby({
   const [notes, setNotes] = useState(false);
   const [toast, setToast] = useState<{ text: string; key: number } | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const toastSeq = useRef(0);
   const say = (text: string) => {
     if (toastTimer.current) clearTimeout(toastTimer.current);
-    setToast({ text, key: Date.now() });
+    setToast({ text, key: ++toastSeq.current });
     toastTimer.current = setTimeout(() => setToast(null), 2400);
   };
 
@@ -96,13 +104,21 @@ export default function Lobby({
   };
 
   const myRank = rank ? rank.findIndex((r) => r.nick === myNick) + 1 : 0;
-  // 고른 종목 · 판돈 단계의 방만
-  const shown = (tables ?? []).filter((t) => t.game === game && t.tier === tier);
   const T = TIERS[tier - 1];
+  const L = LEAGUES[T.league - 1];
+  // 고른 종목 · 리그의 방만 (같은 리그 세 방을 같이, 판돈 낮은 방부터)
+  const shown = (tables ?? [])
+    .filter((t) => t.game === game && TIERS[t.tier - 1]?.league === T.league)
+    .sort((a, b) => a.tier - b.tier);
+  /** 리그 탭: 같은 순서(1~3번째 방)를 유지하며 옮김 */
+  const pickLeague = (lg: number) => setTier(((lg - 1) * 3 + T.step) as TierId);
   const locked = wallet.money < T.min;
   const H = o === "h";
   const bar = 44;
   const info = CHARS[wallet.char];
+  /** 그림 열쇠 (스킨을 입었으면 스킨) */
+  const look = lookOf(wallet.char, wallet.wear);
+  const skin = skinOf(look);
 
   // ── 조각들 ──
   const top = (
@@ -141,7 +157,7 @@ export default function Lobby({
             aria-expanded={menu}
             className="pk-me-chip"
           >
-            <Profile char={wallet.char} size={26} className="ring-2 ring-[var(--pk-brass)]" />
+            <Profile char={look} size={26} className="ring-2 ring-[var(--pk-brass)]" />
             <span className="hidden max-w-[9em] truncate text-[0.8em] text-white/75 sm:inline">
               <b className="text-white">{myNick}</b>님 어서오세요
             </span>
@@ -202,17 +218,14 @@ export default function Lobby({
       <div className="pk-me-glow absolute inset-0" />
       <div className="pk-me-rays absolute inset-0" />
       {}
-      <img
-        key={wallet.char}
-        src={asset.full(wallet.char)}
-        alt=""
-        draggable={false}
-        className="pk-idle-char pointer-events-none absolute left-1/2 h-[112%] w-auto -translate-x-1/2"
+      {/* 내 캐릭터: 누르면 반응 (스킨이면 동작이 더 많음) */}
+      <LobbyChar
+        key={look}
+        look={look}
+        className="absolute inset-x-0 top-[3%] h-[78%]"
         style={{
-          top: "3%",
-          maskImage: "linear-gradient(180deg,#000 50%,transparent 74%)",
-          WebkitMaskImage: "linear-gradient(180deg,#000 50%,transparent 74%)",
-          filter: "drop-shadow(0 0 18px rgba(0,0,0,0.6))",
+          maskImage: "linear-gradient(180deg,#000 62%,transparent 96%)",
+          WebkitMaskImage: "linear-gradient(180deg,#000 62%,transparent 96%)",
         }}
       />
       <div className="relative mt-auto grid gap-[0.45em] p-[0.7em]">
@@ -269,10 +282,10 @@ export default function Lobby({
         </div>
         <button
           type="button"
-          onClick={() => say("스킨 변경은 구현 예정이에요")}
+          onClick={onCloset}
           className="pk-btn pk-btn-gold py-[0.45em] text-[0.82em]"
         >
-          스킨 변경 <span className="font-normal opacity-70">· 준비 중</span>
+          {skin ? `${skin.name} 입는 중` : "옷장 · 스킨"}
         </button>
       </div>
     </div>
@@ -305,7 +318,9 @@ export default function Lobby({
             <ModeCards game={g} h={H} />
           </div>
           <div className="flex min-w-0 items-baseline gap-[0.5em] border-t border-[rgba(214,175,92,0.3)] bg-black/70 px-[0.7em] py-[0.35em]">
-            <span className="shrink-0 text-[1.1em] font-extrabold whitespace-nowrap">{GAMES[g].name}</span>
+            <span className="shrink-0 text-[1.1em] font-extrabold whitespace-nowrap">
+              {GAMES[g].name}
+            </span>
             <span className="pk-frame-title min-w-0 truncate text-[0.7em]">
               {g === "holdem" ? "TEXAS HOLD'EM" : "SEVEN POKER"}
             </span>
@@ -323,60 +338,84 @@ export default function Lobby({
       className="grid h-full gap-[0.5em]"
       style={{ gridTemplateRows: H ? "1fr auto" : "auto auto" }}
     >
-      <div className="grid min-h-0 grid-cols-3 gap-[0.45em]">
-        {TIERS.map((t) => {
-          const lock = wallet.money < t.min;
-          const on = tier === t.id;
-          return (
-            <button
-              key={t.id}
-              type="button"
-              aria-pressed={on}
-              onClick={() => {
-                setTier(t.id);
-                if (lock) say(`${t.name}은 칩 ${fmtShort(t.min)}부터 앉을 수 있어요`);
-              }}
-              className={`relative flex min-h-0 cursor-pointer flex-col overflow-hidden rounded-[8px] border-2 text-left transition ${on ? "border-[var(--pk-brass)] shadow-[0_0_14px_rgba(255,201,60,0.35)]" : "border-white/10 hover:border-white/30"}`}
-            >
-              <div
-                className="relative min-h-[3.2em] flex-1 overflow-hidden bg-cover bg-center"
-                style={{ backgroundImage: `url(${asset.room(t.id, "h")})` }}
+      <div className="grid min-h-0 gap-[0.45em]" style={{ gridTemplateRows: "auto 1fr" }}>
+        {/* 리그 탭: 일반 · 도박꾼 · 타짜 */}
+        <div className="pk-seg pk-league">
+          {LEAGUES.map((lg) => {
+            const open = wallet.money >= TIERS[(lg.id - 1) * 3].min;
+            return (
+              <button
+                key={lg.id}
+                type="button"
+                aria-pressed={T.league === lg.id}
+                onClick={() => pickLeague(lg.id)}
+                style={{ "--lc": lg.color } as CSSProperties}
               >
-                <img
-                  src={asset.table(t.id, "h")}
-                  alt=""
-                  draggable={false}
-                  className="absolute inset-x-[6%] bottom-[-6%] w-[88%]"
-                />
-                {lock && (
-                  <span className="absolute inset-0 flex items-center justify-center bg-black/60 text-[1.3em]">
-                    🔒
-                  </span>
-                )}
-              </div>
-              <div
-                className={`relative px-[0.55em] py-[0.35em] ${on ? "bg-[#2a2110]" : "bg-black/70"}`}
+                {!open && <span className="mr-[0.25em] text-[0.85em]">🔒</span>}
+                {lg.name}
+              </button>
+            );
+          })}
+        </div>
+        <div className="grid min-h-0 grid-cols-3 gap-[0.45em]">
+          {TIERS.filter((t) => t.league === T.league).map((t) => {
+            const lock = wallet.money < t.min;
+            const on = tier === t.id;
+            return (
+              <button
+                key={t.id}
+                type="button"
+                aria-pressed={on}
+                onClick={() => {
+                  setTier(t.id);
+                  if (lock) say(`${t.name}은 칩 ${fmtShort(t.min)}부터 앉을 수 있어요`);
+                }}
+                className={`relative flex min-h-0 cursor-pointer flex-col overflow-hidden rounded-[8px] border-2 text-left transition ${on ? "border-[var(--pk-brass)] shadow-[0_0_14px_rgba(255,201,60,0.35)]" : "border-white/10 hover:border-white/30"}`}
               >
-                <div className="text-[1.05em] font-extrabold">{t.name}</div>
-                <div className="text-[0.76em] leading-snug whitespace-nowrap text-white/70">
-                  판돈 {fmtShort(t.ante)}
-                  {game === "holdem" && (
-                    <>
-                      <br />
-                      <span className="text-white/50">블라인드</span> {fmtShort(t.sb)}·{fmtShort(t.bb)}
-                    </>
+                <div
+                  className="relative min-h-[3.2em] flex-1 overflow-hidden bg-cover bg-center"
+                  style={{
+                    backgroundImage: `url(${asset.room(t.id, "h")})`,
+                    filter: roomTint(t.id),
+                  }}
+                >
+                  <img
+                    src={asset.table(t.id, "h")}
+                    alt=""
+                    draggable={false}
+                    className="absolute inset-x-[6%] bottom-[-6%] w-[88%]"
+                  />
+                  {lock && (
+                    <span className="absolute inset-0 flex items-center justify-center bg-black/60 text-[1.3em]">
+                      🔒
+                    </span>
                   )}
                 </div>
                 <div
-                  className={`flex items-center gap-[0.25em] text-[0.78em] font-bold ${lock ? "text-[#ff8a8a]" : "text-[#e9c879]"}`}
+                  className={`relative px-[0.55em] py-[0.35em] ${on ? "bg-[#2a2110]" : "bg-black/70"}`}
                 >
-                  <img src={asset.chip("gold", "top")} alt="" className="h-[1em] w-[1em]" />
-                  {fmtShort(t.min)}부터
+                  <div className="text-[1.05em] font-extrabold">{t.name}</div>
+                  <div className="text-[0.76em] leading-snug whitespace-nowrap text-white/70">
+                    판돈 {fmtShort(t.ante)}
+                    {game === "holdem" && (
+                      <>
+                        <br />
+                        <span className="text-white/50">블라인드</span> {fmtShort(t.sb)}·
+                        {fmtShort(t.bb)}
+                      </>
+                    )}
+                  </div>
+                  <div
+                    className={`flex items-center gap-[0.25em] text-[0.78em] font-bold ${lock ? "text-[#ff8a8a]" : "text-[#e9c879]"}`}
+                  >
+                    <img src={asset.chip("gold", "top")} alt="" className="h-[1em] w-[1em]" />
+                    {fmtShort(t.min)}부터
+                  </div>
                 </div>
-              </div>
-            </button>
-          );
-        })}
+              </button>
+            );
+          })}
+        </div>
       </div>
       <div className="flex gap-[0.4em]">
         <button
@@ -408,7 +447,7 @@ export default function Lobby({
       <div className="flex items-center gap-[0.5em] border-b border-[rgba(214,175,92,0.25)] bg-black/40 px-[0.8em] py-[0.5em]">
         <span className="pk-frame-title">열린 방</span>
         <span className="rounded-[4px] bg-white/10 px-[0.45em] text-[0.8em] font-bold text-white/80">
-          {GAMES[game].name} · {T.name} {shown.length}
+          {GAMES[game].name} · {L.name} {shown.length}
         </span>
       </div>
       <div
@@ -429,7 +468,7 @@ export default function Lobby({
               ))}
             </div>
             <p className="text-[0.92em] text-white/60">
-              아직 열린 {GAMES[game].name} · {T.name} 방이 없어요
+              아직 열린 {GAMES[game].name} · {L.name} 방이 없어요
             </p>
             <button
               type="button"
@@ -444,7 +483,7 @@ export default function Lobby({
           shown.map((t) => {
             const tt = TIERS[t.tier - 1];
             const lock = wallet.money < tt.min;
-            const color = tt.id === 3 ? "#ff6f91" : tt.id === 2 ? "#4fc9e0" : "#8fd35f";
+            const color = ["#8fd35f", "#4fc9e0", "#ff6f91"][tt.step - 1];
             return (
               <button
                 key={t.id}
@@ -530,7 +569,7 @@ export default function Lobby({
               className="shrink-0 cursor-pointer"
               aria-label="캐릭터 변경"
             >
-              <Profile char={wallet.char} size={44} className="ring-2 ring-[var(--pk-brass)]" />
+              <Profile char={look} size={44} className="ring-2 ring-[var(--pk-brass)]" />
             </button>
             <button
               type="button"
@@ -551,6 +590,15 @@ export default function Lobby({
                 <Money won={wallet.money} className="text-[1.2em] text-[#ffd84a]" />
               </div>
             </button>
+            {skin && (
+              <LobbyChar
+                key={look}
+                look={look}
+                bust
+                onSay={say}
+                className="h-[3.6em] w-[3.2em] shrink-0 self-end"
+              />
+            )}
             {myRank > 0 && (
               <button
                 type="button"
@@ -576,117 +624,101 @@ export default function Lobby({
         </div>
       )}
 
-      {/* 서랍들 */}
+      {/* 창(바텀시트): 하나만 띄우고 내용만 바꿈 — 뒤로가기 기록이 한 번만 쌓이게 */}
       {sheet && (
-        <div
-          className="absolute inset-0 z-40 flex items-end justify-center bg-black/65 sm:items-center"
-          onClick={() => setSheet("")}
+        <Sheet
+          key="sheet"
+          mobile={!H}
+          maxH={sheet === "me" ? h - (H ? 24 : 8) : Math.min(h - (H ? 24 : 8), H ? h : h * 0.9)}
+          wide={sheet === "me" ? 760 : 640}
+          fill={sheet === "me"}
+          title={
+            sheet === "create"
+              ? `${GAMES[game].name} · ${L.name} ${T.name} 방 만들기`
+              : sheet === "char"
+                ? "캐릭터"
+                : sheet === "rank"
+                  ? "자금 순위"
+                  : undefined
+          }
+          onClose={() => setSheet("")}
         >
-          <div
-            className={`pk-frame pk-pop w-full ${H ? "max-w-[min(640px,80%)]" : ""} overflow-hidden`}
-            style={{ maxHeight: h - 20 }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            {sheet === "create" && (
-              <form
-                className="grid gap-[0.6em] p-[1em]"
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  void run("create", async () =>
-                    onEnter(
-                      await createTable({
-                        game,
-                        tier,
-                        name: form.name,
-                        password: form.password,
-                        bots: form.bots,
-                      })
-                    )
-                  );
-                }}
-              >
-                <div className="pk-frame-title">
-                  {GAMES[game].name} · {T.name} 방 만들기
-                </div>
-                <input
-                  value={form.name}
-                  maxLength={20}
-                  onChange={(e) => setForm({ ...form, name: e.target.value })}
-                  placeholder={`방 이름 (${myNick}의 테이블)`}
-                  aria-label="방 이름"
-                  className="rounded-[6px] border border-white/15 bg-black/50 px-[0.7em] py-[0.55em] text-[0.9em] text-white placeholder:text-white/35 focus:border-[var(--pk-brass)] focus:outline-none"
-                />
-                <input
-                  value={form.password}
-                  maxLength={40}
-                  onChange={(e) => setForm({ ...form, password: e.target.value })}
-                  placeholder="비밀번호 (비우면 공개 방)"
-                  aria-label="비밀번호"
-                  className="rounded-[6px] border border-white/15 bg-black/50 px-[0.7em] py-[0.55em] text-[0.9em] text-white placeholder:text-white/35 focus:border-[var(--pk-brass)] focus:outline-none"
-                />
-                <label className="flex cursor-pointer items-center gap-[0.6em] rounded-[6px] bg-white/[0.05] px-[0.7em] py-[0.55em] text-[0.85em]">
-                  <input
-                    type="checkbox"
-                    checked={form.bots}
-                    onChange={(e) => setForm({ ...form, bots: e.target.checked })}
-                    className="h-[1.1em] w-[1.1em] accent-[var(--pk-brass)]"
-                  />
-                  <span>바로 입장 허용</span>
-                </label>
-                <div className="flex gap-[0.4em]">
-                  <button
-                    type="button"
-                    onClick={() => setSheet("")}
-                    className="pk-btn pk-btn-ghost px-[1em] py-[0.55em] text-[0.85em]"
-                  >
-                    취소
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={!!busy}
-                    className="pk-btn pk-btn-gold flex-1 py-[0.55em] text-[0.9em]"
-                  >
-                    {busy === "create" ? "만드는 중…" : "만들고 앉기"}
-                  </button>
-                </div>
-              </form>
-            )}
-            {sheet === "char" && (
-              <CharSelect
-                current={wallet.char}
-                o={o}
-                onPick={(c) => void run("char", async () => (await setChar(c), setSheet("")))}
-                onClose={() => setSheet("")}
+          {sheet === "create" && (
+            <form
+              className="grid gap-[0.6em] p-[0.9em] pt-[0.5em]"
+              onSubmit={(e) => {
+                e.preventDefault();
+                void run("create", async () =>
+                  onEnter(
+                    await createTable({
+                      game,
+                      tier,
+                      name: form.name,
+                      password: form.password,
+                      bots: form.bots,
+                    })
+                  )
+                );
+              }}
+            >
+              <input
+                value={form.name}
+                maxLength={20}
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
+                placeholder={`방 이름 (${myNick}의 테이블)`}
+                aria-label="방 이름"
+                className="rounded-[6px] border border-white/15 bg-black/50 px-[0.7em] py-[0.55em] text-[0.9em] text-white placeholder:text-white/35 focus:border-[var(--pk-brass)] focus:outline-none"
               />
-            )}
-            {sheet === "me" && (
-              <div className="flex flex-col" style={{ maxHeight: h - 20 }}>
-                <MyPage
-                  wallet={wallet}
-                  compact={!H}
-                  onChar={() => setSheet("char")}
-                  onRank={() => setSheet("rank")}
-                  onClose={() => setSheet("")}
+              <input
+                value={form.password}
+                maxLength={40}
+                onChange={(e) => setForm({ ...form, password: e.target.value })}
+                placeholder="비밀번호 (비우면 공개 방)"
+                aria-label="비밀번호"
+                className="rounded-[6px] border border-white/15 bg-black/50 px-[0.7em] py-[0.55em] text-[0.9em] text-white placeholder:text-white/35 focus:border-[var(--pk-brass)] focus:outline-none"
+              />
+              <label className="flex cursor-pointer items-center gap-[0.6em] rounded-[6px] bg-white/[0.05] px-[0.7em] py-[0.55em] text-[0.85em]">
+                <input
+                  type="checkbox"
+                  checked={form.bots}
+                  onChange={(e) => setForm({ ...form, bots: e.target.checked })}
+                  className="h-[1.1em] w-[1.1em] accent-[var(--pk-brass)]"
                 />
-              </div>
-            )}
-            {sheet === "rank" && (
-              <div className="flex flex-col p-[0.9em]" style={{ maxHeight: h * 0.8 }}>
-                <div className="pk-frame-title mb-[0.4em]">순위</div>
-                <div className="pk-scroll min-h-0 overflow-y-auto">
-                  <RankTable rank={rank} myNick={myNick} />
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setSheet("")}
-                  className="pk-btn pk-btn-ghost mt-[0.6em] py-[0.45em] text-[0.85em]"
-                >
-                  닫기
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
+                <span>바로 입장 허용</span>
+              </label>
+              <button
+                type="submit"
+                disabled={!!busy}
+                className="pk-btn pk-btn-gold py-[0.6em] text-[0.92em]"
+              >
+                {busy === "create" ? "만드는 중…" : "만들고 앉기"}
+              </button>
+            </form>
+          )}
+          {sheet === "char" && (
+            <CharSelect
+              current={wallet.char}
+              o={o}
+              onPick={(c) => void run("char", async () => (await setChar(c), setSheet("")))}
+            />
+          )}
+          {sheet === "me" && (
+            <MyPage
+              wallet={wallet}
+              compact={!H}
+              onChar={() => setSheet("char")}
+              onRank={() => setSheet("rank")}
+            />
+          )}
+          {sheet === "rank" && (
+            <div
+              data-sheet-scroll
+              className="pk-scroll min-h-0 flex-1 overflow-y-auto px-[0.9em] pb-[0.9em]"
+            >
+              <RankTable rank={rank} myNick={myNick} />
+            </div>
+          )}
+        </Sheet>
       )}
     </div>
   );
@@ -754,18 +786,15 @@ function CharSelect({
   current,
   o,
   onPick,
-  onClose,
 }: {
   current: CharId;
   o: Orient;
   onPick: (c: CharId) => void;
-  onClose: () => void;
 }) {
   const [sel, setSel] = useState<CharId>(current);
   const info = CHARS[sel];
   return (
-    <div className="flex flex-col gap-[0.6em] p-[0.9em]">
-      <div className="pk-frame-title">캐릭터</div>
+    <div className="flex min-h-0 flex-col gap-[0.6em] p-[0.9em] pt-[0.4em]">
       <div className="flex items-end justify-center" style={{ height: o === "h" ? 260 : 220 }}>
         {CHAR_IDS.map((c) => (
           <button
@@ -798,22 +827,13 @@ function CharSelect({
           <div className="text-[0.72em] text-white/65">{info.blurb}</div>
         </div>
       </div>
-      <div className="flex gap-[0.4em]">
-        <button
-          type="button"
-          onClick={onClose}
-          className="pk-btn pk-btn-ghost px-[1em] py-[0.55em] text-[0.85em]"
-        >
-          취소
-        </button>
-        <button
-          type="button"
-          onClick={() => onPick(sel)}
-          className="pk-btn pk-btn-gold flex-1 py-[0.55em] text-[0.9em]"
-        >
-          {sel === current ? "확인" : `${info.name}(으)로 변경`}
-        </button>
-      </div>
+      <button
+        type="button"
+        onClick={() => onPick(sel)}
+        className="pk-btn pk-btn-gold py-[0.6em] text-[0.92em]"
+      >
+        {sel === current ? "확인" : `${info.name}(으)로 변경`}
+      </button>
     </div>
   );
 }
@@ -850,7 +870,7 @@ export function RankTable({
             >
               {i + 1}
             </span>
-            <Profile char={r.char} size={30} />
+            <Profile char={r.look ?? r.char} size={30} />
             <span
               className={`min-w-0 flex-1 truncate ${me ? "font-bold text-[var(--pk-brass)]" : "text-white/85"}`}
             >

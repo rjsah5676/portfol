@@ -10,7 +10,7 @@ import {
   type ReactNode,
 } from "react";
 import type { ApiError } from "@/lib/api/errors";
-import { asset, chipColor, preloadChar } from "@/lib/poker/assets";
+import { asset, chipColor, preloadChar, roomTint } from "@/lib/poker/assets";
 import { cardLabel, categoryOf, evaluate } from "@/lib/poker/cards";
 import {
   ACT_MS,
@@ -23,10 +23,12 @@ import {
   TIERS,
   fmtShort,
   fmtWon,
-  type CharId,
   type Emote,
   type Face,
+  type Look,
   type Pose,
+  tierLabel,
+  type TierId,
 } from "@/lib/poker/rules";
 import { bestK, kCategory } from "@/lib/poker/seven";
 import { hasSound, isBig, playBgm, playSfx, playVoice, sfx } from "@/lib/poker/sfx";
@@ -140,7 +142,7 @@ export type SeatCardsProps<V> = {
   seat: number;
   hero: boolean;
   myHand: MyHand | null;
-  tier: 1 | 2 | 3;
+  tier: TierId;
   sizes: Sizes;
   side: "left" | "right" | "top";
   /** 쇼다운인데 아직 안 깐 자리 (패 까기 연출 중) */
@@ -216,7 +218,7 @@ export default function TableView({
   const [poses, setPoses] = useState<Record<number, Timed<Pose>>>({});
   const [faces, setFaces] = useState<Record<number, Timed<Face>>>({});
   const [gains, setGains] = useState<Record<number, { amt: number; key: number }>>({});
-  const [cutin, setCutin] = useState<{ char: CharId; name: string; key: number } | null>(null);
+  const [cutin, setCutin] = useState<{ char: Look; name: string; key: number } | null>(null);
   const [sitState, setSitState] = useState<SitState>("joining");
   const [notice, setNotice] = useState("");
   const [password, setPassword] = useState("");
@@ -239,7 +241,7 @@ export default function TableView({
   const logId = useRef(0);
   const namesRef = useRef<Record<number, string>>({});
   /** 자리 → 캐릭터 (나간 뒤에도 작별 인사를 그 캐릭터 목소리로) */
-  const charsRef = useRef<Record<number, CharId>>({});
+  const charsRef = useRef<Record<number, Look>>({});
   const seatedRef = useRef(-1);
   const keyRef = useRef(0);
   /** 직전 상태의 자리별 건 돈 (라운드가 끝나 팟으로 모일 때 칩 날리기용) */
@@ -276,7 +278,7 @@ export default function TableView({
   } | null>(null);
   /** 패를 다 깐 뒤에 보여줄 승리 연출 (칩 · +금액 · 소리) */
   const pendingWinRef = useRef<(() => void) | null>(null);
-  const myCharRef = useRef<CharId | null>(null);
+  const myCharRef = useRef<Look | null>(null);
 
   // ── 일어난 일 → 소리 · 기록 · 말풍선 · 포즈 ──
   const digest = useCallback(
@@ -284,7 +286,7 @@ export default function TableView({
       for (const s of t.seats)
         if (s) {
           namesRef.current[s.seat] = s.name;
-          charsRef.current[s.seat] = s.char;
+          charsRef.current[s.seat] = s.look ?? s.char;
         }
       const nameOf = (seat: number) => namesRef.current[seat] ?? "?";
       const mySeat = t.seats.find((s) => s?.uid === uid)?.seat ?? -1;
@@ -299,7 +301,7 @@ export default function TableView({
         lines.push({ id: ++logId.current, text, tone });
       const now = Date.now();
       const ante = TIERS[t.tier - 1]?.ante ?? 1;
-      const charOf = (seat: number) => t.seats[seat]?.char ?? null;
+      const charOf = (seat: number) => t.seats[seat]?.look ?? t.seats[seat]?.char ?? null;
       const anyAllIn = Object.values(t.hand?.players ?? {}).some((p) => p.allIn);
       if (prevHandRef.current !== t.handNo) {
         // 새 판: 지난 판 연출은 버림
@@ -353,7 +355,7 @@ export default function TableView({
               sfx.allin();
               pose[e.seat] = { v: "allin", until: now + 2600 };
               const s = t.seats[e.seat];
-              if (s) setCutin({ char: s.char, name: s.name, key: ++keyRef.current });
+              if (s) setCutin({ char: s.look ?? s.char, name: s.name, key: ++keyRef.current });
               for (const q of t.seats)
                 if (q && q.seat !== e.seat) face[q.seat] = { v: "shock", until: now + 2200 };
             } else {
@@ -596,7 +598,7 @@ export default function TableView({
             exitAskRef.current = false;
           }
           exitMineRef.current = mine ? ex : null;
-          for (const s of t.seats) if (s) preloadChar(s.char, POSES, FACES);
+          for (const s of t.seats) if (s) preloadChar(s.look ?? s.char, POSES, FACES);
         }
         setTable(t);
       },
@@ -739,7 +741,7 @@ export default function TableView({
       );
       if (others.length && Math.random() < 0.4) {
         const who = others[Math.floor(Math.random() * others.length)]!;
-        playVoice(who.char, "hurry");
+        playVoice(who.look ?? who.char, "hurry");
       }
     }
     if (mine && left > 0 && left <= 3 && tickRef.current !== deadline * 10 + left) {
@@ -749,7 +751,7 @@ export default function TableView({
     }
   }, [now, deadline, hand, mySeat, table]);
 
-  const myChar = me?.char ?? null;
+  const myChar = me ? (me.look ?? me.char) : null;
   useEffect(() => {
     myCharRef.current = myChar;
   }, [myChar]);
@@ -1118,7 +1120,7 @@ export default function TableView({
   };
 
   return (
-    <Shell o={o} tier={table.tier}>
+    <Shell o={o} tier={table.tier} turn={myTurn}>
       <div className="absolute inset-y-0 left-0" style={{ width: boardW }}>
         {/* 테이블 */}
         {}
@@ -1220,7 +1222,10 @@ export default function TableView({
                   dealDelay: dealOf(i),
                 });
           const wonHere = res?.won[i] ?? 0;
-          const tag = p?.last && !res ? p.last.a : null;
+          // 누가 더 올리면(하프 · 레이즈) 그 전에 삥 · 콜 · 체크로 맞춰 둔 사람의 꼬리표는 지움 — 다시 행동해야 하니까
+          const stale =
+            !!p && !p.folded && !p.allIn && !!hand && !hand.result && p.bet < hand.currentBet;
+          const tag = p?.last && !res && !stale ? p.last.a : null;
           const badge =
             hv && hv.button === i
               ? "D"
@@ -1264,7 +1269,7 @@ export default function TableView({
                   style={{ left: x - sprW / 2, top: sprTop, zIndex: sp.side === "top" ? 2 : 4 }}
                 >
                   <CharSprite
-                    char={s.char}
+                    char={s.look ?? s.char}
                     pose={poseOf(i)}
                     seat={sp.side === "top" ? "front" : "side"}
                     flip={sp.side === "right"}
@@ -1297,7 +1302,9 @@ export default function TableView({
                       className="pk-emote pointer-events-none absolute"
                       style={{ left: ex - size / 2, top: ey, zIndex: 40 }}
                     >
-                      <EmoteImg char={s.char} emote={emotes[i].v} size={size} />
+                      <EmoteBubble tail={dir > 0 ? "l" : "r"}>
+                        <EmoteImg char={s.look ?? s.char} emote={emotes[i].v} size={size} />
+                      </EmoteBubble>
                     </div>
                   );
                 })()}
@@ -1324,7 +1331,19 @@ export default function TableView({
                       borderColor: wonHere > 0 ? "var(--pk-brass)" : undefined,
                     }}
                   >
-                    {tag && <ActTag key={`${table.handNo}-${tag}-${p?.bet ?? 0}`} a={tag} />}
+                    {tag && (
+                      <ActTag
+                        key={`${table.handNo}-${tag}-${p?.bet ?? 0}`}
+                        a={tag}
+                        edge={
+                          edgeAlign === "items-start"
+                            ? "l"
+                            : edgeAlign === "items-end"
+                              ? "r"
+                              : undefined
+                        }
+                      />
+                    )}
                     {badge && <span className="pk-badge">{badge}</span>}
                     {gains[i] && wonHere > 0 && (
                       <Rise
@@ -1418,7 +1437,12 @@ export default function TableView({
                   className="absolute w-max -translate-x-1/2 -translate-y-1/2 whitespace-nowrap"
                   style={{ left: clampBetX(betAt.x), top: betAt.y, zIndex: 8 }}
                 >
-                  <Bet won={bet} ratio={bet / base} size={Math.max(22, u * 3.4)} act={p?.last?.a} />
+                  <Bet
+                    won={bet}
+                    ratio={bet / base}
+                    size={Math.max(22, u * 3.4)}
+                    act={stale ? undefined : p?.last?.a}
+                  />
                 </div>
               )}
             </div>
@@ -1690,7 +1714,7 @@ export default function TableView({
                   why={kicked}
                   wallet={wallet}
                   tierMin={tier.min}
-                  tierName={tier.name}
+                  tierName={tierLabel(tier.id)}
                   onSit={() => void trySit(undefined, true)}
                   onExit={onExit}
                 />
@@ -1819,7 +1843,7 @@ export default function TableView({
           style={{ width: panelW - 16, top: bar + 8, bottom: 8, zIndex: 25 }}
         >
           <InfoTabs tab={tab} setTab={setTab} log={log} game={table.game} myCat={myCat} />
-          {me && <EmoteGrid char={me.char} onPick={emote} />}
+          {me && <EmoteGrid char={me.look ?? me.char} onPick={emote} />}
         </aside>
       )}
       {/* 세로판 서랍 */}
@@ -1836,7 +1860,7 @@ export default function TableView({
             {drawer === "info" ? (
               <InfoTabs tab={tab} setTab={setTab} log={log} game={table.game} myCat={myCat} />
             ) : (
-              me && <EmoteGrid char={me.char} onPick={emote} big />
+              me && <EmoteGrid char={me.look ?? me.char} onPick={emote} big />
             )}
           </div>
         </div>
@@ -1854,7 +1878,7 @@ export default function TableView({
       >
         <span className="min-w-0 truncate pl-[0.2em] text-[0.85em] font-bold">{table.name}</span>
         <span className="hidden shrink-0 text-[0.7em] text-white/50 sm:inline">
-          {GAMES[table.game].name} · {tier.name} · 판돈 {fmtShort(tier.ante)}
+          {GAMES[table.game].name} · {tierLabel(tier.id)} · 판돈 {fmtShort(tier.ante)}
           {hv && ` · ${fmtShort(tier.sb)}/${fmtShort(tier.bb)}`}
         </span>
         <span className="ml-auto flex shrink-0 items-center gap-[0.5em]">
@@ -1912,7 +1936,11 @@ export default function TableView({
                 className="pk-frame pk-pop flex w-[19em] flex-col items-center gap-[0.5em] p-[1em]"
                 onClick={(e) => e.stopPropagation()}
               >
-                <Profile char={s.char} size={64} className="ring-2 ring-[var(--pk-brass)]" />
+                <Profile
+                  char={s.look ?? s.char}
+                  size={64}
+                  className="ring-2 ring-[var(--pk-brass)]"
+                />
                 <div className="text-center leading-tight">
                   <div className="text-[1.15em] font-extrabold">{s.name}</div>
                   <div className="text-[0.8em] font-bold" style={{ color: CHARS[s.char].color }}>
@@ -2007,33 +2035,55 @@ export default function TableView({
 }
 
 /** 무대 배경 (방) */
-function Shell({ o, tier, children }: { o: Orient; tier: 1 | 2 | 3; children: ReactNode }) {
+function Shell({
+  o,
+  tier,
+  turn,
+  children,
+}: {
+  o: Orient;
+  tier: TierId;
+  /** 내 차례: 무대 테두리가 금빛으로 숨 쉬듯 빛남 */
+  turn?: boolean;
+  children: ReactNode;
+}) {
   return (
     <div className="absolute inset-0">
-      <div className="pk-bg" style={{ backgroundImage: `url(${asset.room(tier, o)})` }} />
+      <div
+        className="pk-bg"
+        style={{
+          backgroundImage: `url(${asset.room(tier, o)})`,
+          filter: `brightness(0.72) saturate(0.9) ${roomTint(tier) ?? ""}`,
+        }}
+      />
       {children}
+      {turn && <div className="pk-turn-glow pointer-events-none absolute inset-0" aria-hidden />}
     </div>
   );
 }
 
-const TAG_CLASS: Record<string, string> = {
-  fold: "bg-[#4b4f5a]",
-  die: "bg-[#4b4f5a]",
-  check: "bg-[#138a66]",
-  call: "bg-[#138a66]",
-  bbing: "bg-[#2156c9]",
-  ddadang: "bg-[#12807f]",
-  quarter: "bg-[#d06a07]",
-  bet: "bg-[#d06a07]",
-  raise: "bg-[#d06a07]",
-  half: "bg-[#c21f33]",
-  full: "bg-[#6235d6]",
-  allin: "bg-[#d99a0a] text-[#2b1d00]",
-};
-function ActTag({ a }: { a: string }) {
+/** 행동 꼬리표: 행동 색의 칠기 판 + 금속 느낌 글자 (색은 외침과 같음) */
+function ActTag({ a, edge }: { a: string; edge?: "l" | "r" }) {
   return (
-    <span className="absolute bottom-[calc(100%+4px)] left-1/2 z-20 -translate-x-1/2">
-      <span className={`pk-acttag ${TAG_CLASS[a] ?? "bg-black/70"}`}>{ACT_LABEL[a] ?? a}</span>
+    <span
+      className={`absolute bottom-[calc(100%+4px)] z-20 ${edge === "l" ? "left-0" : edge === "r" ? "right-0" : "left-1/2 -translate-x-1/2"}`}
+    >
+      <span
+        className="pk-acttag"
+        data-a={a}
+        style={{ "--ac": SHOUT_COLOR[a] ?? "#c3c9d6" } as CSSProperties}
+      >
+        <span className="pk-acttag-t">{ACT_LABEL[a] ?? a}</span>
+      </span>
+    </span>
+  );
+}
+
+/** 이모티콘 말풍선: 누가 던졌는지 꼬리로 가리킴 (l = 꼬리가 왼쪽 아래) */
+function EmoteBubble({ tail, children }: { tail: "l" | "r"; children: ReactNode }) {
+  return (
+    <span className="pk-emote-bubble" data-tail={tail}>
+      {children}
     </span>
   );
 }
@@ -2127,7 +2177,7 @@ function HeroArea(props: {
   hv: HoldemView | null;
   sv: SevenView | null;
   liveHand: MyHand | null;
-  tier: 1 | 2 | 3;
+  tier: TierId;
   sizes: Sizes;
   L: ReturnType<typeof layoutFor>;
   boardW: number;
@@ -2235,7 +2285,7 @@ function HeroArea(props: {
             won > 0 ? "0 0 0 3px var(--pk-brass), 0 0 16px rgba(255,201,60,0.6)" : undefined,
         }}
       >
-        <FaceIcon char={me.char} face={face} size={fs} />
+        <FaceIcon char={me.look ?? me.char} face={face} size={fs} />
         {waiting && deadline > 0 && <TimerRing size={fs + 4} frac={frac} width={3} square />}
         {(isButton || blind) && <span className="pk-badge">{isButton ? "D" : blind}</span>}
         {bubble && !emote && <Bubble text={bubble} />}
@@ -2314,7 +2364,7 @@ function HeroArea(props: {
           <div
             className={`pk-seat-sprite pointer-events-none absolute bottom-[calc(100%-8px)] left-0 ${waiting ? "pk-seat-turn" : ""}`}
           >
-            <CharSprite char={me.char} pose={pose} w={(heroSprH * 3) / 4} dim={dim} />
+            <CharSprite char={me.look ?? me.char} pose={pose} w={(heroSprH * 3) / 4} dim={dim} />
           </div>
           {/* 내 이모티콘: 캐릭터 오른쪽 어깨 옆 (얼굴을 안 가리게) */}
           {emote && (
@@ -2327,11 +2377,13 @@ function HeroArea(props: {
                 zIndex: 45,
               }}
             >
-              <EmoteImg
-                char={me.char}
-                emote={emote.v}
-                size={Math.round(Math.max(72, Math.min(110, heroSprH * 0.38)))}
-              />
+              <EmoteBubble tail="l">
+                <EmoteImg
+                  char={me.look ?? me.char}
+                  emote={emote.v}
+                  size={Math.round(Math.max(72, Math.min(110, heroSprH * 0.38)))}
+                />
+              </EmoteBubble>
             </div>
           )}
           {plate}
@@ -2343,7 +2395,7 @@ function HeroArea(props: {
               className={`pk-seat-sprite pointer-events-none absolute left-0 ${waiting ? "pk-seat-turn" : ""}`}
               style={{ bottom: `calc(100% - ${Math.round(sprV * 0.3)}px)` }}
             >
-              <CharSprite char={me.char} pose={pose} w={(sprV * 3) / 4} dim={dim} />
+              <CharSprite char={me.look ?? me.char} pose={pose} w={(sprV * 3) / 4} dim={dim} />
             </div>
           )}
           {/* 내 이모티콘: 캐릭터가 있으면 그 어깨 옆, 없으면 내 이름표 위 오른쪽 */}
@@ -2357,11 +2409,13 @@ function HeroArea(props: {
                 bottom: sprV > 0 ? `calc(100% + ${Math.round(sprV * 0.08)}px)` : "calc(100% + 2px)",
               }}
             >
-              <EmoteImg
-                char={me.char}
-                emote={emote.v}
-                size={Math.round(Math.max(52, Math.min(80, sprV > 0 ? sprV * 0.42 : 60)))}
-              />
+              <EmoteBubble tail="l">
+                <EmoteImg
+                  char={me.look ?? me.char}
+                  emote={emote.v}
+                  size={Math.round(Math.max(52, Math.min(80, sprV > 0 ? sprV * 0.42 : 60)))}
+                />
+              </EmoteBubble>
             </div>
           )}
           {plate}
@@ -2403,11 +2457,17 @@ function HeroArea(props: {
               {hint}
             </span>
           )}
-          {p?.last && !res && (
-            <span key={p.last.a} className={`pk-acttag ${TAG_CLASS[p.last.a] ?? "bg-black/70"}`}>
-              {ACT_LABEL[p.last.a] ?? p.last.a}
-            </span>
-          )}
+          {p?.last &&
+            !res &&
+            !(!p.folded && !p.allIn && (hv ?? sv) && p.bet < (hv ?? sv)!.currentBet) && (
+              <span
+                key={p.last.a}
+                className="pk-acttag"
+                style={{ "--ac": SHOUT_COLOR[p.last.a] ?? "#c3c9d6" } as CSSProperties}
+              >
+                <span className="pk-acttag-t">{ACT_LABEL[p.last.a] ?? p.last.a}</span>
+              </span>
+            )}
           {myName && myRevealed && (
             <span
               key={settled ? 1 : 0}
@@ -2451,14 +2511,19 @@ function WinBanner({
             "linear-gradient(90deg, transparent, rgba(0,0,0,0.75) 25%, rgba(0,0,0,0.75) 75%, transparent)",
         }}
       >
-        <div
-          className="pk-title text-[1.8em] leading-none"
-          style={{
-            color: mine ? "#ffd23f" : "#fff",
-            textShadow: "0 0 10px rgba(255,210,63,0.55), 0 2px 0 #3a1d00",
-          }}
-        >
-          {mine ? "WIN!" : "WINNER"}
+        <div className="flex items-center gap-[0.35em]">
+          <span className="pk-winner-star" aria-hidden>
+            ✦
+          </span>
+          <span
+            className={`pk-winner ${mine ? "pk-winner-mine" : ""}`}
+            data-text={mine ? "WIN!" : "WINNER"}
+          >
+            {mine ? "WIN!" : "WINNER"}
+          </span>
+          <span className="pk-winner-star" aria-hidden>
+            ✦
+          </span>
         </div>
         <div className="mt-[0.15em] text-[0.85em] font-bold text-white">{names.join(" · ")}</div>
         {hand && (
@@ -2623,7 +2688,7 @@ function ActionBar(props: {
         // 누구 차례인지: 얼굴 + 이름 + 남은 시간
         <div key={actor.seat} className="pk-turnbar pk-fade-in">
           {}
-          <img src={asset.profile(actor.char)} alt="" className="pk-turnbar-face" />
+          <img src={asset.profile(actor.look ?? actor.char)} alt="" className="pk-turnbar-face" />
           <span className="min-w-0">
             <span className="block text-[0.7em] font-bold tracking-wider text-[#ffd84a]">
               지금 차례
@@ -2833,12 +2898,24 @@ function InfoTabs({
   );
 }
 
+/** 이모티콘 이름 (고르는 칸에서 가리키면 보임) */
+const EMOTE_NAME: Record<Emote, string> = {
+  hi: "안녕!",
+  good: "좋아!",
+  lol: "ㅋㅋㅋ",
+  cry: "엉엉",
+  angry: "화났어",
+  huh: "뭐라고?",
+  tease: "메롱~",
+  wow: "놀람!",
+};
+
 function EmoteGrid({
   char,
   onPick,
   big,
 }: {
-  char: CharId;
+  char: Look;
   onPick: (e: Emote) => void;
   big?: boolean;
 }) {
@@ -2851,10 +2928,15 @@ function EmoteGrid({
           key={e}
           type="button"
           onClick={() => onPick(e)}
-          className="cursor-pointer rounded-[6px] bg-white/[0.05] p-[0.1em] transition hover:bg-white/15 active:scale-95"
-          aria-label={e}
+          className="pk-emote-btn"
+          aria-label={EMOTE_NAME[e]}
+          title={EMOTE_NAME[e]}
         >
           <EmoteImg char={char} emote={e} size={big ? 72 : 48} className="mx-auto h-auto w-full" />
+          {/* 가리키면(폰은 누르는 동안) 이름이 떠오름 */}
+          <span className="pk-emote-name" aria-hidden>
+            {EMOTE_NAME[e]}
+          </span>
         </button>
       ))}
     </div>

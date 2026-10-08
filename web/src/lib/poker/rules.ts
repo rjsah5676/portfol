@@ -21,9 +21,29 @@ export const START_MONEY = 1 * EOK;
 /** 회생: 보유금액이 under 미만이면 amount 를 받음, 하루 perDay 번 (한국 시간 자정에 초기화) */
 export const REVIVE = { amount: 1000 * MAN, under: 500 * MAN, perDay: 10 } as const;
 
-export type TierId = 1 | 2 | 3;
+/*
+ * 방 단계: 리그 3개(일반 · 도박꾼 · 타짜) × 방 3개 = 9단계. 판돈은 단계마다 계속 올라감
+ * (일반 VIP룸 < 도박꾼 첫 방 < … < 타짜 마지막 방). 방 그림은 리그 안의 순서(step 1~3)로 같이 쓰고 리그마다 색조만 다르게.
+ */
+export type TierId = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
+export type LeagueId = 1 | 2 | 3;
+export interface League {
+  id: LeagueId;
+  name: string;
+  blurb: string;
+  /** 리그 색 (탭 · 방 목록 표시) */
+  color: string;
+}
+export const LEAGUES: League[] = [
+  { id: 1, name: "일반", blurb: "처음이라면 여기서", color: "#8fd35f" },
+  { id: 2, name: "도박꾼", blurb: "억 단위가 오가는 판", color: "#4fc9e0" },
+  { id: 3, name: "타짜", blurb: "수십억이 걸린 전설의 판", color: "#ff6f91" },
+];
 export interface Tier {
   id: TierId;
+  league: LeagueId;
+  /** 리그 안의 순서 (방 그림 · 카드 뒷면) */
+  step: 1 | 2 | 3;
   name: string;
   /** 한 줄 소개 */
   blurb: string;
@@ -38,12 +58,40 @@ export interface Tier {
   botMoney: number;
 }
 
+const tier = (
+  id: TierId,
+  name: string,
+  blurb: string,
+  ante: number,
+  min: number,
+  botMoney: number
+): Tier => ({
+  id,
+  league: Math.ceil(id / 3) as LeagueId,
+  step: (((id - 1) % 3) + 1) as 1 | 2 | 3,
+  name,
+  blurb,
+  sb: ante,
+  bb: ante * 2,
+  ante,
+  min,
+  botMoney,
+});
 export const TIERS: Tier[] = [
-  { id: 1, name: "동네판", blurb: "잃어도 덜 아픈 판", sb: 10 * MAN, bb: 20 * MAN, ante: 10 * MAN, min: 500 * MAN, botMoney: 1 * EOK },
-  { id: 2, name: "하우스", blurb: "가입 자금 1억이 딱 100BB", sb: 50 * MAN, bb: 100 * MAN, ante: 50 * MAN, min: 5000 * MAN, botMoney: 5 * EOK },
-  { id: 3, name: "VIP룸", blurb: "3억부터 열리는 큰판", sb: 250 * MAN, bb: 500 * MAN, ante: 250 * MAN, min: 3 * EOK, botMoney: 25 * EOK },
+  tier(1, "동네판", "잃어도 덜 아픈 판", 10 * MAN, 500 * MAN, 1 * EOK),
+  tier(2, "하우스", "가입 자금 1억이 딱 100BB", 50 * MAN, 5000 * MAN, 5 * EOK),
+  tier(3, "VIP룸", "3억부터 열리는 큰판", 250 * MAN, 3 * EOK, 25 * EOK),
+  tier(4, "뒷골목", "도박꾼들의 첫 무대", 500 * MAN, 5 * EOK, 40 * EOK),
+  tier(5, "지하 카지노", "판돈 천만, 숨소리도 조심", 1000 * MAN, 10 * EOK, 80 * EOK),
+  tier(6, "하이롤러", "한 판에 억이 우습게 오감", 2500 * MAN, 25 * EOK, 200 * EOK),
+  tier(7, "밀실", "아는 사람만 들어오는 방", 5000 * MAN, 50 * EOK, 400 * EOK),
+  tier(8, "펜트하우스", "판돈 1억, 야경은 덤", 1 * EOK, 100 * EOK, 800 * EOK),
+  tier(9, "황금판", "타짜 중의 타짜만", 2.5 * EOK, 250 * EOK, 2000 * EOK),
 ];
 export const tierOf = (id: number): Tier => TIERS.find((t) => t.id === id) ?? TIERS[0];
+export const leagueOf = (id: number): League => LEAGUES[tierOf(id).league - 1];
+/** "도박꾼 · 뒷골목" */
+export const tierLabel = (id: number) => `${leagueOf(id).name} · ${tierOf(id).name}`;
 
 /** 한 번 행동하는 데 주는 시간 */
 export const ACT_MS = 12_000;
@@ -70,6 +118,48 @@ export const CHARS: Record<CharId, { name: string; color: string; blurb: string 
   amy: { name: "에이미", color: "#38bdf8", blurb: "딱히 이기고 싶은 건 아니거든. 딱봐도 츤데레" },
 };
 export const charOf = (id: unknown): CharId => (CHAR_IDS.includes(id as CharId) ? (id as CharId) : "jinwoo");
+
+/*
+ * 스킨: 상점에서 칩으로 사서 옷장에서 입음. 입으면 그 캐릭터의 그림이 전부 스킨 그림으로 바뀌고(남들 화면에도),
+ * 효과음은 그대로 · 음성은 스킨 전용 파일이 있으면 그걸로. 그림은 web/public/poker/char/{스킨 id}/ (캐릭터와 같은 파일 구성)
+ * + 로비 동작 lobby-1~6.webp · 터치 반응 touch-1~3.webp.
+ * ready = 그림이 들어왔는지. false 면 원래 캐릭터 그림으로 보임 (사고 입는 것은 됨).
+ */
+export type SkinId = "amy-summer";
+export interface Skin {
+  id: SkinId;
+  char: CharId;
+  name: string;
+  price: number;
+  blurb: string;
+  /** 입었을 때 로비에서 한마디 */
+  line: string;
+  ready: boolean;
+}
+export const SKINS: Skin[] = [
+  {
+    id: "amy-summer",
+    char: "amy",
+    name: "한여름의 에이미",
+    price: 10 * EOK,
+    blurb: "바다 가자고? …따, 딱히 너랑 가고 싶어서 입은 건 아니거든!",
+    line: "뭘 그렇게 봐! …어울리긴 해?",
+    ready: false,
+  },
+];
+export const SKIN_IDS = SKINS.map((s) => s.id);
+export const skinOf = (id: unknown): Skin | undefined => SKINS.find((s) => s.id === id);
+/** 그림을 고르는 열쇠: 캐릭터 id 또는 스킨 id */
+export type Look = CharId | SkinId;
+/** 캐릭터별로 입은 스킨 */
+export type Wear = Partial<Record<CharId, SkinId>>;
+/** 지금 캐릭터 + 입은 스킨 → 그림 열쇠 (그 캐릭터의 스킨이 아니면 무시) */
+export const lookOf = (char: CharId, wear?: Wear | null): Look => {
+  const s = skinOf(wear?.[char]);
+  return s && s.char === char ? s.id : char;
+};
+/** 그림 열쇠 → 캐릭터 */
+export const lookChar = (l: Look | string): CharId => skinOf(l)?.char ?? charOf(l);
 
 /** 동작(2.5D 포즈) · 표정 · 이모티콘 이름 — 파일 이름과 같음 */
 export const POSES = ["idle", "think", "check", "bet", "allin", "die", "win", "lose"] as const;
@@ -110,6 +200,16 @@ export function fmtShort(won: number): string {
   }
   if (n >= MAN) return `${neg}${comma(Math.floor(n / MAN))}만`;
   return neg + comma(n);
+}
+
+/** 억 단위를 소수점 없이: 2억 5,120만 · 3,450만 (2.512억이 2512억으로 읽히지 않게, 만 아래는 버림) */
+export function fmtEok(won: number): string {
+  const neg = won < 0 ? "-" : "";
+  const n = Math.abs(Math.round(won));
+  const eok = Math.floor(n / EOK);
+  const man = Math.floor((n - eok * EOK) / MAN);
+  if (!eok) return man ? `${neg}${comma(man)}만` : neg + comma(n);
+  return `${neg}${comma(eok)}억${man ? ` ${comma(man)}만` : ""}`;
 }
 
 /** 한국 시간 기준 날짜 (회생 횟수가 초기화되는 기준) */

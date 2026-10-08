@@ -212,6 +212,16 @@ export const closeLiveRoom = (game: LiveGame, id: string) =>
     auth: true,
   });
 
+/** 포커 설정: 봇 늘리기 (테이블마다 봇 셋 이상 · 2분 넘게 치면 빈자리까지 · 로비 봇 방 6개) */
+export const getPokerSettings = () =>
+  api<{ botBoost: boolean }>("/api/admin/poker/settings", { auth: true });
+export const setPokerSettings = (botBoost: boolean) =>
+  api<{ botBoost: boolean }>("/api/admin/poker/settings", {
+    method: "PUT",
+    body: { botBoost },
+    auth: true,
+  });
+
 // ── JSON 편집용 직렬화: Timestamp는 {"__timestamp": ISO}로 바꿔서 보여주고 저장 시 되돌림 ──
 // (서버와 주고받을 때도 같은 표기를 씀)
 

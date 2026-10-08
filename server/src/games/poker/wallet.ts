@@ -1,7 +1,7 @@
 import type { Database } from "../../db";
 import { AppError } from "../../errors";
 import { avatarPath, type UserDoc } from "../../users";
-import { REVIVE, START_MONEY, charOf, kstDay, type CharId, type GameKind } from "../../../../web/src/lib/poker/rules";
+import { REVIVE, START_MONEY, charOf, fmtWon, kstDay, lookOf, skinOf, type CharId, type GameKind, type SkinId, type Wear } from "../../../../web/src/lib/poker/rules";
 import type { RankRow } from "../../../../web/src/lib/poker/types";
 
 /*
@@ -20,6 +20,9 @@ export interface WalletDoc {
   reviveUsed: number;
   /** 고른 캐릭터 */
   char: CharId;
+  /** 가진 스킨 · 캐릭터별로 입은 스킨 */
+  skins: SkinId[];
+  wear: Wear;
 }
 
 export interface SettleEntry {
@@ -32,7 +35,19 @@ export interface SettleEntry {
   wonAmount: number;
 }
 
-type MoneyFields = Pick<UserDoc, "nick"> & { money?: number; revive?: { day: string; n: number }; poker?: { char?: string } };
+type MoneyFields = Pick<UserDoc, "nick"> & { money?: number; revive?: { day: string; n: number }; poker?: { char?: string; skins?: string[]; wear?: Record<string, string> } };
+const WALLET_PROJ = { nick: 1, money: 1, revive: 1, "poker.char": 1, "poker.skins": 1, "poker.wear": 1 } as const;
+
+/** 문서의 스킨 목록 · 입은 스킨을 믿을 수 있는 값만 남김 (가진 것 · 그 캐릭터의 스킨만) */
+export function skinsOf(p?: MoneyFields["poker"]): { skins: SkinId[]; wear: Wear } {
+  const skins = [...new Set((p?.skins ?? []).filter((x) => skinOf(x)))] as SkinId[];
+  const wear: Wear = {};
+  for (const [c, id] of Object.entries(p?.wear ?? {})) {
+    const sk = skinOf(id);
+    if (sk && sk.char === c && skins.includes(sk.id)) wear[sk.char] = sk.id;
+  }
+  return { skins, wear };
+}
 
 export type Wallet = ReturnType<typeof createWallet>;
 
@@ -44,6 +59,7 @@ export function createWallet(db: Database, now: () => number = Date.now) {
     money: d.money ?? START_MONEY,
     reviveUsed: d.revive && d.revive.day === kstDay(now()) ? d.revive.n : 0,
     char: charOf(d.poker?.char),
+    ...skinsOf(d.poker),
   });
 
   /**
@@ -54,10 +70,10 @@ export function createWallet(db: Database, now: () => number = Date.now) {
     uids.length ? col.updateMany({ _id: { $in: uids }, money: { $exists: false } }, { $set: { money: START_MONEY } }) : Promise.resolve(null);
 
   async function get(uid: string): Promise<WalletDoc | null> {
-    let d = (await col.findOne({ _id: uid }, { projection: { nick: 1, money: 1, revive: 1, "poker.char": 1 } })) as MoneyFields | null;
+    let d = (await col.findOne({ _id: uid }, { projection: WALLET_PROJ })) as MoneyFields | null;
     if (d && d.money === undefined) {
       await materialize([uid]);
-      d = (await col.findOne({ _id: uid }, { projection: { nick: 1, money: 1, revive: 1, "poker.char": 1 } })) as MoneyFields | null;
+      d = (await col.findOne({ _id: uid }, { projection: WALLET_PROJ })) as MoneyFields | null;
     }
     return d ? toWallet(d) : null;
   }
@@ -142,7 +158,7 @@ export function createWallet(db: Database, now: () => number = Date.now) {
     /** 자금 순위: 한 판이라도 친 회원만 */
     async rank(limit = 50): Promise<RankRow[]> {
       const docs = await col
-        .find({ "stats.poker.hands": { $gte: 1 } }, { projection: { nick: 1, money: 1, "stats.poker.hands": 1, "poker.char": 1, "avatar.at": 1 } })
+        .find({ "stats.poker.hands": { $gte: 1 } }, { projection: { nick: 1, money: 1, "stats.poker.hands": 1, "poker.char": 1, "poker.skins": 1, "poker.wear": 1, "avatar.at": 1 } })
         .sort({ money: -1 })
         .limit(limit)
         .toArray();
@@ -155,8 +171,43 @@ export function createWallet(db: Database, now: () => number = Date.now) {
           money: u.money ?? START_MONEY,
           hands: u.stats?.poker?.hands ?? 0,
           char: charOf(u.poker?.char),
+          look: lookOf(charOf(u.poker?.char), skinsOf(u.poker).wear),
         };
       });
+    },
+
+    /**
+     * 스킨 사기: 돈이 모자라지 않고 아직 없을 때만 (한 번의 조건부 갱신이라 두 번 눌러도 한 번만 빠짐). 사면 바로 입음.
+     * 테이블에 앉아 있는지는 부르는 쪽에서 막음 (앉아 있는 동안의 칩은 메모리에 있어서).
+     */
+    async buySkin(uid: string, id: SkinId) {
+      const sk = skinOf(id);
+      if (!sk) throw new AppError("BAD_REQUEST", "없는 스킨이에요.", 400);
+      await materialize([uid]);
+      const r = await col.updateOne(
+        { _id: uid, money: { $gte: sk.price }, "poker.skins": { $ne: sk.id } } as never,
+        { $inc: { money: -sk.price }, $push: { "poker.skins": sk.id }, $set: { [`poker.wear.${sk.char}`]: sk.id } } as never
+      );
+      if (!r.modifiedCount) {
+        const w = await get(uid);
+        if (!w) throw new AppError("NOT_MEMBER", "회원만 쓸 수 있어요.", 403);
+        if (w.skins.includes(sk.id)) throw new AppError("OWNED", "이미 가진 스킨이에요.", 409);
+        throw new AppError("NEED_MONEY", `칩이 모자라요. ${sk.name}은(는) 칩 ${fmtWon(sk.price)}이에요.`, 409, { need: sk.price, money: w.money });
+      }
+      return (await changed(uid))!;
+    },
+
+    /** 스킨 입기 / 벗기 (skin = null 이면 그 캐릭터는 기본 모습) */
+    async wearSkin(uid: string, char: CharId, id: SkinId | null) {
+      const w = await get(uid);
+      if (!w) throw new AppError("NOT_MEMBER", "회원만 쓸 수 있어요.", 403);
+      if (id) {
+        const sk = skinOf(id);
+        if (!sk || sk.char !== char) throw new AppError("BAD_REQUEST", "그 캐릭터의 스킨이 아니에요.", 400);
+        if (!w.skins.includes(id)) throw new AppError("NOT_OWNED", "아직 없는 스킨이에요. 상점에서 살 수 있어요.", 409);
+        await col.updateOne({ _id: uid }, { $set: { [`poker.wear.${char}`]: id } } as never);
+      } else await col.updateOne({ _id: uid }, { $unset: { [`poker.wear.${char}`]: "" } } as never);
+      return (await changed(uid))!;
     },
 
     /** 자금이 바뀌었을 때 (그 사람의 화면에 알림) */

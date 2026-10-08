@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { madeOf } from "@/lib/poker/cards";
+import type { TierId } from "@/lib/poker/rules";
 import { bestK, handNameK } from "@/lib/poker/seven";
 import type { MyHand, SevenAction, SevenBet, SevenView } from "@/lib/poker/types";
 import type { Orient } from "./layout";
@@ -187,7 +188,7 @@ export function SevenActions({
   myHand: MyHand | null;
   busy: boolean;
   onAct: (a: SevenAction) => void;
-  tier: 1 | 2 | 3;
+  tier: TierId;
   u: number;
   o: Orient;
 }) {

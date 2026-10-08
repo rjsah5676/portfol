@@ -107,6 +107,8 @@ async function ensureIndexes({ db }: Database) {
   // 포커: 자금 순위, 핸드 기록은 30일 뒤 자동 삭제
   idx("users", { money: -1 });
   idx("poker_hands", { at: 1 }, { expireAfterSeconds: 30 * 24 * 60 * 60 });
+  // 마이페이지: 내 최근 판 · 통계
+  idx("poker_hands", { "who.uid": 1, at: -1 });
   idx("inquiries", { createdAt: -1 });
   for (const c of ROOM_COLLECTIONS) {
     idx(c, { updatedAt: -1 });

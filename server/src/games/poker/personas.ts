@@ -87,9 +87,18 @@ export interface Skill {
   fun: number;
 }
 export const SKILL: Record<TierId, Skill> = {
+  // 일반
   1: { sims: 160, noise: 0.07, read: 0.5, adapt: 0, fun: 1 },
   2: { sims: 260, noise: 0.035, read: 0.8, adapt: 0.5, fun: 0.6 },
   3: { sims: 400, noise: 0.012, read: 1, adapt: 1, fun: 0.35 },
+  // 도박꾼: 정석에 가깝되 판이 커서 오히려 잘 지름
+  4: { sims: 400, noise: 0.012, read: 1, adapt: 1, fun: 0.35 },
+  5: { sims: 450, noise: 0.01, read: 1, adapt: 1, fun: 0.3 },
+  6: { sims: 450, noise: 0.01, read: 1, adapt: 1, fun: 0.3 },
+  // 타짜
+  7: { sims: 500, noise: 0.008, read: 1, adapt: 1, fun: 0.25 },
+  8: { sims: 500, noise: 0.008, read: 1, adapt: 1, fun: 0.25 },
+  9: { sims: 550, noise: 0.006, read: 1, adapt: 1, fun: 0.25 },
 };
 
 /** 같은 단계 안에서도 봇마다 실력이 조금씩 다름 */

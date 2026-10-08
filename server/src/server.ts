@@ -49,6 +49,8 @@ export async function createAppServer(
       liveRooms: () => ({ sketch: sketch.adminList(), fight: fight.adminList(), poker: poker.adminList() }),
       pokerRank: () => poker.wallet.rank(),
       closeLiveRoom: (game, id) => live[game].adminClose(id),
+      pokerSettings: () => poker.adminSettings(),
+      setPokerSettings: (p) => poker.adminSetSettings(p),
     })
   );
 

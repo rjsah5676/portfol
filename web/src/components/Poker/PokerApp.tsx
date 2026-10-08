@@ -18,6 +18,7 @@ import type { RankRow, Wallet } from "@/lib/poker/types";
 import { getRank, subscribeWallet, watchClock } from "@/realtime/poker";
 import type { Orient } from "./layout";
 import Lobby from "./Lobby";
+import Shop, { type ShopTab } from "./Shop";
 import { PlayingCard, useSize } from "./parts";
 import TableView from "./TableView";
 
@@ -70,6 +71,7 @@ export default function PokerApp({ rank }: { rank: RankRow[] | null }) {
   const tableId = params.get("t");
   const { loading, account, profile, login } = useAuth();
   const [wallet, setWallet] = useState<Wallet | null>(null);
+  const [shop, setShop] = useState<ShopTab | "">("");
   const [failed, setFailed] = useState("");
   const [loginError, setLoginError] = useState("");
   const [revived, setRevived] = useState<{ text: string; key: number } | null>(null);
@@ -156,8 +158,8 @@ export default function PokerApp({ rank }: { rank: RankRow[] | null }) {
   const o: Orient = size.w > size.h * 1.05 ? "h" : "v";
   const topRight = (
     <>
-      <Soon label="상점" icon={SHOP_ICON} gold />
-      <Soon label="옷장" icon={CLOSET_ICON} />
+      <TopBtn label="상점" icon={SHOP_ICON} gold onClick={() => setShop("shop")} />
+      <TopBtn label="옷장" icon={CLOSET_ICON} onClick={() => setShop("closet")} />
       <Settings />
       {(canFs || fs) && (
         <button
@@ -229,6 +231,7 @@ export default function PokerApp({ rank }: { rank: RankRow[] | null }) {
         h={size.h}
         onEnter={go}
         onWallet={setWallet}
+        onCloset={() => setShop("closet")}
         topRight={topRight}
       />
     );
@@ -286,6 +289,16 @@ export default function PokerApp({ rank }: { rank: RankRow[] | null }) {
         data-o={o}
       >
         {size.w > 0 && screen}
+        {shop && wallet && (
+          <Shop
+            wallet={wallet}
+            tab={shop}
+            setTab={setShop}
+            mobile={o === "v"}
+            maxH={size.h - (o === "h" ? 24 : 8)}
+            onClose={() => setShop("")}
+          />
+        )}
         {revived && (
           <div
             key={revived.key}
@@ -312,49 +325,39 @@ export default function PokerApp({ rank }: { rank: RankRow[] | null }) {
   );
 }
 
-/** 준비 중인 기능 버튼 (상점 · 옷장): 누르면 "추가 예정" 안내 */
-function Soon({ label, icon, gold }: { label: string; icon: ReactNode; gold?: boolean }) {
-  const [open, setOpen] = useState(false);
+/** 머리말 버튼 (상점 · 옷장) */
+function TopBtn({
+  label,
+  icon,
+  gold,
+  onClick,
+}: {
+  label: string;
+  icon: ReactNode;
+  gold?: boolean;
+  onClick: () => void;
+}) {
   return (
-    <span className="relative flex">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        aria-expanded={open}
-        title={label}
-        className={`pk-btn ${gold ? "pk-btn-gold" : "pk-btn-ghost"} flex h-[30px] items-center gap-[0.3em] px-[0.6em] text-[0.78em]`}
+    <button
+      type="button"
+      onClick={onClick}
+      title={label}
+      className={`pk-btn ${gold ? "pk-btn-gold" : "pk-btn-ghost"} flex h-[30px] items-center gap-[0.3em] px-[0.6em] text-[0.78em]`}
+    >
+      <svg
+        viewBox="0 0 24 24"
+        className="h-[15px] w-[15px]"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2.2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden
       >
-        <svg
-          viewBox="0 0 24 24"
-          className="h-[15px] w-[15px]"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2.2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          aria-hidden
-        >
-          {icon}
-        </svg>
-        <span className="hidden sm:inline">{label}</span>
-      </button>
-      {open && (
-        <>
-          <span className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="pk-frame pk-pop absolute top-[calc(100%+6px)] right-0 z-50 grid w-[14em] gap-[0.45em] p-[0.7em] text-[0.82em]">
-            <div className="flex items-center gap-[0.4em]">
-              <span className="pk-frame-title">{label}</span>
-              <span className="rounded-[4px] bg-white/10 px-[0.4em] text-[0.8em] text-white/70">
-                준비 중
-              </span>
-            </div>
-            <p className="leading-relaxed text-white/75">
-              추가 예정 기능이에요. 조금만 기다려 주세요!
-            </p>
-          </div>
-        </>
-      )}
-    </span>
+        {icon}
+      </svg>
+      <span className="hidden sm:inline">{label}</span>
+    </button>
   );
 }
 const SHOP_ICON = (

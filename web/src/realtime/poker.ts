@@ -1,7 +1,7 @@
 import { api } from "@/lib/api/http";
 import { rpc, serverNow, subscribe, watchServerTime } from "@/lib/api/socket";
 import type { ApiError } from "@/lib/api/errors";
-import type { CharId, Emote, GameKind, TierId } from "@/lib/poker/rules";
+import type { CharId, Emote, GameKind, SkinId, TierId } from "@/lib/poker/rules";
 import type {
   ChatMsg,
   HoldemAction,
@@ -106,6 +106,9 @@ export const sendEmote = (id: string, emote: Emote) => rpc("poker.emote", { id, 
 /** 내 캐릭터 고르기 (지갑 구독으로 바뀐 값이 옴) */
 export const setChar = (char: CharId) => rpc("poker.char", { char });
 export const revive = () => rpc<Wallet>("poker.revive");
+/** 상점: 스킨 사기 (사면 바로 입음) · 옷장: 입기 / 벗기 */
+export const buySkin = (skin: SkinId) => rpc<Wallet>("poker.buy", { skin });
+export const wearSkin = (char: CharId, skin: SkinId | null) => rpc<Wallet>("poker.wear", { char, skin });
 
 /** 자금 순위 (한 판이라도 친 회원, 보유금액 순) */
 export const getRank = () => api<{ list: RankRow[] }>("/api/poker/rank").then((r) => r.list);

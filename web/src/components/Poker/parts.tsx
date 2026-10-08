@@ -15,9 +15,10 @@ import {
   FACES,
   POSES,
   fmtWon,
-  type CharId,
+  lookChar,
   type Emote,
   type Face,
+  type Look,
   type Pose,
   type TierId,
 } from "@/lib/poker/rules";
@@ -348,7 +349,7 @@ export function CharSprite({
   className = "",
   style,
 }: {
-  char: CharId;
+  char: Look;
   pose: Pose;
   /** 앉은 그림 (없으면 서 있는 그림) */
   seat?: "front" | "side";
@@ -393,7 +394,7 @@ export function FaceIcon({
   className = "",
   ring,
 }: {
-  char: CharId;
+  char: Look;
   face?: Face;
   size?: number;
   className?: string;
@@ -402,7 +403,12 @@ export function FaceIcon({
   return (
     <span
       className={`pk-face relative inline-flex shrink-0 overflow-hidden rounded-full ${className}`}
-      style={{ width: size, height: size, background: CHARS[char].color, boxShadow: ring }}
+      style={{
+        width: size,
+        height: size,
+        background: CHARS[lookChar(char)].color,
+        boxShadow: ring,
+      }}
       aria-hidden
     >
       {FACES.map((f) => (
@@ -424,17 +430,17 @@ export function Profile({
   size = 36,
   className = "",
 }: {
-  char: CharId;
+  char: Look;
   size?: number;
   className?: string;
 }) {
   return (
     <img
       src={asset.profile(char)}
-      alt={CHARS[char].name}
+      alt={CHARS[lookChar(char)].name}
       draggable={false}
       className={`shrink-0 rounded-full object-cover ${className}`}
-      style={{ width: size, height: size, background: CHARS[char].color }}
+      style={{ width: size, height: size, background: CHARS[lookChar(char)].color }}
     />
   );
 }
@@ -445,7 +451,7 @@ export function EmoteImg({
   size = 72,
   className = "",
 }: {
-  char: CharId;
+  char: Look;
   emote: Emote;
   size?: number;
   className?: string;
@@ -468,7 +474,7 @@ export function CutIn({
   onDone,
   top = "50%",
 }: {
-  char: CharId;
+  char: Look;
   name: string;
   onDone: () => void;
   top?: number | string;

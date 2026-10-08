@@ -5,6 +5,8 @@
  *  음량은 세 줄(배경음악 · 효과음 · 음성) + 전체 음소거, localStorage 에 저장.
  */
 
+import { lookChar } from "./rules";
+
 const KEY = "poker_sound";
 const BASE = "/poker/sound";
 
@@ -411,12 +413,18 @@ const BETS = new Set([
 export function playVoice(char: string, name: string, big = false) {
   const s = getSound();
   if (s.mute || s.voice <= 0) return;
-  const key = `voice/${char}/${char}-${name}`;
-  // 캐릭터 고를 때 대사(select)가 없으면 입장 인사로
-  const url =
-    (big && fileOf(`${key}-big`)) ||
-    fileOf(key) ||
-    (name === "select" ? fileOf(`voice/${char}/${char}-hello`) : null);
+  // 스킨이면 스킨 전용 음성이 있을 때 그것, 없으면 원래 캐릭터 음성
+  const find = (who: string) => {
+    const key = `voice/${who}/${who}-${name}`;
+    // 캐릭터 고를 때 대사(select)가 없으면 입장 인사로
+    return (
+      (big && fileOf(`${key}-big`)) ||
+      fileOf(key) ||
+      (name === "select" ? fileOf(`voice/${who}/${who}-hello`) : null)
+    );
+  };
+  const base = lookChar(char);
+  const url = (base !== char && find(char)) || find(base);
   if (!url) return;
   const c = ac();
   if (!c) return;

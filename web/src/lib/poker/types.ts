@@ -1,5 +1,5 @@
 import type { Card } from "./cards";
-import type { CharId, Emote, GameKind, TierId } from "./rules";
+import type { CharId, Emote, GameKind, Look, SkinId, TierId, Wear } from "./rules";
 
 /*
  * 서버 ↔ 화면이 주고받는 포커 테이블 데이터 (server/src/games/poker 가 만들고 components/Poker 가 그림)
@@ -34,6 +34,9 @@ export interface Wallet {
   table: string | null;
   /** 내 캐릭터 */
   char: CharId;
+  /** 가진 스킨 · 캐릭터별로 입은 스킨 */
+  skins: SkinId[];
+  wear: Wear;
   /** 방금 칩이 바닥나서 기본 칩을 자동으로 받았으면 (알림용, 그때 한 번만 옴) */
   revived?: { amount: number; left: number };
 }
@@ -44,6 +47,8 @@ export interface SeatWire {
   uid: string;
   name: string;
   char: CharId;
+  /** 그림 열쇠 (스킨을 입었으면 스킨 id) */
+  look: Look;
   /** 손에 든 칩 (판 중에는 이미 건 돈을 뺀 나머지) */
   stack: number;
   /** in 이번 판 참가 · wait 다음 판부터 · out 자리 비움 */
@@ -230,6 +235,7 @@ export interface ChatMsg {
   uid: string;
   name: string;
   char: CharId;
+  look?: Look;
   /** 글 또는 이모티콘 (둘 중 하나) */
   text: string;
   emote?: Emote;
@@ -243,12 +249,14 @@ export interface RankRow {
   money: number;
   hands: number;
   char: CharId;
+  look?: Look;
 }
 
 /** 마이페이지 (poker.me) */
 export interface MyPage {
   nick: string;
   char: CharId;
+  look: Look;
   avatar: string | null;
   /** 가입 시각 */
   since: number;
@@ -265,4 +273,30 @@ export interface MyPage {
   seven: { hands: number; wins: number };
   /** 최근 판 (최신순) */
   recent: { at: number; game: GameKind; tier: TierId; delta: number; rivals: number }[];
+  /** 베팅 성향: 최근 30일 핸드 기록(최대 500판)에서 계산 */
+  stats: { holdem: PlayStats; seven: PlayStats };
+}
+
+/**
+ * 한 게임의 베팅 성향.
+ * acts 열쇠 — 홀덤: fold · check · call · bet · raise · allin / 7포커: die · bbing · ddadang · call · quarter · half · allin
+ */
+export interface PlayStats {
+  hands: number;
+  wins: number;
+  acts: Record<string, number>;
+  /** 다이(폴드)로 끝낸 판 */
+  folds: number;
+  /** 끝까지 가서 패를 깐 판 · 그중 이긴 판 */
+  showdowns: number;
+  sdWins: number;
+  /** 홀덤 프리플랍: 스스로 돈을 넣은 판 · 레이즈한 판 · 3벳 한 판 / 3벳 할 수 있던 판 (7포커는 0) */
+  vpip: number;
+  pfr: number;
+  threeBet: number;
+  threeBetChance: number;
+  /** 판마다 누적 증감 (오래된 것 → 최신, 최대 60점) */
+  trend: number[];
+  best: number;
+  worst: number;
 }

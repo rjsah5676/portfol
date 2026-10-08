@@ -22,6 +22,7 @@ import { h, ms, requireAdmin } from "./util";
  * 열려 있는 방 (서버 메모리: 스케치 퀴즈 · 격투)
  *   GET    /api/admin/live
  *   POST   /api/admin/live/close   { game, id }
+ *   GET    /api/admin/poker/settings          · PUT { botBoost }
  * 데이터 (범용 조회·수정·삭제) — 경로는 기존 Firestore 컬렉션 경로 표기를 그대로 받음
  *   ("score", "rhythm_rankings/{곡_난이도}/scores" …)
  *   GET    /api/admin/docs?path=…
@@ -106,6 +107,9 @@ export interface AdminHooks {
   liveRooms(): Record<LiveGame, LiveRoom[]>;
   /** 방 닫기 (없는 방이면 false) */
   closeLiveRoom(game: LiveGame, id: string): boolean;
+  /** 포커 설정 (봇 늘리기 켜고 끄기) */
+  pokerSettings?(): { botBoost: boolean };
+  setPokerSettings?(p: { botBoost?: boolean }): Promise<{ botBoost: boolean }>;
 }
 
 /** 한국 시간 기준 날짜 (방문자 수의 일별 키와 같은 형식) */
@@ -264,6 +268,20 @@ export function adminRouter({ db, auth, web, users, gateway, cfg, traffic }: Dep
     h(async (req) => {
       const body = z.strictObject({ game: z.enum(["sketch", "fight", "poker"]), id: z.string().min(1).max(80) }).parse(req.body);
       return { closed: hooks.closeLiveRoom(body.game, body.id) };
+    })
+  );
+
+  // ───────────── 포커 설정 ─────────────
+
+  r.get(
+    "/poker/settings",
+    h(() => hooks.pokerSettings?.() ?? { botBoost: true })
+  );
+  r.put(
+    "/poker/settings",
+    h(async (req) => {
+      const body = z.strictObject({ botBoost: z.boolean() }).parse(req.body);
+      return (await hooks.setPokerSettings?.(body)) ?? body;
     })
   );
 

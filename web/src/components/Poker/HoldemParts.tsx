@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { evaluate, handName, rankOf } from "@/lib/poker/cards";
-import { UNIT, fmtWon } from "@/lib/poker/rules";
+import { UNIT, fmtWon, type TierId } from "@/lib/poker/rules";
 import type { HoldemAction, HoldemView, MyHand } from "@/lib/poker/types";
 import { Money, PlayingCard } from "./parts";
 import type { SeatCardsProps, Sizes } from "./TableView";
@@ -101,7 +101,7 @@ export function HoldemBoard({
   settled,
 }: {
   view: HoldemView;
-  tier: 1 | 2 | 3;
+  tier: TierId;
   sizes: Sizes;
   settled: boolean;
 }) {
