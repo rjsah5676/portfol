@@ -2,7 +2,7 @@
 
 자동 채보기(`web/src/lib/rhythm/` — analyze·autochart·patterns·stars)를 **osu!mania 4K 랭크 채보와 같은 곡·같은 레벨로 대조**해서 숫자를 맞춰 온 도구 모음.
 채보기 코드 안 주석의 측정값(잭 비율, 롱노트 비율, 동시치기 두께, 어택 보정 등)이 전부 이 도구로 잰 것.
-연구 결론·결정 기록은 claude.ai 프로젝트 문서 `claude/rhythm-chart-research.md` 에 있음.
+**먼저 `HANDOFF.md`(인수인계: 방식·결과·지켜야 할 것)를 읽을 것.** 같은 내용이 claude.ai 프로젝트 문서 `claude/rhythm-chart-research.md` 에도 있음.
 
 ## 펼치기
 
