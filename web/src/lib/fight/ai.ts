@@ -149,12 +149,18 @@ export class FightAI {
   private techDecision: boolean | null = null;
   private gcDecision: boolean | null = null;
   private cutDecision: boolean | null = null;
+  /** 상대가 가만히(서 있거나 가드만) 있은 프레임 수 — 오래 가만히 있으면 먼저 들어감 */
+  private oStill = 0;
+  private oX = 0;
   /** 내다보고 고른 입력 (남은 프레임) */
   private plan: number[] = [];
   /** 대시 입력 (톡·떼고·톡) 남은 프레임 */
   private dashSeq: number[] = [];
   /** 낭떠러지 건너가는 중: 목표 발판 (2단 점프 + 공중 대시로) */
   private crossTo: Plat | null = null;
+  /** 한 번 점프로 못 닿는 높은 발판의 상대에게 가려고 거쳐 가는 발판 (계단처럼) */
+  private climb: Plat | null = null;
+  private climbUntil = 0;
   private jump2At = 0;
   private wasAir = false;
   /** 떨어지는 중 발판으로 복귀하는 중 (착지할 때까지) */
@@ -185,6 +191,11 @@ export class FightAI {
     const L = this.level;
     const air = isAir(s, f);
     let out = 0;
+    // 상대가 가만히 있나 (서 있거나 가드, 거의 안 움직임)
+    if ((o.st === "idle" || o.st === "block") && Math.abs(o.x - this.oX) < 2 * SUB) this.oStill++;
+    else this.oStill = 0;
+    this.oX = o.x;
+    const passive = this.oStill > 90;
 
     // 버튼은 한 프레임 누르고 떼야 새로 눌린 걸로 침
     const press = (b: number) => {
@@ -234,6 +245,32 @@ export class FightAI {
       this.dashSeq = [0, dir, dir, 0, 0, dir, dir, dir];
       return finish();
     };
+    // ── 높은 발판으로 올라가는 중: 거쳐 갈 발판 아래로 가서 점프, 꼭대기에서 2단 점프, 발판 안쪽으로 ──
+    if (this.climb) {
+      const p = this.climb;
+      const landed = !air && Math.abs(f.h - p.y * SUB) < SUB && platBelow(map, f.x, f.h) === p;
+      if (landed || s.f > this.climbUntil || f.st === "hit" || f.st === "down" || f.st === "ko" || dy < 30) this.climb = null;
+      else if (f.st === "idle" || f.st === "walk" || f.st === "dash" || f.st === "jump") {
+        const near = Math.max((p.x0 + 18) * SUB, Math.min((p.x1 - 18) * SUB, f.x));
+        const mid = ((p.x0 + p.x1) / 2) * SUB;
+        if (!air) {
+          // 발판 가장자리 근처까지 걸어가서 점프 (발판 쪽으로 기울여)
+          if (Math.abs(near - f.x) > 36 * SUB) out |= near > f.x ? IN.R : IN.L;
+          else {
+            out |= mid > f.x ? IN.R : IN.L;
+            press(IN.J);
+          }
+        } else {
+          const inside = f.x > (p.x0 + 12) * SUB && f.x < (p.x1 - 12) * SUB;
+          if (!inside) out |= mid > f.x ? IN.R : IN.L;
+          // 아직 발판보다 낮으면 꼭대기 근처에서 2단 점프
+          if (f.h < p.y * SUB + 12 * SUB && f.jumps < 2 && f.vh <= 150) press(IN.J);
+          if (c.glide && f.jumps >= 2 && f.vh < 0 && f.h > p.y * SUB) out |= IN.J;
+        }
+        return finish();
+      }
+    }
+
     // 건너가기는 착지하거나 맞으면 끝
     if ((!air && this.wasAir) || f.st === "hit" || f.st === "down") this.crossTo = null;
     if (!air) this.recover = false;
@@ -513,6 +550,29 @@ export class FightAI {
 
     // ── 높이 맞추기: 위로 점프 / 아래로 내려가기 ──
     if (free && !air) {
+      // 한 번에 못 올라가는 높이(2단 점프로 약 228px)면 중간 발판을 거쳐 감
+      if (dy > 50 && !isAir(s, o) && !this.climb) {
+        const tp = platBelow(map, o.x, o.h);
+        const myY = f.h / SUB;
+        const here = platBelow(map, f.x, f.h);
+        if (tp && tp.y - myY > 205) {
+          let best: Plat | null = null;
+          let bs = -Infinity;
+          for (const p of map.plats) {
+            if (p === here || p.y <= myY + 30 || p.y - myY > 205) continue;
+            const px = Math.max(p.x0, Math.min(p.x1, f.x / SUB));
+            const tx = Math.max(p.x0, Math.min(p.x1, o.x / SUB));
+            // 높을수록, 상대 쪽일수록, 지금 자리에서 가까울수록
+            const sc = p.y * 2 - Math.abs(tx - o.x / SUB) * 0.6 - Math.abs(px - f.x / SUB) * 0.4;
+            if (sc > bs) ((bs = sc), (best = p));
+          }
+          if (best) {
+            this.climb = best;
+            this.climbUntil = s.f + 240;
+            return finish();
+          }
+        }
+      }
       if (dy > 50 && dist < 260 && !isAir(s, o) && this.r() < 0.5) {
         out |= dist > 30 ? toward : 0;
         press(IN.J);
@@ -524,8 +584,11 @@ export class FightAI {
         if (on && !on.solid) {
           const toL = f.x - on.x0 * SUB,
             toR = on.x1 * SUB - f.x;
+          // 상대 쪽 가장자리로 계속 걸어서 떨어짐 (예전엔 가장자리 6px 안에 오면 반대로 돌아서 → 끝에서 좌우로 왔다 갔다,
+          // 방향키를 번갈아 톡톡 눌러 대시까지 나가던 것)
           const side = Math.abs(o.x - on.x0 * SUB) < Math.abs(o.x - on.x1 * SUB) ? -1 : 1;
-          out |= (toL < 6 * SUB ? 1 : toR < 6 * SUB ? -1 : side) > 0 ? IN.R : IN.L;
+          void toL, toR;
+          out |= side > 0 ? IN.R : IN.L;
           return finish();
         }
       }
@@ -574,13 +637,15 @@ export class FightAI {
       }
       case "space": {
         // 발 재기(풋시): 내 평타는 닿고 상대 평타는 안 닿는 거리를 유지, 들어오면 찌름
-        const ideal = Math.max(oReach + 6, hReach - 6);
+        // (내 발차기가 닿는 거리 안쪽으로 — 예전엔 닿지 않는 거리에서 멈춰 서서, 가만히 있는 상대를 영영 안 때렸음)
+        // 상대가 오래 가만히 있으면 약이 닿는 거리까지 들어감
+        const ideal = passive ? lReach - 6 : Math.min(Math.max(oReach + 6, hReach - 6), hReach - 4);
         const closing = (o.st === "walk" || o.st === "dash" || (o.st === "jump" && Math.abs(o.vx) > 300)) && Math.sign(o.vx) === Math.sign(f.x - o.x);
-        if (dist > ideal + 14) out |= toward;
+        if (dist > Math.min(ideal + 14, hReach - 2)) out |= toward;
         else if (dist < ideal - 10) out |= away;
         if (free && aligned) {
           // 들어오는 상대는 바로 찌름 (대시는 특히), 가만히 있으면 가끔 찔러 봄. 등 돌리고 있으면 먼저 돌아섬
-          const want = closing ? L.combo : 0.12 + L.aggro * 0.15;
+          const want = closing ? L.combo : passive ? 0.25 + L.aggro * 0.3 : 0.12 + L.aggro * 0.15;
           if (dist < lReach + 4 && this.r() < want) {
             out &= ~(IN.L | IN.R);
             hitBtn(IN.A);
@@ -703,6 +768,11 @@ export class FightAI {
     // 사거리 우위가 있으면 발 재기를 선호 (리치형)
     const longer = hReach > oReach + 10;
     const zoner = !!c.moves.S.proj;
+    // 상대가 오래 가만히 있으면 다가가서 때림 (발 재기·대기로 서로 멈춰 있지 않게)
+    if (this.oStill > 90 && r < 0.45 + L.aggro * 0.45) {
+      this.intent = dist > 55 ? "approach" : r < 0.3 ? "throw" : "jab";
+      return;
+    }
     if (dist > 120) {
       if (zoner && r < 0.35 && f.cd === 0) this.intent = "fireball";
       else if (longer && r < 0.7) this.intent = "space";
