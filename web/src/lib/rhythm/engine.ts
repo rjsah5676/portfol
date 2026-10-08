@@ -14,17 +14,26 @@ export const WINDOW = { perfect: 0.045, great: 0.09, good: 0.13, early: 0.17 } a
 /** 정확도·점수 반영 비율: PERFECT 100%, GREAT 70%, GOOD 40% */
 const WEIGHT: Record<Judge, number> = { perfect: 1, great: 0.7, good: 0.4, miss: 0 };
 /**
- * HP 증감: 판정은 후하게 주는 대신 HP는 엄격하게 — 미스 7번 연속이면 가득 찬 HP가 바닥남(전엔 11번),
- * GOOD도 조금 깎이고, 회복은 PERFECT로만 제대로 됨
+ * HP 증감: 미스 10번 연속이면 가득 찬 HP가 바닥남(전엔 7번 — 어려운 구간 한 번에 죽는다는 피드백으로 완화),
+ * GOOD은 아주 조금만, 회복은 PERFECT·GREAT로
  */
 export const HP_MAX = 100;
-const HP_DELTA: Record<Judge, number> = { perfect: 0.8, great: 0.3, good: -1, miss: -15 };
+const HP_DELTA: Record<Judge, number> = { perfect: 0.9, great: 0.4, good: -0.5, miss: -10 };
+/** 롱노트 꼬리 MISS(일찍 뗌)는 머리 MISS보다 덜 깎음 — 노트는 쳤으니까 */
+const HP_TAIL_MISS = -5;
 
 /**
- * 롱노트 꼬리(떼는 타이밍) 판정 창 — 머리보다 넉넉하게 (DJMAX처럼 떼는 건 조금 관대)
- * 끝까지 누르고 있으면 PERFECT, 이보다 일찍 떼면 그만큼 깎임
+ * 롱노트 꼬리(떼는 타이밍) 판정 창 — 끝보다 얼마나 일찍 뗐는지. 머리보다 훨씬 넉넉하게:
+ * 고정 창(초)과 롱노트 길이 비율 중 큰 쪽 — 긴 롱노트는 끝 무렵 조금 일찍 떼도 PERFECT
+ * (전엔 80·140·200ms 고정이라 짧게 끊기는 리듬에서 떼는 타이밍이 칠 때보다 빡빡했음)
  */
-const RELEASE = { perfect: 0.08, great: 0.14, good: 0.2 } as const;
+const RELEASE = {
+  perfect: { sec: 0.15, frac: 0.15 },
+  great: { sec: 0.25, frac: 0.25 },
+  good: { sec: 0.35, frac: 0.4 },
+} as const;
+const releaseWin = (k: keyof typeof RELEASE, len: number) =>
+  Math.max(RELEASE[k].sec, len * RELEASE[k].frac);
 
 export interface LiveNote extends Note {
   /** 머리 판정 결과 */
@@ -90,11 +99,12 @@ export class Engine {
     this.lastTime = this.notes.reduce((m, n) => Math.max(m, n.end ?? n.t), 0);
   }
 
-  private record(j: Judge, lane: number, at: number, diff?: number) {
+  /** hp: HP 증감을 바꿀 때 (롱노트 꼬리) — 없으면 판정별 기본값 */
+  private record(j: Judge, lane: number, at: number, diff?: number, hp = HP_DELTA[j]) {
     this.counts[j]++;
     this.sum += WEIGHT[j];
     this.judged++;
-    this.hp = Math.max(0, Math.min(HP_MAX, this.hp + HP_DELTA[j]));
+    this.hp = Math.max(0, Math.min(HP_MAX, this.hp + hp));
     if (this.hp <= 0 && !this.noFail) this.dead = true;
     if (j === "miss") this.combo = 0;
     else this.maxCombo = Math.max(this.maxCombo, ++this.combo);
@@ -124,7 +134,7 @@ export class Engine {
     if (n.end) {
       if (j === "miss") {
         n.tail = "miss";
-        this.record("miss", lane, t);
+        this.record("miss", lane, t, undefined, 0); // 머리에서 이미 깎였으니 HP는 한 번만
         this.dropTicks(n);
       } else {
         n.holding = true;
@@ -141,15 +151,16 @@ export class Engine {
     n.holding = false;
     // 끝보다 얼마나 일찍 뗐는지로 판정 (끝 이후는 update에서 PERFECT 처리됨)
     const early = n.end! - t;
+    const len = n.end! - n.t;
     n.tail =
-      early <= RELEASE.perfect
+      early <= releaseWin("perfect", len)
         ? "perfect"
-        : early <= RELEASE.great
+        : early <= releaseWin("great", len)
           ? "great"
-          : early <= RELEASE.good
+          : early <= releaseWin("good", len)
             ? "good"
             : "miss";
-    this.record(n.tail, lane, t);
+    this.record(n.tail, lane, t, undefined, n.tail === "miss" ? HP_TAIL_MISS : undefined);
     this.dropTicks(n);
   }
 
@@ -173,7 +184,7 @@ export class Engine {
         this.record("miss", lane, n.t + WINDOW.good);
         if (n.end) {
           n.tail = "miss";
-          this.record("miss", lane, n.t + WINDOW.good);
+          this.record("miss", lane, n.t + WINDOW.good, undefined, 0); // HP는 머리 한 번만
           this.dropTicks(n);
         }
         this.ptr[lane]++;

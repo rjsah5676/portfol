@@ -326,7 +326,7 @@ export const RHYTHM_GUIDE: GuideDoc = {
         <>정확도는 PERFECT 100%, GREAT 70%, GOOD 40%로 쳐요. 점수는 최대 1,000,000점.</>,
         <>정확도에 따라 랭크: S+ 97% · S 94% · A 90% · B 80% · C 70% · 그 아래 F.</>,
         <>MISS 없이 끝내면 FC(풀콤보), 전부 PERFECT면 AP(올퍼펙트)!</>,
-        <>MISS가 나면 HP가 크게 깎이고 GOOD도 조금 깎여요. HP가 바닥나면 FAILED.</>,
+        <>MISS가 나면 HP가 깎여요(가득 찬 상태에서 연속 10번이면 바닥). 롱노트를 일찍 떼서 난 MISS는 절반만. HP가 바닥나면 FAILED.</>,
       ],
     },
     {
