@@ -1742,11 +1742,21 @@ export default function TableView({
           {GAMES[table.game].name} · {tier.name} · 판돈 {fmtShort(tier.ante)}
           {hv && ` · ${fmtShort(tier.sb)}/${fmtShort(tier.bb)}`}
         </span>
-        <span className="ml-auto flex items-center gap-[0.5em]">
-          <span className="flex items-center gap-[0.3em] rounded-[6px] border border-[rgba(214,175,92,0.35)] bg-black/50 px-[0.5em] py-[0.1em]">
+        <span className="ml-auto flex shrink-0 items-center gap-[0.5em]">
+          <span
+            className="flex shrink-0 items-center gap-[0.3em] rounded-[6px] border border-[rgba(214,175,92,0.35)] bg-black/50 px-[0.5em] py-[0.1em] whitespace-nowrap"
+            title={`${fmtWon(wallet.money)}칩`}
+          >
             {}
             <img src={asset.chip("gold", "top")} alt="" className="h-[1em] w-[1em]" />
-            <Money won={wallet.money} className="text-[0.95em] text-[var(--pk-brass)]" />
+            {/* 폰처럼 좁으면 짧게(1.1억), 넓으면 전부(1억 1,040만) */}
+            {w < 520 ? (
+              <span className="pk-num text-[0.95em] text-[var(--pk-brass)]">
+                {fmtShort(wallet.money)}
+              </span>
+            ) : (
+              <Money won={wallet.money} className="text-[0.95em] text-[var(--pk-brass)]" />
+            )}
           </span>
           {/* 나가기: 판 중이면 예약(누르면 예약 취소로 바뀜), 대기 중이면 바로 */}
           <button
