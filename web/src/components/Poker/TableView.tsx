@@ -213,7 +213,6 @@ export default function TableView({
   const [table, setTable] = useState<TableWire | null | undefined>(undefined);
   const [myHand, setMyHand] = useState<MyHand | null>(null);
   const [log, setLog] = useState<LogLine[]>([]);
-  const [bubbles, setBubbles] = useState<Record<number, Timed<string>>>({});
   const [emotes, setEmotes] = useState<Record<number, Timed<Emote> & { key: number }>>({});
   const [poses, setPoses] = useState<Record<number, Timed<Pose>>>({});
   const [faces, setFaces] = useState<Record<number, Timed<Face>>>({});
@@ -291,7 +290,6 @@ export default function TableView({
       const nameOf = (seat: number) => namesRef.current[seat] ?? "?";
       const mySeat = t.seats.find((s) => s?.uid === uid)?.seat ?? -1;
       const lines: LogLine[] = [];
-      const say: Record<number, Timed<string>> = {};
       const emo: Record<number, Timed<Emote> & { key: number }> = {};
       const pose: Record<number, Timed<Pose>> = {};
       const face: Record<number, Timed<Face>> = {};
@@ -412,9 +410,7 @@ export default function TableView({
             );
             won[e.seat] = { amt: (won[e.seat]?.amt ?? 0) + e.amt, key: ++keyRef.current };
             break;
-          case "say":
-            say[e.seat] = { v: e.text, until: now + 3200 + e.text.length * 45 };
-            break;
+          // 대사(say)는 말풍선 없이 음성으로만
           case "emote": {
             emo[e.seat] = { v: e.emote, until: now + 2600, key: ++keyRef.current };
             // 이모티콘마다 다른 효과음 (없으면 공통 "뿅")
@@ -470,7 +466,6 @@ export default function TableView({
         }
       }
       if (lines.length) setLog((l) => [...l, ...lines].slice(-80));
-      if (Object.keys(say).length) setBubbles((b) => ({ ...b, ...say }));
       if (Object.keys(emo).length) setEmotes((b) => ({ ...b, ...emo }));
       if (Object.keys(pose).length) setPoses((b) => ({ ...b, ...pose }));
       if (Object.keys(face).length) setFaces((b) => ({ ...b, ...face }));
@@ -532,17 +527,16 @@ export default function TableView({
           if (mine) (isBig(total, ante) ? sfx.bigwin : sfx.win)();
           else if (myShowed) sfx.lose();
           else sfx.pot();
-          // 이긴 사람 한마디, 진 사람 한마디 (내가 졌으면 나, 아니면 깐 사람 중 하나)
-          for (const x of seats) {
-            const ch = charOf(x.seat);
-            if (ch) playVoice(ch, isBig(x.amt, ante) ? "bigwin" : "win");
+          // 한마디: 끝까지 살아 있던 나 → 내 승/패 대사만. 죽었거나 구경 중 → 이긴 사람 대사만
+          if (myShowed) {
+            const ch = charOf(mySeat);
+            const amt = seats.find((x) => x.seat === mySeat)?.amt ?? 0;
+            if (ch) playVoice(ch, mine ? (isBig(amt, ante) ? "bigwin" : "win") : "lose");
+          } else {
+            const top = [...seats].sort((a, b) => b.amt - a.amt)[0];
+            const ch = top ? charOf(top.seat) : null;
+            if (ch) playVoice(ch, isBig(top.amt, ante) ? "bigwin" : "win");
           }
-          const loser =
-            myShowed && !mine
-              ? mySeat
-              : (shows.find((x) => !seats.some((y) => y.seat === x.seat))?.seat ?? -1);
-          const lch = loser >= 0 ? charOf(loser) : null;
-          if (lch && resNow?.showdown) setTimeout(() => playVoice(lch, "lose"), 900);
         };
         if (staged) pendingWinRef.current = apply;
         else apply();
@@ -617,7 +611,6 @@ export default function TableView({
 
   // 시간이 지난 말풍선 · 포즈 · 표정은 지움
   const transient =
-    Object.keys(bubbles).length +
     Object.keys(poses).length +
     Object.keys(faces).length +
     Object.keys(emotes).length;
@@ -631,7 +624,6 @@ export default function TableView({
         ) as Record<number, T>;
         return Object.keys(next).length === Object.keys(m).length ? m : next;
       };
-      setBubbles(prune);
       setPoses(prune);
       setFaces(prune);
       setEmotes(prune);
@@ -1283,7 +1275,6 @@ export default function TableView({
                 className="pointer-events-none absolute"
                 style={{ left: x, top: sprTop + sprH * 0.05, zIndex: 40 }}
               >
-                {bubbles[i] && !emotes[i] && <Bubble text={bubbles[i].v} />}
               </div>
               {/* 이모티콘 말풍선: 캐릭터를 가리지 않게 머리 옆(테이블 안쪽)에, 꼬리가 머리를 가리킴 — 무대 밖으로 안 나가게 */}
               {emotes[i] &&
@@ -1639,7 +1630,6 @@ export default function TableView({
             frac={frac}
             deadline={deadline}
             gain={gains[mySeat] && (res?.won[mySeat] ?? 0) > 0 ? gains[mySeat] : null}
-            bubble={bubbles[mySeat]?.v}
             emote={emotes[mySeat] ?? null}
             heroSprH={heroSprH}
             isButton={!!hv && hv.button === mySeat}
@@ -2075,18 +2065,34 @@ function Shell({
 }
 
 /** 행동 꼬리표: 행동 색의 칠기 판 + 금속 느낌 글자 (색은 외침과 같음) */
+/** 행동 글자 그림 (/poker/ui/act-{행동}.webp) 이 있으면 그걸, 없으면 CSS 글자. 파일 유무는 한 번만 확인 */
+const actImgOk = new Map<string, boolean>();
+const actImg = (a: string) => `/poker/ui/act-${a}.webp`;
+
 function ActTag({ a, edge }: { a: string; edge?: "l" | "r" }) {
+  const [ok, setOk] = useState(() => actImgOk.get(a));
+  useEffect(() => {
+    if (actImgOk.has(a)) return;
+    const im = new Image();
+    im.onload = () => (actImgOk.set(a, true), setOk(true));
+    im.onerror = () => (actImgOk.set(a, false), setOk(false));
+    im.src = actImg(a);
+  }, [a]);
   return (
     <span
       className={`absolute bottom-[calc(100%+4px)] z-20 ${edge === "l" ? "left-0" : edge === "r" ? "right-0" : "left-1/2 -translate-x-1/2"}`}
     >
-      <span
-        className="pk-acttag"
-        data-a={a}
-        style={{ "--ac": SHOUT_COLOR[a] ?? "#c3c9d6" } as CSSProperties}
-      >
-        <span className="pk-acttag-t">{ACT_LABEL[a] ?? a}</span>
-      </span>
+      {ok ? (
+        <img src={actImg(a)} alt={ACT_LABEL[a] ?? a} draggable={false} className="pk-acttag-img" />
+      ) : (
+        <span
+          className="pk-acttag"
+          data-a={a}
+          style={{ "--ac": SHOUT_COLOR[a] ?? "#c3c9d6", visibility: ok === undefined ? "hidden" : undefined } as CSSProperties}
+        >
+          <span className="pk-acttag-t">{ACT_LABEL[a] ?? a}</span>
+        </span>
+      )}
     </span>
   );
 }
@@ -2097,15 +2103,6 @@ function EmoteBubble({ tail, children }: { tail: "l" | "r"; children: ReactNode 
     <span className="pk-emote-bubble" data-tail={tail}>
       {children}
     </span>
-  );
-}
-
-/** 작은 말풍선 */
-function Bubble({ text }: { text: string }) {
-  return (
-    <div className="pointer-events-none absolute bottom-[calc(100%+10px)] left-1/2 z-30 -translate-x-1/2">
-      <div className="pk-talk pk-bubble">{text}</div>
-    </div>
   );
 }
 
@@ -2203,7 +2200,6 @@ function HeroArea(props: {
   frac: number;
   deadline: number;
   gain: { amt: number; key: number } | null;
-  bubble?: string;
   emote: (Timed<Emote> & { key: number }) | null;
   heroSprH: number;
   isButton: boolean;
@@ -2238,7 +2234,6 @@ function HeroArea(props: {
     frac,
     deadline,
     gain,
-    bubble,
     emote,
     heroSprH,
     isButton,
@@ -2300,7 +2295,6 @@ function HeroArea(props: {
         <FaceIcon char={me.look ?? me.char} face={face} size={fs} />
         {waiting && deadline > 0 && <TimerRing size={fs + 4} frac={frac} width={3} square />}
         {(isButton || blind) && <span className="pk-badge">{isButton ? "D" : blind}</span>}
-        {bubble && !emote && <Bubble text={bubble} />}
         {gain && (
           <Rise
             key={gain.key}

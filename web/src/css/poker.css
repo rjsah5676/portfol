@@ -1311,7 +1311,7 @@
 .pk-acttag {
   position: relative;
   display: inline-block;
-  padding: 0.14em 0.85em 0.2em;
+  padding: 0.08em 0.8em 0.12em;
   border-radius: 10px;
   border: 2px solid color-mix(in srgb, var(--ac) 80%, #fff);
   background:
@@ -1336,6 +1336,8 @@
 /* 글자: 위는 하얗고 아래로 행동 색 + 진한 테두리 */
 .pk-acttag-t {
   display: inline-block;
+  line-height: 1.25;
+  padding: 0.04em 0.04em 0;
   color: transparent;
   background: linear-gradient(
     180deg,
@@ -1348,6 +1350,14 @@
   filter: drop-shadow(1.5px 0 0 #120a00) drop-shadow(-1.5px 0 0 #120a00)
     drop-shadow(0 1.5px 0 #120a00) drop-shadow(0 -1.5px 0 #120a00)
     drop-shadow(0 2px 1px rgba(0, 0, 0, 0.6));
+}
+.pk-acttag-img {
+  display: block;
+  height: 2.6em;
+  width: auto;
+  max-width: none;
+  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.6));
+  animation: pk-acttag 0.6s cubic-bezier(0.2, 1.5, 0.35, 1) both;
 }
 .pk-acttag::after {
   content: "";
@@ -1962,6 +1972,8 @@
 /* 글자: 위 밝고 아래 금빛, 진한 테두리 (행동 꼬리표와 같은 결) */
 .pk-tag-t {
   display: inline-block;
+  line-height: 1.25;
+  padding: 0.04em 0.04em 0;
   color: transparent;
   background-image: linear-gradient(180deg, #fff 25%, #ffe9a6 55%, #e9c879);
   -webkit-background-clip: text;
@@ -2419,33 +2431,36 @@
   display: inline-block;
   padding: 0.18em;
   border-radius: 18px;
-  background: radial-gradient(120% 100% at 50% 0%, #ffffff, #eef1f8);
+  background: #f6f7fb;
   border: 2px solid #1b1d27;
   box-shadow:
     0 4px 12px rgba(0, 0, 0, 0.55),
-    inset 0 -3px 0 rgba(0, 0, 0, 0.08);
+    inset 0 -3px 0 rgba(0, 0, 0, 0.06);
 }
+/* 꼬리: 말풍선 위에 겹쳐서 테두리 선을 덮음 → 이음새 없이 흰색으로 이어짐 */
 .pk-emote-bubble::after {
   content: "";
   position: absolute;
   top: 58%;
+  z-index: 1;
   width: 14px;
   height: 14px;
-  z-index: -1;
-  background: #eef1f8;
+  background: #f6f7fb;
   border: 2px solid #1b1d27;
+  border-top-color: transparent;
+  border-right-color: transparent;
   transform: translateY(-50%) rotate(45deg);
 }
 .pk-emote-bubble[data-tail="l"]::after {
-  left: -9px;
-  border-right: 0;
-  border-top: 0;
+  left: -8px;
 }
 .pk-emote-bubble[data-tail="r"]::after {
-  right: -9px;
+  right: -8px;
   transform: translateY(-50%) rotate(225deg);
-  border-right: 0;
-  border-top: 0;
+}
+.pk-emote-bubble img {
+  position: relative;
+  z-index: 2;
 }
 .pk-emote-bubble img {
   display: block;
