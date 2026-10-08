@@ -283,7 +283,7 @@ export default function Lobby({
   );
 
   const mode = (
-    <div className="grid grid-cols-2 gap-[0.5em]" style={{ height: H ? "100%" : 112 }}>
+    <div className="grid shrink-0 grid-cols-2 gap-[0.5em]" style={{ height: H ? "100%" : 112 }}>
       {(["holdem", "seven"] as const).map((g) => (
         <button
           key={g}
@@ -549,13 +549,14 @@ export default function Lobby({
           <div className="flex min-h-0 flex-col">{rooms}</div>
         </div>
       ) : (
+        // 세로판: 화면이 낮으면(전체화면 아닐 때) 열린 방이 찌그러지지 않게 전체가 스크롤됨
         <div
-          className="absolute inset-x-0 bottom-0 flex flex-col gap-[0.55em] p-[0.6em]"
+          className="pk-scroll absolute inset-x-0 bottom-0 flex flex-col gap-[0.55em] overflow-y-auto overscroll-contain p-[0.6em]"
           style={{ top: bar }}
         >
           {/* 세로판: 내 정보 한 줄 */}
           <div
-            className="pk-frame pk-me relative isolate flex items-center gap-[0.6em] overflow-hidden p-[0.5em]"
+            className="pk-frame pk-me relative isolate flex shrink-0 items-center gap-[0.6em] overflow-hidden p-[0.5em]"
             style={{ "--c": info.color } as CSSProperties}
           >
             <div className="pk-me-glow absolute inset-0 -z-10" />
@@ -606,8 +607,8 @@ export default function Lobby({
             )}
           </div>
           {mode}
-          <div className="pk-frame p-[0.6em]">{tiers}</div>
-          {rooms}
+          <div className="pk-frame shrink-0 p-[0.6em]">{tiers}</div>
+          <div className="flex min-h-[17em] flex-1 flex-col">{rooms}</div>
         </div>
       )}
 

@@ -2182,15 +2182,18 @@ function Center({
         )}
         <div key={shown} className="pk-pot">
           <PotChips ratio={shown / base} size={Math.max(24, sizes.u * 4)} />
+          {/* 이번 구에 건 돈은 POT 글자 옆에 작게 (옆으로 길어져 자리를 가리지 않게) */}
           <span className="flex shrink-0 flex-col items-start leading-none whitespace-nowrap">
-            <span className="pk-pot-label">POT</span>
+            <span className="flex items-center gap-[0.4em]">
+              <span className="pk-pot-label">POT</span>
+              {!res && street > 0 && collected > 0 && (
+                <span className="mb-[0.1em] rounded-[3px] bg-white/10 px-[0.35em] py-[0.05em] text-[0.6em] text-white/75">
+                  +{fmtShort(street)}
+                </span>
+              )}
+            </span>
             <Money won={shown} className="text-[1.55em] text-white" />
           </span>
-          {!res && street > 0 && collected > 0 && (
-            <span className="ml-[0.2em] shrink-0 rounded-[4px] bg-white/10 px-[0.4em] py-[0.1em] text-[0.72em] whitespace-nowrap text-white/75">
-              베팅 +{fmtShort(street)}
-            </span>
-          )}
         </div>
       </div>
       {hand.game === "holdem" && (
