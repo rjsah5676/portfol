@@ -21,6 +21,8 @@ export const PATCHES: Patch[] = [
       "폰에서도 내 캐릭터가 내 이름표 위에 보여요",
       "건 돈 표시가 상대 카드(족보)를 가리지 않게 자리를 옮겼어요",
       "연결이 불안정한 사람은 이름표에 「연결 불안정…」, 내 연결이 끊기면 위에 「다시 연결하는 중」 표시",
+      "쇼다운 연출 — 베팅이 끝나면 건 돈이 팟으로 모이고, 패를 한 자리씩 뒤집으며 족보가 도장처럼 찍혀요. 이긴 사람은 맨 마지막에 까고, 그 뒤 이긴 5장이 빛나고 나머지는 어두워져요",
+      "설정에 배경음악 · 효과음 · 캐릭터 음성 음량을 따로 두었어요 (음악 · 음성 파일은 들어오는 대로 켜져요)",
     ],
   },
   {
@@ -64,11 +66,21 @@ export const LATEST = PATCHES[0].ver;
 
 export default function PatchNotes({ onClose }: { onClose: () => void }) {
   return (
-    <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/70 p-[0.8em]" onClick={onClose}>
-      <div className="pk-frame pk-pop flex max-h-full w-full max-w-[34em] flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
+    <div
+      className="absolute inset-0 z-50 flex items-center justify-center bg-black/70 p-[0.8em]"
+      onClick={onClose}
+    >
+      <div
+        className="pk-frame pk-pop flex max-h-full w-full max-w-[34em] flex-col overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="flex items-center gap-[0.5em] border-b border-[rgba(214,175,92,0.25)] bg-black/40 px-[0.9em] py-[0.6em]">
           <span className="pk-frame-title text-[1.05em]">패치노트</span>
-          <button type="button" onClick={onClose} className="pk-btn pk-btn-ghost ml-auto px-[0.8em] py-[0.25em] text-[0.82em]">
+          <button
+            type="button"
+            onClick={onClose}
+            className="pk-btn pk-btn-ghost ml-auto px-[0.8em] py-[0.25em] text-[0.82em]"
+          >
             닫기
           </button>
         </div>
@@ -76,7 +88,9 @@ export default function PatchNotes({ onClose }: { onClose: () => void }) {
           {PATCHES.map((p) => (
             <section key={p.ver}>
               <div className="mb-[0.35em] flex items-baseline gap-[0.5em]">
-                <span className="rounded-[4px] bg-[var(--pk-brass)] px-[0.45em] text-[0.8em] font-extrabold text-[#2a1e05]">{p.ver}</span>
+                <span className="rounded-[4px] bg-[var(--pk-brass)] px-[0.45em] text-[0.8em] font-extrabold text-[#2a1e05]">
+                  {p.ver}
+                </span>
                 <span className="text-[1em] font-extrabold">{p.name}</span>
                 <span className="ml-auto text-[0.75em] text-white/45">{p.date}</span>
               </div>

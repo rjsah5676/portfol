@@ -11,7 +11,8 @@
     "format:check": "prettier --check .",
     "foods": "node scripts/build-foods.mjs",
     "rhythm-chart": "node scripts/build-rhythm-chart.mjs",
-    "seo:audit": "node scripts/seo-audit.mjs"
+    "seo:audit": "node scripts/seo-audit.mjs",
+    "poker-sound": "node scripts/poker-sound-manifest.mjs"
   },
   "dependencies": {
     "animejs": "^3.2.2",

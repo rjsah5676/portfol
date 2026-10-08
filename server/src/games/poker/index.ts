@@ -552,7 +552,10 @@ export function registerPoker({ gateway, db, users }: Deps, opts: PokerOptions =
       who: [...t.inRound.values()].map((s) => ({ seat: s.seat, uid: s.uid, bot: !!s.brain, name: s.name, char: s.char, delta: deltas[s.seat] ?? 0 })),
       hand: round.audit(),
     };
-    const showdown = !!round.view(0).result?.showdown;
+    const resView = round.view(0).result;
+    const showdown = !!resView?.showdown;
+    // 쇼다운이면 화면에서 패를 한 자리씩 까는 시간(자리당 0.5초) + 승리 연출 3초
+    const shown = resView ? Object.keys(resView.names).length : 0;
     t.lastView = round.view(0);
     t.round = null;
     t.inRound.clear();
@@ -572,7 +575,7 @@ export function registerPoker({ gateway, db, users }: Deps, opts: PokerOptions =
 
     for (const s of t.seats) if (s?.leaving || s?.exitAfter) removeSeat(t, s, s.exitAfter === "idle" ? "idle" : "leave");
     emit(t, ...says);
-    scheduleNext(t, showdown ? 4200 : 2400);
+    scheduleNext(t, showdown ? 3000 + 500 * Math.max(2, shown) + 1500 : 2400);
   }
 
   function scheduleNext(t: Table, delay: number) {
