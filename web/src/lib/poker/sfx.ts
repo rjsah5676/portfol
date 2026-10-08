@@ -388,6 +388,7 @@ export function playSfx(name: string) {
 
 /** 지금 나오는 캐릭터 음성 하나 (외침이 겹쳐 쌓이지 않게 새 외침이 오면 앞 것은 짧게 줄이고 끊음) */
 let voiceNow: { src: AudioBufferSourceNode; gain: GainNode } | null = null;
+let voicePending: { char: string; name: string; big: boolean; at: number } | null = null;
 const BETS = new Set([
   "call",
   "bet",
@@ -417,8 +418,11 @@ export function playVoice(char: string, name: string, big = false) {
   const c = ac();
   if (!c) return;
   const bet = BETS.has(name);
-  // 베팅 외침이 아닌 대사(승리 · 입장 …)는 다른 음성이 나오는 중이면 건너뜀
-  if (!bet && voiceNow) return;
+  // 베팅 외침이 아닌 대사(승리 · 패배 · 입장 …)는 다른 음성이 나오는 중이면 끝난 뒤에 이어서 (대기는 한 줄, 5초 지나면 버림)
+  if (!bet && voiceNow) {
+    voicePending = { char, name, big, at: Date.now() };
+    return;
+  }
   void buffer(url).then((buf) => {
     if (!buf) return;
     if (voiceNow) {
@@ -436,7 +440,12 @@ export function playVoice(char: string, name: string, big = false) {
     const me = { src, gain: g };
     voiceNow = me;
     src.onended = () => {
-      if (voiceNow === me) voiceNow = null;
+      if (voiceNow !== me) return;
+      voiceNow = null;
+      const next = voicePending;
+      voicePending = null;
+      if (next && Date.now() - next.at < 5000)
+        setTimeout(() => playVoice(next.char, next.name, next.big), 150);
     };
     src.start();
   });
