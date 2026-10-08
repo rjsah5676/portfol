@@ -45,7 +45,6 @@ export default function Lobby({
   o,
   h,
   onEnter,
-  onCloset,
   topRight,
 }: {
   wallet: Wallet;
@@ -56,7 +55,6 @@ export default function Lobby({
   h: number;
   onEnter: (id: string) => void;
   onWallet: (w: Wallet) => void;
-  onCloset: () => void;
   topRight?: ReactNode;
 }) {
   const [game, setGameState] = useState<GameKind>("holdem");
@@ -280,13 +278,6 @@ export default function Lobby({
             마이페이지
           </button>
         </div>
-        <button
-          type="button"
-          onClick={onCloset}
-          className="pk-btn pk-btn-gold py-[0.45em] text-[0.82em]"
-        >
-          {skin ? `${skin.name} 장착 중` : "옷장 · 스킨"}
-        </button>
       </div>
     </div>
   );
@@ -428,7 +419,12 @@ export default function Lobby({
             ? "입장 중…"
             : locked
               ? `칩 ${fmtShort(T.min)}부터 입장 가능`
-              : `${GAMES[game].name} · ${T.name} 바로 입장`}
+              : (
+                  <>
+                    <b className="pk-quick-game">{GAMES[game].name}</b>
+                    <span className="opacity-80"> · {T.name}</span> 바로 입장
+                  </>
+                )}
         </button>
         <button
           type="button"
