@@ -1,1 +1,8 @@
-{}
+{
+  "bgm-allin": "bgm-allin.mp3",
+  "bgm-lobby1": "bgm-lobby1.mp3",
+  "bgm-lobby2": "bgm-lobby2.mp3",
+  "bgm-low": "bgm-low.mp3",
+  "bgm-mid": "bgm-mid.mp3",
+  "bgm-vip": "bgm-vip.mp3"
+}

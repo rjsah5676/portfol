@@ -5,7 +5,14 @@ import { useRouter, useSearchParams } from "next/navigation";
 import NickForm from "@/components/Account/NickForm";
 import { useAuth } from "@/lib/AuthContext";
 import { asset } from "@/lib/poker/assets";
-import { getSound, onSoundChange, playBgm, setSound, type SoundSettings } from "@/lib/poker/sfx";
+import {
+  getSound,
+  onSoundChange,
+  playBgm,
+  refreshBgm,
+  setSound,
+  type SoundSettings,
+} from "@/lib/poker/sfx";
 import { fmtShort, type CharId } from "@/lib/poker/rules";
 import type { RankRow, Wallet } from "@/lib/poker/types";
 import { getRank, subscribeWallet, watchClock } from "@/realtime/poker";
@@ -399,8 +406,33 @@ function Settings() {
           {row("배경음악", "bgm")}
           {row("효과음", "sfx")}
           {row("음성", "voice")}
+          <div className="grid grid-cols-[3.4em_1fr] items-center gap-[0.4em]">
+            <span className="text-white/80">로비 곡</span>
+            <div className="grid grid-cols-3 gap-[0.25em]">
+              {(
+                [
+                  [1, "1번"],
+                  [2, "2번"],
+                  [0, "번갈아"],
+                ] as const
+              ).map(([v, label]) => (
+                <button
+                  key={v}
+                  type="button"
+                  aria-pressed={snd.lobby === v}
+                  onClick={() => {
+                    setSound({ lobby: v });
+                    refreshBgm();
+                  }}
+                  className="pk-preset py-[0.3em] text-[0.9em]"
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
           <p className="text-[0.85em] leading-relaxed text-white/45">
-            BETA · 배경음악과 캐릭터 음성은 파일이 들어오는 대로 켜져요.
+            BETA · 캐릭터 음성은 준비 중이에요.
           </p>
         </div>
       )}

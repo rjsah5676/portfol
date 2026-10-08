@@ -13,8 +13,10 @@ export interface SoundSettings {
   bgm: number;
   sfx: number;
   voice: number;
+  /** 로비 곡: 1 · 2 · 0 = 접속할 때마다 번갈아 */
+  lobby: 0 | 1 | 2;
 }
-const DEFAULT: SoundSettings = { mute: false, bgm: 0.5, sfx: 0.8, voice: 0.9 };
+const DEFAULT: SoundSettings = { mute: false, bgm: 0.5, sfx: 0.8, voice: 0.9, lobby: 1 };
 let settings: SoundSettings | null = null;
 const listeners = new Set<() => void>();
 
@@ -273,56 +275,90 @@ const synth: Record<string, (c: AudioContext) => void> = {
 };
 
 // ───────────── 배경음악 ─────────────
+// 곡 끝이 페이드아웃이라 그냥 loop 하면 뚝 끊겨서, 끝나기 2.5초 전에 같은 곡을 처음부터 겹쳐 틀어 교차 페이드로 이음.
 
-let bgmEl: HTMLAudioElement | null = null;
+const XFADE = 2.5;
+/** 지금 틀고 있는 곡 (bgm-lobby 는 설정에 따라 bgm-lobby1 / 2 로 바뀐 이름) */
 let bgmName: string | null = null;
 let wantBgm: string | null = null;
-let fadeTimer: ReturnType<typeof setInterval> | null = null;
+/** 살아 있는 오디오들과 각자의 섞는 비율(0~1) */
+const live = new Map<HTMLAudioElement, number>();
+let cur: HTMLAudioElement | null = null;
+/** 로비 곡 "번갈아" 설정일 때 이번 접속에 고른 번호 */
+let lobbyPick = 0;
 
+const bgmTarget = () => (getSound().mute ? 0 : getSound().bgm);
 function applyBgmVolume() {
-  if (!bgmEl) return;
-  const s = getSound();
-  bgmEl.volume = s.mute ? 0 : s.bgm;
-  if (!s.mute && bgmEl.paused && wantBgm) void bgmEl.play().catch(() => {});
+  const v = bgmTarget();
+  for (const [el, mix] of live) el.volume = Math.min(1, v * mix);
+}
+/** el 의 섞는 비율을 to 까지 ms 동안 바꿈. 0 이 되면 멈추고 버림 */
+function fade(el: HTMLAudioElement, to: number, ms: number) {
+  const from = live.get(el) ?? 0;
+  const t0 = performance.now();
+  const step = () => {
+    if (!live.has(el)) return;
+    const k = Math.min(1, (performance.now() - t0) / ms);
+    const mix = from + (to - from) * k;
+    live.set(el, mix);
+    el.volume = Math.min(1, bgmTarget() * mix);
+    if (k < 1) requestAnimationFrame(step);
+    else if (to === 0) {
+      el.pause();
+      live.delete(el);
+    }
+  };
+  requestAnimationFrame(step);
+}
+function resolveBgm(name: string): string {
+  if (name !== "bgm-lobby") return name;
+  const l = getSound().lobby;
+  if (l === 1 || l === 2) return `bgm-lobby${l}`;
+  if (!lobbyPick) lobbyPick = Math.random() < 0.5 ? 1 : 2;
+  return `bgm-lobby${lobbyPick}`;
 }
 async function startBgm(name: string) {
-  const url = fileOf(name);
+  const real = resolveBgm(name);
+  const url = fileOf(real) ?? fileOf(name);
   if (!url) {
-    if (!manifest) {
-      // 목록이 아직 안 왔으면 조금 뒤에 다시
-      setTimeout(() => wantBgm === name && void startBgm(name), 400);
-    }
+    // 목록이 아직 안 왔으면 조금 뒤에 다시
+    if (!manifest) setTimeout(() => wantBgm === name && void startBgm(name), 400);
     return;
   }
-  if (bgmName === name && bgmEl) return;
-  const old = bgmEl;
+  if (bgmName === real && cur && !cur.paused) return;
+  bgmName = real;
+  await spawn(url, real, 1200);
+}
+/** 새로 틀고 지금 곡은 페이드아웃 */
+async function spawn(url: string, real: string, ms: number) {
   const el = new Audio(url);
-  el.loop = true;
   el.volume = 0;
-  bgmEl = el;
-  bgmName = name;
+  live.set(el, 0);
   try {
     await el.play();
   } catch {
     // 아직 입력 전 — 첫 입력 때 unlock 이 다시 부름
-    bgmEl = null;
-    bgmName = null;
+    live.delete(el);
+    if (bgmName === real) bgmName = null;
     return;
   }
-  // 교차 페이드
-  if (fadeTimer) clearInterval(fadeTimer);
-  const target = () => (getSound().mute ? 0 : getSound().bgm);
-  let t = 0;
-  fadeTimer = setInterval(() => {
-    t = Math.min(1, t + 0.08);
-    el.volume = target() * t;
-    if (old) old.volume = Math.max(0, (old.volume || 0) * (1 - t));
-    if (t >= 1) {
-      if (fadeTimer) clearInterval(fadeTimer);
-      fadeTimer = null;
-      old?.pause();
+  if (bgmName !== real) {
+    // 그새 다른 곡으로 바뀜
+    live.delete(el);
+    el.pause();
+    return;
+  }
+  const old = cur;
+  cur = el;
+  fade(el, 1, ms);
+  if (old) fade(old, 0, ms);
+  el.ontimeupdate = () => {
+    if (cur !== el || !el.duration || el.dataset.next) return;
+    if (el.duration - el.currentTime <= XFADE) {
+      el.dataset.next = "1";
+      void spawn(url, real, XFADE * 1000);
     }
-  }, 60);
+  };
 }
 
 // ───────────── 공개 API ─────────────
@@ -356,12 +392,17 @@ export function playVoice(char: string, name: string, big = false) {
 export function playBgm(name: string | null) {
   wantBgm = name;
   if (!name) {
-    bgmEl?.pause();
-    bgmEl = null;
+    for (const el of live.keys()) fade(el, 0, 600);
+    cur = null;
     bgmName = null;
     return;
   }
   if (unlocked) void startBgm(name);
+}
+
+/** 로비 곡 설정을 바꿨을 때 지금 로비면 바로 바꿔 틂 */
+export function refreshBgm() {
+  if (wantBgm && unlocked) void startBgm(wantBgm);
 }
 
 /** 큰 베팅 기준: 그 방 판돈의 100배 이상이면 "크게" 외침 */
