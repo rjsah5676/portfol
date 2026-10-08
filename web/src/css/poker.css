@@ -2600,9 +2600,7 @@
 
 /* 바로 입장 버튼: 게임 이름을 크게 */
 .pk-quick-game {
-  font-family: "Black Han Sans", "Nanum Gothic", sans-serif;
-  font-weight: 400;
-  font-size: 1.22em;
-  letter-spacing: 0.02em;
-  margin-right: 0.05em;
+  font-weight: 900;
+  font-size: 1.14em;
+  letter-spacing: 0.01em;
 }
