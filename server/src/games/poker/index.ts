@@ -1134,10 +1134,14 @@ export function registerPoker({ gateway, db, users }: Deps, opts: PokerOptions =
   function ensureBotRooms() {
     if (opts.lobbyBots === false || tables.size >= MAX_TABLES - 10) return;
     for (const game of ["holdem", "seven"] as GameKind[]) {
-      const open = [...tables.values()].filter((t) => t.game === game && t.bots && !t.locked && freeSeats(t).length > 1).length;
+      const openRooms = [...tables.values()].filter((t) => t.game === game && t.bots && !t.locked && freeSeats(t).length > 1);
+      const open = openRooms.length;
+      // 동네판(누구나 앉을 수 있는 단계) 방은 늘 하나는 있게 — 새 회원(1억)이 VIP룸만 보고 못 앉는 일이 없게
+      let needLow = !openRooms.some((t) => t.tier.id === 1);
       for (let i = open; i < LOBBY_ROOM_TARGET; i++) {
         const r = randomInt(10);
-        const tier = tierOf(r < 6 ? 1 : r < 9 ? 2 : 3);
+        const tier = tierOf(needLow ? 1 : r < 6 ? 1 : r < 9 ? 2 : 3);
+        needLow = false;
         const t = createTable({ game, tier, name: `${uniqueNickname([])}의 테이블`, bots: true, password: "", ownerUid: "" });
         // 5~15분 동안 사람이 안 오면 닫고 다른 방으로 교체 (방 이름이 계속 바뀌어 자연스럽게)
         t.botRoomUntil = now() + ms((5 + randomInt(11)) * 60_000);

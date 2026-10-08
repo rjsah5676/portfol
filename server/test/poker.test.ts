@@ -397,11 +397,12 @@ describe("봇이 연 방", () => {
       const latest = () => [...sub.events].reverse().find((e) => e.t === "list")?.d ?? sub.data ?? [];
       await until(() => {
         const list = latest() as LobbyTable[];
-        const ok = (g: string) => list.some((t) => t.game === g && t.bots && !t.locked && t.players > 0 && t.players < t.max);
+        // (1억으로 앉을 수 있는 방 — VIP룸은 3억부터)
+        const ok = (g: string) => list.some((t) => t.game === g && t.bots && !t.locked && t.players > 0 && t.players < t.max && t.tier !== 3);
         return ok("holdem") && ok("seven");
       }, "봇이 연 방이 로비에 보임", 15_000);
       // 바로 입장을 누르면 그 종목 · 단계의 봇 방으로 들어감 (새 방을 만들지 않음)
-      const room = (latest() as LobbyTable[]).find((t) => t.bots && t.players > 0 && t.players < t.max)!;
+      const room = (latest() as LobbyTable[]).find((t) => t.bots && t.players > 0 && t.players < t.max && t.tier !== 3)!;
       expect(await c.rpc<string>("poker.quick", { game: room.game, tier: room.tier })).toBe(room.id);
       await c.sub("poker.me", { id: room.id });
       await c.rpc("poker.sit", { id: room.id });
