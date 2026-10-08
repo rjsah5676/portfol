@@ -2107,8 +2107,8 @@ function ActTag({ a, edge }: { a: string; edge?: "l" | "r" }) {
 
 /** 전신 그림(hero)은 예전 허벅지까지 그림보다 몇 배 높게 그려야 머리 크기가 같아짐 */
 const HERO_K = 1.7;
-/** 가로판은 아래 자리가 넉넉해서 조금 작게 · 조금 위로 → 무릎까지 보임 */
-const HERO_KH = 1.32;
+/** 가로판: 예전처럼 크게 (머리 크기 · 위치 그대로), 허리 아래는 이름표 · 화면 끝 뒤로 이어짐 */
+const HERO_KH = 1.7;
 
 /** 이름표 테두리를 따라 줄어드는 남은 시간 (초록 → 노랑 → 빨강) */
 function PlateTimer({ frac }: { frac: number }) {
@@ -2400,11 +2400,11 @@ function HeroArea(props: {
       {H ? (
         <div className="absolute bottom-[8px] left-[24px]" style={{ zIndex: 6 }}>
           {hero ? (
-            // 전신 그림: 머리는 예전 자리 근처, 몸은 이름표 뒤로 내려가 무릎까지 보임
+            // 전신 그림: 예전 그림과 같은 크기 · 위치, 몸은 이름표 뒤로 이어져 허리에서 끊기지 않음
             <div
               className={`pk-seat-sprite pointer-events-none absolute ${waiting ? "pk-seat-turn" : ""}`}
               style={{
-                bottom: `calc(100% - 8px - ${Math.round(heroSprH * (HERO_KH - 1.12))}px)`,
+                bottom: `calc(100% - 8px - ${Math.round(heroSprH * (HERO_KH - 1))}px)`,
                 left: Math.round(heroSprH * (0.375 - HERO_KH / 3)),
               }}
             >
