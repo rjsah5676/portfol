@@ -105,6 +105,10 @@ export default function Online({
   const [rank, setRank] = useState<RankStatus>({ s: "idle" });
   const [rankErr, setRankErr] = useState("");
   useEffect(() => (uid ? subscribeRank(setRank) : undefined), [uid]);
+  // AI전: 시작을 누르면 서버 상태가 바로 botplay 로 바뀜 → VS 화면이 끝나 경기로 넘어갈 때까지 같은 화면 유지
+  // (렌더 중 ref 를 고치면 안 되니 state 로 — 이전 렌더 정보를 남기는 React 권장 방식)
+  const [lastBot, setLastBot] = useState<Extract<RankStatus, { s: "bot" }> | null>(null);
+  if (rank.s === "bot" && lastBot !== rank) setLastBot(rank);
   useEffect(() => {
     if (rank.s !== "room" || !uid || !nick) return;
     setWatch(null);
@@ -130,7 +134,8 @@ export default function Online({
     if (!uid || !nickLoaded) return <Center>접속 중…</Center>;
     if (!nick) return <NickForm onSubmit={setNick} onBack={onExit} />;
     // 랭크전 AI전: 캐릭터 고르기 / 결과 / (새로고침 등으로 끊긴) 경기
-    if (!session && rank.s === "bot") return <BotRoom key={rank.id} st={rank} nick={nick} onMatch={onBotMatch} />;
+    if (!session && (rank.s === "bot" || (rank.s === "botplay" && lastBot?.id === rank.id && !played.has(rank.id))))
+      return <BotRoom key={rank.id} st={rank.s === "bot" ? rank : lastBot!} nick={nick} onMatch={onBotMatch} />;
     if (!session && rank.s === "botEnd") return <BotEnd st={rank} onAgain={startRank} onLobby={() => rankCancel()} />;
     if (!session && rank.s === "botplay") return <BotGone id={rank.id} />;
     if (session)

@@ -683,6 +683,8 @@ export default function FightGame() {
     setTimeout(scrollToGameTop, 50);
   }, []);
   const startBot = useCallback((cfg: BotCfg) => {
+    // 끝나고 돌아왔을 때 (결과 확인 중) 캐릭터 고르기 화면으로 다시 들어가지 않게
+    played.add(cfg.id);
     cfgRef.current = null;
     setOlCfg(null);
     botRef.current = cfg;
@@ -691,7 +693,7 @@ export default function FightGame() {
     setPaused(false);
     setPlaying(true);
     setTimeout(scrollToGameTop, 50);
-  }, []);
+  }, [played]);
   const startOnline = useCallback((cfg: MatchCfg) => {
     botRef.current = null;
     setBotCfg(null);
