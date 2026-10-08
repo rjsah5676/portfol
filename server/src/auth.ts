@@ -7,6 +7,8 @@ export interface AuthUser {
   /** 익명 로그인(게임용)인지 */
   anonymous: boolean;
   admin: boolean;
+  /** 로그인 계정(구글 등)의 프로필 사진 주소 (토큰의 picture, 없으면 null) */
+  photo?: string | null;
 }
 
 export interface Auth {
@@ -34,9 +36,11 @@ export function createAuth(
       if (!uid || uid.length > 128) throw new Error("invalid sub");
       const email = typeof payload.email === "string" ? payload.email : null;
       const provider = (payload.firebase as { sign_in_provider?: string } | undefined)?.sign_in_provider;
+      const picture = typeof payload.picture === "string" && /^https:\/\//.test(payload.picture) && payload.picture.length <= 512 ? payload.picture : null;
       return {
         uid,
         email,
+        photo: picture,
         anonymous: provider === "anonymous",
         // 기존 Firestore 규칙(isAdmin)과 같은 기준: 토큰의 이메일이 관리자 이메일인지
         admin: !!email && admins.has(email.toLowerCase()),

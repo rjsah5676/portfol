@@ -28,7 +28,7 @@ export function meRouter({ db, auth, users }: Deps): Router {
     h(async (req) => {
       const user = await me(req);
       // 사이트에 들어올 때마다 불림 → 방문 횟수를 여기서 셈
-      if (!user.anonymous) await users.visit(user.uid);
+      if (!user.anonymous) await users.visit(user.uid, user.photo ?? undefined);
       return {
         uid: user.uid,
         anonymous: user.anonymous,

@@ -68,7 +68,7 @@ export default function Shop({
       // 산 스킨의 캐릭터로 바로 (스킨은 사면 입혀짐)
       if (wallet.char !== sk.char) await setChar(sk.char);
       setConfirm(null);
-      setMsg({ text: `${sk.name}을(를) 입었어요!`, ok: true });
+      setMsg({ text: `${sk.name}을(를) 장착했어요!`, ok: true });
       playVoice(sk.id, "select");
     });
 
@@ -147,7 +147,7 @@ export default function Shop({
                     </div>
                     <p className="text-[0.78em] leading-snug text-white/65">{sk.blurb}</p>
                     <p className="text-[0.7em] text-white/40">
-                      입으면 앉은 모습 · 동작 · 표정 · 이모티콘 · 프로필 · 컷인이 전부 바뀌고 남들
+                      장착하면 앉은 모습 · 동작 · 표정 · 이모티콘 · 프로필 · 컷인이 전부 바뀌고 남들
                       화면에도 보여요. 로비에서 누르면 반응해요.
                     </p>
                     <div className="mt-[0.2em] flex items-center gap-[0.3em] text-[0.95em] font-extrabold text-[#ffd84a]">
@@ -165,7 +165,7 @@ export default function Shop({
                         onClick={() => setTab("closet")}
                         className="pk-btn pk-btn-ghost py-[0.55em] text-[0.88em]"
                       >
-                        옷장에서 입기
+                        옷장에서 장착
                       </button>
                     ) : asking ? (
                       <div className="flex gap-[0.4em]">
@@ -256,7 +256,7 @@ export default function Shop({
                             {}
                             <img src={asset.full(key)} alt="" draggable={false} />
                             <span className="pk-closet-name">{l.name}</span>
-                            {on && <span className="pk-closet-on">입는 중</span>}
+                            {on && <span className="pk-closet-on">장착 중</span>}
                           </button>
                         );
                       })}

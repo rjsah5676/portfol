@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { API_URL } from "@/lib/api/config";
+import { avatarUrl } from "@/lib/api/config";
 import { plainName } from "./Nick";
 
 const SIZE = {
@@ -30,13 +30,14 @@ export default function RankAvatar({
   className?: string;
 }) {
   const [broken, setBroken] = useState("");
-  const src = avatar ? `${API_URL}${avatar}` : null;
+  const src = avatar ? avatarUrl(avatar) : null;
   if (src && broken !== src)
     return (
       <img
         src={src}
         alt=""
         loading="lazy"
+        referrerPolicy="no-referrer"
         onError={() => setBroken(src)}
         className={`shrink-0 rounded-full bg-white/10 object-cover ${SIZE[size]} ${className}`}
       />

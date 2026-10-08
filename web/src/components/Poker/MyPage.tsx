@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { API_URL } from "@/lib/api/config";
+import { avatarUrl } from "@/lib/api/config";
 import { asset } from "@/lib/poker/assets";
 import { CHARS, GAMES, REVIVE, fmtEok, fmtShort, tierLabel } from "@/lib/poker/rules";
 import type { MyPage as MyPageData, Wallet } from "@/lib/poker/types";
@@ -58,8 +58,9 @@ export default function MyPage({
         <div className="flex items-center gap-[0.7em]">
           {me?.avatar ? (
             <img
-              src={`${API_URL}${me.avatar}`}
+              src={avatarUrl(me.avatar)}
               alt=""
+              referrerPolicy="no-referrer"
               className={`${compact ? "h-[3em] w-[3em]" : "h-[3.6em] w-[3.6em]"} shrink-0 rounded-full object-cover ring-2 ring-[var(--pk-brass)]`}
             />
           ) : (

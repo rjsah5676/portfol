@@ -56,6 +56,8 @@ export interface UserDoc {
   lastVisitAt?: Date;
   /** 직접 올린 프로필 사진 (없으면 로그인 계정의 사진을 씀). at = 올린 시각 — 주소에 붙여 캐시를 가름 */
   avatar?: { type: string; data?: Binary; at: number };
+  /** 로그인 계정의 프로필 사진 주소 (들어올 때마다 갱신). 올린 사진이 없을 때 랭킹 등에서 대신 씀 */
+  photo?: string | null;
   stats?: UserStats;
   /** 포커 자금 (가입할 때 START_MONEY). 바꾸는 건 games/poker/wallet.ts 만 */
   money?: number;
@@ -85,6 +87,9 @@ function imageType(b: Buffer): string | null {
   return null;
 }
 export const avatarPath = (uid: string, at: number) => `/api/avatars/${encodeURIComponent(uid)}?v=${at}`;
+/** 랭킹 등에 보여 줄 사진 주소: 직접 올린 사진 → 로그인 계정 사진 → 없음 */
+export const pictureOf = (uid: string, d: { avatar?: { at?: number }; photo?: string | null } | null | undefined): string | null =>
+  d?.avatar?.at ? avatarPath(uid, d.avatar.at) : (d?.photo ?? null);
 
 /** 이 시간 안에 다시 들어온 것은 같은 방문으로 침 */
 const VISIT_GAP_MS = 30 * 60_000;
@@ -253,8 +258,8 @@ export function createUsers(db: Database, cfg: Pick<Config, "adminNick">) {
       return { type: a.type, data: Buffer.from(a.data.buffer) };
     },
 
-    /** 방문 한 번 세기 (회원만). 마지막으로 센 지 30분이 안 됐으면 그대로 */
-    async visit(uid: string) {
+    /** 방문 한 번 세기 (회원만). 마지막으로 센 지 30분이 안 됐으면 그대로. 로그인 계정 사진 주소도 같이 적어 둠 */
+    async visit(uid: string, photo?: string | null) {
       const now = new Date();
       const since = new Date(now.getTime() - VISIT_GAP_MS);
       await col
@@ -263,6 +268,7 @@ export function createUsers(db: Database, cfg: Pick<Config, "adminNick">) {
           { $inc: { visits: 1 }, $set: { lastVisitAt: now } }
         )
         .catch((e) => console.warn("[users] 방문 기록 실패", e));
+      if (photo) await col.updateOne({ _id: uid, photo: { $ne: photo } }, { $set: { photo } }).catch(() => {});
     },
 
     /** 별명이 생기거나 바뀌었을 때 (접속 중인 소켓의 이름을 바꾸는 데 씀) */

@@ -285,7 +285,7 @@ export default function Lobby({
           onClick={onCloset}
           className="pk-btn pk-btn-gold py-[0.45em] text-[0.82em]"
         >
-          {skin ? `${skin.name} 입는 중` : "옷장 · 스킨"}
+          {skin ? `${skin.name} 장착 중` : "옷장 · 스킨"}
         </button>
       </div>
     </div>
@@ -595,7 +595,6 @@ export default function Lobby({
                 key={look}
                 look={look}
                 bust
-                onSay={say}
                 className="h-[3.6em] w-[3.2em] shrink-0 self-end"
               />
             )}

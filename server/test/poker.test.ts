@@ -100,6 +100,7 @@ async function play(
     }
     if (!input || mark === acted) return;
     acted = mark;
+    if (input.a === "__wait") return; // (테스트: 차례가 와도 가만히 있음)
     who.c.rpc("poker.act", { id, hand: t.handNo, ...input }).catch(() => {});
   };
   const onEv = ({ k, t, d }: { k: string; t: string; d: any }) => {
@@ -187,8 +188,8 @@ describe("회원 전용 · 자금", () => {
     expect(await a.c.rpc("poker.buy", { skin: sk.id }).catch((e) => (e as RpcError).code)).toBe("NEED_MONEY");
     await a.c.rpc("poker.char", { char: sk.char });
     await setMoney(a.uid, sk.price + 5 * 10 ** 8);
-    // 앉아 있으면 못 삼
-    const id = await a.c.rpc<string>("poker.create", { game: "holdem", tier: 1, bots: true });
+    // 앉아 있으면 못 삼 (봇 없는 방 — 판이 시작되지 않게)
+    const id = await a.c.rpc<string>("poker.create", { game: "holdem", tier: 1, bots: false });
     await a.c.sub("poker.me", { id });
     await a.c.rpc("poker.sit", { id });
     expect(await a.c.rpc("poker.buy", { skin: sk.id }).catch((e) => (e as RpcError).code)).toBe("SEATED");
@@ -421,6 +422,28 @@ describe("홀덤 테이블", () => {
     }
   }, 60_000);
 
+  it("판 도중에 나가면 죽은 걸로 치고 바로 자리가 비어 다른 방에 앉을 수 있고, 잃은 돈은 판이 끝날 때 반영", async () => {
+    const a = await member();
+    const id = await a.c.rpc<string>("poker.create", { game: "holdem", tier: 1, bots: true });
+    const seen: TableWire[] = [];
+    // 내 차례가 오면 아무것도 안 함 (판 도중에 나가려고)
+    const pa = await play(a, id, () => ({ a: "__wait" }), seen);
+    await a.c.rpc("poker.sit", { id });
+    await until(() => !!pa.state()?.hand && pa.state()!.hand!.toAct === pa.state()!.seats.find((x) => x?.uid === a.uid)?.seat, "내 차례", 40_000);
+    const handNo = pa.state()!.handNo;
+    await a.c.rpc("poker.leave", { id });
+    // 바로 자리가 비고 (판은 아직 그 번호 그대로 진행 중) 다른 방에 앉을 수 있음
+    expect((await a.c.rpc<Wallet>("poker.wallet")).table).toBeNull();
+    await until(() => !pa.state()!.seats.some((x) => x?.uid === a.uid), "자리 비움");
+    expect(pa.state()!.handNo).toBe(handNo);
+    const id2 = await a.c.rpc<string>("poker.create", { game: "seven", tier: 1, bots: true });
+    await a.c.sub("poker.me", { id: id2 });
+    expect(await a.c.rpc("poker.sit", { id: id2 })).toMatchObject({ seat: expect.any(Number) });
+    // 앞 판이 끝나면 그 판의 증감(앤티 · 블라인드 잃음)이 기록에 남음
+    await until(async () => (await srv.db.col("poker_hands").countDocuments({ table: id, no: handNo, "who.uid": a.uid })) === 1, "앞 판 기록", 40_000);
+    pa.stop();
+  }, 60_000);
+
   it("나가기 예약: 판 중이면 끝까지 치고 나감, 대기 중이면 바로 나감, 다시 누르면 취소", async () => {
     const a = await member();
     const id = await a.c.rpc<string>("poker.quick", { game: "holdem", tier: 1 });
@@ -486,9 +509,11 @@ describe("봇이 연 방", () => {
         const ok = (g: string) => list.some((t) => t.game === g && t.bots && !t.locked && t.players > 0 && t.players < t.max && t.tier <= 2);
         return ok("holdem") && ok("seven");
       }, "봇이 연 방이 로비에 보임", 15_000);
-      // 바로 입장을 누르면 그 종목 · 단계의 봇 방으로 들어감 (새 방을 만들지 않음)
+      // 바로 입장을 누르면 그 종목 · 단계의 봇 방으로 들어감 (새 방을 만들지 않음 — 같은 단계에 봇 방이 여럿이면 그중 하나)
       const room = (latest() as LobbyTable[]).find((t) => t.bots && t.players > 0 && t.players < t.max && t.tier <= 2)!;
-      expect(await c.rpc<string>("poker.quick", { game: room.game, tier: room.tier })).toBe(room.id);
+      const picked = await c.rpc<string>("poker.quick", { game: room.game, tier: room.tier });
+      expect((latest() as LobbyTable[]).some((t) => t.id === picked && t.bots && t.game === room.game && t.tier === room.tier)).toBe(true);
+      Object.assign(room, { id: picked });
       await c.sub("poker.me", { id: room.id });
       await c.rpc("poker.sit", { id: room.id });
       const w = await c.rpc<Wallet>("poker.wallet");
@@ -521,15 +546,20 @@ describe("7포커 테이블", () => {
     await a.c.rpc("poker.sit", { id });
     await until(() => seen.filter((t) => t.hand?.result?.showdown).length >= 2 && (pa.state()?.handNo ?? 0) >= 4, "쇼다운 두 번 이상", 60_000);
     pa.stop();
+    const lastNo = pa.state()!.handNo;
     await a.c.rpc("poker.leave", { id });
     await until(async () => (await a.c.rpc<Wallet>("poker.wallet")).table === null, "자리 비움");
-    await sleep(200);
+    // 판 도중에 나가면 자리는 바로 비지만 그 판의 정산은 판이 끝날 때 — 기록이 남을 때까지
+    await until(async () => (await srv.db.col("poker_hands").countDocuments({ table: id, no: lastNo })) === 1, "마지막 판 기록", 40_000);
+    await sleep(300);
 
     const hands = (await srv.db.col("poker_hands").find({ table: id }).toArray()) as unknown as { who: { uid: string | null; delta: number }[] }[];
     for (const h of hands) expect(h.who.reduce((s, w) => s + w.delta, 0)).toBe(0);
     const sum = hands.reduce((s, h) => s + (h.who.find((w) => w.uid === a.uid)?.delta ?? 0), 0);
     expect(await moneyOf(a.uid)).toBe(START_MONEY + sum);
-    expect(((await users().findOne({ _id: a.uid })) as any).stats.poker.seven.hands).toBeGreaterThanOrEqual(4);
+    const myHands = hands.filter((h) => h.who.some((w) => w.uid === a.uid)).length;
+    expect(myHands).toBeGreaterThanOrEqual(3);
+    expect(((await users().findOne({ _id: a.uid })) as any).stats.poker.seven.hands).toBe(myHands);
 
     // 내 카드: 고르기 전 4장 → 고른 뒤 3장(엎은 2장 표시) → 구마다 한 장씩
     expect(mine.some((m) => m.cards.length === 4 && !m.down)).toBe(true);

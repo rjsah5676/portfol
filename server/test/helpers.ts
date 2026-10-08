@@ -51,7 +51,7 @@ export interface TestServer {
   url: string;
   db: Database;
   /** 가짜 Firebase ID 토큰 */
-  token(uid: string, claims?: { email?: string; anonymous?: boolean }): Promise<string>;
+  token(uid: string, claims?: { email?: string; anonymous?: boolean; picture?: string }): Promise<string>;
   adminToken(): Promise<string>;
   /** uid로 로그인한 소켓 클라이언트 (uid 없으면 비로그인) */
   client(uid?: string, claims?: { email?: string }): Promise<TestClient>;
@@ -85,6 +85,7 @@ export async function startTestServer(over: { poker?: PokerOptions } = {}): Prom
   const token: TestServer["token"] = (uid, claims = {}) =>
     new SignJWT({
       ...(claims.email ? { email: claims.email } : {}),
+      ...(claims.picture ? { picture: claims.picture } : {}),
       firebase: { sign_in_provider: claims.email ? "password" : "anonymous" },
     })
       .setProtectedHeader({ alg: "RS256", kid: "test" })

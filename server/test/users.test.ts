@@ -70,6 +70,19 @@ describe("내 정보 · 별명", () => {
     expect(await visits()).toBe(1);
   });
 
+  it("로그인 계정 사진: 들어올 때 적어 두고, 직접 올린 사진이 없으면 랭킹(포커 자금 순위)에 그 사진이 나옴", async () => {
+    const pic = "https://lh3.googleusercontent.com/a/test-photo=s96-c";
+    const token = await member("pic1", "구글사진");
+    const t2 = await s.token("pic1", { email: "pic1@example.com", picture: pic });
+    await s.http("/api/me", { token: t2 });
+    await s.db.col("users").updateOne({ _id: "pic1" }, { $set: { money: 1, "stats.poker.hands": 3 } });
+    const list = (await s.http("/api/poker/rank")).body.list as { nick: string; avatar: string | null }[];
+    expect(list.find((r) => r.nick === "구글사진")?.avatar).toBe(pic);
+    // 토큰에 사진이 없는 로그인(비밀번호 등)이면 그대로 둠
+    await s.http("/api/me", { token });
+    expect(((await s.db.col("users").findOne({ _id: "pic1" })) as { photo?: string }).photo).toBe(pic);
+  });
+
   it("프로필 사진: 올리면 주소가 생기고 누구나 볼 수 있음, 지우면 없어짐. 사진이 아닌 파일·큰 파일·비회원은 거절", async () => {
     const token = await member("av1", "사진회원");
     const put = (body: Buffer, type: string, t = token) =>

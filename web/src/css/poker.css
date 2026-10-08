@@ -1941,47 +1941,68 @@
   }
 }
 /* 내 족보 띠: 크고 또렷하게 */
-.pk-handtag {
-  padding: 0.08em 0.8em 0.14em;
+.pk-handtag,
+.pk-resulttag {
+  display: inline-block;
+  padding: 0.12em 0.85em 0.18em;
   border-radius: 9px;
   font-family: "Black Han Sans", "Nanum Gothic", sans-serif;
-  font-size: 1.25em;
-  line-height: 1.25;
-  letter-spacing: 0.04em;
-  color: #ffe28a;
-  background: rgba(10, 11, 17, 0.92);
-  border: 2px solid rgba(255, 201, 60, 0.75);
-  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.6);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.6);
+  line-height: 1.15;
+  letter-spacing: 0.05em;
   white-space: nowrap;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0) 45%),
+    linear-gradient(180deg, #2a2112, #0b0c12);
+  border: 2px solid rgba(233, 200, 121, 0.8);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.25),
+    0 4px 12px rgba(0, 0, 0, 0.6),
+    0 0 0 3px rgba(0, 0, 0, 0.4);
+}
+/* 글자: 위 밝고 아래 금빛, 진한 테두리 (행동 꼬리표와 같은 결) */
+.pk-tag-t {
+  display: inline-block;
+  color: transparent;
+  background-image: linear-gradient(180deg, #fff 25%, #ffe9a6 55%, #e9c879);
+  -webkit-background-clip: text;
+  background-clip: text;
+  filter: drop-shadow(1.5px 0 0 #120a00) drop-shadow(-1.5px 0 0 #120a00)
+    drop-shadow(0 1.5px 0 #120a00) drop-shadow(0 -1.5px 0 #120a00)
+    drop-shadow(0 3px 2px rgba(0, 0, 0, 0.6));
+}
+/* 내 족보 띠 */
+.pk-handtag {
+  font-size: 1.3em;
 }
 .pk-handtag.pk-made {
-  color: #ffd84a;
-  border-color: #ffd84a;
-}
-/* 쇼다운 족보 이름: 뭐로 이기고 졌는지 크게 */
-.pk-resulttag {
-  padding: 0.05em 0.6em 0.12em;
-  border-radius: 8px;
-  font-family: "Black Han Sans", "Nanum Gothic", sans-serif;
-  font-size: 1.15em;
-  line-height: 1.25;
-  letter-spacing: 0.03em;
-  color: #fff;
-  background: rgba(10, 11, 17, 0.92);
-  border: 2px solid rgba(255, 255, 255, 0.4);
-  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.55);
-  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.55);
-  white-space: nowrap;
-  animation: pk-acttag 0.45s cubic-bezier(0.2, 1.5, 0.35, 1) both;
-}
-.pk-resulttag-win {
-  font-size: 1.35em;
-  color: #ffd84a;
   border-color: #ffd84a;
   box-shadow:
-    0 0 16px rgba(255, 216, 74, 0.55),
-    0 3px 10px rgba(0, 0, 0, 0.55);
+    inset 0 1px 0 rgba(255, 255, 255, 0.3),
+    0 0 16px rgba(255, 216, 74, 0.5),
+    0 4px 12px rgba(0, 0, 0, 0.6);
+}
+.pk-handtag.pk-made .pk-tag-t {
+  background-image: linear-gradient(180deg, #fff8d0 20%, #ffd23f 50%, #e08a00);
+}
+/* 쇼다운 족보 이름: 뭐로 이기고 졌는지 크게 (진 쪽은 하얀 금속, 이긴 쪽은 금) */
+.pk-resulttag {
+  font-size: 1.3em;
+  border-color: rgba(255, 255, 255, 0.55);
+  animation: pk-acttag 0.45s cubic-bezier(0.2, 1.5, 0.35, 1) both;
+}
+.pk-resulttag .pk-tag-t {
+  background-image: linear-gradient(180deg, #ffffff 30%, #dde3ee 55%, #aab3c4);
+}
+.pk-resulttag-win {
+  font-size: 1.55em;
+  border-color: #ffd84a;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.3),
+    0 0 18px rgba(255, 216, 74, 0.6),
+    0 4px 12px rgba(0, 0, 0, 0.6);
+}
+.pk-resulttag-win .pk-tag-t {
+  background-image: linear-gradient(180deg, #fff8d0 20%, #ffd23f 50%, #e08a00);
 }
 
 /* ───────── 바텀시트 (로비 창) ───────── */
@@ -2065,36 +2086,6 @@
   position: relative;
   display: block;
   height: 100%;
-  animation: pk-breathe 3.6s ease-in-out infinite;
-  transform-origin: 50% 100%;
-}
-@keyframes pk-breathe {
-  0%,
-  100% {
-    transform: translateY(0) scaleY(1);
-  }
-  50% {
-    transform: translateY(-0.6%) scaleY(1.008);
-  }
-}
-.pk-lobbychar-hop {
-  animation:
-    pk-hop 0.55s cubic-bezier(0.3, 1.6, 0.5, 1),
-    pk-breathe 3.6s ease-in-out 0.55s infinite;
-}
-@keyframes pk-hop {
-  0% {
-    transform: translateY(0) scale(1, 1);
-  }
-  25% {
-    transform: translateY(1%) scale(1.04, 0.95);
-  }
-  55% {
-    transform: translateY(-6%) scale(0.97, 1.04);
-  }
-  100% {
-    transform: translateY(0) scale(1, 1);
-  }
 }
 .pk-lobbychar-img {
   position: absolute;
@@ -2115,6 +2106,34 @@
   bottom: auto;
   top: 0;
   height: 230%;
+}
+/* 누르면: 금빛 빛이 아래에서 위로 한 번 쓸고 지나감 */
+.pk-lobbychar-flash {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    180deg,
+    transparent 0%,
+    rgba(255, 226, 138, 0) 35%,
+    rgba(255, 226, 138, 0.55) 50%,
+    rgba(255, 226, 138, 0) 65%,
+    transparent 100%
+  );
+  background-size: 100% 300%;
+  background-position: 50% 0%;
+  mix-blend-mode: screen;
+  animation: pk-lobbychar-flash 0.8s ease-out forwards;
+}
+@keyframes pk-lobbychar-flash {
+  from {
+    background-position: 50% 0%;
+    opacity: 1;
+  }
+  to {
+    background-position: 50% 100%;
+    opacity: 0;
+  }
 }
 .pk-lobbychar-heart {
   position: absolute;
@@ -2146,205 +2165,13 @@
     transform: translateY(-260%) scale(0.9);
   }
 }
-.pk-lobbychar-say {
-  position: absolute;
-  top: 6%;
-  left: 50%;
-  z-index: 3;
-  max-width: 92%;
-  width: max-content;
-  transform: translateX(-50%);
-  padding: 0.35em 0.75em;
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.95);
-  color: #1a1b24;
-  font-size: 0.82em;
-  font-weight: 700;
-  line-height: 1.35;
-  white-space: normal;
-  word-break: keep-all;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
-  pointer-events: none;
-  animation: pk-pop 0.22s cubic-bezier(0.2, 0.9, 0.3, 1.3) backwards;
-}
 @media (prefers-reduced-motion: reduce) {
-  .pk-lobbychar-body,
-  .pk-lobbychar-hop,
+  .pk-lobbychar-flash,
   .pk-lobbychar-heart {
     animation: none;
   }
 }
-/* 이모티콘 고르는 칸: 가리키면 커지고 이름표가 위로 */
-.pk-emote-btn {
-  position: relative;
-  cursor: pointer;
-  border-radius: 6px;
-  padding: 0.1em;
-  background: rgba(255, 255, 255, 0.05);
-  transition:
-    background 0.15s,
-    transform 0.15s;
-}
-.pk-emote-btn:hover,
-.pk-emote-btn:focus-visible {
-  z-index: 2;
-  background: rgba(255, 216, 74, 0.18);
-  box-shadow: 0 0 0 1.5px rgba(255, 216, 74, 0.7);
-  transform: scale(1.12);
-}
-.pk-emote-btn:active {
-  transform: scale(0.95);
-}
-.pk-emote-name {
-  position: absolute;
-  left: 50%;
-  bottom: 1px;
-  transform: translateX(-50%) translateY(4px);
-  padding: 0.05em 0.5em;
-  border-radius: 999px;
-  background: #ffd84a;
-  color: #2a1e05;
-  font-size: 0.72em;
-  font-weight: 900;
-  white-space: nowrap;
-  opacity: 0;
-  pointer-events: none;
-  transition:
-    opacity 0.12s,
-    transform 0.12s;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);
-}
-.pk-emote-btn:hover .pk-emote-name,
-.pk-emote-btn:focus-visible .pk-emote-name,
-.pk-emote-btn:active .pk-emote-name {
-  opacity: 1;
-  transform: translateX(-50%) translateY(0);
-}
-/* 내 차례인 동안: 무대 테두리 금빛 (숨 쉬듯) */
-.pk-turn-glow {
-  z-index: 60;
-  border-radius: inherit;
-  box-shadow:
-    inset 0 0 0 3px rgba(255, 216, 74, 0.85),
-    inset 0 0 34px 4px rgba(255, 201, 60, 0.35);
-  animation: pk-turn-glow 1.3s ease-in-out infinite;
-}
-@keyframes pk-turn-glow {
-  0%,
-  100% {
-    opacity: 0.65;
-  }
-  50% {
-    opacity: 1;
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .pk-turn-glow {
-    animation: none;
-  }
-}
-/* WINNER / WIN!: 금속 글자 + 두꺼운 테두리 + 빛이 한 번 쓸고 지나감 */
-.pk-winner {
-  position: relative;
-  display: inline-block;
-  font-family: "Black Han Sans", "Nanum Gothic", sans-serif;
-  font-size: 2.5em;
-  line-height: 1;
-  letter-spacing: 0.04em;
-  font-style: italic;
-  color: transparent;
-  background:
-    linear-gradient(100deg, transparent 35%, rgba(255, 255, 255, 0.95) 48%, transparent 60%) -150%
-      0 / 250% 100% no-repeat,
-    linear-gradient(180deg, #ffffff 0%, #e6ecf5 42%, #9aa6b8 52%, #f4f7fb 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  filter: drop-shadow(2px 0 0 #1a1206) drop-shadow(-2px 0 0 #1a1206) drop-shadow(0 2px 0 #1a1206)
-    drop-shadow(0 -2px 0 #1a1206) drop-shadow(0 4px 0 #5a3a08)
-    drop-shadow(0 0 12px rgba(255, 210, 63, 0.45));
-  animation: pk-winner-shine 1.4s ease-out 0.35s both;
-}
-.pk-winner-mine {
-  font-size: 2.9em;
-  background:
-    linear-gradient(100deg, transparent 35%, rgba(255, 255, 255, 0.95) 48%, transparent 60%) -150%
-      0 / 250% 100% no-repeat,
-    linear-gradient(180deg, #fff8d0 0%, #ffd23f 44%, #d97a00 54%, #ffe58a 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-}
-@keyframes pk-winner-shine {
-  from {
-    background-position:
-      -150% 0,
-      0 0;
-  }
-  to {
-    background-position:
-      250% 0,
-      0 0;
-  }
-}
-.pk-winner-star {
-  color: #ffd84a;
-  font-size: 1.3em;
-  text-shadow: 0 0 10px rgba(255, 216, 74, 0.8);
-  animation: pk-winner-star 1.2s ease-in-out infinite;
-}
-.pk-winner-star:last-child {
-  animation-delay: 0.6s;
-}
-@keyframes pk-winner-star {
-  0%,
-  100% {
-    transform: scale(0.8) rotate(0deg);
-    opacity: 0.6;
-  }
-  50% {
-    transform: scale(1.2) rotate(45deg);
-    opacity: 1;
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .pk-winner,
-  .pk-winner-star {
-    animation: none;
-  }
-}
-/* 이모티콘 말풍선 */
-.pk-emote-bubble {
-  position: relative;
-  display: inline-block;
-  padding: 0.18em;
-  border-radius: 18px;
-  background: radial-gradient(120% 100% at 50% 0%, #ffffff, #eef1f8);
-  border: 2px solid #1b1d27;
-  box-shadow:
-    0 4px 12px rgba(0, 0, 0, 0.55),
-    inset 0 -3px 0 rgba(0, 0, 0, 0.08);
-}
-.pk-emote-bubble::after {
-  content: "";
-  position: absolute;
-  bottom: -11px;
-  width: 16px;
-  height: 14px;
-  background: #eef1f8;
-  border: 2px solid #1b1d27;
-  border-top: 0;
-  border-left: 0;
-  transform: skewX(30deg) rotate(45deg) scale(0.75);
-}
-.pk-emote-bubble[data-tail="l"]::after {
-  left: 16%;
-}
-.pk-emote-bubble[data-tail="r"]::after {
-  right: 16%;
-  transform: skewX(-30deg) rotate(45deg) scale(0.75);
-}
-.pk-emote-bubble img {
-  display: block;
-}
+
 /* ───────── 상점 · 옷장 ───────── */
 .pk-skin-card {
   overflow: hidden;
@@ -2446,4 +2273,265 @@
   color: #2a1e05;
   font-size: 0.66em;
   font-weight: 900;
+}
+
+/* ───────── 가로판 오른쪽 패널 ───────── */
+.pk-side-head {
+  display: grid;
+  gap: 0.35em;
+  margin: 0.45em 0.45em 0;
+  padding: 0.55em 0.65em 0.6em;
+  border-radius: 10px;
+  background: linear-gradient(180deg, rgba(255, 201, 60, 0.12), rgba(255, 255, 255, 0.03));
+  border: 1px solid rgba(214, 175, 92, 0.3);
+}
+/* 구간 표시: 지난 것은 금빛 채움, 지금은 밝게, 다음은 어둡게 */
+.pk-steps {
+  display: flex;
+  gap: 3px;
+}
+.pk-steps > li {
+  flex: 1;
+  min-width: 0;
+  padding: 0.18em 0;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.07);
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 0.68em;
+  font-weight: 800;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pk-steps > li[data-done="1"] {
+  background: rgba(214, 175, 92, 0.35);
+  color: rgba(255, 232, 160, 0.9);
+}
+.pk-steps > li[data-on="1"] {
+  background: #ffd84a;
+  color: #2a1e05;
+  box-shadow: 0 0 10px rgba(255, 216, 74, 0.5);
+}
+.pk-side-title {
+  display: flex;
+  gap: 0.4em;
+  align-items: baseline;
+  margin: 0.55em 0.75em 0.25em;
+  font-family: "Black Han Sans", "Nanum Gothic", sans-serif;
+  font-size: 0.82em;
+  letter-spacing: 0.05em;
+  color: #e9c879;
+}
+.pk-side-title > span {
+  font-family: "Nanum Gothic", sans-serif;
+  font-size: 0.82em;
+  letter-spacing: 0;
+}
+.pk-ranks {
+  display: grid;
+  gap: 2px;
+  margin: 0 0.45em;
+}
+.pk-ranks > li {
+  display: flex;
+  align-items: center;
+  gap: 0.35em;
+  padding: 0.18em 0.45em;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.025);
+  color: rgba(255, 255, 255, 0.82);
+}
+.pk-ranks-dense > li {
+  padding: 0.1em 0.4em;
+  font-size: 0.92em;
+}
+.pk-ranks > li[data-mine="1"] {
+  border-color: var(--pk-brass);
+  background: linear-gradient(90deg, rgba(255, 201, 60, 0.3), rgba(255, 201, 60, 0.06));
+  box-shadow: 0 0 10px rgba(255, 201, 60, 0.25);
+  color: #ffe28a;
+}
+.pk-ranks-me {
+  border-radius: 3px;
+  padding: 0 0.35em;
+  background: var(--pk-brass);
+  color: #2b1d00;
+  font-size: 0.66em;
+  font-weight: 900;
+}
+
+/* ───────── 이모티콘 고르는 칸: 가리키면 커지고 이름표가 뜸 ───────── */
+.pk-emote-btn {
+  position: relative;
+  cursor: pointer;
+  border-radius: 6px;
+  padding: 0.1em;
+  background: rgba(255, 255, 255, 0.05);
+  transition:
+    background 0.15s,
+    transform 0.15s;
+}
+.pk-emote-btn:hover,
+.pk-emote-btn:focus-visible {
+  z-index: 2;
+  background: rgba(255, 216, 74, 0.18);
+  box-shadow: 0 0 0 1.5px rgba(255, 216, 74, 0.7);
+  transform: scale(1.12);
+}
+.pk-emote-btn:active {
+  transform: scale(0.95);
+}
+.pk-emote-name {
+  position: absolute;
+  left: 50%;
+  bottom: 1px;
+  transform: translateX(-50%) translateY(4px);
+  padding: 0.05em 0.5em;
+  border-radius: 999px;
+  background: #ffd84a;
+  color: #2a1e05;
+  font-size: 0.72em;
+  font-weight: 900;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity 0.12s,
+    transform 0.12s;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);
+}
+.pk-emote-btn:hover .pk-emote-name,
+.pk-emote-btn:focus-visible .pk-emote-name,
+.pk-emote-btn:active .pk-emote-name {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+/* ───────── 내 차례인 동안: 무대 테두리 금빛 (숨 쉬듯) ───────── */
+.pk-turn-glow {
+  z-index: 60;
+  border-radius: inherit;
+  box-shadow:
+    inset 0 0 0 3px rgba(255, 216, 74, 0.85),
+    inset 0 0 34px 4px rgba(255, 201, 60, 0.35);
+  animation: pk-turn-glow 1.3s ease-in-out infinite;
+}
+@keyframes pk-turn-glow {
+  0%,
+  100% {
+    opacity: 0.65;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* ───────── 이모티콘 말풍선: 꼬리가 옆(캐릭터 머리 쪽)을 가리킴 ───────── */
+.pk-emote-bubble {
+  position: relative;
+  display: inline-block;
+  padding: 0.18em;
+  border-radius: 18px;
+  background: radial-gradient(120% 100% at 50% 0%, #ffffff, #eef1f8);
+  border: 2px solid #1b1d27;
+  box-shadow:
+    0 4px 12px rgba(0, 0, 0, 0.55),
+    inset 0 -3px 0 rgba(0, 0, 0, 0.08);
+}
+.pk-emote-bubble::after {
+  content: "";
+  position: absolute;
+  top: 58%;
+  width: 14px;
+  height: 14px;
+  z-index: -1;
+  background: #eef1f8;
+  border: 2px solid #1b1d27;
+  transform: translateY(-50%) rotate(45deg);
+}
+.pk-emote-bubble[data-tail="l"]::after {
+  left: -9px;
+  border-right: 0;
+  border-top: 0;
+}
+.pk-emote-bubble[data-tail="r"]::after {
+  right: -9px;
+  transform: translateY(-50%) rotate(225deg);
+  border-right: 0;
+  border-top: 0;
+}
+.pk-emote-bubble img {
+  display: block;
+}
+
+/* ───────── WINNER / WIN!: 금속 글자 + 두꺼운 테두리 + 빛이 한 번 쓸고 지나감 ───────── */
+.pk-winner {
+  position: relative;
+  display: inline-block;
+  font-family: "Black Han Sans", "Nanum Gothic", sans-serif;
+  font-size: 2.5em;
+  line-height: 1;
+  letter-spacing: 0.04em;
+  font-style: italic;
+  color: transparent;
+  background:
+    linear-gradient(100deg, transparent 35%, rgba(255, 255, 255, 0.95) 48%, transparent 60%) -150%
+      0 / 250% 100% no-repeat,
+    linear-gradient(180deg, #ffffff 0%, #e6ecf5 42%, #9aa6b8 52%, #f4f7fb 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  filter: drop-shadow(2px 0 0 #1a1206) drop-shadow(-2px 0 0 #1a1206) drop-shadow(0 2px 0 #1a1206)
+    drop-shadow(0 -2px 0 #1a1206) drop-shadow(0 4px 0 #5a3a08)
+    drop-shadow(0 0 12px rgba(255, 210, 63, 0.45));
+  animation: pk-winner-shine 1.4s ease-out 0.35s both;
+}
+.pk-winner-mine {
+  font-size: 2.9em;
+  background:
+    linear-gradient(100deg, transparent 35%, rgba(255, 255, 255, 0.95) 48%, transparent 60%) -150%
+      0 / 250% 100% no-repeat,
+    linear-gradient(180deg, #fff8d0 0%, #ffd23f 44%, #d97a00 54%, #ffe58a 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+}
+@keyframes pk-winner-shine {
+  from {
+    background-position:
+      -150% 0,
+      0 0;
+  }
+  to {
+    background-position:
+      250% 0,
+      0 0;
+  }
+}
+.pk-winner-star {
+  color: #ffd84a;
+  font-size: 1.3em;
+  text-shadow: 0 0 10px rgba(255, 216, 74, 0.8);
+  animation: pk-winner-star 1.2s ease-in-out infinite;
+}
+.pk-winner-star:last-child {
+  animation-delay: 0.6s;
+}
+@keyframes pk-winner-star {
+  0%,
+  100% {
+    transform: scale(0.8) rotate(0deg);
+    opacity: 0.6;
+  }
+  50% {
+    transform: scale(1.2) rotate(45deg);
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pk-turn-glow,
+  .pk-winner,
+  .pk-winner-star {
+    animation: none;
+  }
 }

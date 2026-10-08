@@ -5,7 +5,7 @@ import { AppError, bad, forbidden } from "../../errors";
 import type { LiveRoom } from "../../http/admin";
 import { newId, orderedId } from "../../ids";
 import type { Ctx } from "../../realtime/gateway";
-import { avatarPath, type UserDoc } from "../../users";
+import { pictureOf, type UserDoc } from "../../users";
 import {
   ACT_AWAY_MS,
   ACT_MS,
@@ -325,6 +325,18 @@ export function registerPoker({ gateway, db, users }: Deps, opts: PokerOptions =
   const freeSeats = (t: Table) => t.seats.map((s, i) => (s ? -1 : i)).filter((i) => i >= 0);
   const findSeat = (t: Table, uid: string) => t.seats.find((s) => s?.uid === uid) ?? null;
   const inLiveRound = (t: Table, s: Seat) => !!t.round && t.inRound.get(s.seat) === s;
+  /**
+   * 판 도중에 나가는(또는 강퇴된) 사람이 이미 죽어 있으면 판이 끝나길 기다리지 않고 바로 자리를 비움 —
+   * 다른 방에 바로 앉을 수 있게. 정산은 t.inRound 에 남은 자리 객체로 판이 끝날 때 그대로 됨 (잃은 돈은 그때 반영).
+   */
+  function detachIfOut(t: Table, s: Seat) {
+    if (!s.uid || !inLiveRound(t, s) || t.seats[s.seat] !== s) return false;
+    if (!s.leaving && !(s.exitAfter && s.exitAfter !== "idle")) return false;
+    if (t.round!.alive(s.seat)) return false;
+    s.leaving = true;
+    removeSeat(t, s, exitWhy(s));
+    return true;
+  }
 
   /** 예약된 나가기의 이유 → leave 이벤트의 why */
   const exitWhy = (s: Seat): "idle" | "vote" | "leave" => (s.exitAfter === "idle" ? "idle" : s.exitAfter === "vote" ? "vote" : "leave");
@@ -629,6 +641,7 @@ export function registerPoker({ gateway, db, users }: Deps, opts: PokerOptions =
     const showdown = !!resView?.showdown;
     // 쇼다운이면 화면에서 패를 한 자리씩 까는 시간(자리당 0.5초) + 승리 연출 3초
     const shown = resView ? Object.keys(resView.names).length : 0;
+    const leftEarly = [...t.inRound.values()].filter((x) => x.uid && t.seats[x.seat] !== x).map((x) => x.uid!);
     t.lastView = round.view(0);
     t.round = null;
     t.inRound.clear();
@@ -646,6 +659,11 @@ export function registerPoker({ gateway, db, users }: Deps, opts: PokerOptions =
       .insertOne(audit as never)
       .catch((e) => console.warn("[poker] 핸드 기록 실패", e));
 
+    // 판 도중에 먼저 나간 사람: 정산이 끝나면 칩이 바닥났는지 확인
+    for (const uid of leftEarly)
+      void settled([uid])
+        .then(() => autoRevive(uid))
+        .catch(() => {});
     // 나가기 예약: 다이한 사람은 바로, 끝까지 간 사람은 승리/패배 연출을 다 보고 다음 판 직전(tryStart)에 나감
     for (const s of t.seats) {
       if (!s) continue;
@@ -907,12 +925,7 @@ export function registerPoker({ gateway, db, users }: Deps, opts: PokerOptions =
     const { uid } = member(ctx);
     const o = z.object({ game: gameSchema, tier: tierSchema }).parse(raw);
     const mine = seatOf.get(uid);
-    if (mine && tables.has(mine)) {
-      // 나가기 예약 후 다이하고 먼저 나온 경우: 그 판 정산이 끝날 때까지만 잠깐 기다리게
-      const seat = findSeat(tables.get(mine)!, uid);
-      if (seat?.exitAfter || seat?.leaving) throw new AppError("LEAVING", "앞 판을 정리하는 중이에요. 잠시 후 다시 눌러주세요.", 409);
-      return mine;
-    }
+    if (mine && tables.has(mine)) return mine;
     // 접속해 있는 사람이 있는 테이블을 먼저 (끊긴 사람만 남은 테이블로는 안 보냄)
     const online = (t: Table) => humans(t).filter((s) => !s.away).length;
     const open = [...tables.values()]
@@ -1036,10 +1049,14 @@ export function registerPoker({ gateway, db, users }: Deps, opts: PokerOptions =
         safely(t, () => {
           const ev = round.timeout(s.seat, true);
           t.waitMark = "";
+          detachIfOut(t, s);
           emit(t, ...ev);
           pump(t);
         });
-      } else emit(t);
+      } else {
+        detachIfOut(t, s);
+        emit(t);
+      }
       return;
     }
     removeSeat(t, s, "leave");
@@ -1065,6 +1082,11 @@ export function registerPoker({ gateway, db, users }: Deps, opts: PokerOptions =
       return { left: true };
     }
     s.exitAfter = on ? "leave" : "";
+    // 이미 죽어 있는 판이면 기다릴 것 없이 바로 나감
+    if (on && detachIfOut(t, s)) {
+      emit(t);
+      return { left: true };
+    }
     if (!on) s.timeouts = 0;
     emit(t);
     return { left: false };
@@ -1104,6 +1126,8 @@ export function registerPoker({ gateway, db, users }: Deps, opts: PokerOptions =
     }
     safely(t, () => {
       sendHand(t, s);
+      // 나가기 예약을 걸어 두고 죽었으면 바로 나감
+      detachIfOut(t, s);
       emit(t, ...ev, ...says);
       pump(t);
     });
@@ -1166,6 +1190,7 @@ export function registerPoker({ gateway, db, users }: Deps, opts: PokerOptions =
         safely(t, () => {
           const ev = round.timeout(s.seat, true);
           t.waitMark = "";
+          detachIfOut(t, s);
           emit(t, ...ev);
           pump(t);
         });
@@ -1294,7 +1319,7 @@ export function registerPoker({ gateway, db, users }: Deps, opts: PokerOptions =
   /** 마이페이지: 전적 · 순위 · 최근 판 */
   gateway.rpc("poker.me", async (ctx): Promise<MyPage | null> => {
     const { uid } = member(ctx);
-    const doc = (await db.col<UserDoc>("users").findOne({ _id: uid }, { projection: { nick: 1, createdAt: 1, money: 1, "stats.poker": 1, "poker.char": 1, "poker.skins": 1, "poker.wear": 1, "avatar.at": 1 } })) as (UserDoc & { poker?: { char?: string; skins?: string[]; wear?: Record<string, string> }; _id: string }) | null;
+    const doc = (await db.col<UserDoc>("users").findOne({ _id: uid }, { projection: { nick: 1, createdAt: 1, money: 1, "stats.poker": 1, "poker.char": 1, "poker.skins": 1, "poker.wear": 1, "avatar.at": 1, photo: 1 } })) as (UserDoc & { poker?: { char?: string; skins?: string[]; wear?: Record<string, string> }; _id: string }) | null;
     if (!doc) return null;
     const money = doc.money ?? START_MONEY;
     const pk = doc.stats?.poker ?? {};
@@ -1324,7 +1349,7 @@ export function registerPoker({ gateway, db, users }: Deps, opts: PokerOptions =
       nick: doc.nick,
       char: charOf(doc.poker?.char),
       look: lookOf(charOf(doc.poker?.char), skinsOf(doc.poker).wear),
-      avatar: doc.avatar?.at ? avatarPath(uid, doc.avatar.at) : null,
+      avatar: pictureOf(uid, doc),
       since: new Date(doc.createdAt).getTime(),
       money,
       rank,

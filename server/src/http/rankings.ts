@@ -12,7 +12,7 @@ import { newId } from "../ids";
 import { KeyedMutex } from "../mutex";
 import { RHYTHM_CHARTS } from "./rhythmCharts";
 import { bpOf, BP_TOP_SONGS } from "./bp";
-import { avatarPath } from "../users";
+import { pictureOf } from "../users";
 import { createFightRating } from "../games/fightRating";
 import { h, ms, userOf } from "./util";
 
@@ -217,12 +217,12 @@ async function avatarsOf(
   if (!ids.length) return out;
   const docs = await db
     .col("users")
-    .find({ _id: { $in: ids }, "avatar.at": { $exists: true } })
-    .project({ "avatar.at": 1 })
+    .find({ _id: { $in: ids }, $or: [{ "avatar.at": { $exists: true } }, { photo: { $type: "string" } }] })
+    .project({ "avatar.at": 1, photo: 1 })
     .toArray();
   for (const d of docs) {
-    const at = (d.avatar as { at?: number } | undefined)?.at;
-    if (at) out.set(String(d._id), avatarPath(String(d._id), at));
+    const url = pictureOf(String(d._id), d as { avatar?: { at?: number }; photo?: string | null });
+    if (url) out.set(String(d._id), url);
   }
   return out;
 }

@@ -19,3 +19,6 @@ function resolve(): string {
 
 /** 브라우저에서는 "" 일 수 있음(같은 출처) → `${API_URL}/api/...` 는 그대로 상대 경로가 됨 */
 export const API_URL = resolve();
+
+/** 서버가 준 사진 주소 → 실제 주소 (올린 사진은 /api/avatars/… 상대 주소, 로그인 계정 사진은 절대 주소) */
+export const avatarUrl = (path: string) => (/^https?:\/\//.test(path) ? path : `${API_URL}${path}`);
