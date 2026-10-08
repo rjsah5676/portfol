@@ -386,19 +386,55 @@ export function playSfx(name: string) {
   if (c && f) f(c);
 }
 
-const voicePlaying = new Set<string>();
+/** 지금 나오는 캐릭터 음성 하나 (외침이 겹쳐 쌓이지 않게 새 외침이 오면 앞 것은 짧게 줄이고 끊음) */
+let voiceNow: { src: AudioBufferSourceNode; gain: GainNode } | null = null;
+const BETS = new Set([
+  "call",
+  "bet",
+  "raise",
+  "allin",
+  "ddadang",
+  "quarter",
+  "half",
+  "bbing",
+  "check",
+  "fold",
+  "die",
+  "allin-call",
+]);
 /** 캐릭터 음성 (파일 있을 때만). big = 크게 외치는 버전(없으면 보통 버전) */
 export function playVoice(char: string, name: string, big = false) {
   const s = getSound();
   if (s.mute || s.voice <= 0) return;
   const key = `voice/${char}/${char}-${name}`;
-  const pick = big && fileOf(`${key}-big`) ? `${key}-big` : key;
-  if (!fileOf(pick)) return;
-  // 같은 캐릭터가 겹쳐 말하지 않게
-  if (voicePlaying.has(char)) return;
-  voicePlaying.add(char);
-  if (!playFile(pick, s.voice, () => voicePlaying.delete(char))) voicePlaying.delete(char);
-  else setTimeout(() => voicePlaying.delete(char), 3000);
+  const url = (big && fileOf(`${key}-big`)) || fileOf(key);
+  if (!url) return;
+  const c = ac();
+  if (!c) return;
+  const bet = BETS.has(name);
+  // 베팅 외침이 아닌 대사(승리 · 입장 …)는 다른 음성이 나오는 중이면 건너뜀
+  if (!bet && voiceNow) return;
+  void buffer(url).then((buf) => {
+    if (!buf) return;
+    if (voiceNow) {
+      // 앞 외침은 0.08초 만에 줄이고 끊음 → 최신 행동이 항상 들림
+      const old = voiceNow;
+      old.gain.gain.setTargetAtTime(0, c.currentTime, 0.03);
+      old.src.stop(c.currentTime + 0.1);
+    }
+    const src = c.createBufferSource();
+    src.buffer = buf;
+    const g = c.createGain();
+    g.gain.value = s.voice * (big ? 1.15 : 1);
+    src.connect(g);
+    g.connect(c.destination);
+    const me = { src, gain: g };
+    voiceNow = me;
+    src.onended = () => {
+      if (voiceNow === me) voiceNow = null;
+    };
+    src.start();
+  });
 }
 
 /** 배경음악 바꾸기 (null = 끔). 파일이 없으면 조용히 아무것도 안 함 */
