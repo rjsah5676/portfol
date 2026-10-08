@@ -376,6 +376,9 @@ async function spawn(url: string, real: string, ms: number) {
 
 // ───────────── 공개 API ─────────────
 
+/** 그 이름의 소리 파일이 있나 */
+export const hasSound = (name: string) => !!fileOf(name);
+
 /** 짧은 소리. 파일이 있으면 파일, 없으면 합성음 */
 export function playSfx(name: string) {
   const s = getSound();

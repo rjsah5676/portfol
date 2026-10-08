@@ -29,7 +29,7 @@ import {
   type Pose,
 } from "@/lib/poker/rules";
 import { bestK, kCategory } from "@/lib/poker/seven";
-import { isBig, playBgm, playSfx, playVoice, sfx } from "@/lib/poker/sfx";
+import { hasSound, isBig, playBgm, playSfx, playVoice, sfx } from "@/lib/poker/sfx";
 import type {
   HoldemAction,
   HoldemView,
@@ -412,9 +412,9 @@ export default function TableView({
             break;
           case "emote": {
             emo[e.seat] = { v: e.emote, until: now + 2600, key: ++keyRef.current };
-            sfx.emote();
-            const ch = charOf(e.seat);
-            if (ch) playVoice(ch, `emote-${e.emote}`);
+            // 이모티콘마다 다른 효과음 (없으면 공통 "뿅")
+            if (hasSound(`sfx-emote-${e.emote}`)) playSfx(`sfx-emote-${e.emote}`);
+            else sfx.emote();
             break;
           }
           case "sit": {
