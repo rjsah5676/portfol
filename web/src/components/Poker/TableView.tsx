@@ -2423,8 +2423,8 @@ function HeroArea(props: {
               key={emote.key}
               className="pk-emote pointer-events-none absolute"
               style={{
-                left: heroSprH * 0.6,
-                bottom: `calc(100% - 8px + ${Math.round(heroSprH * 0.62)}px)`,
+                left: heroSprH * 0.56,
+                bottom: `calc(100% - 8px + ${Math.round(heroSprH * 0.76)}px)`,
                 zIndex: 45,
               }}
             >
