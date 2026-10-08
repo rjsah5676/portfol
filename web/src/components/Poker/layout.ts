@@ -119,7 +119,14 @@ export function compactV(w: number, h: number, seats: number, seven: boolean, R:
   return layoutC(w, h, seats, seven, R, false);
 }
 
-function layoutC(w: number, h: number, seats: number, seven: boolean, R: number, btnAbove: boolean): CompactV & { btnTop: number } {
+function layoutC(
+  w: number,
+  h: number,
+  seats: number,
+  seven: boolean,
+  R: number,
+  btnAbove: boolean
+): CompactV & { btnTop: number } {
   const u = Math.min(w, h) / 100;
   const cl = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
   const heroBottom = h - 8 - R - 6;
@@ -127,7 +134,9 @@ function layoutC(w: number, h: number, seats: number, seven: boolean, R: number,
   const sprU = 19; // 캐릭터 그림 높이(u)
   const cardU = seven ? 7.2 : 7;
   const fixed = 34 + PLATE + 8 + BET + 64 + 12 + 24 + 6;
-  const scal = seven ? 0.92 * sprU + 1.4 * cardU + 1.4 * 11.5 : 0.92 * sprU + 1.4 * cardU + 1.4 * 13.5 + 1.4 * 15;
+  const scal = seven
+    ? 0.92 * sprU + 1.4 * cardU + 1.4 * 11.5
+    : 0.92 * sprU + 1.4 * cardU + 1.4 * 13.5 + 1.4 * 15;
   const k = cl((h - 8 - R - fixed) / (scal * u), 0.6, 1);
   const sprH = sprU * u * k;
   const card = cardU * u * k;
@@ -137,10 +146,14 @@ function layoutC(w: number, h: number, seats: number, seven: boolean, R: number,
   const heroLeft = 8 + face * 1.05 + 6 + 8 * 12.96 + 10;
   const band: [number, number] = [heroLeft, btnAbove ? w - 8 : w - 8 - BTN - 6];
   const bandW = band[1] - band[0];
-  const heroCard = seven ? Math.min(11.5 * u * k, bandW / 5.2) : Math.min(15 * u * k, (bandW - 8) / 2);
+  const heroCard = seven
+    ? Math.min(11.5 * u * k, bandW / 5.2)
+    : Math.min(15 * u * k, (bandW - 8) / 2);
   const boardCard = Math.min(13.5 * u * k, (w - 2 * 90) / 5.2);
   const heroCardsTop = heroBottom - 24 - heroCard * 1.4;
-  const used = seven ? fixed + 0.92 * sprH + cardH + heroCard * 1.4 : fixed + 0.92 * sprH + cardH + boardCard * 1.4 + heroCard * 1.4;
+  const used = seven
+    ? fixed + 0.92 * sprH + cardH + heroCard * 1.4
+    : fixed + 0.92 * sprH + cardH + boardCard * 1.4 + heroCard * 1.4;
   const s = Math.max(0, h - 8 - R - used);
 
   const yA = 34 + 0.92 * sprH + s * (seven ? 0.2 : 0.25);
@@ -168,7 +181,9 @@ function layoutC(w: number, h: number, seats: number, seven: boolean, R: number,
         { x: 87, y: pct(yA), side: "right" },
         { x: 87, y: pct(yB), side: "right" },
       ];
-  const cardSide: ("auto" | "below")[] = seven ? ["auto", "below", "below", "below", "below"] : ["auto", "below", "auto", "below", "auto", "below"];
+  const cardSide: ("auto" | "below")[] = seven
+    ? ["auto", "below", "below", "below", "below"]
+    : ["auto", "below", "auto", "below", "auto", "below"];
   void seats;
   // 테이블 그림: 맞은편 자리의 테이블 선부터 내 줄 아래까지
   const tTop = yA - 8;
@@ -177,7 +192,12 @@ function layoutC(w: number, h: number, seats: number, seven: boolean, R: number,
     L: {
       table: { cx: 50, top: pct(tTop), w: (tW / w) * 100 },
       // 7포커는 바닥 카드가 없으니 '판 가운데'(외침 도착 · 3·2·1) = 팟과 내 카드 사이
-      center: { pot: pct(centerTop), board: seven ? pct((centerTop + 58 + heroCardsTop) / 2 - boardCard * 0.9) : pct(centerTop + 64 + boardCard * 0.7) },
+      center: {
+        pot: pct(centerTop),
+        board: seven
+          ? pct((centerTop + 58 + heroCardsTop) / 2 - boardCard * 0.9)
+          : pct(centerTop + 64 + boardCard * 0.7),
+      },
       heroX: ((band[0] + band[1]) / 2 / w) * 100,
       heroCards: pct(heroCardsTop),
       spots,

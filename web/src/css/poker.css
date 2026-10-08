@@ -574,6 +574,32 @@
     opacity: 0;
   }
 }
+/* 카드 나눠 주기: 딜러 자리에 쌓여 있다가 순서대로 날아가서 도착하면 사라짐(진짜 카드가 그 자리에 나타남) */
+.pk-dealfly {
+  aspect-ratio: 5 / 7;
+  border-radius: calc(var(--u) * 0.6);
+  background-size: cover;
+  background-position: center;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.5);
+  transform: translate(-50%, -50%) rotate(-12deg) scale(0.9);
+  animation-name: pk-dealfly;
+  animation-timing-function: cubic-bezier(0.25, 0.7, 0.3, 1);
+  animation-fill-mode: both;
+}
+@keyframes pk-dealfly {
+  0% {
+    transform: translate(-50%, -50%) rotate(-12deg) scale(0.9);
+    opacity: 1;
+  }
+  96% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) rotate(var(--r))
+      scale(var(--s));
+    opacity: 0;
+  }
+}
 @keyframes pk-flip {
   0% {
     transform: perspective(300px) rotateY(90deg) scale(1.08);

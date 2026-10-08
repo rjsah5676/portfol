@@ -145,7 +145,18 @@ export type SeatCardsProps<V> = {
   hide?: boolean;
   /** 패를 다 깠음 → 이긴 카드 빛남 · 진 카드 어두움 */
   settled?: boolean;
+  /** 카드 나눠 주기 연출 중: i 번째 카드(전체 n장)가 손에 도착하는 시각(ms, 없으면 그냥) */
+  dealDelay?: (i: number, n: number) => number | undefined;
 };
+
+/** 카드 나눠 주기 연출: 딜러(판 가운데)에서 한 장씩 날아감. k = 날아가는 순서, idx = 그 자리의 몇 번째 카드(-1 = 마지막 장) */
+interface DealFx {
+  key: number;
+  handNo: number;
+  items: { seat: number; k: number; idx: number }[];
+  step: number;
+  fly: number;
+}
 
 /** 서버 시계 기준 현재 시각 (제한 시간이 흐르는 동안만 자주 갱신) */
 /** 앉은 그림(384×512)에서 테이블 선의 높이 비율 */
@@ -249,6 +260,8 @@ export default function TableView({
   /** 이름표를 눌러 보는 자리 정보 */
   const [statSeat, setStatSeat] = useState<number | null>(null);
   /** 쇼다운 패 까기 연출: order 순서로 한 자리씩 깜(step = 깐 자리 수). 다 깐 뒤 한 박자 쉬고 결과(step > order.length) */
+  /** 카드 나눠 주기 연출 */
+  const [dealFx, setDealFx] = useState<DealFx | null>(null);
   const [reveal, setReveal] = useState<{
     key: number;
     handNo: number;
@@ -284,11 +297,19 @@ export default function TableView({
         setReveal(null);
       }
       const shows: { seat: number; cards: number[] }[] = [];
+      /** 이번에 나눠 줄 카드: 자리별 장수, last = 그 자리의 마지막 장만 새 카드 */
+      let dealPlan: { counts: [number, number][]; last: boolean } | null = null;
       for (const e of t.ev as PokerEvent[]) {
         switch (e.t) {
           case "hand":
             push(`── ${e.no}번째 판 ──`, "street");
             playSfx("sfx-shuffle");
+            // 홀덤: 패 2장씩 나눠 주기 (7포커는 "deal" 이벤트로)
+            if (t.hand?.game === "holdem")
+              dealPlan = {
+                counts: Object.keys(t.hand.players).map((k) => [Number(k), 2]),
+                last: false,
+              };
             break;
           case "post":
             sfx.chip();
@@ -341,10 +362,13 @@ export default function TableView({
             );
             sfx.card();
             break;
-          case "deal":
+          case "deal": {
             if (e.round >= 4) push(`${e.round}구`, "street");
-            sfx.card();
+            const cnt = new Map<number, number>();
+            for (const c of e.cards) cnt.set(c.seat, (cnt.get(c.seat) ?? 0) + 1);
+            dealPlan = { counts: [...cnt.entries()], last: e.round >= 4 };
             break;
+          }
           case "open":
             sfx.card();
             break;
@@ -410,6 +434,26 @@ export default function TableView({
       if (Object.keys(emo).length) setEmotes((b) => ({ ...b, ...emo }));
       if (Object.keys(pose).length) setPoses((b) => ({ ...b, ...pose }));
       if (Object.keys(face).length) setFaces((b) => ({ ...b, ...face }));
+      // 카드 나눠 주기: 내 다음 자리부터 시계 방향으로 한 바퀴에 한 장씩, 나는 맨 끝
+      if (dealPlan && dealPlan.counts.length) {
+        const n = t.seats.length;
+        const from = Math.max(0, mySeat);
+        const seats = dealPlan.counts
+          .map(([seat]) => seat)
+          .sort((a, b) => ((a - from - 1 + n) % n) - ((b - from - 1 + n) % n));
+        const per = new Map(dealPlan.counts);
+        const rounds = Math.max(...dealPlan.counts.map(([, c]) => c));
+        const items: DealFx["items"] = [];
+        for (let r = 0; r < rounds; r++)
+          for (const seat of seats)
+            if ((per.get(seat) ?? 0) > r)
+              items.push({ seat, k: items.length, idx: dealPlan.last ? -1 : r });
+        // 전부 1.1초 안에 (장수가 많으면 촘촘히)
+        const step = Math.max(45, Math.min(120, Math.round(1100 / items.length)));
+        const fly = 260;
+        setDealFx({ key: ++keyRef.current, handNo: t.handNo, items, step, fly });
+        items.forEach((it) => setTimeout(sfx.card, it.k * step + fly * 0.6));
+      }
       // 쇼다운: 패를 한 자리씩 깐다 — 내 자리부터 시계 방향, 이긴 사람은 맨 마지막에
       const resNow = t.hand?.result ?? null;
       let staged = false;
@@ -554,6 +598,15 @@ export default function TableView({
     }, 250);
     return () => clearInterval(idt);
   }, [transient]);
+
+  // 나눠 주기 연출이 끝나면 지움 (그 뒤로 카드가 다시 그려져도 늦게 나타나지 않게)
+  useEffect(() => {
+    if (!dealFx) return;
+    const total = dealFx.items.length * dealFx.step + dealFx.fly + 400;
+    const key = dealFx.key;
+    const id = setTimeout(() => setDealFx((d) => (d && d.key === key ? null : d)), total);
+    return () => clearTimeout(id);
+  }, [dealFx]);
 
   // 패 까기: 한 자리씩 뒤집고(촥 → 족보 도장 쾅), 이긴 사람 앞에서 한 박자 더, 다 깐 뒤 결과
   useEffect(() => {
@@ -877,6 +930,16 @@ export default function TableView({
   const revealDone = !reveal || reveal.handNo !== table.handNo || reveal.step > reveal.order.length;
   /** 그 자리의 패를 깠나 */
   const revealed = (seat: number) => revealDone || reveal!.step > reveal!.order.indexOf(seat);
+  /** 나눠 주기 연출 중이면 그 자리 카드가 손에 도착하는 시각 */
+  const dealOf = (seat: number): SeatCardsProps<unknown>["dealDelay"] => {
+    if (!dealFx || dealFx.handNo !== table.handNo) return undefined;
+    const mine = dealFx.items.filter((x) => x.seat === seat);
+    if (!mine.length) return undefined;
+    return (i, n) => {
+      const it = mine.find((x) => x.idx === i || (x.idx === -1 && i === n - 1));
+      return it ? it.k * dealFx.step + dealFx.fly : undefined;
+    };
+  };
   /** 결과 (판은 끝났지만 패 까기 연출 중이면 아직 숨김) */
   const rawRes = hand?.result ?? null;
   const res = revealDone ? rawRes : null;
@@ -1061,6 +1124,7 @@ export default function TableView({
                   side: sp.side,
                   hide: !revealed(i),
                   settled: revealDone,
+                  dealDelay: dealOf(i),
                 })
               : sevenSeatCards({
                   view: sv!,
@@ -1072,6 +1136,7 @@ export default function TableView({
                   side: sp.side,
                   hide: !revealed(i),
                   settled: revealDone,
+                  dealDelay: dealOf(i),
                 });
           const wonHere = res?.won[i] ?? 0;
           const tag = p?.last && !res ? p.last.a : null;
@@ -1242,6 +1307,58 @@ export default function TableView({
           );
         })}
 
+        {/* 카드 나눠 주기: 판 가운데(딜러)에서 각 자리로 한 장씩 날아감 */}
+        {dealFx &&
+          dealFx.handNo === table.handNo &&
+          (() => {
+            const ox = px(L.table.cx);
+            const oy = py(L.center.pot) + 20;
+            const cw = sizes.card;
+            const target = (seat: number) => {
+              if (seat === mySeat)
+                return {
+                  x: (L.heroX / 100) * boardW,
+                  y: (L.heroCards / 100) * h + sizes.heroCard * 0.7,
+                  s: sizes.heroCard / cw,
+                };
+              const idx = (seat - Math.max(0, mySeat) + n) % n;
+              const sp = L.spots[idx];
+              if (!sp) return null;
+              const x = Math.max(sprW * 0.5, Math.min(boardW - sprW * 0.5, px(sp.x)));
+              const y = py(sp.y);
+              const half = Math.max(84, sprW * 0.62) / 2;
+              const below = C?.cardSide[idx] === "below" || (sp.side === "top" && !H);
+              if (below) return { x, y: y + 52 + 4 + cw * 0.7, s: 1 };
+              const dir = sp.side === "right" ? -1 : 1;
+              return { x: x + dir * (half + 6 + cw * 0.6), y: y + cw * 0.7, s: 1 };
+            };
+            return dealFx.items.map((it) => {
+              const tg = target(it.seat);
+              if (!tg) return null;
+              return (
+                <span
+                  key={`${dealFx.key}-${it.k}`}
+                  className="pk-dealfly pointer-events-none absolute"
+                  style={
+                    {
+                      left: ox,
+                      top: oy,
+                      width: cw,
+                      zIndex: 13,
+                      backgroundImage: `url(${asset.back(table.tier)})`,
+                      animationDelay: `${it.k * dealFx.step}ms`,
+                      animationDuration: `${dealFx.fly}ms`,
+                      "--dx": `${tg.x - ox}px`,
+                      "--dy": `${tg.y - oy}px`,
+                      "--s": tg.s,
+                      "--r": `${(it.k % 3) * 6 - 6}deg`,
+                    } as CSSProperties
+                  }
+                />
+              );
+            });
+          })()}
+
         {/* 내 차례 3 · 2 · 1 */}
         {myTurn &&
           counting &&
@@ -1390,6 +1507,7 @@ export default function TableView({
             plateBottom={heroPlateBottom}
             compact={!!C}
             sprV={heroSprV}
+            dealDelay={dealOf(mySeat)}
             blind={
               hv && hv.street === 0 && !hv.result && (hv.sbSeat === mySeat || hv.bbSeat === mySeat)
                 ? hv.bbSeat === mySeat
@@ -1844,6 +1962,7 @@ function HeroArea(props: {
   settled: boolean;
   collected: boolean;
   myRevealed: boolean;
+  dealDelay?: SeatCardsProps<unknown>["dealDelay"];
 }) {
   const {
     me,
@@ -1878,6 +1997,7 @@ function HeroArea(props: {
     settled,
     collected,
     myRevealed,
+    dealDelay,
   } = props;
   const H = sizes.o === "h";
   const cards =
@@ -1893,6 +2013,7 @@ function HeroArea(props: {
             sizes,
             side: "top",
             settled,
+            dealDelay,
           })
         : sevenSeatCards({
             view: sv!,
@@ -1903,6 +2024,7 @@ function HeroArea(props: {
             sizes,
             side: "top",
             settled,
+            dealDelay,
           });
   const myName = (hv ?? sv)?.result?.names[me.seat];
   const bet = p && !res && !collected ? p.bet : 0;

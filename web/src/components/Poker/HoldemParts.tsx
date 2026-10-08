@@ -24,6 +24,7 @@ export function holdemSeatCards({
   sizes,
   hide,
   settled,
+  dealDelay,
 }: SeatCardsProps<HoldemView>) {
   const p = view.players[seat];
   if (!p) return null;
@@ -52,7 +53,14 @@ export function holdemSeatCards({
     return (
       <span className="flex gap-[0.3em]">
         {myHand.cards.map((c, i) => (
-          <PlayingCard key={c} card={c} w={sizes.heroCard} dim={p.folded} deal delay={i * 90} />
+          <PlayingCard
+            key={c}
+            card={c}
+            w={sizes.heroCard}
+            dim={p.folded}
+            deal
+            delay={dealDelay?.(i, 2) ?? i * 90}
+          />
         ))}
       </span>
     );
@@ -62,13 +70,13 @@ export function holdemSeatCards({
   const stay = !!p.cards;
   return (
     <span className="flex">
-      <PlayingCard card={null} w={sizes.card} tier={tier} deal={!stay} />
+      <PlayingCard card={null} w={sizes.card} tier={tier} deal={!stay} delay={dealDelay?.(0, 2)} />
       <PlayingCard
         card={null}
         w={sizes.card}
         tier={tier}
         deal={!stay}
-        delay={stay ? 0 : 80}
+        delay={stay ? 0 : (dealDelay?.(1, 2) ?? 80)}
         style={{ marginLeft: -sizes.card * 0.5 }}
       />
     </span>

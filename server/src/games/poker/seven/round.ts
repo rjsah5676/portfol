@@ -263,6 +263,6 @@ export const seven: GameDef = {
     const ev: PokerEvent[] = [{ t: "hand", no: o.handNo }];
     for (const h of hand.history) if (h.type === "ante") ev.push({ t: "post", seat: h.seat, kind: "ante", amt: h.add });
     ev.push({ t: "deal", round: 3, cards: seats.flatMap((s) => [0, 1, 2, 3].map(() => ({ seat: s.seat, card: null }))) });
-    return { round, ev, pause: 1500 };
+    return { round, ev, pause: 1900 }; // 화면에서 카드 나눠 주는 시간
   },
 };

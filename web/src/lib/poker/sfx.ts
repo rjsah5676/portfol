@@ -54,7 +54,7 @@ let manifest: Record<string, string> | null = null;
 let manifestLoading: Promise<void> | null = null;
 function loadManifest() {
   if (manifest || manifestLoading || typeof window === "undefined") return;
-  manifestLoading = fetch(`${BASE}/manifest.json`, { cache: "force-cache" })
+  manifestLoading = fetch(`${BASE}/manifest.json`, { cache: "no-cache" })
     .then((r) => (r.ok ? (r.json() as Promise<Record<string, string>>) : {}))
     .then((m) => {
       manifest = m;
@@ -63,8 +63,14 @@ function loadManifest() {
       manifest = {};
     });
 }
-const fileOf = (name: string): string | null =>
-  manifest && manifest[name] ? `${BASE}/${manifest[name]}` : null;
+/** 이름 → 파일 주소. "sfx-chip" 처럼 변형이 여러 개(sfx-chip-1, -2 …)면 그중 아무거나 */
+function fileOf(name: string): string | null {
+  if (!manifest) return null;
+  if (manifest[name]) return `${BASE}/${manifest[name]}`;
+  const alts: string[] = [];
+  for (let i = 1; manifest[`${name}-${i}`]; i++) alts.push(manifest[`${name}-${i}`]);
+  return alts.length ? `${BASE}/${alts[Math.floor(Math.random() * alts.length)]}` : null;
+}
 
 // ───────────── 재생 ─────────────
 
@@ -92,6 +98,13 @@ function unlock() {
 }
 if (typeof window !== "undefined") {
   loadManifest();
+  // 탭을 가리면 배경음악 멈춤, 돌아오면 이어서
+  document.addEventListener("visibilitychange", () => {
+    for (const el of live.keys()) {
+      if (document.hidden) el.pause();
+      else if (wantBgm) void el.play().catch(() => {});
+    }
+  });
   for (const ev of ["pointerdown", "keydown", "touchstart"])
     window.addEventListener(ev, unlock, { once: true, passive: true });
 }

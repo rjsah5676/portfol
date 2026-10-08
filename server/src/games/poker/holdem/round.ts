@@ -271,7 +271,7 @@ export const holdem: GameDef = {
     round.botMove = (seat, brain) => base(seat, brain, models);
     const ev: PokerEvent[] = [{ t: "hand", no: o.handNo }];
     for (const h of hand.history) if (h.type === "ante" || h.type === "sb" || h.type === "bb") ev.push({ t: "post", seat: h.seat, kind: h.type, amt: h.add });
-    return { round, ev, pause: 1300 };
+    return { round, ev, pause: 1800 }; // 화면에서 카드 나눠 주는 시간
   },
 
   learn(round, mem, keyOf) {

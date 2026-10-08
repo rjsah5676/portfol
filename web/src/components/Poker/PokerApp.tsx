@@ -129,6 +129,8 @@ export default function PokerApp({ rank }: { rank: RankRow[] | null }) {
   useEffect(() => {
     if (!tableId) playBgm("bgm-lobby");
   }, [tableId]);
+  // 포커 페이지를 떠나면 배경음악 끔 (사이트 안에서 다른 페이지로 가도 계속 나오던 것)
+  useEffect(() => () => playBgm(null), []);
   const toggleFs = () => {
     const el = rootRef.current;
     if (!el) return;

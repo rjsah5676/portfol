@@ -1,9 +1,26 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
 import { RANKS, rankOf, suitOf, type Card } from "@/lib/poker/cards";
 import { asset, chipColor } from "@/lib/poker/assets";
-import { CHARS, FACES, POSES, fmtWon, type CharId, type Emote, type Face, type Pose, type TierId } from "@/lib/poker/rules";
+import {
+  CHARS,
+  FACES,
+  POSES,
+  fmtWon,
+  type CharId,
+  type Emote,
+  type Face,
+  type Pose,
+  type TierId,
+} from "@/lib/poker/rules";
 
 /* 포커 화면의 작은 조각들: 카드 · 칩 · 금액 · 캐릭터(서 있는 그림 · 얼굴 · 이모티콘) */
 
@@ -69,7 +86,11 @@ export function PlayingCard({
   className?: string;
   style?: CSSProperties;
 }) {
-  const base = { "--w": `${w}px`, animationDelay: delay ? `${delay}ms` : undefined, ...style } as CSSProperties;
+  const base = {
+    "--w": `${w}px`,
+    animationDelay: delay ? `${delay}ms` : undefined,
+    ...style,
+  } as CSSProperties;
   if (card === null) {
     return (
       <span
@@ -96,14 +117,25 @@ export function PlayingCard({
       className={`pk-card ${deal ? "pk-deal" : ""} ${className}`}
       style={base}
     >
-      <span className="pk-card-rank" style={r === "10" ? { letterSpacing: "0.02em", fontSize: "calc(var(--w) * 0.46)", left: "calc(var(--w) * 0.05)", top: "calc(var(--w) * 0.08)" } : undefined}>
+      <span
+        className="pk-card-rank"
+        style={
+          r === "10"
+            ? {
+                letterSpacing: "0.02em",
+                fontSize: "calc(var(--w) * 0.46)",
+                left: "calc(var(--w) * 0.05)",
+                top: "calc(var(--w) * 0.08)",
+              }
+            : undefined
+        }
+      >
         {r}
       </span>
       <span className="pk-card-pip">
         <Suit s={s} />
       </span>
       {court ? (
-         
         <img src={asset.court(s, rank)} alt="" draggable={false} className="pk-card-court" />
       ) : rank === 12 ? (
         <span className="pk-card-ace">
@@ -122,7 +154,15 @@ export function PlayingCard({
 // ───────────── 금액 · 칩 ─────────────
 
 /** 금액: 숫자는 굵은 숫자 글꼴, 억·만은 작게 */
-export function Money({ won, className = "", sign }: { won: number; className?: string; sign?: boolean }) {
+export function Money({
+  won,
+  className = "",
+  sign,
+}: {
+  won: number;
+  className?: string;
+  sign?: boolean;
+}) {
   const text = fmtWon(Math.abs(won));
   const parts = text.split(/(억|만)/).filter(Boolean);
   return (
@@ -130,7 +170,10 @@ export function Money({ won, className = "", sign }: { won: number; className?: 
       {sign && won > 0 ? "+" : won < 0 ? "−" : ""}
       {parts.map((p, i) =>
         p === "억" || p === "만" ? (
-          <span key={i} className="mr-[0.18em] ml-[0.04em] font-['Nanum_Gothic',sans-serif] text-[0.62em] font-bold opacity-80 last:mr-0">
+          <span
+            key={i}
+            className="mr-[0.18em] ml-[0.04em] font-['Nanum_Gothic',sans-serif] text-[0.62em] font-bold opacity-80 last:mr-0"
+          >
             {p}
           </span>
         ) : (
@@ -157,14 +200,35 @@ const BET_ACT: Record<string, [string, string]> = {
   bb: ["BB", "#9aa3b5"],
   ante: ["판돈", "#9aa3b5"],
 };
-export function Bet({ won, ratio, size = 22, act, className = "" }: { won: number; ratio: number; size?: number; act?: string; className?: string }) {
+export function Bet({
+  won,
+  ratio,
+  size = 22,
+  act,
+  className = "",
+}: {
+  won: number;
+  ratio: number;
+  size?: number;
+  act?: string;
+  className?: string;
+}) {
   const color = chipColor(ratio);
   const kind = ratio >= 8 ? "stack" : ratio >= 2 ? "side" : "top";
   const tag = act ? BET_ACT[act] : undefined;
   return (
-    <span key={won} className={`pk-pop pk-bet inline-flex items-center ${className}`} style={tag ? { borderColor: tag[1] } : undefined}>
-      { }
-      <img src={asset.chip(color, kind)} alt="" draggable={false} style={{ width: size * 1.25, height: size * 1.25 }} />
+    <span
+      key={won}
+      className={`pk-pop pk-bet inline-flex items-center ${className}`}
+      style={tag ? { borderColor: tag[1] } : undefined}
+    >
+      {}
+      <img
+        src={asset.chip(color, kind)}
+        alt=""
+        draggable={false}
+        style={{ width: size * 1.25, height: size * 1.25 }}
+      />
       <span className="flex flex-col items-start leading-none">
         {tag && (
           <span className="pk-bet-act" style={{ color: tag[1] }}>
@@ -179,14 +243,31 @@ export function Bet({ won, ratio, size = 22, act, className = "" }: { won: numbe
 
 /** 팟: 칩 더미 그림 (금액이 클수록 색이 세짐) */
 export function PotChips({ ratio, size = 40 }: { ratio: number; size?: number }) {
-  const colors: ("white" | "red" | "blue" | "green" | "black" | "gold")[] = ["white", "red", "blue", "green", "black", "gold"];
+  const colors: ("white" | "red" | "blue" | "green" | "black" | "gold")[] = [
+    "white",
+    "red",
+    "blue",
+    "green",
+    "black",
+    "gold",
+  ];
   const top = colors.indexOf(chipColor(ratio));
   const shown = colors.slice(Math.max(0, top - 2), top + 1);
   return (
-    <span className="relative inline-flex items-end" style={{ height: size, width: size * (0.6 + shown.length * 0.5) }} aria-hidden>
+    <span
+      className="relative inline-flex items-end"
+      style={{ height: size, width: size * (0.6 + shown.length * 0.5) }}
+      aria-hidden
+    >
       {shown.map((c, i) => (
-         
-        <img key={c} src={asset.chip(c, "stack")} alt="" draggable={false} className="absolute bottom-0" style={{ width: size, height: size, left: i * size * 0.5, zIndex: i }} />
+        <img
+          key={c}
+          src={asset.chip(c, "stack")}
+          alt=""
+          draggable={false}
+          className="absolute bottom-0"
+          style={{ width: size, height: size, left: i * size * 0.5, zIndex: i }}
+        />
       ))}
     </span>
   );
@@ -224,44 +305,115 @@ export function CharSprite({
       className={`pk-sprite ${className}`}
       data-pose={pose}
       data-dim={dim ? "1" : undefined}
-      style={{ width: w, height: Math.round((w * 4) / 3), transform: flip ? "scaleX(-1)" : undefined, ...style }}
+      style={{
+        width: w,
+        height: Math.round((w * 4) / 3),
+        transform: flip ? "scaleX(-1)" : undefined,
+        ...style,
+      }}
       aria-hidden
     >
       {POSES.map((p) => (
-         
-        <img key={p} src={seat ? asset.seat(char, seat, p) : asset.pose(char, p)} alt="" draggable={false} data-on={p === pose ? "1" : undefined} />
+        <img
+          key={p}
+          src={seat ? asset.seat(char, seat, p) : asset.pose(char, p)}
+          alt=""
+          draggable={false}
+          data-on={p === pose ? "1" : undefined}
+        />
       ))}
     </span>
   );
 }
 
 /** 이름표의 얼굴 (표정이 바뀌면 부드럽게) */
-export function FaceIcon({ char, face = "idle", size = 40, className = "", ring }: { char: CharId; face?: Face; size?: number; className?: string; ring?: string }) {
+export function FaceIcon({
+  char,
+  face = "idle",
+  size = 40,
+  className = "",
+  ring,
+}: {
+  char: CharId;
+  face?: Face;
+  size?: number;
+  className?: string;
+  ring?: string;
+}) {
   return (
-    <span className={`pk-face relative inline-flex shrink-0 overflow-hidden rounded-full ${className}`} style={{ width: size, height: size, background: CHARS[char].color, boxShadow: ring }} aria-hidden>
+    <span
+      className={`pk-face relative inline-flex shrink-0 overflow-hidden rounded-full ${className}`}
+      style={{ width: size, height: size, background: CHARS[char].color, boxShadow: ring }}
+      aria-hidden
+    >
       {FACES.map((f) => (
-         
-        <img key={f} src={asset.face(char, f)} alt="" draggable={false} data-on={f === face ? "1" : undefined} />
+        <img
+          key={f}
+          src={asset.face(char, f)}
+          alt=""
+          draggable={false}
+          data-on={f === face ? "1" : undefined}
+        />
       ))}
     </span>
   );
 }
 
 /** 프로필 (로비 · 순위 · 채팅) */
-export function Profile({ char, size = 36, className = "" }: { char: CharId; size?: number; className?: string }) {
+export function Profile({
+  char,
+  size = 36,
+  className = "",
+}: {
+  char: CharId;
+  size?: number;
+  className?: string;
+}) {
   return (
-     
-    <img src={asset.profile(char)} alt={CHARS[char].name} draggable={false} className={`shrink-0 rounded-full object-cover ${className}`} style={{ width: size, height: size, background: CHARS[char].color }} />
+    <img
+      src={asset.profile(char)}
+      alt={CHARS[char].name}
+      draggable={false}
+      className={`shrink-0 rounded-full object-cover ${className}`}
+      style={{ width: size, height: size, background: CHARS[char].color }}
+    />
   );
 }
 
-export function EmoteImg({ char, emote, size = 72, className = "" }: { char: CharId; emote: Emote; size?: number; className?: string }) {
-   
-  return <img src={asset.emote(char, emote)} alt={emote} draggable={false} className={className} style={{ width: size, height: size }} />;
+export function EmoteImg({
+  char,
+  emote,
+  size = 72,
+  className = "",
+}: {
+  char: CharId;
+  emote: Emote;
+  size?: number;
+  className?: string;
+}) {
+  return (
+    <img
+      src={asset.emote(char, emote)}
+      alt={emote}
+      draggable={false}
+      className={className}
+      style={{ width: size, height: size }}
+    />
+  );
 }
 
 /** 올인 컷인: 화면을 가로지르는 띠 (한 번 보이고 사라짐) */
-export function CutIn({ char, name, onDone, top = "50%" }: { char: CharId; name: string; onDone: () => void; top?: number | string }) {
+export function CutIn({
+  char,
+  name,
+  onDone,
+  top = "50%",
+}: {
+  char: CharId;
+  name: string;
+  onDone: () => void;
+  top?: number | string;
+}) {
   const done = useRef(onDone);
   useEffect(() => {
     done.current = onDone;
@@ -272,9 +424,13 @@ export function CutIn({ char, name, onDone, top = "50%" }: { char: CharId; name:
   }, [char]);
   // 테이블 가운데를 가로지르는 띠: 왼쪽 캐릭터 컷 + 오른쪽 ALL IN!
   return (
-    <div className="pk-cutin pointer-events-none absolute inset-x-0 z-50" style={{ top }} aria-hidden>
+    <div
+      className="pk-cutin pointer-events-none absolute inset-x-0 z-50"
+      style={{ top }}
+      aria-hidden
+    >
       <div className="pk-cutin-band">
-        { }
+        {}
         <img src={asset.cutin(char)} alt="" draggable={false} className="pk-cutin-img" />
         <div className="pk-cutin-text">
           <span className="pk-gold pk-title">ALL IN!</span>
@@ -287,11 +443,25 @@ export function CutIn({ char, name, onDone, top = "50%" }: { char: CharId; name:
 
 /** 사라지는 숫자 (+금액) */
 export function Rise({ children, className = "" }: { children: ReactNode; className?: string }) {
-  return <span className={`pk-rise pk-num pointer-events-none whitespace-nowrap ${className}`}>{children}</span>;
+  return (
+    <span className={`pk-rise pk-num pointer-events-none whitespace-nowrap ${className}`}>
+      {children}
+    </span>
+  );
 }
 
 /** 시간 고리 (square = 둥근 사각 틀을 따라) */
-export function TimerRing({ size, frac, width = 4, square }: { size: number; frac: number; width?: number; square?: boolean }) {
+export function TimerRing({
+  size,
+  frac,
+  width = 4,
+  square,
+}: {
+  size: number;
+  frac: number;
+  width?: number;
+  square?: boolean;
+}) {
   const color = frac > 0.5 ? "var(--pk-call)" : frac > 0.2 ? "var(--pk-raise)" : "var(--pk-danger)";
   const pad = width + 2;
   const box = size + pad * 2;
@@ -299,31 +469,88 @@ export function TimerRing({ size, frac, width = 4, square }: { size: number; fra
     const side = size + width;
     const len = side * 4;
     return (
-      <svg className="pointer-events-none absolute" style={{ left: -pad + 2, top: -pad + 2 }} width={box} height={box} aria-hidden>
-        <rect x={pad - width / 2} y={pad - width / 2} width={side} height={side} rx={12} fill="none" stroke="rgba(0,0,0,0.55)" strokeWidth={width} />
-        <rect x={pad - width / 2} y={pad - width / 2} width={side} height={side} rx={12} fill="none" stroke={color} strokeWidth={width} strokeLinecap="round" pathLength={len} strokeDasharray={len} strokeDashoffset={len * (1 - frac)} />
+      <svg
+        className="pointer-events-none absolute"
+        style={{ left: -pad + 2, top: -pad + 2 }}
+        width={box}
+        height={box}
+        aria-hidden
+      >
+        <rect
+          x={pad - width / 2}
+          y={pad - width / 2}
+          width={side}
+          height={side}
+          rx={12}
+          fill="none"
+          stroke="rgba(0,0,0,0.55)"
+          strokeWidth={width}
+        />
+        <rect
+          x={pad - width / 2}
+          y={pad - width / 2}
+          width={side}
+          height={side}
+          rx={12}
+          fill="none"
+          stroke={color}
+          strokeWidth={width}
+          strokeLinecap="round"
+          pathLength={len}
+          strokeDasharray={len}
+          strokeDashoffset={len * (1 - frac)}
+        />
       </svg>
     );
   }
   const r = size / 2 + width / 2 + 1;
   const c = 2 * Math.PI * r;
   return (
-    <svg className="pointer-events-none absolute -rotate-90" style={{ inset: -pad }} width={box} height={box} aria-hidden>
-      <circle cx={size / 2 + pad} cy={size / 2 + pad} r={r} fill="none" stroke="rgba(0,0,0,0.55)" strokeWidth={width} />
-      <circle cx={size / 2 + pad} cy={size / 2 + pad} r={r} fill="none" stroke={color} strokeWidth={width} strokeLinecap="round" strokeDasharray={c} strokeDashoffset={c * (1 - frac)} />
+    <svg
+      className="pointer-events-none absolute -rotate-90"
+      style={{ inset: -pad }}
+      width={box}
+      height={box}
+      aria-hidden
+    >
+      <circle
+        cx={size / 2 + pad}
+        cy={size / 2 + pad}
+        r={r}
+        fill="none"
+        stroke="rgba(0,0,0,0.55)"
+        strokeWidth={width}
+      />
+      <circle
+        cx={size / 2 + pad}
+        cy={size / 2 + pad}
+        r={r}
+        fill="none"
+        stroke={color}
+        strokeWidth={width}
+        strokeLinecap="round"
+        strokeDasharray={c}
+        strokeDashoffset={c * (1 - frac)}
+      />
     </svg>
   );
 }
 
 /** 요소의 크기를 잼 (ref 를 붙인 요소가 나중에 생겨도 됨) */
-export function useSize<T extends HTMLElement>(): [(el: T | null) => void, { w: number; h: number }] {
+export function useSize<T extends HTMLElement>(): [
+  (el: T | null) => void,
+  { w: number; h: number },
+] {
   const [size, setSize] = useState({ w: 0, h: 0 });
   const roRef = useRef<ResizeObserver | null>(null);
   const attach = useCallback((el: T | null) => {
     roRef.current?.disconnect();
     roRef.current = null;
     if (!el) return;
-    const apply = (width: number, height: number) => setSize((s) => (Math.abs(s.w - width) < 1 && Math.abs(s.h - height) < 1 ? s : { w: width, h: height }));
+    const apply = (width: number, height: number) =>
+      setSize((s) =>
+        Math.abs(s.w - width) < 1 && Math.abs(s.h - height) < 1 ? s : { w: width, h: height }
+      );
     const ro = new ResizeObserver(([e]) => apply(e.contentRect.width, e.contentRect.height));
     ro.observe(el);
     roRef.current = ro;

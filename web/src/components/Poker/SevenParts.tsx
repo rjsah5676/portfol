@@ -24,6 +24,7 @@ export function sevenSeatCards({
   side,
   hide,
   settled,
+  dealDelay,
 }: SeatCardsProps<SevenView>) {
   const p = view.players[seat];
   if (!p) return null;
@@ -78,6 +79,7 @@ export function sevenSeatCards({
               w={w}
               dim={p.folded}
               deal
+              delay={dealDelay?.(i, myHand.cards.length)}
               down={down}
               style={{
                 ...gap(i),
@@ -98,11 +100,31 @@ export function sevenSeatCards({
   return (
     <span className={`flex flex-col gap-[3px] ${side === "right" ? "items-end" : "items-start"}`}>
       <span className={row}>
-        {Array.from({ length: leading }, (_, i) => (
-          <PlayingCard key={`d${i}`} card={null} w={w} tier={tier} dim={p.folded} style={gap(i)} />
-        ))}
+        {Array.from({ length: leading }, (_, i) => {
+          const dd = dealDelay?.(i, leading + p.up.length + downLast);
+          return (
+            <PlayingCard
+              key={`d${i}`}
+              card={null}
+              w={w}
+              tier={tier}
+              dim={p.folded}
+              deal={dd !== undefined}
+              delay={dd}
+              style={gap(i)}
+            />
+          );
+        })}
         {p.up.map((c, i) => (
-          <PlayingCard key={c} card={c} w={w} dim={p.folded} deal style={gap(leading + i)} />
+          <PlayingCard
+            key={c}
+            card={c}
+            w={w}
+            dim={p.folded}
+            deal
+            delay={dealDelay?.(leading + i, leading + p.up.length + downLast)}
+            style={gap(leading + i)}
+          />
         ))}
         {Array.from({ length: downLast }, (_, i) => (
           <PlayingCard
@@ -112,6 +134,7 @@ export function sevenSeatCards({
             tier={tier}
             dim={p.folded}
             deal
+            delay={dealDelay?.(leading + p.up.length + i, leading + p.up.length + downLast)}
             style={gap(1)}
           />
         ))}
