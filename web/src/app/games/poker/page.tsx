@@ -29,7 +29,7 @@ function PokerPage() {
           scroll={!inTable}
           rank={{
             sub: "자금 순위",
-            top: rank?.slice(0, 3).map((r) => ({ name: r.nick, member: true, value: `${fmtShort(r.money)}`, sub: <span className="inline-flex items-center gap-1"><Profile char={r.char} size={14} />{r.hands.toLocaleString()}판</span> })) ?? null,
+            top: rank?.slice(0, 3).map((r) => ({ name: r.nick, member: true, avatar: r.avatar ?? null, value: `${fmtShort(r.money)}`, sub: <span className="inline-flex items-center gap-1"><Profile char={r.char} size={14} />{r.hands.toLocaleString()}판</span> })) ?? null,
             render: () => <RankTable rank={rank} myNick={nick ?? undefined} />,
           }}
         />

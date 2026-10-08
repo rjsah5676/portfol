@@ -1,6 +1,6 @@
 import type { Database } from "../../db";
 import { AppError } from "../../errors";
-import type { UserDoc } from "../../users";
+import { avatarPath, type UserDoc } from "../../users";
 import { REVIVE, START_MONEY, charOf, kstDay, type CharId, type GameKind } from "../../../../web/src/lib/poker/rules";
 import type { RankRow } from "../../../../web/src/lib/poker/types";
 
@@ -142,13 +142,15 @@ export function createWallet(db: Database, now: () => number = Date.now) {
     /** 자금 순위: 한 판이라도 친 회원만 */
     async rank(limit = 50): Promise<RankRow[]> {
       const docs = await col
-        .find({ "stats.poker.hands": { $gte: 1 } }, { projection: { nick: 1, money: 1, "stats.poker.hands": 1, "poker.char": 1 } })
+        .find({ "stats.poker.hands": { $gte: 1 } }, { projection: { nick: 1, money: 1, "stats.poker.hands": 1, "poker.char": 1, "avatar.at": 1 } })
         .sort({ money: -1 })
         .limit(limit)
         .toArray();
       return docs.map((d) => {
-        const u = d as unknown as MoneyFields & { stats?: { poker?: { hands?: number } } };
+        const u = d as unknown as MoneyFields & { stats?: { poker?: { hands?: number } }; avatar?: { at?: number } };
         return {
+          // 회원이 직접 올린 프로필 사진 (없으면 null → 화면에서 캐릭터 얼굴)
+          avatar: u.avatar?.at ? avatarPath(String(d._id), u.avatar.at) : null,
           nick: u.nick,
           money: u.money ?? START_MONEY,
           hands: u.stats?.poker?.hands ?? 0,

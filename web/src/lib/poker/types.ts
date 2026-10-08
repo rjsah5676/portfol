@@ -234,6 +234,8 @@ export interface ChatMsg {
 
 export interface RankRow {
   nick: string;
+  /** 프로필 사진 주소 (회원이 올린 것만) */
+  avatar?: string | null;
   money: number;
   hands: number;
   char: CharId;
