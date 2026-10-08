@@ -2079,7 +2079,6 @@
 .pk-lobbychar {
   position: relative;
   display: block;
-  cursor: pointer;
   -webkit-tap-highlight-color: transparent;
 }
 .pk-lobbychar-body {
@@ -2107,32 +2106,18 @@
   top: 0;
   height: 230%;
 }
-/* 누르면: 금빛 빛이 아래에서 위로 한 번 쓸고 지나감 */
-.pk-lobbychar-flash {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background: linear-gradient(
-    180deg,
-    transparent 0%,
-    rgba(255, 226, 138, 0) 35%,
-    rgba(255, 226, 138, 0.55) 50%,
-    rgba(255, 226, 138, 0) 65%,
-    transparent 100%
-  );
-  background-size: 100% 300%;
-  background-position: 50% 0%;
-  mix-blend-mode: screen;
-  animation: pk-lobbychar-flash 0.8s ease-out forwards;
+/* 스킨: 숨 쉬듯 미세하게 (키의 0.6%, 4초) */
+.pk-lobbychar-breathe {
+  animation: pk-breathe 4s ease-in-out infinite;
+  transform-origin: 50% 100%;
 }
-@keyframes pk-lobbychar-flash {
-  from {
-    background-position: 50% 0%;
-    opacity: 1;
+@keyframes pk-breathe {
+  0%,
+  100% {
+    transform: scaleY(1) translateY(0);
   }
-  to {
-    background-position: 50% 100%;
-    opacity: 0;
+  50% {
+    transform: scaleY(1.006) translateY(-0.3%);
   }
 }
 .pk-lobbychar-heart {
@@ -2166,7 +2151,7 @@
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .pk-lobbychar-flash,
+  .pk-lobbychar-breathe,
   .pk-lobbychar-heart {
     animation: none;
   }

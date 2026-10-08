@@ -38,6 +38,8 @@ export const asset = {
   cutin: (c: Look) => `${BASE}/char/${dir(c)}/cutin.webp`,
   /** 스킨 전용: 로비 동작(1~6) · 터치 반응(1~3) */
   lobby: (c: Look, i: number) => `${BASE}/char/${c}/lobby-${i}.webp`,
+  /** 같은 포즈의 눈 감은 그림 (깜빡임) */
+  lobbyBlink: (c: Look, i: number) => `${BASE}/char/${c}/lobby-${i}-blink.webp`,
   touch: (c: Look, i: number) => `${BASE}/char/${c}/touch-${i}.webp`,
   table: (t: TierId, o: "h" | "v") => `${BASE}/table/${TIER_KEY(t)}-${o}.webp`,
   room: (t: TierId | "lobby", o: "h" | "v") =>
