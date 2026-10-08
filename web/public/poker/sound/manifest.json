@@ -59,6 +59,7 @@
   "voice/amy/amy-quarter": "voice/amy/amy-quarter.mp3",
   "voice/amy/amy-raise-big": "voice/amy/amy-raise-big.mp3",
   "voice/amy/amy-raise": "voice/amy/amy-raise.mp3",
+  "voice/amy/amy-select": "voice/amy/amy-select.mp3",
   "voice/amy/amy-win": "voice/amy/amy-win.mp3",
   "voice/jinwoo/jinwoo-allin-big": "voice/jinwoo/jinwoo-allin-big.mp3",
   "voice/jinwoo/jinwoo-allin-call": "voice/jinwoo/jinwoo-allin-call.mp3",
@@ -86,6 +87,7 @@
   "voice/jinwoo/jinwoo-quarter": "voice/jinwoo/jinwoo-quarter.mp3",
   "voice/jinwoo/jinwoo-raise-big": "voice/jinwoo/jinwoo-raise-big.mp3",
   "voice/jinwoo/jinwoo-raise": "voice/jinwoo/jinwoo-raise.mp3",
+  "voice/jinwoo/jinwoo-select": "voice/jinwoo/jinwoo-select.mp3",
   "voice/jinwoo/jinwoo-win": "voice/jinwoo/jinwoo-win.mp3",
   "voice/yeonseo/yeonseo-allin-big": "voice/yeonseo/yeonseo-allin-big.mp3",
   "voice/yeonseo/yeonseo-allin-call": "voice/yeonseo/yeonseo-allin-call.mp3",
@@ -113,5 +115,6 @@
   "voice/yeonseo/yeonseo-quarter": "voice/yeonseo/yeonseo-quarter.mp3",
   "voice/yeonseo/yeonseo-raise-big": "voice/yeonseo/yeonseo-raise-big.mp3",
   "voice/yeonseo/yeonseo-raise": "voice/yeonseo/yeonseo-raise.mp3",
+  "voice/yeonseo/yeonseo-select": "voice/yeonseo/yeonseo-select.mp3",
   "voice/yeonseo/yeonseo-win": "voice/yeonseo/yeonseo-win.mp3"
 }
