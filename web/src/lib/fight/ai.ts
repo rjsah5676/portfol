@@ -6,6 +6,10 @@
 import { CHARS, SUB, type MoveDef } from "./chars";
 import { IN, VIEW_H, clone, isAir, mapOf, platBelow, step, type Fighter, type State } from "./sim";
 import type { Plat } from "./maps";
+import { ROUTES, type ComboRoute, type Starter } from "./combos";
+
+/** 콤보 길로 넣는 피해 상한 (캐릭터마다 길 피해가 달라 너무 아픈 길이 승률을 흔들지 않게) */
+const ROUTE_CAP = 260;
 
 export interface AILevel {
   id: string;
@@ -30,6 +34,12 @@ export interface AILevel {
   interrupt?: number;
   /** 내다보기(프레임): 상대가 기술을 쓰거나 빈틈일 때, 할 수 있는 행동을 미리 돌려 보고 가장 나은 걸 고름 */
   look?: number;
+  /** 내다보기를 쓸 확률 (없으면 1) — 달인과 지존 사이 레이팅은 이걸로 섞음 */
+  lookP?: number;
+  /** 시작기(잡기·아이덴티티·약·발차기)가 맞으면 그 캐릭터의 콤보 길(combos.ts)로 이어 칠 확률 */
+  route?: number;
+  /** 내다볼 때 상대의 대응(가만히·가드·약·점프)을 이만큼 같이 돌려 보고 가장 나쁜 경우로 값을 매김 (1이면 지금 입력 그대로만) */
+  robust?: number;
 }
 
 export const AI_LEVELS: AILevel[] = [
@@ -92,6 +102,7 @@ export const AI_LEVELS: AILevel[] = [
     antiAir: 0.95,
     aggro: 0.72,
     special: 0.02,
+    route: 0.6,
   },
   {
     id: "7",
@@ -106,8 +117,109 @@ export const AI_LEVELS: AILevel[] = [
     just: 0.9,
     interrupt: 0.85,
     look: 28,
+    route: 1,
   },
 ];
+
+/**
+ * 레이팅 기준선: AI 대전 단계가 랭크전 레이팅 어디에 놓이는지 (초급 200 · 지존 2000).
+ * 랭크전 봇은 레이팅에 맞춰 이웃한 두 단계를 섞은 세부 난이도로 둠 (예: 1400 = 고수와 달인 중간).
+ */
+export const AI_RATING = [0, 200, 500, 850, 1200, 1600, 2000];
+
+/** 지존 위 단계 — 랭크전 봇 전용 (AI 대전에서는 고를 수 없음) */
+export const RANK_TIERS: (AILevel & { rating: number })[] = [
+  { ...AI_LEVELS[6], id: "8", name: "전설", rating: 2200, aggro: 0.84, just: 0.95, interrupt: 0.9, robust: 3 },
+  { ...AI_LEVELS[6], id: "9", name: "신화", rating: 2400, aggro: 0.87, just: 1, interrupt: 0.95, robust: 4, look: 32 },
+  { ...AI_LEVELS[6], id: "10", name: "초월", rating: 2600, aggro: 0.9, just: 1, interrupt: 1, robust: 5, look: 32 },
+];
+/** 랭크전 봇 레이팅 상한 */
+export const BOT_MAX = 2600;
+
+/**
+ * 캐릭터 보정 (레이팅): 같은 단계라도 AI가 다루기 쉬운 캐릭터가 따로 있음 (낮은 단계는 리치 긴 소영·제나, 지존은 빠른 건모).
+ * 봇은 (레이팅 + 보정)의 실력으로 둠 → 어떤 캐릭터를 골라도 그 레이팅만큼만 셈. 같은 레이팅 AI끼리 붙여 승률 50% 근처로 맞춘 값.
+ * ADJ_AT 레이팅마다 값, 사이는 섞음.
+ */
+export const ADJ_AT = [200, 500, 850, 1200, 1600, 2000, 2400];
+export const CHAR_ADJ: Record<string, number[]> = {
+  kai: [-37, -61, -27, 35, 33, -100, -85],
+  igna: [-76, -105, -150, -57, -52, -71, -84],
+  soyoung: [60, -25, -128, -185, -22, 350, 320],
+  lily: [37, 138, 204, 209, 28, 29, 140],
+  zena: [-62, -189, -353, -359, -35, 35, 154],
+  gunmo: [78, 244, 458, 357, 48, -220, -450],
+};
+function charAdj(r: number, id: string) {
+  const t = CHAR_ADJ[id];
+  if (!t) return 0;
+  if (r <= ADJ_AT[0]) return t[0];
+  for (let i = 0; i < ADJ_AT.length - 1; i++)
+    if (r < ADJ_AT[i + 1]) return t[i] + ((t[i + 1] - t[i]) * (r - ADJ_AT[i])) / (ADJ_AT[i + 1] - ADJ_AT[i]);
+  return t[t.length - 1];
+}
+
+const ANCHORS: { r: number; l: AILevel }[] = [
+  ...AI_LEVELS.map((l, i) => ({ r: AI_RATING[i], l })),
+  ...RANK_TIERS.map((l) => ({ r: l.rating, l })),
+];
+/** 빈 값은 next() 의 기본값으로 채워서 섞을 수 있게 */
+const filled = (l: AILevel) => ({
+  react: l.react,
+  block: l.block,
+  combo: l.combo,
+  antiAir: l.antiAir,
+  aggro: l.aggro,
+  special: l.special,
+  tech: l.tech ?? l.block * 0.8,
+  just: l.just ?? l.combo * 0.6,
+  interrupt: l.interrupt ?? 0,
+  route: l.route ?? 0,
+  robust: l.robust ?? 1,
+});
+
+/** 레이팅 r 의 AI 세부 난이도 (캐릭터를 주면 캐릭터 보정까지) */
+export function aiForRating(r: number, charId?: string): AILevel {
+  const e = Math.max(0, Math.min(BOT_MAX, r + (charId ? charAdj(r, charId) : 0)));
+  let i = 0;
+  while (i < ANCHORS.length - 2 && e >= ANCHORS[i + 1].r) i++;
+  const a = ANCHORS[i],
+    b = ANCHORS[i + 1];
+  const t = Math.max(0, Math.min(1, (e - a.r) / (b.r - a.r)));
+  const A = filled(a.l),
+    B = filled(b.l);
+  const mix = {} as Record<keyof typeof A, number>;
+  for (const key of Object.keys(A) as (keyof typeof A)[]) mix[key] = A[key] + (B[key] - A[key]) * t;
+  const lv: AILevel = {
+    id: `r${Math.round(r)}`,
+    name: (t < 0.5 ? a : b).l.name,
+    ...mix,
+    react: Math.round(mix.react),
+    robust: Math.round(mix.robust),
+  };
+  // 내다보기: 아래 단계에 없으면 위 단계 쪽으로 갈수록 자주 씀
+  if (a.l.look || b.l.look) {
+    lv.look = Math.round(a.l.look && b.l.look ? a.l.look + (b.l.look - a.l.look) * t : (b.l.look ?? a.l.look)!);
+    lv.lookP = a.l.look ? 1 : t;
+  }
+  return lv;
+}
+
+/**
+ * AI 지문: 랭크전 봇전은 서버가 같은 경기를 다시 돌려 확인하니, 브라우저와 서버의 AI가 똑같아야 함.
+ * 단계 값·보정·콤보 길은 자동으로 들어가고, next() 같은 판단 코드를 바꿨으면 AI_REV 를 올릴 것.
+ */
+const AI_REV = 1;
+export const AI_ID = (() => {
+  const str = AI_REV + JSON.stringify([AI_LEVELS, RANK_TIERS, AI_RATING, ADJ_AT, CHAR_ADJ, ROUTES, ROUTE_CAP]);
+  let h = 0x811c9dc5;
+  for (let i = 0; i < str.length; i++) h = Math.imul(h ^ str.charCodeAt(i), 0x01000193);
+  return (h >>> 0).toString(36);
+})();
+
+/** AI 대전 단계 i 를 캐릭터 보정까지 넣은 난이도로 */
+export const aiLevelFor = (i: number, charId?: string) => aiForRating(AI_RATING[i] ?? 0, charId);
+
 
 function rng(seed: number) {
   let a = seed >>> 0;
@@ -149,9 +261,16 @@ export class FightAI {
   private techDecision: boolean | null = null;
   private gcDecision: boolean | null = null;
   private cutDecision: boolean | null = null;
+  private lookDecision: boolean | null = null;
   /** 상대가 가만히(서 있거나 가드만) 있은 프레임 수 — 오래 가만히 있으면 먼저 들어감 */
   private oStill = 0;
   private oX = 0;
+  /** 이어 치는 중인 콤보 길 · 다음 프레임 · 좌우 뒤집기 · 상대가 맞지 않은 채 지난 프레임 */
+  private route: ComboRoute | null = null;
+  private routeI = 0;
+  private routeFlip = false;
+  private routeIdle = 0;
+  private routeHp = 0;
   /** 내다보고 고른 입력 (남은 프레임) */
   private plan: number[] = [];
   /** 대시 입력 (톡·떼고·톡) 남은 프레임 */
@@ -221,7 +340,42 @@ export class FightAI {
       out = this.dashSeq.shift()!;
       return finish();
     }
-    if (f.st === "hit" || f.st === "down" || f.st === "ko") this.plan = [];
+    if (f.st === "hit" || f.st === "down" || f.st === "ko") ((this.plan = []), (this.route = null));
+    // ── 콤보 길: 내 시작기가 방금 맞았으면 그 캐릭터의 콤보 길로 이어 침 ──
+    if (!this.route && L.route && o.combo <= 2) {
+      const routes = ROUTES[c.id] ?? {};
+      let st: Starter | null = null;
+      for (const e of s.ev) {
+        if (e.p !== me) continue;
+        if (e.k === "throw") st = "T";
+        else if (e.k === "hit" && e.m === "S" && routes.S) st = "S";
+        else if (e.k === "hit" && e.m === "L" && f.chain <= 1) st = "L4";
+        else if (e.k === "hit" && e.m === "H" && f.chain <= 1) st = "H";
+      }
+      const rt = st ? routes[st] : undefined;
+      if (rt && this.r() < L.route) {
+        this.route = rt;
+        this.routeI = rt.k0 + 1;
+        this.routeFlip = o.x < f.x;
+        this.routeIdle = 0;
+        this.routeHp = o.hp;
+      }
+    }
+    if (this.route) {
+      const busy = o.st === "hit" || o.st === "down" || o.trapT > 0 || o.grabbed > 0;
+      this.routeIdle = busy ? 0 : this.routeIdle + 1;
+      // 콤보 길은 피해 ROUTE_CAP 까지만 (캐릭터마다 길이 달라 너무 아픈 길이 승률을 흔들지 않게) — 그다음은 원래 판단으로
+      if (this.routeI >= this.route.r.length || this.routeIdle > 3 || this.routeHp - o.hp >= ROUTE_CAP) this.route = null;
+      else {
+        let a = this.route.r[this.routeI++];
+        if (this.routeFlip) a = (a & ~(IN.L | IN.R)) | (a & IN.L ? IN.R : 0) | (a & IN.R ? IN.L : 0);
+        out = a;
+        this.lastPress = 0;
+        // (입력을 그대로 내보냄 — finish 의 대시 보정 등은 거치지 않음)
+        this.prevDir = a & (IN.L | IN.R);
+        return a;
+      }
+    }
     if (this.plan.length) {
       out = this.plan.shift()!;
       return finish();
@@ -415,7 +569,9 @@ export class FightAI {
     // ── 내다보기 (지존): 상대가 기술을 쓰거나 빈틈이면 할 수 있는 행동을 다 돌려 보고 고름 ──
     if (L.look && (free || blocking) && !air && dist < 160 && Math.abs(dy) < 60) {
       const hot = oAtk || o.st === "hit" || o.st === "down" || (o.st === "atk" && !o.hit) || (incoming && projDist < 140) || oJumpIn;
-      if (hot) {
+      if (!hot) this.lookDecision = null;
+      else if (this.lookDecision === null) this.lookDecision = this.r() < (L.lookP ?? 1);
+      if (hot && this.lookDecision) {
         const best = this.lookAhead(s, me, L.look, faceOk, toward, away);
         if (best) {
           this.plan = best.slice(1, 6);
@@ -737,21 +893,33 @@ export class FightAI {
     }
     let best: number[] | null = null;
     let bestV = -Infinity;
+    const oTo = o.x < f.x ? IN.R : IN.L;
+    const replies = [held, IN.D, IN.A, IN.J | oTo, IN.B].slice(0, Math.max(1, this.level.robust ?? 1));
     for (const c of cands) {
-      const t = clone(s);
-      const my0 = t.p[me].hp,
-        op0 = t.p[1 - me].hp;
-      let v = 0;
-      for (let k = 0; k < W; k++) {
-        step(t, me === 0 ? [c[k], held] : [held, c[k]]);
-        if (t.phase !== "fight") break;
+      let worst = Infinity,
+        sum = 0;
+      for (let ri = 0; ri < replies.length; ri++) {
+        const rep = replies[ri];
+        const t = clone(s);
+        const my0 = t.p[me].hp,
+          op0 = t.p[1 - me].hp;
+        let v = 0;
+        for (let k = 0; k < W; k++) {
+          // 상대 대응: 0번은 지금 누르는 그대로, 나머지는 2프레임 뒤부터 그 버튼(누르는 건 한 번만, 그다음은 방향만)
+          const oi = ri === 0 || k < 2 ? held : k === 2 ? rep : rep & (IN.L | IN.R | IN.D);
+          step(t, me === 0 ? [c[k], oi] : [oi, c[k]]);
+          if (t.phase !== "fight") break;
+        }
+        const dealt = op0 - t.p[1 - me].hp,
+          took = my0 - t.p[me].hp;
+        v = dealt - took * 1.3;
+        // 맞았거나 넘어진 채 끝나면 감점, 상대가 경직 중이면 가점 (이어 갈 수 있음)
+        if (t.p[me].st === "hit" || t.p[me].st === "down") v -= 40;
+        if (t.p[1 - me].st === "hit" || t.p[1 - me].st === "down") v += 20;
+        worst = Math.min(worst, v);
+        sum += v;
       }
-      const dealt = op0 - t.p[1 - me].hp,
-        took = my0 - t.p[me].hp;
-      v = dealt - took * 1.3;
-      // 맞았거나 넘어진 채 끝나면 감점, 상대가 경직 중이면 가점 (이어 갈 수 있음)
-      if (t.p[me].st === "hit" || t.p[me].st === "down") v -= 40;
-      if (t.p[1 - me].st === "hit" || t.p[1 - me].st === "down") v += 20;
+      const v = replies.length > 1 ? worst * 0.6 + (sum / replies.length) * 0.4 : worst;
       if (v > bestV + 0.5) ((bestV = v), (best = c));
     }
     return best;

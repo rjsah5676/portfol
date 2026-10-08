@@ -3,12 +3,14 @@
 /**
  * 온라인 대전 화면 (16:9 판 안): 로비(방 목록·방 만들기) → 대기실(캐릭터·준비·맵·채팅) → 둘 다 준비되면 경기.
  * 랭크전: 로비의 「⚔ 랭크전」 → 매칭 중 → 수락/거절 → 전용 대기실(맵 랜덤·캐릭터만 고름) → 한 판 → 레이팅 변화.
+ *   12초 안에 사람을 못 찾으면 비슷한 레이팅의 AI와 매칭 → 캐릭터 고르기 → 이 브라우저에서 한 판 → 서버가 입력 기록으로 확인 → 레이팅.
  * 방 연결(RoomSession)은 FightGame이 들고 있어서, 경기 화면에 갔다 와도 대기실 자리가 그대로.
  */
 import { useEffect, useReducer, useRef, useState } from "react";
 import { CHARS, type CharDef } from "@/lib/fight/chars";
 import { MAPS } from "@/lib/fight/maps";
 import { BUILD_ID } from "@/lib/fight/sim";
+import { AI_ID } from "@/lib/fight/ai";
 import { useAuth } from "@/lib/AuthContext";
 import { loadSheet } from "@/lib/fight/sprites";
 import { sfxUi } from "@/lib/fight/sfx";
@@ -18,6 +20,8 @@ import Nick from "@/components/Nick";
 import {
   cleanupEmptyRoom,
   createRoom,
+  rankBotForfeit,
+  rankBotStart,
   rankCancel,
   rankQueue,
   rankRespond,
@@ -59,12 +63,23 @@ export interface MatchCfg {
   room?: string;
 }
 
+/** 랭크전 AI전 설정 (나 = 1P, AI = 2P) */
+export interface BotCfg {
+  id: string;
+  chars: [number, number];
+  map: number;
+  seed: number;
+  botR: number;
+  names: [string, string];
+}
+
 export default function Online({
   session,
   setSession,
   initialRoom,
   played,
   onMatch,
+  onBotMatch,
   onExit,
   watch,
   setWatch,
@@ -79,6 +94,8 @@ export default function Online({
   /** 이미 치른 매치 id (대기실로 돌아왔을 때 같은 판으로 다시 들어가지 않게) */
   played: Set<string>;
   onMatch: (cfg: MatchCfg) => void;
+  /** 랭크전 AI전 시작 */
+  onBotMatch: (cfg: BotCfg) => void;
   onExit: () => void;
 }) {
   const { uid, nick, setNick, nickLoaded, error } = useChessUser();
@@ -98,7 +115,7 @@ export default function Online({
   const startRank = () => {
     setRankErr("");
     sfxUi("ready");
-    rankQueue(String(BUILD_ID), MAPS.length).catch((e) => setRankErr(e?.message || "랭크전에 들어가지 못했어요"));
+    rankQueue(String(BUILD_ID), `${BUILD_ID}:${AI_ID}`, MAPS.length).catch((e) => setRankErr(e?.message || "랭크전에 들어가지 못했어요"));
   };
   // 초대 링크: 접속·닉네임이 준비되면 그 방으로
   const autoRef = useRef(false);
@@ -112,6 +129,10 @@ export default function Online({
     if (error) return <Center>{error}</Center>;
     if (!uid || !nickLoaded) return <Center>접속 중…</Center>;
     if (!nick) return <NickForm onSubmit={setNick} onBack={onExit} />;
+    // 랭크전 AI전: 캐릭터 고르기 / 결과 / (새로고침 등으로 끊긴) 경기
+    if (!session && rank.s === "bot") return <BotRoom key={rank.id} st={rank} nick={nick} onMatch={onBotMatch} />;
+    if (!session && rank.s === "botEnd") return <BotEnd st={rank} onAgain={startRank} onLobby={() => rankCancel()} />;
+    if (!session && rank.s === "botplay") return <BotGone id={rank.id} />;
     if (session)
       return (
         <Room
@@ -145,6 +166,9 @@ export default function Online({
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_20%,#0B0D14_90%)]" />
       {body}
       {!session && (rank.s === "queue" || rank.s === "found") && <RankOverlay st={rank} />}
+      {!session && rank.s === "idle" && rank.note && (
+        <div className={`${KR} absolute inset-x-0 bottom-[1.6cqw] z-30 text-center text-[1.2cqw] text-[#FCA5A5]`}>{rank.note}</div>
+      )}
     </div>
   );
 }
@@ -191,6 +215,7 @@ function RankOverlay({ st }: { st: Extract<RankStatus, { s: "queue" | "found" }>
           <div className="font-mono text-[2.6cqw] font-black tracking-[0.3em] text-white italic">MATCHING</div>
           <div className={`${KR} text-[1.6cqw] font-bold text-white`}>매칭 중입니다…</div>
           <div className="font-mono text-[1.6cqw] text-[#FDE047] tabular-nums">{mmss(now - st.since)}</div>
+          <div className={`${KR} text-[1.1cqw] text-white/45`}>12초 이내 매칭이 잡히지 않을 시 비슷한 실력대의 AI와 매칭이 됩니다</div>
           {st.note && <div className={`${KR} text-[1.2cqw] text-[#FCA5A5]`}>{st.note}</div>}
           <button type="button" onClick={() => (sfxUi("back"), rankCancel())} className={pill}>
             취소 (Esc)
@@ -237,6 +262,258 @@ function RankOverlay({ st }: { st: Extract<RankStatus, { s: "queue" | "found" }>
           <div className={`${KR} text-[1.05cqw] text-white/40`}>맵은 랜덤 · 캐릭터는 다음 화면에서 골라요 · {mmss(st.deadline - now)} 안에</div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ───────────── 랭크전 AI전 ─────────────
+
+/** AI와 매칭됨: 내 캐릭터 고르기 → 준비하면 AI 캐릭터 공개(VS) → 경기 */
+function BotRoom({ st, nick, onMatch }: { st: Extract<RankStatus, { s: "bot" }>; nick: string; onMatch: (cfg: BotCfg) => void }) {
+  const [ch, setCh] = useState(-1);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const [vs, setVs] = useState<BotCfg | null>(null);
+  const [now, setNow] = useState(() => serverNow());
+  useEffect(() => {
+    const t = setInterval(() => setNow(serverNow()), 500);
+    return () => clearInterval(t);
+  }, []);
+  const go = () => {
+    if (busy || vs) return;
+    setBusy(true);
+    setErr("");
+    sfxUi("ready");
+    const mine = ch >= 0 ? ch : Math.floor(Math.random() * CHARS.length);
+    rankBotStart(st.id, mine)
+      .then((r) => {
+        const cfg: BotCfg = { id: st.id, chars: [mine, r.botCh], map: r.map, seed: r.seed, botR: r.botR, names: [nick, st.opp.nick] };
+        loadSheet(CHARS[mine].id).catch(() => {});
+        loadSheet(CHARS[r.botCh].id).catch(() => {});
+        if (MAPS[r.map]?.bg) new Image().src = MAPS[r.map].bg!;
+        setVs(cfg);
+      })
+      .catch((e) => {
+        setErr(e?.message || "시작하지 못했어요");
+        setBusy(false);
+      });
+  };
+  useEffect(() => {
+    if (!vs) return;
+    const t = setTimeout(() => onMatch(vs), 1600);
+    return () => clearTimeout(t);
+  }, [vs, onMatch]);
+  // 키보드: A·D(←→) 고르기, J·Enter 시작, Esc 취소
+  const ref = useRef({ ch, go });
+  useEffect(() => {
+    ref.current = { ch, go };
+  });
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const n = CHARS.length;
+      const k = e.code;
+      if (k === "Escape") rankCancel();
+      else if (k === "KeyA" || k === "ArrowLeft") (sfxUi("move"), setCh((c) => ((c + 1 - 1 + n + 1) % (n + 1)) - 1));
+      else if (k === "KeyD" || k === "ArrowRight") (sfxUi("move"), setCh((c) => ((c + 1 + 1) % (n + 1)) - 1));
+      else if (k === "KeyJ" || k === "Space" || k === "Enter") ref.current.go();
+      else return;
+      e.preventDefault();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  if (vs) {
+    const cs = [CHARS[vs.chars[0]], CHARS[vs.chars[1]]];
+    return (
+      <div className="absolute inset-0 flex items-center justify-center gap-[4cqw] bg-black/40">
+        {cs.map((c, i) => (
+          <div key={i} className={`flex flex-col items-center gap-[0.8cqw] ${i === 0 ? "order-1" : "order-3"}`}>
+            <img
+              src={face(c)}
+              alt={c.name}
+              className={`h-[18cqw] w-[22.5cqw] rounded-[0.8cqw] border-[0.4cqw] object-cover ${PX} [animation:modal-fade_300ms_ease-out]`}
+              style={{ borderColor: c.color, transform: i === 1 ? "scaleX(-1)" : undefined }}
+            />
+            <div className={`${KR} text-[3.2cqw] leading-none font-extrabold`} style={{ color: c.color }}>
+              {c.name}
+            </div>
+            <div className={`${KR} text-[1.5cqw] text-white/80`}>
+              <Nick name={vs.names[i]} />
+              {i === 0 && <span className="ml-[0.5cqw] text-[#FDE047]">(나)</span>}
+            </div>
+          </div>
+        ))}
+        <div className="order-2 flex flex-col items-center gap-[0.6cqw]">
+          <div className="font-mono text-[9cqw] font-black text-[#FDE047] italic drop-shadow-[0_0.5cqw_0_#000]">VS</div>
+          <div className={`${KR} text-[1.3cqw] text-white/70`}>{MAPS[vs.map]?.name}</div>
+        </div>
+      </div>
+    );
+  }
+  const c = ch >= 0 ? CHARS[ch] : null;
+  return (
+    <>
+      <div className="absolute inset-x-[2cqw] top-[2cqw] z-20 flex items-center gap-[1cqw]">
+        <button type="button" onClick={() => (sfxUi("back"), rankCancel())} className={pill}>
+          ◀ 취소
+        </button>
+        <div className="flex min-w-0 flex-1 flex-col items-center">
+          <div className={`${KR} text-[2cqw] font-extrabold text-white drop-shadow-[0_0.2cqw_0_#000]`}>⚔ 랭크전</div>
+          <div className={`${KR} text-[1.15cqw] text-white/55`}>맵 {MAPS[st.map]?.name ?? "?"} · 한 판 승부</div>
+        </div>
+        <span className={`${KR} rounded-full bg-black/50 px-[1.4cqw] py-[0.5cqw] text-[1.2cqw] text-[#FDE047] tabular-nums`}>
+          ⏱ {Math.max(0, Math.ceil((st.deadline - now) / 1000))}초 안에 시작
+        </span>
+      </div>
+      {/* 나 */}
+      {c ? (
+        <img
+          key={c.id}
+          src={art(c)}
+          alt={c.name}
+          className={`absolute top-[16%] left-[1cqw] z-0 h-[64%] w-[22cqw] object-contain object-left-bottom ${PX} [animation:modal-fade_250ms_ease-out]`}
+          style={{ filter: `drop-shadow(0 0 1cqw ${SEAT_COL[0]})` }}
+        />
+      ) : (
+        <div className="absolute top-[22%] left-[4cqw] z-0 flex h-[50%] w-[16cqw] items-center justify-center font-mono text-[12cqw] font-black text-white/25">
+          ?
+        </div>
+      )}
+      <div className="absolute top-[8.4cqw] left-[2cqw] z-10 flex w-[20cqw] flex-col gap-[0.3cqw]">
+        <div className="flex items-center gap-[0.6cqw]">
+          <span className="rounded-[0.3cqw] px-[0.7cqw] font-mono text-[1.2cqw] font-black text-white" style={{ background: SEAT_COL[0] }}>
+            1P
+          </span>
+          <span className={`${KR} truncate text-[1.5cqw] font-bold text-white drop-shadow-[0_0.2cqw_0_#000]`}>
+            <Nick name={nick} />
+            <span className="ml-[0.4cqw] text-[1.1cqw] text-[#FDE047]">(나)</span>
+          </span>
+        </div>
+        <div className={`${KR} text-[2.4cqw] leading-none font-extrabold drop-shadow-[0_0.3cqw_0_#000]`} style={{ color: c?.color ?? "#fff" }}>
+          {c ? c.name : "랜덤"}
+        </div>
+        <span className="font-mono text-[1.3cqw] text-white/60 tabular-nums">{st.me.r}</span>
+      </div>
+      {/* 상대 */}
+      <div className="absolute top-[22%] right-[4cqw] z-0 flex h-[50%] w-[16cqw] items-center justify-center font-mono text-[12cqw] font-black text-white/25">
+        ?
+      </div>
+      <div className="absolute top-[8.4cqw] right-[2cqw] z-10 flex w-[20cqw] flex-col items-end gap-[0.3cqw] text-right">
+        <div className="flex flex-row-reverse items-center gap-[0.6cqw]">
+          <span className="rounded-[0.3cqw] px-[0.7cqw] font-mono text-[1.2cqw] font-black text-white" style={{ background: SEAT_COL[1] }}>
+            2P
+          </span>
+          <span className={`${KR} truncate text-[1.5cqw] font-bold text-white drop-shadow-[0_0.2cqw_0_#000]`}>
+            <Nick name={st.opp.nick} />
+          </span>
+        </div>
+        <span className={`${KR} text-[1.2cqw] text-white/50`}>캐릭터는 시작할 때 공개</span>
+        <span className="font-mono text-[1.3cqw] text-white/60 tabular-nums">{st.opp.r}</span>
+      </div>
+      <div className="absolute top-[9cqw] left-1/2 z-10 flex w-[30cqw] -translate-x-1/2 flex-col items-center gap-[0.6cqw] rounded-[0.8cqw] bg-black/55 px-[1.4cqw] py-[1cqw] backdrop-blur-[2px]">
+        <div className={`${KR} text-center text-[1.2cqw] leading-snug text-white/75`}>
+          12초 안에 사람을 찾지 못해 <b className="text-white">비슷한 실력대의 AI</b>와 매칭됐어요
+        </div>
+        <div className={`${KR} text-center text-[1.02cqw] text-white/45`}>레이팅 반영 · 시작한 뒤에 나가면 패배</div>
+      </div>
+      {/* 아래: 캐릭터 고르기 + 시작 */}
+      <div className="absolute bottom-[1cqw] left-1/2 z-10 flex -translate-x-1/2 items-end gap-[1.4cqw] rounded-[1cqw] bg-black/50 px-[1.2cqw] pt-[0.8cqw] pb-[0.7cqw] backdrop-blur-[2px]">
+        <div className="flex flex-col items-center gap-[0.4cqw]">
+          <div className="flex gap-[0.7cqw]">
+            {[-1, ...CHARS.map((_, i) => i)].map((i) => {
+              const on = ch === i;
+              const cc = i >= 0 ? CHARS[i] : null;
+              return (
+                <button key={i} type="button" disabled={busy} onClick={() => (sfxUi("move"), setCh(i))} className="cursor-pointer disabled:cursor-not-allowed">
+                  {cc ? (
+                    <img
+                      src={face(cc)}
+                      alt={cc.name}
+                      className={`h-[5cqw] w-[6.2cqw] rounded-[0.4cqw] border-[0.25cqw] object-cover ${PX} ${on ? "" : "grayscale-[60%]"}`}
+                      style={{ borderColor: on ? SEAT_COL[0] : "rgba(255,255,255,0.2)" }}
+                    />
+                  ) : (
+                    <span
+                      className="flex h-[5cqw] w-[5cqw] items-center justify-center rounded-[0.4cqw] border-[0.25cqw] bg-black/60 font-mono text-[3cqw] font-black text-white/80"
+                      style={{ borderColor: on ? SEAT_COL[0] : "rgba(255,255,255,0.2)" }}
+                    >
+                      ?
+                    </span>
+                  )}
+                  <span className={`${KR} block pt-[0.2cqw] text-center text-[1cqw] text-white/75`}>{cc ? cc.name : "랜덤"}</span>
+                </button>
+              );
+            })}
+          </div>
+          <div className={`${KR} text-[1cqw] text-white/40`}>
+            {err ? <span className="text-[#F87171]">{err}</span> : keyText("A·D(←→) 고르기 · J(Enter) 시작 · Esc 취소")}
+          </div>
+        </div>
+        <button type="button" disabled={busy} onClick={go} className={`${bigBtn} mb-[1.6cqw] min-w-[12cqw]`}>
+          {busy ? "시작하는 중…" : "시작"}
+        </button>
+      </div>
+    </>
+  );
+}
+
+/** 경기 화면이 아닌데 AI전이 진행 중: 막 끝나 결과를 확인하는 중이면 잠깐 기다리고, 아니면(새로고침 등) 기권 안내 */
+function BotGone({ id }: { id: string }) {
+  const [wait, setWait] = useState(true);
+  useEffect(() => {
+    const t = setTimeout(() => setWait(false), 6000);
+    return () => clearTimeout(t);
+  }, []);
+  if (wait) return <Center>결과 확인 중…</Center>;
+  return (
+    <div className="absolute inset-0 flex flex-col items-center justify-center gap-[1.4cqw]">
+      <div className={`${KR} text-[2cqw] font-bold text-white`}>하던 랭크전 경기에서 나왔어요</div>
+      <div className={`${KR} text-[1.3cqw] text-white/55`}>경기 중에 나가면 패배로 처리돼요</div>
+      <button type="button" onClick={() => rankBotForfeit(id)} className={bigBtn}>
+        확인
+      </button>
+    </div>
+  );
+}
+
+/** AI전 결과 · 레이팅 변화 */
+function BotEnd({ st, onAgain, onLobby }: { st: Extract<RankStatus, { s: "botEnd" }>; onAgain: () => void; onLobby: () => void }) {
+  const win = st.out === 2 ? null : st.out === 0;
+  const d = st.delta;
+  return (
+    <div className="absolute inset-0 flex flex-col items-center justify-center gap-[1.4cqw]">
+      <div className="font-mono text-[2.2cqw] font-black tracking-[0.3em] text-white/70 italic">RANKED</div>
+      <div
+        className={`${KR} text-[4.4cqw] leading-none font-extrabold drop-shadow-[0_0.3cqw_0_#000]`}
+        style={{ color: win === true ? "#FDE047" : win === false ? "#F87171" : "#fff" }}
+      >
+        {win === null ? "무승부" : win ? "승리" : "패배"}
+      </div>
+      <div className={`${KR} text-[1.3cqw] text-white/55`}>
+        vs <Nick name={st.opp.nick} /> ({st.opp.r})
+      </div>
+      {st.r !== undefined && d !== undefined ? (
+        <div className="flex items-baseline gap-[1cqw] font-mono tabular-nums">
+          <span className="text-[1.6cqw] text-white/55">{st.r - d}</span>
+          <span className="text-[1.6cqw] text-white/40">→</span>
+          <span className="text-[3.2cqw] font-black text-white">{st.r}</span>
+          <span className={`text-[2.2cqw] font-black ${d > 0 ? "text-[#4ADE80]" : d < 0 ? "text-[#F87171]" : "text-white/60"}`}>
+            {d > 0 ? `+${d}` : d}
+          </span>
+        </div>
+      ) : (
+        <div className={`${KR} text-[1.3cqw] text-white/55`}>레이팅을 저장하지 못했어요</div>
+      )}
+      {st.note && <div className={`${KR} text-[1.2cqw] text-[#FCA5A5]`}>{st.note}</div>}
+      <div className="mt-[1cqw] flex gap-[1.2cqw]">
+        <button type="button" onClick={onAgain} className={rankBtn}>
+          ⚔ 다시 찾기
+        </button>
+        <button type="button" onClick={onLobby} className={pill}>
+          로비로
+        </button>
+      </div>
     </div>
   );
 }
@@ -420,6 +697,9 @@ function Lobby({
           <div className="flex items-baseline justify-between">
             <span className={`${KR} text-[1.5cqw] font-extrabold text-white`}>랭크전</span>
             <span className={`${KR} text-[1.05cqw] text-white/40`}>회원 · 자동 매칭 · 맵 랜덤</span>
+          </div>
+          <div className={`${KR} text-[1.02cqw] leading-snug text-white/45`}>
+            비슷한 레이팅끼리 매칭 · 12초 이내 매칭이 잡히지 않을 시 비슷한 실력대의 AI와 매칭이 됩니다
           </div>
           <button type="button" disabled={!member} onClick={onRank} className={rankBtn}>
             {member ? "랭크전 찾기" : "회원만 할 수 있어요"}

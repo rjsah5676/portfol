@@ -1,0 +1,65 @@
+import { describe, expect, it } from "vitest";
+import { BOT_MAX, RATING_PLACEMENT, dominance, rankDelta } from "../src/games/fightRating";
+import { botBuild, replayBot } from "../src/games/fightBot";
+import { CHARS } from "../../web/src/lib/fight/chars";
+import { newMatch, step } from "../../web/src/lib/fight/sim";
+import { AI_LEVELS, BOT_MAX as WEB_BOT_MAX, FightAI, aiForRating, aiLevelFor } from "../../web/src/lib/fight/ai";
+
+describe("랭크전 레이팅", () => {
+  it("배치가 끝난 뒤 같은 점수끼리는 ±12", () => {
+    expect(rankDelta(1500, RATING_PLACEMENT, 1500, 1)).toBe(12);
+    expect(rankDelta(1500, RATING_PLACEMENT, 1500, 0)).toBe(-12);
+  });
+  it("배치 중 압도하면 더 오름 (2:0 · 체력 가득 = 1.8배, 3연승부터 1.2배 더)", () => {
+    const plain = rankDelta(1000, 0, 1000, 1);
+    expect(plain).toBe(20);
+    expect(rankDelta(1000, 0, 1000, 1, { m: { rounds: 2, hp: 1 } })).toBe(36);
+    expect(rankDelta(1000, 0, 1000, 1, { m: { rounds: 2, hp: 1 }, streak: 2 })).toBe(43);
+    expect(rankDelta(1000, 0, 1000, 1, { m: { rounds: 1, hp: 0.1 } })).toBeLessThan(30);
+    // 배치가 끝나면 보정 없음
+    expect(rankDelta(1000, RATING_PLACEMENT, 1000, 1, { m: { rounds: 2, hp: 1 }, streak: 5 })).toBe(12);
+    expect(dominance(null)).toBe(0);
+  });
+  it("봇 상한 위에서는 봇을 이겨도 1~2점, 지면 크게", () => {
+    expect(BOT_MAX).toBe(WEB_BOT_MAX);
+    expect(rankDelta(2700, 50, 2600, 1, { bot: true })).toBe(2);
+    expect(rankDelta(2900, 50, 2600, 1, { bot: true })).toBe(1);
+    expect(rankDelta(2900, 50, 2600, 0, { bot: true })).toBeLessThanOrEqual(-20);
+    // 사람끼리는 보통 Elo
+    expect(rankDelta(2900, 50, 2900, 1)).toBe(12);
+  });
+});
+
+describe("레이팅별 AI", () => {
+  it("기준선: 지존 2000 · 초급 200, 그 사이는 섞임", () => {
+    expect(aiForRating(2000).react).toBe(AI_LEVELS[6].react);
+    expect(aiForRating(200).block).toBeCloseTo(AI_LEVELS[1].block);
+    const mid = aiForRating(1800);
+    expect(mid.lookP).toBeCloseTo(0.5);
+    expect(aiLevelFor(6).name).toBe("지존");
+    expect(aiForRating(2600).name).toBe("초월");
+    expect(aiForRating(9999).name).toBe("초월");
+  });
+});
+
+describe("봇전 다시 돌리기", () => {
+  it("같은 입력이면 서버에서도 같은 결과", async () => {
+    expect(botBuild()).toContain(":");
+    const chars: [number, number] = [0, CHARS.length - 1];
+    const s = newMatch(chars, 1);
+    const human = new FightAI(AI_LEVELS[4], 7);
+    const bot = new FightAI(aiForRating(1400, CHARS[chars[1]].id), 1234);
+    const inputs: number[] = [];
+    while (s.phase !== "over" && inputs.length < 30000) {
+      const a = human.next(s, 0);
+      inputs.push(a);
+      step(s, [a, bot.next(s, 1)]);
+    }
+    const r = await replayBot({ chars, map: 1, seed: 1234, botR: 1400, inputs });
+    expect(r.done).toBe(true);
+    expect(r.winner).toBe(s.winner);
+    // 끝까지 안 온 기록은 done=false
+    const cut = await replayBot({ chars, map: 1, seed: 1234, botR: 1400, inputs: inputs.slice(0, 600) });
+    expect(cut.done).toBe(false);
+  }, 60_000);
+});

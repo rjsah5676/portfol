@@ -149,7 +149,13 @@ export type RankStatus =
   | { s: "idle"; note?: string }
   | { s: "queue"; since: number; note?: string }
   | { s: "found"; id: string; deadline: number; accepted: boolean; opp: { nick: string; r: number; n: number }; me: { r: number; n: number } }
-  | { s: "room"; room: string };
+  | { s: "room"; room: string }
+  /** 12초 안에 사람을 못 찾아 비슷한 레이팅의 AI와 매칭 → 캐릭터 고르기 (맵 공개) */
+  | { s: "bot"; id: string; deadline: number; opp: { nick: string; r: number; n: number }; me: { r: number; n: number }; map: number }
+  /** AI와 경기 중 */
+  | { s: "botplay"; id: string; opp: { nick: string; r: number } }
+  /** AI전 끝 (out: 0 = 나 승, 1 = 상대 승, 2 = 무승부) */
+  | { s: "botEnd"; out: 0 | 1 | 2; opp: { nick: string; r: number }; delta?: number; r?: number; note?: string };
 
 export function subscribeRank(cb: (st: RankStatus) => void) {
   return subscribe<RankStatus>("fight.rank", null, {
@@ -160,9 +166,16 @@ export function subscribeRank(cb: (st: RankStatus) => void) {
   });
 }
 /** 큐에 들어가기 — build(게임 데이터 지문)가 같은 사람끼리만 짝지음, maps = 내 화면의 맵 수 */
-export const rankQueue = (build: string, maps: number) => rpc("fight.rankQueue", { build, maps });
+/** build = 게임 데이터 지문 (사람끼리) · bot = 게임 데이터 + AI 지문 (서버와 같아야 AI 매칭) */
+export const rankQueue = (build: string, bot: string, maps: number) => rpc("fight.rankQueue", { build, bot, maps });
 export const rankCancel = () => rpc("fight.rankCancel", {}).catch(() => {});
 export const rankRespond = (id: string, accept: boolean) => rpc("fight.rankRespond", { id, accept }).catch(() => {});
+/** AI전 시작: 내 캐릭터 → AI 캐릭터·난수 씨앗 (여기부터 나가면 패배) */
+export const rankBotStart = (id: string, ch: number) =>
+  rpc<{ botCh: number; seed: number; map: number; botR: number }>("fight.rankBotStart", { id, ch });
+/** AI전 끝: 내 입력 기록 [값, 연속 프레임 수]... → 서버가 같은 경기를 다시 돌려 확인 */
+export const rankBotReport = (id: string, inputs: [number, number][]) => rpc<RankStatus | null>("fight.rankBotReport", { id, inputs });
+export const rankBotForfeit = (id: string) => rpc("fight.rankBotForfeit", { id }).catch(() => {});
 
 /**
  * 방 하나에 들어가 있는 동안의 연결 (대기실 ↔ 경기 화면을 오가도 유지)
@@ -342,9 +355,9 @@ export class RoomSession {
   }
   /** 경기가 끝나면 대기실 상태로 */
   /** 내가 본 경기 결과 (0 = 1P 승, 1 = 2P 승, 2 = 무승부) — 두 선수 결과가 맞으면 회원 전적에 */
-  async reportResult(match: string, winner: number) {
+  async reportResult(match: string, winner: number, margin?: { rounds: number; hp: number }) {
     if (winner !== 0 && winner !== 1 && winner !== 2) return;
-    await rpc("fight.result", { id: this.id, match, winner }).catch(() => {});
+    await rpc("fight.result", { id: this.id, match, winner, margin }).catch(() => {});
   }
   /** 경기 중에 스스로 나감 (기권 — 내 패배로 기록) */
   async forfeit(match: string) {

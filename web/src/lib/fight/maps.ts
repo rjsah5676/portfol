@@ -37,32 +37,6 @@ export interface MapDef {
 
 export const MAPS: MapDef[] = [
   {
-    // 그림: public/fight/bg/temple.webp (1365×768 원본 → 발판 좌표는 0.844배)
-    id: "temple",
-    name: "운해 학당",
-    desc: "구름 위 산정 학당 — 사슬에 매달린 발판들, 오른쪽은 낭떠러지",
-    plats: [
-      { x0: 0, x1: 764, y: 132, solid: true, kind: "floor" },
-      // 책상 돌단 (왼쪽 끝 너머 학당 안쪽은 발판 아님 → 떨어짐)
-      { x0: 340, x1: 563, y: 226, kind: "desk" },
-      // 「學問」 현판 위
-      { x0: 0, x1: 145, y: 432, kind: "beam" },
-      { x0: 582, x1: 717, y: 230, kind: "hang" },
-      { x0: 430, x1: 565, y: 340, kind: "hang" },
-      { x0: 736, x1: 874, y: 340, kind: "hang" },
-      { x0: 585, x1: 717, y: 421, kind: "hang" },
-      { x0: 726, x1: 861, y: 498, kind: "hang" },
-      { x0: 427, x1: 557, y: 531, kind: "hang" },
-      { x0: 561, x1: 700, y: 573, kind: "hang" },
-      { x0: 1009, x1: 1152, y: 475, kind: "beam" },
-    ],
-    spawn: [530, 730],
-    respawn: [300, 560, 700],
-    bg: "/fight/bg/temple.webp",
-    bgPlats: true,
-    bgm: "/fight/bgm.mp3",
-  },
-  {
     // 그림: public/fight/bg/rooftop.webp (1672×941 원본 → 0.689배)
     id: "rooftop",
     name: "노을 옥상",
@@ -82,23 +56,21 @@ export const MAPS: MapDef[] = [
     bgm: "/fight/bgm-rooftop.mp3",
   },
   {
-    // 그림: public/fight/bg/sky.webp (1920×1080 = 판 ×5/3) — 배경에 발판 구름 9개를 합성해 둠
+    // 그림: public/fight/bg/sky.webp (1920×1080 = 판 ×5/3) — 배경에 발판 구름 6개를 합성해 둠
+    // (10.09 정리: 9개 → 6개, 좌우 대칭 — 구름이 너무 많고 흩어져 싸움이 산만하던 것)
     id: "sky",
     name: "천공 구름길",
-    desc: "하늘 위 여기저기 떠 있는 구름 발판 — 가운데 큰 구름 말고는 전부 낭떠러지",
+    desc: "하늘 위 좌우로 나란히 떠 있는 구름 발판 — 아래 큰 구름 말고는 전부 낭떠러지",
     plats: [
-      { x0: 330, x1: 820, y: 140, solid: true, kind: "cloud" },
-      { x0: 60, x1: 230, y: 215, kind: "cloud" },
-      { x0: 895, x1: 1085, y: 250, kind: "cloud" },
-      { x0: 560, x1: 720, y: 300, kind: "cloud" },
-      { x0: 215, x1: 425, y: 320, kind: "cloud" },
-      { x0: 815, x1: 1005, y: 400, kind: "cloud" },
-      { x0: 40, x1: 200, y: 440, kind: "cloud" },
-      { x0: 420, x1: 600, y: 470, kind: "cloud" },
-      { x0: 955, x1: 1110, y: 520, kind: "cloud" },
+      { x0: 310, x1: 845, y: 150, solid: true, kind: "cloud" },
+      { x0: 40, x1: 230, y: 270, kind: "cloud" },
+      { x0: 922, x1: 1112, y: 270, kind: "cloud" },
+      { x0: 270, x1: 490, y: 390, kind: "cloud" },
+      { x0: 662, x1: 882, y: 390, kind: "cloud" },
+      { x0: 466, x1: 686, y: 500, kind: "cloud" },
     ],
-    spawn: [440, 712],
-    respawn: [320, 576, 910],
+    spawn: [440, 716],
+    respawn: [400, 578, 755],
     bg: "/fight/bg/sky.webp",
     bgPlats: true,
     bgm: "/fight/bgm-sky.mp3",

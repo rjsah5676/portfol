@@ -1,9 +1,13 @@
 /**
- * 격투 랭크전 레이팅 (Elo) · 랭크전 경기 기록(캐릭터 통계용) — 랭크전(회원끼리 자동 매칭)만. 일반 방 대전은 반영 안 함.
+ * 격투 랭크전 레이팅 (Elo) · 랭크전 경기 기록(캐릭터 통계용) — 랭크전(회원끼리 자동 매칭 · 못 찾으면 봇)만. 일반 방 대전은 반영 안 함.
  *
  *  - 처음 1000점. 기대 승률 E = 1 / (1 + 10^((상대 − 나) / 400)), 바뀌는 점수 = K × (결과 − E)
  *    결과: 승 1 · 무 0.5 · 패 0
- *  - K: 처음 10판은 40 (빨리 제자리를 찾게), 그 뒤 24
+ *  - K: 처음 10판(배치)은 40, 그 뒤 24
+ *  - 배치 보정: 배치 중에 이기면 얼마나 압도했는지(라운드 2:0, 남은 체력)만큼 최대 1.8배, 배치 3연승부터는 1.2배 더
+ *    → 실력이 이 점수대가 아닌 사람은 배치 동안 빨리 제자리로
+ *  - 봇전: 12초 안에 사람을 못 찾으면 비슷한 레이팅의 AI(봇)와. 봇 레이팅은 고정(최대 BOT_MAX)이라
+ *    BOT_MAX 이상인 사람은 봇을 이겨도 1~2점만 오르고, 지면 보통 Elo 대로 크게 내려감
  *  - 같은 두 사람끼리는 하루(24시간)에 10판까지만 레이팅에 반영 (둘이 짜고 올리기 막기). 승패·캐릭터 통계는 그대로 쌓임
  *  - 비회원은 랭크전에 못 들어옴 (매칭 큐에서 막음)
  */
@@ -18,12 +22,39 @@ export const RATING_PLACEMENT = 10;
 export const PAIR_DAILY_MAX = 10;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+/** 랭크전 봇 레이팅 상한 (web lib/fight/ai.ts BOT_MAX 와 같게) */
+export const BOT_MAX = 2600;
+
 export const kOf = (games: number) => (games < RATING_PLACEMENT ? 40 : 24);
 
-/** 두 사람의 점수 변화. score = 0번 사람의 결과 (1 승 · 0.5 무 · 0 패) */
+/** 경기 내용: 이긴 쪽 기준 라운드 차(0~2)와 마지막 라운드 남은 체력(0~1) — 배치 보정에 씀 */
+export interface Margin {
+  rounds: number;
+  hp: number;
+}
+/** 압도 정도 0~1 (2:0 에 체력 가득이면 1) */
+export const dominance = (m?: Margin | null) =>
+  m ? Math.max(0, Math.min(1, 0.5 * (Math.max(0, Math.min(2, m.rounds)) / 2) + 0.5 * Math.max(0, Math.min(1, m.hp)))) : 0;
+
+/**
+ * 한 사람의 점수 변화.
+ *  r, n: 내 점수·판 수 · opp: 상대 점수 · score: 1 승 · 0.5 무 · 0 패 · m: 이겼을 때 경기 내용 · streak: 배치 연승(이번 판 전)
+ *  bot: 상대가 봇
+ */
+export function rankDelta(r: number, n: number, opp: number, score: number, o: { m?: Margin | null; streak?: number; bot?: boolean } = {}) {
+  const e = 1 / (1 + 10 ** ((opp - r) / 400));
+  let d = kOf(n) * (score - e);
+  if (score === 1 && n < RATING_PLACEMENT) d *= (1 + 0.8 * dominance(o.m)) * ((o.streak ?? 0) >= 2 ? 1.2 : 1);
+  // 봇 레이팅 상한 위: 봇을 이겨도 1~2점 (상한 근처 봇이면 2)
+  if (o.bot && score === 1 && r >= BOT_MAX) return opp >= r - 150 ? 2 : 1;
+  const v = Math.round(d);
+  // 이겼는데 0점·졌는데 0점은 없게 (아주 큰 점수 차여도 1점은 움직임)
+  return score === 1 ? Math.max(1, v) : score === 0 ? Math.min(-1, v) : v;
+}
+
+/** 두 사람의 점수 변화 (배치 보정 없이). score = 0번 사람의 결과 (1 승 · 0.5 무 · 0 패) */
 export function eloDelta(r0: number, r1: number, n0: number, n1: number, score: number): [number, number] {
-  const e0 = 1 / (1 + 10 ** ((r1 - r0) / 400));
-  return [Math.round(kOf(n0) * (score - e0)), Math.round(kOf(n1) * (1 - score - (1 - e0)))];
+  return [rankDelta(r0, n0, r1, score), rankDelta(r1, n1, r0, 1 - score)];
 }
 
 export interface RatingDoc {
@@ -39,6 +70,10 @@ export interface RatingDoc {
   l: number;
   d: number;
   peak: number;
+  /** 지금 연승 (배치 보정용) */
+  streak?: number;
+  /** 봇전 판 수 */
+  bots?: number;
   updatedAt: Date;
 }
 
@@ -51,6 +86,8 @@ export interface RankGame {
   map: number;
   /** 0 = 0번 자리 승, 1 = 1번 자리 승, 2 = 무승부 */
   out: 0 | 1 | 2;
+  /** 봇전 (1번 자리가 봇 — uids[1] 은 "bot:별명") — 전체 캐릭터 통계에선 뺌 */
+  bot?: boolean;
 }
 
 /** 캐릭터 통계: 캐릭터별 승·패·무 (같은 캐릭터끼리 붙은 판은 뺌) + 상성(행 캐릭터가 열 캐릭터를 이긴 판 / 붙은 판) */
@@ -74,15 +111,15 @@ export function createFightRating(db: Database, users: Users) {
 
   return {
     /** 랭크전 한 판 기록 (캐릭터 통계) */
-    async logGame(uids: [string, string], chars: [number, number], map: number, out: 0 | 1 | 2) {
-      await games.insertOne({ _id: newId(), at: new Date(), uids, chars, map, out });
+    async logGame(uids: [string, string], chars: [number, number], map: number, out: 0 | 1 | 2, bot = false) {
+      await games.insertOne({ _id: newId(), at: new Date(), uids, chars, map, out, ...(bot ? { bot: true } : {}) });
       statsCache = null;
     },
 
     /** 캐릭터 통계 (1분 기억) + uid 가 있으면 그 사람의 캐릭터별 기록 */
     async stats(uid?: string): Promise<RankStats> {
       if (!statsCache || Date.now() - statsCache.at > 60_000) {
-        const docs = await games.find({}, { projection: { chars: 1, out: 1 } }).toArray();
+        const docs = await games.find({ bot: { $ne: true } }, { projection: { chars: 1, out: 1 } }).toArray();
         const ch = new Map<number, { c: number; w: number; l: number; d: number }>();
         const vs = new Map<string, { a: number; b: number; w: number; g: number }>();
         const add = (c: number, k: "w" | "l" | "d") => {
@@ -128,7 +165,7 @@ export function createFightRating(db: Database, users: Users) {
     },
 
     /** 경기 결과 반영. out: 0 = 0번 자리 승, 1 = 1번 자리 승, 2 = 무승부. 반영했으면 바뀐 점수와 새 점수 */
-    async rate(uids: [string, string], out: 0 | 1 | 2): Promise<{ delta: [number, number]; r: [number, number] } | null> {
+    async rate(uids: [string, string], out: 0 | 1 | 2, m?: Margin | null): Promise<{ delta: [number, number]; r: [number, number] } | null> {
       const [a, b] = uids;
       if (!a || !b || a === b) return null;
       const [na, nb] = await Promise.all([users.nickByUid(a), users.nickByUid(b)]);
@@ -144,13 +181,16 @@ export function createFightRating(db: Database, users: Users) {
         const ra = da?.r ?? RATING_START,
           rb = dbDoc?.r ?? RATING_START;
         const score = out === 2 ? 0.5 : out === 0 ? 1 : 0;
-        const delta = eloDelta(ra, rb, da?.n ?? 0, dbDoc?.n ?? 0, score);
+        const delta: [number, number] = [
+          rankDelta(ra, da?.n ?? 0, rb, score, { m, streak: da?.streak }),
+          rankDelta(rb, dbDoc?.n ?? 0, ra, 1 - score, { m, streak: dbDoc?.streak }),
+        ];
         const now = new Date();
         const save = (uid: string, name: string, prev: RatingDoc | null, r: number, res: "w" | "l" | "d") =>
           col.updateOne(
             { uid },
             {
-              $set: { name, member: true, r, updatedAt: now, peak: Math.max(prev?.peak ?? RATING_START, r) },
+              $set: { name, member: true, r, updatedAt: now, peak: Math.max(prev?.peak ?? RATING_START, r), streak: res === "w" ? (prev?.streak ?? 0) + 1 : 0 },
               $inc: { n: 1, [res]: 1 },
               $setOnInsert: { _id: newId(), uid },
             },
@@ -161,6 +201,30 @@ export function createFightRating(db: Database, users: Users) {
           save(b, nb, dbDoc, rb + delta[1], out === 2 ? "d" : out === 1 ? "w" : "l"),
         ]);
         return { delta, r: [ra + delta[0], rb + delta[1]] as [number, number] };
+      });
+    },
+
+    /** 봇전 결과 반영 (봇 레이팅은 고정이라 내 점수만). out: 0 = 나 승, 1 = 봇 승, 2 = 무승부 */
+    async rateBot(uid: string, botR: number, out: 0 | 1 | 2, m?: Margin | null): Promise<{ delta: number; r: number } | null> {
+      const name = await users.nickByUid(uid);
+      if (!name) return null;
+      return mutex.run("fight-rating", async () => {
+        const prev = await col.findOne({ uid });
+        const r0 = prev?.r ?? RATING_START;
+        const score = out === 2 ? 0.5 : out === 0 ? 1 : 0;
+        const delta = rankDelta(r0, prev?.n ?? 0, botR, score, { m, streak: prev?.streak, bot: true });
+        const r = Math.max(0, r0 + delta);
+        const res = out === 2 ? "d" : out === 0 ? "w" : "l";
+        await col.updateOne(
+          { uid },
+          {
+            $set: { name, member: true, r, updatedAt: new Date(), peak: Math.max(prev?.peak ?? RATING_START, r), streak: res === "w" ? (prev?.streak ?? 0) + 1 : 0 },
+            $inc: { n: 1, bots: 1, [res]: 1 },
+            $setOnInsert: { _id: newId(), uid },
+          },
+          { upsert: true }
+        );
+        return { delta: r - r0, r };
       });
     },
 

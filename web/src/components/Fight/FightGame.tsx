@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { CHARS } from "@/lib/fight/chars";
 import { MAPS } from "@/lib/fight/maps";
-import { AI_LEVELS, FightAI } from "@/lib/fight/ai";
+import { AI_LEVELS, FightAI, aiForRating, aiLevelFor } from "@/lib/fight/ai";
 import {
   METER_MAX,
   ROUND_SEC,
@@ -50,9 +50,9 @@ import TouchControls, { loadMoveMode, saveMoveMode, type MoveMode } from "./Touc
 import { PauseMenu, SettingsBody } from "./Settings";
 import { useNick } from "@/lib/AuthContext";
 import { plainName } from "@/components/Nick";
-import Online, { type MatchCfg } from "./Online";
+import Online, { type BotCfg, type MatchCfg } from "./Online";
 import { OnlineMatch } from "./onlineMatch";
-import { InputLog, WatchFeed, type RoomSession, type WatchSession } from "@/realtime/fight";
+import { InputLog, WatchFeed, rankBotForfeit, rankBotReport, type RoomSession, type WatchSession } from "@/realtime/fight";
 
 
 const SAVE_KEY = "fight:setup";
@@ -169,6 +169,9 @@ export default function FightGame() {
   /** 관전: 받은 입력이 모자라 기다리는 중 / 앞부분을 빨리 따라잡는 중 */
   const [watchWait, setWatchWait] = useState<"" | "buffer" | "catchup" | "stopped">("");
   const cfgRef = useRef<MatchCfg | null>(null);
+  /** 랭크전 AI전 (12초 안에 사람을 못 찾아 AI와 매칭) — 경기는 여기서 돌리고 끝나면 입력 기록을 서버로 */
+  const botRef = useRef<BotCfg | null>(null);
+  const [botCfg, setBotCfg] = useState<BotCfg | null>(null);
   /** 그리기용 (cfgRef와 같은 값) */
   const [olCfg, setOlCfg] = useState<MatchCfg | null>(null);
   const [played] = useState(() => new Set<string>());
@@ -333,9 +336,12 @@ export default function FightGame() {
     if (!canvas) return;
     const r = new FightRenderer(canvas);
     const ol = cfgRef.current;
+    const bot = ol ? null : botRef.current;
     const watching = !!ol?.spectate;
     r.tags = watching
       ? ["1P", "2P"]
+      : bot
+        ? ["YOU", "2P"]
       : ol
         ? ol.seat === 0
           ? ["YOU", "2P"]
@@ -348,6 +354,8 @@ export default function FightGame() {
     // 랜덤 맵: 첫 판은 선택 화면에서 섞어 뽑힌 맵, 다시하기는 새로 뽑음
     let s = ol
       ? newMatch(ol.chars, ol.map)
+      : bot
+        ? newMatch(bot.chars, bot.map)
       : newMatch(
           [setup.c1, setup.c2],
           setup.map < 0 && setup.rolled !== undefined && MAPS[setup.rolled] ? setup.rolled : pickMap()
@@ -371,12 +379,18 @@ export default function FightGame() {
     leaveMatchRef.current = (bye) => {
       // 경기 중에 메뉴로 나감 = 기권 (상대가 먼저 나갔거나 연결이 끊긴 뒤엔 아님)
       if (bye && om && ol && !watching && !doneReported && !netDead) sessRef.current?.forfeit(ol.match);
+      if (bye && bot && !doneReported) rankBotForfeit(bot.id);
       om?.close(bye && !doneReported);
       om = null;
       feed?.close();
     };
     playBgm(MAPS[s.map].bgm ?? MENU_BGM, true);
-    let ai = new FightAI(AI_LEVELS[setup.level], (Date.now() & 0xffff) + 1);
+    // AI: AI 대전은 고른 단계(캐릭터 보정 포함), 랭크전 AI전은 상대 레이팅 그대로 (서버가 같은 씨앗으로 다시 돌려 확인)
+    let ai = bot
+      ? new FightAI(aiForRating(bot.botR, CHARS[bot.chars[1]].id), bot.seed)
+      : new FightAI(aiLevelFor(setup.level, CHARS[setup.c2]?.id), (Date.now() & 0xffff) + 1);
+    /** AI전: 프레임마다 내 입력 (경기가 끝날 때까지) */
+    const botLog: number[] = [];
     // 연습 모드: 허수아비는 가만히, 둘 다 체력 무한·시간 멈춤·내 게이지 가득. 콤보 피해를 잼
     const practice = setup.mode === "practice" && !ol;
     let pracDmg = 0,
@@ -397,10 +411,10 @@ export default function FightGame() {
       })
       .catch(() => {});
     restartRef.current = () => {
-      if (ol) return;
+      if (ol || bot) return;
       s = newMatch([setup.c1, setup.c2], pickMap());
       playBgm(MAPS[s.map].bgm ?? MENU_BGM, true);
-      ai = new FightAI(AI_LEVELS[setup.level], (Date.now() & 0xffff) + 1);
+      ai = new FightAI(aiLevelFor(setup.level, CHARS[setup.c2]?.id), (Date.now() & 0xffff) + 1);
       hits = 0;
       doneReported = false;
       setResult(null);
@@ -410,7 +424,7 @@ export default function FightGame() {
     r.resize();
     window.addEventListener("resize", onResize);
     const onVis = () => {
-      if (document.visibilityState === "hidden" && !ol) setPaused(true);
+      if (document.visibilityState === "hidden" && !ol && !bot) setPaused(true);
     };
     document.addEventListener("visibilitychange", onVis);
     const onKey = (e: KeyboardEvent) => {
@@ -424,7 +438,7 @@ export default function FightGame() {
       raf = requestAnimationFrame(frame);
       const dt = Math.min(100, now - last);
       last = now;
-      if (pausedRef.current && (!ol || watching)) {
+      if (pausedRef.current && (!ol || watching) && !bot) {
         r.draw(s);
         return;
       }
@@ -507,6 +521,11 @@ export default function FightGame() {
           if (!om.tick(pausedRef.current ? 0 : input.read(0))) continue;
           s = om.state;
           evs = om.events;
+        } else if (bot) {
+          // 랭크전 AI전: 멈추지 않음 (메뉴가 열려 있으면 내 입력은 0) — 끝난 뒤엔 승리 포즈만
+          const p1 = s.phase === "over" || pausedRef.current ? 0 : input.read(0);
+          if (s.phase !== "over") botLog.push(p1);
+          step(s, [p1, s.phase === "over" ? 0 : ai.next(s, 1)]);
         } else {
           const p1 = input.read(0);
           const p2 = setup.mode === "2p" ? input.read(1) : practice ? 0 : ai.next(s, 1);
@@ -597,9 +616,22 @@ export default function FightGame() {
             hits,
             hp: Math.round(hpRatio(s.p[me]) * 100),
           });
+          // 이긴 쪽 기준 라운드 차 · 남은 체력 (랭크전 배치 보정)
+          const margin =
+            s.winner === 0 || s.winner === 1 ? { rounds: Math.abs(s.wins[0] - s.wins[1]), hp: hpRatio(s.p[s.winner]) } : undefined;
+          if (bot) {
+            // 입력 기록을 [값, 연속 프레임 수]로 줄여 보냄 → 서버가 다시 돌려 확인 → 결과는 랭크전 상태로 옴
+            const rle: [number, number][] = [];
+            for (const v of botLog) {
+              const t = rle[rle.length - 1];
+              if (t && t[0] === v) t[1]++;
+              else rle.push([v, 1]);
+            }
+            rankBotReport(bot.id, rle).catch(() => {});
+          }
           if (ol && !watching) {
             // 내가 본 결과를 먼저 알리고(두 선수 결과가 맞으면 회원 전적에) 대기실 상태로
-            sessRef.current?.reportResult(ol.match, s.winner);
+            sessRef.current?.reportResult(ol.match, s.winner, margin);
             sessRef.current?.endMatch(ol.match);
           }
           om?.flushLog();
@@ -644,11 +676,25 @@ export default function FightGame() {
   const start = useCallback(() => {
     cfgRef.current = null;
     setOlCfg(null);
+    botRef.current = null;
+    setBotCfg(null);
+    setPaused(false);
+    setPlaying(true);
+    setTimeout(scrollToGameTop, 50);
+  }, []);
+  const startBot = useCallback((cfg: BotCfg) => {
+    cfgRef.current = null;
+    setOlCfg(null);
+    botRef.current = cfg;
+    setBotCfg(cfg);
+    setNetEnd("");
     setPaused(false);
     setPlaying(true);
     setTimeout(scrollToGameTop, 50);
   }, []);
   const startOnline = useCallback((cfg: MatchCfg) => {
+    botRef.current = null;
+    setBotCfg(null);
     played.add(cfg.match);
     setWatchWait("");
     cfgRef.current = cfg;
@@ -661,10 +707,12 @@ export default function FightGame() {
 
   const [entry, setEntry] = useState<"mode" | "char">("mode");
   const toMenu = useCallback(() => {
-    // 온라인 경기에서 나오면 대기실로 (방에는 그대로)
-    if (cfgRef.current) leaveMatchRef.current(true);
+    // 온라인 경기에서 나오면 대기실로 (방에는 그대로) · 랭크전 AI전은 끝나기 전에 나가면 기권
+    if (cfgRef.current || botRef.current) leaveMatchRef.current(true);
     cfgRef.current = null;
     setOlCfg(null);
+    botRef.current = null;
+    setBotCfg(null);
     setNetEnd("");
     setEntry("mode");
     playBgm(MENU_BGM, true);
@@ -721,7 +769,7 @@ export default function FightGame() {
     />
   );
 
-  const level = AI_LEVELS[setup.level];
+  const level = AI_LEVELS[setup.level] ?? AI_LEVELS[0];
 
   if (!playing) {
     return (
@@ -750,6 +798,7 @@ export default function FightGame() {
               initialRoom={initialRoom}
               played={played}
               onMatch={startOnline}
+              onBotMatch={startBot}
               watch={wsess}
               setWatch={setWsess}
               onExit={() => {
@@ -781,12 +830,15 @@ export default function FightGame() {
   }
 
   const ol = olCfg;
+  const bot = ol ? null : botCfg;
   const watching = !!ol?.spectate;
   // 화면 위 이름: 온라인은 서로의 이름, 혼자 할 때는 내 이름(회원 별명, 비회원은 온라인에서 쓰던 닉네임이 있으면 그것)
   const names: [string, string] = watching
     ? [plainName(ol!.names[0]), plainName(ol!.names[1])]
     : ol
     ? [plainName(ol.names[0]) + (ol.seat === 0 ? " (나)" : ""), plainName(ol.names[1]) + (ol.seat === 1 ? " (나)" : "")]
+    : bot
+    ? [plainName(bot.names[0]) + " (나)", plainName(bot.names[1])]
     : [setup.mode === "2p" ? "1P" : myName || "1P", setup.mode === "ai" ? `CPU ${level.name}` : setup.mode === "practice" ? "허수아비" : "2P"];
   const meSeat = ol?.seat ?? 0;
 
@@ -808,7 +860,7 @@ export default function FightGame() {
       banner =
         hud.winner === 2
           ? { kind: "draw", text: "DRAW" }
-          : (setup.mode === "ai" || ol) && !watching
+          : (setup.mode === "ai" || ol || bot) && !watching
             ? hud.winner === meSeat
               ? { kind: "win", text: "YOU WIN!" }
               : { kind: "lose", text: "YOU LOSE" }
@@ -878,11 +930,15 @@ export default function FightGame() {
         )}
         {paused && (
           <PauseMenu
-            title={ol && !watching ? "MENU" : "PAUSED"}
-            note={ol && !watching ? "온라인 대전은 멈추지 않아요 — 메뉴가 열린 동안 내 캐릭터는 가만히 있어요" : undefined}
+            title={(ol && !watching) || bot ? "MENU" : "PAUSED"}
+            note={
+              (ol && !watching) || bot
+                ? `${bot ? "랭크전은" : "온라인 대전은"} 멈추지 않아요 — 메뉴가 열린 동안 내 캐릭터는 가만히 있어요`
+                : undefined
+            }
             actions={[
               { label: "계속하기", onClick: () => setPaused(false) },
-              ...(!ol
+              ...(!ol && !bot
                 ? [
                     {
                       label: "다시하기",
@@ -894,7 +950,11 @@ export default function FightGame() {
                     { label: "캐릭터 선택", onClick: toChars },
                   ]
                 : []),
-              { label: watching ? "관전 대기실로" : ol ? "기권하고 대기실로" : "메뉴로", onClick: toMenu, danger: !!ol && !watching },
+              {
+                label: watching ? "관전 대기실로" : ol ? "기권하고 대기실로" : bot ? "기권하고 나가기" : "메뉴로",
+                onClick: toMenu,
+                danger: (!!ol && !watching) || !!bot,
+              },
             ]}
             settings={settingsBody}
           />
@@ -919,7 +979,7 @@ export default function FightGame() {
                 ? "무승부"
                 : watching
                   ? `${names[hud?.winner ?? 0]} 승리`
-                  : setup.mode === "ai" || ol
+                  : setup.mode === "ai" || ol || bot
                   ? result.win
                     ? "승리"
                     : "패배"
@@ -934,6 +994,8 @@ export default function FightGame() {
                     { label: "👁 다음 경기 보기", onClick: toMenu, primary: true },
                     { label: "로비로", onClick: () => (toMenu(), setWsess(null)) },
                   ]
+                : bot
+                ? [{ label: "레이팅 결과 보기", sub: "랭크전 · AI전", onClick: toMenu, primary: true }]
                 : ol && sess?.room?.rank
                 ? // 랭크전: 한 판뿐 → 대기실 화면에서 결과·레이팅 변화
                   [{ label: "레이팅 결과 보기", sub: "랭크전 · 한 판 승부", onClick: () => toRoom(false), primary: true }]
@@ -957,17 +1019,17 @@ export default function FightGame() {
 
       <div className="mt-3 flex flex-wrap items-center gap-1.5">
         <button type="button" onClick={() => setPaused((p) => !p)} className={btn}>
-          {paused ? "▶ 계속" : ol ? "☰ 메뉴" : "⏸ 일시정지"}
+          {paused ? "▶ 계속" : ol || bot ? "☰ 메뉴" : "⏸ 일시정지"}
         </button>
         <button type="button" onClick={toMenu} className={btn}>
-          {ol ? "대기실로" : "메뉴로"}
+          {ol ? "대기실로" : bot ? (result ? "나가기" : "기권하고 나가기") : "메뉴로"}
         </button>
         <button type="button" onClick={toggleFs} className={btn}>
           ⛶ 전체화면
         </button>
       </div>
 
-      {!coarse && hud && <HowTo mode={ol ? "online" : setup.mode} chars={hud.ch} />}
+      {!coarse && hud && <HowTo mode={ol || bot ? "online" : setup.mode} chars={hud.ch} />}
 
     </div>
   );

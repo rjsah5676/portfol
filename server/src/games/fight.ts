@@ -5,7 +5,9 @@ import { newId, orderedId } from "../ids";
 import type { Ctx } from "../realtime/gateway";
 import type { LiveRoom } from "../http/admin";
 import { forfeit, newResult, onEnd, settle, type FightResult, type Outcome } from "./fightResult";
-import { createFightRating } from "./fightRating";
+import { BOT_MAX, createFightRating, type Margin } from "./fightRating";
+import { uniqueNickname } from "./poker/nicknames";
+import { botBuild, replayBot } from "./fightBot";
 
 /*
  * 픽셀 격투 온라인 대전
@@ -17,8 +19,10 @@ import { createFightRating } from "./fightRating";
  *  - P2P 연결이 안 될 때 입력 중계 (느리지만 됨)
  *  - 관전용 입력 기록 (선수가 확정 입력을 0.5초치씩 올리면 관전자가 그대로 다시 돌림)
  *  - 승패 기록 (두 선수가 본 결과를 맞춰 보고 회원 전적에 — fightResult.ts)
- *  - 랭크전: 회원끼리 자동 매칭(큐) → 둘 다 수락하면 로비에 안 보이는 전용 방(맵은 서버가 랜덤, 캐릭터는 고름, 한 판만)
- *    → 결과가 정해지면 레이팅·캐릭터 통계 (fightRating.ts). 일반 방 대전은 레이팅 없음
+ *  - 랭크전: 회원끼리 자동 매칭(큐, 레이팅 비슷한 사람부터 — 기다릴수록 범위가 넓어짐) → 둘 다 수락하면 로비에 안 보이는
+ *    전용 방(맵은 서버가 랜덤, 캐릭터는 고름, 한 판만) → 결과가 정해지면 레이팅·캐릭터 통계 (fightRating.ts). 일반 방 대전은 레이팅 없음
+ *  - 12초 안에 사람을 못 찾으면 비슷한 레이팅의 봇(AI)과 매칭 — 경기는 브라우저에서 돌리고(봇 = web lib/fight/ai.ts),
+ *    끝나면 내 입력 기록을 보내서 서버가 같은 경기를 다시 돌려 결과를 확인 (fightBot.ts) → 레이팅
  * 방은 휘발성 데이터라 메모리에만 둠 (서버를 다시 띄우면 진행 중인 방은 사라짐).
  *
  * 구독 채널
@@ -103,6 +107,8 @@ interface RankRoom {
   used: boolean;
   /** 결과를 기록했나 (한 번만) */
   recorded: boolean;
+  /** 두 선수가 알려 온 경기 내용 (배치 보정용) */
+  margins: [Margin | null, Margin | null];
   /** 레이팅 반영 결과 (rated=false: 같은 상대와 하루 판 수를 넘음) — 계산이 끝나면 채워짐 */
   result: { out: 0 | 1 | 2; rated: boolean; delta?: [number, number]; r?: [number, number] } | null;
   /** 이때까지 시작 안 하면 방을 닫음 */
@@ -114,14 +120,41 @@ type RankStatus =
   | { s: "idle"; note?: string }
   | { s: "queue"; since: number; note?: string }
   | { s: "found"; id: string; deadline: number; accepted: boolean; opp: { nick: string; r: number; n: number }; me: { r: number; n: number } }
-  | { s: "room"; room: string };
+  | { s: "room"; room: string }
+  /** 봇과 매칭: 캐릭터 고르기 (맵은 공개) */
+  | { s: "bot"; id: string; deadline: number; opp: { nick: string; r: number; n: number }; me: { r: number; n: number }; map: number }
+  /** 봇전 경기 중 */
+  | { s: "botplay"; id: string; opp: { nick: string; r: number } }
+  /** 봇전 끝 (out: 0 = 나 승, 1 = 상대 승, 2 = 무승부) */
+  | { s: "botEnd"; out: 0 | 1 | 2; opp: { nick: string; r: number }; delta?: number; r?: number; note?: string };
 interface QEntry {
   uid: string;
   nick: string;
   build: string;
+  /** 봇전용 빌드 지문 (게임 데이터 + AI) — 서버와 같아야 봇과 붙음 */
+  bot: string;
   maps: number;
   socket: string;
   since: number;
+  r: number;
+  n: number;
+}
+/** 봇전 표 (한 번만 씀) */
+interface BotTicket {
+  id: string;
+  uid: string;
+  nick: string;
+  opp: { nick: string; r: number; n: number };
+  /** 봇 캐릭터 (경기를 시작할 때 공개) · 맵 · 봇 난수 씨앗 */
+  botCh: number;
+  map: number;
+  seed: number;
+  /** check = 결과 기록을 받아 다시 돌려 보는 중 */
+  stage: "found" | "room" | "play" | "check" | "done";
+  /** 내 캐릭터 · 시작 시각 */
+  ch: number;
+  startedAt: number;
+  timer: ReturnType<typeof setTimeout> | null;
 }
 interface Pending {
   id: string;
@@ -135,6 +168,14 @@ interface Pending {
 const RANK_ACCEPT_MS = 15_000;
 /** 랭크전 방에서 경기를 시작해야 하는 시간 (캐릭터 고르고 준비) */
 const RANK_START_MS = 90_000;
+/** 이만큼 사람을 못 찾으면 봇과 매칭 */
+export const RANK_BOT_MS = 12_000;
+/** 레이팅 매칭 범위: 처음 ±150, 1초 기다릴 때마다 +100 */
+const rankWindow = (waitMs: number) => 150 + (100 * waitMs) / 1000;
+/** 봇전: 시작하고 이 시간 안에 결과를 안 보내면 패배 */
+const BOT_PLAY_MS = 12 * 60_000;
+/** 봇전 결과로 받는 입력 기록 최대 프레임 (3라운드 × 99초 + 연출, 넉넉히) */
+const BOT_MAX_FRAMES = 40_000;
 
 const emptyState = (): RoomState => ({ phase: "wait", match: "", chars: [0, 1], map: 0, pick: -1, delay: 2, maxRb: 10 });
 
@@ -262,7 +303,10 @@ export function registerFight({ gateway, users, db }: Deps, opts: FightOptions =
         rk.result = res ? { out, rated: true, delta: res.delta, r: res.r } : { out, rated: false };
         if (rooms.has(room.id)) changed(room);
       };
-      rating.rate(uids, out).then(done, (e) => {
+      // 경기 내용은 두 선수가 알려 온 것 중 덜 압도적인 쪽 (한쪽이 부풀려도 소용없게)
+      const ms = rk.margins.filter((m): m is Margin => !!m);
+      const m = ms.length ? ms.reduce((a, b) => (a.rounds + a.hp <= b.rounds + b.hp ? a : b)) : null;
+      rating.rate(uids, out, out === 2 ? null : m).then(done, (e) => {
         console.warn("[fight] 레이팅 저장 실패", e);
         done(null);
       });
@@ -570,13 +614,20 @@ export function registerFight({ gateway, users, db }: Deps, opts: FightOptions =
   /** 선수: 내가 본 경기 결과 (0 = 1P 승, 1 = 2P 승, 2 = 무승부) */
   gateway.rpc("fight.result", (ctx, raw) => {
     const o = z
-      .object({ id: roomId, match: z.string().max(40), winner: z.union([z.literal(0), z.literal(1), z.literal(2)]) })
+      .object({
+        id: roomId,
+        match: z.string().max(40),
+        winner: z.union([z.literal(0), z.literal(1), z.literal(2)]),
+        /** 이긴 쪽 기준 라운드 차 · 마지막 라운드 남은 체력 (랭크전 배치 보정) */
+        margin: z.object({ rounds: z.number().int().min(0).max(3), hp: z.number().min(0).max(1) }).optional(),
+      })
       .parse(raw);
     const room = getRoom(o.id);
     const seat = resultSeat(room, ctx.uid, o.match);
     const r = room.result;
     if (!r || seat < 0 || r.done || r.reports[seat] !== null) return null;
     r.reports[seat] = o.winner;
+    if (room.rank && o.margin) room.rank.margins[seat] = o.margin;
     record(room, settle(r));
     return null;
   });
@@ -669,14 +720,18 @@ export function registerFight({ gateway, users, db }: Deps, opts: FightOptions =
   });
 
   // ───────────── 랭크전 매칭 ─────────────
-  // 회원만. 큐에 들어온 순서대로 같은 빌드(게임 데이터 지문)끼리 바로 짝지음 (실력 상관없이 무조건 매칭)
+  // 회원만. 같은 빌드(게임 데이터 지문)끼리, 레이팅이 비슷한 사람부터 짝지음 (처음 ±150, 기다릴수록 넓어짐)
   // → 둘 다 수락하면 전용 방. 한쪽이 거절하거나 시간 안에 안 누르면, 수락한 쪽은 다시 큐 맨 앞으로
+  // 12초 안에 못 찾으면 비슷한 레이팅의 봇(별명은 사람처럼)과 매칭 → 브라우저에서 경기 → 입력 기록으로 서버가 확인
 
   const rankKey = (uid: string) => `fight:rank:${uid}`;
   const rankStatus = new Map<string, RankStatus>();
   const queue: QEntry[] = [];
   const pending = new Map<string, Pending>();
   const pendingOf = (uid: string) => [...pending.values()].find((p) => p.a.uid === uid || p.b.uid === uid);
+  const tickets = new Map<string, BotTicket>();
+  const ticketOf = (uid: string) => [...tickets.values()].find((t) => t.uid === uid && t.stage !== "done");
+  const SERVER_BOT = botBuild();
 
   function setRank(uid: string, st: RankStatus) {
     if (st.s === "idle" && !st.note) rankStatus.delete(uid);
@@ -698,29 +753,41 @@ export function registerFight({ gateway, users, db }: Deps, opts: FightOptions =
     tryMatch();
   }
 
+  /** 짝짓기: 오래 기다린 사람부터, 범위 안에서 레이팅이 가장 가까운 사람과. 12초 넘게 못 찾으면 봇 */
   function tryMatch() {
+    const now = Date.now();
     for (let i = 0; i < queue.length; i++) {
-      const j = queue.findIndex((q, k) => k > i && q.build === queue[i].build && q.uid !== queue[i].uid);
-      if (j < 0) continue;
-      const b = queue.splice(j, 1)[0];
-      const a = queue.splice(i, 1)[0];
+      const a = queue[i];
+      let best = -1;
+      let bestGap = Infinity;
+      for (let k = 0; k < queue.length; k++) {
+        const b = queue[k];
+        if (k === i || b.uid === a.uid || b.build !== a.build) continue;
+        const gap = Math.abs(a.r - b.r);
+        if (gap > Math.max(rankWindow(now - a.since), rankWindow(now - b.since)) || gap >= bestGap) continue;
+        best = k;
+        bestGap = gap;
+      }
+      if (best < 0) continue;
+      const b = queue[best];
+      queue.splice(Math.max(i, best), 1);
+      queue.splice(Math.min(i, best), 1);
       void propose(a, b);
-      i--;
+      i = -1;
     }
+    for (const e of [...queue]) if (now - e.since >= RANK_BOT_MS) botMatch(e);
+    if (queue.length && !matchTimer) matchTimer = setInterval(tryMatch, 1000);
+    if (!queue.length && matchTimer) (clearInterval(matchTimer), (matchTimer = null));
   }
+  let matchTimer: ReturnType<typeof setInterval> | null = null;
 
   async function propose(a: QEntry, b: QEntry) {
     const id = newId();
     const deadline = Date.now() + RANK_ACCEPT_MS;
     const p: Pending = { id, a, b, acc: new Set(), deadline, timer: setTimeout(() => expire(id), RANK_ACCEPT_MS + 500) };
     pending.set(id, p);
-    const [ra, rb] = await Promise.all([rating.ratingOf(a.uid), rating.ratingOf(b.uid)]).catch(() => [
-      { r: 1000, n: 0 },
-      { r: 1000, n: 0 },
-    ]);
-    if (pending.get(id) !== p) return;
-    setRank(a.uid, { s: "found", id, deadline, accepted: false, opp: { nick: b.nick, ...rb }, me: ra });
-    setRank(b.uid, { s: "found", id, deadline, accepted: false, opp: { nick: a.nick, ...ra }, me: rb });
+    setRank(a.uid, { s: "found", id, deadline, accepted: false, opp: { nick: b.nick, r: b.r, n: b.n }, me: { r: a.r, n: a.n } });
+    setRank(b.uid, { s: "found", id, deadline, accepted: false, opp: { nick: a.nick, r: a.r, n: a.n }, me: { r: b.r, n: b.n } });
   }
 
   /** 매칭 취소: 거절·시간 초과·끊김. 수락했던 쪽(과 아직 안 정한 피해자)은 큐 맨 앞으로 */
@@ -741,12 +808,86 @@ export function registerFight({ gateway, users, db }: Deps, opts: FightOptions =
     dropPending(p, losers, "상대가 수락하지 않아 다시 찾는 중");
   }
 
-  gateway.rpc("fight.rankQueue", (ctx, raw) => {
-    const o = z.object({ build: z.string().min(1).max(40), maps: z.number().int().min(1).max(99) }).parse(raw);
+  // ── 봇전 ──
+
+  /** 사람을 못 찾음 → 비슷한 레이팅의 봇. 빌드가 서버와 다르면(새로고침 필요) 봇 없이 계속 사람을 찾음 */
+  function botMatch(e: QEntry) {
+    if (e.bot !== SERVER_BOT) {
+      const st = rankStatus.get(e.uid);
+      const note = "게임이 업데이트됐어요 — 새로고침하면 AI 매칭도 돼요";
+      if (st?.s === "queue" && st.note !== note) setRank(e.uid, { ...st, note });
+      return;
+    }
+    const i = queue.indexOf(e);
+    if (i >= 0) queue.splice(i, 1);
+    // 봇 레이팅: 내 점수 ±60 (0 ~ BOT_MAX), 판 수는 사람처럼 아무렇게나
+    const r = Math.max(0, Math.min(BOT_MAX, Math.round(e.r + (Math.random() * 2 - 1) * 60)));
+    const taken = [...tickets.values()].map((t) => t.opp.nick);
+    const id = newId();
+    const t: BotTicket = {
+      id,
+      uid: e.uid,
+      nick: e.nick,
+      opp: { nick: uniqueNickname(taken), r, n: 12 + Math.floor(Math.random() * 300) },
+      botCh: -1,
+      map: Math.floor(Math.random() * e.maps),
+      seed: 1 + Math.floor(Math.random() * 0x7fffffff),
+      stage: "found",
+      ch: -1,
+      startedAt: 0,
+      timer: null,
+    };
+    tickets.set(id, t);
+    const deadline = Date.now() + RANK_ACCEPT_MS;
+    setRank(e.uid, { s: "found", id, deadline, accepted: false, opp: t.opp, me: { r: e.r, n: e.n } });
+    t.timer = setTimeout(() => {
+      // 수락 안 함 → 취소 (레이팅 변화 없음)
+      if (tickets.get(id) !== t || t.stage !== "found") return;
+      tickets.delete(id);
+      setRank(e.uid, { s: "idle" });
+    }, RANK_ACCEPT_MS + 500);
+  }
+
+  function clearTicket(t: BotTicket) {
+    if (t.timer) clearTimeout(t.timer);
+    t.timer = null;
+    tickets.delete(t.id);
+  }
+
+  /** 봇전 결과 반영 → 상태(botEnd)로 알려 줌. out: 0 = 나 승, 1 = 봇 승, 2 = 무승부 */
+  async function finishBot(t: BotTicket, out: 0 | 1 | 2, m: Margin | null, note?: string) {
+    if (t.stage === "done") return null;
+    t.stage = "done";
+    clearTicket(t);
+    rating
+      .logGame([t.uid, `bot:${t.opp.nick}`], [t.ch, t.botCh], t.map, out, true)
+      .catch((e) => console.warn("[fight] 봇전 기록 실패", e));
+    const res = await rating.rateBot(t.uid, t.opp.r, out, out === 0 ? m : null).catch((e) => {
+      console.warn("[fight] 봇전 레이팅 저장 실패", e);
+      return null;
+    });
+    const st: RankStatus = { s: "botEnd", out, opp: { nick: t.opp.nick, r: t.opp.r }, delta: res?.delta, r: res?.r, note };
+    setRank(t.uid, st);
+    return st;
+  }
+
+  gateway.rpc("fight.rankQueue", async (ctx, raw) => {
+    const o = z
+      .object({ build: z.string().min(1).max(40), bot: z.string().max(80).optional(), maps: z.number().int().min(1).max(99) })
+      .parse(raw);
     const uid = ctx.uid;
     if (!ctx.nick) throw new AppError("MEMBERS_ONLY", "랭크전은 회원만 할 수 있어요.", 403);
     if (pendingOf(uid)) return null;
-    enqueue({ uid, nick: ctx.nick, build: o.build, maps: o.maps, socket: ctx.socket.id, since: Date.now() });
+    // 하던 봇전이 있으면 (경기 중에 나갔다 다시 찾음) 그 판은 패배
+    const old = ticketOf(uid);
+    if (old) {
+      if (old.stage === "check") return null;
+      if (old.stage === "play") await finishBot(old, 1, null);
+      else clearTicket(old);
+    }
+    const { r, n } = await rating.ratingOf(uid).catch(() => ({ r: 1000, n: 0 }));
+    if (pendingOf(uid)) return null;
+    enqueue({ uid, nick: ctx.nick, build: o.build, bot: o.bot ?? "", maps: o.maps, socket: ctx.socket.id, since: Date.now(), r, n });
     return null;
   });
 
@@ -755,14 +896,42 @@ export function registerFight({ gateway, users, db }: Deps, opts: FightOptions =
     const i = queue.findIndex((q) => q.uid === uid);
     if (i >= 0) queue.splice(i, 1);
     const p = pendingOf(uid);
+    const t = ticketOf(uid);
     if (p) dropPending(p, new Set([uid]), "상대가 매칭을 취소해서 다시 찾는 중");
-    else setRank(uid, { s: "idle" });
+    else if (t && t.stage === "play") void finishBot(t, 1, null);
+    else if (t && t.stage === "check") return null;
+    else {
+      if (t) clearTicket(t);
+      setRank(uid, { s: "idle" });
+    }
     return null;
   });
 
   gateway.rpc("fight.rankRespond", (ctx, raw) => {
     const o = z.object({ id: z.string().max(40), accept: z.boolean() }).parse(raw);
     const uid = ctx.uid;
+    const t = tickets.get(o.id);
+    if (t) {
+      // 봇과 매칭: 수락하면 바로 캐릭터 고르기 (봇은 늘 수락)
+      if (t.uid !== uid || t.stage !== "found") return null;
+      if (t.timer) clearTimeout(t.timer);
+      if (!o.accept) {
+        clearTicket(t);
+        setRank(uid, { s: "idle" });
+        return null;
+      }
+      t.stage = "room";
+      const st = rankStatus.get(uid);
+      const deadline = Date.now() + RANK_START_MS;
+      setRank(uid, { s: "bot", id: t.id, deadline, opp: t.opp, me: st?.s === "found" ? st.me : { r: 1000, n: 0 }, map: t.map });
+      // 시간 안에 시작 안 하면 취소 (레이팅 변화 없음)
+      t.timer = setTimeout(() => {
+        if (tickets.get(t.id) !== t || t.stage !== "room") return;
+        clearTicket(t);
+        setRank(uid, { s: "idle", note: "시간 안에 시작하지 않아 랭크전이 취소됐어요" });
+      }, RANK_START_MS);
+      return null;
+    }
     const p = pending.get(o.id);
     if (!p || (p.a.uid !== uid && p.b.uid !== uid)) return null;
     if (!o.accept) {
@@ -780,6 +949,63 @@ export function registerFight({ gateway, users, db }: Deps, opts: FightOptions =
       gateway.emit(rankKey(e.uid), "value", { s: "room", room: id } satisfies RankStatus);
       rankStatus.delete(e.uid);
     }
+    return null;
+  });
+
+  /** 봇전 시작: 내 캐릭터를 정하면 봇 캐릭터·난수 씨앗을 알려 줌 (여기부터는 나가면 패배) */
+  gateway.rpc("fight.rankBotStart", (ctx, raw) => {
+    const o = z.object({ id: z.string().max(40), ch: z.number().int().min(0).max(99) }).parse(raw);
+    const t = tickets.get(o.id);
+    if (!t || t.uid !== ctx.uid || t.stage !== "room") throw bad("랭크전이 취소됐어요.");
+    const nCh = replayBot.charCount();
+    if (o.ch >= nCh) throw bad("없는 캐릭터예요.");
+    if (t.timer) clearTimeout(t.timer);
+    t.ch = o.ch;
+    t.botCh = Math.floor(Math.random() * nCh);
+    t.stage = "play";
+    t.startedAt = Date.now();
+    setRank(t.uid, { s: "botplay", id: t.id, opp: { nick: t.opp.nick, r: t.opp.r } });
+    // 결과를 안 보내고 사라지면 패배
+    t.timer = setTimeout(() => void finishBot(t, 1, null), BOT_PLAY_MS);
+    return { botCh: t.botCh, seed: t.seed, map: t.map, botR: t.opp.r };
+  });
+
+  /** 봇전 끝: 내 입력 기록 [값, 연속 프레임 수]... → 서버가 같은 경기를 다시 돌려 승패 확인 → 레이팅 */
+  gateway.rpc("fight.rankBotReport", async (ctx, raw) => {
+    const o = z
+      .object({
+        id: z.string().max(40),
+        inputs: z.array(z.tuple([z.number().int().min(0).max(0xffff), z.number().int().min(1).max(BOT_MAX_FRAMES)])).max(BOT_MAX_FRAMES),
+      })
+      .parse(raw);
+    const t = tickets.get(o.id);
+    if (!t || t.uid !== ctx.uid || t.stage !== "play") return rankStatus.get(ctx.uid) ?? null;
+    const frames: number[] = [];
+    for (const [v, n] of o.inputs) {
+      if (frames.length + n > BOT_MAX_FRAMES) break;
+      for (let k = 0; k < n; k++) frames.push(v);
+    }
+    // 다시 돌리는 동안 기권·다른 신고가 끼지 않게 (한 번만)
+    if (t.timer) clearTimeout(t.timer);
+    t.timer = null;
+    t.stage = "check";
+    const res = await replayBot({ chars: [t.ch, t.botCh], map: t.map, seed: t.seed, botR: t.opp.r, inputs: frames }).catch((e) => {
+      console.warn("[fight] 봇전 확인 실패", e);
+      return null;
+    });
+    if (!res) return finishBot(t, 2, null, "경기를 확인하지 못해 무승부로 처리됐어요");
+    // 끝까지 안 간 기록(중간에 끊김) = 패배
+    if (!res.done) return finishBot(t, 1, null, "경기 기록이 끝까지 오지 않아 패배로 처리됐어요");
+    return finishBot(t, res.winner === 0 ? 0 : res.winner === 1 ? 1 : 2, res.margin);
+  });
+
+  /** 봇전 기권 (경기 중에 나감) */
+  gateway.rpc("fight.rankBotForfeit", (ctx, raw) => {
+    const o = z.object({ id: z.string().max(40) }).parse(raw);
+    const t = tickets.get(o.id);
+    if (!t || t.uid !== ctx.uid) return null;
+    if (t.stage === "play") void finishBot(t, 1, null);
+    else if (t.stage === "found" || t.stage === "room") (clearTicket(t), setRank(t.uid, { s: "idle" }));
     return null;
   });
 
@@ -806,7 +1032,7 @@ export function registerFight({ gateway, users, db }: Deps, opts: FightOptions =
       watcherOwners: new Map(),
       emptySince: now,
       result: null,
-      rank: { uids: [a.uid, b.uid], map, used: false, recorded: false, result: null, deadline: now + RANK_START_MS },
+      rank: { uids: [a.uid, b.uid], map, used: false, recorded: false, margins: [null, null], result: null, deadline: now + RANK_START_MS },
     };
     rooms.set(room.id, room);
     // 시간 안에 시작 못 하면 (한쪽이 안 들어오거나 준비를 안 함) 취소
@@ -830,6 +1056,8 @@ export function registerFight({ gateway, users, db }: Deps, opts: FightOptions =
   return {
     close() {
       clearInterval(sweep);
+      if (matchTimer) clearInterval(matchTimer);
+      for (const t of tickets.values()) if (t.timer) clearTimeout(t.timer);
     },
     /** (관리자) 지금 열려 있는 방 */
     adminList(): LiveRoom[] {

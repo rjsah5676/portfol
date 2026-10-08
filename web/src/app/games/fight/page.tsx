@@ -237,8 +237,9 @@ export default function FightPage() {
                 <Tabs tab={tab} setTab={setTab} />
                 {tab === "rating" && (
                   <p className={`mb-3 px-1 ${KR} text-[11px] text-white/35`}>
-                    온라인 → ⚔ 랭크전 (회원끼리 자동 매칭 · 맵 랜덤) · 1000점에서 시작 · 강한 상대를 이길수록 많이 올라요 · 처음{" "}
-                    {RATING_PLACEMENT}판은 배치(크게 변함) · 같은 상대와는 하루 10판까지만 반영
+                    온라인 → ⚔ 랭크전 (비슷한 레이팅끼리 자동 매칭 · 12초 안에 못 찾으면 비슷한 실력대의 AI · 맵 랜덤) · 1000점에서
+                    시작 · 강한 상대를 이길수록 많이 올라요 · 처음 {RATING_PLACEMENT}판은 배치(크게 변함, 압도적으로 이기면 더) · 같은
+                    상대와는 하루 10판까지만 반영
                   </p>
                 )}
               </>
