@@ -237,6 +237,8 @@ export default function TableView({
   const seqRef = useRef(-1);
   const logId = useRef(0);
   const namesRef = useRef<Record<number, string>>({});
+  /** 자리 → 캐릭터 (나간 뒤에도 작별 인사를 그 캐릭터 목소리로) */
+  const charsRef = useRef<Record<number, CharId>>({});
   const seatedRef = useRef(-1);
   const keyRef = useRef(0);
   /** 직전 상태의 자리별 건 돈 (라운드가 끝나 팟으로 모일 때 칩 날리기용) */
@@ -276,7 +278,11 @@ export default function TableView({
   // ── 일어난 일 → 소리 · 기록 · 말풍선 · 포즈 ──
   const digest = useCallback(
     (t: TableWire) => {
-      for (const s of t.seats) if (s) namesRef.current[s.seat] = s.name;
+      for (const s of t.seats)
+        if (s) {
+          namesRef.current[s.seat] = s.name;
+          charsRef.current[s.seat] = s.char;
+        }
       const nameOf = (seat: number) => namesRef.current[seat] ?? "?";
       const mySeat = t.seats.find((s) => s?.uid === uid)?.seat ?? -1;
       const lines: LogLine[] = [];
@@ -426,7 +432,11 @@ export default function TableView({
             );
             if (e.seat === mySeat && e.why === "bust" && myCharRef.current)
               playVoice(myCharRef.current, "broke");
-            else if (e.seat !== mySeat) sfx.join();
+            else if (e.seat !== mySeat) {
+              sfx.join();
+              const ch = charsRef.current[e.seat];
+              if (ch && e.why !== "bust") playVoice(ch, "bye");
+            }
             break;
         }
       }
@@ -682,6 +692,7 @@ export default function TableView({
   const now = useNow(deadline > 0);
 
   const tickRef = useRef(0);
+  const hurryRef = useRef(0);
   useEffect(() => {
     if (!hand || hand.result || !deadline) return;
     const mine =
@@ -692,12 +703,21 @@ export default function TableView({
           hand.players[mySeat] &&
           !hand.players[mySeat].chosen));
     const left = Math.ceil((deadline - now) / 1000);
+    // 남이 오래 고민하면 가끔 다른 사람이 재촉 (차례마다 한 번, 40%)
+    if (!mine && left === 4 && hurryRef.current !== deadline && table) {
+      hurryRef.current = deadline;
+      const others = table.seats.filter((x) => x && x.seat !== hand.toAct && x.status === "in");
+      if (others.length && Math.random() < 0.4) {
+        const who = others[Math.floor(Math.random() * others.length)]!;
+        playVoice(who.char, "hurry");
+      }
+    }
     if (mine && left > 0 && left <= 3 && tickRef.current !== deadline * 10 + left) {
       tickRef.current = deadline * 10 + left;
       if (left === 1) sfx.tickLast();
       else sfx.tick();
     }
-  }, [now, deadline, hand, mySeat]);
+  }, [now, deadline, hand, mySeat, table]);
 
   const myChar = me?.char ?? null;
   useEffect(() => {
