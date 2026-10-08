@@ -2154,12 +2154,12 @@ function Center({
         )}
         <div key={shown} className="pk-pot">
           <PotChips ratio={shown / base} size={Math.max(24, sizes.u * 4)} />
-          <span className="flex flex-col items-start leading-none">
+          <span className="flex shrink-0 flex-col items-start leading-none whitespace-nowrap">
             <span className="pk-pot-label">POT</span>
             <Money won={shown} className="text-[1.55em] text-white" />
           </span>
           {!res && street > 0 && collected > 0 && (
-            <span className="ml-[0.2em] rounded-[4px] bg-white/10 px-[0.4em] py-[0.1em] text-[0.72em] text-white/75">
+            <span className="ml-[0.2em] shrink-0 rounded-[4px] bg-white/10 px-[0.4em] py-[0.1em] text-[0.72em] whitespace-nowrap text-white/75">
               베팅 +{fmtShort(street)}
             </span>
           )}

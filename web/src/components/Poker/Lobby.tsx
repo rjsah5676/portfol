@@ -451,7 +451,7 @@ export default function Lobby({
         </span>
       </div>
       <div
-        className={`pk-scroll min-h-0 flex-1 overflow-y-auto p-[0.45em] ${tables !== null && shown.length === 0 ? "flex items-center justify-center" : "grid content-start gap-[0.35em]"}`}
+        className={`pk-scroll min-h-0 flex-1 overflow-y-auto p-[0.45em] ${tables !== null && shown.length === 0 ? "flex items-center justify-center" : "grid auto-rows-max content-start gap-[0.35em]"}`}
       >
         {tables === null ? (
           <p className="p-[1em] text-center text-[0.75em] text-white/40">불러오는 중…</p>

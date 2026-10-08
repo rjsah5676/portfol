@@ -315,7 +315,7 @@ export function PotChips({ ratio, size = 40 }: { ratio: number; size?: number })
   const shown = colors.slice(Math.max(0, top - 2), top + 1);
   return (
     <span
-      className="relative inline-flex items-end"
+      className="relative inline-flex shrink-0 items-end"
       style={{ height: size, width: size * (0.6 + shown.length * 0.5) }}
       aria-hidden
     >
