@@ -573,7 +573,12 @@ export function registerPoker({ gateway, db, users }: Deps, opts: PokerOptions =
       .insertOne(audit as never)
       .catch((e) => console.warn("[poker] 핸드 기록 실패", e));
 
-    for (const s of t.seats) if (s?.leaving || s?.exitAfter) removeSeat(t, s, s.exitAfter === "idle" ? "idle" : "leave");
+    // 나가기 예약: 다이한 사람은 바로, 끝까지 간 사람은 승리/패배 연출을 다 보고 다음 판 직전(tryStart)에 나감
+    for (const s of t.seats) {
+      if (!s) continue;
+      const p = t.lastView?.players[s.seat];
+      if (s.leaving || (s.exitAfter && (!p || p.folded))) removeSeat(t, s, s.exitAfter === "idle" ? "idle" : "leave");
+    }
     emit(t, ...says);
     scheduleNext(t, showdown ? 3000 + 500 * Math.max(2, shown) + 1500 : 2400);
   }

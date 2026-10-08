@@ -1807,23 +1807,40 @@
     opacity: 0;
   }
 }
-/* 미리 눌러 둔 표시 */
+/* 미리 눌러 둔 표시: 버튼 오른쪽 위 모서리에 걸친 금빛 체크 배지 */
 .pk-pre-check {
   position: absolute;
-  top: -0.55em;
-  right: -0.3em;
-  width: 1.5em;
-  height: 1.5em;
+  top: -0.45em;
+  right: -0.35em;
+  z-index: 2;
+  width: 1.35em;
+  height: 1.35em;
   display: flex;
   align-items: center;
   justify-content: center;
   border-radius: 999px;
-  background: #ffd84a;
-  color: #2a1903;
-  font-size: 0.72em;
-  font-weight: 900;
-  border: 2px solid #fff;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.6);
+  background: linear-gradient(160deg, #fff3b0, #ffd84a 45%, #c9921c);
+  border: 1.5px solid rgba(60, 36, 4, 0.85);
+  box-shadow:
+    0 0 0 1.5px rgba(255, 236, 160, 0.55),
+    0 2px 5px rgba(0, 0, 0, 0.55);
+  color: #3a2304;
+  pointer-events: none;
+}
+.pk-pre-check svg {
+  width: 62%;
+  height: 62%;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .pk-pre-check {
+    animation: pk-pre-check 0.22s cubic-bezier(0.2, 1.6, 0.4, 1) backwards;
+  }
+}
+@keyframes pk-pre-check {
+  from {
+    transform: scale(0.3);
+    opacity: 0;
+  }
 }
 /* 내 족보 띠: 크고 또렷하게 */
 .pk-handtag {

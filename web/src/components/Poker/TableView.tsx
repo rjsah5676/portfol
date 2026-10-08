@@ -2485,7 +2485,19 @@ function ActionBar(props: {
               <span className="pk-num text-[1.08em] opacity-0" aria-hidden>
                 0
               </span>
-              {pre === k && <span className="pk-pre-check">✓</span>}
+              {pre === k && (
+                <span className="pk-pre-check" aria-hidden>
+                  <svg viewBox="0 0 12 12" fill="none">
+                    <path
+                      d="M2.4 6.3 4.9 8.7 9.6 3.6"
+                      stroke="currentColor"
+                      strokeWidth="2.1"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                </span>
+              )}
             </button>
           ))}
         </div>
