@@ -306,7 +306,7 @@ const RAW: CharSrc[] = [
     name: "이그나",
     title: "불꽃 술사",
     desc: "불꽃 탄과 긴 불꽃 베기로 거리를 두고 태우는 술사",
-    hp: 1220,
+    hp: 1140, // 1220→1140 (10.08 업화주 판정 넓힌 만큼 기본 스펙 낮춤)
     walk: 1160,
     jumpVx: 980,
     dash: 2500,
@@ -318,7 +318,7 @@ const RAW: CharSrc[] = [
     winQuote: "후후, 잘 탔네~ 불장난은 나랑만 하는 거야!",
     tagline: "BLAZING SOUL",
     difficulty: 1,
-    stats: { atk: 4, reach: 4, move: 3, control: 3, combo: 3, hp: 3 },
+    stats: { atk: 4, reach: 4, move: 3, control: 3, combo: 3, hp: 2 },
     idName: "화염구",
     idDesc: "빠르게 날아가는 불꽃 탄. 맞으면 화상 — 한동안 체력이 조금씩 닳고, 그동안 이그나의 공격이 10% 더 아픔",
     ultName: "업화주",
@@ -329,7 +329,7 @@ const RAW: CharSrc[] = [
         startup: 4,
         active: 3,
         recovery: 6,
-        dmg: 42,
+        dmg: 38, // 42→38 (10.08)
         chip: 0,
         hitstun: 14,
         blockstun: 9,
@@ -343,7 +343,7 @@ const RAW: CharSrc[] = [
         startup: 12, // 10.05: 10→12 (발차기 견제가 너무 셈)
         active: 5,
         recovery: 20,
-        dmg: 86,
+        dmg: 80, // 86→80 (10.08)
         chip: 8,
         hitstun: 21,
         blockstun: 15,
@@ -413,7 +413,8 @@ const RAW: CharSrc[] = [
         box: { x: 0, y: 0, w: 0, h: 0 },
         kd: true,
         summon: {
-          w: 66,
+          // 폭 66→120 (10.08): 그림(불기둥 약 170px)보다 판정이 훨씬 좁아 맞은 것 같은데 안 맞던 것
+          w: 120,
           h: 165,
           delay: 20,
           life: 40,
@@ -902,8 +903,8 @@ const RAW: CharSrc[] = [
           hitstun: 46,
           push: 0,
           hitstop: 10,
-          // 발 위 64px ~ 발 아래 56px (전엔 아래 96px까지라 너무 넓었음 — 10.06 아래쪽 줄임)
-          box: { x: -4, y: 64, w: 90, h: 120 },
+          // 발 위 64px ~ 발 아래 20px (10.06 아래 96→56px, 10.08 56→20px — 높이 떠서 아래 상대를 쉽게 맞히고 콤보로 이어 가던 것)
+          box: { x: -4, y: 64, w: 90, h: 84 },
           pause: false,
           swap: true,
           cancel: undefined,

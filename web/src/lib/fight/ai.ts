@@ -599,7 +599,7 @@ export class FightAI {
       return finish();
     }
     // 공중 아이덴티티로 자리 바꾸기 (건모 Alt+Tab): 상대 위에서 내려오는 중이면 가끔
-    if (f.st === "jump" && f.cd === 0 && c.moves.S.air?.swap && dist < 50 && dy < -10 && dy > -90 && this.r() < L.aggro * 0.2) {
+    if (f.st === "jump" && f.cd === 0 && c.moves.S.air?.swap && dist < 50 && dy < -10 && dy > -70 && this.r() < L.aggro * 0.2) {
       out |= toward;
       press(IN.C);
       return finish();
