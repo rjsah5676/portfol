@@ -351,26 +351,29 @@ function Settings() {
   const [open, setOpen] = useState(false);
   const [snd, setSnd] = useState<SoundSettings>(() => getSound());
   useEffect(() => onSoundChange(() => setSnd({ ...getSound() })), []);
-  const row = (label: string, key: "bgm" | "sfx" | "voice") => (
-    <label className="grid grid-cols-[3.4em_1fr_2em] items-center gap-[0.4em]">
-      <span className={snd.mute ? "text-white/35" : "text-white/80"}>{label}</span>
-      <input
-        type="range"
-        className="pk-range"
-        min={0}
-        max={100}
-        step={5}
-        value={Math.round(snd[key] * 100)}
-        disabled={snd.mute}
-        onChange={(e) => setSound({ [key]: Number(e.target.value) / 100 })}
-        style={{ "--fill": `${Math.round(snd[key] * 100)}%`, height: "1.3em" } as CSSProperties}
-        aria-label={`${label} 음량`}
-      />
-      <span className="pk-num text-right text-[0.85em] text-white/55">
-        {Math.round(snd[key] * 100)}
-      </span>
-    </label>
-  );
+  const row = (label: string, key: "bgm" | "sfx" | "voice") => {
+    const v = Math.round(snd[key] * 100);
+    return (
+      <label className={`grid gap-[0.15em] ${snd.mute ? "opacity-40" : ""}`}>
+        <span className="flex items-baseline justify-between">
+          <span className="text-white/85">{label}</span>
+          <span className="pk-num text-[0.9em] text-white/55">{v}</span>
+        </span>
+        <input
+          type="range"
+          className="pk-range w-full min-w-0"
+          min={0}
+          max={100}
+          step={5}
+          value={v}
+          disabled={snd.mute}
+          onChange={(e) => setSound({ [key]: Number(e.target.value) / 100 })}
+          style={{ "--fill": `${v}%`, height: "1.4em" } as CSSProperties}
+          aria-label={`${label} 음량`}
+        />
+      </label>
+    );
+  };
   return (
     <span className="relative flex">
       <button
@@ -393,47 +396,48 @@ function Settings() {
         </svg>
       </button>
       {open && (
-        <div className="pk-frame pk-pop absolute top-[calc(100%+6px)] right-0 z-50 grid w-[17em] gap-[0.5em] p-[0.6em] text-[0.8em]">
-          <div className="pk-frame-title">소리</div>
-          <button
-            type="button"
-            onClick={() => setSound({ mute: !snd.mute })}
-            className="pk-btn pk-btn-ghost flex items-center justify-between px-[0.7em] py-[0.4em]"
-          >
-            <span>전체</span>
-            <span className={snd.mute ? "text-white/40" : "text-[var(--pk-call)]"}>
-              {snd.mute ? "OFF" : "ON"}
-            </span>
-          </button>
+        <div className="pk-frame pk-pop absolute top-[calc(100%+6px)] right-0 z-50 grid w-[15.5em] bg-[rgba(12,13,20,0.97)] max-w-[calc(100vw-24px)] gap-[0.65em] p-[0.75em] text-[0.82em]">
+          <div className="flex items-center justify-between">
+            <span className="pk-frame-title">소리</span>
+            <button
+              type="button"
+              onClick={() => setSound({ mute: !snd.mute })}
+              aria-pressed={!snd.mute}
+              className={`pk-btn px-[0.8em] py-[0.2em] text-[0.9em] ${snd.mute ? "pk-btn-ghost" : "pk-btn-call"}`}
+            >
+              {snd.mute ? "꺼짐" : "켜짐"}
+            </button>
+          </div>
           {row("배경음악", "bgm")}
           {row("효과음", "sfx")}
-          {row("음성", "voice")}
-          <div className="grid grid-cols-[3.4em_1fr] items-center gap-[0.4em]">
-            <span className="text-white/80">로비 곡</span>
-            <div className="grid grid-cols-3 gap-[0.25em]">
+          {row("캐릭터 음성", "voice")}
+          <div className={`grid gap-[0.3em] ${snd.mute ? "opacity-40" : ""}`}>
+            <span className="text-white/85">로비 곡</span>
+            <div className="grid grid-cols-3 gap-[0.3em]">
               {(
                 [
                   [1, "1번"],
                   [2, "2번"],
-                  [0, "번갈아"],
+                  [0, "전체"],
                 ] as const
               ).map(([v, label]) => (
                 <button
                   key={v}
                   type="button"
                   aria-pressed={snd.lobby === v}
+                  title={v === 0 ? "들어올 때마다 1번 · 2번 중 하나" : undefined}
                   onClick={() => {
                     setSound({ lobby: v });
                     refreshBgm();
                   }}
-                  className="pk-preset py-[0.3em] text-[0.9em]"
+                  className="pk-preset min-w-0 py-[0.35em] text-[0.92em]"
                 >
                   {label}
                 </button>
               ))}
             </div>
           </div>
-          <p className="text-[0.85em] leading-relaxed text-white/45">
+          <p className="border-t border-white/10 pt-[0.5em] text-[0.82em] leading-relaxed text-white/40">
             BETA · 캐릭터 음성은 준비 중이에요.
           </p>
         </div>

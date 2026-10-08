@@ -72,6 +72,7 @@ import {
   Profile,
   Rise,
   Suit,
+  PotPile,
   TimerRing,
 } from "./parts";
 import { SevenActions, SevenStage, sevenHint, sevenSeatCards } from "./SevenParts";
@@ -1899,17 +1900,27 @@ function Center({
     <>
       {hand.game === "seven" ? <SevenStage view={hand} /> : <HoldemStage view={hand} />}
       {/* 팟: 크게 · 금액이 바뀌면 살짝 튐 */}
-      <div key={shown} className="pk-pot">
-        <PotChips ratio={shown / base} size={Math.max(24, sizes.u * 4)} />
-        <span className="flex flex-col items-start leading-none">
-          <span className="pk-pot-label">POT</span>
-          <Money won={shown} className="text-[1.55em] text-white" />
-        </span>
-        {!res && street > 0 && collected > 0 && (
-          <span className="ml-[0.2em] rounded-[4px] bg-white/10 px-[0.4em] py-[0.1em] text-[0.72em] text-white/75">
-            베팅 +{fmtShort(street)}
-          </span>
+      <div className="flex items-end gap-[0.35em]">
+        {/* 진짜 칩 더미: 건 돈이 모일 때마다 쌓이고, 승자에게 날아가면 사라짐 */}
+        {!(res && settled) && (
+          <PotPile
+            amount={collected > 0 || res ? shown : 0}
+            base={base}
+            size={Math.max(24, sizes.u * 4.4)}
+          />
         )}
+        <div key={shown} className="pk-pot">
+          <PotChips ratio={shown / base} size={Math.max(24, sizes.u * 4)} />
+          <span className="flex flex-col items-start leading-none">
+            <span className="pk-pot-label">POT</span>
+            <Money won={shown} className="text-[1.55em] text-white" />
+          </span>
+          {!res && street > 0 && collected > 0 && (
+            <span className="ml-[0.2em] rounded-[4px] bg-white/10 px-[0.4em] py-[0.1em] text-[0.72em] text-white/75">
+              베팅 +{fmtShort(street)}
+            </span>
+          )}
+        </div>
       </div>
       {hand.game === "holdem" && (
         <HoldemBoard view={hand} tier={table.tier} sizes={sizes} settled={settled} />

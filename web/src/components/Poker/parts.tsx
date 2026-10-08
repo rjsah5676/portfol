@@ -242,6 +242,65 @@ export function Bet({
 }
 
 /** 팟: 칩 더미 그림 (금액이 클수록 색이 세짐) */
+/**
+ * 팟 옆에 실제로 쌓이는 칩 더미. 판돈 대비 팟 크기에 따라 칩 개수가 늘어나고(로그 비율, 최대 40개),
+ * 큰 색부터 기둥(최대 8개)으로 쌓음. 새로 생긴 칩만 위에서 툭 떨어짐 (key 가 그대로인 칩은 다시 안 움직임).
+ */
+const PILE_COLORS = ["white", "red", "blue", "green", "black", "gold"] as const;
+export function PotPile({
+  amount,
+  base,
+  size = 30,
+}: {
+  amount: number;
+  base: number;
+  size?: number;
+}) {
+  const ratio = amount / Math.max(1, base);
+  const total = amount > 0 ? Math.min(40, Math.max(2, Math.round(6 * Math.log2(1 + ratio)))) : 0;
+  const top = PILE_COLORS.indexOf(chipColor(ratio));
+  const cols: { color: (typeof PILE_COLORS)[number]; n: number; key: string }[] = [];
+  let left = total;
+  // 제일 큰 색 기둥부터, 한 단계씩 작은 색으로 (색이 바닥나면 다시 위에서)
+  for (let c = 0; left > 0 && c < 6; c++) {
+    const color = PILE_COLORS[Math.max(0, top - (c % (top + 1)))];
+    const n = Math.min(8, left);
+    cols.push({ color, n, key: `c${c}` });
+    left -= n;
+  }
+  const shown = cols.slice(0, 6);
+  if (!shown.length) return null;
+  const step = size * 0.17;
+  const gap = size * 0.62;
+  return (
+    <span
+      className="pk-pile relative block shrink-0"
+      style={{ width: gap * (shown.length - 1) + size, height: size }}
+      aria-hidden
+    >
+      {shown.map((col, ci) =>
+        Array.from({ length: col.n }, (_, j) => (
+          <img
+            key={`${col.key}-${j}`}
+            src={asset.chip(col.color, "side")}
+            alt=""
+            draggable={false}
+            className="pk-chipdrop absolute"
+            style={{
+              width: size,
+              height: size,
+              left: ci * gap,
+              bottom: j * step,
+              zIndex: j + 1,
+              animationDelay: `${(ci * 2 + j) * 18}ms`,
+            }}
+          />
+        ))
+      )}
+    </span>
+  );
+}
+
 export function PotChips({ ratio, size = 40 }: { ratio: number; size?: number }) {
   const colors: ("white" | "red" | "blue" | "green" | "black" | "gold")[] = [
     "white",
