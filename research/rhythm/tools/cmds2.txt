@@ -1,0 +1,10 @@
+fullcombo --bpm-label 180 --boss '{"loud":0.48,"full":0.78}' --levels 3,6,9,13,16
+jilju --boss '{}' --tweak '{"hard":{"fill":0.3},"expert":{"fill":0.15}}' --levels 3,5,8,12,16
+natsukasumi --boss '{}' --tweak '{"hard":{"fill":0.9},"expert":{"fill":1.3}}' --levels 2,4,7,12
+rinkaku --boss '{}' --tweak '{"expert":{"fill":0.4}}' --levels 2,4,8,12
+newdim --boss '{"loud":0.55,"full":0.85}' --tweak '{"expert":{"fill":0.4}}' --levels 3,6,10,13,15
+monarch --bpm-label 150 --boss '{"burstEvery":2}' --tweak '{"hard":{"fill":0.35},"expert":{"fill":0.3},"nightmare":{"fill":0.4}}' --levels 3,6,11,13,16
+velocity --bpm-label 180 --boss '{"loud":0.45,"full":0.72,"burstEvery":4,"burstSub":6}' --explus '{}' --levels 3,6,11,14,17,20
+anima --boss '{}' --explus '{}' --levels 3,6,9,13,17,20
+aragami --boss '{}' --explus '{}' --levels 3,6,9,13,17,21
+freedomdive --boss '{}' --explus '{}' --levels 3,5,9,12,15,20
