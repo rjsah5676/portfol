@@ -10,7 +10,7 @@ import {
   type ReactNode,
 } from "react";
 import type { ApiError } from "@/lib/api/errors";
-import { asset, chipColor, preloadChar, roomTint } from "@/lib/poker/assets";
+import { asset, chipColor, heroReady, preloadChar, roomTint } from "@/lib/poker/assets";
 import { cardLabel, categoryOf, evaluate } from "@/lib/poker/cards";
 import {
   ACT_MS,
@@ -67,6 +67,7 @@ import { COMPACT_RATIO, compactV, layoutFor, type Orient, type Spot } from "./la
 import {
   Bet,
   CharSprite,
+  HeroSprite,
   CutIn,
   EmoteImg,
   FaceIcon,
@@ -2104,6 +2105,11 @@ function ActTag({ a, edge }: { a: string; edge?: "l" | "r" }) {
   );
 }
 
+/** 전신 그림(hero)은 예전 허벅지까지 그림보다 몇 배 높게 그려야 머리 크기가 같아짐 */
+const HERO_K = 1.7;
+/** 가로판은 아래 자리가 넉넉해서 조금 작게 · 조금 위로 → 무릎까지 보임 */
+const HERO_KH = 1.32;
+
 /** 이름표 테두리를 따라 줄어드는 남은 시간 (초록 → 노랑 → 빨강) */
 function PlateTimer({ frac }: { frac: number }) {
   const color = frac > 0.5 ? "#4be38a" : frac > 0.25 ? "#ffd84a" : "#ff4d5e";
@@ -2387,16 +2393,30 @@ function HeroArea(props: {
       </div>
     </div>
   );
+  const hero = heroReady(me.look ?? me.char);
   return (
     <>
       {/* 가로판: 왼쪽 아래 내 캐릭터 + 이름표 */}
       {H ? (
         <div className="absolute bottom-[8px] left-[24px]" style={{ zIndex: 6 }}>
-          <div
-            className={`pk-seat-sprite pointer-events-none absolute bottom-[calc(100%-8px)] left-0 ${waiting ? "pk-seat-turn" : ""}`}
-          >
-            <CharSprite char={me.look ?? me.char} pose={pose} w={(heroSprH * 3) / 4} dim={dim} />
-          </div>
+          {hero ? (
+            // 전신 그림: 머리는 예전 자리 근처, 몸은 이름표 뒤로 내려가 무릎까지 보임
+            <div
+              className={`pk-seat-sprite pointer-events-none absolute ${waiting ? "pk-seat-turn" : ""}`}
+              style={{
+                bottom: `calc(100% - 8px - ${Math.round(heroSprH * (HERO_KH - 1.12))}px)`,
+                left: Math.round(heroSprH * (0.375 - HERO_KH / 3)),
+              }}
+            >
+              <HeroSprite char={me.look ?? me.char} pose={pose} h={heroSprH * HERO_KH} dim={dim} />
+            </div>
+          ) : (
+            <div
+              className={`pk-seat-sprite pointer-events-none absolute bottom-[calc(100%-8px)] left-0 ${waiting ? "pk-seat-turn" : ""}`}
+            >
+              <CharSprite char={me.look ?? me.char} pose={pose} w={(heroSprH * 3) / 4} dim={dim} />
+            </div>
+          )}
           {/* 내 이모티콘 말풍선: 머리 오른쪽 옆, 꼬리가 머리를 가리킴 */}
           {emote && (
             <div
@@ -2423,10 +2443,21 @@ function HeroArea(props: {
         <div className="absolute left-[8px]" style={{ bottom: plateBottom, zIndex: 9 }}>
           {sprV > 0 && (
             <div
-              className={`pk-seat-sprite pointer-events-none absolute left-0 ${waiting ? "pk-seat-turn" : ""}`}
-              style={{ bottom: `calc(100% - ${Math.round(sprV * 0.3)}px)` }}
+              className={`pk-seat-sprite pointer-events-none absolute ${waiting ? "pk-seat-turn" : ""}`}
+              style={
+                hero
+                  ? {
+                      bottom: `calc(100% - ${Math.round(sprV * 0.3 + sprV * (HERO_K - 1))}px)`,
+                      left: Math.round(sprV * (0.375 - HERO_K / 3)),
+                    }
+                  : { bottom: `calc(100% - ${Math.round(sprV * 0.3)}px)`, left: 0 }
+              }
             >
-              <CharSprite char={me.look ?? me.char} pose={pose} w={(sprV * 3) / 4} dim={dim} />
+              {hero ? (
+                <HeroSprite char={me.look ?? me.char} pose={pose} h={sprV * HERO_K} dim={dim} />
+              ) : (
+                <CharSprite char={me.look ?? me.char} pose={pose} w={(sprV * 3) / 4} dim={dim} />
+              )}
             </div>
           )}
           {/* 내 이모티콘: 캐릭터가 있으면 그 어깨 옆, 없으면 내 이름표 위 오른쪽 */}

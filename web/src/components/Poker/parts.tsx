@@ -386,6 +386,23 @@ export function CharSprite({
   );
 }
 
+/** 내 캐릭터 전신 그림 (2:3, 포즈 8장을 겹쳐 두고 바뀔 때 서서히). 높이(px)로 크기를 줌 */
+export function HeroSprite({ char, pose, h, dim }: { char: Look; pose: Pose; h: number; dim?: boolean }) {
+  return (
+    <span
+      className="pk-sprite"
+      data-pose={pose}
+      data-dim={dim ? "1" : undefined}
+      style={{ width: Math.round((h * 2) / 3), height: Math.round(h) }}
+      aria-hidden
+    >
+      {POSES.map((p) => (
+        <img key={p} src={asset.hero(char, p)} alt="" draggable={false} data-on={p === pose ? "1" : undefined} />
+      ))}
+    </span>
+  );
+}
+
 /** 이름표의 얼굴 (표정이 바뀌면 부드럽게) */
 export function FaceIcon({
   char,
