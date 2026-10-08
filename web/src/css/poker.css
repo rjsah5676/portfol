@@ -877,16 +877,22 @@
     0 0 0 2px rgba(255, 216, 74, 0.35),
     0 0 14px rgba(255, 216, 74, 0.55);
 }
-.pk-plate-timer {
+.pk-plate-ring {
   position: absolute;
-  left: 4px;
-  right: 4px;
-  bottom: 2px;
-  height: 3px;
-  border-radius: 2px;
-  background: linear-gradient(90deg, #ff5a3c, #ffd84a);
-  transform-origin: 0 50%;
-  transition: transform 0.25s linear;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+.pk-plate-ring rect {
+  fill: none;
+  stroke-width: 3px;
+  stroke-linecap: round;
+  transition:
+    stroke-dasharray 0.25s linear,
+    stroke 0.4s;
 }
 .pk-seat-char .pk-sprite img {
   filter: drop-shadow(0 calc(var(--u) * 0.4) calc(var(--u) * 0.8) rgba(0, 0, 0, 0.5));
@@ -1359,6 +1365,9 @@
   filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.6));
   animation: pk-acttag 0.6s cubic-bezier(0.2, 1.5, 0.35, 1) both;
 }
+.pk-acttag-img.pk-acttag-me {
+  height: 3.2em;
+}
 .pk-acttag::after {
   content: "";
   position: absolute;
@@ -1646,22 +1655,41 @@
 }
 .pk-count-sm {
   position: absolute;
-  right: -0.9em;
-  top: 50%;
-  width: 1.7em;
-  height: 1.7em;
-  margin-top: -0.85em;
+  right: -0.75em;
+  top: -0.75em;
+  z-index: 3;
+  width: 1.75em;
+  height: 1.75em;
   border-radius: 999px;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #e0283c;
-  border: 2px solid #fff;
+  background: radial-gradient(circle at 50% 35%, #ff6b78, #c4142a 70%);
+  border: 2px solid #1a0508;
+  box-shadow:
+    0 0 0 2px #ffd0d5,
+    0 0 12px rgba(255, 60, 80, 0.9);
   color: #fff;
   font-family: "Black Han Sans", sans-serif;
   font-size: 1em;
-  box-shadow: 0 0 10px rgba(255, 60, 80, 0.8);
-  animation: pk-acttag 0.4s cubic-bezier(0.2, 1.5, 0.35, 1) both;
+  line-height: 1;
+  padding-top: 0.06em;
+  text-shadow: 0 1px 0 #5a0010;
+  animation: pk-count-sm 1s ease-out both;
+}
+@keyframes pk-count-sm {
+  0% {
+    transform: scale(1.6);
+    opacity: 0;
+  }
+  15% {
+    transform: scale(0.92);
+    opacity: 1;
+  }
+  30%,
+  100% {
+    transform: scale(1);
+  }
 }
 /* 지금 차례 알림 (행동 바 자리) */
 .pk-turnbar {
@@ -1954,7 +1982,7 @@
 .pk-handtag,
 .pk-resulttag {
   display: inline-block;
-  padding: 0.12em 0.85em 0.18em;
+  padding: 0.17em 0.85em 0.11em;
   border-radius: 9px;
   font-family: "Black Han Sans", "Nanum Gothic", sans-serif;
   line-height: 1.15;
@@ -1982,18 +2010,52 @@
     drop-shadow(0 1.5px 0 #120a00) drop-shadow(0 -1.5px 0 #120a00)
     drop-shadow(0 3px 2px rgba(0, 0, 0, 0.6));
 }
-/* 내 족보 띠 */
+/* 내 족보 띠: 아직 메이드 아님 → 차분한 은색 */
 .pk-handtag {
-  font-size: 1.3em;
+  font-size: 1.25em;
+  border: 1.5px solid rgba(255, 255, 255, 0.3);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0) 50%),
+    linear-gradient(180deg, #232838, #0b0d14);
 }
+.pk-handtag .pk-tag-t {
+  background-image: linear-gradient(180deg, #ffffff 35%, #d9dfeb 60%, #9aa5bb);
+}
+/* 메이드: 금테 + 붉은 안쪽 + 빛이 한 번씩 훑고 지나감 */
 .pk-handtag.pk-made {
-  border-color: #ffd84a;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.3),
-    0 0 16px rgba(255, 216, 74, 0.5),
-    0 4px 12px rgba(0, 0, 0, 0.6);
+  position: relative;
+  overflow: hidden;
+  font-size: 1.4em;
+  border: 2px solid transparent;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0) 50%) padding-box,
+    linear-gradient(180deg, #5a1a0a, #1a0806) padding-box,
+    linear-gradient(135deg, #fff3b0, #ffd23f 30%, #b8770a 55%, #ffe58a 78%, #c98a10) border-box;
+}
+.pk-handtag.pk-made::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(105deg, transparent 35%, rgba(255, 240, 180, 0.5) 50%, transparent 65%);
+  transform: translateX(-120%);
+  pointer-events: none;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .pk-handtag.pk-made::before {
+    animation: pk-made-shine 2.8s ease-in-out 0.3s infinite;
+  }
+}
+@keyframes pk-made-shine {
+  0% {
+    transform: translateX(-120%);
+  }
+  45%,
+  100% {
+    transform: translateX(120%);
+  }
 }
 .pk-handtag.pk-made .pk-tag-t {
+  position: relative;
   background-image: linear-gradient(180deg, #fff8d0 20%, #ffd23f 50%, #e08a00);
 }
 /* 쇼다운 족보 이름: 뭐로 이기고 졌는지 크게 (진 쪽은 하얀 금속, 이긴 쪽은 금) */

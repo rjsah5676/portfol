@@ -1375,10 +1375,10 @@ export default function TableView({
                       )
                     )}
                     {waiting && deadline > 0 && (
-                      <span className="pk-plate-timer" style={{ transform: `scaleX(${frac})` }} />
+                      <PlateTimer frac={frac} />
                     )}
                     {waiting && counting && (
-                      <span key={secLeft} className="pk-count-sm">
+                      <span key={secLeft} className="pk-count-sm" aria-label={`${secLeft}초`}>
                         {secLeft}
                       </span>
                     )}
@@ -2069,7 +2069,8 @@ function Shell({
 const actImgOk = new Map<string, boolean>();
 const actImg = (a: string) => `/poker/ui/act-${a}.webp`;
 
-function ActTag({ a, edge }: { a: string; edge?: "l" | "r" }) {
+/** 행동 글자: 그림이 있으면 그림, 없으면 CSS 글자 */
+function ActWord({ a, className = "" }: { a: string; className?: string }) {
   const [ok, setOk] = useState(() => actImgOk.get(a));
   useEffect(() => {
     if (actImgOk.has(a)) return;
@@ -2078,22 +2079,46 @@ function ActTag({ a, edge }: { a: string; edge?: "l" | "r" }) {
     im.onerror = () => (actImgOk.set(a, false), setOk(false));
     im.src = actImg(a);
   }, [a]);
+  if (ok)
+    return (
+      <img src={actImg(a)} alt={ACT_LABEL[a] ?? a} draggable={false} className={`pk-acttag-img ${className}`} />
+    );
+  return (
+    <span
+      className={`pk-acttag ${className}`}
+      data-a={a}
+      style={{ "--ac": SHOUT_COLOR[a] ?? "#c3c9d6", visibility: ok === undefined ? "hidden" : undefined } as CSSProperties}
+    >
+      <span className="pk-acttag-t">{ACT_LABEL[a] ?? a}</span>
+    </span>
+  );
+}
+
+function ActTag({ a, edge }: { a: string; edge?: "l" | "r" }) {
   return (
     <span
       className={`absolute bottom-[calc(100%+4px)] z-20 ${edge === "l" ? "left-0" : edge === "r" ? "right-0" : "left-1/2 -translate-x-1/2"}`}
     >
-      {ok ? (
-        <img src={actImg(a)} alt={ACT_LABEL[a] ?? a} draggable={false} className="pk-acttag-img" />
-      ) : (
-        <span
-          className="pk-acttag"
-          data-a={a}
-          style={{ "--ac": SHOUT_COLOR[a] ?? "#c3c9d6", visibility: ok === undefined ? "hidden" : undefined } as CSSProperties}
-        >
-          <span className="pk-acttag-t">{ACT_LABEL[a] ?? a}</span>
-        </span>
-      )}
+      <ActWord a={a} />
     </span>
+  );
+}
+
+/** 이름표 테두리를 따라 줄어드는 남은 시간 (초록 → 노랑 → 빨강) */
+function PlateTimer({ frac }: { frac: number }) {
+  const color = frac > 0.5 ? "#4be38a" : frac > 0.25 ? "#ffd84a" : "#ff4d5e";
+  return (
+    <svg className="pk-plate-ring" aria-hidden>
+      <rect
+        x="0"
+        y="0"
+        width="100%"
+        height="100%"
+        rx="7"
+        pathLength={100}
+        style={{ stroke: color, strokeDasharray: `${(frac * 100).toFixed(2)} 100`, filter: `drop-shadow(0 0 4px ${color})` }}
+      />
+    </svg>
   );
 }
 
@@ -2357,7 +2382,7 @@ function HeroArea(props: {
           </span>
         </div>
         {waiting && deadline > 0 && (
-          <span className="pk-plate-timer" style={{ transform: `scaleX(${frac})` }} />
+          <PlateTimer frac={frac} />
         )}
       </div>
     </div>
@@ -2460,7 +2485,6 @@ function HeroArea(props: {
           {hint && !res && !myName && (
             <span className={`pk-handtag pk-pop ${madeKey ? "pk-made" : ""}`}>
               <span className="pk-tag-t">
-                {madeKey ? "★ " : ""}
                 {hint}
               </span>
             </span>
@@ -2468,13 +2492,7 @@ function HeroArea(props: {
           {p?.last &&
             !res &&
             !(!p.folded && !p.allIn && (hv ?? sv) && p.bet < (hv ?? sv)!.currentBet) && (
-              <span
-                key={p.last.a}
-                className="pk-acttag"
-                style={{ "--ac": SHOUT_COLOR[p.last.a] ?? "#c3c9d6" } as CSSProperties}
-              >
-                <span className="pk-acttag-t">{ACT_LABEL[p.last.a] ?? p.last.a}</span>
-              </span>
+              <ActWord key={p.last.a} a={p.last.a} className="pk-acttag-me" />
             )}
           {myName && myRevealed && (
             <span
