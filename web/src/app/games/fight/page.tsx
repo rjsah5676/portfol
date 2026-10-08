@@ -9,7 +9,6 @@ import {
   getFightRatings,
   getRankStats,
   ratingSub,
-  RATING_PLACEMENT,
   MATCHUP_MIN,
   tierOf,
   type FightRatingRow,
@@ -157,19 +156,20 @@ function StatsView() {
         </div>
         {sel &&
           (sel.vs.length ? (
-            <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
+            <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
               {sel.vs.map((v) => {
                 const o = CHARS[v.b];
                 return (
-                  <div key={v.b} className={`flex items-center justify-between gap-2 rounded-lg border px-2.5 py-1.5 ${TIER_STYLE[v.tier]}`}>
-                    <span className={`${KR} text-xs whitespace-nowrap`}>
+                  <div
+                    key={v.b}
+                    className={`grid grid-cols-[minmax(0,1fr)_auto_4.5rem] items-center gap-2 rounded-lg border px-2.5 py-1.5 ${TIER_STYLE[v.tier]}`}
+                  >
+                    <span className={`${KR} truncate text-xs`}>
                       vs <b style={{ color: o?.color }}>{o?.name ?? "?"}</b>
                     </span>
-                    <span className="flex flex-col items-end leading-tight">
-                      <span className="font-mono text-sm font-bold tabular-nums">{pct(v.rate)}</span>
-                      <span className={`${KR} text-[10px] whitespace-nowrap opacity-70`}>
-                        {TIER_LABEL[v.tier]} · {v.g}판
-                      </span>
+                    <span className="font-mono text-sm font-bold tabular-nums">{pct(v.rate)}</span>
+                    <span className={`${KR} text-right text-[10px] whitespace-nowrap opacity-70`}>
+                      {TIER_LABEL[v.tier]} · {v.g}판
                     </span>
                   </div>
                 );
@@ -184,16 +184,16 @@ function StatsView() {
       {mine.length > 0 && (
         <div className="rounded-xl border border-white/10 bg-white/[0.02] p-3">
           <div className={`mb-2 ${KR} text-xs text-white/50`}>내 랭크전 캐릭터별 기록</div>
-          <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
             {mine.map((m) => {
               const c = CHARS[m.c];
               const g = m.w + m.l + m.d;
               return (
-                <div key={m.c} className="flex items-center justify-between gap-2 rounded-lg border border-white/10 px-2.5 py-1.5">
+                <div key={m.c} className="flex min-w-0 items-center justify-between gap-2 rounded-lg border border-white/10 px-2.5 py-1.5">
                   <b className={`${KR} text-xs`} style={{ color: c?.color }}>
                     {c?.name ?? "?"}
                   </b>
-                  <span className="font-mono text-xs text-white/75 tabular-nums">
+                  <span className="font-mono text-xs whitespace-nowrap text-white/75 tabular-nums">
                     {m.w}승 {m.l}패 <span className="text-white/40">{pct((m.w + m.d / 2) / g)}</span>
                   </span>
                 </div>
@@ -232,18 +232,7 @@ export default function FightPage() {
             },
             top: ratingRows(top.rows ?? []),
             podium: tab === "rating" ? ratingRows(all.rows ?? []) : [],
-            head: () => (
-              <>
-                <Tabs tab={tab} setTab={setTab} />
-                {tab === "rating" && (
-                  <p className={`mb-3 px-1 ${KR} text-[11px] text-white/35`}>
-                    온라인 → ⚔ 랭크전 (비슷한 레이팅끼리 자동 매칭 · 12초 안에 못 찾으면 비슷한 실력대의 AI · 맵 랜덤) · 1000점에서
-                    시작 · 강한 상대를 이길수록 많이 올라요 · 처음 {RATING_PLACEMENT}판은 배치(크게 변함, 압도적으로 이기면 더) · 같은
-                    상대와는 하루 10판까지만 반영
-                  </p>
-                )}
-              </>
-            ),
+            head: () => <Tabs tab={tab} setTab={setTab} />,
             render: () =>
               tab === "stats" ? (
                 <StatsView />

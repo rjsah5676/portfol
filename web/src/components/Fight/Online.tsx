@@ -707,7 +707,7 @@ function Lobby({
             비슷한 레이팅끼리 매칭 · 12초 이내 매칭이 잡히지 않을 시 비슷한 실력대의 AI와 매칭이 됩니다
           </div>
           <button type="button" disabled={!member} onClick={onRank} className={rankBtn}>
-            {member ? "랭크전 찾기" : "회원만 할 수 있어요"}
+            {member ? "랭크전 매칭" : "회원만 할 수 있어요"}
           </button>
           {rankErr && <div className={`${KR} text-[1.05cqw] text-[#F87171]`}>{rankErr}</div>}
         </div>
