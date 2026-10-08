@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { madeOf } from "@/lib/poker/cards";
 import { bestK, handNameK } from "@/lib/poker/seven";
 import type { MyHand, SevenAction, SevenBet, SevenView } from "@/lib/poker/types";
 import type { Orient } from "./layout";
@@ -67,7 +68,7 @@ export function sevenSeatCards({
   if (hero && myHand) {
     if (!myHand.down) return null; // 고르는 중에는 아래 고르기 화면에서
     const mine = bestK(myHand.cards);
-    const made = myHand.cards.length >= 5 ? new Set(mine.five) : null;
+    const made = myHand.cards.length >= 5 ? new Set(madeOf(mine.five)) : null;
     return (
       <span className={row}>
         {myHand.cards.map((c, i) => {

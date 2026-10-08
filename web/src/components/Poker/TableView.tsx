@@ -47,6 +47,7 @@ import {
   leave,
   sendEmote,
   serverNow,
+  kickVote,
   setExit,
   setSitOut,
   sit,
@@ -60,7 +61,7 @@ import {
   holdemHint,
   holdemSeatCards,
 } from "./HoldemParts";
-import { COMPACT_RATIO, compactV, layoutFor, type Orient } from "./layout";
+import { COMPACT_RATIO, compactV, layoutFor, type Orient, type Spot } from "./layout";
 import {
   Bet,
   CharSprite,
@@ -219,7 +220,7 @@ export default function TableView({
   const [sitState, setSitState] = useState<SitState>("joining");
   const [notice, setNotice] = useState("");
   const [password, setPassword] = useState("");
-  const [kicked, setKicked] = useState<"" | "cut" | "bust" | "idle">("");
+  const [kicked, setKicked] = useState<"" | "cut" | "bust" | "idle" | "vote">("");
   // 알림은 3초 뒤 사라짐
   useEffect(() => {
     if (!notice) return;
@@ -262,6 +263,8 @@ export default function TableView({
   const [pre, setPre] = useState("");
   /** 이름표를 눌러 보는 자리 정보 */
   const [statSeat, setStatSeat] = useState<number | null>(null);
+  /** 내가 강퇴 투표한 자리들 (이 판 기준) */
+  const [voted, setVoted] = useState<Set<number>>(() => new Set());
   /** 쇼다운 패 까기 연출: order 순서로 한 자리씩 깜(step = 깐 자리 수). 다 깐 뒤 한 박자 쉬고 결과(step > order.length) */
   /** 카드 나눠 주기 연출 */
   const [dealFx, setDealFx] = useState<DealFx | null>(null);
@@ -417,6 +420,28 @@ export default function TableView({
             else sfx.emote();
             break;
           }
+          case "kick": {
+            const who = nameOf(e.by);
+            const whom = nameOf(e.seat);
+            push(
+              <>
+                <b className="text-white/85">{who}</b> → <b className="text-white/85">{whom}</b>{" "}
+                강퇴 투표 ({e.votes}/{e.need})
+              </>,
+              "dim"
+            );
+            if (e.seat === mySeat)
+              setInfo({
+                text: `${who} 님이 나에게 강퇴 투표했어요 (${e.votes}/${e.need})`,
+                key: Date.now(),
+              });
+            else if (e.by !== mySeat)
+              setInfo({
+                text: `${who} → ${whom} 강퇴 투표 (${e.votes}/${e.need})`,
+                key: Date.now(),
+              });
+            break;
+          }
           case "sit": {
             push(`${e.name} 입장`, "dim");
             if (e.seat === mySeat) sfx.entry();
@@ -427,9 +452,11 @@ export default function TableView({
           }
           case "leave":
             push(
-              `${e.name} ${e.why === "bust" ? "파산" : e.why === "cashout" ? "자리에서 일어남" : "퇴장"}`,
-              "dim"
+              `${e.name} ${e.why === "bust" ? "파산" : e.why === "cashout" ? "자리에서 일어남" : e.why === "vote" ? "투표로 강퇴" : "퇴장"}`,
+              e.why === "vote" ? "street" : "dim"
             );
+            if (e.why === "vote" && e.seat !== mySeat)
+              setInfo({ text: `${e.name} 님이 투표로 강퇴됐어요`, key: Date.now() });
             if (e.seat === mySeat && e.why === "bust" && myCharRef.current)
               playVoice(myCharRef.current, "broke");
             else if (e.seat !== mySeat) {
@@ -703,10 +730,13 @@ export default function TableView({
           hand.players[mySeat] &&
           !hand.players[mySeat].chosen));
     const left = Math.ceil((deadline - now) / 1000);
-    // 남이 오래 고민하면 가끔 다른 사람이 재촉 (차례마다 한 번, 40%)
-    if (!mine && left === 4 && hurryRef.current !== deadline && table) {
+    // 남이 오래 고민하면(베팅 차례에서 8초 넘게) 가끔 다른 사람이 재촉 (차례마다 한 번, 40%). 카드 고르는 중에는 안 함
+    const betting = hand.toAct >= 0 && !(hand.game === "seven" && hand.phase === "choice");
+    if (!mine && betting && left === 4 && hurryRef.current !== deadline && table) {
       hurryRef.current = deadline;
-      const others = table.seats.filter((x) => x && x.seat !== hand.toAct && x.status === "in");
+      const others = table.seats.filter(
+        (x) => x && x.seat !== hand.toAct && x.seat !== mySeat && x.status === "in"
+      );
       if (others.length && Math.random() < 0.4) {
         const who = others[Math.floor(Math.random() * others.length)]!;
         playVoice(who.char, "hurry");
@@ -1002,6 +1032,28 @@ export default function TableView({
   const px = (pct: number) => (pct / 100) * boardW;
   const py = (pct: number) => (pct / 100) * h;
   const bar = 40;
+  /** 자리의 가로 위치: 캐릭터 그림도 이름표(최소 폭)도 무대 밖으로 안 나가게 */
+  const plateHalf = Math.max(84, sprW * 0.62) / 2 + 6;
+  const seatX = (pct: number) =>
+    Math.max(
+      Math.max(sprW * 0.5, plateHalf),
+      Math.min(boardW - Math.max(sprW * 0.5, plateHalf), px(pct))
+    );
+  /**
+   * 자리의 세로 위치. 가로판 왼쪽 자리는 내 캐릭터(왼쪽 아래) 머리 위로 올려 이름표·카드가 안 가려지게 —
+   * 단 그 위 맞은편 자리와는 안 겹치게.
+   */
+  const seatY = (sp: Spot) => {
+    const y = py(sp.y);
+    if (!H || sp.side !== "left") return y;
+    const heroTop = h - 8 - (sizes.face * 1.3 + 10) + 8 - heroSprH;
+    const above = L.spots.reduce(
+      (m, q) => (q.side === "top" && q.y < sp.y ? Math.max(m, q.y) : m),
+      0
+    );
+    const lo = above > 0 ? py(above) + 64 : bar + 8;
+    return Math.max(Math.min(y, heroTop - 84), Math.min(y, lo));
+  };
   const myCat = !liveHand
     ? -1
     : hv
@@ -1016,8 +1068,8 @@ export default function TableView({
     if (seat === mySeat) return { x: (L.heroX / 100) * boardW, y: (L.heroCards / 100) * h - 18 };
     const idx = (seat - Math.max(0, mySeat) + n) % n;
     const sp = L.spots[idx];
-    const x = Math.max(sprW * 0.5, Math.min(boardW - sprW * 0.5, px(sp.x)));
-    const y = py(sp.y);
+    const x = seatX(sp.x);
+    const y = seatY(sp);
     if (H) {
       const f = sp.side === "top" ? 0.45 : 0.5;
       return { x: x + (px(L.table.cx) - x) * f, y: y + (py(L.center.board) - y) * f };
@@ -1028,7 +1080,15 @@ export default function TableView({
     if (sp.side === "top") return { x, y: y + 52 + 4 + cardH + 14 }; // 카드 아래
     const dir = sp.side === "left" ? 1 : -1;
     if (C?.cardSide[idx] === "below") return { x: x + dir * (half + 22), y: y - 14 }; // 이름표 위 안쪽 (카드는 아래)
-    return { x: x + dir * half * 0.35, y: y + 52 + 14 }; // 카드가 옆이면 이름표 아래
+    // 카드가 옆이면: 촘촘한 판에선 엎어 둔 카드 위에 겹쳐 둠(아래 자리 꼬리표·옆 자리와 안 겹치게 — 뒷면이라 가려도 됨), 아니면 이름표 아래
+    if (C) return { x: x + dir * (half + 6 + sizes.card * 1.3), y: y + 26 };
+    return { x: x + dir * half * 0.35, y: y + 52 + 14 };
+  };
+  /** 건 돈 알약이 무대 밖으로 안 나가게 (폭은 어림: 칩 + 글자 다섯 자쯤) */
+  const clampBetX = (x: number) => {
+    const fpx = Math.min(15, Math.max(11, u * 1.45 + 4.6));
+    const half = (Math.max(22, u * 3.4) * 1.25 + fpx * 1.5 * 3.6) / 2;
+    return Math.max(half + 4, Math.min(boardW - half - 4, x));
   };
   /** 외침이 시작되는 곳: 그 캐릭터의 머리 근처 */
   const shoutFrom = (seat: number) => {
@@ -1037,9 +1097,9 @@ export default function TableView({
         ? { x: 24 + (heroSprH * 3) / 8, y: h - 8 - heroSprH * 0.8 }
         : { x: (L.heroX / 100) * boardW, y: (L.heroCards / 100) * h - 16 };
     const sp = spotOf(seat);
-    const x = Math.max(sprW * 0.5, Math.min(boardW - sprW * 0.5, px(sp.x)));
+    const x = seatX(sp.x);
     if (sp.y >= 99) return { x, y: py(sp.y) - sizes.face * 1.6 };
-    return { x, y: py(sp.y) - sprH * 0.78 };
+    return { x, y: seatY(sp) - sprH * 0.78 };
   };
   /** 세로판: 내 이름표 위에 서 있는 내 캐릭터 — 옆 아랫자리 묶음 아래 빈 곳만큼 (내 차례 기준 크기로 고정) */
   const heroSprV = (() => {
@@ -1105,8 +1165,8 @@ export default function TableView({
           const live = !!p && !!s && !p.folded && !rawRes;
           const inHand = !!p && !!s && (s.status === "in" || live);
           const bet = inHand && !rawRes ? p!.bet : 0;
-          const x = Math.max(sprW * 0.5, Math.min(boardW - sprW * 0.5, px(sp.x)));
-          const y = py(sp.y);
+          const x = seatX(sp.x);
+          const y = seatY(sp);
           const betAt = betPoint(i);
           if (!s)
             return (
@@ -1184,6 +1244,18 @@ export default function TableView({
                   ? "right"
                   : "below";
           const waiting = isWaiting(i);
+          const resultName = hand?.result?.names[i] && revealed(i) ? hand.result.names[i] : "";
+          /** 이름표 아래 꼬리표들의 높이(em) — 카드가 아래로 올 때 그만큼 내림 */
+          const tagsEm = (resultName ? 1.9 : 0) + (s.votes > 0 ? 1.1 : 0) + (s.exit ? 1.1 : 0);
+          // 가로판 맞은편 가운데 자리: 아래 꼬리표가 팟을 덮으면 이름표 위(캐릭터 몸통)에
+          const tagAbove = H && Math.abs(x - px(L.table.cx)) < 140 && y + 91 > py(L.center.pot);
+          // 무대 가장자리에 붙은 자리: 이름표 아래 꼬리표(족보·강퇴 등)가 밖으로 안 나가게 안쪽으로 붙임
+          const edgeAlign =
+            sp.side === "right" && x + plateHalf > boardW - 40
+              ? "items-end"
+              : sp.side === "left" && x - plateHalf < 40
+                ? "items-start"
+                : "items-center";
           return (
             <div key={i}>
               {!hideSprite && (
@@ -1201,23 +1273,36 @@ export default function TableView({
                   />
                 </div>
               )}
-              {/* 머리 위: 이모티콘 · 말 */}
+              {/* 말풍선: 머리 위 */}
               <div
                 className="pointer-events-none absolute"
                 style={{ left: x, top: sprTop + sprH * 0.05, zIndex: 40 }}
               >
-                {emotes[i] && (
-                  <div
-                    key={emotes[i].key}
-                    className="pk-emote absolute bottom-0 left-1/2 -translate-x-1/2"
-                  >
-                    <EmoteImg char={s.char} emote={emotes[i].v} size={Math.max(84, sprW * 0.75)} />
-                  </div>
-                )}
                 {bubbles[i] && !emotes[i] && <Bubble text={bubbles[i].v} />}
               </div>
+              {/* 이모티콘: 이름표 바로 위, 어깨 쪽(테이블 안쪽)으로 살짝 치우쳐 — 무대 밖으로 안 나가게 */}
+              {emotes[i] &&
+                (() => {
+                  const size = Math.round(Math.max(48, Math.min(104, u * 15)));
+                  const dir =
+                    sp.side === "right" ? -1 : sp.side === "left" ? 1 : x < px(L.table.cx) ? 1 : -1;
+                  const ex = Math.max(
+                    size / 2 + 4,
+                    Math.min(boardW - size / 2 - 4, x + dir * size * 0.45)
+                  );
+                  const ey = Math.max(bar + 4, y - 6 - size * 1.02);
+                  return (
+                    <div
+                      key={emotes[i].key}
+                      className="pk-emote pointer-events-none absolute"
+                      style={{ left: ex - size / 2, top: ey, zIndex: 40 }}
+                    >
+                      <EmoteImg char={s.char} emote={emotes[i].v} size={size} />
+                    </div>
+                  );
+                })()}
               <div
-                className="absolute"
+                className="absolute w-max"
                 style={{
                   left: x,
                   top: hideSprite ? y - sizes.face * 1.6 : y - 6,
@@ -1272,7 +1357,7 @@ export default function TableView({
                     ) : (
                       p &&
                       !res && (
-                        <div className="text-[0.64em] leading-tight whitespace-nowrap text-white/55">
+                        <div className="text-[0.7em] leading-tight whitespace-nowrap text-white/55">
                           베팅 <Money won={p.invested} className="text-[1.1em] text-white/80" />
                         </div>
                       )
@@ -1286,14 +1371,26 @@ export default function TableView({
                       </span>
                     )}
                   </div>
-                  {s.exit && <span className="pk-exit-mark">나가기 예약</span>}
-                  {hand?.result?.names[i] && revealed(i) && (
-                    <span
-                      key={`${table.handNo}-${revealDone ? 1 : 0}`}
-                      className={`pk-resulttag pk-stamp mt-[0.25em] ${res && wonHere > 0 ? "pk-resulttag-win" : ""}`}
+                  {/* 이름표 아래 꼬리표: 이름표 폭에 맞춰 두고, 가장자리 자리에선 안쪽으로 붙여 무대 밖으로 안 나가게 */}
+                  {(s.votes > 0 || s.exit || resultName) && (
+                    <div
+                      className={`pointer-events-none absolute inset-x-0 flex w-full ${tagAbove ? "bottom-full flex-col-reverse pb-[0.3em]" : "top-full flex-col"} ${edgeAlign}`}
                     >
-                      {hand.result.names[i]}
-                    </span>
+                      {s.votes > 0 && (
+                        <span className="pk-vote-mark" title="강퇴 투표">
+                          ⚠ 강퇴 {s.votes}/3
+                        </span>
+                      )}
+                      {s.exit && <span className="pk-exit-mark">나가기 예약</span>}
+                      {resultName && (
+                        <span
+                          key={`${table.handNo}-${revealDone ? 1 : 0}`}
+                          className={`pk-resulttag pk-stamp mt-[0.25em] ${res && wonHere > 0 ? "pk-resulttag-win" : ""}`}
+                        >
+                          {resultName}
+                        </span>
+                      )}
+                    </div>
                   )}
                   {cards && (
                     <div
@@ -1305,7 +1402,7 @@ export default function TableView({
                             ? { right: "100%", top: 0, marginRight: 6 }
                             : {
                                 top: "100%",
-                                marginTop: 4,
+                                marginTop: `calc(4px + ${tagsEm}em)`,
                                 left: "50%",
                                 transform: "translateX(-50%)",
                               }
@@ -1318,8 +1415,8 @@ export default function TableView({
               </div>
               {bet > 0 && (
                 <div
-                  className="absolute -translate-x-1/2 -translate-y-1/2"
-                  style={{ left: betAt.x, top: betAt.y, zIndex: 8 }}
+                  className="absolute w-max -translate-x-1/2 -translate-y-1/2 whitespace-nowrap"
+                  style={{ left: clampBetX(betAt.x), top: betAt.y, zIndex: 8 }}
                 >
                   <Bet won={bet} ratio={bet / base} size={Math.max(22, u * 3.4)} act={p?.last?.a} />
                 </div>
@@ -1345,8 +1442,8 @@ export default function TableView({
               const idx = (seat - Math.max(0, mySeat) + n) % n;
               const sp = L.spots[idx];
               if (!sp) return null;
-              const x = Math.max(sprW * 0.5, Math.min(boardW - sprW * 0.5, px(sp.x)));
-              const y = py(sp.y);
+              const x = seatX(sp.x);
+              const y = seatY(sp);
               const half = Math.max(84, sprW * 0.62) / 2;
               const below = C?.cardSide[idx] === "below" || (sp.side === "top" && !H);
               if (below) return { x, y: y + 52 + 4 + cw * 0.7, s: 1 };
@@ -1623,6 +1720,15 @@ export default function TableView({
           </div>
         ) : null}
 
+        {/* 내 차례 시작: 무대 테두리가 한 번 번쩍 */}
+        {myTurn && (
+          <div
+            key={`edge-${table.handNo}-${hv ? hv.street : (sv?.round ?? 0)}`}
+            className="pk-turn-edge pointer-events-none absolute inset-0"
+            style={{ zIndex: 29 }}
+            aria-hidden
+          />
+        )}
         {/* 행동 바 */}
         <div
           ref={actRef}
@@ -1634,6 +1740,15 @@ export default function TableView({
               : { left: 8, right: 8, bottom: 8, zIndex: 30 }
           }
         >
+          {myTurn && !busy && (
+            <div
+              key={`${table.handNo}-${hand?.toAct}-${hv ? hv.street : (sv?.round ?? 0)}`}
+              className="pk-turn-flag pointer-events-none"
+              aria-hidden
+            >
+              내 차례!
+            </div>
+          )}
           <ActionBar
             revealing={!revealDone}
             o={o}
@@ -1829,6 +1944,42 @@ export default function TableView({
                   <span>보유 칩</span>
                   <Money won={s.stack} className="text-[1.15em] text-[#ffd84a]" />
                 </div>
+                {/* 강퇴 투표: 남의 자리 · 내가 이 방에서 3판 이상 쳤을 때. 3표면 강퇴, 표는 10판 지나면 사라짐 */}
+                {me && s.seat !== mySeat && (
+                  <div className="grid w-full gap-[0.3em]">
+                    <button
+                      type="button"
+                      disabled={me.hands < 3 || voted.has(s.seat)}
+                      onClick={() => {
+                        const seat = s.seat;
+                        kickVote(id, seat)
+                          .then((r) => {
+                            setVoted((v) => new Set(v).add(seat));
+                            setInfo({
+                              text: r.kicked
+                                ? `${s.name} 님이 강퇴됐어요`
+                                : `강퇴 투표했어요 (${r.votes}/${r.need})`,
+                              key: Date.now(),
+                            });
+                            setStatSeat(null);
+                          })
+                          .catch((e: ApiError) => {
+                            if (e.code === "ALREADY_VOTED") setVoted((v) => new Set(v).add(seat));
+                            setNotice(e.message ?? "투표하지 못했어요.");
+                          });
+                      }}
+                      className="pk-btn pk-btn-fold w-full py-[0.45em] text-[0.85em] disabled:opacity-40"
+                    >
+                      {voted.has(s.seat) ? "강퇴 투표함" : "강퇴 투표"}
+                      <span className="ml-[0.4em] text-[0.85em] opacity-80">{s.votes}/3</span>
+                    </button>
+                    <p className="text-center text-[0.68em] leading-snug text-white/40">
+                      {me.hands < 3
+                        ? `이 방에서 ${3 - me.hands}판 더 치면 투표할 수 있어요`
+                        : "3표가 모이면 강퇴 · 표는 10판 지나면 사라져요"}
+                    </p>
+                  </div>
+                )}
                 <button
                   type="button"
                   onClick={() => setStatSeat(null)}
@@ -1956,7 +2107,7 @@ function Center({
         <HoldemBoard view={hand} tier={table.tier} sizes={sizes} settled={settled} />
       )}
       {hand.pots.length > 1 && !res && Object.values(hand.players).some((p) => p.allIn) && (
-        <div className="flex flex-wrap justify-center gap-x-[0.8em] text-[0.65em] text-white/60">
+        <div className="flex flex-wrap justify-center gap-x-[0.8em] text-[0.72em] text-white/60">
           {hand.pots.map((p, i) => (
             <span key={i}>
               {i === 0 ? "메인" : `사이드${hand.pots.length > 2 ? ` ${i}` : ""}`}{" "}
@@ -2114,7 +2265,7 @@ function HeroArea(props: {
           <span className="max-w-[8em] truncate text-[0.82em] font-extrabold text-white">
             {me.name}
           </span>
-          <span className="text-[0.66em] font-bold" style={{ color: CHARS[me.char].color }}>
+          <span className="text-[0.7em] font-bold" style={{ color: CHARS[me.char].color }}>
             {CHARS[me.char].name}
           </span>
         </div>
@@ -2129,7 +2280,7 @@ function HeroArea(props: {
             )}
           </span>
         </div>
-        <div className="mt-[0.15em] flex items-center gap-[0.5em] border-t border-white/10 pt-[0.2em] text-[0.66em]">
+        <div className="mt-[0.15em] flex items-center gap-[0.5em] border-t border-white/10 pt-[0.2em] text-[0.7em]">
           <span className="text-white/50">
             베팅 <Money won={p ? p.invested : 0} className="text-[1.15em] text-white" />
           </span>
@@ -2159,24 +2310,28 @@ function HeroArea(props: {
     <>
       {/* 가로판: 왼쪽 아래 내 캐릭터 + 이름표 */}
       {H ? (
-        <div className="absolute bottom-[8px] left-[24px]" style={{ zIndex: 9 }}>
+        <div className="absolute bottom-[8px] left-[24px]" style={{ zIndex: 6 }}>
           <div
             className={`pk-seat-sprite pointer-events-none absolute bottom-[calc(100%-8px)] left-0 ${waiting ? "pk-seat-turn" : ""}`}
           >
             <CharSprite char={me.char} pose={pose} w={(heroSprH * 3) / 4} dim={dim} />
           </div>
-          {/* 내 이모티콘: 머리 위 */}
+          {/* 내 이모티콘: 캐릭터 오른쪽 어깨 옆 (얼굴을 안 가리게) */}
           {emote && (
             <div
               key={emote.key}
               className="pk-emote pointer-events-none absolute"
               style={{
-                left: (heroSprH * 3) / 8 - 60,
-                bottom: `calc(100% - 8px + ${heroSprH * 0.9}px)`,
+                left: heroSprH * 0.58,
+                bottom: `calc(100% - 8px + ${Math.round(heroSprH * 0.5)}px)`,
                 zIndex: 45,
               }}
             >
-              <EmoteImg char={me.char} emote={emote.v} size={120} />
+              <EmoteImg
+                char={me.char}
+                emote={emote.v}
+                size={Math.round(Math.max(72, Math.min(110, heroSprH * 0.38)))}
+              />
             </div>
           )}
           {plate}
@@ -2191,16 +2346,22 @@ function HeroArea(props: {
               <CharSprite char={me.char} pose={pose} w={(sprV * 3) / 4} dim={dim} />
             </div>
           )}
+          {/* 내 이모티콘: 캐릭터가 있으면 그 어깨 옆, 없으면 내 이름표 위 오른쪽 */}
           {emote && (
             <div
               key={emote.key}
-              className="pk-emote pointer-events-none absolute left-0"
+              className="pk-emote pointer-events-none absolute"
               style={{
                 zIndex: 45,
-                bottom: sprV > 0 ? `calc(100% + ${Math.round(sprV * 0.45)}px)` : "calc(100% + 4px)",
+                left: sprV > 0 ? Math.round(sprV * 0.5) : "40%",
+                bottom: sprV > 0 ? `calc(100% + ${Math.round(sprV * 0.08)}px)` : "calc(100% + 2px)",
               }}
             >
-              <EmoteImg char={me.char} emote={emote.v} size={100} />
+              <EmoteImg
+                char={me.char}
+                emote={emote.v}
+                size={Math.round(Math.max(52, Math.min(80, sprV > 0 ? sprV * 0.42 : 60)))}
+              />
             </div>
           )}
           {plate}
@@ -2320,7 +2481,7 @@ function ActionBar(props: {
   password: string;
   setPassword: (v: string) => void;
   trySit: (pw?: string) => void;
-  kicked: "" | "cut" | "bust" | "idle";
+  kicked: "" | "cut" | "bust" | "idle" | "vote";
   wallet: Wallet;
   tier: (typeof TIERS)[number];
   onWallet: (w: Wallet) => void;
@@ -2661,7 +2822,7 @@ function InfoTabs({
                 </li>
               );
             })}
-          <li className="px-[0.3em] pt-[0.3em] text-[0.64em] leading-relaxed text-white/40">
+          <li className="px-[0.3em] pt-[0.3em] text-[0.7em] leading-relaxed text-white/40">
             {game === "holdem"
               ? "같은 족보면 높은 숫자 · 킥커로 가려요."
               : "같은 족보 · 숫자면 무늬로: ♠ > ◆ > ♥ > ♣"}
@@ -2744,7 +2905,7 @@ function KickedNotice({
   onSit,
   onExit,
 }: {
-  why: "cut" | "bust" | "idle";
+  why: "cut" | "bust" | "idle" | "vote";
   wallet: Wallet;
   tierMin: number;
   tierName: string;
@@ -2755,14 +2916,19 @@ function KickedNotice({
   return (
     <div className="flex flex-col items-center gap-[0.4em] text-center">
       <p className="text-[1em] font-bold text-white">
-        {why === "idle"
-          ? "오래 자리를 비워서 일어났어요"
-          : why === "bust"
-            ? "칩을 모두 잃어서 일어났어요"
-            : `칩이 ${tierName} 입장컷(${fmtShort(tierMin)}) 아래라 일어났어요`}
+        {why === "vote"
+          ? "강퇴 투표로 자리에서 일어났어요"
+          : why === "idle"
+            ? "오래 자리를 비워서 일어났어요"
+            : why === "bust"
+              ? "칩을 모두 잃어서 일어났어요"
+              : `칩이 ${tierName} 입장컷(${fmtShort(tierMin)}) 아래라 일어났어요`}
       </p>
       <div className="flex flex-wrap justify-center gap-[0.4em]">
-        {canSit && (
+        {why === "vote" && (
+          <p className="text-[0.78em] text-white/55">이 방에는 30분 동안 다시 앉을 수 없어요.</p>
+        )}
+        {canSit && why !== "vote" && (
           <button
             type="button"
             className="pk-btn pk-btn-call px-[1.1em] py-[0.45em] text-[0.88em]"

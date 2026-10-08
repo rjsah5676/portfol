@@ -542,7 +542,10 @@ function preflop(v: BotView, brain: Brain, models: Models): Decision {
     }
     // 따라 들어오기: 느슨한 성격은 넓게, SB 는 싸니까 넓게
     const cheap = toCall > 0 && toCall <= v.bb;
-    const limp = v.seat === v.sbSeat ? Math.min(0.78, open * 1.6) : p.raiseShare < 0.5 ? open * 1.3 : speculative && limpers ? open * 1.25 : 0;
+    const fun = brain.skill.fun;
+    let limp = v.seat === v.sbSeat ? Math.min(0.78, open * 1.6) : p.raiseShare < 0.5 ? open * 1.3 : speculative && limpers ? open * 1.25 : 0;
+    // 재미 보정: 싸게 볼 수 있으면 "한 번 보자" — 여럿이 들어와 있으면 더 (동네판은 거의 다 들어감)
+    limp = Math.max(limp, open * (1.2 + 0.7 * fun) * (limpers >= 2 ? 1 + 0.2 * fun : 1));
     if (cheap && pct < limp) return { type: "call", thinkMs: fast(900, 1900) };
     return fold();
   }
@@ -629,6 +632,8 @@ function postflop(v: BotView, brain: Brain, models: Models): Decision {
     // 받는 기준: 팟 오즈 + 성격 + 여럿이면 조심 − 앙금 − 드로우의 뒷심
     // (리버 전에는 뒤에 또 돈이 들어가고, 자리가 나쁘면 승률만큼 못 챙기므로 조금 더 높게)
     let margin = p.callMargin + 0.03 * (n - 1) - 0.03 * grudge + (river ? 0.02 : inPosition ? 0.045 : 0.065);
+    // 재미 보정: 작은 벳은 "한 장 더 보자"며 잘 받아 줌 (리버 전, 스택에 비해 싸게 볼 때)
+    if (!river && toCall <= pot * 0.35 && toCall < me.stack * 0.12) margin -= 0.05 * brain.skill.fun;
     // 판이 아주 커질 때는 애매한 패로 스택을 걸지 않음
     if (commitBB > 120 && read.myQ < 0.93) margin += 0.07;
     const implied = !river && spr > 2 ? (outs >= 8 ? 0.06 : outs >= 4 && spr > 4 ? 0.02 : 0) : 0;

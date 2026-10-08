@@ -5,7 +5,7 @@ import { AppError, bad, forbidden } from "../../errors";
 import type { LiveRoom } from "../../http/admin";
 import { newId, orderedId } from "../../ids";
 import type { Ctx } from "../../realtime/gateway";
-import type { UserDoc } from "../../users";
+import { avatarPath, type UserDoc } from "../../users";
 import {
   ACT_AWAY_MS,
   ACT_MS,
@@ -15,6 +15,7 @@ import {
   GAMES,
   REVIVE,
   SITOUT_KICK_MS,
+  START_MONEY,
   TIERS,
   TIMEOUTS_TO_SITOUT,
   UNIT,
@@ -24,8 +25,9 @@ import {
   type CharId,
   type GameKind,
   type Tier,
+  type TierId,
 } from "../../../../web/src/lib/poker/rules";
-import type { ChatMsg, HoldemView, LobbyTable, MyHand, PokerEvent, SeatWire, SevenView, TableWire, Wallet } from "../../../../web/src/lib/poker/types";
+import type { ChatMsg, HoldemView, LobbyTable, MyHand, MyPage, PokerEvent, SeatWire, SevenView, TableWire, Wallet } from "../../../../web/src/lib/poker/types";
 import { holdem } from "./holdem/round";
 import { uniqueNickname } from "./nicknames";
 import { coolDown, line, newBrain, type Brain } from "./personas";
@@ -70,13 +72,23 @@ interface Seat {
   /** 판이 끝나면 자리를 비움 */
   leaving: boolean;
   /** 나가기 예약: 이번 판은 끝까지 치고, 끝나면 나감. idle = 시간 초과가 이어져 자동으로 걸림 (직접 행동하면 풀림) */
-  exitAfter: "" | "leave" | "idle";
+  exitAfter: "" | "leave" | "idle" | "vote";
   /** 이 방에 앉을 때의 칩 (딴 돈 = 지금 칩 − 이것) */
   joinStack: number;
   /** 이 방에서 친 판 수 · 이긴 판 수 */
   hands: number;
   wins: number;
+  /** 강퇴 투표: 누가(uid 또는 봇 key) → 몇 번째 판에 (KICK_HANDS 판이 지나면 지워짐) */
+  kickVotes: Map<string, number>;
+  /** 사람이 던진 표가 (아직 유효하게) 있음 → 봇들이 따라 투표 */
+  kickByHuman: boolean;
 }
+
+/** 강퇴 투표: 3표면 강퇴, 표는 10판 지나면 사라짐, 3판 이상 친 사람만 투표, 강퇴되면 30분 동안 그 방에 못 앉음 */
+const KICK_NEED = 3;
+const KICK_HANDS = 10;
+const KICK_MIN_HANDS = 3;
+const KICK_BAN_MS = 30 * 60_000;
 
 interface Table {
   id: string;
@@ -120,6 +132,8 @@ interface Table {
   starting: boolean;
   closed: boolean;
   emptySince: number;
+  /** 투표로 강퇴된 사람 → 다시 앉을 수 있는 시각 */
+  banned: Map<string, number>;
   /** 봇이 연 방: 사람이 안 오면 이 시각에 닫고 새 방으로 교체 */
   botRoomUntil: number;
 }
@@ -195,8 +209,15 @@ export function registerPoker({ gateway, db, users }: Deps, opts: PokerOptions =
       hands: s.hands,
       wins: s.wins,
       net: stack - s.joinStack,
+      votes: liveVotes(t, s),
     };
   };
+  /** 아직 유효한(최근 KICK_HANDS 판 안의) 강퇴 표 수 */
+  function liveVotes(t: Table, s: Seat): number {
+    for (const [k, at] of s.kickVotes) if (t.handNo - at >= KICK_HANDS) s.kickVotes.delete(k);
+    if (!s.kickVotes.size) s.kickByHuman = false;
+    return s.kickVotes.size;
+  }
 
   const wire = (t: Table, ev: PokerEvent[] = []): TableWire => ({
     id: t.id,
@@ -293,6 +314,9 @@ export function registerPoker({ gateway, db, users }: Deps, opts: PokerOptions =
   const findSeat = (t: Table, uid: string) => t.seats.find((s) => s?.uid === uid) ?? null;
   const inLiveRound = (t: Table, s: Seat) => !!t.round && t.inRound.get(s.seat) === s;
 
+  /** 예약된 나가기의 이유 → leave 이벤트의 why */
+  const exitWhy = (s: Seat): "idle" | "vote" | "leave" => (s.exitAfter === "idle" ? "idle" : s.exitAfter === "vote" ? "vote" : "leave");
+
   function removeSeat(t: Table, s: Seat, why: (PokerEvent & { t: "leave" })["why"]) {
     if (t.seats[s.seat] !== s) return;
     t.seats[s.seat] = null;
@@ -348,6 +372,8 @@ export function registerPoker({ gateway, db, users }: Deps, opts: PokerOptions =
       joinStack: Math.floor(money / UNIT) * UNIT,
       hands: 0,
       wins: 0,
+      kickVotes: new Map(),
+      kickByHuman: false,
     };
     t.ev.push({ t: "sit", seat, name });
     const hello = humans(t).length ? line(brain, "sit") : undefined;
@@ -420,7 +446,7 @@ export function registerPoker({ gateway, db, users }: Deps, opts: PokerOptions =
     t.round = null;
     t.inRound.clear();
     t.lastView = null;
-    for (const s of t.seats) if (s?.leaving || s?.exitAfter) removeSeat(t, s, s.exitAfter === "idle" ? "idle" : "leave");
+    for (const s of t.seats) if (s?.leaving || s?.exitAfter) removeSeat(t, s, exitWhy(s));
     emit(t);
     scheduleNext(t, 3000);
   }
@@ -541,6 +567,8 @@ export function registerPoker({ gateway, db, users }: Deps, opts: PokerOptions =
       }
     }
     t.def.learn?.(round, t.mem, keyOf);
+    // 강퇴 투표가 걸려 있는 자리: 이번 판으로 3판을 채운 봇들도 따라 투표
+    for (const s of t.seats) if (s && !s.leaving && liveVotes(t, s) > 0) botsFollowVote(t, s);
 
     const audit = {
       _id: newId(),
@@ -577,7 +605,7 @@ export function registerPoker({ gateway, db, users }: Deps, opts: PokerOptions =
     for (const s of t.seats) {
       if (!s) continue;
       const p = t.lastView?.players[s.seat];
-      if (s.leaving || (s.exitAfter && (!p || p.folded))) removeSeat(t, s, s.exitAfter === "idle" ? "idle" : "leave");
+      if (s.leaving || (s.exitAfter && (!p || p.folded))) removeSeat(t, s, exitWhy(s));
     }
     emit(t, ...says);
     // (+1.5초: 승리 · 패배 대사를 다 듣고 다음 판으로)
@@ -601,7 +629,7 @@ export function registerPoker({ gateway, db, users }: Deps, opts: PokerOptions =
 
       // 자리 정리: 끊긴 지 오래된 사람 · 자리 비움이 길어진 사람
       for (const s of humans(t)) {
-        if (s.exitAfter) removeSeat(t, s, s.exitAfter === "idle" ? "idle" : "leave");
+        if (s.exitAfter) removeSeat(t, s, exitWhy(s));
         else if (s.away && now() - s.awayAt >= ms(AWAY_KICK_MS)) removeSeat(t, s, "idle");
         else if (s.status === "out" && now() - s.outAt >= ms(SITOUT_KICK_MS)) removeSeat(t, s, "idle");
       }
@@ -800,6 +828,7 @@ export function registerPoker({ gateway, db, users }: Deps, opts: PokerOptions =
       starting: false,
       closed: false,
       emptySince: now(),
+      banned: new Map(),
       botRoomUntil: 0,
     };
     rollBotTarget(t);
@@ -879,6 +908,8 @@ export function registerPoker({ gateway, db, users }: Deps, opts: PokerOptions =
       nudge(t);
       return { seat: cur.seat };
     }
+    const banUntil = t.banned.get(uid) ?? 0;
+    if (banUntil > now()) throw new AppError("BANNED", `투표로 강퇴된 방이에요. ${Math.ceil((banUntil - now()) / 60_000)}분 뒤에 다시 앉을 수 있어요.`, 403, { until: banUntil });
     const other = seatOf.get(uid);
     if (other === id) throw new AppError("BUSY", "자리에 앉는 중이에요.", 409);
     if (other && tables.has(other)) throw new AppError("ALREADY_SEATED", "다른 테이블에 앉아 있어요. 그 판이 끝나야 옮길 수 있어요.", 409, { table: other });
@@ -921,6 +952,8 @@ export function registerPoker({ gateway, db, users }: Deps, opts: PokerOptions =
         joinStack: Math.floor(w.money / UNIT) * UNIT,
         hands: 0,
         wins: 0,
+        kickVotes: new Map(),
+        kickByHuman: false,
       };
       users.bump(uid, { "stats.poker.games": 1 });
       lobbyChanged();
@@ -1062,6 +1095,76 @@ export function registerPoker({ gateway, db, users }: Deps, opts: PokerOptions =
     gateway.emit(tableKey(t.id), "chat", msg);
   }
 
+  // ───────────── 강퇴 투표 ─────────────
+
+  /** 투표로 강퇴: 판 중이면 죽은 것으로 치고 판이 끝나면 비워짐, 아니면 바로. 사람이면 한동안 그 방에 못 앉음 */
+  function kickOut(t: Table, s: Seat) {
+    if (s.uid) t.banned.set(s.uid, now() + ms(KICK_BAN_MS));
+    if (inLiveRound(t, s)) {
+      s.leaving = true;
+      s.exitAfter = "vote";
+      const round = t.round!;
+      if (round.waiting().includes(s.seat)) {
+        const h = t.actTimers.get(s.seat);
+        if (h) clearTimeout(h);
+        t.actTimers.delete(s.seat);
+        safely(t, () => {
+          const ev = round.timeout(s.seat, true);
+          t.waitMark = "";
+          emit(t, ...ev);
+          pump(t);
+        });
+      } else emit(t);
+      return;
+    }
+    removeSeat(t, s, "vote");
+    rollBotTarget(t);
+    planBot(t);
+    emit(t);
+  }
+
+  /** 한 표. 돌려주는 값 = 지금까지 표 수 (강퇴됐으면 KICK_NEED 이상). 투표할 수 없으면 오류 */
+  function castVote(t: Table, voter: Seat, target: Seat): number {
+    const key = voter.uid ?? voter.brain!.key;
+    if (voter === target) throw bad("자기 자신에게는 투표할 수 없어요.");
+    if (voter.hands < KICK_MIN_HANDS) throw new AppError("TOO_EARLY", `이 방에서 ${KICK_MIN_HANDS}판 이상 치면 투표할 수 있어요.`, 403, { hands: voter.hands, need: KICK_MIN_HANDS });
+    liveVotes(t, target);
+    if (target.kickVotes.has(key)) throw new AppError("ALREADY_VOTED", "이미 투표했어요.", 409);
+    target.kickVotes.set(key, t.handNo);
+    if (voter.uid) target.kickByHuman = true;
+    const votes = target.kickVotes.size;
+    emit(t, { t: "kick", seat: target.seat, by: voter.seat, votes, need: KICK_NEED });
+    if (votes >= KICK_NEED) kickOut(t, target);
+    return votes;
+  }
+
+  /** 사람이 투표하면 봇들도 (3판 이상 친 봇만) 1~4초 뒤에 따라 투표 — 봇만 있는 방에서도 강퇴가 되게. 판이 끝날 때마다 다시 봄(그새 3판을 채운 봇) */
+  function botsFollowVote(t: Table, target: Seat) {
+    if (!target.kickByHuman || t.seats[target.seat] !== target) return;
+    for (const b of bots(t)) {
+      if (b === target || b.hands < KICK_MIN_HANDS || target.kickVotes.has(b.brain!.key)) continue;
+      setTimeout(() => {
+        if (t.closed || t.seats[b.seat] !== b || t.seats[target.seat] !== target || target.leaving) return;
+        try {
+          castVote(t, b, target);
+        } catch {}
+      }, ms(1000 + randomInt(3000))).unref?.();
+    }
+  }
+
+  gateway.rpc("poker.kick", (ctx, raw) => {
+    const { uid } = member(ctx);
+    const { id, seat } = z.object({ id: tableId, seat: z.number().int().min(0).max(9) }).parse(raw);
+    const t = getTable(id);
+    const me = findSeat(t, uid);
+    if (!me) throw forbidden("자리에 앉아 있어야 해요.");
+    const target = t.seats[seat];
+    if (!target || target.leaving) throw bad("그 자리에 아무도 없어요.");
+    const votes = castVote(t, me, target);
+    if (votes < KICK_NEED) botsFollowVote(t, target);
+    return { votes, need: KICK_NEED, kicked: votes >= KICK_NEED };
+  });
+
   /** 이모티콘: 채팅에도 남고 자리 위에 잠깐 뜸. 가끔 봇이 따라 함 */
   gateway.rpc("poker.emote", (ctx, raw) => {
     const { uid, nick } = member(ctx);
@@ -1105,6 +1208,49 @@ export function registerPoker({ gateway, db, users }: Deps, opts: PokerOptions =
     const { uid } = member(ctx);
     const w = await wallet.get(uid);
     return w ? walletWire(uid, w) : null;
+  });
+
+  /** 마이페이지: 전적 · 순위 · 최근 판 */
+  gateway.rpc("poker.me", async (ctx): Promise<MyPage | null> => {
+    const { uid } = member(ctx);
+    const doc = (await db.col<UserDoc>("users").findOne({ _id: uid }, { projection: { nick: 1, createdAt: 1, money: 1, "stats.poker": 1, "poker.char": 1, "avatar.at": 1 } })) as (UserDoc & { poker?: { char?: string }; _id: string }) | null;
+    if (!doc) return null;
+    const money = doc.money ?? START_MONEY;
+    const pk = doc.stats?.poker ?? {};
+    const hands = pk.hands ?? 0;
+    // 순위: 한 판이라도 친 회원 중 나보다 돈이 많은 사람 수 + 1 (아직 안 쳤으면 없음)
+    const rank = hands > 0 ? (await db.col("users").countDocuments({ "stats.poker.hands": { $gte: 1 }, money: { $gt: money } })) + 1 : null;
+    let recent: MyPage["recent"] = [];
+    try {
+      const docs = await db
+        .col("poker_hands")
+        .find({ "who.uid": uid }, { projection: { at: 1, game: 1, tier: 1, no: 1, who: 1 } })
+        .sort({ at: -1 })
+        .limit(12)
+        .toArray();
+      recent = docs.map((d) => {
+        const h = d as unknown as { at: Date; game: GameKind; tier: TierId; no: number; who: { uid: string | null; delta: number; name: string }[] };
+        const mine = h.who.find((w) => w.uid === uid);
+        const rivals = h.who.filter((w) => w.uid !== uid).length;
+        return { at: new Date(h.at).getTime(), game: h.game, tier: h.tier, delta: mine?.delta ?? 0, rivals };
+      });
+    } catch {
+      recent = [];
+    }
+    return {
+      nick: doc.nick,
+      char: charOf(doc.poker?.char),
+      avatar: doc.avatar?.at ? avatarPath(uid, doc.avatar.at) : null,
+      since: new Date(doc.createdAt).getTime(),
+      money,
+      rank,
+      games: pk.games ?? 0,
+      hands,
+      best: pk.best ?? 0,
+      holdem: { hands: pk.holdem?.hands ?? 0, wins: pk.holdem?.wins ?? 0 },
+      seven: { hands: pk.seven?.hands ?? 0, wins: pk.seven?.wins ?? 0 },
+      recent,
+    };
   });
 
   gateway.rpc("poker.revive", async (ctx) => {

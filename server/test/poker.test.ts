@@ -386,6 +386,44 @@ describe("홀덤 테이블", () => {
   }, 30_000);
 });
 
+describe("강퇴 투표", () => {
+  it("3판 이상 친 사람만 투표, 봇들이 따라 투표해 3표면 강퇴되고 한동안 못 앉음, 10판 지나면 표가 사라짐", async () => {
+    const a = await member();
+    const b = await member();
+    const id = await a.c.rpc<string>("poker.quick", { game: "holdem", tier: 1 });
+    const seenA: TableWire[] = [];
+    const pa = await play(a, id, undefined, seenA);
+    await a.c.rpc("poker.sit", { id });
+    const pb = await play(b, id);
+    await b.c.rpc("poker.sit", { id });
+    const seatOf = (uid: string) => pa.state()!.seats.find((s) => s?.uid === uid)!.seat;
+    // 아직 한 판도 안 쳤으면 투표 불가
+    expect(await code(a.c.rpc("poker.kick", { id, seat: seatOf(b.uid) }))).toBe("TOO_EARLY");
+    await until(() => !!pa.state()?.seats.some((s) => s?.uid === ""), "봇 입장", 20_000);
+    await until(() => (pa.state()?.seats.find((s) => s?.uid === a.uid)?.hands ?? 0) >= 3, "a 가 3판", 40_000);
+    // 자기 자신 · 중복 투표 불가
+    expect(await code(a.c.rpc("poker.kick", { id, seat: seatOf(a.uid) }))).toBe("BAD_REQUEST");
+    const bSeat = seatOf(b.uid);
+    const r = await a.c.rpc<{ votes: number; need: number; kicked: boolean }>("poker.kick", { id, seat: bSeat });
+    expect(r.votes).toBe(1);
+    expect(r.need).toBe(3);
+    expect(await code(a.c.rpc("poker.kick", { id, seat: bSeat }))).toBe("ALREADY_VOTED");
+    // 표 수가 자리 정보에 실림
+    await until(() => (pa.state()?.seats[bSeat]?.votes ?? 0) >= 1, "표 수 표시");
+    // 봇들(3판 이상 친)이 따라 투표 → 3표가 되면 강퇴 (판 중이면 그 판이 끝난 뒤)
+    await until(() => !pa.state()?.seats.some((s) => s?.uid === b.uid), "b 강퇴", 40_000);
+    expect((await b.c.rpc<Wallet>("poker.wallet")).table).toBeNull();
+    // 강퇴로 나간 것 (입장컷·파산이 아니라)
+    const lastEv = seenA.flatMap((t) => t.ev).find((e) => e.t === "leave" && e.seat === bSeat) as { why: string } | undefined;
+    expect(lastEv?.why).toBe("vote");
+    // 강퇴된 방에는 한동안 못 앉음
+    expect(await code(b.c.rpc("poker.sit", { id }))).toBe("BANNED");
+    pa.stop();
+    pb.stop();
+    await a.c.rpc("poker.leave", { id });
+  }, 90_000);
+});
+
 describe("봇이 연 방", () => {
   it("로비에 게임별로 들어갈 수 있는 방이 유지되고, 봇이 앉아 있다", async () => {
     const quick = await startTestServer({ poker: { speed: 0.004, sweepIntervalMs: 100, lobbyBots: true } });

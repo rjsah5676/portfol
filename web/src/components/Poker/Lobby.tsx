@@ -17,6 +17,7 @@ import {
 import type { LobbyTable, RankRow, Wallet } from "@/lib/poker/types";
 import { createTable, quickJoin, setChar, subscribeLobby } from "@/realtime/poker";
 import type { Orient } from "./layout";
+import MyPage from "./MyPage";
 import PatchNotes, { LATEST } from "./PatchNotes";
 import { Money, PlayingCard, Profile } from "./parts";
 
@@ -55,7 +56,7 @@ export default function Lobby({
   const [tier, setTier] = useState<TierId>(1);
   const [tables, setTables] = useState<LobbyTable[] | null>(null);
   const [busy, setBusy] = useState("");
-  const [sheet, setSheet] = useState<"" | "create" | "char" | "rank">("");
+  const [sheet, setSheet] = useState<"" | "create" | "char" | "rank" | "me">("");
   const [form, setForm] = useState({ name: "", password: "", bots: true });
   const [menu, setMenu] = useState(false);
   const [notes, setNotes] = useState(false);
@@ -174,10 +175,10 @@ export default function Lobby({
                 ))}
                 <button
                   type="button"
-                  disabled
-                  className="pk-btn pk-btn-ghost flex items-center justify-between px-[0.8em] py-[0.5em] text-left"
+                  onClick={() => (setMenu(false), setSheet("me"))}
+                  className="pk-btn pk-btn-ghost px-[0.8em] py-[0.5em] text-left"
                 >
-                  마이페이지 <span className="text-[0.8em] text-white/40">준비 중</span>
+                  마이페이지
                 </button>
               </div>
             </>
@@ -224,7 +225,7 @@ export default function Lobby({
           </div>
           {myRank > 0 && (
             <div className="flex shrink-0 flex-col items-center rounded-[8px] border border-[rgba(255,201,60,0.45)] bg-black/45 px-[0.7em] py-[0.2em] leading-tight">
-              <span className="text-[0.65em] text-white/55">순위</span>
+              <span className="text-[0.7em] text-white/55">순위</span>
               <span className="text-[1.15em] font-extrabold text-[#ffd84a]">{myRank}위</span>
             </div>
           )}
@@ -239,17 +240,17 @@ export default function Lobby({
             className="h-[2em] w-[2em]"
           />
           <div className="min-w-0">
-            <div className="text-[0.62em] text-white/50">보유 칩</div>
+            <div className="text-[0.7em] text-white/50">보유 칩</div>
             <Money won={wallet.money} className="text-[1.35em] leading-none text-[#ffd84a]" />
           </div>
         </div>
-        <div className="grid grid-cols-2 gap-[0.35em]">
+        <div className="grid grid-cols-3 gap-[0.35em]">
           <button
             type="button"
             onClick={() => setSheet("char")}
             className="pk-btn pk-btn-ghost py-[0.45em] text-[0.78em]"
           >
-            캐릭터 변경
+            캐릭터
           </button>
           <button
             type="button"
@@ -257,6 +258,13 @@ export default function Lobby({
             className="pk-btn pk-btn-ghost py-[0.45em] text-[0.78em]"
           >
             순위
+          </button>
+          <button
+            type="button"
+            onClick={() => setSheet("me")}
+            className="pk-btn pk-btn-ghost py-[0.45em] text-[0.78em]"
+          >
+            마이페이지
           </button>
         </div>
         <button
@@ -296,12 +304,12 @@ export default function Lobby({
             />
             <ModeCards game={g} h={H} />
           </div>
-          <div className="flex items-baseline gap-[0.5em] border-t border-[rgba(214,175,92,0.3)] bg-black/70 px-[0.7em] py-[0.35em]">
-            <span className="text-[1.1em] font-extrabold">{GAMES[g].name}</span>
-            <span className="pk-frame-title text-[0.7em]">
+          <div className="flex min-w-0 items-baseline gap-[0.5em] border-t border-[rgba(214,175,92,0.3)] bg-black/70 px-[0.7em] py-[0.35em]">
+            <span className="shrink-0 text-[1.1em] font-extrabold whitespace-nowrap">{GAMES[g].name}</span>
+            <span className="pk-frame-title min-w-0 truncate text-[0.7em]">
               {g === "holdem" ? "TEXAS HOLD'EM" : "SEVEN POKER"}
             </span>
-            <span className="ml-auto rounded-[4px] bg-white/10 px-[0.45em] text-[0.8em] font-bold text-white/80">
+            <span className="ml-auto shrink-0 rounded-[4px] bg-white/10 px-[0.45em] text-[0.8em] font-bold whitespace-nowrap text-white/80">
               {GAMES[g].seats}인
             </span>
           </div>
@@ -350,12 +358,12 @@ export default function Lobby({
                 className={`relative px-[0.55em] py-[0.35em] ${on ? "bg-[#2a2110]" : "bg-black/70"}`}
               >
                 <div className="text-[1.05em] font-extrabold">{t.name}</div>
-                <div className="text-[0.76em] leading-snug text-white/70">
+                <div className="text-[0.76em] leading-snug whitespace-nowrap text-white/70">
                   판돈 {fmtShort(t.ante)}
                   {game === "holdem" && (
                     <>
                       <br />
-                      블라인드 {fmtShort(t.sb)}/{fmtShort(t.bb)}
+                      <span className="text-white/50">블라인드</span> {fmtShort(t.sb)}·{fmtShort(t.bb)}
                     </>
                   )}
                 </div>
@@ -453,7 +461,7 @@ export default function Lobby({
                     </span>
                     {t.locked && <span className="text-[0.62em]">🔒</span>}
                     {!t.bots && (
-                      <span className="rounded-[3px] bg-white/10 px-[0.3em] text-[0.55em] text-white/60">
+                      <span className="rounded-[3px] bg-white/10 px-[0.3em] text-[0.64em] text-white/60">
                         친구방
                       </span>
                     )}
@@ -524,19 +532,25 @@ export default function Lobby({
             >
               <Profile char={wallet.char} size={44} className="ring-2 ring-[var(--pk-brass)]" />
             </button>
-            <div className="min-w-0 flex-1">
+            <button
+              type="button"
+              onClick={() => setSheet("me")}
+              className="min-w-0 flex-1 cursor-pointer text-left"
+              aria-label="마이페이지"
+            >
               <div className="flex items-baseline gap-[0.4em]">
                 <span className="truncate text-[1.1em] font-extrabold">{myNick}</span>
                 <span className="shrink-0 text-[0.8em] font-bold" style={{ color: info.color }}>
                   {info.name}
                 </span>
+                <span className="ml-auto shrink-0 text-[0.68em] text-white/40">마이페이지 ›</span>
               </div>
               <div className="flex items-center gap-[0.3em]">
                 {}
                 <img src={asset.chip("gold", "top")} alt="" className="h-[1.1em] w-[1.1em]" />
                 <Money won={wallet.money} className="text-[1.2em] text-[#ffd84a]" />
               </div>
-            </div>
+            </button>
             {myRank > 0 && (
               <button
                 type="button"
@@ -644,6 +658,17 @@ export default function Lobby({
                 onPick={(c) => void run("char", async () => (await setChar(c), setSheet("")))}
                 onClose={() => setSheet("")}
               />
+            )}
+            {sheet === "me" && (
+              <div className="flex flex-col" style={{ maxHeight: h - 20 }}>
+                <MyPage
+                  wallet={wallet}
+                  compact={!H}
+                  onChar={() => setSheet("char")}
+                  onRank={() => setSheet("rank")}
+                  onClose={() => setSheet("")}
+                />
+              </div>
             )}
             {sheet === "rank" && (
               <div className="flex flex-col p-[0.9em]" style={{ maxHeight: h * 0.8 }}>

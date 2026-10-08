@@ -52,6 +52,13 @@ const isIOS = () =>
   typeof navigator !== "undefined" &&
   /iP(hone|ad|od)/.test(navigator.userAgent) &&
   !("MSStream" in window);
+/** 진짜 전체화면이 되는 기기인지 (아이폰 사파리는 안 됨 → 전체화면 버튼·띠를 아예 안 보임) */
+const canFullscreen = () =>
+  typeof document !== "undefined" &&
+  !!(
+    document.fullscreenEnabled ||
+    (document as Document & { webkitFullscreenEnabled?: boolean }).webkitFullscreenEnabled
+  );
 const isStandalone = () =>
   typeof window !== "undefined" &&
   (window.matchMedia("(display-mode: standalone)").matches ||
@@ -97,6 +104,12 @@ export default function PokerApp({ rank }: { rank: RankRow[] | null }) {
   const [pseudoFs, setPseudoFs] = useState(false);
   const fs = fsReal || pseudoFs;
   const standalone = typeof window !== "undefined" && isStandalone();
+  // 전체화면이 안 되는 기기(아이폰 사파리)에서는 전체화면 버튼 · 띠를 아예 안 보임
+  const [canFs, setCanFs] = useState(true);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 브라우저에서만 알 수 있는 값
+    setCanFs(canFullscreen());
+  }, []);
   useEffect(() => {
     const on = () => setFsReal(document.fullscreenElement === rootRef.current && !!rootRef.current);
     document.addEventListener("fullscreenchange", on);
@@ -146,28 +159,30 @@ export default function PokerApp({ rank }: { rank: RankRow[] | null }) {
       <Soon label="상점" icon={SHOP_ICON} gold />
       <Soon label="옷장" icon={CLOSET_ICON} />
       <Settings />
-      <button
-        type="button"
-        onClick={toggleFs}
-        title={fs ? "전체화면 끝내기" : "전체화면"}
-        className="pk-btn pk-btn-ghost flex h-[30px] w-[34px] items-center justify-center"
-      >
-        <svg
-          viewBox="0 0 24 24"
-          className="h-[16px] w-[16px]"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2.2"
-          strokeLinecap="round"
-          aria-hidden
+      {(canFs || fs) && (
+        <button
+          type="button"
+          onClick={toggleFs}
+          title={fs ? "전체화면 끝내기" : "전체화면"}
+          className="pk-btn pk-btn-ghost flex h-[30px] w-[34px] items-center justify-center"
         >
-          {fs ? (
-            <path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5" />
-          ) : (
-            <path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" />
-          )}
-        </svg>
-      </button>
+          <svg
+            viewBox="0 0 24 24"
+            className="h-[16px] w-[16px]"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.2"
+            strokeLinecap="round"
+            aria-hidden
+          >
+            {fs ? (
+              <path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5" />
+            ) : (
+              <path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" />
+            )}
+          </svg>
+        </button>
+      )}
     </>
   );
 
@@ -223,27 +238,33 @@ export default function PokerApp({ rank }: { rank: RankRow[] | null }) {
     ? "fixed inset-0 z-[100] flex items-center justify-center overflow-hidden bg-black"
     : fsReal
       ? "flex h-full w-full items-center justify-center overflow-hidden bg-black"
-      : "mx-auto w-full max-w-[min(1280px,calc((100dvh-150px)*16/9))] px-0 sm:px-3";
-  // (폰: 사이트 머리말 57px + 게임 메뉴 45px + 전체화면 권장 띠 46px 아래부터 화면 끝까지)
+      : "mx-auto w-full max-w-[min(1280px,calc((100dvh-166px)*16/9))] px-0 sm:px-3";
+  // (폰: 사이트 머리말 57px + 게임 메뉴 45px + 전체화면 권장 띠 62px 아래부터 화면 끝까지. 띠가 없는 기기(아이폰)는 그만큼 더 크게)
+  const showFsBanner = !fs && canFs;
   const stageCls = fit
     ? "flex-none"
     : fs
       ? "h-full w-full"
-      : "h-[calc(100dvh-150px)] min-h-[480px] w-full scroll-mt-[150px] sm:aspect-video sm:h-auto sm:min-h-0 sm:rounded-2xl sm:border sm:border-white/10";
+      : `${showFsBanner ? "h-[calc(100dvh-166px)] scroll-mt-[166px]" : "h-[calc(100dvh-104px)] scroll-mt-[104px]"} min-h-[480px] w-full sm:aspect-video sm:h-auto sm:min-h-0 sm:rounded-2xl sm:border sm:border-white/10`;
   return (
     <div ref={rootRef} className={`pk ${outer}`}>
       {/* 전체화면 권장 — 폰에서만 (PC 는 창 모드로도 충분) */}
-      {!fs && (
+      {showFsBanner && (
         <button
           type="button"
           onClick={toggleFs}
-          className="mx-3 mb-2 flex h-[38px] w-[calc(100%-24px)] cursor-pointer items-center justify-center gap-2 overflow-hidden rounded-xl border border-[#D6AF5C]/50 bg-[linear-gradient(90deg,rgba(214,175,92,0.2),rgba(122,20,32,0.25))] px-3 py-2 font-['Nanum_Gothic',sans-serif] text-[12.5px] text-white/85 shadow-[0_0_24px_-6px_rgba(214,175,92,0.55)] transition-colors hover:border-[#D6AF5C] hover:text-white sm:hidden"
+          className="mx-3 mb-2 flex h-[54px] w-[calc(100%-24px)] cursor-pointer items-center justify-center gap-2.5 overflow-hidden rounded-xl border border-[#D6AF5C]/50 bg-[linear-gradient(90deg,rgba(214,175,92,0.2),rgba(122,20,32,0.25))] px-3 py-2 font-['Nanum_Gothic',sans-serif] text-[12.5px] text-white/85 shadow-[0_0_24px_-6px_rgba(214,175,92,0.55)] transition-colors hover:border-[#D6AF5C] hover:text-white sm:hidden"
         >
-          <span className="rounded-md bg-[#D6AF5C] px-1.5 py-0.5 font-mono text-[11px] font-bold text-[#2a1e05]">
+          <span className="rounded-md bg-[#D6AF5C] px-1.5 py-0.5 font-mono text-[13px] font-bold text-[#2a1e05]">
             ⛶
           </span>
-          <b className="font-bold text-white">전체화면 플레이 권장</b>
-          <span className="truncate text-white/55">— 누르면 전체화면</span>
+          <span className="flex flex-col items-start leading-tight">
+            <b className="font-bold text-white">
+              전체화면 플레이 권장{" "}
+              <span className="font-normal text-white/60">— 가로/세로 지원</span>
+            </b>
+            <span className="text-[11.5px] text-white/50">누르면 전체화면</span>
+          </span>
         </button>
       )}
       <div

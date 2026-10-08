@@ -83,18 +83,20 @@ export interface Skill {
   read: number;
   /** 상대 성향(통계)을 반영하는 정도 */
   adapt: number;
+  /** 재미 보정 (0 = 정석대로, 1 = 동네판 아재): 넓게 들어오고 잘 안 죽고 자주 지름 — 판이 자주 쇼다운까지 가게 */
+  fun: number;
 }
 export const SKILL: Record<TierId, Skill> = {
-  1: { sims: 160, noise: 0.07, read: 0.5, adapt: 0 },
-  2: { sims: 260, noise: 0.035, read: 0.8, adapt: 0.5 },
-  3: { sims: 400, noise: 0.012, read: 1, adapt: 1 },
+  1: { sims: 160, noise: 0.07, read: 0.5, adapt: 0, fun: 1 },
+  2: { sims: 260, noise: 0.035, read: 0.8, adapt: 0.5, fun: 0.6 },
+  3: { sims: 400, noise: 0.012, read: 1, adapt: 1, fun: 0.35 },
 };
 
 /** 같은 단계 안에서도 봇마다 실력이 조금씩 다름 */
 export function randomSkill(tier: TierId, rand: () => number = Math.random): Skill {
   const s = SKILL[tier];
   const f = 0.7 + rand() * 0.6;
-  return { sims: s.sims, noise: clamp(s.noise * (2 - f), 0.005, 0.12), read: clamp(s.read * f, 0, 1), adapt: clamp(s.adapt * f, 0, 1) };
+  return { sims: s.sims, noise: clamp(s.noise * (2 - f), 0.005, 0.12), read: clamp(s.read * f, 0, 1), adapt: clamp(s.adapt * f, 0, 1), fun: clamp(s.fun + (rand() - 0.5) * 0.3, 0, 1) };
 }
 
 /** 봇 한 명의 테이블 안 상태 (자리에 앉아 있는 동안 유지) */
@@ -143,13 +145,26 @@ export function coolDown(b: Brain, lossBB: number) {
 
 /** 흔들림이 반영된 지금의 성격 */
 export function moodOf(b: Brain): Persona {
-  const p = b.persona;
+  const p = funOf(b.persona, b.skill.fun);
   const h = b.heat * p.tilt;
   if (!h) return p;
   if (h > 0)
     return { ...p, loose: p.loose * (1 + 0.5 * h), bluff: p.bluff * (1 + 0.9 * h), reraise: p.reraise * (1 + 0.6 * h), callMargin: p.callMargin - 0.06 * h, sizing: p.sizing * (1 + 0.25 * h) };
   // 움츠러드는 쪽: 더 좁게, 블러프를 줄임
   return { ...p, loose: p.loose * (1 + 0.45 * h), bluff: p.bluff * (1 + 0.7 * h), callMargin: p.callMargin - 0.05 * h };
+}
+
+/** 재미 보정: 패를 넓게 치고, 받는 기준을 낮추고(잘 안 죽음), 가끔 더 지름 */
+function funOf(p: Persona, fun: number): Persona {
+  if (fun <= 0) return p;
+  return {
+    ...p,
+    loose: Math.min(2.2, p.loose * (1 + 0.55 * fun)),
+    callMargin: p.callMargin - 0.06 * fun,
+    bluff: p.bluff * (1 + 0.3 * fun),
+    semiBluff: Math.min(0.7, p.semiBluff * (1 + 0.3 * fun)),
+    slowplay: p.slowplay * (1 - 0.3 * fun),
+  };
 }
 
 // ───────────── 대사 (캐릭터 말투) ─────────────

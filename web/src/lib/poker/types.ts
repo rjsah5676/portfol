@@ -56,6 +56,8 @@ export interface SeatWire {
   hands: number;
   wins: number;
   net: number;
+  /** 이 사람에게 쌓인 강퇴 투표 수 (3표면 강퇴) */
+  votes: number;
 }
 
 /** 테이블에서 일어난 일 (효과음 · 움직임 · 기록에 씀). 상태(TableWire)만 봐도 화면은 그릴 수 있음 */
@@ -75,7 +77,9 @@ export type PokerEvent =
   | { t: "say"; seat: number; text: string }
   | { t: "emote"; seat: number; emote: Emote }
   | { t: "sit"; seat: number; name: string }
-  | { t: "leave"; seat: number; name: string; why: "leave" | "bust" | "cut" | "idle" | "cashout" };
+  | { t: "leave"; seat: number; name: string; why: "leave" | "bust" | "cut" | "idle" | "cashout" | "vote" }
+  /** 강퇴 투표: seat 에게 by 가 한 표 (votes / need) */
+  | { t: "kick"; seat: number; by: number; votes: number; need: number };
 
 export interface PotWire {
   amount: number;
@@ -239,4 +243,26 @@ export interface RankRow {
   money: number;
   hands: number;
   char: CharId;
+}
+
+/** 마이페이지 (poker.me) */
+export interface MyPage {
+  nick: string;
+  char: CharId;
+  avatar: string | null;
+  /** 가입 시각 */
+  since: number;
+  money: number;
+  /** 자금 순위 (아직 한 판도 안 쳤으면 null) */
+  rank: number | null;
+  /** 테이블에 앉은 횟수 */
+  games: number;
+  /** 친 판 수 (전체) */
+  hands: number;
+  /** 한 판에 가장 크게 먹은 돈 */
+  best: number;
+  holdem: { hands: number; wins: number };
+  seven: { hands: number; wins: number };
+  /** 최근 판 (최신순) */
+  recent: { at: number; game: GameKind; tier: TierId; delta: number; rivals: number }[];
 }

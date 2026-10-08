@@ -62,6 +62,8 @@ export function nickname(rand: () => number = Math.random): string {
   else if (r < 0.88) n = pick(ENG, rand) + (rand() < 0.7 ? digits(rand) : pick(ENG, rand));
   else if (r < 0.94) n = pick(FOOD, rand);
   else n = pick(ADJ, rand) + pick(NOUN, rand);
+  // 한 글자 별명("콜", "삥")은 어색하니 숫자를 붙여 두 글자 이상으로
+  if (n.length < 2) n += digits(rand);
   return n.slice(0, 12);
 }
 

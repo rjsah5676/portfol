@@ -1,4 +1,4 @@
-import { bestFive, categoryOf, CAT, evaluate, shuffledDeck, type Card } from "../../../../../web/src/lib/poker/cards";
+import { bestFive, categoryOf, CAT, evaluate, madeOf, shuffledDeck, type Card } from "../../../../../web/src/lib/poker/cards";
 import { UNIT } from "../../../../../web/src/lib/poker/rules";
 import type { HoldemPlayer, HoldemView, PokerEvent, ResultWire } from "../../../../../web/src/lib/poker/types";
 import type { Brain, Cue } from "../personas";
@@ -109,7 +109,7 @@ class HoldemRound implements Round {
     }
     for (const [seat, amt] of Object.entries(r.won)) {
       const n = Number(seat);
-      if (r.showdown) best[n] = bestFive([...this.hand.player(n)!.cards, ...r.board]);
+      if (r.showdown) best[n] = madeOf(bestFive([...this.hand.player(n)!.cards, ...r.board]));
       ev.push({ t: "win", seat: n, amt, name: names[n] ?? null });
     }
     this.result = { showdown: r.showdown, pots: r.pots, won: r.won, names, best };

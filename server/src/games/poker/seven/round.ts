@@ -1,4 +1,4 @@
-import { shuffledDeck, type Card } from "../../../../../web/src/lib/poker/cards";
+import { madeOf, shuffledDeck, type Card } from "../../../../../web/src/lib/poker/cards";
 import { UNIT } from "../../../../../web/src/lib/poker/rules";
 import { bestK, kCategory, KCAT } from "../../../../../web/src/lib/poker/seven";
 import type { PokerEvent, ResultWire, SevenPlayer as SevenPlayerWire, SevenView } from "../../../../../web/src/lib/poker/types";
@@ -121,7 +121,7 @@ class SevenRound implements Round {
     }
     for (const [seat, amt] of Object.entries(r.won)) {
       const n = Number(seat);
-      if (r.showdown) best[n] = bestK(this.hand.player(n)!.cards).five;
+      if (r.showdown) best[n] = madeOf(bestK(this.hand.player(n)!.cards).five);
       ev.push({ t: "win", seat: n, amt, name: names[n] ?? null });
     }
     this.result = { showdown: r.showdown, pots: r.pots, won: r.won, names, best };

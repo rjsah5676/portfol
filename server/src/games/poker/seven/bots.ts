@@ -141,6 +141,8 @@ export function decideSeven(v: SevenBotView, brain: Brain): SevenDecision {
     const big = toCall >= v.pot * 0.4 || toCall >= me.stack * 0.5;
     let margin = p.callMargin + 0.03 * (n - 1) + (last ? 0.01 : 0.035);
     if (toCall >= me.stack * 0.5) margin += 0.04;
+    // 재미 보정: 싼 베팅은 다음 장을 보러 잘 따라감 (마지막 구 전)
+    if (!last && toCall <= v.pot * 0.3 && toCall < me.stack * 0.12) margin -= 0.045 * brain.skill.fun;
     const valueThr = 0.7 + 0.05 * (n - 1) + p.valueShift;
     if (avail.length && eq >= valueThr) {
       if (!last && eq > 0.88 && r() < p.slowplay) return { type: "call", thinkMs: think(1400, 3000) };

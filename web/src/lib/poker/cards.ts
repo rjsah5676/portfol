@@ -208,3 +208,22 @@ export function bestFive(cards: readonly Card[]): Card[] {
   }
   return pick;
 }
+
+/**
+ * 가장 센 5장 중 족보를 "이루는" 카드만 (강조 표시용).
+ * 원페어·투페어·트리플·포카드·풀하우스는 짝이 맞는 카드만, 스트레이트·플러시 계열은 5장 다, 하이카드는 제일 높은 한 장.
+ */
+export function madeOf(five: readonly Card[]): Card[] {
+  if (five.length < 5) return [...five];
+  const cnt = new Array<number>(13).fill(0);
+  for (const c of five) cnt[rankOf(c)]++;
+  if (cnt.some((n) => n >= 2)) return five.filter((c) => cnt[rankOf(c)] >= 2);
+  const flush = five.every((c) => suitOf(c) === suitOf(five[0]));
+  const rs = five.map(rankOf).sort((a, b) => a - b);
+  const straight =
+    rs[4] - rs[0] === 4 ||
+    (rs[0] === 0 && rs[1] === 1 && rs[2] === 2 && rs[3] === 3 && rs[4] === 12);
+  if (flush || straight) return [...five];
+  const top = Math.max(...rs);
+  return five.filter((c) => rankOf(c) === top);
+}

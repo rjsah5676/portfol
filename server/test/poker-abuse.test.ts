@@ -736,7 +736,7 @@ const HOLDEM_PLAYER_KEYS = ["allIn", "bet", "cards", "folded", "invested", "last
 const SEVEN_KEYS = ["ante", "boss", "currentBet", "deadline", "game", "legal", "phase", "players", "pot", "pots", "result", "round", "toAct"];
 const SEVEN_PLAYER_KEYS = ["allIn", "bet", "cards", "chosen", "down", "folded", "invested", "last", "up"];
 const TABLE_KEYS = ["bots", "ev", "game", "hand", "handNo", "id", "locked", "name", "nextAt", "seats", "seq", "tier"];
-const SEAT_KEYS = ["away", "char", "exit", "hands", "name", "net", "seat", "stack", "status", "uid", "wins"];
+const SEAT_KEYS = ["away", "char", "exit", "hands", "name", "net", "seat", "stack", "status", "uid", "votes", "wins"];
 
 /** 사람 둘 + (들어오고 나가는) 유저봇들이 여러 판을 치는 동안, 앉지 않은 구경꾼이 받은 것 전부를 모음 */
 async function watchGame(game: GameKind, policyA: (rnd: () => number) => Policy, policyB: Policy, enough: (seen: TableWire[]) => boolean) {
