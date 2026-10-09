@@ -39,6 +39,8 @@ export interface Wallet {
   /** 가진 스킨 · 캐릭터별로 입은 스킨 */
   skins: SkinId[];
   wear: Wear;
+  /** 산 캐릭터 (사야 쓰는 캐릭터 중 가진 것) */
+  chars: CharId[];
   /** 방금 칩이 바닥나서 기본 칩을 자동으로 받았으면 (알림용, 그때 한 번만 옴) */
   revived?: { amount: number; left: number };
 }

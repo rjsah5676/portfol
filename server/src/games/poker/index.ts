@@ -10,7 +10,10 @@ import { pictureOf, type UserDoc } from "../../users";
 import {
   ACT_AWAY_MS,
   ACT_MS,
+  BOT_CHAR_IDS,
   CHAR_IDS,
+  CHAR_PRICE,
+  charOwned,
   CHOICE_MS,
   EMOTES,
   GAMES,
@@ -404,7 +407,8 @@ export function registerPoker({ gateway, db, users }: Deps, opts: PokerOptions =
     const free = freeSeats(t);
     if (free.length - t.joining <= 1) return false;
     const seat = free[randomInt(free.length)];
-    const char = CHAR_IDS[randomInt(CHAR_IDS.length)];
+    // 사야 쓰는 캐릭터는 봇이 안 씀
+    const char = BOT_CHAR_IDS[randomInt(BOT_CHAR_IDS.length)];
     const name = uniqueNickname(t.seats.map((x) => x?.name ?? ""));
     // 들고 오는 돈: 기준의 0.6~2.2배, 적어도 입장컷의 1.5배
     const money = Math.max(Math.round(t.tier.min * 1.5), Math.round(t.tier.botMoney * (0.6 + randomInt(161) / 100)));
@@ -1327,6 +1331,10 @@ export function registerPoker({ gateway, db, users }: Deps, opts: PokerOptions =
   gateway.rpc("poker.char", async (ctx, raw) => {
     const { uid } = member(ctx);
     const { char } = z.object({ char: z.enum(CHAR_IDS as [CharId, ...CharId[]]) }).parse(raw);
+    if (CHAR_PRICE[char]) {
+      const own = await wallet.get(uid);
+      if (!own || !charOwned(char, own.chars)) throw new AppError("NOT_OWNED", "아직 없는 캐릭터예요. 상점에서 살 수 있어요.", 409);
+    }
     await db.col<UserDoc>("users").updateOne({ _id: uid }, { $set: { "poker.char": char } });
     const t = tables.get(seatOf.get(uid) ?? "");
     const s = t && findSeat(t, uid);
@@ -1347,6 +1355,16 @@ export function registerPoker({ gateway, db, users }: Deps, opts: PokerOptions =
     if (seatOf.has(uid)) throw new AppError("SEATED", "테이블에서 일어난 뒤에 살 수 있어요.", 409);
     await settlingOf.get(uid);
     const w = await wallet.buySkin(uid, skin);
+    return walletWire(uid, w);
+  });
+
+  /** 상점: 캐릭터 사기 (테이블에 앉아 있으면 안 됨). 사면 바로 그 캐릭터로 */
+  gateway.rpc("poker.buyChar", async (ctx, raw) => {
+    const { uid } = member(ctx);
+    const { char } = z.object({ char: z.enum(CHAR_IDS as [CharId, ...CharId[]]) }).parse(raw);
+    if (seatOf.has(uid)) throw new AppError("SEATED", "테이블에서 일어난 뒤에 살 수 있어요.", 409);
+    await settlingOf.get(uid);
+    const w = await wallet.buyChar(uid, char);
     return walletWire(uid, w);
   });
 

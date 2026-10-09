@@ -6,9 +6,12 @@ import { playVoice } from "@/lib/poker/sfx";
 import {
   CHARS,
   CHAR_IDS,
+  CHAR_PRICE,
   GAMES,
   LEAGUES,
   TIERS,
+  charOwned,
+  fmtEok,
   fmtShort,
   lookOf,
   type CharId,
@@ -24,6 +27,7 @@ import MyPage from "./MyPage";
 import PatchNotes, { LATEST } from "./PatchNotes";
 import LobbyChar from "./LobbyChar";
 import Sheet from "./Sheet";
+import type { ShopTab } from "./Shop";
 import { Money, PlayingCard, Profile } from "./parts";
 
 /*
@@ -45,6 +49,7 @@ export default function Lobby({
   o,
   h,
   onEnter,
+  onShop,
   topRight,
 }: {
   wallet: Wallet;
@@ -55,6 +60,8 @@ export default function Lobby({
   h: number;
   onEnter: (id: string) => void;
   onWallet: (w: Wallet) => void;
+  /** 상점 열기 (캐릭터 고르기에서 안 산 캐릭터를 고르면 캐릭터 탭으로) */
+  onShop?: (t: ShopTab) => void;
   topRight?: ReactNode;
 }) {
   const [game, setGameState] = useState<GameKind>("holdem");
@@ -414,16 +421,16 @@ export default function Lobby({
           onClick={() => run("quick", async () => onEnter(await quickJoin(game, tier)))}
           className="pk-btn pk-btn-gold flex-1 py-[0.75em] text-[1.05em]"
         >
-          {busy === "quick"
-            ? "입장 중…"
-            : locked
-              ? `칩 ${fmtShort(T.min)}부터 입장 가능`
-              : (
-                  <>
-                    <b className="pk-quick-game">{GAMES[game].name}</b>
-                    <span className="opacity-80"> · {T.name}</span> 바로 입장
-                  </>
-                )}
+          {busy === "quick" ? (
+            "입장 중…"
+          ) : locked ? (
+            `칩 ${fmtShort(T.min)}부터 입장 가능`
+          ) : (
+            <>
+              <b className="pk-quick-game">{GAMES[game].name}</b>
+              <span className="opacity-80"> · {T.name}</span> 바로 입장
+            </>
+          )}
         </button>
         <button
           type="button"
@@ -631,7 +638,7 @@ export default function Lobby({
                   ? "순위"
                   : sheet === "mychar"
                     ? "내 캐릭터"
-                  : undefined
+                    : undefined
           }
           onClose={() => setSheet("")}
         >
@@ -703,8 +710,10 @@ export default function Lobby({
           {sheet === "char" && (
             <CharSelect
               current={wallet.char}
+              owned={wallet.chars}
               o={o}
               onPick={(c) => void run("char", async () => (await setChar(c), setSheet("")))}
+              onShop={() => (setSheet(""), onShop?.("chars"))}
             />
           )}
           {sheet === "me" && (
@@ -819,59 +828,88 @@ function ModeCards({ game, h }: { game: "holdem" | "seven"; h: boolean }) {
   );
 }
 
-/** 캐릭터 고르기: 전신 5명 */
+/** 캐릭터 고르기: 위에 고른 캐릭터 소개(상반신 · 나이 · 생일), 아래에 프로필 줄 (늘어나면 옆으로 넘김) */
 function CharSelect({
   current,
+  owned,
   o,
   onPick,
+  onShop,
 }: {
   current: CharId;
+  owned: CharId[];
   o: Orient;
   onPick: (c: CharId) => void;
+  onShop: () => void;
 }) {
   const [sel, setSel] = useState<CharId>(current);
   const info = CHARS[sel];
+  const locked = !charOwned(sel, owned);
+  const price = CHAR_PRICE[sel] ?? 0;
   return (
-    <div className="flex min-h-0 flex-col gap-[0.6em] p-[0.9em] pt-[0.4em]">
-      <div className="flex items-end justify-center" style={{ height: o === "h" ? 260 : 220 }}>
-        {CHAR_IDS.map((c) => (
-          <button
-            key={c}
-            type="button"
-            aria-pressed={sel === c}
-            onClick={() => {
-              setSel(c);
-              playVoice(c, "select");
-            }}
-            className="pk-pick h-full min-w-0 flex-1 cursor-pointer"
-          >
-            {}
-            <img
-              src={asset.full(c)}
-              alt={CHARS[c].name}
-              draggable={false}
-              className="mx-auto h-full w-auto max-w-none object-contain"
-            />
-          </button>
-        ))}
-      </div>
+    <div className="flex min-h-0 flex-col gap-[0.7em] p-[0.9em] pt-[0.4em]">
+      {/* 고른 캐릭터 */}
       <div
-        className="flex items-center gap-[0.6em] rounded-[8px] px-[0.7em] py-[0.45em]"
-        style={{ background: `linear-gradient(90deg, ${info.color}55, transparent)` }}
+        className="pk-cs-hero"
+        style={{ "--c": info.color, height: o === "h" ? 230 : 200 } as React.CSSProperties}
       >
-        <Profile char={sel} size={36} />
-        <div>
-          <div className="text-[0.95em] font-extrabold">{info.name}</div>
-          <div className="text-[0.72em] text-white/65">{info.blurb}</div>
+        {}
+        <img src={asset.pose(sel, "idle")} alt="" draggable={false} className="pk-cs-bust" />
+        <div className="relative z-10 flex min-w-0 flex-1 flex-col justify-center gap-[0.25em] py-[0.6em] pr-[0.9em]">
+          <div className="flex items-baseline gap-[0.45em]">
+            <span className="text-[1.5em] leading-none font-extrabold">{info.name}</span>
+            {locked && <span className="pk-cs-lock">🔒 {fmtEok(price)}</span>}
+          </div>
+          <div className="pk-num text-[0.82em] text-white/75">
+            {info.age}세 · {info.birthday} ({info.sign})
+          </div>
+          <p className="text-[0.8em] leading-snug text-white/70">{info.blurb}</p>
         </div>
       </div>
-      <button
-        type="button"
-        onClick={() => onPick(sel)}
-        className="pk-btn pk-btn-gold py-[0.6em] text-[0.92em]"
-      >
-        {sel === current ? "확인" : `${info.name}(으)로 변경`}
-      </button>
+
+      {/* 프로필 줄: 좁으면 옆으로 넘김 */}
+      <div className="pk-cs-row pk-scroll" role="listbox" aria-label="캐릭터">
+        {CHAR_IDS.map((c) => {
+          const lock = !charOwned(c, owned);
+          return (
+            <button
+              key={c}
+              type="button"
+              role="option"
+              aria-selected={sel === c}
+              onClick={() => {
+                setSel(c);
+                playVoice(c, "select");
+              }}
+              className="pk-cs-item"
+              style={{ "--c": CHARS[c].color } as React.CSSProperties}
+            >
+              <Profile char={c} size={54} className={lock ? "opacity-55 grayscale-[0.6]" : ""} />
+              <span className="pk-cs-name">{CHARS[c].name}</span>
+              {lock && <span className="pk-cs-badge">🔒</span>}
+              {c === current && <span className="pk-cs-now">사용 중</span>}
+            </button>
+          );
+        })}
+      </div>
+
+      {locked ? (
+        <button
+          type="button"
+          onClick={onShop}
+          className="pk-btn pk-btn-gold py-[0.6em] text-[0.92em]"
+        >
+          상점에서 {info.name} 데려오기 · 칩 {fmtEok(price)}
+        </button>
+      ) : (
+        <button
+          type="button"
+          onClick={() => onPick(sel)}
+          className="pk-btn pk-btn-gold py-[0.6em] text-[0.92em]"
+        >
+          {sel === current ? "확인" : `${info.name}(으)로 변경`}
+        </button>
+      )}
     </div>
   );
 }

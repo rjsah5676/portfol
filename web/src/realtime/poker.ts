@@ -115,6 +115,8 @@ export const setChar = (char: CharId) => rpc("poker.char", { char });
 export const revive = () => rpc<Wallet>("poker.revive");
 /** 상점: 스킨 사기 (사면 바로 입음) · 옷장: 입기 / 벗기 */
 export const buySkin = (skin: SkinId) => rpc<Wallet>("poker.buy", { skin });
+/** 상점: 사야 쓰는 캐릭터 사기 (사면 바로 그 캐릭터로) */
+export const buyChar = (char: CharId) => rpc<Wallet>("poker.buyChar", { char });
 export const wearSkin = (char: CharId, skin: SkinId | null) => rpc<Wallet>("poker.wear", { char, skin });
 
 /** 자금 순위 (한 판이라도 친 회원, 보유금액 순) */

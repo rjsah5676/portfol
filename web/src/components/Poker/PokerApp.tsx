@@ -233,6 +233,7 @@ export default function PokerApp({ rank }: { rank: RankRow[] | null }) {
         h={size.h}
         onEnter={go}
         onWallet={setWallet}
+        onShop={setShop}
         topRight={topRight}
       />
     );

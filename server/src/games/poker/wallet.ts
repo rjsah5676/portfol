@@ -1,7 +1,7 @@
 import type { Database } from "../../db";
 import { AppError } from "../../errors";
 import { pictureOf, type UserDoc } from "../../users";
-import { CHAR_PRICE, REVIVE, START_MONEY, charOf, fmtWon, kstDay, lookOf, skinOf, type CharId, type GameKind, type SkinId, type Wear } from "../../../../web/src/lib/poker/rules";
+import { CHAR_PRICE, REVIVE, charOwned, START_MONEY, charOf, fmtWon, kstDay, lookOf, skinOf, type CharId, type GameKind, type SkinId, type Wear } from "../../../../web/src/lib/poker/rules";
 import type { BuyRankRow, RankRow } from "../../../../web/src/lib/poker/types";
 
 /*
@@ -23,6 +23,8 @@ export interface WalletDoc {
   /** 가진 스킨 · 캐릭터별로 입은 스킨 */
   skins: SkinId[];
   wear: Wear;
+  /** 산 캐릭터 (사야 쓰는 캐릭터 중 가진 것) */
+  chars: CharId[];
 }
 
 export interface SettleEntry {
@@ -35,8 +37,11 @@ export interface SettleEntry {
   wonAmount: number;
 }
 
-type MoneyFields = Pick<UserDoc, "nick"> & { money?: number; revive?: { day: string; n: number }; poker?: { char?: string; skins?: string[]; wear?: Record<string, string> } };
-const WALLET_PROJ = { nick: 1, money: 1, revive: 1, "poker.char": 1, "poker.skins": 1, "poker.wear": 1 } as const;
+type MoneyFields = Pick<UserDoc, "nick"> & { money?: number; revive?: { day: string; n: number }; poker?: { char?: string; skins?: string[]; wear?: Record<string, string>; chars?: string[] } };
+const WALLET_PROJ = { nick: 1, money: 1, revive: 1, "poker.char": 1, "poker.skins": 1, "poker.wear": 1, "poker.chars": 1 } as const;
+
+/** 문서의 산 캐릭터 목록 (가격이 있는 캐릭터만) */
+const ownedChars = (p?: MoneyFields["poker"]): CharId[] => [...new Set(p?.chars ?? [])].filter((c) => (CHAR_PRICE[c] ?? 0) > 0) as CharId[];
 
 /** 문서의 스킨 목록 · 입은 스킨을 믿을 수 있는 값만 남김 (가진 것 · 그 캐릭터의 스킨만) */
 export function skinsOf(p?: MoneyFields["poker"]): { skins: SkinId[]; wear: Wear } {
@@ -55,12 +60,18 @@ export function createWallet(db: Database, now: () => number = Date.now) {
   const col = db.col<UserDoc>("users");
   const listeners: ((uid: string, w: WalletDoc) => void)[] = [];
 
-  const toWallet = (d: MoneyFields): WalletDoc => ({
-    money: d.money ?? START_MONEY,
-    reviveUsed: d.revive && d.revive.day === kstDay(now()) ? d.revive.n : 0,
-    char: charOf(d.poker?.char),
-    ...skinsOf(d.poker),
-  });
+  const toWallet = (d: MoneyFields): WalletDoc => {
+    const chars = ownedChars(d.poker);
+    const c = charOf(d.poker?.char);
+    return {
+      money: d.money ?? START_MONEY,
+      reviveUsed: d.revive && d.revive.day === kstDay(now()) ? d.revive.n : 0,
+      // 고른 캐릭터가 사야 하는 캐릭터인데 안 샀으면(가격이 새로 붙었거나 문서가 꼬였을 때) 기본 캐릭터로
+      char: charOwned(c, chars) ? c : "jinwoo",
+      ...skinsOf(d.poker),
+      chars,
+    };
+  };
 
   /**
    * money 가 아직 없는 회원 문서에 시작 자금을 실제로 써 넣음 (조건부라 여러 번 불러도 한 번만).
@@ -223,6 +234,27 @@ export function createWallet(db: Database, now: () => number = Date.now) {
         if (!w) throw new AppError("NOT_MEMBER", "회원만 쓸 수 있어요.", 403);
         if (w.skins.includes(sk.id)) throw new AppError("OWNED", "이미 가진 스킨이에요.", 409);
         throw new AppError("NEED_MONEY", `칩이 모자라요. ${sk.name}은(는) 칩 ${fmtWon(sk.price)}이에요.`, 409, { need: sk.price, money: w.money });
+      }
+      return (await changed(uid))!;
+    },
+
+    /**
+     * 캐릭터 사기: 돈이 모자라지 않고 아직 없을 때만 (한 번의 조건부 갱신). 사면 바로 그 캐릭터로 바뀜.
+     * 테이블에 앉아 있는지는 부르는 쪽에서 막음.
+     */
+    async buyChar(uid: string, c: CharId) {
+      const price = CHAR_PRICE[c] ?? 0;
+      if (price <= 0) throw new AppError("BAD_REQUEST", "살 수 없는 캐릭터예요.", 400);
+      await materialize([uid]);
+      const r = await col.updateOne(
+        { _id: uid, money: { $gte: price }, "poker.chars": { $ne: c } } as never,
+        { $inc: { money: -price }, $push: { "poker.chars": c }, $set: { "poker.char": c } } as never
+      );
+      if (!r.modifiedCount) {
+        const w = await get(uid);
+        if (!w) throw new AppError("NOT_MEMBER", "회원만 쓸 수 있어요.", 403);
+        if (w.chars.includes(c)) throw new AppError("OWNED", "이미 가진 캐릭터예요.", 409);
+        throw new AppError("NEED_MONEY", `칩이 모자라요. 이 캐릭터는 칩 ${fmtWon(price)}이에요.`, 409, { need: price, money: w.money });
       }
       return (await changed(uid))!;
     },

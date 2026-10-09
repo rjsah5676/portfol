@@ -2289,6 +2289,89 @@
   background: #ffd84a;
   color: #2a1e05;
 }
+/* 캐릭터 고르기 */
+.pk-cs-hero {
+  --c: #ffd84a;
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  gap: 0.6em;
+  overflow: hidden;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--c) 45%, transparent);
+  background: linear-gradient(110deg, color-mix(in srgb, var(--c) 40%, #0b0d14), #0b0d14 70%);
+}
+.pk-cs-bust {
+  position: relative;
+  z-index: 1;
+  height: 100%;
+  width: auto;
+  flex-shrink: 0;
+  object-fit: contain;
+  object-position: bottom;
+  filter: drop-shadow(0 6px 14px rgba(0, 0, 0, 0.5));
+}
+.pk-cs-lock {
+  padding: 0.1em 0.55em;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.55);
+  border: 1px solid #ffd84a;
+  color: #ffd84a;
+  font-size: 0.75em;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.pk-cs-row {
+  display: flex;
+  gap: 0.55em;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  padding: 0.2em 0.1em 0.4em;
+}
+.pk-cs-item {
+  --c: #ffd84a;
+  position: relative;
+  flex: 1 0 4.6em;
+  max-width: 6em;
+  scroll-snap-align: start;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25em;
+  padding: 0.45em 0.2em 0.35em;
+  border-radius: 10px;
+  border: 2px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  cursor: pointer;
+}
+.pk-cs-item[aria-selected="true"] {
+  border-color: var(--c);
+  background: color-mix(in srgb, var(--c) 18%, transparent);
+}
+.pk-cs-name {
+  font-size: 0.78em;
+  font-weight: 800;
+}
+.pk-cs-badge {
+  position: absolute;
+  top: 0.25em;
+  right: 0.3em;
+  font-size: 0.8em;
+}
+.pk-cs-now {
+  position: absolute;
+  top: -0.55em;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 0 0.45em;
+  border-radius: 999px;
+  background: #ffd84a;
+  color: #2a1e05;
+  font-size: 0.62em;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
 /* 마이페이지 */
 .pk-me-chip {
   display: inline-flex;

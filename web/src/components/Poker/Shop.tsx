@@ -5,7 +5,9 @@ import { asset, lookReady } from "@/lib/poker/assets";
 import {
   CHARS,
   CHAR_IDS,
+  CHAR_PRICE,
   SKINS,
+  charOwned,
   fmtEok,
   fmtWon,
   lookOf,
@@ -15,17 +17,18 @@ import {
 } from "@/lib/poker/rules";
 import { playVoice } from "@/lib/poker/sfx";
 import type { Wallet } from "@/lib/poker/types";
-import { buySkin, wearSkin } from "@/realtime/poker";
+import { buyChar, buySkin, setChar, wearSkin } from "@/realtime/poker";
 import { Money } from "./parts";
 import Sheet from "./Sheet";
 
 /*
  * 상점 · 옷장 (한 창에 탭 둘).
  *   상점: 모든 캐릭터의 스킨을 보여 주고 칩으로 삼 (두 번 눌러 확인, 지금 캐릭터 것 먼저). 테이블에 앉아 있으면 못 삼 — 앉은 동안의 칩은 판에 들고 있어서.
+ *   캐릭터: 칩으로 사야 쓰는 캐릭터 (사면 바로 그 캐릭터로). 봇은 이 캐릭터를 안 씀.
  *   옷장: 지금 캐릭터의 기본 / 가진 스킨만. 다른 캐릭터 스킨은 그 캐릭터로 바꾼 뒤 입음.
  */
 
-export type ShopTab = "shop" | "closet";
+export type ShopTab = "shop" | "chars" | "closet";
 
 export default function Shop({
   wallet,
@@ -97,7 +100,10 @@ export default function Shop({
       <div className="shrink-0 px-[0.9em] pt-[0.5em] pr-[3.2em]">
         <div className="pk-seg">
           <button type="button" aria-pressed={tab === "shop"} onClick={() => setTab("shop")}>
-            상점
+            스킨
+          </button>
+          <button type="button" aria-pressed={tab === "chars"} onClick={() => setTab("chars")}>
+            캐릭터
           </button>
           <button type="button" aria-pressed={tab === "closet"} onClick={() => setTab("closet")}>
             옷장
@@ -109,7 +115,7 @@ export default function Shop({
         보유 칩{}
         <img src={asset.chip("gold", "top")} alt="" className="h-[1em] w-[1em]" />
         <Money won={wallet.money} className="text-[1.15em] text-[#ffd84a]" />
-        {seated && tab === "shop" && (
+        {seated && tab !== "closet" && (
           <span className="ml-auto text-[0.92em] text-[#ff8a97]">
             테이블에서 일어난 뒤 살 수 있어요
           </span>
@@ -128,7 +134,16 @@ export default function Shop({
         data-sheet-scroll
         className="pk-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain p-[0.9em]"
       >
-        {tab === "shop" ? (
+        {tab === "chars" ? (
+          <CharShop
+            wallet={wallet}
+            mobile={mobile}
+            seated={seated}
+            busy={busy}
+            run={run}
+            setMsg={setMsg}
+          />
+        ) : tab === "shop" ? (
           <ul className={`grid gap-[0.7em] ${mobile ? "" : "grid-cols-2"}`}>
             <li className="col-span-full rounded-[8px] bg-white/[0.05] px-[0.8em] py-[0.5em] text-[0.8em] text-white/70">
               <b className="text-[#9fe7ff]">터치 반응</b> 스킨을 입으면 로비에서 캐릭터를 눌러 볼 수
@@ -304,5 +319,120 @@ export default function Shop({
         )}
       </div>
     </Sheet>
+  );
+}
+
+/** 상점 · 캐릭터 탭: 칩으로 사야 쓰는 캐릭터 */
+function CharShop({
+  wallet,
+  mobile,
+  seated,
+  busy,
+  run,
+  setMsg,
+}: {
+  wallet: Wallet;
+  mobile: boolean;
+  seated: boolean;
+  busy: string;
+  run: (key: string, fn: () => Promise<void>) => Promise<void>;
+  setMsg: (m: { text: string; ok: boolean } | null) => void;
+}) {
+  const [confirm, setConfirm] = useState<CharId | null>(null);
+  const forSale = CHAR_IDS.filter((c) => (CHAR_PRICE[c] ?? 0) > 0);
+  if (!forSale.length)
+    return (
+      <p className="rounded-[8px] bg-white/[0.04] px-[0.8em] py-[1.6em] text-center text-[0.85em] text-white/55">
+        새 캐릭터를 준비 중이에요.
+      </p>
+    );
+  return (
+    <ul className={`grid gap-[0.7em] ${mobile ? "" : "grid-cols-2"}`}>
+      <li className="col-span-full rounded-[8px] bg-white/[0.05] px-[0.8em] py-[0.5em] text-[0.8em] text-white/70">
+        사면 바로 그 캐릭터로 바뀌고, 언제든 <b className="text-[#ffd84a]">캐릭터 변경</b>에서 다시
+        고를 수 있어요.
+      </li>
+      {forSale.map((c) => {
+        const info = CHARS[c];
+        const price = CHAR_PRICE[c] ?? 0;
+        const owned = charOwned(c, wallet.chars);
+        const short = Math.max(0, price - wallet.money);
+        const asking = confirm === c;
+        return (
+          <li key={c} className="pk-skin-card" style={{ "--c": info.color } as React.CSSProperties}>
+            <div className="pk-skin-art">
+              {}
+              <img src={asset.full(c)} alt={info.name} draggable={false} />
+              {owned && <span className="pk-skin-owned">보유 중</span>}
+            </div>
+            <div className="grid gap-[0.3em] p-[0.7em]">
+              <div className="flex items-baseline gap-[0.4em]">
+                <span className="text-[1.1em] font-extrabold">{info.name}</span>
+                <span className="text-[0.75em] text-white/55">
+                  {info.age}세 · {info.sign}
+                </span>
+              </div>
+              <p className="text-[0.78em] leading-snug text-white/65">{info.blurb}</p>
+              <div className="mt-[0.2em] flex items-center gap-[0.3em] text-[0.95em] font-extrabold text-[#ffd84a]">
+                {}
+                <img src={asset.chip("gold", "stack")} alt="" className="h-[1.3em] w-[1.3em]" />
+                {fmtWon(price)}
+              </div>
+              {owned ? (
+                <button
+                  type="button"
+                  disabled={!!busy || wallet.char === c}
+                  onClick={() => void run(`pick:${c}`, async () => void (await setChar(c)))}
+                  className="pk-btn pk-btn-ghost py-[0.55em] text-[0.88em]"
+                >
+                  {wallet.char === c ? "지금 캐릭터" : `${info.name}(으)로 바꾸기`}
+                </button>
+              ) : asking ? (
+                <div className="flex gap-[0.4em]">
+                  <button
+                    type="button"
+                    onClick={() => setConfirm(null)}
+                    className="pk-btn pk-btn-ghost px-[1em] py-[0.55em] text-[0.85em]"
+                  >
+                    그만두기
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!!busy}
+                    onClick={() =>
+                      void run(c, async () => {
+                        await buyChar(c);
+                        setConfirm(null);
+                        setMsg({
+                          text: `${info.name}을(를) 데려왔어요! 지금 캐릭터로 바뀌었어요.`,
+                          ok: true,
+                        });
+                        playVoice(c, "select");
+                      })
+                    }
+                    className="pk-btn pk-btn-gold flex-1 py-[0.55em] text-[0.88em]"
+                  >
+                    {busy === c ? "사는 중…" : `칩 ${fmtEok(price)} 내고 사기`}
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  disabled={seated || short > 0}
+                  onClick={() => setConfirm(c)}
+                  className="pk-btn pk-btn-gold py-[0.55em] text-[0.88em]"
+                >
+                  {seated
+                    ? "테이블에서는 못 사요"
+                    : short > 0
+                      ? `칩 ${fmtEok(short)} 더 필요해요`
+                      : "사기"}
+                </button>
+              )}
+            </div>
+          </li>
+        );
+      })}
+    </ul>
   );
 }
