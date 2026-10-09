@@ -48,6 +48,9 @@ export default function Shop({
   const [busy, setBusy] = useState("");
   const [confirm, setConfirm] = useState<SkinId | null>(null);
   const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
+  /** 상점에서 볼 캐릭터 (전체 / 캐릭터별) */
+  const [who, setWho] = useState<CharId | "all">("all");
+  const shown = (sk: Skin) => who === "all" || sk.char === who;
   const seated = !!wallet.table;
   const skins = wallet.skins ?? [];
   /** 옷장에 보이는 것 = 지금 캐릭터의 스킨만 */
@@ -131,9 +134,30 @@ export default function Shop({
               <b className="text-[#9fe7ff]">터치 반응</b> 스킨을 입으면 로비에서 캐릭터를 눌러 볼 수
               있어요. 누를 때마다 다른 반응과 대사가 나와요.
             </li>
+            <li className="col-span-full flex flex-wrap gap-[0.35em]">
+              {(["all", ...CHAR_IDS] as const).map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  aria-pressed={who === c}
+                  onClick={() => setWho(c)}
+                  className="pk-shop-chip"
+                  style={
+                    c === "all" ? undefined : ({ "--c": CHARS[c].color } as React.CSSProperties)
+                  }
+                >
+                  {c === "all" ? "전체" : CHARS[c].name}
+                </button>
+              ))}
+            </li>
+            {who !== "all" && !SKINS.some((sk) => sk.char === who) && (
+              <li className="col-span-full rounded-[8px] bg-white/[0.04] px-[0.8em] py-[1.4em] text-center text-[0.85em] text-white/55">
+                {CHARS[who].name}의 스킨은 준비 중이에요.
+              </li>
+            )}
             {[
-              ...SKINS.filter((sk) => sk.char === wallet.char),
-              ...SKINS.filter((sk) => sk.char !== wallet.char),
+              ...SKINS.filter((sk) => sk.char === wallet.char && shown(sk)),
+              ...SKINS.filter((sk) => sk.char !== wallet.char && shown(sk)),
             ].map((sk) => {
               const owned = skins.includes(sk.id);
               const short = Math.max(0, sk.price - wallet.money);

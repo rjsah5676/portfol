@@ -2289,6 +2289,23 @@
   background: #ffd84a;
   color: #2a1e05;
 }
+/* 상점 캐릭터 고르기 */
+.pk-shop-chip {
+  --c: #ffd84a;
+  padding: 0.3em 0.85em;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 0.8em;
+  font-weight: 700;
+  cursor: pointer;
+}
+.pk-shop-chip[aria-pressed="true"] {
+  border-color: var(--c);
+  background: color-mix(in srgb, var(--c) 22%, transparent);
+  color: #fff;
+}
 /* 로비에서 누르면 반응하는 스킨 */
 .pk-skin-live {
   position: absolute;
