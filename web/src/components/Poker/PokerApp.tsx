@@ -596,12 +596,13 @@ function Intro({
             src={asset.full(c)}
             alt=""
             draggable={false}
-            className="pk-intro-char h-auto"
+            className="pk-intro-char w-auto max-w-none"
             style={{
-              width: h ? "23%" : "40%",
+              // 키 기준 (그림마다 가로세로 비율이 달라서 폭으로 맞추면 마른 그림이 너무 크게 나옴)
+              height: h ? "58cqw" : "100cqw",
               marginLeft: i ? (h ? "-3%" : "-20%") : 0,
               zIndex: 5 - Math.abs(i - 2),
-              transform: `translateY(${(LIFT[c] ?? 0) * (h ? 1 : 0.6) - Math.abs(i - 2) * (h ? 3 : 2)}%) scale(${(c === "jinwoo" ? 1.08 : 1) - Math.abs(i - 2) * 0.07})`,
+              transform: `translateY(${(LIFT[c] ?? 0) * (h ? 1 : 0.6) - Math.abs(i - 2) * (h ? 3 : 2)}%) scale(${(c === "jinwoo" ? 1.02 : 1) - Math.abs(i - 2) * 0.07})`,
               transformOrigin: "bottom",
               filter: `drop-shadow(0 0 14px rgba(0,0,0,0.8)) brightness(${1 - Math.abs(i - 2) * 0.1})`,
               animationDelay: `${0.1 + Math.abs(i - 2) * 0.12}s`,
