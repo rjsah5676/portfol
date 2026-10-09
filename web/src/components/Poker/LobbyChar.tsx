@@ -14,8 +14,8 @@ import { playVoice } from "@/lib/poker/sfx";
  */
 
 const TOUCH_N = 3;
-/** 터치 반응 영상 한 편 길이 (끝나면 대기로) */
-const TOUCH_MS = 4200;
+/** 터치 반응 영상 한 편 길이 (6초, 끝나면 대기로). 끝날 때까지 다시 눌러도 무시 */
+const TOUCH_MS = 6000;
 
 export default function LobbyChar({
   look,
@@ -58,21 +58,27 @@ export default function LobbyChar({
     return () => clearTimeout(touchTimer.current);
   }, [live, touchable, look]);
 
+  const lastTouch = useRef(0);
   const poke = () => {
     if (!touchable || Date.now() < busyUntil.current) return;
-    busyUntil.current = Date.now() + 1400;
     const k = ++key.current;
     const hs = [0, 1, 2].map((i) => ({ key: k * 10 + i, x: 30 + Math.random() * 40 }));
     setHearts((h) => [...h, ...hs]);
     setTimeout(() => setHearts((h) => h.filter((x) => !hs.includes(x))), 1600);
     playVoice(look, Math.random() < 0.5 ? "select" : "hello");
-    if (touches.length) {
-      // 같은 그림을 다시 틀 때 처음부터 나오게 주소에 번호를 붙임
-      setTouch(touches[Math.floor(Math.random() * touches.length)] * 1000 + (k % 1000));
-      busyUntil.current = Date.now() + TOUCH_MS;
-      clearTimeout(touchTimer.current);
-      touchTimer.current = setTimeout(() => setTouch(0), TOUCH_MS);
+    if (!touches.length) {
+      busyUntil.current = Date.now() + 1400;
+      return;
     }
+    // 무작위로 하나 (방금 나온 것은 빼고)
+    const pool = touches.length > 1 ? touches.filter((t) => t !== lastTouch.current) : touches;
+    const pick = pool[Math.floor(Math.random() * pool.length)];
+    lastTouch.current = pick;
+    // 같은 그림을 다시 틀 때 처음부터 나오게 주소에 번호를 붙임
+    setTouch(pick * 1000 + (k % 1000));
+    busyUntil.current = Date.now() + TOUCH_MS;
+    clearTimeout(touchTimer.current);
+    touchTimer.current = setTimeout(() => setTouch(0), TOUCH_MS);
   };
 
   const imgCls = `pk-lobbychar-img ${bust ? "pk-lobbychar-bust" : ""}`;
