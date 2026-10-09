@@ -2289,6 +2289,20 @@
   background: #ffd84a;
   color: #2a1e05;
 }
+/* 로비에서 누르면 반응하는 스킨 */
+.pk-skin-live {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  padding: 0.12em 0.6em;
+  border-radius: 999px;
+  font-size: 0.72em;
+  font-weight: 800;
+  white-space: nowrap;
+  background: rgba(8, 40, 60, 0.85);
+  border: 1px solid #9fe7ff;
+  color: #9fe7ff;
+}
 .pk-closet-item {
   position: relative;
   height: 9em;

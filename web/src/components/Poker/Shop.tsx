@@ -127,6 +127,10 @@ export default function Shop({
       >
         {tab === "shop" ? (
           <ul className={`grid gap-[0.7em] ${mobile ? "" : "grid-cols-2"}`}>
+            <li className="col-span-full rounded-[8px] bg-white/[0.05] px-[0.8em] py-[0.5em] text-[0.8em] text-white/70">
+              <b className="text-[#9fe7ff]">터치 반응</b> 스킨을 입으면 로비에서 캐릭터를 눌러 볼 수
+              있어요. 누를 때마다 다른 반응과 대사가 나와요.
+            </li>
             {[
               ...SKINS.filter((sk) => sk.char === wallet.char),
               ...SKINS.filter((sk) => sk.char !== wallet.char),
@@ -145,6 +149,7 @@ export default function Shop({
                     <img src={asset.full(sk.id)} alt={sk.name} draggable={false} />
                     {!lookReady(sk.id) && <span className="pk-skin-soon">새 그림 준비 중</span>}
                     {owned && <span className="pk-skin-owned">보유 중</span>}
+                    {sk.live && lookReady(sk.id) && <span className="pk-skin-live">터치 반응</span>}
                   </div>
                   <div className="grid gap-[0.3em] p-[0.7em]">
                     <div className="flex items-baseline gap-[0.4em]">
