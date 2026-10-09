@@ -27,6 +27,7 @@ export function sevenSeatCards({
   hide,
   settled,
   dealDelay,
+  maxW,
 }: SeatCardsProps<SevenView>) {
   const p = view.players[seat];
   if (!p) return null;
@@ -35,9 +36,15 @@ export function sevenSeatCards({
   const w = hero ? sizes.heroCard : sizes.card;
   const count = p.cards?.length ?? (hero ? myHand?.cards.length : p.up.length + p.down) ?? 0;
   // 옆자리는 카드가 늘어나도 폭이 거의 안 늘게 촘촘히 겹침, 내 카드는 숫자가 다 보이게
-  const overlap = hero
+  let overlap = hero
     ? -Math.round(w * (count >= 6 ? 0.3 : 0.2))
     : -Math.round(w * (side === "top" ? 0.38 : 0.48));
+  // 폭이 정해져 있으면 그 안에 들어오게 더 겹침 (숫자 보일 만큼은 남김)
+  if (maxW && !hero && count > 1) {
+    const cw = p.cards && !hide ? Math.round(w * 1.15) : w;
+    const fit = -Math.ceil(cw - (maxW - cw) / (count - 1));
+    overlap = Math.min(overlap, Math.max(fit, -Math.round(cw * 0.72)));
+  }
   const row = `flex ${side === "right" ? "justify-end" : ""}`;
   const gap = (i: number) => (i ? { marginLeft: overlap } : undefined);
 

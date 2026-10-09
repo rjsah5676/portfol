@@ -152,6 +152,8 @@ export type SeatCardsProps<V> = {
   settled?: boolean;
   /** 카드 나눠 주기 연출 중: i 번째 카드(전체 n장)가 손에 도착하는 시각(ms, 없으면 그냥) */
   dealDelay?: (i: number, n: number) => number | undefined;
+  /** 옆으로 늘어놓을 수 있는 최대 폭(px) — 넘치면 더 촘촘히 겹침 (폰 세로판 양옆 자리끼리 안 겹치게) */
+  maxW?: number;
 };
 
 /** 카드 나눠 주기 연출: 딜러(판 가운데)에서 한 장씩 날아감. k = 날아가는 순서, idx = 그 자리의 몇 번째 카드(-1 = 마지막 장) */
@@ -1075,14 +1077,35 @@ export default function TableView({
     if (sp.side === "top") return { x, y: y + 52 + 4 + cardH + 14 }; // 카드 아래
     const dir = sp.side === "left" ? 1 : -1;
     if (C?.cardSide[idx] === "below") return { x: x + dir * (half + 22), y: y - 14 }; // 이름표 위 안쪽 (카드는 아래)
-    // 카드가 옆이면: 촘촘한 판에선 엎어 둔 카드 위에 겹쳐 둠(아래 자리 꼬리표·옆 자리와 안 겹치게 — 뒷면이라 가려도 됨), 아니면 이름표 아래
-    if (C) return { x: x + dir * (half + 6 + sizes.card * 1.3), y: y + 26 };
-    return { x: x + dir * half * 0.35, y: y + 52 + 14 };
+    // 카드가 옆이면: 촘촘한 판에선 엎어 둔 카드 위에 겹쳐 둠(뒷면이라 가려도 됨), 아니면 이름표 아래.
+    // 좁은 폰에서 그 자리가 다른 사람 이름표에 걸리면 이름표 아래 → 이름표 위 순으로 비킴
+    const cands = [
+      ...(C ? [{ x: x + dir * (half + 6 + sizes.card * 1.3), y: y + 26 }] : []),
+      { x: x + dir * half * 0.35, y: y + 52 + 14 },
+      { x: x + dir * half * 0.35, y: y - 14 },
+    ];
+    const pillHalf = betHalfW();
+    const hits = (c: { x: number; y: number }) => {
+      const cx = clampBetX(c.x);
+      for (let j = 0; j < n; j++) {
+        if (j === idx || !L.spots[j]) continue;
+        const o = L.spots[j];
+        const ox = seatX(o.x);
+        const oy = seatY(o);
+        if (Math.abs(cx - ox) < pillHalf + half && c.y + 13 > oy - 2 && c.y - 13 < oy + 54) return true;
+      }
+      return false;
+    };
+    return cands.find((c) => !hits(c)) ?? cands[0];
+  };
+  /** 건 돈 알약 폭의 절반 (어림: 칩 + 글자 다섯 자쯤) */
+  const betHalfW = () => {
+    const fpx = Math.min(15, Math.max(11, u * 1.45 + 4.6));
+    return (Math.max(22, u * 3.4) * 1.25 + fpx * 1.5 * 3.6) / 2;
   };
   /** 건 돈 알약이 무대 밖으로 안 나가게 (폭은 어림: 칩 + 글자 다섯 자쯤) */
   const clampBetX = (x: number) => {
-    const fpx = Math.min(15, Math.max(11, u * 1.45 + 4.6));
-    const half = (Math.max(22, u * 3.4) * 1.25 + fpx * 1.5 * 3.6) / 2;
+    const half = betHalfW();
     return Math.max(half + 4, Math.min(boardW - half - 4, x));
   };
   /** 외침이 시작되는 곳: 그 캐릭터의 머리 근처 */
@@ -1213,6 +1236,16 @@ export default function TableView({
                   hide: !revealed(i),
                   settled: revealDone,
                   dealDelay: dealOf(i),
+                  // 폰 세로판(길쭉한 화면): 양옆 자리 카드는 판 가운데까지만
+                  maxW:
+                    o === "v" && !C && sp.side !== "top"
+                      ? Math.max(
+                          60,
+                          sp.side === "left"
+                            ? px(L.table.cx) - (x + plateHalf + 6) - 5
+                            : x - plateHalf - 6 - px(L.table.cx) - 5
+                        )
+                      : undefined,
                 });
           const wonHere = res?.won[i] ?? 0;
           // 누가 더 올리면(하프 · 레이즈) 그 전에 삥 · 콜 · 체크로 맞춰 둔 사람의 꼬리표는 지움 — 다시 행동해야 하니까
@@ -2182,15 +2215,19 @@ function Center({
         )}
         <div key={shown} className="pk-pot">
           <PotChips ratio={shown / base} size={Math.max(24, sizes.u * 4)} />
+          {/* 이번 구에 건 돈은 POT 글자 옆에 작게 (옆으로 길어져 자리를 가리지 않게) */}
           <span className="flex shrink-0 flex-col items-start leading-none whitespace-nowrap">
-            <span className="pk-pot-label">POT</span>
+            <span className="flex items-center gap-[0.4em]">
+              <span className="pk-pot-label">POT</span>
+              {/* 세로판(폰)은 길어지니 안 보여 줌 */}
+              {sizes.o !== "v" && !res && street > 0 && collected > 0 && (
+                <span className="mb-[0.1em] rounded-[3px] bg-white/10 px-[0.35em] py-[0.05em] text-[0.6em] text-white/75">
+                  +{fmtShort(street)}
+                </span>
+              )}
+            </span>
             <Money won={shown} className="text-[1.55em] text-white" />
           </span>
-          {!res && street > 0 && collected > 0 && (
-            <span className="ml-[0.2em] shrink-0 rounded-[4px] bg-white/10 px-[0.4em] py-[0.1em] text-[0.72em] whitespace-nowrap text-white/75">
-              베팅 +{fmtShort(street)}
-            </span>
-          )}
         </div>
       </div>
       {hand.game === "holdem" && (
