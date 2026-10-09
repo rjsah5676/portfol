@@ -491,7 +491,7 @@ const cloneF = (f: Fighter): Fighter => ({ ...f, hist: f.hist.slice() });
  * 이 빌드의 게임 데이터 지문 (캐릭터 성능·맵) — 온라인에서 서로 다른 빌드끼리 붙었는지 확인.
  * 계산 방식(sim.ts)만 바꿨을 땐 SIM_REV를 올릴 것.
  */
-const SIM_REV = 4;
+const SIM_REV = 5;
 export const BUILD_ID = (() => {
   const str = SIM_REV + JSON.stringify(CHARS.map((c) => [c.hp, c.walk, c.jumpVx, c.dash, c.cd, c.glide, c.hurt, c.width, c.moves])) + JSON.stringify(MAPS.map((m) => [m.plats, m.spawn]));
   let h = 2166136261;
@@ -1530,7 +1530,10 @@ function applyHit(s: State, ai: number, m: MoveDef, srcX: number, mid: MoveId, p
     d.t = 0;
     d.mv = "";
     d.stun = just ? Math.max(2, m.blockstun >> 1) : m.blockstun;
-    if (srcX !== d.x) d.face = srcX > d.x ? 1 : -1;
+    // 막는 쪽은 때린 사람을 봄 (탄은 날아온 쪽). 이미 막는 중이면 그대로 — 연타·소환 필살기는 판정이
+    // 상대 앞뒤 여기저기서 나와서, 맞을 때마다 그쪽으로 돌아 뒤를 보던 것 (10.10)
+    const faceX = m.proj && !m.summon ? srcX : a.x;
+    if (!wasBlocking && faceX !== d.x) d.face = faceX > d.x ? 1 : -1;
     d.gcT = d.stun + GC_GRACE;
     if (!wasBlocking) d.guardT = 0;
     d.guardT = Math.max(d.guardT, JUST_T + 1);
