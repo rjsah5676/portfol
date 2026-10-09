@@ -29,7 +29,7 @@ export const lookReady = (l: Look) => !!skinOf(l)?.ready;
 const LIVE_BASE = new Set<string>(["amy", "yeonseo", "jinwoo", "taeyang", "jeongmin"]);
 export const liveIdle = (l: Look) => (skinOf(l) ? !!skinOf(l)?.live && lookReady(l) : LIVE_BASE.has(l));
 /** 왼쪽 아래 내 캐릭터용 전신 그림(hero-*.webp, 384×576)이 있는 그림 폴더 */
-const HERO_DIRS = new Set(["amy", "jinwoo", "taeyang", "jeongmin", "yeonseo", "amy-summer"]);
+const HERO_DIRS = new Set(["amy", "jinwoo", "taeyang", "jeongmin", "yeonseo", "amy-summer", "yeonseo-summer"]);
 export const heroReady = (l: Look) => HERO_DIRS.has(dir(l));
 
 export const asset = {

@@ -15,14 +15,14 @@ import {
 } from "@/lib/poker/rules";
 import { playVoice } from "@/lib/poker/sfx";
 import type { Wallet } from "@/lib/poker/types";
-import { buySkin, setChar, wearSkin } from "@/realtime/poker";
+import { buySkin, wearSkin } from "@/realtime/poker";
 import { Money } from "./parts";
 import Sheet from "./Sheet";
 
 /*
  * 상점 · 옷장 (한 창에 탭 둘).
- *   상점: 스킨을 칩으로 삼 (두 번 눌러 확인). 테이블에 앉아 있으면 못 삼 — 앉은 동안의 칩은 판에 들고 있어서.
- *   옷장: 캐릭터별로 기본 / 가진 스킨 중 골라 입음. 다른 캐릭터의 스킨을 고르면 그 캐릭터로 바뀜.
+ *   상점: 모든 캐릭터의 스킨을 보여 주고 칩으로 삼 (두 번 눌러 확인, 지금 캐릭터 것 먼저). 테이블에 앉아 있으면 못 삼 — 앉은 동안의 칩은 판에 들고 있어서.
+ *   옷장: 지금 캐릭터의 기본 / 가진 스킨만. 다른 캐릭터 스킨은 그 캐릭터로 바꾼 뒤 입음.
  */
 
 export type ShopTab = "shop" | "closet";
@@ -50,6 +50,8 @@ export default function Shop({
   const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
   const seated = !!wallet.table;
   const skins = wallet.skins ?? [];
+  /** 옷장에 보이는 것 = 지금 캐릭터의 스킨만 */
+  const mine = SKINS.filter((sk) => sk.char === wallet.char && skins.includes(sk.id)).length;
   const wear = wallet.wear ?? {};
 
   const run = async (key: string, fn: () => Promise<void>) => {
@@ -68,17 +70,21 @@ export default function Shop({
   const buy = (sk: Skin) =>
     run(sk.id, async () => {
       await buySkin(sk.id);
-      // 산 스킨의 캐릭터로 바로 (스킨은 사면 입혀짐)
-      if (wallet.char !== sk.char) await setChar(sk.char);
       setConfirm(null);
-      setMsg({ text: `${sk.name}을(를) 장착했어요!`, ok: true });
-      playVoice(sk.id, "select");
+      // 스킨은 사면 그 캐릭터에 입혀짐. 다른 캐릭터 스킨이면 캐릭터는 그대로
+      if (wallet.char === sk.char) {
+        setMsg({ text: `${sk.name}을(를) 장착했어요!`, ok: true });
+        playVoice(sk.id, "select");
+      } else
+        setMsg({
+          text: `${sk.name}을(를) 샀어요! ${CHARS[sk.char].name} 캐릭터로 바꾸면 입혀져 있어요.`,
+          ok: true,
+        });
     });
 
   const put = (char: CharId, skin: SkinId | null) =>
     run(`${char}:${skin ?? ""}`, async () => {
       await wearSkin(char, skin);
-      if (wallet.char !== char) await setChar(char);
       // 테이블 화면에서는 판을 방해하지 않게 대사 없이
       if (!inGame && !seated) playVoice(skin ?? char, "select");
     });
@@ -92,9 +98,7 @@ export default function Shop({
           </button>
           <button type="button" aria-pressed={tab === "closet"} onClick={() => setTab("closet")}>
             옷장
-            {skins.length > 0 && (
-              <span className="ml-[0.3em] text-[0.82em] opacity-70">{skins.length}</span>
-            )}
+            {mine > 0 && <span className="ml-[0.3em] text-[0.82em] opacity-70">{mine}</span>}
           </button>
         </div>
       </div>
@@ -123,7 +127,10 @@ export default function Shop({
       >
         {tab === "shop" ? (
           <ul className={`grid gap-[0.7em] ${mobile ? "" : "grid-cols-2"}`}>
-            {SKINS.map((sk) => {
+            {[
+              ...SKINS.filter((sk) => sk.char === wallet.char),
+              ...SKINS.filter((sk) => sk.char !== wallet.char),
+            ].map((sk) => {
               const owned = skins.includes(sk.id);
               const short = Math.max(0, sk.price - wallet.money);
               const asking = confirm === sk.id;
@@ -162,10 +169,13 @@ export default function Shop({
                     {owned ? (
                       <button
                         type="button"
+                        disabled={sk.char !== wallet.char}
                         onClick={() => setTab("closet")}
                         className="pk-btn pk-btn-ghost py-[0.55em] text-[0.88em]"
                       >
-                        옷장에서 장착
+                        {sk.char === wallet.char
+                          ? "옷장에서 장착"
+                          : `${CHARS[sk.char].name} 캐릭터로 바꾸면 입을 수 있어요`}
                       </button>
                     ) : asking ? (
                       <div className="flex gap-[0.4em]">
@@ -206,18 +216,15 @@ export default function Shop({
           </ul>
         ) : (
           <div className="grid gap-[0.7em]">
-            {skins.length === 0 && (
+            {mine === 0 && (
               <p className="rounded-[8px] bg-white/[0.05] px-[0.8em] py-[0.7em] text-[0.82em] text-white/60">
-                아직 가진 스킨이 없어요. <b className="text-[#ffd84a]">상점</b>에서 사면 여기서
-                갈아입을 수 있어요.
+                {CHARS[wallet.char].name}의 스킨이 아직 없어요.{" "}
+                <b className="text-[#ffd84a]">상점</b>에서 사면 여기서 갈아입을 수 있어요.
               </p>
             )}
-            {/* 지금 캐릭터 먼저, 그다음 스킨을 가진 캐릭터 */}
+            {/* 지금 캐릭터의 스킨만 (다른 캐릭터 스킨은 그 캐릭터로 바꾼 뒤 입음) */}
             {[wallet.char, ...CHAR_IDS.filter((c) => c !== wallet.char)]
-              .filter(
-                (c) =>
-                  c === wallet.char || SKINS.some((sk) => sk.char === c && skins.includes(sk.id))
-              )
+              .filter((c) => c === wallet.char)
               .map((c) => {
                 const looks: { id: SkinId | null; name: string }[] = [
                   { id: null, name: "기본" },

@@ -130,7 +130,7 @@ export const charOf = (id: unknown): CharId => (CHAR_IDS.includes(id as CharId) 
  * + (live) 로비 대기 영상 idle.webp · 터치 반응 touch-1~3.webp.
  * ready = 그림이 들어왔는지. false 면 원래 캐릭터 그림으로 보임 (사고 입는 것은 됨).
  */
-export type SkinId = "amy-summer";
+export type SkinId = "amy-summer" | "yeonseo-summer";
 export interface Skin {
   id: SkinId;
   char: CharId;
@@ -153,6 +153,16 @@ export const SKINS: Skin[] = [
     line: "뭘 그렇게 봐! …어울리긴 해?",
     ready: true,
     live: true,
+  },
+  {
+    id: "yeonseo-summer",
+    char: "yeonseo",
+    name: "한여름의 연서",
+    price: 10 * EOK,
+    blurb: "바다요? …이 판 끝나고 가죠.",
+    line: "여름이니까요. …어울려요?",
+    ready: true,
+    live: false,
   },
 ];
 export const SKIN_IDS = SKINS.map((s) => s.id);
