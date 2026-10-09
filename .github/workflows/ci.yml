@@ -19,7 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       mongo:
-        image: mongo:7
+        image: public.ecr.aws/docker/library/mongo:7  # Docker Hub 대신 같은 공식 이미지의 AWS 미러 (GitHub 러너는 Docker Hub 받기 횟수 제한에 자주 걸림)
         ports:
           - 27017:27017
         options: >-

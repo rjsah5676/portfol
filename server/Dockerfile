@@ -4,7 +4,7 @@
 # (서버가 web/src 의 게임 규칙·점수 계산·채보를 상대 경로로 import 해서 server/ 만으로는 빌드할 수 없음)
 
 # ── 1) 빌드: 의존성 전체 설치 → tsup 으로 dist/index.js 한 파일로 묶음 ──
-FROM node:24-slim AS build
+FROM public.ecr.aws/docker/library/node:24-slim AS build
 # 레포와 같은 상대 위치(/repo/server, /repo/web/src/lib/…)로 둬야 ../../../../web/src/lib/… import 가 맞음
 WORKDIR /repo/server
 COPY server/package.json server/package-lock.json ./
@@ -24,7 +24,7 @@ COPY web/src/lib/fight /repo/web/src/lib/fight
 RUN npm run build
 
 # ── 2) 실행: 운영 의존성 + dist 만 ──
-FROM node:24-slim
+FROM public.ecr.aws/docker/library/node:24-slim
 ENV NODE_ENV=production
 WORKDIR /app
 COPY server/package.json server/package-lock.json ./
