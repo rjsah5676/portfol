@@ -124,6 +124,13 @@ export interface MoveDef {
   /** 맞히면 상대를 물방울에 가둠 (프레임 수) — 둥실 떠서 못 움직이고, 버튼 연타로 빨리 빠져나옴, 맞으면 터짐 */
   trap?: number;
   proj?: ProjDef;
+  /**
+   * 차지 기술 (이반 붕권): 시작 동작 at 프레임에서 버튼을 누르고 있는 동안 멈춰서 기를 모음 (최대 max 프레임).
+   * 모은 만큼 피해가 dmg 까지 · 경직·밀어내기도 커지고, 끝까지 모으면 가드를 부숨(막을 수 없음) + 다운
+   */
+  charge?: { at: number; max: number; dmg: number };
+  /** (계산용) 가드를 부숨 — 끝까지 모은 붕권 */
+  crush?: boolean;
 }
 
 export interface CharDef {
@@ -926,6 +933,142 @@ const RAW: CharSrc[] = [
         box: { x: 0, y: 0, w: 0, h: 0 },
         kd: true,
         summon: { w: 180, h: 160, delay: 18, life: 40, every: 8, front: 110 },
+      },
+    },
+  },
+  {
+    // 묵직한 한 방형: 느리고 크지만 한 대가 가장 아프고 체력이 가장 많음. 모티브 철권 폴
+    id: "ivan",
+    name: "이반",
+    title: "특수부대 교관 · 붕권",
+    desc: "기를 모아 정권 한 방으로 끝내는 러시아 특수부대 출신 거구",
+    hp: 1380,
+    walk: 1000,
+    jumpVx: 930,
+    dash: 2300,
+    cd: 150,
+    hurt: { x: -10, y: 64, w: 20, h: 64 },
+    width: 20,
+    color: "#D7263D",
+    quote: "한 방이면 충분하다.",
+    winQuote: "일어나라. …못 일어나겠지.",
+    tagline: "IRON BEAR",
+    difficulty: 2,
+    stats: { atk: 5, reach: 3, move: 1, control: 2, combo: 2, hp: 5 },
+    idName: "붕권",
+    idDesc: "누르고 있으면 기를 모으고, 떼면 한 걸음 내디디며 정권 — 오래 모을수록 세고, 끝까지 모으면 가드를 부숨",
+    ultName: "붉은 폭풍",
+    ultDesc: "숨을 들이쉬고(경직 면역) 돌진해 거대한 한 방 — 맞으면 멀리 날아감",
+    airLabel: "공중 L 낙하 팔꿈치",
+    airDesc: "아래로 팔꿈치를 내리꽂고 착지하면 주변에 충격파",
+    moves: {
+      L: {
+        // 약 (J): 잽 · 잽 · 바디블로 · 어깨 박치기 — 느리지만 한 대가 셈
+        startup: 5,
+        active: 3,
+        recovery: 8,
+        dmg: 52,
+        chip: 0,
+        hitstun: 15,
+        blockstun: 9,
+        push: 620,
+        hitstop: 6,
+        meter: 5,
+        box: { x: 4, y: 50, w: 52, h: 20 },
+        cancel: ["H", "S", "X"],
+      },
+      H: {
+        // 발차기 (K): 로우킥 → 두 손 깍지 해머 내려치기
+        startup: 12,
+        active: 4,
+        recovery: 21,
+        dmg: 115,
+        chip: 0,
+        hitstun: 21,
+        blockstun: 14,
+        push: 1300,
+        hitstop: 10,
+        meter: 9,
+        box: { x: 6, y: 58, w: 70, h: 32 },
+        cancel: ["S", "X"],
+        step: 160,
+      },
+      J: {
+        // 공중 약: 팔꿈치
+        startup: 6,
+        active: 6,
+        recovery: 8,
+        dmg: 62,
+        chip: 0,
+        hitstun: 16,
+        blockstun: 10,
+        push: 650,
+        hitstop: 7,
+        meter: 5,
+        box: { x: 0, y: 48, w: 46, h: 26 },
+      },
+      K: {
+        // 공중 발차기: 무릎
+        startup: 8,
+        active: 6,
+        recovery: 12,
+        dmg: 96,
+        chip: 0,
+        hitstun: 20,
+        blockstun: 12,
+        push: 1300,
+        hitstop: 9,
+        meter: 8,
+        box: { x: 0, y: 34, w: 50, h: 34 },
+        lunge: 1400,
+      },
+      S: {
+        // 아이덴티티 「붕권」: 누르고 있으면 기 모으기(최대 0.8초) → 한 걸음 내디디며 정권. 탭이면 빠른 정권
+        startup: 14,
+        active: 4,
+        recovery: 24,
+        dmg: 70,
+        chip: 8,
+        hitstun: 22,
+        blockstun: 12,
+        push: 1500,
+        hitstop: 10,
+        meter: 8,
+        box: { x: 6, y: 60, w: 76, h: 30 },
+        step: 420,
+        onBlock: -10,
+        charge: { at: 6, max: 48, dmg: 210 },
+        // 공중 「낙하 팔꿈치」: 아래로 내리꽂고 착지 충격파
+        air: {
+          startup: 8,
+          active: 16,
+          recovery: 14,
+          dmg: 80,
+          hitstun: 22,
+          push: 900,
+          box: { x: -6, y: 30, w: 42, h: 40 },
+          rush: { vx: 900, airVh: -2600, airVx: 700, landBurst: 60, landDmg: 50 },
+          kd: true,
+          step: undefined,
+          charge: undefined,
+        },
+      },
+      X: {
+        // 필살기 「붉은 폭풍」: 숨 들이쉬고(경직 면역) 돌진해 거대한 한 방
+        startup: 16,
+        active: 6,
+        recovery: 30,
+        dmg: 300,
+        chip: 30,
+        hitstun: 40,
+        blockstun: 20,
+        push: 2600,
+        hitstop: 18,
+        meter: 0,
+        box: { x: 4, y: 66, w: 70, h: 44 },
+        armor: true,
+        kd: true,
+        rush: { vx: 3400, airVh: 0, airFall: 900 },
       },
     },
   },

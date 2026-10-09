@@ -32,13 +32,14 @@ import {
   sfxRespawn,
   sfxSkill,
   sfxStatus,
+  sfxIvan,
   hasSkillSfx,
   setFightVolume,
   type Element,
 } from "@/lib/fight/sfx";
 
 /** 캐릭터별 효과음 성격 */
-const SFX_EL: Record<string, Element> = { kai: "wind", igna: "fire", soyoung: "whip", lily: "water", zena: "bolt", gunmo: "key" };
+const SFX_EL: Record<string, Element> = { kai: "wind", igna: "fire", soyoung: "whip", lily: "water", zena: "bolt", gunmo: "key", ivan: "fist" };
 import { FightRenderer } from "./render";
 import { FightInput } from "./input";
 import HowTo from "./HowTo";
@@ -399,6 +400,7 @@ export default function FightGame() {
     setPrac({ hits: 0, dmg: 0, best: 0 });
     let hits = 0;
     const prevMeter = [0, 0];
+    const prevChg = [0, 0];
     let lastHud = "";
     let acc = 0;
     let last = performance.now();
@@ -579,6 +581,8 @@ export default function FightGame() {
           else if (e.k === "proj") {
             if (!skillFile(e.p)) sfxProj(elOf(e.p), s.p[e.p].mv === "X");
           } else if (e.k === "burn" || e.k === "shock" || e.k === "trap" || e.k === "pop" || e.k === "pause" || e.k === "swap") sfxStatus(e.k);
+          else if (e.k === "charged") sfxIvan("max");
+          else if (e.k === "crush") sfxIvan("crush");
           else if (e.k === "super") sfxSuper();
           else if (e.k === "ko") sfxKO();
           else if (e.k === "jump") sfxJump();
@@ -596,6 +600,9 @@ export default function FightGame() {
           prevMeter[i] = f.meter;
           if (f.st === "atk" && (prevSt[i] !== "atk" || f.t < prevT[i]) && f.mv !== "S")
             sfxWhoosh(f.mv === "H" || f.mv === "K" || f.mv === "X", SFX_EL[CHARS[f.ch].id] ?? "wind");
+          // 이반 붕권: 기 모으기를 시작한 순간
+          if (f.st === "atk" && f.mv === "S" && f.chg === 1 && prevChg[i] !== 1) sfxIvan("charge");
+          prevChg[i] = f.st === "atk" ? f.chg : 0;
           // 아이덴티티·필살기가 실제로 나가는 순간 (발동 준비가 끝난 프레임)
           if (f.st === "atk" && (f.mv === "S" || f.mv === "X")) {
             const su = CHARS[f.ch].moves[f.mv].startup;

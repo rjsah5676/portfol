@@ -18,7 +18,7 @@ import matchImg from "@/img/Page/info/pixelfight/match.webp";
 // ───────────────────────── 데이터 ─────────────────────────
 
 const STATS = [
-  { value: "6명", label: "캐릭터" },
+  { value: "7명", label: "캐릭터" },
   { value: "4개", label: "맵" },
   { value: "7단계", label: "AI 난이도" },
   { value: "60fps", label: "고정 프레임 계산" },
@@ -46,7 +46,7 @@ const FEATURES: { title: string; items: string[] }[] = [
     title: "격투 시스템",
     items: [
       "발판을 오르내리는 플랫폼 대전 — 2단 점프, 대시(공중 1번), 낭떠러지",
-      "약 · 발차기 · 아이덴티티 기술 · 필살기, 캐릭터 6명이 기술과 상태 이상(화상 · 감전 · 방울 · 일시정지 · 혼란)이 모두 다름",
+      "약 · 발차기 · 아이덴티티 기술 · 필살기, 캐릭터 7명이 기술과 상태 이상(화상 · 감전 · 방울 · 일시정지 · 혼란)이 모두 다름",
       "가드 · 저스트 가드 · 가드 반격, 잡기와 잡기 풀기, 돌진 잡기, 카운터 히트",
       "공중 콤보 — 같은 기술만 반복하면 덜 아프고, 내려찍기로 마무리하면 다운",
       "기술마다 발동 · 지속 · 후딜 · 막혔을 때 이득을 프레임 단위로 정의",
@@ -130,7 +130,7 @@ export default function PixelFightProject() {
       <Section num="01" title="개요">
         <div className="flex flex-col gap-3 font-['Nanum_Gothic',sans-serif] text-sm leading-relaxed text-white/70">
           <p>
-            도트 캐릭터 6명이 발판 위에서 싸우는 1:1 격투게임입니다. 게임 로직은 그림 · 소리 ·
+            도트 캐릭터 7명이 발판 위에서 싸우는 1:1 격투게임입니다. 게임 로직은 그림 · 소리 ·
             시간과 분리된 <b className="text-white">결정론적 시뮬레이션</b>으로 짰습니다. 같은
             상태에 같은 입력을 넣으면 어느 기기에서 돌려도 같은 결과가 나오고, 온라인 대전 · AI ·
             밸런스 시뮬레이션이 모두 이 한 가지 계산을 같이 씁니다.

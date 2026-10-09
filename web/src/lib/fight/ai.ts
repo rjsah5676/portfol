@@ -149,6 +149,7 @@ export const CHAR_ADJ: Record<string, number[]> = {
   lily: [37, 138, 204, 209, 28, 29, 140],
   zena: [-62, -189, -353, -359, -35, 35, 154],
   gunmo: [78, 244, 458, 357, 48, -220, -450],
+  ivan: [0, 86, 144, 262, 52, 101, 124],
 };
 function charAdj(r: number, id: string) {
   const t = CHAR_ADJ[id];
@@ -209,7 +210,7 @@ export function aiForRating(r: number, charId?: string): AILevel {
  * AI 지문: 랭크전 봇전은 서버가 같은 경기를 다시 돌려 확인하니, 브라우저와 서버의 AI가 똑같아야 함.
  * 단계 값·보정·콤보 길은 자동으로 들어가고, next() 같은 판단 코드를 바꿨으면 AI_REV 를 올릴 것.
  */
-const AI_REV = 1;
+const AI_REV = 2;
 export const AI_ID = (() => {
   const str = AI_REV + JSON.stringify([AI_LEVELS, RANK_TIERS, AI_RATING, ADJ_AT, CHAR_ADJ, ROUTES, ROUTE_CAP]);
   let h = 0x811c9dc5;
@@ -262,6 +263,8 @@ export class FightAI {
   private gcDecision: boolean | null = null;
   private cutDecision: boolean | null = null;
   private lookDecision: boolean | null = null;
+  /** 차지 기술을 몇 프레임 모을지 (-1 = 아직 안 정함) */
+  private chargeGoal = -1;
   /** 상대가 가만히(서 있거나 가드만) 있은 프레임 수 — 오래 가만히 있으면 먼저 들어감 */
   private oStill = 0;
   private oX = 0;
@@ -336,6 +339,18 @@ export class FightAI {
       return out;
     };
 
+    // ── 차지 기술 (이반 붕권): 기 모으는 동안 버튼을 누르고 있음 — 상대가 막고 있거나 멀거나 쓰러져 있으면 끝까지(가드 부수기), 아니면 짧게 ──
+    const chg = c.moves.S.charge;
+    if (chg && f.st === "atk" && f.mv === "S" && !air) {
+      if (this.chargeGoal < 0) {
+        const full = o.st === "block" || o.st === "down" || o.st === "rise" || dist > 110 || this.oStill > 30;
+        this.chargeGoal = full && this.r() < 0.4 + L.combo * 0.5 ? chg.max : Math.floor(this.r() * chg.max * 0.5);
+      }
+      if (f.chg < this.chargeGoal && f.t <= chg.at + 1) {
+        this.lastPress = IN.C;
+        return IN.C;
+      }
+    } else this.chargeGoal = -1;
     if (this.dashSeq.length) {
       out = this.dashSeq.shift()!;
       return finish();

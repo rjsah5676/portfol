@@ -7,7 +7,7 @@
  * 마지막에 압축기(컴프레서)를 걸어 소리가 단단하고 크게 들리게 함.
  * 능력별(불·바람·채찍·물)로 맞는 소리·탄 소리를 조금씩 다르게.
  */
-export type Element = "fire" | "wind" | "whip" | "water" | "bolt" | "ice" | "key";
+export type Element = "fire" | "wind" | "whip" | "water" | "bolt" | "ice" | "key" | "fist";
 
 let ctx: AudioContext | null = null;
 let master: GainNode | null = null;
@@ -76,6 +76,12 @@ const SAMPLES: Record<string, number> = {
   "gunmo-pause": 0.5,
   "gunmo-confuse": 0.45,
   "gunmo-whoosh": 0.3,
+  "ivan-l": 0.6,
+  "ivan-l-air": 0.55,
+  "ivan-i": 0.6,
+  "ivan-charge": 0.4,
+  "ivan-max": 0.45,
+  "ivan-crush": 0.6,
   // 상태 이상
   burn: 0.35,
   shock: 0.4,
@@ -254,6 +260,11 @@ export function sfxHit(power: number, el: Element = "wind") {
     tone(c, t, "sine", 520, 1400, 0.18, 0.08);
     burst(c, t + 0.02, 900, 3, 0.18, 0.14, "bandpass", 0.3, 400);
   } else if (el === "whip") tone(c, t, "triangle", 2400, 900, 0.12, 0.05);
+  else if (el === "fist") {
+    // 맨주먹: 묵직하게 퍽 (낮은 저음 한 번 더)
+    tone(c, t, "sine", 120 - power * 20, 38, 0.45 + power * 0.12, 0.12 + power * 0.06, 3);
+    burst(c, t, 700, 1.2, 0.3 + power * 0.1, 0.08 + power * 0.04, "lowpass", 0.2);
+  }
   else if (el === "wind") burst(c, t, 1800, 0.8, 0.16, 0.12, "bandpass", 0.2, 600);
   else if (el === "bolt") {
     // 찌직 — 전기
@@ -440,6 +451,21 @@ export function sfxStatus(kind: "burn" | "shock" | "trap" | "pop" | "pause" | "s
   if (kind === "pause") sample("gunmo-pause");
   else if (kind === "swap") sample("gunmo-confuse");
   else sample(kind === "trap" || kind === "pop" ? `lily-${kind}` : kind);
+}
+/** 이반 붕권: 기 모으기 시작 · 다 모음 · 가드 부숨 */
+export function sfxIvan(kind: "charge" | "max" | "crush") {
+  if (sample(`ivan-${kind}`)) return;
+  const c = ac();
+  if (!c) return;
+  const t = c.currentTime;
+  if (kind === "charge") tone(c, t, "sawtooth", 70, 140, 0.18, 0.5, 2);
+  else if (kind === "max") {
+    tone(c, t, "square", 440, 880, 0.12, 0.12);
+    tone(c, t + 0.08, "square", 880, 880, 0.1, 0.1);
+  } else {
+    burst(c, t, 3000, 1, 0.6, 0.15, "highpass", 0.3);
+    tone(c, t, "sine", 90, 30, 0.9, 0.35, 3);
+  }
 }
 /** 떨어졌다 다시 등장 */
 export function sfxRespawn() {

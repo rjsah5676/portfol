@@ -40,6 +40,7 @@ const ELEMENT: Record<string, "fire" | "bolt" | "ice" | "wind" | "whip" | "water
   soyoung: "whip",
   lily: "water",
   gunmo: "ice",
+  ivan: "fire",
 };
 
 /** 탄 그림 (public/fight/fx/<이름>.webp, 오른쪽을 보는 그림) — 처음 쓸 때 불러옴 */
@@ -92,6 +93,16 @@ const FX_SETS: Record<string, Record<string, [number, number, boolean]>> = {
     err: [4, 1, true],
     pause: [2, 1, true],
     confuse: [2, 1, true],
+  },
+  // 이반: aura(붕권 기 모으기)·wave(붕권 충격파)·burst(붉은 폭풍)·crack(낙하 팔꿈치 착지 균열)는 따로 띄움
+  ivan: {
+    spark: [4, 0.7, true],
+    guard: [2, 0.6, true],
+    dust: [2, 0.5, false],
+    aura: [4, 0.95, true],
+    wave: [4, 0.9, true],
+    burst: [4, 1.35, true],
+    crack: [4, 0.95, false],
   },
 };
 /** 캐릭터 하나가 쓰는 그림 효과 파일 이름 전부 */
@@ -291,6 +302,15 @@ export class FightRenderer {
       if (e.k === "hit" || e.k === "throw") {
         const a = s.p[e.p];
         this.spawnFx(a.ch, "spark", x, y, a.face, 12);
+        if (e.k === "hit" && CHARS[a.ch].id === "ivan") {
+          // 붕권: 맞힌 자리에서 앞으로 퍼지는 충격파 / 붉은 폭풍: 큰 폭발
+          if (e.m === "S" && !isAirF(s, a)) this.spawnFx(a.ch, "wave", x + a.face * 18, y, a.face, 16);
+          else if (e.m === "X") {
+            this.spawnFx(a.ch, "burst", x + a.face * 22, y, a.face, 28);
+            this.flash = 3;
+            this.flashColor = "#FFD0D0";
+          }
+        }
       } else if (e.k === "block" || e.k === "just") {
         const d = s.p[1 - e.p];
         this.spawnFx(d.ch, "guard", d.x / SUB + d.face * 12, y, d.face, 12);
@@ -351,6 +371,27 @@ export class FightRenderer {
         this.parts.push({ x, y: y - 10, vx: 0, vy: -0.5, life: 34, max: 34, color: col, size: 1.3, kind: "text", text: txt });
         this.parts.push({ x, y, vx: 0, vy: 0, life: 12, max: 12, color: col, size: 13, kind: "ring" });
         if (e.k === "counter") this.shake = Math.max(this.shake, 3);
+      } else if (e.k === "charged") {
+        // 붕권 기를 끝까지 모음
+        const a = s.p[e.p];
+        this.parts.push({ x, y: y - 22, vx: 0, vy: -0.5, life: 30, max: 30, color: "#FF4D4D", size: 1.3, kind: "text", text: "MAX!" });
+        this.parts.push({ x, y, vx: 0, vy: 0, life: 14, max: 14, color: "#FF6B6B", size: 22, kind: "ring" });
+        this.spawnFx(a.ch, "aura", a.x / SUB, screenY(a.h + 34 * SUB), a.face, 12, false, { from: 3 });
+        this.shake = Math.max(this.shake, 2);
+      } else if (e.k === "crush") {
+        // 다 모은 붕권이 가드를 부숨
+        const a = s.p[e.p];
+        this.parts.push({ x, y: y - 14, vx: 0, vy: -0.6, life: 38, max: 38, color: "#FF3B3B", size: 1.5, kind: "text", text: "GUARD CRUSH!" });
+        this.parts.push({ x, y, vx: 0, vy: 0, life: 16, max: 16, color: "#FFC2C2", size: 26, kind: "ring" });
+        for (let i = 0; i < 12; i++)
+          this.parts.push({
+            x, y, vx: (Math.random() - 0.5) * 6, vy: (Math.random() - 0.5) * 6, life: 18, max: 18,
+            color: i % 2 ? "#CFEFFF" : "#FF6B6B", size: 1.5, kind: "shard",
+          });
+        this.spawnFx(a.ch, "wave", x + a.face * 18, y, a.face, 18);
+        this.flash = 4;
+        this.flashColor = "#fff";
+        this.shake = Math.max(this.shake, 7);
       } else if (e.k === "shock") {
         this.parts.push({ x, y: y - 6, vx: 0, vy: -0.6, life: 34, max: 34, color: "#FFE45C", size: 1.25, kind: "text", text: "SHOCK!" });
         for (let i = 0; i < 8; i++)
@@ -413,6 +454,13 @@ export class FightRenderer {
           });
         this.parts.push({ x, y: y - 4, vx: 0, vy: 0, life: 16, max: 16, color: "#FFE2C2", size: 30, kind: "ring" });
         this.shake = Math.max(this.shake, 10);
+      } else if (e.k === "clash" && e.v === 1 && e.p >= 0 && CHARS[s.p[e.p].ch].id === "ivan" && s.p[e.p].st === "atk") {
+        // 이반 낙하 팔꿈치 착지: 바닥 균열 + 붉은 충격 링
+        const a = s.p[e.p];
+        this.spawnFx(a.ch, "crack", x, y + 6, a.face, 24, true);
+        this.spawnFx(a.ch, "dust", x - 26, y, -1, 18, true);
+        this.spawnFx(a.ch, "dust", x + 26, y, 1, 18, true);
+        this.shake = Math.max(this.shake, 6);
       } else if (e.k === "clash" && e.v === 1) {
         // 착지 충격파: 옆으로 퍼지는 바람
         for (let i = 0; i < 14; i++) {
@@ -669,6 +717,29 @@ export class FightRenderer {
         g.drawImage(im, -w * 0.55, -h / 2, w, h);
         g.restore();
       }
+    }
+    // 이반 붕권 기 모으기: 몸 둘레로 붉은 기가 소용돌이 (모을수록 커지고, 다 모으면 번쩍임)
+    if (CHARS[f.ch].id === "ivan" && cm?.charge && f.mv === "S" && !f.aerial && f.chg > 0 && f.t <= cm.charge.at + 1) {
+      const full = f.chg >= cm.charge.max;
+      const k = full ? 2 + (Math.floor(s.f / 3) % 2) : Math.min(2, Math.floor((f.chg * 3) / cm.charge.max));
+      const im = fxImg(`ivan-aura-${k}`);
+      if (im) {
+        const z = 0.75 + (0.35 * Math.min(f.chg, cm.charge.max)) / cm.charge.max;
+        const w = (im.width / 1.72) * 0.95 * z,
+          h = (im.height / 1.72) * 0.95 * z;
+        g.save();
+        g.globalCompositeOperation = "lighter";
+        g.globalAlpha = 0.65 + 0.35 * Math.sin(s.f * 0.5) ** 2;
+        g.translate(x, y - 36);
+        if (f.face < 0) g.scale(-1, 1);
+        g.drawImage(im, -w / 2, -h / 2, w, h);
+        g.restore();
+      }
+      if (s.f % 3 === 0)
+        this.parts.push({
+          x: x + (Math.random() - 0.5) * 40, y: y - Math.random() * 10, vx: (Math.random() - 0.5) * 0.6, vy: -1 - Math.random() * 1.5,
+          life: 14, max: 14, color: Math.random() < 0.5 ? "#FF4D4D" : "#FFD0C0", size: 1.2, kind: "spark",
+        });
     }
     g.save();
     // 다시 내려온 직후 무적: 깜빡이지 않고 살짝만 투명하게

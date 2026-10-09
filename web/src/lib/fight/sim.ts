@@ -253,6 +253,8 @@ export interface Fighter {
   trapT: number;
   /** 공중에서 안 떨어지고 버티는 남은 프레임 (건모 Alt+Tab 뒤) */
   hold: number;
+  /** 차지 기술로 모은 프레임 (이반 붕권) */
+  chg: number;
   /** 남은 무적 프레임 (다시 내려온 뒤) */
   inv: number;
   /** 최근 입력 (마지막이 이번 프레임) */
@@ -301,7 +303,10 @@ export type EvKind =
   | "counter"
   | "pause"
   | "swap"
-  | "slam";
+  | "slam"
+  /** 붕권 기를 다 모음 · 가드 부숨 (이반) */
+  | "charged"
+  | "crush";
 export interface Ev {
   k: EvKind;
   /** 관련 플레이어 (hit/block은 때린 쪽) */
@@ -347,7 +352,23 @@ const moveOf = (f: Fighter): MoveDef | null => {
   if (!f.mv) return null;
   const m = charOf(f).moves[f.mv];
   if (f.mv === "T" && f.lg) return { ...m, ...DASH_GRAB };
-  return f.aerial && m.air ? { ...m, ...m.air } : m;
+  if (f.aerial && m.air) return { ...m, ...m.air };
+  // 차지 기술: 모은 만큼 피해·경직·밀어내기가 커지고, 끝까지 모으면 가드 불가 + 다운
+  if (m.charge && f.chg > 0) {
+    const c = m.charge;
+    const k = Math.min(f.chg, c.max);
+    const full = k >= c.max;
+    return {
+      ...m,
+      dmg: m.dmg + Math.trunc(((c.dmg - m.dmg) * k) / c.max),
+      hitstun: m.hitstun + Math.trunc((14 * k) / c.max),
+      push: m.push + Math.trunc((1200 * k) / c.max),
+      hitstop: m.hitstop + Math.trunc((8 * k) / c.max),
+      kd: full || m.kd,
+      crush: full,
+    };
+  }
+  return m;
 };
 const totalOf = (m: MoveDef) => m.startup + m.active + m.recovery;
 const mapOf = (s: State): MapDef => MAPS[s.map] ?? MAPS[0];
@@ -433,6 +454,7 @@ function newFighter(ch: number, side: 0 | 1, map: MapDef): Fighter {
     pulled: 0,
     trapT: 0,
     hold: 0,
+    chg: 0,
     inv: 0,
     hist: new Array(HIST).fill(0),
   };
@@ -491,7 +513,7 @@ const cloneF = (f: Fighter): Fighter => ({ ...f, hist: f.hist.slice() });
  * 이 빌드의 게임 데이터 지문 (캐릭터 성능·맵) — 온라인에서 서로 다른 빌드끼리 붙었는지 확인.
  * 계산 방식(sim.ts)만 바꿨을 땐 SIM_REV를 올릴 것.
  */
-const SIM_REV = 5;
+const SIM_REV = 6;
 export const BUILD_ID = (() => {
   const str = SIM_REV + JSON.stringify(CHARS.map((c) => [c.hp, c.walk, c.jumpVx, c.dash, c.cd, c.glide, c.hurt, c.width, c.moves])) + JSON.stringify(MAPS.map((m) => [m.plats, m.spawn]));
   let h = 2166136261;
@@ -559,6 +581,7 @@ export function hash(s: State): number {
     mix(f.pulled);
     mix(f.trapT);
     mix(f.hold);
+    mix(f.chg);
     mix(f.inv);
     mix(f.st.length * 31 + f.st.charCodeAt(0));
     mix(f.mv ? f.mv.charCodeAt(0) : 0);
@@ -689,6 +712,7 @@ function startMove(s: State, i: number, id: MoveId) {
   const m = moveOf(f)!;
   if (f.aerial && m.hover) f.vh = Math.max(f.vh, m.hover);
   if (id === "S") f.cd = charOf(f).cd;
+  f.chg = 0;
   if (id === "G") f.meter = Math.max(0, f.meter - GUARD_COUNTER_COST);
   if (id === "T" || id === "G") f.vx = 0;
   f.dk = 0;
@@ -931,6 +955,13 @@ function control(s: State, i: number) {
     case "atk": {
       const m = moveOf(f)!;
       const air = airborneS(s, f);
+      // 차지 기술: 시작 자세(at)에서 버튼을 누르고 있는 동안 멈춰서 기를 모음 — 떼거나 다 모으면 바로 이어 나감
+      if (m.charge && !air && f.t === m.charge.at + 1 && f.chg < m.charge.max && holding(f, IN.C)) {
+        f.t = m.charge.at;
+        f.chg++;
+        if (f.chg === m.charge.max) s.ev.push({ k: "charged", p: i, x: f.x, h: f.h + 40 * SUB, v: 0 });
+        return;
+      }
       // 잡기 입력 너그럽게: 약(또는 발차기)을 먼저 눌러 시작 중이어도 몇 프레임 안에 나머지를 누르면 잡기
       if (!air && (f.mv === "L" || f.mv === "H") && f.chain === 1 && f.t <= 3 &&
           (cur(f) & (IN.A | IN.B)) === (IN.A | IN.B) && pressed(f, f.mv === "L" ? IN.B : IN.A, 2)) {
@@ -1316,7 +1347,8 @@ function physics(s: State, i: number) {
   const on = standingOn(map, f);
   if (on) {
     if (f.fell > 0) f.fell--;
-    if (f.st === "atk" && m?.step && f.t < m.startup) moveX(f, m.step * f.face);
+    // (차지 기술은 모으는 동안엔 제자리, 다 모은 뒤 내디딤)
+    if (f.st === "atk" && m?.step && f.t < m.startup && !(m.charge && f.t <= m.charge.at)) moveX(f, m.step * f.face);
     // 연속 동작 2단째부터는 앞으로 조금씩 따라 들어감 (밀려난 상대를 계속 맞힘)
     if (f.st === "atk" && m && f.chain > 1 && CHAIN_MAX[f.mv as MoveId] && f.t < m.startup) moveX(f, CHAIN_STEP * f.face);
     moveX(f, f.vx);
@@ -1520,7 +1552,9 @@ function applyHit(s: State, ai: number, m: MoveDef, srcX: number, mid: MoveId, p
     if (d.hp <= 0) d.hp = 0;
     return;
   }
-  if (mid !== "T" && canBlock(s, d, srcX)) {
+  // 가드 부수기 (끝까지 모은 붕권): 막고 있어도 그냥 맞음
+  if (m.crush && canBlock(s, d, srcX)) s.ev.push({ k: "crush", p: ai, x: d.x, h: d.h + 40 * SUB, v: 0 });
+  if (mid !== "T" && !m.crush && canBlock(s, d, srcX)) {
     // 저스트 가드: 가드를 올린 지 JUST_T 프레임 안에 막으면 경직 반, 깎임 없음, 게이지 보너스
     const wasBlocking = d.st === "block";
     // (↓를 새로 눌러야 함 — 다운·경직 중부터 누르고만 있던 가드는 보통 가드)
