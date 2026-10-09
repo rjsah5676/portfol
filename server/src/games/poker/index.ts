@@ -452,8 +452,9 @@ export function registerPoker({ gateway, db, users }: Deps, opts: PokerOptions =
       else if (s.stack >= t.tier.botMoney * 3) leaveNow(s, "cashout");
       else if (s.brain!.hands >= s.brain!.stayHands) leaveNow(s, "leave");
     }
-    // 사람이 앉을 자리가 없으면 봇 하나가 일어남 (칩이 가장 적은 봇)
-    if (!freeSeats(t).length) {
+    // 사람이 앉을 자리가 없으면 봇 하나가 일어남 (칩이 가장 적은 봇).
+    // 방금 앉은 사람이 있으면 두 판은 같이 쳐 줌 — 들어오자마자 봇이 인사하고 나가면 어색해서
+    if (!freeSeats(t).length && humans(t).every((h) => h.hands >= 2)) {
       const b = bots(t).sort((a, c) => a.stack - c.stack)[0];
       if (b) leaveNow(b, "leave");
     }
