@@ -13,9 +13,11 @@ import { trackRouter } from "./track";
 export interface AppHooks extends Omit<AdminHooks, "guestChanged"> {
   /** 포커 자금 순위 */
   pokerRank(): Promise<unknown>;
+  /** 포커 구매 순위 */
+  pokerBuyRank(): Promise<unknown>;
 }
 
-export function createApp(deps: Deps, { pokerRank, ...hooks }: AppHooks) {
+export function createApp(deps: Deps, { pokerRank, pokerBuyRank, ...hooks }: AppHooks) {
   const { cfg } = deps;
   const app = express();
   app.disable("x-powered-by");
@@ -85,6 +87,13 @@ export function createApp(deps: Deps, { pokerRank, ...hooks }: AppHooks) {
   // 포커 자금 순위: 한 판이라도 친 회원을 보유금액 순으로 (누구나 볼 수 있음)
   app.get("/api/poker/rank", (_req, res, next) => {
     pokerRank()
+      .then((list) => res.set("Cache-Control", "public, max-age=15").json({ list }))
+      .catch(next);
+  });
+
+  // 포커 구매 순위: 스킨 · 캐릭터에 쓴 칩 순 (누구나 볼 수 있음)
+  app.get("/api/poker/rank-buy", (_req, res, next) => {
+    pokerBuyRank()
       .then((list) => res.set("Cache-Control", "public, max-age=15").json({ list }))
       .catch(next);
   });

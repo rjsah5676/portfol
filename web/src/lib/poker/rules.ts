@@ -117,6 +117,11 @@ export const CHARS: Record<CharId, { name: string; color: string; blurb: string 
   jeongmin: { name: "정민", color: "#8b5cf6", blurb: "확률대로 친다. 근거 없는 콜은 안 함" },
   amy: { name: "에이미", color: "#38bdf8", blurb: "딱히 이기고 싶은 건 아니거든. 딱봐도 츤데레" },
 };
+/**
+ * 칩으로 사는 캐릭터의 가격 (기본 다섯 명은 무료라 없음). 산 캐릭터는 users.poker.chars 에 쌓임.
+ * 구매 순위의 '캐릭터 구매'는 여기 가격이 있는 캐릭터만 셈.
+ */
+export const CHAR_PRICE: Partial<Record<string, number>> = {};
 export const charOf = (id: unknown): CharId => (CHAR_IDS.includes(id as CharId) ? (id as CharId) : "jinwoo");
 
 /*

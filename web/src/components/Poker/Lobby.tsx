@@ -17,8 +17,8 @@ import {
   type Tier,
   type TierId,
 } from "@/lib/poker/rules";
-import type { LobbyTable, RankRow, Wallet } from "@/lib/poker/types";
-import { createTable, quickJoin, setChar, subscribeLobby } from "@/realtime/poker";
+import type { BuyRankRow, LobbyTable, RankRow, Wallet } from "@/lib/poker/types";
+import { createTable, getBuyRank, quickJoin, setChar, subscribeLobby } from "@/realtime/poker";
 import type { Orient } from "./layout";
 import MyPage from "./MyPage";
 import PatchNotes, { LATEST } from "./PatchNotes";
@@ -175,7 +175,7 @@ export default function Lobby({
                 {(
                   [
                     ["캐릭터 변경", () => setSheet("char")],
-                    ["자금 순위", () => setSheet("rank")],
+                    ["순위", () => setSheet("rank")],
                   ] as const
                 ).map(([label, fn]) => (
                   <button
@@ -634,7 +634,7 @@ export default function Lobby({
               : sheet === "char"
                 ? "캐릭터"
                 : sheet === "rank"
-                  ? "자금 순위"
+                  ? "순위"
                   : undefined
           }
           onClose={() => setSheet("")}
@@ -711,7 +711,7 @@ export default function Lobby({
               data-sheet-scroll
               className="pk-scroll min-h-0 flex-1 overflow-y-auto px-[0.9em] pb-[0.9em]"
             >
-              <RankTable rank={rank} myNick={myNick} />
+              <PokerRanks rank={rank} myNick={myNick} />
             </div>
           )}
         </Sheet>
@@ -835,6 +835,96 @@ function CharSelect({
 }
 
 /** 자금 순위 표 (로비 · 게임 머리말의 랭킹 모달에서 같이 씀) */
+/** 순위 창: 자금 순위 / 구매 순위 탭 */
+export function PokerRanks({ rank, myNick }: { rank: RankRow[] | null; myNick?: string }) {
+  const [tab, setTab] = useState<"money" | "buy">("money");
+  const [buy, setBuy] = useState<BuyRankRow[] | null>(null);
+  useEffect(() => {
+    if (tab !== "buy") return;
+    let alive = true;
+    getBuyRank()
+      .then((r) => alive && setBuy(r))
+      .catch(() => alive && setBuy((cur) => cur ?? []));
+    return () => {
+      alive = false;
+    };
+  }, [tab]);
+  return (
+    <div>
+      <div className="mb-1 flex gap-1 pt-1" role="tablist">
+        {(
+          [
+            ["money", "자금 순위"],
+            ["buy", "구매 순위"],
+          ] as const
+        ).map(([k, label]) => (
+          <button
+            key={k}
+            type="button"
+            role="tab"
+            aria-selected={tab === k}
+            onClick={() => setTab(k)}
+            className={`rounded-full px-3 py-1 text-xs font-bold transition ${
+              tab === k
+                ? "bg-[var(--pk-brass)] text-black"
+                : "bg-white/[0.06] text-white/60 hover:bg-white/10"
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      {tab === "money" ? (
+        <RankTable rank={rank} myNick={myNick} />
+      ) : (
+        <BuyRankTable rank={buy} myNick={myNick} />
+      )}
+    </div>
+  );
+}
+
+/** 구매 순위: 스킨 · 캐릭터에 쓴 칩 합계, 산 개수 */
+function BuyRankTable({ rank, myNick }: { rank: BuyRankRow[] | null; myNick?: string }) {
+  if (rank === null) return <p className="py-6 text-center text-sm text-white/40">불러오는 중…</p>;
+  if (!rank.length)
+    return (
+      <p className="py-6 text-center text-sm text-white/40">
+        아직 아무도 안 샀어요. 상점에서 첫 손님이 되어 보세요.
+      </p>
+    );
+  return (
+    <ol className="divide-y divide-white/[0.07]">
+      {rank.map((r, i) => {
+        const me = myNick && r.nick === myNick;
+        return (
+          <li
+            key={`${r.nick}-${i}`}
+            className={`flex items-center gap-3 px-2 py-2 text-sm ${me ? "bg-[var(--pk-brass)]/10" : ""}`}
+          >
+            <span
+              className={`w-6 text-center font-bold ${i < 3 ? "text-[var(--pk-brass)]" : "text-white/40"}`}
+            >
+              {i + 1}
+            </span>
+            <Profile char={r.look ?? r.char} size={30} />
+            <span
+              className={`min-w-0 flex-1 truncate ${me ? "font-bold text-[var(--pk-brass)]" : "text-white/85"}`}
+            >
+              {r.nick}
+            </span>
+            <span className="text-right text-xs leading-tight whitespace-nowrap text-white/45">
+              스킨 {r.skins}
+              <br />
+              캐릭터 {r.chars}
+            </span>
+            <Money won={r.spent} className="text-base text-white" />
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
 export function RankTable({
   rank,
   myNick,

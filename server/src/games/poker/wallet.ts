@@ -1,8 +1,8 @@
 import type { Database } from "../../db";
 import { AppError } from "../../errors";
 import { pictureOf, type UserDoc } from "../../users";
-import { REVIVE, START_MONEY, charOf, fmtWon, kstDay, lookOf, skinOf, type CharId, type GameKind, type SkinId, type Wear } from "../../../../web/src/lib/poker/rules";
-import type { RankRow } from "../../../../web/src/lib/poker/types";
+import { CHAR_PRICE, REVIVE, START_MONEY, charOf, fmtWon, kstDay, lookOf, skinOf, type CharId, type GameKind, type SkinId, type Wear } from "../../../../web/src/lib/poker/rules";
+import type { BuyRankRow, RankRow } from "../../../../web/src/lib/poker/types";
 
 /*
  * 포커 자금 (회원의 users 문서에 money 로 저장).
@@ -174,6 +174,36 @@ export function createWallet(db: Database, now: () => number = Date.now) {
           look: lookOf(charOf(u.poker?.char), skinsOf(u.poker).wear),
         };
       });
+    },
+
+    /** 구매 순위: 스킨 · (칩으로 사는) 캐릭터에 쓴 칩이 많은 순. 하나라도 산 회원만 */
+    async buyRank(limit = 50): Promise<BuyRankRow[]> {
+      const docs = await col
+        .find(
+          { $or: [{ "poker.skins.0": { $exists: true } }, { "poker.chars.0": { $exists: true } }] } as never,
+          { projection: { nick: 1, "poker.char": 1, "poker.skins": 1, "poker.chars": 1, "poker.wear": 1, "avatar.at": 1, photo: 1 } }
+        )
+        .toArray();
+      return docs
+        .map((d) => {
+          const u = d as unknown as MoneyFields & { poker?: { chars?: string[] }; avatar?: { at?: number }; photo?: string | null };
+          const { skins, wear } = skinsOf(u.poker);
+          const chars = [...new Set(u.poker?.chars ?? [])].filter((c) => (CHAR_PRICE[c] ?? 0) > 0);
+          const spent =
+            skins.reduce((a, id) => a + (skinOf(id)?.price ?? 0), 0) + chars.reduce((a, c) => a + (CHAR_PRICE[c] ?? 0), 0);
+          return {
+            avatar: pictureOf(String(d._id), u),
+            nick: u.nick,
+            char: charOf(u.poker?.char),
+            look: lookOf(charOf(u.poker?.char), wear),
+            spent,
+            skins: skins.length,
+            chars: chars.length,
+          };
+        })
+        .filter((r) => r.spent > 0)
+        .sort((a, b) => b.spent - a.spent || b.skins + b.chars - (a.skins + a.chars))
+        .slice(0, limit);
     },
 
     /**

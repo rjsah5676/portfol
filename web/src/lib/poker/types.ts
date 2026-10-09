@@ -252,6 +252,18 @@ export interface RankRow {
   look?: Look;
 }
 
+/** 구매 순위 한 줄: 스킨 · 캐릭터에 쓴 칩 합계 */
+export interface BuyRankRow {
+  nick: string;
+  avatar?: string | null;
+  char: CharId;
+  look?: Look;
+  /** 산 스킨 · 캐릭터 값의 합 (지금 가격 기준) */
+  spent: number;
+  skins: number;
+  chars: number;
+}
+
 /** 마이페이지 (poker.me) */
 export interface MyPage {
   nick: string;

@@ -8,6 +8,7 @@ import type {
   LobbyTable,
   MyHand,
   MyPage,
+  BuyRankRow,
   RankRow,
   SevenAction,
   TableWire,
@@ -112,3 +113,5 @@ export const wearSkin = (char: CharId, skin: SkinId | null) => rpc<Wallet>("poke
 
 /** 자금 순위 (한 판이라도 친 회원, 보유금액 순) */
 export const getRank = () => api<{ list: RankRow[] }>("/api/poker/rank").then((r) => r.list);
+/** 구매 순위 (스킨 · 캐릭터에 쓴 칩 순) */
+export const getBuyRank = () => api<{ list: BuyRankRow[] }>("/api/poker/rank-buy").then((r) => r.list);
