@@ -2,6 +2,10 @@
 
 import { useEffect, useRef, useState } from "react";
 import SketchRoom from "@/components/Sketch/SketchRoom";
+import type { MascotPose } from "@/lib/sketch/assets";
+import { playSfx } from "@/lib/sketch/sfx";
+import { Icon, Mascot } from "./Art";
+import { tap } from "./stage";
 import {
   hasAccess,
   joinRoom,
@@ -34,6 +38,7 @@ export default function SketchRoomGate({
   const [gate, setGate] = useState<Gate>("loading");
   const [pw, setPw] = useState("");
   const [pwError, setPwError] = useState("");
+  const [pwTry, setPwTry] = useState(0);
   const joinedRef = useRef(false);
 
   useEffect(() => subscribeRoom(roomId, setRoom), [roomId]);
@@ -113,31 +118,30 @@ export default function SketchRoomGate({
       await unlockRoom(roomId, uid, { password: pw });
       tryJoin(room);
     } catch (e) {
+      playSfx("sfx-error");
+      setPwTry((n) => n + 1);
       setPwError(e instanceof WrongPasswordError ? e.message : "입장하지 못했어요.");
     }
   };
 
-  const center = (children: React.ReactNode) => (
-    <div className="mx-auto flex max-w-sm flex-col items-center gap-4 px-6 pt-8 pb-24 text-center">
+  const center = (pose: MascotPose, children: React.ReactNode) => (
+    <div className="flex h-full flex-col items-center justify-center gap-4 px-6 text-center">
+      <Mascot pose={pose} size={120} />
       {children}
     </div>
   );
   const backBtn = (
-    <button
-      type="button"
-      onClick={onExit}
-      className="cursor-pointer rounded-full border border-white/15 px-4 py-1.5 font-mono text-xs text-white/60 hover:text-white"
-    >
-      ← 로비로
+    <button type="button" onClick={tap(onExit, "sfx-close")} className="sk-btn text-[20px]">
+      <Icon name="back" size={18} /> 로비로
     </button>
   );
+  const msg = (t: string) => <p className="sk-hand text-[24px]">{t}</p>;
 
   if (gate === "kicked" || (gate === "in" && room?.kicked[uid]))
     return center(
+      "sad",
       <>
-        <p className="font-['Nanum_Gothic',sans-serif] text-white/60">
-          방장이 이 방에서 내보냈어요.
-        </p>
+        {msg("방장이 이 방에서 내보냈어요")}
         {backBtn}
       </>
     );
@@ -145,45 +149,59 @@ export default function SketchRoomGate({
     return <SketchRoom room={room} uid={uid} nick={nick} onLeave={onExit} />;
   if (gate === "missing")
     return center(
+      "wow",
       <>
-        <p className="font-['Nanum_Gothic',sans-serif] text-white/60">방이 없거나 이미 끝났어요.</p>
+        {msg("방이 없거나 이미 끝났어요")}
         {backBtn}
       </>
     );
   if (gate === "full")
     return center(
+      "sad",
       <>
-        <p className="font-['Nanum_Gothic',sans-serif] text-white/60">방이 가득 찼어요.</p>
+        {msg("방이 가득 찼어요")}
         {backBtn}
       </>
     );
   if (gate === "password")
     return center(
-      <>
-        <div className="font-mono text-sm text-[#8B84FF]">🔒 {room?.meta.name}</div>
-        <p className="font-['Nanum_Gothic',sans-serif] text-sm text-white/60">
-          비밀번호를 입력해주세요
-        </p>
-        <div className="flex w-full gap-2">
-          <input
-            type="password"
-            autoFocus
-            value={pw}
-            onChange={(e) => setPw(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && submitPw()}
-            className="min-w-0 flex-1 rounded-full border border-white/10 bg-[#1C1E24] px-4 py-2 text-center text-white focus:border-[#6C63FF]/50 focus:outline-none"
-          />
+      "think",
+      <div className="sk-card relative flex w-full max-w-[360px] flex-col gap-3 p-5">
+        <span className="sk-tape top" />
+        <div className="sk-hand flex items-center justify-center gap-1.5 text-[24px]">
+          <Icon name="lock" size={20} className="text-[var(--coral)]" /> {room?.meta.name}
+        </div>
+        <p className="text-[13px] text-[var(--ink2)]">비밀번호를 입력해 주세요</p>
+        <input
+          type="password"
+          autoFocus
+          value={pw}
+          onChange={(e) => setPw(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && submitPw()}
+          className={`sk-input text-center text-[18px] ${pwError ? "sk-shake" : ""}`}
+          key={pwError ? pwTry : 0}
+        />
+        {pwError && <p className="text-[13px] font-bold text-[var(--coral)]">{pwError}</p>}
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={tap(onExit, "sfx-close")}
+            className="sk-btn sk-btn-ghost flex-1 text-[20px]"
+          >
+            돌아가기
+          </button>
           <button
             type="button"
             onClick={submitPw}
-            className="cursor-pointer rounded-full bg-[#6C63FF] px-5 py-2 font-mono text-sm text-white hover:bg-[#5b52f0]"
+            className="sk-btn sk-btn-coral flex-1 text-[20px]"
           >
             입장
           </button>
         </div>
-        {pwError && <p className="font-mono text-xs text-red-300">{pwError}</p>}
-        {backBtn}
-      </>
+      </div>
     );
-  return center(<p className="font-mono text-sm text-white/40">입장 중…</p>);
+  return center(
+    "draw",
+    <p className="sk-hand text-[22px] text-[var(--ink2)]">방에 들어가는 중…</p>
+  );
 }

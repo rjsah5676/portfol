@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { pageMeta } from "@/lib/seo";
+import "@/css/sketch.css";
 
 // page.tsx가 "use client"라 metadata를 export할 수 없어서 layout에서 지정
 export const metadata = pageMeta({

@@ -1,28 +1,59 @@
 "use client";
 
-import Nick from "@/components/Nick";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
+import { AVATAR_COLOR, avatarOf } from "@/lib/sketch/assets";
+import { playSfx } from "@/lib/sketch/sfx";
 import { CHAT_MAX, subscribeChat, type ChatMsg } from "@/realtime/sketch";
+import { Avatar, Icon, Who } from "./Art";
 
+/** 채팅 · 정답 입력. 그리는 중엔 이 칸에 친 말이 곧 정답 시도 */
 export default function SketchChat({
   roomId,
   uid,
   disabledReason,
   placeholder,
+  guessing,
   onSend,
+  inputRef,
+  compact = false,
 }: {
   roomId: string;
   uid: string;
   /** 지금 입력할 수 없는 이유 (그리는 중, 이미 맞힘 등) */
   disabledReason: string;
   placeholder: string;
+  /** 지금 치는 말이 정답 시도인지 (입력칸을 강조) */
+  guessing: boolean;
   onSend: (text: string) => void;
+  inputRef?: RefObject<HTMLInputElement | null>;
+  /** 세로판: 줄 간격 좁게 */
+  compact?: boolean;
 }) {
   const [list, setList] = useState<ChatMsg[]>([]);
   const [text, setText] = useState("");
   const boxRef = useRef<HTMLDivElement>(null);
+  const firstRef = useRef(true);
+  const lastIdRef = useRef("");
 
-  useEffect(() => subscribeChat(roomId, setList), [roomId]);
+  useEffect(
+    () =>
+      subscribeChat(roomId, (l) => {
+        // 처음 받은 목록 뒤로 새로 온 남의 말에만 소리
+        const last = l[l.length - 1];
+        if (
+          !firstRef.current &&
+          last &&
+          last.uid !== uid &&
+          last.kind === "msg" &&
+          last.id !== lastIdRef.current
+        )
+          playSfx("sfx-chat");
+        firstRef.current = false;
+        lastIdRef.current = last?.id ?? "";
+        setList(l);
+      }),
+    [roomId, uid]
+  );
   useEffect(() => {
     const el = boxRef.current;
     if (el) el.scrollTop = el.scrollHeight;
@@ -31,38 +62,72 @@ export default function SketchChat({
   const submit = () => {
     const t = text.trim();
     if (!t || disabledReason) return;
+    playSfx(guessing ? "sfx-send" : "sfx-chat");
     onSend(t);
     setText("");
   };
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col rounded-xl border border-white/10 bg-[#1C1E24]">
+    <div className="sk-card-soft flex min-h-0 flex-1 flex-col overflow-hidden">
       <div
         ref={boxRef}
-        className="thin-scroll min-h-[160px] flex-1 space-y-1 overflow-y-auto px-3 py-2 font-['Nanum_Gothic',sans-serif] text-[13px] leading-relaxed"
+        className={`sk-scroll min-h-0 flex-1 overflow-y-auto px-2.5 ${compact ? "space-y-1 py-1.5 text-[13px]" : "space-y-1.5 py-2.5 text-[13.5px]"} leading-snug`}
       >
-        {list.length === 0 && <p className="text-white/25">채팅·정답을 여기에 입력하세요</p>}
+        {list.length === 0 && (
+          <p className="pt-2 text-center text-[12.5px] text-[var(--ink3)]">
+            채팅 · 정답을 아래에 입력하세요
+          </p>
+        )}
         {list.map((m) =>
           m.kind === "system" ? (
-            <p key={m.id} className="text-center font-mono text-[11px] text-[#A9A3FF]/80">
+            <p key={m.id} className="sk-msg text-center text-[11.5px] font-bold text-[var(--ink3)]">
               {m.text}
             </p>
           ) : m.kind === "correct" ? (
-            <p key={m.id} className="font-medium text-emerald-300">
-              ✓ {m.text}
+            <p
+              key={m.id}
+              className="sk-msg rounded-lg border-2 border-[var(--mint)] bg-[#2EC4B6]/15 px-2 py-1 text-center font-extrabold text-[#138a7f]"
+            >
+              🎉 {m.text}
             </p>
           ) : (
-            <p key={m.id} className="break-all text-white/80">
-              <span className={m.uid === uid ? "text-[#A9A3FF]" : "text-white/45"}>
-                <Nick name={m.nick} />
-              </span>{" "}
-              {m.text}
-            </p>
+            <div
+              key={m.id}
+              className={`sk-msg flex items-start gap-1.5 ${m.uid === uid ? "flex-row-reverse" : ""}`}
+            >
+              {!compact && <Avatar idx={avatarOf(m.uid)} size={24} className="mt-0.5" />}
+              <div
+                className={`flex min-w-0 flex-col ${m.uid === uid ? "items-end" : "items-start"}`}
+              >
+                {m.uid !== uid && (
+                  <span
+                    className="max-w-full truncate text-[11px] font-bold"
+                    style={{ color: AVATAR_COLOR[avatarOf(m.uid)] }}
+                  >
+                    <span className="brightness-75">
+                      <Who name={m.nick} />
+                    </span>
+                  </span>
+                )}
+                <span
+                  className={`max-w-full rounded-xl px-2.5 py-1 break-all ${
+                    m.uid === uid
+                      ? "rounded-tr-sm bg-[var(--ink)] text-white"
+                      : "rounded-tl-sm border-[1.5px] border-[var(--line)] bg-white"
+                  }`}
+                >
+                  {m.text}
+                </span>
+              </div>
+            </div>
           )
         )}
       </div>
-      <div className="flex gap-1.5 border-t border-white/10 p-2">
+      <div
+        className={`flex gap-1.5 border-t-2 border-dashed border-[var(--line)] p-2 ${guessing ? "bg-[#FFC93C]/20" : ""}`}
+      >
         <input
+          ref={inputRef}
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => {
@@ -71,15 +136,18 @@ export default function SketchChat({
           maxLength={CHAT_MAX}
           disabled={!!disabledReason}
           placeholder={disabledReason || placeholder}
-          className="min-w-0 flex-1 rounded-lg border border-white/10 bg-[#15171c] px-3 py-2 text-sm text-white placeholder:text-white/30 focus:border-[#6C63FF]/50 focus:outline-none disabled:opacity-60"
+          enterKeyHint="send"
+          autoComplete="off"
+          className={`sk-input py-2 text-[14.5px] ${guessing ? "border-[var(--orange)]" : ""}`}
         />
         <button
           type="button"
           onClick={submit}
           disabled={!!disabledReason || !text.trim()}
-          className="cursor-pointer rounded-lg bg-[#6C63FF] px-3 font-mono text-xs text-white disabled:cursor-default disabled:opacity-40"
+          aria-label="보내기"
+          className={`sk-btn sk-btn-icon shrink-0 text-[16px] ${guessing ? "sk-btn-sun" : "sk-btn-sky"}`}
         >
-          전송
+          <Icon name="send" size={18} />
         </button>
       </div>
     </div>
