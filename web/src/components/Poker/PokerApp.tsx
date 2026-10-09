@@ -140,10 +140,12 @@ export default function PokerApp({ rank }: { rank: RankRow[] | null }) {
     const id = setTimeout(() => el.scrollIntoView({ behavior: "smooth", block: "start" }), 250);
     return () => clearTimeout(id);
   }, [tableId]);
-  // 배경음악: 로비·타이틀은 로비 곡, 테이블은 TableView 가 판돈 단계별로 바꿈
+  // 배경음악: 로그인 화면은 타이틀 곡, 로비는 로비 곡, 테이블은 TableView 가 판돈 단계별로 바꿈
+  // (브라우저가 소리를 막아서 첫 터치 · 클릭 뒤부터 나옴)
+  const onIntro = !loading && (!account || !profile);
   useEffect(() => {
-    if (!tableId) playBgm("bgm-lobby");
-  }, [tableId]);
+    if (!tableId) playBgm(onIntro ? "bgm-intro" : "bgm-lobby");
+  }, [tableId, onIntro]);
   // 포커 페이지를 떠나면 배경음악 끔 (사이트 안에서 다른 페이지로 가도 계속 나오던 것)
   useEffect(() => () => playBgm(null), []);
   const toggleFs = () => {
@@ -488,8 +490,8 @@ const LIFT: Partial<Record<CharId, number>> = {
   jinwoo: -16,
   yeonseo: -13,
   amy: -12,
-  taeyang: 4,
-  jeongmin: 4,
+  taeyang: -5,
+  jeongmin: -3,
 };
 
 /** 타이틀 테이블 위 소품: x,y = 가로 화면 %, vx,vy = 세로 화면 % (card: null = 뒷면) */
