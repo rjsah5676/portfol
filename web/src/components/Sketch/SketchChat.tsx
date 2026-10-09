@@ -73,7 +73,7 @@ export default function SketchChat({
     <div className="sk-card-soft flex min-h-0 flex-1 flex-col overflow-hidden">
       <div
         ref={boxRef}
-        className={`sk-scroll min-h-0 flex-1 overflow-y-auto px-2.5 ${compact ? "space-y-1 py-1.5 text-[14.5px]" : "space-y-1.5 py-2.5 text-[15px]"} leading-snug`}
+        className={`sk-scroll min-h-0 flex-1 overflow-y-auto px-2.5 ${compact ? "space-y-1 py-1.5 text-[13.5px]" : "space-y-1.5 py-2.5 text-[14px]"} leading-snug`}
       >
         {list.length === 0 && (
           <p className="pt-2 text-center text-[12.5px] text-[var(--ink3)]">
