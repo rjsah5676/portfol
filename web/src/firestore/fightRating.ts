@@ -61,3 +61,12 @@ export const MATCHUP_MIN = 5;
 export type Tier = "strong" | "weak" | "even" | "few";
 export const tierOf = (rate: number, games: number): Tier =>
   games < MATCHUP_MIN ? "few" : rate >= 0.55 ? "strong" : rate <= 0.45 ? "weak" : "even";
+
+/** 내 랭크전 정보 (서버 GET /api/rankings/fight-me) — 마이페이지 · 온라인 로비 */
+export interface FightMe {
+  me: { r: number; n: number; w: number; l: number; d: number; peak: number; rank: number; of: number } | null;
+  chars: { c: number; w: number; l: number; d: number }[];
+  /** 최근 경기 (새것부터) — res: w 승 · l 패 · d 무 */
+  recent: { at: number; ch: number; oppCh: number; opp: string; bot: boolean; map: number; res: "w" | "l" | "d" }[];
+}
+export const getFightMe = () => api<FightMe>("/api/rankings/fight-me", { auth: true });

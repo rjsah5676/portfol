@@ -16,6 +16,7 @@ import {
 } from "@/firestore/fightRating";
 import RankList from "@/components/RankList";
 import { CHARS } from "@/lib/fight/chars";
+import { rankTierOf } from "@/lib/fight/tiers";
 
 const KR = "font-['Nanum_Gothic',sans-serif]";
 
@@ -41,7 +42,8 @@ const ratingRows = (rows: FightRatingRow[]) =>
     member: true,
     avatar: r.avatar,
     value: r.r.toLocaleString(),
-    sub: ratingSub(r),
+    // 등급 · 전적 (배치 중이면 ratingSub 가 "배치 n/10" 을 붙임)
+    sub: `${r.n >= 10 ? `${rankTierOf(r.r, r.n).label} · ` : ""}${ratingSub(r)}`,
     date: r.at,
   }));
 

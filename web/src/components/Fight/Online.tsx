@@ -11,6 +11,9 @@ import { CHARS, type CharDef } from "@/lib/fight/chars";
 import { MAPS } from "@/lib/fight/maps";
 import { BUILD_ID } from "@/lib/fight/sim";
 import { AI_ID } from "@/lib/fight/ai";
+import { rankTierOf } from "@/lib/fight/tiers";
+import { getFightMe, type FightMe } from "@/firestore/fightRating";
+import { TierEmblem } from "./TierBadge";
 import { useAuth } from "@/lib/AuthContext";
 import { loadSheet } from "@/lib/fight/sprites";
 import { sfxUi } from "@/lib/fight/sfx";
@@ -510,6 +513,7 @@ function BotEnd({ st, onAgain, onLobby }: { st: Extract<RankStatus, { s: "botEnd
       ) : (
         <div className={`${KR} text-[1.3cqw] text-white/55`}>레이팅을 저장하지 못했어요</div>
       )}
+      {st.r !== undefined && d !== undefined && <TierChange before={st.r - d} after={st.r} />}
       {st.note && <div className={`${KR} text-[1.2cqw] text-[#FCA5A5]`}>{st.note}</div>}
       <div className="mt-[1cqw] flex gap-[1.2cqw]">
         <button type="button" onClick={onAgain} className={rankBtn}>
@@ -519,6 +523,47 @@ function BotEnd({ st, onAgain, onLobby }: { st: Extract<RankStatus, { s: "botEnd
           로비로
         </button>
       </div>
+    </div>
+  );
+}
+
+/** 로비 랭크전 칸: 내 등급 · 점수 · 순위 */
+function MyTier({ r, n, rank }: { r: number; n: number; rank: string }) {
+  const info = rankTierOf(r, n);
+  return (
+    <div className="flex items-center gap-[0.9cqw] rounded-[0.7cqw] bg-white/[0.04] px-[0.9cqw] py-[0.6cqw]">
+      <TierEmblem info={info} size={40} className="h-[3.4cqw] w-[3.4cqw]" />
+      <div className="flex min-w-0 flex-col">
+        <span className={`${KR} text-[1.3cqw] font-extrabold`} style={{ color: info.placing ? "#9AA3B2" : info.tier.color }}>
+          {info.placing ? `배치 중 ${n}/10` : info.label}
+        </span>
+        <span className="font-mono text-[1.1cqw] text-white/55 tabular-nums">
+          <b className="text-white">{r}</b> · <span className={KR}>{rank}</span>
+        </span>
+      </div>
+    </div>
+  );
+}
+
+/** 결과 화면: 바뀐 뒤 등급 (오르거나 내려갔으면 표시) */
+function TierChange({ before, after }: { before: number; after: number }) {
+  const a = rankTierOf(before);
+  const b = rankTierOf(after);
+  const moved = a.label !== b.label;
+  const up = after > before;
+  return (
+    <div className="flex items-center gap-[0.8cqw]">
+      <TierEmblem info={b} size={48} className={`h-[3.8cqw] w-[3.8cqw] ${moved ? "[animation:modal-pop_400ms_ease-out]" : ""}`} />
+      <span className={`${KR} text-[1.6cqw] font-extrabold`} style={{ color: b.tier.color }}>
+        {b.label}
+      </span>
+      {moved && (
+        <span
+          className={`${KR} rounded-full px-[0.8cqw] py-[0.15cqw] text-[1.1cqw] font-bold ${up ? "bg-[#4ADE80]/20 text-[#86EFAC]" : "bg-[#F87171]/20 text-[#FCA5A5]"}`}
+        >
+          {up ? "승급!" : "강등"}
+        </span>
+      )}
     </div>
   );
 }
@@ -589,6 +634,14 @@ function Lobby({
   rankErr: string;
 }) {
   const [rooms, setRooms] = useState<LobbyRoom[] | null>(null);
+  // 내 랭크전 등급 (회원)
+  const [my, setMy] = useState<FightMe["me"] | undefined>(undefined);
+  useEffect(() => {
+    if (!member) return;
+    getFightMe()
+      .then((d) => setMy(d.me))
+      .catch(() => {});
+  }, [member]);
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
@@ -703,6 +756,9 @@ function Lobby({
             <span className={`${KR} text-[1.5cqw] font-extrabold text-white`}>랭크전</span>
             <span className={`${KR} text-[1.05cqw] text-white/40`}>회원 · 자동 매칭 · 맵 랜덤</span>
           </div>
+          {member && my !== undefined && (
+            <MyTier r={my?.r ?? 1000} n={my?.n ?? 0} rank={my ? `${my.rank}위 / ${my.of}명` : "첫 판을 해 보세요"} />
+          )}
           <div className={`${KR} text-[1.02cqw] leading-snug text-white/45`}>
             비슷한 레이팅끼리 매칭 · 12초 이내 매칭이 잡히지 않을 시 비슷한 실력대의 AI와 매칭이 됩니다
           </div>
@@ -1021,7 +1077,9 @@ function Room({
               {d > 0 ? `+${d}` : d}
             </span>
           </div>
-        ) : res && !res.rated ? (
+        ) : null}
+        {res?.rated && res.r && d !== undefined && <TierChange before={res.r[mySeat] - d} after={res.r[mySeat]} />}
+        {res?.rated && res.r && d !== undefined ? null : res && !res.rated ? (
           <div className={`${KR} text-[1.3cqw] text-white/55`}>이번 판은 레이팅에 반영되지 않았어요 (같은 상대와는 하루 10판까지)</div>
         ) : (
           <div className={`${KR} text-[1.3cqw] text-white/55`}>{win === undefined ? "두 선수의 결과를 맞춰 보는 중이에요" : "레이팅 계산 중…"}</div>

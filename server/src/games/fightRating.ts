@@ -228,6 +228,26 @@ export function createFightRating(db: Database, users: Users) {
       });
     },
 
+    /** 내 최근 랭크전 (새것부터): 내 캐릭터 · 상대 · 상대 캐릭터 · 결과 · AI전인지 */
+    async recent(uid: string, limit: number) {
+      const docs = await games.find({ uids: uid }).sort({ at: -1 }).limit(limit).toArray();
+      const opps = [...new Set(docs.map((g) => g.uids[g.uids[0] === uid ? 1 : 0]).filter((u) => !u.startsWith("bot:")))];
+      const names = new Map(await Promise.all(opps.map(async (u) => [u, (await users.nickByUid(u)) ?? "?"] as const)));
+      return docs.map((g) => {
+        const seat = g.uids[0] === uid ? 0 : 1;
+        const o = g.uids[1 - seat];
+        return {
+          at: g.at.getTime(),
+          ch: g.chars[seat],
+          oppCh: g.chars[1 - seat],
+          opp: o.startsWith("bot:") ? o.slice(4) : (names.get(o) ?? "?"),
+          bot: !!g.bot,
+          map: g.map,
+          res: g.out === 2 ? ("d" as const) : g.out === seat ? ("w" as const) : ("l" as const),
+        };
+      });
+    },
+
     /** 레이팅 랭킹 (회원만, 높은 순) */
     async top(limit: number) {
       return col.find({ member: true, n: { $gt: 0 } }).sort({ r: -1, n: -1, _id: 1 }).limit(limit).toArray();

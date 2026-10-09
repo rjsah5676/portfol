@@ -12,6 +12,8 @@ import { rankDateLabel, toDate } from "@/lib/rankDate";
 import { BP_TOP_SONGS, bpOf } from "@/lib/rhythm/bp";
 import { DIFFICULTIES } from "@/lib/rhythm/chart";
 import { getMySummary, type MyRecord, type MySummary } from "@/firestore/me";
+import FightProfile from "@/components/Fight/FightProfile";
+import TierBadge from "@/components/Fight/TierBadge";
 
 /*
  * 내 정보: 별명 바꾸기 · 게임별 내 최고 기록과 순위 · 온라인 전적 · 로그아웃.
@@ -288,6 +290,8 @@ export default function MyPage() {
               </div>
             </section>
 
+            <FightProfile card={card} label={label} matches={stats.fight?.matches ?? 0} />
+
             <section className={card}>
               <div className={label}>온라인 전적</div>
               <div className="flex flex-col gap-4">
@@ -315,15 +319,13 @@ export default function MyPage() {
                         </span>
                       )}
                       {key === "fight" && data.fightRating && (
-                        <span
-                          className="ml-auto rounded-full border border-[#FF8A3D]/35 bg-[#FF8A3D]/10 px-2.5 py-0.5 font-mono text-xs text-[#FFC9A3] tabular-nums"
-                          title={`랭크전 최고 ${data.fightRating.peak} · ${data.fightRating.n}판`}
-                        >
-                          랭크 <b className="text-white">{data.fightRating.r}</b>
-                          <span className="ml-1.5 text-white/45">
-                            {data.fightRating.rank}위 / {data.fightRating.of}명
-                          </span>
-                        </span>
+                        <TierBadge
+                          r={data.fightRating.r}
+                          n={data.fightRating.n}
+                          showR
+                          size={20}
+                          className="ml-auto rounded-full border border-white/10 bg-white/[0.03] py-0.5 pr-2.5 pl-1 font-['Nanum_Gothic',sans-serif] text-xs"
+                        />
                       )}
                     </div>
                   );
@@ -335,7 +337,6 @@ export default function MyPage() {
                     name="스케치 누적 점수"
                     value={(stats.sketch?.points ?? 0).toLocaleString()}
                   />
-                  <Stat name="격투 온라인 경기" value={stats.fight?.matches ?? 0} />
                 </div>
               </div>
             </section>

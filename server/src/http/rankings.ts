@@ -22,6 +22,7 @@ import { h, ms, userOf } from "./util";
  *   GET  /api/rankings/rhythm/:chart?limit=10      (chart = 곡id_난이도)
  *   GET  /api/rankings/fight-rating?limit=10      격투 랭크전 레이팅
  *   GET  /api/rankings/fight-rank-stats           격투 랭크전 캐릭터 통계 (로그인했으면 내 캐릭터별 기록도)
+ *   GET  /api/rankings/fight-me                   (로그인) 내 랭크전 레이팅·순위 · 캐릭터별 기록 · 최근 경기
  *   GET  /api/rankings/rhythm-bp?limit=10          회원 BP 랭킹 (곡별 최고 BP 상위 20곡 합)
  *   POST /api/rankings/tickets  { board }           게임을 시작할 때: 1회용 티켓 발급 (로그인 필요)
  *   POST /api/rankings/:board   { …기록, ticket }   기록 등록 (로그인 필요)
@@ -515,6 +516,15 @@ export function rankingsRouter({ db, auth, users }: Deps): Router {
     h(async (req) => {
       const user = await userOf(auth, req).catch(() => null);
       return fightRating.stats(user?.uid);
+    }),
+  );
+  r.get(
+    "/fight-me",
+    h(async (req) => {
+      const user = await userOf(auth, req).catch(() => null);
+      if (!user) return { me: null, chars: [], recent: [] };
+      const [me, st, recent] = await Promise.all([fightRating.mine(user.uid), fightRating.stats(user.uid), fightRating.recent(user.uid, 12)]);
+      return { me, chars: st.mine ?? [], recent };
     }),
   );
   r.get(
