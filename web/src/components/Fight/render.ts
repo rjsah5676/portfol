@@ -28,7 +28,7 @@ interface Particle {
   max: number;
   color: string;
   size: number;
-  kind: "spark" | "ring" | "dust" | "text" | "flame" | "bolt" | "shard" | "streak";
+  kind: "spark" | "ring" | "dust" | "text" | "flame" | "bolt" | "shard" | "streak" | "vstreak";
   text?: string;
 }
 
@@ -421,6 +421,20 @@ export class FightRenderer {
         this.parts.push({ x, y: y - 30, vx: 0, vy: -0.6, life: 30, max: 30, color: "#FFE08A", size: 1.2, kind: "text", text: "LAUNCH!" });
         this.parts.push({ x, y, vx: 0, vy: 0, life: 14, max: 14, color: "#FFE08A", size: 14, kind: "ring" });
         this.shake = Math.max(this.shake, 3);
+      } else if (e.k === "throw" && e.m === "S") {
+        // 이반 곰 포옹: 공중에서 붙잡음
+        const a = s.p[e.p];
+        this.parts.push({ x, y: y - 14, vx: 0, vy: -0.5, life: 30, max: 30, color: "#FF6B6B", size: 1.4, kind: "text", text: "GRAB!" });
+        this.parts.push({ x, y, vx: 0, vy: 0, life: 14, max: 14, color: "#FF8A8A", size: 22, kind: "ring" });
+        this.spawnFx(a.ch, "spark", x, y, a.face, 12);
+        for (let i = 0; i < 10; i++) {
+          const an = (i / 10) * Math.PI * 2;
+          this.parts.push({
+            x, y, vx: Math.cos(an) * 2.5, vy: Math.sin(an) * 2.5, life: 14, max: 14,
+            color: i % 2 ? "#FFD0C0" : "#FF4D4D", size: 1.3, kind: "spark",
+          });
+        }
+        this.shake = Math.max(this.shake, 4);
       } else if (e.k === "throw") {
         this.parts.push({ x, y, vx: 0, vy: 0, life: 12, max: 12, color: "#fff", size: 12, kind: "ring" });
         this.shake = Math.max(this.shake, 4);
@@ -725,6 +739,36 @@ export class FightRenderer {
         if (f.face < 0) g.scale(-1, 1);
         g.drawImage(im, -w * 0.55, -h / 2, w, h);
         g.restore();
+      }
+    }
+    // 이반 곰 포옹: 덮칠 때 손끝에 붉은 휘두름, 안고 떨어질 때 붉은 기 + 위로 속도선
+    if (CHARS[f.ch].id === "ivan" && f.st === "atk" && f.mv === "S" && f.aerial && cm?.air?.hug) {
+      const am = cm.air;
+      if (f.hug) {
+        const im = fxImg(`ivan-aura-${2 + (Math.floor(s.f / 3) % 2)}`);
+        if (im) {
+          const w = (im.width / 1.72) * 1.1,
+            h = (im.height / 1.72) * 1.1;
+          g.save();
+          g.globalCompositeOperation = "lighter";
+          g.globalAlpha = 0.75;
+          g.translate(x + f.face * 10, y - 34);
+          if (f.face < 0) g.scale(-1, 1);
+          g.drawImage(im, -w / 2, -h / 2, w, h);
+          g.restore();
+        }
+        for (let k = 0; k < 2; k++)
+          this.parts.push({
+            x: x + f.face * 10 + (Math.random() - 0.5) * 56, y: y - 70 - Math.random() * 30, vx: 0, vy: -1.5, life: 8, max: 8,
+            color: Math.random() < 0.5 ? "rgba(255,255,255,0.8)" : "#FF6B6B", size: 1 + Math.random(), kind: "vstreak",
+          });
+      } else if (isAirF(s, f) && f.t === am.startup) {
+        this.spawnFx(f.ch, "wave", x + f.face * 34, y - 40, f.face, 10, false, { size: [70, 46], from: 1, alpha: 0.9 });
+        for (let k = 0; k < 6; k++)
+          this.parts.push({
+            x: x + f.face * 30, y: y - 40 + (Math.random() - 0.5) * 30, vx: f.face * (2 + Math.random() * 2), vy: (Math.random() - 0.5) * 0.6,
+            life: 10, max: 10, color: k % 2 ? "#FFD0C0" : "#FF4D4D", size: 1.4, kind: "streak",
+          });
       }
     }
     // 이반 철곰권 기 모으기: 몸 둘레로 붉은 기가 소용돌이 (모을수록 커지고, 다 모으면 번쩍임)
@@ -1206,6 +1250,14 @@ export class FightRenderer {
         g.beginPath();
         g.arc(p.x, p.y, p.size * 0.6, 0, Math.PI * 2);
         g.fill();
+      } else if (p.kind === "vstreak") {
+        // 세로 속도선 (곰 포옹으로 안고 떨어질 때)
+        g.strokeStyle = p.color;
+        g.lineWidth = p.size;
+        g.beginPath();
+        g.moveTo(p.x, p.y);
+        g.lineTo(p.x, p.y - 14 - p.size * 4);
+        g.stroke();
       } else if (p.kind === "streak") {
         g.strokeStyle = p.color;
         g.lineWidth = p.size;

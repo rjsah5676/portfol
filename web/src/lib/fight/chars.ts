@@ -73,6 +73,8 @@ export interface MoveDef {
     landBurst?: number;
     /** 착지 충격파 피해 (없으면 기술 피해 그대로) */
     landDmg?: number;
+    /** 내리꽂는 중(땅에 닿기 전) 공중에서 맞혔을 때 피해 */
+    airDmg?: number;
     /** 공중에서 쓰면 판정 동안 이 속도보다 빨리 안 떨어짐 (공중에서 버티며 때림) */
     airFall?: number;
   };
@@ -132,6 +134,8 @@ export interface MoveDef {
   charge?: { at: number; max: number; dmg: number; armor?: boolean };
   /** 공중 잡기 (이반 곰 포옹): 닿으면 붙잡고 fall 속도로 같이 떨어져 착지하면 dmg + stun 프레임 기절 */
   hug?: { dmg: number; stun: number; fall: number };
+  /** (아이덴티티) 이 기술만 재사용 대기가 다름 (프레임) — 없으면 캐릭터 cd */
+  cd?: number;
   /** (계산용) 가드를 부숨 — 끝까지 모은 철곰권 */
   crush?: boolean;
 }
@@ -208,7 +212,7 @@ const RAW: CharSrc[] = [
     idDesc: "바람을 두르고 돌진하며 2연타 — 돌진하는 동안 경직 면역, 맞으면 기절",
     ultName: "천풍난무",
     ultDesc: "회오리를 두르고 돌진하며 6연타, 마지막 타에 날려 버림",
-    airDesc: "아래로 급강하해 바닥을 쾅 — 양옆 넓게 충격파로 띄움",
+    airDesc: "어느 높이든 바닥까지 급강하해 쾅 — 양옆 넓게 충격파로 띄움, 떨어지는 도중 맞히면 더 아픔",
     moves: {
       L: {
         // 약 (J): 제일 빠르고 짧은 경직 — J·J로 이어 치고 발차기·아이덴티티·필살기로 캔슬
@@ -285,7 +289,8 @@ const RAW: CharSrc[] = [
         box: { x: 0, y: 48, w: 46, h: 32 },
         // 공중: 거의 수직으로 급강하 → 바닥을 쾅 찍어 양옆 넓게 충격파로 띄움 (공중 K는 앞으로 길게 차는 기술)
         // (airVh: 최고 낙하 속도 2600에 잘리므로 그 값으로 — 전엔 -3400이라 적혀 있었지만 실제론 2600)
-        rush: { vx: 2500, airVh: -2600, airVx: 900, landBurst: 76, landDmg: 50 },
+        // 10.10 땅에 닿기 전 공중에서 맞히면 44→64 (공중에서 맞혀도 이득이 없었음), 착지 충격파 양옆 76→86px
+        rush: { vx: 2500, airVh: -2600, airVx: 900, landBurst: 86, landDmg: 50, airDmg: 64 },
         // 돌진 중 2번 때림, 돌진하는 동안 경직 면역
         multi: 6,
         armor: true,
@@ -914,7 +919,9 @@ const RAW: CharSrc[] = [
           push: 0,
           hitstop: 10,
           // 발 위 64px ~ 발 아래 20px (10.06 아래 96→56px, 10.08 56→20px — 높이 떠서 아래 상대를 쉽게 맞히고 콤보로 이어 가던 것)
-          box: { x: -4, y: 64, w: 90, h: 84 },
+          // 10.10 앞 90→102px · 위 64→72px 로 조금 넓힘, 대신 공중 버전 재사용 대기 3초 → 4초
+          box: { x: -4, y: 72, w: 102, h: 92 },
+          cd: 240,
           pause: false,
           swap: true,
           cancel: undefined,
@@ -945,7 +952,7 @@ const RAW: CharSrc[] = [
     name: "이반",
     title: "교관 · 맨주먹",
     desc: "기를 모아 정권 한 방으로 끝내는 러시아 특수부대 출신 거구",
-    hp: 1380,
+    hp: 1440, // 10.10 1380→1440
     walk: 1000,
     jumpVx: 930,
     dash: 2300,
@@ -969,7 +976,7 @@ const RAW: CharSrc[] = [
         // 약 (J): 잽 · 잽 · 바디블로 · 어깨 박치기 — 느리지만 한 대가 셈
         startup: 5,
         active: 3,
-        recovery: 8,
+        recovery: 7, // 10.10 8→7
         dmg: 52,
         chip: 0,
         hitstun: 15,
@@ -982,7 +989,7 @@ const RAW: CharSrc[] = [
       },
       H: {
         // 발차기 (K): 로우킥 → 두 손 깍지 해머 내려치기
-        startup: 12,
+        startup: 11, // 10.10 12→11 (가장 느린 발에 발차기까지 느려 다 맞고 시작)
         active: 4,
         recovery: 21,
         dmg: 115,

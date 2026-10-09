@@ -612,6 +612,8 @@ export default function FightGame() {
             const fresh = prevSt[i] !== "atk" || prevMv[i] !== f.mv || prevT[i] > f.t;
             // (공중 잡기는 붙잡아 내리꽂을 때 소리)
             const hugM = f.mv === "S" && !!f.aerial && !!CHARS[f.ch].moves.S.air?.hug;
+            // 곰 포옹 덮치기: 묵직하게 휙 (헛쳐도 들림)
+            if (hugM && f.t >= su && (fresh || prevT[i] < su)) sfxWhoosh(true, "fist");
             if (!hugM && f.t >= su && (fresh || prevT[i] < su)) sfxSkill(CHARS[f.ch].id, f.mv === "S" ? "l" : "i", !!f.aerial);
           }
         }

@@ -357,7 +357,11 @@ const moveOf = (f: Fighter): MoveDef | null => {
   if (!f.mv) return null;
   const m = charOf(f).moves[f.mv];
   if (f.mv === "T" && f.lg) return { ...m, ...DASH_GRAB };
-  if (f.aerial && m.air) return { ...m, ...m.air };
+  if (f.aerial && m.air) {
+    const am = { ...m, ...m.air };
+    // 급강하(카이 공중 질풍권)가 땅에 닿기 전 공중에서 맞히면 더 아픔
+    return f.dive && am.rush?.airDmg ? { ...am, dmg: am.rush.airDmg } : am;
+  }
   // 차지 기술: 모은 만큼 피해·경직·밀어내기가 커지고, 끝까지 모으면 가드 불가 + 다운
   if (m.charge && f.chg > 0) {
     const c = m.charge;
@@ -520,7 +524,7 @@ const cloneF = (f: Fighter): Fighter => ({ ...f, hist: f.hist.slice() });
  * 이 빌드의 게임 데이터 지문 (캐릭터 성능·맵) — 온라인에서 서로 다른 빌드끼리 붙었는지 확인.
  * 계산 방식(sim.ts)만 바꿨을 땐 SIM_REV를 올릴 것.
  */
-const SIM_REV = 7;
+const SIM_REV = 8;
 export const BUILD_ID = (() => {
   const str = SIM_REV + JSON.stringify(CHARS.map((c) => [c.hp, c.walk, c.jumpVx, c.dash, c.cd, c.glide, c.hurt, c.width, c.moves])) + JSON.stringify(MAPS.map((m) => [m.plats, m.spawn]));
   let h = 2166136261;
@@ -720,7 +724,7 @@ function startMove(s: State, i: number, id: MoveId) {
   f.aerial = airborneS(s, f) ? 1 : 0;
   const m = moveOf(f)!;
   if (f.aerial && m.hover) f.vh = Math.max(f.vh, m.hover);
-  if (id === "S") f.cd = charOf(f).cd;
+  if (id === "S") f.cd = m.cd ?? charOf(f).cd; // (공중 버전만 재사용 대기가 다를 수 있음)
   f.chg = 0;
   if (id === "G") f.meter = Math.max(0, f.meter - GUARD_COUNTER_COST);
   if (id === "T" || id === "G") f.vx = 0;
@@ -964,6 +968,8 @@ function control(s: State, i: number) {
     case "atk": {
       const m = moveOf(f)!;
       const air = airborneS(s, f);
+      // 급강하: 어느 높이에서 써도 바닥에 닿을 때까지 내리꽂음 (높은 데서 쓰면 기술이 공중에서 끝나 충격파가 안 나가던 것 10.10)
+      if (f.dive && air && m.rush && m.rush.airVh < 0 && f.t >= m.startup + m.active - 1) f.t = m.startup + m.active - 1;
       // 곰 포옹으로 안고 떨어지는 중: 착지할 때까지 그 자세 그대로
       if (f.hug) {
         f.t = m.startup + m.active;
@@ -1278,8 +1284,8 @@ function landed(s: State, i: number, f: Fighter) {
     const hr = hurtRect(o);
     const r = lm.rush.landBurst * SUB;
     s.ev.push({ k: "clash", p: i, x: f.x, h: f.h, v: 1 });
-    // 양옆 r px, 위로도 낮게 뛴 상대까지 (56px)
-    if (hr && Math.abs(o.x - f.x) < r && o.h - f.h < 56 * SUB && f.h - o.h < 24 * SUB) {
+    // 양옆 r px, 위로도 낮게 뛴 상대까지 (56→66px 10.10)
+    if (hr && Math.abs(o.x - f.x) < r && o.h - f.h < 66 * SUB && f.h - o.h < 24 * SUB) {
       f.hit = 0;
       applyHit(s, i, { ...lm, kd: false, multi: undefined, push: 0, dmg: lm.rush.landDmg ?? lm.dmg, launch: true }, f.x, "S");
     }

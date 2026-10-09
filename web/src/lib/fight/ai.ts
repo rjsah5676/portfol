@@ -143,13 +143,13 @@ export const BOT_MAX = 2600;
  */
 export const ADJ_AT = [200, 500, 850, 1200, 1600, 2000, 2400];
 export const CHAR_ADJ: Record<string, number[]> = {
-  kai: [-37, -61, -27, 35, 33, -100, -85],
-  igna: [-76, -105, -150, -57, -52, -71, -84],
-  soyoung: [60, -25, -128, -185, -22, 350, 320],
-  lily: [37, 138, 204, 209, 28, 29, 140],
-  zena: [-62, -189, -353, -359, -35, 35, 154],
-  gunmo: [78, 244, 458, 357, 48, -220, -450],
-  ivan: [-11, -47, -10, 261, 98, 200, 220],
+  kai: [-37, -40, -18, 127, -4, -139, -260],
+  igna: [-71, -126, -198, -154, -29, -153, -185],
+  soyoung: [40, -56, -148, -226, -38, 430, 480],
+  lily: [25, 160, 241, 285, 28, -190, 68],
+  zena: [-73, -148, -244, -333, 12, 65, 252],
+  gunmo: [164, 362, 559, 371, 49, -117, -440],
+  ivan: [-60, -193, -190, 190, 77, 283, 233],
 };
 function charAdj(r: number, id: string) {
   const t = CHAR_ADJ[id];
@@ -210,7 +210,7 @@ export function aiForRating(r: number, charId?: string): AILevel {
  * AI 지문: 랭크전 봇전은 서버가 같은 경기를 다시 돌려 확인하니, 브라우저와 서버의 AI가 똑같아야 함.
  * 단계 값·보정·콤보 길은 자동으로 들어가고, next() 같은 판단 코드를 바꿨으면 AI_REV 를 올릴 것.
  */
-const AI_REV = 3;
+const AI_REV = 4;
 export const AI_ID = (() => {
   const str = AI_REV + JSON.stringify([AI_LEVELS, RANK_TIERS, AI_RATING, ADJ_AT, CHAR_ADJ, ROUTES, ROUTE_CAP]);
   let h = 0x811c9dc5;
