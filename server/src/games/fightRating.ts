@@ -86,7 +86,7 @@ export interface RankGame {
   map: number;
   /** 0 = 0번 자리 승, 1 = 1번 자리 승, 2 = 무승부 */
   out: 0 | 1 | 2;
-  /** 봇전 (1번 자리가 봇 — uids[1] 은 "bot:별명") — 전체 캐릭터 통계에선 뺌 */
+  /** 봇전 (1번 자리가 봇 — uids[1] 은 "bot:별명") — 캐릭터 통계엔 사람 판과 똑같이 들어감 */
   bot?: boolean;
 }
 
@@ -119,7 +119,7 @@ export function createFightRating(db: Database, users: Users) {
     /** 캐릭터 통계 (1분 기억) + uid 가 있으면 그 사람의 캐릭터별 기록 */
     async stats(uid?: string): Promise<RankStats> {
       if (!statsCache || Date.now() - statsCache.at > 60_000) {
-        const docs = await games.find({ bot: { $ne: true } }, { projection: { chars: 1, out: 1 } }).toArray();
+        const docs = await games.find({}, { projection: { chars: 1, out: 1 } }).toArray();
         const ch = new Map<number, { c: number; w: number; l: number; d: number }>();
         const vs = new Map<string, { a: number; b: number; w: number; g: number }>();
         const add = (c: number, k: "w" | "l" | "d") => {
@@ -129,7 +129,7 @@ export function createFightRating(db: Database, users: Users) {
         };
         for (const g of docs) {
           const [c0, c1] = g.chars;
-          if (c0 === c1) continue;
+          if (c0 < 0 || c1 < 0 || c0 === c1) continue;
           add(c0, g.out === 2 ? "d" : g.out === 0 ? "w" : "l");
           add(c1, g.out === 2 ? "d" : g.out === 1 ? "w" : "l");
           for (const [a, b, win] of [
