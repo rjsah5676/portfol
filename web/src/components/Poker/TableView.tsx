@@ -1115,7 +1115,7 @@ export default function TableView({
     ? -1
     : hv
       ? hv.board.length >= 3
-        ? categoryOf(evaluate([...liveHand.cards, ...hv.board]))
+        ? holdemRankIdx(evaluate([...liveHand.cards, ...hv.board]))
         : -1
       : sv && liveHand.down && liveHand.cards.length >= 5
         ? kCategory(bestK(liveHand.cards).score)
@@ -3051,7 +3051,13 @@ const HOLDEM_RANKS: [string, number[]][] = [
   ["풀하우스", ex("Qs Qh Qd 9c 9s")],
   ["포카드", ex("Ks Kh Kd Kc 2s")],
   ["스티플", ex("9h 8h 7h 6h 5h")],
+  ["로티플", ex("As Ks Qs Js Ts")],
 ];
+/** 홀덤 점수 → 족보표 줄 번호 (스트레이트 플러시 중 A 하이 = 로티플은 따로 한 줄) */
+const holdemRankIdx = (score: number) => {
+  const cat = categoryOf(score);
+  return cat === 8 && Math.floor(score / 65536) % 16 === 12 ? 9 : cat;
+};
 const SEVEN_RANKS: [string, number[]][] = [
   ["탑", ex("As Qd 9c 5h 3s")],
   ["원페어", ex("Th Tc Ks 7d 3h")],

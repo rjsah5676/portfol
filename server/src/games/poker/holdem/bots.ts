@@ -292,6 +292,12 @@ function strengths(board: Card[], valid: Uint8Array, withDraws: boolean) {
   return { q, draw, rank };
 }
 
+/** 큰 돈을 받을지 따질 때: 서툰 봇도 "크게 미는 사람의 패"는 좁게 읽음 (읽기 깊이 최소 0.85) */
+function bigCallBrain(brain: Brain): Brain {
+  if (brain.skill.read >= 0.85) return brain;
+  return { ...brain, skill: { ...brain.skill, read: 0.85, adapt: Math.max(brain.skill.adapt, 0.5) } };
+}
+
 function readTable(v: BotView, brain: Brain, models: Models): Read {
   const skill = brain.skill;
   const dead = new Uint8Array(52);
@@ -515,10 +521,16 @@ function preflop(v: BotView, brain: Brain, models: Models): Decision {
   };
 
   // 상대가 올인했거나 받으면 내 칩의 큰 몫이 들어가는 자리 → 상대 레인지 상대 승률로 판단
+  // (크게 미는 사람은 아무 패나 들고 있지 않다고 보고, 잡패로 스택을 걸지 않게)
   if (toCall > 0 && (toCall >= me.stack * 0.4 || !canRaise) && raises.length) {
-    const read = readTable(v, brain, models);
-    const eq = equity(v, read, brain.skill.sims, r) + gauss(r) * brain.skill.noise;
-    const ok = eq >= need + 0.02 + p.callMargin;
+    const read = readTable(v, bigCallBrain(brain), models);
+    const eq = equity(v, read, brain.skill.sims, r) + gauss(r) * Math.min(brain.skill.noise, 0.03);
+    const risk = Math.min(1, toCall / Math.max(1, me.stack));
+    // 칩의 큰 몫이면: 성격이 아무리 헐거워도 거의 손해 없는 기준 + 걸리는 몫만큼 더 조심
+    const margin = Math.max(p.callMargin, -0.02) + 0.02 + 0.06 * risk;
+    // 잡패 바닥: 싸게 받는 게 아니면(팟 오즈 35% 이상) 상위 32% 밖 패로는 안 받음
+    const junk = need >= 0.35 && pct > 0.32;
+    const ok = !junk && eq >= need + margin;
     return ok ? { type: "call", thinkMs: fast(2200, 4800), cue: toCall >= me.stack ? "allin" : "call" } : { ...fold(), thinkMs: fast(1800, 3600) };
   }
 
@@ -599,10 +611,12 @@ function postflop(v: BotView, brain: Brain, models: Models): Decision {
   const r = brain.rand;
   const me = v.players.find((x) => x.seat === v.seat)!;
   const { toCall, canRaise, maxTo } = v.legal;
-  const read = readTable(v, brain, models);
+  // 칩의 큰 몫이 걸린 벳을 받을 때는 상대 레인지를 제대로 읽음 (크게 거는 사람은 아무 패나 아님)
+  const heavy = v.legal.toCall >= me.stack * 0.4;
+  const read = readTable(v, heavy ? bigCallBrain(brain) : brain, models);
   const live = read.villains;
   const n = live.length;
-  const eq = clamp(equity(v, read, brain.skill.sims, r) + gauss(r) * brain.skill.noise, 0, 1);
+  const eq = clamp(equity(v, read, brain.skill.sims, r) + gauss(r) * (heavy ? Math.min(brain.skill.noise, 0.03) : brain.skill.noise), 0, 1);
   const outs = v.street < 3 ? drawOuts([...v.cards, ...v.board]) : 0;
   const wet = wetness(v.board);
   const pot = v.pot;
@@ -636,6 +650,9 @@ function postflop(v: BotView, brain: Brain, models: Models): Decision {
     if (!river && toCall <= pot * 0.35 && toCall < me.stack * 0.12) margin -= 0.05 * brain.skill.fun;
     // 판이 아주 커질 때는 애매한 패로 스택을 걸지 않음
     if (commitBB > 120 && read.myQ < 0.93) margin += 0.07;
+    // 칩의 큰 몫을 받는 자리(올인 받기 등): 헐거운 성격 · 기분 보정은 거의 빼고, 걸리는 몫만큼 더 조심
+    const risk = Math.min(1, toCall / Math.max(1, me.stack));
+    if (risk >= 0.4) margin = Math.max(margin, 0.02) + 0.05 * risk;
     const implied = !river && spr > 2 ? (outs >= 8 ? 0.06 : outs >= 4 && spr > 4 ? 0.02 : 0) : 0;
 
     const valueThr = 0.72 + 0.04 * (n - 1) + p.valueShift;
