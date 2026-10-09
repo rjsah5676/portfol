@@ -112,7 +112,7 @@ function Status() {
       </p>
       <div className="flex flex-col gap-[0.6cqw]">
         {STATUS.map(([n, who, col, d]) => (
-          <div key={n} className="flex items-start gap-[1cqw] rounded-[0.6cqw] bg-white/[0.05] px-[1.2cqw] py-[0.8cqw]">
+          <div key={n + who} className="flex items-start gap-[1cqw] rounded-[0.6cqw] bg-white/[0.05] px-[1.2cqw] py-[0.8cqw]">
             <span
               className="mt-[0.1cqw] w-[6.4cqw] shrink-0 rounded-[0.3cqw] py-[0.15cqw] text-center text-[1.15cqw] font-extrabold text-black"
               style={{ background: col }}

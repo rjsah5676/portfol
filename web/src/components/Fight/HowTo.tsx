@@ -149,7 +149,7 @@ function StatusList() {
       <Sec title="상태 이상" color="#34D399" />
       <div className={`${CARD} grid gap-1`}>
         {STATUS.map(([n, who, col, d]) => (
-          <div key={n} className="flex items-start gap-2">
+          <div key={n + who} className="flex items-start gap-2">
             <span className="mt-px w-14 shrink-0 rounded px-1.5 text-center text-[10.5px] font-bold text-black" style={{ background: col }}>
               {n}
             </span>
