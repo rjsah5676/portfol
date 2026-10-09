@@ -880,7 +880,11 @@ export function PokerRanks({ rank, myNick }: { rank: RankRow[] | null; myNick?: 
   }, [tab]);
   return (
     <div>
-      <div className="mb-1 flex gap-1 pt-1" role="tablist">
+      {/* 사이트 위 순위 창(포커 무대 밖)에서도 같은 색이 나오게 색은 값으로 */}
+      <div
+        className="mb-2 grid grid-cols-2 gap-1 rounded-full border border-white/10 bg-black/40 p-1"
+        role="tablist"
+      >
         {(
           [
             ["money", "자금 순위"],
@@ -893,10 +897,10 @@ export function PokerRanks({ rank, myNick }: { rank: RankRow[] | null; myNick?: 
             role="tab"
             aria-selected={tab === k}
             onClick={() => setTab(k)}
-            className={`rounded-full px-3 py-1 text-xs font-bold transition ${
+            className={`rounded-full px-3 py-1.5 text-sm font-bold transition ${
               tab === k
-                ? "bg-[var(--pk-brass)] text-black"
-                : "bg-white/[0.06] text-white/60 hover:bg-white/10"
+                ? "bg-[#ffc93c] text-[#241700] shadow-[0_2px_8px_rgba(255,201,60,0.35)]"
+                : "text-white/55 hover:bg-white/10 hover:text-white/80"
             }`}
           >
             {label}
@@ -928,16 +932,16 @@ function BuyRankTable({ rank, myNick }: { rank: BuyRankRow[] | null; myNick?: st
         return (
           <li
             key={`${r.nick}-${i}`}
-            className={`flex items-center gap-3 px-2 py-2 text-sm ${me ? "bg-[var(--pk-brass)]/10" : ""}`}
+            className={`flex items-center gap-3 px-2 py-2 text-sm ${me ? "bg-[#ffc93c]/10" : ""}`}
           >
             <span
-              className={`w-6 text-center font-bold ${i < 3 ? "text-[var(--pk-brass)]" : "text-white/40"}`}
+              className={`w-6 text-center font-bold ${i < 3 ? "text-[#ffc93c]" : "text-white/40"}`}
             >
               {i + 1}
             </span>
             <Profile char={r.look ?? r.char} size={30} />
             <span
-              className={`min-w-0 flex-1 truncate ${me ? "font-bold text-[var(--pk-brass)]" : "text-white/85"}`}
+              className={`min-w-0 flex-1 truncate ${me ? "font-bold text-[#ffc93c]" : "text-white/85"}`}
             >
               {r.nick}
             </span>
@@ -978,16 +982,16 @@ export function RankTable({
         return (
           <li
             key={`${r.nick}-${i}`}
-            className={`flex items-center gap-3 px-2 py-2 text-sm ${me ? "bg-[var(--pk-brass)]/10" : ""}`}
+            className={`flex items-center gap-3 px-2 py-2 text-sm ${me ? "bg-[#ffc93c]/10" : ""}`}
           >
             <span
-              className={`w-6 text-center font-bold ${i < 3 ? "text-[var(--pk-brass)]" : "text-white/40"}`}
+              className={`w-6 text-center font-bold ${i < 3 ? "text-[#ffc93c]" : "text-white/40"}`}
             >
               {i + 1}
             </span>
             <Profile char={r.look ?? r.char} size={30} />
             <span
-              className={`min-w-0 flex-1 truncate ${me ? "font-bold text-[var(--pk-brass)]" : "text-white/85"}`}
+              className={`min-w-0 flex-1 truncate ${me ? "font-bold text-[#ffc93c]" : "text-white/85"}`}
             >
               {r.nick}
             </span>
