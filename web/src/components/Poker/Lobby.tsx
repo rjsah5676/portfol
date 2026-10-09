@@ -11,7 +11,6 @@ import {
   TIERS,
   fmtShort,
   lookOf,
-  skinOf,
   type CharId,
   type GameKind,
   type Tier,
@@ -117,7 +116,6 @@ export default function Lobby({
   const info = CHARS[wallet.char];
   /** 그림 열쇠 (스킨을 입었으면 스킨) */
   const look = lookOf(wallet.char, wallet.wear);
-  const skin = skinOf(look);
 
   // ── 조각들 ──
   const top = (
@@ -591,14 +589,6 @@ export default function Lobby({
                 <Money won={wallet.money} className="text-[1.2em] text-[#ffd84a]" />
               </div>
             </button>
-            {skin && (
-              <LobbyChar
-                key={look}
-                look={look}
-                bust
-                className="h-[3.6em] w-[3.2em] shrink-0 self-end"
-              />
-            )}
             {myRank > 0 && (
               <button
                 type="button"

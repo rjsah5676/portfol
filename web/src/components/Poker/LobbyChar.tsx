@@ -9,7 +9,7 @@ import { hasSound, playVoice } from "@/lib/poker/sfx";
  * 로비의 내 캐릭터.
  *   기본 캐릭터: 대기 영상(char/{id}/idle.webp)이 있으면 그게 반복, 없으면 전신 그림 한 장 (눌러도 아무 일 없음).
  *   라이브 스킨(rules.ts 의 live): 대기 영상(idle.webp, 투명 배경 움직이는 그림)이 계속 반복되고,
- *     누르면 하트 + 음성. 터치 반응 영상(touch-1~3.webp)이 있으면 그걸 한 번 틀고 대기로 돌아감.
+ *     누르면 음성. 터치 반응 영상(touch-1~3.webp)이 있으면 그걸 한 번 틀고 대기로 돌아감.
  *   움직이는 그림을 받는 동안은 전신 그림이 보임.
  */
 
@@ -41,9 +41,7 @@ export default function LobbyChar({
   // 지금 틀고 있는 터치 영상 (재생할 때마다 새로 만든 blob 주소 — 같은 주소면 브라우저가 한 번 끝난 움직이는 그림을 처음부터 다시 안 틀어 줘서 멈춘 것처럼 보임)
   const [touchUrl, setTouchUrl] = useState("");
   const blobs = useRef<Record<number, Blob>>({});
-  const [hearts, setHearts] = useState<{ key: number; x: number }[]>([]);
   const busyUntil = useRef(0);
-  const key = useRef(0);
   const touchTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   // 움직이는 그림 미리 받기 (없는 터치 영상은 건너뜀)
@@ -77,10 +75,6 @@ export default function LobbyChar({
   const lastTouch = useRef(0);
   const poke = () => {
     if (!touchable || Date.now() < busyUntil.current) return;
-    const k = ++key.current;
-    const hs = [0, 1, 2].map((i) => ({ key: k * 10 + i, x: 30 + Math.random() * 40 }));
-    setHearts((h) => [...h, ...hs]);
-    setTimeout(() => setHearts((h) => h.filter((x) => !hs.includes(x))), 1600);
     const greet = () => playVoice(look, Math.random() < 0.5 ? "select" : "hello");
     if (!touches.length) {
       greet();
@@ -129,16 +123,6 @@ export default function LobbyChar({
       style={style}
     >
       {body}
-      {hearts.map((h) => (
-        <span
-          key={`h${h.key}`}
-          className="pk-lobbychar-heart"
-          style={{ left: `${h.x}%` }}
-          aria-hidden
-        >
-          ♥
-        </span>
-      ))}
     </button>
   );
 }
