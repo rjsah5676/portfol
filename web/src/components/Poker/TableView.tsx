@@ -29,6 +29,7 @@ import {
   type Pose,
   tierLabel,
   type TierId,
+  lookChar,
   lookName,
 } from "@/lib/poker/rules";
 import { bestK, kCategory } from "@/lib/poker/seven";
@@ -278,6 +279,8 @@ export default function TableView({
     handNo: number;
     order: number[];
     step: number;
+    /** 깔 때 그 사람이 읊는 족보 대사 (order 와 같은 순서, 음성 파일이 없으면 null) */
+    say: ({ look: string; line: string } | null)[];
   } | null>(null);
   /** 패를 다 깐 뒤에 보여줄 승리 연출 (칩 · +금액 · 소리) */
   const pendingWinRef = useRef<(() => void) | null>(null);
@@ -508,7 +511,14 @@ export default function TableView({
           ...ord.filter((x) => wonSeats.includes(x)),
         ];
         staged = true;
-        setReveal({ key: ++keyRef.current, handNo: t.handNo, order, step: 0 });
+        const say = order.map((seat) => {
+          const look = charOf(seat);
+          const line = handLine(resNow?.names[seat] ?? "");
+          if (!look || !line) return null;
+          const has = (who: string) => hasSound(`voice/${who}/${who}-${line}`);
+          return has(look) || has(lookChar(look)) ? { look, line } : null;
+        });
+        setReveal({ key: ++keyRef.current, handNo: t.handNo, order, step: 0, say });
         if (resNow?.showdown) sfx.drum();
         // 마지막 구의 건 돈은 깔기 전에 팟으로
         const lastBets = Object.entries(prevBetsRef.current)
@@ -644,17 +654,34 @@ export default function TableView({
     return () => clearTimeout(id);
   }, [dealFx]);
 
-  // 패 까기: 한 자리씩 뒤집고(촥 → 족보 도장 쾅), 이긴 사람 앞에서 한 박자 더, 다 깐 뒤 결과
+  // 패 까기: 한 자리씩 뒤집고(촥 → 족보 도장 쾅 → 그 사람이 자기 족보를 읊음), 이긴 사람 앞에서 한 박자 더,
+  // 다 깐 뒤 결과(승리 · 패배 동작과 대사). 족보 대사가 있으면 다 듣고 다음 사람으로
   useEffect(() => {
     if (!reveal || reveal.step > reveal.order.length) return;
     const n = reveal.order.length;
     const beforeLast = reveal.step === n - 1 && n > 1;
-    const delay = reveal.step === n ? 650 : reveal.step === 0 ? 520 : beforeLast ? 820 : 460;
+    const spoke = reveal.step > 0 && !!reveal.say[reveal.step - 1];
+    const delay =
+      reveal.step === n
+        ? spoke
+          ? 1300
+          : 650
+        : reveal.step === 0
+          ? 520
+          : spoke
+            ? beforeLast
+              ? 1700
+              : 1450
+            : beforeLast
+              ? 820
+              : 460;
     const key = reveal.key;
     const id = setTimeout(() => {
       if (reveal.step < n) {
         sfx.flip();
         setTimeout(sfx.stamp, 230);
+        const say = reveal.say[reveal.step];
+        if (say) setTimeout(() => playVoice(say.look, say.line), 380);
       } else {
         pendingWinRef.current?.();
         pendingWinRef.current = null;
@@ -2137,6 +2164,30 @@ function ActTag({ a }: { a: string }) {
       <ActWord a={a} />
     </span>
   );
+}
+
+/**
+ * 쇼다운 족보 이름(서버가 보낸 "A 원페어", "K 탑", "로열 플러시" …) → 족보 대사 이름 (voice/{캐릭터}/{캐릭터}-hand-*.mp3)
+ * 탑은 숫자별(A·K·Q·J·10·9 — 7장이면 9 아래 탑은 안 나옴), 나머지는 족보별 하나.
+ */
+function handLine(name: string): string | null {
+  const n = name.replace(/\s+/g, " ").trim();
+  if (!n) return null;
+  if (n.startsWith("로열")) return "hand-royal";
+  if (n.startsWith("백 스트레이트 플러시")) return "hand-backsf";
+  if (n.includes("스트레이트 플러시")) return "hand-sf";
+  if (n.endsWith("포카드")) return "hand-quads";
+  if (n.endsWith("풀하우스")) return "hand-fullhouse";
+  if (n.endsWith("플러시")) return "hand-flush";
+  if (n === "마운틴") return "hand-mountain";
+  if (n === "백스트레이트") return "hand-backstraight";
+  if (n.endsWith("스트레이트")) return "hand-straight";
+  if (n.endsWith("트리플")) return "hand-trips";
+  if (n.endsWith("투페어")) return "hand-twopair";
+  if (n.endsWith("원페어")) return "hand-pair";
+  const top = n.match(/^(10|[2-9AKQJ]) (탑|하이)$/);
+  if (top) return `hand-top-${top[1]}`;
+  return null;
 }
 
 /** 전신 그림(hero)은 예전 허벅지까지 그림보다 몇 배 높게 그려야 머리 크기가 같아짐 */
