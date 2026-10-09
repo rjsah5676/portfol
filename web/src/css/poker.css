@@ -153,7 +153,7 @@
     animation: pk-slam 0.6s cubic-bezier(0.2, 0.9, 0.2, 1.4) 1;
   }
   .pk-sprite[data-pose="win"] img[data-on="1"] {
-    animation: pk-hop 0.9s ease-in-out infinite;
+    animation: pk-hop 0.7s ease-in-out infinite;
   }
   .pk-sprite[data-pose="lose"] img[data-on="1"],
   .pk-sprite[data-pose="die"] img[data-on="1"] {
@@ -197,7 +197,7 @@
     transform: translateY(0);
   }
   40% {
-    transform: translateY(-1.8%);
+    transform: translateY(-4%);
   }
 }
 @keyframes pk-sag {
@@ -1552,9 +1552,14 @@
       pk-breath 3.4s ease-in-out 0.6s infinite,
       pk-sway 6.8s ease-in-out 0.6s infinite;
   }
-  /* 로그인 화면 캐릭터: 나타날 때만 (계속 흔들리는 움직임 없이) */
   .pk-intro-char {
-    animation: pk-rise-in 0.7s cubic-bezier(0.2, 0.9, 0.2, 1) both;
+    animation:
+      pk-rise-in 0.7s cubic-bezier(0.2, 0.9, 0.2, 1) both,
+      pk-breath 3.6s ease-in-out 0.8s infinite,
+      pk-sway 7.5s ease-in-out 0.8s infinite;
+  }
+  .pk-intro-char:nth-child(2n) {
+    animation-duration: 0.7s, 3.1s, 6.4s;
   }
 }
 /* (translate 속성은 Tailwind 의 -translate-x-1/2 가 쓰므로 건드리지 않음) */
@@ -2533,8 +2538,6 @@
   line-height: 1;
   letter-spacing: 0.04em;
   font-style: italic;
-  /* 기울인 글자 끝(!)이 글자 상자 밖으로 나가 잘리지 않게 여백 */
-  padding: 0.06em 0.18em 0.04em 0.06em;
   color: transparent;
   background:
     linear-gradient(100deg, transparent 35%, rgba(255, 255, 255, 0.95) 48%, transparent 60%) -150%
