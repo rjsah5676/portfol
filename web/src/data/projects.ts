@@ -10,6 +10,7 @@ import beatdashImg from "@/img/Page/info/beatdash/title.webp";
 import pixelfightImg from "@/img/Page/info/pixelfight/title.webp";
 import yoriJoriImg from "@/img/Page/info/YoriJori.png";
 import pokerImg from "@/img/Page/info/poker/title.webp";
+import sketchImg from "@/img/Page/info/sketch/title.webp";
 
 export interface Project {
   /** 상세 페이지 주소: /infoPage/<idx> */
@@ -152,6 +153,16 @@ export const gameProjects: Project[] = [
     tech: ["TypeScript", "socket.io", "React", "MongoDB"],
     period: "2026.10 –",
     playLink: "/games/poker/",
+  },
+  {
+    idx: 15,
+    name: "SKETCH QUIZ",
+    imgLink: sketchImg,
+    title: "실시간 그림 퀴즈 [SKETCH QUIZ]",
+    desc: "최대 8명, 한 명이 그리고 나머지가 채팅으로 맞히는 그림 퀴즈. 스케치북 테마의 전용 게임 화면",
+    tech: ["TypeScript", "Canvas", "socket.io", "React"],
+    period: "2026.10 –",
+    playLink: "/games/sketch/",
   },
 ];
 

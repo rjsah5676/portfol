@@ -16,7 +16,7 @@ import { Avatar, Doodles, Icon, Logo, Mascot, Who } from "./Art";
 import { Dialog, FsButton, nextKey, SoundButton, tap, useStage } from "./stage";
 
 /** 직접 입력 범위 (서버 규칙과 같게) */
-const TIME_MIN = 30;
+const TIME_MIN = 40;
 const TIME_MAX = 300;
 const ROUNDS_MIN = 1;
 const ROUNDS_MAX = 10;
@@ -76,7 +76,8 @@ export default function SketchLobby({
   useEffect(
     () =>
       subscribeLobby((list) => {
-        setRooms(list);
+        // 아무도 없는 방은 목록에서 숨김 (나간 방이 남아 보이지 않게 — 서버가 곧 정리함)
+        setRooms(list.filter((r) => r.count > 0));
         for (const r of list) {
           if (checked.current.has(r.id) || serverNow() - r.createdAt < 60_000) continue;
           checked.current.add(r.id);
@@ -471,7 +472,10 @@ function CreateDialog({
   const [more, setMore] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const preset = PRESETS.find((p) => p.drawTime === drawTime && p.rounds === rounds)?.id ?? "";
+  /** 직접 정하기를 눌렀거나, 정한 값이 준비된 3개와 다르면 직접 정하기 */
+  const [custom, setCustom] = useState(false);
+  const matched = PRESETS.find((p) => p.drawTime === drawTime && p.rounds === rounds)?.id ?? "";
+  const preset = custom || !matched ? "custom" : matched;
 
   const create = async () => {
     setBusy(true);
@@ -510,12 +514,13 @@ function CreateDialog({
         />
         <div>
           {label("게임 길이")}
-          <div className="grid grid-cols-3 gap-2">
+          <div className={`grid gap-2 ${o === "v" ? "grid-cols-2" : "grid-cols-4"}`}>
             {PRESETS.map((p) => (
               <button
                 key={p.id}
                 type="button"
                 onClick={tap(() => {
+                  setCustom(false);
                   setDrawTime(p.drawTime);
                   setRounds(p.rounds);
                 })}
@@ -527,7 +532,72 @@ function CreateDialog({
                 </span>
               </button>
             ))}
+            <button
+              type="button"
+              onClick={tap(() => setCustom(true))}
+              className={`sk-btn flex-col gap-1 px-1 py-2.5 text-[19px] ${preset === "custom" ? "sk-btn-sun" : ""}`}
+            >
+              ✏️ 직접
+              <span className="font-['Nanum_Gothic',sans-serif] text-[10.5px] font-bold whitespace-normal text-[var(--ink2)]">
+                {preset === "custom" ? `${drawTime}초 · ${rounds}번` : "시간 · 횟수 정하기"}
+              </span>
+            </button>
           </div>
+          {preset === "custom" && (
+            <div className="sk-rise sk-card-soft mt-3 grid gap-3 p-3.5">
+              <div>
+                <div className="mb-1 flex items-baseline justify-between">
+                  <span className="sk-hand text-[17px]">그리는 시간</span>
+                  <NumInput
+                    value={drawTime}
+                    min={TIME_MIN}
+                    max={TIME_MAX}
+                    unit="초"
+                    onChange={setDrawTime}
+                  />
+                </div>
+                <input
+                  type="range"
+                  min={TIME_MIN}
+                  max={TIME_MAX}
+                  step={5}
+                  value={drawTime}
+                  aria-label="그리는 시간"
+                  onChange={(e) => setDrawTime(Number(e.target.value))}
+                  className="w-full accent-[#FF6B6B]"
+                />
+                <div className="flex justify-between text-[11px] font-bold text-[var(--ink3)]">
+                  <span>{TIME_MIN}초</span>
+                  <span>{TIME_MAX}초</span>
+                </div>
+              </div>
+              <div>
+                <div className="mb-1 flex items-baseline justify-between">
+                  <span className="sk-hand text-[17px]">한 사람당 그리는 횟수</span>
+                  <NumInput
+                    value={rounds}
+                    min={ROUNDS_MIN}
+                    max={ROUNDS_MAX}
+                    unit="번"
+                    onChange={setRounds}
+                  />
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {[1, 2, 3, 4, 5].map((n) => (
+                    <button
+                      key={n}
+                      type="button"
+                      data-on={rounds === n}
+                      onClick={tap(() => setRounds(n))}
+                      className="sk-chip min-w-[3em] text-[15px]"
+                    >
+                      {n}번
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
         <div>
           {label("최대 인원")}
@@ -564,56 +634,10 @@ function CreateDialog({
           onClick={tap(() => setMore((x) => !x))}
           className="sk-hand cursor-pointer self-start text-[17px] text-[var(--sky)]"
         >
-          {more ? "▾ 자세한 설정 접기" : "▸ 자세한 설정 (시간 · 횟수 · 순서 · 힌트)"}
+          {more ? "▾ 자세한 설정 접기" : "▸ 자세한 설정 (그리는 순서 · 힌트)"}
         </button>
         {more && (
           <div className="sk-rise grid gap-4">
-            <div>
-              {label("그리는 시간")}
-              <div className="flex flex-wrap items-center gap-1.5">
-                {[60, 80, 100, 120].map((t) => (
-                  <button
-                    key={t}
-                    type="button"
-                    data-on={drawTime === t}
-                    onClick={tap(() => setDrawTime(t))}
-                    className="sk-chip text-[15px]"
-                  >
-                    {t}초
-                  </button>
-                ))}
-                <NumInput
-                  value={drawTime}
-                  min={TIME_MIN}
-                  max={TIME_MAX}
-                  unit="초"
-                  onChange={setDrawTime}
-                />
-              </div>
-            </div>
-            <div>
-              {label("한 사람당 그리는 횟수")}
-              <div className="flex flex-wrap items-center gap-1.5">
-                {[1, 2, 3].map((n) => (
-                  <button
-                    key={n}
-                    type="button"
-                    data-on={rounds === n}
-                    onClick={tap(() => setRounds(n))}
-                    className="sk-chip text-[15px]"
-                  >
-                    {n}번
-                  </button>
-                ))}
-                <NumInput
-                  value={rounds}
-                  min={ROUNDS_MIN}
-                  max={ROUNDS_MAX}
-                  unit="번"
-                  onChange={setRounds}
-                />
-              </div>
-            </div>
             <div>
               {label("다음에 그릴 사람")}
               <div className="flex flex-wrap gap-1.5">

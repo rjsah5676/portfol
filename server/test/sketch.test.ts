@@ -130,6 +130,18 @@ describe("입장 · 퇴장", () => {
     expect((await sub.wait((e) => e.t === "room" && e.d === null)).d).toBeNull();
     expect(await peek(id)).toBeNull();
   });
+
+  it("마지막 사람이 직접 나가면 잠시 뒤 방이 정리됨 (다른 사람이 남아 있으면 그대로)", async () => {
+    const two = await roomWith(2);
+    await two.host.rpc("sketch.leave", { id: two.id });
+    const solo = await roomWith(1);
+    const anyone = await user("y");
+    const sub = await anyone.sub("sketch.room", { id: solo.id });
+    await solo.host.rpc("sketch.leave", { id: solo.id });
+    expect((await sub.wait((e) => e.t === "room" && e.d === null, 8_000)).d).toBeNull();
+    expect(await peek(solo.id)).toBeNull();
+    expect((await peek(two.id)).id).toBe(two.id);
+  });
 });
 
 describe("비밀번호 방 · 강퇴", () => {

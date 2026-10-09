@@ -9,6 +9,7 @@ import KickeatProject from "./KickeatProject";
 import MimyoProject from "./MimyoProject";
 import OhsoriProject from "./OhsoriProject";
 import PixelFightProject from "./PixelFightProject";
+import SketchQuizProject from "./SketchQuizProject";
 import YorijoriProject from "./YorijoriProject";
 
 // 프로젝트 idx(data/projects.ts) → 상세 페이지 컴포넌트
@@ -24,6 +25,7 @@ const PROJECT_PAGES: Record<number, ComponentType> = {
   12: BeatDashProject,
   13: PixelFightProject,
   14: AnimePokerProject,
+  15: SketchQuizProject,
 };
 
 function InfoContents({ idx }: { idx: number }) {

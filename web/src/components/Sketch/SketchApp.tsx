@@ -169,7 +169,7 @@ export default function SketchApp() {
     ? "fixed inset-0 z-[100] flex items-center justify-center bg-[#2B2D42]"
     : fsReal
       ? "flex h-full w-full items-center justify-center bg-[#2B2D42]"
-      : "mx-auto w-full max-w-[min(1280px,calc((100dvh-120px)*16/9))] px-0 pb-10 sm:px-3";
+      : "mx-auto w-full max-w-[min(1280px,calc((100dvh-176px)*16/9))] px-0 pb-10 sm:px-3";
   // (폰: 사이트 머리말 57px + 게임 메뉴 45px + 전체화면 띠 52px 아래부터 화면 끝까지)
   const boxCls = fs
     ? "h-full w-full"
@@ -178,7 +178,7 @@ export default function SketchApp() {
   return (
     <StageCtx.Provider value={{ o, fs, canFs, toggleFs }}>
       <div ref={rootRef} className={`sk ${outer}`}>
-        {/* 폰: 전체화면 권장 띠 (PC 는 무대 오른쪽 위 버튼) */}
+        {/* 전체화면 권장 띠 (다른 게임들처럼 무대 위에) */}
         {!fs && (
           <button
             type="button"
@@ -186,12 +186,16 @@ export default function SketchApp() {
               playSfx("sfx-open");
               toggleFs();
             }}
-            className="sk-btn sk-btn-sun mx-2 mb-2 flex h-[44px] w-[calc(100%-16px)] text-[19px] sm:hidden"
+            className="group mx-2 mb-2 flex h-[44px] w-[calc(100%-16px)] cursor-pointer items-center justify-center gap-2 rounded-xl border border-[#FF6B6B]/50 bg-[linear-gradient(90deg,rgba(255,107,107,0.2),rgba(255,201,60,0.18))] px-3 font-['Nanum_Gothic',sans-serif] text-[13px] text-white/85 shadow-[0_0_24px_-6px_rgba(255,107,107,0.55)] transition-colors hover:border-[#FF6B6B] hover:text-white sm:mx-0 sm:mb-3 sm:w-full"
           >
-            ⛶ 전체화면으로 플레이
-            <span className="font-['Nanum_Gothic',sans-serif] text-[11.5px] font-bold text-[var(--ink2)]">
-              화면을 꽉 채워 더 크게
+            <span className="rounded-md bg-[#FF6B6B] px-1.5 py-0.5 font-mono text-[11px] font-bold text-white">
+              ⛶
             </span>
+            <b className="shrink-0 font-bold text-white">전체화면 플레이 권장</b>
+            <span className="hidden truncate text-white/55 sm:inline">
+              — 여기를 누르면 전체화면으로 (게임 안 오른쪽 위 버튼으로도 켜고 끌 수 있어요)
+            </span>
+            <span className="truncate text-white/55 sm:hidden">— 화면을 꽉 채워 더 크게</span>
           </button>
         )}
         <div

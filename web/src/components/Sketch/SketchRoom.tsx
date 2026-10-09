@@ -683,7 +683,7 @@ export default function SketchRoom({
                 ✏️ {state.phase === "choosing" ? "고르는 중" : "그리는 중"}
               </span>
             ) : got !== undefined ? (
-              <span className="text-[#138a7f]">✓ 정답 +{got}</span>
+              <span className="whitespace-nowrap text-[#138a7f]">✓ 정답 +{got}</span>
             ) : p.uid === uid ? (
               <span className="text-[var(--ink3)]">나</span>
             ) : null}

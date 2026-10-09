@@ -99,19 +99,19 @@ export const NAV_GROUPS: NavGroup[] = [
         featured: true,
       },
       {
-        href: "/games/melongame",
-        image: imgMelongame,
-        label: "멜론 게임",
-        desc: "합이 10·20이 되게 묶어 지우는 2분 타임어택",
-        icon: "🍈",
-        featured: true,
-      },
-      {
         href: "/games/sketch",
         image: imgSketch,
         label: "스케치 퀴즈",
         desc: "최대 8명, 한 명이 그리고 나머지가 맞히기",
         icon: "🎨",
+        featured: true,
+      },
+      {
+        href: "/games/melongame",
+        image: imgMelongame,
+        label: "멜론 게임",
+        desc: "합이 10·20이 되게 묶어 지우는 2분 타임어택",
+        icon: "🍈",
       },
       {
         href: "/games/board",

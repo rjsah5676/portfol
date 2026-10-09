@@ -205,7 +205,8 @@ export interface SketchOptions {
 
 export function registerSketch({ gateway, users }: Deps, opts: SketchOptions = {}) {
   const rooms = new Map<string, Room>();
-  const emptyRoomTtl = opts.emptyRoomTtlMs ?? 30 * 60_000;
+  // 끊겨서 빈 방은 새로고침·재접속으로 돌아올 시간만 남겨 두고 정리 (예전 30분 → 3분)
+  const emptyRoomTtl = opts.emptyRoomTtlMs ?? 3 * 60_000;
 
   const LOBBY = "sketch:lobby";
   const roomKey = (id: string) => `sketch:room:${id}`;
@@ -519,6 +520,11 @@ export function registerSketch({ gateway, users }: Deps, opts: SketchOptions = {
     if (!room || !room.players[uid]) return null;
     if (nick) systemChat(room, `${plain(room.players[uid].nick)}님이 나갔어요.`);
     removePlayer(room, uid);
+    // 마지막 사람이 직접 나갔으면 곧바로 정리 (빠른 시작으로 만들고 나간 방이 로비에 남던 것). 같은 화면에서 바로 다시 들어오는 경우만 잠깐 기다림
+    if (!Object.keys(room.players).length)
+      setTimeout(() => {
+        if (rooms.get(id) === room && !Object.keys(room.players).length) removeRoom(room);
+      }, 5_000).unref();
     return null;
   });
 
@@ -838,7 +844,7 @@ export function registerSketch({ gateway, users }: Deps, opts: SketchOptions = {
     const now = Date.now();
     for (const room of [...rooms.values()])
       if (!Object.keys(room.players).length && now - room.emptySince >= emptyRoomTtl) removeRoom(room);
-  }, opts.sweepIntervalMs ?? 5 * 60_000);
+  }, opts.sweepIntervalMs ?? 30_000);
   sweep.unref();
 
   return {
