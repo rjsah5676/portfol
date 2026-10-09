@@ -2384,9 +2384,11 @@
   gap: 0.4em;
   align-items: baseline;
   margin: 0.55em 0.75em 0.25em;
-  font-family: "Black Han Sans", "Nanum Gothic", sans-serif;
+  /* 작은 제목: 납작한 굵은 글꼴(Black Han Sans)은 작으면 뭉개져서 나눔고딕 굵게 */
+  font-family: "Nanum Gothic", sans-serif;
+  font-weight: 700;
   font-size: 0.82em;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.02em;
   color: #e9c879;
 }
 .pk-side-title > span {

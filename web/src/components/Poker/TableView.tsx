@@ -1998,7 +1998,7 @@ export default function TableView({
           >
             <div className="flex items-center justify-between border-b border-white/10 px-[0.9em] py-[0.55em]">
               <span className="pk-side-title !m-0 !text-[1em]">
-                기록 <span className="text-white/40">이 테이블에서 일어난 일</span>
+                기록
               </span>
               <button
                 type="button"
@@ -3198,7 +3198,7 @@ function SidePanel({
 
       {/* ③ 기록 (오른쪽 끝: 크게 보기) */}
       <div className="pk-side-title mt-[0.2em]">
-        기록 <span className="text-white/40">이 테이블에서 일어난 일</span>
+        기록
         <button
           type="button"
           onClick={onLogBig}
