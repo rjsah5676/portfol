@@ -33,7 +33,7 @@ export const replay = (moves: string[], variant: string) =>
 
 const api = createBoardRooms<Janggi, Exclude<EndReason, "">>({
   collection: "janggi_rooms",
-  path: "/games/janggi/",
+  path: "/games/board/?g=janggi",
   initialFen: (variant) => new Janggi(parseVariant(variant)).fen(),
   replay,
   fenOf: (g) => g.fen(),

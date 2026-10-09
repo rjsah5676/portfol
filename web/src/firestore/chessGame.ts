@@ -78,7 +78,7 @@ function endState(game: Chess): { result: GameResult; reason: Exclude<EndReason,
 
 const api = createBoardRooms<Chess, Exclude<EndReason, "">>({
   collection: "chess_rooms",
-  path: "/games/chess/",
+  path: "/games/board/?g=chess",
   initialFen: () => new Chess().fen(),
   replay: (moves) => replay(moves),
   fenOf: (g) => g.fen(),

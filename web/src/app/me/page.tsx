@@ -28,17 +28,17 @@ const BOARDS: Record<string, { name: string; href: string; value: (r: MyRecord) 
   score: { name: "멜론 게임", href: "/games/melongame", value: (r) => `${r.score}점` },
   minesweeper_rankings: { name: "지뢰찾기", href: "/games/mine", value: (r) => `${r.time}s` },
   reaction: { name: "반응속도", href: "/games/rspeed", value: (r) => `${r.score}ms` },
-  chess_ai_rankings: { name: "체스 AI 랭킹전", href: "/games/chess", value: (r) => aiValue(r) },
-  janggi_ai_rankings: { name: "장기 AI 랭킹전", href: "/games/janggi", value: (r) => aiValue(r) },
-  omok_ai_rankings: { name: "오목 AI 랭킹전", href: "/games/omok", value: (r) => aiValue(r) },
+  chess_ai_rankings: { name: "체스 AI 랭킹전", href: "/games/board/?mode=ai&g=chess", value: (r) => aiValue(r) },
+  janggi_ai_rankings: { name: "장기 AI 랭킹전", href: "/games/board/?mode=ai&g=janggi", value: (r) => aiValue(r) },
+  omok_ai_rankings: { name: "오목 AI 랭킹전", href: "/games/board/?mode=ai&g=omok", value: (r) => aiValue(r) },
 };
 const aiValue = (r: MyRecord) =>
   `${Math.floor((r.score ?? 0) / 1_000_000)}단계 · ${pointsOf(r.score ?? 0).toLocaleString()}점`;
 
 const ONLINE: [string, string, string][] = [
-  ["chess", "체스", "/games/chess"],
-  ["janggi", "장기", "/games/janggi"],
-  ["omok", "오목", "/games/omok"],
+  ["chess", "체스", "/games/board/?g=chess"],
+  ["janggi", "장기", "/games/board/?g=janggi"],
+  ["omok", "오목", "/games/board/?g=omok"],
   ["fight", "격투", "/games/fight"],
 ];
 /** "120판 · 이긴 판 31" */

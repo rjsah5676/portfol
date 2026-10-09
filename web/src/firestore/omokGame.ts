@@ -27,7 +27,7 @@ export const replay = (moves: string[], variant: string) =>
 
 const api = createBoardRooms<Omok, Exclude<EndReason, "">>({
   collection: "omok_rooms",
-  path: "/games/omok/",
+  path: "/games/board/?g=omok",
   initialFen: (variant) => new Omok(parseRule(variant), parseBoardN(variant)).fen(),
   replay,
   fenOf: (g) => g.fen(),

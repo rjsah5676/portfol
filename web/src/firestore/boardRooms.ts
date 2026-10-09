@@ -164,7 +164,7 @@ export interface ChatMessage {
 export interface BoardRoomConfig<G, R extends string> {
   /** 방 컬렉션 이름 ("chess_rooms") — 서버에서 게임을 구분하는 데 씀 */
   collection: string;
-  /** 페이지 경로 (초대 링크용, "/games/chess/") */
+  /** 페이지 경로 (초대 링크용, "/games/board/?g=chess") */
   path: string;
   initialFen(variant: string): string;
   replay(moves: string[], variant: string): G;
@@ -389,7 +389,7 @@ export function createBoardRooms<G, R extends string>(cfg: BoardRoomConfig<G, R>
     } catch {
       key = "";
     }
-    return `${location.origin}${cfg.path}?room=${roomId}${key ? `&k=${key}` : ""}`;
+    return `${location.origin}${cfg.path}${cfg.path.includes("?") ? "&" : "?"}room=${roomId}${key ? `&k=${key}` : ""}`;
   }
 
   async function joinAsPlayer(roomId: string, _uid: string, nick: string) {

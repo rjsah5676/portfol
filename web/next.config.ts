@@ -22,6 +22,10 @@ const nextConfig: NextConfig = {
     return [
       { source: "/project", destination: "/portfolio/", permanent: true },
       { source: "/infoPage/2", destination: "/portfolio/", permanent: true },
+      // 체스·장기·오목은 온라인 보드게임 한 페이지로 합침 (방·초대 링크 쿼리는 그대로 붙어 감)
+      { source: "/games/chess", destination: "/games/board/?g=chess", permanent: true },
+      { source: "/games/janggi", destination: "/games/board/?g=janggi", permanent: true },
+      { source: "/games/omok", destination: "/games/board/?g=omok", permanent: true },
     ];
   },
   // Turbopack은 이미지/폰트 등만 기본으로 asset 처리하고 mp3 같은 오디오는

@@ -4,9 +4,7 @@ import imgRetro from "@/img/menu/retro.jpg";
 import imgMelongame from "@/img/menu/melongame.jpg";
 import imgRspeed from "@/img/menu/rspeed.jpg";
 import imgMine from "@/img/menu/mine.jpg";
-import imgChess from "@/img/menu/chess.jpg";
-import imgJanggi from "@/img/menu/janggi.jpg";
-import imgOmok from "@/img/menu/omok.jpg";
+import imgBoard from "@/img/menu/board.jpg";
 import imgFight from "@/img/menu/fight.jpg";
 import imgRhythm from "@/img/menu/rhythm.jpg";
 import imgSketch from "@/img/menu/sketch.jpg";
@@ -116,25 +114,11 @@ export const NAV_GROUPS: NavGroup[] = [
         icon: "🎨",
       },
       {
-        href: "/games/chess",
-        image: imgChess,
-        label: "온라인 체스",
-        desc: "실시간 온라인 대국·관전, AI 대국·랭킹전",
+        href: "/games/board",
+        image: imgBoard,
+        label: "온라인 보드게임",
+        desc: "체스·장기·오목 한곳에서, 실시간 대국·관전·AI 랭킹전",
         icon: "♟️",
-      },
-      {
-        href: "/games/janggi",
-        image: imgJanggi,
-        label: "온라인 장기",
-        desc: "실시간 온라인 대국, 위인 AI 대국·랭킹전",
-        icon: "將",
-      },
-      {
-        href: "/games/omok",
-        image: imgOmok,
-        label: "온라인 오목",
-        desc: "렌주룰 금수 판정, 실시간 온라인 대국·AI 대국·랭킹전",
-        icon: "⚫",
       },
       {
         href: "/games/mine",
