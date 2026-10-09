@@ -58,19 +58,21 @@ export const MAPS: MapDef[] = [
   {
     // 그림: public/fight/bg/sky.webp (1920×1080 = 판 ×5/3) — 배경에 발판 구름 6개를 합성해 둠
     // (10.09 정리: 9개 → 6개, 좌우 대칭 — 구름이 너무 많고 흩어져 싸움이 산만하던 것)
+    // (10.10 아래 큰 구름 좌우로 넓힘 310~845 → 180~975, 가운데 낮은 구름 하나 추가 — 공중에서만 싸우던 것)
     id: "sky",
     name: "천공 구름길",
     desc: "하늘 위 좌우로 나란히 떠 있는 구름 발판 — 아래 큰 구름 말고는 전부 낭떠러지",
     plats: [
-      { x0: 310, x1: 845, y: 150, solid: true, kind: "cloud" },
+      { x0: 180, x1: 975, y: 150, solid: true, kind: "cloud" },
       { x0: 40, x1: 230, y: 270, kind: "cloud" },
       { x0: 922, x1: 1112, y: 270, kind: "cloud" },
+      { x0: 482, x1: 672, y: 270, kind: "cloud" },
       { x0: 270, x1: 490, y: 390, kind: "cloud" },
       { x0: 662, x1: 882, y: 390, kind: "cloud" },
       { x0: 466, x1: 686, y: 500, kind: "cloud" },
     ],
-    spawn: [440, 716],
-    respawn: [400, 578, 755],
+    spawn: [400, 752],
+    respawn: [330, 578, 825],
     bg: "/fight/bg/sky.webp",
     bgPlats: true,
     bgm: "/fight/bgm-sky.mp3",
@@ -79,10 +81,11 @@ export const MAPS: MapDef[] = [
     // 그림: public/fight/bg/skyscraper.webp (1920×1080) — 높이 다른 아파트 두 동 옥상, 가운데는 낭떠러지
     id: "skyscraper",
     name: "달밤 마천루",
-    desc: "보름달 뜬 도시 위 아파트 옥상 두 동 — 오른쪽 동이 더 높고, 사이가 넓어 2단 점프에 공중 대시까지 써야 건넘",
+    desc: "보름달 뜬 도시 위 아파트 옥상 두 동 — 오른쪽 동이 조금 더 높고, 사이 낭떠러지는 점프로 건넘",
     plats: [
       { x0: 0, x1: 420, y: 200, solid: true, wall: true, kind: "roof" },
-      { x0: 720, x1: 1152, y: 270, solid: true, wall: true, kind: "roof" },
+      // 10.10 오른쪽 동을 한 칸(150px) 왼쪽으로 — 사이 300 → 150px
+      { x0: 570, x1: 1152, y: 270, solid: true, wall: true, kind: "roof" },
     ],
     spawn: [230, 940],
     respawn: [210, 940],
