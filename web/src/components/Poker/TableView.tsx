@@ -2275,14 +2275,13 @@ function handLine(name: string): string | null {
   const n = name.replace(/\s+/g, " ").trim();
   if (!n) return null;
   if (n.startsWith("로열")) return "hand-royal";
-  if (n.startsWith("백 스트레이트 플러시") || n === "5 하이 스트레이트 플러시") return "hand-backsf";
+  if (n.startsWith("백 스트레이트 플러시")) return "hand-backsf";
   if (n.includes("스트레이트 플러시")) return "hand-sf";
   if (n.endsWith("포카드")) return "hand-quads";
   if (n.endsWith("풀하우스")) return "hand-fullhouse";
   if (n.endsWith("플러시")) return "hand-flush";
   if (n === "마운틴") return "hand-mountain";
-  if (n === "백스트레이트" || n === "5 하이 스트레이트") return "hand-backstraight";
-  if (n === "A 하이 스트레이트") return "hand-mountain"; // 홀덤 이름
+  if (n === "백스트레이트") return "hand-backstraight";
   if (n.endsWith("스트레이트")) return "hand-straight";
   if (n.endsWith("트리플")) return "hand-trips";
   if (n.endsWith("투페어")) return "hand-twopair";
@@ -3051,17 +3050,14 @@ const HOLDEM_RANKS: [string, number[]][] = [
   ["플러시", ex("Ad Jd 8d 6d 3d")],
   ["풀하우스", ex("Qs Qh Qd 9c 9s")],
   ["포카드", ex("Ks Kh Kd Kc 2s")],
-  // 홀덤에선 A-2-3-4-5 스티플이 가장 약한 스티플 (7포커처럼 스티플보다 위가 아님)
-  ["백스티플", ex("5s 4s 3s 2s As")],
   ["스티플", ex("9h 8h 7h 6h 5h")],
+  // 홀덤 족보표에도 흔히 따로 적는 맨 위 (A 하이 스트레이트 플러시). 백스티플 · 마운틴 같은 구분은 홀덤엔 없음
   ["로티플", ex("As Ks Qs Js Ts")],
 ];
-/** 홀덤 점수 → 족보표 줄 번호 (스트레이트 플러시를 백스티플 · 스티플 · 로티플 세 줄로) */
+/** 홀덤 점수 → 족보표 줄 번호 (스트레이트 플러시 중 A 하이 = 로티플은 따로 한 줄) */
 const holdemRankIdx = (score: number) => {
   const cat = categoryOf(score);
-  if (cat !== 8) return cat;
-  const top = Math.floor(score / 65536) % 16;
-  return top === 12 ? 10 : top === 3 ? 8 : 9;
+  return cat === 8 && Math.floor(score / 65536) % 16 === 12 ? 9 : cat;
 };
 const SEVEN_RANKS: [string, number[]][] = [
   ["탑", ex("As Qd 9c 5h 3s")],
