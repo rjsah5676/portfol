@@ -291,6 +291,7 @@ export default function PokerApp({ rank }: { rank: RankRow[] | null }) {
         {shop && wallet && (
           <Shop
             wallet={wallet}
+            inGame={!!tableId}
             tab={shop}
             setTab={setShop}
             mobile={o === "v"}

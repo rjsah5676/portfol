@@ -33,6 +33,7 @@ export default function Shop({
   setTab,
   mobile,
   maxH,
+  inGame,
   onClose,
 }: {
   wallet: Wallet;
@@ -40,6 +41,8 @@ export default function Shop({
   setTab: (t: ShopTab) => void;
   mobile: boolean;
   maxH: number;
+  /** 테이블 화면에서 연 옷장: 갈아입어도 대사 없이 (판 방해 안 되게) */
+  inGame?: boolean;
   onClose: () => void;
 }) {
   const [busy, setBusy] = useState("");
@@ -76,7 +79,8 @@ export default function Shop({
     run(`${char}:${skin ?? ""}`, async () => {
       await wearSkin(char, skin);
       if (wallet.char !== char) await setChar(char);
-      playVoice(skin ?? char, "select");
+      // 테이블 화면에서는 판을 방해하지 않게 대사 없이
+      if (!inGame && !seated) playVoice(skin ?? char, "select");
     });
 
   return (
