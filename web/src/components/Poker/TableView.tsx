@@ -33,6 +33,7 @@ import {
   lookName,
 } from "@/lib/poker/rules";
 import { bestK, kCategory } from "@/lib/poker/seven";
+import { topHands } from "@/lib/poker/showdown";
 import { hasSound, isBig, playBgm, playSfx, playVoice, sfx, voiceDuration } from "@/lib/poker/sfx";
 import type {
   HoldemAction,
@@ -1520,7 +1521,7 @@ export default function TableView({
                   {/* 이름표 아래 꼬리표: 이름표 폭에 맞춰 두고, 가장자리 자리에선 안쪽으로 붙여 무대 밖으로 안 나가게 */}
                   {(s.votes > 0 || s.exit || resultName) && (
                     <div
-                      className={`pointer-events-none absolute inset-x-0 flex w-full ${tagAbove ? "bottom-full flex-col-reverse pb-[0.3em]" : "top-full flex-col"} ${edgeAlign}`}
+                      className={`pointer-events-none absolute inset-x-0 z-[3] flex w-full ${tagAbove ? "bottom-full flex-col-reverse pb-[0.3em]" : "top-full flex-col"} ${edgeAlign}`}
                     >
                       {s.votes > 0 && (
                         <span className="pk-vote-mark" title="강퇴 투표">
@@ -1788,9 +1789,9 @@ export default function TableView({
 
         {res && winners.length > 0 && (
           <WinBanner
-            names={winners.map((x) => table.seats[x]?.name ?? "?")}
-            hand={res.names[winners[0]]}
-            mine={winners.includes(mySeat)}
+            names={winners.filter(isTop).map((x) => table.seats[x]?.name ?? "?")}
+            hand={res.names[winners.find(isTop) ?? winners[0]]}
+            mine={winners.includes(mySeat) && isTop(mySeat)}
             o={o}
             top={C ? py(L.center.pot) - 6 : undefined}
           />
@@ -2264,22 +2265,6 @@ function ActTag({ a }: { a: string }) {
       <ActWord a={a} />
     </span>
   );
-}
-
-/** 쇼다운에서 족보가 제일 센 자리들 (같으면 여럿). 쇼다운이 아니면 null */
-function topHands(hand: HoldemView | SevenView | null | undefined): Set<number> | null {
-  if (!hand?.result?.showdown) return null;
-  const board = hand.game === "holdem" ? (hand as HoldemView).board : [];
-  const sc: [number, number][] = [];
-  for (const [k, p] of Object.entries(hand.players)) {
-    if (!p || p.folded || !p.cards) continue;
-    const cards = [...p.cards, ...board];
-    if (cards.length < 5) continue;
-    sc.push([Number(k), hand.game === "holdem" ? evaluate(cards) : bestK(cards).score]);
-  }
-  if (!sc.length) return null;
-  const top = Math.max(...sc.map((x) => x[1]));
-  return new Set(sc.filter((x) => x[1] === top).map((x) => x[0]));
 }
 
 /**

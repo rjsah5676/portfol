@@ -4,6 +4,7 @@ import { useState } from "react";
 import { madeOf } from "@/lib/poker/cards";
 import type { TierId } from "@/lib/poker/rules";
 import { bestK, handNameK } from "@/lib/poker/seven";
+import { isTopSeat } from "@/lib/poker/showdown";
 import type { MyHand, SevenAction, SevenBet, SevenView } from "@/lib/poker/types";
 import type { Orient } from "./layout";
 import { Money, PlayingCard } from "./parts";
@@ -50,7 +51,8 @@ export function sevenSeatCards({
 
   // 쇼다운에서 깐 7장: 엎어 뒀던 카드만 뒤집히고, 다 깐 뒤 이긴 5장은 빛나고 나머지는 어둡게
   if (p.cards && !(hide && !hero)) {
-    const won = (view.result?.won[seat] ?? 0) > 0;
+    // 이긴 사람 = 족보 1등 (사이드 팟만 딴 2등은 진 쪽처럼)
+    const won = (view.result?.won[seat] ?? 0) > 0 && isTopSeat(view, seat);
     let k = 0;
     return (
       <span className={row}>

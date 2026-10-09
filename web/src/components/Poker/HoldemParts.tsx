@@ -6,6 +6,7 @@ import { UNIT, fmtWon, type TierId } from "@/lib/poker/rules";
 import type { HoldemAction, HoldemView, MyHand } from "@/lib/poker/types";
 import { Money, PlayingCard } from "./parts";
 import type { SeatCardsProps, Sizes } from "./TableView";
+import { isTopSeat, topHands } from "@/lib/poker/showdown";
 
 /* 홀덤에서만 쓰는 화면 조각: 바닥 카드, 자리의 패, 행동 버튼 */
 
@@ -40,9 +41,9 @@ export function holdemSeatCards({
             key={c}
             card={c}
             w={w}
-            // 홀덤은 바닥 카드와 합쳐야 족보라, 다 깐 뒤 이긴 사람 카드만 빛남
-            win={ended && !!best?.includes(c)}
-            dim={ended && !(view.result!.won[seat] > 0)}
+            // 홀덤은 바닥 카드와 합쳐야 족보라, 다 깐 뒤 이긴 사람(족보 1등) 카드만 빛남
+            win={ended && isTopSeat(view, seat) && !!best?.includes(c)}
+            dim={ended && !isTopSeat(view, seat)}
             className={hero ? "" : "pk-flip"}
             delay={hero ? 0 : i * 140}
           />
@@ -109,11 +110,13 @@ export function HoldemBoard({
   const res = view.result;
   const winning = useMemo(() => {
     const set = new Set<number>();
-    if (res?.showdown && settled)
+    if (res?.showdown && settled) {
+      const tops = topHands(view);
       for (const seat of Object.keys(res.won))
-        for (const c of res.best[Number(seat)] ?? []) set.add(c);
+        if (!tops || tops.has(Number(seat))) for (const c of res.best[Number(seat)] ?? []) set.add(c);
+    }
     return set;
-  }, [res, settled]);
+  }, [res, settled, view]);
   return (
     <div className="flex gap-[0.25em]">
       {[0, 1, 2, 3, 4].map((i) => {
