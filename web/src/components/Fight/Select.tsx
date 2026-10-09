@@ -101,7 +101,8 @@ function StatRadar({ c }: { c: CharDef }) {
   };
   const poly = (f: (i: number) => number) => STAT_AXES.map((_, i) => pt(i, f(i)).join(",")).join(" ");
   return (
-    <svg viewBox="-14 4 128 92" className="h-[7.4cqw] w-[10.3cqw] shrink-0" aria-label="능력치">
+    // 옆 글자(콤보·체력·리치·기동력)가 그림 밖으로 잘리지 않게 좌우를 넉넉히
+    <svg viewBox="-26 4 152 92" className="h-[7.4cqw] w-[12.2cqw] shrink-0 overflow-visible" aria-label="능력치">
       {[1, 0.8, 0.6, 0.4, 0.2].map((k) => (
         <polygon
           key={k}
