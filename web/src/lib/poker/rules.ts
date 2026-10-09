@@ -135,6 +135,8 @@ export interface Skin {
   /** 입었을 때 로비에서 한마디 */
   line: string;
   ready: boolean;
+  /** 로비에서 움직이는 그림(대기 · 터치 반응)이 들어왔는지. false 면 로비에서 전신 그림 한 장 */
+  live: boolean;
 }
 export const SKINS: Skin[] = [
   {
@@ -144,7 +146,8 @@ export const SKINS: Skin[] = [
     price: 10 * EOK,
     blurb: "바다 가자고? …따, 딱히 너랑 가고 싶어서 입은 건 아니거든!",
     line: "뭘 그렇게 봐! …어울리긴 해?",
-    ready: false,
+    ready: true,
+    live: false,
   },
 ];
 export const SKIN_IDS = SKINS.map((s) => s.id);

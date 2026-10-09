@@ -26,7 +26,7 @@ const dir = (l: Look) => {
 /** 스킨 그림이 들어와 있나 (로비 동작 · 터치 반응 그림이 있는지) */
 export const lookReady = (l: Look) => !!skinOf(l)?.ready;
 /** 왼쪽 아래 내 캐릭터용 전신 그림(hero-*.webp, 384×576)이 있는 그림 폴더 */
-const HERO_DIRS = new Set(["amy", "jinwoo", "taeyang", "jeongmin", "yeonseo"]);
+const HERO_DIRS = new Set(["amy", "jinwoo", "taeyang", "jeongmin", "yeonseo", "amy-summer"]);
 export const heroReady = (l: Look) => HERO_DIRS.has(dir(l));
 
 export const asset = {

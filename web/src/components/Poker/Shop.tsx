@@ -146,10 +146,6 @@ export default function Shop({
                       </span>
                     </div>
                     <p className="text-[0.78em] leading-snug text-white/65">{sk.blurb}</p>
-                    <p className="text-[0.7em] text-white/40">
-                      장착하면 앉은 모습 · 동작 · 표정 · 이모티콘 · 프로필 · 컷인이 전부 바뀌고 남들
-                      화면에도 보여요. 로비에서 누르면 반응해요.
-                    </p>
                     <div className="mt-[0.2em] flex items-center gap-[0.3em] text-[0.95em] font-extrabold text-[#ffd84a]">
                       {}
                       <img

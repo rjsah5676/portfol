@@ -29,7 +29,7 @@ export default function LobbyChar({
   bust?: boolean;
 }) {
   const skin = skinOf(look);
-  const animated = !!skin && lookReady(look);
+  const animated = !!skin?.live && lookReady(look);
   const char = lookChar(look);
   const still = asset.full(look);
   // 지금 보이는 포즈 번호 (0 = 아직 전신 그림)
