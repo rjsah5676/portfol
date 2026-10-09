@@ -577,6 +577,9 @@ export default function FightGame() {
           else if (e.k === "slam") {
             sfxHit(2, elOf(e.p));
             if (e.v === 1) sfxLand();
+            // 이반 곰 포옹 내리꽂기
+            const sl = s.p[1 - e.p];
+            if (e.v === 1 && sl.st === "atk" && sl.mv === "S" && sl.aerial && CHARS[sl.ch].moves.S.air?.hug) sfxSkill(CHARS[sl.ch].id, "l", true);
           }
           else if (e.k === "proj") {
             if (!skillFile(e.p)) sfxProj(elOf(e.p), s.p[e.p].mv === "X");
@@ -607,7 +610,9 @@ export default function FightGame() {
           if (f.st === "atk" && (f.mv === "S" || f.mv === "X")) {
             const su = CHARS[f.ch].moves[f.mv].startup;
             const fresh = prevSt[i] !== "atk" || prevMv[i] !== f.mv || prevT[i] > f.t;
-            if (f.t >= su && (fresh || prevT[i] < su)) sfxSkill(CHARS[f.ch].id, f.mv === "S" ? "l" : "i", !!f.aerial);
+            // (공중 잡기는 붙잡아 내리꽂을 때 소리)
+            const hugM = f.mv === "S" && !!f.aerial && !!CHARS[f.ch].moves.S.air?.hug;
+            if (!hugM && f.t >= su && (fresh || prevT[i] < su)) sfxSkill(CHARS[f.ch].id, f.mv === "S" ? "l" : "i", !!f.aerial);
           }
         }
         if (process.env.NODE_ENV !== "production")

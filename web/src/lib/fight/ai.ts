@@ -149,7 +149,7 @@ export const CHAR_ADJ: Record<string, number[]> = {
   lily: [37, 138, 204, 209, 28, 29, 140],
   zena: [-62, -189, -353, -359, -35, 35, 154],
   gunmo: [78, 244, 458, 357, 48, -220, -450],
-  ivan: [0, 86, 144, 262, 52, 101, 124],
+  ivan: [-11, -47, -10, 261, 98, 200, 220],
 };
 function charAdj(r: number, id: string) {
   const t = CHAR_ADJ[id];
@@ -210,7 +210,7 @@ export function aiForRating(r: number, charId?: string): AILevel {
  * AI 지문: 랭크전 봇전은 서버가 같은 경기를 다시 돌려 확인하니, 브라우저와 서버의 AI가 똑같아야 함.
  * 단계 값·보정·콤보 길은 자동으로 들어가고, next() 같은 판단 코드를 바꿨으면 AI_REV 를 올릴 것.
  */
-const AI_REV = 2;
+const AI_REV = 3;
 export const AI_ID = (() => {
   const str = AI_REV + JSON.stringify([AI_LEVELS, RANK_TIERS, AI_RATING, ADJ_AT, CHAR_ADJ, ROUTES, ROUTE_CAP]);
   let h = 0x811c9dc5;
@@ -539,7 +539,10 @@ export class FightAI {
         out |= toward;
         // 공중 연속: 약 위주로 이어 치다 마지막은 발차기 (박자: 판정이 맞은 직후에 누름)
         if (dist < 48 && dy > -25 && dy < 70 && this.r() < 0.35 + L.combo * 0.6) {
-          if ((o.floatT > 90 || o.combo >= 6 || (f.airUsed >= 4 && f.airK >= 2)) && f.airS === 0) {
+          if (c.moves.S.air?.hug && f.cd === 0 && !o.hugd && (o.combo >= 3 || f.airUsed >= 3) && this.r() < 0.5 + L.combo * 0.5) {
+            // 곰 포옹으로 마무리: 안고 내리꽂아 기절 → 땅에서 이어 침
+            press(IN.C);
+          } else if ((o.floatT > 90 || o.combo >= 6 || (f.airUsed >= 4 && f.airK >= 2)) && f.airS === 0) {
             // 오래 띄웠거나 다 썼으면 ↓ + K 마무리 내려찍기
             out |= IN.D;
             hitBtn(IN.B);
@@ -771,6 +774,12 @@ export class FightAI {
     }
     // 공중 아이덴티티로 자리 바꾸기 (건모 Alt+Tab): 상대 위에서 내려오는 중이면 가끔
     if (f.st === "jump" && f.cd === 0 && c.moves.S.air?.swap && dist < 50 && dy < -10 && dy > -70 && this.r() < L.aggro * 0.2) {
+      out |= toward;
+      press(IN.C);
+      return finish();
+    }
+    // 공중 잡기(이반 곰 포옹): 가까이 있으면 막든 말든 붙잡음
+    if (f.st === "jump" && f.cd === 0 && c.moves.S.air?.hug && dist < 34 && dy > -50 && dy < 40 && o.st !== "down" && this.r() < 0.25 + L.aggro * 0.5) {
       out |= toward;
       press(IN.C);
       return finish();

@@ -133,6 +133,11 @@ export function pickFrame(sh: SpriteSheet, f: Fighter, s: State): { anim: AnimDe
       const m = CHARS[f.ch].moves[f.mv as MoveId];
       // 잡기·가드 반격은 그림이 없으면 약·발차기 그림으로
       // 공중 아이덴티티 그림 (급강하 등)
+      // 공중 잡기(곰 포옹): 덮치기 → 안고 떨어짐 → 착지해 내리꽂음
+      if (f.mv === "S" && (air || f.aerial) && m.air?.hug && has("Sair")) {
+        const a = sh.anims.Sair;
+        return { anim: a, frame: Math.min(a.frames - 1, f.hug ? 1 : air ? 0 : 2) };
+      }
       if (f.mv === "S" && (air || f.aerial) && has("Sair")) return byTime("Sair", f.t);
       const ma =
         sh.chain?.[f.mv as MoveId]?.[f.chain - 1] ??

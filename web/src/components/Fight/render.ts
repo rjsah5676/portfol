@@ -94,7 +94,7 @@ const FX_SETS: Record<string, Record<string, [number, number, boolean]>> = {
     pause: [2, 1, true],
     confuse: [2, 1, true],
   },
-  // 이반: aura(철곰권 기 모으기)·wave(철곰권 충격파)·burst(붉은 폭풍)·crack(낙하 팔꿈치 착지 균열)는 따로 띄움
+  // 이반: aura(철곰권 기 모으기)·wave(철곰권 충격파)·burst(붉은 폭풍)·crack(곰 포옹 내리꽂기 균열)는 따로 띄움
   ivan: {
     spark: [4, 0.7, true],
     guard: [2, 0.6, true],
@@ -304,7 +304,7 @@ export class FightRenderer {
         this.spawnFx(a.ch, "spark", x, y, a.face, 12);
         if (e.k === "hit" && CHARS[a.ch].id === "ivan") {
           // 철곰권: 맞힌 자리에서 앞으로 퍼지는 충격파 / 붉은 폭풍: 큰 폭발
-          if (e.m === "S" && !isAirF(s, a)) this.spawnFx(a.ch, "wave", x + a.face * 18, y, a.face, 16);
+          if (e.m === "S" && !a.aerial && !isAirF(s, a)) this.spawnFx(a.ch, "wave", x + a.face * 18, y, a.face, 16);
           else if (e.m === "X") {
             this.spawnFx(a.ch, "burst", x + a.face * 22, y, a.face, 28);
             this.flash = 3;
@@ -438,8 +438,24 @@ export class FightRenderer {
         this.flash = 4;
         this.flashColor = "#fff";
         this.shake = Math.max(this.shake, 6);
+      } else if (e.k === "stun") {
+        // 이반 곰 포옹으로 내리꽂혀 기절: 머리 위 글자 + 도는 별
+        this.parts.push({ x, y, vx: 0, vy: -0.4, life: 40, max: 40, color: "#FFE45C", size: 1.3, kind: "text", text: "STUN!" });
+        for (let i = 0; i < 6; i++) {
+          const a = (i / 6) * Math.PI * 2;
+          this.parts.push({
+            x: x + Math.cos(a) * 12, y: y + 8 + Math.sin(a) * 4, vx: -Math.sin(a) * 0.8, vy: Math.cos(a) * 0.3,
+            life: 30, max: 30, color: "#FFF27A", size: 1.2, kind: "spark",
+          });
+        }
       } else if (e.k === "slam") {
-        // 바닥에 처박힘: 크게 퍼지는 충격파 + 흙먼지
+        // 바닥에 처박힘: 크게 퍼지는 충격파 + 흙먼지 (이반 곰 포옹이면 바닥 균열도)
+        const sl = s.p[1 - e.p];
+        if (CHARS[sl.ch].id === "ivan" && sl.st === "atk" && sl.mv === "S") {
+          this.spawnFx(sl.ch, "crack", x, y + 6, sl.face, 26, true);
+          this.flash = 3;
+          this.flashColor = "#FFD0D0";
+        }
         for (let i = 0; i < 24; i++) {
           const d = i % 2 ? 1 : -1;
           this.parts.push({
@@ -454,13 +470,6 @@ export class FightRenderer {
           });
         this.parts.push({ x, y: y - 4, vx: 0, vy: 0, life: 16, max: 16, color: "#FFE2C2", size: 30, kind: "ring" });
         this.shake = Math.max(this.shake, 10);
-      } else if (e.k === "clash" && e.v === 1 && e.p >= 0 && CHARS[s.p[e.p].ch].id === "ivan" && s.p[e.p].st === "atk") {
-        // 이반 낙하 팔꿈치 착지: 바닥 균열 + 붉은 충격 링
-        const a = s.p[e.p];
-        this.spawnFx(a.ch, "crack", x, y + 6, a.face, 24, true);
-        this.spawnFx(a.ch, "dust", x - 26, y, -1, 18, true);
-        this.spawnFx(a.ch, "dust", x + 26, y, 1, 18, true);
-        this.shake = Math.max(this.shake, 6);
       } else if (e.k === "clash" && e.v === 1) {
         // 착지 충격파: 옆으로 퍼지는 바람
         for (let i = 0; i < 14; i++) {

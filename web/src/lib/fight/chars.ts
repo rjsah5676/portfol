@@ -126,9 +126,12 @@ export interface MoveDef {
   proj?: ProjDef;
   /**
    * 차지 기술 (이반 철곰권): 시작 동작 at 프레임에서 버튼을 누르고 있는 동안 멈춰서 기를 모음 (최대 max 프레임).
-   * 모은 만큼 피해가 dmg 까지 · 경직·밀어내기도 커지고, 끝까지 모으면 가드를 부숨(막을 수 없음) + 다운
+   * 모은 만큼 피해가 dmg 까지 · 경직·밀어내기도 커지고, 끝까지 모으면 가드를 부숨(막을 수 없음) + 다운.
+   * armor: 모으기 시작한 뒤 판정이 끝날 때까지 맞아도 버팀(피해만 받음) · 잡히지 않음 — 필살기(I)에는 뚫림
    */
-  charge?: { at: number; max: number; dmg: number };
+  charge?: { at: number; max: number; dmg: number; armor?: boolean };
+  /** 공중 잡기 (이반 곰 포옹): 닿으면 붙잡고 fall 속도로 같이 떨어져 착지하면 dmg + stun 프레임 기절 */
+  hug?: { dmg: number; stun: number; fall: number };
   /** (계산용) 가드를 부숨 — 끝까지 모은 철곰권 */
   crush?: boolean;
 }
@@ -956,11 +959,11 @@ const RAW: CharSrc[] = [
     difficulty: 2,
     stats: { atk: 5, reach: 3, move: 1, control: 2, combo: 2, hp: 5 },
     idName: "철곰권",
-    idDesc: "누르고 있으면 기를 모으고, 떼면 한 걸음 내디디며 정권 — 오래 모을수록 세고, 끝까지 모으면 가드를 부숨",
+    idDesc: "누르고 있으면 기를 모으고(맞아도 버팀·잡히지 않음, 필살기엔 뚫림), 떼면 정권 — 끝까지 모으면 가드를 부숨",
     ultName: "붉은 폭풍",
     ultDesc: "숨을 들이쉬고(경직 면역) 돌진해 거대한 한 방 — 맞으면 멀리 날아감",
-    airLabel: "공중 L 낙하 팔꿈치",
-    airDesc: "아래로 팔꿈치를 내리꽂고 착지하면 주변에 충격파",
+    airLabel: "공중 L 곰 포옹",
+    airDesc: "닿은 상대를 끌어안고 같이 떨어져 바닥에 내리꽂음 — 막을 수 없고 맞으면 기절",
     moves: {
       L: {
         // 약 (J): 잽 · 잽 · 바디블로 · 어깨 박치기 — 느리지만 한 대가 셈
@@ -1037,18 +1040,19 @@ const RAW: CharSrc[] = [
         box: { x: 6, y: 60, w: 76, h: 30 },
         step: 420,
         onBlock: -10,
-        charge: { at: 6, max: 48, dmg: 210 },
-        // 공중 「낙하 팔꿈치」: 아래로 내리꽂고 착지 충격파
+        charge: { at: 6, max: 40, dmg: 210, armor: true },
+        // 공중 「곰 포옹」: 닿은 상대를 붙잡아 같이 떨어진 뒤 바닥에 내리꽂아 기절 — 막을 수 없지만 리치가 짧고, 헛치면 착지 경직
         air: {
-          startup: 8,
-          active: 16,
-          recovery: 14,
-          dmg: 80,
-          hitstun: 22,
-          push: 900,
-          box: { x: -6, y: 30, w: 42, h: 40 },
-          rush: { vx: 900, airVh: -2600, airVx: 700, landBurst: 60, landDmg: 50 },
-          kd: true,
+          startup: 5,
+          active: 8,
+          recovery: 24,
+          dmg: 0,
+          hitstun: 0,
+          push: 0,
+          hitstop: 12,
+          meter: 12,
+          box: { x: 0, y: 46, w: 40, h: 76 },
+          hug: { dmg: 150, stun: 46, fall: 1800 },
           step: undefined,
           charge: undefined,
         },

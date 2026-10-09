@@ -255,6 +255,10 @@ export interface Fighter {
   hold: number;
   /** 차지 기술로 모은 프레임 (이반 철곰권) */
   chg: number;
+  /** 공중 잡기(이반 곰 포옹)로 상대를 안고 떨어지는 중 */
+  hug: number;
+  /** 이번 콤보에서 곰 포옹에 이미 잡혔음 (콤보마다 한 번) */
+  hugd: number;
   /** 남은 무적 프레임 (다시 내려온 뒤) */
   inv: number;
   /** 최근 입력 (마지막이 이번 프레임) */
@@ -306,7 +310,8 @@ export type EvKind =
   | "slam"
   /** 철곰권 기를 다 모음 · 가드 부숨 (이반) */
   | "charged"
-  | "crush";
+  | "crush"
+  | "stun";
 export interface Ev {
   k: EvKind;
   /** 관련 플레이어 (hit/block은 때린 쪽) */
@@ -455,6 +460,8 @@ function newFighter(ch: number, side: 0 | 1, map: MapDef): Fighter {
     trapT: 0,
     hold: 0,
     chg: 0,
+    hug: 0,
+    hugd: 0,
     inv: 0,
     hist: new Array(HIST).fill(0),
   };
@@ -513,7 +520,7 @@ const cloneF = (f: Fighter): Fighter => ({ ...f, hist: f.hist.slice() });
  * 이 빌드의 게임 데이터 지문 (캐릭터 성능·맵) — 온라인에서 서로 다른 빌드끼리 붙었는지 확인.
  * 계산 방식(sim.ts)만 바꿨을 땐 SIM_REV를 올릴 것.
  */
-const SIM_REV = 6;
+const SIM_REV = 7;
 export const BUILD_ID = (() => {
   const str = SIM_REV + JSON.stringify(CHARS.map((c) => [c.hp, c.walk, c.jumpVx, c.dash, c.cd, c.glide, c.hurt, c.width, c.moves])) + JSON.stringify(MAPS.map((m) => [m.plats, m.spawn]));
   let h = 2166136261;
@@ -582,6 +589,8 @@ export function hash(s: State): number {
     mix(f.trapT);
     mix(f.hold);
     mix(f.chg);
+    mix(f.hug);
+    mix(f.hugd);
     mix(f.inv);
     mix(f.st.length * 31 + f.st.charCodeAt(0));
     mix(f.mv ? f.mv.charCodeAt(0) : 0);
@@ -955,6 +964,11 @@ function control(s: State, i: number) {
     case "atk": {
       const m = moveOf(f)!;
       const air = airborneS(s, f);
+      // 곰 포옹으로 안고 떨어지는 중: 착지할 때까지 그 자세 그대로
+      if (f.hug) {
+        f.t = m.startup + m.active;
+        return;
+      }
       // 차지 기술: 시작 자세(at)에서 버튼을 누르고 있는 동안 멈춰서 기를 모음 — 떼거나 다 모으면 바로 이어 나감
       if (m.charge && !air && f.t === m.charge.at + 1 && f.chg < m.charge.max && holding(f, IN.C)) {
         f.t = m.charge.at;
@@ -1229,6 +1243,35 @@ function landed(s: State, i: number, f: Fighter) {
   f.airDash = 0;
   f.dashT = 0;
   const lm = moveOf(f);
+  if (f.st === "atk" && f.aerial && f.mv === "S" && lm?.hug) {
+    if (f.hug) {
+      // 안고 떨어져 착지: 바닥에 내리꽂음 → 기절 (그 자리에서 비틀거림, 이어 치기)
+      const o = s.p[1 - i];
+      f.hug = 0;
+      o.x = f.x + f.face * 22 * SUB;
+      o.h = f.h;
+      o.vx = 0;
+      o.vh = 0;
+      const dmg = scaleDmg(lm.hug.dmg, o.combo);
+      o.hp = Math.max(0, o.hp - dmg);
+      o.combo++;
+      o.st = "hit";
+      o.t = 0;
+      o.stun = lm.hug.stun;
+      o.kd = 0;
+      o.float = 0;
+      f.meter = Math.min(METER_MAX, f.meter + lm.meter);
+      s.stop = Math.max(s.stop, lm.hitstop);
+      s.ev.push({ k: "hit", p: i, x: o.x, h: o.h + 20 * SUB, v: dmg, m: "S" });
+      s.ev.push({ k: "slam", p: 1 - i, x: o.x, h: o.h, v: 1 });
+      s.ev.push({ k: "stun", p: i, x: o.x, h: o.h + 70 * SUB, v: 0 });
+    } else s.ev.push({ k: "land", p: i, x: f.x, h: f.h, v: 0 });
+    // 착지 경직 (내리꽂는 자세 / 헛치면 그대로 무방비)
+    f.t = Math.max(f.t, lm.startup + lm.active);
+    f.vx = 0;
+    f.dive = 0;
+    return;
+  }
   // 내리꽂기 착지: 주변에 충격파 (가까이 땅에 있는 상대를 띄움 → 후속 2타, 바로 점프해 공중 콤보)
   if (f.dive && f.st === "atk" && lm?.rush?.landBurst) {
     const o = s.p[1 - i];
@@ -1290,6 +1333,7 @@ function respawn(s: State, i: number) {
   // 떨어진 그 자리(지금 x) 바로 위 화면 꼭대기에서 다시 내려옴 — 아래가 낭떠러지면 공중 조작·2단 점프·대시로 건너감
   const bx = Math.max(WALL_L + 24 * SUB, Math.min(WALL_R - 24 * SUB, f.x));
   s.ev.push({ k: "fall", p: i, x: f.x, h: 0, v: 0 });
+  releaseHug(s, i);
   f.x = bx;
   f.h = RESPAWN_H;
   f.vx = 0;
@@ -1329,6 +1373,15 @@ function physics(s: State, i: number) {
   // 안 떠 있으면 띄워진 시간은 0 — 땅에 서 있을 땐 아래까지 안 내려가서, 긴 공중 콤보 뒤 남은 값 때문에
   // 다음에 띄울 때(잡기 등) 처음부터 무거운 중력으로 낮게 뜨던 것
   if (!f.float) f.floatT = 0;
+  const hb = s.p[1 - i];
+  if (hb.hug && f.st === "hit") {
+    // 곰 포옹에 안김: 안은 쪽 바로 앞에 붙어서 같이 떨어짐
+    f.x = hb.x + hb.face * 22 * SUB;
+    f.h = hb.h;
+    f.vx = 0;
+    f.vh = 0;
+    return;
+  }
   if (f.trapT > 0) {
     // 방울 안: 천천히 떠오르다 멈춤 (중력 없음)
     f.vx = 0;
@@ -1391,7 +1444,8 @@ function physics(s: State, i: number) {
     o.st === "hit" &&
     (o.float === 1 || (o.float === 3 && f.vh <= 0));
   if (!hang) f.juggle = 0;
-  if (f.hold > 0 && f.vh <= 0 && (f.st === "jump" || f.st === "atk")) {
+  if (f.hug && m?.hug) f.vh = -m.hug.fall; // 곰 포옹: 안고 곧장 떨어짐
+  else if (f.hold > 0 && f.vh <= 0 && (f.st === "jump" || f.st === "atk")) {
     // 건모 Alt+Tab 뒤: 잠깐 안 떨어짐 (점프하면 끝)
     f.hold--;
     f.vh = 0;
@@ -1468,6 +1522,60 @@ function separate(s: State) {
   moveX(b, dir * (over - pa));
 }
 
+/** 곰 포옹 풀기 (i가 안고 있었거나 안겨 있었으면) — 안겨 있던 쪽은 짧은 경직으로 */
+function releaseHug(s: State, i: number) {
+  for (const k of [i, 1 - i]) {
+    const a = s.p[k];
+    if (!a.hug) continue;
+    a.hug = 0;
+    const o = s.p[1 - k];
+    if (o.st === "hit" && o.stun > 100) o.stun = 12;
+  }
+}
+
+/** 공중 잡기(곰 포옹)가 상대를 붙잡음 — 막을 수 없음, 같이 떨어져 착지하면 내리꽂음 */
+function hugStart(s: State, i: number) {
+  const a = s.p[i],
+    o = s.p[1 - i];
+  if (o.combo === 0) o.hugd = 0;
+  a.hit = 1;
+  a.hug = 1;
+  a.vx = 0;
+  a.vh = Math.min(a.vh, 0);
+  o.hugd = 1;
+  o.st = "hit";
+  o.mv = "";
+  o.t = 0;
+  o.stun = 999;
+  o.kd = 0;
+  o.float = 0;
+  o.floatT = 0;
+  o.juggle = 0;
+  o.grabbed = 0;
+  o.trapT = 0;
+  o.pullT = 0;
+  o.spiked = 0;
+  o.hold = 0;
+  o.vx = 0;
+  o.vh = 0;
+  o.face = a.face > 0 ? -1 : 1;
+  s.stop = Math.max(s.stop, 6);
+  s.ev.push({ k: "throw", p: i, x: o.x, h: o.h + 30 * SUB, v: 0, m: "S" });
+}
+
+/** 공중 잡기로 잡을 수 있나: 누운·잡기 무적(차지 아머)·이번 콤보에 이미 잡힌 상대는 안 됨 */
+function hugOk(o: Fighter) {
+  if (o.st === "down" || o.st === "ko" || o.st === "rise" || chargeArmored(o)) return false;
+  return !(o.hugd && o.combo > 0);
+}
+
+/** 차지 아머 (이반 철곰권): 기를 모으기 시작한 뒤 판정이 끝날 때까지 — 맞아도 버티고 잡히지 않음 (필살기엔 뚫림) */
+function chargeArmored(d: Fighter) {
+  if (d.st !== "atk" || d.mv !== "S" || d.aerial || d.chg <= 0) return false;
+  const m = CHARS[d.ch].moves.S;
+  return !!m.charge?.armor && d.t >= m.charge.at && d.t < m.startup + m.active;
+}
+
 function canBlock(s: State, d: Fighter, fromX: number) {
   if (airborneS(s, d)) return false;
   // 막기는 앞뒤 다 막음 (뒤로 걷다 막아도, 발밑 기둥도) — 막으면 때린 쪽으로 돌아봄
@@ -1524,6 +1632,8 @@ function applyHit(s: State, ai: number, m: MoveDef, srcX: number, mid: MoveId, p
   if (!m.proj && !m.summon) a.hit = 1;
   // 새 콤보의 첫 타: 누운 상대 잡기 횟수 초기화
   if (d.combo === 0) d.otg = 0;
+  if (d.combo === 0 && !d.hug) d.hugd = 0;
+  if (d.hug) releaseHug(s, 1 - ai);
   const wasDown = d.st === "down";
   const eh = d.h + 28 * SUB;
   d.juggle = 0;
@@ -1542,7 +1652,10 @@ function applyHit(s: State, ai: number, m: MoveDef, srcX: number, mid: MoveId, p
   }
   // 경직 면역 (카이 질풍권 돌진 중): 피해만 받고 하던 동작 계속 (잡기는 못 버팀)
   const am = d.st === "atk" ? moveOf(d) : null;
-  if (mid !== "T" && am?.armor && d.t >= am.startup - 2 && d.t < am.startup + am.active) {
+  if (
+    (mid !== "T" && am?.armor && d.t >= am.startup - 2 && d.t < am.startup + am.active) ||
+    (mid !== "T" && mid !== "X" && chargeArmored(d))
+  ) {
     const dmg = Math.max(1, scaleDmg(m.dmg, d.combo));
     d.hp -= dmg;
     a.meter = Math.min(METER_MAX, a.meter + (m.meter >> 1));
@@ -1923,6 +2036,15 @@ function attacks(s: State) {
     const r = hitRect(s.p[i]);
     const h = hurtRect(s.p[1 - i]);
     if (!r || !h || !overlap(r, h)) continue;
+    // 공중 잡기(곰 포옹): 맞으면 바로 붙잡음 (가드·아머 무시), 못 잡는 상대면 헛침
+    const hm = s.p[i].st === "atk" && s.p[i].mv === "S" && s.p[i].aerial ? moveOf(s.p[i]) : null;
+    if (hm?.hug) {
+      // 동시에 상대 공격도 닿으면 상대 공격이 이김 (잡기처럼)
+      const or = hitRect(s.p[1 - i]),
+        mh = hurtRect(s.p[i]);
+      if (hugOk(s.p[1 - i]) && !(or && mh && overlap(or, mh))) hugStart(s, i);
+      continue;
+    }
     // 잡기는 땅에 서 있는(경직 아닌) 상대만 — 단, 끌어당겨 온 상대·감전된 상대(땅)·방울에 갇힌 상대는 잡을 수 있음
     if (s.p[i].mv === "T") {
       const o = s.p[1 - i];
@@ -1932,6 +2054,8 @@ function attacks(s: State) {
       if (o.st === "down" && o.otg) continue;
       // 막는 경직 중엔 안 잡힘
       if (o.st === "block" && o.stun > 0) continue;
+      // 이반 철곰권 기 모으는 중엔 안 잡힘 (아머)
+      if (chargeArmored(o)) continue;
     }
     hits.push(i);
   }
