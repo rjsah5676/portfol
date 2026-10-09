@@ -125,11 +125,11 @@ export interface MoveDef {
   trap?: number;
   proj?: ProjDef;
   /**
-   * 차지 기술 (이반 붕권): 시작 동작 at 프레임에서 버튼을 누르고 있는 동안 멈춰서 기를 모음 (최대 max 프레임).
+   * 차지 기술 (이반 철곰권): 시작 동작 at 프레임에서 버튼을 누르고 있는 동안 멈춰서 기를 모음 (최대 max 프레임).
    * 모은 만큼 피해가 dmg 까지 · 경직·밀어내기도 커지고, 끝까지 모으면 가드를 부숨(막을 수 없음) + 다운
    */
   charge?: { at: number; max: number; dmg: number };
-  /** (계산용) 가드를 부숨 — 끝까지 모은 붕권 */
+  /** (계산용) 가드를 부숨 — 끝까지 모은 철곰권 */
   crush?: boolean;
 }
 
@@ -940,7 +940,7 @@ const RAW: CharSrc[] = [
     // 묵직한 한 방형: 느리고 크지만 한 대가 가장 아프고 체력이 가장 많음. 모티브 철권 폴
     id: "ivan",
     name: "이반",
-    title: "특수부대 교관 · 붕권",
+    title: "특수부대 교관 · 철곰권",
     desc: "기를 모아 정권 한 방으로 끝내는 러시아 특수부대 출신 거구",
     hp: 1380,
     walk: 1000,
@@ -955,7 +955,7 @@ const RAW: CharSrc[] = [
     tagline: "IRON BEAR",
     difficulty: 2,
     stats: { atk: 5, reach: 3, move: 1, control: 2, combo: 2, hp: 5 },
-    idName: "붕권",
+    idName: "철곰권",
     idDesc: "누르고 있으면 기를 모으고, 떼면 한 걸음 내디디며 정권 — 오래 모을수록 세고, 끝까지 모으면 가드를 부숨",
     ultName: "붉은 폭풍",
     ultDesc: "숨을 들이쉬고(경직 면역) 돌진해 거대한 한 방 — 맞으면 멀리 날아감",
@@ -1023,7 +1023,7 @@ const RAW: CharSrc[] = [
         lunge: 1400,
       },
       S: {
-        // 아이덴티티 「붕권」: 누르고 있으면 기 모으기(최대 0.8초) → 한 걸음 내디디며 정권. 탭이면 빠른 정권
+        // 아이덴티티 「철곰권」: 누르고 있으면 기 모으기(최대 0.8초) → 한 걸음 내디디며 정권. 탭이면 빠른 정권
         startup: 14,
         active: 4,
         recovery: 24,

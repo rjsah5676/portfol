@@ -253,7 +253,7 @@ export interface Fighter {
   trapT: number;
   /** 공중에서 안 떨어지고 버티는 남은 프레임 (건모 Alt+Tab 뒤) */
   hold: number;
-  /** 차지 기술로 모은 프레임 (이반 붕권) */
+  /** 차지 기술로 모은 프레임 (이반 철곰권) */
   chg: number;
   /** 남은 무적 프레임 (다시 내려온 뒤) */
   inv: number;
@@ -304,7 +304,7 @@ export type EvKind =
   | "pause"
   | "swap"
   | "slam"
-  /** 붕권 기를 다 모음 · 가드 부숨 (이반) */
+  /** 철곰권 기를 다 모음 · 가드 부숨 (이반) */
   | "charged"
   | "crush";
 export interface Ev {
@@ -1552,7 +1552,7 @@ function applyHit(s: State, ai: number, m: MoveDef, srcX: number, mid: MoveId, p
     if (d.hp <= 0) d.hp = 0;
     return;
   }
-  // 가드 부수기 (끝까지 모은 붕권): 막고 있어도 그냥 맞음
+  // 가드 부수기 (끝까지 모은 철곰권): 막고 있어도 그냥 맞음
   if (m.crush && canBlock(s, d, srcX)) s.ev.push({ k: "crush", p: ai, x: d.x, h: d.h + 40 * SUB, v: 0 });
   if (mid !== "T" && !m.crush && canBlock(s, d, srcX)) {
     // 저스트 가드: 가드를 올린 지 JUST_T 프레임 안에 막으면 경직 반, 깎임 없음, 게이지 보너스

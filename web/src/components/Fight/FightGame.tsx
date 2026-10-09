@@ -600,7 +600,7 @@ export default function FightGame() {
           prevMeter[i] = f.meter;
           if (f.st === "atk" && (prevSt[i] !== "atk" || f.t < prevT[i]) && f.mv !== "S")
             sfxWhoosh(f.mv === "H" || f.mv === "K" || f.mv === "X", SFX_EL[CHARS[f.ch].id] ?? "wind");
-          // 이반 붕권: 기 모으기를 시작한 순간
+          // 이반 철곰권: 기 모으기를 시작한 순간
           if (f.st === "atk" && f.mv === "S" && f.chg === 1 && prevChg[i] !== 1) sfxIvan("charge");
           prevChg[i] = f.st === "atk" ? f.chg : 0;
           // 아이덴티티·필살기가 실제로 나가는 순간 (발동 준비가 끝난 프레임)

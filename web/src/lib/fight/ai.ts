@@ -339,7 +339,7 @@ export class FightAI {
       return out;
     };
 
-    // ── 차지 기술 (이반 붕권): 기 모으는 동안 버튼을 누르고 있음 — 상대가 막고 있거나 멀거나 쓰러져 있으면 끝까지(가드 부수기), 아니면 짧게 ──
+    // ── 차지 기술 (이반 철곰권): 기 모으는 동안 버튼을 누르고 있음 — 상대가 막고 있거나 멀거나 쓰러져 있으면 끝까지(가드 부수기), 아니면 짧게 ──
     const chg = c.moves.S.charge;
     if (chg && f.st === "atk" && f.mv === "S" && !air) {
       if (this.chargeGoal < 0) {

@@ -452,7 +452,7 @@ export function sfxStatus(kind: "burn" | "shock" | "trap" | "pop" | "pause" | "s
   else if (kind === "swap") sample("gunmo-confuse");
   else sample(kind === "trap" || kind === "pop" ? `lily-${kind}` : kind);
 }
-/** 이반 붕권: 기 모으기 시작 · 다 모음 · 가드 부숨 */
+/** 이반 철곰권: 기 모으기 시작 · 다 모음 · 가드 부숨 */
 export function sfxIvan(kind: "charge" | "max" | "crush") {
   if (sample(`ivan-${kind}`)) return;
   const c = ac();

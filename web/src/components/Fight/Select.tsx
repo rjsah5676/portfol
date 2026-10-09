@@ -272,6 +272,29 @@ export default function Select({
   const pickSide = (l: [boolean, boolean]) => (ai ? (l[0] ? 1 : 0) : -1);
 
   /** 칸 순서: 랜덤(-1), 0..n-1 */
+  // 아래 얼굴 줄: 넘칠 때 좌우로 넘김 — 화살표 보일지, 고르는 칸이 보이게
+  const stripRef = useRef<HTMLDivElement>(null);
+  const [stripAt, setStripAt] = useState<[boolean, boolean]>([false, false]);
+  const onStripScroll = () => {
+    const el = stripRef.current;
+    if (!el) return;
+    const at: [boolean, boolean] = [el.scrollLeft > 2, el.scrollLeft + el.clientWidth < el.scrollWidth - 2];
+    setStripAt((p) => (p[0] === at[0] && p[1] === at[1] ? p : at));
+  };
+  useEffect(() => {
+    const el = stripRef.current;
+    if (!el) return;
+    onStripScroll();
+    const sd = lock[0] ? 1 : 0;
+    const cur = rnd[sd] ? -1 : sd === 0 ? setup.c1 : setup.c2;
+    const b = cur < 0 ? (el.firstElementChild as HTMLElement | null) : el.querySelector<HTMLElement>(`[data-ci="${cur}"]`);
+    if (!b) return;
+    const l = b.offsetLeft - el.offsetLeft,
+      r = l + b.offsetWidth;
+    if (l < el.scrollLeft) el.scrollTo({ left: l, behavior: "smooth" });
+    else if (r > el.scrollLeft + el.clientWidth) el.scrollTo({ left: r - el.clientWidth, behavior: "smooth" });
+  });
+
   const setCursor = (side: 0 | 1, pos: number) => {
     sfxUi("move");
     setRnd((r) => (side === 0 ? [pos < 0, r[1]] : [r[0], pos < 0]));
@@ -669,8 +692,22 @@ export default function Select({
           })}
 
           {/* 가운데 아래 얼굴 칸 */}
-          <div className="absolute bottom-[1cqw] left-1/2 z-10 flex -translate-x-1/2 flex-col items-center gap-[0.6cqw] rounded-[1cqw] bg-black/50 px-[1.2cqw] pt-[1.6cqw] pb-[0.7cqw] backdrop-blur-[2px]">
-            <div className="flex gap-[1cqw]">
+          <div className="absolute bottom-[1cqw] left-1/2 z-10 flex -translate-x-1/2 flex-col items-center gap-[0.6cqw] rounded-[1cqw] bg-black/50 px-[1.2cqw] pb-[0.7cqw] backdrop-blur-[2px]">
+            {/* 캐릭터가 늘어도 칸 크기는 그대로: 7칸만 보이고 ◀ ▶ (또는 고르는 칸 따라) 좌우로 넘김 */}
+            <div className="relative flex items-center">
+              <button
+                type="button"
+                aria-label="왼쪽"
+                onClick={() => stripRef.current?.scrollBy({ left: -stripRef.current.clientWidth / 2, behavior: "smooth" })}
+                className={`absolute -left-[1.1cqw] top-[3.9cqw] z-10 cursor-pointer font-mono text-[1.4cqw] text-white/70 hover:text-white ${stripAt[0] ? "" : "invisible"}`}
+              >
+                ◀
+              </button>
+              <div
+                ref={stripRef}
+                onScroll={onStripScroll}
+                className="flex max-w-[52.2cqw] gap-[1cqw] overflow-x-auto pt-[1.6cqw] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+              >
               {(() => {
                 const r1 = rnd[0] && !lock[0],
                   r2 = rnd[1] && !lock[1];
@@ -705,6 +742,7 @@ export default function Select({
                 return (
                   <button
                     key={c.id}
+                    data-ci={i}
                     type="button"
                     onClick={() => {
                       // 아직 안 고른 쪽부터 (AI 대전은 1P → CPU). 한 번 누르면 커서, 같은 칸을 한 번 더 누르면 결정
@@ -729,7 +767,7 @@ export default function Select({
                               : "border-white/20 grayscale-[60%]"
                       }`}
                     />
-                    <span className="absolute -top-[1.6cqw] left-0 flex gap-[0.3cqw] font-mono text-[1.1cqw] font-black">
+                    <span className="absolute -top-[1.6cqw] left-0 flex gap-[0.3cqw] font-mono text-[1.1cqw] font-black whitespace-nowrap">
                       {on1 && <span className="rounded-[0.2cqw] bg-[#3B82F6] px-[0.4cqw] text-white">1P</span>}
                       {on2 && (
                         <span className="rounded-[0.2cqw] bg-[#F43F5E] px-[0.4cqw] text-white">{ai ? foe : "2P"}</span>
@@ -739,6 +777,15 @@ export default function Select({
                   </button>
                 );
               })}
+              </div>
+              <button
+                type="button"
+                aria-label="오른쪽"
+                onClick={() => stripRef.current?.scrollBy({ left: stripRef.current.clientWidth / 2, behavior: "smooth" })}
+                className={`absolute -right-[1.1cqw] top-[3.9cqw] z-10 cursor-pointer font-mono text-[1.4cqw] text-white/70 hover:text-white ${stripAt[1] ? "" : "invisible"}`}
+              >
+                ▶
+              </button>
             </div>
             <div className={`${KR} text-center text-[1.1cqw] text-white/45`}>
               {ai

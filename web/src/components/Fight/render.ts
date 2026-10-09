@@ -94,7 +94,7 @@ const FX_SETS: Record<string, Record<string, [number, number, boolean]>> = {
     pause: [2, 1, true],
     confuse: [2, 1, true],
   },
-  // 이반: aura(붕권 기 모으기)·wave(붕권 충격파)·burst(붉은 폭풍)·crack(낙하 팔꿈치 착지 균열)는 따로 띄움
+  // 이반: aura(철곰권 기 모으기)·wave(철곰권 충격파)·burst(붉은 폭풍)·crack(낙하 팔꿈치 착지 균열)는 따로 띄움
   ivan: {
     spark: [4, 0.7, true],
     guard: [2, 0.6, true],
@@ -303,7 +303,7 @@ export class FightRenderer {
         const a = s.p[e.p];
         this.spawnFx(a.ch, "spark", x, y, a.face, 12);
         if (e.k === "hit" && CHARS[a.ch].id === "ivan") {
-          // 붕권: 맞힌 자리에서 앞으로 퍼지는 충격파 / 붉은 폭풍: 큰 폭발
+          // 철곰권: 맞힌 자리에서 앞으로 퍼지는 충격파 / 붉은 폭풍: 큰 폭발
           if (e.m === "S" && !isAirF(s, a)) this.spawnFx(a.ch, "wave", x + a.face * 18, y, a.face, 16);
           else if (e.m === "X") {
             this.spawnFx(a.ch, "burst", x + a.face * 22, y, a.face, 28);
@@ -372,14 +372,14 @@ export class FightRenderer {
         this.parts.push({ x, y, vx: 0, vy: 0, life: 12, max: 12, color: col, size: 13, kind: "ring" });
         if (e.k === "counter") this.shake = Math.max(this.shake, 3);
       } else if (e.k === "charged") {
-        // 붕권 기를 끝까지 모음
+        // 철곰권 기를 끝까지 모음
         const a = s.p[e.p];
         this.parts.push({ x, y: y - 22, vx: 0, vy: -0.5, life: 30, max: 30, color: "#FF4D4D", size: 1.3, kind: "text", text: "MAX!" });
         this.parts.push({ x, y, vx: 0, vy: 0, life: 14, max: 14, color: "#FF6B6B", size: 22, kind: "ring" });
         this.spawnFx(a.ch, "aura", a.x / SUB, screenY(a.h + 34 * SUB), a.face, 12, false, { from: 3 });
         this.shake = Math.max(this.shake, 2);
       } else if (e.k === "crush") {
-        // 다 모은 붕권이 가드를 부숨
+        // 다 모은 철곰권이 가드를 부숨
         const a = s.p[e.p];
         this.parts.push({ x, y: y - 14, vx: 0, vy: -0.6, life: 38, max: 38, color: "#FF3B3B", size: 1.5, kind: "text", text: "GUARD CRUSH!" });
         this.parts.push({ x, y, vx: 0, vy: 0, life: 16, max: 16, color: "#FFC2C2", size: 26, kind: "ring" });
@@ -718,7 +718,7 @@ export class FightRenderer {
         g.restore();
       }
     }
-    // 이반 붕권 기 모으기: 몸 둘레로 붉은 기가 소용돌이 (모을수록 커지고, 다 모으면 번쩍임)
+    // 이반 철곰권 기 모으기: 몸 둘레로 붉은 기가 소용돌이 (모을수록 커지고, 다 모으면 번쩍임)
     if (CHARS[f.ch].id === "ivan" && cm?.charge && f.mv === "S" && !f.aerial && f.chg > 0 && f.t <= cm.charge.at + 1) {
       const full = f.chg >= cm.charge.max;
       const k = full ? 2 + (Math.floor(s.f / 3) % 2) : Math.min(2, Math.floor((f.chg * 3) / cm.charge.max));
