@@ -242,7 +242,7 @@ describe("회원 전용", () => {
       const lobby = await who.sub<LobbyTable[]>("poker.lobby");
       expect(lobby.data.some((t) => t.id === id)).toBe(true);
       // 목록에는 자리 수 같은 것만 (패·칩 없음)
-      expect(Object.keys(lobby.data[0]).sort()).toEqual(["bots", "createdAt", "game", "id", "locked", "max", "name", "players", "tier"]);
+      expect(Object.keys(lobby.data[0]).sort()).toEqual(["bots", "createdAt", "game", "id", "locked", "max", "name", "players", "quick", "tier"]);
     }
     // 아무 일도 일어나지 않았음
     expect(pa.state()!.seats.filter((s) => s?.uid).map((s) => s!.uid)).toEqual([a.uid]);
