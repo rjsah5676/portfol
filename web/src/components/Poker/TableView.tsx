@@ -2349,7 +2349,8 @@ function HeroArea(props: {
   const live = !!p && !p.folded && !res && !collected;
   const dim = me.status === "out" || (!!p?.folded && !res);
   const won = res?.won[me.seat] ?? 0;
-  const fs = H ? sizes.face * 1.4 : sizes.face * 1.2;
+  // 좁은 폰 배치(compact)는 내 줄 폭이 정해져 있어서 예전 크기 그대로
+  const fs = H ? sizes.face * 1.4 : compact ? sizes.face * 1.05 : sizes.face * 1.2;
   const plate = (
     <div className="flex items-center gap-[0.45em]" style={{ fontSize: H ? "1.18em" : "1.08em" }}>
       <div
@@ -2381,7 +2382,7 @@ function HeroArea(props: {
         onKeyDown={(e) => e.key === "Enter" && onStats()}
         className="pk-hero-hud cursor-pointer"
         data-turn={waiting ? "1" : undefined}
-        style={compact ? { minWidth: "8em" } : undefined}
+        style={compact ? { minWidth: "8em", maxWidth: "9.4em", fontSize: "1em" } : undefined}
       >
         {me.exit && (
           <span className="pk-exit-mark absolute -top-[1.1em] right-[0.4em]">나가기 예약</span>
@@ -2539,7 +2540,8 @@ function HeroArea(props: {
             act={p?.last?.a}
             className={
               compact
-                ? "absolute top-[18%] right-[calc(100%+4px)] z-10"
+                ? // 좁은 폰: 카드 위 왼쪽 (카드 왼쪽에 두면 내 이름표 · 카드에 걸려 잘림)
+                  "absolute bottom-[calc(100%+2px)] left-0 z-20"
                 : "relative z-10 -mt-[1.6em]"
             }
           />
