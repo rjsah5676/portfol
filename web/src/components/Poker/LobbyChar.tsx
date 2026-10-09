@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { asset, liveIdle } from "@/lib/poker/assets";
 import { CHARS, lookChar, skinOf, type Look } from "@/lib/poker/rules";
-import { playVoice } from "@/lib/poker/sfx";
+import { hasSound, playVoice } from "@/lib/poker/sfx";
 
 /*
  * 로비의 내 캐릭터.
@@ -81,8 +81,9 @@ export default function LobbyChar({
     const hs = [0, 1, 2].map((i) => ({ key: k * 10 + i, x: 30 + Math.random() * 40 }));
     setHearts((h) => [...h, ...hs]);
     setTimeout(() => setHearts((h) => h.filter((x) => !hs.includes(x))), 1600);
-    playVoice(look, Math.random() < 0.5 ? "select" : "hello");
+    const greet = () => playVoice(look, Math.random() < 0.5 ? "select" : "hello");
     if (!touches.length) {
+      greet();
       busyUntil.current = Date.now() + 1400;
       return;
     }
@@ -90,6 +91,9 @@ export default function LobbyChar({
     const pool = touches.length > 1 ? touches.filter((t) => t !== lastTouch.current) : touches;
     const pick = pool[Math.floor(Math.random() * pool.length)];
     lastTouch.current = pick;
+    // 그 동작 전용 대사(voice/{스킨}/{스킨}-touch-N)가 있으면 그것, 없으면 인사 대사
+    if (hasSound(`voice/${look}/${look}-touch-${pick}`)) playVoice(look, `touch-${pick}`);
+    else greet();
     setTouchUrl(URL.createObjectURL(blobs.current[pick]));
     busyUntil.current = Date.now() + TOUCH_MS;
     clearTimeout(touchTimer.current);
