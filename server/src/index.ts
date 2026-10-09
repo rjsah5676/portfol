@@ -13,10 +13,10 @@ let closing = false;
 async function shutdown(signal: string) {
   if (closing) return;
   closing = true;
-  console.log(`[server] ${signal} → 종료 중`);
-  // 정리가 오래 걸려도 10초 뒤에는 끝냄
-  setTimeout(() => process.exit(1), 10_000).unref();
-  await server.close().catch((e) => console.error(e));
+  console.log(`[server] ${signal} → 진행 중인 판을 마무리하고 방을 저장한 뒤 종료 (최대 ${Math.round(cfg.drainMs / 1000)}초)`);
+  // 마무리가 오래 걸려도 정해진 시간 + 15초 뒤에는 끝냄 (docker 의 stop_grace_period 는 이보다 길게)
+  setTimeout(() => process.exit(1), cfg.drainMs + 15_000).unref();
+  await server.shutdown().catch((e) => console.error(e));
   process.exit(0);
 }
 process.on("SIGINT", () => void shutdown("SIGINT"));

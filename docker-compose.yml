@@ -31,6 +31,8 @@ services:
       dockerfile: server/Dockerfile
     image: ${SERVER_IMAGE:-portfolio-server}
     restart: unless-stopped
+    # 배포 때: 진행 중인 판이 끝나길 최대 60초(DRAIN_MS) 기다리고 방을 저장한 뒤 내려감 → 그 시간을 기다려 줌 (기본 10초면 중간에 강제 종료)
+    stop_grace_period: 90s
     depends_on:
       mongo:
         condition: service_healthy

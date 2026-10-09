@@ -11,6 +11,7 @@ import { ApiError, toApiError, type WireError } from "./errors";
  *   subscribe(채널, 인자, 핸들러)    구독: 첫 데이터(onSnapshot) + 이후 이벤트(onEvent). 끊겼다 붙으면 자동으로 다시 구독
  *   serverNow()                     서버 시계 기준 현재 시각
  *   onConnection(cb)                연결 상태 알림
+ *   watchServerNotice(cb)           서버 공지 (배포로 곧 다시 시작 등) + 연결 상태 — 연결을 새로 만들지는 않음
  *
  * 로그인(Firebase Auth) 상태는 여기서 서버에 알려줌: 요청·구독은 항상 "지금 로그인한 사용자"로 인증이 끝난 뒤에 나감.
  */
@@ -33,6 +34,12 @@ let chain: Promise<unknown> = Promise.resolve();
 let online = false;
 const connListeners = new Set<(connected: boolean) => void>();
 
+/** 서버 공지: 배포로 곧 다시 시작함 (until = 늦어도 이때쯤 내려감) */
+export type ServerNotice = { t: "restart"; until: number } | null;
+let notice: ServerNotice = null;
+const noticeListeners = new Set<() => void>();
+const noticeChanged = () => noticeListeners.forEach((f) => f());
+
 const network = () =>
   new ApiError("NETWORK", `서버에 연결할 수 없습니다. (${API_URL || "같은 주소"})`);
 
@@ -51,6 +58,8 @@ function sock(): Socket {
 
   s.on("connect", () => {
     authedUid = null;
+    // 새로 붙은 서버(다시 켜진 서버)는 공지가 없음 — 아직 내려가는 중인 서버면 곧 다시 보내 줌
+    if (notice) ((notice = null), noticeChanged());
     void syncTime();
     sync()
       .then(() => {
@@ -68,6 +77,10 @@ function sock(): Socket {
     setOnline(false);
   });
   s.on("ev", (msg: { k: string; t: string; d: unknown }) => onEv(msg));
+  s.on("srv", (n: ServerNotice) => {
+    notice = n && n.t === "restart" ? n : null;
+    noticeChanged();
+  });
 
   // 로그인·로그아웃·토큰 갱신 → 서버에 다시 알림
   onIdTokenChanged(auth, () => {
@@ -271,6 +284,21 @@ export function onConnection(cb: (connected: boolean) => void): () => void {
   connListeners.add(cb);
   cb(online);
   return () => connListeners.delete(cb);
+}
+
+/**
+ * 서버 공지와 연결 상태를 지켜봄 (상단 안내 띠용). 실시간 연결을 쓰는 화면(게임)에서만 의미가 있어서
+ * 연결을 새로 만들지 않음 — 아직 연결이 없으면 connected 는 null.
+ */
+export function watchServerNotice(cb: (s: { notice: ServerNotice; connected: boolean | null }) => void): () => void {
+  const fire = () => cb({ notice, connected: socket ? online : null });
+  noticeListeners.add(fire);
+  connListeners.add(fire);
+  fire();
+  return () => {
+    noticeListeners.delete(fire);
+    connListeners.delete(fire);
+  };
 }
 
 let timeOffset = 0;

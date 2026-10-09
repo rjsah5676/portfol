@@ -16,6 +16,7 @@ import { displayName } from "../users";
  *   time  (ack)                      서버 시각 (시계 보정용)
  * 서버 → 클라이언트
  *   ev    ({ k, t, d })              구독 키 k에 대한 이벤트
+ *   srv   ({ t, ... } | null)        서버 공지 — 지금은 배포로 곧 다시 시작한다는 알림 { t: "restart", until }
  *
  * 한 소켓의 요청은 도착한 순서대로 하나씩 처리함 (auth → sub → rpc 순서가 뒤바뀌지 않게).
  */
@@ -64,6 +65,13 @@ export class Gateway {
   private rpcs = new Map<string, RpcHandler>();
   private channels = new Map<string, Channel>();
   private disconnectHooks: ((ctx: Ctx) => MaybePromise<void>)[] = [];
+  /** 지금 걸려 있는 서버 공지 (새로 붙는 연결에도 바로 보냄) */
+  private notice: { t: string; [k: string]: unknown } | null = null;
+  /**
+   * 내려가기 직전: 상태를 저장한 뒤라 더는 아무것도 바꾸지 않음 — 요청은 거절하고,
+   * 연결이 끊겨도 자리를 비우지 않음 (다시 켜진 서버가 저장한 방을 그대로 이어받음)
+   */
+  private frozen = false;
   /** 로그인한 사용자의 별명을 찾는 방법 (server.ts 에서 연결) */
   nickOf: (user: AuthUser) => Promise<string | null> = async () => null;
 
@@ -143,6 +151,17 @@ export class Gateway {
     }
   }
 
+  /** 서버 공지를 모두에게 (null = 내림) */
+  announce(notice: { t: string; [k: string]: unknown } | null) {
+    this.notice = notice;
+    this.io.emit("srv", notice);
+  }
+
+  /** 상태 저장 직전에 호출: 이후로는 요청을 받지 않고 끊김도 처리하지 않음 */
+  freeze() {
+    this.frozen = true;
+  }
+
   /** 지금 붙어 있는 연결 수 (관리자 화면) */
   connections(): number {
     return this.io.sockets.sockets.size;
@@ -191,6 +210,7 @@ export class Gateway {
     if (!all && --sub.n > 0) return;
     data.subs.delete(key);
     socket.leave(key);
+    if (this.frozen) return;
     try {
       this.channels.get(sub.ch)?.closed?.(this.ctx(socket), key);
     } catch (e) {
@@ -212,7 +232,10 @@ export class Gateway {
         return;
       }
       data.chain = data.chain
-        .then(work)
+        .then(() => {
+          if (this.frozen) throw new AppError("RESTARTING", "서버를 다시 시작하는 중이에요. 잠시 후 다시 시도해주세요.", 503);
+          return work();
+        })
         .then(
           (d) => reply({ ok: true, d: d ?? null }),
           (e) => {
@@ -224,6 +247,8 @@ export class Gateway {
         // reply 자체가 던져도 다음 요청 처리는 이어지게
         .catch(() => {});
     };
+
+    if (this.notice) socket.emit("srv", this.notice);
 
     socket.on("time", (ack: unknown) => {
       if (typeof ack === "function") (ack as (t: number) => void)(Date.now());
@@ -288,6 +313,7 @@ export class Gateway {
     );
 
     socket.on("disconnect", () => {
+      if (this.frozen) return;
       data.chain = data.chain
         .then(async () => {
           for (const key of [...data.subs.keys()]) this.drop(socket, key, true);

@@ -4,6 +4,7 @@ import { AppError, bad, forbidden } from "../errors";
 import { newId, orderedId } from "../ids";
 import type { Ctx } from "../realtime/gateway";
 import type { LiveRoom } from "../http/admin";
+import { RESTORED, RESTORE_GRACE_MS, type LiveGame } from "../live";
 import { forfeit, newResult, onEnd, settle, type FightResult, type Outcome } from "./fightResult";
 import { BOT_MAX, createFightRating, type Margin } from "./fightRating";
 import { uniqueNickname } from "./poker/nicknames";
@@ -23,7 +24,8 @@ import { botBuild, replayBot } from "./fightBot";
  *    전용 방(맵은 서버가 랜덤, 캐릭터는 고름, 한 판만) → 결과가 정해지면 레이팅·캐릭터 통계 (fightRating.ts). 일반 방 대전은 레이팅 없음
  *  - 12초 안에 사람을 못 찾으면 비슷한 레이팅의 봇(AI)과 매칭 — 경기는 브라우저에서 돌리고(봇 = web lib/fight/ai.ts),
  *    끝나면 내 입력 기록을 보내서 서버가 같은 경기를 다시 돌려 결과를 확인 (fightBot.ts) → 레이팅
- * 방은 휘발성 데이터라 메모리에만 둠 (서버를 다시 띄우면 진행 중인 방은 사라짐).
+ * 방은 휘발성 데이터라 메모리에만 둠. 배포로 서버를 다시 띄울 때만 저장했다가 이어받음 (live.ts) —
+ * 경기는 브라우저끼리 하므로 서버가 잠깐 내려가도 이어지고, 결과는 다시 켜진 서버에 알리면 됨.
  *
  * 구독 채널
  *   fight.lobby                        방 목록 (로그인 없이도 가능)
@@ -331,6 +333,12 @@ export function registerFight({ gateway, users, db }: Deps, opts: FightOptions =
     if (!room) throw noRoom();
     return room;
   };
+  /** 배포로 곧 다시 시작함 → 새 경기·매칭은 받지 않음 */
+  let draining = false;
+  const notWhileDraining = () => {
+    if (draining) throw new AppError("RESTARTING", "서버 업데이트 중이에요. 잠시 후 다시 시작해주세요.", 503);
+  };
+
   function asPlayer(ctx: Ctx, id: string) {
     const room = getRoom(id);
     const uid = ctx.uid;
@@ -348,9 +356,13 @@ export function registerFight({ gateway, users, db }: Deps, opts: FightOptions =
       void ctx.uid; // 로그인한 사람만 (관전자 포함)
       return roomKey(idOnly.parse(p).id);
     },
-    snapshot(_ctx, _key, p) {
+    snapshot(ctx, _key, p) {
       const room = rooms.get(idOnly.parse(p).id);
-      return room ? roomWire(room) : null;
+      if (!room) return null;
+      // 서버가 다시 켜진 뒤 처음 들어온 연결 → 그 사람 자리의 주인으로 (이 연결이 끊기면 자리를 비움)
+      const uid = ctx.user?.uid;
+      if (uid && room.owners.get(uid) === RESTORED) room.owners.set(uid, ctx.socket.id);
+      return roomWire(room);
     },
   });
 
@@ -591,6 +603,7 @@ export function registerFight({ gateway, users, db }: Deps, opts: FightOptions =
     const o = startSchema.parse(raw);
     const { room, uid } = asPlayer(ctx, o.id);
     if (room.hostUid !== uid) throw forbidden();
+    notWhileDraining();
     if (!room.players[room.seats[0]] || !room.players[room.seats[1]]) throw bad("상대가 없습니다.");
     // 랭크전: 한 판만, 맵은 서버가 정한 것
     if (room.rank) {
@@ -877,6 +890,7 @@ export function registerFight({ gateway, users, db }: Deps, opts: FightOptions =
       .parse(raw);
     const uid = ctx.uid;
     if (!ctx.nick) throw new AppError("MEMBERS_ONLY", "랭크전은 회원만 할 수 있어요.", 403);
+    notWhileDraining();
     if (pendingOf(uid)) return null;
     // 하던 봇전이 있으면 (경기 중에 나갔다 다시 찾음) 그 판은 패배
     const old = ticketOf(uid);
@@ -957,6 +971,7 @@ export function registerFight({ gateway, users, db }: Deps, opts: FightOptions =
     const o = z.object({ id: z.string().max(40), ch: z.number().int().min(0).max(99) }).parse(raw);
     const t = tickets.get(o.id);
     if (!t || t.uid !== ctx.uid || t.stage !== "room") throw bad("랭크전이 취소됐어요.");
+    notWhileDraining();
     const nCh = replayBot.charCount();
     if (o.ch >= nCh) throw bad("없는 캐릭터예요.");
     if (t.timer) clearTimeout(t.timer);
@@ -1035,11 +1050,15 @@ export function registerFight({ gateway, users, db }: Deps, opts: FightOptions =
       rank: { uids: [a.uid, b.uid], map, used: false, recorded: false, margins: [null, null], result: null, deadline: now + RANK_START_MS },
     };
     rooms.set(room.id, room);
-    // 시간 안에 시작 못 하면 (한쪽이 안 들어오거나 준비를 안 함) 취소
+    armRankDeadline(room, RANK_START_MS);
+    return room.id;
+  }
+
+  /** 랭크전 방: 시간 안에 시작 못 하면 (한쪽이 안 들어오거나 준비를 안 함) 취소 */
+  function armRankDeadline(room: Room, after: number) {
     setTimeout(() => {
       if (rooms.get(room.id) === room && !room.rank!.used) removeRoom(room);
-    }, RANK_START_MS).unref?.();
-    return room.id;
+    }, Math.max(0, after)).unref?.();
   }
 
   // ───────────── 오래 비어 있는 방 정리 ─────────────
@@ -1053,7 +1072,99 @@ export function registerFight({ gateway, users, db }: Deps, opts: FightOptions =
   }, opts.sweepIntervalMs ?? 5 * 60_000);
   sweep.unref();
 
+  // ───────────── 배포 때 이어받기 (live.ts) ─────────────
+
+  const RESTART_NOTE = "서버 업데이트로 매칭이 취소됐어요. 잠시 후 다시 찾아주세요";
+  const live: LiveGame = {
+    // 진행 중인 경기가 끝나길 (최대 DRAIN_MS) 기다림 — 경기는 P2P 라 넘어가도 이어지지만, 중계로 하는 판은 잠깐 멈춤
+    busy: () => [...rooms.values()].some((r) => r.state.phase === "play"),
+    drain() {
+      draining = true;
+      // 매칭 대기·수락 대기는 취소 (다시 켜진 뒤 다시 찾으면 됨)
+      for (const e of queue.splice(0)) setRank(e.uid, { s: "idle", note: RESTART_NOTE });
+      for (const p of [...pending.values()]) {
+        clearTimeout(p.timer);
+        pending.delete(p.id);
+        for (const e of [p.a, p.b]) setRank(e.uid, { s: "idle", note: RESTART_NOTE });
+      }
+      for (const t of [...tickets.values()])
+        if (t.stage === "found") {
+          clearTicket(t);
+          setRank(t.uid, { s: "idle", note: RESTART_NOTE });
+        }
+      if (matchTimer) (clearInterval(matchTimer), (matchTimer = null));
+    },
+    snapshot: () => ({
+      rooms: [...rooms.values()].map((r) => ({
+        id: r.id,
+        name: r.name,
+        hostUid: r.hostUid,
+        hostNick: r.hostNick,
+        createdAt: r.createdAt,
+        seats: r.seats,
+        players: r.players,
+        state: r.state,
+        chat: r.chat,
+        sig: [...r.sig.entries()],
+        relay: r.relay,
+        watch: r.watch,
+        watchMatch: r.watchMatch,
+        emptySince: r.emptySince,
+        result: r.result,
+        rank: r.rank,
+      })),
+      // 봇전: 캐릭터를 고르는 중(room)이거나 경기 중(play)인 표만 — 경기는 브라우저에서 이어지고 결과는 다시 켜진 서버로
+      tickets: [...tickets.values()].filter((t) => t.stage === "room" || t.stage === "play").map((t) => ({ ...t, timer: null })),
+      status: [...rankStatus.entries()].filter(([, st]) => st.s !== "queue" && st.s !== "found"),
+    }),
+    restore(data, downMs) {
+      const d = data as {
+        rooms: (Omit<Room, "sig" | "owners" | "watchers" | "watcherOwners"> & { sig: [string, { offer?: SigPart; answer?: SigPart }][] })[];
+        tickets: BotTicket[];
+        status: [string, RankStatus][];
+      };
+      const now = Date.now();
+      for (const r of d.rooms) {
+        const room: Room = {
+          ...r,
+          sig: new Map(r.sig),
+          watchers: {},
+          owners: new Map(Object.keys(r.players).map((uid) => [uid, RESTORED])),
+          watcherOwners: new Map(),
+        };
+        rooms.set(room.id, room);
+        if (room.rank && !room.rank.used) {
+          room.rank.deadline += downMs;
+          armRankDeadline(room, room.rank.deadline - now);
+        }
+      }
+      for (const [uid, st] of d.status) rankStatus.set(uid, st.s === "bot" ? { ...st, deadline: st.deadline + downMs } : st);
+      for (const saved of d.tickets) {
+        const t: BotTicket = { ...saved, timer: null };
+        tickets.set(t.id, t);
+        if (t.stage === "play") {
+          t.startedAt += downMs;
+          t.timer = setTimeout(() => void finishBot(t, 1, null), Math.max(0, t.startedAt + BOT_PLAY_MS - now));
+        } else {
+          const st = rankStatus.get(t.uid);
+          const left = st?.s === "bot" ? st.deadline - now : RANK_START_MS;
+          t.timer = setTimeout(() => {
+            if (tickets.get(t.id) !== t || t.stage !== "room") return;
+            clearTicket(t);
+            setRank(t.uid, { s: "idle", note: "시간 안에 시작하지 않아 랭크전이 취소됐어요" });
+          }, Math.max(0, left));
+        }
+      }
+      // 시간 안에 안 돌아온 선수는 나간 것으로 (경기 중이었으면 남은 쪽 신고로 결과가 정해짐)
+      setTimeout(() => {
+        for (const room of [...rooms.values()])
+          for (const [uid, owner] of [...room.owners]) if (owner === RESTORED) removePlayer(room, uid);
+      }, RESTORE_GRACE_MS).unref();
+    },
+  };
+
   return {
+    live,
     close() {
       clearInterval(sweep);
       if (matchTimer) clearInterval(matchTimer);

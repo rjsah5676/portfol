@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { Deps } from "../../deps";
 import { AppError, bad, forbidden } from "../../errors";
 import type { LiveRoom } from "../../http/admin";
+import type { LiveGame } from "../../live";
 import { newId, orderedId } from "../../ids";
 import type { Ctx } from "../../realtime/gateway";
 import { pictureOf, type UserDoc } from "../../users";
@@ -44,6 +45,7 @@ import { createWallet, skinsOf, type SettleEntry } from "./wallet";
  * 포커 테이블 (홀덤 · 7포커 공용). 회원만 이용.
  *
  * 테이블은 서버 메모리에 있고(스케치·격투 방처럼), 돈만 DB 에 있음.
+ * 배포로 서버를 다시 띄울 때는 진행 중인 판이 끝나길 기다렸다가 사람이 앉은 테이블을 저장해 두고 이어받음 (live.ts).
  *  - 앉으면 가진 돈 전부가 칩. 판이 끝날 때마다 증감이 DB 에 반영되고, 다음 판을 시작할 때 DB 의 금액으로 다시 맞춤
  *  - 한 사람은 한 테이블에만 앉을 수 있음 (같은 돈을 두 곳에 걸 수 없게)
  *  - 판 도중에 나가면 그 판은 죽은 것으로 치고, 판이 정산된 뒤에 자리가 비워짐
@@ -689,7 +691,12 @@ export function registerPoker({ gateway, db, users }: Deps, opts: PokerOptions =
 
   /** 다음 판 시작 (조건이 안 되면 대기) */
   async function tryStart(t: Table) {
-    if (t.closed || t.round || t.starting) return;
+    if (t.closed || t.round || t.starting || draining) return;
+    const hold = holdUntil.get(t.id);
+    if (hold !== undefined) {
+      if (now() < hold && humans(t).some((s) => s.away)) return;
+      holdUntil.delete(t.id);
+    }
     t.starting = true;
     try {
       await t.settling;
@@ -755,6 +762,11 @@ export function registerPoker({ gateway, db, users }: Deps, opts: PokerOptions =
       t.starting = false;
     }
   }
+
+  /** 배포로 곧 다시 시작함 → 새 판을 돌리지 않음 */
+  let draining = false;
+  /** 다시 켜진 직후: 이 시각까지는 자리 비운(아직 다시 접속 안 한) 사람이 있으면 판을 시작하지 않음 — 돌아오는 사람이 판을 놓치지 않게 */
+  const holdUntil = new Map<string, number>();
 
   /** 대기 중인 테이블이면 곧 시작을 시도 */
   function nudge(t: Table, delay = 1200) {
@@ -1490,8 +1502,142 @@ export function registerPoker({ gateway, db, users }: Deps, opts: PokerOptions =
   }, opts.sweepIntervalMs ?? 3000);
   sweep.unref();
 
+  // ───────────── 배포 때 이어받기 (live.ts) ─────────────
+
+  type SavedSeat = Omit<Seat, "brain" | "kickVotes"> & {
+    brain: (Omit<Brain, "grudge" | "rand"> & { grudge: [string, number][] }) | null;
+    kickVotes: [string, number][];
+  };
+  const live: LiveGame = {
+    // 판 도중에는 카드·베팅이 서버에만 있어서 끝나길 기다림 (최대 DRAIN_MS — 넘으면 그 판은 없던 일, 돈은 판이 끝날 때만 바뀌어서 그대로)
+    busy: () => [...tables.values()].some((t) => !!t.round || t.starting),
+    drain() {
+      draining = true;
+    },
+    async flush() {
+      await Promise.all([...tables.values()].map((t) => t.settling));
+      await Promise.all([...settlingOf.values()]);
+    },
+    // 사람이 앉은 테이블만 (봇만 있는 로비 방은 다시 켜지면 새로 열림)
+    snapshot: () =>
+      [...tables.values()]
+        .filter((t) => !t.closed && humans(t).length)
+        .map((t) => ({
+          id: t.id,
+          name: t.name,
+          game: t.game,
+          tier: t.tier.id,
+          locked: t.locked,
+          pw: t.pw,
+          ownerUid: t.ownerUid,
+          access: [...t.access],
+          createdAt: t.createdAt,
+          seats: t.seats.map((x): SavedSeat | null =>
+            x
+              ? {
+                  ...x,
+                  brain: x.brain ? (({ rand: _r, ...b }) => ({ ...b, grudge: [...b.grudge] }))(x.brain) : null,
+                  kickVotes: [...x.kickVotes],
+                }
+              : null
+          ),
+          bots: t.bots,
+          quick: t.quick,
+          botTarget: t.botTarget,
+          botNext: t.botNext,
+          peopleSince: t.peopleSince,
+          handNo: t.handNo,
+          // 봇의 상대 기록(models)은 클래스라 버리고 버튼 자리만
+          button: (t.mem as { button?: number }).button,
+          chat: t.chat,
+          emptySince: t.emptySince,
+          banned: [...t.banned],
+          botRoomUntil: t.botRoomUntil,
+        })),
+    restore(data, downMs) {
+      for (const r of data as {
+        id: string;
+        name: string;
+        game: GameKind;
+        tier: TierId;
+        locked: boolean;
+        pw: string | null;
+        ownerUid: string;
+        access: string[];
+        createdAt: number;
+        seats: (SavedSeat | null)[];
+        bots: boolean;
+        quick: boolean;
+        botTarget: number;
+        botNext: number;
+        peopleSince: number;
+        handNo: number;
+        button?: number;
+        chat: ChatMsg[];
+        emptySince: number;
+        banned: [string, number][];
+        botRoomUntil: number;
+      }[]) {
+        if (tables.has(r.id) || !GAME_DEFS[r.game]) continue;
+        const seats = r.seats.map((x): Seat | null => {
+          if (!x) return null;
+          // 다시 접속하기 전까지는 자리 비움 (poker.me 를 다시 구독하면 풀림, 오래 안 오면 평소처럼 내려옴)
+          const status = x.status === "in" ? "wait" : x.status;
+          const brain = x.brain ? { ...x.brain, rand: Math.random, grudge: new Map(x.brain.grudge) } : null;
+          return { ...x, brain, kickVotes: new Map(x.kickVotes), status, ...(x.uid ? { away: true, awayAt: now() } : {}) };
+        });
+        // 이미 다른 테이블에 앉은 것으로 잡힌 사람은 빼고 (한 사람 한 테이블)
+        for (const x of seats) if (x?.uid && seatOf.has(x.uid)) seats[x.seat] = null;
+        const t: Table = {
+          id: r.id,
+          name: r.name,
+          game: r.game,
+          def: GAME_DEFS[r.game],
+          tier: tierOf(r.tier),
+          locked: r.locked,
+          pw: r.pw,
+          ownerUid: r.ownerUid,
+          access: new Set(r.access),
+          createdAt: r.createdAt,
+          seats,
+          bots: r.bots,
+          quick: r.quick,
+          botTarget: r.botTarget,
+          botNext: r.botNext ? now() + 5_000 : 0,
+          peopleSince: r.peopleSince ? r.peopleSince + downMs : 0,
+          joining: 0,
+          handNo: r.handNo,
+          round: null,
+          inRound: new Map(),
+          mem: r.button === undefined ? {} : { button: r.button },
+          lastView: null,
+          deadline: 0,
+          nextAt: null,
+          timer: null,
+          actTimers: new Map(),
+          waitMark: "",
+          seq: 0,
+          ev: [],
+          chat: r.chat,
+          settling: Promise.resolve(),
+          starting: false,
+          closed: false,
+          emptySince: r.emptySince,
+          banned: new Map(r.banned),
+          botRoomUntil: r.botRoomUntil,
+        };
+        tables.set(t.id, t);
+        for (const x of humans(t)) seatOf.set(x.uid!, t.id);
+        // 사람들이 다시 접속할 시간을 줌 (모두 돌아오면 바로 시작)
+        holdUntil.set(t.id, now() + 15_000);
+      }
+      lobbyChanged();
+    },
+  };
+
   return {
     wallet,
+    live,
     close() {
       clearInterval(sweep);
       for (const t of [...tables.values()]) {

@@ -42,6 +42,8 @@ export interface TestSub<S = any> {
 export interface TestClient {
   socket: Socket;
   uid: string | null;
+  /** 받은 서버 공지 (srv) */
+  notices: any[];
   rpc<T = any>(method: string, args?: unknown): Promise<T>;
   sub<S = any>(channel: string, params?: unknown): Promise<TestSub<S>>;
   close(): void;
@@ -50,6 +52,8 @@ export interface TestClient {
 export interface TestServer {
   url: string;
   db: Database;
+  /** 이 서버가 쓰는 DB 이름 (같은 DB 로 서버를 다시 띄울 때) */
+  dbName: string;
   /** 가짜 Firebase ID 토큰 */
   token(uid: string, claims?: { email?: string; anonymous?: boolean; picture?: string }): Promise<string>;
   adminToken(): Promise<string>;
@@ -58,16 +62,18 @@ export interface TestServer {
   /** REST 호출 */
   http(path: string, init?: { method?: string; body?: unknown; token?: string }): Promise<{ status: number; body: any }>;
   close(): Promise<void>;
+  /** 배포처럼 내려감: 진행 중인 판을 기다리고(최대 drainMs) 방을 DB 에 저장 (DB 는 지우지 않음 — 같은 dbName 으로 다시 띄워 이어받기) */
+  shutdown(drainMs?: number): Promise<void>;
 }
 
-export async function startTestServer(over: { poker?: PokerOptions } = {}): Promise<TestServer> {
+export async function startTestServer(over: { poker?: PokerOptions; dbName?: string } = {}): Promise<TestServer> {
   const { publicKey, privateKey } = await generateKeyPair("RS256");
   const jwk = { ...(await exportJWK(publicKey)), kid: "test", alg: "RS256", use: "sig" };
   const cfg = loadConfig({
     NODE_ENV: "test",
     PORT: "0",
     MONGODB_URI: inject("mongoUri"),
-    MONGODB_DB: `test_${randomBytes(6).toString("hex")}`,
+    MONGODB_DB: over.dbName ?? `test_${randomBytes(6).toString("hex")}`,
     FIREBASE_PROJECT_ID: PROJECT,
     ADMIN_EMAILS: ADMIN_EMAIL,
   });
@@ -103,6 +109,8 @@ export async function startTestServer(over: { poker?: PokerOptions } = {}): Prom
       socket.once("connect_error", rej);
     });
     const subs = new Map<string, TestSub[]>();
+    const notices: any[] = [];
+    socket.on("srv", (n: any) => notices.push(n));
     socket.on("ev", ({ k, t, d }: { k: string; t: string; d: any }) => {
       for (const s of subs.get(k) ?? []) {
         s.events.push({ t, d });
@@ -118,6 +126,7 @@ export async function startTestServer(over: { poker?: PokerOptions } = {}): Prom
     const c: TestClient = {
       socket,
       uid: uid ?? null,
+      notices,
       rpc: (m, a) => ack("rpc", { m, a }),
       async sub(ch, p) {
         // 응답 전에 도착한 이벤트도 놓치지 않게 먼저 받아 둠
@@ -197,10 +206,16 @@ export async function startTestServer(over: { poker?: PokerOptions } = {}): Prom
       const text = await res.text();
       return { status: res.status, body: text ? JSON.parse(text) : null };
     },
+    dbName: cfg.mongoDb,
     async close() {
       for (const c of [...clients]) c.close();
       await server.close();
       await db.db.dropDatabase().catch(() => {});
+      await db.close();
+    },
+    async shutdown(drainMs = 0) {
+      await server.shutdown(drainMs);
+      for (const c of [...clients]) c.close();
       await db.close();
     },
   };

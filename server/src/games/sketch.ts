@@ -6,6 +6,7 @@ import { isClientId, newId, orderedId } from "../ids";
 import type { Ctx } from "../realtime/gateway";
 import { GUEST_MARK } from "../users";
 import type { LiveRoom } from "../http/admin";
+import { RESTORED, RESTORE_GRACE_MS, type LiveGame } from "../live";
 
 /*
  * 스케치 퀴즈 (실시간 그림 퀴즈)
@@ -15,7 +16,8 @@ import type { LiveRoom } from "../http/admin";
  * 진행 방식 자체는 그대로:
  *  - 그리는 사람: 제시어 후보·선택, 정답 판정, 힌트, 시간 종료
  *  - 리더(방장. 방장이 나가면 가장 먼저 들어와 있는 사람이 이어받음): 게임 시작, 다음 차례, 강퇴
- * 방은 접속자가 없으면 정리되는 휘발성 데이터라 DB에 저장하지 않음 (서버를 다시 띄우면 진행 중인 방은 사라짐).
+ * 방은 접속자가 없으면 정리되는 휘발성 데이터라 평소엔 DB에 저장하지 않음.
+ * 배포로 서버를 다시 띄울 때만 방 전체(그리던 그림까지)를 저장했다가 이어받음 (live.ts).
  *
  * 구독 채널
  *   sketch.lobby                 로비 목록 (로그인 없이도 가능)
@@ -363,9 +365,13 @@ export function registerSketch({ gateway, users }: Deps, opts: SketchOptions = {
       void ctx.uid; // 로그인한 사람만
       return roomKey(idOnly.parse(p).id);
     },
-    snapshot(_ctx, _key, p) {
+    snapshot(ctx, _key, p) {
       const room = rooms.get(idOnly.parse(p).id);
-      return room ? roomWire(room) : null;
+      if (!room) return null;
+      // 서버가 다시 켜진 뒤 처음 들어온 연결 → 그 사람 자리의 주인으로 (이 연결이 끊기면 자리를 비움)
+      const uid = ctx.user?.uid;
+      if (uid && room.owners.get(uid) === RESTORED) room.owners.set(uid, ctx.socket.id);
+      return roomWire(room);
     },
   });
 
@@ -860,7 +866,53 @@ export function registerSketch({ gateway, users }: Deps, opts: SketchOptions = {
   }, opts.sweepIntervalMs ?? 30_000);
   sweep.unref();
 
+  // ───────────── 배포 때 이어받기 (live.ts) ─────────────
+
+  // 진행은 브라우저가 나눠 맡고 서버엔 타이머가 없어서, 그리던 중이어도 그대로 저장했다가 이어 감
+  const live: LiveGame = {
+    busy: () => false,
+    drain() {},
+    snapshot: () =>
+      [...rooms.values()].map((r) => ({
+        id: r.id,
+        meta: r.meta,
+        players: r.players,
+        scores: r.scores,
+        state: r.state,
+        kicked: r.kicked,
+        used: r.used,
+        strokes: [...r.strokes.entries()],
+        strokesTurn: r.strokesTurn,
+        chat: r.chat,
+        guesses: r.guesses,
+        words: r.words,
+        pw: r.pw,
+        invite: r.invite,
+        access: [...r.access],
+        emptySince: r.emptySince,
+      })),
+    restore(data, downMs) {
+      for (const r of data as (Omit<Room, "strokes" | "access" | "owners"> & { strokes: [string, unknown][]; access: string[] })[]) {
+        // 차례 시간은 내려가 있던 만큼 미룸 (그 사이 아무도 그리거나 맞힐 수 없었으니)
+        const state = r.state.endsAt ? { ...r.state, endsAt: r.state.endsAt + downMs } : r.state;
+        rooms.set(r.id, {
+          ...r,
+          state,
+          strokes: new Map(r.strokes),
+          access: new Set(r.access),
+          owners: new Map(Object.keys(r.players).map((uid) => [uid, RESTORED])),
+        });
+      }
+      // 시간 안에 안 돌아온 사람은 나간 것으로
+      setTimeout(() => {
+        for (const room of [...rooms.values()])
+          for (const [uid, owner] of [...room.owners]) if (owner === RESTORED) removePlayer(room, uid);
+      }, RESTORE_GRACE_MS).unref();
+    },
+  };
+
   return {
+    live,
     close() {
       clearInterval(sweep);
     },
