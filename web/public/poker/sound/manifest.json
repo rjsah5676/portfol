@@ -180,5 +180,9 @@
   "voice/yeonseo/yeonseo-raise-big": "voice/yeonseo/yeonseo-raise-big.mp3",
   "voice/yeonseo/yeonseo-raise": "voice/yeonseo/yeonseo-raise.mp3",
   "voice/yeonseo/yeonseo-select": "voice/yeonseo/yeonseo-select.mp3",
-  "voice/yeonseo/yeonseo-win": "voice/yeonseo/yeonseo-win.mp3"
+  "voice/yeonseo/yeonseo-win": "voice/yeonseo/yeonseo-win.mp3",
+  "voice/amy-summer/amy-summer-select": "voice/amy-summer/amy-summer-select.mp3",
+  "voice/amy-summer/amy-summer-hello": "voice/amy-summer/amy-summer-hello.mp3",
+  "voice/amy-summer/amy-summer-win": "voice/amy-summer/amy-summer-win.mp3",
+  "voice/amy-summer/amy-summer-lose": "voice/amy-summer/amy-summer-lose.mp3"
 }
