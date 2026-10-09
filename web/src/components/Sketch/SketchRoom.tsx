@@ -14,6 +14,7 @@ import { playBgm, playSfx, playVoice } from "@/lib/sketch/sfx";
 import {
   addSeen,
   hintOf,
+  isCloseAnswer,
   LEVEL_BONUS,
   LEVEL_LABEL,
   loadSeen,
@@ -196,7 +197,7 @@ export default function SketchRoom({
         return;
       }
       if (normalizeAnswer(g.text) === normalizeAnswer(word)) markCorrect(cur, g).catch(() => {});
-      else relayGuess(roomId, g).catch(() => {});
+      else relayGuess(roomId, g, isCloseAnswer(g.text, word)).catch(() => {});
     });
   }, [amDrawer, roomId]);
 

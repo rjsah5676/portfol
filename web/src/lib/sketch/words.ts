@@ -152,3 +152,47 @@ export function hintOf(word: string, level: number): string {
     })
     .join("");
 }
+
+// ───────────── 거의 맞힌 답 ─────────────
+
+const JUNG = "ㅏㅐㅑㅒㅓㅔㅕㅖㅗㅘㅙㅚㅛㅜㅝㅞㅟㅠㅡㅢㅣ";
+const JONG = " ㄱㄲㄳㄴㄵㄶㄷㄹㄺㄻㄼㄽㄾㄿㅀㅁㅂㅄㅅㅆㅇㅈㅊㅋㅌㅍㅎ";
+
+/** 한글을 자모로 풀어서 (슬리퍼 → ㅅㅡㄹㄹㅣㅍㅓ) 한 글자 차이도 잡게 */
+function jamo(s: string): string[] {
+  return [...s].flatMap((ch) => {
+    const c = ch.charCodeAt(0) - 0xac00;
+    if (c < 0 || c > 11171) return [ch];
+    const out = [CHO[Math.floor(c / 588)], JUNG[Math.floor((c % 588) / 28)]];
+    if (c % 28) out.push(JONG[c % 28]);
+    return out;
+  });
+}
+
+function editDistance(a: string[], b: string[]): number {
+  let prev = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    const cur = [i];
+    for (let j = 1; j <= b.length; j++)
+      cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    prev = cur;
+  }
+  return prev[b.length];
+}
+
+/**
+ * 정답은 아니지만 아주 비슷한 답인지 (그리는 사람 화면에서 판정 → 친 사람에게만 알림)
+ * - 정답을 품고 군더더기가 붙은 답 (슬리퍼 → "슬리퍼 한 짝")
+ * - 자모로 풀어서 1~3개 차이 (슬리퍼 → 슬리파 · 슬리핑, 길수록 넉넉하게 — 두 글자 단어는 1개만: 사과 ≠ 사자)
+ */
+export function isCloseAnswer(guess: string, word: string): boolean {
+  const g = normalizeAnswer(guess);
+  const w = normalizeAnswer(word);
+  if (!g || g === w) return false;
+  if (w.length >= 2 && g.includes(w) && g.length <= w.length * 2 + 2) return true;
+  const a = jamo(g);
+  const b = jamo(w);
+  const limit = b.length <= 6 ? 1 : b.length <= 12 ? 2 : 3;
+  if (Math.abs(a.length - b.length) > limit) return false;
+  return editDistance(a, b) <= limit;
+}

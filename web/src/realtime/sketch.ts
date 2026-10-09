@@ -112,9 +112,11 @@ export interface ChatMsg {
   uid: string;
   nick: string;
   text: string;
-  /** msg: 일반, system: 안내, correct: 정답 알림 */
-  kind: "msg" | "system" | "correct";
+  /** msg: 일반, system: 안내, correct: 정답 알림, close: 거의 맞힘 (친 사람에게만 옴) */
+  kind: "msg" | "system" | "correct" | "close";
   ts: number;
+  /** close: 거의 맞힌 그 채팅의 id */
+  of?: string;
 }
 
 export interface Guess {
@@ -518,10 +520,11 @@ export async function removeGuess(roomId: string, id: string) {
   await rpc("sketch.removeGuess", { id: roomId, guessId: id }).catch(() => {});
 }
 
-/** 오답은 그리는 사람이 대신 채팅에 올려줌 */
-export async function relayGuess(roomId: string, g: Guess) {
+/** 오답은 그리는 사람이 대신 채팅에 올려줌. close = 거의 맞힘 → 친 사람에게만 "거의 다 왔어요" 알림 */
+export async function relayGuess(roomId: string, g: Guess, close = false) {
   await rpc("sketch.relayGuess", {
     id: roomId,
     guess: { uid: g.uid, nick: g.nick, text: g.text },
+    ...(close ? { close: true } : {}),
   });
 }

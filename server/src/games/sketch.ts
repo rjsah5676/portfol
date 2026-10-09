@@ -75,6 +75,12 @@ interface ChatMsg {
   kind: "msg" | "system" | "correct";
   ts: number;
 }
+/** 거의 맞힌 사람에게만 보내는 안내 (채팅 기록엔 안 남김) */
+interface CloseNote extends Omit<ChatMsg, "kind"> {
+  kind: "close";
+  /** 거의 맞힌 그 채팅의 id */
+  of: string;
+}
 interface Guess {
   id: string;
   uid: string;
@@ -830,11 +836,18 @@ export function registerSketch({ gateway, users }: Deps, opts: SketchOptions = {
   });
 
   /** 오답은 그리는 사람이 대신 채팅에 올려줌 */
-  const relaySchema = z.object({ id: roomId, guess: z.object({ uid: z.string().max(128), nick: z.string().max(12), text: z.string().min(1).max(100) }) });
+  const relaySchema = z.object({ id: roomId, guess: z.object({ uid: z.string().max(128), nick: z.string().max(12), text: z.string().min(1).max(100) }), close: z.boolean().optional() });
   gateway.rpc("sketch.relayGuess", (ctx, raw) => {
-    const { id, guess } = relaySchema.parse(raw);
+    const { id, guess, close } = relaySchema.parse(raw);
     const { room } = asDrawer(ctx, id);
-    pushChat(room, { uid: guess.uid, nick: nameIn(room, guess.uid, guess.nick), text: guess.text, kind: "msg" });
+    const msgId = orderedId();
+    pushChat(room, { id: msgId, uid: guess.uid, nick: nameIn(room, guess.uid, guess.nick), text: guess.text, kind: "msg" });
+    // 거의 맞힌 답(그리는 사람 화면이 판정): 친 사람에게만 "거의 다 왔어요" — 다른 사람에겐 힌트가 되니까 안 보냄
+    if (close) {
+      const key = chatKey(id);
+      const note: CloseNote = { id: orderedId(), uid: "", nick: "", text: `「${guess.text.slice(0, 20)}」 거의 다 왔어요! 조금만 바꿔 보세요`, kind: "close", of: msgId, ts: Date.now() };
+      for (const s of gateway.subscribers(key)) if (gateway.ctx(s).user?.uid === guess.uid) gateway.emitTo(s, key, "add", note);
+    }
     return null;
   });
 

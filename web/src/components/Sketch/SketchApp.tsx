@@ -178,7 +178,7 @@ export default function SketchApp() {
   return (
     <StageCtx.Provider value={{ o, fs, canFs, toggleFs }}>
       <div ref={rootRef} className={`sk ${outer}`}>
-        {/* 전체화면 권장 띠 (다른 게임들처럼 무대 위에) */}
+        {/* 전체화면 띠 (다른 게임들처럼 무대 위에) */}
         {!fs && (
           <button
             type="button"
@@ -191,7 +191,7 @@ export default function SketchApp() {
             <span className="rounded-md bg-[#FF6B6B] px-1.5 py-0.5 font-mono text-[11px] font-bold text-white">
               ⛶
             </span>
-            <b className="shrink-0 font-bold text-white">전체화면 플레이 권장</b>
+            <b className="shrink-0 font-bold text-white">전체화면 플레이 가능</b>
             <span className="hidden truncate text-white/55 sm:inline">
               — 여기를 누르면 전체화면으로 (게임 안 오른쪽 위 버튼으로도 켜고 끌 수 있어요)
             </span>

@@ -24,6 +24,12 @@
     font-family: "Nanum Gothic", sans-serif;
     -webkit-tap-highlight-color: transparent;
   }
+  /* 누를 수 있는 건 전부 손가락 커서 (Tailwind 기본은 화살표) */
+  .sk button:not(:disabled),
+  .sk label:has(input[type="checkbox"]),
+  .sk input[type="range"] {
+    cursor: pointer;
+  }
   .sk *:focus-visible {
     outline: 3px solid var(--sky);
     outline-offset: 2px;

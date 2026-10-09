@@ -44,16 +44,18 @@ export default function SketchChat({
           !firstRef.current &&
           last &&
           last.uid !== uid &&
-          last.kind === "msg" &&
+          (last.kind === "msg" || last.kind === "close") &&
           last.id !== lastIdRef.current
         )
-          playSfx("sfx-chat");
+          playSfx(last.kind === "close" ? "sfx-hint" : "sfx-chat");
         firstRef.current = false;
         lastIdRef.current = last?.id ?? "";
         setList(l);
       }),
     [roomId, uid]
   );
+  /** 거의 맞힌 내 채팅 (초록으로) */
+  const closeOf = new Set(list.flatMap((m) => (m.kind === "close" && m.of ? [m.of] : [])));
   useEffect(() => {
     const el = boxRef.current;
     if (el) el.scrollTop = el.scrollHeight;
@@ -82,6 +84,14 @@ export default function SketchChat({
           m.kind === "system" ? (
             <p key={m.id} className="sk-msg text-center text-[12.5px] font-bold text-[var(--ink3)]">
               {m.text}
+            </p>
+          ) : m.kind === "close" ? (
+            <p
+              key={m.id}
+              className="sk-msg rounded-lg border-2 border-dashed border-[#4CAF50] bg-[#6BCB77]/15 px-2 py-1 text-center font-extrabold text-[#2E7D32]"
+            >
+              🔥 {m.text}
+              <span className="ml-1 text-[11px] font-bold text-[#2E7D32]/60">(나만 보여요)</span>
             </p>
           ) : m.kind === "correct" ? (
             <p
@@ -112,7 +122,9 @@ export default function SketchChat({
                 <span
                   className={`max-w-full rounded-xl px-2.5 py-1 break-all ${
                     m.uid === uid
-                      ? "rounded-tr-sm bg-[var(--ink)] text-white"
+                      ? closeOf.has(m.id)
+                        ? "rounded-tr-sm bg-[#43A047] text-white ring-2 ring-[#A5D6A7]"
+                        : "rounded-tr-sm bg-[var(--ink)] text-white"
                       : "rounded-tl-sm border-[1.5px] border-[var(--line)] bg-white"
                   }`}
                 >

@@ -33,5 +33,12 @@
   "sfx-tick": "sfx-tick.mp3",
   "sfx-tool": "sfx-tool.mp3",
   "sfx-turn": "sfx-turn.mp3",
-  "sfx-undo": "sfx-undo.mp3"
+  "sfx-undo": "sfx-undo.mp3",
+  "voice-allcorrect": "voice-allcorrect.mp3",
+  "voice-correct": "voice-correct.mp3",
+  "voice-end": "voice-end.mp3",
+  "voice-myturn": "voice-myturn.mp3",
+  "voice-start": "voice-start.mp3",
+  "voice-timeup": "voice-timeup.mp3",
+  "voice-winner": "voice-winner.mp3"
 }

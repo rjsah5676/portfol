@@ -385,7 +385,20 @@ export function playSfx(name: string) {
 export function playVoice(name: string) {
   const s = getSound();
   if (s.mute || s.sfx <= 0) return;
-  playFile(`voice-${name}`, Math.min(1, s.sfx * 1.1));
+  if (playFile(`voice-${name}`, Math.min(1, s.sfx * 1.25))) duckBgm();
+}
+
+/** 진행 음성이 잘 들리게 그동안 배경음악을 잠깐 줄였다가 되돌림 */
+let duckTimer: ReturnType<typeof setTimeout> | null = null;
+function duckBgm(ms = 1800) {
+  if (!cur) return;
+  const el = cur;
+  if (!duckTimer) fade(el, 0.3, 150);
+  else clearTimeout(duckTimer);
+  duckTimer = setTimeout(() => {
+    duckTimer = null;
+    if (cur === el) fade(el, 1, 500);
+  }, ms);
 }
 
 /** 배경음악 바꾸기 (null = 끔). 파일이 없으면 조용히 아무것도 안 함 */

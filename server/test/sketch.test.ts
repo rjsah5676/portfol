@@ -289,6 +289,17 @@ describe("진행", () => {
     // 오답은 그리는 사람이 채팅으로 넘겨줌
     await host.rpc("sketch.relayGuess", { id, guess: { uid: b.uid, nick: "참가2", text: "바나나" } });
     expect((await chat.wait((e) => e.d?.text === "바나나")).d).toMatchObject({ kind: "msg", uid: b.uid, nick: "◦참가2" });
+
+    // 거의 맞힌 답: 친 사람에게만 "거의 다 왔어요" (다른 사람 · 채팅 기록엔 없음)
+    const chatB = chat; // 위에서 구독한 참가2(b)의 채팅
+    const chatA = await a.sub("sketch.chat", { id });
+    await host.rpc("sketch.relayGuess", { id, guess: { uid: b.uid, nick: "참가2", text: "바나니" }, close: true });
+    const guessMsg = (await chatB.wait((e) => e.d?.text === "바나니")).d;
+    expect((await chatB.wait((e) => e.d?.kind === "close")).d).toMatchObject({ kind: "close", of: guessMsg.id });
+    await chatA.wait((e) => e.d?.text === "바나니");
+    await new Promise((r) => setTimeout(r, 100));
+    expect(chatA.events.some((e) => e.d?.kind === "close")).toBe(false);
+    expect((await peek(id)).chat?.some?.((m: { kind: string }) => m.kind === "close") ?? false).toBe(false);
   });
 
   it("차례 종료 → 정답 공개·사용 단어 기록 → 다음 차례는 입장 순서, 모두 그리면 게임 끝", async () => {
