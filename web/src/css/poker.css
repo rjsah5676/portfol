@@ -134,8 +134,9 @@
 .pk-sprite[data-dim="1"] {
   filter: grayscale(0.9) brightness(0.55);
 }
-/* 자리에 서 있는 캐릭터: 테이블에 안 가려지는 아래쪽은 흐려져 사라짐 */
-.pk-seat-sprite .pk-sprite {
+/* 자리에 서 있는 캐릭터: 테이블에 안 가려지는 아래쪽은 흐려져 사라짐.
+   가림막은 그림(img)에 붙임 — 상자에 붙이면 통통 튀는 동작 때 상자 위로 올라간 머리가 잘림 */
+.pk-seat-sprite .pk-sprite img {
   -webkit-mask-image: linear-gradient(180deg, #000 72%, transparent 97%);
   mask-image: linear-gradient(180deg, #000 72%, transparent 97%);
 }
@@ -1612,8 +1613,8 @@
     opacity: 0;
   }
 }
-/* 앉은 그림의 칸 가장자리(머리카락이 잘린 선)를 부드럽게 흐리고, 테이블 선 아래는 가림 */
-.pk-seat-char .pk-sprite {
+/* 앉은 그림의 칸 가장자리(머리카락이 잘린 선)를 부드럽게 흐리고, 테이블 선 아래는 가림 (그림에 붙여 같이 움직임) */
+.pk-seat-char .pk-sprite img {
   -webkit-mask-image:
     linear-gradient(90deg, transparent 0, #000 10%, #000 90%, transparent 100%),
     linear-gradient(180deg, #000 90%, transparent 92.5%);
