@@ -878,11 +878,27 @@ function CharSelect({
 
 /** 자금 순위 표 (로비 · 게임 머리말의 랭킹 모달에서 같이 씀) */
 /** 순위 창: 자금 순위 / 구매 순위 탭 */
-export function PokerRanks({ rank, myNick }: { rank: RankRow[] | null; myNick?: string }) {
-  const [tab, setTab] = useState<"money" | "buy">("money");
-  const [buy, setBuy] = useState<BuyRankRow[] | null>(null);
+export function PokerRanks({
+  rank,
+  myNick,
+  tab: tabP,
+  onTab,
+  buy: buyP,
+}: {
+  rank: RankRow[] | null;
+  myNick?: string;
+  /** 바깥에서 탭을 쥘 때 (사이트 위 순위 창: 제목 · 시상대도 탭 따라 바뀜) */
+  tab?: "money" | "buy";
+  onTab?: (t: "money" | "buy") => void;
+  buy?: BuyRankRow[] | null;
+}) {
+  const [tabS, setTabS] = useState<"money" | "buy">("money");
+  const [buyS, setBuy] = useState<BuyRankRow[] | null>(null);
+  const tab = tabP ?? tabS;
+  const setTab = onTab ?? setTabS;
+  const buy = buyP !== undefined ? buyP : buyS;
   useEffect(() => {
-    if (tab !== "buy") return;
+    if (tab !== "buy" || buyP !== undefined) return;
     let alive = true;
     getBuyRank()
       .then((r) => alive && setBuy(r))
@@ -890,7 +906,7 @@ export function PokerRanks({ rank, myNick }: { rank: RankRow[] | null; myNick?: 
     return () => {
       alive = false;
     };
-  }, [tab]);
+  }, [tab, buyP]);
   return (
     <div>
       {/* 사이트 위 순위 창(포커 무대 밖)에서도 같은 색이 나오게 색은 값으로 */}

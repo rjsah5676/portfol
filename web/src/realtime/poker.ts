@@ -91,6 +91,9 @@ export const createTable = (o: {
   bots: boolean;
   password: string;
 }) => rpc<string>("poker.create", o);
+/** 방 설정 (바로 입장 허용 · 봇 참가 가능): 값을 안 주면 읽기만. 바꾸는 건 방장만 */
+export const roomOpts = (id: string, set?: { quick?: boolean; bots?: boolean }) =>
+  rpc<{ owner: boolean; quick: boolean; bots: boolean }>("poker.roomOpts", { id, ...set });
 export const sit = (id: string, password?: string) =>
   rpc<{ seat: number }>("poker.sit", { id, password });
 export const leave = (id: string) => rpc("poker.leave", { id });

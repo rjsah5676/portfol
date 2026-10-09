@@ -446,7 +446,9 @@ export function registerPoker({ gateway, db, users }: Deps, opts: PokerOptions =
       planBot(t);
     };
     for (const s of bots(t)) {
-      if (s.stack < t.def.minStack(t.tier)) leaveNow(s, "bust");
+      // 방장이 봇 참가를 껐으면 판 사이에 다 나감
+      if (!t.bots) leaveNow(s, "leave");
+      else if (s.stack < t.def.minStack(t.tier)) leaveNow(s, "bust");
       else if (s.stack >= t.tier.botMoney * 3) leaveNow(s, "cashout");
       else if (s.brain!.hands >= s.brain!.stayHands) leaveNow(s, "leave");
     }
@@ -924,6 +926,39 @@ export function registerPoker({ gateway, db, users }: Deps, opts: PokerOptions =
     const o = createSchema.parse(raw);
     const t = createTable({ ...o, tier: tierOf(o.tier), name: o.name.trim().slice(0, 20) || `${nick}의 테이블`, ownerUid: uid });
     return t.id;
+  });
+
+  /**
+   * 방 설정: 바로 입장 허용 · 봇 참가 가능 (봇은 바로 입장 허용일 때만).
+   * 값 없이 부르면 지금 설정과 내가 방장인지만 돌려줌. 바꾸는 건 방을 연 사람만.
+   * 봇 참가를 끄면 판이 안 돌 땐 봇이 바로, 판 도중이면 그 판이 끝나고 나감.
+   */
+  gateway.rpc("poker.roomOpts", (ctx, raw) => {
+    const { uid } = member(ctx);
+    const o = z.object({ id: z.string().max(40), quick: z.boolean().optional(), bots: z.boolean().optional() }).parse(raw);
+    const t = tables.get(o.id);
+    if (!t || t.closed) throw bad("없는 테이블이에요.");
+    const owner = !!t.ownerUid && t.ownerUid === uid;
+    if (o.quick !== undefined || o.bots !== undefined) {
+      if (!owner) throw forbidden("방을 연 사람만 바꿀 수 있어요.");
+      const quick = o.quick ?? t.quick;
+      const botsOn = quick && (o.bots ?? t.bots);
+      const changed = quick !== t.quick || botsOn !== t.bots;
+      t.quick = quick;
+      t.bots = botsOn;
+      if (changed) {
+        if (!t.bots) {
+          t.botNext = 0;
+          if (!t.round) for (const b of bots(t)) removeSeat(t, b, "leave");
+        } else {
+          rollBotTarget(t);
+          planBot(t);
+        }
+        lobbyChanged();
+        emit(t);
+      }
+    }
+    return { owner, quick: t.quick, bots: t.bots };
   });
 
   /** 바로 입장: 같은 게임·단계의 공개 테이블 중 사람이 있는 곳, 없으면 봇과 함께 새 테이블 */

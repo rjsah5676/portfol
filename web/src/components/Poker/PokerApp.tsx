@@ -15,7 +15,7 @@ import {
 } from "@/lib/poker/sfx";
 import { fmtShort, type CharId } from "@/lib/poker/rules";
 import type { RankRow, Wallet } from "@/lib/poker/types";
-import { getRank, subscribeWallet, watchClock } from "@/realtime/poker";
+import { getRank, roomOpts, subscribeWallet, watchClock } from "@/realtime/poker";
 import type { Orient } from "./layout";
 import Lobby from "./Lobby";
 import Shop, { type ShopTab } from "./Shop";
@@ -162,7 +162,7 @@ export default function PokerApp({ rank }: { rank: RankRow[] | null }) {
     <>
       <TopBtn label="상점" icon={SHOP_ICON} gold onClick={() => setShop("shop")} />
       <TopBtn label="옷장" icon={CLOSET_ICON} onClick={() => setShop("closet")} />
-      <Settings />
+      <Settings tableId={tableId} />
       {(canFs || fs) && (
         <button
           type="button"
@@ -373,10 +373,31 @@ const CLOSET_ICON = (
 );
 
 /** 설정 (톱니): 소리 */
-function Settings() {
+function Settings({ tableId }: { tableId: string | null }) {
   const [open, setOpen] = useState(false);
   const [snd, setSnd] = useState<SoundSettings>(() => getSound());
   useEffect(() => onSoundChange(() => setSnd({ ...getSound() })), []);
+  // 테이블 안: 방 설정 (열 때마다 지금 값을 받아 옴)
+  const [room, setRoom] = useState<{ owner: boolean; quick: boolean; bots: boolean } | null>(null);
+  const [roomErr, setRoomErr] = useState("");
+  useEffect(() => {
+    if (!open || !tableId) return;
+    let alive = true;
+    setRoomErr("");
+    roomOpts(tableId)
+      .then((r) => alive && setRoom(r))
+      .catch(() => alive && setRoom(null));
+    return () => {
+      alive = false;
+    };
+  }, [open, tableId]);
+  const setRoomOpt = (set: { quick?: boolean; bots?: boolean }) => {
+    if (!tableId || !room?.owner) return;
+    setRoom({ ...room, ...set, bots: (set.quick ?? room.quick) && (set.bots ?? room.bots) });
+    roomOpts(tableId, set)
+      .then(setRoom)
+      .catch((e: { message?: string }) => setRoomErr(e?.message ?? "바꾸지 못했어요."));
+  };
   const row = (label: string, key: "bgm" | "sfx" | "voice") => {
     const v = Math.round(snd[key] * 100);
     return (
@@ -463,6 +484,43 @@ function Settings() {
               ))}
             </div>
           </div>
+          {tableId && room && (
+            <div className="grid gap-[0.4em] border-t border-white/10 pt-[0.6em]">
+              <span className="pk-frame-title">방 설정</span>
+              <label
+                className={`flex items-center gap-[0.55em] ${room.owner ? "cursor-pointer" : "opacity-60"}`}
+              >
+                <input
+                  type="checkbox"
+                  checked={room.quick}
+                  disabled={!room.owner}
+                  onChange={(e) => setRoomOpt({ quick: e.target.checked })}
+                  className="h-[1.05em] w-[1.05em] accent-[#ffc93c]"
+                />
+                <span className="text-white/85">바로 입장 허용</span>
+              </label>
+              {room.quick && (
+                <label
+                  className={`ml-[1.2em] flex items-center gap-[0.55em] ${room.owner ? "cursor-pointer" : "opacity-60"}`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={room.bots}
+                    disabled={!room.owner}
+                    onChange={(e) => setRoomOpt({ bots: e.target.checked })}
+                    className="h-[1.05em] w-[1.05em] accent-[#ffc93c]"
+                  />
+                  <span className="text-white/85">봇 참가 가능</span>
+                </label>
+              )}
+              <p className="text-[0.82em] leading-snug text-white/40">
+                {room.owner
+                  ? "봇을 끄면 지금 판이 끝나고 봇이 나가요."
+                  : "방을 연 사람만 바꿀 수 있어요."}
+              </p>
+              {roomErr && <p className="text-[0.82em] text-[#ffb3b5]">{roomErr}</p>}
+            </div>
+          )}
           <p className="border-t border-white/10 pt-[0.5em] text-[0.82em] leading-relaxed text-white/40">
             BETA
           </p>
