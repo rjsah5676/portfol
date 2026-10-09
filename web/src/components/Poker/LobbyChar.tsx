@@ -40,6 +40,8 @@ export default function LobbyChar({
   const [touches, setTouches] = useState<number[]>([]);
   // 지금 틀고 있는 터치 영상 (재생할 때마다 새로 만든 blob 주소 — 같은 주소면 브라우저가 한 번 끝난 움직이는 그림을 처음부터 다시 안 틀어 줘서 멈춘 것처럼 보임)
   const [touchUrl, setTouchUrl] = useState("");
+  // 터치 영상이 그려질 준비가 됐는지 (그 전까지는 대기 그림을 그대로 보여 줘서 깜빡임 없게)
+  const [touchReady, setTouchReady] = useState(false);
   const blobs = useRef<Record<number, Blob>>({});
   const busyUntil = useRef(0);
   const touchTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -88,6 +90,7 @@ export default function LobbyChar({
     // 그 동작 전용 대사(voice/{스킨}/{스킨}-touch-N)가 있으면 그것, 없으면 인사 대사
     if (hasSound(`voice/${look}/${look}-touch-${pick}`)) playVoice(look, `touch-${pick}`);
     else greet();
+    setTouchReady(false);
     setTouchUrl(URL.createObjectURL(blobs.current[pick]));
     busyUntil.current = Date.now() + TOUCH_MS;
     clearTimeout(touchTimer.current);
@@ -95,17 +98,30 @@ export default function LobbyChar({
   };
 
   const imgCls = `pk-lobbychar-img ${bust ? "pk-lobbychar-bust" : ""}`;
-  const shown = !live
-    ? still
-    : touchUrl
-      ? touchUrl
-      : idleOk
-        ? asset.idle(look)
-        : still;
+  // 바탕(대기 영상 · 전신 그림)은 늘 붙여 두고, 터치 영상은 그 위에 얹음 — 갈아 끼우는 순간 빈 화면이 안 생기게
+  const base = live && idleOk ? asset.idle(look) : still;
   const body = (
     <span className={`pk-lobbychar-body ${bust ? "overflow-hidden" : ""}`}>
       {}
-      <img key={shown} src={shown} alt="" draggable={false} className={imgCls} />
+      <img
+        key={base}
+        src={base}
+        alt=""
+        draggable={false}
+        className={imgCls}
+        style={touchUrl && touchReady ? { visibility: "hidden" } : undefined}
+      />
+      {touchUrl && (
+        <img
+          key={touchUrl}
+          src={touchUrl}
+          alt=""
+          draggable={false}
+          className={imgCls}
+          style={touchReady ? undefined : { visibility: "hidden" }}
+          onLoad={() => setTouchReady(true)}
+        />
+      )}
     </span>
   );
   if (!touchable)
