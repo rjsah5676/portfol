@@ -162,7 +162,7 @@ export const SKINS: Skin[] = [
     blurb: "바다요? …이 판 끝나고 가죠.",
     line: "여름이니까요. …어울려요?",
     ready: true,
-    live: false,
+    live: true,
   },
 ];
 export const SKIN_IDS = SKINS.map((s) => s.id);
