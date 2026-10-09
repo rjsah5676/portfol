@@ -2289,6 +2289,101 @@
   background: #ffd84a;
   color: #2a1e05;
 }
+/* 마이페이지 */
+.pk-me-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35em;
+  padding: 0.32em 0.8em;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 201, 60, 0.45);
+  background: rgba(0, 0, 0, 0.45);
+  font-size: 0.8em;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.pk-me-chip-gold {
+  border-color: transparent;
+  background: linear-gradient(180deg, #ffe07a, #d99a0a);
+  color: #2b1d00;
+  font-weight: 800;
+}
+.pk-me-tabs {
+  display: flex;
+  gap: 1.2em;
+  padding: 0 0.9em;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+.pk-me-tabs > button {
+  position: relative;
+  padding: 0.6em 0.1em 0.5em;
+  font-size: 0.88em;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.45);
+  cursor: pointer;
+}
+.pk-me-tabs > button[aria-selected="true"] {
+  color: #fff;
+}
+.pk-me-tabs > button[aria-selected="true"]::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 2px;
+  border-radius: 2px;
+  background: #ffd84a;
+}
+.pk-me-card {
+  --g: #ffd84a;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(255, 255, 255, 0.045);
+  padding: 0.65em 0.8em;
+}
+.pk-me-game {
+  font-size: 0.9em;
+  font-weight: 800;
+  color: var(--g);
+}
+.pk-me-list {
+  display: grid;
+  overflow: hidden;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+.pk-me-list > li {
+  display: flex;
+  align-items: center;
+  gap: 0.55em;
+  padding: 0.45em 0.7em 0.45em 0.6em;
+  font-size: 0.8em;
+  background: rgba(255, 255, 255, 0.03);
+  border-left: 3px solid rgba(255, 255, 255, 0.15);
+}
+.pk-me-list > li + li {
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+.pk-me-list > li[data-res="win"] {
+  border-left-color: #5ff0b5;
+}
+.pk-me-list > li[data-res="lose"] {
+  border-left-color: #ff8a97;
+}
+.pk-me-badge {
+  --g: #fff;
+  flex-shrink: 0;
+  width: 3.6em;
+  padding: 0.08em 0;
+  border-radius: 999px;
+  text-align: center;
+  font-size: 0.85em;
+  font-weight: 800;
+  color: var(--g);
+  background: color-mix(in srgb, var(--g) 16%, transparent);
+}
+
 /* 상점 캐릭터 고르기 */
 .pk-shop-chip {
   --c: #ffd84a;
