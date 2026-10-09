@@ -453,7 +453,6 @@ export default function SettingsModal({
             setCalibrate(false);
             sfx("ui-back", 0.7);
           }}
-          hitSound={settings.hitSound}
           speed={settings.speed}
           skin={settings.skin}
         />

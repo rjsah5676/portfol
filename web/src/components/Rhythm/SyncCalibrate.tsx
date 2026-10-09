@@ -2,22 +2,20 @@
 
 import { useEffect, useRef, useState } from "react";
 import { audio } from "@/lib/rhythm/sfx";
-import { laneColors, makeHitSound, type HitSound, type Skin } from "@/lib/rhythm/fx";
-import { SONGS } from "@/lib/rhythm/music";
-import { renderSong } from "@/lib/rhythm/synth";
+import { laneColors, type Skin } from "@/lib/rhythm/fx";
 import { visibleSec } from "./Stage";
 import HoldButton from "./HoldButton";
 
 /**
  * 싱크 맞추기 (설정 → 싱크 → 들으면서 맞추기): 게임 화면 전체를 덮는 레이어에
- * 연습곡(패턴 연습)의 계단 구간 8마디를 실제 채보(HARD)·실제 레인 크기·내 노트 속도로 돌려 보여 준다.
- * 반주가 신스라 박이 또렷하고 바로 만들어져 기다림이 없다. 음악·타격음은 같은 오디오 시계에 예약되고,
- * 노트는 게임과 똑같이 "싱크(ms)"만큼 늦게/일찍 줄에 닿는다 — 타격음과 음악이 겹칠 때까지
- * +·−를 움직이면 그 값이 그대로 플레이에 쓰인다. (치는 타이밍은 자동 싱크가 따로 맞춤)
+ * 메트로놈(120 BPM, 똑 딱 딱 딱)에 맞춰 박마다 노트 하나가 실제 레인 크기·내 노트 속도로 떨어진다.
+ * osu 오프셋 마법사 방식: 노트가 판정선에 닿는 "화면"과 똑딱 "소리"를 맞춘다. 노트는 게임과 똑같이
+ * "싱크(ms)"만큼 늦게/일찍 줄에 닿으니, 닿는 순간 똑딱이 들릴 때까지 +·−를 움직이면 그 값이 그대로 플레이에 쓰인다.
+ * 타격음은 내지 않음 — 메트로놈과 같은 출력 지연을 타서 소리끼리 비교하면 싱크 0에서 늘 맞게 들림.
+ * (치는 타이밍은 자동 싱크가 따로 맞춤)
  */
-/** 계단 구간: 준비 2마디 뒤 8마디 (practice.ts PRACTICE_SECTIONS) */
-const SKIP_BARS = 2;
-const BARS = 8;
+/** 메트로놈 템포: 120 BPM (박 0.5초) — 박이 또렷하고 블루투스 지연(150~250ms)도 박 절반 안이라 헷갈리지 않음 */
+const BEAT = 0.5;
 /** 실제 플레이 기어 비율 (Stage GEAR): 레인 4개 폭 = 화면 높이 × 0.449, 판정선 = 높이 × 0.828 */
 const LANE_W_R = (189 * 4) / 1683;
 const JUDGE_R = 1393 / 1683;
@@ -26,14 +24,12 @@ export default function SyncCalibrate({
   sync,
   onSync,
   onClose,
-  hitSound,
   speed,
   skin,
 }: {
   sync: number;
   onSync: (v: number) => void;
   onClose: () => void;
-  hitSound: HitSound;
   speed: number;
   skin: Skin;
 }) {
@@ -53,17 +49,15 @@ export default function SyncCalibrate({
     const g = canvas.getContext("2d")!;
     let raf = 0;
     let alive = true;
-    // 음악 조각은 길어서(≈12초) 끝까지 참조를 들고 있다가 닫을 때 전부 멈춤 — 타격음만 오래된 걸 버림
+    // 예약해 둔 메트로놈 마디들 — 닫을 때 전부 멈춤 (끝난 건 앞에서 버림)
     const musicNodes: AudioBufferSourceNode[] = [];
-    const hitNodes: AudioBufferSourceNode[] = [];
     const stopAll = () => {
-      for (const n of [...musicNodes, ...hitNodes]) {
+      for (const n of musicNodes) {
         try {
           n.stop();
         } catch {}
       }
       musicNodes.length = 0;
-      hitNodes.length = 0;
     };
     const resize = () => {
       const r = wrap.getBoundingClientRect();
@@ -75,41 +69,34 @@ export default function SyncCalibrate({
     const ro = new ResizeObserver(resize);
     ro.observe(wrap);
 
-    const song = SONGS.find((s) => s.practice);
-    const chart = song?.charts?.hard;
-    if (!song || !chart) {
-      raf = requestAnimationFrame(() => setState("failed"));
-      return () => {
-        cancelAnimationFrame(raf);
-        ro.disconnect();
-      };
-    }
     (async () => {
       try {
-        // 필요한 구간(준비 2 + 계단 8마디)까지만 합성 — 전체(52마디)를 만들면 쓸데없이 오래 걸림
-        const cutBars = SKIP_BARS + BARS + 1;
-        const cut = { ...song, bars: cutBars, duration: (cutBars * 4 * 60) / song.bpm };
-        const [ctx, buf] = await Promise.all([audio(), renderSong(cut)]);
+        const ctx = await audio();
         if (!alive) return;
         setState("on");
-        const barSec = (60 / song.bpm) * 4;
-        const A = SKIP_BARS * barSec;
-        const L = barSec * BARS;
-        const notes = chart.notes
-          .filter((n) => n.t >= A - 0.001 && n.t < A + L - 0.001)
-          .map((n) => ({ rel: n.t - A, lane: n.lane }));
+        // 메트로놈 한 마디(4박) 버퍼: 똑(높은 소리) 딱 딱 딱 — 소리 시작이 박에 딱 맞게 어택 없이 바로
+        const L = BEAT * 4;
+        const sr = ctx.sampleRate;
+        const buf = ctx.createBuffer(1, Math.ceil(L * sr), sr);
+        const d = buf.getChannelData(0);
+        for (let b = 0; b < 4; b++) {
+          const f = b === 0 ? 1760 : 1175;
+          const amp = b === 0 ? 0.55 : 0.4;
+          const i0 = Math.round(b * BEAT * sr);
+          const n = Math.round(0.05 * sr);
+          for (let i = 0; i < n; i++) {
+            const t = i / sr;
+            d[i0 + i] += amp * Math.sin(2 * Math.PI * f * t) * Math.exp(-t * 90);
+          }
+        }
+        // 박마다 노트 하나, 레인은 계단(0→1→2→3)
+        const notes = [0, 1, 2, 3].map((b) => ({ rel: b * BEAT, lane: b }));
 
-        const hitBuf = makeHitSound(ctx, hitSound);
         const musicGain = ctx.createGain();
         musicGain.gain.value = 0.7;
         musicGain.connect(ctx.destination);
-        const hitGain = ctx.createGain();
-        hitGain.gain.value = 0.55;
-        hitGain.connect(ctx.destination);
         const epoch = ctx.currentTime + 0.35;
         let musicNext = 0;
-        let hitLoop = 0;
-        let hitIdx = 0;
         const schedule = () => {
           const horizon = ctx.currentTime + 1;
           while (epoch + musicNext * L < horizon) {
@@ -118,34 +105,17 @@ export default function SyncCalibrate({
               const src = ctx.createBufferSource();
               src.buffer = buf;
               src.connect(musicGain);
-              src.start(Math.max(at, ctx.currentTime), A + Math.max(0, ctx.currentTime - at), L);
+              src.start(Math.max(at, ctx.currentTime), Math.max(0, ctx.currentTime - at), L);
               musicNodes.push(src);
+              if (musicNodes.length > 16) musicNodes.splice(0, 8);
             }
             musicNext++;
-          }
-          // 타격음: 노트가 판정선에 닿는 시각(싱크 적용) — 음악과 같은 시계라 출력 지연도 같음
-          while (hitLoop < musicNext) {
-            if (hitIdx >= notes.length) {
-              hitLoop++;
-              hitIdx = 0;
-              continue;
-            }
-            const at = epoch + hitLoop * L + notes[hitIdx].rel + live.current.sync / 1000;
-            if (at > horizon) break;
-            hitIdx++;
-            if (at < ctx.currentTime - 0.02) continue;
-            const h = ctx.createBufferSource();
-            h.buffer = hitBuf;
-            h.connect(hitGain);
-            h.start(Math.max(at, ctx.currentTime));
-            hitNodes.push(h);
-            if (hitNodes.length > 128) hitNodes.splice(0, 64);
           }
         };
         const latency =
           ((ctx as AudioContext & { outputLatency?: number }).outputLatency ?? 0) +
           (ctx.baseLatency ?? 0);
-        const colors = laneColors(skin, song.color);
+        const colors = laneColors(skin, "#A78BFA");
         const frame = () => {
           if (!alive) return;
           schedule();
@@ -165,8 +135,18 @@ export default function SyncCalibrate({
           g.strokeStyle = "rgba(167,139,250,0.35)";
           g.lineWidth = Math.max(1, h * 0.002);
           g.strokeRect(x0 - laneW * 0.1, -4, fieldW + laneW * 0.2, h + 8);
+          // 노트가 판정선에 닿은 직후 0.1초 동안 판정선이 번쩍 — 이 순간에 똑딱이 들려야 함
+          const since = (((tGame % BEAT) + BEAT) % BEAT) / 0.1;
+          const flash = since < 1 ? 1 - since : 0;
           g.fillStyle = "#F472B6";
           g.fillRect(x0 - laneW * 0.1, judgeY - h * 0.0035, fieldW + laneW * 0.2, h * 0.007);
+          if (flash > 0) {
+            g.globalAlpha = flash;
+            g.fillStyle = "#FFFFFF";
+            const fh = h * (0.007 + 0.012 * flash);
+            g.fillRect(x0 - laneW * 0.1, judgeY - fh / 2, fieldW + laneW * 0.2, fh);
+            g.globalAlpha = 1;
+          }
           const noteH = Math.max(10, h * 0.032);
           for (const n of notes) {
             for (const k of [-1, 0, 1]) {
@@ -200,8 +180,8 @@ export default function SyncCalibrate({
       ro.disconnect();
       stopAll();
     };
-    // 타격음·스킨이 바뀌면 다시 시작 (싱크·속도는 ref로 바로 반영)
-  }, [hitSound, skin]);
+    // 스킨이 바뀌면 다시 시작 (싱크·속도는 ref로 바로 반영)
+  }, [skin]);
 
   const KR = "font-['Nanum_Gothic',sans-serif]";
   const btn =
@@ -213,7 +193,7 @@ export default function SyncCalibrate({
         <div
           className={`${KR} absolute inset-0 flex items-center justify-center text-[1.4cqw] text-white/60`}
         >
-          {failed ? "연습곡을 만들지 못했어요" : "연습곡 준비 중…"}
+          {failed ? "소리를 켜지 못했어요" : "준비 중…"}
         </div>
       )}
       {/* 머리말 띠 */}
@@ -223,7 +203,7 @@ export default function SyncCalibrate({
             SYNC CHECK
           </span>
           <span className={`${KR} text-[1.1cqw] text-white/55`}>
-            패턴 연습 · 계단 구간 · 내 노트 속도
+            메트로놈 120 BPM · 박마다 노트 · 내 노트 속도
           </span>
         </div>
         <button
@@ -252,9 +232,9 @@ export default function SyncCalibrate({
           </HoldButton>
         </div>
         <p className={`${KR} mt-[0.9cqw] text-[1cqw] leading-relaxed text-white/55`}>
-          타격음과 음악이 딱 겹쳐야 해요. 타격음이 <b className="text-white/85">먼저</b>면{" "}
-          <b className="text-white/85">+</b>, <b className="text-white/85">늦으면</b>{" "}
-          <b className="text-white/85">−</b>
+          노트가 판정선에 닿는 순간 똑딱이 들려야 해요. 노트가 소리보다{" "}
+          <b className="text-white/85">먼저</b> 닿으면 <b className="text-white/85">+</b>,{" "}
+          <b className="text-white/85">늦게</b> 닿으면 <b className="text-white/85">−</b>
           <span className="text-white/35"> (← → 키로도 5ms씩)</span>. 블루투스 이어폰이면 낀 채로
           맞추세요.
         </p>
