@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { avatarUrl } from "@/lib/api/config";
 import { asset } from "@/lib/poker/assets";
-import { CHARS, GAMES, REVIVE, fmtEok, fmtShort, tierLabel } from "@/lib/poker/rules";
+import { CHARS, GAMES, REVIVE, fmtEok, fmtShort, lookName, lookOf, tierLabel } from "@/lib/poker/rules";
 import type { MyPage as MyPageData, Wallet } from "@/lib/poker/types";
 import { getMyPage } from "@/realtime/poker";
 import MyStats from "./MyStats";
@@ -72,9 +72,12 @@ export default function MyPage({
           )}
           <div className="min-w-0 flex-1">
             <div className="flex items-baseline gap-[0.4em]">
-              <span className="truncate text-[1.2em] font-extrabold">{me?.nick ?? "…"}</span>
-              <span className="shrink-0 text-[0.78em] font-bold" style={{ color: info.color }}>
-                {info.name}
+              <span className="min-w-0 truncate text-[1.2em] font-extrabold">{me?.nick ?? "…"}</span>
+              <span
+                className="max-w-[50%] min-w-0 shrink truncate text-[0.78em] font-bold"
+                style={{ color: info.color }}
+              >
+                {lookName(lookOf(wallet.char, wallet.wear))}
               </span>
             </div>
             <div className="mt-[0.1em] flex items-center gap-[0.3em]">
@@ -104,6 +107,24 @@ export default function MyPage({
             </span>
           </button>
         </div>
+      </div>
+
+      {/* 주요 행동: 머리 바로 아래 (아래 끝에 두면 폰에서 잘 안 보여서) */}
+      <div className="grid shrink-0 grid-cols-2 gap-[0.4em] px-[0.9em] pt-[0.6em]">
+        <button
+          type="button"
+          onClick={onRank}
+          className="pk-btn pk-btn-ghost py-[0.55em] text-[0.88em]"
+        >
+          순위 보기
+        </button>
+        <button
+          type="button"
+          onClick={onChar}
+          className="pk-btn pk-btn-gold py-[0.55em] text-[0.88em]"
+        >
+          캐릭터 변경
+        </button>
       </div>
 
       <div className="shrink-0 px-[0.9em] pt-[0.6em]">
@@ -223,24 +244,6 @@ export default function MyPage({
             )}
           </>
         )}
-      </div>
-
-      {/* 아래: 주요 행동만 (닫기는 위 X · 끌어내리기 · 바깥 누르기) */}
-      <div className="flex shrink-0 gap-[0.4em] border-t border-white/10 p-[0.7em]">
-        <button
-          type="button"
-          onClick={onRank}
-          className="pk-btn pk-btn-ghost flex-1 py-[0.55em] text-[0.88em]"
-        >
-          자금 순위
-        </button>
-        <button
-          type="button"
-          onClick={onChar}
-          className="pk-btn pk-btn-gold flex-1 py-[0.55em] text-[0.88em]"
-        >
-          캐릭터 변경
-        </button>
       </div>
     </div>
   );

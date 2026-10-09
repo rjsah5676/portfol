@@ -168,6 +168,8 @@ export const lookOf = (char: CharId, wear?: Wear | null): Look => {
 };
 /** 그림 열쇠 → 캐릭터 */
 export const lookChar = (l: Look | string): CharId => skinOf(l)?.char ?? charOf(l);
+/** 보이는 이름: 스킨을 입었으면 스킨 이름(「한여름의 에이미」), 아니면 캐릭터 이름 */
+export const lookName = (l: Look | string): string => skinOf(l)?.name ?? CHARS[charOf(l)].name;
 
 /** 동작(2.5D 포즈) · 표정 · 이모티콘 이름 — 파일 이름과 같음 */
 export const POSES = ["idle", "think", "check", "bet", "allin", "die", "win", "lose"] as const;

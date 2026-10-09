@@ -71,7 +71,7 @@ export default function RootLayout({
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         {/* 폰트는 요청 하나로 (CSS 안의 @import는 렌더링을 막아서 쓰지 않음) */}
         <link
-          href="https://fonts.googleapis.com/css2?family=Barlow:wght@600;700;800&family=Black+Han+Sans&family=JetBrains+Mono:wght@400;500;600;700;800&family=Jua&family=Nanum+Gothic&family=Nanum+Gothic+Coding:wght@400;700&display=swap"
+          href="https://fonts.googleapis.com/css2?family=Barlow:wght@600;700;800&family=Black+Han+Sans&family=JetBrains+Mono:wght@400;500;600;700;800&family=Jua&family=Nanum+Gothic:wght@400;700;800&family=Nanum+Gothic+Coding:wght@400;700&display=swap"
           rel="stylesheet"
         />
       </head>

@@ -16,6 +16,7 @@ import {
   type GameKind,
   type Tier,
   type TierId,
+  lookName,
 } from "@/lib/poker/rules";
 import type { BuyRankRow, LobbyTable, RankRow, Wallet } from "@/lib/poker/types";
 import { createTable, getBuyRank, quickJoin, setChar, subscribeLobby } from "@/realtime/poker";
@@ -61,7 +62,7 @@ export default function Lobby({
   const [tier, setTier] = useState<TierId>(1);
   const [tables, setTables] = useState<LobbyTable[] | null>(null);
   const [busy, setBusy] = useState("");
-  const [sheet, setSheet] = useState<"" | "create" | "char" | "rank" | "me">("");
+  const [sheet, setSheet] = useState<"" | "create" | "char" | "rank" | "me" | "mychar">("");
   const [form, setForm] = useState({ name: "", password: "", bots: true });
   const [menu, setMenu] = useState(false);
   const [notes, setNotes] = useState(false);
@@ -229,8 +230,8 @@ export default function Lobby({
       <div className="relative mt-auto grid gap-[0.45em] p-[0.7em]">
         <div className="flex items-center gap-[0.5em]">
           <div className="min-w-0 flex-1">
-            <div className="text-[1.05em] font-extrabold" style={{ color: info.color }}>
-              {info.name}
+            <div className="truncate text-[1.05em] font-extrabold" style={{ color: info.color }}>
+              {lookName(look)}
             </div>
             <div className="truncate text-[1.3em] leading-tight font-extrabold">{myNick}</div>
           </div>
@@ -562,9 +563,9 @@ export default function Lobby({
             <div className="pk-me-glow absolute inset-0 -z-10" />
             <button
               type="button"
-              onClick={() => setSheet("char")}
+              onClick={() => setSheet("mychar")}
               className="shrink-0 cursor-pointer"
-              aria-label="캐릭터 변경"
+              aria-label="내 캐릭터"
             >
               <Profile char={look} size={44} className="ring-2 ring-[var(--pk-brass)]" />
             </button>
@@ -575,9 +576,12 @@ export default function Lobby({
               aria-label="마이페이지"
             >
               <div className="flex items-baseline gap-[0.4em]">
-                <span className="truncate text-[1.1em] font-extrabold">{myNick}</span>
-                <span className="shrink-0 text-[0.8em] font-bold" style={{ color: info.color }}>
-                  {info.name}
+                <span className="min-w-0 truncate text-[1.1em] font-extrabold">{myNick}</span>
+                <span
+                  className="max-w-[45%] min-w-0 shrink truncate text-[0.8em] font-bold"
+                  style={{ color: info.color }}
+                >
+                  {lookName(look)}
                 </span>
                 <span className="ml-auto shrink-0 text-[0.68em] text-white/40">마이페이지 ›</span>
               </div>
@@ -635,6 +639,8 @@ export default function Lobby({
                 ? "캐릭터"
                 : sheet === "rank"
                   ? "순위"
+                  : sheet === "mychar"
+                    ? "내 캐릭터"
                   : undefined
           }
           onClose={() => setSheet("")}
@@ -705,6 +711,39 @@ export default function Lobby({
               onChar={() => setSheet("char")}
               onRank={() => setSheet("rank")}
             />
+          )}
+          {sheet === "mychar" && (
+            // 폰: 내 캐릭터 크게 (로비 칸이 좁아 대기 영상 · 터치 반응을 못 보니까)
+            <div className="flex min-h-0 flex-col items-center gap-[0.5em] px-[0.9em] pb-[0.9em]">
+              <LobbyChar
+                key={look}
+                look={look}
+                className="w-full shrink-0"
+                style={{ height: Math.round(Math.min(h * 0.56, 460)) }}
+              />
+              <div className="w-full min-w-0 text-center leading-tight">
+                <div className="truncate text-[1.35em] font-extrabold">{myNick}</div>
+                <div className="truncate text-[0.95em] font-bold" style={{ color: info.color }}>
+                  {lookName(look)}
+                </div>
+              </div>
+              <div className="grid w-full grid-cols-2 gap-[0.4em]">
+                <button
+                  type="button"
+                  onClick={() => setSheet("rank")}
+                  className="pk-btn pk-btn-ghost py-[0.55em] text-[0.9em]"
+                >
+                  순위
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSheet("char")}
+                  className="pk-btn pk-btn-gold py-[0.55em] text-[0.9em]"
+                >
+                  캐릭터 변경
+                </button>
+              </div>
+            </div>
           )}
           {sheet === "rank" && (
             <div

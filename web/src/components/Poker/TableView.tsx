@@ -29,6 +29,7 @@ import {
   type Pose,
   tierLabel,
   type TierId,
+  lookName,
 } from "@/lib/poker/rules";
 import { bestK, kCategory } from "@/lib/poker/seven";
 import { hasSound, isBig, playBgm, playSfx, playVoice, sfx } from "@/lib/poker/sfx";
@@ -1076,7 +1077,18 @@ export default function TableView({
     const cardH = sizes.card * 1.4;
     if (sp.side === "top") return { x, y: y + 52 + 4 + cardH + 14 }; // 카드 아래
     const dir = sp.side === "left" ? 1 : -1;
-    if (C?.cardSide[idx] === "below") return { x: x + dir * (half + 22), y: y - 14 }; // 이름표 위 안쪽 (카드는 아래)
+    if (C?.cardSide[idx] === "below") {
+      // 이름표 위 안쪽 (카드는 아래). 바로 위 자리의 건 돈(그 사람 엎은 카드 위)과 겹치면 이름표 옆 안쪽으로
+      const up = { x: x + dir * (half + 22), y: y - 14 };
+      const pillHalf = betHalfW();
+      const clash = L.spots.some((o, j) => {
+        if (j === idx || !o || o.side !== sp.side || C.cardSide[j] === "below") return false;
+        const ox = seatX(o.x) + dir * (half + 6 + sizes.card * 1.3);
+        const oy = seatY(o) + 26;
+        return Math.abs(clampBetX(ox) - clampBetX(up.x)) < pillHalf * 2 && Math.abs(oy - up.y) < 34;
+      });
+      return clash ? { x: x + dir * (half + pillHalf + 6), y: y + 30 } : up;
+    }
     // 카드가 옆이면: 촘촘한 판에선 엎어 둔 카드 위에 겹쳐 둠(뒷면이라 가려도 됨), 아니면 이름표 아래.
     // 좁은 폰에서 그 자리가 다른 사람 이름표에 걸리면 이름표 아래 → 이름표 위 순으로 비킴
     const cands = [
@@ -1359,17 +1371,8 @@ export default function TableView({
                     }}
                   >
                     {tag && (
-                      <ActTag
-                        key={`${table.handNo}-${tag}-${p?.bet ?? 0}`}
-                        a={tag}
-                        edge={
-                          edgeAlign === "items-start"
-                            ? "l"
-                            : edgeAlign === "items-end"
-                              ? "r"
-                              : undefined
-                        }
-                      />
+                      // 행동 글자는 언제나 그 사람 이름표 바로 위 가운데 (구석으로 붙이면 잘 안 보여서)
+                      <ActTag key={`${table.handNo}-${tag}-${p?.bet ?? 0}`} a={tag} />
                     )}
                     {badge && <span className="pk-badge">{badge}</span>}
                     {gains[i] && wonHere > 0 && (
@@ -1980,7 +1983,7 @@ export default function TableView({
                 <div className="text-center leading-tight">
                   <div className="text-[1.15em] font-extrabold">{s.name}</div>
                   <div className="text-[0.8em] font-bold" style={{ color: CHARS[s.char].color }}>
-                    {CHARS[s.char].name}
+                    {lookName(s.look ?? s.char)}
                   </div>
                 </div>
                 <div className="grid w-full grid-cols-2 gap-[0.4em] text-center">
@@ -2128,11 +2131,9 @@ function ActWord({ a, className = "" }: { a: string; className?: string }) {
   );
 }
 
-function ActTag({ a, edge }: { a: string; edge?: "l" | "r" }) {
+function ActTag({ a }: { a: string }) {
   return (
-    <span
-      className={`absolute bottom-[calc(100%+4px)] z-20 ${edge === "l" ? "left-0" : edge === "r" ? "right-0" : "left-1/2 -translate-x-1/2"}`}
-    >
+    <span className="absolute bottom-[calc(100%+4px)] left-1/2 z-20 -translate-x-1/2">
       <ActWord a={a} />
     </span>
   );
@@ -2385,12 +2386,15 @@ function HeroArea(props: {
         {me.exit && (
           <span className="pk-exit-mark absolute -top-[1.1em] right-[0.4em]">나가기 예약</span>
         )}
-        <div className="flex items-baseline gap-[0.4em]">
-          <span className="max-w-[8em] truncate text-[0.82em] font-extrabold text-white">
+        <div className="flex min-w-0 items-baseline gap-[0.4em]">
+          <span className="max-w-[7em] min-w-0 truncate text-[0.82em] font-extrabold text-white">
             {me.name}
           </span>
-          <span className="text-[0.7em] font-bold" style={{ color: CHARS[me.char].color }}>
-            {CHARS[me.char].name}
+          <span
+            className="max-w-[6.5em] min-w-0 truncate text-[0.7em] font-bold"
+            style={{ color: CHARS[me.char].color }}
+          >
+            {lookName(me.look ?? me.char)}
           </span>
         </div>
         <div className="flex items-center gap-[0.3em]">
@@ -3001,7 +3005,7 @@ function SidePanel({
                 </span>
                 <span className="min-w-0 flex-1 truncate text-[0.8em] font-bold">{name}</span>
                 {mine && <span className="pk-ranks-me">내 패</span>}
-                <span className="flex shrink-0 gap-[1px] text-[0.55em]">
+                <span className="flex shrink-0 gap-[1px] text-[0.64em]">
                   {cards.map((cc, k) => (
                     <MiniCard key={k} card={cc} />
                   ))}

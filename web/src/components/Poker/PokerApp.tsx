@@ -490,8 +490,8 @@ const LIFT: Partial<Record<CharId, number>> = {
   jinwoo: -16,
   yeonseo: -13,
   amy: -12,
-  taeyang: -5,
-  jeongmin: -3,
+  taeyang: -10,
+  jeongmin: -10,
 };
 
 /** 타이틀 테이블 위 소품: x,y = 가로 화면 %, vx,vy = 세로 화면 % (card: null = 뒷면) */
@@ -601,10 +601,11 @@ function Intro({
             className="pk-intro-char w-auto max-w-none"
             style={{
               // 키 기준 (그림마다 가로세로 비율이 달라서 폭으로 맞추면 마른 그림이 너무 크게 나옴)
-              height: h ? "58cqw" : "100cqw",
-              marginLeft: i ? (h ? "-3%" : "-20%") : 0,
+              height: h ? "58cqw" : i === 2 ? "92cqw" : "80cqw",
+              // 폰: 옆 사람은 조금 작게 · 덜 겹치게 (가운데로 몰려 보이던 것)
+              marginLeft: i ? (h ? "-3%" : "-12%") : 0,
               zIndex: 5 - Math.abs(i - 2),
-              transform: `translateY(${(LIFT[c] ?? 0) * (h ? 1 : 0.6) - Math.abs(i - 2) * (h ? 3 : 2)}%) scale(${(c === "jinwoo" ? 1.02 : 1) - Math.abs(i - 2) * 0.07})`,
+              transform: `translateY(${(LIFT[c] ?? 0) * (h ? 1 : 0.6) - Math.abs(i - 2) * (h ? 3 : 7)}%) scale(${(c === "jinwoo" ? 1.02 : 1) - Math.abs(i - 2) * (h ? 0.07 : 0.03)})`,
               transformOrigin: "bottom",
               filter: `drop-shadow(0 0 14px rgba(0,0,0,0.8)) brightness(${1 - Math.abs(i - 2) * 0.1})`,
               animationDelay: `${0.1 + Math.abs(i - 2) * 0.12}s`,
