@@ -62,7 +62,7 @@ export default function Lobby({
   const [tables, setTables] = useState<LobbyTable[] | null>(null);
   const [busy, setBusy] = useState("");
   const [sheet, setSheet] = useState<"" | "create" | "char" | "rank" | "me" | "mychar">("");
-  const [form, setForm] = useState({ name: "", password: "", bots: true });
+  const [form, setForm] = useState({ name: "", password: "", quick: true, bots: true });
   const [menu, setMenu] = useState(false);
   const [notes, setNotes] = useState(false);
   const [toast, setToast] = useState<{ text: string; key: number } | null>(null);
@@ -494,7 +494,7 @@ export default function Lobby({
                       {tt.name}
                     </span>
                     {t.locked && <span className="text-[0.62em]">🔒</span>}
-                    {!t.bots && (
+                    {!t.quick && (
                       <span className="rounded-[3px] bg-white/10 px-[0.3em] text-[0.64em] text-white/60">
                         친구방
                       </span>
@@ -647,7 +647,8 @@ export default function Lobby({
                       tier,
                       name: form.name,
                       password: form.password,
-                      bots: form.bots,
+                      quick: form.quick,
+                      bots: form.quick && form.bots,
                     })
                   )
                 );
@@ -672,12 +673,24 @@ export default function Lobby({
               <label className="flex cursor-pointer items-center gap-[0.6em] rounded-[6px] bg-white/[0.05] px-[0.7em] py-[0.55em] text-[0.85em]">
                 <input
                   type="checkbox"
-                  checked={form.bots}
-                  onChange={(e) => setForm({ ...form, bots: e.target.checked })}
+                  checked={form.quick}
+                  onChange={(e) => setForm({ ...form, quick: e.target.checked })}
                   className="h-[1.1em] w-[1.1em] accent-[var(--pk-brass)]"
                 />
                 <span>바로 입장 허용</span>
               </label>
+              {/* 봇은 바로 입장을 허용한 방에만 (친구방은 사람끼리) */}
+              {form.quick && (
+                <label className="-mt-[0.3em] ml-[1.2em] flex cursor-pointer items-center gap-[0.6em] rounded-[6px] bg-white/[0.05] px-[0.7em] py-[0.5em] text-[0.82em]">
+                  <input
+                    type="checkbox"
+                    checked={form.bots}
+                    onChange={(e) => setForm({ ...form, bots: e.target.checked })}
+                    className="h-[1.1em] w-[1.1em] accent-[var(--pk-brass)]"
+                  />
+                  <span>봇 참가 가능</span>
+                </label>
+              )}
               <button
                 type="submit"
                 disabled={!!busy}
@@ -897,7 +910,7 @@ export function PokerRanks({ rank, myNick }: { rank: RankRow[] | null; myNick?: 
             role="tab"
             aria-selected={tab === k}
             onClick={() => setTab(k)}
-            className={`rounded-full px-3 py-1.5 text-sm font-bold transition ${
+            className={`cursor-pointer rounded-full px-3 py-1.5 text-sm font-bold transition ${
               tab === k
                 ? "bg-[#ffc93c] text-[#241700] shadow-[0_2px_8px_rgba(255,201,60,0.35)]"
                 : "text-white/55 hover:bg-white/10 hover:text-white/80"

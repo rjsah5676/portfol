@@ -117,11 +117,13 @@ class SevenRound implements Round {
     const best: Record<number, Card[]> = {};
     for (const s of r.shows) {
       names[s.seat] = s.name;
+      // 족보에 든 5장: 깐 사람 모두 (깔 때 바로 빛나게 — 다 깐 뒤엔 화면이 이긴 사람 것만 남김)
+      if (r.showdown) best[s.seat] = madeOf(bestK(this.hand.player(s.seat)!.cards).five);
       ev.push({ t: "show", seat: s.seat, cards: s.cards, name: s.name });
     }
     for (const [seat, amt] of Object.entries(r.won)) {
       const n = Number(seat);
-      if (r.showdown) best[n] = madeOf(bestK(this.hand.player(n)!.cards).five);
+      if (r.showdown && !best[n]) best[n] = madeOf(bestK(this.hand.player(n)!.cards).five);
       ev.push({ t: "win", seat: n, amt, name: names[n] ?? null });
     }
     this.result = { showdown: r.showdown, pots: r.pots, won: r.won, names, best };

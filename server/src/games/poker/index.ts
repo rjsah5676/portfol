@@ -112,6 +112,8 @@ interface Table {
   seats: (Seat | null)[];
   /** 유저봇이 들어올 수 있는 방 */
   bots: boolean;
+  /** 바로 입장으로 모르는 사람이 들어올 수 있는 방 (아니면 친구방: 링크 · 목록으로만) */
+  quick: boolean;
   /** 지금 이 방이 "붐비는" 정도 — 봇은 이 수까지 찼다 빠졌다 함 (가끔 다시 뽑음) */
   botTarget: number;
   /** 다음 봇이 들어오는 시각 (0 = 예정 없음) */
@@ -257,6 +259,7 @@ export function registerPoker({ gateway, db, users }: Deps, opts: PokerOptions =
         players: t.seats.filter((s) => !!s).length,
         max: t.seats.length,
         bots: t.bots,
+        quick: t.quick,
         createdAt: t.createdAt,
       }))
       .sort((a, b) => b.players - a.players || b.createdAt - a.createdAt);
@@ -856,7 +859,7 @@ export function registerPoker({ gateway, db, users }: Deps, opts: PokerOptions =
 
   // ───────────── 요청 ─────────────
 
-  function createTable(o: { game: GameKind; tier: Tier; name: string; bots: boolean; password: string; ownerUid: string }): Table {
+  function createTable(o: { game: GameKind; tier: Tier; name: string; bots: boolean; quick?: boolean; password: string; ownerUid: string }): Table {
     // 한 사람이 빈 테이블을 쌓아 둘 수 없게: 새로 만들면 그 사람이 만든, 아무도 안 앉은 테이블은 닫음
     if (o.ownerUid) for (const old of [...tables.values()]) if (old.ownerUid === o.ownerUid && !humans(old).length && !old.round) closeTable(old);
     if (tables.size >= MAX_TABLES) throw bad("테이블이 너무 많아요. 잠시 후 다시 시도해주세요.");
@@ -875,7 +878,9 @@ export function registerPoker({ gateway, db, users }: Deps, opts: PokerOptions =
       access: new Set([o.ownerUid]),
       createdAt: now(),
       seats: Array.from({ length: size }, () => null),
-      bots: o.bots,
+      quick: o.quick ?? true,
+      // 봇은 바로 입장을 허용한 방에만
+      bots: o.bots && (o.quick ?? true),
       botTarget: 0,
       peopleSince: 0,
       joining: 0,
@@ -911,6 +916,7 @@ export function registerPoker({ gateway, db, users }: Deps, opts: PokerOptions =
     tier: tierSchema,
     name: z.string().max(40).default(""),
     bots: z.boolean().default(true),
+    quick: z.boolean().default(true),
     password: z.string().max(40).default(""),
   });
   gateway.rpc("poker.create", (ctx, raw) => {
@@ -929,16 +935,16 @@ export function registerPoker({ gateway, db, users }: Deps, opts: PokerOptions =
     // 접속해 있는 사람이 있는 테이블을 먼저 (끊긴 사람만 남은 테이블로는 안 보냄)
     const online = (t: Table) => humans(t).filter((s) => !s.away).length;
     const open = [...tables.values()]
-      .filter((t) => t.game === o.game && t.tier.id === o.tier && !t.locked && freeSeats(t).length > 0)
+      .filter((t) => t.game === o.game && t.tier.id === o.tier && !t.locked && t.quick && freeSeats(t).length > 0)
       .sort((a, b) => online(b) - online(a))[0];
     if (open && online(open)) return open.id;
     // 사람이 없으면 봇이 열어 둔 방 (봇이 많이 앉은 곳부터)
     const botRoom = [...tables.values()]
-      .filter((t) => t.game === o.game && t.tier.id === o.tier && !t.locked && t.bots && !t.ownerUid && freeSeats(t).length > 0 && !humans(t).length)
+      .filter((t) => t.game === o.game && t.tier.id === o.tier && !t.locked && t.quick && t.bots && !t.ownerUid && freeSeats(t).length > 0 && !humans(t).length)
       .sort((a, b) => bots(b).length - bots(a).length)[0];
     if (botRoom) return botRoom.id;
     // 방금 내가 열어 두고 아직 안 앉은 같은 종류의 테이블이 있으면 그걸 다시 씀 (여러 번 눌러도 하나만)
-    const own = [...tables.values()].find((t) => t.ownerUid === uid && t.game === o.game && t.tier.id === o.tier && !t.locked && !humans(t).length && !t.round);
+    const own = [...tables.values()].find((t) => t.ownerUid === uid && t.game === o.game && t.tier.id === o.tier && !t.locked && t.quick && !humans(t).length && !t.round);
     if (own) return own.id;
     const tier = tierOf(o.tier);
     const n = [...tables.values()].filter((t) => t.game === o.game && t.tier.id === o.tier).length + 1;
@@ -1391,23 +1397,29 @@ export function registerPoker({ gateway, db, users }: Deps, opts: PokerOptions =
   const BOT_ROOM_WEIGHT = [6, 3, 2, 1.6, 1.2, 1, 0.7, 0.5, 0.4];
   function ensureBotRooms() {
     if (opts.lobbyBots === false || tables.size >= MAX_TABLES - 10) return;
+    const pickTier = (from: number, to: number) => {
+      const w = BOT_ROOM_WEIGHT.slice(from - 1, to);
+      let r = (randomInt(10_000) / 10_000) * w.reduce((a, b) => a + b, 0);
+      for (let k = 0; k < w.length; k++) {
+        r -= w[k];
+        if (r < 0) return from + k;
+      }
+      return from;
+    };
+    const open = (t: Table) => t.bots && !t.locked && freeSeats(t).length > 1;
+    // 홀덤 · 7포커 똑같이: 게임마다 전체 목표 수, 그중 "일반" 리그(로비 첫 탭, 판돈 1~3단계)에 최소 몇 개
+    // (전에는 전체 수만 맞춰서, 운에 따라 한 게임의 일반 탭이 텅 비어 보일 때가 있었음)
+    const lowNeed = botBoost ? 3 : 2;
     for (const game of ["holdem", "seven"] as GameKind[]) {
-      const openRooms = [...tables.values()].filter((t) => t.game === game && t.bots && !t.locked && freeSeats(t).length > 1);
-      const open = openRooms.length;
+      const rooms = [...tables.values()].filter((t) => t.game === game && open(t));
+      let low = rooms.filter((t) => t.tier.id <= 3).length;
       // 동네판(누구나 앉을 수 있는 단계) 방은 늘 하나는 있게 — 새 회원(1억)이 VIP룸만 보고 못 앉는 일이 없게
-      let needLow = !openRooms.some((t) => t.tier.id === 1);
-      for (let i = open; i < lobbyRoomTarget(); i++) {
-        let r = (randomInt(10_000) / 10_000) * BOT_ROOM_WEIGHT.reduce((a, b) => a + b, 0);
-        let pick = 1;
-        for (let k = 0; k < BOT_ROOM_WEIGHT.length; k++) {
-          r -= BOT_ROOM_WEIGHT[k];
-          if (r < 0) {
-            pick = k + 1;
-            break;
-          }
-        }
-        const tier = tierOf(needLow ? 1 : pick);
+      let needLow = !rooms.some((t) => t.tier.id === 1);
+      for (let n = rooms.length; n < lobbyRoomTarget() || low < lowNeed || needLow; n++) {
+        const tierId = needLow ? 1 : low < lowNeed ? pickTier(1, 3) : pickTier(1, BOT_ROOM_WEIGHT.length);
         needLow = false;
+        if (tierId <= 3) low++;
+        const tier = tierOf(tierId);
         const t = createTable({ game, tier, name: `${uniqueNickname([])}의 테이블`, bots: true, password: "", ownerUid: "" });
         // 5~15분 동안 사람이 안 오면 닫고 다른 방으로 교체 (방 이름이 계속 바뀌어 자연스럽게)
         t.botRoomUntil = now() + ms((5 + randomInt(11)) * 60_000);
@@ -1415,6 +1427,7 @@ export function registerPoker({ gateway, db, users }: Deps, opts: PokerOptions =
         for (let k = 0; k < seatN; k++) addBot(t);
         rollBotTarget(t);
         emit(t);
+        if (tables.size >= MAX_TABLES - 10) return;
       }
     }
   }

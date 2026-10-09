@@ -409,11 +409,8 @@ const BETS = new Set([
   "allin-call",
   "select",
 ]);
-/** 캐릭터 음성 (파일 있을 때만). big = 크게 외치는 버전(없으면 보통 버전) */
-export function playVoice(char: string, name: string, big = false) {
-  const s = getSound();
-  if (s.mute || s.voice <= 0) return;
-  // 스킨이면 스킨 전용 음성이 있을 때 그것, 없으면 원래 캐릭터 음성
+/** 그 캐릭터(스킨이면 스킨 전용 → 원래 캐릭터)의 음성 파일 주소 */
+function voiceUrl(char: string, name: string, big = false): string | null {
   const find = (who: string) => {
     const key = `voice/${who}/${who}-${name}`;
     // 캐릭터 고를 때 대사(select)가 없으면 입장 인사로
@@ -424,7 +421,23 @@ export function playVoice(char: string, name: string, big = false) {
     );
   };
   const base = lookChar(char);
-  const url = (base !== char && find(char)) || find(base);
+  return (base !== char && find(char)) || find(base) || null;
+}
+
+/** 음성 길이(초). 파일이 없거나 못 읽으면 null — 소리를 꺼 둬도 길이는 알려 줌 (연출 박자용) */
+export async function voiceDuration(char: string, name: string): Promise<number | null> {
+  const url = voiceUrl(char, name);
+  if (!url) return null;
+  const buf = await buffer(url);
+  return buf ? buf.duration : null;
+}
+
+/** 캐릭터 음성 (파일 있을 때만). big = 크게 외치는 버전(없으면 보통 버전) */
+export function playVoice(char: string, name: string, big = false) {
+  const s = getSound();
+  if (s.mute || s.voice <= 0) return;
+  // 스킨이면 스킨 전용 음성이 있을 때 그것, 없으면 원래 캐릭터 음성
+  const url = voiceUrl(char, name, big);
   if (!url) return;
   const c = ac();
   if (!c) return;

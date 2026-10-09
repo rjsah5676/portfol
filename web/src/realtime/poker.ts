@@ -85,6 +85,9 @@ export const createTable = (o: {
   game: GameKind;
   tier: TierId;
   name: string;
+  /** 바로 입장 허용 */
+  quick: boolean;
+  /** 봇 참가 가능 (바로 입장 허용일 때만) */
   bots: boolean;
   password: string;
 }) => rpc<string>("poker.create", o);

@@ -33,7 +33,7 @@ import {
   lookName,
 } from "@/lib/poker/rules";
 import { bestK, kCategory } from "@/lib/poker/seven";
-import { hasSound, isBig, playBgm, playSfx, playVoice, sfx } from "@/lib/poker/sfx";
+import { hasSound, isBig, playBgm, playSfx, playVoice, sfx, voiceDuration } from "@/lib/poker/sfx";
 import type {
   HoldemAction,
   HoldemView,
@@ -281,6 +281,8 @@ export default function TableView({
     step: number;
     /** 깔 때 그 사람이 읊는 족보 대사 (order 와 같은 순서, 음성 파일이 없으면 null) */
     say: ({ look: string; line: string } | null)[];
+    /** 그 대사들의 길이(초) — 다 읽히면 채워짐 (읊고 나면 바로 다음 사람으로) */
+    durs?: (number | null)[];
   } | null>(null);
   /** 패를 다 깐 뒤에 보여줄 승리 연출 (칩 · +금액 · 소리) */
   const pendingWinRef = useRef<(() => void) | null>(null);
@@ -518,7 +520,11 @@ export default function TableView({
           const has = (who: string) => hasSound(`voice/${who}/${who}-${line}`);
           return has(look) || has(lookChar(look)) ? { look, line } : null;
         });
-        setReveal({ key: ++keyRef.current, handNo: t.handNo, order, step: 0, say });
+        const rk = ++keyRef.current;
+        setReveal({ key: rk, handNo: t.handNo, order, step: 0, say });
+        void Promise.all(say.map((x) => (x ? voiceDuration(x.look, x.line) : Promise.resolve(null)))).then(
+          (durs) => setReveal((r) => (r && r.key === rk ? { ...r, durs } : r))
+        );
         if (resNow?.showdown) sfx.drum();
         // 마지막 구의 건 돈은 깔기 전에 팟으로
         const lastBets = Object.entries(prevBetsRef.current)
@@ -537,7 +543,10 @@ export default function TableView({
         const apply = () => {
           setGains(won);
           setWinFly({ key: ++keyRef.current, seats });
-          const mine = seats.some((x) => x.seat === mySeat);
+          // 사이드 팟만 따 간 사람(족보는 2등)은 진 쪽 — 이긴 소리 · 대사는 족보가 제일 센 사람만
+          const tops = topHands(t.hand);
+          const topWin = (seat: number) => (tops ? tops.has(seat) : true);
+          const mine = seats.some((x) => x.seat === mySeat) && topWin(mySeat);
           if (mine) (isBig(total, ante) ? sfx.bigwin : sfx.win)();
           else if (myShowed) sfx.lose();
           else sfx.pot();
@@ -547,7 +556,7 @@ export default function TableView({
             const amt = seats.find((x) => x.seat === mySeat)?.amt ?? 0;
             if (ch) playVoice(ch, mine ? (isBig(amt, ante) ? "bigwin" : "win") : "lose");
           } else {
-            const top = [...seats].sort((a, b) => b.amt - a.amt)[0];
+            const top = [...seats].filter((x) => topWin(x.seat)).sort((a, b) => b.amt - a.amt)[0] ?? seats[0];
             const ch = top ? charOf(top.seat) : null;
             if (ch) playVoice(ch, isBig(top.amt, ante) ? "bigwin" : "win");
           }
@@ -661,17 +670,17 @@ export default function TableView({
     const n = reveal.order.length;
     const beforeLast = reveal.step === n - 1 && n > 1;
     const spoke = reveal.step > 0 && !!reveal.say[reveal.step - 1];
+    // 앞 사람 대사: 뒤집고 0.38초 뒤 시작 → 끝나자마자(조금만 쉬고) 다음 사람. 길이를 모르면 1.2초로 어림
+    const said = spoke ? 380 + Math.round((reveal.durs?.[reveal.step - 1] ?? 1.2) * 1000) : 0;
     const delay =
       reveal.step === n
         ? spoke
-          ? 1500
+          ? said + 250
           : 650
         : reveal.step === 0
           ? 520
           : spoke
-            ? beforeLast
-              ? 1900
-              : 1600
+            ? said + (beforeLast ? 320 : 120)
             : beforeLast
               ? 820
               : 460;
@@ -1020,12 +1029,19 @@ export default function TableView({
   const rawRes = hand?.result ?? null;
   const res = revealDone ? rawRes : null;
   const winners = res ? Object.keys(res.won).map(Number) : [];
+  /**
+   * 쇼다운에서 족보가 제일 센 사람(같으면 여럿). 사이드 팟을 따 간 두 번째 사람은 돈은 받아도 이긴 동작은 아님.
+   * 쇼다운이 아니면(다 죽고 혼자 남음) null = 판 가져간 사람이 이김
+   */
+  const topSeats = topHands(hand);
+  /** 이긴 동작 · 이긴 대사를 할 사람인지 */
+  const isTop = (seat: number) => (topSeats ? topSeats.has(seat) : (rawRes?.won[seat] ?? 0) > 0);
   const poseOf = (seat: number): Pose => {
     const p = hand?.players[seat];
     const t = poses[seat]; // (시간이 지난 것은 주기적으로 지워짐)
     if (t) return t.v;
     if (res) {
-      if ((res.won[seat] ?? 0) > 0) return "win";
+      if ((res.won[seat] ?? 0) > 0) return isTop(seat) ? "win" : "lose";
       if (res.showdown && p && !p.folded) return "lose";
       return "idle";
     }
@@ -1136,6 +1152,32 @@ export default function TableView({
       return false;
     };
     return cands.find((c) => !hits(c)) ?? cands[0];
+  };
+  /**
+   * 가로판: 자리 카드 줄을 dir 쪽(1 = 오른쪽)으로 늘어놓을 수 있는 폭 — 같은 높이에 걸치는 옆 사람 캐릭터 얼굴 앞까지.
+   * 걸리는 사람이 없으면 undefined (기본 겹침 그대로)
+   */
+  const sideRoom = (seat: number, x: number, y: number, dir: 1 | -1) => {
+    const x0 = x + dir * (plateHalf + 6);
+    const rowTop = y;
+    const rowBot = y + sizes.card * 1.15 * 1.4;
+    let room = Infinity;
+    for (let j = 0; j < n; j++) {
+      const idx = (j - Math.max(0, mySeat) + n) % n;
+      const o = L.spots[idx];
+      if (j === seat || !o || !table.seats[j] || o.y >= 99) continue;
+      const ox = seatX(o.x);
+      const oy = seatY(o);
+      if ((ox - x) * dir <= 0) continue;
+      const dx = Math.abs(ox - x0);
+      // 그 사람 이름표 (같은 높이면 이름표 앞까지)
+      if (rowBot > oy - 2 && rowTop < oy + 56) room = Math.min(room, dx - plateHalf - 4);
+      // 그 사람 얼굴 · 상반신 (이름표 위 캐릭터 그림의 위쪽 70%)
+      const top = oy - sprH * SEAT_LINE;
+      const bot = oy - sprH * 0.25;
+      if (rowBot > top && rowTop < bot) room = Math.min(room, dx - sprW * 0.3);
+    }
+    return Number.isFinite(room) ? Math.max(70, room) : undefined;
   };
   /** 건 돈 알약 폭의 절반 (어림: 칩 + 글자 다섯 자쯤) */
   const betHalfW = () => {
@@ -1249,6 +1291,18 @@ export default function TableView({
                 )}
               </div>
             );
+          // 가로판 위쪽 자리는 보통 이름표 오른쪽에 — 오른쪽 끝 자리는 넘쳐서 오른쪽 패널에 잘리니 왼쪽으로
+          const rowEst = hv ? sizes.card * 1.3 * 2.2 : sizes.card * 1.15 * 4.6;
+          const cardSide =
+            C?.cardSide[(i - Math.max(0, mySeat) + n) % n] === "below"
+              ? "below"
+              : sp.side === "right"
+                ? "left"
+                : sp.side === "left" || o === "h"
+                  ? sp.side === "top" && x + plateHalf + 6 + rowEst > boardW - 6
+                    ? "left"
+                    : "right"
+                  : "below";
           const cards = !hand
             ? null
             : hv
@@ -1271,11 +1325,12 @@ export default function TableView({
                   myHand: null,
                   tier: table.tier,
                   sizes,
-                  side: sp.side,
+                  side: cardSide === "left" ? "right" : sp.side,
                   hide: !revealed(i),
                   settled: revealDone,
                   dealDelay: dealOf(i),
                   // 폰 세로판(길쭉한 화면): 양옆 자리 카드는 판 가운데까지만
+                  // 가로판: 옆으로 늘어놓은 카드가 그쪽 옆 사람 얼굴을 가리지 않게
                   maxW:
                     o === "v" && !C && sp.side !== "top"
                       ? Math.max(
@@ -1284,7 +1339,9 @@ export default function TableView({
                             ? px(L.table.cx) - (x + plateHalf + 6) - 5
                             : x - plateHalf - 6 - px(L.table.cx) - 5
                         )
-                      : undefined,
+                      : H
+                        ? sideRoom(i, x, y, cardSide === "left" ? -1 : 1)
+                        : undefined,
                 });
           const wonHere = res?.won[i] ?? 0;
           // 누가 더 올리면(하프 · 레이즈) 그 전에 삥 · 콜 · 체크로 맞춰 둔 사람의 꼬리표는 지움 — 다시 행동해야 하니까
@@ -1305,14 +1362,6 @@ export default function TableView({
           // 구경 중일 때 6시(내 자리였을 곳)에 오는 사람: 등을 보이는 그림이 없으니 캐릭터는 안 그림
           const hideSprite = sp.y >= 99;
           // 카드는 이름표 옆(테이블 안쪽), 위 자리는 아래
-          const cardSide =
-            C?.cardSide[(i - Math.max(0, mySeat) + n) % n] === "below"
-              ? "below"
-              : sp.side === "right"
-                ? "left"
-                : sp.side === "left" || o === "h"
-                  ? "right"
-                  : "below";
           const waiting = isWaiting(i);
           const resultName = hand?.result?.names[i] && revealed(i) ? hand.result.names[i] : "";
           /** 이름표 아래 꼬리표들의 높이(em) — 카드가 아래로 올 때 그만큼 내림 */
@@ -1442,7 +1491,13 @@ export default function TableView({
                       <PlateTimer frac={frac} />
                     )}
                     {waiting && counting && (
-                      <span key={secLeft} className="pk-count-sm" aria-label={`${secLeft}초`}>
+                      <span
+                        key={secLeft}
+                        className="pk-count-sm"
+                        // 오른쪽 끝 자리는 배지를 이름표 왼쪽 위에 (오른쪽 패널에 잘리지 않게)
+                        data-edge={sp.side === "right" ? "l" : undefined}
+                        aria-label={`${secLeft}초`}
+                      >
                         {secLeft}
                       </span>
                     )}
@@ -1461,7 +1516,7 @@ export default function TableView({
                       {resultName && (
                         <span
                           key={`${table.handNo}-${revealDone ? 1 : 0}`}
-                          className={`pk-resulttag pk-stamp mt-[0.25em] ${res && wonHere > 0 ? "pk-resulttag-win" : ""}`}
+                          className={`pk-resulttag pk-stamp mt-[0.25em] ${res && wonHere > 0 && isTop(i) ? "pk-resulttag-win" : ""}`}
                         >
                           <span className="pk-tag-t">{resultName}</span>
                         </span>
@@ -2166,6 +2221,22 @@ function ActTag({ a }: { a: string }) {
   );
 }
 
+/** 쇼다운에서 족보가 제일 센 자리들 (같으면 여럿). 쇼다운이 아니면 null */
+function topHands(hand: HoldemView | SevenView | null | undefined): Set<number> | null {
+  if (!hand?.result?.showdown) return null;
+  const board = hand.game === "holdem" ? (hand as HoldemView).board : [];
+  const sc: [number, number][] = [];
+  for (const [k, p] of Object.entries(hand.players)) {
+    if (!p || p.folded || !p.cards) continue;
+    const cards = [...p.cards, ...board];
+    if (cards.length < 5) continue;
+    sc.push([Number(k), hand.game === "holdem" ? evaluate(cards) : bestK(cards).score]);
+  }
+  if (!sc.length) return null;
+  const top = Math.max(...sc.map((x) => x[1]));
+  return new Set(sc.filter((x) => x[1] === top).map((x) => x[0]));
+}
+
 /**
  * 쇼다운 족보 이름(서버가 보낸 "A 원페어", "K 탑", "로열 플러시" …) → 족보 대사 이름 (voice/{캐릭터}/{캐릭터}-hand-*.mp3)
  * 탑은 숫자별(A·K·Q·J·10·9 — 7장이면 9 아래 탑은 안 나옴), 나머지는 족보별 하나.
@@ -2488,6 +2559,7 @@ function HeroArea(props: {
     <>
       {/* 가로판: 왼쪽 아래 내 캐릭터 + 이름표 */}
       {H ? (
+        <>
         <div className="absolute bottom-[8px] left-[24px]" style={{ zIndex: 6 }}>
           {hero ? (
             // 전신 그림: 예전 그림과 같은 크기 · 위치, 몸은 이름표 뒤로 이어져 허리에서 끊기지 않음
@@ -2507,29 +2579,39 @@ function HeroArea(props: {
               <CharSprite char={me.look ?? me.char} pose={pose} w={(heroSprH * 3) / 4} dim={dim} />
             </div>
           )}
-          {/* 내 이모티콘 말풍선: 머리 오른쪽 옆, 꼬리가 머리를 가리킴 */}
-          {emote && (
-            <div
-              key={emote.key}
-              className="pk-emote pointer-events-none absolute"
-              style={{
-                left: heroSprH * 0.56,
-                bottom: `calc(100% - 8px + ${Math.round(heroSprH * 0.76)}px)`,
-                zIndex: 45,
-              }}
-            >
-              <EmoteBubble tail="l">
-                <EmoteImg
-                  char={me.look ?? me.char}
-                  emote={emote.v}
-                  size={Math.round(Math.max(64, Math.min(100, heroSprH * 0.34)))}
-                />
-              </EmoteBubble>
-            </div>
-          )}
           {plate}
         </div>
+        {/* 이모티콘은 카드 · 다른 자리보다 위에: 이름표와 같은 자리 · 크기의 투명 칸 위에 따로 띄움 */}
+        {emote && (
+          <div className="pointer-events-none absolute bottom-[8px] left-[24px]" style={{ zIndex: 45 }}>
+            <div className="invisible" aria-hidden>
+              {plate}
+            </div>
+            {/* 내 이모티콘 말풍선: 머리 오른쪽 옆, 꼬리가 머리를 가리킴 */}
+            {emote && (
+              <div
+                key={emote.key}
+                className="pk-emote pointer-events-none absolute"
+                style={{
+                  left: heroSprH * 0.56,
+                  bottom: `calc(100% - 8px + ${Math.round(heroSprH * 0.76)}px)`,
+                  zIndex: 45,
+                }}
+              >
+                <EmoteBubble tail="l">
+                  <EmoteImg
+                    char={me.look ?? me.char}
+                    emote={emote.v}
+                    size={Math.round(Math.max(64, Math.min(100, heroSprH * 0.34)))}
+                  />
+                </EmoteBubble>
+              </div>
+            )}
+          </div>
+        )}
+        </>
       ) : (
+        <>
         <div className="absolute left-[8px]" style={{ bottom: plateBottom, zIndex: 9 }}>
           {sprV > 0 && (
             <div
@@ -2550,6 +2632,13 @@ function HeroArea(props: {
               )}
             </div>
           )}
+          {plate}
+        </div>
+        {emote && (
+          <div className="pointer-events-none absolute left-[8px]" style={{ bottom: plateBottom, zIndex: 45 }}>
+            <div className="invisible" aria-hidden>
+              {plate}
+            </div>
           {/* 내 이모티콘: 캐릭터가 있으면 그 어깨 옆, 없으면 내 이름표 위 오른쪽 */}
           {emote && (
             <div
@@ -2570,8 +2659,9 @@ function HeroArea(props: {
               </EmoteBubble>
             </div>
           )}
-          {plate}
-        </div>
+          </div>
+        )}
+        </>
       )}
       {/* 내 카드 · 족보 · 건 돈 (테이블 앞쪽 가운데) */}
       <div
@@ -2603,7 +2693,14 @@ function HeroArea(props: {
           )}
           {cards}
         </div>
-        <div className={compact ? "flex items-center gap-[0.35em] whitespace-nowrap" : "contents"}>
+        {/* 족보 · 행동 · 결과 글자는 카드보다 위에 (카드가 커지거나 떠오를 때 가리지 않게) */}
+        <div
+          className={
+            compact
+              ? "relative z-20 flex items-center gap-[0.35em] whitespace-nowrap"
+              : "relative z-20 flex flex-col items-center gap-[0.4em]"
+          }
+        >
           {hint && !res && !myName && (
             <span className={`pk-handtag pk-pop ${madeKey ? "pk-made" : ""}`}>
               <span className="pk-tag-t">
@@ -2619,7 +2716,7 @@ function HeroArea(props: {
           {myName && myRevealed && (
             <span
               key={settled ? 1 : 0}
-              className={`pk-resulttag pk-stamp ${res && won > 0 ? "pk-resulttag-win" : ""}`}
+              className={`pk-resulttag pk-stamp ${res && won > 0 && (topHands(hv ?? sv)?.has(me.seat) ?? true) ? "pk-resulttag-win" : ""}`}
             >
               <span className="pk-tag-t">{myName}</span>
             </span>
@@ -3004,7 +3101,7 @@ function SidePanel({
           : hand.toAct === mySeat
             ? "내 차례"
             : "진행 중";
-  const dense = u < 7; // 작은 창: 족보표 글씨를 줄임
+  const dense = u < 8.5; // 작은 창: 족보표 글씨를 줄임 (아래 기록 칸이 남게)
   return (
     <>
       {/* ① 이 판 */}
@@ -3042,7 +3139,8 @@ function SidePanel({
       <div className="pk-side-title">
         족보 <span className="text-white/40">{table.game === "holdem" ? "홀덤" : "7포커"}</span>
       </div>
-      <ol className={`pk-ranks ${dense ? "pk-ranks-dense" : ""}`}>
+      {/* 족보표는 자리가 모자라면 스크롤 — 아래 기록 칸이 늘 몇 줄은 보이게 */}
+      <ol className={`pk-ranks pk-scroll min-h-0 shrink overflow-y-auto ${dense ? "pk-ranks-dense" : ""}`}>
         {ranks
           .map((r, cat) => [r, cat] as const)
           .reverse()
@@ -3216,7 +3314,7 @@ function LogList({ lines }: { lines: LogLine[] }) {
   return (
     <div
       ref={ref}
-      className="pk-scroll min-h-0 flex-1 overflow-y-auto px-[0.7em] pb-[0.5em] text-[0.74em] leading-relaxed"
+      className="pk-scroll min-h-[7.5em] flex-1 overflow-y-auto px-[0.7em] pb-[0.5em] text-[0.74em] leading-relaxed"
       aria-live="polite"
     >
       {lines.length === 0 && (

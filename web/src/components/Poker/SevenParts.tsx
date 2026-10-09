@@ -61,7 +61,8 @@ export function sevenSeatCards({
               key={c}
               card={c}
               w={hero ? w : Math.round(w * 1.15)}
-              win={ended && won && !!best?.includes(c)}
+              // 깔자마자 족보에 든 5장은 빛남, 다 깐 뒤엔 이긴 사람 것만
+              win={!!best?.includes(c) && (!ended || won)}
               dim={ended && (!won || (!!best && !best.includes(c)))}
               className={wasDown ? "pk-flip" : ""}
               delay={wasDown ? k++ * 140 : 0}

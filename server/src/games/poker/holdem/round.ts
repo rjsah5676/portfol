@@ -101,15 +101,23 @@ class HoldemRound implements Round {
     const ev: PokerEvent[] = [];
     const names: Record<number, string> = {};
     const best: Record<number, Card[]> = {};
+    // 쇼다운까지 간 사람은 진 패도 전부 깜 (규칙상 덮어도 되는 패도 — 7포커처럼 한 명씩 까며 족보를 읊는 연출)
     for (const s of r.shows) {
-      if (s.cards) {
+      const cards = s.cards ?? this.hand.player(s.seat)?.cards;
+      if (cards) {
         names[s.seat] = s.name;
-        if (!this.revealed) ev.push({ t: "show", seat: s.seat, cards: [...s.cards], name: s.name });
+        if (!this.revealed) ev.push({ t: "show", seat: s.seat, cards: [...cards], name: s.name });
       } else ev.push({ t: "muck", seat: s.seat });
     }
+    // 족보에 든 카드: 깐 사람 모두 (깔 때 바로 빛나게 — 다 깐 뒤엔 화면이 이긴 사람 것만 남김)
+    if (r.showdown)
+      for (const k of Object.keys(names)) {
+        const n = Number(k);
+        best[n] = madeOf(bestFive([...this.hand.player(n)!.cards, ...r.board]));
+      }
     for (const [seat, amt] of Object.entries(r.won)) {
       const n = Number(seat);
-      if (r.showdown) best[n] = madeOf(bestFive([...this.hand.player(n)!.cards, ...r.board]));
+      if (r.showdown && !best[n]) best[n] = madeOf(bestFive([...this.hand.player(n)!.cards, ...r.board]));
       ev.push({ t: "win", seat: n, amt, name: names[n] ?? null });
     }
     this.result = { showdown: r.showdown, pots: r.pots, won: r.won, names, best };
@@ -120,7 +128,10 @@ class HoldemRound implements Round {
     const h = this.hand;
     const shown = new Map<number, [Card, Card]>();
     if (this.revealed) for (const p of h.live) shown.set(p.seat, p.cards);
-    for (const s of h.result?.shows ?? []) if (s.cards) shown.set(s.seat, s.cards);
+    for (const s of h.result?.shows ?? []) {
+      const cards = s.cards ?? h.player(s.seat)?.cards;
+      if (cards) shown.set(s.seat, cards);
+    }
     const players: Record<number, HoldemPlayer> = {};
     for (const p of h.players)
       players[p.seat] = {

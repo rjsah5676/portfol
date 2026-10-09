@@ -23,6 +23,8 @@ export interface LobbyTable {
   max: number;
   /** 유저봇이 들어올 수 있는 방인지 */
   bots: boolean;
+  /** 바로 입장으로 모르는 사람이 들어올 수 있는 방인지 (아니면 친구방) */
+  quick: boolean;
   createdAt: number;
 }
 

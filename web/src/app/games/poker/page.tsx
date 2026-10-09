@@ -8,8 +8,13 @@ import { PokerRanks } from "@/components/Poker/Lobby";
 import PokerApp, { useRank } from "@/components/Poker/PokerApp";
 import { POKER_GUIDE } from "@/data/gameGuides";
 import { useNick } from "@/lib/AuthContext";
-import { fmtEok } from "@/lib/poker/rules";
+import { fmtEok, type Look } from "@/lib/poker/rules";
+import { asset } from "@/lib/poker/assets";
 import { Profile } from "@/components/Poker/parts";
+
+// 포커 순위는 프로필 사진 대신 캐릭터 얼굴 (순위 그림은 절대 주소여야 함 — 상대 주소는 API 서버로 붙음)
+const charPic = (look: string) =>
+  typeof window === "undefined" ? null : `${window.location.origin}${asset.profile(look as Look)}`;
 
 // 테이블은 ?t=ID 쿼리로 구분 (다른 온라인 게임들과 같은 방식)
 function PokerPage() {
@@ -29,7 +34,7 @@ function PokerPage() {
           scroll={!inTable}
           rank={{
             sub: "자금 순위",
-            top: rank?.slice(0, 3).map((r) => ({ name: r.nick, member: true, avatar: r.avatar ?? null, value: fmtEok(r.money), sub: <span className="inline-flex items-center gap-1"><Profile char={r.look ?? r.char} size={14} />{r.hands.toLocaleString()}판</span> })) ?? null,
+            top: rank?.slice(0, 3).map((r) => ({ name: r.nick, member: true, avatar: charPic(r.look ?? r.char), value: fmtEok(r.money), sub: <span className="inline-flex items-center gap-1"><Profile char={r.look ?? r.char} size={14} />{r.hands.toLocaleString()}판</span> })) ?? null,
             render: () => <PokerRanks rank={rank} myNick={nick ?? undefined} />,
           }}
         />

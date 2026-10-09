@@ -40,7 +40,8 @@ export function holdemSeatCards({
             key={c}
             card={c}
             w={w}
-            win={ended && !!best?.includes(c)}
+            // 깔자마자 그 사람 족보에 든 카드는 빛남 (끝나면 진 사람은 어둡게)
+            win={!!best?.includes(c) && (!ended || view.result!.won[seat] > 0)}
             dim={ended && !(view.result!.won[seat] > 0)}
             className={hero ? "" : "pk-flip"}
             delay={hero ? 0 : i * 140}
