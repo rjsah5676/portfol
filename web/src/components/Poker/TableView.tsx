@@ -664,14 +664,14 @@ export default function TableView({
     const delay =
       reveal.step === n
         ? spoke
-          ? 1300
+          ? 1500
           : 650
         : reveal.step === 0
           ? 520
           : spoke
             ? beforeLast
-              ? 1700
-              : 1450
+              ? 1900
+              : 1600
             : beforeLast
               ? 820
               : 460;
