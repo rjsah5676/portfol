@@ -38,7 +38,9 @@ export default function LobbyChar({
   const [idleOk, setIdleOk] = useState(false);
   // 있는 터치 반응 영상 번호들
   const [touches, setTouches] = useState<number[]>([]);
-  const [touch, setTouch] = useState(0);
+  // 지금 틀고 있는 터치 영상 (재생할 때마다 새로 만든 blob 주소 — 같은 주소면 브라우저가 한 번 끝난 움직이는 그림을 처음부터 다시 안 틀어 줘서 멈춘 것처럼 보임)
+  const [touchUrl, setTouchUrl] = useState("");
+  const blobs = useRef<Record<number, Blob>>({});
   const [hearts, setHearts] = useState<{ key: number; x: number }[]>([]);
   const busyUntil = useRef(0);
   const key = useRef(0);
@@ -50,13 +52,27 @@ export default function LobbyChar({
     const im = new Image();
     im.onload = () => setIdleOk(true);
     im.src = asset.idle(look);
+    let alive = true;
     for (let i = 1; touchable && i <= TOUCH_N; i++) {
-      const t = new Image();
-      t.onload = () => setTouches((p) => (p.includes(i) ? p : [...p, i]));
-      t.src = asset.touch(look, i);
+      fetch(asset.touch(look, i))
+        .then((r) => (r.ok ? r.blob() : Promise.reject()))
+        .then((b) => {
+          if (!alive) return;
+          blobs.current[i] = b;
+          setTouches((p) => (p.includes(i) ? p : [...p, i]));
+        })
+        .catch(() => {});
     }
-    return () => clearTimeout(touchTimer.current);
+    return () => {
+      alive = false;
+      clearTimeout(touchTimer.current);
+    };
   }, [live, touchable, look]);
+  // 다 쓴 blob 주소 정리
+  useEffect(() => {
+    if (!touchUrl) return;
+    return () => URL.revokeObjectURL(touchUrl);
+  }, [touchUrl]);
 
   const lastTouch = useRef(0);
   const poke = () => {
@@ -74,18 +90,17 @@ export default function LobbyChar({
     const pool = touches.length > 1 ? touches.filter((t) => t !== lastTouch.current) : touches;
     const pick = pool[Math.floor(Math.random() * pool.length)];
     lastTouch.current = pick;
-    // 같은 그림을 다시 틀 때 처음부터 나오게 주소에 번호를 붙임
-    setTouch(pick * 1000 + (k % 1000));
+    setTouchUrl(URL.createObjectURL(blobs.current[pick]));
     busyUntil.current = Date.now() + TOUCH_MS;
     clearTimeout(touchTimer.current);
-    touchTimer.current = setTimeout(() => setTouch(0), TOUCH_MS);
+    touchTimer.current = setTimeout(() => setTouchUrl(""), TOUCH_MS);
   };
 
   const imgCls = `pk-lobbychar-img ${bust ? "pk-lobbychar-bust" : ""}`;
   const shown = !live
     ? still
-    : touch
-      ? `${asset.touch(look, Math.floor(touch / 1000))}#${touch % 1000}`
+    : touchUrl
+      ? touchUrl
       : idleOk
         ? asset.idle(look)
         : still;
