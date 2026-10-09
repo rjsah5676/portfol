@@ -1,3 +1,4 @@
+import { withCaptcha } from "@/lib/captcha";
 import { api } from "@/lib/api/http";
 import { subscribe } from "@/lib/api/socket";
 import { toTimestamp, type Timestamp } from "@/lib/api/timestamp";
@@ -26,17 +27,21 @@ export interface Inquiry extends InquiryInput {
 export const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
 export async function addInquiry({ name, email, phone, message }: InquiryInput): Promise<void> {
-  await api("/api/inquiries", {
-    method: "POST",
-    // 로그인한 상태면 토큰을 같이 보내서 누구인지 남김 (안 했으면 그냥 익명)
-    auth: true,
-    body: {
-      name: name.trim().slice(0, INQUIRY_LIMITS.name),
-      email: email.trim().slice(0, INQUIRY_LIMITS.email),
-      phone: phone.trim().slice(0, INQUIRY_LIMITS.phone),
-      message: message.trim().slice(0, INQUIRY_LIMITS.message),
-    },
-  });
+  // 익명이면 사람 확인을 거칠 수 있음
+  await withCaptcha((headers) =>
+    api("/api/inquiries", {
+      method: "POST",
+      // 로그인한 상태면 토큰을 같이 보내서 누구인지 남김 (안 했으면 그냥 익명)
+      auth: true,
+      headers,
+      body: {
+        name: name.trim().slice(0, INQUIRY_LIMITS.name),
+        email: email.trim().slice(0, INQUIRY_LIMITS.email),
+        phone: phone.trim().slice(0, INQUIRY_LIMITS.phone),
+        message: message.trim().slice(0, INQUIRY_LIMITS.message),
+      },
+    })
+  );
 }
 
 interface Row extends InquiryInput {

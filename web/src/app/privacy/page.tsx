@@ -116,6 +116,11 @@ export default function PrivacyPage() {
             ["Amazon Web Services (Lightsail)", "사이트 서버와 데이터베이스", "대한민국(서울 리전)"],
             ["Google (Firebase Authentication)", "Google 계정 로그인", "미국 등 Google 데이터센터"],
             ["Google (Google Fonts)", "글꼴 파일 제공 (브라우저가 글꼴을 받을 때 IP가 전달됨)", "미국 등 Google 데이터센터"],
+            [
+              "Cloudflare (Turnstile)",
+              "로그인하지 않고 랭킹 · 방명록 · 문의를 남길 때 사람인지 확인 (브라우저 · 기기 정보와 IP가 전달됨)",
+              "미국 등 Cloudflare 데이터센터",
+            ],
           ]}
         />
         <p>

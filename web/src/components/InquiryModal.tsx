@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Modal from "@/components/Modal/Modal";
 import { addInquiry, EMAIL_RE, INQUIRY_LIMITS } from "@/firestore/inquiries";
 import { useAuth } from "@/lib/AuthContext";
+import { captchaMessage } from "@/lib/captcha";
 
 const THROTTLE_KEY = "inquiry_last_sent";
 const THROTTLE_MS = 60_000;
@@ -64,7 +65,7 @@ export default function InquiryModal({ open, onClose }: { open: boolean; onClose
       setDone(true);
     } catch (err) {
       console.error(err);
-      setError("전송에 실패했습니다. 잠시 후 다시 시도해주세요.");
+      setError(captchaMessage(err) ?? "전송에 실패했습니다. 잠시 후 다시 시도해주세요.");
     } finally {
       setSending(false);
     }

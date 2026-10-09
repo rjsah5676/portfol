@@ -15,6 +15,7 @@ import {
 } from "@/firestore/guestbook";
 import { useInitial } from "@/lib/api/InitialData";
 import "@/css/guest.css";
+import { captchaMessage } from "@/lib/captcha";
 
 const NAME_MAX = 12;
 const CONTENTS_MAX = 50;
@@ -172,7 +173,7 @@ export default function GuestPage() {
       setContents("");
     } catch (e) {
       console.error(e);
-      setError("등록에 실패했습니다. 잠시 후 다시 시도해주세요.");
+      setError(captchaMessage(e) ?? "등록에 실패했습니다. 잠시 후 다시 시도해주세요.");
     } finally {
       setSending(false);
     }

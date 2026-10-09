@@ -1,3 +1,4 @@
+import { withCaptcha } from "@/lib/captcha";
 import { api } from "@/lib/api/http";
 import { subscribe } from "@/lib/api/socket";
 
@@ -53,11 +54,15 @@ export async function addGuestEntry({
   const id = now.getTime();
   const date = `${now.getFullYear()}년 ${now.getMonth() + 1}월 ${now.getDate()}일  ${now.getHours()}:${pad(now.getMinutes())}`;
   // 로그인해 있으면 같이 알림 → 회원이 쓴 글은 서버가 별명으로 저장
-  await api("/api/guest", {
-    method: "POST",
-    auth: true,
-    body: { name, contents, id, date, color: color ?? "lavender" },
-  });
+  // 익명이면 사람 확인을 거칠 수 있음
+  await withCaptcha((headers) =>
+    api("/api/guest", {
+      method: "POST",
+      auth: true,
+      headers,
+      body: { name, contents, id, date, color: color ?? "lavender" },
+    })
+  );
   return id;
 }
 

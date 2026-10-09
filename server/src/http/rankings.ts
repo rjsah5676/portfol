@@ -6,6 +6,7 @@ import {
   omokScore,
 } from "../../../web/src/lib/aiScore";
 import { TOTAL_SEC as MELON_SEC } from "../../../web/src/lib/melon/logic";
+import type { Captcha } from "../captcha";
 import type { Deps } from "../deps";
 import { AppError, bad, notFound, unauthenticated } from "../errors";
 import { newId } from "../ids";
@@ -33,6 +34,7 @@ import { h, ms, userOf } from "./util";
  *   2) 티켓: 게임을 시작할 때 받고 등록할 때 내야 함. 한 번만 쓸 수 있고,
  *      받은 뒤로 "그 기록이 나오려면 걸리는 시간"만큼 지나지 않았으면 거절
  *   3) 값끼리 맞는지: AI 대국 점수는 같은 공식으로 다시 계산, 리듬게임은 채보(노트 수)와 비교
+ *   4) 익명 로그인이면 등록할 때 사람 확인(captcha.ts, 한 번 통과하면 24시간) — Google 로그인은 건너뜀
  */
 
 /** 랭킹에 적는 이름 길이 (회원 별명 최대 길이와 같음). 예전에 더 길게 들어간 기록은 그대로 둠 */
@@ -354,7 +356,7 @@ export async function bpBoard(db: Deps["db"]): Promise<BpRow[]> {
   return list;
 }
 
-export function rankingsRouter({ db, auth, users }: Deps): Router {
+export function rankingsRouter({ db, auth, users }: Deps, captcha?: Captcha): Router {
   const r = Router();
   const tickets = db.col<Ticket>("rank_tickets");
   const fightRating = createFightRating(db, users);
@@ -381,6 +383,8 @@ export function rankingsRouter({ db, auth, users }: Deps): Router {
     if (!board) throw notFound();
     const user = await userOf(auth, req);
     if (!user) throw unauthenticated();
+    // 티켓을 쓰기 전에 (확인하고 다시 보내도 같은 티켓으로 등록되게)
+    if (user.anonymous) await captcha?.check(req, { remember: user.uid });
     const { ticket, ...body } = (req.body ?? {}) as Record<string, unknown>;
     // 회원은 별명으로 등록 (보낸 이름은 무시). 비회원은 적은 이름 그대로 — member 표시가 없는 기록이 비회원 기록
     const nick = await users.nickOf(user);

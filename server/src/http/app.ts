@@ -2,6 +2,7 @@ import cors from "cors";
 import express, { type ErrorRequestHandler } from "express";
 import { rateLimit } from "express-rate-limit";
 import type { Deps } from "../deps";
+import { createCaptcha, mongoPassStore } from "../captcha";
 import { toWireError } from "../errors";
 import { adminRouter, type AdminHooks } from "./admin";
 import { meRouter } from "./me";
@@ -98,9 +99,11 @@ export function createApp(deps: Deps, { pokerRank, pokerBuyRank, ...hooks }: App
       .catch(next);
   });
 
-  const site = siteRouter(deps);
+  // 익명 쓰기(랭킹 · 방명록 · 문의) 사람 확인 — TURNSTILE_* 가 없으면 꺼져 있음
+  const captcha = createCaptcha(mongoPassStore(deps.db));
+  const site = siteRouter(deps, captcha);
   app.use("/api", trackRouter(deps));
-  app.use("/api/rankings", rankingsRouter(deps));
+  app.use("/api/rankings", rankingsRouter(deps, captcha));
   app.use("/api/me", meRouter(deps));
   app.use("/api/study-posts", studyPostsRouter(deps));
   app.use("/api/admin", adminRouter(deps, { guestChanged: site.publishGuest, ...hooks }));

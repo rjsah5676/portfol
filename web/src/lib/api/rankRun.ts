@@ -1,3 +1,4 @@
+import { withCaptcha } from "@/lib/captcha";
 import { api } from "./http";
 
 /*
@@ -11,6 +12,7 @@ import { api } from "./http";
  *
  * board = 랭킹 이름 (리듬게임은 "rhythm:곡id_난이도").
  * 티켓은 localStorage 에도 둬서, 새로고침한 뒤 이어 하는 판(AI 대국)도 등록할 수 있음.
+ * 익명이면 서버가 사람 확인을 요구할 수 있음 → 확인 창을 띄우고 다시 보냄 (한 번 통과하면 24시간)
  */
 /** 랭킹에 적는 이름 길이 (서버 RANK_NAME_MAX 와 같은 값 — 회원 별명 최대 길이) */
 export const RANK_NAME_MAX = 10;
@@ -82,11 +84,15 @@ export async function submitRun(board: string, path: string, body: object): Prom
   // 이름은 어디서 입력받았든(입력 칸·prompt) 여기서 한 번 더 길이를 맞춤
   const typed = (body as { name?: unknown }).name;
   const name = typeof typed === "string" ? typed.trim().slice(0, RANK_NAME_MAX) : undefined;
-  const res = await api<{ id: string }>(path, {
-    method: "POST",
-    auth: true,
-    body: { ...body, ...(name !== undefined && { name }), ticket: await ticketOf(board) },
-  });
+  const ticket = await ticketOf(board);
+  const res = await withCaptcha((headers) =>
+    api<{ id: string }>(path, {
+      method: "POST",
+      auth: true,
+      headers,
+      body: { ...body, ...(name !== undefined && { name }), ticket },
+    })
+  );
   // 티켓은 한 번만 쓸 수 있음
   pending.delete(board);
   try {

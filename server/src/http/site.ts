@@ -1,4 +1,6 @@
-import { Router } from "express";
+import { Router, type Request } from "express";
+import type { AuthUser } from "../auth";
+import type { Captcha } from "../captcha";
 import { z } from "zod";
 import type { Deps } from "../deps";
 import { notFound } from "../errors";
@@ -11,6 +13,7 @@ import { h, ms, requireAdmin, userOf } from "./util";
  *   GET/POST /api/guest          DELETE /api/guest/:id (관리자)        구독 채널 "guest"
  *   POST /api/inquiries          PATCH·DELETE /api/inquiries/:id (관리자)  구독 채널 "inquiries" (관리자)
  *   POST /api/stats/visit        GET /api/stats?date=YYYY-MM-DD
+ * 방명록 · 문의 쓰기는 익명이면 사람 확인(captcha.ts)을 거침
  */
 
 export const NOTE_COLORS = ["lavender", "yellow", "mint", "pink", "sky"] as const;
@@ -36,7 +39,13 @@ const inquirySchema = z.strictObject({
 
 const DATE_KEY = /^\d{4}-\d{2}-\d{2}$/;
 
-export function siteRouter({ db, auth, gateway, users }: Deps) {
+/** 익명(로그인 안 함 · 익명 로그인)이면 사람 확인. Google 로그인한 사람은 건너뜀 */
+async function humanCheck(captcha: Captcha | undefined, req: Request, user: AuthUser | null) {
+  if (!captcha || (user && !user.anonymous)) return;
+  await captcha.check(req, { remember: user?.uid });
+}
+
+export function siteRouter({ db, auth, gateway, users }: Deps, captcha?: Captcha) {
   const r = Router();
 
   // ── 방명록 ──
@@ -56,6 +65,7 @@ export function siteRouter({ db, auth, gateway, users }: Deps) {
       const data = guestSchema.parse(req.body);
       // 회원이 쓰면 별명으로 (적은 이름은 무시), member 표시가 없는 글이 비회원 글
       const user = await userOf(auth, req);
+      await humanCheck(captcha, req, user);
       const nick = await users.nickOf(user);
       const owner = nick ? { name: nick, uid: user!.uid, member: true } : {};
       const _id = newId();
@@ -102,6 +112,7 @@ export function siteRouter({ db, auth, gateway, users }: Deps) {
       const data = inquirySchema.parse(req.body);
       // 로그인한 상태로 남기면 누구인지(회원 uid · 별명)를 같이 저장
       const user = await userOf(auth, req);
+      await humanCheck(captcha, req, user);
       const member = user ? { uid: user.uid, nick: await users.nickByUid(user.uid) } : {};
       await db.col("inquiries").insertOne({ _id: newId(), ...data, ...member, read: false, createdAt: new Date() });
       inquiries.publish();

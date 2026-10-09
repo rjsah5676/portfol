@@ -15,6 +15,8 @@ interface Options {
   next?: { revalidate?: number; tags?: string[] };
   /** 이 시간(ms) 안에 응답이 없으면 포기 */
   timeoutMs?: number;
+  /** 더 보낼 헤더 (사람 확인 토큰 등) */
+  headers?: Record<string, string>;
 }
 
 async function bearer(): Promise<Record<string, string>> {
@@ -28,9 +30,9 @@ async function bearer(): Promise<Record<string, string>> {
 /** 백엔드 REST 호출. 2xx가 아니면 ApiError (서버에 못 닿으면 code = "NETWORK") */
 export async function api<T = void>(
   path: string,
-  { method = "GET", body, blob, auth = false, next, timeoutMs }: Options = {}
+  { method = "GET", body, blob, auth = false, next, timeoutMs, headers: extra }: Options = {}
 ): Promise<T> {
-  const headers: Record<string, string> = auth ? await bearer() : {};
+  const headers: Record<string, string> = { ...(auth ? await bearer() : {}), ...extra };
   if (blob) headers["Content-Type"] = blob.type;
   else if (body !== undefined) headers["Content-Type"] = "application/json";
   let res: Response;
