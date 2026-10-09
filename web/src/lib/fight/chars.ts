@@ -552,7 +552,7 @@ const RAW: CharSrc[] = [
         push: 200,
         hitstop: 2,
         meter: 0,
-        box: { x: -80, y: 80, w: 170, h: 80 },
+        box: { x: -80, y: 80, w: 195, h: 80 }, // 앞 90 → 115px (10.09 리치 조금 늘림)
         kd: true,
         multi: 6,
       },
