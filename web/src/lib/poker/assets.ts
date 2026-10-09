@@ -37,7 +37,8 @@ export const asset = {
   seat: (c: Look, view: "front" | "side", p: Pose) =>
     `${BASE}/char/${dir(c)}/seat-${view}-${p}.webp`,
   face: (c: Look, f: Face) => `${BASE}/char/${dir(c)}/face-${f}.webp`,
-  emote: (c: Look, e: Emote) => `${BASE}/char/${dir(c)}/emote-${e}.webp`,
+  /** 이모티콘은 스킨을 입어도 원래 캐릭터 것 */
+  emote: (c: Look, e: Emote) => `${BASE}/char/${skinOf(c)?.char ?? c}/emote-${e}.webp`,
   profile: (c: Look) => `${BASE}/char/${dir(c)}/profile.webp`,
   full: (c: Look) => `${BASE}/char/${dir(c)}/full.webp`,
   cutin: (c: Look) => `${BASE}/char/${dir(c)}/cutin.webp`,
