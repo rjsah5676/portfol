@@ -1,4 +1,3 @@
-# syntax=docker/dockerfile:1
 # 서버 이미지. 빌드 컨텍스트는 레포 루트:
 #   docker build -f server/Dockerfile -t portfolio-server .
 # (서버가 web/src 의 게임 규칙·점수 계산·채보를 상대 경로로 import 해서 server/ 만으로는 빌드할 수 없음)

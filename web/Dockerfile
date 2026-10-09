@@ -1,4 +1,3 @@
-# syntax=docker/dockerfile:1
 # 프론트(Next.js 서버 모드) 이미지. 빌드 컨텍스트는 web 폴더:
 #   docker build -t portfolio-web web
 # 실행 중에 필요한 값: API_URL(백엔드 내부 주소), REVALIDATE_SECRET — docker-compose.yml 참고
