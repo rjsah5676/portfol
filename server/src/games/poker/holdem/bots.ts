@@ -523,13 +523,18 @@ function preflop(v: BotView, brain: Brain, models: Models): Decision {
   // 상대가 올인했거나 받으면 내 칩의 큰 몫이 들어가는 자리 → 상대 레인지 상대 승률로 판단
   // (크게 미는 사람은 아무 패나 들고 있지 않다고 보고, 잡패로 스택을 걸지 않게)
   if (toCall > 0 && (toCall >= me.stack * 0.4 || !canRaise) && raises.length) {
+    const last0 = raises[raises.length - 1];
     const read = readTable(v, bigCallBrain(brain), models);
     const eq = equity(v, read, brain.skill.sims, r) + gauss(r) * Math.min(brain.skill.noise, 0.03);
     const risk = Math.min(1, toCall / Math.max(1, me.stack));
-    // 칩의 큰 몫이면: 성격이 아무리 헐거워도 거의 손해 없는 기준 + 걸리는 몫만큼 더 조심
-    const margin = Math.max(p.callMargin, -0.02) + 0.02 + 0.06 * risk;
-    // 잡패 바닥: 싸게 받는 게 아니면(팟 오즈 35% 이상) 상위 32% 밖 패로는 안 받음
-    const junk = need >= 0.35 && pct > 0.32;
+    // 이미 이 큰 벳을 받은 사람 (여럿이 받을수록 팟 오즈는 좋아 보여도 누군가는 센 패)
+    const callers = others.filter((x) => x.seat !== last0.seat && x.bet >= v.currentBet).length;
+    // 칩의 큰 몫이면: 성격이 아무리 헐거워도 거의 손해 없는 기준 + 걸리는 몫만큼 + 상대 수만큼 더 조심
+    const margin = Math.max(p.callMargin, -0.02) + 0.02 + 0.06 * risk + 0.03 * (others.length - 1);
+    // 잡패 바닥: 스택이 걸리면 팟 오즈와 상관없이 상위 22%(짧은 스택은 30%) 밖 패로는 안 받음, 이미 누가 받았으면 더 좁게.
+    // 스택의 작은 몫이면 예전처럼 싸게 받는 게 아닐 때(팟 오즈 35% 이상)만 상위 32% 밖을 거름
+    const floor = (effBB <= 15 ? 0.3 : 0.22) * (callers ? 0.6 : 1);
+    const junk = risk >= 0.4 ? pct > floor : need >= 0.35 && pct > 0.32;
     const ok = !junk && eq >= need + margin;
     return ok ? { type: "call", thinkMs: fast(2200, 4800), cue: toCall >= me.stack ? "allin" : "call" } : { ...fold(), thinkMs: fast(1800, 3600) };
   }
@@ -652,7 +657,11 @@ function postflop(v: BotView, brain: Brain, models: Models): Decision {
     if (commitBB > 120 && read.myQ < 0.93) margin += 0.07;
     // 칩의 큰 몫을 받는 자리(올인 받기 등): 헐거운 성격 · 기분 보정은 거의 빼고, 걸리는 몫만큼 더 조심
     const risk = Math.min(1, toCall / Math.max(1, me.stack));
-    if (risk >= 0.4) margin = Math.max(margin, 0.02) + 0.05 * risk;
+    if (risk >= 0.4) margin = Math.max(margin, 0.02) + 0.05 * risk + 0.03 * (n - 1);
+    // 스택이 걸리는 콜은 팟 오즈가 좋아 보여도 최소한 "제 몫 정도"는 이길 패여야 함 (여럿이 받은 올인에 잡패로 따라가지 않게)
+    const floorEq = risk >= 0.4 ? 0.95 / (n + 1) + 0.03 : 0;
+    // 잡패 바닥: 스택이 걸리면 이 보드에서 중간 아래 패(노페어 · 약한 페어)로는 센 드로우가 아닌 한 안 받음
+    const junk = risk >= 0.4 && read.myQ < 0.7 + 0.05 * (n - 1) && outs < 8;
     const implied = !river && spr > 2 ? (outs >= 8 ? 0.06 : outs >= 4 && spr > 4 ? 0.02 : 0) : 0;
 
     const valueThr = 0.72 + 0.04 * (n - 1) + p.valueShift;
@@ -673,7 +682,7 @@ function postflop(v: BotView, brain: Brain, models: Models): Decision {
       const amount = sizeTo(v, v.currentBet + (pot + toCall) * pick(r, 0.7, 1));
       return { type: "raise", amount, thinkMs: think(2200, 4500), cue: "bigRaise" };
     }
-    if (eq + implied >= need + margin) {
+    if (!junk && eq + implied >= need + margin && eq >= floorEq) {
       const hero = big && eq < 0.55;
       return { type: "call", thinkMs: think(big ? 2200 : 1100, big ? 5200 : 2600), cue: toCall >= me.stack ? "allin" : hero ? "heroCall" : "call" };
     }

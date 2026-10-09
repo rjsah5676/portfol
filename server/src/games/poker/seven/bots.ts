@@ -42,7 +42,7 @@ export interface SevenDecision {
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 const gauss = (rand: () => number) => (rand() + rand() + rand() - 1.5) * 1.15;
 
-function equity(v: SevenBotView, brain: Brain): number {
+function equity(v: SevenBotView, brain: Brain, heavy = false): number {
   const rand = brain.rand;
   const opps = v.players.filter((p) => !p.folded && p.seat !== v.seat);
   if (!opps.length) return 1;
@@ -55,7 +55,8 @@ function equity(v: SevenBotView, brain: Brain): number {
   // 세게 친 만큼 좋은 쪽으로 뽑음 (읽기의 깊이에 따라)
   const tries = opps.map((p) => {
     const raises = v.history.filter((h) => h.seat === p.seat && h.aggressive).length;
-    return 1 + (rand() < brain.skill.read ? Math.min(2, raises) : 0);
+    // 스택이 걸린 콜을 따질 때는 서툰 봇도 세게 친 사람을 제대로 읽음
+    return 1 + (heavy || rand() < brain.skill.read ? Math.min(2, raises) : 0);
   });
   const mine = [...v.cards];
   const myNeed = 7 - v.cards.length;
@@ -119,7 +120,8 @@ export function decideSeven(v: SevenBotView, brain: Brain): SevenDecision {
   const me = v.players.find((x) => x.seat === v.seat)!;
   const { toCall, bets } = v.legal;
   const n = v.players.filter((x) => !x.folded && x.seat !== v.seat).length;
-  const eq = clamp(equity(v, brain) + gauss(r) * brain.skill.noise, 0, 1);
+  const heavy = toCall >= me.stack * 0.4;
+  const eq = clamp(equity(v, brain, heavy) + gauss(r) * (heavy ? Math.min(brain.skill.noise, 0.03) : brain.skill.noise), 0, 1);
   const last = v.round === 7;
   const think = (lo: number, hi: number) => Math.round((lo + (hi - lo) * r()) * p.pace);
 
@@ -140,7 +142,10 @@ export function decideSeven(v: SevenBotView, brain: Brain): SevenDecision {
     const need = toCall / (v.pot + toCall);
     const big = toCall >= v.pot * 0.4 || toCall >= me.stack * 0.5;
     let margin = p.callMargin + 0.03 * (n - 1) + (last ? 0.01 : 0.035);
-    if (toCall >= me.stack * 0.5) margin += 0.04;
+    // 칩의 큰 몫(올인 받기 등): 걸리는 몫 · 상대 수만큼 더 조심하고, 최소한 제 몫 정도는 이길 패여야 받음
+    const risk = Math.min(1, toCall / Math.max(1, me.stack));
+    if (risk >= 0.4) margin = Math.max(margin, 0.02) + 0.06 * risk + 0.03 * (n - 1);
+    const floorEq = risk >= 0.4 ? 0.95 / (n + 1) + 0.03 : 0;
     // 재미 보정: 싼 베팅은 다음 장을 보러 잘 따라감 (마지막 구 전)
     if (!last && toCall <= v.pot * 0.3 && toCall < me.stack * 0.12) margin -= 0.045 * brain.skill.fun;
     const valueThr = 0.7 + 0.05 * (n - 1) + p.valueShift;
@@ -153,7 +158,7 @@ export function decideSeven(v: SevenBotView, brain: Brain): SevenDecision {
       const b = pickBet(0.5)!;
       return { type: b, thinkMs: think(2000, 4200), cue: "bigRaise" };
     }
-    if (eq >= need + margin) return { type: "call", thinkMs: think(big ? 2000 : 1000, big ? 4800 : 2400), cue: allIn("call") ? "allin" : big && eq < 0.55 ? "heroCall" : "call" };
+    if (eq >= need + margin && eq >= floorEq) return { type: "call", thinkMs: think(big ? 2000 : 1000, big ? 4800 : 2400), cue: allIn("call") ? "allin" : big && eq < 0.55 ? "heroCall" : "call" };
     return { type: "die", thinkMs: think(big ? 1600 : 800, big ? 3800 : 2000), cue: big && eq > 0.3 ? "bigFold" : "fold" };
   }
 
