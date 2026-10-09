@@ -122,7 +122,7 @@ export const charOf = (id: unknown): CharId => (CHAR_IDS.includes(id as CharId) 
 /*
  * 스킨: 상점에서 칩으로 사서 옷장에서 입음. 입으면 그 캐릭터의 그림이 전부 스킨 그림으로 바뀌고(남들 화면에도),
  * 효과음은 그대로 · 음성은 스킨 전용 파일이 있으면 그걸로. 그림은 web/public/poker/char/{스킨 id}/ (캐릭터와 같은 파일 구성)
- * + 로비 동작 lobby-1~6.webp · 터치 반응 touch-1~3.webp.
+ * + (live) 로비 대기 영상 idle.webp · 터치 반응 touch-1~3.webp.
  * ready = 그림이 들어왔는지. false 면 원래 캐릭터 그림으로 보임 (사고 입는 것은 됨).
  */
 export type SkinId = "amy-summer";
@@ -147,7 +147,7 @@ export const SKINS: Skin[] = [
     blurb: "바다 가자고? …따, 딱히 너랑 가고 싶어서 입은 건 아니거든!",
     line: "뭘 그렇게 봐! …어울리긴 해?",
     ready: true,
-    live: false,
+    live: true,
   },
 ];
 export const SKIN_IDS = SKINS.map((s) => s.id);
