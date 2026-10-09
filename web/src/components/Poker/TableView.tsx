@@ -269,6 +269,8 @@ export default function TableView({
   const [pre, setPre] = useState("");
   /** 이름표를 눌러 보는 자리 정보 */
   const [statSeat, setStatSeat] = useState<number | null>(null);
+  /** 기록 크게 보기 (가로판 오른쪽 패널의 기록) */
+  const [logBig, setLogBig] = useState(false);
   /** 내가 강퇴 투표한 자리들 (이 판 기준) */
   const [voted, setVoted] = useState<Set<number>>(() => new Set());
   /** 쇼다운 패 까기 연출: order 순서로 한 자리씩 깜(step = 깐 자리 수). 다 깐 뒤 한 박자 쉬고 결과(step > order.length) */
@@ -283,6 +285,8 @@ export default function TableView({
     say: ({ look: string; line: string } | null)[];
     /** 그 대사들의 길이(초) — 다 읽히면 채워짐 (읊고 나면 바로 다음 사람으로) */
     durs?: (number | null)[];
+    /** 카드는 이미 다 보이는 상태에서 족보만 차례로 읊음 (홀덤 올인 런아웃: 패를 먼저 깐 뒤 바닥이 다 깔리고 결과) */
+    shown?: boolean;
   } | null>(null);
   /** 패를 다 깐 뒤에 보여줄 승리 연출 (칩 · +금액 · 소리) */
   const pendingWinRef = useRef<(() => void) | null>(null);
@@ -501,27 +505,34 @@ export default function TableView({
       // 쇼다운: 패를 한 자리씩 깐다 — 내 자리부터 시계 방향, 이긴 사람은 맨 마지막에
       const resNow = t.hand?.result ?? null;
       let staged = false;
-      if (shows.length && t.hand) {
+      // 홀덤 올인 런아웃: 패는 바닥이 다 깔리기 전에 이미 깠음 → 결과가 나온 지금, 족보만 차례로 읊음
+      const voiceOnly =
+        !shows.length &&
+        Object.keys(won).length > 0 && // 결과가 막 나온 이번 한 번만 (뒤이은 갱신엔 결과가 그대로 실려 옴)
+        !!t.hand &&
+        !!resNow?.showdown &&
+        Object.keys(resNow.names ?? {}).length > 0;
+      if ((shows.length || voiceOnly) && t.hand) {
         const n = t.seats.length;
         const wonSeats = Object.keys(won).map(Number);
         const from = Math.max(0, mySeat);
-        const ord = shows
-          .map((x) => x.seat)
+        const ord = (voiceOnly ? Object.keys(resNow!.names).map(Number) : shows.map((x) => x.seat))
           .sort((a, b) => ((a - from + n) % n) - ((b - from + n) % n));
         const order = [
           ...ord.filter((x) => !wonSeats.includes(x)),
           ...ord.filter((x) => wonSeats.includes(x)),
         ];
         staged = true;
+        // 결과가 아직 없으면(런아웃 중 먼저 깐 패) 족보가 바뀔 수 있어 읊지 않음
         const say = order.map((seat) => {
           const look = charOf(seat);
-          const line = handLine(resNow?.names[seat] ?? "");
+          const line = resNow ? handLine(resNow.names[seat] ?? "") : null;
           if (!look || !line) return null;
           const has = (who: string) => hasSound(`voice/${who}/${who}-${line}`);
           return has(look) || has(lookChar(look)) ? { look, line } : null;
         });
         const rk = ++keyRef.current;
-        setReveal({ key: rk, handNo: t.handNo, order, step: 0, say });
+        setReveal({ key: rk, handNo: t.handNo, order, step: 0, say, shown: voiceOnly });
         void Promise.all(say.map((x) => (x ? voiceDuration(x.look, x.line) : Promise.resolve(null)))).then(
           (durs) => setReveal((r) => (r && r.key === rk ? { ...r, durs } : r))
         );
@@ -670,27 +681,30 @@ export default function TableView({
     const n = reveal.order.length;
     const beforeLast = reveal.step === n - 1 && n > 1;
     const spoke = reveal.step > 0 && !!reveal.say[reveal.step - 1];
-    // 앞 사람 대사: 뒤집고 0.38초 뒤 시작 → 끝나자마자(조금만 쉬고) 다음 사람. 길이를 모르면 1.2초로 어림
-    const said = spoke ? 380 + Math.round((reveal.durs?.[reveal.step - 1] ?? 1.2) * 1000) : 0;
+    // 앞 사람 대사: 뒤집고 0.2초 뒤 시작 → 끝나기 조금 전에 다음 사람 카드를 뒤집음
+    // (다음 대사는 앞 대사가 끝난 뒤 이어서 나와서 겹치지 않음). 길이를 모르면 1초로 어림
+    const said = spoke ? 200 + Math.round((reveal.durs?.[reveal.step - 1] ?? 1) * 1000) : 0;
     const delay =
       reveal.step === n
         ? spoke
-          ? said + 250
-          : 650
+          ? said + 80
+          : 600
         : reveal.step === 0
-          ? 520
+          ? 380
           : spoke
-            ? said + (beforeLast ? 320 : 120)
+            ? said - (beforeLast ? 0 : 180)
             : beforeLast
-              ? 820
-              : 460;
+              ? 760
+              : 420;
     const key = reveal.key;
     const id = setTimeout(() => {
       if (reveal.step < n) {
-        sfx.flip();
-        setTimeout(sfx.stamp, 230);
+        if (!reveal.shown) {
+          sfx.flip();
+          setTimeout(sfx.stamp, 230);
+        }
         const say = reveal.say[reveal.step];
-        if (say) setTimeout(() => playVoice(say.look, say.line), 380);
+        if (say) setTimeout(() => playVoice(say.look, say.line), 200);
       } else {
         pendingWinRef.current?.();
         pendingWinRef.current = null;
@@ -1014,7 +1028,8 @@ export default function TableView({
   /** 패 까기 연출이 끝났나 (그 전엔 결과를 숨김) */
   const revealDone = !reveal || reveal.handNo !== table.handNo || reveal.step > reveal.order.length;
   /** 그 자리의 패를 깠나 */
-  const revealed = (seat: number) => revealDone || reveal!.step > reveal!.order.indexOf(seat);
+  const revealed = (seat: number) =>
+    revealDone || !!reveal!.shown || reveal!.step > reveal!.order.indexOf(seat);
   /** 나눠 주기 연출 중이면 그 자리 카드가 손에 도착하는 시각 */
   const dealOf = (seat: number): SeatCardsProps<unknown>["dealDelay"] => {
     if (!dealFx || dealFx.handNo !== table.handNo) return undefined;
@@ -1963,9 +1978,39 @@ export default function TableView({
             log={log}
             myCat={myCat}
             u={u}
+            onLogBig={() => setLogBig(true)}
           />
           {me && <EmoteGrid char={me.look ?? me.char} onPick={emote} />}
         </aside>
+      )}
+      {/* 기록 크게 보기 */}
+      {H && logBig && (
+        <div
+          className="absolute inset-0 flex items-center justify-center bg-black/70"
+          style={{ zIndex: 60 }}
+          onClick={() => setLogBig(false)}
+        >
+          <div
+            className="pk-frame flex max-h-[82%] w-[min(40em,86%)] flex-col overflow-hidden"
+            style={{ height: "82%", background: "#12131b" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-white/10 px-[0.9em] py-[0.55em]">
+              <span className="pk-side-title !m-0 !text-[1em]">
+                기록 <span className="text-white/40">이 테이블에서 일어난 일</span>
+              </span>
+              <button
+                type="button"
+                onClick={() => setLogBig(false)}
+                aria-label="닫기"
+                className="cursor-pointer rounded-[6px] px-[0.5em] text-[1.2em] leading-none text-white/60 hover:bg-white/10 hover:text-white"
+              >
+                ✕
+              </button>
+            </div>
+            <LogList lines={log} big />
+          </div>
+        </div>
       )}
       {/* 세로판 서랍 */}
       {!H && drawer && (
@@ -2670,7 +2715,8 @@ function HeroArea(props: {
           left: (L.heroX / 100) * boardW,
           top: (L.heroCards / 100) * h,
           transform: "translateX(-50%)",
-          zIndex: 14,
+          // 다른 자리 카드 · 날아가는 칩/카드(12~13)보다 위 — 내 족보 글자가 가려지지 않게
+          zIndex: 20,
         }}
       >
         {bet > 0 && (
@@ -3069,6 +3115,7 @@ function SidePanel({
   log,
   myCat,
   u,
+  onLogBig,
 }: {
   table: TableWire;
   hand: HoldemView | SevenView | null;
@@ -3079,6 +3126,7 @@ function SidePanel({
   log: LogLine[];
   myCat: number;
   u: number;
+  onLogBig: () => void;
 }) {
   const ranks = table.game === "holdem" ? HOLDEM_RANKS : SEVEN_RANKS;
   // 구간: 홀덤 프리플랍 → 리버, 7포커 카드 고르기 → 4구 → 7구
@@ -3151,7 +3199,7 @@ function SidePanel({
                 <span className="pk-num w-[1.1em] shrink-0 text-center text-[0.8em] text-white/35">
                   {ranks.length - i}
                 </span>
-                <span className="min-w-0 flex-1 truncate text-[0.8em] font-bold">{name}</span>
+                <span className={`min-w-0 flex-1 truncate text-[0.82em] ${mine ? "font-bold" : "font-normal"}`}>{name}</span>
                 {mine && <span className="pk-ranks-me">내 패</span>}
                 <span className="flex shrink-0 gap-[1px] text-[0.64em]">
                   {cards.map((cc, k) => (
@@ -3163,9 +3211,20 @@ function SidePanel({
           })}
       </ol>
 
-      {/* ③ 기록 */}
+      {/* ③ 기록 (오른쪽 끝: 크게 보기) */}
       <div className="pk-side-title mt-[0.2em]">
         기록 <span className="text-white/40">이 테이블에서 일어난 일</span>
+        <button
+          type="button"
+          onClick={onLogBig}
+          aria-label="기록 크게 보기"
+          title="크게 보기"
+          className="ml-auto cursor-pointer self-center rounded-[4px] p-[0.15em] text-white/55 hover:bg-white/10 hover:text-white"
+        >
+          <svg viewBox="0 0 16 16" className="h-[1.1em] w-[1.1em]" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden>
+            <path d="M9.5 2.5h4v4M13.5 2.5 9 7M6.5 13.5h-4v-4M2.5 13.5 7 9" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </button>
       </div>
       <LogList lines={log} />
     </>
@@ -3231,7 +3290,7 @@ function InfoTabs({
                   </span>
                   <div className="min-w-0 flex-1">
                     <div
-                      className={`truncate text-[0.82em] font-bold ${mine ? "text-[#ffe28a]" : top ? "text-white" : "text-white/80"}`}
+                      className={`truncate text-[0.82em] ${mine ? "font-bold text-[#ffe28a]" : top ? "text-white" : "text-white/80"}`}
                     >
                       {name}
                       {mine && (
@@ -3305,7 +3364,7 @@ function EmoteGrid({
   );
 }
 
-function LogList({ lines }: { lines: LogLine[] }) {
+function LogList({ lines, big }: { lines: LogLine[]; big?: boolean }) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const el = ref.current;
@@ -3314,7 +3373,7 @@ function LogList({ lines }: { lines: LogLine[] }) {
   return (
     <div
       ref={ref}
-      className="pk-scroll min-h-[7.5em] flex-1 overflow-y-auto px-[0.7em] pb-[0.5em] text-[0.74em] leading-relaxed"
+      className={`pk-scroll flex-1 overflow-y-auto px-[0.7em] pb-[0.5em] leading-relaxed ${big ? "min-h-0 py-[0.5em] text-[0.95em]" : "min-h-[7.5em] text-[0.78em]"}`}
       aria-live="polite"
     >
       {lines.length === 0 && (
