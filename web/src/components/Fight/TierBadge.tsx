@@ -8,10 +8,10 @@ const ROMAN = ["III", "II", "I"];
 
 export function TierEmblem({ info, size = 40, className = "" }: { info: TierInfo; size?: number; className?: string }) {
   const { tier, div, placing } = info;
-  if (TIER_ICONS && !placing)
+  if (TIER_ICONS)
     return (
       <img
-        src={`/fight/tier/${tier.id}.webp`}
+        src={`/fight/tier/${placing ? "placement" : tier.id}.webp`}
         alt={info.label}
         width={size}
         height={size}
