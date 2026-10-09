@@ -2349,7 +2349,7 @@ function HeroArea(props: {
   const live = !!p && !p.folded && !res && !collected;
   const dim = me.status === "out" || (!!p?.folded && !res);
   const won = res?.won[me.seat] ?? 0;
-  const fs = H ? sizes.face * 1.3 : sizes.face * 1.05;
+  const fs = H ? sizes.face * 1.4 : sizes.face * 1.2;
   const plate = (
     <div className="flex items-center gap-[0.45em]" style={{ fontSize: H ? "1.18em" : "1.08em" }}>
       <div
@@ -2386,16 +2386,13 @@ function HeroArea(props: {
         {me.exit && (
           <span className="pk-exit-mark absolute -top-[1.1em] right-[0.4em]">나가기 예약</span>
         )}
-        <div className="flex min-w-0 items-baseline gap-[0.4em]">
-          <span className="max-w-[7em] min-w-0 truncate text-[0.82em] font-extrabold text-white">
-            {me.name}
-          </span>
-          <span
-            className="max-w-[6.5em] min-w-0 truncate text-[0.7em] font-bold"
-            style={{ color: CHARS[me.char].color }}
-          >
-            {lookName(me.look ?? me.char)}
-          </span>
+        {/* 이름 / 캐릭터(스킨) 이름은 다음 줄 — 길면 말줄임 */}
+        <div className="truncate text-[0.9em] font-extrabold text-white">{me.name}</div>
+        <div
+          className="-mt-[0.1em] truncate text-[0.72em] font-bold"
+          style={{ color: CHARS[me.char].color }}
+        >
+          {lookName(me.look ?? me.char)}
         </div>
         <div className="flex items-center gap-[0.3em]">
           {}

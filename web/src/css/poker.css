@@ -1446,7 +1446,9 @@
 /* 내 정보 판 */
 .pk-hero-hud {
   position: relative;
-  min-width: 10.5em;
+  min-width: 11.5em;
+  max-width: 14em;
+  font-size: 1.08em;
   padding: 0.3em 0.7em 0.35em;
   border-radius: 9px;
   background: linear-gradient(180deg, rgba(30, 31, 46, 0.96), rgba(6, 7, 12, 0.96));
