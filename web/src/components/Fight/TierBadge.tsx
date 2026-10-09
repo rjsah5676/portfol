@@ -15,7 +15,7 @@ export function TierEmblem({ info, size = 40, className = "" }: { info: TierInfo
         alt={info.label}
         width={size}
         height={size}
-        className={`shrink-0 object-contain [image-rendering:pixelated] ${className}`}
+        className={`shrink-0 object-contain ${className}`}
       />
     );
   const c = placing ? "#7B8494" : tier.color;

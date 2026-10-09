@@ -25,7 +25,7 @@ export const TIERS: Tier[] = [
 ];
 
 /** 등급 그림 파일이 있나 (public/fight/tier/*.webp) */
-export const TIER_ICONS = false;
+export const TIER_ICONS = true;
 
 /** 배치 판 수 (서버 fightRating.ts RATING_PLACEMENT 와 같게) */
 export const TIER_PLACEMENT = 10;
