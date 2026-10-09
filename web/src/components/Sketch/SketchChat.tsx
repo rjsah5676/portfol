@@ -88,15 +88,15 @@ export default function SketchChat({
           ) : m.kind === "close" ? (
             <p
               key={m.id}
-              className="sk-msg rounded-lg border-2 border-dashed border-[#4CAF50] bg-[#6BCB77]/15 px-2 py-1 text-center font-extrabold text-[#2E7D32]"
+              className="sk-msg rounded-lg border-2 border-dashed border-[#4CAF50] bg-[#6BCB77]/15 px-2 py-0.5 text-center text-[12px] leading-snug font-bold text-[#2E7D32]"
             >
               🔥 {m.text}
-              <span className="ml-1 text-[11px] font-bold text-[#2E7D32]/60">(나만 보여요)</span>
+              <span className="ml-1 text-[10.5px] font-bold text-[#2E7D32]/60">(나만 보여요)</span>
             </p>
           ) : m.kind === "correct" ? (
             <p
               key={m.id}
-              className="sk-msg rounded-lg border-2 border-[var(--mint)] bg-[#2EC4B6]/15 px-2 py-1 text-center font-extrabold text-[#138a7f]"
+              className="sk-msg rounded-lg border-2 border-[var(--mint)] bg-[#2EC4B6]/15 px-2 py-0.5 text-center text-[12px] leading-snug font-bold text-[#138a7f]"
             >
               🎉 {m.text}
             </p>
