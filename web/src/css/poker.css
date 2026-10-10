@@ -901,6 +901,32 @@
 .pk-seat-win .pk-sprite img {
   filter: drop-shadow(0 0 calc(var(--u) * 1.2) rgba(255, 210, 63, 0.85));
 }
+/* 새 배치: 아바타(앉은 그림 · 얼굴) 밑에 딱 붙는 이름표 */
+.pk-plate2 {
+  padding: 0.15em 0.4em 0.2em;
+  margin-top: -0.2em;
+  font-size: 1em;
+}
+.pk-plate2 .pk-stack {
+  font-size: 1.05em;
+}
+/* 아바타 틀: 행동 글자 · 배지 · 초 세기가 이 안에 붙음 */
+.pk-av {
+  flex: none;
+}
+.pk-av .pk-sprite img {
+  filter: drop-shadow(0 calc(var(--u) * 0.3) calc(var(--u) * 0.6) rgba(0, 0, 0, 0.55));
+}
+.pk-av .pk-face {
+  box-shadow: 0 0 0 2px rgba(214, 175, 92, 0.55), 0 4px 10px rgba(0, 0, 0, 0.6);
+}
+.pk-av[data-turn="1"] .pk-face {
+  box-shadow: 0 0 0 3px #ffd84a, 0 0 16px rgba(255, 216, 74, 0.6);
+}
+.pk-av .pk-acttag {
+  bottom: auto;
+  top: -0.6em;
+}
 /* 보유 칩: 크고 밝게 */
 .pk-plate .pk-stack {
   margin-top: 0.1em;
@@ -2574,6 +2600,25 @@
 }
 
 /* ───────── 가로판 오른쪽 패널 ───────── */
+/* 오른쪽 위 작은 상자 (족보 · 기록) */
+.pk-infobox {
+  width: 13.5em;
+  max-height: 24%;
+  font-size: 0.95em;
+  background: rgba(8, 9, 14, 0.9);
+}
+.pk-infobox .pk-ranks {
+  padding: 0 0.4em 0.4em;
+}
+.pk-seg-sm > button {
+  padding: 0.1em 0.55em;
+  font-size: 0.72em;
+}
+/* 이모티콘 여는 버튼 */
+.pk-emote-open-on {
+  border-color: #ffd84a;
+  color: #ffd84a;
+}
 .pk-side-head {
   display: grid;
   gap: 0.35em;

@@ -6,7 +6,7 @@
 
 export type GameKind = "holdem" | "seven";
 export const GAMES: Record<GameKind, { name: string; seats: number; blurb: string }> = {
-  holdem: { name: "홀덤", seats: 6, blurb: "내 패 2장 + 바닥 5장, 노리밋" },
+  holdem: { name: "홀덤", seats: 9, blurb: "내 패 2장 + 바닥 5장, 노리밋" },
   seven: { name: "7포커", seats: 5, blurb: "7장 중 5장, 삥·따당·하프" },
 };
 
