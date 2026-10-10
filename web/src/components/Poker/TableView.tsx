@@ -1146,7 +1146,8 @@ export default function TableView({
         const oy = seatY(o) + 26;
         return Math.abs(clampBetX(ox) - clampBetX(up.x)) < pillHalf * 2 && Math.abs(oy - up.y) < 34;
       });
-      return clash ? { x: x + dir * (half + pillHalf + 6), y: y + 30 } : up;
+      // 7포커는 맞은편 자리 카드가 이름표 위 안쪽까지 내려와 있어서 늘 이름표 옆 안쪽에
+      return clash || sv ? { x: x + dir * (half + pillHalf + 6), y: y + 30 } : up;
     }
     // 카드가 옆이면: 촘촘한 판에선 엎어 둔 카드 위에 겹쳐 둠(뒷면이라 가려도 됨), 아니면 이름표 아래.
     // 좁은 폰에서 그 자리가 다른 사람 이름표에 걸리면 이름표 아래 → 이름표 위 순으로 비킴
@@ -1355,9 +1356,12 @@ export default function TableView({
                             ? px(L.table.cx) - (x + plateHalf + 6) - 5
                             : x - plateHalf - 6 - px(L.table.cx) - 5
                         )
-                      : H
-                        ? sideRoom(i, x, y, cardSide === "left" ? -1 : 1)
-                        : undefined,
+                      : C && cardSide === "below"
+                        ? // 좁은 폰(전체화면 아님): 이름표 바깥 끝에서 판 가운데까지만 — 화면 밖 · 옆 사람 얼굴로 안 넘치게
+                          Math.max(60, Math.abs(x - px(L.table.cx)) + plateHalf - 12)
+                        : H
+                          ? sideRoom(i, x, y, cardSide === "left" ? -1 : 1)
+                          : undefined,
                 });
           const wonHere = res?.won[i] ?? 0;
           // 누가 더 올리면(하프 · 레이즈) 그 전에 삥 · 콜 · 체크로 맞춰 둔 사람의 꼬리표는 지움 — 다시 행동해야 하니까
@@ -1550,8 +1554,12 @@ export default function TableView({
                             : {
                                 top: "100%",
                                 marginTop: `calc(4px + ${tagsEm}em)`,
-                                left: "50%",
-                                transform: "translateX(-50%)",
+                                // 좁은 폰 7포커: 이름표 바깥 끝에 붙여 판 가운데 쪽으로 늘어놓음
+                                ...(C && sv
+                                  ? x < px(L.table.cx)
+                                    ? { left: 0 }
+                                    : { right: 0 }
+                                  : { left: "50%", transform: "translateX(-50%)" }),
                               }
                       }
                     >
