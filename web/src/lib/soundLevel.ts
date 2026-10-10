@@ -29,7 +29,7 @@ const lv = (db: number) => dbGain(db + MASTER_DB);
 export const LEVEL = {
   /** 따로 보정이 없는 소리(멜론 · 격투 배경음악 · 지뢰찾기 끝 음악 등)에 곱하는 값 */
   master: lv(0),
-  poker: { sfx: lv(-6), voice: lv(-6), bgm: lv(-1) },
+  poker: { sfx: lv(-6), voice: lv(0), bgm: lv(-1) },
   sketch: { sfx: lv(-11), bgm: lv(0) },
   /** 격투 효과음 (배경음악은 master) */
   fight: { sfx: lv(-7) },
