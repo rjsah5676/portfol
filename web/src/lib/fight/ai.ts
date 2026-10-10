@@ -72,7 +72,7 @@ export const AI_LEVELS: AILevel[] = [
   {
     id: "3",
     name: "중급",
-    react: 20,
+    react: 18,
     read: 0.3,
     block: 0.42,
     combo: 0.45,
@@ -83,7 +83,7 @@ export const AI_LEVELS: AILevel[] = [
   {
     id: "4",
     name: "상급",
-    react: 17,
+    react: 14,
     read: 0.5,
     plan: 0,
     block: 0.6,
@@ -95,9 +95,9 @@ export const AI_LEVELS: AILevel[] = [
   {
     id: "5",
     name: "고수",
-    react: 15,
+    react: 12,
     read: 0.65,
-    plan: 0.02,
+    plan: 0.008,
     block: 0.76,
     combo: 0.86,
     antiAir: 0.7,
@@ -107,9 +107,9 @@ export const AI_LEVELS: AILevel[] = [
   {
     id: "6",
     name: "달인",
-    react: 13,
+    react: 10,
     read: 0.8,
-    plan: 0.17,
+    plan: 0.05,
     block: 0.95,
     combo: 1,
     antiAir: 0.95,
@@ -120,9 +120,9 @@ export const AI_LEVELS: AILevel[] = [
   {
     id: "7",
     name: "지존",
-    react: 12,
+    react: 9,
     read: 0.9,
-    plan: 1,
+    plan: 0.5,
     block: 1,
     combo: 1,
     antiAir: 1,
@@ -145,9 +145,9 @@ export const AI_RATING = [0, 200, 500, 850, 1200, 1600, 2000];
 
 /** 지존 위 단계 — 랭크전 봇 전용 (AI 대전에서는 고를 수 없음) */
 export const RANK_TIERS: (AILevel & { rating: number })[] = [
-  { ...AI_LEVELS[6], id: "8", name: "전설", rating: 2200, tech: 0.45, read: 0.95, aggro: 0.84, just: 0.95, interrupt: 0.9, robust: 3 },
-  { ...AI_LEVELS[6], id: "9", name: "신화", rating: 2400, tech: 0.48, read: 1, aggro: 0.87, just: 1, interrupt: 0.95, robust: 4, look: 32 },
-  { ...AI_LEVELS[6], id: "10", name: "초월", rating: 2600, tech: 0.5, read: 1, react: 11, aggro: 0.9, just: 1, interrupt: 1, robust: 5, look: 32 },
+  { ...AI_LEVELS[6], id: "8", name: "전설", rating: 2200, tech: 0.45, read: 0.95, plan: 0.8, aggro: 0.84, just: 0.95, interrupt: 0.9, robust: 3 },
+  { ...AI_LEVELS[6], id: "9", name: "신화", rating: 2400, tech: 0.48, read: 1, plan: 1, aggro: 0.87, just: 1, interrupt: 0.95, robust: 4, look: 32 },
+  { ...AI_LEVELS[6], id: "10", name: "초월", rating: 2600, tech: 0.5, read: 1, plan: 1, react: 8, aggro: 0.9, just: 1, interrupt: 1, robust: 5, look: 32 },
 ];
 /** 랭크전 봇 레이팅 상한 */
 export const BOT_MAX = 2600;
@@ -159,13 +159,13 @@ export const BOT_MAX = 2600;
  */
 export const ADJ_AT = [200, 500, 850, 1200, 1600, 2000, 2400];
 export const CHAR_ADJ: Record<string, number[]> = {
-  kai: [-33, 4, -29, 252, 69, 161, 200],
-  igna: [-69, -35, 33, 89, 71, -169, -471],
-  soyoung: [29, -114, -228, -400, -276, -183, 271],
-  lily: [-11, 34, 184, 262, 122, 107, 236],
-  zena: [-40, -80, -76, -96, 19, -76, 74],
-  gunmo: [135, 319, 426, 340, 104, 343, 184],
-  ivan: [-51, -178, -296, -72, -30, -169, -485],
+  kai: [-34, -91, -25, 151, 73, -11, 283],
+  igna: [-83, -6, 44, 165, 3, 44, -137],
+  soyoung: [42, -82, -241, -348, -174, 77, 204],
+  lily: [-17, 72, 160, 244, 28, -189, -460],
+  zena: [-29, -75, -121, -14, 64, 236, 541],
+  gunmo: [174, 357, 475, 288, 46, -48, -26],
+  ivan: [-86, -220, -278, -109, 30, -96, -405],
 };
 function charAdj(r: number, id: string) {
   const t = CHAR_ADJ[id];
@@ -228,7 +228,7 @@ export function aiForRating(r: number, charId?: string): AILevel {
  * AI 지문: 랭크전 봇전은 서버가 같은 경기를 다시 돌려 확인하니, 브라우저와 서버의 AI가 똑같아야 함.
  * 단계 값·보정·콤보 길은 자동으로 들어가고, next() 같은 판단 코드를 바꿨으면 AI_REV 를 올릴 것.
  */
-const AI_REV = 8;
+const AI_REV = 9;
 export const AI_ID = (() => {
   const str = AI_REV + JSON.stringify([AI_LEVELS, RANK_TIERS, AI_RATING, ADJ_AT, CHAR_ADJ, ROUTES, ROUTE_CAP]);
   let h = 0x811c9dc5;
@@ -293,7 +293,7 @@ type Oki = "bait" | "throw" | "aa" | "meaty";
  * 노림수 설정: 몇 프레임마다 · 몇 프레임 앞까지 돌려 볼지, 둘 만한 수의 최소 값, 미리 넣을 입력 수, 상대와의 거리(상대 손 닿는 거리 + range),
  * 기대값과 최악의 경우를 섞는 비율 (10.11 사람 흉내 상대로 맞춤)
  */
-const K = { every: 2, W: 24, thr: 4, plan: 8, range: 70, worst: 0.4 };
+const K = { every: 2, W: 24, WV: 40, thr: 4, plan: 8, range: 70, worst: 0.4 };
 /** 일어나는 동작 프레임 (sim RISE_T 와 같게) */
 const RISE_T = 14;
 
@@ -514,6 +514,19 @@ export class FightAI {
       this.dashSeq = [0, dir, dir, 0, 0, dir, dir, dir];
       return finish();
     };
+    // ── 공중 노림수: 뛰어서 다가가는 중 — 상대가 하던 행동 비율로 공격 타이밍 · 2단 점프 · 공중 대시를 미리 돌려 보고 파고듦 ──
+    if ((L.plan ?? 0) > 0 && air && f.st === "jump" && !isAir(s, o) && dist < 160 && Math.abs(dy) < 170 && s.f >= this.nextRead && o.st !== "hit") {
+      this.nextRead = s.f + K.every;
+      if (this.r() < (L.plan ?? 0)) {
+        const wts = ACTS.map((a) => [a, this.near.p(a)] as [Act, number]);
+        const best = this.lookAhead(s, me, K.WV, true, toward, away, wts, this.airCands(toward, away, f), true);
+        if (best && best.v > K.thr) {
+          this.plan = best.seq.slice(1, K.plan + 6);
+          out = best.seq[0];
+          return finish();
+        }
+      }
+    }
     // ── 윗발판 상대에게 올라가기: 상대 손이 안 닿는 쪽 가장자리 밑으로 가서 점프 → 그쪽 끝에 내려앉음 ──
     if (this.entry !== null) {
       const ex = this.entry * SUB;
@@ -838,7 +851,9 @@ export class FightAI {
         this.nextRead = s.f + K.every;
         if (this.r() < (L.plan ?? 0)) {
           const wts = ACTS.map((a) => [a, this.near.p(a)] as [Act, number]);
-          const best = this.lookAhead(s, me, K.W, faceOk, toward, away, wts);
+          // 높이가 다르면(윗발판 · 아래) 점프로 파고들기 · 받아치기까지 길게 돌려 봄
+          const vert = Math.abs(dy) > 40;
+          const best = this.lookAhead(s, me, vert ? K.WV : K.W, faceOk, toward, away, wts, vert ? this.vertCands(toward, away) : undefined);
           if (best && best.v > K.thr) {
             this.plan = best.seq.slice(1, K.plan);
             out = best.seq[0];
@@ -1266,6 +1281,33 @@ export class FightAI {
     ps.stun = o.stun;
   }
 
+  /** 땅에서 높이가 다른 상대에게: 점프 → (2단 점프) → 공격 타이밍 여러 가지, 바깥에서 올라갔다 공중 대시로 파고들기 */
+  private vertCands(toward: number, away: number): number[][] {
+    const out: number[][] = [];
+    const rep = (n: number, x: number) => Array.from({ length: n }, () => x);
+    for (const d of [toward, 0, away])
+      for (const j2 of [8, 14])
+        for (const atk of [IN.A, IN.B])
+          for (const at of [4, 10]) out.push([IN.J | d, ...rep(j2, d), IN.J | d, ...rep(at, d), atk | d, d]);
+    // 올라가서 공중 대시(톡·떼고·톡)로 파고들며 발차기
+    for (const j2 of [8, 14]) out.push([IN.J, ...rep(j2, 0), IN.J, 0, 0, 0, 0, toward, 0, toward, toward, IN.B | toward, toward]);
+    return out;
+  }
+
+  /** 공중에서: 지금 · 조금 뒤 공격, 2단 점프 뒤 공격, 공중 대시로 파고들기, 아이덴티티, 물러나기 */
+  private airCands(toward: number, away: number, f: Fighter): number[][] {
+    const out: number[][] = [];
+    const rep = (n: number, x: number) => Array.from({ length: n }, () => x);
+    for (const d of [toward, 0, away]) {
+      out.push(rep(4, d));
+      for (const atk of [IN.A, IN.B]) for (const at of [0, 3, 6, 10]) out.push([...rep(at, d), atk | d, d]);
+    }
+    if (f.jumps < 2) for (const atk of [IN.A, IN.B]) for (const at of [3, 8]) out.push([IN.J | toward, ...rep(at, toward), atk | toward, toward]);
+    if (!f.airDash) for (const atk of [IN.A, IN.B]) out.push([0, toward, 0, toward, toward, atk | toward, toward]);
+    if (f.cd === 0) out.push([IN.C | toward, toward]);
+    return out;
+  }
+
   /** 지금 필살기를 쓰면 상대가 맞나 (상대는 지금 누르는 방향을 그대로 유지한다고 봄) — 허공에 쓰는 것 막기 */
   private ultHits(s: State, me: 0 | 1, dir: number) {
     const t = clone(s);
@@ -1299,7 +1341,9 @@ export class FightAI {
     faceOk: boolean,
     toward: number,
     away: number,
-    weighted?: [Act, number][]
+    weighted?: [Act, number][],
+    extra?: number[][],
+    only = false
   ): { seq: number[]; v: number } | null {
     const f = s.p[me];
     const o = s.p[1 - me];
@@ -1309,8 +1353,9 @@ export class FightAI {
       while (a.length < W) a.push(rest);
       return a;
     };
-    const cands: number[][] = [seq([], IN.D), seq([], 0), seq([], away), seq([IN.J | away], away), seq([IN.J | toward], toward)];
-    if (faceOk) {
+    const cands: number[][] = only ? [] : [seq([], IN.D), seq([], 0), seq([], away), seq([IN.J | away], away), seq([IN.J | toward], toward)];
+    if (extra) for (const e of extra) cands.push(seq(e, e[e.length - 1] & (IN.L | IN.R | IN.D)));
+    if (faceOk && !only) {
       for (const b of [IN.A, IN.B, IN.C, IN.A | IN.B]) cands.push(seq([b, 0, 0], IN.D));
       if (f.meter >= 100 && this.ultHits(s, me, 0)) cands.push(seq([IN.X, 0, 0], IN.D));
       if (f.st === "block" && f.stun > 0 && f.meter >= 25) cands.push(seq([IN.D | IN.B, IN.D, IN.D], IN.D));
@@ -1350,7 +1395,9 @@ export class FightAI {
           op0 = t.p[1 - me].hp;
         for (let k = 0; k < W; k++) {
           // 상대 대응: 반응 모드 0번은 지금 누르는 그대로, 나머지는 2프레임 뒤부터 그 버튼(누르는 건 한 번만, 그다음은 방향만)
-          const oi = (!weighted && ri === 0) || k < 2 ? held : k === 2 ? rep : rep & (IN.L | IN.R | IN.D);
+          // 읽기에선 상대가 때리는 버릇이면 연타로 봄 (7프레임마다 다시 누름)
+          const mash = weighted && rep === IN.A && k > 2 && (k - 2) % 7 === 0;
+          const oi = (!weighted && ri === 0) || k < 2 ? held : k === 2 || mash ? rep : rep & (IN.L | IN.R | IN.D);
           step(t, me === 0 ? [c[k], oi] : [oi, c[k]]);
           if (t.phase !== "fight") break;
         }
