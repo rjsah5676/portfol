@@ -152,6 +152,17 @@ export function decideSeven(v: SevenBotView, brain: Brain): SevenDecision {
   };
   const allIn = (b: SevenBet | "call") => (b === "call" ? toCall : (bets[b] ?? 0)) >= me.stack;
 
+  // 마지막 구: 남이 편 카드만으로도 내 패(7장 전부)를 이기고 있으면 더 넣지 않음 (상대 원페어 · 투페어가 보이는데 탑으로 받던 것)
+  const mine = evaluate(v.cards);
+  const shown = Math.max(-1, ...v.players.filter((x) => !x.folded && x.seat !== v.seat).map((x) => (x.up.length ? evaluate(x.up) : -1)));
+  if (last && shown > mine) return { type: "die", thinkMs: think(900, 2200), cue: toCall > 0 ? "fold" : undefined };
+
+  // 좋은 시작(초반 페어 · 같은 무늬 4장 · 4장 연속): 사람처럼 세게 나옴
+  const ranksMine = v.cards.map((c) => c >> 2);
+  const pairRank = Math.max(-1, ...ranksMine.filter((x, i) => ranksMine.indexOf(x) !== i));
+  const strongStart = v.round <= 5 && avail.length > 0 && (pairRank >= 0 || hasDraw(v.cards));
+  const pushStart = strongStart && r() < (pairRank >= 8 || hasDraw(v.cards) ? 0.6 : 0.4) * (0.7 + 0.3 * p.loose);
+
   if (toCall > 0) {
     const need = toCall / (v.pot + toCall);
     const big = toCall >= v.pot * 0.4 || toCall >= me.stack * 0.5;
@@ -177,6 +188,10 @@ export function decideSeven(v: SevenBotView, brain: Brain): SevenDecision {
       const b = pickBet(0.5)!;
       return { type: b, thinkMs: think(2000, 4200), cue: "bigRaise" };
     }
+    if (pushStart && toCall < me.stack * 0.15) {
+      const b = pickBet(0.65)!;
+      return { type: b, thinkMs: think(1300, 2800), cue: allIn(b) ? "allin" : "raise" };
+    }
     // 초반(4 · 5구)에 내 칩에 비해 싼 벳이면 하프라도 "한 장 더 보자": 남은 카드가 많아(뒷심) 기준을 낮추고, 잡패도 가끔은 그냥 따라감
     const cheapEarly = !last && v.round <= 5 && toCall < me.stack * 0.06 && risk < 0.4;
     if (cheapEarly) {
@@ -195,6 +210,10 @@ export function decideSeven(v: SevenBotView, brain: Brain): SevenDecision {
     if (!last && eq > 0.85 && r() < p.slowplay) return { type: avail[0], thinkMs: think(1100, 2400) };
     const b = pickBet(eq >= 0.85 ? (last ? 1 : 0.8) : eq >= 0.72 ? 0.55 : 0.2)!;
     return { type: b, thinkMs: think(1200, 3000), cue: allIn(b) ? "allin" : "raise" };
+  }
+  if (pushStart) {
+    const b = pickBet(0.65)!;
+    return { type: b, thinkMs: think(1100, 2600), cue: allIn(b) ? "allin" : "raise" };
   }
   // 드로우로 먼저 세게 (완성되면 크게 먹고, 상대가 죽으면 그냥 먹음)
   if (!last && hasDraw(v.cards) && r() < p.semiBluff * 0.8) {
