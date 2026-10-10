@@ -3,8 +3,10 @@
  *  파일이 있으면 파일(/poker/sound/…, manifest.json 에 적힌 것만)을 틀고, 없으면 Web Audio 로 즉석 합성한 소리로 대신한다.
  *  브라우저 자동재생 정책 때문에 첫 클릭·터치 이후에만 소리가 난다 (그 전에 틀려던 배경음악은 첫 입력 때 시작).
  *  음량은 세 줄(배경음악 · 효과음 · 음성) + 전체 음소거, localStorage 에 저장.
+ *  실제 크기는 슬라이더 값 × 게임별 보정(lib/soundLevel.ts — 측정해서 맞춤), 효과음·음성은 리미터를 거쳐 겹쳐도 찢어지지 않게.
  */
 
+import { LEVEL, limiter } from "@/lib/soundLevel";
 import { lookChar } from "./rules";
 
 const KEY = "poker_sound";
@@ -151,7 +153,7 @@ function playFile(name: string, vol: number, onEnd?: () => void): boolean {
     const g = c.createGain();
     g.gain.value = vol;
     src.connect(g);
-    g.connect(c.destination);
+    g.connect(limiter(c));
     src.start();
     if (onEnd) src.onended = onEnd;
   });
@@ -174,9 +176,9 @@ function noise(c: AudioContext): AudioBufferSourceNode {
 function env(c: AudioContext, peak: number, attack: number, decay: number, at: number): GainNode {
   const g = c.createGain();
   g.gain.setValueAtTime(0.0001, at);
-  g.gain.exponentialRampToValueAtTime(Math.max(0.0002, peak * getSound().sfx), at + attack);
+  g.gain.exponentialRampToValueAtTime(Math.max(0.0002, peak * getSound().sfx * LEVEL.poker.sfx), at + attack);
   g.gain.exponentialRampToValueAtTime(0.0001, at + attack + decay);
-  g.connect(c.destination);
+  g.connect(limiter(c));
   return g;
 }
 function tone(
@@ -317,7 +319,7 @@ let cur: HTMLAudioElement | null = null;
 /** 로비 곡 "번갈아" 설정일 때 이번 접속에 고른 번호 */
 let lobbyPick = 0;
 
-const bgmTarget = () => (getSound().mute ? 0 : getSound().bgm);
+const bgmTarget = () => (getSound().mute ? 0 : getSound().bgm * LEVEL.poker.bgm);
 function applyBgmVolume() {
   const v = bgmTarget();
   for (const [el, mix] of live) el.volume = Math.min(1, v * mix);
@@ -400,7 +402,7 @@ export const hasSound = (name: string) => !!fileOf(name);
 export function playSfx(name: string) {
   const s = getSound();
   if (s.mute || s.sfx <= 0) return;
-  if (playFile(name, s.sfx)) return;
+  if (playFile(name, s.sfx * LEVEL.poker.sfx)) return;
   const c = ac();
   const f = synth[name];
   if (c && f) f(c);
@@ -463,9 +465,9 @@ function playBuf(c: AudioContext, buf: AudioBuffer, vol: number, onEnd?: () => v
   const src = c.createBufferSource();
   src.buffer = buf;
   const g = c.createGain();
-  g.gain.value = vol;
+  g.gain.value = vol * LEVEL.poker.voice;
   src.connect(g);
-  g.connect(c.destination);
+  g.connect(limiter(c));
   const me = { src, gain: g };
   voiceNow = me;
   src.onended = () => {

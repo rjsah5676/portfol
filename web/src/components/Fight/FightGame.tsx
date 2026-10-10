@@ -54,6 +54,7 @@ import { plainName } from "@/components/Nick";
 import Online, { type BotCfg, type MatchCfg } from "./Online";
 import { OnlineMatch } from "./onlineMatch";
 import { InputLog, WatchFeed, rankBotForfeit, rankBotReport, type RoomSession, type WatchSession } from "@/realtime/fight";
+import { LEVEL } from "@/lib/soundLevel";
 
 
 const SAVE_KEY = "fight:setup";
@@ -292,7 +293,7 @@ export default function FightGame() {
     const a = new Audio(src);
     a.dataset.src = src;
     a.loop = true;
-    a.volume = BGM_MAX * volRef.current.bgm;
+    a.volume = BGM_MAX * volRef.current.bgm * LEVEL.master;
     bgmRef.current = a;
     a.play().catch(() => {});
   }, []);
@@ -754,7 +755,7 @@ export default function FightGame() {
   useEffect(() => {
     volRef.current = vol;
     if (!muted) setFightVolume(vol.sfx);
-    if (bgmRef.current) bgmRef.current.volume = BGM_MAX * vol.bgm;
+    if (bgmRef.current) bgmRef.current.volume = BGM_MAX * vol.bgm * LEVEL.master;
     try {
       localStorage.setItem(VOL_KEY, JSON.stringify(vol));
     } catch {}

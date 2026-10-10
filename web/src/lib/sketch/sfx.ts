@@ -6,8 +6,11 @@
  *  (배경음악 · 진행 음성은 파일이 있을 때만)
  *  브라우저 자동재생 정책 때문에 첫 클릭·터치·키 입력 이후에만 소리가 난다 (그 전에 틀려던 배경음악은 첫 입력 때 시작).
  *  설정: 전체 음소거 + 배경음악 · 효과음 음량, localStorage 에 저장.
+ *  실제 크기는 슬라이더 값 × 게임별 보정(lib/soundLevel.ts — 징글·진행 음성이 배경음악보다 15 dB 크게 나와서 줄임), 리미터를 거쳐 겹쳐도 찢어지지 않게.
  *  manifest.json 예: { "bgm-lobby": "bgm-lobby.mp3", "sfx-correct": "sfx-correct.wav", "sfx-pop-1": "sfx-pop-1.wav", … }
  */
+
+import { LEVEL, limiter } from "@/lib/soundLevel";
 
 const KEY = "sketch_sound";
 const BASE = "/sketch/sound";
@@ -126,9 +129,9 @@ function playFile(name: string, vol: number): boolean {
     const src = c.createBufferSource();
     src.buffer = buf;
     const g = c.createGain();
-    g.gain.value = vol;
+    g.gain.value = vol * LEVEL.sketch.sfx;
     src.connect(g);
-    g.connect(c.destination);
+    g.connect(limiter(c));
     src.start();
   });
   return true;
@@ -150,9 +153,9 @@ function noise(c: AudioContext): AudioBufferSourceNode {
 function env(c: AudioContext, peak: number, attack: number, decay: number, at: number): GainNode {
   const g = c.createGain();
   g.gain.setValueAtTime(0.0001, at);
-  g.gain.exponentialRampToValueAtTime(Math.max(0.0002, peak * getSound().sfx), at + attack);
+  g.gain.exponentialRampToValueAtTime(Math.max(0.0002, peak * getSound().sfx * LEVEL.sketch.sfx), at + attack);
   g.gain.exponentialRampToValueAtTime(0.0001, at + attack + decay);
-  g.connect(c.destination);
+  g.connect(limiter(c));
   return g;
 }
 function tone(
@@ -306,7 +309,7 @@ let wantBgm: string | null = null;
 const live = new Map<HTMLAudioElement, number>();
 let cur: HTMLAudioElement | null = null;
 
-const bgmTarget = () => (getSound().mute ? 0 : getSound().bgm);
+const bgmTarget = () => (getSound().mute ? 0 : getSound().bgm * LEVEL.sketch.bgm);
 function applyBgmVolume() {
   const v = bgmTarget();
   for (const [el, mix] of live) el.volume = Math.min(1, v * mix);

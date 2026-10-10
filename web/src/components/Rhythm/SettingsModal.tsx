@@ -8,6 +8,7 @@ import {
   type ReactNode,
   type SetStateAction,
 } from "react";
+import { LEVEL } from "@/lib/soundLevel";
 import {
   drawHead,
   HIT_SOUNDS,
@@ -71,7 +72,7 @@ async function previewHit(kind: HitSound, volume: number) {
     if (!hitCache.has(kind)) hitCache.set(kind, await hitSoundBuffer(ctx, kind));
     const src = ctx.createBufferSource();
     const gain = ctx.createGain();
-    gain.gain.value = volume * 0.9;
+    gain.gain.value = volume * 0.9 * LEVEL.rhythm.hit;
     src.buffer = hitCache.get(kind)!;
     src.connect(gain).connect(ctx.destination);
     src.start();

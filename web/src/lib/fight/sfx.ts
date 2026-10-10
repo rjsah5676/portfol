@@ -4,9 +4,12 @@
  * 아케이드 격투게임 느낌을 내려고 소리를 겹쳐 만듦:
  *   타격 = 딱 하는 고음 클릭 + 찌그러뜨린(포화) 저음 쿵 + 거친 노이즈 + 짧은 잔향
  *   가드 = 둔탁한 쿵 + 금속성 울림, 휘두르기 = 위로 쓸리는 바람 소리
- * 마지막에 압축기(컴프레서)를 걸어 소리가 단단하고 크게 들리게 함.
+ * 마지막에 압축기(컴프레서)를 걸어 소리가 단단하고 크게 들리게 함 — 압축기가 스스로 키우는 만큼(약 +9 dB) 너무 커서
+ * 최종 음량에 게임별 보정(lib/soundLevel.ts, 측정해서 맞춤)을 곱함.
  * 능력별(불·바람·채찍·물)로 맞는 소리·탄 소리를 조금씩 다르게.
  */
+import { LEVEL } from "@/lib/soundLevel";
+
 export type Element = "fire" | "wind" | "whip" | "water" | "bolt" | "ice" | "key" | "fist";
 
 let ctx: AudioContext | null = null;
@@ -21,7 +24,7 @@ function ac(): AudioContext | null {
     if (!ctx) {
       ctx = new AudioContext();
       master = ctx.createGain();
-      master.gain.value = volume;
+      master.gain.value = volume * LEVEL.fight.sfx;
       const comp = ctx.createDynamicsCompressor();
       comp.threshold.value = -18;
       comp.knee.value = 6;
@@ -148,7 +151,7 @@ export function preloadFightSfx() {
 
 export function setFightVolume(v: number) {
   volume = v;
-  if (master) master.gain.value = v;
+  if (master) master.gain.value = v * LEVEL.fight.sfx;
 }
 
 let noiseBuf: AudioBuffer | null = null;

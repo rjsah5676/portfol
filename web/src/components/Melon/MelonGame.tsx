@@ -32,6 +32,7 @@ import { beginRun } from "@/lib/api/rankRun";
 import Nick from "@/components/Nick";
 import RankAvatar from "@/components/RankAvatar";
 import { useAutoRank } from "@/lib/useAutoRank";
+import { LEVEL } from "@/lib/soundLevel";
 import {
   CELL,
   COLS,
@@ -222,9 +223,9 @@ export default function MelonGame() {
   useEffect(() => {
     const a = audio.current;
     if (a) {
-      a.bgm.volume = vol.bgm;
-      a.end.volume = vol.bgm;
-      a.bbyong.volume = vol.sfx;
+      a.bgm.volume = vol.bgm * LEVEL.master;
+      a.end.volume = vol.bgm * LEVEL.master;
+      a.bbyong.volume = vol.sfx * LEVEL.master;
     }
     try {
       localStorage.setItem(VOL_KEY, JSON.stringify(vol));

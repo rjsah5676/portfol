@@ -1,7 +1,9 @@
 /**
  * BEAT DASH 효과음·메뉴 BGM (public/rhythm/sfx, menu-bgm.mp3).
  * 오디오 컨텍스트는 게임 전체가 하나를 같이 씀 (곡 재생·타격음과 같은 시계).
+ * 크기는 lib/soundLevel.ts 의 보정을 곱함 (메뉴 곡은 재서 맞춤).
  */
+import { fitGain, LEVEL } from "@/lib/soundLevel";
 
 let sharedCtx: AudioContext | null = null;
 /** 공용 오디오 컨텍스트 (처음 부를 때 만들고, 멈춰 있으면 깨움) */
@@ -71,7 +73,7 @@ export function sfx(n: SfxName, gain = 1, at?: number): AudioBufferSourceNode | 
   const src = ctx.createBufferSource();
   src.buffer = b;
   const g = ctx.createGain();
-  g.gain.value = master * gain;
+  g.gain.value = master * gain * LEVEL.rhythm.sfx;
   src.connect(g).connect(ctx.destination);
   src.start(at ?? 0);
   return src;
@@ -86,7 +88,7 @@ export function tick(gain = 0.25) {
   const g = ctx.createGain();
   o.type = "square";
   o.frequency.value = 2400;
-  g.gain.setValueAtTime(master * gain, t);
+  g.gain.setValueAtTime(master * gain * LEVEL.rhythm.sfx, t);
   g.gain.exponentialRampToValueAtTime(0.0001, t + 0.03);
   o.connect(g).connect(ctx.destination);
   o.start(t);
@@ -99,6 +101,8 @@ const LOOP = [20.782, 50.7815] as const;
 let bgmBuf: Promise<AudioBuffer> | null = null;
 let bgm: { src: AudioBufferSourceNode; gain: GainNode } | null = null;
 let bgmVol = 0.5;
+/** 메뉴 곡 크기 맞춤 배수 (불러온 뒤 잼, lib/soundLevel.ts) */
+let bgmFit = 0.45;
 /** 틀어야 하는지 — 파일을 받거나 풀어서(모바일은 몇 초 걸림) 기다리는 사이 stopBgm이 불렸으면 틀지 않음 */
 let bgmWant = false;
 
@@ -111,7 +115,7 @@ export async function playBgm(volume: number) {
     const t = ctx.currentTime;
     bgm.gain.gain.cancelScheduledValues(t);
     bgm.gain.gain.setValueAtTime(bgm.gain.gain.value, t);
-    bgm.gain.gain.linearRampToValueAtTime(volume * 0.45, t + 0.4);
+    bgm.gain.gain.linearRampToValueAtTime(volume * bgmFit, t + 0.4);
     return;
   }
   if (!bgmBuf)
@@ -127,6 +131,7 @@ export async function playBgm(volume: number) {
   }
   // 기다리는 사이 다른 호출이 이미 틀었거나, 화면이 바뀌어 꺼야 하면 그냥 끝
   if (bgm || !bgmWant) return;
+  bgmFit = fitGain(buf, LEVEL.rhythm.menuLufs);
   const src = ctx.createBufferSource();
   src.buffer = buf;
   src.loop = true;
@@ -135,7 +140,7 @@ export async function playBgm(volume: number) {
   const gain = ctx.createGain();
   const t = ctx.currentTime;
   gain.gain.setValueAtTime(0, t);
-  gain.gain.linearRampToValueAtTime(bgmVol * 0.45, t + 0.8);
+  gain.gain.linearRampToValueAtTime(bgmVol * bgmFit, t + 0.8);
   src.connect(gain).connect(ctx.destination);
   src.start(t);
   bgm = { src, gain };

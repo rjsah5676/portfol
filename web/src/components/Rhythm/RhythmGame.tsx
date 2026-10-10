@@ -18,6 +18,7 @@ import {
 } from "@/lib/rhythm/autosync";
 import { HIT_SOUNDS, NOTE_SIZES, setNoteSize, SKINS } from "@/lib/rhythm/fx";
 import { audio, loadSfx, playBgm, setSfxVolume, sfx, stopBgm } from "@/lib/rhythm/sfx";
+import { fitGain, LEVEL } from "@/lib/soundLevel";
 import { accelSettingsUrl, gpuInfo } from "@/lib/rhythm/gpu";
 import Stage, {
   COVERS_OPT,
@@ -434,7 +435,7 @@ export default function RhythmGame() {
         );
         const len = Math.min(18, Math.max(4, buffer.duration - from - 0.5));
         const t = ctx.currentTime;
-        const v = previewVol * 0.55;
+        const v = previewVol * 0.55 * fitGain(buffer, LEVEL.rhythm.musicLufs);
         gain.gain.setValueAtTime(0, t);
         gain.gain.linearRampToValueAtTime(v, t + 0.6);
         gain.gain.setValueAtTime(v, t + len - 1.2);
@@ -1004,7 +1005,7 @@ export default function RhythmGame() {
         src.loopEnd = from + len;
         const t = ctx.currentTime;
         gain.gain.setValueAtTime(0, t);
-        gain.gain.linearRampToValueAtTime(settings.music * 0.55, t + 0.8);
+        gain.gain.linearRampToValueAtTime(settings.music * 0.55 * fitGain(buffer, LEVEL.rhythm.musicLufs), t + 0.8);
         src.start(t, from);
         node = { src, gain, ctx };
       } catch {}

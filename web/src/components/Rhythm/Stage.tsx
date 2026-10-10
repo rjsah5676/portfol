@@ -25,6 +25,7 @@ import {
   type Skin,
 } from "@/lib/rhythm/fx";
 import { sfx, sfxBuffer } from "@/lib/rhythm/sfx";
+import { fitGain, LEVEL } from "@/lib/soundLevel";
 
 export const KEY_CODES = ["KeyD", "KeyF", "KeyJ", "KeyK"];
 
@@ -587,7 +588,9 @@ export default function Stage({
     const src = ctx.createBufferSource();
     src.buffer = buffer;
     const musicGain = ctx.createGain();
-    musicGain.gain.value = live.music;
+    // 곡마다 크기가 달라서(-7.6 ~ -14.5 LUFS) 재서 같은 크기로 맞춤 (lib/soundLevel.ts)
+    const musicFit = fitGain(buffer, LEVEL.rhythm.musicLufs);
+    musicGain.gain.value = live.music * musicFit;
     src.connect(musicGain).connect(ctx.destination);
     // 온라인: 서버가 정한 시각에 모두 같이 (카운트다운이 덜 남았으면 그만큼 건너뜀)
     const startAt = online
@@ -614,7 +617,7 @@ export default function Stage({
       o.type = "triangle";
       o.frequency.value = ph.beep;
       gn.gain.setValueAtTime(0.0001, at);
-      gn.gain.exponentialRampToValueAtTime(0.35, at + 0.01);
+      gn.gain.exponentialRampToValueAtTime(0.35 * LEVEL.rhythm.sfx, at + 0.01);
       gn.gain.exponentialRampToValueAtTime(0.0001, at + (ph.label === "GO!" ? 0.45 : 0.18));
       o.connect(gn).connect(ctx.destination);
       o.start(at);
@@ -676,7 +679,7 @@ export default function Stage({
     // 샘플 타격음은 파일을 받아야 해서 — 받는 동안은 1번 소리, 다 되면 바꿈 (설정에서 들어 봤으면 이미 받아져 있음)
     void hitSoundBuffer(ctx, hitSound).then((b) => (hitBuf = b));
     const hitGain = ctx.createGain();
-    hitGain.gain.value = live.hit * 0.9;
+    hitGain.gain.value = live.hit * 0.9 * LEVEL.rhythm.hit;
     hitGain.connect(ctx.destination);
     // 타격 효과: 판정선에서 터지는 빛·링·불꽃
     const bursts: { lane: number; at: number; judge: Judge; big: boolean }[] = [];
@@ -2146,8 +2149,8 @@ export default function Stage({
     const apply = (p: Partial<LiveSettings>) => {
       Object.assign(live, p);
       if (p.speed !== undefined) vis = visibleSec(live.speed);
-      if (p.music !== undefined) musicGain.gain.value = live.music;
-      if (p.hit !== undefined) hitGain.gain.value = live.hit * 0.9;
+      if (p.music !== undefined) musicGain.gain.value = live.music * musicFit;
+      if (p.hit !== undefined) hitGain.gain.value = live.hit * 0.9 * LEVEL.rhythm.hit;
     };
     ctrl.current = { pause, resume, apply };
 

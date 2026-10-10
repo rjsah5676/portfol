@@ -19,6 +19,7 @@ import endBgmSrc from "@/sounds/melongame/endbgm.mp3";
 import "@/css/minesweeper.css";
 import { generateNoGuessBoard } from "./noGuess";
 import HintBubble, { markHintSeen } from "@/components/HintBubble";
+import { LEVEL } from "@/lib/soundLevel";
 
 const HINT_KEY = "hint:mine-controls";
 
@@ -53,7 +54,7 @@ export default function Minesweeper() {
   const endBgmAudioRef = useRef<HTMLAudioElement | null>(null);
   useEffect(() => {
     endBgmAudioRef.current = new Audio(endBgmSrc);
-    endBgmAudioRef.current.volume = 0.6;
+    endBgmAudioRef.current.volume = 0.6 * LEVEL.master;
   }, []);
 
   const [board, setBoard] = useState<Grid<number>>(

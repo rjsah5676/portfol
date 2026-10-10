@@ -2,6 +2,7 @@
  * 짧은 효과음을 Web Audio로 즉석 합성 (파일 없이).
  * 첫 사용자 입력 이후에만 소리가 나므로(브라우저 자동재생 정책) 게임 입력에서 호출하면 됨.
  */
+import { LEVEL, limiter } from "@/lib/soundLevel";
 
 let ctx: AudioContext | null = null;
 function ac(): AudioContext | null {
@@ -26,12 +27,13 @@ function noise(c: AudioContext): AudioBuffer {
   return noiseBuf;
 }
 
+/** 합성음(지뢰찾기 깃발 · 칸 열기 · 폭발) 봉투 — 크기는 lib/soundLevel.ts 의 보정을 곱하고 리미터를 거침 (폭발이 찢어지지 않게) */
 function env(c: AudioContext, peak: number, attack: number, decay: number, at = c.currentTime) {
   const g = c.createGain();
   g.gain.setValueAtTime(0.0001, at);
-  g.gain.exponentialRampToValueAtTime(peak, at + attack);
+  g.gain.exponentialRampToValueAtTime(Math.max(0.0002, peak * LEVEL.mine), at + attack);
   g.gain.exponentialRampToValueAtTime(0.0001, at + attack + decay);
-  g.connect(c.destination);
+  g.connect(limiter(c));
   return g;
 }
 
