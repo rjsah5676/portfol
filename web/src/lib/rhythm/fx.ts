@@ -319,16 +319,23 @@ export function drawHoldBody(
   g.fillStyle = color;
   switch (skin) {
     case "neon": {
+      // 머리처럼 빛나는 관: 속은 반투명하게 채우고, 양쪽 테두리와 가운데 심지를 밝게
       g.fillStyle = holdGrad(g, `n|${color}|${bx}|${bw}`, bx, bw, [
-        [0, `${color}22`],
-        [0.5, `${color}aa`],
-        [1, `${color}22`],
+        [0, `${color}dd`],
+        [0.2, `${color}77`],
+        [0.5, `${color}99`],
+        [0.8, `${color}77`],
+        [1, `${color}dd`],
       ]);
       g.fillRect(bx, yTail, bw, h);
       g.shadowColor = color;
-      g.shadowBlur = 8;
-      g.fillStyle = "rgba(255,255,255,0.75)";
-      g.fillRect(x + laneW / 2 - 1, yTail, 2, h);
+      g.shadowBlur = 10;
+      g.fillStyle = color;
+      g.fillRect(bx, yTail, 3, h);
+      g.fillRect(bx + bw - 3, yTail, 3, h);
+      g.fillStyle = "rgba(255,255,255,0.9)";
+      g.fillRect(x + laneW / 2 - 1.5, yTail, 3, h);
+      g.shadowBlur = 0;
       break;
     }
     case "metal": {
