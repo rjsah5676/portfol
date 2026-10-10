@@ -99,8 +99,8 @@ export const ACT_MS = 7_000;
 export const ACT_AWAY_MS = 3_000;
 /** 7포커에서 버릴 카드·보여 줄 카드를 고르는 시간 */
 export const CHOICE_MS = 6_000;
-/** 시간 초과가 이만큼 이어지면 자리 비움으로 바뀜 */
-export const TIMEOUTS_TO_SITOUT = 2;
+/** 시간 초과가 이만큼 이어지면 나가기 예약 (이번 판 끝나면 일어남 · 직접 행동하거나 예약 취소하면 풀림) */
+export const TIMEOUTS_TO_SITOUT = 1;
 /** 자리 비움이 이만큼 이어지면 자리에서 내려옴 */
 export const SITOUT_KICK_MS = 3 * 60_000;
 

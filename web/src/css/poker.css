@@ -3005,6 +3005,13 @@
 .pk-sf-act .pk-acttag-img {
   height: 2.3em;
 }
+/* 내 행동 글자는 더 크게 */
+.pk-sf-me .pk-sf-act .pk-acttag-img {
+  height: 3.8em;
+}
+.pk-sf-me .pk-sf-act .pk-acttag {
+  font-size: 2em;
+}
 /* 족보 · 결과 글자: 카드 칸 아랫단 위 */
 .pk-sf-label {
   position: absolute;
@@ -3034,17 +3041,14 @@
   color: #ffd84a;
   text-shadow: 0 1px 0 #000;
 }
-.pk-sevenbar > .pk-btn {
-  padding-top: 0;
-  padding-bottom: 0;
-}
-/* 족보 · 기록 상자 접기/펴기 탭 */
+/* 족보 · 기록 상자 접기/펴기 탭: 상자 왼쪽 끝에 딱 붙음 */
 .pk-dock-tab {
   position: absolute;
   z-index: 26;
   width: 1.6em;
   height: 3.2em;
-  border-radius: 6px;
+  border-radius: 6px 0 0 6px;
+  border-right: 0 !important;
   border: 1.5px solid rgba(214, 175, 92, 0.55);
   background: rgba(10, 11, 18, 0.92);
   color: #ffd84a;
@@ -3057,51 +3061,246 @@
   background: rgba(30, 32, 46, 0.95);
 }
 
-/* 7포커 베팅 칸: 남의 차례엔 어둡게 잠김 (글자만 흐리게 보임), 내 차례엔 켜진 칸만 색 */
-.pk-sbtn:disabled,
-.pk-sbtn-idle {
-  filter: saturate(0.15) brightness(0.55);
-  opacity: 0.85;
-  box-shadow: none;
+/* 붙박이 족보 · 기록 · 이모티콘 탭: 상자 폭을 셋이 나눠 씀 */
+.pk-seg-dock {
+  display: flex;
 }
-.pk-sevenbar[data-live="1"] .pk-sbtn:not(:disabled) {
-  filter: none;
-  opacity: 1;
-}
-.pk-sbtn-idle:not(:disabled) {
-  cursor: pointer;
-}
-.pk-sbtn-idle[aria-pressed="true"] {
-  filter: none;
-}
-/* 금액: 칸 위 작은 알약 */
-.pk-sbtn-amt {
-  position: absolute;
-  top: -0.65em;
-  left: 50%;
-  transform: translateX(-50%);
-  padding: 0 0.5em;
-  border-radius: 999px;
-  background: rgba(0, 0, 0, 0.85);
-  border: 1px solid rgba(255, 255, 255, 0.25);
-  color: #fff;
-  font-size: 0.78em;
-  line-height: 1.35;
+.pk-seg-dock > button {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 0.22em 0.3em;
+  font-size: 0.8em;
   white-space: nowrap;
 }
-/* 미리 누르기 체크 상자: 칸 왼쪽 */
-.pk-sbtn-box {
-  position: absolute;
-  left: 0.5em;
-  top: 50%;
-  width: 0.7em;
-  height: 1.1em;
-  transform: translateY(-50%);
-  border: 1.5px solid rgba(255, 255, 255, 0.45);
-  border-radius: 3px;
+
+/* ── 7포커 베팅 칸 (한게임식): 늘 같은 다섯 칸, 어두운 바탕에 행동마다 글자 색. 켜진 칸만 밝게 ── */
+.pk-sbtn {
+  --lc: #fff;
+  cursor: pointer;
+  border-radius: 9px;
+  background: linear-gradient(180deg, #17323d, #0b1820);
+  border: 1.5px solid rgba(110, 200, 220, 0.45);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 3px 8px rgba(0, 0, 0, 0.5);
+  transition:
+    transform 0.07s ease,
+    filter 0.12s ease,
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
 }
-.pk-sbtn-box-on {
-  background: #ffd84a;
-  border-color: #ffd84a;
-  box-shadow: 0 0 8px rgba(255, 216, 74, 0.7);
+.pk-sbtn[data-k="die"] { --lc: #ff6b8a; }
+.pk-sbtn[data-k="bbing"] { --lc: #ff9f43; }
+.pk-sbtn[data-k="ddadang"] { --lc: #ffbe3d; }
+.pk-sbtn[data-k="call"] { --lc: #3ee08f; }
+.pk-sbtn[data-k="quarter"] { --lc: #d07bff; }
+.pk-sbtn[data-k="half"] { --lc: #ff7a50; }
+.pk-sbtn[data-k="allin"] { --lc: #ff3b5c; }
+.pk-sbtn-t {
+  font-family: "Black Han Sans", "Nanum Gothic", sans-serif;
+  font-size: 1.45em;
+  line-height: 1;
+  letter-spacing: 0.04em;
+  color: var(--lc);
+  text-shadow:
+    0 2px 0 rgba(0, 0, 0, 0.55),
+    0 0 12px color-mix(in srgb, var(--lc) 45%, transparent);
+}
+.pk-sbtn:hover:not(:disabled) {
+  filter: brightness(1.15);
+}
+.pk-sbtn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+/* 내 차례에 켜진 칸: 테두리 · 바탕이 살아남 */
+.pk-sevenbar[data-live="1"] .pk-sbtn:not(:disabled) {
+  background: linear-gradient(180deg, #1d4b59, #0e2630);
+  border-color: rgba(120, 225, 245, 0.75);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    0 0 14px rgba(90, 210, 240, 0.28),
+    0 3px 8px rgba(0, 0, 0, 0.5);
+}
+/* 잠긴 칸 (남의 차례 · 못 하는 행동): 바탕 · 글자 다 어둡게 */
+.pk-sbtn:disabled {
+  cursor: default;
+  background: linear-gradient(180deg, #121c22, #0a1015);
+  border-color: rgba(110, 200, 220, 0.14);
+  box-shadow: none;
+}
+.pk-sbtn:disabled .pk-sbtn-t {
+  color: rgba(200, 215, 225, 0.22);
+  text-shadow: none;
+}
+/* 남의 차례에 미리 누를 수 있는 칸: 어둡지만 누를 수 있음, 눌러 두면 테두리만 금색으로 강조 */
+.pk-sevenbar:not([data-live="1"]) .pk-sbtn:not(:disabled) {
+  background: linear-gradient(180deg, #13222a, #0a1318);
+  border-color: rgba(110, 200, 220, 0.22);
+}
+.pk-sevenbar:not([data-live="1"]) .pk-sbtn:not(:disabled) .pk-sbtn-t {
+  color: color-mix(in srgb, var(--lc) 45%, #2a3640);
+  text-shadow: none;
+}
+.pk-sbtn[aria-pressed="true"] {
+  border: 2px solid #ffd84a !important;
+  box-shadow:
+    0 0 0 1px rgba(255, 216, 74, 0.35),
+    0 0 14px rgba(255, 216, 74, 0.55) !important;
+}
+.pk-sbtn[aria-pressed="true"] .pk-sbtn-t {
+  color: var(--lc) !important;
+}
+/* 금액: 칸 위에 걸친 알약 (크게) */
+.pk-sbtn-amt {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translate(-50%, -55%);
+  padding: 0.05em 0.6em;
+  border-radius: 999px;
+  background: #05080b;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: #fff;
+  font-size: 1em;
+  font-weight: 800;
+  line-height: 1.3;
+  white-space: nowrap;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.6);
+}
+
+/* ── 내 차례 3 · 2 · 1: 둥근 시계 (테두리가 1초 동안 줄어듦) ── */
+.pk-cd {
+  width: 2.1em;
+  height: 2.1em;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: radial-gradient(circle at 50% 38%, rgba(40, 36, 30, 0.95), rgba(8, 8, 12, 0.95) 70%);
+  box-shadow:
+    0 0 0 0.05em rgba(255, 255, 255, 0.12),
+    0 0.12em 0.4em rgba(0, 0, 0, 0.6);
+  animation: pk-cd-pop 0.35s cubic-bezier(0.2, 1.5, 0.35, 1) both;
+  --cc: #ffd84a;
+}
+.pk-cd[data-n="2"] { --cc: #ff9f43; }
+.pk-cd[data-n="1"] { --cc: #ff4d5e; }
+.pk-cd svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+  overflow: visible;
+}
+.pk-cd-track {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.1);
+  stroke-width: 6;
+}
+.pk-cd-ring {
+  fill: none;
+  stroke: var(--cc);
+  stroke-width: 6;
+  stroke-linecap: round;
+  stroke-dasharray: 100 100;
+  filter: drop-shadow(0 0 4px var(--cc));
+  animation: pk-cd-ring 1s linear forwards;
+}
+.pk-cd b {
+  position: relative;
+  font-family: "Black Han Sans", sans-serif;
+  font-weight: 400;
+  font-size: 1.15em;
+  line-height: 1;
+  color: #fff;
+  text-shadow:
+    0 0 0.25em var(--cc),
+    0 0.05em 0 rgba(0, 0, 0, 0.6);
+}
+@keyframes pk-cd-ring {
+  from { stroke-dashoffset: 0; }
+  to { stroke-dashoffset: 100; }
+}
+@keyframes pk-cd-pop {
+  0% { transform: translate(-50%, -50%) scale(1.4); opacity: 0; }
+  100% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+}
+/* 틀 안 작은 초 세기: 캐릭터 칸 오른쪽 위 안쪽 */
+.pk-sf-char .pk-count-sm {
+  right: 4px;
+  top: 4px;
+  left: auto;
+  font-size: 1.05em;
+  background: radial-gradient(circle at 50% 38%, #3a3328, #0b0b10 70%);
+  border: 2px solid #ff4d5e;
+  box-shadow: 0 0 10px rgba(255, 77, 94, 0.7);
+}
+.pk-sf-char-r .pk-count-sm {
+  right: auto;
+  left: 4px;
+}
+/* 7포커: 「내 차례!」는 버튼 줄 왼쪽 위 (족보 상자를 안 가리게) */
+.pk-turn-flag-l {
+  left: 0;
+  translate: 50% 0; /* 움직임의 translateX(-50%) 를 되돌림 → 왼쪽 끝에 맞춤 */
+}
+
+/* 7포커 내 차례: 「내 차례!」 딱지 대신 내 틀이 금빛으로 숨 쉬듯 빛나고, 버튼 줄이 한 번 번쩍 */
+.pk-sf-me[data-turn="1"] {
+  animation: pk-me-turn 1.1s ease-in-out infinite;
+}
+@keyframes pk-me-turn {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 2px rgba(255, 216, 74, 0.45),
+      0 0 16px rgba(255, 216, 74, 0.45);
+  }
+  50% {
+    box-shadow:
+      0 0 0 3px rgba(255, 216, 74, 0.85),
+      0 0 34px rgba(255, 216, 74, 0.8);
+  }
+}
+.pk-sevenbar[data-live="1"] {
+  border-radius: 10px;
+  animation: pk-bar-live 0.6s ease-out both;
+}
+@keyframes pk-bar-live {
+  0% {
+    box-shadow: 0 0 0 0 rgba(120, 225, 245, 0);
+  }
+  40% {
+    box-shadow: 0 0 0 4px rgba(120, 225, 245, 0.55), 0 0 30px rgba(120, 225, 245, 0.5);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(120, 225, 245, 0);
+  }
+}
+
+/* 베팅 칸 글자 그림: 칸 높이에 맞춰 크게. 잠긴 칸은 흑백 · 흐리게, 미리 누를 수 있는 칸은 반쯤 */
+.pk-sbtn-img {
+  display: block;
+  height: 70%;
+  margin-top: 0.55em; /* 위에 걸친 금액 알약 아래로 — 글자를 안 가리게 */
+  max-width: 94%;
+  width: auto;
+  object-fit: contain;
+  pointer-events: none;
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.6));
+  transition: filter 0.15s, opacity 0.15s;
+}
+.pk-sbtn:disabled .pk-sbtn-img {
+  filter: grayscale(1) brightness(0.7);
+  opacity: 0.28;
+}
+.pk-sevenbar:not([data-live="1"]) .pk-sbtn:not(:disabled) .pk-sbtn-img {
+  filter: grayscale(0.7) brightness(0.75);
+  opacity: 0.55;
+}
+.pk-sbtn[aria-pressed="true"] .pk-sbtn-img {
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.6)) !important;
+  opacity: 1 !important;
 }

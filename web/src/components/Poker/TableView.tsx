@@ -624,7 +624,7 @@ export default function TableView({
             const text = ex
               ? exitAskRef.current
                 ? "나가기 예약 · 이번 판이 끝나면 나가요"
-                : "자리를 오래 비워서 나가기 예약됐어요"
+                : "시간 안에 안 골라서 나가기 예약됐어요 · 계속 치려면 「예약 취소」"
               : "나가기 예약을 취소했어요";
             setInfo({ text, key: Date.now() });
             exitAskRef.current = false;
@@ -874,7 +874,18 @@ export default function TableView({
       } else {
         const sv2 = hd as SevenView;
         const lg = sv2.legal;
-        if (sv2.phase === "bet" && lg) {
+        const stack = me?.stack ?? 0;
+        // 미리 눌러 둔 베팅이 그 사이 팟이 커져 올인이 돼 버리면 자동으로 안 함 — 칸이 「올인」으로 바뀌니 직접 눌러야 함
+        const wouldAllIn = (() => {
+          if (!lg) return false;
+          if (pre === "call" || pre === "callbbing") return lg.toCall > 0 ? lg.toCall >= stack : (lg.bets.bbing ?? 0) >= stack;
+          if (pre === "bbdd") return (lg.bets.bbing ?? lg.bets.ddadang ?? 0) >= stack;
+          if (pre === "ddadang" || pre === "quarter" || pre === "half") return (lg.bets[pre] ?? 0) >= stack;
+          return false;
+        })();
+        if (sv2.phase === "bet" && lg && wouldAllIn) {
+          setInfo({ text: "미리 누른 베팅이 올인이 돼서 직접 골라 주세요", key: Date.now() });
+        } else if (sv2.phase === "bet" && lg) {
           if (pre === "die") void doAct({ a: "die" });
           else if (pre === "call" || pre === "callbbing") {
             // 받을 돈이 있으면 얼마든(삥·따당·하프…) 콜, 없으면 삥
@@ -1222,11 +1233,11 @@ export default function TableView({
           myHand: hero ? liveHand : null,
           tier: table.tier,
           sizes,
-          side: right ? "right" : "left",
+          side: "left",
           hide: !hero && !revealed(i),
           settled: revealDone,
           dealDelay: dealOf(i),
-          maxW: f.areaW - 8,
+          maxW: f.areaW - 6,
         });
     return (
       <div
@@ -1273,9 +1284,9 @@ export default function TableView({
           </div>
           {/* 카드 칸: 캐릭터 칸에 딱 붙게, 엎은 카드 묶음 → 편 카드 차곡차곡. 족보 · 결과 글자는 카드 아랫단 위에 */}
           <div
-            className={`pk-sf-cards relative flex min-w-0 flex-1 ${hero ? "items-start" : "items-center"} ${right ? "justify-end" : "justify-start"}`}
-            // 내 카드: 위에 메이드 카드가 떠오를 틈, 아래에 족보 글자 자리를 남김
-            style={{ padding: hero ? `${Math.round(f.cell * 0.075)}px 4px 0` : "0 4px" }}
+            className={`pk-sf-cards relative flex min-w-0 flex-1 justify-start ${hero ? "items-start" : "items-center"}`}
+            // 카드는 늘 왼쪽부터 차곡차곡. 내 카드: 위에 메이드 카드가 떠오를 틈, 아래에 족보 글자 자리를 남김
+            style={{ padding: hero ? `${Math.round(f.cell * 0.075)}px 3px 0` : "0 3px" }}
           >
             {hero && madeKey && !res && <span key={`burst-${madeKey}`} className="pk-made-burst" aria-hidden />}
             {cards}
@@ -1675,15 +1686,20 @@ export default function TableView({
           !(sv && sv.phase === "choice" && liveHand?.down) && (
             <div
               key={secLeft}
-              className="pk-count pointer-events-none absolute"
+              className="pk-cd pointer-events-none absolute"
+              data-n={secLeft}
               style={{
                 left: px(L.table.cx),
-                top: py(L.center.board) + sizes.boardCard * 0.7,
+                top: SF ? py(L.center.pot) + u * 17 : py(L.center.board) + sizes.boardCard * 0.7,
                 zIndex: 34,
-                fontSize: Math.max(64, u * 16),
+                fontSize: Math.max(40, u * (SF ? 9 : 11)),
               }}
             >
-              {secLeft}
+              <svg viewBox="0 0 100 100" aria-hidden>
+                <circle cx="50" cy="50" r="44" className="pk-cd-track" />
+                <circle cx="50" cy="50" r="44" className="pk-cd-ring" pathLength={100} />
+              </svg>
+              <b>{secLeft}</b>
             </div>
           )}
 
@@ -1796,7 +1812,7 @@ export default function TableView({
                 })();
           // 7포커: 던진 칩은 바로 가운데 팟 더미로 (판 위에 자리별로 깔지 않음)
           const to = SF ? potPoint : betPoint(t.seat);
-          const sz = Math.max(18, u * 3);
+          const sz = Math.max(14, u * (SF ? 2.3 : 3));
           return Array.from({ length: t.n }, (_, i) => (
             <div
               key={`${t.key}-${i}`}
@@ -1987,10 +2003,10 @@ export default function TableView({
               : { left: boardW * 0.5, right: 12, bottom: 10, zIndex: 30, fontSize: h <= 560 ? "1.2em" : "1.1em" }
           }
         >
-          {myTurn && !busy && (
+          {myTurn && !busy && !SF && (
             <div
               key={`${table.handNo}-${hand?.toAct}-${hv ? hv.street : (sv?.round ?? 0)}`}
-              className="pk-turn-flag pointer-events-none"
+              className={`pk-turn-flag pointer-events-none ${SF ? "pk-turn-flag-l" : ""}`}
               aria-hidden
             >
               내 차례!
@@ -2053,8 +2069,8 @@ export default function TableView({
               type="button"
               onClick={() => setDockOpen(false)}
               aria-label="족보 · 기록 접기"
-              className="pk-dock-tab"
-              style={{ left: SF.info.x - 2, top: SF.info.y + SF.info.h / 2, transform: "translate(-100%, -50%)" }}
+              className="pk-dock-tab pk-dock-tab-in"
+              style={{ left: SF.info.x + 1, top: SF.info.y + SF.info.h / 2, transform: "translate(-100%, -50%)" }}
             >
               ›
             </button>
@@ -2333,7 +2349,7 @@ function sevenFrames(w: number, h: number, bar: number, stripH: number) {
   const gap = Math.round(hp * 0.014);
   const gRow = Math.round(hp * 0.034);
   const mx = Math.round(Math.max(6, hp * 0.012));
-  const F = Math.round(hp * 0.255);
+  const F = Math.round(hp * 0.27);
   const cell = F - stripH;
   const charW = Math.round(cell * 0.75);
   const cardW = Math.round((cell * 0.9) / 1.4);
@@ -2350,7 +2366,7 @@ function sevenFrames(w: number, h: number, bar: number, stripH: number) {
   const mAreaW = Math.round(mCardW * 3.1);
   const mw = mCharW + mAreaW;
   /** 베팅 버튼 줄: 내 틀 오른쪽 아래 끝까지 */
-  const barH = Math.round(mh * 0.42);
+  const barH = Math.round(mh * 0.34);
   const barX = mx + mw + gap;
   return {
     gap,
@@ -2532,11 +2548,11 @@ function Center({
           <PotPile
             amount={collected > 0 || res ? shown : 0}
             base={base}
-            size={Math.max(24, sizes.u * 4.4)}
+            size={Math.max(20, sizes.u * (hand.game === "seven" ? 3.2 : 4.4))}
           />
         )}
         <div key={shown} className="pk-pot">
-          <PotChips ratio={shown / base} size={Math.max(24, sizes.u * 4)} />
+          <PotChips ratio={shown / base} size={Math.max(20, sizes.u * (hand.game === "seven" ? 3.2 : 4))} />
           {/* 이번 구에 건 돈은 POT 글자 옆에 작게 (옆으로 길어져 자리를 가리지 않게) */}
           <span className="flex shrink-0 flex-col items-start leading-none whitespace-nowrap">
             <span className="flex items-center gap-[0.4em]">
@@ -3151,7 +3167,8 @@ function InfoBox({
   emoteChar?: Look;
   onEmote?: (e: Emote) => void;
 }) {
-  const [tab, setTab] = useState<"rank" | "log" | "emote">("rank");
+  // 붙박이(7포커) 상자는 이모티콘이 먼저
+  const [tab, setTab] = useState<"rank" | "log" | "emote">(box ? "emote" : "rank");
   const ranks = table.game === "holdem" ? HOLDEM_RANKS : SEVEN_RANKS;
   const steps = hv ? ["프리플랍", "플랍", "턴", "리버"] : ["고르기", "4구", "5구", "6구", "7구"];
   const at = !hand ? -1 : hv ? hv.street : sv!.phase === "choice" ? 0 : Math.max(1, sv!.round - 3);
@@ -3165,12 +3182,17 @@ function InfoBox({
       style={box ? { left: box.x, top: box.y, width: box.w, height: box.h, maxHeight: "none", zIndex: 25 } : { top, zIndex: 45 }}
     >
       <div className="flex items-center gap-[0.35em] px-[0.5em] py-[0.3em]">
-        <span className="pk-num text-[0.78em] font-bold text-[#ffd84a]">{hand ? `${table.handNo}판` : "판 사이"}</span>
-        <span className="text-[0.7em] text-white/55">
-          {hand && at >= 0 ? steps[at] : ""}
-          {hand ? ` · ${alive}/${sitting}명` : `${sitting}명`}
-        </span>
-        <div role="tablist" className="pk-seg pk-seg-sm ml-auto">
+        {/* 붙박이 상자는 탭만 꽉 차게 (몇 판 · 몇 구는 위 바 · 판 가운데에 있음) */}
+        {!box && (
+          <>
+            <span className="pk-num text-[0.78em] font-bold text-[#ffd84a]">{hand ? `${table.handNo}판` : "판 사이"}</span>
+            <span className="text-[0.7em] text-white/55">
+              {hand && at >= 0 ? steps[at] : ""}
+              {hand ? ` · ${alive}/${sitting}명` : `${sitting}명`}
+            </span>
+          </>
+        )}
+        <div role="tablist" className={`pk-seg ${box ? "pk-seg-dock flex-1" : "pk-seg-sm ml-auto"}`}>
           <button role="tab" type="button" aria-selected={tab === "rank"} onClick={() => setTab("rank")}>
             족보
           </button>
@@ -3178,13 +3200,8 @@ function InfoBox({
             기록
           </button>
           {emoteChar && onEmote && (
-            <button role="tab" type="button" aria-selected={tab === "emote"} onClick={() => setTab("emote")} aria-label="이모티콘">
-              <svg viewBox="0 0 24 24" className="inline h-[1.1em] w-[1.1em] align-[-0.2em]" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                <path d="M4 5h16v11H9l-5 4z" />
-                <circle cx="9" cy="10.5" r="0.9" fill="currentColor" />
-                <circle cx="12" cy="10.5" r="0.9" fill="currentColor" />
-                <circle cx="15" cy="10.5" r="0.9" fill="currentColor" />
-              </svg>
+            <button role="tab" type="button" aria-selected={tab === "emote"} onClick={() => setTab("emote")}>
+              이모티콘
             </button>
           )}
         </div>
@@ -3197,7 +3214,7 @@ function InfoBox({
           ✕
         </button>}
       </div>
-      {tab === "rank" && (
+      {(tab === "rank" || (tab === "emote" && !(emoteChar && onEmote))) && (
         <ol className="pk-ranks pk-ranks-dense pk-scroll min-h-0 overflow-y-auto">
           {ranks
             .map((r, cat) => [r, cat] as const)
@@ -3265,12 +3282,12 @@ function EmoteGrid({
   char: Look;
   onPick: (e: Emote) => void;
   big?: boolean;
-  /** 붙박이 상자 안: 그림을 조금 작게 (두 줄이 한눈에) */
+  /** 붙박이 상자 안: 한 줄에 여덟 개 (스크롤 없이 한눈에) */
   dense?: boolean;
 }) {
   return (
     <div
-      className={`grid grid-cols-4 gap-[0.3em] border-t border-[rgba(214,175,92,0.2)] p-[0.45em] ${big ? "gap-[0.5em] p-[0.8em]" : ""}`}
+      className={`grid ${dense ? "grid-cols-8" : "grid-cols-4"} gap-[0.3em] border-t border-[rgba(214,175,92,0.2)] p-[0.45em] ${big ? "gap-[0.5em] p-[0.8em]" : ""}`}
     >
       {EMOTES.map((e) => (
         <button
@@ -3281,7 +3298,7 @@ function EmoteGrid({
           aria-label={EMOTE_NAME[e]}
           title={EMOTE_NAME[e]}
         >
-          <EmoteImg char={char} emote={e} size={big ? 72 : 48} className={`mx-auto h-auto ${dense ? "w-[62%]" : "w-full"}`} />
+          <EmoteImg char={char} emote={e} size={big ? 72 : 48} className="mx-auto h-auto w-full" />
           {/* 가리키면(폰은 누르는 동안) 이름이 떠오름 */}
           <span className="pk-emote-name" aria-hidden>
             {EMOTE_NAME[e]}

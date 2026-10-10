@@ -37,15 +37,14 @@ export function sevenSeatCards({
   const w = hero ? sizes.heroCard : sizes.card;
   const count = p.cards?.length ?? (hero ? myHand?.cards.length : p.up.length + p.down) ?? 0;
   // 옆자리는 카드가 늘어나도 폭이 거의 안 늘게 촘촘히 겹침, 내 카드는 숫자가 다 보이게
+  // 내 카드도 펼쳐 놓지 않고 왼쪽부터 차곡차곡 (숫자 · 무늬가 넉넉히 보일 만큼만 띄움)
   let overlap = hero
-    ? -Math.round(w * (count >= 6 ? 0.3 : 0.2))
+    ? -Math.round(w * 0.42)
     : -Math.round(w * (side === "top" ? 0.38 : 0.48));
   // 폭이 정해져 있으면(틀의 카드 칸) 그 안에 들어오게 더 겹침 (숫자 · 무늬 보일 만큼은 남김). 내 카드는 칸이 남으면 덜 겹침
   if (maxW && count > 1) {
     const fit = -Math.ceil(w - (maxW - w) / (count - 1));
-    overlap = hero
-      ? Math.max(Math.min(fit, -Math.round(w * 0.06)), -Math.round(w * 0.8))
-      : Math.min(overlap, Math.max(fit, -Math.round(w * 0.8)));
+    overlap = Math.min(overlap, Math.max(fit, -Math.round(w * 0.8)));
   }
   const row = `flex ${side === "right" ? "justify-end" : ""}`;
   const gap = (i: number) => (i ? { marginLeft: overlap } : undefined);
@@ -78,7 +77,23 @@ export function sevenSeatCards({
   }
   // 내 카드: 전부 보이되, 메이드에 든 카드는 위로 · 엎어 둔 카드는 표시
   if (hero && myHand) {
-    if (!myHand.down) return null; // 고르는 중에는 아래 고르기 화면에서
+    // 고르는 중: 고르기는 화면 가운데에서, 내 틀에는 남들처럼 엎은 카드 묶음
+    if (!myHand.down)
+      return (
+        <span className={`${row} items-center`}>
+          {myHand.cards.map((c, i) => (
+            <PlayingCard
+              key={`d${c}`}
+              card={null}
+              w={w}
+              tier={tier}
+              deal
+              delay={dealDelay?.(i, myHand.cards.length)}
+              style={i ? { marginLeft: -Math.round(w * 0.8) } : undefined}
+            />
+          ))}
+        </span>
+      );
     const mine = bestK(myHand.cards);
     const made = myHand.cards.length >= 5 ? new Set(madeOf(mine.five)) : null;
     return (
@@ -113,10 +128,11 @@ export function sevenSeatCards({
   const bg = -Math.round(bw * 0.8);
   const backsW = downN ? bw + (downN - 1) * (bw + bg) : 0;
   // 편 카드는 숫자 · 무늬(왼쪽 위)만 보이면 되니 반쯤 겹침 (한게임처럼)
+  // 편 카드는 엎은 묶음 바로 위에 겹쳐 이어짐 (묶음도 한 장 몫만큼만 보임) → 6구 · 7구도 칸 안에 숫자가 다 보이게
   let g = -Math.round(w * 0.52);
-  if (maxW && U > 1) {
-    const room = (maxW - backsW - (downN ? 4 : 0) - w) / (U - 1) - w;
-    g = Math.min(g, Math.max(Math.floor(room), -Math.round(w * 0.8)));
+  if (maxW && U > 0) {
+    const room = (maxW - (downN ? backsW : w)) / (downN ? U : Math.max(1, U - 1)) - w;
+    g = Math.min(g, Math.max(Math.floor(room), -Math.round(w * 0.75)));
   }
   const ml = (m: number) => ({ marginLeft: m });
   return (
@@ -145,7 +161,7 @@ export function sevenSeatCards({
             dim={p.folded}
             deal
             delay={dealDelay?.(downN + i, total)}
-            style={i ? ml(g) : downN ? ml(4) : undefined}
+            style={i || downN ? ml(g) : undefined}
           />
         ))}
       </span>
@@ -267,26 +283,22 @@ export function SevenBar({
 }) {
   const lg = view && !view.result && myTurn && view.phase === "bet" && view.toAct === mySeat ? view.legal : null;
   const live = !!lg;
-  type Slot = { key: string; label: string; cls: string; amt?: number; act?: SevenAction };
+  /** k = 글자 그림 · 색 (다이 · 삥 · 따당 · 콜 · 쿼터 · 하프 · 올인) */
+  type Slot = { key: string; label: string; k: string; amt?: number; act?: SevenAction };
   const bet = (b: SevenBet, key: string, idle: string): Slot => {
     const v = lg?.bets[b];
-    if (v === undefined) return { key, label: idle, cls: `pk-btn-${b}` };
+    if (v === undefined) return { key, label: idle, k: key === "bbdd" ? "bbing" : b };
+    // 팟이 커져 그 베팅이 가진 칩을 다 쓰게 되면 칸이 「올인」으로 바뀜
     const allIn = v >= myStack;
-    return { key, label: allIn ? "올인" : BET_LABEL[b], cls: allIn ? "pk-btn-allin" : `pk-btn-${b}`, amt: v, act: { a: b } };
+    return { key, label: allIn ? "올인" : BET_LABEL[b], k: allIn ? "allin" : b, amt: v, act: { a: b } };
   };
   const slots: Slot[] = [
-    { key: "die", label: "다이", cls: "pk-btn-fold", act: live ? { a: "die" } : undefined },
+    { key: "die", label: "다이", k: "die", act: live ? { a: "die" } : undefined },
     // 아무도 안 걸었으면 삥, 누가 걸었으면 따당(받을 돈의 2배)
     lg && lg.bets.ddadang !== undefined ? bet("ddadang", "bbdd", "삥") : bet("bbing", "bbdd", "삥"),
     lg && lg.toCall > 0
-      ? {
-          key: "call",
-          label: lg.toCall >= myStack ? "올인 콜" : "콜",
-          cls: lg.toCall >= myStack ? "pk-btn-allin" : "pk-btn-call",
-          amt: lg.toCall,
-          act: { a: "call" },
-        }
-      : { key: "call", label: "콜", cls: "pk-btn-call" },
+      ? { key: "call", label: lg.toCall >= myStack ? "올인" : "콜", k: lg.toCall >= myStack ? "allin" : "call", amt: lg.toCall, act: { a: "call" } }
+      : { key: "call", label: "콜", k: "call" },
     bet("quarter", "quarter", "쿼터"),
     bet("half", "half", "하프"),
   ];
@@ -295,25 +307,27 @@ export function SevenBar({
   const canPre =
     !live && !!view && !!myP && !myP.folded && !myP.allIn && !view.result && view.phase === "bet" && (!myP.last || myP.bet < view.currentBet);
   return (
-    <div className="pk-frame pk-sevenbar flex h-full gap-[0.3em] p-[0.4em]" data-live={live ? "1" : undefined}>
+    <div className="pk-sevenbar flex h-full gap-[0.35em] pt-[0.75em]" data-live={live ? "1" : undefined}>
       {slots.map((b) => {
         const on = live && !!b.act && !busy;
         return (
           <button
             key={b.key}
             type="button"
+            data-k={b.k}
             disabled={live ? !on : !canPre}
             aria-pressed={!live && canPre ? pre === b.key : undefined}
             onClick={() => (live ? b.act && onAct(b.act) : onPre(b.key))}
-            className={`pk-btn ${b.cls} pk-sbtn relative flex h-full min-w-0 flex-1 flex-col items-center justify-center px-[0.2em] whitespace-nowrap ${live ? "" : "pk-sbtn-idle"}`}
+            className="pk-sbtn relative flex h-full min-w-0 flex-1 flex-col items-center justify-center whitespace-nowrap"
           >
             {live && b.amt !== undefined && (
-              <span className="pk-sbtn-amt">
+              <span className="pk-sbtn-amt pk-num">
                 <Money won={b.amt} />
               </span>
             )}
-            {!live && canPre && <span className={`pk-sbtn-box ${pre === b.key ? "pk-sbtn-box-on" : ""}`} aria-hidden />}
-            <span className="text-[1.15em]">{b.label}</span>
+            {/* 글자는 행동 글자 그림 (판 위 외침과 같은 그림) */}
+            {}
+            <img src={`/poker/ui/act-${b.k}.webp`} alt={b.label} draggable={false} className="pk-sbtn-img" />
           </button>
         );
       })}
