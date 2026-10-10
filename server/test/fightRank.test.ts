@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BOT_MAX, RATING_PLACEMENT, dominance, nextStreak, rankDelta } from "../src/games/fightRating";
+import { BOT_MAX, RATING_PLACEMENT, dominance, estimateRatings, nextStreak, rankDelta } from "../src/games/fightRating";
 import { botBuild, replayBot } from "../src/games/fightBot";
 import { CHARS } from "../../web/src/lib/fight/chars";
 import { newMatch, step } from "../../web/src/lib/fight/sim";
@@ -47,6 +47,24 @@ describe("연승·연패 보정", () => {
     expect(nextStreak(-2, "l")).toBe(-3);
     expect(nextStreak(-2, "w")).toBe(1);
     expect(nextStreak(undefined, "d")).toBe(0);
+  });
+});
+
+describe("예전 판 추정 레이팅", () => {
+  it("시간순으로 다시 계산하고, 마지막은 지금 점수 쪽으로 맞춤 · 봇 자리는 사람과 같게", () => {
+    const g = (a: string, b: string, out: 0 | 1 | 2, bot = false) => ({ uids: [a, b] as [string, string], out, ...(bot ? { bot } : {}) });
+    const games = [g("a", "b", 0), g("a", "b", 0), g("a", "bot:x", 1, true), g("b", "a", 1)];
+    const raw = estimateRatings(games, new Map());
+    expect(raw[0]).toEqual([1000, 1000]);
+    expect(raw[1][0]).toBeGreaterThan(1000);
+    expect(raw[1][1]).toBeLessThan(1000);
+    expect(raw[2][1]).toBe(raw[2][0]);
+    expect(raw[3][1]).toBe(raw[2][0] + rankDelta(raw[2][0], 2, raw[2][0], 0, { streak: 2, bot: true }));
+    // a 의 지금 점수가 2000 이면 뒤 판일수록 그쪽으로 끌어올림 (첫 판은 1000 그대로)
+    const fit = estimateRatings(games, new Map([["a", 2000]]));
+    expect(fit[0][0]).toBe(1000);
+    expect(fit[3][1]).toBeGreaterThan(1500);
+    expect(fit[3][0]).toBe(raw[3][0]);
   });
 });
 

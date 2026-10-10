@@ -113,6 +113,56 @@ export interface RankGame {
   build?: number;
   /** 경기 전 두 사람 레이팅 (봇 자리는 사람과 같게) — 등급별 통계 */
   rs?: [number, number];
+  /** rs 가 기록이 아니라 다시 계산해 채운 추정치 (10.10 전 판) */
+  rsEst?: boolean;
+}
+
+/**
+ * 경기 전 레이팅이 안 남은 예전 판들의 rs 추정: 시간순으로 Elo 를 다시 돌려 그 판 전 점수를 구하고,
+ * 마지막 추정이 지금 실제 점수와 맞도록 사람마다 판 순서에 비례해 어긋난 만큼 고르게 나눠 맞춤
+ * (배치 압도 보정 · 하루 판 수 제한은 경기 기록에 없어서 생기는 어긋남).
+ * games: 시간순 · now: 사람별 지금 점수 · 반환: 판마다 [r0, r1]
+ */
+export function estimateRatings(games: Pick<RankGame, "uids" | "out" | "bot">[], now: Map<string, number>): [number, number][] {
+  const st = new Map<string, { r: number; n: number; streak: number; at: { i: number; seat: 0 | 1; r: number }[] }>();
+  const get = (u: string) => {
+    let x = st.get(u);
+    if (!x) st.set(u, (x = { r: RATING_START, n: 0, streak: 0, at: [] }));
+    return x;
+  };
+  const out: [number, number][] = games.map(() => [RATING_START, RATING_START]);
+  games.forEach((g, i) => {
+    const bot = !!g.bot || g.uids[1].startsWith("bot:");
+    const p0 = get(g.uids[0]);
+    const p1 = bot ? null : get(g.uids[1]);
+    const r0 = p0.r,
+      r1 = p1 ? p1.r : r0;
+    out[i] = [r0, r1];
+    p0.at.push({ i, seat: 0, r: r0 });
+    if (p1) p1.at.push({ i, seat: 1, r: r1 });
+    const score = g.out === 2 ? 0.5 : g.out === 0 ? 1 : 0;
+    const d0 = rankDelta(r0, p0.n, r1, score, { streak: p0.streak, bot });
+    const d1 = p1 ? rankDelta(r1, p1.n, r0, 1 - score, { streak: p1.streak }) : 0;
+    p0.r += d0;
+    p0.n++;
+    p0.streak = nextStreak(p0.streak, score === 1 ? "w" : score === 0 ? "l" : "d");
+    if (p1) {
+      p1.r += d1;
+      p1.n++;
+      p1.streak = nextStreak(p1.streak, score === 0 ? "w" : score === 1 ? "l" : "d");
+    }
+  });
+  for (const [u, x] of st) {
+    const real = now.get(u);
+    if (real === undefined || !x.at.length) continue;
+    const off = real - x.r;
+    x.at.forEach((a, k) => {
+      const v = Math.round(a.r + (off * k) / x.at.length);
+      out[a.i][a.seat] = v;
+      if (a.seat === 0 && (games[a.i].bot || games[a.i].uids[1].startsWith("bot:"))) out[a.i][1] = v;
+    });
+  }
+  return out;
 }
 
 /** 캐릭터 통계: 캐릭터별 승·패·무 (같은 캐릭터끼리 붙은 판은 뺌) + 상성(행 캐릭터가 열 캐릭터를 이긴 판 / 붙은 판) */
@@ -147,6 +197,20 @@ export function createFightRating(db: Database, users: Users) {
   // AI 시뮬레이션 통계 (운영에서만 상시로 돎 — games/fightSim.ts)
   startFightSim(db);
 
+  // 예전 판(경기 전 레이팅이 안 남은 판)에 추정 레이팅을 한 번 채움 → 등급별 통계에 들어감
+  const backfill = (async () => {
+    const old = await games.find({ rs: { $exists: false } }, { projection: { uids: 1, out: 1, bot: 1, at: 1 } }).sort({ at: 1 }).toArray();
+    if (!old.length) return;
+    // 맞출 점수: 그 사람의 첫 새 기록 판의 경기 전 점수, 없으면 지금 점수
+    const now = new Map((await col.find({}, { projection: { uid: 1, r: 1 } }).toArray()).map((d) => [d.uid, d.r]));
+    const later = await games.find({ rs: { $exists: true }, rsEst: { $ne: true } }, { projection: { uids: 1, rs: 1 } }).sort({ at: -1 }).toArray();
+    for (const g of later) g.uids.forEach((u, seat) => !u.startsWith("bot:") && g.rs && now.set(u, g.rs[seat]));
+    const est = estimateRatings(old, now);
+    await Promise.all(old.map((g, i) => games.updateOne({ _id: g._id, rs: { $exists: false } }, { $set: { rs: est[i], rsEst: true } })));
+    statsCache.clear();
+    console.log(`[fight] 예전 랭크전 ${old.length}판에 추정 레이팅을 채움`);
+  })().catch((e) => console.error("[fight] 추정 레이팅 채우기 실패", e));
+
   return {
     /** 랭크전 한 판 기록 (캐릭터 통계) */
     async logGame(uids: [string, string], chars: [number, number], map: number, out: 0 | 1 | 2, bot = false) {
@@ -178,10 +242,11 @@ export function createFightRating(db: Database, users: Users) {
      */
     async stats(uid?: string, o: { build?: number; tier?: number } = {}): Promise<RankStats> {
       const tier = o.tier ?? -1;
+      if (tier >= 0) await backfill;
+      const q = o.build === undefined ? {} : o.build === 0 ? { build: { $exists: false } } : { build: o.build };
       const key = `${o.build ?? "all"}:${tier}`;
       let cached = statsCache.get(key);
       if (!cached || Date.now() - cached.at > 60_000) {
-        const q = o.build === undefined ? {} : o.build === 0 ? { build: { $exists: false } } : { build: o.build };
         const docs = await games.find(q, { projection: { chars: 1, out: 1, rs: 1 } }).toArray();
         const ch = new Map<number, { c: number; w: number; l: number; d: number }>();
         const vs = new Map<string, { a: number; b: number; w: number; g: number }>();
@@ -190,7 +255,7 @@ export function createFightRating(db: Database, users: Users) {
           x[k]++;
           ch.set(c, x);
         };
-        // 등급별: 각 자리를 그 자리 사람의 (경기 전) 등급으로 봄 — 레이팅 기록 없는 예전 판은 등급별에서 빠짐
+        // 등급별: 각 자리를 그 자리 사람의 (경기 전) 등급으로 봄 — 예전 판은 추정 레이팅(estimateRatings)
         const inTier = (g: RankGame, seat: 0 | 1) => tier < 0 || (!!g.rs && tierIndexOf(g.rs[seat]) === tier);
         let n = 0;
         for (const g of docs) {
@@ -218,10 +283,12 @@ export function createFightRating(db: Database, users: Users) {
         statsCache.set(key, cached);
       }
       if (!uid) return cached.v;
-      const my = await games.find({ uids: uid }, { projection: { uids: 1, chars: 1, out: 1 } }).toArray();
+      // 내 기록도 같은 버전 · 등급(그 판 전 내 등급) 으로
+      const my = await games.find({ ...q, uids: uid }, { projection: { uids: 1, chars: 1, out: 1, rs: 1 } }).toArray();
       const m = new Map<number, { c: number; w: number; l: number; d: number }>();
       for (const g of my) {
         const seat = g.uids[0] === uid ? 0 : 1;
+        if (tier >= 0 && !(g.rs && tierIndexOf(g.rs[seat]) === tier)) continue;
         const c = g.chars[seat];
         const x = m.get(c) ?? { c, w: 0, l: 0, d: 0 };
         x[g.out === 2 ? "d" : g.out === seat ? "w" : "l"]++;
