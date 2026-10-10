@@ -48,11 +48,9 @@ export function sevenSeatCards({
   const count = p.cards?.length ?? (hero ? myHand?.cards.length : p.up.length + p.down) ?? 0;
   // 남 · 나 모두 한게임처럼 왼쪽부터 같은 간격으로 차곡차곡 (칸을 꽉 채우려고 벌리지 않음) — 모서리 숫자 · 무늬만 보이는 간격
   // 7장이 다 들어와도 칸 안에 들어가는 간격으로 고정 (칸이 그보다 좁으면 그때만 더 겹침)
+  // 간격은 판 내내 같음: 7장이 다 들어왔을 때 칸을 딱 채우는 간격 (장수와 상관없이 고정 → 왼쪽부터 같은 자리에 차곡차곡)
   let overlap = -Math.round(w * (1 - STEP));
-  if (maxW && count > 1) {
-    const fit = -Math.ceil(w - (maxW - w) / (count - 1));
-    overlap = Math.min(overlap, fit);
-  }
+  if (maxW) overlap = -Math.ceil(w - Math.max(w * STEP, (maxW - w) / 6));
   const row = "flex";
   const gap = (i: number) => (i ? { marginLeft: overlap } : undefined);
 

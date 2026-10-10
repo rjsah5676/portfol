@@ -134,7 +134,7 @@ export function PlayingCard({
  *  - 2~10: 정식 무늬 배치 (아래 절반은 뒤집힘) · A: 가운데 큰 무늬 하나 · J Q K: 가운데 틀 안에 캐릭터 그림, 숫자는 양쪽 모서리
  */
 // 실제 카드 비율: 모서리 숫자는 작게 가장자리에 붙고, 무늬는 크게 · 넓게 (가로 30% / 70% 두 줄, 세로 21% ~ 79%)
-const IDX_X = 12.5;
+const IDX_X = 15;
 const COL_L = 35;
 const COL_R = 65;
 const PIP = 20;
@@ -168,10 +168,11 @@ function Index({ r, s }: { r: string; s: number }) {
   return (
     <>
       {/* 글자 사이 좁히기는 10 에만 (한 글자에 걸면 글자가 오른쪽으로 밀려 아래 무늬와 줄이 안 맞음) */}
-      <text x={IDX_X} y={33} className={r === "10" ? "pk-idx pk-idx-10" : "pk-idx"} textAnchor="middle">
+      <text x={IDX_X} y={37} className={r === "10" ? "pk-idx pk-idx-10" : "pk-idx"} textAnchor="middle">
         {r}
       </text>
-      <Pip s={s} x={IDX_X} y={47} size={19} />
+      {/* 모서리 무늬는 가운데 무늬보다 크게 (겹쳐 놓았을 때 이것만 보이니까) */}
+      <Pip s={s} x={IDX_X} y={54} size={24} />
     </>
   );
 }
