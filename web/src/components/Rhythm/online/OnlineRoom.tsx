@@ -5,6 +5,7 @@ import { DIFFICULTIES, type Difficulty } from "@/lib/rhythm/chart";
 import { sfx } from "@/lib/rhythm/sfx";
 import type { LiveRow, OnlineRoom as Room } from "@/realtime/rhythmOnline";
 import { RankEmblem } from "../Stage";
+import RoomChat from "./RoomChat";
 import TopButtons from "./TopButtons";
 
 const DISP = "font-['Arial_Black','Segoe_UI_Black',Impact,sans-serif] font-black italic";
@@ -304,7 +305,7 @@ export default function OnlineRoom({
       </div>
 
       {/* 오른쪽: 사람들 / 점수판 / 결과 */}
-      <div className="absolute top-[7cqw] right-[2.4cqw] bottom-[2.4cqw] flex w-[48cqw] flex-col rounded-[1.2cqw] border border-white/12 bg-[#0b0820]/80 p-[1.4cqw]">
+      <div className="absolute top-[7cqw] right-[2.4cqw] bottom-[17cqw] flex w-[48cqw] flex-col rounded-[1.2cqw] border border-white/12 bg-[#0b0820]/80 p-[1.4cqw]">
         {room.phase === "result" && results.length > 0 ? (
           <>
             <div className="mb-[0.9cqw] flex items-baseline justify-between">
@@ -474,6 +475,11 @@ export default function OnlineRoom({
             </div>
           </>
         )}
+      </div>
+
+      {/* 오른쪽 아래: 채팅 */}
+      <div className="absolute right-[2.4cqw] bottom-[2.4cqw] h-[13.6cqw] w-[48cqw]">
+        <RoomChat roomId={room.id} uid={uid} color={color} hostUid={room.meta.hostUid} />
       </div>
     </div>
   );

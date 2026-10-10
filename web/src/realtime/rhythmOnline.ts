@@ -72,6 +72,37 @@ export interface OnlineLobbyRoom {
   createdAt: number;
 }
 
+export interface OnlineChatMsg {
+  id: string;
+  uid: string;
+  nick: string;
+  text: string;
+  ts: number;
+}
+
+/**
+ * 대기실 채팅 — 방 구독(watchRoom)으로 같이 받아서 여기 모아 둠.
+ * 방 화면이 useSyncExternalStore 로 읽음 (방 상태와 따로 렌더되게)
+ */
+let chatRoom = "";
+let chatMsgs: OnlineChatMsg[] = [];
+const chatSubs = new Set<() => void>();
+const EMPTY_CHAT: OnlineChatMsg[] = [];
+const chatSet = (room: string, msgs: OnlineChatMsg[]) => {
+  chatRoom = room;
+  chatMsgs = msgs.slice(-50);
+  chatSubs.forEach((f) => f());
+};
+export const roomChat = {
+  subscribe(f: () => void) {
+    chatSubs.add(f);
+    return () => void chatSubs.delete(f);
+  },
+  get: () => chatMsgs,
+  empty: (): OnlineChatMsg[] => EMPTY_CHAT,
+};
+export const sendChat = (id: string, text: string) => rpc("rhythm.chat", { id, text });
+
 /** 플레이 중 한 사람의 진행: [점수, 콤보, 정확도, HP, 죽음 1/0, 끝 1/0, PERFECT, GREAT, GOOD, MISS 수] */
 export type LiveRow = [
   number,
@@ -98,19 +129,26 @@ export function watchRoom(
   id: string,
   h: { room(r: OnlineRoom | null): void; live(round: number, rows: Record<string, LiveRow>): void }
 ): () => void {
-  return subscribe<(OnlineRoom & { live: Record<string, LiveRow> | null }) | null>(
+  if (chatRoom !== id) chatSet(id, []);
+  return subscribe<
+    (OnlineRoom & { live: Record<string, LiveRow> | null; chat?: OnlineChatMsg[] }) | null
+  >(
     "rhythm.room",
     { id },
     {
       onSnapshot: (d) => {
         if (!d) return h.room(null);
-        const { live, ...room } = d;
+        const { live, chat, ...room } = d;
+        if (chat) chatSet(id, chat);
         h.room(room);
         if (live && room.round) h.live(room.round.no, live);
       },
       onEvent: (t, d) => {
         if (t === "room") h.room(d as OnlineRoom | null);
-        else if (t === "live") {
+        else if (t === "chat") {
+          const m = d as OnlineChatMsg;
+          if (!chatMsgs.some((x) => x.id === m.id)) chatSet(id, [...chatMsgs, m]);
+        } else if (t === "live") {
           const { round, rows } = d as { round: number; rows: Record<string, LiveRow> };
           h.live(round, rows);
         }

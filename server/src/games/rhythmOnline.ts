@@ -29,7 +29,7 @@ import type { Ctx } from "../realtime/gateway";
  *
  * 구독 채널
  *   rhythm.lobby          방 목록
- *   rhythm.room  { id }   방 상태 ("room") + 플레이 중 점수판 ("live")
+ *   rhythm.room  { id }   방 상태 ("room") + 플레이 중 점수판 ("live") + 대기실 채팅 ("chat")
  *
  * HTTP (내 음악 파일)
  *   POST /api/rhythm-online/:id/:ver/audio?k=올리기키   음원 (방장)
@@ -112,6 +112,8 @@ interface Room {
   // ── 여기부터 방 상태로 나가지 않는 것 ──
   live: Record<string, LiveRow>;
   liveDirty: boolean;
+  /** 대기실 채팅 (최근 CHAT_KEEP 개) */
+  chat: ChatMsg[];
   /** 내 음악 파일: 올리기 키(방장만 앎) · 받기 키(참가자만 받아 감) · 올라온 것 */
   upload: { ver: string; upKey: string; downKey: string; audioType: string; audio: boolean; chart: string | null } | null;
   owners: Map<string, string>;
@@ -119,7 +121,18 @@ interface Room {
   timer: NodeJS.Timeout | null;
 }
 
+export interface ChatMsg {
+  id: string;
+  uid: string;
+  nick: string;
+  text: string;
+  ts: number;
+}
+
 const MAX_ROOMS = 200;
+const CHAT_KEEP = 50;
+/** 한 사람이 이 간격(ms) 안에 다시 보내면 무시 (도배 막기) */
+const CHAT_GAP_MS = 400;
 /** 다 받을 때까지 기다리는 최대 시간 (못 받은 사람은 이번 판에서 빠짐) */
 const LOAD_TIMEOUT_MS = 45_000;
 /** 다 받은 뒤 시작까지 — 각자 카운트다운(최대 약 7초)을 다 보여 줄 만큼 */
@@ -322,7 +335,7 @@ export function registerRhythmOnline({ gateway }: Deps) {
       if (!room) return null;
       const uid = ctx.user?.uid;
       if (uid && room.owners.get(uid) === RESTORED) room.owners.set(uid, ctx.socket.id);
-      return { ...roomWire(room), live: room.phase === "playing" ? room.live : null };
+      return { ...roomWire(room), live: room.phase === "playing" ? room.live : null, chat: room.chat };
     },
   });
 
@@ -350,6 +363,7 @@ export function registerRhythmOnline({ gateway }: Deps) {
       live: {},
       liveDirty: false,
       upload: null,
+      chat: [],
       owners: new Map(),
       emptySince: now,
       timer: null,
@@ -636,6 +650,24 @@ export function registerRhythmOnline({ gateway }: Deps) {
     return null;
   });
 
+  /** 대기실 채팅 (플레이 중에도 받기는 하지만 화면엔 대기실·결과에서만 보임) */
+  const lastChat = new Map<string, number>();
+  gateway.rpc("rhythm.chat", (ctx, raw) => {
+    const o = z.object({ id: roomId, text: z.string().min(1).max(200) }).parse(raw);
+    const { room, uid } = asPlayer(ctx, o.id);
+    const text = o.text.replace(/\s+/g, " ").trim().slice(0, 100);
+    if (!text) return null;
+    const now = Date.now();
+    if (now - (lastChat.get(uid) ?? 0) < CHAT_GAP_MS) return null;
+    lastChat.set(uid, now);
+    if (lastChat.size > 5000) lastChat.clear();
+    const msg: ChatMsg = { id: newId(), uid, nick: room.players[uid].nick, text, ts: now };
+    room.chat.push(msg);
+    if (room.chat.length > CHAT_KEEP) room.chat.splice(0, room.chat.length - CHAT_KEEP);
+    gateway.emit(roomKey(room.id), "chat", msg);
+    return null;
+  });
+
   // ───────────── 내 음악 파일 (HTTP) ─────────────
 
   const router: Router = express.Router();
@@ -736,6 +768,7 @@ export function registerRhythmOnline({ gateway }: Deps) {
           live: {},
           liveDirty: false,
           upload: null,
+      chat: [],
           owners: new Map(Object.keys(r.players).map((uid) => [uid, RESTORED])),
           emptySince: r.emptySince,
           timer: null,
