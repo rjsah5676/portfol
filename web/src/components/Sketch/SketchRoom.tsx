@@ -649,7 +649,7 @@ export default function SketchRoom({
     return (
       <li
         key={p.uid}
-        className={`flex items-center gap-2 rounded-xl border-2 px-2 py-1.5 transition-colors ${flashing ? "sk-pop" : ""}`}
+        className={`relative flex items-center gap-1.5 rounded-xl border-2 py-1.5 pr-2 pl-1.5 transition-colors ${flashing ? "sk-pop" : ""}`}
         style={{
           borderColor: got !== undefined ? "#2EC4B6" : drawingThis ? "#2B2D42" : "transparent",
           background:
@@ -660,13 +660,13 @@ export default function SketchRoom({
                 : "rgba(255,255,255,0.7)",
         }}
       >
-        <span className="sk-hand w-4 shrink-0 text-center text-[17px] text-[var(--ink3)]">
+        <span className="sk-hand w-3 shrink-0 text-center text-[15px] text-[var(--ink3)]">
           {state.phase === "waiting" ? "" : rank}
         </span>
         <span className="relative">
-          <Avatar idx={avatarOf(p.uid)} size={38} />
+          <Avatar idx={avatarOf(p.uid)} size={34} />
           {p.uid === leader && (
-            <span className="absolute -top-2.5 -left-1.5 text-[14px]" title="방장">
+            <span className="absolute -top-2.5 -left-1.5 text-[13px]" title="방장">
               👑
             </span>
           )}
@@ -678,7 +678,7 @@ export default function SketchRoom({
           >
             <Who name={p.nick} />
           </span>
-          <span className="flex items-center gap-1 text-[11px] font-bold text-[var(--ink2)]">
+          <span className="flex items-center gap-1 overflow-hidden text-[11px] font-bold whitespace-nowrap text-[var(--ink2)]">
             {drawingThis ? (
               <span className="text-[#B7791F]">
                 ✏️ {state.phase === "choosing" ? "고르는 중" : "그리는 중"}
@@ -690,19 +690,19 @@ export default function SketchRoom({
             ) : null}
           </span>
         </span>
-        <span className="sk-hand shrink-0 text-[20px] leading-none">{sc}</span>
+        <span className="sk-hand shrink-0 text-[19px] leading-none">{sc}</span>
         {isLeader && p.uid !== uid && (
           <button
             type="button"
             title="강퇴"
             onClick={() => kick(p.uid)}
-            className={`shrink-0 rounded-md px-1 text-[11px] font-extrabold transition-colors ${
+            className={`absolute top-0.5 right-0.5 rounded-md px-0.5 text-[10.5px] leading-none font-extrabold transition-colors ${
               kickTarget === p.uid
-                ? "bg-[var(--coral)] py-0.5 text-white"
+                ? "bg-[var(--coral)] px-1 py-0.5 text-white"
                 : "text-[var(--ink3)] hover:bg-[#FF6B6B]/15 hover:text-[var(--coral)]"
             }`}
           >
-            {kickTarget === p.uid ? "강퇴?" : <Icon name="kick" size={13} />}
+            {kickTarget === p.uid ? "강퇴?" : <Icon name="kick" size={10} />}
           </button>
         )}
       </li>
