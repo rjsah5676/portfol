@@ -63,13 +63,14 @@ export function sevenSeatCards({
     let k = 0;
     return (
       <span className={row}>
-        {orderSeven(p.cards, (c) => p.up.includes(c)).map(({ c, up }, j) => {
+        {orderSeven(p.cards, (c) => p.up.includes(c)).map(({ c, up }, j, all) => {
           const wasDown = !hero && !up;
           return (
             <PlayingCard
               key={c}
               card={c}
               w={w}
+              covered={j < all.length - 1}
               // 깔자마자 족보에 든 5장은 빛남, 다 깐 뒤엔 이긴 사람 것만
               win={!!best?.includes(c) && (!ended || won)}
               dim={ended && (!won || (!!best && !best.includes(c)))}
@@ -109,7 +110,7 @@ export function sevenSeatCards({
     const n = myHand.cards.length;
     return (
       <span className={row}>
-        {orderSeven(myHand.cards, (_, i) => !downs.includes(i)).map(({ c, i, hidden }, j) =>
+        {orderSeven(myHand.cards, (_, i) => !downs.includes(i)).map(({ c, i, hidden }, j, all) =>
           hidden && shut ? (
             <button
               key="hidden"
@@ -127,6 +128,7 @@ export function sevenSeatCards({
               key={c}
               card={c}
               w={w}
+              covered={j < all.length - 1}
               dim={p.folded}
               deal={!hidden}
               className={hidden ? "pk-flip" : ""}
@@ -177,6 +179,7 @@ export function sevenSeatCards({
             key={c}
             card={c}
             w={w}
+            covered={i < p.up.length - 1 || hid > 0}
             dim={p.folded}
             deal
             delay={dealDelay?.(downN + i, total)}

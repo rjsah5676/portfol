@@ -3583,8 +3583,8 @@
 .pk-card .pk-idx {
   font-family: "Barlow Condensed", "Arial Narrow", sans-serif;
   font-weight: 600;
-  font-size: 25px;
-  letter-spacing: -1px;
+  font-size: 28px;
+  letter-spacing: -1.5px;
 }
 /* 붙박이 이모티콘 줄: 정사각형 칸, 상자 높이에 맞춰 크기, 넘치면 좌우로 밀기 */
 .pk-emote-row {

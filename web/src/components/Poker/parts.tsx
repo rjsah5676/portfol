@@ -68,6 +68,7 @@ export function PlayingCard({
   deal,
   delay = 0,
   down,
+  covered,
   className = "",
   style,
 }: {
@@ -85,6 +86,8 @@ export function PlayingCard({
   delay?: number;
   /** 7포커: 내가 엎어 둔 카드 (남은 안 보임) 표시 */
   down?: boolean;
+  /** 다른 카드에 덮여 모서리만 보임 → 가운데 무늬 · 그림은 안 그림 (겹친 틈으로 조각이 삐져나오지 않게) */
+  covered?: boolean;
   className?: string;
   style?: CSSProperties;
 }) {
@@ -119,7 +122,7 @@ export function PlayingCard({
       className={`pk-card ${deal ? "pk-deal" : ""} ${className}`}
       style={base}
     >
-      <CardFace rank={rank} r={r} s={s} court={court} />
+      <CardFace rank={rank} r={r} s={s} court={court} covered={covered} />
       {down && <span className="pk-card-down">엎음</span>}
     </span>
   );
@@ -131,10 +134,10 @@ export function PlayingCard({
  *  - 2~10: 정식 무늬 배치 (아래 절반은 뒤집힘) · A: 가운데 큰 무늬 하나 · J Q K: 가운데 틀 안에 캐릭터 그림, 숫자는 양쪽 모서리
  */
 // 실제 카드 비율: 모서리 숫자는 작게 가장자리에 붙고, 무늬는 크게 · 넓게 (가로 30% / 70% 두 줄, 세로 21% ~ 79%)
-const IDX_X = 10.5;
-const COL_L = 30;
-const COL_R = 70;
-const PIP = 22;
+const IDX_X = 11.5;
+const COL_L = 32;
+const COL_R = 68;
+const PIP = 21;
 const Y1 = 30;
 const Y4 = 110;
 const yAt = (k: number) => Y1 + ((Y4 - Y1) * k) / 6; // 7줄 눈금 (0 ~ 6)
@@ -164,19 +167,19 @@ function Pip({ s, x, y, size, flip }: { s: number; x: number; y: number; size: n
 function Index({ r, s }: { r: string; s: number }) {
   return (
     <>
-      <text x={IDX_X} y={26} className="pk-idx" textAnchor="middle">
+      <text x={IDX_X} y={28.5} className="pk-idx" textAnchor="middle">
         {r}
       </text>
-      <Pip s={s} x={IDX_X} y={37} size={14} />
+      <Pip s={s} x={IDX_X} y={40.5} size={16} />
     </>
   );
 }
 
-function CardFace({ rank, r, s, court }: { rank: number; r: string; s: number; court: boolean }) {
+function CardFace({ rank, r, s, court, covered }: { rank: number; r: string; s: number; court: boolean; covered?: boolean }) {
   const n = rank + 2; // 2 ~ 14 (A)
   return (
     <svg viewBox="0 0 100 140" className="pk-face" fill="currentColor" aria-hidden>
-      {court ? (
+      {covered ? null : court ? (
         <>
           <clipPath id={`cc-${rank}-${s}`}>
             <rect x={21} y={7} width={58} height={126} rx={4} />
