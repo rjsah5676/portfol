@@ -357,7 +357,8 @@ function BotRoom({ st, nick, onMatch }: { st: Extract<RankStatus, { s: "bot" }>;
   // 키보드: A·D(←→) 고르기, J·Enter 시작, Esc 취소
   const ref = useRef({ ch, go, spinning: false });
   useEffect(() => {
-    ref.current = { ch, go, spinning: shuffle.cur !== null };
+    // (시작을 누른 뒤 · VS 화면에선 고르기 키를 안 받음 — A·D에 고르는 소리가 나던 것)
+    ref.current = { ch, go, spinning: shuffle.cur !== null || busy || !!vs };
   });
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
