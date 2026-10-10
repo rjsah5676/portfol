@@ -663,7 +663,7 @@ export function registerPoker({ gateway, db, users }: Deps, opts: PokerOptions =
     };
     const resView = round.view(0).result;
     const showdown = !!resView?.showdown;
-    // 쇼다운이면 화면에서 패를 한 자리씩 까는 시간(자리당 0.5초) + 승리 연출 3초
+    // 쇼다운이면 화면에서 패를 까는 시간(7포커 자리당 0.38초 · 홀덤은 거의 동시) + 결과 연출 3.3초
     const shown = resView ? Object.keys(resView.names).length : 0;
     const leftEarly = [...t.inRound.values()].filter((x) => x.uid && t.seats[x.seat] !== x).map((x) => x.uid!);
     t.lastView = round.view(0);
@@ -695,8 +695,7 @@ export function registerPoker({ gateway, db, users }: Deps, opts: PokerOptions =
       if (s.leaving || (s.exitAfter && (!p || p.folded))) removeSeat(t, s, exitWhy(s));
     }
     emit(t, ...says);
-    // (+1.5초: 승리 · 패배 대사를 다 듣고 다음 판으로)
-    scheduleNext(t, showdown ? 4500 + 500 * Math.max(2, shown) + 1500 : 3900);
+    scheduleNext(t, showdown ? (t.game === "seven" ? 700 + 380 * shown : 800) + 3300 : 3000);
   }
 
   function scheduleNext(t: Table, delay: number) {

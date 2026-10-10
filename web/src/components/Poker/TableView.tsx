@@ -34,7 +34,7 @@ import {
 } from "@/lib/poker/rules";
 import { bestK, kCategory } from "@/lib/poker/seven";
 import { topHands } from "@/lib/poker/showdown";
-import { hasSound, isBig, playBgm, playSfx, playVoice, sfx, voiceDuration } from "@/lib/poker/sfx";
+import { hasSound, isBig, playBgm, playSfx, playVoice, sfx } from "@/lib/poker/sfx";
 import type {
   HoldemAction,
   HoldemView,
@@ -287,10 +287,9 @@ export default function TableView({
     step: number;
     /** 깔 때 그 사람이 읊는 족보 대사 (order 와 같은 순서, 음성 파일이 없으면 null) */
     say: ({ look: string; line: string } | null)[];
-    /** 그 대사들의 길이(초) — 다 읽히면 채워짐 (읊고 나면 바로 다음 사람으로) */
-    durs?: (number | null)[];
     /** 카드는 이미 다 보이는 상태에서 족보만 차례로 읊음 (홀덤 올인 런아웃: 패를 먼저 깐 뒤 바닥이 다 깔리고 결과) */
     shown?: boolean;
+    game: "holdem" | "seven";
   } | null>(null);
   /** 패를 다 깐 뒤에 보여줄 승리 연출 (칩 · +금액 · 소리) */
   const pendingWinRef = useRef<(() => void) | null>(null);
@@ -500,13 +499,13 @@ export default function TableView({
           for (const seat of seats)
             if ((per.get(seat) ?? 0) > r)
               items.push({ seat, k: items.length, idx: dealPlan.last ? -1 : r });
-        // 전부 1.1초 안에 (장수가 많으면 촘촘히)
-        const step = Math.max(45, Math.min(120, Math.round(1100 / items.length)));
-        const fly = 260;
+        // 전부 0.75초 안에 (장수가 많으면 촘촘히)
+        const step = Math.max(35, Math.min(90, Math.round(750 / items.length)));
+        const fly = 220;
         setDealFx({ key: ++keyRef.current, handNo: t.handNo, items, step, fly });
         items.forEach((it) => setTimeout(sfx.card, it.k * step + fly * 0.6));
       }
-      // 쇼다운: 패를 한 자리씩 깐다 — 내 자리부터 시계 방향, 이긴 사람은 맨 마지막에
+      // 쇼다운: 패를 한 자리씩 깐다 — 내 자리부터 시계 방향 (이긴 사람도 제자리에서, 결과는 다 깐 뒤에)
       const resNow = t.hand?.result ?? null;
       let staged = false;
       // 홀덤 올인 런아웃: 패는 바닥이 다 깔리기 전에 이미 깠음 → 결과가 나온 지금, 족보만 차례로 읊음
@@ -518,17 +517,13 @@ export default function TableView({
         Object.keys(resNow.names ?? {}).length > 0;
       if ((shows.length || voiceOnly) && t.hand) {
         const n = t.seats.length;
-        const wonSeats = Object.keys(won).map(Number);
         const from = Math.max(0, mySeat);
-        const ord = (voiceOnly ? Object.keys(resNow!.names).map(Number) : shows.map((x) => x.seat))
+        const order = (voiceOnly ? Object.keys(resNow!.names).map(Number) : shows.map((x) => x.seat))
           .sort((a, b) => ((a - from + n) % n) - ((b - from + n) % n));
-        const order = [
-          ...ord.filter((x) => !wonSeats.includes(x)),
-          ...ord.filter((x) => wonSeats.includes(x)),
-        ];
         staged = true;
-        // 결과가 아직 없으면(런아웃 중 먼저 깐 패) 족보가 바뀔 수 있어 읊지 않음
+        // 족보 읊기는 내 자리만 (봇들이 차례로 읊으면 쇼다운이 늘어짐). 결과가 아직 없으면(런아웃 중 먼저 깐 패) 읊지 않음
         const say = order.map((seat) => {
+          if (seat !== mySeat) return null;
           const look = charOf(seat);
           const line = resNow ? handLine(resNow.names[seat] ?? "") : null;
           if (!look || !line) return null;
@@ -536,10 +531,7 @@ export default function TableView({
           return has(look) || has(lookChar(look)) ? { look, line } : null;
         });
         const rk = ++keyRef.current;
-        setReveal({ key: rk, handNo: t.handNo, order, step: 0, say, shown: voiceOnly });
-        void Promise.all(say.map((x) => (x ? voiceDuration(x.look, x.line) : Promise.resolve(null)))).then(
-          (durs) => setReveal((r) => (r && r.key === rk ? { ...r, durs } : r))
-        );
+        setReveal({ key: rk, handNo: t.handNo, order, step: 0, say, shown: voiceOnly, game: t.game });
         if (resNow?.showdown) sfx.drum();
         // 마지막 구의 건 돈은 깔기 전에 팟으로
         const lastBets = Object.entries(prevBetsRef.current)
@@ -678,37 +670,19 @@ export default function TableView({
     return () => clearTimeout(id);
   }, [dealFx]);
 
-  // 패 까기: 한 자리씩 뒤집고(촥 → 족보 도장 쾅 → 그 사람이 자기 족보를 읊음), 이긴 사람 앞에서 한 박자 더,
-  // 다 깐 뒤 결과(승리 · 패배 동작과 대사). 족보 대사가 있으면 다 듣고 다음 사람으로
+  // 패 까기 (빠르게 — 한게임 템포): 내 자리부터 시계 방향으로 7포커는 0.38초 간격, 홀덤은 거의 동시(0.09초),
+  // 뒤집히는 자리마다 족보 이름이 바로 붙음. 족보를 읊는 대사는 내 것만. 다 깐 뒤 0.35초 뒤 결과(승리 · 패배 동작과 대사)
   useEffect(() => {
     if (!reveal || reveal.step > reveal.order.length) return;
     const n = reveal.order.length;
-    const beforeLast = reveal.step === n - 1 && n > 1;
-    const spoke = reveal.step > 0 && !!reveal.say[reveal.step - 1];
-    // 앞 사람 대사: 뒤집고 0.2초 뒤 시작 → 끝나기 조금 전에 다음 사람 카드를 뒤집음
-    // (다음 대사는 앞 대사가 끝난 뒤 이어서 나와서 겹치지 않음). 길이를 모르면 1초로 어림
-    const said = spoke ? 200 + Math.round((reveal.durs?.[reveal.step - 1] ?? 1) * 1000) : 0;
-    const delay =
-      reveal.step === n
-        ? spoke
-          ? said + 80
-          : 600
-        : reveal.step === 0
-          ? 380
-          : spoke
-            ? said - (beforeLast ? 0 : 180)
-            : beforeLast
-              ? 760
-              : 420;
+    const seven = reveal.game === "seven";
+    const delay = reveal.step === n ? (seven ? 350 : 420) : reveal.step === 0 ? 150 : seven ? 380 : 90;
     const key = reveal.key;
     const id = setTimeout(() => {
       if (reveal.step < n) {
-        if (!reveal.shown) {
-          sfx.flip();
-          setTimeout(sfx.stamp, 230);
-        }
+        if (!reveal.shown && (seven || reveal.step === 0)) sfx.flip();
         const say = reveal.say[reveal.step];
-        if (say) setTimeout(() => playVoice(say.look, say.line), 200);
+        if (say) setTimeout(() => playVoice(say.look, say.line), 150);
       } else {
         pendingWinRef.current?.();
         pendingWinRef.current = null;
@@ -1470,7 +1444,10 @@ export default function TableView({
           const hideSprite = sp.y >= 99;
           // 카드는 이름표 옆(테이블 안쪽), 위 자리는 아래
           const waiting = isWaiting(i);
-          const resultName = hand?.result?.names[i] && revealed(i) ? hand.result.names[i] : "";
+          // 결과: 깐 사람은 족보, 죽은 사람은 「기권」 (한게임처럼 누가 어떻게 끝났는지 한눈에)
+          const resultName = hand?.result?.names[i] && revealed(i) ? hand.result.names[i] : res && p?.folded ? "기권" : "";
+          /** 결과가 난 뒤 이 자리의 손익 (딴 돈 − 넣은 돈) */
+          const net = res && p ? (res.won[i] ?? 0) - p.invested : null;
           /** 이름표 아래 꼬리표들의 높이(em) — 카드가 아래로 올 때 그만큼 내림 */
           const tagsEm = (resultName ? 2.2 : 0) + (s.votes > 0 ? 1.1 : 0) + (s.exit ? 1.1 : 0);
           // 가로판 맞은편 가운데 자리: 아래 꼬리표가 팟을 덮으면 이름표 위(캐릭터 몸통)에
@@ -1567,6 +1544,12 @@ export default function TableView({
                         +{fmtShort(gains[i].amt)}
                       </Rise>
                     )}
+                    {net !== null && net !== 0 && !tag && (
+                      <span className={`pk-net pk-num ${net > 0 ? "pk-net-up" : "pk-net-down"}`}>
+                        {net > 0 ? "+" : "−"}
+                        {fmtShort(Math.abs(net))}
+                      </span>
+                    )}
                     <div
                       className="pk-name truncate"
                       style={{ maxWidth: Math.max(96, sprW * 0.8) }}
@@ -1624,7 +1607,7 @@ export default function TableView({
                       {resultName && (
                         <span
                           key={`${table.handNo}-${revealDone ? 1 : 0}`}
-                          className={`pk-resulttag pk-stamp mt-[0.25em] ${res && wonHere > 0 && isTop(i) ? "pk-resulttag-win" : ""}`}
+                          className={`pk-resulttag pk-stamp mt-[0.25em] ${res && wonHere > 0 && isTop(i) ? "pk-resulttag-win" : resultName === "기권" ? "pk-resulttag-out" : ""}`}
                         >
                           <span className="pk-tag-t">{resultName}</span>
                         </span>

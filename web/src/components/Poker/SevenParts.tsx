@@ -68,7 +68,9 @@ export function sevenSeatCards({
               win={!!best?.includes(c) && (!ended || won)}
               dim={ended && (!won || (!!best && !best.includes(c)))}
               className={wasDown ? "pk-flip" : ""}
-              delay={wasDown ? k++ * 140 : 0}
+              delay={wasDown ? k++ * 90 : 0}
+              // 깐 뒤에도 어느 게 엎어 뒀던 카드(히든)인지 보이게 — 내 카드와 같은 「엎음」 표시
+              down={wasDown}
               style={gap(i)}
             />
           );
