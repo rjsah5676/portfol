@@ -690,7 +690,7 @@ export default function RhythmGame() {
   const [oPlaying, setOPlaying] = useState(0);
   /** 끝냈거나 나간 판 (다시 들어가지 않게) */
   const doneRounds = useRef(new Set<number>());
-  const lastProg = useRef<LiveRow>([0, 0, 100, 100, 0, 0]);
+  const lastProg = useRef<LiveRow>([0, 0, 100, 100, 0, 0, 0, 0, 0, 0]);
 
   const openOnline = useCallback(() => {
     setOnlineOn(true);
@@ -805,7 +805,7 @@ export default function RhythmGame() {
     /* eslint-disable react-hooks/set-state-in-effect -- 서버가 판을 시작하면 플레이 화면으로 */
     setAuto(loadAutoSync(key));
     setPortrait(coarse);
-    lastProg.current = [0, 0, 100, 100, 0, 0];
+    lastProg.current = [0, 0, 100, 100, 0, 0, 0, 0, 0, 0];
     setOPlaying(r.no);
     setPlay((p) => ({
       ctx: oPrep.ctx,

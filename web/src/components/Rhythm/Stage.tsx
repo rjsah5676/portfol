@@ -168,6 +168,10 @@ export interface OnlineBoardRow {
   dead: boolean;
   done: boolean;
   me: boolean;
+  combo: number;
+  hp: number;
+  /** PERFECT · GREAT · GOOD · MISS 수 */
+  counts: [number, number, number, number];
 }
 
 /** 온라인 판: 모두 같이 시작하고, 점수만 주고받음 (상대 화면은 안 맞춤) */
@@ -177,8 +181,10 @@ export interface OnlineStage {
   serverNow: () => number;
   /** 점수판 (ref) — 부모가 rows 를 바꾸고 ver 를 올림. Stage 는 ver 가 바뀌었을 때만 점수판을 다시 그림 */
   board: { current: { ver: number; rows: OnlineBoardRow[] } };
-  /** 0.5초마다 내 진행: [점수, 콤보, 정확도, HP, 죽음 1/0, 끝 1/0] */
-  onProgress: (row: [number, number, number, number, number, number]) => void;
+  /** 0.5초마다 내 진행: [점수, 콤보, 정확도, HP, 죽음 1/0, 끝 1/0, PERFECT, GREAT, GOOD, MISS 수] */
+  onProgress: (
+    row: [number, number, number, number, number, number, number, number, number, number]
+  ) => void;
   /** Esc 꾹 → 나가기 */
   onLeave: () => void;
 }
@@ -388,8 +394,10 @@ export default function Stage({
     const infoBox = side
       ? { x: sideX, y: 56, w: sideW, h: 210 }
       : { x: 40, y: 56, w: gearX - 80, h: 250 };
+    /** 온라인 + 레인이 한쪽(가로 화면): 점수판을 줄이고 그 아래에 다른 사람들 미니 화면 (내 레인 크기는 그대로) */
+    const minis = !!online && !!side && !portrait;
     const scoreBox = side
-      ? { x: sideX, y: 290, w: sideW, h: 300 }
+      ? { x: sideX, y: 290, w: sideW, h: minis ? 124 : 300 }
       : { x: gearX + gearW + 40, y: 56, w: LW - gearX - gearW - 80, h: 330 };
     // 곡 정보판: 넓으면 커버 옆에 글자, 좁으면(레인 가운데) 커버 아래에 제목
     const infoWide = infoBox.w >= 520;
@@ -1029,25 +1037,27 @@ export default function Stage({
       ];
       const rowTop = sb.y + 140;
       const rowH = Math.min(40, (sb.y + sb.h - 14 - rowTop) / 4);
-      rows.forEach(([label, n, c], i) => {
-        const y = rowTop + i * rowH;
-        g.fillStyle = "rgba(255,255,255,0.05)";
-        g.beginPath();
-        g.roundRect(sx, y, sw, rowH - 6, 6);
-        g.fill();
-        g.fillStyle = c;
-        g.fillRect(sx, y, 4, rowH - 6);
-        // 점수·랭크와 같은 굵은 기울임 글꼴로 (따로 놀지 않게)
-        g.font = `italic 900 15px ${disp}`;
-        g.textBaseline = "middle";
-        g.fillText(label, sx + 16, y + (rowH - 6) / 2 + 1);
-        g.fillStyle = "#fff";
-        g.textAlign = "right";
-        g.font = `italic 900 19px ${disp}`;
-        g.fillText(String(n), sx + sw - 14, y + (rowH - 6) / 2 + 1);
-        g.textAlign = "left";
-        g.textBaseline = "top";
-      });
+      // 미니 화면이 있으면 판정 수 줄은 뺌 (내 판정은 레인에서 보임)
+      if (!minis)
+        rows.forEach(([label, n, c], i) => {
+          const y = rowTop + i * rowH;
+          g.fillStyle = "rgba(255,255,255,0.05)";
+          g.beginPath();
+          g.roundRect(sx, y, sw, rowH - 6, 6);
+          g.fill();
+          g.fillStyle = c;
+          g.fillRect(sx, y, 4, rowH - 6);
+          // 점수·랭크와 같은 굵은 기울임 글꼴로 (따로 놀지 않게)
+          g.font = `italic 900 15px ${disp}`;
+          g.textBaseline = "middle";
+          g.fillText(label, sx + 16, y + (rowH - 6) / 2 + 1);
+          g.fillStyle = "#fff";
+          g.textAlign = "right";
+          g.font = `italic 900 19px ${disp}`;
+          g.fillText(String(n), sx + sw - 14, y + (rowH - 6) / 2 + 1);
+          g.textAlign = "left";
+          g.textBaseline = "top";
+        });
     };
 
     // ── 온라인 점수판: 부모가 0.5초마다 바꿔 주는 줄을 미리 그려 두고 찍기만 (바뀔 때·내 점수만 0.25초마다 다시) ──
@@ -1143,6 +1153,153 @@ export default function Stage({
       g.drawImage(c, boardBox.x, boardBox.y, boardBox.w, boardBox.h);
     };
 
+    // ── 온라인 미니 화면: 다른 사람(최대 7명)의 레인을 작게 ──
+    // 모두 같은 채보·같은 난이도라 노트는 내 채보로 그리고, 그 사람의 점수·콤보·HP·판정(0.5초마다 오는 판정 수 변화)만 얹음.
+    // 따로 그린 그림을 30fps(무거우면 15fps)로만 다시 그려 찍음 — 내 레인 그리기에 부담이 안 가게
+    const miniBox = {
+      x: sideX,
+      y: scoreBox.y + scoreBox.h + 14,
+      w: sideW,
+      h: CH - (scoreBox.y + scoreBox.h + 14) - 24,
+    };
+    /** 미니 레인에 노트가 보이는 시간(초) */
+    const MINI_VIS = 1.2;
+    const miniNotes = minis ? [...chart.notes].sort((a, b) => a.t - b.t) : [];
+    let miniIdx = 0;
+    let miniLayer: HTMLCanvasElement | null = null;
+    let miniAt = 0;
+    let miniK = 0;
+    /** 사람별 판정 표시: 지난 판정 수와 마지막으로 바뀐 판정 */
+    const miniFlash = new Map<string, { prev: number[]; kind: number; at: number }>();
+    const JUDGE_KEYS = ["perfect", "great", "good", "miss"] as const;
+    const drawMinis = (t: number) => {
+      if (!online) return;
+      const now = performance.now();
+      if (miniLayer && miniK === k && now - miniAt < (quality <= 1 ? 66 : 33)) {
+        g.drawImage(miniLayer, miniBox.x, miniBox.y, miniBox.w, miniBox.h);
+        return;
+      }
+      miniAt = now;
+      miniK = k;
+      const rows = online.board.current.rows;
+      const ranked = rows
+        .map((r) => (r.me ? { ...r, score: engine.score } : r))
+        .sort((a, b) => b.score - a.score);
+      // 자리는 고정 (순위가 바뀔 때마다 미니 화면이 자리를 옮기면 눈이 못 따라감) — 순위는 숫자로
+      const others = rows.filter((r) => !r.me).sort((a, b) => (a.uid < b.uid ? -1 : 1));
+      const { c, b } = layer(miniBox.w, miniBox.h);
+      if (!others.length) {
+        miniLayer = c;
+        return;
+      }
+      const H = miniBox.h;
+      const gap = 10;
+      const mw = Math.min(130, (miniBox.w - gap * (others.length - 1)) / others.length);
+      const top = 26;
+      const judge = H - 46;
+      const span = judge - top;
+      // 화면에 보일 노트 (모두 같으니 한 번만 골라 둠)
+      while (
+        miniIdx < miniNotes.length &&
+        (miniNotes[miniIdx].end ?? miniNotes[miniIdx].t) < t - 0.05
+      )
+        miniIdx++;
+      const vis: { l: number; y: number; y2: number | null }[] = [];
+      for (let j = Math.max(0, miniIdx - 40); j < miniNotes.length; j++) {
+        const n = miniNotes[j];
+        if (n.t > t + MINI_VIS) break;
+        const end = n.end ?? n.t;
+        if (end < t - 0.05) continue;
+        const y = judge - ((n.t - t) / MINI_VIS) * span;
+        const y2 = n.end ? Math.max(top, judge - ((n.end - t) / MINI_VIS) * span) : null;
+        vis.push({ l: n.lane, y: Math.min(judge, y), y2 });
+      }
+      others.forEach((r, i) => {
+        const x = i * (mw + gap);
+        const rank = ranked.findIndex((o) => o.uid === r.uid) + 1;
+        b.save();
+        b.translate(x, 0);
+        // 판
+        b.fillStyle = "rgba(6,4,20,0.72)";
+        roundRectFill(b, 0, 0, mw, H, 8);
+        b.strokeStyle = rank === 1 ? "rgba(253,230,138,0.7)" : "rgba(255,255,255,0.14)";
+        b.lineWidth = 1.5;
+        b.beginPath();
+        b.roundRect(0.75, 0.75, mw - 1.5, H - 1.5, 8);
+        b.stroke();
+        // 이름 · 순위
+        b.textBaseline = "middle";
+        b.textAlign = "left";
+        b.fillStyle = rank === 1 ? "#FDE68A" : "rgba(255,255,255,0.65)";
+        b.font = `italic 900 13px ${disp}`;
+        b.fillText(String(rank), 7, 13);
+        b.fillStyle = "#fff";
+        b.font = `800 11px ${KR_FONT}`;
+        let name = r.nick;
+        while (name.length > 1 && b.measureText(name).width > mw - 26) name = name.slice(0, -1);
+        b.fillText(name, 21, 13);
+        // 레인
+        const lx = 5;
+        const lw = (mw - 10) / 4;
+        b.fillStyle = "rgba(255,255,255,0.04)";
+        for (let l = 1; l < 4; l += 2) b.fillRect(lx + l * lw, top, lw, span);
+        for (const v of vis) {
+          b.fillStyle = laneColor(v.l);
+          if (v.y2 !== null) {
+            b.globalAlpha = 0.45;
+            b.fillRect(lx + v.l * lw + lw * 0.25, v.y2, lw * 0.5, Math.max(0, v.y - v.y2));
+            b.globalAlpha = 1;
+          }
+          if (v.y < judge) b.fillRect(lx + v.l * lw + 1, v.y - 3, lw - 2, 4);
+        }
+        b.fillStyle = "rgba(244,114,182,0.9)";
+        b.fillRect(lx, judge, mw - 10, 2);
+        // 판정: 0.5초마다 오는 판정 수가 늘어난 쪽 (MISS 가 늘었으면 MISS)
+        let f = miniFlash.get(r.uid);
+        if (!f) miniFlash.set(r.uid, (f = { prev: r.counts, kind: -1, at: 0 }));
+        if (r.counts.some((v, j) => v !== f!.prev[j])) {
+          const inc = r.counts.map((v, j) => v - f!.prev[j]);
+          f.kind = inc[3] > 0 ? 3 : inc[2] > 0 ? 2 : inc[1] > 0 ? 1 : 0;
+          f.at = now;
+          f.prev = r.counts;
+        }
+        if (f.kind >= 0 && now - f.at < 450) {
+          const st = JUDGE_STYLE[JUDGE_KEYS[f.kind]];
+          b.globalAlpha = 1 - (now - f.at) / 450;
+          b.textAlign = "center";
+          b.fillStyle = st.color;
+          b.font = `italic 900 ${mw < 90 ? 10 : 12}px ${disp}`;
+          b.fillText(st.text, mw / 2, top + span * 0.62);
+          b.globalAlpha = 1;
+        }
+        if (r.combo >= 10 && !r.dead) {
+          b.textAlign = "center";
+          b.fillStyle = "rgba(255,255,255,0.35)";
+          b.font = `italic 900 ${mw < 90 ? 14 : 18}px ${disp}`;
+          b.fillText(String(r.combo), mw / 2, top + span * 0.42);
+        }
+        // 점수 · HP
+        b.textAlign = "center";
+        b.fillStyle = "#fff";
+        b.font = `italic 900 13px ${disp}`;
+        b.fillText(String(r.score).padStart(7, "0"), mw / 2, H - 28);
+        b.fillStyle = "rgba(255,255,255,0.12)";
+        b.fillRect(6, H - 13, mw - 12, 4);
+        b.fillStyle = r.hp > 60 ? "#4ADE80" : r.hp > 30 ? "#FBBF24" : "#F43F5E";
+        b.fillRect(6, H - 13, ((mw - 12) * Math.max(0, Math.min(100, r.hp))) / 100, 4);
+        if (r.dead || r.done) {
+          b.fillStyle = r.dead ? "rgba(0,0,0,0.6)" : "rgba(0,0,0,0.35)";
+          roundRectFill(b, 0, top, mw, span + 2, 0);
+          b.fillStyle = r.dead ? "#F43F5E" : "#4ADE80";
+          b.font = `italic 900 ${mw < 90 ? 11 : 13}px ${disp}`;
+          b.fillText(r.dead ? "FAILED" : "CLEAR", mw / 2, top + span / 2);
+        }
+        b.restore();
+      });
+      miniLayer = c;
+      g.drawImage(c, miniBox.x, miniBox.y, miniBox.w, miniBox.h);
+    };
+
     const draw = (t: number) => {
       const laneW = W / 4;
       // 박자 위상 (0: 박자 순간) → 판정선·배경이 박자에 맞춰 번쩍
@@ -1151,7 +1308,8 @@ export default function Stage({
       const pulse = t > 0 ? Math.exp(-beatPh * 5) : 0;
       shownScore += (engine.score - shownScore) * 0.18;
       drawBackdrop(t, pulse);
-      drawBoard();
+      if (minis) drawMinis(t);
+      else drawBoard();
       g.save();
       g.translate(gx, 0);
       for (let l = 0; l < 4; l++) {
@@ -1524,6 +1682,10 @@ export default function Stage({
         Math.round(engine.hp),
         dead ? 1 : 0,
         0,
+        engine.counts.perfect,
+        engine.counts.great,
+        engine.counts.good,
+        engine.counts.miss,
       ]);
     const finish = (failed = false) => {
       video?.pause();

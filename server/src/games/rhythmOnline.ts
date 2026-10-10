@@ -69,8 +69,8 @@ interface Song {
   levels?: Partial<Record<Diff, number>>;
 }
 
-/** 플레이 중 진행: [점수, 콤보, 정확도(0~100), HP(0~100), 죽음 1/0, 끝 1/0] */
-type LiveRow = [number, number, number, number, number, number];
+/** 플레이 중 진행: [점수, 콤보, 정확도(0~100), HP(0~100), 죽음 1/0, 끝 1/0, PERFECT, GREAT, GOOD, MISS 수] */
+type LiveRow = [number, number, number, number, number, number, number, number, number, number];
 
 interface ResultRow {
   nick: string;
@@ -266,7 +266,7 @@ export function registerRhythmOnline({ gateway }: Deps) {
     }
     room.phase = "playing";
     r.startAt = Date.now() + START_DELAY_MS;
-    room.live = Object.fromEntries(r.roster.map((uid) => [uid, [0, 0, 100, 100, 0, 0] as LiveRow]));
+    room.live = Object.fromEntries(r.roster.map((uid) => [uid, [0, 0, 100, 100, 0, 0, 0, 0, 0, 0] as LiveRow]));
     room.liveDirty = false;
     later(room, START_DELAY_MS + (room.song?.duration ?? 0) * 1000 + END_GRACE_MS, () => endRound(room));
     changed(room);
@@ -567,7 +567,8 @@ export function registerRhythmOnline({ gateway }: Deps) {
   const progSchema = z.object({
     id: roomId,
     round: z.number().int(),
-    r: z.tuple([z.number(), z.number(), z.number(), z.number(), z.number(), z.number()]),
+    // 판정 수 4개는 미니 화면(다른 사람 플레이)의 판정 표시용 — 예전 클라이언트는 6개만 보냄
+    r: z.array(z.number()).min(6).max(10),
   });
   gateway.rpc("rhythm.prog", (ctx, raw) => {
     const { id, round, r: row } = progSchema.parse(raw);
@@ -582,7 +583,8 @@ export function registerRhythmOnline({ gateway }: Deps) {
       Math.round(clamp(row[3], 0, 100)),
       row[4] ? 1 : 0,
       row[5] ? 1 : 0,
-    ];
+      ...[6, 7, 8, 9].map((i) => Math.round(clamp(row[i] ?? 0, 0, 40_000))),
+    ] as LiveRow;
     room.liveDirty = true;
     return null;
   });
@@ -615,7 +617,10 @@ export function registerRhythmOnline({ gateway }: Deps) {
     const p = room.players[uid];
     r.results[uid] = { nick: p?.nick ?? "?", diff: p?.diff ?? "normal", ...res };
     const lv = room.live[uid];
-    if (lv) room.live[uid] = [res.score, lv[1], res.acc, res.failed ? 0 : lv[3], res.failed ? 1 : 0, 1];
+    if (lv) {
+      const c = res.counts;
+      room.live[uid] = [res.score, lv[1], res.acc, res.failed ? 0 : lv[3], res.failed ? 1 : 0, 1, c.perfect, c.great, c.good, c.miss];
+    }
     room.liveDirty = true;
     changed(room);
     checkRoundEnd(room);

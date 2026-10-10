@@ -72,8 +72,19 @@ export interface OnlineLobbyRoom {
   createdAt: number;
 }
 
-/** 플레이 중 한 사람의 진행: [점수, 콤보, 정확도, HP, 죽음 1/0, 끝 1/0] */
-export type LiveRow = [number, number, number, number, number, number];
+/** 플레이 중 한 사람의 진행: [점수, 콤보, 정확도, HP, 죽음 1/0, 끝 1/0, PERFECT, GREAT, GOOD, MISS 수] */
+export type LiveRow = [
+  number,
+  number,
+  number,
+  number,
+  number,
+  number,
+  number,
+  number,
+  number,
+  number,
+];
 
 export function watchLobby(cb: (rooms: OnlineLobbyRoom[]) => void): () => void {
   return subscribe<OnlineLobbyRoom[]>("rhythm.lobby", null, {

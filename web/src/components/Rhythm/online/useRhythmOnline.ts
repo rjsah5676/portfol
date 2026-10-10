@@ -94,6 +94,9 @@ export function useRhythmOnline(active: boolean) {
         dead: !!v[4],
         done: !!v[5],
         me: u === uid,
+        combo: v[1],
+        hp: v[3],
+        counts: [v[6] ?? 0, v[7] ?? 0, v[8] ?? 0, v[9] ?? 0],
       }));
     },
     [uid]
