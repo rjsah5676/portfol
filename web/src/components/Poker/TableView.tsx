@@ -2993,8 +2993,8 @@ function HeroArea(props: {
 }
 
 /**
- * 승자 컷인 (쇼다운 끝): 내가 이기면 내 전신(hero-win)이 왼쪽 아래에서 크게 올라와 1.8초쯤 머묾,
- * 남이 이기면 그 캐릭터(pose-win)가 그 사람 쪽 가장자리에서 작게 튀어나와 1.2초쯤 기뻐함.
+ * 승자 컷인 (쇼다운 끝): 내가 이기면 내 전신(hero-win)이 왼쪽 아래에서 크게 올라와 WIN 글자와 같이 머물다 같이 사라짐,
+ * 남이 이기면 그 캐릭터 전신이 그 사람 쪽에서 작게 튀어나와 3초쯤 기뻐함 (WINNER 글자보다 앞에).
  */
 function WinCutIn({
   look,
@@ -3018,7 +3018,7 @@ function WinCutIn({
     <div
       className={`pk-cutwin pointer-events-none absolute ${mine ? "pk-cutwin-me" : "pk-cutwin-other"}`}
       data-side={side}
-      style={{ [side === "l" ? "left" : "right"]: mine ? "4%" : inset, bottom: mine ? 0 : bottom, height: ch, zIndex: mine ? 41 : 36 }}
+      style={{ [side === "l" ? "left" : "right"]: mine ? "4%" : inset, bottom: mine ? 0 : bottom, height: ch, zIndex: mine ? 41 : 43 }}
     >
       <span className="pk-cutwin-glow" aria-hidden />
       {}
