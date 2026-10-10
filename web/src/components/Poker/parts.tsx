@@ -134,10 +134,10 @@ export function PlayingCard({
  *  - 2~10: 정식 무늬 배치 (아래 절반은 뒤집힘) · A: 가운데 큰 무늬 하나 · J Q K: 가운데 틀 안에 캐릭터 그림, 숫자는 양쪽 모서리
  */
 // 실제 카드 비율: 모서리 숫자는 작게 가장자리에 붙고, 무늬는 크게 · 넓게 (가로 30% / 70% 두 줄, 세로 21% ~ 79%)
-const IDX_X = 11.5;
-const COL_L = 32;
-const COL_R = 68;
-const PIP = 21;
+const IDX_X = 12.5;
+const COL_L = 35;
+const COL_R = 65;
+const PIP = 20;
 const Y1 = 30;
 const Y4 = 110;
 const yAt = (k: number) => Y1 + ((Y4 - Y1) * k) / 6; // 7줄 눈금 (0 ~ 6)
@@ -167,10 +167,11 @@ function Pip({ s, x, y, size, flip }: { s: number; x: number; y: number; size: n
 function Index({ r, s }: { r: string; s: number }) {
   return (
     <>
-      <text x={IDX_X} y={28.5} className="pk-idx" textAnchor="middle">
+      {/* 글자 사이 좁히기는 10 에만 (한 글자에 걸면 글자가 오른쪽으로 밀려 아래 무늬와 줄이 안 맞음) */}
+      <text x={IDX_X} y={33} className={r === "10" ? "pk-idx pk-idx-10" : "pk-idx"} textAnchor="middle">
         {r}
       </text>
-      <Pip s={s} x={IDX_X} y={40.5} size={16} />
+      <Pip s={s} x={IDX_X} y={47} size={19} />
     </>
   );
 }
@@ -182,18 +183,18 @@ function CardFace({ rank, r, s, court, covered }: { rank: number; r: string; s: 
       {covered ? null : court ? (
         <>
           <clipPath id={`cc-${rank}-${s}`}>
-            <rect x={21} y={7} width={58} height={126} rx={4} />
+            <rect x={26} y={7} width={48} height={126} rx={4} />
           </clipPath>
           <image
             href={asset.court(s, rank)}
-            x={21}
+            x={26}
             y={7}
-            width={58}
+            width={48}
             height={126}
             preserveAspectRatio="xMidYMid slice"
             clipPath={`url(#cc-${rank}-${s})`}
           />
-          <rect x={21} y={7} width={58} height={126} rx={4} fill="none" stroke="currentColor" strokeOpacity={0.35} strokeWidth={0.9} />
+          <rect x={26} y={7} width={48} height={126} rx={4} fill="none" stroke="currentColor" strokeOpacity={0.35} strokeWidth={0.9} />
         </>
       ) : n === 14 ? (
         // A: 가운데 큰 무늬 하나 (스페이드 A 는 더 크게 — 실제 카드처럼)

@@ -3583,8 +3583,12 @@
 .pk-card .pk-idx {
   font-family: "Barlow Condensed", "Arial Narrow", sans-serif;
   font-weight: 600;
-  font-size: 28px;
-  letter-spacing: -1.5px;
+  font-size: 34px;
+}
+/* 10 은 두 글자라 폭만 맞춰 조금 좁게 (높이는 다른 숫자와 거의 같게) */
+.pk-card .pk-idx-10 {
+  letter-spacing: -0.8px;
+  font-size: 30px;
 }
 /* 붙박이 이모티콘 줄: 정사각형 칸, 상자 높이에 맞춰 크기, 넘치면 좌우로 밀기 */
 .pk-emote-row {
