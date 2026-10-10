@@ -38,6 +38,10 @@ export interface AILevel {
   lookP?: number;
   /** 시작기(잡기·아이덴티티·약·발차기)가 맞으면 그 캐릭터의 콤보 길(combos.ts)로 이어 칠 확률 */
   route?: number;
+  /** 읽기: 이번 판에서 본 상대 버릇(일어날 때 · 막은 뒤 · 잡기 풀기 · 점프)으로 미리 대응할 정도 0~1 */
+  read?: number;
+  /** 노림수(읽기로 내 행동을 미리 돌려 보기)를 쓸 확률 — 가장 큰 실력 차이 */
+  plan?: number;
   /** 내다볼 때 상대의 대응(가만히·가드·약·점프)을 이만큼 같이 돌려 보고 가장 나쁜 경우로 값을 매김 (1이면 지금 입력 그대로만) */
   robust?: number;
 }
@@ -47,6 +51,7 @@ export const AI_LEVELS: AILevel[] = [
     id: "1",
     name: "입문",
     react: 30,
+    read: 0,
     block: 0.05,
     combo: 0,
     antiAir: 0.05,
@@ -56,7 +61,8 @@ export const AI_LEVELS: AILevel[] = [
   {
     id: "2",
     name: "초급",
-    react: 22,
+    react: 24,
+    read: 0.1,
     block: 0.2,
     combo: 0.2,
     antiAir: 0.15,
@@ -66,7 +72,8 @@ export const AI_LEVELS: AILevel[] = [
   {
     id: "3",
     name: "중급",
-    react: 16,
+    react: 20,
+    read: 0.3,
     block: 0.42,
     combo: 0.45,
     antiAir: 0.35,
@@ -76,7 +83,9 @@ export const AI_LEVELS: AILevel[] = [
   {
     id: "4",
     name: "상급",
-    react: 12,
+    react: 17,
+    read: 0.5,
+    plan: 0,
     block: 0.6,
     combo: 0.7,
     antiAir: 0.55,
@@ -86,7 +95,9 @@ export const AI_LEVELS: AILevel[] = [
   {
     id: "5",
     name: "고수",
-    react: 9,
+    react: 15,
+    read: 0.65,
+    plan: 0.02,
     block: 0.76,
     combo: 0.86,
     antiAir: 0.7,
@@ -96,7 +107,9 @@ export const AI_LEVELS: AILevel[] = [
   {
     id: "6",
     name: "달인",
-    react: 4,
+    react: 13,
+    read: 0.8,
+    plan: 0.17,
     block: 0.95,
     combo: 1,
     antiAir: 0.95,
@@ -107,7 +120,9 @@ export const AI_LEVELS: AILevel[] = [
   {
     id: "7",
     name: "지존",
-    react: 1,
+    react: 12,
+    read: 0.9,
+    plan: 1,
     block: 1,
     combo: 1,
     antiAir: 1,
@@ -130,9 +145,9 @@ export const AI_RATING = [0, 200, 500, 850, 1200, 1600, 2000];
 
 /** 지존 위 단계 — 랭크전 봇 전용 (AI 대전에서는 고를 수 없음) */
 export const RANK_TIERS: (AILevel & { rating: number })[] = [
-  { ...AI_LEVELS[6], id: "8", name: "전설", rating: 2200, tech: 0.45, aggro: 0.84, just: 0.95, interrupt: 0.9, robust: 3 },
-  { ...AI_LEVELS[6], id: "9", name: "신화", rating: 2400, tech: 0.48, aggro: 0.87, just: 1, interrupt: 0.95, robust: 4, look: 32 },
-  { ...AI_LEVELS[6], id: "10", name: "초월", rating: 2600, tech: 0.5, aggro: 0.9, just: 1, interrupt: 1, robust: 5, look: 32 },
+  { ...AI_LEVELS[6], id: "8", name: "전설", rating: 2200, tech: 0.45, read: 0.95, aggro: 0.84, just: 0.95, interrupt: 0.9, robust: 3 },
+  { ...AI_LEVELS[6], id: "9", name: "신화", rating: 2400, tech: 0.48, read: 1, aggro: 0.87, just: 1, interrupt: 0.95, robust: 4, look: 32 },
+  { ...AI_LEVELS[6], id: "10", name: "초월", rating: 2600, tech: 0.5, read: 1, react: 11, aggro: 0.9, just: 1, interrupt: 1, robust: 5, look: 32 },
 ];
 /** 랭크전 봇 레이팅 상한 */
 export const BOT_MAX = 2600;
@@ -144,13 +159,13 @@ export const BOT_MAX = 2600;
  */
 export const ADJ_AT = [200, 500, 850, 1200, 1600, 2000, 2400];
 export const CHAR_ADJ: Record<string, number[]> = {
-  kai: [-60, -64, -35, 263, 34, -122, -202],
-  igna: [-51, -71, -26, -76, 51, -162, -235],
-  soyoung: [17, -113, -216, -285, -95, 490, 700],
-  lily: [3, 67, 136, 303, 37, -191, -175],
-  zena: [-26, -73, -107, -175, 83, 164, 460],
-  gunmo: [117, 358, 465, 402, 55, -87, -413],
-  ivan: [-42, -160, -204, -58, -74, -76, -128],
+  kai: [-33, 4, -29, 252, 69, 161, 200],
+  igna: [-69, -35, 33, 89, 71, -169, -471],
+  soyoung: [29, -114, -228, -400, -276, -183, 271],
+  lily: [-11, 34, 184, 262, 122, 107, 236],
+  zena: [-40, -80, -76, -96, 19, -76, 74],
+  gunmo: [135, 319, 426, 340, 104, 343, 184],
+  ivan: [-51, -178, -296, -72, -30, -169, -485],
 };
 function charAdj(r: number, id: string) {
   const t = CHAR_ADJ[id];
@@ -178,6 +193,8 @@ const filled = (l: AILevel) => ({
   interrupt: l.interrupt ?? 0,
   route: l.route ?? 0,
   robust: l.robust ?? 1,
+  read: l.read ?? 0,
+  plan: l.plan ?? 0,
 });
 
 /** 레이팅 r 의 AI 세부 난이도 (캐릭터를 주면 캐릭터 보정까지) */
@@ -211,7 +228,7 @@ export function aiForRating(r: number, charId?: string): AILevel {
  * AI 지문: 랭크전 봇전은 서버가 같은 경기를 다시 돌려 확인하니, 브라우저와 서버의 AI가 똑같아야 함.
  * 단계 값·보정·콤보 길은 자동으로 들어가고, next() 같은 판단 코드를 바꿨으면 AI_REV 를 올릴 것.
  */
-const AI_REV = 7;
+const AI_REV = 8;
 export const AI_ID = (() => {
   const str = AI_REV + JSON.stringify([AI_LEVELS, RANK_TIERS, AI_RATING, ADJ_AT, CHAR_ADJ, ROUTES, ROUTE_CAP]);
   let h = 0x811c9dc5;
@@ -249,6 +266,37 @@ type Intent =
 /** 기술 사거리(px): 박스 끝 + 여유 */
 const reachOf = (m: MoveDef, extra = 4) => m.box.x + m.box.w + extra;
 
+/** 상대가 그 상황에서 한 행동 */
+type Act = "atk" | "throw" | "jump" | "block" | "wait";
+const ACTS: Act[] = ["atk", "throw", "jump", "block", "wait"];
+/** 상황별 상대 버릇: 그 상황마다 상대가 뭘 했는지 셈 (오래된 건 조금씩 잊음 — 상대가 바꾸면 따라감) */
+class Habit {
+  n: Record<Act, number>;
+  constructor(prior: Record<Act, number>) {
+    this.n = { ...prior };
+  }
+  add(a: Act) {
+    for (const k of ACTS) this.n[k] *= 0.85;
+    this.n[a] += 1;
+  }
+  p(a: Act) {
+    let t = 0;
+    for (const k of ACTS) t += this.n[k];
+    return this.n[a] / t;
+  }
+}
+/** 일어날 때 · 막은 뒤 버릇의 처음 값 (아직 본 게 없을 때) */
+const WAKE_PRIOR: Record<Act, number> = { atk: 0.8, throw: 0.2, jump: 0.4, block: 0.8, wait: 0.8 };
+/** 쓰러진 상대가 일어나는 동안 할 일 (일어날 때 버릇으로 고름) */
+type Oki = "bait" | "throw" | "aa" | "meaty";
+/**
+ * 노림수 설정: 몇 프레임마다 · 몇 프레임 앞까지 돌려 볼지, 둘 만한 수의 최소 값, 미리 넣을 입력 수, 상대와의 거리(상대 손 닿는 거리 + range),
+ * 기대값과 최악의 경우를 섞는 비율 (10.11 사람 흉내 상대로 맞춤)
+ */
+const K = { every: 2, W: 24, thr: 4, plan: 8, range: 70, worst: 0.4 };
+/** 일어나는 동작 프레임 (sim RISE_T 와 같게) */
+const RISE_T = 14;
+
 export class FightAI {
   private r: () => number;
   private intent: Intent = "wait";
@@ -284,6 +332,35 @@ export class FightAI {
   /** 한 번 점프로 못 닿는 높은 발판의 상대에게 가려고 거쳐 가는 발판 (계단처럼) */
   private climb: Plat | null = null;
   private climbUntil = 0;
+  // ── 읽기 (상대 버릇) ──
+  private wake = new Habit(WAKE_PRIOR);
+  private afterBlk = new Habit(WAKE_PRIOR);
+  /** 지금 지켜보는 상황 (일어남 · 막은 뒤) — 끝나기 전에 상대가 처음 한 행동을 버릇에 더함 */
+  private watch: { h: Habit; until: number } | null = null;
+  private po = { st: "", stun: 0 };
+  /** 가까이서 상대가 잡기 / 타격을 낸 횟수, 내 잡기를 상대가 푼 횟수 / 내 잡기가 들어간 횟수 */
+  private oThrows = 0.6;
+  private oStrikes = 2;
+  private oTechs = 0.6;
+  private myGrabs = 2;
+  /** 중거리에서 상대가 뛴 횟수 / 중거리에 있던 프레임 */
+  private oJumps = 0;
+  private midT = 300;
+  /** 이 프레임까지 미리 가드 (읽기) */
+  private guardUntil = -1;
+  /** 상대가 막은 뒤 내 다음 수 (읽기) */
+  private after: "guard" | "throw" | "jab" | null = null;
+  private afterUntil = -1;
+  /** 쓰러진 상대 일어날 때 노림수 */
+  private oki: Oki | null = null;
+  /** 상대 공격 · 빈틈을 처음 본 프레임 (내다보기도 알아챈 뒤에만) */
+  private sawHot = -1;
+  /** 가까운 거리(중립)에서 상대가 하는 행동 — 10프레임마다 처음 한 행동 */
+  private near = new Habit({ atk: 1, throw: 0.3, jump: 0.5, block: 0.8, wait: 1.5 });
+  private nearWin = { until: -1, act: null as Act | null };
+  private nextRead = 0;
+  /** 가까이서 상대가 공격을 내는 빈도 (프레임당) */
+  private closeAtk = 0.02;
   /** 윗발판 상대에게 올라갈 때 상대 손이 안 닿는 쪽 가장자리 (그 밑에서 점프) */
   private entry: number | null = null;
   private entryUntil = 0;
@@ -333,6 +410,7 @@ export class FightAI {
     if (f.st === "hit" && this.prevSt !== "hit" && dy > 30) this.upHits = Math.min(4, this.upHits + 1);
     this.prevSt = f.st;
     if (dy < 30) this.upSmart = null;
+    this.observe(s, me, dist);
     if (!air && Math.abs(dy) < 20 && this.upHits > 0 && this.r() < 0.004) this.upHits--;
 
     // 버튼은 한 프레임 누르고 떼야 새로 눌린 걸로 침
@@ -419,7 +497,13 @@ export class FightAI {
     }
     // ── 잡혔다: 풀기 (단계별 확률) ──
     if (f.grabbed > 0) {
-      if (this.techDecision === null) this.techDecision = this.r() < (L.tech ?? L.block * 0.4);
+      if (this.techDecision === null) {
+        // 잡기 풀기는 보고 하기엔 짧아 찍기 — 상대가 가까이서 잡기를 자주 쓰면(읽기) 더 자주 미리 누름
+        const base = L.tech ?? L.block * 0.4;
+        const share = this.oThrows / (this.oThrows + this.oStrikes);
+        const rd = L.read ?? 0;
+        this.techDecision = this.r() < base * (1 - rd) + rd * Math.min(0.75, base * (0.4 + 2.2 * share));
+      }
       if (this.techDecision) out = IN.A | IN.B;
       return finish();
     }
@@ -594,7 +678,7 @@ export class FightAI {
         if (f.mv === "S" && (o.pulled || o.mark === 1)) press(this.r() < 0.5 ? IN.A | IN.B : IN.A);
         else if (f.mv === "L") press(f.chain < 4 && this.r() < 0.6 ? IN.A : IN.B);
         else if (f.mv === "H") {
-          if (f.meter >= 100 && this.r() < 0.6) press(IN.X);
+          if (f.meter >= 100 && this.r() < 0.6 && this.ultHits(s, me, 0)) press(IN.X);
           else if (f.cd === 0 && !sm.proj) press(IN.C);
           else if (f.chain < 2) press(IN.B);
         }
@@ -620,14 +704,18 @@ export class FightAI {
 
     // ── 내다보기 (지존): 상대가 기술을 쓰거나 빈틈이면 할 수 있는 행동을 다 돌려 보고 고름 ──
     if (L.look && (free || blocking) && !air && dist < 160 && Math.abs(dy) < 60) {
-      const hot = oAtk || o.st === "hit" || o.st === "down" || (o.st === "atk" && !o.hit) || (incoming && projDist < 140) || oJumpIn;
-      if (!hot) this.lookDecision = null;
+      const hot0 = oAtk || o.st === "hit" || o.st === "down" || (o.st === "atk" && !o.hit) || (incoming && projDist < 140) || oJumpIn;
+      // 사람처럼: 상황을 본 뒤 반응 시간이 지나야 내다봄 (보자마자 정답을 고르지 않게)
+      if (!hot0) this.sawHot = -1;
+      else if (this.sawHot < 0) this.sawHot = s.f;
+      const hot = hot0 && noticed(this.sawHot);
+      if (!hot0) this.lookDecision = null;
       else if (this.lookDecision === null) this.lookDecision = this.r() < (L.lookP ?? 1);
       if (hot && this.lookDecision) {
         const best = this.lookAhead(s, me, L.look, faceOk, toward, away);
         if (best) {
-          this.plan = best.slice(1, 6);
-          out = best[0];
+          this.plan = best.seq.slice(1, 6);
+          out = best.seq[0];
           return finish();
         }
       }
@@ -662,6 +750,111 @@ export class FightAI {
     }
 
     if ((free || blocking) && !air) {
+      const rd = L.read ?? 0;
+      // ── 읽기: 미리 가드 (상대가 이 상황에서 잘 때리면 보기 전에 막고 있음) ──
+      if (this.guardUntil >= s.f && aligned) {
+        out = IN.D;
+        return finish();
+      }
+      // ── 읽기: 내 공격이 막힌 뒤 다음 수 ──
+      if (this.after && free && aligned && dist < 90) {
+        const a = this.after;
+        this.after = null;
+        if (a === "guard") {
+          this.guardUntil = s.f + 14;
+          out = IN.D;
+          return finish();
+        }
+        if (a === "throw" && faceOk) {
+          if (dist > tReach - 2) {
+            // 한 걸음 다가가서 잡기
+            this.dashSeq = [toward, toward, toward, toward | IN.A | IN.B];
+            return finish();
+          }
+          press(IN.A | IN.B);
+          return finish();
+        }
+        if (a === "jab" && dist < lReach + 6) {
+          hitBtn(IN.A);
+          return finish();
+        }
+      }
+      // ── 읽기: 쓰러진 상대가 일어날 때 노림수 (일어날 때 버릇으로 고름) ──
+      if ((o.st === "down" && o.t >= 26) || o.st === "rise") {
+        if (this.oki === null) {
+          const h = this.wake;
+          const techR = Math.min(0.8, this.oTechs / this.myGrabs);
+          const w: [Oki, number][] = [
+            ["bait", h.p("atk") * 1.2],
+            ["throw", (h.p("block") + h.p("wait") * 0.4) * (1 - techR)],
+            ["aa", h.p("jump")],
+            ["meaty", h.p("wait") + h.p("block") * 0.3 + 0.12],
+          ];
+          if (this.r() < rd) {
+            // 버릇에 맞춰 (확률을 제곱해서 많이 한 쪽으로 더 쏠리게)
+            let t = 0;
+            for (const x of w) t += x[1] ** 2;
+            let r = this.r() * t;
+            this.oki = w[w.length - 1][0];
+            for (const x of w) if ((r -= x[1] ** 2) <= 0) {
+              this.oki = x[0];
+              break;
+            }
+          } else this.oki = this.r() < L.combo ? "meaty" : "bait";
+        }
+        const rising = o.st === "rise";
+        const left = rising ? RISE_T - o.t : RISE_T + 36 - o.t;
+        switch (this.oki) {
+          case "bait":
+            // 상대 손 닿는 거리 바로 밖에서 가드 → 일어나며 친 걸 막고 반격(막은 뒤 반격은 위 가드 처리)
+            if (dist < oReach + 6) out |= away;
+            else if (dist > oReach + 24) out |= toward;
+            if (rising && left <= 4) this.guardUntil = s.f + 16;
+            return finish();
+          case "throw":
+            if (dist > tReach - 6) out |= toward;
+            return finish(); // 일어난 첫 프레임에 잡기 (아래 "일어남" 처리)
+          case "aa":
+            if (dist < 36) out |= away;
+            else if (dist > 60) out |= toward;
+            this.aaDecision = true;
+            return finish();
+          case "meaty": {
+            // 일어나는 순간 판정이 나오게 미리 약
+            const st = c.moves.L.startup;
+            if (dist > lReach - 8) out |= toward;
+            else if (rising && left <= st && left >= st - 2 && faceOk) press(IN.A);
+            return finish();
+          }
+        }
+      }
+      if (this.oki === "throw" && o.st === "idle" && dist < tReach && faceOk && o.t < 2) {
+        this.oki = null;
+        press(IN.A | IN.B);
+        return finish();
+      }
+      // ── 노림수: 가까운 중립에서 상대가 하던 행동 비율로 내 행동들을 미리 돌려 보고 기대값이 좋은 수를 둠 ──
+      if ((L.plan ?? 0) > 0 && (free || (blocking && f.stun === 0)) && dist < oReach + K.range && !oAtk && o.st !== "hit" && s.f >= this.nextRead) {
+        this.nextRead = s.f + K.every;
+        if (this.r() < (L.plan ?? 0)) {
+          const wts = ACTS.map((a) => [a, this.near.p(a)] as [Act, number]);
+          const best = this.lookAhead(s, me, K.W, faceOk, toward, away, wts);
+          if (best && best.v > K.thr) {
+            this.plan = best.seq.slice(1, K.plan);
+            out = best.seq[0];
+            return finish();
+          }
+        }
+      }
+      // ── 읽기: 가까이서 상대가 자주 때리면 가끔 미리 가드 (반응으로는 빠른 약을 못 막으니) ──
+      if (free && aligned && dist < oReach + 8 && !oAtk && rd > 0) {
+        const busy = Math.min(1, this.closeAtk * 30);
+        if (this.r() < rd * L.block * busy * 0.06) {
+          this.guardUntil = s.f + 8 + Math.floor(this.r() * 8);
+          out = IN.D;
+          return finish();
+        }
+      }
       // 끼어들기 (지존): 상대 기술이 나오기 전에 내 약이 먼저 닿으면 먼저 때림
       if (L.interrupt && free && om && oAtk && noticed(this.sawAtk) && aligned && dist < lReach && faceOk && om.startup - o.t > c.moves.L.startup + 1) {
         if (this.cutDecision === null) this.cutDecision = this.r() < L.interrupt;
@@ -699,7 +892,8 @@ export class FightAI {
       }
       // 대공
       if (oJumpIn && noticed(this.sawJump)) {
-        if (this.aaDecision === null) this.aaDecision = this.r() < L.antiAir;
+        // 상대가 자주 뛰는 걸 봤으면(읽기) 대공을 미리 노리고 있음
+        if (this.aaDecision === null) this.aaDecision = this.r() < Math.min(1, L.antiAir * (0.8 + 0.5 * (L.read ?? 0) * this.jumpy()));
         if (this.aaDecision && dist < 50) {
           out |= toward;
           press(IN.B);
@@ -749,7 +943,8 @@ export class FightAI {
       // 필살기: 상대가 빈틈이 크거나 가까우면
       const sx = c.moves.X.box;
       const ultReach = c.moves.X.summon || c.moves.X.proj ? 400 : sx.x + sx.w + 8;
-      if (f.meter >= 100 && aligned && dist < ultReach && ((om && o.t < 6) || this.r() < 0.02)) {
+      // 허공에 쓰지 않게: 지금 쓰면 맞는지(막혀도 X) 미리 돌려 보고 씀 — 반응 시간 전에 본 상대 공격은 아직 모르는 걸로
+      if (f.meter >= 100 && dist < ultReach && ((om && noticed(this.sawAtk) && o.t < 10) || this.r() < 0.02) && this.ultHits(s, me, toward)) {
         out |= toward;
         press(IN.X);
         return finish();
@@ -984,8 +1179,128 @@ export class FightAI {
     return finish();
   }
 
-  /** 후보 입력열을 각각 W프레임 돌려 보고 (상대는 지금 누른 방향만 유지) 손익이 가장 좋은 걸 돌려줌 */
-  private lookAhead(s: State, me: 0 | 1, W: number, faceOk: boolean, toward: number, away: number): number[] | null {
+  /**
+   * 읽기: 상대 버릇 세기 — 일어날 때 · 내 공격을 막은 뒤 처음 한 행동, 가까이서 잡기/타격 비율,
+   * 내 잡기를 푸는 비율, 중거리 점프 빈도. 상황이 시작되는 순간 그 버릇으로 미리 대응을 정함.
+   */
+  private observe(s: State, me: 0 | 1, dist: number) {
+    const f = s.p[me];
+    const o = s.p[1 - me];
+    const ps = this.po;
+    const L = this.level;
+    const rd = L.read ?? 0;
+    const oc = CHARS[o.ch];
+    const oReach = Math.max(reachOf(oc.moves.L), reachOf(oc.moves.H));
+    const oAir = isAir(s, o);
+    // 상황 시작: 일어남 / 내 공격을 막는 경직이 풀림
+    if (ps.st === "rise" && o.st !== "rise") this.watch = { h: this.wake, until: s.f + 20 };
+    else if (ps.st === "block" && ps.stun > 0 && o.stun === 0 && dist < 130) {
+      this.watch = { h: this.afterBlk, until: s.f + 16 };
+      // 막힌 뒤 내 다음 수: 상대가 막고 나서 잘 때리면 가드, 가만히(가드 · 기다림)면 잡기(잘 풀면 약으로 끊어 치기)
+      if (rd > 0 && this.r() < rd) {
+        const h = this.afterBlk;
+        const pA = h.p("atk") + h.p("throw") * 0.5,
+          pS = h.p("block") + h.p("wait");
+        const techR = this.oTechs / this.myGrabs;
+        const x = this.r() * (pA + pS + 0.15);
+        this.after = x < pA ? "guard" : x < pA + pS * (1 - Math.min(0.8, techR)) ? "throw" : "jab";
+        this.afterUntil = s.f + 24;
+      }
+    }
+    if (this.watch) {
+      let a: Act | null = null;
+      if (o.st === "atk") a = o.mv === "T" ? "throw" : "atk";
+      else if (o.st === "jump" || (oAir && o.st !== "hit")) a = "jump";
+      else if (o.st === "block" && o.stun === 0) a = "block";
+      if (o.st === "hit" || o.st === "down" || o.grabbed > 0) this.watch = null;
+      else if (a) {
+        this.watch.h.add(a);
+        this.watch = null;
+      } else if (s.f >= this.watch.until) {
+        this.watch.h.add("wait");
+        this.watch = null;
+      }
+    }
+    // 가까이서 잡기 / 타격
+    if (ps.st !== "atk" && o.st === "atk" && dist < 80) {
+      this.oThrows *= 0.95;
+      this.oStrikes *= 0.95;
+      if (o.mv === "T") this.oThrows++;
+      else if (o.mv !== "J") this.oStrikes++;
+    }
+    for (const e of s.ev) {
+      if (e.k === "throw" && e.p === me && e.m !== "S") this.myGrabs++;
+      if (e.k === "tech" && e.p === 1 - me) this.oTechs++;
+    }
+    // 중거리 점프
+    if (dist > 50 && dist < 220) {
+      if (!oAir) this.midT++;
+      if (ps.st !== "jump" && o.st === "jump") this.oJumps++;
+    }
+    // 미리 가드 놓친 건 풀기 (멀어지면)
+    if (this.guardUntil >= s.f && dist > oReach + 40) this.guardUntil = -1;
+    if (this.afterUntil < s.f) this.after = null;
+    if (o.st !== "down" && o.st !== "rise" && o.t > 2) this.oki = null;
+    // 중립 버릇: 가까울 때 10프레임마다 상대가 처음 한 행동
+    const fr = s.p[me];
+    const neutral = dist < oReach + 50 && o.st !== "hit" && o.st !== "down" && o.st !== "rise" && fr.st !== "hit" && fr.st !== "down";
+    if (neutral) {
+      const nw = this.nearWin;
+      if (nw.until < s.f) {
+        if (nw.until >= 0) this.near.add(nw.act ?? "wait");
+        nw.until = s.f + 10;
+        nw.act = null;
+      }
+      if (!nw.act) {
+        if (ps.st !== "atk" && o.st === "atk") nw.act = o.mv === "T" ? "throw" : "atk";
+        else if (ps.st !== "jump" && o.st === "jump") nw.act = "jump";
+        else if (o.st === "block" && o.stun === 0) nw.act = "block";
+      }
+    } else this.nearWin.until = -1;
+    // 가까이(상대 손 닿는 거리)에서 상대가 때리는 빈도 (프레임당, 천천히 따라감)
+    if (dist < oReach + 12 && !oAir) {
+      const started = ps.st !== "atk" && o.st === "atk" && o.mv !== "T" && o.mv !== "J";
+      this.closeAtk = this.closeAtk * 0.992 + (started ? 0.008 : 0);
+    }
+    ps.st = o.st;
+    ps.stun = o.stun;
+  }
+
+  /** 지금 필살기를 쓰면 상대가 맞나 (상대는 지금 누르는 방향을 그대로 유지한다고 봄) — 허공에 쓰는 것 막기 */
+  private ultHits(s: State, me: 0 | 1, dir: number) {
+    const t = clone(s);
+    const o = t.p[1 - me];
+    const held = (o.hist[o.hist.length - 1] & (IN.L | IN.R | IN.D)) | (o.st === "block" ? IN.D : 0);
+    for (let k = 0; k < 110; k++) {
+      step(t, me === 0 ? [k === 0 ? IN.X | dir : 0, held] : [held, k === 0 ? IN.X | dir : 0]);
+      const d = t.p[1 - me];
+      if (d.st === "hit" || d.st === "down" || d.grabbed > 0) return true;
+      const f = t.p[me];
+      if (k > 4 && (f.st !== "atk" || f.mv !== "X") && !t.proj.some((p) => p.o === me)) return false;
+      if (t.phase !== "fight") return false;
+    }
+    return false;
+  }
+
+  /** 상대가 중거리에서 뛰는 빈도 0~1 (10초에 3번 이상이면 1) */
+  private jumpy() {
+    return Math.min(1, ((this.oJumps / this.midT) * 600) / 3);
+  }
+
+  /**
+   * 후보 입력열을 각각 W프레임 돌려 보고 손익이 가장 좋은 걸 돌려줌.
+   * weighted 가 없으면(반응): 상대 대응 몇 가지 중 최악 · 평균으로 매김.
+   * weighted 가 있으면(읽기): 상대가 이 상황에서 하던 행동 비율대로 기대값으로 매김 → 노림수 (상대가 잘 하는 걸 잡아먹는 수)
+   */
+  private lookAhead(
+    s: State,
+    me: 0 | 1,
+    W: number,
+    faceOk: boolean,
+    toward: number,
+    away: number,
+    weighted?: [Act, number][]
+  ): { seq: number[]; v: number } | null {
     const f = s.p[me];
     const o = s.p[1 - me];
     const held = (o.hist[o.hist.length - 1] & (IN.L | IN.R | IN.D)) | (o.st === "block" ? IN.D : 0);
@@ -997,42 +1312,63 @@ export class FightAI {
     const cands: number[][] = [seq([], IN.D), seq([], 0), seq([], away), seq([IN.J | away], away), seq([IN.J | toward], toward)];
     if (faceOk) {
       for (const b of [IN.A, IN.B, IN.C, IN.A | IN.B]) cands.push(seq([b, 0, 0], IN.D));
-      if (f.meter >= 100) cands.push(seq([IN.X, 0, 0], IN.D));
+      if (f.meter >= 100 && this.ultHits(s, me, 0)) cands.push(seq([IN.X, 0, 0], IN.D));
       if (f.st === "block" && f.stun > 0 && f.meter >= 25) cands.push(seq([IN.D | IN.B, IN.D, IN.D], IN.D));
       cands.push(seq([0, toward, toward, IN.B], IN.D));
+      if (weighted) {
+        // 노림수: 한 박자 늦춘 공격 (상대 헛침 · 버튼 누르기를 기다렸다 때림), 다가가 잡기, 물러났다 찌르기
+        cands.push(seq([IN.D, IN.D, IN.D, IN.D, IN.D, IN.D, IN.B], IN.D));
+        cands.push(seq([away, away, away, away, 0, IN.B], IN.D));
+        cands.push(seq([toward, toward, IN.A | IN.B], IN.D));
+        cands.push(seq([0, 0, 0, IN.A], IN.D));
+      }
+    }
+    const oTo = o.x < f.x ? IN.R : IN.L;
+    // 상대 대응: [첫 2프레임 뒤 누를 입력, 무게]
+    const actIn: Record<Act, number> = { wait: held, block: IN.D, atk: IN.A, jump: IN.J | oTo, throw: IN.A | IN.B };
+    const replies: [number, number][] = weighted
+      ? weighted.filter((x) => x[1] > 0.04).map(([a, w]) => [actIn[a], w])
+      : [held, IN.D, IN.A, IN.J | oTo, IN.B].slice(0, Math.max(1, this.level.robust ?? 1)).map((x) => [x, 1]);
+    // 읽기에선 상대 공격은 약 · 발차기 반반으로 봄
+    if (weighted) {
+      const ai = replies.findIndex((r) => r[0] === IN.A);
+      if (ai >= 0) {
+        replies[ai][1] /= 2;
+        replies.push([IN.B, replies[ai][1]]);
+      }
     }
     let best: number[] | null = null;
     let bestV = -Infinity;
-    const oTo = o.x < f.x ? IN.R : IN.L;
-    const replies = [held, IN.D, IN.A, IN.J | oTo, IN.B].slice(0, Math.max(1, this.level.robust ?? 1));
     for (const c of cands) {
       let worst = Infinity,
-        sum = 0;
+        sum = 0,
+        wsum = 0;
       for (let ri = 0; ri < replies.length; ri++) {
-        const rep = replies[ri];
+        const [rep, wt] = replies[ri];
         const t = clone(s);
         const my0 = t.p[me].hp,
           op0 = t.p[1 - me].hp;
-        let v = 0;
         for (let k = 0; k < W; k++) {
-          // 상대 대응: 0번은 지금 누르는 그대로, 나머지는 2프레임 뒤부터 그 버튼(누르는 건 한 번만, 그다음은 방향만)
-          const oi = ri === 0 || k < 2 ? held : k === 2 ? rep : rep & (IN.L | IN.R | IN.D);
+          // 상대 대응: 반응 모드 0번은 지금 누르는 그대로, 나머지는 2프레임 뒤부터 그 버튼(누르는 건 한 번만, 그다음은 방향만)
+          const oi = (!weighted && ri === 0) || k < 2 ? held : k === 2 ? rep : rep & (IN.L | IN.R | IN.D);
           step(t, me === 0 ? [c[k], oi] : [oi, c[k]]);
           if (t.phase !== "fight") break;
         }
         const dealt = op0 - t.p[1 - me].hp,
           took = my0 - t.p[me].hp;
-        v = dealt - took * 1.3;
+        let v = dealt - took * 1.3;
         // 맞았거나 넘어진 채 끝나면 감점, 상대가 경직 중이면 가점 (이어 갈 수 있음)
         if (t.p[me].st === "hit" || t.p[me].st === "down") v -= 40;
         if (t.p[1 - me].st === "hit" || t.p[1 - me].st === "down") v += 20;
         worst = Math.min(worst, v);
-        sum += v;
+        sum += v * wt;
+        wsum += wt;
       }
-      const v = replies.length > 1 ? worst * 0.6 + (sum / replies.length) * 0.4 : worst;
+      const avg = sum / wsum;
+      const v = weighted ? avg * (1 - K.worst) + worst * K.worst : replies.length > 1 ? worst * 0.6 + avg * 0.4 : worst;
       if (v > bestV + 0.5) ((bestV = v), (best = c));
     }
-    return best;
+    return best ? { seq: best, v: bestV } : null;
   }
 
   private decide(s: State, me: 0 | 1, dist: number, lReach: number, hReach: number, oReach: number) {

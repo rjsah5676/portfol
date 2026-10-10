@@ -33,7 +33,7 @@ export async function replayBot(o: BotReplay): Promise<{ done: boolean; winner: 
     step(s, [o.inputs[k], ai.next(s, 1)]);
     k++;
     // 한 번에 오래 붙잡고 있지 않게 (다른 방·게임이 멈추지 않게) 조금씩 끊어서
-    if (k % 400 === 0) await new Promise((r) => setImmediate(r));
+    if (k % 150 === 0) await new Promise((r) => setImmediate(r)); // AI 노림수(미리 돌려 보기)가 무거워져 더 자주 쉼
   }
   if (s.phase !== "over") return { done: false, winner: -1, margin: null, frames: k };
   const w = s.winner;
