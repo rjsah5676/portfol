@@ -123,8 +123,9 @@ function movingMean(x: Float32Array, before: number, after: number) {
 export async function analyzeAudio(
   buffer: AudioBuffer,
   progress: Progress,
-  /** straight: 셋잇단처럼 보여도 1.5배 템포 4/4로 (내장곡 채보 만들 때 직접 지정) */
-  opt: { straight?: boolean } = {}
+  /** straight: 셋잇단처럼 보여도 1.5배 템포 4/4로 (내장곡 채보 만들 때 직접 지정)
+   *  double: 절반 템포로 잡혀도 2배 템포로 (내장곡 채보 만들 때 직접 지정) */
+  opt: { straight?: boolean; double?: boolean } = {}
 ): Promise<Analysis> {
   progress(0.02, "모노로 변환 중");
   const len = Math.ceil(buffer.duration * SR);
@@ -294,7 +295,7 @@ export async function analyzeAudio(
   beats = straighten(beats);
   // 빠른 곡(170~280 BPM)은 절반 템포로 잡히기 쉬움 — 박 사이 자리가 박만큼 세면 2배 템포 후보를 만들어 둠
   // (osu 랭크 106곡 중 56곡이 절반으로 잡혔음. 어느 쪽을 쓸지는 격자 맞출 때 셋잇단 판정과 같이 정함)
-  const doubled = octaveDoubled(beats, hp, fl, FPS);
+  const doubled = opt.double ? doubleBeats(beats) : octaveDoubled(beats, hp, fl, FPS);
 
   // ── 어택 지점 재보정용 고해상도 에너지 (1.45ms 간격) ──
   progress(0.8, "타격 시점 정밀 보정 중");
@@ -398,7 +399,7 @@ export async function analyzeAudio(
   if (doubled) {
     // 2배 템포가 셋잇단(12/8)으로 읽히면 원래 템포가 맞는 것 — 아니면 2배 쪽을 씀
     const fast = alignToGrid(doubled, kept, opt.straight);
-    if (fast.div !== DIV_TRIPLET) aligned = fast;
+    if (opt.double || fast.div !== DIV_TRIPLET) aligned = fast;
   }
   return { duration: buffer.duration, ...aligned, rms };
 }
@@ -478,6 +479,12 @@ function octaveDoubled(
   const lowr = aP > 0.05 ? acf(P / 2) / aP : 0;
   if (alt2 < 0.6 || rq2 >= 0.6) return null;
   if (!(lowr >= 0.85 || rq >= 0.45 || rmid >= 0.9)) return null;
+  return doubleBeats(beats);
+}
+
+/** 박 사이마다 박을 하나씩 끼워 2배 템포 비트열로 */
+function doubleBeats(beats: number[]): number[] {
+  const n = beats.length;
   const out: number[] = [];
   for (let i = 0; i < n; i++) {
     out.push(beats[i]);

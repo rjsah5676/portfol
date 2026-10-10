@@ -13,6 +13,8 @@ import fullcomboCover from "@/img/rhythm/fullcombo.jpg";
 import animaCover from "@/img/rhythm/anima.jpg";
 import freedomdiveCover from "@/img/rhythm/freedomdive.jpg";
 import aragamiCover from "@/img/rhythm/aragami.jpg";
+import crimsonCover from "@/img/rhythm/crimsoncadenza.jpg";
+import hwimoriCover from "@/img/rhythm/hwimori.jpg";
 
 export const COVERS: Record<string, StaticImageData> = {
   jilju: jiljuCover,
@@ -25,6 +27,8 @@ export const COVERS: Record<string, StaticImageData> = {
   anima: animaCover,
   freedomdive: freedomdiveCover,
   aragami: aragamiCover,
+  crimsoncadenza: crimsonCover,
+  hwimori: hwimoriCover,
 };
 
 /** 내 음악에 앨범 사진이 없을 때 쓰는 기본 재킷 */

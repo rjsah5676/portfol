@@ -1,7 +1,9 @@
 import anima from "../../../web/src/data/rhythm/anima.json";
 import aragami from "../../../web/src/data/rhythm/aragami.json";
+import crimsoncadenza from "../../../web/src/data/rhythm/crimsoncadenza.json";
 import freedomdive from "../../../web/src/data/rhythm/freedomdive.json";
 import fullcombo from "../../../web/src/data/rhythm/fullcombo.json";
+import hwimori from "../../../web/src/data/rhythm/hwimori.json";
 import jilju from "../../../web/src/data/rhythm/jilju.json";
 import monarch from "../../../web/src/data/rhythm/monarch.json";
 import natsukasumi from "../../../web/src/data/rhythm/natsukasumi.json";
@@ -23,8 +25,10 @@ interface SongData {
 const SONGS: Record<string, SongData> = {
   anima,
   aragami,
+  crimsoncadenza,
   freedomdive,
   fullcombo,
+  hwimori,
   jilju,
   monarch,
   natsukasumi,
