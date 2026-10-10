@@ -3445,8 +3445,9 @@
 .pk-face-bet {
   position: absolute;
   left: 50%;
-  bottom: calc(100% + 3px);
-  transform: translateX(-50%);
+  /* 얼굴 윗선에 걸쳐서 — 얼굴 위로 올리면 위 자리 이름표 · 칩을 가림 */
+  top: 0;
+  transform: translate(-50%, -40%);
   z-index: 6;
   padding: 0.05em 0.55em;
   border-radius: 999px;

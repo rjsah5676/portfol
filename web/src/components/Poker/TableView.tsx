@@ -1236,7 +1236,8 @@ export default function TableView({
     const s = table.seats[i];
     const hero = i === mySeat;
     const right = f.dir < 0;
-    const box: CSSProperties = { left: f.x, top: f.y, width: f.w, height: f.h, zIndex: hero ? 21 : 34 };
+    // 이모티콘이 떠 있는 동안은 그 틀을 다른 틀 · 위 바보다 위로 (말풍선이 위 틀 · 위 바에 가려지지 않게)
+    const box: CSSProperties = { left: f.x, top: f.y, width: f.w, height: f.h, zIndex: emotes[i] ? 40 : hero ? 21 : 34 };
     if (!s)
       return (
         <div key={i} className="pk-sf pk-sf-empty absolute flex items-center justify-center" style={box}>
