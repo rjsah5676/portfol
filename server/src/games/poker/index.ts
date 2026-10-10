@@ -568,8 +568,8 @@ export function registerPoker({ gateway, db, users }: Deps, opts: PokerOptions =
       const s = t.inRound.get(seatNo)!;
       if (s.brain) {
         const move = round.botMove(seatNo, s.brain);
-        // 봇은 사람처럼 생각하는 시간을 그대로 씀 (봇끼리 남아도 빨리 돌리지 않음). 최소 1.2초, 제한 시간 0.9초 전까지
-        const think = ms(Math.max(1200, Math.min(limit - 900, move.thinkMs * (0.9 + Math.random() * 0.5))));
+        // 봇이 생각하는 시간: 성격 · 판 크기에 따른 시간의 절반 (전체적으로 두 배 빠르게). 최소 0.6초, 제한 시간 0.9초 전까지
+        const think = ms(Math.max(600, Math.min(limit - 900, move.thinkMs * 0.5 * (0.9 + Math.random() * 0.5))));
         t.actTimers.set(
           seatNo,
           setTimeout(() => {
