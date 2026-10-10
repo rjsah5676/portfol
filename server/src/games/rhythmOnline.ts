@@ -172,8 +172,10 @@ export function registerRhythmOnline({ gateway }: Deps) {
     song: r.song,
     round: r.round,
   });
+  // 아무도 없는 방(마지막 사람이 끊겨 잠깐 기다리는 중)은 목록에 안 보임
   const lobbyWire = () =>
     [...rooms.values()]
+      .filter((r) => Object.keys(r.players).length > 0)
       .map((r) => ({
         id: r.id,
         name: r.meta.name,
@@ -386,10 +388,8 @@ export function registerRhythmOnline({ gateway }: Deps) {
     const room = rooms.get(id);
     if (!room || !room.players[uid]) return null;
     removePlayer(room, uid);
-    if (!Object.keys(room.players).length)
-      setTimeout(() => {
-        if (rooms.get(id) === room && !Object.keys(room.players).length) removeRoom(room);
-      }, 5_000).unref();
+    // 마지막 사람이 직접 나가면 바로 정리 (끊김은 다시 붙을 수 있게 sweep 이 1분 기다림)
+    if (!Object.keys(room.players).length) removeRoom(room);
     return null;
   });
 
@@ -699,7 +699,7 @@ export function registerRhythmOnline({ gateway }: Deps) {
   const sweep = setInterval(() => {
     const now = Date.now();
     for (const room of [...rooms.values()])
-      if (!Object.keys(room.players).length && now - room.emptySince >= 3 * 60_000) removeRoom(room);
+      if (!Object.keys(room.players).length && now - room.emptySince >= 60_000) removeRoom(room);
   }, 30_000);
   sweep.unref();
 

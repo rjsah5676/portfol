@@ -5,6 +5,7 @@ import { onAuthStateChanged, signInAnonymously } from "firebase/auth";
 import { auth } from "@/firebase";
 import { useAuth } from "@/lib/AuthContext";
 import { onConnection } from "@/lib/api/socket";
+import { API_URL } from "@/lib/api/config";
 import {
   createRoom,
   joinRoom,
@@ -26,7 +27,7 @@ const NICK_KEY = "chess_nick";
  * 점수판은 렌더 없이 board(ref)만 바꿈 — 플레이 화면(Stage)이 매 프레임 읽음.
  */
 export function useRhythmOnline(active: boolean) {
-  const { profile } = useAuth();
+  const { profile, account } = useAuth();
   const [uid, setUid] = useState<string | null>(null);
   // 비회원 이름: 처음 렌더에서 바로 읽음 (브라우저에서만 — 온라인 화면은 늘 브라우저에서 열림)
   const [typed, setTyped] = useState(() => {
@@ -46,6 +47,12 @@ export function useRhythmOnline(active: boolean) {
   /** 마지막으로 받은 점수 (방 화면의 관전·대기 점수판용) */
   const [live, setLive] = useState<{ round: number; rows: Record<string, LiveRow> } | null>(null);
   const nick = profile?.nick ?? typed;
+  /** 회원 프로필 사진: 직접 올린 것 → 로그인 계정 사진 (비회원은 null) */
+  const avatar = profile
+    ? profile.avatar
+      ? `${API_URL}${profile.avatar}`
+      : (account?.photoURL ?? null)
+    : null;
 
   const setNick = useCallback((v: string) => {
     const n = v.trim().slice(0, 10);
@@ -178,6 +185,7 @@ export function useRhythmOnline(active: boolean) {
     uid,
     nick,
     member: !!profile,
+    avatar,
     setNick,
     err,
     setErr,

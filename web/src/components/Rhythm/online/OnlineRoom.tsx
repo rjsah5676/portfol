@@ -157,7 +157,7 @@ export default function OnlineRoom({
               {song ? (song.kind === "custom" ? "MY MUSIC · 방장" : "SONG") : "NO SONG"}
             </div>
             <div
-              className={`${KR} mt-[0.3cqw] line-clamp-2 text-[2.3cqw] leading-tight font-extrabold break-keep text-white`}
+              className={`${KR} mt-[0.3cqw] line-clamp-2 text-[2.3cqw] leading-tight font-extrabold break-keep text-white [overflow-wrap:anywhere]`}
             >
               {song?.title ?? (host ? "곡을 골라 주세요" : "방장이 곡을 고르는 중")}
             </div>

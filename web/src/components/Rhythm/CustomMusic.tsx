@@ -264,8 +264,9 @@ export default function CustomMusic({
                 <br />
                 눌러서 고르세요
               </p>
-              <p className="font-mono text-[1.05cqw] text-white/40">
-                mp3 · wav · ogg · m4a · mp4 · 12분 이하
+              <p className="flex flex-wrap justify-center gap-x-[0.6cqw] font-mono text-[1.05cqw] text-white/40">
+                <span className="whitespace-nowrap">mp3 · wav · ogg · m4a · mp4</span>
+                <span className="whitespace-nowrap">12분 이하</span>
               </p>
             </>
           )}

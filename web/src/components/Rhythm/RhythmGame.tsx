@@ -454,9 +454,7 @@ export default function RhythmGame() {
 
   // 메뉴 BGM: 타이틀, 그리고 미리 듣기가 없는 화면(내 음악 고를 때)
   const bgmOn =
-    entered &&
-    !bgmMute &&
-    (screen === "title" || screen === "online" || (screen === "select" && customSel && !track));
+    entered && !bgmMute && (screen === "title" || (screen === "select" && customSel && !track));
   // B 키: 타이틀·곡 선택에서 배경음 켜고 끄기 (입력칸·설정 창에선 안 받음)
   useEffect(() => {
     if (!entered || settingsOpen || (screen !== "title" && screen !== "select")) return;
@@ -906,7 +904,8 @@ export default function RhythmGame() {
       await uploadCustom(
         id,
         {
-          title: t.name,
+          // 파일 이름의 밑줄은 띄어쓰기로 (QWER_-_My_Name → QWER - My Name)
+          title: t.name.replace(/_+/g, " ").replace(/\s+/g, " ").trim() || t.name,
           diff,
           duration: t.buffer.duration,
           info: {
@@ -929,6 +928,65 @@ export default function RhythmGame() {
       net.setErr(msg);
     }
   }, [oRoomId, isCustom, builtinSong, diff, track, customCharts, net]);
+  // 방에서 곡을 골라 두면 메뉴 BGM 대신 그 곡 하이라이트(8마디)를 반복 — 참가자는 내 음악을 받기 전까진 BGM
+  const roomSong = oRoom?.song;
+  const roomHostBuf = roomSong && hosted?.ver === roomSong.id ? hosted.track.buffer : null;
+  const roomGotBuf = roomSong && got?.ver === roomSong.id ? got.buffer : null;
+  const roomPreviewOn =
+    screen === "online" &&
+    entered &&
+    !bgmMute &&
+    !!onlineSong &&
+    (roomSong?.kind === "builtin" || !!roomHostBuf || !!roomGotBuf);
+  useEffect(() => {
+    if (screen !== "online") return;
+    if (entered && !bgmMute && !roomPreviewOn) playBgm(settings.music);
+    else stopBgm();
+  }, [screen, entered, bgmMute, roomPreviewOn, settings.music]);
+  useEffect(() => {
+    if (!roomPreviewOn || !onlineSong) return;
+    let alive = true;
+    let node: { src: AudioBufferSourceNode; gain: GainNode; ctx: AudioContext } | null = null;
+    void (async () => {
+      try {
+        const ctx = await audio();
+        if (ctx.state !== "running") return;
+        const buffer = roomHostBuf ?? roomGotBuf ?? (await loadSong(onlineSong));
+        if (!alive) return;
+        const src = ctx.createBufferSource();
+        src.buffer = buffer;
+        const gain = ctx.createGain();
+        src.connect(gain).connect(ctx.destination);
+        const barSec = (60 / onlineSong.bpm) * 4;
+        const from = Math.max(
+          0,
+          Math.floor(buffer.duration / 3 / barSec) * barSec + (onlineSong.beatOffset ?? 0)
+        );
+        const len = Math.min(barSec * 8, Math.max(4, buffer.duration - from - 0.5));
+        src.loop = true;
+        src.loopStart = from;
+        src.loopEnd = from + len;
+        const t = ctx.currentTime;
+        gain.gain.setValueAtTime(0, t);
+        gain.gain.linearRampToValueAtTime(settings.music * 0.55, t + 0.8);
+        src.start(t, from);
+        node = { src, gain, ctx };
+      } catch {}
+    })();
+    return () => {
+      alive = false;
+      if (!node) return;
+      const { src, gain, ctx } = node;
+      const t = ctx.currentTime;
+      try {
+        gain.gain.cancelScheduledValues(t);
+        gain.gain.setValueAtTime(gain.gain.value, t);
+        gain.gain.linearRampToValueAtTime(0, t + 0.3);
+        src.stop(t + 0.35);
+      } catch {}
+    };
+  }, [roomPreviewOn, onlineSong, roomHostBuf, roomGotBuf, settings.music]);
+
   const roomAct = useCallback(
     (p: Promise<unknown>) =>
       p.catch((e) => net.setErr(e instanceof Error ? e.message : "요청을 처리하지 못했어요.")),
@@ -1152,6 +1210,7 @@ export default function RhythmGame() {
                 rooms={net.lobby}
                 nick={net.nick}
                 member={net.member}
+                avatar={net.avatar}
                 onNick={net.setNick}
                 onCreate={net.create}
                 onJoin={net.join}
