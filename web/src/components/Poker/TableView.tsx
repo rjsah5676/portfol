@@ -1170,8 +1170,13 @@ export default function TableView({
       }
       // 7포커 위쪽 자리: 판 쪽 중간이면 이름표에 걸림 → 이름표 바로 아래, 팟과 안 겹치게 바깥쪽으로 살짝
       if (sv) return { x: x + (x > px(L.table.cx) ? 1 : -1) * plateHalf * 0.5, y: y + 56 + 22 };
-      const f = sp.side === "top" ? 0.45 : 0.5;
-      return { x: x + (px(L.table.cx) - x) * f, y: y + (py(L.center.board) - y) * f };
+      // 홀덤 위쪽 자리: 판이 낮으면(폰 가로) 판 쪽 중간이 이름표에 걸림 → 그 사람 엎은 카드 위에 겹쳐 둠 (뒷면이라 가려도 됨)
+      if (sp.side === "top") {
+        const rowEst = sizes.card * 1.3 * 2.2;
+        const dir = x + plateHalf + 6 + rowEst > boardW - 6 ? -1 : 1;
+        return { x: x + dir * (plateHalf + 6 + sizes.card * 1.15 * 0.9), y: y + sizes.card * 0.75 };
+      }
+      return { x: x + (px(L.table.cx) - x) * 0.5, y: y + (py(L.center.board) - y) * 0.5 };
     }
     // 세로판: 건 돈이 그 사람 카드(= 족보)를 가리지 않게 카드가 없는 쪽에
     const half = Math.max(84, sprW * 0.62) / 2;

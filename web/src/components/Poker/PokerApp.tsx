@@ -140,8 +140,13 @@ export default function PokerApp({ rank }: { rank: RankRow[] | null }) {
     return () => window.removeEventListener("resize", on);
   }, []);
   // 폰을 눕혀서(가로) 전체화면 없이 볼 때: 사이트 메뉴 밑 16:9 상자는 손바닥만 해지므로 화면을 덮어 전체화면처럼 그림 (세로로 돌리면 원래대로)
-  const shortLand = !fs && scr.touch && scr.w > scr.h * 1.2 && scr.h < 560;
-  const fit = (fs || shortLand) && scr.w > scr.h * 1.2 ? Math.min(scr.w / DESIGN.w, scr.h / DESIGN.h) : 0;
+  // 폰은 가로 전용: 가로면 화면을 덮어 그리고, 세로면 "가로로 돌려 주세요"
+  const phone = scr.touch && Math.min(scr.w, scr.h) < 600;
+  const land = scr.w > scr.h * 1.2;
+  const shortLand = !fs && phone && land;
+  // 폰 가로는 1280×720 을 통째로 줄이면 글씨가 너무 작아서, 높이 540 짜리 무대(폭은 화면 비율대로)로 그려 키움
+  const D = phone && land ? { w: Math.round(Math.min(1280, Math.max(960, (540 * scr.w) / scr.h))), h: 540 } : DESIGN;
+  const fit = (fs || shortLand) && land ? Math.min(scr.w / D.w, scr.h / D.h) : 0;
   // 무대 위에 사이트의 떠 있는 메뉴 버튼이 겹치지 않게
   useEffect(() => {
     document.body.classList.add("game-full");
@@ -178,8 +183,14 @@ export default function PokerApp({ rank }: { rank: RankRow[] | null }) {
       selfExit.current = true;
       return void document.exitFullscreen().catch(() => {});
     }
+    // 폰: 전체화면이 되면 가로로 고정 (안드로이드 크롬 등 되는 기기만 — 안 되면 "가로로 돌려 주세요" 안내)
+    const lockLand = () => {
+      if (!matchMedia("(pointer: coarse)").matches) return;
+      const o = window.screen.orientation as ScreenOrientation & { lock?: (o: string) => Promise<void> };
+      void o?.lock?.("landscape").catch(() => {});
+    };
     if (typeof el.requestFullscreen === "function")
-      el.requestFullscreen({ navigationUI: "hide" }).catch(() => setPseudoFs(true));
+      el.requestFullscreen({ navigationUI: "hide" }).then(lockLand, () => setPseudoFs(true));
     else setPseudoFs(true);
   };
   const o: Orient = size.w > size.h * 1.05 ? "h" : "v";
@@ -273,7 +284,10 @@ export default function PokerApp({ rank }: { rank: RankRow[] | null }) {
         : "mx-auto w-full max-w-[min(1280px,calc((100dvh-166px)*16/9))] px-0 sm:px-3";
   // (폰: 사이트 머리말 57px + 게임 메뉴 45px + 전체화면 권장 띠 62px 아래부터 화면 끝까지. 띠가 없는 기기(아이폰)는 그만큼 더 크게)
   // 폰 로비: 전체화면이 아니면 로비를 가리고 전체화면부터 (전체화면이 안 되는 아이폰 · 홈 화면 앱은 제외)
-  const fsGate = !fs && canFs && !standalone && scr.touch && !tableId && !!wallet && !!account && !!profile;
+  const ready = !!wallet && !!account && !!profile;
+  const fsGate = !fs && canFs && !standalone && phone && ready;
+  // 전체화면인데(또는 전체화면이 안 되는 기기에서) 세로로 들고 있음
+  const rotateGate = !fsGate && phone && !land && ready;
   const showFsBanner = !fs && canFs && !shortLand && !fsGate;
   const stageCls = fit
     ? "flex-none"
@@ -310,8 +324,8 @@ export default function PokerApp({ rank }: { rank: RankRow[] | null }) {
         style={
           fit
             ? {
-                width: DESIGN.w,
-                height: DESIGN.h,
+                width: D.w,
+                height: D.h,
                 transform: `scale(${fit})`,
                 fontSize: 15, // 무대 글씨 크기는 바깥 크기로 재는데, 통째로 줄인 무대는 PC 창(1280)과 같아야 하므로 고정
                 transformOrigin: "center",
@@ -326,7 +340,7 @@ export default function PokerApp({ rank }: { rank: RankRow[] | null }) {
             <p className="font-['Black_Han_Sans',sans-serif] text-[1.6em] leading-tight text-white">
               전체화면으로 플레이해 주세요
             </p>
-            <p className="text-[0.95em] text-white/60">가로 · 세로 모두 지원해요</p>
+            <p className="text-[0.95em] text-white/60">폰은 가로 화면으로 쳐요 · 누르면 가로로 돌아가요</p>
             <button
               type="button"
               onClick={toggleFs}
@@ -345,6 +359,16 @@ export default function PokerApp({ rank }: { rank: RankRow[] | null }) {
               </svg>
               전체화면으로 시작
             </button>
+          </div>
+        )}
+        {rotateGate && (
+          <div className="absolute inset-0 z-[60] flex flex-col items-center justify-center gap-[1em] bg-black/85 px-6 text-center backdrop-blur-[3px]">
+            <svg viewBox="0 0 24 24" className="h-[3.2em] w-[3.2em] text-[#ffd84a]" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <rect x="7" y="2.5" width="10" height="19" rx="2" />
+              <path d="M3 9a9 9 0 0 1 4-5M21 15a9 9 0 0 1-4 5" />
+            </svg>
+            <p className="font-['Black_Han_Sans',sans-serif] text-[1.5em] leading-tight text-white">폰을 가로로 돌려 주세요</p>
+            <p className="text-[0.95em] text-white/60">폰에서는 가로 화면만 지원해요</p>
           </div>
         )}
         {shop && wallet && (
