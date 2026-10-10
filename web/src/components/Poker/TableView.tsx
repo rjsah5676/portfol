@@ -1756,11 +1756,13 @@ export default function TableView({
                 {
                   left: from.x,
                   top: from.y,
-                  zIndex: 33,
+                  // 이름표 · 카드보다 위에 보이게 하되, 판 쪽으로 내려가지 않고 머리 높이에서 가운데 쪽으로만 날아감 (카드 줄을 덮지 않게)
+                  zIndex: 36,
                   fontSize: Math.max(30, u * 6),
                   color: SHOUT_COLOR[sh.a] ?? "#fff",
-                  "--dx": `${(to.x - from.x) * 0.62}px`,
-                  "--dy": `${(to.y - from.y) * 0.62}px`,
+                  // 내 외침은 내 카드 쪽으로 가지 않고 내 캐릭터 머리 위로만 살짝 떠오름
+                  "--dx": `${sh.seat === mySeat ? 0 : (to.x - from.x) * 0.45}px`,
+                  "--dy": `${sh.seat === mySeat ? -u * 5 : Math.min(0, (to.y - from.y) * 0.12)}px`,
                 } as CSSProperties
               }
               onAnimationEnd={() => setShouts((c) => c.filter((x) => x.key !== sh.key))}

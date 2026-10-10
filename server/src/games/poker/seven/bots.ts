@@ -177,6 +177,12 @@ export function decideSeven(v: SevenBotView, brain: Brain): SevenDecision {
       const b = pickBet(0.5)!;
       return { type: b, thinkMs: think(2000, 4200), cue: "bigRaise" };
     }
+    // 초반(4 · 5구)에 내 칩에 비해 싼 벳이면 하프라도 "한 장 더 보자": 남은 카드가 많아(뒷심) 기준을 낮추고, 잡패도 가끔은 그냥 따라감
+    const cheapEarly = !last && v.round <= 5 && toCall < me.stack * 0.06 && risk < 0.4;
+    if (cheapEarly) {
+      if (eq >= need * 0.7 + margin - 0.06 - 0.06 * brain.skill.fun) return { type: "call", thinkMs: think(900, 2200), cue: "call" };
+      if (r() < 0.2 + 0.25 * brain.skill.fun) return { type: "call", thinkMs: think(1200, 2600), cue: "call" };
+    }
     if (eq >= need + margin && eq >= floorEq) return { type: "call", thinkMs: think(big ? 2000 : 1000, big ? 4800 : 2400), cue: allIn("call") ? "allin" : big && eq < 0.55 ? "heroCall" : "call" };
     return { type: "die", thinkMs: think(big ? 1600 : 800, big ? 3800 : 2000), cue: big && eq > 0.3 ? "bigFold" : "fold" };
   }
