@@ -193,6 +193,11 @@ export function decideSeven(v: SevenBotView, brain: Brain): SevenDecision {
       const b = pickBet(0.5)!;
       return { type: b, thinkMs: think(2000, 4200), cue: "bigRaise" };
     }
+    // 괜찮은 패(기준 조금 아래)는 가끔 되받아 올림 — 너무 콜만 하지 않게 (같은 구에 아직 안 따라갔고, 올림이 하나뿐일 때)
+    if (avail.length && !calledNow && raisesNow <= 1 && toCall < me.stack * 0.25 && eq >= Math.min(valueThr - 0.12, 0.15 + 1 / (n + 1)) && r() < 0.5 * (0.6 + 0.4 * p.reraise)) {
+      const b = pickBet(0.5)!;
+      return { type: b, thinkMs: think(1500, 3200), cue: allIn(b) ? "allin" : "raise" };
+    }
     if (pushStart && toCall < me.stack * 0.15) {
       const b = pickBet(0.65)!;
       return { type: b, thinkMs: think(1300, 2800), cue: allIn(b) ? "allin" : "raise" };

@@ -541,7 +541,9 @@ function preflop(v: BotView, brain: Brain, models: Models): Decision {
 
   // 사람 같은 지름: 크게 잃고 흥분한 봇 · 동네판 아재는 가끔 괜찮은 패로 그냥 올인 (밀리면 나머지가 고민하게)
   const hot = brain.heat * brain.persona.tilt;
-  if (canRaise && effBB <= 45 && ((hot > 0.45 && pct < 0.22 && r() < 0.3) || (pct < 0.1 && r() < 0.05 * brain.skill.fun)))
+  // (프리플랍 첫 행동에서만 — 따라 들어갔다가 갑자기 올인하면 어색)
+  const actedPre = hist.some((h) => h.seat === v.seat && h.type !== "sb" && h.type !== "bb" && h.type !== "ante");
+  if (canRaise && !actedPre && effBB <= 45 && ((hot > 0.45 && pct < 0.22 && r() < 0.3) || (pct < 0.1 && r() < 0.05 * brain.skill.fun)))
     return raiseTo(v.legal.maxTo);
 
   // ── 아직 아무도 안 올림 ──
@@ -669,7 +671,9 @@ function postflop(v: BotView, brain: Brain, models: Models): Decision {
     const junk = risk >= 0.4 && read.myQ < 0.7 + 0.05 * (n - 1) && outs < 8;
     const implied = !river && spr > 2 ? (outs >= 8 ? 0.06 : outs >= 4 && spr > 4 ? 0.02 : 0) : 0;
 
-    const valueThr = 0.72 + 0.04 * (n - 1) + p.valueShift;
+    // 이번 구간에 이미 콜로 따라간 봇은 같은 구간에서 블러프 · 드로우로 다시 올리지 않음 (아주 센 패만 예외)
+    const calledNow = v.history.some((h) => h.street === v.street && h.seat === v.seat && h.type === "call");
+    const valueThr = 0.72 + 0.04 * (n - 1) + p.valueShift + (calledNow ? 0.1 : 0) + 0.05 * Math.max(0, hist.length - 1);
     if (canRaise && eq >= valueThr && !(commitBB > 120 && read.myQ < 0.93 && eq < 0.8)) {
       // 아주 센 패는 가끔 콜만 하며 숨김
       if (!river && eq > 0.88 && r() < p.slowplay) return { type: "call", thinkMs: think(1500, 3200) };
@@ -678,12 +682,12 @@ function postflop(v: BotView, brain: Brain, models: Models): Decision {
       return { type: "raise", amount, thinkMs: think(1800, 4000), cue: amount === maxTo ? "allin" : "bigRaise" };
     }
     // 드로우로 되받아침
-    if (canRaise && !river && outs >= 8 && spr > 1.5 && r() < p.semiBluff * 0.7) {
+    if (canRaise && !calledNow && hist.length <= 1 && !river && outs >= 8 && spr > 1.5 && r() < p.semiBluff * 0.7) {
       const amount = sizeTo(v, v.currentBet + (pot + toCall) * pick(r, 0.6, 0.85));
       return { type: "raise", amount, thinkMs: think(1800, 3800), cue: amount === maxTo ? "allin" : "raise" };
     }
     // 순수 블러프 레이즈: 한 명 상대로 아주 가끔, 잘 죽는 사람에게
-    if (canRaise && n === 1 && eq < 0.3 && !big && r() < 0.035 * p.bluff * (models.foldy(live[0].key) / 0.45)) {
+    if (canRaise && !calledNow && hist.length <= 1 && n === 1 && eq < 0.3 && !big && r() < 0.035 * p.bluff * (models.foldy(live[0].key) / 0.45)) {
       const amount = sizeTo(v, v.currentBet + (pot + toCall) * pick(r, 0.7, 1));
       return { type: "raise", amount, thinkMs: think(2200, 4500), cue: "bigRaise" };
     }
