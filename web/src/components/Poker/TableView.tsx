@@ -3539,7 +3539,7 @@ function InfoBox({
         </ol>
       )}
       {tab === "emote" && emoteChar && onEmote && (
-        <div className="pk-scroll min-h-0 overflow-y-auto">
+        <div className={box ? "flex min-h-0 flex-1" : "pk-scroll min-h-0 overflow-y-auto"}>
           <EmoteGrid char={emoteChar} onPick={onEmote} dense={!!box} />
         </div>
       )}
@@ -3584,12 +3584,17 @@ function EmoteGrid({
   char: Look;
   onPick: (e: Emote) => void;
   big?: boolean;
-  /** 붙박이 상자 안: 한 줄에 여덟 개 (스크롤 없이 한눈에) */
+  /** 붙박이 상자 안: 정사각형 칸 한 줄 · 좌우로 밀어 고름 */
   dense?: boolean;
 }) {
   return (
     <div
-      className={`grid ${dense ? "grid-cols-8" : "grid-cols-4"} gap-[0.3em] border-t border-[rgba(214,175,92,0.2)] p-[0.45em] ${big ? "gap-[0.5em] p-[0.8em]" : ""}`}
+      // 붙박이 상자: 정사각형 칸을 한 줄로 늘어놓고 좌우로 밀어서 고름 (폰에서 칸이 세로로 길쭉해지지 않게)
+      className={
+        dense
+          ? "pk-emote-row pk-scroll border-t border-[rgba(214,175,92,0.2)]"
+          : `grid grid-cols-4 gap-[0.3em] border-t border-[rgba(214,175,92,0.2)] p-[0.45em] ${big ? "gap-[0.5em] p-[0.8em]" : ""}`
+      }
     >
       {EMOTES.map((e) => (
         <button
@@ -3600,7 +3605,7 @@ function EmoteGrid({
           aria-label={EMOTE_NAME[e]}
           title={EMOTE_NAME[e]}
         >
-          <EmoteImg char={char} emote={e} size={big ? 72 : 48} className="mx-auto h-auto w-full" />
+          <EmoteImg char={char} emote={e} size={big ? 72 : 48} className={dense ? "h-full w-full object-contain" : "mx-auto h-auto w-full"} />
           {/* 가리키면(폰은 누르는 동안) 이름이 떠오름 */}
           <span className="pk-emote-name" aria-hidden>
             {EMOTE_NAME[e]}

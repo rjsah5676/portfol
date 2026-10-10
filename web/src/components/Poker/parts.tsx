@@ -128,14 +128,15 @@ export function PlayingCard({
 /*
  * 카드 앞면 (100 × 140 상자에 SVG 로): 숫자 크기 · 자리 · 무늬 배치가 52장 모두 같은 규칙.
  *  - 모서리: 왼쪽 위 숫자(얇고 또렷한 좁은 글꼴, 모든 숫자 같은 크기 · 같은 가운데 줄) + 그 아래 작은 무늬, 오른쪽 아래에 뒤집어 하나 더
- *  - 2~10: 정식 무늬 배치 (아래 절반은 뒤집힘) · A: 가운데 큰 무늬 하나 · J Q K: 캐릭터 그림
+ *  - 2~10: 정식 무늬 배치 (아래 절반은 뒤집힘) · A: 가운데 큰 무늬 하나 · J Q K: 가운데 틀 안에 캐릭터 그림, 숫자는 양쪽 모서리
  */
-const IDX_X = 14;
-const COL_L = 39;
-const COL_R = 61;
-const PIP = 16;
-const Y1 = 26;
-const Y4 = 114;
+// 실제 카드 비율: 모서리 숫자는 작게 가장자리에 붙고, 무늬는 크게 · 넓게 (가로 30% / 70% 두 줄, 세로 21% ~ 79%)
+const IDX_X = 10.5;
+const COL_L = 30;
+const COL_R = 70;
+const PIP = 22;
+const Y1 = 30;
+const Y4 = 110;
 const yAt = (k: number) => Y1 + ((Y4 - Y1) * k) / 6; // 7줄 눈금 (0 ~ 6)
 /** 숫자별 무늬 자리 [x, 눈금] — 눈금 3 위로는 바로, 아래로는 뒤집어 그림 */
 const PIPS: Record<number, [number, number][]> = {
@@ -163,10 +164,10 @@ function Pip({ s, x, y, size, flip }: { s: number; x: number; y: number; size: n
 function Index({ r, s }: { r: string; s: number }) {
   return (
     <>
-      <text x={IDX_X} y={31} className="pk-idx" textAnchor="middle">
+      <text x={IDX_X} y={26} className="pk-idx" textAnchor="middle">
         {r}
       </text>
-      <Pip s={s} x={IDX_X} y={43} size={15} />
+      <Pip s={s} x={IDX_X} y={37} size={14} />
     </>
   );
 }
@@ -178,30 +179,29 @@ function CardFace({ rank, r, s, court }: { rank: number; r: string; s: number; c
       {court ? (
         <>
           <clipPath id={`cc-${rank}-${s}`}>
-            <rect x={27} y={6} width={67} height={128} rx={5} />
+            <rect x={21} y={7} width={58} height={126} rx={4} />
           </clipPath>
           <image
             href={asset.court(s, rank)}
-            x={27}
-            y={6}
-            width={67}
-            height={128}
+            x={21}
+            y={7}
+            width={58}
+            height={126}
             preserveAspectRatio="xMidYMid slice"
             clipPath={`url(#cc-${rank}-${s})`}
           />
-          <rect x={27} y={6} width={67} height={128} rx={5} fill="none" stroke="rgba(0,0,0,0.18)" strokeWidth={0.8} />
+          <rect x={21} y={7} width={58} height={126} rx={4} fill="none" stroke="currentColor" strokeOpacity={0.35} strokeWidth={0.9} />
         </>
       ) : n === 14 ? (
-        <Pip s={s} x={50} y={70} size={46} />
+        // A: 가운데 큰 무늬 하나 (스페이드 A 는 더 크게 — 실제 카드처럼)
+        <Pip s={s} x={50} y={70} size={s === 0 ? 66 : 50} />
       ) : (
         PIPS[n].map(([x, k], i) => <Pip key={i} s={s} x={x} y={yAt(k)} size={PIP} flip={k > 3} />)
       )}
       <Index r={r} s={s} />
-      {!court && (
-        <g transform="rotate(180 50 70)">
-          <Index r={r} s={s} />
-        </g>
-      )}
+      <g transform="rotate(180 50 70)">
+        <Index r={r} s={s} />
+      </g>
     </svg>
   );
 }

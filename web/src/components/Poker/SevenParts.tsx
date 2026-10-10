@@ -17,6 +17,9 @@ export function sevenHint(my: MyHand): string {
   return handNameK(bestK(my.cards).score);
 }
 
+/** 카드 사이 간격 (카드 폭 대비) — 모서리 숫자 · 무늬가 보이는 만큼 */
+const STEP = 0.3;
+
 /** 7포커 카드 놓는 순서: 엎은 카드(처음 2장) → 편 카드(받은 순서) → 히든(7번째 장, 늘 맨 끝) */
 function orderSeven(cards: Card[], isUp: (c: Card, i: number) => boolean) {
   const all = cards.map((c, i) => ({ c, i, up: isUp(c, i), hidden: cards.length === 7 && i === 6 && !isUp(c, i) }));
@@ -43,11 +46,12 @@ export function sevenSeatCards({
   const ended = !!view.result && !!settled;
   const w = hero ? sizes.heroCard : sizes.card;
   const count = p.cards?.length ?? (hero ? myHand?.cards.length : p.up.length + p.down) ?? 0;
-  // 남 · 나 모두 펼쳐 놓지 않고 왼쪽부터 포개서 차곡차곡 (숫자 · 무늬만 보이게), 칸이 모자라면 더 겹침
-  let overlap = -Math.round(w * 0.52);
+  // 남 · 나 모두 한게임처럼 왼쪽부터 같은 간격으로 차곡차곡 (칸을 꽉 채우려고 벌리지 않음) — 모서리 숫자 · 무늬만 보이는 간격
+  // 7장이 다 들어와도 칸 안에 들어가는 간격으로 고정 (칸이 그보다 좁으면 그때만 더 겹침)
+  let overlap = -Math.round(w * (1 - STEP));
   if (maxW && count > 1) {
     const fit = -Math.ceil(w - (maxW - w) / (count - 1));
-    overlap = Math.min(overlap, Math.max(fit, -Math.round(w * 0.8)));
+    overlap = Math.min(overlap, fit);
   }
   const row = "flex";
   const gap = (i: number) => (i ? { marginLeft: overlap } : undefined);
@@ -145,17 +149,10 @@ export function sevenSeatCards({
   const downN = downAll - hid;
   const U = p.up.length;
   const total = downAll + U;
-  // 엎은 카드도 편 카드와 같은 크기 (작게 하면 뭐가 몇 장인지 눈에 안 들어옴) — 대신 촘촘히 겹친 묶음
+  // 엎은 카드도 편 카드와 같은 크기 · 같은 간격 — 7장 모두 한 줄로 고르게
   const bw = w;
-  const bg = -Math.round(bw * 0.8);
-  const backsW = downN ? bw + (downN - 1) * (bw + bg) : 0;
-  // 편 카드(와 히든)는 엎은 묶음 바로 위에 겹쳐 이어짐 → 6구 · 7구도 칸 안에 숫자가 다 보이게
-  const tail = U + hid;
-  let g = -Math.round(w * 0.52);
-  if (maxW && tail > 0) {
-    const room = (maxW - (downN ? backsW : w)) / (downN ? tail : Math.max(1, tail - 1)) - w;
-    g = Math.min(g, Math.max(Math.floor(room), -Math.round(w * 0.75)));
-  }
+  const bg = overlap;
+  const g = overlap;
   const ml = (m: number) => ({ marginLeft: m });
   return (
     <span className="flex flex-col items-start gap-[3px]">
