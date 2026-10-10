@@ -94,7 +94,7 @@ export const leagueOf = (id: number): League => LEAGUES[tierOf(id).league - 1];
 export const tierLabel = (id: number) => `${leagueOf(id).name} · ${tierOf(id).name}`;
 
 /** 한 번 행동하는 데 주는 시간 */
-export const ACT_MS = 12_000;
+export const ACT_MS = 7_000;
 /** 접속이 끊긴 사람에게 주는 시간 */
 export const ACT_AWAY_MS = 3_000;
 /** 7포커에서 버릴 카드·보여 줄 카드를 고르는 시간 */
