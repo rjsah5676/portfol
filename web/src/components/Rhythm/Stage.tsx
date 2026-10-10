@@ -14,6 +14,7 @@ import {
   drawHoldBody,
   laneColors,
   makeHitSound,
+  hitSoundBuffer,
   type HitSound,
   type Skin,
 } from "@/lib/rhythm/fx";
@@ -620,7 +621,9 @@ export default function Stage({
       // 지금까지 모은 기록도 새 싱크 기준으로 (결과 화면 평균이 남은 쏠림만 보이게)
       for (let i = 0; i < diffs.length; i++) diffs[i] -= step / 1000;
     };
-    const hitBuf = makeHitSound(ctx, hitSound);
+    let hitBuf = makeHitSound(ctx, hitSound);
+    // 샘플 타격음은 파일을 받아야 해서 — 받는 동안은 1번 소리, 다 되면 바꿈 (설정에서 들어 봤으면 이미 받아져 있음)
+    void hitSoundBuffer(ctx, hitSound).then((b) => (hitBuf = b));
     const hitGain = ctx.createGain();
     hitGain.gain.value = live.hit * 0.9;
     hitGain.connect(ctx.destination);

@@ -5,7 +5,10 @@
 
 // ───────────────────────── 타격음 ─────────────────────────
 
-export type HitSound = "thump" | "wood" | "knock" | "tom";
+/** 합성 4종 + 시험용 샘플(test1~21, public/rhythm/hit/testN.wav — 들어보고 고를 것만 남길 예정) */
+export type HitSound = "thump" | "wood" | "knock" | "tom" | `test${number}`;
+type SynthHit = "thump" | "wood" | "knock" | "tom";
+const HIT_TESTS = 21;
 
 /**
  * 타격음: 음악을 덮지 않게 둥글지만, 친 순간은 확실히 느껴지게.
@@ -16,7 +19,29 @@ export const HIT_SOUNDS: { key: HitSound; label: string }[] = [
   { key: "wood", label: "2" },
   { key: "knock", label: "3" },
   { key: "tom", label: "4" },
+  ...Array.from({ length: HIT_TESTS }, (_, i) => ({
+    key: `test${i + 1}` as HitSound,
+    label: `T${i + 1}`,
+  })),
 ];
+
+const isSample = (k: HitSound): k is `test${number}` => k.startsWith("test");
+/** 샘플 타격음 캐시 (한 번 받아서 디코딩) */
+const samples = new Map<string, Promise<AudioBuffer | null>>();
+/** 샘플 타격음이면 파일을 받아 디코딩해 둠 (합성음은 바로 null) — 다 되면 makeHitSound가 그걸 돌려줌 */
+export function loadHitSound(ctx: BaseAudioContext, kind: HitSound): Promise<AudioBuffer | null> {
+  if (!isSample(kind)) return Promise.resolve(null);
+  let p = samples.get(kind);
+  if (!p) {
+    p = fetch(`/rhythm/hit/${kind}.wav`)
+      .then((r) => r.arrayBuffer())
+      .then((a) => ctx.decodeAudioData(a))
+      .catch(() => null);
+    samples.set(kind, p);
+  }
+  return p;
+}
+const loaded = new Map<string, AudioBuffer>();
 
 function noiseGen(seed: number) {
   let s = seed;
@@ -26,7 +51,7 @@ function noiseGen(seed: number) {
   };
 }
 
-const LEN: Record<HitSound, number> = {
+const LEN: Record<SynthHit, number> = {
   thump: 0.12,
   wood: 0.12,
   knock: 0.1,
@@ -34,14 +59,24 @@ const LEN: Record<HitSound, number> = {
 };
 
 /** 소리별 최종 크기 (피크). 저음 위주 소리는 노트북 스피커에서 작게 들려서 더 크게 */
-const PEAK: Record<HitSound, number> = {
+const PEAK: Record<SynthHit, number> = {
   thump: 0.95,
   wood: 0.7,
   knock: 0.95,
   tom: 0.9,
 };
 
-export function makeHitSound(ctx: BaseAudioContext, kind: HitSound = "thump") {
+/** 샘플은 loadHitSound가 끝난 뒤 그 버퍼를, 아직이면 1번(툭)으로 */
+export async function hitSoundBuffer(ctx: BaseAudioContext, kind: HitSound): Promise<AudioBuffer> {
+  const b = await loadHitSound(ctx, kind);
+  if (b) loaded.set(kind, b);
+  return b ?? makeHitSound(ctx, isSample(kind) ? "thump" : kind);
+}
+
+export function makeHitSound(ctx: BaseAudioContext, hit: HitSound = "thump") {
+  const ready = loaded.get(hit);
+  if (ready) return ready;
+  const kind: SynthHit = isSample(hit) ? "thump" : hit;
   const sr = ctx.sampleRate;
   const len = Math.floor(sr * LEN[kind]);
   const buf = ctx.createBuffer(1, len, sr);

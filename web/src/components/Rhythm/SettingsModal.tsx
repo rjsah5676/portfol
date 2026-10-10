@@ -12,7 +12,7 @@ import {
   drawHead,
   HIT_SOUNDS,
   laneColors,
-  makeHitSound,
+  hitSoundBuffer,
   NOTE_SIZES,
   setNoteSize,
   SKINS,
@@ -68,7 +68,7 @@ async function previewHit(kind: HitSound, volume: number) {
   if (volume <= 0) return;
   try {
     const ctx = await audio();
-    if (!hitCache.has(kind)) hitCache.set(kind, makeHitSound(ctx, kind));
+    if (!hitCache.has(kind)) hitCache.set(kind, await hitSoundBuffer(ctx, kind));
     const src = ctx.createBufferSource();
     const gain = ctx.createGain();
     gain.gain.value = volume * 0.9;
