@@ -1021,8 +1021,9 @@ export default function TableView({
       ? {
           o,
           u,
-          card: sv ? u * 6 : u * 6.2,
-          heroCard: sv ? u * 9 : u * 11.5,
+          // 낮은 가로 무대(폰 가로 = 높이 540): 남의 카드 · 내 카드를 키움 (작은 화면이라 숫자가 잘 보이게)
+          card: (sv ? u * 6 : u * 6.2) * (h <= 560 ? (sv ? 1.3 : 1.4) : 1),
+          heroCard: (sv ? u * 9 : u * 11.5) * (h <= 560 ? (sv ? 1.2 : 1.1) : 1),
           boardCard: u * 9.5,
           face: u * 8.5,
         }
