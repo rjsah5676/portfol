@@ -203,6 +203,7 @@ export default function TableView({
   onExit,
   onWallet,
   topRight,
+  fs,
 }: {
   id: string;
   uid: string;
@@ -215,6 +216,8 @@ export default function TableView({
   onWallet: (w: Wallet) => void;
   /** 무대 공통 버튼 (전체화면 등) */
   topRight?: ReactNode;
+  /** 전체화면(흉내 포함)으로 보는 중 — 이때 뒤로가기는 나가기 버튼처럼 */
+  fs?: boolean;
 }) {
   const [table, setTable] = useState<TableWire | null | undefined>(undefined);
   const [myHand, setMyHand] = useState<MyHand | null>(null);
@@ -952,6 +955,35 @@ export default function TableView({
     }
   };
 
+  // 전체화면으로 방 안에 있을 때 뒤로가기 = 나가기 버튼 (뒤로가기가 전체화면만 풀어 버리는 폰은 PokerApp 이 "pk-back" 으로 알려 줌)
+  const backRef = useRef<() => void>(() => {});
+  useEffect(() => {
+    backRef.current = () => {
+      if (me?.exit) return setNotice("나가기 예약 중이에요 · 이번 판이 끝나면 나가요");
+      void exit();
+    };
+  });
+  useEffect(() => {
+    if (!fs) return;
+    let last = 0;
+    const back = () => {
+      if (Date.now() - last < 1000) return; // 전체화면 풀림 + 뒤로가기가 한 번에 와도 한 번만
+      last = Date.now();
+      backRef.current();
+    };
+    const onPop = () => {
+      history.pushState(history.state, "", location.href); // 방 화면은 그대로 두고
+      back();
+    };
+    history.pushState(history.state, "", location.href);
+    window.addEventListener("popstate", onPop);
+    window.addEventListener("pk-back", back);
+    return () => {
+      window.removeEventListener("popstate", onPop);
+      window.removeEventListener("pk-back", back);
+    };
+  }, [fs]);
+
   const u = Math.min(w, h) / 100;
   if (table === undefined)
     return (
@@ -1131,13 +1163,21 @@ export default function TableView({
     const x = seatX(sp.x);
     const y = seatY(sp);
     if (H) {
+      // 7포커 양옆 자리: 카드 줄이 이름표 안쪽으로 길게 깔려서 판 쪽 중간에 두면 편 카드를 가림 → 카드 줄 바로 아래
+      if (sv && sp.side !== "top") {
+        const dir = sp.side === "left" ? 1 : -1;
+        return { x: x + dir * (plateHalf + sizes.card * 1.3), y: y + sizes.card * 1.4 + 22 };
+      }
+      // 7포커 위쪽 자리: 판 쪽 중간이면 이름표에 걸림 → 이름표 바로 아래, 팟과 안 겹치게 바깥쪽으로 살짝
+      if (sv) return { x: x + (x > px(L.table.cx) ? 1 : -1) * plateHalf * 0.5, y: y + 56 + 22 };
       const f = sp.side === "top" ? 0.45 : 0.5;
       return { x: x + (px(L.table.cx) - x) * f, y: y + (py(L.center.board) - y) * f };
     }
     // 세로판: 건 돈이 그 사람 카드(= 족보)를 가리지 않게 카드가 없는 쪽에
     const half = Math.max(84, sprW * 0.62) / 2;
     const cardH = sizes.card * 1.4;
-    if (sp.side === "top") return { x, y: y + 52 + 4 + cardH + 14 }; // 카드 아래
+    // 홀덤 위쪽 자리: 엎은 카드 위에 겹쳐 둠 (카드 아래에 두면 가운데 구간 글씨 · 팟에 걸림). 7포커는 편 카드라 카드 아래
+    if (sp.side === "top") return sv ? { x, y: y + 52 + 4 + cardH + 14 } : { x, y: y + 52 + 4 + cardH * 0.62 };
     const dir = sp.side === "left" ? 1 : -1;
     if (C?.cardSide[idx] === "below") {
       // 이름표 위 안쪽 (카드는 아래). 바로 위 자리의 건 돈(그 사람 엎은 카드 위)과 겹치면 이름표 옆 안쪽으로
@@ -1155,7 +1195,7 @@ export default function TableView({
     // 카드가 옆이면: 촘촘한 판에선 엎어 둔 카드 위에 겹쳐 둠(뒷면이라 가려도 됨), 아니면 이름표 아래.
     // 좁은 폰에서 그 자리가 다른 사람 이름표에 걸리면 이름표 아래 → 이름표 위 순으로 비킴
     const cands = [
-      ...(C ? [{ x: x + dir * (half + 6 + sizes.card * 1.3), y: y + 26 }] : []),
+      ...(C || !sv ? [{ x: x + dir * (half + 6 + sizes.card * 1.3), y: y + 26 }] : []),
       { x: x + dir * half * 0.35, y: y + 52 + 14 },
       { x: x + dir * half * 0.35, y: y - 14 },
     ];
@@ -1168,6 +1208,16 @@ export default function TableView({
         const ox = seatX(o.x);
         const oy = seatY(o);
         if (Math.abs(cx - ox) < pillHalf + half && c.y + 13 > oy - 2 && c.y - 13 < oy + 54) return true;
+      }
+      // 가운데 팟 덩어리 (구간 글씨 · 칩 더미 · 팟 상자)
+      if (Math.abs(cx - px(L.table.cx)) < pillHalf + u * 20 && Math.abs(c.y - py(L.center.pot)) < 13 + u * 8) return true;
+      // 내 카드 줄 (7포커는 7장까지 늘어남) — 아래쪽 옆자리 건 돈이 내 카드 밑에 깔려 잘리지 않게
+      if (mySeat >= 0) {
+        const hx = (L.heroX / 100) * boardW;
+        const hy = (L.heroCards / 100) * h;
+        const hHalf = (sizes.heroCard * (1 + 0.7 * ((sv ? 7 : 2) - 1))) / 2;
+        // (내 카드 바로 위는 내 건 돈 자리)
+        if (Math.abs(cx - hx) < pillHalf + hHalf && c.y + 13 > hy - 34 && c.y - 13 < hy + sizes.heroCard * 1.45) return true;
       }
       return false;
     };

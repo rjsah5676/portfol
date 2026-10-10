@@ -465,7 +465,8 @@ export function registerPoker({ gateway, db, users }: Deps, opts: PokerOptions =
     for (const s of bots(t)) {
       // 방장이 봇 참가를 껐으면 판 사이에 다 나감
       if (!t.bots) leaveNow(s, "leave");
-      else if (s.stack < t.def.minStack(t.tier)) leaveNow(s, "bust");
+      // 사람처럼 입장컷(방 최소 칩) 밑으로 떨어지면 일어남 — 하우스에 천만 남은 봇이 계속 앉아 있던 것
+      else if (s.stack < t.tier.min) leaveNow(s, "bust");
       else if (cashOut(s)) leaveNow(s, "cashout");
       else if (s.brain!.hands >= s.brain!.stayHands) leaveNow(s, "leave");
     }

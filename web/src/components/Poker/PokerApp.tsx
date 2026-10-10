@@ -113,21 +113,35 @@ export default function PokerApp({ rank }: { rank: RankRow[] | null }) {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- 브라우저에서만 알 수 있는 값
     setCanFs(canFullscreen());
   }, []);
+  // 폰에서 뒤로가기가 전체화면만 풀어 버리면(안드로이드 크롬) 방 안에서는 나가기 버튼으로 (TableView 가 "pk-back" 을 받음)
+  const selfExit = useRef(false);
+  const inTable = useRef(false);
   useEffect(() => {
-    const on = () => setFsReal(document.fullscreenElement === rootRef.current && !!rootRef.current);
+    inTable.current = !!tableId;
+  }, [tableId]);
+  useEffect(() => {
+    const on = () => {
+      const now = document.fullscreenElement === rootRef.current && !!rootRef.current;
+      if (!now && !selfExit.current && inTable.current && matchMedia("(pointer: coarse)").matches)
+        window.dispatchEvent(new Event("pk-back"));
+      selfExit.current = false;
+      setFsReal(now);
+    };
     document.addEventListener("fullscreenchange", on);
     return () => document.removeEventListener("fullscreenchange", on);
   }, []);
   // 전체화면(가로 화면): 무대를 평소와 같은 1280×720 으로 그리고 화면에 맞게 통째로 키움 → 배치가 창 모드와 똑같음
-  const [scr, setScr] = useState({ w: 0, h: 0 });
+  const [scr, setScr] = useState({ w: 0, h: 0, touch: false });
   useEffect(() => {
-    if (!fs) return;
-    const on = () => setScr({ w: window.innerWidth, h: window.innerHeight });
+    const on = () =>
+      setScr({ w: window.innerWidth, h: window.innerHeight, touch: matchMedia("(pointer: coarse)").matches });
     on();
     window.addEventListener("resize", on);
     return () => window.removeEventListener("resize", on);
-  }, [fs]);
-  const fit = fs && scr.w > scr.h * 1.2 ? Math.min(scr.w / DESIGN.w, scr.h / DESIGN.h) : 0;
+  }, []);
+  // 폰을 눕혀서(가로) 전체화면 없이 볼 때: 사이트 메뉴 밑 16:9 상자는 손바닥만 해지므로 화면을 덮어 전체화면처럼 그림 (세로로 돌리면 원래대로)
+  const shortLand = !fs && scr.touch && scr.w > scr.h * 1.2 && scr.h < 560;
+  const fit = (fs || shortLand) && scr.w > scr.h * 1.2 ? Math.min(scr.w / DESIGN.w, scr.h / DESIGN.h) : 0;
   // 무대 위에 사이트의 떠 있는 메뉴 버튼이 겹치지 않게
   useEffect(() => {
     document.body.classList.add("game-full");
@@ -160,7 +174,10 @@ export default function PokerApp({ rank }: { rank: RankRow[] | null }) {
     const el = rootRef.current;
     if (!el) return;
     if (pseudoFs) return setPseudoFs(false);
-    if (document.fullscreenElement) return void document.exitFullscreen().catch(() => {});
+    if (document.fullscreenElement) {
+      selfExit.current = true;
+      return void document.exitFullscreen().catch(() => {});
+    }
     if (typeof el.requestFullscreen === "function")
       el.requestFullscreen({ navigationUI: "hide" }).catch(() => setPseudoFs(true));
     else setPseudoFs(true);
@@ -228,6 +245,7 @@ export default function PokerApp({ rank }: { rank: RankRow[] | null }) {
         onExit={() => go(null)}
         onWallet={setWallet}
         topRight={topRight}
+        fs={fs}
       />
     );
   else
@@ -247,13 +265,16 @@ export default function PokerApp({ rank }: { rank: RankRow[] | null }) {
     );
 
   // 무대 크기: 전체화면이면 화면 전부, 아니면 PC 는 16:9 상자, 폰은 화면 높이에 맞춘 세로 상자
-  const outer = pseudoFs
-    ? "fixed inset-0 z-[100] flex items-center justify-center overflow-hidden bg-black"
-    : fsReal
-      ? "flex h-full w-full items-center justify-center overflow-hidden bg-black"
-      : "mx-auto w-full max-w-[min(1280px,calc((100dvh-166px)*16/9))] px-0 sm:px-3";
+  const outer =
+    pseudoFs || shortLand
+      ? "fixed inset-0 z-[100] flex items-center justify-center overflow-hidden bg-black"
+      : fsReal
+        ? "flex h-full w-full items-center justify-center overflow-hidden bg-black"
+        : "mx-auto w-full max-w-[min(1280px,calc((100dvh-166px)*16/9))] px-0 sm:px-3";
   // (폰: 사이트 머리말 57px + 게임 메뉴 45px + 전체화면 권장 띠 62px 아래부터 화면 끝까지. 띠가 없는 기기(아이폰)는 그만큼 더 크게)
-  const showFsBanner = !fs && canFs;
+  // 폰 로비: 전체화면이 아니면 로비를 가리고 전체화면부터 (전체화면이 안 되는 아이폰 · 홈 화면 앱은 제외)
+  const fsGate = !fs && canFs && !standalone && scr.touch && !tableId && !!wallet && !!account && !!profile;
+  const showFsBanner = !fs && canFs && !shortLand && !fsGate;
   const stageCls = fit
     ? "flex-none"
     : fs
@@ -292,6 +313,7 @@ export default function PokerApp({ rank }: { rank: RankRow[] | null }) {
                 width: DESIGN.w,
                 height: DESIGN.h,
                 transform: `scale(${fit})`,
+                fontSize: 15, // 무대 글씨 크기는 바깥 크기로 재는데, 통째로 줄인 무대는 PC 창(1280)과 같아야 하므로 고정
                 transformOrigin: "center",
               }
             : undefined
@@ -299,6 +321,32 @@ export default function PokerApp({ rank }: { rank: RankRow[] | null }) {
         data-o={o}
       >
         {size.w > 0 && screen}
+        {fsGate && (
+          <div className="pk-fsgate absolute inset-0 z-[60] flex flex-col items-center justify-center gap-[1.1em] bg-black/75 px-6 text-center backdrop-blur-[3px]">
+            <p className="font-['Black_Han_Sans',sans-serif] text-[1.6em] leading-tight text-white">
+              전체화면으로 플레이해 주세요
+            </p>
+            <p className="text-[0.95em] text-white/60">가로 · 세로 모두 지원해요</p>
+            <button
+              type="button"
+              onClick={toggleFs}
+              className="pk-btn pk-btn-gold flex items-center gap-[0.5em] px-[1.6em] py-[0.8em] text-[1.1em]"
+            >
+              <svg
+                viewBox="0 0 24 24"
+                className="h-[1.1em] w-[1.1em]"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.4"
+                strokeLinecap="round"
+                aria-hidden
+              >
+                <path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" />
+              </svg>
+              전체화면으로 시작
+            </button>
+          </div>
+        )}
         {shop && wallet && (
           <Shop
             wallet={wallet}
@@ -321,15 +369,17 @@ export default function PokerApp({ rank }: { rank: RankRow[] | null }) {
           </div>
         )}
       </div>
-      {!fs && !standalone && isIOS() && (
+      {!fs && !shortLand && !standalone && isIOS() && (
         <p className="mx-3 mt-2 text-center text-[11px] text-white/40 sm:mx-0">
           아이폰은 사파리 공유 → <b className="text-white/60">홈 화면에 추가</b>하면 전체화면 앱처럼
           할 수 있어요.
         </p>
       )}
-      {!fs && (
+      {!fs && !shortLand && (
         <p className="mx-3 mt-2 text-center text-[11px] text-white/30 sm:mx-0">
           칩을 다 잃으셨다면 몰래 문의 한번 남겨주세요. 드릴수도?
+          <br />
+          베타 버전 데이터는 정식 출시 때 초기화될 수 있어요.
         </p>
       )}
     </div>
@@ -530,6 +580,9 @@ function Settings({ tableId }: { tableId: string | null }) {
               {roomErr && <p className="text-[0.82em] text-[#ffb3b5]">{roomErr}</p>}
             </div>
           )}
+          <p className="border-t border-white/10 pt-[0.5em] text-[0.82em] leading-relaxed text-white/40">
+            BETA
+          </p>
         </div>
       )}
     </span>
@@ -604,6 +657,9 @@ function Intro({
       >
         <span className="pk-intro-tag whitespace-nowrap">TEXAS HOLD&apos;EM</span>
         <span className="pk-intro-tag whitespace-nowrap">SEVEN POKER</span>
+        <span className="rounded-[4px] bg-[var(--pk-danger)] px-[0.5em] text-[0.7em] leading-[1.7em] font-extrabold tracking-wider">
+          BETA
+        </span>
       </div>
       {/* 시작 칸 (테이블 위) */}
       <div

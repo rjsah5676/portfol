@@ -539,6 +539,11 @@ function preflop(v: BotView, brain: Brain, models: Models): Decision {
     return ok ? { type: "call", thinkMs: fast(2200, 4800), cue: toCall >= me.stack ? "allin" : "call" } : { ...fold(), thinkMs: fast(1800, 3600) };
   }
 
+  // 사람 같은 지름: 크게 잃고 흥분한 봇 · 동네판 아재는 가끔 괜찮은 패로 그냥 올인 (밀리면 나머지가 고민하게)
+  const hot = brain.heat * brain.persona.tilt;
+  if (canRaise && effBB <= 45 && ((hot > 0.45 && pct < 0.22 && r() < 0.3) || (pct < 0.1 && r() < 0.05 * brain.skill.fun)))
+    return raiseTo(v.legal.maxTo);
+
   // ── 아직 아무도 안 올림 ──
   if (!raises.length) {
     const base = order.length === 2 ? 0.7 : [0.5, 0.48, 0.4, 0.27, 0.19, 0.15][Math.min(5, behind)];
@@ -709,6 +714,9 @@ function postflop(v: BotView, brain: Brain, models: Models): Decision {
   // 드로우로 먼저 침
   if (!river && outs >= 8 && r() < p.semiBluff * (initiative ? 1.4 : 1) * (n === 1 ? 1 : 0.6)) return bet(pick(r, 0.5, 0.7), "raise");
   // 블러프: 주도권·자리·상대 수·상대가 얼마나 잘 죽는지
+  // 리버에 다 놓친 패로 한 명 상대 올인 블러프 (드물게, 공격적 · 흥분한 봇일수록) — 판이 확 뜨거워지는 순간
+  if (river && n === 1 && eq < 0.22 && spr <= 4 && r() < 0.045 * p.bluff * (1 + brain.heat) * (inPosition ? 1.3 : 0.8))
+    return { type: "raise", amount: maxTo, thinkMs: think(2600, 5200), cue: "allin" };
   if (eq < 0.42) {
     const foldy = live.reduce((a, x) => a * clamp(models.foldy(x.key) / 0.45, 0.5, 1.6), 1);
     const base = initiative ? (v.street === 1 ? 0.55 * p.cbet : 0.38 * p.cbet) : 0.16;
@@ -719,11 +727,15 @@ function postflop(v: BotView, brain: Brain, models: Models): Decision {
       return bet(v.street === 1 ? (wet > 0.45 ? pick(r, 0.5, 0.66) : pick(r, 0.3, 0.45)) : pick(r, 0.6, 0.75), "raise");
     }
   }
+  // 애매한 패로 먼저 작게 찔러 봄 (자리가 나쁠 때, 상대가 적을 때) — 늘 체크만 하지 않게
+  if (!inPosition && n <= 2 && eq >= 0.45 && r() < 0.12 * (0.6 + 0.4 * p.loose)) return bet(pick(r, 0.25, 0.4));
   return { type: "check", thinkMs: think(800, 2000) };
 }
 
 export function decideHoldem(v: BotView, brain: Brain, models: Models): Decision {
   const d = v.street === 0 ? preflop(v, brain, models) : postflop(v, brain, models);
+  // 큰 결정은 가끔 오래 고민 (사람처럼 뜸 들이기 · 시간 제한 안에서 잘림)
+  if ((d.cue === "allin" || d.cue === "heroCall" || d.cue === "bigFold") && brain.rand() < 0.3) d.thinkMs = Math.round(d.thinkMs * 1.6);
   // 규칙 밖의 결정이 나오지 않게 한 번 더 맞춤
   const lg = v.legal;
   if (d.type === "check" && !lg.canCheck) return { ...d, type: lg.toCall > 0 ? "fold" : "check" };

@@ -84,7 +84,8 @@ function ac(): AudioContext | null {
   if (typeof window === "undefined" || getSound().mute) return null;
   try {
     if (!ctx) ctx = new AudioContext();
-    if (ctx.state === "suspended") void ctx.resume();
+    // (아이폰은 전화 · 다른 앱 소리 뒤에 "interrupted" 로 멈춰 있음)
+    if (ctx.state === "suspended" || (ctx.state as string) === "interrupted") void ctx.resume();
     return ctx;
   } catch {
     return null;
@@ -114,10 +115,24 @@ if (typeof window !== "undefined") {
 function buffer(url: string): Promise<AudioBuffer | null> {
   let p = buffers.get(url);
   if (!p) {
+    // 소리를 꺼 둔 채(오디오를 아직 안 깨운 채) 길이를 재러 먼저 받은 파일도 풀 수 있게 오디오는 여기서도 만듦.
+    // 못 받았으면 기억하지 않음 — 예전엔 실패(null)를 기억해서 나중에 소리를 켜도 그 음성이 끝까지 안 나왔음
+    const key = url;
     p = fetch(url)
       .then((r) => r.arrayBuffer())
-      .then((b) => (ctx ? ctx.decodeAudioData(b) : null))
-      .catch(() => null);
+      .then((b) => {
+        if (!ctx) {
+          try {
+            ctx = new AudioContext();
+          } catch {}
+        }
+        return ctx ? ctx.decodeAudioData(b) : null;
+      })
+      .catch(() => null)
+      .then((buf) => {
+        if (!buf) buffers.delete(key);
+        return buf;
+      });
     buffers.set(url, p);
   }
   return p;

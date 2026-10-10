@@ -141,6 +141,9 @@ export default function Lobby({
         draggable={false}
         style={{ height: H ? bar - 8 : bar - 14, width: "auto" }}
       />
+      <span className="rounded-[4px] bg-[var(--pk-danger)] px-[0.45em] text-[0.62em] leading-[1.6em] font-extrabold tracking-wider">
+        BETA
+      </span>
       <button
         type="button"
         onClick={() => setNotes(true)}

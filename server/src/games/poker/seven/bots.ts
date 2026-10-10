@@ -109,6 +109,20 @@ function looksScary(up: Card[]): boolean {
   return [...ranks.values()].some((n) => n >= 2) || Math.max(...suits) >= 3;
 }
 
+/** 다음 장으로 완성을 노리는 패인지: 같은 무늬 4장, 또는 4장 연속(양쪽 열림) */
+function hasDraw(cards: Card[]): boolean {
+  const suits = [0, 0, 0, 0];
+  const ranks = new Set<number>();
+  for (const c of cards) {
+    suits[c & 3]++;
+    ranks.add(c >> 2);
+  }
+  if (Math.max(...suits) === 4) return true;
+  if (ranks.has(12)) ranks.add(-1); // A 는 1 로도
+  for (let lo = -1; lo <= 8; lo++) if ([0, 1, 2, 3].every((k) => ranks.has(lo + k)) && !ranks.has(lo - 1) && !ranks.has(lo + 4)) return true;
+  return false;
+}
+
 export function chooseSeven(dealt: Card[], brain: Brain): { discard: number; open: number; thinkMs: number } {
   const c = autoChoice(dealt);
   return { ...c, thinkMs: Math.round((900 + brain.rand() * 2200) * brain.persona.pace) };
@@ -154,6 +168,11 @@ export function decideSeven(v: SevenBotView, brain: Brain): SevenDecision {
       const b = pickBet(eq >= 0.88 ? 0.9 : eq >= 0.78 ? 0.6 : 0.3)!;
       return { type: b, thinkMs: think(1600, 3800), cue: allIn(b) ? "allin" : eq >= 0.8 ? "bigRaise" : "raise" };
     }
+    // 드로우로 되받아침 (마지막 구 전, 판이 너무 크지 않을 때)
+    if (avail.length && !last && !big && eq < valueThr && hasDraw(v.cards) && r() < p.semiBluff * 0.45) {
+      const b = pickBet(0.45)!;
+      return { type: b, thinkMs: think(1700, 3600), cue: allIn(b) ? "allin" : "raise" };
+    }
     if (avail.length && n === 1 && eq < 0.3 && !big && looksScary(me.up) && r() < 0.05 * p.bluff) {
       const b = pickBet(0.5)!;
       return { type: b, thinkMs: think(2000, 4200), cue: "bigRaise" };
@@ -170,6 +189,11 @@ export function decideSeven(v: SevenBotView, brain: Brain): SevenDecision {
     if (!last && eq > 0.85 && r() < p.slowplay) return { type: avail[0], thinkMs: think(1100, 2400) };
     const b = pickBet(eq >= 0.85 ? (last ? 1 : 0.8) : eq >= 0.72 ? 0.55 : 0.2)!;
     return { type: b, thinkMs: think(1200, 3000), cue: allIn(b) ? "allin" : "raise" };
+  }
+  // 드로우로 먼저 세게 (완성되면 크게 먹고, 상대가 죽으면 그냥 먹음)
+  if (!last && hasDraw(v.cards) && r() < p.semiBluff * 0.8) {
+    const b = pickBet(0.4)!;
+    return { type: b, thinkMs: think(1300, 3000), cue: allIn(b) ? "allin" : "raise" };
   }
   if (eq < 0.4 && r() < 0.1 * p.bluff * (n === 1 ? 1 : 0.4) * (looksScary(me.up) ? 1.7 : 0.8)) {
     const b = pickBet(0.55)!;

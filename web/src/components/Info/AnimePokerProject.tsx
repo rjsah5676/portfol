@@ -12,7 +12,7 @@ const STATS = [
   { value: "2종목", label: "홀덤 6인 · 7포커 5인" },
   { value: "6명", label: "애니풍 캐릭터" },
   { value: "3단계", label: "동네판 · 하우스 · VIP룸" },
-  { value: "v1.0", label: "2026.10" },
+  { value: "BETA", label: "2026.10" },
 ];
 
 const STACK: { group: string; items: string[] }[] = [
@@ -89,11 +89,11 @@ export default function AnimePokerProject() {
       <div className="mb-3 font-mono text-sm text-[#8B84FF]">game · gunmo.my</div>
       <h1 className="font-mono text-3xl font-bold text-white sm:text-4xl">ANIME POKER</h1>
       <p className="mt-3 font-['Nanum_Gothic',sans-serif] text-white/60">
-        애니풍 캐릭터 6명과 치는 홀덤 · 7포커. 유저봇이 들락날락하는 실시간 테이블.
+        무료로 온라인 플레이하는 애니풍 포커. 캐릭터를 골라 홀덤 · 7포커를 실시간으로.
       </p>
 
       <div className="mt-5 flex flex-wrap items-center gap-2 font-mono text-xs">
-        <span className="rounded-full border border-white/10 px-3 py-1 text-white/50">2026.10 – v1.0</span>
+        <span className="rounded-full border border-white/10 px-3 py-1 text-white/50">2026.10 – BETA</span>
         <Link href="/games/poker/" className="rounded-full bg-[#6C63FF] px-4 py-1 text-white transition-colors hover:bg-[#5b52f0]">
           플레이
         </Link>
@@ -108,7 +108,7 @@ export default function AnimePokerProject() {
       <Section num="01" title="개요">
         <div className="flex flex-col gap-3 font-['Nanum_Gothic',sans-serif] text-sm leading-relaxed text-white/70">
           <p>
-            캐릭터를 골라 테이블에 앉으면 익명 유저들이 수시로 들어오고 나가는 포커 게임입니다. 돈과 카드는 전부{" "}
+            무료로 온라인 플레이할 수 있는 애니풍 포커 게임입니다. 마음에 드는 캐릭터를 골라 텍사스 홀덤 · 7포커 테이블에 앉으면 되고, PC와 모바일 모두 지원합니다. 돈과 카드는 전부{" "}
             <b className="text-white">서버가 계산</b>하고, 화면은 "무엇을 할지"만 보냅니다. 홀덤 · 7포커 규칙 엔진은 순수
             TypeScript 모듈이라 웹과 서버가 같은 파일을 쓰고, 같은 테스트로 검증됩니다. 실제 돈이 아닌 사이트 안 점수로만
             칩니다.

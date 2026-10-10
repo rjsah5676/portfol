@@ -121,7 +121,8 @@ export function sevenSeatCards({
   const ml = (m: number) => ({ marginLeft: m });
   return (
     <span className={`flex flex-col gap-[3px] ${side === "right" ? "items-end" : "items-start"}`}>
-      <span className={row}>
+      {/* isolate: 마지막 엎은 카드(7구)를 편 카드 밑으로 넣어도 줄 밖(판)으로는 안 빠지게 */}
+      <span className={`${row} isolate`}>
         {Array.from({ length: leading }, (_, i) => {
           const dd = dealDelay?.(i, leading + p.up.length + downLast);
           return (
@@ -157,7 +158,8 @@ export function sevenSeatCards({
             dim={p.folded}
             deal
             delay={dealDelay?.(leading + p.up.length + i, leading + p.up.length + downLast)}
-            style={ml(backGap)}
+            // 7구 엎은 카드는 마지막 편 카드 밑으로 (위에 얹으면 편 카드 숫자를 가림) — 오른쪽 끝만 살짝 보임
+            style={{ ...ml(backGap), position: "relative", zIndex: -1 }}
           />
         ))}
       </span>
