@@ -551,7 +551,8 @@ const RAW: CharSrc[] = [
           hitstun: 34,
           push: 0,
           hitstop: 9,
-          box: { x: -24, y: 4, w: 155, h: 82 }, // 그림: 바로 아래 약 75px · 앞쪽 사선 끝 약 130px
+          // 그림: 바로 아래 약 75px · 앞쪽 사선 끝 약 130px — 10.10 앞쪽 판정 131→110px (너무 멀리서 끌어올림)
+          box: { x: -24, y: 4, w: 134, h: 82 },
           pull: true,
           pullUp: true,
           cancel: undefined,
