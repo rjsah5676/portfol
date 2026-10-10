@@ -170,8 +170,24 @@ export default function PokerApp({ rank }: { rank: RankRow[] | null }) {
   const greeted = useRef(false);
   useEffect(() => {
     if (greeted.current || onIntro || tableId || !wallet) return;
-    greeted.current = true;
-    playVoice(lookOf(wallet.char, wallet.wear), "hello");
+    const look = lookOf(wallet.char, wallet.wear);
+    const say = () => {
+      if (greeted.current) return;
+      greeted.current = true;
+      playVoice(look, "hello");
+    };
+    // 아직 페이지를 한 번도 누르지 않았으면(소리가 막힌 상태) 바로 틀지 않고 포커 화면을 처음 누를 때 —
+    // 바로 틀어 두면 소리가 풀리는 순간(예: 사이트 메뉴를 눌러 다른 페이지로 갈 때) 뒤늦게 인사가 나왔음
+    const ua = (navigator as Navigator & { userActivation?: { hasBeenActive: boolean } }).userActivation;
+    if (!ua || ua.hasBeenActive) return say();
+    const el = rootRef.current;
+    if (!el) return;
+    el.addEventListener("pointerdown", say, { once: true });
+    window.addEventListener("keydown", say, { once: true });
+    return () => {
+      el.removeEventListener("pointerdown", say);
+      window.removeEventListener("keydown", say);
+    };
   }, [onIntro, tableId, wallet]);
   // 포커 페이지를 떠나면 배경음악 끔 (사이트 안에서 다른 페이지로 가도 계속 나오던 것)
   useEffect(() => () => playBgm(null), []);
