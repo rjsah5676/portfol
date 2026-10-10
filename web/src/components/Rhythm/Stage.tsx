@@ -4,7 +4,13 @@ import { useEffect, useRef, useState } from "react";
 import type { Song } from "@/lib/rhythm/music";
 import type { Chart, Difficulty } from "@/lib/rhythm/chart";
 import { Engine, HP_MAX, rankOf, type Judge } from "@/lib/rhythm/engine";
-import { AUTO_SYNC, AutoSyncTracker, splitSync, type AutoSyncState } from "@/lib/rhythm/autosync";
+import {
+  AUTO_SYNC,
+  AutoSyncTracker,
+  decayOffset,
+  splitSync,
+  type AutoSyncState,
+} from "@/lib/rhythm/autosync";
 import { DIFFICULTIES } from "@/lib/rhythm/chart";
 import { coverOf, CUSTOM_COVER } from "./SongCarousel";
 import { gpuInfo } from "@/lib/rhythm/gpu";
@@ -329,7 +335,7 @@ export default function Stage({
     const live: LiveSettings = { speed, music: musicVolume, hit: hitVolume };
     // 싱크: 음악 싱크 = 수동 + 자동(소리 지연 몫), 타격 싱크 = 자동(손 지연 몫). 자동은 치는 동안 움직임
     const outputLatency = (ctx as AudioContext & { outputLatency?: number }).outputLatency;
-    let autoOffset = auto.offset;
+    let autoOffset = decayOffset(auto.offset, outputLatency !== undefined);
     const tracker = new AutoSyncTracker(auto.judge);
     /** 이 판에서 누른 횟수 — 아무것도 안 누르는데 초반 유예로 안 죽는 일이 없게 */
     let presses = 0;
@@ -340,11 +346,12 @@ export default function Stage({
     let reported: AutoSyncState | null = null;
     const reportAuto = () => {
       if (autoplay) return; // 자동 연주엔 입력이 없어 보정할 게 없음
-      const next = splitSync(
-        tracker.judge,
-        autoOffset,
-        outputLatency === undefined ? AUTO_SYNC.handCapNoLatency : AUTO_SYNC.handCap
-      );
+      // 출력 지연을 아는 브라우저는 소리 지연이 이미 빠져 있어서 타격 싱크를 음악 싱크로 넘기지 않음
+      // (넘기면 판정 쏠림이 노트 화면까지 밀어 버리고, 다시 안 돌아와서 오래 쌓일수록 어긋남)
+      const next =
+        outputLatency === undefined
+          ? splitSync(tracker.judge, autoOffset, AUTO_SYNC.handCapNoLatency)
+          : { judge: tracker.judge, offset: autoOffset };
       if (reported && reported.judge === next.judge && reported.offset === next.offset) return;
       reported = next;
       onAutoSync(next);

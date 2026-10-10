@@ -136,8 +136,23 @@ export function splitSync(
   };
 }
 
+/**
+ * 판 시작 때: 출력 지연을 아는 브라우저(크롬 등)는 소리 지연을 이미 빼서 계산하므로
+ * 자동 음악 싱크가 쌓일 이유가 없음 — 예전에 쌓인 값은 판마다 절반씩 0으로 되돌림
+ * (한 번에 0으로 만들면 판정이 확 바뀌어서). 출력 지연을 모르면(사파리) 그대로.
+ */
+export function decayOffset(offset: number, latencyKnown: boolean): number {
+  if (!latencyKnown) return offset;
+  const half = Math.trunc(offset / 2);
+  return Math.abs(half) < 5 ? 0 : half;
+}
+
 /** 자동 싱크 값은 기기·입력 방식별로 따로 (스피커↔블루투스, 키보드↔터치가 바뀌면 지연도 달라서) */
-export const AUTO_SYNC_KEY = "rhythm.autosync.v1";
+// v2: v1 때 쌓인 음악 싱크가 어긋나 있어서 모두 0부터 다시 (v1은 지움)
+export const AUTO_SYNC_KEY = "rhythm.autosync.v2";
+try {
+  if (typeof window !== "undefined") localStorage.removeItem("rhythm.autosync.v1");
+} catch {}
 export type AutoSyncStore = Record<string, AutoSyncState>;
 
 /** 프로필 키: 입력 방식 × 출력 지연(10ms 단위, 모르면 na) */
@@ -163,5 +178,12 @@ export function saveAutoSync(key: string, s: AutoSyncState) {
       (JSON.parse(localStorage.getItem(AUTO_SYNC_KEY) ?? "null") as AutoSyncStore | null) ?? {};
     all[key] = { judge: Math.round(s.judge), offset: Math.round(s.offset) };
     localStorage.setItem(AUTO_SYNC_KEY, JSON.stringify(all));
+  } catch {}
+}
+
+/** 자동 싱크 초기화 (모든 기기·입력 방식 프로필) */
+export function clearAutoSync() {
+  try {
+    localStorage.removeItem(AUTO_SYNC_KEY);
   } catch {}
 }

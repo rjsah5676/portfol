@@ -11,6 +11,7 @@ import { DIFFICULTIES, makeChart, type Chart, type Difficulty } from "@/lib/rhyt
 import { renderSong } from "@/lib/rhythm/synth";
 import {
   autoSyncProfile,
+  clearAutoSync,
   loadAutoSync,
   saveAutoSync,
   type AutoSyncState,
@@ -1273,6 +1274,11 @@ export default function RhythmGame() {
               setSettings={setSettings}
               color={song?.color ?? "#A78BFA"}
               onClose={() => setSettingsOpen(false)}
+              onResetAuto={() => {
+                clearAutoSync();
+                migratedAuto.current = null;
+                setAuto({ judge: 0, offset: 0 });
+              }}
             />
           )}
         </div>

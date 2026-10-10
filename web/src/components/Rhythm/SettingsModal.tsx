@@ -118,13 +118,17 @@ export default function SettingsModal({
   setSettings,
   color,
   onClose,
+  onResetAuto,
 }: {
   settings: Settings;
   setSettings: Dispatch<SetStateAction<Settings>>;
   color: string;
   onClose: () => void;
+  /** 자동 싱크(치는 동안 쌓인 값)를 지움 */
+  onResetAuto?: () => void;
 }) {
   const [tab, setTab] = useState<Tab>("play");
+  const [autoCleared, setAutoCleared] = useState(false);
   // 싱크 탭: 들으면서 맞추기 (박자 소리 + 떨어지는 노트)
   const [calibrate, setCalibrate] = useState(false);
   const set = (p: Partial<Settings>) => setSettings((s) => ({ ...s, ...p }));
@@ -401,6 +405,26 @@ export default function SettingsModal({
                   초기화
                 </button>
               </div>
+              {onResetAuto && (
+                <div className="flex items-center justify-between gap-[1cqw] border-t border-white/[0.06] py-[1cqw]">
+                  <p className="font-['Nanum_Gothic',sans-serif] text-[1cqw] leading-relaxed text-white/40">
+                    이어폰을 바꿨거나 판정이 예전보다 어긋나는 느낌이면 자동 싱크를 처음부터 다시
+                    맞추게 하세요.
+                  </p>
+                  <button
+                    type="button"
+                    className={chip(false)}
+                    disabled={autoCleared}
+                    onClick={() => {
+                      onResetAuto();
+                      setAutoCleared(true);
+                      sfx("ui-move", 0.5);
+                    }}
+                  >
+                    {autoCleared ? "초기화됨" : "자동 싱크 초기화"}
+                  </button>
+                </div>
+              )}
             </>
           )}
 
