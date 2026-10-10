@@ -936,13 +936,16 @@ export default function RhythmGame() {
       const ch = customCharts!;
       const ts = trackSong(t);
       setUpload({ ratio: 0, error: "" });
-      // 영상은 너무 커서 소리만 (WAV), 소리 파일은 그대로
-      const blob = t.file && !t.isVideo ? t.file : await audioToWav(t.buffer);
+      // 영상은 너무 커서 소리만 (WAV), 소리 파일은 그대로 (서버 한도 60MB를 넘는 무손실 파일 등도 WAV로 줄여서)
+      const blob =
+        t.file && !t.isVideo && t.file.size <= 55 * 1024 * 1024
+          ? t.file
+          : await audioToWav(t.buffer);
       await uploadCustom(
         id,
         {
           // 파일 이름의 밑줄은 띄어쓰기로 (QWER_-_My_Name → QWER - My Name)
-          title: t.name.replace(/_+/g, " ").replace(/\s+/g, " ").trim() || t.name,
+          title: (t.name.replace(/_+/g, " ").replace(/\s+/g, " ").trim() || t.name).slice(0, 80),
           diff,
           duration: t.buffer.duration,
           info: {

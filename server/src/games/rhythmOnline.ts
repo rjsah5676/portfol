@@ -463,24 +463,29 @@ export function registerRhythmOnline({ gateway }: Deps) {
     return null;
   });
 
+  // 숫자·제목은 거르지 않고 범위로 맞춤 (긴 파일 이름 · 특이한 BPM 때문에 "잘못된 요청"이 나던 것)
+  const fit = (lo: number, hi: number) => z.number().finite().transform((v) => Math.max(lo, Math.min(hi, v)));
   const customSchema = z.object({
     id: roomId,
-    title: z.string().min(1).max(80),
+    title: z.string().max(500).transform((t) => t.trim().slice(0, 80) || "내 음악"),
     diff: diffSchema,
-    duration: z.number().min(10).max(MAX_SONG_SEC),
-    bytes: z.number().int().min(1).max(MAX_AUDIO_BYTES),
-    audioType: z.string().max(80),
+    duration: z.number().finite(),
+    bytes: z.number().int().min(1),
+    audioType: z.string().max(200),
     info: z.object({
-      bpm: z.number().min(20).max(600),
-      bpmLabel: z.number().min(20).max(900),
-      beatOffset: z.number().min(-10).max(60),
-      color: z.string().regex(/^#[0-9A-Fa-f]{6}$/),
+      bpm: fit(20, 600),
+      bpmLabel: fit(20, 900),
+      beatOffset: fit(-10, 60),
+      color: z.string().catch("#F472B6").transform((c) => (/^#[0-9A-Fa-f]{6}$/.test(c) ? c : "#F472B6")),
     }),
   });
   /** 내 음악을 고름 → 올리기 키를 돌려줌 (파일은 HTTP 로 올림. 다 올라오면 song.ready) */
   gateway.rpc("rhythm.setCustom", (ctx, raw) => {
     const o = customSchema.parse(raw);
     const { room } = asHost(ctx, o.id);
+    if (o.duration < 10) throw bad("10초보다 짧은 곡은 같이 칠 수 없어요.");
+    if (o.duration > MAX_SONG_SEC) throw bad("12분이 넘는 곡은 같이 칠 수 없어요.");
+    if (o.bytes > MAX_AUDIO_BYTES) throw bad("음원 파일이 너무 커요 (60MB까지).");
     idle(room);
     dropUpload(room);
     const ver = newId(10);
@@ -495,7 +500,7 @@ export function registerRhythmOnline({ gateway }: Deps) {
     room.song = {
       kind: "custom",
       id: ver,
-      title: o.title.slice(0, 80),
+      title: o.title,
       duration: o.duration,
       diffs: [],
       ready: false,
