@@ -160,8 +160,13 @@ export function decideSeven(v: SevenBotView, brain: Brain): SevenDecision {
   // 좋은 시작(초반 페어 · 같은 무늬 4장 · 4장 연속): 사람처럼 세게 나옴
   const ranksMine = v.cards.map((c) => c >> 2);
   const pairRank = Math.max(-1, ...ranksMine.filter((x, i) => ranksMine.indexOf(x) !== i));
-  const strongStart = v.round <= 5 && avail.length > 0 && (pairRank >= 0 || hasDraw(v.cards));
-  const pushStart = strongStart && r() < (pairRank >= 8 || hasDraw(v.cards) ? 0.6 : 0.4) * (0.7 + 0.3 * p.loose);
+  // 이번 구에서 내가 이미 한 행동 — 한 번 콜로 따라간 봇이 같은 구에서 갑자기 다시 올리면 어색하므로(아주 센 패만 예외) 막음
+  const mineNow = v.history.filter((h) => h.round === v.round && h.seat === v.seat && h.type !== "ante");
+  const calledNow = mineNow.some((h) => h.type === "call");
+  // 이번 구에 이미 올린 횟수: 올림이 쌓일수록 다시 올리는 기준을 높임 (레이즈 난사 방지)
+  const raisesNow = v.history.filter((h) => h.round === v.round && h.aggressive).length;
+  const strongStart = v.round === 4 && !mineNow.length && avail.length > 0 && (pairRank >= 0 || hasDraw(v.cards));
+  const pushStart = strongStart && raisesNow <= 1 && r() < (pairRank >= 8 || hasDraw(v.cards) ? 0.45 : 0.3) * (0.7 + 0.3 * p.loose);
 
   if (toCall > 0) {
     const need = toCall / (v.pot + toCall);
@@ -173,18 +178,18 @@ export function decideSeven(v: SevenBotView, brain: Brain): SevenDecision {
     const floorEq = risk >= 0.4 ? 0.95 / (n + 1) + 0.03 : 0;
     // 재미 보정: 싼 베팅은 다음 장을 보러 잘 따라감 (마지막 구 전)
     if (!last && toCall <= v.pot * 0.3 && toCall < me.stack * 0.12) margin -= 0.045 * brain.skill.fun;
-    const valueThr = 0.7 + 0.05 * (n - 1) + p.valueShift;
+    const valueThr = 0.7 + 0.05 * (n - 1) + p.valueShift + 0.06 * Math.max(0, raisesNow - 1) + (calledNow ? 0.12 : 0);
     if (avail.length && eq >= valueThr) {
       if (!last && eq > 0.88 && r() < p.slowplay) return { type: "call", thinkMs: think(1400, 3000) };
       const b = pickBet(eq >= 0.88 ? 0.9 : eq >= 0.78 ? 0.6 : 0.3)!;
       return { type: b, thinkMs: think(1600, 3800), cue: allIn(b) ? "allin" : eq >= 0.8 ? "bigRaise" : "raise" };
     }
     // 드로우로 되받아침 (마지막 구 전, 판이 너무 크지 않을 때)
-    if (avail.length && !last && !big && eq < valueThr && hasDraw(v.cards) && r() < p.semiBluff * 0.45) {
+    if (avail.length && !calledNow && raisesNow <= 1 && !last && !big && eq < valueThr && hasDraw(v.cards) && r() < p.semiBluff * 0.35) {
       const b = pickBet(0.45)!;
       return { type: b, thinkMs: think(1700, 3600), cue: allIn(b) ? "allin" : "raise" };
     }
-    if (avail.length && n === 1 && eq < 0.3 && !big && looksScary(me.up) && r() < 0.05 * p.bluff) {
+    if (avail.length && !calledNow && raisesNow <= 1 && n === 1 && eq < 0.3 && !big && looksScary(me.up) && r() < 0.05 * p.bluff) {
       const b = pickBet(0.5)!;
       return { type: b, thinkMs: think(2000, 4200), cue: "bigRaise" };
     }
