@@ -568,8 +568,8 @@ export function registerPoker({ gateway, db, users }: Deps, opts: PokerOptions =
       const s = t.inRound.get(seatNo)!;
       if (s.brain) {
         const move = round.botMove(seatNo, s.brain);
-        // 봇이 생각하는 시간: 성격 · 판 크기에 따른 시간의 0.7배 (예전보다 빠르게, 절반은 너무 급했음). 최소 0.85초, 제한 시간 0.9초 전까지
-        const think = ms(Math.max(850, Math.min(limit - 900, move.thinkMs * 0.7 * (0.9 + Math.random() * 0.5))));
+        // 봇이 생각하는 시간: 성격 · 판 크기에 따른 시간의 0.8배 (예전보다 조금 빠르게). 최소 1초, 제한 시간 0.9초 전까지
+        const think = ms(Math.max(1000, Math.min(limit - 900, move.thinkMs * 0.8 * (0.9 + Math.random() * 0.5))));
         t.actTimers.set(
           seatNo,
           setTimeout(() => {
@@ -1000,7 +1000,7 @@ export function registerPoker({ gateway, db, users }: Deps, opts: PokerOptions =
     const online = (t: Table) => humans(t).filter((s) => !s.away).length;
     const open = [...tables.values()]
       .filter((t) => t.game === o.game && t.tier.id === o.tier && !t.locked && t.quick && freeSeats(t).length > 0)
-      .sort((a, b) => online(b) - online(a))[0];
+      .sort((a, b) => online(b) - online(a) || bots(a).length - bots(b).length)[0]; // 사람이 같으면 봇이 적은 방
     if (open && online(open)) return open.id;
     // 사람이 없으면 봇이 열어 둔 방 (봇이 많이 앉은 곳부터)
     const botRoom = [...tables.values()]
