@@ -112,17 +112,18 @@ export function sevenSeatCards({
   // 엎은 카드는 안 보여도 되니 바짝 겹치고(끝만 살짝), 남는 폭은 편 카드에 — 줄이 좁아도 편 카드 숫자가 보이게
   const U = p.up.length;
   const backGap = -Math.round(w * 0.8);
-  const peeks = Math.max(0, leading - 1) + (leading && U ? 1 : 0) + downLast;
+  const peeks = Math.max(0, leading - 1) + (leading && U ? 1 : 0);
   let upGap = hero ? overlap : -Math.round(w * (side === "top" ? 0.38 : 0.48));
-  if (maxW && U > 1) {
-    const room = (maxW - w - peeks * (w + backGap)) / (U - 1) - w;
+  // 7구 엎은 카드는 편 카드와 같은 간격으로 줄 끝에 (다른 7포커 게임처럼 한 줄로) — 편 카드 숫자는 그대로 보임
+  const slots = U - 1 + downLast;
+  if (maxW && slots > 0) {
+    const room = (maxW - w - peeks * (w + backGap)) / slots - w;
     upGap = Math.min(upGap, Math.max(Math.floor(room), -Math.round(w * 0.7)));
   }
   const ml = (m: number) => ({ marginLeft: m });
   return (
     <span className={`flex flex-col gap-[3px] ${side === "right" ? "items-end" : "items-start"}`}>
-      {/* isolate: 마지막 엎은 카드(7구)를 편 카드 밑으로 넣어도 줄 밖(판)으로는 안 빠지게 */}
-      <span className={`${row} isolate`}>
+      <span className={row}>
         {Array.from({ length: leading }, (_, i) => {
           const dd = dealDelay?.(i, leading + p.up.length + downLast);
           return (
@@ -158,8 +159,7 @@ export function sevenSeatCards({
             dim={p.folded}
             deal
             delay={dealDelay?.(leading + p.up.length + i, leading + p.up.length + downLast)}
-            // 7구 엎은 카드는 마지막 편 카드 밑으로 (위에 얹으면 편 카드 숫자를 가림) — 오른쪽 끝만 살짝 보임
-            style={{ ...ml(backGap), position: "relative", zIndex: -1 }}
+            style={ml(U ? upGap : backGap)}
           />
         ))}
       </span>

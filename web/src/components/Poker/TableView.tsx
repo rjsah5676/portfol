@@ -1169,8 +1169,42 @@ export default function TableView({
         const dir = sp.side === "left" ? 1 : -1;
         return { x: x + dir * (plateHalf + sizes.card * 1.3), y: y + sizes.card * 1.4 + 22 };
       }
-      // 7포커 위쪽 자리: 판 쪽 중간이면 이름표에 걸림 → 이름표 바로 아래, 팟과 안 겹치게 바깥쪽으로 살짝
-      if (sv) return { x: x + (x > px(L.table.cx) ? 1 : -1) * plateHalf * 0.5, y: y + 56 + 22 };
+      // 7포커 위쪽 자리: 이름표 · 카드 줄(그 사람 것 · 남의 것) · 팟에 안 걸리는 곳을 차례로 찾음
+      if (sv) {
+        const ph = betHalfW();
+        const rowW = sizes.card * (1 + 0.62 * 6);
+        const boxes: [number, number, number, number][] = [];
+        L.spots.forEach((o, j) => {
+          const seatJ = (j + Math.max(0, mySeat)) % n;
+          if (!o || !table.seats[seatJ] || seatJ === mySeat) return;
+          const ox = seatX(o.x);
+          const oy = seatY(o);
+          boxes.push([ox - plateHalf, ox + plateHalf, oy, oy + 56]);
+          const toLeft = o.side === "right" || (o.side === "top" && ox + plateHalf + 6 + rowW > boardW - 6);
+          const r0 = toLeft ? ox - plateHalf - 6 - rowW : ox + plateHalf + 6;
+          boxes.push([r0, r0 + rowW, oy, oy + sizes.card * 1.4]);
+        });
+        const pcx = px(L.table.cx);
+        const pcy = py(L.center.pot);
+        boxes.push([pcx - u * 20, pcx + u * 20, pcy - u * 8, pcy + u * 8]);
+        // 겹치는 넓이 (0 = 안 걸림)
+        const clash = (c: { x: number; y: number }) =>
+          boxes.reduce(
+            (a, [x0, x1, y0, y1]) =>
+              a + Math.max(0, Math.min(c.x + ph, x1) - Math.max(c.x - ph, x0)) * Math.max(0, Math.min(c.y + 15, y1) - Math.max(c.y - 15, y0)),
+            0
+          );
+        const cardsLeft = x + plateHalf + 6 + rowW > boardW - 6;
+        const away = cardsLeft ? 1 : -1; // 카드 줄 반대쪽
+        const cands = [
+          { x: x + away * (plateHalf + ph + 6), y: y + 28 },
+          { x: x + away * plateHalf * 0.5, y: y + 56 + 22 },
+          { x: x - away * (plateHalf + 6 + rowW * 0.5), y: y + sizes.card * 1.4 + 20 },
+          // 다 걸리면 이름표 바로 위 (그 사람 캐릭터 몸 앞 — 카드 · 이름표는 안 가림)
+          { x, y: y - 18 },
+        ];
+        return cands.find((c) => !clash(c)) ?? cands.reduce((a, c) => (clash(c) < clash(a) ? c : a));
+      }
       // 홀덤 위쪽 자리: 판이 낮으면(폰 가로) 판 쪽 중간이 이름표에 걸림 → 그 사람 엎은 카드 위에 겹쳐 둠 (뒷면이라 가려도 됨)
       if (sp.side === "top") {
         const rowEst = sizes.card * 1.3 * 2.2;
