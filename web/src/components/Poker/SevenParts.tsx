@@ -4,6 +4,7 @@ import { useState } from "react";
 import { madeOf } from "@/lib/poker/cards";
 import type { TierId } from "@/lib/poker/rules";
 import { bestK, handNameK } from "@/lib/poker/seven";
+import { sfx } from "@/lib/poker/sfx";
 import { isTopSeat } from "@/lib/poker/showdown";
 import type { MyHand, SevenAction, SevenBet, SevenView } from "@/lib/poker/types";
 import type { Orient } from "./layout";
@@ -207,8 +208,16 @@ export function SevenActions({
     const cards = myHand && !myHand.down ? myHand.cards : [];
     const pick = (i: number) => {
       if (busy) return;
-      if (discard < 0) return setDiscard(i);
-      if (i === discard) return setDiscard(-1);
+      // 효과음: 버릴 카드 고름 = 카드 던지는 소리 · 취소 = 딸깍 · 펼 카드 고름(확정) = 카드 뒤집는 소리
+      if (discard < 0) {
+        sfx.fold();
+        return setDiscard(i);
+      }
+      if (i === discard) {
+        sfx.click();
+        return setDiscard(-1);
+      }
+      sfx.flip();
       onAct({ a: "choose", discard, open: i });
     };
     const cw = o === "h" ? u * 10 : u * 17;
