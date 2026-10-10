@@ -113,7 +113,8 @@ export const AI_LEVELS: AILevel[] = [
     antiAir: 1,
     aggro: 0.8,
     special: 0.025,
-    tech: 1,
+    // 잡기 풀기: 잡히는 걸 보고 반응하기엔 창(약 0.23초)이 짧아 사람은 거의 찍기 — AI도 찍는 정도로
+    tech: 0.42,
     just: 0.9,
     interrupt: 0.85,
     look: 28,
@@ -129,9 +130,9 @@ export const AI_RATING = [0, 200, 500, 850, 1200, 1600, 2000];
 
 /** 지존 위 단계 — 랭크전 봇 전용 (AI 대전에서는 고를 수 없음) */
 export const RANK_TIERS: (AILevel & { rating: number })[] = [
-  { ...AI_LEVELS[6], id: "8", name: "전설", rating: 2200, aggro: 0.84, just: 0.95, interrupt: 0.9, robust: 3 },
-  { ...AI_LEVELS[6], id: "9", name: "신화", rating: 2400, aggro: 0.87, just: 1, interrupt: 0.95, robust: 4, look: 32 },
-  { ...AI_LEVELS[6], id: "10", name: "초월", rating: 2600, aggro: 0.9, just: 1, interrupt: 1, robust: 5, look: 32 },
+  { ...AI_LEVELS[6], id: "8", name: "전설", rating: 2200, tech: 0.45, aggro: 0.84, just: 0.95, interrupt: 0.9, robust: 3 },
+  { ...AI_LEVELS[6], id: "9", name: "신화", rating: 2400, tech: 0.48, aggro: 0.87, just: 1, interrupt: 0.95, robust: 4, look: 32 },
+  { ...AI_LEVELS[6], id: "10", name: "초월", rating: 2600, tech: 0.5, aggro: 0.9, just: 1, interrupt: 1, robust: 5, look: 32 },
 ];
 /** 랭크전 봇 레이팅 상한 */
 export const BOT_MAX = 2600;
@@ -172,7 +173,7 @@ const filled = (l: AILevel) => ({
   antiAir: l.antiAir,
   aggro: l.aggro,
   special: l.special,
-  tech: l.tech ?? l.block * 0.8,
+  tech: l.tech ?? l.block * 0.4,
   just: l.just ?? l.combo * 0.6,
   interrupt: l.interrupt ?? 0,
   route: l.route ?? 0,
@@ -210,7 +211,7 @@ export function aiForRating(r: number, charId?: string): AILevel {
  * AI 지문: 랭크전 봇전은 서버가 같은 경기를 다시 돌려 확인하니, 브라우저와 서버의 AI가 똑같아야 함.
  * 단계 값·보정·콤보 길은 자동으로 들어가고, next() 같은 판단 코드를 바꿨으면 AI_REV 를 올릴 것.
  */
-const AI_REV = 6;
+const AI_REV = 7;
 export const AI_ID = (() => {
   const str = AI_REV + JSON.stringify([AI_LEVELS, RANK_TIERS, AI_RATING, ADJ_AT, CHAR_ADJ, ROUTES, ROUTE_CAP]);
   let h = 0x811c9dc5;
@@ -283,6 +284,16 @@ export class FightAI {
   /** 한 번 점프로 못 닿는 높은 발판의 상대에게 가려고 거쳐 가는 발판 (계단처럼) */
   private climb: Plat | null = null;
   private climbUntil = 0;
+  /** 윗발판 상대에게 올라갈 때 상대 손이 안 닿는 쪽 가장자리 (그 밑에서 점프) */
+  private entry: number | null = null;
+  private entryUntil = 0;
+  /** 밑에서 올라가다 위의 상대에게 맞은 횟수 — 많을수록 더 조심 (빈틈을 기다림) */
+  private upHits = 0;
+  private prevSt = "";
+  /** 이번에 윗발판으로 올라갈 때 조심해서 올라가나 (null = 아직 안 정함) */
+  private upSmart: boolean | null = null;
+  /** 윗발판 상대를 떠보는 낮은 점프 중 */
+  private bait = false;
   private jump2At = 0;
   private wasAir = false;
   /** 떨어지는 중 발판으로 복귀하는 중 (착지할 때까지) */
@@ -318,6 +329,11 @@ export class FightAI {
     else this.oStill = 0;
     this.oX = o.x;
     const passive = this.oStill > 90;
+    // 밑에서 올라가다(위의 상대에게) 맞은 횟수
+    if (f.st === "hit" && this.prevSt !== "hit" && dy > 30) this.upHits = Math.min(4, this.upHits + 1);
+    this.prevSt = f.st;
+    if (dy < 30) this.upSmart = null;
+    if (!air && Math.abs(dy) < 20 && this.upHits > 0 && this.r() < 0.004) this.upHits--;
 
     // 버튼은 한 프레임 누르고 떼야 새로 눌린 걸로 침
     const press = (b: number) => {
@@ -403,7 +419,7 @@ export class FightAI {
     }
     // ── 잡혔다: 풀기 (단계별 확률) ──
     if (f.grabbed > 0) {
-      if (this.techDecision === null) this.techDecision = this.r() < (L.tech ?? L.block * 0.8);
+      if (this.techDecision === null) this.techDecision = this.r() < (L.tech ?? L.block * 0.4);
       if (this.techDecision) out = IN.A | IN.B;
       return finish();
     }
@@ -414,6 +430,24 @@ export class FightAI {
       this.dashSeq = [0, dir, dir, 0, 0, dir, dir, dir];
       return finish();
     };
+    // ── 윗발판 상대에게 올라가기: 상대 손이 안 닿는 쪽 가장자리 밑으로 가서 점프 → 그쪽 끝에 내려앉음 ──
+    if (this.entry !== null) {
+      const ex = this.entry * SUB;
+      const oNear = Math.abs(o.x - ex) / SUB < Math.max(reachOf(oc.moves.L), reachOf(oc.moves.H)) + 30;
+      const landedUp = !air && dy < 30;
+      if (landedUp || s.f > this.entryUntil || f.st === "hit" || f.st === "down" || f.st === "ko" || isAir(s, o) || (!air && oNear)) this.entry = null;
+      else if (f.st === "idle" || f.st === "walk" || f.st === "dash" || f.st === "jump") {
+        if (!air) {
+          if (Math.abs(ex - f.x) > 14 * SUB) out |= ex > f.x ? IN.R : IN.L;
+          else press(IN.J);
+        } else {
+          if (Math.abs(ex - f.x) > 10 * SUB) out |= ex > f.x ? IN.R : IN.L;
+          if (dy > 20 && f.jumps < 2 && f.vh <= 150) press(IN.J);
+          if (c.glide && f.jumps >= 2 && f.vh < 0 && dy < 0) out |= IN.J;
+        }
+        return finish();
+      }
+    }
     // ── 높은 발판으로 올라가는 중: 거쳐 갈 발판 아래로 가서 점프, 꼭대기에서 2단 점프, 발판 안쪽으로 ──
     if (this.climb) {
       const p = this.climb;
@@ -737,7 +771,10 @@ export class FightAI {
             const px = Math.max(p.x0, Math.min(p.x1, f.x / SUB));
             const tx = Math.max(p.x0, Math.min(p.x1, o.x / SUB));
             // 높을수록, 상대 쪽일수록, 지금 자리에서 가까울수록
-            const sc = p.y * 2 - Math.abs(tx - o.x / SUB) * 0.6 - Math.abs(px - f.x / SUB) * 0.4;
+            // 거쳐 갈 발판에 내려앉는 자리가 위 상대 손 닿는 곳이면 피함 (거기로 뛰어오르다 맞고 떨어짐)
+            const land = Math.max(p.x0 + 18, Math.min(p.x1 - 18, f.x / SUB));
+            const risky = p.y > o.h / SUB - 150 && Math.abs(land - o.x / SUB) < oReach + 45;
+            const sc = p.y * 2 - Math.abs(tx - o.x / SUB) * 0.6 - Math.abs(px - f.x / SUB) * 0.4 - (risky ? 400 : 0);
             if (sc > bs) ((bs = sc), (best = p));
           }
           if (best) {
@@ -747,10 +784,48 @@ export class FightAI {
           }
         }
       }
-      if (dy > 50 && dist < 260 && !isAir(s, o) && this.r() < 0.5) {
-        out |= dist > 30 ? toward : 0;
-        press(IN.J);
-        return finish();
+      if (dy > 50 && dist < 300 && !isAir(s, o)) {
+        // 바로 밑에서(또는 비스듬히 상대 쪽으로) 뛰어오르면 위에서 기다리던 상대에게 맞고 떨어짐 →
+        //  · 상대 손이 안 닿는 쪽 가장자리에 내려앉게 올라가거나
+        //  · 그럴 자리가 없으면 손 닿는 거리 밖에서 기다렸다가 상대가 헛치거나 맞은 틈(빈틈)에 올라감
+        //    (시간이 없고 지고 있으면 그냥 올라감 · 위에서 맞을수록(upHits) 더 기다림)
+        // 낮은 단계는 가끔만 이렇게 생각함 (올라갈 때마다 정함)
+        if (this.upSmart === null) this.upSmart = this.r() < 0.25 + L.antiAir * 0.75;
+        const tp = platBelow(map, o.x, o.h);
+        const here = platBelow(map, f.x, f.h);
+        const oBusy = (o.st === "atk" && o.t > 3) || o.st === "hit" || o.st === "down" || o.st === "rise" || o.trapT > 0 || o.grabbed > 0;
+        const danger = oReach + 45;
+        const hurry = s.timer < 25 * 60 && f.hp / c.hp <= o.hp / oc.hp;
+        if (tp && here && this.upSmart && !oBusy && !hurry) {
+          let ex: number | null = null;
+          let far = 0;
+          for (const cx of [tp.x0 + 22, tp.x1 - 22]) {
+            const d = Math.abs(cx - o.x / SUB);
+            // 뛰어오를 자리: 내 발판 위에서 그 가장자리에 가장 가까운 곳 (공중에서 90px 까지는 옆으로 감)
+            const tx = Math.max(here.x0 + 10, Math.min(here.x1 - 10, cx));
+            if (d > danger + 25 && d > far && Math.abs(tx - cx) < 90 && Math.abs(tx - o.x / SUB) > danger) ((far = d), (ex = cx));
+          }
+          if (ex !== null) {
+            this.entry = ex;
+            this.entryUntil = s.f + 150;
+            return finish();
+          }
+          // 돌아갈 자리가 없음: 손 닿는 거리 밖에서 기다림 (탄이 있으면 쏨).
+          // 가끔 제자리 낮은 점프로 떠봄(bait) — 위에서 헛치면 그 빈틈에 2단 점프로 올라감 (공중 처리는 아래)
+          if (dist < danger + 20) out |= away;
+          else if (dist > danger + 60) out |= toward;
+          else if (this.r() < 0.012 + L.aggro * 0.012) {
+            this.bait = true;
+            press(IN.J);
+          }
+          if (f.cd === 0 && (c.moves.S.proj || c.moves.S.summon) && this.r() < 0.03 + L.special * 2) press(IN.C);
+          return finish();
+        }
+        if (this.r() < (this.upSmart ? 0.8 : 0.5)) {
+          out |= dist > 30 ? toward : 0;
+          press(IN.J);
+          return finish();
+        }
       }
       if (dy < -50 && dist < 300) {
         // 아래에 있는 상대: 발판 끝으로 걸어 내려감 (하단 점프 없음)
@@ -767,8 +842,19 @@ export class FightAI {
         }
       }
     }
+    // 떠보기 점프: 위의 상대가 헛치고 있으면(빈틈) 2단 점프로 올라가고, 아니면 그대로 내려옴
+    if (!air || f.st === "hit") this.bait = false;
+    if (this.bait && f.st === "jump") {
+      const oOpen = (o.st === "atk" && o.t > 3 && !o.hit) || o.st === "hit" || o.st === "down";
+      if (oOpen && f.jumps < 2) {
+        this.bait = false;
+        out |= toward;
+        press(IN.J);
+      }
+      return finish();
+    }
     if (f.st === "jump" && dy > 70 && f.vh < 200 && f.jumps < 2) {
-      out |= toward;
+      out |= this.entry !== null ? (this.entry * SUB > f.x ? IN.R : IN.L) : toward;
       press(IN.J);
       return finish();
     }
