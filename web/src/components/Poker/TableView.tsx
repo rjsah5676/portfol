@@ -1169,10 +1169,11 @@ export default function TableView({
         const dir = sp.side === "left" ? 1 : -1;
         return { x: x + dir * (plateHalf + sizes.card * 1.3), y: y + sizes.card * 1.4 + 22 };
       }
-      // 7포커 위쪽 자리: 이름표 · 카드 줄(그 사람 것 · 남의 것) · 팟에 안 걸리는 곳을 차례로 찾음
-      if (sv) {
+      // 위쪽 자리: 이름표 · 카드 줄(그 사람 것 · 남의 것) · 팟에 안 걸리는 곳을 차례로 찾음 (카드가 건 돈보다 위라 카드 위에 두면 안 보임)
+      if (sp.side === "top") {
         const ph = betHalfW();
-        const rowW = sizes.card * (1 + 0.62 * 6);
+        const rowW = sv ? sizes.card * (1 + 0.62 * 6) : sizes.card * 1.15 * 1.9;
+        const rowEst = sv ? sizes.card * 1.15 * 4.6 : sizes.card * 1.3 * 2.2; // 카드를 어느 쪽에 까는지 (자리 그릴 때와 같은 셈)
         const boxes: [number, number, number, number][] = [];
         L.spots.forEach((o, j) => {
           const seatJ = (j + Math.max(0, mySeat)) % n;
@@ -1180,7 +1181,7 @@ export default function TableView({
           const ox = seatX(o.x);
           const oy = seatY(o);
           boxes.push([ox - plateHalf, ox + plateHalf, oy, oy + 56]);
-          const toLeft = o.side === "right" || (o.side === "top" && ox + plateHalf + 6 + rowW > boardW - 6);
+          const toLeft = o.side === "right" || (o.side === "top" && ox + plateHalf + 6 + rowEst > boardW - 6);
           const r0 = toLeft ? ox - plateHalf - 6 - rowW : ox + plateHalf + 6;
           boxes.push([r0, r0 + rowW, oy, oy + sizes.card * 1.4]);
         });
@@ -1191,33 +1192,26 @@ export default function TableView({
         const clash = (c: { x: number; y: number }) =>
           boxes.reduce(
             (a, [x0, x1, y0, y1]) =>
-              a + Math.max(0, Math.min(c.x + ph, x1) - Math.max(c.x - ph, x0)) * Math.max(0, Math.min(c.y + 15, y1) - Math.max(c.y - 15, y0)),
+              a + Math.max(0, Math.min(c.x + ph, x1) - Math.max(c.x - ph, x0)) * Math.max(0, Math.min(c.y + 24, y1) - Math.max(c.y - 24, y0)), // 알약 높이 (행동 글자가 위에 붙으면 더 큼)
             0
           );
-        const cardsLeft = x + plateHalf + 6 + rowW > boardW - 6;
+        const cardsLeft = x + plateHalf + 6 + rowEst > boardW - 6;
         const away = cardsLeft ? 1 : -1; // 카드 줄 반대쪽
         const cands = [
           { x: x + away * (plateHalf + ph + 6), y: y + 28 },
-          { x: x + away * plateHalf * 0.5, y: y + 56 + 22 },
-          { x: x - away * (plateHalf + 6 + rowW * 0.5), y: y + sizes.card * 1.4 + 20 },
+          { x: x + away * plateHalf * 0.5, y: y + 56 + 26 },
+          { x: x - away * (plateHalf + 6 + rowW * 0.5), y: y + sizes.card * 1.4 + 26 },
           // 다 걸리면 이름표 바로 위 (그 사람 캐릭터 몸 앞 — 카드 · 이름표는 안 가림)
-          { x, y: y - 18 },
+          { x, y: y - 26 },
         ];
         return cands.find((c) => !clash(c)) ?? cands.reduce((a, c) => (clash(c) < clash(a) ? c : a));
-      }
-      // 홀덤 위쪽 자리: 판이 낮으면(폰 가로) 판 쪽 중간이 이름표에 걸림 → 그 사람 엎은 카드 위에 겹쳐 둠 (뒷면이라 가려도 됨)
-      if (sp.side === "top") {
-        const rowEst = sizes.card * 1.3 * 2.2;
-        const dir = x + plateHalf + 6 + rowEst > boardW - 6 ? -1 : 1;
-        return { x: x + dir * (plateHalf + 6 + sizes.card * 1.15 * 0.9), y: y + sizes.card * 0.75 };
       }
       return { x: x + (px(L.table.cx) - x) * 0.5, y: y + (py(L.center.board) - y) * 0.5 };
     }
     // 세로판: 건 돈이 그 사람 카드(= 족보)를 가리지 않게 카드가 없는 쪽에
     const half = Math.max(84, sprW * 0.62) / 2;
     const cardH = sizes.card * 1.4;
-    // 홀덤 위쪽 자리: 엎은 카드 위에 겹쳐 둠 (카드 아래에 두면 가운데 구간 글씨 · 팟에 걸림). 7포커는 편 카드라 카드 아래
-    if (sp.side === "top") return sv ? { x, y: y + 52 + 4 + cardH + 14 } : { x, y: y + 52 + 4 + cardH * 0.62 };
+    if (sp.side === "top") return { x, y: y + 52 + 4 + cardH + 14 }; // 카드 아래
     const dir = sp.side === "left" ? 1 : -1;
     if (C?.cardSide[idx] === "below") {
       // 이름표 위 안쪽 (카드는 아래). 바로 위 자리의 건 돈(그 사람 엎은 카드 위)과 겹치면 이름표 옆 안쪽으로
@@ -1235,7 +1229,6 @@ export default function TableView({
     // 카드가 옆이면: 촘촘한 판에선 엎어 둔 카드 위에 겹쳐 둠(뒷면이라 가려도 됨), 아니면 이름표 아래.
     // 좁은 폰에서 그 자리가 다른 사람 이름표에 걸리면 이름표 아래 → 이름표 위 순으로 비킴
     const cands = [
-      ...(C || !sv ? [{ x: x + dir * (half + 6 + sizes.card * 1.3), y: y + 26 }] : []),
       { x: x + dir * half * 0.35, y: y + 52 + 14 },
       { x: x + dir * half * 0.35, y: y - 14 },
     ];
@@ -1989,7 +1982,8 @@ export default function TableView({
           data-turn={myTurn ? "1" : undefined}
           style={
             H
-              ? { left: boardW * 0.48, right: 10, bottom: 10, zIndex: 30 }
+              ? // 버튼 · 글씨를 키움 (폰 가로 1.2배 · PC 1.1배 — 안의 크기가 전부 em 이라 같이 커짐)
+                { left: boardW * 0.48, right: 10, bottom: 10, zIndex: 30, fontSize: h <= 560 ? "1.2em" : "1.1em" }
               : { left: 8, right: 8, bottom: 8, zIndex: 30 }
           }
         >

@@ -1367,7 +1367,8 @@ export function registerPoker({ gateway, db, users }: Deps, opts: PokerOptions =
     if (seatOf.has(uid)) throw new AppError("SEATED", "테이블에서 일어난 뒤에 살 수 있어요.", 409);
     await settlingOf.get(uid);
     const w = await wallet.buySkin(uid, skin);
-    return walletWire(uid, w);
+    // 사고 나서 칩이 기본 칩 기준 밑이면 바로 기본 칩 지급 (예전엔 새로고침해야 들어왔음)
+    return (await autoRevive(uid).catch(() => null)) ?? walletWire(uid, w);
   });
 
   /** 상점: 캐릭터 사기 (테이블에 앉아 있으면 안 됨). 사면 바로 그 캐릭터로 */
@@ -1377,7 +1378,7 @@ export function registerPoker({ gateway, db, users }: Deps, opts: PokerOptions =
     if (seatOf.has(uid)) throw new AppError("SEATED", "테이블에서 일어난 뒤에 살 수 있어요.", 409);
     await settlingOf.get(uid);
     const w = await wallet.buyChar(uid, char);
-    return walletWire(uid, w);
+    return (await autoRevive(uid).catch(() => null)) ?? walletWire(uid, w);
   });
 
   /** 옷장: 스킨 입기 / 벗기 (앉아 있으면 그 자리 그림도 바로) */
