@@ -43,7 +43,7 @@ export function sevenSeatCards({
     : -Math.round(w * (side === "top" ? 0.38 : 0.48));
   // 폭이 정해져 있으면 그 안에 들어오게 더 겹침 (숫자 보일 만큼은 남김)
   if (maxW && !hero && count > 1) {
-    const cw = p.cards && !hide ? Math.round(w * 1.15) : w;
+    const cw = w;
     const fit = -Math.ceil(cw - (maxW - cw) / (count - 1));
     overlap = Math.min(overlap, Math.max(fit, -Math.round(cw * 0.72)));
   }
@@ -63,7 +63,7 @@ export function sevenSeatCards({
             <PlayingCard
               key={c}
               card={c}
-              w={hero ? w : Math.round(w * 1.15)}
+              w={w}
               // 깔자마자 족보에 든 5장은 빛남, 다 깐 뒤엔 이긴 사람 것만
               win={!!best?.includes(c) && (!ended || won)}
               dim={ended && (!won || (!!best && !best.includes(c)))}
@@ -107,15 +107,17 @@ export function sevenSeatCards({
       </span>
     );
   }
-  // 남의 카드: 엎은 카드(처음 2장 · 7구 1장)는 작게 앞에 한 묶음, 편 카드는 크게 덜 겹쳐서 — 편 카드가 한눈에 보이게
+  // 남의 카드: 엎은 카드(처음 2장 · 7구 1장)는 앞에 촘촘한 한 묶음, 편 카드는 덜 겹쳐서 — 편 카드가 한눈에 보이게
   // (쇼다운 중 아직 안 깐 자리도 이 모양 그대로)
   const downN = p.cards ? p.cards.length - p.up.length : p.down;
   const U = p.up.length;
   const total = downN + U;
-  const bw = U ? Math.round(w * 0.72) : w;
+  // 엎은 카드도 편 카드와 같은 크기 (작게 하면 뭐가 몇 장인지 눈에 안 들어옴) — 대신 촘촘히 겹친 묶음
+  const bw = w;
   const bg = -Math.round(bw * 0.82);
   const backsW = downN ? bw + (downN - 1) * (bw + bg) : 0;
-  let g = -Math.round(w * 0.3);
+  // 편 카드는 숫자 · 무늬(왼쪽 위)만 보이면 되니 반쯤 겹침 (한게임처럼)
+  let g = -Math.round(w * 0.52);
   if (maxW && U > 1) {
     const room = (maxW - backsW - (downN ? 4 : 0) - w) / (U - 1) - w;
     g = Math.min(g, Math.max(Math.floor(room), -Math.round(w * 0.7)));

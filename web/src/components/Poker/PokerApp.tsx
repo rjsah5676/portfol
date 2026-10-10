@@ -281,7 +281,6 @@ export default function PokerApp({ rank }: { rank: RankRow[] | null }) {
         wallet={wallet}
         rank={rank}
         myNick={profile.nick}
-        o={o}
         w={size.w}
         h={size.h}
         onEnter={go}

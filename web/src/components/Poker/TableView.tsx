@@ -10,7 +10,7 @@ import {
   type ReactNode,
 } from "react";
 import type { ApiError } from "@/lib/api/errors";
-import { asset, chipColor, heroReady, preloadChar, roomTint } from "@/lib/poker/assets";
+import { asset, chipColor, preloadChar, roomTint } from "@/lib/poker/assets";
 import { cardLabel, categoryOf, evaluate } from "@/lib/poker/cards";
 import {
   ACT_MS,
@@ -70,7 +70,6 @@ import { layoutFor, type Orient } from "./layout";
 import {
   Bet,
   CharSprite,
-  HeroSprite,
   CutIn,
   EmoteImg,
   FaceIcon,
@@ -169,9 +168,6 @@ interface DealFx {
 }
 
 /** 서버 시계 기준 현재 시각 (제한 시간이 흐르는 동안만 자주 갱신) */
-/** 앉은 그림(384×512)에서 테이블 선의 높이 비율 */
-const SEAT_LINE = 470 / 512;
-
 function useNow(active: boolean): number {
   const [now, setNow] = useState(() => serverNow());
   useEffect(() => {
@@ -241,7 +237,6 @@ export default function TableView({
   useEffect(() => {
     exitRef.current = onExit;
   });
-  const [tab, setTab] = useState<"log" | "rank">("rank");
   /** 세로판: 기록 · 족보 서랍 / 이모티콘 고르기 */
   const [drawer, setDrawer] = useState<"" | "info" | "emote">("");
   const [busy, setBusy] = useState(false);
@@ -258,6 +253,8 @@ export default function TableView({
   const [info, setInfo] = useState<{ text: string; key: number } | null>(null);
   const exitMineRef = useRef<boolean | null>(null);
   const exitAskRef = useRef(false);
+  /** 베팅 순간 아바타에서 건 돈 자리로 던져지는 칩 (여러 개가 포물선으로) */
+  const [tosses, setTosses] = useState<{ key: number; seat: number; amt: number; n: number }[]>([]);
   const [flying, setFlying] = useState<{
     key: number;
     seats: { seat: number; amt: number }[];
@@ -275,6 +272,8 @@ export default function TableView({
   const [statSeat, setStatSeat] = useState<number | null>(null);
   /** 기록 크게 보기 (가로판 오른쪽 패널의 기록) */
   const [logBig, setLogBig] = useState(false);
+  /** 위 바의 「족보 · 기록」을 눌렀을 때 내려오는 상자 (기본은 닫힘 — 판을 넓게 쓰려고) */
+  const [infoOpen, setInfoOpen] = useState(false);
   /** 내가 강퇴 투표한 자리들 (이 판 기준) */
   const [voted, setVoted] = useState<Set<number>>(() => new Set());
   /** 쇼다운 패 까기 연출: order 순서로 한 자리씩 깜(step = 깐 자리 수). 다 깐 뒤 한 박자 쉬고 결과(step > order.length) */
@@ -311,6 +310,7 @@ export default function TableView({
       const face: Record<number, Timed<Face>> = {};
       const won: Record<number, { amt: number; key: number }> = {};
       const shoutsNew: { key: number; seat: number; a: string }[] = [];
+      const tossNew: { key: number; seat: number; amt: number; n: number }[] = [];
       const push = (text: ReactNode, tone?: LogLine["tone"]) =>
         lines.push({ id: ++logId.current, text, tone });
       const now = Date.now();
@@ -367,6 +367,7 @@ export default function TableView({
               pose[e.seat] = { v: "check", until: now + 1200 };
             } else if (e.a === "allin") {
               sfx.allin();
+              tossNew.push({ key: ++keyRef.current, seat: e.seat, amt: e.amt, n: 6 });
               pose[e.seat] = { v: "allin", until: now + 2600 };
               const s = t.seats[e.seat];
               if (s) setCutin({ char: s.look ?? s.char, name: s.name, key: ++keyRef.current });
@@ -376,6 +377,10 @@ export default function TableView({
               if (isBig(amt, ante)) sfx.chipBig();
               else sfx.chip();
               pose[e.seat] = { v: "bet", until: now + 1400 };
+              // 칩 던지기: 건 돈이 클수록 여러 개
+              const add = e.amt > 0 ? e.amt : amt;
+              if (add > 0)
+                tossNew.push({ key: ++keyRef.current, seat: e.seat, amt: add, n: Math.min(5, 1 + Math.floor(add / Math.max(1, ante) / 3)) });
               if (e.a === "raise" || e.a === "half" || e.a === "full" || e.a === "ddadang")
                 face[e.seat] = { v: "taunt", until: now + 1600 };
             }
@@ -572,6 +577,7 @@ export default function TableView({
         else apply();
       }
       if (shoutsNew.length) setShouts((cur) => [...cur.slice(-6), ...shoutsNew]);
+      if (tossNew.length) setTosses((cur) => [...cur.slice(-8), ...tossNew]);
       // 라운드가 끝나 건 돈이 팟으로 모였으면 칩이 팟으로 날아감
       const nowBets: Record<number, number> = {};
       for (const [k, v] of Object.entries(t.hand?.players ?? {})) nowBets[Number(k)] = v.bet;
@@ -905,16 +911,6 @@ export default function TableView({
     };
   }, []);
 
-  /** 아래 행동 바의 실제 높이 (세로판에서 내 이름표 · 작은 버튼을 그 위에 붙임) */
-  const [actH, setActH] = useState(48);
-  const actObs = useRef<ResizeObserver | null>(null);
-  const actRef = useCallback((el: HTMLDivElement | null) => {
-    actObs.current?.disconnect();
-    if (!el) return;
-    const ro = new ResizeObserver(() => setActH(Math.round(el.offsetHeight)));
-    ro.observe(el);
-    actObs.current = ro;
-  }, []);
 
   /** 나가기: 앉아 있지 않으면 바로 로비로. 판 중이면 서버에 나가기 예약을 켜고/끄고, 판에 안 끼어 있으면 서버가 바로 내보냄 */
   const exit = async () => {
@@ -988,16 +984,15 @@ export default function TableView({
   const hv = hand?.game === "holdem" ? (hand as HoldemView) : null;
   const sv = hand?.game === "seven" ? (hand as SevenView) : null;
   const L = layoutFor(n);
-  // 카드가 주인공: 남의 편 카드 · 내 카드 · 바닥 카드를 크게. 낮은 무대(폰 가로 = 높이 540)에선 조금 더
-  const big = h <= 560 ? 1.2 : 1;
-  // 7포커는 한게임만큼 (남의 편 카드 = 무대 폭의 5% · 내 카드 6%), 홀덤은 9인이라 조금 작게
+  // 카드가 주인공 — 한게임 비율(화면 높이 대비): 7포커 남의 편 카드 17.5% · 내 카드 21% · 캐릭터 상반신 18.5%. 홀덤은 9인이라 조금 작게
+  const seven = table.game === "seven";
   const sizes: Sizes = {
     o: "h",
     u,
-    card: (sv || table.game === "seven" ? u * 9 : u * 8) * big,
-    heroCard: (sv || table.game === "seven" ? u * 11 : u * 10) * (h <= 560 ? 1.1 : 1),
-    boardCard: u * 10,
-    face: u * 8.4 * big,
+    card: seven ? u * 12.5 : u * 10,
+    heroCard: seven ? u * 15 : u * 13,
+    boardCard: u * 10.5,
+    face: u * 8.4,
   };
   const base = table.game === "holdem" ? tier.bb : tier.ante;
   const totalMs = sv && sv.phase === "choice" ? CHOICE_MS : ACT_MS;
@@ -1082,12 +1077,25 @@ export default function TableView({
   const px = (pct: number) => (pct / 100) * boardW;
   const py = (pct: number) => (pct / 100) * h;
   const bar = 40;
-  /** 아바타: 7포커는 앉은 캐릭터 그림(3:4), 홀덤은 얼굴 아이콘 */
-  const avW = table.game === "seven" ? Math.round(h * 0.24 * 0.75) : Math.round(sizes.face);
-  const avH = table.game === "seven" ? Math.round(h * 0.24) : Math.round(sizes.face);
-  /** 이름표 폭 (아바타 아래) */
-  const plateW = Math.max(96, avW + 16);
-  const seatX = (pct: number) => Math.max(plateW / 2 + 4, Math.min(boardW - plateW / 2 - 4, px(pct)));
+  /*
+   * 자리 틀 (한게임처럼): [아바타][카드 칸] 한 줄 + 그 아래 이름 · 칩 띠. 아바타 키 = 카드 키 (캐릭터와 카드가 맞먹게)
+   *   7포커: 앉은 캐릭터 그림(3:4) · 홀덤: 얼굴 아이콘(정사각)
+   */
+  const cardH = Math.round(sizes.card * 1.4);
+  const avH = seven ? cardH : Math.round(cardH * 0.8);
+  const avW = seven ? Math.round(cardH * 0.75) : avH;
+  /** 카드 칸 폭: 7포커는 엎은 묶음 + 편 카드 4장이 들어가는 폭, 홀덤은 두 장 */
+  const boxW = seven ? Math.round(sizes.card * 3.6) : Math.round(sizes.card * 2 + 4);
+  const frameW = avW + 6 + boxW;
+  /** 내 아바타: 왼쪽 아래를 크게 (7포커 앉은 그림은 무대 높이의 30%, 홀덤 얼굴은 20%) + 그 아래 내 정보 띠 */
+  const heroAvH = seven ? Math.round(h * 0.29) : Math.round(h * 0.18);
+  const heroAvW = seven ? Math.round(heroAvH * 0.75) : heroAvH;
+  const heroW = Math.max(heroAvW, Math.round(u * 25));
+  /** 이름 · 칩 띠의 높이 (무대 글자 크기 × 1.75 쯤) */
+  const stripH = Math.round(Math.min(15, Math.max(12, u * 1.45 + 4.6)) * 1.75);
+  /** 아바타 가운데 x — 틀이 무대 밖으로 안 나가게 */
+  const seatX = (pct: number, dir: number) =>
+    dir > 0 ? Math.max(avW / 2 + 4, px(pct)) : Math.min(boardW - avW / 2 - 4, px(pct));
   const myCat = !liveHand
     ? -1
     : hv
@@ -1109,35 +1117,26 @@ export default function TableView({
     const half = betHalfW();
     return Math.max(half + 4, Math.min(boardW - half - 4, x));
   };
-  /** 그 자리의 건 돈이 놓이는 곳 (칩 날리기 시작점) — 배치표의 bx · by */
-  const betPoint = (seat: number) => {
-    if (seat === mySeat) return { x: (L.heroX / 100) * boardW, y: (L.heroCards / 100) * h - 18 };
-    const sp = spotOf(seat);
-    return { x: clampBetX(px(sp.bx)), y: py(sp.by) };
-  };
-  /** 카드 줄이 시작하는 x (아바타 옆, 판 쪽) 와 방향 */
+  /** 자리 틀의 자리: 아바타 가운데(x) · 카드 줄 세로 가운데(y) · 카드 칸이 시작하는 x(x0) · 방향 */
   const cardsAt = (seat: number) => {
     const sp = spotOf(seat);
-    const x = seatX(sp.x);
     const dir = sp.cards === "r" ? 1 : -1;
-    return { x0: x + dir * (avW / 2 + 8), dir, y: py(sp.y) };
+    const x = seatX(sp.x, dir);
+    return { x, x0: x + dir * (avW / 2 + 6), dir, y: py(sp.y) };
   };
-  /** 카드 줄을 늘어놓을 수 있는 폭: 판 가운데(팟)까지, 건 돈 알약 자리는 남기고 */
-  const cardsRoom = (seat: number) => {
-    const { x0, dir } = cardsAt(seat);
+  /** 건 돈이 놓이는 곳 (칩 날리기 끝점): 옆자리는 카드 칸 바로 앞(판 쪽), 위쪽 자리는 띠 아래 */
+  const betPoint = (seat: number) => {
+    if (seat === mySeat) return { x: (L.heroX / 100) * boardW, y: (L.heroCards / 100) * h - 6 };
     const sp = spotOf(seat);
-    const toCenter = Math.abs(px(L.table.cx) - x0);
-    // 위쪽 자리는 가운데까지 다 써도 됨(팟보다 위), 옆 · 아래 자리는 건 돈 알약 앞까지. 판이 끝나(쇼다운) 건 돈이 없으면 가운데까지
-    const room =
-      rawRes || (sp.side === "top" && sp.y < 20) ? toCenter + px(dir > 0 ? 6 : 6) : Math.abs(px(sp.bx) - x0) - betHalfW() - 10;
-    return Math.max(sizes.card * 2.2, room);
+    const { x0, dir, y } = cardsAt(seat);
+    if (sp.side === "top") return { x: x0 + dir * boxW * 0.5, y: y + cardH / 2 + stripH + 22 };
+    return { x: clampBetX(x0 + dir * (boxW + 8 + betHalfW())), y };
   };
   /** 외침이 시작되는 곳: 아바타 머리 위 (카드 줄은 안 덮게) — 위쪽 자리는 위 바에 안 걸리게 */
   const shoutFrom = (seat: number) => {
-    if (seat === mySeat) return { x: 16 + avW / 2, y: h - 10 - avH - 24 };
-    const sp = spotOf(seat);
-    const dir = sp.cards === "r" ? 1 : -1;
-    return { x: seatX(sp.x) - dir * avW * 0.25, y: Math.max(bar + 22, py(sp.y) - avH / 2 - 14) };
+    if (seat === mySeat) return { x: 12 + heroW / 2, y: h - 8 - stripH * 2 - heroAvH - 24 };
+    const { x, dir, y } = cardsAt(seat);
+    return { x: x - dir * avW * 0.25, y: Math.max(bar + 36, y - avH / 2 - 14) };
   };
   /** 메이드(트리플 이상): 키가 바뀔 때마다 터지는 효과가 한 번 재생됨 */
   const madeKey = myCat >= 3 ? `${table.handNo}:${myCat}` : "";
@@ -1186,24 +1185,24 @@ export default function TableView({
           />
         </div>
 
-        {/* 다른 자리: 아바타(7포커 앉은 그림 · 홀덤 얼굴) + 이름표, 옆에 카드 줄, 판 쪽에 건 돈 */}
+        {/* 다른 자리 틀: [아바타][카드 칸] + 아래 이름 · 칩 띠 (한게임처럼 한 덩어리), 판 쪽에 건 돈 */}
         {table.seats.map((s, i) => {
           if (i === mySeat) return null;
-          const sp = spotOf(i);
           const p = hand?.players[i];
           const live = !!p && !!s && !p.folded && !rawRes;
           const inHand = !!p && !!s && (s.status === "in" || live);
           const bet = inHand && !rawRes ? p!.bet : 0;
-          const x = seatX(sp.x);
-          const y = py(sp.y);
+          const { x, dir, y } = cardsAt(i);
           const betAt = betPoint(i);
           const seven = table.game === "seven";
+          /** 틀의 바깥쪽 모서리 (왼쪽 자리는 left, 오른쪽 자리는 right) */
+          const edge = dir > 0 ? { left: x - avW / 2 } : { right: boardW - (x + avW / 2) };
           if (!s)
             return (
               <div
                 key={i}
-                className="absolute -translate-x-1/2 -translate-y-1/2"
-                style={{ left: x, top: y, zIndex: 5 }}
+                className="absolute flex items-center justify-center"
+                style={{ ...edge, top: y - cardH / 2, width: frameW, height: cardH + stripH, zIndex: 5 }}
               >
                 {sitState === "watching" || sitState === "password" ? (
                   <button
@@ -1216,13 +1215,12 @@ export default function TableView({
                 ) : (
                   <span
                     title="빈자리"
-                    className="block rounded-[12px] border border-dashed border-white/[0.08]"
-                    style={{ width: avW * 0.7, height: avH * 0.7 }}
+                    className="block rounded-[10px] border border-dashed border-white/[0.09]"
+                    style={{ width: frameW * 0.6, height: (cardH + stripH) * 0.6 }}
                   />
                 )}
               </div>
             );
-          const { x0, dir } = cardsAt(i);
           const cards = !hand
             ? null
             : hv
@@ -1249,7 +1247,7 @@ export default function TableView({
                   hide: !revealed(i),
                   settled: revealDone,
                   dealDelay: dealOf(i),
-                  maxW: cardsRoom(i),
+                  maxW: boxW,
                 });
           const wonHere = res?.won[i] ?? 0;
           // 누가 더 올리면(하프 · 레이즈) 그 전에 삥 · 콜 · 체크로 맞춰 둔 사람의 꼬리표는 지움 — 다시 행동해야 하니까
@@ -1271,48 +1269,67 @@ export default function TableView({
           /** 결과가 난 뒤 이 자리의 손익 (딴 돈 − 넣은 돈) */
           const net = res && p ? (res.won[i] ?? 0) - p.invested : null;
           const look = s.look ?? s.char;
-          const cardH = sizes.card * 1.4;
           return (
             <div key={i}>
-              {/* 아바타 + 이름표 (세로 한 덩어리, 아바타 가운데가 x · y) */}
               <div
-                className="absolute flex flex-col items-center"
-                style={{ left: x, top: y - avH / 2, transform: "translateX(-50%)", zIndex: 34, width: plateW }}
+                className={`pk-seat absolute flex flex-col ${dir > 0 ? "items-start" : "items-end"}`}
+                style={{ ...edge, top: y - cardH / 2, width: frameW, zIndex: 34 }}
               >
-                <div
-                  className={`pk-av relative ${wonHere > 0 ? "pk-seat-win" : waiting ? "pk-seat-turn" : ""}`}
-                  data-turn={waiting ? "1" : undefined}
-                  style={{ width: avW, height: avH, opacity: dim ? 0.55 : 1 }}
-                >
-                  {seven ? (
-                    <CharSprite char={look} pose={poseOf(i)} seat="front" w={avW} dim={dim} />
-                  ) : (
-                    <FaceIcon char={look} face={faceOf(i)} size={avW} />
-                  )}
-                  {waiting && deadline > 0 && (
-                    <TimerRing size={avW + 6} frac={frac} width={3} square={seven} />
-                  )}
-                  {badge && <span className="pk-badge">{badge}</span>}
-                  {waiting && counting && (
-                    <span key={secLeft} className="pk-count-sm" aria-label={`${secLeft}초`}>
-                      {secLeft}
-                    </span>
-                  )}
+                {/* 윗줄: 아바타 + 카드 칸 (아래 끝 맞춤) */}
+                <div className={`flex items-end gap-[6px] ${dir > 0 ? "" : "flex-row-reverse"}`}>
+                  <div
+                    className={`pk-av relative ${wonHere > 0 ? "pk-seat-win" : waiting ? "pk-seat-turn" : ""}`}
+                    data-turn={waiting ? "1" : undefined}
+                    style={{ width: avW, height: avH, opacity: dim ? 0.55 : 1 }}
+                  >
+                    {seven ? (
+                      <CharSprite char={look} pose={poseOf(i)} seat="front" w={avW} dim={dim} />
+                    ) : (
+                      <FaceIcon char={look} face={faceOf(i)} size={avW} />
+                    )}
+                    {waiting && deadline > 0 && (
+                      <TimerRing size={avW + 6} frac={frac} width={3} square={seven} />
+                    )}
+                    {badge && <span className="pk-badge">{badge}</span>}
+                    {waiting && counting && (
+                      <span key={secLeft} className="pk-count-sm" aria-label={`${secLeft}초`}>
+                        {secLeft}
+                      </span>
+                    )}
+                  </div>
+                  <div
+                    className={`pk-seat-cards flex items-end ${dir > 0 ? "justify-start" : "justify-end"}`}
+                    style={{ width: boxW, height: cardH }}
+                  >
+                    {cards}
+                  </div>
                 </div>
+                {/* 아랫줄: 이름 · 칩 띠 (틀 폭 전부) */}
                 <div
                   role="button"
                   tabIndex={0}
                   onClick={() => setStatSeat(i)}
                   onKeyDown={(e) => e.key === "Enter" && setStatSeat(i)}
-                  className="pk-plate pk-plate2 relative cursor-pointer"
+                  className="pk-plate pk-strip relative cursor-pointer"
                   data-turn={waiting ? "1" : undefined}
-                  style={{ width: plateW, opacity: dim ? 0.75 : 1, borderColor: wonHere > 0 ? "var(--pk-brass)" : undefined }}
+                  style={{ width: frameW, height: stripH, opacity: dim ? 0.75 : 1, borderColor: wonHere > 0 ? "var(--pk-brass)" : undefined }}
                 >
-                  {tag && <ActTag key={`${table.handNo}-${tag}-${p?.bet ?? 0}`} a={tag} />}
+                  {/* 행동 글자 · 결과 족보: 띠 위에 걸쳐서 (카드 아랫단을 살짝 덮음 — 한게임처럼) */}
+                  {tag && <ActTag key={`${table.handNo}-${tag}-${p?.bet ?? 0}`} a={tag} over />}
+                  {resultName && (
+                    <span className="absolute left-1/2 z-20 -translate-x-1/2" style={{ bottom: "calc(100% - 0.4em)" }}>
+                      <span
+                        key={`${table.handNo}-${revealDone ? 1 : 0}`}
+                        className={`pk-resulttag pk-stamp ${res && wonHere > 0 && isTop(i) ? "pk-resulttag-win" : resultName === "기권" ? "pk-resulttag-out" : ""}`}
+                      >
+                        <span className="pk-tag-t">{resultName}</span>
+                      </span>
+                    </span>
+                  )}
                   {gains[i] && wonHere > 0 && (
                     <Rise
                       key={gains[i].key}
-                      className="absolute -top-[1.2em] left-1/2 -translate-x-1/2 text-[1.2em] text-[var(--pk-brass)]"
+                      className="absolute -top-[2.3em] left-1/2 -translate-x-1/2 text-[1.2em] text-[var(--pk-brass)]"
                     >
                       +{fmtShort(gains[i].amt)}
                     </Rise>
@@ -1323,10 +1340,8 @@ export default function TableView({
                       {fmtShort(Math.abs(net))}
                     </span>
                   )}
-                  <div className="pk-name truncate" style={{ maxWidth: plateW - 8 }}>
-                    {s.name}
-                  </div>
-                  <div className="pk-stack pk-num whitespace-nowrap">
+                  <span className="pk-name min-w-0 flex-1 truncate text-left">{s.name}</span>
+                  <span className="pk-stack pk-num shrink-0 whitespace-nowrap">
                     {p?.allIn && !res ? (
                       <span className="text-[var(--pk-danger)]">ALL IN</span>
                     ) : s.status === "out" && !live ? (
@@ -1334,7 +1349,7 @@ export default function TableView({
                     ) : (
                       <Money won={stackShown(i, s.stack)} />
                     )}
-                  </div>
+                  </span>
                   {s.away && (
                     <span className="pk-net-mark pk-net-in">
                       <i />
@@ -1342,50 +1357,29 @@ export default function TableView({
                     </span>
                   )}
                 </div>
-                {/* 이름표 아래 꼬리표 */}
-                {(s.votes > 0 || s.exit || resultName) && (
-                  <div className="pointer-events-none flex flex-col items-center">
+                {/* 띠 아래 꼬리표 */}
+                {(s.votes > 0 || s.exit) && (
+                  <div className="pointer-events-none flex flex-col items-center self-center">
                     {s.votes > 0 && (
                       <span className="pk-vote-mark" title="강퇴 투표">
                         ⚠ 강퇴 {s.votes}/3
                       </span>
                     )}
                     {s.exit && <span className="pk-exit-mark">나가기 예약</span>}
-                    {resultName && (
-                      <span
-                        key={`${table.handNo}-${revealDone ? 1 : 0}`}
-                        className={`pk-resulttag pk-stamp mt-[0.25em] ${res && wonHere > 0 && isTop(i) ? "pk-resulttag-win" : resultName === "기권" ? "pk-resulttag-out" : ""}`}
-                      >
-                        <span className="pk-tag-t">{resultName}</span>
-                      </span>
-                    )}
                   </div>
                 )}
               </div>
-              {/* 카드 줄: 아바타 옆(판 쪽), 아바타 세로 가운데에 맞춤 */}
-              {cards && (
-                <div
-                  className="absolute"
-                  style={{
-                    ...(dir > 0 ? { left: x0 } : { right: boardW - x0 }),
-                    top: y - cardH / 2,
-                    zIndex: 34,
-                  }}
-                >
-                  {cards}
-                </div>
-              )}
-              {/* 이모티콘 말풍선: 아바타 머리 옆(판 쪽) 위 */}
+              {/* 이모티콘 말풍선: 아바타 머리 위 */}
               {emotes[i] &&
                 (() => {
                   const size = Math.round(Math.max(44, Math.min(96, u * 13)));
-                  const ex = Math.max(size / 2 + 4, Math.min(boardW - size / 2 - 4, x + dir * (avW / 2 + size / 2 + 6)));
-                  const ey = Math.max(bar + 4, y - avH / 2 - size * 0.6);
+                  const ex = Math.max(size / 2 + 4, Math.min(boardW - size / 2 - 4, x + dir * (size * 0.2)));
+                  const ey = Math.max(bar + 4, y - cardH / 2 - size - 8);
                   return (
                     <div
                       key={emotes[i].key}
                       className="pk-emote pointer-events-none absolute"
-                      style={{ left: ex - size / 2, top: ey, zIndex: 32 }}
+                      style={{ left: ex - size / 2, top: ey, zIndex: 40 }}
                     >
                       <EmoteBubble tail={dir > 0 ? "l" : "r"}>
                         <EmoteImg char={look} emote={emotes[i].v} size={size} />
@@ -1571,6 +1565,45 @@ export default function TableView({
             );
           })}
 
+        {/* 베팅 순간: 아바타(손)에서 건 돈 자리로 칩이 포물선으로 던져짐 */}
+        {tosses.map((t) => {
+          const from =
+            t.seat === mySeat
+              ? { x: 12 + heroW / 2 + 10, y: h - 8 - stripH * 2 - heroAvH * 0.55 }
+              : (() => {
+                  const { x, dir, y } = cardsAt(t.seat);
+                  return { x: x + dir * avW * 0.3, y };
+                })();
+          const to = betPoint(t.seat);
+          const sz = Math.max(18, u * 3);
+          return Array.from({ length: t.n }, (_, i) => (
+            <div
+              key={`${t.key}-${i}`}
+              className="pk-toss pointer-events-none absolute"
+              style={
+                {
+                  left: from.x,
+                  top: from.y,
+                  zIndex: 12,
+                  animationDelay: `${i * 70}ms`,
+                  "--dx": `${to.x - from.x + ((i % 3) - 1) * 6}px`,
+                  "--dy": `${to.y - from.y + (i % 2) * 4}px`,
+                  "--arc": `${-Math.max(30, Math.abs(to.x - from.x) * 0.18)}px`,
+                } as CSSProperties
+              }
+              onAnimationEnd={() => i === t.n - 1 && setTosses((c) => c.filter((x) => x.key !== t.key))}
+            >
+              {}
+              <img
+                src={asset.chip(chipColor(t.amt / base), "top")}
+                alt=""
+                draggable={false}
+                style={{ width: sz, height: sz }}
+              />
+            </div>
+          ));
+        })}
+
         {/* 내 자리 */}
         {me && (
           <HeroArea
@@ -1594,8 +1627,9 @@ export default function TableView({
             deadline={deadline}
             gain={gains[mySeat] && (res?.won[mySeat] ?? 0) > 0 ? gains[mySeat] : null}
             emote={emotes[mySeat] ?? null}
-            avW={avW}
-            avH={avH}
+            avW={heroAvW}
+            avH={heroAvH}
+            frameW={heroW}
             isButton={!!hv && hv.button === mySeat}
             onStats={() => setStatSeat(mySeat)}
             madeKey={madeKey}
@@ -1618,7 +1652,6 @@ export default function TableView({
             names={winners.filter(isTop).map((x) => table.seats[x]?.name ?? "?")}
             hand={res.names[winners.find(isTop) ?? winners[0]]}
             mine={winners.includes(mySeat) && isTop(mySeat)}
-            o={o}
           />
         )}
         {info && !notice && (
@@ -1707,7 +1740,6 @@ export default function TableView({
         )}
         {/* 행동 바 */}
         <div
-          ref={actRef}
           className="pk-actwrap absolute"
           data-turn={myTurn ? "1" : undefined}
           // 버튼 · 글씨를 키움 (폰 가로 1.2배 · PC 1.1배 — 안의 크기가 전부 em 이라 같이 커짐)
@@ -1745,7 +1777,6 @@ export default function TableView({
             table={table}
             actor={actor}
             myTurn={myTurn}
-            frac={frac}
             pre={pre}
             onPre={(a) => {
               if (pre === a) return setPre("");
@@ -1756,22 +1787,25 @@ export default function TableView({
 
       </div>
 
-      {/* 오른쪽 위 작은 상자: 족보 · 기록 (접을 수 있음) */}
-      <InfoBox
-        table={table}
-        hand={hand}
-        hv={hv}
-        sv={sv}
-        res={res}
-        mySeat={mySeat}
-        log={log}
-        myCat={myCat}
-        top={bar + 6}
-        onLogBig={() => setLogBig(true)}
-      />
+      {/* 위 바 「족보 · 기록」 아래로 내려오는 상자 (열었을 때만) */}
+      {infoOpen && (
+        <InfoBox
+          table={table}
+          hand={hand}
+          hv={hv}
+          sv={sv}
+          res={res}
+          mySeat={mySeat}
+          log={log}
+          myCat={myCat}
+          top={bar + 4}
+          onLogBig={() => setLogBig(true)}
+          onClose={() => setInfoOpen(false)}
+        />
+      )}
       {/* 이모티콘: 내 정보 판 옆 말풍선 버튼 → 누르면 고르는 칸 */}
       {me && (
-        <div className="absolute" style={{ left: 16 + avW + 8, bottom: 10 + 100, zIndex: 31 }}>
+        <div className="absolute" style={{ left: 12 + heroW + 6, bottom: 8, zIndex: 31 }}>
           <button
             type="button"
             onClick={() => setDrawer(drawer === "emote" ? "" : "emote")}
@@ -1787,7 +1821,7 @@ export default function TableView({
             </svg>
           </button>
           {drawer === "emote" && (
-            <div className="pk-frame pk-pop absolute bottom-[calc(100%+6px)] left-0 w-[16em]" style={{ background: "#12131b" }}>
+            <div className="pk-frame pk-pop absolute left-0 w-[16em]" style={{ bottom: "calc(100% + 6px)", background: "#12131b" }}>
               <EmoteGrid char={me.look ?? me.char} onPick={emote} />
             </div>
           )}
@@ -1838,7 +1872,21 @@ export default function TableView({
           {GAMES[table.game].name} · {tierLabel(tier.id)} · 판돈 {fmtShort(tier.ante)}
           {hv && ` · ${fmtShort(tier.sb)}/${fmtShort(tier.bb)}`}
         </span>
+        {hand && (
+          <span className="pk-num shrink-0 text-[0.72em] font-bold text-[#ffd84a]">{table.handNo}판</span>
+        )}
         <span className="ml-auto flex shrink-0 items-center gap-[0.5em]">
+          <button
+            type="button"
+            onClick={() => setInfoOpen(!infoOpen)}
+            aria-expanded={infoOpen}
+            className={`pk-btn pk-btn-ghost flex h-[30px] items-center gap-[0.3em] px-[0.6em] text-[0.74em] whitespace-nowrap ${infoOpen ? "pk-emote-open-on" : ""}`}
+          >
+            <svg viewBox="0 0 24 24" className="h-[13px] w-[13px]" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden>
+              <path d="M4 6h16M4 12h16M4 18h10" />
+            </svg>
+            족보 · 기록
+          </button>
           <span
             className="flex shrink-0 items-center gap-[0.3em] rounded-[6px] border border-[rgba(214,175,92,0.35)] bg-black/50 px-[0.5em] py-[0.1em] whitespace-nowrap"
             title={`${fmtWon(wallet.money)}칩`}
@@ -2049,9 +2097,12 @@ function ActWord({ a, className = "" }: { a: string; className?: string }) {
   );
 }
 
-function ActTag({ a }: { a: string }) {
+function ActTag({ a, over }: { a: string; over?: boolean }) {
   return (
-    <span className="absolute bottom-[calc(100%+4px)] left-1/2 z-20 -translate-x-1/2">
+    <span
+      className="absolute left-1/2 z-20 -translate-x-1/2"
+      style={{ bottom: over ? "calc(100% - 0.5em)" : "calc(100% + 4px)" }}
+    >
       <ActWord a={a} />
     </span>
   );
@@ -2080,11 +2131,6 @@ function handLine(name: string): string | null {
   if (top) return `hand-top-${top[1]}`;
   return null;
 }
-
-/** 전신 그림(hero)은 예전 허벅지까지 그림보다 몇 배 높게 그려야 머리 크기가 같아짐 */
-const HERO_K = 1.7;
-/** 가로판: 예전처럼 크게 (머리 크기 · 위치 그대로), 허리 아래는 이름표 · 화면 끝 뒤로 이어짐 */
-const HERO_KH = 1.7;
 
 /** 이름표 테두리를 따라 줄어드는 남은 시간 (초록 → 노랑 → 빨강) */
 function PlateTimer({ frac }: { frac: number }) {
@@ -2215,6 +2261,8 @@ function HeroArea(props: {
   /** 아바타 크기 (7포커: 앉은 캐릭터 그림 3:4 · 홀덤: 얼굴 아이콘) */
   avW: number;
   avH: number;
+  /** 아바타 + 정보 띠 틀의 폭 */
+  frameW: number;
   isButton: boolean;
   blind: string | null;
   onStats: () => void;
@@ -2247,6 +2295,7 @@ function HeroArea(props: {
     emote,
     avW,
     avH,
+    frameW,
     isButton,
     blind,
     onStats,
@@ -2292,8 +2341,11 @@ function HeroArea(props: {
   const net = res && p ? won - p.invested : null;
   return (
     <>
-      {/* 왼쪽 아래: 내 아바타(7포커 앉은 그림 · 홀덤 얼굴) + 내 정보 판 */}
-      <div className="absolute bottom-[10px] left-[16px] flex items-end gap-[0.5em]" style={{ zIndex: 20, fontSize: "1.12em" }}>
+      {/* 왼쪽 아래: 내 아바타(크게 — 7포커 앉은 그림 · 홀덤 얼굴) 과 그 아래 내 정보 띠 */}
+      <div
+        className="absolute flex flex-col items-center"
+        style={{ left: 12, bottom: 8, width: frameW, zIndex: 20, fontSize: "1.12em" }}
+      >
         <div
           className={`pk-av relative ${won > 0 ? "pk-seat-win" : waiting ? "pk-seat-turn" : ""}`}
           data-turn={waiting ? "1" : undefined}
@@ -2314,12 +2366,12 @@ function HeroArea(props: {
               +{fmtShort(gain.amt)}
             </Rise>
           )}
-          {/* 내 이모티콘: 머리 오른쪽 옆 */}
+          {/* 내 이모티콘: 머리 오른쪽 위 */}
           {emote && (
             <div
               key={emote.key}
               className="pk-emote pointer-events-none absolute"
-              style={{ left: avW + 6, bottom: avH * 0.55, zIndex: 45 }}
+              style={{ left: avW * 0.55, bottom: avH * 0.8, zIndex: 45 }}
             >
               <EmoteBubble tail="l">
                 <EmoteImg char={look} emote={emote.v} size={Math.round(Math.max(56, Math.min(96, avH * 0.6)))} />
@@ -2333,15 +2385,18 @@ function HeroArea(props: {
           tabIndex={0}
           onClick={onStats}
           onKeyDown={(e) => e.key === "Enter" && onStats()}
-          className="pk-hero-hud cursor-pointer"
+          className="pk-hero-hud pk-hero-hud2 cursor-pointer"
           data-turn={waiting ? "1" : undefined}
+          style={{ width: frameW }}
         >
           {me.exit && (
             <span className="pk-exit-mark absolute -top-[1.1em] right-[0.4em]">나가기 예약</span>
           )}
-          <div className="truncate text-[0.9em] font-extrabold text-white">{me.name}</div>
-          <div className="-mt-[0.1em] truncate text-[0.72em] font-bold" style={{ color: CHARS[me.char].color }}>
-            {lookName(look)}
+          <div className="flex items-baseline gap-[0.4em]">
+            <span className="min-w-0 flex-1 truncate text-[0.9em] font-extrabold text-white">{me.name}</span>
+            <span className="shrink-0 truncate text-[0.66em] font-bold" style={{ color: CHARS[me.char].color }}>
+              {lookName(look)}
+            </span>
           </div>
           <div className="flex items-center gap-[0.3em]">
             {}
@@ -2383,7 +2438,7 @@ function HeroArea(props: {
         }}
       >
         {bet > 0 && (
-          <Bet won={bet} ratio={bet / base} size={Math.max(22, sizes.u * 3.4)} act={p?.last?.a} className="relative z-10 -mt-[1.6em]" />
+          <Bet won={bet} ratio={bet / base} size={Math.max(22, sizes.u * 3.4)} act={p?.last?.a} className="relative z-10 -mt-[1.2em]" />
         )}
         <div className="relative flex items-end">
           {madeKey && !res && <span key={`burst-${madeKey}`} className="pk-made-burst" aria-hidden />}
@@ -2419,13 +2474,11 @@ function WinBanner({
   names,
   hand,
   mine,
-  o,
   top,
 }: {
   names: string[];
   hand?: string;
   mine: boolean;
-  o: Orient;
   top?: number;
 }) {
   return (
@@ -2496,7 +2549,6 @@ function ActionBar(props: {
   table: TableWire;
   actor: SeatWire | null;
   myTurn: boolean;
-  frac: number;
   pre: string;
   onPre: (a: string) => void;
 }) {
@@ -2521,7 +2573,6 @@ function ActionBar(props: {
     table,
     actor,
     myTurn,
-    frac,
     pre,
     onPre,
   } = props;
@@ -2757,6 +2808,7 @@ function InfoBox({
   myCat,
   top,
   onLogBig,
+  onClose,
 }: {
   table: TableWire;
   hand: HoldemView | SevenView | null;
@@ -2768,9 +2820,9 @@ function InfoBox({
   myCat: number;
   top: number;
   onLogBig: () => void;
+  onClose: () => void;
 }) {
   const [tab, setTab] = useState<"rank" | "log">("rank");
-  const [open, setOpen] = useState(true);
   const ranks = table.game === "holdem" ? HOLDEM_RANKS : SEVEN_RANKS;
   const steps = hv ? ["프리플랍", "플랍", "턴", "리버"] : ["고르기", "4구", "5구", "6구", "7구"];
   const at = !hand ? -1 : hv ? hv.street : sv!.phase === "choice" ? 0 : Math.max(1, sv!.round - 3);
@@ -2779,7 +2831,7 @@ function InfoBox({
   void res;
   void mySeat;
   return (
-    <div className="pk-infobox pk-frame absolute right-[8px] flex flex-col overflow-hidden" style={{ top, zIndex: 25 }}>
+    <div className="pk-infobox pk-frame absolute right-[8px] flex flex-col overflow-hidden" style={{ top, zIndex: 45 }}>
       <div className="flex items-center gap-[0.35em] px-[0.5em] py-[0.3em]">
         <span className="pk-num text-[0.78em] font-bold text-[#ffd84a]">{hand ? `${table.handNo}판` : "판 사이"}</span>
         <span className="text-[0.7em] text-white/55">
@@ -2787,23 +2839,23 @@ function InfoBox({
           {hand ? ` · ${alive}/${sitting}명` : `${sitting}명`}
         </span>
         <div role="tablist" className="pk-seg pk-seg-sm ml-auto">
-          <button role="tab" type="button" aria-selected={tab === "rank"} onClick={() => { setTab("rank"); setOpen(true); }}>
+          <button role="tab" type="button" aria-selected={tab === "rank"} onClick={() => setTab("rank")}>
             족보
           </button>
-          <button role="tab" type="button" aria-selected={tab === "log"} onClick={() => { setTab("log"); setOpen(true); }}>
+          <button role="tab" type="button" aria-selected={tab === "log"} onClick={() => setTab("log")}>
             기록
           </button>
         </div>
         <button
           type="button"
-          onClick={() => setOpen(!open)}
-          aria-label={open ? "접기" : "펼치기"}
-          className="cursor-pointer rounded-[4px] px-[0.3em] text-[0.9em] leading-none text-white/55 hover:bg-white/10 hover:text-white"
+          onClick={onClose}
+          aria-label="닫기"
+          className="cursor-pointer rounded-[4px] px-[0.3em] text-[0.95em] leading-none text-white/55 hover:bg-white/10 hover:text-white"
         >
-          {open ? "–" : "+"}
+          ✕
         </button>
       </div>
-      {open && tab === "rank" && (
+      {tab === "rank" && (
         <ol className="pk-ranks pk-ranks-dense pk-scroll min-h-0 overflow-y-auto">
           {ranks
             .map((r, cat) => [r, cat] as const)
@@ -2825,7 +2877,7 @@ function InfoBox({
             })}
         </ol>
       )}
-      {open && tab === "log" && (
+      {tab === "log" && (
         <div className="relative flex min-h-0 flex-col">
           <button
             type="button"
@@ -2842,220 +2894,6 @@ function InfoBox({
         </div>
       )}
     </div>
-  );
-}
-
-function SidePanel({
-  table,
-  hand,
-  hv,
-  sv,
-  res,
-  mySeat,
-  log,
-  myCat,
-  u,
-  onLogBig,
-}: {
-  table: TableWire;
-  hand: HoldemView | SevenView | null;
-  hv: HoldemView | null;
-  sv: SevenView | null;
-  res: HoldemView["result"];
-  mySeat: number;
-  log: LogLine[];
-  myCat: number;
-  u: number;
-  onLogBig: () => void;
-}) {
-  const ranks = table.game === "holdem" ? HOLDEM_RANKS : SEVEN_RANKS;
-  // 구간: 홀덤 프리플랍 → 리버, 7포커 카드 고르기 → 4구 → 7구
-  const steps = hv ? ["프리플랍", "플랍", "턴", "리버"] : ["고르기", "4구", "5구", "6구", "7구"];
-  const at = !hand ? -1 : hv ? hv.street : sv!.phase === "choice" ? 0 : Math.max(1, sv!.round - 3);
-  const alive = hand ? Object.values(hand.players).filter((p) => !p.folded).length : 0;
-  const sitting = table.seats.filter((s) => s && s.status !== "out").length;
-  const pot = hand ? hand.pot : 0;
-  const me = mySeat >= 0 ? hand?.players[mySeat] : undefined;
-  const myState = !hand
-    ? ""
-    : !me
-      ? "구경 중"
-      : me.folded
-        ? "폴드"
-        : res
-          ? (res.won[mySeat] ?? 0) > 0
-            ? "이김!"
-            : "짐"
-          : hand.toAct === mySeat
-            ? "내 차례"
-            : "진행 중";
-  const dense = u < 8.5; // 작은 창: 족보표 글씨를 줄임 (아래 기록 칸이 남게)
-  return (
-    <>
-      {/* ① 이 판 */}
-      <div className="pk-side-head">
-        <div className="flex items-baseline gap-[0.4em]">
-          <span className="pk-frame-title">{hand ? `${table.handNo}번째 판` : "판 사이"}</span>
-          <span className="ml-auto text-[0.72em] text-white/50">
-            {sitting}명 앉음{hand ? ` · ${alive}명 남음` : ""}
-          </span>
-        </div>
-        <ol className="pk-steps" aria-label="진행 구간">
-          {steps.map((nm, i) => (
-            <li key={nm} data-on={i === at ? "1" : undefined} data-done={i < at ? "1" : undefined}>
-              {nm}
-            </li>
-          ))}
-        </ol>
-        <div className="flex items-center gap-[0.5em]">
-          <span className="flex items-center gap-[0.3em] text-[0.78em] text-white/60">
-            {}
-            <img src={asset.chip("gold", "top")} alt="" className="h-[1.1em] w-[1.1em]" />팟
-          </span>
-          <Money won={pot} className="pk-num text-[1.05em] text-[#ffd84a]" />
-          {myState && (
-            <span
-              className={`ml-auto rounded-[4px] px-[0.5em] py-[0.05em] text-[0.74em] font-extrabold ${myState === "내 차례" ? "bg-[#ffd84a] text-[#2a1e05]" : myState === "이김!" ? "bg-[#5ff0b5] text-[#06321f]" : "bg-white/10 text-white/70"}`}
-            >
-              {myState}
-            </span>
-          )}
-        </div>
-      </div>
-
-      {/* ② 족보표 */}
-      <div className="pk-side-title">
-        족보 <span className="text-white/40">{table.game === "holdem" ? "홀덤" : "7포커"}</span>
-      </div>
-      {/* 족보표는 자리가 모자라면 스크롤 — 아래 기록 칸이 늘 몇 줄은 보이게 */}
-      <ol className={`pk-ranks pk-scroll min-h-0 shrink overflow-y-auto ${dense ? "pk-ranks-dense" : ""}`}>
-        {ranks
-          .map((r, cat) => [r, cat] as const)
-          .reverse()
-          .map(([[name, cards], cat], i) => {
-            const mine = cat === myCat;
-            return (
-              <li key={name} data-mine={mine ? "1" : undefined}>
-                <span className="pk-num w-[1.1em] shrink-0 text-center text-[0.8em] text-white/35">
-                  {ranks.length - i}
-                </span>
-                <span className={`min-w-0 flex-1 truncate text-[0.82em] ${mine ? "font-bold" : "font-normal"}`}>{name}</span>
-                {mine && <span className="pk-ranks-me">내 패</span>}
-                <span className="flex shrink-0 gap-[1px] text-[0.64em]">
-                  {cards.map((cc, k) => (
-                    <MiniCard key={k} card={cc} />
-                  ))}
-                </span>
-              </li>
-            );
-          })}
-      </ol>
-
-      {/* ③ 기록 (오른쪽 끝: 크게 보기) */}
-      <div className="pk-side-title mt-[0.2em]">
-        기록
-        <button
-          type="button"
-          onClick={onLogBig}
-          aria-label="기록 크게 보기"
-          title="크게 보기"
-          className="ml-auto cursor-pointer self-center rounded-[4px] p-[0.15em] text-white/55 hover:bg-white/10 hover:text-white"
-        >
-          <svg viewBox="0 0 16 16" className="h-[1.1em] w-[1.1em]" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden>
-            <path d="M9.5 2.5h4v4M13.5 2.5 9 7M6.5 13.5h-4v-4M2.5 13.5 7 9" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        </button>
-      </div>
-      <LogList lines={log} />
-    </>
-  );
-}
-
-/** 기록 · 족보표 탭 (세로판 서랍) */
-function InfoTabs({
-  tab,
-  setTab,
-  log,
-  game,
-  myCat,
-}: {
-  tab: "log" | "rank";
-  setTab: (t: "log" | "rank") => void;
-  log: LogLine[];
-  game: "holdem" | "seven";
-  myCat: number;
-}) {
-  const ranks = game === "holdem" ? HOLDEM_RANKS : SEVEN_RANKS;
-  return (
-    <>
-      <div className="p-[0.45em]">
-        <div role="tablist" className="pk-seg">
-          <button
-            role="tab"
-            type="button"
-            aria-selected={tab === "log"}
-            onClick={() => setTab("log")}
-          >
-            기록
-          </button>
-          <button
-            role="tab"
-            type="button"
-            aria-selected={tab === "rank"}
-            onClick={() => setTab("rank")}
-          >
-            족보
-          </button>
-        </div>
-      </div>
-      {tab === "log" ? (
-        <LogList lines={log} />
-      ) : (
-        <ol className="pk-scroll grid min-h-0 flex-1 content-start gap-[0.25em] overflow-x-hidden overflow-y-auto px-[0.45em] pb-[0.5em]">
-          {ranks
-            .map((r, cat) => [r, cat] as const)
-            .reverse()
-            .map(([[name, cards], cat], i) => {
-              const mine = cat === myCat;
-              const top = i < 3;
-              return (
-                <li
-                  key={name}
-                  className={`relative flex items-center gap-[0.35em] rounded-[6px] border px-[0.4em] py-[0.3em] ${mine ? "border-[var(--pk-brass)] bg-[linear-gradient(90deg,rgba(255,201,60,0.28),rgba(255,201,60,0.06))] shadow-[0_0_10px_rgba(255,201,60,0.25)]" : "border-white/[0.06] bg-white/[0.025]"}`}
-                >
-                  <span
-                    className={`pk-num w-[1.1em] shrink-0 text-center text-[0.85em] ${mine ? "text-[#ffe28a]" : top ? "text-[#e9c879]" : "text-white/35"}`}
-                  >
-                    {ranks.length - i}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <div
-                      className={`truncate text-[0.82em] ${mine ? "font-bold text-[#ffe28a]" : top ? "text-white" : "text-white/80"}`}
-                    >
-                      {name}
-                      {mine && (
-                        <span className="ml-[0.4em] rounded-[3px] bg-[var(--pk-brass)] px-[0.3em] text-[0.8em] text-[#2b1d00]">
-                          내 패
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  <span className="flex shrink-0 gap-[1px] text-[0.6em]">
-                    {cards.map((cc, k) => (
-                      <MiniCard key={k} card={cc} />
-                    ))}
-                  </span>
-                </li>
-              );
-            })}
-          <li className="px-[0.3em] pt-[0.3em] text-[0.7em] leading-relaxed text-white/40">
-            {game === "holdem"
-              ? "같은 족보면 높은 숫자 · 킥커로 가려요."
-              : "같은 족보 · 숫자면 무늬로: ♠ > ◆ > ♥ > ♣"}
-          </li>
-        </ol>
-      )}
-    </>
   );
 }
 
