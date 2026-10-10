@@ -678,6 +678,8 @@ export default function RhythmGame() {
   const oRoomId = oRoom?.id;
   /** 이번 판 준비물 (받아서 디코딩까지 끝난 것) */
   type Prepared = {
+    /** 방 id + 판 번호 (판 번호는 방마다 1부터라 방을 옮기면 겹침) */
+    key: string;
     round: number;
     ctx: AudioContext;
     buffer: AudioBuffer;
@@ -686,12 +688,12 @@ export default function RhythmGame() {
     diff: Difficulty;
   };
   const [oPrep, setOPrep] = useState<Prepared | null>(null);
-  const preparing = useRef(0);
+  const preparing = useRef("");
   const [oLoad, setOLoad] = useState<{ ratio: number; label: string; error: string } | null>(null);
   /** 지금 치고 있는 온라인 판 번호 (0 = 아님) */
   const [oPlaying, setOPlaying] = useState(0);
-  /** 끝냈거나 나간 판 (다시 들어가지 않게) */
-  const doneRounds = useRef(new Set<number>());
+  /** 끝냈거나 나간 판 (다시 들어가지 않게) — 방 id + 판 번호 */
+  const doneRounds = useRef(new Set<string>());
   const lastProg = useRef<LiveRow>([0, 0, 100, 100, 0, 0, 0, 0, 0, 0]);
 
   const openOnline = useCallback(() => {
@@ -737,15 +739,64 @@ export default function RhythmGame() {
     };
   }, [oRoom?.song, onlineSong, charts, hosted, got]);
 
+  /** 방장의 음악 받기 — 같은 곡은 한 번만 (대기실에서 미리 받던 것이 있으면 그걸 이어서 기다림) */
+  const gotJob = useRef<{
+    ver: string;
+    p: Promise<{ ver: string; buffer: AudioBuffer; charts: Partial<Record<Difficulty, Chart>> }>;
+    onProgress?: (r: number) => void;
+  } | null>(null);
+  const fetchGot = useCallback((roomId: string, ver: string, onProgress?: (r: number) => void) => {
+    const cur = gotJob.current;
+    if (cur?.ver === ver) {
+      cur.onProgress = onProgress;
+      return cur.p;
+    }
+    // 진행 표시는 나중에 기다리는 쪽(판 준비)이 바꿔 끼울 수 있게
+    const prog: { fn?: (r: number) => void } = { fn: onProgress };
+    const p = (async () => {
+      const d = await downloadCustom(roomId, (r) => prog.fn?.(r));
+      prog.fn?.(1);
+      const ctx = await audio();
+      const g = { ver, buffer: await ctx.decodeAudioData(d.audio), charts: d.charts };
+      setGot(g);
+      return g;
+    })();
+    const job = {
+      ver,
+      p,
+      get onProgress() {
+        return prog.fn;
+      },
+      set onProgress(f) {
+        prog.fn = f;
+      },
+    };
+    // 실패하면 다음에 다시 받게
+    job.p.catch(() => {
+      if (gotJob.current === job) gotJob.current = null;
+    });
+    gotJob.current = job;
+    return job.p;
+  }, []);
+  // 대기실: 방장이 내 음악을 다 올리면 미리 받아 둠 (시작을 누르면 바로 칠 수 있게)
+  useEffect(() => {
+    const s = oRoom?.song;
+    if (!oRoom || !s || s.kind !== "custom" || !s.ready) return;
+    if (oRoom.phase !== "lobby" && oRoom.phase !== "result") return;
+    if (hosted?.ver === s.id || got?.ver === s.id || gotJob.current?.ver === s.id) return;
+    fetchGot(oRoom.id, s.id).catch((e) => console.warn("미리 받기 실패", e));
+  }, [oRoom, hosted, got, fetchGot]);
+
   // loading: 내 음원·채보 준비 → 서버에 "받음"
   const oRound = oRoom?.round;
   useEffect(() => {
     const uid = net.uid;
     if (!oRoom || !uid || oRoom.phase !== "loading" || !oRound || !oRound.roster.includes(uid))
       return;
-    if (oPrep?.round === oRound.no || preparing.current === oRound.no) return;
     const no = oRound.no;
-    preparing.current = no;
+    const key = `${oRoom.id}#${no}`;
+    if (oPrep?.key === key || preparing.current === key) return;
+    preparing.current = key;
     const s = oRoom.song!;
     const diff = oRoom.players[uid]?.diff ?? "normal";
     const id = oRoom.id;
@@ -765,21 +816,22 @@ export default function RhythmGame() {
           buffer = hosted.track.buffer;
           chart = hosted.charts[diff];
         } else {
-          let g = got?.ver === s.id ? got : null;
-          if (!g) {
-            const d = await downloadCustom(id, (r) =>
-              setOLoad({ ratio: r * 0.9, label: "곡 받는 중", error: "" })
-            );
-            setOLoad({ ratio: 0.95, label: "곡 여는 중", error: "" });
-            g = { ver: s.id, buffer: await ctx.decodeAudioData(d.audio), charts: d.charts };
-            setGot(g);
-          }
+          const g =
+            got?.ver === s.id
+              ? got
+              : await fetchGot(id, s.id, (r) =>
+                  setOLoad({
+                    ratio: r * 0.95,
+                    label: r < 1 ? "곡 받는 중" : "곡 여는 중",
+                    error: "",
+                  })
+                );
           song = guestSong(s);
           buffer = g.buffer;
           chart = g.charts[diff];
         }
         if (!chart) throw new Error("이 난이도 채보가 없어요.");
-        setOPrep({ round: no, ctx, buffer, song, chart, diff });
+        setOPrep({ key, round: no, ctx, buffer, song, chart, diff });
         setOLoad({ ratio: 1, label: "준비 완료", error: "" });
         await markLoaded(id, no);
       } catch (e) {
@@ -790,18 +842,19 @@ export default function RhythmGame() {
           error: e instanceof Error ? e.message : "곡을 받지 못했어요.",
         });
       } finally {
-        if (preparing.current === no) preparing.current = 0;
+        if (preparing.current === key) preparing.current = "";
       }
     })();
-  }, [oRoom, oRound, net.uid, oPrep?.round, hosted, got, charts]);
+  }, [oRoom, oRound, net.uid, oPrep?.key, hosted, got, charts, fetchGot]);
 
   // playing: 준비가 끝난 판이면 플레이 화면으로 (시작 시각은 서버가 정함 — Stage 가 맞춰 기다림)
   useEffect(() => {
     const uid = net.uid;
     const r = oRoom?.round;
     if (!oRoom || oRoom.phase !== "playing" || !r || !uid || !r.roster.includes(uid)) return;
-    if (screen !== "online" || oPlaying === r.no || doneRounds.current.has(r.no)) return;
-    if (!oPrep || oPrep.round !== r.no) return;
+    const rk = `${oRoom.id}#${r.no}`;
+    if (screen !== "online" || oPlaying === r.no || doneRounds.current.has(rk)) return;
+    if (!oPrep || oPrep.key !== rk) return;
     const coarse = window.matchMedia("(pointer: coarse)").matches;
     const key = autoSyncProfile(
       coarse,
@@ -833,7 +886,7 @@ export default function RhythmGame() {
     (r: Result) => {
       const id = oRoomId;
       const no = oPlaying;
-      doneRounds.current.add(no);
+      doneRounds.current.add(`${id}#${no}`);
       if (id && no)
         sendDone(id, no, {
           score: r.score,
@@ -862,7 +915,7 @@ export default function RhythmGame() {
     (r: Result) => {
       const id = oRoomId;
       const no = oPlaying;
-      doneRounds.current.add(no);
+      doneRounds.current.add(`${id}#${no}`);
       if (id && no)
         sendDone(id, no, {
           score: r.score,
@@ -884,7 +937,7 @@ export default function RhythmGame() {
     const id = oRoomId;
     const no = oPlaying;
     const l = lastProg.current;
-    doneRounds.current.add(no);
+    doneRounds.current.add(`${id}#${no}`);
     if (id && no)
       sendDone(id, no, {
         score: l[0],
@@ -1008,7 +1061,10 @@ export default function RhythmGame() {
         src.loopEnd = from + len;
         const t = ctx.currentTime;
         gain.gain.setValueAtTime(0, t);
-        gain.gain.linearRampToValueAtTime(settings.music * 0.55 * fitGain(buffer, LEVEL.rhythm.musicLufs), t + 0.8);
+        gain.gain.linearRampToValueAtTime(
+          settings.music * 0.55 * fitGain(buffer, LEVEL.rhythm.musicLufs),
+          t + 0.8
+        );
         src.start(t, from);
         node = { src, gain, ctx };
       } catch {}

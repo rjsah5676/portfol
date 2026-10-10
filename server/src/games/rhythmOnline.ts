@@ -134,7 +134,7 @@ const CHAT_KEEP = 50;
 /** 한 사람이 이 간격(ms) 안에 다시 보내면 무시 (도배 막기) */
 const CHAT_GAP_MS = 400;
 /** 다 받을 때까지 기다리는 최대 시간 (못 받은 사람은 이번 판에서 빠짐) */
-const LOAD_TIMEOUT_MS = 45_000;
+const LOAD_TIMEOUT_MS = 60_000;
 /** 다 받은 뒤 시작까지 — 각자 카운트다운(최대 약 7초)을 다 보여 줄 만큼 */
 const START_DELAY_MS = 8_000;
 /** 곡 길이 + 이만큼 지나도 안 끝낸 사람은 기다리지 않음 */
@@ -773,7 +773,7 @@ export function registerRhythmOnline({ gateway }: Deps) {
           live: {},
           liveDirty: false,
           upload: null,
-      chat: [],
+          chat: [],
           owners: new Map(Object.keys(r.players).map((uid) => [uid, RESTORED])),
           emptySince: r.emptySince,
           timer: null,

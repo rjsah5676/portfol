@@ -9,7 +9,12 @@ let sharedCtx: AudioContext | null = null;
 /** 공용 오디오 컨텍스트 (처음 부를 때 만들고, 멈춰 있으면 깨움) */
 export async function audio() {
   if (!sharedCtx) sharedCtx = new AudioContext({ latencyHint: "interactive" });
-  if (sharedCtx.state !== "running") await sharedCtx.resume().catch(() => {});
+  // 사용자 동작 없이 부르면 resume 이 끝나지 않을 수 있어서 오래 기다리지 않음 (온라인 판 준비가 멈추지 않게)
+  if (sharedCtx.state !== "running")
+    await Promise.race([
+      sharedCtx.resume().catch(() => {}),
+      new Promise((r) => setTimeout(r, 1500)),
+    ]);
   return sharedCtx;
 }
 /** 이미 만들어진 컨텍스트 (없으면 null) — 사용자 동작 전에 새로 만들지 않으려고 */
