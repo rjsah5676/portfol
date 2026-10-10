@@ -140,6 +140,10 @@ const BURN_EVERY = 15;
 const BURN_DMG = 2;
 /** 감전 처음 걸릴 때 짧게 기절 (경직 +) */
 const SHOCK_STUN = 10;
+/** 상태 이상(기절·방울·끌려옴·감전·일시정지·혼란)이 풀린 뒤 다시 안 걸리는 시간 (2초) — 그 사이엔 피해만 들어가고 IMMUNE */
+const STATUS_IMM = 120;
+/** 면역일 때 기절 대신 주는 경직 */
+const DIZZY_IMM_STUN = 18;
 /** 화상 중인 상대: 태울 수 있는 캐릭터(이그나)의 공격이 이만큼(%) 더 아픔 */
 const BURN_BONUS = 10;
 /** 건모 Alt+Tab 뒤 공중에서 안 떨어지는 시간 (0.3초) */
@@ -259,6 +263,10 @@ export interface Fighter {
   hug: number;
   /** 이번 콤보에서 곰 포옹에 이미 잡혔음 (콤보마다 한 번) */
   hugd: number;
+  /** 상태 이상에 걸려 있음 (풀리면 imm 시작) — 걸린 채 또 맞으면 상태 이상은 안 걸림 */
+  cc: number;
+  /** 상태 이상 면역 남은 프레임 */
+  imm: number;
   /** 남은 무적 프레임 (다시 내려온 뒤) */
   inv: number;
   /** 최근 입력 (마지막이 이번 프레임) */
@@ -311,7 +319,8 @@ export type EvKind =
   /** 철곰권 기를 다 모음 · 가드 부숨 (이반) */
   | "charged"
   | "crush"
-  | "stun";
+  | "stun"
+  | "immune";
 export interface Ev {
   k: EvKind;
   /** 관련 플레이어 (hit/block은 때린 쪽) */
@@ -466,6 +475,8 @@ function newFighter(ch: number, side: 0 | 1, map: MapDef): Fighter {
     chg: 0,
     hug: 0,
     hugd: 0,
+    cc: 0,
+    imm: 0,
     inv: 0,
     hist: new Array(HIST).fill(0),
   };
@@ -524,7 +535,7 @@ const cloneF = (f: Fighter): Fighter => ({ ...f, hist: f.hist.slice() });
  * 이 빌드의 게임 데이터 지문 (캐릭터 성능·맵) — 온라인에서 서로 다른 빌드끼리 붙었는지 확인.
  * 계산 방식(sim.ts)만 바꿨을 땐 SIM_REV를 올릴 것.
  */
-const SIM_REV = 8;
+const SIM_REV = 9;
 export const BUILD_ID = (() => {
   const str = SIM_REV + JSON.stringify(CHARS.map((c) => [c.hp, c.walk, c.jumpVx, c.dash, c.cd, c.glide, c.hurt, c.width, c.moves])) + JSON.stringify(MAPS.map((m) => [m.plats, m.spawn]));
   let h = 2166136261;
@@ -595,6 +606,8 @@ export function hash(s: State): number {
     mix(f.chg);
     mix(f.hug);
     mix(f.hugd);
+    mix(f.cc);
+    mix(f.imm);
     mix(f.inv);
     mix(f.st.length * 31 + f.st.charCodeAt(0));
     mix(f.mv ? f.mv.charCodeAt(0) : 0);
@@ -879,6 +892,12 @@ function control(s: State, i: number) {
   f.t++;
   if (f.gcT > 0) f.gcT--;
   if (f.st !== "hit") f.mark = 0;
+  // 상태 이상이 다 풀리면(다시 움직일 수 있게 되면) 2초 면역
+  if (f.imm > 0) f.imm--;
+  if (f.cc && f.st !== "hit" && f.st !== "down" && f.st !== "rise" && f.trapT === 0 && f.grabbed === 0 && !s.p[1 - i].hug) {
+    f.cc = 0;
+    f.imm = STATUS_IMM;
+  }
   switch (f.st) {
     case "idle":
     case "walk": {
@@ -1263,14 +1282,17 @@ function landed(s: State, i: number, f: Fighter) {
       o.combo++;
       o.st = "hit";
       o.t = 0;
-      o.stun = lm.hug.stun;
+      // 상태 이상 면역이면 기절 대신 짧은 경직
+      const imm = o.cc > 0 || o.imm > 0;
+      o.stun = imm ? DIZZY_IMM_STUN : lm.hug.stun;
+      if (!imm) o.cc = 1;
       o.kd = 0;
       o.float = 0;
       f.meter = Math.min(METER_MAX, f.meter + lm.meter);
       s.stop = Math.max(s.stop, lm.hitstop);
       s.ev.push({ k: "hit", p: i, x: o.x, h: o.h + 20 * SUB, v: dmg, m: "S" });
       s.ev.push({ k: "slam", p: 1 - i, x: o.x, h: o.h, v: 1 });
-      s.ev.push({ k: "stun", p: i, x: o.x, h: o.h + 70 * SUB, v: 0 });
+      s.ev.push({ k: imm ? "immune" : "stun", p: i, x: o.x, h: o.h + 70 * SUB, v: 0 });
     } else s.ev.push({ k: "land", p: i, x: f.x, h: f.h, v: 0 });
     // 착지 경직 (내리꽂는 자세 / 헛치면 그대로 무방비)
     f.t = Math.max(f.t, lm.startup + lm.active);
@@ -1641,6 +1663,7 @@ function applyHit(s: State, ai: number, m: MoveDef, srcX: number, mid: MoveId, p
   if (d.combo === 0 && !d.hug) d.hugd = 0;
   if (d.hug) releaseHug(s, 1 - ai);
   const wasDown = d.st === "down";
+  const wasHitSt = d.st === "hit";
   const eh = d.h + 28 * SUB;
   d.juggle = 0;
   d.hold = 0;
@@ -1751,7 +1774,18 @@ function applyHit(s: State, ai: number, m: MoveDef, srcX: number, mid: MoveId, p
     if (counter) s.ev.push({ k: "counter", p: ai, x: d.x, h: d.h + 70 * SUB, v: 0 });
     d.vx = fin ? Math.trunc((dir * m.push * 16) / 10) : dir * m.push;
     // 끌어당기는 기술: 때린 쪽 바로 앞(약 34px)에 멈추게 — 땅 마찰(60/프레임)로 멈추는 거리에 맞춘 속도
-    if (m.pull) {
+    // 상태 이상 면역: 이미 걸려 있거나(같은 콤보) 풀린 지 2초 안 — 피해·경직만 들어가고 상태 이상은 안 걸림
+    // (연타기의 2타째부터는 같은 상태 이상의 연장 — 면역 아님)
+    const cont = !!m.multi && !m.proj && !m.summon && a.st === "atk" && a.t > m.startup && wasHitSt;
+    const immune = (d.cc > 0 && !cont) || d.imm > 0;
+    const hasStatus = !!(m.pull || m.pause || m.swap || (m.trap && !popBonus) || m.shock || m.dizzy);
+    let gotStatus = false;
+    if (hasStatus && immune) s.ev.push({ k: "immune", p: ai, x: d.x, h: d.h + 74 * SUB, v: 0 });
+    // 긴 경직이 곧 상태 이상인 기술(카이 기절·건모 일시정지·혼란 등): 면역이면 보통 경직으로
+    if (hasStatus && immune && m.hitstun > 30) d.stun = Math.min(d.stun, DIZZY_IMM_STUN);
+    if (m.dizzy && !immune) gotStatus = true;
+    if (m.pull && !immune) {
+      gotStatus = true;
       // 8프레임 동안 때린 쪽 바로 앞(30px)까지 끌려옴 → 바로 약·잡기로 이어 칠 수 있음
       d.vx = 0;
       d.pullX = a.x + a.face * 30 * SUB;
@@ -1855,13 +1889,15 @@ function applyHit(s: State, ai: number, m: MoveDef, srcX: number, mid: MoveId, p
       d.kd = 0;
     }
     d.mark = 0; // 다른 기술에 맞으면 ⏸/💫 표시는 사라짐 (아래에서 다시 붙음)
-    if (m.pause && !kd) {
+    if (m.pause && !kd && !immune) {
+      gotStatus = true;
       // ⏸ 일시정지: 긴 경직 그대로 (콤보 보정으로 줄지 않게)
       d.stun = Math.max(d.stun, m.hitstun);
       d.mark = 1;
       s.ev.push({ k: "pause", p: ai, x: d.x, h: d.h + 70 * SUB, v: 0 });
     }
-    if (m.swap) {
+    if (m.swap && !immune) {
+      gotStatus = true;
       // Alt+Tab: 자리를 바꾸고 💫 혼란 — 그 자리에 떠 있다가 넘어짐 (아래에 발판이 없으면 안 넘어뜨림)
       const ax = a.x,
         ah = a.h;
@@ -1907,7 +1943,8 @@ function applyHit(s: State, ai: number, m: MoveDef, srcX: number, mid: MoveId, p
       // (x·h = 때린 쪽이 원래 있던 자리 — 화면에서 "떠난 자리"에 창을 남기는 데 씀)
       s.ev.push({ k: "swap", p: ai, x: ax, h: ah, v: 0 });
     }
-    if (m.trap && !kd && !popBonus) {
+    if (m.trap && !kd && !popBonus && !immune) {
+      gotStatus = true;
       // 비눗방울에 갇힘: 그 자리에서 둥실 떠오름
       d.trapT = m.trap;
       d.stun = m.trap + 4;
@@ -1917,13 +1954,15 @@ function applyHit(s: State, ai: number, m: MoveDef, srcX: number, mid: MoveId, p
       d.float = 0;
       s.ev.push({ k: "trap", p: ai, x: d.x, h: d.h + 30 * SUB, v: 0 });
     }
-    if (m.shock) {
+    if (m.shock && !immune) {
+      gotStatus = true;
       // 처음 감전되면 짧게 기절 (몸이 굳음), 이미 감전 중이면 살짝만
       const fresh = d.shock === 0;
       if (fresh) s.ev.push({ k: "shock", p: ai, x: d.x, h: d.h + 70 * SUB, v: 0 });
       d.shock = Math.max(d.shock, m.shock);
       if (!d.kd) d.stun += fresh ? SHOCK_STUN : 3;
     }
+    if (gotStatus) d.cc = 1;
     if (m.burn) {
       if (d.burn === 0) s.ev.push({ k: "burn", p: ai, x: d.x, h: d.h + 60 * SUB, v: 0 });
       d.burn = Math.max(d.burn, m.burn);

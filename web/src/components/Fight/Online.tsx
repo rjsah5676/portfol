@@ -277,22 +277,65 @@ function RankOverlay({ st }: { st: Extract<RankStatus, { s: "queue" | "found" }>
 // ───────────── 랭크전 AI전 ─────────────
 
 /** AI와 매칭됨: 내 캐릭터 고르기 → 준비하면 AI 캐릭터 공개(VS) → 경기 */
+/** 랜덤 고르기 연출: 얼굴 칸을 슬롯머신처럼 돌다 하나에 멈춤 (선택 화면과 같은 박자) — cur = 지금 돌고 있는 칸 */
+function useCharShuffle() {
+  const [cur, setCur] = useState<number | null>(null);
+  const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  useEffect(() => () => timers.current.forEach(clearTimeout), []);
+  const run = (done: (pick: number) => void) => {
+    if (cur !== null) return;
+    const n = CHARS.length;
+    const pick = Math.floor(Math.random() * n);
+    const start = Math.floor(Math.random() * n);
+    const count = 14 + ((pick - start - 14 + n * 4) % n) + 1;
+    let t = 0;
+    for (let k = 0; k < count; k++) {
+      const q = k / Math.max(1, count - 1);
+      t += Math.round(50 + 230 * q * q * q);
+      const kk = k;
+      timers.current.push(
+        setTimeout(() => {
+          sfxUi("shuffle");
+          setCur((start + kk) % n);
+        }, t)
+      );
+    }
+    timers.current.push(
+      setTimeout(() => {
+        setCur(null);
+        done(pick);
+      }, t + 950)
+    );
+    setCur(start);
+  };
+  return { cur, run };
+}
+
 function BotRoom({ st, nick, onMatch }: { st: Extract<RankStatus, { s: "bot" }>; nick: string; onMatch: (cfg: BotCfg) => void }) {
   const [ch, setCh] = useState(-1);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [vs, setVs] = useState<BotCfg | null>(null);
+  const shuffle = useCharShuffle();
   const [now, setNow] = useState(() => serverNow());
   useEffect(() => {
     const t = setInterval(() => setNow(serverNow()), 500);
     return () => clearInterval(t);
   }, []);
-  const go = () => {
-    if (busy || vs) return;
+  const go = (picked?: number) => {
+    if (busy || vs || (picked === undefined && shuffle.cur !== null)) return;
+    // 랜덤: 먼저 얼굴 칸을 돌려 뽑은 뒤 시작
+    if (picked === undefined && ch < 0) {
+      shuffle.run((p) => {
+        setCh(p);
+        go(p);
+      });
+      return;
+    }
     setBusy(true);
     setErr("");
     sfxUi("ready");
-    const mine = ch >= 0 ? ch : Math.floor(Math.random() * CHARS.length);
+    const mine = picked ?? ch;
     rankBotStart(st.id, mine)
       .then((r) => {
         const cfg: BotCfg = { id: st.id, chars: [mine, r.botCh], map: r.map, seed: r.seed, botR: r.botR, names: [nick, st.opp.nick] };
@@ -312,15 +355,16 @@ function BotRoom({ st, nick, onMatch }: { st: Extract<RankStatus, { s: "bot" }>;
     return () => clearTimeout(t);
   }, [vs, onMatch]);
   // 키보드: A·D(←→) 고르기, J·Enter 시작, Esc 취소
-  const ref = useRef({ ch, go });
+  const ref = useRef({ ch, go, spinning: false });
   useEffect(() => {
-    ref.current = { ch, go };
+    ref.current = { ch, go, spinning: shuffle.cur !== null };
   });
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const n = CHARS.length;
       const k = e.code;
       if (k === "Escape") rankCancel();
+      else if (ref.current.spinning) return;
       else if (k === "KeyA" || k === "ArrowLeft") (sfxUi("move"), setCh((c) => ((c + 1 - 1 + n + 1) % (n + 1)) - 1));
       else if (k === "KeyD" || k === "ArrowRight") (sfxUi("move"), setCh((c) => ((c + 1 + 1) % (n + 1)) - 1));
       else if (k === "KeyJ" || k === "Space" || k === "Enter") ref.current.go();
@@ -359,7 +403,8 @@ function BotRoom({ st, nick, onMatch }: { st: Extract<RankStatus, { s: "bot" }>;
       </div>
     );
   }
-  const c = ch >= 0 ? CHARS[ch] : null;
+  const shown = shuffle.cur ?? ch;
+  const c = shown >= 0 ? CHARS[shown] : null;
   return (
     <>
       <div className="absolute inset-x-[2cqw] top-[2cqw] z-20 flex items-center gap-[1cqw]">
@@ -430,10 +475,10 @@ function BotRoom({ st, nick, onMatch }: { st: Extract<RankStatus, { s: "bot" }>;
         <div className="flex flex-col items-center gap-[0.4cqw]">
           <div className="flex gap-[0.7cqw]">
             {[-1, ...CHARS.map((_, i) => i)].map((i) => {
-              const on = ch === i;
+              const on = shown === i;
               const cc = i >= 0 ? CHARS[i] : null;
               return (
-                <button key={i} type="button" disabled={busy} onClick={() => (sfxUi("move"), setCh(i))} className="cursor-pointer disabled:cursor-not-allowed">
+                <button key={i} type="button" disabled={busy || shuffle.cur !== null} onClick={() => (sfxUi("move"), setCh(i))} className="cursor-pointer disabled:cursor-not-allowed">
                   {cc ? (
                     <img
                       src={face(cc)}
@@ -458,7 +503,7 @@ function BotRoom({ st, nick, onMatch }: { st: Extract<RankStatus, { s: "bot" }>;
             {err ? <span className="text-[#F87171]">{err}</span> : keyText("A·D(←→) 고르기 · J(Enter) 시작 · Esc 취소")}
           </div>
         </div>
-        <button type="button" disabled={busy} onClick={go} className={`${bigBtn} mb-[1.6cqw] min-w-[12cqw]`}>
+        <button type="button" disabled={busy || shuffle.cur !== null} onClick={() => go()} className={`${bigBtn} mb-[1.6cqw] min-w-[12cqw]`}>
           {busy ? "시작하는 중…" : "시작"}
         </button>
       </div>
@@ -922,6 +967,9 @@ function Room({
   const [vs, setVs] = useState<MatchCfg | null>(null);
   const [chatText, setChatText] = useState("");
   const [copied, setCopied] = useState(false);
+  const shuffle = useCharShuffle();
+  /** 준비 / 준비 취소 — 랜덤이면 먼저 얼굴 칸을 돌려 뽑은 캐릭터로 준비 */
+  const toggleRef = useRef<() => void>(() => {});
   const chatRef = useRef<HTMLDivElement>(null);
 
   // 입장 (이미 들어가 있으면 그대로)
@@ -1007,9 +1055,22 @@ function Room({
   }, [vs, onMatch]);
 
   // 키보드: A·D(←→) 캐릭터, J·Space·Enter 준비, Esc 나가기
-  const stRef = useRef({ me, vs });
+  const stRef = useRef({ me, vs, spinning: false });
   useEffect(() => {
-    stRef.current = { me, vs };
+    stRef.current = { me, vs, spinning: shuffle.cur !== null };
+    toggleRef.current = () => {
+      if (!me || shuffle.cur !== null) return;
+      if (!me.ready && me.ch < 0) {
+        shuffle.run((pick) => {
+          s.setChar(pick);
+          sfxUi("ready");
+          s.setReady(true);
+        });
+        return;
+      }
+      sfxUi(me.ready ? "back" : "ready");
+      s.setReady(!me.ready);
+    };
   });
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -1025,10 +1086,10 @@ function Room({
       }
       if (!me) return;
       const n = CHARS.length;
-      const move = (d: number) => !me.ready && (sfxUi("move"), s.setChar((((me.ch + 1 + d) % (n + 1)) + n + 1) % (n + 1) - 1));
+      const move = (d: number) => !me.ready && !stRef.current.spinning && (sfxUi("move"), s.setChar((((me.ch + 1 + d) % (n + 1)) + n + 1) % (n + 1) - 1));
       if (k === "KeyA" || k === "ArrowLeft") move(-1);
       else if (k === "KeyD" || k === "ArrowRight") move(1);
-      else if (k === "KeyJ" || k === "Space" || k === "Enter") (sfxUi(me.ready ? "back" : "ready"), s.setReady(!me.ready));
+      else if (k === "KeyJ" || k === "Space" || k === "Enter") toggleRef.current();
       else return;
       e.preventDefault();
     };
@@ -1182,8 +1243,10 @@ function Room({
       {[0, 1].map((sd) => {
         const p = seats[sd];
         const col = SEAT_COL[sd];
-        const c = p && p.ch >= 0 ? CHARS[p.ch] : null;
         const mine = sd === s.seat;
+        // 내 자리는 랜덤을 돌리는 동안 도는 칸을 보여 줌
+        const pch = mine && shuffle.cur !== null ? shuffle.cur : (p?.ch ?? -1);
+        const c = p && pch >= 0 ? CHARS[pch] : null;
         return (
           <div key={sd} className="contents">
             {p && c ? (
@@ -1300,13 +1363,13 @@ function Room({
         <div className="flex flex-col items-center gap-[0.4cqw]">
           <div className="flex gap-[0.7cqw]">
             {[-1, ...CHARS.map((_, i) => i)].map((i) => {
-              const on = me.ch === i;
+              const on = (shuffle.cur ?? me.ch) === i;
               const c = i >= 0 ? CHARS[i] : null;
               return (
                 <button
                   key={i}
                   type="button"
-                  disabled={me.ready}
+                  disabled={me.ready || shuffle.cur !== null}
                   onClick={() => (sfxUi("move"), s.setChar(i))}
                   className="cursor-pointer disabled:cursor-not-allowed"
                 >
@@ -1332,7 +1395,7 @@ function Room({
           </div>
           <div className={`${KR} text-[1cqw] text-white/40`}>{keyText("A·D(←→) 고르기 · J(Enter) 준비 · Esc 나가기 · 둘 다 준비하면 시작")}</div>
         </div>
-        <button type="button" disabled={!foe && !me.ready} onClick={() => (sfxUi(me.ready ? "back" : "ready"), s.setReady(!me.ready))} className={`${bigBtn} mb-[1.6cqw] min-w-[12cqw]`}>
+        <button type="button" disabled={(!foe && !me.ready) || shuffle.cur !== null} onClick={() => toggleRef.current()} className={`${bigBtn} mb-[1.6cqw] min-w-[12cqw]`}>
           {me.ready ? "준비 취소" : foe ? "준비" : "상대 대기"}
         </button>
       </div>

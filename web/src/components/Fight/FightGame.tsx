@@ -584,6 +584,7 @@ export default function FightGame() {
           else if (e.k === "proj") {
             if (!skillFile(e.p)) sfxProj(elOf(e.p), s.p[e.p].mv === "X");
           } else if (e.k === "burn" || e.k === "shock" || e.k === "trap" || e.k === "pop" || e.k === "pause" || e.k === "swap") sfxStatus(e.k);
+          else if (e.k === "immune") sfxTech();
           else if (e.k === "charged") sfxIvan("max");
           else if (e.k === "crush") sfxIvan("crush");
           else if (e.k === "super") sfxSuper();

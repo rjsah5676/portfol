@@ -136,6 +136,8 @@ export interface MoveDef {
   hug?: { dmg: number; stun: number; fall: number };
   /** (아이덴티티) 이 기술만 재사용 대기가 다름 (프레임) — 없으면 캐릭터 cd */
   cd?: number;
+  /** 맞으면 기절 (긴 경직) — 상태 이상이라 면역이면 보통 경직 */
+  dizzy?: boolean;
   /** (계산용) 가드를 부숨 — 끝까지 모은 철곰권 */
   crush?: boolean;
 }
@@ -282,6 +284,7 @@ const RAW: CharSrc[] = [
         chip: 6,
         // 맞으면 기절 0.85초 (60→51, 카이가 너무 셈)
         hitstun: 51,
+        dizzy: true,
         blockstun: 10,
         push: 700,
         hitstop: 7,
@@ -294,7 +297,7 @@ const RAW: CharSrc[] = [
         // 돌진 중 2번 때림, 돌진하는 동안 경직 면역
         multi: 6,
         armor: true,
-        air: { armor: false },
+        air: { armor: false, dizzy: false },
       },
       X: {
         // 필살기 「천풍난무」: 회오리를 두르고 돌진하며 6연타, 마지막에 날려 버림

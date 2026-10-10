@@ -452,6 +452,10 @@ export class FightRenderer {
         this.flash = 4;
         this.flashColor = "#fff";
         this.shake = Math.max(this.shake, 6);
+      } else if (e.k === "immune") {
+        // 상태 이상 면역 (풀린 지 2초 안 / 이미 걸린 채): 피해만 들어감
+        this.parts.push({ x, y, vx: 0, vy: -0.45, life: 34, max: 34, color: "#C4B5FD", size: 1.2, kind: "text", text: "IMMUNE" });
+        this.parts.push({ x, y: y + 30, vx: 0, vy: 0, life: 10, max: 10, color: "#DDD6FE", size: 14, kind: "ring" });
       } else if (e.k === "stun") {
         // 이반 곰 포옹으로 내리꽂혀 기절: 머리 위 글자 + 도는 별
         this.parts.push({ x, y, vx: 0, vy: -0.4, life: 40, max: 40, color: "#FFE45C", size: 1.3, kind: "text", text: "STUN!" });
