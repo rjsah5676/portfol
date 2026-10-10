@@ -703,8 +703,9 @@ export default function TableView({
           setTimeout(() => playVoice(say.look, say.line), 120);
           void voiceDuration(say.look, say.line).then((d) => {
             if (dead) return;
+            // 대사 끝자락에 다음 사람이 까기 시작 (조금 빠르게 — 대사 길이를 맞춰 둬서 박자가 일정)
             const gap = seven ? 380 : 90;
-            later = setTimeout(advance, Math.max(0, (d ?? 0) * 1000 * 0.92 + 120 - gap));
+            later = setTimeout(advance, Math.max(0, (d ?? 0) * 1000 * 0.8 + 40 - gap));
           });
           return;
         }
@@ -1304,7 +1305,8 @@ export default function TableView({
             </span>
             {waiting && deadline > 0 && <PlateTimer frac={frac} />}
             {bet > 0 && (
-              <span className="pk-sf-bet pk-num">
+              // 틀 크기에 비례 (내 틀이 크니 글씨도 같은 비율로 크게)
+              <span className="pk-sf-bet pk-num" style={{ fontSize: `${(0.82 * f.cell) / SF!.cell}em` }}>
                 <Money won={bet} />
               </span>
             )}

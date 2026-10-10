@@ -31,20 +31,21 @@ import {
  * 카드 무늬는 그림(SVG)으로 그림 — 글꼴 글자(♠♥♦♣)는 OS마다 모양·크기가 달라서 (윈도우 Segoe UI Symbol 은 작고 흐릿하고 클로버가 뭉툭함).
  * 크기는 원래 글자가 차지하던 만큼으로 맞춤.
  */
+/** 무늬 (0~100 상자). 스페이드는 뾰족한 머리 + 매끈한 몸통, 클로버는 또렷한 동그라미 셋 — 작게 봐도 안 헷갈리게 */
 const SUIT_PATH = [
   // ♠
-  "M12 2C9.6 6.2 4.2 9 4.2 13.3a4.1 4.1 0 0 0 6.9 3c-.3 1.9-1 3.5-2.3 4.7V22h6.4v-1c-1.3-1.2-2-2.8-2.3-4.7a4.1 4.1 0 0 0 6.9-3C19.8 9 14.4 6.2 12 2z",
+  "M50 3C40 22 8 38 8 60c0 14 10 23 22 23 7 0 13-3 17-9-1 10-5 17-13 21h32c-8-4-12-11-13-21 4 6 10 9 17 9 12 0 22-9 22-23C92 38 60 22 50 3z",
   // ♥
-  "M12 21.2C6.3 16.4 2.8 13 2.8 9.2 2.8 6.3 5 4.3 7.5 4.3c1.9 0 3.4 1 4.5 2.7 1.1-1.7 2.6-2.7 4.5-2.7 2.5 0 4.7 2 4.7 4.9 0 3.8-3.5 7.2-9.2 12z",
+  "M50 93C21 71 5 55 5 34 5 18 17 7 31 7c9 0 15 5 19 13 4-8 10-13 19-13 14 0 26 11 26 27 0 21-16 37-45 59z",
   // ◆
-  "M12 1l6.8 10.2L12 21.4 5.2 11.2z",
+  "M50 2 88 50 50 98 12 50z",
   // ♣
-  "M12 2.2a4.4 4.4 0 1 1 0 8.8 4.4 4.4 0 0 1 0-8.8z M6.3 9.6a4.4 4.4 0 1 1 0 8.8 4.4 4.4 0 0 1 0-8.8z M17.7 9.6a4.4 4.4 0 1 1 0 8.8 4.4 4.4 0 0 1 0-8.8z M10.7 14.6h2.6c.1 2.9.8 5.1 2.1 6.5V22H8.6v-.9c1.3-1.4 2-3.6 2.1-6.5z",
+  "M50 6a19 19 0 1 1 0 38 19 19 0 0 1 0-38zM27 39a19 19 0 1 1 0 38 19 19 0 0 1 0-38zM73 39a19 19 0 1 1 0 38 19 19 0 0 1 0-38zM50 44a12 12 0 1 1 0 24 12 12 0 0 1 0-24zM46 60c0 15-4 26-12 35h32c-8-9-12-20-12-35z",
 ];
 /** 무늬 하나 (글자 크기 = 한 변) */
 export function Suit({ s }: { s: number }) {
   return (
-    <svg viewBox="0 0 24 24" className="pk-suit" fill="currentColor" aria-hidden>
+    <svg viewBox="0 0 100 100" className="pk-suit" fill="currentColor" aria-hidden>
       <path d={SUIT_PATH[s]} />
     </svg>
   );
@@ -118,37 +119,90 @@ export function PlayingCard({
       className={`pk-card ${deal ? "pk-deal" : ""} ${className}`}
       style={base}
     >
-      <span
-        className="pk-card-rank"
-        style={
-          r === "10"
-            ? {
-                letterSpacing: "0.02em",
-                fontSize: "calc(var(--w) * 0.46)",
-                left: "calc(var(--w) * 0.05)",
-                top: "calc(var(--w) * 0.08)",
-              }
-            : undefined
-        }
-      >
-        {r}
-      </span>
-      <span className="pk-card-pip">
-        <Suit s={s} />
-      </span>
-      {court ? (
-        <img src={asset.court(s, rank)} alt="" draggable={false} className="pk-card-court" />
-      ) : rank === 12 ? (
-        <span className="pk-card-ace">
-          <Suit s={s} />
-        </span>
-      ) : (
-        <span className="pk-card-suit">
-          <Suit s={s} />
-        </span>
-      )}
+      <CardFace rank={rank} r={r} s={s} court={court} />
       {down && <span className="pk-card-down">엎음</span>}
     </span>
+  );
+}
+
+/*
+ * 카드 앞면 (100 × 140 상자에 SVG 로): 숫자 크기 · 자리 · 무늬 배치가 52장 모두 같은 규칙.
+ *  - 모서리: 왼쪽 위 숫자(얇고 또렷한 좁은 글꼴, 모든 숫자 같은 크기 · 같은 가운데 줄) + 그 아래 작은 무늬, 오른쪽 아래에 뒤집어 하나 더
+ *  - 2~10: 정식 무늬 배치 (아래 절반은 뒤집힘) · A: 가운데 큰 무늬 하나 · J Q K: 캐릭터 그림
+ */
+const IDX_X = 14;
+const COL_L = 39;
+const COL_R = 61;
+const PIP = 16;
+const Y1 = 26;
+const Y4 = 114;
+const yAt = (k: number) => Y1 + ((Y4 - Y1) * k) / 6; // 7줄 눈금 (0 ~ 6)
+/** 숫자별 무늬 자리 [x, 눈금] — 눈금 3 위로는 바로, 아래로는 뒤집어 그림 */
+const PIPS: Record<number, [number, number][]> = {
+  2: [[50, 0], [50, 6]],
+  3: [[50, 0], [50, 3], [50, 6]],
+  4: [[COL_L, 0], [COL_R, 0], [COL_L, 6], [COL_R, 6]],
+  5: [[COL_L, 0], [COL_R, 0], [50, 3], [COL_L, 6], [COL_R, 6]],
+  6: [[COL_L, 0], [COL_R, 0], [COL_L, 3], [COL_R, 3], [COL_L, 6], [COL_R, 6]],
+  7: [[COL_L, 0], [COL_R, 0], [50, 1.5], [COL_L, 3], [COL_R, 3], [COL_L, 6], [COL_R, 6]],
+  8: [[COL_L, 0], [COL_R, 0], [50, 1.5], [COL_L, 3], [COL_R, 3], [50, 4.5], [COL_L, 6], [COL_R, 6]],
+  9: [[COL_L, 0], [COL_R, 0], [COL_L, 2], [COL_R, 2], [50, 3], [COL_L, 4], [COL_R, 4], [COL_L, 6], [COL_R, 6]],
+  10: [[COL_L, 0], [COL_R, 0], [50, 1], [COL_L, 2], [COL_R, 2], [COL_L, 4], [COL_R, 4], [50, 5], [COL_L, 6], [COL_R, 6]],
+};
+
+function Pip({ s, x, y, size, flip }: { s: number; x: number; y: number; size: number; flip?: boolean }) {
+  const k = size / 100;
+  return (
+    <path
+      d={SUIT_PATH[s]}
+      transform={`translate(${x} ${y})${flip ? " rotate(180)" : ""} scale(${k}) translate(-50 -50)`}
+    />
+  );
+}
+
+function Index({ r, s }: { r: string; s: number }) {
+  return (
+    <>
+      <text x={IDX_X} y={31} className="pk-idx" textAnchor="middle">
+        {r}
+      </text>
+      <Pip s={s} x={IDX_X} y={43} size={15} />
+    </>
+  );
+}
+
+function CardFace({ rank, r, s, court }: { rank: number; r: string; s: number; court: boolean }) {
+  const n = rank + 2; // 2 ~ 14 (A)
+  return (
+    <svg viewBox="0 0 100 140" className="pk-face" fill="currentColor" aria-hidden>
+      {court ? (
+        <>
+          <clipPath id={`cc-${rank}-${s}`}>
+            <rect x={27} y={6} width={67} height={128} rx={5} />
+          </clipPath>
+          <image
+            href={asset.court(s, rank)}
+            x={27}
+            y={6}
+            width={67}
+            height={128}
+            preserveAspectRatio="xMidYMid slice"
+            clipPath={`url(#cc-${rank}-${s})`}
+          />
+          <rect x={27} y={6} width={67} height={128} rx={5} fill="none" stroke="rgba(0,0,0,0.18)" strokeWidth={0.8} />
+        </>
+      ) : n === 14 ? (
+        <Pip s={s} x={50} y={70} size={46} />
+      ) : (
+        PIPS[n].map(([x, k], i) => <Pip key={i} s={s} x={x} y={yAt(k)} size={PIP} flip={k > 3} />)
+      )}
+      <Index r={r} s={s} />
+      {!court && (
+        <g transform="rotate(180 50 70)">
+          <Index r={r} s={s} />
+        </g>
+      )}
+    </svg>
   );
 }
 
