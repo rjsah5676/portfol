@@ -1996,11 +1996,44 @@ export default function TableView({
           />
         )}
 
+        {/* 승자 컷인: 쇼다운으로 끝났을 때만 — 내가 이기면 내 전신이 크게, 남이 이기면 그 캐릭터가 한쪽에서 작게 기뻐함 (진 건 내 틀에서만) */}
+        {res &&
+          res.showdown &&
+          revealDone &&
+          winners.length > 0 &&
+          (() => {
+            const top = winners.filter(isTop);
+            const mineWin = top.includes(mySeat);
+            const seat = mineWin ? mySeat : top[0];
+            const ws = table.seats[seat];
+            if (seat === undefined || !ws) return null;
+            // 남 승자는 그 사람 자리 쪽에서 (7포커 틀 기준 왼쪽/오른쪽, 홀덤은 자리 x 로)
+            const side: "l" | "r" = mineWin
+              ? "l"
+              : SF
+                ? frameOf(seat).dir > 0
+                  ? "l"
+                  : "r"
+                : spotOf(seat).x < 50
+                  ? "l"
+                  : "r";
+            return (
+              <WinCutIn
+                key={`cut-${table.handNo}`}
+                look={ws.look ?? ws.char}
+                mine={mineWin}
+                side={side}
+                h={h}
+                bottom={SF ? h - SF.me.y : 0}
+              />
+            );
+          })()}
         {res && winners.length > 0 && (
           <WinBanner
             names={winners.filter(isTop).map((x) => table.seats[x]?.name ?? "?")}
             hand={res.names[winners.find(isTop) ?? winners[0]]}
             mine={winners.includes(mySeat) && isTop(mySeat)}
+            amt={winners.includes(mySeat) && isTop(mySeat) && hand?.players[mySeat] ? (res.won[mySeat] ?? 0) - hand.players[mySeat].invested : 0}
           />
         )}
         {info && !notice && (
@@ -2091,7 +2124,8 @@ export default function TableView({
         {SF && sv && sv.phase === "choice" && !sv.result && me && liveHand && !liveHand.down && (
           <div
             className="absolute -translate-x-1/2 -translate-y-1/2"
-            style={{ left: w / 2, top: (SF.row1 + SF.me.y) / 2 + SF.gap, zIndex: 40 }}
+            // 판 가운데보다 살짝 아래, 무엇보다 위 (틀 · 위 바 · 컷인 위)
+            style={{ left: w / 2, top: (SF.row1 + SF.me.y) / 2 + SF.gap + h * 0.05, zIndex: 60 }}
           >
             <SevenChoice
               key={table.handNo}
@@ -2099,7 +2133,7 @@ export default function TableView({
               busy={busy}
               onAct={doAct}
               tier={table.tier}
-              cw={Math.round(Math.min(SF.me.cardW, (w - SF.fw * 2 - SF.mx * 2 - 60) / 4.6))}
+              cw={Math.round(Math.min(SF.me.cardW * 1.1, (w - SF.fw * 2 - SF.mx * 2 - 40) / 4.4))}
             />
           </div>
         )}
@@ -2961,16 +2995,57 @@ function HeroArea(props: {
   );
 }
 
+/**
+ * 승자 컷인 (쇼다운 끝): 내가 이기면 내 전신(hero-win)이 왼쪽 아래에서 크게 올라와 1.8초쯤 머묾,
+ * 남이 이기면 그 캐릭터(pose-win)가 그 사람 쪽 가장자리에서 작게 튀어나와 1.2초쯤 기뻐함.
+ */
+function WinCutIn({
+  look,
+  mine,
+  side,
+  h,
+  bottom,
+}: {
+  look: Look;
+  mine: boolean;
+  side: "l" | "r";
+  h: number;
+  /** 아래 끝 (7포커는 내 틀 위에서 남 컷인이 올라오게) */
+  bottom: number;
+}) {
+  const ch = Math.round(mine ? h * 0.92 : h * 0.5);
+  return (
+    <div
+      className={`pk-cutwin pointer-events-none absolute ${mine ? "pk-cutwin-me" : "pk-cutwin-other"}`}
+      data-side={side}
+      style={{ [side === "l" ? "left" : "right"]: mine ? "4%" : "28%", bottom: mine ? 0 : bottom, height: ch, zIndex: mine ? 41 : 36 }}
+    >
+      <span className="pk-cutwin-glow" aria-hidden />
+      {}
+      <img
+        src={mine ? asset.hero(look, "win") : asset.pose(look, "win")}
+        alt=""
+        draggable={false}
+        className="relative h-full w-auto max-w-none"
+        style={{ transform: side === "r" ? "scaleX(-1)" : undefined }}
+      />
+    </div>
+  );
+}
+
 function WinBanner({
   names,
   hand,
   mine,
   top,
+  amt = 0,
 }: {
   names: string[];
   hand?: string;
   mine: boolean;
   top?: number;
+  /** 내가 이겼을 때 이번 판에 딴 돈(넣은 돈 뺀) */
+  amt?: number;
 }) {
   return (
     <>
@@ -2984,9 +3059,10 @@ function WinBanner({
         style={{
           // 팟 자리에 (위쪽 자리 카드 · 꼬리표를 덮지 않게 가운데 폭만)
           top: top ?? "27%",
-          left: "30%",
-          right: "30%",
-          zIndex: 30,
+          // 내 승리는 왼쪽에 내 전신이 크게 서니 글자는 오른쪽으로 비켜서
+          left: mine ? "40%" : "30%",
+          right: mine ? "14%" : "30%",
+          zIndex: 42,
           background:
             "linear-gradient(90deg, transparent, rgba(0,0,0,0.8) 18%, rgba(0,0,0,0.8) 82%, transparent)",
         }}
@@ -3005,7 +3081,11 @@ function WinBanner({
             ✦
           </span>
         </div>
-        <div className="mt-[0.15em] text-[0.85em] font-bold text-white">{names.join(" · ")}</div>
+        {mine && amt > 0 ? (
+          <div className="pk-winamt pk-num">+{fmtShort(amt)}</div>
+        ) : (
+          <div className="mt-[0.15em] text-[0.85em] font-bold text-white">{names.join(" · ")}</div>
+        )}
         {hand && (
           <div className="pk-shine mt-[0.25em] rounded-[4px] bg-[var(--pk-brass)] px-[0.8em] py-[0.05em] text-[0.78em] font-extrabold text-[#2a1e05]">
             {hand}
