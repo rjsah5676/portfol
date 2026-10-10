@@ -252,6 +252,18 @@ export const RHYTHM_GUIDE: GuideDoc = {
       ),
     },
     {
+      title: "온라인 — 같이 치기",
+      visual: <Poster emoji="🎮" chips={["타이틀 → ONLINE", "방장이 곡 고르기", "난이도는 각자"]} />,
+      body: (
+        <>
+          타이틀의 <B>ONLINE</B>에서 방을 만들거나 들어가요. 방장이 곡을 고르고 각자 난이도를 골라
+          준비하면 <B>다 같이 같은 순간에 시작</B>하고, 치는 동안 서로 점수가 보여요. 방장의{" "}
+          <B>내 음악</B>도 같이 칠 수 있어요(파일은 방이 있는 동안만 서버에 잠깐 올려 둬요). 온라인은
+          멈출 수 없고, 나가려면 <K>Esc</K>를 꾹 누르세요.
+        </>
+      ),
+    },
+    {
       title: "자동 싱크 조절이란?",
       visual: <SyncConcept />,
       body: (
@@ -290,7 +302,7 @@ export const RHYTHM_GUIDE: GuideDoc = {
       mp3를 넣으면 자동으로 채보를 만들어 줘요.
     </>
   ),
-  facts: ["⌨️ D F J K", "📱 터치 지원", "🎵 내 음악 OK", "🏆 곡·난이도별 랭킹"],
+  facts: ["⌨️ D F J K", "📱 터치 지원", "🎵 내 음악 OK", "🎮 온라인 같이 치기", "🏆 곡·난이도별 랭킹"],
   sections: [
     {
       icon: "⌨️",

@@ -7,6 +7,7 @@ import type { Deps } from "./deps";
 import { registerBoardGames } from "./games/board";
 import { registerFight } from "./games/fight";
 import { registerPoker, type PokerOptions } from "./games/poker";
+import { registerRhythmOnline } from "./games/rhythmOnline";
 import { registerSketch } from "./games/sketch";
 import { createApp } from "./http/app";
 import { restoreLive, saveLive, waitIdle, type LiveGame } from "./live";
@@ -47,8 +48,9 @@ export async function createAppServer(
   const sketch = registerSketch(deps);
   const fight = registerFight(deps);
   const poker = registerPoker(deps, overrides.poker);
-  const live = { sketch, fight, poker };
-  const liveGames: Record<string, LiveGame> = { sketch: sketch.live, fight: fight.live, poker: poker.live };
+  const rhythm = registerRhythmOnline(deps);
+  const live = { sketch, fight, poker, rhythm };
+  const liveGames: Record<string, LiveGame> = { sketch: sketch.live, fight: fight.live, poker: poker.live, rhythm: rhythm.live };
   // 배포 직전에 저장해 둔 방이 있으면 이어받음
   const restored = await restoreLive(db, liveGames).catch((e) => {
     console.error("[live] 이어받기 실패", e);
@@ -59,7 +61,13 @@ export async function createAppServer(
     "request",
     createApp(deps, {
       roomsDeleted: board.roomsDeleted,
-      liveRooms: () => ({ sketch: sketch.adminList(), fight: fight.adminList(), poker: poker.adminList() }),
+      liveRooms: () => ({
+        sketch: sketch.adminList(),
+        fight: fight.adminList(),
+        poker: poker.adminList(),
+        rhythm: rhythm.adminList(),
+      }),
+      rhythmFiles: rhythm.router,
       pokerRank: () => poker.wallet.rank(),
       pokerBuyRank: () => poker.wallet.buyRank(),
       closeLiveRoom: (game, id) => live[game].adminClose(id),
@@ -78,6 +86,7 @@ export async function createAppServer(
     sketch.close();
     fight.close();
     poker.close();
+    rhythm.close();
     await gateway.close();
     await new Promise<void>((res) => http.close(() => res()));
     if (!overrides.db) await db.close();

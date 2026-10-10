@@ -18,6 +18,8 @@ import velocity from "../../../web/src/data/rhythm/velocity.json";
  */
 interface SongData {
   bpm: number;
+  /** 곡 길이(초) */
+  duration: number;
   charts: Record<string, { level: number; units: number; notes: number[][] }>;
 }
 
@@ -37,6 +39,10 @@ const SONGS: Record<string, SongData> = {
   velocity,
 };
 export const RHYTHM_SONG_IDS = Object.keys(SONGS);
+/** 곡 id → 길이(초)와 있는 난이도 (온라인 방에서 곡·난이도 확인용) */
+export const RHYTHM_SONG_INFO = new Map(
+  Object.entries(SONGS).map(([id, s]) => [id, { duration: s.duration, diffs: Object.keys(s.charts) }])
+);
 
 export interface ChartInfo {
   /** 판정 단위 수 (롱노트는 머리+꼬리) */

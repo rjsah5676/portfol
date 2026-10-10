@@ -104,7 +104,7 @@ export interface AdminOverview {
   activity: AdminActivity[];
 }
 
-export type LiveGame = "sketch" | "fight" | "poker";
+export type LiveGame = "sketch" | "fight" | "poker" | "rhythm";
 export interface LiveRoom {
   id: string;
   name: string;

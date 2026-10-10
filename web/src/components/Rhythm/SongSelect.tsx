@@ -34,6 +34,7 @@ export default function SongSelect({
   starting,
   launching,
   canStart,
+  startLabel = "START",
   err,
   onBack,
   onSettings,
@@ -62,6 +63,8 @@ export default function SongSelect({
   starting: boolean;
   launching: boolean;
   canStart: boolean;
+  /** 시작 버튼 글자 (온라인 방장이 곡을 고를 때는 PICK) */
+  startLabel?: string;
   err: string;
   onBack: () => void;
   onSettings: () => void;
@@ -670,7 +673,7 @@ export default function SongSelect({
           }}
         >
           <span className="pointer-events-none absolute inset-y-0 left-0 w-[4cqw] bg-white/30 [animation:bd-sweep_1.8s_ease-in-out_infinite]" />
-          <span className="inline-block skew-x-12">{starting ? "LOADING…" : "START"}</span>
+          <span className="inline-block skew-x-12">{starting ? "LOADING…" : startLabel}</span>
         </button>
       </div>
 

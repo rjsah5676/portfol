@@ -96,7 +96,7 @@ export interface LiveRoom {
   players: string[];
   createdAt: number;
 }
-export type LiveGame = "sketch" | "fight" | "poker";
+export type LiveGame = "sketch" | "fight" | "poker" | "rhythm";
 
 export interface AdminHooks {
   /** 방명록이 바뀜 → 구독자에게 다시 보냄 */
@@ -266,7 +266,7 @@ export function adminRouter({ db, auth, web, users, gateway, cfg, traffic }: Dep
   r.post(
     "/live/close",
     h(async (req) => {
-      const body = z.strictObject({ game: z.enum(["sketch", "fight", "poker"]), id: z.string().min(1).max(80) }).parse(req.body);
+      const body = z.strictObject({ game: z.enum(["sketch", "fight", "poker", "rhythm"]), id: z.string().min(1).max(80) }).parse(req.body);
       return { closed: hooks.closeLiveRoom(body.game, body.id) };
     })
   );

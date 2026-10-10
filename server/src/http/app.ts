@@ -12,13 +12,15 @@ import { studyPostsRouter } from "./studyPosts";
 import { trackRouter } from "./track";
 
 export interface AppHooks extends Omit<AdminHooks, "guestChanged"> {
+  /** 리듬게임 온라인: 내 음악 파일 올리기·받기 (/api/rhythm-online) */
+  rhythmFiles?: express.Router;
   /** 포커 자금 순위 */
   pokerRank(): Promise<unknown>;
   /** 포커 구매 순위 */
   pokerBuyRank(): Promise<unknown>;
 }
 
-export function createApp(deps: Deps, { pokerRank, pokerBuyRank, ...hooks }: AppHooks) {
+export function createApp(deps: Deps, { pokerRank, pokerBuyRank, rhythmFiles, ...hooks }: AppHooks) {
   const { cfg } = deps;
   const app = express();
   app.disable("x-powered-by");
@@ -106,6 +108,7 @@ export function createApp(deps: Deps, { pokerRank, pokerBuyRank, ...hooks }: App
   app.use("/api/rankings", rankingsRouter(deps, captcha));
   app.use("/api/me", meRouter(deps));
   app.use("/api/study-posts", studyPostsRouter(deps));
+  if (rhythmFiles) app.use("/api/rhythm-online", rhythmFiles);
   app.use("/api/admin", adminRouter(deps, { guestChanged: site.publishGuest, ...hooks }));
   app.use("/api", site.router);
 

@@ -13,6 +13,9 @@ export interface CustomTrack {
   cover?: string;
   /** 영상 파일을 넣었으면 그 영상 (object URL) — 플레이 배경에 뮤직비디오로 */
   video?: string;
+  /** 넣은 파일 그대로 (온라인 방에서 같이 칠 때 올림 — 영상이면 소리만 뽑아서) */
+  file?: File;
+  isVideo?: boolean;
 }
 
 /** 영상 파일의 한 장면(20% 지점)을 재킷으로 — 못 뽑으면 null (4초 안에 안 되면 포기) */
@@ -189,6 +192,8 @@ export default function CustomMusic({
         analysis,
         cover: pic ? URL.createObjectURL(pic) : frame ? URL.createObjectURL(frame) : undefined,
         video: videoUrl,
+        file,
+        isVideo,
       });
     } catch (e) {
       console.error(e);

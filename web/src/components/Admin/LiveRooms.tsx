@@ -23,6 +23,7 @@ const GAMES: { key: LiveGame; label: string }[] = [
   { key: "sketch", label: "스케치 퀴즈" },
   { key: "fight", label: "픽셀 격투" },
   { key: "poker", label: "포커" },
+  { key: "rhythm", label: "리듬게임" },
 ];
 const STATUS: Record<string, { label: string; on: boolean }> = {
   waiting: { label: "대기", on: false },

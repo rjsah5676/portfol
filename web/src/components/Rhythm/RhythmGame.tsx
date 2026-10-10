@@ -23,12 +23,32 @@ import Stage, {
   FIELD_POS,
   PLAY_HISTORY_KEY,
   type LiveSettings,
+  type OnlineStage,
   type Result,
 } from "./Stage";
+import { useRhythmOnline } from "./online/useRhythmOnline";
+import OnlineLobby from "./online/OnlineLobby";
+import OnlineRoom, { type RoomSongView } from "./online/OnlineRoom";
+import {
+  audioToWav,
+  backToRoom,
+  chartsToWire,
+  downloadCustom,
+  markLoaded,
+  sendDone,
+  sendProgress,
+  serverNow,
+  setDiff as setOnlineDiff,
+  setReady,
+  setSong as setOnlineSong,
+  startGame,
+  uploadCustom,
+  type LiveRow,
+} from "@/realtime/rhythmOnline";
 import { makeAutoCharts } from "@/lib/rhythm/autochart";
 import { displayBpm } from "@/lib/rhythm/analyze";
 import type { CustomTrack } from "./CustomMusic";
-import { CUSTOM_COVER } from "./SongCarousel";
+import { CUSTOM_COVER, coverOf } from "./SongCarousel";
 import { useAuth } from "@/lib/AuthContext";
 import GameHeader from "@/components/GameHeader";
 import { RHYTHM_GUIDE } from "@/data/gameGuides";
@@ -103,9 +123,58 @@ const CUSTOM_COLORS = [
   "#60A5FA",
   "#F97316",
 ];
+/** 내 음악 → 곡 정보 (곡 선택·플레이, 온라인 방장이 자기 파일로 칠 때) */
+function trackSong(track: CustomTrack): Song {
+  const a = track.analysis;
+  return {
+    id: `custom:${track.key}`,
+    title: track.name,
+    bpm: a.bpm,
+    bpmLabel: displayBpm(a),
+    bars: Math.ceil(a.duration / ((60 / a.bpm) * 4)),
+    duration: a.duration,
+    events: [],
+    sections: [[0, ""]],
+    sound: { lead: "sine", arp: "sine", delaySteps: 0 },
+    // 채보(노트) 색: 곡마다 랜덤 (같은 파일이면 늘 같은 색)
+    color: CUSTOM_COLORS[parseInt(track.key, 36) % CUSTOM_COLORS.length],
+    cover: track.cover ?? CUSTOM_COVER,
+    video: track.video,
+    desc: "내 음악",
+    beatOffset: a.beats[0] ?? 0,
+    custom: true,
+  };
+}
+
+/** 온라인: 방장이 올린 내 음악 → 곡 정보 (재킷·영상은 안 옴) */
+function guestSong(s: {
+  id: string;
+  title: string;
+  duration: number;
+  info?: { bpm: number; bpmLabel: number; beatOffset: number; color: string };
+}): Song {
+  const i = s.info ?? { bpm: 120, bpmLabel: 120, beatOffset: 0, color: "#F472B6" };
+  return {
+    id: `online:${s.id}`,
+    title: s.title,
+    bpm: i.bpm,
+    bpmLabel: i.bpmLabel,
+    bars: Math.ceil(s.duration / ((60 / i.bpm) * 4)),
+    duration: s.duration,
+    events: [],
+    sections: [[0, ""]],
+    sound: { lead: "sine", arp: "sine", delaySteps: 0 },
+    color: i.color,
+    cover: CUSTOM_COVER,
+    desc: "방장의 음악",
+    beatOffset: i.beatOffset,
+    custom: true,
+  };
+}
+
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-type Screen = "title" | "select" | "play" | "result";
+type Screen = "title" | "select" | "play" | "result" | "online";
 
 export default function RhythmGame() {
   const [screen, setScreen] = useState<Screen>("title");
@@ -264,28 +333,7 @@ export default function RhythmGame() {
         : null,
     [track]
   );
-  const customSong = useMemo<Song | null>(() => {
-    if (!track) return null;
-    const a = track.analysis;
-    return {
-      id: `custom:${track.key}`,
-      title: track.name,
-      bpm: a.bpm,
-      bpmLabel: displayBpm(a),
-      bars: Math.ceil(a.duration / ((60 / a.bpm) * 4)),
-      duration: a.duration,
-      events: [],
-      sections: [[0, ""]],
-      sound: { lead: "sine", arp: "sine", delaySteps: 0 },
-      // 채보(노트) 색: 곡마다 랜덤 (같은 파일이면 늘 같은 색)
-      color: CUSTOM_COLORS[parseInt(track.key, 36) % CUSTOM_COLORS.length],
-      cover: track.cover ?? CUSTOM_COVER,
-      video: track.video,
-      desc: "내 음악",
-      beatOffset: a.beats[0] ?? 0,
-      custom: true,
-    };
-  }, [track]);
+  const customSong = useMemo<Song | null>(() => (track ? trackSong(track) : null), [track]);
   const customSel = sel === SONGS.length;
   const isCustom = customSel && !!customSong && !!customCharts;
 
@@ -406,7 +454,9 @@ export default function RhythmGame() {
 
   // 메뉴 BGM: 타이틀, 그리고 미리 듣기가 없는 화면(내 음악 고를 때)
   const bgmOn =
-    entered && !bgmMute && (screen === "title" || (screen === "select" && customSel && !track));
+    entered &&
+    !bgmMute &&
+    (screen === "title" || screen === "online" || (screen === "select" && customSel && !track));
   // B 키: 타이틀·곡 선택에서 배경음 켜고 끄기 (입력칸·설정 창에선 안 받음)
   useEffect(() => {
     if (!entered || settingsOpen || (screen !== "title" && screen !== "select")) return;
@@ -604,6 +654,287 @@ export default function RhythmGame() {
     setScreen("select");
   }, []);
 
+  // ───────────── 온라인 (같이 치기) ─────────────
+  // 연결·구독은 온라인 화면을 열었을 때만. 플레이 중에 오가는 건 0.5초마다 점수 한 줄뿐 (Stage 는 그림만 찍음)
+  const [onlineOn, setOnlineOn] = useState(false);
+  const net = useRhythmOnline(onlineOn);
+  const oRoom = net.room;
+  /** 방장이 곡 선택 화면에서 방 곡을 고르는 중 */
+  const [pickMode, setPickMode] = useState(false);
+  /** 방장: 내 음악 올리는 진행 */
+  const [upload, setUpload] = useState<{ ratio: number; error: string } | null>(null);
+  /** 방장이 올린 내 음악 — 그 버전(ver) 곡이면 방장은 받지 않고 내 파일·내 채보로 침 */
+  const [hosted, setHosted] = useState<{
+    ver: string;
+    track: CustomTrack;
+    charts: Partial<Record<Difficulty, Chart>>;
+  } | null>(null);
+  /** 받아 둔 내 음악 (같은 곡으로 또 치면 다시 안 받음) */
+  const [got, setGot] = useState<{
+    ver: string;
+    buffer: AudioBuffer;
+    charts: Partial<Record<Difficulty, Chart>>;
+  } | null>(null);
+  const oRoomId = oRoom?.id;
+  /** 이번 판 준비물 (받아서 디코딩까지 끝난 것) */
+  type Prepared = {
+    round: number;
+    ctx: AudioContext;
+    buffer: AudioBuffer;
+    song: Song;
+    chart: Chart;
+    diff: Difficulty;
+  };
+  const [oPrep, setOPrep] = useState<Prepared | null>(null);
+  const preparing = useRef(0);
+  const [oLoad, setOLoad] = useState<{ ratio: number; label: string; error: string } | null>(null);
+  /** 지금 치고 있는 온라인 판 번호 (0 = 아님) */
+  const [oPlaying, setOPlaying] = useState(0);
+  /** 끝냈거나 나간 판 (다시 들어가지 않게) */
+  const doneRounds = useRef(new Set<number>());
+  const lastProg = useRef<LiveRow>([0, 0, 100, 100, 0, 0]);
+
+  const openOnline = useCallback(() => {
+    setOnlineOn(true);
+    setScreen("online");
+  }, []);
+  const closeOnline = useCallback(() => {
+    setOnlineOn(false);
+    setPickMode(false);
+    setScreen("title");
+  }, []);
+
+  /** 방 곡 → 곡 정보 */
+  const onlineSong = useMemo<Song | null>(() => {
+    const s = oRoom?.song;
+    if (!s) return null;
+    if (s.kind === "builtin") return SONGS.find((x) => x.id === s.id) ?? null;
+    return hosted?.ver === s.id ? trackSong(hosted.track) : guestSong(s);
+  }, [oRoom?.song, hosted]);
+  const roomSongView = useMemo<RoomSongView | null>(() => {
+    const s = oRoom?.song;
+    if (!s || !onlineSong) return null;
+    const ch =
+      s.kind === "builtin"
+        ? charts[s.id]
+        : hosted?.ver === s.id
+          ? hosted.charts
+          : got?.ver === s.id
+            ? got.charts
+            : undefined;
+    return {
+      cover: coverOf(onlineSong),
+      color: onlineSong.color,
+      bpm: onlineSong.bpmLabel ?? onlineSong.bpm,
+      artist: onlineSong.artist,
+      levels: ch
+        ? Object.fromEntries(Object.entries(ch).map(([d, c]) => [d, c!.level]))
+        : (s.levels ?? {}),
+    };
+  }, [oRoom?.song, onlineSong, charts, hosted, got]);
+
+  // loading: 내 음원·채보 준비 → 서버에 "받음"
+  const oRound = oRoom?.round;
+  useEffect(() => {
+    const uid = net.uid;
+    if (!oRoom || !uid || oRoom.phase !== "loading" || !oRound || !oRound.roster.includes(uid))
+      return;
+    if (oPrep?.round === oRound.no || preparing.current === oRound.no) return;
+    const no = oRound.no;
+    preparing.current = no;
+    const s = oRoom.song!;
+    const diff = oRoom.players[uid]?.diff ?? "normal";
+    const id = oRoom.id;
+    void (async () => {
+      try {
+        setOLoad({ ratio: 0, label: "곡 받는 중", error: "" });
+        const ctx = await audio();
+        let buffer: AudioBuffer;
+        let chart: Chart | undefined;
+        let song: Song;
+        if (s.kind === "builtin") {
+          song = SONGS.find((x) => x.id === s.id)!;
+          buffer = await loadSong(song);
+          chart = charts[s.id]?.[diff];
+        } else if (hosted?.ver === s.id) {
+          song = trackSong(hosted.track);
+          buffer = hosted.track.buffer;
+          chart = hosted.charts[diff];
+        } else {
+          let g = got?.ver === s.id ? got : null;
+          if (!g) {
+            const d = await downloadCustom(id, (r) =>
+              setOLoad({ ratio: r * 0.9, label: "곡 받는 중", error: "" })
+            );
+            setOLoad({ ratio: 0.95, label: "곡 여는 중", error: "" });
+            g = { ver: s.id, buffer: await ctx.decodeAudioData(d.audio), charts: d.charts };
+            setGot(g);
+          }
+          song = guestSong(s);
+          buffer = g.buffer;
+          chart = g.charts[diff];
+        }
+        if (!chart) throw new Error("이 난이도 채보가 없어요.");
+        setOPrep({ round: no, ctx, buffer, song, chart, diff });
+        setOLoad({ ratio: 1, label: "준비 완료", error: "" });
+        await markLoaded(id, no);
+      } catch (e) {
+        console.error(e);
+        setOLoad({
+          ratio: 0,
+          label: "",
+          error: e instanceof Error ? e.message : "곡을 받지 못했어요.",
+        });
+      } finally {
+        if (preparing.current === no) preparing.current = 0;
+      }
+    })();
+  }, [oRoom, oRound, net.uid, oPrep?.round, hosted, got, charts]);
+
+  // playing: 준비가 끝난 판이면 플레이 화면으로 (시작 시각은 서버가 정함 — Stage 가 맞춰 기다림)
+  useEffect(() => {
+    const uid = net.uid;
+    const r = oRoom?.round;
+    if (!oRoom || oRoom.phase !== "playing" || !r || !uid || !r.roster.includes(uid)) return;
+    if (screen !== "online" || oPlaying === r.no || doneRounds.current.has(r.no)) return;
+    if (!oPrep || oPrep.round !== r.no) return;
+    const coarse = window.matchMedia("(pointer: coarse)").matches;
+    const key = autoSyncProfile(
+      coarse,
+      (oPrep.ctx as AudioContext & { outputLatency?: number }).outputLatency
+    );
+    autoKey.current = key;
+    /* eslint-disable react-hooks/set-state-in-effect -- 서버가 판을 시작하면 플레이 화면으로 */
+    setAuto(loadAutoSync(key));
+    setPortrait(coarse);
+    lastProg.current = [0, 0, 100, 100, 0, 0];
+    setOPlaying(r.no);
+    setPlay((p) => ({
+      ctx: oPrep.ctx,
+      buffer: oPrep.buffer,
+      round: (p?.round ?? 0) + 1,
+      seed: Math.random() * 1e9,
+    }));
+    setScreen("play");
+    /* eslint-enable react-hooks/set-state-in-effect */
+  }, [oRoom, net.uid, screen, oPlaying, oPrep]);
+  // 대기실로 돌아오면 받는 중 표시 지움
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 판이 끝나면 정리
+    if (oRoom?.phase === "lobby" || oRoom?.phase === "result") setOLoad(null);
+  }, [oRoom?.phase]);
+
+  const finishOnline = useCallback(
+    (r: Result) => {
+      const id = oRoomId;
+      const no = oPlaying;
+      doneRounds.current.add(no);
+      if (id && no)
+        sendDone(id, no, {
+          score: r.score,
+          acc: Math.round(r.acc * 100) / 100,
+          rank: r.rank,
+          maxCombo: r.maxCombo,
+          failed: r.failed,
+          fc: r.fc,
+          ap: r.ap,
+          counts: r.counts,
+        }).catch(() => {});
+      setOPlaying(0);
+      setScreen("online");
+    },
+    [oRoomId, oPlaying]
+  );
+  /** 치다가 나가기 (Esc 꾹 · 나가기 버튼) — 그때 점수로 실패 처리, 방에는 남음 */
+  const leaveOnlinePlay = useCallback(() => {
+    const id = oRoomId;
+    const no = oPlaying;
+    const l = lastProg.current;
+    doneRounds.current.add(no);
+    if (id && no)
+      sendDone(id, no, {
+        score: l[0],
+        acc: l[2],
+        rank: "F",
+        maxCombo: 0,
+        failed: true,
+        fc: false,
+        ap: false,
+        counts: { perfect: 0, great: 0, good: 0, miss: 0 },
+      }).catch(() => {});
+    setOPlaying(0);
+    setScreen("online");
+  }, [oRoomId, oPlaying]);
+  /** 지금 온라인 판을 치는 중 */
+  const playingOnline = oPlaying > 0 && oRoom?.round?.no === oPlaying;
+  const onlineStage = useMemo<OnlineStage | undefined>(() => {
+    const r = oRoom?.round;
+    if (!oPlaying || !oRoom || !r || r.no !== oPlaying) return undefined;
+    const id = oRoom.id;
+    return {
+      startAt: r.startAt,
+      serverNow,
+      board: net.board,
+      onProgress: (row) => {
+        lastProg.current = row;
+        sendProgress(id, oPlaying, row);
+      },
+      onLeave: leaveOnlinePlay,
+    };
+    // 판이 시작될 때 한 번만 (점수판은 같은 객체를 계속 고쳐 씀)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [oPlaying, oRoom?.id, oRoom?.round?.startAt, leaveOnlinePlay]);
+
+  /** 방장: 곡 선택 화면에서 고른 곡을 방 곡으로 (내 음악은 뒤에서 올림) */
+  const pickForRoom = useCallback(async () => {
+    const id = oRoomId;
+    if (!id) return;
+    setPickMode(false);
+    setScreen("online");
+    sfx("song-decide", 0.7);
+    try {
+      if (!isCustom) {
+        await setOnlineSong(id, builtinSong.id, diff, builtinSong.title);
+        return;
+      }
+      const t = track!;
+      const ch = customCharts!;
+      const ts = trackSong(t);
+      setUpload({ ratio: 0, error: "" });
+      // 영상은 너무 커서 소리만 (WAV), 소리 파일은 그대로
+      const blob = t.file && !t.isVideo ? t.file : await audioToWav(t.buffer);
+      await uploadCustom(
+        id,
+        {
+          title: t.name,
+          diff,
+          duration: t.buffer.duration,
+          info: {
+            bpm: ts.bpm,
+            bpmLabel: ts.bpmLabel ?? ts.bpm,
+            beatOffset: ts.beatOffset ?? 0,
+            color: ts.color,
+          },
+        },
+        blob,
+        chartsToWire(ch),
+        (r) => setUpload({ ratio: r, error: "" }),
+        (ver) => setHosted({ ver, track: t, charts: ch })
+      );
+      setUpload(null);
+    } catch (e) {
+      console.error(e);
+      const msg = e instanceof Error ? e.message : "올리지 못했어요";
+      setUpload({ ratio: 0, error: msg });
+      net.setErr(msg);
+    }
+  }, [oRoomId, isCustom, builtinSong, diff, track, customCharts, net]);
+  const roomAct = useCallback(
+    (p: Promise<unknown>) =>
+      p.catch((e) => net.setErr(e instanceof Error ? e.message : "요청을 처리하지 못했어요.")),
+    [net]
+  );
+
   const portraitPlay = portrait && screen === "play";
   const frameCls = portraitPlay
     ? // 세로 레인: 화면 전체 (전체화면이 안 되는 브라우저도 화면을 덮음)
@@ -706,6 +1037,7 @@ export default function RhythmGame() {
               onStart={() => setScreen("select")}
               onSettings={() => setSettingsOpen(true)}
               onRanking={() => setRankOpen(true)}
+              onOnline={openOnline}
               bgmMute={bgmMute}
               onToggleBgm={toggleBgm}
               fs={fs}
@@ -727,28 +1059,34 @@ export default function RhythmGame() {
               onTrack={setTrack}
               customCharts={customCharts}
               song={customSel ? customSong : builtinSong}
-              onStart={start}
+              onStart={pickMode ? pickForRoom : start}
               starting={loading}
               launching={launching}
               canStart={!!chart}
+              startLabel={pickMode ? "PICK" : "START"}
               err={err}
-              onBack={() => setScreen("title")}
+              onBack={() => {
+                if (pickMode) {
+                  setPickMode(false);
+                  setScreen("online");
+                } else setScreen("title");
+              }}
               onSettings={() => setSettingsOpen(true)}
               bgmMute={bgmMute}
               onToggleBgm={toggleBgm}
               blocked={settingsOpen}
               fs={fs}
               onToggleFs={toggleFs}
-              analyze={admin ? analyze : undefined}
+              analyze={admin && !pickMode ? analyze : undefined}
               onAnalyze={setAnalyze}
             />
           )}
-          {screen === "play" && play && chart && (
+          {screen === "play" && play && (playingOnline ? !!oPrep : !!chart) && (
             <Stage
               key={play.round}
-              song={song}
-              diff={diff}
-              chart={applyLaneMod(chart, settings.lanes, play.seed)}
+              song={playingOnline ? oPrep!.song : song}
+              diff={playingOnline ? oPrep!.diff : diff}
+              chart={applyLaneMod(playingOnline ? oPrep!.chart : chart!, settings.lanes, play.seed)}
               cover={settings.cover}
               bg={settings.bg}
               buffer={play.buffer}
@@ -766,14 +1104,58 @@ export default function RhythmGame() {
               fs={fs}
               onToggleFs={toggleFs}
               portrait={portrait}
-              autoplay={autoplay}
-              onFinish={finish}
-              onQuit={toSelect}
+              autoplay={playingOnline ? false : autoplay}
+              online={onlineStage}
+              onFinish={playingOnline ? finishOnline : finish}
+              onQuit={playingOnline ? leaveOnlinePlay : toSelect}
               onRestart={() =>
                 setPlay((p) => p && { ...p, round: p.round + 1, seed: Math.random() * 1e9 })
               }
             />
           )}
+          {screen === "online" &&
+            (oRoom && net.uid ? (
+              <OnlineRoom
+                room={oRoom}
+                uid={net.uid}
+                live={net.live}
+                songView={roomSongView}
+                upload={upload}
+                load={oLoad}
+                err={net.err}
+                onPick={() => {
+                  net.setErr("");
+                  setPickMode(true);
+                  // 지금 방 곡이 내장곡이면 그 곡에 커서를
+                  const si = SONGS.findIndex((x) => x.id === oRoom.song?.id);
+                  if (si >= 0) setSel(si);
+                  setScreen("select");
+                }}
+                onDiff={(d) => void roomAct(setOnlineDiff(oRoom.id, d))}
+                onReady={(r) => void roomAct(setReady(oRoom.id, r))}
+                onStart={() => {
+                  sfx("song-decide", 0.8);
+                  void roomAct(startGame(oRoom.id));
+                }}
+                onBack={() => void roomAct(backToRoom(oRoom.id))}
+                onLeave={() => {
+                  net.leave();
+                  setUpload(null);
+                }}
+              />
+            ) : (
+              <OnlineLobby
+                rooms={net.lobby}
+                nick={net.nick}
+                member={net.member}
+                onNick={net.setNick}
+                onCreate={net.create}
+                onJoin={net.join}
+                onBack={closeOnline}
+                err={net.err}
+                ready={!!net.uid}
+              />
+            ))}
           {screen === "result" && result && (
             <ResultScreen
               result={result}

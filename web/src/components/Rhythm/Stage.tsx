@@ -159,6 +159,30 @@ export interface LiveSettings {
   hit: number;
 }
 
+/** 온라인 점수판 한 줄 */
+export interface OnlineBoardRow {
+  uid: string;
+  nick: string;
+  score: number;
+  acc: number;
+  dead: boolean;
+  done: boolean;
+  me: boolean;
+}
+
+/** 온라인 판: 모두 같이 시작하고, 점수만 주고받음 (상대 화면은 안 맞춤) */
+export interface OnlineStage {
+  /** 모두 같이 음악이 시작하는 서버 시각(ms) */
+  startAt: number;
+  serverNow: () => number;
+  /** 점수판 (ref) — 부모가 rows 를 바꾸고 ver 를 올림. Stage 는 ver 가 바뀌었을 때만 점수판을 다시 그림 */
+  board: { current: { ver: number; rows: OnlineBoardRow[] } };
+  /** 0.5초마다 내 진행: [점수, 콤보, 정확도, HP, 죽음 1/0, 끝 1/0] */
+  onProgress: (row: [number, number, number, number, number, number]) => void;
+  /** Esc 꾹 → 나가기 */
+  onLeave: () => void;
+}
+
 interface Props {
   song: Song;
   diff: Difficulty;
@@ -195,6 +219,8 @@ interface Props {
   autoplay?: boolean;
   /** 플레이 배경 (커버·뮤비 / 무대) */
   bg?: BgMode;
+  /** 온라인 판 — 일시정지·다시 시작 없음, 시작 시각은 서버가 정함 */
+  online?: OnlineStage;
 }
 
 export default function Stage({
@@ -222,6 +248,7 @@ export default function Stage({
   portrait = false,
   autoplay = false,
   bg = "cover",
+  online,
 }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -238,6 +265,8 @@ export default function Stage({
     window.matchMedia("(pointer: fine)").matches;
   const useVideo = domBg && !!song.video;
   const [paused, setPaused] = useState(false);
+  /** 온라인: 나가기 버튼을 한 번 누른 상태 */
+  const [leaveArm, setLeaveArm] = useState(false);
   // 일시정지 화면의 지금까지 점수·정확도·랭크
   const [pauseStats, setPauseStats] = useState<{
     score: number;
@@ -541,7 +570,10 @@ export default function Stage({
     const musicGain = ctx.createGain();
     musicGain.gain.value = live.music;
     src.connect(musicGain).connect(ctx.destination);
-    const startAt = ctx.currentTime + leadIn;
+    // 온라인: 서버가 정한 시각에 모두 같이 (카운트다운이 덜 남았으면 그만큼 건너뜀)
+    const startAt = online
+      ? ctx.currentTime + Math.max(0.3, (online.startAt - online.serverNow()) / 1000)
+      : ctx.currentTime + leadIn;
     src.start(startAt);
     let stopped = false;
 
@@ -1018,6 +1050,99 @@ export default function Stage({
       });
     };
 
+    // ── 온라인 점수판: 부모가 0.5초마다 바꿔 주는 줄을 미리 그려 두고 찍기만 (바뀔 때·내 점수만 0.25초마다 다시) ──
+    let boardLayer: HTMLCanvasElement | null = null;
+    let boardVer = -1;
+    let boardAt = 0;
+    let boardK = 0;
+    /** 점수판 자리: 레인이 한쪽이면 정보판 아래 띠(2단), 가운데면 왼쪽 정보판 아래 세로 목록. 세로 화면은 내 순위만 */
+    const boardBox = portrait
+      ? { x: CW - 16 - 220, y: HUD_H + 12, w: 220, h: 34, cols: 1, rowsPer: 1 }
+      : side
+        ? {
+            x: sideX,
+            y: scoreBox.y + scoreBox.h + 14,
+            w: sideW,
+            h: CH - (scoreBox.y + scoreBox.h + 14) - 24,
+            cols: 2,
+            rowsPer: 4,
+          }
+        : {
+            x: infoBox.x,
+            y: infoBox.y + infoBox.h + 24,
+            w: infoBox.w,
+            h: 300,
+            cols: 1,
+            rowsPer: 8,
+          };
+    const drawBoard = () => {
+      if (!online) return;
+      const now = performance.now();
+      const bd = online.board.current;
+      if (boardVer === bd.ver && boardK === k && now - boardAt < 250 && boardLayer) {
+        g.drawImage(boardLayer, boardBox.x, boardBox.y, boardBox.w, boardBox.h);
+        return;
+      }
+      boardVer = bd.ver;
+      boardAt = now;
+      boardK = k;
+      // 내 줄은 내 화면의 지금 점수로 (서버를 한 바퀴 돈 값보다 빠르게)
+      const rows = bd.rows
+        .map((r) => (r.me ? { ...r, score: engine.score, acc: engine.accuracy } : r))
+        .sort((a, b) => b.score - a.score);
+      const { c, b } = layer(boardBox.w, boardBox.h);
+      const myRank = rows.findIndex((r) => r.me) + 1;
+      if (portrait) {
+        b.fillStyle = "rgba(10,8,30,0.7)";
+        roundRectFill(b, 0, 0, boardBox.w, boardBox.h, 17);
+        b.textBaseline = "middle";
+        b.textAlign = "center";
+        b.fillStyle = "#fff";
+        b.font = `italic 900 17px ${disp}`;
+        b.fillText(`RANK ${myRank || "-"} / ${rows.length}`, boardBox.w / 2, boardBox.h / 2 + 1);
+      } else {
+        glass(b, 0, 0, boardBox.w, boardBox.h, song.color);
+        const cols = boardBox.cols;
+        const colW = (boardBox.w - 24) / cols;
+        const rowH = Math.min(26, (boardBox.h - 16) / boardBox.rowsPer);
+        const max = cols * boardBox.rowsPer;
+        // 자리가 모자라면 내 줄은 꼭 보이게 (마지막 칸을 나로)
+        let shown = rows.slice(0, max);
+        if (myRank > max) shown = [...rows.slice(0, max - 1), rows[myRank - 1]];
+        b.textBaseline = "middle";
+        shown.forEach((r, i) => {
+          const rank = rows.indexOf(r) + 1;
+          const col = Math.floor(i / boardBox.rowsPer);
+          const x = 12 + col * colW;
+          const y = 8 + (i % boardBox.rowsPer) * rowH + rowH / 2;
+          if (r.me) {
+            b.fillStyle = `${song.color}33`;
+            roundRectFill(b, x - 4, y - rowH / 2 + 2, colW - 6, rowH - 4, 6);
+          }
+          b.globalAlpha = r.dead ? 0.45 : 1;
+          b.textAlign = "left";
+          b.fillStyle = rank === 1 ? "#FDE68A" : "rgba(255,255,255,0.6)";
+          b.font = `italic 900 14px ${disp}`;
+          b.fillText(String(rank), x, y + 1);
+          b.fillStyle = r.me ? "#fff" : "rgba(255,255,255,0.85)";
+          b.font = `800 13px ${KR_FONT}`;
+          const nameX = x + 22;
+          const scoreW = 92;
+          let name = r.nick + (r.dead ? " ✕" : r.done ? " ✓" : "");
+          while (name.length > 1 && b.measureText(name).width > colW - 22 - scoreW - 10)
+            name = name.slice(0, -1);
+          b.fillText(name, nameX, y + 1);
+          b.textAlign = "right";
+          b.fillStyle = "#fff";
+          b.font = `italic 900 14px ${disp}`;
+          b.fillText(String(r.score).padStart(7, "0"), x + colW - 12, y + 1);
+          b.globalAlpha = 1;
+        });
+      }
+      boardLayer = c;
+      g.drawImage(c, boardBox.x, boardBox.y, boardBox.w, boardBox.h);
+    };
+
     const draw = (t: number) => {
       const laneW = W / 4;
       // 박자 위상 (0: 박자 순간) → 판정선·배경이 박자에 맞춰 번쩍
@@ -1026,6 +1151,7 @@ export default function Stage({
       const pulse = t > 0 ? Math.exp(-beatPh * 5) : 0;
       shownScore += (engine.score - shownScore) * 0.18;
       drawBackdrop(t, pulse);
+      drawBoard();
       g.save();
       g.translate(gx, 0);
       for (let l = 0; l < 4; l++) {
@@ -1329,7 +1455,17 @@ export default function Stage({
         g.globalAlpha = 1;
       }
       drawCountdown(g, cd, t + leadIn, W, laneTop, judgeY);
-      // R 꾹: 다시 시작 — 카운트다운처럼 비스듬한 띠에 게이지가 차오름
+      // 온라인: 다 같이 시작하기 전 (카운트다운 전) 잠깐 비는 동안
+      if (online && t + leadIn < 0) {
+        g.textAlign = "center";
+        g.textBaseline = "middle";
+        g.fillStyle = "rgba(0,0,0,0.55)";
+        roundRectFill(g, W / 2 - 150, midY(0.45) - 24, 300, 48, 24);
+        g.fillStyle = "#fff";
+        g.font = `800 17px ${KR_FONT}`;
+        g.fillText("다 같이 시작해요…", W / 2, midY(0.45) + 1);
+      }
+      // R 꾹: 다시 시작 (온라인은 Esc 꾹: 나가기) — 카운트다운처럼 비스듬한 띠에 게이지가 차오름
       if (rHoldAt !== null) {
         const pr = Math.min(1, (performance.now() - rHoldAt) / R_HOLD_MS);
         const bw = W - 24;
@@ -1354,20 +1490,21 @@ export default function Stage({
         g.fillStyle = "rgba(255,255,255,0.8)";
         g.fillRect(-bw / 2, -bh / 2, bw, 2);
         g.fillRect(-bw / 2, bh / 2 - 2, bw, 2);
-        // 키캡 R
+        // 키캡 R (온라인은 ESC)
         const kx = -bw / 2 + 14;
+        const kw = online ? 50 : 30;
         g.fillStyle = "rgba(255,255,255,0.95)";
-        roundRectFill(g, kx, -15, 30, 30, 6);
+        roundRectFill(g, kx, -15, kw, 30, 6);
         g.fillStyle = "#1a1030";
-        g.font = `italic 900 18px ${disp}`;
+        g.font = `italic 900 ${online ? 15 : 18}px ${disp}`;
         g.textAlign = "center";
         g.textBaseline = "middle";
-        g.fillText("R", kx + 15, 1);
+        g.fillText(online ? "ESC" : "R", kx + kw / 2, 1);
         // 글자
         g.fillStyle = "#fff";
         g.font = `italic 900 19px ${disp}`;
         (g as CanvasRenderingContext2D & { letterSpacing?: string }).letterSpacing = "4px";
-        g.fillText("RESTART", 18, 1);
+        g.fillText(online ? "LEAVE" : "RESTART", 18 + (online ? 10 : 0), 1);
         (g as CanvasRenderingContext2D & { letterSpacing?: string }).letterSpacing = "0px";
         g.restore();
       }
@@ -1377,6 +1514,17 @@ export default function Stage({
     let raf = 0;
     let running = true;
     let finished = false;
+    // 온라인: 0.5초마다 내 진행 한 줄
+    let progAt = 0;
+    const sendProg = (dead: boolean) =>
+      online?.onProgress([
+        engine.score,
+        engine.combo,
+        Math.round(engine.accuracy * 100) / 100,
+        Math.round(engine.hp),
+        dead ? 1 : 0,
+        0,
+      ]);
     const finish = (failed = false) => {
       video?.pause();
       if (finished) return;
@@ -1504,7 +1652,10 @@ export default function Stage({
       if (rHoldAt !== null && performance.now() - rHoldAt >= R_HOLD_MS) {
         rHoldAt = null;
         running = false;
-        onRestart();
+        if (online) {
+          finished = true;
+          online.onLeave();
+        } else onRestart();
         return;
       }
       const workStart = performance.now();
@@ -1563,6 +1714,10 @@ export default function Stage({
         sfx("combo-break", 0.6);
       }
       prevCombo = cc;
+      if (online && ts - progAt >= 500) {
+        progAt = ts;
+        sendProg(false);
+      }
       if (engine.dead) return fail(t);
       // 간격 고정 중엔 한 칸 건너 그림 (판정·효과 계산은 매 프레임)
       if (pace === 2 && skipDraw) skipDraw = false;
@@ -1581,6 +1736,7 @@ export default function Stage({
     const fail = (tFail: number) => {
       if (failing) return;
       failing = true;
+      if (online) sendProg(true);
       running = false;
       video?.pause();
       if (autoplay) autoSfxStop();
@@ -1703,6 +1859,8 @@ export default function Stage({
     // 재개 시도 번호: 카운트다운 도중·오디오 재개 대기 중에 다시 멈추면 이전 시도는 무시되게
     let resumeSeq = 0;
     const pause = () => {
+      // 온라인은 멈출 수 없음 (다 같이 치는 중) — 나가기는 Esc 꾹
+      if (online) return;
       if (resuming) {
         // 카운트다운 중(또는 오디오 재개 대기 중)에 다시 Esc → 일시정지로 돌아감
         resuming = false;
@@ -1791,7 +1949,7 @@ export default function Stage({
       // R: 플레이 중엔 꾹 누르면 다시 시작, 일시정지 중엔 바로 다시 시작
       if (e.code === "KeyR") {
         e.preventDefault();
-        if (e.repeat) return;
+        if (e.repeat || online) return;
         if (running) rHoldAt = performance.now();
         else if (!resuming && !finished && !failing) onRestart();
         return;
@@ -1799,6 +1957,11 @@ export default function Stage({
       if (e.code === "Escape") {
         e.preventDefault();
         if (e.repeat) return; // 꾹 누르고 있으면 멈춤·재개가 연달아 일어나던 문제
+        // 온라인: 꾹 누르면 나가기 (실수로 한 번 눌러 나가지 않게)
+        if (online) {
+          if (running) rHoldAt = performance.now();
+          return;
+        }
         if (running || resuming) pause();
         else resume();
         return;
@@ -1822,7 +1985,7 @@ export default function Stage({
       if (!e.repeat) press(lane, e.timeStamp);
     };
     const onKeyUp = (e: KeyboardEvent) => {
-      if (e.code === "KeyR") rHoldAt = null;
+      if (e.code === "KeyR" || (online && e.code === "Escape")) rHoldAt = null;
       const lane = KEY_CODES.indexOf(e.code);
       if (lane >= 0) release(lane, e.timeStamp);
     };
@@ -1861,6 +2024,11 @@ export default function Stage({
     // 처음 기록은 부모(RhythmGame)가 플레이 화면에 들어올 때 쌓음
     const onPop = () => {
       if (finished || failing) return;
+      // 온라인: 멈추지 않고 뒤로가기만 다시 막아 둠 (나가기는 Esc 꾹·화면의 나가기)
+      if (online) {
+        window.history.pushState({ ...window.history.state, [PLAY_HISTORY_KEY]: true }, "");
+        return;
+      }
       if (running || resuming) {
         pause();
         window.history.pushState({ ...window.history.state, [PLAY_HISTORY_KEY]: true }, "");
@@ -1986,13 +2154,30 @@ export default function Stage({
         className={`absolute z-10 flex gap-[0.6cqw] ${portrait ? "top-[1.2cqw] left-[1.2cqw]" : "top-[1.2cqw] right-[1.2cqw]"}`}
         style={portrait ? { zoom: 2.6 } : undefined}
       >
-        <button
-          type="button"
-          onClick={() => ctrl.current.pause()}
-          className="cursor-pointer rounded-[0.6cqw] bg-black/55 px-[0.9cqw] py-[0.35cqw] font-mono text-[1.1cqw] text-white/70 hover:bg-white/20 hover:text-white"
-        >
-          {portrait ? "II" : "II 일시정지 (Esc)"}
-        </button>
+        {online ? (
+          // 온라인은 멈출 수 없음 — 두 번 눌러야 나감 (실수 방지)
+          <button
+            type="button"
+            onClick={() => {
+              if (leaveArm) online.onLeave();
+              else {
+                setLeaveArm(true);
+                setTimeout(() => setLeaveArm(false), 2500);
+              }
+            }}
+            className={`cursor-pointer rounded-[0.6cqw] px-[0.9cqw] py-[0.35cqw] font-mono text-[1.1cqw] hover:bg-white/20 hover:text-white ${leaveArm ? "bg-[#F43F5E]/80 text-white" : "bg-black/55 text-white/70"}`}
+          >
+            {leaveArm ? "한 번 더 누르면 나가기" : portrait ? "나가기" : "나가기 (Esc 꾹)"}
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={() => ctrl.current.pause()}
+            className="cursor-pointer rounded-[0.6cqw] bg-black/55 px-[0.9cqw] py-[0.35cqw] font-mono text-[1.1cqw] text-white/70 hover:bg-white/20 hover:text-white"
+          >
+            {portrait ? "II" : "II 일시정지 (Esc)"}
+          </button>
+        )}
         <button
           type="button"
           onClick={onToggleFs}
