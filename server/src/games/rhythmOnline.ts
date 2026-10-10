@@ -409,10 +409,12 @@ export function registerRhythmOnline({ gateway }: Deps) {
     return diffs[Math.min(1, diffs.length - 1)];
   }
   /** 곡이 바뀌면: 준비 풀고, 각자 난이도가 그 곡에 없으면 가까운 것으로 */
+  /** 곡이 바뀌면: 준비 풀고, 난이도는 모두 방장이 고른 것으로 (난이도는 방장이 정함) */
   function songChanged(room: Room, hostDiff?: Diff) {
-    for (const [uid, p] of Object.entries(room.players)) {
+    const diff = hostDiff ?? room.players[leaderOf(room)]?.diff ?? "normal";
+    for (const p of Object.values(room.players)) {
       p.ready = false;
-      if (uid === leaderOf(room) && hostDiff) p.diff = hostDiff;
+      p.diff = diff;
       fitDiff(room, p);
     }
   }
@@ -500,16 +502,18 @@ export function registerRhythmOnline({ gateway }: Deps) {
     return { ver: up.ver, key: up.downKey };
   });
 
+  /** 난이도 (방장이 정하고 모두 같은 난이도) — 바꾸면 다들 다시 준비 */
   gateway.rpc("rhythm.diff", (ctx, raw) => {
     const { id, diff } = z.object({ id: roomId, diff: diffSchema }).parse(raw);
-    const { room, uid } = asPlayer(ctx, id);
+    const { room, uid } = asHost(ctx, id);
     idle(room);
     if (room.song?.diffs.length && !room.song.diffs.includes(diff)) throw bad("이 곡에 없는 난이도예요.");
-    const p = room.players[uid];
-    if (p.diff !== diff) {
+    if (room.players[uid].diff === diff) return null;
+    for (const p of Object.values(room.players)) {
       p.diff = diff;
-      changed(room);
+      p.ready = false;
     }
+    changed(room);
     return null;
   });
 

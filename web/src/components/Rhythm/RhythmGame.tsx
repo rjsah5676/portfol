@@ -1142,6 +1142,10 @@ export default function RhythmGame() {
                   net.leave();
                   setUpload(null);
                 }}
+                fs={fs}
+                onToggleFs={toggleFs}
+                onSettings={() => setSettingsOpen(true)}
+                blocked={settingsOpen}
               />
             ) : (
               <OnlineLobby
@@ -1154,6 +1158,10 @@ export default function RhythmGame() {
                 onBack={closeOnline}
                 err={net.err}
                 ready={!!net.uid}
+                fs={fs}
+                onToggleFs={toggleFs}
+                onSettings={() => setSettingsOpen(true)}
+                blocked={settingsOpen}
               />
             ))}
           {screen === "result" && result && (

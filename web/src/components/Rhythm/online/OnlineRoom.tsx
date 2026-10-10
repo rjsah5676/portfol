@@ -5,6 +5,7 @@ import { DIFFICULTIES, type Difficulty } from "@/lib/rhythm/chart";
 import { sfx } from "@/lib/rhythm/sfx";
 import type { LiveRow, OnlineRoom as Room } from "@/realtime/rhythmOnline";
 import { RankEmblem } from "../Stage";
+import TopButtons from "./TopButtons";
 
 const DISP = "font-['Arial_Black','Segoe_UI_Black',Impact,sans-serif] font-black italic";
 const KR = "font-['Nanum_Gothic',sans-serif]";
@@ -36,6 +37,10 @@ export default function OnlineRoom({
   onStart,
   onBack,
   onLeave,
+  fs,
+  onToggleFs,
+  onSettings,
+  blocked = false,
 }: {
   room: Room;
   uid: string;
@@ -52,6 +57,11 @@ export default function OnlineRoom({
   onStart: () => void;
   onBack: () => void;
   onLeave: () => void;
+  fs: boolean;
+  onToggleFs: () => void;
+  onSettings: () => void;
+  /** 설정 창이 떠 있으면 키 입력 안 받음 */
+  blocked?: boolean;
 }) {
   const host = room.meta.hostUid === uid;
   const me = room.players[uid];
@@ -67,7 +77,7 @@ export default function OnlineRoom({
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement | null)?.tagName;
-      if (tag === "INPUT") return;
+      if (tag === "INPUT" || blocked) return;
       if (e.code === "Enter" && idle) {
         e.preventDefault();
         if (host) {
@@ -77,7 +87,7 @@ export default function OnlineRoom({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [idle, host, canStart, me, onStart, onReady]);
+  }, [idle, host, canStart, me, onStart, onReady, blocked]);
 
   // 결과 · 관전 점수판 (점수 순)
   const results = round
@@ -114,16 +124,19 @@ export default function OnlineRoom({
             {players.length}/{room.meta.max}
           </span>
         </div>
-        <button
-          type="button"
-          onClick={() => {
-            sfx("ui-back", 0.7);
-            onLeave();
-          }}
-          className={`${KR} cursor-pointer rounded-[0.6cqw] border border-white/15 bg-white/5 px-[1.2cqw] py-[0.4cqw] text-[1.1cqw] text-white/75 hover:border-[#F43F5E]/70 hover:text-white`}
-        >
-          방 나가기
-        </button>
+        <div className="flex shrink-0 items-center gap-[0.6cqw]">
+          <TopButtons fs={fs} onToggleFs={onToggleFs} onSettings={onSettings} />
+          <button
+            type="button"
+            onClick={() => {
+              sfx("ui-back", 0.7);
+              onLeave();
+            }}
+            className={`${KR} cursor-pointer rounded-[0.6cqw] border border-white/15 bg-white/5 px-[1.2cqw] py-[0.4cqw] text-[1.05cqw] text-white/75 hover:border-[#F43F5E]/70 hover:text-white`}
+          >
+            방 나가기
+          </button>
+        </div>
       </div>
 
       {/* 왼쪽: 곡 · 내 난이도 */}
@@ -193,7 +206,7 @@ export default function OnlineRoom({
         {song && me && (
           <div className="rounded-[1cqw] border border-white/10 bg-black/35 p-[1.2cqw]">
             <div className={`${KR} mb-[0.7cqw] text-[1.05cqw] font-bold text-white/60`}>
-              내 난이도 (각자 골라요)
+              난이도 {host ? "(방장 — 모두 같은 난이도)" : "(방장이 골라요)"}
             </div>
             <div className="grid grid-cols-6 gap-[0.6cqw]">
               {DIFFICULTIES.filter((d) => !song.diffs.length || song.diffs.includes(d.key)).map(
@@ -204,7 +217,7 @@ export default function OnlineRoom({
                     <button
                       key={d.key}
                       type="button"
-                      disabled={!idle}
+                      disabled={!idle || !host}
                       onClick={() => {
                         if (on) return;
                         sfx("ui-move", 0.6);

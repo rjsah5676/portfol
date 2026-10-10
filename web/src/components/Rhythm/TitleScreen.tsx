@@ -42,7 +42,7 @@ export default function TitleScreen({
   const [notes, setNotes] = useState(false);
   const items: { label: string; sub: string; run: () => void }[] = [
     { label: "GAME START", sub: "곡 고르기", run: onStart },
-    { label: "ONLINE", sub: "같이 치기 — 같은 곡으로 점수 겨루기 (내 음악도)", run: onOnline },
+    { label: "ONLINE", sub: "온라인 모드", run: onOnline },
     { label: "SETTINGS", sub: "속도 · 싱크 · 레인 위치", run: onSettings },
     { label: "RANKING", sub: "BP 랭킹 — 곡별 최고 BP 상위 20곡 합", run: onRanking },
     { label: "HOW TO PLAY", sub: "게임 가이드", run: () => setGuide(true) },

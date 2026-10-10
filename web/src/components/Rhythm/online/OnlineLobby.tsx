@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { sfx } from "@/lib/rhythm/sfx";
 import type { OnlineLobbyRoom } from "@/realtime/rhythmOnline";
+import TopButtons from "./TopButtons";
 
 const DISP = "font-['Arial_Black','Segoe_UI_Black',Impact,sans-serif] font-black italic";
 const KR = "font-['Nanum_Gothic',sans-serif]";
@@ -25,6 +26,10 @@ export default function OnlineLobby({
   onBack,
   err,
   ready,
+  fs,
+  onToggleFs,
+  onSettings,
+  blocked = false,
 }: {
   rooms: OnlineLobbyRoom[] | null;
   nick: string;
@@ -36,6 +41,11 @@ export default function OnlineLobby({
   err: string;
   /** 접속(익명 로그인 포함)이 끝났는지 */
   ready: boolean;
+  fs: boolean;
+  onToggleFs: () => void;
+  onSettings: () => void;
+  /** 설정 창이 떠 있으면 Esc 안 받음 */
+  blocked?: boolean;
 }) {
   const [name, setName] = useState("");
   const [max, setMax] = useState(4);
@@ -44,7 +54,7 @@ export default function OnlineLobby({
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.code !== "Escape") return;
+      if (e.code !== "Escape" || blocked) return;
       const tag = (e.target as HTMLElement | null)?.tagName;
       if (tag === "INPUT") return;
       e.preventDefault();
@@ -53,7 +63,7 @@ export default function OnlineLobby({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onBack]);
+  }, [onBack, blocked]);
 
   const needNick = !member && !nick;
   const run = async (fn: () => unknown) => {
@@ -87,20 +97,21 @@ export default function OnlineLobby({
       <div className="absolute inset-x-0 top-0 z-10 flex h-[5.4cqw] items-center justify-between border-b border-white/10 bg-black/35 px-[2.4cqw]">
         <div className="flex items-baseline gap-[1.2cqw]">
           <span className={`${DISP} text-[2.2cqw] tracking-[0.06em] text-white`}>ONLINE</span>
-          <span className={`${KR} text-[1.1cqw] text-white/45`}>
-            같은 곡을 같이 쳐서 점수 겨루기 — 내 음악도 돼요
-          </span>
+          <span className={`${KR} text-[1.1cqw] text-white/45`}>온라인 모드</span>
         </div>
-        <button
-          type="button"
-          onClick={() => {
-            sfx("ui-back", 0.7);
-            onBack();
-          }}
-          className={`${KR} cursor-pointer rounded-[0.6cqw] border border-white/15 bg-white/5 px-[1.2cqw] py-[0.4cqw] text-[1.1cqw] text-white/75 hover:border-white/40 hover:text-white`}
-        >
-          ← 타이틀 (Esc)
-        </button>
+        <div className="flex items-center gap-[0.6cqw]">
+          <TopButtons fs={fs} onToggleFs={onToggleFs} onSettings={onSettings} />
+          <button
+            type="button"
+            onClick={() => {
+              sfx("ui-back", 0.7);
+              onBack();
+            }}
+            className={`${KR} cursor-pointer rounded-[0.6cqw] border border-white/15 bg-white/5 px-[1.2cqw] py-[0.4cqw] text-[1.05cqw] text-white/75 hover:border-white/40 hover:text-white`}
+          >
+            ← 타이틀 (Esc)
+          </button>
+        </div>
       </div>
 
       {!ready ? (
@@ -134,77 +145,129 @@ export default function OnlineLobby({
           </button>
         </form>
       ) : (
-        <div className="absolute top-[7cqw] right-[2.4cqw] bottom-[2.4cqw] left-[2.4cqw] flex gap-[2cqw]">
-          {/* 방 만들기 */}
-          <div className="flex w-[28cqw] shrink-0 flex-col gap-[1cqw] rounded-[1.2cqw] border border-white/12 bg-[#0b0820]/80 p-[1.6cqw]">
-            <div className={`${DISP} text-[1.5cqw] text-white`}>CREATE ROOM</div>
-            <div className={`${KR} text-[1.05cqw] text-white/55`}>
-              {member ? "" : "◦"}
-              {nick} 님
-              {!member && (
-                <button
-                  type="button"
-                  className="ml-[0.6cqw] cursor-pointer text-white/40 underline hover:text-white"
-                  onClick={() => onNick("")}
-                >
-                  이름 바꾸기
-                </button>
-              )}
+        <div className="absolute top-[7cqw] right-[2.4cqw] bottom-[2.4cqw] left-[2.4cqw] flex gap-[1.8cqw]">
+          {/* 왼쪽: 방 만들기 + 하는 법 */}
+          <div className="flex w-[31cqw] shrink-0 flex-col gap-[1.2cqw]">
+            <div className="relative overflow-hidden rounded-[1.2cqw] border border-[#F472B6]/35 bg-[#0b0820]/85 p-[1.6cqw] shadow-[0_0_3cqw_-1cqw_rgba(236,72,153,0.45)]">
+              <div className="pointer-events-none absolute -top-[6cqw] -right-[6cqw] h-[14cqw] w-[14cqw] rounded-full bg-[#EC4899]/25 blur-[3cqw]" />
+              <div className="relative flex items-center justify-between">
+                <span className={`${DISP} text-[1.6cqw] tracking-[0.04em] text-white`}>
+                  CREATE ROOM
+                </span>
+                <span className="flex items-center gap-[0.5cqw]">
+                  <span className="flex h-[2cqw] w-[2cqw] items-center justify-center rounded-full bg-[linear-gradient(135deg,#DB2777,#7C3AED)] text-[1cqw] font-black text-white">
+                    {(nick || "?").slice(0, 1)}
+                  </span>
+                  <span
+                    className={`${KR} max-w-[11cqw] truncate text-[1.1cqw] font-bold text-white/85`}
+                  >
+                    {member ? "" : "◦"}
+                    {nick}
+                  </span>
+                  {!member && (
+                    <button
+                      type="button"
+                      className={`${KR} cursor-pointer text-[0.95cqw] text-white/40 underline-offset-2 hover:text-white hover:underline`}
+                      onClick={() => onNick("")}
+                    >
+                      바꾸기
+                    </button>
+                  )}
+                </span>
+              </div>
+              <label
+                className={`${KR} relative mt-[1.2cqw] block text-[0.95cqw] font-bold text-white/50`}
+              >
+                방 이름
+                <input
+                  className={`${KR} ${input} mt-[0.4cqw]`}
+                  value={name}
+                  maxLength={20}
+                  placeholder={`${nick || "내 이름"}의 방`}
+                  onChange={(e) => setName(e.target.value)}
+                />
+              </label>
+              <div className={`${KR} relative mt-[1cqw] text-[0.95cqw] font-bold text-white/50`}>
+                인원
+                <div className="mt-[0.4cqw] grid grid-cols-5 overflow-hidden rounded-[0.6cqw] border border-white/15">
+                  {[2, 3, 4, 6, 8].map((n) => (
+                    <button
+                      key={n}
+                      type="button"
+                      onClick={() => {
+                        setMax(n);
+                        sfx("ui-move", 0.5);
+                      }}
+                      className={`cursor-pointer border-r border-white/10 py-[0.45cqw] font-mono text-[1.2cqw] font-bold transition-colors last:border-r-0 ${
+                        max === n
+                          ? "bg-[#F472B6]/30 text-white"
+                          : "bg-black/30 text-white/50 hover:bg-white/10 hover:text-white"
+                      }`}
+                    >
+                      {n}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <button
+                type="button"
+                className={`${btn()} relative mt-[1.4cqw] w-full py-[0.9cqw] text-[1.4cqw] shadow-[0_0.4cqw_2cqw_-0.4cqw_rgba(219,39,119,0.7)]`}
+                disabled={busy}
+                onClick={() => run(() => onCreate(name, max))}
+              >
+                방 만들기
+              </button>
             </div>
-            <input
-              className={`${KR} ${input}`}
-              value={name}
-              maxLength={20}
-              placeholder="방 이름 (비우면 '내 이름의 방')"
-              onChange={(e) => setName(e.target.value)}
-            />
-            <div className={`${KR} flex items-center gap-[0.6cqw] text-[1.1cqw] text-white/70`}>
-              인원
-              {[2, 3, 4, 6, 8].map((n) => (
-                <button
-                  key={n}
-                  type="button"
-                  onClick={() => setMax(n)}
-                  className={`cursor-pointer rounded-[0.5cqw] border px-[0.8cqw] py-[0.25cqw] font-mono text-[1.1cqw] ${
-                    max === n
-                      ? "border-[#F472B6] bg-[#F472B6]/20 text-white"
-                      : "border-white/15 text-white/60 hover:border-white/40"
-                  }`}
-                >
-                  {n}
-                </button>
+
+            <div className="flex min-h-0 flex-1 flex-col gap-[0.6cqw] rounded-[1.2cqw] border border-white/10 bg-[#0b0820]/75 p-[1.4cqw]">
+              <span className={`${DISP} text-[1.15cqw] tracking-[0.06em] text-white/80`}>
+                HOW IT WORKS
+              </span>
+              {[
+                ["01", "방장이 곡을 골라요", "내장곡이나 방장의 내 음악(mp3·영상)"],
+                ["02", "방장이 난이도까지 정하면 READY", "모두 같은 곡 · 같은 난이도로 겨뤄요"],
+                ["03", "다 같이 시작", "치는 동안 서로 점수가 실시간으로 보여요"],
+              ].map(([no, t, d]) => (
+                <div key={no} className="flex items-start gap-[0.8cqw]">
+                  <span className="mt-[0.1cqw] shrink-0 -skew-x-12 rounded-[0.3cqw] bg-[#22D3EE] px-[0.5cqw] font-['Arial_Black',sans-serif] text-[0.95cqw] font-black text-[#06041a]">
+                    {no}
+                  </span>
+                  <span className="min-w-0">
+                    <span className={`${KR} block text-[1.05cqw] font-bold text-white/85`}>
+                      {t}
+                    </span>
+                    <span className={`${KR} block text-[0.9cqw] text-white/40`}>{d}</span>
+                  </span>
+                </div>
               ))}
             </div>
-            <button
-              type="button"
-              className={btn()}
-              disabled={busy}
-              onClick={() => run(() => onCreate(name, max))}
-            >
-              방 만들기
-            </button>
-            <p className={`${KR} mt-auto text-[0.95cqw] leading-relaxed text-white/40`}>
-              방장이 곡을 고르고, 각자 난이도를 골라 준비하면 방장이 시작해요. 다 같이 같은 순간에
-              시작하고, 치는 동안 서로 점수가 보여요. 방장의 내 음악(mp3·영상)도 같이 칠 수 있어요.
-            </p>
           </div>
 
-          {/* 방 목록 */}
+          {/* 오른쪽: 방 목록 */}
           <div className="flex min-w-0 flex-1 flex-col rounded-[1.2cqw] border border-white/12 bg-[#0b0820]/80 p-[1.6cqw]">
-            <div className="mb-[1cqw] flex items-baseline justify-between">
-              <span className={`${DISP} text-[1.5cqw] text-white`}>ROOMS</span>
-              <span className="font-mono text-[1cqw] text-white/40">{rooms?.length ?? 0}</span>
+            <div className="mb-[1cqw] flex items-center gap-[0.8cqw]">
+              <span className={`${DISP} text-[1.6cqw] tracking-[0.04em] text-white`}>ROOMS</span>
+              <span className="rounded-full bg-white/10 px-[0.7cqw] py-[0.1cqw] font-mono text-[1cqw] text-white/70">
+                {rooms?.length ?? 0}
+              </span>
+              <span className={`${KR} ml-auto text-[0.95cqw] text-white/35`}>눌러서 입장</span>
             </div>
             {err && <p className={`${KR} mb-[0.8cqw] text-[1.1cqw] text-[#FB7185]`}>{err}</p>}
             <div className="min-h-0 flex-1 overflow-y-auto pr-[0.4cqw]">
               {rooms === null ? (
                 <p className={`${KR} text-[1.1cqw] text-white/40`}>불러오는 중…</p>
               ) : rooms.length === 0 ? (
-                <p className={`${KR} text-[1.1cqw] text-white/40`}>
-                  열린 방이 없어요. 방을 만들어 보세요.
-                </p>
+                <div className="flex h-full flex-col items-center justify-center gap-[0.8cqw] text-center">
+                  <span className="text-[4.5cqw] opacity-80">🎮</span>
+                  <span className={`${KR} text-[1.5cqw] font-extrabold text-white/80`}>
+                    열린 방이 없어요
+                  </span>
+                  <span className={`${KR} text-[1.05cqw] text-white/40`}>
+                    왼쪽에서 방을 만들고 친구를 불러 보세요
+                  </span>
+                </div>
               ) : (
-                <div className="flex flex-col gap-[0.6cqw]">
+                <div className="flex flex-col gap-[0.7cqw]">
                   {rooms.map((r) => {
                     const full = r.count >= r.max;
                     const ph = PHASE[r.phase];
@@ -214,26 +277,49 @@ export default function OnlineLobby({
                         type="button"
                         disabled={full || busy}
                         onClick={() => run(() => onJoin(r.id))}
-                        className="flex cursor-pointer items-center gap-[1cqw] rounded-[0.8cqw] border border-white/10 bg-white/[0.04] px-[1.2cqw] py-[0.8cqw] text-left transition-colors hover:border-[#F472B6]/70 hover:bg-[#F472B6]/10 disabled:cursor-default disabled:opacity-45"
+                        className="group relative flex cursor-pointer items-center gap-[1.2cqw] overflow-hidden rounded-[0.9cqw] border border-white/10 bg-white/[0.04] py-[0.9cqw] pr-[1.4cqw] pl-[1.6cqw] text-left transition-colors hover:border-[#F472B6]/70 hover:bg-[#F472B6]/10 disabled:cursor-default disabled:opacity-45"
                       >
                         <span
-                          className={`${KR} shrink-0 rounded-full px-[0.7cqw] py-[0.15cqw] text-[0.9cqw] font-bold`}
-                          style={{ color: ph.color, background: `${ph.color}22` }}
-                        >
-                          {ph.label}
-                        </span>
+                          className="absolute inset-y-0 left-0 w-[0.35cqw]"
+                          style={{ background: ph.color }}
+                        />
                         <span className="min-w-0 flex-1">
-                          <span
-                            className={`${KR} block truncate text-[1.3cqw] font-extrabold text-white`}
-                          >
-                            {r.name}
+                          <span className="flex items-center gap-[0.7cqw]">
+                            <span
+                              className={`${KR} truncate text-[1.35cqw] font-extrabold text-white`}
+                            >
+                              {r.name}
+                            </span>
+                            <span
+                              className={`${KR} shrink-0 rounded-full px-[0.6cqw] py-[0.1cqw] text-[0.85cqw] font-bold`}
+                              style={{ color: ph.color, background: `${ph.color}22` }}
+                            >
+                              {ph.label}
+                            </span>
                           </span>
-                          <span className={`${KR} block truncate text-[1cqw] text-white/45`}>
+                          <span
+                            className={`${KR} mt-[0.2cqw] block truncate text-[1cqw] text-white/45`}
+                          >
                             {r.song ? `♪ ${r.song}` : "곡 고르는 중"}
                           </span>
                         </span>
-                        <span className="shrink-0 font-mono text-[1.2cqw] text-white/75">
-                          {r.count}/{r.max}
+                        <span className="flex shrink-0 flex-col items-end gap-[0.35cqw]">
+                          <span className="flex gap-[0.25cqw]">
+                            {Array.from({ length: r.max }, (_, i) => (
+                              <span
+                                key={i}
+                                className={`h-[0.7cqw] w-[0.7cqw] rounded-full ${i < r.count ? "bg-[#F472B6]" : "bg-white/15"}`}
+                              />
+                            ))}
+                          </span>
+                          <span className="font-mono text-[1cqw] text-white/60">
+                            {full ? "가득 참" : `${r.count}/${r.max}`}
+                          </span>
+                        </span>
+                        <span
+                          className={`${KR} shrink-0 text-[1.1cqw] font-bold text-white/30 transition-colors group-hover:text-white`}
+                        >
+                          입장 →
                         </span>
                       </button>
                     );
