@@ -267,6 +267,8 @@ export interface Fighter {
   cc: number;
   /** 상태 이상 면역 남은 프레임 */
   imm: number;
+  /** 이번 프레임에 경직에서 풀림 — 이 프레임 안에 또 맞으면 같은 콤보(콤보 수·피해 보정 이어짐), 안 맞으면 프레임 끝에 콤보 0 */
+  recov: number;
   /** 남은 무적 프레임 (다시 내려온 뒤) */
   inv: number;
   /** 최근 입력 (마지막이 이번 프레임) */
@@ -477,6 +479,7 @@ function newFighter(ch: number, side: 0 | 1, map: MapDef): Fighter {
     hugd: 0,
     cc: 0,
     imm: 0,
+    recov: 0,
     inv: 0,
     hist: new Array(HIST).fill(0),
   };
@@ -535,7 +538,7 @@ const cloneF = (f: Fighter): Fighter => ({ ...f, hist: f.hist.slice() });
  * 이 빌드의 게임 데이터 지문 (캐릭터 성능·맵) — 온라인에서 서로 다른 빌드끼리 붙었는지 확인.
  * 계산 방식(sim.ts)만 바꿨을 땐 SIM_REV를 올릴 것.
  */
-const SIM_REV = 9;
+const SIM_REV = 10;
 export const BUILD_ID = (() => {
   const str = SIM_REV + JSON.stringify(CHARS.map((c) => [c.hp, c.walk, c.jumpVx, c.dash, c.cd, c.glide, c.hurt, c.width, c.moves])) + JSON.stringify(MAPS.map((m) => [m.plats, m.spawn]));
   let h = 2166136261;
@@ -608,6 +611,7 @@ export function hash(s: State): number {
     mix(f.hugd);
     mix(f.cc);
     mix(f.imm);
+    mix(f.recov);
     mix(f.inv);
     mix(f.st.length * 31 + f.st.charCodeAt(0));
     mix(f.mv ? f.mv.charCodeAt(0) : 0);
@@ -1184,15 +1188,16 @@ function control(s: State, i: number) {
       if (f.stun > 0) f.stun--;
       if (f.stun <= 0) {
         f.pulled = 0;
+        // (콤보 수는 프레임 끝에 0 — 풀리는 바로 그 프레임에 또 맞으면 같은 콤보로 이어 셈, 10.10)
         if (onGround(s, f)) {
           f.st = "idle";
           f.t = 0;
-          f.combo = 0;
+          f.recov = 1;
         } else if (!f.kd) {
           // 공중에서 경직이 풀리면 다시 조작 (점프 하나는 남겨 둠)
           f.st = "jump";
           f.t = 0;
-          f.combo = 0;
+          f.recov = 1;
           f.float = 0;
           f.airUsed = 0;
           f.airK = 0;
@@ -1231,7 +1236,7 @@ function control(s: State, i: number) {
       if (f.t >= RISE_T) {
         f.st = "idle";
         f.t = 0;
-        f.combo = 0;
+        f.recov = 1;
       }
       return;
     default:
@@ -2229,6 +2234,11 @@ export function step(s: State, input: [number, number]): State {
   if (s.phase === "fight") {
     projectiles(s);
     attacks(s);
+    // 경직에서 풀린 프레임에 안 맞았으면 콤보 끝
+    for (const f of s.p) {
+      if (f.recov && f.st !== "hit" && f.st !== "down") f.combo = 0;
+      f.recov = 0;
+    }
     checkKO(s);
     if (s.phase === "fight" && s.timer <= 0) {
       // 시간 끝: 남은 체력 비율로
