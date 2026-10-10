@@ -349,6 +349,8 @@ export default function FightGame() {
           ? ["YOU", "2P"]
           : ["1P", "YOU"]
         : ["1P", setup.mode === "ai" ? "CPU" : setup.mode === "practice" ? "허수아비" : "2P"];
+    // 차지 게이지는 직접 조작하는 사람에게만 (관전 · 상대 자리 · CPU 자리는 안 보임)
+    r.gauge = watching ? [false, false] : ol ? [ol.seat === 0, ol.seat === 1] : bot ? [true, false] : [true, setup.mode === "2p"];
     rendererRef.current = r;
     input.configure(setup.mode === "2p");
     const pickMap = () =>

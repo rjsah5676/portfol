@@ -1048,7 +1048,7 @@ const RAW: CharSrc[] = [
         push: 1500,
         hitstop: 10,
         meter: 8,
-        box: { x: 6, y: 60, w: 76, h: 30 },
+        box: { x: 6, y: 60, w: 88, h: 30 }, // 10.11 앞 82 → 94px (철곰권이 정면에서 잘 안 닿던 것)
         step: 420,
         onBlock: -10,
         charge: { at: 6, max: 40, dmg: 210, armor: true },

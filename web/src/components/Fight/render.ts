@@ -554,6 +554,9 @@ export class FightRenderer {
 
   /** 이름표: 머리 위 1P(파랑)·2P/CPU(빨강) 표시 — 둘이 겹쳐도 내 캐릭터를 알 수 있게 */
   tags: [string, string] = ["1P", "2P"];
+  /** 차지 게이지(이반 철곰권)를 보여 줄 자리 — 직접 조작하는 사람에게만 (상대 · 관전자에겐 안 보임) */
+  gauge: [boolean, boolean] = [false, false];
+  private tagF = 0;
   private drawTag(f: Fighter, i: number) {
     if (f.st === "ko" || f.h / SUB > VIEW_H) return;
     const g = this.g;
@@ -577,6 +580,32 @@ export class FightRenderer {
     g.fillStyle = "#fff";
     g.textAlign = "center";
     g.fillText(label, x, y - 3);
+    // 차지 게이지: 이름표 오른쪽 세로 막대 (다 모으면 번쩍)
+    const cm = CHARS[f.ch].moves.S.charge;
+    if (this.gauge[i] && cm && f.st === "atk" && f.mv === "S" && !f.aerial && f.chg > 0 && f.t <= cm.at + 1) {
+      const k = Math.min(1, f.chg / cm.max);
+      const full = k >= 1;
+      const gx = x + tw / 2 + 3,
+        gh = 22,
+        gy = y + 4 - gh;
+      g.globalAlpha = 1;
+      g.fillStyle = "rgba(0,0,0,0.6)";
+      g.fillRect(gx - 1, gy - 1, 6, gh + 2);
+      g.fillStyle = full ? (Math.floor(this.tagF / 3) % 2 ? "#FFFFFF" : "#FFD34D") : k > 0.66 ? "#FF6B3D" : "#FF4D4D";
+      g.fillRect(gx, gy + gh * (1 - k), 4, gh * k);
+      // 1/3 · 2/3 눈금
+      g.fillStyle = "rgba(255,255,255,0.45)";
+      g.fillRect(gx, gy + gh / 3, 4, 0.8);
+      g.fillRect(gx, gy + (gh * 2) / 3, 4, 0.8);
+      if (full) {
+        g.fillStyle = "#FFD34D";
+        g.font = "bold 8px ui-monospace, monospace";
+        g.textAlign = "left";
+        g.fillText("MAX", gx + 7, gy + 7);
+        g.textAlign = "center";
+      }
+      g.font = "bold 9px ui-monospace, monospace";
+    }
     if (f.shock > 0) {
       // 감전 표시 (남은 시간만큼 줄어드는 노란 막대)
       g.globalAlpha = 1;
@@ -1242,6 +1271,7 @@ export class FightRenderer {
       this.drawFighter(s.p[i], i, s);
       this.drawWindAura(s.p[i], s);
     }
+    this.tagF = s.f;
     for (let i = 0; i < 2; i++) this.drawTag(s.p[i], i);
     this.drawProj(s);
     this.drawFx();

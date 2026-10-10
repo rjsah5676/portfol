@@ -538,7 +538,7 @@ const cloneF = (f: Fighter): Fighter => ({ ...f, hist: f.hist.slice() });
  * 이 빌드의 게임 데이터 지문 (캐릭터 성능·맵) — 온라인에서 서로 다른 빌드끼리 붙었는지 확인.
  * 계산 방식(sim.ts)만 바꿨을 땐 SIM_REV를 올릴 것.
  */
-const SIM_REV = 12;
+const SIM_REV = 13;
 export const BUILD_ID = (() => {
   const str = SIM_REV + JSON.stringify(CHARS.map((c) => [c.hp, c.walk, c.jumpVx, c.dash, c.cd, c.glide, c.hurt, c.width, c.moves])) + JSON.stringify(MAPS.map((m) => [m.plats, m.spawn]));
   let h = 2166136261;
@@ -1830,6 +1830,12 @@ function applyHit(s: State, ai: number, m: MoveDef, srcX: number, mid: MoveId, p
         d.vx = Math.trunc((dir * m.push * JUGGLE_PUSH) / 100);
         d.stun = Math.max(d.stun, JUGGLE_STUN);
       }
+    }
+    // 제자리 연타 필살기(소영 보충수업 등)를 공중에서 맞음: 매 타 위로 튕겨 판정 밖으로 빠져 나머지 타가 헛치던 것 → 그 자리에 붙잡아 둠
+    if (wasAir && !kd && m.multi && !m.rush && !m.proj && !m.summon && mid === "X" && !airborneS(s, a)) {
+      d.vh = 160;
+      d.vx = Math.trunc((dir * m.push) / 10);
+      d.float = 2;
     }
     if (m.launch && wasAir && !kd && prevFloat === 1) {
       d.vh = Math.max(d.vh, prevVh);
