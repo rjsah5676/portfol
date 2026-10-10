@@ -109,6 +109,16 @@ export function sevenSeatCards({
   const downFirst = Math.min(2, downN);
   const downLast = p.up.length ? downN - downFirst : 0;
   const leading = p.up.length ? downFirst : downN;
+  // 엎은 카드는 안 보여도 되니 바짝 겹치고(끝만 살짝), 남는 폭은 편 카드에 — 줄이 좁아도 편 카드 숫자가 보이게
+  const U = p.up.length;
+  const backGap = -Math.round(w * 0.8);
+  const peeks = Math.max(0, leading - 1) + (leading && U ? 1 : 0) + downLast;
+  let upGap = hero ? overlap : -Math.round(w * (side === "top" ? 0.38 : 0.48));
+  if (maxW && U > 1) {
+    const room = (maxW - w - peeks * (w + backGap)) / (U - 1) - w;
+    upGap = Math.min(upGap, Math.max(Math.floor(room), -Math.round(w * 0.7)));
+  }
+  const ml = (m: number) => ({ marginLeft: m });
   return (
     <span className={`flex flex-col gap-[3px] ${side === "right" ? "items-end" : "items-start"}`}>
       <span className={row}>
@@ -123,7 +133,7 @@ export function sevenSeatCards({
               dim={p.folded}
               deal={dd !== undefined}
               delay={dd}
-              style={gap(i)}
+              style={i ? ml(backGap) : undefined}
             />
           );
         })}
@@ -135,7 +145,7 @@ export function sevenSeatCards({
             dim={p.folded}
             deal
             delay={dealDelay?.(leading + i, leading + p.up.length + downLast)}
-            style={gap(leading + i)}
+            style={i ? ml(upGap) : leading ? ml(backGap) : undefined}
           />
         ))}
         {Array.from({ length: downLast }, (_, i) => (
@@ -147,7 +157,7 @@ export function sevenSeatCards({
             dim={p.folded}
             deal
             delay={dealDelay?.(leading + p.up.length + i, leading + p.up.length + downLast)}
-            style={gap(1)}
+            style={ml(backGap)}
           />
         ))}
       </span>

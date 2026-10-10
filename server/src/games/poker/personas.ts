@@ -123,6 +123,8 @@ export interface Brain {
   /** 이 테이블에서 친 판 수 · 이만큼 치면 일어남 */
   hands: number;
   stayHands: number;
+  /** 수금 기준: 들고 온 칩의 몇 배가 되면 일어날까 고민하기 시작하는지 (봇마다 다름, 욕심 많은 봇은 높음) */
+  cashAt: number;
   rand: () => number;
 }
 
@@ -137,6 +139,7 @@ export function newBrain(char: CharId, tier: TierId, rand: () => number = Math.r
     grudge: new Map(),
     hands: 0,
     stayHands: 8 + Math.floor(rand() * 30),
+    cashAt: 1.8 + rand() * 2.7,
     rand,
   };
 }

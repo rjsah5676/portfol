@@ -442,6 +442,17 @@ export function registerPoker({ gateway, db, users }: Deps, opts: PokerOptions =
     return true;
   }
 
+  /**
+   * 크게 딴 봇이 일어날지: 봇마다 기준(cashAt, 들고 온 칩의 1.8~4.5배)이 다르고, 넘은 뒤에도 판마다 확률로만 일어남.
+   * 기준을 많이 넘을수록 잘 일어나고, 아주 크게 불리면(기준의 2배) 거의 일어남 — 늘 딱 3배에서 칼같이 나가던 것
+   */
+  const cashOut = (s: Seat) => {
+    const b = s.brain!;
+    const over = s.stack / Math.max(1, s.joinStack) / b.cashAt;
+    if (over < 1) return false;
+    return b.rand() < Math.min(0.9, 0.18 + 0.5 * (over - 1));
+  };
+
   /** 판 사이에 봇을 정리: 파산·수금·오래 친 봇은 나가고, 자리가 꽉 찼으면 하나 비켜 줌 */
   function tendBots(t: Table) {
     const leaveNow = (s: Seat, why: "bust" | "cashout" | "leave") => {
@@ -455,7 +466,7 @@ export function registerPoker({ gateway, db, users }: Deps, opts: PokerOptions =
       // 방장이 봇 참가를 껐으면 판 사이에 다 나감
       if (!t.bots) leaveNow(s, "leave");
       else if (s.stack < t.def.minStack(t.tier)) leaveNow(s, "bust");
-      else if (s.stack >= t.tier.botMoney * 3) leaveNow(s, "cashout");
+      else if (cashOut(s)) leaveNow(s, "cashout");
       else if (s.brain!.hands >= s.brain!.stayHands) leaveNow(s, "leave");
     }
     // 사람이 앉을 자리가 없으면 봇 하나가 일어남 (칩이 가장 적은 봇).
