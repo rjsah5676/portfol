@@ -141,9 +141,6 @@ export default function Lobby({
         draggable={false}
         style={{ height: H ? bar - 8 : bar - 14, width: "auto" }}
       />
-      <span className="rounded-[4px] bg-[var(--pk-danger)] px-[0.45em] text-[0.62em] leading-[1.6em] font-extrabold tracking-wider">
-        BETA
-      </span>
       <button
         type="button"
         onClick={() => setNotes(true)}
@@ -899,7 +896,7 @@ function CharSelect({
           onClick={onShop}
           className="pk-btn pk-btn-gold py-[0.6em] text-[0.92em]"
         >
-          상점에서 {info.name} 데려오기 · 칩 {fmtEok(price)}
+          상점에서 {info.name} 구매하기 · 칩 {fmtEok(price)}
         </button>
       ) : (
         <button

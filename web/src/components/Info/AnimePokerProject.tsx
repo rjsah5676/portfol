@@ -12,7 +12,7 @@ const STATS = [
   { value: "2종목", label: "홀덤 6인 · 7포커 5인" },
   { value: "6명", label: "애니풍 캐릭터" },
   { value: "3단계", label: "동네판 · 하우스 · VIP룸" },
-  { value: "BETA", label: "2026.10" },
+  { value: "v1.0", label: "2026.10" },
 ];
 
 const STACK: { group: string; items: string[] }[] = [
@@ -93,7 +93,7 @@ export default function AnimePokerProject() {
       </p>
 
       <div className="mt-5 flex flex-wrap items-center gap-2 font-mono text-xs">
-        <span className="rounded-full border border-white/10 px-3 py-1 text-white/50">2026.10 – BETA</span>
+        <span className="rounded-full border border-white/10 px-3 py-1 text-white/50">2026.10 – v1.0</span>
         <Link href="/games/poker/" className="rounded-full bg-[#6C63FF] px-4 py-1 text-white transition-colors hover:bg-[#5b52f0]">
           플레이
         </Link>

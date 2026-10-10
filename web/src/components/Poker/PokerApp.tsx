@@ -9,11 +9,12 @@ import {
   getSound,
   onSoundChange,
   playBgm,
+  playVoice,
   refreshBgm,
   setSound,
   type SoundSettings,
 } from "@/lib/poker/sfx";
-import { fmtShort } from "@/lib/poker/rules";
+import { fmtShort, lookOf } from "@/lib/poker/rules";
 import type { RankRow, Wallet } from "@/lib/poker/types";
 import { getRank, roomOpts, subscribeWallet, watchClock } from "@/realtime/poker";
 import type { Orient } from "./layout";
@@ -146,6 +147,13 @@ export default function PokerApp({ rank }: { rank: RankRow[] | null }) {
   useEffect(() => {
     if (!tableId) playBgm(onIntro ? "bgm-intro" : "bgm-lobby");
   }, [tableId, onIntro]);
+  // 페이지에 들어와 로비가 처음 뜨면 내 캐릭터가 인사 (소리는 브라우저가 막으면 첫 터치 · 클릭 때 나옴)
+  const greeted = useRef(false);
+  useEffect(() => {
+    if (greeted.current || onIntro || tableId || !wallet) return;
+    greeted.current = true;
+    playVoice(lookOf(wallet.char, wallet.wear), "hello");
+  }, [onIntro, tableId, wallet]);
   // 포커 페이지를 떠나면 배경음악 끔 (사이트 안에서 다른 페이지로 가도 계속 나오던 것)
   useEffect(() => () => playBgm(null), []);
   const toggleFs = () => {
@@ -522,9 +530,6 @@ function Settings({ tableId }: { tableId: string | null }) {
               {roomErr && <p className="text-[0.82em] text-[#ffb3b5]">{roomErr}</p>}
             </div>
           )}
-          <p className="border-t border-white/10 pt-[0.5em] text-[0.82em] leading-relaxed text-white/40">
-            BETA
-          </p>
         </div>
       )}
     </span>
@@ -582,7 +587,7 @@ function Intro({
       {/* 로고 + 한 줄 소개 */}
       <div
         className="absolute left-1/2 z-20 flex -translate-x-1/2 flex-col items-center"
-        style={{ top: h ? "1.5%" : "5%", width: h ? "23%" : "84%" }}
+        style={{ top: h ? "2%" : "5%", width: h ? "29%" : "84%" }}
       >
         {}
         <img
@@ -599,9 +604,6 @@ function Intro({
       >
         <span className="pk-intro-tag whitespace-nowrap">TEXAS HOLD&apos;EM</span>
         <span className="pk-intro-tag whitespace-nowrap">SEVEN POKER</span>
-        <span className="rounded-[4px] bg-[var(--pk-danger)] px-[0.5em] text-[0.7em] leading-[1.7em] font-extrabold tracking-wider">
-          BETA
-        </span>
       </div>
       {/* 시작 칸 (테이블 위) */}
       <div

@@ -288,7 +288,7 @@ export default function Shop({
                         {CHARS[c].name}
                       </span>
                       {c === wallet.char && (
-                        <span className="text-[0.72em] text-white/45">지금 캐릭터</span>
+                        <span className="text-[0.72em] text-white/45">현재 캐릭터</span>
                       )}
                     </div>
                     <div className="grid grid-cols-3 gap-[0.45em] sm:grid-cols-4">
@@ -385,7 +385,7 @@ function CharShop({
                   onClick={() => void run(`pick:${c}`, async () => void (await setChar(c)))}
                   className="pk-btn pk-btn-ghost py-[0.55em] text-[0.88em]"
                 >
-                  {wallet.char === c ? "지금 캐릭터" : `${info.name}(으)로 바꾸기`}
+                  {wallet.char === c ? "현재 캐릭터" : `${info.name}(으)로 바꾸기`}
                 </button>
               ) : asking ? (
                 <div className="flex gap-[0.4em]">
@@ -404,7 +404,7 @@ function CharShop({
                         await buyChar(c);
                         setConfirm(null);
                         setMsg({
-                          text: `${info.name}을(를) 데려왔어요! 지금 캐릭터로 바뀌었어요.`,
+                          text: `${info.name}을(를) 구매했어요! 현재 캐릭터로 바뀌었어요.`,
                           ok: true,
                         });
                         playVoice(c, "select");

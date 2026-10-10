@@ -1044,6 +1044,9 @@ export default function TableView({
   /** 결과 (판은 끝났지만 패 까기 연출 중이면 아직 숨김) */
   const rawRes = hand?.result ?? null;
   const res = revealDone ? rawRes : null;
+  /** 보여 줄 보유 칩: 패 까기 연출 중엔 딴 돈을 빼고 (결과보다 칩이 먼저 올라 스포일러가 되지 않게) */
+  const stackShown = (seat: number, stack: number) =>
+    rawRes && !revealDone ? stack - (rawRes.won[seat] ?? 0) : stack;
   const winners = res ? Object.keys(res.won).map(Number) : [];
   /**
    * 쇼다운에서 족보가 제일 센 사람(같으면 여럿). 사이드 팟을 따 간 두 번째 사람은 돈은 받아도 이긴 동작은 아님.
@@ -1491,7 +1494,7 @@ export default function TableView({
                       ) : s.status === "out" && !live ? (
                         <span className="text-white/45">자리 비움</span>
                       ) : (
-                        <Money won={s.stack} />
+                        <Money won={stackShown(i, s.stack)} />
                       )}
                     </div>
                     {s.away ? (
@@ -1754,7 +1757,7 @@ export default function TableView({
         {/* 내 자리 */}
         {me && (
           <HeroArea
-            me={me}
+            me={{ ...me, stack: stackShown(mySeat, me.stack) }}
             p={hand?.players[mySeat] ?? null}
             hv={hv}
             sv={sv}
@@ -2145,7 +2148,7 @@ export default function TableView({
                 </div>
                 <div className="flex w-full items-center justify-between text-[0.78em] text-white/60">
                   <span>보유 칩</span>
-                  <Money won={s.stack} className="text-[1.15em] text-[#ffd84a]" />
+                  <Money won={stackShown(statSeat, s.stack)} className="text-[1.15em] text-[#ffd84a]" />
                 </div>
                 {/* 강퇴 투표: 남의 자리 · 내가 이 방에서 3판 이상 쳤을 때. 3표면 강퇴, 표는 10판 지나면 사라짐 */}
                 {me && s.seat !== mySeat && (
