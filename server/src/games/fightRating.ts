@@ -38,19 +38,37 @@ export const dominance = (m?: Margin | null) =>
 
 /**
  * 한 사람의 점수 변화.
- *  r, n: 내 점수·판 수 · opp: 상대 점수 · score: 1 승 · 0.5 무 · 0 패 · m: 이겼을 때 경기 내용 · streak: 배치 연승(이번 판 전)
+ *  r, n: 내 점수·판 수 · opp: 상대 점수 · score: 1 승 · 0.5 무 · 0 패 · m: 이겼을 때 경기 내용
+ *  streak: 이번 판 전 연승(+)·연패(−) 수
  *  bot: 상대가 봇
  */
 export function rankDelta(r: number, n: number, opp: number, score: number, o: { m?: Margin | null; streak?: number; bot?: boolean } = {}) {
   const e = 1 / (1 + 10 ** ((opp - r) / 400));
   let d = kOf(n) * (score - e);
-  if (score === 1 && n < RATING_PLACEMENT) d *= (1 + 0.8 * dominance(o.m)) * ((o.streak ?? 0) >= 2 ? 1.2 : 1);
+  const st = o.streak ?? 0;
+  if (score === 1 && n < RATING_PLACEMENT) d *= (1 + 0.8 * dominance(o.m)) * (st >= 2 ? 1.2 : 1);
+  else d *= streakMul(st, score);
   // 봇 레이팅 상한 위: 봇을 이겨도 1~2점 (상한 근처 봇이면 2)
   if (o.bot && score === 1 && r >= BOT_MAX) return opp >= r - 150 ? 2 : 1;
   const v = Math.round(d);
   // 이겼는데 0점·졌는데 0점은 없게 (아주 큰 점수 차여도 1점은 움직임)
   return score === 1 ? Math.max(1, v) : score === 0 ? Math.min(-1, v) : v;
 }
+
+/**
+ * 연승·연패 보정 (배치 뒤): 3연승째부터 얻는 점수 ×1.1, 5연승째부터 ×1.2 /
+ * 3연패째부터 잃는 점수 ×1.1, 5연패째부터 ×1.2 — 실력이 바뀐 사람이 빨리 제자리로
+ */
+export function streakMul(streak: number, score: number) {
+  if (score === 1 && streak >= 2) return streak >= 4 ? 1.2 : 1.1;
+  if (score === 0 && streak <= -2) return streak <= -4 ? 1.2 : 1.1;
+  return 1;
+}
+/** 다음 연승·연패 수: 이기면 +, 지면 −, 비기면 0 */
+export const nextStreak = (prev: number | undefined, res: "w" | "l" | "d") => {
+  const p = prev ?? 0;
+  return res === "w" ? (p > 0 ? p + 1 : 1) : res === "l" ? (p < 0 ? p - 1 : -1) : 0;
+};
 
 /** 두 사람의 점수 변화 (배치 보정 없이). score = 0번 사람의 결과 (1 승 · 0.5 무 · 0 패) */
 export function eloDelta(r0: number, r1: number, n0: number, n1: number, score: number): [number, number] {
@@ -70,7 +88,7 @@ export interface RatingDoc {
   l: number;
   d: number;
   peak: number;
-  /** 지금 연승 (배치 보정용) */
+  /** 지금 연승(+)·연패(−) 수 — 배치 연승 보정, 배치 뒤 연승·연패 보정 */
   streak?: number;
   /** 봇전 판 수 */
   bots?: number;
@@ -190,7 +208,7 @@ export function createFightRating(db: Database, users: Users) {
           col.updateOne(
             { uid },
             {
-              $set: { name, member: true, r, updatedAt: now, peak: Math.max(prev?.peak ?? RATING_START, r), streak: res === "w" ? (prev?.streak ?? 0) + 1 : 0 },
+              $set: { name, member: true, r, updatedAt: now, peak: Math.max(prev?.peak ?? RATING_START, r), streak: nextStreak(prev?.streak, res) },
               $inc: { n: 1, [res]: 1 },
               $setOnInsert: { _id: newId(), uid },
             },
@@ -218,7 +236,7 @@ export function createFightRating(db: Database, users: Users) {
         await col.updateOne(
           { uid },
           {
-            $set: { name, member: true, r, updatedAt: new Date(), peak: Math.max(prev?.peak ?? RATING_START, r), streak: res === "w" ? (prev?.streak ?? 0) + 1 : 0 },
+            $set: { name, member: true, r, updatedAt: new Date(), peak: Math.max(prev?.peak ?? RATING_START, r), streak: nextStreak(prev?.streak, res) },
             $inc: { n: 1, bots: 1, [res]: 1 },
             $setOnInsert: { _id: newId(), uid },
           },

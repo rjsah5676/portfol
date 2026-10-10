@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BOT_MAX, RATING_PLACEMENT, dominance, rankDelta } from "../src/games/fightRating";
+import { BOT_MAX, RATING_PLACEMENT, dominance, nextStreak, rankDelta } from "../src/games/fightRating";
 import { botBuild, replayBot } from "../src/games/fightBot";
 import { CHARS } from "../../web/src/lib/fight/chars";
 import { newMatch, step } from "../../web/src/lib/fight/sim";
@@ -16,8 +16,9 @@ describe("랭크전 레이팅", () => {
     expect(rankDelta(1000, 0, 1000, 1, { m: { rounds: 2, hp: 1 } })).toBe(36);
     expect(rankDelta(1000, 0, 1000, 1, { m: { rounds: 2, hp: 1 }, streak: 2 })).toBe(43);
     expect(rankDelta(1000, 0, 1000, 1, { m: { rounds: 1, hp: 0.1 } })).toBeLessThan(30);
-    // 배치가 끝나면 보정 없음
-    expect(rankDelta(1000, RATING_PLACEMENT, 1000, 1, { m: { rounds: 2, hp: 1 }, streak: 5 })).toBe(12);
+    // 배치가 끝나면 압도 보정 없음 (연승 보정만 — 5연승째 ×1.2)
+    expect(rankDelta(1000, RATING_PLACEMENT, 1000, 1, { m: { rounds: 2, hp: 1 }, streak: 0 })).toBe(12);
+    expect(rankDelta(1000, RATING_PLACEMENT, 1000, 1, { m: { rounds: 2, hp: 1 }, streak: 5 })).toBe(14);
     expect(dominance(null)).toBe(0);
   });
   it("봇 상한 위에서는 봇을 이겨도 1~2점, 지면 크게", () => {
@@ -27,6 +28,25 @@ describe("랭크전 레이팅", () => {
     expect(rankDelta(2900, 50, 2600, 0, { bot: true })).toBeLessThanOrEqual(-20);
     // 사람끼리는 보통 Elo
     expect(rankDelta(2900, 50, 2900, 1)).toBe(12);
+  });
+});
+
+describe("연승·연패 보정", () => {
+  it("배치 뒤 3연승째 ×1.1 · 5연승째 ×1.2, 3연패째 ×1.1 · 5연패째 ×1.2", () => {
+    const n = RATING_PLACEMENT;
+    expect(rankDelta(1500, n, 1500, 1, { streak: 1 })).toBe(12);
+    expect(rankDelta(1500, n, 1500, 1, { streak: 2 })).toBe(13);
+    expect(rankDelta(1500, n, 1500, 1, { streak: 4 })).toBe(14);
+    expect(rankDelta(1500, n, 1500, 0, { streak: -1 })).toBe(-12);
+    expect(rankDelta(1500, n, 1500, 0, { streak: -2 })).toBe(-13);
+    expect(rankDelta(1500, n, 1500, 0, { streak: -4 })).toBe(-14);
+    // 연승 중에 지면 보정 없음
+    expect(rankDelta(1500, n, 1500, 0, { streak: 5 })).toBe(-12);
+    expect(nextStreak(3, "w")).toBe(4);
+    expect(nextStreak(3, "l")).toBe(-1);
+    expect(nextStreak(-2, "l")).toBe(-3);
+    expect(nextStreak(-2, "w")).toBe(1);
+    expect(nextStreak(undefined, "d")).toBe(0);
   });
 });
 
