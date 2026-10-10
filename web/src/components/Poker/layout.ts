@@ -50,7 +50,7 @@ const S9: Spot[] = [
 export function layoutFor(seats: number): Layout {
   // 7포커(5인)는 자리 틀이 양옆을 채우니 판은 가운데 칸에 (틀 사이로 보이게)
   if (seats === 5)
-    return { table: { cx: 50, top: 17, w: 60 }, center: { pot: 30, board: 42 }, heroX: 38, heroCards: 61, spots: S5 };
+    return { table: { cx: 50, top: 17, w: 60 }, center: { pot: 25, board: 42 }, heroX: 38, heroCards: 61, spots: S5 };
   return {
     table: { cx: 50, top: 19, w: 62 },
     center: { pot: 31, board: 42 },

@@ -38,8 +38,8 @@ export function holdemHint(my: MyHand, view: HoldemView): string {
   if (a === b) return g === 2 ? `${RANK_CH[a]} 포켓 페어 · 프리미엄` : `${RANK_CH[a]} 포켓 페어`;
   const suited = (my.cards[0] & 3) === (my.cards[1] & 3);
   const name = `${RANK_CH[Math.max(a, b)]}·${RANK_CH[Math.min(a, b)]}${suited ? " 수딧" : ""}`;
-  // 첫 두 장도 늘 알려 줌: 프리미엄 · 좋은 패는 따로 표시
-  return g === 2 ? `${name} · 프리미엄` : g === 1 ? `${name} · 좋은 패` : name;
+  // 첫 두 장도 늘 알려 줌 (프리미엄만 따로 표시)
+  return g === 2 ? `${name} · 프리미엄` : name;
 }
 
 export function holdemSeatCards({

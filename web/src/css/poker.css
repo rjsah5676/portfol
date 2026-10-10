@@ -3375,16 +3375,94 @@
   flex-wrap: wrap;
 }
 .pk-ri {
-  padding: 0.08em 0.6em;
+  padding: 0.08em 0.65em;
   border-radius: 999px;
   background: rgba(0, 0, 0, 0.55);
   border: 1px solid rgba(255, 255, 255, 0.14);
-  color: rgba(255, 255, 255, 0.82);
-  font-size: 0.8em;
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 0.95em;
   font-weight: 700;
   white-space: nowrap;
 }
 .pk-ri-call {
   color: #3ee08f;
   border-color: rgba(62, 224, 143, 0.5);
+}
+/* 7포커 띠 가운데: 이번 판 총 베팅 */
+.pk-sf-total {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.3em;
+  font-size: 0.92em;
+  font-weight: 800;
+  color: #fff;
+}
+.pk-sf-total-l {
+  font-size: 0.78em;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.5);
+}
+/* 판 끝 손익: 카드 칸 오른쪽 위에 크게 */
+.pk-sf-net {
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  z-index: 9;
+  padding: 0.05em 0.55em;
+  border-radius: 8px;
+  background: rgba(6, 7, 12, 0.88);
+  font-size: 1.35em;
+  font-weight: 900;
+  line-height: 1.25;
+  white-space: nowrap;
+  pointer-events: none;
+  animation: pk-acttag 0.45s cubic-bezier(0.2, 1.5, 0.35, 1) both;
+}
+.pk-sf-net-up {
+  color: #ffd84a;
+  border: 1.5px solid rgba(255, 216, 74, 0.7);
+  text-shadow: 0 0 10px rgba(255, 216, 74, 0.6);
+}
+.pk-sf-net-down {
+  color: #ff7d86;
+  border: 1.5px solid rgba(255, 125, 134, 0.55);
+}
+/* 캐릭터 칸 남은 시간 테두리: 칸 안쪽으로 들여서 아래가 띠에 안 가리게 */
+.pk-sf-char .pk-plate-ring {
+  left: 2px;
+  top: 2px;
+  width: calc(100% - 4px);
+  height: calc(100% - 4px);
+}
+/* 판 위 칩: 구가 넘어가면 가운데로 쓸려 모이는 움직임 */
+.pk-pilechip {
+  transition:
+    left 0.55s cubic-bezier(0.3, 0.8, 0.3, 1),
+    top 0.55s cubic-bezier(0.3, 0.8, 0.3, 1);
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.6));
+}
+/* 홀덤 이번 판 총 베팅: 얼굴 아이콘 위 가운데 */
+.pk-face-bet {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 3px);
+  transform: translateX(-50%);
+  z-index: 6;
+  padding: 0.05em 0.55em;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.78);
+  border: 1px solid rgba(255, 216, 74, 0.45);
+  color: #ffd84a;
+  font-size: 0.85em;
+  font-weight: 800;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.pk-face-bet-me {
+  left: auto;
+  right: -0.9em;
+  bottom: auto;
+  top: 2px;
+  transform: none;
+  font-size: 0.9em;
 }
