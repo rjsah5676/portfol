@@ -393,7 +393,13 @@ export function playSfx(name: string) {
 
 /** 지금 나오는 캐릭터 음성 하나 (외침이 겹쳐 쌓이지 않게 새 외침이 오면 앞 것은 짧게 줄이고 끊음) */
 let voiceNow: { src: AudioBufferSourceNode; gain: GainNode } | null = null;
-let voicePending: { char: string; name: string; big: boolean; at: number } | null = null;
+/**
+ * 외침이 아닌 대사(족보 · 승리 · 패배 · 입장 …)는 줄을 세워 하나씩, 들어온 순서대로.
+ * (파일을 받는 동안 뒤에 온 대사가 먼저 나오던 것 — 쇼다운에서 「투페어 → 승리 → 원페어」처럼)
+ * 5초 넘게 기다린 대사는 버림
+ */
+const speakQ: { char: string; name: string; big: boolean; at: number }[] = [];
+let speaking = false;
 const BETS = new Set([
   "call",
   "bet",
@@ -432,6 +438,49 @@ export async function voiceDuration(char: string, name: string): Promise<number 
   return buf ? buf.duration : null;
 }
 
+/** 음성 한 줄 재생 — 나오던 음성은 0.08초 만에 줄이고 끊음 (최신 행동이 항상 들림) */
+function playBuf(c: AudioContext, buf: AudioBuffer, vol: number, onEnd?: () => void) {
+  if (voiceNow) {
+    const old = voiceNow;
+    old.gain.gain.setTargetAtTime(0, c.currentTime, 0.03);
+    old.src.stop(c.currentTime + 0.1);
+  }
+  const src = c.createBufferSource();
+  src.buffer = buf;
+  const g = c.createGain();
+  g.gain.value = vol;
+  src.connect(g);
+  g.connect(c.destination);
+  const me = { src, gain: g };
+  voiceNow = me;
+  src.onended = () => {
+    if (voiceNow === me) voiceNow = null;
+    onEnd?.();
+    if (!voiceNow) setTimeout(pumpSpeak, 150);
+  };
+  src.start();
+}
+
+/** 대사 줄에서 다음 것 (나오는 음성이 없을 때만) */
+function pumpSpeak() {
+  if (speaking || voiceNow || !speakQ.length) return;
+  const next = speakQ.shift()!;
+  const s = getSound();
+  const url = voiceUrl(next.char, next.name, next.big);
+  const c = ac();
+  if (Date.now() - next.at > 5000 || !url || !c || s.mute || s.voice <= 0) return pumpSpeak();
+  speaking = true;
+  void buffer(url).then((buf) => {
+    if (!buf) {
+      speaking = false;
+      return pumpSpeak();
+    }
+    playBuf(c, buf, s.voice * (next.big ? 1.15 : 1), () => {
+      speaking = false;
+    });
+  });
+}
+
 /** 캐릭터 음성 (파일 있을 때만). big = 크게 외치는 버전(없으면 보통 버전) */
 export function playVoice(char: string, name: string, big = false) {
   const s = getSound();
@@ -441,37 +490,15 @@ export function playVoice(char: string, name: string, big = false) {
   if (!url) return;
   const c = ac();
   if (!c) return;
-  const bet = BETS.has(name);
-  // 베팅 외침이 아닌 대사(승리 · 패배 · 입장 …)는 다른 음성이 나오는 중이면 끝난 뒤에 이어서 (대기는 한 줄, 5초 지나면 버림)
-  if (!bet && voiceNow) {
-    voicePending = { char, name, big, at: Date.now() };
+  // 대사는 줄 서서 차례로 (다른 음성이 나오는 중이면 끝난 뒤에), 너무 많이 쌓이면 오래된 것부터 버림
+  if (!BETS.has(name)) {
+    speakQ.push({ char, name, big, at: Date.now() });
+    if (speakQ.length > 4) speakQ.shift();
+    pumpSpeak();
     return;
   }
   void buffer(url).then((buf) => {
-    if (!buf) return;
-    if (voiceNow) {
-      // 앞 외침은 0.08초 만에 줄이고 끊음 → 최신 행동이 항상 들림
-      const old = voiceNow;
-      old.gain.gain.setTargetAtTime(0, c.currentTime, 0.03);
-      old.src.stop(c.currentTime + 0.1);
-    }
-    const src = c.createBufferSource();
-    src.buffer = buf;
-    const g = c.createGain();
-    g.gain.value = s.voice * (big ? 1.15 : 1);
-    src.connect(g);
-    g.connect(c.destination);
-    const me = { src, gain: g };
-    voiceNow = me;
-    src.onended = () => {
-      if (voiceNow !== me) return;
-      voiceNow = null;
-      const next = voicePending;
-      voicePending = null;
-      if (next && Date.now() - next.at < 5000)
-        setTimeout(() => playVoice(next.char, next.name, next.big), 150);
-    };
-    src.start();
+    if (buf) playBuf(c, buf, s.voice * (big ? 1.15 : 1));
   });
 }
 
