@@ -187,6 +187,8 @@ export interface OnlineStage {
   ) => void;
   /** Esc 꾹 → 나가기 */
   onLeave: () => void;
+  /** 죽음: 결과를 알리고 화면은 그대로 (다른 사람 미니 화면을 보며 판이 끝나길 기다림) */
+  onDead: (result: Result) => void;
 }
 
 interface Props {
@@ -273,6 +275,8 @@ export default function Stage({
   const [paused, setPaused] = useState(false);
   /** 온라인: 나가기 버튼을 한 번 누른 상태 */
   const [leaveArm, setLeaveArm] = useState(false);
+  /** 온라인: 죽고 나서 다른 사람을 보는 중 */
+  const [watching, setWatching] = useState(false);
   // 일시정지 화면의 지금까지 점수·정확도·랭크
   const [pauseStats, setPauseStats] = useState<{
     score: number;
@@ -1308,7 +1312,8 @@ export default function Stage({
       const pulse = t > 0 ? Math.exp(-beatPh * 5) : 0;
       shownScore += (engine.score - shownScore) * 0.18;
       drawBackdrop(t, pulse);
-      if (minis) drawMinis(t);
+      // 죽고 나서 보는 중이면 미니 화면은 지금 곡 시각으로 (내 레인만 멈춤)
+      if (minis) drawMinis(watchingNow ? now() - judgeSec() : t);
       else drawBoard();
       g.save();
       g.translate(gx, 0);
@@ -1687,14 +1692,9 @@ export default function Stage({
         engine.counts.good,
         engine.counts.miss,
       ]);
-    const finish = (failed = false) => {
-      video?.pause();
-      if (finished) return;
-      finished = true;
-      running = false;
-      if (autoplay) autoSfxStop();
+    const resultOf = (failed: boolean): Result => {
       const acc = engine.accuracy;
-      onFinish({
+      return {
         auto: autoplay || undefined,
         failed,
         songId: song.id,
@@ -1709,7 +1709,15 @@ export default function Stage({
         fast,
         slow,
         ...timingOf(diffs),
-      });
+      };
+    };
+    const finish = (failed = false) => {
+      video?.pause();
+      if (finished) return;
+      finished = true;
+      running = false;
+      if (autoplay) autoSfxStop();
+      onFinish(resultOf(failed));
       reportAuto();
     };
     // 화면용 부드러운 시계: 오디오 시계(currentTime)는 오디오 버퍼 단위(수~십 ms)로 뚝뚝 끊겨 올라서
@@ -1893,6 +1901,39 @@ export default function Stage({
     };
     raf = requestAnimationFrame(frame);
 
+    // 온라인에서 죽음: 결과는 알리고, 내 레인은 멈춘 채로 다른 사람 미니 화면만 계속 (판이 끝나면 부모가 결과로)
+    let watchingNow = false;
+    const watch = (tFail: number) => {
+      finished = true;
+      running = false;
+      watchingNow = true;
+      reportAuto();
+      online?.onDead(resultOf(true));
+      setWatching(true);
+      const tick = () => {
+        if (!watchingNow) return;
+        draw(tFail);
+        // 내 레인 위에 FAILED · 기다리는 중
+        g.save();
+        g.translate(gx, 0);
+        g.fillStyle = "rgba(4,3,12,0.62)";
+        g.fillRect(0, laneTop, W, judgeY - laneTop);
+        g.textAlign = "center";
+        g.textBaseline = "middle";
+        g.fillStyle = "#F43F5E";
+        g.font = `italic 900 40px ${disp}`;
+        g.fillText("FAILED", W / 2, midY(0.4));
+        g.fillStyle = "rgba(255,255,255,0.8)";
+        g.font = `800 16px ${KR_FONT}`;
+        g.fillText("다른 사람이 끝나길 기다리는 중", W / 2, midY(0.4) + 40);
+        g.fillStyle = "rgba(255,255,255,0.45)";
+        g.font = `700 13px ${KR_FONT}`;
+        g.fillText("Esc · 로비로 나가기", W / 2, midY(0.4) + 66);
+        g.restore();
+        raf = requestAnimationFrame(tick);
+      };
+      raf = requestAnimationFrame(tick);
+    };
     // HP 바닥: 화면 멈추고 음악이 테이프 멈추듯 느려지며 꺼짐 → FAILED → 결과
     let failing = false;
     const fail = (tFail: number) => {
@@ -1918,6 +1959,7 @@ export default function Stage({
         drawFailed(g, el, failImg, CW, CH);
         if (el >= 2.6) {
           failing = false;
+          if (online) return watch(tFail);
           finish(true);
           return;
         }
@@ -2119,9 +2161,10 @@ export default function Stage({
       if (e.code === "Escape") {
         e.preventDefault();
         if (e.repeat) return; // 꾹 누르고 있으면 멈춤·재개가 연달아 일어나던 문제
-        // 온라인: 꾹 누르면 나가기 (실수로 한 번 눌러 나가지 않게)
+        // 온라인: 꾹 누르면 나가기 (실수로 한 번 눌러 나가지 않게). 죽고 나서 보는 중이면 바로
         if (online) {
-          if (running) rHoldAt = performance.now();
+          if (watchingNow) online.onLeave();
+          else if (running) rHoldAt = performance.now();
           return;
         }
         if (running || resuming) pause();
@@ -2321,7 +2364,7 @@ export default function Stage({
           <button
             type="button"
             onClick={() => {
-              if (leaveArm) online.onLeave();
+              if (leaveArm || watching) online.onLeave();
               else {
                 setLeaveArm(true);
                 setTimeout(() => setLeaveArm(false), 2500);
@@ -2329,7 +2372,13 @@ export default function Stage({
             }}
             className={`cursor-pointer rounded-[0.6cqw] px-[0.9cqw] py-[0.35cqw] font-mono text-[1.1cqw] hover:bg-white/20 hover:text-white ${leaveArm ? "bg-[#F43F5E]/80 text-white" : "bg-black/55 text-white/70"}`}
           >
-            {leaveArm ? "한 번 더 누르면 나가기" : portrait ? "나가기" : "나가기 (Esc 꾹)"}
+            {watching
+              ? "로비로 나가기"
+              : leaveArm
+                ? "한 번 더 누르면 나가기"
+                : portrait
+                  ? "나가기"
+                  : "나가기 (Esc 꾹)"}
           </button>
         ) : (
           <button

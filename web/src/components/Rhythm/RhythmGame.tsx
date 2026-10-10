@@ -702,13 +702,17 @@ export default function RhythmGame() {
     setScreen("title");
   }, []);
 
-  /** 방 곡 → 곡 정보 */
+  /** 방 곡 → 곡 정보. 곡이 바뀔 때만 새로 (준비 등으로 방 상태가 와도 그대로 — 미리 듣기가 처음부터 다시 나오지 않게) */
+  const roomSongKey = oRoom?.song ? `${oRoom.song.kind}:${oRoom.song.id}` : "";
+  // 곡 id 가 바뀔 때만 새 객체 (방 상태 객체는 이벤트마다 새로 옴)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const stableSong = useMemo(() => oRoom?.song ?? null, [roomSongKey]);
   const onlineSong = useMemo<Song | null>(() => {
-    const s = oRoom?.song;
+    const s = stableSong;
     if (!s) return null;
     if (s.kind === "builtin") return SONGS.find((x) => x.id === s.id) ?? null;
     return hosted?.ver === s.id ? trackSong(hosted.track) : guestSong(s);
-  }, [oRoom?.song, hosted]);
+  }, [stableSong, hosted]);
   const roomSongView = useMemo<RoomSongView | null>(() => {
     const s = oRoom?.song;
     if (!s || !onlineSong) return null;
@@ -822,6 +826,36 @@ export default function RhythmGame() {
     if (oRoom?.phase === "lobby" || oRoom?.phase === "result") setOLoad(null);
   }, [oRoom?.phase]);
 
+  /** 내 판 결과를 서버에 (죽었을 땐 화면은 그대로 두고 이것만) */
+  const reportOnline = useCallback(
+    (r: Result) => {
+      const id = oRoomId;
+      const no = oPlaying;
+      doneRounds.current.add(no);
+      if (id && no)
+        sendDone(id, no, {
+          score: r.score,
+          acc: Math.round(r.acc * 100) / 100,
+          rank: r.rank,
+          maxCombo: r.maxCombo,
+          failed: r.failed,
+          fc: r.fc,
+          ap: r.ap,
+          counts: r.counts,
+        }).catch(() => {});
+    },
+    [oRoomId, oPlaying]
+  );
+  // 죽고 나서 보던 판이 끝나면(결과·대기실) 방 화면으로
+  useEffect(() => {
+    if (screen !== "play" || !oPlaying || !oRoom) return;
+    if (oRoom.phase === "result" || oRoom.phase === "lobby" || oRoom.round?.no !== oPlaying) {
+      /* eslint-disable react-hooks/set-state-in-effect -- 서버가 판을 끝내면 결과 화면으로 */
+      setOPlaying(0);
+      setScreen("online");
+      /* eslint-enable react-hooks/set-state-in-effect */
+    }
+  }, [screen, oPlaying, oRoom]);
   const finishOnline = useCallback(
     (r: Result) => {
       const id = oRoomId;
@@ -878,10 +912,11 @@ export default function RhythmGame() {
         sendProgress(id, oPlaying, row);
       },
       onLeave: leaveOnlinePlay,
+      onDead: reportOnline,
     };
     // 판이 시작될 때 한 번만 (점수판은 같은 객체를 계속 고쳐 씀)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [oPlaying, oRoom?.id, oRoom?.round?.startAt, leaveOnlinePlay]);
+  }, [oPlaying, oRoom?.id, oRoom?.round?.startAt, leaveOnlinePlay, reportOnline]);
 
   /** 방장: 곡 선택 화면에서 고른 곡을 방 곡으로 (내 음악은 뒤에서 올림) */
   const pickForRoom = useCallback(async () => {
