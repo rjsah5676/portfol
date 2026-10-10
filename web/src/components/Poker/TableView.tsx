@@ -1508,7 +1508,7 @@ export default function TableView({
               {/* 말풍선: 머리 위 */}
               <div
                 className="pointer-events-none absolute"
-                style={{ left: x, top: sprTop + sprH * 0.05, zIndex: 40 }}
+                style={{ left: x, top: sprTop + sprH * 0.05, zIndex: 32 }}
               >
               </div>
               {/* 이모티콘 말풍선: 캐릭터를 가리지 않게 머리 옆(테이블 안쪽)에, 꼬리가 머리를 가리킴 — 무대 밖으로 안 나가게 */}
@@ -1528,7 +1528,7 @@ export default function TableView({
                     <div
                       key={emotes[i].key}
                       className="pk-emote pointer-events-none absolute"
-                      style={{ left: ex - size / 2, top: ey, zIndex: 40 }}
+                      style={{ left: ex - size / 2, top: ey, zIndex: 32 }}
                     >
                       <EmoteBubble tail={dir > 0 ? "l" : "r"}>
                         <EmoteImg char={s.look ?? s.char} emote={emotes[i].v} size={size} />
@@ -1542,7 +1542,8 @@ export default function TableView({
                   left: x,
                   top: hideSprite ? y - sizes.face * 1.6 : y - 6,
                   transform: "translateX(-50%)",
-                  zIndex: 7,
+                  // 카드는 절대 가려지면 안 됨: 이름표 · 카드 줄을 건 돈 · 날아가는 칩 · 외침 · 말풍선 · 이모티콘보다 위에 (위 바 · 창들보다는 아래)
+                  zIndex: 34,
                 }}
               >
                 <div className="relative flex flex-col items-center">
@@ -1762,7 +1763,7 @@ export default function TableView({
                 {
                   left: from.x,
                   top: from.y,
-                  zIndex: 36,
+                  zIndex: 33,
                   fontSize: Math.max(30, u * 6),
                   color: SHOUT_COLOR[sh.a] ?? "#fff",
                   "--dx": `${(to.x - from.x) * 0.62}px`,

@@ -104,38 +104,35 @@ export function sevenSeatCards({
       </span>
     );
   }
-  // 남의 카드: 엎은 2장 · 편 카드들 · (7구) 엎은 1장 (쇼다운 중 아직 안 깐 자리도 이 모양 그대로)
+  // 남의 카드: 엎은 카드(처음 2장 · 7구 1장)는 작게 앞에 한 묶음, 편 카드는 크게 덜 겹쳐서 — 편 카드가 한눈에 보이게
+  // (쇼다운 중 아직 안 깐 자리도 이 모양 그대로)
   const downN = p.cards ? p.cards.length - p.up.length : p.down;
-  const downFirst = Math.min(2, downN);
-  const downLast = p.up.length ? downN - downFirst : 0;
-  const leading = p.up.length ? downFirst : downN;
-  // 엎은 카드는 안 보여도 되니 바짝 겹치고(끝만 살짝), 남는 폭은 편 카드에 — 줄이 좁아도 편 카드 숫자가 보이게
   const U = p.up.length;
-  const backGap = -Math.round(w * 0.8);
-  const peeks = Math.max(0, leading - 1) + (leading && U ? 1 : 0);
-  let upGap = hero ? overlap : -Math.round(w * (side === "top" ? 0.38 : 0.48));
-  // 7구 엎은 카드는 편 카드와 같은 간격으로 줄 끝에 (다른 7포커 게임처럼 한 줄로) — 편 카드 숫자는 그대로 보임
-  const slots = U - 1 + downLast;
-  if (maxW && slots > 0) {
-    const room = (maxW - w - peeks * (w + backGap)) / slots - w;
-    upGap = Math.min(upGap, Math.max(Math.floor(room), -Math.round(w * 0.7)));
+  const total = downN + U;
+  const bw = U ? Math.round(w * 0.72) : w;
+  const bg = -Math.round(bw * 0.82);
+  const backsW = downN ? bw + (downN - 1) * (bw + bg) : 0;
+  let g = -Math.round(w * 0.3);
+  if (maxW && U > 1) {
+    const room = (maxW - backsW - (downN ? 4 : 0) - w) / (U - 1) - w;
+    g = Math.min(g, Math.max(Math.floor(room), -Math.round(w * 0.7)));
   }
   const ml = (m: number) => ({ marginLeft: m });
   return (
     <span className={`flex flex-col gap-[3px] ${side === "right" ? "items-end" : "items-start"}`}>
-      <span className={row}>
-        {Array.from({ length: leading }, (_, i) => {
-          const dd = dealDelay?.(i, leading + p.up.length + downLast);
+      <span className={`${row} items-center`}>
+        {Array.from({ length: downN }, (_, i) => {
+          const dd = dealDelay?.(i, total);
           return (
             <PlayingCard
               key={`d${i}`}
               card={null}
-              w={w}
+              w={bw}
               tier={tier}
               dim={p.folded}
               deal={dd !== undefined}
               delay={dd}
-              style={i ? ml(backGap) : undefined}
+              style={i ? ml(bg) : undefined}
             />
           );
         })}
@@ -146,20 +143,8 @@ export function sevenSeatCards({
             w={w}
             dim={p.folded}
             deal
-            delay={dealDelay?.(leading + i, leading + p.up.length + downLast)}
-            style={i ? ml(upGap) : leading ? ml(backGap) : undefined}
-          />
-        ))}
-        {Array.from({ length: downLast }, (_, i) => (
-          <PlayingCard
-            key={`l${i}`}
-            card={null}
-            w={w}
-            tier={tier}
-            dim={p.folded}
-            deal
-            delay={dealDelay?.(leading + p.up.length + i, leading + p.up.length + downLast)}
-            style={ml(U ? upGap : backGap)}
+            delay={dealDelay?.(downN + i, total)}
+            style={i ? ml(g) : downN ? ml(4) : undefined}
           />
         ))}
       </span>
