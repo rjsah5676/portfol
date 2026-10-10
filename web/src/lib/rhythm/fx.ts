@@ -1,33 +1,30 @@
 /**
  * 타격음 종류와 노트 스킨.
- * 타격음은 샘플 파일 없이 직접 계산해서 짧은 AudioBuffer로 만든다(한 번 만들어 재사용).
+ * 타격음 1(툭)은 직접 계산해서, 2~5는 짧은 샘플 파일(public/rhythm/hit/*.wav)을 받아 AudioBuffer로 (한 번 만들어 재사용).
  */
 
 // ───────────────────────── 타격음 ─────────────────────────
 
-/** 합성 4종 + 시험용 샘플(test1~21, public/rhythm/hit/testN.wav — 들어보고 고를 것만 남길 예정) */
-export type HitSound = "thump" | "wood" | "knock" | "tom" | `test${number}`;
-type SynthHit = "thump" | "wood" | "knock" | "tom";
-const HIT_TESTS = 21;
+/** 1 툭(합성) · 2 물방울 · 3 펀치(박수+클릭) · 4 하이햇 틱 · 5 하이햇 */
+export type HitSound = "thump" | "drop" | "punch" | "tick" | "hat";
+type SampleHit = Exclude<HitSound, "thump">;
 
 /**
- * 타격음: 음악을 덮지 않게 둥글지만, 친 순간은 확실히 느껴지게.
- * 화면엔 번호로만 보여줌 (1이 기본). 전부 같은 체감 크기로 맞춤.
+ * 타격음: 친 순간이 또렷하게. 화면엔 번호로만 보여줌 (1이 기본).
+ * 샘플은 ElevenLabs로 만든 것 중 고른 4개 — 어택 시작에 맞춰 0.2초로 자르고, 음악에 묻히지 않게 소프트 리미터로 키움
  */
 export const HIT_SOUNDS: { key: HitSound; label: string }[] = [
   { key: "thump", label: "1" },
-  { key: "wood", label: "2" },
-  { key: "knock", label: "3" },
-  { key: "tom", label: "4" },
-  ...Array.from({ length: HIT_TESTS }, (_, i) => ({
-    key: `test${i + 1}` as HitSound,
-    label: `T${i + 1}`,
-  })),
+  { key: "drop", label: "2" },
+  { key: "punch", label: "3" },
+  { key: "tick", label: "4" },
+  { key: "hat", label: "5" },
 ];
 
-const isSample = (k: HitSound): k is `test${number}` => k.startsWith("test");
+const isSample = (k: HitSound): k is SampleHit => k !== "thump";
 /** 샘플 타격음 캐시 (한 번 받아서 디코딩) */
 const samples = new Map<string, Promise<AudioBuffer | null>>();
+const loaded = new Map<string, AudioBuffer>();
 /** 샘플 타격음이면 파일을 받아 디코딩해 둠 (합성음은 바로 null) — 다 되면 makeHitSound가 그걸 돌려줌 */
 export function loadHitSound(ctx: BaseAudioContext, kind: HitSound): Promise<AudioBuffer | null> {
   if (!isSample(kind)) return Promise.resolve(null);
@@ -41,7 +38,13 @@ export function loadHitSound(ctx: BaseAudioContext, kind: HitSound): Promise<Aud
   }
   return p;
 }
-const loaded = new Map<string, AudioBuffer>();
+
+/** 샘플은 파일을 받은 버퍼를, 못 받으면 1번(툭)으로 */
+export async function hitSoundBuffer(ctx: BaseAudioContext, kind: HitSound): Promise<AudioBuffer> {
+  const b = await loadHitSound(ctx, kind);
+  if (b) loaded.set(kind, b);
+  return b ?? makeHitSound(ctx, "thump");
+}
 
 function noiseGen(seed: number) {
   let s = seed;
@@ -51,102 +54,39 @@ function noiseGen(seed: number) {
   };
 }
 
-const LEN: Record<SynthHit, number> = {
-  thump: 0.12,
-  wood: 0.12,
-  knock: 0.1,
-  tom: 0.16,
-};
-
-/** 소리별 최종 크기 (피크). 저음 위주 소리는 노트북 스피커에서 작게 들려서 더 크게 */
-const PEAK: Record<SynthHit, number> = {
-  thump: 0.95,
-  wood: 0.7,
-  knock: 0.95,
-  tom: 0.9,
-};
-
-/** 샘플은 loadHitSound가 끝난 뒤 그 버퍼를, 아직이면 1번(툭)으로 */
-export async function hitSoundBuffer(ctx: BaseAudioContext, kind: HitSound): Promise<AudioBuffer> {
-  const b = await loadHitSound(ctx, kind);
-  if (b) loaded.set(kind, b);
-  return b ?? makeHitSound(ctx, isSample(kind) ? "thump" : kind);
-}
-
+/** 받아 둔 샘플이 있으면 그것, 아니면 1번 툭을 계산해서 (샘플이 아직 안 왔을 때도 툭) */
 export function makeHitSound(ctx: BaseAudioContext, hit: HitSound = "thump") {
   const ready = loaded.get(hit);
   if (ready) return ready;
-  const kind: SynthHit = isSample(hit) ? "thump" : hit;
   const sr = ctx.sampleRate;
-  const len = Math.floor(sr * LEN[kind]);
+  const len = Math.floor(sr * 0.12);
   const buf = ctx.createBuffer(1, len, sr);
   const d = buf.getChannelData(0);
   const rnd = noiseGen(7);
   const TAU = 2 * Math.PI;
   /** 1ms 어택 — 바로 0→최대면 '틱' 하는 날카로운 클릭이 생겨서 */
   const atk = (t: number) => Math.min(1, t / 0.001);
-
-  if (kind === "wood") {
-    // 2 우드블록: 높은 공명 두 개가 빠르게 사그라듦
-    for (let i = 0; i < len; i++) {
-      const t = i / sr;
-      const x =
-        Math.sin(TAU * 820 * t) * Math.exp(-t * 55) +
-        Math.sin(TAU * 2210 * t) * Math.exp(-t * 110) * 0.35 +
-        rnd() * Math.exp(-t * 900) * 0.3;
-      d[i] = Math.tanh(x * 1.2);
-    }
-  } else if (kind === "thump") {
-    // 1 툭: 손가락으로 책상 두드리는 소리.
-    // 몸통(220→120Hz)은 그대로 두고, 작은 스피커에서도 들리게 2배음(중음)과 짧은 접촉음을 얹음
-    let lp = 0;
-    let phase = 0;
-    for (let i = 0; i < len; i++) {
-      const t = i / sr;
-      const f = 120 + 100 * Math.exp(-t * 55);
-      phase += (TAU * f) / sr;
-      lp += (rnd() - lp) * 0.18;
-      const x =
-        Math.sin(phase) * Math.exp(-t * 30) +
-        Math.sin(phase * 2) * Math.exp(-t * 45) * 0.8 +
-        Math.sin(phase * 3) * Math.exp(-t * 70) * 0.35 +
-        Math.sin(TAU * 900 * t) * Math.exp(-t * 150) * 0.3 +
-        lp * Math.exp(-t * 200) * 1.2;
-      d[i] = Math.tanh(x * 2.2 * atk(t));
-    }
-  } else if (kind === "knock") {
-    // 3 노크: 나무 문을 손마디로 똑 — 툭보다 조금 높고(340Hz) 단단함, 우드블록보다 낮고 둥긂
-    let lp = 0;
-    for (let i = 0; i < len; i++) {
-      const t = i / sr;
-      lp += (rnd() - lp) * 0.35;
-      const x =
-        Math.sin(TAU * 340 * t) * Math.exp(-t * 60) +
-        Math.sin(TAU * 790 * t) * Math.exp(-t * 110) * 0.35 +
-        Math.sin(TAU * 1450 * t) * Math.exp(-t * 200) * 0.12 +
-        lp * Math.exp(-t * 350) * 0.7;
-      d[i] = Math.tanh(x * 1.4 * atk(t));
-    }
-  } else {
-    // 4 탐: 작은 플로어 탐을 손바닥으로 — 음정이 살짝 내려가는 둥근 저음 + 가죽 접촉음
-    let lp = 0;
-    let phase = 0;
-    for (let i = 0; i < len; i++) {
-      const t = i / sr;
-      const f = 170 + 90 * Math.exp(-t * 35);
-      phase += (TAU * f) / sr;
-      lp += (rnd() - lp) * 0.25;
-      const x =
-        Math.sin(phase) * Math.exp(-t * 22) +
-        Math.sin(phase * 1.5) * Math.exp(-t * 45) * 0.3 +
-        lp * Math.exp(-t * 260) * 0.8;
-      d[i] = Math.tanh(x * 1.3 * atk(t));
-    }
+  // 1 툭: 손가락으로 책상 두드리는 소리.
+  // 몸통(220→120Hz)은 그대로 두고, 작은 스피커에서도 들리게 2배음(중음)과 짧은 접촉음을 얹음
+  let lp = 0;
+  let phase = 0;
+  for (let i = 0; i < len; i++) {
+    const t = i / sr;
+    const f = 120 + 100 * Math.exp(-t * 55);
+    phase += (TAU * f) / sr;
+    lp += (rnd() - lp) * 0.18;
+    const x =
+      Math.sin(phase) * Math.exp(-t * 30) +
+      Math.sin(phase * 2) * Math.exp(-t * 45) * 0.8 +
+      Math.sin(phase * 3) * Math.exp(-t * 70) * 0.35 +
+      Math.sin(TAU * 900 * t) * Math.exp(-t * 150) * 0.3 +
+      lp * Math.exp(-t * 200) * 1.2;
+    d[i] = Math.tanh(x * 2.2 * atk(t));
   }
-  // 피크를 소리별 목표 크기로 맞춤 (어떤 걸 골라도 비슷하게 들리게)
+  // 피크 0.95로
   let peak = 0;
   for (let i = 0; i < len; i++) peak = Math.max(peak, Math.abs(d[i]));
-  if (peak > 0) for (let i = 0; i < len; i++) d[i] *= PEAK[kind] / peak;
+  if (peak > 0) for (let i = 0; i < len; i++) d[i] *= 0.95 / peak;
   // 끝부분 클릭 방지
   const fade = Math.floor(sr * 0.004);
   for (let i = 0; i < fade; i++) d[len - 1 - i] *= i / fade;
