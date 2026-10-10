@@ -538,7 +538,7 @@ const cloneF = (f: Fighter): Fighter => ({ ...f, hist: f.hist.slice() });
  * 이 빌드의 게임 데이터 지문 (캐릭터 성능·맵) — 온라인에서 서로 다른 빌드끼리 붙었는지 확인.
  * 계산 방식(sim.ts)만 바꿨을 땐 SIM_REV를 올릴 것.
  */
-const SIM_REV = 11;
+const SIM_REV = 12;
 export const BUILD_ID = (() => {
   const str = SIM_REV + JSON.stringify(CHARS.map((c) => [c.hp, c.walk, c.jumpVx, c.dash, c.cd, c.glide, c.hurt, c.width, c.moves])) + JSON.stringify(MAPS.map((m) => [m.plats, m.spawn]));
   let h = 2166136261;
@@ -1785,7 +1785,7 @@ function applyHit(s: State, ai: number, m: MoveDef, srcX: number, mid: MoveId, p
     const immune = (d.cc > 0 && !cont) || d.imm > 0;
     // (이미 감전 중이면 새 상태 이상이 아니라 감전 연장 — 제나 L 뒤 천뢰강림 3연타가 매번 IMMUNE 뜨던 것)
     const shockOn = !!m.shock && d.shock > 0;
-    const hasStatus = !!(m.pull || m.pause || m.swap || (m.trap && !popBonus) || (m.shock && !shockOn) || m.dizzy);
+    const hasStatus = !!(m.pull || m.pullUp || m.pause || m.swap || (m.trap && !popBonus) || (m.shock && !shockOn) || m.dizzy);
     let gotStatus = false;
     if (hasStatus && immune) s.ev.push({ k: "immune", p: ai, x: d.x, h: d.h + 74 * SUB, v: 0 });
     // 긴 경직이 곧 상태 이상인 기술(카이 기절·건모 일시정지·혼란 등): 면역이면 보통 경직으로
@@ -1835,7 +1835,8 @@ function applyHit(s: State, ai: number, m: MoveDef, srcX: number, mid: MoveId, p
       d.vh = Math.max(d.vh, prevVh);
       d.float = 1;
     }
-    if (m.pullUp && !kd) {
+    if (m.pullUp && !kd && !immune) {
+      gotStatus = true;
       // 끌어올리기 = 띄우기: 때린 쪽 높이까지 솟구치게 띄우고(천천히 떨어지는 상태), 가로로는 때린 쪽 앞으로 끌려옴
       const dh = Math.max(0, a.h - 20 * SUB - d.h);
       // 낮은 데서 맞혀도 최소 80px은 뜨게 (예전엔 700 → 26px쯤 떠서 이어 칠 수가 없었음)
