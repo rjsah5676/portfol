@@ -787,9 +787,9 @@ export default function TableView({
           hand.players[mySeat] &&
           !hand.players[mySeat].chosen));
     const left = Math.ceil((deadline - now) / 1000);
-    // 남이 오래 고민하면 재촉: 한 사람이 늦게 친 게(남은 시간 4초까지 고민) 3번 쌓일 때마다 한 번. 카드 고르는 중에는 안 함
+    // 남이 오래 고민하면 재촉: 한 사람이 늦게 친 게(남은 시간 2초까지 고민) 3번 쌓일 때마다 한 번. 카드 고르는 중에는 안 함
     const betting = hand.toAct >= 0 && !(hand.game === "seven" && hand.phase === "choice");
-    if (!mine && betting && left === 4 && hurryRef.current !== deadline && table) {
+    if (!mine && betting && left === 2 && hurryRef.current !== deadline && table) {
       hurryRef.current = deadline;
       const slow = (slowRef.current[hand.toAct] ?? 0) + 1;
       slowRef.current[hand.toAct] = slow;
@@ -1395,8 +1395,9 @@ export default function TableView({
             </span>
           )}
         </div>
+        {/* 나가기 예약 · 강퇴 투표: 틀 윗선 가운데에 걸쳐서 (아래에 두면 아래 틀 · 화면 끝에 묻힘) */}
         {(s.votes > 0 || s.exit) && (
-          <div className="pointer-events-none absolute top-full left-1/2 flex -translate-x-1/2 flex-col items-center">
+          <div className="pointer-events-none absolute top-0 left-1/2 z-20 flex -translate-x-1/2 -translate-y-1/2 items-center gap-[0.3em]">
             {s.votes > 0 && <span className="pk-vote-mark">⚠ 강퇴 {s.votes}/3</span>}
             {s.exit && <span className="pk-exit-mark">나가기 예약</span>}
           </div>
@@ -2008,15 +2009,8 @@ export default function TableView({
             const ws = table.seats[seat];
             if (seat === undefined || !ws) return null;
             // 남 승자는 그 사람 자리 쪽에서 (7포커 틀 기준 왼쪽/오른쪽, 홀덤은 자리 x 로)
-            const side: "l" | "r" = mineWin
-              ? "l"
-              : SF
-                ? frameOf(seat).dir > 0
-                  ? "l"
-                  : "r"
-                : spotOf(seat).x < 50
-                  ? "l"
-                  : "r";
+            // 남 승자: 7포커는 그 사람 틀 쪽 가운데 칸 가장자리, 홀덤은 늘 오른쪽 아래(결과 땐 버튼 줄이 비어 있는 자리)
+            const side: "l" | "r" = mineWin ? "l" : SF ? (frameOf(seat).dir > 0 ? "l" : "r") : "r";
             return (
               <WinCutIn
                 key={`cut-${table.handNo}`}
@@ -2024,7 +2018,9 @@ export default function TableView({
                 mine={mineWin}
                 side={side}
                 h={h}
+                // 7포커: 내 틀 위에 서서 (남 틀 바로 안쪽) · 홀덤: 화면 아래에 서서
                 bottom={SF ? h - SF.me.y : 0}
+                inset={SF ? `${((SF.fw + SF.mx * 2) / w) * 100}%` : "7%"}
               />
             );
           })()}
@@ -2033,6 +2029,7 @@ export default function TableView({
             names={winners.filter(isTop).map((x) => table.seats[x]?.name ?? "?")}
             hand={res.names[winners.find(isTop) ?? winners[0]]}
             mine={winners.includes(mySeat) && isTop(mySeat)}
+            shift={!!res.showdown && winners.includes(mySeat) && isTop(mySeat)}
             amt={winners.includes(mySeat) && isTop(mySeat) && hand?.players[mySeat] ? (res.won[mySeat] ?? 0) - hand.players[mySeat].invested : 0}
           />
         )}
@@ -3005,6 +3002,7 @@ function WinCutIn({
   side,
   h,
   bottom,
+  inset,
 }: {
   look: Look;
   mine: boolean;
@@ -3012,18 +3010,21 @@ function WinCutIn({
   h: number;
   /** 아래 끝 (7포커는 내 틀 위에서 남 컷인이 올라오게) */
   bottom: number;
+  /** 남 컷인이 화면 가장자리에서 얼마나 안쪽에 서는지 */
+  inset: string;
 }) {
-  const ch = Math.round(mine ? h * 0.92 : h * 0.5);
+  const ch = Math.round(mine ? h * 0.92 : Math.min(h * 0.56, h - bottom - 46));
   return (
     <div
       className={`pk-cutwin pointer-events-none absolute ${mine ? "pk-cutwin-me" : "pk-cutwin-other"}`}
       data-side={side}
-      style={{ [side === "l" ? "left" : "right"]: mine ? "4%" : "28%", bottom: mine ? 0 : bottom, height: ch, zIndex: mine ? 41 : 36 }}
+      style={{ [side === "l" ? "left" : "right"]: mine ? "4%" : inset, bottom: mine ? 0 : bottom, height: ch, zIndex: mine ? 41 : 36 }}
     >
       <span className="pk-cutwin-glow" aria-hidden />
       {}
       <img
-        src={mine ? asset.hero(look, "win") : asset.pose(look, "win")}
+        // 남 승자도 전신(발까지) 그림 — pose 그림은 무릎에서 잘린 캐릭터가 있음
+        src={asset.hero(look, "win")}
         alt=""
         draggable={false}
         className="relative h-full w-auto max-w-none"
@@ -3039,11 +3040,14 @@ function WinBanner({
   mine,
   top,
   amt = 0,
+  shift,
 }: {
   names: string[];
   hand?: string;
   mine: boolean;
   top?: number;
+  /** 내 전신 컷인이 왼쪽에 설 때만 글자를 오른쪽으로 비킴 (다 죽어서 이긴 판은 컷인이 없으니 가운데 그대로) */
+  shift?: boolean;
   /** 내가 이겼을 때 이번 판에 딴 돈(넣은 돈 뺀) */
   amt?: number;
 }) {
@@ -3060,8 +3064,8 @@ function WinBanner({
           // 팟 자리에 (위쪽 자리 카드 · 꼬리표를 덮지 않게 가운데 폭만)
           top: top ?? "27%",
           // 내 승리는 왼쪽에 내 전신이 크게 서니 글자는 오른쪽으로 비켜서
-          left: mine ? "40%" : "30%",
-          right: mine ? "14%" : "30%",
+          left: shift ? "40%" : "30%",
+          right: shift ? "14%" : "30%",
           zIndex: 42,
           background:
             "linear-gradient(90deg, transparent, rgba(0,0,0,0.8) 18%, rgba(0,0,0,0.8) 82%, transparent)",
