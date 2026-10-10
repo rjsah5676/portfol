@@ -821,7 +821,8 @@ export default function TableView({
         ? (hand as HoldemView).board.length >= 3
           ? categoryOf(evaluate([...myHand.cards, ...(hand as HoldemView).board]))
           : -1
-        : myHand.down && myHand.cards.length >= 5
+        : // 7포커는 카드를 고르자마자(3장부터) — 처음 받은 카드에 트리플이 있으면 고른 순간 바로 (예전엔 5장이 돼야 떴음)
+          myHand.down && myHand.cards.length >= 3
           ? kCategory(bestK(myHand.cards).score)
           : -1;
     return cat >= 3 ? `${table.handNo}:${cat}` : "";
@@ -1153,7 +1154,7 @@ export default function TableView({
       ? hv.board.length >= 3
         ? holdemRankIdx(evaluate([...liveHand.cards, ...hv.board]))
         : -1
-      : sv && liveHand.down && liveHand.cards.length >= 5
+      : sv && liveHand.down && liveHand.cards.length >= 3
         ? kCategory(bestK(liveHand.cards).score)
         : -1;
   /** 그 자리의 건 돈이 놓이는 곳 (칩 날리기 시작점) */
