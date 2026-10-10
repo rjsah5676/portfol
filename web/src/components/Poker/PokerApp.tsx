@@ -13,13 +13,13 @@ import {
   setSound,
   type SoundSettings,
 } from "@/lib/poker/sfx";
-import { fmtShort, type CharId } from "@/lib/poker/rules";
+import { fmtShort } from "@/lib/poker/rules";
 import type { RankRow, Wallet } from "@/lib/poker/types";
 import { getRank, roomOpts, subscribeWallet, watchClock } from "@/realtime/poker";
 import type { Orient } from "./layout";
 import Lobby from "./Lobby";
 import Shop, { type ShopTab } from "./Shop";
-import { PlayingCard, useSize } from "./parts";
+import { useSize } from "./parts";
 import TableView from "./TableView";
 
 /*
@@ -544,38 +544,7 @@ function Centered({ children, tone }: { children: ReactNode; tone?: "error" }) {
   );
 }
 
-/** 타이틀 줄에서 캐릭터별 높이 보정 (전신 그림마다 서 있는 높이가 달라서, %) */
-const LIFT: Partial<Record<CharId, number>> = {
-  jinwoo: -16,
-  yeonseo: -13,
-  amy: -12,
-  taeyang: -10,
-  jeongmin: -10,
-};
-
-/** 타이틀 테이블 위 소품: x,y = 가로 화면 %, vx,vy = 세로 화면 % (card: null = 뒷면) */
-const TABLE_PROPS: {
-  x: number;
-  y: number;
-  vx: number;
-  vy: number;
-  r: number;
-  card?: number | null;
-  chip?: "red" | "gold" | "blue" | "black" | "green";
-}[] = [
-  { x: 14, y: 80, vx: 10, vy: 76, r: -24, card: 48 },
-  { x: 19, y: 86, vx: 18, vy: 82, r: -6, card: 47 },
-  { x: 26, y: 78, vx: 8, vy: 90, r: 14, card: null },
-  { x: 9, y: 92, vx: 26, vy: 92, r: 0, chip: "red" },
-  { x: 31, y: 90, vx: 30, vy: 74, r: 0, chip: "gold" },
-  { x: 74, y: 79, vx: 90, vy: 76, r: 18, card: 45 },
-  { x: 81, y: 86, vx: 82, vy: 83, r: 32, card: null },
-  { x: 87, y: 78, vx: 92, vy: 90, r: -12, card: 44 },
-  { x: 70, y: 91, vx: 72, vy: 92, r: 0, chip: "blue" },
-  { x: 92, y: 92, vx: 70, vy: 75, r: 0, chip: "black" },
-];
-
-/** 로그인 전 · 별명 전: 타이틀 화면 — 테이블 뒤에 5명이 둘러앉은 장면, 위 로고, 테이블 위 시작 칸 */
+/** 로그인 전 · 별명 전: 타이틀 화면 — 여섯 캐릭터가 포커 치는 움직이는 그림(가로 · 세로 따로), 위 로고, 아래 시작 칸 */
 function Intro({
   o,
   account,
@@ -588,136 +557,32 @@ function Intro({
   onLogin: () => void;
 }) {
   const h = o === "h";
-  // 가운데 진우, 바로 옆 여캐 둘, 바깥쪽 남캐 둘
-  const order: CharId[] = ["taeyang", "yeonseo", "jinwoo", "amy", "jeongmin"];
-  // 떠다니는 카드 · 칩 (위치 %, 크기, 지연)
-  // 떠다니는 카드 · 칩 (card: 카드 번호, null = 뒷면 / chip: 칩 색)
-  const floats: {
-    x: number;
-    y: number;
-    s: number;
-    d: number;
-    r: number;
-    card?: number | null;
-    chip?: "red" | "gold" | "blue";
-  }[] = [
-    { x: 6, y: 8, s: 1, d: 0, r: -18, card: 50 }, // A♦
-    { x: 22, y: 20, s: 0.7, d: 2.1, r: 0, chip: "red" },
-    { x: 3, y: 30, s: 0.75, d: 2.6, r: 22, card: null },
-    { x: 86, y: 20, s: 0.95, d: 1.2, r: 16, card: 44 }, // K♠
-    { x: 74, y: 30, s: 0.75, d: 0.6, r: 0, chip: "gold" },
-    { x: 93, y: 38, s: 0.6, d: 1.7, r: 0, chip: "blue" },
-  ];
-
   return (
     <div className="pk-intro absolute inset-0 overflow-hidden">
-      <div
-        className="pk-bg"
-        style={{
-          backgroundImage: `url(${asset.room(3, o)})`,
-          filter: "brightness(0.55) saturate(1.1)",
-        }}
-      />
-      {/* 무대 조명 */}
-      <div className="pk-intro-spot absolute inset-0" />
-      {/* 떠다니는 카드 · 칩 */}
-      {floats.map((f, i) => (
-        <span
-          key={i}
-          className="pk-float pointer-events-none absolute z-[6]"
-          style={
-            {
-              left: `${f.x}%`,
-              top: `${f.y}%`,
-              animationDelay: `${f.d}s`,
-              "--r": `${f.r}deg`,
-            } as CSSProperties
-          }
-        >
-          {f.chip ? (
-            <img
-              src={asset.chip(f.chip, "top")}
-              alt=""
-              draggable={false}
-              style={{ width: (h ? 64 : 42) * f.s, height: (h ? 64 : 42) * f.s }}
-            />
-          ) : (
-            <PlayingCard card={f.card ?? null} w={Math.round((h ? 62 : 40) * f.s)} tier={3} />
-          )}
-        </span>
-      ))}
-      {/* 캐릭터 줄 (가운데가 앞) — 아래는 테이블에 가려짐 */}
-      <div
-        className="pointer-events-none absolute inset-x-0 flex items-end justify-center"
-        style={{ bottom: h ? "-41%" : "8%" }}
-      >
-        {order.map((c, i) => (
-          <img
-            key={c}
-            src={asset.full(c)}
-            alt=""
-            draggable={false}
-            className="pk-intro-char w-auto max-w-none"
-            style={{
-              // 키 기준 (그림마다 가로세로 비율이 달라서 폭으로 맞추면 마른 그림이 너무 크게 나옴)
-              height: h ? "58cqw" : i === 2 ? "92cqw" : "80cqw",
-              // 폰: 옆 사람은 조금 작게 · 덜 겹치게 (가운데로 몰려 보이던 것)
-              marginLeft: i ? (h ? "-3%" : "-12%") : 0,
-              zIndex: 5 - Math.abs(i - 2),
-              transform: `translateY(${(LIFT[c] ?? 0) * (h ? 1 : 0.6) - Math.abs(i - 2) * (h ? 3 : 7)}%) scale(${(c === "jinwoo" ? 1.02 : 1) - Math.abs(i - 2) * (h ? 0.07 : 0.03)})`,
-              transformOrigin: "bottom",
-              filter: `drop-shadow(0 0 14px rgba(0,0,0,0.8)) brightness(${1 - Math.abs(i - 2) * 0.1})`,
-              animationDelay: `${0.1 + Math.abs(i - 2) * 0.12}s`,
-            }}
-          />
-        ))}
-      </div>
-      {/* 앞쪽 테이블 (캐릭터가 테이블 뒤에 둘러선 느낌) */}
-      {}
-      <img
-        src={asset.table(1, "h")}
-        alt=""
-        draggable={false}
-        className="pointer-events-none absolute left-1/2 z-10 max-w-none -translate-x-1/2"
-        style={{ width: h ? "118%" : "230%", bottom: h ? "-44%" : "-12%" }}
+      {/* 배경: 짧게 반복되는 영상 (첫 장면 그림을 먼저 깔아 둠 · 움직임 줄이기 설정이면 그림만) */}
+      <video
+        key={o}
+        className="pk-intro-video absolute inset-0 h-full w-full object-cover"
+        src={asset.intro(o)}
+        poster={asset.introPoster(o)}
+        autoPlay
+        muted
+        loop
+        playsInline
+        preload="auto"
+        aria-hidden
       />
       <div
         className="absolute inset-0 z-10"
         style={{
           background:
-            "linear-gradient(180deg, rgba(0,0,0,0.65), rgba(0,0,0,0) 30%, rgba(0,0,0,0) 70%, rgba(0,0,0,0.6))",
+            "linear-gradient(180deg, rgba(0,0,0,0.55), rgba(0,0,0,0) 26%, rgba(0,0,0,0) 62%, rgba(0,0,0,0.7))",
         }}
       />
-      {/* 테이블 위에 흩어진 카드 · 칩 */}
-      <div className="pointer-events-none absolute inset-0 z-[11]">
-        {TABLE_PROPS.map((p, i) => (
-          <span
-            key={i}
-            className="absolute"
-            style={{
-              left: `${h ? p.x : p.vx}%`,
-              top: `${h ? p.y : p.vy}%`,
-              transform: `translate(-50%, -50%) rotate(${p.r}deg)`,
-              filter: "drop-shadow(0 4px 6px rgba(0,0,0,0.55))",
-            }}
-          >
-            {p.card !== undefined ? (
-              <PlayingCard card={p.card} w={h ? 56 : 40} tier={3} />
-            ) : (
-              <img
-                src={asset.chip(p.chip!, "stack")}
-                alt=""
-                draggable={false}
-                style={{ width: h ? 64 : 44, height: h ? 64 : 44 }}
-              />
-            )}
-          </span>
-        ))}
-      </div>
       {/* 로고 + 한 줄 소개 */}
       <div
         className="absolute left-1/2 z-20 flex -translate-x-1/2 flex-col items-center"
-        style={{ top: h ? "3%" : "5%", width: h ? "30%" : "84%" }}
+        style={{ top: h ? "1.5%" : "5%", width: h ? "23%" : "84%" }}
       >
         {}
         <img

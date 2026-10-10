@@ -48,6 +48,9 @@ export const asset = {
   /** 라이브 스킨 전용: 로비 대기 영상 · 터치 반응 영상 (투명 배경 움직이는 webp) */
   idle: (c: Look) => `${BASE}/char/${c}/idle.webp`,
   touch: (c: Look, i: number) => `${BASE}/char/${c}/touch-${i}.webp`,
+  /** 타이틀 화면 배경 영상 · 첫 장면 그림 (가로 = PC, 세로 = 폰) */
+  intro: (o: "h" | "v") => `${BASE}/room/intro-${o}.mp4`,
+  introPoster: (o: "h" | "v") => `${BASE}/room/intro-${o}.webp`,
   table: (t: TierId, o: "h" | "v") => `${BASE}/table/${TIER_KEY(t)}-${o}.webp`,
   room: (t: TierId | "lobby", o: "h" | "v") =>
     `${BASE}/room/${t === "lobby" ? "lobby" : TIER_KEY(t)}-${o}.webp`,

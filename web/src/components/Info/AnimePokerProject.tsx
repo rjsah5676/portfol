@@ -10,7 +10,7 @@ import sevenImg from "@/img/Page/info/poker/seven.webp";
 
 const STATS = [
   { value: "2종목", label: "홀덤 6인 · 7포커 5인" },
-  { value: "5명", label: "애니풍 캐릭터" },
+  { value: "6명", label: "애니풍 캐릭터" },
   { value: "3단계", label: "동네판 · 하우스 · VIP룸" },
   { value: "BETA", label: "2026.10" },
 ];
@@ -89,7 +89,7 @@ export default function AnimePokerProject() {
       <div className="mb-3 font-mono text-sm text-[#8B84FF]">game · gunmo.my</div>
       <h1 className="font-mono text-3xl font-bold text-white sm:text-4xl">ANIME POKER</h1>
       <p className="mt-3 font-['Nanum_Gothic',sans-serif] text-white/60">
-        애니풍 캐릭터 5명과 치는 홀덤 · 7포커. 유저봇이 들락날락하는 실시간 테이블.
+        애니풍 캐릭터 6명과 치는 홀덤 · 7포커. 유저봇이 들락날락하는 실시간 테이블.
       </p>
 
       <div className="mt-5 flex flex-wrap items-center gap-2 font-mono text-xs">
@@ -100,7 +100,7 @@ export default function AnimePokerProject() {
       </div>
 
       <div className="mt-8">
-        <Shot img={titleImg} alt="타이틀 화면 — 다섯 캐릭터가 테이블에 둘러앉음" />
+        <Shot img={titleImg} alt="타이틀 화면 — 여섯 캐릭터가 포커 치는 움직이는 배경" />
       </div>
 
       <StatGrid stats={STATS} />

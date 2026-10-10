@@ -149,7 +149,7 @@ export const gameProjects: Project[] = [
     name: "ANIME POKER",
     imgLink: pokerImg,
     title: "홀덤 · 7포커 [ANIME POKER]",
-    desc: "애니풍 캐릭터 5명과 치는 홀덤·7포커. 유저봇이 들락날락하는 실시간 테이블, 자금 순위",
+    desc: "애니풍 캐릭터 6명과 치는 홀덤·7포커. 유저봇이 들락날락하는 실시간 테이블, 자금 순위",
     tech: ["TypeScript", "socket.io", "React", "MongoDB"],
     period: "2026.10 –",
     playLink: "/games/poker/",
