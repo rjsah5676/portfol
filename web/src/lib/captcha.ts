@@ -56,7 +56,10 @@ export async function getCaptchaToken(siteKey: string): Promise<string> {
       <div data-box style="margin-top:14px;min-height:65px;display:flex;justify-content:center"></div>
       <button type="button" data-cancel style="margin-top:12px;width:100%;cursor:pointer;border-radius:999px;border:1px solid rgba(255,255,255,.15);background:transparent;padding:8px;color:rgba(255,255,255,.65);font-size:12px">취소</button>
     </div>`;
-  document.body.appendChild(overlay);
+  // 게임이 전체 화면이면 그 요소 안에 띄워야 보임 (body 에 붙이면 전체 화면 뒤에 가려짐)
+  const fs = document.fullscreenElement;
+  const host = fs && !/^(CANVAS|VIDEO|IMG|IFRAME)$/.test(fs.tagName) ? fs : document.body;
+  host.appendChild(overlay);
   const box = overlay.querySelector<HTMLElement>("[data-box]")!;
   const cancel = overlay.querySelector<HTMLButtonElement>("[data-cancel]")!;
 
