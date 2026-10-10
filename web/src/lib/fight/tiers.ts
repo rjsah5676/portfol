@@ -77,3 +77,13 @@ export function rankTierOf(r: number, n = TIER_PLACEMENT): TierInfo {
     placing: n < TIER_PLACEMENT,
   };
 }
+
+/** 레이팅 r 이 몇 번째 등급인가 (TIERS 번호 — 브론즈 0 ~ 레전드 7) */
+export function tierIndexOf(r: number) {
+  let i = 0;
+  while (i < TIERS.length - 1 && r >= TIERS[i + 1].min) i++;
+  return i;
+}
+
+/** AI 시뮬레이션 통계: 등급마다 이 레이팅 실력의 AI끼리 (보정 없이) 붙임 — 구간 가운데쯤 */
+export const SIM_TIER_R = [650, 1000, 1200, 1425, 1675, 1950, 2250, 2500];

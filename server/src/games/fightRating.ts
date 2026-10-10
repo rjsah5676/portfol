@@ -15,6 +15,9 @@ import type { Database } from "../db";
 import { newId } from "../ids";
 import { KeyedMutex } from "../mutex";
 import type { Users } from "../users";
+import { BUILD_ID } from "../../../web/src/lib/fight/sim";
+import { tierIndexOf } from "../../../web/src/lib/fight/tiers";
+import { simStats, startFightSim, touchBuild, type BuildDoc } from "./fightSim";
 
 export const RATING_START = 1000;
 /** 이 판 수 전까지는 "배치 중" (K 가 크고, 랭킹에 표시) */
@@ -106,6 +109,10 @@ export interface RankGame {
   out: 0 | 1 | 2;
   /** 봇전 (1번 자리가 봇 — uids[1] 은 "bot:별명") — 캐릭터 통계엔 사람 판과 똑같이 들어감 */
   bot?: boolean;
+  /** 밸런스 버전 (sim BUILD_ID) — 10.10 전 기록엔 없음 */
+  build?: number;
+  /** 경기 전 두 사람 레이팅 (봇 자리는 사람과 같게) — 등급별 통계 */
+  rs?: [number, number];
 }
 
 /** 캐릭터 통계: 캐릭터별 승·패·무 (같은 캐릭터끼리 붙은 판은 뺌) + 상성(행 캐릭터가 열 캐릭터를 이긴 판 / 붙은 판) */
@@ -117,6 +124,15 @@ export interface RankStats {
   mine?: { c: number; w: number; l: number; d: number }[];
 }
 
+/** 통계 버전 목록 한 줄 */
+export interface StatBuild {
+  build: number;
+  ver: string;
+  from: number;
+  human: number;
+  sim: number;
+}
+
 export type FightRating = ReturnType<typeof createFightRating>;
 
 export function createFightRating(db: Database, users: Users) {
@@ -124,20 +140,49 @@ export function createFightRating(db: Database, users: Users) {
   const col = db.col<RatingDoc>("fight_rank_ratings");
   const log = db.col<{ pair: string; at: Date }>("fight_rank_log");
   const games = db.col<RankGame>("fight_rank_games");
-  let statsCache: { at: number; v: RankStats } | null = null;
+  /** 버전 · 등급별 통계 기억 (1분) — 키 "버전:등급" */
+  const statsCache = new Map<string, { at: number; v: RankStats }>();
   const mutex = new KeyedMutex();
+  const builds = db.col<BuildDoc>("fight_builds");
+  // AI 시뮬레이션 통계 (운영에서만 상시로 돎 — games/fightSim.ts)
+  startFightSim(db);
 
   return {
     /** 랭크전 한 판 기록 (캐릭터 통계) */
     async logGame(uids: [string, string], chars: [number, number], map: number, out: 0 | 1 | 2, bot = false) {
-      await games.insertOne({ _id: newId(), at: new Date(), uids, chars, map, out, ...(bot ? { bot: true } : {}) });
-      statsCache = null;
+      // 경기 전 레이팅 (레이팅 반영보다 먼저 불림) — 봇 자리는 사람 레이팅으로 (비슷한 레이팅 봇과 붙음)
+      const [d0, d1] = await Promise.all(uids.map((u) => (u.startsWith("bot:") ? null : col.findOne({ uid: u }, { projection: { r: 1 } }))));
+      const r0 = d0?.r ?? RATING_START,
+        r1 = bot ? r0 : (d1?.r ?? RATING_START);
+      await games.insertOne({ _id: newId(), at: new Date(), uids, chars, map, out, build: BUILD_ID, rs: [r0, r1], ...(bot ? { bot: true } : {}) });
+      await touchBuild(db, "human");
+      statsCache.clear();
     },
 
-    /** 캐릭터 통계 (1분 기억) + uid 가 있으면 그 사람의 캐릭터별 기록 */
-    async stats(uid?: string): Promise<RankStats> {
-      if (!statsCache || Date.now() - statsCache.at > 60_000) {
-        const docs = await games.find({}, { projection: { chars: 1, out: 1 } }).toArray();
+    /** 통계 버전 목록 (새것부터) — 지금 버전은 표본이 없어도 맨 위, 버전 구분 전(10.10 전) 기록은 build 0 */
+    async builds(): Promise<StatBuild[]> {
+      const docs = await builds.find({}).sort({ from: -1 }).toArray();
+      const out: StatBuild[] = docs.map((d) => ({ build: Number(d._id), ver: d.ver, from: d.from.getTime(), human: d.human ?? 0, sim: d.sim ?? 0 }));
+      if (!out.some((b) => b.build === BUILD_ID)) out.unshift({ build: BUILD_ID, ver: "", from: Date.now(), human: 0, sim: 0 });
+      const old = await games.countDocuments({ build: { $exists: false } });
+      if (old) out.push({ build: 0, ver: "버전 구분 전", from: 0, human: old, sim: 0 });
+      return out;
+    },
+
+    /** AI 시뮬레이션 통계 (버전 · 등급, tier < 0 = 전체) */
+    simStats: (build: number, tier: number) => simStats(db, build, tier),
+
+    /**
+     * 캐릭터 통계 (1분 기억) + uid 가 있으면 그 사람의 캐릭터별 기록.
+     * build: 그 밸런스 버전 판만 (0 = 10.10 전 기록, 없으면 전부) · tier: 그 등급 사람 쪽에서 본 판만 (없거나 < 0 이면 전부)
+     */
+    async stats(uid?: string, o: { build?: number; tier?: number } = {}): Promise<RankStats> {
+      const tier = o.tier ?? -1;
+      const key = `${o.build ?? "all"}:${tier}`;
+      let cached = statsCache.get(key);
+      if (!cached || Date.now() - cached.at > 60_000) {
+        const q = o.build === undefined ? {} : o.build === 0 ? { build: { $exists: false } } : { build: o.build };
+        const docs = await games.find(q, { projection: { chars: 1, out: 1, rs: 1 } }).toArray();
         const ch = new Map<number, { c: number; w: number; l: number; d: number }>();
         const vs = new Map<string, { a: number; b: number; w: number; g: number }>();
         const add = (c: number, k: "w" | "l" | "d") => {
@@ -145,15 +190,23 @@ export function createFightRating(db: Database, users: Users) {
           x[k]++;
           ch.set(c, x);
         };
+        // 등급별: 각 자리를 그 자리 사람의 (경기 전) 등급으로 봄 — 레이팅 기록 없는 예전 판은 등급별에서 빠짐
+        const inTier = (g: RankGame, seat: 0 | 1) => tier < 0 || (!!g.rs && tierIndexOf(g.rs[seat]) === tier);
+        let n = 0;
         for (const g of docs) {
           const [c0, c1] = g.chars;
           if (c0 < 0 || c1 < 0 || c0 === c1) continue;
-          add(c0, g.out === 2 ? "d" : g.out === 0 ? "w" : "l");
-          add(c1, g.out === 2 ? "d" : g.out === 1 ? "w" : "l");
-          for (const [a, b, win] of [
-            [c0, c1, g.out === 0 ? 1 : g.out === 2 ? 0.5 : 0],
-            [c1, c0, g.out === 1 ? 1 : g.out === 2 ? 0.5 : 0],
-          ]) {
+          const s0 = inTier(g, 0),
+            s1 = inTier(g, 1);
+          if (!s0 && !s1) continue;
+          n++;
+          if (s0) add(c0, g.out === 2 ? "d" : g.out === 0 ? "w" : "l");
+          if (s1) add(c1, g.out === 2 ? "d" : g.out === 1 ? "w" : "l");
+          for (const [a, b, win, on] of [
+            [c0, c1, g.out === 0 ? 1 : g.out === 2 ? 0.5 : 0, s0],
+            [c1, c0, g.out === 1 ? 1 : g.out === 2 ? 0.5 : 0, s1],
+          ] as [number, number, number, boolean][]) {
+            if (!on) continue;
             const k = `${a}:${b}`;
             const x = vs.get(k) ?? { a, b, w: 0, g: 0 };
             x.w += win;
@@ -161,9 +214,10 @@ export function createFightRating(db: Database, users: Users) {
             vs.set(k, x);
           }
         }
-        statsCache = { at: Date.now(), v: { games: docs.length, chars: [...ch.values()], vs: [...vs.values()] } };
+        cached = { at: Date.now(), v: { games: n, chars: [...ch.values()], vs: [...vs.values()] } };
+        statsCache.set(key, cached);
       }
-      if (!uid) return statsCache.v;
+      if (!uid) return cached.v;
       const my = await games.find({ uids: uid }, { projection: { uids: 1, chars: 1, out: 1 } }).toArray();
       const m = new Map<number, { c: number; w: number; l: number; d: number }>();
       for (const g of my) {
@@ -173,7 +227,7 @@ export function createFightRating(db: Database, users: Users) {
         x[g.out === 2 ? "d" : g.out === seat ? "w" : "l"]++;
         m.set(c, x);
       }
-      return { ...statsCache.v, mine: [...m.values()] };
+      return { ...cached.v, mine: [...m.values()] };
     },
 
     /** 지금 레이팅 (없으면 시작 점수) — 매칭 화면 표시용 */

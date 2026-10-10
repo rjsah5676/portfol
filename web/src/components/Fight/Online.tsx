@@ -689,6 +689,8 @@ function Lobby({
       .catch(() => {});
   }, [member]);
   const [name, setName] = useState("");
+  // 방 검색 (방 이름 · 방장 닉네임)
+  const [q, setQ] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const checked = useRef(new Set<string>());
@@ -731,6 +733,8 @@ function Lobby({
     }
   };
   const open = (rooms ?? []).filter((r) => r.count === 1 && !r.playing);
+  const qn = q.trim().toLowerCase();
+  const shown = rooms && qn ? rooms.filter((r) => r.name.toLowerCase().includes(qn) || r.host.toLowerCase().includes(qn)) : rooms;
 
   return (
     <div className="absolute inset-0 flex flex-col gap-[1.4cqw] px-[3cqw] pt-[2.4cqw] pb-[2cqw]">
@@ -749,9 +753,32 @@ function Lobby({
       <div className="flex min-h-0 flex-1 gap-[2cqw]">
         {/* 방 목록 */}
         <div className="flex min-h-0 flex-1 flex-col rounded-[1cqw] bg-black/50 p-[1cqw] backdrop-blur-[2px]">
-          <div className={`${KR} mb-[0.6cqw] flex items-center justify-between text-[1.2cqw] text-white/50`}>
-            <span>열린 방 {rooms ? rooms.length : ""}</span>
-            <span className="text-white/35">한 방에 2명 · 꽉 찬 방·대전 중인 방은 관전</span>
+          <div className={`${KR} mb-[0.6cqw] flex items-center justify-between gap-[1cqw] text-[1.2cqw] text-white/50`}>
+            <span className="shrink-0">
+              열린 방 {rooms ? (qn ? `${shown?.length ?? 0} / ${rooms.length}` : rooms.length) : ""}
+            </span>
+            <span className="relative min-w-0 flex-1">
+              <input
+                value={q}
+                maxLength={20}
+                onChange={(e) => setQ(e.target.value)}
+                onKeyDown={(e) => e.key === "Escape" && (e.stopPropagation(), setQ(""))}
+                placeholder="🔍 방 이름 · 방장 검색"
+                aria-label="방 검색"
+                className={`${KR} w-full rounded-full border border-white/15 bg-white/[0.06] px-[1cqw] py-[0.35cqw] text-[1.1cqw] text-white placeholder:text-white/30 focus:border-[#FDE047]/60 focus:outline-none`}
+              />
+              {q && (
+                <button
+                  type="button"
+                  onClick={() => setQ("")}
+                  aria-label="검색 지우기"
+                  className="absolute top-1/2 right-[0.6cqw] -translate-y-1/2 cursor-pointer text-[1.1cqw] text-white/45 hover:text-white"
+                >
+                  ✕
+                </button>
+              )}
+            </span>
+            <span className="shrink-0 text-[1.05cqw] text-white/35">한 방에 2명 · 꽉 찬 방·대전 중은 관전</span>
           </div>
           <div className="thin-scroll flex min-h-0 flex-1 flex-col gap-[0.6cqw] overflow-y-auto pr-[0.4cqw]">
             {rooms === null ? (
@@ -761,8 +788,12 @@ function Lobby({
                 열린 방이 없어요.
                 <br />방을 만들고 친구에게 초대 링크를 보내 보세요!
               </div>
+            ) : !shown?.length ? (
+              <div className={`${KR} py-[4cqw] text-center text-[1.3cqw] leading-relaxed text-white/40`}>
+                &lsquo;{q.trim()}&rsquo; 에 맞는 방이 없어요
+              </div>
             ) : (
-              rooms.map((r) => {
+              shown.map((r) => {
                 const full = r.count >= 2;
                 // 꽉 찼거나 대전 중인 방은 자리에 앉는 대신 관전으로 들어감
                 const watchable = full || (r.playing && r.count > 0);

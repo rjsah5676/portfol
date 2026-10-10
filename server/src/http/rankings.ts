@@ -15,6 +15,7 @@ import { RHYTHM_CHARTS } from "./rhythmCharts";
 import { bpOf, BP_TOP_SONGS } from "./bp";
 import { pictureOf } from "../users";
 import { createFightRating } from "../games/fightRating";
+import { BUILD_ID as FIGHT_BUILD } from "../../../web/src/lib/fight/sim";
 import { h, ms, userOf } from "./util";
 
 /*
@@ -515,11 +516,18 @@ export function rankingsRouter({ db, auth, users }: Deps, captcha?: Captcha): Ro
   );
 
   // 격투 랭크전 레이팅 · 캐릭터 통계 (games/fightRating.ts)
+  // src=ai 면 AI 시뮬레이션 통계 · build = 밸런스 버전(없으면 지금 버전, all = 전부) · tier = 등급 번호(없으면 전체)
   r.get(
     "/fight-rank-stats",
     h(async (req) => {
       const user = await userOf(auth, req).catch(() => null);
-      return fightRating.stats(user?.uid);
+      const bq = String(req.query.build ?? "");
+      const build = bq === "all" ? undefined : bq && /^\d+$/.test(bq) ? Number(bq) : FIGHT_BUILD;
+      const tq = Number(req.query.tier);
+      const tier = Number.isInteger(tq) && tq >= 0 && tq < 8 ? tq : -1;
+      const builds = await fightRating.builds();
+      if (req.query.src === "ai") return { ...(await fightRating.simStats(build ?? FIGHT_BUILD, tier)), builds, build: build ?? FIGHT_BUILD };
+      return { ...(await fightRating.stats(user?.uid, { build, tier })), builds, build: build ?? null };
     }),
   );
   r.get(

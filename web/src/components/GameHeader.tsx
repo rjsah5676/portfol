@@ -54,6 +54,7 @@ export default function GameHeader({
   accent = "#8B84FF",
   guide,
   rank,
+  extra,
   scroll = true,
   className = "",
 }: {
@@ -64,6 +65,8 @@ export default function GameHeader({
   accent?: string;
   guide?: GuideDoc;
   rank?: RankSpec;
+  /** 가이드 · 랭킹 버튼 사이에 더 넣을 버튼 (pill 클래스명을 받음) */
+  extra?: (pill: string) => ReactNode;
   /** 처음 들어올 때 게임 위치로 스크롤 */
   scroll?: boolean;
   className?: string;
@@ -153,6 +156,7 @@ export default function GameHeader({
               </HintBubble>
             </span>
           )}
+          {extra?.(pill)}
           {rank && (
             <button
               type="button"

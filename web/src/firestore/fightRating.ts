@@ -54,7 +54,27 @@ export interface RankStats {
   mine?: { c: number; w: number; l: number; d: number }[];
 }
 
-export const getRankStats = () => api<RankStats>("/api/rankings/fight-rank-stats", { auth: true });
+/** 통계 버전 (밸런스 패치) 한 줄 — build 0 = 버전 구분 전(10.10 전) 기록 */
+export interface StatBuild {
+  build: number;
+  ver: string;
+  /** 이 버전 첫 판 시각 (ms) */
+  from: number;
+  human: number;
+  sim: number;
+}
+export type StatSrc = "human" | "ai";
+
+/**
+ * 캐릭터 통계 — src: 사람 랭크전 / AI 시뮬레이션 · build: 밸런스 버전(없으면 지금 버전) · tier: 등급 번호(-1 = 전체)
+ * 응답의 builds = 버전 목록(새것부터), build = 실제로 보여 준 버전
+ */
+export const getRankStats = (src: StatSrc = "human", build?: number, tier = -1) => {
+  const q = new URLSearchParams({ src });
+  if (build !== undefined) q.set("build", String(build));
+  if (tier >= 0) q.set("tier", String(tier));
+  return api<RankStats & { builds: StatBuild[]; build: number | null }>(`/api/rankings/fight-rank-stats?${q}`, { auth: true });
+};
 
 /** 강세·약세 기준: 이 판 수 이상 붙었을 때만 */
 export const MATCHUP_MIN = 5;
