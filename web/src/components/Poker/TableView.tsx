@@ -81,7 +81,7 @@ import {
   PotPile,
   TimerRing,
 } from "./parts";
-import { SevenActions, SevenStage, sevenHint, sevenSeatCards } from "./SevenParts";
+import { SevenBar, SevenChoice, SevenStage, sevenHint, sevenSeatCards } from "./SevenParts";
 
 /*
  * 테이블 화면 (홀덤 · 7포커 공용). 무대(stage) 안에서 그려지고, 무대의 가로·세로에 따라 세로판(폰) / 가로판(PC)으로 배치가 바뀜.
@@ -274,6 +274,8 @@ export default function TableView({
   const [logBig, setLogBig] = useState(false);
   /** 위 바의 「족보 · 기록」을 눌렀을 때 내려오는 상자 (기본은 닫힘 — 판을 넓게 쓰려고) */
   const [infoOpen, setInfoOpen] = useState(false);
+  /** 7포커 오른쪽 아래 족보 · 기록 상자 (기본 열림) */
+  const [dockOpen, setDockOpen] = useState(true);
   /** 내가 강퇴 투표한 자리들 (이 판 기준) */
   const [voted, setVoted] = useState<Set<number>>(() => new Set());
   /** 쇼다운 패 까기 연출: order 순서로 한 자리씩 깜(step = 깐 자리 수). 다 깐 뒤 한 박자 쉬고 결과(step > order.length) */
@@ -874,10 +876,14 @@ export default function TableView({
         const lg = sv2.legal;
         if (sv2.phase === "bet" && lg) {
           if (pre === "die") void doAct({ a: "die" });
-          else if (pre === "callbbing") {
+          else if (pre === "call" || pre === "callbbing") {
             // 받을 돈이 있으면 얼마든(삥·따당·하프…) 콜, 없으면 삥
             if (lg.toCall > 0) void doAct({ a: "call" });
             else if (lg.bets.bbing !== undefined) void doAct({ a: "bbing" });
+          } else if (pre === "bbdd") {
+            // 삥 칸: 아무도 안 걸었으면 삥, 누가 걸었으면 따당
+            if (lg.bets.bbing !== undefined) void doAct({ a: "bbing" });
+            else if (lg.bets.ddadang !== undefined) void doAct({ a: "ddadang" });
           } else if (pre === "ddadang" || pre === "quarter" || pre === "half") {
             if (lg.bets[pre] !== undefined) void doAct({ a: pre });
           }
@@ -986,11 +992,13 @@ export default function TableView({
   const L = layoutFor(n);
   // 카드가 주인공 — 한게임 비율(화면 높이 대비): 7포커 남의 편 카드 17.5% · 내 카드 21% · 캐릭터 상반신 18.5%. 홀덤은 9인이라 조금 작게
   const seven = table.game === "seven";
+  /** 7포커: 자리마다 틀(프레임) 배치 — 무대 크기에 비례해서 PC · 폰 어디서든 같은 모양 */
+  const SF = seven ? sevenFrames(w, h, 40, Math.round(Math.min(15, Math.max(12, u * 1.45 + 4.6)) * 1.75)) : null;
   const sizes: Sizes = {
     o: "h",
     u,
-    card: seven ? u * 12.5 : u * 10,
-    heroCard: seven ? u * 15 : u * 13,
+    card: SF ? SF.cardW : u * 10,
+    heroCard: SF ? SF.me.cardW : u * 13,
     boardCard: u * 10.5,
     face: u * 8.4,
   };
@@ -1134,6 +1142,10 @@ export default function TableView({
   };
   /** 외침이 시작되는 곳: 아바타 머리 위 (카드 줄은 안 덮게) — 위쪽 자리는 위 바에 안 걸리게 */
   const shoutFrom = (seat: number) => {
+    if (SF) {
+      const f = frameOf(seat);
+      return { x: charMid(seat).x, y: Math.max(bar + 30, f.y + 14) };
+    }
     if (seat === mySeat) return { x: 12 + heroW / 2, y: h - 8 - stripH * 2 - heroAvH - 24 };
     const { x, dir, y } = cardsAt(seat);
     return { x: x - dir * avW * 0.25, y: Math.max(bar + 36, y - avH / 2 - 14) };
@@ -1143,6 +1155,206 @@ export default function TableView({
   const emote = (e: Emote) => {
     setDrawer("");
     sendEmote(id, e).catch((err: ApiError) => setNotice(err.message ?? ""));
+  };
+  /** 7포커 틀 자리: 내 자리(0번) = 왼쪽 아래 큰 틀, 나머지는 배치표의 왼쪽/오른쪽 · 윗줄/아랫줄 */
+  const frameOf = (seat: number) => {
+    const S = SF!;
+    const k = (seat - Math.max(0, mySeat) + n) % n;
+    if (k === 0) return { ...S.me, dir: 1 };
+    const sp = L.spots[k];
+    const left = sp.side === "left";
+    return {
+      x: left ? S.mx : w - S.mx - S.fw,
+      y: sp.y < 30 ? S.row1 : S.row2,
+      w: S.fw,
+      h: S.F,
+      cell: S.cell,
+      charW: S.charW,
+      cardW: S.cardW,
+      areaW: S.areaW,
+      strip: S.strip,
+      dir: left ? 1 : -1,
+    };
+  };
+  /** 틀의 캐릭터 칸 가운데 */
+  const charMid = (seat: number) => {
+    const f = frameOf(seat);
+    return { x: f.dir > 0 ? f.x + f.charW / 2 : f.x + f.w - f.charW / 2, y: f.y + f.cell / 2 };
+  };
+  /** 판 가운데 칩 더미 (던진 칩이 쌓이는 곳) */
+  const potPoint = { x: w / 2 - u * 6, y: py(L.center.pot) + u * 5 };
+  /** 7포커 틀 하나: [캐릭터 칸][카드 칸] + 아래 이름 · 칩 띠. 빈자리도 틀은 늘 자리를 지킴 */
+  const sevenFrame = (i: number) => {
+    const f = frameOf(i);
+    const s = table.seats[i];
+    const hero = i === mySeat;
+    const right = f.dir < 0;
+    const box: CSSProperties = { left: f.x, top: f.y, width: f.w, height: f.h, zIndex: hero ? 21 : 34 };
+    if (!s)
+      return (
+        <div key={i} className="pk-sf pk-sf-empty absolute flex items-center justify-center" style={box}>
+          {sitState === "watching" || sitState === "password" ? (
+            <button type="button" onClick={() => void trySit()} className="pk-btn pk-btn-ghost px-[1em] py-[0.45em] text-[0.85em]">
+              앉기
+            </button>
+          ) : (
+            <span className="text-[0.8em] text-white/25">빈 자리</span>
+          )}
+        </div>
+      );
+    const p = hand?.players[i];
+    const live = !!p && !p.folded && !rawRes;
+    const wonHere = res?.won[i] ?? 0;
+    const waiting = isWaiting(i);
+    const dim = !!p?.folded || (s.status !== "in" && !live);
+    const look = s.look ?? s.char;
+    const stale = !!p && !p.folded && !p.allIn && !!hand && !hand.result && p.bet < hand.currentBet;
+    const tag = p?.last && !res && !stale ? p.last.a : null;
+    const resultName = hand?.result?.names[i] && revealed(i) ? hand.result.names[i] : res && p?.folded ? "기권" : "";
+    const net = res && p ? wonHere - p.invested : null;
+    const bet = p && !rawRes ? p.bet : 0;
+    const cards = !sv
+      ? null
+      : sevenSeatCards({
+          view: sv,
+          seat: i,
+          hero,
+          myHand: hero ? liveHand : null,
+          tier: table.tier,
+          sizes,
+          side: right ? "right" : "left",
+          hide: !hero && !revealed(i),
+          settled: revealDone,
+          dealDelay: dealOf(i),
+          maxW: f.areaW - 8,
+        });
+    return (
+      <div
+        key={i}
+        className={`pk-sf absolute flex flex-col ${hero ? "pk-sf-me" : ""}`}
+        data-turn={waiting ? "1" : undefined}
+        data-win={wonHere > 0 && isTop(i) ? "1" : undefined}
+        style={box}
+      >
+        <div className={`flex min-h-0 flex-1 ${right ? "flex-row-reverse" : ""}`}>
+          {/* 캐릭터 칸: 누르면 자리 정보(전적 · 강퇴 투표). 위엔 이번 구에 건 돈, 아래엔 행동 글자. 남은 시간은 이 칸 테두리를 따라 */}
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={() => setStatSeat(i)}
+            onKeyDown={(e) => e.key === "Enter" && setStatSeat(i)}
+            className={`pk-sf-char relative flex-none cursor-pointer ${right ? "pk-sf-char-r" : ""} ${wonHere > 0 ? "pk-seat-win" : waiting ? "pk-seat-turn" : ""}`}
+            style={{ width: f.charW, height: f.cell }}
+          >
+            <span className="absolute inset-0 overflow-hidden" style={{ opacity: dim ? 0.5 : 1 }}>
+              <CharSprite char={look} pose={poseOf(i)} seat="front" w={f.charW} dim={dim} />
+            </span>
+            {waiting && deadline > 0 && <PlateTimer frac={frac} />}
+            {bet > 0 && (
+              <span className="pk-sf-bet pk-num">
+                <Money won={bet} />
+              </span>
+            )}
+            {waiting && counting && (
+              <span key={secLeft} className="pk-count-sm" aria-label={`${secLeft}초`}>
+                {secLeft}
+              </span>
+            )}
+            {tag && (
+              <span className="pk-sf-act" key={`${table.handNo}-${tag}-${p?.bet ?? 0}`}>
+                <ActWord a={tag} className={hero ? "pk-acttag-me" : ""} />
+              </span>
+            )}
+            {gains[i] && wonHere > 0 && (
+              <Rise key={gains[i].key} className="absolute top-[18%] left-1/2 -translate-x-1/2 text-[1.2em] text-[var(--pk-brass)]">
+                +{fmtShort(gains[i].amt)}
+              </Rise>
+            )}
+          </div>
+          {/* 카드 칸: 캐릭터 칸에 딱 붙게, 엎은 카드 묶음 → 편 카드 차곡차곡. 족보 · 결과 글자는 카드 아랫단 위에 */}
+          <div
+            className={`pk-sf-cards relative flex min-w-0 flex-1 ${hero ? "items-start" : "items-center"} ${right ? "justify-end" : "justify-start"}`}
+            // 내 카드: 위에 메이드 카드가 떠오를 틈, 아래에 족보 글자 자리를 남김
+            style={{ padding: hero ? `${Math.round(f.cell * 0.075)}px 4px 0` : "0 4px" }}
+          >
+            {hero && madeKey && !res && <span key={`burst-${madeKey}`} className="pk-made-burst" aria-hidden />}
+            {cards}
+            <span className="pk-sf-label" style={hero ? { bottom: 2 } : undefined}>
+              {hero && hint && !res && !resultName && (
+                <span className={`pk-handtag pk-pop ${madeKey ? "pk-made" : ""}`}>
+                  <span className="pk-tag-t">{hint}</span>
+                </span>
+              )}
+              {resultName && (
+                <span
+                  key={`${table.handNo}-${revealDone ? 1 : 0}`}
+                  className={`pk-resulttag pk-stamp ${res && wonHere > 0 && isTop(i) ? "pk-resulttag-win" : resultName === "기권" ? "pk-resulttag-out" : ""}`}
+                >
+                  <span className="pk-tag-t">{resultName}</span>
+                </span>
+              )}
+            </span>
+          </div>
+        </div>
+        {/* 이름 · (나만) 이 방 총 득실 · 보유 칩 */}
+        <div className="pk-sf-strip relative" style={{ height: f.strip }}>
+          {net !== null && net !== 0 && (
+            <span className={`pk-net pk-num ${net > 0 ? "pk-net-up" : "pk-net-down"}`}>
+              {net > 0 ? "+" : "−"}
+              {fmtShort(Math.abs(net))}
+            </span>
+          )}
+          <span className="pk-name min-w-0 flex-1 truncate">{s.name}</span>
+          {hero && (
+            <span className={`pk-num shrink-0 text-[0.82em] font-bold ${s.net > 0 ? "text-[#ffd84a]" : s.net < 0 ? "text-[#ff7d86]" : "text-white/45"}`}>
+              {s.net > 0 ? "+" : s.net < 0 ? "−" : "±"}
+              {fmtShort(Math.abs(s.net))}
+            </span>
+          )}
+          <span className="pk-stack pk-num shrink-0 whitespace-nowrap" style={{ flex: hero ? "1 1 0" : undefined, textAlign: "right" }}>
+            {p?.allIn && !res ? (
+              <span className="text-[var(--pk-danger)]">ALL IN</span>
+            ) : s.status === "out" && !live ? (
+              <span className="text-white/45">자리 비움</span>
+            ) : (
+              <>
+                <img src={asset.chip("gold", "top")} alt="" className="mr-[0.25em] inline h-[0.9em] w-[0.9em] align-[-0.1em]" />
+                <Money won={stackShown(i, s.stack)} />
+              </>
+            )}
+          </span>
+          {s.away && (
+            <span className="pk-net-mark pk-net-in">
+              <i />
+              연결 불안정…
+            </span>
+          )}
+        </div>
+        {(s.votes > 0 || s.exit) && (
+          <div className="pointer-events-none absolute top-full left-1/2 flex -translate-x-1/2 flex-col items-center">
+            {s.votes > 0 && <span className="pk-vote-mark">⚠ 강퇴 {s.votes}/3</span>}
+            {s.exit && <span className="pk-exit-mark">나가기 예약</span>}
+          </div>
+        )}
+        {/* 이모티콘: 캐릭터 머리 위 */}
+        {emotes[i] &&
+          (() => {
+            const size = Math.round(Math.max(40, Math.min(104, f.cell * 0.5)));
+            return (
+              <div
+                key={emotes[i].key}
+                className="pk-emote pointer-events-none absolute"
+                // 머리 옆(판 쪽)에서 말풍선 꼬리가 머리를 가리킴
+                style={{ [right ? "right" : "left"]: f.charW * 0.62, top: Math.round(f.cell * 0.02), zIndex: 45 }}
+              >
+                <EmoteBubble tail={right ? "r" : "l"}>
+                  <EmoteImg char={look} emote={emotes[i].v} size={size} />
+                </EmoteBubble>
+              </div>
+            );
+          })()}
+      </div>
+    );
   };
 
   return (
@@ -1186,7 +1398,8 @@ export default function TableView({
         </div>
 
         {/* 다른 자리 틀: [아바타][카드 칸] + 아래 이름 · 칩 띠 (한게임처럼 한 덩어리), 판 쪽에 건 돈 */}
-        {table.seats.map((s, i) => {
+        {SF && table.seats.map((_, i) => sevenFrame(i))}
+        {!SF && table.seats.map((s, i) => {
           if (i === mySeat) return null;
           const p = hand?.players[i];
           const live = !!p && !!s && !p.folded && !rawRes;
@@ -1412,6 +1625,11 @@ export default function TableView({
             const oy = py(L.center.pot) + 20;
             const cw = sizes.card;
             const target = (seat: number) => {
+              if (SF) {
+                const f = frameOf(seat);
+                const cx = f.dir > 0 ? f.x + f.charW + f.cardW * 0.6 : f.x + f.w - f.charW - f.cardW * 0.6;
+                return { x: cx, y: f.y + f.cell / 2, s: f.cardW / cw };
+              }
               if (seat === mySeat)
                 return {
                   x: (L.heroX / 100) * boardW,
@@ -1503,7 +1721,7 @@ export default function TableView({
           winFly.seats.flatMap(({ seat }) =>
             [0, 1, 2].map((i) => {
               const from = { x: px(L.table.cx), y: py(L.center.pot) + 14 };
-              const to = betPoint(seat);
+              const to = SF ? charMid(seat) : betPoint(seat);
               return (
                 <div
                   key={`${winFly.key}-${seat}-${i}`}
@@ -1536,6 +1754,7 @@ export default function TableView({
 
         {/* 팟으로 모이는 칩 */}
         {flying &&
+          !SF &&
           flying.seats.map(({ seat, amt }) => {
             const from = betPoint(seat);
             const to = { x: px(L.table.cx), y: py(L.center.pot) + 14 };
@@ -1567,14 +1786,16 @@ export default function TableView({
 
         {/* 베팅 순간: 아바타(손)에서 건 돈 자리로 칩이 포물선으로 던져짐 */}
         {tosses.map((t) => {
-          const from =
-            t.seat === mySeat
+          const from = SF
+            ? charMid(t.seat)
+            : t.seat === mySeat
               ? { x: 12 + heroW / 2 + 10, y: h - 8 - stripH * 2 - heroAvH * 0.55 }
               : (() => {
                   const { x, dir, y } = cardsAt(t.seat);
                   return { x: x + dir * avW * 0.3, y };
                 })();
-          const to = betPoint(t.seat);
+          // 7포커: 던진 칩은 바로 가운데 팟 더미로 (판 위에 자리별로 깔지 않음)
+          const to = SF ? potPoint : betPoint(t.seat);
           const sz = Math.max(18, u * 3);
           return Array.from({ length: t.n }, (_, i) => (
             <div
@@ -1604,8 +1825,8 @@ export default function TableView({
           ));
         })}
 
-        {/* 내 자리 */}
-        {me && (
+        {/* 내 자리 (홀덤 — 7포커는 틀로) */}
+        {me && !SF && (
           <HeroArea
             me={{ ...me, stack: stackShown(mySeat, me.stack) }}
             p={hand?.players[mySeat] ?? null}
@@ -1738,12 +1959,33 @@ export default function TableView({
             aria-hidden
           />
         )}
+        {/* 7포커 카드 고르기: 화면 가운데에 크게 */}
+        {SF && sv && sv.phase === "choice" && !sv.result && me && liveHand && !liveHand.down && (
+          <div
+            className="absolute -translate-x-1/2 -translate-y-1/2"
+            style={{ left: w / 2, top: (SF.row1 + SF.me.y) / 2 + SF.gap, zIndex: 40 }}
+          >
+            <SevenChoice
+              key={table.handNo}
+              myHand={liveHand}
+              busy={busy}
+              onAct={doAct}
+              tier={table.tier}
+              cw={Math.round(Math.min(SF.me.cardW, (w - SF.fw * 2 - SF.mx * 2 - 60) / 4.6))}
+            />
+          </div>
+        )}
+
         {/* 행동 바 */}
         <div
           className="pk-actwrap absolute"
           data-turn={myTurn ? "1" : undefined}
           // 버튼 · 글씨를 키움 (폰 가로 1.2배 · PC 1.1배 — 안의 크기가 전부 em 이라 같이 커짐)
-          style={{ left: boardW * 0.5, right: 12, bottom: 10, zIndex: 30, fontSize: h <= 560 ? "1.2em" : "1.1em" }}
+          style={
+            SF
+              ? { left: SF.bar.x, top: SF.bar.y, width: SF.bar.w, height: SF.bar.h, zIndex: 30, fontSize: h <= 560 ? "1.2em" : "1.1em" }
+              : { left: boardW * 0.5, right: 12, bottom: 10, zIndex: 30, fontSize: h <= 560 ? "1.2em" : "1.1em" }
+          }
         >
           {myTurn && !busy && (
             <div
@@ -1787,8 +2029,49 @@ export default function TableView({
 
       </div>
 
-      {/* 위 바 「족보 · 기록」 아래로 내려오는 상자 (열었을 때만) */}
-      {infoOpen && (
+      {/* 7포커: 오른쪽 아래 족보 · 기록 상자 (기본 열림, 왼쪽 › 로 접음 · 접으면 ‹ 탭만) */}
+      {SF &&
+        (dockOpen ? (
+          <>
+            <InfoBox
+              table={table}
+              hand={hand}
+              hv={hv}
+              sv={sv}
+              res={res}
+              mySeat={mySeat}
+              log={log}
+              myCat={myCat}
+              top={SF.info.y}
+              box={SF.info}
+              emoteChar={me ? (me.look ?? me.char) : undefined}
+              onEmote={me ? emote : undefined}
+              onLogBig={() => setLogBig(true)}
+              onClose={() => setDockOpen(false)}
+            />
+            <button
+              type="button"
+              onClick={() => setDockOpen(false)}
+              aria-label="족보 · 기록 접기"
+              className="pk-dock-tab"
+              style={{ left: SF.info.x - 2, top: SF.info.y + SF.info.h / 2, transform: "translate(-100%, -50%)" }}
+            >
+              ›
+            </button>
+          </>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setDockOpen(true)}
+            aria-label="족보 · 기록 열기"
+            className="pk-dock-tab"
+            style={{ right: SF.mx, top: SF.info.y + SF.info.h / 2, transform: "translateY(-50%)" }}
+          >
+            ‹
+          </button>
+        ))}
+      {/* 홀덤: 위 바 「족보 · 기록」 아래로 내려오는 상자 (열었을 때만) */}
+      {!SF && infoOpen && (
         <InfoBox
           table={table}
           hand={hand}
@@ -1803,8 +2086,8 @@ export default function TableView({
           onClose={() => setInfoOpen(false)}
         />
       )}
-      {/* 이모티콘: 내 정보 판 옆 말풍선 버튼 → 누르면 고르는 칸 */}
-      {me && (
+      {/* 이모티콘: 내 정보 판 옆 말풍선 버튼 → 누르면 고르는 칸 (7포커는 내 틀 띠 안에) */}
+      {me && !SF && (
         <div className="absolute" style={{ left: 12 + heroW + 6, bottom: 8, zIndex: 31 }}>
           <button
             type="button"
@@ -1876,7 +2159,7 @@ export default function TableView({
           <span className="pk-num shrink-0 text-[0.72em] font-bold text-[#ffd84a]">{table.handNo}판</span>
         )}
         <span className="ml-auto flex shrink-0 items-center gap-[0.5em]">
-          <button
+          {!SF && <button
             type="button"
             onClick={() => setInfoOpen(!infoOpen)}
             aria-expanded={infoOpen}
@@ -1886,7 +2169,7 @@ export default function TableView({
               <path d="M4 6h16M4 12h16M4 18h10" />
             </svg>
             족보 · 기록
-          </button>
+          </button>}
           <span
             className="flex shrink-0 items-center gap-[0.3em] rounded-[6px] border border-[rgba(214,175,92,0.35)] bg-black/50 px-[0.5em] py-[0.1em] whitespace-nowrap"
             title={`${fmtWon(wallet.money)}칩`}
@@ -2040,6 +2323,55 @@ export default function TableView({
 }
 
 /** 무대 배경 (방) */
+/**
+ * 7포커 틀 배치 (그림 기준): 왼쪽 · 오른쪽에 남의 틀 두 줄, 왼쪽 아래 내 큰 틀, 오른쪽 아래 족보 · 기록 상자와 베팅 버튼 줄.
+ * 틀 = [캐릭터 칸][카드 칸] + 아래 이름 · 칩 띠. 캐릭터 칸은 앉은 정면 그림(3:4)이 꽉 차게, 카드 칸은 바로 옆에 딱 붙게.
+ * 길이는 전부 무대 높이(위 바 뺀)에 비례 → 무대가 커지든 작아지든(폰) 같은 비율로 보임. 넓은 화면은 가운데(판)만 넓어짐.
+ */
+function sevenFrames(w: number, h: number, bar: number, stripH: number) {
+  const hp = h - bar;
+  const gap = Math.round(hp * 0.014);
+  const gRow = Math.round(hp * 0.034);
+  const mx = Math.round(Math.max(6, hp * 0.012));
+  const F = Math.round(hp * 0.255);
+  const cell = F - stripH;
+  const charW = Math.round(cell * 0.75);
+  const cardW = Math.round((cell * 0.9) / 1.4);
+  const areaW = Math.round(cardW * 3.05);
+  const fw = charW + areaW;
+  const row1 = bar + gap;
+  const row2 = row1 + F + gRow;
+  const mTop = row2 + F + gRow;
+  const mh = h - gap - mTop;
+  const mStrip = Math.round(stripH * 1.15);
+  const mCell = mh - mStrip;
+  const mCharW = Math.round(mCell * 0.75);
+  const mCardW = Math.round((mCell * 0.78) / 1.4);
+  const mAreaW = Math.round(mCardW * 3.1);
+  const mw = mCharW + mAreaW;
+  /** 베팅 버튼 줄: 내 틀 오른쪽 아래 끝까지 */
+  const barH = Math.round(mh * 0.42);
+  const barX = mx + mw + gap;
+  return {
+    gap,
+    mx,
+    F,
+    cell,
+    charW,
+    cardW,
+    areaW,
+    fw,
+    strip: stripH,
+    row1,
+    row2,
+    me: { x: mx, y: mTop, w: mw, h: mh, cell: mCell, charW: mCharW, cardW: mCardW, areaW: mAreaW, strip: mStrip },
+    bar: { x: barX, y: h - gap - barH, w: w - mx - barX, h: barH },
+    info: { x: w - mx - fw, y: mTop, w: fw, h: h - gap - barH - gap - mTop },
+    /** 판 가운데 칸 (남의 틀 사이) */
+    center: { x: w / 2, top: bar, bottom: mTop },
+  };
+}
+
 function Shell({
   o,
   tier,
@@ -2187,7 +2519,8 @@ function Center({
     );
   }
   const street = Object.values(hand.players).reduce((a, p) => a + p.bet, 0);
-  const collected = res ? hand.pot : hand.pot - street;
+  // 7포커는 던진 칩이 바로 팟 더미로 가니 이번 구에 건 돈까지 팟에 다 셈
+  const collected = res || hand.game === "seven" ? hand.pot : hand.pot - street;
   const shown = res || collected > 0 ? collected : hand.pot;
   return (
     <>
@@ -2555,7 +2888,6 @@ function ActionBar(props: {
   const {
     revealing,
     o,
-    u,
     me,
     sitState,
     password,
@@ -2567,7 +2899,6 @@ function ActionBar(props: {
     hv,
     sv,
     mySeat,
-    liveHand,
     busy,
     doAct,
     table,
@@ -2626,6 +2957,11 @@ function ActionBar(props: {
         )}
       </div>
     );
+  // 7포커: 베팅 버튼 줄은 절대 안 사라짐 — 같은 다섯 칸이 켜지고 잠기기만 (한게임식)
+  if (table.game === "seven")
+    return (
+      <SevenBar view={sv} mySeat={mySeat} myStack={me.stack} busy={busy} myTurn={myTurn} onAct={doAct} pre={pre} onPre={onPre} />
+    );
   if (hv && hv.toAct === mySeat && !hv.result && hv.legal)
     return (
       <HoldemActions
@@ -2636,21 +2972,6 @@ function ActionBar(props: {
         busy={busy}
         onAct={doAct}
         unitBB={tier.bb}
-        o={o}
-      />
-    );
-  if (sv && !sv.result && myTurn)
-    return (
-      <SevenActions
-        key={table.handNo}
-        view={sv}
-        mySeat={mySeat}
-        myStack={me.stack}
-        myHand={liveHand}
-        busy={busy}
-        onAct={doAct}
-        tier={table.tier}
-        u={u}
         o={o}
       />
     );
@@ -2809,6 +3130,9 @@ function InfoBox({
   top,
   onLogBig,
   onClose,
+  box,
+  emoteChar,
+  onEmote,
 }: {
   table: TableWire;
   hand: HoldemView | SevenView | null;
@@ -2821,8 +3145,13 @@ function InfoBox({
   top: number;
   onLogBig: () => void;
   onClose: () => void;
+  /** 붙박이 자리 (7포커 오른쪽 아래) — 없으면 위 바 아래 오른쪽에 뜨는 상자 */
+  box?: { x: number; y: number; w: number; h: number };
+  /** 있으면 「이모티콘」 탭 (7포커 붙박이 상자) */
+  emoteChar?: Look;
+  onEmote?: (e: Emote) => void;
 }) {
-  const [tab, setTab] = useState<"rank" | "log">("rank");
+  const [tab, setTab] = useState<"rank" | "log" | "emote">("rank");
   const ranks = table.game === "holdem" ? HOLDEM_RANKS : SEVEN_RANKS;
   const steps = hv ? ["프리플랍", "플랍", "턴", "리버"] : ["고르기", "4구", "5구", "6구", "7구"];
   const at = !hand ? -1 : hv ? hv.street : sv!.phase === "choice" ? 0 : Math.max(1, sv!.round - 3);
@@ -2831,7 +3160,10 @@ function InfoBox({
   void res;
   void mySeat;
   return (
-    <div className="pk-infobox pk-frame absolute right-[8px] flex flex-col overflow-hidden" style={{ top, zIndex: 45 }}>
+    <div
+      className="pk-infobox pk-frame absolute right-[8px] flex flex-col overflow-hidden"
+      style={box ? { left: box.x, top: box.y, width: box.w, height: box.h, maxHeight: "none", zIndex: 25 } : { top, zIndex: 45 }}
+    >
       <div className="flex items-center gap-[0.35em] px-[0.5em] py-[0.3em]">
         <span className="pk-num text-[0.78em] font-bold text-[#ffd84a]">{hand ? `${table.handNo}판` : "판 사이"}</span>
         <span className="text-[0.7em] text-white/55">
@@ -2845,15 +3177,25 @@ function InfoBox({
           <button role="tab" type="button" aria-selected={tab === "log"} onClick={() => setTab("log")}>
             기록
           </button>
+          {emoteChar && onEmote && (
+            <button role="tab" type="button" aria-selected={tab === "emote"} onClick={() => setTab("emote")} aria-label="이모티콘">
+              <svg viewBox="0 0 24 24" className="inline h-[1.1em] w-[1.1em] align-[-0.2em]" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <path d="M4 5h16v11H9l-5 4z" />
+                <circle cx="9" cy="10.5" r="0.9" fill="currentColor" />
+                <circle cx="12" cy="10.5" r="0.9" fill="currentColor" />
+                <circle cx="15" cy="10.5" r="0.9" fill="currentColor" />
+              </svg>
+            </button>
+          )}
         </div>
-        <button
+        {!box && <button
           type="button"
           onClick={onClose}
           aria-label="닫기"
           className="cursor-pointer rounded-[4px] px-[0.3em] text-[0.95em] leading-none text-white/55 hover:bg-white/10 hover:text-white"
         >
           ✕
-        </button>
+        </button>}
       </div>
       {tab === "rank" && (
         <ol className="pk-ranks pk-ranks-dense pk-scroll min-h-0 overflow-y-auto">
@@ -2876,6 +3218,11 @@ function InfoBox({
               );
             })}
         </ol>
+      )}
+      {tab === "emote" && emoteChar && onEmote && (
+        <div className="pk-scroll min-h-0 overflow-y-auto">
+          <EmoteGrid char={emoteChar} onPick={onEmote} dense />
+        </div>
       )}
       {tab === "log" && (
         <div className="relative flex min-h-0 flex-col">
@@ -2913,10 +3260,13 @@ function EmoteGrid({
   char,
   onPick,
   big,
+  dense,
 }: {
   char: Look;
   onPick: (e: Emote) => void;
   big?: boolean;
+  /** 붙박이 상자 안: 그림을 조금 작게 (두 줄이 한눈에) */
+  dense?: boolean;
 }) {
   return (
     <div
@@ -2931,7 +3281,7 @@ function EmoteGrid({
           aria-label={EMOTE_NAME[e]}
           title={EMOTE_NAME[e]}
         >
-          <EmoteImg char={char} emote={e} size={big ? 72 : 48} className="mx-auto h-auto w-full" />
+          <EmoteImg char={char} emote={e} size={big ? 72 : 48} className={`mx-auto h-auto ${dense ? "w-[62%]" : "w-full"}`} />
           {/* 가리키면(폰은 누르는 동안) 이름이 떠오름 */}
           <span className="pk-emote-name" aria-hidden>
             {EMOTE_NAME[e]}

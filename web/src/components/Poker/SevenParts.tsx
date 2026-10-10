@@ -7,7 +7,6 @@ import { bestK, handNameK } from "@/lib/poker/seven";
 import { sfx } from "@/lib/poker/sfx";
 import { isTopSeat } from "@/lib/poker/showdown";
 import type { MyHand, SevenAction, SevenBet, SevenView } from "@/lib/poker/types";
-import type { Orient } from "./layout";
 import { Money, PlayingCard } from "./parts";
 import type { SeatCardsProps } from "./TableView";
 
@@ -41,11 +40,12 @@ export function sevenSeatCards({
   let overlap = hero
     ? -Math.round(w * (count >= 6 ? 0.3 : 0.2))
     : -Math.round(w * (side === "top" ? 0.38 : 0.48));
-  // 폭이 정해져 있으면 그 안에 들어오게 더 겹침 (숫자 보일 만큼은 남김)
-  if (maxW && !hero && count > 1) {
-    const cw = w;
-    const fit = -Math.ceil(cw - (maxW - cw) / (count - 1));
-    overlap = Math.min(overlap, Math.max(fit, -Math.round(cw * 0.72)));
+  // 폭이 정해져 있으면(틀의 카드 칸) 그 안에 들어오게 더 겹침 (숫자 · 무늬 보일 만큼은 남김). 내 카드는 칸이 남으면 덜 겹침
+  if (maxW && count > 1) {
+    const fit = -Math.ceil(w - (maxW - w) / (count - 1));
+    overlap = hero
+      ? Math.max(Math.min(fit, -Math.round(w * 0.06)), -Math.round(w * 0.8))
+      : Math.min(overlap, Math.max(fit, -Math.round(w * 0.8)));
   }
   const row = `flex ${side === "right" ? "justify-end" : ""}`;
   const gap = (i: number) => (i ? { marginLeft: overlap } : undefined);
@@ -69,8 +69,6 @@ export function sevenSeatCards({
               dim={ended && (!won || (!!best && !best.includes(c)))}
               className={wasDown ? "pk-flip" : ""}
               delay={wasDown ? k++ * 90 : 0}
-              // 깐 뒤에도 어느 게 엎어 뒀던 카드(히든)인지 보이게 — 내 카드와 같은 「엎음」 표시
-              down={wasDown}
               style={gap(i)}
             />
           );
@@ -86,7 +84,6 @@ export function sevenSeatCards({
     return (
       <span className={row}>
         {myHand.cards.map((c, i) => {
-          const down = myHand.down!.includes(i);
           return (
             <PlayingCard
               key={c}
@@ -95,7 +92,6 @@ export function sevenSeatCards({
               dim={p.folded}
               deal
               delay={dealDelay?.(i, myHand.cards.length)}
-              down={down}
               style={{
                 ...gap(i),
                 transform: made?.has(c) ? "translateY(-10%)" : undefined,
@@ -114,13 +110,13 @@ export function sevenSeatCards({
   const total = downN + U;
   // 엎은 카드도 편 카드와 같은 크기 (작게 하면 뭐가 몇 장인지 눈에 안 들어옴) — 대신 촘촘히 겹친 묶음
   const bw = w;
-  const bg = -Math.round(bw * 0.82);
+  const bg = -Math.round(bw * 0.8);
   const backsW = downN ? bw + (downN - 1) * (bw + bg) : 0;
   // 편 카드는 숫자 · 무늬(왼쪽 위)만 보이면 되니 반쯤 겹침 (한게임처럼)
   let g = -Math.round(w * 0.52);
   if (maxW && U > 1) {
     const room = (maxW - backsW - (downN ? 4 : 0) - w) / (U - 1) - w;
-    g = Math.min(g, Math.max(Math.floor(room), -Math.round(w * 0.7)));
+    g = Math.min(g, Math.max(Math.floor(room), -Math.round(w * 0.8)));
   }
   const ml = (m: number) => ({ marginLeft: m });
   return (
@@ -183,142 +179,144 @@ const BET_LABEL: Record<SevenBet, string> = {
   full: "풀",
 };
 
-export function SevenActions({
-  view,
-  mySeat,
-  myStack,
+/** 카드 고르기: 화면 가운데에 크게 — 첫 번째 누른 카드 = 버림, 두 번째 = 펴기 → 바로 확정 (버린 카드를 다시 누르면 취소) */
+export function SevenChoice({
   myHand,
   busy,
   onAct,
   tier,
-  u,
-  o,
+  cw,
 }: {
-  view: SevenView;
-  mySeat: number;
-  myStack: number;
   myHand: MyHand | null;
   busy: boolean;
   onAct: (a: SevenAction) => void;
   tier: TierId;
-  u: number;
-  o: Orient;
+  cw: number;
 }) {
   const [discard, setDiscard] = useState(-1);
-  const choosing = view.phase === "choice";
-
-  // 고르기: 첫 번째 누른 카드 = 버림, 두 번째 = 펴기 → 바로 확정 (버린 카드를 다시 누르면 취소)
-  if (choosing) {
-    const cards = myHand && !myHand.down ? myHand.cards : [];
-    const pick = (i: number) => {
-      if (busy) return;
-      // 효과음: 버릴 카드 고름 = 카드 던지는 소리 · 취소 = 딸깍 · 펼 카드 고름(확정) = 카드 뒤집는 소리
-      if (discard < 0) {
-        sfx.fold();
-        return setDiscard(i);
-      }
-      if (i === discard) {
-        sfx.click();
-        return setDiscard(-1);
-      }
-      sfx.flip();
-      onAct({ a: "choose", discard, open: i });
-    };
-    const cw = o === "h" ? u * 10 : u * 17;
-    return (
-      <div className="pk-frame flex flex-col items-center gap-[0.5em] px-[0.7em] py-[0.55em]">
-        <p className="text-center text-[0.8em] text-white/80">
-          {discard < 0 ? (
-            <>
-              <b className="text-white">버릴 카드</b>를 누르세요
-            </>
-          ) : (
-            <>
-              이제 <b className="text-[var(--pk-call)]">펼 카드</b>를 누르세요
-            </>
-          )}
-        </p>
-        <div className="flex gap-[0.5em]">
-          {cards.map((c, i) => (
-            <button
-              key={c}
-              type="button"
-              onClick={() => pick(i)}
-              aria-pressed={i === discard}
-              className="relative cursor-pointer rounded-[0.5em]"
-            >
-              <PlayingCard
-                card={c}
-                w={cw}
-                tier={tier}
-                pick={i === discard ? "discard" : undefined}
-                deal
-                delay={i * 70}
-              />
-              {i === discard && (
-                <span className="pk-tag absolute inset-x-0 -bottom-[0.3em] mx-auto w-max bg-[#4b4f5a]">
-                  버림
-                </span>
-              )}
-            </button>
-          ))}
-        </div>
-      </div>
-    );
-  }
-
-  const lg = view.legal;
-  if (!lg || view.toAct !== mySeat) return null;
-  const big =
-    "pk-btn flex min-w-0 flex-1 flex-col items-center justify-center px-[0.2em] py-[0.55em] whitespace-nowrap";
-  // 순서: 다이 · 따당 · 삥(또는 콜) · 쿼터 · 하프 (그 순간 할 수 있는 것만)
-  const buttons: { key: string; label: string; cls: string; amt?: number; act: SevenAction }[] = [];
-  buttons.push({ key: "die", label: "다이", cls: "pk-btn-fold", act: { a: "die" } });
-  const bet = (b: SevenBet) => {
-    const v = lg.bets[b];
-    if (v === undefined) return;
-    const allIn = v >= myStack;
-    buttons.push({
-      key: b,
-      label: allIn ? "올인" : BET_LABEL[b],
-      cls: allIn ? "pk-btn-allin" : `pk-btn-${b}`,
-      amt: v,
-      act: { a: b },
-    });
+  const cards = myHand && !myHand.down ? myHand.cards : [];
+  const pick = (i: number) => {
+    if (busy) return;
+    // 효과음: 버릴 카드 고름 = 카드 던지는 소리 · 취소 = 딸깍 · 펼 카드 고름(확정) = 카드 뒤집는 소리
+    if (discard < 0) {
+      sfx.fold();
+      return setDiscard(i);
+    }
+    if (i === discard) {
+      sfx.click();
+      return setDiscard(-1);
+    }
+    sfx.flip();
+    onAct({ a: "choose", discard, open: i });
   };
-  bet("ddadang");
-  bet("bbing");
-  // 콜은 삥 자리(세 번째)에 — 미리 행동 줄의 「삥/콜」과 같은 자리라 헷갈리지 않게
-  // 받을 돈이 가진 칩 이상이면 콜 = 있는 만큼 올인 (서버가 그렇게 처리, 남는 건 상대가 돌려받음)
-  if (lg.toCall > 0)
-    buttons.push({
-      key: "call",
-      label: lg.toCall >= myStack ? "올인 콜" : "콜",
-      cls: lg.toCall >= myStack ? "pk-btn-allin" : "pk-btn-call",
-      amt: lg.toCall,
-      act: { a: "call" },
-    });
-  bet("quarter");
-  bet("half");
   return (
-    // 버튼 한 줄: 색으로 구분
-    <div className="pk-frame flex gap-[0.3em] p-[0.45em]">
-      {buttons.map((b) => (
-        <button
-          key={b.key}
-          type="button"
-          disabled={busy}
-          onClick={() => onAct(b.act)}
-          className={`${big} ${b.cls}`}
-        >
-          <span className="text-[1.02em]">{b.label}</span>
-          {b.amt !== undefined ? (
-            <Money won={b.amt} className="text-[1.08em] opacity-95" />
-          ) : (
-            <span className="pk-num text-[1.08em] opacity-0">0</span>
-          )}
-        </button>
-      ))}
+    <div className="pk-frame pk-pop flex flex-col items-center gap-[0.6em] px-[1em] py-[0.8em]" style={{ background: "rgba(10,11,18,0.94)" }}>
+      <p className="text-center text-[1em] text-white/85">
+        {discard < 0 ? (
+          <>
+            <b className="text-white">버릴 카드</b>를 누르세요
+          </>
+        ) : (
+          <>
+            이제 <b className="text-[var(--pk-call)]">펼 카드</b>를 누르세요
+          </>
+        )}
+      </p>
+      <div className="flex gap-[0.6em]">
+        {cards.map((c, i) => (
+          <button
+            key={c}
+            type="button"
+            onClick={() => pick(i)}
+            aria-pressed={i === discard}
+            className="relative cursor-pointer rounded-[0.5em]"
+          >
+            <PlayingCard card={c} w={cw} tier={tier} pick={i === discard ? "discard" : undefined} deal delay={i * 70} />
+            {i === discard && (
+              <span className="pk-tag absolute inset-x-0 -bottom-[0.3em] mx-auto w-max bg-[#4b4f5a]">버림</span>
+            )}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * 7포커 베팅 버튼 줄 (한게임식): 다섯 칸이 늘 같은 자리 — 다이 · 삥(받을 돈 있으면 따당) · 콜 · 쿼터 · 하프.
+ * 내 차례면 할 수 있는 칸만 켜지고 금액이 위에 붙음. 남의 차례엔 전부 어둡게 잠기고, 미리 누르기가 되면 칸 왼쪽에 작은 체크 상자.
+ */
+export function SevenBar({
+  view,
+  mySeat,
+  myStack,
+  busy,
+  myTurn,
+  onAct,
+  pre,
+  onPre,
+}: {
+  view: SevenView | null;
+  mySeat: number;
+  myStack: number;
+  busy: boolean;
+  myTurn: boolean;
+  onAct: (a: SevenAction) => void;
+  pre: string;
+  onPre: (k: string) => void;
+}) {
+  const lg = view && !view.result && myTurn && view.phase === "bet" && view.toAct === mySeat ? view.legal : null;
+  const live = !!lg;
+  type Slot = { key: string; label: string; cls: string; amt?: number; act?: SevenAction };
+  const bet = (b: SevenBet, key: string, idle: string): Slot => {
+    const v = lg?.bets[b];
+    if (v === undefined) return { key, label: idle, cls: `pk-btn-${b}` };
+    const allIn = v >= myStack;
+    return { key, label: allIn ? "올인" : BET_LABEL[b], cls: allIn ? "pk-btn-allin" : `pk-btn-${b}`, amt: v, act: { a: b } };
+  };
+  const slots: Slot[] = [
+    { key: "die", label: "다이", cls: "pk-btn-fold", act: live ? { a: "die" } : undefined },
+    // 아무도 안 걸었으면 삥, 누가 걸었으면 따당(받을 돈의 2배)
+    lg && lg.bets.ddadang !== undefined ? bet("ddadang", "bbdd", "삥") : bet("bbing", "bbdd", "삥"),
+    lg && lg.toCall > 0
+      ? {
+          key: "call",
+          label: lg.toCall >= myStack ? "올인 콜" : "콜",
+          cls: lg.toCall >= myStack ? "pk-btn-allin" : "pk-btn-call",
+          amt: lg.toCall,
+          act: { a: "call" },
+        }
+      : { key: "call", label: "콜", cls: "pk-btn-call" },
+    bet("quarter", "quarter", "쿼터"),
+    bet("half", "half", "하프"),
+  ];
+  // 미리 누르기: 이번 구에 내 차례가 또 올 때만 (아직 안 쳤거나, 낸 뒤 누가 더 올렸을 때)
+  const myP = view?.players[mySeat];
+  const canPre =
+    !live && !!view && !!myP && !myP.folded && !myP.allIn && !view.result && view.phase === "bet" && (!myP.last || myP.bet < view.currentBet);
+  return (
+    <div className="pk-frame pk-sevenbar flex h-full gap-[0.3em] p-[0.4em]" data-live={live ? "1" : undefined}>
+      {slots.map((b) => {
+        const on = live && !!b.act && !busy;
+        return (
+          <button
+            key={b.key}
+            type="button"
+            disabled={live ? !on : !canPre}
+            aria-pressed={!live && canPre ? pre === b.key : undefined}
+            onClick={() => (live ? b.act && onAct(b.act) : onPre(b.key))}
+            className={`pk-btn ${b.cls} pk-sbtn relative flex h-full min-w-0 flex-1 flex-col items-center justify-center px-[0.2em] whitespace-nowrap ${live ? "" : "pk-sbtn-idle"}`}
+          >
+            {live && b.amt !== undefined && (
+              <span className="pk-sbtn-amt">
+                <Money won={b.amt} />
+              </span>
+            )}
+            {!live && canPre && <span className={`pk-sbtn-box ${pre === b.key ? "pk-sbtn-box-on" : ""}`} aria-hidden />}
+            <span className="text-[1.15em]">{b.label}</span>
+          </button>
+        );
+      })}
     </div>
   );
 }

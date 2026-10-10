@@ -2935,3 +2935,173 @@
   font-size: 1.14em;
   letter-spacing: 0.01em;
 }
+
+/* ── 7포커 자리 틀: [캐릭터 칸][카드 칸] + 아래 이름 · 칩 띠 ── */
+.pk-sf {
+  border: 2px solid rgba(214, 175, 92, 0.45);
+  border-radius: 8px;
+  background: linear-gradient(180deg, rgba(14, 15, 24, 0.78), rgba(6, 7, 12, 0.84));
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.55);
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.pk-sf-me {
+  border-color: rgba(255, 201, 60, 0.6);
+}
+/* 그 사람 차례: 틀 전체가 빛남 */
+.pk-sf[data-turn="1"] {
+  border-color: #ffd84a;
+  box-shadow:
+    0 0 0 2px rgba(255, 216, 74, 0.4),
+    0 0 22px rgba(255, 216, 74, 0.55);
+}
+.pk-sf[data-win="1"] {
+  border-color: var(--pk-brass);
+  box-shadow:
+    0 0 0 2px rgba(255, 210, 63, 0.45),
+    0 0 26px rgba(255, 210, 63, 0.6);
+}
+.pk-sf-empty {
+  border-style: dashed;
+  border-color: rgba(255, 255, 255, 0.12);
+  background: rgba(6, 7, 12, 0.45);
+  box-shadow: none;
+}
+.pk-sf-char {
+  border-right: 1px solid rgba(214, 175, 92, 0.3);
+  border-radius: 6px 0 0 0;
+}
+.pk-sf-char-r {
+  border-right: 0;
+  border-left: 1px solid rgba(214, 175, 92, 0.3);
+  border-radius: 0 6px 0 0;
+}
+.pk-sf-char .pk-plate-ring rect {
+  stroke-width: 4px;
+}
+/* 이번 구에 건 돈: 캐릭터 머리 위 */
+.pk-sf-bet {
+  position: absolute;
+  top: 3px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 6;
+  padding: 0.05em 0.5em;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.72);
+  border: 1px solid rgba(255, 216, 74, 0.45);
+  color: #ffd84a;
+  font-size: 0.82em;
+  white-space: nowrap;
+}
+/* 행동 글자: 캐릭터 칸 아래쪽 */
+.pk-sf-act {
+  position: absolute;
+  left: 50%;
+  bottom: 6%;
+  transform: translateX(-50%);
+  z-index: 7;
+  pointer-events: none;
+}
+.pk-sf-act .pk-acttag-img {
+  height: 2.3em;
+}
+/* 족보 · 결과 글자: 카드 칸 아랫단 위 */
+.pk-sf-label {
+  position: absolute;
+  left: 50%;
+  bottom: 7%;
+  transform: translateX(-50%);
+  z-index: 8;
+  pointer-events: none;
+  white-space: nowrap;
+}
+.pk-sf-strip {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  padding: 0 0.6em;
+  border-top: 1px solid rgba(214, 175, 92, 0.35);
+  background: linear-gradient(180deg, rgba(28, 30, 44, 0.95), rgba(6, 7, 12, 0.95));
+  border-radius: 0 0 6px 6px;
+}
+.pk-sf-strip .pk-name {
+  font-size: 0.82em;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.92);
+}
+.pk-sf-strip .pk-stack {
+  font-size: 1.05em;
+  color: #ffd84a;
+  text-shadow: 0 1px 0 #000;
+}
+.pk-sevenbar > .pk-btn {
+  padding-top: 0;
+  padding-bottom: 0;
+}
+/* 족보 · 기록 상자 접기/펴기 탭 */
+.pk-dock-tab {
+  position: absolute;
+  z-index: 26;
+  width: 1.6em;
+  height: 3.2em;
+  border-radius: 6px;
+  border: 1.5px solid rgba(214, 175, 92, 0.55);
+  background: rgba(10, 11, 18, 0.92);
+  color: #ffd84a;
+  font-size: 1.1em;
+  font-weight: 900;
+  line-height: 1;
+  cursor: pointer;
+}
+.pk-dock-tab:hover {
+  background: rgba(30, 32, 46, 0.95);
+}
+
+/* 7포커 베팅 칸: 남의 차례엔 어둡게 잠김 (글자만 흐리게 보임), 내 차례엔 켜진 칸만 색 */
+.pk-sbtn:disabled,
+.pk-sbtn-idle {
+  filter: saturate(0.15) brightness(0.55);
+  opacity: 0.85;
+  box-shadow: none;
+}
+.pk-sevenbar[data-live="1"] .pk-sbtn:not(:disabled) {
+  filter: none;
+  opacity: 1;
+}
+.pk-sbtn-idle:not(:disabled) {
+  cursor: pointer;
+}
+.pk-sbtn-idle[aria-pressed="true"] {
+  filter: none;
+}
+/* 금액: 칸 위 작은 알약 */
+.pk-sbtn-amt {
+  position: absolute;
+  top: -0.65em;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 0 0.5em;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  color: #fff;
+  font-size: 0.78em;
+  line-height: 1.35;
+  white-space: nowrap;
+}
+/* 미리 누르기 체크 상자: 칸 왼쪽 */
+.pk-sbtn-box {
+  position: absolute;
+  left: 0.5em;
+  top: 50%;
+  width: 0.7em;
+  height: 1.1em;
+  transform: translateY(-50%);
+  border: 1.5px solid rgba(255, 255, 255, 0.45);
+  border-radius: 3px;
+}
+.pk-sbtn-box-on {
+  background: #ffd84a;
+  border-color: #ffd84a;
+  box-shadow: 0 0 8px rgba(255, 216, 74, 0.7);
+}
