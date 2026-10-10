@@ -1,5 +1,5 @@
 import { evaluate, type Card } from "../../../../../web/src/lib/poker/cards";
-import { autoChoice } from "../../../../../web/src/lib/poker/seven";
+import { autoChoice, bestK, kCategory, openRank } from "../../../../../web/src/lib/poker/seven";
 import { moodOf, type Brain, type Cue } from "../personas";
 import type { SevenAct, SevenBet, SevenHistory, SevenLegal } from "./engine";
 
@@ -153,8 +153,9 @@ export function decideSeven(v: SevenBotView, brain: Brain): SevenDecision {
   const allIn = (b: SevenBet | "call") => (b === "call" ? toCall : (bets[b] ?? 0)) >= me.stack;
 
   // 마지막 구: 남이 편 카드만으로도 내 패(7장 전부)를 이기고 있으면 더 넣지 않음 (상대 원페어 · 투페어가 보이는데 탑으로 받던 것)
-  const mine = evaluate(v.cards);
-  const shown = Math.max(-1, ...v.players.filter((x) => !x.folded && x.seat !== v.seat).map((x) => (x.up.length ? evaluate(x.up) : -1)));
+  // (족보 등급으로만 비교 — 상대가 투페어를 펴 놨는데 나는 원페어 이하일 때. 같은 원페어끼리 키커 · 무늬 차이로는 안 죽음)
+  const mine = kCategory(bestK(v.cards).score);
+  const shown = Math.max(-1, ...v.players.filter((x) => !x.folded && x.seat !== v.seat).map((x) => (x.up.length ? kCategory(openRank(x.up)) : -1)));
   if (last && shown > mine) return { type: "die", thinkMs: think(900, 2200), cue: toCall > 0 ? "fold" : undefined };
 
   // 좋은 시작(초반 페어 · 같은 무늬 4장 · 4장 연속): 사람처럼 세게 나옴
@@ -208,12 +209,16 @@ export function decideSeven(v: SevenBotView, brain: Brain): SevenDecision {
       if (eq >= need * 0.7 + margin - 0.06 - 0.06 * brain.skill.fun) return { type: "call", thinkMs: think(900, 2200), cue: "call" };
       if (r() < 0.2 + 0.25 * brain.skill.fun) return { type: "call", thinkMs: think(1200, 2600), cue: "call" };
     }
+    // 메이드 원페어 이상 · 편 카드로 지고 있지 않음 · 판에 비해 싼 콜이면 그냥 받음 (A 페어를 들고 첫 콜에 죽던 것)
+    if (mine >= 1 && shown <= mine && toCall <= v.pot * 0.2 && risk < 0.2) return { type: "call", thinkMs: think(900, 2000), cue: "call" };
     if (eq >= need + margin && eq >= floorEq) return { type: "call", thinkMs: think(big ? 2000 : 1000, big ? 4800 : 2400), cue: allIn("call") ? "allin" : big && eq < 0.55 ? "heroCall" : "call" };
     return { type: "die", thinkMs: think(big ? 1600 : 800, big ? 3800 : 2000), cue: big && eq > 0.3 ? "bigFold" : "fold" };
   }
 
   // 받을 돈이 없음: 체크가 없으니 삥 이상을 걸거나 죽어야 함
   if (!avail.length) return { type: "die", thinkMs: think(600, 1200) };
+  // 먼저 거는 차례인데 삥 값이 판에 비해 싸고 메이드 원페어 이상이면 죽지 않음
+  const cheapLead = mine >= 1 && shown <= mine && (bets[avail[0]] ?? v.ante) <= v.pot * 0.15;
   const valueThr = 0.6 + 0.05 * (n - 1) + p.valueShift;
   if (eq >= valueThr) {
     // 센 패를 숨길 때는 가장 작은 삥만
@@ -237,6 +242,6 @@ export function decideSeven(v: SevenBotView, brain: Brain): SevenDecision {
   // 삥 한 번 값으로 다음 장을 볼 만한지
   const bbing = bets[avail[0]] ?? v.ante;
   const need = bbing / (v.pot + bbing);
-  if (eq >= need + p.callMargin + 0.02 * (n - 1) + (last ? 0.08 : 0)) return { type: avail[0], thinkMs: think(700, 1800) };
+  if (cheapLead || eq >= need + p.callMargin + 0.02 * (n - 1) + (last ? 0.08 : 0)) return { type: avail[0], thinkMs: think(700, 1800) };
   return { type: "die", thinkMs: think(600, 1500), cue: "fold" };
 }
