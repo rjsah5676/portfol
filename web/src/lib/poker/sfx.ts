@@ -3,10 +3,8 @@
  *  파일이 있으면 파일(/poker/sound/…, manifest.json 에 적힌 것만)을 틀고, 없으면 Web Audio 로 즉석 합성한 소리로 대신한다.
  *  브라우저 자동재생 정책 때문에 첫 클릭·터치 이후에만 소리가 난다 (그 전에 틀려던 배경음악은 첫 입력 때 시작).
  *  음량은 세 줄(배경음악 · 효과음 · 음성) + 전체 음소거, localStorage 에 저장.
- *  실제 크기는 슬라이더 값 × 게임별 보정(lib/soundLevel.ts — 측정해서 맞춤), 효과음·음성은 리미터를 거쳐 겹쳐도 찢어지지 않게.
  */
 
-import { LEVEL, limiter } from "@/lib/soundLevel";
 import { lookChar } from "./rules";
 
 const KEY = "poker_sound";
@@ -153,7 +151,7 @@ function playFile(name: string, vol: number, onEnd?: () => void): boolean {
     const g = c.createGain();
     g.gain.value = vol;
     src.connect(g);
-    g.connect(limiter(c));
+    g.connect(c.destination);
     src.start();
     if (onEnd) src.onended = onEnd;
   });
@@ -176,9 +174,9 @@ function noise(c: AudioContext): AudioBufferSourceNode {
 function env(c: AudioContext, peak: number, attack: number, decay: number, at: number): GainNode {
   const g = c.createGain();
   g.gain.setValueAtTime(0.0001, at);
-  g.gain.exponentialRampToValueAtTime(Math.max(0.0002, peak * getSound().sfx * LEVEL.poker.sfx), at + attack);
+  g.gain.exponentialRampToValueAtTime(Math.max(0.0002, peak * getSound().sfx), at + attack);
   g.gain.exponentialRampToValueAtTime(0.0001, at + attack + decay);
-  g.connect(limiter(c));
+  g.connect(c.destination);
   return g;
 }
 function tone(
@@ -319,7 +317,7 @@ let cur: HTMLAudioElement | null = null;
 /** 로비 곡 "번갈아" 설정일 때 이번 접속에 고른 번호 */
 let lobbyPick = 0;
 
-const bgmTarget = () => (getSound().mute ? 0 : getSound().bgm * LEVEL.poker.bgm);
+const bgmTarget = () => (getSound().mute ? 0 : getSound().bgm);
 function applyBgmVolume() {
   const v = bgmTarget();
   for (const [el, mix] of live) el.volume = Math.min(1, v * mix);
@@ -402,7 +400,7 @@ export const hasSound = (name: string) => !!fileOf(name);
 export function playSfx(name: string) {
   const s = getSound();
   if (s.mute || s.sfx <= 0) return;
-  if (playFile(name, s.sfx * LEVEL.poker.sfx)) return;
+  if (playFile(name, s.sfx)) return;
   const c = ac();
   const f = synth[name];
   if (c && f) f(c);
@@ -465,9 +463,9 @@ function playBuf(c: AudioContext, buf: AudioBuffer, vol: number, onEnd?: () => v
   const src = c.createBufferSource();
   src.buffer = buf;
   const g = c.createGain();
-  g.gain.value = vol * LEVEL.poker.voice;
+  g.gain.value = vol;
   src.connect(g);
-  g.connect(limiter(c));
+  g.connect(c.destination);
   const me = { src, gain: g };
   voiceNow = me;
   src.onended = () => {
@@ -479,6 +477,10 @@ function playBuf(c: AudioContext, buf: AudioBuffer, vol: number, onEnd?: () => v
 }
 
 /** 대사 줄에서 다음 것 (나오는 음성이 없을 때만) */
+/** 메이드 · 족보 대사는 중요 — 그동안 남의 삥 · 콜 같은 짧은 베팅 대사가 끊어 먹지 않게 (그 베팅 대사는 건너뜀) */
+const isVip = (name: string) => name === "made" || name.startsWith("hand-");
+let vipUntil = 0;
+
 function pumpSpeak() {
   if (speaking || voiceNow || !speakQ.length) return;
   const next = speakQ.shift()!;
@@ -487,13 +489,16 @@ function pumpSpeak() {
   const c = ac();
   if (Date.now() - next.at > 5000 || !url || !c || s.mute || s.voice <= 0) return pumpSpeak();
   speaking = true;
+  const vip = isVip(next.name);
   void buffer(url).then((buf) => {
     if (!buf) {
       speaking = false;
       return pumpSpeak();
     }
+    if (vip) vipUntil = Date.now() + buf.duration * 1000;
     playBuf(c, buf, s.voice * (next.big ? 1.15 : 1), () => {
       speaking = false;
+      if (vip) vipUntil = 0;
     });
   });
 }
@@ -514,8 +519,9 @@ export function playVoice(char: string, name: string, big = false) {
     pumpSpeak();
     return;
   }
+  if (Date.now() < vipUntil) return;
   void buffer(url).then((buf) => {
-    if (buf) playBuf(c, buf, s.voice * (big ? 1.15 : 1));
+    if (buf && Date.now() >= vipUntil) playBuf(c, buf, s.voice * (big ? 1.15 : 1));
   });
 }
 

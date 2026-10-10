@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { madeOf } from "@/lib/poker/cards";
+import { madeOf, type Card } from "@/lib/poker/cards";
 import type { TierId } from "@/lib/poker/rules";
 import { bestK, handNameK } from "@/lib/poker/seven";
 import { sfx } from "@/lib/poker/sfx";
@@ -17,6 +17,12 @@ export function sevenHint(my: MyHand): string {
   return handNameK(bestK(my.cards).score);
 }
 
+/** 7포커 카드 놓는 순서: 엎은 카드(처음 2장) → 편 카드(받은 순서) → 히든(7번째 장, 늘 맨 끝) */
+function orderSeven(cards: Card[], isUp: (c: Card, i: number) => boolean) {
+  const all = cards.map((c, i) => ({ c, i, up: isUp(c, i), hidden: cards.length === 7 && i === 6 && !isUp(c, i) }));
+  return [...all.filter((x) => !x.up && !x.hidden), ...all.filter((x) => x.up), ...all.filter((x) => x.hidden)];
+}
+
 export function sevenSeatCards({
   view,
   seat,
@@ -24,11 +30,12 @@ export function sevenSeatCards({
   myHand,
   tier,
   sizes,
-  side,
   hide,
   settled,
   dealDelay,
   maxW,
+  hiddenShut,
+  onPeek,
 }: SeatCardsProps<SevenView>) {
   const p = view.players[seat];
   if (!p) return null;
@@ -36,28 +43,24 @@ export function sevenSeatCards({
   const ended = !!view.result && !!settled;
   const w = hero ? sizes.heroCard : sizes.card;
   const count = p.cards?.length ?? (hero ? myHand?.cards.length : p.up.length + p.down) ?? 0;
-  // 옆자리는 카드가 늘어나도 폭이 거의 안 늘게 촘촘히 겹침, 내 카드는 숫자가 다 보이게
-  // 내 카드도 펼쳐 놓지 않고 왼쪽부터 차곡차곡 (숫자 · 무늬가 넉넉히 보일 만큼만 띄움)
-  let overlap = hero
-    ? -Math.round(w * 0.42)
-    : -Math.round(w * (side === "top" ? 0.38 : 0.48));
-  // 폭이 정해져 있으면(틀의 카드 칸) 그 안에 들어오게 더 겹침 (숫자 · 무늬 보일 만큼은 남김). 내 카드는 칸이 남으면 덜 겹침
+  // 남 · 나 모두 펼쳐 놓지 않고 왼쪽부터 포개서 차곡차곡 (숫자 · 무늬만 보이게), 칸이 모자라면 더 겹침
+  let overlap = -Math.round(w * 0.52);
   if (maxW && count > 1) {
     const fit = -Math.ceil(w - (maxW - w) / (count - 1));
     overlap = Math.min(overlap, Math.max(fit, -Math.round(w * 0.8)));
   }
-  const row = `flex ${side === "right" ? "justify-end" : ""}`;
+  const row = "flex";
   const gap = (i: number) => (i ? { marginLeft: overlap } : undefined);
 
-  // 쇼다운에서 깐 7장: 엎어 뒀던 카드만 뒤집히고, 다 깐 뒤 이긴 5장은 빛나고 나머지는 어둡게
+  // 쇼다운에서 깐 7장: 엎어 뒀던 카드만 뒤집히고, 다 깐 뒤 이긴 5장은 빛나고 나머지는 어둡게 (순서는 판 중과 같게: 엎은 2장 → 편 카드 → 히든)
   if (p.cards && !(hide && !hero)) {
     // 이긴 사람 = 족보 1등 (사이드 팟만 딴 2등은 진 쪽처럼)
     const won = (view.result?.won[seat] ?? 0) > 0 && isTopSeat(view, seat);
     let k = 0;
     return (
       <span className={row}>
-        {p.cards.map((c, i) => {
-          const wasDown = !hero && !p.up.includes(c);
+        {orderSeven(p.cards, (c) => p.up.includes(c)).map(({ c, up }, j) => {
+          const wasDown = !hero && !up;
           return (
             <PlayingCard
               key={c}
@@ -68,14 +71,14 @@ export function sevenSeatCards({
               dim={ended && (!won || (!!best && !best.includes(c)))}
               className={wasDown ? "pk-flip" : ""}
               delay={wasDown ? k++ * 90 : 0}
-              style={gap(i)}
+              style={gap(j)}
             />
           );
         })}
       </span>
     );
   }
-  // 내 카드: 전부 보이되, 메이드에 든 카드는 위로 · 엎어 둔 카드는 표시
+  // 내 카드: 메이드에 든 카드는 위로. 히든(7번째)은 엎은 채로 맨 끝 — 눌러야 열림 (안 열어도 베팅은 됨, 쇼다운 때 열림)
   if (hero && myHand) {
     // 고르는 중: 고르기는 화면 가운데에서, 내 틀에는 남들처럼 엎은 카드 묶음
     if (!myHand.down)
@@ -94,49 +97,68 @@ export function sevenSeatCards({
           ))}
         </span>
       );
-    const mine = bestK(myHand.cards);
-    const made = myHand.cards.length >= 5 ? new Set(madeOf(mine.five)) : null;
+    const shut = !!hiddenShut && myHand.cards.length === 7;
+    const evalCards = shut ? myHand.cards.slice(0, 6) : myHand.cards;
+    const mine = bestK(evalCards);
+    const made = evalCards.length >= 5 ? new Set(madeOf(mine.five)) : null;
+    const downs = myHand.down;
+    const n = myHand.cards.length;
     return (
       <span className={row}>
-        {myHand.cards.map((c, i) => {
-          return (
+        {orderSeven(myHand.cards, (_, i) => !downs.includes(i)).map(({ c, i, hidden }, j) =>
+          hidden && shut ? (
+            <button
+              key="hidden"
+              type="button"
+              onClick={onPeek}
+              className="pk-peek relative cursor-pointer rounded-[0.5em]"
+              style={gap(j)}
+              aria-label="히든 카드 열어 보기"
+            >
+              <PlayingCard card={null} w={w} tier={tier} deal delay={dealDelay?.(n - 1, n)} />
+              <span className="pk-peek-tag">눌러서 확인</span>
+            </button>
+          ) : (
             <PlayingCard
               key={c}
               card={c}
               w={w}
               dim={p.folded}
-              deal
-              delay={dealDelay?.(i, myHand.cards.length)}
+              deal={!hidden}
+              className={hidden ? "pk-flip" : ""}
+              delay={hidden ? 0 : dealDelay?.(i, n)}
               style={{
-                ...gap(i),
+                ...gap(j),
                 transform: made?.has(c) ? "translateY(-10%)" : undefined,
                 filter: made && !made.has(c) ? "brightness(0.75)" : undefined,
               }}
             />
-          );
-        })}
+          )
+        )}
       </span>
     );
   }
-  // 남의 카드: 엎은 카드(처음 2장 · 7구 1장)는 앞에 촘촘한 한 묶음, 편 카드는 덜 겹쳐서 — 편 카드가 한눈에 보이게
+  // 남의 카드: 엎은 카드(처음 2장)는 앞에 촘촘한 한 묶음 → 편 카드 → 7구 히든은 엎은 채로 맨 끝
   // (쇼다운 중 아직 안 깐 자리도 이 모양 그대로)
-  const downN = p.cards ? p.cards.length - p.up.length : p.down;
+  const downAll = p.cards ? p.cards.length - p.up.length : p.down;
+  const hid = count === 7 && downAll >= 3 ? 1 : 0;
+  const downN = downAll - hid;
   const U = p.up.length;
-  const total = downN + U;
+  const total = downAll + U;
   // 엎은 카드도 편 카드와 같은 크기 (작게 하면 뭐가 몇 장인지 눈에 안 들어옴) — 대신 촘촘히 겹친 묶음
   const bw = w;
   const bg = -Math.round(bw * 0.8);
   const backsW = downN ? bw + (downN - 1) * (bw + bg) : 0;
-  // 편 카드는 숫자 · 무늬(왼쪽 위)만 보이면 되니 반쯤 겹침 (한게임처럼)
-  // 편 카드는 엎은 묶음 바로 위에 겹쳐 이어짐 (묶음도 한 장 몫만큼만 보임) → 6구 · 7구도 칸 안에 숫자가 다 보이게
+  // 편 카드(와 히든)는 엎은 묶음 바로 위에 겹쳐 이어짐 → 6구 · 7구도 칸 안에 숫자가 다 보이게
+  const tail = U + hid;
   let g = -Math.round(w * 0.52);
-  if (maxW && U > 0) {
-    const room = (maxW - (downN ? backsW : w)) / (downN ? U : Math.max(1, U - 1)) - w;
+  if (maxW && tail > 0) {
+    const room = (maxW - (downN ? backsW : w)) / (downN ? tail : Math.max(1, tail - 1)) - w;
     g = Math.min(g, Math.max(Math.floor(room), -Math.round(w * 0.75)));
   }
   const ml = (m: number) => ({ marginLeft: m });
   return (
-    <span className={`flex flex-col gap-[3px] ${side === "right" ? "items-end" : "items-start"}`}>
+    <span className="flex flex-col items-start gap-[3px]">
       <span className={`${row} items-center`}>
         {Array.from({ length: downN }, (_, i) => {
           const dd = dealDelay?.(i, total);
@@ -164,6 +186,18 @@ export function sevenSeatCards({
             style={i || downN ? ml(g) : undefined}
           />
         ))}
+        {hid > 0 && (
+          <PlayingCard
+            key="hidden"
+            card={null}
+            w={bw}
+            tier={tier}
+            dim={p.folded}
+            deal={dealDelay?.(total - 1, total) !== undefined}
+            delay={dealDelay?.(total - 1, total)}
+            style={ml(g)}
+          />
+        )}
       </span>
     </span>
   );
