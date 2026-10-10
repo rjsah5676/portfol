@@ -87,6 +87,9 @@ const GEAR = {
   h: 1683,
   /** 레인: 틀 안쪽을 꽉 채움 (기둥 안쪽 158 ~ 914) */
   lane0: 158,
+  /** 기둥 안쪽 실제 끝 (왼쪽 기둥은 레인보다 89px 바깥이라 레인 뒤 판을 여기까지 넓힘 — 안 그러면 배경이 비침) */
+  innerL: 66,
+  innerR: 932,
   laneW: 189,
   judge: 1393,
   padTop: 1452,
@@ -288,6 +291,8 @@ export default function Stage({
     const outputLatency = (ctx as AudioContext & { outputLatency?: number }).outputLatency;
     let autoOffset = auto.offset;
     const tracker = new AutoSyncTracker(auto.judge);
+    /** 이 판에서 누른 횟수 — 아무것도 안 누르는데 초반 유예로 안 죽는 일이 없게 */
+    let presses = 0;
     const offsetSec = () => (sync + autoOffset) / 1000;
     // 분석 모드(자동 연주)는 손 지연이 없으니 타격 싱크 0
     const judgeSec = () => (autoplay ? 0 : tracker.judge / 1000);
@@ -426,7 +431,9 @@ export default function Stage({
       lane.addColorStop(0.25, "rgba(3,4,12,0.82)");
       lane.addColorStop(1, "rgba(3,4,12,0.9)");
       b.fillStyle = lane;
-      b.fillRect(gx - 6, laneTop, W + 12, judgeY + 4 - laneTop);
+      const panelL = Math.min(gx - 6, gpx(GEAR.innerL));
+      const panelR = Math.max(gx + W + 6, gpx(GEAR.innerR));
+      b.fillRect(panelL, laneTop, panelR - panelL, judgeY + 4 - laneTop);
       b.fillStyle = "rgba(255,255,255,0.07)";
       for (let l = 1; l < 4; l++) b.fillRect(gx + (l * W) / 4 - 0.5, laneTop, 1, judgeY - laneTop);
       if (portrait) {
@@ -858,10 +865,13 @@ export default function Stage({
         g.fillStyle = "#070814";
         g.fillRect(0, 0, CW, CH);
       }
-      if (beatGlow && pulse > 0.02 && quality >= 3) {
-        g.globalAlpha = pulse * 0.3; // 박자 번쩍임은 은은하게 (눈 아프지 않게)
+      if (beatGlow && pulse > 0.02 && quality >= 2) {
+        // 박자마다 기어 주변이 살짝 밝아짐 — 밝은 배경 그림 위에서도 보이게 더하기(lighter)로, 눈 아프지 않게 은은하게
+        g.globalCompositeOperation = "lighter";
+        g.globalAlpha = pulse * 0.35;
         g.drawImage(beatGlow, 0, 0, CW, CH);
         g.globalAlpha = 1;
+        g.globalCompositeOperation = "source-over";
       }
       if (portrait) return drawHudPortrait(t);
 
@@ -1406,7 +1416,7 @@ export default function Stage({
       return perfT + clockBase;
     };
     let prevCombo = 0;
-    // 프레임 시간 측정 → 무거우면 효과를 한 단계씩 내림 (quality: 3 전부 · 2 박자 빛 끔 · 1 불꽃 절반·그림자 끔 · 0 해상도도 낮춤)
+    // 프레임 시간 측정 → 무거우면 효과를 한 단계씩 내림 (quality: 3 전부 · 2 박자 빛은 유지 · 1 박자 빛 끔·불꽃 절반·그림자 끔 · 0 해상도도 낮춤)
     //
     // 프레임 고정(pace): 90·120Hz 화면에서 한 프레임 그리기가 주사 간격(8.3ms)에 아슬아슬하면 8·17·8·17ms로 들쭉날쭉
     // 그려져서 눈이 따라가는 노트가 둘로 보인다(분신). 그럴 땐 한 칸씩 건너뛰어 2배 간격(60fps)으로 고르게 그리는 게
@@ -1502,7 +1512,10 @@ export default function Stage({
         autoStep(t);
       }
       // 싱크가 잡히기 전(처음 몇 탭·곡 초반)엔 HP가 바닥나도 안 끝남 — 지연이 큰 기기는 첫 보정 전에 다 MISS라 죽어 버려서
-      engine.noFail = !!song.practice || (tracker.grace && t < AUTO_SYNC.graceSec);
+      // 단, 거의 안 누르면(MISS가 누른 횟수의 2배 넘게) 유예 없음 — 가만히 있으면 MISS 10번(HP 바닥)에 바로 끝남
+      engine.noFail =
+        !!song.practice ||
+        (tracker.grace && t < AUTO_SYNC.graceSec && presses * 2 >= engine.counts.miss);
       engine.update(t - judgeSec()); // 지나간 노트 미스 처리도 타격 싱크 기준
       for (const e of engine.events) {
         lastJudge = e;
@@ -1663,6 +1676,7 @@ export default function Stage({
     };
     const press = (lane: number, stamp = NaN) => {
       if (!running || autoplay) return;
+      presses++;
       playHit();
       const t = eventTime(stamp);
       const tj = t - judgeSec();
