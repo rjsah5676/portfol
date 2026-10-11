@@ -34,7 +34,7 @@ import {
 } from "@/lib/poker/rules";
 import { bestK, kCategory } from "@/lib/poker/seven";
 import { topHands } from "@/lib/poker/showdown";
-import { hasSound, isBig, playBgm, playSfx, playVoice, sfx, voiceDuration } from "@/lib/poker/sfx";
+import { hasSound, isBig, playBgm, playSfx, playVoice, playVoiceNow, sfx, voiceDuration } from "@/lib/poker/sfx";
 import type {
   HoldemAction,
   HoldemView,
@@ -543,6 +543,8 @@ export default function TableView({
           return has(look) || has(lookChar(look)) ? { look, line } : null;
         });
         const rk = ++keyRef.current;
+        // 대사 파일을 미리 받아 둠 (깔 때 받기 시작하면 늦게 나옴)
+        for (const x of say) if (x) void voiceDuration(x.look, x.line);
         setReveal({ key: rk, handNo: t.handNo, order, step: 0, say, shown: voiceOnly, game: t.game });
         if (resNow?.showdown) sfx.drum();
         // 마지막 구의 건 돈은 깔기 전에 팟으로
@@ -700,7 +702,8 @@ export default function TableView({
         const say = reveal.say[reveal.step];
         if (say) {
           // 그 사람이 족보를 다 읊을 즈음 다음 사람이 깜 (대사 길이만큼 기다림)
-          setTimeout(() => playVoice(say.look, say.line), 120);
+          // 카드가 뒤집히는 순간 바로 (줄 서지 않음 — 까는 박자와 대사가 어긋나지 않게)
+          playVoiceNow(say.look, say.line);
           void voiceDuration(say.look, say.line).then((d) => {
             if (dead) return;
             // 대사가 3분의 2쯤 나왔을 때 다음 사람이 까기 시작 (한게임 템포 — 겹쳐도 족보 이름은 들림)

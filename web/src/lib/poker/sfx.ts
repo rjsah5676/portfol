@@ -525,6 +525,29 @@ export function playVoice(char: string, name: string, big = false) {
   });
 }
 
+/**
+ * 쇼다운 족보 대사: 줄 서지 않고 바로 (패 까는 박자와 딱 맞게). 앞사람 대사 끝자락과는 겹쳐서 같이 들림 — 끊지 않음.
+ * 그동안 남의 짧은 베팅 대사는 안 끼어듦.
+ */
+export function playVoiceNow(char: string, name: string) {
+  const s = getSound();
+  if (s.mute || s.voice <= 0) return;
+  const url = voiceUrl(char, name);
+  const c = ac();
+  if (!url || !c) return;
+  void buffer(url).then((buf) => {
+    if (!buf) return;
+    vipUntil = Math.max(vipUntil, Date.now() + buf.duration * 1000);
+    const src = c.createBufferSource();
+    src.buffer = buf;
+    const g = c.createGain();
+    g.gain.value = s.voice;
+    src.connect(g);
+    g.connect(c.destination);
+    src.start();
+  });
+}
+
 /** 배경음악 바꾸기 (null = 끔). 파일이 없으면 조용히 아무것도 안 함 */
 export function playBgm(name: string | null) {
   wantBgm = name;
