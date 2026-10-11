@@ -456,7 +456,9 @@ function GateBg() {
         playsInline
         aria-hidden
       />
-      <div className="absolute inset-x-0 top-0 h-[30%] bg-[linear-gradient(180deg,rgba(0,0,0,0.75),transparent)]" />
+      {/* 살짝 어둡게 (예전처럼 뒤가 흐려 보이게) — 로고 · 글자 · 버튼은 그 위라 그대로 또렷 */}
+      <div className="absolute inset-0 bg-black/45" />
+      <div className="absolute inset-x-0 top-0 h-[30%] bg-[linear-gradient(180deg,rgba(0,0,0,0.6),transparent)]" />
       <img src="/poker/ui/logo.webp" alt="ANIME POKER" className="absolute top-[4%] left-1/2 w-[62%] -translate-x-1/2 drop-shadow-[0_4px_12px_rgba(0,0,0,0.8)]" />
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_75%_32%_at_50%_58%,rgba(0,0,0,0.82),rgba(0,0,0,0.35)_70%,transparent)]" />
     </>
