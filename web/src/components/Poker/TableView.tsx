@@ -686,7 +686,7 @@ export default function TableView({
   }, [dealFx]);
 
   // 패 까기 (한게임 템포): 내 자리부터 시계 방향으로 한 사람씩 — 카드가 뒤집히고, 뒤집힌 카드가 보일 즈음 그 사람이 족보를 읊음.
-  // 다음 사람은 앞사람 대사가 70% 쯤 나왔을 때 깜 (대사가 없으면 7포커 0.44초 · 홀덤 0.1초). 다 깐 뒤 결과(승리 · 패배 동작과 대사)
+  // 다음 사람은 앞사람 대사가 60% 쯤 나왔을 때 깜 (대사가 없으면 7포커 0.38초 · 홀덤 0.09초). 다 깐 뒤 결과(승리 · 패배 동작과 대사)
   useEffect(() => {
     if (!reveal || reveal.step > reveal.order.length) return;
     const n = reveal.order.length;
@@ -694,7 +694,7 @@ export default function TableView({
     const step = reveal.step;
     /** 카드가 뒤집혀 앞면이 보일 즈음 대사 시작 (뒤집기 0.34초 · 7포커는 엎은 카드가 0.09초씩 차례로) */
     const lag = seven ? 300 : 260;
-    const base = step === 0 ? 150 : step === n ? (seven ? 400 : 480) : seven ? 440 : 100;
+    const base = step === 0 ? 150 : step === n ? (seven ? 350 : 420) : seven ? 380 : 90;
     const key = reveal.key;
     let id: ReturnType<typeof setTimeout> | undefined;
     let dead = false;
@@ -717,7 +717,7 @@ export default function TableView({
     if (prev) {
       void voiceDuration(prev.look, prev.line).then((d) => {
         if (dead) return;
-        const talk = (reveal.shown ? 0 : lag) + (d ?? 0) * 1000 * 0.71;
+        const talk = (reveal.shown ? 0 : lag) + (d ?? 0) * 1000 * 0.6;
         id = setTimeout(run, Math.max(base, talk + (step === n ? 150 : 0)));
       });
     } else id = setTimeout(run, base);
@@ -1365,7 +1365,7 @@ export default function TableView({
           <span className="flex min-w-0 flex-1 items-baseline gap-[0.35em]">
             <span className="pk-name min-w-0 truncate">{s.name}</span>
             {hero && s.net !== 0 && (
-              <span className={`pk-num shrink-0 text-[0.7em] font-bold ${s.net > 0 ? "text-[#ffd84a]/80" : "text-[#ff7d86]/80"}`}>
+              <span className={`pk-num shrink-0 text-[0.7em] font-bold ${s.net > 0 ? "text-[#ff5a5f]" : "text-[#4aa3ff]"}`}>
                 {s.net > 0 ? "+" : "−"}
                 {fmtShort(Math.abs(s.net))}
               </span>

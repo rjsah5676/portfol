@@ -261,10 +261,10 @@ function Index({ r, s }: { r: string; s: number }) {
       ) : r === "10" ? (
         // 10: 글자를 눌러 담으면 다른 숫자와 모양이 달라 튀어 보여서, 1 과 0 을 원래 모양 그대로 바짝 붙여 씀
         <g className="pk-idx pk-idx-10">
-          <text x={x - 6.4} y={BASE} textAnchor="middle">
+          <text x={x - 6.8} y={BASE} textAnchor="middle">
             1
           </text>
-          <text x={x + 5} y={BASE} textAnchor="middle">
+          <text x={x + 5.4} y={BASE} textAnchor="middle">
             0
           </text>
         </g>
