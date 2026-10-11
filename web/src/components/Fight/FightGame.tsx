@@ -43,6 +43,7 @@ const SFX_EL: Record<string, Element> = { kai: "wind", igna: "fire", soyoung: "w
 import { FightRenderer } from "./render";
 import { FightInput } from "./input";
 import HowTo from "./HowTo";
+import PracticeGuide from "./PracticeGuide";
 import { Banner, Combo, HUD_CSS, PlayerBottom, PlayerTop, TimerBox, WinQuote, type BannerKind } from "./Hud";
 import Select, { type Setup } from "./Select";
 import { scrollToGameTop } from "@/components/GameHeader";
@@ -929,6 +930,7 @@ export default function FightGame() {
             <span className="text-white/50">최고 {prac.best}</span>
           </div>
         )}
+        {setup.mode === "practice" && !ol && hud && !result && <PracticeGuide ch={hud.ch[0]} />}
         {watching && hud && (
           <div className="pointer-events-none absolute top-[8.6cqw] left-1/2 z-10 -translate-x-1/2 rounded-full bg-black/55 px-[1.2cqw] py-[0.3cqw] font-['Nanum_Gothic',sans-serif] text-[1.2cqw] font-bold text-[#67E8F9]">
             👁 관전 중

@@ -263,7 +263,7 @@ export default function Select({
     return () => clearTimeout(t);
   }, [stage, onStart]);
 
-  // 연습 모드도 AI 대전처럼 1P가 고른 뒤 상대(허수아비) 캐릭터를 고름
+  // 연습 모드: 1P만 고르면 허수아비는 건모로 (lockSide)
   const prac = setup.mode === "practice";
   const ai = setup.mode === "ai" || prac;
   const foe = prac ? "허수아비" : "CPU";
@@ -309,6 +309,13 @@ export default function Select({
     sfxUi("ok");
     const l: [boolean, boolean] = [...stRef.current.lock];
     l[side] = true;
+    // 연습 모드: 허수아비는 고르지 않고 건모로
+    if (prac && side === 0 && !l[1]) {
+      l[1] = true;
+      const gm = CHARS.findIndex((c) => c.id === "gunmo");
+      setRnd((r) => [r[0], false]);
+      setSetup((s) => ({ ...s, c2: gm >= 0 ? gm : s.c2 }));
+    }
     setLock(l);
     if (l[0] && l[1]) setStage("map");
   };
