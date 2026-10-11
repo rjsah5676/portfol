@@ -110,6 +110,13 @@ if (typeof window !== "undefined") {
   loadManifest();
   // 탭을 가리면 배경음악 멈춤, 돌아오면 이어서
   document.addEventListener("visibilitychange", () => {
+    // 가리는 순간 나오던 대사 · 줄 선 대사도 끊음
+    if (document.hidden) {
+      speakQ.length = 0;
+      try {
+        voiceNow?.src.stop();
+      } catch {}
+    }
     for (const el of live.keys()) {
       if (document.hidden) el.pause();
       else if (wantBgm) void el.play().catch(() => {});
@@ -522,7 +529,7 @@ function pumpSpeak() {
   const s = getSound();
   const url = voiceUrl(next.char, next.name, next.big);
   const c = ac();
-  if (Date.now() - next.at > 5000 || !url || !c || s.mute || s.voice <= 0) return pumpSpeak();
+  if (Date.now() - next.at > 5000 || !url || !c || s.mute || s.voice <= 0 || away()) return pumpSpeak();
   speaking = true;
   const vip = isVip(next.name);
   void buffer(url).then((buf) => {
@@ -539,9 +546,12 @@ function pumpSpeak() {
 }
 
 /** 캐릭터 음성 (파일 있을 때만). big = 크게 외치는 버전(없으면 보통 버전) */
+/** 탭을 가렸거나 앱을 내려 둠(폰 홈 키) — 연결은 그대로 두고 캐릭터 대사만 안 냄 */
+const away = () => typeof document !== "undefined" && document.hidden;
+
 export function playVoice(char: string, name: string, big = false) {
   const s = getSound();
-  if (s.mute || s.voice <= 0) return;
+  if (s.mute || s.voice <= 0 || away()) return;
   // 스킨이면 스킨 전용 음성이 있을 때 그것, 없으면 원래 캐릭터 음성
   const url = voiceUrl(char, name, big);
   if (!url) return;
@@ -566,7 +576,7 @@ export function playVoice(char: string, name: string, big = false) {
  */
 export function playVoiceNow(char: string, name: string) {
   const s = getSound();
-  if (s.mute || s.voice <= 0) return;
+  if (s.mute || s.voice <= 0 || away()) return;
   const url = voiceUrl(char, name);
   const c = ac();
   if (!url || !c) return;
