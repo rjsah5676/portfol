@@ -3591,12 +3591,26 @@ function EmoteGrid({
   /** 붙박이 상자 안: 정사각형 칸 한 줄 · 좌우로 밀어 고름 */
   dense?: boolean;
 }) {
+  // 붙박이 줄: 스크롤 막대를 숨겨(막대 높이만큼 칸이 위로 쏠리던 것) 정가운데 — PC는 마우스 휠로 좌우 밀기
+  const rowRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = rowRef.current;
+    if (!dense || !el) return;
+    const onWheel = (ev: WheelEvent) => {
+      if (Math.abs(ev.deltaY) <= Math.abs(ev.deltaX) || el.scrollWidth <= el.clientWidth) return;
+      ev.preventDefault();
+      el.scrollLeft += ev.deltaY;
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, [dense]);
   return (
     <div
+      ref={rowRef}
       // 붙박이 상자: 정사각형 칸을 한 줄로 늘어놓고 좌우로 밀어서 고름 (폰에서 칸이 세로로 길쭉해지지 않게)
       className={
         dense
-          ? "pk-emote-row pk-scroll border-t border-[rgba(214,175,92,0.2)]"
+          ? "pk-emote-row border-t border-[rgba(214,175,92,0.2)]"
           : `grid grid-cols-4 gap-[0.3em] border-t border-[rgba(214,175,92,0.2)] p-[0.45em] ${big ? "gap-[0.5em] p-[0.8em]" : ""}`
       }
     >

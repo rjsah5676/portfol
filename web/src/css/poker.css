@@ -3605,6 +3605,11 @@
   overflow-y: hidden;
   overscroll-behavior-x: contain;
   -webkit-overflow-scrolling: touch;
+  /* 스크롤 막대 숨김: 막대가 아래 자리를 먹어 칸이 위로 쏠렸음 (밀기 · 휠은 그대로) */
+  scrollbar-width: none;
+}
+.pk-emote-row::-webkit-scrollbar {
+  display: none;
 }
 /* 칸은 언제나 같은 크기 (상자 높이 · 화면 크기와 상관없이), 넘치면 좌우로 밀기 */
 .pk-emote-row .pk-emote-btn {
