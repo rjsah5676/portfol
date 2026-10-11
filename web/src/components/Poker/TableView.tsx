@@ -703,9 +703,9 @@ export default function TableView({
           setTimeout(() => playVoice(say.look, say.line), 120);
           void voiceDuration(say.look, say.line).then((d) => {
             if (dead) return;
-            // 대사 끝자락에 다음 사람이 까기 시작 (조금 빠르게 — 대사 길이를 맞춰 둬서 박자가 일정)
+            // 대사가 3분의 2쯤 나왔을 때 다음 사람이 까기 시작 (한게임 템포 — 겹쳐도 족보 이름은 들림)
             const gap = seven ? 380 : 90;
-            later = setTimeout(advance, Math.max(0, (d ?? 0) * 1000 * 0.8 + 40 - gap));
+            later = setTimeout(advance, Math.max(0, (d ?? 0) * 1000 * 0.62 + 20 - gap));
           });
           return;
         }
