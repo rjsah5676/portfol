@@ -367,6 +367,8 @@ export function SevenBar({
             }}
             className="pk-sbtn relative flex h-full min-w-0 flex-1 flex-col items-center justify-center whitespace-nowrap"
           >
+            {/* 왼쪽 위 동그란 불: 미리 눌러 두면 테두리와 같이 불이 들어옴 */}
+            <span className="pk-sbtn-lamp" aria-hidden />
             {live && b.amt !== undefined && (
               <span className="pk-sbtn-amt pk-num">
                 <Money won={b.amt} />
