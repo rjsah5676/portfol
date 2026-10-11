@@ -697,7 +697,7 @@ export default function TableView({
     sdRef.current = table?.dev?.sd ?? 1;
   }, [table?.dev?.sd]);
   // 패 까기 (한게임 템포): 내 자리부터 시계 방향으로 한 사람씩 — 카드가 뒤집히고, 뒤집힌 카드가 보일 즈음 그 사람이 족보를 읊음.
-  // 다음 사람은 앞사람 대사가 절반쯤 나왔을 때 깜 (대사가 없으면 7포커 0.33초 · 홀덤 0.09초). 다 깐 뒤 결과(승리 · 패배 동작과 대사)
+  // 다음 사람은 앞사람 대사가 30% 나왔을 때 깜 (대사가 없으면 7포커 0.2초 · 홀덤 0.05초). 다 깐 뒤 결과(승리 · 패배 동작과 대사)
   useEffect(() => {
     if (!reveal || reveal.step > reveal.order.length) return;
     const n = reveal.order.length;
@@ -707,7 +707,8 @@ export default function TableView({
     const lag = seven ? 300 : 260;
     // 관리자 테스트 방: 쇼다운 연출 배수 (카드 → 대사 간격 lag 은 그대로, 다음 사람까지의 간격만)
     const sd = sdRef.current;
-    const base = (step === 0 ? 150 : step === n ? (seven ? 320 : 380) : seven ? 330 : 90) * sd;
+    // 간격은 예전의 0.6배 (테스트 방에서 맞춰 본 값)
+    const base = (step === 0 ? 150 : step === n ? (seven ? 320 : 380) : seven ? 330 : 90) * 0.6 * sd;
     const key = reveal.key;
     let id: ReturnType<typeof setTimeout> | undefined;
     let dead = false;
@@ -730,7 +731,7 @@ export default function TableView({
     if (prev) {
       void voiceDuration(prev.look, prev.line).then((d) => {
         if (dead) return;
-        const talk = (reveal.shown ? 0 : lag) + (d ?? 0) * 1000 * 0.5 * sd;
+        const talk = (reveal.shown ? 0 : lag) + (d ?? 0) * 1000 * 0.5 * 0.6 * sd;
         id = setTimeout(run, Math.max(base, talk + (step === n ? 150 : 0)));
       });
     } else id = setTimeout(run, base);
