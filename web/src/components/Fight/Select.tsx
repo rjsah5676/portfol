@@ -40,6 +40,8 @@ const MODES = MODE_TILES.map(([m]) => m);
 
 const face = (c: CharDef) => `/fight/art/${c.id}-face.webp`;
 const art = (c: CharDef) => `/fight/art/${c.id}.webp`;
+/** 선택 화면 전신 그림 배율 (그림마다 인물이 차지하는 크기가 달라서 — 발 위치는 그대로) */
+const ART_SCALE: Record<string, number> = { soyoung: 0.86 };
 const PX = "[image-rendering:pixelated]";
 const KR = "font-['Nanum_Gothic',sans-serif]";
 const MENU_BG = "/fight/bg/title.webp";
@@ -657,6 +659,7 @@ export default function Select({
                     active || lock[sd] ? "" : "opacity-45 brightness-50"
                   }`}
                   style={{
+                    ...(ART_SCALE[c.id] ? { height: `${76 * ART_SCALE[c.id]}%`, top: `${89 - 76 * ART_SCALE[c.id]}%` } : {}),
                     filter: active
                       ? `drop-shadow(0 0 0.25cqw ${col}) drop-shadow(0 0 1.4cqw ${col})`
                       : lock[sd]
