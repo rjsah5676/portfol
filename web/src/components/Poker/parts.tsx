@@ -204,13 +204,15 @@ const PIPS: Record<number, [number, number][]> = {
 
 /** 무늬별 높이 맞춤 (그림 상자 안 실제 높이가 달라서 — 스페이드 95 · 하트 86 · 다이아 96 · 클로버 89) → 같은 size 면 네 무늬 키가 같음 */
 const SUIT_NORM = [96 / 95, 96 / 86, 1, 96 / 89];
+/** 무늬별 폭 맞춤: 하트는 원래 넓적해서(폭/키 1.05) 스페이드 · 클로버 비율(약 0.91)로 좁힘 */
+const SUIT_SX = [1, 0.87, 1, 1];
 
 function Pip({ s, x, y, size, flip, sx = 1 }: { s: number; x: number; y: number; size: number; flip?: boolean; sx?: number }) {
   const k = (size / 100) * SUIT_NORM[s];
   return (
     <path
       d={FACE_PATH[s]}
-      transform={`translate(${x} ${y})${flip ? " rotate(180)" : ""} scale(${k * sx} ${k}) translate(-50 -50)`}
+      transform={`translate(${x} ${y})${flip ? " rotate(180)" : ""} scale(${k * sx * SUIT_SX[s]} ${k}) translate(-50 -50)`}
     />
   );
 }
