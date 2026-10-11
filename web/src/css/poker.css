@@ -3701,3 +3701,27 @@
     translate: 0 0;
   }
 }
+
+/* 폰 전체화면 안내 버튼: 가운데 크게, 금빛이 숨 쉬듯 번쩍 */
+.pk-fsgate-btn {
+  box-shadow:
+    0 0 0 2px rgba(255, 226, 140, 0.55),
+    0 0 26px 6px rgba(255, 196, 60, 0.55),
+    0 6px 16px rgba(0, 0, 0, 0.6);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .pk-fsgate-btn {
+    animation: pk-fsgate-glow 1.6s ease-in-out infinite;
+  }
+}
+@keyframes pk-fsgate-glow {
+  0%,
+  100% {
+    transform: scale(1);
+    filter: brightness(1);
+  }
+  50% {
+    transform: scale(1.05);
+    filter: brightness(1.15);
+  }
+}

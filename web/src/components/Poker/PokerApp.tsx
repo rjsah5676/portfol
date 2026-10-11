@@ -355,15 +355,16 @@ export default function PokerApp({ rank }: { rank: RankRow[] | null }) {
       >
         {size.w > 0 && screen}
         {fsGate && (
-          <div className="pk-fsgate absolute inset-0 z-[60] flex flex-col items-center justify-center gap-[1.1em] bg-black/75 px-6 text-center backdrop-blur-[3px]">
-            <p className="font-['Black_Han_Sans',sans-serif] text-[1.6em] leading-tight text-white">
+          <div className="pk-fsgate absolute inset-0 z-[60] flex flex-col items-center justify-center gap-[1.1em] overflow-hidden bg-black px-6 pt-[18%] text-center">
+            <GateBg />
+            <p className="relative font-['Black_Han_Sans',sans-serif] text-[1.6em] leading-tight text-white drop-shadow-[0_2px_6px_rgba(0,0,0,0.9)]">
               전체화면으로 플레이해 주세요
             </p>
-            <p className="text-[0.95em] text-white/60">폰은 가로 화면으로 쳐요 · 누르면 가로로 돌아가요</p>
+            <p className="relative text-[0.95em] text-white/75 drop-shadow-[0_1px_4px_rgba(0,0,0,0.9)]">폰은 가로 화면으로 쳐요 · 누르면 가로로 돌아가요</p>
             <button
               type="button"
               onClick={toggleFs}
-              className="pk-btn pk-btn-gold flex items-center gap-[0.5em] px-[1.6em] py-[0.8em] text-[1.1em]"
+              className="pk-btn pk-btn-gold pk-fsgate-btn relative flex items-center gap-[0.5em] px-[2em] py-[0.95em] text-[1.3em]"
             >
               <svg
                 viewBox="0 0 24 24"
@@ -441,6 +442,27 @@ export default function PokerApp({ rank }: { rank: RankRow[] | null }) {
 }
 
 /** 머리말 버튼 (상점 · 옷장) */
+/** 폰 전체화면 안내 뒤 배경: 타이틀 영상(세로) + 위 로고, 가운데 글자 · 버튼 뒤는 어둡게 */
+function GateBg() {
+  return (
+    <>
+      <video
+        className="absolute inset-0 h-full w-full object-cover"
+        src={asset.intro("v")}
+        poster={asset.introPoster("v")}
+        autoPlay
+        muted
+        loop
+        playsInline
+        aria-hidden
+      />
+      <div className="absolute inset-x-0 top-0 h-[30%] bg-[linear-gradient(180deg,rgba(0,0,0,0.75),transparent)]" />
+      <img src="/poker/ui/logo.webp" alt="ANIME POKER" className="absolute top-[4%] left-1/2 w-[62%] -translate-x-1/2 drop-shadow-[0_4px_12px_rgba(0,0,0,0.8)]" />
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_75%_32%_at_50%_58%,rgba(0,0,0,0.82),rgba(0,0,0,0.35)_70%,transparent)]" />
+    </>
+  );
+}
+
 function TopBtn({
   label,
   icon,
