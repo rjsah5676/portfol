@@ -259,10 +259,15 @@ function Index({ r, s }: { r: string; s: number }) {
           );
         })()
       ) : r === "10" ? (
-        // 10: 다른 숫자와 같은 높이, 폭만 칸에 맞춰 눌러 담음
-        <text x={x} y={BASE} className="pk-idx" textAnchor="middle" textLength={19.5} lengthAdjust="spacingAndGlyphs">
-          10
-        </text>
+        // 10: 글자를 눌러 담으면 다른 숫자와 모양이 달라 튀어 보여서, 1 과 0 을 원래 모양 그대로 바짝 붙여 씀
+        <g className="pk-idx pk-idx-10">
+          <text x={x - 5.8} y={BASE} textAnchor="middle">
+            1
+          </text>
+          <text x={x + 4.4} y={BASE} textAnchor="middle">
+            0
+          </text>
+        </g>
       ) : (
         <text x={x} y={BASE} className="pk-idx" textAnchor="middle">
           {r}
