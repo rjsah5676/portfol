@@ -206,8 +206,8 @@ const PIPS: Record<number, [number, number][]> = {
 
 /** 무늬별 높이 맞춤 (그림 상자 안 실제 높이가 달라서 — 스페이드 95 · 하트 86 · 다이아 96 · 클로버 89) → 같은 size 면 네 무늬 키가 같음 */
 const SUIT_NORM = [96 / 95, 96 / 86, 1, 96 / 89];
-/** 무늬별 폭 맞춤: 하트는 원래 넓적해서(폭/키 1.05) 스페이드 · 클로버 비율(약 0.91)로 좁힘 */
-const SUIT_SX = [1, 0.87, 1, 1];
+/** 무늬별 폭 맞춤: 네 무늬 모두 폭/키 약 0.91 (스페이드 · 클로버 비율) — 하트는 좁히고 다이아는 넓힘 */
+const SUIT_SX = [1, 0.87, 1.15, 1];
 
 function Pip({ s, x, y, size, flip, sx = 1 }: { s: number; x: number; y: number; size: number; flip?: boolean; sx?: number }) {
   const k = (size / 100) * SUIT_NORM[s];
@@ -233,7 +233,7 @@ function Index({ r, s }: { r: string; s: number }) {
       {r === "4" ? (
         // 정석 4: 닫힌 삼각 머리 + 곧은 기둥 + 가로대
         <path
-          d={`M${x + 3} ${BASE} V${top + STROKE / 2} L${x - 8} ${BASE - 10} H${x + 10}`}
+          d={`M${x + 2.4} ${BASE} V${top + STROKE / 2} L${x - 6.4} ${BASE - 10} H${x + 7.8}`}
           fill="none"
           stroke="currentColor"
           strokeWidth={STROKE}
@@ -242,13 +242,13 @@ function Index({ r, s }: { r: string; s: number }) {
       ) : r === "Q" ? (
         // 정석 Q: 둥근 O + 오른쪽 아래로 빠지는 꼬리
         <g fill="none" stroke="currentColor" strokeWidth={STROKE}>
-          <ellipse cx={x} cy={top + CAP / 2} rx={7.6} ry={CAP / 2 - STROKE / 2} />
-          <path d={`M${x + 1} ${BASE - 8} L${x + 6.5} ${BASE - 1.8}`} strokeLinecap="round" />
+          <ellipse cx={x} cy={top + CAP / 2} rx={6.2} ry={CAP / 2 - STROKE / 2} />
+          <path d={`M${x + 1} ${BASE - 8} L${x + 5.8} ${BASE - 1.8}`} strokeLinecap="round" />
         </g>
       ) : r === "A" ? (
         // A: 가운데 가로대를 조금 높게 (글꼴 A 는 가로대가 낮음)
         (() => {
-          const hw = 8.6;
+          const hw = 6.4;
           const yb = BASE - 10.5;
           const bw = (hw * (yb - top)) / CAP - STROKE * 0.35;
           return (
@@ -260,7 +260,7 @@ function Index({ r, s }: { r: string; s: number }) {
         })()
       ) : r === "10" ? (
         // 10: 다른 숫자와 같은 높이, 폭만 칸에 맞춰 눌러 담음
-        <text x={x} y={BASE} className="pk-idx" textAnchor="middle" textLength={23} lengthAdjust="spacingAndGlyphs">
+        <text x={x} y={BASE} className="pk-idx" textAnchor="middle" textLength={19.5} lengthAdjust="spacingAndGlyphs">
           10
         </text>
       ) : (
@@ -270,7 +270,7 @@ function Index({ r, s }: { r: string; s: number }) {
       )}
       {/* 모서리 무늬는 가운데 무늬보다 크게 (겹쳐 놓았을 때 이것만 보이니까) */}
       {/* 다이아는 높이만 크게, 폭은 가운데 무늬와 같게 (넓적해 보이지 않게) */}
-      <Pip s={s} x={x} y={54} size={pip} sx={s === 2 ? 20 / 24 : 1} />
+      <Pip s={s} x={x} y={54} size={pip} />
     </>
   );
 }
@@ -298,9 +298,9 @@ function CardFace({ rank, r, s, court, covered }: { rank: number; r: string; s: 
         </>
       ) : n === 14 ? (
         // A: 오른쪽 아래에 큰 무늬 하나 (한게임처럼)
-        <Pip s={s} x={62} y={96} size={s === 1 ? 50 : 56} sx={s === 2 ? 20 / 24 : 1} />
+        <Pip s={s} x={62} y={96} size={s === 1 ? 50 : 56} />
       ) : (
-        PIPS[n].map(([x, k], i) => <Pip key={i} s={s} x={x} y={yAt(k)} size={PIP} sx={s === 2 ? 20 / 24 : 1} />)
+        PIPS[n].map(([x, k], i) => <Pip key={i} s={s} x={x} y={yAt(k)} size={PIP} />)
       )}
       </g>
       <Index r={r} s={s} />
