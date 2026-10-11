@@ -83,11 +83,7 @@ export default function PokerApp({ rank }: { rank: RankRow[] | null }) {
   // 우편함 · 오늘 첫 접속 출석 보상 안내
   const [mailOpen, setMailOpen] = useState(false);
   const [attendNote, setAttendNote] = useState<{ text: string; key: number } | null>(null);
-  useEffect(() => {
-    if (!attendNote) return;
-    const t = setTimeout(() => setAttendNote(null), 5000);
-    return () => clearTimeout(t);
-  }, [attendNote]);
+
   useEffect(() => {
     if (!revived) return;
     const t = setTimeout(() => setRevived(null), 3200);
@@ -139,8 +135,21 @@ export default function PokerApp({ rank }: { rank: RankRow[] | null }) {
   useEffect(() => {
     const on = () => {
       const now = document.fullscreenElement === rootRef.current && !!rootRef.current;
-      if (!now && !selfExit.current && inTable.current && matchMedia("(pointer: coarse)").matches)
+      if (!now && !selfExit.current && inTable.current && matchMedia("(pointer: coarse)").matches) {
+        // 게임방에서 폰 뒤로가기: 전체화면이 풀린 채 끝나지 않게 — 화면은 계속 덮어 그리고(가짜 전체화면) 나가기로 처리,
+        // 다음에 화면을 한 번 누르면 진짜 전체화면으로 되돌림 (전체화면은 터치가 있어야 다시 켤 수 있음)
+        setPseudoFs(true);
+        const el = rootRef.current;
+        const again = () => {
+          if (!el || document.fullscreenElement) return;
+          el.requestFullscreen?.({ navigationUI: "hide" }).then(
+            () => setPseudoFs(false),
+            () => {}
+          );
+        };
+        el?.addEventListener("pointerup", again, { once: true });
         window.dispatchEvent(new Event("pk-back"));
+      }
       selfExit.current = false;
       setFsReal(now);
     };
@@ -208,6 +217,12 @@ export default function PokerApp({ rank }: { rank: RankRow[] | null }) {
       window.removeEventListener("keydown", say);
     };
   }, [onIntro, tableId, wallet, gated]);
+  // 출석 안내: 폰 전체화면 안내에 가려 안 보인 채 지나가지 않게, 로비가 보일 때부터 5초
+  useEffect(() => {
+    if (!attendNote || gated) return;
+    const t = setTimeout(() => setAttendNote(null), 5000);
+    return () => clearTimeout(t);
+  }, [attendNote, gated]);
   // 포커 페이지를 떠나면 배경음악 끔 (사이트 안에서 다른 페이지로 가도 계속 나오던 것)
   useEffect(() => () => playBgm(null), []);
   const toggleFs = () => {
@@ -229,10 +244,12 @@ export default function PokerApp({ rank }: { rank: RankRow[] | null }) {
     else setPseudoFs(true);
   };
   const o: Orient = size.w > size.h * 1.05 ? "h" : "v";
-  const topRight = (
+  /** 위 오른쪽 버튼들. exit = 게임방의 나가기 버튼 (설정 바로 왼쪽에 들어감) */
+  const topRightFor = (exit?: ReactNode) => (
     <>
       {admin && <TopBtn label="테스트" icon={DEV_ICON} onClick={() => setDevOpen(true)} />}
-      <TopBtn label="상점" icon={SHOP_ICON} gold onClick={() => setShop("shop")} />
+      {/* 게임방 안에서는 상점 없이 옷장(지금 캐릭터 스킨 갈아입기)만 */}
+      {!tableId && <TopBtn label="상점" icon={SHOP_ICON} gold onClick={() => setShop("shop")} />}
       <TopBtn label="옷장" icon={CLOSET_ICON} onClick={() => setShop("closet")} />
       {wallet && (
         <button
@@ -249,6 +266,7 @@ export default function PokerApp({ rank }: { rank: RankRow[] | null }) {
           {wallet.mail > 0 && <span className="pk-mail-badge">{wallet.mail}</span>}
         </button>
       )}
+      {exit}
       <Settings tableId={tableId} />
       {(canFs || fs) && (
         <button
@@ -306,7 +324,7 @@ export default function PokerApp({ rank }: { rank: RankRow[] | null }) {
         h={size.h}
         onExit={() => go(null)}
         onWallet={setWallet}
-        topRight={topRight}
+        topRight={topRightFor}
         fs={fs}
       />
     );
@@ -321,7 +339,7 @@ export default function PokerApp({ rank }: { rank: RankRow[] | null }) {
         onEnter={go}
         onWallet={setWallet}
         onShop={setShop}
-        topRight={topRight}
+        topRight={topRightFor()}
       />
     );
 
@@ -426,7 +444,7 @@ export default function PokerApp({ rank }: { rank: RankRow[] | null }) {
           <Shop
             wallet={wallet}
             inGame={!!tableId}
-            tab={shop}
+            tab={tableId ? "closet" : shop}
             setTab={setShop}
             mobile={o === "v"}
             maxH={size.h - (o === "h" ? 24 : 8)}
@@ -452,7 +470,7 @@ export default function PokerApp({ rank }: { rank: RankRow[] | null }) {
             onWallet={setWallet}
           />
         )}
-        {attendNote && (
+        {attendNote && !gated && (
           <button
             type="button"
             key={attendNote.key}

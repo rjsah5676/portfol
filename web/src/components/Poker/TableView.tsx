@@ -215,7 +215,8 @@ export default function TableView({
   onExit: () => void;
   onWallet: (w: Wallet) => void;
   /** 무대 공통 버튼 (전체화면 등) */
-  topRight?: ReactNode;
+  /** 위 오른쪽 버튼들 (나가기 버튼을 받아 설정 왼쪽에 넣음) */
+  topRight?: (exit: ReactNode) => ReactNode;
   /** 전체화면(흉내 포함)으로 보는 중 — 이때 뒤로가기는 나가기 버튼처럼 */
   fs?: boolean;
 }) {
@@ -2342,29 +2343,30 @@ export default function TableView({
               <Money won={wallet.money} className="text-[0.95em] text-[var(--pk-brass)]" />
             )}
           </span>
-          {/* 나가기: 판 중이면 예약(누르면 예약 취소로 바뀜), 대기 중이면 바로 */}
-          <button
-            type="button"
-            onClick={exit}
-            className="pk-btn pk-btn-half flex h-[30px] items-center gap-[0.35em] px-[0.7em] text-[0.78em] whitespace-nowrap"
-          >
-            {!me?.exit && (
-              <svg
-                viewBox="0 0 24 24"
-                className="h-[14px] w-[14px]"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.4"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden
-              >
-                <path d="M15 4h4v16h-4M10 8l-4 4 4 4M6 12h10" />
-              </svg>
-            )}
-            {me?.exit ? "예약 취소" : "나가기"}
-          </button>
-          {topRight}
+          {/* 나가기: 판 중이면 예약(누르면 예약 취소로 바뀜), 대기 중이면 바로 — 설정 버튼 바로 왼쪽 */}
+          {topRight?.(
+            <button
+              type="button"
+              onClick={exit}
+              className="pk-btn pk-btn-half flex h-[30px] items-center gap-[0.35em] px-[0.7em] text-[0.78em] whitespace-nowrap"
+            >
+              {!me?.exit && (
+                <svg
+                  viewBox="0 0 24 24"
+                  className="h-[14px] w-[14px]"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.4"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden
+                >
+                  <path d="M15 4h4v16h-4M10 8l-4 4 4 4M6 12h10" />
+                </svg>
+              )}
+              {me?.exit ? "예약 취소" : "나가기"}
+            </button>
+          )}
         </span>
       </div>
       {/* 자리 정보: 이 방에서 딴 돈 · 전적 */}

@@ -1471,6 +1471,8 @@ export function registerPoker({ gateway, db, users }: Deps, opts: PokerOptions =
   gateway.rpc("poker.char", async (ctx, raw) => {
     const { uid } = member(ctx);
     const { char } = z.object({ char: z.enum(CHAR_IDS as [CharId, ...CharId[]]) }).parse(raw);
+    // 게임방 안에서는 캐릭터를 못 바꿈 (스킨만 갈아입을 수 있음)
+    if (seatOf.has(uid)) throw new AppError("SEATED", "테이블에서는 캐릭터를 바꿀 수 없어요. 나간 뒤에 바꿔 주세요.", 409);
     if (CHAR_PRICE[char]) {
       const own = await wallet.get(uid);
       if (!own || !charOwned(char, own.chars)) throw new AppError("NOT_OWNED", "아직 없는 캐릭터예요. 상점에서 살 수 있어요.", 409);

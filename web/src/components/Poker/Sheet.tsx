@@ -136,7 +136,7 @@ export default function Sheet({
   const dragging = dy > 0 && !closing;
   return (
     <div
-      className={`pk-sheet-back absolute inset-0 z-40 flex justify-center ${mobile ? "items-end" : "items-center"}`}
+      className={`pk-sheet-back absolute inset-0 z-[70] flex justify-center ${mobile ? "items-end" : "items-center"}`}
       data-closing={closing ? "1" : undefined}
       style={{ background: `rgba(0,0,0,${0.65 * (1 - Math.min(1, dy / 400))})` }}
       onClick={() => close()}

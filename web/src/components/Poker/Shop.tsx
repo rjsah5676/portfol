@@ -98,18 +98,25 @@ export default function Shop({
   return (
     <Sheet mobile={mobile} maxH={maxH} wide={720} fill onClose={onClose}>
       <div className="shrink-0 px-[0.9em] pt-[0.5em] pr-[3.2em]">
-        <div className="pk-seg">
-          <button type="button" aria-pressed={tab === "shop"} onClick={() => setTab("shop")}>
-            스킨
-          </button>
-          <button type="button" aria-pressed={tab === "chars"} onClick={() => setTab("chars")}>
-            캐릭터
-          </button>
-          <button type="button" aria-pressed={tab === "closet"} onClick={() => setTab("closet")}>
-            옷장
-            {mine > 0 && <span className="ml-[0.3em] text-[0.82em] opacity-70">{mine}</span>}
-          </button>
-        </div>
+        {/* 게임방 안: 상점 · 캐릭터 탭 없이 옷장만 */}
+        {inGame ? (
+          <div className="py-[0.2em] text-[1em] font-extrabold text-white/90">
+            옷장 · {CHARS[wallet.char].name}
+          </div>
+        ) : (
+          <div className="pk-seg">
+            <button type="button" aria-pressed={tab === "shop"} onClick={() => setTab("shop")}>
+              스킨
+            </button>
+            <button type="button" aria-pressed={tab === "chars"} onClick={() => setTab("chars")}>
+              캐릭터
+            </button>
+            <button type="button" aria-pressed={tab === "closet"} onClick={() => setTab("closet")}>
+              옷장
+              {mine > 0 && <span className="ml-[0.3em] text-[0.82em] opacity-70">{mine}</span>}
+            </button>
+          </div>
+        )}
       </div>
       <div className="flex shrink-0 items-center gap-[0.4em] px-[0.9em] pt-[0.5em] text-[0.8em] text-white/60">
         보유 칩{}
@@ -134,7 +141,7 @@ export default function Shop({
         data-sheet-scroll
         className="pk-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain p-[0.9em]"
       >
-        {tab === "chars" ? (
+        {tab === "chars" && !inGame ? (
           <CharShop
             wallet={wallet}
             mobile={mobile}
@@ -143,7 +150,7 @@ export default function Shop({
             run={run}
             setMsg={setMsg}
           />
-        ) : tab === "shop" ? (
+        ) : tab === "shop" && !inGame ? (
           <ul className={`grid gap-[0.7em] ${mobile ? "" : "grid-cols-2"}`}>
             <li className="col-span-full rounded-[8px] bg-white/[0.05] px-[0.8em] py-[0.5em] text-[0.8em] text-white/70">
               <b className="text-[#9fe7ff]">터치 반응</b> 스킨을 입으면 로비에서 캐릭터를 눌러 볼 수
@@ -260,15 +267,20 @@ export default function Shop({
           </ul>
         ) : (
           <div className="grid gap-[0.7em]">
-            {mine === 0 && (
-              <p className="rounded-[8px] bg-white/[0.05] px-[0.8em] py-[0.7em] text-[0.82em] text-white/60">
-                {CHARS[wallet.char].name}의 스킨이 아직 없어요.{" "}
-                <b className="text-[#ffd84a]">상점</b>에서 사면 여기서 갈아입을 수 있어요.
-              </p>
-            )}
+            {mine === 0 &&
+              (inGame ? (
+                <p className="rounded-[8px] bg-white/[0.05] px-[0.8em] py-[1.4em] text-center text-[0.9em] text-white/60">
+                  보유 스킨이 없습니다
+                </p>
+              ) : (
+                <p className="rounded-[8px] bg-white/[0.05] px-[0.8em] py-[0.7em] text-[0.82em] text-white/60">
+                  {CHARS[wallet.char].name}의 스킨이 아직 없어요.{" "}
+                  <b className="text-[#ffd84a]">상점</b>에서 사면 여기서 갈아입을 수 있어요.
+                </p>
+              ))}
             {/* 지금 캐릭터의 스킨만 (다른 캐릭터 스킨은 그 캐릭터로 바꾼 뒤 입음) */}
             {[wallet.char, ...CHAR_IDS.filter((c) => c !== wallet.char)]
-              .filter((c) => c === wallet.char)
+              .filter((c) => c === wallet.char && !(inGame && mine === 0))
               .map((c) => {
                 const looks: { id: SkinId | null; name: string }[] = [
                   { id: null, name: "기본" },

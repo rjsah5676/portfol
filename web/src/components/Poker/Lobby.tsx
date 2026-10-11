@@ -62,7 +62,8 @@ export default function Lobby({
   topRight?: ReactNode;
 }) {
   const [game, setGameState] = useState<GameKind>("holdem");
-  const [tier, setTier] = useState<TierId>(1);
+  // 처음 고른 방: 내 칩으로 앉을 수 있는 가장 높은 단계
+  const [tier, setTier] = useState<TierId>(() => [...TIERS].reverse().find((t) => wallet.money >= t.min)?.id ?? 1);
   const [tables, setTables] = useState<LobbyTable[] | null>(null);
   const [busy, setBusy] = useState("");
   const [sheet, setSheet] = useState<"" | "create" | "char" | "rank" | "me" | "mychar">("");
