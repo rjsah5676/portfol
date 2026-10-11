@@ -6,7 +6,7 @@ import { pageMeta } from "@/lib/seo";
 export const metadata = pageMeta({
   title: "아카이브",
   description:
-    "이건모의 개발 기록. 사이트 개발 변경 이력, 팀·개인 프로젝트, 실무 작업, 학습 이력을 시간순으로 정리합니다.",
+    "이건모의 개발 기록. 사이트 개발 변경 이력, 팀·개인 프로젝트, 실무 작업을 시간순으로 정리합니다.",
   path: "/archive/",
 });
 
