@@ -15,6 +15,7 @@ import { KeyCap, keyText } from "./KeyCap";
 import PatchNotes, { LATEST } from "./PatchNotes";
 import { SettingsModal } from "./Settings";
 import TechGuide from "./TechGuide";
+import PixelPreview from "./PixelPreview";
 
 export type Mode = "ai" | "2p" | "online" | "practice";
 export interface Setup {
@@ -620,7 +621,7 @@ export default function Select({
               CHARACTER SELECT
             </div>
             <div className={`${KR} text-[1.2cqw] text-white/55`}>
-              {prac ? "연습 모드 · 허수아비 캐릭터도 골라요" : ai ? `AI 대전 · CPU ${AI_LEVELS[setup.level].name}` : "2인 대전"}
+              {prac ? "연습 모드 · 허수아비는 건모" : ai ? `AI 대전 · CPU ${AI_LEVELS[setup.level].name}` : "2인 대전"}
             </div>
           </div>
           <button
@@ -694,6 +695,15 @@ export default function Select({
                     <CharInfo c={c} right={sd === 1} />
                   )}
                 </div>
+                {/* 게임 속 도트 모습 (동작을 돌아가며) — 전신 그림 발치 */}
+                {!rnd[sd] && (
+                  <div
+                    className={`absolute bottom-[1cqw] ${sd === 0 ? "left-[1cqw]" : "right-[1cqw]"} z-10 flex flex-col items-center rounded-[0.8cqw] border border-white/15 bg-black/55 px-[0.4cqw] pt-[0.3cqw] backdrop-blur-[2px]`}
+                  >
+                    <span className={`${KR} text-[0.9cqw] text-white/50`}>게임 속 모습</span>
+                    <PixelPreview key={c.id} id={c.id} flip={sd === 1} className="h-[10cqw] w-[9cqw]" />
+                  </div>
+                )}
               </div>
             );
           })}
