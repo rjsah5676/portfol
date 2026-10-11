@@ -697,6 +697,9 @@ export default function FightGame() {
     botRef.current = null;
     setBotCfg(null);
     setPaused(false);
+    // 전 판 결과창 · 체력바가 새 판 첫 화면에 잠깐 보이지 않게 (게임 루프가 돌기 전에 지움)
+    setResult(null);
+    setHud(null);
     setPlaying(true);
     setTimeout(scrollToGameTop, 50);
   }, []);
@@ -709,6 +712,9 @@ export default function FightGame() {
     setBotCfg(cfg);
     setNetEnd("");
     setPaused(false);
+    // 전 판 결과창 · 체력바가 새 판 첫 화면에 잠깐 보이지 않게 (게임 루프가 돌기 전에 지움)
+    setResult(null);
+    setHud(null);
     setPlaying(true);
     setTimeout(scrollToGameTop, 50);
   }, [played]);
@@ -721,6 +727,9 @@ export default function FightGame() {
     setOlCfg(cfg);
     setNetEnd("");
     setPaused(false);
+    // 전 판 결과창 · 체력바가 새 판 첫 화면에 잠깐 보이지 않게 (게임 루프가 돌기 전에 지움)
+    setResult(null);
+    setHud(null);
     setPlaying(true);
     setTimeout(scrollToGameTop, 50);
   }, [played]);
@@ -739,6 +748,7 @@ export default function FightGame() {
     setPlaying(false);
     setPaused(false);
     setHud(null);
+    setResult(null);
   }, [playBgm]);
   /** 온라인: 대기실로 (again = 바로 준비 — 방장은 빼고: 방장까지 준비돼 있으면 상대가 준비하자마자 바로 시작돼 버림) */
   const toRoom = useCallback(
