@@ -3656,14 +3656,10 @@
 .pk-card .pk-face-in-off {
   opacity: 0;
 }
-/* 승리 컷인 전신: 올라온 뒤 살짝 숨 쉬고 · 흔들리고 · 통통 (예전 내 캐릭터 움직임처럼). scale · rotate · translate 속성이라 좌우 뒤집기(transform)와 안 겹침 */
+/* 승리 컷인 전신: 올라온 뒤 위로만 살짝 들썩 (좌우 흔들림 · 숨쉬기 크기 변화는 정신없어서 뺌). translate 속성이라 좌우 뒤집기(transform)와 안 겹침 */
 @media (prefers-reduced-motion: no-preference) {
   .pk-cutwin img {
-    transform-origin: 50% 100%;
-    animation:
-      pk-breath 2.4s ease-in-out 0.6s infinite,
-      pk-sway 3.2s ease-in-out 0.6s infinite,
-      pk-cut-hop 1.1s ease-in-out 0.6s infinite;
+    animation: pk-cut-hop 1.4s ease-in-out 0.6s infinite;
   }
 }
 @keyframes pk-cut-hop {
@@ -3671,10 +3667,10 @@
   100% {
     translate: 0 0;
   }
-  30% {
-    translate: 0 -1.6%;
+  40% {
+    translate: 0 -1%;
   }
-  55% {
+  70% {
     translate: 0 0;
   }
 }
