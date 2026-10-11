@@ -685,43 +685,45 @@ export default function TableView({
     return () => clearTimeout(id);
   }, [dealFx]);
 
-  // 패 까기 (빠르게 — 한게임 템포): 내 자리부터 시계 방향으로 7포커는 0.38초 간격, 홀덤은 거의 동시(0.09초),
-  // 뒤집히는 자리마다 족보 이름이 바로 붙고, 그 사람이 족보를 읊는 동안 기다렸다 다음 사람. 다 깐 뒤 0.35초 뒤 결과(승리 · 패배 동작과 대사)
+  // 패 까기 (한게임 템포): 내 자리부터 시계 방향으로 한 사람씩 — 카드가 뒤집히고, 뒤집힌 카드가 보일 즈음 그 사람이 족보를 읊음.
+  // 다음 사람은 앞사람 대사가 70% 쯤 나왔을 때 깜 (대사가 없으면 7포커 0.44초 · 홀덤 0.1초). 다 깐 뒤 결과(승리 · 패배 동작과 대사)
   useEffect(() => {
     if (!reveal || reveal.step > reveal.order.length) return;
     const n = reveal.order.length;
     const seven = reveal.game === "seven";
-    const delay = reveal.step === n ? (seven ? 350 : 420) : reveal.step === 0 ? 150 : seven ? 380 : 90;
+    const step = reveal.step;
+    /** 카드가 뒤집혀 앞면이 보일 즈음 대사 시작 (뒤집기 0.34초 · 7포커는 엎은 카드가 0.09초씩 차례로) */
+    const lag = seven ? 300 : 260;
+    const base = step === 0 ? 150 : step === n ? (seven ? 400 : 480) : seven ? 440 : 100;
     const key = reveal.key;
-    const advance = () => setReveal((r) => (r && r.key === key ? { ...r, step: r.step + 1 } : r));
-    let later: ReturnType<typeof setTimeout> | undefined;
+    let id: ReturnType<typeof setTimeout> | undefined;
     let dead = false;
-    const id = setTimeout(() => {
-      if (reveal.step < n) {
-        if (!reveal.shown && (seven || reveal.step === 0)) sfx.flip();
-        const say = reveal.say[reveal.step];
-        if (say) {
-          // 그 사람이 족보를 다 읊을 즈음 다음 사람이 깜 (대사 길이만큼 기다림)
-          // 카드가 뒤집히는 순간 바로 (줄 서지 않음 — 까는 박자와 대사가 어긋나지 않게)
-          playVoiceNow(say.look, say.line);
-          void voiceDuration(say.look, say.line).then((d) => {
-            if (dead) return;
-            // 대사가 3분의 2쯤 나왔을 때 다음 사람이 까기 시작 (한게임 템포 — 겹쳐도 족보 이름은 들림)
-            const gap = seven ? 380 : 90;
-            later = setTimeout(advance, Math.max(0, (d ?? 0) * 1000 * 0.62 + 20 - gap));
-          });
-          return;
-        }
+    const run = () => {
+      if (dead) return;
+      if (step < n) {
+        // 이 사람 카드 뒤집기 (step 이 하나 오르면 order[step] 자리가 깐 걸로 보임)
+        if (!reveal.shown) sfx.flip();
+        const say = reveal.say[step];
+        // (단계가 넘어가며 이 효과가 정리돼도 대사는 그대로 나와야 해서 따로 안 지움)
+        if (say) setTimeout(() => playVoiceNow(say.look, say.line), reveal.shown ? 0 : lag);
       } else {
         pendingWinRef.current?.();
         pendingWinRef.current = null;
       }
-      advance();
-    }, delay);
+      setReveal((r) => (r && r.key === key ? { ...r, step: r.step + 1 } : r));
+    };
+    // 기다릴 시간: 앞사람 대사가 있으면 그 대사 길이에 맞춰서 (대사 파일은 쇼다운 시작 때 미리 받아 둠)
+    const prev = step > 0 ? reveal.say[step - 1] : null;
+    if (prev) {
+      void voiceDuration(prev.look, prev.line).then((d) => {
+        if (dead) return;
+        const talk = (reveal.shown ? 0 : lag) + (d ?? 0) * 1000 * 0.71;
+        id = setTimeout(run, Math.max(base, talk + (step === n ? 150 : 0)));
+      });
+    } else id = setTimeout(run, base);
     return () => {
       dead = true;
-      clearTimeout(id);
-      if (later) clearTimeout(later);
+      if (id) clearTimeout(id);
     };
   }, [reveal]);
 

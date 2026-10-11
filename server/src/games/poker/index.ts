@@ -696,7 +696,7 @@ export function registerPoker({ gateway, db, users }: Deps, opts: PokerOptions =
     }
     emit(t, ...says);
     // 쇼다운: 깐 사람마다 족보를 읊는 시간(한 사람 1초 안팎)만큼 더 기다린 뒤 결과를 보고 다음 판
-    scheduleNext(t, showdown ? (t.game === "seven" ? 700 + 850 * shown : 800 + 750 * shown) + 3300 : 3000);
+    scheduleNext(t, showdown ? (t.game === "seven" ? 900 + 1000 * shown : 900 + 900 * shown) + 3300 : 3000);
   }
 
   function scheduleNext(t: Table, delay: number) {
