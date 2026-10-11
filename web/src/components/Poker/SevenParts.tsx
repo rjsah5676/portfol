@@ -334,7 +334,8 @@ export function SevenBar({
       ? lg.bets.ddadang !== undefined
         ? bet("ddadang", "ddadang", "따당")
         : bet("bbing", "bbing", "삥")
-      : view && view.currentBet > 0
+      : // 남의 차례: 이번 구에 이미 누가 걸었거나 내가 선(먼저 거는 사람)이 아니면 따당 — 삥은 선만 칠 수 있음
+        view && (view.currentBet > 0 || view.boss !== mySeat)
         ? bet("ddadang", "ddadang", "따당")
         : bet("bbing", "bbing", "삥"),
     lg && lg.toCall > 0
