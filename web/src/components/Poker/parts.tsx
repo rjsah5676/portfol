@@ -524,7 +524,14 @@ export function CharSprite({
   // 앉은 대기 동작: 받아지면 한 장짜리 대기 그림 대신 (다른 포즈는 그대로 한 장)
   const live = seatLive(char) ? asset.seatLive(char) : null;
   const [liveOk, setLiveOk] = useState<string | null>(null);
-  const liveOn = !!live && liveOk === live && pose === "idle";
+  // 자리마다 0~6초 늦게 틀기 시작 — 다 같이 같은 박자로 숨 쉬지 않게
+  const [liveGo, setLiveGo] = useState(false);
+  useEffect(() => {
+    if (!live) return;
+    const t = setTimeout(() => setLiveGo(true), Math.random() * 6000);
+    return () => clearTimeout(t);
+  }, [live]);
+  const liveOn = !!live && liveGo && liveOk === live && pose === "idle";
   return (
     <span
       className={`pk-sprite ${className}`}
@@ -547,7 +554,7 @@ export function CharSprite({
           data-on={p === pose && !(liveOn && p === "idle") ? "1" : undefined}
         />
       ))}
-      {live && (
+      {live && liveGo && (
         <img
           src={live}
           alt=""
