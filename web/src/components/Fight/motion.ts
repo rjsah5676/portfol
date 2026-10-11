@@ -122,7 +122,9 @@ export class Motion {
       this.prevRect = rect;
     } else if (this.smear > 0) this.smear--;
     // 잔상: 대시·돌진·연타 돌진 중
-    const m = f.st === "atk" && f.mv ? CHARS[f.ch].moves[f.mv] : null;
+    const m0 = f.st === "atk" && f.mv ? CHARS[f.ch].moves[f.mv] : null;
+    // (공중 버전이 따로 있는 기술은 그걸로 — 제나 공중 뇌격돌)
+    const m = m0 && f.aerial && m0.air ? { ...m0, ...m0.air } : m0;
     const fast =
       f.st === "dash" ||
       (f.st === "jump" && f.dashT > 0) ||

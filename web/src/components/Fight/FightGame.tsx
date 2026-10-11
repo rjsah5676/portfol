@@ -33,6 +33,7 @@ import {
   sfxSkill,
   sfxStatus,
   sfxIvan,
+  sfxZena,
   hasSkillSfx,
   setFightVolume,
   type Element,
@@ -44,6 +45,7 @@ import { FightRenderer } from "./render";
 import { FightInput } from "./input";
 import HowTo from "./HowTo";
 import PracticeGuide from "./PracticeGuide";
+import CutIn, { type CutInCfg } from "./CutIn";
 import { Banner, Combo, HUD_CSS, PlayerBottom, PlayerTop, TimerBox, WinQuote, type BannerKind } from "./Hud";
 import Select, { type Setup } from "./Select";
 import { scrollToGameTop } from "@/components/GameHeader";
@@ -130,6 +132,8 @@ export default function FightGame() {
   const myName = memberNick ?? guestNick;
   const [paused, setPaused] = useState(false);
   const [hud, setHud] = useState<Hud | null>(null);
+  // 필살기 컷인 (쓴 순간 0.6초)
+  const [cutin, setCutin] = useState<CutInCfg | null>(null);
   const [muted, setMuted] = useState(false);
   /** 효과음·배경음 음량 (0~1) */
   const [vol, setVol] = useState({ sfx: 0.8, bgm: 0.7 });
@@ -589,9 +593,17 @@ export default function FightGame() {
             if (!skillFile(e.p)) sfxProj(elOf(e.p), s.p[e.p].mv === "X");
           } else if (e.k === "burn" || e.k === "shock" || e.k === "trap" || e.k === "pop" || e.k === "pause" || e.k === "swap") sfxStatus(e.k);
           else if (e.k === "immune") sfxTech();
+          else if (e.k === "zapMark") sfxZena("mark");
+          else if (e.k === "zapLine") sfxDash();
+          else if (e.k === "zapBurst") sfxZena("burst");
           else if (e.k === "charged") sfxIvan("max");
           else if (e.k === "crush") sfxIvan("crush");
-          else if (e.k === "super") sfxSuper();
+          else if (e.k === "super") {
+            sfxSuper();
+            const cut = { ch: s.p[e.p].ch, right: e.p === 1, key: s.f };
+            setCutin(cut);
+            setTimeout(() => setCutin((c) => (c === cut ? null : c)), 650);
+          }
           else if (e.k === "ko") sfxKO();
           else if (e.k === "jump") sfxJump();
           else if (e.k === "land") sfxLand();
@@ -904,6 +916,7 @@ export default function FightGame() {
       <div className="fs-screen relative isolate w-full overflow-hidden rounded-xl border border-white/10 bg-black [container-type:inline-size]">
         <canvas ref={canvasRef} className="block aspect-video w-full [image-rendering:pixelated]" />
         {fsBtn(true)}
+        {cutin && <CutIn key={cutin.key} cfg={cutin} />}
         {winCh && hud && hud.pt >= 80 && <WinQuote ch={hud.ch[hud.winner]} right={hud.winner === 1} />}
         {hud && (
           <div className="pointer-events-none absolute inset-0 flex flex-col justify-between px-[1.6cqw] py-[1.4cqw]">

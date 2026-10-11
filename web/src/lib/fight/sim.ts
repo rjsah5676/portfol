@@ -135,17 +135,18 @@ const GC_GRACE = 10;
 /** 잡기 성공 후 위로 띄우는 세기와 그동안의 경직 */
 const LAUNCH_VH = 1725;
 const LAUNCH_STUN = 60;
-/** 화상: 이만큼마다 체력 -BURN_DMG */
+/** 화상: BURN_EVERY 프레임마다 겹수 × 최대 체력 × 0.05% (= 겹마다 초당 0.2%), 지속 BURN_T, 최대 BURN_MAX 겹 */
 const BURN_EVERY = 15;
-const BURN_DMG = 2;
+const BURN_T = 300;
+const BURN_MAX = 5;
 /** 감전 처음 걸릴 때 짧게 기절 (경직 +) */
 const SHOCK_STUN = 10;
 /** 상태 이상(기절·방울·끌려옴·감전·일시정지·혼란)이 풀린 뒤 다시 안 걸리는 시간 (2초) — 그 사이엔 피해만 들어가고 IMMUNE */
 const STATUS_IMM = 120;
 /** 면역일 때 기절 대신 주는 경직 */
 const DIZZY_IMM_STUN = 18;
-/** 화상 중인 상대: 태울 수 있는 캐릭터(이그나)의 공격이 이만큼(%) 더 아픔 */
-const BURN_BONUS = 10;
+/** 화상 중인 상대: 태울 수 있는 캐릭터(이그나)의 공격이 겹마다 이만큼(%) 더 아픔 */
+const BURN_BONUS = 5;
 /** 건모 Alt+Tab 뒤 공중에서 안 떨어지는 시간 (0.3초) */
 const SWAP_HOLD = 18;
 /** 대시가 끝난 뒤에도 이 프레임 안에 잡기를 누르면 돌진 잡기 */
@@ -239,6 +240,16 @@ export interface Fighter {
   shock: number;
   /** 화상 남은 프레임 (이그나 — 15프레임마다 체력이 조금씩 닳음, 화상으로는 안 죽음) */
   burn: number;
+  /** 화상 겹수 (1~5) · 틱 피해 나머지(1/10000 체력) */
+  burnN: number;
+  burnAcc: number;
+  /** 일섬 낙인: 남은 프레임 (0이 되는 순간 터짐) */
+  zap: number;
+  /** 일섬 시작 자리 (그림용) */
+  zx: number;
+  /** 불 장판: 마지막으로 피해 · 화상 겹을 받은 프레임 (장판 여러 개가 겹쳐도 한 번만) */
+  flT: number;
+  flB: number;
   /** 지금 기술을 공중에서 시작했나 (공중 버전 기술용) */
   aerial: number;
   /** 아래로 내리꽂힌 상태: 땅에 닿으면 한 번 튀어 오름 */
@@ -321,6 +332,10 @@ export type EvKind =
   /** 철곰권 기를 다 모음 · 가드 부숨 (이반) */
   | "charged"
   | "crush"
+  /** 일섬 낙인 (제나) · 낙인이 터짐 · 일섬이 지나간 선 (x = 시작, v = 끝 x) */
+  | "zapMark"
+  | "zapBurst"
+  | "zapLine"
   | "stun"
   | "immune";
 export interface Ev {
@@ -464,6 +479,12 @@ function newFighter(ch: number, side: 0 | 1, map: MapDef): Fighter {
     mark: 0,
     shock: 0,
     burn: 0,
+    burnN: 0,
+    burnAcc: 0,
+    zap: 0,
+    zx: 0,
+    flT: -1,
+    flB: -999,
     aerial: 0,
     spiked: 0,
     dk: 0,
@@ -538,7 +559,7 @@ const cloneF = (f: Fighter): Fighter => ({ ...f, hist: f.hist.slice() });
  * 이 빌드의 게임 데이터 지문 (캐릭터 성능·맵) — 온라인에서 서로 다른 빌드끼리 붙었는지 확인.
  * 계산 방식(sim.ts)만 바꿨을 땐 SIM_REV를 올릴 것.
  */
-const SIM_REV = 13;
+const SIM_REV = 14;
 export const BUILD_ID = (() => {
   const str = SIM_REV + JSON.stringify(CHARS.map((c) => [c.hp, c.walk, c.jumpVx, c.dash, c.cd, c.glide, c.hurt, c.width, c.moves])) + JSON.stringify(MAPS.map((m) => [m.plats, m.spawn]));
   let h = 2166136261;
@@ -596,6 +617,12 @@ export function hash(s: State): number {
     mix(f.mark);
     mix(f.shock);
     mix(f.burn);
+    mix(f.burnN);
+    mix(f.burnAcc);
+    mix(f.zap);
+    mix(f.zx);
+    mix(f.flT);
+    mix(f.flB);
     mix(f.aerial);
     mix(f.spiked);
     mix(f.dk);
@@ -1040,6 +1067,12 @@ function control(s: State, i: number) {
         const fwd = f.face > 0 ? IN.R : IN.L;
         if (holding(f, fwd)) f.vx = Math.trunc((c.walk * 7) / 10) * f.face;
       }
+      // 일섬이 지나간 선 (그림용): 시작 자리 기억 → 끝날 때 선
+      if (m.zap && f.t === m.startup) f.zx = f.x;
+      if (m.zap && f.t === m.startup + m.active) {
+        f.vx = 0;
+        s.ev.push({ k: "zapLine", p: i, x: f.zx, h: f.h + 40 * SUB, v: f.x });
+      }
       if (m.rush && f.t === m.startup) {
         // 돌진: 땅에선 앞으로, 공중에선 앞쪽 아래로 내리꽂음
         f.vx = f.face * m.rush.vx;
@@ -1060,8 +1093,10 @@ function control(s: State, i: number) {
       }
       // 돌진 잡기: 잡을 때까지 앞으로 파고듦
       if (f.mv === "T" && f.lg && f.t < m.startup + m.active) f.vx = f.face * DASH_GRAB_V;
-      // 연타 돌진기는 판정 동안 계속 나아감
-      if (m.multi && m.rush && f.t >= m.startup && f.t < m.startup + m.active) f.vx = f.face * m.rush.vx;
+      // 연타 돌진기 · 일섬 · 공중 뇌격돌은 판정 동안 계속 나아감 (공중 뇌격돌은 맞히면 멈춤 — applyHit)
+      if ((m.multi || m.zap) && m.rush && f.t >= m.startup && f.t < m.startup + m.active) f.vx = f.face * m.rush.vx;
+      // 공중 뇌격돌: 돌진이 끝나면 확 느려짐 (끝없이 날아가지 않게)
+      if (m.rush && m.rush.airVh === 0 && !m.zap && !m.multi && air && f.t === m.startup + m.active) f.vx = Math.trunc(f.vx / 5);
       // 연타기: 일정 프레임마다 다시 맞을 수 있게
       if (m.multi && f.t > m.startup && (f.t - m.startup) % m.multi === 0) f.hit = 0;
       if (m.proj && f.t === m.startup) {
@@ -1074,7 +1109,8 @@ function control(s: State, i: number) {
           n: d.hits ?? 1,
           t: 0,
           o: i,
-          x: f.x + f.face * 24 * SUB,
+          // 여러 번 맞는 파도(릴리 장마 파도)는 몸에서부터 — 딱 붙은 상대도 맞게 (10.12)
+          x: f.x + f.face * (d.hits && d.hits > 1 ? 4 : 24) * SUB,
           h: f.h + d.y * SUB,
           vx: f.face * (dive ? Math.trunc((d.speed * 3) / 4) : d.speed),
           vh: dive ? -Math.trunc((d.speed * 3) / 5) : 0,
@@ -1545,6 +1581,11 @@ function carryDashGrab(s: State, x0: number[]) {
 function separate(s: State) {
   const [a, b] = s.p;
   if (Math.abs(a.h - b.h) > 40 * SUB) return;
+  // 일섬으로 꿰뚫고 지나가는 중엔 몸끼리 안 막힘
+  for (const f of s.p) {
+    const m = f.st === "atk" ? moveOf(f) : null;
+    if (m?.zap && f.t >= m.startup && f.t < m.startup + m.active + 2) return;
+  }
   const need = Math.trunc(((charOf(a).width + charOf(b).width) * SUB) / 2);
   const dx = b.x - a.x;
   if (Math.abs(dx) >= need) return;
@@ -1649,6 +1690,48 @@ function scaleDmg(dmg: number, combo: number) {
   return Math.max(1, Math.trunc((dmg * Math.max(floor, 100 - 12 * combo)) / 100));
 }
 
+/** 화상 1겹 더함 (최대 BURN_MAX) — 지속은 BURN_T 로 다시 */
+function addBurn(s: State, ai: number, d: Fighter) {
+  if (d.st === "ko") return;
+  if (d.burn === 0) ((d.burnN = 0), (d.burnAcc = 0));
+  const up = d.burnN < BURN_MAX;
+  d.burnN = Math.min(BURN_MAX, d.burnN + 1);
+  d.burn = BURN_T;
+  if (up) s.ev.push({ k: "burn", p: ai, x: d.x, h: d.h + 60 * SUB, v: d.burnN });
+}
+
+/** 일섬 낙인이 터짐: 큰 피해 + 감전 (가드 · 무적 무시, 누워 있어도 다 들어감) */
+function zapBurst(s: State, ai: number) {
+  const a = s.p[ai];
+  const d = s.p[1 - ai];
+  const z = CHARS[a.ch].moves.X.zap;
+  if (!z || d.st === "ko" || s.phase !== "fight") return;
+  const dmg = z.dmg;
+  d.hp = Math.max(0, d.hp - dmg);
+  a.meter = Math.min(METER_MAX, a.meter + 6);
+  s.stop = Math.max(s.stop, 10);
+  s.ev.push({ k: "zapBurst", p: ai, x: d.x, h: d.h + 40 * SUB, v: dmg });
+  s.ev.push({ k: "hit", p: ai, x: d.x, h: d.h + 28 * SUB, v: dmg, m: "X" });
+  if (d.st === "down" || d.st === "rise") return;
+  // 하던 걸 끊고 경직 — 감전은 상태 이상 면역 규칙 그대로
+  if (d.hug) releaseHug(s, 1 - ai);
+  d.grabbed = 0;
+  d.st = "hit";
+  d.t = 0;
+  d.mv = "";
+  d.combo++;
+  d.stun = 24;
+  d.vx = 0;
+  if (airborneS(s, d)) ((d.vh = 600), (d.float = 2));
+  // 낙인의 감전은 1차 감전의 마무리라 면역 무시
+  if (d.shock === 0) s.ev.push({ k: "shock", p: ai, x: d.x, h: d.h + 70 * SUB, v: 0 });
+  d.shock = Math.max(d.shock, z.shock);
+  d.stun += SHOCK_STUN;
+  d.cc = 1;
+  d.imm = 0;
+  if (d.hp <= 0) d.hp = 0;
+}
+
 /** 동시에 맞을 때: 때린 쪽이 (먼저 맞아서 상태가 바뀌기 전) 원래 어떤 상태였나 */
 interface PreHit {
   fin: boolean;
@@ -1725,6 +1808,8 @@ function applyHit(s: State, ai: number, m: MoveDef, srcX: number, mid: MoveId, p
     d.meter = Math.min(METER_MAX, d.meter + (just ? 10 : 3));
     s.stop = Math.max(s.stop, m.hitstop - 3);
     s.ev.push({ k: just ? "just" : "block", p: ai, x: d.x - dir * 10 * SUB, h: eh, v: m.chip, m: mid });
+    // 막아도 화상은 쌓이는 기술 (이그나 업화주)
+    if (m.burn && m.burnGuard) addBurn(s, ai, d);
   } else {
     // 연타·소환 필살기는 콤보 보정 없이 매 타 같은 피해
     const fin = pre ? pre.fin : (mid === "L" || mid === "H") && isFinisher(a);
@@ -1739,7 +1824,7 @@ function applyHit(s: State, ai: number, m: MoveDef, srcX: number, mid: MoveId, p
     if (d.shock > 0 && shocker) base = Math.trunc((base * 110) / 100);
     // 화상 중인 상대: 태울 수 있는 캐릭터(이그나)의 모든 공격이 더 아픔
     const burner = CHARS[a.ch].moves.S.burn !== undefined || CHARS[a.ch].moves.X.burn !== undefined;
-    if (d.burn > 0 && burner) base = Math.trunc((base * (100 + BURN_BONUS)) / 100);
+    if (d.burn > 0 && burner) base = Math.trunc((base * (100 + BURN_BONUS * d.burnN)) / 100);
     const wasAir = airborneS(s, d);
     const slam = mid === "K" && a.dk === 1 && wasAir;
     if (slam) base = Math.trunc((base * SLAM_DMG) / 100);
@@ -1977,9 +2062,14 @@ function applyHit(s: State, ai: number, m: MoveDef, srcX: number, mid: MoveId, p
       if (!d.kd) d.stun += fresh ? SHOCK_STUN : 3;
     }
     if (gotStatus) d.cc = 1;
-    if (m.burn) {
-      if (d.burn === 0) s.ev.push({ k: "burn", p: ai, x: d.x, h: d.h + 60 * SUB, v: 0 });
-      d.burn = Math.max(d.burn, m.burn);
+    if (m.burn) addBurn(s, ai, d);
+    // 공중 뇌격돌(제나): 맞히면 돌진을 멈춰 상대 앞에 붙음 → 공중 콤보
+    if (mid === "S" && m.rush && !m.rush.landBurst && m.rush.airVh === 0 && !m.zap && airborneS(s, a)) a.vx = Math.trunc(a.vx / 6);
+    // 일섬 낙인: 막지 못하고 맞으면 delay 뒤 터짐
+    if (m.zap && !kd) d.stun = Math.max(d.stun, m.zap.stun);
+    if (m.zap && d.zap === 0) {
+      d.zap = m.zap.delay;
+      s.ev.push({ k: "zapMark", p: ai, x: d.x, h: d.h + 70 * SUB, v: 0 });
     }
     if (m.launch && !kd && !wasAir) {
       // 띄우는 후속타 (카이 질풍권 · 공중 질풍권 착지 충격파)
@@ -2047,9 +2137,13 @@ function projectiles(s: State) {
       const fl = CHARS[s.p[p.o].ch].moves.X.summon!.floor!;
       const r = projRect(p, s);
       const on = d.x >= r.l && d.x <= r.r && d.h >= r.lo && d.h <= r.hi && d.st !== "ko" && d.inv === 0;
-      if (on && p.t % fl.every === 0) {
-        if (d.burn === 0) s.ev.push({ k: "burn", p: p.o, x: d.x, h: d.h + 60 * SUB, v: 0 });
-        d.burn = Math.max(d.burn, fl.burn);
+      // (장판이 여러 개 겹쳐 있어도 한 번만 — 피해는 그 프레임에 한 번, 화상 겹은 1초에 한 번)
+      if (on && p.t % fl.every === 0 && d.flT !== s.f) {
+        d.flT = s.f;
+        if (s.f - d.flB >= 60) {
+          d.flB = s.f;
+          addBurn(s, p.o, d);
+        } else if (d.burn > 0) d.burn = BURN_T;
         if (d.hp > 1) d.hp = Math.max(1, d.hp - fl.dmg);
       }
       continue;
@@ -2059,8 +2153,8 @@ function projectiles(s: State) {
       const X = CHARS[s.p[p.o].ch].moves.X;
       const sm = X.summon!;
       const at = p.t - sm.delay;
-      if (sm.track && d.shock > 0 && at >= 0 && at % sm.every === 0) {
-        // 추적: 감전된 상대라면 타마다 상대 발밑으로 따라감 (지금 선 발판 높이)
+      if (sm.track && (sm.track === "burn" ? d.burn > 0 : d.shock > 0) && at >= 0 && at % sm.every === 0) {
+        // 추적: 감전(화상)된 상대라면 타마다 상대 발밑으로 따라감 (지금 선 발판 높이)
         p.x = d.x;
         const under = platBelow(map, d.x, d.h);
         p.h = under ? under.y * SUB : d.h;
@@ -2075,9 +2169,11 @@ function projectiles(s: State) {
     const pd = pm.proj!;
     if (pd.hits && pd.hits > 1) {
       // 여러 번 맞는 탄: every 프레임마다, 마지막 타에만 다운
-      if (p.t % (pd.every ?? 8) === 0 && h && overlap(projRect(p, s), h)) {
+      // (나오자마자 첫 타 — 예전엔 every 프레임 뒤라 붙어 있던 상대를 지나쳐 버림)
+      if (p.t % (pd.every ?? 8) === 1 && h && overlap(projRect(p, s), h)) {
         p.n--;
-        applyHit(s, p.o, { ...pm, multi: pd.every ?? 8, kd: !!pm.kd && p.n <= 0 }, p.x - p.vx * 4, p.mv ? "X" : "S");
+        // 밀어내는 쪽은 파도가 나아가는 쪽 (파도 가운데가 상대를 지나치면 거꾸로 당겨져 남은 타가 빗나가던 것)
+        applyHit(s, p.o, { ...pm, multi: pd.every ?? 8, kd: !!pm.kd && p.n <= 0 }, d.x - Math.sign(p.vx) * SUB, p.mv ? "X" : "S");
         if (p.n <= 0) p.life = 0;
       }
     } else if (h && overlap(projRect(p, s), h)) {
@@ -2223,8 +2319,20 @@ export function step(s: State, input: [number, number]): State {
       if (f.shock > 0) f.shock--;
       if (f.burn > 0) {
         f.burn--;
-        if (f.burn % BURN_EVERY === 0 && f.hp > 1) f.hp = Math.max(1, f.hp - BURN_DMG);
+        if (f.burn % BURN_EVERY === 0 && f.hp > 1) {
+          // 겹마다 초당 최대 체력 0.2% (15프레임마다 0.05%) — 나머지는 모아 둠
+          f.burnAcc += CHARS[f.ch].hp * f.burnN * 5;
+          const dmg = Math.trunc(f.burnAcc / 10000);
+          f.burnAcc -= dmg * 10000;
+          if (dmg) f.hp = Math.max(1, f.hp - dmg);
+        }
+        if (f.burn === 0) ((f.burnN = 0), (f.burnAcc = 0));
       }
+    }
+    // 일섬 낙인이 터짐 (때린 쪽 = 상대)
+    for (let i = 0; i < 2; i++) {
+      const f = s.p[i];
+      if (f.zap > 0 && --f.zap === 0) zapBurst(s, 1 - i);
     }
     control(s, 0);
     control(s, 1);

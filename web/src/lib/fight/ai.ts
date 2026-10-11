@@ -159,13 +159,13 @@ export const BOT_MAX = 2600;
  */
 export const ADJ_AT = [200, 500, 850, 1200, 1600, 2000, 2400];
 export const CHAR_ADJ: Record<string, number[]> = {
-  kai: [-34, -91, -25, 151, 73, -11, 283],
-  igna: [-83, -6, 44, 165, 3, 44, -137],
-  soyoung: [42, -82, -241, -348, -174, 77, 204],
-  lily: [-17, 72, 160, 244, 28, -189, -460],
-  zena: [-29, -75, -121, -14, 64, 236, 541],
-  gunmo: [174, 357, 475, 288, 46, -48, -26],
-  ivan: [-86, -220, -278, -109, 30, -96, -405],
+  kai: [-3, -21, 88, 96, 22, 27, 358],
+  igna: [-80, -109, 18, 100, -8, -26, -168],
+  soyoung: [69, -36, -156, -183, -100, 155, 192],
+  lily: [-14, 124, 222, 293, 44, -156, -440],
+  zena: [-120, -259, -401, -309, 33, 184, 508],
+  gunmo: [172, 414, 466, 364, 64, -46, -46],
+  ivan: [-52, -156, -222, 14, 10, -124, -402],
 };
 function charAdj(r: number, id: string) {
   const t = CHAR_ADJ[id];
@@ -228,7 +228,7 @@ export function aiForRating(r: number, charId?: string): AILevel {
  * AI 지문: 랭크전 봇전은 서버가 같은 경기를 다시 돌려 확인하니, 브라우저와 서버의 AI가 똑같아야 함.
  * 단계 값·보정·콤보 길은 자동으로 들어가고, next() 같은 판단 코드를 바꿨으면 AI_REV 를 올릴 것.
  */
-const AI_REV = 9;
+const AI_REV = 10;
 export const AI_ID = (() => {
   const str = AI_REV + JSON.stringify([AI_LEVELS, RANK_TIERS, AI_RATING, ADJ_AT, CHAR_ADJ, ROUTES, ROUTE_CAP]);
   let h = 0x811c9dc5;
@@ -613,6 +613,12 @@ export class FightAI {
         if (f.jumps < 2 && f.vh < 0 && f.h < best.y * SUB + 40 * SUB) press(IN.J);
         // 점프를 다 써도 못 닿으면 공중 대시
         else if (f.jumps >= 2 && !f.airDash && f.vh < 0 && !inside && f.h < best.y * SUB + 60 * SUB) return airDash(cx > f.x ? IN.R : IN.L);
+        // 공중 돌진 아이덴티티(제나 뇌격돌)로 옆으로 복귀: 다 쓰고도 못 닿고, 돌진 방향으로 발판이 있으면
+        else if (f.jumps >= 2 && f.airDash && f.cd === 0 && !inside && c.moves.S.air?.rush?.airVh === 0 && f.h > best.y * SUB - 20 * SUB) {
+          out = cx > f.x ? IN.R : IN.L;
+          if ((f.face > 0) === (cx > f.x)) press(IN.C);
+          return finish();
+        }
         // 우산 활강 (점프를 다 쓴 뒤)
         if (c.glide && f.vh < 0 && f.jumps >= 2) out |= IN.J;
         return finish();
@@ -957,7 +963,9 @@ export class FightAI {
       }
       // 필살기: 상대가 빈틈이 크거나 가까우면
       const sx = c.moves.X.box;
-      const ultReach = c.moves.X.summon || c.moves.X.proj ? 400 : sx.x + sx.w + 8;
+      // (돌진 필살기 — 제나 뇌섬일창 · 카이 천풍난무 — 는 돌진 거리까지)
+      const rx = c.moves.X.rush;
+      const ultReach = c.moves.X.summon || c.moves.X.proj ? 400 : sx.x + sx.w + 8 + (rx ? Math.trunc((rx.vx * c.moves.X.active) / SUB) : 0);
       // 허공에 쓰지 않게: 지금 쓰면 맞는지(막혀도 X) 미리 돌려 보고 씀 — 반응 시간 전에 본 상대 공격은 아직 모르는 걸로
       if (f.meter >= 100 && dist < ultReach && ((om && noticed(this.sawAtk) && o.t < 10) || this.r() < 0.02) && this.ultHits(s, me, toward)) {
         out |= toward;
@@ -1066,6 +1074,16 @@ export class FightAI {
     if (f.st === "jump" && dy > 70 && f.vh < 200 && f.jumps < 2) {
       out |= this.entry !== null ? (this.entry * SUB > f.x ? IN.R : IN.L) : toward;
       press(IN.J);
+      return finish();
+    }
+    // 공중 뇌격돌(제나): 비슷한 높이 · 돌진 거리 안의 상대에게 파고들며 찌름 (단계가 높을수록 자주)
+    const ar = c.moves.S.air?.rush;
+    if (
+      f.st === "jump" && f.cd === 0 && ar && ar.airVh === 0 && !ar.landBurst && dist > 30 && dist < 190 && Math.abs(dy) < 34 && o.st !== "down" &&
+      (f.jumps < 2 || !!platBelow(map, f.x + (o.x > f.x ? 1 : -1) * 190 * SUB, f.h)) && this.r() < 0.02 + L.aggro * 0.05
+    ) {
+      out |= toward;
+      if ((f.face > 0) === (o.x > f.x)) press(IN.C);
       return finish();
     }
     // 공중 아이덴티티로 자리 바꾸기 (건모 Alt+Tab): 상대 위에서 내려오는 중이면 가끔
@@ -1316,12 +1334,25 @@ export class FightAI {
     for (let k = 0; k < 110; k++) {
       step(t, me === 0 ? [k === 0 ? IN.X | dir : 0, held] : [held, k === 0 ? IN.X | dir : 0]);
       const d = t.p[1 - me];
-      if (d.st === "hit" || d.st === "down" || d.grabbed > 0) return true;
       const f = t.p[me];
+      // 맞혀도 내가 낭떠러지로 날아가 버리면 안 씀 (제나 뇌섬일창처럼 멀리 꿰뚫는 기술)
+      if (d.st === "hit" || d.st === "down" || d.grabbed > 0) return !this.offStage(t, me, k);
       if (k > 4 && (f.st !== "atk" || f.mv !== "X") && !t.proj.some((p) => p.o === me)) return false;
       if (t.phase !== "fight") return false;
     }
     return false;
+  }
+
+  /** 돌진기를 끝까지 돌려 봤을 때 내 발밑에 발판이 없나 (k 프레임 돌린 상태에서 남은 동작까지) */
+  private offStage(t: State, me: 0 | 1, k: number) {
+    const u = clone(t);
+    for (let j = k; j < 110; j++) {
+      const f = u.p[me];
+      if (f.st !== "atk") break;
+      step(u, me === 0 ? [0, 0] : [0, 0]);
+    }
+    const f = u.p[me];
+    return !platBelow(mapOf(u), f.x, f.h + 4 * SUB);
   }
 
   /** 상대가 중거리에서 뛰는 빈도 0~1 (10초에 3번 이상이면 1) */
@@ -1406,6 +1437,8 @@ export class FightAI {
         let v = dealt - took * 1.3;
         // 맞았거나 넘어진 채 끝나면 감점, 상대가 경직 중이면 가점 (이어 갈 수 있음)
         if (t.p[me].st === "hit" || t.p[me].st === "down") v -= 40;
+        // 발밑에 발판이 없는 곳에서 끝나면 크게 감점 (돌진으로 낭떠러지 넘어가기)
+        if (!platBelow(mapOf(t), t.p[me].x, t.p[me].h + 4 * SUB) && t.p[me].jumps >= 2) v -= 80;
         if (t.p[1 - me].st === "hit" || t.p[1 - me].st === "down") v += 20;
         worst = Math.min(worst, v);
         sum += v * wt;

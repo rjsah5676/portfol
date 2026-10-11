@@ -203,6 +203,9 @@ export class FightRenderer {
     }
   }
   private flash = 0;
+  /** 일섬 빛줄기 · 낙인 번개 (그림용) */
+  private lines: { x0: number; x1: number; y: number; life: number; max: number }[] = [];
+  private bolts: { x: number; y: number; life: number; max: number }[] = [];
   private flashColor = "#fff";
   sheets: (LoadedSheet | null)[] = [null, null];
 
@@ -399,8 +402,31 @@ export class FightRenderer {
             x, y: y - 20, vx: (Math.random() - 0.5) * 5, vy: (Math.random() - 0.5) * 5, life: 14, max: 14,
             color: "#FFF27A", size: 1, kind: "bolt",
           });
+      } else if (e.k === "zapMark") {
+        // 일섬 낙인: 보라·흰 번개 고리
+        this.parts.push({ x, y: y - 6, vx: 0, vy: -0.5, life: 40, max: 40, color: "#E9D8FF", size: 1.25, kind: "text", text: "MARKED" });
+        this.parts.push({ x, y: y + 30, vx: 0, vy: 0, life: 18, max: 18, color: "#C9A7FF", size: 22, kind: "ring" });
+      } else if (e.k === "zapLine") {
+        // 일섬이 지나간 자리: 화면을 가르는 빛줄기 (잠깐 남았다 사라짐)
+        this.lines.push({ x0: e.x / SUB, x1: e.v / SUB, y, life: 22, max: 22 });
+        this.flash = Math.max(this.flash, 3);
+        this.flashColor = "#FFF6C8";
+        this.shake = Math.max(this.shake, 4);
+      } else if (e.k === "zapBurst") {
+        // 낙인이 터짐: 하늘에서 번개가 내리꽂힘
+        this.bolts.push({ x, y: y + 40, life: 16, max: 16 });
+        this.parts.push({ x, y: y - 30, vx: 0, vy: -0.6, life: 40, max: 40, color: "#FFF27A", size: 1.6, kind: "text", text: `⚡ ${e.v}` });
+        this.parts.push({ x, y, vx: 0, vy: 0, life: 20, max: 20, color: "#FFF6A8", size: 34, kind: "ring" });
+        for (let i = 0; i < 16; i++)
+          this.parts.push({
+            x, y, vx: (Math.random() - 0.5) * 8, vy: (Math.random() - 0.5) * 8, life: 16, max: 16,
+            color: i % 2 ? "#FFFFFF" : "#FFE45C", size: 1.2, kind: "bolt",
+          });
+        this.flash = 6;
+        this.flashColor = "#FFF6C8";
+        this.shake = Math.max(this.shake, 10);
       } else if (e.k === "burn") {
-        this.parts.push({ x, y: y - 6, vx: 0, vy: -0.6, life: 34, max: 34, color: "#FF8A3D", size: 1.25, kind: "text", text: "BURN!" });
+        this.parts.push({ x, y: y - 6, vx: 0, vy: -0.6, life: 34, max: 34, color: "#FF8A3D", size: 1.25, kind: "text", text: e.v > 1 ? `BURN ×${e.v}` : "BURN!" });
         for (let i = 0; i < 10; i++)
           this.parts.push({
             x: x + (Math.random() - 0.5) * 20, y: y - 10, vx: (Math.random() - 0.5) * 2, vy: -1 - Math.random() * 2, life: 18, max: 18,
@@ -620,8 +646,18 @@ export class FightRenderer {
       g.globalAlpha = 1;
       g.fillStyle = "#FF8A3D";
       g.font = "bold 8px ui-monospace, monospace";
-      g.fillText("🔥화상", x, by);
-      g.fillRect(x - 12, by + 2, Math.min(24, (24 * f.burn) / 180), 1.5);
+      g.fillText(f.burnN > 1 ? `🔥화상×${f.burnN}` : "🔥화상", x, by);
+      g.fillRect(x - 12, by + 2, Math.min(24, (24 * f.burn) / 300), 1.5);
+    }
+    if (f.zap > 0) {
+      // 일섬 낙인: 터질 때까지 줄어드는 보라 막대 (위쪽에)
+      const zy = y - 14 - (f.shock > 0 ? 10 : 0) - (f.burn > 0 ? 10 : 0);
+      g.globalAlpha = 0.75 + 0.25 * Math.sin(this.tagF * 0.6);
+      g.fillStyle = "#D8B4FE";
+      g.font = "bold 8px ui-monospace, monospace";
+      g.fillText("⚡낙인", x, zy);
+      g.fillRect(x - 12, zy + 2, Math.min(24, (24 * f.zap) / 120), 1.5);
+      g.globalAlpha = 1;
     }
     g.restore();
   }
@@ -1249,6 +1285,61 @@ export class FightRenderer {
     }
   }
 
+  /** 제나 일섬: 지나간 빛줄기, 낙인 몸 둘레 고리, 낙인이 터지는 번개 */
+  private drawZap(s: State) {
+    const g = this.g;
+    g.save();
+    g.globalCompositeOperation = "lighter";
+    for (const l of this.lines) {
+      const a = l.life / l.max;
+      const th = 2 + 10 * a;
+      const grad = g.createLinearGradient(l.x0, 0, l.x1, 0);
+      grad.addColorStop(0, "rgba(255,240,150,0)");
+      grad.addColorStop(0.15, `rgba(255,245,180,${0.9 * a})`);
+      grad.addColorStop(1, `rgba(255,255,255,${a})`);
+      g.fillStyle = grad;
+      g.fillRect(Math.min(l.x0, l.x1), l.y - th / 2, Math.abs(l.x1 - l.x0), th);
+      g.fillStyle = `rgba(255,255,255,${a})`;
+      g.fillRect(Math.min(l.x0, l.x1), l.y - th / 6, Math.abs(l.x1 - l.x0), th / 3);
+    }
+    for (const b of this.bolts) {
+      const a = b.life / b.max;
+      g.strokeStyle = `rgba(255,250,200,${a})`;
+      g.lineWidth = 2 + 4 * a;
+      g.beginPath();
+      let px = b.x,
+        py = -10;
+      g.moveTo(px, py);
+      while (py < b.y) {
+        py = Math.min(b.y, py + 22 + Math.random() * 18);
+        px = b.x + (Math.random() - 0.5) * (py < b.y ? 26 : 0);
+        g.lineTo(px, py);
+      }
+      g.stroke();
+    }
+    // 낙인 찍힌 상대: 몸 둘레에 도는 보라 번개
+    for (const f of s.p) {
+      if (f.zap <= 0) continue;
+      const x = f.x / SUB,
+        y = screenY(f.h) - 32;
+      const r = 22 + 4 * Math.sin(s.f * 0.4);
+      g.strokeStyle = `rgba(200,160,255,${0.35 + 0.3 * (1 - f.zap / 120)})`;
+      g.lineWidth = 1.5;
+      g.beginPath();
+      for (let k = 0; k <= 12; k++) {
+        const t = (k / 12) * Math.PI * 2 + s.f * 0.15;
+        const rr = r + (k % 2 ? 3 : -3);
+        g.lineTo(x + Math.cos(t) * rr, y + Math.sin(t) * rr * 1.4);
+      }
+      g.stroke();
+    }
+    g.restore();
+    for (const l of this.lines) l.life--;
+    for (const b of this.bolts) b.life--;
+    this.lines = this.lines.filter((l) => l.life > 0);
+    this.bolts = this.bolts.filter((b) => b.life > 0);
+  }
+
   draw(s: State) {
     const g = this.g;
     const k = this.canvas.width / VIEW_W;
@@ -1275,6 +1366,7 @@ export class FightRenderer {
     for (let i = 0; i < 2; i++) this.drawTag(s.p[i], i);
     this.drawProj(s);
     this.drawFx();
+    this.drawZap(s);
 
     for (const p of this.parts) {
       const a = p.life / p.max;
