@@ -49,8 +49,10 @@ export function onSoundChange(cb: () => void): () => void {
 export const isMuted = () => getSound().mute;
 export const setMuted = (v: boolean) => setSound({ mute: v });
 
-/** 탭을 가렸거나 앱을 내려 둠(폰 홈 키) — 연결은 그대로 두고 소리(대사 · 효과음)만 안 냄 */
-const away = () => typeof document !== "undefined" && document.hidden;
+/** 폰 "전체화면으로 플레이해 주세요" · "가로로 돌려 주세요" 안내 중 — 타이틀 곡만 나오고 다른 소리는 전부 끔 */
+let gate = false;
+/** 탭을 가렸거나 앱을 내려 둠(폰 홈 키) · 폰 안내 중 — 연결은 그대로 두고 소리(대사 · 효과음)만 안 냄 */
+const away = () => gate || (typeof document !== "undefined" && document.hidden);
 
 // ───────────── 파일 목록 ─────────────
 
@@ -100,7 +102,8 @@ function unlock() {
   if (unlocked || typeof window === "undefined") return;
   unlocked = true;
   ac();
-  if (wantBgm) void startBgm(wantBgm);
+  const w = wantNow();
+  if (w) void startBgm(w);
   // 버튼 누름 소리는 처음 누를 때 받느라 늦지 않게 미리 받아 둠
   void manifestLoading?.then(() => {
     for (const n of ["sfx-press-die", "sfx-press-call", "sfx-press-bet", "sfx-press-ui", "sfx-check"]) {
@@ -370,7 +373,7 @@ async function startBgm(name: string) {
   const url = fileOf(real) ?? fileOf(name);
   if (!url) {
     // 목록이 아직 안 왔으면 조금 뒤에 다시
-    if (!manifest) setTimeout(() => wantBgm === name && void startBgm(name), 400);
+    if (!manifest) setTimeout(() => wantNow() === name && void startBgm(name), 400);
     return;
   }
   if (bgmName === real && cur && !cur.paused) return;
@@ -595,8 +598,26 @@ export function playVoiceNow(char: string, name: string) {
 }
 
 /** 배경음악 바꾸기 (null = 끔). 파일이 없으면 조용히 아무것도 안 함 */
+/** 지금 틀어야 할 곡: 폰 안내 중이면 타이틀 곡 */
+const wantNow = () => (gate && wantBgm ? "bgm-intro" : wantBgm);
+
+/** 폰 전체화면 · 가로 안내를 켜고 끔 (켜지면 나오던 대사도 끊고 타이틀 곡으로, 꺼지면 원래 곡으로) */
+export function setGate(on: boolean) {
+  if (gate === on) return;
+  gate = on;
+  if (on) {
+    speakQ.length = 0;
+    try {
+      voiceNow?.src.stop();
+    } catch {}
+  }
+  const w = wantNow();
+  if (w && unlocked) void startBgm(w);
+}
+
 export function playBgm(name: string | null) {
   wantBgm = name;
+  if (name && gate) name = "bgm-intro";
   if (!name) {
     for (const el of live.keys()) fade(el, 0, 600);
     cur = null;
@@ -608,7 +629,8 @@ export function playBgm(name: string | null) {
 
 /** 로비 곡 설정을 바꿨을 때 지금 로비면 바로 바꿔 틂 */
 export function refreshBgm() {
-  if (wantBgm && unlocked) void startBgm(wantBgm);
+  const w = wantNow();
+  if (w && unlocked) void startBgm(w);
 }
 
 /** 큰 베팅 기준: 그 방 판돈의 100배 이상이면 "크게" 외침 */

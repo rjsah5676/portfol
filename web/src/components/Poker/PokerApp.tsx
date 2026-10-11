@@ -13,6 +13,7 @@ import {
   playBgm,
   playVoice,
   refreshBgm,
+  setGate,
   setSound,
   type SoundSettings,
 } from "@/lib/poker/sfx";
@@ -217,6 +218,11 @@ export default function PokerApp({ rank }: { rank: RankRow[] | null }) {
       window.removeEventListener("keydown", say);
     };
   }, [onIntro, tableId, wallet, gated]);
+  // 폰 전체화면 · 가로 안내 중: 타이틀 곡만, 다른 소리는 전부 끔 (판 중에 전체화면이 풀려도)
+  useEffect(() => {
+    setGate(gated);
+    return () => setGate(false);
+  }, [gated]);
   // 출석 안내: 폰 전체화면 안내에 가려 안 보인 채 지나가지 않게, 로비가 보일 때부터 5초
   useEffect(() => {
     if (!attendNote || gated) return;
