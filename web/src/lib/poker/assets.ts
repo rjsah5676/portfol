@@ -29,6 +29,10 @@ export const lookReady = (l: Look) => !!skinOf(l)?.ready;
 const LIVE_BASE = new Set<string>(["amy", "yeonseo", "jinwoo", "taeyang", "jeongmin", "mio"]);
 export const liveIdle = (l: Look) => (skinOf(l) ? !!skinOf(l)?.live && lookReady(l) : LIVE_BASE.has(l));
 
+/** 7포커 자리 앉은 대기 동작(움직이는 webp)이 있는 그림 폴더 */
+const SEAT_LIVE = new Set<string>(["jinwoo", "yeonseo", "taeyang", "jeongmin", "amy", "mio", "amy-summer", "yeonseo-summer"]);
+export const seatLive = (l: Look) => SEAT_LIVE.has(dir(l));
+
 export const asset = {
   /** 캐릭터 고르기 화면 상반신 (대기 1장만 남김) */
   pose: (c: Look, p: "idle") => `${BASE}/char/${dir(c)}/pose-${p}.webp`,
@@ -36,6 +40,8 @@ export const asset = {
   hero: (c: Look, p: "win") => `${BASE}/char/${dir(c)}/hero-${p}.webp`,
   /** 7포커 자리: 앉은 정면 상반신 (포즈 8장) */
   seat: (c: Look, view: "front", p: Pose) => `${BASE}/char/${dir(c)}/seat-${view}-${p}.webp`,
+  /** 앉은 대기 동작 (6초 반복, 투명 배경 움직이는 webp) — 받기 전엔 한 장짜리 대기 그림 */
+  seatLive: (c: Look) => `${BASE}/char/${dir(c)}/seat-front-idle-live.webp`,
   face: (c: Look, f: Face) => `${BASE}/char/${dir(c)}/face-${f}.webp`,
   /** 이모티콘은 스킨을 입어도 원래 캐릭터 것 */
   emote: (c: Look, e: Emote) => `${BASE}/char/${skinOf(c)?.char ?? c}/emote-${e}.webp`,

@@ -9,7 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import { RANKS, rankOf, suitOf, type Card } from "@/lib/poker/cards";
-import { asset, chipColor } from "@/lib/poker/assets";
+import { asset, chipColor, seatLive } from "@/lib/poker/assets";
 import {
   CHARS,
   FACES,
@@ -521,6 +521,10 @@ export function CharSprite({
   className?: string;
   style?: CSSProperties;
 }) {
+  // 앉은 대기 동작: 받아지면 한 장짜리 대기 그림 대신 (다른 포즈는 그대로 한 장)
+  const live = seatLive(char) ? asset.seatLive(char) : null;
+  const [liveOk, setLiveOk] = useState<string | null>(null);
+  const liveOn = !!live && liveOk === live && pose === "idle";
   return (
     <span
       className={`pk-sprite ${className}`}
@@ -540,9 +544,19 @@ export function CharSprite({
           src={asset.seat(char, "front", p)}
           alt=""
           draggable={false}
-          data-on={p === pose ? "1" : undefined}
+          data-on={p === pose && !(liveOn && p === "idle") ? "1" : undefined}
         />
       ))}
+      {live && (
+        <img
+          src={live}
+          alt=""
+          draggable={false}
+          className="pk-sprite-live"
+          data-on={liveOn ? "1" : undefined}
+          onLoad={() => setLiveOk(live)}
+        />
+      )}
     </span>
   );
 }

@@ -140,6 +140,10 @@
 .pk-sprite img[data-on="1"] {
   opacity: 1;
 }
+/* 앉은 대기 동작은 영상 안에서 숨을 쉬니 숨쉬기 흔들림은 안 얹음 */
+.pk-sprite img.pk-sprite-live {
+  animation: none !important;
+}
 .pk-sprite[data-dim="1"] {
   filter: grayscale(0.9) brightness(0.55);
 }
