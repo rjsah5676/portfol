@@ -3614,8 +3614,35 @@
 /* 칸은 언제나 같은 크기 (상자 높이 · 화면 크기와 상관없이), 넘치면 좌우로 밀기 */
 .pk-emote-row .pk-emote-btn {
   flex: none;
-  width: 4.2em;
-  height: 4.2em;
+  /* 정사각형, 상자가 낮으면 상자 안에 들어오게 (아래 얇은 막대 자리 남김) */
+  height: min(4.2em, 100%);
+  width: auto;
+  aspect-ratio: 1;
+}
+.pk-emote-row[data-drag="1"] {
+  cursor: grab;
+}
+.pk-emote-row[data-drag="1"]:active {
+  cursor: grabbing;
+}
+/* 옆에 더 있다는 표시: 칸 아래 얇은 막대 (자리를 안 먹게 겹쳐 그림) */
+.pk-emote-track {
+  position: absolute;
+  left: 0.6em;
+  right: 0.6em;
+  bottom: 0.12em;
+  height: 0.2em;
+  min-height: 2px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  pointer-events: none;
+}
+.pk-emote-thumb {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-radius: 999px;
+  background: rgba(240, 196, 92, 0.75);
 }
 /* 가리켜도 크기는 그대로 (커지면 줄이 밀려 맨 앞 칸이 흔들림) — 테두리 · 바탕만 바뀜 */
 .pk-emote-row .pk-emote-btn:hover,

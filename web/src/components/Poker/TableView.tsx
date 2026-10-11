@@ -3591,45 +3591,105 @@ function EmoteGrid({
   /** 붙박이 상자 안: 정사각형 칸 한 줄 · 좌우로 밀어 고름 */
   dense?: boolean;
 }) {
-  // 붙박이 줄: 스크롤 막대를 숨겨(막대 높이만큼 칸이 위로 쏠리던 것) 정가운데 — PC는 마우스 휠로 좌우 밀기
+  // 붙박이 줄: 진짜 스크롤 막대는 숨기고(막대 높이만큼 칸이 위로 쏠리던 것) 아래에 얇은 막대를 겹쳐 그려 옆에 더 있다는 걸 보여 줌.
+  // PC는 마우스 휠 · 끌어서 좌우로 밀기 (폰은 손가락으로 그대로)
   const rowRef = useRef<HTMLDivElement>(null);
+  const [bar, setBar] = useState<{ w: number; x: number } | null>(null);
+  const drag = useRef<{ x: number; left: number; moved: boolean } | null>(null);
+  const eatClick = useRef(false);
   useEffect(() => {
     const el = rowRef.current;
     if (!dense || !el) return;
+    const sync = () => {
+      const { scrollWidth: sw, clientWidth: cw, scrollLeft: sl } = el;
+      if (sw <= cw + 1) return setBar(null);
+      const w = cw / sw;
+      setBar({ w, x: (sl / (sw - cw)) * (1 - w) });
+    };
     const onWheel = (ev: WheelEvent) => {
       if (Math.abs(ev.deltaY) <= Math.abs(ev.deltaX) || el.scrollWidth <= el.clientWidth) return;
       ev.preventDefault();
       el.scrollLeft += ev.deltaY;
     };
+    sync();
+    el.addEventListener("scroll", sync, { passive: true });
     el.addEventListener("wheel", onWheel, { passive: false });
-    return () => el.removeEventListener("wheel", onWheel);
+    const ro = new ResizeObserver(sync);
+    ro.observe(el);
+    return () => {
+      el.removeEventListener("scroll", sync);
+      el.removeEventListener("wheel", onWheel);
+      ro.disconnect();
+    };
   }, [dense]);
+  const onDown = (ev: React.PointerEvent) => {
+    const el = rowRef.current;
+    if (!el || ev.pointerType !== "mouse" || ev.button !== 0) return;
+    drag.current = { x: ev.clientX, left: el.scrollLeft, moved: false };
+    const move = (e: PointerEvent) => {
+      const d = drag.current;
+      if (!d) return;
+      const dx = e.clientX - d.x;
+      if (Math.abs(dx) > 4) d.moved = true;
+      if (d.moved) el.scrollLeft = d.left - dx;
+    };
+    const up = () => {
+      // 끌다 놓은 건 누름으로 안 침 (이모티콘이 나가지 않게)
+      if (drag.current?.moved) eatClick.current = true;
+      drag.current = null;
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  };
+  const buttons = EMOTES.map((e) => (
+    <button
+      key={e}
+      type="button"
+      onClick={() => onPick(e)}
+      className="pk-emote-btn"
+      aria-label={EMOTE_NAME[e]}
+      title={EMOTE_NAME[e]}
+    >
+      <EmoteImg char={char} emote={e} size={big ? 72 : 48} className={dense ? "h-full w-full object-contain" : "mx-auto h-auto w-full"} />
+      {/* 가리키면(폰은 누르는 동안) 이름이 떠오름 */}
+      <span className="pk-emote-name" aria-hidden>
+        {EMOTE_NAME[e]}
+      </span>
+    </button>
+  ));
+  if (dense)
+    return (
+      // 붙박이 상자: 정사각형 칸을 한 줄로 늘어놓고 좌우로 밀어서 고름 (폰에서 칸이 세로로 길쭉해지지 않게)
+      <div className="relative h-full w-full border-t border-[rgba(214,175,92,0.2)]">
+        <div
+          ref={rowRef}
+          className="pk-emote-row"
+          data-drag={bar ? "1" : undefined}
+          onPointerDown={onDown}
+          onClickCapture={(e) => {
+            if (!eatClick.current) return;
+            eatClick.current = false;
+            e.preventDefault();
+            e.stopPropagation();
+          }}
+          onDragStart={(e) => e.preventDefault()}
+        >
+          {buttons}
+        </div>
+        {bar && (
+          <div className="pk-emote-track" aria-hidden>
+            <div className="pk-emote-thumb" style={{ width: `${bar.w * 100}%`, left: `${bar.x * 100}%` }} />
+          </div>
+        )}
+      </div>
+    );
   return (
     <div
-      ref={rowRef}
-      // 붙박이 상자: 정사각형 칸을 한 줄로 늘어놓고 좌우로 밀어서 고름 (폰에서 칸이 세로로 길쭉해지지 않게)
-      className={
-        dense
-          ? "pk-emote-row border-t border-[rgba(214,175,92,0.2)]"
-          : `grid grid-cols-4 gap-[0.3em] border-t border-[rgba(214,175,92,0.2)] p-[0.45em] ${big ? "gap-[0.5em] p-[0.8em]" : ""}`
-      }
+      className={`grid grid-cols-4 gap-[0.3em] border-t border-[rgba(214,175,92,0.2)] p-[0.45em] ${big ? "gap-[0.5em] p-[0.8em]" : ""}`}
     >
-      {EMOTES.map((e) => (
-        <button
-          key={e}
-          type="button"
-          onClick={() => onPick(e)}
-          className="pk-emote-btn"
-          aria-label={EMOTE_NAME[e]}
-          title={EMOTE_NAME[e]}
-        >
-          <EmoteImg char={char} emote={e} size={big ? 72 : 48} className={dense ? "h-full w-full object-contain" : "mx-auto h-auto w-full"} />
-          {/* 가리키면(폰은 누르는 동안) 이름이 떠오름 */}
-          <span className="pk-emote-name" aria-hidden>
-            {EMOTE_NAME[e]}
-          </span>
-        </button>
-      ))}
+      {buttons}
     </div>
   );
 }
