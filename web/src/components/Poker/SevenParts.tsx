@@ -322,15 +322,21 @@ export function SevenBar({
   type Slot = { key: string; label: string; k: string; amt?: number; act?: SevenAction };
   const bet = (b: SevenBet, key: string, idle: string): Slot => {
     const v = lg?.bets[b];
-    if (v === undefined) return { key, label: idle, k: key === "bbdd" ? "bbing" : b };
+    if (v === undefined) return { key, label: idle, k: b };
     // 팟이 커져 그 베팅이 가진 칩을 다 쓰게 되면 칸이 「올인」으로 바뀜
     const allIn = v >= myStack;
     return { key, label: allIn ? "올인" : BET_LABEL[b], k: allIn ? "allin" : b, amt: v, act: { a: b } };
   };
   const slots: Slot[] = [
     { key: "die", label: "다이", k: "die", act: live ? { a: "die" } : undefined },
-    // 아무도 안 걸었으면 삥, 누가 걸었으면 따당(받을 돈의 2배)
-    lg && lg.bets.ddadang !== undefined ? bet("ddadang", "bbdd", "삥") : bet("bbing", "bbdd", "삥"),
+    // 아무도 안 걸었으면 삥, 누가 걸었으면 따당(받을 돈의 2배) — 남의 차례(미리 누르기)에도 지금 판 상황대로 이름이 바뀜
+    lg
+      ? lg.bets.ddadang !== undefined
+        ? bet("ddadang", "ddadang", "따당")
+        : bet("bbing", "bbing", "삥")
+      : view && view.currentBet > 0
+        ? bet("ddadang", "ddadang", "따당")
+        : bet("bbing", "bbing", "삥"),
     lg && lg.toCall > 0
       ? { key: "call", label: lg.toCall >= myStack ? "올인" : "콜", k: lg.toCall >= myStack ? "allin" : "call", amt: lg.toCall, act: { a: "call" } }
       : { key: "call", label: "콜", k: "call" },

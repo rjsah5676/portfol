@@ -909,8 +909,7 @@ export default function TableView({
         const wouldAllIn = (() => {
           if (!lg) return false;
           if (pre === "call" || pre === "callbbing") return lg.toCall > 0 ? lg.toCall >= stack : (lg.bets.bbing ?? 0) >= stack;
-          if (pre === "bbdd") return (lg.bets.bbing ?? lg.bets.ddadang ?? 0) >= stack;
-          if (pre === "ddadang" || pre === "quarter" || pre === "half") return (lg.bets[pre] ?? 0) >= stack;
+          if (pre === "bbing" || pre === "ddadang" || pre === "quarter" || pre === "half") return (lg.bets[pre] ?? 0) >= stack;
           return false;
         })();
         if (sv2.phase === "bet" && lg && wouldAllIn) {
@@ -921,11 +920,8 @@ export default function TableView({
             // 받을 돈이 있으면 얼마든(삥·따당·하프…) 콜, 없으면 삥
             if (lg.toCall > 0) void doAct({ a: "call" });
             else if (lg.bets.bbing !== undefined) void doAct({ a: "bbing" });
-          } else if (pre === "bbdd") {
-            // 삥 칸: 아무도 안 걸었으면 삥, 누가 걸었으면 따당
-            if (lg.bets.bbing !== undefined) void doAct({ a: "bbing" });
-            else if (lg.bets.ddadang !== undefined) void doAct({ a: "ddadang" });
-          } else if (pre === "ddadang" || pre === "quarter" || pre === "half") {
+          } else if (pre === "bbing" || pre === "ddadang" || pre === "quarter" || pre === "half") {
+            // 눌러 둔 그대로만 (삥을 눌러 뒀는데 그 사이 누가 걸어 삥이 없어지면 따당으로 바꿔 치지 않고 안 함)
             if (lg.bets[pre] !== undefined) void doAct({ a: pre });
           }
         }
