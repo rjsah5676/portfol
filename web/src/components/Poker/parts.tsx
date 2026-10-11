@@ -183,23 +183,25 @@ export function PlayingCard({
  */
 // 실제 카드 비율: 모서리 숫자는 작게 가장자리에 붙고, 무늬는 크게 · 넓게 (가로 30% / 70% 두 줄, 세로 21% ~ 79%)
 const IDX_X = 15;
-const COL_L = 35;
-const COL_R = 65;
-const PIP = 20;
-const Y1 = 30;
-const Y4 = 110;
+// 한게임식: 왼쪽 세로줄은 숫자 · 무늬, 오른쪽 아래 숫자는 없음 → 무늬는 오른쪽 넓은 칸(가로 33~95 · 세로 13~127)에 크게
+const COL_L = 47;
+const COL_R = 81;
+const COL_C = 64;
+const PIP = 24;
+const Y1 = 17;
+const Y4 = 123;
 const yAt = (k: number) => Y1 + ((Y4 - Y1) * k) / 6; // 7줄 눈금 (0 ~ 6)
 /** 숫자별 무늬 자리 [x, 눈금] — 눈금 3 위로는 바로, 아래로는 뒤집어 그림 */
 const PIPS: Record<number, [number, number][]> = {
-  2: [[50, 0], [50, 6]],
-  3: [[50, 0], [50, 3], [50, 6]],
+  2: [[COL_C, 0], [COL_C, 6]],
+  3: [[COL_C, 0], [COL_C, 3], [COL_C, 6]],
   4: [[COL_L, 0], [COL_R, 0], [COL_L, 6], [COL_R, 6]],
-  5: [[COL_L, 0], [COL_R, 0], [50, 3], [COL_L, 6], [COL_R, 6]],
+  5: [[COL_L, 0], [COL_R, 0], [COL_C, 3], [COL_L, 6], [COL_R, 6]],
   6: [[COL_L, 0], [COL_R, 0], [COL_L, 3], [COL_R, 3], [COL_L, 6], [COL_R, 6]],
-  7: [[COL_L, 0], [COL_R, 0], [50, 1.5], [COL_L, 3], [COL_R, 3], [COL_L, 6], [COL_R, 6]],
-  8: [[COL_L, 0], [COL_R, 0], [50, 1.5], [COL_L, 3], [COL_R, 3], [50, 4.5], [COL_L, 6], [COL_R, 6]],
-  9: [[COL_L, 0], [COL_R, 0], [COL_L, 2], [COL_R, 2], [50, 3], [COL_L, 4], [COL_R, 4], [COL_L, 6], [COL_R, 6]],
-  10: [[COL_L, 0], [COL_R, 0], [50, 1], [COL_L, 2], [COL_R, 2], [COL_L, 4], [COL_R, 4], [50, 5], [COL_L, 6], [COL_R, 6]],
+  7: [[COL_L, 0], [COL_R, 0], [COL_C, 1.5], [COL_L, 3], [COL_R, 3], [COL_L, 6], [COL_R, 6]],
+  8: [[COL_L, 0], [COL_R, 0], [COL_C, 1.5], [COL_L, 3], [COL_R, 3], [COL_C, 4.5], [COL_L, 6], [COL_R, 6]],
+  9: [[COL_L, 0], [COL_R, 0], [COL_L, 2], [COL_R, 2], [COL_C, 3], [COL_L, 4], [COL_R, 4], [COL_L, 6], [COL_R, 6]],
+  10: [[COL_L, 0], [COL_R, 0], [COL_C, 1], [COL_L, 2], [COL_R, 2], [COL_L, 4], [COL_R, 4], [COL_C, 5], [COL_L, 6], [COL_R, 6]],
 };
 
 /** 무늬별 높이 맞춤 (그림 상자 안 실제 높이가 달라서 — 스페이드 95 · 하트 86 · 다이아 96 · 클로버 89) → 같은 size 면 네 무늬 키가 같음 */
@@ -268,7 +270,7 @@ function Index({ r, s }: { r: string; s: number }) {
       )}
       {/* 모서리 무늬는 가운데 무늬보다 크게 (겹쳐 놓았을 때 이것만 보이니까) */}
       {/* 다이아는 높이만 크게, 폭은 가운데 무늬와 같게 (넓적해 보이지 않게) */}
-      <Pip s={s} x={x} y={54} size={pip} sx={s === 2 ? PIP / pip : 1} />
+      <Pip s={s} x={x} y={54} size={pip} sx={s === 2 ? 20 / 24 : 1} />
     </>
   );
 }
@@ -281,30 +283,27 @@ function CardFace({ rank, r, s, court, covered }: { rank: number; r: string; s: 
       {court ? (
         <>
           <clipPath id={`cc-${rank}-${s}`}>
-            <rect x={26} y={7} width={48} height={126} rx={4} />
+            <rect x={31} y={6} width={63} height={128} rx={4} />
           </clipPath>
           <image
             href={asset.court(s, rank)}
-            x={26}
-            y={7}
-            width={48}
-            height={126}
+            x={31}
+            y={6}
+            width={63}
+            height={128}
             preserveAspectRatio="xMidYMid slice"
             clipPath={`url(#cc-${rank}-${s})`}
           />
-          <rect x={26} y={7} width={48} height={126} rx={4} fill="none" stroke="currentColor" strokeOpacity={0.35} strokeWidth={0.9} />
+          <rect x={31} y={6} width={63} height={128} rx={4} fill="none" stroke="currentColor" strokeOpacity={0.35} strokeWidth={0.9} />
         </>
       ) : n === 14 ? (
-        // A: 가운데 큰 무늬 하나 (스페이드 A 는 더 크게 — 실제 카드처럼)
-        <Pip s={s} x={50} y={70} size={s === 1 ? 42 : 48} sx={s === 2 ? PIP / 24 : 1} />
+        // A: 오른쪽 아래에 큰 무늬 하나 (한게임처럼)
+        <Pip s={s} x={62} y={96} size={s === 1 ? 50 : 56} sx={s === 2 ? 20 / 24 : 1} />
       ) : (
-        PIPS[n].map(([x, k], i) => <Pip key={i} s={s} x={x} y={yAt(k)} size={PIP} flip={k > 3} />)
+        PIPS[n].map(([x, k], i) => <Pip key={i} s={s} x={x} y={yAt(k)} size={PIP} sx={s === 2 ? 20 / 24 : 1} />)
       )}
       </g>
       <Index r={r} s={s} />
-      <g transform="rotate(180 50 70)">
-        <Index r={r} s={s} />
-      </g>
     </svg>
   );
 }
