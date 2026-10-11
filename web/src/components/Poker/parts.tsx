@@ -260,11 +260,12 @@ function Index({ r, s }: { r: string; s: number }) {
         })()
       ) : r === "10" ? (
         // 10: 글자를 눌러 담으면 다른 숫자와 모양이 달라 튀어 보여서, 1 과 0 을 원래 모양 그대로 바짝 붙여 씀
-        <g className="pk-idx pk-idx-10">
-          <text x={x - 6.8} y={BASE} textAnchor="middle">
+        // 키는 다른 숫자와 똑같이, 폭만 아주 살짝(0.92) 좁혀 칸에 맞춤
+        <g className="pk-idx pk-idx-10" transform={`translate(${x} 0) scale(0.92 1) translate(${-x} 0)`}>
+          <text x={x - 7.2} y={BASE} textAnchor="middle">
             1
           </text>
-          <text x={x + 5.4} y={BASE} textAnchor="middle">
+          <text x={x + 5.8} y={BASE} textAnchor="middle">
             0
           </text>
         </g>
