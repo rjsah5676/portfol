@@ -3275,7 +3275,7 @@ function ActionBar(props: {
               disabled={!preOpen}
               aria-pressed={pre === k}
               onClick={() => {
-                sfx.press("ui");
+                sfx.press("pre");
                 onPre(k);
               }}
               className={`pk-btn ${cls} pk-prebig relative flex min-w-0 flex-1 flex-col items-center justify-center px-[0.2em] py-[0.55em] whitespace-nowrap`}

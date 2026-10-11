@@ -361,7 +361,7 @@ export function SevenBar({
             aria-pressed={!live && canPre ? pre === b.key : undefined}
             onClick={() => {
               // 누른 줄 알게: 행동마다 다른 소리, 미리 누르기는 버튼 딸깍
-              sfx.press(!live ? "ui" : b.key === "die" ? "die" : b.key === "call" || b.key === "bbing" ? "call" : "bet");
+              sfx.press(!live ? "pre" : b.key === "die" ? "die" : b.key === "call" || b.key === "bbing" ? "call" : "bet");
               if (live) b.act && onAct(b.act);
               else onPre(b.key);
             }}

@@ -612,9 +612,11 @@ export function registerPoker({ gateway, db, users }: Deps, opts: PokerOptions =
           t.actTimers.delete(seatNo);
           if (t.closed || t.round !== round) return;
           safely(t, () => {
+            // 7포커 처음 카드 고르기는 안 골라도 대신 골라 줄 뿐, 자리 비움으로 치지 않음
+            const choosing = round.waitKind() === "choice";
             const ev = round.timeout(seatNo, s.leaving);
             // 시간 초과가 이어지면 나가기 예약 (이번 판 끝나면 자리에서 일어남)
-            if (!s.leaving && ++s.timeouts >= TIMEOUTS_TO_SITOUT && !s.exitAfter) s.exitAfter = "idle";
+            if (!s.leaving && !choosing && ++s.timeouts >= TIMEOUTS_TO_SITOUT && !s.exitAfter) s.exitAfter = "idle";
             emit(t, ...ev);
             pump(t);
           });

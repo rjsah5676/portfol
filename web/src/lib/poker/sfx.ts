@@ -404,10 +404,10 @@ async function spawn(url: string, real: string, ms: number) {
 export const hasSound = (name: string) => !!fileOf(name);
 
 /** 짧은 소리. 파일이 있으면 파일, 없으면 합성음 */
-export function playSfx(name: string) {
+export function playSfx(name: string, gain = 1) {
   const s = getSound();
   if (s.mute || s.sfx <= 0) return;
-  if (playFile(name, s.sfx)) return;
+  if (playFile(name, s.sfx * gain)) return;
   const c = ac();
   const f = synth[name];
   if (c && f) f(c);
@@ -594,11 +594,14 @@ export const sfx = {
   tick: () => playSfx("sfx-tick"),
   tickLast: () => playSfx("sfx-tick-last"),
   click: () => playSfx("sfx-click"),
-  /** 행동 버튼 누름: 다이 = 테이블 톡, 콜·삥 = 칩 탁, 체크 = 똑똑, 따당·쿼터·하프·레이즈 = 칩 짤랑, 미리 누르기·금액 고르기 = 버튼 딸깍 */
-  press: (k: "die" | "call" | "bet" | "ui" | "check") => {
-    if (k !== "ui") pressedAt = Date.now();
+  /** 행동 버튼 누름: 다이 = 테이블 톡, 콜·삥 = 칩 탁, 체크 = 똑똑, 따당·쿼터·하프·레이즈 = 칩 짤랑, 미리 누르기·금액 고르기 = 버튼 딸깍(미리 누르기는 조금 크게) */
+  press: (k: "die" | "call" | "bet" | "ui" | "check" | "pre") => {
+    if (k !== "ui" && k !== "pre") pressedAt = Date.now();
     // 체크는 남이 체크할 때와 같은 똑똑 소리
-    playSfx(k === "check" ? "sfx-check" : `sfx-press-${k}`);
+    if (k === "check") playSfx("sfx-check");
+    // 미리 누르기(예약)만 같은 딸깍을 조금 크게 (+4dB) — 금액 고르기 딸깍은 그대로
+    else if (k === "pre") playSfx("sfx-press-ui", 1.6);
+    else playSfx(`sfx-press-${k}`);
   },
   emote: () => playSfx("sfx-emote"),
   coin: () => playSfx("sfx-coin"),
