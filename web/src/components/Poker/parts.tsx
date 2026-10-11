@@ -492,8 +492,8 @@ export function PotChips({ ratio, size = 40 }: { ratio: number; size?: number })
 // ───────────── 캐릭터 ─────────────
 
 /**
- * 테이블 뒤에 서 있는 캐릭터. 모든 포즈 그림을 겹쳐 두고 지금 포즈만 보여 줘서 바뀔 때 깜빡이지 않음.
- * 숨쉬기 · 포즈별 작은 움직임은 CSS (pk-pose-*). flip = 왼쪽 자리(오른쪽을 보게 뒤집음).
+ * 7포커 자리 캐릭터 (앉은 정면 상반신). 모든 포즈 그림을 겹쳐 두고 지금 포즈만 보여 줘서 바뀔 때 깜빡이지 않음.
+ * 숨쉬기 · 포즈별 작은 움직임은 CSS (pk-pose-*).
  */
 export function CharSprite({
   char,
@@ -501,14 +501,13 @@ export function CharSprite({
   flip,
   dim,
   w,
-  seat,
   className = "",
   style,
 }: {
   char: Look;
   pose: Pose;
-  /** 앉은 그림 (없으면 서 있는 그림) */
-  seat?: "front" | "side";
+  /** 앉은 정면 그림만 (옆모습 · 서 있는 그림은 정리함) — 예전 호출 호환용 */
+  seat?: "front";
   flip?: boolean;
   dim?: boolean;
   /** 폭(px). 높이는 4:3 → w*4/3 */
@@ -532,28 +531,11 @@ export function CharSprite({
       {POSES.map((p) => (
         <img
           key={p}
-          src={seat ? asset.seat(char, seat, p) : asset.pose(char, p)}
+          src={asset.seat(char, "front", p)}
           alt=""
           draggable={false}
           data-on={p === pose ? "1" : undefined}
         />
-      ))}
-    </span>
-  );
-}
-
-/** 내 캐릭터 전신 그림 (2:3, 포즈 8장을 겹쳐 두고 바뀔 때 서서히). 높이(px)로 크기를 줌 */
-export function HeroSprite({ char, pose, h, dim }: { char: Look; pose: Pose; h: number; dim?: boolean }) {
-  return (
-    <span
-      className="pk-sprite"
-      data-pose={pose}
-      data-dim={dim ? "1" : undefined}
-      style={{ width: Math.round((h * 2) / 3), height: Math.round(h) }}
-      aria-hidden
-    >
-      {POSES.map((p) => (
-        <img key={p} src={asset.hero(char, p)} alt="" draggable={false} data-on={p === pose ? "1" : undefined} />
       ))}
     </span>
   );

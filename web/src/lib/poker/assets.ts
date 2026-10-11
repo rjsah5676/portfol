@@ -2,7 +2,7 @@ import { skinOf, tierOf, type Emote, type Face, type Look, type Pose, type TierI
 
 /*
  * 포커 그림 파일 주소 (web/public/poker/ — anime-poker-src/build.py 가 만듦).
- * 캐릭터: char/{id}/pose-*.webp(288×384) · face-*.webp(256²) · emote-*.webp(160²) · profile.webp · full.webp · cutin.webp
+ * 캐릭터: char/{id}/seat-front-*.webp(앉은 정면, 288×384) · pose-idle · hero-win · face-*.webp(256²) · emote-*.webp(160²) · profile.webp · full.webp · cutin.webp
  */
 
 const BASE = "/poker";
@@ -28,17 +28,14 @@ export const lookReady = (l: Look) => !!skinOf(l)?.ready;
 /** 로비에서 대기 영상(idle.webp)이 도는 기본 캐릭터 (스킨은 rules.ts 의 live). 파일이 아직 없으면 전신 그림 한 장 */
 const LIVE_BASE = new Set<string>(["amy", "yeonseo", "jinwoo", "taeyang", "jeongmin", "mio"]);
 export const liveIdle = (l: Look) => (skinOf(l) ? !!skinOf(l)?.live && lookReady(l) : LIVE_BASE.has(l));
-/** 왼쪽 아래 내 캐릭터용 전신 그림(hero-*.webp, 384×576)이 있는 그림 폴더 */
-const HERO_DIRS = new Set(["amy", "jinwoo", "taeyang", "jeongmin", "yeonseo", "mio", "amy-summer", "yeonseo-summer"]);
-export const heroReady = (l: Look) => HERO_DIRS.has(dir(l));
 
 export const asset = {
-  pose: (c: Look, p: Pose) => `${BASE}/char/${dir(c)}/pose-${p}.webp`,
-  /** 내 캐릭터 전신 (머리 ~ 발, 2:3) */
-  hero: (c: Look, p: Pose) => `${BASE}/char/${dir(c)}/hero-${p}.webp`,
-  /** 테이블에 앉은 모습: front = 맞은편, side = 왼쪽 자리(오른쪽을 봄) */
-  seat: (c: Look, view: "front" | "side", p: Pose) =>
-    `${BASE}/char/${dir(c)}/seat-${view}-${p}.webp`,
+  /** 캐릭터 고르기 화면 상반신 (대기 1장만 남김) */
+  pose: (c: Look, p: "idle") => `${BASE}/char/${dir(c)}/pose-${p}.webp`,
+  /** 승리 컷인 전신 (이기는 포즈 1장만 남김) */
+  hero: (c: Look, p: "win") => `${BASE}/char/${dir(c)}/hero-${p}.webp`,
+  /** 7포커 자리: 앉은 정면 상반신 (포즈 8장) */
+  seat: (c: Look, view: "front", p: Pose) => `${BASE}/char/${dir(c)}/seat-${view}-${p}.webp`,
   face: (c: Look, f: Face) => `${BASE}/char/${dir(c)}/face-${f}.webp`,
   /** 이모티콘은 스킨을 입어도 원래 캐릭터 것 */
   emote: (c: Look, e: Emote) => `${BASE}/char/${skinOf(c)?.char ?? c}/emote-${e}.webp`,
@@ -81,10 +78,7 @@ const loaded = new Set<string>();
 export function preloadChar(c: Look, poses: readonly Pose[], faces: readonly Face[]) {
   if (typeof window === "undefined" || loaded.has(c)) return;
   loaded.add(c);
-  for (const p of poses) {
-    new Image().src = asset.seat(c, "front", p);
-    new Image().src = asset.seat(c, "side", p);
-  }
+  for (const p of poses) new Image().src = asset.seat(c, "front", p);
   for (const f of faces) new Image().src = asset.face(c, f);
   new Image().src = asset.cutin(c);
 }
