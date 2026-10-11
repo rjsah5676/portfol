@@ -31,12 +31,23 @@ import {
  * 카드 무늬는 그림(SVG)으로 그림 — 글꼴 글자(♠♥♦♣)는 OS마다 모양·크기가 달라서 (윈도우 Segoe UI Symbol 은 작고 흐릿하고 클로버가 뭉툭함).
  * 크기는 원래 글자가 차지하던 만큼으로 맞춤.
  */
-/** 무늬 (0~100 상자). 스페이드는 뾰족한 머리 + 매끈한 몸통, 클로버는 또렷한 동그라미 셋 — 작게 봐도 안 헷갈리게 */
 const SUIT_PATH = [
   // ♠
-  "M50 3C40 22 8 38 8 60c0 14 10 23 22 23 7 0 13-3 17-9-1 10-5 17-13 21h32c-8-4-12-11-13-21 4 6 10 9 17 9 12 0 22-9 22-23C92 38 60 22 50 3z",
+  "M12 2C9.6 6.2 4.2 9 4.2 13.3a4.1 4.1 0 0 0 6.9 3c-.3 1.9-1 3.5-2.3 4.7V22h6.4v-1c-1.3-1.2-2-2.8-2.3-4.7a4.1 4.1 0 0 0 6.9-3C19.8 9 14.4 6.2 12 2z",
   // ♥
-  "M50 93C21 71 5 55 5 34 5 18 17 7 31 7c9 0 15 5 19 13 4-8 10-13 19-13 14 0 26 11 26 27 0 21-16 37-45 59z",
+  "M12 21.2C6.3 16.4 2.8 13 2.8 9.2 2.8 6.3 5 4.3 7.5 4.3c1.9 0 3.4 1 4.5 2.7 1.1-1.7 2.6-2.7 4.5-2.7 2.5 0 4.7 2 4.7 4.9 0 3.8-3.5 7.2-9.2 12z",
+  // ◆
+  "M12 1l6.8 10.2L12 21.4 5.2 11.2z",
+  // ♣
+  "M12 2.2a4.4 4.4 0 1 1 0 8.8 4.4 4.4 0 0 1 0-8.8z M6.3 9.6a4.4 4.4 0 1 1 0 8.8 4.4 4.4 0 0 1 0-8.8z M17.7 9.6a4.4 4.4 0 1 1 0 8.8 4.4 4.4 0 0 1 0-8.8z M10.7 14.6h2.6c.1 2.9.8 5.1 2.1 6.5V22H8.6v-.9c1.3-1.4 2-3.6 2.1-6.5z",
+];
+/** 7포커 손패 SVG 카드 전용 무늬 */
+/** 무늬 (0~100 상자). 스페이드는 뾰족한 머리 + 매끈한 몸통, 클로버는 또렷한 동그라미 셋 — 작게 봐도 안 헷갈리게 */
+const FACE_PATH = [
+  // ♠
+  "M50 3C40 22 8 38 8 60c0 14 10 23 22 23 7 0 13-3 17-9-1 12-5 20-13 24h32c-8-4-12-12-13-24 4 6 10 9 17 9 12 0 22-9 22-23C92 38 60 22 50 3z",
+  // ♥
+  "M50 93C21 71 5 55 5 34 5 18 17 7 31 7c9 0 15 8 19 17 4-9 10-17 19-17 14 0 26 11 26 27 0 21-16 37-45 59z",
   // ◆
   "M50 2 88 50 50 98 12 50z",
   // ♣
@@ -45,7 +56,7 @@ const SUIT_PATH = [
 /** 무늬 하나 (글자 크기 = 한 변) */
 export function Suit({ s }: { s: number }) {
   return (
-    <svg viewBox="0 0 100 100" className="pk-suit" fill="currentColor" aria-hidden>
+    <svg viewBox="0 0 24 24" className="pk-suit" fill="currentColor" aria-hidden>
       <path d={SUIT_PATH[s]} />
     </svg>
   );
@@ -69,6 +80,7 @@ export function PlayingCard({
   delay = 0,
   down,
   covered,
+  svg = true,
   className = "",
   style,
 }: {
@@ -86,6 +98,8 @@ export function PlayingCard({
   delay?: number;
   /** 7포커: 내가 엎어 둔 카드 (남은 안 보임) 표시 */
   down?: boolean;
+  /** 새 SVG 앞면 (기본). false 면 예전 글자 앞면 */
+  svg?: boolean;
   /** 다른 카드에 덮여 모서리만 보임 → 가운데 무늬 · 그림은 안 그림 (겹친 틈으로 조각이 삐져나오지 않게) */
   covered?: boolean;
   className?: string;
@@ -122,7 +136,41 @@ export function PlayingCard({
       className={`pk-card ${deal ? "pk-deal" : ""} ${className}`}
       style={base}
     >
-      <CardFace rank={rank} r={r} s={s} court={court} covered={covered} />
+      {svg ? (
+        <CardFace rank={rank} r={r} s={s} court={court} covered={covered} />
+      ) : (
+        <>
+          <span
+            className="pk-card-rank"
+            style={
+              r === "10"
+                ? {
+                    letterSpacing: "0.02em",
+                    fontSize: "calc(var(--w) * 0.46)",
+                    left: "calc(var(--w) * 0.05)",
+                    top: "calc(var(--w) * 0.08)",
+                  }
+                : undefined
+            }
+          >
+            {r}
+          </span>
+          <span className="pk-card-pip">
+            <Suit s={s} />
+          </span>
+          {court ? (
+            <img src={asset.court(s, rank)} alt="" draggable={false} className="pk-card-court" />
+          ) : rank === 12 ? (
+            <span className="pk-card-ace">
+              <Suit s={s} />
+            </span>
+          ) : (
+            <span className="pk-card-suit">
+              <Suit s={s} />
+            </span>
+          )}
+        </>
+      )}
       {down && <span className="pk-card-down">엎음</span>}
     </span>
   );
@@ -154,25 +202,69 @@ const PIPS: Record<number, [number, number][]> = {
   10: [[COL_L, 0], [COL_R, 0], [50, 1], [COL_L, 2], [COL_R, 2], [COL_L, 4], [COL_R, 4], [50, 5], [COL_L, 6], [COL_R, 6]],
 };
 
-function Pip({ s, x, y, size, flip }: { s: number; x: number; y: number; size: number; flip?: boolean }) {
+function Pip({ s, x, y, size, flip, sx = 1 }: { s: number; x: number; y: number; size: number; flip?: boolean; sx?: number }) {
   const k = size / 100;
   return (
     <path
-      d={SUIT_PATH[s]}
-      transform={`translate(${x} ${y})${flip ? " rotate(180)" : ""} scale(${k}) translate(-50 -50)`}
+      d={FACE_PATH[s]}
+      transform={`translate(${x} ${y})${flip ? " rotate(180)" : ""} scale(${k * sx} ${k}) translate(-50 -50)`}
     />
   );
 }
 
+/** 모서리 글자의 세로 자리 (모든 숫자 같은 높이: 글자 윗선 BASE-CAP ~ 바닥선 BASE) */
+const BASE = 37;
+const CAP = 28;
+const STROKE = 4;
+
 function Index({ r, s }: { r: string; s: number }) {
+  const x = IDX_X;
+  const top = BASE - CAP;
+  // 스페이드 · 하트는 같은 크기여도 커 보여서 조금 작게
+  const pip = s === 0 || s === 1 ? 21 : 24;
   return (
     <>
-      {/* 글자 사이 좁히기는 10 에만 (한 글자에 걸면 글자가 오른쪽으로 밀려 아래 무늬와 줄이 안 맞음) */}
-      <text x={IDX_X} y={37} className={r === "10" ? "pk-idx pk-idx-10" : "pk-idx"} textAnchor="middle">
-        {r}
-      </text>
+      {r === "4" ? (
+        // 정석 4: 닫힌 삼각 머리 + 곧은 기둥 + 가로대
+        <path
+          d={`M${x + 3} ${BASE} V${top + STROKE / 2} L${x - 8} ${BASE - 10} H${x + 10}`}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={STROKE}
+          strokeLinejoin="round"
+        />
+      ) : r === "Q" ? (
+        // 정석 Q: 둥근 O + 오른쪽 아래로 빠지는 꼬리
+        <g fill="none" stroke="currentColor" strokeWidth={STROKE}>
+          <ellipse cx={x} cy={top + CAP / 2} rx={7.6} ry={CAP / 2 - STROKE / 2} />
+          <path d={`M${x + 1} ${BASE - 8} L${x + 6.5} ${BASE - 1.8}`} strokeLinecap="round" />
+        </g>
+      ) : r === "A" ? (
+        // A: 가운데 가로대를 조금 높게 (글꼴 A 는 가로대가 낮음)
+        (() => {
+          const hw = 8.6;
+          const yb = BASE - 10.5;
+          const bw = (hw * (yb - top)) / CAP - STROKE * 0.35;
+          return (
+            <g fill="none" stroke="currentColor" strokeWidth={STROKE} strokeLinejoin="round">
+              <path d={`M${x - hw} ${BASE - 0.2} L${x} ${top + STROKE / 2} L${x + hw} ${BASE - 0.2}`} />
+              <path d={`M${x - bw} ${yb} H${x + bw}`} />
+            </g>
+          );
+        })()
+      ) : r === "10" ? (
+        // 10: 다른 숫자와 같은 높이, 폭만 칸에 맞춰 눌러 담음
+        <text x={x} y={BASE} className="pk-idx" textAnchor="middle" textLength={23} lengthAdjust="spacingAndGlyphs">
+          10
+        </text>
+      ) : (
+        <text x={x} y={BASE} className="pk-idx" textAnchor="middle">
+          {r}
+        </text>
+      )}
       {/* 모서리 무늬는 가운데 무늬보다 크게 (겹쳐 놓았을 때 이것만 보이니까) */}
-      <Pip s={s} x={IDX_X} y={54} size={24} />
+      {/* 다이아는 높이만 크게, 폭은 가운데 무늬와 같게 (넓적해 보이지 않게) */}
+      <Pip s={s} x={x} y={54} size={pip} sx={s === 2 ? PIP / pip : 1} />
     </>
   );
 }
@@ -181,7 +273,8 @@ function CardFace({ rank, r, s, court, covered }: { rank: number; r: string; s: 
   const n = rank + 2; // 2 ~ 14 (A)
   return (
     <svg viewBox="0 0 100 140" className="pk-face" fill="currentColor" aria-hidden>
-      {covered ? null : court ? (
+      <g className={covered ? "pk-face-in pk-face-in-off" : "pk-face-in"}>
+      {court ? (
         <>
           <clipPath id={`cc-${rank}-${s}`}>
             <rect x={26} y={7} width={48} height={126} rx={4} />
@@ -199,10 +292,12 @@ function CardFace({ rank, r, s, court, covered }: { rank: number; r: string; s: 
         </>
       ) : n === 14 ? (
         // A: 가운데 큰 무늬 하나 (스페이드 A 는 더 크게 — 실제 카드처럼)
-        <Pip s={s} x={50} y={70} size={s === 0 ? 66 : 50} />
+        <Pip s={s} x={50} y={70} size={s === 0 ? 50 : s === 1 ? 44 : 50} />
       ) : (
-        PIPS[n].map(([x, k], i) => <Pip key={i} s={s} x={x} y={yAt(k)} size={PIP} flip={k > 3} />)
+        // 하트는 같은 크기여도 커 보여서 조금 작게
+        PIPS[n].map(([x, k], i) => <Pip key={i} s={s} x={x} y={yAt(k)} size={s === 1 ? PIP * 0.92 : PIP} flip={k > 3} />)
       )}
+      </g>
       <Index r={r} s={s} />
       <g transform="rotate(180 50 70)">
         <Index r={r} s={s} />

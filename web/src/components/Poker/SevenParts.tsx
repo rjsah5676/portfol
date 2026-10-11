@@ -68,6 +68,7 @@ export function sevenSeatCards({
               key={c}
               card={c}
               w={w}
+              svg
               covered={j < all.length - 1}
               // 깔자마자 족보에 든 5장은 빛남, 다 깐 뒤엔 이긴 사람 것만
               win={!!best?.includes(c) && (!ended || won)}
@@ -126,6 +127,7 @@ export function sevenSeatCards({
               key={c}
               card={c}
               w={w}
+              svg
               covered={j < all.length - 1}
               dim={p.folded}
               deal={!hidden}
@@ -177,6 +179,7 @@ export function sevenSeatCards({
             key={c}
             card={c}
             w={w}
+            svg
             covered={i < p.up.length - 1 || hid > 0}
             dim={p.folded}
             deal
@@ -279,7 +282,7 @@ export function SevenChoice({
             aria-pressed={i === discard}
             className="relative cursor-pointer rounded-[0.5em]"
           >
-            <PlayingCard card={c} w={cw} tier={tier} pick={i === discard ? "discard" : undefined} deal delay={i * 70} />
+            <PlayingCard card={c} w={cw} tier={tier} svg pick={i === discard ? "discard" : undefined} deal delay={i * 70} />
             {i === discard && (
               <span className="pk-tag absolute inset-x-0 -bottom-[0.3em] mx-auto w-max bg-[#4b4f5a]">버림</span>
             )}
