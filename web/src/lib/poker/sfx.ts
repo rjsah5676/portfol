@@ -49,6 +49,9 @@ export function onSoundChange(cb: () => void): () => void {
 export const isMuted = () => getSound().mute;
 export const setMuted = (v: boolean) => setSound({ mute: v });
 
+/** 탭을 가렸거나 앱을 내려 둠(폰 홈 키) — 연결은 그대로 두고 소리(대사 · 효과음)만 안 냄 */
+const away = () => typeof document !== "undefined" && document.hidden;
+
 // ───────────── 파일 목록 ─────────────
 
 /** manifest.json: { "sfx-deal": "sfx-deal.wav", "voice/jinwoo/jinwoo-call": "voice/jinwoo/jinwoo-call.mp3", … } */
@@ -110,13 +113,14 @@ if (typeof window !== "undefined") {
   loadManifest();
   // 탭을 가리면 배경음악 멈춤, 돌아오면 이어서
   document.addEventListener("visibilitychange", () => {
-    // 가리는 순간 나오던 대사 · 줄 선 대사도 끊음
+    // 가리는 순간 나오던 대사 · 줄 선 대사도 끊고, 효과음까지 통째로 멈춤 (돌아오면 다시 켬)
     if (document.hidden) {
       speakQ.length = 0;
       try {
         voiceNow?.src.stop();
       } catch {}
-    }
+      void ctx?.suspend().catch(() => {});
+    } else if (ctx && unlocked) void ctx.resume().catch(() => {});
     for (const el of live.keys()) {
       if (document.hidden) el.pause();
       else if (wantBgm) void el.play().catch(() => {});
@@ -441,7 +445,7 @@ export async function playExact(name: string): Promise<number> {
 /** 짧은 소리. 파일이 있으면 파일, 없으면 합성음 */
 export function playSfx(name: string, gain = 1) {
   const s = getSound();
-  if (s.mute || s.sfx <= 0) return;
+  if (s.mute || s.sfx <= 0 || away()) return;
   if (playFile(name, s.sfx * gain)) return;
   const c = ac();
   const f = synth[name];
@@ -546,9 +550,6 @@ function pumpSpeak() {
 }
 
 /** 캐릭터 음성 (파일 있을 때만). big = 크게 외치는 버전(없으면 보통 버전) */
-/** 탭을 가렸거나 앱을 내려 둠(폰 홈 키) — 연결은 그대로 두고 캐릭터 대사만 안 냄 */
-const away = () => typeof document !== "undefined" && document.hidden;
-
 export function playVoice(char: string, name: string, big = false) {
   const s = getSound();
   if (s.mute || s.voice <= 0 || away()) return;

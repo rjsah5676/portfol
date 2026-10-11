@@ -251,7 +251,7 @@ export default function PokerApp({ rank }: { rank: RankRow[] | null }) {
       {/* 게임방 안에서는 상점 없이 옷장(지금 캐릭터 스킨 갈아입기)만 */}
       {!tableId && <TopBtn label="상점" icon={SHOP_ICON} gold onClick={() => setShop("shop")} />}
       <TopBtn label="옷장" icon={CLOSET_ICON} onClick={() => setShop("closet")} />
-      {wallet && (
+      {wallet && !tableId && (
         <button
           type="button"
           onClick={() => setMailOpen(true)}
