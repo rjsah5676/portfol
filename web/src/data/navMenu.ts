@@ -9,6 +9,7 @@ import imgFight from "@/img/menu/fight.jpg";
 import imgRhythm from "@/img/menu/rhythm.jpg";
 import imgSketch from "@/img/menu/sketch.jpg";
 import imgPoker from "@/img/menu/poker.jpg";
+import imgVirus from "@/img/menu/virus.jpg";
 import imgLadder from "@/img/menu/ladder.jpg";
 import imgRoulette from "@/img/menu/roulette.jpg";
 import imgCalorie from "@/img/menu/calorie.jpg";
@@ -105,6 +106,13 @@ export const NAV_GROUPS: NavGroup[] = [
         desc: "최대 8명, 한 명이 그리고 나머지가 맞히기",
         icon: "🎨",
         featured: true,
+      },
+      {
+        href: "/games/virus",
+        image: imgVirus,
+        label: "바이러스 키우기",
+        desc: "파일을 감염시키고 전설의 바이러스를 격퇴하는 방치형",
+        icon: "👾",
       },
       {
         href: "/games/melongame",

@@ -35,6 +35,18 @@ export const LEVEL = {
   fight: { sfx: lv(-7) },
   /** 지뢰찾기 합성음 (lib/sfx.ts 의 깃발 · 칸 열기 · 폭발) */
   mine: lv(-7),
+  /**
+   * 바이러스 키우기 테마곡 (public/virus/bgm-theme.mp3, 통합 -13.2 LUFS — 2026-10-12 측정).
+   * 처음엔 격투 배경음악에 맞춰 -7 dB → "배경음이 너무 작다"(2026-10-12)고 해서 +6 dB 올려 -1 dB.
+   */
+  virus: {
+    bgm: lv(-1),
+    /**
+     * 효과음 (lib/virus/sfx.ts — 소리마다 따로 맞춘 배수 위에 곱함).
+     * 격투 효과음과 같은 -7 dB 로 시작 → "효과음이 너무 크다"(2026-10-12)고 해서 -6 dB 더 내려 -13 dB.
+     */
+    sfx: lv(-13),
+  },
   rhythm: {
     /** 곡은 곡마다 크기를 재서 이 크기로 맞춤 (음악 슬라이더 100% 기준) */
     musicLufs: -21 + MASTER_DB,
@@ -70,7 +82,8 @@ export function measureLufs(buf: AudioBuffer): number {
   }
   // 0.4초 창(0.1초씩 겹침)의 채널 합 평균 제곱
   const blocks: number[] = [];
-  for (let k = 0; k + 4 <= n; k++) blocks.push((sums[k] + sums[k + 1] + sums[k + 2] + sums[k + 3]) / (step * 4));
+  for (let k = 0; k + 4 <= n; k++)
+    blocks.push((sums[k] + sums[k + 1] + sums[k + 2] + sums[k + 3]) / (step * 4));
   const lufs = (ms: number) => -0.691 + 10 * Math.log10(ms + 1e-20);
   const loud = blocks.filter((ms) => lufs(ms) > -70);
   if (!loud.length) return -70;
