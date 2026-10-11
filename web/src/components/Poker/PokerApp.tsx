@@ -185,8 +185,10 @@ export default function PokerApp({ rank }: { rank: RankRow[] | null }) {
   }, [tableId, onIntro]);
   // 페이지에 들어와 로비가 처음 뜨면 내 캐릭터가 인사 (소리는 브라우저가 막으면 첫 터치 · 클릭 때 나옴)
   const greeted = useRef(false);
+  // 폰에서 "전체화면으로 플레이해 주세요" · "가로로 돌려 주세요" 안내가 덮고 있는 동안은 인사 안 함 (로비가 보일 때 함)
+  const gated = phone && ((!fs && canFs && !standalone) || !land);
   useEffect(() => {
-    if (greeted.current || onIntro || tableId || !wallet) return;
+    if (greeted.current || onIntro || tableId || !wallet || gated) return;
     const look = lookOf(wallet.char, wallet.wear);
     const say = () => {
       if (greeted.current) return;
@@ -205,7 +207,7 @@ export default function PokerApp({ rank }: { rank: RankRow[] | null }) {
       el.removeEventListener("pointerdown", say);
       window.removeEventListener("keydown", say);
     };
-  }, [onIntro, tableId, wallet]);
+  }, [onIntro, tableId, wallet, gated]);
   // 포커 페이지를 떠나면 배경음악 끔 (사이트 안에서 다른 페이지로 가도 계속 나오던 것)
   useEffect(() => () => playBgm(null), []);
   const toggleFs = () => {
