@@ -20,9 +20,10 @@ export default function Contact() {
           data-no-drag
           className="flex cursor-text flex-col gap-2 font-mono text-sm text-white/60 select-text"
         >
-          <li>010-6385-4676</li>
           <li>rjsah5676@gmail.com</li>
         </ul>
+        {/* 사이트를 처음 만든 때 (아카이브 "Gunmo's Dev Life 개발 시작") */}
+        <div className="font-mono text-[11px] tracking-wide text-white/25">since 2021.07</div>
         <button
           id="exit-button"
           type="button"

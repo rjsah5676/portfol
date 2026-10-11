@@ -2,6 +2,7 @@ import Link from "next/link";
 import gitImg from "../img/footer/github.png";
 import FooterWidgets from "./FooterWidgets";
 import ContactButton from "./ContactButton";
+import InquiryButton from "./InquiryButton";
 
 export default function Footer() {
   return (
@@ -28,6 +29,8 @@ export default function Footer() {
       <div className="flex items-center justify-center gap-2 font-mono text-xs text-white/40">
         {/* 모바일에서 오른쪽 아래 플로팅 버튼에 가리지 않게 맨 앞에 둠 */}
         <ContactButton />
+        <span className="text-white/20">·</span>
+        <InquiryButton />
         <span className="text-white/20">·</span>
         <a
           href="https://github.com/rjsah5676"
