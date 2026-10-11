@@ -49,8 +49,8 @@ export default function FightPage() {
       <div className="mx-auto max-w-5xl px-3 pt-6 pb-24 sm:px-6">
         <GameHeader
           icon="🥊"
-          title="픽셀 격투"
-          en="Pixel Fighter"
+          title="PIXEL FIGHT"
+          en="Fighting Game"
           accent="#FF8A3D"
           desc="도트 캐릭터 6명의 1:1 플랫폼 대전 — AI, 한 키보드 2인, 온라인 · 랭크전"
           guide={FIGHT_GUIDE}
