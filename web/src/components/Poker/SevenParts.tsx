@@ -359,7 +359,12 @@ export function SevenBar({
             data-k={b.k}
             disabled={live ? !on : !canPre}
             aria-pressed={!live && canPre ? pre === b.key : undefined}
-            onClick={() => (live ? b.act && onAct(b.act) : onPre(b.key))}
+            onClick={() => {
+              // 누른 줄 알게 딸깍
+              sfx.click();
+              if (live) b.act && onAct(b.act);
+              else onPre(b.key);
+            }}
             className="pk-sbtn relative flex h-full min-w-0 flex-1 flex-col items-center justify-center whitespace-nowrap"
           >
             {live && b.amt !== undefined && (
