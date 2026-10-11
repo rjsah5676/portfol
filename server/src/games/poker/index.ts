@@ -103,6 +103,8 @@ const KICK_MIN_HANDS = 3;
 const KICK_BAN_MS = 30 * 60_000;
 
 interface Table {
+  /** 방금 누가 행동함 → 다음 카드 · 쇼다운 전에 잠깐 쉼 (행동 글자 · 칩 · 올인 컷인이 패 까기와 겹치지 않게). allin = 올인 컷인 길이만큼 */
+  grace?: "act" | "allin";
   id: string;
   name: string;
   game: GameKind;
@@ -283,6 +285,7 @@ export function registerPoker({ gateway, db, users }: Deps, opts: PokerOptions =
   function emit(t: Table, ...ev: PokerEvent[]) {
     if (t.closed) return;
     t.ev.push(...ev);
+    for (const e of ev) if (e.t === "act") t.grace = e.a === "allin" || t.grace === "allin" ? "allin" : "act";
     for (const e of t.ev) {
       if (e.t !== "say") continue;
       const s = t.seats[e.seat];
@@ -539,6 +542,14 @@ export function registerPoker({ gateway, db, users }: Deps, opts: PokerOptions =
     if (round.done()) return settle(t);
 
     const waiting = round.waiting();
+    if (!waiting.length && t.grace) {
+      // 베팅이 막 끝남: 마지막 행동 연출을 보여 주고 넘어감 (올인은 컷인 1.7초를 다 보여 줌)
+      const g = t.grace === "allin" ? 1700 : 550;
+      t.grace = undefined;
+      t.deadline = 0;
+      return later(t, ms(g), () => pump(t));
+    }
+    t.grace = undefined;
     if (!waiting.length) {
       for (const h of t.actTimers.values()) clearTimeout(h);
       t.actTimers.clear();
