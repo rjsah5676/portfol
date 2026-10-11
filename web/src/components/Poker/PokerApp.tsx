@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import NickForm from "@/components/Account/NickForm";
 import { useAuth } from "@/lib/AuthContext";
 import DevPanel from "./DevPanel";
+import Mailbox from "./Mailbox";
 import { asset } from "@/lib/poker/assets";
 import {
   getSound,
@@ -79,6 +80,14 @@ export default function PokerApp({ rank }: { rank: RankRow[] | null }) {
   const [failed, setFailed] = useState("");
   const [loginError, setLoginError] = useState("");
   const [revived, setRevived] = useState<{ text: string; key: number } | null>(null);
+  // 우편함 · 오늘 첫 접속 출석 보상 안내
+  const [mailOpen, setMailOpen] = useState(false);
+  const [attendNote, setAttendNote] = useState<{ text: string; key: number } | null>(null);
+  useEffect(() => {
+    if (!attendNote) return;
+    const t = setTimeout(() => setAttendNote(null), 5000);
+    return () => clearTimeout(t);
+  }, [attendNote]);
   useEffect(() => {
     if (!revived) return;
     const t = setTimeout(() => setRevived(null), 3200);
@@ -93,6 +102,11 @@ export default function PokerApp({ rank }: { rank: RankRow[] | null }) {
       (w) => {
         setWallet(w);
         setFailed("");
+        if (w?.attended)
+          setAttendNote({
+            text: `출석 보상 칩 ${fmtShort(w.attended)}이 우편함에 도착했어요 · 우편함에서 받아 주세요`,
+            key: Date.now(),
+          });
         if (w?.revived)
           setRevived({
             text: `기본 칩 ${fmtShort(w.revived.amount)}이 지급됐어요 · 오늘 ${w.revived.left}회 남았어요`,
@@ -218,6 +232,21 @@ export default function PokerApp({ rank }: { rank: RankRow[] | null }) {
       {admin && <TopBtn label="테스트" icon={DEV_ICON} onClick={() => setDevOpen(true)} />}
       <TopBtn label="상점" icon={SHOP_ICON} gold onClick={() => setShop("shop")} />
       <TopBtn label="옷장" icon={CLOSET_ICON} onClick={() => setShop("closet")} />
+      {wallet && (
+        <button
+          type="button"
+          onClick={() => setMailOpen(true)}
+          title="우편함"
+          className={`pk-btn pk-btn-ghost relative flex h-[30px] items-center gap-[0.3em] px-[0.6em] text-[0.78em] ${wallet.mail ? "pk-mail-new" : ""}`}
+        >
+          <svg viewBox="0 0 24 24" className="h-[15px] w-[15px]" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <rect x="3" y="5" width="18" height="14" rx="2" />
+            <path d="m3.5 6.5 8.5 6.5 8.5-6.5" />
+          </svg>
+          <span className="hidden sm:inline">우편함</span>
+          {wallet.mail > 0 && <span className="pk-mail-badge">{wallet.mail}</span>}
+        </button>
+      )}
       <Settings tableId={tableId} />
       {(canFs || fs) && (
         <button
@@ -412,6 +441,25 @@ export default function PokerApp({ rank }: { rank: RankRow[] | null }) {
               go(id);
             }}
           />
+        )}
+        {mailOpen && wallet && (
+          <Mailbox
+            mobile={o === "v"}
+            maxH={size.h - (o === "h" ? 24 : 8)}
+            onClose={() => setMailOpen(false)}
+            onWallet={setWallet}
+          />
+        )}
+        {attendNote && (
+          <button
+            type="button"
+            key={attendNote.key}
+            className="pk-toast pk-attend-toast"
+            style={{ top: 52, bottom: "auto", animationDuration: "5s" }}
+            onClick={() => (setAttendNote(null), setMailOpen(true))}
+          >
+            🎁 {attendNote.text}
+          </button>
         )}
         {revived && (
           <div

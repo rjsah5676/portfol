@@ -933,11 +933,13 @@ export function registerPoker({ gateway, db, users }: Deps, opts: PokerOptions =
   gateway.channel("poker.wallet", {
     key: (ctx) => walletKey(member(ctx).uid),
     async snapshot(ctx) {
+      // 오늘 첫 접속이면 출석 보상 우편 (받기는 우편함에서)
+      const attended = await wallet.attend(ctx.uid).catch(() => 0);
       // 접속했을 때 칩이 바닥나 있으면 기본 칩부터 지급
       const got = await autoRevive(ctx.uid).catch(() => null);
-      if (got) return got;
+      if (got) return attended ? { ...got, attended } : got;
       const w = await wallet.get(ctx.uid);
-      return w ? walletWire(ctx.uid, w) : null;
+      return w ? { ...walletWire(ctx.uid, w), ...(attended ? { attended } : {}) } : null;
     },
   });
 
@@ -1572,6 +1574,19 @@ export function registerPoker({ gateway, db, users }: Deps, opts: PokerOptions =
       recent,
       stats,
     };
+  });
+
+  /** 우편함 */
+  gateway.rpc("poker.mail", async (ctx) => wallet.mail(member(ctx).uid));
+  /** 우편 받기 (id 없으면 전부) */
+  gateway.rpc("poker.mailClaim", async (ctx, raw) => {
+    const { uid } = member(ctx);
+    const { id } = z.object({ id: z.string().max(40).optional() }).parse(raw ?? {});
+    const r = await wallet.claim(uid, id);
+    // 앉아 있는 테이블이 쉬고 있으면 늘어난 칩으로 바로 다음 판을 시도
+    const t = tables.get(seatOf.get(uid) ?? "");
+    if (t && r.got) nudge(t, 600);
+    return { got: r.got, wallet: r.wallet ? walletWire(uid, r.wallet) : null };
   });
 
   gateway.rpc("poker.revive", async (ctx) => {

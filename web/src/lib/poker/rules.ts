@@ -20,6 +20,8 @@ export const START_MONEY = 1 * EOK;
 
 /** 회생: 보유금액이 under 미만이면 amount 를 받음, 하루 perDay 번 (한국 시간 자정에 초기화) */
 export const REVIVE = { amount: 1000 * MAN, under: 500 * MAN, perDay: 10 } as const;
+/** 매일 첫 접속 출석 보상 (우편함으로 와서 「받기」를 눌러야 들어옴) */
+export const ATTEND_REWARD = 3000 * MAN;
 
 /*
  * 방 단계: 리그 3개(일반 · 도박꾼 · 타짜) × 방 3개 = 9단계. 판돈은 단계마다 계속 올라감

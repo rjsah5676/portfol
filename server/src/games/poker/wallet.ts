@@ -1,8 +1,9 @@
 import type { Database } from "../../db";
 import { AppError } from "../../errors";
 import { pictureOf, type UserDoc } from "../../users";
-import { CHAR_PRICE, REVIVE, charOwned, START_MONEY, charOf, fmtWon, kstDay, lookOf, skinOf, type CharId, type GameKind, type SkinId, type Wear } from "../../../../web/src/lib/poker/rules";
-import type { BuyRankRow, RankRow } from "../../../../web/src/lib/poker/types";
+import { ATTEND_REWARD, CHAR_PRICE, REVIVE, charOwned, START_MONEY, charOf, fmtWon, kstDay, lookOf, skinOf, type CharId, type GameKind, type SkinId, type Wear } from "../../../../web/src/lib/poker/rules";
+import type { BuyRankRow, MailItem, RankRow } from "../../../../web/src/lib/poker/types";
+import { newId } from "../../ids";
 
 /*
  * 포커 자금 (회원의 users 문서에 money 로 저장).
@@ -25,6 +26,8 @@ export interface WalletDoc {
   wear: Wear;
   /** 산 캐릭터 (사야 쓰는 캐릭터 중 가진 것) */
   chars: CharId[];
+  /** 안 받은 우편 수 */
+  mail: number;
 }
 
 export interface SettleEntry {
@@ -37,8 +40,14 @@ export interface SettleEntry {
   wonAmount: number;
 }
 
-type MoneyFields = Pick<UserDoc, "nick"> & { money?: number; revive?: { day: string; n: number }; poker?: { char?: string; skins?: string[]; wear?: Record<string, string>; chars?: string[] } };
-const WALLET_PROJ = { nick: 1, money: 1, revive: 1, "poker.char": 1, "poker.skins": 1, "poker.wear": 1, "poker.chars": 1 } as const;
+type MoneyFields = Pick<UserDoc, "nick"> & {
+  money?: number;
+  revive?: { day: string; n: number };
+  poker?: { char?: string; skins?: string[]; wear?: Record<string, string>; chars?: string[]; attend?: string; mail?: MailItem[] };
+};
+const WALLET_PROJ = { nick: 1, money: 1, revive: 1, "poker.char": 1, "poker.skins": 1, "poker.wear": 1, "poker.chars": 1, "poker.mail": 1 } as const;
+/** 우편함에 쌓아 두는 최대 수 (넘으면 오래된 것부터 사라짐) */
+const MAIL_KEEP = 30;
 
 /** 문서의 산 캐릭터 목록 (가격이 있는 캐릭터만) */
 const ownedChars = (p?: MoneyFields["poker"]): CharId[] => [...new Set(p?.chars ?? [])].filter((c) => (CHAR_PRICE[c] ?? 0) > 0) as CharId[];
@@ -70,6 +79,7 @@ export function createWallet(db: Database, now: () => number = Date.now) {
       char: charOwned(c, chars) ? c : "jinwoo",
       ...skinsOf(d.poker),
       chars,
+      mail: d.poker?.mail?.length ?? 0,
     };
   };
 
@@ -137,6 +147,49 @@ export function createWallet(db: Database, now: () => number = Date.now) {
         throw new AppError("REVIVE_LIMIT", "오늘 회생은 다 썼어요. 자정에 다시 채워져요.", 409);
       }
       return (await changed(uid))!;
+    },
+
+    /**
+     * 출석: 오늘(KST) 처음이면 출석 보상 우편을 넣음. 조건 확인과 넣기를 updateOne 하나로 — 여러 탭에서 동시에 접속해도 하루 한 번.
+     * 넣었으면 금액, 이미 받은 날이면 0
+     */
+    async attend(uid: string): Promise<number> {
+      const day = kstDay(now());
+      const item: MailItem = { id: newId(10), kind: "attend", amount: ATTEND_REWARD, day, at: now() };
+      const r = await col.updateOne(
+        { _id: uid, nick: { $exists: true }, "poker.attend": { $ne: day } },
+        { $set: { "poker.attend": day }, $push: { "poker.mail": { $each: [item], $slice: -MAIL_KEEP } } } as never
+      );
+      if (!r.modifiedCount) return 0;
+      await changed(uid);
+      return ATTEND_REWARD;
+    },
+
+    /** 우편함 (최근 것부터) */
+    async mail(uid: string): Promise<MailItem[]> {
+      const d = (await col.findOne({ _id: uid }, { projection: { "poker.mail": 1 } })) as MoneyFields | null;
+      return [...(d?.poker?.mail ?? [])].reverse();
+    },
+
+    /**
+     * 우편 받기: 우편을 빼는 것과 칩을 올리는 것을 updateOne 하나로 (두 번 눌러도 한 번만 들어감).
+     * id 를 안 주면 전부. 받은 칩 합계를 돌려줌
+     */
+    async claim(uid: string, id?: string): Promise<{ got: number; wallet: WalletDoc | null }> {
+      await materialize([uid]);
+      const list = ((await col.findOne({ _id: uid }, { projection: { "poker.mail": 1 } })) as MoneyFields | null)?.poker?.mail ?? [];
+      let got = 0;
+      for (const m of list) {
+        if (id && m.id !== id) continue;
+        const r = await col.updateOne(
+          { _id: uid, "poker.mail.id": m.id },
+          // (그 우편 통째로 빼기 — 조건식 $pull 은 FerretDB 가 못 알아들어서)
+          { $pull: { "poker.mail": m }, $inc: { money: m.amount } } as never
+        );
+        if (r.modifiedCount) got += m.amount;
+      }
+      if (id && !got) throw new AppError("NO_MAIL", "이미 받았거나 없는 우편이에요.", 409);
+      return { got, wallet: got ? await changed(uid) : await get(uid) };
     },
 
     /** 판 정산: 사람마다 증감을 반영하고 기록(판 수 · 이긴 판 · 가장 크게 먹은 판)을 올림 */

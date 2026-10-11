@@ -43,6 +43,21 @@ export interface Wallet {
   chars: CharId[];
   /** 방금 칩이 바닥나서 기본 칩을 자동으로 받았으면 (알림용, 그때 한 번만 옴) */
   revived?: { amount: number; left: number };
+  /** 우편함에 안 받은 우편 수 */
+  mail: number;
+  /** 오늘 첫 접속이라 출석 보상이 우편함에 막 들어왔으면 그 금액 (알림용, 그때 한 번만 옴) */
+  attended?: number;
+}
+
+/** 우편 (받기를 눌러야 칩이 들어옴) */
+export interface MailItem {
+  id: string;
+  kind: "attend";
+  /** 받을 칩 */
+  amount: number;
+  /** 보낸 날 (KST "YYYY-MM-DD") */
+  day: string;
+  at: number;
 }
 
 export interface SeatWire {

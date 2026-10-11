@@ -7,6 +7,7 @@ import type {
   DevOpts,
   HoldemAction,
   LobbyTable,
+  MailItem,
   MyHand,
   MyPage,
   BuyRankRow,
@@ -103,6 +104,10 @@ export const devSet = (
   id: string,
   o: Partial<DevOpts> & { refill?: boolean; addBot?: CharId; removeSeat?: number; next?: boolean }
 ) => rpc<DevOpts>("poker.devSet", { id, ...o });
+/** 우편함 (최근 것부터) */
+export const getMail = () => rpc<MailItem[]>("poker.mail");
+/** 우편 받기 (id 없으면 전부) */
+export const claimMail = (id?: string) => rpc<{ got: number; wallet: Wallet | null }>("poker.mailClaim", { id });
 export const sit = (id: string, password?: string) =>
   rpc<{ seat: number }>("poker.sit", { id, password });
 export const leave = (id: string) => rpc("poker.leave", { id });
