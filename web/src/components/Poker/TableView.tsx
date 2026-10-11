@@ -635,9 +635,11 @@ export default function TableView({
             const text = ex
               ? exitAskRef.current
                 ? "나가기 예약 · 이번 판이 끝나면 나가요"
-                : "시간 안에 안 골라서 나가기 예약됐어요 · 계속 치려면 「예약 취소」"
+                : "시간 초과로 나가기 예약됐어요 · 계속 치려면 「예약 취소」"
               : "나가기 예약을 취소했어요";
             setInfo({ text, key: Date.now() });
+            // 나가기 예약이 걸리면 따르릉 (직접 눌렀든 시간 초과든)
+            if (ex) playSfx("sfx-exit");
             exitAskRef.current = false;
           }
           exitMineRef.current = mine ? ex : null;
