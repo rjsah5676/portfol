@@ -26,7 +26,6 @@ export default function PixelPreview({ id, flip, className = "" }: { id: string;
     let sh: LoadedSheet | null = null;
     let alive = true;
     let raf = 0;
-    let ext: { idle: number } | null = null;
     loadSheet(id)
       .then((s) => alive && (sh = s))
       .catch(() => {});
@@ -57,14 +56,13 @@ export default function PixelPreview({ id, flip, className = "" }: { id: string;
       const a = sh.anims[seq[i][0]];
       const k = Math.min(a.frames - 1, Math.floor(t * a.fps) % a.frames);
       const fr = frameRect(sh, a, k);
-      // 배율: 서 있는 키를 칸 높이의 62%로 (캐릭터마다 같은 크기 — 채찍 · 필살기처럼 아주 긴 그림은 칸 밖이 잘림)
-      if (!ext) ext = { idle: frameRect(sh, sh.anims[sh.states.idle?.anim ?? "idle"] ?? a, 0).ay };
-      const sc = (H * 0.62) / Math.max(1, ext.idle);
+      // 서 있는 키 기준으로 맞춤 (동작마다 크기가 달라도 같은 배율)
+      const idle = frameRect(sh, sh.anims[sh.states.idle?.anim ?? "idle"] ?? a, 0);
+      const sc = (H * 0.86) / Math.max(1, idle.ay);
       g.imageSmoothingEnabled = !sh.pixel;
       g.imageSmoothingQuality = "high";
       g.save();
-      // 앞쪽(공격 나가는 쪽)에 자리를 조금 더
-      g.translate(W * (flip ? 0.62 : 0.38), H * 0.96);
+      g.translate(W / 2, H * 0.96);
       const faceRight = (sh.facing ?? "right") === "right";
       if (faceRight === !!flip) g.scale(-1, 1);
       g.drawImage(sh.img, fr.sx, fr.sy, fr.sw, fr.sh, -fr.ax * sc, -fr.ay * sc, fr.sw * sc, fr.sh * sc);

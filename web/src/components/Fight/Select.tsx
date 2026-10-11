@@ -701,7 +701,7 @@ export default function Select({
                     className={`absolute bottom-[1cqw] ${sd === 0 ? "left-[1cqw]" : "right-[1cqw]"} z-10 flex flex-col items-center rounded-[0.8cqw] border border-white/15 bg-black/55 px-[0.4cqw] pt-[0.3cqw] backdrop-blur-[2px]`}
                   >
                     <span className={`${KR} text-[0.9cqw] text-white/50`}>게임 속 모습</span>
-                    <PixelPreview key={c.id} id={c.id} flip={sd === 1} className="h-[10cqw] w-[12cqw]" />
+                    <PixelPreview key={c.id} id={c.id} flip={sd === 1} className="h-[10cqw] w-[9cqw]" />
                   </div>
                 )}
               </div>
