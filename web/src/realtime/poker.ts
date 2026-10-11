@@ -4,6 +4,7 @@ import type { ApiError } from "@/lib/api/errors";
 import type { CharId, Emote, GameKind, SkinId, TierId } from "@/lib/poker/rules";
 import type {
   ChatMsg,
+  DevOpts,
   HoldemAction,
   LobbyTable,
   MyHand,
@@ -94,6 +95,14 @@ export const createTable = (o: {
 /** 방 설정 (바로 입장 허용 · 봇 참가 가능): 값을 안 주면 읽기만. 바꾸는 건 방장만 */
 export const roomOpts = (id: string, set?: { quick?: boolean; bots?: boolean }) =>
   rpc<{ owner: boolean; quick: boolean; bots: boolean }>("poker.roomOpts", { id, ...set });
+/** 관리자 테스트 방 열기 (돌려준 id 로 sit) */
+export const devCreate = (o: { game: GameKind; tier: TierId; bots: CharId[] } & Partial<DevOpts>) =>
+  rpc<string>("poker.devCreate", o);
+/** 테스트 방 바꾸기 */
+export const devSet = (
+  id: string,
+  o: Partial<DevOpts> & { refill?: boolean; addBot?: CharId; removeSeat?: number; next?: boolean }
+) => rpc<DevOpts>("poker.devSet", { id, ...o });
 export const sit = (id: string, password?: string) =>
   rpc<{ seat: number }>("poker.sit", { id, password });
 export const leave = (id: string) => rpc("poker.leave", { id });

@@ -221,6 +221,17 @@ export interface TableWire {
   /** 직전 상태 이후에 일어난 일 */
   ev: PokerEvent[];
   seq: number;
+  /** 관리자 테스트 방 설정 (테스트 방일 때만) */
+  dev?: DevOpts;
+}
+
+/** 관리자 테스트 방: speed = 진행 기다림 배수, sd = 쇼다운 연출 배수, mode = 봇 행동, stack = 내 칩, limit = 내 제한 시간(ms) */
+export interface DevOpts {
+  speed: number;
+  sd: number;
+  mode: "normal" | "call" | "allin";
+  stack: number;
+  limit: number;
 }
 
 /** 나만 보는 것 */

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 
 import { useRouter, useSearchParams } from "next/navigation";
 import NickForm from "@/components/Account/NickForm";
 import { useAuth } from "@/lib/AuthContext";
+import DevPanel from "./DevPanel";
 import { asset } from "@/lib/poker/assets";
 import {
   getSound,
@@ -70,7 +71,9 @@ export default function PokerApp({ rank }: { rank: RankRow[] | null }) {
   const router = useRouter();
   const params = useSearchParams();
   const tableId = params.get("t");
-  const { loading, account, profile, login } = useAuth();
+  const { loading, account, profile, login, admin } = useAuth();
+  // 관리자 전용 개발자 창 (테스트 방 · 음성 · 효과음)
+  const [devOpen, setDevOpen] = useState(false);
   const [wallet, setWallet] = useState<Wallet | null>(null);
   const [shop, setShop] = useState<ShopTab | "">("");
   const [failed, setFailed] = useState("");
@@ -212,6 +215,7 @@ export default function PokerApp({ rank }: { rank: RankRow[] | null }) {
   const o: Orient = size.w > size.h * 1.05 ? "h" : "v";
   const topRight = (
     <>
+      {admin && <TopBtn label="테스트" icon={DEV_ICON} onClick={() => setDevOpen(true)} />}
       <TopBtn label="상점" icon={SHOP_ICON} gold onClick={() => setShop("shop")} />
       <TopBtn label="옷장" icon={CLOSET_ICON} onClick={() => setShop("closet")} />
       <Settings tableId={tableId} />
@@ -397,6 +401,17 @@ export default function PokerApp({ rank }: { rank: RankRow[] | null }) {
             onClose={() => setShop("")}
           />
         )}
+        {admin && devOpen && (
+          <DevPanel
+            mobile={o === "v"}
+            maxH={size.h - (o === "h" ? 24 : 8)}
+            onClose={() => setDevOpen(false)}
+            onEnter={(id) => {
+              setDevOpen(false);
+              go(id);
+            }}
+          />
+        )}
         {revived && (
           <div
             key={revived.key}
@@ -460,6 +475,7 @@ function TopBtn({
     </button>
   );
 }
+const DEV_ICON = <path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.6 2.6-2.4-.6-.6-2.4z" />;
 const SHOP_ICON = (
   <>
     <path d="M5 8h14l-1.2 11.2a1 1 0 0 1-1 .8H7.2a1 1 0 0 1-1-.8z" />

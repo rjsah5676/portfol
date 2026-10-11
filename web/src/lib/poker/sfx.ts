@@ -403,6 +403,34 @@ async function spawn(url: string, real: string, ms: number) {
 /** 그 이름의 소리 파일이 있나 */
 export const hasSound = (name: string) => !!fileOf(name);
 
+/** 관리자 테스트: 소리 파일 이름 전부 (manifest 를 받은 뒤) */
+export async function soundNames(): Promise<string[]> {
+  loadManifest();
+  await manifestLoading;
+  return Object.keys(manifest ?? {}).sort();
+}
+
+/** 관리자 테스트: manifest 이름 그대로 한 번 틂 (음성은 음성 크기 · 앞 음성 끊음, 나머지는 효과음 크기). 길이(초)를 돌려줌 */
+export async function playExact(name: string): Promise<number> {
+  const s = getSound();
+  const file = manifest?.[name];
+  const c = ac();
+  if (!file || !c || s.mute) return 0;
+  const buf = await buffer(`${BASE}/${file}`);
+  if (!buf) return 0;
+  if (name.startsWith("voice/")) playBuf(c, buf, s.voice);
+  else {
+    const src = c.createBufferSource();
+    src.buffer = buf;
+    const g = c.createGain();
+    g.gain.value = s.sfx;
+    src.connect(g);
+    g.connect(c.destination);
+    src.start();
+  }
+  return buf.duration;
+}
+
 /** 짧은 소리. 파일이 있으면 파일, 없으면 합성음 */
 export function playSfx(name: string, gain = 1) {
   const s = getSound();

@@ -82,6 +82,7 @@ import {
   TimerRing,
 } from "./parts";
 import { SevenBar, SevenChoice, SevenStage, sevenHint, sevenSeatCards } from "./SevenParts";
+import { DevBar } from "./DevPanel";
 
 /*
  * 테이블 화면 (홀덤 · 7포커 공용). 무대(stage) 안에서 그려지고, 무대의 가로·세로에 따라 세로판(폰) / 가로판(PC)으로 배치가 바뀜.
@@ -691,6 +692,10 @@ export default function TableView({
     return () => clearTimeout(id);
   }, [dealFx]);
 
+  const sdRef = useRef(1);
+  useEffect(() => {
+    sdRef.current = table?.dev?.sd ?? 1;
+  }, [table?.dev?.sd]);
   // 패 까기 (한게임 템포): 내 자리부터 시계 방향으로 한 사람씩 — 카드가 뒤집히고, 뒤집힌 카드가 보일 즈음 그 사람이 족보를 읊음.
   // 다음 사람은 앞사람 대사가 절반쯤 나왔을 때 깜 (대사가 없으면 7포커 0.33초 · 홀덤 0.09초). 다 깐 뒤 결과(승리 · 패배 동작과 대사)
   useEffect(() => {
@@ -700,7 +705,9 @@ export default function TableView({
     const step = reveal.step;
     /** 카드가 뒤집혀 앞면이 보일 즈음 대사 시작 (뒤집기 0.34초 · 7포커는 엎은 카드가 0.09초씩 차례로) */
     const lag = seven ? 300 : 260;
-    const base = step === 0 ? 150 : step === n ? (seven ? 320 : 380) : seven ? 330 : 90;
+    // 관리자 테스트 방: 쇼다운 연출 배수 (카드 → 대사 간격 lag 은 그대로, 다음 사람까지의 간격만)
+    const sd = sdRef.current;
+    const base = (step === 0 ? 150 : step === n ? (seven ? 320 : 380) : seven ? 330 : 90) * sd;
     const key = reveal.key;
     let id: ReturnType<typeof setTimeout> | undefined;
     let dead = false;
@@ -723,7 +730,7 @@ export default function TableView({
     if (prev) {
       void voiceDuration(prev.look, prev.line).then((d) => {
         if (dead) return;
-        const talk = (reveal.shown ? 0 : lag) + (d ?? 0) * 1000 * 0.5;
+        const talk = (reveal.shown ? 0 : lag) + (d ?? 0) * 1000 * 0.5 * sd;
         id = setTimeout(run, Math.max(base, talk + (step === n ? 150 : 0)));
       });
     } else id = setTimeout(run, base);
@@ -2458,6 +2465,14 @@ export default function TableView({
         </div>
       )}
 
+      {table.dev && (
+        <DevBar
+          id={id}
+          dev={table.dev}
+          seats={table.seats}
+          onCutin={(look, name) => setCutin({ char: look as Look, name, key: ++keyRef.current })}
+        />
+      )}
       {cutin && (
         <CutIn
           key={cutin.key}
