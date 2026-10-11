@@ -34,7 +34,7 @@ import {
 } from "@/lib/poker/rules";
 import { bestK, kCategory } from "@/lib/poker/seven";
 import { topHands } from "@/lib/poker/showdown";
-import { hasSound, isBig, playBgm, playSfx, playVoice, playVoiceNow, sfx, voiceDuration } from "@/lib/poker/sfx";
+import { hasSound, isBig, playBgm, playSfx, playVoice, playVoiceNow, pressedJust, sfx, voiceDuration } from "@/lib/poker/sfx";
 import type {
   HoldemAction,
   HoldemView,
@@ -367,11 +367,13 @@ export default function TableView({
               if (ch)
                 playVoice(ch, e.a === "call" && anyAllIn && !e.allIn ? "allin-call" : e.a, big);
             }
+            // 내가 버튼으로 낸 행동은 누를 때 소리가 이미 났으니 칩 · 다이 · 체크 소리는 건너뜀 (겹쳐 두 번 들리던 것)
+            const quiet = e.seat === mySeat && pressedJust();
             if (e.a === "fold" || e.a === "die") {
-              sfx.fold();
+              if (!quiet) sfx.fold();
               pose[e.seat] = { v: "die", until: now + 1600 };
             } else if (e.a === "check") {
-              sfx.check();
+              if (!quiet) sfx.check();
               pose[e.seat] = { v: "check", until: now + 1200 };
             } else if (e.a === "allin") {
               sfx.allin();
@@ -382,7 +384,9 @@ export default function TableView({
               for (const q of t.seats)
                 if (q && q.seat !== e.seat) face[q.seat] = { v: "shock", until: now + 2200 };
             } else {
-              if (isBig(amt, ante)) sfx.chipBig();
+              if (quiet) {
+                /* 누름 소리로 대신 */
+              } else if (isBig(amt, ante)) sfx.chipBig();
               else sfx.chip();
               pose[e.seat] = { v: "bet", until: now + 1400 };
               // 칩 던지기: 건 돈이 클수록 여러 개
@@ -3270,7 +3274,10 @@ function ActionBar(props: {
               type="button"
               disabled={!preOpen}
               aria-pressed={pre === k}
-              onClick={() => onPre(k)}
+              onClick={() => {
+                sfx.press("ui");
+                onPre(k);
+              }}
               className={`pk-btn ${cls} pk-prebig relative flex min-w-0 flex-1 flex-col items-center justify-center px-[0.2em] py-[0.55em] whitespace-nowrap`}
             >
               <span className="text-[1.02em]">{label}</span>

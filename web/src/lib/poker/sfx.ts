@@ -98,6 +98,13 @@ function unlock() {
   unlocked = true;
   ac();
   if (wantBgm) void startBgm(wantBgm);
+  // 버튼 누름 소리는 처음 누를 때 받느라 늦지 않게 미리 받아 둠
+  void manifestLoading?.then(() => {
+    for (const n of ["sfx-press-die", "sfx-press-call", "sfx-press-bet", "sfx-press-ui", "sfx-check"]) {
+      const u = fileOf(n);
+      if (u) void buffer(u);
+    }
+  });
 }
 if (typeof window !== "undefined") {
   loadManifest();
@@ -569,6 +576,10 @@ export function refreshBgm() {
 export const BIG_X = 100;
 export const isBig = (amt: number, ante: number) => amt >= ante * BIG_X;
 
+/** 내가 방금 행동 버튼을 눌렀나 — 그 행동이 서버에서 돌아올 때 칩 · 다이 · 체크 소리를 또 내지 않게 (누름 소리가 대신함) */
+let pressedAt = 0;
+export const pressedJust = () => Date.now() - pressedAt < 1500;
+
 /** 예전 호출 호환 */
 export const sfx = {
   card: () => playSfx("sfx-deal"),
@@ -583,8 +594,12 @@ export const sfx = {
   tick: () => playSfx("sfx-tick"),
   tickLast: () => playSfx("sfx-tick-last"),
   click: () => playSfx("sfx-click"),
-  /** 행동 버튼 누름: 다이 = 테이블 톡, 콜·삥·체크 = 칩 탁, 따당·쿼터·하프·레이즈 = 칩 짤랑, 미리 누르기·금액 고르기 = 버튼 딸깍 */
-  press: (k: "die" | "call" | "bet" | "ui") => playSfx(`sfx-press-${k}`),
+  /** 행동 버튼 누름: 다이 = 테이블 톡, 콜·삥 = 칩 탁, 체크 = 똑똑, 따당·쿼터·하프·레이즈 = 칩 짤랑, 미리 누르기·금액 고르기 = 버튼 딸깍 */
+  press: (k: "die" | "call" | "bet" | "ui" | "check") => {
+    if (k !== "ui") pressedAt = Date.now();
+    // 체크는 남이 체크할 때와 같은 똑똑 소리
+    playSfx(k === "check" ? "sfx-check" : `sfx-press-${k}`);
+  },
   emote: () => playSfx("sfx-emote"),
   coin: () => playSfx("sfx-coin"),
   join: () => playSfx("sfx-join"),

@@ -310,7 +310,7 @@ export function HoldemActions({
           type="button"
           disabled={busy}
           onClick={() => {
-            sfx.press("call");
+            sfx.press(lg.canCheck ? "check" : "call");
             onAct({ a: lg.canCheck ? "check" : "call" });
           }}
           className={`${big} pk-btn-call`}
