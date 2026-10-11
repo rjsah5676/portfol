@@ -1135,7 +1135,7 @@ export default function TableView({
   /** 내 아바타: 왼쪽 아래를 크게 (7포커 앉은 그림은 무대 높이의 30%, 홀덤 얼굴은 20%) + 그 아래 내 정보 띠 */
   const heroAvH = seven ? Math.round(h * 0.29) : Math.round(h * 0.18);
   const heroAvW = seven ? Math.round(heroAvH * 0.75) : heroAvH;
-  const heroW = Math.max(heroAvW, Math.round(u * 25));
+  const heroW = Math.max(heroAvW, Math.round(u * 30));
   /** 이름 · 칩 띠의 높이 (무대 글자 크기 × 1.75 쯤) */
   const stripH = Math.round(Math.min(15, Math.max(12, u * 1.45 + 4.6)) * 1.75);
   /** 아바타 가운데 x — 틀이 무대 밖으로 안 나가게 */
@@ -2912,12 +2912,8 @@ function HeroArea(props: {
             // 얼굴 오른쪽 아래 D · SB 배지와 안 겹치게 왼쪽 위에
             <span className="pk-exit-mark absolute -top-[1.1em] left-[0.4em] z-20">나가기 예약</span>
           )}
-          <div className="flex items-baseline gap-[0.4em]">
-            <span className="min-w-0 flex-1 truncate text-[0.9em] font-extrabold text-white">{me.name}</span>
-            <span className="shrink-0 truncate text-[0.66em] font-bold" style={{ color: CHARS[me.char].color }}>
-              {lookName(look)}
-            </span>
-          </div>
+          {/* 이름만 (스킨 이름은 자리를 먹어 이름이 잘려서 뺌) */}
+          <div className="truncate text-[0.9em] font-extrabold text-white">{me.name}</div>
           <div className="flex items-center gap-[0.3em]">
             {}
             <img src={asset.chip("gold", "top")} alt="" className="h-[1em] w-[1em]" />
