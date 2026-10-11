@@ -202,8 +202,11 @@ const PIPS: Record<number, [number, number][]> = {
   10: [[COL_L, 0], [COL_R, 0], [50, 1], [COL_L, 2], [COL_R, 2], [COL_L, 4], [COL_R, 4], [50, 5], [COL_L, 6], [COL_R, 6]],
 };
 
+/** 무늬별 높이 맞춤 (그림 상자 안 실제 높이가 달라서 — 스페이드 95 · 하트 86 · 다이아 96 · 클로버 89) → 같은 size 면 네 무늬 키가 같음 */
+const SUIT_NORM = [96 / 95, 96 / 86, 1, 96 / 89];
+
 function Pip({ s, x, y, size, flip, sx = 1 }: { s: number; x: number; y: number; size: number; flip?: boolean; sx?: number }) {
-  const k = size / 100;
+  const k = (size / 100) * SUIT_NORM[s];
   return (
     <path
       d={FACE_PATH[s]}
@@ -220,8 +223,7 @@ const STROKE = 4;
 function Index({ r, s }: { r: string; s: number }) {
   const x = IDX_X;
   const top = BASE - CAP;
-  // 스페이드 · 하트는 같은 크기여도 커 보여서 조금 작게
-  const pip = s === 0 || s === 1 ? 21 : 24;
+  const pip = 24;
   return (
     <>
       {r === "4" ? (
@@ -292,10 +294,9 @@ function CardFace({ rank, r, s, court, covered }: { rank: number; r: string; s: 
         </>
       ) : n === 14 ? (
         // A: 가운데 큰 무늬 하나 (스페이드 A 는 더 크게 — 실제 카드처럼)
-        <Pip s={s} x={50} y={70} size={s === 0 ? 50 : s === 1 ? 44 : 50} />
+        <Pip s={s} x={50} y={70} size={s === 1 ? 42 : 48} sx={s === 2 ? PIP / 24 : 1} />
       ) : (
-        // 하트는 같은 크기여도 커 보여서 조금 작게
-        PIPS[n].map(([x, k], i) => <Pip key={i} s={s} x={x} y={yAt(k)} size={s === 1 ? PIP * 0.92 : PIP} flip={k > 3} />)
+        PIPS[n].map(([x, k], i) => <Pip key={i} s={s} x={x} y={yAt(k)} size={PIP} flip={k > 3} />)
       )}
       </g>
       <Index r={r} s={s} />
