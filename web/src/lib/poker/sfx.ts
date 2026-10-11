@@ -583,6 +583,8 @@ export const sfx = {
   tick: () => playSfx("sfx-tick"),
   tickLast: () => playSfx("sfx-tick-last"),
   click: () => playSfx("sfx-click"),
+  /** 행동 버튼 누름: 다이 = 테이블 톡, 콜·삥·체크 = 칩 탁, 따당·쿼터·하프·레이즈 = 칩 짤랑, 미리 누르기·금액 고르기 = 버튼 딸깍 */
+  press: (k: "die" | "call" | "bet" | "ui") => playSfx(`sfx-press-${k}`),
   emote: () => playSfx("sfx-emote"),
   coin: () => playSfx("sfx-coin"),
   join: () => playSfx("sfx-join"),

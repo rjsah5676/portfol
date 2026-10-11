@@ -5,6 +5,7 @@ import { evaluate, handName, rankOf, type Card } from "@/lib/poker/cards";
 import { UNIT, fmtWon, type TierId } from "@/lib/poker/rules";
 import type { HoldemAction, HoldemView, MyHand } from "@/lib/poker/types";
 import { Money, PlayingCard } from "./parts";
+import { sfx } from "@/lib/poker/sfx";
 import type { SeatCardsProps, Sizes } from "./TableView";
 import { isTopSeat, topHands } from "@/lib/poker/showdown";
 
@@ -253,7 +254,10 @@ export function HoldemActions({
                   key={label}
                   type="button"
                   aria-pressed={on}
-                  onClick={() => setK(kk)}
+                  onClick={() => {
+                    sfx.press("ui");
+                    setK(kk);
+                  }}
                   className="pk-preset"
                 >
                   {label}
@@ -293,7 +297,10 @@ export function HoldemActions({
           <button
             type="button"
             disabled={busy}
-            onClick={() => onAct({ a: "fold" })}
+            onClick={() => {
+              sfx.press("die");
+              onAct({ a: "fold" });
+            }}
             className={`${big} pk-btn-fold`}
           >
             <span className="text-[1.05em]">폴드</span>
@@ -302,7 +309,10 @@ export function HoldemActions({
         <button
           type="button"
           disabled={busy}
-          onClick={() => onAct({ a: lg.canCheck ? "check" : "call" })}
+          onClick={() => {
+            sfx.press("call");
+            onAct({ a: lg.canCheck ? "check" : "call" });
+          }}
           className={`${big} pk-btn-call`}
         >
           <span className="text-[1.05em]">{lg.canCheck ? "체크" : callAll ? "올인 콜" : "콜"}</span>
@@ -312,7 +322,10 @@ export function HoldemActions({
           <button
             type="button"
             disabled={busy}
-            onClick={() => onAct({ a: "raise", amt: amount })}
+            onClick={() => {
+              sfx.press("bet");
+              onAct({ a: "raise", amt: amount });
+            }}
             className={`${big} ${allIn ? "pk-btn-allin" : "pk-btn-raise"}`}
           >
             <span className="text-[1.05em]">
