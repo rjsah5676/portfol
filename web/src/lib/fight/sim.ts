@@ -249,6 +249,8 @@ export interface Fighter {
   zx: number;
   /** 건모 Alt+F4 강제 종료: 남은 멈춤 프레임 (그동안 맞아도 멈춤이 안 풀림) */
   frz: number;
+  /** 이번 콤보에서 이미 강제 종료를 맞음 (콤보 초기화로 무한 반복 안 되게 — 다시 맞아도 피해만) */
+  bsodd: number;
   /** 불 장판: 마지막으로 피해 · 화상 겹을 받은 프레임 (장판 여러 개가 겹쳐도 한 번만) */
   flT: number;
   flB: number;
@@ -487,6 +489,7 @@ function newFighter(ch: number, side: 0 | 1, map: MapDef): Fighter {
     zap: 0,
     zx: 0,
     frz: 0,
+    bsodd: 0,
     flT: -1,
     flB: -999,
     aerial: 0,
@@ -626,6 +629,7 @@ export function hash(s: State): number {
     mix(f.zap);
     mix(f.zx);
     mix(f.frz);
+    mix(f.bsodd);
     mix(f.flT);
     mix(f.flB);
     mix(f.aerial);
@@ -789,6 +793,8 @@ function startMove(s: State, i: number, id: MoveId) {
       f.vx = f.face * m.lunge;
       f.vh = Math.max(f.vh, 300);
     }
+    // 건모 공중 Alt+Tab+F4: 판정 끝날 때까지 그 자리에 떠 있음
+    if (m.bsod) ((f.vh = Math.min(f.vh, 0)), (f.vx = 0), (f.hold = m.startup + m.active));
   } else {
     // 대시 남은 프레임은 여기서 끝 (안 지우면 나중에 점프했을 때 공중 조작이 잠깐 안 먹음)
     f.dashT = 0;
@@ -928,7 +934,12 @@ function control(s: State, i: number) {
   f.t++;
   if (f.gcT > 0) f.gcT--;
   if (f.st !== "hit") ((f.mark = 0), (f.frz = 0));
-  else if (f.frz > 0) f.frz--;
+  if (f.st !== "hit" && f.st !== "down") f.bsodd = 0;
+  else if (f.frz > 0) {
+    // 공중에서 맞으면 멈춘 채로 떨어지고, 땅에 닿은 뒤부터 1.5초가 줄어듦
+    if (!airborneS(s, f)) f.frz--;
+    f.stun = Math.max(f.stun, f.frz);
+  }
   // 상태 이상이 다 풀리면(다시 움직일 수 있게 되면) 2초 면역
   if (f.imm > 0) f.imm--;
   if (f.cc && f.st !== "hit" && f.st !== "down" && f.st !== "rise" && f.trapT === 0 && f.grabbed === 0 && !s.p[1 - i].hug) {
@@ -2010,16 +2021,28 @@ function applyHit(s: State, ai: number, m: MoveDef, srcX: number, mid: MoveId, p
       d.mark = 1;
       s.ev.push({ k: "pause", p: ai, x: d.x, h: d.h + 70 * SUB, v: 0 });
     }
-    if (m.bsod) {
+    if (m.bsod && !d.bsodd) {
       // Alt+F4: 강제 종료 — 면역 무시, 그 자리에 멈춤 (공중이면 둥실 멈춤)
       gotStatus = true;
       d.frz = m.bsod;
+      d.bsodd = 1;
       d.stun = Math.max(d.stun, m.bsod);
       d.mark = 1;
       d.vx = 0;
       d.kd = 0;
-      if (airborneS(s, d)) ((d.vh = 0), (d.float = 3));
+      // 콤보 초기화: 피해 보정 · 경직 감소 · 공중 낙하 가속 · 섞기 · 콤보마다 한 번 기술(곰 포옹 등)이 처음부터 → 멈춘 동안 한 콤보 더
+      d.combo = 0;
+      d.floatT = 0;
+      d.mixM = 0;
+      d.mixN = 0;
+      d.otg = 0;
+      d.hugd = 0;
+      // 공중이면 그대로 땅에 떨어져 선 채로 멈춤 (멈춘 동안 다시 땅 콤보부터)
+      if (airborneS(s, d)) ((d.vh = Math.min(d.vh, 0)), (d.float = 0));
       s.ev.push({ k: "bsod", p: ai, x: d.x, h: d.h + 70 * SUB, v: 0 });
+    } else if (m.bsod) {
+      // 같은 콤보에 두 번째 강제 종료: 이미 꺼진 창 — 멈춤 · 초기화 없이 경직도 짧게 (무한 반복 막기)
+      d.stun = Math.min(d.stun, 10);
     } else if (d.frz > 0 && !kd && d.vh > 0 && !wasAir) {
       // 멈춘 상대를 띄우는 타(약 4단 · 가드 반격): 멈춤이 풀리고 그대로 공중 콤보로
       d.frz = 0;
@@ -2028,7 +2051,7 @@ function applyHit(s: State, ai: number, m: MoveDef, srcX: number, mid: MoveId, p
       d.stun = Math.max(d.stun, d.frz);
       d.mark = 1;
       d.vx = Math.trunc(d.vx / 3);
-      if (airborneS(s, d)) ((d.vh = 0), (d.float = 3));
+      if (airborneS(s, d)) ((d.vh = Math.min(d.vh, 0)), (d.float = 0));
     }
     if (m.swap && !immune) {
       gotStatus = true;
