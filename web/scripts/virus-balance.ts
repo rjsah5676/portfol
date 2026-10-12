@@ -230,7 +230,7 @@ if (overflow)
 console.log("첫 회차 스테이지 도달 시각:");
 console.log(
   "  " +
-    [5, 10, 20, 30, 40, 50, 60, 80, 100]
+    [2, 3, 5, 10, 15, 20, 30, 40, 50, 60, 80, 100]
       .filter((n) => stageAt[n] != null)
       .map((n) => `${n} → ${fmtT(stageAt[n])}`)
       .join(" · ")

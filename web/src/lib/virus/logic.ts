@@ -18,6 +18,13 @@
 export const BAL = {
   /** 1스테이지 파일의 보안 등급(체력) */
   hp0: 4,
+  /**
+   * 극초반 보정 — 첫 몇 스테이지만 체력을 낮추고 데이터를 더 줌 (스테이지마다 earlyDecay 배씩 사라짐, 15스테이지쯤 없음)
+   *   체력 ÷ (1 + earlyHp × earlyDecay^(스테이지-1)) · 데이터 × (1 + earlyData × earlyDecay^(스테이지-1))
+   */
+  earlyHp: 3,
+  earlyData: 3,
+  earlyDecay: 0.75,
   /** 스테이지마다 체력 배율 */
   hpGrowth: 1.17,
   /** 보스 체력 = 같은 스테이지 파일의 몇 배 */
@@ -370,15 +377,17 @@ export function dps(st: Stats) {
 function baseHp(stage: number) {
   return BAL.hp0 * BAL.hpGrowth ** (stage - 1);
 }
+/** 극초반 보정이 남은 정도 (1스테이지 1 → 점점 0) */
+const early = (stage: number) => BAL.earlyDecay ** (stage - 1);
 export function mobHp(stage: number, st: Stats) {
-  return baseHp(stage) * st.mobHpMul;
+  return (baseHp(stage) * st.mobHpMul) / (1 + BAL.earlyHp * early(stage));
 }
 export function bossHp(stage: number, st: Stats) {
-  return baseHp(stage) * BAL.bossHp * st.bossHpMul;
+  return (baseHp(stage) * BAL.bossHp * st.bossHpMul) / (1 + BAL.earlyHp * early(stage));
 }
 /** 보상은 (모듈로 줄이기 전) 체력에 비례 — 스테이지가 올라도 체력 대비 보상이 같음 */
 export function mobData(stage: number, st: Stats) {
-  return (baseHp(stage) / BAL.dataRatio) * st.dataMul;
+  return (baseHp(stage) / BAL.dataRatio) * st.dataMul * (1 + BAL.earlyData * early(stage));
 }
 export function bossData(stage: number, st: Stats) {
   return mobData(stage, st) * BAL.bossData;
