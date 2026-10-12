@@ -475,17 +475,23 @@ export class FightRenderer {
       } else if (e.k === "throw" && e.m === "S") {
         // 이반 곰 포옹: 공중에서 붙잡음
         const a = s.p[e.p];
-        this.parts.push({ x, y: y - 14, vx: 0, vy: -0.5, life: 30, max: 30, color: "#FF6B6B", size: 1.4, kind: "text", text: "GRAB!" });
-        this.parts.push({ x, y, vx: 0, vy: 0, life: 14, max: 14, color: "#FF8A8A", size: 22, kind: "ring" });
-        this.spawnFx(a.ch, "spark", x, y, a.face, 12);
-        for (let i = 0; i < 10; i++) {
-          const an = (i / 10) * Math.PI * 2;
+        // (10.12 크게: 글자 · 고리 두 겹 · 붉은 기 · 번쩍 — 잡혔는지 잘 안 보이던 것)
+        this.parts.push({ x, y: y - 18, vx: 0, vy: -0.45, life: 42, max: 42, color: "#FF5A4D", size: 1.9, kind: "text", text: "BEAR HUG!" });
+        this.parts.push({ x, y, vx: 0, vy: 0, life: 16, max: 16, color: "#FF8A8A", size: 26, kind: "ring" });
+        this.parts.push({ x, y, vx: 0, vy: 0, life: 24, max: 24, color: "#FF3B30", size: 46, kind: "ring" });
+        this.spawnFx(a.ch, "aura", x, y + 6, a.face, 20, false, { size: [120, 120], alpha: 0.9 });
+        this.spawnFx(a.ch, "spark", x, y, a.face, 14);
+        for (let i = 0; i < 18; i++) {
+          const an = (i / 18) * Math.PI * 2;
+          const sp = 2.5 + (i % 3) * 1.4;
           this.parts.push({
-            x, y, vx: Math.cos(an) * 2.5, vy: Math.sin(an) * 2.5, life: 14, max: 14,
-            color: i % 2 ? "#FFD0C0" : "#FF4D4D", size: 1.3, kind: "spark",
+            x, y, vx: Math.cos(an) * sp, vy: Math.sin(an) * sp, life: 18, max: 18,
+            color: i % 3 === 0 ? "#FFFFFF" : i % 2 ? "#FFD0C0" : "#FF4D4D", size: 1.6, kind: "spark",
           });
         }
-        this.shake = Math.max(this.shake, 4);
+        this.flash = Math.max(this.flash, 3);
+        this.flashColor = "#FF9A8A";
+        this.shake = Math.max(this.shake, 8);
       } else if (e.k === "throw") {
         this.parts.push({ x, y, vx: 0, vy: 0, life: 12, max: 12, color: "#fff", size: 12, kind: "ring" });
         this.shake = Math.max(this.shake, 4);
@@ -521,9 +527,20 @@ export class FightRenderer {
         // 바닥에 처박힘: 크게 퍼지는 충격파 + 흙먼지 (이반 곰 포옹이면 바닥 균열도)
         const sl = s.p[1 - e.p];
         if (CHARS[sl.ch].id === "ivan" && sl.st === "atk" && sl.mv === "S") {
-          this.spawnFx(sl.ch, "crack", x, y + 6, sl.face, 26, true);
-          this.flash = 3;
-          this.flashColor = "#FFD0D0";
+          // 곰 포옹 내리꽂기: 균열 크게 · 붉은 충격파 두 겹 · 솟는 흙기둥 · 화면 크게 흔들림
+          this.spawnFx(sl.ch, "crack", x, y + 6, sl.face, 34, true, { size: [190, 64] });
+          this.spawnFx(sl.ch, "wave", x - 40, y - 10, -1, 18, false, { size: [110, 70], alpha: 0.95 });
+          this.spawnFx(sl.ch, "wave", x + 40, y - 10, 1, 18, false, { size: [110, 70], alpha: 0.95 });
+          this.flash = 5;
+          this.flashColor = "#FFB0A0";
+          this.shake = Math.max(this.shake, 11);
+          this.parts.push({ x, y: y - 4, vx: 0, vy: 0, life: 26, max: 26, color: "#FF4D3D", size: 60, kind: "ring" });
+          this.parts.push({ x, y: y - 46, vx: 0, vy: -0.35, life: 34, max: 34, color: "#FFE2C2", size: 2.2, kind: "text", text: "쾅!" });
+          for (let i = 0; i < 12; i++)
+            this.parts.push({
+              x: x + (i - 5.5) * 9 + (Math.random() - 0.5) * 6, y: y - 2, vx: 0, vy: -3 - Math.random() * 3.5, life: 16, max: 16,
+              color: i % 3 ? "rgba(235,220,200,0.95)" : "#FF6B4D", size: 1.6 + Math.random(), kind: "vstreak",
+            });
         }
         for (let i = 0; i < 24; i++) {
           const d = i % 2 ? 1 : -1;
@@ -872,24 +889,41 @@ export class FightRenderer {
       if (f.hug) {
         const im = fxImg(`ivan-aura-${2 + (Math.floor(s.f / 3) % 2)}`);
         if (im) {
-          const w = (im.width / 1.72) * 1.1,
-            h = (im.height / 1.72) * 1.1;
+          // 10.12 크게 · 진하게 (안고 떨어지는 게 잘 안 보이던 것)
+          const w = (im.width / 1.72) * 1.55,
+            h = (im.height / 1.72) * 1.55;
           g.save();
           g.globalCompositeOperation = "lighter";
-          g.globalAlpha = 0.75;
+          g.globalAlpha = 0.95;
           g.translate(x + f.face * 10, y - 34);
           if (f.face < 0) g.scale(-1, 1);
           g.drawImage(im, -w / 2, -h / 2, w, h);
           g.restore();
         }
-        for (let k = 0; k < 2; k++)
+        for (let k = 0; k < 5; k++)
           this.parts.push({
-            x: x + f.face * 10 + (Math.random() - 0.5) * 56, y: y - 70 - Math.random() * 30, vx: 0, vy: -1.5, life: 8, max: 8,
-            color: Math.random() < 0.5 ? "rgba(255,255,255,0.8)" : "#FF6B6B", size: 1 + Math.random(), kind: "vstreak",
+            x: x + f.face * 10 + (Math.random() - 0.5) * 70, y: y - 60 - Math.random() * 50, vx: 0, vy: -2.2, life: 9, max: 9,
+            color: Math.random() < 0.4 ? "rgba(255,255,255,0.85)" : "#FF5A4D", size: 1.2 + Math.random() * 1.2, kind: "vstreak",
           });
+        // 몸 둘레 붉은 불티
+        this.parts.push({
+          x: x + (Math.random() - 0.5) * 50, y: y - 20 - Math.random() * 60, vx: (Math.random() - 0.5) * 1.2, vy: -0.8, life: 12, max: 12,
+          color: "#FF8A5A", size: 1.2, kind: "spark",
+        });
+      } else if (isAirF(s, f) && f.t < (am.startup ?? 0)) {
+        // 덮치기 직전: 손에 붉은 기가 모임 (곰 포옹 예고)
+        const hx = x + f.face * 26,
+          hy = y - 44;
+        const an = Math.random() * Math.PI * 2;
+        this.parts.push({
+          x: hx + Math.cos(an) * 26, y: hy + Math.sin(an) * 20, vx: -Math.cos(an) * 2.4, vy: -Math.sin(an) * 2,
+          life: 9, max: 9, color: Math.random() < 0.5 ? "#FFD0C0" : "#FF4D4D", size: 1.3, kind: "spark",
+        });
+        if (f.t === 1) this.parts.push({ x: hx, y: hy, vx: 0, vy: 0, life: 12, max: 12, color: "#FF6B5A", size: 20, kind: "ring" });
       } else if (isAirF(s, f) && f.t === am.startup) {
-        this.spawnFx(f.ch, "wave", x + f.face * 34, y - 40, f.face, 10, false, { size: [70, 46], from: 1, alpha: 0.9 });
-        for (let k = 0; k < 6; k++)
+        this.spawnFx(f.ch, "wave", x + f.face * 40, y - 40, f.face, 14, false, { size: [120, 78], from: 1, alpha: 1 });
+        this.parts.push({ x: x + f.face * 44, y: y - 40, vx: 0, vy: 0, life: 12, max: 12, color: "#FF4D4D", size: 30, kind: "ring" });
+        for (let k = 0; k < 12; k++)
           this.parts.push({
             x: x + f.face * 30, y: y - 40 + (Math.random() - 0.5) * 30, vx: f.face * (2 + Math.random() * 2), vy: (Math.random() - 0.5) * 0.6,
             life: 10, max: 10, color: k % 2 ? "#FFD0C0" : "#FF4D4D", size: 1.4, kind: "streak",
