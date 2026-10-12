@@ -9,7 +9,7 @@
  */
 
 /** 포인트 이름 · 단위 (이름을 정하면 여기만 바꾸면 됨) */
-export const POINT = { name: "포인트", unit: "P" } as const;
+export const POINT = { name: "GP", unit: "GP" } as const;
 
 export const fmtPoint = (n: number) =>
   `${Math.trunc(n).toLocaleString("ko-KR")}${POINT.unit}`;
@@ -25,7 +25,7 @@ export const POINT_NOTICE = [
   `${POINT.name}는 이 사이트 안에서만 쓰는 무료 재화예요. 돈을 내고 살 수 없어요.`,
   "현금 · 상품권 · 다른 서비스의 재화 등으로 바꾸거나 환불받을 수 없어요.",
   "다른 회원에게 주거나 팔 수 없어요.",
-  "운영상 필요하면 얻는 양 · 상품 가격이 바뀔 수 있고, 부정한 방법으로 얻은 포인트는 회수될 수 있어요.",
+  `운영상 필요하면 얻는 양 · 상품 가격이 바뀔 수 있고, 부정한 방법으로 얻은 ${POINT.name}는 회수될 수 있어요.`,
 ] as const;
 
 /* ─────────────── 환전 (포커 칩 ↔ 포인트) ─────────────── */
