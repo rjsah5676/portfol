@@ -1,4 +1,4 @@
-# 글리치 디펜스 (GLITCH DEFENSE) 엔진
+# 픽셀 글리치 디펜스 (PIXEL GLITCH DEFENSE) 엔진
 
 작업 전에 `web/docs/defense/HANDOFF.md` 를 먼저 읽을 것 (구조 · 규칙 · 다음 할 일 전부 거기).
 

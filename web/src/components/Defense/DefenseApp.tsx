@@ -13,8 +13,10 @@ import {
   getDefenseRank,
   joinRoom,
   leaveRoom,
+  myRoom,
   reportOver,
   sendCmds,
+  sendHash,
   setReady,
   startRun,
   watchLobby,
@@ -28,10 +30,13 @@ import Codex from "./Codex";
 import { Controller } from "./controller";
 import GameView from "./GameView";
 import Stage from "./Stage";
-import { Btn, Modal, TITLE, UnitIcon, fmtTime } from "./ui";
+import { playBgm } from "./audio";
+import { Btn, FactionIcon, Icon, Modal, SoundButton, TITLE, UnitIcon, fmtTime } from "./ui";
+import { BOSS_ART, UNIT_ART } from "@/lib/defense/assets";
+import { FACTION_COLOR, FACTION_NAME, FACTIONS } from "@/lib/defense/units";
 
 /*
- * 글리치 디펜스 몸통 — 무대(Stage) 안에서 메뉴 → 솔로 / 멀티(로비 → 방 → 판) / 도감 / 랭킹 이 바뀜.
+ * PIXEL GLITCH DEFENSE(픽셀 글리치 디펜스) 몸통 — 무대(Stage) 안에서 메뉴 → 솔로 / 멀티(로비 → 방 → 판) / 도감 / 랭킹 이 바뀜.
  *  솔로: 회원이면 서버에서 시드를 받아 랭킹 판, 아니면 연습 판(기록 안 남음)
  *  멀티: 회원만. 방장이 시작하면 각자 자기 보드를 막는 생존 경쟁 (남 돕기는 나중에)
  */
@@ -73,6 +78,13 @@ export default function DefenseApp() {
       key: Date.now(),
     });
   };
+
+  // 메뉴 · 로비 · 방 화면은 메뉴 배경음 (판 안에서는 GameView 가 웨이브에 맞춰 바꿈)
+  const inGame = screen.k === "solo";
+  useEffect(() => {
+    if (!inGame) playBgm("menu");
+  }, [inGame, screen.k]);
+  useEffect(() => () => playBgm(null), []);
 
   let body: ReactNode;
   if (screen.k === "solo") {
@@ -139,6 +151,7 @@ export default function DefenseApp() {
         onMulti={() => setScreen({ k: "lobby" })}
         onCodex={() => setScreen({ k: "codex" })}
         onRank={() => setScreen({ k: "rank" })}
+        onRejoin={(id) => setScreen({ k: "room", id })}
       />
     );
 
@@ -146,12 +159,16 @@ export default function DefenseApp() {
     <Stage>
       {body}
       {screen.k === "codex" && (
-        <Modal title="도감" onClose={() => setScreen({ k: "menu" })} wide>
+        <Modal title="도감" onClose={() => setScreen({ k: "menu" })} wide accent="#c08cff">
           <Codex />
         </Modal>
       )}
       {screen.k === "rank" && (
-        <Modal title={`랭킹 (밸런스 ${BALANCE_VER})`} onClose={() => setScreen({ k: "menu" })}>
+        <Modal
+          title={`랭킹 · 밸런스 ${BALANCE_VER}`}
+          onClose={() => setScreen({ k: "menu" })}
+          accent="#ffd23f"
+        >
           <RankList />
         </Modal>
       )}
@@ -173,74 +190,126 @@ function Menu(p: {
   onMulti(): void;
   onCodex(): void;
   onRank(): void;
+  onRejoin(id: string): void;
 }) {
+  // 새로고침했는데 멀티 판이 진행 중이면 돌아가기 버튼
+  const [mine, setMine] = useState<{ id: string; name: string } | null>(null);
+  useEffect(() => {
+    if (p.member) myRoom().then(setMine, () => {});
+  }, [p.member]);
+  // 메뉴에 세워 둘 대표 유닛 (그림이 있을 때만)
+  const heroes = ["k_commander", "m_titan", "a_archmage"].filter((id) => UNIT_ART[id]);
   return (
-    <div className="dfn-menu absolute inset-0 overflow-hidden bg-[#070a14] text-white">
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_30%_20%,rgba(255,92,214,0.18),transparent_55%),radial-gradient(ellipse_at_80%_80%,rgba(126,243,255,0.14),transparent_55%)]" />
-      <div className="dfn-scan absolute inset-0" />
+    <div className="px-stars absolute inset-0 overflow-hidden">
+      <div className="dfn-scan absolute inset-0 opacity-60" />
+      <div className="dfn-vignette absolute inset-0" />
+      {/* 아래 도트 땅 */}
+      <div className="absolute inset-x-0 bottom-0 h-[86px] bg-[repeating-linear-gradient(90deg,#2b2348_0_32px,#2f274f_32px_64px)] shadow-[inset_0_4px_0_0_#3d3468,inset_0_8px_0_0_#0a0816]" />
+      {/* 대표 유닛 */}
+      {heroes.length > 0 && (
+        <div className="absolute right-[40px] bottom-[60px] flex items-end gap-1">
+          {heroes.map((id, i) => (
+            <img
+              key={id}
+              src={UNIT_ART[id].src}
+              alt=""
+              className="dfn-float"
+              style={{
+                width: 150,
+                height: 150,
+                animationDelay: `${i * 0.4}s`,
+                imageRendering: "auto",
+              }}
+            />
+          ))}
+        </div>
+      )}
       {/* 오염된 파이터들 */}
-      <div className="absolute right-8 bottom-6 flex gap-2 opacity-80">
-        {BOSSES.map((b) => (
-          <img
-            key={b.wave}
-            src={`/fight/art/${b.fighter}-face.webp`}
-            alt=""
-            className="dfn-glitch h-14 w-14 rounded-full border-2 object-cover grayscale-[40%]"
-            style={{ borderColor: b.color }}
-          />
-        ))}
+      <div className="absolute top-[18px] right-[24px] flex gap-1">
+        {BOSSES.map((b, i) =>
+          BOSS_ART[b.fighter] ? (
+            <img
+              key={b.wave}
+              src={BOSS_ART[b.fighter].src}
+              alt=""
+              title={`W${b.wave} ${b.name}`}
+              className="dfn-glitch h-[72px] w-[72px] object-contain"
+              style={{ animationDelay: `${i * 0.5}s` }}
+            />
+          ) : (
+            <img
+              key={b.wave}
+              src={`/fight/art/${b.fighter}-face.webp`}
+              alt=""
+              title={b.name}
+              className="dfn-glitch h-12 w-12 object-cover grayscale-[35%]"
+              style={{ boxShadow: `0 0 0 2px ${b.color}, 0 0 0 4px #0a0816` }}
+            />
+          )
+        )}
       </div>
-      <div className="absolute top-[70px] left-[70px]">
-        <p className="text-[15px] font-bold tracking-[0.35em] text-[#ff5cd6]">PIXEL FIGHT 외전</p>
-        <h1
-          className={`${TITLE} dfn-title mt-1 text-[78px] leading-[0.95]`}
-          data-text="GLITCH DEFENSE"
-        >
-          GLITCH DEFENSE
-        </h1>
-        <p className="mt-3 max-w-[520px] text-[16px] leading-relaxed text-white/70">
-          픽셀 세계가 버그에 먹히고 있어요. 기사단 · 기계공방 · 마도회의 수호자를 소환하고 합성해서,
-          글리치와 오염된 파이터들을 {LAST_WAVE}웨이브까지 막아 주세요.
+      <div className="absolute top-[60px] left-[64px]">
+        <p className="text-[13px] font-bold tracking-[0.4em] text-[var(--pink)]">
+          PIXEL FIGHT 외전
         </p>
-        <span className="mt-2 inline-block rounded bg-[#ffd84a]/15 px-2 py-0.5 text-[12px] font-bold text-[#ffd84a]">
-          ALPHA · 그림 없이 자리표시 · 밸런스 {BALANCE_VER}
+        <h1 className={`${TITLE} dfn-title mt-3 text-[60px] leading-[1.02]`}>
+          PIXEL GLITCH
+          <br />
+          DEFENSE
+        </h1>
+        <p className="mt-4 max-w-[500px] text-[14px] leading-relaxed text-[var(--mute)]">
+          픽셀 세계가 버그에 먹히고 있어요.{" "}
+          {FACTIONS.map((f, i) => (
+            <span key={f}>
+              <b style={{ color: FACTION_COLOR[f] }}>
+                <FactionIcon f={f} size={12} className="mr-0.5" />
+                {FACTION_NAME[f]}
+              </b>
+              {i < 2 ? " · " : ""}
+            </span>
+          ))}
+          의 수호자를 소환 · 합성해서 오염된 파이터들을 {LAST_WAVE}웨이브까지 막아 주세요.
+        </p>
+        <span className="mt-3 inline-block bg-[var(--gold)] px-2 py-1 text-[11px] font-bold text-[#1a1000]">
+          ALPHA · 밸런스 {BALANCE_VER}
         </span>
       </div>
-      <div className="absolute top-[330px] left-[70px] flex w-[340px] flex-col gap-2.5">
+      <div className="absolute top-[318px] left-[64px] flex w-[330px] flex-col gap-3">
         <Btn
           tone="main"
-          className="h-[60px] text-[22px] font-bold"
+          arrow
+          className="h-[58px] text-[20px] font-bold"
           onClick={p.onSolo}
           disabled={p.busy}
         >
-          {p.busy ? "준비 중…" : "혼자 하기"}
-          <span className="block text-[12px] font-normal opacity-80">
+          <span className="px-shadow">{p.busy ? "준비 중…" : "혼자 하기"}</span>
+          <span className="block text-[11px] font-normal opacity-85">
             {p.member ? "랭킹 기록 판" : "연습 판 (회원은 랭킹 기록)"}
           </span>
         </Btn>
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-3 gap-2.5">
           <Btn
             tone="cyan"
-            className="h-[46px] text-[15px] font-bold"
+            className="h-[42px] text-[14px] font-bold"
             onClick={p.onMulti}
             disabled={!p.member}
             title={p.member ? "" : "회원만"}
           >
             함께 하기
           </Btn>
-          <Btn className="h-[46px] text-[15px]" onClick={p.onRank}>
-            랭킹
+          <Btn className="h-[42px] text-[14px]" onClick={p.onRank}>
+            <Icon n="star" size={12} /> 랭킹
           </Btn>
-          <Btn className="h-[46px] text-[15px]" onClick={p.onCodex}>
-            도감
+          <Btn className="h-[42px] text-[14px]" onClick={p.onCodex}>
+            <Icon n="book" size={12} /> 도감
           </Btn>
         </div>
-        <div className="mt-1 text-[13px] text-white/55">
+        <div className="mt-1 text-[12px] text-[var(--mute)]">
           {p.loading ? (
-            "로그인 확인 중…"
+            <span className="dfn-blink">로그인 확인 중…</span>
           ) : p.member ? (
             <>
-              <b className="text-white/85">{p.nick}</b> 님으로 기록돼요
+              <b className="text-[var(--text)]">{p.nick}</b> 님으로 기록돼요
             </>
           ) : p.account ? (
             <NickForm submitLabel="별명 정하기" />
@@ -248,14 +317,30 @@ function Menu(p: {
             <button
               type="button"
               onClick={p.onLogin}
-              className="underline underline-offset-2 hover:text-white"
+              className="underline underline-offset-4 hover:text-white"
             >
               로그인하면 랭킹 · 멀티를 할 수 있어요
             </button>
           )}
         </div>
-        {p.note && <p className="text-[13px] text-[#ffb347]">{p.note}</p>}
+        {p.note && <p className="text-[12px] text-[#ffb347]">{p.note}</p>}
+        {mine && (
+          <Btn
+            tone="gold"
+            arrow
+            className="dfn-pulse h-[40px] text-[13px] font-bold"
+            onClick={() =>
+              void joinRoom(mine.id).then(
+                () => p.onRejoin(mine.id),
+                () => setMine(null)
+              )
+            }
+          >
+            진행 중인 멀티 판으로 돌아가기
+          </Btn>
+        )}
       </div>
+      <SoundButton className="absolute bottom-[22px] left-[64px]" />
     </div>
   );
 }
@@ -271,27 +356,36 @@ export function RankList({ limit = 50 }: { limit?: number }) {
       (e: Error) => setErr(e.message)
     );
   }, [limit]);
-  if (err) return <p className="text-[14px] text-[#ff9aa8]">{err}</p>;
-  if (!rows) return <p className="text-[14px] text-white/50">불러오는 중…</p>;
+  if (err) return <p className="text-[13px] text-[#ff9ab0]">{err}</p>;
+  if (!rows) return <p className="dfn-blink text-[13px] text-[var(--mute)]">불러오는 중…</p>;
   if (!rows.length)
     return (
-      <p className="text-[14px] text-white/50">아직 기록이 없어요 — 첫 기록의 주인공이 돼 보세요</p>
+      <p className="text-[13px] text-[var(--mute)]">
+        아직 기록이 없어요 — 첫 기록의 주인공이 돼 보세요
+      </p>
     );
   return (
-    <div className="flex flex-col gap-1">
+    <div className="flex flex-col gap-2">
       {rows.map((r, i) => (
         <div
           key={r.nick + i}
-          className="flex items-center gap-2 rounded-lg bg-white/[0.04] px-2.5 py-1.5 text-[14px]"
+          className="px-inset flex items-center gap-2 px-2.5 py-1.5 text-[13px]"
+          style={
+            i < 3
+              ? ({ "--b": ["#ffd23f", "#d6d9e6", "#e09a5b"][i] } as React.CSSProperties)
+              : undefined
+          }
         >
-          <b className={`${TITLE} w-7 text-center ${i < 3 ? "text-[#ffd84a]" : "text-white/50"}`}>
+          <b
+            className={`${TITLE} w-7 text-center ${i < 3 ? "text-[var(--gold)]" : "text-[var(--dim)]"}`}
+          >
             {i + 1}
           </b>
           <b className="w-[110px] truncate">{r.nick}</b>
-          <span className={`w-[110px] ${r.win ? "text-[#7ef3ff]" : ""}`}>
+          <span className={`w-[110px] ${r.win ? "text-[var(--cyan)]" : ""}`}>
             {r.win ? `클리어 ${fmtTime(r.sec)}` : `${r.wave}웨이브`}
           </span>
-          <span className="w-[70px] text-white/50">처치 {r.kills}</span>
+          <span className="w-[70px] text-[var(--mute)]">처치 {r.kills}</span>
           <span className="flex gap-1">
             {r.tops.map((t) => (UNIT[t] ? <UnitIcon key={t} id={t} size={22} /> : null))}
           </span>
@@ -306,48 +400,68 @@ export function RankList({ limit = 50 }: { limit?: number }) {
 function Lobby({ onBack, onEnter }: { onBack(): void; onEnter(id: string): void }) {
   const [rooms, setRooms] = useState<MpLobbyRoom[] | null>(null);
   const [err, setErr] = useState("");
+  const [mine, setMine] = useState<{ id: string; name: string } | null>(null);
   useEffect(() => watchLobby(setRooms), []);
+  useEffect(() => {
+    myRoom().then(setMine, () => {});
+  }, []);
   const go = (p: Promise<{ id: string }>) =>
     p.then(
       (r) => onEnter(r.id),
       (e: Error) => setErr(e.message)
     );
   return (
-    <div className="absolute inset-0 bg-[#070a14] p-8 text-white">
+    <div className="px-stars absolute inset-0 p-8">
       <div className="flex items-center gap-3">
         <Btn className="h-10 px-4" onClick={onBack}>
-          ← 메뉴
+          ◀ 메뉴
         </Btn>
-        <h2 className={`${TITLE} text-[30px]`}>함께 하기</h2>
-        <span className="text-[14px] text-white/50">
+        <h2 className={`${TITLE} px-shadow text-[28px]`}>함께 하기</h2>
+        <span className="text-[12px] text-[var(--mute)]">
           최대 4명 · 각자 자기 라인을 막는 생존 경쟁 (남 돕기는 다음 버전)
         </span>
         <Btn
           tone="main"
-          className="ml-auto h-11 px-6 text-[16px] font-bold"
+          arrow
+          className="ml-auto h-11 px-6 text-[15px] font-bold"
           onClick={() => go(createRoom())}
         >
           방 만들기
         </Btn>
+        <SoundButton />
       </div>
-      {err && <p className="mt-3 text-[14px] text-[#ff9aa8]">{err}</p>}
-      <div className="mt-5 grid grid-cols-2 gap-2">
-        {rooms === null && <p className="text-white/50">불러오는 중…</p>}
+      {err && <p className="mt-3 text-[13px] text-[#ff9ab0]">{err}</p>}
+      {mine && (
+        <Btn
+          tone="gold"
+          arrow
+          className="dfn-pulse mt-5 w-full px-4 py-3 text-left"
+          onClick={() => go(joinRoom(mine.id))}
+        >
+          <b className="text-[15px]">진행 중인 판으로 돌아가기</b>
+          <span className="ml-2 text-[12px] opacity-80">
+            {mine.name} · 내 보드가 그대로 이어져요
+          </span>
+        </Btn>
+      )}
+      <div className="mt-6 grid grid-cols-2 gap-3">
+        {rooms === null && <p className="dfn-blink text-[var(--mute)]">불러오는 중…</p>}
         {rooms?.length === 0 && (
-          <p className="text-white/50">열린 방이 없어요 — 방을 만들어 보세요</p>
+          <p className="text-[var(--mute)]">열린 방이 없어요 — 방을 만들어 보세요</p>
         )}
         {rooms?.map((r) => (
-          <button
+          <Btn
             key={r.id}
-            type="button"
+            tone="cyan"
+            arrow
             onClick={() => go(joinRoom(r.id))}
-            className="flex items-center rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-left hover:border-[#7ef3ff]/50"
+            className="flex items-center px-4 py-3 text-left"
           >
-            <b className="flex-1 text-[16px]">{r.name}</b>
-            <span className="text-[14px] text-white/60">
+            <b className="flex-1 text-[15px]">{r.name}</b>
+            <span className="text-[13px] opacity-80">
               {r.count}/{r.max}
             </span>
-          </button>
+          </Btn>
         ))}
       </div>
     </div>
@@ -380,6 +494,7 @@ function Room({
         room: id,
         send: (cmds) => sendCmds(id, cmds),
       });
+      c.onHash = (tick, h) => void sendHash(id, tick, h).catch(() => {});
       ctrlRef.current = c;
       setCtrl(c);
       setStandings(null);
@@ -405,6 +520,10 @@ function Room({
         make(d.seed, d.players, r?.players.map((p) => p.uid) ?? []);
       },
       onTurn: (d) => ctrlRef.current?.onTurn(d.n, d.c),
+      onDesync: (d) => {
+        console.warn(`[defense] 멀티 어긋남 감지 tick ${d.tick}`);
+        if (ctrlRef.current) ctrlRef.current.desync++;
+      },
       onResult: (rows) => {
         setStandings(rows);
         ctrlRef.current = null;
@@ -437,13 +556,13 @@ function Room({
   }
   if (room === undefined)
     return (
-      <div className="absolute inset-0 flex items-center justify-center bg-[#070a14] text-white/60">
-        방에 들어가는 중…
+      <div className="px-stars absolute inset-0 flex items-center justify-center text-[var(--mute)]">
+        <span className="dfn-blink">방에 들어가는 중…</span>
       </div>
     );
   if (room === null)
     return (
-      <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-[#070a14] text-white">
+      <div className="px-stars absolute inset-0 flex flex-col items-center justify-center gap-3">
         <p>방이 없어졌어요</p>
         <Btn className="px-5 py-2" onClick={onLeave}>
           로비로
@@ -454,38 +573,40 @@ function Room({
   const host = room.hostUid === myUid;
   const allReady = room.players.every((p) => p.uid === room.hostUid || p.ready);
   return (
-    <div className="absolute inset-0 bg-[#070a14] p-8 text-white">
+    <div className="px-stars absolute inset-0 p-8">
       <div className="flex items-center gap-3">
         <Btn className="h-10 px-4" onClick={leave}>
-          ← 나가기
+          ◀ 나가기
         </Btn>
-        <h2 className={`${TITLE} text-[28px]`}>{room.name}</h2>
-        <span className="text-[14px] text-white/50">
+        <h2 className={`${TITLE} px-shadow text-[26px]`}>{room.name}</h2>
+        <span className="text-[12px] text-[var(--mute)]">
           {room.phase === "playing" ? "진행 중" : "대기 중"}
         </span>
       </div>
-      {err && <p className="mt-2 text-[14px] text-[#ff9aa8]">{err}</p>}
-      <div className="mt-6 grid grid-cols-4 gap-3">
+      {err && <p className="mt-2 text-[13px] text-[#ff9ab0]">{err}</p>}
+      <div className="mt-6 grid grid-cols-4 gap-4">
         {Array.from({ length: room.max }, (_, i) => room.players[i]).map((p, i) => (
           <div
             key={i}
-            className={`flex h-[150px] flex-col items-center justify-center rounded-2xl border ${p ? "border-white/15 bg-white/[0.05]" : "border-dashed border-white/10"}`}
+            className={`flex h-[150px] flex-col items-center justify-center ${p ? "px-box" : "px-inset"}`}
+            style={p && p.ready ? ({ "--b": "#6dff8f" } as React.CSSProperties) : undefined}
           >
             {p ? (
               <>
-                <b className="text-[18px]">{p.nick}</b>
-                <span className="mt-1 text-[13px] text-white/50">
+                <span className="mb-2 text-[11px] text-[var(--dim)]">P{i + 1}</span>
+                <b className="text-[17px]">{p.nick}</b>
+                <span className="mt-1 text-[12px] text-[var(--mute)]">
                   {p.uid === room.hostUid ? (
                     "방장"
                   ) : p.ready ? (
-                    <span className="text-[#7dff8a]">준비 완료</span>
+                    <span className="text-[var(--green)]">준비 완료</span>
                   ) : (
                     "준비 중"
                   )}
                 </span>
               </>
             ) : (
-              <span className="text-white/30">빈 자리</span>
+              <span className="dfn-blink text-[var(--dim)]">빈 자리</span>
             )}
           </div>
         ))}
@@ -509,28 +630,28 @@ function Room({
             {me?.ready ? "준비 취소" : "준비"}
           </Btn>
         )}
-        <p className="self-center text-[13px] text-white/45">
+        <p className="self-center text-[12px] text-[var(--mute)]">
           같은 시드로 시작해요 — 운은 같고, 고르는 건 각자. 가장 오래 버틴 사람이 1등.
         </p>
       </div>
       {standings && (
-        <Modal title="결과" onClose={() => setStandings(null)}>
+        <Modal title="결과" onClose={() => setStandings(null)} accent="#ffd23f">
           <div className="flex flex-col gap-1.5">
             {standings.map((s, i) => (
               <div
                 key={s.nick + i}
-                className="flex items-center gap-3 rounded-lg bg-white/[0.05] px-3 py-2 text-[15px]"
+                className="px-inset flex items-center gap-3 px-3 py-2 text-[14px]"
               >
                 <b
-                  className={`${TITLE} w-7 text-[20px] ${i === 0 ? "text-[#ffd84a]" : "text-white/50"}`}
+                  className={`${TITLE} w-7 text-[20px] ${i === 0 ? "text-[var(--gold)]" : "text-[var(--dim)]"}`}
                 >
                   {i + 1}
                 </b>
                 <b className="w-[120px] truncate">{s.nick}</b>
-                <span className={s.win ? "text-[#7ef3ff]" : ""}>
+                <span className={s.win ? "text-[var(--cyan)]" : ""}>
                   {s.win ? `클리어 ${fmtTime(s.sec)}` : `${s.wave}웨이브`}
                 </span>
-                <span className="text-white/50">처치 {s.kills}</span>
+                <span className="text-[var(--mute)]">처치 {s.kills}</span>
                 <span className="ml-auto flex gap-1">
                   {s.tops.map((t) => (UNIT[t] ? <UnitIcon key={t} id={t} size={24} /> : null))}
                 </span>

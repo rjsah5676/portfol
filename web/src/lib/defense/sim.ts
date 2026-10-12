@@ -1,5 +1,5 @@
 /**
- * 글리치 디펜스 시뮬레이션 (결정론).
+ * 픽셀 글리치 디펜스 시뮬레이션 (결정론).
  *
  * 같은 시드 + 같은 명령 기록 → 브라우저 · 서버 · 시뮬레이터 어디서 돌려도 결과가 똑같음.
  *  - 랭킹: 서버가 명령 기록을 다시 돌려(replay.ts) 결과를 직접 계산 → 점수를 꾸며 보낼 수 없음
@@ -765,7 +765,8 @@ function hit(b: Board, def: UnitDef, e: Enemy, raw: number): number {
   if (e.boss >= 0 && def.boss) m *= def.boss;
   if (def.dtype === "phys") {
     const sz = SIZE_MULT[def.faction][e.size];
-    m *= (e.boss >= 0 ? Math.max(B.bossSizeFloor, sz) : sz) * armorF(e.armor - e.shred) * (1 - e.pres);
+    m *=
+      (e.boss >= 0 ? Math.max(B.bossSizeFloor, sz) : sz) * armorF(e.armor - e.shred) * (1 - e.pres);
   } else m *= 1 - e.mres;
   let dmg = raw * m;
   if (e.shield > 0) {

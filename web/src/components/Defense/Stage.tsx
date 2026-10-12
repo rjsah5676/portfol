@@ -9,9 +9,10 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { unlock } from "./audio";
 
 /*
- * 글리치 디펜스 무대 — 1024 × 576 디자인을 화면에 맞춰 통째로 키우고 줄임 (PC = 폰, 배치가 늘 같음).
+ * PIXEL GLITCH DEFENSE 무대 — 1024 × 576 디자인을 화면에 맞춰 통째로 키우고 줄임 (PC = 폰, 배치가 늘 같음).
  *  PC: 사이트 안 16:9 상자 (전체화면 버튼으로 크게)
  *  폰: 가로 전용 (ANIME POKER 와 같은 방식) — 세로면 "가로로 돌려 주세요", 전체화면이 되는 기기는 전체화면부터 권함
  *      전체화면이 안 되는 아이폰 사파리는 가로로 눕히면 화면을 덮어 그림 (홈 화면에 추가하면 앱처럼)
@@ -79,7 +80,13 @@ export default function Stage({ children }: { children: ReactNode }) {
       setFsReal(!!document.fullscreenElement && document.fullscreenElement === rootRef.current);
     document.addEventListener("fullscreenchange", fsOn);
     document.body.classList.add("game-full");
+    // 브라우저는 사용자가 한 번 누르기 전엔 소리를 막음 → 첫 누르기 · 키에서 소리 잠금 풀기
+    const un = () => unlock();
+    window.addEventListener("pointerdown", un);
+    window.addEventListener("keydown", un);
     return () => {
+      window.removeEventListener("pointerdown", un);
+      window.removeEventListener("keydown", un);
       window.removeEventListener("resize", on);
       document.removeEventListener("fullscreenchange", fsOn);
       document.body.classList.remove("game-full");
@@ -124,7 +131,7 @@ export default function Stage({ children }: { children: ReactNode }) {
           className={
             cover
               ? "relative h-full w-full"
-              : "relative aspect-video w-full overflow-hidden rounded-2xl border border-white/10 bg-black"
+              : "relative aspect-video w-full overflow-hidden border-2 border-[#3d3468] bg-black shadow-[0_6px_0_0_rgba(0,0,0,0.5)]"
           }
           style={!cover && phone && !land ? { aspectRatio: "auto", height: "62vh" } : undefined}
         >
@@ -142,16 +149,17 @@ export default function Stage({ children }: { children: ReactNode }) {
             </div>
           )}
           {(fsGate || rotateGate) && (
-            <div className="absolute inset-0 z-[60] flex flex-col items-center justify-center gap-4 bg-black/90 px-6 text-center backdrop-blur-sm">
-              <p className="font-['Black_Han_Sans',sans-serif] text-2xl text-white">
+            <div className="dfn absolute inset-0 z-[60] flex flex-col items-center justify-center gap-4 bg-[#0b0918] px-6 text-center">
+              <p className="px-title text-2xl text-white">
                 {fsGate ? "전체화면으로 플레이해 주세요" : "폰을 가로로 돌려 주세요"}
               </p>
-              <p className="text-sm text-white/60">폰에서는 가로 화면으로 플레이해요</p>
+              <p className="text-sm text-[#a69cc9]">폰에서는 가로 화면으로 플레이해요</p>
               {fsGate && (
                 <button
                   type="button"
                   onClick={toggleFs}
-                  className="rounded-xl bg-[#ff5cd6] px-8 py-3 text-lg font-bold text-black"
+                  className="px-btn px-8 py-3 text-lg font-bold"
+                  style={{ "--c": "#d4249f", "--t": "#fff" } as React.CSSProperties}
                 >
                   ⛶ 전체화면으로 시작
                 </button>

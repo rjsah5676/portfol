@@ -1,7 +1,7 @@
-# GLITCH DEFENSE (글리치 디펜스) — 인수인계 · 작업 가이드
+# PIXEL GLITCH DEFENSE (픽셀 글리치 디펜스) — 인수인계 · 작업 가이드
 
-> PIXEL FIGHT 외전 랜덤 디펜스. **알파** (그림 없이 자리표시, 메뉴 미노출 · noindex).
-> 주소: `/games/defense/` · 처음 만든 날: 2026-10-13
+> PIXEL FIGHT 외전 랜덤 디펜스. **알파** (메뉴 미노출 · noindex). 이름: **PIXEL GLITCH DEFENSE (픽셀 글리치 디펜스)**
+> 주소: `/games/defense/` · 처음 만든 날: 2026-10-13 · 도트 2.5D 화면 · 그림 · 소리 입힘: 2026-10-13
 > 이 문서만 읽으면 바로 이어서 작업할 수 있게 정리함. Claude 로 작업한다면 이 파일부터 읽히기.
 
 ---
@@ -23,7 +23,14 @@ npx tsx scripts/defense-trace.ts -b 기사단 --seed 7        # 봇 한 판을 �
 npm test -- defense                           # 엔진 · 랭킹 검증 · 멀티 턴 테스트
 ```
 
-관리자 계정이면 게임 화면 오른쪽 위 **DEV** 버튼: 봇 자동 플레이 · ×5/×10/×20 · 골드/행운석 (쓰면 그 판은 랭킹 안 올라감).
+관리자 계정이면 게임 화면 오른쪽 위 **DEV** 버튼(관리자에게만 보임): 봇 자동 플레이 · ×5/×10/×20 · 골드/행운석 (쓰면 그 판은 랭킹 안 올라감).
+
+**Firebase 없이 화면 확인 (회원 여러 명 · 멀티)**: `server/scripts/dev-fake.ts` + web 을 `POKER_E2E=1` 로 띄우고 주소에 `?fake=<uid>:<별명>`.
+```bash
+cd server && MONGODB_URI=mongodb://127.0.0.1:27027/ ADMIN_EMAILS=admin@example.com npx tsx scripts/dev-fake.ts
+cd web && POKER_E2E=1 npx next dev            # → /games/defense/?fake=admin:관리자 (admin@example.com 이라 관리자)
+```
+브라우저 창 두 개에 `?fake=alice:alice` · `?fake=bob:bob` 이면 멀티 둘이서 확인 가능.
 
 ## 3. 파일 지도
 
@@ -37,16 +44,19 @@ npm test -- defense                           # 엔진 · 랭킹 검증 · 멀�
 | `web/src/lib/defense/replay.ts` | 명령 기록 다시 돌리기 · 기록 검사 · 점수 · 멀티 턴 상수 |
 | `web/src/lib/defense/bot.ts` | 밸런스용 봇 전략 (`BOTS`) |
 | `web/src/lib/defense/rng.ts` | 시드 난수 (mulberry32) |
-| `web/src/lib/defense/assets.ts` | **그림 · 소리 연결표** — 에셋 받으면 여기 한 줄 |
+| `web/src/lib/defense/assets.ts` | **그림 · 소리 연결표** (유닛 41 · 적 8 · 보스 6 · 효과음 23 · 배경음 5) — 에셋 바꾸면 여기 |
 | `web/src/components/Defense/DefenseApp.tsx` | 메뉴 · 솔로 시작 · 멀티 로비/방 · 랭킹 목록 |
 | `web/src/components/Defense/GameView.tsx` | 게임 화면 (위 바 · 필드 · 아래 정보 · 오른쪽 패널 · 창들 · 결과) |
 | `web/src/components/Defense/controller.ts` | 화면 쪽 진행: 솔로(즉시 실행 + 기록) / 멀티(서버 턴 받아 락스텝) |
-| `web/src/components/Defense/render.ts` | 캔버스 필드 그리기 (그림 있으면 그림, 없으면 도트 자리표시) |
+| `web/src/components/Defense/render.ts` | 캔버스 필드 그리기 — **2.5D** (돌길 + 높은 블록 · 발 위치 순서로 겹침) · 등급 오라/외곽선/보석 · 효과 |
+| `web/src/components/Defense/audio.ts` | 소리: 효과음(Web Audio, 종류별 간격 제한) · 배경음(웨이브/보스에 맞춰 바뀜) · 음량 저장 |
 | `web/src/components/Defense/Stage.tsx` | 1024×576 무대 · 화면 맞춤 · 폰 가로 전용 · 전체화면 |
-| `web/src/components/Defense/Codex.tsx` · `ui.tsx` | 도감 · 공용 버튼/창 |
+| `web/src/components/Defense/Codex.tsx` · `ui.tsx` | 도감 · 공용 도트 UI (버튼 · 창 · 세력 문장 · 도트 아이콘 · 막대 · 소리 설정) |
 | `web/src/realtime/defense.ts` | 서버 통신 (rpc · 구독) |
 | `web/src/app/games/defense/` | 페이지 (GameHeader + 랭킹) · layout(메타, noindex) |
-| `web/src/css/defense.css` | 애니메이션 · 글리치 효과 키프레임만 |
+| `web/src/css/defense.css` | **도트 UI 규칙** (`px-btn` · `px-box` · `px-inset` · `px-win` · `px-bar`) · 커서 · 글꼴 · 키프레임 |
+| `web/public/defense/` | `units/` · `enemies/` · `bosses/` 그림(webp) · `sfx/` · `bgm/` (mp3) · `fonts/` 갈무리(OFL) · `ui/` 커서 |
+| `web/scripts/defense-art/` | 그림 시트 자르기 (`slice.py` 칸 나누기 · `cc.py` 겹친 줄은 덩어리 기준) |
 | `server/src/games/defense.ts` | 랭킹(시드 발급 · 기록 검증 · 순위) + 멀티 방(턴 릴레이) |
 | `server/src/games/defenseVerify.worker.ts` | 기록 검증 작업 스레드 (tsup 엔트리에 추가돼 있음) |
 | `server/scripts/defense-sim.ts` · `defense-trace.ts` | 밸런스 시뮬 CLI |
@@ -79,8 +89,8 @@ npm test -- defense                           # 엔진 · 랭킹 검증 · 멀�
 **밸런스** — `balance.ts` · 유닛/보스 수치 수정 → `defense-sim.ts` 로 확인 → `BALANCE_VER` 올림.
 봇은 사람보다 못함(배치 최적화 X, 균열 단순). 봇 클리어율 0~10%, 평균 30~45웨이브 정도면 사람 기준 적당하다고 봄 (알파 기준선).
 
-**에셋 입히기** — `assets.ts` 의 `UNIT_ART / ENEMY_ART / BOSS_ART / FIELD_ART / SFX` 에 한 줄씩. 파일은 `web/public/defense/…`. 규격은 `ASSETS.md`.
-연결표에 없는 것은 자동으로 자리표시 그림이라 일부만 넣어도 됨.
+**에셋 입히기** — `assets.ts` 의 `UNIT_ART / ENEMY_ART / BOSS_ART / FIELD_ART / SFX / BGM` 에 한 줄씩. 파일은 `web/public/defense/…`. 규격 · 만든 방법은 `ASSETS.md`.
+연결표에 없는 것은 자동으로 자리표시 그림(세력별 도트 인형)이라 일부만 넣어도 됨. 그림이 보는 방향이 왼쪽이면 `face: -1`.
 
 ## 6. 구조 설명
 
@@ -100,6 +110,9 @@ npm test -- defense                           # 엔진 · 랭킹 검증 · 멀�
 - 끝: 모두 `defense.over` 를 보내면 서버가 기록을 다시 돌려 순위 → `result`
 - 지금은 보드끼리 영향 없음(생존 경쟁, 같은 시드라 운은 같음)
 
+- **새로고침 · 탭 닫음 뒤 돌아가기**: 메뉴 · 로비에 "진행 중인 멀티 판으로 돌아가기" (`defense.mine` → `defense.join` 이 자리를 그대로 돌려줌). 판 중 연결이 끊기면 `gone` 시각만 적어 두고, 다른 사람이 다 끝났는데 60초(`GONE_MS`) 안에 안 돌아오면 순위를 냄 (그 보드는 명령 없이 끝까지 돈 결과)
+- **어긋남 감시**: 각자 `HASH_TICKS`(150 tick = 5초)마다 `hashGame` 을 `defense.hash` 로 보냄 → 같은 tick 값이 다르면 서버 로그 `[defense] 멀티 어긋남 …` + 방에 `desync` → 화면 오른쪽 위 "동기화 어긋남 N" (관리자 방 목록에도 `desync` 횟수). 따라잡는 중엔 안 보냄
+
 **"남 돕기" 넣는 법 (다음 단계)**: 명령에 다른 보드를 가리키는 종류를 추가(예: `{ t: "gift", to, c }`) → `isCmd` · `apply` 에서 `g.boards[to]` 를 바꾸면 끝.
 같은 기록 · 같은 시뮬이라 서버 · 동기화 구조는 그대로. 웨이브는 보드마다 따로 흐르므로, 협동 모드를 만들 땐 웨이브 시계를 `Game` 으로 올리는 것도 고려.
 
@@ -107,21 +120,37 @@ npm test -- defense                           # 엔진 · 랭킹 검증 · 멀�
 - 무대 1024×576 고정 배치를 화면에 맞춰 통째로 확대/축소 (PC = 폰). 폰은 가로 전용 (ANIME POKER 와 같은 방식)
 - 필드는 캔버스, 나머지 UI 는 DOM. HUD 는 100ms 마다 다시 그림
 - 조작: 칸 누르기 = 정보, 끌기 = 자리 바꾸기(같은 유닛이면 모음). 단축키 Q 소환 · W 합성 · E 판매 · 1 2 3 강화 · 4 확률 · R 조합식 · Space 일시정지 · F 배속 · Esc
+- **도트 화면 규칙** (AI 웹사이트 느낌 안 나게): 둥근 모서리 · 흐림 · 부드러운 그라데이션 금지 → `px-*` 클래스 (2px 계단 테두리 · 아래 턱 · 누르면 내려감). 움직임은 `steps()`. 글꼴 갈무리. 이모지 대신 `ui.tsx` 의 `Icon`(8×8 도트) · `FactionIcon`(세력 문장)
+- **세력 구분**: 블록 윗면 색 · 버튼 색 · 문장(기사단 방패 / 기계공방 톱니 / 마도회 별) · 칩. **등급 구분**: 블록 테두리 · 그림 외곽선(레어부터) · 발밑 오라(레어 링 → 레전드 빛 기둥 · 반짝이 → 신화 깜빡임) · 칸 왼쪽 위 보석 글자(N R E L M H)
+- **마우스**: 도트 커서(`public/defense/ui/cursor*.png`, 손 · 집기), 버튼은 올리면 1칸 떠오르고 테두리가 밝아짐 + 작은 소리, 메뉴 버튼은 ▶ 표시
+- **소리**: 첫 누르기에서 잠금 풀림(Stage). 효과음 종류별 최소 간격 · 동시 14개 제한(배속에서도 안 시끄럽게). 메뉴 · 로비 = `menu`, 1~29웨이브 `wave-early`, 30~ `wave-late`, 보스 `boss`, 60 카이 `boss-final`, 끝나면 배경음을 줄이고 `clear`/`gameover`. 음량은 스피커 버튼(이 기기에 저장)
 
 ## 7. 알파 상태 · 다음 할 일
 
-- [x] 엔진 · 봇 시뮬 · 랭킹 검증 · 멀티 락스텝 · 화면 전체 (자리표시 그림)
-- [ ] 에셋 (`ASSETS.md`) — 유닛 41 · 적 8 · 필드 · 효과음
-- [ ] 메뉴 노출: `web/src/data/navMenu.ts` (썸네일 `img/menu/defense.jpg`) · `app/sitemap.ts` · layout 의 `noindex` 빼기 · 게임 가이드(`data/gameGuides.tsx`)
-- [ ] 밸런스: 지금은 **보스만 패배 원인**(필드 100마리로 죽는 판이 거의 없음) → 후반 웨이브 압박 올리기. 기사단 봇이 약함(보스가 중 · 대형이라). 10 · 20 보스가 벽
-- [ ] 멀티 "남 돕기" · 협동 보스 · 관전
-- [ ] 효과음 · 배경음 연결 (`assets.ts SFX` 는 자리만 있음, 재생 코드는 아직)
+- [x] 엔진 · 봇 시뮬 · 랭킹 검증 · 멀티 락스텝
+- [x] 에셋 — 유닛 41 · 적 8 · 보스 6 (ChatGPT 이미지) · 효과음 23 (ElevenLabs) · 배경음 5 (주인 제작) · 글꼴 · 커서
+- [x] 도트 2.5D 화면 개편 · 세력/등급 구분 · 호버 · 커서 · 이름 PIXEL GLITCH DEFENSE
+- [x] 밸런스 1차 (a2, 9번)
+- [x] 효과음 · 배경음 연결 (`audio.ts`)
+- [x] 멀티 어긋남 감시 · 새로고침 뒤 돌아가기 · 끊긴 사람 기다리다 순위
+- [ ] 메뉴 노출: `web/src/data/navMenu.ts` (썸네일 `img/menu/defense.jpg`) · `app/sitemap.ts` · layout 의 `noindex` 빼기 · 게임 가이드(`data/gameGuides.tsx`) — **주인 결정**
+- [ ] 멀티 "남 돕기" · 협동 보스 · 관전 — **주인과 상의 후** (설계는 6번)
+- [ ] 유닛 공격 동작 그림 (지금은 한 장 그림 + 코드로 튀어나감 · 눌림). 시트로 받으면 `attack` 줄만 채우면 됨
+- [ ] 필드 배경 그림 (`FIELD_ART`) — 지금은 코드로 그린 돌길 · 블록. 그림을 쓰려면 칸 경계가 `CELL`(76) 격자와 맞아야 함
+- [ ] 라이브 이미지(Grok) — 필요하면 주인에게 요청 (메뉴 · 보스 등장 연출 후보)
 - [ ] 배포 때 방 이어받기(live.ts) — 지금 멀티 방은 서버 재시작하면 사라짐
-- [ ] 멀티 어긋남 감시 (`hashGame` 은 있음 — 몇 턴마다 서버로 보내 비교하는 건 아직)
+- [ ] 실제 판 기록이 쌓이면 밸런스 2차 (60보스 도달률 · 전략별 차이)
 
 ## 8. 테스트 메모
 - 2026-10-13: 서버 · 웹 타입체크 통과. 봇 시뮬 결정론 확인(전략 8종). 멀티 락스텝을 가짜 서버로 돌려 두 클라이언트 + 중간 입장 클라이언트 해시 일치 확인.
 - `server/test/defense.test.ts` 는 작성만 (윈도우에서 `npm test -- defense` 로 돌려 볼 것).
+- 2026-10-13 (2차):
+  - `npm test -- defense` 9개 통과 (어긋남 감시 · 돌아가기 검사 추가). `defense-sim.ts -n 40` 결정론 확인
+  - 서버 Docker 빌드가 `web/src/lib/defense` 를 못 찾던 문제 → `server/Dockerfile` 에 복사 줄 추가
+  - 실제 화면(dev-fake + 헤드리스 크롬)으로: 메뉴 → 혼자 하기 → 소환 · 칸 고르기 · 강화 · DEV 봇 ×10 (28웨이브까지) · 판 끝 결과창 → **랭킹 1위 등록** 확인
+  - 멀티(alice · bob): 방 만들기 → 준비 → 시작 → 서로 명령 · 상대 보드 표시 확인. **고친 것**: 새로고침하면 로비에 진행 중인 방이 안 보여 돌아갈 길이 없었음 → "진행 중인 판으로 돌아가기" 추가, 끊긴 사람을 영원히 기다려 순위가 안 나오던 것 → 60초 뒤 순위
+  - `dev-fake.ts`: 가짜 회원을 두 명 이상 만들면 `nickKey` 중복으로 서버가 죽던 것 고침 (멀티 확인용)
+  - 폰 가로 · 세로 안내 확인
 
 ## 9. 밸런스 기록
 

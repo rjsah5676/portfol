@@ -1,19 +1,35 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import {
   FACTION_COLOR,
   FACTION_NAME,
   GRADE_COLOR,
   GRADE_NAME,
   UNIT,
+  type Faction,
   type UnitDef,
 } from "@/lib/defense/units";
 import { UNIT_ART } from "@/lib/defense/assets";
+import { getPrefs, onPrefs, setPrefs, sfx, type AudioPrefs } from "./audio";
 
-/* 글리치 디펜스 공용 UI 조각 (무대 1024×576 안에서 쓰는 크기) */
+/* PIXEL GLITCH DEFENSE 공용 UI 조각 (무대 1024×576 안에서 쓰는 크기) — 도트 규칙은 css/defense.css */
 
-export const TITLE = "font-['Black_Han_Sans',sans-serif]";
+export const TITLE = "px-title";
+export const GAME_NAME = "PIXEL GLITCH DEFENSE";
+
+type Tone = "ghost" | "main" | "gold" | "danger" | "cyan" | "knight" | "mech" | "arcane";
+/** 버튼 바탕 · 글자 · 마우스 올렸을 때 테두리 색 */
+const TONES: Record<Tone, { c: string; t: string; hb: string }> = {
+  ghost: { c: "#2a2350", t: "#f2eefc", hb: "#bfb3ff" },
+  main: { c: "#d4249f", t: "#fff", hb: "#ffd6f4" },
+  gold: { c: "#e0a412", t: "#2a1a00", hb: "#fff2b8" },
+  danger: { c: "#8c1f3a", t: "#ffd0da", hb: "#ff9ab0" },
+  cyan: { c: "#137f93", t: "#e6fdff", hb: "#b8fbff" },
+  knight: { c: "#1d4f7a", t: "#e3f3ff", hb: "#6ec1ff" },
+  mech: { c: "#7a4612", t: "#fff0dc", hb: "#ffb347" },
+  arcane: { c: "#4d2a82", t: "#f2e6ff", hb: "#c08cff" },
+};
 
 export function Btn({
   children,
@@ -23,34 +39,41 @@ export function Btn({
   className = "",
   title,
   hot,
+  arrow,
+  silent,
+  style,
 }: {
   children: ReactNode;
   onClick?: () => void;
   disabled?: boolean;
-  tone?: "ghost" | "main" | "gold" | "danger" | "cyan";
+  tone?: Tone;
   className?: string;
   title?: string;
   /** 단축키 표시 (PC) */
   hot?: string;
+  /** 마우스를 올리면 왼쪽에 ▶ (메뉴 버튼) */
+  arrow?: boolean;
+  /** 누름 소리 안 냄 (누른 결과에 따로 소리가 있을 때) */
+  silent?: boolean;
+  style?: CSSProperties;
 }) {
-  const tones = {
-    ghost: "border-white/12 bg-white/[0.05] text-white/85 hover:bg-white/[0.1]",
-    main: "border-[#ff5cd6]/70 bg-[linear-gradient(180deg,#ff5cd6,#b02fa0)] text-white shadow-[0_0_18px_-4px_#ff5cd6] hover:brightness-110",
-    gold: "border-[#ffd84a]/70 bg-[linear-gradient(180deg,#ffd84a,#c99a12)] text-[#2a1e05] hover:brightness-110",
-    danger: "border-[#ff5a6e]/60 bg-[#ff5a6e]/15 text-[#ffb3bd] hover:bg-[#ff5a6e]/25",
-    cyan: "border-[#7ef3ff]/50 bg-[#7ef3ff]/10 text-[#c8fbff] hover:bg-[#7ef3ff]/20",
-  };
+  const t = TONES[tone];
   return (
     <button
       type="button"
       title={title}
       disabled={disabled}
-      onClick={onClick}
-      className={`relative rounded-lg border transition active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-35 disabled:active:scale-100 ${tones[tone]} ${className}`}
+      onPointerEnter={(e) => e.pointerType === "mouse" && !disabled && sfx("ui-hover")}
+      onClick={() => {
+        if (!silent) sfx("ui-click");
+        onClick?.();
+      }}
+      className={`px-btn ${arrow ? "px-arrow" : ""} ${className}`}
+      style={{ "--c": t.c, "--t": t.t, "--hb": t.hb, ...style } as CSSProperties}
     >
       {children}
       {hot && (
-        <span className="pointer-events-none absolute top-0.5 right-1 hidden font-mono text-[9px] opacity-45 [@media(pointer:fine)]:block">
+        <span className="px-key pointer-events-none absolute top-1 right-1 hidden [@media(pointer:fine)]:block">
           {hot}
         </span>
       )}
@@ -63,30 +86,38 @@ export function Modal({
   onClose,
   children,
   wide,
+  accent = "#5b4f96",
 }: {
   title: ReactNode;
   onClose?: () => void;
   children: ReactNode;
   wide?: boolean;
+  accent?: string;
 }) {
+  useEffect(() => {
+    sfx("ui-click", 0.8, 1.2);
+  }, []);
   return (
     <div
-      className="absolute inset-0 z-40 flex items-center justify-center bg-black/65 backdrop-blur-[2px]"
+      className="absolute inset-0 z-40 flex items-center justify-center bg-[#05040c]/75"
       onPointerDown={(e) => e.target === e.currentTarget && onClose?.()}
     >
-      <div
-        className={`flex max-h-[540px] flex-col rounded-2xl border border-white/12 bg-[#0d1122] shadow-2xl ${wide ? "w-[900px]" : "w-[600px]"}`}
-      >
-        <div className="flex items-center justify-between border-b border-white/10 px-5 py-3">
-          <h3 className={`${TITLE} text-[22px] text-white`}>{title}</h3>
+      <div className={`px-win flex max-h-[528px] flex-col ${wide ? "w-[900px]" : "w-[600px]"}`}>
+        <div
+          className="px-win-head m-[4px] mb-0 flex items-center justify-between px-4 py-2"
+          style={{ boxShadow: `inset 0 -2px 0 0 ${accent}` }}
+        >
+          <h3 className={`${TITLE} px-shadow text-[20px] text-white`}>{title}</h3>
           {onClose && (
             <button
               type="button"
-              onClick={onClose}
-              className="h-9 w-9 rounded-lg text-2xl text-white/50 hover:bg-white/10 hover:text-white"
+              onPointerEnter={(e) => e.pointerType === "mouse" && sfx("ui-hover")}
+              onClick={() => (sfx("ui-click"), onClose())}
+              className="px-btn h-8 w-8 text-[16px] leading-none"
+              style={{ "--c": "#3a2f66", "--hb": "#ff9ab0" } as CSSProperties}
               aria-label="닫기"
             >
-              ×
+              ✕
             </button>
           )}
         </div>
@@ -96,14 +127,62 @@ export function Modal({
   );
 }
 
+/* ───────── 세력 문장 (도트 그림) ─────────
+ * 기사단 = 방패와 검 · 기계공방 = 톱니 · 마도회 = 별과 달 · 히든 = 깨진 픽셀
+ * 7×7 칸 무늬, 1칸 = size/7 */
+const EMBLEM: Record<Faction, string[]> = {
+  knight: ["..XXX..", ".XXXXX.", ".XX.XX.", ".X.X.X.", ".XX.XX.", "..XXX..", "...X..."],
+  mech: [".X.X.X.", "XXXXXXX", ".XX.XX.", "XX...XX", ".XX.XX.", "XXXXXXX", ".X.X.X."],
+  arcane: ["...X...", "..XXX..", "XXXXXXX", ".XXXXX.", "..XXX..", ".XX.XX.", "X.....X"],
+  hidden: ["XX..X.X", "X..XX..", ".XX..XX", "X.XX.X.", "..X.XX.", "XX.X..X", "X..X.XX"],
+};
+export function FactionIcon({
+  f,
+  size = 14,
+  color,
+  className = "",
+}: {
+  f: Faction;
+  size?: number;
+  color?: string;
+  className?: string;
+}) {
+  const rows = EMBLEM[f];
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 7 7"
+      shapeRendering="crispEdges"
+      className={`inline-block shrink-0 ${className}`}
+      aria-hidden
+    >
+      {rows.flatMap((r, y) =>
+        [...r].map((ch, x) =>
+          ch === "X" ? (
+            <rect
+              key={`${x}-${y}`}
+              x={x}
+              y={y}
+              width={1}
+              height={1}
+              fill={color ?? FACTION_COLOR[f]}
+            />
+          ) : null
+        )
+      )}
+    </svg>
+  );
+}
+
 export function GradeChip({ g }: { g: number }) {
   return (
     <span
-      className="rounded px-1.5 py-[1px] text-[12px] font-bold"
+      className="inline-block px-1.5 py-[2px] text-[11px] leading-none font-bold"
       style={{
-        color: GRADE_COLOR[g],
-        background: GRADE_COLOR[g] + "22",
-        border: `1px solid ${GRADE_COLOR[g]}55`,
+        color: g >= 3 ? "#160f00" : GRADE_COLOR[g],
+        background: g >= 3 ? GRADE_COLOR[g] : GRADE_COLOR[g] + "22",
+        boxShadow: `0 0 0 2px ${GRADE_COLOR[g]}${g >= 3 ? "" : "88"}`,
       }}
     >
       {GRADE_NAME[g]}
@@ -113,48 +192,69 @@ export function GradeChip({ g }: { g: number }) {
 export function FactionChip({ f }: { f: UnitDef["faction"] }) {
   return (
     <span
-      className="rounded px-1.5 py-[1px] text-[12px] font-bold"
-      style={{ color: FACTION_COLOR[f], background: FACTION_COLOR[f] + "1c" }}
+      className="inline-flex items-center gap-1 px-1.5 py-[2px] text-[11px] leading-none font-bold"
+      style={{ color: FACTION_COLOR[f], background: FACTION_COLOR[f] + "1f" }}
     >
+      <FactionIcon f={f} size={10} />
       {FACTION_NAME[f]}
     </span>
   );
 }
 
-/** 유닛 얼굴 (그림이 있으면 첫 프레임, 없으면 세력색 네모 + 글자) */
+/** 세력별 칸 바탕 (유닛 아이콘 뒤) — 같은 세력이 한눈에 묶여 보이게 */
+export const FACTION_BG: Record<Faction, string> = {
+  knight: "#173a5c",
+  mech: "#5c3410",
+  arcane: "#3a2068",
+  hidden: "#0f4d3a",
+};
+
+/** 유닛 얼굴 (그림이 있으면 그림, 없으면 세력 문장 + 글자) — 세력색 바탕 · 등급색 테두리 */
 export function UnitIcon({ id, size = 40, dim }: { id: string; size?: number; dim?: boolean }) {
   const d = UNIT[id];
   const art = UNIT_ART[id];
-  if (art)
+  const border = d.grade >= 3 ? 3 : 2;
+  const box: CSSProperties = {
+    width: size,
+    height: size,
+    background: FACTION_BG[d.faction],
+    boxShadow: `0 0 0 ${border}px ${GRADE_COLOR[d.grade]}${d.grade >= 3 ? `, 0 0 10px ${GRADE_COLOR[d.grade]}aa` : ""}, inset 0 -${Math.round(size / 6)}px 0 0 rgba(0,0,0,0.3)`,
+    opacity: dim ? 0.35 : 1,
+  };
+  if (art) {
+    const fw = art.w,
+      fh = art.h;
+    const k = (size * 1.1) / fh;
     return (
-      <span
-        className="inline-block shrink-0 rounded-md"
-        style={{
-          width: size,
-          height: size,
-          backgroundImage: `url(${art.src})`,
-          backgroundSize: `${(art.idle.frames * size * art.w) / art.h}px auto`,
-          backgroundPosition: `0 ${-art.idle.row * size}px`,
-          imageRendering: art.pixel ? "pixelated" : undefined,
-          border: `2px solid ${GRADE_COLOR[d.grade]}`,
-          opacity: dim ? 0.35 : 1,
-        }}
-      />
+      <span className="relative inline-block shrink-0 overflow-hidden" style={box}>
+        <span
+          className="absolute left-1/2"
+          style={{
+            width: fw * k,
+            height: fh * k,
+            bottom: -size * 0.04,
+            marginLeft: (-fw * k) / 2,
+            backgroundImage: `url(${art.src})`,
+            backgroundSize: `${(art.cols ?? art.idle.frames) * fw * k}px auto`,
+            backgroundPosition: `0 ${-art.idle.row * fh * k}px`,
+            imageRendering: art.pixel ? "pixelated" : undefined,
+          }}
+        />
+      </span>
     );
+  }
   return (
     <span
-      className={`${TITLE} inline-flex shrink-0 items-center justify-center rounded-md text-[#0b0f1d]`}
-      style={{
-        width: size,
-        height: size,
-        background: FACTION_COLOR[d.faction],
-        border: `${d.grade >= 2 ? 3 : 2}px solid ${GRADE_COLOR[d.grade]}`,
-        fontSize: d.glyph.length > 1 ? size * 0.3 : size * 0.45,
-        opacity: dim ? 0.35 : 1,
-        boxShadow: d.grade >= 3 ? `0 0 12px ${GRADE_COLOR[d.grade]}88` : undefined,
-      }}
+      className="relative inline-flex shrink-0 flex-col items-center justify-center"
+      style={box}
     >
-      {d.glyph}
+      <FactionIcon f={d.faction} size={Math.round(size * 0.42)} />
+      <span
+        className="font-bold text-white"
+        style={{ fontSize: Math.max(9, Math.round(size * 0.24)), lineHeight: 1.1 }}
+      >
+        {d.glyph}
+      </span>
     </span>
   );
 }
@@ -165,6 +265,92 @@ export function unitStats(d: UnitDef) {
   return `피해 ${d.dmg} · 초당 ${d.aps}회 · 사거리 ${r} · ${d.dtype === "phys" ? "물리" : "마법"}`;
 }
 
+/* ───────── 소리 설정 ───────── */
+
+export function useAudioPrefs(): AudioPrefs {
+  const [p, setP] = useState<AudioPrefs>(() => getPrefs());
+  useEffect(() => onPrefs(setP), []);
+  return p;
+}
+
+/** 스피커 버튼 + 누르면 음량 창 */
+export function SoundButton({ className = "" }: { className?: string }) {
+  const p = useAudioPrefs();
+  const [open, setOpen] = useState(false);
+  const icon = <Icon n={p.mute ? "mute" : "speaker"} size={16} />;
+  return (
+    <div className={`relative ${className}`}>
+      <Btn
+        onClick={() => setOpen((o) => !o)}
+        className="h-[34px] w-[38px] text-[15px]"
+        title="소리"
+      >
+        {icon}
+      </Btn>
+      {open && (
+        <div
+          className="px-win absolute top-[44px] right-0 z-50 w-[220px] p-3 text-[13px]"
+          onPointerLeave={() => setOpen(false)}
+        >
+          <Slider
+            label="배경음"
+            value={p.bgm}
+            onChange={(v) => setPrefs({ bgm: v, mute: false })}
+          />
+          <Slider
+            label="효과음"
+            value={p.sfx}
+            onChange={(v) => {
+              setPrefs({ sfx: v, mute: false });
+              sfx("ui-click");
+            }}
+          />
+          <Btn
+            tone={p.mute ? "danger" : "ghost"}
+            className="mt-2 h-[30px] w-full text-[12px]"
+            onClick={() => setPrefs({ mute: !p.mute })}
+          >
+            {p.mute ? "소리 켜기" : "모두 끄기"}
+          </Btn>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Slider({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  onChange(v: number): void;
+}) {
+  const steps = 10;
+  const on = Math.round(value * steps);
+  return (
+    <div className="mb-2">
+      <div className="mb-1 flex justify-between text-[var(--mute)]">
+        <span>{label}</span>
+        <span>{on * 10}%</span>
+      </div>
+      <div className="flex gap-[3px]">
+        {Array.from({ length: steps }, (_, i) => (
+          <button
+            key={i}
+            type="button"
+            aria-label={`${label} ${(i + 1) * 10}%`}
+            onClick={() => onChange(on === i + 1 ? i / steps : (i + 1) / steps)}
+            className="h-[14px] flex-1"
+            style={{ background: i < on ? (i < 7 ? "#5ff2ff" : "#ff4fd8") : "#2a2350" }}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export const fmtTime = (s: number) =>
   `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 export const fmtNum = (n: number) =>
@@ -173,3 +359,227 @@ export const fmtNum = (n: number) =>
     : n >= 1e4
       ? `${(n / 1e3).toFixed(1)}K`
       : String(Math.round(n));
+
+/* ───────── 도트 아이콘 (이모지 대신) ─────────
+ * 8×8 무늬. 글자: 1 주색 · 2 밝은색 · 3 어두운색 · 0 외곽선 */
+const ICONS: Record<string, { rows: string[]; c: [string, string, string] }> = {
+  coin: {
+    rows: [
+      "..0000..",
+      ".011110.",
+      "01122110",
+      "01211310",
+      "01211310",
+      "01133310",
+      ".033330.",
+      "..0000..",
+    ],
+    c: ["#ffd23f", "#fff2b8", "#b8860b"],
+  },
+  gem: {
+    rows: [
+      "........",
+      ".000000.",
+      "01222110",
+      "0122113.",
+      ".01113..",
+      "..0130..",
+      "...00...",
+      "........",
+    ],
+    c: ["#5ff2ff", "#e6fdff", "#1b8fa3"],
+  },
+  clover: {
+    rows: [
+      ".00..00.",
+      "0110011.",
+      "01211210",
+      ".001100.",
+      "0110011.",
+      "01100110",
+      ".00.30..",
+      "....3...",
+    ],
+    c: ["#6dff8f", "#d6ffe0", "#2f7a3e"],
+  },
+  gear: {
+    rows: [
+      "...00...",
+      ".0.11.0.",
+      "..1221..",
+      "01200210",
+      "01200210",
+      "..1221..",
+      ".0.11.0.",
+      "...00...",
+    ],
+    c: ["#5ff2ff", "#e6fdff", "#1b8fa3"],
+  },
+  flask: {
+    rows: [
+      "..0000..",
+      "...00...",
+      "...00...",
+      "..0110..",
+      ".012210.",
+      "01211110",
+      "01111110",
+      ".000000.",
+    ],
+    c: ["#ffd23f", "#fff2b8", "#b8860b"],
+  },
+  star: {
+    rows: [
+      "...00...",
+      "...11...",
+      "0011110.",
+      ".012210.",
+      "..1221..",
+      ".11.111.",
+      ".1....1.",
+      "........",
+    ],
+    c: ["#ffd23f", "#fff2b8", "#b8860b"],
+  },
+  book: {
+    rows: [
+      ".000000.",
+      "0111122.",
+      "0121122.",
+      "0111122.",
+      "0121122.",
+      "0111122.",
+      "0333333.",
+      ".000000.",
+    ],
+    c: ["#c08cff", "#f2e6ff", "#4d2a82"],
+  },
+  ticket: {
+    rows: [
+      "........",
+      "00000000",
+      "01121110",
+      "11211211",
+      "11211211",
+      "01121110",
+      "00000000",
+      "........",
+    ],
+    c: ["#ffd23f", "#fff2b8", "#b8860b"],
+  },
+  rift: {
+    rows: [
+      "..0..0..",
+      ".010010.",
+      "0121.120",
+      ".12..21.",
+      ".12..21.",
+      "0121.120",
+      ".010010.",
+      "..0..0..",
+    ],
+    c: ["#ff4fd8", "#ffd6f4", "#8c1f7a"],
+  },
+  dice: {
+    rows: [
+      ".000000.",
+      "01111110",
+      "01211210",
+      "01111110",
+      "01121110",
+      "01211210",
+      "01111110",
+      ".000000.",
+    ],
+    c: ["#f2eefc", "#120d22", "#a69cc9"],
+  },
+  speaker: {
+    rows: [
+      "....0...",
+      "...01.0.",
+      "0001102.",
+      "01211.02",
+      "01211.02",
+      "0001102.",
+      "...01.0.",
+      "....0...",
+    ],
+    c: ["#f2eefc", "#ffffff", "#a69cc9"],
+  },
+  mute: {
+    rows: [
+      "....0...",
+      "...01...",
+      "000110.0",
+      "012110.0",
+      "01211.0.",
+      "000110.0",
+      "...01...",
+      "....0...",
+    ],
+    c: ["#a69cc9", "#f2eefc", "#6f6597"],
+  },
+  skull: {
+    rows: [
+      ".000000.",
+      "01111110",
+      "11111111",
+      "10011001",
+      "11111111",
+      ".111111.",
+      ".1.11.1.",
+      "........",
+    ],
+    c: ["#f2eefc", "#ffffff", "#a69cc9"],
+  },
+};
+export function Icon({
+  n,
+  size = 16,
+  className = "",
+}: {
+  n: keyof typeof ICONS | string;
+  size?: number;
+  className?: string;
+}) {
+  const ic = ICONS[n];
+  if (!ic) return null;
+  const col: Record<string, string> = { "0": "#0a0816", "1": ic.c[0], "2": ic.c[1], "3": ic.c[2] };
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 8 8"
+      shapeRendering="crispEdges"
+      className={`inline-block shrink-0 align-[-2px] ${className}`}
+      aria-hidden
+    >
+      {ic.rows.flatMap((r, y) =>
+        [...r].map((ch, x) =>
+          col[ch] ? (
+            <rect key={`${x}-${y}`} x={x} y={y} width={1} height={1} fill={col[ch]} />
+          ) : null
+        )
+      )}
+    </svg>
+  );
+}
+
+/** 도트 막대 (진행 · 체력) */
+export function Bar({
+  value,
+  color,
+  h = 8,
+  className = "",
+}: {
+  value: number;
+  color: string;
+  h?: number;
+  className?: string;
+}) {
+  return (
+    <div className={`px-bar ${className}`} style={{ height: h }}>
+      <i style={{ width: `${Math.max(0, Math.min(1, value)) * 100}%`, backgroundColor: color }} />
+    </div>
+  );
+}

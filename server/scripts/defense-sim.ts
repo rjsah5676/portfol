@@ -1,5 +1,5 @@
 /**
- * 글리치 디펜스 밸런스 시뮬 — 봇 전략별로 여러 판을 돌려 결과를 표로.
+ * 픽셀 글리치 디펜스 밸런스 시뮬 — 봇 전략별로 여러 판을 돌려 결과를 표로.
  *
  *   npx tsx scripts/defense-sim.ts                 전략 전부 × 20판
  *   npx tsx scripts/defense-sim.ts -n 100 -b 마도회   한 전략만 100판
@@ -87,7 +87,7 @@ const med = (xs: number[]) => {
   return s[Math.floor(s.length / 2)] ?? 0;
 };
 
-console.log(`\n글리치 디펜스 밸런스 시뮬 (버전 ${BALANCE_VER}) — 전략별 ${N}판${verify ? " · 결정론 확인함" : ""}\n`);
+console.log(`\n픽셀 글리치 디펜스 밸런스 시뮬 (버전 ${BALANCE_VER}) — 전략별 ${N}판${verify ? " · 결정론 확인함" : ""}\n`);
 console.log("전략      클리어  평균웨이브 중앙  사망(필드/보스)  평균시간  판당계산");
 for (const cfg of bots) {
   const rs = runs.filter((r) => r.bot === cfg.name);
