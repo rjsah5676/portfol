@@ -16,8 +16,9 @@ import PatchNotes, { LATEST } from "./PatchNotes";
 import { SettingsModal } from "./Settings";
 import TechGuide from "./TechGuide";
 import PixelPreview from "./PixelPreview";
+import { TUT_CHAR, TUT_FOE, TUT_MAP } from "@/lib/fight/tutorial";
 
-export type Mode = "ai" | "2p" | "online" | "practice";
+export type Mode = "tutorial" | "ai" | "online" | "practice";
 export interface Setup {
   mode: Mode;
   c1: number;
@@ -31,8 +32,8 @@ export interface Setup {
 
 /** 메인 화면의 모드 칸 (← → 로 고르는 순서) */
 const MODE_TILES: readonly (readonly [Mode, string, string])[] = [
+  ["tutorial", "튜토리얼", "카이로 기본 배우기"],
   ["ai", "AI 대전", "CPU와 1:1"],
-  ["2p", "2인 대전", "한 키보드로 둘이서"],
   ["online", "온라인 대전", "방 만들고 1:1 · 랭크전"],
   ["practice", "연습 모드", "허수아비로 콤보 연습"],
 ];
@@ -389,6 +390,12 @@ export default function Select({
       onOnline?.();
       return;
     }
+    if (stRef.current.setup.mode === "tutorial") {
+      // 튜토리얼: 캐릭터 · 맵 고르기 없이 카이 vs 연습 상대, 노을 옥상
+      setSetup((s) => ({ ...s, c1: TUT_CHAR, c2: TUT_FOE, map: TUT_MAP, rolled: undefined }));
+      setStage("vs");
+      return;
+    }
     setLock([false, false]);
     setStage("char");
   };
@@ -623,7 +630,7 @@ export default function Select({
               CHARACTER SELECT
             </div>
             <div className={`${KR} text-[1.2cqw] text-white/55`}>
-              {prac ? "연습 모드 · 허수아비는 건모" : ai ? `AI 대전 · CPU ${AI_LEVELS[setup.level].name}` : "2인 대전"}
+              {prac ? "연습 모드 · 허수아비는 건모" : ai ? `AI 대전 · CPU ${AI_LEVELS[setup.level].name}` : "튜토리얼"}
             </div>
           </div>
           <button

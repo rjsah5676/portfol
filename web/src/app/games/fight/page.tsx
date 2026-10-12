@@ -52,7 +52,7 @@ export default function FightPage() {
           title="PIXEL FIGHT"
           en="Fighting Game"
           accent="#FF8A3D"
-          desc="도트 캐릭터 6명의 1:1 플랫폼 대전 — AI, 한 키보드 2인, 온라인 · 랭크전"
+          desc="도트 캐릭터 7명의 1:1 플랫폼 대전 — 튜토리얼, AI, 온라인 · 랭크전"
           guide={FIGHT_GUIDE}
           extra={(pill) => (
             <button

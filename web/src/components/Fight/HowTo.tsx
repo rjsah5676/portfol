@@ -32,33 +32,19 @@ function Sec({ title, color, children }: { title: string; color: string; childre
 
 const CARD = "rounded-md border border-white/10 bg-white/[0.03] px-2.5 py-2";
 
-export default function HowTo({ mode, chars }: { mode: "ai" | "2p" | "online" | "practice"; chars?: [number, number] }) {
-  const two = mode === "2p";
-  const rows: Row[] = two
-    ? [
-        ["이동", k("A", "D"), k("←", "→")],
-        ["대시", k("A", "A", "/", "D", "D"), k("←", "←", "/", "→", "→")],
-        ["점프 (2단)", k("W", "/", "Space"), k("↑", "/", "Enter")],
-        ["가드", k("S"), k("↓")],
-        ["약", k("J"), k(",")],
-        ["발차기", k("K"), k(".")],
-        ["아이덴티티", k("L"), k(";")],
-        ["필살기 (MAX)", k("I"), k("'")],
-        ["잡기", k("J", "+", "K"), k(",", "+", ".")],
-        ["돌진 잡기 (대시 중·직후)", k("J", "+", "K"), k(",", "+", ".")],
-      ]
-    : [
-        ["이동", k("A", "D"), k("←", "→")],
-        ["대시", k("A", "A", "/", "D", "D"), k("←", "←", "/", "→", "→")],
-        ["점프 (2단)", k("W", "/", "Space"), k("↑")],
-        ["가드", k("S"), k("↓")],
-        ["약", k("J"), k("Z")],
-        ["발차기", k("K"), k("X")],
-        ["아이덴티티", k("L"), k("C")],
-        ["필살기 (MAX)", k("I"), k("V")],
-        ["잡기", k("J", "+", "K"), k("Z", "+", "X")],
-        ["돌진 잡기 (대시 중·직후)", k("J", "+", "K"), k("Z", "+", "X")],
-      ];
+export default function HowTo({ mode, chars }: { mode: "tutorial" | "ai" | "online" | "practice"; chars?: [number, number] }) {
+  const rows: Row[] = [
+    ["이동", k("A", "D"), k("←", "→")],
+    ["대시", k("A", "A", "/", "D", "D"), k("←", "←", "/", "→", "→")],
+    ["점프 (2단)", k("W", "/", "Space"), k("↑")],
+    ["가드", k("S"), k("↓")],
+    ["약", k("J"), k("Z")],
+    ["발차기", k("K"), k("X")],
+    ["아이덴티티", k("L"), k("C")],
+    ["필살기 (MAX)", k("I"), k("V")],
+    ["잡기", k("J", "+", "K"), k("Z", "+", "X")],
+    ["돌진 잡기 (대시 중·직후)", k("J", "+", "K"), k("Z", "+", "X")],
+  ];
   return (
     <div className={`mt-3 flex flex-col gap-3 rounded-lg bg-black/20 px-3 py-3 ${KR} text-[11.5px] leading-relaxed text-white/60`}>
       <div className="grid gap-3 md:grid-cols-[minmax(0,17rem)_minmax(0,1fr)]">
@@ -67,8 +53,8 @@ export default function HowTo({ mode, chars }: { mode: "ai" | "2p" | "online" | 
           <Sec title="조작" color="#A78BFA" />
           <div className="grid grid-cols-[1fr_auto_auto] items-center gap-x-2 gap-y-1">
             <span />
-            <span className="min-w-20 text-center text-[10px] text-white/35">{two ? "1P" : "기본"}</span>
-            <span className="min-w-16 text-center text-[10px] text-white/35">{two ? "2P" : "또는"}</span>
+            <span className="min-w-20 text-center text-[10px] text-white/35">기본</span>
+            <span className="min-w-16 text-center text-[10px] text-white/35">또는</span>
             {rows.map(([label, a, b]) => (
               <div key={label} className="contents">
                 <span className="break-keep text-white/70">{label}</span>

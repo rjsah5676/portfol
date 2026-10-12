@@ -5,6 +5,7 @@ import { CHARS } from "@/lib/fight/chars";
 import { MAPS } from "@/lib/fight/maps";
 import { AI_LEVELS, FightAI, aiForRating, aiLevelFor } from "@/lib/fight/ai";
 import {
+  IN,
   METER_MAX,
   ROUND_SEC,
   hpRatio,
@@ -46,6 +47,8 @@ import { FightRenderer } from "./render";
 import { FightInput } from "./input";
 import HowTo from "./HowTo";
 import PracticeGuide from "./PracticeGuide";
+import { TutorialOverlay, type TutView } from "./Tutorial";
+import { Tutorial } from "@/lib/fight/tutorial";
 import CutIn, { type CutInCfg } from "./CutIn";
 import { Banner, Combo, HUD_CSS, PlayerBottom, PlayerTop, TimerBox, WinQuote, type BannerKind } from "./Hud";
 import Select, { type Setup } from "./Select";
@@ -144,6 +147,10 @@ export default function FightGame() {
   const [moveMode, setMoveMode] = useState<MoveMode>("stick");
   /** 연습 모드: 마지막 콤보 (히트 수·피해)와 최고 피해 */
   const [prac, setPrac] = useState<{ hits: number; dmg: number; best: number }>({ hits: 0, dmg: 0, best: 0 });
+  /** 튜토리얼: 지금 단계 (화면용) · 진행 객체 · 끝나고 "AI 대전" 누르면 */
+  const [tutView, setTutView] = useState<TutView | null>(null);
+  const tutRef = useRef<Tutorial | null>(null);
+  const tutAiRef = useRef<() => void>(() => {});
   const [result, setResult] = useState<{
     win: boolean;
     seconds: number;
@@ -354,11 +361,11 @@ export default function FightGame() {
         ? ol.seat === 0
           ? ["YOU", "2P"]
           : ["1P", "YOU"]
-        : ["1P", setup.mode === "ai" ? "CPU" : setup.mode === "practice" ? "허수아비" : "2P"];
+        : ["1P", setup.mode === "ai" ? "CPU" : setup.mode === "practice" ? "허수아비" : "연습 상대"];
     // 차지 게이지는 직접 조작하는 사람에게만 (관전 · 상대 자리 · CPU 자리는 안 보임)
-    r.gauge = watching ? [false, false] : ol ? [ol.seat === 0, ol.seat === 1] : bot ? [true, false] : [true, setup.mode === "2p"];
+    r.gauge = watching ? [false, false] : ol ? [ol.seat === 0, ol.seat === 1] : bot ? [true, false] : [true, false];
     rendererRef.current = r;
-    input.configure(setup.mode === "2p");
+    input.configure(false);
     const pickMap = () =>
       setup.map >= 0 ? setup.map : Math.floor(Math.random() * MAPS.length);
     // 랜덤 맵: 첫 판은 선택 화면에서 섞어 뽑힌 맵, 다시하기는 새로 뽑음
@@ -407,6 +414,12 @@ export default function FightGame() {
       pracHits = 0,
       pracBest = 0;
     setPrac({ hits: 0, dmg: 0, best: 0 });
+    // 튜토리얼: 카이 vs 연습 상대, 단계마다 상대 움직임 · 성공 판정 (lib/fight/tutorial)
+    const tutorial = setup.mode === "tutorial" && !ol && !bot ? new Tutorial() : null;
+    tutRef.current = tutorial;
+    let tutHeld = false,
+      tutMask = 0;
+    setTutView(tutorial ? tutorial.view() : null);
     let hits = 0;
     const prevMeter = [0, 0];
     const prevChg = [0, 0];
@@ -426,6 +439,7 @@ export default function FightGame() {
       s = newMatch([setup.c1, setup.c2], pickMap());
       playBgm(MAPS[s.map].bgm ?? MENU_BGM, true);
       ai = new FightAI(aiLevelFor(setup.level, CHARS[setup.c2]?.id), (Date.now() & 0xffff) + 1);
+      if (tutorial) (tutorial.retry(), setTutView(tutorial.view()));
       hits = 0;
       doneReported = false;
       setResult(null);
@@ -442,6 +456,8 @@ export default function FightGame() {
       const t = e.target as HTMLElement | null;
       if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA")) return;
       if (e.code === "Escape" || e.code === "KeyP") setPaused((p) => !p);
+      // 튜토리얼: N 건너뛰기 (설명 카드 넘기기 J · Space 는 게임 입력으로 — 아래 frame)
+      if (tutorial && !pausedRef.current && e.code === "KeyN" && !tutorial.done) (tutorial.skip(), setTutView(tutorial.view()));
     };
     window.addEventListener("keydown", onKey);
 
@@ -461,6 +477,20 @@ export default function FightGame() {
       // 그림이 다 불러와질 때까지는 판을 멈춰 두고 검은 화면 (임시 그림이 잠깐 보이는 것 방지, 보통 한두 프레임)
       if (!r.ready(s)) {
         r.drawLoading();
+        return;
+      }
+      // 튜토리얼 설명 카드: 판을 멈춰 둠 (처음 ROUND · FIGHT 는 그대로 지나감). J · Space 로 넘김
+      if (tutorial?.blocking && s.phase === "fight") {
+        const b = input.read(0) & (IN.A | IN.J);
+        if (b && !tutHeld) {
+          if (tutorial.done) tutAiRef.current();
+          else (tutorial.next(), setTutView(tutorial.view()));
+          // 카드를 넘긴 그 키를 떼기 전까지는 공격 · 점프로 안 들어가게
+          tutMask = IN.A | IN.J;
+        }
+        tutHeld = !!b;
+        r.draw(s);
+        acc = 0;
         return;
       }
       if (feed && !doneReported && s.phase !== "over") {
@@ -538,8 +568,12 @@ export default function FightGame() {
           if (s.phase !== "over") botLog.push(p1);
           step(s, [p1, s.phase === "over" ? 0 : ai.next(s, 1)]);
         } else {
-          const p1 = input.read(0);
-          const p2 = setup.mode === "2p" ? input.read(1) : practice ? 0 : ai.next(s, 1);
+          let p1 = input.read(0);
+          if (tutMask) {
+            if (p1 & tutMask) p1 &= ~tutMask;
+            else tutMask = 0;
+          }
+          const p2 = tutorial ? tutorial.input(s) : practice ? 0 : ai.next(s, 1);
           const hp0 = s.p[1].hp;
           step(s, [p1, p2]);
           if (practice) {
@@ -560,6 +594,12 @@ export default function FightGame() {
             for (let k = 0; k < 2; k++) s.p[k].hp = CHARS[s.p[k].ch].hp;
             s.p[0].meter = METER_MAX;
             s.timer = ROUND_SEC * 60;
+          }
+          if (tutorial) {
+            // 체력 무한 · 시간 멈춤 (게이지는 단계마다 tutorial 이 정함)
+            for (let k = 0; k < 2; k++) s.p[k].hp = CHARS[s.p[k].ch].hp;
+            s.timer = ROUND_SEC * 60;
+            if (tutorial.update(s)) setTutView(tutorial.view());
           }
         }
         // 소리
@@ -778,6 +818,12 @@ export default function FightGame() {
     toMenu();
     setEntry("char");
   }, [toMenu]);
+  useEffect(() => {
+    tutAiRef.current = () => {
+      setSetup((st) => ({ ...st, mode: "ai", c1: 0, map: -1 }));
+      toChars();
+    };
+  }, [toChars]);
   // 음량 바뀌면 바로 반영 + 저장
   useEffect(() => {
     volRef.current = vol;
@@ -884,7 +930,7 @@ export default function FightGame() {
     ? [plainName(ol.names[0]) + (ol.seat === 0 ? " (나)" : ""), plainName(ol.names[1]) + (ol.seat === 1 ? " (나)" : "")]
     : bot
     ? [plainName(bot.names[0]) + " (나)", plainName(bot.names[1])]
-    : [setup.mode === "2p" ? "1P" : myName || "1P", setup.mode === "ai" ? `CPU ${level.name}` : setup.mode === "practice" ? "허수아비" : "2P"];
+    : [myName || "1P", setup.mode === "ai" ? `CPU ${level.name}` : setup.mode === "practice" ? "허수아비" : "연습 상대"];
   const meSeat = ol?.seat ?? 0;
 
   let banner: { kind: BannerKind; text: string; name?: string; nameColor?: string } | null = null;
@@ -946,6 +992,21 @@ export default function FightGame() {
           </div>
         )}
         {setup.mode === "practice" && !ol && hud && !result && <PracticeGuide ch={hud.ch[0]} />}
+        {setup.mode === "tutorial" && !ol && !bot && tutView && hud && !paused && (
+          <TutorialOverlay
+            view={tutView}
+            onNext={() => {
+              const t = tutRef.current;
+              if (t) (t.next(), setTutView(t.view()));
+            }}
+            onSkip={() => {
+              const t = tutRef.current;
+              if (t && !t.done) (t.skip(), setTutView(t.view()));
+            }}
+            onAi={() => tutAiRef.current()}
+            onMenu={toMenu}
+          />
+        )}
         {watching && hud && (
           <div className="pointer-events-none absolute top-[8.6cqw] left-1/2 z-10 -translate-x-1/2 rounded-full bg-black/55 px-[1.2cqw] py-[0.3cqw] font-['Nanum_Gothic',sans-serif] text-[1.2cqw] font-bold text-[#67E8F9]">
             👁 관전 중
@@ -988,13 +1049,13 @@ export default function FightGame() {
               ...(!ol && !bot
                 ? [
                     {
-                      label: "다시하기",
+                      label: setup.mode === "tutorial" ? "이 단계 다시" : "다시하기",
                       onClick: () => {
                         restartRef.current();
                         setPaused(false);
                       },
                     },
-                    { label: "캐릭터 선택", onClick: toChars },
+                    ...(setup.mode === "tutorial" ? [] : [{ label: "캐릭터 선택", onClick: toChars }]),
                   ]
                 : []),
               {
