@@ -138,7 +138,8 @@ function spendRoot(sv: Save) {
   for (const k of UTIL) buyShop(sv, k as (typeof SHOP)[number]["key"]);
   for (let i = 0; i < 500; i++) {
     const options = SHOP.filter(
-      (d) => !UTIL.includes(d.key) && (d.max == null || sv.shop[d.key] < d.max)
+      (d) =>
+        !UTIL.includes(d.key) && d.group !== "core" && (d.max == null || sv.shop[d.key] < d.max)
     );
     options.sort((a, b) => shopCost(a, sv.shop[a.key]) - shopCost(b, sv.shop[b.key]));
     if (!options.length || !buyShop(sv, options[0].key)) break;
@@ -155,7 +156,7 @@ function nextEnemy() {
   // 스테이지 100 상위 보스까지 잡으면 최종 보스, 10스테이지마다 보스를 잡으면 상위 보스(보안 시스템)
   fin = boss && s.finalReady;
   apex = boss && s.bossDone && !fin;
-  hp = fin ? finalHp(st) : apex ? apexHp(s.stage, st) : boss ? bossHp(s.stage, st) : mobHp(s.stage, st);
+  hp = fin ? finalHp(st, s.clears) : apex ? apexHp(s.stage, st) : boss ? bossHp(s.stage, st) : mobHp(s.stage, st);
   const extra = st.bossTime - BOSS_TIME;
   left = fin ? FINAL_TIME + extra : apex ? APEX_TIME + extra : st.bossTime;
 }
@@ -205,6 +206,13 @@ while (t < HOURS * 3600) {
       gainData(s, finalData(st));
       if (finalAt < 0) finalAt = t;
       s.clears++;
+      s.cores++;
+      // 커널 코어: 가장 싼 것부터 (인터럽트 지연은 최대 3)
+      for (let k = 0; k < 50; k++) {
+        const c = SHOP.filter((d) => d.group === "core" && (d.max == null || s.shop[d.key] < d.max));
+        c.sort((a, b) => shopCost(a, s.shop[a.key]) - shopCost(b, s.shop[b.key]));
+        if (!c.length || !buyShop(s, c[0].key)) break;
+      }
       s.finalReady = false;
       s.kills = 0;
       fails = 0;

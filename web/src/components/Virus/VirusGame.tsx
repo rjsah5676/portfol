@@ -81,6 +81,8 @@ import {
   upgradeAdvice,
   rootAdvice,
   formatStart,
+  canAffordShop,
+  isCoreItem,
   type UpgKey,
   zoneOf,
   type Save,
@@ -177,7 +179,7 @@ interface Reward {
   module?: { name: string; effect: string; level: number };
   apex?: { index: number; trait: string; effect: string; look: string };
   /** 최종 보스 격퇴 (몇 번째인지) */
-  final?: { clears: number };
+  final?: { clears: number; cores: number };
 }
 
 /** 화면에 그릴 때 쓰는 복사본 (ref는 렌더 중에 읽지 않음) */
@@ -203,7 +205,7 @@ function spawn(s: Save): Enemy {
   const final = boss && s.finalReady;
   const apex = boss && s.bossDone && !final;
   const max = final
-    ? finalHp(st)
+    ? finalHp(st, s.clears)
     : apex
       ? apexHp(s.stage, st)
       : boss
@@ -262,7 +264,7 @@ export default function VirusGame() {
   const [tab, setTab] = useState<Tab>("upgrade");
   const [buyMode, setBuyMode] = useState<BuyMode>(1);
   /** 루트 상점 분류: 효율 강화 · 편의성 */
-  const [shopCat, setShopCat] = useState<"power" | "util">("power");
+  const [shopCat, setShopCat] = useState<"power" | "util" | "core">("power");
   /** 아래 패널 목록의 페이지 (칸에 다 안 들어가면 나눔 — 스크롤 없음) */
   const [page, setPage] = useState(0);
   const [pages, setPages] = useState(1);
@@ -336,7 +338,7 @@ export default function VirusGame() {
       seed: def.id,
       color: final ? FINAL.color : apex ? ax.def.color : def.color,
       name: final
-        ? `${FINAL.role} ${FINAL.name}`
+        ? `${FINAL.role} ${FINAL.name}${tierLabel(save.current.clears + 1)}`
         : apex
           ? `${ax.def.role} ${ax.def.name}${tierLabel(ax.tier)}`
           : def.name + tierLabel(tier),
@@ -383,14 +385,15 @@ export default function VirusGame() {
         duckBgm.current();
         gainData(s, finalData(st));
         s.clears += 1;
+        s.cores += 1;
         s.finalReady = false;
         s.bossDone = false;
         s.kills = 0;
         pendingReward.current = {
-          name: `${FINAL.role} ${FINAL.name}`,
+          name: `${FINAL.role} ${FINAL.name}${tierLabel(s.clears)}`,
           seed: FINAL.id,
           color: FINAL.color,
-          final: { clears: s.clears },
+          final: { clears: s.clears, cores: s.cores },
         };
         persist();
       } else if (e.boss && !e.apex && isApexStage(s.stage)) {
@@ -1309,7 +1312,7 @@ export default function VirusGame() {
                       <b style={{ color: failing.color }}>☠️ {failing.name}</b>
                     ) : e.final ? (
                       <b style={{ color: FINAL.color }}>
-                        {FINAL.icon} {FINAL.role} {FINAL.name}{" "}
+                        {FINAL.icon} {FINAL.role} {FINAL.name + tierLabel(s.clears + 1)}{" "}
                         <span className="vt-xs font-mono font-normal text-white/75">최종 보스</span>
                       </b>
                     ) : e.apex ? (
@@ -1460,6 +1463,9 @@ export default function VirusGame() {
                         [
                           ["power", "⚔️", "효율 강화"],
                           ["util", "🛠️", "편의성"],
+                          ...(s.clears > 0 || s.cores > 0
+                            ? ([["core", "🧩", `커널 ${s.cores}`]] as const)
+                            : []),
                         ] as const
                       ).map(([k, icon, label]) => (
                         <button
@@ -1852,14 +1858,20 @@ export default function VirusGame() {
                           <button
                             type="button"
                             onClick={() => buyRoot(d.key)}
-                            disabled={maxed || locked || rootLeft(s) < cost}
+                            disabled={maxed || locked || !canAffordShop(s, d)}
                             className="flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-lg border border-amber-300/50 bg-amber-300/15 px-2 transition-colors enabled:hover:bg-amber-300/25 @2xl/panel:h-10 @2xl/panel:min-w-[74px] @2xl/panel:flex-col @2xl/panel:gap-0"
                           >
                             <span className="vt-xs leading-none text-amber-100/90">
                               {maxed ? "완료" : locked ? "🔒 잠김" : "구매"}
                             </span>
                             <span className="vt-sm font-mono font-bold text-amber-200">
-                              {maxed ? "MAX" : locked ? `${reqName} 먼저` : `🔑${fmt(cost)}`}
+                              {maxed
+                                ? "MAX"
+                                : locked
+                                  ? `${reqName} 먼저`
+                                  : isCoreItem(d)
+                                    ? `🧩${cost}`
+                                    : `🔑${fmt(cost)}`}
                             </span>
                           </button>
                         </div>
@@ -2051,14 +2063,15 @@ export default function VirusGame() {
                 <div className="min-w-0 flex-1">
                   <div className="vt-sm break-keep [overflow-wrap:anywhere] font-bold" style={{ color: r.color }}>
                     {r.final
-                      ? `최종 보스 ${r.name} 격퇴! (${r.final.clears}번째)`
+                      ? `최종 보스 ${r.name} 격퇴!`
                       : r.apex
                         ? `상위 보스 ${r.name} 처치!`
                         : `${r.name} 격퇴!`}
                   </div>
                   {r.final && (
                     <div className="vt-xs break-keep [overflow-wrap:anywhere] text-white/90">
-                      🌐 인터넷 차단을 막았어요 — 스테이지 100에서 계속 퍼질 수 있어요
+                      🧩 커널 코어 +1 (보유 {r.final.cores}) — 루트 상점 「커널」에서 써요. 다음
+                      KILLSWITCH{tierLabel(r.final.clears + 1)}는 체력 ×{BAL.finalGrowth}
                     </div>
                   )}
                   {r.apex && (

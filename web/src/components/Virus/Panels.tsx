@@ -304,6 +304,14 @@ export function ArchivePanel({ best }: { best: number }) {
 /** 패치노트 — 새 버전을 맨 위에 */
 export const PATCH_NOTES: { ver: string; date: string; items: string[] }[] = [
   {
+    ver: "v0.4",
+    date: "2026.10.12",
+    items: [
+      "최종 보스 KILLSWITCH를 잡을 때마다 🧩 커널 코어 +1 (변이해도 남음) — 다음 KILLSWITCH(v2, v3…)는 체력 ×1.5",
+      "루트 상점에 🧩 커널 분류 (첫 격퇴 뒤 열림, 코어로 삼 · 가격 = 레벨 + 1 코어): 커널 패치(피해 ×1.25) · 권한 상승(루트 권한 획득 +20% — 다시 변이할 수 있게 됨) · 데이터 압축(데이터 ×1.5) · 인터럽트 지연(보스 제한 시간 +5초, 최대 3)",
+    ],
+  },
+  {
     ver: "v0.3",
     date: "2026.10.12",
     items: [

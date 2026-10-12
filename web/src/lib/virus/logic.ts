@@ -31,6 +31,13 @@ export const BAL = {
   /** 최종 보스 체력 · 보상 = 스테이지 100 상위 보스의 몇 배 */
   finalHp: 3,
   finalData: 10,
+  /** KILLSWITCH 를 잡을 때마다 다음 버전 체력 배율 */
+  finalGrowth: 1.5,
+  /** 커널 상점: 커널 패치 피해 · 권한 상승 루트 권한 획득 · 데이터 압축 데이터 · 인터럽트 지연 보스 시간(초) */
+  corePatch: 1.25,
+  coreEscal: 0.2,
+  coreComp: 1.5,
+  coreIrq: 5,
   /** 스테이지마다 체력 배율 */
   hpGrowth: 1.18,
   /** 보스 체력 = 같은 스테이지 파일의 몇 배 */
@@ -105,7 +112,17 @@ export const SHOT_MS = 380;
 
 export type UpgKey = "atk" | "spd" | "crit";
 export type ShopKey =
-  "rootkit" | "miner" | "poly" | "profiler" | "cron" | "daemon" | "kprof";
+  | "rootkit"
+  | "miner"
+  | "poly"
+  | "profiler"
+  | "cron"
+  | "daemon"
+  | "kprof"
+  | "kpatch"
+  | "kescal"
+  | "kcomp"
+  | "kirq";
 
 export interface Save {
   v: 3;
@@ -126,8 +143,10 @@ export interface Save {
   bossDone: boolean;
   /** 스테이지 100 상위 보스까지 잡았고 최종 보스가 남음 */
   finalReady: boolean;
-  /** 최종 보스를 잡은 횟수 (변이해도 유지) */
+  /** 최종 보스를 잡은 횟수 (변이해도 유지) — 다음 KILLSWITCH 는 v(clears+1) */
   clears: number;
+  /** 아직 안 쓴 커널 코어 (최종 보스를 잡을 때마다 1, 변이해도 유지) */
+  cores: number;
   /** 상위 보스를 처음 잡은 가장 높은 스테이지 (포맷해도 유지) — 특성 · 외형은 이걸로 정해짐 */
   apexBest: number;
   /** 받은 루트 권한 (합계 — 피해 보너스는 이걸로, 상점에 써도 줄지 않음) */
@@ -159,7 +178,20 @@ export function newSave(): Save {
     apexBest: 0,
     root: 0,
     rootSpent: 0,
-    shop: { rootkit: 0, miner: 0, poly: 0, profiler: 0, cron: 0, daemon: 0, kprof: 0 },
+    shop: {
+      rootkit: 0,
+      miner: 0,
+      poly: 0,
+      profiler: 0,
+      cron: 0,
+      daemon: 0,
+      kprof: 0,
+      kpatch: 0,
+      kescal: 0,
+      kcomp: 0,
+      kirq: 0,
+    },
+    cores: 0,
     auto: false,
     formats: 0,
     savedAt: Date.now(),
@@ -540,7 +572,12 @@ export function stats(s: Save): Stats {
     BAL.atkStep ** s.lv.atk * BAL.atkMilestoneMul ** Math.floor(s.lv.atk / BAL.atkMilestone);
   return {
     dmg:
-      atk * BAL.modDmg ** m[3] * rootMul * BAL.shopRootkit ** s.shop.rootkit * (has(8) ? 1.5 : 1),
+      atk *
+      BAL.modDmg ** m[3] *
+      rootMul *
+      BAL.shopRootkit ** s.shop.rootkit *
+      BAL.corePatch ** s.shop.kpatch *
+      (has(8) ? 1.5 : 1),
     aps:
       (1 + (BAL.spdMax - 1) * (1 - BAL.spdK ** s.lv.spd)) *
       BAL.modSpd ** m[1] *
@@ -550,12 +587,16 @@ export function stats(s: Save): Stats {
       0.05 + (BAL.critMax - 0.05) * (1 - BAL.critK ** s.lv.crit) + modCritOf(m[7])
     ),
     critMul: 2 + BAL.critMulStep * s.lv.crit + 0.5 * m[8] + (has(4) ? 1 : 0),
-    dataMul: BAL.modData ** m[2] * BAL.shopMiner ** s.shop.miner * (has(3) ? 1.5 : 1),
+    dataMul:
+      BAL.modData ** m[2] *
+      BAL.shopMiner ** s.shop.miner *
+      BAL.coreComp ** s.shop.kcomp *
+      (has(3) ? 1.5 : 1),
     costMul: BAL.modCost ** m[4] * (has(9) ? 0.85 : 1),
     mobHpMul: BAL.modMobHp ** m[0] * (has(0) ? 0.85 : 1),
     bossHpMul: BAL.modBossHp ** m[6] * (has(5) ? 0.85 : 1),
-    bossTime: BOSS_TIME + (has(2) ? 5 : 0),
-    rootGain: has(7) ? 1.25 : 1,
+    bossTime: BOSS_TIME + (has(2) ? 5 : 0) + BAL.coreIrq * s.shop.kirq,
+    rootGain: (has(7) ? 1.25 : 1) * (1 + BAL.coreEscal * s.shop.kescal),
     bossDmgMul: BAL.modBossDmg ** m[9],
     rootMul,
     offlineRate: offlineRateOf(m[5]) + (has(6) ? 0.15 : 0),
@@ -601,8 +642,8 @@ export function apexData(stage: number, st: Stats) {
   return bossData(stage, st) * BAL.apexData;
 }
 /** 최종 보스: 스테이지 100 상위 보스의 finalHp 배 체력 · finalData 배 보상 */
-export function finalHp(st: Stats) {
-  return apexHp(MAX_STAGE, st) * BAL.finalHp;
+export function finalHp(st: Stats, clears: number) {
+  return apexHp(MAX_STAGE, st) * BAL.finalHp * BAL.finalGrowth ** clears;
 }
 export function finalData(st: Stats) {
   return apexData(MAX_STAGE, st) * BAL.finalData;
@@ -785,6 +826,7 @@ export function format(s: Save): Save {
     best: s.best,
     apexBest: s.apexBest,
     clears: s.clears,
+    cores: s.cores,
     root: s.root + pendingRoot(s),
     rootSpent: s.rootSpent,
     shop: { ...s.shop },
@@ -804,8 +846,8 @@ export interface ShopDef {
   max?: number;
   /** 이 상품을 먼저 사야 열림 */
   req?: ShopKey;
-  /** 효율 강화(power) · 편의성(util) */
-  group: "power" | "util";
+  /** 효율 강화(power) · 편의성(util) · 커널(core — 커널 코어로 삼) */
+  group: "power" | "util" | "core";
   desc: string;
   /** 지금 레벨의 효과 */
   label: (lv: number) => string;
@@ -890,7 +932,54 @@ export const SHOP: ShopDef[] = [
     desc: "루트 권한을 쓴 만큼 초당 피해가 가장 많이 오르는 상품(루트킷 · 데이터 마이닝 · 폴리모픽 엔진)을 알려 줌",
     label: (lv) => (lv ? "루트 상점 추천 켜짐" : "루트 상점에서 효율 1등 추천"),
   },
+  // ── 커널 (최종 보스에게서 얻은 커널 코어로 삼 · 가격 = 레벨 + 1 코어) ──
+  {
+    key: "kpatch",
+    group: "core",
+    name: "커널 패치",
+    icon: "🩹",
+    base: 1,
+    growth: 1,
+    desc: "운영체제 커널을 직접 고쳐 모든 공격을 강화",
+    label: (lv) => `피해 ×${fmt(BAL.corePatch ** lv)}`,
+  },
+  {
+    key: "kescal",
+    group: "core",
+    name: "권한 상승",
+    icon: "👑",
+    base: 1,
+    growth: 1,
+    desc: "더 높은 권한을 빼앗아, 같은 최고 스테이지에서도 루트 권한을 더 받음 (다시 변이할 수 있게 됨)",
+    label: (lv) => `루트 권한 획득 +${Math.round(BAL.coreEscal * 100 * lv)}%`,
+  },
+  {
+    key: "kcomp",
+    group: "core",
+    name: "데이터 압축",
+    icon: "🗜️",
+    base: 1,
+    growth: 1,
+    desc: "훔친 데이터를 압축해 한 번에 더 많이 빼냄",
+    label: (lv) => `데이터 ×${fmt(BAL.coreComp ** lv)}`,
+  },
+  {
+    key: "kirq",
+    group: "core",
+    name: "인터럽트 지연",
+    icon: "⏳",
+    base: 1,
+    growth: 1,
+    max: 3,
+    desc: "보안 시스템의 인터럽트를 늦춰 보스와 싸울 시간을 늘림",
+    label: (lv) => `보스 제한 시간 +${BAL.coreIrq * lv}초`,
+  },
 ];
+
+/** 커널 코어로 사는 상품인지 */
+export function isCoreItem(d: ShopDef) {
+  return d.group === "core";
+}
 
 /** 남은 루트 권한 포인트 */
 export function rootLeft(s: Save) {
@@ -898,7 +987,14 @@ export function rootLeft(s: Save) {
 }
 
 export function shopCost(d: ShopDef, lv: number) {
+  if (isCoreItem(d)) return lv + 1;
   return Math.ceil(d.base * d.growth ** lv);
+}
+
+/** 이 상품 값을 낼 수 있는지 (루트 권한 또는 커널 코어) */
+export function canAffordShop(s: Save, d: ShopDef) {
+  const cost = shopCost(d, s.shop[d.key]);
+  return isCoreItem(d) ? s.cores >= cost : rootLeft(s) >= cost;
 }
 
 /** 상점에서 사기 — 성공하면 true */
@@ -913,8 +1009,9 @@ export function buyShop(s: Save, key: ShopKey) {
   const lv = s.shop[key];
   if (d.max != null && lv >= d.max) return false;
   const cost = shopCost(d, lv);
-  if (rootLeft(s) < cost) return false;
-  s.rootSpent += cost;
+  if (!canAffordShop(s, d)) return false;
+  if (isCoreItem(d)) s.cores -= cost;
+  else s.rootSpent += cost;
   s.shop[key] = lv + 1;
   return true;
 }
