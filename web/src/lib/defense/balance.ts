@@ -7,7 +7,7 @@
  * 시간 단위는 tick (1초 = TPS tick). 거리 단위는 칸 (필드 8 × 5칸).
  */
 
-export const BALANCE_VER = "a1";
+export const BALANCE_VER = "a2";
 
 export const TPS = 30;
 /** 필드에 남은 적이 이 수에 닿으면 패배 */
@@ -22,21 +22,22 @@ export const B = {
   prepSec: 8,
   /** 일반 웨이브 길이 */
   waveSec: 20,
-  /** 웨이브마다 나오는 적 수 (초반은 적게: [~3웨이브, ~6웨이브, 그 뒤]) · 나오는 간격 */
-  waveCount: [12, 16, 20],
+  /** 웨이브마다 나오는 적 수 — waveCountTo[i] 웨이브까지 waveCount[i] 마리 (초반은 적게, 중후반은 많이) · 나오는 간격 */
+  waveCount: [12, 16, 20, 26, 32],
+  waveCountTo: [3, 6, 20, 40, 999],
   spawnGap: 0.5,
   /** 보스 제한 시간 (못 잡으면 패배) */
   bossSec: 60,
   /** 보스를 잡고 다음 웨이브까지 */
   breakSec: 3,
-  /** 적 체력: base × (1 + lin × w) × mult^w */
-  hp: { base: 26, lin: 0.4, mult: 1.068 },
+  /** 적 체력: base × (1 + lin × w) × mult^w — from2 웨이브부터는 mult2 로 더 가파르게 (중후반 압박) */
+  hp: { base: 26, lin: 0.4, mult: 1.068, mult2: 1.155, from2: 20 },
   /** 적 방어력 = perWave × w × 종류 배수 */
   armorPerWave: 1,
   /** 엘리트(5 · 15 · 25… 웨이브 마지막 한 마리) 체력 배수 */
   eliteHp: 8,
   /** 보스 체력 = 그 웨이브 적 체력 × 이 값 × 보스 배수 */
-  bossHp: 17,
+  bossHp: 5.5,
   /** 적 기본 이동 속도 (칸/초) — 한 바퀴 22칸 */
   enemySpd: 1.4,
 
@@ -96,6 +97,8 @@ export const B = {
   slowCap: 0.75,
   /** 보스 피해 감소: 둔화 · 기절이 보스에겐 이만큼만 */
   bossCc: 0.4,
+  /** 보스에게는 크기 상성이 이보다 나쁘지 않음 (기사단도 중 · 대형 보스를 칠 수 있게) */
+  bossSizeFloor: 0.8,
 } as const;
 
 /** 웨이브별 일반 적 체력 (곱을 차례로 해서 미리 — Math.pow 는 엔진마다 끝자리가 다를 수 있어 안 씀) */
@@ -104,14 +107,16 @@ export const HP_TABLE: number[] = (() => {
   let m = 1;
   for (let w = 0; w <= 400; w++) {
     out.push(Math.round(B.hp.base * (1 + B.hp.lin * w) * m));
-    m *= B.hp.mult;
+    m *= w >= B.hp.from2 ? B.hp.mult2 : B.hp.mult;
   }
   return out;
 })();
 export const hpOf = (w: number) => HP_TABLE[Math.min(HP_TABLE.length - 1, Math.max(0, w))];
 
 /** 그 웨이브에 나오는 적 수 */
-export const countOf = (w: number) =>
-  w <= 3 ? B.waveCount[0] : w <= 6 ? B.waveCount[1] : B.waveCount[2];
+export const countOf = (w: number) => {
+  for (let i = 0; i < B.waveCountTo.length; i++) if (w <= B.waveCountTo[i]) return B.waveCount[i];
+  return B.waveCount[B.waveCount.length - 1];
+};
 
 export const sec = (s: number) => Math.round(s * TPS);

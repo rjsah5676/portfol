@@ -15,7 +15,7 @@ export const PATCHES: PatchDef[] = [
   {
     id: "gambler",
     name: "도박사 패치",
-    desc: "행운석 도박 성공률 +8%p · 실패하면 행운석 1개 돌려받음",
+    desc: "행운석 도박 성공률 +8%p · 레전드 도박이 실패하면 행운석 1개 돌려받음",
   },
   {
     id: "core",

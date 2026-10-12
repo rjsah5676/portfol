@@ -404,7 +404,7 @@ export function apply(g: Game, p: number, cmd: Cmd): string | null {
         give(b, def.id, "gamble");
       } else {
         b.failStreak++;
-        const refund = b.patch === "gambler";
+        const refund = b.patch === "gambler" && cmd.g === "L";
         if (refund) b.stones++;
         b.ev?.push({ t: "gambleFail", g: cmd.g, refund });
       }
@@ -737,7 +737,7 @@ function rebuild(b: Board) {
   b.auras = [...by.entries()].map(([id, cells]) => ({ def: UNIT[id], cells }));
 }
 
-/** 사거리 안에서 가장 많이 간(가장 위험한) 적 */
+/** 사거리 안의 보스 우선, 없으면 가장 많이 간(가장 위험한) 적 */
 function target(b: Board, ci: number, range: number): Enemy | null {
   const cx = cellX(ci),
     cy = cellY(ci),
@@ -748,6 +748,7 @@ function target(b: Board, ci: number, range: number): Enemy | null {
     const dx = e.x - cx,
       dy = e.y - cy;
     if (dx * dx + dy * dy > r2) continue;
+    if (e.boss >= 0) return e;
     if (!best || e.trav > best.trav) best = e;
   }
   return best;
@@ -763,7 +764,8 @@ function hit(b: Board, def: UnitDef, e: Enemy, raw: number): number {
   if (b.patch === "core") m *= 1.15;
   if (e.boss >= 0 && def.boss) m *= def.boss;
   if (def.dtype === "phys") {
-    m *= SIZE_MULT[def.faction][e.size] * armorF(e.armor - e.shred) * (1 - e.pres);
+    const sz = SIZE_MULT[def.faction][e.size];
+    m *= (e.boss >= 0 ? Math.max(B.bossSizeFloor, sz) : sz) * armorF(e.armor - e.shred) * (1 - e.pres);
   } else m *= 1 - e.mres;
   let dmg = raw * m;
   if (e.shield > 0) {
