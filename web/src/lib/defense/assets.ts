@@ -1,5 +1,5 @@
 /**
- * 글리치 디펜스 그림 · 소리 연결표 — 에셋을 받으면 여기에 한 줄 넣으면 바로 입혀짐 (없으면 도트 자리표시 그림).
+ * 픽셀 글리치 디펜스 그림 · 소리 연결표 — 에셋을 받으면 여기에 한 줄 넣으면 바로 입혀짐 (없으면 도트 자리표시 그림).
  *
  * 파일 위치 (public/defense/…):
  *   유닛      units/<유닛 id>.webp       예) units/k_squire.webp
@@ -34,22 +34,147 @@ export interface SpriteSpec {
   attack?: SpriteRow;
   /** 화면에 그릴 크기 배수 (기본 1) */
   scale?: number;
+  /** 시트 한 줄의 프레임 수 (아이콘 그릴 때 배경 크기 계산용, 기본 idle.frames) */
+  cols?: number;
+  /** 그림이 보는 방향 (1 = 오른쪽 · -1 = 왼쪽). 화면이 적 쪽으로 뒤집어 그림 */
+  face?: 1 | -1;
 }
 
-/** 유닛 id → 그림. 에셋을 받으면 여기에 추가 */
+/** 한 장짜리 유닛 그림 (160×160, 발은 아래 4%) — ChatGPT 이미지로 만든 도트풍 SD (2026-10-13) */
+const U = (id: string, face: 1 | -1 = 1): SpriteSpec => ({
+  src: `/defense/units/${id}.webp`,
+  w: 160,
+  h: 160,
+  anchor: [0.5, 0.96],
+  idle: { row: 0, frames: 1, fps: 1 },
+  face,
+});
+
+/** 유닛 id → 그림. 없는 유닛은 세력별 도트 인형으로 그림 */
 export const UNIT_ART: Record<string, SpriteSpec> = {
-  // 예) k_squire: { src: "/defense/units/k_squire.webp", w: 64, h: 64, pixel: true, idle: { row: 0, frames: 4, fps: 6 }, attack: { row: 1, frames: 4, fps: 12 } },
+  a_archmage: U("a_archmage"),
+  a_bolt: U("a_bolt"),
+  a_chrono: U("a_chrono"),
+  a_frost: U("a_frost"),
+  a_lord: U("a_lord"),
+  a_novice: U("a_novice"),
+  a_pyro: U("a_pyro"),
+  a_sage: U("a_sage"),
+  a_seal: U("a_seal"),
+  a_star: U("a_star"),
+  a_venom: U("a_venom"),
+  a_void: U("a_void"),
+  a_wind: U("a_wind"),
+  k_axe: U("k_axe"),
+  k_blade: U("k_blade"),
+  k_commander: U("k_commander"),
+  k_dragoon: U("k_dragoon"),
+  k_gale: U("k_gale"),
+  k_hunter: U("k_hunter"),
+  k_knight: U("k_knight", -1),
+  k_paladin: U("k_paladin"),
+  k_saint: U("k_saint"),
+  k_shield: U("k_shield"),
+  k_spear: U("k_spear"),
+  k_squire: U("k_squire", -1),
+  k_twin: U("k_twin"),
+  m_arsenal: U("m_arsenal"),
+  m_bolt: U("m_bolt"),
+  m_coil: U("m_coil"),
+  m_drone: U("m_drone"),
+  m_flame: U("m_flame"),
+  m_missile: U("m_missile"),
+  m_mortar: U("m_mortar"),
+  m_omega: U("m_omega", -1),
+  m_orbit: U("m_orbit"),
+  m_rail: U("m_rail"),
+  m_scrap: U("m_scrap"),
+  m_titan: U("m_titan"),
+  m_turret: U("m_turret"),
+  h_glitchpet: U("h_glitchpet"),
+  h_debugger: U("h_debugger"),
 };
+/** 적 그림 (128×128 한 장, 발은 아래 4%) — 걸음은 화면이 통통 튀게 */
+const E = (id: string, face: 1 | -1 = 1): SpriteSpec => ({
+  src: `/defense/enemies/${id}.webp`,
+  w: 128,
+  h: 128,
+  anchor: [0.5, 0.96],
+  idle: { row: 0, frames: 1, fps: 1 },
+  face,
+});
 /** 적 종류 id → 그림 */
-export const ENEMY_ART: Record<string, SpriteSpec> = {};
+export const ENEMY_ART: Record<string, SpriteSpec> = {
+  slime: E("slime"),
+  bat: E("bat"),
+  bug: E("bug"),
+  block: E("block"),
+  skull: E("skull", -1),
+  ghost: E("ghost"),
+  golem: E("golem"),
+  worm: E("worm"),
+};
+/** 보스 그림 (192×192 한 장) — 글리치에 오염된 PIXEL FIGHT 파이터 */
+const BS = (id: string): SpriteSpec => ({
+  src: `/defense/bosses/${id}.webp`,
+  w: 192,
+  h: 192,
+  anchor: [0.5, 0.96],
+  idle: { row: 0, frames: 1, fps: 1 },
+});
 /** 보스 파이터 id → 그림 (없으면 PIXEL FIGHT 얼굴) */
-export const BOSS_ART: Record<string, SpriteSpec> = {};
+export const BOSS_ART: Record<string, SpriteSpec> = {
+  lily: BS("lily"),
+  soyoung: BS("soyoung"),
+  zena: BS("zena"),
+  igna: BS("igna"),
+  ivan: BS("ivan"),
+  kai: BS("kai"),
+};
 /** 필드 배경 (없으면 코드로 그린 격자) */
 export const FIELD_ART: string | null = null;
 
-/** 소리 (없으면 무음) — public/defense/sfx/<이름>.mp3 */
-export const SFX: Record<string, string> = {
-  // summon: "/defense/sfx/summon.mp3",
+/**
+ * 효과음 — public/defense/sfx/<이름>.mp3 (없거나 못 불러오면 그 소리만 무음).
+ * 재생은 components/Defense/audio.ts. 크기는 파일에서 미리 맞춰 둠(시끄럽지 않게), vol 은 같은 종류 안에서 미세 조정.
+ * 만든 곳: ElevenLabs 효과음 (2026-10-13)
+ */
+export const SFX: Record<string, { src: string; vol?: number }> = {
+  summon: { src: "/defense/sfx/summon.mp3" },
+  merge: { src: "/defense/sfx/merge.mp3" },
+  legend: { src: "/defense/sfx/legend.mp3" },
+  myth: { src: "/defense/sfx/myth.mp3" },
+  "gamble-ok": { src: "/defense/sfx/gamble-ok.mp3" },
+  "gamble-fail": { src: "/defense/sfx/gamble-fail.mp3" },
+  boss: { src: "/defense/sfx/boss.mp3" },
+  "boss-down": { src: "/defense/sfx/boss-down.mp3" },
+  wave: { src: "/defense/sfx/wave.mp3", vol: 0.7 },
+  "hit-phys": { src: "/defense/sfx/hit-phys.mp3", vol: 0.55 },
+  "hit-mech": { src: "/defense/sfx/hit-mech.mp3", vol: 0.55 },
+  "hit-magic": { src: "/defense/sfx/hit-magic.mp3", vol: 0.55 },
+  ult: { src: "/defense/sfx/ult.mp3", vol: 0.8 },
+  die: { src: "/defense/sfx/die.mp3", vol: 0.5 },
+  rift: { src: "/defense/sfx/rift.mp3" },
+  mission: { src: "/defense/sfx/mission.mp3" },
+  upgrade: { src: "/defense/sfx/upgrade.mp3" },
+  sell: { src: "/defense/sfx/sell.mp3" },
+  deny: { src: "/defense/sfx/deny.mp3" },
+  "ui-click": { src: "/defense/sfx/ui-click.mp3" },
+  "ui-hover": { src: "/defense/sfx/ui-hover.mp3", vol: 0.8 },
+  clear: { src: "/defense/sfx/clear.mp3" },
+  gameover: { src: "/defense/sfx/gameover.mp3" },
+};
+
+/**
+ * 배경음 — public/defense/bgm/<이름>.mp3 (반복 재생, 크기 -20 LUFS 로 맞춰 둠). 없으면 무음.
+ *  menu: 메뉴 · 로비 · 방 / wave-early: 1~29웨이브 / wave-late: 30~59웨이브 / boss: 10~50 보스 / boss-final: 60 카이
+ */
+export const BGM: Record<string, string> = {
+  menu: "/defense/bgm/menu.mp3",
+  "wave-early": "/defense/bgm/wave-early.mp3",
+  "wave-late": "/defense/bgm/wave-late.mp3",
+  boss: "/defense/bgm/boss.mp3",
+  "boss-final": "/defense/bgm/boss-final.mp3",
 };
 
 /* ───────── 불러오기 (브라우저 전용) ───────── */

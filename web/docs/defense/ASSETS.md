@@ -1,10 +1,26 @@
-# GLITCH DEFENSE 에셋 요청서
+# PIXEL GLITCH DEFENSE 에셋 요청서 · 기록
 
-> 알파는 그림 없이 돌아감 (도트 자리표시). 아래 규격대로 받으면 `web/src/lib/defense/assets.ts` 연결표에 한 줄씩 넣으면 바로 입혀짐 — 일부만 받아도 됨(없는 건 자리표시).
-> 그림체 기준: PIXEL FIGHT 캐릭터 시트처럼 **선명한 외곽선의 도트풍 SD**. 세력 색: 기사단 하늘 #6EC1FF · 기계공방 주황 #FFB347 · 마도회 보라 #C08CFF · 히든 민트 #4CFFB0.
-> 등급이 높을수록 장식 · 이펙트를 화려하게 (노말 수수 → 레전드 빛 · 망토 → 신화 오라).
+> **2026-10-13: 전부 입힘** — 유닛 41 · 적 8 · 보스 6 (ChatGPT 이미지) · 효과음 23 (ElevenLabs 효과음, 모델 `eleven_text_to_sound_v2`) · 배경음 5 (주인이 Tunee/Gemini 로 제작) · 글꼴 갈무리(OFL) · 도트 커서.
+> 연결표: `web/src/lib/defense/assets.ts`. 연결표에 없는 것은 자리표시(세력별 도트 인형)로 그려서 일부만 바꿔도 됨.
+> 그림체: **도트풍 SD (2.5등신) · 굵은 외곽선 · 3/4 시점(2.5D)** · 세력 색: 기사단 하늘 #6EC1FF · 기계공방 주황 #FFB347 · 마도회 보라 #C08CFF · 히든 민트 #4CFFB0. 등급이 높을수록 장식 · 빛 (에픽 보라 · 레전드 금 · 신화 분홍빨강 오라).
 
-## 규격
+## 지금 들어간 파일 (만든 방법)
+
+| 종류 | 파일 | 크기 | 만든 방법 |
+| --- | --- | --- | --- |
+| 유닛 | `public/defense/units/<id>.webp` | 160×160 한 장, 발은 아래 4% | ChatGPT 이미지로 "투명 배경 · 4×2(또는 3+2) 칸" 시트 → `web/scripts/defense-art/slice.py` 로 자름 (겹친 줄은 `cc.py`) |
+| 적 | `public/defense/enemies/<id>.webp` | 128×128 | 같은 방법 (4×2) |
+| 보스 | `public/defense/bosses/<fighter>.webp` | 192×192 | 같은 방법 (3×2), PIXEL FIGHT 원본 옷차림을 글리치로 오염시킨 모습 |
+| 효과음 | `public/defense/sfx/<이름>.mp3` | 0.1~6초, 모노 96kbps | ElevenLabs 효과음 2개씩 뽑아 골라 → ffmpeg 로 끝 무음 자르기 + 종류별 크기 맞춤(작은 UI 소리 -27~-30dB · 타격 -25 · 큰 연출 -17~-19) |
+| 배경음 | `public/defense/bgm/<이름>.mp3` | 2.5~3분, 128kbps | 주인 제작 → ffmpeg `loudnorm I=-20` + 처음 0.4초 · 끝 3초 페이드 (반복 재생 이음새) |
+| 글꼴 | `public/defense/fonts/Galmuri*.woff2` | | 갈무리 2.40.3 (SIL OFL 1.1, 라이선스 파일 같이 둠) |
+| 커서 | `public/defense/ui/cursor*.png` | | 코드로 그린 도트 (기본 · 손 · 집기) |
+
+그림 다시 뽑을 때: 같은 ChatGPT 대화에서 "Same style, scale, outline, 3/4 view and facing" 로 이어 가면 그림체가 맞음.
+자르기: `python3 web/scripts/defense-art/slice.py 시트.png 4,4 id1 … id8 --out 폴더 --size 160` (행마다 개수) → 미리보기 `_preview_*.png` 확인.
+그림이 왼쪽을 보면 연결표에서 `face: -1` (화면이 적 쪽으로 뒤집어 그림).
+
+## 규격 (처음 요청 — 애니메이션 시트로 다시 받으면 이대로. 지금은 한 장 그림 + 코드 동작)
 
 | 종류 | 파일 | 한 프레임 | 줄 (위에서부터) | 비고 |
 | --- | --- | --- | --- | --- |
@@ -12,7 +28,8 @@
 | 적 | `public/defense/enemies/<id>.webp` | 96×96 | 0: 이동 4프레임 | 오른쪽으로 걷는 그림 (코드가 방향 안 뒤집음 — 사각 길을 돌아서 정면/옆 어느 쪽이든 어색하지 않게, 약간 정면) |
 | 보스 | `public/defense/bosses/<fighter>.webp` | 160×160 | 0: 이동 4프레임 | 없으면 PIXEL FIGHT 얼굴(`/fight/art/<id>-face.webp`)에 글리치 효과로 대신함 |
 | 필드 배경 | `public/defense/field.webp` | 1216×760 (2배) | — | 8×5칸(한 칸 152px) — 바깥 한 줄은 적이 도는 길, 안쪽 6×3칸은 유닛 자리. 칸 경계는 은은하게 |
-| 효과음 | `public/defense/sfx/<이름>.mp3` | — | — | summon · merge · legend · myth · gamble-ok · gamble-fail · boss · boss-down · wave · lose · clear · hit-phys · hit-magic · ult |
+| 효과음 | `public/defense/sfx/<이름>.mp3` | — | — | summon · merge · legend · myth · gamble-ok · gamble-fail · boss · boss-down · wave · hit-phys · hit-mech · hit-magic · ult · die · rift · mission · upgrade · sell · deny · ui-click · ui-hover · clear · gameover |
+| 배경음 | `public/defense/bgm/<이름>.mp3` | — | — | menu · wave-early(1~29) · wave-late(30~59) · boss(10~50) · boss-final(60) |
 
 크기: 화면에서 유닛 1기는 약 44px(칸에 3기면 32px), 적 소형 24 · 중형 32 · 대형 42, 보스 60 → 128px 로 그리면 줄여도 선명함. 도트면 `pixel: true`.
 
