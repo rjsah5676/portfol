@@ -48,7 +48,7 @@ server.http.on("request", (req, res) => {
   const uid = q.get("uid") || "dev-a";
   const nick = q.get("nick") || "";
   void (async () => {
-    if (nick) await db.col("users").updateOne({ _id: uid } as never, { $set: { nick, email: `${uid}@example.com`, createdAt: new Date() } }, { upsert: true });
+    if (nick) await db.col("users").updateOne({ _id: uid } as never, { $set: { nick, nickKey: nick.toLowerCase(), email: `${uid}@example.com`, createdAt: new Date() } }, { upsert: true });
     res.setHeader("content-type", "application/json");
     res.setHeader("access-control-allow-origin", "*");
     res.end(JSON.stringify({ uid, token: await token(uid) }));

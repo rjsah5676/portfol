@@ -3,7 +3,7 @@ import type { LogEntry } from "@/lib/defense/replay";
 import type { Cmd, Result } from "@/lib/defense/sim";
 
 /*
- * 글리치 디펜스 — 백엔드(server/src/games/defense.ts)와 통신
+ * 픽셀 글리치 디펜스 — 백엔드(server/src/games/defense.ts)와 통신
  *  랭킹: startRun(시드 받기) → 판 → finishRun(명령 기록 제출, 서버가 다시 돌려 검증)
  *  멀티: 방 목록 · 방 구독, 만들기 · 들어가기 · 준비 · 시작, 판 중 명령 보내기(턴 단위로 모두에게 뿌려짐)
  */
@@ -82,6 +82,8 @@ export interface RoomHandlers {
   onStart(d: { seed: number; players: string[] }): void;
   onTurn(d: { n: number; c: [number, Cmd][] }): void;
   onResult(rows: MpStanding[]): void;
+  /** 서버가 보드끼리 해시가 다른 tick 을 찾음 (어긋남 감시) */
+  onDesync?(d: { tick: number }): void;
   onError?(msg: string): void;
 }
 export function watchRoom(id: string, h: RoomHandlers) {
@@ -95,6 +97,7 @@ export function watchRoom(id: string, h: RoomHandlers) {
         else if (t === "start") h.onStart(d as { seed: number; players: string[] });
         else if (t === "turn") h.onTurn(d as { n: number; c: [number, Cmd][] });
         else if (t === "result") h.onResult(d as MpStanding[]);
+        else if (t === "desync") h.onDesync?.(d as { tick: number });
       },
       onError: (e) => h.onError?.(e.message),
     }
@@ -104,8 +107,13 @@ export function watchRoom(id: string, h: RoomHandlers) {
 export const createRoom = (name?: string) => rpc<{ id: string }>("defense.create", { name });
 export const joinRoom = (id: string) => rpc<{ id: string }>("defense.join", { id });
 export const leaveRoom = (id: string) => rpc("defense.leave", { id });
+/** 내가 자리를 가진 진행 중인 방 (새로고침 뒤 돌아가기) */
+export const myRoom = () => rpc<{ id: string; name: string } | null>("defense.mine");
 export const setReady = (id: string, ready: boolean) => rpc("defense.ready", { id, ready });
 export const beginRoom = (id: string) => rpc("defense.begin", { id });
 export const sendCmds = (id: string, c: Cmd[]) => rpc<{ turn: number }>("defense.cmd", { id, c });
+/** 어긋남 감시: 이 tick 의 내 hashGame 값 */
+export const sendHash = (id: string, tick: number, h: number) =>
+  rpc<{ ok: boolean } | null>("defense.hash", { id, tick, h });
 export const reportOver = (id: string, win: boolean, wave: number) =>
   rpc("defense.over", { id, win, wave });

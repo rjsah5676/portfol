@@ -8,12 +8,12 @@ import { newId } from "../ids";
 import { pictureOf } from "../users";
 import type { Ctx } from "../realtime/gateway";
 import { BALANCE_VER, TPS } from "../../../web/src/lib/defense/balance";
-import { MAX_LOG, MAX_SPEED, MAX_TICKS, TICKS_PER_TURN, TURN_MS, scoreOf, validLog, type LogEntry } from "../../../web/src/lib/defense/replay";
+import { HASH_TICKS, MAX_LOG, MAX_SPEED, MAX_TICKS, TICKS_PER_TURN, TURN_MS, scoreOf, validLog, type LogEntry } from "../../../web/src/lib/defense/replay";
 import { isCmd, type Cmd, type Result } from "../../../web/src/lib/defense/sim";
 import type { VerifyJob, VerifyOut } from "./defenseVerify.worker";
 
 /*
- * 글리치 디펜스 (PIXEL FIGHT 외전 랜덤 디펜스) — 랭킹 · 멀티
+ * 픽셀 글리치 디펜스 (PIXEL FIGHT 외전 랜덤 디펜스) — 랭킹 · 멀티
  *
  * 게임 엔진은 web/src/lib/defense (결정론 시뮬) 를 그대로 씀. 서버는 시뮬을 직접 돌리지 않고:
  *
@@ -32,14 +32,19 @@ import type { VerifyJob, VerifyOut } from "./defenseVerify.worker";
  *   끝: 모든 보드가 끝났다고 알리면 서버가 기록을 다시 돌려 순위를 정해 "result" 로 뿌림
  *   (나중에 "남 돕기"는 명령 종류만 추가 — 같은 기록 · 같은 시뮬이라 서버 구조는 그대로)
  *
- *  채널: defense.lobby (방 목록) · defense.room { id } (방 상태 "room" · "start" · "turn" · "result")
- *  rpc : defense.create · join · leave · ready · begin · cmd · over
+ *   어긋남 감시: 각자 HASH_TICKS 마다 hashGame 을 defense.hash 로 보냄 → 같은 tick 의 값이 보드마다 다르면
+ *            로그를 남기고(console.warn) 방에 "desync" 를 뿌림 (관리자 방 목록에도 횟수)
+ *
+ *  채널: defense.lobby (방 목록) · defense.room { id } (방 상태 "room" · "start" · "turn" · "result" · "desync")
+ *  rpc : defense.create · join · mine(새로고침 뒤 내 판 찾기) · leave · ready · begin · cmd · over · hash
  */
 
 const RUN_TTL_MS = 4 * 3600_000;
 const RUNS_PER_HOUR = 40;
 const MAX_PLAYERS = 4;
 const MAX_ROOMS = 100;
+/** 판 중 연결이 끊긴 사람을 기다리는 시간 — 다른 사람이 다 끝났는데 이만큼 안 돌아오면 순위를 냄 */
+const GONE_MS = 60_000;
 
 interface RunDoc {
   uid: string;
@@ -152,6 +157,8 @@ interface MPlayer {
   /** 끝났다고 알린 결과 (표시용 — 순위는 서버가 다시 돌려서) */
   over: { win: boolean; wave: number } | null;
   left: boolean;
+  /** 판 중 연결이 끊긴 시각 (다시 들어오면 0) — 오래 안 돌아오면 그 보드는 끝난 셈 치고 순위를 냄 */
+  gone?: number;
 }
 interface Room {
   id: string;
@@ -166,6 +173,10 @@ interface Room {
   timer: NodeJS.Timeout | null;
   createdAt: number;
   standings: { nick: string; win: boolean; wave: number; sec: number; kills: number; tops: string[] }[] | null;
+  /** 어긋남 감시: tick → (보드 → 해시) */
+  hashes: Map<number, Map<number, number>>;
+  /** 어긋난 tick 기록 (최근 20개) */
+  desync: { tick: number; seats: Record<number, number> }[];
 }
 
 const LOBBY = "defense:lobby";
@@ -306,7 +317,8 @@ export function registerDefense({ gateway, db }: Deps) {
     for (const [p, cmd] of c) r.log.push([t, p, cmd]);
     gateway.emit(roomKey(r.id), "turn", { n: r.turn, c });
     r.turn++;
-    const allDone = r.players.every((p) => p.over || p.left);
+    const now = Date.now();
+    const allDone = r.players.every((p) => p.over || p.left || (p.gone && now - p.gone > GONE_MS));
     if (allDone || t > MAX_TICKS) void finalize(r);
   }
 
@@ -345,6 +357,8 @@ export function registerDefense({ gateway, db }: Deps) {
       timer: null,
       createdAt: Date.now(),
       standings: null,
+      hashes: new Map(),
+      desync: [],
     };
     rooms.set(r.id, r);
     pushRoom(r);
@@ -354,7 +368,17 @@ export function registerDefense({ gateway, db }: Deps) {
   gateway.rpc("defense.join", (ctx, raw) => {
     const nick = member(ctx);
     const r = roomOf((raw as { id?: unknown })?.id);
-    if (seatOf(r, ctx.uid) >= 0) return { id: r.id };
+    const seat = seatOf(r, ctx.uid);
+    if (seat >= 0) {
+      // 판 중에 나갔다(새로고침 · 나가기) 다시 들어옴 → 자리 그대로 이어서
+      const pl = r.players[seat];
+      if (pl.left || pl.gone) {
+        pl.left = false;
+        pl.gone = 0;
+        pushRoom(r);
+      }
+      return { id: r.id };
+    }
     if (r.phase === "playing") throw forbidden("이미 시작한 방이에요.");
     if (r.players.length >= MAX_PLAYERS) throw forbidden("방이 꽉 찼어요.");
     if (r.phase === "result") r.phase = "lobby";
@@ -378,6 +402,13 @@ export function registerDefense({ gateway, db }: Deps) {
     pushRoom(r);
   }
 
+  // 내가 자리를 가진 진행 중인 방 (새로고침 뒤 돌아가기)
+  gateway.rpc("defense.mine", (ctx) => {
+    member(ctx);
+    for (const r of rooms.values()) if (r.phase === "playing" && seatOf(r, ctx.uid) >= 0) return { id: r.id, name: r.name };
+    return null;
+  });
+
   gateway.rpc("defense.leave", (ctx, raw) => {
     const r = rooms.get(String((raw as { id?: unknown })?.id));
     if (r) leave(r, ctx.uid);
@@ -386,8 +417,14 @@ export function registerDefense({ gateway, db }: Deps) {
   gateway.onDisconnect((ctx) => {
     const uid = ctx.user?.uid;
     if (!uid) return;
-    // 판 중이 아니면 바로 나감 (판 중엔 다시 들어올 수 있게 자리 유지)
-    for (const r of [...rooms.values()]) if (r.phase !== "playing") leave(r, uid);
+    // 판 중이 아니면 바로 나감 (판 중엔 다시 들어올 수 있게 자리 유지 — 끊긴 시각만 적어 둠)
+    for (const r of [...rooms.values()]) {
+      if (r.phase !== "playing") leave(r, uid);
+      else {
+        const i = seatOf(r, uid);
+        if (i >= 0 && !r.players[i].over) r.players[i].gone = Date.now();
+      }
+    }
   });
 
   gateway.rpc("defense.ready", (ctx, raw) => {
@@ -411,9 +448,12 @@ export function registerDefense({ gateway, db }: Deps) {
     r.log = [];
     r.pending = [];
     r.standings = null;
+    r.hashes.clear();
+    r.desync = [];
     for (const p of r.players) {
       p.over = null;
       p.left = false;
+      p.gone = 0;
     }
     pushRoom(r);
     gateway.emit(roomKey(r.id), "start", { seed: r.seed, players: r.players.map((p) => p.nick) });
@@ -430,6 +470,7 @@ export function registerDefense({ gateway, db }: Deps) {
     if (r.log.length + r.pending.length + c.length > MAX_LOG * r.players.length) throw bad("명령이 너무 많아요.");
     for (const cmd of c) if (!isCmd(cmd)) throw bad("잘못된 명령이에요.");
     for (const cmd of c) r.pending.push([p, cmd as Cmd]);
+    r.players[p].gone = 0;
     return { turn: r.turn };
   });
 
@@ -443,9 +484,45 @@ export function registerDefense({ gateway, db }: Deps) {
     return null;
   });
 
+  gateway.rpc("defense.hash", (ctx, raw) => {
+    const { id, tick, h } = z
+      .object({ id: z.string(), tick: z.number().int().min(0), h: z.number().int().min(0).max(0xffffffff) })
+      .parse(raw);
+    const r = roomOf(id);
+    const p = seatOf(r, ctx.uid);
+    if (p < 0 || r.phase !== "playing") return null;
+    // 아직 안 뿌린 턴의 tick · 간격에 안 맞는 tick 은 무시
+    if (tick % HASH_TICKS !== 0 || tick > r.turn * TICKS_PER_TURN) throw bad();
+    r.players[p].gone = 0; // 해시를 보낸다 = 아직 보고 있음
+    let m = r.hashes.get(tick);
+    if (!m) {
+      m = new Map();
+      r.hashes.set(tick, m);
+      // 오래된 tick 은 버림 (늦게 들어온 사람이 따라잡으며 보내는 것까지 비교하려고 넉넉히)
+      for (const t of r.hashes.keys()) if (t < tick - HASH_TICKS * 400) r.hashes.delete(t);
+    }
+    m.set(p, h);
+    const vals = new Set(m.values());
+    if (vals.size > 1 && !r.desync.some((d) => d.tick === tick)) {
+      const seats = Object.fromEntries(m);
+      r.desync.push({ tick, seats });
+      if (r.desync.length > 20) r.desync.shift();
+      console.warn(`[defense] 멀티 어긋남 방 ${r.id} tick ${tick}`, JSON.stringify(seats), `플레이어 ${r.players.map((x) => x.nick).join(",")}`);
+      gateway.emit(roomKey(r.id), "desync", { tick });
+    }
+    return { ok: vals.size === 1 };
+  });
+
   return {
     adminList: () =>
-      [...rooms.values()].map((r) => ({ id: r.id, name: r.name, phase: r.phase, players: r.players.map((p) => p.nick), turn: r.turn })),
+      [...rooms.values()].map((r) => ({
+        id: r.id,
+        name: r.name,
+        phase: r.phase,
+        players: r.players.map((p) => p.nick),
+        turn: r.turn,
+        desync: r.desync.length,
+      })),
     close() {
       for (const r of rooms.values()) if (r.timer) clearInterval(r.timer);
       rooms.clear();

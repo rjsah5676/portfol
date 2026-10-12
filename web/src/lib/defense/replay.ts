@@ -17,6 +17,8 @@ export const TURN_MS = 100;
 export const TICKS_PER_TURN = (TPS * TURN_MS) / 1000;
 /** 클라이언트 최대 배속 (랭킹 검증: 이보다 빨리 끝난 판은 거절) */
 export const MAX_SPEED = 3;
+/** 멀티 어긋남 감시: 이 tick 마다 각자 hashGame 을 서버로 보내 비교 (5초) */
+export const HASH_TICKS = 150;
 /** 기록 줄 수 상한 (서버가 받는 크기) */
 export const MAX_LOG = 6000;
 

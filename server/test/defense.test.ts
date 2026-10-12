@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { BALANCE_VER, LAST_WAVE } from "../../web/src/lib/defense/balance";
 import { BOTS, botTurn } from "../../web/src/lib/defense/bot";
-import { replay, scoreOf, validLog, type LogEntry } from "../../web/src/lib/defense/replay";
+import { HASH_TICKS, TICKS_PER_TURN, TURN_MS, replay, scoreOf, validLog, type LogEntry } from "../../web/src/lib/defense/replay";
 import { CELLS, apply, hashGame, isCmd, newGame, step, unitCount, type Game } from "../../web/src/lib/defense/sim";
 import { RECIPES, UNIT, UNITS } from "../../web/src/lib/defense/units";
 import { startTestServer, type TestClient, type TestServer } from "./helpers";
@@ -17,7 +17,7 @@ function botGame(seed: number, bot = 0, until = Infinity): { g: Game; log: LogEn
   return { g, log };
 }
 
-describe("글리치 디펜스 엔진", () => {
+describe("픽셀 글리치 디펜스 엔진", () => {
   it("데이터: 조합식 재료 · 결과가 다 있는 유닛", () => {
     for (const r of RECIPES) {
       expect(UNIT[r.id]).toBeTruthy();
@@ -74,7 +74,7 @@ describe("글리치 디펜스 엔진", () => {
   });
 });
 
-describe("글리치 디펜스 서버", () => {
+describe("픽셀 글리치 디펜스 서버", () => {
   let srv: TestServer;
   let n = 0;
   async function member(): Promise<TestClient> {
@@ -127,9 +127,21 @@ describe("글리치 디펜스 서버", () => {
     await a.rpc("defense.begin", { id });
     const start = await sa.wait((e) => e.t === "start");
     expect(start.d.players).toHaveLength(2);
+    // 새로고침 뒤 돌아가기: 내 진행 중인 방을 찾고, 다시 들어가면 자리 그대로
+    expect((await b.rpc("defense.mine"))?.id).toBe(id);
+    expect(await b.rpc("defense.join", { id })).toEqual({ id });
     await b.rpc("defense.cmd", { id, c: [{ t: "summon" }] });
     const turn = await sa.wait((e) => e.t === "turn" && e.d.c.length > 0, 3000);
     expect(turn.d.c[0]).toEqual([1, { t: "summon" }]);
+    // 어긋남 감시: tick 0 은 같은 값 → 괜찮음, 다른 값이면 "desync"
+    expect(await a.rpc("defense.hash", { id, tick: 0, h: 123 })).toEqual({ ok: true });
+    expect(await b.rpc("defense.hash", { id, tick: 0, h: 123 })).toEqual({ ok: true });
+    await expect(a.rpc("defense.hash", { id, tick: 7, h: 1 })).rejects.toThrow();
+    await new Promise((r) => setTimeout(r, HASH_TICKS * (TURN_MS / TICKS_PER_TURN) + 300));
+    await a.rpc("defense.hash", { id, tick: HASH_TICKS, h: 1 });
+    expect(await b.rpc("defense.hash", { id, tick: HASH_TICKS, h: 2 })).toEqual({ ok: false });
+    const ds = await sa.wait((e) => e.t === "desync", 3000);
+    expect(ds.d.tick).toBe(HASH_TICKS);
     await a.rpc("defense.over", { id, win: false, wave: 1 });
     await b.rpc("defense.over", { id, win: false, wave: 1 });
     const result = await sa.wait((e) => e.t === "result", 10_000);

@@ -6,9 +6,10 @@
  *        받은 턴까지만 진행할 수 있음 → 모두의 화면이 같은 시뮬. 늦게 들어오면 기록으로 빨리 따라잡음.
  */
 import { TPS } from "@/lib/defense/balance";
-import { TICKS_PER_TURN, type LogEntry } from "@/lib/defense/replay";
+import { HASH_TICKS, TICKS_PER_TURN, type LogEntry } from "@/lib/defense/replay";
 import {
   apply,
+  hashGame,
   newGame,
   step,
   type Board,
@@ -40,6 +41,10 @@ export class Controller {
   inflight = 0;
   /** 매 tick 뒤 (봇 · 개발자 도구) */
   onTick: ((g: Game) => void) | null = null;
+  /** 멀티 어긋남 감시: HASH_TICKS 마다 전체 상태 해시 (Room 이 서버로 보냄) */
+  onHash: ((tick: number, h: number) => void) | null = null;
+  /** 서버가 알려 준 어긋남 수 (화면 표시용) */
+  desync = 0;
 
   constructor(
     seed: number,
@@ -130,6 +135,9 @@ export class Controller {
     }
     step(g);
     this.onTick?.(g);
+    // 따라잡는 중(받은 턴보다 많이 뒤)에는 안 보냄 — 한꺼번에 몰리지 않게, 지금 진행 중인 tick 만 비교
+    if (this.onHash && g.tick % HASH_TICKS === 0 && this.behind < HASH_TICKS)
+      this.onHash(g.tick, hashGame(g));
     return true;
   }
 
