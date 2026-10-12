@@ -813,7 +813,7 @@ const RAW: CharSrc[] = [
           recovery: 16,
           dmg: 62,
           chip: 6,
-          hitstun: 20,
+          hitstun: 35, // 10.12 20 → 35: 감전으로 굳는 시간 0.5 → 0.75초 (맞힌 뒤 공중 콤보 잇기 쉽게)
           blockstun: 12,
           push: 700,
           hitstop: 7,
