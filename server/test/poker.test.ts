@@ -641,16 +641,16 @@ describe("7포커 테이블", () => {
     await a.c.rpc("poker.sit", { id });
     const sat = await sub.wait((e) => e.t === "state" && e.d?.seats.some((s: any) => s?.uid === a.uid));
     expect(sat.d.seats.find((s: any) => s?.uid === a.uid).char).toBe("amy");
-    // 앉은 채로 바꾸면 자리도 바로 바뀜
-    await a.c.rpc("poker.char", { char: "taeyang" });
-    await sub.wait((e) => e.t === "state" && e.d?.seats.find((s: any) => s?.uid === a.uid)?.char === "taeyang");
+    // 게임방 안에서는 캐릭터를 못 바꿈 (스킨만) — 지갑 · 자리 그대로
+    expect(await code(a.c.rpc("poker.char", { char: "taeyang" }))).toBe("SEATED");
+    expect((await a.c.rpc<Wallet>("poker.wallet")).char).toBe("amy");
 
     expect(await code(a.c.rpc("poker.emote", { id, emote: "nope" }))).toBe("BAD_REQUEST");
     expect(await code(a.c.rpc("poker.emote", { id, emote: "lol" }))).toBe("OK");
     // 1.2초에 한 번
     expect(await code(a.c.rpc("poker.emote", { id, emote: "cry" }))).toBe("RATE_LIMITED");
     const chat = await sub.wait((e) => e.t === "chat" && e.d.emote === "lol");
-    expect(chat.d).toMatchObject({ uid: a.uid, name: a.nick, char: "taeyang", text: "", emote: "lol" });
+    expect(chat.d).toMatchObject({ uid: a.uid, name: a.nick, char: "amy", text: "", emote: "lol" });
     const ev = await sub.wait((e) => e.t === "state" && e.d?.ev.some((x: any) => x.t === "emote" && x.emote === "lol"));
     expect(ev.d.ev.find((x: any) => x.t === "emote")).toMatchObject({ seat: sat.d.seats.findIndex((s: any) => s?.uid === a.uid), emote: "lol" });
     await a.c.rpc("poker.leave", { id });
