@@ -20,6 +20,8 @@ COPY web/src/data/rhythm /repo/web/src/data/rhythm
 COPY web/src/lib/poker /repo/web/src/lib/poker
 # 랭크전 봇전 확인: 브라우저에서 한 경기를 서버가 같은 입력으로 다시 돌림 (games/fightBot.ts)
 COPY web/src/lib/fight /repo/web/src/lib/fight
+# 글리치 디펜스: 랭킹 기록 검증 · 멀티 순위 (서버가 같은 시뮬을 다시 돌림, games/defense.ts)
+COPY web/src/lib/defense /repo/web/src/lib/defense
 RUN npm run build
 
 # ── 2) 실행: 운영 의존성 + dist 만 ──
