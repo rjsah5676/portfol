@@ -39,6 +39,8 @@ export interface NavGroup {
   href: string;
   title: string;
   desc: string;
+  /** 설명 아래 해시태그 줄 ("#" 없이) */
+  tags?: string[];
   items: NavMenuItem[];
 }
 
@@ -72,7 +74,8 @@ export const NAV_GROUPS: NavGroup[] = [
     label: "games",
     href: "/games",
     title: "Games",
-    desc: "직접 만든 브라우저 게임. 대부분 랭킹이 있습니다.",
+    desc: "어디서든 즐길 수 있는 웹 게임 공간. 지루함을 달래보세요.",
+    tags: ["월루용 게임", "랭킹게임", "웹 게임", "무료 게임", "설치 없이", "실시간 대전"],
     items: [
       {
         href: "/games/rhythm",
