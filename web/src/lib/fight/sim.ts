@@ -99,6 +99,10 @@ const AIR_ACC = 70;
 const JUST_T = 5;
 /** 잡힌 뒤 던져질 때까지 붙잡혀 있는 프레임 */
 const THROW_TECH_T = 14;
+/** 이반: 바닥에서 이 높이(px) 안쪽으로 떨어지는 중엔 L 이 곰 포옹이 아니라 착지 후 철곰권 */
+const LAND_S_H = 60;
+/** 착지 직후 철곰권 입력을 봐 주는 프레임 (공중에서 미리 누른 L) */
+const LAND_S_BUF = 14;
 /** 그중 풀 수 있는 앞쪽 프레임 (잡히는 순간의 히트스톱 10프레임 동안 누른 것도 인정 → 약 0.33초, 철권 수준). 풀면 피해 없음
  *  (10.12 4 → 10 · 붙잡는 시간 8 → 14: 보고 풀기엔 0.23초가 너무 짧아 0.1초 늘림) */
 const THROW_TECH_WIN = 10;
@@ -567,7 +571,7 @@ const cloneF = (f: Fighter): Fighter => ({ ...f, hist: f.hist.slice() });
  * 이 빌드의 게임 데이터 지문 (캐릭터 성능·맵) — 온라인에서 서로 다른 빌드끼리 붙었는지 확인.
  * 계산 방식(sim.ts)만 바꿨을 땐 SIM_REV를 올릴 것.
  */
-const SIM_REV = 18;
+const SIM_REV = 19;
 export const BUILD_ID = (() => {
   const str = SIM_REV + JSON.stringify(CHARS.map((c) => [c.hp, c.walk, c.jumpVx, c.dash, c.cd, c.glide, c.hurt, c.width, c.moves])) + JSON.stringify(MAPS.map((m) => [m.plats, m.spawn]));
   let h = 2166136261;
@@ -838,7 +842,9 @@ function tryAttack(s: State, i: number, allow: MoveId[]): boolean {
   }
   // (대시 중 약·발차기 하나만 누르면 기다리지 않고 바로 나감 — 곧바로 나머지를 누르면 control의 atk에서 돌진 잡기로 바뀜)
   const late = 3;
-  if (allow.includes("S") && f.cd === 0 && pressed(f, IN.C, 3)) {
+  // 이반 철곰권: 착지 직전에 누른 L(공중 곰 포옹 대신 미리 누른 것)도 착지하자마자 나가게 — 착지 뒤 몇 프레임은 입력을 길게 봐 줌
+  const sBuf = charOf(f).moves.S.charge && f.st === "idle" && f.t < 6 ? LAND_S_BUF : 3;
+  if (allow.includes("S") && f.cd === 0 && pressed(f, IN.C, sBuf)) {
     startMove(s, i, "S");
     return true;
   }
@@ -890,7 +896,14 @@ function airAttack(s: State, i: number): boolean {
     startMove(s, i, "X");
     return true;
   }
-  if (f.cd === 0 && pressed(f, IN.C, 3)) {
+  // 이반: 떨어지다 바닥에 거의 닿았으면 곰 포옹 대신 착지해서 철곰권 (위 tryAttack 의 LAND_S_BUF)
+  const nearLand = (() => {
+    const am = charOf(f).moves.S;
+    if (!am.charge || !am.air?.hug || f.vh >= 0) return false;
+    const pl = platBelow(mapOf(s), f.x, f.h);
+    return !!pl && f.h - pl.y * SUB < LAND_S_H * SUB;
+  })();
+  if (f.cd === 0 && pressed(f, IN.C, 3) && !nearLand) {
     turn();
     startMove(s, i, "S");
     return true;

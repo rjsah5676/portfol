@@ -1114,7 +1114,7 @@ const RAW: CharSrc[] = [
           push: 0,
           hitstop: 12,
           meter: 12,
-          box: { x: 0, y: 46, w: 40, h: 76 },
+          box: { x: 0, y: 46, w: 55, h: 76 }, // 10.12 앞 40 → 55px
           hug: { dmg: 150, stun: 46, fall: 1800 },
           step: undefined,
           charge: undefined,
