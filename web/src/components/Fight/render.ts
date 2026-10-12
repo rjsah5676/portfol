@@ -488,7 +488,9 @@ export class FightRenderer {
         }
         this.shake = Math.max(this.shake, 5);
       } else if (e.k === "throw") {
-        this.parts.push({ x, y, vx: 0, vy: 0, life: 12, max: 12, color: "#fff", size: 12, kind: "ring" });
+        // 잡기 성공: 보라색 고리 + 글자 (타격과 다른 색으로 한눈에)
+        this.parts.push({ x, y, vx: 0, vy: 0, life: 14, max: 14, color: "#C084FC", size: 18, kind: "ring" });
+        this.parts.push({ x, y: y - 16, vx: 0, vy: -0.5, life: 28, max: 28, color: "#D8B4FE", size: 1.3, kind: "text", text: "GRAB!" });
         this.shake = Math.max(this.shake, 4);
       } else if (e.k === "block") {
         this.parts.push({ x, y, vx: 0, vy: 0, life: 12, max: 12, color: "#8FD3FF", size: 11, kind: "ring" });
@@ -818,6 +820,42 @@ export class FightRenderer {
         x: x + (Math.random() - 0.5) * 18, y: y - Math.random() * hh, vx: (Math.random() - 0.5) * 0.6, vy: -0.8 - Math.random(),
         life: 14, max: 14, color: Math.random() < 0.5 ? "#FFB347" : "#FF5A1F", size: 1.2, kind: "spark",
       });
+    }
+    // 잡기: 손을 뻗는 동안 손끝에 보라색 손아귀 — 원이 오므라들며 잡는 순간까지 (10.13: 모션만으론 잡기인지 알아보기 힘들어서)
+    if (f.st === "atk" && f.mv === "T" && !f.hit && f.t <= (f.lg ? 14 : 8)) {
+      const k = Math.min(1, f.t / (f.lg ? 14 : 8));
+      const hx = x + f.face * (26 + k * 10),
+        hy = y - 44;
+      g.save();
+      g.globalCompositeOperation = "lighter";
+      g.strokeStyle = `rgba(200,140,255,${0.55 + 0.4 * k})`;
+      g.lineWidth = 2.2;
+      g.beginPath();
+      g.arc(hx, hy, 20 - k * 11, 0, Math.PI * 2);
+      g.stroke();
+      // 손톱 세 줄이 가운데로 모임
+      g.lineWidth = 1.6;
+      for (let n = -1; n <= 1; n++) {
+        const an = (f.face > 0 ? Math.PI : 0) + n * 0.55;
+        const r0 = 24 - k * 10;
+        g.beginPath();
+        g.moveTo(hx + Math.cos(an) * r0, hy + Math.sin(an) * r0);
+        g.lineTo(hx + Math.cos(an) * (r0 - 7), hy + Math.sin(an) * (r0 - 7));
+        g.stroke();
+      }
+      g.restore();
+    }
+    // 잡힌 상대: 풀 수 있는 동안 머리 위에 "J+K" (잡기 풀기 안내)
+    if (f.grabbed > 3 && f.st === "hit" && Math.floor(s.f / 4) % 2 === 0) {
+      g.save();
+      g.font = "bold 11px 'JetBrains Mono', monospace";
+      g.textAlign = "center";
+      g.lineWidth = 3;
+      g.strokeStyle = "rgba(20,10,40,0.9)";
+      g.strokeText("J+K!", x, y - 92);
+      g.fillStyle = "#E9D5FF";
+      g.fillText("J+K!", x, y - 92);
+      g.restore();
     }
     // 움직임 연출 (발 기준 늘이기·기울이기·밀기, 잔상)
     const mo = this.motion[i];

@@ -305,6 +305,9 @@ export class FightAI {
   /** 상대가 공격을 시작한 걸 처음 본 프레임 */
   private sawAtk = -1;
   private sawJump = -1;
+  /** 뛰어들며 치는 공격을 처음 본 프레임 · 막을지 */
+  private sawAir = -1;
+  private airBlockDecision: boolean | null = null;
   private blockDecision: boolean | null = null;
   private aaDecision: boolean | null = null;
   private comboDecision: boolean | null = null;
@@ -645,6 +648,14 @@ export class FightAI {
       this.aaDecision = null;
     }
     const noticed = (t: number) => t >= 0 && s.f - t >= L.react;
+    // 뛰어들며 치는 공격 (공중 약 · 발차기 · 공중 아이덴티티 · 필살기): 나를 보고 위에서 떨어지며 닿을 거리 — 막음 (10.13: 공중 약은 공격으로 안 봐서 점프 약 연타에 다 맞던 것)
+    const oAirAtk = !!om && isAir(s, o) && o.mv !== "T" && dy > -20 && dy < 150 && dist < 130 && o.face > 0 === f.x > o.x;
+    if (oAirAtk) {
+      if (this.sawAir < 0) this.sawAir = s.f;
+    } else {
+      this.sawAir = -1;
+      this.airBlockDecision = null;
+    }
 
     const lReach = reachOf(c.moves.L, 6);
     const hReach = reachOf(c.moves.H);
@@ -726,6 +737,14 @@ export class FightAI {
     }
     const projDist = incoming ? Math.abs(incoming.x - f.x) / SUB : 999;
 
+    // ── 뛰어드는 공격 막기 ──
+    if ((free || blocking) && !air && oAirAtk && noticed(this.sawAir)) {
+      if (this.airBlockDecision === null) this.airBlockDecision = this.r() < L.block;
+      if (this.airBlockDecision) {
+        out = IN.D;
+        return finish();
+      }
+    }
     // ── 내다보기 (지존): 상대가 기술을 쓰거나 빈틈이면 할 수 있는 행동을 다 돌려 보고 고름 ──
     if (L.look && (free || blocking) && !air && dist < 160 && Math.abs(dy) < 60) {
       const hot0 = oAtk || o.st === "hit" || o.st === "down" || (o.st === "atk" && !o.hit) || (incoming && projDist < 140) || oJumpIn;
@@ -760,6 +779,11 @@ export class FightAI {
       }
       this.gcDecision = null;
       // 경직 끝: 상대가 아직 빈틈이면 반격, 아니면 가드 유지 여부 결정
+      // (공중에서 친 상대는 곧 공중 약을 또 이어 쳐서 반격이 지기만 함 → 착지할 때까지 막고 있음, 10.13)
+      if (oAirAtk || (isAir(s, o) && o.st === "atk" && dist < 110)) {
+        out = IN.D;
+        return finish();
+      }
       if (om && aligned && dist < lReach) {
         const left = om.startup + om.active + om.recovery - o.t;
         if (left >= 3 && this.r() < L.combo) {
@@ -863,7 +887,8 @@ export class FightAI {
         if (this.r() < (L.plan ?? 0)) {
           const wts = ACTS.map((a) => [a, this.near.p(a)] as [Act, number]);
           // 높이가 다르면(윗발판 · 아래) 점프로 파고들기 · 받아치기까지 길게 돌려 봄
-          const vert = Math.abs(dy) > 40;
+          // (상대가 그냥 뛰어 있는 거면 높이 차이가 아님 — 점프로 마중 나가면 공중에서 먼저 맞음, 10.13)
+          const vert = Math.abs(dy) > 40 && !isAir(s, o);
           const best = this.lookAhead(s, me, vert ? K.WV : K.W, faceOk, toward, away, wts, vert ? this.vertCands(toward, away) : undefined);
           if (best && best.v > K.thr) {
             this.plan = best.seq.slice(1, K.plan);
@@ -920,9 +945,10 @@ export class FightAI {
       if (oJumpIn && noticed(this.sawJump)) {
         // 상대가 자주 뛰는 걸 봤으면(읽기) 대공을 미리 노리고 있음
         if (this.aaDecision === null) this.aaDecision = this.r() < Math.min(1, L.antiAir * (0.8 + 0.5 * (L.read ?? 0) * this.jumpy()));
-        if (this.aaDecision && dist < 50) {
-          out |= toward;
-          press(IN.B);
+        // (10.13) 땅 발차기 대공은 시작이 느리고 판정이 낮아 공중 약에 지기만 함 → 막고 착지 빈틈에 반격
+        // (마주 뛰어올라 공중 약으로 받아치기도 해 봤는데 시뮬에서 더 많이 짐)
+        if (this.aaDecision && dist < 70) {
+          out = IN.D;
           return finish();
         }
       }
@@ -1076,7 +1102,14 @@ export class FightAI {
       }
       return finish();
     }
-    if (f.st === "jump" && dy > 70 && f.vh < 200 && f.jumps < 2) {
+    // 공중끼리: 가까우면 빠른 공중 약으로 먼저 침 (10.13 — 공중에서 마주치면 가만히 맞던 것)
+    if (f.st === "jump" && isAir(s, o) && o.st !== "hit" && dist < 64 && dy > -45 && dy < 55 && f.airUsed < 4 && this.r() < 0.3 + L.antiAir * 0.6) {
+      out |= toward;
+      press(IN.A);
+      return finish();
+    }
+    // (높은 발판 위 상대에게 2단 점프로 올라감 — 상대가 그냥 공중에 떠서 치고 있으면 쫓아 올라가다 맞기만 함)
+    if (f.st === "jump" && dy > 70 && f.vh < 200 && f.jumps < 2 && !(isAir(s, o) && o.st === "atk")) {
       out |= this.entry !== null ? (this.entry * SUB > f.x ? IN.R : IN.L) : toward;
       press(IN.J);
       return finish();
@@ -1158,7 +1191,7 @@ export class FightAI {
       case "jumpIn":
         if (free) {
           out |= toward;
-          if (this.r() < 0.2) press(IN.J);
+          if (this.r() < 0.2 && !(isAir(s, o) && dist < 160)) press(IN.J);
         } else if (f.st === "jump" && dist < 50 && dy < 10) {
           out |= toward;
           press(IN.B);
