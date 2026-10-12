@@ -559,7 +559,7 @@ const cloneF = (f: Fighter): Fighter => ({ ...f, hist: f.hist.slice() });
  * 이 빌드의 게임 데이터 지문 (캐릭터 성능·맵) — 온라인에서 서로 다른 빌드끼리 붙었는지 확인.
  * 계산 방식(sim.ts)만 바꿨을 땐 SIM_REV를 올릴 것.
  */
-const SIM_REV = 14;
+const SIM_REV = 15;
 export const BUILD_ID = (() => {
   const str = SIM_REV + JSON.stringify(CHARS.map((c) => [c.hp, c.walk, c.jumpVx, c.dash, c.cd, c.glide, c.hurt, c.width, c.moves])) + JSON.stringify(MAPS.map((m) => [m.plats, m.spawn]));
   let h = 2166136261;
@@ -1058,8 +1058,8 @@ function control(s: State, i: number) {
           return;
         }
       }
-      // 방향키 우선: 기술 중에도 누르는 쪽으로 돎 (돌진기는 돌진 시작 전까지만)
-      if (f.mv !== "T" && f.mv !== "G" && (!(m.rush || m.lunge) || f.t < m.startup)) steerFace(f);
+      // 방향키 우선: 기술 중에도 누르는 쪽으로 돎 (돌진기는 돌진 시작 전까지만, 필살기는 쓴 순간 본 쪽 그대로)
+      if (f.mv !== "T" && f.mv !== "G" && f.mv !== "X" && (!(m.rush || m.lunge) || f.t < m.startup)) steerFace(f);
       if (air) {
         if ((!m.lunge && !m.rush) || f.t > m.startup + m.active) airSteer(f);
       } else if ((f.mv === "L" || f.mv === "H") && f.vx * f.face < c.walk) {
@@ -1355,7 +1355,9 @@ function landed(s: State, i: number, f: Fighter) {
   }
   f.dive = 0;
   // 연타 돌진 필살기(카이 천풍난무)는 공중에서 써도 착지 뒤 땅에서 마저 돌진 (끊기지 않게)
-  const keepRush = f.st === "atk" && f.mv === "X" && !!lm?.rush && !!lm.multi && f.t < lm.startup + lm.active;
+  // 제나 뇌섬일창도 떨어지다 쓰면 착지에 끊겨서(10.12) 땅에서 마저 꿰뚫고 마무리까지
+  const keepRush =
+    f.st === "atk" && f.mv === "X" && !!lm?.rush && ((!!lm.multi && f.t < lm.startup + lm.active) || !!lm.zap);
   if (keepRush) {
     f.vh = 0;
     f.aerial = 0;
