@@ -82,7 +82,8 @@ const FX_SETS: Record<string, Record<string, [number, number, boolean]>> = {
   igna: { spark: [4, 0.7, true], guard: [2, 0.6, true], dust: [4, 0.5, false] },
   soyoung: { spark: [4, 0.6, true], guard: [2, 0.6, true], dust: [4, 0.5, false], burst: [4, 1.0, true] },
   lily: { spark: [4, 0.6, true], guard: [2, 0.6, true], dust: [4, 0.5, false] },
-  zena: { spark: [4, 0.6, true], guard: [2, 0.6, true], dust: [4, 0.5, false] },
+  // 제나: flash(일섬 빛줄기)·mark(낙인)·strike(낙뢰)는 drawZap 이, flash 는 공중 L 뇌격돌 꼬리로도 씀
+  zena: { spark: [4, 0.6, true], guard: [2, 0.6, true], dust: [4, 0.5, false], flash: [1, 1, true], mark: [1, 1, true], strike: [1, 1, true] },
   // 건모: box(Ctrl+A 선택 박스)·win(Alt+Tab 창)·err(금요일 배포 블록)·pause(⏸)·confuse(💫 로딩 원)는 따로 그림
   gunmo: {
     spark: [4, 0.6, true],
@@ -810,6 +811,36 @@ export class FightRenderer {
         g.restore();
       }
     }
+    // 제나 공중 L 뇌격돌: 몸 뒤로 번개 꼬리 + 창끝·몸 둘레에 찌릿 (돌진하는 동안)
+    if (CHARS[f.ch].id === "zena" && f.st === "atk" && f.mv === "S" && f.aerial && cm?.air) {
+      const am = { ...cm, ...cm.air };
+      const t0 = f.t - am.startup;
+      if (t0 >= -3 && t0 < am.active + 4) {
+        const on = t0 >= 0 && t0 < am.active;
+        const im = fxImg("zena-flash-0");
+        if (im && t0 >= 0) {
+          const fade = on ? 1 : Math.max(0, 1 - (t0 - am.active) / 4);
+          const w = 120 * (on ? Math.min(1, (t0 + 2) / 4) : 1),
+            h = 30;
+          g.save();
+          g.globalCompositeOperation = "lighter";
+          g.globalAlpha = (0.55 + 0.25 * Math.random()) * fade;
+          g.translate(x + f.face * 6, y - 40);
+          if (f.face < 0) g.scale(-1, 1);
+          g.drawImage(im, -w, -h / 2, w, h);
+          g.restore();
+        }
+        if (s.f % 2 === 0)
+          for (let k = 0; k < (on ? 3 : 1); k++) {
+            const tip = Math.random() < 0.5;
+            this.parts.push({
+              x: x + f.face * (tip ? 40 + Math.random() * 20 : (Math.random() - 0.5) * 36), y: y - 40 + (Math.random() - 0.5) * (tip ? 16 : 40),
+              vx: (Math.random() - 0.5) * 3, vy: (Math.random() - 0.5) * 3, life: 8, max: 8,
+              color: Math.random() < 0.4 ? "#FFFFFF" : "#FFE45C", size: 0.9 + Math.random() * 0.5, kind: "bolt",
+            });
+          }
+      }
+    }
     // 이반 곰 포옹: 덮칠 때 손끝에 붉은 휘두름, 안고 떨어질 때 붉은 기 + 위로 속도선
     if (CHARS[f.ch].id === "ivan" && f.st === "atk" && f.mv === "S" && f.aerial && cm?.air?.hug) {
       const am = cm.air;
@@ -1290,8 +1321,22 @@ export class FightRenderer {
     const g = this.g;
     g.save();
     g.globalCompositeOperation = "lighter";
+    const flash = fxImg("zena-flash-0"),
+      strike = fxImg("zena-strike-0"),
+      mark = fxImg("zena-mark-0");
     for (const l of this.lines) {
       const a = l.life / l.max;
+      if (flash) {
+        // 그림은 오른쪽(x1 쪽)이 끝 — 일섬이 간 방향으로 뒤집음
+        const dir = l.x1 >= l.x0 ? 1 : -1;
+        const len = Math.abs(l.x1 - l.x0) + 40;
+        g.save();
+        g.globalAlpha = Math.min(1, a * 1.3);
+        g.translate(l.x0 - dir * 20, l.y);
+        g.scale(dir, 1);
+        g.drawImage(flash, 0, -(26 + 16 * a) / 2, len, 26 + 16 * a);
+        g.restore();
+      }
       const th = 2 + 10 * a;
       const grad = g.createLinearGradient(l.x0, 0, l.x1, 0);
       grad.addColorStop(0, "rgba(255,240,150,0)");
@@ -1304,6 +1349,15 @@ export class FightRenderer {
     }
     for (const b of this.bolts) {
       const a = b.life / b.max;
+      if (strike) {
+        // 낙뢰 그림: 바닥(b.y) 기준, 위로 화면 끝까지 늘림
+        const w = 110,
+          h = Math.max(140, b.y + 10);
+        g.save();
+        g.globalAlpha = Math.min(1, a * 1.5);
+        g.drawImage(strike, b.x - w / 2, b.y - h, w, h);
+        g.restore();
+      }
       g.strokeStyle = `rgba(255,250,200,${a})`;
       g.lineWidth = 2 + 4 * a;
       g.beginPath();
@@ -1322,6 +1376,17 @@ export class FightRenderer {
       if (f.zap <= 0) continue;
       const x = f.x / SUB,
         y = screenY(f.h) - 32;
+      if (mark) {
+        // 낙인 문양: 몸 위에서 천천히 돌며 깜빡, 터질 때가 가까울수록 커지고 진해짐
+        const near = 1 - f.zap / 120;
+        const z = 38 + 10 * near + 3 * Math.sin(s.f * 0.5);
+        g.save();
+        g.globalAlpha = 0.45 + 0.4 * near + 0.15 * Math.sin(s.f * 0.7);
+        g.translate(x, y);
+        g.rotate(s.f * 0.05);
+        g.drawImage(mark, -z / 2, -z / 2, z, z);
+        g.restore();
+      }
       const r = 22 + 4 * Math.sin(s.f * 0.4);
       g.strokeStyle = `rgba(200,160,255,${0.35 + 0.3 * (1 - f.zap / 120)})`;
       g.lineWidth = 1.5;
