@@ -99,6 +99,8 @@ const AIR_ACC = 70;
 const JUST_T = 5;
 /** 잡힌 뒤 던져질 때까지 붙잡혀 있는 프레임 */
 const THROW_TECH_T = 14;
+/** 제나 공중 뇌격돌을 맞힌 뒤 상대 앞에 붙는 거리(px) */
+const ZAP_AIR_GAP = 34;
 /** 이반: 바닥에서 이 높이(px) 안쪽으로 떨어지는 중엔 L 이 곰 포옹이 아니라 착지 후 철곰권 */
 const LAND_S_H = 60;
 /** 착지 직후 철곰권 입력을 봐 주는 프레임 (공중에서 미리 누른 L) */
@@ -571,7 +573,7 @@ const cloneF = (f: Fighter): Fighter => ({ ...f, hist: f.hist.slice() });
  * 이 빌드의 게임 데이터 지문 (캐릭터 성능·맵) — 온라인에서 서로 다른 빌드끼리 붙었는지 확인.
  * 계산 방식(sim.ts)만 바꿨을 땐 SIM_REV를 올릴 것.
  */
-const SIM_REV = 19;
+const SIM_REV = 20;
 export const BUILD_ID = (() => {
   const str = SIM_REV + JSON.stringify(CHARS.map((c) => [c.hp, c.walk, c.jumpVx, c.dash, c.cd, c.glide, c.hurt, c.width, c.moves])) + JSON.stringify(MAPS.map((m) => [m.plats, m.spawn]));
   let h = 2166136261;
@@ -1128,6 +1130,11 @@ function control(s: State, i: number) {
       if ((m.multi || m.zap) && m.rush && f.t >= m.startup && f.t < m.startup + m.active) f.vx = f.face * m.rush.vx;
       // 공중 뇌격돌: 돌진이 끝나면 확 느려짐 (끝없이 날아가지 않게)
       if (m.rush && m.rush.airVh === 0 && !m.zap && !m.multi && air && f.t === m.startup + m.active) f.vx = Math.trunc(f.vx / 5);
+      // 공중 뇌격돌을 맞혔으면: 상대 바로 앞(ZAP_AIR_GAP)까지 마저 파고든 뒤 멈춤 — 판정 끝(약 90px)에서 맞으면 너무 멀어 후속타가 안 닿던 것 (10.12)
+      if (airRushHit(f, m) && air) {
+        const gap = Math.abs(s.p[1 - i].x - f.x) - ZAP_AIR_GAP * SUB;
+        f.vx = gap > 0 ? f.face * Math.min(m.rush!.vx, gap) : 0;
+      }
       // 연타기: 일정 프레임마다 다시 맞을 수 있게
       if (m.multi && f.t > m.startup && (f.t - m.startup) % m.multi === 0) f.hit = 0;
       if (m.proj && f.t === m.startup) {
@@ -1162,7 +1169,8 @@ function control(s: State, i: number) {
         return;
       }
       // 공중 끌어올리기가 맞으면: 판정 끝난 뒤 바로 점프·공중 약·발차기로 이어감 (공중 콤보)
-      if (f.hit && f.aerial && m.pullUp && f.t >= m.startup + m.active - 2) {
+      // (제나 공중 뇌격돌도: 맞히면 남은 돌진·빈틈 없이 바로)
+      if (f.hit && f.aerial && ((m.pullUp && f.t >= m.startup + m.active - 2) || airRushHit(f, m))) {
         if (f.jumps < 2 && pressed(f, JUMP_BITS, 10)) {
           f.mv = "";
           jump(s, i, JUMP2_V);
@@ -1645,6 +1653,11 @@ function releaseHug(s: State, i: number) {
     const o = s.p[1 - k];
     if (o.st === "hit" && o.stun > 100) o.stun = 12;
   }
+}
+
+/** 제나 공중 뇌격돌(수평 돌진 아이덴티티)을 맞힌 상태 */
+function airRushHit(f: Fighter, m: MoveDef) {
+  return f.mv === "S" && f.hit > 0 && !!f.aerial && !!m.rush && m.rush.airVh === 0 && !m.zap && !m.multi && !m.rush.landBurst;
 }
 
 /** 공중 잡기(곰 포옹)가 상대를 붙잡음 — 막을 수 없음, 같이 떨어져 착지하면 내리꽂음 */
@@ -2136,7 +2149,11 @@ function applyHit(s: State, ai: number, m: MoveDef, srcX: number, mid: MoveId, p
     if (gotStatus) d.cc = 1;
     if (m.burn) addBurn(s, ai, d);
     // 공중 뇌격돌(제나): 맞히면 돌진을 멈춰 상대 앞에 붙음 → 공중 콤보
-    if (mid === "S" && m.rush && !m.rush.landBurst && m.rush.airVh === 0 && !m.zap && airborneS(s, a)) a.vx = Math.trunc(a.vx / 6);
+    if (mid === "S" && m.rush && !m.rush.landBurst && m.rush.airVh === 0 && !m.zap && airborneS(s, a)) {
+      a.vx = Math.trunc(a.vx / 6);
+      // 공중에 뜬 상대는 띄운 상태(저글)로 — 둘 다 같은 느린 중력으로 내려와서 공중 약·발차기가 이어짐 (10.12)
+      if (airborneS(s, d) && !kd) ((d.float = 1), (d.vh = 0), (a.juggle = JUGGLE_HANG));
+    }
     // 일섬 낙인: 막지 못하고 맞으면 delay 뒤 터짐
     if (m.zap && !kd) d.stun = Math.max(d.stun, m.zap.stun);
     if (m.zap && d.zap === 0) {
