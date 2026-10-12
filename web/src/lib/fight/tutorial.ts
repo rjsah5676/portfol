@@ -181,6 +181,18 @@ export const TUT_STEPS: TutStep[] = [
   },
   {
     ch: "공중",
+    title: "돌진 잡기",
+    text: [
+      "대시하는 중이나 대시 직후에 J + K 를 누르면 돌진 잡기 — 미끄러지듯 길게 파고들어 잡아요. 게이지 25를 써요.",
+      "멀리서 D D 로 대시 → J + K 로 잡아 보세요. 막고만 있는 상대를 깨는 수단이지만 헛치면 빈틈이 커요.",
+    ],
+    dummy: "idle",
+    dist: 220,
+    meter: true,
+    check: (s, ev) => ev.filter((e) => e.k === "throw" && e.p === 0 && s.p[0].lg === 1).length,
+  },
+  {
+    ch: "공중",
     title: "공중 콤보",
     text: [
       "띄운 상대는 바로 점프해서 따라 올라가 공중에서 J · K 로 이어 쳐요 (맞히는 동안 나도 천천히 내려와요).",
@@ -296,7 +308,7 @@ export const TUT_STEPS: TutStep[] = [
     title: "한 콤보 250",
     text: [
       "배운 걸 섞어서 한 콤보에 피해 250을 넣어 보세요. 게이지는 계속 가득 차 있어요.",
-      "예: J + K → 점프 → 공중 J J K → 2단 점프 → J K → S + K, 또는 L → J J J → I",
+      "예: J + K → 점프 → 공중 J J K → S + K, 또는 L → J J J → I",
     ],
     dummy: "idle",
     dist: 70,
