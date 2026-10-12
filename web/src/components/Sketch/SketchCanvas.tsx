@@ -32,6 +32,13 @@ export const COLORS = [
   "#6D4C41",
 ];
 /** 굵기 단계 */
+const groupId = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+
+/** 그리는 동안 다른 손가락(손바닥)이 페이지를 밀거나 확대하지 못하게 */
+const holdPage = (e: TouchEvent) => {
+  if (e.cancelable) e.preventDefault();
+};
+
 export const WIDTHS = [3, 7, 14, 26, 42];
 const BG = "#ffffff";
 const FLUSH_MS = 50;
@@ -381,11 +388,22 @@ export default function SketchCanvas({
     }).catch(() => {});
   };
 
+  // 손바닥 무시: 펜을 한 번이라도 쓰면 그 뒤로 손가락 터치는 그리기에 안 씀,
+  // 한 획은 처음 누른 포인터 하나로만 (손 대고 펜으로 그리면 두 입력이 섞여 선이 지그재그로 흔들리던 것)
+  const penSeen = useRef(false);
+  const activeId = useRef<number | null>(null);
   const onDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
     if (!canDraw || e.button > 0) return;
     e.preventDefault();
+    if (e.pointerType === "pen") penSeen.current = true;
+    else if (e.pointerType === "touch" && penSeen.current) return;
+    if (drawing.current) {
+      // 손바닥으로 시작된 획 중에 펜이 닿으면 손 획은 끝내고 펜으로
+      if (e.pointerType !== "pen") return;
+      endStroke();
+    }
     const pt = toCanvas(e.clientX, e.clientY);
-    const g = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+    const g = groupId();
     localRef.current.add(g);
     if (tool === "fill") {
       playSfx("sfx-fill");
@@ -404,6 +422,8 @@ export default function SketchCanvas({
       return;
     }
     e.currentTarget.setPointerCapture(e.pointerId);
+    activeId.current = e.pointerId;
+    document.addEventListener("touchmove", holdPage, { passive: false });
     const col = tool === "eraser" ? BG : color;
     const w = tool === "eraser" ? Math.max(width, 16) : width;
     drawing.current = { g, pts: [pt], sent: 0, color: col, width: w };
@@ -427,7 +447,7 @@ export default function SketchCanvas({
       });
     }
     const d = drawing.current;
-    if (!d) return;
+    if (!d || e.pointerId !== activeId.current) return;
     const grp = groupsRef.current.get(d.g);
     // 빠르게 그을 때 브라우저가 합쳐버린 중간 좌표까지 써서 촘촘하게
     const evs = e.nativeEvent.getCoalescedEvents?.() ?? [e.nativeEvent];
@@ -447,7 +467,12 @@ export default function SketchCanvas({
     }
   };
 
-  const onUp = () => {
+  const onUp = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (e.pointerId === activeId.current) endStroke();
+  };
+  const endStroke = () => {
+    activeId.current = null;
+    document.removeEventListener("touchmove", holdPage);
     const d = drawing.current;
     if (!d) return;
     if (flushTimer.current) clearInterval(flushTimer.current);
@@ -490,6 +515,7 @@ export default function SketchCanvas({
 
   useEffect(
     () => () => {
+      document.removeEventListener("touchmove", holdPage);
       if (flushTimer.current) clearInterval(flushTimer.current);
       cancelAnimationFrame(animRaf.current);
       cancelAnimationFrame(redrawRaf.current);
