@@ -5,6 +5,7 @@ import type { Config } from "./config";
 import { connectDatabase, type Database } from "./db";
 import type { Deps } from "./deps";
 import { registerBoardGames } from "./games/board";
+import { registerDefense } from "./games/defense";
 import { registerFight } from "./games/fight";
 import { registerPoker, type PokerOptions } from "./games/poker";
 import { registerRhythmOnline } from "./games/rhythmOnline";
@@ -49,6 +50,7 @@ export async function createAppServer(
   const fight = registerFight(deps);
   const poker = registerPoker(deps, overrides.poker);
   const rhythm = registerRhythmOnline(deps);
+  const defense = registerDefense(deps);
   const live = { sketch, fight, poker, rhythm };
   const liveGames: Record<string, LiveGame> = { sketch: sketch.live, fight: fight.live, poker: poker.live, rhythm: rhythm.live };
   // 배포 직전에 저장해 둔 방이 있으면 이어받음
@@ -87,6 +89,7 @@ export async function createAppServer(
     fight.close();
     poker.close();
     rhythm.close();
+    defense.close();
     await gateway.close();
     await new Promise<void>((res) => http.close(() => res()));
     if (!overrides.db) await db.close();

@@ -1,0 +1,147 @@
+/*
+ * GLITCH DEFENSE (글리치 디펜스) 화면 — 무대(.dfn, 1024×576) 안의 애니메이션 · 글리치 효과.
+ * 배치 · 색은 거의 Tailwind 로 (components/Defense), 여기는 키프레임만.
+ */
+
+.dfn {
+  font-family: "Nanum Gothic", sans-serif;
+  -webkit-tap-highlight-color: transparent;
+}
+.dfn button {
+  touch-action: manipulation;
+}
+
+.dfn-toast {
+  animation: dfn-toast 2.2s ease forwards;
+}
+@keyframes dfn-toast {
+  0% {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  10%,
+  80% {
+    opacity: 1;
+    transform: none;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+.dfn-shout {
+  animation: dfn-shout 1.6s cubic-bezier(0.2, 1.4, 0.4, 1) forwards;
+}
+@keyframes dfn-shout {
+  0% {
+    opacity: 0;
+    transform: scale(1.6);
+  }
+  15% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  80% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-14px);
+  }
+}
+
+.dfn-boss {
+  animation: dfn-boss 2.6s ease forwards;
+}
+@keyframes dfn-boss {
+  0% {
+    opacity: 0;
+    transform: translateX(-60px) skewX(-12deg);
+  }
+  12% {
+    opacity: 1;
+    transform: none;
+  }
+  85% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(40px);
+  }
+}
+
+.dfn-pulse {
+  animation: dfn-pulse 1.2s ease-in-out infinite;
+}
+@keyframes dfn-pulse {
+  50% {
+    filter: brightness(1.25);
+    box-shadow: 0 0 16px -2px currentColor;
+  }
+}
+
+/* 글리치: 가끔 옆으로 어긋나며 색이 갈라짐 */
+.dfn-glitch {
+  animation: dfn-glitch 3.2s steps(1) infinite;
+}
+@keyframes dfn-glitch {
+  0%,
+  86%,
+  100% {
+    transform: none;
+    filter: none;
+  }
+  88% {
+    transform: translateX(-3px);
+    filter: hue-rotate(80deg) saturate(2);
+  }
+  90% {
+    transform: translateX(3px) skewX(6deg);
+  }
+  92% {
+    transform: translateX(-1px);
+    filter: invert(0.15);
+  }
+}
+
+.dfn-title {
+  position: relative;
+  color: #fff;
+  text-shadow:
+    3px 0 #ff5cd6,
+    -3px 0 #7ef3ff;
+  animation: dfn-title 4s steps(1) infinite;
+}
+@keyframes dfn-title {
+  0%,
+  92%,
+  100% {
+    text-shadow:
+      3px 0 #ff5cd6,
+      -3px 0 #7ef3ff;
+    transform: none;
+  }
+  94% {
+    text-shadow:
+      -5px 0 #ff5cd6,
+      5px 0 #7ef3ff;
+    transform: translateX(2px);
+  }
+  96% {
+    text-shadow:
+      6px 1px #ff5cd6,
+      -2px -1px #7ef3ff;
+    transform: skewX(-4deg);
+  }
+}
+
+/* 메뉴 배경 주사선 */
+.dfn-scan {
+  background: repeating-linear-gradient(
+    0deg,
+    rgba(255, 255, 255, 0.025) 0 1px,
+    transparent 1px 4px
+  );
+  pointer-events: none;
+}
