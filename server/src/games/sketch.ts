@@ -121,6 +121,8 @@ interface Room {
   access: Set<string>;
   /** 플레이어 자리의 주인 소켓 — 그 소켓이 끊기면 자리에서 뺌 */
   owners: Map<string, string>;
+  /** 게임 중에 들어와 아직 안 그린 사람 (들어온 순서) — 이번 바퀴가 끝난 뒤에 그림 */
+  late: string[];
   /** 아무도 없게 된 시각 (정리용) */
   emptySince: number;
 }
@@ -178,8 +180,17 @@ const leaderOf = (room: Room) =>
 function nextDrawer(room: Room): string {
   const { drawer: current, firstCorrect, drawn } = room.state;
   const all = orderedPlayers(room).map((p) => p.uid);
-  const pending = all.filter((u) => (drawn[u] ?? 0) < room.meta.rounds);
+  let pending = all.filter((u) => (drawn[u] ?? 0) < room.meta.rounds);
   if (pending.length === 0) return "";
+  // 게임 중에 들어온 사람은 원래 있던 사람들이 이번 바퀴를 다 그린 뒤에 (들어온 순서대로)
+  const late = room.late.filter((u) => pending.includes(u));
+  if (late.length) {
+    const early = pending.filter((u) => !late.includes(u));
+    const lap = Math.max(0, ...all.filter((u) => !late.includes(u)).map((u) => drawn[u] ?? 0));
+    const behind = early.filter((u) => (drawn[u] ?? 0) < lap);
+    if (!behind.length) return late[0];
+    pending = behind;
+  }
   if (room.meta.turnMode === "winner" && firstCorrect && pending.includes(firstCorrect)) return firstCorrect;
   // 입장 순서로 지금 사람 다음부터 돌면서 아직 덜 그린 사람
   const start = all.indexOf(current);
@@ -463,6 +474,7 @@ export function registerSketch({ gateway, users }: Deps, opts: SketchOptions = {
       invite: newId(24),
       access: new Set(locked ? [uid] : []),
       owners: new Map(),
+      late: [],
       emptySince: now,
     };
     rooms.set(id, room);
@@ -513,6 +525,9 @@ export function registerSketch({ gateway, users }: Deps, opts: SketchOptions = {
     // 입장 시각은 클라이언트가 보냄(잠깐 끊겼다 재연결이면 원래 값 → 입장 순서 유지). 미래·방 생성 전 값은 바로잡음
     const now = Date.now();
     room.players[uid] = { nick, joinedAt: Math.max(room.meta.createdAt, Math.min(now, joinedAt ?? now)) };
+    // 게임 중에 처음 들어온 사람은 이번 바퀴 맨 뒤로
+    const playing = room.state.phase !== "waiting" && room.state.phase !== "ended";
+    if (playing && room.state.drawn[uid] === undefined && !room.late.includes(uid)) room.late.push(uid);
     room.owners.set(uid, ctx.socket.id);
     // 점수 자리 (새로고침으로 다시 들어온 경우 기존 점수 유지)
     const cur = room.scores[uid];
@@ -623,6 +638,7 @@ export function registerSketch({ gateway, users }: Deps, opts: SketchOptions = {
     }
     const first = list[0].uid;
     room.state = emptyState();
+    room.late = [];
     beginTurn(room, { ...newTurn(room, first, 1), drawn: { [first]: 1 } });
     changed(room);
     systemChat(room, `게임 시작! 한 사람당 ${room.meta.rounds}번씩 그려요. 중간에 들어와도 같이 할 수 있어요.`);
@@ -751,6 +767,7 @@ export function registerSketch({ gateway, users }: Deps, opts: SketchOptions = {
       systemChat(room, "게임 끝! 최종 순위를 확인하세요.");
       return null;
     }
+    room.late = room.late.filter((u) => u !== drawer);
     beginTurn(room, {
       ...newTurn(room, drawer, cur.turnNo + 1),
       drawn: { ...cur.drawn, [drawer]: (cur.drawn[drawer] ?? 0) + 1 },

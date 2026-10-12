@@ -362,6 +362,27 @@ describe("진행", () => {
     void a;
   });
 
+  it("게임 중에 들어온 사람은 먼저 맞혀도 이번 바퀴 맨 뒤에 그림", async () => {
+    const { host, others, id } = await roomWith(3, { turnMode: "winner", rounds: 1 });
+    const [a, b] = others;
+    await host.rpc("sketch.startGame", { id });
+    const late = await user("late");
+    await join(late, id, "늦음");
+    const next = async (guesser?: TestClient) => {
+      const st = (await peek(id)).state;
+      const drawer = [host, a, b, late].find((c) => c.uid === st.drawer)!;
+      const t = await toDrawing(id, drawer);
+      if (guesser) await drawer.rpc("sketch.markCorrect", { id, guess: { uid: guesser.uid, nick: "x", turnId: t } });
+      await drawer.rpc("sketch.endTurn", { id, turnId: t, reveal: "사과" });
+      await host.rpc("sketch.nextTurn", { id, turnId: t });
+      return (await peek(id)).state;
+    };
+    expect((await next(late)).drawer).toBe(a.uid); // 늦게 온 사람이 맞혔지만 원래 있던 사람 먼저
+    expect((await next(late)).drawer).toBe(b.uid);
+    expect((await next()).drawer).toBe(late.uid); // 바퀴가 끝나면 늦게 온 사람
+    expect((await next()).phase).toBe("ended");
+  });
+
   it("그리는 사람이 나가면 리더가 차례를 넘길 수 있음", async () => {
     const { host, others, id } = await roomWith(3, { rounds: 2 });
     const [a, b] = others;

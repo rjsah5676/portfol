@@ -43,6 +43,9 @@
   /* 무대: 모눈 스케치북 */
   .sk-stage {
     overflow: hidden;
+    /* 두 번 탭 확대 · 끝에서 튕기며 페이지까지 밀리는 것 막기 */
+    touch-action: manipulation;
+    overscroll-behavior: contain;
     background-color: var(--paper);
     background-image:
       linear-gradient(rgba(78, 168, 222, 0.11) 1px, transparent 1px),
@@ -645,4 +648,11 @@
       stroke-dashoffset: 0;
     }
   }
+}
+
+/* 전체화면 동안 뒤 페이지 고정 */
+html.sk-lock,
+html.sk-lock body {
+  overflow: hidden;
+  overscroll-behavior: none;
 }
