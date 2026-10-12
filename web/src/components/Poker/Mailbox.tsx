@@ -70,7 +70,7 @@ export default function Mailbox({
               <span className="text-[2em] opacity-60" aria-hidden>
                 📭
               </span>
-              <span className="text-[0.9em]">받을 우편이 없어요</span>
+              <span className="text-[0.9em]">받은 우편이 없어요</span>
             </div>
           ) : (
             <div className="flex flex-col gap-[0.45em]">

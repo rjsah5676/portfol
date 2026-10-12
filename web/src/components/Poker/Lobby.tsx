@@ -41,6 +41,9 @@ function stakeLine(game: GameKind, t: Tier) {
     : `판돈 ${fmtShort(t.ante)}`;
 }
 
+/** 이번 접속에서 로비에 마지막으로 고른 단계 (페이지를 새로 열 때까지 유지) */
+let lastTier: TierId | null = null;
+
 export default function Lobby({
   wallet,
   rank,
@@ -62,8 +65,13 @@ export default function Lobby({
   topRight?: ReactNode;
 }) {
   const [game, setGameState] = useState<GameKind>("holdem");
-  // 처음 고른 방: 내 칩으로 앉을 수 있는 가장 높은 단계
-  const [tier, setTier] = useState<TierId>(() => [...TIERS].reverse().find((t) => wallet.money >= t.min)?.id ?? 1);
+  // 처음 고른 방: 접속해서 처음 로비가 뜰 때만 내 칩으로 앉을 수 있는 가장 높은 단계, 그 뒤로는(방에서 나와 돌아와도) 마지막에 고른 단계
+  const [tier, setTier] = useState<TierId>(
+    () => (lastTier ??= [...TIERS].reverse().find((t) => wallet.money >= t.min)?.id ?? 1)
+  );
+  useEffect(() => {
+    lastTier = tier;
+  }, [tier]);
   const [tables, setTables] = useState<LobbyTable[] | null>(null);
   const [busy, setBusy] = useState("");
   const [sheet, setSheet] = useState<"" | "create" | "char" | "rank" | "me" | "mychar">("");

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { madeOf, type Card } from "@/lib/poker/cards";
 import type { TierId } from "@/lib/poker/rules";
 import { bestK, handNameK } from "@/lib/poker/seven";
@@ -318,6 +318,8 @@ export function SevenBar({
 }) {
   const lg = view && !view.result && myTurn && view.phase === "bet" && view.toAct === mySeat ? view.legal : null;
   const live = !!lg;
+  /** 마지막으로 손가락 · 마우스가 닿은 시각 (닿는 순간 낸 소리를 뗄 때 또 내지 않게) */
+  const downAt = useRef(0);
   /** k = 글자 그림 · 색 (다이 · 삥 · 따당 · 콜 · 쿼터 · 하프 · 올인) */
   type Slot = { key: string; label: string; k: string; amt?: number; act?: SevenAction };
   const bet = (b: SevenBet, key: string, idle: string): Slot => {
@@ -359,9 +361,15 @@ export function SevenBar({
             data-k={b.k}
             disabled={live ? !on : !canPre}
             aria-pressed={!live && canPre ? pre === b.key : undefined}
-            onClick={() => {
-              // 누른 줄 알게: 행동마다 다른 소리, 미리 누르기는 버튼 딸깍
+            // 누른 줄 알게: 손가락이 닿는 순간 바로 소리 (떼는 순간까지 기다리면 폰에서 굼떠 보임). 행동은 뗄 때 (밀어서 취소 가능)
+            onPointerDown={() => {
+              downAt.current = Date.now();
               sfx.press(!live ? "pre" : b.key === "die" ? "die" : b.key === "call" || b.key === "bbing" ? "call" : "bet");
+            }}
+            onClick={() => {
+              // 키보드로 누른 경우만 여기서 소리
+              if (Date.now() - downAt.current > 800)
+                sfx.press(!live ? "pre" : b.key === "die" ? "die" : b.key === "call" || b.key === "bbing" ? "call" : "bet");
               if (live) b.act && onAct(b.act);
               else onPre(b.key);
             }}
