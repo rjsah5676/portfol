@@ -43,6 +43,51 @@ const KR = "font-['Nanum_Gothic',sans-serif]";
 const PX = "[image-rendering:pixelated]";
 const MENU_BG = "/fight/bg/title.webp";
 const face = (c: CharDef) => `/fight/art/${c.id}-face.webp`;
+
+/** 캐릭터 고르기 격자 한 줄 칸 수 (랜덤 + 캐릭터들을 이만큼씩 여러 줄로) */
+const PICK_COLS = 6;
+/** 위·아래로 한 줄 옮김 (격자 밖이면 그대로) — 칸 번호는 랜덤(-1)부터 */
+const pickVert = (ch: number, d: number) => {
+  const p = ch + 1 + d * PICK_COLS;
+  return p >= 0 && p <= CHARS.length ? p - 1 : ch;
+};
+
+/** 철권식 캐릭터 고르기 격자: 정사각 초상화, 이름은 칸 아래 띠, 고른 칸은 자리 색 테두리 · 빛 */
+function PickGrid({ sel, color, disabled, onPick }: { sel: number; color: string; disabled: boolean; onPick: (i: number) => void }) {
+  const cell = 5.4,
+    gap = 0.3;
+  return (
+    <div className="flex flex-wrap justify-center" style={{ width: `${PICK_COLS * cell + (PICK_COLS - 1) * gap}cqw`, gap: `${gap}cqw` }}>
+      {[-1, ...CHARS.map((_, i) => i)].map((i) => {
+        const on = sel === i;
+        const c = i >= 0 ? CHARS[i] : null;
+        const col = on ? color : "rgba(255,255,255,0.18)";
+        return (
+          <button
+            key={i}
+            type="button"
+            disabled={disabled}
+            onClick={() => onPick(i)}
+            className={`relative cursor-pointer overflow-hidden rounded-[0.3cqw] border-[0.22cqw] bg-black/60 transition-transform disabled:cursor-not-allowed ${on ? "z-10 scale-[1.08]" : ""}`}
+            style={{ width: `${cell}cqw`, height: `${cell}cqw`, borderColor: col, boxShadow: on ? `0 0 1.2cqw ${col}` : undefined }}
+          >
+            {c ? (
+              <img src={face(c)} alt={c.name} className={`absolute inset-0 h-full w-full object-cover object-top ${PX} ${on ? "" : "brightness-75 grayscale-[55%]"}`} />
+            ) : (
+              <span className="absolute inset-0 flex items-center justify-center pb-[1cqw] font-mono text-[2.6cqw] font-black text-white/80">?</span>
+            )}
+            <span
+              className={`${KR} absolute inset-x-0 bottom-0 truncate px-[0.2cqw] text-center text-[0.85cqw] leading-[1.35] text-white`}
+              style={{ background: on ? color : "rgba(0,0,0,0.65)" }}
+            >
+              {c ? c.name : "랜덤"}
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
 const art = (c: CharDef) => `/fight/art/${c.id}.webp`;
 const SEAT_COL = ["#3B82F6", "#F43F5E"];
 const pill = `${KR} cursor-pointer rounded-full bg-black/50 px-[1.4cqw] py-[0.5cqw] text-[1.2cqw] text-white/75 hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-40`;
@@ -267,7 +312,7 @@ function RankOverlay({ st }: { st: Extract<RankStatus, { s: "queue" | "found" }>
               </button>
             </div>
           )}
-          <div className={`${KR} text-[1.05cqw] text-white/40`}>맵은 랜덤 · 캐릭터는 다음 화면에서 골라요 · {mmss(st.deadline - now)} 안에</div>
+          <div className={`${KR} text-[1.05cqw] text-white/40`}>맵은 랜덤 · 캐릭터는 다음 화면에서 골라요 · {mmss(st.deadline - now)}</div>
         </div>
       )}
     </div>
@@ -368,6 +413,8 @@ function BotRoom({ st, nick, onMatch }: { st: Extract<RankStatus, { s: "bot" }>;
       else if (ref.current.spinning) return;
       else if (k === "KeyA" || k === "ArrowLeft") (sfxUi("move"), setCh((c) => ((c + 1 - 1 + n + 1) % (n + 1)) - 1));
       else if (k === "KeyD" || k === "ArrowRight") (sfxUi("move"), setCh((c) => ((c + 1 + 1) % (n + 1)) - 1));
+      else if (k === "KeyW" || k === "ArrowUp") (sfxUi("move"), setCh((c) => pickVert(c, -1)));
+      else if (k === "KeyS" || k === "ArrowDown") (sfxUi("move"), setCh((c) => pickVert(c, 1)));
       else if (k === "KeyJ" || k === "Space" || k === "Enter") ref.current.go();
       else return;
       e.preventDefault();
@@ -474,34 +521,9 @@ function BotRoom({ st, nick, onMatch }: { st: Extract<RankStatus, { s: "bot" }>;
       {/* 아래: 캐릭터 고르기 + 시작 */}
       <div className="absolute bottom-[1cqw] left-1/2 z-10 flex -translate-x-1/2 items-end gap-[1.4cqw] rounded-[1cqw] bg-black/50 px-[1.2cqw] pt-[0.8cqw] pb-[0.7cqw] backdrop-blur-[2px]">
         <div className="flex flex-col items-center gap-[0.4cqw]">
-          <div className="flex gap-[0.7cqw]">
-            {[-1, ...CHARS.map((_, i) => i)].map((i) => {
-              const on = shown === i;
-              const cc = i >= 0 ? CHARS[i] : null;
-              return (
-                <button key={i} type="button" disabled={busy || shuffle.cur !== null} onClick={() => (sfxUi("move"), setCh(i))} className="cursor-pointer disabled:cursor-not-allowed">
-                  {cc ? (
-                    <img
-                      src={face(cc)}
-                      alt={cc.name}
-                      className={`h-[5cqw] w-[6.2cqw] rounded-[0.4cqw] border-[0.25cqw] object-cover ${PX} ${on ? "" : "grayscale-[60%]"}`}
-                      style={{ borderColor: on ? SEAT_COL[0] : "rgba(255,255,255,0.2)" }}
-                    />
-                  ) : (
-                    <span
-                      className="flex h-[5cqw] w-[5cqw] items-center justify-center rounded-[0.4cqw] border-[0.25cqw] bg-black/60 font-mono text-[3cqw] font-black text-white/80"
-                      style={{ borderColor: on ? SEAT_COL[0] : "rgba(255,255,255,0.2)" }}
-                    >
-                      ?
-                    </span>
-                  )}
-                  <span className={`${KR} block pt-[0.2cqw] text-center text-[1cqw] text-white/75`}>{cc ? cc.name : "랜덤"}</span>
-                </button>
-              );
-            })}
-          </div>
+          <PickGrid sel={shown} color={SEAT_COL[0]} disabled={busy || shuffle.cur !== null} onPick={(i) => (sfxUi("move"), setCh(i))} />
           <div className={`${KR} text-[1cqw] text-white/40`}>
-            {err ? <span className="text-[#F87171]">{err}</span> : keyText("A·D(←→) 고르기 · J(Enter) 시작 · Esc 취소")}
+            {err ? <span className="text-[#F87171]">{err}</span> : keyText("A·D·W·S(←→↑↓) 고르기 · J(Enter) 시작 · Esc 취소")}
           </div>
         </div>
         <button type="button" disabled={busy || shuffle.cur !== null} onClick={() => go()} className={`${bigBtn} mb-[1.6cqw] min-w-[12cqw]`}>
@@ -535,6 +557,22 @@ function BotGone({ id }: { id: string }) {
 function BotEnd({ st, onAgain, onLobby }: { st: Extract<RankStatus, { s: "botEnd" }>; onAgain: () => void; onLobby: () => void }) {
   const win = st.out === 2 ? null : st.out === 0;
   const d = st.delta;
+  // J(Enter · Space) = 다시 찾기
+  const againRef = useRef(onAgain);
+  useEffect(() => {
+    againRef.current = onAgain;
+  });
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const tg = e.target as HTMLElement | null;
+      if (tg && (tg.tagName === "INPUT" || tg.tagName === "TEXTAREA")) return;
+      if (e.code !== "KeyJ" && e.code !== "Space" && e.code !== "Enter") return;
+      e.preventDefault();
+      againRef.current();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
   return (
     <div className="absolute inset-0 flex flex-col items-center justify-center gap-[1.4cqw]">
       <div className="font-mono text-[2.2cqw] font-black tracking-[0.3em] text-white/70 italic">RANKED</div>
@@ -563,7 +601,7 @@ function BotEnd({ st, onAgain, onLobby }: { st: Extract<RankStatus, { s: "botEnd
       {st.note && <div className={`${KR} text-[1.2cqw] text-[#FCA5A5]`}>{st.note}</div>}
       <div className="mt-[1cqw] flex gap-[1.2cqw]">
         <button type="button" onClick={onAgain} className={rankBtn}>
-          ⚔ 다시 찾기
+          ⚔ 다시 찾기 <span className="font-mono text-[0.8em] opacity-60">J</span>
         </button>
         <button type="button" onClick={onLobby} className={pill}>
           로비로
@@ -1087,9 +1125,11 @@ function Room({
   }, [vs, onMatch]);
 
   // 키보드: A·D(←→) 캐릭터, J·Space·Enter 준비, Esc 나가기
-  const stRef = useRef({ me, vs, spinning: false });
+  const stRef = useRef({ me, vs, spinning: false, rankEnd: false, again: () => {} });
   useEffect(() => {
-    stRef.current = { me, vs, spinning: shuffle.cur !== null };
+    // 랭크전 한 판이 끝나 결과 화면이면 J(Enter · Space) = 다시 찾기
+    const rankEnd = !!(rank?.used && st && (st.phase === "wait" || played.has(st.match)) && !vs);
+    stRef.current = { me, vs, spinning: shuffle.cur !== null, rankEnd, again: () => (s.leave(), onRankAgain()) };
     toggleRef.current = () => {
       if (!me || shuffle.cur !== null) return;
       if (!me.ready && me.ch < 0) {
@@ -1108,7 +1148,7 @@ function Room({
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement | null;
       if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA")) return;
-      const { me, vs } = stRef.current;
+      const { me, vs, rankEnd, again } = stRef.current;
       if (vs) return;
       const k = e.code;
       if (k === "Escape") {
@@ -1116,11 +1156,17 @@ function Room({
         leave();
         return;
       }
+      if (rankEnd) {
+        if (k === "KeyJ" || k === "Space" || k === "Enter") (e.preventDefault(), again());
+        return;
+      }
       if (!me) return;
       const n = CHARS.length;
       const move = (d: number) => !me.ready && !stRef.current.spinning && (sfxUi("move"), s.setChar((((me.ch + 1 + d) % (n + 1)) + n + 1) % (n + 1) - 1));
       if (k === "KeyA" || k === "ArrowLeft") move(-1);
       else if (k === "KeyD" || k === "ArrowRight") move(1);
+      else if (k === "KeyW" || k === "ArrowUp") move(pickVert(me.ch, -1) - me.ch);
+      else if (k === "KeyS" || k === "ArrowDown") move(pickVert(me.ch, 1) - me.ch);
       else if (k === "KeyJ" || k === "Space" || k === "Enter") toggleRef.current();
       else return;
       e.preventDefault();
@@ -1179,7 +1225,7 @@ function Room({
         )}
         <div className="mt-[1cqw] flex gap-[1.2cqw]">
           <button type="button" onClick={() => (s.leave(), onRankAgain())} className={rankBtn}>
-            ⚔ 다시 찾기
+            ⚔ 다시 찾기 <span className="font-mono text-[0.8em] opacity-60">J</span>
           </button>
           <button type="button" onClick={leave} className={pill}>
             로비로
@@ -1393,39 +1439,8 @@ function Room({
       {/* 아래: 내 캐릭터 고르기 + 준비 */}
       <div className="absolute bottom-[1cqw] left-1/2 z-10 flex -translate-x-1/2 items-end gap-[1.4cqw] rounded-[1cqw] bg-black/50 px-[1.2cqw] pt-[0.8cqw] pb-[0.7cqw] backdrop-blur-[2px]">
         <div className="flex flex-col items-center gap-[0.4cqw]">
-          <div className="flex gap-[0.7cqw]">
-            {[-1, ...CHARS.map((_, i) => i)].map((i) => {
-              const on = (shuffle.cur ?? me.ch) === i;
-              const c = i >= 0 ? CHARS[i] : null;
-              return (
-                <button
-                  key={i}
-                  type="button"
-                  disabled={me.ready || shuffle.cur !== null}
-                  onClick={() => (sfxUi("move"), s.setChar(i))}
-                  className="cursor-pointer disabled:cursor-not-allowed"
-                >
-                  {c ? (
-                    <img
-                      src={face(c)}
-                      alt={c.name}
-                      className={`h-[5cqw] w-[6.2cqw] rounded-[0.4cqw] border-[0.25cqw] object-cover ${PX} ${on ? "" : "grayscale-[60%]"}`}
-                      style={{ borderColor: on ? SEAT_COL[s.seat] : "rgba(255,255,255,0.2)" }}
-                    />
-                  ) : (
-                    <span
-                      className="flex h-[5cqw] w-[5cqw] items-center justify-center rounded-[0.4cqw] border-[0.25cqw] bg-black/60 font-mono text-[3cqw] font-black text-white/80"
-                      style={{ borderColor: on ? SEAT_COL[s.seat] : "rgba(255,255,255,0.2)" }}
-                    >
-                      ?
-                    </span>
-                  )}
-                  <span className={`${KR} block pt-[0.2cqw] text-center text-[1cqw] text-white/75`}>{c ? c.name : "랜덤"}</span>
-                </button>
-              );
-            })}
-          </div>
-          <div className={`${KR} text-[1cqw] text-white/40`}>{keyText("A·D(←→) 고르기 · J(Enter) 준비 · Esc 나가기 · 둘 다 준비하면 시작")}</div>
+          <PickGrid sel={shuffle.cur ?? me.ch} color={SEAT_COL[s.seat]} disabled={me.ready || shuffle.cur !== null} onPick={(i) => (sfxUi("move"), s.setChar(i))} />
+          <div className={`${KR} text-[1cqw] text-white/40`}>{keyText("A·D·W·S(←→↑↓) 고르기 · J(Enter) 준비 · Esc 나가기 · 둘 다 준비하면 시작")}</div>
         </div>
         <button type="button" disabled={(!foe && !me.ready) || shuffle.cur !== null} onClick={() => toggleRef.current()} className={`${bigBtn} mb-[1.6cqw] min-w-[12cqw]`}>
           {me.ready ? "준비 취소" : foe ? "준비" : "상대 대기"}
