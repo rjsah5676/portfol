@@ -42,6 +42,7 @@ import { uniqueNickname } from "./nicknames";
 import { coolDown, line, newBrain, type Brain } from "./personas";
 import { RoundError, type GameDef, type Round } from "./round";
 import { seven } from "./seven/round";
+import { POKER_EXCHANGE } from "../../../../web/src/lib/points";
 import { createWallet, skinsOf, type SettleEntry } from "./wallet";
 
 /*
@@ -191,7 +192,7 @@ const AWAY_KICK_MS = 45_000;
 /** 사람이 없는 테이블은 이만큼 뒤에 정리 */
 const EMPTY_TTL_MS = 20_000;
 
-export function registerPoker({ gateway, db, users }: Deps, opts: PokerOptions = {}) {
+export function registerPoker({ gateway, db, users, points }: Deps, opts: PokerOptions = {}) {
   const now = opts.now ?? Date.now;
   const speed = opts.speed ?? 1;
   const ms = (t: number) => Math.round(t * speed);
@@ -200,7 +201,9 @@ export function registerPoker({ gateway, db, users }: Deps, opts: PokerOptions =
   const actMs = opts.actMs ?? ACT_MS;
   const choiceMs = opts.choiceMs ?? CHOICE_MS;
   const awayMs = opts.awayMs ?? ACT_AWAY_MS;
-  const wallet = createWallet(db, now);
+  const wallet = createWallet(db, now, points);
+  // 포인트가 바뀌면 (출석 · 업적 · 상점 · 환전 · 운영자) 포커 화면의 지갑도
+  points.onChange((uid) => void wallet.refresh(uid).catch(() => {}));
   void wallet.ensure().catch((e) => console.warn("[poker] 시작 자금 채우기 실패", e));
 
   const tables = new Map<string, Table>();
@@ -1509,6 +1512,16 @@ export function registerPoker({ gateway, db, users }: Deps, opts: PokerOptions =
     await settlingOf.get(uid);
     const w = await wallet.buyChar(uid, char);
     return (await autoRevive(uid).catch(() => null)) ?? walletWire(uid, w);
+  });
+
+  /** 환전: 칩 ↔ 포인트 (테이블에 앉아 있으면 안 됨 — 앉은 동안의 칩은 판에 들고 있어서) */
+  gateway.rpc("poker.exchange", async (ctx, raw) => {
+    const { uid } = member(ctx);
+    const { dir, units } = z.object({ dir: z.enum(["toPoints", "toChips"]), units: z.number().int().min(1).max(POKER_EXCHANGE.maxUnits) }).parse(raw);
+    if (seatOf.has(uid)) throw new AppError("SEATED", "테이블에서 일어난 뒤에 바꿀 수 있어요.", 409);
+    await settlingOf.get(uid);
+    const w = await wallet.exchange(uid, dir, units);
+    return walletWire(uid, w);
   });
 
   /** 옷장: 스킨 입기 / 벗기 (앉아 있으면 그 자리 그림도 바로) */

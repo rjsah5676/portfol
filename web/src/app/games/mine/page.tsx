@@ -26,6 +26,9 @@ const HINT_KEY = "hint:mine-controls";
 type Grid<T> = T[][];
 type Timer = ReturnType<typeof setTimeout>;
 
+/** 클리어 시간 (예전 기록에 소수점 끝자리 오차가 섞여 있어 둘째 자리까지만) */
+const fmtSec = (t: number) => String(Math.round(Number(t) * 100) / 100);
+
 export default function Minesweeper() {
   const [rankOpen, setRankOpen] = useState(false);
   // window.innerHeight/innerWidth를 useState 초기값으로 직접 넣으면 정적 export
@@ -371,7 +374,7 @@ export default function Minesweeper() {
             name: r.name,
             member: r.member,
             avatar: r.avatar,
-            value: `${r.time}s`,
+            value: `${fmtSec(r.time)}s`,
           })),
           sub: "클리어 시간",
           open: rankOpen,
@@ -382,7 +385,7 @@ export default function Minesweeper() {
                 name: r.name,
                 member: r.member,
                 avatar: r.avatar,
-                value: `${r.time}s`,
+                value: `${fmtSec(r.time)}s`,
                 date: r.createdAt,
               }))}
               skip={3}

@@ -72,6 +72,8 @@ export interface AdminUser {
   avatar: string | null;
   /** 포커 칩 */
   money: number;
+  /** 포인트 */
+  points: number;
   stats: {
     plays?: Record<string, number>;
     online?: Record<string, { w?: number; l?: number; d?: number }>;
@@ -185,7 +187,7 @@ export const listUsers = (q = "") =>
     { auth: true }
   );
 
-export const updateUser = (uid: string, patch: { nick?: string; badge?: string | null; money?: number }) =>
+export const updateUser = (uid: string, patch: { nick?: string; badge?: string | null; money?: number; points?: number }) =>
   api<AdminUser>(`/api/admin/users/${encodeURIComponent(uid)}`, {
     method: "PATCH",
     body: patch,
@@ -280,3 +282,7 @@ export function sortValue(v: unknown): number | string {
   if (typeof v === "boolean") return v ? 1 : 0;
   return v === undefined || v === null ? "" : String(v);
 }
+
+/** 회원의 포인트 최근 내역 (관리자) */
+export const getUserPointLog = (uid: string) =>
+  api<{ log: import("@/lib/points").PointLogRow[] }>(`/api/admin/users/${encodeURIComponent(uid)}/points`, { auth: true }).then((r) => r.log);

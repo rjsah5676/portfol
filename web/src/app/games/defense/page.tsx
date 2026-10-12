@@ -36,6 +36,7 @@ export default function DefensePage() {
           accent="#FF5CD6"
           desc="소환 · 합성으로 픽셀 세계를 지키는 랜덤 디펜스"
           tags={["운빨 디펜스", "랭킹모드", "멀티모드", "웹 디펜스 게임"]}
+          ach="defense"
           guide={DEFENSE_GUIDE}
           rank={{
             sub: "최고 기록",

@@ -4,6 +4,8 @@
  * 돈은 두 게임이 같이 씀: 가진 돈을 전부 들고 앉고, 판이 끝날 때마다 딴 만큼·잃은 만큼이 반영됨.
  */
 
+import { SHOP } from "../points";
+
 export type GameKind = "holdem" | "seven";
 export const GAMES: Record<GameKind, { name: string; seats: number; blurb: string }> = {
   holdem: { name: "홀덤", seats: 9, blurb: "내 패 2장 + 바닥 5장, 노리밋" },
@@ -121,10 +123,12 @@ export const CHARS: Record<CharId, { name: string; color: string; blurb: string;
   mio: { name: "미오", color: "#7c9cff", blurb: "말수가 적다. 토끼 인형을 안고 조용히 칩을 쓸어 감", age: 26, birthday: "3월 3일", sign: "물고기자리" },
 };
 /**
- * 칩으로 사는 캐릭터의 가격 (기본 다섯 명은 무료라 없음). 산 캐릭터는 users.poker.chars 에 쌓임.
- * 구매 순위의 '캐릭터 구매'는 여기 가격이 있는 캐릭터만 셈.
+ * 사야 쓰는 캐릭터의 가격 — 포인트 (기본 다섯 명은 무료라 없음). 값은 lib/points.ts 의 SHOP 에서. 산 캐릭터는 users.poker.chars 에 쌓임.
+ * 구매 순위의 '캐릭터 구매'는 여기 가격이 있는 캐릭터만 셈. (10.13 전에는 칩으로 샀음 — 그때 산 것도 그대로)
  */
-export const CHAR_PRICE: Partial<Record<string, number>> = { mio: 5 * EOK };
+export const CHAR_PRICE: Partial<Record<string, number>> = Object.fromEntries(
+  SHOP.filter((s) => s.game === "poker" && s.kind === "char").map((s) => [s.ref, s.price])
+);
 /** 그 캐릭터를 쓸 수 있는지 (무료 캐릭터이거나 산 캐릭터) */
 export const charOwned = (c: CharId, owned: readonly string[] | undefined) => !CHAR_PRICE[c] || !!owned?.includes(c);
 /** 봇이 앉을 때 고르는 캐릭터: 사야 하는 캐릭터는 빼고 */
@@ -132,7 +136,7 @@ export const BOT_CHAR_IDS: CharId[] = CHAR_IDS.filter((c) => !CHAR_PRICE[c]);
 export const charOf = (id: unknown): CharId => (CHAR_IDS.includes(id as CharId) ? (id as CharId) : "jinwoo");
 
 /*
- * 스킨: 상점에서 칩으로 사서 옷장에서 입음. 입으면 그 캐릭터의 그림이 전부 스킨 그림으로 바뀌고(남들 화면에도),
+ * 스킨: 상점에서 포인트로 사서 옷장에서 입음. 입으면 그 캐릭터의 그림이 전부 스킨 그림으로 바뀌고(남들 화면에도),
  * 효과음은 그대로 · 음성은 스킨 전용 파일이 있으면 그걸로. 그림은 web/public/poker/char/{스킨 id}/ (캐릭터와 같은 파일 구성)
  * + (live) 로비 대기 영상 idle.webp · 터치 반응 touch-1~3.webp.
  * ready = 그림이 들어왔는지. false 면 원래 캐릭터 그림으로 보임 (사고 입는 것은 됨).
@@ -142,6 +146,7 @@ export interface Skin {
   id: SkinId;
   char: CharId;
   name: string;
+  /** 포인트 (lib/points.ts 의 SHOP 에서) */
   price: number;
   blurb: string;
   /** 입었을 때 로비에서 한마디 */
@@ -150,12 +155,13 @@ export interface Skin {
   /** 로비에서 움직이는 그림(대기 · 터치 반응)이 들어왔는지. false 면 로비에서 전신 그림 한 장 */
   live: boolean;
 }
+const skinPrice = (id: SkinId) => SHOP.find((s) => s.game === "poker" && s.kind === "skin" && s.ref === id)?.price ?? 0;
 export const SKINS: Skin[] = [
   {
     id: "amy-summer",
     char: "amy",
     name: "한여름의 에이미",
-    price: 10 * EOK,
+    price: skinPrice("amy-summer"),
     blurb: "바다 가자고? …따, 딱히 너랑 가고 싶어서 입은 건 아니거든!",
     line: "뭘 그렇게 봐! …어울리긴 해?",
     ready: true,
@@ -165,7 +171,7 @@ export const SKINS: Skin[] = [
     id: "yeonseo-summer",
     char: "yeonseo",
     name: "한여름의 연서",
-    price: 10 * EOK,
+    price: skinPrice("yeonseo-summer"),
     blurb: "바다요? …이 판 끝나고 가죠.",
     line: "여름이니까요. …어울려요?",
     ready: true,

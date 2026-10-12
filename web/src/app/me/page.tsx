@@ -13,6 +13,7 @@ import { BP_TOP_SONGS, bpOf } from "@/lib/rhythm/bp";
 import { DIFFICULTIES } from "@/lib/rhythm/chart";
 import { getMySummary, type MyRecord, type MySummary } from "@/firestore/me";
 import FightProfile from "@/components/Fight/FightProfile";
+import MyPoints from "@/components/Points/MyPoints";
 import TierBadge from "@/components/Fight/TierBadge";
 
 /*
@@ -207,6 +208,8 @@ export default function MyPage() {
             </button>
           </div>
         </div>
+
+        {profile && <MyPoints card={card} label={label} />}
 
         {profile && (
           <section className={card}>

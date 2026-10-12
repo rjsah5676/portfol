@@ -6,6 +6,7 @@ import { createCaptcha, mongoPassStore } from "../captcha";
 import { toWireError } from "../errors";
 import { adminRouter, type AdminHooks } from "./admin";
 import { meRouter } from "./me";
+import { pointsRouter } from "./points";
 import { rankingsRouter } from "./rankings";
 import { siteRouter } from "./site";
 import { studyPostsRouter } from "./studyPosts";
@@ -107,6 +108,7 @@ export function createApp(deps: Deps, { pokerRank, pokerBuyRank, rhythmFiles, ..
   app.use("/api", trackRouter(deps));
   app.use("/api/rankings", rankingsRouter(deps, captcha));
   app.use("/api/me", meRouter(deps));
+  app.use("/api/points", pointsRouter(deps));
   app.use("/api/study-posts", studyPostsRouter(deps));
   if (rhythmFiles) app.use("/api/rhythm-online", rhythmFiles);
   app.use("/api/admin", adminRouter(deps, { guestChanged: site.publishGuest, ...hooks }));

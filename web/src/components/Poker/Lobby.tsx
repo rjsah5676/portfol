@@ -20,6 +20,7 @@ import {
   type TierId,
   lookName,
 } from "@/lib/poker/rules";
+import { fmtPoint } from "@/lib/points";
 import type { BuyRankRow, LobbyTable, RankRow, Wallet } from "@/lib/poker/types";
 import { createTable, getBuyRank, quickJoin, setChar, subscribeLobby } from "@/realtime/poker";
 import MyPage from "./MyPage";
@@ -803,7 +804,7 @@ function CharSelect({
         <div className="relative z-10 flex min-w-0 flex-1 flex-col justify-center gap-[0.25em] py-[0.6em] pr-[0.9em]">
           <div className="flex items-baseline gap-[0.45em]">
             <span className="text-[1.5em] leading-none font-extrabold">{info.name}</span>
-            {locked && <span className="pk-cs-lock">🔒 {fmtEok(price)}</span>}
+            {locked && <span className="pk-cs-lock">🔒 {fmtPoint(price)}</span>}
           </div>
           <div className="pk-num text-[0.82em] text-white/75">
             {info.age}세 · {info.birthday} ({info.sign})
@@ -928,7 +929,7 @@ export function PokerRanks({
   );
 }
 
-/** 구매 순위: 스킨 · 캐릭터에 쓴 칩 합계, 산 개수 */
+/** 구매 순위: 스킨 · 캐릭터 값(지금 포인트 가격) 합계, 산 개수 */
 function BuyRankTable({ rank, myNick }: { rank: BuyRankRow[] | null; myNick?: string }) {
   if (rank === null) return <p className="py-6 text-center text-sm text-white/40">불러오는 중…</p>;
   if (!rank.length)
@@ -962,7 +963,7 @@ function BuyRankTable({ rank, myNick }: { rank: BuyRankRow[] | null; myNick?: st
               <br />
               캐릭터 {r.chars}
             </span>
-            <Money won={r.spent} className="text-base text-white" />
+            <span className="pk-num text-base whitespace-nowrap text-[#b9a8ff]">{fmtPoint(r.spent)}</span>
           </li>
         );
       })}

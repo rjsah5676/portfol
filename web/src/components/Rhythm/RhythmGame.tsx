@@ -1110,6 +1110,7 @@ export default function RhythmGame() {
         accent="#EC4899"
         desc="DFJK 4키 리듬게임"
         tags={["랭킹모드", "온라인모드", "mp3 자동 채보", "웹 리듬게임"]}
+        ach="rhythm"
         guide={RHYTHM_GUIDE}
         rank={{
           top: bpTop?.slice(0, 3).map((r) => ({

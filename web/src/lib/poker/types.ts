@@ -47,6 +47,8 @@ export interface Wallet {
   mail: number;
   /** 오늘 첫 접속이라 출석 보상이 우편함에 막 들어왔으면 그 금액 (알림용, 그때 한 번만 옴) */
   attended?: number;
+  /** 포인트 (사이트 공용 — 캐릭터 · 스킨을 사고 칩과 환전) */
+  points: number;
 }
 
 /** 우편 (받기를 눌러야 칩이 들어옴) */
@@ -288,7 +290,7 @@ export interface BuyRankRow {
   avatar?: string | null;
   char: CharId;
   look?: Look;
-  /** 산 스킨 · 캐릭터 값의 합 (지금 가격 기준) */
+  /** 산 스킨 · 캐릭터 값의 합 — 포인트, 지금 가격 기준 (예전에 칩으로 산 것도 지금 포인트 가격으로) */
   spent: number;
   skins: number;
   chars: number;

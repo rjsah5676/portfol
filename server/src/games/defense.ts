@@ -218,6 +218,14 @@ export function registerDefense({ gateway, db }: Deps) {
     const elapsed = (Date.now() - doc.at.getTime()) / 1000;
     if (elapsed + 5 < res.tick / TPS / MAX_SPEED) throw new AppError("RANK_REJECTED", "기록을 확인할 수 없어요.", 400);
     const score = scoreOf(res);
+    // 업적용 누적 (끝까지 검증된 판만)
+    void db
+      .col("users")
+      .updateOne(
+        { _id: uid },
+        { $inc: { "stats.defense.runs": 1, "stats.defense.kills": res.kills ?? 0, ...(res.win && { "stats.defense.wins": 1 }) }, $max: { "stats.defense.wave": res.wave } } as never
+      )
+      .catch((e) => console.warn("[defense] 기록 저장 실패", e));
     const id = `${BALANCE_VER}:${uid}`;
     const prev = await ranks.findOne({ _id: id });
     const best = !prev || prev.score < score;

@@ -131,6 +131,8 @@ export const revive = () => rpc<Wallet>("poker.revive");
 export const buySkin = (skin: SkinId) => rpc<Wallet>("poker.buy", { skin });
 /** 상점: 사야 쓰는 캐릭터 사기 (사면 바로 그 캐릭터로) */
 export const buyChar = (char: CharId) => rpc<Wallet>("poker.buyChar", { char });
+/** 환전: 칩 ↔ 포인트 (units 칸 — 1칸 = lib/points.ts 의 POKER_EXCHANGE) */
+export const exchange = (dir: "toPoints" | "toChips", units: number) => rpc<Wallet>("poker.exchange", { dir, units });
 export const wearSkin = (char: CharId, skin: SkinId | null) => rpc<Wallet>("poker.wear", { char, skin });
 
 /** 자금 순위 (한 판이라도 친 회원, 보유금액 순) */

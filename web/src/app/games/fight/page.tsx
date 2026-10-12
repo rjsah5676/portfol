@@ -63,6 +63,7 @@ export default function FightPage() {
           accent="#FF8A3D"
           desc="도트 캐릭터 7명의 1:1 플랫폼 대전"
           tags={["AI 대전", "온라인 대전", "랭크전", "웹 격투게임"]}
+          ach="fight"
           guide={FIGHT_GUIDE}
           extra={(pill) => (
             <button
@@ -72,7 +73,7 @@ export default function FightPage() {
               className={`${pill} border-[#FF8A3D]/30 bg-[#FF8A3D]/[0.07] text-[#FFC79E] hover:border-[#FF8A3D]/60`}
             >
               <span aria-hidden>📊</span>
-              <span className="hidden @sm:inline">통계</span>
+              <span>통계</span>
             </button>
           )}
           rank={{

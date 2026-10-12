@@ -6,6 +6,8 @@ import GuideView, { type GuideDoc } from "@/components/GuideView";
 import HintBubble, { markHintSeen } from "@/components/HintBubble";
 import Nick from "@/components/Nick";
 import RankAvatar from "./RankAvatar";
+import { AchievementList, AchievementRank } from "@/components/Points/Achievements";
+import type { AchGame } from "@/lib/points";
 
 export interface TopEntry {
   name: string;
@@ -55,6 +57,7 @@ export default function GameHeader({
   accent = "#8B84FF",
   guide,
   rank,
+  ach,
   extra,
   scroll = true,
   className = "",
@@ -68,6 +71,8 @@ export default function GameHeader({
   accent?: string;
   guide?: GuideDoc;
   rank?: RankSpec;
+  /** 업적이 있는 게임이면 [업적] 버튼 (랭킹 오른쪽) + 랭킹 모달에 「업적 랭킹」 탭 */
+  ach?: AchGame;
   /** 가이드 · 랭킹 버튼 사이에 더 넣을 버튼 (pill 클래스명을 받음) */
   extra?: (pill: string) => ReactNode;
   /** 처음 들어올 때 게임 위치로 스크롤 */
@@ -77,6 +82,9 @@ export default function GameHeader({
   const ref = useRef<HTMLElement>(null);
   const [guideOpen, setGuideOpen] = useState(false);
   const [rankOpenSelf, setRankOpenSelf] = useState(false);
+  const [achOpen, setAchOpen] = useState(false);
+  /** 랭킹 모달 탭: 게임 랭킹 / 업적 랭킹 */
+  const [rankTab, setRankTab] = useState<"game" | "ach">("game");
   const rankOpen = rank?.open ?? rankOpenSelf;
   const setRankOpen = (o: boolean) => {
     if (rank?.onOpenChange) rank.onOpenChange(o);
@@ -101,7 +109,8 @@ export default function GameHeader({
       data-game-header
       className={`@container mb-4 scroll-mt-[114px] text-left sm:mb-5 ${className}`}
     >
-      <div className="flex items-center gap-3">
+      {/* 좁으면(폰) 버튼들은 아래 줄로 — 제목 · 설명이 버튼에 밀려 글자 단위로 깨지지 않게 */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2.5 @2xl:flex-nowrap">
         <div
           className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border text-2xl text-white sm:h-12 sm:w-12"
           style={{
@@ -112,7 +121,7 @@ export default function GameHeader({
         >
           {icon}
         </div>
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 flex-1 basis-[calc(100%-3.5rem)] @2xl:basis-0">
           <div className="flex items-baseline gap-2">
             <h1 className="truncate font-['Nanum_Gothic',sans-serif] text-lg font-bold text-white sm:text-xl">
               {title}
@@ -133,7 +142,7 @@ export default function GameHeader({
             ))}
           </p>
         </div>
-        <div className="flex shrink-0 items-center gap-1.5">
+        <div className="flex w-full flex-wrap items-center gap-1.5 @2xl:w-auto @2xl:shrink-0 @2xl:flex-nowrap">
           {guide && (
             <span className="relative">
               <button
@@ -173,8 +182,19 @@ export default function GameHeader({
               className={`${pill} border-[#FDE047]/30 bg-[#FDE047]/[0.07] text-[#FDE68A] hover:border-[#FDE047]/60`}
             >
               <span aria-hidden>🏆</span>
-              <span className="hidden @sm:inline">랭킹</span>
+              <span>랭킹</span>
               {!!rank.top?.length && <TopTicker top={rank.top} />}
+            </button>
+          )}
+          {ach && (
+            <button
+              type="button"
+              onClick={() => setAchOpen(true)}
+              aria-label="업적 보기"
+              className={`${pill} border-[#F472B6]/30 bg-[#F472B6]/[0.07] text-[#F9A8D4] hover:border-[#F472B6]/60`}
+            >
+              <span aria-hidden>🏅</span>
+              <span>업적</span>
             </button>
           )}
         </div>
@@ -216,11 +236,55 @@ export default function GameHeader({
         >
           {rankOpen && (
             <>
-              {rank.head?.()}
-              {!!(rank.podium ?? rank.top)?.length && <Podium top={(rank.podium ?? rank.top)!} />}
-              {rank.render()}
+              {ach && (
+                <div role="tablist" className="mb-4 grid grid-cols-2 gap-1 rounded-xl border border-white/10 bg-white/[0.03] p-1 font-['Nanum_Gothic',sans-serif] text-sm">
+                  {(
+                    [
+                      ["game", "🏆 기록 랭킹"],
+                      ["ach", "🏅 업적 랭킹"],
+                    ] as const
+                  ).map(([k, label]) => (
+                    <button
+                      key={k}
+                      type="button"
+                      role="tab"
+                      aria-selected={rankTab === k}
+                      onClick={() => setRankTab(k)}
+                      className={`cursor-pointer rounded-lg py-1.5 whitespace-nowrap transition-colors ${
+                        rankTab === k ? "bg-white/12 font-bold text-white" : "text-white/50 hover:text-white/80"
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {ach && rankTab === "ach" ? (
+                <AchievementRank game={ach} />
+              ) : (
+                <>
+                  {rank.head?.()}
+                  {!!(rank.podium ?? rank.top)?.length && <Podium top={(rank.podium ?? rank.top)!} />}
+                  {rank.render()}
+                </>
+              )}
             </>
           )}
+        </Modal>
+      )}
+      {ach && (
+        <Modal
+          open={achOpen}
+          onClose={() => setAchOpen(false)}
+          size="md"
+          closeButton
+          title={
+            <span className="flex items-center gap-2">
+              <span aria-hidden>🏅</span> {title} 업적
+            </span>
+          }
+        >
+          {achOpen && <AchievementList game={ach} accent={accent} />}
         </Modal>
       )}
     </header>
@@ -264,7 +328,7 @@ function Podium({ top }: { top: TopEntry[] }) {
         const st = style[n];
         return (
           <div key={n} className="flex w-1/3 max-w-[9.5rem] min-w-0 flex-col items-center">
-            <div className={`text-center ${n === 0 ? "rank-crown" : ""}`}>
+            <div className={`w-full min-w-0 text-center ${n === 0 ? "rank-crown" : ""}`}>
               <div className={n === 0 ? "text-3xl" : "text-2xl"}>{MEDAL[n]}</div>
               <div className="mt-1 flex justify-center">
                 <RankAvatar avatar={e.avatar} name={e.name} guest={!e.member} size="lg" />
@@ -272,7 +336,7 @@ function Podium({ top }: { top: TopEntry[] }) {
               <div className="mt-0.5 max-w-full truncate px-1 text-sm font-bold text-white">
                 <Nick name={e.name} guest={!e.member} />
               </div>
-              <div className="font-mono text-xs tabular-nums" style={{ color: st.ring }}>
+              <div className="max-w-full truncate px-1 font-mono text-xs tabular-nums" style={{ color: st.ring }}>
                 {e.value}
               </div>
               {e.sub && (

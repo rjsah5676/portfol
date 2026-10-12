@@ -14,6 +14,7 @@ import { createApp } from "./http/app";
 import { restoreLive, saveLive, waitIdle, type LiveGame } from "./live";
 import { Gateway } from "./realtime/gateway";
 import { createTraffic } from "./traffic";
+import { createPoints } from "./points";
 import { createUsers } from "./users";
 import { createWebNotifier, type WebNotifier } from "./webNotify";
 
@@ -43,7 +44,8 @@ export async function createAppServer(
   gateway.nickOf = (user) => users.nickOf(user);
   users.onRename((uid, nick) => gateway.setNick(uid, nick));
   const traffic = createTraffic(db, { geo: cfg.trafficGeo, cloud: cfg.trafficCloud });
-  const deps: Deps = { cfg, db, auth, gateway, users, traffic, web: overrides.web ?? createWebNotifier(cfg) };
+  const points = createPoints(db);
+  const deps: Deps = { cfg, db, auth, gateway, users, points, traffic, web: overrides.web ?? createWebNotifier(cfg) };
 
   const board = registerBoardGames(deps);
   const sketch = registerSketch(deps);

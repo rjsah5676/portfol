@@ -93,6 +93,8 @@ export interface RatingDoc {
   peak: number;
   /** 지금 연승(+)·연패(−) 수 — 배치 연승 보정, 배치 뒤 연승·연패 보정 */
   streak?: number;
+  /** 가장 길었던 연승 (업적용, 10.13부터 셈 — 그 전은 지금 연승만 앎) */
+  bestStreak?: number;
   /** 봇전 판 수 */
   bots?: number;
   updatedAt: Date;
@@ -325,16 +327,26 @@ export function createFightRating(db: Database, users: Users) {
           rankDelta(rb, dbDoc?.n ?? 0, ra, 1 - score, { m, streak: dbDoc?.streak }),
         ];
         const now = new Date();
-        const save = (uid: string, name: string, prev: RatingDoc | null, r: number, res: "w" | "l" | "d") =>
-          col.updateOne(
+        const save = (uid: string, name: string, prev: RatingDoc | null, r: number, res: "w" | "l" | "d") => {
+          const streak = nextStreak(prev?.streak, res);
+          return col.updateOne(
             { uid },
             {
-              $set: { name, member: true, r, updatedAt: now, peak: Math.max(prev?.peak ?? RATING_START, r), streak: nextStreak(prev?.streak, res) },
+              $set: {
+                name,
+                member: true,
+                r,
+                updatedAt: now,
+                peak: Math.max(prev?.peak ?? RATING_START, r),
+                streak,
+                bestStreak: Math.max(prev?.bestStreak ?? 0, prev?.streak ?? 0, streak),
+              },
               $inc: { n: 1, [res]: 1 },
               $setOnInsert: { _id: newId(), uid },
             },
             { upsert: true }
           );
+        };
         await Promise.all([
           save(a, na, da, ra + delta[0], out === 2 ? "d" : out === 0 ? "w" : "l"),
           save(b, nb, dbDoc, rb + delta[1], out === 2 ? "d" : out === 1 ? "w" : "l"),
@@ -357,7 +369,15 @@ export function createFightRating(db: Database, users: Users) {
         await col.updateOne(
           { uid },
           {
-            $set: { name, member: true, r, updatedAt: new Date(), peak: Math.max(prev?.peak ?? RATING_START, r), streak: nextStreak(prev?.streak, res) },
+            $set: {
+              name,
+              member: true,
+              r,
+              updatedAt: new Date(),
+              peak: Math.max(prev?.peak ?? RATING_START, r),
+              streak: nextStreak(prev?.streak, res),
+              bestStreak: Math.max(prev?.bestStreak ?? 0, prev?.streak ?? 0, nextStreak(prev?.streak, res)),
+            },
             $inc: { n: 1, bots: 1, [res]: 1 },
             $setOnInsert: { _id: newId(), uid },
           },

@@ -22,6 +22,8 @@ COPY web/src/lib/poker /repo/web/src/lib/poker
 COPY web/src/lib/fight /repo/web/src/lib/fight
 # 글리치 디펜스: 랭킹 기록 검증 · 멀티 순위 (서버가 같은 시뮬을 다시 돌림, games/defense.ts)
 COPY web/src/lib/defense /repo/web/src/lib/defense
+# 포인트 (상품 · 업적 · 환전 정의)
+COPY web/src/lib/points.ts /repo/web/src/lib/points.ts
 RUN npm run build
 
 # ── 2) 실행: 운영 의존성 + dist 만 ──

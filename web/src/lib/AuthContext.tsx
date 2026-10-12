@@ -61,6 +61,9 @@ interface AuthState {
   refresh(): Promise<void>;
   /** 프로필 사진 올리기 (null 이면 올린 사진을 지움) */
   setAvatar(photo: Blob | null): Promise<void>;
+  /** 포인트 (회원만, 아니면 null) — 업적 받기 · 구매 · 환전 뒤에는 setPoints 로 맞춤 */
+  points: number | null;
+  setPoints(points: number): void;
 }
 
 const noop = async () => {};
@@ -75,12 +78,20 @@ const AuthContext = createContext<AuthState>({
   setNick: noop,
   refresh: noop,
   setAvatar: noop,
+  points: null,
+  setPoints: () => {},
 });
 
 interface Me {
   admin: boolean;
   profile: Profile | null;
+  points?: number | null;
+  /** 오늘 첫 접속이라 출석 포인트가 막 들어왔으면 그 양 */
+  attended?: number;
 }
+
+/** 출석 포인트가 들어왔을 때 (화면 한쪽에 잠깐 알림 — components/Points/PointToast) */
+export const POINTS_ATTEND_EVENT = "points:attend";
 
 /** 로그인 창을 닫았거나 겹쳐 띄운 경우 — 오류로 치지 않음 */
 const cancelled = (e: unknown) =>
@@ -126,6 +137,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             if (!alive || last !== key) return;
             setMe(res);
             setLoading(false);
+            if (res.attended) window.dispatchEvent(new CustomEvent(POINTS_ATTEND_EVENT, { detail: res.attended }));
           })
           .catch(() => {
             if (!alive || last !== key) return;
@@ -186,7 +198,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       auth: true,
       body: { nick },
     });
-    setMe((m) => ({ admin: m?.admin ?? false, profile: res.profile }));
+    setMe((m) => ({ admin: m?.admin ?? false, profile: res.profile, points: m?.points }));
+    // 가입한 날도 출석 포인트 (가입 전엔 회원이 아니라 못 받았음)
+    api<Me>("/api/me", { auth: true })
+      .then((r) => {
+        setMe(r);
+        if (r.attended) window.dispatchEvent(new CustomEvent(POINTS_ATTEND_EVENT, { detail: r.attended }));
+      })
+      .catch(() => {});
   }, []);
 
   const setAvatar = useCallback(async (photo: Blob | null) => {
@@ -195,8 +214,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       auth: true,
       ...(photo && { blob: photo }),
     });
-    setMe((m) => ({ admin: m?.admin ?? false, profile: res.profile }));
+    setMe((m) => ({ admin: m?.admin ?? false, profile: res.profile, points: m?.points }));
   }, []);
+
+  const setPoints = useCallback((points: number) => setMe((m) => (m ? { ...m, points } : m)), []);
 
   const refresh = useCallback(async () => {
     const cur = auth.currentUser;
@@ -221,8 +242,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setNick,
       refresh,
       setAvatar,
+      points: account && me?.profile ? (me.points ?? 0) : null,
+      setPoints,
     };
-  }, [account, me, loading, login, logout, setNick, refresh, setAvatar]);
+  }, [account, me, loading, login, logout, setNick, refresh, setAvatar, setPoints]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

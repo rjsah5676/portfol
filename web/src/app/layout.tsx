@@ -10,6 +10,7 @@ import Footer from "@/components/Footer";
 import Contact from "@/components/Contact";
 import QuickMenu from "@/components/QuickMenu";
 import ServerNotice from "@/components/ServerNotice";
+import PointToast from "@/components/Points/PointToast";
 import TrafficBeacon from "@/components/TrafficBeacon";
 import { AuthProvider } from "@/lib/AuthContext";
 import { ModalProvider } from "@/components/Modal/ModalProvider";
@@ -89,6 +90,7 @@ export default function RootLayout({
             <QuickMenu />
             <TrafficBeacon />
             <ServerNotice />
+            <PointToast />
           </ModalProvider>
         </AuthProvider>
       </body>

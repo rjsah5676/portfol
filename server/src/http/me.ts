@@ -8,13 +8,14 @@ import { h, ms, userOf } from "./util";
 
 /*
  * 로그인한 사람 자신의 정보.
- *   GET /api/me            누구로 로그인했는지 + 프로필(별명·방문 횟수). 별명을 아직 안 정했으면 profile = null
+ *   GET /api/me            누구로 로그인했는지 + 프로필(별명·방문 횟수) + 포인트. 별명을 아직 안 정했으면 profile = null
+ *                          (회원이면 오늘 첫 접속 출석 포인트를 여기서 줌 → attended)
  *   PUT /api/me/nick       별명 정하기(가입) · 바꾸기  { nick }
  *   PUT /api/me/avatar     프로필 사진 올리기 (본문 = 사진 파일 그대로, JPG · PNG · WebP)
  *   DELETE /api/me/avatar  올린 사진 지우기 (로그인 계정의 사진으로 돌아감)
  *   GET /api/me/summary    내 정보 페이지용: 게임별 최고 기록과 순위, 전적, 비트대시 BP 합·순위
  */
-export function meRouter({ db, auth, users }: Deps): Router {
+export function meRouter({ db, auth, users, points }: Deps): Router {
   const r = Router();
 
   const me = async (req: Request) => {
@@ -29,11 +30,17 @@ export function meRouter({ db, auth, users }: Deps): Router {
       const user = await me(req);
       // 사이트에 들어올 때마다 불림 → 방문 횟수를 여기서 셈
       if (!user.anonymous) await users.visit(user.uid, user.photo ?? undefined);
+      const profile = await users.profileOf(user);
+      // 회원이면 오늘 첫 접속 출석 포인트 (하루 한 번 — 받았으면 attended 에 그 양, 화면이 한 번 알림)
+      const attended = profile ? await points.attend(user.uid).catch(() => 0) : 0;
+      const pts = profile ? await points.get(user.uid) : null;
       return {
         uid: user.uid,
         anonymous: user.anonymous,
         admin: user.admin,
-        profile: await users.profileOf(user),
+        profile,
+        points: pts?.points ?? null,
+        ...(attended && { attended }),
       };
     })
   );

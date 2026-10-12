@@ -63,6 +63,9 @@ export interface UserDoc {
   money?: number;
   /** 오늘 받은 회생 횟수 (day = 한국 시간 날짜) */
   revive?: { day: string; n: number };
+  /** 포인트 잔액 · 마지막 출석 포인트 날짜 — 바꾸는 건 points.ts 만 */
+  points?: number;
+  pointsDay?: string;
 }
 
 export interface Profile {
@@ -137,6 +140,8 @@ export interface AdminUser extends Profile {
   stats: UserStats;
   /** 포커 칩 */
   money: number;
+  /** 포인트 */
+  points: number;
 }
 const toAdmin = (uid: string, d: UserDoc): AdminUser => ({
   uid,
@@ -146,6 +151,7 @@ const toAdmin = (uid: string, d: UserDoc): AdminUser => ({
   lastVisitAt: d.lastVisitAt?.getTime() ?? null,
   stats: d.stats ?? {},
   money: d.money ?? 0,
+  points: d.points ?? 0,
 });
 const escapeRe = (v: string) => v.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 /** 회원의 이름이 저장되는 곳 (별명이 바뀌면 같이 바뀌고, 회원을 지울 때 같이 정리) */

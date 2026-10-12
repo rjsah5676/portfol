@@ -1,5 +1,6 @@
 "use client";
 
+import { POINT, fmtPoint, pointReason, type PointLogRow } from "@/lib/points";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Avatar from "@/components/Account/Avatar";
 import { useModal } from "@/components/Modal/ModalProvider";
@@ -7,7 +8,7 @@ import {
   clearUserAvatar,
   listUsers,
   removeUser,
-  updateUser,
+  updateUser, getUserPointLog,
   type AdminUser,
 } from "@/firestore/adminData";
 import { refreshBadges } from "@/lib/badges";
@@ -58,19 +59,34 @@ function Detail({
   const [nick, setNick] = useState(user.nick);
   const [badge, setBadge] = useState(user.badge ?? "");
   const [money, setMoney] = useState(String(user.money ?? 0));
+  const [pts, setPts] = useState(String(user.points ?? 0));
+  const [ptLog, setPtLog] = useState<PointLogRow[] | null>(null);
   const [records, setRecords] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
   const moneyNum = Math.max(0, Math.floor(Number(money.replaceAll(",", "")) || 0));
-  const dirty = nick.trim() !== user.nick || badge.trim() !== (user.badge ?? "") || moneyNum !== (user.money ?? 0);
+  const ptsNum = Math.max(0, Math.floor(Number(pts.replaceAll(",", "")) || 0));
+  const dirty =
+    nick.trim() !== user.nick ||
+    badge.trim() !== (user.badge ?? "") ||
+    moneyNum !== (user.money ?? 0) ||
+    ptsNum !== (user.points ?? 0);
 
   const save = async () => {
     if (busy || !dirty) return;
     setBusy(true);
     setError("");
     try {
-      onSaved(await updateUser(user.uid, { nick: nick.trim(), badge: badge.trim() || null, money: moneyNum }));
+      onSaved(
+        await updateUser(user.uid, {
+          nick: nick.trim(),
+          badge: badge.trim() || null,
+          money: moneyNum,
+          ...(ptsNum !== (user.points ?? 0) && { points: ptsNum }),
+        })
+      );
+      if (ptLog) setPtLog(await getUserPointLog(user.uid).catch(() => ptLog));
       refreshBadges(true); // 랭킹·방명록의 이름 옆 꾸밈도 바로 바뀌게
     } catch (e) {
       setError(e instanceof Error ? e.message : "저장하지 못했어요.");
@@ -194,9 +210,54 @@ function Detail({
             />
             <span className={`shrink-0 text-xs text-white/40 ${KR}`}>{moneyNum.toLocaleString()}칩</span>
           </label>
+          <label className="flex items-center gap-3">
+            <span className={`w-10 shrink-0 text-xs text-white/45 ${KR}`}>{POINT.name}</span>
+            <input
+              value={pts}
+              inputMode="numeric"
+              autoComplete="off"
+              spellCheck={false}
+              aria-label={POINT.name}
+              onChange={(e) => {
+                setPts(e.target.value.replace(/[^\d,]/g, ""));
+                setError("");
+              }}
+              className={`${input} flex-1 font-mono`}
+            />
+            <span className={`shrink-0 text-xs text-white/40 ${KR}`}>{fmtPoint(ptsNum)}</span>
+          </label>
+          <div className={`text-xs text-white/45 ${KR}`}>
+            <button
+              type="button"
+              className="cursor-pointer underline underline-offset-2 hover:text-white"
+              onClick={() =>
+                ptLog ? setPtLog(null) : void getUserPointLog(user.uid).then(setPtLog).catch(() => setPtLog([]))
+              }
+            >
+              {ptLog ? `${POINT.name} 내역 접기` : `${POINT.name} 내역 보기`}
+            </button>
+            {ptLog && (
+              <ul className="mt-1.5 max-h-48 overflow-y-auto rounded-lg bg-white/[0.03] px-2 py-1">
+                {!ptLog.length && <li className="py-1 text-white/30">내역이 없어요.</li>}
+                {ptLog.map((r, i) => (
+                  <li key={i} className="flex gap-2 py-0.5">
+                    <span className="w-24 shrink-0 font-mono text-white/30">
+                      {new Date(r.at).toLocaleString("ko-KR", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                    </span>
+                    <span className="min-w-0 flex-1 truncate">{pointReason(r)}</span>
+                    <span className={`font-mono ${r.delta >= 0 ? "text-[#FDE68A]" : "text-white/45"}`}>
+                      {r.delta >= 0 ? "+" : ""}
+                      {fmtPoint(r.delta)}
+                    </span>
+                    {r.bal !== undefined && <span className="w-16 text-right font-mono text-white/30">{fmtPoint(r.bal)}</span>}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
           <p className={`text-xs ${error ? "text-red-400" : "text-white/35"} ${KR}`}>
             {error ||
-              "별명을 바꾸면 랭킹·방명록 이름도 같이 바뀌어요. 꾸밈은 별명 앞에 붙어요(8자까지). 칩은 테이블 밖일 때 바로, 앉아 있으면 다음 판부터 반영돼요."}
+              `별명을 바꾸면 랭킹·방명록 이름도 같이 바뀌어요. 꾸밈은 별명 앞에 붙어요(8자까지). 칩은 테이블 밖일 때 바로, 앉아 있으면 다음 판부터 반영돼요. ${POINT.name}는 바꾸면 회원의 내역에 '운영자 조정'으로 남아요.`}
           </p>
           <div className="flex flex-wrap items-center gap-2">
             <button

@@ -9,7 +9,6 @@ import {
   SKINS,
   charOwned,
   fmtEok,
-  fmtWon,
   lookOf,
   type CharId,
   type Skin,
@@ -17,18 +16,33 @@ import {
 } from "@/lib/poker/rules";
 import { playVoice } from "@/lib/poker/sfx";
 import type { Wallet } from "@/lib/poker/types";
-import { buyChar, buySkin, setChar, wearSkin } from "@/realtime/poker";
+import { buyChar, buySkin, exchange, setChar, wearSkin } from "@/realtime/poker";
+import { POINT, POKER_EXCHANGE, fmtPoint } from "@/lib/points";
+import PointInfo from "@/components/Points/PointInfo";
 import { Money } from "./parts";
 import Sheet from "./Sheet";
 
 /*
  * 상점 · 옷장 (한 창에 탭 둘).
- *   상점: 모든 캐릭터의 스킨을 보여 주고 칩으로 삼 (두 번 눌러 확인, 지금 캐릭터 것 먼저). 테이블에 앉아 있으면 못 삼 — 앉은 동안의 칩은 판에 들고 있어서.
- *   캐릭터: 칩으로 사야 쓰는 캐릭터 (사면 바로 그 캐릭터로). 봇은 이 캐릭터를 안 씀.
+ *   상점: 모든 캐릭터의 스킨을 보여 주고 포인트로 삼 (두 번 눌러 확인, 지금 캐릭터 것 먼저). 테이블에 앉아 있으면 못 삼.
+ *   캐릭터: 포인트로 사야 쓰는 캐릭터 (사면 바로 그 캐릭터로). 봇은 이 캐릭터를 안 씀.
  *   옷장: 지금 캐릭터의 기본 / 가진 스킨만. 다른 캐릭터 스킨은 그 캐릭터로 바꾼 뒤 입음.
+ *   환전: 칩 ↔ 포인트 (lib/points.ts 의 POKER_EXCHANGE). 앉아 있으면 못 바꿈.
  */
 
-export type ShopTab = "shop" | "chars" | "closet";
+export type ShopTab = "shop" | "chars" | "closet" | "exchange";
+
+/** 포인트 값 (상점 · 환전의 가격 줄) */
+function PointPrice({ n, className = "" }: { n: number; className?: string }) {
+  return (
+    <span className={`inline-flex items-center gap-[0.3em] font-extrabold text-[#b9a8ff] ${className}`}>
+      <span className="inline-flex h-[1.15em] w-[1.15em] items-center justify-center rounded-full bg-[#7c6cff] text-[0.7em] text-white">
+        {POINT.unit}
+      </span>
+      {fmtPoint(n)}
+    </span>
+  );
+}
 
 export default function Shop({
   wallet,
@@ -115,16 +129,26 @@ export default function Shop({
               옷장
               {mine > 0 && <span className="ml-[0.3em] text-[0.82em] opacity-70">{mine}</span>}
             </button>
+            <button type="button" aria-pressed={tab === "exchange"} onClick={() => setTab("exchange")}>
+              환전
+            </button>
           </div>
         )}
       </div>
-      <div className="flex shrink-0 items-center gap-[0.4em] px-[0.9em] pt-[0.5em] text-[0.8em] text-white/60">
-        보유 칩{}
-        <img src={asset.chip("gold", "top")} alt="" className="h-[1em] w-[1em]" />
-        <Money won={wallet.money} className="text-[1.15em] text-[#ffd84a]" />
+      <div className="flex shrink-0 flex-wrap items-center gap-x-[0.9em] gap-y-[0.3em] px-[0.9em] pt-[0.5em] text-[0.8em] text-white/60">
+        <span className="inline-flex items-center gap-[0.4em] whitespace-nowrap">
+          보유 칩
+          <img src={asset.chip("gold", "top")} alt="" className="h-[1em] w-[1em]" />
+          <Money won={wallet.money} className="text-[1.15em] text-[#ffd84a]" />
+        </span>
+        <span className="inline-flex items-center gap-[0.4em] whitespace-nowrap">
+          {POINT.name}
+          <PointPrice n={wallet.points ?? 0} className="text-[1.15em]" />
+          <PointInfo />
+        </span>
         {seated && tab !== "closet" && (
           <span className="ml-auto text-[0.92em] text-[#ff8a97]">
-            테이블에서 일어난 뒤 살 수 있어요
+            테이블에서 일어난 뒤 {tab === "exchange" ? "바꿀" : "살"} 수 있어요
           </span>
         )}
       </div>
@@ -141,7 +165,9 @@ export default function Shop({
         data-sheet-scroll
         className="pk-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain p-[0.9em]"
       >
-        {tab === "chars" && !inGame ? (
+        {tab === "exchange" && !inGame ? (
+          <Exchange wallet={wallet} seated={seated} busy={busy} run={run} setMsg={setMsg} />
+        ) : tab === "chars" && !inGame ? (
           <CharShop
             wallet={wallet}
             mobile={mobile}
@@ -182,7 +208,7 @@ export default function Shop({
               ...SKINS.filter((sk) => sk.char !== wallet.char && shown(sk)),
             ].map((sk) => {
               const owned = skins.includes(sk.id);
-              const short = Math.max(0, sk.price - wallet.money);
+              const short = Math.max(0, sk.price - (wallet.points ?? 0));
               const asking = confirm === sk.id;
               return (
                 <li
@@ -208,14 +234,8 @@ export default function Shop({
                       </span>
                     </div>
                     <p className="text-[0.78em] leading-snug text-white/65">{sk.blurb}</p>
-                    <div className="mt-[0.2em] flex items-center gap-[0.3em] text-[0.95em] font-extrabold text-[#ffd84a]">
-                      {}
-                      <img
-                        src={asset.chip("gold", "stack")}
-                        alt=""
-                        className="h-[1.3em] w-[1.3em]"
-                      />
-                      {fmtWon(sk.price)}
+                    <div className="mt-[0.2em] text-[0.95em]">
+                      <PointPrice n={sk.price} />
                     </div>
                     {owned ? (
                       <button
@@ -243,7 +263,7 @@ export default function Shop({
                           onClick={() => void buy(sk)}
                           className="pk-btn pk-btn-gold flex-1 py-[0.55em] text-[0.88em]"
                         >
-                          {busy === sk.id ? "사는 중…" : `칩 ${fmtEok(sk.price)} 내고 사기`}
+                          {busy === sk.id ? "사는 중…" : `${fmtPoint(sk.price)} 내고 사기`}
                         </button>
                       </div>
                     ) : (
@@ -256,7 +276,7 @@ export default function Shop({
                         {seated
                           ? "테이블에서는 못 사요"
                           : short > 0
-                            ? `칩 ${fmtEok(short)} 더 필요해요`
+                            ? `${POINT.name} ${fmtPoint(short)} 더 필요해요`
                             : "사기"}
                       </button>
                     )}
@@ -334,7 +354,7 @@ export default function Shop({
   );
 }
 
-/** 상점 · 캐릭터 탭: 칩으로 사야 쓰는 캐릭터 */
+/** 상점 · 캐릭터 탭: 포인트로 사야 쓰는 캐릭터 */
 function CharShop({
   wallet,
   mobile,
@@ -368,7 +388,7 @@ function CharShop({
         const info = CHARS[c];
         const price = CHAR_PRICE[c] ?? 0;
         const owned = charOwned(c, wallet.chars);
-        const short = Math.max(0, price - wallet.money);
+        const short = Math.max(0, price - (wallet.points ?? 0));
         const asking = confirm === c;
         return (
           <li key={c} className="pk-skin-card" style={{ "--c": info.color } as React.CSSProperties}>
@@ -385,10 +405,8 @@ function CharShop({
                 </span>
               </div>
               <p className="text-[0.78em] leading-snug text-white/65">{info.blurb}</p>
-              <div className="mt-[0.2em] flex items-center gap-[0.3em] text-[0.95em] font-extrabold text-[#ffd84a]">
-                {}
-                <img src={asset.chip("gold", "stack")} alt="" className="h-[1.3em] w-[1.3em]" />
-                {fmtWon(price)}
+              <div className="mt-[0.2em] text-[0.95em]">
+                <PointPrice n={price} />
               </div>
               {owned ? (
                 <button
@@ -424,7 +442,7 @@ function CharShop({
                     }
                     className="pk-btn pk-btn-gold flex-1 py-[0.55em] text-[0.88em]"
                   >
-                    {busy === c ? "사는 중…" : `칩 ${fmtEok(price)} 내고 사기`}
+                    {busy === c ? "사는 중…" : `${fmtPoint(price)} 내고 사기`}
                   </button>
                 </div>
               ) : (
@@ -437,7 +455,7 @@ function CharShop({
                   {seated
                     ? "테이블에서는 못 사요"
                     : short > 0
-                      ? `칩 ${fmtEok(short)} 더 필요해요`
+                      ? `${POINT.name} ${fmtPoint(short)} 더 필요해요`
                       : "사기"}
                 </button>
               )}
@@ -446,5 +464,110 @@ function CharShop({
         );
       })}
     </ul>
+  );
+}
+
+/** 환전 칸 수 고르기 */
+function Stepper({ v, set, max }: { v: number; set: (n: number) => void; max: number }) {
+  return (
+    <div className="flex flex-wrap items-center gap-[0.35em]">
+      <button type="button" className="pk-btn pk-btn-ghost w-[2.2em] py-[0.35em]" disabled={v <= 1} onClick={() => set(Math.max(1, v - 1))}>
+        −
+      </button>
+      <span className="min-w-[3.2em] text-center font-extrabold tabular-nums">{v}칸</span>
+      <button type="button" className="pk-btn pk-btn-ghost w-[2.2em] py-[0.35em]" disabled={v >= max} onClick={() => set(Math.min(max, v + 1))}>
+        +
+      </button>
+      {[5, 10].map((n) => (
+        <button key={n} type="button" className="pk-shop-chip" disabled={max < 1} onClick={() => set(Math.max(1, Math.min(max, n)))}>
+          {n}칸
+        </button>
+      ))}
+      <button type="button" className="pk-shop-chip" disabled={max < 1} onClick={() => set(Math.max(1, max))}>
+        최대
+      </button>
+    </div>
+  );
+}
+
+/** 환전 탭: 칩 ↔ 포인트 (칸 단위) */
+function Exchange({
+  wallet,
+  seated,
+  busy,
+  run,
+  setMsg,
+}: {
+  wallet: Wallet;
+  seated: boolean;
+  busy: string;
+  run: (key: string, fn: () => Promise<void>) => Promise<void>;
+  setMsg: (m: { text: string; ok: boolean } | null) => void;
+}) {
+  const X = POKER_EXCHANGE;
+  const [toP, setToP] = useState(1);
+  const [toC, setToC] = useState(1);
+  const pts = wallet.points ?? 0;
+  /** 칩 → 포인트: 500만은 남겨야 해서 */
+  const maxToP = Math.max(0, Math.min(X.maxUnits, Math.floor((wallet.money - X.keepChips) / X.chips)));
+  const maxToC = Math.max(0, Math.min(X.maxUnits, Math.floor(pts / X.points)));
+  const card = "rounded-[10px] border border-white/[0.08] bg-white/[0.04] p-[0.8em] grid gap-[0.5em]";
+  return (
+    <div className="grid gap-[0.7em] text-[0.9em]">
+      <p className="rounded-[8px] bg-white/[0.05] px-[0.8em] py-[0.55em] text-[0.88em] leading-snug break-keep text-white/70">
+        칩 <b className="text-[#ffd84a]">{fmtEok(X.chips)}</b> = <b className="text-[#b9a8ff]">{fmtPoint(X.points)}</b> 로 서로 바꿀 수
+        있어요 (1칸). {POINT.name}로 바꿔 받은 칩은 <b className="text-white/85">칩 업적에 들어가지 않아요</b>.
+      </p>
+      <section className={card}>
+        <div className="flex flex-wrap items-baseline justify-between gap-x-[0.6em]">
+          <b className="text-[1.05em]">칩 → {POINT.name}</b>
+          <span className="text-[0.8em] text-white/45">바꾼 뒤에도 칩 {fmtEok(X.keepChips)}은 남아야 해요</span>
+        </div>
+        <Stepper v={Math.min(toP, Math.max(1, maxToP))} set={setToP} max={maxToP} />
+        <div className="flex flex-wrap items-center gap-[0.4em] text-[0.9em]">
+          칩 <b className="text-[#ffd84a]">{fmtEok(Math.max(1, Math.min(toP, maxToP)) * X.chips)}</b> →
+          <PointPrice n={Math.max(1, Math.min(toP, maxToP)) * X.points} />
+        </div>
+        <button
+          type="button"
+          disabled={seated || maxToP < 1 || !!busy}
+          onClick={() =>
+            void run("ex:toPoints", async () => {
+              const n = Math.max(1, Math.min(toP, maxToP));
+              await exchange("toPoints", n);
+              setMsg({ text: `칩 ${fmtEok(n * X.chips)}을(를) ${fmtPoint(n * X.points)}로 바꿨어요.`, ok: true });
+            })
+          }
+          className="pk-btn pk-btn-gold py-[0.55em] text-[0.9em]"
+        >
+          {seated ? "테이블에서는 못 바꿔요" : maxToP < 1 ? "칩이 모자라요" : busy === "ex:toPoints" ? "바꾸는 중…" : `${POINT.name}로 바꾸기`}
+        </button>
+      </section>
+      <section className={card}>
+        <b className="text-[1.05em]">{POINT.name} → 칩</b>
+        <Stepper v={Math.min(toC, Math.max(1, maxToC))} set={setToC} max={maxToC} />
+        <div className="flex flex-wrap items-center gap-[0.4em] text-[0.9em]">
+          <PointPrice n={Math.max(1, Math.min(toC, maxToC)) * X.points} /> → 칩{" "}
+          <b className="text-[#ffd84a]">{fmtEok(Math.max(1, Math.min(toC, maxToC)) * X.chips)}</b>
+        </div>
+        <button
+          type="button"
+          disabled={seated || maxToC < 1 || !!busy}
+          onClick={() =>
+            void run("ex:toChips", async () => {
+              const n = Math.max(1, Math.min(toC, maxToC));
+              await exchange("toChips", n);
+              setMsg({ text: `${fmtPoint(n * X.points)}를 칩 ${fmtEok(n * X.chips)}(으)로 바꿨어요.`, ok: true });
+            })
+          }
+          className="pk-btn pk-btn-gold py-[0.55em] text-[0.9em]"
+        >
+          {seated ? "테이블에서는 못 바꿔요" : maxToC < 1 ? `${POINT.name}가 모자라요` : busy === "ex:toChips" ? "바꾸는 중…" : "칩으로 바꾸기"}
+        </button>
+      </section>
+      <p className="text-[0.78em] leading-snug break-keep text-white/40">
+        {POINT.name}는 출석 · 업적으로 모으는 사이트 전용 재화예요. 현금으로 사거나 바꿀 수 없어요.
+      </p>
+    </div>
   );
 }

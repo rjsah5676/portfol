@@ -28,9 +28,9 @@ describe("내 정보 · 별명", () => {
   it("로그인 상태에 따라: 비로그인 401, 익명·별명 없는 회원은 프로필 없음", async () => {
     expect((await s.http("/api/me")).status).toBe(401);
     const anon = await s.http("/api/me", { token: await s.token("anon1") });
-    expect(anon.body).toEqual({ uid: "anon1", anonymous: true, admin: false, profile: null });
+    expect(anon.body).toEqual({ uid: "anon1", anonymous: true, admin: false, profile: null, points: null });
     const fresh = await s.http("/api/me", { token: await memberToken("fresh1") });
-    expect(fresh.body).toEqual({ uid: "fresh1", anonymous: false, admin: false, profile: null });
+    expect(fresh.body).toEqual({ uid: "fresh1", anonymous: false, admin: false, profile: null, points: null });
   });
 
   it("별명 규칙: 한글·영문·숫자 2~10자, 이모지·공백·기호·예약어 안 됨, 익명은 못 정함", async () => {

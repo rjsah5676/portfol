@@ -4,6 +4,8 @@ import { pictureOf, type UserDoc } from "../../users";
 import { ATTEND_REWARD, CHAR_PRICE, REVIVE, charOwned, START_MONEY, charOf, fmtWon, kstDay, lookOf, skinOf, type CharId, type GameKind, type SkinId, type Wear } from "../../../../web/src/lib/poker/rules";
 import type { BuyRankRow, MailItem, RankRow } from "../../../../web/src/lib/poker/types";
 import { newId } from "../../ids";
+import type { Points } from "../../points";
+import { shopFor } from "../../../../web/src/lib/points";
 
 /*
  * 포커 자금 (회원의 users 문서에 money 로 저장).
@@ -12,6 +14,8 @@ import { newId } from "../../ids";
  *   1) 가입할 때 START_MONEY (users.ts 가 넣음. 그 전에 가입한 회원은 서버가 뜰 때 채움)
  *   2) 회생: 조건(보유금액 · 오늘 횟수)을 DB 가 한 번에 확인하고 올림
  *   3) 판이 끝났을 때 딴 만큼 · 잃은 만큼 ($inc). 한 판의 증감 합은 0 (봇 몫 제외)
+ *   4) 출석 우편 받기 · 포인트 환전 (../../points.ts — 칩과 포인트를 updateOne 하나로 같이 바꿈)
+ * 캐릭터 · 스킨은 포인트로 삼 (lib/points.ts 의 SHOP). 예전에 칩으로 산 것도 그대로 가짐.
  * 브라우저는 금액을 보내지 않음 — 보내는 건 "콜", "레이즈 얼마" 같은 행동뿐이고 그것도 서버가 규칙대로 검사.
  * 판 도중의 칩은 서버 메모리에만 있어서, 판이 끝나기 전에 서버가 꺼지면 그 판은 없던 일이 됨(DB 의 돈은 그대로).
  */
@@ -28,6 +32,8 @@ export interface WalletDoc {
   chars: CharId[];
   /** 안 받은 우편 수 */
   mail: number;
+  /** 포인트 (사이트 공용 — 상점 · 환전용으로 같이 보냄) */
+  points: number;
 }
 
 export interface SettleEntry {
@@ -42,10 +48,11 @@ export interface SettleEntry {
 
 type MoneyFields = Pick<UserDoc, "nick"> & {
   money?: number;
+  points?: number;
   revive?: { day: string; n: number };
   poker?: { char?: string; skins?: string[]; wear?: Record<string, string>; chars?: string[]; attend?: string; mail?: MailItem[] };
 };
-const WALLET_PROJ = { nick: 1, money: 1, revive: 1, "poker.char": 1, "poker.skins": 1, "poker.wear": 1, "poker.chars": 1, "poker.mail": 1 } as const;
+const WALLET_PROJ = { nick: 1, money: 1, points: 1, revive: 1, "poker.char": 1, "poker.skins": 1, "poker.wear": 1, "poker.chars": 1, "poker.mail": 1 } as const;
 /** 우편함에 쌓아 두는 최대 수 (넘으면 오래된 것부터 사라짐) */
 const MAIL_KEEP = 30;
 
@@ -65,7 +72,7 @@ export function skinsOf(p?: MoneyFields["poker"]): { skins: SkinId[]; wear: Wear
 
 export type Wallet = ReturnType<typeof createWallet>;
 
-export function createWallet(db: Database, now: () => number = Date.now) {
+export function createWallet(db: Database, now: () => number = Date.now, points?: Points) {
   const col = db.col<UserDoc>("users");
   const listeners: ((uid: string, w: WalletDoc) => void)[] = [];
 
@@ -80,6 +87,7 @@ export function createWallet(db: Database, now: () => number = Date.now) {
       ...skinsOf(d.poker),
       chars,
       mail: d.poker?.mail?.length ?? 0,
+      points: d.points ?? 0,
     };
   };
 
@@ -271,46 +279,34 @@ export function createWallet(db: Database, now: () => number = Date.now) {
     },
 
     /**
-     * 스킨 사기: 돈이 모자라지 않고 아직 없을 때만 (한 번의 조건부 갱신이라 두 번 눌러도 한 번만 빠짐). 사면 바로 입음.
-     * 테이블에 앉아 있는지는 부르는 쪽에서 막음 (앉아 있는 동안의 칩은 메모리에 있어서).
+     * 스킨 사기 (포인트로). 포인트가 충분하고 아직 없을 때만 — 한 번의 조건부 갱신이라 두 번 눌러도 한 번만 빠짐. 사면 바로 입음.
      */
     async buySkin(uid: string, id: SkinId) {
       const sk = skinOf(id);
-      if (!sk) throw new AppError("BAD_REQUEST", "없는 스킨이에요.", 400);
-      await materialize([uid]);
-      const r = await col.updateOne(
-        { _id: uid, money: { $gte: sk.price }, "poker.skins": { $ne: sk.id } } as never,
-        { $inc: { money: -sk.price }, $push: { "poker.skins": sk.id }, $set: { [`poker.wear.${sk.char}`]: sk.id } } as never
-      );
-      if (!r.modifiedCount) {
-        const w = await get(uid);
-        if (!w) throw new AppError("NOT_MEMBER", "회원만 쓸 수 있어요.", 403);
-        if (w.skins.includes(sk.id)) throw new AppError("OWNED", "이미 가진 스킨이에요.", 409);
-        throw new AppError("NEED_MONEY", `칩이 모자라요. ${sk.name}은(는) 칩 ${fmtWon(sk.price)}이에요.`, 409, { need: sk.price, money: w.money });
-      }
+      const item = sk && shopFor("poker", "skin", sk.id);
+      if (!item || !points) throw new AppError("BAD_REQUEST", "없는 스킨이에요.", 400);
+      await points.buy(uid, item.id);
       return (await changed(uid))!;
     },
 
-    /**
-     * 캐릭터 사기: 돈이 모자라지 않고 아직 없을 때만 (한 번의 조건부 갱신). 사면 바로 그 캐릭터로 바뀜.
-     * 테이블에 앉아 있는지는 부르는 쪽에서 막음.
-     */
+    /** 캐릭터 사기 (포인트로). 사면 바로 그 캐릭터로 바뀜 */
     async buyChar(uid: string, c: CharId) {
-      const price = CHAR_PRICE[c] ?? 0;
-      if (price <= 0) throw new AppError("BAD_REQUEST", "살 수 없는 캐릭터예요.", 400);
-      await materialize([uid]);
-      const r = await col.updateOne(
-        { _id: uid, money: { $gte: price }, "poker.chars": { $ne: c } } as never,
-        { $inc: { money: -price }, $push: { "poker.chars": c }, $set: { "poker.char": c } } as never
-      );
-      if (!r.modifiedCount) {
-        const w = await get(uid);
-        if (!w) throw new AppError("NOT_MEMBER", "회원만 쓸 수 있어요.", 403);
-        if (w.chars.includes(c)) throw new AppError("OWNED", "이미 가진 캐릭터예요.", 409);
-        throw new AppError("NEED_MONEY", `칩이 모자라요. 이 캐릭터는 칩 ${fmtWon(price)}이에요.`, 409, { need: price, money: w.money });
-      }
+      const item = shopFor("poker", "char", c);
+      if (!item || !points) throw new AppError("BAD_REQUEST", "살 수 없는 캐릭터예요.", 400);
+      await points.buy(uid, item.id);
       return (await changed(uid))!;
     },
+
+    /** 환전 (포인트 ↔ 칩). 테이블에 앉아 있는지는 부르는 쪽에서 막음 */
+    async exchange(uid: string, dir: "toPoints" | "toChips", units: number) {
+      if (!points) throw new AppError("BAD_REQUEST", "환전을 할 수 없어요.", 400);
+      if (dir === "toPoints") await points.chipsToPoints(uid, units);
+      else await points.pointsToChips(uid, units);
+      return (await changed(uid))!;
+    },
+
+    /** 포인트가 바뀌었을 때 (출석 · 업적 등 — 포커 화면의 지갑도 갱신) */
+    refresh: (uid: string) => changed(uid),
 
     /** 스킨 입기 / 벗기 (skin = null 이면 그 캐릭터는 기본 모습) */
     async wearSkin(uid: string, char: CharId, id: SkinId | null) {
