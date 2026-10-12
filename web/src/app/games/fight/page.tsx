@@ -32,8 +32,17 @@ const ratingRows = (rows: FightRatingRow[]) =>
     member: true,
     avatar: r.avatar,
     value: r.r.toLocaleString(),
-    // 등급 · 전적 (배치 중이면 ratingSub 가 "배치 n/10" 을 붙임)
-    sub: `${r.n >= 10 ? `${rankTierOf(r.r, r.n).label} · ` : ""}${ratingSub(r)}`,
+    // 등급(색, 한 줄) + 전적(배치 중이면 ratingSub 가 "배치 n/10" 을 붙임) — 한 줄에 다 넣으면 시상대 · 목록에서 등급이 잘려서 두 줄로
+    sub: (
+      <>
+        {r.n >= 10 && (
+          <span className="block truncate font-bold" style={{ color: rankTierOf(r.r, r.n).tier.color }}>
+            {rankTierOf(r.r, r.n).label}
+          </span>
+        )}
+        <span className="block truncate">{ratingSub(r)}</span>
+      </>
+    ),
     date: r.at,
   }));
 
