@@ -77,6 +77,8 @@ export interface MoveDef {
     airDmg?: number;
     /** 공중에서 쓰면 판정 동안 이 속도보다 빨리 안 떨어짐 (공중에서 버티며 때림) */
     airFall?: number;
+    /** 공중에서 쓰면 내리꽂다가 착지하는 순간 땅에서 돌진을 처음부터 (이반 붉은 폭풍 — 공중에서 씹히지 않게) */
+    landRush?: boolean;
   };
   /** 여러 번 맞는 기술: 판정 동안 이 프레임마다 다시 맞음 (마지막 타만 다운) */
   multi?: number;
@@ -147,6 +149,8 @@ export interface MoveDef {
   dizzy?: boolean;
   /** (계산용) 가드를 부숨 — 끝까지 모은 철곰권 */
   crush?: boolean;
+  /** 건모 「Alt+F4」: 가드 불가 · 맞으면 이 프레임 동안 멈춤(⏸, 면역 무시) — 그 사이 맞는 타는 멈춤을 안 풀고 남은 만큼 경직 유지 */
+  bsod?: number;
 }
 
 export interface CharDef {
@@ -861,8 +865,8 @@ const RAW: CharSrc[] = [
     stats: { atk: 2, reach: 3, move: 2, control: 5, combo: 5, hp: 4 },
     idName: "Ctrl+A",
     idDesc: "넓은 파란 선택 박스를 펼쳐, 맞은 상대를 ⏸ 일시정지 (1초 동안 꼼짝 못 함)",
-    ultName: "금요일 배포",
-    ultDesc: "앞쪽 넓게 에러 블록이 빗발쳐 5연타, 마지막 타에 넘어뜨림",
+    ultName: "Alt+F4",
+    ultDesc: "가드 불가 · 손을 뻗어 강제 종료 — 맞으면 블루스크린, 상대가 1.5초 멈춰 그동안 콤보 (시작이 느리고 사거리 짧음)",
     airLabel: "공중 L Alt+Tab",
     airDesc: "앞에 큰 창을 띄워 맞히면 상대와 자리를 바꾸고 💫 혼란 — 건모는 잠깐 공중에 멈춰 바로 이어 침",
     moves: {
@@ -965,20 +969,20 @@ const RAW: CharSrc[] = [
         },
       },
       X: {
-        // 필살기 「금요일 배포」: 내 앞 넓은 범위에 에러 블록이 빗발침 (5연타, 마지막 타 다운)
-        startup: 10,
-        active: 1,
-        recovery: 30,
-        dmg: 34,
-        chip: 6,
-        hitstun: 20,
-        blockstun: 14,
-        push: 300,
-        hitstop: 4,
+        // 필살기 「Alt+F4」 (10.12, 금요일 배포 대신): 손을 뻗어 상대 프로그램을 강제 종료 — 가드 불가,
+        // 시작이 느리고(0.3초) 앞 64px만 닿는 대신 맞으면 화면이 블루스크린 · 상대는 1.5초 멈춤(⏸, 면역 무시) → 그동안 콤보
+        startup: 18,
+        active: 4,
+        recovery: 26,
+        dmg: 40,
+        chip: 0,
+        hitstun: 90,
+        blockstun: 0,
+        push: 0,
+        hitstop: 16,
         meter: 0,
-        box: { x: 0, y: 0, w: 0, h: 0 },
-        kd: true,
-        summon: { w: 180, h: 160, delay: 18, life: 40, every: 8, front: 110 },
+        box: { x: 0, y: 120, w: 64, h: 124 },
+        bsod: 90,
       },
     },
   },
@@ -1115,7 +1119,8 @@ const RAW: CharSrc[] = [
         box: { x: 4, y: 66, w: 70, h: 44 },
         armor: true,
         kd: true,
-        rush: { vx: 3400, airVh: 0, airFall: 900 },
+        // 공중에서 쓰면 앞쪽 아래로 내리꽂고 → 착지하면 땅에서 그대로 돌진 (10.12 — 예전엔 공중에서 옆으로만 나가 서 있는 상대 위로 헛치거나 착지에 끊김)
+        rush: { vx: 3400, airVh: -2600, airVx: 1600, landRush: true },
       },
     },
   },

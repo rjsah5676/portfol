@@ -83,6 +83,7 @@ const SAMPLES: Record<string, number> = {
   "gunmo-pause": 0.5,
   "gunmo-confuse": 0.45,
   "gunmo-whoosh": 0.3,
+  "gunmo-bsod": 0.6,
   "ivan-l": 0.6,
   "ivan-l-air": 0.55,
   "ivan-i": 0.6,
@@ -470,6 +471,15 @@ export function sfxZena(kind: "mark" | "burst") {
   const t = c.currentTime;
   burst(c, t, 2400, 1, 0.5, 0.25, "lowpass", 0.35);
   tone(c, t, "sine", 120, 35, 0.8, 0.4, 3);
+}
+/** 건모 Alt+F4 강제 종료가 맞음 (파일 없으면 일시정지 소리 + 낮게 꺼지는 소리) */
+export function sfxGunmo() {
+  if (sample("gunmo-bsod")) return;
+  sample("gunmo-pause");
+  const c = ac();
+  if (!c) return;
+  const t = c.currentTime;
+  tone(c, t, "square", 880, 110, 0.22, 0.6);
 }
 export function sfxIvan(kind: "charge" | "max" | "crush") {
   if (sample(`ivan-${kind}`)) return;

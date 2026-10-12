@@ -247,6 +247,8 @@ export interface Fighter {
   zap: number;
   /** 일섬 시작 자리 (그림용) */
   zx: number;
+  /** 건모 Alt+F4 강제 종료: 남은 멈춤 프레임 (그동안 맞아도 멈춤이 안 풀림) */
+  frz: number;
   /** 불 장판: 마지막으로 피해 · 화상 겹을 받은 프레임 (장판 여러 개가 겹쳐도 한 번만) */
   flT: number;
   flB: number;
@@ -335,6 +337,7 @@ export type EvKind =
   /** 일섬 낙인 (제나) · 낙인이 터짐 · 일섬이 지나간 선 (x = 시작, v = 끝 x) */
   | "zapMark"
   | "zapBurst"
+  | "bsod"
   | "zapLine"
   | "stun"
   | "immune";
@@ -483,6 +486,7 @@ function newFighter(ch: number, side: 0 | 1, map: MapDef): Fighter {
     burnAcc: 0,
     zap: 0,
     zx: 0,
+    frz: 0,
     flT: -1,
     flB: -999,
     aerial: 0,
@@ -559,7 +563,7 @@ const cloneF = (f: Fighter): Fighter => ({ ...f, hist: f.hist.slice() });
  * 이 빌드의 게임 데이터 지문 (캐릭터 성능·맵) — 온라인에서 서로 다른 빌드끼리 붙었는지 확인.
  * 계산 방식(sim.ts)만 바꿨을 땐 SIM_REV를 올릴 것.
  */
-const SIM_REV = 15;
+const SIM_REV = 16;
 export const BUILD_ID = (() => {
   const str = SIM_REV + JSON.stringify(CHARS.map((c) => [c.hp, c.walk, c.jumpVx, c.dash, c.cd, c.glide, c.hurt, c.width, c.moves])) + JSON.stringify(MAPS.map((m) => [m.plats, m.spawn]));
   let h = 2166136261;
@@ -621,6 +625,7 @@ export function hash(s: State): number {
     mix(f.burnAcc);
     mix(f.zap);
     mix(f.zx);
+    mix(f.frz);
     mix(f.flT);
     mix(f.flB);
     mix(f.aerial);
@@ -922,7 +927,8 @@ function control(s: State, i: number) {
   const map = mapOf(s);
   f.t++;
   if (f.gcT > 0) f.gcT--;
-  if (f.st !== "hit") f.mark = 0;
+  if (f.st !== "hit") ((f.mark = 0), (f.frz = 0));
+  else if (f.frz > 0) f.frz--;
   // 상태 이상이 다 풀리면(다시 움직일 수 있게 되면) 2초 면역
   if (f.imm > 0) f.imm--;
   if (f.cc && f.st !== "hit" && f.st !== "down" && f.st !== "rise" && f.trapT === 0 && f.grabbed === 0 && !s.p[1 - i].hug) {
@@ -1358,9 +1364,16 @@ function landed(s: State, i: number, f: Fighter) {
   // 제나 뇌섬일창도 떨어지다 쓰면 착지에 끊겨서(10.12) 땅에서 마저 꿰뚫고 마무리까지
   const keepRush =
     f.st === "atk" && f.mv === "X" && !!lm?.rush && ((!!lm.multi && f.t < lm.startup + lm.active) || !!lm.zap);
+  const landRush = f.st === "atk" && f.mv === "X" && !!lm?.rush?.landRush && f.t < lm.startup + lm.active;
   if (keepRush) {
     f.vh = 0;
     f.aerial = 0;
+  } else if (landRush && lm) {
+    // 이반 붉은 폭풍: 내리꽂다 착지 → 땅에서 돌진을 처음부터 (다음 프레임에 시작 = 돌진 속도)
+    f.vh = 0;
+    f.aerial = 0;
+    f.dive = 0;
+    if (f.t >= lm.startup) ((f.t = lm.startup - 1), (f.vx = 0));
   } else if (f.st === "jump" || (f.st === "atk" && (f.mv === "J" || f.mv === "K" || lm?.lunge || lm?.rush || (f.aerial && f.mv && charOf(f).moves[f.mv].air)))) {
     f.st = "idle";
     f.mv = "";
@@ -1786,7 +1799,7 @@ function applyHit(s: State, ai: number, m: MoveDef, srcX: number, mid: MoveId, p
   }
   // 가드 부수기 (끝까지 모은 철곰권): 막고 있어도 그냥 맞음
   if (m.crush && canBlock(s, d, srcX)) s.ev.push({ k: "crush", p: ai, x: d.x, h: d.h + 40 * SUB, v: 0 });
-  if (mid !== "T" && !m.crush && canBlock(s, d, srcX)) {
+  if (mid !== "T" && !m.crush && !m.bsod && canBlock(s, d, srcX)) {
     // 저스트 가드: 가드를 올린 지 JUST_T 프레임 안에 막으면 경직 반, 깎임 없음, 게이지 보너스
     const wasBlocking = d.st === "block";
     // (↓를 새로 눌러야 함 — 다운·경직 중부터 누르고만 있던 가드는 보통 가드)
@@ -1996,6 +2009,26 @@ function applyHit(s: State, ai: number, m: MoveDef, srcX: number, mid: MoveId, p
       d.stun = Math.max(d.stun, m.hitstun);
       d.mark = 1;
       s.ev.push({ k: "pause", p: ai, x: d.x, h: d.h + 70 * SUB, v: 0 });
+    }
+    if (m.bsod) {
+      // Alt+F4: 강제 종료 — 면역 무시, 그 자리에 멈춤 (공중이면 둥실 멈춤)
+      gotStatus = true;
+      d.frz = m.bsod;
+      d.stun = Math.max(d.stun, m.bsod);
+      d.mark = 1;
+      d.vx = 0;
+      d.kd = 0;
+      if (airborneS(s, d)) ((d.vh = 0), (d.float = 3));
+      s.ev.push({ k: "bsod", p: ai, x: d.x, h: d.h + 70 * SUB, v: 0 });
+    } else if (d.frz > 0 && !kd && d.vh > 0 && !wasAir) {
+      // 멈춘 상대를 띄우는 타(약 4단 · 가드 반격): 멈춤이 풀리고 그대로 공중 콤보로
+      d.frz = 0;
+    } else if (d.frz > 0 && !kd) {
+      // 멈춘 동안 맞은 타: 멈춤은 그대로(남은 만큼 경직), 멀리 안 밀려남
+      d.stun = Math.max(d.stun, d.frz);
+      d.mark = 1;
+      d.vx = Math.trunc(d.vx / 3);
+      if (airborneS(s, d)) ((d.vh = 0), (d.float = 3));
     }
     if (m.swap && !immune) {
       gotStatus = true;

@@ -34,6 +34,7 @@ import {
   sfxStatus,
   sfxIvan,
   sfxZena,
+  sfxGunmo,
   hasSkillSfx,
   setFightVolume,
   type Element,
@@ -596,6 +597,7 @@ export default function FightGame() {
           else if (e.k === "zapMark") sfxZena("mark");
           else if (e.k === "zapLine") sfxDash();
           else if (e.k === "zapBurst") sfxZena("burst");
+          else if (e.k === "bsod") sfxGunmo();
           else if (e.k === "charged") sfxIvan("max");
           else if (e.k === "crush") sfxIvan("crush");
           else if (e.k === "super") {

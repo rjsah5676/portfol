@@ -43,6 +43,9 @@ const ELEMENT: Record<string, "fire" | "bolt" | "ice" | "wind" | "whip" | "water
   ivan: "fire",
 };
 
+/** 건모 Alt+F4 블루스크린 길이 (프레임) */
+const BSOD_T = 40;
+
 /** 탄 그림 (public/fight/fx/<이름>.webp, 오른쪽을 보는 그림) — 처음 쓸 때 불러옴 */
 const fxCache = new Map<string, HTMLImageElement | null>();
 /** 불러오기가 끝난 그림 (실패 포함) — 시작 전에 다 받아 두려고 */
@@ -94,6 +97,10 @@ const FX_SETS: Record<string, Record<string, [number, number, boolean]>> = {
     err: [4, 1, true],
     pause: [2, 1, true],
     confuse: [2, 1, true],
+    // Alt+F4: crash(깨지는 창)·ring(충격파)는 강제 종료 맞은 자리, glitch(파란 픽셀 조각)는 (응답 없음) 동안
+    crash: [1, 1.1, true],
+    glitch: [1, 0.7, true],
+    ring: [1, 1.2, true],
   },
   // 이반: aura(철곰권 기 모으기)·wave(철곰권 충격파)·burst(붉은 폭풍)·crack(곰 포옹 내리꽂기 균열)는 따로 띄움
   ivan: {
@@ -204,6 +211,8 @@ export class FightRenderer {
     }
   }
   private flash = 0;
+  /** 건모 Alt+F4: 화면 전체 블루스크린 남은 프레임 */
+  private bsod = 0;
   /** 일섬 빛줄기 · 낙인 번개 (그림용) */
   private lines: { x0: number; x1: number; y: number; life: number; max: number }[] = [];
   private bolts: { x: number; y: number; life: number; max: number }[] = [];
@@ -426,6 +435,21 @@ export class FightRenderer {
         this.flash = 6;
         this.flashColor = "#FFF6C8";
         this.shake = Math.max(this.shake, 10);
+      } else if (e.k === "bsod") {
+        // Alt+F4 강제 종료: 화면 전체 블루스크린 + 맞은 자리에 깨진 창 조각
+        this.bsod = BSOD_T;
+        this.shake = Math.max(this.shake, 8);
+        const ga = s.p[e.p];
+        this.spawnFx(ga.ch, "crash", x, y - 4, ga.face, 30);
+        this.spawnFx(ga.ch, "ring", x, y - 4, ga.face, 22);
+        this.spawnFx(ga.ch, "glitch", x - ga.face * 6, y - 8, ga.face, 40);
+        this.parts.push({ x, y: y - 14, vx: 0, vy: -0.5, life: 60, max: 60, color: "#9CC8FF", size: 1.5, kind: "text", text: "FORCE QUIT!" });
+        this.parts.push({ x, y, vx: 0, vy: 0, life: 18, max: 18, color: "#5AA0FF", size: 30, kind: "ring" });
+        for (let i = 0; i < 14; i++)
+          this.parts.push({
+            x, y: y - 10, vx: (Math.random() - 0.5) * 7, vy: -1 - Math.random() * 4, life: 22, max: 22,
+            color: i % 3 ? "#1E6FE0" : "#FFFFFF", size: 1.6, kind: "spark",
+          });
       } else if (e.k === "burn") {
         this.parts.push({ x, y: y - 6, vx: 0, vy: -0.6, life: 34, max: 34, color: "#FF8A3D", size: 1.25, kind: "text", text: e.v > 1 ? `BURN ×${e.v}` : "BURN!" });
         for (let i = 0; i < 10; i++)
@@ -557,6 +581,7 @@ export class FightRenderer {
   /** 연출 한 프레임 진행 (시뮬레이션이 진행됐을 때만) */
   tick(s: State) {
     if (this.flash > 0) this.flash--;
+    if (this.bsod > 0) this.bsod--;
     if (s.stop > 0 || s.freeze > 0) {
       this.shake *= 0.85;
       return;
@@ -967,6 +992,26 @@ export class FightRenderer {
         }
       }
     }
+    // Alt+F4로 멈춘 상대: 몸에 파란 글리치 줄 + 머리 위 (응답 없음)
+    if (f.frz > 0 && f.st === "hit") {
+      const hh = (fr.sh / sc) * 0.9;
+      g.save();
+      g.globalAlpha = 0.55;
+      for (let k = 0; k < 4; k++) {
+        const gy = y - ((s.f * 3 + k * 23) % Math.max(1, Math.round(hh)));
+        g.fillStyle = k % 2 ? "#2B7BFF" : "#9CC8FF";
+        g.fillRect(x - 18 + ((s.f * 7 + k * 13) % 9) - 4, gy, 36, 2);
+      }
+      g.globalAlpha = 1;
+      g.font = "bold 9px 'Nanum Gothic', sans-serif";
+      g.textAlign = "center";
+      g.lineWidth = 2;
+      g.strokeStyle = "rgba(0,0,0,0.85)";
+      g.strokeText("(응답 없음)", x, y - 100);
+      g.fillStyle = "#CFE3FF";
+      g.fillText("(응답 없음)", x, y - 100);
+      g.restore();
+    }
     if (f.mark && f.st === "hit") {
       // 머리 위: ⏸ 일시정지 / 💫 혼란 로딩 원
       const im = fxImg(f.mark === 1 ? `gunmo-pause-${Math.floor(s.f / 10) % 2}` : `gunmo-confuse-${Math.floor(s.f / 6) % 2}`);
@@ -1316,6 +1361,48 @@ export class FightRenderer {
     }
   }
 
+  /** 건모 Alt+F4: 화면 전체가 잠깐 블루스크린 (처음엔 꽉 차게, 뒤로 갈수록 줄무늬로 깨지며 걷힘) */
+  private drawBsod() {
+    const g = this.g;
+    const W = this.canvas.width,
+      H = this.canvas.height;
+    const t = BSOD_T - this.bsod; // 지난 프레임
+    const hold = 16;
+    const a = t < hold ? 0.92 : Math.max(0, 0.92 * (1 - (t - hold) / (BSOD_T - hold)));
+    g.save();
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    if (t < hold) {
+      g.globalAlpha = a;
+      g.fillStyle = "#1452B8";
+      g.fillRect(0, 0, W, H);
+    } else {
+      // 걷히는 동안: 가로 줄무늬로 깨져 사라짐
+      const rows = 18;
+      for (let r = 0; r < rows; r++) {
+        if ((r * 7 + t * 3) % 5 === 0) continue;
+        g.globalAlpha = a * (0.6 + 0.4 * ((r * 13) % 7) / 7);
+        g.fillStyle = r % 3 ? "#1452B8" : "#2A6BD6";
+        const off = ((r * 37 + t * 11) % 40) - 20;
+        g.fillRect(off * (W / 400), (r * H) / rows, W, H / rows + 1);
+      }
+    }
+    g.globalAlpha = Math.min(1, a * 1.1);
+    g.fillStyle = "#FFFFFF";
+    g.textAlign = "left";
+    g.textBaseline = "top";
+    const u = W / 100;
+    g.font = `${Math.round(u * 9)}px 'Nanum Gothic', sans-serif`;
+    g.fillText(":(", u * 10, H * 0.2);
+    g.font = `bold ${Math.round(u * 2.4)}px 'Nanum Gothic', sans-serif`;
+    g.fillText("상대 프로그램이 응답하지 않아 강제로 종료했습니다.", u * 10, H * 0.2 + u * 11);
+    g.font = `${Math.round(u * 1.8)}px 'Nanum Gothic', sans-serif`;
+    g.fillText(`${Math.min(100, t * 7)}% 완료`, u * 10, H * 0.2 + u * 15);
+    g.font = `${Math.round(u * 1.2)}px monospace`;
+    g.globalAlpha *= 0.7;
+    g.fillText("중지 코드: ALT_F4_FORCE_QUIT", u * 10, H * 0.2 + u * 19);
+    g.restore();
+  }
+
   /** 제나 일섬: 지나간 빛줄기, 낙인 몸 둘레 고리, 낙인이 터지는 번개 */
   private drawZap(s: State) {
     const g = this.g;
@@ -1496,6 +1583,7 @@ export class FightRenderer {
     }
     g.globalAlpha = 1;
 
+    if (this.bsod > 0) this.drawBsod();
     if (this.flash > 0) {
       g.setTransform(1, 0, 0, 1, 0, 0);
       g.globalAlpha = this.flash / 20;

@@ -694,7 +694,9 @@ export class FightAI {
       if (this.comboDecision) {
         // 끌어당긴 뒤: 잡기로 띄우거나 약 콤보
         // 끌어당김(소영)·일시정지(건모) 뒤: 잡기로 띄우거나 약 콤보
-        if (f.mv === "S" && (o.pulled || o.mark === 1)) press(this.r() < 0.5 ? IN.A | IN.B : IN.A);
+        // 건모: ⏸ 일시정지 → 필살기 Alt+F4 로 캔슬 (느린 시작도 확정)
+        if (f.mv === "S" && c.moves.X.bsod && o.mark === 1 && f.meter >= 100 && this.r() < 0.7 && this.ultHits(s, me, 0)) press(IN.X);
+        else if (f.mv === "S" && (o.pulled || o.mark === 1)) press(this.r() < 0.5 ? IN.A | IN.B : IN.A);
         else if (f.mv === "L") press(f.chain < 4 && this.r() < 0.6 ? IN.A : IN.B);
         else if (f.mv === "H") {
           if (f.meter >= 100 && this.r() < 0.6 && this.ultHits(s, me, 0)) press(IN.X);

@@ -33,7 +33,7 @@ export interface Setup {
 const MODE_TILES: readonly (readonly [Mode, string, string])[] = [
   ["ai", "AI 대전", "CPU와 1:1"],
   ["2p", "2인 대전", "한 키보드로 둘이서"],
-  ["online", "온라인 대전", "방 만들고 1:1 · 관전"],
+  ["online", "온라인 대전", "방 만들고 1:1 · 랭크전"],
   ["practice", "연습 모드", "허수아비로 콤보 연습"],
 ];
 const MODES = MODE_TILES.map(([m]) => m);
