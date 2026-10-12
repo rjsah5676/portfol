@@ -550,6 +550,16 @@
     border: 3px solid var(--ink);
     border-radius: 6px;
     box-shadow: 5px 6px 0 rgba(43, 45, 66, 0.85);
+    /* iPad 길게 누르기 메뉴 · 선택 · 확대 막기 */
+    touch-action: none;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .sk-canvas-wrap canvas {
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
   }
   .sk-canvas-wrap[data-draw="true"] {
     box-shadow:

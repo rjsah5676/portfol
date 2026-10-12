@@ -464,6 +464,30 @@ export default function SketchCanvas({
     drawing.current = null;
   };
 
+  // iPad · 애플펜슬: 사파리가 펜 입력을 길게 누르기(돋보기 · 글자 선택) · 손글씨 입력(Scribble) ·
+  // 두 번 탭 확대로 먼저 가져가서 꾹 눌러야 그려지던 것 — 도화지 위 터치 기본 동작을 막는다.
+  // (React 의 터치 이벤트는 passive 라 preventDefault 가 안 먹어서 직접 붙임)
+  useEffect(() => {
+    const el = tailRef.current;
+    if (!el) return;
+    const stop = (e: Event) => {
+      if (e.cancelable) e.preventDefault();
+    };
+    const opt = { passive: false } as const;
+    el.addEventListener("touchstart", stop, opt);
+    el.addEventListener("touchmove", stop, opt);
+    el.addEventListener("touchend", stop, opt);
+    el.addEventListener("contextmenu", stop);
+    el.addEventListener("selectstart", stop);
+    return () => {
+      el.removeEventListener("touchstart", stop);
+      el.removeEventListener("touchmove", stop);
+      el.removeEventListener("touchend", stop);
+      el.removeEventListener("contextmenu", stop);
+      el.removeEventListener("selectstart", stop);
+    };
+  }, []);
+
   useEffect(
     () => () => {
       if (flushTimer.current) clearInterval(flushTimer.current);
