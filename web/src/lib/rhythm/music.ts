@@ -19,6 +19,8 @@ import freedomdiveData from "@/data/rhythm/freedomdive.json";
 import aragamiData from "@/data/rhythm/aragami.json";
 import crimsonData from "@/data/rhythm/crimsoncadenza.json";
 import hwimoriData from "@/data/rhythm/hwimori.json";
+import luckysevenData from "@/data/rhythm/luckyseven.json";
+import pixelfightingData from "@/data/rhythm/pixelfighting.json";
 
 export type Kind =
   | "kick"
@@ -399,6 +401,28 @@ const HWIMORI = audioSong("hwimori", "휘모리", "/audio/hwimori.mp3", hwimoriD
   desc: "175 BPM · 국악 DRUM & BASS · AI 자작곡 (tunee.ai)",
 });
 
+const LUCKYSEVEN = audioSong(
+  "luckyseven",
+  "Lucky Seven Rush",
+  "/audio/luckyseven.mp3",
+  luckysevenData,
+  {
+    color: "#F43F5E",
+    desc: "176 BPM · ELECTRO SWING · AI 자작곡 (tunee.ai)",
+  }
+);
+
+const PIXELFIGHTING = audioSong(
+  "pixelfighting",
+  "Pixel Fighting",
+  "/audio/pixelfighting.mp3",
+  pixelfightingData,
+  {
+    color: "#A855F7",
+    desc: "180 BPM · CHIPTUNE ROCK · AI 자작곡 (tunee.ai)",
+  }
+);
+
 // xi의 곡 — 제작자 표기 필수 (artist는 곡 선택·플레이·결과·랭킹에 함께 나옴)
 const ANIMA = audioSong("anima", "ANiMA", "/audio/anima.mp3", animaData, {
   color: "#D9A066",
@@ -435,6 +459,8 @@ const FREEDOMDIVE = audioSong(
  *   aragami     --boss '{}' --explus '{}' --levels 3,6,9,13,17,21   (ULTIMA는 19)
  *   crimsoncadenza --double --boss '{}' --explus '{}'   (자동 레벨 3,6,10,12,17,19 — 절반 템포 100으로 잡혀서 --double)
  *   hwimori     --boss '{}' --explus '{}'   (자동 레벨 3,6,9,13,16,19)
+ *   luckyseven  --double --boss '{}' --explus '{}' --levels 3,6,9,13,16,19   (NIGHTMARE는 15 — 절반 템포 88로 잡혀서 --double)
+ *   pixelfighting --boss '{}' --explus '{}' --levels 3,6,9,13,16,18
  *   freedomdive --boss '{}' --explus '{}' --levels 3,5,9,12,15,20   (ULTIMA는 17 — 222 BPM이라 16분 스트림이 한계)   (222 BPM 8분·16분이 꽉 차도 별점 12·15 — 그 위는 24분·잭이 필요)
  */
 // ───────────────────────── 연습곡 ─────────────────────────
@@ -484,6 +510,8 @@ const PRACTICE: Song = {
 
 /** 새 곡은 항상 맨 앞에 (연습곡은 맨 끝) */
 export const SONGS: Song[] = [
+  LUCKYSEVEN,
+  PIXELFIGHTING,
   CRIMSON,
   HWIMORI,
   FULLCOMBO,

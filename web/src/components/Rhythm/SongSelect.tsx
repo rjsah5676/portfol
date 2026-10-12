@@ -13,6 +13,14 @@ import type { Best } from "./RhythmGame";
 
 const DISP = "font-['Arial_Black','Segoe_UI_Black',Impact,sans-serif] font-black italic";
 const KR = "font-['Nanum_Gothic',sans-serif]";
+
+type SortKey = "new" | "name" | "level";
+const SORTS: { key: SortKey; label: string }[] = [
+  { key: "new", label: "최신" },
+  { key: "name", label: "가나다" },
+  { key: "level", label: "난이도" },
+];
+const SORT_KEY = "rhythm_sort";
 const fmtTime = (s: number) =>
   `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}`;
 const CUSTOM_COLOR = "#22D3EE";
@@ -104,13 +112,41 @@ export default function SongSelect({
     return () => clearTimeout(id);
   }, [q]);
   const searchRef = useRef<HTMLInputElement>(null);
+  // 정렬: 최신(곡 목록 순서 — 새 곡이 맨 앞) · 가나다 · 난이도(지금 고른 난이도의 레벨 낮은 순). 고른 것은 기억
+  const [sort, setSort] = useState<SortKey>(() => {
+    try {
+      const v = localStorage.getItem(SORT_KEY);
+      return SORTS.some((x) => x.key === v) ? (v as SortKey) : "new";
+    } catch {
+      return "new";
+    }
+  });
+  const pickSort = (k: SortKey) => {
+    if (k === sort) return;
+    setSort(k);
+    sfx("ui-move", 0.6);
+    try {
+      localStorage.setItem(SORT_KEY, k);
+    } catch {}
+  };
   const visible = useMemo(() => {
     const norm = (x: string) => x.toLowerCase().replace(/\s+/g, "");
     const k = norm(dq);
     // 내 음악은 목록 밖(오른쪽 맨 위 카드)이라 검색 대상은 곡만
     const all = songs.map((s, i) => ({ i, text: `${s.title} ${s.artist ?? ""} ${s.desc}` }));
-    return all.filter((x) => !k || norm(x.text).includes(k)).map((x) => x.i);
-  }, [dq, songs]);
+    const out = all.filter((x) => !k || norm(x.text).includes(k)).map((x) => x.i);
+    const lv = (i: number) => charts[songs[i].id]?.[diff]?.level ?? Infinity;
+    out.sort((a, b) => {
+      // 연습곡은 늘 맨 끝
+      const pa = songs[a].practice ? 1 : 0;
+      const pb = songs[b].practice ? 1 : 0;
+      if (pa !== pb) return pa - pb;
+      if (sort === "name") return songs[a].title.localeCompare(songs[b].title, "ko") || a - b;
+      if (sort === "level") return lv(a) - lv(b) || a - b;
+      return a - b;
+    });
+    return out;
+  }, [dq, songs, sort, charts, diff]);
   // 걸러진 목록에 지금 곡이 없으면 첫 곡으로 (내 음악을 고른 중이면 그대로)
   useEffect(() => {
     if (!custom && visible.length && !visible.includes(sel)) onSel(visible[0]);
@@ -187,7 +223,8 @@ export default function SongSelect({
       top: el.offsetTop - box.clientHeight / 2 + el.offsetHeight / 2,
       behavior: "smooth",
     });
-  }, [sel]);
+    // 정렬·검색으로 순서가 바뀌어도 고른 곡이 가운데로
+  }, [sel, visible]);
 
   const cover = custom ? (song?.cover ?? CUSTOM_COVER) : song ? coverOf(song) : undefined;
 
@@ -555,6 +592,22 @@ export default function SongSelect({
         ) : (
           <K>F</K>
         )}
+        <span className="flex shrink-0 overflow-hidden rounded-[0.45cqw] border border-white/12">
+          {SORTS.map((x) => (
+            <button
+              key={x.key}
+              type="button"
+              onClick={() => pickSort(x.key)}
+              className={`${KR} cursor-pointer px-[0.7cqw] py-[0.3cqw] text-[0.95cqw] font-bold whitespace-nowrap transition-colors ${
+                sort === x.key
+                  ? "bg-[#A78BFA]/35 text-white"
+                  : "text-white/45 hover:bg-white/10 hover:text-white/80"
+              }`}
+            >
+              {x.label}
+            </button>
+          ))}
+        </span>
         <span className="shrink-0 font-mono text-[0.95cqw] text-white/40">{visible.length}곡</span>
       </label>
       <div
@@ -566,8 +619,8 @@ export default function SongSelect({
             검색 결과가 없어요
           </p>
         )}
-        {songs.map((s, i) => {
-          if (!visible.includes(i)) return null;
+        {visible.map((i) => {
+          const s = songs[i];
           const on = i === sel;
           const c = s.color;
           const lv = charts[s.id][diff]?.level;

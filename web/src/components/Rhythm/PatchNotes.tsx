@@ -17,6 +17,17 @@ export interface Patch {
 
 export const PATCHES: Patch[] = [
   {
+    ver: "v1.3",
+    name: "새 곡 · 정렬",
+    date: "2026.10.12",
+    lines: [
+      "새 곡 — 「Lucky Seven Rush」(176 BPM 일렉트로 스윙, 카지노 · NIGHTMARE Lv15 · ULTIMA Lv19) · 「Pixel Fighting」(180 BPM 칩튠 록, 도트 격투 · NIGHTMARE Lv16 · ULTIMA Lv18)",
+      "곡 목록 정렬 — 최신 순(기본) · 가나다 순 · 난이도 순(지금 고른 난이도의 레벨 낮은 순), 고른 정렬은 기억",
+      "온라인 방 대기실 채팅",
+      "자동 싱크가 오래 쌓이면 노트가 소리와 어긋나던 것 — 한 번 모두 0부터 다시 맞춤, 설정 → 싱크에 '자동 싱크 초기화'",
+    ],
+  },
+  {
     ver: "v1.2",
     name: "온라인",
     date: "2026.10.10",
