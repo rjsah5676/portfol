@@ -33,7 +33,6 @@ import {
 } from "@/lib/defense/units";
 import type { Controller } from "./controller";
 import { FH, FW, cellAt, draw, newView, pushFx } from "./render";
-import { useStage } from "./Stage";
 import {
   Bar,
   Btn,
@@ -43,6 +42,7 @@ import {
   Icon,
   Modal,
   SoundButton,
+  FsButton,
   TITLE,
   UnitIcon,
   fmtNum,
@@ -94,7 +94,6 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry }
   const [over, setOver] = useState<{ note: ReactNode | null } | null>(null);
   const [bot, setBot] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
-  const stage = useStage();
   const b: Board = ctrl.board;
   const multi = ctrl.mode.kind === "multi";
 
@@ -470,15 +469,7 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry }
             </Btn>
           )}
           <SoundButton />
-          {(stage.canFs || stage.fs) && (
-            <Btn
-              onClick={stage.toggleFs}
-              className="h-[30px] w-[34px] text-[13px]"
-              title="전체화면"
-            >
-              ⛶
-            </Btn>
-          )}
+          <FsButton h={30} />
           {admin && (
             <Btn
               tone="cyan"

@@ -75,23 +75,33 @@
     3px 3px 0 rgba(0, 0, 0, 0.6);
 }
 
-/* ───────── 커서 (마우스일 때만) ───────── */
+/* ───────── 커서 (마우스일 때만) ─────────
+ * 보통 화면은 -1x(반 크기, 일반 마우스 크기), 레티나 같은 2배 화면은 원본(같은 크기로 보이며 선명) */
 @media (pointer: fine) {
   .dfn {
     cursor:
-      url("/defense/ui/cursor.png") 1 1,
+      url("/defense/ui/cursor-1x.png") 0 0,
+      default;
+    cursor:
+      image-set(url("/defense/ui/cursor-1x.png") 1x, url("/defense/ui/cursor.png") 2x) 0 0,
       default;
   }
   .dfn button:not(:disabled),
   .dfn .px-hand {
     cursor:
-      url("/defense/ui/cursor-hand.png") 9 1,
+      url("/defense/ui/cursor-hand-1x.png") 4 0,
+      pointer;
+    cursor:
+      image-set(url("/defense/ui/cursor-hand-1x.png") 1x, url("/defense/ui/cursor-hand.png") 2x) 4 0,
       pointer;
   }
   .dfn .px-grab,
   .dfn .px-grab * {
     cursor:
-      url("/defense/ui/cursor-grab.png") 9 1,
+      url("/defense/ui/cursor-grab-1x.png") 4 0,
+      grabbing !important;
+    cursor:
+      image-set(url("/defense/ui/cursor-grab-1x.png") 1x, url("/defense/ui/cursor-grab.png") 2x) 4 0,
       grabbing !important;
   }
 }

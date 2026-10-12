@@ -12,6 +12,7 @@ import {
 } from "@/lib/defense/units";
 import { UNIT_ART } from "@/lib/defense/assets";
 import { getPrefs, onPrefs, setPrefs, sfx, type AudioPrefs } from "./audio";
+import { useStage } from "./Stage";
 
 /* PIXEL GLITCH DEFENSE 공용 UI 조각 (무대 1024×576 안에서 쓰는 크기) — 도트 규칙은 css/defense.css */
 
@@ -274,6 +275,21 @@ export function useAudioPrefs(): AudioPrefs {
 }
 
 /** 스피커 버튼 + 누르면 음량 창 */
+/** 전체화면 켜고 끄기 (PC · 폰 모두) — 무대 전체가 화면을 덮음. 브라우저가 막으면 창 안에서 덮기 */
+export function FsButton({ className = "", h = 34 }: { className?: string; h?: number }) {
+  const st = useStage();
+  return (
+    <Btn
+      onClick={st.toggleFs}
+      className={className}
+      style={{ height: h, width: h + 4 }}
+      title={st.fs ? "전체화면 끄기" : "전체화면"}
+    >
+      <Icon n={st.fs ? "unfull" : "full"} size={16} />
+    </Btn>
+  );
+}
+
 export function SoundButton({ className = "" }: { className?: string }) {
   const p = useAudioPrefs();
   const [open, setOpen] = useState(false);
@@ -492,6 +508,45 @@ const ICONS: Record<string, { rows: string[]; c: [string, string, string] }> = {
       ".000000.",
     ],
     c: ["#f2eefc", "#120d22", "#a69cc9"],
+  },
+  full: {
+    rows: [
+      "111..111",
+      "1......1",
+      "1......1",
+      "........",
+      "........",
+      "1......1",
+      "1......1",
+      "111..111",
+    ],
+    c: ["#f2eefc", "#ffffff", "#a69cc9"],
+  },
+  unfull: {
+    rows: [
+      "..1..1..",
+      "..1..1..",
+      "111..111",
+      "........",
+      "........",
+      "111..111",
+      "..1..1..",
+      "..1..1..",
+    ],
+    c: ["#f2eefc", "#ffffff", "#a69cc9"],
+  },
+  note: {
+    rows: [
+      "0000000.",
+      "0222220.",
+      "0211110.",
+      "0222220.",
+      "0211110.",
+      "0222220.",
+      "0211100.",
+      "000000..",
+    ],
+    c: ["#a69cc9", "#f2eefc", "#5b4f96"],
   },
   speaker: {
     rows: [

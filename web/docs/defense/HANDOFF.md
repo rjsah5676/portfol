@@ -122,7 +122,7 @@ cd web && POKER_E2E=1 npx next dev            # → /games/defense/?fake=admin:�
 - 조작: 칸 누르기 = 정보, 끌기 = 자리 바꾸기(같은 유닛이면 모음). 단축키 Q 소환 · W 합성 · E 판매 · 1 2 3 강화 · 4 확률 · R 조합식 · Space 일시정지 · F 배속 · Esc
 - **도트 화면 규칙** (AI 웹사이트 느낌 안 나게): 둥근 모서리 · 흐림 · 부드러운 그라데이션 금지 → `px-*` 클래스 (2px 계단 테두리 · 아래 턱 · 누르면 내려감). 움직임은 `steps()`. 글꼴 갈무리. 이모지 대신 `ui.tsx` 의 `Icon`(8×8 도트) · `FactionIcon`(세력 문장)
 - **세력 구분**: 블록 윗면 색 · 버튼 색 · 문장(기사단 방패 / 기계공방 톱니 / 마도회 별) · 칩. **등급 구분**: 블록 테두리 · 그림 외곽선(레어부터) · 발밑 오라(레어 링 → 레전드 빛 기둥 · 반짝이 → 신화 깜빡임) · 칸 왼쪽 위 보석 글자(N R E L M H)
-- **마우스**: 도트 커서(`public/defense/ui/cursor*.png`, 손 · 집기), 버튼은 올리면 1칸 떠오르고 테두리가 밝아짐 + 작은 소리, 메뉴 버튼은 ▶ 표시
+- **마우스**: 도트 커서(`public/defense/ui/cursor*.png`, 손 · 집기 — 원본은 2배 그림, `*-1x.png` 는 반으로 줄인 것. css 에서 `image-set` 으로 보통 화면 1x · 레티나 2x), 버튼은 올리면 1칸 떠오르고 테두리가 밝아짐 + 작은 소리, 메뉴 버튼은 ▶ 표시
 - **소리**: 첫 누르기에서 잠금 풀림(Stage). 효과음 종류별 최소 간격 · 동시 14개 제한(배속에서도 안 시끄럽게). 메뉴 · 로비 = `menu`, 1~29웨이브 `wave-early`, 30~ `wave-late`, 보스 `boss`, 60 카이 `boss-final`, 끝나면 배경음을 줄이고 `clear`/`gameover`. 음량은 스피커 버튼(이 기기에 저장)
 
 ## 7. 알파 상태 · 다음 할 일
@@ -133,7 +133,10 @@ cd web && POKER_E2E=1 npx next dev            # → /games/defense/?fake=admin:�
 - [x] 밸런스 1차 (a2, 9번)
 - [x] 효과음 · 배경음 연결 (`audio.ts`)
 - [x] 멀티 어긋남 감시 · 새로고침 뒤 돌아가기 · 끊긴 사람 기다리다 순위
-- [ ] 메뉴 노출: `web/src/data/navMenu.ts` (썸네일 `img/menu/defense.jpg`) · `app/sitemap.ts` · layout 의 `noindex` 빼기 · 게임 가이드(`data/gameGuides.tsx`) — **주인 결정**
+- [x] 메뉴 노출 · 사이트맵 · noindex 해제 · 이름 PIXEL LUCKY DEFENSE
+- [x] 게임 가이드 `data/gameGuides.tsx` `DEFENSE_GUIDE` (페이지 GameHeader 「가이드」) — 규칙 · 수치가 바뀌면 같이 고치기
+- [x] 패치노트 `components/Defense/PatchNotes.tsx` (메뉴 왼쪽 아래) — **패치마다 `PATCHES` 맨 앞에 추가**
+- [x] 전체화면 버튼 PC 포함 모든 화면 (`ui.tsx` `FsButton`)
 - [ ] 멀티 "남 돕기" · 협동 보스 · 관전 — **주인과 상의 후** (설계는 6번)
 - [ ] 유닛 공격 동작 그림 (지금은 한 장 그림 + 코드로 튀어나감 · 눌림). 시트로 받으면 `attack` 줄만 채우면 됨
 - [ ] 필드 배경 그림 (`FIELD_ART`) — 지금은 코드로 그린 돌길 · 블록. 그림을 쓰려면 칸 경계가 `CELL`(76) 격자와 맞아야 함

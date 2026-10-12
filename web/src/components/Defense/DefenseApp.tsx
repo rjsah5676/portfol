@@ -31,7 +31,18 @@ import { Controller } from "./controller";
 import GameView from "./GameView";
 import Stage from "./Stage";
 import { playBgm } from "./audio";
-import { Btn, FactionIcon, Icon, Modal, SoundButton, TITLE, UnitIcon, fmtTime } from "./ui";
+import {
+  Btn,
+  FactionIcon,
+  FsButton,
+  Icon,
+  Modal,
+  SoundButton,
+  TITLE,
+  UnitIcon,
+  fmtTime,
+} from "./ui";
+import PatchNotes, { LATEST } from "./PatchNotes";
 import { BOSS_ART, UNIT_ART } from "@/lib/defense/assets";
 import { FACTION_COLOR, FACTION_NAME, FACTIONS } from "@/lib/defense/units";
 
@@ -55,6 +66,7 @@ export default function DefenseApp() {
   const member = !!profile;
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState("");
+  const [notes, setNotes] = useState(false);
 
   const startSolo = async () => {
     setBusy(true);
@@ -152,6 +164,7 @@ export default function DefenseApp() {
         onCodex={() => setScreen({ k: "codex" })}
         onRank={() => setScreen({ k: "rank" })}
         onRejoin={(id) => setScreen({ k: "room", id })}
+        onNotes={() => setNotes(true)}
       />
     );
 
@@ -172,6 +185,7 @@ export default function DefenseApp() {
           <RankList />
         </Modal>
       )}
+      {notes && screen.k === "menu" && <PatchNotes onClose={() => setNotes(false)} />}
     </Stage>
   );
 }
@@ -191,6 +205,7 @@ function Menu(p: {
   onCodex(): void;
   onRank(): void;
   onRejoin(id: string): void;
+  onNotes(): void;
 }) {
   // 새로고침했는데 멀티 판이 진행 중이면 돌아가기 버튼
   const [mine, setMine] = useState<{ id: string; name: string } | null>(null);
@@ -340,7 +355,14 @@ function Menu(p: {
           </Btn>
         )}
       </div>
-      <SoundButton className="absolute bottom-[22px] left-[64px]" />
+      <div className="absolute bottom-[22px] left-[64px] flex items-center gap-2">
+        <SoundButton />
+        <FsButton />
+        <Btn className="h-[34px] px-3 text-[13px]" onClick={p.onNotes}>
+          <Icon n="note" size={14} /> 패치노트
+          <span className="ml-1.5 text-[11px] text-[var(--gold)]">{LATEST}</span>
+        </Btn>
+      </div>
     </div>
   );
 }
@@ -429,6 +451,7 @@ function Lobby({ onBack, onEnter }: { onBack(): void; onEnter(id: string): void 
           방 만들기
         </Btn>
         <SoundButton />
+        <FsButton />
       </div>
       {err && <p className="mt-3 text-[13px] text-[#ff9ab0]">{err}</p>}
       {mine && (
@@ -582,6 +605,10 @@ function Room({
         <span className="text-[12px] text-[var(--mute)]">
           {room.phase === "playing" ? "진행 중" : "대기 중"}
         </span>
+        <div className="ml-auto flex items-center gap-2">
+          <SoundButton />
+          <FsButton />
+        </div>
       </div>
       {err && <p className="mt-2 text-[13px] text-[#ff9ab0]">{err}</p>}
       <div className="mt-6 grid grid-cols-4 gap-4">

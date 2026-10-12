@@ -5,6 +5,7 @@ import Faded from "@/components/Faded";
 import GameHeader from "@/components/GameHeader";
 import DefenseApp, { RankList } from "@/components/Defense/DefenseApp";
 import { fmtTime } from "@/components/Defense/ui";
+import { DEFENSE_GUIDE } from "@/data/gameGuides";
 import { getDefenseRank, type DefenseRankRow } from "@/realtime/defense";
 
 const rows = (rs: DefenseRankRow[]) =>
@@ -35,6 +36,7 @@ export default function DefensePage() {
           accent="#FF5CD6"
           desc="소환 · 합성으로 픽셀 세계를 지키는 랜덤 디펜스"
           tags={["운빨 디펜스", "랭킹모드", "멀티모드", "웹 디펜스 게임"]}
+          guide={DEFENSE_GUIDE}
           rank={{
             sub: "최고 기록",
             open,
