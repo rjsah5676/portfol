@@ -1,7 +1,7 @@
 /**
  * 바이러스 키우기 밸런스 시뮬레이션 — 계속 켜 두고 보는 플레이어를 흉내 내서 성장 속도를 뽑는다.
  *
- *   npx tsx scripts/virus-balance.ts [시간=72] [BAL키=값 ...] [--no-rand]
+ *   npx tsx scripts/virus-balance.ts [시간=72] [BAL키=값 ...] [--no-rand] [--no-shop] [--auto]
  *   예) npx tsx scripts/virus-balance.ts 24 hpGrowth=1.16 dataRatio=6
  *
  *  플레이어 행동
@@ -9,6 +9,7 @@
  *     업그레이드별 랜덤 강화(그 업그레이드 1~3레벨)의 평균 효율이 더 좋으면 랜덤 강화를 삼
  *   - 보스에게 지면 파일을 RETRY_FARM 초 동안 감염시킨 뒤 재도전
  *   - 같은 스테이지에서 보스에게 STUCK_FAILS 번 지거나 STUCK_SECS 초 넘게 걸리면 포맷 (포맷할 수 있을 때)
+ *   - 포맷하면 루트 권한 상점에서 프로파일러 · 크론잡 · 크론 데몬 먼저, 그다음 가장 싼 것부터 살 수 있는 만큼 삼
  *
  *  목표 (보고서 기준)
  *   - 첫 30분: 20~30스테이지, 업그레이드를 5~20초마다 하나
@@ -36,14 +37,38 @@ import {
   randUpgrade,
   randExpectedGain,
   randPrice,
+  SHOP,
+  buyShop,
+  rootLeft,
+  shopCost,
+  applyPlan,
+  optimalPlan,
+  evoStage,
+  EVOLUTION,
 } from "../src/lib/virus/logic";
 
 const args = process.argv.slice(2).filter((a) => !a.startsWith("--"));
 /** --no-rand: 랜덤 강화 없이 (비교용) */
 const NO_RAND = process.argv.includes("--no-rand");
+/** --no-shop: 루트 권한 상점 없이 (비교용) */
+const NO_SHOP = process.argv.includes("--no-shop");
+/** --auto: 크론 데몬을 산 뒤로는 자동 최적 업그레이드(크론잡)만 쓰는 플레이어 */
+const AUTO = process.argv.includes("--auto");
 const HOURS = Number(args.find((a) => !a.includes("=")) ?? 72);
 for (const a of args.filter((x) => x.includes("="))) {
   const [k, v] = a.split("=");
+  // evo=50,200,500 → 진화 단계 기준 바꿔 보기
+  if (k === "evo") {
+    v.split(",").forEach((n, i) => (EVOLUTION[i + 1].min = Number(n)));
+    continue;
+  }
+  // shopGrowth=1.3 → 루트킷 · 데이터 마이닝 가격 배율
+  if (k === "shopGrowth") {
+    SHOP.filter((d) => d.key === "rootkit" || d.key === "miner").forEach(
+      (d) => (d.growth = Number(v))
+    );
+    continue;
+  }
   if (!(k in BAL)) throw new Error(`BAL에 없는 키: ${k}`);
   (BAL as Record<string, number>)[k] = Number(v);
 }
@@ -93,8 +118,23 @@ let rands = 0;
 const stageAt: Record<number, number> = {};
 const slowStages: string[] = [];
 const runs: string[] = [];
+const evoAt: Record<number, number> = {};
 
 let overflow = "";
+
+/** 루트 권한 쓰기: 프로파일러 → 크론잡 → 크론 데몬 먼저, 그다음 가장 싼 것부터 */
+const UTIL = ["profiler", "cron", "daemon", "kprof"];
+function spendRoot(sv: Save) {
+  for (const k of UTIL) buyShop(sv, k as (typeof SHOP)[number]["key"]);
+  for (let i = 0; i < 500; i++) {
+    const options = SHOP.filter(
+      (d) => !UTIL.includes(d.key) && (d.max == null || sv.shop[d.key] < d.max)
+    );
+    options.sort((a, b) => shopCost(a, sv.shop[a.key]) - shopCost(b, sv.shop[b.key]));
+    if (!options.length || !buyShop(sv, options[0].key)) break;
+  }
+  if (rootLeft(sv) < 0) throw new Error("루트 권한이 음수");
+}
 
 function nextEnemy() {
   st = stats(s);
@@ -105,31 +145,37 @@ function nextEnemy() {
 
 while (t < HOURS * 3600) {
   // 업그레이드 (한 틱에 최대 1000번 — 숫자가 무한대로 튀면 멈춤)
-  for (let i = 0; i < 1000; i++) {
-    const b = bestUpgrade(s);
-    // 업그레이드별 랜덤 강화 중 평균 효율이 가장 좋은 것
-    let f: { key: (typeof UPGRADES)[number]["key"]; price: number; score: number } | null = null;
-    if (!NO_RAND)
-      for (const u of UPGRADES) {
-        const price = randPrice(s, u.key);
-        const score = randExpectedGain(s, u.key) / price;
-        if (!f || score > f.score) f = { key: u.key, price, score };
+  if (AUTO && s.shop.daemon) {
+    const p = optimalPlan(s);
+    if (applyPlan(s, p)) buys += p.count;
+  } else
+    for (let i = 0; i < 1000; i++) {
+      const b = bestUpgrade(s);
+      // 업그레이드별 랜덤 강화 중 평균 효율이 가장 좋은 것
+      let f: { key: (typeof UPGRADES)[number]["key"]; price: number; score: number } | null = null;
+      if (!NO_RAND)
+        for (const u of UPGRADES) {
+          const price = randPrice(s, u.key);
+          const score = randExpectedGain(s, u.key) / price;
+          if (!f || score > f.score) f = { key: u.key, price, score };
+        }
+      if (f && f.score > b.score) {
+        if (!Number.isFinite(f.price) || !randUpgrade(s, f.key)) break;
+        rands++;
+      } else {
+        if (!Number.isFinite(b.cost) || s.data < b.cost) break;
+        s.data -= b.cost;
+        s.lv[b.key]++;
       }
-    if (f && f.score > b.score) {
-      if (!Number.isFinite(f.price) || !randUpgrade(s, f.key)) break;
-      rands++;
-    } else {
-      if (!Number.isFinite(b.cost) || s.data < b.cost) break;
-      s.data -= b.cost;
-      s.lv[b.key]++;
+      buys++;
+      if (t <= 1800) buys30++;
     }
-    buys++;
-    if (t <= 1800) buys30++;
-  }
   if (!Number.isFinite(s.data) || !Number.isFinite(dps(stats(s)))) {
     overflow = `${fmtT(t)}에 숫자가 무한대로 넘침 (스테이지 ${s.stage}) — 성장이 너무 빠름`;
     break;
   }
+  const evo = evoStage(s.lv);
+  if (evoAt[evo] == null) evoAt[evo] = t;
   st = stats(s);
   hp -= dps(st) * (boss ? st.bossDmgMul : 1) * DT;
   t += DT;
@@ -162,9 +208,10 @@ while (t < HOURS * 3600) {
   }
   if ((fails >= STUCK_FAILS || t - stageStart > STUCK_SECS) && canFormat(s)) {
     runs.push(
-      `  회차 ${s.formats + 1}: ${fmtT(t - runStart)} 동안 스테이지 ${s.stage}까지 → 루트 권한 +${pendingRoot(s)} (합계 ${s.root + pendingRoot(s)}) · 끝난 시각 ${fmtT(t)}`
+      `  회차 ${s.formats + 1}: ${fmtT(t - runStart)} 동안 스테이지 ${s.stage}까지 → 루트 권한 +${pendingRoot(s)} (합계 ${s.root + pendingRoot(s)}) · 끝난 시각 ${fmtT(t)} · 상점 ${Object.values(s.shop).join("/")}`
     );
     s = format(s);
+    if (!NO_SHOP) spendRoot(s);
     runStart = t;
     stageStart = t;
     fails = 0;
@@ -174,7 +221,7 @@ while (t < HOURS * 3600) {
 }
 
 console.log(
-  `밸런스 시뮬레이션 (${HOURS}시간, 계속 켜 둔 플레이어${NO_RAND ? ", 랜덤 강화 없이" : ""})`
+  `밸런스 시뮬레이션 (${HOURS}시간, 계속 켜 둔 플레이어${NO_RAND ? ", 랜덤 강화 없이" : ""}${NO_SHOP ? ", 상점 없이" : ""}${AUTO ? ", 자동 구매만" : ""})`
 );
 console.log(`BAL: ${JSON.stringify(BAL)}\n`);
 if (overflow)
@@ -200,3 +247,8 @@ console.log(
 console.log(`\n10분 넘게 걸린 스테이지 ${slowStages.length}개:`);
 console.log(slowStages.slice(0, 10).join("\n") || "  없음");
 console.log(`\n업그레이드 총 ${buys}번 (그중 랜덤 강화 ${rands}번) · 레벨 ${JSON.stringify(s.lv)}`);
+console.log(
+  "진화 처음 도달: " +
+    EVOLUTION.map((e, i) => `${e.name} ${evoAt[i] == null ? "-" : fmtT(evoAt[i])}`).join(" · ")
+);
+console.log(`루트 권한 상점: ${JSON.stringify(s.shop)} · 남은 포인트 ${rootLeft(s)}`);

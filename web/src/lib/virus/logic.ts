@@ -1,6 +1,6 @@
 // 바이러스 키우기 (방치형, 컴퓨터 바이러스) — 화면과 상관없는 규칙·수치
 //
-// 흐름: 해커(나)가 바이러스 코드를 자동으로 발사해 파일을 감염 → 데이터 탈취 → 데이터로 강화
+// 흐름: 내 바이러스(me.exe)가 코드 조각을 자동으로 쏴 파일을 감염 → 데이터 탈취 → 데이터로 내 바이러스를 강화
 //       스테이지마다 파일 MOBS_PER_STAGE 개를 감염시키면 그 네트워크를 장악한 보스 바이러스가 나옴
 //       제한 시간 안에 격퇴하면 다음 스테이지 + 그 바이러스의 코드 모듈(영구 능력)을 빼앗음
 //       보스는 ROSTER 10종이 돌아가며 나오고, 처음 가 보는 스테이지에서 이길 때마다 모듈 버전이 오름
@@ -68,6 +68,13 @@ export const BAL = {
   atkCost: 1.25,
   /** 랜덤 강화 가격 = 오를 레벨 수(1~3)의 확률대로 평균 낸 비용 × 이 값 */
   randPrice: 0.95,
+  /** 루트 권한 상점 — 레벨마다 효과 · 가격 배율 (가격 = base × growth^레벨) */
+  shopRootkit: 1.3,
+  shopMiner: 1.3,
+  /** 골든 이미지: 포맷 직후 업그레이드마다 이만큼 레벨을 갖고 시작 */
+  shopGolden: 10,
+  /** 폴리모픽 엔진: 랜덤 강화 3레벨 확률 +이만큼 (1레벨 확률에서 뺌) */
+  shopPoly: 0.03,
 };
 
 const x = (n: number) => `×${Number(n.toFixed(2))}`;
@@ -79,6 +86,8 @@ export const SAVE_KEY = "virus-idle-v3";
 export const SHOT_MS = 380;
 
 export type UpgKey = "atk" | "spd" | "crit";
+export type ShopKey =
+  "rootkit" | "miner" | "golden" | "poly" | "profiler" | "cron" | "daemon" | "kprof";
 
 export interface Save {
   v: 3;
@@ -95,8 +104,14 @@ export interface Save {
   lv: Record<UpgKey, number>;
   /** 보스에게 져서 파일만 감염시키는 중 (재도전 버튼을 눌러야 보스가 다시 나옴) */
   bossFail: boolean;
-  /** 받은 루트 권한 */
+  /** 받은 루트 권한 (합계 — 피해 보너스는 이걸로, 상점에 써도 줄지 않음) */
   root: number;
+  /** 루트 권한 상점에 쓴 양 (남은 포인트 = root - rootSpent) */
+  rootSpent: number;
+  /** 루트 권한 상점 레벨 (포맷해도 유지) */
+  shop: Record<ShopKey, number>;
+  /** 자동 최적 업그레이드 켜짐 (크론 데몬이 있어야 동작) */
+  auto: boolean;
   /** 포맷한 횟수 */
   formats: number;
   savedAt: number;
@@ -113,6 +128,9 @@ export function newSave(): Save {
     lv: { atk: 0, spd: 0, crit: 0 },
     bossFail: false,
     root: 0,
+    rootSpent: 0,
+    shop: { rootkit: 0, miner: 0, golden: 0, poly: 0, profiler: 0, cron: 0, daemon: 0, kprof: 0 },
+    auto: false,
     formats: 0,
     savedAt: Date.now(),
   };
@@ -125,7 +143,8 @@ export function parseSave(raw: string | null): Save {
     if (s?.v !== 3 || !(s.stage >= 1) || !s.lv) return newSave();
     const lv = newSave().lv;
     for (const k of Object.keys(lv) as UpgKey[]) if (s.lv[k] >= 0) lv[k] = s.lv[k];
-    return { ...newSave(), ...s, lv, best: Math.max(s.best || 1, s.stage) };
+    const shop = { ...newSave().shop, ...(s.shop ?? {}) };
+    return { ...newSave(), ...s, lv, shop, best: Math.max(s.best || 1, s.stage) };
   } catch {
     return newSave();
   }
@@ -318,14 +337,14 @@ export function stats(s: Save): Stats {
   const atk =
     BAL.atkStep ** s.lv.atk * BAL.atkMilestoneMul ** Math.floor(s.lv.atk / BAL.atkMilestone);
   return {
-    dmg: atk * BAL.modDmg ** m[3] * rootMul,
+    dmg: atk * BAL.modDmg ** m[3] * rootMul * BAL.shopRootkit ** s.shop.rootkit,
     aps: (1 + (BAL.spdMax - 1) * (1 - BAL.spdK ** s.lv.spd)) * BAL.modSpd ** m[1],
     critChance: Math.min(
       0.9,
       0.05 + (BAL.critMax - 0.05) * (1 - BAL.critK ** s.lv.crit) + modCritOf(m[7])
     ),
     critMul: 2 + BAL.critMulStep * s.lv.crit + 0.5 * m[8],
-    dataMul: BAL.modData ** m[2],
+    dataMul: BAL.modData ** m[2] * BAL.shopMiner ** s.shop.miner,
     costMul: BAL.modCost ** m[4],
     mobHpMul: BAL.modMobHp ** m[0],
     bossHpMul: BAL.modBossHp ** m[6],
@@ -383,6 +402,24 @@ export const FILE_TYPES = [
   { ext: "sys", name: "driver", color: "#fb923c" },
   { ext: "db", name: "고객정보", color: "#67e8f9" },
 ];
+
+// ── 내 바이러스의 진화 ──
+// 업그레이드 총 레벨(페이로드 + 오버클럭 + 익스플로잇)이 늘면 형태가 바뀜. 포맷하면 레벨이 0이라 다시 1단계부터.
+
+export const EVOLUTION = [
+  { min: 0, name: "시드", en: "SEED" },
+  { min: 40, name: "웜", en: "WORM" },
+  { min: 120, name: "군체", en: "SWARM" },
+  { min: 300, name: "오버마인드", en: "OVERMIND" },
+];
+
+/** 지금 진화 단계 (0부터) */
+export function evoStage(lv: Record<UpgKey, number>) {
+  const total = lv.atk + lv.spd + lv.crit;
+  let i = 0;
+  while (i + 1 < EVOLUTION.length && total >= EVOLUTION[i + 1].min) i++;
+  return i;
+}
 
 // ── 업그레이드 ──
 
@@ -458,14 +495,20 @@ export function randPrice(s: Save, key: UpgKey) {
   return Math.ceil(avg * BAL.randPrice);
 }
 
+/** 실제 뽑기 확률 — 폴리모픽 엔진 레벨만큼 1레벨 확률을 3레벨로 옮김 (가격은 기본 확률 그대로라 순수한 이득) */
+export function randOdds(s: Save) {
+  const move = Math.min(RAND_ODDS[0] - 0.1, BAL.shopPoly * s.shop.poly);
+  return [RAND_ODDS[0] - move, RAND_ODDS[1], RAND_ODDS[2] + move];
+}
+
 /** 오를 레벨 수 뽑기 (rand는 시험용으로 바꿀 수 있음) */
-export function rollRand(rand: () => number = Math.random) {
+export function rollRand(rand: () => number = Math.random, odds: number[] = RAND_ODDS) {
   let r = rand();
-  for (let i = 0; i < RAND_ODDS.length; i++) {
-    if (r < RAND_ODDS[i]) return i + 1;
-    r -= RAND_ODDS[i];
+  for (let i = 0; i < odds.length; i++) {
+    if (r < odds[i]) return i + 1;
+    r -= odds[i];
   }
-  return RAND_ODDS.length;
+  return odds.length;
 }
 
 /** 랜덤 강화 실행: 값을 치르고 그 업그레이드를 1~3레벨 올림. 오른 레벨 수, 돈이 모자라면 0 */
@@ -473,7 +516,7 @@ export function randUpgrade(s: Save, key: UpgKey, rand: () => number = Math.rand
   const price = randPrice(s, key);
   if (s.data < price) return 0;
   s.data -= price;
-  const n = rollRand(rand);
+  const n = rollRand(rand, randOdds(s));
   s.lv[key] += n;
   return n;
 }
@@ -481,7 +524,7 @@ export function randUpgrade(s: Save, key: UpgKey, rand: () => number = Math.rand
 /** 랜덤 강화의 평균 초당 피해 증가 (로그) — 시뮬레이터가 일반 업그레이드와 비교할 때 씀 */
 export function randExpectedGain(s: Save, key: UpgKey) {
   const base = Math.log(dps(stats(s)));
-  return RAND_ODDS.reduce((sum, p, i) => {
+  return randOdds(s).reduce((sum, p, i) => {
     const lv = { ...s.lv, [key]: s.lv[key] + i + 1 };
     return sum + p * (Math.log(dps(stats({ ...s, lv }))) - base);
   }, 0);
@@ -504,15 +547,338 @@ export function canFormat(s: Save) {
   return s.stage >= BAL.formatStage && pendingRoot(s) > 0;
 }
 
-/** 포맷: 스테이지·업그레이드·데이터는 처음으로, 루트 권한·모듈·누적 기록은 유지 */
+/** 포맷: 스테이지·업그레이드·데이터는 처음으로, 루트 권한·상점·모듈·누적 기록은 유지 (골든 이미지만큼 레벨을 갖고 시작) */
 export function format(s: Save): Save {
+  const g = s.shop.golden * BAL.shopGolden;
   return {
     ...newSave(),
     lifetime: s.lifetime,
     best: s.best,
     root: s.root + pendingRoot(s),
+    rootSpent: s.rootSpent,
+    shop: { ...s.shop },
+    auto: s.auto,
+    lv: { atk: g, spd: g, crit: g },
     formats: s.formats + 1,
   };
+}
+
+// ── 루트 권한 상점 (포맷해서 받은 루트 권한을 써서 사는 영구 업그레이드) ──
+
+export interface ShopDef {
+  key: ShopKey;
+  name: string;
+  icon: string;
+  base: number;
+  growth: number;
+  max?: number;
+  /** 이 상품을 먼저 사야 열림 */
+  req?: ShopKey;
+  desc: string;
+  /** 지금 레벨의 효과 */
+  label: (lv: number) => string;
+}
+
+export const SHOP: ShopDef[] = [
+  {
+    key: "rootkit",
+    name: "루트킷",
+    icon: "🦠",
+    base: 25,
+    growth: 1.4,
+    desc: "시스템 깊숙이 숨어 모든 공격을 강화",
+    label: (lv) => `피해 ×${fmt(BAL.shopRootkit ** lv)}`,
+  },
+  {
+    key: "miner",
+    name: "데이터 마이닝",
+    icon: "⛏️",
+    base: 25,
+    growth: 1.4,
+    desc: "감염시킨 파일에서 데이터를 더 많이 긁어 옴",
+    label: (lv) => `데이터 ×${fmt(BAL.shopMiner ** lv)}`,
+  },
+  {
+    key: "golden",
+    name: "골든 이미지",
+    icon: "💿",
+    base: 60,
+    growth: 1.8,
+    max: 10,
+    desc: "미리 만들어 둔 시스템 이미지로 포맷 직후부터 강하게",
+    label: (lv) => `포맷 뒤 업그레이드마다 Lv.${lv * BAL.shopGolden}로 시작`,
+  },
+  {
+    key: "poly",
+    name: "폴리모픽 엔진",
+    icon: "🧬",
+    base: 40,
+    growth: 1.7,
+    max: 5,
+    desc: "스스로 코드를 바꿔 랜덤 강화가 더 크게 터짐",
+    label: (lv) => `랜덤 강화 3레벨 확률 ${Math.round((RAND_ODDS[2] + BAL.shopPoly * lv) * 100)}%`,
+  },
+  {
+    key: "profiler",
+    name: "프로파일러",
+    icon: "📊",
+    base: 40,
+    growth: 1,
+    max: 1,
+    desc: "코드 성능을 재서, 데이터를 쓴 만큼 초당 피해가 가장 많이 오르는 업그레이드를 알려 줌",
+    label: (lv) => (lv ? "업그레이드 추천 켜짐" : "업그레이드 탭에서 효율 1등 추천"),
+  },
+  {
+    key: "cron",
+    name: "크론잡",
+    icon: "⏱️",
+    base: 60,
+    growth: 1,
+    max: 1,
+    req: "profiler",
+    desc: "가진 데이터를 모두 써서 초당 피해가 가장 많이 오르는 조합으로 한 번에 업그레이드하는 예약 작업",
+    label: (lv) => (lv ? "⚡ 최적 업그레이드 버튼 사용 가능" : "⚡ 최적 업그레이드 버튼 열기"),
+  },
+  {
+    key: "daemon",
+    name: "크론 데몬",
+    icon: "🔁",
+    base: 150,
+    growth: 1,
+    max: 1,
+    req: "cron",
+    desc: "크론잡을 백그라운드에 상주시켜, 데이터가 모일 때마다 최적 업그레이드를 알아서 실행",
+    label: (lv) => (lv ? "자동 최적 업그레이드 사용 가능" : "크론잡을 1초마다 자동 실행"),
+  },
+  {
+    key: "kprof",
+    name: "커널 프로파일러",
+    icon: "🧠",
+    base: 300,
+    growth: 1,
+    max: 1,
+    req: "daemon",
+    desc: "루트 권한을 쓴 만큼 초당 피해가 가장 많이 오르는 상품(루트킷 · 데이터 마이닝 · 폴리모픽 엔진)을 알려 줌",
+    label: (lv) => (lv ? "루트 상점 추천 켜짐" : "루트 상점에서 효율 1등 추천"),
+  },
+];
+
+/** 남은 루트 권한 포인트 */
+export function rootLeft(s: Save) {
+  return s.root - s.rootSpent;
+}
+
+export function shopCost(d: ShopDef, lv: number) {
+  return Math.ceil(d.base * d.growth ** lv);
+}
+
+/** 상점에서 사기 — 성공하면 true */
+/** 먼저 사야 하는 상품이 아직 없어서 잠겨 있는지 */
+export function shopLocked(s: Save, d: ShopDef) {
+  return d.req != null && !s.shop[d.req];
+}
+
+export function buyShop(s: Save, key: ShopKey) {
+  const d = SHOP.find((x) => x.key === key)!;
+  if (shopLocked(s, d)) return false;
+  const lv = s.shop[key];
+  if (d.max != null && lv >= d.max) return false;
+  const cost = shopCost(d, lv);
+  if (rootLeft(s) < cost) return false;
+  s.rootSpent += cost;
+  s.shop[key] = lv + 1;
+  return true;
+}
+
+// ── 업그레이드 추천 (프로파일러) ──
+
+export interface Advice {
+  /** "atk" · "spd" · "crit" 는 업그레이드, "rand:atk" 처럼 앞에 rand: 가 붙으면 랜덤 강화 */
+  id: string;
+  /** 사면 초당 피해가 몇 % 오르나 (랜덤 강화는 평균) */
+  gain: number;
+  /** 데이터 1당 오르는 정도 (ln 배율 ÷ 값) — 크게 오르는 것과 작게 오르는 것을 공평하게 비교 */
+  score: number;
+}
+
+/** 업그레이드 · 랜덤 강화 6가지의 초당 피해 상승과 데이터 대비 효율 (n = 한 번에 살 개수, Infinity = 최대) */
+export function upgradeAdvice(s: Save, n: number): { list: Advice[]; best: string | null } {
+  const st = stats(s);
+  const now = dps(st);
+  const list: Advice[] = [];
+  for (const u of UPGRADES) {
+    const b = bulkCost(s, u, n);
+    const count = b.count || 1;
+    const cost = b.count ? b.cost : upgCost(u, s.lv[u.key], st);
+    const after = dps(stats({ ...s, lv: { ...s.lv, [u.key]: s.lv[u.key] + count } }));
+    const g = Math.log(after / now);
+    list.push({ id: u.key, gain: (after / now - 1) * 100, score: g / cost });
+    const eg = randExpectedGain(s, u.key);
+    list.push({
+      id: `rand:${u.key}`,
+      gain: (Math.exp(eg) - 1) * 100,
+      score: eg / randPrice(s, u.key),
+    });
+  }
+  let best: string | null = null;
+  let top = -Infinity;
+  for (const a of list)
+    if (a.score > top) {
+      top = a.score;
+      best = a.id;
+    }
+  return { list, best };
+}
+
+// ── 루트 상점 추천 (커널 프로파일러) ──
+
+/**
+ * 데이터를 f배 더 버는 것을 초당 피해 배율로 환산 — 늘어난 데이터를 업그레이드 한 줄에 몰아넣는다고 보고
+ * (가격이 레벨마다 일정 배율로 오르니 ln(f) ÷ ln(가격 배율)레벨 더), 세 줄 중 가장 많이 오르는 값
+ */
+function dataToDps(s: Save, f: number) {
+  const now = dps(stats(s));
+  let best = 1;
+  for (const u of UPGRADES) {
+    const after = dps(stats({ ...s, lv: { ...s.lv, [u.key]: s.lv[u.key] + 1 } }));
+    best = Math.max(best, (after / now) ** (Math.log(f) / Math.log(u.growth)));
+  }
+  return best;
+}
+
+/** 랜덤 강화의 효율 (받는 가치 ÷ 가격, 페이로드 기준) — 폴리모픽 엔진 레벨에 따라 */
+function randEfficiency(s: Save) {
+  const st = stats(s);
+  const u = UPGRADES[0];
+  const sum = (n: number) => {
+    let c = 0;
+    for (let i = 0; i < n; i++) c += upgCost(u, s.lv[u.key] + i, st);
+    return c;
+  };
+  return randOdds(s).reduce((a, p, i) => a + p * sum(i + 1), 0) / randPrice(s, u.key);
+}
+
+export interface RootAdvice {
+  key: ShopKey;
+  /** 다음 레벨을 사면 초당 피해가 몇 배 (환산 포함) */
+  mul: number;
+  /** 루트 권한 100당 초당 피해 상승 % */
+  per100: number;
+  /** 직접 오르는 게 아니라 데이터 · 랜덤 강화 효율을 환산한 값 */
+  converted: boolean;
+  score: number;
+}
+
+/** 루트킷 · 데이터 마이닝 · 폴리모픽 엔진 중 루트 권한 1당 초당 피해가 가장 많이 오르는 것 (다 산 것은 뺌) */
+export function rootAdvice(s: Save): { list: RootAdvice[]; best: ShopKey | null } {
+  const list: RootAdvice[] = [];
+  for (const key of ["rootkit", "miner", "poly"] as ShopKey[]) {
+    const d = SHOP.find((x) => x.key === key)!;
+    if (d.max != null && s.shop[key] >= d.max) continue;
+    let mul: number;
+    if (key === "rootkit") mul = BAL.shopRootkit;
+    else if (key === "miner") mul = dataToDps(s, BAL.shopMiner);
+    else {
+      const next = { ...s, shop: { ...s.shop, poly: s.shop.poly + 1 } };
+      mul = dataToDps(s, randEfficiency(next) / randEfficiency(s));
+    }
+    const cost = shopCost(d, s.shop[key]);
+    list.push({
+      key,
+      mul,
+      per100: ((mul - 1) * 100 * 100) / cost,
+      converted: key !== "rootkit",
+      score: Math.log(mul) / cost,
+    });
+  }
+  let best: ShopKey | null = null;
+  let top = -Infinity;
+  for (const a of list)
+    if (a.score > top) {
+      top = a.score;
+      best = a.key;
+    }
+  return { list, best };
+}
+
+// ── 여러 번 사기 · 크론잡(최적 업그레이드) ──
+
+/** u 를 최대 n번 산 값과 횟수 (n = Infinity 면 살 수 있는 만큼) — 사지는 않음 */
+export function bulkCost(s: Save, u: UpgDef, n: number) {
+  const st = stats(s);
+  let sum = 0;
+  let k = 0;
+  while (k < n && k < 1000) {
+    const c = upgCost(u, s.lv[u.key] + k, st);
+    if (n === Infinity && sum + c > s.data) break;
+    sum += c;
+    k++;
+  }
+  return { cost: sum, count: k };
+}
+
+export interface Plan {
+  /** 업그레이드마다 더 살 레벨 */
+  add: Record<UpgKey, number>;
+  cost: number;
+  /** 다 사면 초당 피해가 몇 배가 되나 */
+  mul: number;
+  count: number;
+}
+
+/**
+ * 크론잡: 가진 데이터를 다 써서 초당 피해가 가장 많이 오르는 조합 —
+ * 살 수 있는 업그레이드 중 「데이터 1당 초당 피해 상승(ln 배율 ÷ 값)」이 가장 큰 것을 한 레벨씩 계속 고름.
+ * (가격이 레벨마다 일정 배율로 오르는 구조라 이렇게 고르면 거의 최적. 랜덤 강화는 결과가 무작위라 뺌)
+ */
+export function optimalPlan(s: Save, maxSteps = 5000): Plan {
+  const sim: Save = { ...s, lv: { ...s.lv } };
+  const add: Record<UpgKey, number> = { atk: 0, spd: 0, crit: 0 };
+  const start = dps(stats(sim));
+  let data = s.data;
+  let cost = 0;
+  let count = 0;
+  for (let step = 0; step < maxSteps; step++) {
+    const st = stats(sim);
+    const now = dps(st);
+    let pick: { key: UpgKey; n: number; cost: number } | null = null;
+    let best = -Infinity;
+    for (const u of UPGRADES) {
+      // 후보: 1레벨 · (페이로드는) 다음 「25레벨마다 ×2」까지 한 묶음 — 한 칸씩만 보면 큰 도약을 놓침
+      const ns = [1];
+      if (u.key === "atk") {
+        const k = BAL.atkMilestone - (sim.lv.atk % BAL.atkMilestone);
+        if (k > 1) ns.push(k);
+      }
+      for (const n of ns) {
+        let c = 0;
+        for (let i = 0; i < n; i++) c += upgCost(u, sim.lv[u.key] + i, st);
+        if (c > data) continue;
+        sim.lv[u.key] += n;
+        const score = Math.log(dps(stats(sim)) / now) / c;
+        sim.lv[u.key] -= n;
+        if (score > best) {
+          best = score;
+          pick = { key: u.key, n, cost: c };
+        }
+      }
+    }
+    if (!pick) break;
+    data -= pick.cost;
+    cost += pick.cost;
+    sim.lv[pick.key] += pick.n;
+    add[pick.key] += pick.n;
+    count += pick.n;
+  }
+  return { add, cost, mul: dps(stats(sim)) / start, count };
+}
+
+/** 계획대로 사기 */
+export function applyPlan(s: Save, p: Plan) {
+  if (!p.count || s.data < p.cost) return false;
+  s.data -= p.cost;
+  for (const k of Object.keys(p.add) as UpgKey[]) s.lv[k] += p.add[k];
+  return true;
 }
 
 // ── 오프라인 수익 ──

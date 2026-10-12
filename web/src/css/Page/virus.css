@@ -608,3 +608,408 @@
     animation-name: none;
   }
 }
+
+/* ── 화면 크기 맞춤 (전체화면 · 폰 세로 · 폰 가로) ──
+ * 게임 틀이 자기 가로·세로를 재는 컨테이너(vg) — 그림 크기 · 패널 높이 · 배치를 틀 크기로 정함 (화면이 아니라)
+ *   cqmin = 틀의 가로·세로 중 짧은 쪽의 1%, cqh = 틀 세로의 1% */
+.vg-frame {
+  container: vg / size;
+}
+.vg-safe {
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom)
+    env(safe-area-inset-left);
+}
+.vg-sprite > svg {
+  width: 100%;
+  height: auto;
+}
+.vg-me {
+  width: clamp(72px, calc(24cqmin / var(--vz, 1)), 230px);
+}
+.vg-boss {
+  width: clamp(76px, calc(24cqmin / var(--vz, 1)), 240px);
+}
+.vg-file {
+  width: clamp(60px, calc(19cqmin / var(--vz, 1)), 190px);
+}
+/* 큰 화면 전체화면: 글자 · 버튼까지 통째로 키움 (zoom). 틀 비율로 정한 크기(cqh · cqmin)는 --vz 로 나눠서 비율 그대로 */
+@container vg (min-width: 1360px) and (min-height: 820px) {
+  .vg-frame > * {
+    zoom: 1.3;
+    --vz: 1.3;
+  }
+}
+@container vg (min-width: 1800px) and (min-height: 1000px) {
+  .vg-frame > * {
+    zoom: 1.55;
+    --vz: 1.55;
+  }
+}
+/* 아래 패널: 세로로 긴 틀(폰 세로)은 36%, 가로로 긴 틀(PC)은 32% */
+.vg-panel {
+  height: clamp(200px, calc(36cqh / var(--vz, 1)), 420px);
+  border-top: 1px solid rgba(74, 222, 128, 0.15);
+}
+@container vg (min-aspect-ratio: 4/3) {
+  .vg-panel {
+    height: calc(32cqh / var(--vz, 1));
+  }
+}
+/* 폰 가로 (낮고 넓은 틀): 왼쪽 전투 · 오른쪽 패널 */
+@container vg (max-height: 540px) and (min-aspect-ratio: 3/2) {
+  .vg-play {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) min(44%, 420px);
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+  .vg-top {
+    grid-column: 1 / -1;
+  }
+  .vg-prog {
+    display: none;
+  }
+  .vg-battle {
+    grid-row: 2;
+    grid-column: 1;
+  }
+  .vg-panel {
+    grid-row: 2;
+    grid-column: 2;
+    height: auto;
+    border-top: 0;
+    border-left: 1px solid rgba(74, 222, 128, 0.15);
+  }
+  /* 시작 화면도 낮게: 부팅 글 빼고 로고 · 메뉴 줄여서 겹치지 않게 */
+  .vg-boot {
+    display: none;
+  }
+  .vg-item {
+    padding-top: 4px;
+    padding-bottom: 4px;
+  }
+  .vg-logo {
+    top: 2% !important;
+    transform: scale(0.72);
+    transform-origin: top center;
+  }
+}
+
+/* 내 바이러스: 오버클럭 궤도 (도는 빠르기는 초당 발사 수에 맞춰 style 로) */
+.vm-spin {
+  animation: virus-spin-orbit 4s linear infinite;
+}
+@keyframes virus-spin-orbit {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .vm-spin {
+    animation: none;
+  }
+}
+.virus-calm .vm-spin {
+  animation: none;
+}
+
+/* ── 격퇴 실패: 보스에게 내 바이러스가 소멸 (2초 · boss-fail 효과음에 맞춤) ──
+ * 0~0.65초 큰 지직(보스 돌진 · 붉은 코드 5발 · 맞을 때마다 떨림) → 0.65~1.6초 소리가 가라앉음(내 바이러스가 녹아 흩어짐)
+ * → 1.65초 끊김 · 1.75초 딸깍(지직 화면) → 다시 부팅. 퍼센트 = 시각 ÷ 2초 (0.65초 = 32.5%, 1.6초 = 80%, 1.65초 = 82.5%) */
+.vf-red,
+.vf-banner,
+.vf-static,
+.vf-boss,
+.vf-me,
+.vf-frag,
+.vf-shake {
+  animation-duration: 2s;
+  animation-fill-mode: both;
+}
+.vf-red {
+  animation-name: vf-red;
+  box-shadow: inset 0 0 90px 22px rgba(220, 38, 38, 0.7);
+  background: rgba(127, 29, 29, 0.18);
+}
+@keyframes vf-red {
+  0% {
+    opacity: 0;
+  }
+  4%,
+  32% {
+    opacity: 1;
+  }
+  80% {
+    opacity: 0.5;
+  }
+  83%,
+  100% {
+    opacity: 0;
+  }
+}
+.vf-banner {
+  animation-name: vf-banner;
+}
+@keyframes vf-banner {
+  0% {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  5%,
+  80% {
+    opacity: 1;
+    transform: none;
+  }
+  83%,
+  100% {
+    opacity: 0;
+  }
+}
+/* 공격 코드: 보스(오른쪽) → 내 바이러스(왼쪽), 0.3초에 한 발씩 닿음 */
+.vf-shot {
+  opacity: 0;
+  animation: vf-shot 0.3s cubic-bezier(0.4, 0, 0.9, 0.6) both;
+}
+@keyframes vf-shot {
+  from {
+    left: calc(75% - 40px);
+    opacity: 1;
+    transform: scale(0.8);
+  }
+  92% {
+    opacity: 1;
+  }
+  to {
+    left: calc(25% + 10px);
+    opacity: 0;
+    transform: scale(1.3);
+  }
+}
+.vf-static {
+  animation-name: vf-static;
+  background:
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.22) 0 1px, transparent 1px 3px),
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.06) 0 2px, transparent 2px 5px),
+    rgba(10, 10, 10, 0.85);
+}
+@keyframes vf-static {
+  0%,
+  82% {
+    opacity: 0;
+  }
+  83% {
+    opacity: 1;
+    transform: translateX(-6px);
+  }
+  85% {
+    transform: translateX(5px);
+  }
+  87.5% {
+    opacity: 0.9;
+    transform: none;
+  }
+  90%,
+  100% {
+    opacity: 0;
+  }
+}
+/* 보스: 두 번 달려들었다 물러남 */
+.vf-boss {
+  animation-name: vf-boss;
+}
+@keyframes vf-boss {
+  0%,
+  32%,
+  100% {
+    transform: none;
+  }
+  6% {
+    transform: translateX(-46px) scale(1.18);
+    filter: brightness(1.5);
+  }
+  13% {
+    transform: translateX(-8px) scale(1.04);
+  }
+  19% {
+    transform: translateX(-52px) scale(1.2);
+    filter: brightness(1.6);
+  }
+  26% {
+    transform: translateX(-6px);
+    filter: none;
+  }
+}
+/* 내 바이러스: 맞을 때마다 붉게 떨림 → 줄어들며 색이 빠지고 녹아 사라짐 → 끊긴 뒤 다시 부팅 */
+.vf-me {
+  animation-name: vf-me;
+}
+@keyframes vf-me {
+  0% {
+    transform: none;
+    filter: none;
+    opacity: 1;
+  }
+  15% {
+    transform: translateX(-6px) skewX(-10deg);
+    filter: sepia(1) saturate(6) hue-rotate(-50deg) brightness(1.3);
+  }
+  18% {
+    transform: translateX(4px);
+    filter: none;
+  }
+  21% {
+    transform: translateX(-6px) skewX(8deg);
+    filter: sepia(1) saturate(6) hue-rotate(-50deg) brightness(1.3);
+  }
+  24% {
+    transform: translateX(3px);
+    filter: none;
+  }
+  27% {
+    transform: translateX(-5px) skewX(-6deg);
+    filter: sepia(1) saturate(6) hue-rotate(-50deg) brightness(1.3);
+  }
+  32.5% {
+    transform: none;
+    filter: saturate(0.6);
+    opacity: 1;
+  }
+  55% {
+    transform: scale(0.75) skewX(6deg);
+    filter: grayscale(0.7) blur(0.5px);
+    opacity: 0.7;
+  }
+  80% {
+    transform: scale(0.35) skewX(-10deg);
+    filter: grayscale(1) blur(1.5px);
+    opacity: 0.2;
+  }
+  82.5%,
+  87.5% {
+    transform: scale(0.2);
+    opacity: 0;
+  }
+  95% {
+    transform: scale(1.1);
+    filter: brightness(2);
+    opacity: 1;
+  }
+  100% {
+    transform: none;
+    filter: none;
+    opacity: 1;
+  }
+}
+/* 녹아 흩어지는 조각: 소리가 가라앉는 동안 위로 둥둥 */
+.vf-frag {
+  animation-name: vf-frag;
+  animation-timing-function: ease-out;
+}
+@keyframes vf-frag {
+  0%,
+  32% {
+    opacity: 0;
+    transform: translate(0, 0);
+  }
+  36% {
+    opacity: 0.9;
+  }
+  80% {
+    opacity: 0.5;
+  }
+  84%,
+  100% {
+    opacity: 0;
+    transform: translate(calc(var(--dx) * 0.5), calc(var(--dy) * 0.4 - 70px)) rotate(var(--rot));
+  }
+}
+.vf-shake {
+  animation-name: vf-shake;
+}
+@keyframes vf-shake {
+  0%,
+  13%,
+  32%,
+  82%,
+  90%,
+  100% {
+    transform: none;
+  }
+  15% {
+    transform: translate(4px, -2px);
+  }
+  21% {
+    transform: translate(-4px, 2px);
+  }
+  27% {
+    transform: translate(3px, 1px);
+  }
+  84% {
+    transform: translate(-6px, 3px);
+  }
+  86% {
+    transform: translate(5px, -2px);
+  }
+}
+.virus-calm .vf-static,
+.virus-calm .vf-red {
+  display: none;
+}
+.virus-calm .vf-shake {
+  animation-name: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .vf-static {
+    display: none;
+  }
+  .vf-shake {
+    animation-name: none;
+  }
+}
+
+/* ── 글자 기준 (vt-*) ──
+ * 정보가 있는 글자는 PC 11px · 폰 12px 이상. 「글자 크게」(설정)는 --ts 로 전부 1.15배.
+ * 색은 세 단계만: 본문 white/90 · 보조 white/75 · 꺼진 것만 그 아래 (30~45% 투명 글자는 쓰지 않음) */
+.vg-frame {
+  --ts: 1;
+}
+.vg-frame.vg-big {
+  --ts: 1.15;
+}
+.vt-xs {
+  font-size: calc(11px * var(--ts));
+  line-height: 1.3;
+}
+.vt-sm {
+  font-size: calc(12px * var(--ts));
+  line-height: 1.35;
+}
+.vt-md {
+  font-size: calc(13px * var(--ts));
+  line-height: 1.35;
+}
+.vt-base {
+  font-size: calc(14px * var(--ts));
+  line-height: 1.4;
+}
+@container vg (max-width: 520px) {
+  .vt-xs {
+    font-size: calc(12px * var(--ts));
+  }
+  .vt-sm {
+    font-size: calc(12.5px * var(--ts));
+  }
+}
+/* 살 수 없는 버튼: 흐리게 만들지 않고 색만 빼서 값은 그대로 읽히게 */
+.vg-frame button:disabled {
+  cursor: not-allowed;
+  filter: saturate(0.25) brightness(0.9);
+}
+/* 낮은 화면(폰 가로)에서는 메뉴 · 창 목록을 두 줄로 */
+@container vg (max-height: 540px) {
+  .vg-menu,
+  .vw-list {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+  }
+}

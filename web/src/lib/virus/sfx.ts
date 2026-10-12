@@ -4,21 +4,25 @@
  *   exploit     익스플로잇 (원본 5초 → 첫 터짐 0.6초만)
  *   boss-appear 보스 등장 (2.9초)
  *   boss-down   보스 격퇴 (1.85초)
+ *   boss-fail   격퇴 실패 · 차단 (원본 2초 → 1.95초, 끝 페이드)
  * 다듬기: 앞 무음 자르고 끝 페이드, 최대를 -1 dBFS 로 (원본은 public 밖에 백업).
  * 아래 GAIN 은 0.4초 창 최대 음량을 재서 맞춤 — hit -28 · exploit -20 LUFS 근처 (자주 나는 소리일수록 작게).
  * 보스 소리는 처음 0.5 · 0.6 → "타격음보다 더 크게"(2026-10-12)라서 1로 (+5 dB, 약 -8 LUFS · 최대 -1 dBFS — 리미터가 겹침을 막음).
  * hit 은 0.12초짜리 딱 소리라 0.4초 창 음량보다 크게 들림 (최대는 둘 다 -1 dBFS 근처).
  * 후반엔 초당 20발 넘게 맞아서, 같은 소리는 MIN_GAP 간격보다 자주 내지 않음 (뭉개지지 않게).
+ * 다른 탭으로 가거나 창을 내리면 소리를 아예 멈춤 (게임은 뒤에서도 돌아서 타격 · 보스 소리가 들렸음).
  */
 import { LEVEL, limiter } from "@/lib/soundLevel";
 
-export type VirusSfx = "hit" | "exploit" | "boss-appear" | "boss-down";
+export type VirusSfx = "hit" | "exploit" | "boss-appear" | "boss-down" | "boss-fail";
 
 const GAIN: Record<VirusSfx, number> = {
   hit: 0.9,
   exploit: 0.4,
   "boss-appear": 1,
   "boss-down": 1,
+  /** 0.4초 창 -11.3 LUFS — 등장 · 격퇴보다 살짝 작게 (자주 지는 구간에서 반복돼도 덜 거슬리게) */
+  "boss-fail": 0.85,
 };
 /** 같은 소리를 다시 낼 수 있는 최소 간격 (초) */
 const MIN_GAP: Record<VirusSfx, number> = {
@@ -26,6 +30,7 @@ const MIN_GAP: Record<VirusSfx, number> = {
   exploit: 0.16,
   "boss-appear": 1,
   "boss-down": 1,
+  "boss-fail": 1,
 };
 
 let ctx: AudioContext | null = null;
@@ -35,6 +40,15 @@ const buffers = new Map<VirusSfx, AudioBuffer>();
 const lastAt = new Map<VirusSfx, number>();
 let loading = false;
 
+const hidden = () => typeof document !== "undefined" && document.visibilityState === "hidden";
+
+/** 화면이 가려지면 소리 장치를 멈추고, 돌아오면 다시 (이미 나고 있던 보스 소리도 같이 멈춤) */
+function onVisibility() {
+  if (!ctx) return;
+  if (hidden()) void ctx.suspend();
+  else void ctx.resume();
+}
+
 function ac(): AudioContext | null {
   if (typeof window === "undefined") return null;
   try {
@@ -43,8 +57,9 @@ function ac(): AudioContext | null {
       master = ctx.createGain();
       master.gain.value = volume * LEVEL.virus.sfx;
       master.connect(limiter(ctx));
+      document.addEventListener("visibilitychange", onVisibility);
     }
-    if (ctx.state === "suspended") void ctx.resume();
+    if (ctx.state === "suspended" && !hidden()) void ctx.resume();
     if (!loading) {
       loading = true;
       const c = ctx;
@@ -75,7 +90,7 @@ export function setVirusSfxVolume(v: number) {
 
 /** 효과음 재생 — 반복돼도 덜 질리게 음높이를 ±3% 흔듦 */
 export function playVirusSfx(name: VirusSfx) {
-  if (volume <= 0) return;
+  if (volume <= 0 || hidden()) return;
   const c = ac();
   const buf = buffers.get(name);
   if (!c || !buf || !master) return;
