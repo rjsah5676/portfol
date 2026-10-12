@@ -26,7 +26,7 @@ export default function Footer() {
           guest box
         </Link>
       </nav>
-      <div className="flex items-center justify-center gap-2 font-mono text-xs text-white/40">
+      <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1.5 px-4 font-mono text-xs text-white/40 [&>*]:whitespace-nowrap">
         {/* 모바일에서 오른쪽 아래 플로팅 버튼에 가리지 않게 맨 앞에 둠 */}
         <ContactButton />
         <span className="text-white/20">·</span>

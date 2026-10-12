@@ -11,7 +11,7 @@ export default function InquiryButton() {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="cursor-pointer text-white/60 transition-colors hover:text-[#8B84FF]"
+        className="cursor-pointer font-['Nanum_Gothic',sans-serif] text-white/60 transition-colors hover:text-[#8B84FF]"
       >
         문의하기
       </button>
