@@ -37,7 +37,7 @@ function PointPrice({ n, className = "" }: { n: number; className?: string }) {
   return (
     <span className={`inline-flex items-center gap-[0.3em] font-extrabold text-[#b9a8ff] ${className}`}>
       <span className="inline-flex h-[1.15em] w-[1.15em] items-center justify-center rounded-full bg-[#7c6cff] text-[0.7em] text-white">
-        {POINT.unit}
+        {POINT.unit[0]}
       </span>
       {fmtPoint(n)}
     </span>
