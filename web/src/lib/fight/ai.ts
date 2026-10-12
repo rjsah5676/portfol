@@ -128,8 +128,8 @@ export const AI_LEVELS: AILevel[] = [
     antiAir: 1,
     aggro: 0.8,
     special: 0.025,
-    // 잡기 풀기: 잡히는 걸 보고 반응하기엔 창(약 0.23초)이 짧아 사람은 거의 찍기 — AI도 찍는 정도로
-    tech: 0.42,
+    // 잡기 풀기: 사람은 거의 찍기 — AI도 찍는 정도로 (10.12 0.42 → 0.32: 거의 다 풀던 것)
+    tech: 0.32,
     just: 0.9,
     interrupt: 0.85,
     look: 28,
@@ -145,9 +145,9 @@ export const AI_RATING = [0, 200, 500, 850, 1200, 1600, 2000];
 
 /** 지존 위 단계 — 랭크전 봇 전용 (AI 대전에서는 고를 수 없음) */
 export const RANK_TIERS: (AILevel & { rating: number })[] = [
-  { ...AI_LEVELS[6], id: "8", name: "전설", rating: 2200, tech: 0.45, read: 0.95, plan: 0.8, aggro: 0.84, just: 0.95, interrupt: 0.9, robust: 3 },
-  { ...AI_LEVELS[6], id: "9", name: "신화", rating: 2400, tech: 0.48, read: 1, plan: 1, aggro: 0.87, just: 1, interrupt: 0.95, robust: 4, look: 32 },
-  { ...AI_LEVELS[6], id: "10", name: "초월", rating: 2600, tech: 0.5, read: 1, plan: 1, react: 8, aggro: 0.9, just: 1, interrupt: 1, robust: 5, look: 32 },
+  { ...AI_LEVELS[6], id: "8", name: "전설", rating: 2200, tech: 0.34, read: 0.95, plan: 0.8, aggro: 0.84, just: 0.95, interrupt: 0.9, robust: 3 },
+  { ...AI_LEVELS[6], id: "9", name: "신화", rating: 2400, tech: 0.36, read: 1, plan: 1, aggro: 0.87, just: 1, interrupt: 0.95, robust: 4, look: 32 },
+  { ...AI_LEVELS[6], id: "10", name: "초월", rating: 2600, tech: 0.38, read: 1, plan: 1, react: 8, aggro: 0.9, just: 1, interrupt: 1, robust: 5, look: 32 },
 ];
 /** 랭크전 봇 레이팅 상한 */
 export const BOT_MAX = 2600;
@@ -502,7 +502,8 @@ export class FightAI {
         const base = L.tech ?? L.block * 0.4;
         const share = this.oThrows / (this.oThrows + this.oStrikes);
         const rd = L.read ?? 0;
-        this.techDecision = this.r() < base * (1 - rd) + rd * Math.min(0.75, base * (0.4 + 2.2 * share));
+        // (10.12 읽기 상한 0.75 → 0.5, 잡기 비율 가중 2.2 → 1.4: 잡기를 자주 쓰면 거의 다 풀던 것)
+        this.techDecision = this.r() < base * (1 - rd) + rd * Math.min(0.5, base * (0.5 + 1.4 * share));
       }
       if (this.techDecision) out = IN.A | IN.B;
       return finish();

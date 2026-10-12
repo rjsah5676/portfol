@@ -98,9 +98,10 @@ const AIR_ACC = 70;
 /** 저스트 가드 판정 프레임 (가드 올린 뒤 이 안에 막으면) */
 const JUST_T = 5;
 /** 잡힌 뒤 던져질 때까지 붙잡혀 있는 프레임 */
-const THROW_TECH_T = 8;
-/** 그중 풀 수 있는 앞쪽 프레임 (잡히는 순간의 히트스톱 10프레임 동안 누른 것도 인정 → 약 0.23초). 풀면 피해 없음 */
-const THROW_TECH_WIN = 4;
+const THROW_TECH_T = 14;
+/** 그중 풀 수 있는 앞쪽 프레임 (잡히는 순간의 히트스톱 10프레임 동안 누른 것도 인정 → 약 0.33초, 철권 수준). 풀면 피해 없음
+ *  (10.12 4 → 10 · 붙잡는 시간 8 → 14: 보고 풀기엔 0.23초가 너무 짧아 0.1초 늘림) */
+const THROW_TECH_WIN = 10;
 /** 연속 동작 수: 약(L) 4단, 발차기(H) 2단 */
 const CHAIN_MAX: Partial<Record<MoveId, number>> = { L: 4, H: 2 };
 const CHAIN_STEP = 520;
@@ -566,7 +567,7 @@ const cloneF = (f: Fighter): Fighter => ({ ...f, hist: f.hist.slice() });
  * 이 빌드의 게임 데이터 지문 (캐릭터 성능·맵) — 온라인에서 서로 다른 빌드끼리 붙었는지 확인.
  * 계산 방식(sim.ts)만 바꿨을 땐 SIM_REV를 올릴 것.
  */
-const SIM_REV = 16;
+const SIM_REV = 17;
 export const BUILD_ID = (() => {
   const str = SIM_REV + JSON.stringify(CHARS.map((c) => [c.hp, c.walk, c.jumpVx, c.dash, c.cd, c.glide, c.hurt, c.width, c.moves])) + JSON.stringify(MAPS.map((m) => [m.plats, m.spawn]));
   let h = 2166136261;
