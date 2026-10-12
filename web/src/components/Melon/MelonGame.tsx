@@ -614,6 +614,7 @@ export default function MelonGame() {
           en="Melon"
           accent="#7ED957"
           desc="합이 10·20이 되게 묶어 터뜨리는 2분 타임어택"
+          tags={["랭킹모드", "숫자 퍼즐", "웹 퍼즐게임"]}
           guide={MELON_GUIDE}
           rank={{
             top: ranks

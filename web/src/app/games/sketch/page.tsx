@@ -19,6 +19,7 @@ function SketchPage() {
           en="Sketch Quiz"
           accent="#FF6B6B"
           desc="한 명이 그리고 나머지가 맞히는 실시간 그림 퀴즈"
+          tags={["최대 8명", "초대 링크", "온라인 그림 맞히기"]}
           guide={SKETCH_GUIDE}
           scroll={!inRoom}
         />

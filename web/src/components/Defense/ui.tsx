@@ -16,7 +16,7 @@ import { getPrefs, onPrefs, setPrefs, sfx, type AudioPrefs } from "./audio";
 /* PIXEL GLITCH DEFENSE 공용 UI 조각 (무대 1024×576 안에서 쓰는 크기) — 도트 규칙은 css/defense.css */
 
 export const TITLE = "px-title";
-export const GAME_NAME = "PIXEL GLITCH DEFENSE";
+export const GAME_NAME = "PIXEL LUCKY DEFENSE";
 
 type Tone = "ghost" | "main" | "gold" | "danger" | "cyan" | "knight" | "mech" | "arcane";
 /** 버튼 바탕 · 글자 · 마우스 올렸을 때 테두리 색 */

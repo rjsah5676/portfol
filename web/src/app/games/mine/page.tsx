@@ -363,6 +363,7 @@ export default function Minesweeper() {
         en="Minesweeper"
         accent="#F87171"
         desc="지뢰 99개 고급 난이도"
+        tags={["클리어 시간 랭킹", "모바일 지원", "웹 지뢰찾기"]}
         className="w-full max-w-[848px]"
         guide={MINE_GUIDE}
         rank={{

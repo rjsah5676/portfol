@@ -9,6 +9,7 @@ import imgFight from "@/img/menu/fight.jpg";
 import imgRhythm from "@/img/menu/rhythm.jpg";
 import imgSketch from "@/img/menu/sketch.jpg";
 import imgPoker from "@/img/menu/poker.jpg";
+import imgDefense from "@/img/menu/defense.jpg";
 import imgLadder from "@/img/menu/ladder.jpg";
 import imgRoulette from "@/img/menu/roulette.jpg";
 import imgCalorie from "@/img/menu/calorie.jpg";
@@ -102,12 +103,19 @@ export const NAV_GROUPS: NavGroup[] = [
         featured: true,
       },
       {
+        href: "/games/defense",
+        image: imgDefense,
+        label: "PIXEL LUCKY DEFENSE",
+        desc: "소환 · 합성으로 막는 운빨 랜덤 디펜스, 랭킹 · 멀티",
+        icon: "👾",
+        featured: true,
+      },
+      {
         href: "/games/sketch",
         image: imgSketch,
         label: "스케치 퀴즈",
         desc: "최대 8명, 한 명이 그리고 나머지가 맞히기",
         icon: "🎨",
-        featured: true,
       },
       {
         href: "/games/melongame",

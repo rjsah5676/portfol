@@ -10,6 +10,7 @@ export const SHOT_KEYS = new Set([
   "games/rhythm",
   "games/fight",
   "games/poker",
+  "games/defense",
   "games/sketch",
   "games/melongame",
   "games/board",

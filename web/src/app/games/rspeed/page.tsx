@@ -170,6 +170,7 @@ export default function RspeedPage() {
       en="Reaction"
       accent="#60A5FA"
       desc="파란색이 되는 순간 클릭, 5회 평균"
+      tags={["랭킹모드", "반응속도 측정"]}
       guide={REACTION_GUIDE}
       rank={{
         top: list

@@ -51,6 +51,7 @@ export default function GameHeader({
   title,
   en,
   desc,
+  tags,
   accent = "#8B84FF",
   guide,
   rank,
@@ -62,6 +63,8 @@ export default function GameHeader({
   title: string;
   en: string;
   desc: string;
+  /** 설명 뒤에 붙는 해시태그 ("#" 없이) */
+  tags?: string[];
   accent?: string;
   guide?: GuideDoc;
   rank?: RankSpec;
@@ -121,8 +124,13 @@ export default function GameHeader({
               {en}
             </span>
           </div>
-          <p className="truncate font-['Nanum_Gothic',sans-serif] text-xs text-white/45 sm:text-[13px]">
-            {desc}
+          <p className="flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5 font-['Nanum_Gothic',sans-serif] text-xs break-keep text-white/45 sm:text-[13px]">
+            <span>{desc}</span>
+            {tags?.map((t) => (
+              <span key={t} className="whitespace-nowrap opacity-80" style={{ color: accent }}>
+                #{t}
+              </span>
+            ))}
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-1.5">

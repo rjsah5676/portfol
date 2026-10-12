@@ -1108,7 +1108,8 @@ export default function RhythmGame() {
         title="BEAT DASH"
         en="Rhythm Game"
         accent="#EC4899"
-        desc="DFJK 4키 리듬게임 — 곡·난이도별 랭킹, 내 mp3도 자동 채보"
+        desc="DFJK 4키 리듬게임"
+        tags={["랭킹모드", "온라인모드", "mp3 자동 채보", "웹 리듬게임"]}
         guide={RHYTHM_GUIDE}
         rank={{
           top: bpTop?.slice(0, 3).map((r) => ({

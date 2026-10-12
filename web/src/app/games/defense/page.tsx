@@ -30,10 +30,11 @@ export default function DefensePage() {
       <div className="mx-auto max-w-5xl px-3 pt-6 pb-24 sm:px-6">
         <GameHeader
           icon="👾"
-          title="PIXEL GLITCH DEFENSE"
+          title="PIXEL LUCKY DEFENSE"
           en="PIXEL FIGHT 외전 · ALPHA"
           accent="#FF5CD6"
-          desc="버그에 먹히는 픽셀 세계를 지키는 랜덤 디펜스 — 소환 · 합성 · 조합식, 랭킹 · 멀티"
+          desc="소환 · 합성으로 픽셀 세계를 지키는 랜덤 디펜스"
+          tags={["운빨 디펜스", "랭킹모드", "멀티모드", "웹 디펜스 게임"]}
           rank={{
             sub: "최고 기록",
             open,
