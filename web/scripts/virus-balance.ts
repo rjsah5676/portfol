@@ -42,6 +42,15 @@ import {
   rootLeft,
   shopCost,
   applyPlan,
+  APEX_TIME,
+  apexData,
+  apexHp,
+  apexCount,
+  isApexStage,
+  MAX_STAGE,
+  FINAL_TIME,
+  finalHp,
+  finalData,
   optimalPlan,
   evoStage,
   EVOLUTION,
@@ -119,6 +128,7 @@ const stageAt: Record<number, number> = {};
 const slowStages: string[] = [];
 const runs: string[] = [];
 const evoAt: Record<number, number> = {};
+const apexAt: Record<number, number> = {};
 
 let overflow = "";
 
@@ -136,11 +146,18 @@ function spendRoot(sv: Save) {
   if (rootLeft(sv) < 0) throw new Error("루트 권한이 음수");
 }
 
+let apex = false;
+let fin = false;
+let finalAt = -1;
 function nextEnemy() {
   st = stats(s);
   boss = s.kills >= MOBS_PER_STAGE && farmLeft <= 0;
-  hp = boss ? bossHp(s.stage, st) : mobHp(s.stage, st);
-  left = BOSS_TIME;
+  // 스테이지 100 상위 보스까지 잡으면 최종 보스, 10스테이지마다 보스를 잡으면 상위 보스(보안 시스템)
+  fin = boss && s.finalReady;
+  apex = boss && s.bossDone && !fin;
+  hp = fin ? finalHp(st) : apex ? apexHp(s.stage, st) : boss ? bossHp(s.stage, st) : mobHp(s.stage, st);
+  const extra = st.bossTime - BOSS_TIME;
+  left = fin ? FINAL_TIME + extra : apex ? APEX_TIME + extra : st.bossTime;
 }
 
 while (t < HOURS * 3600) {
@@ -183,8 +200,37 @@ while (t < HOURS * 3600) {
   else if (farmLeft > 0) farmLeft -= DT;
 
   if (hp <= 0) {
-    if (boss) {
+    if (fin) {
+      // 최종 보스: 스테이지 100에 머물며 다시 파일부터
+      gainData(s, finalData(st));
+      if (finalAt < 0) finalAt = t;
+      s.clears++;
+      s.finalReady = false;
+      s.kills = 0;
+      fails = 0;
+    } else if (boss && apex && s.stage >= MAX_STAGE) {
+      // 마지막 상위 보스: 더 나아가지 않고 바로 최종 보스
+      gainData(s, apexData(s.stage, st));
+      if (s.stage > s.apexBest && apexAt[apexCount(s.stage)] == null) apexAt[apexCount(s.stage)] = t;
+      s.apexBest = Math.max(s.apexBest, s.stage);
+      if (s.formats === 0 && stageAt[MAX_STAGE] == null) stageAt[MAX_STAGE] = t;
+      s.bossDone = false;
+      s.finalReady = true;
+      s.best = Math.max(s.best, MAX_STAGE + 1);
+      fails = 0;
+    } else if (boss && !apex && isApexStage(s.stage)) {
+      // 보스는 잡았고 상위 보스가 남음 (스테이지는 그대로)
       gainData(s, bossData(s.stage, st));
+      s.bossDone = true;
+      fails = 0;
+    } else if (boss) {
+      gainData(s, apex ? apexData(s.stage, st) : bossData(s.stage, st));
+      if (apex) {
+        if (s.stage > s.apexBest && apexAt[apexCount(s.stage)] == null)
+          apexAt[apexCount(s.stage)] = t;
+        s.apexBest = Math.max(s.apexBest, s.stage);
+      }
+      s.bossDone = false;
       const took = t - stageStart;
       if (s.formats === 0 && stageAt[s.stage] == null) stageAt[s.stage] = t;
       if (took > 600)
@@ -251,4 +297,11 @@ console.log(
   "진화 처음 도달: " +
     EVOLUTION.map((e, i) => `${e.name} ${evoAt[i] == null ? "-" : fmtT(evoAt[i])}`).join(" · ")
 );
+console.log(
+  "상위 보스 처음 처치: " +
+    (Object.entries(apexAt)
+      .map(([n, at]) => `${n}번째 ${fmtT(at)}`)
+      .join(" · ") || "없음")
+);
+console.log(`최종 보스 처음 격퇴: ${finalAt < 0 ? "없음" : fmtT(finalAt)} (모두 ${s.clears}번)`);
 console.log(`루트 권한 상점: ${JSON.stringify(s.shop)} · 남은 포인트 ${rootLeft(s)}`);

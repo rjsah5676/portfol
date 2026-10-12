@@ -19,14 +19,20 @@ export const BAL = {
   /** 1스테이지 파일의 보안 등급(체력) */
   hp0: 4,
   /**
-   * 극초반 보정 — 첫 몇 스테이지만 체력을 낮추고 데이터를 더 줌 (스테이지마다 earlyDecay 배씩 사라짐, 15스테이지쯤 없음)
+   * 극초반 보정 — 첫 몇 스테이지만 체력을 낮추고 데이터를 더 줌 (스테이지마다 earlyDecay 배씩 사라짐, 40스테이지쯤 거의 없음 — 최적으로 하면 스테이지 30까지 약 5분)
    *   체력 ÷ (1 + earlyHp × earlyDecay^(스테이지-1)) · 데이터 × (1 + earlyData × earlyDecay^(스테이지-1))
    */
-  earlyHp: 3,
-  earlyData: 3,
-  earlyDecay: 0.75,
+  earlyHp: 10,
+  earlyData: 10,
+  earlyDecay: 0.9,
+  /** 상위 보스 체력 · 보상 = 같은 스테이지 보스의 몇 배 */
+  apexHp: 2,
+  apexData: 5,
+  /** 최종 보스 체력 · 보상 = 스테이지 100 상위 보스의 몇 배 */
+  finalHp: 3,
+  finalData: 10,
   /** 스테이지마다 체력 배율 */
-  hpGrowth: 1.17,
+  hpGrowth: 1.18,
   /** 보스 체력 = 같은 스테이지 파일의 몇 배 */
   bossHp: 10,
   /** 보상 = 체력 ÷ 이 값 */
@@ -49,9 +55,10 @@ export const BAL = {
   formatStage: 30,
   /** 루트 권한 합계 = ((최고 스테이지 - 1) ÷ rootDiv)^rootPow — 더 멀리 가야만 늘어남 */
   rootDiv: 10,
-  rootPow: 3,
+  /** hpGrowth 1.18 · 2.17제곱 · 3%: 항상 최적으로 해도 최종 보스까지 약 1시간 53분 (변이 5번), 스테이지 30까지는 약 5분 */
+  rootPow: 2.17,
   /** 루트 권한 1당 피해 +이 비율 */
-  rootBonus: 0.1,
+  rootBonus: 0.03,
   /** 모듈 버전 1당 배율 — 10스테이지마다 하나씩 오르므로 작게 (크면 성장이 폭주) */
   modDmg: 1.1,
   modSpd: 1.05,
@@ -78,8 +85,6 @@ export const BAL = {
   /** 루트 권한 상점 — 레벨마다 효과 · 가격 배율 (가격 = base × growth^레벨) */
   shopRootkit: 1.3,
   shopMiner: 1.3,
-  /** 골든 이미지: 포맷 직후 업그레이드마다 이만큼 레벨을 갖고 시작 */
-  shopGolden: 10,
   /** 폴리모픽 엔진: 랜덤 강화 3레벨 확률 +이만큼 (1레벨 확률에서 뺌) */
   shopPoly: 0.03,
 };
@@ -88,13 +93,19 @@ const x = (n: number) => `×${Number(n.toFixed(2))}`;
 
 export const MOBS_PER_STAGE = 10;
 export const BOSS_TIME = 30; // 초
+/** 상위 보스 (10스테이지마다 보스 다음에 나오는 보안 시스템) 제한 시간 */
+export const APEX_TIME = 45;
+/** 최종 보스 제한 시간 */
+export const FINAL_TIME = 60;
+/** 마지막 스테이지 — 여기 상위 보스를 잡으면 최종 보스가 나오고, 더 나아가지 않음 */
+export const MAX_STAGE = 100;
 export const SAVE_KEY = "virus-idle-v3";
 /** 발사한 코드가 적에게 닿기까지 (ms) — 닿는 순간 피해 */
 export const SHOT_MS = 380;
 
 export type UpgKey = "atk" | "spd" | "crit";
 export type ShopKey =
-  "rootkit" | "miner" | "golden" | "poly" | "profiler" | "cron" | "daemon" | "kprof";
+  "rootkit" | "miner" | "poly" | "profiler" | "cron" | "daemon" | "kprof";
 
 export interface Save {
   v: 3;
@@ -111,6 +122,14 @@ export interface Save {
   lv: Record<UpgKey, number>;
   /** 보스에게 져서 파일만 감염시키는 중 (재도전 버튼을 눌러야 보스가 다시 나옴) */
   bossFail: boolean;
+  /** 이 스테이지(10의 배수)의 보스는 잡았고 상위 보스가 남음 */
+  bossDone: boolean;
+  /** 스테이지 100 상위 보스까지 잡았고 최종 보스가 남음 */
+  finalReady: boolean;
+  /** 최종 보스를 잡은 횟수 (변이해도 유지) */
+  clears: number;
+  /** 상위 보스를 처음 잡은 가장 높은 스테이지 (포맷해도 유지) — 특성 · 외형은 이걸로 정해짐 */
+  apexBest: number;
   /** 받은 루트 권한 (합계 — 피해 보너스는 이걸로, 상점에 써도 줄지 않음) */
   root: number;
   /** 루트 권한 상점에 쓴 양 (남은 포인트 = root - rootSpent) */
@@ -134,9 +153,13 @@ export function newSave(): Save {
     kills: 0,
     lv: { atk: 0, spd: 0, crit: 0 },
     bossFail: false,
+    bossDone: false,
+    finalReady: false,
+    clears: 0,
+    apexBest: 0,
     root: 0,
     rootSpent: 0,
-    shop: { rootkit: 0, miner: 0, golden: 0, poly: 0, profiler: 0, cron: 0, daemon: 0, kprof: 0 },
+    shop: { rootkit: 0, miner: 0, poly: 0, profiler: 0, cron: 0, daemon: 0, kprof: 0 },
     auto: false,
     formats: 0,
     savedAt: Date.now(),
@@ -150,8 +173,19 @@ export function parseSave(raw: string | null): Save {
     if (s?.v !== 3 || !(s.stage >= 1) || !s.lv) return newSave();
     const lv = newSave().lv;
     for (const k of Object.keys(lv) as UpgKey[]) if (s.lv[k] >= 0) lv[k] = s.lv[k];
-    const shop = { ...newSave().shop, ...(s.shop ?? {}) };
-    return { ...newSave(), ...s, lv, shop, best: Math.max(s.best || 1, s.stage) };
+    const old = (s.shop ?? {}) as Partial<Record<string, number>>;
+    const shop = newSave().shop;
+    for (const k of Object.keys(shop) as ShopKey[]) if ((old[k] ?? 0) > 0) shop[k] = old[k]!;
+    // 없어진 골든 이미지(기본 60 · ×1.8)에 쓴 루트 권한은 돌려줌
+    let refund = 0;
+    for (let i = 0; i < (old.golden ?? 0); i++) refund += Math.ceil(60 * 1.8 ** i);
+    const rootSpent = Math.max(0, (s.rootSpent ?? 0) - refund);
+    // stage cap: older saves past MAX_STAGE come back to stage MAX_STAGE (best 101 = cleared MAX_STAGE)
+    const stage = Math.min(s.stage, MAX_STAGE);
+    const best = Math.min(Math.max(s.best || 1, s.stage), MAX_STAGE + 1);
+    const apexBest = Math.min(s.apexBest || 0, MAX_STAGE);
+    const finalReady = s.stage > MAX_STAGE || !!s.finalReady;
+    return { ...newSave(), ...s, lv, shop, rootSpent, stage, best, apexBest, finalReady, kills: s.stage > MAX_STAGE ? 0 : s.kills };
   } catch {
     return newSave();
   }
@@ -169,8 +203,8 @@ export interface VirusDef {
   /** 빼앗는 모듈 이름과 버전(레벨)당 효과 설명 */
   module: string;
   effect: string;
-  /** 버전마다 덜 오르는 모듈은 지금 값 (예: "효율 54% · 최대 9.9시간") */
-  cur?: (v: number) => string;
+  /** 지금 버전까지 쌓인 효과 (예: "페이로드 피해 ×1.33") — effect 는 버전마다 붙는 양 */
+  cur: (v: number) => string;
   /** 도감 설명 (실제 사건 요약) */
   desc: string;
 }
@@ -183,6 +217,7 @@ export const ROSTER: VirusDef[] = [
     color: "#7dd3fc",
     module: "부트 섹터 장악",
     effect: `일반 파일 보안 등급 ${x(BAL.modMobHp)}`,
+    cur: (v) => `일반 파일 보안 등급 ${x(BAL.modMobHp ** v)}`,
     desc: "IBM PC에서 처음으로 널리 퍼진 바이러스로 알려져 있어요. 파키스탄의 두 형제가 만들었고, 플로피 디스크의 부트 섹터를 감염시켰어요.",
   },
   {
@@ -192,6 +227,7 @@ export const ROSTER: VirusDef[] = [
     color: "#a78bfa",
     module: "자가 복제",
     effect: `발사 속도 ${x(BAL.modSpd)}`,
+    cur: (v) => `발사 속도 ${x(BAL.modSpd ** v)}`,
     desc: "대학원생 로버트 모리스가 퍼뜨린 초기 인터넷 웜이에요. 스스로 복제하다 통제를 벗어나, 당시 인터넷에 연결된 컴퓨터 상당수를 마비시켰어요.",
   },
   {
@@ -201,6 +237,7 @@ export const ROSTER: VirusDef[] = [
     color: "#f472b6",
     module: "러브레터 미끼",
     effect: `데이터 탈취 ${x(BAL.modData)}`,
+    cur: (v) => `데이터 탈취 ${x(BAL.modData ** v)}`,
     desc: "필리핀에서 시작된 이메일 웜이에요. 'LOVE-LETTER-FOR-YOU' 첨부 파일을 열면 주소록 전체로 자신을 보내, 며칠 만에 전 세계 수천만 대를 감염시켰어요.",
   },
   {
@@ -210,6 +247,7 @@ export const ROSTER: VirusDef[] = [
     color: "#f87171",
     module: "BIOS 덮어쓰기",
     effect: `페이로드 피해 ${x(BAL.modDmg)}`,
+    cur: (v) => `페이로드 피해 ${x(BAL.modDmg ** v)}`,
     desc: "대만에서 만들어진 바이러스로, 일부 변종이 체르노빌 사고일인 4월 26일에 발동해 '체르노빌 바이러스'라고 불려요. 하드디스크를 덮어쓰고 일부 PC의 BIOS까지 지웠어요.",
   },
   {
@@ -219,6 +257,7 @@ export const ROSTER: VirusDef[] = [
     color: "#34d399",
     module: "매크로 자동화",
     effect: `업그레이드 비용 ${x(BAL.modCost)}`,
+    cur: (v) => `업그레이드 비용 ${x(BAL.modCost ** v)}`,
     desc: "워드 문서 매크로에 숨어 있던 바이러스예요. 문서를 열면 아웃룩 주소록의 처음 50명에게 자신을 메일로 보내, 여러 회사의 메일 서버를 멈추게 했어요.",
   },
   {
@@ -238,6 +277,7 @@ export const ROSTER: VirusDef[] = [
     color: "#94a3b8",
     module: "탐지 우회",
     effect: `보스 보안 등급 ${x(BAL.modBossHp)}`,
+    cur: (v) => `보스 보안 등급 ${x(BAL.modBossHp ** v)}`,
     desc: "이란 핵시설의 원심분리기를 제어하는 PLC를 노린 웜이에요. 여러 개의 제로데이 취약점을 동시에 쓰고, 들키지 않게 정상 값을 보여 주며 장비를 망가뜨렸어요.",
   },
   {
@@ -257,6 +297,7 @@ export const ROSTER: VirusDef[] = [
     color: "#ef4444",
     module: "암호화 폭주",
     effect: "익스플로잇 피해 +0.5",
+    cur: (v) => `익스플로잇 피해 +${(0.5 * v).toFixed(1)}`,
     desc: "파일을 암호화하고 비트코인을 요구한 랜섬웨어예요. 이터널블루 취약점으로 스스로 퍼져 150여 개국의 병원·기업 컴퓨터를 멈췄어요.",
   },
   {
@@ -266,9 +307,156 @@ export const ROSTER: VirusDef[] = [
     color: "#facc15",
     module: "DDoS 봇넷",
     effect: `보스에게 주는 피해 ${x(BAL.modBossDmg)}`,
+    cur: (v) => `보스에게 주는 피해 ${x(BAL.modBossDmg ** v)}`,
     desc: "가장 빠르게 퍼진 이메일 웜 중 하나로 꼽혀요. 감염된 PC들을 동원해 특정 웹사이트에 DDoS 공격을 퍼부었어요.",
   },
 ];
+
+// ── 상위 보스 (보안 시스템) ──
+// 10스테이지마다 그 스테이지 보스를 잡으면 그 네트워크를 지키는 보안 시스템이 나옴. 처음 잡으면 영구 특성 + 내 바이러스 외형 변화.
+
+export interface ApexDef {
+  id: string;
+  name: string;
+  /** 무엇을 하는 보안 시스템인지 */
+  role: string;
+  icon: string;
+  color: string;
+  /** 빼앗는 특성 이름과 효과 (한 번만) */
+  trait: string;
+  effect: string;
+  /** 내 바이러스에 생기는 모양 */
+  look: string;
+}
+
+export const APEX: ApexDef[] = [
+  {
+    id: "sentinel",
+    name: "Sentinel",
+    role: "백신 엔진",
+    icon: "🛡️",
+    color: "#38bdf8",
+    trait: "서명 위조",
+    effect: "일반 파일 보안 등급 ×0.85",
+    look: "회로 링",
+  },
+  {
+    id: "bastion",
+    name: "Bastion",
+    role: "방화벽",
+    icon: "🧱",
+    color: "#f97316",
+    trait: "포트 스캔",
+    effect: "발사 속도 ×1.15",
+    look: "안테나 한 쌍",
+  },
+  {
+    id: "argus",
+    name: "Argus",
+    role: "침입 탐지 시스템",
+    icon: "👁️",
+    color: "#a3e635",
+    trait: "로그 삭제",
+    effect: "보스 제한 시간 +5초",
+    look: "반투명 외피",
+  },
+  {
+    id: "hydra",
+    name: "Hydra",
+    role: "스팸 필터",
+    icon: "🐍",
+    color: "#22d3ee",
+    trait: "스팸 폭탄",
+    effect: "데이터 탈취 ×1.5",
+    look: "촉수 3개",
+  },
+  {
+    id: "warden",
+    name: "Warden",
+    role: "샌드박스",
+    icon: "⛓️",
+    color: "#e879f9",
+    trait: "샌드박스 탈출",
+    effect: "익스플로잇 피해 +1",
+    look: "결정 가시",
+  },
+  {
+    id: "soc",
+    name: "SOC",
+    role: "보안 관제 센터",
+    icon: "🏛️",
+    color: "#facc15",
+    trait: "관제 우회",
+    effect: "보스 · 상위 보스 보안 등급 ×0.85",
+    look: "왕관",
+  },
+  {
+    id: "tracker",
+    name: "Tracker",
+    role: "EDR 추적기",
+    icon: "🔍",
+    color: "#fb7185",
+    trait: "프로세스 은닉",
+    effect: "오프라인 효율 +15%p",
+    look: "잔상",
+  },
+  {
+    id: "mimic",
+    name: "Mimic",
+    role: "허니팟",
+    icon: "🍯",
+    color: "#fbbf24",
+    trait: "미끼 역이용",
+    effect: "루트 권한 획득 ×1.25",
+    look: "날개",
+  },
+  {
+    id: "leviathan",
+    name: "Leviathan",
+    role: "심층 패킷 검사",
+    icon: "🌊",
+    color: "#60a5fa",
+    trait: "암호화 터널",
+    effect: "피해 ×1.5",
+    look: "이중 궤도 링",
+  },
+  {
+    id: "oracle",
+    name: "Oracle",
+    role: "AI 보안 시스템",
+    icon: "🔮",
+    color: "#c084fc",
+    trait: "자가 학습",
+    effect: "업그레이드 비용 ×0.85",
+    look: "오라 · 세 번째 눈",
+  },
+];
+
+/** 상위 보스가 나오는 스테이지인지 (10의 배수) */
+export function isApexStage(stage: number) {
+  return stage % 10 === 0;
+}
+
+/** 이 스테이지의 상위 보스 (몇 바퀴째인지 tier 1부터) */
+export function apexOf(stage: number) {
+  const n = stage / 10 - 1;
+  const i = ((n % APEX.length) + APEX.length) % APEX.length;
+  return { def: APEX[i], index: i, tier: Math.floor(n / APEX.length) + 1 };
+}
+
+/** 지금까지 처음 잡은 상위 보스 수 (0~10) — 그만큼 특성 · 외형이 열림 */
+export function apexCount(apexBest: number) {
+  return Math.min(APEX.length, Math.floor(apexBest / 10));
+}
+
+/** 최종 보스: 인터넷 전체를 끊어 버리는 마지막 차단 스위치 */
+export const FINAL = {
+  id: "killswitch",
+  name: "KILLSWITCH",
+  role: "글로벌 차단 스위치",
+  icon: "☢️",
+  color: "#f43f5e",
+} as const;
 
 /** 이 스테이지의 보스 (몇 바퀴째인지 tier 1부터) */
 export function bossOf(stage: number) {
@@ -323,6 +511,10 @@ export interface Stats {
   bossDmgMul: number;
   /** 루트 권한으로 받는 피해 배율 */
   rootMul: number;
+  /** 보스 제한 시간 (상위 보스는 여기에 +15초) */
+  bossTime: number;
+  /** 루트 권한 받는 양 배율 */
+  rootGain: number;
   offlineRate: number;
   offlineHours: number;
 }
@@ -340,24 +532,33 @@ export function modCritOf(v: number) {
 
 export function stats(s: Save): Stats {
   const m = moduleLevels(s.best);
+  // 상위 보스 특성 (처음 잡은 순서대로 열림)
+  const ac = apexCount(s.apexBest);
+  const has = (i: number) => ac > i;
   const rootMul = 1 + BAL.rootBonus * s.root;
   const atk =
     BAL.atkStep ** s.lv.atk * BAL.atkMilestoneMul ** Math.floor(s.lv.atk / BAL.atkMilestone);
   return {
-    dmg: atk * BAL.modDmg ** m[3] * rootMul * BAL.shopRootkit ** s.shop.rootkit,
-    aps: (1 + (BAL.spdMax - 1) * (1 - BAL.spdK ** s.lv.spd)) * BAL.modSpd ** m[1],
+    dmg:
+      atk * BAL.modDmg ** m[3] * rootMul * BAL.shopRootkit ** s.shop.rootkit * (has(8) ? 1.5 : 1),
+    aps:
+      (1 + (BAL.spdMax - 1) * (1 - BAL.spdK ** s.lv.spd)) *
+      BAL.modSpd ** m[1] *
+      (has(1) ? 1.15 : 1),
     critChance: Math.min(
       0.9,
       0.05 + (BAL.critMax - 0.05) * (1 - BAL.critK ** s.lv.crit) + modCritOf(m[7])
     ),
-    critMul: 2 + BAL.critMulStep * s.lv.crit + 0.5 * m[8],
-    dataMul: BAL.modData ** m[2] * BAL.shopMiner ** s.shop.miner,
-    costMul: BAL.modCost ** m[4],
-    mobHpMul: BAL.modMobHp ** m[0],
-    bossHpMul: BAL.modBossHp ** m[6],
+    critMul: 2 + BAL.critMulStep * s.lv.crit + 0.5 * m[8] + (has(4) ? 1 : 0),
+    dataMul: BAL.modData ** m[2] * BAL.shopMiner ** s.shop.miner * (has(3) ? 1.5 : 1),
+    costMul: BAL.modCost ** m[4] * (has(9) ? 0.85 : 1),
+    mobHpMul: BAL.modMobHp ** m[0] * (has(0) ? 0.85 : 1),
+    bossHpMul: BAL.modBossHp ** m[6] * (has(5) ? 0.85 : 1),
+    bossTime: BOSS_TIME + (has(2) ? 5 : 0),
+    rootGain: has(7) ? 1.25 : 1,
     bossDmgMul: BAL.modBossDmg ** m[9],
     rootMul,
-    offlineRate: offlineRateOf(m[5]),
+    offlineRate: offlineRateOf(m[5]) + (has(6) ? 0.15 : 0),
     offlineHours: BAL.offHours,
   };
 }
@@ -391,6 +592,20 @@ export function mobData(stage: number, st: Stats) {
 }
 export function bossData(stage: number, st: Stats) {
   return mobData(stage, st) * BAL.bossData;
+}
+/** 상위 보스: 같은 스테이지 보스의 apexHp 배 체력 · apexData 배 보상 */
+export function apexHp(stage: number, st: Stats) {
+  return bossHp(stage, st) * BAL.apexHp;
+}
+export function apexData(stage: number, st: Stats) {
+  return bossData(stage, st) * BAL.apexData;
+}
+/** 최종 보스: 스테이지 100 상위 보스의 finalHp 배 체력 · finalData 배 보상 */
+export function finalHp(st: Stats) {
+  return apexHp(MAX_STAGE, st) * BAL.finalHp;
+}
+export function finalData(st: Stats) {
+  return apexData(MAX_STAGE, st) * BAL.finalData;
 }
 
 /** 데이터를 얻음 (누적 합계도 같이) */
@@ -548,7 +763,7 @@ export function rootTotal(best: number) {
 
 /** 지금 포맷하면 새로 받는 루트 권한 (전보다 더 멀리 가야 생김) */
 export function pendingRoot(s: Save) {
-  return Math.max(0, rootTotal(s.best) - s.root);
+  return Math.max(0, Math.floor(rootTotal(s.best) * stats(s).rootGain) - s.root);
 }
 
 /** 포맷할 수 있는지 (이번 회차에 formatStage 이상 + 받을 루트 권한이 있음) */
@@ -556,18 +771,24 @@ export function canFormat(s: Save) {
   return s.stage >= BAL.formatStage && pendingRoot(s) > 0;
 }
 
-/** 포맷: 스테이지·업그레이드·데이터는 처음으로, 루트 권한·상점·모듈·누적 기록은 유지 (골든 이미지만큼 레벨을 갖고 시작) */
+/** 포맷 뒤 시작 스테이지: 최고 스테이지의 절반을 10 단위로 내리고 +1 (예: 68 → 31, 30 → 11) */
+export function formatStart(best: number) {
+  return Math.floor(best / 2 / 10) * 10 + 1;
+}
+
+/** 포맷: 업그레이드·데이터는 처음으로, 스테이지는 formatStart 부터. 루트 권한·상점·모듈·누적 기록은 유지 */
 export function format(s: Save): Save {
-  const g = s.shop.golden * BAL.shopGolden;
   return {
     ...newSave(),
+    stage: formatStart(s.best),
     lifetime: s.lifetime,
     best: s.best,
+    apexBest: s.apexBest,
+    clears: s.clears,
     root: s.root + pendingRoot(s),
     rootSpent: s.rootSpent,
     shop: { ...s.shop },
     auto: s.auto,
-    lv: { atk: g, spd: g, crit: g },
     formats: s.formats + 1,
   };
 }
@@ -583,6 +804,8 @@ export interface ShopDef {
   max?: number;
   /** 이 상품을 먼저 사야 열림 */
   req?: ShopKey;
+  /** 효율 강화(power) · 편의성(util) */
+  group: "power" | "util";
   desc: string;
   /** 지금 레벨의 효과 */
   label: (lv: number) => string;
@@ -591,6 +814,7 @@ export interface ShopDef {
 export const SHOP: ShopDef[] = [
   {
     key: "rootkit",
+    group: "power",
     name: "루트킷",
     icon: "🦠",
     base: 25,
@@ -600,6 +824,7 @@ export const SHOP: ShopDef[] = [
   },
   {
     key: "miner",
+    group: "power",
     name: "데이터 마이닝",
     icon: "⛏️",
     base: 25,
@@ -608,17 +833,8 @@ export const SHOP: ShopDef[] = [
     label: (lv) => `데이터 ×${fmt(BAL.shopMiner ** lv)}`,
   },
   {
-    key: "golden",
-    name: "골든 이미지",
-    icon: "💿",
-    base: 60,
-    growth: 1.8,
-    max: 10,
-    desc: "미리 만들어 둔 시스템 이미지로 포맷 직후부터 강하게",
-    label: (lv) => `포맷 뒤 업그레이드마다 Lv.${lv * BAL.shopGolden}로 시작`,
-  },
-  {
     key: "poly",
+    group: "power",
     name: "폴리모픽 엔진",
     icon: "🧬",
     base: 40,
@@ -629,6 +845,7 @@ export const SHOP: ShopDef[] = [
   },
   {
     key: "profiler",
+    group: "util",
     name: "프로파일러",
     icon: "📊",
     base: 40,
@@ -639,6 +856,7 @@ export const SHOP: ShopDef[] = [
   },
   {
     key: "cron",
+    group: "util",
     name: "크론잡",
     icon: "⏱️",
     base: 60,
@@ -650,6 +868,7 @@ export const SHOP: ShopDef[] = [
   },
   {
     key: "daemon",
+    group: "util",
     name: "크론 데몬",
     icon: "🔁",
     base: 150,
@@ -661,6 +880,7 @@ export const SHOP: ShopDef[] = [
   },
   {
     key: "kprof",
+    group: "util",
     name: "커널 프로파일러",
     icon: "🧠",
     base: 300,

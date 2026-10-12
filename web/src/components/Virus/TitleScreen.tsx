@@ -182,7 +182,7 @@ export default function TitleScreen({
       )}
 
       <div className="absolute right-4 bottom-2 font-mono vt-xs text-white/70">
-        v0.2 · {entered ? "↑ ↓ 이동 · Enter 선택" : "VIRUS IDLE"}
+        v0.3 · {entered ? "↑ ↓ 이동 · Enter 선택" : "VIRUS IDLE"}
       </div>
     </div>
   );

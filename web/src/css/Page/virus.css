@@ -7,6 +7,38 @@
   animation: virus-float 0.8s ease-out forwards;
   pointer-events: none;
 }
+/* 격퇴 알림: 오른쪽에서 들어와 잠깐 머물다 사라짐 (길이는 style 의 animation-duration) */
+.vg-toast {
+  animation: vg-toast 4.5s ease-out forwards;
+}
+@keyframes vg-toast {
+  0% {
+    opacity: 0;
+    transform: translateX(24px);
+  }
+  6%,
+  85% {
+    opacity: 1;
+    transform: none;
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(12px);
+  }
+}
+.virus-calm .vg-toast {
+  animation-name: vg-toast-calm;
+}
+@keyframes vg-toast-calm {
+  0%,
+  90% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
 .virus-pop {
   animation: virus-pop 0.35s ease-out;
 }

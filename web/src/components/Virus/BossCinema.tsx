@@ -14,6 +14,10 @@ export interface Cinema {
   seed: string;
   color: string;
   name: string;
+  /** 상위 보스(보안 시스템)면 그 번호 (APEX) */
+  apex?: number;
+  /** 최종 보스 */
+  final?: boolean;
   /** performance.now() 기준으로 끝나는 시각 */
   until: number;
 }
@@ -31,10 +35,13 @@ export default function BossCinema({ c }: { c: Cinema }) {
             style={{ boxShadow: `0 0 24px ${c.color}66` }}
           >
             <div className="virus-blink font-mono vt-base font-black tracking-[0.3em] text-rose-400 sm:text-base">
-              ⚠ WARNING · 침입 감지
+              {c.final ? "☢ 최종 방어선 가동" : c.apex != null ? "⚠ 상위 보안 시스템 가동" : "⚠ WARNING · 침입 감지"}
             </div>
             <div className="mt-0.5 vt-sm text-white/80 sm:text-sm">
-              이 네트워크를 장악한 바이러스 · <b style={{ color: c.color }}>{c.name}</b>
+              {c.apex != null
+                ? "이 네트워크를 지키는 보안 시스템 · "
+                : "이 네트워크를 장악한 바이러스 · "}
+              <b style={{ color: c.color }}>{c.name}</b>
             </div>
           </div>
         </div>

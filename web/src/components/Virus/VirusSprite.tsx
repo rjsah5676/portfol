@@ -245,9 +245,12 @@ export function MyVirusSprite({
   aps = 1,
   size = 140,
   firing = false,
+  parts = [],
 }: {
   color: string;
   lv: { atk: number; spd: number; crit: number };
+  /** 상위 보스를 처음 잡을 때마다 하나씩 붙는 외형 (그 보스 색, 0~10개) */
+  parts?: string[];
   /** 진화 단계 (0~3) */
   stage: number;
   /** 모듈 10칸: 빼앗았으면 그 보스 색, 아니면 null */
@@ -285,6 +288,94 @@ export function MyVirusSprite({
       style={{ filter: `drop-shadow(0 0 ${firing ? 14 : 8}px ${color}${firing ? "aa" : "55"})` }}
       aria-hidden
     >
+      {/* ── 상위 보스 외형 (뒤쪽) ── */}
+      {/* 10 Oracle: 오라 */}
+      {parts[9] && (
+        <>
+          <circle cx={C} cy={C} r={57} fill={parts[9]} opacity={0.08} />
+          <circle
+            cx={C}
+            cy={C}
+            r={57}
+            fill="none"
+            stroke={parts[9]}
+            strokeOpacity={0.5}
+            strokeWidth={1}
+            strokeDasharray="1 4"
+          />
+        </>
+      )}
+      {/* 8 Mimic: 날개 */}
+      {parts[7] &&
+        [1, -1].map((d) => (
+          <path
+            key={d}
+            d={`M${C - d * (R - 2)} ${C - 6} C${C - d * (R + 14)} ${C - 30}, ${C - d * (R + 30)} ${C - 22}, ${C - d * (R + 26)} ${C + 2} C${C - d * (R + 20)} ${C - 2}, ${C - d * (R + 12)} ${C + 8}, ${C - d * (R - 2)} ${C + 6} Z`}
+            fill={parts[7]}
+            fillOpacity={0.35}
+            stroke={parts[7]}
+            strokeWidth={1.5}
+            strokeLinejoin="round"
+          />
+        ))}
+      {/* 4 Hydra: 촉수 3개 */}
+      {parts[3] &&
+        [-9, 0, 9].map((dx, i) => (
+          <path
+            key={dx}
+            d={`M${C + dx} ${C + R - 3} q${i - 1 ? 6 : -6} 9 0 16 t${i - 1 ? -2 : 2} 12`}
+            fill="none"
+            stroke={parts[3]}
+            strokeWidth={3}
+            strokeLinecap="round"
+          />
+        ))}
+      {/* 3 Argus: 반투명 외피 */}
+      {parts[2] && (
+        <circle
+          cx={C}
+          cy={C}
+          r={R + spikeLen + 2}
+          fill={parts[2]}
+          fillOpacity={0.07}
+          stroke={parts[2]}
+          strokeOpacity={0.45}
+          strokeWidth={1.2}
+        />
+      )}
+      {/* 7 Tracker: 잔상 */}
+      {parts[6] &&
+        [
+          [-7, 4],
+          [7, -4],
+        ].map(([dx, dy]) => (
+          <circle
+            key={dx}
+            cx={C + dx}
+            cy={C + dy}
+            r={R}
+            fill="none"
+            stroke={parts[6]}
+            strokeOpacity={0.35}
+            strokeWidth={2}
+          />
+        ))}
+      {/* 9 Leviathan: 이중 궤도 링 */}
+      {parts[8] &&
+        [-28, 28].map((deg) => (
+          <ellipse
+            key={deg}
+            cx={C}
+            cy={C}
+            rx={R + spikeLen + 12}
+            ry={9}
+            fill="none"
+            stroke={parts[8]}
+            strokeOpacity={0.7}
+            strokeWidth={1.4}
+            transform={`rotate(${deg} ${C} ${C})`}
+          />
+        ))}
       {/* 기운 (2단계부터) */}
       {stage >= 1 && (
         <circle cx={C} cy={C} r={R + spikeLen + 10} fill={color} opacity={0.05 + stage * 0.03} />
@@ -374,6 +465,80 @@ export function MyVirusSprite({
       {/* 눈 */}
       <rect x={C - 7} y={C - 4} width={4} height={5} rx={1} fill="#ecfdf5" />
       <rect x={C + 3} y={C - 4} width={4} height={5} rx={1} fill="#ecfdf5" />
+      {/* ── 상위 보스 외형 (앞쪽) ── */}
+      {/* 1 Sentinel: 회로 링 */}
+      {parts[0] && (
+        <g>
+          <circle
+            cx={C}
+            cy={C}
+            r={R + 5}
+            fill="none"
+            stroke={parts[0]}
+            strokeWidth={1}
+            strokeOpacity={0.8}
+          />
+          {Array.from({ length: 8 }, (_, i) => {
+            const a = (i / 8) * Math.PI * 2 + Math.PI / 8;
+            const x1 = r2(C + Math.cos(a) * (R + 5));
+            const y1 = r2(C + Math.sin(a) * (R + 5));
+            const x2 = r2(C + Math.cos(a) * (R + 11));
+            const y2 = r2(C + Math.sin(a) * (R + 11));
+            return (
+              <g key={i}>
+                <line x1={x1} y1={y1} x2={x2} y2={y2} stroke={parts[0]} strokeWidth={1} />
+                <rect x={x2 - 1.5} y={y2 - 1.5} width={3} height={3} fill={parts[0]} />
+              </g>
+            );
+          })}
+        </g>
+      )}
+      {/* 5 Warden: 결정 가시 */}
+      {parts[4] &&
+        Array.from({ length: 6 }, (_, i) => {
+          const a = (i / 6) * Math.PI * 2 - Math.PI / 2 + Math.PI / 6;
+          const x = r2(C + Math.cos(a) * (R + spikeLen * 0.6 + 3));
+          const y = r2(C + Math.sin(a) * (R + spikeLen * 0.6 + 3));
+          return (
+            <polygon
+              key={i}
+              points={`${x},${y - 5} ${x + 3},${y} ${x},${y + 5} ${x - 3},${y}`}
+              fill={parts[4]}
+              stroke="#fff"
+              strokeOpacity={0.6}
+              strokeWidth={0.6}
+              transform={`rotate(${r2((a * 180) / Math.PI + 90)} ${x} ${y})`}
+            />
+          );
+        })}
+      {/* 2 Bastion: 안테나 한 쌍 */}
+      {parts[1] &&
+        [1, -1].map((d) => (
+          <g key={d}>
+            <line
+              x1={C + d * 7}
+              y1={C - R + 3}
+              x2={C + d * 19}
+              y2={C - R - 15}
+              stroke={parts[1]}
+              strokeWidth={2}
+              strokeLinecap="round"
+            />
+            <circle cx={C + d * 19} cy={C - R - 15} r={3} fill={parts[1]} />
+          </g>
+        ))}
+      {/* 6 SOC: 왕관 */}
+      {parts[5] && (
+        <polygon
+          points={`${C - 11},${C - R + 2} ${C - 12},${C - R - 10} ${C - 6},${C - R - 4} ${C},${C - R - 14} ${C + 6},${C - R - 4} ${C + 12},${C - R - 10} ${C + 11},${C - R + 2}`}
+          fill={parts[5]}
+          stroke="#020604"
+          strokeWidth={1}
+          strokeLinejoin="round"
+        />
+      )}
+      {/* 10 Oracle: 세 번째 눈 */}
+      {parts[9] && <rect x={C - 2} y={C - 12} width={4} height={5} rx={1} fill={parts[9]} />}
       {/* 빼앗은 모듈: 몸 둘레 코드 조각 */}
       {mods.map((m, i) => {
         if (!m) return null;
@@ -394,6 +559,144 @@ export function MyVirusSprite({
           />
         );
       })}
+    </svg>
+  );
+}
+
+/** 상위 보스 (보안 시스템): 방패 + 큰 감시 눈. index 로 위쪽 문장 · 양옆 날개 모양이 달라짐 */
+export function ApexSprite({
+  index,
+  color,
+  size = 160,
+  hit = false,
+}: {
+  index: number;
+  color: string;
+  size?: number;
+  hit?: boolean;
+}) {
+  const fins = index % 3;
+  const emblem = (() => {
+    const s = { stroke: color, strokeWidth: 2, fill: "none", strokeLinecap: "round" as const };
+    switch (index) {
+      case 0: // 십자 (백신)
+        return <path d="M60 18v14M53 25h14" {...s} />;
+      case 1: // 벽돌 (방화벽)
+        return <path d="M50 20h20M50 26h20M50 32h20M57 20v6M63 26v6" {...s} strokeWidth={1.4} />;
+      case 2: // 작은 눈 (탐지)
+        return <ellipse cx={60} cy={26} rx={8} ry={4} {...s} />;
+      case 3: // 뱀 (필터)
+        return <path d="M52 20q8 0 8 6t8 6" {...s} />;
+      case 4: // 사슬 (샌드박스)
+        return (
+          <>
+            <ellipse cx={55} cy={26} rx={4} ry={3} {...s} />
+            <ellipse cx={63} cy={26} rx={4} ry={3} {...s} />
+          </>
+        );
+      case 5: // 기둥 (관제)
+        return <path d="M51 32h18M53 32V22M60 32V22M67 32V22M50 21h20" {...s} strokeWidth={1.6} />;
+      case 6: // 돋보기 (추적)
+        return (
+          <>
+            <circle cx={58} cy={24} r={5} {...s} />
+            <path d="M62 28l5 5" {...s} />
+          </>
+        );
+      case 7: // 벌집 (허니팟)
+        return <polygon points="60,18 66,22 66,29 60,33 54,29 54,22" {...s} />;
+      case 8: // 물결 (패킷 검사)
+        return <path d="M50 24q5-5 10 0t10 0M50 30q5-5 10 0t10 0" {...s} strokeWidth={1.6} />;
+      case 10: // 방사능 (최종 보스)
+        return (
+          <>
+            <circle cx={60} cy={25} r={2.5} fill={color} />
+            <path d="M60 22a8 8 0 0 0-6.9 4M60 22a8 8 0 0 1 6.9 4M53.5 29.5a8 8 0 0 0 13 0" {...s} strokeWidth={3} />
+          </>
+        );
+      default: // 별 (AI)
+        return (
+          <polygon
+            points="60,17 62.5,23 69,23 64,27 66,33 60,29.5 54,33 56,27 51,23 57.5,23"
+            {...s}
+            strokeWidth={1.4}
+          />
+        );
+    }
+  })();
+  return (
+    <svg
+      viewBox="0 0 120 120"
+      width={size}
+      height={size}
+      className="virus-glitch overflow-visible"
+      style={{ filter: hit ? "brightness(2)" : `drop-shadow(0 0 12px ${color}77)` }}
+      aria-hidden
+    >
+      {/* 경고 고리 (두 겹, 거꾸로) */}
+      <g
+        className="vm-spin"
+        style={{
+          animationDuration: "10s",
+          animationDirection: "reverse",
+          transformOrigin: "60px 60px",
+        }}
+      >
+        <circle
+          cx={60}
+          cy={60}
+          r={57}
+          fill="none"
+          stroke="#ef4444"
+          strokeOpacity={0.5}
+          strokeWidth={2}
+          strokeDasharray="14 6"
+        />
+      </g>
+      <circle
+        cx={60}
+        cy={60}
+        r={52}
+        fill="none"
+        stroke={color}
+        strokeOpacity={0.3}
+        strokeWidth={1}
+      />
+      {/* 날개 (보스마다 0~2쌍) */}
+      {Array.from({ length: fins + 1 }, (_, k) =>
+        [1, -1].map((d) => (
+          <path
+            key={`${k}${d}`}
+            d={`M${60 + d * 34} ${40 + k * 16} l${d * 16} ${-6 + k * 4} l${-d * 4} 12 Z`}
+            fill={color}
+            fillOpacity={0.55}
+            stroke={color}
+            strokeWidth={1}
+          />
+        ))
+      )}
+      {/* 방패 */}
+      <path
+        d="M60 8 L100 22 L96 68 Q90 98 60 112 Q30 98 24 68 L20 22 Z"
+        fill="#0b0f1a"
+        stroke={color}
+        strokeWidth={3}
+        strokeLinejoin="round"
+      />
+      <path
+        d="M60 16 L92 27 L89 66 Q84 90 60 103 Q36 90 31 66 L28 27 Z"
+        fill="none"
+        stroke={color}
+        strokeOpacity={0.4}
+        strokeWidth={1.2}
+      />
+      {emblem}
+      {/* 큰 감시 눈 */}
+      <ellipse cx={60} cy={62} rx={24} ry={14} fill="#020617" stroke={color} strokeWidth={2} />
+      <circle cx={60} cy={62} r={9} fill={color} />
+      <circle cx={60} cy={62} r={4} fill="#020617" />
+      <circle cx={57} cy={59} r={1.8} fill="#fff" />
+      <line x1={38} y1={62} x2={82} y2={62} stroke="#ef4444" strokeOpacity={0.6} strokeWidth={1} />
     </svg>
   );
 }
