@@ -600,6 +600,29 @@ function CreateDialog({
           )}
         </div>
         <div>
+          {label("다음에 그릴 사람")}
+          <div className="grid grid-cols-2 gap-2">
+            {(
+              [
+                ["winner", "🏃 처음 맞힌 사람", "제일 먼저 맞히면 다음에 그려요"],
+                ["order", "🔁 들어온 순서대로", "돌아가면서 한 번씩 그려요"],
+              ] as const
+            ).map(([m, t, d]) => (
+              <button
+                key={m}
+                type="button"
+                onClick={tap(() => setTurnMode(m))}
+                className={`sk-btn flex-col gap-1 px-1 py-2.5 text-[18px] ${turnMode === m ? "sk-btn-sun" : ""}`}
+              >
+                {t}
+                <span className="font-['Nanum_Gothic',sans-serif] text-[10.5px] font-bold whitespace-normal text-[var(--ink2)]">
+                  {d}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+        <div>
           {label("최대 인원")}
           <div className="flex flex-wrap gap-1.5">
             {[2, 3, 4, 5, 6, 7, 8].map((n) => (
@@ -634,31 +657,10 @@ function CreateDialog({
           onClick={tap(() => setMore((x) => !x))}
           className="sk-hand cursor-pointer self-start text-[17px] text-[var(--sky)]"
         >
-          {more ? "▾ 자세한 설정 접기" : "▸ 자세한 설정 (그리는 순서 · 힌트)"}
+          {more ? "▾ 자세한 설정 접기" : "▸ 자세한 설정 (힌트)"}
         </button>
         {more && (
           <div className="sk-rise grid gap-4">
-            <div>
-              {label("다음에 그릴 사람")}
-              <div className="flex flex-wrap gap-1.5">
-                <button
-                  type="button"
-                  data-on={turnMode === "winner"}
-                  onClick={tap(() => setTurnMode("winner"))}
-                  className="sk-chip text-[15px]"
-                >
-                  처음 맞힌 사람
-                </button>
-                <button
-                  type="button"
-                  data-on={turnMode === "order"}
-                  onClick={tap(() => setTurnMode("order"))}
-                  className="sk-chip text-[15px]"
-                >
-                  들어온 순서대로
-                </button>
-              </div>
-            </div>
             <label className="flex cursor-pointer items-center gap-2 text-[14px] font-bold">
               <input
                 type="checkbox"

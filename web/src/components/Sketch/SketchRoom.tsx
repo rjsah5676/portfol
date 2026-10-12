@@ -639,7 +639,7 @@ export default function SketchRoom({
             )}
           </button>
           <span
-            className={`mt-0.5 w-full truncate text-center text-[10.5px] font-bold ${p.uid === uid ? "text-[var(--coral)]" : ""}`}
+            className={`mt-0.5 line-clamp-2 w-full text-center text-[10px] leading-tight font-bold break-all ${p.uid === uid ? "text-[var(--coral)]" : ""}`}
           >
             {plainName(p.nick)}
           </span>
@@ -673,7 +673,7 @@ export default function SketchRoom({
         </span>
         <span className="min-w-0 flex-1">
           <span
-            className={`block truncate text-[13.5px] font-extrabold ${p.uid === uid ? "underline decoration-2 underline-offset-2" : ""}`}
+            className={`line-clamp-2 leading-tight font-extrabold break-all ${plainName(p.nick).length > 6 ? "text-[12px]" : "text-[13.5px]"} ${p.uid === uid ? "underline decoration-2 underline-offset-2" : ""}`}
             style={{ textDecorationColor: color }}
           >
             <Who name={p.nick} />
@@ -848,7 +848,7 @@ export default function SketchRoom({
                   style={{ animationDelay: `${i * 0.04}s` }}
                 >
                   <Avatar idx={avatarOf(p.uid)} size={v ? 34 : 46} />
-                  <span className="w-full truncate text-[10.5px] font-bold">
+                  <span className="line-clamp-2 w-full text-[10px] leading-tight font-bold break-all">
                     {plainName(p.nick)}
                   </span>
                 </span>
@@ -1026,7 +1026,7 @@ export default function SketchRoom({
                   size={rank === 1 ? (v ? 46 : 62) : v ? 36 : 48}
                   ring={rank === 1 ? "#FFC93C" : undefined}
                 />
-                <span className="mt-0.5 w-full truncate text-[11.5px] font-extrabold">
+                <span className="mt-0.5 line-clamp-2 w-full text-[11px] leading-tight font-extrabold break-all">
                   {plainName(p.nick)}
                 </span>
                 <span className="sk-hand text-[18px] leading-none">{p.score}</span>
