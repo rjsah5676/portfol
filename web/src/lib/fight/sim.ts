@@ -2468,3 +2468,9 @@ export const hpRatio = (f: Fighter) => f.hp / CHARS[f.ch].hp;
 /** 공중인지 (AI·그림용) */
 export const isAir = (s: State, f: Fighter) => airborneS(s, f);
 export { charOf, moveOf, totalOf, mapOf, finishRec };
+
+/** 지금 하는 기술의 정의 (연습 모드 프레임 데이터용 — 연속 동작 마무리 빈틈 · 공중 · 돌진 잡기 · 모으기 반영) */
+export const moveData = (f: Fighter) => {
+  const m = moveOf(f);
+  return m ? { ...m, recovery: m.recovery + finishRec(f) } : null;
+};

@@ -48,6 +48,8 @@ import { FightInput } from "./input";
 import HowTo from "./HowTo";
 import PracticeGuide from "./PracticeGuide";
 import { TutorialOverlay, type TutView } from "./Tutorial";
+import FrameData, { type DummyGuard } from "./FrameData";
+import { FrameMeter, type FrameView } from "@/lib/fight/framedata";
 import { Tutorial } from "@/lib/fight/tutorial";
 import CutIn, { type CutInCfg } from "./CutIn";
 import { Banner, Combo, HUD_CSS, PlayerBottom, PlayerTop, TimerBox, WinQuote, type BannerKind } from "./Hud";
@@ -145,12 +147,17 @@ export default function FightGame() {
   const [coarse, setCoarse] = useState(false);
   /** 휴대폰 이동 방식: 스틱 / 키 */
   const [moveMode, setMoveMode] = useState<MoveMode>("stick");
-  /** 연습 모드: 마지막 콤보 (히트 수·피해)와 최고 피해 */
-  const [prac, setPrac] = useState<{ hits: number; dmg: number; best: number }>({ hits: 0, dmg: 0, best: 0 });
   /** 튜토리얼: 지금 단계 (화면용) · 진행 객체 · 끝나고 "AI 대전" 누르면 */
   const [tutView, setTutView] = useState<TutView | null>(null);
   const tutRef = useRef<Tutorial | null>(null);
   const tutAiRef = useRef<() => void>(() => {});
+  /** 연습 모드: 프레임 데이터 · 허수아비 가드 */
+  const [frameView, setFrameView] = useState<FrameView | null>(null);
+  const [dummyGuard, setDummyGuard] = useState<DummyGuard>("none");
+  const guardRef = useRef<DummyGuard>("none");
+  useEffect(() => {
+    guardRef.current = dummyGuard;
+  }, [dummyGuard]);
   const [result, setResult] = useState<{
     win: boolean;
     seconds: number;
@@ -410,10 +417,10 @@ export default function FightGame() {
     const botLog: number[] = [];
     // 연습 모드: 허수아비는 가만히, 둘 다 체력 무한·시간 멈춤·내 게이지 가득. 콤보 피해를 잼
     const practice = setup.mode === "practice" && !ol;
-    let pracDmg = 0,
-      pracHits = 0,
-      pracBest = 0;
-    setPrac({ hits: 0, dmg: 0, best: 0 });
+    const fm = practice ? new FrameMeter() : null;
+    setFrameView(fm ? fm.view() : null);
+    /** 허수아비 "첫 타 뒤 막음": 맞은 뒤 남은 프레임 (그동안 가드) */
+    let guardAfter = 0;
     // 튜토리얼: 카이 vs 연습 상대, 단계마다 상대 움직임 · 성공 판정 (lib/fight/tutorial)
     const tutorial = setup.mode === "tutorial" && !ol && !bot ? new Tutorial() : null;
     tutRef.current = tutorial;
@@ -458,6 +465,9 @@ export default function FightGame() {
       if (e.code === "Escape" || e.code === "KeyP") setPaused((p) => !p);
       // 튜토리얼: N 건너뛰기 (설명 카드 넘기기 J · Space 는 게임 입력으로 — 아래 frame)
       if (tutorial && !pausedRef.current && e.code === "KeyN" && !tutorial.done) (tutorial.skip(), setTutView(tutorial.view()));
+      // 연습 모드: 1 · 2 · 3 허수아비 가드
+      if (practice && (e.code === "Digit1" || e.code === "Digit2" || e.code === "Digit3"))
+        setDummyGuard(e.code === "Digit1" ? "none" : e.code === "Digit2" ? "all" : "after");
     };
     window.addEventListener("keydown", onKey);
 
@@ -573,27 +583,26 @@ export default function FightGame() {
             if (p1 & tutMask) p1 &= ~tutMask;
             else tutMask = 0;
           }
-          const p2 = tutorial ? tutorial.input(s) : practice ? 0 : ai.next(s, 1);
-          const hp0 = s.p[1].hp;
+          let p2 = 0;
+          if (tutorial) p2 = tutorial.input(s);
+          else if (practice) {
+            // 허수아비 가드: 안 막음 / 전부 / 첫 타 뒤 (맞고 나서 2초 동안, 콤보 중엔 못 막음)
+            const g = guardRef.current;
+            if (s.p[1].combo > 0) guardAfter = 120;
+            else if (guardAfter > 0) guardAfter--;
+            p2 = g === "all" || (g === "after" && guardAfter > 0) ? IN.D : 0;
+          } else p2 = ai.next(s, 1);
           step(s, [p1, p2]);
+          if (fm && fm.update(s)) setFrameView(fm.view());
           if (practice) {
-            const d = s.p[1];
-            if (d.combo > 0) {
-              pracDmg += Math.max(0, hp0 - d.hp);
-              pracHits = Math.max(pracHits, d.combo);
-            } else if (pracHits > 0) {
-              // 콤보가 끝남 → 결과 표시
-              pracBest = Math.max(pracBest, pracDmg);
-              setPrac({ hits: pracHits, dmg: pracDmg, best: pracBest });
-              pracDmg = 0;
-              pracHits = 0;
-            }
+            // (콤보 히트 · 피해 · 최고 피해는 프레임 데이터(fm)가 잼)
             // 허수아비가 낭떠러지로 떨어지면 처음 자리(시작 위치)로 — 보통 대전처럼 떨어진 자리 위에서 다시 내려오면
             // 가만히 있는 허수아비는 또 떨어지기만 함
             if (s.ev.some((e) => e.k === "fall" && e.p === 1)) s.p[1] = newMatch([s.p[0].ch, s.p[1].ch], s.map).p[1];
             for (let k = 0; k < 2; k++) s.p[k].hp = CHARS[s.p[k].ch].hp;
             s.p[0].meter = METER_MAX;
             s.timer = ROUND_SEC * 60;
+            fm?.syncHp(s);
           }
           if (tutorial) {
             // 체력 무한 · 시간 멈춤 (게이지는 단계마다 tutorial 이 정함)
@@ -982,14 +991,8 @@ export default function FightGame() {
             {banner && <Banner {...banner} top={result ? "15%" : undefined} />}
           </div>
         )}
-        {setup.mode === "practice" && !ol && hud && (
-          <div className="pointer-events-none absolute top-[10.6cqw] left-1/2 z-10 flex -translate-x-1/2 items-center gap-[1cqw] rounded-full bg-black/60 px-[1.4cqw] py-[0.35cqw] font-['Nanum_Gothic',sans-serif] text-[1.15cqw] text-white/80">
-            <span className="font-bold text-[#FFC86B]">연습 모드</span>
-            <span>
-              마지막 콤보 <b className="text-white">{prac.hits}</b>히트 · <b className="text-white">{prac.dmg}</b> 피해
-            </span>
-            <span className="text-white/50">최고 {prac.best}</span>
-          </div>
+        {setup.mode === "practice" && !ol && hud && frameView && !result && (
+          <FrameData view={frameView} guard={dummyGuard} onGuard={setDummyGuard} />
         )}
         {setup.mode === "practice" && !ol && hud && !result && <PracticeGuide ch={hud.ch[0]} />}
         {setup.mode === "tutorial" && !ol && !bot && tutView && hud && !paused && (
