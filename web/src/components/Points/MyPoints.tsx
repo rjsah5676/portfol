@@ -39,7 +39,7 @@ export default function MyPoints({
   const log = data?.log ?? [];
   const shown = more ? log : log.slice(0, 5);
   return (
-    <section className={card}>
+    <section id="points" className={`${card} scroll-mt-28`}>
       <div className={`${label} flex items-center gap-1.5`}>
         {POINT.name} <PointInfo align="left" />
       </div>
