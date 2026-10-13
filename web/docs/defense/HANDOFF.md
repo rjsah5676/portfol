@@ -42,11 +42,13 @@ cd web && POKER_E2E=1 npx next dev            # → /games/defense/?fake=admin:�
 | `web/src/lib/defense/meta.ts` | 패치(항법) 4종 · 미션 11종 정의 |
 | `web/src/lib/defense/sim.ts` | **결정론 시뮬** — 상태 · 명령(`apply`) · 한 tick 진행(`step`) · 보스 기술 · 미션 판정 |
 | `web/src/lib/defense/replay.ts` | 명령 기록 다시 돌리기 · 기록 검사 · 점수 · 멀티 턴 상수 |
+| `web/src/lib/defense/progress.ts` | **판 밖 성장 정의** — 로드아웃 · `modsOf` · 연구 · 유물 · 오염 단계 · 레벨 비용 · 판 보상 · 상자 · 미션 · 시즌 패스 · GP 값 · 테마 · 한국 시간 주/시즌 |
 | `web/src/lib/defense/bot.ts` | 밸런스용 봇 전략 (`BOTS`) |
 | `web/src/lib/defense/rng.ts` | 시드 난수 (mulberry32) |
 | `web/src/lib/defense/assets.ts` | **그림 · 소리 연결표** (유닛 41 · 적 8 · 보스 6 · 효과음 23 · 배경음 5) — 에셋 바꾸면 여기 |
 | `web/src/components/Defense/DefenseApp.tsx` | 메뉴 · 솔로 시작 · 멀티 로비/방 · 랭킹 목록 |
 | `web/src/components/Defense/GameView.tsx` | 게임 화면 (위 바 · 필드 · 아래 정보 · 오른쪽 패널 · 창들 · 결과) |
+| `web/src/components/Defense/Hub.tsx` | 정비소 (출전 준비 · 유닛 강화 · 연구 · 유물 · 상자 · 미션 · 시즌 패스 · GP 상점) |
 | `web/src/components/Defense/controller.ts` | 화면 쪽 진행: 솔로(즉시 실행 + 기록) / 멀티(서버 턴 받아 락스텝) |
 | `web/src/components/Defense/render.ts` | 캔버스 필드 그리기 — **2.5D** (돌길 + 높은 블록 · 발 위치 순서로 겹침) · 등급 오라/외곽선/보석 · 효과 |
 | `web/src/components/Defense/audio.ts` | 소리: 효과음(Web Audio, 종류별 간격 제한) · 배경음(웨이브/보스에 맞춰 바뀜) · 음량 저장 |
@@ -58,6 +60,7 @@ cd web && POKER_E2E=1 npx next dev            # → /games/defense/?fake=admin:�
 | `web/public/defense/` | `units/` · `enemies/` · `bosses/` 그림(webp) · `sfx/` · `bgm/` (mp3) · `fonts/` 갈무리(OFL) · `ui/` 커서 |
 | `web/scripts/defense-art/` | 그림 시트 자르기 (`slice.py` 칸 나누기 · `cc.py` 겹친 줄은 덩어리 기준) |
 | `server/src/games/defense.ts` | 랭킹(시드 발급 · 기록 검증 · 순위) + 멀티 방(턴 릴레이) |
+| `server/src/games/defenseMeta.ts` | 판 밖 성장 저장 · 지급 (`defense_profile`, 보상 · 미션 · 패스 · 상자 · GP · 주간 순위 GP) |
 | `server/src/games/defenseVerify.worker.ts` | 기록 검증 작업 스레드 (tsup 엔트리에 추가돼 있음) |
 | `server/scripts/defense-sim.ts` · `defense-trace.ts` | 밸런스 시뮬 CLI |
 | `server/test/defense.test.ts` | 테스트 |
@@ -95,12 +98,28 @@ cd web && POKER_E2E=1 npx next dev            # → /games/defense/?fake=admin:�
 ## 6. 구조 설명
 
 ### 랭킹 (회원만)
-1. 판 시작: `defense.start` → 서버가 시드 · run id 발급 (`defense_runs`)
+1. 판 시작: `defense.start { mode }` → 서버가 시드 · run id · **로드아웃** 발급 (`defense_runs` 에 `mode · lo · board` 같이 저장)
+   - `season`: 무작위 시드 + 내 영구 성장 (`defenseMeta.loadoutOf` — 장착한 연구 · 유물 · 유닛 레벨 · 오염 단계)
+   - `weekly`: 주 번호로 정한 같은 시드 (`weeklySeed`, 서버 비밀값 `DEFENSE_SECRET` → 없으면 `SESSION_SECRET`) + 같은 유물 3개 (`weeklyRelics`), 강화 · 연구 없음
 2. 판 중: 클라이언트는 명령을 `[tick, 0, 명령]` 으로 기록 (`controller.log`)
-3. 판 끝: `defense.finish { run, log }` → 서버 작업 스레드가 처음부터 다시 돌려 결과 계산 → 점수 저장 (`defense_rank`, `_id = 버전:uid`, 최고 기록만)
+3. 판 끝: `defense.finish { run, log }` → 서버 작업 스레드가 **같은 로드아웃으로** 처음부터 다시 돌려 결과 계산 → 점수 저장 (`defense_rank`, `_id = 순위표키:uid`, 최고 기록만) → 보상 (`defenseMeta.onRun`)
+   - 순위표 키(`ver` 필드): 시즌 `b1:s1` (밸런스 버전 · 시즌), 주간 `w0` (주 번호). 옛 알파 기록은 `a2` 그대로 남음
    - 같은 run 두 번 X, 4시간 지난 run X, 버전 다르면 X
    - 걸린 실제 시간 ≥ 게임 시간 / 최대 배속(3) − 5초 (속도핵 막기)
-4. 점수: 클리어 = `1e9 − tick` (빠를수록), 아니면 `웨이브 × 1e6 + 처치 수`
+4. 점수: 주간 = `scoreOf` (클리어 `1e9 − tick`, 아니면 `웨이브 × 1e6 + 처치 수`), 시즌 = `seasonScore` (오염 단계 × 2e7 + 클리어 7e7 − tick / 웨이브 × 1e6 + 처치 — 단계 하나 ≈ 20웨이브)
+
+### 판 밖 성장 (베타, `lib/defense/progress.ts` 정의 · `server/src/games/defenseMeta.ts` 저장)
+- **로드아웃** `Loadout { lv, res, relics, glitch }` → `modsOf()` 가 `Mods` 로 바꿔 `newBoard` 때 `b.mods` 에 한 번 붙음. 시뮬은 `b.mods` 만 읽음 (결정론 그대로). 멀티는 `defense.begin` 때 각자 로드아웃을 정해 `start` · 방 스냅샷으로 모두에게 보냄
+- **재화**: 픽셀 조각(판 보상 · 미션 → 연구 · 유닛 레벨 · 상자), 유닛 카드(판에서 그 유닛을 얻으면 · 상자 → 유닛 레벨), 글리치 코어(클리어 · 50웨이브 · 주간 미션 · GP 교환 → 유물 직접 사기). 보상 계산 `runReward` (오염 단계 배수, 멀티 2명 이상 ×1.2)
+- **오염 단계 0~10** (`GLITCH`): 적 체력 · 속도 · 보스 시간 ↔ 보상 배수 · 시즌 점수. 그 단계에서 40웨이브(`GLITCH_UNLOCK_WAVE`) 넘기면 다음 단계 열림
+- **프로필** `defense_profile` (회원당 한 문서): 회원별 잠금(KeyedMutex) 안에서 읽고 → 고치고 → 통째 저장. 날 · 주 · 시즌이 바뀌면 `roll` 이 미션 · 패스를 새로
+- **미션** 하루 3 · 주 3 (`dailyOf` · `weeklyOf` 날짜로 모두 같음), 숫자는 검증 결과(`VerifyOut.stats` 얻은 유닛 · 닫은 균열)에서 `questValues`
+- **시즌 4주 · 패스 30단계** (무료 · 프리미엄 `PASS_PREMIUM_GP` 5000 GP). 테마 아이템은 사이트 인벤토리 `inv.defense` 에
+- **GP 연결** (`server/src/points.ts` 에 `spend` · `grant` 추가, 원장 reason `defense`): 코어 교환(주 5번) · 패스 프리미엄 · 블록 테마(사이트 상점 `SHOP` 의 `defense.theme.*`) · 주간 도전 순위 GP (`WEEKLY_GP`, 다음 주 첫 `defense.profile` 때 한 번 — `paidWeek` 를 먼저 저장하고 지급)
+- rpc: `defense.profile · unit.up · res.buy · relic.buy · chest.buy · chest.open · load · theme · quest.claim · pass.claim · pass.buy · cores.buy` — 실패하면 프로필은 그대로(저장 전에 throw)
+- 화면: `components/Defense/Hub.tsx` (정비소 8탭), 메뉴의 시즌 도전 · 주간 도전 · 정비소, 판 끝 보상 줄(`FinishNote`), 블록 테마는 `render.ts setTheme`
+- 업적 추가: `defense.glitch`(클리어한 오염 단계+1) · `defense.maxlv` · `defense.relics` (`server/src/achievements.ts`)
+- **보관함** `BENCH = 6` (`sim.ts`): 칸 번호 `CELLS..SLOTS-1`, 공격 · 오라 없음, 합성 · 조합식 · 판매 가능, 필드가 차면 소환이 여기로. 화면은 필드 아래 줄 (`render.ts BENCH_H`)
 
 ### 멀티 (락스텝, 회원만, 최대 4명)
 - 서버는 시뮬을 돌리지 않음. 100ms(=3 tick)마다 그 사이 모인 명령을 `turn { n, c }` 로 뿌림
@@ -125,7 +144,19 @@ cd web && POKER_E2E=1 npx next dev            # → /games/defense/?fake=admin:�
 - **마우스**: 도트 커서(`public/defense/ui/cursor*.png`, 손 · 집기 — 원본은 2배 그림, `*-1x.png` 는 반으로 줄인 것. css 에서 `image-set` 으로 보통 화면 1x · 레티나 2x), 버튼은 올리면 1칸 떠오르고 테두리가 밝아짐 + 작은 소리, 메뉴 버튼은 ▶ 표시
 - **소리**: 첫 누르기에서 잠금 풀림(Stage). 효과음 종류별 최소 간격 · 동시 14개 제한(배속에서도 안 시끄럽게). 메뉴 · 로비 = `menu`, 1~29웨이브 `wave-early`, 30~ `wave-late`, 보스 `boss`, 60 카이 `boss-final`, 끝나면 배경음을 줄이고 `clear`/`gameover`. 음량은 스피커 버튼(이 기기에 저장)
 
-## 7. 알파 상태 · 다음 할 일
+## 7. 베타 상태 · 다음 할 일
+
+- [x] 보관함 6칸 · 조합식 재료 정리 (신화에 노말 재료 X)
+- [x] 로드아웃 엔진 · 서버 검증 · 멀티 로드아웃
+- [x] 성장 서버 (프로필 · 보상 · 미션 · 시즌 패스 · 상자 · GP 교환 · 주간 도전 · 순위 GP) + 테스트
+- [x] 정비소 화면 · 메뉴 · 랭킹 탭(시즌/주간) · 판 끝 보상 · 블록 테마
+- [x] 밸런스 b1 + 성장 봇 시뮬 (`defense-sim.ts --meta mid|late|max --glitch N`)
+- [ ] 유물 · 재화 · 상자 그림 (`assets.ts RELIC_ART · ITEM_ART`, 없으면 도트 아이콘) / 효과음 (레벨업 · 상자 열기)
+- [ ] 판 안에서 장착한 유물 · 오염 단계 표시 (지금은 메뉴 · 정비소에서만 보임)
+- [ ] 시즌이 끝날 때 시즌 순위 보상 (지금은 주간만 GP)
+- [ ] 실제 기록이 쌓이면 재화 수급 · 패스 경험치 조정 (지금 값은 봇 기준 추정: 판당 조각 150~400 · 카드 15~30)
+
+## (알파) 상태 · 다음 할 일
 
 - [x] 엔진 · 봇 시뮬 · 랭킹 검증 · 멀티 락스텝
 - [x] 에셋 — 유닛 41 · 적 8 · 보스 6 (ChatGPT 이미지) · 효과음 23 (ElevenLabs) · 배경음 5 (주인 제작) · 글꼴 · 커서
@@ -182,3 +213,29 @@ cd web && POKER_E2E=1 npx next dev            # → /games/defense/?fake=admin:�
 - 죽는 곳: a1 은 10 · 20보스(합 79/160) → a2 는 21~30 필드 · 40 · 50보스 · 41~50 필드로 퍼짐 (10 · 20보스 사망 0)
 - 전략 간 격차(소환만 제외): a1 29.5~54.5 → a2 38.9~46.2
 - 봇 클리어 0% — 사람은 배치 · 균열 · 조합 타이밍이 봇보다 나아서 이 정도가 알맞다고 봄. 실제 판 기록이 쌓이면 60보스(카이) 도달률을 보고 다시 조정
+
+### b1 (2026-10-13) — 베타: 보관함 · 성장 붙이기
+바꾼 것
+- 보관함 6칸 (봇도 보관함을 씀: `bot.ts benchMove`), 조합식 재료: 용기사 `k_spear → k_axe`, 시간의 군주 `a_frost → a_wind`, 길들인 글리치 노말 6기 → 3기
+- 적 체력 곡선 3단: 20~ ×1.15, 50~ ×1.06 (`B.hp.mult3 · from3`), 이반 체력 0.6 → 0.5, 카이 1.3 → 0.35
+- 이자 패치 10% (최대 70), 단일 코어 ×1.35
+
+봇 시뮬 (`--no-verify`, 성장 없음 30판): 균형 10% · 기사단 7% · 기계공방 10% · 마도회 13% · 이자 3% · 도박사 3% · 단일코어 0% · 소환만 0% (클리어율) → **여러 길에서 5% 이상**
+
+성장을 든 봇 (클리어율, 30판 / 20판)
+
+| 전략 | mid · 오염0 | late · 오염0 | max · 오염0 | mid · 오염3 | max · 오염10 (평균 웨이브) |
+| --- | --- | --- | --- | --- | --- |
+| 균형 | 93% | 90% | 90% | 35% | 0% (49.1) |
+| 기사단 | 53% | 80% | 77% | 5% | 0% (44.9) |
+| 기계공방 | 87% | 97% | 90% | 20% | 0% (45.7) |
+| 마도회 | 73% | 83% | 93% | 15% | 0% (41.2) |
+| 이자 | 33% | 57% | 77% | 5% | 0% (43.9) |
+| 도박사 | 37% | 70% | 73% | 0% | 0% (47.5) |
+| 단일코어 | 0% | 0% | 0% | 0% | 0% (36.1) |
+| 소환만 | 7% | 7% | 17% | 0% | 0% (28.4) |
+
+- mid = 유닛 Lv.2~3 · 연구 2 · 경제 유물 (몇 주 한 사람), max = 전부 Lv.10 · 연구 4 · 전설 유물
+- 성장하면 오염 0 은 쉬워지고 → 오염 단계를 올리는 구조. 다 모아도 오염 10 은 봇 0% (사람의 끝 목표)
+- 단일 코어는 성장해도 0% — 다음 밸런스에서 볼 것
+
