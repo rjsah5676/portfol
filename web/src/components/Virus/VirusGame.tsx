@@ -80,6 +80,7 @@ import {
   upgradeAdvice,
   rootAdvice,
   formatStart,
+  fastLv,
   canAffordShop,
   isCoreItem,
   type UpgKey,
@@ -110,6 +111,8 @@ import {
 } from "@/lib/virus/logic";
 
 const TICK_MS = 100;
+/** 커널 권한 「자동 재도전」: 차단당한 뒤 이만큼 파일을 감염시키고 재도전 */
+const AUTO_RETRY_MS = 30000;
 /** 보스 연출 길이 — virus.css 의 vb-* (2.3s) · vd-* (1.7s) 와 같게, 효과음 길이에 맞춘 값 */
 const APPEAR_MS = 2300;
 const DOWN_MS = 1700;
@@ -330,6 +333,11 @@ export default function VirusGame() {
     ddos: false,
     cinema: null,
   }));
+  /** 커널 권한 「자동 재도전」: 이 시각(performance.now)에 보스 재도전 (0 = 없음) */
+  const autoRetryAt = useRef(0);
+  /** 커널 권한 「자동 변이」: 이번 회차 시작 시각 · 변이 효율 최고점 */
+  const runStartAt = useRef(0);
+  const peakRate = useRef(0);
   /** 코드 모듈 효과가 마지막으로 터진 시각 (ROSTER 번호별) · DDoS 가 터진 시각 */
   const fxAt = useRef<number[]>(ROSTER.map(() => 0));
   const ddosAt = useRef(0);
@@ -919,6 +927,8 @@ export default function VirusGame() {
         }
       }
       pending.current = [];
+      runStartAt.current = performance.now();
+      peakRate.current = 0;
       atkAcc.current = 0;
       setShots([]);
       setFloats([]);
@@ -989,11 +999,14 @@ export default function VirusGame() {
       s.rec.fails++;
       enemy.current = spawn(s);
       bossLeft.current = timeFor(enemy.current, save.current);
+      // 커널 권한 「자동 재도전」: 30초 동안 파일을 감염시킨 뒤
+      autoRetryAt.current = s.shop.kretry ? performance.now() + AUTO_RETRY_MS : 0;
     };
     /** 자동 최적 업그레이드 (크론 데몬) — 1초마다 */
     let lastAuto = 0;
-    /** 마지막 업적 확인 */
+    /** 마지막 업적 확인 · 마지막 자동 변이 확인 */
     let lastAch = 0;
+    let lastFmtCheck = 0;
     const runAuto = (s: Save, force = false) => {
       if (!s.auto || !s.shop.daemon) return;
       const now = performance.now();
@@ -1078,6 +1091,38 @@ export default function VirusGame() {
       // 틱이 늦게 왔으면 밀린 시간을 먼저 계산
       if (real - dt > 0.15) fastForward(real - dt);
       runAuto(s);
+      // 커널 권한 「자동 재도전」
+      if (s.bossFail && autoRetryAt.current && now >= autoRetryAt.current && s.shop.kretry) {
+        autoRetryAt.current = 0;
+        s.bossFail = false;
+        enemy.current = spawn(s);
+        if (enemy.current.boss)
+          startCinema("appear", s.stage, enemy.current.apex, enemy.current.final);
+        bossLeft.current = timeFor(enemy.current, s);
+      }
+      // 커널 권한 「자동 변이」: 5초마다 변이 효율(루트 권한으로 오를 피해 배율의 로그 ÷ 회차 시간)이 최고점에서 꺾였는지
+      if (s.shop.kformat && s.autoFmt && now - lastFmtCheck >= 5000) {
+        lastFmtCheck = now;
+        const pend = pendingRoot(s);
+        const secs = Math.max(60, (now - runStartAt.current) / 1000);
+        const rate =
+          pend > 0
+            ? Math.log((1 + BAL.rootBonus * (s.root + pend)) / (1 + BAL.rootBonus * s.root)) / secs
+            : 0;
+        if (rate > peakRate.current) peakRate.current = rate;
+        else if (rate > 0 && rate < peakRate.current * 0.9 && canFormat(s)) {
+          save.current = format(s);
+          peakRate.current = 0;
+          runStartAt.current = now;
+          pending.current = [];
+          setShots([]);
+          enemy.current = spawn(save.current);
+          bossLeft.current = timeFor(enemy.current, save.current);
+          persist();
+          sync();
+          return;
+        }
+      }
       const st = stats(s);
       // 발사: 공격 속도만큼 코드를 쏘고, SHOT_MS 뒤에 닿음
       atkAcc.current += st.aps * dt;
@@ -1240,6 +1285,21 @@ export default function VirusGame() {
     persist();
     sync();
   };
+  /** 커널 권한 「자동 변이」 켜기 · 끄기 */
+  const toggleAutoFmt = () => {
+    save.current.autoFmt = !save.current.autoFmt;
+    peakRate.current = 0;
+    persist();
+    sync();
+  };
+  /** 커널 권한 「보스 지정」: 반복 중 이 바이러스만 (다시 누르면 해제) */
+  const togglePick = (i: number) => {
+    const sv = save.current;
+    sv.pick = sv.pick === i ? -1 : i;
+    if (sv.repeat && !enemy.current.boss) rollBoss(sv);
+    persist();
+    sync();
+  };
   /** 스테이지 반복 켜기 · 끄기 */
   const toggleRepeat = () => {
     save.current.repeat = !save.current.repeat;
@@ -1261,7 +1321,7 @@ export default function VirusGame() {
     if (!canFormat(s)) return;
     setAsk({
       title: "☣️ 변이할까요?",
-      body: `지금 몸(업그레이드 · 데이터)을 버리고 새 변종으로 스테이지 ${formatStart(s.best)}부터 다시 퍼져요.\n루트 권한 +${fmt(pendingRoot(s))}을 받아요 (빼앗은 모듈 · 우회 기술 · 루트 상점은 그대로).`,
+      body: `지금 몸(업그레이드 · 데이터)을 버리고 새 변종으로 스테이지 ${formatStart(s.best, fastLv(s))}부터 다시 퍼져요.\n루트 권한 +${fmt(pendingRoot(s))}을 받아요 (빼앗은 모듈 · 우회 기술 · 루트 상점은 그대로).`,
       yes: "변이하기",
       onYes: formatNow,
     });
@@ -1274,6 +1334,8 @@ export default function VirusGame() {
   /** 변이 뒤 새 몸으로 */
   const reborn = (next: Save) => {
     save.current = next;
+    runStartAt.current = performance.now();
+    peakRate.current = 0;
     pending.current = [];
     enemy.current = spawn(save.current);
     bossLeft.current = timeFor(enemy.current, save.current);
@@ -1400,6 +1462,9 @@ export default function VirusGame() {
     else if (introNow != null) setIntro((q) => q.slice(1));
     else setAway(null);
   };
+  /** 보스 지정 (자세히 보기 — 버튼의 data-mod) */
+  const onPickModule = (ev: React.MouseEvent<HTMLButtonElement>) =>
+    togglePick(Number(ev.currentTarget.dataset.mod));
   /** 코드 모듈 하나를 모인 조각으로 컴파일 (자세히 보기 — 버튼의 data-mod) */
   const onCompileModule = (ev: React.MouseEvent<HTMLButtonElement>) => {
     const i = Number(ev.currentTarget.dataset.mod);
@@ -2589,6 +2654,27 @@ export default function VirusGame() {
                           )}
                         </button>
                       </div>,
+                      ...(s.shop.kformat
+                        ? [
+                            <label
+                              key="autofmt"
+                              className="flex cursor-pointer items-center justify-between gap-3 rounded-lg border border-amber-300/30 bg-amber-300/[0.06] px-3 py-2"
+                            >
+                              <span className="vt-sm text-white/90">
+                                ☣️ 자동 변이{" "}
+                                <span className="text-white/70">
+                                  — 변이 효율이 꺾이면 (루트 권한이 덜 늘기 시작하면) 알아서
+                                </span>
+                              </span>
+                              <input
+                                type="checkbox"
+                                checked={s.autoFmt}
+                                onChange={toggleAutoFmt}
+                                className="h-4 w-4 accent-amber-300"
+                              />
+                            </label>,
+                          ]
+                        : []),
                       <p key="state" className="vt-sm text-white/90">
                         {formatReady
                           ? "더 나아가기 힘들면 지금 변이하세요."
@@ -2598,7 +2684,7 @@ export default function VirusGame() {
                       </p>,
                       <p key="desc" className="vt-sm leading-relaxed text-white/75">
                         변이하면 지금 몸(업그레이드·데이터)을 버리고 새 변종으로 스테이지{" "}
-                        {formatStart(s.best)}부터 다시 퍼져요. 루트 권한 1마다 피해가{" "}
+                        {formatStart(s.best, fastLv(s))}부터 다시 퍼져요. 루트 권한 1마다 피해가{" "}
                         {+(BAL.rootBonus * 100).toFixed(1)}% 늘어나요. 빼앗은 모듈과 루트 상점은
                         남아요.
                       </p>,
@@ -2954,6 +3040,21 @@ export default function VirusGame() {
                                   >
                                     {to > lv ? `▲ v${to}로 컴파일` : "조각이 더 필요해요"}
                                   </button>
+                                  {s.shop.kpick > 0 && (
+                                    <button
+                                      type="button"
+                                      data-mod={i}
+                                      onClick={onPickModule}
+                                      title="커널 권한 「보스 지정」 — 스테이지 반복 중에는 이 바이러스만 보스로 나와요"
+                                      className={`mt-2 ml-2 rounded-full border px-3 py-1.5 vt-sm font-bold ${
+                                        s.pick === i
+                                          ? "border-sky-300/70 bg-sky-400/20 text-sky-100"
+                                          : "border-white/20 text-white/80"
+                                      }`}
+                                    >
+                                      📡 {s.pick === i ? "지정됨" : "반복 중 이 보스만"}
+                                    </button>
+                                  )}
                                 </>
                               ) : (
                                 <p className="vt-sm mt-1 text-white/75">

@@ -35,9 +35,9 @@ export const BAL = {
   finalGrowth: 1.5,
   /** 커널 상점: 커널 패치 피해 · 권한 상승 루트 권한 획득 · 데이터 압축 데이터 · 인터럽트 지연 보스 시간(초) */
   corePatch: 1.25,
-  coreEscal: 0.2,
-  coreComp: 1.5,
-  coreIrq: 5,
+  /** 커널 권한 「장기 잠복」: 오프라인 최대 시간 · 「모듈 오버클럭」: 코드 모듈 효과 상한 배율 */
+  coreIdleHours: 48,
+  coreOver: 1.1,
   /** 스테이지마다 체력 배율 (lateFrom 까지) · 그 뒤로는 hpGrowthLate */
   hpGrowth: 1.18,
   lateFrom: 100,
@@ -69,7 +69,7 @@ export const BAL = {
   rootDiv: 10,
   /**
    * 루트 권한 합계 = ((최고 스테이지 - 1) ÷ rootDiv)^rootPow (× 100을 넘은 스테이지마다 rootLate)
-   * 시뮬레이션(--auto --rate, 최적 변이): 스테이지 100 ≈ 1.5시간 · 500 ≈ 5.6시간 · 900 ≈ 25시간 · 1000 ≈ 45시간 (변이 약 38번)
+   * 시뮬레이션(--auto --rate, 최적 변이 · 커널 권한 차례로): 스테이지 100 ≈ 1.6시간 · 500 ≈ 6.8시간 · 900 ≈ 26시간 · 1000 ≈ 43시간 (변이 약 40번)
    */
   rootPow: 2.17,
   /** 스테이지 lateFrom 을 넘은 뒤 최고 스테이지 1마다 루트 권한 합계 ×rootLate */
@@ -87,7 +87,7 @@ export const BAL = {
   fragK: 3,
   fragGrowth: 8,
   keyK: 3,
-  keyGrowth: 7,
+  keyGrowth: 6,
   /** 우회 기술 세기: v1 = 예전 공식(10스테이지마다 1버전)의 bypBase 버전어치, 그 뒤 1버전마다 bypScale 버전어치 */
   bypBase: 4,
   bypScale: 1,
@@ -149,10 +149,14 @@ export type ShopKey =
   | "daemon"
   | "kprof"
   | "autoc"
-  | "kpatch"
-  | "kescal"
-  | "kcomp"
-  | "kirq";
+  | "kretry"
+  | "kidle"
+  | "kfast"
+  | "kformat"
+  | "kpick"
+  | "kfast2"
+  | "kover"
+  | "kpatch";
 
 export interface Save {
   v: 3;
@@ -208,6 +212,9 @@ export interface Save {
   runTop: number;
   /** 스테이지 반복: 보스를 잡아도 다음 스테이지로 안 감 */
   repeat: boolean;
+  /** 커널 권한 「보스 지정」으로 고른 바이러스 (ROSTER 번호, -1 = 없음) · 「자동 변이」 켜짐 */
+  pick: number;
+  autoFmt: boolean;
   savedAt: number;
 }
 
@@ -287,10 +294,14 @@ export function newSave(): Save {
       daemon: 0,
       kprof: 0,
       autoc: 0,
+      kretry: 0,
+      kidle: 0,
+      kfast: 0,
+      kformat: 0,
+      kpick: 0,
+      kfast2: 0,
+      kover: 0,
       kpatch: 0,
-      kescal: 0,
-      kcomp: 0,
-      kirq: 0,
     },
     cores: 0,
     auto: false,
@@ -305,6 +316,8 @@ export function newSave(): Save {
     bossIdx: -1,
     runTop: 1,
     repeat: false,
+    pick: -1,
+    autoFmt: false,
     savedAt: Date.now(),
   };
 }
@@ -339,6 +352,10 @@ export function parseSave(raw: string | null): Save {
     let refund = 0;
     for (let i = 0; i < (old.golden ?? 0); i++) refund += Math.ceil(60 * 1.8 ** i);
     const rootSpent = Math.max(0, (s.rootSpent ?? 0) - refund);
+    // v0.7 까지의 커널 상품 (권한 상승 · 데이터 압축 · 인터럽트 지연 — 가격 = 레벨 + 1) 에 쓴 코어는 돌려줌
+    let coreRefund = 0;
+    for (const k of ["kescal", "kcomp", "kirq"])
+      for (let i = 0; i < (old[k] ?? 0); i++) coreRefund += i + 1;
     // 스테이지 상한: 넘은 저장본은 MAX_STAGE 로 (best = MAX_STAGE + 1 은 마지막 스테이지까지 통과)
     let stage = Math.min(s.stage, MAX_STAGE);
     let best = Math.min(Math.max(s.best || 1, s.stage), MAX_STAGE + 1);
@@ -378,6 +395,7 @@ export function parseSave(raw: string | null): Save {
       apexBest,
       finalReady,
       kills: s.stage > MAX_STAGE || oldCap ? 0 : s.kills,
+      cores: Math.max(0, Number(s.cores) || 0) + coreRefund,
       bossDone: oldCap ? false : !!s.bossDone,
       rec,
       ach,
@@ -385,6 +403,8 @@ export function parseSave(raw: string | null): Save {
       ...codeOf(s, best, apexBest),
       runTop: Math.max(stage, Math.min(Number(s.runTop) || stage, best)),
       repeat: !!s.repeat,
+      pick: Number.isInteger(s.pick) && s.pick! >= 0 && s.pick! < ROSTER.length ? s.pick! : -1,
+      autoFmt: !!s.autoFmt,
       bossIdx:
         Number.isInteger(s.bossIdx) && s.bossIdx! >= -2 && s.bossIdx! < ROSTER.length
           ? s.bossIdx!
@@ -457,8 +477,10 @@ export interface Fx {
 }
 
 /** 모듈 버전 → 공격 효과 수치 */
-export function fxOf(m: number[]): Fx {
-  const c = (i: number, v1: number, cap: number) => fxCurve(m[i], v1, cap);
+export function fxOf(m: number[], over = 1): Fx {
+  // over: 「모듈 오버클럭」 — 늘어나는 효과는 상한 ×over, 줄어드는 간격(매크로 · DDoS)은 상한 ÷over
+  const c = (i: number, v1: number, cap: number) =>
+    fxCurve(m[i], v1, cap > v1 ? cap * over : cap / over);
   return {
     first: c(0, 6, 20),
     extraP: c(1, 0.35, 1),
@@ -863,6 +885,11 @@ export function bossOf(s: Save) {
 
 /** 다음 스테이지로 (또는 변이 · 스테이지 고르기로 스테이지가 바뀌면) 새 보스를 뽑음 */
 export function rollBoss(s: Save, rand: () => number = Math.random) {
+  // 커널 권한 「보스 지정」: 반복 중이면 고른 바이러스만 (해금된 것일 때)
+  if (s.shop.kpick && s.repeat && s.pick >= 0 && bossPool(s.stage, s.best).includes(s.pick)) {
+    s.bossIdx = s.pick;
+    return;
+  }
   s.bossIdx = pickBoss(s.stage, s.best, rand);
 }
 
@@ -1087,7 +1114,7 @@ export function stats(s: Save): Stats {
   // 우회 기술: 버전 → 효과 계산용 「예전 버전」 (bypEq)
   const b = s.byp.map(bypEq);
   const has = (i: number) => b[i] > 0;
-  const fx = fxOf(m);
+  const fx = fxOf(m, s.shop.kover ? BAL.coreOver : 1);
   const rootMul = 1 + BAL.rootBonus * s.root;
   const achMul = 1 + BAL.achDmg * s.ach.length;
   const atk =
@@ -1116,19 +1143,16 @@ export function stats(s: Save): Stats {
     aps,
     critChance,
     critMul: 2 + BAL.critMulStep * s.lv.crit + (has(4) ? 1 + 0.5 * b[4] : 0),
-    dataMul:
-      (has(3) ? 1.5 * BAL.modData ** b[3] : 1) *
-      BAL.shopMiner ** s.shop.miner *
-      BAL.coreComp ** s.shop.kcomp,
+    dataMul: (has(3) ? 1.5 * BAL.modData ** b[3] : 1) * BAL.shopMiner ** s.shop.miner,
     costMul: has(9) ? 0.85 * BAL.modCost ** b[9] : 1,
     mobHpMul: has(0) ? 0.85 * BAL.modMobHp ** b[0] : 1,
     bossHpMul: has(2) ? BAL.modBossHp ** b[2] : 1,
-    bossTime: BOSS_TIME + (has(2) ? 5 : 0) + BAL.coreIrq * s.shop.kirq,
-    rootGain: (has(7) ? 1.25 : 1) * (1 + BAL.coreEscal * s.shop.kescal),
+    bossTime: BOSS_TIME + (has(2) ? 5 : 0),
+    rootGain: has(7) ? 1.25 : 1,
     bossDmgMul: has(5) ? BAL.modBossDmg ** b[5] : 1,
     rootMul,
     offlineRate: has(6) ? offlineRateOf(b[6]) + 0.15 : 0.3,
-    offlineHours: BAL.offHours,
+    offlineHours: s.shop.kidle ? BAL.coreIdleHours : BAL.offHours,
     achMul,
     fx,
     shotsMul,
@@ -1383,15 +1407,21 @@ export function canFormat(s: Save) {
  * 포맷 뒤 시작 스테이지: 최고 스테이지의 절반을 10 단위로 내리고 +1, 최대 51 (예: 68 → 31, 30 → 11, 682 → 51)
  * — 업그레이드 없이 시작하니 깊은 곳에서 다시 시작하면 그대로 막힘. 초반은 빨리 지나가니 51부터 다시 퍼짐
  */
-export function formatStart(best: number) {
-  return Math.floor(Math.min(best, 100) / 2 / 10) * 10 + 1;
+export function formatStart(best: number, fast = 0) {
+  // 커널 권한 「빠른 재감염」 I · II: 최대 51 → 101 → 151
+  return Math.floor(Math.min(best, 100 + 100 * fast) / 2 / 10) * 10 + 1;
+}
+
+/** 이 저장본의 「빠른 재감염」 단계 (0~2) */
+export function fastLv(s: Save) {
+  return s.shop.kfast + s.shop.kfast2;
 }
 
 /** 포맷: 업그레이드·데이터는 처음으로, 스테이지는 formatStart 부터. 루트 권한·상점·모듈·누적 기록은 유지 */
 export function format(s: Save): Save {
   const n: Save = {
     ...newSave(),
-    stage: formatStart(s.best),
+    stage: formatStart(s.best, fastLv(s)),
     lifetime: s.lifetime,
     best: s.best,
     apexBest: s.apexBest,
@@ -1401,6 +1431,8 @@ export function format(s: Save): Save {
     rootSpent: s.rootSpent,
     shop: { ...s.shop },
     auto: s.auto,
+    pick: s.pick,
+    autoFmt: s.autoFmt,
     formats: s.formats + 1,
     rec: { ...s.rec },
     ach: [...s.ach],
@@ -1524,7 +1556,90 @@ export const SHOP: ShopDef[] = [
     desc: "코드 조각 · 우회 키가 모이면 알림 없이 바로 컴파일",
     label: (lv) => (lv ? "자동 컴파일 켜짐" : "조각이 모이면 바로 컴파일"),
   },
-  // ── 커널 (최종 보스에게서 얻은 커널 코어로 삼 · 가격 = 레벨 + 1 코어) ──
+  // ── 커널 권한 (100스테이지마다 · KILLSWITCH 에게서 얻은 커널 코어로 삼) — 위에서부터 차례로만 열림 ──
+  {
+    key: "kretry",
+    group: "core",
+    name: "자동 재도전",
+    icon: "🔁",
+    base: 1,
+    growth: 1,
+    max: 1,
+    desc: "보스에게 차단당하면 잠시 파일을 감염시킨 뒤 알아서 다시 침투",
+    label: (lv) => (lv ? "자동 재도전 켜짐" : "차단당하면 30초 뒤 자동 재도전"),
+  },
+  {
+    key: "kidle",
+    group: "core",
+    name: "장기 잠복",
+    icon: "🌙",
+    base: 1,
+    growth: 1,
+    max: 1,
+    req: "kretry",
+    desc: "자리를 비운 동안 더 오래 몰래 실행",
+    label: () => `오프라인 수익 최대 ${BAL.offHours} → ${BAL.coreIdleHours}시간`,
+  },
+  {
+    key: "kfast",
+    group: "core",
+    name: "빠른 재감염 I",
+    icon: "🚀",
+    base: 1,
+    growth: 1,
+    max: 1,
+    req: "kidle",
+    desc: "변이한 뒤 더 깊은 곳에서 다시 퍼짐",
+    label: () => "변이 시작 스테이지 최대 51 → 101",
+  },
+  {
+    key: "kformat",
+    group: "core",
+    name: "자동 변이",
+    icon: "☣️",
+    base: 2,
+    growth: 1,
+    max: 1,
+    req: "kfast",
+    desc: "변이 효율이 꺾이면 (루트 권한이 덜 늘기 시작하면) 알아서 변이 — 변이 탭에서 켜고 끔",
+    label: (lv) => (lv ? "자동 변이 사용 가능" : "변이 효율이 꺾이면 자동 변이"),
+  },
+  {
+    key: "kpick",
+    group: "core",
+    name: "보스 지정",
+    icon: "📡",
+    base: 1,
+    growth: 1,
+    max: 1,
+    req: "kformat",
+    desc: "스테이지 반복 중에는 고른 바이러스만 보스로 — 늦게 합류한 모듈 따라잡기 (코드 모듈 자세히 보기에서 고름)",
+    label: (lv) => (lv ? "반복 중 보스 지정 가능" : "반복 중 원하는 바이러스만"),
+  },
+  {
+    key: "kfast2",
+    group: "core",
+    name: "빠른 재감염 II",
+    icon: "🚀",
+    base: 1,
+    growth: 1,
+    max: 1,
+    req: "kpick",
+    desc: "변이한 뒤 훨씬 깊은 곳에서 다시 퍼짐",
+    label: () => "변이 시작 스테이지 최대 101 → 151",
+  },
+  {
+    key: "kover",
+    group: "core",
+    name: "모듈 오버클럭",
+    icon: "🧬",
+    base: 2,
+    growth: 1,
+    max: 1,
+    req: "kfast2",
+    desc: "코드 모듈의 한계를 넘김 — 모든 공격 효과의 상한이 올라감",
+    label: () => `코드 모듈 효과 상한 ×${BAL.coreOver}`,
+  },
   {
     key: "kpatch",
     group: "core",
@@ -1532,39 +1647,9 @@ export const SHOP: ShopDef[] = [
     icon: "🩹",
     base: 1,
     growth: 1,
-    desc: "운영체제 커널을 직접 고쳐 모든 공격을 강화",
+    req: "kover",
+    desc: "운영체제 커널을 직접 고쳐 모든 공격을 강화 (반복 — 가격 = 레벨 + 1)",
     label: (lv) => `피해 ×${fmt(BAL.corePatch ** lv)}`,
-  },
-  {
-    key: "kescal",
-    group: "core",
-    name: "권한 상승",
-    icon: "👑",
-    base: 1,
-    growth: 1,
-    desc: "더 높은 권한을 빼앗아, 같은 최고 스테이지에서도 루트 권한을 더 받음 (다시 변이할 수 있게 됨)",
-    label: (lv) => `루트 권한 획득 +${Math.round(BAL.coreEscal * 100 * lv)}%`,
-  },
-  {
-    key: "kcomp",
-    group: "core",
-    name: "데이터 압축",
-    icon: "🗜️",
-    base: 1,
-    growth: 1,
-    desc: "훔친 데이터를 압축해 한 번에 더 많이 빼냄",
-    label: (lv) => `데이터 ×${fmt(BAL.coreComp ** lv)}`,
-  },
-  {
-    key: "kirq",
-    group: "core",
-    name: "인터럽트 지연",
-    icon: "⏳",
-    base: 1,
-    growth: 1,
-    max: 3,
-    desc: "보안 시스템의 인터럽트를 늦춰 보스와 싸울 시간을 늘림",
-    label: (lv) => `보스 제한 시간 +${BAL.coreIrq * lv}초`,
   },
 ];
 
@@ -1579,7 +1664,8 @@ export function rootLeft(s: Save) {
 }
 
 export function shopCost(d: ShopDef, lv: number) {
-  if (isCoreItem(d)) return lv + 1;
+  // 커널 패치만 반복 (레벨 + 1), 나머지 커널 권한은 정해진 값
+  if (isCoreItem(d)) return d.key === "kpatch" ? lv + 1 : d.base;
   return Math.ceil(d.base * d.growth ** lv);
 }
 

@@ -41,6 +41,7 @@ import {
   buyShop,
   rootLeft,
   shopCost,
+  shopLocked,
   applyPlan,
   apexData,
   apexHp,
@@ -79,6 +80,8 @@ const AUTO = process.argv.includes("--auto");
 const TO_END = process.argv.includes("--to-end");
 /** --quiet: 100스테이지 표만 */
 const QUIET = process.argv.includes("--quiet");
+/** --no-kernel: 커널 코어를 쓰지 않음 (비교용) */
+const NO_KERNEL = process.argv.includes("--no-kernel");
 /** stuck=600: 한 스테이지에 이 초 넘게 머물면 막혔다고 보고 변이 */
 let STUCK_SECS = 600;
 /**
@@ -188,14 +191,19 @@ function spendRoot(sv: Save) {
   if (rootLeft(sv) < 0) throw new Error("루트 권한이 음수");
 }
 
-/** 커널 코어: 가장 싼 것부터 (인터럽트 지연은 최대 3) */
+/** 커널 코어: 커널 권한을 위에서부터 차례로 (잠기지 않은 다음 것 — 마지막은 커널 패치 반복). --no-kernel 이면 안 씀 */
 function spendCores(sv: Save) {
-  for (let k = 0; k < 50; k++) {
-    const c = SHOP.filter((d) => d.group === "core" && (d.max == null || sv.shop[d.key] < d.max));
-    c.sort((a, b) => shopCost(a, sv.shop[a.key]) - shopCost(b, sv.shop[b.key]));
-    if (!c.length || !buyShop(sv, c[0].key)) break;
+  if (NO_KERNEL) return;
+  for (let k = 0; k < 200; k++) {
+    const next = SHOP.find(
+      (d) => d.group === "core" && !shopLocked(sv, d) && (d.max == null || sv.shop[d.key] < d.max)
+    );
+    if (!next || !buyShop(sv, next.key)) break;
+    if (!kernelAt[next.key]) kernelAt[next.key] = { t, stage: sv.best - 1 };
   }
 }
+/** 커널 권한을 산 시각 · 그때 최고 스테이지 */
+const kernelAt: Record<string, { t: number; stage: number }> = {};
 /** 최고 스테이지가 처음 100 · 200 … 을 넘은 시각 · 그때 변이 횟수 */
 const bestAt: Record<number, { t: number; formats: number }> = {};
 const diagSeen = new Set<number>();
@@ -485,6 +493,12 @@ for (let n = 100; n <= MAX_STAGE; n += 100) {
 }
 console.log(
   `  끝 시각 ${fmtT(t)} · 최고 ${s.best - 1} · 지금 스테이지 ${s.stage} · 루트 권한 ${fmt(s.root)} · 코어 ${s.cores}`
+);
+console.log(
+  "커널 권한 산 때: " +
+    (SHOP.filter((d) => d.group === "core" && kernelAt[d.key])
+      .map((d) => `${d.name} ${fmtT(kernelAt[d.key].t)}(${kernelAt[d.key].stage})`)
+      .join(" → ") || "없음")
 );
 console.log("\n모듈 · 우회 기술을 처음 열 때:");
 console.log(unlocks.join("\n") || "  없음");
