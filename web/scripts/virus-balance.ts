@@ -71,8 +71,7 @@ import {
   dropFrag,
   rollBoss,
   dropKey,
-  compileAuto,
-  type WildMode,
+  compileAll,
   ROSTER,
   APEX,
 } from "../src/lib/virus/logic";
@@ -90,8 +89,6 @@ const CHALS = process.argv.includes("--chal");
 const TO_END = process.argv.includes("--to-end");
 /** --quiet: 100스테이지 표만 */
 const QUIET = process.argv.includes("--quiet");
-/** wild=new|star|cheap|off: 제로데이 조각 규칙 (기본 new — 게임 기본값) */
-let WILD: WildMode = "new";
 /** stuck=600: 한 스테이지에 이 초 넘게 머물면 막혔다고 보고 변이 */
 let STUCK_SECS = 600;
 /**
@@ -117,10 +114,6 @@ for (const a of args.filter((x) => x.includes("="))) {
   }
   if (k === "drop") {
     RATE_DROP = Number(v);
-    continue;
-  }
-  if (k === "wild") {
-    WILD = v as WildMode;
     continue;
   }
   if (k === "stuck") {
@@ -167,7 +160,6 @@ function bestUpgrade(s: Save) {
 }
 
 let s = newSave();
-s.wildMode = WILD;
 let t = 0;
 let st = stats(s);
 let hp = mobHp(1, st);
@@ -233,7 +225,7 @@ function loot(kind: "boss" | "apex", fresh: boolean) {
     const k = dropKey(s, dk);
     if (k.opened) opened.push(`🛡️ ${APEX[k.index].trait} v1`);
   }
-  for (const c of compileAuto(s)) {
+  for (const c of compileAll(s)) {
     if (c.kind === "mod" && s.mods[c.i] === c.to && !unlockedMod.has(c.i)) {
       unlockedMod.add(c.i);
       opened.push(`📦 ${ROSTER[c.i].module} v${c.to}`);

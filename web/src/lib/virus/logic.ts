@@ -192,9 +192,8 @@ export interface Save {
   achSeen: number;
   /** 코드 모듈 버전 (ROSTER 순서, 0 = 아직 컴파일 안 함) — 변이해도 유지 */
   mods: number[];
-  /** 바이러스별 코드 조각 (ROSTER 순서) · 아무 모듈에나 쓰는 제로데이 조각 (원시 바이러스) */
+  /** 바이러스별 코드 조각 (ROSTER 순서) */
   frag: number[];
-  wild: number;
   /** 우회 기술 버전 (APEX 순서, 0 = 그 상위 보스를 아직 못 잡음) · 우회 키 */
   byp: number[];
   keys: number[];
@@ -204,9 +203,6 @@ export interface Save {
   runTop: number;
   /** 스테이지 반복: 보스를 잡아도 다음 스테이지로 안 감 */
   repeat: boolean;
-  /** 제로데이 조각 자동 사용 규칙 · ★ 우선 모듈 (-1 = 없음) */
-  wildMode: WildMode;
-  star: number;
   /** 진행 중인 챌린지 변이 (없으면 null) */
   chal: ChalKey | null;
   /** 끝낸 챌린지 (보상은 영구) */
@@ -303,14 +299,11 @@ export function newSave(): Save {
     achSeen: 0,
     mods: zeros(),
     frag: zeros(),
-    wild: 0,
     byp: zeros(),
     keys: zeros(),
     bossIdx: -1,
     runTop: 1,
     repeat: false,
-    wildMode: "new",
-    star: -1,
     chal: null,
     chalDone: [],
     savedAt: Date.now(),
@@ -325,11 +318,9 @@ function codeOf(s: Partial<Save>, best: number, apexBest: number) {
       : null;
   const mods = arr(s.mods) ?? ROSTER.map((v) => (best > v.join ? 1 : 0));
   const byp = arr(s.byp) ?? APEX.map((_, i) => (i < apexCount(apexBest) ? 1 : 0));
-  const wild = Number(s.wild);
   return {
     mods,
     frag: arr(s.frag) ?? zeros(),
-    wild: Number.isFinite(wild) && wild > 0 ? Math.floor(wild) : 0,
     byp,
     keys: arr(s.keys) ?? zeros(),
   };
@@ -390,8 +381,6 @@ export function parseSave(raw: string | null): Save {
       ...codeOf(s, best, apexBest),
       runTop: Math.max(stage, Math.min(Number(s.runTop) || stage, best)),
       repeat: !!s.repeat,
-      wildMode: WILD_MODES.some((w) => w.key === s.wildMode) ? s.wildMode! : "new",
-      star: Number.isInteger(s.star) && s.star! >= 0 && s.star! < ROSTER.length ? s.star! : -1,
       bossIdx:
         Number.isInteger(s.bossIdx) && s.bossIdx! >= -2 && s.bossIdx! < ROSTER.length
           ? s.bossIdx!
@@ -818,7 +807,7 @@ export const FINAL = {
   color: "#f43f5e",
 } as const;
 
-/** 원시 바이러스 — 처음부터 나오는 보스 (해를 끼치지 않던 장난 프로그램이라 모듈은 없고, 만능 제로데이 조각을 줌) */
+/** 원시 바이러스 — 처음부터 나오는 보스 (해를 끼치지 않던 장난 프로그램이라 빼앗을 코드가 없음 — 데이터 · 도감 기록만) */
 export const PRIMITIVES: { id: string; name: string; year: number; color: string; desc: string }[] =
   [
     {
@@ -876,7 +865,7 @@ export function joinedCount(best: number) {
 }
 
 // ── 코드 조각 · 우회 키 · 컴파일 ──
-// 보스를 잡으면 그 바이러스의 코드 조각 (원시 바이러스는 만능 제로데이 조각), 상위 보스는 그 보안 시스템의 우회 키.
+// 보스를 잡으면 그 바이러스의 코드 조각 (원시 바이러스는 없음), 상위 보스는 그 보안 시스템의 우회 키.
 // 처음 가 보는 스테이지면 DROP_NEW 개, 변이 뒤 다시 잡으면 DROP_AGAIN 개. 모이면 컴파일해서 버전을 올림.
 
 export const DROP_NEW = 3;
@@ -887,7 +876,7 @@ export const DROP_AGAIN = 1;
  *  - new: 처음 가 보는 스테이지 (최고 스테이지) → DROP_NEW
  *  - run: 이번 회차에 처음 오르는 스테이지 (변이 뒤 다시 오르기) → DROP_AGAIN
  *  - again: 이번 회차에 이미 지나온 스테이지 (반복 · 스테이지 되돌리기) → 보스를 잡는 데 걸린 시간에 비례한 확률로 1개
- *    (낮은 스테이지에서 순식간에 잡히는 보스 — 특히 원시 바이러스의 제로데이 조각 — 를 무한히 모으지 못하게)
+ *    (낮은 스테이지에서 순식간에 잡히는 보스의 조각 · 키를 무한히 모으지 못하게)
  */
 export type DropKind = "new" | "run" | "again";
 export function dropKind(s: Save): DropKind {
@@ -913,12 +902,12 @@ export function keyCost(v: number) {
   return Math.ceil(BAL.keyBase * BAL.keyGrowth ** (v - 1));
 }
 
-/** 보스를 잡으면 조각 — 어느 모듈의 조각인지 (-1 = 제로데이) */
+/** 보스를 잡으면 조각 — 어느 모듈의 조각인지 · 몇 개 (원시 바이러스는 index -1 · 0개) */
 export function dropFrag(s: Save, kind: DropKind, fightSecs = 0, rand: () => number = Math.random) {
   const index = s.bossIdx;
   const n = dropCount(kind, fightSecs, rand);
-  if (index < 0) s.wild += n;
-  else s.frag[index] += n;
+  if (index < 0) return { index, n: 0 };
+  s.frag[index] += n;
   return { index, n };
 }
 
@@ -953,49 +942,30 @@ export interface CompileItem {
   i: number;
   /** 컴파일 뒤 버전 */
   to: number;
-  /** 이번에 쓴 제로데이 조각 */
-  wild?: number;
 }
 
-/** 제로데이 조각 자동 사용 규칙 (자동 컴파일 · 팝업의 「컴파일」이 따름) */
-export type WildMode = "new" | "star" | "cheap" | "off";
-export const WILD_MODES: { key: WildMode; label: string; desc: string }[] = [
-  { key: "new", label: "새 모듈 열 때만", desc: "처음 여는 모듈에 몰아줌 — 그 밖에는 쓰지 않음" },
-  { key: "star", label: "★ 우선 모듈에", desc: "★ 표시한 모듈에 몰아줌" },
-  { key: "cheap", label: "가장 싼 것부터", desc: "조각이 덜 드는 모듈부터 고르게" },
-  { key: "off", label: "쓰지 않기", desc: "직접 쓸 때만 (모듈 카드 · 자세히 보기)" },
-];
-
-/** 이 모듈을 열거나 올릴 수 있는 상태인지 (한 번도 조각을 못 얻은 모듈은 제로데이 조각만으로 열 수 없음) */
+/** 이 모듈을 열거나 올릴 수 있는 상태인지 (그 바이러스의 조각을 한 번이라도 얻었음) */
 export function modOpenable(s: Save, i: number) {
   return s.mods[i] > 0 || s.frag[i] > 0;
 }
 
-/** 모듈 i 를 제로데이 조각을 wildMax 개까지 써서 몇 버전까지 올릴 수 있나 (자기 조각을 먼저 씀) */
-export function planMod(s: Save, i: number, wildMax: number) {
+/** 모듈 i 를 가진 조각으로 몇 버전까지 올릴 수 있나 · 쓰는 조각 */
+export function planMod(s: Save, i: number) {
   let v = s.mods[i];
   let own = s.frag[i];
-  let wild = 0;
-  if (!modOpenable(s, i)) return { to: v, own: 0, wild: 0 };
-  for (let k = 0; k < 500; k++) {
-    const c = fragCost(v);
-    const useOwn = Math.min(c, own);
-    const need = c - useOwn;
-    if (wild + need > Math.min(wildMax, s.wild)) break;
-    own -= useOwn;
-    wild += need;
+  for (let k = 0; k < 500 && own >= fragCost(v); k++) {
+    own -= fragCost(v);
     v++;
   }
-  return { to: v, own: s.frag[i] - own, wild };
+  return { to: v, own: s.frag[i] - own };
 }
 
-/** 모듈 i 를 계획대로 컴파일 (제로데이 wildMax 개까지) — 오른 버전 수 */
-export function compileMod(s: Save, i: number, wildMax: number) {
-  const p = planMod(s, i, wildMax);
+/** 모듈 i 를 가진 조각으로 올릴 수 있는 만큼 — 오른 버전 수 */
+export function compileMod(s: Save, i: number) {
+  const p = planMod(s, i);
   const gained = p.to - s.mods[i];
   if (gained <= 0) return 0;
   s.frag[i] -= p.own;
-  s.wild -= p.wild;
   s.mods[i] = p.to;
   return gained;
 }
@@ -1011,11 +981,11 @@ export function compileByp(s: Save, i: number) {
   return n;
 }
 
-/** 자기 조각 · 키만으로 지금 올릴 수 있는 것 (한 버전 이상) */
-export function ownReady(s: Save): CompileItem[] {
+/** 지금 컴파일하면 오를 것 (모듈 · 우회 기술 — 각각 올라갈 버전까지) */
+export function compileReady(s: Save): CompileItem[] {
   const out: CompileItem[] = [];
   ROSTER.forEach((_, i) => {
-    const p = planMod(s, i, 0);
+    const p = planMod(s, i);
     if (p.to > s.mods[i]) out.push({ kind: "mod", i, to: p.to });
   });
   APEX.forEach((_, i) => {
@@ -1030,87 +1000,12 @@ export function ownReady(s: Save): CompileItem[] {
   return out;
 }
 
-/** 자기 조각 · 키로 되는 것을 전부 컴파일 */
-export function compileOwn(s: Save): CompileItem[] {
+/** 할 수 있는 컴파일을 전부 (컴파일 막대 · 자동 컴파일러 · 시뮬레이터) */
+export function compileAll(s: Save): CompileItem[] {
   const out: CompileItem[] = [];
-  ROSTER.forEach((_, i) => compileMod(s, i, 0) && out.push({ kind: "mod", i, to: s.mods[i] }));
+  ROSTER.forEach((_, i) => compileMod(s, i) && out.push({ kind: "mod", i, to: s.mods[i] }));
   APEX.forEach((_, i) => compileByp(s, i) && out.push({ kind: "byp", i, to: s.byp[i] }));
   return out;
-}
-
-/** 제로데이 조각을 규칙대로 씀 */
-export function autoWild(s: Save, mode: WildMode = s.wildMode): CompileItem[] {
-  const out: CompileItem[] = [];
-  const spend = (i: number) => {
-    const before = s.wild;
-    if (compileMod(s, i, s.wild))
-      out.push({ kind: "mod", i, to: s.mods[i], wild: before - s.wild });
-  };
-  if (mode === "new") {
-    ROSTER.forEach((_, i) => !s.mods[i] && s.frag[i] > 0 && spend(i));
-  } else if (mode === "star") {
-    if (s.star >= 0 && modOpenable(s, s.star)) spend(s.star);
-  } else if (mode === "cheap") {
-    const got = new Map<number, number>();
-    const start = new Map<number, number>();
-    for (let k = 0; k < 2000; k++) {
-      const can = ROSTER.map((_, i) => i).filter(
-        (i) => modOpenable(s, i) && s.frag[i] + s.wild >= fragCost(s.mods[i])
-      );
-      if (!can.length) break;
-      can.sort((a, b) => fragCost(s.mods[a]) - fragCost(s.mods[b]));
-      const i = can[0];
-      const before = s.wild;
-      if (!start.has(i)) start.set(i, 0);
-      const need = fragCost(s.mods[i]);
-      const own = Math.min(need, s.frag[i]);
-      s.frag[i] -= own;
-      s.wild -= need - own;
-      s.mods[i]++;
-      start.set(i, start.get(i)! + before - s.wild);
-      got.set(i, s.mods[i]);
-    }
-    got.forEach((to, i) => out.push({ kind: "mod", i, to, wild: start.get(i) }));
-  }
-  return out;
-}
-
-/** 자동 컴파일 (자동 컴파일러 · 시뮬레이터): 제로데이 규칙 → 자기 조각 · 키 */
-export function compileAuto(s: Save): CompileItem[] {
-  const map = new Map<string, CompileItem>();
-  for (const c of [...autoWild(s), ...compileOwn(s)]) {
-    const key = `${c.kind}${c.i}`;
-    const prev = map.get(key);
-    map.set(key, { ...c, wild: (prev?.wild ?? 0) + (c.wild ?? 0) || undefined });
-  }
-  return [...map.values()];
-}
-
-/**
- * 팝업 제안: 제로데이 조각을 써야 오르는 모듈 중 「쓴 조각 1개당 초당 피해(보스 기준)」가 가장 많이 오르는 것 — 한 버전만
- * (자기 조각만으로 되는 것은 위 「컴파일」 줄에 있으니 뺌)
- */
-export function wildSuggest(s: Save): { i: number; to: number; wild: number; gain: number } | null {
-  const st = stats(s);
-  const base = dps(st) * st.bossDmgMul * st.fxBossMul;
-  let best: { i: number; to: number; wild: number; gain: number } | null = null;
-  let top = 0;
-  ROSTER.forEach((_, i) => {
-    if (!modOpenable(s, i) || planMod(s, i, 0).to > s.mods[i]) return;
-    const need = fragCost(s.mods[i]) - s.frag[i];
-    if (need <= 0 || need > s.wild) return;
-    const mods = [...s.mods];
-    mods[i]++;
-    const st2 = stats({ ...s, mods });
-    const gain = (dps(st2) * st2.bossDmgMul * st2.fxBossMul) / base - 1;
-    // 피해에 안 잡히는 효과(첫 발 · 이월 · 잠금 · 데이터)도 고를 수 있게 아주 작은 값은 깔아 둠
-    const score = (gain + 0.001) / need;
-    if (score > top) {
-      top = score;
-      best = { i, to: s.mods[i] + 1, wild: need, gain };
-    }
-  });
-  return best;
 }
 
 const ZONES = [
@@ -1547,11 +1442,8 @@ export function format(s: Save): Save {
     achSeen: s.achSeen,
     mods: [...s.mods],
     frag: [...s.frag],
-    wild: s.wild,
     byp: [...s.byp],
     keys: [...s.keys],
-    wildMode: s.wildMode,
-    star: s.star,
     chalDone: [...s.chalDone],
   };
   n.runTop = n.stage;

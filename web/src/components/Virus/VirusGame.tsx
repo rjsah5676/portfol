@@ -104,15 +104,14 @@ import {
   dropKind,
   gotoStage,
   rollBoss,
-  compileAuto,
   compileMod,
+  compileAll,
+  compileReady,
   compileByp,
   planMod,
-  wildSuggest,
   fragCost,
   keyCost,
   modOpenable,
-  WILD_MODES,
   DROP_NEW,
   DROP_AGAIN,
   type CompileItem,
@@ -220,7 +219,7 @@ interface Reward {
   name: string;
   seed: string;
   color: string;
-  /** 보스에게서 얻은 코드 조각 (index -1 = 제로데이 조각) */
+  /** 보스에게서 얻은 코드 조각 */
   frag?: { index: number; n: number };
   /** 상위 보스에게서 얻은 우회 키 (처음 잡았으면 apex 로 보여 줌) */
   key?: { index: number; n: number };
@@ -406,8 +405,6 @@ export default function VirusGame() {
   } | null>(null);
   /** 코드 모듈 탭에서 누른 모듈 · 특성 (크게 보기) */
   const [detail, setDetail] = useState<{ kind: "mod" | "apex"; i: number } | null>(null);
-  /** 자세히 보기에서 고른 목표 버전 (null = 자기 조각만으로 되는 만큼) */
-  const [pickTo, setPickTo] = useState<number | null>(null);
   /** 방금 랜덤 강화 결과 (잠깐 띄움) */
   const [randed, setRanded] = useState<{ id: number; key: UpgKey; n: number } | null>(null);
   /** 기록 창을 열 때 새로 본 업적 (NEW 표시) */
@@ -495,12 +492,6 @@ export default function VirusGame() {
 
   /** 새로 연 코드 모듈 소개 (처음 컴파일했을 때 한 번) */
   const [intro, setIntro] = useState<number[]>([]);
-  /** 마지막 컴파일 되돌리기 — 그 전의 모듈 · 조각 · 우회 기술 (보스를 더 잡거나 변이하면 사라짐) */
-  const [undo, setUndo] = useState<{
-    id: number;
-    text: string;
-    snap: Pick<Save, "mods" | "frag" | "wild" | "byp" | "keys">;
-  } | null>(null);
   /** 컴파일 막대를 닫은 때의 조각 · 키 합계 — 그보다 더 모이기 전엔 다시 안 띄움 */
   const [barHidden, setBarHidden] = useState(-1);
   /** 컴파일 뒤: 처음 연 모듈은 소개 */
@@ -508,52 +499,23 @@ export default function VirusGame() {
     const fresh = items.filter((c) => c.kind === "mod" && !before[c.i]).map((c) => c.i);
     if (fresh.length) setIntro((q) => [...q, ...fresh.filter((i) => !q.includes(i))]);
   }, []);
-  /** 컴파일 한 번 (버튼) — 되돌리기용으로 그 전 상태를 남김 */
+  /** 컴파일 (버튼 · F 키) */
   const doCompile = useCallback(
     (fn: (sv: Save) => CompileItem[]) => {
       const sv = save.current;
-      const snap = {
-        mods: [...sv.mods],
-        frag: [...sv.frag],
-        wild: sv.wild,
-        byp: [...sv.byp],
-        keys: [...sv.keys],
-      };
+      const before = [...sv.mods];
       const items = fn(sv);
       if (!items.length) return;
-      afterCompile(snap.mods, items);
-      const wild = items.reduce((n, c) => n + (c.wild ?? 0), 0);
-      const id = Date.now();
-      setUndo({
-        id,
-        text: `${items.map((c) => (c.kind === "mod" ? `${ROSTER[c.i].icon} ${ROSTER[c.i].module} v${c.to}` : `🛡️ ${APEX[c.i].trait} v${c.to}`)).join(" · ")}${wild ? ` (✦ ${wild} 사용)` : ""}`,
-        snap,
-      });
-      setTimeout(() => setUndo((u) => (u?.id === id ? null : u)), 6000);
+      afterCompile(before, items);
       playVirusSfx("boss-down");
       persist();
       sync();
     },
     [afterCompile, persist, sync]
   );
-  const undoNow = () => {
-    if (!undo) return;
-    Object.assign(save.current, {
-      mods: [...undo.snap.mods],
-      frag: [...undo.snap.frag],
-      wild: undo.snap.wild,
-      byp: [...undo.snap.byp],
-      keys: [...undo.snap.keys],
-    });
-    setIntro((q) => q.filter((i) => undo.snap.mods[i] === 0 && save.current.mods[i] > 0));
-    setUndo(null);
-    persist();
-    sync();
-  };
 
   /**
-   * 보스 · 상위 보스를 잡은 뒤 조각 · 키 — 자동 컴파일러가 있으면 바로 컴파일 (제로데이 규칙대로).
-   * 되돌리기는 여기서 사라짐 (그 사이 조각이 바뀌어서)
+   * 보스 · 상위 보스를 잡은 뒤 조각 · 키 — 자동 컴파일러가 있으면 바로 컴파일.
    */
   const lootRef = useRef<
     (apex: boolean) => { frag?: Reward["frag"]; key?: Reward["key"]; opened: boolean }
@@ -572,10 +534,9 @@ export default function VirusGame() {
         const f = dropFrag(s, kind, fight);
         out = { frag: f.n ? f : undefined, opened: false };
       }
-      setUndo(null);
       if (s.shop.autoc) {
         const before = [...s.mods];
-        afterCompile(before, compileAuto(s));
+        afterCompile(before, compileAll(s));
       }
       return out;
     };
@@ -1344,17 +1305,8 @@ export default function VirusGame() {
         return;
       }
       if (overlay || detail || away || ask || intro.length) return;
-      // F: 컴파일 (제로데이 규칙대로) · G: 제로데이 제안 쓰기
-      if (e.code === "KeyF") doCompile((sv) => compileAuto(sv));
-      if (e.code === "KeyG") {
-        const sg = wildSuggest(save.current);
-        if (sg)
-          doCompile((sv) =>
-            compileMod(sv, sg.i, sg.wild)
-              ? [{ kind: "mod", i: sg.i, to: sv.mods[sg.i], wild: sg.wild }]
-              : []
-          );
-      }
+      // F: 컴파일
+      if (e.code === "KeyF") doCompile((sv) => compileAll(sv));
       const n = Number(e.key);
       if (n >= 1 && n <= UPGRADES.length) buy(UPGRADES[n - 1]);
       if (e.code === "KeyC") runCron();
@@ -1422,44 +1374,19 @@ export default function VirusGame() {
   /** 지금 띄울 새 모듈 소개 (자세히 보기 · 오프라인 수익 창이 없을 때) */
   const introNow = !detail && !away && intro.length ? intro[0] : null;
   const closeDetail = () => {
-    if (detail) {
-      setDetail(null);
-      setPickTo(null);
-    } else if (introNow != null) setIntro((q) => q.slice(1));
+    if (detail) setDetail(null);
+    else if (introNow != null) setIntro((q) => q.slice(1));
     else setAway(null);
   };
-  const setStar = (i: number) => {
-    save.current.star = i;
-    persist();
-    sync();
+  /** 코드 모듈 하나를 모인 조각으로 컴파일 (자세히 보기 — 버튼의 data-mod) */
+  const onCompileModule = (ev: React.MouseEvent<HTMLButtonElement>) => {
+    const i = Number(ev.currentTarget.dataset.mod);
+    doCompile((sv) => (compileMod(sv, i) ? [{ kind: "mod", i, to: sv.mods[i] }] : []));
   };
-  const setWildMode = (m: (typeof WILD_MODES)[number]["key"]) => {
-    save.current.wildMode = m;
-    persist();
-    sync();
-  };
-  // 컴파일 막대: 지금 「컴파일」을 누르면 오를 것 (제로데이 규칙 포함) · 제로데이를 써야 오르는 것 중 제안 하나
-  const preview = (() => {
-    if (s.shop.autoc || scene !== "play") return [];
-    const c: Save = {
-      ...s,
-      mods: [...s.mods],
-      frag: [...s.frag],
-      byp: [...s.byp],
-      keys: [...s.keys],
-    };
-    return compileAuto(c);
-  })();
-  const previewWild = preview.reduce((n, c) => n + (c.wild ?? 0), 0);
-  const suggest =
-    s.shop.autoc || scene !== "play"
-      ? null
-      : (() => {
-          const sg = wildSuggest(s);
-          return sg && !preview.some((c) => c.kind === "mod" && c.i === sg.i) ? sg : null;
-        })();
-  const lootSum = s.frag.reduce((a, b) => a + b, 0) + s.wild + s.keys.reduce((a, b) => a + b, 0);
-  const showBar = !undo && (preview.length > 0 || suggest != null) && lootSum > barHidden;
+  // 컴파일 막대: 지금 「컴파일」을 누르면 오를 것
+  const ready = s.shop.autoc || scene !== "play" ? [] : compileReady(s);
+  const lootSum = s.frag.reduce((a, b) => a + b, 0) + s.keys.reduce((a, b) => a + b, 0);
+  const showBar = ready.length > 0 && lootSum > barHidden;
   const itemName = (c: CompileItem) =>
     c.kind === "mod"
       ? `${ROSTER[c.i].icon} ${ROSTER[c.i].module} v${c.to}`
@@ -1978,89 +1905,30 @@ export default function VirusGame() {
                 </div>
               )}
 
-              {/* 컴파일 막대 · 되돌리기 */}
-              {(showBar || undo) && !cinema && (
+              {/* 컴파일 막대 */}
+              {showBar && !cinema && (
                 <div
-                  className={`vg-compile absolute inset-x-3 bottom-11 z-20 mx-auto flex max-w-[560px] flex-col gap-1 rounded-xl border border-emerald-300/40 bg-[#07130d]/95 px-3 py-2 shadow-[0_0_18px_rgba(74,222,128,0.25)] ${KR}`}
+                  className={`vg-compile absolute inset-x-3 bottom-11 z-20 mx-auto flex max-w-[560px] items-center gap-2 rounded-xl border border-emerald-300/40 bg-[#07130d]/95 px-3 py-2 shadow-[0_0_18px_rgba(74,222,128,0.25)] ${KR}`}
                 >
-                  {undo ? (
-                    <div className="flex items-center gap-2 vt-sm">
-                      <span className="min-w-0 flex-1 truncate text-emerald-100">
-                        ✅ 컴파일됨 · {undo.text}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={undoNow}
-                        className="shrink-0 rounded-lg border border-white/25 px-2.5 py-1 vt-xs font-bold text-white/90 hover:border-white/50"
-                      >
-                        되돌리기
-                      </button>
-                    </div>
-                  ) : (
-                    <>
-                      {preview.length > 0 && (
-                        <div className="flex items-center gap-2 vt-sm">
-                          <span className="min-w-0 flex-1 truncate text-white/90">
-                            🧬 {preview.map(itemName).join(" · ")}
-                            {previewWild > 0 && (
-                              <span className="ml-1 text-amber-200">(✦ {previewWild} 사용)</span>
-                            )}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => doCompile((sv) => compileAuto(sv))}
-                            className="shrink-0 rounded-lg bg-emerald-400 px-3 py-1 vt-xs font-bold text-black hover:bg-emerald-300"
-                          >
-                            컴파일
-                            <span className="ml-1 hidden font-mono opacity-70 md:inline">F</span>
-                          </button>
-                        </div>
-                      )}
-                      {suggest && (
-                        <div className="flex items-center gap-2 vt-sm">
-                          <span className="min-w-0 flex-1 truncate text-amber-100">
-                            ✦ 제로데이 {suggest.wild}개 더 쓰면 {ROSTER[suggest.i].icon}{" "}
-                            {ROSTER[suggest.i].module} v{suggest.to}
-                            {suggest.gain > 0.001 && (
-                              <span className="ml-1 text-amber-200/80">
-                                (보스 DPS +{(suggest.gain * 100).toFixed(1)}%)
-                              </span>
-                            )}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              doCompile((sv) =>
-                                compileMod(sv, suggest.i, suggest.wild)
-                                  ? [
-                                      {
-                                        kind: "mod",
-                                        i: suggest.i,
-                                        to: sv.mods[suggest.i],
-                                        wild: suggest.wild,
-                                      },
-                                    ]
-                                  : []
-                              )
-                            }
-                            className="shrink-0 rounded-lg border border-amber-300/60 bg-amber-300/15 px-3 py-1 vt-xs font-bold text-amber-100 hover:bg-amber-300/25"
-                          >
-                            쓰기
-                            <span className="ml-1 hidden font-mono opacity-70 md:inline">G</span>
-                          </button>
-                        </div>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => setBarHidden(lootSum)}
-                        aria-label="컴파일 막대 닫기 (조각이 더 모이면 다시 떠요)"
-                        title="닫기 — 조각이 더 모이면 다시 떠요"
-                        className="absolute -top-2 -right-2 flex h-5 w-5 items-center justify-center rounded-full border border-white/25 bg-[#07130d] vt-xs text-white/80 hover:text-white"
-                      >
-                        ✕
-                      </button>
-                    </>
-                  )}
+                  <span className="min-w-0 flex-1 truncate vt-sm text-white/90">
+                    🧬 {ready.map(itemName).join(" · ")}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => doCompile((sv) => compileAll(sv))}
+                    className="shrink-0 rounded-lg bg-emerald-400 px-3 py-1 vt-xs font-bold text-black hover:bg-emerald-300"
+                  >
+                    컴파일<span className="ml-1 hidden font-mono opacity-70 md:inline">F</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setBarHidden(lootSum)}
+                    aria-label="컴파일 막대 닫기 (조각이 더 모이면 다시 떠요)"
+                    title="닫기 — 조각이 더 모이면 다시 떠요"
+                    className="absolute -top-2 -right-2 flex h-5 w-5 items-center justify-center rounded-full border border-white/25 bg-[#07130d] vt-xs text-white/80 hover:text-white"
+                  >
+                    ✕
+                  </button>
                 </div>
               )}
 
@@ -2144,28 +2012,6 @@ export default function VirusGame() {
                   ))}
                 </div>
                 <div className="ml-auto flex shrink-0 items-center gap-1.5 pb-1">
-                  {tab === "module" && (
-                    <label
-                      className={`flex items-center gap-1 rounded-lg border border-amber-300/40 bg-amber-300/10 px-1.5 py-0.5 vt-xs font-bold text-amber-100 ${KR}`}
-                      title={`제로데이 조각 자동 사용 규칙 (컴파일 막대의 「컴파일」 · 자동 컴파일러가 따름)\n${WILD_MODES.map((w) => `${w.label}: ${w.desc}`).join("\n")}`}
-                    >
-                      ✦ {fmt(s.wild)}
-                      <select
-                        value={s.wildMode}
-                        onChange={(ev) =>
-                          setWildMode(ev.target.value as (typeof WILD_MODES)[number]["key"])
-                        }
-                        aria-label="제로데이 조각 자동 사용 규칙"
-                        className="rounded bg-[#0b130f] px-1 py-0.5 text-amber-50 outline-none"
-                      >
-                        {WILD_MODES.map((w) => (
-                          <option key={w.key} value={w.key}>
-                            {w.label}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                  )}
                   {tab === "shop" && (
                     <div className={`flex overflow-hidden rounded-lg border border-white/20 ${KR}`}>
                       {(
@@ -2446,11 +2292,8 @@ export default function VirusGame() {
                       const joined = v.join <= Math.max(s.best - 1, s.stage);
                       const cost = fragCost(lv);
                       const own = s.frag[i];
-                      const openable = modOpenable(s, i);
-                      const ownUp = planMod(s, i, 0).to > lv;
-                      const fill = openable && !ownUp && own + s.wild >= cost;
+                      const ownUp = planMod(s, i).to > lv;
                       const ownPct = Math.min(100, (own / cost) * 100);
-                      const wildPct = openable ? Math.min(100 - ownPct, (s.wild / cost) * 100) : 0;
                       return (
                         <div
                           key={v.id}
@@ -2481,7 +2324,6 @@ export default function VirusGame() {
                                 {lv > 0 && (
                                   <span className="ml-1 font-mono vt-xs text-white/75">v{lv}</span>
                                 )}
-                                {s.star === i && <span className="ml-1 text-amber-200">★</span>}
                               </div>
                               <div className="truncate vt-xs text-white/70">
                                 {lv ? v.cur(lv) : joined ? v.name : `스테이지 ${v.join} 합류`}
@@ -2490,18 +2332,13 @@ export default function VirusGame() {
                           </button>
                           {joined && (
                             <div className="flex items-center gap-1.5">
-                              {/* 조각 진행: 자기 조각(바이러스 색) · 제로데이로 채울 수 있는 만큼(금색 빗금) */}
                               <div
                                 className="relative h-1.5 flex-1 overflow-hidden rounded-full bg-white/10"
-                                title={`조각 ${own}${openable ? ` + 제로데이 ${s.wild}` : ""} / ${cost}`}
+                                title={`조각 ${own} / ${cost}`}
                               >
                                 <div
                                   className="absolute inset-y-0 left-0 rounded-full"
                                   style={{ width: `${ownPct}%`, background: v.color }}
-                                />
-                                <div
-                                  className="vg-wild-fill absolute inset-y-0"
-                                  style={{ left: `${ownPct}%`, width: `${wildPct}%` }}
                                 />
                               </div>
                               <span className="font-mono vt-xs text-white/75 tabular-nums">
@@ -2511,34 +2348,16 @@ export default function VirusGame() {
                                 type="button"
                                 onClick={() =>
                                   doCompile((sv) => {
-                                    const n = compileMod(sv, i, 0);
+                                    const n = compileMod(sv, i);
                                     return n ? [{ kind: "mod", i, to: sv.mods[i] }] : [];
                                   })
                                 }
                                 disabled={!ownUp}
                                 aria-label={`${v.module} 컴파일`}
-                                title="자기 조각으로 컴파일"
+                                title="모인 조각으로 컴파일"
                                 className="rounded-md border border-emerald-300/50 bg-emerald-400/15 px-1.5 vt-xs font-bold text-emerald-100 enabled:hover:bg-emerald-400/25 disabled:opacity-35"
                               >
                                 ▲
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  doCompile((sv) => {
-                                    const w = Math.max(0, fragCost(sv.mods[i]) - sv.frag[i]);
-                                    const n = compileMod(sv, i, w);
-                                    return n
-                                      ? [{ kind: "mod", i, to: sv.mods[i], wild: w || undefined }]
-                                      : [];
-                                  })
-                                }
-                                disabled={!fill}
-                                aria-label={`${v.module} 제로데이로 채우기`}
-                                title={`모자란 ${Math.max(0, cost - own)}개를 제로데이 조각으로 채워 한 버전`}
-                                className="rounded-md border border-amber-300/50 bg-amber-300/15 px-1.5 vt-xs font-bold text-amber-100 enabled:hover:bg-amber-300/25 disabled:opacity-35"
-                              >
-                                ✦
                               </button>
                             </div>
                           )}
@@ -3028,12 +2847,8 @@ export default function VirusGame() {
                     </>
                   )}
                   {r.frag && (
-                    <div
-                      className={`vt-xs break-keep [overflow-wrap:anywhere] ${r.frag.index < 0 ? "text-amber-200" : "text-white/90"}`}
-                    >
-                      {r.frag.index < 0
-                        ? `✦ 제로데이 조각 +${r.frag.n} (아무 모듈에나)`
-                        : `${ROSTER[r.frag.index].icon} ${ROSTER[r.frag.index].module} 조각 +${r.frag.n}`}
+                    <div className="vt-xs break-keep [overflow-wrap:anywhere] text-white/90">
+                      {ROSTER[r.frag.index].icon} {ROSTER[r.frag.index].module} 조각 +{r.frag.n}
                     </div>
                   )}
                   {r.key && (
@@ -3133,16 +2948,7 @@ export default function VirusGame() {
                       const lv = mods[i];
                       const joined = v.join <= Math.max(s.best - 1, s.stage);
                       const openable = modOpenable(s, i);
-                      const maxTo = planMod(s, i, s.wild).to;
-                      const to = Math.min(maxTo, Math.max(lv, pickTo ?? planMod(s, i, 0).to));
-                      // 목표 버전까지 드는 제로데이 조각 (자기 조각을 먼저 씀)
-                      let w = 0;
-                      for (let k = lv, own = s.frag[i]; k < to; k++) {
-                        const c = fragCost(k);
-                        const u = Math.min(c, own);
-                        own -= u;
-                        w += c - u;
-                      }
+                      const to = planMod(s, i).to;
                       return (
                         <>
                           {isIntro && (
@@ -3174,97 +2980,32 @@ export default function VirusGame() {
                             </p>
                           )}
                           {!isIntro && joined && (
-                            <div className="mt-3 rounded-xl border border-white/10 bg-white/[0.03] p-2.5 text-left">
+                            <div className="mt-3 rounded-xl border border-white/10 bg-white/[0.03] p-2.5">
                               <p className="vt-sm text-white/85">
-                                조각 <b className="font-mono">{s.frag[i]}</b> · ✦ 제로데이{" "}
-                                <b className="font-mono text-amber-200">{s.wild}</b> · 다음 버전{" "}
-                                {fragCost(lv)}개
+                                조각 <b className="font-mono">{s.frag[i]}</b> / 다음 버전{" "}
+                                <b className="font-mono">{fragCost(lv)}</b>
                               </p>
                               {openable ? (
                                 <>
-                                  <div className="mt-2 flex items-center justify-center gap-2">
-                                    <button
-                                      type="button"
-                                      onClick={() => setPickTo(Math.max(lv, to - 1))}
-                                      disabled={to <= lv}
-                                      aria-label="한 버전 낮게"
-                                      className="h-8 w-8 rounded-lg border border-white/20 font-mono text-white disabled:opacity-35"
-                                    >
-                                      −
-                                    </button>
-                                    <span className="min-w-[96px] text-center font-mono vt-base font-bold text-white">
-                                      v{lv} → v{to}
-                                    </span>
-                                    <button
-                                      type="button"
-                                      onClick={() => setPickTo(Math.min(maxTo, to + 1))}
-                                      disabled={to >= maxTo}
-                                      aria-label="한 버전 높게"
-                                      className="h-8 w-8 rounded-lg border border-white/20 font-mono text-white disabled:opacity-35"
-                                    >
-                                      +
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => setPickTo(maxTo)}
-                                      disabled={to >= maxTo}
-                                      className="rounded-lg border border-amber-300/40 px-2 py-1 vt-xs font-bold text-amber-100 disabled:opacity-35"
-                                    >
-                                      최대
-                                    </button>
-                                  </div>
                                   {to > lv && (
-                                    <p className="vt-sm mt-1.5 text-center text-emerald-200">
-                                      {v.cur(to)}
-                                      <span className="ml-1 text-amber-200">
-                                        {w ? `· ✦ ${w}개 사용` : "· 자기 조각만"}
-                                      </span>
+                                    <p className="vt-sm mt-1 text-emerald-200">
+                                      → v{to}: {v.cur(to)}
                                     </p>
                                   )}
-                                  <div className="mt-2 flex items-center justify-center gap-2">
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        setStar(s.star === i ? -1 : i);
-                                      }}
-                                      className={`rounded-full border px-3 py-1.5 vt-sm font-bold ${
-                                        s.star === i
-                                          ? "border-amber-300/70 bg-amber-300/20 text-amber-100"
-                                          : "border-white/20 text-white/80"
-                                      }`}
-                                      title="제로데이 규칙이 「★ 우선 모듈에」일 때 이 모듈에 몰아줘요"
-                                    >
-                                      {s.star === i ? "★ 우선" : "☆ 우선으로"}
-                                    </button>
-                                    <button
-                                      type="button"
-                                      disabled={to <= lv}
-                                      onClick={() => {
-                                        doCompile((sv) => {
-                                          const n = compileMod(sv, i, w);
-                                          return n
-                                            ? [
-                                                {
-                                                  kind: "mod",
-                                                  i,
-                                                  to: sv.mods[i],
-                                                  wild: w || undefined,
-                                                },
-                                              ]
-                                            : [];
-                                        });
-                                        setPickTo(null);
-                                      }}
-                                      className="rounded-full bg-emerald-400 px-4 py-1.5 vt-sm font-bold text-black enabled:hover:bg-emerald-300 disabled:opacity-40"
-                                    >
-                                      v{to}로 컴파일
-                                    </button>
-                                  </div>
+                                  <button
+                                    type="button"
+                                    disabled={to <= lv}
+                                    data-mod={i}
+                                    onClick={onCompileModule}
+                                    className="mt-2 rounded-full bg-emerald-400 px-4 py-1.5 vt-sm font-bold text-black enabled:hover:bg-emerald-300 disabled:opacity-40"
+                                  >
+                                    {to > lv ? `▲ v${to}로 컴파일` : "조각이 더 필요해요"}
+                                  </button>
                                 </>
                               ) : (
                                 <p className="vt-sm mt-1 text-white/75">
-                                  {v.name}을 한 번 잡아 조각을 얻어야 열 수 있어요 (제로데이
-                                  조각만으로는 못 열어요).
+                                  {v.name}을 잡아 조각을 모으면 열 수 있어요 (처음 가는 스테이지{" "}
+                                  {DROP_NEW}개 · 다시 {DROP_AGAIN}개).
                                 </p>
                               )}
                             </div>
