@@ -248,6 +248,28 @@ export function createPoints(db: Database, now: () => number = Date.now) {
       return rows.map(({ at, delta, reason, ref, bal }) => ({ at, delta, reason, ...(ref && { ref }), ...(bal !== undefined && { bal }) }));
     },
 
+    /** 게임 안에서 포인트 쓰기 (예: 디펜스 시즌 패스 · 코어 교환). 모자라면 NEED_POINTS. 쓴 뒤 잔액 */
+    async spend(uid: string, amount: number, reason: string, ref?: string): Promise<number> {
+      const n = Math.floor(amount);
+      if (!(n > 0)) throw new AppError("BAD_REQUEST", "잘못된 값이에요.", 400);
+      const r = await col.updateOne({ _id: uid, nick: { $exists: true }, points: { $gte: n } } as never, { $inc: { points: -n } } as never);
+      if (!r.modifiedCount) {
+        const d = await read(uid);
+        if (!d?.nick) throw notMember();
+        throw short(n, d.points ?? 0);
+      }
+      return after(uid, -n, reason, ref);
+    },
+
+    /** 게임 보상으로 포인트 주기 (예: 디펜스 주간 도전 순위). 준 뒤 잔액 */
+    async grant(uid: string, amount: number, reason: string, ref?: string): Promise<number> {
+      const n = Math.floor(amount);
+      if (!(n > 0)) return (await read(uid))?.points ?? 0;
+      const r = await col.updateOne({ _id: uid, nick: { $exists: true } } as never, { $inc: { points: n } } as never);
+      if (!r.modifiedCount) throw notMember();
+      return after(uid, n, reason, ref);
+    },
+
     /** (관리자) 잔액을 그 값으로 맞춤 — 차이만큼 원장에 */
     async adminSet(uid: string, points: number): Promise<number> {
       const d = await read(uid);
@@ -273,6 +295,8 @@ export function createPoints(db: Database, now: () => number = Date.now) {
     chipsToPoints: locked(api.chipsToPoints),
     pointsToChips: locked(api.pointsToChips),
     claim: locked(api.claim),
+    spend: locked(api.spend),
+    grant: locked(api.grant),
     adminSet: locked(api.adminSet),
   };
 }

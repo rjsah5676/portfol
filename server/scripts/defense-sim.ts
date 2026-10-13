@@ -5,6 +5,8 @@
  *   npx tsx scripts/defense-sim.ts -n 100 -b 마도회   한 전략만 100판
  *   npx tsx scripts/defense-sim.ts --curve          웨이브별 적 체력 · 봇 DPS 곡선
  *   npx tsx scripts/defense-sim.ts --json out.json  결과를 파일로
+ *   npx tsx scripts/defense-sim.ts --meta mid      영구 성장을 든 봇 (mid: 몇 주 한 사람 · late: 많이 한 사람 · max: 다 모은 사람)
+ *   npx tsx scripts/defense-sim.ts --meta max --glitch 6   오염 단계까지
  *
  * 봇 판도 명령 기록을 남겨 replay 로 다시 돌려 보고 결과가 같은지 확인함 (결정론 검사).
  */
@@ -13,7 +15,8 @@ import { BALANCE_VER, LAST_WAVE, TPS, hpOf } from "../../web/src/lib/defense/bal
 import { BOTS, botByName, botTurn, type BotCfg } from "../../web/src/lib/defense/bot";
 import { replay, type LogEntry } from "../../web/src/lib/defense/replay";
 import { newGame, step, unitCount, type Game } from "../../web/src/lib/defense/sim";
-import { GRADE_NAME, UNIT } from "../../web/src/lib/defense/units";
+import { GRADE_NAME, UNIT, UNITS } from "../../web/src/lib/defense/units";
+import type { Loadout } from "../../web/src/lib/defense/progress";
 
 const args = process.argv.slice(2);
 const opt = (k: string) => {
@@ -25,6 +28,25 @@ const only = opt("-b");
 const seed0 = Number(opt("--seed") ?? 1000);
 const curve = args.includes("--curve");
 const verify = !args.includes("--no-verify");
+const metaLv = opt("--meta");
+const glitch = Number(opt("--glitch") ?? 0);
+
+/** 봇 길에 맞춘 영구 성장 (그 길을 꾸준히 한 사람이 들고 올 만한 것) */
+function loadoutFor(cfg: BotCfg): Loadout | null {
+  if (!metaLv) return null;
+  const lvN = metaLv === "max" ? 10 : metaLv === "late" ? 6 : 3;
+  const lv: Record<string, number> = {};
+  for (const u of UNITS) if (!cfg.focus || u.faction === cfg.focus || u.faction === "hidden") lv[u.id] = cfg.focus ? lvN : Math.max(1, lvN - 1);
+  const fres: Record<string, string[]> = { knight: ["k_drill", "k_tactic"], mech: ["m_drill", "m_tune"], arcane: ["a_drill", "a_focus"] };
+  const res = cfg.focus ? ["g_wave", "g_boss", ...fres[cfg.focus]] : ["g_gold", "g_wave", "g_boss", "g_summon"];
+  const relics =
+    metaLv === "mid"
+      ? ["gold_gear", "first_harvest", cfg.gamble ? "gambler_coin" : "lucky_clover"]
+      : cfg.focus
+        ? ["pure_blood", "vaccine", "hourglass"]
+        : ["rainbow", "war_banner", "vaccine"];
+  return { lv, res: metaLv === "mid" ? res.slice(0, 2) : res, relics, glitch };
+}
 
 interface Run {
   bot: string;
@@ -41,7 +63,8 @@ interface Run {
 }
 
 function play(cfg: BotCfg, seed: number): Run {
-  const g: Game = newGame(seed, 1);
+  const lo = loadoutFor(cfg);
+  const g: Game = newGame(seed, 1, [lo]);
   const b = g.boards[0];
   const log: LogEntry[] = [];
   const snap: Run["snap"] = {};
@@ -69,7 +92,7 @@ function play(cfg: BotCfg, seed: number): Run {
   const ms = performance.now() - t0;
   const r = b.result!;
   if (verify) {
-    const again = replay(seed, 1, log).boards[0].result!;
+    const again = replay(seed, 1, log, [lo]).boards[0].result!;
     if (again.wave !== r.wave || again.tick !== r.tick || again.kills !== r.kills || again.win !== r.win)
       throw new Error(`결정론 깨짐: ${cfg.name} seed ${seed} — ${JSON.stringify(r)} vs ${JSON.stringify(again)}`);
   }
@@ -87,7 +110,7 @@ const med = (xs: number[]) => {
   return s[Math.floor(s.length / 2)] ?? 0;
 };
 
-console.log(`\n픽셀 글리치 디펜스 밸런스 시뮬 (버전 ${BALANCE_VER}) — 전략별 ${N}판${verify ? " · 결정론 확인함" : ""}\n`);
+console.log(`\n픽셀 글리치 디펜스 밸런스 시뮬 (버전 ${BALANCE_VER}) — 전략별 ${N}판${metaLv ? ` · 성장 ${metaLv} · 오염 ${glitch}` : ""}${verify ? " · 결정론 확인함" : ""}\n`);
 console.log("전략      클리어  평균웨이브 중앙  사망(필드/보스)  평균시간  판당계산");
 for (const cfg of bots) {
   const rs = runs.filter((r) => r.bot === cfg.name);

@@ -50,6 +50,11 @@ export async function metricsOf(db: Database, uid: string, game: AchGame): Promi
     m["defense.wave"] = Math.max(s.wave ?? 0, ...best.map((b) => b.wave ?? 0));
     m["defense.wins"] = Math.max(s.wins ?? 0, best.some((b) => b.win) ? 1 : 0);
     m["defense.kills"] = s.kills ?? 0;
+    // 판 밖 성장 (defenseMeta 의 defense_profile)
+    const pf = (await db.col("defense_profile").findOne({ _id: uid } as never, { projection: { glitchWin: 1, lv: 1, relics: 1 } })) as { glitchWin?: number; lv?: Record<string, number>; relics?: string[] } | null;
+    m["defense.glitch"] = (pf?.glitchWin ?? -1) + 1;
+    m["defense.maxlv"] = Math.max(0, ...Object.values(pf?.lv ?? {}));
+    m["defense.relics"] = pf?.relics?.length ?? 0;
   }
 
   if (game === "rhythm") {

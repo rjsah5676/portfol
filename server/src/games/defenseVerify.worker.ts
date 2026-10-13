@@ -4,6 +4,7 @@
  * (개발 서버(tsx)에선 작업 스레드 대신 메인에서 verifyRun 을 그대로 부름 — 조금씩 끊어서 돌리는 건 같음)
  */
 import { parentPort } from "node:worker_threads";
+import type { Loadout } from "../../../web/src/lib/defense/progress";
 import { replayer, type LogEntry } from "../../../web/src/lib/defense/replay";
 import type { Result } from "../../../web/src/lib/defense/sim";
 import { UNIT } from "../../../web/src/lib/defense/units";
@@ -13,6 +14,8 @@ export interface VerifyJob {
   seed: number;
   players: number;
   log: LogEntry[];
+  /** 보드마다 들고 간 영구 성장 (없으면 맨몸) */
+  loadouts?: (Loadout | null)[];
 }
 export interface VerifyOut {
   id: number;
@@ -20,6 +23,8 @@ export interface VerifyOut {
   results: (Result | null)[];
   /** 보드마다 가장 높은 등급 유닛 3개 (순위표에 보여 줌) */
   tops: string[][];
+  /** 보드마다 미션 숫자 재료 (얻은 유닛 · 닫은 균열) */
+  stats: { made: Record<string, number>; rifts: number }[];
   ticks: number;
   cpu: number;
 }
@@ -27,7 +32,7 @@ export interface VerifyOut {
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export async function verifyRun(job: VerifyJob): Promise<VerifyOut> {
-  const r = replayer(job.seed, job.players, job.log);
+  const r = replayer(job.seed, job.players, job.log, job.loadouts ?? undefined);
   let cpu = 0;
   for (;;) {
     const t = performance.now();
@@ -45,6 +50,7 @@ export async function verifyRun(job: VerifyJob): Promise<VerifyOut> {
         .sort((a, c) => UNIT[c].grade - UNIT[a].grade || UNIT[c].dmg - UNIT[a].dmg)
         .slice(0, 3)
     ),
+    stats: g.boards.map((b) => ({ made: { ...b.made }, rifts: b.rifts })),
     ticks: g.tick,
     cpu: Math.round(cpu),
   };

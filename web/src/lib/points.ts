@@ -47,7 +47,7 @@ export type PointGame = "poker" | "fight" | "defense" | "rhythm" | "sketch";
 export const POINT_GAMES: Record<PointGame, string> = {
   poker: "ANIME POKER",
   fight: "PIXEL FIGHT",
-  defense: "PIXEL LUCKY DEFENSE",
+  defense: "PIXEL GLITCH DEFENSE",
   rhythm: "BEAT DASH",
   sketch: "스케치 퀴즈",
 };
@@ -92,6 +92,9 @@ export const SHOP: ShopItem[] = [
     name: "한여름의 연서",
     price: 30_000,
   },
+  // PIXEL GLITCH DEFENSE 블록 테마 (lib/defense/progress.ts 의 THEMES — 얼음 · 네온 · 황금은 시즌 패스 프리미엄에서도)
+  { id: "defense.theme.forest", game: "defense", kind: "item", ref: "theme.forest", name: "블록 테마 · 픽셀 숲", price: 3_000 },
+  { id: "defense.theme.ice", game: "defense", kind: "item", ref: "theme.ice", name: "블록 테마 · 얼음 성채", price: 8_000 },
 ];
 export const shopItem = (id: unknown) => SHOP.find((s) => s.id === id);
 export const shopOf = (game: PointGame) => SHOP.filter((s) => s.game === game);
@@ -122,6 +125,9 @@ export type AchMetric =
   | "defense.wave"
   | "defense.wins"
   | "defense.kills"
+  | "defense.glitch"
+  | "defense.maxlv"
+  | "defense.relics"
   | "rhythm.plays"
   | "rhythm.songs"
   | "rhythm.fc"
@@ -280,7 +286,7 @@ export const ACHIEVEMENTS: Achievement[] = [
     ),
   ),
 
-  // PIXEL LUCKY DEFENSE (랭킹 판 기준)
+  // PIXEL GLITCH DEFENSE (랭킹 판 기준)
   a(
     "defense",
     "runs-10",
@@ -344,6 +350,11 @@ export const ACHIEVEMENTS: Achievement[] = [
     10_000,
     500,
   ),
+  a("defense", "glitch-3", "오염 적응", "오염 3단계 클리어", "defense.glitch", 4, 1500),
+  a("defense", "glitch-10", "글리치 정복자", "오염 10단계 클리어", "defense.glitch", 11, 5000),
+  a("defense", "maxlv-1", "만렙 유닛", "유닛 하나를 최고 레벨(10)까지", "defense.maxlv", 10, 1000),
+  a("defense", "relics-6", "유물 수집가", "유물 6개 모으기", "defense.relics", 6, 500),
+  a("defense", "relics-12", "유물 박물관", "유물 12개 모두 모으기", "defense.relics", 12, 2000),
 
   // BEAT DASH
   a("rhythm", "plays-30", "리듬 입문", "30판 하기", "rhythm.plays", 30, 200),
@@ -437,6 +448,16 @@ export function pointReason(r: Pick<PointLogRow, "reason" | "ref">): string {
       return r.ref === "toChips" ? "환전 · 포커 칩으로" : "환전 · 포커 칩에서";
     case "admin":
       return "운영자 조정";
+    case "defense":
+      return r.ref === "cores"
+        ? "디펜스 · 글리치 코어 교환"
+        : r.ref?.startsWith("weekly:")
+          ? `디펜스 · 주간 도전 ${r.ref.split(":")[2]}위`
+          : r.ref?.startsWith("pass")
+            ? "디펜스 · 시즌 패스"
+            : r.ref?.startsWith("quest:")
+              ? "디펜스 · 미션"
+              : "디펜스";
     default:
       return r.reason;
   }
