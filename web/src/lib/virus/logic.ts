@@ -28,7 +28,7 @@ export const BAL = {
   /** 상위 보스 체력 · 보상 = 같은 스테이지 보스의 몇 배 */
   apexHp: 2,
   apexData: 5,
-  /** 최종 보스 체력 · 보상 = 스테이지 100 상위 보스의 몇 배 */
+  /** 최종 보스 체력 · 보상 = 마지막 스테이지 상위 보스의 몇 배 */
   finalHp: 3,
   finalData: 10,
   /** KILLSWITCH 를 잡을 때마다 다음 버전 체력 배율 */
@@ -38,8 +38,10 @@ export const BAL = {
   coreEscal: 0.2,
   coreComp: 1.5,
   coreIrq: 5,
-  /** 스테이지마다 체력 배율 */
+  /** 스테이지마다 체력 배율 (lateFrom 까지) · 그 뒤로는 hpGrowthLate */
   hpGrowth: 1.18,
+  lateFrom: 100,
+  hpGrowthLate: 1.18,
   /** 보스 체력 = 같은 스테이지 파일의 몇 배 */
   bossHp: 10,
   /** 보상 = 체력 ÷ 이 값 */
@@ -62,13 +64,22 @@ export const BAL = {
   formatStage: 30,
   /** 루트 권한 합계 = ((최고 스테이지 - 1) ÷ rootDiv)^rootPow — 더 멀리 가야만 늘어남 */
   rootDiv: 10,
-  /** hpGrowth 1.18 · 2.17제곱 · 3%: 자동 구매로 최종 보스까지 약 1시간 20분~1시간 40분 (v0.5 업적 · 세트 포함), 스테이지 30까지는 약 3분 */
+  /**
+   * 루트 권한 합계 = ((최고 스테이지 - 1) ÷ rootDiv)^rootPow (× 100을 넘은 스테이지마다 rootLate)
+   * 시뮬레이션(--auto --chal --rate, 최적 변이): 스테이지 100 ≈ 45분 · 500 ≈ 3시간 · 1000 ≈ 9.7시간 (변이 약 20번)
+   */
   rootPow: 2.17,
+  /** 스테이지 lateFrom 을 넘은 뒤 최고 스테이지 1마다 루트 권한 합계 ×rootLate */
+  rootLate: 1.03,
   /** 루트 권한 1당 피해 +이 비율 */
   rootBonus: 0.03,
-  /** 모듈 버전 1당 배율 — 10스테이지마다 하나씩 오르므로 작게 (크면 성장이 폭주) */
+  /** 코드 모듈 공격 효과: 버전마다 상한까지 남은 거리가 이 배로 줄어듦 (v10 ≈ 37% · v50 ≈ 92% · v100 ≈ 99%) */
+  fxK: 0.98,
+  /** 우회 기술 「암호화 터널」 발사 속도: ×1.15 에서 최대 ×1.15·modSpdMax 로 (버전마다 남은 거리 modSpdK 배) */
+  modSpdMax: 3,
+  modSpdK: 0.96,
+  /** 우회 기술 버전 1당 배율 — 10스테이지마다 하나씩 오르므로 작게 (크면 성장이 폭주) */
   modDmg: 1.1,
-  modSpd: 1.05,
   modData: 1.1,
   modCost: 0.97,
   modMobHp: 0.97,
@@ -109,7 +120,7 @@ export const APEX_TIME = 45;
 /** 최종 보스 제한 시간 */
 export const FINAL_TIME = 60;
 /** 마지막 스테이지 — 여기 상위 보스를 잡으면 최종 보스가 나오고, 더 나아가지 않음 */
-export const MAX_STAGE = 100;
+export const MAX_STAGE = 1000;
 export const SAVE_KEY = "virus-idle-v3";
 /** 발사한 코드가 적에게 닿기까지 (ms) — 닿는 순간 피해 */
 export const SHOT_MS = 380;
@@ -145,7 +156,7 @@ export interface Save {
   bossFail: boolean;
   /** 이 스테이지(10의 배수)의 보스는 잡았고 상위 보스가 남음 */
   bossDone: boolean;
-  /** 스테이지 100 상위 보스까지 잡았고 최종 보스가 남음 */
+  /** 마지막 스테이지 상위 보스까지 잡았고 최종 보스가 남음 */
   finalReady: boolean;
   /** 최종 보스를 잡은 횟수 (변이해도 유지) — 다음 KILLSWITCH 는 v(clears+1) */
   clears: number;
@@ -283,11 +294,18 @@ export function parseSave(raw: string | null): Save {
     let refund = 0;
     for (let i = 0; i < (old.golden ?? 0); i++) refund += Math.ceil(60 * 1.8 ** i);
     const rootSpent = Math.max(0, (s.rootSpent ?? 0) - refund);
-    // stage cap: older saves past MAX_STAGE come back to stage MAX_STAGE (best 101 = cleared MAX_STAGE)
-    const stage = Math.min(s.stage, MAX_STAGE);
-    const best = Math.min(Math.max(s.best || 1, s.stage), MAX_STAGE + 1);
+    // 스테이지 상한: 넘은 저장본은 MAX_STAGE 로 (best = MAX_STAGE + 1 은 마지막 스테이지까지 통과)
+    let stage = Math.min(s.stage, MAX_STAGE);
+    let best = Math.min(Math.max(s.best || 1, s.stage), MAX_STAGE + 1);
     const apexBest = Math.min(s.apexBest || 0, MAX_STAGE);
-    const finalReady = s.stage > MAX_STAGE || !!s.finalReady;
+    let finalReady = s.stage > MAX_STAGE || !!s.finalReady;
+    // v0.5 까지는 스테이지 100이 끝 — 거기서 최종 보스를 기다리던 저장본은 101부터 이어서
+    if (finalReady && stage < MAX_STAGE) {
+      finalReady = false;
+      stage += 1;
+      best = Math.max(best, stage);
+    }
+    const oldCap = !!s.finalReady && s.stage <= 100;
     // 기록 · 업적 · 챌린지 (v0.5에서 생김 — 없으면 빈 값, 모르는 값은 버림)
     const rec = newRec();
     for (const k of Object.keys(rec) as (keyof Rec)[]) {
@@ -309,7 +327,8 @@ export function parseSave(raw: string | null): Save {
       best,
       apexBest,
       finalReady,
-      kills: s.stage > MAX_STAGE ? 0 : s.kills,
+      kills: s.stage > MAX_STAGE || oldCap ? 0 : s.kills,
+      bossDone: oldCap ? false : !!s.bossDone,
       rec,
       ach,
       achSeen: Math.min(ach.length, Math.max(0, Math.floor(Number(s.achSeen) || 0))),
@@ -322,6 +341,8 @@ export function parseSave(raw: string | null): Save {
 }
 
 // ── 보스 바이러스 · 코드 모듈 ──
+// 코드 모듈 = 공격 자체에 붙는 특수 효과 (추가 투사체 · 점화 · 약점 중첩 …). 버전이 오를수록 상한(cap)에 다가감.
+// 피해 · 속도 · 데이터 같은 능력치는 상위 보스에게서 빼앗는 「우회 기술」이 맡음 (아래 APEX).
 
 export interface VirusDef {
   id: string;
@@ -330,14 +351,76 @@ export interface VirusDef {
   year: number;
   /** 대표 색 */
   color: string;
-  /** 빼앗는 모듈 이름과 버전(레벨)당 효과 설명 */
+  /** 빼앗는 코드 모듈 이름 */
   module: string;
+  /** 어떤 공격 효과인지 (버전과 상관없이) */
   effect: string;
-  /** 지금 버전까지 쌓인 효과 (예: "페이로드 피해 ×1.33") — effect 는 버전마다 붙는 양 */
+  /** 버전 v 의 수치 (예: "추가 발사 32%") */
   cur: (v: number) => string;
   /** 도감 설명 (실제 사건 요약) */
   desc: string;
 }
+
+/** 모듈 버전 v 의 수치 — v1 값에서 시작해 버전마다 상한(cap)까지 남은 거리가 BAL.fxK 배로 줄어듦 (0 = 없음) */
+export function fxCurve(v: number, v1: number, cap: number) {
+  return v > 0 ? cap - (cap - v1) * BAL.fxK ** (v - 1) : 0;
+}
+
+/** 점화가 타는 시간 (초) · 취약점 노출이 이어지는 시간 (ms) */
+export const BURN_SECS = 3;
+export const BUFF_MS = 4000;
+
+/** 코드 모듈 효과 수치 (없는 모듈은 0) */
+export interface Fx {
+  /** Brain: 새 적에게 맞히는 첫 발의 피해 배율 */
+  first: number;
+  /** Morris: 발사할 때 한 발 더 쏠 확률 · 늘 더 쏘는 발 수 */
+  extraP: number;
+  extraN: number;
+  /** ILOVEYOU: 명중마다 (준 피해 ÷ 적 체력) × 이 비율만큼 그 적의 데이터를 미리 빼냄 */
+  leech: number;
+  /** CIH: 점화 — 명중하면 BURN_SECS 동안 초당 피해 × 이 값 */
+  burn: number;
+  /** Melissa: 이 발수마다 2발 더 */
+  burstEvery: number;
+  /** Zeus: 적을 쓰러뜨리고 남은 피해를 다음 적에게 넘기는 비율 */
+  carry: number;
+  /** Stuxnet: 같은 적을 맞힐 때마다 받는 피해 +stack (stackMax 번까지) */
+  stack: number;
+  stackMax: number;
+  /** Conficker: 익스플로잇이 터지면 BUFF_MS 동안 모든 피해 +buff */
+  buff: number;
+  /** WannaCry: 익스플로잇이 보스에게 터질 때마다 제한 시간 +lockT 초 (한 전투에 lockCap 초까지) */
+  lockT: number;
+  lockCap: number;
+  /** Mydoom: ddosEvery 초마다 초당 피해 × ddosMul 한 방 */
+  ddosEvery: number;
+  ddosMul: number;
+}
+
+/** 모듈 버전 → 공격 효과 수치 */
+export function fxOf(m: number[]): Fx {
+  const c = (i: number, v1: number, cap: number) => fxCurve(m[i], v1, cap);
+  return {
+    first: c(0, 2, 15),
+    extraP: c(1, 0.1, 1),
+    extraN: Math.floor(m[1] / 25),
+    leech: c(2, 0.03, 1),
+    burn: c(3, 0.05, 1.5),
+    burstEvery: m[4] ? Math.max(3, Math.round(c(4, 12, 3))) : 0,
+    carry: c(5, 0.1, 1),
+    stack: c(6, 0.005, 0.05),
+    stackMax: Math.round(c(6, 10, 60)),
+    buff: c(7, 0.05, 1),
+    lockT: c(8, 0.05, 0.5),
+    lockCap: c(8, 2, 20),
+    ddosEvery: c(9, 12, 3),
+    ddosMul: c(9, 2, 15),
+  };
+}
+
+const pc = (n: number) => `${Math.round(n * 100)}%`;
+const fxAt = (i: number, v: number) => fxOf(ROSTER.map((_, k) => (k === i ? v : 0)));
 
 export const ROSTER: VirusDef[] = [
   {
@@ -345,9 +428,9 @@ export const ROSTER: VirusDef[] = [
     name: "Brain",
     year: 1986,
     color: "#7dd3fc",
-    module: "부트 섹터 장악",
-    effect: `일반 파일 보안 등급 ${x(BAL.modMobHp)}`,
-    cur: (v) => `일반 파일 보안 등급 ${x(BAL.modMobHp ** v)}`,
+    module: "부트 선점",
+    effect: "새 적에게 맞히는 첫 발이 강타",
+    cur: (v) => `첫 발 피해 ×${fxAt(0, v).first.toFixed(1)}`,
     desc: "IBM PC에서 처음으로 널리 퍼진 바이러스로 알려져 있어요. 파키스탄의 두 형제가 만들었고, 플로피 디스크의 부트 섹터를 감염시켰어요.",
   },
   {
@@ -356,8 +439,11 @@ export const ROSTER: VirusDef[] = [
     year: 1988,
     color: "#a78bfa",
     module: "자가 복제",
-    effect: `발사 속도 ${x(BAL.modSpd)}`,
-    cur: (v) => `발사 속도 ${x(BAL.modSpd ** v)}`,
+    effect: "쏠 때마다 확률로 코드 한 발 더 (25버전마다 늘 한 발 더)",
+    cur: (v) => {
+      const f = fxAt(1, v);
+      return `추가 발사 ${pc(f.extraP)}${f.extraN ? ` + 늘 ${f.extraN}발` : ""}`;
+    },
     desc: "대학원생 로버트 모리스가 퍼뜨린 초기 인터넷 웜이에요. 스스로 복제하다 통제를 벗어나, 당시 인터넷에 연결된 컴퓨터 상당수를 마비시켰어요.",
   },
   {
@@ -366,8 +452,8 @@ export const ROSTER: VirusDef[] = [
     year: 2000,
     color: "#f472b6",
     module: "러브레터 미끼",
-    effect: `데이터 탈취 ${x(BAL.modData)}`,
-    cur: (v) => `데이터 탈취 ${x(BAL.modData ** v)}`,
+    effect: "맞힐 때마다 그 적의 데이터를 미리 빼냄 (보상과 별도)",
+    cur: (v) => `데이터 +${pc(fxAt(2, v).leech)} (명중마다 나눠서)`,
     desc: "필리핀에서 시작된 이메일 웜이에요. 'LOVE-LETTER-FOR-YOU' 첨부 파일을 열면 주소록 전체로 자신을 보내, 며칠 만에 전 세계 수천만 대를 감염시켰어요.",
   },
   {
@@ -375,9 +461,9 @@ export const ROSTER: VirusDef[] = [
     name: "CIH (체르노빌)",
     year: 1998,
     color: "#f87171",
-    module: "BIOS 덮어쓰기",
-    effect: `페이로드 피해 ${x(BAL.modDmg)}`,
-    cur: (v) => `페이로드 피해 ${x(BAL.modDmg ** v)}`,
+    module: "BIOS 과열",
+    effect: `맞히면 점화 — ${BURN_SECS}초 동안 불타며 계속 피해 (맞힐 때마다 갱신)`,
+    cur: (v) => `점화: 초당 피해의 ${pc(fxAt(3, v).burn)}`,
     desc: "대만에서 만들어진 바이러스로, 일부 변종이 체르노빌 사고일인 4월 26일에 발동해 '체르노빌 바이러스'라고 불려요. 하드디스크를 덮어쓰고 일부 PC의 BIOS까지 지웠어요.",
   },
   {
@@ -385,9 +471,9 @@ export const ROSTER: VirusDef[] = [
     name: "Melissa",
     year: 1999,
     color: "#34d399",
-    module: "매크로 자동화",
-    effect: `업그레이드 비용 ${x(BAL.modCost)}`,
-    cur: (v) => `업그레이드 비용 ${x(BAL.modCost ** v)}`,
+    module: "매크로 연사",
+    effect: "몇 발마다 매크로가 2발을 덤으로 쏨",
+    cur: (v) => `${fxAt(4, v).burstEvery}발마다 +2발`,
     desc: "워드 문서 매크로에 숨어 있던 바이러스예요. 문서를 열면 아웃룩 주소록의 처음 50명에게 자신을 메일로 보내, 여러 회사의 메일 서버를 멈추게 했어요.",
   },
   {
@@ -395,9 +481,9 @@ export const ROSTER: VirusDef[] = [
     name: "Zeus",
     year: 2007,
     color: "#fbbf24",
-    module: "백도어 상주",
-    effect: `오프라인 효율 증가 (최대 ${Math.round(BAL.offRateMax * 100)}%)`,
-    cur: (v) => `오프라인 효율 ${Math.round(offlineRateOf(v) * 100)}%`,
+    module: "백도어 이월",
+    effect: "적을 쓰러뜨리고 남은 피해를 다음 적에게 넘김",
+    cur: (v) => `남은 피해 ${pc(fxAt(5, v).carry)} 이월`,
     desc: "은행 계정 정보를 몰래 훔치는 트로이 목마예요. 감염된 PC를 묶어 거대한 봇넷을 만들었고, 소스 코드가 유출된 뒤 수많은 변종이 나왔어요.",
   },
   {
@@ -405,9 +491,12 @@ export const ROSTER: VirusDef[] = [
     name: "Stuxnet",
     year: 2010,
     color: "#94a3b8",
-    module: "탐지 우회",
-    effect: `보스 보안 등급 ${x(BAL.modBossHp)}`,
-    cur: (v) => `보스 보안 등급 ${x(BAL.modBossHp ** v)}`,
+    module: "약점 분석",
+    effect: "같은 적을 맞힐수록 받는 피해가 쌓임 (보스에게 강함)",
+    cur: (v) => {
+      const f = fxAt(6, v);
+      return `명중마다 +${(f.stack * 100).toFixed(1)}% (최대 ${f.stackMax}번)`;
+    },
     desc: "이란 핵시설의 원심분리기를 제어하는 PLC를 노린 웜이에요. 여러 개의 제로데이 취약점을 동시에 쓰고, 들키지 않게 정상 값을 보여 주며 장비를 망가뜨렸어요.",
   },
   {
@@ -415,9 +504,9 @@ export const ROSTER: VirusDef[] = [
     name: "Conficker",
     year: 2008,
     color: "#fb923c",
-    module: "취약점 스캐너",
-    effect: `익스플로잇 확률 증가 (최대 +${Math.round(BAL.modCritMax * 100)}%p)`,
-    cur: (v) => `익스플로잇 확률 +${(modCritOf(v) * 100).toFixed(1)}%p`,
+    module: "취약점 노출",
+    effect: `익스플로잇이 터지면 ${BUFF_MS / 1000}초 동안 모든 피해 증가`,
+    cur: (v) => `${BUFF_MS / 1000}초 동안 피해 +${pc(fxAt(7, v).buff)}`,
     desc: "윈도의 네트워크 취약점을 이용해 수백만 대를 감염시킨 웜이에요. 업데이트를 막고 비밀번호를 무작위로 대입하며 퍼졌어요.",
   },
   {
@@ -425,9 +514,12 @@ export const ROSTER: VirusDef[] = [
     name: "WannaCry",
     year: 2017,
     color: "#ef4444",
-    module: "암호화 폭주",
-    effect: "익스플로잇 피해 +0.5",
-    cur: (v) => `익스플로잇 피해 +${(0.5 * v).toFixed(1)}`,
+    module: "암호화 잠금",
+    effect: "익스플로잇이 보스에게 터질 때마다 제한 시간이 늘어남",
+    cur: (v) => {
+      const f = fxAt(8, v);
+      return `+${f.lockT.toFixed(2)}초씩 (전투당 최대 ${f.lockCap.toFixed(0)}초)`;
+    },
     desc: "파일을 암호화하고 비트코인을 요구한 랜섬웨어예요. 이터널블루 취약점으로 스스로 퍼져 150여 개국의 병원·기업 컴퓨터를 멈췄어요.",
   },
   {
@@ -435,15 +527,19 @@ export const ROSTER: VirusDef[] = [
     name: "Mydoom",
     year: 2004,
     color: "#facc15",
-    module: "DDoS 봇넷",
-    effect: `보스에게 주는 피해 ${x(BAL.modBossDmg)}`,
-    cur: (v) => `보스에게 주는 피해 ${x(BAL.modBossDmg ** v)}`,
+    module: "DDoS 폭격",
+    effect: "몇 초마다 봇넷이 일제 사격 — 초당 피해의 몇 배를 한 방에",
+    cur: (v) => {
+      const f = fxAt(9, v);
+      return `${f.ddosEvery.toFixed(1)}초마다 초당 피해 ×${f.ddosMul.toFixed(1)}`;
+    },
     desc: "가장 빠르게 퍼진 이메일 웜 중 하나로 꼽혀요. 감염된 PC들을 동원해 특정 웹사이트에 DDoS 공격을 퍼부었어요.",
   },
 ];
 
-// ── 상위 보스 (보안 시스템) ──
-// 10스테이지마다 그 스테이지 보스를 잡으면 그 네트워크를 지키는 보안 시스템이 나옴. 처음 잡으면 영구 특성 + 내 바이러스 외형 변화.
+// ── 상위 보스 (보안 시스템) · 우회 기술 ──
+// 10스테이지마다 그 스테이지 보스를 잡으면 그 네트워크를 지키는 보안 시스템이 나옴 (100스테이지마다 같은 순서로 다시, v2 · v3 …).
+// 처음 잡으면 우회 기술(능력치) + 내 바이러스 외형. 우회 기술 버전은 같은 번호의 코드 모듈처럼 최고 스테이지로 오름.
 
 export interface ApexDef {
   id: string;
@@ -452,11 +548,18 @@ export interface ApexDef {
   role: string;
   icon: string;
   color: string;
-  /** 빼앗는 특성 이름과 효과 (한 번만) */
+  /** 빼앗는 우회 기술 이름 · 어떤 능력치인지 */
   trait: string;
   effect: string;
+  /** 버전 v 의 수치 */
+  cur: (v: number) => string;
   /** 내 바이러스에 생기는 모양 */
   look: string;
+}
+
+/** 우회 기술 「암호화 터널」 버전별 발사 속도 배율 (×1.15 → 최대 ×1.15·modSpdMax) */
+export function tunnelSpd(v: number) {
+  return 1.15 * (1 + (BAL.modSpdMax - 1) * (1 - BAL.modSpdK ** v));
 }
 
 export const APEX: ApexDef[] = [
@@ -467,7 +570,8 @@ export const APEX: ApexDef[] = [
     icon: "🛡️",
     color: "#38bdf8",
     trait: "서명 위조",
-    effect: "일반 파일 보안 등급 ×0.85",
+    effect: "일반 파일 보안 등급 감소",
+    cur: (v) => `일반 파일 보안 등급 ${x(0.85 * BAL.modMobHp ** v)}`,
     look: "회로 링",
   },
   {
@@ -477,7 +581,8 @@ export const APEX: ApexDef[] = [
     icon: "🧱",
     color: "#f97316",
     trait: "포트 스캔",
-    effect: "발사 속도 ×1.15",
+    effect: "페이로드 피해 증가",
+    cur: (v) => `피해 ${x(1.5 * BAL.modDmg ** v)}`,
     look: "안테나 한 쌍",
   },
   {
@@ -487,7 +592,8 @@ export const APEX: ApexDef[] = [
     icon: "👁️",
     color: "#a3e635",
     trait: "로그 삭제",
-    effect: "보스 제한 시간 +5초",
+    effect: "보스 보안 등급 감소 · 보스 제한 시간 +5초",
+    cur: (v) => `보스 보안 등급 ${x(BAL.modBossHp ** v)} · 시간 +5초`,
     look: "반투명 외피",
   },
   {
@@ -497,7 +603,8 @@ export const APEX: ApexDef[] = [
     icon: "🐍",
     color: "#22d3ee",
     trait: "스팸 폭탄",
-    effect: "데이터 탈취 ×1.5",
+    effect: "데이터 탈취 증가",
+    cur: (v) => `데이터 ${x(1.5 * BAL.modData ** v)}`,
     look: "촉수 3개",
   },
   {
@@ -507,7 +614,8 @@ export const APEX: ApexDef[] = [
     icon: "⛓️",
     color: "#e879f9",
     trait: "샌드박스 탈출",
-    effect: "익스플로잇 피해 +1",
+    effect: "익스플로잇 피해 증가",
+    cur: (v) => `익스플로잇 피해 +${(1 + 0.5 * v).toFixed(1)}`,
     look: "결정 가시",
   },
   {
@@ -517,7 +625,8 @@ export const APEX: ApexDef[] = [
     icon: "🏛️",
     color: "#facc15",
     trait: "관제 우회",
-    effect: "보스 · 상위 보스 보안 등급 ×0.85",
+    effect: "보스에게 주는 피해 증가",
+    cur: (v) => `보스에게 주는 피해 ${x(BAL.modBossDmg ** v)}`,
     look: "왕관",
   },
   {
@@ -527,7 +636,8 @@ export const APEX: ApexDef[] = [
     icon: "🔍",
     color: "#fb7185",
     trait: "프로세스 은닉",
-    effect: "오프라인 효율 +15%p",
+    effect: "오프라인 효율 증가",
+    cur: (v) => `오프라인 효율 ${Math.round((offlineRateOf(v) + 0.15) * 100)}%`,
     look: "잔상",
   },
   {
@@ -537,7 +647,8 @@ export const APEX: ApexDef[] = [
     icon: "🍯",
     color: "#fbbf24",
     trait: "미끼 역이용",
-    effect: "루트 권한 획득 ×1.25",
+    effect: "익스플로잇 확률 증가 · 루트 권한 획득 ×1.25",
+    cur: (v) => `익스플로잇 확률 +${(modCritOf(v) * 100).toFixed(1)}%p · 루트 권한 ×1.25`,
     look: "날개",
   },
   {
@@ -547,7 +658,8 @@ export const APEX: ApexDef[] = [
     icon: "🌊",
     color: "#60a5fa",
     trait: "암호화 터널",
-    effect: "피해 ×1.5",
+    effect: "발사 속도 증가",
+    cur: (v) => `발사 속도 ${x(tunnelSpd(v))}`,
     look: "이중 궤도 링",
   },
   {
@@ -557,7 +669,8 @@ export const APEX: ApexDef[] = [
     icon: "🔮",
     color: "#c084fc",
     trait: "자가 학습",
-    effect: "업그레이드 비용 ×0.85",
+    effect: "업그레이드 비용 감소",
+    cur: (v) => `업그레이드 비용 ${x(0.85 * BAL.modCost ** v)}`,
     look: "오라 · 세 번째 눈",
   },
 ];
@@ -574,7 +687,7 @@ export function apexOf(stage: number) {
   return { def: APEX[i], index: i, tier: Math.floor(n / APEX.length) + 1 };
 }
 
-/** 지금까지 처음 잡은 상위 보스 수 (0~10) — 그만큼 특성 · 외형이 열림 */
+/** 지금까지 처음 잡은 상위 보스 수 (0~10) — 그만큼 우회 기술 · 외형이 열림 */
 export function apexCount(apexBest: number) {
   return Math.min(APEX.length, Math.floor(apexBest / 10));
 }
@@ -602,6 +715,13 @@ export function moduleLevels(best: number): number[] {
   );
 }
 
+/** 우회 기술 버전 — 그 상위 보스를 처음 잡아야 열리고, 버전은 같은 번호의 코드 모듈처럼 최고 스테이지로 (못 잡았으면 0) */
+export function bypassLevels(best: number, apexBest: number): number[] {
+  const m = moduleLevels(best);
+  const ac = apexCount(apexBest);
+  return m.map((v, i) => (i < ac ? Math.max(1, v) : 0));
+}
+
 const ZONES = [
   "개인 PC",
   "공유기",
@@ -614,10 +734,24 @@ const ZONES = [
   "통신사 백본",
   "루트 DNS",
 ];
-/** 10스테이지마다 바뀌는 네트워크 이름 */
+/** 스테이지 101부터: 100스테이지마다 바뀌는 더 깊은 네트워크 (10스테이지마다 구역) */
+const WORLDS = [
+  "다크넷",
+  "국방망",
+  "위성 통신망",
+  "전력망",
+  "국제 결제망",
+  "해저 케이블",
+  "양자 연구소",
+  "궤도 정거장",
+  "글로벌 코어",
+];
+/** 네트워크 이름 (1~100은 10스테이지마다, 그 뒤로는 100스테이지마다 + 구역) */
 export function zoneOf(stage: number) {
   const z = Math.floor((stage - 1) / 10);
-  return z < ZONES.length ? ZONES[z] : `다크넷 ${z - ZONES.length + 1}층`;
+  if (z < ZONES.length) return ZONES[z];
+  const w = Math.min(WORLDS.length - 1, Math.floor((stage - 1) / 100) - 1);
+  return `${WORLDS[w]} ${(z % 10) + 1}구역`;
 }
 
 /** 같은 바이러스를 다시 만나면 변종 버전 표시 (v2, v3 …) */
@@ -626,7 +760,7 @@ export function tierLabel(tier: number) {
 }
 
 // ── 모듈 세트 ──
-// 같은 계열 바이러스의 모듈이 모두 v3 · v6 · v10 이 되면 세트 효과 (단계마다 커짐). 모듈 버전처럼 최고 스테이지로 정해짐.
+// 같은 계열 바이러스의 모듈이 모두 SET_TIERS 버전이 되면 세트 효과 (단계마다 커짐). 모듈 버전처럼 최고 스테이지로 정해짐.
 
 export interface SetDef {
   id: string;
@@ -634,18 +768,18 @@ export interface SetDef {
   icon: string;
   /** ROSTER 번호 */
   members: number[];
-  /** 단계(1~3)별 효과 설명 */
+  /** 단계(1~)별 효과 설명 */
   effect: (tier: number) => string;
 }
 
 /** 세트 단계가 오르는 모듈 버전 (모든 구성 모듈이 이 버전 이상) */
-export const SET_TIERS = [3, 6, 10];
+export const SET_TIERS = [3, 10, 30, 100];
 /** 세트 단계별 수치 (0단계 = 효과 없음) */
 const SET_VAL = {
-  mail: [1, 1.2, 1.5, 2],
-  worm: [0, 0.1, 0.2, 0.3],
-  wiper: [1, 1.2, 1.5, 2],
-  apt: [0, 3, 6, 10],
+  mail: [1, 1.2, 1.5, 2, 3],
+  worm: [0, 0.1, 0.2, 0.3, 0.4],
+  wiper: [1, 1.2, 1.5, 2, 3],
+  apt: [0, 3, 6, 10, 15],
 };
 
 export const SETS: SetDef[] = [
@@ -680,7 +814,7 @@ export const SETS: SetDef[] = [
   },
 ];
 
-/** 세트 단계 (0~3) — 구성 모듈 중 가장 낮은 버전으로 정해짐 */
+/** 세트 단계 (0~SET_TIERS.length) — 구성 모듈 중 가장 낮은 버전으로 정해짐 */
 export function setTier(best: number, d: SetDef) {
   const m = moduleLevels(best);
   const low = Math.min(...d.members.map((i) => m[i]));
@@ -691,7 +825,7 @@ export function setTier(best: number, d: SetDef) {
 
 export interface Stats {
   dmg: number;
-  /** 초당 공격 횟수 */
+  /** 초당 발사 횟수 (코드 모듈의 추가 발사 전) */
   aps: number;
   critChance: number;
   critMul: number;
@@ -717,27 +851,36 @@ export interface Stats {
   randMul: number;
   /** 업적으로 받는 피해 배율 */
   achMul: number;
+  /** 코드 모듈 공격 효과 수치 */
+  fx: Fx;
+  /** 발사 한 번에 평균 몇 발 (추가 발사 · 매크로 연사) */
+  shotsMul: number;
+  /** 코드 모듈로 오르는 평균 초당 피해 배율 (발 수 · 점화 · 취약점 노출 · DDoS — 계산용 기댓값) */
+  fxMul: number;
+  /** 보스에게만 더 붙는 평균 배율 (약점 분석이 다 쌓였다고 봄 — 계산용 기댓값) */
+  fxBossMul: number;
 }
 
 /** 버전 v일 때 상한 쪽으로 다가간 비율 (0 → 1) */
 const soft = (v: number) => 1 - BAL.modSoftK ** v;
-/** Zeus 버전별 오프라인 효율 (30% → 최대 offRateMax) */
+/** 「프로세스 은닉」 버전별 오프라인 효율 (30% → 최대 offRateMax, 여기에 +15%p) */
 export function offlineRateOf(v: number) {
   return 0.3 + (BAL.offRateMax - 0.3) * soft(v);
 }
-/** Conficker 버전별 익스플로잇 확률 보너스 (최대 modCritMax) */
+/** 「미끼 역이용」 버전별 익스플로잇 확률 보너스 (최대 modCritMax) */
 export function modCritOf(v: number) {
   return BAL.modCritMax * soft(v);
 }
 
 export function stats(s: Save): Stats {
-  // 챌린지 「모듈 봉인」: 모듈 · 우회 기술 · 세트 없음 / 「루트 차단」: 루트 권한 보너스 · 효율 강화 상품 없음
+  // 챌린지 「모듈 봉인」: 코드 모듈 · 우회 기술 · 세트 없음 / 「루트 차단」: 루트 권한 보너스 · 효율 강화 상품 없음
   const naked = s.chal === "naked";
   const noRoot = s.chal === "noroot";
-  const m = naked ? ROSTER.map(() => 0) : moduleLevels(s.best);
-  // 상위 보스 특성 (처음 잡은 순서대로 열림)
-  const ac = naked ? 0 : apexCount(s.apexBest);
-  const has = (i: number) => ac > i;
+  const zero = ROSTER.map(() => 0);
+  const m = naked ? zero : moduleLevels(s.best);
+  const b = naked ? zero : bypassLevels(s.best, s.apexBest);
+  const has = (i: number) => b[i] > 0;
+  const fx = fxOf(m);
   const set = (id: string) =>
     naked
       ? 0
@@ -751,35 +894,42 @@ export function stats(s: Save): Stats {
   const achMul = 1 + BAL.achDmg * s.ach.length;
   const atk =
     BAL.atkStep ** s.lv.atk * BAL.atkMilestoneMul ** Math.floor(s.lv.atk / BAL.atkMilestone);
+  const aps =
+    (1 + (BAL.spdMax - 1) * (1 - BAL.spdK ** s.lv.spd)) *
+    (has(8) ? tunnelSpd(b[8]) : 1) *
+    (done("single") ? 1.2 : 1);
+  const critChance = Math.min(
+    0.9,
+    0.05 + (BAL.critMax - 0.05) * (1 - BAL.critK ** s.lv.crit) + (has(7) ? modCritOf(b[7]) : 0)
+  );
+  // 코드 모듈 기댓값: 발 수 × 점화 × 취약점 노출(유지되는 비율) × DDoS
+  const shotsMul = (1 + fx.extraP + fx.extraN) * (fx.burstEvery ? 1 + 2 / fx.burstEvery : 1);
+  const uptime = 1 - Math.exp((-critChance * aps * shotsMul * BUFF_MS) / 1000);
+  const fxMul =
+    shotsMul *
+    (1 + fx.burn) *
+    (1 + fx.buff * uptime) *
+    (fx.ddosEvery ? 1 + fx.ddosMul / fx.ddosEvery : 1);
   return {
     dmg:
       atk *
-      BAL.modDmg ** m[3] *
+      (has(1) ? 1.5 * BAL.modDmg ** b[1] : 1) *
       rootMul *
       BAL.shopRootkit ** shop("rootkit") *
       BAL.corePatch ** s.shop.kpatch *
-      (has(8) ? 1.5 : 1) *
       achMul *
       (done("naked") ? 1.5 : 1),
-    aps:
-      (1 + (BAL.spdMax - 1) * (1 - BAL.spdK ** s.lv.spd)) *
-      BAL.modSpd ** m[1] *
-      (has(1) ? 1.15 : 1) *
-      (done("single") ? 1.2 : 1),
-    critChance: Math.min(
-      0.9,
-      0.05 + (BAL.critMax - 0.05) * (1 - BAL.critK ** s.lv.crit) + modCritOf(m[7])
-    ),
-    critMul: 2 + BAL.critMulStep * s.lv.crit + 0.5 * m[8] + (has(4) ? 1 : 0),
+    aps,
+    critChance,
+    critMul: 2 + BAL.critMulStep * s.lv.crit + (has(4) ? 1 + 0.5 * b[4] : 0),
     dataMul:
-      BAL.modData ** m[2] *
+      (has(3) ? 1.5 * BAL.modData ** b[3] : 1) *
       BAL.shopMiner ** shop("miner") *
       BAL.coreComp ** s.shop.kcomp *
-      (has(3) ? 1.5 : 1) *
       SET_VAL.mail[set("mail")],
-    costMul: BAL.modCost ** m[4] * (has(9) ? 0.85 : 1),
-    mobHpMul: BAL.modMobHp ** m[0] * (has(0) ? 0.85 : 1),
-    bossHpMul: BAL.modBossHp ** m[6] * (has(5) ? 0.85 : 1),
+    costMul: has(9) ? 0.85 * BAL.modCost ** b[9] : 1,
+    mobHpMul: has(0) ? 0.85 * BAL.modMobHp ** b[0] : 1,
+    bossHpMul: has(2) ? BAL.modBossHp ** b[2] : 1,
     bossTime:
       BOSS_TIME +
       (has(2) ? 5 : 0) +
@@ -787,14 +937,18 @@ export function stats(s: Save): Stats {
       SET_VAL.apt[set("apt")] +
       (done("rush") ? 5 : 0),
     rootGain: (has(7) ? 1.25 : 1) * (1 + BAL.coreEscal * s.shop.kescal),
-    bossDmgMul: BAL.modBossDmg ** m[9] * SET_VAL.wiper[set("wiper")],
+    bossDmgMul: (has(5) ? BAL.modBossDmg ** b[5] : 1) * SET_VAL.wiper[set("wiper")],
     rootMul,
-    offlineRate: offlineRateOf(m[5]) + (has(6) ? 0.15 : 0),
+    offlineRate: has(6) ? offlineRateOf(b[6]) + 0.15 : 0.3,
     offlineHours: BAL.offHours,
     timeMul: s.chal === "rush" ? 0.5 : 1,
     chain: SET_VAL.worm[set("worm")],
     randMul: done("lock") ? 0.85 : 1,
     achMul,
+    fx,
+    shotsMul,
+    fxMul,
+    fxBossMul: 1 + fx.stack * fx.stackMax,
   };
 }
 
@@ -810,15 +964,24 @@ export function avgHit(st: Stats) {
   return st.dmg * (1 + st.critChance * (st.critMul - 1));
 }
 
-/** 초당 평균 피해 */
+/** 코드 모듈 효과 전 초당 피해 (발 수 · 취약점 노출만) — 점화 · DDoS 의 기준 */
+export function baseDps(st: Stats) {
+  const uptime = 1 - Math.exp((-st.critChance * st.aps * st.shotsMul * BUFF_MS) / 1000);
+  return avgHit(st) * st.aps * st.shotsMul * (1 + st.fx.buff * uptime);
+}
+
+/** 초당 평균 피해 (코드 모듈 효과 기댓값까지) */
 export function dps(st: Stats) {
-  return avgHit(st) * st.aps;
+  return avgHit(st) * st.aps * st.fxMul;
 }
 
 // ── 적 (보안 등급 = 체력) · 보상 ──
 
+/** 스테이지 lateFrom 까지는 hpGrowth 배씩, 그 뒤로는 hpGrowthLate 배씩 */
 function baseHp(stage: number) {
-  return BAL.hp0 * BAL.hpGrowth ** (stage - 1);
+  const a = Math.min(stage, BAL.lateFrom) - 1;
+  const b = Math.max(0, stage - BAL.lateFrom);
+  return BAL.hp0 * BAL.hpGrowth ** a * BAL.hpGrowthLate ** b;
 }
 /** 극초반 보정이 남은 정도 (1스테이지 1 → 점점 0) */
 const early = (stage: number) => BAL.earlyDecay ** (stage - 1);
@@ -842,7 +1005,7 @@ export function apexHp(stage: number, st: Stats) {
 export function apexData(stage: number, st: Stats) {
   return bossData(stage, st) * BAL.apexData;
 }
-/** 최종 보스: 스테이지 100 상위 보스의 finalHp 배 체력 · finalData 배 보상 */
+/** 최종 보스: 마지막 스테이지 상위 보스의 finalHp 배 체력 · finalData 배 보상 */
 export function finalHp(st: Stats, clears: number) {
   return apexHp(MAX_STAGE, st) * BAL.finalHp * BAL.finalGrowth ** clears;
 }
@@ -1023,9 +1186,13 @@ export function randExpectedGain(s: Save, key: UpgKey) {
 
 // ── 시스템 포맷 (환생) ──
 
-/** 최고 스테이지에 따른 루트 권한 합계 */
+/**
+ * 최고 스테이지에 따른 루트 권한 합계 — 100까지는 거듭제곱, 그 뒤로는 스테이지마다 rootLate 배씩 더
+ * (적 체력이 지수로 늘어나는 후반에 거듭제곱만 쓰면 변이할수록 덜 밀려서 결국 벽에 막힘)
+ */
 export function rootTotal(best: number) {
-  return Math.floor(((best - 1) / BAL.rootDiv) ** BAL.rootPow);
+  const late = Math.max(0, best - 1 - BAL.lateFrom);
+  return Math.floor(((best - 1) / BAL.rootDiv) ** BAL.rootPow * BAL.rootLate ** late);
 }
 
 /** 지금 포맷하면 새로 받는 루트 권한 (전보다 더 멀리 가야 생김) */
@@ -1038,9 +1205,12 @@ export function canFormat(s: Save) {
   return s.stage >= BAL.formatStage && pendingRoot(s) > 0;
 }
 
-/** 포맷 뒤 시작 스테이지: 최고 스테이지의 절반을 10 단위로 내리고 +1 (예: 68 → 31, 30 → 11) */
+/**
+ * 포맷 뒤 시작 스테이지: 최고 스테이지의 절반을 10 단위로 내리고 +1, 최대 51 (예: 68 → 31, 30 → 11, 682 → 51)
+ * — 업그레이드 없이 시작하니 깊은 곳에서 다시 시작하면 그대로 막힘. 초반은 빨리 지나가니 51부터 다시 퍼짐
+ */
 export function formatStart(best: number) {
-  return Math.floor(best / 2 / 10) * 10 + 1;
+  return Math.floor(Math.min(best, 100) / 2 / 10) * 10 + 1;
 }
 
 /** 포맷: 업그레이드·데이터는 처음으로, 스테이지는 formatStart 부터. 루트 권한·상점·모듈·누적 기록은 유지 */
@@ -1449,11 +1619,13 @@ export function offlineGain(s: Save, seconds: number) {
   const secs = Math.min(seconds, st.offlineHours * 3600);
   if (secs < 60) return { data: 0, secs: 0 };
   // 연쇄 감염은 평균만큼 파일을 더 감염시킨다고 봄
-  const perSec = (dps(st) / mobHp(s.stage, st)) * mobData(s.stage, st) * (1 + st.chain);
+  // 러브레터 미끼(명중마다 미리 빼내는 데이터)도 평균만큼
+  const perSec =
+    (dps(st) / mobHp(s.stage, st)) * mobData(s.stage, st) * (1 + st.chain) * (1 + st.fx.leech);
   return { data: perSec * secs * st.offlineRate, secs };
 }
 
-// ── 챌린지 변이 (첫 KILLSWITCH 격퇴 뒤 열림) ──
+// ── 챌린지 변이 (스테이지 100 돌파 뒤 열림) ──
 // 스테이지 1부터 제약을 걸고 다시 퍼짐. 목표 스테이지를 넘으면 제약이 풀리고 영구 보상 + 커널 코어. 그냥 변이하면 챌린지는 끝남.
 
 export type ChalKey = "lock" | "rush" | "naked" | "single" | "noroot";
@@ -1511,9 +1683,14 @@ export const CHAL: ChalDef[] = [
   },
 ];
 
-/** 챌린지를 고를 수 있는지 (첫 KILLSWITCH 격퇴 뒤) */
+/** 챌린지를 고를 수 있는지 (스테이지 100 돌파 뒤 — 루트 DNS 를 함락하면) */
 export function chalOpen(s: Save) {
-  return s.clears > 0;
+  return s.best > 100 || s.clears > 0;
+}
+
+/** 이 스테이지의 상위 보스를 처음 잡으면 커널 코어를 주는지 (100스테이지마다 · 마지막은 최종 보스가 줌) */
+export function milestoneCore(stage: number) {
+  return stage % 100 === 0 && stage < MAX_STAGE;
 }
 
 /** 챌린지 시작: 변이처럼 몸을 버리지만 스테이지 1부터 (받을 루트 권한이 있으면 같이 받음) */
@@ -1548,7 +1725,8 @@ export interface AchDef {
 }
 
 const GB = 1024 ** 3;
-const TB = 1024 ** 4;
+const PB = 1024 ** 5;
+const YB = 1024 ** 8;
 const ach = (
   id: string,
   icon: string,
@@ -1566,6 +1744,11 @@ export const ACH: AchDef[] = [
   ach("st51", "🏦", "은행 전산망 침투", "스테이지 50 돌파", (s) => [s.best - 1, 50]),
   ach("st81", "📡", "통신사 백본", "스테이지 80 돌파", (s) => [s.best - 1, 80]),
   ach("st101", "🌐", "루트 DNS 함락", "스테이지 100 돌파", (s) => [s.best - 1, 100]),
+  ach("st201", "🕳️", "다크넷 장악", "스테이지 200 돌파", (s) => [s.best - 1, 200]),
+  ach("st301", "🎖️", "국방망 침투", "스테이지 300 돌파", (s) => [s.best - 1, 300]),
+  ach("st501", "🔌", "전력망 장악", "스테이지 500 돌파", (s) => [s.best - 1, 500]),
+  ach("st701", "🌊", "해저 케이블 장악", "스테이지 700 돌파", (s) => [s.best - 1, 700]),
+  ach("st1001", "🌍", "글로벌 코어 함락", "스테이지 1000 돌파", (s) => [s.best - 1, 1000]),
   ach("pure", "🧪", "순수 혈통", "변이하지 않고 스테이지 70 돌파", (s) => [
     s.formats ? 0 : s.best - 1,
     70,
@@ -1590,8 +1773,8 @@ export const ACH: AchDef[] = [
   ach("fmt1", "☣️", "첫 변이", "처음으로 변이", (s) => [s.formats, 1]),
   ach("fmt5", "🧫", "변종 다발", "변이 5번", (s) => [s.formats, 5]),
   ach("fmt10", "♾️", "끝없는 변이", "변이 10번", (s) => [s.formats, 10]),
-  ach("root100", "🔑", "관리자 권한", "루트 권한 100", (s) => [s.root, 100]),
-  ach("root300", "👑", "시스템 소유자", "루트 권한 300", (s) => [s.root, 300]),
+  ach("root1k", "🔑", "관리자 권한", "루트 권한 1,000", (s) => [s.root, 1000]),
+  ach("root1t", "👑", "시스템 소유자", "루트 권한 1T", (s) => [s.root, 1e12]),
   ach("chal1", "🎯", "챌린저", "챌린지 변이 하나 성공", (s) => [s.chalDone.length, 1]),
   ach("chalAll", "🏆", "완벽한 변종", "챌린지 변이 모두 성공", (s) => [
     s.chalDone.length,
@@ -1602,8 +1785,8 @@ export const ACH: AchDef[] = [
   ach("files100k", "🦠", "팬데믹", "파일 100,000개 감염", (s) => [s.rec.files, 100000]),
   ach("chain", "🔗", "연쇄 반응", "연쇄 감염 1,000번", (s) => [s.rec.chains, 1000]),
   ach("gb", "💾", "기가바이트 도둑", "데이터 1GB 탈취 (누적)", (s) => [s.lifetime, GB], true),
-  ach("tb", "🗄️", "테라바이트 도둑", "데이터 1TB 탈취 (누적)", (s) => [s.lifetime, TB], true),
-  ach("tb50", "🏛️", "빅데이터", "데이터 50TB 탈취 (누적)", (s) => [s.lifetime, 50 * TB], true),
+  ach("pb", "🗄️", "페타바이트 도둑", "데이터 1PB 탈취 (누적)", (s) => [s.lifetime, PB], true),
+  ach("yb", "🏛️", "요타바이트 도둑", "데이터 1YB 탈취 (누적)", (s) => [s.lifetime, YB], true),
   ach("ups1k", "🔧", "튜닝 중독", "업그레이드 1,000레벨", (s) => [s.rec.ups, 1000]),
   ach("evo", "🧠", "오버마인드", "진화 마지막 단계", (s) => [s.rec.evo, EVOLUTION.length - 1]),
   // 도전
@@ -1660,17 +1843,23 @@ export function importSave(code: string): Save | null {
 
 // ── 숫자 표시 ──
 
-const UNITS = ["", "K", "M", "B", "T"];
-/** 피해량 등 일반 숫자 */
+const UNITS = ["", "K", "M", "B", "T", "Qa", "Qi", "Sx", "Sp", "Oc", "No", "Dc"];
+/** 피해량 등 일반 숫자 (Dc = 10^33 를 넘으면 1.23e45 처럼) */
 export function fmt(n: number): string {
   if (n < 1000) return n < 10 && n % 1 ? n.toFixed(1) : Math.floor(n).toString();
+  if (n >= 1000 ** UNITS.length) return n.toExponential(2).replace("+", "");
   let u = 0;
-  while (n >= 1000 && u < UNITS.length - 1) {
-    n /= 1000;
+  let v = n;
+  while (v >= 1000 && u < UNITS.length - 1) {
+    v /= 1000;
     u++;
   }
-  if (n >= 1000) return n.toExponential(2).replace("+", "");
-  return `${n.toFixed(n < 10 ? 2 : n < 100 ? 1 : 0)}${UNITS[u]}`;
+  // 반올림으로 1000.0K 가 되면 다음 단위로
+  if (Number(v.toFixed(v < 10 ? 2 : v < 100 ? 1 : 0)) >= 1000 && u < UNITS.length - 1) {
+    v /= 1000;
+    u++;
+  }
+  return `${v.toFixed(v < 10 ? 2 : v < 100 ? 1 : 0)}${UNITS[u]}`;
 }
 
 const BYTE_UNITS = ["B", "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB"];

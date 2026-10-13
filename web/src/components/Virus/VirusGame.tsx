@@ -102,6 +102,11 @@ import {
   ACH,
   type ChalDef,
   type ChalKey,
+  milestoneCore,
+  bypassLevels,
+  BUFF_MS,
+  BURN_SECS,
+  baseDps,
 } from "@/lib/virus/logic";
 
 const TICK_MS = 100;
@@ -155,10 +160,22 @@ interface Enemy {
   boss: boolean;
   /** 상위 보스 (10스테이지마다 보스 다음) */
   apex: boolean;
-  /** 최종 보스 (스테이지 100 상위 보스 다음) */
+  /** 최종 보스 (마지막 스테이지 상위 보스 다음) */
   final: boolean;
   /** 파일 종류 (FILE_TYPES 번호) */
   file: number;
+  /** 쓰러뜨리면 받는 데이터 (러브레터 미끼가 명중마다 미리 나눠 빼냄) */
+  reward: number;
+  /** 아직 한 발도 안 맞음 (부트 선점 — 첫 발 강타) */
+  fresh: boolean;
+  /** 약점 분석 중첩 수 */
+  stacks: number;
+  /** 점화가 꺼지는 시각 (performance.now, 0 = 안 탐) */
+  burnUntil: number;
+  /** 암호화 잠금으로 이번 전투에 늘린 보스 시간 (초) */
+  locked: number;
+  /** 백도어 이월만으로 쓰러진 적 (그 초과 피해는 다시 넘기지 않음) */
+  carryKill: boolean;
 }
 
 interface Float {
@@ -195,6 +212,8 @@ interface Reward {
   apex?: { index: number; trait: string; effect: string; look: string };
   /** 최종 보스 격퇴 (몇 번째인지) */
   final?: { clears: number; cores: number };
+  /** 100스테이지마다 처음 넘어서 받은 커널 코어 (보유 수) */
+  core?: number;
   /** 챌린지 변이 성공 */
   chal?: ChalDef;
 }
@@ -208,17 +227,34 @@ interface View {
   hit: boolean;
   /** 이번 틱에 발사했는지 */
   fired: boolean;
+  /** 취약점 노출(익스플로잇 뒤 피해 증가)이 켜져 있는지 */
+  exposed: boolean;
+  /** 지금 적이 점화로 불타는지 */
+  burning: boolean;
   /** 보스 등장 · 격퇴 연출 중이면 그 내용 */
   cinema: Cinema | null;
 }
 
-const START_ENEMY: Enemy = { hp: 5, max: 5, boss: false, apex: false, final: false, file: 0 };
+const START_ENEMY: Enemy = {
+  hp: 5,
+  max: 5,
+  boss: false,
+  apex: false,
+  final: false,
+  file: 0,
+  reward: 0,
+  fresh: true,
+  stacks: 0,
+  burnUntil: 0,
+  locked: 0,
+  carryKill: false,
+};
 
 function spawn(s: Save): Enemy {
   const st = stats(s);
   const boss = s.kills >= MOBS_PER_STAGE && !s.bossFail;
   // 10스테이지마다 보스를 잡고 나면 그 자리에 상위 보스
-  // 스테이지 100 상위 보스까지 잡으면 최종 보스
+  // 마지막 스테이지 상위 보스까지 잡으면 최종 보스
   const final = boss && s.finalReady;
   const apex = boss && s.bossDone && !final;
   const max = final
@@ -228,7 +264,23 @@ function spawn(s: Save): Enemy {
       : boss
         ? bossHp(s.stage, st)
         : mobHp(s.stage, st);
-  return { hp: max, max, boss, apex, final, file: Math.floor(Math.random() * FILE_TYPES.length) };
+  const reward = final
+    ? finalData(st)
+    : apex
+      ? apexData(s.stage, st)
+      : boss
+        ? bossData(s.stage, st)
+        : mobData(s.stage, st);
+  return {
+    ...START_ENEMY,
+    hp: max,
+    max,
+    boss,
+    apex,
+    final,
+    reward,
+    file: Math.floor(Math.random() * FILE_TYPES.length),
+  };
 }
 
 /** 이 적의 제한 시간 (상위 보스는 더 길게, 「로그 삭제」 특성이면 +5초) */
@@ -262,13 +314,19 @@ export default function VirusGame() {
     bossLeft: BOSS_TIME,
     hit: false,
     fired: false,
+    exposed: false,
+    burning: false,
     cinema: null,
   }));
+  /** 취약점 노출이 꺼지는 시각 (performance.now) · DDoS 폭격까지 쌓인 시간 · 매크로 연사용 발사 수 */
+  const buffUntil = useRef(0);
+  const ddosAcc = useRef(0);
+  const shotCount = useRef(0);
   /** 지금 연출 (끝나는 시각까지 공격 · 보스 시간이 멈춤) */
   const cinemaRef = useRef<Cinema | null>(null);
   /** 보스 격퇴 연출이 끝나면 상위 보스 등장 연출 */
   const apexIntro = useRef(false);
-  /** 상위 보스(스테이지 100) 격퇴 연출이 끝나면 최종 보스 등장 연출 */
+  /** 상위 보스(마지막 스테이지) 격퇴 연출이 끝나면 최종 보스 등장 연출 */
   const finalIntro = useRef(false);
   /** 격퇴 연출이 끝나면 띄울 보상 창 */
   const pendingReward = useRef<Reward | null>(null);
@@ -355,6 +413,8 @@ export default function VirusGame() {
       bossLeft: bossLeft.current,
       hit,
       fired,
+      exposed: buffUntil.current > performance.now(),
+      burning: enemy.current.burnUntil > performance.now(),
       cinema: cinemaRef.current,
     });
   }, []);
@@ -408,6 +468,8 @@ export default function VirusGame() {
   /** 보스 격퇴 소리가 나는 동안 배경음악을 줄이는 함수 (배경음악 코드가 아래에 있어서 ref로 연결) */
   const duckBgm = useRef<() => void>(() => {});
 
+  /** damage 를 자기 안에서 다시 부를 때 (백도어 이월로 다음 적까지 쓰러질 때) */
+  const damageRef = useRef<(amount: number) => void>(() => {});
   /** 적에게 피해를 주고, 쓰러뜨리면 보상·다음 적 */
   const damage = useCallback(
     (amount: number) => {
@@ -417,6 +479,8 @@ export default function VirusGame() {
       if (amount > s.rec.maxHit) s.rec.maxHit = amount;
       if (e.hp > 0) return;
       const st = stats(s);
+      // 백도어 이월: 넘친 피해 (쓰러뜨린 적의 최대 체력까지) × 이월 비율 — 이월로 쓰러진 적의 초과분은 다시 안 넘김
+      const over = e.carryKill ? 0 : Math.min(-e.hp, e.max) * st.fx.carry;
       if (e.boss) {
         if (bossLeft.current <= 1) s.rec.clutch++;
         if (e.final) {
@@ -426,7 +490,7 @@ export default function VirusGame() {
         else s.rec.bosses++;
       }
       if (e.final) {
-        // 최종 보스: 스테이지 100에 머물며 다시 파일부터 (반복해서 잡을 수 있음)
+        // 최종 보스: 마지막 스테이지에 머물며 다시 파일부터 (반복해서 잡을 수 있음)
         startCinema("down", s.stage, false, true);
         duckBgm.current();
         gainData(s, finalData(st));
@@ -457,8 +521,10 @@ export default function VirusGame() {
         startCinema("down", s.stage, wasApex);
         duckBgm.current();
         gainData(s, wasApex ? apexData(s.stage, st) : bossData(s.stage, st));
-        // 상위 보스를 처음 잡으면 특성 + 외형 (변이해도 남음)
+        // 상위 보스를 처음 잡으면 우회 기술 + 외형 (변이해도 남음) · 100스테이지마다 처음 넘으면 커널 코어
         const newApex = wasApex && s.stage > s.apexBest;
+        const core = newApex && milestoneCore(s.stage);
+        if (core) s.cores += 1;
         if (newApex) s.apexBest = s.stage;
         s.bossDone = false;
         s.kills = 0;
@@ -486,12 +552,18 @@ export default function VirusGame() {
             color: newApex ? ax.def.color : def.color,
             module: {
               name: def.module,
-              effect: `${def.cur(moduleLevels(s.best)[index])} (버전마다 ${def.effect})`,
+              effect: def.cur(moduleLevels(s.best)[index]),
               level: moduleLevels(s.best)[index],
             },
             apex: newApex
-              ? { index: ax.index, trait: ax.def.trait, effect: ax.def.effect, look: ax.def.look }
+              ? {
+                  index: ax.index,
+                  trait: ax.def.trait,
+                  effect: ax.def.cur(bypassLevels(s.best, s.apexBest)[ax.index]),
+                  look: ax.def.look,
+                }
               : undefined,
+            core: core ? s.cores : undefined,
           };
         }
         persist();
@@ -513,8 +585,75 @@ export default function VirusGame() {
       if (enemy.current.boss && !apexIntro.current && !finalIntro.current)
         startCinema("appear", s.stage, enemy.current.apex, enemy.current.final);
       bossLeft.current = timeFor(enemy.current, save.current);
+      // 백도어 이월: 남은 피해를 새 적에게 (이것만으로 쓰러지면 바로 다음으로)
+      if (over > 0) {
+        const ne = enemy.current;
+        ne.hp -= over;
+        if (ne.hp <= 0) {
+          ne.carryKill = true;
+          damageRef.current(0);
+        }
+      }
     },
     [persist, startCinema, addFloat]
+  );
+  useEffect(() => {
+    damageRef.current = damage;
+  }, [damage]);
+
+  /**
+   * 코드 한 발이 적에게 닿음 — 코드 모듈 공격 효과를 붙여 피해 (부트 선점 · 약점 분석 · 취약점 노출 · 점화 ·
+   * 러브레터 미끼 · 암호화 잠금). 준 피해를 돌려줌
+   */
+  const strike = useCallback(
+    (crit: boolean, now: number) => {
+      const s = save.current;
+      const e = enemy.current;
+      const st = stats(s);
+      const fx = st.fx;
+      let dmg = st.dmg * (crit ? st.critMul : 1) * (e.boss ? st.bossDmgMul : 1);
+      if (e.fresh && fx.first > 1) dmg *= fx.first;
+      e.fresh = false;
+      if (fx.stackMax) {
+        dmg *= 1 + fx.stack * e.stacks;
+        e.stacks = Math.min(fx.stackMax, e.stacks + 1);
+      }
+      if (buffUntil.current > now) dmg *= 1 + fx.buff;
+      if (crit && fx.buff) buffUntil.current = now + BUFF_MS;
+      if (fx.burn) e.burnUntil = now + BURN_SECS * 1000;
+      // 러브레터 미끼: 준 피해만큼 이 적의 데이터를 미리
+      if (fx.leech) gainData(s, e.reward * fx.leech * (Math.min(dmg, Math.max(0, e.hp)) / e.max));
+      // 암호화 잠금: 보스에게 익스플로잇이 터지면 제한 시간 + (전투당 상한)
+      if (crit && e.boss && fx.lockT && e.locked < fx.lockCap) {
+        const g = Math.min(fx.lockT, fx.lockCap - e.locked);
+        e.locked += g;
+        bossLeft.current += g;
+      }
+      damage(dmg);
+      return dmg;
+    },
+    [damage]
+  );
+
+  /**
+   * 시간에 따라 붙는 피해 — 점화(불타는 동안) · DDoS 폭격(ddosEvery 초마다 한 방). 쏜 피해의 기댓값(baseDps) 기준
+   * DDoS 가 터졌으면 그 피해를 돌려줌
+   */
+  const tickEffects = useCallback(
+    (dt: number, now: number) => {
+      const st = stats(save.current);
+      const fx = st.fx;
+      const bossMul = () => (enemy.current.boss ? st.bossDmgMul : 1);
+      if (fx.burn && enemy.current.burnUntil > now) damage(baseDps(st) * fx.burn * bossMul() * dt);
+      if (!fx.ddosEvery) return 0;
+      ddosAcc.current += dt;
+      if (ddosAcc.current < fx.ddosEvery) return 0;
+      ddosAcc.current -= fx.ddosEvery;
+      const hit = baseDps(st) * fx.ddosMul * bossMul();
+      damage(hit);
+      return hit;
+    },
+    [damage]
   );
 
   // 저장본 · 설정 불러오기 (자리 비운 동안 수익은 "이어하기"를 누를 때 계산)
@@ -768,17 +907,27 @@ export default function VirusGame() {
      * 화면 없이 빨리 돌리기 — 틱 사이가 길게 벌어졌을 때 (탭을 뒤로 보내면 브라우저가 타이머를 1초~1분에 한 번으로 늦춤).
      * 0.1초씩 끊어서 공격 · 보스 시간을 그대로 계산 (코드는 날리지 않고 바로 맞음)
      */
+    /** 한 번 발사할 때 나가는 코드 수 (자가 복제 추가 발사 · 매크로 연사) */
+    const volley = (st: ReturnType<typeof stats>) => {
+      let n = 1 + st.fx.extraN + (Math.random() < st.fx.extraP ? 1 : 0);
+      shotCount.current++;
+      if (st.fx.burstEvery && shotCount.current % st.fx.burstEvery === 0) n += 2;
+      return n;
+    };
     const fastForward = (secs: number) => {
       const step = 0.1;
+      const start = performance.now() - secs * 1000;
       for (let t = 0; t < secs && !cinemaRef.current; t += step) {
         const s = save.current;
         const st = stats(s);
+        const at = start + t * 1000;
         atkAcc.current += st.aps * step;
         for (let k = 0; atkAcc.current >= 1 && k < 200 && !cinemaRef.current; k++) {
           atkAcc.current -= 1;
-          const crit = Math.random() < st.critChance;
-          damage(st.dmg * (crit ? st.critMul : 1) * (enemy.current.boss ? st.bossDmgMul : 1));
+          for (let j = volley(st); j > 0 && !cinemaRef.current; j--)
+            strike(Math.random() < st.critChance, at);
         }
+        if (!cinemaRef.current) tickEffects(step, at);
         if (enemy.current.boss && !cinemaRef.current) {
           bossLeft.current -= step;
           if (bossLeft.current <= 0) failBoss(s);
@@ -835,17 +984,20 @@ export default function VirusGame() {
       // 발사: 공격 속도만큼 코드를 쏘고, SHOT_MS 뒤에 닿음
       atkAcc.current += st.aps * dt;
       const launched: Shot[] = [];
-      while (atkAcc.current >= 1 && launched.length < 20) {
+      while (atkAcc.current >= 1 && launched.length < 40) {
         atkAcc.current -= 1;
-        const id = ++floatId.current;
-        const crit = Math.random() < st.critChance;
-        pending.current.push({ id, landAt: now + SHOT_MS, crit });
-        launched.push({
-          id,
-          glyph: GLYPHS[Math.floor(Math.random() * GLYPHS.length)],
-          crit,
-          dy: Math.round((Math.random() - 0.5) * 24),
-        });
+        // 자가 복제 · 매크로 연사로 한 번에 여러 발 (조금씩 다른 높이로)
+        for (let j = volley(st); j > 0; j--) {
+          const id = ++floatId.current;
+          const crit = Math.random() < st.critChance;
+          pending.current.push({ id, landAt: now + SHOT_MS + j * 30, crit });
+          launched.push({
+            id,
+            glyph: GLYPHS[Math.floor(Math.random() * GLYPHS.length)],
+            crit,
+            dy: Math.round((Math.random() - 0.5) * 24) + (j > 1 ? (j % 2 ? 14 : -14) : 0),
+          });
+        }
       }
       if (launched.length) setShots((sh) => [...sh.slice(-24), ...launched]);
       // 닿은 코드: 그때의 적에게 피해
@@ -859,10 +1011,14 @@ export default function VirusGame() {
         landed.forEach((p, i) => {
           // 이 틱에 보스가 나타나거나 쓰러졌으면 나머지는 버림 (연출 시작)
           if (cinemaRef.current) return;
-          const dmg = st.dmg * (p.crit ? st.critMul : 1) * (enemy.current.boss ? st.bossDmgMul : 1);
+          const dmg = strike(p.crit, now);
           if (i < 3) addFloat(fmt(dmg), p.crit);
-          damage(dmg);
         });
+      }
+      // 점화 · DDoS 폭격
+      if (!cinemaRef.current) {
+        const ddos = tickEffects(dt, now);
+        if (ddos > 0) addFloat(`💣 ${fmt(ddos)}`, true);
       }
       if (enemy.current.boss) {
         bossLeft.current -= dt;
@@ -886,7 +1042,7 @@ export default function VirusGame() {
       window.removeEventListener("pagehide", persist);
       persist();
     };
-  }, [scene, damage, addFloat, persist, sync, startCinema, checkEvolve, pushToast]);
+  }, [scene, strike, tickEffects, addFloat, persist, sync, startCinema, checkEvolve, pushToast]);
 
   /** 업그레이드 사기 — ×1 · ×10 · 최대 (×10 은 10번 다 살 수 있을 때만) */
   const buy = useCallback(
@@ -1090,6 +1246,8 @@ export default function VirusGame() {
   const owned = mods.filter((m) => m > 0).length;
   /** 상위 보스에게서 빼앗은 우회 기술 수 */
   const bypassN = apexCount(s.apexBest);
+  /** 우회 기술 버전 (못 잡은 것은 0) */
+  const bv = bypassLevels(s.best, s.apexBest);
   // 내 바이러스와 날아가는 코드의 색: 마지막으로 빼앗은 모듈의 색
   const last = s.best > 1 ? bossOf(s.best - 1).def : null;
   const myColor = last?.color ?? ACCENT;
@@ -1104,7 +1262,7 @@ export default function VirusGame() {
   /** 내 바이러스 몸 둘레에 붙는 모듈 조각 (빼앗은 보스의 색) */
   const modColors = ROSTER.map((v, i) => (mods[i] ? v.color : null));
   /** 지금 적에게 들어가는 예상 초당 피해 */
-  const curDps = dps(st) * (e.boss ? st.bossDmgMul : 1);
+  const curDps = dps(st) * (e.boss ? st.bossDmgMul * st.fxBossMul : 1);
   /** 프로파일러가 있으면: 데이터 대비 초당 피해가 가장 많이 오르는 업그레이드 · 랜덤 강화 */
   const advice = s.shop.profiler ? upgradeAdvice(s, buyMode === "max" ? Infinity : buyMode) : null;
   const gainOf = (id: string) => advice?.list.find((a) => a.id === id)?.gain ?? 0;
@@ -1352,7 +1510,7 @@ export default function VirusGame() {
               {/* 왼쪽 위: 지금 적에게 들어가는 예상 초당 피해 */}
               <div
                 className={`pointer-events-none absolute top-2 left-3 z-10 rounded-lg border border-emerald-400/20 bg-black/55 px-2.5 py-1 ${KR}`}
-                title="공격력 × 초당 발사 × 익스플로잇 평균 (보스면 보스 피해 배율까지)"
+                title="공격력 × 초당 발사 × 익스플로잇 평균 × 코드 모듈 효과 평균 (보스면 보스 피해 배율 · 약점 분석 최대 중첩까지)"
               >
                 <div className="vt-xs text-emerald-300/90">예상 DPS</div>
                 <div className="font-mono text-base leading-tight font-bold text-emerald-200 tabular-nums">
@@ -1363,6 +1521,18 @@ export default function VirusGame() {
                     </span>
                   )}
                 </div>
+                {/* 지금 붙어 있는 공격 효과 */}
+                {(view.exposed || view.burning || e.stacks > 0) && (
+                  <div className="mt-0.5 flex gap-1.5 vt-xs font-bold">
+                    {view.exposed && <span className="text-orange-200">🔓 노출</span>}
+                    {view.burning && <span className="text-red-300">🔥 점화</span>}
+                    {e.stacks > 0 && (
+                      <span className="text-slate-200" title="약점 분석 중첩">
+                        🎯 {e.stacks}
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
               {cinema && <BossCinema c={cinema} />}
               <div
@@ -1427,7 +1597,7 @@ export default function VirusGame() {
                 <div className="relative flex flex-col items-center gap-2">
                   <div
                     key={`${s.stage}-${s.kills}-${e.boss}`}
-                    className={`relative ${
+                    className={`relative ${view.burning && !dying && !failing ? "vg-burn" : ""} ${
                       dying
                         ? ""
                         : failing
@@ -1638,7 +1808,17 @@ export default function VirusGame() {
                             t.key === "format" ? "text-amber-200" : "text-white/70"
                           }`}
                         >
-                          {t.badge}
+                          {t.key === "format" ? (
+                            // 좁으면 점만 (받을 루트 권한이 커지면 숫자가 길어져 탭 줄이 넘침)
+                            <>
+                              <span className="@lg/panel:hidden" aria-hidden>
+                                ●
+                              </span>
+                              <span className="hidden @lg/panel:inline">{t.badge}</span>
+                            </>
+                          ) : (
+                            t.badge
+                          )}
                         </span>
                       )}
                     </button>
@@ -1935,7 +2115,7 @@ export default function VirusGame() {
                             }}
                             title={
                               lv
-                                ? `${v.module} v${lv}: ${v.cur(lv)} (버전마다 ${v.effect})`
+                                ? `${v.module} v${lv}: ${v.cur(lv)} — ${v.effect}`
                                 : `스테이지 ${i + 1} 보스를 격퇴하면 획득`
                             }
                           >
@@ -2019,7 +2199,7 @@ export default function VirusGame() {
                             }}
                             title={
                               got
-                                ? `${a.role} ${a.name} 처치: ${a.trait} — ${a.effect} · 외형 ${a.look}`
+                                ? `${a.role} ${a.name} 처치: ${a.trait} v${bv[i]} — ${a.cur(bv[i])} · 외형 ${a.look}`
                                 : `스테이지 ${(i + 1) * 10}의 상위 보스를 잡으면 열려요`
                             }
                           >
@@ -2029,9 +2209,14 @@ export default function VirusGame() {
                             <div className={`min-w-0 ${KR}`}>
                               <div className="vt-sm truncate font-bold text-white/90">
                                 {got ? `🛡️ ${a.trait}` : "??? 우회 기술"}
+                                {got && (
+                                  <span className="ml-1 font-mono vt-xs text-white/75">
+                                    v{bv[i]}
+                                  </span>
+                                )}
                               </div>
                               <div className="vt-xs truncate text-white/75">
-                                {got ? a.effect : `${(i + 1) * 10}스테이지 상위 보스`}
+                                {got ? a.cur(bv[i]) : `${(i + 1) * 10}스테이지 상위 보스`}
                               </div>
                             </div>
                           </button>
@@ -2173,7 +2358,7 @@ export default function VirusGame() {
                         </p>
                       ) : (
                         <p key="chal-h" className="vt-sm text-white/75">
-                          🎯 챌린지 변이: 최종 보스 KILLSWITCH를 처음 잡으면 열려요.
+                          🎯 챌린지 변이: 스테이지 100을 돌파하면 열려요.
                         </p>
                       ),
                       ...(chalOpen(s)
@@ -2417,6 +2602,11 @@ export default function VirusGame() {
                       제약이 풀렸어요 · 보상 {r.chal.reward} · 🧩 커널 코어 +1
                     </div>
                   )}
+                  {r.core != null && (
+                    <div className="vt-xs break-keep [overflow-wrap:anywhere] text-amber-200">
+                      🧩 100스테이지 돌파 · 커널 코어 +1 (보유 {r.core})
+                    </div>
+                  )}
                   {r.final && (
                     <div className="vt-xs break-keep [overflow-wrap:anywhere] text-white/90">
                       🧩 커널 코어 +1 (보유 {r.final.cores}) — 루트 상점 「커널」에서 써요. 다음
@@ -2436,7 +2626,7 @@ export default function VirusGame() {
                   {r.module && (
                     <div className="vt-xs break-keep [overflow-wrap:anywhere] text-white/90">
                       📦 {r.module.name} {r.module.level > 1 ? `v${r.module.level}` : "획득"} ·{" "}
-                      {r.module.effect.replace(/ \(버전마다.*\)$/, "")}
+                      {r.module.effect}
                     </div>
                   )}
                 </div>
@@ -2539,9 +2729,17 @@ export default function VirusGame() {
                               {got ? (
                                 <>
                                   <p className="mt-2 text-lg font-bold" style={{ color: a.color }}>
-                                    🛡️ 우회 기술 「{a.trait}」
+                                    🛡️ 우회 기술 「{a.trait}」 v{bv[detail.i]}
                                   </p>
-                                  <p className="vt-base mt-1 text-white/90">{a.effect}</p>
+                                  <p className="vt-base mt-1 font-bold text-white">
+                                    {a.cur(bv[detail.i])}
+                                  </p>
+                                  <p className="vt-sm mt-0.5 text-emerald-200/90">
+                                    다음 v{bv[detail.i] + 1}: {a.cur(bv[detail.i] + 1)}
+                                  </p>
+                                  <p className="vt-sm mt-1 text-white/75">
+                                    버전은 같은 번호의 코드 모듈처럼 최고 스테이지가 오를수록 올라요
+                                  </p>
                                   <p className="vt-base mt-2 font-bold text-emerald-200">
                                     🧬 외형 · {a.look}
                                   </p>
@@ -2577,7 +2775,7 @@ export default function VirusGame() {
                                     📦 모듈 「{v.module}」 v{lv}
                                   </p>
                                   <p className="vt-base mt-1 font-bold text-white">{v.cur(lv)}</p>
-                                  <p className="vt-sm mt-1 text-white/75">버전마다 {v.effect}</p>
+                                  <p className="vt-sm mt-1 text-white/75">{v.effect}</p>
                                   <p className="vt-sm mt-0.5 text-emerald-200/90">
                                     다음 v{lv + 1}: {v.cur(lv + 1)}
                                   </p>

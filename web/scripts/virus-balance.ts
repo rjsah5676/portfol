@@ -27,7 +27,7 @@ import {
   canFormat,
   dps,
   format,
-  gainData,
+  gainData as gainDataRaw,
   mobData,
   mobHp,
   newSave,
@@ -64,6 +64,10 @@ import {
   randLocked,
   fmtBytes,
   type ChalKey,
+  avgHit,
+  chalOpen,
+  milestoneCore,
+  fmt,
 } from "../src/lib/virus/logic";
 
 const args = process.argv.slice(2).filter((a) => !a.startsWith("--"));
@@ -73,8 +77,20 @@ const NO_RAND = process.argv.includes("--no-rand");
 const NO_SHOP = process.argv.includes("--no-shop");
 /** --auto: 크론 데몬을 산 뒤로는 자동 최적 업그레이드(크론잡)만 쓰는 플레이어 */
 const AUTO = process.argv.includes("--auto");
-/** --chal: 첫 KILLSWITCH 뒤 챌린지 변이를 차례로 */
+/** --chal: 챌린지가 열리면 (스테이지 100 돌파) 막힐 때마다 변이 대신 챌린지를 하나씩 */
 const CHALS = process.argv.includes("--chal");
+/** --to-end: 마지막 스테이지까지 가서 최종 보스를 처음 잡으면 멈춤 */
+const TO_END = process.argv.includes("--to-end");
+/** --quiet: 100스테이지 표만 */
+const QUIET = process.argv.includes("--quiet");
+/** stuck=600: 한 스테이지에 이 초 넘게 머물면 막혔다고 보고 변이 */
+let STUCK_SECS = 600;
+/**
+ * --rate: 변이 효율이 꺾이면 변이 (최적 루트 근사) — 이번 회차의 「변이하면 오를 피해 배율의 로그 ÷ 회차 시간」이
+ * 최고점에서 RATE_DROP 아래로 떨어지면. 막혔을 때(stuck)도 변이
+ */
+const RATE = process.argv.includes("--rate");
+let RATE_DROP = 0.9;
 const HOURS = Number(args.find((a) => !a.includes("=")) ?? 72);
 for (const a of args.filter((x) => x.includes("="))) {
   const [k, v] = a.split("=");
@@ -88,6 +104,14 @@ for (const a of args.filter((x) => x.includes("="))) {
     SHOP.filter((d) => d.key === "rootkit" || d.key === "miner").forEach(
       (d) => (d.growth = Number(v))
     );
+    continue;
+  }
+  if (k === "drop") {
+    RATE_DROP = Number(v);
+    continue;
+  }
+  if (k === "stuck") {
+    STUCK_SECS = Number(v);
     continue;
   }
   // goal.single=100 → 챌린지 목표 스테이지 바꿔 보기
@@ -104,8 +128,6 @@ for (const a of args.filter((x) => x.includes("="))) {
 const DT = 0.25;
 const RETRY_FARM = 30;
 const STUCK_FAILS = 3;
-/** 한 스테이지가 이보다 오래 걸리면 막혔다고 보고 포맷 */
-const STUCK_SECS = 600;
 
 const fmtT = (x: number) =>
   x < 60
@@ -171,6 +193,29 @@ function spendRoot(sv: Save) {
   if (rootLeft(sv) < 0) throw new Error("루트 권한이 음수");
 }
 
+/** 커널 코어: 가장 싼 것부터 (인터럽트 지연은 최대 3) */
+function spendCores(sv: Save) {
+  for (let k = 0; k < 50; k++) {
+    const c = SHOP.filter((d) => d.group === "core" && (d.max == null || sv.shop[d.key] < d.max));
+    c.sort((a, b) => shopCost(a, sv.shop[a.key]) - shopCost(b, sv.shop[b.key]));
+    if (!c.length || !buyShop(sv, c[0].key)) break;
+  }
+}
+/** 최고 스테이지가 처음 100 · 200 … 을 넘은 시각 · 그때 변이 횟수 */
+const bestAt: Record<number, { t: number; formats: number }> = {};
+function noteBest() {
+  for (let n = 100; n <= MAX_STAGE; n += 100)
+    if (s.best > n && bestAt[n] == null) bestAt[n] = { t, formats: s.formats };
+}
+/** 백도어 이월로 다음 적에게 넘길 피해 · 이번 보스 전투에서 암호화 잠금으로 늘린 시간 */
+let carry = 0;
+/** 이번 회차 변이 효율 최고점 (--rate) */
+let peakRate = 0;
+/** 지금 적의 최대 체력 · 이월만으로 쓰러진 적인지 (그 초과 피해는 다시 넘기지 않음) */
+let hpMax = 1;
+let carryKill = false;
+let lockGained = 0;
+
 let apex = false;
 let fin = false;
 let finalAt = -1;
@@ -189,6 +234,13 @@ function nextEnemy() {
         : mobHp(s.stage, st);
   left = bossTimeOf(fin ? "final" : apex ? "apex" : "boss", st);
   leftMax = left;
+  lockGained = 0;
+  hpMax = hp;
+  // 백도어 이월 (이것만으로 쓰러지면 그 초과 피해는 다시 넘기지 않음) · 부트 선점(첫 발 강타)
+  hp -= carry;
+  carryKill = carry > 0 && hp <= 0;
+  carry = 0;
+  if (st.fx.first > 1) hp -= (st.fx.first - 1) * avgHit(st);
 }
 let leftMax = BOSS_TIME;
 const achAt: Record<string, number> = {};
@@ -201,6 +253,7 @@ function nextChal() {
   if (chalIdx >= CHAL.length) return;
   s = startChal(s, CHAL[chalIdx].key as ChalKey);
   if (!NO_SHOP) spendRoot(s);
+  peakRate = 0;
   chalStart = t;
   runStart = t;
   stageStart = t;
@@ -247,15 +300,29 @@ while (t < HOURS * 3600) {
   const evo = evoStage(s.lv);
   if (evoAt[evo] == null) evoAt[evo] = t;
   st = stats(s);
-  hp -= dps(st) * (boss ? st.bossDmgMul : 1) * DT;
+  hp -= dps(st) * (boss ? st.bossDmgMul * st.fxBossMul : 1) * DT;
   t += DT;
-  if (boss) left -= DT;
-  else if (farmLeft > 0) farmLeft -= DT;
+  if (boss) {
+    left -= DT;
+    // 암호화 잠금: 보스에게 익스플로잇이 터질 때마다 시간 + (전투당 상한)
+    if (st.fx.lockT && lockGained < st.fx.lockCap) {
+      const g = Math.min(
+        st.fx.lockCap - lockGained,
+        st.critChance * st.aps * st.shotsMul * st.fx.lockT * DT
+      );
+      left += g;
+      lockGained += g;
+    }
+  } else if (farmLeft > 0) farmLeft -= DT;
 
   if (Math.floor(t) !== Math.floor(t - DT)) {
     for (const a of checkAch(s)) achAt[a.id] = t;
   }
   if (hp <= 0) {
+    // 백도어 이월: 넘친 피해 (쓰러뜨린 적의 최대 체력까지) × 이월 비율
+    carry = carryKill ? 0 : Math.min(-hp, hpMax) * st.fx.carry;
+    // 러브레터 미끼: 명중마다 미리 빼낸 데이터 (평균만큼 보상에 얹음)
+    const gainData = (sv: Save, n: number) => gainDataRaw(sv, n * (1 + st.fx.leech));
     if (boss) {
       if (left <= 1) s.rec.clutch++;
       if (fin) {
@@ -270,18 +337,11 @@ while (t < HOURS * 3600) {
       if (finalAt < 0) finalAt = t;
       s.clears++;
       s.cores++;
-      // 커널 코어: 가장 싼 것부터 (인터럽트 지연은 최대 3)
-      for (let k = 0; k < 50; k++) {
-        const c = SHOP.filter(
-          (d) => d.group === "core" && (d.max == null || s.shop[d.key] < d.max)
-        );
-        c.sort((a, b) => shopCost(a, s.shop[a.key]) - shopCost(b, s.shop[b.key]));
-        if (!c.length || !buyShop(s, c[0].key)) break;
-      }
+      spendCores(s);
       s.finalReady = false;
       s.kills = 0;
       fails = 0;
-      if (CHALS && chalIdx < 0) nextChal();
+      if (TO_END) break;
     } else if (boss && apex && s.stage >= MAX_STAGE) {
       // 마지막 상위 보스: 더 나아가지 않고 바로 최종 보스
       gainData(s, apexData(s.stage, st));
@@ -292,6 +352,7 @@ while (t < HOURS * 3600) {
       s.bossDone = false;
       s.finalReady = true;
       s.best = Math.max(s.best, MAX_STAGE + 1);
+      noteBest();
       fails = 0;
     } else if (boss && !apex && isApexStage(s.stage)) {
       // 보스는 잡았고 상위 보스가 남음 (스테이지는 그대로)
@@ -303,6 +364,11 @@ while (t < HOURS * 3600) {
       if (apex) {
         if (s.stage > s.apexBest && apexAt[apexCount(s.stage)] == null)
           apexAt[apexCount(s.stage)] = t;
+        // 100스테이지마다 처음 넘으면 커널 코어
+        if (s.stage > s.apexBest && milestoneCore(s.stage)) {
+          s.cores++;
+          spendCores(s);
+        }
         s.apexBest = Math.max(s.apexBest, s.stage);
       }
       s.bossDone = false;
@@ -314,13 +380,14 @@ while (t < HOURS * 3600) {
         );
       s.stage++;
       s.best = Math.max(s.best, s.stage);
+      noteBest();
       s.kills = 0;
       fails = 0;
       stageStart = t;
       const done = checkChal(s);
       if (done) {
         chalLog.push(`  ${done.icon} ${done.name} (목표 ${done.goal}): ${fmtT(t - chalStart)}`);
-        nextChal();
+        spendCores(s);
       }
     } else {
       gainData(s, mobData(s.stage, st));
@@ -341,19 +408,36 @@ while (t < HOURS * 3600) {
     farmLeft = RETRY_FARM;
     nextEnemy();
   }
-  if (s.chal && t - chalStart > 3600) {
+  // 챌린지 중 한 스테이지에 30분 넘게 막히면 포기 (제약만 풀고 그대로 이어서)
+  if (s.chal && t - stageStart > 1800) {
     chalLog.push(
-      `  ${CHAL[chalIdx].icon} ${CHAL[chalIdx].name} (목표 ${CHAL[chalIdx].goal}): 1시간 안에 실패 — 스테이지 ${s.stage}에서 포기`
+      `  ${CHAL[chalIdx].icon} ${CHAL[chalIdx].name} (목표 ${CHAL[chalIdx].goal}): 스테이지 ${s.stage}에서 막혀 포기 (${fmtT(t - chalStart)})`
     );
     s.chal = null;
-    nextChal();
+    stageStart = t;
   }
-  if ((fails >= STUCK_FAILS || t - stageStart > STUCK_SECS) && canFormat(s) && !s.chal) {
+  let stuck = (fails >= STUCK_FAILS || t - stageStart > STUCK_SECS) && !s.chal;
+  // 변이 효율: 루트 권한으로 오를 피해 배율(로그) ÷ 이번 회차 시간 — 꺾이면 변이
+  if (RATE && !s.chal && Math.floor(t) % 5 === 0 && t - Math.floor(t) < DT) {
+    const pend = pendingRoot(s);
+    const rate =
+      pend > 0
+        ? Math.log((1 + BAL.rootBonus * (s.root + pend)) / (1 + BAL.rootBonus * s.root)) /
+          Math.max(60, t - runStart)
+        : 0;
+    if (rate > peakRate) peakRate = rate;
+    else if (rate > 0 && rate < peakRate * RATE_DROP) stuck = true;
+  }
+  // 막혔을 때: 챌린지가 남았으면 변이 대신 챌린지 (챌린지도 받을 루트 권한은 받음)
+  if (stuck && CHALS && chalOpen(s) && chalIdx + 1 < CHAL.length) {
+    nextChal();
+  } else if (stuck && canFormat(s)) {
     runs.push(
       `  회차 ${s.formats + 1}: ${fmtT(t - runStart)} 동안 스테이지 ${s.stage}까지 → 루트 권한 +${pendingRoot(s)} (합계 ${s.root + pendingRoot(s)}) · 끝난 시각 ${fmtT(t)} · 상점 ${Object.values(s.shop).join("/")}`
     );
     s = format(s);
     if (!NO_SHOP) spendRoot(s);
+    peakRate = 0;
     runStart = t;
     stageStart = t;
     fails = 0;
@@ -369,7 +453,26 @@ console.log(`BAL: ${JSON.stringify(BAL)}\n`);
 if (overflow)
   console.log(`⚠ ${overflow}
 `);
-console.log("첫 회차 스테이지 도달 시각:");
+console.log(
+  "100스테이지마다 (최고 스테이지가 처음 넘은 시각 · 그 100스테이지에 걸린 시간 · 그때까지 변이):"
+);
+let prevT = 0;
+for (let n = 100; n <= MAX_STAGE; n += 100) {
+  const b = bestAt[n];
+  if (!b) {
+    console.log(`  ${String(n).padStart(4)} 돌파: -`);
+    break;
+  }
+  console.log(
+    `  ${String(n).padStart(4)} 돌파: ${fmtT(b.t).padStart(7)} · +${fmtT(b.t - prevT).padStart(7)} · 변이 ${b.formats}번`
+  );
+  prevT = b.t;
+}
+console.log(
+  `  끝 시각 ${fmtT(t)} · 최고 ${s.best - 1} · 지금 스테이지 ${s.stage} · 루트 권한 ${fmt(s.root)} · 코어 ${s.cores} · 챌린지 ${s.chalDone.length}`
+);
+if (QUIET) process.exit(0);
+console.log("\n첫 회차 스테이지 도달 시각:");
 console.log(
   "  " +
     [2, 3, 5, 10, 15, 20, 30, 40, 50, 60, 80, 100]
