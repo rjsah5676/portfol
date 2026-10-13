@@ -7,7 +7,7 @@
  * 시간 단위는 tick (1초 = TPS tick). 거리 단위는 칸 (필드 8 × 5칸).
  */
 
-export const BALANCE_VER = "a2";
+export const BALANCE_VER = "b1";
 
 export const TPS = 30;
 /** 필드에 남은 적이 이 수에 닿으면 패배 */
@@ -30,8 +30,8 @@ export const B = {
   bossSec: 60,
   /** 보스를 잡고 다음 웨이브까지 */
   breakSec: 3,
-  /** 적 체력: base × (1 + lin × w) × mult^w — from2 웨이브부터는 mult2 로 더 가파르게 (중후반 압박) */
-  hp: { base: 26, lin: 0.4, mult: 1.068, mult2: 1.155, from2: 20 },
+  /** 적 체력: base × (1 + lin × w) × mult^w — from2 웨이브부터는 mult2 로 더 가파르게 (중후반 압박), from3 부터는 mult3 (끝판 숨 고르기) */
+  hp: { base: 26, lin: 0.4, mult: 1.068, mult2: 1.15, from2: 20, mult3: 1.06, from3: 50 },
   /** 적 방어력 = perWave × w × 종류 배수 */
   armorPerWave: 1,
   /** 엘리트(5 · 15 · 25… 웨이브 마지막 한 마리) 체력 배수 */
@@ -107,7 +107,7 @@ export const HP_TABLE: number[] = (() => {
   let m = 1;
   for (let w = 0; w <= 400; w++) {
     out.push(Math.round(B.hp.base * (1 + B.hp.lin * w) * m));
-    m *= w >= B.hp.from2 ? B.hp.mult2 : B.hp.mult;
+    m *= w >= B.hp.from3 ? B.hp.mult3 : w >= B.hp.from2 ? B.hp.mult2 : B.hp.mult;
   }
   return out;
 })();

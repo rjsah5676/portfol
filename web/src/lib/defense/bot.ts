@@ -7,6 +7,7 @@ import { B } from "./balance";
 import { PATCHES } from "./meta";
 import {
   CELLS,
+  SLOTS,
   STACK,
   apply,
   canRecipe,
@@ -19,6 +20,10 @@ import {
   type Game,
 } from "./sim";
 import { FACTIONS, RECIPES, UNIT, poolOf, type Faction, type Grade } from "./units";
+import type { Loadout } from "./progress";
+
+/** 조합식 재료 (팔지 않고 남겨 둠) */
+const MATERIAL = new Set(RECIPES.filter((r) => !r.hidden).flatMap((r) => r.needs));
 
 export interface BotCfg {
   name: string;
@@ -31,6 +36,8 @@ export interface BotCfg {
   rift: boolean;
   /** 몇 tick 마다 생각하는지 (사람 손 속도 흉내) */
   every: number;
+  /** 영구 성장 (루트별 연구 · 유물). 시뮬 스크립트가 newGame 에 넘김 */
+  lo?: Loadout;
 }
 
 export const BOTS: BotCfg[] = [
@@ -144,8 +151,14 @@ export function botMove(b: Board, cfg: BotCfg, skip: ReadonlySet<string> = new S
       const c = ok({ t: "recipe", id: r.id });
       if (c) return c;
     }
+  // 보관함 정리: 같은 유닛이 있는 칸으로 모으기 → 필드 빈 칸으로 올리기 → 필드의 약한 낱개와 바꾸기
+  const mv = benchMove(b);
+  if (mv) {
+    const c = ok(mv);
+    if (c) return c;
+  }
   // 합성
-  for (let i = 0; i < CELLS; i++) {
+  for (let i = 0; i < SLOTS; i++) {
     const c = b.cells[i];
     if (c.def && c.units.length >= STACK && UNIT[c.def].grade < 3) {
       const c = ok({ t: "merge", c: i });
@@ -188,16 +201,17 @@ export function botMove(b: Board, cfg: BotCfg, skip: ReadonlySet<string> = new S
     const c = ok({ t: "summon" });
     if (c) return c;
   }
-  // 칸이 꽉 찼으면: 주력이 아닌 낮은 등급 낱개부터 판매
+  // 칸이 꽉 찼으면: 주력이 아닌 낮은 등급 낱개부터 판매 (조합식 재료는 남김)
   if (!hasEmpty(b)) {
     let sell = -1,
       worst = Infinity;
-    for (let i = 0; i < CELLS; i++) {
+    for (let i = 0; i < SLOTS; i++) {
       const c = b.cells[i];
       if (!c.def) continue;
       const d = UNIT[c.def];
       if (d.grade > 1) continue;
-      const v = d.grade * 10 + c.units.length + (d.faction === main ? 5 : 0);
+      const v =
+        d.grade * 10 + c.units.length + (d.faction === main ? 5 : 0) + (MATERIAL.has(d.id) ? 20 : 0);
       if (v < worst) {
         worst = v;
         sell = i;
@@ -220,6 +234,52 @@ export function botMove(b: Board, cfg: BotCfg, skip: ReadonlySet<string> = new S
     const c = ok({ t: "up", k: others[0] });
     if (c) return c;
   }
+  return null;
+}
+
+/** 유닛 가치 (자리 고를 때) */
+const worth = (id: string, n: number) => {
+  const d = UNIT[id];
+  return (d.grade + 1) * 100 + n * 10 + d.dmg * d.aps * 0.01;
+};
+
+/** 보관함 → 필드 정리 명령 하나 */
+function benchMove(b: Board): Cmd | null {
+  for (let j = CELLS; j < SLOTS; j++) {
+    const bj = b.cells[j];
+    if (!bj.def) continue;
+    // 같은 유닛이 필드에 덜 찬 칸이 있으면 그리로 모음
+    for (let i = 0; i < CELLS; i++)
+      if (b.cells[i].def === bj.def && b.cells[i].units.length < STACK) return { t: "swap", a: j, b: i };
+  }
+  // 필드에 빈 칸이 있으면 보관함에서 가장 값진 것 올림
+  const empty = b.cells.findIndex((c, i) => i < CELLS && !c.def);
+  let best = -1,
+    bv = -1;
+  for (let j = CELLS; j < SLOTS; j++) {
+    const c = b.cells[j];
+    if (!c.def) continue;
+    const v = worth(c.def, c.units.length);
+    if (v > bv) {
+      bv = v;
+      best = j;
+    }
+  }
+  if (best < 0) return null;
+  if (empty >= 0) return { t: "swap", a: best, b: empty };
+  // 필드의 가장 약한 칸보다 보관함 것이 훨씬 세면 바꿈
+  let weak = -1,
+    wv = Infinity;
+  for (let i = 0; i < CELLS; i++) {
+    const c = b.cells[i];
+    if (!c.def) continue;
+    const v = worth(c.def, c.units.length);
+    if (v < wv) {
+      wv = v;
+      weak = i;
+    }
+  }
+  if (weak >= 0 && bv > wv + 100) return { t: "swap", a: best, b: weak };
   return null;
 }
 

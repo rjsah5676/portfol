@@ -18,7 +18,9 @@ import {
   type SpriteSpec,
 } from "@/lib/defense/assets";
 import { CAP } from "@/lib/defense/balance";
+import { THEME, type ThemeDef } from "@/lib/defense/progress";
 import {
+  BENCH,
   CELLS,
   COLS,
   FIELD_H,
@@ -37,6 +39,16 @@ import { FACTION_COLOR, GRADE_COLOR, UNIT, type Faction } from "@/lib/defense/un
 export const CELL = 76;
 export const FW = FIELD_W * CELL;
 export const FH = FIELD_H * CELL;
+/** 필드 아래 보관함 줄 높이 · 캔버스 전체 높이 */
+export const BENCH_H = 72;
+export const FH2 = FH + BENCH_H;
+/** 보관함 칸 왼쪽 끝 x */
+const BENCH_X0 = (FW - BENCH * CELL) / 2;
+/** 칸 가운데 (필드 · 보관함 공용, 디자인 px) */
+export function slotCenter(i: number): [number, number] {
+  if (i < CELLS) return [cellX(i) * CELL, cellY(i) * CELL];
+  return [BENCH_X0 + (i - CELLS + 0.5) * CELL, FH + BENCH_H / 2];
+}
 
 /** 블록 앞면 높이 (2.5D 두께) */
 const LIFT = 10;
@@ -95,6 +107,10 @@ export function pushFx(v: View, list: Fx[]) {
 }
 
 export const cellAt = (x: number, y: number) => {
+  if (y >= FH) {
+    const j = Math.floor((x - BENCH_X0) / CELL);
+    return j >= 0 && j < BENCH && y < FH2 ? CELLS + j : -1;
+  }
   const c = Math.floor(x / CELL) - 1,
     r = Math.floor(y / CELL) - 1;
   if (c < 0 || c >= COLS || r < 0 || r >= CELLS / COLS) return -1;
@@ -330,11 +346,24 @@ function sprite(
 
 /* ───────── 바닥 ───────── */
 
+/** 블록 테마 (꾸미기, lib/defense/progress.ts THEMES) — 판 시작 때 GameView 가 정함 */
+let theme: ThemeDef = THEME["theme.base"];
+export function setTheme(id: string | null | undefined) {
+  theme = THEME[id ?? ""] ?? THEME["theme.base"];
+}
+const FAC_IDX: Record<string, number> = { knight: 0, mech: 1, arcane: 2 };
+/** 블록 윗면 색 (테마가 정한 색이 있으면 그 색) */
+const topOf = (f: string | null) => {
+  if (!f) return theme.top[3];
+  const t = theme.top[FAC_IDX[f] ?? -1];
+  return t || shade(FACTION_COLOR[f as keyof typeof FACTION_COLOR], 0.42);
+};
+
 let floorCache: { key: string; cv: HTMLCanvasElement } | null = null;
 /** 바닥(길 · 블록 바탕)은 한 번 그려 두고 재사용 */
 function floor(): HTMLCanvasElement | null {
   if (typeof document === "undefined") return null;
-  const key = FIELD_ART ?? "procedural";
+  const key = (FIELD_ART ?? "procedural") + theme.id;
   if (floorCache?.key === key) return floorCache.cv;
   const cv = document.createElement("canvas");
   cv.width = FW;
@@ -356,7 +385,7 @@ function floor(): HTMLCanvasElement | null {
       if (!ring) continue;
       const x = gx * CELL,
         y = gy * CELL;
-      ctx.fillStyle = "#2b2348";
+      ctx.fillStyle = theme.road[0];
       ctx.fillRect(x, y, CELL, CELL);
       // 돌 무늬: 엇갈린 벽돌
       for (let r = 0; r < 4; r++) {
@@ -365,7 +394,7 @@ function floor(): HTMLCanvasElement | null {
           const bx = x + c * (CELL / 2) + off,
             by = y + r * (CELL / 4);
           const tone = rnd();
-          ctx.fillStyle = tone > 0.66 ? "#3a3060" : tone > 0.33 ? "#332a57" : "#2f274f";
+          ctx.fillStyle = tone > 0.66 ? theme.road[1] : tone > 0.33 ? theme.road[0] : theme.road[2];
           const x0 = Math.max(x, bx + 2),
             x1 = Math.min(x + CELL, bx + CELL / 2 - 2);
           if (x1 > x0) ctx.fillRect(x0, by + 2, x1 - x0, CELL / 4 - 4);
@@ -432,9 +461,10 @@ function block(
 
 /** 고른 칸 표시: 깜빡이는 네 귀퉁이 */
 function brackets(ctx: CanvasRenderingContext2D, i: number, color: string, now: number) {
-  const x = (cellX(i) - 0.5) * CELL,
-    y = (cellY(i) - 0.5) * CELL,
-    s = CELL;
+  const [scx, scy] = slotCenter(i);
+  const s = i < CELLS ? CELL : BENCH_H - 8;
+  const x = scx - s / 2,
+    y = scy - s / 2;
   const o = Math.floor(now / 250) % 2 ? 0 : 2;
   const L = 12;
   ctx.fillStyle = color;
@@ -496,7 +526,7 @@ export function draw(ctx: CanvasRenderingContext2D, b: Board, v: View, opt: { ra
     const c = b.cells[i];
     const target = !!v.drag && v.hover === i && v.drag.from !== i;
     const d = c.def ? UNIT[c.def] : null;
-    const top = d ? shade(FACTION_COLOR[d.faction], 0.42) : "#2a2350";
+    const top = topOf(d ? d.faction : null);
     const full = d && c.units.length >= STACK && d.grade < 3;
     const edge =
       full && blink
@@ -511,6 +541,40 @@ export function draw(ctx: CanvasRenderingContext2D, b: Board, v: View, opt: { ra
       edge,
       target ? "rgba(255,255,255,0.18)" : v.hover === i && !v.drag ? "rgba(255,255,255,0.07)" : null
     );
+  }
+
+  // 보관함 줄 (필드 아래): 어두운 선반 + 칸 받침
+  {
+    ctx.fillStyle = "#0b0918";
+    ctx.fillRect(0, FH, FW, BENCH_H);
+    ctx.fillStyle = "#3d3468";
+    ctx.fillRect(0, FH, FW, 2);
+    ctx.font = `bold 11px ${FONT}`;
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    ctx.fillStyle = "#6f6597";
+    ctx.fillText("보관함", 12, FH + 26);
+    ctx.fillStyle = "#4b4275";
+    ctx.fillText("공격 X", 12, FH + 44);
+    for (let j = 0; j < BENCH; j++) {
+      const i = CELLS + j;
+      const x = BENCH_X0 + j * CELL + 4,
+        y = FH + 8,
+        w = CELL - 8,
+        h = BENCH_H - 16;
+      const c = b.cells[i];
+      const d = c.def ? UNIT[c.def] : null;
+      const target = !!v.drag && v.hover === i && v.drag.from !== i;
+      ctx.fillStyle = target ? "#3a3060" : d ? shade(FACTION_COLOR[d.faction], 0.3) : "#1c1834";
+      ctx.fillRect(x, y, w, h);
+      ctx.fillStyle = "rgba(0,0,0,0.35)";
+      ctx.fillRect(x, y + h - 6, w, 6);
+      ctx.fillStyle = d ? shade(GRADE_COLOR[d.grade], 0.75) : "#2a2350";
+      ctx.fillRect(x - 2, y - 2, w + 4, 2);
+      ctx.fillRect(x - 2, y + h, w + 4, 2);
+      ctx.fillRect(x - 2, y, 2, h);
+      ctx.fillRect(x + w, y, 2, h);
+    }
   }
 
   // 고른 칸의 사거리 (도트 점선 원)
@@ -536,7 +600,7 @@ export function draw(ctx: CanvasRenderingContext2D, b: Board, v: View, opt: { ra
     ring(r, hexA(FACTION_COLOR[d.faction], 0.85), 10);
     if (d.aura) ring(Math.min(d.aura.r, 9) * CELL, "rgba(255,255,255,0.5)", 14);
   };
-  if (opt.range && v.sel >= 0) showRange(v.sel);
+  if (opt.range && v.sel >= 0 && v.sel < CELLS) showRange(v.sel);
   if (v.sel >= 0) brackets(ctx, v.sel, "#ffffff", now);
   if (v.drag && v.hover >= 0 && v.hover !== v.drag.from) brackets(ctx, v.hover, "#5ff2ff", now);
 
@@ -583,6 +647,14 @@ export function draw(ctx: CanvasRenderingContext2D, b: Board, v: View, opt: { ra
   for (const e of b.enemies) list.push({ y: e.y * CELL + 10, fn: () => drawEnemy(ctx, e, now) });
   list.sort((a, c) => a.y - c.y);
   for (const d of list) d.fn();
+  // 보관함 유닛 (작게, 공격 안 함)
+  for (let j = 0; j < BENCH; j++) {
+    const i = CELLS + j;
+    const c = b.cells[i];
+    if (!c.def || (v.drag && v.drag.from === i)) continue;
+    const [x] = slotCenter(i);
+    drawStack(ctx, i, c.def, c.units.map(() => false), x, FH + BENCH_H - 14, now, 0, c.units.length, 1, false, 0.72);
+  }
 
   // 끌고 있는 유닛
   if (v.drag) {
@@ -645,16 +717,18 @@ export function drawStack(
   shotT: number,
   n: number,
   dir = 1,
-  lifted = false
+  lifted = false,
+  /** 크기 배수 (보관함은 작게) */
+  scale = 1
 ) {
   const d = UNIT[id];
   const g = d.grade;
   // 등급이 높을수록 크게
-  const base = n === 1 ? 66 : n === 2 ? 52 : 46;
+  const base = (n === 1 ? 66 : n === 2 ? 52 : 46) * scale;
   const size = base * (1 + Math.min(g, 4) * 0.05);
-  const pos = STACK_POS[Math.min(3, n)];
-  // 등급 오라 (발밑) — 레어부터 색 링, 레전드부터 빛 기둥 + 올라가는 반짝이
-  groundAura(ctx, g, cx, footY, now, ci);
+  const pos = STACK_POS[Math.min(3, n)].map(([x, y]) => [x * scale, y * scale] as [number, number]);
+  // 등급 오라 (발밑) — 레어부터 색 링, 레전드부터 빛 기둥 + 올라가는 반짝이 (보관함은 작은 링만)
+  if (scale === 1) groundAura(ctx, g, cx, footY, now, ci);
   const art = UNIT_ART[id];
   const order = pos.map((p, k) => ({ p, k })).sort((a, b) => a.p[1] - b.p[1]);
   for (const { k } of order) {
@@ -695,12 +769,13 @@ export function drawStack(
     }
   }
   // 등급 보석 (칸 왼쪽 위) — 글자로도 한눈에
-  if (!lifted) gradeGem(ctx, g, P(cx - CELL / 2 + 8), P(footY - CELL + 20));
+  const top = scale === 1 ? footY - CELL + 20 : footY - BENCH_H + 24;
+  if (!lifted) gradeGem(ctx, g, P(cx - CELL / 2 + 8), P(top));
   // 몇 기인지 (합성 가능하면 금색)
   if (n > 1) {
     const ready = n >= STACK && g < 3;
     const bx = P(cx + CELL / 2 - 26),
-      by = P(footY - CELL + 18);
+      by = P(top - 2);
     ctx.fillStyle = "#07060f";
     ctx.fillRect(bx - 2, by - 2, 24, 16);
     ctx.fillStyle = ready ? "#ffd23f" : "#3d3468";

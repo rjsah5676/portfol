@@ -13,11 +13,16 @@
  *
  * 필드: 8 × 5 칸. 가운데 6 × 3 = 18칸에 유닛, 둘레 사각 길(한 바퀴 22칸)을 적이 시계 방향으로 계속 돔.
  * 한 칸엔 같은 유닛 3기까지 (3기가 되면 합성).
+ * 보관함: 필드 밖 BENCH 칸 (cells[CELLS..SLOTS-1]) — 공격 · 범위 효과는 없고, 합성 · 조합식 재료 · 판매는 됨.
+ *         소환 · 합성 결과는 필드 빈 칸이 먼저, 없으면 보관함으로.
+ *
+ * 영구 성장(로드아웃: 유닛 레벨 · 연구 · 유물 · 오염 단계)은 progress.ts 의 modsOf 로 보드마다 한 번 계산해 b.mods 에 붙임.
  */
 import { B, BOSS_EVERY, CAP, LAST_WAVE, TPS, countOf, hpOf, sec } from "./balance";
 import { BOSSES, KIND, bossOfWave, kindOfWave, type BossDef, type Size } from "./enemies";
 import { MISSIONS, PATCH_DEADLINE, PATCHES } from "./meta";
 import { mixSeed, pick, rnd, rndInt, type Rng } from "./rng";
+import { LV_DMG, modsOf, type Loadout, type Mods } from "./progress";
 import {
   FACTIONS,
   RECIPE,
@@ -32,6 +37,10 @@ import {
 export const COLS = 6;
 export const ROWS = 3;
 export const CELLS = COLS * ROWS;
+/** 보관함 칸 수 · 필드 + 보관함 */
+export const BENCH = 6;
+export const SLOTS = CELLS + BENCH;
+export const isBench = (i: number) => i >= CELLS;
 export const FIELD_W = 8;
 export const FIELD_H = 5;
 export const PERIM = 22;
@@ -125,7 +134,7 @@ export type Fx =
 
 /** 화면 알림 (토스트 · 획득 연출) */
 export type Ev =
-  | { t: "unit"; def: string; how: "summon" | "merge" | "gamble" | "recipe" | "pick" }
+  | { t: "unit"; def: string; how: "summon" | "merge" | "gamble" | "recipe" | "pick" | "twin" }
   | { t: "gambleFail"; g: "E" | "L"; refund: boolean }
   | { t: "boss"; boss: number }
   | { t: "bossDown"; boss: number; gold: number; stones: number; ticket: number | null }
@@ -182,6 +191,10 @@ export interface Board {
   dirty: boolean;
   /** 범위 효과(둔화 · 방어 깎기)를 가진 유닛 종류 → 그 칸들 */
   auras: { def: UnitDef; cells: number[] }[];
+  /** 영구 성장 효과 (판 시작 때 고정) */
+  mods: Mods;
+  /** 배치 따라 바뀌는 전체 피해 배수 (순수 혈통 · 무지개 연합) */
+  team: number;
   fx: Fx[] | null;
   ev: Ev[] | null;
 }
@@ -195,7 +208,8 @@ export interface Game {
 
 /* ───────────────────────── 만들기 ───────────────────────── */
 
-export function newBoard(seed: number, idx: number): Board {
+export function newBoard(seed: number, idx: number, lo?: Loadout | null): Board {
+  const mods = modsOf(lo);
   return {
     idx,
     // 보드마다 같은 시드 → 멀티에서 모두 같은 운으로 시작 (나뉘는 건 각자 고른 것 때문)
@@ -205,15 +219,15 @@ export function newBoard(seed: number, idx: number): Board {
     wt: -sec(B.prepSec),
     spawned: 0,
     bossT: 0,
-    cells: Array.from({ length: CELLS }, () => ({ def: null, units: [] })),
+    cells: Array.from({ length: SLOTS }, () => ({ def: null, units: [] })),
     enemies: [],
     nextId: 1,
-    gold: B.startGold,
-    stones: 0,
+    gold: B.startGold + mods.startGold,
+    stones: mods.startStones,
     summons: 0,
     free: 0,
     up: { knight: 0, mech: 0, arcane: 0 },
-    luck: 0,
+    luck: Math.min(B.luckCost.length, mods.startLuck),
     patch: null,
     tickets: [],
     riftCd: 0,
@@ -228,16 +242,19 @@ export function newBoard(seed: number, idx: number): Board {
     aspd: new Array(CELLS).fill(0),
     dirty: true,
     auras: [],
+    mods,
+    team: 1,
     fx: null,
     ev: null,
   };
 }
 
-export function newGame(seed: number, players = 1): Game {
+/** loadouts: 보드마다 영구 성장 (없으면 기본) */
+export function newGame(seed: number, players = 1, loadouts?: (Loadout | null)[]): Game {
   return {
     seed: seed >>> 0,
     tick: 0,
-    boards: Array.from({ length: players }, (_, i) => newBoard(seed >>> 0, i)),
+    boards: Array.from({ length: players }, (_, i) => newBoard(seed >>> 0, i, loadouts?.[i])),
     over: false,
   };
 }
@@ -245,12 +262,16 @@ export function newGame(seed: number, players = 1): Game {
 /* ───────────────────────── 조회 (UI · 봇 공용) ───────────────────────── */
 
 export const summonCost = (b: Board) =>
-  Math.min(B.summon.max, B.summon.base + B.summon.step * b.summons);
+  Math.min(B.summon.max, B.summon.base + B.summon.step * b.summons) - b.mods.summonDisc;
 export const upCost = (b: Board, k: "knight" | "mech" | "arcane") =>
   B.up[k].base + B.up[k].step * b.up[k];
 export const luckCost = (b: Board) => (b.luck < B.luckCost.length ? B.luckCost[b.luck] : Infinity);
 export const unitCount = (b: Board) => b.cells.reduce((n, c) => n + c.units.length, 0);
 export const hasEmpty = (b: Board) => b.cells.some((c) => !c.def);
+/** 판매 금액 */
+export const sellPrice = (b: Board, grade: number) => Math.floor((B.sell[grade] ?? 0) * b.mods.sellMult);
+/** 보스 제한 시간 (초) */
+export const bossSecOf = (b: Board) => Math.max(20, B.bossSec + b.mods.bossSec);
 /** 보드에 있는 유닛 수 (id → 수) */
 export function counts(b: Board): Record<string, number> {
   const m: Record<string, number> = {};
@@ -281,7 +302,7 @@ export function upMult(b: Board, f: Faction): number {
 export function isCmd(x: unknown): x is Cmd {
   if (!x || typeof x !== "object") return false;
   const c = x as Record<string, unknown>;
-  const cell = (v: unknown) => Number.isInteger(v) && (v as number) >= 0 && (v as number) < CELLS;
+  const cell = (v: unknown) => Number.isInteger(v) && (v as number) >= 0 && (v as number) < SLOTS;
   const keys = Object.keys(c).length;
   switch (c.t) {
     case "summon":
@@ -356,7 +377,7 @@ export function apply(g: Game, p: number, cmd: Cmd): string | null {
       if (d.grade > 2) return "레전드부터는 팔 수 없어요";
       c.units.pop();
       if (!c.units.length) c.def = null;
-      b.gold += B.sell[d.grade] ?? 0;
+      b.gold += sellPrice(b, d.grade);
       b.sold++;
       b.dirty = true;
       return null;
@@ -397,7 +418,7 @@ export function apply(g: Game, p: number, cmd: Cmd): string | null {
       if (b.stones < gm.cost) return "행운석이 모자라요";
       if (!hasEmpty(b)) return "빈 칸이 없어요";
       b.stones -= gm.cost;
-      const p = gm.p + (b.patch === "gambler" ? 0.08 : 0);
+      const p = gm.p + (b.patch === "gambler" ? 0.08 : 0) + b.mods.gamble;
       if (rnd(b.rng) < p) {
         b.failStreak = 0;
         const def = pick(b.rng, poolOf(pick(b.rng, FACTIONS), cmd.g === "E" ? 2 : 3));
@@ -418,7 +439,7 @@ export function apply(g: Game, p: number, cmd: Cmd): string | null {
       // 재료가 여러 칸에 있으면 적게 쌓인 칸부터 뺌
       for (const n of r.needs) {
         let best = -1;
-        for (let i = 0; i < CELLS; i++)
+        for (let i = 0; i < SLOTS; i++)
           if (
             b.cells[i].def === n &&
             (best < 0 || b.cells[i].units.length < b.cells[best].units.length)
@@ -430,6 +451,10 @@ export function apply(g: Game, p: number, cmd: Cmd): string | null {
       }
       b.dirty = true;
       give(b, r.id, "recipe");
+      if (b.mods.alchemy) {
+        b.gold += 80;
+        b.stones += 2;
+      }
       return null;
     }
     case "patch": {
@@ -449,7 +474,7 @@ export function apply(g: Game, p: number, cmd: Cmd): string | null {
       e.rift = tier;
       e.size = 1;
       e.expire = sec(B.rift.sec);
-      b.riftCd = sec(B.rift.cd);
+      b.riftCd = Math.round(sec(B.rift.cd) * b.mods.riftCd);
       return null;
     }
     case "pick": {
@@ -470,16 +495,17 @@ export function apply(g: Game, p: number, cmd: Cmd): string | null {
 function give(
   b: Board,
   id: string,
-  how: "summon" | "merge" | "gamble" | "recipe" | "pick",
+  how: "summon" | "merge" | "gamble" | "recipe" | "pick" | "twin",
   prefer = -1
 ) {
   let at = -1;
-  for (let i = 0; i < CELLS; i++)
+  for (let i = 0; i < SLOTS; i++)
     if (b.cells[i].def === id && b.cells[i].units.length < STACK) {
       at = i;
       break;
     }
   if (at < 0 && prefer >= 0 && !b.cells[prefer].def) at = prefer;
+  // 필드 빈 칸 먼저, 없으면 보관함 (findIndex 가 앞에서부터라 필드가 먼저)
   if (at < 0) at = b.cells.findIndex((c) => !c.def);
   if (at < 0) return; // (부르는 쪽이 자리를 확인함)
   const c = b.cells[at];
@@ -490,6 +516,10 @@ function give(
   const d = UNIT[id];
   if (d.grade >= 3 && b.patch === "union") b.free += 2;
   b.ev?.push({ t: "unit", def: id, how });
+  // 쌍둥이 별: 레전드 이상을 얻으면 확률로 같은 등급 · 같은 세력 하나 더 (그 1기는 다시 굴리지 않음)
+  if (b.mods.twinStar && d.grade >= 3 && d.faction !== "hidden" && how !== "twin" && hasEmpty(b)) {
+    if (rnd(b.rng) < b.mods.twinStar) give(b, pick(b.rng, poolOf(d.faction, d.grade)).id, "twin");
+  }
 }
 
 /* ───────────────────────── 적 ───────────────────────── */
@@ -503,13 +533,13 @@ function spawn(b: Board, kindId: string, hp: number): Enemy {
     boss: -1,
     rift: 0,
     elite: false,
-    hp,
-    max: hp,
+    hp: hp * b.mods.glitch.hp,
+    max: hp * b.mods.glitch.hp,
     armor: Math.round(B.armorPerWave * w * k.armor),
     mres: k.mres,
     pres: 0,
     size: k.size,
-    spd: (B.enemySpd * k.spd) / TPS,
+    spd: (B.enemySpd * k.spd * b.mods.glitch.spd) / TPS,
     d: 0,
     trav: 0,
     x: 0.5,
@@ -540,7 +570,7 @@ function spawnBoss(b: Board, def: BossDef) {
   e.mres = def.mres;
   e.pres = def.pres;
   e.size = def.size;
-  e.spd = (B.enemySpd * def.spd) / TPS;
+  e.spd = (B.enemySpd * def.spd * b.mods.glitch.spd) / TPS;
   e.sk = def.skills.map((s) => sec(s.every));
   b.ev?.push({ t: "boss", boss: e.boss });
 }
@@ -571,14 +601,15 @@ function startWave(b: Board, w: number) {
   const boss = w % BOSS_EVERY === 0 ? bossOfWave(w) : null;
   if (boss) {
     b.phase = "boss";
-    b.bossT = sec(B.bossSec);
+    b.bossT = sec(bossSecOf(b));
     spawnBoss(b, boss);
   } else b.phase = "wave";
 }
 
 function endWave(b: Board) {
-  b.gold += B.waveGold.base + B.waveGold.per * b.wave;
-  if (b.patch === "interest") b.gold += Math.min(40, Math.floor(b.gold * 0.06));
+  const wg = Math.floor((B.waveGold.base + B.waveGold.per * b.wave) * b.mods.waveGold);
+  b.gold += b.mods.firstHarvest && b.wave <= 15 ? wg * 2 : wg;
+  if (b.patch === "interest") b.gold += Math.min(70, Math.floor(b.gold * 0.1));
 }
 
 const armorF = (a: number) => (a >= 0 ? 100 / (100 + a) : 2 - 100 / (100 - a));
@@ -675,7 +706,7 @@ function stepBoard(g: Game, b: Board) {
     const c = b.cells[i];
     if (!c.def) continue;
     const def = UNIT[c.def];
-    const sp = 1 + b.aspd[i];
+    const sp = 1 + b.aspd[i] + (def.faction === "mech" ? b.mods.mechAspd : 0);
     const period = TPS / def.aps;
     for (const u of c.units) {
       if (u.stun > 0) {
@@ -735,6 +766,18 @@ function rebuild(b: Board) {
     }
   }
   b.auras = [...by.entries()].map(([id, cells]) => ({ def: UNIT[id], cells }));
+  // 순수 혈통 · 무지개 연합 (필드만, 히든은 안 셈)
+  let fk = 0,
+    fm = 0,
+    fa = 0;
+  for (let i = 0; i < CELLS; i++) {
+    const f = b.cells[i].def ? UNIT[b.cells[i].def!].faction : null;
+    if (f === "knight") fk = 1;
+    else if (f === "mech") fm = 1;
+    else if (f === "arcane") fa = 1;
+  }
+  const kinds = fk + fm + fa;
+  b.team = (kinds === 1 ? b.mods.pureBlood : 1) * (kinds === 3 ? b.mods.rainbow : 1);
 }
 
 /** 사거리 안의 보스 우선, 없으면 가장 많이 간(가장 위험한) 적 */
@@ -760,11 +803,17 @@ function hit(b: Board, def: UnitDef, e: Enemy, raw: number): number {
     b.fx?.push({ k: "miss", x: e.x, y: e.y });
     return 0;
   }
-  let m = upMult(b, def.faction);
-  if (b.patch === "core") m *= 1.15;
+  let m = upMult(b, def.faction) * b.team;
+  const M = b.mods;
+  m *= 1 + LV_DMG * (M.lv[def.id] ?? 0);
+  if (def.faction !== "hidden") m *= M.fac[def.faction];
+  if (M.warBanner) m *= 1 + M.warBanner * Math.floor((b.up.knight + b.up.mech + b.up.arcane) / 10);
+  if (M.vaccine !== 1 && (e.boss >= 0 || e.elite || e.rift)) m *= M.vaccine;
+  if (b.patch === "core") m *= 1.35;
   if (e.boss >= 0 && def.boss) m *= def.boss;
   if (def.dtype === "phys") {
-    const sz = SIZE_MULT[def.faction][e.size];
+    let sz = SIZE_MULT[def.faction][e.size];
+    if (def.faction === "knight" && e.size > 0) sz = Math.min(1, sz + M.knightBig);
     m *=
       (e.boss >= 0 ? Math.max(B.bossSizeFloor, sz) : sz) * armorF(e.armor - e.shred) * (1 - e.pres);
   } else m *= 1 - e.mres;
@@ -846,13 +895,15 @@ function attack(b: Board, ci: number, def: UnitDef, u: Unit, t: Enemy) {
   if (def.procs)
     for (const p of def.procs) {
       if (p.chance < 1 && rnd(b.rng) >= p.chance) continue;
+      const fx = def.faction === "arcane" ? b.mods.arcaneFx : 1;
       if (p.kind === "stun") stun(t, p.sec);
       else if (p.kind === "slow") {
-        if (p.pct >= t.slowP || t.slowT <= 0) {
-          t.slowP = p.pct;
+        const pct = Math.min(B.slowCap, p.pct * fx);
+        if (pct >= t.slowP || t.slowT <= 0) {
+          t.slowP = pct;
           t.slowT = sec(p.sec);
         }
-      } else if (p.kind === "cur" && t.boss < 0 && t.hp > 0) hitRaw(b, def, t, t.hp * p.pct);
+      } else if (p.kind === "cur" && t.boss < 0 && t.hp > 0) hitRaw(b, def, t, t.hp * p.pct * fx);
     }
   if (def.ult && ++u.ult >= def.ult.every) {
     u.ult = 0;
@@ -957,7 +1008,7 @@ function die(g: Game, b: Board, e: Enemy): boolean {
   let gold = 0;
   if (e.rift) {
     const R = e.rift === 1 ? B.rift.C : e.rift === 2 ? B.rift.B : B.rift.A;
-    b.stones += R.stones;
+    b.stones += R.stones + b.mods.riftStone;
     gold = R.gold;
     b.rifts++;
     b.ev?.push({ t: "rift", tier: e.rift, ok: true });
@@ -976,7 +1027,7 @@ function die(g: Game, b: Board, e: Enemy): boolean {
     b.phase = "break";
     b.wt = 0;
   } else {
-    gold = B.killGold + Math.floor(b.wave / B.killGoldPer);
+    gold = B.killGold + Math.floor(b.wave / B.killGoldPer) + b.mods.killGold;
   }
   const k = UNIT[e.last]?.onKill;
   if (k) {

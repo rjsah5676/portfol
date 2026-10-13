@@ -652,14 +652,14 @@ export interface Recipe {
 
 export const RECIPES: Recipe[] = [
   { id: "k_saint", needs: ["k_commander", "k_blade", "k_knight"] },
-  { id: "k_dragoon", needs: ["k_gale", "k_hunter", "k_spear"] },
+  { id: "k_dragoon", needs: ["k_gale", "k_hunter", "k_axe"] },
   { id: "m_omega", needs: ["m_titan", "m_missile", "m_mortar"] },
   { id: "m_arsenal", needs: ["m_orbit", "m_rail", "m_coil"] },
   { id: "a_void", needs: ["a_archmage", "a_chrono", "a_bolt"] },
-  { id: "a_lord", needs: ["a_sage", "a_seal", "a_frost"] },
+  { id: "a_lord", needs: ["a_sage", "a_seal", "a_wind"] },
   {
     id: "h_glitchpet",
-    needs: ["k_squire", "m_bolt", "a_novice", "k_squire", "m_bolt", "a_novice"],
+    needs: ["k_squire", "m_bolt", "a_novice"],
     hidden: true,
   },
   { id: "h_debugger", needs: ["k_commander", "m_titan", "a_archmage"], hidden: true },

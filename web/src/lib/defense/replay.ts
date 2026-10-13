@@ -4,12 +4,13 @@
  */
 import { BALANCE_VER, B, BOSS_EVERY, LAST_WAVE, TPS } from "./balance";
 import { apply, isCmd, newGame, step, type Cmd, type Game } from "./sim";
+import type { Loadout } from "./progress";
 
 export type LogEntry = [number, number, Cmd];
 
 /** 한 판이 아무리 길어도 이것보다 길 수 없음 (준비 + 일반 웨이브 + 보스 제한 시간 + 쉬는 시간, 넉넉히) */
 export const MAX_TICKS = Math.ceil(
-  (B.prepSec + LAST_WAVE * B.waveSec + (LAST_WAVE / BOSS_EVERY) * (B.bossSec + B.breakSec) + 60) *
+  (B.prepSec + LAST_WAVE * B.waveSec + (LAST_WAVE / BOSS_EVERY) * (B.bossSec + 20 + B.breakSec) + 60) *
     TPS
 );
 /** 멀티: 서버가 명령을 모아 뿌리는 간격 · 한 턴의 tick 수 (턴 n 의 명령은 tick n×TICKS_PER_TURN 에 실행) */
@@ -43,8 +44,13 @@ export interface Replayer {
   run(ticks: number): boolean;
 }
 
-export function replayer(seed: number, players: number, log: LogEntry[]): Replayer {
-  const g = newGame(seed, players);
+export function replayer(
+  seed: number,
+  players: number,
+  log: LogEntry[],
+  loadouts?: (Loadout | null)[]
+): Replayer {
+  const g = newGame(seed, players, loadouts);
   let k = 0;
   return {
     game: g,
@@ -62,8 +68,13 @@ export function replayer(seed: number, players: number, log: LogEntry[]): Replay
 }
 
 /** 끝까지 한 번에 */
-export function replay(seed: number, players: number, log: LogEntry[]): Game {
-  const r = replayer(seed, players, log);
+export function replay(
+  seed: number,
+  players: number,
+  log: LogEntry[],
+  loadouts?: (Loadout | null)[]
+): Game {
+  const r = replayer(seed, players, log, loadouts);
   r.run(MAX_TICKS);
   return r.game;
 }

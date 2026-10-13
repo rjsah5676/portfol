@@ -20,12 +20,12 @@ export const PATCHES: PatchDef[] = [
   {
     id: "core",
     name: "단일 코어",
-    desc: "신화 · 히든은 1개만 만들 수 있지만, 모든 피해 +15% · 적 이동 속도 -8%",
+    desc: "신화 · 히든은 1개만 만들 수 있지만, 모든 피해 +35% · 적 이동 속도 -8%",
   },
   {
     id: "interest",
     name: "이자 프로토콜",
-    desc: "웨이브를 넘길 때마다 가진 골드의 6% 이자 (최대 40)",
+    desc: "웨이브를 넘길 때마다 가진 골드의 10% 이자 (최대 70)",
   },
 ];
 export const PATCH_DEADLINE = 10;

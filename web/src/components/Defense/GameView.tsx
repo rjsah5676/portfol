@@ -7,11 +7,14 @@ import { MISSIONS, PATCHES, PATCH_DEADLINE } from "@/lib/defense/meta";
 import { botByName, botTurn, BOTS } from "@/lib/defense/bot";
 import { BOSS_ART, preloadArt } from "@/lib/defense/assets";
 import {
+  CELLS,
   STACK,
   canRecipe,
   counts,
   hasEmpty,
   luckCost,
+  sellPrice,
+  bossSecOf,
   summonCost,
   upCost,
   type Board,
@@ -32,7 +35,7 @@ import {
   type Grade,
 } from "@/lib/defense/units";
 import type { Controller } from "./controller";
-import { FH, FW, cellAt, draw, newView, pushFx } from "./render";
+import { FH2, FW, cellAt, draw, newView, pushFx } from "./render";
 import {
   Bar,
   Btn,
@@ -225,7 +228,7 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry }
         cv.width = W;
         cv.height = H;
       }
-      ctx.setTransform(W / FW, 0, 0, H / FH, 0, 0);
+      ctx.setTransform(W / FW, 0, 0, H / FH2, 0, 0);
       draw(ctx, ctrl.board, v, { range: true });
       if (now - lastHud > 100) {
         lastHud = now;
@@ -266,7 +269,7 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry }
   const press = useRef<{ from: number; x: number; y: number; moved: boolean } | null>(null);
   const toField = (e: { clientX: number; clientY: number }) => {
     const r = canvasRef.current!.getBoundingClientRect();
-    return { x: ((e.clientX - r.left) * FW) / r.width, y: ((e.clientY - r.top) * FH) / r.height };
+    return { x: ((e.clientX - r.left) * FW) / r.width, y: ((e.clientY - r.top) * FH2) / r.height };
   };
   const onDown = (e: React.PointerEvent) => {
     const p = toField(e);
@@ -350,7 +353,7 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry }
 
   // ── 값 ──
   const waveLen =
-    b.phase === "boss" ? sec(B.bossSec) : b.phase === "prep" ? sec(B.prepSec) : sec(B.waveSec);
+    b.phase === "boss" ? sec(bossSecOf(b)) : b.phase === "prep" ? sec(B.prepSec) : sec(B.waveSec);
   const waveP =
     b.phase === "boss"
       ? b.bossT / waveLen
@@ -491,7 +494,7 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry }
             left: FIELD.x,
             top: FIELD.y,
             width: FW,
-            height: FH,
+            height: FH2,
             "--b": "#0a0816",
             "--f": "#0e0b1e",
           } as React.CSSProperties
@@ -586,88 +589,69 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry }
         )}
       </div>
 
-      {/* ── 아래: 고른 유닛 ── */}
+      {/* ── 아래: 고른 유닛 (한 줄) ── */}
       <div
-        className="px-box absolute flex gap-3 p-3"
+        className="px-box absolute flex items-center gap-2.5 px-2.5"
         style={
           {
             left: 12,
-            top: 448,
+            top: 516,
             width: FW,
-            height: 118,
+            height: 50,
             "--b": selDef ? FACTION_COLOR[selDef.faction] : "#3d3468",
           } as React.CSSProperties
         }
       >
-        <div className="min-w-0 flex-1">
-          {selDef && selCell ? (
-            <div className="flex h-full gap-3">
-              <UnitIcon id={selDef.id} size={64} />
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-1.5">
-                  <b className="text-[16px]">{selDef.name}</b>
-                  <GradeChip g={selDef.grade} />
-                  <FactionChip f={selDef.faction} />
-                  <span className="text-[12px] text-[var(--mute)]">×{selCell.units.length}</span>
-                </div>
-                <p className="mt-1 text-[12px] text-[var(--mute)]">{unitStats(selDef)}</p>
-                <p className="mt-0.5 text-[13px]">{selDef.desc}</p>
-                <p className="mt-0.5 text-[11px] text-[var(--dim)]">
-                  {selDef.dtype === "phys"
-                    ? `상성 소형 ${SIZE_MULT[selDef.faction][0] * 100}% · 중형 ${SIZE_MULT[selDef.faction][1] * 100}% · 대형 ${SIZE_MULT[selDef.faction][2] * 100}%`
-                    : "마법: 크기 · 방어력 무시"}
-                  {" · "}이번 판 피해 {fmtNum(b.dealt[selDef.id] ?? 0)}
-                  {usedIn(selDef.id) && <> · 재료: {usedIn(selDef.id)}</>}
-                </p>
+        {selDef && selCell ? (
+          <>
+            <UnitIcon id={selDef.id} size={38} />
+            <div className="min-w-0 flex-1 leading-tight">
+              <div className="flex items-center gap-1.5">
+                <b className="truncate text-[14px]">{selDef.name}</b>
+                <GradeChip g={selDef.grade} />
+                <FactionChip f={selDef.faction} />
+                <span className="text-[11px] text-[var(--mute)]">
+                  ×{selCell.units.length}
+                  {sel >= CELLS && " · 보관함"}
+                </span>
               </div>
-              <div className="flex w-[124px] flex-col gap-2">
-                <Btn
-                  tone={selCell.units.length >= STACK && selDef.grade < 3 ? "gold" : "ghost"}
-                  disabled={selCell.units.length < STACK || selDef.grade >= 3}
-                  onClick={() => run({ t: "merge", c: sel })}
-                  className={`h-[50px] text-[14px] font-bold ${selCell.units.length >= STACK && selDef.grade < 3 ? "dfn-pulse" : ""}`}
-                  hot="W"
-                  silent
-                >
-                  {selDef.grade >= 3 ? "조합식으로" : `합성 ${selCell.units.length}/${STACK}`}
-                  {selDef.grade < 3 && (
-                    <span className="block text-[10px] font-normal opacity-80">
-                      → {GRADE_NAME[selDef.grade + 1]} 무작위
-                    </span>
-                  )}
-                </Btn>
-                <Btn
-                  tone="danger"
-                  disabled={selDef.grade > 2}
-                  onClick={() => run({ t: "sell", c: sel })}
-                  className="h-[36px] text-[13px]"
-                  hot="E"
-                  silent
-                >
-                  {selDef.grade > 2 ? "판매 불가" : `판매 +${B.sell[selDef.grade]}G`}
-                </Btn>
-              </div>
+              <p className="mt-1 truncate text-[11px] text-[var(--mute)]" title={selDef.desc}>
+                {unitStats(selDef)} · {selDef.desc}
+                {usedIn(selDef.id) && <> · 재료: {usedIn(selDef.id)}</>}
+              </p>
             </div>
-          ) : (
-            <DpsMeter b={b} />
-          )}
-        </div>
+            <Btn
+              tone={selCell.units.length >= STACK && selDef.grade < 3 ? "gold" : "ghost"}
+              disabled={selCell.units.length < STACK || selDef.grade >= 3}
+              onClick={() => run({ t: "merge", c: sel })}
+              className={`h-[36px] w-[96px] text-[12px] font-bold ${selCell.units.length >= STACK && selDef.grade < 3 ? "dfn-pulse" : ""}`}
+              hot="W"
+              silent
+            >
+              {selDef.grade >= 3 ? "조합식으로" : `합성 ${selCell.units.length}/${STACK}`}
+            </Btn>
+            <Btn
+              tone="danger"
+              disabled={selDef.grade > 2}
+              onClick={() => run({ t: "sell", c: sel })}
+              className="h-[36px] w-[84px] text-[12px]"
+              hot="E"
+              silent
+            >
+              {selDef.grade > 2 ? "판매 불가" : `판매 +${sellPrice(b, selDef.grade)}`}
+            </Btn>
+          </>
+        ) : (
+          <DpsMeter b={b} />
+        )}
         {multi && names && (
-          <div className="flex w-[140px] shrink-0 flex-col gap-1 border-l-2 border-[var(--line)] pl-3">
-            <p className="text-[11px] text-[var(--dim)]">다른 플레이어</p>
+          <div className="flex shrink-0 flex-col gap-0.5 border-l-2 border-[var(--line)] pl-2.5 text-[10px] leading-tight">
             {ctrl.game.boards.map((o, i) =>
               i === ctrl.seat ? null : (
-                <div
-                  key={i}
-                  className={`text-[12px] leading-tight ${o.result ? "text-[var(--dim)]" : ""}`}
-                >
-                  <b className="block truncate">{names[i]}</b>
-                  {o.result
-                    ? o.result.win
-                      ? "클리어"
-                      : `탈락 · W${o.result.wave}`
-                    : `W${o.wave} · 적 ${o.enemies.length}/${CAP}`}
-                </div>
+                <span key={i} className={o.result ? "text-[var(--dim)]" : ""}>
+                  <b>{names[i]}</b>{" "}
+                  {o.result ? (o.result.win ? "클리어" : `탈락 W${o.result.wave}`) : `W${o.wave} · ${o.enemies.length}/${CAP}`}
+                </span>
               )
             )}
           </div>
@@ -1163,22 +1147,17 @@ function DpsMeter({ b }: { b: Board }) {
   const total = rows.reduce((a, [, v]) => a + v, 0);
   if (!rows.length)
     return (
-      <div className="flex h-full flex-col justify-center gap-1.5 text-[13px] text-[var(--mute)]">
-        <p>
-          <b className="text-[var(--text)]">칸을 누르면</b> 유닛 정보 ·{" "}
-          <b className="text-[var(--text)]">끌면</b> 자리 바꾸기 (같은 유닛 3기 → 합성)
+      <div className="flex min-w-0 flex-1 flex-col justify-center gap-1 text-[11px] leading-tight text-[var(--mute)]">
+        <p className="truncate">
+          <b className="text-[var(--text)]">칸을 누르면</b> 정보 · <b className="text-[var(--text)]">끌면</b> 자리 바꾸기 (보관함 칸도) · 같은 유닛 3기 → 합성
         </p>
-        <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px]">
+        <p className="flex items-center gap-x-3">
           {FACTIONS.map((f) => (
             <span key={f} className="flex items-center gap-1">
-              <FactionIcon f={f} size={12} />
+              <FactionIcon f={f} size={10} />
               <b style={{ color: FACTION_COLOR[f] }}>{FACTION_NAME[f]}</b>
               <span className="text-[var(--dim)]">
-                {f === "knight"
-                  ? "작은 적에 강함"
-                  : f === "mech"
-                    ? "큰 적에 강함"
-                    : "크기 · 방어 무시"}
+                {f === "knight" ? "작은 적" : f === "mech" ? "큰 적" : "크기 · 방어 무시"}
               </span>
             </span>
           ))}
@@ -1186,27 +1165,17 @@ function DpsMeter({ b }: { b: Board }) {
       </div>
     );
   return (
-    <div className="h-full">
-      <p className="mb-1.5 text-[11px] text-[var(--dim)]">이번 판 피해 비중</p>
-      <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
-        {rows.slice(0, 8).map(([id, v]) => (
-          <div key={id} className="flex items-center gap-1.5 text-[11px]">
-            <FactionIcon f={UNIT[id].faction} size={10} />
-            <span className="w-[80px] truncate" style={{ color: GRADE_COLOR[UNIT[id].grade] }}>
-              {UNIT[id].name}
-            </span>
-            <Bar
-              className="flex-1"
-              h={6}
-              value={v / total}
-              color={FACTION_COLOR[UNIT[id].faction]}
-            />
-            <span className="w-[30px] text-right text-[var(--mute)]">
-              {((v / total) * 100).toFixed(0)}%
-            </span>
-          </div>
-        ))}
-      </div>
+    <div className="grid min-w-0 flex-1 grid-cols-2 gap-x-4 gap-y-1">
+      {rows.slice(0, 4).map(([id, v]) => (
+        <div key={id} className="flex items-center gap-1.5 text-[10px]">
+          <FactionIcon f={UNIT[id].faction} size={9} />
+          <span className="w-[74px] truncate" style={{ color: GRADE_COLOR[UNIT[id].grade] }}>
+            {UNIT[id].name}
+          </span>
+          <Bar className="flex-1" h={5} value={v / total} color={FACTION_COLOR[UNIT[id].faction]} />
+          <span className="w-[28px] text-right text-[var(--mute)]">{((v / total) * 100).toFixed(0)}%</span>
+        </div>
+      ))}
     </div>
   );
 }
