@@ -312,6 +312,13 @@ function pixelBlob(
 }
 
 /** 그림 한 장 그리기 (발 위치 기준). dir: 1 오른쪽 · -1 왼쪽 */
+/** 공격 그림을 보여 줄 시간 (ms) — 공격 동작(ATK_MS)보다 살짝 길게 */
+const ATK_HOLD = 240;
+/** 지금 그릴 그림 — 막 공격했고 공격 그림(atk)이 불러와졌으면 그것 */
+function srcAt(s: SpriteSpec, now: number, attackT: number) {
+  return s.atk && now - attackT >= 0 && now - attackT < ATK_HOLD && img(s.atk) ? s.atk : s.src;
+}
+
 function sprite(
   ctx: CanvasRenderingContext2D,
   s: SpriteSpec,
@@ -325,7 +332,7 @@ function sprite(
   /** 기울기 (라디안, 발 기준) — 공격 동작 */
   tilt = 0
 ) {
-  const im = img(s.src);
+  const im = img(srcAt(s, now, attackT)) ?? img(s.src);
   if (!im) return false;
   const row =
     s.attack && now - attackT < (s.attack.frames / s.attack.fps) * 1000 ? s.attack : s.idle;
@@ -749,7 +756,7 @@ export function drawStack(
     const yy = y - (lifted ? 6 : 0) - pose.dy;
     if (pose.cast > 0) castRing(ctx, d.faction, x, y, size, pose.cast);
     // 등급색 외곽선 (그림 둘레 2px) — 노말은 없음
-    if (art && g >= 1) gradeOutline(ctx, art, id, x + lunge, yy, size, dir, squash, now, pose.tilt);
+    if (art && g >= 1) gradeOutline(ctx, art, id, x + lunge, yy, size, dir, squash, now, pose.tilt, shotT);
     if (art && sprite(ctx, art, x + lunge, yy, size, now, shotT, dir, squash, pose.tilt)) {
       // 맞으면 흰 번쩍임은 생략 (그림 위 덧칠 비용) — 기절만 표시
     } else {
@@ -840,11 +847,11 @@ function groundAura(
 
 /** 그림 실루엣을 등급색으로 칠한 캐시 */
 const tintCache = new Map<string, HTMLCanvasElement>();
-function tinted(art: SpriteSpec, key: string, color: string): HTMLCanvasElement | null {
-  const k = key + color;
+function tinted(art: SpriteSpec, key: string, color: string, src = art.src): HTMLCanvasElement | null {
+  const k = key + color + (src === art.src ? "" : ":atk");
   const c0 = tintCache.get(k);
   if (c0) return c0;
-  const im = img(art.src);
+  const im = img(src);
   if (!im || typeof document === "undefined") return null;
   const c = document.createElement("canvas");
   c.width = art.w;
@@ -868,11 +875,12 @@ function gradeOutline(
   dir: number,
   squash: number,
   now: number,
-  tilt = 0
+  tilt = 0,
+  shotT = -1e9
 ) {
   const g = UNIT[id].grade;
   const col = g >= 4 && Math.floor(now / 260) % 2 ? "#ffffff" : GRADE_COLOR[g];
-  const sil = tinted(art, id, col);
+  const sil = tinted(art, id, col, srcAt(art, now, shotT));
   if (!sil) return;
   const [ax, ay] = art.anchor ?? [0.5, 0.96];
   const k = (size * (art.scale ?? 1)) / art.h;

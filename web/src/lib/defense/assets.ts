@@ -38,11 +38,20 @@ export interface SpriteSpec {
   cols?: number;
   /** 그림이 보는 방향 (1 = 오른쪽 · -1 = 왼쪽). 화면이 적 쪽으로 뒤집어 그림 */
   face?: 1 | -1;
+  /** 공격 순간 그림 (같은 크기 · 같은 발 위치, 한 장) — 공격하면 잠깐 바꿔 그림 */
+  atk?: string;
 }
+
+/** 공격 그림이 있는 유닛 (units/<id>-atk.webp, 같은 160×160 · 같은 발 위치) — 새로 받으면 여기에 id 추가 */
+const ATK = new Set<string>([
+  // 2026-10-13 ChatGPT 공격 그림 1차 (기사단 12) — web/scripts/defense-art/unchecker.py → slice.py → atk_fit.py
+  "k_squire", "k_shield", "k_spear", "k_twin", "k_knight", "k_axe", "k_paladin", "k_blade", "k_hunter", "k_commander", "k_gale", "k_saint",
+]);
 
 /** 한 장짜리 유닛 그림 (160×160, 발은 아래 4%) — ChatGPT 이미지로 만든 도트풍 SD (2026-10-13) */
 const U = (id: string, face: 1 | -1 = 1): SpriteSpec => ({
   src: `/defense/units/${id}.webp`,
+  ...(ATK.has(id) ? { atk: `/defense/units/${id}-atk.webp` } : {}),
   w: 160,
   h: 160,
   anchor: [0.5, 0.96],
@@ -222,7 +231,9 @@ export function preloadArt() {
     ...Object.values(UNIT_ART),
     ...Object.values(ENEMY_ART),
     ...Object.values(BOSS_ART),
-  ])
+  ]) {
     img(s.src);
+    if (s.atk) img(s.atk);
+  }
   if (FIELD_ART) img(FIELD_ART);
 }
