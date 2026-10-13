@@ -60,7 +60,16 @@ let master: GainNode | null = null;
 const buffers = new Map<string, AudioBuffer | null>();
 const loading = new Map<string, Promise<void>>();
 const lastAt = new Map<string, number>();
-let playing = 0;
+interface Voice {
+  src: AudioBufferSourceNode;
+  g: GainNode;
+  combat: boolean;
+}
+const voices: Voice[] = [];
+let speed = 1;
+/** 판 안에서 끝없이 나는 전투음 — 따로 수를 줄이고, 다른 소리가 들어올 자리를 내 줌 */
+const COMBAT = new Set(["hit-phys", "hit-mech", "hit-magic", "die", "ult"]);
+const COMBAT_VOICES = 6;
 
 /** 종류별 최소 간격(ms) · 같이 울릴 수 있는 수 — 없으면 기본 40ms */
 const GAP: Record<string, number> = {
@@ -140,22 +149,60 @@ export function sfx(name: string, vol = 1, rate = 1) {
   }
   if (!buf) return;
   const now = performance.now();
-  if (now - (lastAt.get(name) ?? -1e9) < (GAP[name] ?? 40)) return;
-  if (playing >= MAX_VOICES) return;
+  const combat = COMBAT.has(name);
+  // 배속이면 전투음 간격도 배속만큼 — 같은 시간에 소리가 몇 배로 겹쳐 뭉개지던 것
+  const gap = (GAP[name] ?? 40) * (combat ? speed : 1);
+  if (now - (lastAt.get(name) ?? -1e9) < gap) return;
+  if (combat) {
+    // 전투음은 따로 적게 — 꽉 차면 이번 것은 넘김 (꼬리가 쌓여 늦게 들리는 느낌 방지)
+    if (voices.filter((v) => v.combat).length >= COMBAT_VOICES) return;
+  } else if (voices.length >= MAX_VOICES) {
+    // 버튼 · 소환 · 보스 같은 소리는 꼭 — 가장 오래된 전투음을 끊고 자리 만들기
+    const old = voices.find((v) => v.combat);
+    if (!old) return;
+    stopVoice(old);
+  }
   lastAt.set(name, now);
   const src = c.createBufferSource();
   src.buffer = buf;
   src.playbackRate.value = rate;
   const g = c.createGain();
-  g.gain.value = Math.max(0, Math.min(1.5, (SFX[name]?.vol ?? 1) * vol * prefs.sfx));
+  const level = Math.max(0, Math.min(1.5, (SFX[name]?.vol ?? 1) * vol * prefs.sfx));
+  g.gain.value = level;
   src.connect(g).connect(master);
-  playing++;
+  const v: Voice = { src, g, combat };
+  voices.push(v);
   src.onended = () => {
-    playing--;
+    const i = voices.indexOf(v);
+    if (i >= 0) voices.splice(i, 1);
     src.disconnect();
     g.disconnect();
   };
   src.start();
+  // 배속에서는 전투음 꼬리를 짧게 (뒤늦게 울리는 느낌)
+  if (combat && speed > 1) {
+    const t = c.currentTime;
+    const keep = Math.min(buf.duration / rate, 0.36 / speed);
+    g.gain.setValueAtTime(level, t + keep * 0.6);
+    g.gain.linearRampToValueAtTime(0, t + keep);
+    src.stop(t + keep + 0.01);
+  }
+}
+
+function stopVoice(v: Voice) {
+  const i = voices.indexOf(v);
+  if (i >= 0) voices.splice(i, 1);
+  try {
+    v.g.gain.setTargetAtTime(0, ctx!.currentTime, 0.01);
+    v.src.stop(ctx!.currentTime + 0.04);
+  } catch {
+    /* 이미 멈춤 */
+  }
+}
+
+/** 게임 배속 (전투음 간격 · 꼬리 길이에 씀) — GameView 가 바뀔 때 알려 줌 */
+export function setSfxSpeed(n: number) {
+  speed = Math.max(1, n);
 }
 
 /** 살짝 다른 높이로 (타격음처럼 자주 나는 소리) */

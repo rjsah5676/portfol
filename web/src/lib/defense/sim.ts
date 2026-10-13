@@ -505,10 +505,12 @@ export function apply(g: Game, p: number, cmd: Cmd): string | null {
     case "pick": {
       if (!b.tickets.length) return "골라 뽑기권이 없어요";
       const d = UNIT[cmd.id];
-      if (d.grade !== b.tickets[0] || d.faction === "hidden") return "그 등급이 아니에요";
+      // 쌓인(이월된) 뽑기권 중 그 등급 것을 아무거나 씀 (예전 기록은 늘 맨 앞 것과 같은 등급이라 결과 같음)
+      const ti = b.tickets.indexOf(d.grade);
+      if (ti < 0 || d.faction === "hidden") return "그 등급 뽑기권이 없어요";
       if (!hasEmpty(b) && !b.cells.some((c) => c.def === d.id && c.units.length < STACK))
         return "빈 칸이 없어요";
-      b.tickets.shift();
+      b.tickets.splice(ti, 1);
       give(b, d.id, "pick");
       return null;
     }

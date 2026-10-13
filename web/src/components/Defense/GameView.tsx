@@ -55,7 +55,7 @@ import {
   fmtTime,
   unitStats,
 } from "./ui";
-import { bgmFor, jingle, playBgm, preloadSfx, sfx, sfxVar } from "./audio";
+import { bgmFor, jingle, playBgm, preloadSfx, setSfxSpeed, sfx, sfxVar } from "./audio";
 import Codex, { foundHidden, markFound } from "./Codex";
 
 /*
@@ -244,6 +244,7 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry }
       v.now = now;
       if (ctrl.fx.length) {
         pushFx(v, ctrl.fx);
+        setSfxSpeed(ctrl.speed);
         fxSound(ctrl.fx);
         ctrl.fx.length = 0;
       }
@@ -782,8 +783,11 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry }
               onClick={() => setModal("pick")}
               className="dfn-pulse flex-1 text-[13px] font-bold"
             >
-              <Icon n="ticket" size={14} /> {GRADE_NAME[b.tickets[0]]} 골라 뽑기
-              {b.tickets.length > 1 ? ` ×${b.tickets.length}` : ""}
+              <Icon n="ticket" size={14} /> 골라 뽑기{" "}
+              {[...new Set(b.tickets)]
+                .sort((x, y) => y - x)
+                .map((g) => `${GRADE_NAME[g]}${b.tickets.filter((t) => t === g).length > 1 ? `×${b.tickets.filter((t) => t === g).length}` : ""}`)
+                .join(" · ")}
             </Btn>
           ) : null}
           {!b.patch && b.wave < PATCH_DEADLINE ? (
@@ -1011,49 +1015,7 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry }
         </Modal>
       )}
       {modal === "pick" && b.tickets.length > 0 && (
-        <Modal
-          title={`${GRADE_NAME[b.tickets[0]]} 골라 뽑기`}
-          onClose={() => setModal(null)}
-          wide
-          accent={GRADE_COLOR[b.tickets[0]]}
-        >
-          <div className="grid grid-cols-3 gap-4">
-            {FACTIONS.map((f) => (
-              <div
-                key={f}
-                className="px-inset p-2"
-                style={{ "--b": FACTION_COLOR[f] + "66" } as React.CSSProperties}
-              >
-                <p
-                  className="mb-2 flex items-center gap-1.5 text-[14px] font-bold"
-                  style={{ color: FACTION_COLOR[f] }}
-                >
-                  <FactionIcon f={f} size={14} /> {FACTION_NAME[f]}
-                </p>
-                <div className="flex flex-col gap-2">
-                  {poolOf(f, b.tickets[0] as Grade).map((u) => (
-                    <Btn
-                      key={u.id}
-                      tone={f}
-                      onClick={() =>
-                        run({ t: "pick", id: u.id }) &&
-                        setModal(b.tickets.length > 0 ? "pick" : null)
-                      }
-                      className="flex items-center gap-2 p-2 text-left"
-                      silent
-                    >
-                      <UnitIcon id={u.id} size={40} />
-                      <span className="min-w-0">
-                        <b className="block text-[13px]">{u.name}</b>
-                        <span className="block text-[12px] leading-tight opacity-80">{u.desc}</span>
-                      </span>
-                    </Btn>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        </Modal>
+        <PickModal b={b} run={run} onClose={() => setModal(null)} />
       )}
       {modal === "recipe" && <RecipeModal b={b} run={run} onClose={() => setModal(null)} />}
       {modal === "mission" && (
@@ -1558,5 +1520,63 @@ function riftRisk(b: Board, t: "C" | "B" | "A", dps: number) {
   const need = (hp / B.rift.sec) * 1.6;
   const r = dps / need;
   return r >= 2 ? { label: "여유", color: "#6dff8f" } : r >= 1 ? { label: "적정", color: "#ffd23f" } : { label: "위험", color: "#ff4d6d" };
+}
+
+/**
+ * 골라 뽑기 (보스 보상): 뽑기권은 쓰지 않으면 다음 웨이브로 그대로 넘어가 쌓임(이월).
+ * 등급마다 탭 — 몇 장 남았는지 보이고, 아무 등급 것부터 써도 됨
+ */
+function PickModal({ b, run, onClose }: { b: Board; run: (c: Cmd) => boolean; onClose(): void }) {
+  const grades = [...new Set(b.tickets)].sort((x, y) => y - x);
+  const [g0, setG] = useState(grades[0]);
+  const g = grades.includes(g0) ? g0 : grades[0];
+  const n = (x: number) => b.tickets.filter((t) => t === x).length;
+  return (
+    <Modal title="골라 뽑기" onClose={onClose} wide accent={GRADE_COLOR[g]}>
+      <div className="mb-3 flex items-center gap-1.5">
+        {grades.map((x) => (
+          <Btn
+            key={x}
+            tone={x === g ? "gold" : "ghost"}
+            className="h-8 px-3 text-[13px] font-bold"
+            onClick={() => setG(x)}
+          >
+            <span style={{ color: x === g ? undefined : GRADE_COLOR[x] }}>{GRADE_NAME[x]}</span> ×{n(x)}
+          </Btn>
+        ))}
+        <span className="ml-2 text-[12px] text-[var(--mute)]">
+          보스를 잡을 때 받은 뽑기권 — 안 쓰면 그대로 남아 다음에 써도 돼요 (지금 {b.tickets.length}장)
+        </span>
+      </div>
+      <div className="grid grid-cols-3 gap-4">
+        {FACTIONS.map((f) => (
+          <div key={f} className="px-inset p-2" style={{ "--b": FACTION_COLOR[f] + "66" } as React.CSSProperties}>
+            <p className="mb-2 flex items-center gap-1.5 text-[14px] font-bold" style={{ color: FACTION_COLOR[f] }}>
+              <FactionIcon f={f} size={14} /> {FACTION_NAME[f]}
+            </p>
+            <div className="flex flex-col gap-2">
+              {poolOf(f, g as Grade).map((u) => (
+                <Btn
+                  key={u.id}
+                  tone={f}
+                  onClick={() => {
+                    if (run({ t: "pick", id: u.id }) && b.tickets.length === 0) onClose();
+                  }}
+                  className="flex items-center gap-2 p-2 text-left"
+                  silent
+                >
+                  <UnitIcon id={u.id} size={40} />
+                  <span className="min-w-0">
+                    <b className="block text-[13px]">{u.name}</b>
+                    <span className="block text-[12px] leading-tight opacity-80">{u.desc}</span>
+                  </span>
+                </Btn>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </Modal>
+  );
 }
 
