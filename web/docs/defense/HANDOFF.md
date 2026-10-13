@@ -58,7 +58,7 @@ cd web && POKER_E2E=1 npx next dev            # → /games/defense/?fake=admin:�
 | `web/src/app/games/defense/` | 페이지 (GameHeader + 랭킹) · layout(메타, noindex) |
 | `web/src/css/defense.css` | **도트 UI 규칙** (`px-btn` · `px-box` · `px-inset` · `px-win` · `px-bar`) · 커서 · 글꼴 · 키프레임 |
 | `web/public/defense/` | `units/` · `enemies/` · `bosses/` 그림(webp) · `sfx/` · `bgm/` (mp3) · `fonts/` 갈무리(OFL) · `ui/` 커서 |
-| `web/scripts/defense-art/` | 그림 시트 자르기 (`slice.py` 칸 나누기 · `cc.py` 겹친 줄은 덩어리 기준) |
+| `web/scripts/defense-art/` | 그림 시트 자르기 (`slice.py` 칸 나누기 · `cc.py` 겹친 줄은 덩어리 기준 · `icons.py` 아이콘 격자 → 정사각 가운데) |
 | `server/src/games/defense.ts` | 랭킹(시드 발급 · 기록 검증 · 순위) + 멀티 방(턴 릴레이) |
 | `server/src/games/defenseMeta.ts` | 판 밖 성장 저장 · 지급 (`defense_profile`, 보상 · 미션 · 패스 · 상자 · GP · 주간 순위 GP) |
 | `server/src/games/defenseVerify.worker.ts` | 기록 검증 작업 스레드 (tsup 엔트리에 추가돼 있음) |
@@ -151,7 +151,8 @@ cd web && POKER_E2E=1 npx next dev            # → /games/defense/?fake=admin:�
 - [x] 성장 서버 (프로필 · 보상 · 미션 · 시즌 패스 · 상자 · GP 교환 · 주간 도전 · 순위 GP) + 테스트
 - [x] 정비소 화면 · 메뉴 · 랭킹 탭(시즌/주간) · 판 끝 보상 · 블록 테마
 - [x] 밸런스 b1 + 성장 봇 시뮬 (`defense-sim.ts --meta mid|late|max --glitch N`)
-- [ ] 유물 · 재화 · 상자 그림 (`assets.ts RELIC_ART · ITEM_ART`, 없으면 도트 아이콘) / 효과음 (레벨업 · 상자 열기)
+- [x] 유물 12 · 재화 3 · 상자(닫힘/열림) 그림 — ChatGPT 시트 → `web/scripts/defense-art/icons.py` 로 잘라 128px webp (`public/defense/relics/` · `items/`)
+- [x] 효과음 `reward`(미션 · 패스 받기) · `chest-open` (ElevenLabs 효과음, 1초). **`legend.mp3` 가 거의 무음(-80dB)이던 것 발견 → 새로 만들어 바꿈**. 새 소리는 기존 소리와 비슷한 크기로 줄여 넣음 (최대 -17 ~ -21 dB)
 - [ ] 판 안에서 장착한 유물 · 오염 단계 표시 (지금은 메뉴 · 정비소에서만 보임)
 - [ ] 시즌이 끝날 때 시즌 순위 보상 (지금은 주간만 GP)
 - [ ] 실제 기록이 쌓이면 재화 수급 · 패스 경험치 조정 (지금 값은 봇 기준 추정: 판당 조각 150~400 · 카드 15~30)
