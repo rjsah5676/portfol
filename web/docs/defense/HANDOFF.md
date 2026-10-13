@@ -102,24 +102,24 @@ cd web && POKER_E2E=1 npx next dev            # → /games/defense/?fake=admin:�
 ### 랭킹 (회원만)
 1. 판 시작: `defense.start { mode }` → 서버가 시드 · run id · **로드아웃** 발급 (`defense_runs` 에 `mode · lo · board` 같이 저장)
    - `season`: 무작위 시드 + 내 영구 성장 (`defenseMeta.loadoutOf` — 장착한 연구 · 유물 · 유닛 레벨 · 오염 단계)
-   - `weekly`: 주 번호로 정한 같은 시드 (`weeklySeed`, 서버 비밀값 `DEFENSE_SECRET` → 없으면 `SESSION_SECRET`) + 같은 유물 3개 (`weeklyRelics`), 강화 · 연구 없음
+   - (주간 도전 `weekly` 는 v1.1 에서 없앰 — `mode` · `board` 는 `season` 만 받음. 메뉴 그 자리는 상점)
 2. 판 중: 클라이언트는 명령을 `[tick, 0, 명령]` 으로 기록 (`controller.log`)
 3. 판 끝: `defense.finish { run, log }` → 서버 작업 스레드가 **같은 로드아웃으로** 처음부터 다시 돌려 결과 계산 → 점수 저장 (`defense_rank`, `_id = 순위표키:uid`, 최고 기록만) → 보상 (`defenseMeta.onRun`)
-   - 순위표 키(`ver` 필드): 시즌 `b1:s1` (밸런스 버전 · 시즌), 주간 `w0` (주 번호). 옛 알파 기록은 `a2` 그대로 남음
+   - 순위표 키(`ver` 필드): 시즌 `beta2:s1` (밸런스 버전 · 시즌). 옛 주간 `w0` · 알파 `a2` 기록은 그대로 남음 (안 보임)
    - 같은 run 두 번 X, 4시간 지난 run X, 버전 다르면 X
    - 걸린 실제 시간 ≥ 게임 시간 / 최대 배속(3) − 5초 (속도핵 막기)
-4. 점수: 주간 = `scoreOf` (클리어 `1e9 − tick`, 아니면 `웨이브 × 1e6 + 처치 수`), 시즌 = `seasonScore` (오염 단계 × 2e7 + 클리어 7e7 − tick / 웨이브 × 1e6 + 처치 — 단계 하나 ≈ 20웨이브)
+4. 점수: 시즌 = `seasonScore` (멀티 순위는 `scoreOf`) (오염 단계 × 2e7 + 클리어 7e7 − tick / 웨이브 × 1e6 + 처치 — 단계 하나 ≈ 20웨이브)
 
 ### 판 밖 성장 (베타, `lib/defense/progress.ts` 정의 · `server/src/games/defenseMeta.ts` 저장)
 - **로드아웃** `Loadout { lv, res, relics, glitch }` → `modsOf()` 가 `Mods` 로 바꿔 `newBoard` 때 `b.mods` 에 한 번 붙음. 시뮬은 `b.mods` 만 읽음 (결정론 그대로). 멀티는 `defense.begin` 때 각자 로드아웃을 정해 `start` · 방 스냅샷으로 모두에게 보냄
-- **재화**: 픽셀 조각(판 보상 · 미션 → 연구 · 유닛 레벨 · 상자), 유닛 카드(판에서 그 유닛을 얻으면 · 상자 → 유닛 레벨), 글리치 코어(클리어 · 50웨이브 · 주간 미션 · GP 교환 → 유물 직접 사기). 보상 계산 `runReward` (오염 단계 배수, 멀티 2명 이상 ×1.2)
+- **재화**: 픽셀 조각(판 보상 · 미션 → 연구 · 유닛 레벨 · 상자), 유닛 카드(판에서 그 유닛을 얻으면 · 상자 → 유닛 레벨), 글리치 코어(클리어 · 50웨이브 · 주간 미션 · 상점 → 유물 상자 · 유물 강화 · 세력 칸 · 초월 소환). 보상 계산 `runReward` (오염 단계 배수, 멀티 2명 이상 ×1.2)
 - **오염 단계 0~10** (`GLITCH`): 적 체력 · 속도 · 보스 시간 ↔ 보상 배수 · 시즌 점수. 그 단계에서 40웨이브(`GLITCH_UNLOCK_WAVE`) 넘기면 다음 단계 열림
 - **프로필** `defense_profile` (회원당 한 문서): 회원별 잠금(KeyedMutex) 안에서 읽고 → 고치고 → 통째 저장. 날 · 주 · 시즌이 바뀌면 `roll` 이 미션 · 패스를 새로
 - **미션** 하루 3 · 주 3 (`dailyOf` · `weeklyOf` 날짜로 모두 같음), 숫자는 검증 결과(`VerifyOut.stats` 얻은 유닛 · 닫은 균열)에서 `questValues`
 - **시즌 4주 · 패스 30단계** (무료 · 프리미엄 `PASS_PREMIUM_GP` 5000 GP). 테마 아이템은 사이트 인벤토리 `inv.defense` 에
-- **GP 연결** (`server/src/points.ts` 에 `spend` · `grant` 추가, 원장 reason `defense`): 코어 교환(주 5번) · 패스 프리미엄 · 블록 테마(사이트 상점 `SHOP` 의 `defense.theme.*`) · 주간 도전 순위 GP (`WEEKLY_GP`, 다음 주 첫 `defense.profile` 때 한 번 — `paidWeek` 를 먼저 저장하고 지급)
-- rpc: `defense.profile · unit.up · res.buy · relic.buy · chest.buy · chest.open · load · theme · quest.claim · pass.claim · pass.buy · cores.buy` — 실패하면 프로필은 그대로(저장 전에 throw)
-- 화면: `components/Defense/Hub.tsx` (정비소 8탭), 메뉴의 시즌 도전 · 주간 도전 · 정비소, 판 끝 보상 줄(`FinishNote`), 블록 테마는 `render.ts setTheme`
+- **GP 연결** (`server/src/points.ts` 의 `spend` · `grant`, 원장 reason `defense`, ref `store:` · `sell:` · `pack:` · `pass…` · `quest:`): 상점(재화샵 · GP 교환 · 패키지 — v1.1 표 참고) · 패스 프리미엄. GP 를 주는 쪽(`storeSell`)은 프로필을 먼저 저장하고 지급
+- rpc: `defense.profile · unit.up/upAll/down · res.buy/level · relic.buy/level · box.buy/open · bench.buy · fslot.buy · trans · store.buy · store.sell · pack.buy · load · theme · quest.claim · pass.claim · pass.buy` — 실패하면 프로필은 그대로(저장 전에 throw)
+- 화면: `components/Defense/Hub.tsx` — 정비소(6탭)와 상점(`mode="shop"`, 4탭)이 같은 틀. 메뉴의 시즌 도전 · 상점 · 정비소, 판 끝 보상 줄(`FinishNote`), 블록 테마는 `render.ts setTheme`
 - 업적 추가: `defense.glitch`(클리어한 오염 단계+1) · `defense.maxlv` · `defense.relics` (`server/src/achievements.ts`)
 - **보관함** `BENCH = 6` (`sim.ts`): 칸 번호 `CELLS..SLOTS-1`, 공격 · 오라 없음, 합성 · 조합식 · 판매 가능, 필드가 차면 소환이 여기로. 화면은 필드 아래 줄 (`render.ts BENCH_H`)
 
@@ -161,17 +161,31 @@ cd web && POKER_E2E=1 npx next dev            # → /games/defense/?fake=admin:�
 - 화면: 이어하기(`DefenseApp` localStorage `pgd-resume:<uid>` 2초마다 → `Controller.restore` 로 기록을 다시 돌려 따라잡음, 3.5시간) · 포기하기 · DPS 창(필드 오른쪽 위) · 클릭 두 번 이동(빈 칸은 바로, 「이동」/M 뒤엔 다른 유닛과 바꿈) · 재화 말풍선(`ui.tsx Tip`, `Hub CUR_INFO`) · 도트 스크롤바 · 마우스 크기(소리 창, `data-cur` + `cursor-3x/4x/6x.png`)
 - 효과: 공격 모양 유닛별 `render.ts HIT_KIND/drawShot` · 공격 동작 세력별 `attackPose` · 소환 `Fx spawn`(빛기둥 + 고리) · 효과음 `spawn`(레어 · 에픽 소환) · `reward` · `chest-open`
 
+### v1.1 BETA (밸런스 beta2) — 상점 · GP 경제 · 심연 재조정
+- **주간 도전 없앰** (`weekly` 모드 · 순위표 · 순위 GP `WEEKLY_GP` · `weeklyRelics` · `paidWeek` 전부). 메뉴 그 자리 = **상점** 화면 (`Hub mode="shop"`: 패키지 · 상자 · 소환(+칸 해금) · 재화샵 · GP 교환). 정비소 상점 탭 없음
+- **프로필**: `coreBuys` · `gpBuys` · `paidWeek` 대신 `shop {w, n: id→이번 주 산 수}` · `packs` (한 번만 패키지) · `pity` (초월 천장)
+- **초월 소환** `transRoll(pity, r)` (progress.ts, 서버 · 경제 시뮬 같은 함수): 코어 40 · `rate 0.15` · `pity 10` (마지막 초월 뒤 9번 꽝이면 10번째 확정 — 실제 확률 ≈ 18.6%). 꽝 = `TRANS_MISS` 조각 600 (50%) · 코어 8 (30%) · 카드 상자 2 (20%)
+- **GP 값 기준** `GP_VALUE` (= 재화샵 값, 100%): 조각 2GP · 코어 250 · 카드 상자 600 · 유물 상자 3,000 · 초월 소환 10,000. `goodsGp(묶음)` · `packPct(패키지)`
+- **재화샵** `GP_STORE` (주 한도): 조각 500 = 1,000GP (5) · 코어 4 = 1,000GP (5) · 카드 상자 600GP (5) · 유물 상자 3,000GP (2)
+- **GP 교환** `GP_SELL` (재화샵 값의 절반, 주 한도): 조각 1,000 → 1,000GP (3) · 코어 4 → 500GP (2) — 한 주 최대 4,000GP (출석 1,400/주의 약 3배) → 다른 게임으로 새는 GP 상한
+- **패키지** `GP_PACKS` (GP 전용 · 300~800%, 테스트가 범위 검사): 신입 1,000GP 1회 520% · 주간 보급 1,500GP 주1 553% · 유물 탐사 2,000GP 주1 550% · 초월 계약 3,000GP 주1 667% (소환 2) · 픽셀 숲 3,000GP 1회 300%+테마 · 심연 개척 4,000GP(오염 10 클리어) 800% · 심연 정복 6,000GP(오염 20 클리어) 750%. 한 주에 다 사면 6,500GP — 업적 GP 로는 다 못 사서 고르게 됨
+- **업적 GP** (`points.ts`, 디펜스 한 번짜리 합계 16,800 → 44,300, + 반복형 판 5번 · 처치 5,000마리마다 50GP ≈ 판당 20GP): 오염 15/20/25/30 클리어 2,000/3,000/4,000/6,000 · 150/400판 1,000/2,500 · 30/100 클리어 2,000/4,000 · 처치 5만/20만 1,000/2,000. 테마 `defense.theme.*` 는 사이트 `SHOP` 에서 뺌
+- **심연 곡선** `DEEP_PARAMS` → `deepGlitch(P)` (규칙 글도 값에서 만듦): 단계마다 체력 +2%(10단계 2.6 기준, 30단계 3.64) · 방어 ×1.1(11~)/×1.2(20~) · 보스 ×1.05(15~)/×1.1(25~) · 속도 ×1.08(20~) · 보스 시간 -18(25~) · 보상 배수 +0.1/단계 (30단계 ×6). 옛 값(+9% · ×1.3/1.6 · ×1.25/1.5)은 다 키운 봇도 30단계 0%였음
+- **유닛 레벨 카드 ×1.6** (`LV_COST` 3·6·10·16·24·32·48·64·96·128 = 427장) — 성장 속도는 카드(판 수)가 정함
+- **시뮬 도구**: `defense-sim.ts --deep hp,armor11,armor20,boss15,boss25,spd20` (심연 곡선 바꿔 보기) · **`defense-econ.ts`** (봇 한 명이 0부터 판을 계속 — 실제 보상 함수 · 미션 · 패스 무료 · 업적 GP · 패키지로 성장, 30단계 클리어까지 시간). `--deep · --rslope · --cardmult · --lvmult` 로 실험. 주의: tsx 에서 `sim.ts` 가 `progress.ts` 를 CJS 로 따로 불러 **모듈이 두 벌** → 값을 바꿀 땐 `createRequire` 로 두 벌 다 고침
+- 결과 (봇 · 배속 2 · 하루 8판, 초월 안 씀): 오염 30 클리어까지 이자째기 36h(241판) · 균형 49h/53h(시드 2개, 347/408판) · 도박사 72h(465판) · 기계공방 90h(683판) — 바꾸기 전 25~31h. 운(시드) 차이가 큼. 다 키운 성장 봇 30단계 클리어 0~20%. 사람은 배치 · 초월이 나아 판은 덜 들지만 배속을 섞어 써서 **40~80시간** 어림. 실제 기록이 쌓이면 `LV_COST` 카드 · `DEEP_PARAMS` 로 조정
+
 ### v1.0 BETA (밸런스 beta1) 에서 바뀐 구조 — 데이터 초기화 후 시작
 - **판 7×4** (`sim.ts COLS/ROWS`, 길 한 바퀴 26칸, `pathPos` 일반식) · **보관함 오른쪽 세로 줄** (`render.ts BENCH_W = CELL`, 캔버스 `CW = FW + BENCH_W`). 칸 72px
 - **보관함 잠금**: `BENCH_MAX 6` 중 `b.mods.bench`(로드아웃 `bench`, 처음 `BENCH_BASE 3`)만 씀 — `usable(b, i)`, `hasEmpty` · `give` · `swap` 이 확인. 정비소 `defense.bench.buy` (조각 `BENCH_COST`)
 - **연구칸**: 공용 `RES_SLOTS 4` 는 group general 만, 세력 칸 `fslots`(0~3, `defense.fslot.buy` 코어 `FRES_COST`)는 세력 연구만 — `cleanLoadout` · `setLoad` 둘 다 검사
-- **초월 등급 6** (`TRANS = 6`, `TRANS_IDS`): 조합식은 `b.mods.trans` 에 있어야 열림 (`recipeOpen`). 정비소 `defense.trans {pay: cores|gp}` — 처음이면 `p.trans` 에 넣고, 겹치면 카드
+- **초월 등급 6** (`TRANS = 6`, `TRANS_IDS`): 조합식은 `b.mods.trans` 에 있어야 열림 (`recipeOpen`). 상점 `defense.trans` (코어, v1.1 부터 15% · 천장 10 — `transRoll`) — 처음이면 `p.trans` 에 넣고, 겹치면 카드
 - **조합식 @ 재료**: `"@4"` 아무 신화 · `"@6"` 아무 초월 (`needMatch` · `needName`) — `recipePlan` 이 정해진 재료 먼저, @ 는 남은 것에서. 히든 노아 = @6 + @4 + @4
 - **히든 강화** `b.up.hidden`: 히든 피해는 안 오르고 `hiddenFx`(Lv 당 8%)가 삭제/정화 비율 · 방어 깎기 · 보스 배수에 붙음. 단축키 4 히든 · 5 확률
 - **균열 S** (`RIFT_TIERS`, 30웨이브부터) · 새 유닛 능력 `execute`(처형) · `pierce`(보스 보호막 무시)
 - **강화 레벨 버프**: `LV_BUFF 0.03` — 오라(공속 · 둔화 · 방어 깎기) · proc 확률 · 처형선에 `lvBuff`
 - **유물 보유 효과**: 로드아웃 `own`(가진 유물 전부 + 레벨) → `relicPassive` → `Mods.relicDmg`. 유물 강화는 **유물 조각**(`p.shards`, 상자에서 겹치면 +1) + 코어 (`relicUpCost` → {shards, cores})
-- **상자 개편** (`BOX`): 카드 상자(조각 · `boxes.card`) · 유물 상자(코어 · GP 주 3 · `boxes.relic`) · 초월 소환 — rpc `defense.box.buy/open {kind}` · `gp.relic` · `trans`. 옛 `chest` · `gp.chest` 없음
+- **상자 개편** (`BOX`): 카드 상자(조각 · `boxes.card`) · 유물 상자(코어 · `boxes.relic`) · 초월 소환 — rpc `defense.box.buy/open {kind}` · `trans`. 옛 `chest` · `gp.chest` · `gp.relic` · `gp.cards` · `cores.buy` 없음
 - **관리자 초기화**: 관리자 → 랭킹 탭 아래 「픽셀 운빨 디펜스 데이터 초기화」 (`POST /api/admin/defense/reset`, 확인 문구 `디펜스 초기화`) — profile · rank · runs · users.stats.defense 삭제, GP 그대로
 - 그림: 새 10종 + 공격 그림 (ChatGPT 같은 대화에서 「same style」로 새 캐릭터 → 공격 시트), 상점 아이콘 `items/cardbox · relicbox · trans`
 - 봇 시뮬 (8판): 성장 없음 클리어 0~13% · 평균 44~53웨이브 / 다 모은 성장 오염 10 = 13~75% / 오염 25 = 0% (20~41웨이브)
@@ -190,11 +204,11 @@ cd web && POKER_E2E=1 npx next dev            # → /games/defense/?fake=admin:�
 
 ### 콘텐츠 소모 속도 (설계 어림)
 - 연구 12개 전부 ≈ 조각 10,900 → 판당 300~600 이면 20~40판
-- 유닛 하나 Lv.10 = 카드 267장 · 조각 7,630 × 등급 배수 (노말 ×0.5 ~ 신화 ×2). 카드는 그 유닛을 얻을 때만 (판당 1~2장) → 주력 유닛 하나 만렙 ≈ 150~250판, 44종 전부는 사실상 끝없음 (GP 카드 묶음 · 상자로 조금 당김)
+- 유닛 하나 Lv.10 = 카드 427장(v1.1) · 조각 7,630 × 등급 배수 (노말 ×0.5 ~ 초월 ×3). 카드는 그 유닛을 얻을 때만 (판당 1~2장) → 주력 유닛 하나 만렙 ≈ 250~400판, 전부는 사실상 끝없음 (카드 상자로 조금 당김)
 - 유물 12개: 상자 35% · 코어 · GP 상자 → 2~4주. 유물 5레벨 = 코어 일반 80 · 희귀 150 · 전설 300 (전부 ≈ 2,300 코어) → 오래 가는 코어 소모처
 - 연구 5레벨 = 처음 값 × 10 더 (12개 전부 ≈ 조각 109,000) → 장착할 4개 위주로 올림
 - 오염 단계: 0~9 는 40웨이브로 빨리 열림 (알파 테스터가 하루에 9까지), 10부터 클리어 필요 + 심연 → 봇 기준 다 모은 성장으로도 20단계는 25~40웨이브. 끝 목표
-- 매일: 일일 미션 3 + 첫 판 ×2 / 매주: 주간 미션 · 주간 도전 순위 GP · GP 상점 횟수 초기화 / 4주: 시즌 패스
+- 매일: 일일 미션 3 + 첫 판 ×2 / 매주: 주간 미션 · 상점 주 한도(재화샵 · GP 교환 · 주간 패키지) 초기화 / 4주: 시즌 패스
 
 
 - [x] 보관함 6칸 · 조합식 재료 정리 (신화에 노말 재료 X)
