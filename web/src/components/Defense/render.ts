@@ -36,18 +36,22 @@ import {
 } from "@/lib/defense/sim";
 import { FACTION_COLOR, GRADE_COLOR, UNIT, type Faction } from "@/lib/defense/units";
 
-export const CELL = 76;
+export const CELL = 72;
+/** 그림 크기 배수 (칸 76px 기준으로 맞춘 크기들) */
+const K = CELL / 76;
 export const FW = FIELD_W * CELL;
 export const FH = FIELD_H * CELL;
 /** 필드 아래 보관함 줄 높이 · 캔버스 전체 높이 */
-export const BENCH_H = 72;
-export const FH2 = FH + BENCH_H;
+/** 보관함: 필드 오른쪽 세로 한 줄 (칸 높이 = CELL) */
+export const BENCH_W = CELL;
+/** 캔버스 전체 (필드 + 보관함 줄) */
+export const CW = FW + BENCH_W;
+export const FH2 = FH;
 /** 보관함 칸 왼쪽 끝 x */
-const BENCH_X0 = (FW - BENCH * CELL) / 2;
 /** 칸 가운데 (필드 · 보관함 공용, 디자인 px) */
 export function slotCenter(i: number): [number, number] {
   if (i < CELLS) return [cellX(i) * CELL, cellY(i) * CELL];
-  return [BENCH_X0 + (i - CELLS + 0.5) * CELL, FH + BENCH_H / 2];
+  return [FW + BENCH_W / 2, (i - CELLS + 0.5) * CELL];
 }
 
 /** 블록 앞면 높이 (2.5D 두께) */
@@ -108,9 +112,9 @@ export function pushFx(v: View, list: Fx[]) {
 }
 
 export const cellAt = (x: number, y: number) => {
-  if (y >= FH) {
-    const j = Math.floor((x - BENCH_X0) / CELL);
-    return j >= 0 && j < BENCH && y < FH2 ? CELLS + j : -1;
+  if (x >= FW) {
+    const j = Math.floor(y / CELL);
+    return j >= 0 && j < BENCH && x < CW ? CELLS + j : -1;
   }
   const c = Math.floor(x / CELL) - 1,
     r = Math.floor(y / CELL) - 1;
@@ -473,7 +477,7 @@ function block(
 /** 고른 칸 표시: 깜빡이는 네 귀퉁이 */
 function brackets(ctx: CanvasRenderingContext2D, i: number, color: string, now: number) {
   const [scx, scy] = slotCenter(i);
-  const s = i < CELLS ? CELL : BENCH_H - 8;
+  const s = i < CELLS ? CELL : BENCH_W - 8;
   const x = scx - s / 2,
     y = scy - s / 2;
   const o = Math.floor(now / 250) % 2 ? 0 : 2;
@@ -554,25 +558,18 @@ export function draw(ctx: CanvasRenderingContext2D, b: Board, v: View, opt: { ra
     );
   }
 
-  // 보관함 줄 (필드 아래): 어두운 선반 + 칸 받침
+  // 보관함 줄 (필드 오른쪽 세로): 어두운 선반 + 칸 받침
   {
     ctx.fillStyle = "#0b0918";
-    ctx.fillRect(0, FH, FW, BENCH_H);
+    ctx.fillRect(FW, 0, BENCH_W, FH);
     ctx.fillStyle = "#3d3468";
-    ctx.fillRect(0, FH, FW, 2);
-    ctx.font = `bold 12px ${FONT}`;
-    ctx.textAlign = "left";
-    ctx.textBaseline = "middle";
-    ctx.fillStyle = "#6f6597";
-    ctx.fillText("보관함", 12, FH + 26);
-    ctx.fillStyle = "#4b4275";
-    ctx.fillText("공격 X", 12, FH + 44);
+    ctx.fillRect(FW, 0, 2, FH);
     for (let j = 0; j < BENCH; j++) {
       const i = CELLS + j;
-      const x = BENCH_X0 + j * CELL + 4,
-        y = FH + 8,
-        w = CELL - 8,
-        h = BENCH_H - 16;
+      const x = FW + 5,
+        y = j * CELL + 4,
+        w = BENCH_W - 8,
+        h = CELL - 8;
       const c = b.cells[i];
       const d = c.def ? UNIT[c.def] : null;
       const target = !!v.drag && v.hover === i && v.drag.from !== i;
@@ -584,7 +581,12 @@ export function draw(ctx: CanvasRenderingContext2D, b: Board, v: View, opt: { ra
       ctx.fillRect(x - 2, y - 2, w + 4, 2);
       ctx.fillRect(x - 2, y + h, w + 4, 2);
       ctx.fillRect(x - 2, y, 2, h);
-      ctx.fillRect(x + w, y, 2, h);
+      ctx.fillRect(x + w, y, 2, h);      // 잠긴 칸 (정비소에서 해금)
+      if (j >= b.mods.bench) {
+        ctx.fillStyle = "rgba(8,6,16,0.72)";
+        ctx.fillRect(x, y, w, h);
+        pxText(ctx, "잠김", x + w / 2, y + h / 2, 12, "#4b4275");
+      } else if (!d) pxText(ctx, "보관", x + w / 2, y + h / 2, 12, "#3d3468");
     }
   }
 
@@ -664,7 +666,8 @@ export function draw(ctx: CanvasRenderingContext2D, b: Board, v: View, opt: { ra
     const c = b.cells[i];
     if (!c.def || (v.drag && v.drag.from === i)) continue;
     const [x] = slotCenter(i);
-    drawStack(ctx, i, c.def, c.units.map(() => false), x, FH + BENCH_H - 14, now, 0, c.units.length, 1, false, 0.72);
+    const [, y] = slotCenter(i);
+    drawStack(ctx, i, c.def, c.units.map(() => false), x, y + CELL / 2 - 12, now, 0, c.units.length, 1, false, 0.72);
   }
 
   // 끌고 있는 유닛
@@ -735,9 +738,9 @@ export function drawStack(
   const d = UNIT[id];
   const g = d.grade;
   // 등급이 높을수록 크게
-  const base = (n === 1 ? 66 : n === 2 ? 52 : 46) * scale;
+  const base = (n === 1 ? 66 : n === 2 ? 52 : 46) * scale * K;
   const size = base * (1 + Math.min(g, 4) * 0.05);
-  const pos = STACK_POS[Math.min(3, n)].map(([x, y]) => [x * scale, y * scale] as [number, number]);
+  const pos = STACK_POS[Math.min(3, n)].map(([x, y]) => [x * scale * K, y * scale * K] as [number, number]);
   // 등급 오라 (발밑) — 레어부터 색 링, 레전드부터 빛 기둥 + 올라가는 반짝이 (보관함은 작은 링만)
   if (scale === 1) groundAura(ctx, g, cx, footY, now, ci);
   const art = UNIT_ART[id];
@@ -781,12 +784,12 @@ export function drawStack(
     }
   }
   // 등급 보석 (칸 왼쪽 위) — 글자로도 한눈에
-  const top = scale === 1 ? footY - CELL + 20 : footY - BENCH_H + 24;
-  if (!lifted) gradeGem(ctx, g, P(cx - CELL / 2 + 8), P(top));
+  const top = scale === 1 ? footY - CELL + 20 : footY - CELL + 22;
+  if (!lifted) gradeGem(ctx, g, P(scale === 1 ? cx - CELL / 2 + 8 : cx - BENCH_W / 2 + 6), P(top));
   // 몇 기인지 (합성 가능하면 금색)
   if (n > 1) {
     const ready = n >= STACK && g < 3;
-    const bx = P(cx + CELL / 2 - 26),
+    const bx = P(cx + (scale === 1 ? CELL : BENCH_W) / 2 - 26),
       by = P(top - 2);
     ctx.fillStyle = "#07060f";
     ctx.fillRect(bx - 2, by - 2, 24, 16);
@@ -802,7 +805,7 @@ export function drawStack(
 
 /* ───────── 등급 표시 ───────── */
 
-const GRADE_LETTER = ["N", "R", "E", "L", "M", "H"];
+const GRADE_LETTER = ["N", "R", "E", "L", "M", "H", "T"];
 
 /** 발밑 오라: 레어 · 에픽은 색 링, 레전드 이상은 빛 기둥 + 반짝이 (신화 · 히든은 더 크게) */
 function groundAura(
@@ -879,7 +882,13 @@ function gradeOutline(
   shotT = -1e9
 ) {
   const g = UNIT[id].grade;
-  const col = g >= 4 && Math.floor(now / 260) % 2 ? "#ffffff" : GRADE_COLOR[g];
+  // 초월: 무지개로 돌아감 (30도씩 — 색 그림 캐시가 너무 늘지 않게)
+  const col =
+    g === 6
+      ? `hsl(${Math.floor(now / 120) % 12 * 30} 95% 72%)`
+      : g >= 4 && Math.floor(now / 260) % 2
+        ? "#ffffff"
+        : GRADE_COLOR[g];
   const sil = tinted(art, id, col, srcAt(art, now, shotT));
   if (!sil) return;
   const [ax, ay] = art.anchor ?? [0.5, 0.96];
@@ -941,11 +950,11 @@ function drawEnemy(ctx: CanvasRenderingContext2D, e: Enemy, now: number) {
     shadow(ctx, x, foot, 52);
     ctx.save();
     ctx.globalAlpha = e.evade > 0 ? 0.35 : 1;
-    if (art && sprite(ctx, art, x - gl, foot, 84, now, 0, moveDir(e))) {
+    if (art && sprite(ctx, art, x - gl, foot, 84 * K, now, 0, moveDir(e))) {
       if (gl) {
         ctx.globalCompositeOperation = "lighter";
         ctx.globalAlpha = 0.35;
-        sprite(ctx, art, x + gl, foot, 84, now, 0, moveDir(e));
+        sprite(ctx, art, x + gl, foot, 84 * K, now, 0, moveDir(e));
       }
     } else {
       const r = 30;
@@ -997,7 +1006,7 @@ function drawEnemy(ctx: CanvasRenderingContext2D, e: Enemy, now: number) {
     return;
   }
   const k = KIND[e.kind];
-  const size = e.size === 0 ? 26 : e.size === 1 ? 34 : 44;
+  const size = (e.size === 0 ? 26 : e.size === 1 ? 34 : 44) * K;
   const s = e.elite || e.rift ? size * 1.3 : size;
   const hop = e.stun > 0 ? 0 : Math.floor(now / 160 + e.id) % 2 ? 2 : 0;
   shadow(ctx, x, foot, s * 0.8);
@@ -1223,7 +1232,10 @@ const HIT_KIND: Record<string, HitKind> = {
   a_venom: "poison", a_plague: "poison",
   a_pyro: "fire", a_archmage: "fire",
   a_star: "star", a_sage: "star", a_bolt: "spark", a_wind: "orb", a_void: "orb", a_seal: "orb", a_novice: "orb",
-  h_glitchpet: "glitch", h_debugger: "glitch",
+  h_debugger: "glitch", h_noa: "beam",
+  k_black: "slash", k_lion: "slash", k_astra: "slash",
+  m_chief: "shell", m_grav: "shell", m_deus: "beam",
+  a_moon: "frost", a_dream: "star", a_origin: "star",
 };
 function hitKind(id: string): HitKind {
   const k = HIT_KIND[id];

@@ -4,7 +4,6 @@ import { useState, type CSSProperties, type ReactNode } from "react";
 import { buyItem } from "@/lib/api/points";
 import { ITEM_ART, RELIC_ART } from "@/lib/defense/assets";
 import {
-  CHEST,
   GP_SHOP,
   CORE_EXCHANGE,
   GLITCH,
@@ -13,6 +12,7 @@ import {
   glitchFirstClear,
   lvCost,
   LV_DMG,
+  LV_BUFF,
   planUpAll,
   relicDesc,
   relicUpCost,
@@ -33,6 +33,15 @@ import {
   THEMES,
   UNIT_MAX_LV,
   type PassReward,
+  BOX,
+  BENCH_BASE,
+  BENCH_COST,
+  BENCH_MAX,
+  FRES_COST,
+  FRES_MAX,
+  TRANS_IDS,
+  relicPassive,
+  RELIC_PASSIVE,
 } from "@/lib/defense/progress";
 import { shopFor } from "@/lib/points";
 import {
@@ -50,54 +59,68 @@ import { Bar, Btn, FactionIcon, Icon, SoundButton, FsButton, TITLE, Tip, UnitIco
 
 /*
  * 정비소 — 판 밖 성장 화면 (무대 1024×576 통째로).
- *  출전 준비(연구 · 유물 장착 · 오염 단계 · 블록 테마) · 유닛 강화 · 연구 · 유물 · 상자 · 미션 · 시즌 패스 · GP 상점
+ *  출전 준비(연구 · 유물 장착 · 오염 단계 · 블록 테마) · 유닛 강화 · 연구 · 유물 · 상점(상자 3종 · 칸 해금 · GP) · 미션 · 시즌 패스
  * 값은 모두 서버(defenseMeta)가 정하고 돌려준 프로필로 다시 그림 — 화면은 보여 주기 · 요청만.
  */
 
-export type HubTab = "load" | "units" | "res" | "relic" | "chest" | "quest" | "pass" | "shop";
+export type HubTab = "load" | "units" | "res" | "relic" | "shop" | "quest" | "pass";
 const TABS: { k: HubTab; name: string; icon: string }[] = [
   { k: "load", name: "출전 준비", icon: "star" },
   { k: "units", name: "유닛 강화", icon: "up" },
   { k: "res", name: "연구", icon: "flask" },
   { k: "relic", name: "유물", icon: "relic" },
-  { k: "chest", name: "상자", icon: "chest" },
+  { k: "shop", name: "상점", icon: "chest" },
   { k: "quest", name: "미션", icon: "note" },
   { k: "pass", name: "시즌 패스", icon: "ticket" },
-  { k: "shop", name: "GP 상점", icon: "gp" },
 ];
 
 const TIER_NAME = ["일반", "희귀", "전설"];
 const TIER_COLOR = ["#a69cc9", "#5ff2ff", "#ffd23f"];
 
 /** 재화 한 칸 (그림이 있으면 그림) */
-export function Cur({ k, n, size = 16, className = "" }: { k: "piece" | "core" | "chest" | "gp" | "card"; n: ReactNode; size?: number; className?: string }) {
+type CurK = "piece" | "core" | "gp" | "card" | "cardbox" | "relicbox" | "shard" | "trans";
+/** 그림이 아직 없는 재화는 비슷한 도트 아이콘으로 */
+const CUR_ICON: Partial<Record<CurK, string>> = { cardbox: "chest", relicbox: "chest", shard: "relic", trans: "star" };
+export function Cur({ k, n, size = 16, className = "" }: { k: CurK; n: ReactNode; size?: number; className?: string }) {
   // 그림은 클 때만 (작게 줄이면 뭉개져서 알아보기 어려움 → 작은 곳은 도트 아이콘)
   const art = size >= 20 ? ITEM_ART[k] : undefined;
   return (
     <span className={`inline-flex items-center gap-1 ${className}`}>
-      {art ? <img src={art} alt="" width={size} height={size} className="shrink-0" /> : <Icon n={k} size={size} />}
+      {art ? <img src={art} alt="" width={size} height={size} className="shrink-0" /> : <Icon n={CUR_ICON[k] ?? k} size={size} />}
       <b>{n}</b>
     </span>
   );
 }
-const CUR_NAME = { piece: "픽셀 조각", core: "글리치 코어", chest: "상자", gp: "GP", card: "카드" };
+const CUR_NAME = { piece: "픽셀 조각", core: "글리치 코어", gp: "GP", card: "카드", cardbox: "카드 상자", relicbox: "유물 상자", shard: "유물 조각", trans: "초월 소환" };
 /** 재화 설명 (어디서 얻고 어디에 쓰는지) — 말풍선 · title */
 export const CUR_INFO: Record<keyof typeof CUR_NAME, { get: string; use: string }> = {
   piece: {
     get: "회원 판 보상 (웨이브 · 보스 · 클리어, 오염 단계가 높을수록 많이) · 오늘 첫 판 ×2 · 미션 · 시즌 패스 · 처음 얻은 유닛(도감)",
-    use: "유닛 강화 · 연구 열기 · 상자 사기",
+    use: "유닛 강화 · 연구 열기 · 카드 상자 · 보관함 칸 해금",
   },
   core: {
-    get: "클리어 (오염 단계가 높을수록 더) · 50웨이브 · 오염 단계 첫 클리어 · 주간 미션 · 시즌 패스 · 상자에서 이미 가진 유물 · 처음 얻은 신화/히든 · GP 교환",
-    use: "유물 바로 사기",
+    get: "클리어 (오염 단계가 높을수록 더) · 50웨이브 · 오염 단계 첫 클리어 · 주간 미션 · 시즌 패스 · 처음 얻은 신화/히든/초월 · GP 교환",
+    use: "유물 상자 · 유물 바로 사기 · 유물 강화 · 세력 연구칸 · 초월 소환",
   },
   card: {
-    get: "판에서 그 유닛을 얻으면 1장 (레전드 이상 2장, 한 판 최대 30장) · 상자 (카드 묶음)",
+    get: "판에서 그 유닛을 얻으면 1장 (레전드 이상 2장, 한 판 최대 30장) · 카드 상자 · GP 카드 묶음 · 초월 소환에서 겹치면",
     use: "그 유닛 강화 (유닛마다 따로 모아요)",
   },
-  chest: {
-    get: "픽셀 조각 400으로 사기 · 시즌 패스 · 오염 단계 첫 클리어",
-    use: "열면 유물 35% (안 가진 것이면 새 유물, 가진 것이면 코어) · 아니면 유닛 카드 12장",
+  cardbox: {
+    get: `상점에서 픽셀 조각 ${BOX.card.pieces} · 시즌 패스 · 시작 선물`,
+    use: `열면 무작위 유닛 카드 ${BOX.card.n}장 (낮은 등급이 잘 나와요)`,
+  },
+  relicbox: {
+    get: `상점에서 글리치 코어 ${BOX.relic.cores} · GP 유물 상자 · 오염 단계 첫 클리어 · 시즌 패스`,
+    use: "열면 유물 하나 — 새 유물이면 얻고, 가진 유물이면 그 유물 조각 +1",
+  },
+  shard: {
+    get: "유물 상자에서 이미 가진 유물이 또 나오면 (그 유물 것)",
+    use: "그 유물 레벨 올리기 (+ 글리치 코어)",
+  },
+  trans: {
+    get: `상점에서 글리치 코어 ${BOX.trans.cores} 또는 GP ${BOX.trans.gp} (주 ${BOX.trans.gpPerWeek}번)`,
+    use: "초월 셋 중 하나 — 처음이면 해금(판에서 신화 3기로 조합 가능), 겹치면 그 유닛 카드",
   },
   gp: {
     get: "사이트 공용 포인트 — 출석 · 업적 · 주간 도전 순위 보상",
@@ -134,7 +157,8 @@ function RewardLine({ r }: { r: PassReward & { xp?: number } }) {
     <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[12px]">
       {!!r.pieces && <Cur k="piece" n={r.pieces} size={13} />}
       {!!r.cores && <Cur k="core" n={r.cores} size={13} />}
-      {!!r.chest && <Cur k="chest" n={r.chest} size={13} />}
+      {!!r.cardBox && <Cur k="cardbox" n={r.cardBox} size={13} />}
+      {!!r.relicBox && <Cur k="relicbox" n={r.relicBox} size={13} />}
       {!!r.gp && <Cur k="gp" n={fmtNum(r.gp)} size={13} />}
       {!!r.xp && <span className="text-[var(--cyan)]">+{r.xp} XP</span>}
       {r.item && <span className="text-[var(--gold)]">{THEME[r.item]?.name ?? r.item} 테마</span>}
@@ -185,7 +209,7 @@ export default function Hub({
   const dots: Partial<Record<HubTab, number>> = {
     quest: [...p.quests.daily, ...p.quests.weekly].filter((q) => !q.claimed && q.value >= q.goal).length,
     pass: p.passTier - p.season.free.length + (p.season.premium ? p.passTier - p.season.prem.length : 0),
-    chest: p.chests,
+    shop: p.boxes.card + p.boxes.relic,
   };
   const ctx: TabProps = { p, act, busy };
 
@@ -205,9 +229,6 @@ export default function Hub({
           <Tip text={curTip("core")} className="text-[#ffb3ee]">
             <Cur k="core" n={p.cores} />
           </Tip>
-          <Tip text={curTip("chest")}>
-            <Cur k="chest" n={p.chests} />
-          </Tip>
           <Tip text={curTip("gp")} className="text-[var(--green)]">
             <Cur k="gp" n={fmtNum(p.gp)} />
           </Tip>
@@ -224,7 +245,7 @@ export default function Hub({
             <Btn
               key={t.k}
               tone={tab === t.k ? "main" : "ghost"}
-              className="relative flex h-[46px] items-center gap-2 px-2.5 text-left text-[13px] font-bold"
+              className="relative flex h-[38px] items-center gap-2 px-2.5 text-left text-[13px] font-bold"
               onClick={() => {
                 setTab(t.k);
                 setErr("");
@@ -248,7 +269,6 @@ export default function Hub({
             {tab === "units" && <UnitsTab {...ctx} />}
             {tab === "res" && <ResTab {...ctx} />}
             {tab === "relic" && <RelicTab {...ctx} />}
-            {tab === "chest" && <ChestTab {...ctx} />}
             {tab === "quest" && <QuestTab {...ctx} />}
             {tab === "pass" && <PassTab {...ctx} />}
             {tab === "shop" && <ShopTab {...ctx} />}
@@ -277,9 +297,12 @@ const H = ({ children, sub }: { children: ReactNode; sub?: ReactNode }) => (
 function LoadTab({ p, act, busy }: TabProps) {
   const L = p.load;
   const save = (load: DefenseProfile["load"]) => act(() => meta.setLoad(load));
+  const isGen = (id: string) => RES[id]?.group === "general";
   const toggle = <K extends "res" | "relics">(k: K, id: string, max: number) => {
     const cur = L[k];
-    const next = cur.includes(id) ? cur.filter((x) => x !== id) : cur.length < max ? [...cur, id] : null;
+    // 연구는 공용 칸 · 세력 칸을 따로 셈
+    const same = k === "res" ? cur.filter((x) => isGen(x) === isGen(id)) : cur;
+    const next = cur.includes(id) ? cur.filter((x) => x !== id) : same.length < max ? [...cur, id] : null;
     if (!next) {
       sfx("deny");
       return;
@@ -302,7 +325,7 @@ function LoadTab({ p, act, busy }: TabProps) {
                 key={x.lv}
                 tone={on ? "main" : x.lv > 10 && open ? "arcane" : "ghost"}
                 disabled={!open || busy}
-                title={open ? `${x.lv}단계 — ${x.rule}${won ? " · 클리어함" : ` · 첫 클리어: 코어 ${fc.cores} · 상자 ${fc.chest}`}` : "잠김"}
+                title={open ? `${x.lv}단계 — ${x.rule}${won ? " · 클리어함" : ` · 첫 클리어: 코어 ${fc.cores} · 유물 상자 ${fc.relicBox}`}` : "잠김"}
                 className="relative h-9 text-[13px] font-bold"
                 onClick={() => void save({ ...L, glitch: x.lv })}
               >
@@ -337,36 +360,47 @@ function LoadTab({ p, act, busy }: TabProps) {
         <p className="mt-0.5 text-[12px] text-[var(--dim)]">
           {L.glitch > p.glitchWin ? (
             <>
-              이 단계 첫 클리어 보상: <Cur k="core" n={glitchFirstClear(L.glitch).cores} size={12} /> · <Cur k="chest" n={glitchFirstClear(L.glitch).chest} size={12} /> · 초록 점 = 클리어한 단계 · 11단계부터 심연 (방어력 · 보스 체력이 더 올라요)
+              이 단계 첫 클리어 보상: <Cur k="core" n={glitchFirstClear(L.glitch).cores} size={12} /> · <Cur k="relicbox" n={glitchFirstClear(L.glitch).relicBox} size={12} /> · 초록 점 = 클리어한 단계 · 11단계부터 심연 (방어력 · 보스 체력이 더 올라요)
             </>
           ) : (
             "초록 점 = 클리어한 단계 · 11단계부터 심연 (방어력 · 보스 체력이 더 올라요)"
           )}
         </p>
       </div>
-      <div>
-        <H sub={`장착 ${L.res.length}/${RES_SLOTS} · 연 연구 중에서 골라 끼워요`}>연구 장착</H>
-        {p.res.length === 0 ? (
-          <p className="text-[12px] text-[var(--dim)]">아직 연 연구가 없어요 — 연구 탭에서 픽셀 조각으로 열어요</p>
-        ) : (
-          <div className="grid grid-cols-3 gap-1.5">
-            {p.res.map((id) => {
-              const on = L.res.includes(id);
-              return (
-                <Btn key={id} tone={on ? "cyan" : "ghost"} disabled={busy} className="px-2 py-1.5 text-left" onClick={() => toggle("res", id, RES_SLOTS)}>
-                  <b className="block text-[13px]">
-                    {on ? "■ " : "□ "}
-                    {RES[id].name} <span className="text-[var(--gold)]">Lv.{p.resLv?.[id] ?? 1}</span>
-                  </b>
-                  <span className="block text-[12px] opacity-75">{resDesc(id, p.resLv?.[id] ?? 1)}</span>
-                </Btn>
-              );
-            })}
+      {(
+        [
+          ["공용 연구", true, RES_SLOTS, "공동 연구만 · 4칸"],
+          ["세력 연구", false, p.fslots, p.fslots ? `기사단 · 기계공방 · 마도회 연구만 · ${p.fslots}칸` : "상점에서 세력 연구칸을 사면 기사단 · 기계공방 · 마도회 연구를 끼울 수 있어요"],
+        ] as const
+      ).map(([title, gen, max, sub]) => {
+        const mine = p.res.filter((id) => isGen(id) === gen);
+        const on = L.res.filter((id) => isGen(id) === gen).length;
+        return (
+          <div key={title}>
+            <H sub={`장착 ${on}/${max} · ${sub}`}>{title}</H>
+            {mine.length === 0 ? (
+              <p className="text-[12px] text-[var(--dim)]">아직 연 {gen ? "공동" : "세력"} 연구가 없어요 — 연구 탭에서 픽셀 조각으로 열어요</p>
+            ) : (
+              <div className="grid grid-cols-3 gap-1.5">
+                {mine.map((id) => {
+                  const eq = L.res.includes(id);
+                  return (
+                    <Btn key={id} tone={eq ? "cyan" : "ghost"} disabled={busy || (!eq && max === 0)} className="px-2 py-1 text-left" onClick={() => toggle("res", id, max)}>
+                      <b className="block text-[12px]">
+                        {eq ? "■ " : "□ "}
+                        {RES[id].name} <span className="text-[var(--gold)]">Lv.{p.resLv?.[id] ?? 1}</span>
+                      </b>
+                      <span className="block truncate text-[12px] opacity-75">{resDesc(id, p.resLv?.[id] ?? 1)}</span>
+                    </Btn>
+                  );
+                })}
+              </div>
+            )}
           </div>
-        )}
-      </div>
+        );
+      })}
       <div>
-        <H sub={`장착 ${L.relics.length}/${RELIC_SLOTS}`}>유물 장착</H>
+        <H sub={`장착 ${L.relics.length}/${RELIC_SLOTS} · 가진 유물 보유 효과: 모든 피해 +${relicPassive(Object.fromEntries(p.relics.map((id) => [id, p.relicLv?.[id] ?? 1])))}% (장착 안 해도)`}>유물 장착</H>
         {p.relics.length === 0 ? (
           <p className="text-[12px] text-[var(--dim)]">아직 유물이 없어요 — 상자를 열거나 글리치 코어로 사요</p>
         ) : (
@@ -500,7 +534,13 @@ function UnitsTab({ p, act, busy }: TabProps) {
         </span>
         <p className={`${TITLE} mt-2 text-[22px] text-[var(--gold)]`}>Lv.{lv}</p>
         <p className="text-[12px] text-[var(--mute)]">
-          판에서 이 유닛 피해 <b className="text-[var(--text)]">+{Math.round(lv * LV_DMG * 100)}%</b>
+          판에서 피해 <b className="text-[var(--text)]">+{Math.round(lv * LV_DMG * 100)}%</b>
+          {(u.aura || u.procs || u.execute) && (
+            <>
+              {" "}
+              · 버프 · 둔화 · 확률 <b className="text-[var(--text)]">+{Math.round(lv * LV_BUFF * 100)}%</b>
+            </>
+          )}
         </p>
         {lv < UNIT_MAX_LV ? (
           <>
@@ -574,7 +614,14 @@ const GROUP_NAME: Record<string, string> = { general: "공통", knight: "기사�
 function ResTab({ p, act, busy }: TabProps) {
   return (
     <div>
-      <H sub={`연 연구 중 ${RES_SLOTS}개를 출전 준비에서 장착해요 (연 것은 자동으로 빈 칸에)`}>연구</H>
+      <div className="mb-2 flex items-center gap-2">
+        <H sub={`공용 칸 ${RES_SLOTS}개 (공동 연구만) + 세력 칸 ${p.fslots}/${FRES_MAX} (세력 연구만) — 출전 준비에서 장착`}>연구</H>
+        {p.fslots < FRES_MAX && (
+          <Btn tone="arcane" disabled={busy || p.cores < FRES_COST[p.fslots]} silent className="ml-auto h-8 shrink-0 px-2 text-[12px]" onClick={() => void act(() => meta.fslotBuy(), "upgrade")}>
+            세력 연구칸 +1 · <Cur k="core" n={FRES_COST[p.fslots]} size={12} />
+          </Btn>
+        )}
+      </div>
       {(["general", "knight", "mech", "arcane"] as const).map((g) => (
         <div key={g} className="mb-3">
           <p className="mb-1 text-[12px] font-bold" style={{ color: g === "general" ? "var(--mute)" : FACTION_COLOR[g] }}>
@@ -650,7 +697,9 @@ function LvBtns({ lv, max, busy, can, cost, back, next, onUp, onDown }: { lv: nu
 function RelicTab({ p, act, busy }: TabProps) {
   return (
     <div>
-      <H sub="상자에서 나오거나, 글리치 코어로 바로 사요 · 출전 준비에서 3개까지 장착">유물 {p.relics.length}/{RELICS.length}</H>
+      <H sub={`유물 상자 · 코어로 바로 사기 · 장착은 3개, 가진 유물은 모두 보유 효과 (레벨당 모든 피해 +${RELIC_PASSIVE.join(" / ")}% — 일반 / 희귀 / 전설) · 지금 +${relicPassive(Object.fromEntries(p.relics.map((id) => [id, p.relicLv?.[id] ?? 1])))}%`}>
+        유물 {p.relics.length}/{RELICS.length}
+      </H>
       <div className="grid grid-cols-2 gap-1.5">
         {RELICS.map((r) => {
           const own = p.relics.includes(r.id);
@@ -666,6 +715,7 @@ function RelicTab({ p, act, busy }: TabProps) {
                   {TIER_NAME[r.tier]}
                 </span>
                 {own && <span className="ml-1.5 text-[12px] font-bold text-[var(--gold)]">Lv.{lv}</span>}
+                {own && <span className="ml-1.5 text-[12px] text-[var(--mute)]">조각 {p.shards?.[r.id] ?? 0}</span>}
                 {own && p.load.relics.includes(r.id) && <span className="ml-1.5 text-[12px] text-[var(--green)]">장착 중</span>}
                 <span className="block text-[12px] leading-tight text-[var(--mute)]">{relicDesc(r.id, own ? lv : 1)}</span>
               </span>
@@ -674,9 +724,13 @@ function RelicTab({ p, act, busy }: TabProps) {
                   lv={lv}
                   max={RELIC_MAX_LV}
                   busy={busy}
-                  can={p.cores >= up}
-                  cost={<Cur k="core" n={up} size={12} />}
-                  back={lv > 1 ? `코어 ${relicUpCost(r.id, lv - 1)} 돌려받기` : ""}
+                  can={p.cores >= up.cores && (p.shards?.[r.id] ?? 0) >= up.shards}
+                  cost={
+                    <>
+                      <Cur k="shard" n={up.shards} size={12} /> <Cur k="core" n={up.cores} size={12} />
+                    </>
+                  }
+                  back={lv > 1 ? `조각 ${relicUpCost(r.id, lv - 1).shards} · 코어 ${relicUpCost(r.id, lv - 1).cores} 돌려받기` : ""}
                   next={lv < RELIC_MAX_LV ? relicDesc(r.id, lv + 1) : ""}
                   onUp={() => void act(() => meta.relicLevel(r.id, 1), "legend")}
                   onDown={() => void act(() => meta.relicLevel(r.id, -1), "sell")}
@@ -690,85 +744,6 @@ function RelicTab({ p, act, busy }: TabProps) {
           );
         })}
       </div>
-    </div>
-  );
-}
-
-/* ───────── 상자 ───────── */
-
-function ChestTab({ p, act, busy }: TabProps) {
-  const [got, setGot] = useState<DefenseProfile["got"] | null>(null);
-  const gpChestN = p.gpBuys?.chest ?? 0;
-  const open = async () => {
-    setGot(null);
-    const np = await act(() => meta.chestOpen(), "chest-open");
-    if (np?.got) setGot(np.got);
-  };
-  return (
-    <div className="flex h-full flex-col items-center">
-      <H sub={`유물 ${Math.round(CHEST.relicChance * 100)}% (일반 ${CHEST.tierOdds[0] * 100}% · 희귀 ${CHEST.tierOdds[1] * 100}% · 전설 ${CHEST.tierOdds[2] * 100}%) · 아니면 유닛 카드 ${CHEST.cards}장 · 가진 유물이면 코어 ${CHEST.dupCores}개`}>
-        글리치 상자
-      </H>
-      <div className="mt-2 flex items-center gap-10">
-        <div className="flex flex-col items-center">
-          {ITEM_ART.chest ? <img src={got ? ITEM_ART["chest-open"] : ITEM_ART.chest} alt="" width={128} height={128} className={busy ? "dfn-glitch" : "dfn-float"} /> : <Icon n="chest" size={112} className={busy ? "dfn-glitch" : "dfn-float"} />}
-          <p className="mt-2 text-[14px]">
-            안 연 상자 <b className="text-[var(--gold)]">{p.chests}</b>개
-          </p>
-        </div>
-        <div className="flex w-[220px] flex-col gap-2">
-          <Btn tone="gold" disabled={busy || p.chests < 1} silent className="h-14 text-[18px] font-bold" onClick={() => void open()}>
-            열기
-          </Btn>
-          <Btn tone="cyan" disabled={busy || p.pieces < CHEST.price} silent className="h-11 text-[13px]" onClick={() => void act(() => meta.chestBuy(), "upgrade")}>
-            상자 사기 · <Cur k="piece" n={CHEST.price} size={13} />
-          </Btn>
-          <Btn
-            tone="arcane"
-            disabled={busy || p.gp < GP_SHOP.chest.gp || gpChestN >= GP_SHOP.chest.perWeek}
-            silent
-            className="h-11 text-[12px]"
-            title="유물 확정 (안 가진 유물 우선, 희귀 · 전설이 더 잘 나와요) — 바로 열려요"
-            onClick={async () => {
-              setGot(null);
-              const np = await act(() => meta.gpChest(), "chest-open");
-              if (np?.got) setGot(np.got);
-            }}
-          >
-            GP 유물 상자 · <Cur k="gp" n={fmtNum(GP_SHOP.chest.gp)} size={12} /> ({gpChestN}/{GP_SHOP.chest.perWeek})
-          </Btn>
-        </div>
-      </div>
-      {got && (
-        <div className="px-box dfn-pop mt-5 w-full max-w-[560px] p-3 text-center" style={{ "--b": got.relic ? TIER_COLOR[RELIC[got.relic].tier] : "#ffb347" } as CSSProperties}>
-          {got.relic ? (
-            <div className="flex items-center justify-center gap-3">
-              <RelicIcon id={got.relic} size={56} />
-              <div className="text-left">
-                <p className="text-[12px]" style={{ color: TIER_COLOR[RELIC[got.relic].tier] }}>
-                  {TIER_NAME[RELIC[got.relic].tier]} 유물
-                </p>
-                <b className="text-[17px]">{RELIC[got.relic].name}</b>
-                <p className="text-[12px] text-[var(--mute)]">{got.dup ? `이미 가진 유물 → 글리치 코어 +${got.dup}` : RELIC[got.relic].desc}</p>
-              </div>
-            </div>
-          ) : got.dup ? (
-            <p className="text-[14px]">유물을 모두 가져서 글리치 코어 +{got.dup}</p>
-          ) : (
-            <>
-              <p className="mb-2 text-[13px]">유닛 카드 {CHEST.cards}장</p>
-              <div className="flex flex-wrap justify-center gap-1.5">
-                {Object.entries(got.cards ?? {}).map(([id, n]) => (
-                  <span key={id} className="relative">
-                    <UnitIcon id={id} size={44} />
-                    <b className="absolute right-0 bottom-0 bg-[#0a0816] px-1 text-[12px] text-[#ffb347]">×{n}</b>
-                  </span>
-                ))}
-              </div>
-            </>
-          )}
-        </div>
-      )}
     </div>
   );
 }
@@ -892,7 +867,8 @@ function PassTab({ p, act, busy }: TabProps) {
                   <span className="flex flex-col items-center gap-0.5 text-[12px]">
                     {!!r.pieces && <Cur k="piece" n={r.pieces} size={14} />}
                     {!!r.cores && <Cur k="core" n={r.cores} size={14} />}
-                    {!!r.chest && <Cur k="chest" n={r.chest} size={14} />}
+                    {!!r.cardBox && <Cur k="cardbox" n={r.cardBox} size={14} />}
+                    {!!r.relicBox && <Cur k="relicbox" n={r.relicBox} size={14} />}
                     {!!r.gp && <Cur k="gp" n={r.gp} size={14} />}
                   </span>
                 )}
@@ -913,42 +889,177 @@ function PassTab({ p, act, busy }: TabProps) {
   );
 }
 
-/* ───────── GP 상점 ───────── */
+/* ───────── 상점 (상품별 상자 · 해금 · GP) ───────── */
+
+type Got = NonNullable<DefenseProfile["got"]>;
+function GotBox({ got }: { got: Got }) {
+  const col = got.relic ? TIER_COLOR[RELIC[got.relic].tier] : got.trans ? "#fff6d6" : "#ffb347";
+  return (
+    <div className="px-box dfn-pop mt-2 p-3 text-center" style={{ "--b": col } as CSSProperties}>
+      {got.trans ? (
+        <div className="flex items-center justify-center gap-3">
+          <UnitIcon id={got.trans} size={56} />
+          <div className="text-left">
+            <p className="text-[12px] text-[#fff6d6]">초월</p>
+            <b className="text-[17px]">{UNIT[got.trans].name}</b>
+            <p className="text-[12px] text-[var(--mute)]">{got.dup ? `이미 해금 → 카드 +${got.dup}` : "해금! 판에서 신화 3기로 조합할 수 있어요"}</p>
+          </div>
+        </div>
+      ) : got.relic ? (
+        <div className="flex items-center justify-center gap-3">
+          <RelicIcon id={got.relic} size={56} />
+          <div className="text-left">
+            <p className="text-[12px]" style={{ color: TIER_COLOR[RELIC[got.relic].tier] }}>
+              {TIER_NAME[RELIC[got.relic].tier]} 유물
+            </p>
+            <b className="text-[17px]">{RELIC[got.relic].name}</b>
+            <p className="text-[12px] text-[var(--mute)]">{got.shard ? `이미 가진 유물 → 유물 조각 +${got.shard} (유물 강화 재료)` : RELIC[got.relic].desc}</p>
+          </div>
+        </div>
+      ) : (
+        <>
+          <p className="mb-2 text-[13px]">유닛 카드 {BOX.card.n}장</p>
+          <div className="flex flex-wrap justify-center gap-1.5">
+            {Object.entries(got.cards ?? {}).map(([id, n]) => (
+              <span key={id} className="relative">
+                <UnitIcon id={id} size={40} />
+                <b className="absolute right-0 bottom-0 bg-[#0a0816] px-1 text-[12px] text-[#ffb347]">×{n}</b>
+              </span>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+/** 상품 한 줄: 그림 · 이름 · 설명 · 버튼들 */
+function Product({ k, title, sub, children }: { k: CurK; title: ReactNode; sub: ReactNode; children: ReactNode }) {
+  const art = ITEM_ART[k];
+  return (
+    <div className="px-inset flex items-center gap-3 px-3 py-2">
+      {art ? <img src={art} alt="" width={44} height={44} className="shrink-0" /> : <Icon n={CUR_ICON[k] ?? k} size={36} />}
+      <div className="min-w-0 flex-1">
+        <b className="text-[14px]">{title}</b>
+        <p className="text-[12px] leading-snug text-[var(--mute)]">{sub}</p>
+      </div>
+      <div className="flex shrink-0 flex-col items-stretch gap-1">{children}</div>
+    </div>
+  );
+}
 
 function ShopTab({ p, act, busy }: TabProps) {
   const [msg, setMsg] = useState("");
+  const [got, setGot] = useState<Got | null>(null);
   const themeItems = THEMES.map((t) => ({ t, item: shopFor("defense", "item", t.id) })).filter((x) => x.item);
+  const run = async (f: () => Promise<DefenseProfile>, s = "chest-open") => {
+    setGot(null);
+    const np = await act(f, s);
+    if (np?.got) setGot(np.got);
+  };
+  const gb = p.gpBuys ?? { relic: 0, cards: 0, trans: 0 };
+  const btn = "h-8 px-2.5 text-[12px]";
   return (
     <div className="flex flex-col gap-4">
-      <p className="text-[12px] text-[var(--mute)]">
-        GP 는 사이트 공용 포인트 — 출석 · 업적 · 주간 도전 순위로 모여요. 여기서 글리치 코어 · 유물 상자 · 카드 묶음 · 테마 · 시즌 패스에 쓸 수 있어요. (성장을 한 번에 건너뛰지 못하게 주마다 횟수 제한)
-      </p>
       <div>
-        <H sub={`이번 주 ${p.coreBuys.n}/${CORE_EXCHANGE.maxPerWeek}번`}>글리치 코어 교환</H>
-        <div className="px-inset flex items-center gap-3 px-3 py-2.5">
-          <Cur k="gp" n={fmtNum(CORE_EXCHANGE.gp)} size={18} className="text-[15px] text-[var(--green)]" />
-          <span className="text-[var(--dim)]">→</span>
-          <Cur k="core" n={CORE_EXCHANGE.cores} size={18} className="text-[15px] text-[#ffb3ee]" />
-          <span className="text-[12px] text-[var(--mute)]">유물을 바로 사거나 모자란 코어를 채울 때</span>
-          <Btn tone="arcane" disabled={busy || p.gp < CORE_EXCHANGE.gp || p.coreBuys.n >= CORE_EXCHANGE.maxPerWeek} silent className="ml-auto h-9 px-4 text-[13px] font-bold" onClick={() => void act(() => meta.coresBuy(), "upgrade")}>
-            교환
-          </Btn>
+        <H sub="상품마다 따로 — 산 상자는 쌓아 두고 언제든 열어요">상자</H>
+        <div className="flex flex-col gap-1.5">
+          <Product k="cardbox" title={<>카드 상자 <span className="text-[12px] font-normal text-[var(--gold)]">보유 {p.boxes.card}</span></>} sub={`무작위 유닛 카드 ${BOX.card.n}장 (낮은 등급이 잘 나와요)`}>
+            <Btn tone="gold" disabled={busy || p.boxes.card < 1} silent className={btn} onClick={() => void run(() => meta.boxOpen("card"))}>
+              열기
+            </Btn>
+            <Btn tone="cyan" disabled={busy || p.pieces < BOX.card.pieces} silent className={btn} onClick={() => void act(() => meta.boxBuy("card"), "upgrade")}>
+              사기 <Cur k="piece" n={BOX.card.pieces} size={12} />
+            </Btn>
+          </Product>
+          <Product
+            k="relicbox"
+            title={<>유물 상자 <span className="text-[12px] font-normal text-[var(--gold)]">보유 {p.boxes.relic}</span></>}
+            sub={`유물 하나 (일반 ${BOX.relic.tierOdds[0] * 100}% · 희귀 ${BOX.relic.tierOdds[1] * 100}% · 전설 ${BOX.relic.tierOdds[2] * 100}%) — 가진 유물이면 그 유물 조각 +1 (유물 강화 재료)`}
+          >
+            <Btn tone="gold" disabled={busy || p.boxes.relic < 1} silent className={btn} onClick={() => void run(() => meta.boxOpen("relic"))}>
+              열기
+            </Btn>
+            <Btn tone="arcane" disabled={busy || p.cores < BOX.relic.cores} silent className={btn} onClick={() => void act(() => meta.boxBuy("relic"), "upgrade")}>
+              사기 <Cur k="core" n={BOX.relic.cores} size={12} />
+            </Btn>
+            <Btn
+              tone="cyan"
+              disabled={busy || p.gp < BOX.relic.gp || gb.relic >= BOX.relic.gpPerWeek}
+              silent
+              className={btn}
+              title={`좋은 확률 (희귀 ${BOX.relic.gpOdds[1] * 100}% · 전설 ${BOX.relic.gpOdds[2] * 100}%) · 바로 열림`}
+              onClick={() => void run(() => meta.gpRelic())}
+            >
+              <Cur k="gp" n={fmtNum(BOX.relic.gp)} size={12} /> ({gb.relic}/{BOX.relic.gpPerWeek})
+            </Btn>
+          </Product>
+          <Product
+            k="trans"
+            title={<>초월 소환 <span className="text-[12px] font-normal text-[#fff6d6]">해금 {p.trans.length}/{TRANS_IDS.length}</span></>}
+            sub={
+              <>
+                {TRANS_IDS.map((id) => (
+                  <span key={id} className={p.trans.includes(id) ? "text-[#fff6d6]" : "text-[var(--dim)]"}>
+                    {UNIT[id].name}
+                    {" · "}
+                  </span>
+                ))}
+                셋 중 하나 — 처음이면 해금 (판에서 그 세력 신화 3기로 조합), 겹치면 카드 {BOX.trans.dupCards}장
+              </>
+            }
+          >
+            <Btn tone="arcane" disabled={busy || p.cores < BOX.trans.cores} silent className={btn} onClick={() => void run(() => meta.transSummon("cores"), "myth")}>
+              <Cur k="core" n={BOX.trans.cores} size={12} />
+            </Btn>
+            <Btn tone="cyan" disabled={busy || p.gp < BOX.trans.gp || gb.trans >= BOX.trans.gpPerWeek} silent className={btn} onClick={() => void run(() => meta.transSummon("gp"), "myth")}>
+              <Cur k="gp" n={fmtNum(BOX.trans.gp)} size={12} /> ({gb.trans}/{BOX.trans.gpPerWeek})
+            </Btn>
+          </Product>
+        </div>
+        {got && <GotBox got={got} />}
+      </div>
+      <div>
+        <H sub="한 번 사면 계속">칸 해금</H>
+        <div className="grid grid-cols-2 gap-1.5">
+          <Product k="cardbox" title={`보관함 칸 ${p.bench}/${BENCH_MAX}`} sub={`처음 ${BENCH_BASE}칸 · 판 아래 보관함이 1칸 늘어요`}>
+            {p.bench < BENCH_MAX ? (
+              <Btn tone="cyan" disabled={busy || p.pieces < BENCH_COST[p.bench - BENCH_BASE]} silent className={btn} onClick={() => void act(() => meta.benchBuy(), "upgrade")}>
+                +1 <Cur k="piece" n={fmtNum(BENCH_COST[p.bench - BENCH_BASE])} size={12} />
+              </Btn>
+            ) : (
+              <span className="text-[12px] text-[var(--gold)]">MAX</span>
+            )}
+          </Product>
+          <Product k="trans" title={`세력 연구칸 ${p.fslots}/${FRES_MAX}`} sub="기사단 · 기계공방 · 마도회 연구 전용 칸 (공용 4칸엔 공동 연구만)">
+            {p.fslots < FRES_MAX ? (
+              <Btn tone="arcane" disabled={busy || p.cores < FRES_COST[p.fslots]} silent className={btn} onClick={() => void act(() => meta.fslotBuy(), "upgrade")}>
+                +1 <Cur k="core" n={FRES_COST[p.fslots]} size={12} />
+              </Btn>
+            ) : (
+              <span className="text-[12px] text-[var(--gold)]">MAX</span>
+            )}
+          </Product>
         </div>
       </div>
       <div>
-        <H sub={`이번 주 ${p.gpBuys?.chest ?? 0}/${GP_SHOP.chest.perWeek}번 · 상자 탭에서 바로 열려요`}>GP 유물 상자</H>
-        <div className="px-inset flex items-center gap-3 px-3 py-2.5">
-          <Cur k="gp" n={fmtNum(GP_SHOP.chest.gp)} size={18} className="text-[15px] text-[var(--green)]" />
-          <span className="text-[var(--dim)]">→</span>
-          <span className="text-[13px]">유물 확정 (안 가진 것 우선 · 희귀 {GP_SHOP.chest.tierOdds[1] * 100}% · 전설 {GP_SHOP.chest.tierOdds[2] * 100}%)</span>
-        </div>
-      </div>
-      <div>
-        <H sub={`이번 주 ${p.gpBuys?.cards ?? 0}/${GP_SHOP.cards.perWeek}번 · 유닛 강화 탭에서 유닛을 골라 사요`}>유닛 카드 묶음</H>
-        <div className="px-inset flex items-center gap-3 px-3 py-2.5">
-          <Cur k="gp" n={GP_SHOP.cards.gp} size={18} className="text-[15px] text-[var(--green)]" />
-          <span className="text-[var(--dim)]">→</span>
-          <Cur k="card" n={`고른 유닛 ${GP_SHOP.cards.n}장`} size={18} className="text-[13px]" />
+        <H sub="GP 는 사이트 공용 포인트 (출석 · 업적 · 주간 도전 순위) — 성장을 한 번에 건너뛰지 못하게 주마다 횟수 제한">GP</H>
+        <div className="flex flex-col gap-1.5">
+          <div className="px-inset flex items-center gap-3 px-3 py-2">
+            <Cur k="gp" n={fmtNum(CORE_EXCHANGE.gp)} size={18} className="text-[14px] text-[var(--green)]" />
+            <span className="text-[var(--dim)]">→</span>
+            <Cur k="core" n={CORE_EXCHANGE.cores} size={18} className="text-[14px] text-[#ffb3ee]" />
+            <span className="text-[12px] text-[var(--mute)]">글리치 코어 교환 · 이번 주 {p.coreBuys.n}/{CORE_EXCHANGE.maxPerWeek}</span>
+            <Btn tone="arcane" disabled={busy || p.gp < CORE_EXCHANGE.gp || p.coreBuys.n >= CORE_EXCHANGE.maxPerWeek} silent className={`ml-auto ${btn}`} onClick={() => void act(() => meta.coresBuy(), "upgrade")}>
+              교환
+            </Btn>
+          </div>
+          <div className="px-inset flex items-center gap-3 px-3 py-2">
+            <Cur k="gp" n={GP_SHOP.cards.gp} size={18} className="text-[14px] text-[var(--green)]" />
+            <span className="text-[var(--dim)]">→</span>
+            <Cur k="card" n={`고른 유닛 ${GP_SHOP.cards.n}장`} size={18} className="text-[13px]" />
+            <span className="text-[12px] text-[var(--mute)]">유닛 강화 탭에서 골라 사요 · 이번 주 {gb.cards}/{GP_SHOP.cards.perWeek}</span>
+          </div>
         </div>
       </div>
       <div>

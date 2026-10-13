@@ -8,6 +8,7 @@ import {
   FACTION_NAME,
   GRADE_NAME,
   RECIPES,
+  needName,
   SIZE_MULT,
   UNITS,
   UNIT,
@@ -140,7 +141,7 @@ export default function Codex({ have }: { have?: Record<string, number> }) {
                   </p>
                   {r && !hidden && (
                     <p className="text-[12px] text-[#ffd84a]/80">
-                      조합: {r.needs.map((n) => UNIT[n].name).join(" + ")}
+                      조합: {r.needs.map((n) => needName(n)).join(" + ")}
                     </p>
                   )}
                 </div>

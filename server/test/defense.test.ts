@@ -4,7 +4,7 @@ import { BOTS, botTurn } from "../../web/src/lib/defense/bot";
 import { HASH_TICKS, TICKS_PER_TURN, TURN_MS, replay, replayer, scoreOf, validLog, type LogEntry } from "../../web/src/lib/defense/replay";
 import { CELLS, SLOTS, apply, hashGame, isCmd, newGame, step, unitCount, type Game } from "../../web/src/lib/defense/sim";
 import { RECIPES, UNIT, UNITS } from "../../web/src/lib/defense/units";
-import { CHEST, CORE_EXCHANGE, GP_SHOP, PASS_PREMIUM_GP, RESEARCH, lvCost, modsOf, planUpAll, seasonScore, weeklyRelics, weekOf } from "../../web/src/lib/defense/progress";
+import { BOX, BENCH_COST, CORE_EXCHANGE, FRES_COST, TRANS_IDS, GP_SHOP, PASS_PREMIUM_GP, RESEARCH, lvCost, modsOf, planUpAll, seasonScore, weeklyRelics, weekOf } from "../../web/src/lib/defense/progress";
 import { startTestServer, type TestClient, type TestServer } from "./helpers";
 
 /** 봇 한 판 (기록 포함) */
@@ -22,7 +22,7 @@ describe("픽셀 글리치 디펜스 엔진", () => {
   it("데이터: 조합식 재료 · 결과가 다 있는 유닛", () => {
     for (const r of RECIPES) {
       expect(UNIT[r.id]).toBeTruthy();
-      for (const n of r.needs) expect(UNIT[n], n).toBeTruthy();
+      for (const n of r.needs) expect(UNIT[n] || /^@[46]$/.test(n), n).toBeTruthy();
     }
     expect(new Set(UNITS.map((u) => u.id)).size).toBe(UNITS.length);
   });
@@ -232,10 +232,10 @@ describe("픽셀 글리치 디펜스 서버", () => {
     expect(down.cards.k_squire).toBe(5);
     expect(down.pieces).toBe(up.pieces + lvCost(0, 0).pieces);
     // 상자
-    const p3 = await c.rpc("defense.chest.open");
+    const p3 = await c.rpc("defense.box.open", { kind: "card" });
     expect(p3.got).toBeTruthy();
-    await c.rpc("defense.chest.buy");
-    expect((await c.rpc("defense.profile")).pieces).toBe(p2.pieces - CHEST.price);
+    await c.rpc("defense.box.buy", { kind: "card" });
+    expect((await c.rpc("defense.profile")).pieces).toBe(p2.pieces - BOX.card.pieces);
     // 오염 단계는 열린 만큼만
     await expect(c.rpc("defense.load", { res: ["g_gold"], relics: [], glitch: 3 })).rejects.toThrow();
     const s2 = await c.rpc("defense.start", { mode: "season" });
@@ -266,16 +266,16 @@ describe("픽셀 글리치 디펜스 서버", () => {
 
   it("연구 · 유물 레벨: 1레벨은 예전 수치 그대로, 올리면 로드아웃에 실림 · 내리면 전부 돌려받기", async () => {
     // 1레벨 = 예전 값 (예전 기록 다시 돌리기가 그대로 맞게)
-    const m1 = modsOf({ res: ["g_gold", "k_drill", "g_sell"], relics: ["first_harvest", "rift_compass", "alchemy"] });
+    const m1 = modsOf({ fslots: 1, res: ["g_gold", "k_drill", "g_sell"], relics: ["first_harvest", "rift_compass", "alchemy"] });
     expect([m1.startGold, m1.fac.knight, m1.sellMult, m1.firstHarvest, m1.riftCd, m1.riftStone, m1.alchemyGold, m1.alchemyStones]).toEqual([40, 1.1, 1.5, 15, 0.7, 1, 80, 2]);
-    const m5 = modsOf({ res: ["g_gold", "k_drill"], relics: ["first_harvest"], resLv: { g_gold: 5, k_drill: 5, nope: 3 }, relicLv: { first_harvest: 5, vaccine: 5 } });
+    const m5 = modsOf({ fslots: 1, res: ["g_gold", "k_drill"], relics: ["first_harvest"], resLv: { g_gold: 5, k_drill: 5, nope: 3 }, relicLv: { first_harvest: 5, vaccine: 5 } });
     expect([m5.startGold, m5.fac.knight, m5.firstHarvest]).toEqual([80, 1.2, 27]);
     expect(m5.resLv).toEqual({ g_gold: 5, k_drill: 5 });
     expect(m5.relicLv).toEqual({ first_harvest: 5 });
 
     const c = await member();
     await c.rpc("defense.profile");
-    await srv.db.col("defense_profile").updateOne({ _id: c.uid! } as never, { $set: { pieces: 10000, cores: 100, res: ["g_gold"], relics: ["vaccine"], load: { res: ["g_gold"], relics: ["vaccine"], glitch: 0 } } });
+    await srv.db.col("defense_profile").updateOne({ _id: c.uid! } as never, { $set: { pieces: 10000, cores: 100, shards: { vaccine: 1 }, res: ["g_gold"], relics: ["vaccine"], load: { res: ["g_gold"], relics: ["vaccine"], glitch: 0 } } });
     await expect(c.rpc("defense.res.level", { id: "g_stone", dir: 1 })).rejects.toThrow();
     await expect(c.rpc("defense.res.level", { id: "g_gold", dir: -1 })).rejects.toThrow();
     const a = await c.rpc("defense.res.level", { id: "g_gold", dir: 1 });
@@ -283,7 +283,8 @@ describe("픽셀 글리치 디펜스 서버", () => {
     expect(a.pieces).toBe(10000 - RESEARCH.find((r) => r.id === "g_gold")!.cost);
     const b = await c.rpc("defense.relic.level", { id: "vaccine", dir: 1 });
     expect(b.relicLv.vaccine).toBe(2);
-    expect(b.cores).toBe(85);
+    expect(b.cores).toBe(92);
+    expect(b.shards.vaccine).toBe(0);
     const { loadout } = await c.rpc("defense.start", { mode: "season" });
     expect(loadout).toMatchObject({ resLv: { g_gold: 2 }, relicLv: { vaccine: 2 } });
     const d = await c.rpc("defense.relic.level", { id: "vaccine", dir: -1 });
@@ -314,8 +315,8 @@ describe("픽셀 글리치 디펜스 서버", () => {
   it("GP: 패스 프리미엄 · 코어 교환은 GP 로 (모자라면 거절)", async () => {
     const c = await member();
     await expect(c.rpc("defense.pass.buy")).rejects.toThrow();
-    await srv.db.col("users").updateOne({ _id: c.uid! } as never, { $set: { points: PASS_PREMIUM_GP + CORE_EXCHANGE.gp + GP_SHOP.chest.gp + GP_SHOP.cards.gp } });
-    const gc = await c.rpc("defense.gp.chest");
+    await srv.db.col("users").updateOne({ _id: c.uid! } as never, { $set: { points: PASS_PREMIUM_GP + CORE_EXCHANGE.gp + BOX.relic.gp + GP_SHOP.cards.gp } });
+    const gc = await c.rpc("defense.gp.relic");
     expect(gc.got.relic).toBeTruthy();
     expect(gc.relics).toContain(gc.got.relic);
     const gk = await c.rpc("defense.gp.cards", { id: "a_void" });
@@ -327,5 +328,65 @@ describe("픽셀 글리치 디펜스 서버", () => {
     expect(q.gp).toBe(0);
     await expect(c.rpc("defense.cores.buy")).rejects.toThrow();
     c.close();
+  });
+
+  it("베타: 보관함 · 세력 연구칸 해금 · 유물 상자 조각 · 초월 소환 → 로드아웃", async () => {
+    const c = await member();
+    const p0 = await c.rpc("defense.profile");
+    expect(p0.bench).toBe(3);
+    expect(p0.boxes).toEqual({ card: 1, relic: 1 });
+    await expect(c.rpc("defense.fslot.buy")).rejects.toThrow();
+    await srv.db.col("defense_profile").updateOne({ _id: c.uid! } as never, { $set: { pieces: 20000, cores: 500, res: ["g_gold", "k_drill"] } });
+    const b = await c.rpc("defense.bench.buy");
+    expect(b.bench).toBe(4);
+    expect(b.pieces).toBe(20000 - BENCH_COST[0]);
+    // 세력 연구는 세력 칸이 없으면 못 낌
+    await expect(c.rpc("defense.load", { res: ["g_gold", "k_drill"], relics: [], glitch: 0 })).rejects.toThrow();
+    const f = await c.rpc("defense.fslot.buy");
+    expect(f.fslots).toBe(1);
+    expect(f.cores).toBe(500 - FRES_COST[0]);
+    await c.rpc("defense.load", { res: ["g_gold", "k_drill"], relics: [], glitch: 0 });
+    // 유물 상자: 같은 유물이 또 나오면 조각
+    let shards = 0;
+    for (let i = 0; i < 12; i++) {
+      await c.rpc("defense.box.buy", { kind: "relic" });
+      const o = await c.rpc("defense.box.open", { kind: "relic" });
+      if (o.got.shard) shards++;
+    }
+    const pr = await c.rpc("defense.profile");
+    expect(Object.values(pr.shards as Record<string, number>).reduce((a, x) => a + x, 0)).toBe(shards);
+    // 초월 소환
+    const t = await c.rpc("defense.trans", { pay: "cores" });
+    expect(TRANS_IDS).toContain(t.got.trans);
+    expect(t.trans).toEqual([t.got.trans]);
+    const { loadout } = await c.rpc("defense.start", { mode: "season" });
+    expect(loadout.bench).toBe(4);
+    expect(loadout.fslots).toBe(1);
+    expect(loadout.res).toEqual(["g_gold", "k_drill"]);
+    expect(loadout.trans).toEqual([t.got.trans]);
+    expect(Object.keys(loadout.own).length).toBe(pr.relics.length);
+    expect(modsOf(loadout).relicDmg).toBeGreaterThan(1);
+    c.close();
+  });
+
+  it("베타 엔진: 7×4 · 잠긴 보관함 · 초월은 해금해야 조합 · 히든 @ 재료", () => {
+    const g = newGame(7, 1, [{ trans: [] }]);
+    const b = g.boards[0];
+    expect(CELLS).toBe(28);
+    expect(apply(g, 0, { t: "swap", a: 0, b: CELLS + 4 })).toBeTruthy(); // 잠긴 칸
+    for (const id of ["k_saint", "k_dragoon", "k_lion"]) {
+      const i = b.cells.findIndex((c) => !c.def);
+      b.cells[i] = { def: id, units: [{ cd: 0, ult: 0, stun: 0 }] };
+    }
+    expect(apply(g, 0, { t: "recipe", id: "k_astra" })).toBeTruthy();
+    const g2 = newGame(7, 1, [{ trans: ["k_astra"] }]);
+    const b2 = g2.boards[0];
+    for (const id of ["k_saint", "k_dragoon", "k_lion", "m_omega", "a_void"]) {
+      const i = b2.cells.findIndex((c) => !c.def);
+      b2.cells[i] = { def: id, units: [{ cd: 0, ult: 0, stun: 0 }] };
+    }
+    expect(apply(g2, 0, { t: "recipe", id: "k_astra" })).toBeNull();
+    expect(apply(g2, 0, { t: "recipe", id: "h_noa" })).toBeNull();
+    expect(b2.cells.filter((c) => c.def).map((c) => c.def)).toEqual(["h_noa"]);
   });
 });

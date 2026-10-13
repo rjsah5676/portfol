@@ -1,7 +1,8 @@
 /**
  * 픽셀 운빨 디펜스 — 영구 성장(판 밖) 정의. 시뮬 · 서버 · 화면이 같이 씀 (브라우저 전용 API 금지).
  *
- * 판에 들고 가는 것 = 로드아웃(Loadout): 유닛 레벨 · 연구(장착 4칸) · 유물(장착 3칸) · 오염 단계.
+ * 판에 들고 가는 것 = 로드아웃(Loadout): 유닛 레벨 · 연구(공용 4칸 + 세력 전용 0~3칸) · 유물(장착 3칸 + 가진 유물 보유 효과)
+ *   · 오염 단계 · 보관함 칸 수 · 해금한 초월.
  *   서버가 판 시작(defense.start) 때 계정에 저장된 걸로 정해서 시드와 같이 기록 → 검증 · 멀티에서 그대로 다시 돌림.
  *   시뮬은 modsOf(로드아웃) 한 번만 계산해서 보드에 붙임 (매 tick 계산 X).
  *
@@ -27,11 +28,33 @@ export interface Loadout {
   resLv?: Record<string, number>;
   /** 장착한 유물 레벨 (없으면 1) */
   relicLv?: Record<string, number>;
+  /** 열린 보관함 칸 (BENCH_BASE..BENCH_MAX) */
+  bench?: number;
+  /** 산 세력 전용 연구칸 (0..FRES_MAX) */
+  fslots?: number;
+  /** 가진 유물 전부 (id → 레벨) — 보유 효과 */
+  own?: Record<string, number>;
+  /** 해금한 초월 (조합식이 열림) */
+  trans?: string[];
 }
+
+/** 보관함: 처음 BENCH_BASE 칸, 정비소에서 1칸씩 BENCH_MAX 까지 (픽셀 조각) */
+export const BENCH_BASE = 3;
+export const BENCH_MAX = 6;
+export const BENCH_COST = [1500, 3000, 6000] as const;
+/** 세력 전용 연구칸: 기사단 · 기계공방 · 마도회 연구만 (글리치 코어) — 공용 4칸엔 공동 연구만 */
+export const FRES_MAX = 3;
+export const FRES_COST = [15, 30, 60] as const;
+/** 초월 (세력마다 1종) */
+export const TRANS_IDS = ["k_astra", "m_deus", "a_origin"] as const;
+/** 유물 보유 효과: 가진 유물 하나 · 레벨 하나당 모든 피해 +% (일반 · 희귀 · 전설) */
+export const RELIC_PASSIVE = [0.4, 0.7, 1] as const;
 
 export const UNIT_MAX_LV = 10;
 /** 유닛 레벨 하나당 그 유닛 피해 + */
 export const LV_DMG = 0.03;
+/** 유닛 레벨 하나당 그 유닛 버프 · 둔화 · 방어 깎기 · 확률 효과 + (아군 공속 오라 등도 강해짐) */
+export const LV_BUFF = 0.03;
 export const RES_SLOTS = 4;
 export const RELIC_SLOTS = 3;
 export const GLITCH_MAX = 30;
@@ -244,6 +267,12 @@ export interface Mods {
   relics: string[];
   resLv: Record<string, number>;
   relicLv: Record<string, number>;
+  /** 열린 보관함 칸 */
+  bench: number;
+  /** 해금한 초월 */
+  trans: string[];
+  /** 유물 보유 효과 (모든 피해 배수) */
+  relicDmg: number;
 }
 
 const clampInt = (v: unknown, lo: number, hi: number) =>
@@ -259,7 +288,12 @@ export function cleanLoadout(lo: Loadout | null | undefined, unitIds?: Set<strin
   }
   const uniq = (a: unknown, ok: (s: string) => boolean, max: number) =>
     [...new Set(Array.isArray(a) ? a.filter((s): s is string => typeof s === "string" && ok(s)) : [])].slice(0, max);
-  const res = uniq(lo?.res, (s) => !!RES[s], RES_SLOTS);
+  const fslots = clampInt(lo?.fslots, 0, FRES_MAX);
+  // 공용 칸엔 공동 연구만, 세력 칸엔 세력 연구만
+  const res = [
+    ...uniq(lo?.res, (s) => RES[s]?.group === "general", RES_SLOTS),
+    ...uniq(lo?.res, (s) => !!RES[s] && RES[s].group !== "general", fslots),
+  ];
   const relics = uniq(lo?.relics, (s) => !!RELIC[s], RELIC_SLOTS);
   // 레벨은 장착한 것만, 2 이상만 (1 은 기본이라 안 적음 — 예전 기록과 모양이 같게)
   const lvs = (src: Record<string, number> | undefined, ids: string[], max: number) => {
@@ -277,7 +311,23 @@ export function cleanLoadout(lo: Loadout | null | undefined, unitIds?: Set<strin
     glitch: clampInt(lo?.glitch, 0, GLITCH_MAX),
     resLv: lvs(lo?.resLv, res, RES_MAX_LV),
     relicLv: lvs(lo?.relicLv, relics, RELIC_MAX_LV),
+    bench: Number.isInteger(lo?.bench) ? clampInt(lo?.bench, BENCH_BASE, BENCH_MAX) : BENCH_BASE,
+    fslots,
+    own: Object.fromEntries(
+      Object.entries(lo?.own ?? {})
+        .filter(([k]) => !!RELIC[k])
+        .map(([k, v]) => [k, clampInt(v, 1, RELIC_MAX_LV)])
+        .sort((a, b) => (a[0] < b[0] ? -1 : 1))
+    ),
+    trans: uniq(lo?.trans, (s) => (TRANS_IDS as readonly string[]).includes(s), TRANS_IDS.length).sort(),
   };
+}
+
+/** 유물 보유 효과 합 (%) */
+export function relicPassive(own: Record<string, number> | undefined): number {
+  let p = 0;
+  for (const [id, lv] of Object.entries(own ?? {})) if (RELIC[id]) p += RELIC_PASSIVE[RELIC[id].tier] * lv;
+  return Math.round(p * 10) / 10;
 }
 
 export function modsOf(lo: Loadout | null | undefined): Mods {
@@ -323,6 +373,9 @@ export function modsOf(lo: Loadout | null | undefined): Mods {
     relics: L.relics,
     resLv: L.resLv,
     relicLv: L.relicLv,
+    bench: L.bench,
+    trans: L.trans,
+    relicDmg: 1 + relicPassive(L.own) / 100,
   };
 }
 
@@ -346,7 +399,7 @@ export const LV_COST: { cards: number; pieces: number }[] = [
  * 등급별 레벨업 조각 배수 — 같은 +3% 라도 신화 · 히든은 원래 피해가 훨씬 커서 실제로 늘어나는 피해가 큼 → 더 비싸게.
  * (카드는 같은 수: 높은 등급은 판에서 얻기 어려워 카드 모으는 데서 이미 오래 걸림)
  */
-export const LV_GRADE_MULT = [0.5, 0.7, 1, 1.4, 2, 2];
+export const LV_GRADE_MULT = [0.5, 0.7, 1, 1.4, 2, 2, 3];
 export function lvCost(grade: number, lv: number): { cards: number; pieces: number } {
   const c = LV_COST[Math.max(0, Math.min(UNIT_MAX_LV - 1, lv))];
   return { cards: c.cards, pieces: Math.round((c.pieces * (LV_GRADE_MULT[grade] ?? 1)) / 10) * 10 };
@@ -399,12 +452,12 @@ export function planUpAll(
 }
 
 /** 오염 단계를 처음 클리어하면 (단계마다 한 번) */
-export const glitchFirstClear = (g: number) => ({ cores: 3 + g, chest: 1 + Math.floor(g / 10) });
+export const glitchFirstClear = (g: number) => ({ cores: 3 + g, relicBox: 1 + Math.floor(g / 10) });
 /** 하루 첫 판 (검증된 판) 픽셀 조각 배수 */
 export const FIRST_RUN_MULT = 2;
 /** 처음 얻은 유닛 (도감 수집) 보상 — 에픽부터 */
 export function collectReward(grade: number): { pieces: number; cores?: number } | null {
-  return grade >= 5 ? { pieces: 500, cores: 5 } : grade === 4 ? { pieces: 300, cores: 3 } : grade === 3 ? { pieces: 100 } : grade === 2 ? { pieces: 40 } : null;
+  return grade >= 6 ? { pieces: 800, cores: 8 } : grade >= 5 ? { pieces: 500, cores: 5 } : grade === 4 ? { pieces: 300, cores: 3 } : grade === 3 ? { pieces: 100 } : grade === 2 ? { pieces: 40 } : null;
 }
 
 /* ───────────────────────── 판 보상 (서버가 검증 뒤 계산) ───────────────────────── */
@@ -464,25 +517,25 @@ export const GLITCH_DEEP_FROM = 10;
 export const glitchUnlocks = (glitch: number, r: { win: boolean; wave: number }) =>
   r.win || (glitch < GLITCH_DEEP_FROM && r.wave >= GLITCH_UNLOCK_WAVE);
 
-/* ───────────────────────── 상자 ───────────────────────── */
+/* ───────────────────────── 상점 상자 (상품별로 따로) ───────────────────────── */
 
-/** 상자: 조각으로 사서 열면 유물(안 가진 것 우선) 또는 카드 묶음 */
-export const CHEST = {
-  /** 조각 값 */
-  price: 400,
-  /** 유물이 나올 확률 (안 가진 유물이 있을 때) */
-  relicChance: 0.35,
-  /** 유물 희귀도 확률 */
-  tierOdds: [0.6, 0.3, 0.1],
-  /** 카드 묶음: 무작위 유닛 이만큼 */
-  cards: 12,
-  /** 이미 가진 유물이 또 나오면 코어로 */
-  dupCores: 3,
+/**
+ * 카드 상자: 무작위 유닛 카드 (낮은 등급이 잘 나옴) — 픽셀 조각
+ * 유물 상자: 유물 하나 (희귀도 확률) — 가진 유물이면 그 유물 조각 +1 (유물 강화 재료) — 코어 또는 GP(주 3번, 좋은 확률)
+ * 초월 소환: 초월 셋 중 하나 — 처음이면 해금(판에서 조합식이 열림), 이미 있으면 그 유닛 카드 — 코어 또는 GP(주 2번)
+ */
+export const BOX = {
+  card: { pieces: 300, n: 12 },
+  relic: { cores: 12, tierOdds: [0.6, 0.3, 0.1], gp: 1500, gpPerWeek: 3, gpOdds: [0.45, 0.4, 0.15] },
+  trans: { cores: 60, gp: 3000, gpPerWeek: 2, dupCards: 15 },
 } as const;
-/** 코어로 원하는 유물 바로 사기 */
+/** 코어로 원하는 유물 바로 사기 (일반 · 희귀 · 전설) */
 export const RELIC_CORE_PRICE = [8, 15, 30] as const;
-/** 유물 lv → lv+1 글리치 코어 (일반 8 · 희귀 15 · 전설 30 × 지금 레벨) */
-export const relicUpCost = (id: string, lv: number) => (RELIC_CORE_PRICE[RELIC[id]?.tier ?? 0] ?? 0) * lv;
+/** 유물 lv → lv+1: 그 유물 조각(같은 유물이 또 나오면 1개) lv 개 + 코어 (희귀도 값 × lv ÷ 2) */
+export const relicUpCost = (id: string, lv: number) => ({
+  shards: lv,
+  cores: Math.ceil(((RELIC_CORE_PRICE[RELIC[id]?.tier ?? 0] ?? 0) * lv) / 2),
+});
 
 /* ───────────────────────── 일일 · 주간 미션 ───────────────────────── */
 
@@ -557,7 +610,9 @@ export function weeklyRelics(week: number): string[] {
 export interface PassReward {
   pieces?: number;
   cores?: number;
-  chest?: number;
+  /** 카드 상자 · 유물 상자 */
+  cardBox?: number;
+  relicBox?: number;
   gp?: number;
   /** 꾸미기 id (inv.defense) */
   item?: string;
@@ -572,7 +627,7 @@ export const PASS: PassTier[] = Array.from({ length: 30 }, (_, i): PassTier => {
   const t = i + 1;
   const xp = 100 * t + 10 * t * t;
   const free: PassReward =
-    t % 10 === 0 ? { cores: 5, gp: 300 } : t % 5 === 0 ? { chest: 1, gp: 100 } : t % 2 === 0 ? { pieces: 150 } : { pieces: 100 };
+    t % 10 === 0 ? { cores: 5, gp: 300, relicBox: 1 } : t % 5 === 0 ? { cardBox: 2, gp: 100 } : t % 2 === 0 ? { pieces: 150 } : { pieces: 100 };
   const premium: PassReward =
     t === 30
       ? { item: "theme.gold", cores: 10 }
@@ -581,8 +636,8 @@ export const PASS: PassTier[] = Array.from({ length: 30 }, (_, i): PassTier => {
         : t === 10
           ? { item: "theme.ice", cores: 5 }
           : t % 3 === 0
-            ? { chest: 1 }
-            : { pieces: 200 };
+            ? { relicBox: 1 }
+            : { pieces: 200, cardBox: 1 };
   return { xp, free, premium };
 });
 /** 프리미엄 줄 값 (GP) */
@@ -590,11 +645,9 @@ export const PASS_PREMIUM_GP = 5000;
 
 /**
  * GP 상점 (주마다 횟수 제한 — GP 가 많은 사람이 한 번에 다 사서 성장을 건너뛰지 못하게)
- *  chest: 유물 확정 상자 (안 가진 유물 우선, 다 가졌으면 코어)
- *  cards: 고른 유닛 카드 묶음
+ *  cards: 고른 유닛 카드 묶음 (유물 · 초월 GP 는 BOX 에)
  */
 export const GP_SHOP = {
-  chest: { gp: 1500, perWeek: 3, tierOdds: [0.45, 0.4, 0.15], allOwnedCores: 10 },
   cards: { gp: 600, n: 10, perWeek: 5 },
 } as const;
 

@@ -10,6 +10,7 @@ import {
   CELLS,
   STACK,
   canRecipe,
+  recipeOpen,
   counts,
   hasEmpty,
   luckCost,
@@ -21,6 +22,8 @@ import {
   type Cmd,
   type Ev,
   type Fx,
+  RIFT_TIERS,
+  type RiftTier,
 } from "@/lib/defense/sim";
 import {
   FACTIONS,
@@ -29,6 +32,8 @@ import {
   GRADE_COLOR,
   GRADE_NAME,
   RECIPES,
+  needMatch,
+  needName,
   SIZE_MULT,
   UNIT,
   poolOf,
@@ -38,7 +43,7 @@ import {
 import type { Controller } from "./controller";
 import { RelicIcon } from "./Hub";
 import { RELIC, RES, relicDesc, resDesc } from "@/lib/defense/progress";
-import { FH2, FW, cellAt, draw, newView, pushFx } from "./render";
+import { BENCH_W, CW, FH2, cellAt, draw, newView, pushFx } from "./render";
 import {
   Bar,
   Btn,
@@ -64,7 +69,7 @@ import Codex, { foundHidden, markFound } from "./Codex";
  *  왼쪽: 필드(캔버스) — 칸을 누르면 정보, 끌어서 자리 바꾸기 (같은 유닛이면 한 칸으로 모음)
  *  아래: 고른 유닛 정보 · 합성 · 판매 / 안 골랐으면 DPS 측정
  *  오른쪽: 소환 · 강화 · 도박 · 균열 · 조합식 · 미션
- * 단축키(PC): Q 소환 · W 합성 · E 판매 · 1 2 3 세력 강화 · 4 확률 강화 · R 조합식 · Space 일시정지 · F 배속 · Esc 선택 해제
+ * 단축키(PC): Q 소환 · W 합성 · E 판매 · 1 2 3 세력 강화 · 4 히든 강화 · 5 확률 강화 · R 조합식 · Space 일시정지 · F 배속 · Esc 선택 해제
  */
 
 const FIELD = { x: 12, y: 56 };
@@ -211,7 +216,7 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry }
         sfx(e.ok ? "mission" : "deny");
         toast(
           e.ok
-            ? `균열을 닫았어요! 💎+${[0, B.rift.C.stones, B.rift.B.stones, B.rift.A.stones][e.tier]}`
+            ? `균열을 닫았어요! 💎+${B.rift[RIFT_TIERS[e.tier - 1]].stones}`
             : "균열이 사라졌어요",
           e.ok ? "good" : "bad"
         );
@@ -261,7 +266,7 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry }
         cv.width = W;
         cv.height = H;
       }
-      ctx.setTransform(W / FW, 0, 0, H / FH2, 0, 0);
+      ctx.setTransform(W / CW, 0, 0, H / FH2, 0, 0);
       draw(ctx, ctrl.board, v, { range: true });
       if (now - lastHud > 100) {
         lastHud = now;
@@ -310,7 +315,7 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry }
   const press = useRef<{ from: number; x: number; y: number; moved: boolean } | null>(null);
   const toField = (e: { clientX: number; clientY: number }) => {
     const r = canvasRef.current!.getBoundingClientRect();
-    return { x: ((e.clientX - r.left) * FW) / r.width, y: ((e.clientY - r.top) * FH2) / r.height };
+    return { x: ((e.clientX - r.left) * CW) / r.width, y: ((e.clientY - r.top) * FH2) / r.height };
   };
   const onDown = (e: React.PointerEvent) => {
     const p = toField(e);
@@ -387,7 +392,8 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry }
       else if (k === "e" && sel >= 0) sellSel();
       else if (k === "m" && sel >= 0) setMoveArm((x) => !x);
       else if (k === "1" || k === "2" || k === "3") run({ t: "up", k: FACTIONS[Number(k) - 1] });
-      else if (k === "4") run({ t: "luck" });
+      else if (k === "4") run({ t: "up", k: "hidden" });
+      else if (k === "5") run({ t: "luck" });
       else if (k === "r") setModal((m) => (m === "recipe" ? null : "recipe"));
       else if (k === " " && !multi) {
         e.preventDefault();
@@ -575,7 +581,7 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry }
           {
             left: FIELD.x,
             top: FIELD.y,
-            width: FW,
+            width: CW,
             height: FH2,
             "--b": "#0a0816",
             "--f": "#0e0b1e",
@@ -598,7 +604,7 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry }
         />
         <div className="dfn-scan pointer-events-none absolute inset-0 opacity-40" />
         {/* 딜량 창 (오른쪽 위, 켜고 끄기 — 전체화면에서도 보이게 필드 위에 작게) */}
-        <div className="absolute top-1.5 right-1.5 z-10">
+        <div className="absolute top-1.5 z-10" style={{ right: BENCH_W + 6 }}>
           <button
             type="button"
             onClick={() => {
@@ -696,9 +702,9 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry }
         style={
           {
             left: 12,
-            top: 516,
-            width: FW,
-            height: 50,
+            top: FIELD.y + FH2 + 6,
+            width: CW,
+            height: 576 - 10 - (FIELD.y + FH2 + 6),
             "--b": selDef ? FACTION_COLOR[selDef.faction] : "#3d3468",
           } as React.CSSProperties
         }
@@ -774,42 +780,24 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry }
       {/* ── 오른쪽: 조작 ── */}
       <div
         className="absolute flex flex-col gap-[10px]"
-        style={{ left: 636, top: 56, width: 376, height: 510 }}
+        style={{ left: FIELD.x + CW + 10, top: 56, width: 1012 - (FIELD.x + CW + 10), height: 510 }}
       >
-        <div className="flex h-[34px] gap-2">
-          {b.tickets.length > 0 ? (
-            <Btn
-              tone="gold"
-              onClick={() => setModal("pick")}
-              className="dfn-pulse flex-1 text-[13px] font-bold"
-            >
-              <Icon n="ticket" size={14} /> 골라 뽑기{" "}
-              {[...new Set(b.tickets)]
-                .sort((x, y) => y - x)
-                .map((g) => `${GRADE_NAME[g]}${b.tickets.filter((t) => t === g).length > 1 ? `×${b.tickets.filter((t) => t === g).length}` : ""}`)
-                .join(" · ")}
+        <div className="flex h-[30px] gap-1.5">
+          {b.tickets.length > 0 && (
+            <Btn tone="gold" onClick={() => setModal("pick")} className="dfn-pulse flex-1 text-[12px] font-bold" title="보스 확정 뽑기권">
+              <Icon n="ticket" size={13} /> 뽑기권 {b.tickets.length}
             </Btn>
-          ) : null}
+          )}
           {!b.patch && b.wave < PATCH_DEADLINE ? (
-            <Btn
-              tone="cyan"
-              onClick={() => setModal("patch")}
-              className="dfn-pulse flex-1 text-[13px] font-bold"
-            >
-              <Icon n="gear" size={14} /> 패치 고르기{" "}
-              <span className="font-normal opacity-75">({PATCH_DEADLINE}웨이브 전)</span>
+            <Btn tone="cyan" onClick={() => setModal("patch")} className="dfn-pulse relative flex-1 text-[12px] font-bold" title={`${PATCH_DEADLINE}웨이브 전까지 하나 (안 고르면 연합)`}>
+              <Icon n="gear" size={13} /> 패치 고르기
+              <Badge>~{PATCH_DEADLINE}W</Badge>
             </Btn>
           ) : (
-            !b.tickets.length && (
-              <div
-                className="px-inset flex flex-1 items-center gap-1.5 px-3 text-[12px]"
-                title={patch?.desc}
-              >
-                <Icon n="gear" size={13} />
-                <b>{patch?.name ?? "패치 없음"}</b>
-                <span className="truncate text-[var(--dim)]">{patch?.desc}</span>
-              </div>
-            )
+            <div className="px-inset flex min-w-0 flex-1 items-center gap-1 px-2 text-[12px]" title={patch?.desc}>
+              <Icon n="gear" size={12} />
+              <b className="truncate">{patch?.name ?? "패치 없음"}</b>
+            </div>
           )}
         </div>
 
@@ -817,66 +805,62 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry }
           tone="main"
           onClick={() => run({ t: "summon" })}
           disabled={!hasEmpty(b) || (b.free <= 0 && b.gold < sCost)}
-          className="h-[70px]"
+          className="h-[56px]"
           hot="Q"
           silent
         >
-          <span className={`${TITLE} px-shadow block text-[24px] leading-none`}>
-            소환{b.free > 0 ? ` · 무료 ${b.free}` : ""}
-          </span>
-          <span className="mt-1.5 flex items-center justify-center gap-1 text-[12px]">
-            {b.free > 0 ? (
-              "무료"
-            ) : (
-              <>
-                <Icon n="coin" size={12} />
-                {sCost}
-              </>
-            )}
+          <span className="flex items-center justify-center gap-2 leading-none">
+            <span className={`${TITLE} px-shadow text-[18px]`}>소환{b.free > 0 ? ` · 무료 ${b.free}` : ""}</span>
             <span className="opacity-60">|</span>
+            <b className="flex items-center gap-0.5 text-[13px]">
+              {b.free > 0 ? "무료" : (
+                <>
+                  <Icon n="coin" size={12} />
+                  {sCost}
+                </>
+              )}
+            </b>
+            {!hasEmpty(b) && <span className="text-[12px] text-[#ffd6f4]">꽉 참</span>}
+          </span>
+          <span className="mt-1 flex items-center justify-center gap-1.5 text-[12px]">
             {odds.map((p, i) =>
               p > 0 ? (
-                <span
-                  key={i}
-                  style={{ color: i >= 2 ? GRADE_COLOR[i] : undefined }}
-                  className={i >= 2 ? "font-bold drop-shadow-[1px_1px_0_#000]" : "opacity-90"}
-                >
-                  {GRADE_NAME[i]} {p}%
+                <span key={i} style={{ color: i >= 2 ? GRADE_COLOR[i] : undefined }} className={i >= 2 ? "font-bold drop-shadow-[1px_1px_0_#000]" : "opacity-90"}>
+                  {"NREL"[i]} {p}%
                 </span>
               ) : null
             )}
-            {!hasEmpty(b) && <span className="text-[#ffd6f4]">· 빈 칸 없음</span>}
           </span>
         </Btn>
 
-        <section className="px-box px-2.5 pt-1.5 pb-2.5">
-          <div className="mb-1.5 flex items-center text-[12px] text-[var(--mute)]">
-            세력 강화 <span className="ml-1 text-[var(--dim)]">피해 +{B.up.perLv * 100}%/Lv</span>
+        <section className="px-box px-2 pt-1 pb-2">
+          <div className="mb-1 flex items-center text-[12px] text-[var(--mute)]">
+            강화 <span className="ml-1 text-[var(--dim)]">피해 +{B.up.perLv * 100}%/Lv · 히든은 고유 효과</span>
           </div>
-          <div className="grid grid-cols-3 gap-2">
-            {FACTIONS.map((f, i) => {
+          <div className="grid grid-cols-2 gap-1.5">
+            {UP_KEYS.map((f, i) => {
               const c = upCost(b, f);
               return (
                 <Btn
                   key={f}
-                  tone={f}
+                  tone={f === "hidden" ? "cyan" : f}
                   onClick={() => run({ t: "up", k: f })}
                   disabled={b.gold < c || b.up[f] >= B.up.max}
-                  className="h-[52px] text-left"
+                  className="h-[40px] text-left"
                   hot={String(i + 1)}
                   silent
                 >
-                  <span className="flex items-center gap-1.5 px-2 text-[13px] font-bold">
-                    <FactionIcon f={f} size={14} color="#fff" />
+                  <span className="flex items-center gap-1 px-1.5 text-[12px] font-bold">
+                    <FactionIcon f={f} size={12} color="#fff" />
                     {FACTION_NAME[f]}
+                    <span className="ml-auto pr-3 font-normal">Lv{b.up[f]}</span>
                   </span>
-                  <span className="mt-0.5 flex items-center gap-1 px-2 text-[12px]">
-                    <b className="text-white">Lv{b.up[f]}</b>
-                    <span className="opacity-70">+{Math.round(b.up[f] * B.up.perLv * 100)}%</span>
-                    <span className="ml-auto flex items-center gap-0.5 font-bold text-[var(--gold)]">
+                  <span className="flex items-center gap-0.5 px-1.5 text-[12px]">
+                    <b className="text-[var(--gold)]">
                       <Icon n="coin" size={10} />
                       {c}
-                    </span>
+                    </b>
+                    <span className="ml-auto opacity-80">{f === "hidden" ? `효과 +${Math.round(b.up[f] * B.up.hiddenFx * 100)}%` : `+${Math.round(b.up[f] * B.up.perLv * 100)}%`}</span>
                   </span>
                 </Btn>
               );
@@ -885,88 +869,84 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry }
           <Btn
             onClick={() => run({ t: "luck" })}
             disabled={!Number.isFinite(luckCost(b)) || b.gold < luckCost(b)}
-            className="mt-2 h-[32px] w-full text-[12px]"
-            hot="4"
+            className="mt-1.5 h-[40px] w-full text-[12px]"
+            hot="5"
             silent
           >
-            <Icon n="clover" size={13} /> 소환 확률 Lv{b.luck}
-            {Number.isFinite(luckCost(b)) ? (
-              <>
-                {" "}
-                → 에픽 {B.odds[b.luck + 1][2]}% · 레전드 {B.odds[b.luck + 1][3]}% ·{" "}
-                <b className="text-[var(--gold)]">
-                  <Icon n="coin" size={11} /> {luckCost(b)}
+            <span className="flex items-center justify-center gap-1">
+              <Icon n="clover" size={12} /> 소환 확률 Lv{b.luck}
+              {Number.isFinite(luckCost(b)) ? (
+                <b className="ml-1 text-[var(--gold)]">
+                  <Icon n="coin" size={10} /> {luckCost(b)}
                 </b>
-              </>
-            ) : (
-              " (최대)"
+              ) : (
+                " MAX"
+              )}
+            </span>
+            {Number.isFinite(luckCost(b)) && (
+              <span className="block opacity-80">
+                → <span style={{ color: GRADE_COLOR[2] }}>E {B.odds[b.luck + 1][2]}%</span> · <span style={{ color: GRADE_COLOR[3] }}>L {B.odds[b.luck + 1][3]}%</span>
+              </span>
             )}
           </Btn>
         </section>
 
-        <section className="px-box px-2.5 pt-1.5 pb-2.5">
-          <div className="mb-1.5 flex items-center text-[12px] text-[var(--mute)]">
+        <section className="px-box px-2 pt-1 pb-2">
+          <div className="mb-1 flex items-center text-[12px] text-[var(--mute)]">
             <Icon n="dice" size={11} className="mr-1" /> 행운석 도박
           </div>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-2 gap-1.5">
             {(["E", "L"] as const).map((g) => {
               const gm = B.gamble[g];
               const p = Math.round((gm.p + (b.patch === "gambler" ? 0.1 : 0) + b.mods.gamble) * 100);
               const locked = b.wave < gm.from;
-              if (locked)
-                return (
-                  <Btn key={g} disabled className="h-[36px] text-[12px]" title={`초반엔 막혀 있어요 — ${gm.from}웨이브부터`}>
-                    <Icon n="lock" size={10} /> {g === "E" ? "에픽" : "레전드"} {gm.from}W부터
-                  </Btn>
-                );
               return (
                 <Btn
                   key={g}
                   onClick={() => run({ t: "gamble", g })}
-                  disabled={b.stones < gm.cost || !hasEmpty(b)}
-                  className="h-[36px] text-[12px]"
+                  disabled={locked || b.stones < gm.cost || !hasEmpty(b)}
+                  className="relative h-[32px] text-[12px]"
                   silent
+                  title={locked ? `${gm.from}웨이브부터` : ""}
                 >
-                  <b
-                    style={{ color: GRADE_COLOR[g === "E" ? 2 : 3] }}
-                    className="drop-shadow-[1px_1px_0_#000]"
-                  >
+                  <b style={{ color: GRADE_COLOR[g === "E" ? 2 : 3] }} className="drop-shadow-[1px_1px_0_#000]">
                     {g === "E" ? "에픽" : "레전드"}
                   </b>{" "}
-                  <Icon n="gem" size={11} />
-                  {gm.cost} · {p}%
+                  <Icon n="gem" size={10} />
+                  {gm.cost} · {p}%{locked && <Badge>{gm.from}W+</Badge>}
                 </Btn>
               );
             })}
           </div>
-          <div className="mt-2 mb-1.5 flex items-center text-[12px] text-[var(--mute)]">
-            <Icon n="rift" size={11} className="mr-1" /> 글리치 균열
-            <span className="ml-1 text-[var(--dim)]">미니 보스 · {B.rift.sec}초 안에</span>
-            {b.riftCd > 0 && (
-              <span className="ml-auto text-[var(--pink)]">{Math.ceil(b.riftCd / TPS)}s</span>
-            )}
+          <div className="mt-1.5 mb-1 flex items-center text-[12px] text-[var(--mute)]">
+            <Icon n="rift" size={11} className="mr-1" /> 균열
+            <span className="ml-1 text-[var(--dim)]">{B.rift.sec}초 안에</span>
+            {b.riftCd > 0 && <span className="ml-auto text-[var(--pink)]">{Math.ceil(b.riftCd / TPS)}s</span>}
           </div>
-          <div className="grid grid-cols-3 gap-2">
-            {(["C", "B", "A"] as const).map((t) => {
+          <div className="grid grid-cols-2 gap-1.5">
+            {RIFT_TIERS.map((t) => {
               const risk = riftRisk(b, t, dpsNow);
+              const lockW = t === "S" ? B.rift.S.from : B.rift.from;
+              const locked = b.wave < lockW;
               return (
                 <Btn
                   key={t}
                   onClick={() => run({ t: "rift", tier: t })}
-                  disabled={b.riftCd > 0 || b.wave < B.rift.from || b.enemies.some((e) => e.rift > 0)}
-                  className="relative h-[36px] text-[12px]"
+                  disabled={locked || b.riftCd > 0 || b.enemies.some((e) => e.rift > 0)}
+                  className="relative h-[32px] text-[12px]"
                   silent
                   title={risk ? `지금 화력으로 ${B.rift.sec}초 안에 잡기: ${risk.label} (최근 DPS 기준 어림)` : ""}
                 >
-                  <b className="text-[var(--pink)]">{t}급</b> <Icon n="gem" size={10} />
+                  <b className={t === "S" ? "text-[var(--gold)]" : "text-[var(--pink)]"}>{t}</b> <Icon n="gem" size={10} />
                   {B.rift[t].stones} +{B.rift[t].gold}
-                  {risk && b.wave >= B.rift.from && (
-                    <span
-                      className="absolute -top-2 right-0.5 px-1 text-[10px] leading-[13px] font-bold text-[#0a0816] shadow-[0_0_0_1px_#0a0816]"
-                      style={{ background: risk.color }}
-                    >
-                      {risk.label}
-                    </span>
+                  {locked ? (
+                    <Badge>{lockW}W+</Badge>
+                  ) : (
+                    risk && (
+                      <span className="absolute -top-2 right-0.5 px-1 text-[10px] leading-[13px] font-bold text-[#0a0816] shadow-[0_0_0_1px_#0a0816]" style={{ background: risk.color }}>
+                        {risk.label}
+                      </span>
+                    )
                   )}
                 </Btn>
               );
@@ -974,20 +954,20 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry }
           </div>
         </section>
 
-        <div className="mt-auto grid grid-cols-3 gap-2">
+        <div className="mt-auto grid grid-cols-3 gap-1.5">
           <Btn
             tone={recipesReady ? "gold" : "ghost"}
             onClick={() => setModal("recipe")}
-            className={`h-[40px] text-[13px] font-bold ${recipesReady ? "dfn-pulse" : ""}`}
+            className={`h-[34px] text-[12px] font-bold ${recipesReady ? "dfn-pulse" : ""}`}
             hot="R"
           >
-            <Icon n="flask" size={13} /> 조합식{recipesReady ? ` ${recipesReady}` : ""}
+            <Icon n="flask" size={12} /> 조합{recipesReady ? ` ${recipesReady}` : ""}
           </Btn>
-          <Btn onClick={() => setModal("mission")} className="h-[40px] text-[13px]">
-            <Icon n="star" size={13} /> 미션 {b.missions.length}/{MISSIONS.length}
+          <Btn onClick={() => setModal("mission")} className="h-[34px] text-[12px]">
+            <Icon n="star" size={12} /> 미션 {b.missions.length}/{MISSIONS.length}
           </Btn>
-          <Btn onClick={() => setModal("codex")} className="h-[40px] text-[13px]">
-            <Icon n="book" size={13} /> 도감
+          <Btn onClick={() => setModal("codex")} className="h-[34px] text-[12px]">
+            <Icon n="book" size={12} /> 도감
           </Btn>
         </div>
       </div>
@@ -1105,7 +1085,7 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry }
               <p>
                 <K>Q</K> 소환 <K>W</K> 합성 <K>E</K> 판매 <K>1</K>
                 <K>2</K>
-                <K>3</K> 세력 강화 <K>4</K> 확률 강화 <K>R</K> 조합식 <K>Space</K> 일시정지 <K>F</K>{" "}
+                <K>3</K> 세력 강화 <K>4</K> 히든 강화 <K>5</K> 확률 강화 <K>R</K> 조합식 <K>Space</K> 일시정지 <K>F</K>{" "}
                 배속 <K>Esc</K> 선택 해제
               </p>
               <p className="mt-1">
@@ -1217,6 +1197,16 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry }
   );
 }
 
+const UP_KEYS = ["knight", "mech", "arcane", "hidden"] as const;
+/** 버튼 오른쪽 위 작은 표시 (5W+ 같은 잠김 · 기한) */
+function Badge({ children }: { children: ReactNode }) {
+  return (
+    <span className="absolute -top-2 right-0.5 bg-[#2a2350] px-1 text-[10px] leading-[13px] font-bold text-[var(--mute)] shadow-[0_0_0_1px_#0a0816]">
+      {children}
+    </span>
+  );
+}
+
 function K({ children }: { children: ReactNode }) {
   return <span className="px-key mx-[2px] inline-block !text-[12px] !text-white">{children}</span>;
 }
@@ -1306,12 +1296,29 @@ function RecipeModal({ b, run, onClose }: { b: Board; run: (c: Cmd) => boolean; 
     } catch {}
   };
   const ORDER: Faction[] = ["knight", "mech", "arcane", "hidden"];
-  const list = [...RECIPES]
-    .filter((r) => tab === "all" || UNIT[r.id].faction === tab)
-    .sort((x, y) => ORDER.indexOf(UNIT[x.id].faction) - ORDER.indexOf(UNIT[y.id].faction));
+  // 재료가 얼마나 모였나 (0~1) — 만들 수 있는 것 → 많이 모인 것 순으로 위에
+  const haveOf = (n: string) => (n[0] === "@" ? Object.entries(have).reduce((a, [id, k]) => a + (needMatch(n, id) ? k : 0), 0) : (have[n] ?? 0));
+  const progress = (r: (typeof RECIPES)[number]) => {
+    const need: Record<string, number> = {};
+    for (const n of r.needs) need[n] = (need[n] ?? 0) + 1;
+    const e = Object.entries(need);
+    return e.reduce((a, [n, k]) => a + Math.min(1, haveOf(n) / k), 0) / e.length;
+  };
+  const okNow = (id: string) => canRecipe(b, id);
+  const base = [...RECIPES].filter((r) => tab === "all" || UNIT[r.id].faction === tab);
+  const readyList = base.filter((r) => okNow(r.id)).sort((x, y) => UNIT[y.id].grade - UNIT[x.id].grade);
+  const list = [
+    ...readyList,
+    ...base
+      .filter((r) => !okNow(r.id))
+      .sort(
+        (x, y) =>
+          (tab === "all" ? ORDER.indexOf(UNIT[x.id].faction) - ORDER.indexOf(UNIT[y.id].faction) : 0) || progress(y) - progress(x)
+      ),
+  ];
   const ready = (f: Faction) => RECIPES.some((r) => UNIT[r.id].faction === f && canRecipe(b, r.id));
   return (
-    <Modal title="조합식 — 신화 · 히든" onClose={onClose} wide accent="#ffd23f">
+    <Modal title="조합식 — 신화 · 초월 · 히든" onClose={onClose} wide accent="#ffd23f">
       <div className="mb-2.5 flex gap-1.5">
         {(["all", ...ORDER] as const).map((t) => (
           <Btn
@@ -1328,8 +1335,15 @@ function RecipeModal({ b, run, onClose }: { b: Board; run: (c: Cmd) => boolean; 
       </div>
       <div className="flex flex-col gap-2.5">
         {list.map((r, i) => {
-          const head =
-            tab === "all" && (i === 0 || UNIT[list[i - 1].id].faction !== UNIT[r.id].faction) ? (
+          const isReady = i < readyList.length;
+          const head = isReady ? (
+            i === 0 ? (
+              <p key="h-ready" className="flex items-center gap-1 text-[13px] font-bold text-[var(--gold)]">
+                <Icon n="star" size={12} /> 지금 만들 수 있어요
+              </p>
+            ) : null
+          ) : (tab === "all" || i === readyList.length) &&
+            (i === readyList.length || UNIT[list[i - 1].id].faction !== UNIT[r.id].faction) ? (
               <p
                 key={`h-${r.id}`}
                 className="mt-1 flex items-center gap-1 text-[13px] font-bold"
@@ -1339,7 +1353,8 @@ function RecipeModal({ b, run, onClose }: { b: Board; run: (c: Cmd) => boolean; 
               </p>
             ) : null;
           const known = !r.hidden || foundHidden(r.id);
-          const ok = canRecipe(b, r.id);
+          const ok = isReady;
+          const open = recipeOpen(b, r.id);
           const d = UNIT[r.id];
           const need: Record<string, number> = {};
           for (const n of r.needs) need[n] = (need[n] ?? 0) + 1;
@@ -1374,6 +1389,7 @@ function RecipeModal({ b, run, onClose }: { b: Board; run: (c: Cmd) => boolean; 
                 <p className="mt-0.5 text-[12px] leading-tight text-[var(--mute)]">
                   {known ? d.desc : "숨겨진 조합식 — 어떤 유닛들이 모이면…?"}
                 </p>
+                {!open && <p className="mt-0.5 text-[12px] text-[#fff6d6]">정비소 「초월 소환」으로 해금해야 만들 수 있어요</p>}
               </div>
               <div className="flex flex-1 flex-wrap items-center gap-1.5">
                 {Object.entries(need).map(([id, n]) =>
@@ -1382,9 +1398,9 @@ function RecipeModal({ b, run, onClose }: { b: Board; run: (c: Cmd) => boolean; 
                       key={id}
                       className="flex items-center gap-1 bg-[#0a0816]/60 px-1.5 py-1 text-[12px]"
                     >
-                      <UnitIcon id={id} size={22} dim={(have[id] ?? 0) < n} />
-                      <span style={{ color: (have[id] ?? 0) >= n ? "#6dff8f" : "#ff9ab0" }}>
-                        {UNIT[id].name} {have[id] ?? 0}/{n}
+                      {id[0] === "@" ? <Icon n="star" size={18} /> : <UnitIcon id={id} size={22} dim={haveOf(id) < n} />}
+                      <span style={{ color: haveOf(id) >= n ? "#6dff8f" : "#ff9ab0" }}>
+                        {needName(id)} {Math.min(haveOf(id), 99)}/{n}
                       </span>
                     </span>
                   ) : (
@@ -1392,7 +1408,7 @@ function RecipeModal({ b, run, onClose }: { b: Board; run: (c: Cmd) => boolean; 
                       key={id}
                       className="bg-[#0a0816]/60 px-2 py-1 text-[12px] text-[var(--dim)]"
                     >
-                      {GRADE_NAME[UNIT[id].grade]} ?
+                      {id[0] === "@" ? GRADE_NAME[Number(id.slice(1))] : GRADE_NAME[UNIT[id].grade]} ?
                     </span>
                   )
                 )}
@@ -1485,7 +1501,7 @@ function DpsOverlay({ b, dps }: { b: Board; dps: number }) {
   const rows = Object.entries(b.dealt).sort((x, y) => y[1] - x[1]);
   const total = rows.reduce((a, [, v]) => a + v, 0) || 1;
   return (
-    <div className="pointer-events-none absolute top-1 right-[46px] z-10 w-[184px] bg-[#0a0816]/80 px-1.5 py-0.5 shadow-[0_0_0_2px_#2a2350]">
+    <div className="pointer-events-none absolute top-1 right-[110px] z-10 w-[184px] bg-[#0a0816]/80 px-1.5 py-0.5 shadow-[0_0_0_2px_#2a2350]">
       <p className="flex justify-between text-[12px] leading-[15px]">
         <span className="text-[var(--mute)]">최근 DPS</span>
         <b className="text-[var(--cyan)]">{fmtNum(dps)}</b>
@@ -1514,7 +1530,7 @@ function recentDps(q: { t: number; v: number }[]) {
 }
 
 /** 균열 위험도 어림: 균열 적 체력 ÷ 제한 시간 vs 최근 DPS (보스 · 졸개도 같이 치니 넉넉히 1.6배로 봄) */
-function riftRisk(b: Board, t: "C" | "B" | "A", dps: number) {
+function riftRisk(b: Board, t: RiftTier, dps: number) {
   if (!dps) return null;
   const hp = hpOf(Math.max(1, b.wave)) * B.rift[t].hp * b.mods.glitch.hp;
   const need = (hp / B.rift.sec) * 1.6;

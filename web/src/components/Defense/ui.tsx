@@ -299,7 +299,8 @@ export function FsButton({ className = "", h = 34 }: { className?: string; h?: n
   );
 }
 
-export function SoundButton({ className = "" }: { className?: string }) {
+/** up: 화면 아래쪽에 있는 버튼이면 위로 열기 (메뉴 왼쪽 아래) */
+export function SoundButton({ className = "", up = false }: { className?: string; up?: boolean }) {
   const p = useAudioPrefs();
   const [open, setOpen] = useState(false);
   const icon = <Icon n={p.mute ? "mute" : "speaker"} size={16} />;
@@ -314,7 +315,7 @@ export function SoundButton({ className = "" }: { className?: string }) {
       </Btn>
       {open && (
         <div
-          className="px-win absolute top-[44px] right-0 z-50 w-[240px] p-3 text-[13px]"
+          className={`px-win absolute z-50 w-[240px] p-3 text-[13px] ${up ? "bottom-[44px] left-0" : "top-[44px] right-0"}`}
           onPointerLeave={() => setOpen(false)}
         >
           <Slider

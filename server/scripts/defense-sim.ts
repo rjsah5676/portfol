@@ -16,7 +16,7 @@ import { BOTS, botByName, botTurn, type BotCfg } from "../../web/src/lib/defense
 import { replay, type LogEntry } from "../../web/src/lib/defense/replay";
 import { newGame, step, unitCount, type Game } from "../../web/src/lib/defense/sim";
 import { GRADE_NAME, UNIT, UNITS } from "../../web/src/lib/defense/units";
-import type { Loadout } from "../../web/src/lib/defense/progress";
+import { RELICS, TRANS_IDS, type Loadout } from "../../web/src/lib/defense/progress";
 
 const args = process.argv.slice(2);
 const opt = (k: string) => {
@@ -38,7 +38,10 @@ function loadoutFor(cfg: BotCfg): Loadout | null {
   const lv: Record<string, number> = {};
   for (const u of UNITS) if (!cfg.focus || u.faction === cfg.focus || u.faction === "hidden") lv[u.id] = cfg.focus ? lvN : Math.max(1, lvN - 1);
   const fres: Record<string, string[]> = { knight: ["k_drill", "k_tactic"], mech: ["m_drill", "m_tune"], arcane: ["a_drill", "a_focus"] };
-  const res = cfg.focus ? ["g_wave", "g_boss", ...fres[cfg.focus]] : ["g_gold", "g_wave", "g_boss", "g_summon"];
+  // 공용 4칸 + 세력 칸 (mid 0 · late 2 · max 3)
+  const fs = metaLv === "max" ? 3 : metaLv === "late" ? 2 : 0;
+  const fpool = cfg.focus ? fres[cfg.focus] : ["k_drill", "m_drill", "a_drill"];
+  const res = ["g_gold", "g_wave", "g_boss", "g_summon", ...fpool.slice(0, fs)];
   const relics =
     metaLv === "mid"
       ? ["gold_gear", "first_harvest", cfg.gamble ? "gambler_coin" : "lucky_clover"]
@@ -48,9 +51,12 @@ function loadoutFor(cfg: BotCfg): Loadout | null {
   // 연구 · 유물 레벨 (max 는 모두 5, late 3, mid 1)
   const rl = metaLv === "max" ? 5 : metaLv === "late" ? 3 : 1;
   const R = metaLv === "mid" ? res.slice(0, 2) : res;
+  const bench = metaLv === "max" ? 6 : metaLv === "late" ? 5 : 4;
+  const own = Object.fromEntries((metaLv === "mid" ? RELICS.slice(0, 4) : RELICS).map((r) => [r.id, rl]));
+  const trans = metaLv === "max" ? [...TRANS_IDS] : [];
   const resLv = Object.fromEntries(R.map((id) => [id, rl]));
   const relicLv = Object.fromEntries(relics.map((id) => [id, rl]));
-  return { lv, res: R, relics, glitch, resLv, relicLv };
+  return { lv, res: R, relics, glitch, resLv, relicLv, bench, fslots: fs, own, trans };
 }
 
 interface Run {

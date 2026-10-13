@@ -29,7 +29,8 @@ import { createDefenseMeta, weeklyLoadout, weeklySeed } from "./defenseMeta";
  *   defense.rank { board, limit } → 시즌(이번 밸런스 버전 · 이번 시즌) 또는 이번 주 도전 순위
  *   defense.me { board }      → 내 최고 기록 · 순위
  *
- *  성장 (defenseMeta.ts): defense.profile · unit.up · unit.down · res.buy · relic.buy · chest.buy · chest.open · load · theme
+ *  성장 (defenseMeta.ts): defense.profile · unit.up/upAll/down · res.buy/level · relic.buy/level · box.buy/open (card · relic)
+ *                          · bench.buy · fslot.buy · trans (초월 소환) · gp.relic · gp.cards · load · theme
  *                        · quest.claim · pass.claim · pass.buy(GP) · cores.buy(GP)
  *
  *  멀티 (락스텝 — 서버는 명령만 모아 뿌림)
@@ -304,15 +305,19 @@ export function registerDefense({ gateway, db, points }: Deps) {
   gateway.rpc("defense.res.level", (ctx, raw) => (member(ctx), ((a) => meta.resLevel(ctx.uid, a.id, a.dir))(lvArg.parse(raw))));
   gateway.rpc("defense.relic.level", (ctx, raw) => (member(ctx), ((a) => meta.relicLevel(ctx.uid, a.id, a.dir))(lvArg.parse(raw))));
   gateway.rpc("defense.relic.buy", (ctx, raw) => (member(ctx), meta.relicBuy(ctx.uid, id.parse(raw).id)));
-  gateway.rpc("defense.chest.buy", (ctx) => (member(ctx), meta.chestBuy(ctx.uid)));
-  gateway.rpc("defense.chest.open", (ctx) => (member(ctx), meta.chestOpen(ctx.uid)));
+  const boxKind = z.object({ kind: z.enum(["card", "relic"]) });
+  gateway.rpc("defense.box.buy", (ctx, raw) => (member(ctx), meta.boxBuy(ctx.uid, boxKind.parse(raw).kind)));
+  gateway.rpc("defense.box.open", (ctx, raw) => (member(ctx), meta.boxOpen(ctx.uid, boxKind.parse(raw).kind)));
+  gateway.rpc("defense.bench.buy", (ctx) => (member(ctx), meta.benchBuy(ctx.uid)));
+  gateway.rpc("defense.fslot.buy", (ctx) => (member(ctx), meta.fslotBuy(ctx.uid)));
+  gateway.rpc("defense.trans", (ctx, raw) => (member(ctx), meta.transSummon(ctx.uid, z.object({ pay: z.enum(["cores", "gp"]) }).parse(raw).pay)));
   gateway.rpc("defense.load", (ctx, raw) => (member(ctx), meta.setLoad(ctx.uid, raw)));
   gateway.rpc("defense.theme", (ctx, raw) => (member(ctx), meta.setTheme(ctx.uid, id.parse(raw).id)));
   gateway.rpc("defense.quest.claim", (ctx, raw) => (member(ctx), meta.questClaim(ctx.uid, id.parse(raw).id)));
   gateway.rpc("defense.pass.claim", (ctx) => (member(ctx), meta.passClaim(ctx.uid)));
   gateway.rpc("defense.pass.buy", (ctx) => (member(ctx), meta.passBuy(ctx.uid)));
   gateway.rpc("defense.cores.buy", (ctx) => (member(ctx), meta.coresBuy(ctx.uid)));
-  gateway.rpc("defense.gp.chest", (ctx) => (member(ctx), meta.gpChest(ctx.uid)));
+  gateway.rpc("defense.gp.relic", (ctx) => (member(ctx), meta.gpRelic(ctx.uid)));
   gateway.rpc("defense.gp.cards", (ctx, raw) => (member(ctx), meta.gpCards(ctx.uid, id.parse(raw).id)));
 
   /* ── 멀티 ── */

@@ -121,8 +121,8 @@ export const BOTS: BotCfg[] = [
 export const botByName = (n: string) => BOTS.find((b) => b.name === n) ?? BOTS[0];
 
 /** 세력별 대략적인 DPS (강화 고를 때) */
-function factionDps(b: Board): Record<Exclude<Faction, "hidden">, number> {
-  const out = { knight: 0, mech: 0, arcane: 0 };
+function factionDps(b: Board): Record<Faction, number> {
+  const out = { knight: 0, mech: 0, arcane: 0, hidden: 0 };
   for (const c of b.cells) {
     if (!c.def) continue;
     const d = UNIT[c.def];
@@ -132,8 +132,7 @@ function factionDps(b: Board): Record<Exclude<Faction, "hidden">, number> {
       c.units.length *
       (d.splash ? 1 + d.splash.pct : 1) *
       (d.chain ? 1 + d.chain.n * 0.5 : 1);
-    if (d.faction === "hidden") for (const f of FACTIONS) out[f] += v / 3;
-    else out[d.faction] += v;
+    out[d.faction] += v;
   }
   return out;
 }
@@ -159,7 +158,7 @@ export function botMove(b: Board, cfg: BotCfg, skip: ReadonlySet<string> = new S
   }
   // 조합식 (신화 · 히든) — 단일 코어면 길들인 글리치(약한 히든)로 한 종류를 정하지 않음
   for (const r of RECIPES)
-    if (canRecipe(b, r.id) && !(b.patch === "core" && r.id === "h_glitchpet")) {
+    if (canRecipe(b, r.id)) {
       const c = ok({ t: "recipe", id: r.id });
       if (c) return c;
     }
@@ -198,7 +197,7 @@ export function botMove(b: Board, cfg: BotCfg, skip: ReadonlySet<string> = new S
   const dps = factionDps(b);
   const main =
     cfg.focus ??
-    (Object.entries(dps).sort((x, y) => y[1] - x[1] || x[0].localeCompare(y[0]))[0][0] as "knight");
+    (Object.entries(dps).sort((x, y) => y[1] - x[1] || x[0].localeCompare(y[0]))[0][0] as Faction);
   const sc = summonCost(b);
   const uc = upCost(b, main);
   // 이자 째기: 필드가 안전하면 keep 만큼은 남겨 둠

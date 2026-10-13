@@ -41,7 +41,7 @@ export type FinishOut = {
         first?: boolean;
         /** 처음 얻은 유닛 (도감 수집 보상) */
         fresh?: string[];
-        firstClear?: { glitch: number; cores: number; chest: number } | null;
+        firstClear?: { glitch: number; cores: number; relicBox: number } | null;
       })
     | null;
 };
@@ -57,7 +57,15 @@ export type QuestRow = QuestDef & { value: number; claimed: boolean };
 export interface DefenseProfile {
   pieces: number;
   cores: number;
-  chests: number;
+  /** 안 연 상자 */
+  boxes: { card: number; relic: number };
+  /** 유물 조각 (유물 강화 재료) */
+  shards: Record<string, number>;
+  /** 해금한 초월 */
+  trans: string[];
+  /** 열린 보관함 칸 · 세력 연구칸 */
+  bench: number;
+  fslots: number;
   cards: Record<string, number>;
   lv: Record<string, number>;
   res: string[];
@@ -73,7 +81,7 @@ export interface DefenseProfile {
   season: { id: number; xp: number; free: number[]; prem: number[]; premium: boolean };
   coreBuys: { w: number; n: number };
   seen?: string[];
-  gpBuys?: { w: number; chest: number; cards: number };
+  gpBuys?: { w: number; relic: number; cards: number; trans: number };
   firstDay?: string;
   runs: number;
   quests: { daily: QuestRow[]; weekly: QuestRow[] };
@@ -86,7 +94,7 @@ export interface DefenseProfile {
   /** 지난주 주간 도전 순위 GP (이번에 받음) */
   paid?: { week: number; rank: number; gp: number } | null;
   /** 상자를 열어 나온 것 */
-  got?: { relic?: string; dup?: number; cards?: Record<string, number> };
+  got?: { relic?: string; shard?: number; cards?: Record<string, number>; trans?: string; dup?: number };
 }
 const P = (name: string, arg?: unknown) => rpc<DefenseProfile>(name, arg);
 export const meta = {
@@ -100,15 +108,18 @@ export const meta = {
   resLevel: (id: string, dir: 1 | -1) => P("defense.res.level", { id, dir }),
   relicLevel: (id: string, dir: 1 | -1) => P("defense.relic.level", { id, dir }),
   relicBuy: (id: string) => P("defense.relic.buy", { id }),
-  chestBuy: () => P("defense.chest.buy"),
-  chestOpen: () => P("defense.chest.open"),
+  boxBuy: (kind: "card" | "relic") => P("defense.box.buy", { kind }),
+  boxOpen: (kind: "card" | "relic") => P("defense.box.open", { kind }),
+  benchBuy: () => P("defense.bench.buy"),
+  fslotBuy: () => P("defense.fslot.buy"),
+  transSummon: (pay: "cores" | "gp") => P("defense.trans", { pay }),
   setLoad: (load: { res: string[]; relics: string[]; glitch: number }) => P("defense.load", load),
   setTheme: (id: string) => P("defense.theme", { id }),
   questClaim: (id: string) => P("defense.quest.claim", { id }),
   passClaim: () => P("defense.pass.claim"),
   passBuy: () => P("defense.pass.buy"),
   coresBuy: () => P("defense.cores.buy"),
-  gpChest: () => P("defense.gp.chest"),
+  gpRelic: () => P("defense.gp.relic"),
   gpCards: (id: string) => P("defense.gp.cards", { id }),
 };
 

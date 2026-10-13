@@ -7,7 +7,7 @@
  * 시간 단위는 tick (1초 = TPS tick). 거리 단위는 칸 (필드 8 × 5칸).
  */
 
-export const BALANCE_VER = "b2";
+export const BALANCE_VER = "beta1";
 
 export const TPS = 30;
 /** 필드에 남은 적이 이 수에 닿으면 패배 */
@@ -52,14 +52,17 @@ export const B = {
   waveGold: { base: 20, per: 2 },
   /** 판매 금액 (노말 · 레어 · 에픽) — 레전드부터 판매 불가 */
   /** 판매 골드 (등급별: 노말 · 레어 · 에픽 · 레전드 · 신화 · 히든) */
-  sell: [8, 20, 50, 120, 250, 300] as number[],
+  sell: [8, 20, 50, 120, 250, 300, 500] as number[],
   /** 판매 행운석 (레전드부터) */
-  sellStones: [0, 0, 0, 1, 2, 2] as number[],
+  sellStones: [0, 0, 0, 1, 2, 2, 3] as number[],
   /** 세력 강화: 비용 = base + step × lv, 피해 +perLv (곱 아닌 합) */
   up: {
     knight: { base: 30, step: 10 },
     mech: { base: 30, step: 10 },
     arcane: { base: 20, step: 7 },
+    /** 히든 — 피해 대신 히든 고유 효과(정화 · 삭제 비율 · 방어 깎기 · 보스 배수)가 Lv 당 hiddenFx 만큼 (비쌈) */
+    hidden: { base: 80, step: 30 },
+    hiddenFx: 0.08,
     perLv: 0.1,
     max: 50,
   },
@@ -89,6 +92,8 @@ export const B = {
     C: { hp: 15, stones: 1, gold: 20 },
     B: { hp: 45, stones: 2, gold: 40 },
     A: { hp: 120, stones: 4, gold: 80 },
+    /** S: 30웨이브부터, 아주 단단함 */
+    S: { hp: 320, stones: 8, gold: 160, from: 30 },
     /** 균열 적이 머무는 시간 (못 잡으면 그냥 사라짐) */
     sec: 30,
     /** 균열을 연 뒤 다음 균열까지 */

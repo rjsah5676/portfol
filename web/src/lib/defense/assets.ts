@@ -48,7 +48,9 @@ const ATK = new Set<string>([
   "k_squire", "k_shield", "k_spear", "k_twin", "k_knight", "k_axe", "k_paladin", "k_blade", "k_hunter", "k_commander", "k_gale", "k_saint",
   "k_dragoon", "k_aegis", "m_bolt", "m_turret", "m_drone", "m_flame", "m_mortar", "m_coil", "m_rail", "m_missile", "m_scrap", "m_titan",
   "m_orbit", "m_omega", "m_arsenal", "m_inferno", "a_novice", "a_frost", "a_star", "a_bolt", "a_venom", "a_wind", "a_chrono", "a_pyro",
-  "a_seal", "a_archmage", "a_sage", "a_void", "a_lord", "a_plague", "h_glitchpet", "h_debugger",
+  "a_seal", "a_archmage", "a_sage", "a_void", "a_lord", "a_plague", "h_debugger",
+  // 베타: 새 레전드 · 신화 · 초월 · 히든
+  "k_black", "k_lion", "k_astra", "m_chief", "m_grav", "m_deus", "a_moon", "a_dream", "a_origin", "h_noa",
 ]);
 
 /** 한 장짜리 유닛 그림 (160×160, 발은 아래 4%) — ChatGPT 이미지로 만든 도트풍 SD (2026-10-13) */
@@ -106,8 +108,17 @@ export const UNIT_ART: Record<string, SpriteSpec> = {
   m_scrap: U("m_scrap"),
   m_titan: U("m_titan"),
   m_turret: U("m_turret"),
-  h_glitchpet: U("h_glitchpet"),
   h_debugger: U("h_debugger"),
+  h_noa: U("h_noa"),
+  k_black: U("k_black"),
+  k_lion: U("k_lion"),
+  k_astra: U("k_astra"),
+  m_chief: U("m_chief"),
+  m_grav: U("m_grav"),
+  m_deus: U("m_deus"),
+  a_moon: U("a_moon"),
+  a_dream: U("a_dream"),
+  a_origin: U("a_origin"),
 };
 /** 적 그림 (128×128 한 장, 발은 아래 4%) — 걸음은 화면이 통통 튀게 */
 const E = (id: string, face: 1 | -1 = 1): SpriteSpec => ({
@@ -155,7 +166,7 @@ export const RELIC_ART: Record<string, string> = Object.fromEntries(
   ["gold_gear", "first_harvest", "lucky_clover", "rift_compass", "gambler_coin", "hourglass", "alchemy", "vaccine", "pure_blood", "rainbow", "twin_star", "war_banner"].map((id) => [id, `/defense/relics/${id}.webp`])
 );
 export const ITEM_ART: Record<string, string> = Object.fromEntries(
-  ["piece", "core", "card", "chest", "chest-open"].map((id) => [id, `/defense/items/${id}.webp`])
+  ["piece", "core", "card", "chest", "chest-open", "cardbox", "relicbox", "trans"].map((id) => [id, `/defense/items/${id}.webp`])
 );
 
 /** 필드 배경 (없으면 코드로 그린 격자) */

@@ -5,7 +5,13 @@ import { AppError, bad } from "../errors";
 import { KeyedMutex } from "../mutex";
 import type { Points } from "../points";
 import {
-  CHEST,
+  BENCH_BASE,
+  BENCH_COST,
+  BENCH_MAX,
+  BOX,
+  FRES_COST,
+  FRES_MAX,
+  TRANS_IDS,
   CORE_EXCHANGE,
   GLITCH_MAX,
   GP_SHOP,
@@ -67,7 +73,15 @@ export interface Profile {
   _id: string;
   pieces: number;
   cores: number;
-  chests: number;
+  /** 안 연 상자 (카드 상자 · 유물 상자) */
+  boxes: { card: number; relic: number };
+  /** 유물 조각 (같은 유물이 또 나오면 +1 — 유물 강화 재료) */
+  shards: Record<string, number>;
+  /** 해금한 초월 */
+  trans: string[];
+  /** 열린 보관함 칸 · 산 세력 전용 연구칸 */
+  bench: number;
+  fslots: number;
   /** 유닛 카드 */
   cards: Record<string, number>;
   /** 유닛 레벨 */
@@ -92,7 +106,7 @@ export interface Profile {
   season: { id: number; xp: number; free: number[]; prem: number[]; premium: boolean };
   coreBuys: { w: number; n: number };
   /** 이번 주 GP 상점 산 횟수 */
-  gpBuys: { w: number; chest: number; cards: number };
+  gpBuys: { w: number; relic: number; cards: number; trans: number };
   /** 한 번이라도 얻은 유닛 (도감 수집 보상) */
   seen: string[];
   /** 오늘 첫 판 보너스를 받은 날 */
@@ -110,7 +124,7 @@ export interface RunStats {
 }
 
 /** 시작 선물 */
-const STARTER = { pieces: 300, chests: 1 };
+const STARTER = { pieces: 300, boxes: { card: 1, relic: 1 } };
 
 const DAY_MS = 86_400_000;
 
@@ -169,7 +183,11 @@ export function createDefenseMeta(db: Database, points: Points, now: () => numbe
       _id: uid,
       pieces: STARTER.pieces,
       cores: 0,
-      chests: STARTER.chests,
+      boxes: { ...STARTER.boxes },
+      shards: {},
+      trans: [],
+      bench: BENCH_BASE,
+      fslots: 0,
       cards: {},
       lv: {},
       res: [],
@@ -184,7 +202,7 @@ export function createDefenseMeta(db: Database, points: Points, now: () => numbe
       coreBuys: { w: weekOf(t), n: 0 },
       seen: [],
       firstDay: "",
-      gpBuys: { w: weekOf(t), chest: 0, cards: 0 },
+      gpBuys: { w: weekOf(t), relic: 0, cards: 0, trans: 0 },
       paidWeek: weekOf(t) - 1,
       runs: 0,
       at: new Date(t),
@@ -201,7 +219,7 @@ export function createDefenseMeta(db: Database, points: Points, now: () => numbe
     if (p.week.key !== w) p.week = { key: w, prog: {}, claimed: [] };
     if (p.season.id !== s) p.season = { id: s, xp: 0, free: [], prem: [], premium: false };
     if (p.coreBuys.w !== w) p.coreBuys = { w, n: 0 };
-    if (!p.gpBuys || p.gpBuys.w !== w) p.gpBuys = { w, chest: 0, cards: 0 };
+    if (!p.gpBuys || p.gpBuys.w !== w) p.gpBuys = { w, relic: 0, cards: 0, trans: 0 };
     return p;
   };
 
@@ -233,7 +251,8 @@ export function createDefenseMeta(db: Database, points: Points, now: () => numbe
   async function give(uid: string, p: Profile, r: PassReward & { xp?: number }, ref: string) {
     p.pieces += r.pieces ?? 0;
     p.cores += r.cores ?? 0;
-    p.chests += r.chest ?? 0;
+    p.boxes.card += r.cardBox ?? 0;
+    p.boxes.relic += r.relicBox ?? 0;
     if (r.xp) p.season.xp += r.xp;
     if (r.gp) await points.grant(uid, r.gp, "defense", ref);
     if (r.item) await users.updateOne({ _id: uid } as never, { $addToSet: { "inv.defense": r.item } } as never);
@@ -282,13 +301,56 @@ export function createDefenseMeta(db: Database, points: Points, now: () => numbe
 
   const weeklyKey = (w: number) => `w${w}`;
 
+  /** 카드 상자 하나: 등급이 낮을수록 잘 나옴 (히든 · 초월 제외) */
+  const openCards = (p: Profile) => {
+    const pool = UNITS.filter((u) => u.faction !== "hidden" && u.grade <= 4);
+    const wsum = pool.reduce((s, u) => s + (5 - u.grade), 0);
+    const cards: Record<string, number> = {};
+    for (let i = 0; i < BOX.card.n; i++) {
+      let r = randomInt(0, wsum);
+      const u = pool.find((x) => (r -= 5 - x.grade) < 0)!;
+      cards[u.id] = (cards[u.id] ?? 0) + 1;
+    }
+    for (const [id, n] of Object.entries(cards)) p.cards[id] = (p.cards[id] ?? 0) + n;
+    return { cards };
+  };
+  /** 유물 하나: 희귀도 → 그 안에서 무작위. 가진 것이면 유물 조각 +1 */
+  const openRelic = (p: Profile, odds: readonly number[]) => {
+    const tr = randomInt(0, 1_000_000) / 1_000_000;
+    const tier = tr < odds[0] ? 0 : tr < odds[0] + odds[1] ? 1 : 2;
+    const pool = RELICS.filter((r) => r.tier === tier);
+    const pick = pool[randomInt(0, pool.length)];
+    if (p.relics.includes(pick.id)) {
+      p.shards[pick.id] = (p.shards[pick.id] ?? 0) + 1;
+      return { relic: pick.id, shard: 1 };
+    }
+    p.relics.push(pick.id);
+    if (p.load.relics.length < RELIC_SLOTS) p.load.relics.push(pick.id);
+    return { relic: pick.id };
+  };
+
   return {
     weeklyKey,
     /** 시즌 판 · 멀티에 들고 갈 로드아웃 (서버가 정함) */
     async loadoutOf(uid: string): Promise<Required<Loadout>> {
       const p = await load(uid);
       const lv = Object.fromEntries(Object.entries(p.lv).filter(([, v]) => v > 0));
-      return cleanLoadout({ lv, res: p.load.res.filter((r) => p.res.includes(r)), relics: p.load.relics.filter((r) => p.relics.includes(r)), glitch: Math.min(p.load.glitch, p.glitchOpen), resLv: p.resLv, relicLv: p.relicLv }, unitIds);
+      const own = Object.fromEntries(p.relics.map((id) => [id, p.relicLv?.[id] ?? 1]));
+      return cleanLoadout(
+        {
+          lv,
+          res: p.load.res.filter((r) => p.res.includes(r)),
+          relics: p.load.relics.filter((r) => p.relics.includes(r)),
+          glitch: Math.min(p.load.glitch, p.glitchOpen),
+          resLv: p.resLv,
+          relicLv: p.relicLv,
+          bench: p.bench,
+          fslots: p.fslots,
+          own,
+          trans: p.trans,
+        },
+        unitIds
+      );
     },
 
     async profile(uid: string): Promise<Wire> {
@@ -324,12 +386,12 @@ export function createDefenseMeta(db: Database, points: Points, now: () => numbe
           rw.cores += cr.cores ?? 0;
         }
         // 오염 단계 첫 클리어
-        let firstClear: { glitch: number; cores: number; chest: number } | null = null;
+        let firstClear: { glitch: number; cores: number; relicBox: number } | null = null;
         if (mode !== "weekly" && res.win && glitch > p.glitchWin) {
           const fc = glitchFirstClear(glitch);
           firstClear = { glitch, ...fc };
           rw.cores += fc.cores;
-          p.chests += fc.chest;
+          p.boxes.relic += fc.relicBox;
         }
         p.pieces += rw.pieces;
         p.cores += rw.cores;
@@ -408,7 +470,9 @@ export function createDefenseMeta(db: Database, points: Points, now: () => numbe
         need(p.pieces >= r.cost, "픽셀 조각이 모자라요.");
         p.pieces -= r.cost;
         p.res.push(id);
-        if (p.load.res.length < RES_SLOTS) p.load.res.push(id);
+        const general = (x: string) => RES[x]?.group === "general";
+        const used = p.load.res.filter((x) => general(x) === general(id)).length;
+        if (used < (general(id) ? RES_SLOTS : p.fslots)) p.load.res.push(id);
         return wire(uid, p);
       });
     },
@@ -449,7 +513,7 @@ export function createDefenseMeta(db: Database, points: Points, now: () => numbe
       });
     },
 
-    /** 유물 레벨 올리기 (글리치 코어) · 내리기 (쓴 코어 전부 돌려받기) */
+    /** 유물 레벨 올리기 (유물 조각 + 글리치 코어) · 내리기 (쓴 것 전부 돌려받기) */
     relicLevel(uid: string, id: string, dir: 1 | -1) {
       return edit(uid, async (p) => {
         need(!!RELIC[id] && p.relics.includes(id), "가진 유물만 올릴 수 있어요.");
@@ -458,12 +522,16 @@ export function createDefenseMeta(db: Database, points: Points, now: () => numbe
         if (dir > 0) {
           need(lv < RELIC_MAX_LV, "이미 최고 레벨이에요.");
           const c = relicUpCost(id, lv);
-          need(p.cores >= c, "글리치 코어가 모자라요.");
-          p.cores -= c;
+          need((p.shards[id] ?? 0) >= c.shards, "유물 조각이 모자라요 (유물 상자에서 같은 유물이 나오면 생겨요).");
+          need(p.cores >= c.cores, "글리치 코어가 모자라요.");
+          p.shards[id] -= c.shards;
+          p.cores -= c.cores;
           p.relicLv[id] = lv + 1;
         } else {
           need(lv > 1, "이미 1레벨이에요.");
-          p.cores += relicUpCost(id, lv - 1);
+          const c = relicUpCost(id, lv - 1);
+          p.shards[id] = (p.shards[id] ?? 0) + c.shards;
+          p.cores += c.cores;
           if (lv - 1 > 1) p.relicLv[id] = lv - 1;
           else delete p.relicLv[id];
         }
@@ -471,55 +539,97 @@ export function createDefenseMeta(db: Database, points: Points, now: () => numbe
       });
     },
 
-    chestBuy(uid: string) {
+    /** 보관함 칸 하나 해금 (픽셀 조각) */
+    benchBuy(uid: string) {
       return edit(uid, async (p) => {
-        need(p.pieces >= CHEST.price, "픽셀 조각이 모자라요.");
-        p.pieces -= CHEST.price;
-        p.chests++;
+        need(p.bench < BENCH_MAX, "보관함을 다 열었어요.");
+        const c = BENCH_COST[p.bench - BENCH_BASE];
+        need(p.pieces >= c, "픽셀 조각이 모자라요.");
+        p.pieces -= c;
+        p.bench++;
         return wire(uid, p);
       });
     },
 
-    chestOpen(uid: string) {
+    /** 세력 전용 연구칸 하나 (글리치 코어) */
+    fslotBuy(uid: string) {
       return edit(uid, async (p) => {
-        need(p.chests >= 1, "상자가 없어요.");
-        p.chests--;
-        const roll = randomInt(0, 1_000_000) / 1_000_000;
-        let got: { relic?: string; dup?: number; cards?: Record<string, number> };
-        if (roll < CHEST.relicChance) {
-          const tr = randomInt(0, 1_000_000) / 1_000_000;
-          const tier = tr < CHEST.tierOdds[0] ? 0 : tr < CHEST.tierOdds[0] + CHEST.tierOdds[1] ? 1 : 2;
-          const pool = RELICS.filter((r) => r.tier === tier);
-          const pick = pool[randomInt(0, pool.length)];
-          if (p.relics.includes(pick.id)) {
-            p.cores += CHEST.dupCores;
-            got = { relic: pick.id, dup: CHEST.dupCores };
-          } else {
-            p.relics.push(pick.id);
-            if (p.load.relics.length < RELIC_SLOTS) p.load.relics.push(pick.id);
-            got = { relic: pick.id };
-          }
+        need(p.fslots < FRES_MAX, "세력 연구칸을 다 샀어요.");
+        const c = FRES_COST[p.fslots];
+        need(p.cores >= c, "글리치 코어가 모자라요.");
+        p.cores -= c;
+        p.fslots++;
+        return wire(uid, p);
+      });
+    },
+
+    /** 상자 사기: card (조각) · relic (코어) */
+    boxBuy(uid: string, kind: "card" | "relic") {
+      return edit(uid, async (p) => {
+        if (kind === "card") {
+          need(p.pieces >= BOX.card.pieces, "픽셀 조각이 모자라요.");
+          p.pieces -= BOX.card.pieces;
+          p.boxes.card++;
         } else {
-          // 카드 묶음: 등급이 낮을수록 잘 나옴 (히든 제외)
-          const pool = UNITS.filter((u) => u.faction !== "hidden" && u.grade <= 4);
-          const wsum = pool.reduce((s, u) => s + (5 - u.grade), 0);
-          const cards: Record<string, number> = {};
-          for (let i = 0; i < CHEST.cards; i++) {
-            let r = randomInt(0, wsum);
-            const u = pool.find((x) => (r -= 5 - x.grade) < 0)!;
-            cards[u.id] = (cards[u.id] ?? 0) + 1;
-          }
-          for (const [id, n] of Object.entries(cards)) p.cards[id] = (p.cards[id] ?? 0) + n;
-          got = { cards };
+          need(p.cores >= BOX.relic.cores, "글리치 코어가 모자라요.");
+          p.cores -= BOX.relic.cores;
+          p.boxes.relic++;
+        }
+        return wire(uid, p);
+      });
+    },
+
+    /** 상자 열기 (가진 것 하나) */
+    boxOpen(uid: string, kind: "card" | "relic") {
+      return edit(uid, async (p) => {
+        need(p.boxes[kind] >= 1, "상자가 없어요.");
+        p.boxes[kind]--;
+        const got = kind === "card" ? openCards(p) : openRelic(p, BOX.relic.tierOdds);
+        return wire(uid, p, { got });
+      });
+    },
+
+    /** GP 유물 상자 (주 3번, 좋은 확률 · 바로 열림) */
+    gpRelic(uid: string) {
+      return edit(uid, async (p) => {
+        need(p.gpBuys.relic < BOX.relic.gpPerWeek, "이번 주 GP 유물 상자를 다 샀어요.");
+        await points.spend(uid, BOX.relic.gp, "defense", "gprelic");
+        p.gpBuys.relic++;
+        return wire(uid, p, { got: openRelic(p, BOX.relic.gpOdds) });
+      });
+    },
+
+    /** 초월 소환: 코어 또는 GP (주 2번) */
+    transSummon(uid: string, pay: "cores" | "gp") {
+      return edit(uid, async (p) => {
+        if (pay === "cores") {
+          need(p.cores >= BOX.trans.cores, "글리치 코어가 모자라요.");
+          p.cores -= BOX.trans.cores;
+        } else {
+          need(p.gpBuys.trans < BOX.trans.gpPerWeek, "이번 주 GP 초월 소환을 다 했어요.");
+          await points.spend(uid, BOX.trans.gp, "defense", "gptrans");
+          p.gpBuys.trans++;
+        }
+        const id = TRANS_IDS[randomInt(0, TRANS_IDS.length)];
+        let got: { trans: string; dup?: number };
+        if (!p.trans.includes(id)) {
+          p.trans.push(id);
+          got = { trans: id };
+        } else {
+          p.cards[id] = (p.cards[id] ?? 0) + BOX.trans.dupCards;
+          got = { trans: id, dup: BOX.trans.dupCards };
         }
         return wire(uid, p, { got });
       });
     },
 
     setLoad(uid: string, raw: unknown) {
-      const v = z.object({ res: z.array(z.string()).max(RES_SLOTS), relics: z.array(z.string()).max(RELIC_SLOTS), glitch: z.number().int().min(0).max(GLITCH_MAX) }).parse(raw);
+      const v = z.object({ res: z.array(z.string()).max(RES_SLOTS + FRES_MAX), relics: z.array(z.string()).max(RELIC_SLOTS), glitch: z.number().int().min(0).max(GLITCH_MAX) }).parse(raw);
       return edit(uid, async (p) => {
         need(v.res.every((r) => p.res.includes(r)), "열지 않은 연구가 있어요.");
+        const gen = v.res.filter((r) => RES[r]?.group === "general").length;
+        need(gen <= RES_SLOTS, `공용 연구는 ${RES_SLOTS}칸까지예요.`);
+        need(v.res.length - gen <= p.fslots, "세력 연구칸이 모자라요 (정비소에서 살 수 있어요).");
         need(v.relics.every((r) => p.relics.includes(r)), "없는 유물이 있어요.");
         need(v.glitch <= p.glitchOpen, "아직 열리지 않은 오염 단계예요.");
         p.load = { res: [...new Set(v.res)], relics: [...new Set(v.relics)], glitch: v.glitch };
@@ -580,32 +690,6 @@ export function createDefenseMeta(db: Database, points: Points, now: () => numbe
         await points.spend(uid, PASS_PREMIUM_GP, "defense", `pass:${p.season.id}`);
         p.season.premium = true;
         return wire(uid, p);
-      });
-    },
-
-    /** GP 유물 상자: 유물 확정 (안 가진 것 우선) */
-    gpChest(uid: string) {
-      return edit(uid, async (p) => {
-        need(p.gpBuys.chest < GP_SHOP.chest.perWeek, "이번 주 GP 상자를 다 샀어요.");
-        await points.spend(uid, GP_SHOP.chest.gp, "defense", "gpchest");
-        p.gpBuys.chest++;
-        const left = RELICS.filter((r) => !p.relics.includes(r.id));
-        let got: { relic?: string; dup?: number };
-        if (!left.length) {
-          p.cores += GP_SHOP.chest.allOwnedCores;
-          got = { dup: GP_SHOP.chest.allOwnedCores };
-        } else {
-          const tr = randomInt(0, 1_000_000) / 1_000_000;
-          const o = GP_SHOP.chest.tierOdds;
-          const tier = tr < o[0] ? 0 : tr < o[0] + o[1] ? 1 : 2;
-          const pool = left.filter((r) => r.tier === tier);
-          const from = pool.length ? pool : left;
-          const pick = from[randomInt(0, from.length)];
-          p.relics.push(pick.id);
-          if (p.load.relics.length < RELIC_SLOTS) p.load.relics.push(pick.id);
-          got = { relic: pick.id };
-        }
-        return wire(uid, p, { got });
       });
     },
 

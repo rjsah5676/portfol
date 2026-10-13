@@ -11,9 +11,10 @@
  * Game = 보드(플레이어) 여러 개. 지금은 보드끼리 서로 영향이 없음 (각자 웨이브 · 각자 적).
  * 나중에 "남 돕기"를 넣을 땐 명령에 다른 보드를 가리키는 것(예: gift { to, c })만 추가하면 같은 step 안에서 처리됨.
  *
- * 필드: 8 × 5 칸. 가운데 6 × 3 = 18칸에 유닛, 둘레 사각 길(한 바퀴 22칸)을 적이 시계 방향으로 계속 돔.
+ * 필드: 9 × 6 칸. 가운데 7 × 4 = 28칸에 유닛, 둘레 사각 길(한 바퀴 26칸)을 적이 시계 방향으로 계속 돔.
  * 한 칸엔 같은 유닛 3기까지 (3기가 되면 합성).
  * 보관함: 필드 밖 BENCH 칸 (cells[CELLS..SLOTS-1]) — 공격 · 범위 효과는 없고, 합성 · 조합식 재료 · 판매는 됨.
+ *         처음엔 BENCH_BASE 칸만 열려 있고 정비소에서 1칸씩 영구 해금 (b.mods.bench) — 잠긴 칸은 못 씀.
  *         소환 · 합성 결과는 필드 빈 칸이 먼저, 없으면 보관함으로.
  *
  * 영구 성장(로드아웃: 유닛 레벨 · 연구 · 유물 · 오염 단계)은 progress.ts 의 modsOf 로 보드마다 한 번 계산해 b.mods 에 붙임.
@@ -22,10 +23,12 @@ import { B, BOSS_EVERY, CAP, LAST_WAVE, TPS, countOf, hpOf, sec } from "./balanc
 import { BOSSES, KIND, bossOfWave, kindOfWave, type BossDef, type Size } from "./enemies";
 import { MISSIONS, PATCH_DEADLINE, PATCHES } from "./meta";
 import { mixSeed, pick, rnd, rndInt, type Rng } from "./rng";
-import { LV_DMG, modsOf, type Loadout, type Mods } from "./progress";
+import { BENCH_MAX, LV_BUFF, LV_DMG, modsOf, type Loadout, type Mods } from "./progress";
 import {
   FACTIONS,
   RECIPE,
+  TRANS,
+  needMatch,
   SIZE_MULT,
   UNIT,
   poolOf,
@@ -34,24 +37,28 @@ import {
   type UnitDef,
 } from "./units";
 
-export const COLS = 6;
-export const ROWS = 3;
+export const COLS = 7;
+export const ROWS = 4;
 export const CELLS = COLS * ROWS;
-/** 보관함 칸 수 · 필드 + 보관함 */
-export const BENCH = 6;
+/** 보관함 칸 수 (최대 — 열린 칸은 b.mods.bench) · 필드 + 보관함 */
+export const BENCH = BENCH_MAX;
 export const SLOTS = CELLS + BENCH;
 export const isBench = (i: number) => i >= CELLS;
-export const FIELD_W = 8;
-export const FIELD_H = 5;
-export const PERIM = 22;
+export const FIELD_W = COLS + 2;
+export const FIELD_H = ROWS + 2;
+export const PERIM = 2 * (FIELD_W - 1) + 2 * (FIELD_H - 1);
 export const STACK = 3;
+/** 쓸 수 있는 칸인지 (잠긴 보관함 칸이 아님) */
+export const usable = (b: Board, i: number) => i < CELLS + b.mods.bench;
 
 /** 길 위 거리 → 좌표 (왼쪽 위에서 시작, 시계 방향) */
 export function pathPos(d: number): [number, number] {
-  if (d < 7) return [0.5 + d, 0.5];
-  if (d < 11) return [7.5, 0.5 + (d - 7)];
-  if (d < 18) return [7.5 - (d - 11), 4.5];
-  return [0.5, 4.5 - (d - 18)];
+  const W = FIELD_W - 1,
+    H = FIELD_H - 1;
+  if (d < W) return [0.5 + d, 0.5];
+  if (d < W + H) return [W + 0.5, 0.5 + (d - W)];
+  if (d < 2 * W + H) return [W + 0.5 - (d - W - H), H + 0.5];
+  return [0.5, H + 0.5 - (d - 2 * W - H)];
 }
 export const cellX = (i: number) => 1.5 + (i % COLS);
 export const cellY = (i: number) => 1.5 + Math.floor(i / COLS);
@@ -108,17 +115,21 @@ export interface Enemy {
   last: string;
 }
 
+export type UpKey = "knight" | "mech" | "arcane" | "hidden";
+export type RiftTier = "C" | "B" | "A" | "S";
+export const RIFT_TIERS: RiftTier[] = ["C", "B", "A", "S"];
+
 export type Cmd =
   | { t: "summon" }
   | { t: "merge"; c: number }
   | { t: "sell"; c: number }
   | { t: "swap"; a: number; b: number }
-  | { t: "up"; k: "knight" | "mech" | "arcane" }
+  | { t: "up"; k: UpKey }
   | { t: "luck" }
   | { t: "gamble"; g: "E" | "L" }
   | { t: "recipe"; id: string }
   | { t: "patch"; id: string }
-  | { t: "rift"; tier: "C" | "B" | "A" }
+  | { t: "rift"; tier: RiftTier }
   | { t: "pick"; id: string }
   /** 포기 — 지금 웨이브에서 진 것으로 끝냄 (기록 · 보상은 거기까지) */
   | { t: "quit" };
@@ -175,7 +186,7 @@ export interface Board {
   stones: number;
   summons: number;
   free: number;
-  up: { knight: number; mech: number; arcane: number };
+  up: { knight: number; mech: number; arcane: number; hidden: number };
   luck: number;
   patch: string | null;
   tickets: number[];
@@ -230,7 +241,7 @@ export function newBoard(seed: number, idx: number, lo?: Loadout | null): Board 
     stones: mods.startStones,
     summons: 0,
     free: 0,
-    up: { knight: 0, mech: 0, arcane: 0 },
+    up: { knight: 0, mech: 0, arcane: 0, hidden: 0 },
     luck: Math.min(B.luckCost.length, mods.startLuck),
     patch: null,
     tickets: [],
@@ -267,11 +278,11 @@ export function newGame(seed: number, players = 1, loadouts?: (Loadout | null)[]
 
 export const summonCost = (b: Board) =>
   Math.min(B.summon.max, B.summon.base + B.summon.step * b.summons) - b.mods.summonDisc;
-export const upCost = (b: Board, k: "knight" | "mech" | "arcane") =>
+export const upCost = (b: Board, k: UpKey) =>
   B.up[k].base + B.up[k].step * b.up[k];
 export const luckCost = (b: Board) => (b.luck < B.luckCost.length ? B.luckCost[b.luck] : Infinity);
 export const unitCount = (b: Board) => b.cells.reduce((n, c) => n + c.units.length, 0);
-export const hasEmpty = (b: Board) => b.cells.some((c) => !c.def);
+export const hasEmpty = (b: Board) => b.cells.some((c, i) => !c.def && usable(b, i));
 /** 판매 금액 */
 export const sellPrice = (b: Board, grade: number) => Math.floor((B.sell[grade] ?? 0) * b.mods.sellMult);
 /** 판매 값 (골드 · 행운석). 모든 유닛을 팔 수 있음 — 레전드부터는 행운석도 (유닛마다 따로 정한 값이 있으면 그 값) */
@@ -287,15 +298,35 @@ export function counts(b: Board): Record<string, number> {
   for (const c of b.cells) if (c.def) m[c.def] = (m[c.def] ?? 0) + c.units.length;
   return m;
 }
+/** 초월 조합식이 열렸는지 (정비소 해금) */
+export const recipeOpen = (b: Board, id: string) => UNIT[id].grade !== TRANS || b.mods.trans.includes(id);
+/**
+ * 조합식 재료로 뺄 칸들 (재료 하나당 칸 하나, 같은 칸이 여러 번 나올 수 있음). 못 만들면 null.
+ * 정해진 유닛 먼저 고르고, @ 재료(아무 신화 · 아무 초월)는 남은 것 중 앞 칸부터 — 적게 쌓인 칸부터 뺌.
+ */
+export function recipePlan(b: Board, id: string): number[] | null {
+  const r = RECIPE[id];
+  if (!r || !recipeOpen(b, id)) return null;
+  const left = b.cells.map((c) => (c.def ? c.units.length : 0));
+  const out: number[] = [];
+  const order = [...r.needs].sort((x, y) => (x[0] === "@" ? 1 : 0) - (y[0] === "@" ? 1 : 0));
+  for (const n of order) {
+    let best = -1;
+    for (let i = 0; i < SLOTS; i++) {
+      const d = b.cells[i].def;
+      if (!d || left[i] <= 0 || !needMatch(n, d) || d === id) continue;
+      if (best < 0 || left[i] < left[best]) best = i;
+    }
+    if (best < 0) return null;
+    left[best]--;
+    out.push(best);
+  }
+  return out;
+}
 /** 지금 만들 수 있는 조합식인지 */
 export function canRecipe(b: Board, id: string): boolean {
-  const r = RECIPE[id];
-  if (!r) return false;
   if (b.patch === "core" && coreBlocked(b, id)) return false;
-  const have = counts(b);
-  const need: Record<string, number> = {};
-  for (const n of r.needs) need[n] = (need[n] ?? 0) + 1;
-  return Object.entries(need).every(([k, v]) => (have[k] ?? 0) >= v);
+  return !!recipePlan(b, id);
 }
 /** 단일 코어: 신화 · 히든은 한 종류만 (같은 것은 여러 기) — 이미 다른 종류가 있으면 막힘 */
 export const coreKind = (b: Board) => b.cells.find((c) => c.def && UNIT[c.def].grade >= 4)?.def ?? null;
@@ -305,10 +336,14 @@ const coreBlocked = (b: Board, id: string) => {
 };
 export const mythCount = (b: Board) =>
   b.cells.reduce((n, c) => n + (c.def && UNIT[c.def].grade >= 4 ? c.units.length : 0), 0);
-/** 세력 강화 배수 (히든은 세 세력 평균) */
+/** 세력 강화 피해 배수 — 히든은 피해 대신 고유 효과 (hiddenFx) */
 export function upMult(b: Board, f: Faction): number {
-  const lv = f === "hidden" ? (b.up.knight + b.up.mech + b.up.arcane) / 3 : b.up[f];
-  return 1 + B.up.perLv * lv;
+  if (f === "hidden") return 1;
+  return 1 + B.up.perLv * b.up[f];
+}
+/** 히든 강화: 히든 유닛 고유 효과 배수 (삭제 · 정화 비율, 방어 깎기, 보스 배수) */
+export function hiddenFx(b: Board): number {
+  return 1 + B.up.hiddenFx * b.up.hidden;
 }
 
 /* ───────────────────────── 명령 ───────────────────────── */
@@ -329,7 +364,7 @@ export function isCmd(x: unknown): x is Cmd {
     case "swap":
       return keys === 3 && cell(c.a) && cell(c.b);
     case "up":
-      return keys === 2 && (c.k === "knight" || c.k === "mech" || c.k === "arcane");
+      return keys === 2 && (c.k === "knight" || c.k === "mech" || c.k === "arcane" || c.k === "hidden");
     case "gamble":
       return keys === 2 && (c.g === "E" || c.g === "L");
     case "recipe":
@@ -338,7 +373,7 @@ export function isCmd(x: unknown): x is Cmd {
     case "patch":
       return keys === 2 && typeof c.id === "string" && PATCHES.some((p) => p.id === c.id);
     case "rift":
-      return keys === 2 && (c.tier === "C" || c.tier === "B" || c.tier === "A");
+      return keys === 2 && RIFT_TIERS.includes(c.tier as RiftTier);
     case "quit":
       return keys === 1;
   }
@@ -402,6 +437,7 @@ export function apply(g: Game, p: number, cmd: Cmd): string | null {
     }
     case "swap": {
       if (cmd.a === cmd.b) return null;
+      if (!usable(b, cmd.a) || !usable(b, cmd.b)) return "잠긴 보관함 칸이에요";
       const A = b.cells[cmd.a],
         Bc = b.cells[cmd.b];
       // 같은 유닛이면 한 칸으로 모음 (3기까지)
@@ -454,17 +490,11 @@ export function apply(g: Game, p: number, cmd: Cmd): string | null {
       const r = RECIPE[cmd.id];
       if (!r) return "없는 조합식이에요";
       if (b.patch === "core" && coreBlocked(b, cmd.id)) return "단일 코어: 신화 · 히든은 한 종류만";
-      if (!canRecipe(b, cmd.id)) return "재료가 모자라요";
-      // 재료가 여러 칸에 있으면 적게 쌓인 칸부터 뺌
-      for (const n of r.needs) {
-        let best = -1;
-        for (let i = 0; i < SLOTS; i++)
-          if (
-            b.cells[i].def === n &&
-            (best < 0 || b.cells[i].units.length < b.cells[best].units.length)
-          )
-            best = i;
-        const c = b.cells[best];
+      if (!recipeOpen(b, cmd.id)) return "정비소에서 초월을 해금해야 해요";
+      const plan = recipePlan(b, cmd.id);
+      if (!plan) return "재료가 모자라요";
+      for (const i of plan) {
+        const c = b.cells[i];
         c.units.pop();
         if (!c.units.length) c.def = null;
       }
@@ -487,7 +517,9 @@ export function apply(g: Game, p: number, cmd: Cmd): string | null {
       if (b.wave < B.rift.from) return `${B.rift.from}웨이브부터 열 수 있어요`;
       if (b.riftCd > 0) return "균열이 아직 닫혀 있어요";
       if (b.enemies.some((e) => e.rift)) return "이미 열린 균열이 있어요";
-      const tier = cmd.tier === "C" ? 1 : cmd.tier === "B" ? 2 : 3;
+      const S = B.rift.S;
+      if (cmd.tier === "S" && b.wave < S.from) return `S 균열은 ${S.from}웨이브부터`;
+      const tier = RIFT_TIERS.indexOf(cmd.tier) + 1;
       const kind = KIND[kindOfWave(Math.max(1, b.wave))];
       const e = spawn(b, kind.id, hpOf(b.wave) * B.rift[cmd.tier].hp);
       e.rift = tier;
@@ -531,7 +563,7 @@ function give(
     }
   if (at < 0 && prefer >= 0 && !b.cells[prefer].def) at = prefer;
   // 필드 빈 칸 먼저, 없으면 보관함 (findIndex 가 앞에서부터라 필드가 먼저)
-  if (at < 0) at = b.cells.findIndex((c) => !c.def);
+  if (at < 0) at = b.cells.findIndex((c, i) => !c.def && usable(b, i));
   if (at < 0) return; // (부르는 쪽이 자리를 확인함)
   const c = b.cells[at];
   c.def = id;
@@ -694,8 +726,10 @@ function stepBoard(g: Game, b: Board) {
         }
       }
       if (!inR) continue;
-      if (a.def.aura!.slow && a.def.aura!.slow > e.aSlow) e.aSlow = a.def.aura!.slow;
-      if (a.def.aura!.shred) e.shred += a.def.aura!.shred;
+      const k = lvBuff(b, a.def.id);
+      const sl = Math.min(B.slowCap, (a.def.aura!.slow ?? 0) * k);
+      if (sl > e.aSlow) e.aSlow = sl;
+      if (a.def.aura!.shred) e.shred += a.def.aura!.shred * k * (a.def.faction === "hidden" ? hiddenFx(b) : 1);
     }
   }
 
@@ -782,7 +816,8 @@ function rebuild(b: Board) {
         if (!b.cells[j].def) continue;
         const dx = cellX(i) - cellX(j),
           dy = cellY(i) - cellY(j);
-        if (dx * dx + dy * dy <= r2 && a.aspd > b.aspd[j]) b.aspd[j] = a.aspd;
+        const as = a.aspd * lvBuff(b, id);
+        if (dx * dx + dy * dy <= r2 && as > b.aspd[j]) b.aspd[j] = as;
       }
     }
     if (a.slow || a.shred) {
@@ -831,13 +866,13 @@ function hit(b: Board, def: UnitDef, e: Enemy, raw: number): number {
   }
   let m = upMult(b, def.faction) * b.team;
   const M = b.mods;
-  m *= 1 + LV_DMG * (M.lv[def.id] ?? 0);
+  m *= (1 + LV_DMG * (M.lv[def.id] ?? 0)) * M.relicDmg;
   if (def.faction !== "hidden") m *= M.fac[def.faction];
   if (M.warBanner) m *= 1 + M.warBanner * Math.floor((b.up.knight + b.up.mech + b.up.arcane) / 10);
   if (M.vaccine !== 1 && (e.boss >= 0 || e.elite || e.rift)) m *= M.vaccine;
   // 단일 코어: 하나뿐인 신화 · 히든에 힘을 몰아줌
   if (b.patch === "core") m *= def.grade >= 4 ? 2.5 : 3.6;
-  if (e.boss >= 0 && def.boss) m *= def.boss;
+  if (e.boss >= 0 && def.boss) m *= def.faction === "hidden" ? 1 + (def.boss - 1) * hiddenFx(b) : def.boss;
   if (def.dtype === "phys") {
     let sz = SIZE_MULT[def.faction][e.size];
     if (def.faction === "knight" && e.size > 0) sz = Math.min(1, sz + M.knightBig);
@@ -845,7 +880,7 @@ function hit(b: Board, def: UnitDef, e: Enemy, raw: number): number {
       (e.boss >= 0 ? Math.max(B.bossSizeFloor, sz) : sz) * armorF(e.armor - e.shred) * (1 - e.pres);
   } else m *= 1 - e.mres;
   let dmg = raw * m;
-  if (e.shield > 0) {
+  if (e.shield > 0 && !def.pierce) {
     const s = Math.min(e.shield, dmg);
     e.shield -= s;
     dmg -= s;
@@ -855,6 +890,9 @@ function hit(b: Board, def: UnitDef, e: Enemy, raw: number): number {
   b.dealt[def.id] = (b.dealt[def.id] ?? 0) + dmg;
   return dmg;
 }
+
+/** 유닛 영구 레벨이 버프 · 둔화 · 방어 깎기 · 확률 효과에도 붙는 배수 (레벨당 LV_BUFF) */
+const lvBuff = (b: Board, id: string) => 1 + LV_BUFF * (b.mods.lv[id] ?? 0);
 
 function stun(e: Enemy, s: number) {
   const t = Math.round(sec(s) * (e.boss >= 0 ? B.bossCc : 1));
@@ -921,7 +959,7 @@ function attack(b: Board, ci: number, def: UnitDef, u: Unit, t: Enemy) {
   }
   if (def.procs)
     for (const p of def.procs) {
-      if (p.chance < 1 && rnd(b.rng) >= p.chance) continue;
+      if (p.chance < 1 && rnd(b.rng) >= p.chance * lvBuff(b, def.id)) continue;
       const fx = def.faction === "arcane" ? b.mods.arcaneFx : 1;
       if (p.kind === "stun") stun(t, p.sec);
       else if (p.kind === "slow") {
@@ -932,6 +970,12 @@ function attack(b: Board, ci: number, def: UnitDef, u: Unit, t: Enemy) {
         }
       } else if (p.kind === "cur" && t.boss < 0 && t.hp > 0) hitRaw(b, def, t, t.hp * p.pct * fx);
     }
+  // 처형: 맞은 적 체력이 pct 이하면 바로 쓰러뜨림 (보스 제외)
+  if (def.execute && t.hp > 0 && t.boss < 0 && t.hp <= t.max * def.execute * lvBuff(b, def.id)) {
+    b.dealt[def.id] = (b.dealt[def.id] ?? 0) + t.hp;
+    t.hp = 0;
+    t.last = def.id;
+  }
   if (def.ult && ++u.ult >= def.ult.every) {
     u.ult = 0;
     ult(b, ci, def, t, tx, ty);
@@ -973,7 +1017,7 @@ function ult(b: Board, ci: number, def: UnitDef, t: Enemy, tx: number, ty: numbe
     for (const e of b.enemies)
       if (e.hp > 0 && e.boss < 0 && !e.rift && (!best || e.trav > best.trav)) best = e;
     const boss = b.enemies.find((e) => e.hp > 0 && e.boss >= 0);
-    if (boss) hitRaw(b, def, boss, boss.max * U.pct);
+    if (boss) hitRaw(b, def, boss, boss.max * U.pct * (def.faction === "hidden" ? hiddenFx(b) : 1));
     else if (best) {
       b.dealt[def.id] = (b.dealt[def.id] ?? 0) + best.hp;
       best.hp = 0;
@@ -1034,7 +1078,7 @@ function die(g: Game, b: Board, e: Enemy): boolean {
   b.kills++;
   let gold = 0;
   if (e.rift) {
-    const R = e.rift === 1 ? B.rift.C : e.rift === 2 ? B.rift.B : B.rift.A;
+    const R = B.rift[RIFT_TIERS[e.rift - 1]];
     b.stones += R.stones + b.mods.riftStone;
     gold = R.gold;
     b.rifts++;

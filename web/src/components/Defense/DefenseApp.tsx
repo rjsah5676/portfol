@@ -312,7 +312,8 @@ function Menu(p: {
   const hubDot = pr
     ? [...pr.quests.daily, ...pr.quests.weekly].filter((q) => !q.claimed && q.value >= q.goal).length +
       (pr.passTier - pr.season.free.length) +
-      pr.chests
+      pr.boxes.card +
+      pr.boxes.relic
     : 0;
   return (
     <div className="px-stars absolute inset-0 overflow-hidden">
@@ -404,7 +405,7 @@ function Menu(p: {
         </p>
         <div className="mt-2 flex items-center gap-1.5">
           <span className="inline-block bg-[var(--gold)] px-2 py-1 text-[12px] font-bold text-[#1a1000]">
-            BETA · 밸런스 {BALANCE_VER}
+            BETA 1.0 · 밸런스 {BALANCE_VER}
           </span>
           {p.resume && (
             <>
@@ -528,8 +529,8 @@ function Menu(p: {
           </Btn>
         )}
       </div>
-      <div className="absolute bottom-[22px] left-[64px] flex items-center gap-2">
-        <SoundButton />
+      <div className="absolute bottom-[22px] left-[64px] z-30 flex items-center gap-2">
+        <SoundButton up />
         <FsButton />
         <Btn className="h-[34px] px-3 text-[13px]" onClick={p.onNotes}>
           <Icon n="note" size={14} /> 패치노트
@@ -568,7 +569,7 @@ function FinishNote({ r }: { r: FinishOut }) {
           {w.first && <span className="text-[var(--gold)]">오늘 첫 판 — 조각 ×2</span>}
           {w.firstClear && (
             <b className="text-[var(--pink)]">
-              오염 {w.firstClear.glitch}단계 첫 클리어! 코어 +{w.firstClear.cores} · 상자 +{w.firstClear.chest}
+              오염 {w.firstClear.glitch}단계 첫 클리어! 코어 +{w.firstClear.cores} · 유물 상자 +{w.firstClear.relicBox}
             </b>
           )}
           {(w.fresh?.length ?? 0) > 0 && (
