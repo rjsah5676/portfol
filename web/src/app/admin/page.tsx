@@ -11,6 +11,7 @@ import LiveRooms from "@/components/Admin/LiveRooms";
 import InquiryInbox from "@/components/Admin/InquiryInbox";
 import PostManager from "@/components/Admin/PostManager";
 import DataManager from "@/components/Admin/DataManager";
+import DefenseReset from "@/components/Admin/DefenseReset";
 import { subscribeInquiries, type Inquiry } from "@/firestore/inquiries";
 import { fetchStudyPostsLive, type StudyPost } from "@/firestore/studyPosts";
 
@@ -235,7 +236,13 @@ export default function AdminDashboard() {
         {tab === "members" && <Members />}
         {tab === "inbox" && <InquiryInbox items={inquiries} loaded={inqLoaded} />}
         {tab === "posts" && <PostManager posts={posts} loaded={postsLoaded} onChanged={loadPosts} />}
-        {tab === "rankings" && <DataManager key="rankings" groups={G_RANK} />}
+        {tab === "rankings" && (
+          <div>
+            <DataManager key="rankings" groups={G_RANK} />
+            <SubHeading>픽셀 운빨 디펜스</SubHeading>
+            <DefenseReset />
+          </div>
+        )}
         {tab === "guest" && <DataManager key="guest" groups={G_GUEST} />}
         {tab === "rooms" && (
           <div>

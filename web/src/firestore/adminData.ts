@@ -286,3 +286,13 @@ export function sortValue(v: unknown): number | string {
 /** 회원의 포인트 최근 내역 (관리자) */
 export const getUserPointLog = (uid: string) =>
   api<{ log: import("@/lib/points").PointLogRow[] }>(`/api/admin/users/${encodeURIComponent(uid)}/points`, { auth: true }).then((r) => r.log);
+
+/** 디펜스 데이터 (프로필 · 랭킹 · 판 기록) 개수 / 모두 지우기 — GP 는 그대로 */
+export const getDefenseStats = () =>
+  api<{ profiles: number; ranks: number; runs: number }>("/api/admin/defense/stats", { auth: true });
+export const resetDefense = () =>
+  api<Record<string, number>>("/api/admin/defense/reset", {
+    method: "POST",
+    body: { confirm: "디펜스 초기화" },
+    auth: true,
+  });

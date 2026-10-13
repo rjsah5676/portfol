@@ -206,6 +206,29 @@ export function adminRouter({ db, auth, web, users, points, gateway, cfg, traffi
     })
   );
 
+  // ───────────── 디펜스 초기화 (베타 승급 등) ─────────────
+  // 디펜스 프로필 · 랭킹 · 판 기록 · 회원 디펜스 통계를 모두 지움. GP 잔액 · 원장 · 블록 테마(GP 로 산 것)는 그대로.
+  r.get(
+    "/defense/stats",
+    h(async () => {
+      const [profiles, ranks, runs] = await Promise.all(
+        ["defense_profile", "defense_rank", "defense_runs"].map((c) => db.col(c).countDocuments({}))
+      );
+      return { profiles, ranks, runs };
+    })
+  );
+  r.post(
+    "/defense/reset",
+    h(async (req) => {
+      z.object({ confirm: z.literal("디펜스 초기화") }).parse(req.body);
+      const out: Record<string, number> = {};
+      for (const c of ["defense_profile", "defense_rank", "defense_runs"]) out[c] = (await db.col(c).deleteMany({})).deletedCount ?? 0;
+      out.users = (await db.col("users").updateMany({ "stats.defense": { $exists: true } } as never, { $unset: { "stats.defense": "" } } as never)).modifiedCount;
+      console.warn("[admin] 디펜스 데이터 초기화", JSON.stringify(out));
+      return out;
+    })
+  );
+
   // ───────────── 유입 분석 ─────────────
 
   r.get(
