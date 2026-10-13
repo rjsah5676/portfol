@@ -32,9 +32,9 @@ import {
 } from "@/realtime/defense";
 import Codex from "./Codex";
 import { Controller } from "./controller";
-import Hub, { Cur, RelicIcon, curTip, type HubTab } from "./Hub";
+import Hub, { Cur, curTip, type HubTab } from "./Hub";
 import { setTheme } from "./render";
-import { GLITCH, RELIC, type Loadout } from "@/lib/defense/progress";
+import { GLITCH, type Loadout } from "@/lib/defense/progress";
 import GameView from "./GameView";
 import Stage from "./Stage";
 import { playBgm } from "./audio";
@@ -57,7 +57,7 @@ import { FACTION_COLOR, FACTION_NAME, FACTIONS } from "@/lib/defense/units";
 
 /*
  * PIXEL GLITCH DEFENSE(픽셀 글리치 디펜스) 몸통 — 무대(Stage) 안에서 메뉴 → 솔로 / 멀티(로비 → 방 → 판) / 도감 / 랭킹 이 바뀜.
- *  솔로: 회원이면 서버에서 시드 · 로드아웃을 받아 시즌 판(영구 성장 적용) 또는 주간 도전(모두 같은 시드 · 유물, 강화 없음),
+ *  솔로: 회원이면 서버에서 시드 · 로드아웃을 받아 시즌 판(영구 성장 적용),
  *        아니면 연습 판(기록 안 남음). 끝나면 서버가 검증한 뒤 보상(픽셀 조각 · 카드 · 코어 · 패스 경험치)
  *  정비소(Hub): 판 밖 성장 — 유닛 강화 · 연구 · 유물 · 상자 · 미션 · 시즌 패스 · GP 상점
  *  멀티: 회원만. 방장이 시작하면 각자 자기 보드를 막는 생존 경쟁 (남 돕기는 나중에)
@@ -67,6 +67,7 @@ type Screen =
   | { k: "menu" }
   | { k: "solo"; ctrl: Controller; ranked: boolean; key: number; mode: RankBoard; lo: Loadout | null }
   | { k: "hub"; tab?: HubTab }
+  | { k: "shop"; tab?: HubTab }
   | { k: "lobby" }
   | { k: "room"; id: string }
   | { k: "codex" }
@@ -81,13 +82,9 @@ export default function DefenseApp() {
   const [notes, setNotes] = useState(false);
   /** 판 밖 성장 (회원만) */
   const [prof, setProf] = useState<DefenseProfile | null>(null);
-  const [paid, setPaid] = useState<DefenseProfile["paid"]>(null);
   const loadProf = () =>
     meta.profile().then(
-      (p) => {
-        setProf(p);
-        if (p.paid) setPaid(p.paid);
-      },
+      (p) => setProf(p),
       () => {}
     );
   useEffect(() => {
@@ -205,9 +202,16 @@ export default function DefenseApp() {
         onEnter={(id) => setScreen({ k: "room", id })}
       />
     );
-  else if (screen.k === "hub")
+  else if (screen.k === "hub" || screen.k === "shop")
     body = prof ? (
-      <Hub profile={prof} setProfile={setProf} tab={screen.tab} onBack={() => setScreen({ k: "menu" })} />
+      <Hub
+        key={screen.k}
+        mode={screen.k}
+        profile={prof}
+        setProfile={setProf}
+        tab={screen.tab}
+        onBack={() => setScreen({ k: "menu" })}
+      />
     ) : (
       <div className="px-stars absolute inset-0 flex items-center justify-center text-[var(--mute)]">
         <span className="dfn-blink">불러오는 중…</span>
@@ -237,7 +241,7 @@ export default function DefenseApp() {
         onResume={() => resume && doResume(resume)}
         onDropResume={() => (clearResume(saveKey), setResume(null))}
         onSolo={() => void startSolo("season")}
-        onWeekly={() => void startSolo("weekly")}
+        onShop={() => setScreen({ k: "shop" })}
         onHub={(tab) => setScreen({ k: "hub", tab })}
         onMulti={() => setScreen({ k: "lobby" })}
         onCodex={() => setScreen({ k: "codex" })}
@@ -260,17 +264,6 @@ export default function DefenseApp() {
           <RankTabs />
         </Modal>
       )}
-      {paid && screen.k === "menu" && (
-        <Modal title="주간 도전 보상" onClose={() => setPaid(null)} accent="#6dff8f">
-          <div className="dfn-pop flex flex-col items-center gap-2 py-3 text-center">
-            <p className="text-[14px]">
-              지난주 주간 도전 <b className="text-[var(--gold)]">{paid.rank}위</b>
-            </p>
-            <Cur k="gp" n={`+${fmtNum(paid.gp)} GP`} size={22} className="text-[20px] text-[var(--green)]" />
-            <p className="text-[12px] text-[var(--mute)]">정비소 GP 상점에서 코어 · 테마 · 시즌 패스에 쓸 수 있어요</p>
-          </div>
-        </Modal>
-      )}
       {notes && screen.k === "menu" && <PatchNotes onClose={() => setNotes(false)} />}
     </Stage>
   );
@@ -291,7 +284,7 @@ function Menu(p: {
   onDropResume(): void;
   onLogin(): void;
   onSolo(): void;
-  onWeekly(): void;
+  onShop(): void;
   onHub(tab?: HubTab): void;
   onMulti(): void;
   onCodex(): void;
@@ -405,12 +398,12 @@ function Menu(p: {
         </p>
         <div className="mt-2 flex items-center gap-1.5">
           <span className="inline-block bg-[var(--gold)] px-2 py-1 text-[12px] font-bold text-[#1a1000]">
-            BETA 1.0 · 밸런스 {BALANCE_VER}
+            BETA 1.1 · 밸런스 {BALANCE_VER}
           </span>
           {p.resume && (
             <>
               <Btn tone="gold" arrow className="dfn-pulse h-[26px] px-3 text-[12px] font-bold" onClick={p.onResume} title="새로고침 · 튕기기 전에 하던 판을 그 자리부터">
-                ▶ 이어하기 — {p.resume.mode === "weekly" ? "주간 도전" : p.resume.run ? "시즌" : "연습"} {p.resume.wave}웨이브
+                ▶ 이어하기 — {p.resume.run ? "시즌" : "연습"} {p.resume.wave}웨이브
               </Btn>
               <Btn className="h-[26px] w-[26px] text-[12px]" onClick={p.onDropResume} title="저장된 판 지우기">
                 ✕
@@ -440,26 +433,18 @@ function Menu(p: {
         <div className="grid grid-cols-2 gap-2.5">
           <Btn
             tone="gold"
-            className="h-[50px] px-2 text-left"
-            onClick={p.onWeekly}
+            className="relative h-[50px] px-2 text-left"
+            onClick={p.onShop}
             disabled={!p.member || p.busy}
-            title={p.member ? "이번 주 모두 같은 시드 · 같은 유물, 강화 없이 실력 겨루기" : "회원만"}
+            title={p.member ? "패키지 · 상자 · 초월 소환 · 재화샵 · GP 교환" : "회원만"}
           >
-            <b className="block text-[14px]">주간 도전</b>
-            <span className="flex items-center gap-1 text-[12px] opacity-85">
-              {pr ? (
-                <>
-                  {pr.week.relics.map((id) => (
-                    <span key={id} title={`${RELIC[id]?.name} — ${RELIC[id]?.desc}`}>
-                      <RelicIcon id={id} size={16} />
-                    </span>
-                  ))}
-                  <span className="ml-0.5">순위 GP</span>
-                </>
-              ) : (
-                "같은 시드 · 강화 없음"
-              )}
-            </span>
+            <b className="block text-[14px]">상점</b>
+            <span className="block truncate text-[12px] opacity-85">패키지 · 상자 · 초월 소환</span>
+            {!!pr && pr.boxes.card + pr.boxes.relic > 0 && (
+              <span className="absolute top-1 right-1 min-w-[16px] bg-[#ff4d6d] px-1 text-center text-[12px] leading-[16px] text-white shadow-[0_0_0_2px_#0a0816]">
+                {pr.boxes.card + pr.boxes.relic}
+              </span>
+            )}
           </Btn>
           <Btn
             tone="cyan"
@@ -548,7 +533,7 @@ function FinishNote({ r }: { r: FinishOut }) {
   return (
     <span className="flex flex-col items-center gap-1.5">
       <span>
-        {r.mode === "weekly" ? "주간 도전" : "시즌 랭킹"} <b className="text-[#ffd84a]">{r.rank}위</b>
+        시즌 랭킹 <b className="text-[#ffd84a]">{r.rank}위</b>
         {r.best ? (
           <b className="ml-2 text-[#7ef3ff]">최고 기록 갱신!</b>
         ) : (
@@ -594,13 +579,8 @@ function RankTabs() {
         <Btn tone={board === "season" ? "main" : "ghost"} className="h-8 px-3 text-[13px] font-bold" onClick={() => setBoard("season")}>
           시즌
         </Btn>
-        <Btn tone={board === "weekly" ? "gold" : "ghost"} className="h-8 px-3 text-[13px] font-bold" onClick={() => setBoard("weekly")}>
-          주간 도전
-        </Btn>
         <span className="ml-2 text-[12px] text-[var(--mute)]">
-          {board === "season"
-            ? `영구 성장 적용 · 오염 단계가 높을수록 위 · 밸런스 ${BALANCE_VER}`
-            : "이번 주 모두 같은 판 · 강화 없음 · 주가 끝나면 순위 GP"}
+          {`영구 성장 적용 · 오염 단계가 높을수록 위 · 밸런스 ${BALANCE_VER}`}
         </span>
       </div>
       <RankList key={board} board={board} />

@@ -1,5 +1,5 @@
 import { rpc, subscribe } from "@/lib/api/socket";
-import type { Loadout, QuestDef, RunReward } from "@/lib/defense/progress";
+import type { Goods, Loadout, QuestDef, RunReward } from "@/lib/defense/progress";
 import type { LogEntry } from "@/lib/defense/replay";
 import type { Cmd, Result } from "@/lib/defense/sim";
 
@@ -23,7 +23,7 @@ export interface DefenseRankRow {
   at: number;
 }
 
-export type RankBoard = "season" | "weekly";
+export type RankBoard = "season";
 export type RunStart = { run: string; seed: number; ver: string; mode: RankBoard; loadout: Loadout };
 export const startRun = (mode: RankBoard = "season") => rpc<RunStart>("defense.start", { mode });
 export type FinishOut = {
@@ -79,22 +79,40 @@ export interface DefenseProfile {
   theme: string;
   day: { key: string };
   season: { id: number; xp: number; free: number[]; prem: number[]; premium: boolean };
-  coreBuys: { w: number; n: number };
   seen?: string[];
-  gpBuys?: { w: number; relic: number; cards: number; trans: number };
+  /** 이번 주 상점(재화샵 · 판매 · 주간 패키지) 산 횟수 */
+  shop: { w: number; n: Record<string, number> };
+  /** 한 번만 사는 패키지 산 것 */
+  packs: Record<string, number>;
+  /** 초월 소환 천장 — 마지막 초월 뒤로 돌린 수 */
+  pity: number;
   firstDay?: string;
   runs: number;
   quests: { daily: QuestRow[]; weekly: QuestRow[] };
   passTier: number;
   themes: string[];
   gp: number;
-  week: { n: number; ends: number; relics: string[] };
+  week: { n: number; ends: number };
   seasonEnds: number;
   dayEnds: number;
-  /** 지난주 주간 도전 순위 GP (이번에 받음) */
-  paid?: { week: number; rank: number; gp: number } | null;
-  /** 상자를 열어 나온 것 */
-  got?: { relic?: string; shard?: number; cards?: Record<string, number>; trans?: string; dup?: number };
+  /** 상자 · 소환 · 패키지에서 나온 것 */
+  got?: {
+    relic?: string;
+    shard?: number;
+    cards?: Record<string, number>;
+    /** 초월 소환 한 번 (trans 가 없으면 miss 의 재화) */
+    trans?: string | TransGot[];
+    dup?: number;
+    miss?: Goods;
+    pity?: number;
+    pack?: string;
+  };
+}
+export interface TransGot {
+  trans?: string;
+  dup?: number;
+  miss?: Goods;
+  pity: number;
 }
 const P = (name: string, arg?: unknown) => rpc<DefenseProfile>(name, arg);
 export const meta = {
@@ -112,15 +130,15 @@ export const meta = {
   boxOpen: (kind: "card" | "relic") => P("defense.box.open", { kind }),
   benchBuy: () => P("defense.bench.buy"),
   fslotBuy: () => P("defense.fslot.buy"),
-  transSummon: (pay: "cores" | "gp") => P("defense.trans", { pay }),
+  transSummon: () => P("defense.trans"),
+  storeBuy: (id: string) => P("defense.store.buy", { id }),
+  storeSell: (id: string) => P("defense.store.sell", { id }),
+  packBuy: (id: string) => P("defense.pack.buy", { id }),
   setLoad: (load: { res: string[]; relics: string[]; glitch: number }) => P("defense.load", load),
   setTheme: (id: string) => P("defense.theme", { id }),
   questClaim: (id: string) => P("defense.quest.claim", { id }),
   passClaim: () => P("defense.pass.claim"),
   passBuy: () => P("defense.pass.buy"),
-  coresBuy: () => P("defense.cores.buy"),
-  gpRelic: () => P("defense.gp.relic"),
-  gpCards: (id: string) => P("defense.gp.cards", { id }),
 };
 
 // ── 멀티 ──

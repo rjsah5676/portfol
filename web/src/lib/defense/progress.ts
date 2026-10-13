@@ -7,7 +7,7 @@
  *   시뮬은 modsOf(로드아웃) 한 번만 계산해서 보드에 붙임 (매 tick 계산 X).
  *
  * 재화: 픽셀 조각(기본) · 유닛 카드(유닛별) · 글리치 코어(희귀). 보상은 서버가 기록을 다시 돌려 검증한 뒤에만.
- * GP(사이트 공용 포인트, lib/points.ts)는 꾸미기 · 시즌 패스 프리미엄 · 코어 교환에 씀.
+ * GP(사이트 공용 포인트, lib/points.ts)는 상점(패키지 · 재화샵) · 시즌 패스 프리미엄에 씀. 게임 재화 → GP 교환도 상점에서 (GP_SELL).
  *
  * 수치를 바꾸면 balance.ts 의 BALANCE_VER 도 올리기 (판 결과가 바뀜).
  */
@@ -203,33 +203,49 @@ const BASE_GLITCH: GlitchDef[] = [
   { lv: 10, hp: 2.6, spd: 1.1, bossSec: -15, reward: 4, armor: 1, boss: 1, rule: "끝판 — 보스 제한 시간 -15초" },
 ];
 /**
- * 11~30단계 (심연): 10단계 위에 한 단계마다 적 체력 +9% · 보상 +0.25, 5단계마다 새 규칙
- *  11~ 방어력 ×1.3 · 15~ 보스 체력 ×1.25 · 20~ 속도 ×1.15 · 방어력 ×1.6 · 25~ 보스 체력 ×1.5 · 보스 시간 -18 · 30 끝
+ * 11~30단계 (심연): 10단계 위에 한 단계마다 적 체력 +2%(10단계 기준) · 보상 +0.1, 5단계마다 새 규칙 (DEEP_PARAMS)
+ *  11~ 방어력 · 15~ 보스 체력 · 20~ 속도 · 방어력 더 · 25~ 보스 체력 더 · 보스 시간 -18 · 30 끝
+ *  (다 키운 봇이 30단계를 다섯 판에 한 번쯤 깨는 정도 — 사람은 배치 · 초월이 더 나아서 이보다 쉬움)
  */
-const DEEP_RULE: Record<number, string> = {
-  11: "심연 — 적 방어력 ×1.3",
-  15: "보스 체력 ×1.25",
-  20: "적 속도 ×1.15 · 방어력 ×1.6",
-  25: "보스 체력 ×1.5 · 보스 시간 -18초",
+const x100 = (v: number) => `×${v}`;
+const deepRule = (P: DeepParams): Record<number, string> => ({
+  11: `심연 — 적 방어력 ${x100(P.armor11)}`,
+  15: `보스 체력 ${x100(P.boss15)}`,
+  20: `적 속도 ${x100(P.spd20)} · 방어력 ${x100(P.armor20)}`,
+  25: `보스 체력 ${x100(P.boss25)} · 보스 시간 -18초`,
   30: "끝없는 오염 — 마지막 단계",
-};
-export const GLITCH: GlitchDef[] = [
-  ...BASE_GLITCH,
-  ...Array.from({ length: 20 }, (_, i): GlitchDef => {
+});
+/** 심연 곡선 값 (밸런스 시뮬이 --deep 으로 바꿔 볼 수 있음) */
+export interface DeepParams {
+  hpPerLv: number;
+  armor11: number;
+  armor20: number;
+  boss15: number;
+  boss25: number;
+  spd20: number;
+  /** 단계마다 보상 배수 + (10단계 4 에서) */
+  rewardPerLv?: number;
+}
+export const DEEP_PARAMS: DeepParams = { hpPerLv: 0.02, armor11: 1.1, armor20: 1.2, boss15: 1.05, boss25: 1.1, spd20: 1.08, rewardPerLv: 0.1 };
+export function deepGlitch(P: DeepParams): GlitchDef[] {
+  const top = BASE_GLITCH[10];
+  const rules = deepRule(P);
+  return Array.from({ length: 20 }, (_, i): GlitchDef => {
     const lv = 11 + i;
-    const top = BASE_GLITCH[10];
+    const hp = Math.round(top.hp * (1 + P.hpPerLv * (lv - 10)) * 100) / 100;
     return {
       lv,
-      hp: Math.round(top.hp * (1 + 0.09 * (lv - 10)) * 100) / 100,
-      spd: lv >= 20 ? 1.15 : top.spd,
+      hp,
+      spd: lv >= 20 ? P.spd20 : top.spd,
       bossSec: lv >= 25 ? -18 : top.bossSec,
-      reward: Math.round((top.reward + 0.25 * (lv - 10)) * 100) / 100,
-      armor: lv >= 20 ? 1.6 : 1.3,
-      boss: lv >= 25 ? 1.5 : lv >= 15 ? 1.25 : 1,
-      rule: DEEP_RULE[lv] ?? `적 체력 +${Math.round(((top.hp * (1 + 0.09 * (lv - 10))) - 1) * 100)}%`,
+      reward: Math.round((top.reward + (P.rewardPerLv ?? 0.1) * (lv - 10)) * 100) / 100,
+      armor: lv >= 20 ? P.armor20 : P.armor11,
+      boss: lv >= 25 ? P.boss25 : lv >= 15 ? P.boss15 : 1,
+      rule: rules[lv] ?? `적 체력 +${Math.round((hp - 1) * 100)}%`,
     };
-  }),
-];
+  });
+}
+export const GLITCH: GlitchDef[] = [...BASE_GLITCH, ...deepGlitch(DEEP_PARAMS)];
 
 /* ───────────────────────── 판에 붙는 효과 (시뮬이 읽음) ───────────────────────── */
 
@@ -383,16 +399,16 @@ export function modsOf(lo: Loadout | null | undefined): Mods {
 
 /** lv → lv+1 에 드는 카드 · 조각 */
 export const LV_COST: { cards: number; pieces: number }[] = [
-  { cards: 2, pieces: 50 },
-  { cards: 4, pieces: 100 },
-  { cards: 6, pieces: 180 },
-  { cards: 10, pieces: 300 },
-  { cards: 15, pieces: 450 },
-  { cards: 20, pieces: 650 },
-  { cards: 30, pieces: 900 },
-  { cards: 40, pieces: 1200 },
-  { cards: 60, pieces: 1600 },
-  { cards: 80, pieces: 2200 },
+  { cards: 3, pieces: 50 },
+  { cards: 6, pieces: 100 },
+  { cards: 10, pieces: 180 },
+  { cards: 16, pieces: 300 },
+  { cards: 24, pieces: 450 },
+  { cards: 32, pieces: 650 },
+  { cards: 48, pieces: 900 },
+  { cards: 64, pieces: 1200 },
+  { cards: 96, pieces: 1600 },
+  { cards: 128, pieces: 2200 },
 ];
 
 /**
@@ -462,7 +478,7 @@ export function collectReward(grade: number): { pieces: number; cores?: number }
 
 /* ───────────────────────── 판 보상 (서버가 검증 뒤 계산) ───────────────────────── */
 
-export type RunMode = "season" | "weekly" | "multi";
+export type RunMode = "season" | "multi";
 
 export interface RunReward {
   pieces: number;
@@ -521,14 +537,118 @@ export const glitchUnlocks = (glitch: number, r: { win: boolean; wave: number })
 
 /**
  * 카드 상자: 무작위 유닛 카드 (낮은 등급이 잘 나옴) — 픽셀 조각
- * 유물 상자: 유물 하나 (희귀도 확률) — 가진 유물이면 그 유물 조각 +1 (유물 강화 재료) — 코어 또는 GP(주 3번, 좋은 확률)
- * 초월 소환: 초월 셋 중 하나 — 처음이면 해금(판에서 조합식이 열림), 이미 있으면 그 유닛 카드 — 코어 또는 GP(주 2번)
+ * 유물 상자: 유물 하나 (희귀도 확률) — 가진 유물이면 그 유물 조각 +1 (유물 강화 재료) — 글리치 코어
+ * 초월 소환: 15% 로 초월 셋 중 하나 (처음이면 해금 · 이미 있으면 그 유닛 카드) — 아니면 게임 재화.
+ *   천장: 초월 없이 9번 넘기면 10번째는 반드시 초월 (pity = 마지막 초월 뒤로 돌린 수) — 글리치 코어
+ * GP 로는 상점의 재화샵 · 패키지에서만 (GP_STORE · GP_PACKS)
  */
 export const BOX = {
   card: { pieces: 300, n: 12 },
-  relic: { cores: 12, tierOdds: [0.6, 0.3, 0.1], gp: 1500, gpPerWeek: 3, gpOdds: [0.45, 0.4, 0.15] },
-  trans: { cores: 60, gp: 3000, gpPerWeek: 2, dupCards: 15 },
+  relic: { cores: 12, tierOdds: [0.6, 0.3, 0.1] },
+  trans: { cores: 40, rate: 0.15, pity: 10, dupCards: 15 },
 } as const;
+/** 초월 소환에서 초월이 안 나오면 (85%) — 가중치대로 하나 */
+export const TRANS_MISS: { w: number; give: Goods }[] = [
+  { w: 50, give: { pieces: 600 } },
+  { w: 30, give: { cores: 8 } },
+  { w: 20, give: { cardBox: 2 } },
+];
+/**
+ * 초월 소환 한 번 (서버 · 성장 시뮬이 같은 함수). r() 은 [0,1) 난수.
+ * 결과 pity 는 저장할 새 값 (초월이 나오면 0).
+ */
+export function transRoll(pity: number, r: () => number): { pity: number; trans?: string; give?: Goods } {
+  const n = Math.max(0, pity | 0) + 1;
+  if (n >= BOX.trans.pity || r() < BOX.trans.rate) {
+    return { pity: 0, trans: TRANS_IDS[Math.min(TRANS_IDS.length - 1, Math.floor(r() * TRANS_IDS.length))] };
+  }
+  const sum = TRANS_MISS.reduce((a, m) => a + m.w, 0);
+  let x = r() * sum;
+  const m = TRANS_MISS.find((t) => (x -= t.w) < 0) ?? TRANS_MISS[0];
+  return { pity: n, give: m.give };
+}
+
+/* ───────────────────────── 상점: 재화샵 · 패키지 (GP) ───────────────────────── */
+
+/** 상점에서 오가는 것 (게임 재화 · 상자 · 초월 소환 · 꾸미기) */
+export interface Goods {
+  pieces?: number;
+  cores?: number;
+  cardBox?: number;
+  relicBox?: number;
+  /** 초월 소환 횟수 (받는 즉시 돌림) */
+  trans?: number;
+  /** 꾸미기 id (inv.defense) */
+  item?: string;
+}
+/**
+ * GP 기준값 — 재화샵 값 (= 100%). 패키지 이득 % 는 이 값으로 셈.
+ * 조각 2GP · 코어 250GP · 카드 상자 600GP(=300조각) · 유물 상자 3,000GP(=12코어) · 초월 소환 10,000GP(=40코어)
+ */
+export const GP_VALUE = { pieces: 2, cores: 250, cardBox: 600, relicBox: 3000, trans: 10_000 } as const;
+export const goodsGp = (g: Goods) =>
+  (g.pieces ?? 0) * GP_VALUE.pieces +
+  (g.cores ?? 0) * GP_VALUE.cores +
+  (g.cardBox ?? 0) * GP_VALUE.cardBox +
+  (g.relicBox ?? 0) * GP_VALUE.relicBox +
+  (g.trans ?? 0) * GP_VALUE.trans;
+
+export interface StoreItem {
+  id: string;
+  name: string;
+  gp: number;
+  give: Goods;
+  /** 한 주에 살 수 있는 수 */
+  perWeek: number;
+}
+/** 재화샵: GP → 게임 재화 (효율 낮음 — 판에서 버는 게 훨씬 빠름. 급할 때 · 남는 GP 용) */
+export const GP_STORE: StoreItem[] = [
+  { id: "s_pieces", name: "픽셀 조각 500", gp: 1000, give: { pieces: 500 }, perWeek: 5 },
+  { id: "s_cores", name: "글리치 코어 4", gp: 1000, give: { cores: 4 }, perWeek: 5 },
+  { id: "s_card", name: "카드 상자", gp: 600, give: { cardBox: 1 }, perWeek: 5 },
+  { id: "s_relic", name: "유물 상자", gp: 3000, give: { relicBox: 1 }, perWeek: 2 },
+];
+export interface SellItem {
+  id: string;
+  name: string;
+  /** 내는 게임 재화 */
+  pay: { pieces?: number; cores?: number };
+  gp: number;
+  perWeek: number;
+}
+/** 재화 → GP: 재화샵 값의 절반 (조각 1,000 = 재화샵 2,000GP → 1,000GP) */
+export const GP_SELL: SellItem[] = [
+  { id: "x_pieces", name: "픽셀 조각 1,000 → GP", pay: { pieces: 1000 }, gp: 1000, perWeek: 3 },
+  { id: "x_cores", name: "글리치 코어 4 → GP", pay: { cores: 4 }, gp: 500, perWeek: 2 },
+];
+
+export interface PackDef {
+  id: string;
+  name: string;
+  desc: string;
+  gp: number;
+  give: Goods;
+  /** 한 번만 (계정) */
+  once?: boolean;
+  /** 주마다 (once 가 아니면) */
+  perWeek?: number;
+  /** 이 오염 단계를 클리어해야 보임 */
+  needWin?: number;
+}
+/** 패키지: GP 로만. 재화샵 값의 5~8배 (이득 % = goodsGp ÷ gp) */
+export const GP_PACKS: PackDef[] = [
+  { id: "p_start", name: "신입 수호자 꾸러미", desc: "처음 한 번 — 정비소를 빠르게 시작", gp: 1000, once: true, give: { pieces: 1500, cardBox: 2, cores: 4 } },
+  { id: "p_week", name: "주간 보급 꾸러미", desc: "매주 — 조각 · 카드 · 코어", gp: 1500, perWeek: 1, give: { pieces: 2500, cardBox: 3, cores: 6 } },
+  { id: "p_relic", name: "유물 탐사 꾸러미", desc: "매주 — 유물 상자 3 + 강화용 코어", gp: 2000, perWeek: 1, give: { relicBox: 3, cores: 8 } },
+  { id: "p_trans", name: "초월 계약 꾸러미", desc: "매주 — 초월 소환 2번 (천장 횟수에 들어감)", gp: 3000, perWeek: 1, give: { trans: 2 } },
+  { id: "p_forest", name: "픽셀 숲 꾸러미", desc: "한 번 — 블록 테마 「픽셀 숲」 + 조각 · 카드", gp: 3000, once: true, give: { item: "theme.forest", pieces: 3000, cardBox: 5 } },
+  { id: "p_deep10", name: "심연 개척 꾸러미", desc: "오염 10단계 클리어 뒤 한 번", gp: 4000, once: true, needWin: 10, give: { pieces: 6000, cores: 16, relicBox: 2, trans: 1 } },
+  { id: "p_deep20", name: "심연 정복 꾸러미", desc: "오염 20단계 클리어 뒤 한 번", gp: 6000, once: true, needWin: 20, give: { pieces: 10000, cores: 24, relicBox: 3, trans: 1 } },
+];
+export const PACK: Record<string, PackDef> = Object.fromEntries(GP_PACKS.map((x) => [x.id, x]));
+/** 패키지 이득 % (재화샵 값 대비, 꾸미기는 셈에서 뺌) */
+export const packPct = (pk: PackDef) => Math.round((goodsGp(pk.give) / pk.gp) * 100);
+
 /** 코어로 원하는 유물 바로 사기 (일반 · 희귀 · 전설) */
 export const RELIC_CORE_PRICE = [8, 15, 30] as const;
 /** 유물 lv → lv+1: 그 유물 조각(같은 유물이 또 나오면 1개) lv 개 + 코어 (희귀도 값 × lv ÷ 2) */
@@ -600,11 +720,6 @@ function pickN<T>(pool: T[], n: number, key: number): T[] {
 export const dailyOf = (t: number) => pickN(DAILY_POOL, 3, Math.floor((t - EPOCH) / DAY) + 7);
 export const weeklyOf = (t: number) => pickN(WEEKLY_POOL, 3, weekOf(t) + 101);
 
-/** 주간 도전: 모두 같은 유물 3개 (강화 · 연구 없음, 오염 0) */
-export function weeklyRelics(week: number): string[] {
-  return pickN(RELICS, 3, week + 977).map((r) => r.id);
-}
-
 /* ───────────────────────── 시즌 패스 ───────────────────────── */
 
 export interface PassReward {
@@ -642,27 +757,6 @@ export const PASS: PassTier[] = Array.from({ length: 30 }, (_, i): PassTier => {
 });
 /** 프리미엄 줄 값 (GP) */
 export const PASS_PREMIUM_GP = 5000;
-
-/**
- * GP 상점 (주마다 횟수 제한 — GP 가 많은 사람이 한 번에 다 사서 성장을 건너뛰지 못하게)
- *  cards: 고른 유닛 카드 묶음 (유물 · 초월 GP 는 BOX 에)
- */
-export const GP_SHOP = {
-  cards: { gp: 600, n: 10, perWeek: 5 },
-} as const;
-
-/** GP → 글리치 코어 교환 (주에 max 번) */
-export const CORE_EXCHANGE = { gp: 1000, cores: 4, maxPerWeek: 5 } as const;
-
-/** 주간 도전 순위 GP 보상 (주가 끝나면 다음 접속 때 받음) */
-export const WEEKLY_GP: { upTo: number; gp: number }[] = [
-  { upTo: 1, gp: 3000 },
-  { upTo: 3, gp: 2000 },
-  { upTo: 10, gp: 1000 },
-  { upTo: 50, gp: 300 },
-];
-/** 주간 도전에 한 판이라도 끝내면 (순위와 별개) */
-export const WEEKLY_JOIN_GP = 100;
 
 /* ───────────────────────── 꾸미기 (블록 테마) ───────────────────────── */
 

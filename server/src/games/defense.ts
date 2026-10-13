@@ -10,9 +10,9 @@ import type { Ctx } from "../realtime/gateway";
 import { BALANCE_VER, TPS } from "../../../web/src/lib/defense/balance";
 import { HASH_TICKS, MAX_LOG, MAX_SPEED, MAX_TICKS, TICKS_PER_TURN, TURN_MS, scoreOf, validLog, type LogEntry } from "../../../web/src/lib/defense/replay";
 import { isCmd, type Cmd, type Result } from "../../../web/src/lib/defense/sim";
-import { seasonOf, seasonScore, weekOf, type Loadout, type RunMode } from "../../../web/src/lib/defense/progress";
+import { seasonOf, seasonScore, type Loadout, type RunMode } from "../../../web/src/lib/defense/progress";
 import type { VerifyJob, VerifyOut } from "./defenseVerify.worker";
-import { createDefenseMeta, weeklyLoadout, weeklySeed } from "./defenseMeta";
+import { createDefenseMeta } from "./defenseMeta";
 
 /*
  * 픽셀 글리치 디펜스 (PIXEL FIGHT 외전 랜덤 디펜스) — 랭킹 · 멀티
@@ -22,16 +22,17 @@ import { createDefenseMeta, weeklyLoadout, weeklySeed } from "./defenseMeta";
  *  랭킹 (회원만)
  *   defense.start { mode }   → { run, seed, ver, mode, loadout }  판을 시작할 때. 시드 · 로드아웃은 서버가 정함
  *       mode "season": 무작위 시드 + 내 영구 성장(유닛 레벨 · 연구 · 유물 · 오염 단계) — 시즌 랭킹 (오염 단계 가중 점수)
- *       mode "weekly": 이번 주 모두 같은 시드 + 같은 유물 3개, 강화 · 연구 없음 — 주간 도전 랭킹 (주가 끝나면 순위 GP)
+ *       (주간 도전은 베타에서 없앰 — 그 자리는 상점)
  *   defense.finish { run, log } → 명령 기록을 작업 스레드에서 처음부터 다시 돌려(defenseVerify.worker) 결과를 직접 계산
  *                              → 점수를 꾸며 보낼 수 없음. 걸린 시간도 봄 (최대 배속 MAX_SPEED 로도 그만큼은 걸려야)
  *                              → 검증된 판만 보상 · 미션 · 패스 경험치 (defenseMeta.onRun)
- *   defense.rank { board, limit } → 시즌(이번 밸런스 버전 · 이번 시즌) 또는 이번 주 도전 순위
+ *   defense.rank { board, limit } → 시즌(이번 밸런스 버전 · 이번 시즌) 순위
  *   defense.me { board }      → 내 최고 기록 · 순위
  *
  *  성장 (defenseMeta.ts): defense.profile · unit.up/upAll/down · res.buy/level · relic.buy/level · box.buy/open (card · relic)
- *                          · bench.buy · fslot.buy · trans (초월 소환) · gp.relic · gp.cards · load · theme
- *                        · quest.claim · pass.claim · pass.buy(GP) · cores.buy(GP)
+ *                          · bench.buy · fslot.buy · trans (초월 소환, 코어) · load · theme
+ *                        · quest.claim · pass.claim · pass.buy(GP)
+ *                        · store.buy(재화샵, GP) · store.sell(재화 → GP) · pack.buy(패키지, GP)
  *
  *  멀티 (락스텝 — 서버는 명령만 모아 뿌림)
  *   방: lobby → playing → result. 최대 4명, 각자 자기 보드(라인)를 막음 — 지금은 서로 영향 없음(생존 경쟁)
@@ -61,7 +62,7 @@ interface RunDoc {
   ver: string;
   at: Date;
   used: boolean;
-  mode?: "season" | "weekly";
+  mode?: "season";
   /** 이 판에 들고 간 로드아웃 (시작 때 고정) */
   lo?: Loadout;
   /** 순위표 키 (시즌 · 주) */
@@ -209,7 +210,7 @@ export function registerDefense({ gateway, db, points }: Deps) {
   const verifier = createVerifier();
   const meta = createDefenseMeta(db, points);
   const seasonKey = () => `${BALANCE_VER}:s${seasonOf(Date.now())}`;
-  const boardKey = (b: unknown) => (b === "weekly" ? meta.weeklyKey(weekOf(Date.now())) : seasonKey());
+  const boardKey = (_b: unknown) => seasonKey();
   const rooms = new Map<string, Room>();
 
   /* ── 랭킹 ── */
@@ -217,14 +218,13 @@ export function registerDefense({ gateway, db, points }: Deps) {
   gateway.rpc("defense.start", async (ctx, raw) => {
     member(ctx);
     const uid = ctx.uid;
-    const { mode } = z.object({ mode: z.enum(["season", "weekly"]).default("season") }).parse(raw ?? {});
+    const { mode } = z.object({ mode: z.enum(["season"]).default("season") }).parse(raw ?? {});
     const recent = await runs.countDocuments({ uid, at: { $gt: new Date(Date.now() - 3600_000) } });
     if (recent >= RUNS_PER_HOUR) throw new AppError("RATE_LIMITED", "잠시 후에 다시 시작해 주세요.", 429);
     const _id = newId();
-    const week = weekOf(Date.now());
-    const seed = mode === "weekly" ? weeklySeed(week) : randomInt(1, 2 ** 31 - 1);
-    const lo = mode === "weekly" ? weeklyLoadout(week) : await meta.loadoutOf(uid);
-    const board = mode === "weekly" ? meta.weeklyKey(week) : seasonKey();
+    const seed = randomInt(1, 2 ** 31 - 1);
+    const lo = await meta.loadoutOf(uid);
+    const board = seasonKey();
     await runs.insertOne({ _id, uid, seed, ver: BALANCE_VER, at: new Date(), used: false, mode, lo, board });
     return { run: _id, seed, ver: BALANCE_VER, mode, loadout: lo };
   });
@@ -238,15 +238,15 @@ export function registerDefense({ gateway, db, points }: Deps) {
     if (!doc) throw new AppError("RANK_REJECTED", "이미 끝났거나 없는 판이에요.", 400);
     if (doc.ver !== BALANCE_VER) throw new AppError("RANK_REJECTED", "밸런스가 바뀌어서 이 판은 기록할 수 없어요.", 400);
     if (Date.now() - doc.at.getTime() > RUN_TTL_MS) throw new AppError("RANK_REJECTED", "너무 오래된 판이에요.", 400);
-    const mode = doc.mode ?? "season";
+    const mode = "season" as const;
     const lo = doc.lo ?? null;
     const out = await verifier.run({ seed: doc.seed, players: 1, log, loadouts: [lo] });
     const res = out.results[0];
     if (!res) throw new AppError("RANK_REJECTED", "끝나지 않은 판은 기록할 수 없어요.", 400);
     const elapsed = (Date.now() - doc.at.getTime()) / 1000;
     if (elapsed + 5 < res.tick / TPS / MAX_SPEED) throw new AppError("RANK_REJECTED", "기록을 확인할 수 없어요.", 400);
-    const glitch = mode === "weekly" ? 0 : (lo?.glitch ?? 0);
-    const score = mode === "weekly" ? scoreOf(res) : seasonScore(res, glitch);
+    const glitch = lo?.glitch ?? 0;
+    const score = seasonScore(res, glitch);
     const reward = await meta.onRun(uid, mode, res, out.stats[0], glitch).catch((e) => {
       console.warn("[defense] 보상 저장 실패", e);
       return null;
@@ -274,7 +274,7 @@ export function registerDefense({ gateway, db, points }: Deps) {
     return { result: res, score, best, rank, tops: out.tops[0], mode, reward };
   });
 
-  const boardArg = z.object({ board: z.enum(["season", "weekly"]).default("season"), limit: z.number().int().min(1).max(100).default(20) });
+  const boardArg = z.object({ board: z.enum(["season"]).default("season"), limit: z.number().int().min(1).max(100).default(20) });
 
   gateway.rpc("defense.rank", async (_ctx, raw) => {
     const { board, limit } = boardArg.parse(raw ?? {});
@@ -310,15 +310,15 @@ export function registerDefense({ gateway, db, points }: Deps) {
   gateway.rpc("defense.box.open", (ctx, raw) => (member(ctx), meta.boxOpen(ctx.uid, boxKind.parse(raw).kind)));
   gateway.rpc("defense.bench.buy", (ctx) => (member(ctx), meta.benchBuy(ctx.uid)));
   gateway.rpc("defense.fslot.buy", (ctx) => (member(ctx), meta.fslotBuy(ctx.uid)));
-  gateway.rpc("defense.trans", (ctx, raw) => (member(ctx), meta.transSummon(ctx.uid, z.object({ pay: z.enum(["cores", "gp"]) }).parse(raw).pay)));
+  gateway.rpc("defense.trans", (ctx) => (member(ctx), meta.transSummon(ctx.uid)));
+  gateway.rpc("defense.store.buy", (ctx, raw) => (member(ctx), meta.storeBuy(ctx.uid, id.parse(raw).id)));
+  gateway.rpc("defense.store.sell", (ctx, raw) => (member(ctx), meta.storeSell(ctx.uid, id.parse(raw).id)));
+  gateway.rpc("defense.pack.buy", (ctx, raw) => (member(ctx), meta.packBuy(ctx.uid, id.parse(raw).id)));
   gateway.rpc("defense.load", (ctx, raw) => (member(ctx), meta.setLoad(ctx.uid, raw)));
   gateway.rpc("defense.theme", (ctx, raw) => (member(ctx), meta.setTheme(ctx.uid, id.parse(raw).id)));
   gateway.rpc("defense.quest.claim", (ctx, raw) => (member(ctx), meta.questClaim(ctx.uid, id.parse(raw).id)));
   gateway.rpc("defense.pass.claim", (ctx) => (member(ctx), meta.passClaim(ctx.uid)));
   gateway.rpc("defense.pass.buy", (ctx) => (member(ctx), meta.passBuy(ctx.uid)));
-  gateway.rpc("defense.cores.buy", (ctx) => (member(ctx), meta.coresBuy(ctx.uid)));
-  gateway.rpc("defense.gp.relic", (ctx) => (member(ctx), meta.gpRelic(ctx.uid)));
-  gateway.rpc("defense.gp.cards", (ctx, raw) => (member(ctx), meta.gpCards(ctx.uid, id.parse(raw).id)));
 
   /* ── 멀티 ── */
 

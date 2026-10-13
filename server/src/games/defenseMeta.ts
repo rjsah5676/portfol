@@ -1,4 +1,4 @@
-import { createHash, randomInt } from "node:crypto";
+import { randomInt } from "node:crypto";
 import { z } from "zod";
 import type { Database } from "../db";
 import { AppError, bad } from "../errors";
@@ -11,10 +11,11 @@ import {
   BOX,
   FRES_COST,
   FRES_MAX,
-  TRANS_IDS,
-  CORE_EXCHANGE,
   GLITCH_MAX,
-  GP_SHOP,
+  GP_PACKS,
+  GP_SELL,
+  GP_STORE,
+  PACK,
   glitchUnlocks,
   FIRST_RUN_MULT,
   collectReward,
@@ -35,8 +36,6 @@ import {
   RELIC_SLOTS,
   THEME,
   UNIT_MAX_LV,
-  WEEKLY_GP,
-  WEEKLY_JOIN_GP,
   cleanLoadout,
   dailyOf,
   kstDayKey,
@@ -46,7 +45,8 @@ import {
   weekEnds,
   weekOf,
   weeklyOf,
-  weeklyRelics,
+  transRoll,
+  type Goods,
   type Loadout,
   type PassReward,
   type QuestDef,
@@ -56,7 +56,7 @@ import { RECIPE, UNIT, UNITS } from "../../../web/src/lib/defense/units";
 import type { Result } from "../../../web/src/lib/defense/sim";
 
 /*
- * 픽셀 글리치 디펜스 — 판 밖 성장 (프로필 · 재화 · 미션 · 시즌 패스 · 주간 도전 GP).
+ * 픽셀 글리치 디펜스 — 판 밖 성장 (프로필 · 재화 · 미션 · 시즌 패스 · 상점: 재화샵 · 재화 → GP · 패키지).
  * 정의(수치)는 web/src/lib/defense/progress.ts. 여기선 저장 · 지급만.
  *
  * defense_profile (회원당 문서 하나, _id = uid). 바꾸는 일은 회원별 잠금 안에서 읽고 → 고치고 → 통째로 저장.
@@ -104,15 +104,16 @@ export interface Profile {
   day: Prog;
   week: Prog;
   season: { id: number; xp: number; free: number[]; prem: number[]; premium: boolean };
-  coreBuys: { w: number; n: number };
-  /** 이번 주 GP 상점 산 횟수 */
-  gpBuys: { w: number; relic: number; cards: number; trans: number };
+  /** 이번 주 상점(재화샵 · 재화 판매 · 주간 패키지) 산 횟수 (id → 수) */
+  shop: { w: number; n: Record<string, number> };
+  /** 한 번만 사는 패키지를 산 것 (id → 수) */
+  packs: Record<string, number>;
+  /** 초월 소환 천장 — 마지막 초월 뒤로 돌린 수 */
+  pity: number;
   /** 한 번이라도 얻은 유닛 (도감 수집 보상) */
   seen: string[];
   /** 오늘 첫 판 보너스를 받은 날 */
   firstDay: string;
-  /** 주간 도전 GP 를 확인한 마지막 주 */
-  paidWeek: number;
   runs: number;
   at: Date;
 }
@@ -128,12 +129,6 @@ const STARTER = { pieces: 300, boxes: { card: 1, relic: 1 } };
 
 const DAY_MS = 86_400_000;
 
-export function weeklySeed(week: number): number {
-  const secret = process.env.DEFENSE_SECRET ?? process.env.SESSION_SECRET ?? "pixel-glitch-defense";
-  const h = createHash("sha256").update(`${secret}:weekly:${week}`).digest();
-  return (h.readUInt32BE(0) % (2 ** 31 - 2)) + 1;
-}
-export const weeklyLoadout = (week: number): Loadout => ({ relics: weeklyRelics(week), glitch: 0 });
 
 /** 미션 숫자 (판 하나) */
 export function questValues(mode: RunMode, res: Result, st: RunStats, players: number): Record<QuestDef["metric"], number> {
@@ -199,11 +194,11 @@ export function createDefenseMeta(db: Database, points: Points, now: () => numbe
       day: { key: kstDayKey(t), prog: {}, claimed: [] },
       week: { key: weekOf(t), prog: {}, claimed: [] },
       season: { id: seasonOf(t), xp: 0, free: [], prem: [], premium: false },
-      coreBuys: { w: weekOf(t), n: 0 },
+      shop: { w: weekOf(t), n: {} },
+      packs: {},
+      pity: 0,
       seen: [],
       firstDay: "",
-      gpBuys: { w: weekOf(t), relic: 0, cards: 0, trans: 0 },
-      paidWeek: weekOf(t) - 1,
       runs: 0,
       at: new Date(t),
     };
@@ -218,8 +213,7 @@ export function createDefenseMeta(db: Database, points: Points, now: () => numbe
     if (p.day.key !== d) p.day = { key: d, prog: {}, claimed: [] };
     if (p.week.key !== w) p.week = { key: w, prog: {}, claimed: [] };
     if (p.season.id !== s) p.season = { id: s, xp: 0, free: [], prem: [], premium: false };
-    if (p.coreBuys.w !== w) p.coreBuys = { w, n: 0 };
-    if (!p.gpBuys || p.gpBuys.w !== w) p.gpBuys = { w, relic: 0, cards: 0, trans: 0 };
+    if (!p.shop || p.shop.w !== w) p.shop = { w, n: {} };
     return p;
   };
 
@@ -258,22 +252,6 @@ export function createDefenseMeta(db: Database, points: Points, now: () => numbe
     if (r.item) await users.updateOne({ _id: uid } as never, { $addToSet: { "inv.defense": r.item } } as never);
   }
 
-  /** 주간 도전 순위 GP: 지난주 기록이 있으면 한 번만 */
-  async function payWeekly(uid: string, p: Profile) {
-    const last = weekOf(now()) - 1;
-    if (p.paidWeek >= last) return null;
-    p.paidWeek = last;
-    const key = weeklyKey(last);
-    const mine = await ranks.findOne({ _id: `${key}:${uid}` } as never);
-    if (!mine) return null;
-    const rank = (await ranks.countDocuments({ ver: key, score: { $gt: mine.score } })) + 1;
-    const gp = (WEEKLY_GP.find((x) => rank <= x.upTo)?.gp ?? 0) + WEEKLY_JOIN_GP;
-    // 프로필(paidWeek)을 먼저 저장한 뒤 지급 — 저장 실패로 두 번 받는 일이 없게
-    await save(p);
-    await points.grant(uid, gp, "defense", `weekly:${last}:${rank}`);
-    return { week: last, rank, gp };
-  }
-
   const questsOf = (p: Profile) => {
     const t = now();
     const row = (q: QuestDef, pr: Prog) => ({ ...q, value: Math.min(q.goal, pr.prog[q.metric] ?? 0), claimed: pr.claimed.includes(q.id) });
@@ -291,15 +269,13 @@ export function createDefenseMeta(db: Database, points: Points, now: () => numbe
       passTier: passTier(p.season.xp),
       themes: ["theme.base", ...items.filter((i) => THEME[i])],
       gp,
-      week: { n: w, ends: weekEnds(w), relics: weeklyRelics(w) },
+      week: { n: w, ends: weekEnds(w) },
       seasonEnds: seasonEnds(p.season.id),
       dayEnds: Math.floor((t + 9 * 3600_000) / DAY_MS + 1) * DAY_MS - 9 * 3600_000,
       ...extra,
     };
   }
   type Wire = Awaited<ReturnType<typeof wire>>;
-
-  const weeklyKey = (w: number) => `w${w}`;
 
   /** 카드 상자 하나: 등급이 낮을수록 잘 나옴 (히든 · 초월 제외) */
   const openCards = (p: Profile) => {
@@ -329,8 +305,40 @@ export function createDefenseMeta(db: Database, points: Points, now: () => numbe
     return { relic: pick.id };
   };
 
+  /** 상점에서 받는 것 넣기 (초월 소환은 바로 돌림) */
+  async function grantGoods(uid: string, p: Profile, g: Goods) {
+    p.pieces += g.pieces ?? 0;
+    p.cores += g.cores ?? 0;
+    p.boxes.card += g.cardBox ?? 0;
+    p.boxes.relic += g.relicBox ?? 0;
+    const trans = [];
+    for (let i = 0; i < (g.trans ?? 0); i++) trans.push(pullTrans(p));
+    if (g.item) await users.updateOne({ _id: uid } as never, { $addToSet: { "inv.defense": g.item } } as never);
+    return trans;
+  }
+
+  /** 초월 소환 한 번 (15% · 10번째 천장). 초월이 아니면 게임 재화 */
+  const pullTrans = (p: Profile) => {
+    const out = transRoll(p.pity ?? 0, () => randomInt(0, 1_000_000) / 1_000_000);
+    p.pity = out.pity;
+    if (out.trans) {
+      if (!p.trans.includes(out.trans)) {
+        p.trans.push(out.trans);
+        return { trans: out.trans, pity: p.pity };
+      }
+      p.cards[out.trans] = (p.cards[out.trans] ?? 0) + BOX.trans.dupCards;
+      return { trans: out.trans, dup: BOX.trans.dupCards, pity: p.pity };
+    }
+    const g = out.give ?? {};
+    p.pieces += g.pieces ?? 0;
+    p.cores += g.cores ?? 0;
+    p.boxes.card += g.cardBox ?? 0;
+    return { miss: g, pity: p.pity };
+  };
+
+  const weekLeft = (p: Profile, id: string, perWeek: number) => perWeek - (p.shop.n[id] ?? 0);
+
   return {
-    weeklyKey,
     /** 시즌 판 · 멀티에 들고 갈 로드아웃 (서버가 정함) */
     async loadoutOf(uid: string): Promise<Required<Loadout>> {
       const p = await load(uid);
@@ -356,9 +364,8 @@ export function createDefenseMeta(db: Database, points: Points, now: () => numbe
     async profile(uid: string): Promise<Wire> {
       return lock.run(`dp:${uid}`, async () => {
         const p = await load(uid);
-        const paid = await payWeekly(uid, p);
         await save(p);
-        return wire(uid, p, { paid });
+        return wire(uid, p);
       });
     },
 
@@ -387,7 +394,7 @@ export function createDefenseMeta(db: Database, points: Points, now: () => numbe
         }
         // 오염 단계 첫 클리어
         let firstClear: { glitch: number; cores: number; relicBox: number } | null = null;
-        if (mode !== "weekly" && res.win && glitch > p.glitchWin) {
+        if (res.win && glitch > p.glitchWin) {
           const fc = glitchFirstClear(glitch);
           firstClear = { glitch, ...fc };
           rw.cores += fc.cores;
@@ -405,12 +412,10 @@ export function createDefenseMeta(db: Database, points: Points, now: () => numbe
             pr.prog[k] = k === "wave" ? Math.max(pr.prog[k] ?? 0, v) : (pr.prog[k] ?? 0) + v;
           }
         let opened = false;
-        if (mode !== "weekly") {
-          if (res.win) p.glitchWin = Math.max(p.glitchWin, glitch);
-          if (glitchUnlocks(glitch, res) && glitch >= p.glitchOpen && p.glitchOpen < GLITCH_MAX) {
-            p.glitchOpen = glitch + 1;
-            opened = true;
-          }
+        if (res.win) p.glitchWin = Math.max(p.glitchWin, glitch);
+        if (glitchUnlocks(glitch, res) && glitch >= p.glitchOpen && p.glitchOpen < GLITCH_MAX) {
+          p.glitchOpen = glitch + 1;
+          opened = true;
         }
         return { ...rw, opened: opened ? p.glitchOpen : null, passTier: passTier(p.season.xp), first, fresh, firstClear };
       });
@@ -589,37 +594,59 @@ export function createDefenseMeta(db: Database, points: Points, now: () => numbe
       });
     },
 
-    /** GP 유물 상자 (주 3번, 좋은 확률 · 바로 열림) */
-    gpRelic(uid: string) {
+    /** 초월 소환 (글리치 코어) — 15% 초월 · 10번째 천장, 아니면 게임 재화 */
+    transSummon(uid: string) {
       return edit(uid, async (p) => {
-        need(p.gpBuys.relic < BOX.relic.gpPerWeek, "이번 주 GP 유물 상자를 다 샀어요.");
-        await points.spend(uid, BOX.relic.gp, "defense", "gprelic");
-        p.gpBuys.relic++;
-        return wire(uid, p, { got: openRelic(p, BOX.relic.gpOdds) });
+        need(p.cores >= BOX.trans.cores, "글리치 코어가 모자라요.");
+        p.cores -= BOX.trans.cores;
+        return wire(uid, p, { got: pullTrans(p) });
       });
     },
 
-    /** 초월 소환: 코어 또는 GP (주 2번) */
-    transSummon(uid: string, pay: "cores" | "gp") {
+    /** 재화샵: GP → 게임 재화 (주 한도) */
+    storeBuy(uid: string, id: string) {
       return edit(uid, async (p) => {
-        if (pay === "cores") {
-          need(p.cores >= BOX.trans.cores, "글리치 코어가 모자라요.");
-          p.cores -= BOX.trans.cores;
-        } else {
-          need(p.gpBuys.trans < BOX.trans.gpPerWeek, "이번 주 GP 초월 소환을 다 했어요.");
-          await points.spend(uid, BOX.trans.gp, "defense", "gptrans");
-          p.gpBuys.trans++;
-        }
-        const id = TRANS_IDS[randomInt(0, TRANS_IDS.length)];
-        let got: { trans: string; dup?: number };
-        if (!p.trans.includes(id)) {
-          p.trans.push(id);
-          got = { trans: id };
-        } else {
-          p.cards[id] = (p.cards[id] ?? 0) + BOX.trans.dupCards;
-          got = { trans: id, dup: BOX.trans.dupCards };
-        }
-        return wire(uid, p, { got });
+        const it = GP_STORE.find((x) => x.id === id);
+        if (!it) throw bad("없는 상품이에요.");
+        need(weekLeft(p, id, it.perWeek) > 0, "이번 주에 더 살 수 없어요.");
+        await points.spend(uid, it.gp, "defense", `store:${id}`);
+        p.shop.n[id] = (p.shop.n[id] ?? 0) + 1;
+        await grantGoods(uid, p, it.give);
+        return wire(uid, p);
+      });
+    },
+
+    /** 재화 → GP (재화샵 값의 절반, 주 한도). 프로필을 먼저 저장한 뒤 지급 — 저장 실패로 두 번 받는 일이 없게 */
+    storeSell(uid: string, id: string) {
+      return edit(uid, async (p) => {
+        const it = GP_SELL.find((x) => x.id === id);
+        if (!it) throw bad("없는 교환이에요.");
+        need(weekLeft(p, id, it.perWeek) > 0, "이번 주 교환을 다 했어요.");
+        need(p.pieces >= (it.pay.pieces ?? 0), "픽셀 조각이 모자라요.");
+        need(p.cores >= (it.pay.cores ?? 0), "글리치 코어가 모자라요.");
+        p.pieces -= it.pay.pieces ?? 0;
+        p.cores -= it.pay.cores ?? 0;
+        p.shop.n[id] = (p.shop.n[id] ?? 0) + 1;
+        await save(p);
+        await points.grant(uid, it.gp, "defense", `sell:${id}`);
+        return wire(uid, p);
+      });
+    },
+
+    /** 패키지 (GP 로만) */
+    packBuy(uid: string, id: string) {
+      return edit(uid, async (p) => {
+        const pk = PACK[id];
+        if (!pk) throw bad("없는 패키지예요.");
+        if (pk.once) need(!(p.packs[id] ?? 0), "이미 산 패키지예요.");
+        else need(weekLeft(p, id, pk.perWeek ?? 1) > 0, "이번 주에 이미 샀어요.");
+        if (pk.needWin !== undefined) need(p.glitchWin >= pk.needWin, `오염 ${pk.needWin}단계를 클리어하면 살 수 있어요.`);
+        if (pk.give.item) need(!(await inv(uid)).items.includes(pk.give.item), "이미 가진 꾸미기가 들어 있어요.");
+        await points.spend(uid, pk.gp, "defense", `pack:${id}`);
+        if (pk.once) p.packs[id] = (p.packs[id] ?? 0) + 1;
+        else p.shop.n[id] = (p.shop.n[id] ?? 0) + 1;
+        const trans = await grantGoods(uid, p, pk.give);
+        return wire(uid, p, { got: { pack: id, trans } });
       });
     },
 
@@ -689,28 +716,6 @@ export function createDefenseMeta(db: Database, points: Points, now: () => numbe
         need(!p.season.premium, "이미 프리미엄이에요.");
         await points.spend(uid, PASS_PREMIUM_GP, "defense", `pass:${p.season.id}`);
         p.season.premium = true;
-        return wire(uid, p);
-      });
-    },
-
-    /** GP 카드 묶음: 고른 유닛 카드 10장 */
-    gpCards(uid: string, id: string) {
-      return edit(uid, async (p) => {
-        if (!unitIds.has(id)) throw bad("없는 유닛이에요.");
-        need(p.gpBuys.cards < GP_SHOP.cards.perWeek, "이번 주 카드 묶음을 다 샀어요.");
-        await points.spend(uid, GP_SHOP.cards.gp, "defense", `gpcards:${id}`);
-        p.gpBuys.cards++;
-        p.cards[id] = (p.cards[id] ?? 0) + GP_SHOP.cards.n;
-        return wire(uid, p);
-      });
-    },
-
-    coresBuy(uid: string) {
-      return edit(uid, async (p) => {
-        need(p.coreBuys.n < CORE_EXCHANGE.maxPerWeek, "이번 주 교환을 다 했어요.");
-        await points.spend(uid, CORE_EXCHANGE.gp, "defense", "cores");
-        p.coreBuys.n++;
-        p.cores += CORE_EXCHANGE.cores;
         return wire(uid, p);
       });
     },

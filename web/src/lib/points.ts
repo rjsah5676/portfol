@@ -92,9 +92,6 @@ export const SHOP: ShopItem[] = [
     name: "한여름의 연서",
     price: 30_000,
   },
-  // PIXEL LUCKY DEFENSE 블록 테마 (lib/defense/progress.ts 의 THEMES — 얼음 · 네온 · 황금은 시즌 패스 프리미엄에서도)
-  { id: "defense.theme.forest", game: "defense", kind: "item", ref: "theme.forest", name: "블록 테마 · 픽셀 숲", price: 3_000 },
-  { id: "defense.theme.ice", game: "defense", kind: "item", ref: "theme.ice", name: "블록 테마 · 얼음 성채", price: 8_000 },
 ];
 export const shopItem = (id: unknown) => SHOP.find((s) => s.id === id);
 export const shopOf = (game: PointGame) => SHOP.filter((s) => s.game === game);
@@ -408,6 +405,16 @@ export const ACHIEVEMENTS: Achievement[] = [
   ),
   a("defense", "glitch-3", "오염 적응", "오염 3단계 클리어", "defense.glitch", 4, 1500),
   a("defense", "glitch-10", "글리치 정복자", "오염 10단계 클리어", "defense.glitch", 11, 5000),
+  a("defense", "glitch-15", "심연의 문턱", "오염 15단계 클리어", "defense.glitch", 16, 2000),
+  a("defense", "glitch-20", "심연 탐험가", "오염 20단계 클리어", "defense.glitch", 21, 3000),
+  a("defense", "glitch-25", "심연 사냥꾼", "오염 25단계 클리어", "defense.glitch", 26, 4000),
+  a("defense", "glitch-30", "끝없는 오염의 끝", "오염 30단계 클리어", "defense.glitch", 31, 6000),
+  a("defense", "runs-150", "단골 수호자", "랭킹 판 150번 끝내기", "defense.runs", 150, 1000),
+  a("defense", "runs-400", "평생 수호자", "랭킹 판 400번 끝내기", "defense.runs", 400, 2500),
+  a("defense", "win-30", "든든한 방벽", "60웨이브 30번 클리어", "defense.wins", 30, 2000),
+  a("defense", "win-100", "백전백승", "60웨이브 100번 클리어", "defense.wins", 100, 4000),
+  a("defense", "kills-50000", "글리치 소탕", "적 50,000마리 처치 (랭킹 판 누적)", "defense.kills", 50_000, 1000),
+  a("defense", "kills-200000", "글리치 멸절자", "적 200,000마리 처치 (랭킹 판 누적)", "defense.kills", 200_000, 2000),
   a("defense", "maxlv-1", "만렙 유닛", "유닛 하나를 최고 레벨(10)까지", "defense.maxlv", 10, 1000),
   a("defense", "relics-6", "유물 수집가", "유물 6개 모으기", "defense.relics", 6, 500),
   a("defense", "relics-12", "유물 박물관", "유물 12개 모두 모으기", "defense.relics", 12, 2000),
@@ -515,19 +522,21 @@ export function pointReason(r: Pick<PointLogRow, "reason" | "ref">): string {
     case "admin":
       return "운영자 조정";
     case "defense":
-      return r.ref === "cores"
-        ? "디펜스 · 글리치 코어 교환"
-        : r.ref === "gpchest"
-          ? "디펜스 · GP 유물 상자"
-          : r.ref?.startsWith("gpcards:")
-            ? "디펜스 · 카드 묶음"
-        : r.ref?.startsWith("weekly:")
-          ? `디펜스 · 주간 도전 ${r.ref.split(":")[2]}위`
-          : r.ref?.startsWith("pass")
-            ? "디펜스 · 시즌 패스"
-            : r.ref?.startsWith("quest:")
-              ? "디펜스 · 미션"
-              : "디펜스";
+      return r.ref?.startsWith("store:")
+        ? "디펜스 · 재화샵"
+        : r.ref?.startsWith("sell:")
+          ? "디펜스 · 재화 → GP"
+          : r.ref?.startsWith("pack:")
+            ? "디펜스 · 패키지"
+            : r.ref?.startsWith("pass")
+              ? "디펜스 · 시즌 패스"
+              : r.ref?.startsWith("quest:")
+                ? "디펜스 · 미션"
+                : r.ref === "cores" || r.ref === "gpchest" || r.ref === "gprelic" || r.ref === "gptrans" || r.ref?.startsWith("gpcards:")
+                  ? "디펜스 · 옛 GP 상점"
+                  : r.ref?.startsWith("weekly:")
+                    ? "디펜스 · 주간 도전 (종료)"
+                    : "디펜스";
     default:
       return r.reason;
   }

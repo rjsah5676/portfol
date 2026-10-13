@@ -4,7 +4,7 @@ import { BOTS, botTurn } from "../../web/src/lib/defense/bot";
 import { HASH_TICKS, TICKS_PER_TURN, TURN_MS, replay, replayer, scoreOf, validLog, type LogEntry } from "../../web/src/lib/defense/replay";
 import { CELLS, SLOTS, apply, hashGame, isCmd, newGame, step, unitCount, type Game } from "../../web/src/lib/defense/sim";
 import { RECIPES, UNIT, UNITS } from "../../web/src/lib/defense/units";
-import { BOX, BENCH_COST, CORE_EXCHANGE, FRES_COST, TRANS_IDS, GP_SHOP, PASS_PREMIUM_GP, RESEARCH, lvCost, modsOf, planUpAll, seasonScore, weeklyRelics, weekOf } from "../../web/src/lib/defense/progress";
+import { BOX, BENCH_COST, FRES_COST, TRANS_IDS, GP_PACKS, GP_SELL, GP_STORE, PACK, PASS_PREMIUM_GP, RESEARCH, lvCost, modsOf, packPct, planUpAll, seasonScore, transRoll } from "../../web/src/lib/defense/progress";
 import { startTestServer, type TestClient, type TestServer } from "./helpers";
 
 /** 봇 한 판 (기록 포함) */
@@ -293,41 +293,95 @@ describe("픽셀 글리치 디펜스 서버", () => {
     c.close();
   });
 
-  it("주간 도전: 모두 같은 시드 · 같은 유물, 강화 없음", async () => {
+  it("주간 도전은 없음 (weekly 모드 거절)", async () => {
     const a = await member();
-    const b = await member();
-    const sa = await a.rpc("defense.start", { mode: "weekly" });
-    const sb = await b.rpc("defense.start", { mode: "weekly" });
-    expect(sa.seed).toBe(sb.seed);
-    expect(sa.loadout.relics).toEqual(weeklyRelics(weekOf(Date.now())));
-    expect(sa.loadout.lv ?? {}).toEqual({});
-    const { log } = botGame(sa.seed, 0, Infinity, [sa.loadout]);
-    await srv.db.col("defense_runs").updateOne({ _id: sa.run }, { $set: { at: new Date(Date.now() - 3600_000) } });
-    const fin = await a.rpc("defense.finish", { run: sa.run, log });
-    expect(fin.mode).toBe("weekly");
-    const wr = await a.rpc("defense.rank", { board: "weekly" });
-    expect(wr.rows).toHaveLength(1);
-    expect((await a.rpc("defense.rank", { board: "season" })).rows.some((x: { nick: string }) => x.nick === wr.rows[0].nick)).toBe(false);
+    await expect(a.rpc("defense.start", { mode: "weekly" })).rejects.toThrow();
+    await expect(a.rpc("defense.rank", { board: "weekly" })).rejects.toThrow();
     a.close();
-    b.close();
   });
 
-  it("GP: 패스 프리미엄 · 코어 교환은 GP 로 (모자라면 거절)", async () => {
+  it("상점: 재화샵 · 재화 → GP(절반) · 패키지(GP, 한도) · 패스 프리미엄", async () => {
     const c = await member();
     await expect(c.rpc("defense.pass.buy")).rejects.toThrow();
-    await srv.db.col("users").updateOne({ _id: c.uid! } as never, { $set: { points: PASS_PREMIUM_GP + CORE_EXCHANGE.gp + BOX.relic.gp + GP_SHOP.cards.gp } });
-    const gc = await c.rpc("defense.gp.relic");
-    expect(gc.got.relic).toBeTruthy();
-    expect(gc.relics).toContain(gc.got.relic);
-    const gk = await c.rpc("defense.gp.cards", { id: "a_void" });
-    expect(gk.cards.a_void).toBe(GP_SHOP.cards.n);
+    await expect(c.rpc("defense.pack.buy", { id: "p_start" })).rejects.toThrow();
+    const s0 = GP_STORE.find((x) => x.id === "s_cores")!;
+    const pk = PACK.p_start;
+    await srv.db.col("users").updateOne({ _id: c.uid! } as never, { $set: { points: PASS_PREMIUM_GP + s0.gp + pk.gp } });
+    const p0 = await c.rpc("defense.profile");
+    const a = await c.rpc("defense.store.buy", { id: "s_cores" });
+    expect(a.cores).toBe(p0.cores + s0.give.cores!);
+    const b = await c.rpc("defense.pack.buy", { id: "p_start" });
+    expect(b.pieces).toBe(p0.pieces + pk.give.pieces!);
+    expect(b.boxes.card).toBe(p0.boxes.card + pk.give.cardBox!);
+    expect(b.packs.p_start).toBe(1);
     const p = await c.rpc("defense.pass.buy");
     expect(p.season.premium).toBe(true);
-    const q = await c.rpc("defense.cores.buy");
-    expect(q.cores).toBe(CORE_EXCHANGE.cores);
-    expect(q.gp).toBe(0);
-    await expect(c.rpc("defense.cores.buy")).rejects.toThrow();
+    expect(p.gp).toBe(0);
+    // 한 번만 패키지 · GP 모자람 · 오염 단계 조건
+    await srv.db.col("users").updateOne({ _id: c.uid! } as never, { $set: { points: 100_000 } });
+    await expect(c.rpc("defense.pack.buy", { id: "p_start" })).rejects.toThrow();
+    await expect(c.rpc("defense.pack.buy", { id: "p_deep10" })).rejects.toThrow();
+    // 주간 패키지: 주 1번
+    await c.rpc("defense.pack.buy", { id: "p_week" });
+    await expect(c.rpc("defense.pack.buy", { id: "p_week" })).rejects.toThrow();
+    // 초월 패키지: 소환 2번 (천장 횟수에 들어감)
+    const t = await c.rpc("defense.pack.buy", { id: "p_trans" });
+    expect(t.got.trans).toHaveLength(2);
+    // 재화 → GP: 재화샵 값의 절반 · 주 한도
+    const x = GP_SELL.find((q) => q.id === "x_pieces")!;
+    await srv.db.col("defense_profile").updateOne({ _id: c.uid! } as never, { $set: { pieces: 10_000 } });
+    const gp0 = (await c.rpc("defense.profile")).gp;
+    for (let i = 0; i < x.perWeek; i++) await c.rpc("defense.store.sell", { id: "x_pieces" });
+    await expect(c.rpc("defense.store.sell", { id: "x_pieces" })).rejects.toThrow();
+    const after = await c.rpc("defense.profile");
+    expect(after.gp).toBe(gp0 + x.gp * x.perWeek);
+    expect(after.pieces).toBe(10_000 - x.pay.pieces! * x.perWeek);
+    // 재화샵 주 한도
+    for (let i = 0; i < s0.perWeek - 1; i++) await c.rpc("defense.store.buy", { id: "s_cores" });
+    await expect(c.rpc("defense.store.buy", { id: "s_cores" })).rejects.toThrow();
     c.close();
+  });
+
+  it("상점 수치: 패키지는 재화샵의 3~8배 · 판매는 재화샵 값의 절반", () => {
+    for (const pk of GP_PACKS) {
+      expect(packPct(pk)).toBeGreaterThanOrEqual(300);
+      expect(packPct(pk)).toBeLessThanOrEqual(800);
+    }
+    for (const it of GP_STORE) expect(it.gp).toBeGreaterThan(0);
+    // 조각 1,000 은 재화샵에서 2,000GP → 판매는 1,000GP · 코어 4 는 1,000GP → 500GP
+    const buyPer = (k: "pieces" | "cores") => { const s = GP_STORE.find((x) => x.give[k] && Object.keys(x.give).length === 1)!; return s.gp / s.give[k]!; };
+    for (const x of GP_SELL) {
+      const k = x.pay.pieces ? "pieces" : "cores";
+      expect(x.gp).toBe((buyPer(k) * x.pay[k]!) / 2);
+    }
+  });
+
+  it("초월 소환: 15% · 10번째 천장 · 아니면 게임 재화", () => {
+    let st = 7;
+    const r = () => ((st = (Math.imul(st ^ (st >>> 15), 2246822519) + 0x9e3779b9) >>> 0), st / 4294967296);
+    let hits = 0;
+    let maxGap = 0;
+    let gap = 0;
+    let pity = 0;
+    const N = 20000;
+    for (let i = 0; i < N; i++) {
+      const o = transRoll(pity, r);
+      pity = o.pity;
+      if (o.trans) {
+        expect(TRANS_IDS).toContain(o.trans);
+        hits++;
+        maxGap = Math.max(maxGap, gap + 1);
+        gap = 0;
+      } else {
+        gap++;
+        expect(Object.keys(o.give ?? {}).length).toBe(1);
+      }
+    }
+    expect(maxGap).toBeLessThanOrEqual(BOX.trans.pity);
+    // 천장 덕분에 실제 확률은 15% 보다 조금 높음 (≈18.6%)
+    expect(hits / N).toBeGreaterThan(0.17);
+    expect(hits / N).toBeLessThan(0.2);
+    expect(transRoll(BOX.trans.pity - 1, () => 0.99).trans).toBeTruthy();
   });
 
   it("베타: 보관함 · 세력 연구칸 해금 · 유물 상자 조각 · 초월 소환 → 로드아웃", async () => {
@@ -336,7 +390,7 @@ describe("픽셀 글리치 디펜스 서버", () => {
     expect(p0.bench).toBe(3);
     expect(p0.boxes).toEqual({ card: 1, relic: 1 });
     await expect(c.rpc("defense.fslot.buy")).rejects.toThrow();
-    await srv.db.col("defense_profile").updateOne({ _id: c.uid! } as never, { $set: { pieces: 20000, cores: 500, res: ["g_gold", "k_drill"] } });
+    await srv.db.col("defense_profile").updateOne({ _id: c.uid! } as never, { $set: { pieces: 20000, cores: 500, res: ["g_gold", "k_drill"], pity: BOX.trans.pity - 1 } });
     const b = await c.rpc("defense.bench.buy");
     expect(b.bench).toBe(4);
     expect(b.pieces).toBe(20000 - BENCH_COST[0]);
@@ -356,7 +410,8 @@ describe("픽셀 글리치 디펜스 서버", () => {
     const pr = await c.rpc("defense.profile");
     expect(Object.values(pr.shards as Record<string, number>).reduce((a, x) => a + x, 0)).toBe(shards);
     // 초월 소환
-    const t = await c.rpc("defense.trans", { pay: "cores" });
+    // 천장 직전이라 반드시 초월
+    const t = await c.rpc("defense.trans");
     expect(TRANS_IDS).toContain(t.got.trans);
     expect(t.trans).toEqual([t.got.trans]);
     const { loadout } = await c.rpc("defense.start", { mode: "season" });

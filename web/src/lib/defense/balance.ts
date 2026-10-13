@@ -7,7 +7,7 @@
  * 시간 단위는 tick (1초 = TPS tick). 거리 단위는 칸 (필드 8 × 5칸).
  */
 
-export const BALANCE_VER = "beta1";
+export const BALANCE_VER = "beta2";
 
 export const TPS = 30;
 /** 필드에 남은 적이 이 수에 닿으면 패배 */
