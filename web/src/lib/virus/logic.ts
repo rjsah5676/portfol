@@ -75,15 +75,19 @@ export const BAL = {
   rootBonus: 0.03,
   /** 코드 모듈 공격 효과: 버전마다 상한까지 남은 거리가 이 배로 줄어듦 (v10 ≈ 37% · v50 ≈ 92% · v100 ≈ 99%) */
   fxK: 0.93,
-  /** 코드 모듈 v → v+1 조각 = fragBase × fragGrowth^v · 우회 기술 v → v+1 키 = keyBase × keyGrowth^(v-1) */
-  fragBase: 3,
-  fragGrowth: 1.12,
-  keyBase: 2,
-  keyGrowth: 1.15,
-  /** 다시 도는 스테이지: 보스를 이 초 이상 걸려 잡으면 조각 · 키 확률 100% (짧을수록 낮음) */
-  revisitSecs: 20,
-  /** 우회 기술 1버전 = 예전 공식(10스테이지마다 1버전)의 몇 버전어치 */
-  bypScale: 4,
+  /**
+   * 코드 조각 · 우회 키 = 잡은 보스의 기본 체력에 비례 (1스테이지 = 1개, 처음 가는 스테이지 ×dropFresh)
+   * 모듈 v → v+1 = fragK × (합류 스테이지 1개어치) × fragGrowth^v — 진행 속도는 fragGrowth 로
+   * 우회 기술 v → v+1 = keyK × (처음 나오는 스테이지 1개어치) × keyGrowth^(v-1)
+   */
+  dropFresh: 3,
+  fragK: 3,
+  fragGrowth: 8,
+  keyK: 3,
+  keyGrowth: 7.25,
+  /** 우회 기술 세기: v1 = 예전 공식(10스테이지마다 1버전)의 bypBase 버전어치, 그 뒤 1버전마다 bypScale 버전어치 */
+  bypBase: 4,
+  bypScale: 1,
   /** 우회 기술 「암호화 터널」 발사 속도: ×1.15 에서 최대 ×1.15·modSpdMax 로 (버전마다 남은 거리 modSpdK 배) */
   modSpdMax: 3,
   modSpdK: 0.96,
@@ -312,17 +316,17 @@ export function newSave(): Save {
 
 /** 저장본의 모듈 · 조각 · 우회 기술 — 없으면 (v0.6 까지: 최고 스테이지로 정해지던 때) 만난 바이러스 · 잡은 상위 보스는 v1 */
 function codeOf(s: Partial<Save>, best: number, apexBest: number) {
-  const arr = (a: unknown) =>
+  const arr = (a: unknown, int = true) =>
     Array.isArray(a) && a.length === 10
-      ? a.map((v) => (Number.isFinite(v) && v > 0 ? Math.floor(v) : 0))
+      ? a.map((v) => (Number.isFinite(v) && v > 0 ? (int ? Math.floor(v) : v) : 0))
       : null;
   const mods = arr(s.mods) ?? ROSTER.map((v) => (best > v.join ? 1 : 0));
   const byp = arr(s.byp) ?? APEX.map((_, i) => (i < apexCount(apexBest) ? 1 : 0));
   return {
     mods,
-    frag: arr(s.frag) ?? zeros(),
+    frag: arr(s.frag, false) ?? zeros(),
     byp,
-    keys: arr(s.keys) ?? zeros(),
+    keys: arr(s.keys, false) ?? zeros(),
   };
 }
 
@@ -638,6 +642,11 @@ export function tunnelSpd(v: number) {
   return 1.15 * (1 + (BAL.modSpdMax - 1) * (1 - BAL.modSpdK ** v));
 }
 
+/** 우회 기술 버전 → 효과를 계산할 때 쓰는 「예전 버전」 (v1 이 bypBase, 그 뒤 bypScale 씩 — 0 이면 없음) */
+export function bypEq(v: number) {
+  return v > 0 ? BAL.bypBase + (v - 1) * BAL.bypScale : 0;
+}
+
 export const APEX: ApexDef[] = [
   {
     id: "sentinel",
@@ -648,7 +657,7 @@ export const APEX: ApexDef[] = [
     trait: "서명 위조",
     effect: "일반 파일 보안 등급 감소",
     cur: (n) => {
-      const v = n * BAL.bypScale;
+      const v = bypEq(n);
       return `일반 파일 보안 등급 ${x(0.85 * BAL.modMobHp ** v)}`;
     },
     look: "회로 링",
@@ -662,7 +671,7 @@ export const APEX: ApexDef[] = [
     trait: "포트 스캔",
     effect: "페이로드 피해 증가",
     cur: (n) => {
-      const v = n * BAL.bypScale;
+      const v = bypEq(n);
       return `피해 ${x(1.5 * BAL.modDmg ** v)}`;
     },
     look: "안테나 한 쌍",
@@ -676,7 +685,7 @@ export const APEX: ApexDef[] = [
     trait: "로그 삭제",
     effect: "보스 보안 등급 감소 · 보스 제한 시간 +5초",
     cur: (n) => {
-      const v = n * BAL.bypScale;
+      const v = bypEq(n);
       return `보스 보안 등급 ${x(BAL.modBossHp ** v)} · 시간 +5초`;
     },
     look: "반투명 외피",
@@ -690,7 +699,7 @@ export const APEX: ApexDef[] = [
     trait: "스팸 폭탄",
     effect: "데이터 탈취 증가",
     cur: (n) => {
-      const v = n * BAL.bypScale;
+      const v = bypEq(n);
       return `데이터 ${x(1.5 * BAL.modData ** v)}`;
     },
     look: "촉수 3개",
@@ -704,7 +713,7 @@ export const APEX: ApexDef[] = [
     trait: "샌드박스 탈출",
     effect: "익스플로잇 피해 증가",
     cur: (n) => {
-      const v = n * BAL.bypScale;
+      const v = bypEq(n);
       return `익스플로잇 피해 +${(1 + 0.5 * v).toFixed(1)}`;
     },
     look: "결정 가시",
@@ -718,7 +727,7 @@ export const APEX: ApexDef[] = [
     trait: "관제 우회",
     effect: "보스에게 주는 피해 증가",
     cur: (n) => {
-      const v = n * BAL.bypScale;
+      const v = bypEq(n);
       return `보스에게 주는 피해 ${x(BAL.modBossDmg ** v)}`;
     },
     look: "왕관",
@@ -732,7 +741,7 @@ export const APEX: ApexDef[] = [
     trait: "프로세스 은닉",
     effect: "오프라인 효율 증가",
     cur: (n) => {
-      const v = n * BAL.bypScale;
+      const v = bypEq(n);
       return `오프라인 효율 ${Math.round((offlineRateOf(v) + 0.15) * 100)}%`;
     },
     look: "잔상",
@@ -746,7 +755,7 @@ export const APEX: ApexDef[] = [
     trait: "미끼 역이용",
     effect: "익스플로잇 확률 증가 · 루트 권한 획득 ×1.25",
     cur: (n) => {
-      const v = n * BAL.bypScale;
+      const v = bypEq(n);
       return `익스플로잇 확률 +${(modCritOf(v) * 100).toFixed(1)}%p · 루트 권한 ×1.25`;
     },
     look: "날개",
@@ -760,7 +769,7 @@ export const APEX: ApexDef[] = [
     trait: "암호화 터널",
     effect: "발사 속도 증가",
     cur: (n) => {
-      const v = n * BAL.bypScale;
+      const v = bypEq(n);
       return `발사 속도 ${x(tunnelSpd(v))}`;
     },
     look: "이중 궤도 링",
@@ -774,7 +783,7 @@ export const APEX: ApexDef[] = [
     trait: "자가 학습",
     effect: "업그레이드 비용 감소",
     cur: (n) => {
-      const v = n * BAL.bypScale;
+      const v = bypEq(n);
       return `업그레이드 비용 ${x(0.85 * BAL.modCost ** v)}`;
     },
     look: "오라 · 세 번째 눈",
@@ -866,59 +875,44 @@ export function joinedCount(best: number) {
 
 // ── 코드 조각 · 우회 키 · 컴파일 ──
 // 보스를 잡으면 그 바이러스의 코드 조각 (원시 바이러스는 없음), 상위 보스는 그 보안 시스템의 우회 키.
-// 처음 가 보는 스테이지면 DROP_NEW 개, 변이 뒤 다시 잡으면 DROP_AGAIN 개. 모이면 컴파일해서 버전을 올림.
+// 양은 잡은 보스의 기본 체력에 비례 (데이터 보상처럼 — 낮은 스테이지를 반복하면 지수적으로 적음), 처음 가는 스테이지는 더.
+// 모이면 컴파일해서 버전을 올림 — 버전마다 드는 양이 일정 배율로 늘어서 진행 속도가 정해짐.
 
-export const DROP_NEW = 3;
-export const DROP_AGAIN = 1;
-
-/**
- * 조각 · 키를 얼마나 주는 처치인지
- *  - new: 처음 가 보는 스테이지 (최고 스테이지) → DROP_NEW
- *  - run: 이번 회차에 처음 오르는 스테이지 (변이 뒤 다시 오르기) → DROP_AGAIN
- *  - again: 이번 회차에 이미 지나온 스테이지 (반복 · 스테이지 되돌리기) → 보스를 잡는 데 걸린 시간에 비례한 확률로 1개
- *    (낮은 스테이지에서 순식간에 잡히는 보스의 조각 · 키를 무한히 모으지 못하게)
- */
-export type DropKind = "new" | "run" | "again";
-export function dropKind(s: Save): DropKind {
-  return s.stage >= s.best ? "new" : s.stage >= s.runTop ? "run" : "again";
+/** 이 스테이지 보스 한 마리가 주는 조각 · 키의 기준량 (1스테이지 = 1 — 보스 기본 체력에 비례) */
+export function dropUnit(stage: number) {
+  return baseHp(stage) / BAL.hp0;
 }
-/** 다시 도는 스테이지에서 조각이 나올 확률 — 보스를 잡는 데 걸린 시간 ÷ BAL.revisitSecs (최대 1) */
-export function revisitChance(fightSecs: number) {
-  return Math.min(1, Math.max(0, fightSecs / BAL.revisitSecs));
-}
-/** 처치 종류 · 전투 시간 → 받을 개수 */
-function dropCount(kind: DropKind, fightSecs: number, rand: () => number) {
-  if (kind === "new") return DROP_NEW;
-  if (kind === "run") return DROP_AGAIN;
-  return rand() < revisitChance(fightSecs) ? 1 : 0;
+/** 이 스테이지 보스를 잡으면 받는 조각 · 키 (처음 가는 스테이지면 ×dropFresh) */
+export function dropAmount(stage: number, fresh: boolean) {
+  return dropUnit(stage) * (fresh ? BAL.dropFresh : 1);
 }
 
-/** 코드 모듈 v → v+1 에 드는 조각 (v0 → v1 이 모듈 획득) */
-export function fragCost(v: number) {
-  return Math.ceil(BAL.fragBase * BAL.fragGrowth ** v);
+/** 코드 모듈 i 의 v → v+1 에 드는 조각 (v0 → v1 은 합류 스테이지 보스를 처음 잡으면 딱 됨) */
+export function fragCost(i: number, v: number) {
+  return BAL.fragK * dropUnit(ROSTER[i].join) * BAL.fragGrowth ** v;
 }
-/** 우회 기술 v → v+1 에 드는 우회 키 (v1 은 상위 보스를 처음 잡으면 바로) */
-export function keyCost(v: number) {
-  return Math.ceil(BAL.keyBase * BAL.keyGrowth ** (v - 1));
+/** 우회 기술 i 의 v → v+1 에 드는 우회 키 (v1 은 상위 보스를 처음 잡으면 바로) */
+export function keyCost(i: number, v: number) {
+  return BAL.keyK * dropUnit((i + 1) * 10) * BAL.keyGrowth ** (Math.max(1, v) - 1);
 }
 
-/** 보스를 잡으면 조각 — 어느 모듈의 조각인지 · 몇 개 (원시 바이러스는 index -1 · 0개) */
-export function dropFrag(s: Save, kind: DropKind, fightSecs = 0, rand: () => number = Math.random) {
+/** 보스를 잡으면 조각 (보스 체력에 비례) — 어느 모듈의 조각인지 · 얼마나 (원시 바이러스는 index -1 · 0) */
+export function dropFrag(s: Save, fresh: boolean) {
   const index = s.bossIdx;
-  const n = dropCount(kind, fightSecs, rand);
+  const n = dropAmount(s.stage, fresh);
   if (index < 0) return { index, n: 0 };
   s.frag[index] += n;
   return { index, n };
 }
 
 /** 상위 보스를 잡으면 — 처음이면 우회 기술 v1 (opened), 아니면 우회 키 */
-export function dropKey(s: Save, kind: DropKind, fightSecs = 0, rand: () => number = Math.random) {
+export function dropKey(s: Save, fresh: boolean) {
   const { index } = apexOf(s.stage);
   if (!s.byp[index]) {
     s.byp[index] = 1;
     return { index, n: 0, opened: true };
   }
-  const n = dropCount(kind, fightSecs, rand);
+  const n = dropAmount(s.stage, fresh);
   s.keys[index] += n;
   return { index, n, opened: false };
 }
@@ -953,8 +947,8 @@ export function modOpenable(s: Save, i: number) {
 export function planMod(s: Save, i: number) {
   let v = s.mods[i];
   let own = s.frag[i];
-  for (let k = 0; k < 500 && own >= fragCost(v); k++) {
-    own -= fragCost(v);
+  for (let k = 0; k < 500 && own >= fragCost(i, v); k++) {
+    own -= fragCost(i, v);
     v++;
   }
   return { to: v, own: s.frag[i] - own };
@@ -973,8 +967,8 @@ export function compileMod(s: Save, i: number) {
 /** 우회 기술 i 를 가진 키로 올릴 수 있는 만큼 — 오른 버전 수 */
 export function compileByp(s: Save, i: number) {
   let n = 0;
-  while (s.byp[i] > 0 && s.keys[i] >= keyCost(s.byp[i]) && n < 500) {
-    s.keys[i] -= keyCost(s.byp[i]);
+  while (s.byp[i] > 0 && s.keys[i] >= keyCost(i, s.byp[i]) && n < 500) {
+    s.keys[i] -= keyCost(i, s.byp[i]);
     s.byp[i]++;
     n++;
   }
@@ -991,8 +985,8 @@ export function compileReady(s: Save): CompileItem[] {
   APEX.forEach((_, i) => {
     let v = s.byp[i];
     let k = s.keys[i];
-    while (v > 0 && k >= keyCost(v)) {
-      k -= keyCost(v);
+    while (v > 0 && k >= keyCost(i, v)) {
+      k -= keyCost(i, v);
       v++;
     }
     if (v > s.byp[i]) out.push({ kind: "byp", i, to: v });
@@ -1101,7 +1095,7 @@ export function stats(s: Save): Stats {
   const zero = ROSTER.map(() => 0);
   const m = naked ? zero : s.mods;
   // 우회 기술: 버전 1 = 예전(최고 스테이지로 오르던 때) bypScale 버전만큼
-  const b = (naked ? zero : s.byp).map((v) => v * BAL.bypScale);
+  const b = (naked ? zero : s.byp).map(bypEq);
   const has = (i: number) => b[i] > 0;
   const fx = fxOf(m);
   const done = (k: ChalKey) => s.chalDone.includes(k);

@@ -219,10 +219,9 @@ const unlocks: string[] = [];
 function loot(kind: "boss" | "apex", fresh: boolean) {
   const before = feel();
   const opened: string[] = [];
-  const dk = fresh ? "new" : s.stage >= s.runTop ? "run" : "again";
-  if (kind === "boss") dropFrag(s, dk);
+  if (kind === "boss") dropFrag(s, fresh);
   else {
-    const k = dropKey(s, dk);
+    const k = dropKey(s, fresh);
     if (k.opened) opened.push(`🛡️ ${APEX[k.index].trait} v1`);
   }
   for (const c of compileAll(s)) {

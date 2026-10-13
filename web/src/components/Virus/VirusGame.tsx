@@ -101,7 +101,6 @@ import {
   milestoneCore,
   dropFrag,
   dropKey,
-  dropKind,
   gotoStage,
   rollBoss,
   compileMod,
@@ -112,8 +111,6 @@ import {
   fragCost,
   keyCost,
   modOpenable,
-  DROP_NEW,
-  DROP_AGAIN,
   type CompileItem,
   BUFF_MS,
   BURN_SECS,
@@ -196,6 +193,9 @@ interface Float {
   /** 세로로도 조금씩 흩어지게 (px) — 연달아 뜬 숫자가 겹쳐 읽히지 않게 */
   y: number;
   crit: boolean;
+  /** 코드 모듈 효과 숫자 (점화 · DDoS · 첫 발 강타) — 색과 크기를 따로 */
+  tone?: string;
+  big?: boolean;
 }
 
 /** 날아가는 바이러스 코드 (화면용) */
@@ -205,6 +205,8 @@ interface Shot {
   crit: boolean;
   /** 위아래로 조금씩 흩어지게 (px) */
   dy: number;
+  /** 코드 모듈로 더 나간 발의 색 (자가 복제 · 매크로 연사 · DDoS) */
+  tone?: string;
 }
 
 /** 아직 닿지 않은 코드 — 닿는 시각에 피해 */
@@ -245,6 +247,10 @@ interface View {
   exposed: boolean;
   /** 지금 적이 점화로 불타는지 */
   burning: boolean;
+  /** 방금 효과가 터진 코드 모듈 (ROSTER 번호) — 모듈 HUD 가 반짝임 */
+  pulse: number[];
+  /** DDoS 폭격이 방금 터짐 — 화면 번쩍 */
+  ddos: boolean;
   /** 보스 등장 · 격퇴 연출 중이면 그 내용 */
   cinema: Cinema | null;
 }
@@ -330,8 +336,15 @@ export default function VirusGame() {
     fired: false,
     exposed: false,
     burning: false,
+    pulse: [],
+    ddos: false,
     cinema: null,
   }));
+  /** 코드 모듈 효과가 마지막으로 터진 시각 (ROSTER 번호별) · DDoS 가 터진 시각 */
+  const fxAt = useRef<number[]>(ROSTER.map(() => 0));
+  const ddosAt = useRef(0);
+  /** 점화로 준 피해를 모았다가 1초마다 숫자로 */
+  const burnAcc = useRef({ dmg: 0, at: 0 });
   /** 취약점 노출이 꺼지는 시각 (performance.now) · DDoS 폭격까지 쌓인 시간 · 매크로 연사용 발사 수 */
   const buffUntil = useRef(0);
   const ddosAcc = useRef(0);
@@ -429,6 +442,8 @@ export default function VirusGame() {
       fired,
       exposed: buffUntil.current > performance.now(),
       burning: enemy.current.burnUntil > performance.now(),
+      pulse: fxAt.current.flatMap((at, i) => (performance.now() - at < 320 ? [i] : [])),
+      ddos: performance.now() - ddosAt.current < 260,
       cinema: cinemaRef.current,
     });
   }, []);
@@ -478,13 +493,21 @@ export default function VirusGame() {
     } catch {}
   }, []);
 
-  const addFloat = useCallback((text: string, crit: boolean) => {
+  const addFloat = useCallback((text: string, crit: boolean, tone?: string, big = false) => {
     const id = ++floatId.current;
     setFloats((f) => [
-      ...f.slice(-14),
-      { id, text, x: 22 + Math.random() * 56, y: Math.round(Math.random() * 28), crit },
+      ...f.slice(-7),
+      {
+        id,
+        text,
+        x: 22 + Math.random() * 56,
+        y: Math.round(Math.random() * 28),
+        crit,
+        tone,
+        big,
+      },
     ]);
-    setTimeout(() => setFloats((f) => f.filter((x) => x.id !== id)), 1000);
+    setTimeout(() => setFloats((f) => f.filter((x) => x.id !== id)), big ? 1300 : 1000);
   }, []);
 
   /** 보스 격퇴 소리가 나는 동안 배경음악을 줄이는 함수 (배경음악 코드가 아래에 있어서 ref로 연결) */
@@ -523,15 +546,14 @@ export default function VirusGame() {
   useEffect(() => {
     lootRef.current = (apex: boolean) => {
       const s = save.current;
-      // 처음 가는 스테이지 · 이번 회차에 처음 오르는 스테이지 · 다시 도는 스테이지 (보스 전투 시간에 비례한 확률)
-      const kind = dropKind(s);
-      const fight = Math.max(0, timeFor(enemy.current, s) - bossLeft.current);
+      // 양은 잡은 보스의 기본 체력에 비례 (처음 가는 스테이지면 더)
+      const fresh = s.stage >= s.best;
       let out: { frag?: Reward["frag"]; key?: Reward["key"]; opened: boolean };
       if (apex) {
-        const k = dropKey(s, kind, fight);
+        const k = dropKey(s, fresh);
         out = { key: k.opened || !k.n ? undefined : { index: k.index, n: k.n }, opened: k.opened };
       } else {
-        const f = dropFrag(s, kind, fight);
+        const f = dropFrag(s, fresh);
         out = { frag: f.n ? f : undefined, opened: false };
       }
       if (s.shop.autoc) {
@@ -655,6 +677,7 @@ export default function VirusGame() {
       bossLeft.current = timeFor(enemy.current, save.current);
       // 백도어 이월: 남은 피해를 새 적에게 (이것만으로 쓰러지면 바로 다음으로)
       if (over > 0) {
+        fxAt.current[5] = performance.now();
         const ne = enemy.current;
         ne.hp -= over;
         if (ne.hp <= 0) {
@@ -679,47 +702,72 @@ export default function VirusGame() {
       const e = enemy.current;
       const st = stats(s);
       const fx = st.fx;
+      const pulse = (i: number) => (fxAt.current[i] = now);
       let dmg = st.dmg * (crit ? st.critMul : 1) * (e.boss ? st.bossDmgMul : 1);
-      if (e.fresh && fx.first > 1) dmg *= fx.first;
+      // 부트 선점: 보스에게 터지면 화면에 크게 (파일은 HUD 만 반짝 — 너무 자주라)
+      const boot = e.fresh && fx.first > 1 ? fx.first : 0;
+      if (boot) {
+        dmg *= boot;
+        pulse(0);
+      }
       e.fresh = false;
       if (fx.stackMax) {
         dmg *= 1 + fx.stack * e.stacks;
         e.stacks = Math.min(fx.stackMax, e.stacks + 1);
+        if (e.boss) pulse(6);
       }
       if (buffUntil.current > now) dmg *= 1 + fx.buff;
-      if (crit && fx.buff) buffUntil.current = now + BUFF_MS;
-      if (fx.burn) e.burnUntil = now + BURN_SECS * 1000;
-      // 러브레터 미끼: 준 피해만큼 이 적의 데이터를 미리
-      if (fx.leech) gainData(s, e.reward * fx.leech * (Math.min(dmg, Math.max(0, e.hp)) / e.max));
-      // 암호화 잠금: 보스에게 익스플로잇이 터지면 제한 시간 + (전투당 상한)
-      if (crit && e.boss && fx.lockT && e.locked < fx.lockCap) {
-        const g = Math.min(fx.lockT, fx.lockCap - e.locked);
-        e.locked += g;
-        bossLeft.current += g;
+      if (crit && fx.buff) {
+        buffUntil.current = now + BUFF_MS;
+        pulse(7);
       }
+      if (fx.burn) {
+        if (e.burnUntil < now) pulse(3);
+        e.burnUntil = now + BURN_SECS * 1000;
+      }
+      // 러브레터 미끼: 준 피해만큼 이 적의 데이터를 미리
+      if (fx.leech) {
+        gainData(s, e.reward * fx.leech * (Math.min(dmg, Math.max(0, e.hp)) / e.max));
+        pulse(2);
+      }
+      // 암호화 잠금: 보스에게 익스플로잇이 터지면 제한 시간 + (전투당 상한)
+      let lock = 0;
+      if (crit && e.boss && fx.lockT && e.locked < fx.lockCap) {
+        lock = Math.min(fx.lockT, fx.lockCap - e.locked);
+        e.locked += lock;
+        bossLeft.current += lock;
+        pulse(8);
+      }
+      const bossHit = e.boss;
       damage(dmg);
-      return dmg;
+      return { dmg, boot: bossHit ? boot : 0, lock };
     },
     [damage]
   );
 
   /**
    * 시간에 따라 붙는 피해 — 점화(불타는 동안) · DDoS 폭격(ddosEvery 초마다 한 방). 쏜 피해의 기댓값(baseDps) 기준
-   * DDoS 가 터졌으면 그 피해를 돌려줌
+   * 이번에 준 점화 피해 · 터진 DDoS 피해를 돌려줌
    */
   const tickEffects = useCallback(
     (dt: number, now: number) => {
       const st = stats(save.current);
       const fx = st.fx;
       const bossMul = () => (enemy.current.boss ? st.bossDmgMul : 1);
-      if (fx.burn && enemy.current.burnUntil > now) damage(baseDps(st) * fx.burn * bossMul() * dt);
-      if (!fx.ddosEvery) return 0;
+      let burn = 0;
+      if (fx.burn && enemy.current.burnUntil > now) {
+        burn = baseDps(st) * fx.burn * bossMul() * dt;
+        damage(burn);
+      }
+      if (!fx.ddosEvery) return { ddos: 0, burn };
       ddosAcc.current += dt;
-      if (ddosAcc.current < fx.ddosEvery) return 0;
+      if (ddosAcc.current < fx.ddosEvery) return { ddos: 0, burn };
       ddosAcc.current -= fx.ddosEvery;
       const hit = baseDps(st) * fx.ddosMul * bossMul();
+      fxAt.current[9] = now;
+      ddosAt.current = now;
       damage(hit);
-      return hit;
+      return { ddos: hit, burn };
     },
     [damage]
   );
@@ -977,10 +1025,13 @@ export default function VirusGame() {
      */
     /** 한 번 발사할 때 나가는 코드 수 (자가 복제 추가 발사 · 매크로 연사) */
     const volley = (st: ReturnType<typeof stats>) => {
-      let n = 1 + st.fx.extraN + (Math.random() < st.fx.extraP ? 1 : 0);
+      const extra = st.fx.extraN + (Math.random() < st.fx.extraP ? 1 : 0);
       shotCount.current++;
-      if (st.fx.burstEvery && shotCount.current % st.fx.burstEvery === 0) n += 2;
-      return n;
+      const burst = st.fx.burstEvery && shotCount.current % st.fx.burstEvery === 0 ? 2 : 0;
+      const now = performance.now();
+      if (extra) fxAt.current[1] = now;
+      if (burst) fxAt.current[4] = now;
+      return { n: 1 + extra + burst, extra, burst };
     };
     const fastForward = (secs: number) => {
       const step = 0.1;
@@ -992,7 +1043,7 @@ export default function VirusGame() {
         atkAcc.current += st.aps * step;
         for (let k = 0; atkAcc.current >= 1 && k < 200 && !cinemaRef.current; k++) {
           atkAcc.current -= 1;
-          for (let j = volley(st); j > 0 && !cinemaRef.current; j--)
+          for (let j = volley(st).n; j > 0 && !cinemaRef.current; j--)
             strike(Math.random() < st.critChance, at);
         }
         if (!cinemaRef.current) tickEffects(step, at);
@@ -1054,8 +1105,9 @@ export default function VirusGame() {
       const launched: Shot[] = [];
       while (atkAcc.current >= 1 && launched.length < 40) {
         atkAcc.current -= 1;
-        // 자가 복제 · 매크로 연사로 한 번에 여러 발 (조금씩 다른 높이로)
-        for (let j = volley(st); j > 0; j--) {
+        // 자가 복제(보라) · 매크로 연사(초록)로 한 번에 여러 발 (조금씩 다른 높이로)
+        const v = volley(st);
+        for (let j = 0; j < v.n; j++) {
           const id = ++floatId.current;
           const crit = Math.random() < st.critChance;
           pending.current.push({ id, landAt: now + SHOT_MS + j * 30, crit });
@@ -1063,7 +1115,8 @@ export default function VirusGame() {
             id,
             glyph: GLYPHS[Math.floor(Math.random() * GLYPHS.length)],
             crit,
-            dy: Math.round((Math.random() - 0.5) * 24) + (j > 1 ? (j % 2 ? 14 : -14) : 0),
+            dy: Math.round((Math.random() - 0.5) * 24) + (j ? (j % 2 ? 14 : -14) : 0),
+            tone: j === 0 ? undefined : j <= v.extra ? ROSTER[1].color : ROSTER[4].color,
           });
         }
       }
@@ -1076,17 +1129,43 @@ export default function VirusGame() {
         setShots((sh) => sh.filter((x) => !ids.has(x.id)));
         // 소리는 틱마다 하나 — 익스플로잇이 섞였으면 익스플로잇 소리
         playVirusSfx(landed.some((p) => p.crit) ? "exploit" : "hit");
-        landed.forEach((p, i) => {
+        // 숫자는 틱마다 가장 큰 한 방만 (겹쳐서 읽히지 않게) · 부트 선점 · 암호화 잠금은 따로
+        let top = { dmg: 0, crit: false };
+        landed.forEach((p) => {
           // 이 틱에 보스가 나타나거나 쓰러졌으면 나머지는 버림 (연출 시작)
           if (cinemaRef.current) return;
-          const dmg = strike(p.crit, now);
-          if (i < 3) addFloat(fmt(dmg), p.crit);
+          const r = strike(p.crit, now);
+          if (r.boot) addFloat(`🥾 BOOT ×${r.boot.toFixed(1)}`, true, ROSTER[0].color, true);
+          if (r.lock) addFloat(`🔐 +${r.lock.toFixed(1)}s`, false, ROSTER[8].color);
+          if (r.dmg > top.dmg) top = { dmg: r.dmg, crit: p.crit };
         });
+        if (top.dmg) addFloat(fmt(top.dmg), top.crit);
       }
       // 점화 · DDoS 폭격
       if (!cinemaRef.current) {
-        const ddos = tickEffects(dt, now);
-        if (ddos > 0) addFloat(`💣 ${fmt(ddos)}`, true);
+        const fx = tickEffects(dt, now);
+        if (fx.ddos > 0) {
+          addFloat(`💣 DDoS ${fmt(fx.ddos)}`, true, ROSTER[9].color, true);
+          // 봇넷 일제 사격: 노란 코드 여러 발이 한꺼번에 (화면용)
+          if (settingsRef.current.effects) {
+            const volleyShots: Shot[] = Array.from({ length: 10 }, () => ({
+              id: ++floatId.current,
+              glyph: GLYPHS[Math.floor(Math.random() * GLYPHS.length)],
+              crit: false,
+              dy: Math.round((Math.random() - 0.5) * 90),
+              tone: ROSTER[9].color,
+            }));
+            const ids = new Set(volleyShots.map((x) => x.id));
+            setShots((sh) => [...sh.slice(-24), ...volleyShots]);
+            setTimeout(() => setShots((sh) => sh.filter((x) => !ids.has(x.id))), SHOT_MS);
+          }
+        }
+        // 점화: 1초마다 모아서 주황 숫자
+        burnAcc.current.dmg += fx.burn;
+        if (burnAcc.current.dmg > 0 && now - burnAcc.current.at > 1000) {
+          addFloat(`🔥 ${fmt(burnAcc.current.dmg)}`, false, ROSTER[3].color);
+          burnAcc.current = { dmg: 0, at: now };
+        }
       }
       if (enemy.current.boss) {
         bossLeft.current -= dt;
@@ -1618,7 +1697,9 @@ export default function VirusGame() {
             </div>
 
             {/* ── 전투 ── */}
-            <div className="vg-battle virus-screen relative min-h-0 flex-1">
+            <div
+              className={`vg-battle virus-screen relative min-h-0 flex-1 ${view.ddos && settings.effects ? "vg-ddos" : ""}`}
+            >
               {/* 왼쪽 위: 지금 적에게 들어가는 예상 초당 피해 */}
               <div
                 className={`pointer-events-none absolute top-2 left-3 z-10 rounded-lg border border-emerald-400/20 bg-black/55 px-2.5 py-1 ${KR}`}
@@ -1664,7 +1745,7 @@ export default function VirusGame() {
                     type="button"
                     onClick={toggleRepeat}
                     aria-pressed={s.repeat}
-                    title={`스테이지 반복: 보스를 잡아도 이 스테이지에 머물러요.\n이번 회차에 이미 지나온 스테이지에서는 코드 조각 · 우회 키가 보스를 잡는 데 걸린 시간에 비례한 확률로만 나와요 (${BAL.revisitSecs}초 이상이면 100%, 한 방에 잡히면 거의 0%).`}
+                    title={`스테이지 반복: 보스를 잡아도 이 스테이지에 머물러요.\n코드 조각 · 우회 키는 잡은 보스의 체력에 비례해서, 낮은 스테이지를 반복하면 아주 조금만 모여요 (최고 스테이지 근처일수록 많이).`}
                     className={`border-x border-white/15 px-2 py-1 vt-xs font-bold whitespace-nowrap ${
                       s.repeat ? "bg-sky-400/25 text-sky-100" : "text-white/80 hover:bg-white/10"
                     }`}
@@ -1682,18 +1763,6 @@ export default function VirusGame() {
                     ▶
                   </button>
                 </div>
-                {s.stage < s.runTop && (
-                  <span
-                    className="rounded-md bg-black/55 px-1.5 vt-xs text-sky-200"
-                    title={`보스를 ${BAL.revisitSecs}초 이상 걸려 잡으면 조각 100%`}
-                  >
-                    ↺ 다시 도는 중
-                    <span className="hidden @xl/vg:inline">
-                      {" "}
-                      · 조각 확률 = 보스 전투 시간 ÷ {BAL.revisitSecs}초
-                    </span>
-                  </span>
-                )}
               </div>
               <div
                 key={cinema?.id ?? 0}
@@ -1732,6 +1801,32 @@ export default function VirusGame() {
                       · 모듈 {owned}/{ROSTER.length} · 우회 {bypassN}/{APEX.length}
                     </span>
                   </span>
+                  {/* 모듈 HUD: 컴파일한 코드 모듈 — 효과가 터지면 반짝 */}
+                  {owned > 0 && (
+                    <div
+                      className="flex max-w-[260px] flex-wrap justify-center gap-1"
+                      aria-label="코드 모듈"
+                    >
+                      {ROSTER.map((v, i) =>
+                        mods[i] ? (
+                          <span
+                            key={v.id}
+                            title={`${v.module} v${mods[i]} — ${v.cur(mods[i])}`}
+                            className={`vg-fx flex h-6 w-6 items-center justify-center rounded-md border text-sm ${
+                              view.pulse.includes(i) ? "vg-fx-on" : ""
+                            }`}
+                            style={{
+                              borderColor: `${v.color}${view.pulse.includes(i) ? "ee" : "55"}`,
+                              background: `${v.color}${view.pulse.includes(i) ? "55" : "14"}`,
+                              boxShadow: view.pulse.includes(i) ? `0 0 12px ${v.color}` : undefined,
+                            }}
+                          >
+                            {v.icon}
+                          </span>
+                        ) : null
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 {/* 날아가는 바이러스 코드 */}
@@ -1744,8 +1839,8 @@ export default function VirusGame() {
                       }`}
                       style={{
                         top: `calc(42% + ${sh.dy}px)`,
-                        color: sh.crit ? CRIT_COLOR : myColor,
-                        textShadow: `0 0 8px ${sh.crit ? CRIT_COLOR : myColor}`,
+                        color: sh.crit ? CRIT_COLOR : (sh.tone ?? myColor),
+                        textShadow: `0 0 8px ${sh.crit ? CRIT_COLOR : (sh.tone ?? myColor)}`,
                         animationDuration: `${SHOT_MS}ms`,
                       }}
                     >
@@ -1865,14 +1960,20 @@ export default function VirusGame() {
                     floats.map((f) => (
                       <span
                         key={f.id}
-                        className={`absolute z-10 font-mono font-black tabular-nums ${
-                          f.crit ? "virus-float-crit text-3xl" : "virus-float text-xl"
+                        className={`absolute z-10 font-mono font-black whitespace-nowrap tabular-nums ${
+                          f.big
+                            ? "virus-float-crit text-2xl"
+                            : f.crit
+                              ? "virus-float-crit text-3xl"
+                              : f.tone
+                                ? "virus-float text-base"
+                                : "virus-float text-xl"
                         }`}
                         style={{
-                          left: `${f.x}%`,
-                          top: `${8 + f.y}px`,
-                          color: f.crit ? CRIT_COLOR : "#bbf7d0",
-                          textShadow: outline(f.crit ? "#f59e0b" : "#22c55e"),
+                          left: `${f.big ? Math.min(f.x, 40) : f.x}%`,
+                          top: `${(f.big ? -18 : 8) + f.y}px`,
+                          color: f.tone ?? (f.crit ? CRIT_COLOR : "#bbf7d0"),
+                          textShadow: outline(f.tone ?? (f.crit ? "#f59e0b" : "#22c55e")),
                         }}
                       >
                         {f.text}
@@ -2123,7 +2224,7 @@ export default function VirusGame() {
                   <FitPages
                     page={page}
                     onPages={onPages}
-                    className="grid gap-2 @2xl/panel:grid-cols-3 @2xl/panel:gap-3"
+                    className="grid grid-cols-[minmax(0,1fr)] gap-2 pt-2 @2xl/panel:grid-cols-3 @2xl/panel:gap-3"
                     items={UPGRADES.map((u, i) => {
                       const lv = s.lv[u.key];
                       const bulk = bulkCost(s, u, buyMode === "max" ? Infinity : buyMode);
@@ -2208,7 +2309,7 @@ export default function VirusGame() {
                               type="button"
                               onClick={() => buy(u)}
                               disabled={locked || s.data < cost}
-                              className={`relative flex items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition-colors enabled:hover:border-emerald-400/50 ${
+                              className={`relative flex items-center gap-3 rounded-xl border px-3 py-2 text-left transition-colors enabled:hover:border-emerald-400/50 ${
                                 upTop
                                   ? "border-emerald-300/80 bg-emerald-400/[0.1] shadow-[0_0_16px_rgba(74,222,128,0.35)]"
                                   : "border-white/10 bg-white/[0.03]"
@@ -2225,14 +2326,15 @@ export default function VirusGame() {
                                 </span>
                                 <span className="block truncate vt-sm text-white/75">
                                   {u.label(st, lv)}
+                                  {/* 프로파일러: 같은 줄에 (카드를 2줄로 — 넓은 화면 패널 높이에 맞게) */}
+                                  {advice && (
+                                    <span
+                                      className={`ml-1.5 font-mono vt-xs ${upTop ? "text-emerald-200" : "text-white/70"}`}
+                                    >
+                                      DPS +{pct(gainOf(u.key))}
+                                    </span>
+                                  )}
                                 </span>
-                                {advice && (
-                                  <span
-                                    className={`block font-mono vt-xs ${upTop ? "text-emerald-200" : "text-white/70"}`}
-                                  >
-                                    DPS +{pct(gainOf(u.key))}
-                                  </span>
-                                )}
                               </span>
                               <span className="flex shrink-0 flex-col items-end">
                                 <span className="font-mono vt-base font-bold text-emerald-300">
@@ -2290,7 +2392,7 @@ export default function VirusGame() {
                     items={ROSTER.map((v, i) => {
                       const lv = mods[i];
                       const joined = v.join <= Math.max(s.best - 1, s.stage);
-                      const cost = fragCost(lv);
+                      const cost = fragCost(i, lv);
                       const own = s.frag[i];
                       const ownUp = planMod(s, i).to > lv;
                       const ownPct = Math.min(100, (own / cost) * 100);
@@ -2334,7 +2436,7 @@ export default function VirusGame() {
                             <div className="flex items-center gap-1.5">
                               <div
                                 className="relative h-1.5 flex-1 overflow-hidden rounded-full bg-white/10"
-                                title={`조각 ${own} / ${cost}`}
+                                title={`조각 ${fmt(own)} / ${fmt(cost)}`}
                               >
                                 <div
                                   className="absolute inset-y-0 left-0 rounded-full"
@@ -2342,7 +2444,7 @@ export default function VirusGame() {
                                 />
                               </div>
                               <span className="font-mono vt-xs text-white/75 tabular-nums">
-                                {own}/{cost}
+                                {fmt(own)}/{fmt(cost)}
                               </span>
                               <button
                                 type="button"
@@ -2375,7 +2477,7 @@ export default function VirusGame() {
                     items={APEX.map((a, i) => {
                       const v = bv[i];
                       const got = v > 0;
-                      const cost = keyCost(Math.max(1, v));
+                      const cost = keyCost(i, v);
                       const ready = got && s.keys[i] >= cost;
                       return (
                         <div
@@ -2415,7 +2517,7 @@ export default function VirusGame() {
                             <div className="flex items-center gap-1.5">
                               <div
                                 className="relative h-1.5 flex-1 overflow-hidden rounded-full bg-white/10"
-                                title={`우회 키 ${s.keys[i]} / ${cost}`}
+                                title={`우회 키 ${fmt(s.keys[i])} / ${fmt(cost)}`}
                               >
                                 <div
                                   className="absolute inset-y-0 left-0 rounded-full"
@@ -2426,7 +2528,7 @@ export default function VirusGame() {
                                 />
                               </div>
                               <span className="font-mono vt-xs text-white/75 tabular-nums">
-                                🔑{s.keys[i]}/{cost}
+                                🔑{fmt(s.keys[i])}/{fmt(cost)}
                               </span>
                               <button
                                 type="button"
@@ -2848,12 +2950,13 @@ export default function VirusGame() {
                   )}
                   {r.frag && (
                     <div className="vt-xs break-keep [overflow-wrap:anywhere] text-white/90">
-                      {ROSTER[r.frag.index].icon} {ROSTER[r.frag.index].module} 조각 +{r.frag.n}
+                      {ROSTER[r.frag.index].icon} {ROSTER[r.frag.index].module} 조각 +
+                      {fmt(r.frag.n)}
                     </div>
                   )}
                   {r.key && (
                     <div className="vt-xs break-keep [overflow-wrap:anywhere] text-white/90">
-                      🔑 {APEX[r.key.index].trait} 우회 키 +{r.key.n}
+                      🔑 {APEX[r.key.index].trait} 우회 키 +{fmt(r.key.n)}
                     </div>
                   )}
                 </div>
@@ -2878,7 +2981,7 @@ export default function VirusGame() {
                     const a = APEX[i];
                     const v = bv[i];
                     const got = v > 0;
-                    const cost = keyCost(Math.max(1, v));
+                    const cost = keyCost(i, v);
                     return (
                       <>
                         <div className="mb-1 flex items-center justify-center gap-3">
@@ -2912,8 +3015,8 @@ export default function VirusGame() {
                               다음 v{v + 1}: {a.cur(v + 1)}
                             </p>
                             <p className="vt-sm mt-2 text-white/80">
-                              🔑 우회 키 {s.keys[i]} / {cost} — 이 상위 보스를 잡으면 모여요 (처음
-                              가는 스테이지 {DROP_NEW}개 · 다시 {DROP_AGAIN}개)
+                              🔑 우회 키 {fmt(s.keys[i])} / {fmt(cost)} — 이 상위 보스를 잡으면 그
+                              체력에 비례해서 모여요 (처음 가는 스테이지는 ×{BAL.dropFresh})
                             </p>
                             <button
                               type="button"
@@ -2982,8 +3085,8 @@ export default function VirusGame() {
                           {!isIntro && joined && (
                             <div className="mt-3 rounded-xl border border-white/10 bg-white/[0.03] p-2.5">
                               <p className="vt-sm text-white/85">
-                                조각 <b className="font-mono">{s.frag[i]}</b> / 다음 버전{" "}
-                                <b className="font-mono">{fragCost(lv)}</b>
+                                조각 <b className="font-mono">{fmt(s.frag[i])}</b> / 다음 버전{" "}
+                                <b className="font-mono">{fmt(fragCost(i, lv))}</b>
                               </p>
                               {openable ? (
                                 <>
@@ -3004,8 +3107,9 @@ export default function VirusGame() {
                                 </>
                               ) : (
                                 <p className="vt-sm mt-1 text-white/75">
-                                  {v.name}을 잡아 조각을 모으면 열 수 있어요 (처음 가는 스테이지{" "}
-                                  {DROP_NEW}개 · 다시 {DROP_AGAIN}개).
+                                  {v.name}을 잡으면 그 체력에 비례해 조각이 모여요 (처음 가는
+                                  스테이지는 ×{BAL.dropFresh}) — 합류 스테이지에서 처음 잡으면 바로
+                                  열려요.
                                 </p>
                               )}
                             </div>

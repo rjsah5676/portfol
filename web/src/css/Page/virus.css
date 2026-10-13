@@ -721,14 +721,14 @@
     margin-inline: auto;
   }
 }
-/* 아래 패널: 세로로 긴 틀(폰 세로)은 36%, 가로로 긴 틀(PC)은 32% */
+/* 아래 패널: 세로로 긴 틀(폰 세로)은 36%, 가로로 긴 틀(PC)은 35% */
 .vg-panel {
   height: clamp(200px, calc(36cqh / var(--vz, 1)), 420px);
   border-top: 1px solid rgba(74, 222, 128, 0.15);
 }
 @container vg (min-aspect-ratio: 4/3) {
   .vg-panel {
-    height: calc(32cqh / var(--vz, 1));
+    height: calc(35cqh / var(--vz, 1));
   }
 }
 /* 폰 가로 (낮고 넓은 틀): 왼쪽 전투 · 오른쪽 패널 */
@@ -1109,3 +1109,33 @@
   animation: none;
 }
 
+/* 모듈 HUD: 효과가 터진 모듈 아이콘이 톡 커짐 (화면 효과를 끄면 빛만) */
+.vg-fx {
+  transition:
+    transform 0.15s ease-out,
+    background-color 0.2s,
+    box-shadow 0.2s;
+}
+.vg-fx-on {
+  transform: scale(1.25);
+}
+.virus-calm .vg-fx-on {
+  transform: none;
+}
+/* DDoS 폭격: 전투 화면이 노랗게 번쩍 */
+.vg-ddos::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(circle at 70% 45%, rgba(250, 204, 21, 0.35), transparent 60%);
+  animation: vg-ddos 0.26s ease-out forwards;
+}
+@keyframes vg-ddos {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
