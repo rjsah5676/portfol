@@ -4,7 +4,7 @@ import { BOTS, botTurn } from "../../web/src/lib/defense/bot";
 import { HASH_TICKS, TICKS_PER_TURN, TURN_MS, replay, replayer, scoreOf, validLog, type LogEntry } from "../../web/src/lib/defense/replay";
 import { CELLS, SLOTS, apply, hashGame, isCmd, newGame, step, unitCount, type Game } from "../../web/src/lib/defense/sim";
 import { RECIPES, UNIT, UNITS } from "../../web/src/lib/defense/units";
-import { CHEST, CORE_EXCHANGE, GP_SHOP, PASS_PREMIUM_GP, RESEARCH, lvCost, modsOf, seasonScore, weeklyRelics, weekOf } from "../../web/src/lib/defense/progress";
+import { CHEST, CORE_EXCHANGE, GP_SHOP, PASS_PREMIUM_GP, RESEARCH, lvCost, modsOf, planUpAll, seasonScore, weeklyRelics, weekOf } from "../../web/src/lib/defense/progress";
 import { startTestServer, type TestClient, type TestServer } from "./helpers";
 
 /** 봇 한 판 (기록 포함) */
@@ -240,6 +240,55 @@ describe("픽셀 글리치 디펜스 서버", () => {
     await expect(c.rpc("defense.load", { res: ["g_gold"], relics: [], glitch: 3 })).rejects.toThrow();
     const s2 = await c.rpc("defense.start", { mode: "season" });
     expect(s2.loadout.res).toEqual(["g_gold"]);
+    c.close();
+  });
+
+  it("일괄 강화: 한 유닛 최대한 · 모든 유닛 고르게, 할 게 없으면 거절", async () => {
+    const c = await member();
+    await c.rpc("defense.profile");
+    await expect(c.rpc("defense.unit.upAll", {})).rejects.toThrow();
+    await srv.db.col("defense_profile").updateOne({ _id: c.uid! } as never, {
+      $set: { pieces: 100000, cards: { k_squire: 40, m_bolt: 3 } },
+    });
+    const one = await c.rpc("defense.unit.upAll", { id: "k_squire" });
+    const plan = planUpAll([UNIT.k_squire], {}, { k_squire: 40 }, 100000);
+    expect(one.lv.k_squire).toBe(plan.n);
+    expect(plan.n).toBeGreaterThan(1);
+    expect(one.pieces).toBe(100000 - plan.pieces);
+    expect(one.lv.m_bolt ?? 0).toBe(0);
+    const all = await c.rpc("defense.unit.upAll", {});
+    expect(all.lv.m_bolt).toBe(1);
+    expect(all.ups).toBeGreaterThan(0);
+    // 다시 하면 더 할 게 없음
+    await expect(c.rpc("defense.unit.upAll", {})).rejects.toThrow();
+    c.close();
+  });
+
+  it("연구 · 유물 레벨: 1레벨은 예전 수치 그대로, 올리면 로드아웃에 실림 · 내리면 전부 돌려받기", async () => {
+    // 1레벨 = 예전 값 (예전 기록 다시 돌리기가 그대로 맞게)
+    const m1 = modsOf({ res: ["g_gold", "k_drill", "g_sell"], relics: ["first_harvest", "rift_compass", "alchemy"] });
+    expect([m1.startGold, m1.fac.knight, m1.sellMult, m1.firstHarvest, m1.riftCd, m1.riftStone, m1.alchemyGold, m1.alchemyStones]).toEqual([40, 1.1, 1.5, 15, 0.7, 1, 80, 2]);
+    const m5 = modsOf({ res: ["g_gold", "k_drill"], relics: ["first_harvest"], resLv: { g_gold: 5, k_drill: 5, nope: 3 }, relicLv: { first_harvest: 5, vaccine: 5 } });
+    expect([m5.startGold, m5.fac.knight, m5.firstHarvest]).toEqual([80, 1.2, 27]);
+    expect(m5.resLv).toEqual({ g_gold: 5, k_drill: 5 });
+    expect(m5.relicLv).toEqual({ first_harvest: 5 });
+
+    const c = await member();
+    await c.rpc("defense.profile");
+    await srv.db.col("defense_profile").updateOne({ _id: c.uid! } as never, { $set: { pieces: 10000, cores: 100, res: ["g_gold"], relics: ["vaccine"], load: { res: ["g_gold"], relics: ["vaccine"], glitch: 0 } } });
+    await expect(c.rpc("defense.res.level", { id: "g_stone", dir: 1 })).rejects.toThrow();
+    await expect(c.rpc("defense.res.level", { id: "g_gold", dir: -1 })).rejects.toThrow();
+    const a = await c.rpc("defense.res.level", { id: "g_gold", dir: 1 });
+    expect(a.resLv.g_gold).toBe(2);
+    expect(a.pieces).toBe(10000 - RESEARCH.find((r) => r.id === "g_gold")!.cost);
+    const b = await c.rpc("defense.relic.level", { id: "vaccine", dir: 1 });
+    expect(b.relicLv.vaccine).toBe(2);
+    expect(b.cores).toBe(85);
+    const { loadout } = await c.rpc("defense.start", { mode: "season" });
+    expect(loadout).toMatchObject({ resLv: { g_gold: 2 }, relicLv: { vaccine: 2 } });
+    const d = await c.rpc("defense.relic.level", { id: "vaccine", dir: -1 });
+    expect(d.cores).toBe(100);
+    expect(d.relicLv.vaccine).toBeUndefined();
     c.close();
   });
 

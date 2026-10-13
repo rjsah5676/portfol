@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import {
   FACTION_COLOR,
   FACTION_NAME,
@@ -776,14 +776,48 @@ export function Bar({
 
 /**
  * 도트 말풍선 (마우스를 올리면 아래에) — 스크롤 상자 안에서는 잘릴 수 있어서 머리말 · 메뉴처럼 바깥쪽에 씀.
- * 터치 기기에서는 누르고 있는 동안 (:active) 보임.
+ * 눌러도 열리고 (폰 · PC), 다시 누르거나 바깥을 누르면 닫힘. 감싸는 쪽의 z-index 가 옆 칸보다 낮으면 가려지니 주의.
  */
-export function Tip({ text, children, className = "", side = "bottom", width = 260 }: { text: ReactNode; children: ReactNode; className?: string; side?: "bottom" | "top"; width?: number }) {
+export function Tip({
+  text,
+  children,
+  className = "",
+  side = "bottom",
+  align = "center",
+  width = 260,
+}: {
+  text: ReactNode;
+  children: ReactNode;
+  className?: string;
+  side?: "bottom" | "top";
+  /** 화면 가장자리 근처면 right/left 로 (무대 밖으로 나가면 잘림) */
+  align?: "center" | "left" | "right";
+  width?: number;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLSpanElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const off = (e: PointerEvent) => {
+      if (!ref.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const esc = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    document.addEventListener("pointerdown", off, true);
+    document.addEventListener("keydown", esc, true);
+    return () => {
+      document.removeEventListener("pointerdown", off, true);
+      document.removeEventListener("keydown", esc, true);
+    };
+  }, [open]);
   return (
-    <span className={`group/tip relative inline-flex ${className}`}>
+    <span
+      ref={ref}
+      className={`group/tip relative inline-flex cursor-help ${className}`}
+      onClick={() => setOpen((o) => !o)}
+    >
       {children}
       <span
-        className={`px-box pointer-events-none absolute left-1/2 z-[70] hidden -translate-x-1/2 p-2 text-left text-[12px] leading-relaxed font-normal text-[var(--text)] group-hover/tip:block group-active/tip:block ${side === "bottom" ? "top-[calc(100%+6px)]" : "bottom-[calc(100%+6px)]"}`}
+        className={`px-box pointer-events-none absolute z-[70] ${align === "center" ? "left-1/2 -translate-x-1/2" : align === "right" ? "right-0" : "left-0"} p-2 text-left text-[12px] leading-relaxed font-normal text-[var(--text)] group-hover/tip:block ${open ? "block" : "hidden"} ${side === "bottom" ? "top-[calc(100%+6px)]" : "bottom-[calc(100%+6px)]"}`}
         style={{ width, "--b": "#5b4f96", "--f": "#120d22" } as CSSProperties}
       >
         {text}

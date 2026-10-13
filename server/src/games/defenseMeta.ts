@@ -14,6 +14,11 @@ import {
   collectReward,
   glitchFirstClear,
   lvCost,
+  planUpAll,
+  RES_MAX_LV,
+  RELIC_MAX_LV,
+  resUpCost,
+  relicUpCost,
   PASS,
   PASS_PREMIUM_GP,
   RELIC,
@@ -71,6 +76,10 @@ export interface Profile {
   res: string[];
   /** 가진 유물 */
   relics: string[];
+  /** 연구 레벨 (없으면 1) */
+  resLv?: Record<string, number>;
+  /** 유물 레벨 (없으면 1) */
+  relicLv?: Record<string, number>;
   /** 장착 (시즌 판 · 멀티에 들고 감) */
   load: { res: string[]; relics: string[]; glitch: number };
   /** 고를 수 있는 가장 높은 오염 단계 */
@@ -279,7 +288,7 @@ export function createDefenseMeta(db: Database, points: Points, now: () => numbe
     async loadoutOf(uid: string): Promise<Required<Loadout>> {
       const p = await load(uid);
       const lv = Object.fromEntries(Object.entries(p.lv).filter(([, v]) => v > 0));
-      return cleanLoadout({ lv, res: p.load.res.filter((r) => p.res.includes(r)), relics: p.load.relics.filter((r) => p.relics.includes(r)), glitch: Math.min(p.load.glitch, p.glitchOpen) }, unitIds);
+      return cleanLoadout({ lv, res: p.load.res.filter((r) => p.res.includes(r)), relics: p.load.relics.filter((r) => p.relics.includes(r)), glitch: Math.min(p.load.glitch, p.glitchOpen), resLv: p.resLv, relicLv: p.relicLv }, unitIds);
     },
 
     async profile(uid: string): Promise<Wire> {
@@ -360,6 +369,22 @@ export function createDefenseMeta(db: Database, points: Points, now: () => numbe
       });
     },
 
+    /** 일괄 강화 — id 가 있으면 그 유닛만 최대한, 없으면 모든 유닛을 고르게 (planUpAll) */
+    unitUpAll(uid: string, id?: string) {
+      return edit(uid, async (p) => {
+        if (id && !unitIds.has(id)) throw bad("없는 유닛이에요.");
+        const pool = id ? [UNIT[id]] : UNITS;
+        const plan = planUpAll(pool, p.lv, p.cards, p.pieces);
+        need(plan.n > 0, "지금 올릴 수 있는 유닛이 없어요.");
+        for (const [k, n] of Object.entries(plan.ups)) {
+          p.lv[k] = (p.lv[k] ?? 0) + n;
+          p.cards[k] -= plan.cards[k];
+        }
+        p.pieces -= plan.pieces;
+        return { ...(await wire(uid, p)), ups: plan.n };
+      });
+    },
+
     /** 레벨 내리기 — 그 레벨에 쓴 카드 · 조각을 모두 돌려줌 (여러 조합을 시험해 보게) */
     unitDown(uid: string, id: string) {
       return edit(uid, async (p) => {
@@ -398,6 +423,50 @@ export function createDefenseMeta(db: Database, points: Points, now: () => numbe
         p.cores -= price;
         p.relics.push(id);
         if (p.load.relics.length < RELIC_SLOTS) p.load.relics.push(id);
+        return wire(uid, p);
+      });
+    },
+
+    /** 연구 레벨 올리기 (조각) · 내리기 (쓴 조각 전부 돌려받기) */
+    resLevel(uid: string, id: string, dir: 1 | -1) {
+      return edit(uid, async (p) => {
+        need(!!RES[id] && p.res.includes(id), "연 연구만 올릴 수 있어요.");
+        p.resLv ??= {};
+        const lv = p.resLv[id] ?? 1;
+        if (dir > 0) {
+          need(lv < RES_MAX_LV, "이미 최고 레벨이에요.");
+          const c = resUpCost(id, lv);
+          need(p.pieces >= c, "픽셀 조각이 모자라요.");
+          p.pieces -= c;
+          p.resLv[id] = lv + 1;
+        } else {
+          need(lv > 1, "이미 1레벨이에요.");
+          p.pieces += resUpCost(id, lv - 1);
+          if (lv - 1 > 1) p.resLv[id] = lv - 1;
+          else delete p.resLv[id];
+        }
+        return wire(uid, p);
+      });
+    },
+
+    /** 유물 레벨 올리기 (글리치 코어) · 내리기 (쓴 코어 전부 돌려받기) */
+    relicLevel(uid: string, id: string, dir: 1 | -1) {
+      return edit(uid, async (p) => {
+        need(!!RELIC[id] && p.relics.includes(id), "가진 유물만 올릴 수 있어요.");
+        p.relicLv ??= {};
+        const lv = p.relicLv[id] ?? 1;
+        if (dir > 0) {
+          need(lv < RELIC_MAX_LV, "이미 최고 레벨이에요.");
+          const c = relicUpCost(id, lv);
+          need(p.cores >= c, "글리치 코어가 모자라요.");
+          p.cores -= c;
+          p.relicLv[id] = lv + 1;
+        } else {
+          need(lv > 1, "이미 1레벨이에요.");
+          p.cores += relicUpCost(id, lv - 1);
+          if (lv - 1 > 1) p.relicLv[id] = lv - 1;
+          else delete p.relicLv[id];
+        }
         return wire(uid, p);
       });
     },

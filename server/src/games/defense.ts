@@ -297,8 +297,12 @@ export function registerDefense({ gateway, db, points }: Deps) {
   const id = z.object({ id: z.string().max(40) });
   gateway.rpc("defense.profile", (ctx) => (member(ctx), meta.profile(ctx.uid)));
   gateway.rpc("defense.unit.up", (ctx, raw) => (member(ctx), meta.unitUp(ctx.uid, id.parse(raw).id)));
+  gateway.rpc("defense.unit.upAll", (ctx, raw) => (member(ctx), meta.unitUpAll(ctx.uid, z.object({ id: z.string().max(40).optional() }).parse(raw ?? {}).id)));
   gateway.rpc("defense.unit.down", (ctx, raw) => (member(ctx), meta.unitDown(ctx.uid, id.parse(raw).id)));
   gateway.rpc("defense.res.buy", (ctx, raw) => (member(ctx), meta.resBuy(ctx.uid, id.parse(raw).id)));
+  const lvArg = z.object({ id: z.string().max(40), dir: z.union([z.literal(1), z.literal(-1)]) });
+  gateway.rpc("defense.res.level", (ctx, raw) => (member(ctx), ((a) => meta.resLevel(ctx.uid, a.id, a.dir))(lvArg.parse(raw))));
+  gateway.rpc("defense.relic.level", (ctx, raw) => (member(ctx), ((a) => meta.relicLevel(ctx.uid, a.id, a.dir))(lvArg.parse(raw))));
   gateway.rpc("defense.relic.buy", (ctx, raw) => (member(ctx), meta.relicBuy(ctx.uid, id.parse(raw).id)));
   gateway.rpc("defense.chest.buy", (ctx) => (member(ctx), meta.chestBuy(ctx.uid)));
   gateway.rpc("defense.chest.open", (ctx) => (member(ctx), meta.chestOpen(ctx.uid)));

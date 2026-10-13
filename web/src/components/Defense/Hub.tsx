@@ -13,6 +13,13 @@ import {
   glitchFirstClear,
   lvCost,
   LV_DMG,
+  planUpAll,
+  relicDesc,
+  relicUpCost,
+  RELIC_MAX_LV,
+  resDesc,
+  resUpCost,
+  RES_MAX_LV,
   PASS,
   PASS_PREMIUM_GP,
   RELIC,
@@ -186,7 +193,7 @@ export default function Hub({
     <div className="px-stars absolute inset-0 flex flex-col">
       <div className="dfn-scan pointer-events-none absolute inset-0 opacity-40" />
       {/* 머리 */}
-      <div className="relative z-10 flex h-[58px] shrink-0 items-center gap-3 border-b-2 border-[#0a0816] bg-[#151029] px-4 shadow-[0_2px_0_0_#2a2350]">
+      <div className="relative z-30 flex h-[58px] shrink-0 items-center gap-3 border-b-2 border-[#0a0816] bg-[#151029] px-4 shadow-[0_2px_0_0_#2a2350]">
         <Btn className="h-9 px-3 text-[13px]" onClick={onBack}>
           ◀ 메뉴
         </Btn>
@@ -349,9 +356,9 @@ function LoadTab({ p, act, busy }: TabProps) {
                 <Btn key={id} tone={on ? "cyan" : "ghost"} disabled={busy} className="px-2 py-1.5 text-left" onClick={() => toggle("res", id, RES_SLOTS)}>
                   <b className="block text-[13px]">
                     {on ? "■ " : "□ "}
-                    {RES[id].name}
+                    {RES[id].name} <span className="text-[var(--gold)]">Lv.{p.resLv?.[id] ?? 1}</span>
                   </b>
-                  <span className="block text-[12px] opacity-75">{RES[id].desc}</span>
+                  <span className="block text-[12px] opacity-75">{resDesc(id, p.resLv?.[id] ?? 1)}</span>
                 </Btn>
               );
             })}
@@ -371,8 +378,10 @@ function LoadTab({ p, act, busy }: TabProps) {
                 <Btn key={id} tone={on ? "gold" : "ghost"} disabled={busy} className="flex items-center gap-2 px-2 py-1.5 text-left" onClick={() => toggle("relics", id, RELIC_SLOTS)}>
                   <RelicIcon id={id} size={34} />
                   <span className="min-w-0">
-                    <b className="block text-[13px]">{r.name}</b>
-                    <span className="block text-[12px] leading-tight opacity-80">{r.desc}</span>
+                    <b className="block text-[13px]">
+                      {r.name} <span className="text-[var(--gold)]">Lv.{p.relicLv?.[id] ?? 1}</span>
+                    </b>
+                    <span className="block text-[12px] leading-tight opacity-80">{relicDesc(id, p.relicLv?.[id] ?? 1)}</span>
                   </span>
                 </Btn>
               );
@@ -425,20 +434,34 @@ function UnitsTab({ p, act, busy }: TabProps) {
   const cards = p.cards[u.id] ?? 0;
   const seen = new Set(p.seen ?? []);
   const collectable = UNITS.filter((x) => collectReward(x.grade));
+  const all = planUpAll(UNITS, p.lv, p.cards, p.pieces);
+  const one = planUpAll([u], p.lv, p.cards, p.pieces);
   return (
     <div className="flex h-full gap-3">
       <div className="flex min-w-0 flex-1 flex-col">
-        <div className="mb-2 flex gap-1.5">
+        <div className="mb-2 flex items-center gap-1.5">
           {(["knight", "mech", "arcane", "hidden"] as Faction[]).map((f) => (
             <Btn key={f} tone={fac === f ? (f === "hidden" ? "cyan" : f) : "ghost"} className="h-8 px-3 text-[12px] font-bold" onClick={() => setFac(f)}>
               <FactionIcon f={f} size={12} className="mr-1" />
               {FACTION_NAME[f]}
             </Btn>
           ))}
+          <Btn
+            tone="main"
+            disabled={busy || !all.n}
+            silent
+            className="ml-auto h-8 px-3 text-[12px] font-bold"
+            title={all.n ? `모든 세력 유닛을 낮은 레벨부터 고르게 ${all.n}번 강화 — 조각 ${fmtNum(all.pieces)} 사용 (「−」로 하나씩 되돌릴 수 있어요)` : "지금 올릴 수 있는 유닛이 없어요"}
+            onClick={() => void act(() => meta.unitUpAll(), "upgrade")}
+          >
+            일괄 강화{all.n ? ` ×${all.n}` : ""}
+          </Btn>
         </div>
         <p className="mb-1.5 text-[12px] text-[var(--mute)]">
           도감 수집 <b className="text-[var(--gold)]">{collectable.filter((x) => seen.has(x.id)).length}</b>/{collectable.length} — 에픽 이상을 판에서 처음 얻으면 보상 (신화 · 히든은 코어도) ·{" "}
-          <span title={curTitle("card")} className="underline decoration-dotted">카드는 어디서?</span>
+          <Tip text={curTip("card")} width={280}>
+            <span className="cursor-pointer underline decoration-dotted">카드는 어디서?</span>
+          </Tip>
         </p>
         <div className="grid grid-cols-6 gap-1.5">
           {list.map((x) => {
@@ -497,6 +520,16 @@ function UnitsTab({ p, act, busy }: TabProps) {
             >
               + Lv.{lv + 1} 로 강화 (+{Math.round(LV_DMG * 100)}%)
             </Btn>
+            {one.n > 1 && (
+              <Btn
+                disabled={busy}
+                className="mt-1.5 h-8 w-full text-[12px]"
+                silent
+                onClick={() => void act(() => meta.unitUpAll(u.id), "upgrade")}
+              >
+                ++ Lv.{lv + one.n} 까지 한 번에 (조각 {fmtNum(one.pieces)})
+              </Btn>
+            )}
           </>
         ) : (
           <p className="mt-3 text-[13px] text-[var(--gold)]">최고 레벨!</p>
@@ -551,14 +584,30 @@ function ResTab({ p, act, busy }: TabProps) {
           <div className="grid grid-cols-2 gap-1.5">
             {RESEARCH.filter((r) => r.group === g).map((r) => {
               const own = p.res.includes(r.id);
+              const lv = p.resLv?.[r.id] ?? 1;
+              const up = resUpCost(r.id, lv);
               return (
                 <div key={r.id} className="px-inset flex items-center gap-2 px-2.5 py-1.5" style={own ? ({ "--b": "#6dff8f" } as CSSProperties) : undefined}>
                   <span className="min-w-0 flex-1">
-                    <b className="block text-[13px]">{r.name}</b>
-                    <span className="block text-[12px] text-[var(--mute)]">{r.desc}</span>
+                    <b className="block text-[13px]">
+                      {r.name}
+                      {own && <span className="ml-1.5 text-[var(--gold)]">Lv.{lv}</span>}
+                      {own && p.load.res.includes(r.id) && <span className="ml-1.5 text-[12px] font-normal text-[var(--green)]">장착 중</span>}
+                    </b>
+                    <span className="block text-[12px] text-[var(--mute)]">{resDesc(r.id, own ? lv : 1)}</span>
                   </span>
                   {own ? (
-                    <span className="text-[12px] text-[var(--green)]">{p.load.res.includes(r.id) ? "장착 중" : "보유"}</span>
+                    <LvBtns
+                      lv={lv}
+                      max={RES_MAX_LV}
+                      busy={busy}
+                      can={p.pieces >= up}
+                      cost={<Cur k="piece" n={up} size={12} />}
+                      back={lv > 1 ? `조각 ${resUpCost(r.id, lv - 1)} 돌려받기` : ""}
+                      next={lv < RES_MAX_LV ? resDesc(r.id, lv + 1) : ""}
+                      onUp={() => void act(() => meta.resLevel(r.id, 1), "upgrade")}
+                      onDown={() => void act(() => meta.resLevel(r.id, -1), "sell")}
+                    />
                   ) : (
                     <Btn tone="cyan" disabled={busy || p.pieces < r.cost} silent className="h-8 shrink-0 px-2 text-[12px]" onClick={() => void act(() => meta.resBuy(r.id), "upgrade")}>
                       <Cur k="piece" n={r.cost} size={12} />
@@ -574,6 +623,28 @@ function ResTab({ p, act, busy }: TabProps) {
   );
 }
 
+/** 연구 · 유물 레벨 버튼 — 「−」 내리기 (전부 돌려받기) · 「+ 값」 올리기 */
+function LvBtns({ lv, max, busy, can, cost, back, next, onUp, onDown }: { lv: number; max: number; busy: boolean; can: boolean; cost: ReactNode; back: string; next: string; onUp(): void; onDown(): void }) {
+  return (
+    <span className="flex shrink-0 items-center gap-1">
+      {lv > 1 && (
+        <Btn disabled={busy} silent className="h-8 w-7 px-0 text-[13px]" title={`Lv.${lv - 1} 로 내리기 (${back})`} onClick={onDown}>
+          −
+        </Btn>
+      )}
+      {lv < max ? (
+        <Tip text={<><b className="text-[var(--gold)]">Lv.{lv + 1}</b> — {next}</>} align="right" width={240}>
+          <Btn tone="cyan" disabled={busy || !can} silent className="h-8 px-2 text-[12px]" title={`Lv.${lv + 1} 로 강화`} onClick={onUp}>
+            + {cost}
+          </Btn>
+        </Tip>
+      ) : (
+        <span className="px-1 text-[12px] text-[var(--gold)]">MAX</span>
+      )}
+    </span>
+  );
+}
+
 /* ───────── 유물 ───────── */
 
 function RelicTab({ p, act, busy }: TabProps) {
@@ -584,6 +655,8 @@ function RelicTab({ p, act, busy }: TabProps) {
         {RELICS.map((r) => {
           const own = p.relics.includes(r.id);
           const price = RELIC_CORE_PRICE[r.tier];
+          const lv = p.relicLv?.[r.id] ?? 1;
+          const up = relicUpCost(r.id, lv);
           return (
             <div key={r.id} className="px-inset flex items-center gap-2.5 px-2.5 py-2" style={{ "--b": own ? TIER_COLOR[r.tier] : undefined } as CSSProperties}>
               <RelicIcon id={r.id} size={42} dim={!own} />
@@ -592,10 +665,22 @@ function RelicTab({ p, act, busy }: TabProps) {
                 <span className="ml-1.5 text-[12px]" style={{ color: TIER_COLOR[r.tier] }}>
                   {TIER_NAME[r.tier]}
                 </span>
-                <span className="block text-[12px] leading-tight text-[var(--mute)]">{r.desc}</span>
+                {own && <span className="ml-1.5 text-[12px] font-bold text-[var(--gold)]">Lv.{lv}</span>}
+                {own && p.load.relics.includes(r.id) && <span className="ml-1.5 text-[12px] text-[var(--green)]">장착 중</span>}
+                <span className="block text-[12px] leading-tight text-[var(--mute)]">{relicDesc(r.id, own ? lv : 1)}</span>
               </span>
               {own ? (
-                <span className="shrink-0 text-[12px] text-[var(--green)]">{p.load.relics.includes(r.id) ? "장착 중" : "보유"}</span>
+                <LvBtns
+                  lv={lv}
+                  max={RELIC_MAX_LV}
+                  busy={busy}
+                  can={p.cores >= up}
+                  cost={<Cur k="core" n={up} size={12} />}
+                  back={lv > 1 ? `코어 ${relicUpCost(r.id, lv - 1)} 돌려받기` : ""}
+                  next={lv < RELIC_MAX_LV ? relicDesc(r.id, lv + 1) : ""}
+                  onUp={() => void act(() => meta.relicLevel(r.id, 1), "legend")}
+                  onDown={() => void act(() => meta.relicLevel(r.id, -1), "sell")}
+                />
               ) : (
                 <Btn tone="arcane" disabled={busy || p.cores < price} silent className="h-8 shrink-0 px-2 text-[12px]" onClick={() => void act(() => meta.relicBuy(r.id), "legend")}>
                   <Cur k="core" n={price} size={12} />

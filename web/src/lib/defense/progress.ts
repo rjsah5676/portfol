@@ -23,6 +23,10 @@ export interface Loadout {
   relics?: string[];
   /** 오염 단계 0..GLITCH_MAX */
   glitch?: number;
+  /** 장착한 연구 레벨 (없으면 1) */
+  resLv?: Record<string, number>;
+  /** 장착한 유물 레벨 (없으면 1) */
+  relicLv?: Record<string, number>;
 }
 
 export const UNIT_MAX_LV = 10;
@@ -34,59 +38,113 @@ export const GLITCH_MAX = 30;
 
 /* ───────────────────────── 연구 ───────────────────────── */
 
+/** 연구 · 유물 최고 레벨 (1 = 처음 연 상태) */
+export const RES_MAX_LV = 5;
+export const RELIC_MAX_LV = 5;
+/** 레벨마다 효과 늘어나는 비율 — 1레벨 효과 × (1 + k × (레벨-1)) */
+const sc = (lv: number, k: number) => 1 + k * (Math.max(1, lv) - 1);
+const rd = (x: number) => Math.round(x);
+
 export interface ResearchDef {
   id: string;
   name: string;
+  /** 1레벨 설명 (화면에서 레벨별은 resDesc) */
   desc: string;
+  /** 설명 틀 — {v} 자리에 val(레벨) */
+  tpl: string;
+  /** 레벨 → 효과 수치 (정수, 시뮬이 modsOf 로 읽음) */
+  val: (lv: number) => number;
   /** 어느 줄 (화면 묶음) */
   group: Faction | "general";
-  /** 여는 값 (픽셀 조각) */
+  /** 여는 값 (픽셀 조각) — 레벨 n → n+1 은 cost × n */
   cost: number;
 }
 
+const res = (id: string, name: string, tpl: string, val: (lv: number) => number, group: ResearchDef["group"], cost: number): ResearchDef => ({
+  id,
+  name,
+  tpl,
+  val,
+  group,
+  cost,
+  desc: tpl.replace("{v}", String(val(1))),
+});
+
 export const RESEARCH: ResearchDef[] = [
-  { id: "g_gold", name: "비상금", desc: "시작 골드 +40", group: "general", cost: 300 },
-  { id: "g_summon", name: "소환 할인", desc: "소환 비용 -2G", group: "general", cost: 600 },
-  { id: "g_wave", name: "웨이브 수당", desc: "웨이브를 넘길 때 받는 골드 +20%", group: "general", cost: 900 },
-  { id: "g_stone", name: "행운석 주머니", desc: "시작 행운석 +2", group: "general", cost: 600 },
-  { id: "g_boss", name: "버티기 훈련", desc: "보스 제한 시간 +8초", group: "general", cost: 1200 },
-  { id: "g_sell", name: "고물상", desc: "유닛 판매 금액 ×1.5", group: "general", cost: 400 },
-  { id: "k_drill", name: "기사단 훈련", desc: "기사단 피해 +10%", group: "knight", cost: 800 },
-  { id: "k_tactic", name: "대형 진형", desc: "기사단이 중형 · 대형 적에게 주는 피해 +20%p", group: "knight", cost: 1500 },
-  { id: "m_drill", name: "공방 개조", desc: "기계공방 피해 +10%", group: "mech", cost: 800 },
-  { id: "m_tune", name: "과급 장치", desc: "기계공방 공격 속도 +10%", group: "mech", cost: 1500 },
-  { id: "a_drill", name: "마도 수련", desc: "마도회 피해 +10%", group: "arcane", cost: 800 },
-  { id: "a_focus", name: "마력 집중", desc: "마도회 둔화 · 체력 비례 피해 효과 +25%", group: "arcane", cost: 1500 },
+  res("g_gold", "비상금", "시작 골드 +{v}", (l) => rd(40 * sc(l, 0.25)), "general", 300),
+  res("g_summon", "소환 할인", "소환 비용 -{v}G", (l) => rd(2 * sc(l, 0.25)), "general", 600),
+  res("g_wave", "웨이브 수당", "웨이브를 넘길 때 받는 골드 +{v}%", (l) => rd(20 * sc(l, 0.25)), "general", 900),
+  res("g_stone", "행운석 주머니", "시작 행운석 +{v}", (l) => rd(2 * sc(l, 0.25)), "general", 600),
+  res("g_boss", "버티기 훈련", "보스 제한 시간 +{v}초", (l) => rd(8 * sc(l, 0.25)), "general", 1200),
+  res("g_sell", "고물상", "유닛 판매 금액 +{v}%", (l) => 50 + 10 * (Math.max(1, l) - 1), "general", 400),
+  res("k_drill", "기사단 훈련", "기사단 피해 +{v}%", (l) => rd(10 * sc(l, 0.25)), "knight", 800),
+  res("k_tactic", "대형 진형", "기사단이 중형 · 대형 적에게 주는 피해 +{v}%p", (l) => rd(20 * sc(l, 0.25)), "knight", 1500),
+  res("m_drill", "공방 개조", "기계공방 피해 +{v}%", (l) => rd(10 * sc(l, 0.25)), "mech", 800),
+  res("m_tune", "과급 장치", "기계공방 공격 속도 +{v}%", (l) => rd(10 * sc(l, 0.25)), "mech", 1500),
+  res("a_drill", "마도 수련", "마도회 피해 +{v}%", (l) => rd(10 * sc(l, 0.25)), "arcane", 800),
+  res("a_focus", "마력 집중", "마도회 둔화 · 체력 비례 피해 효과 +{v}%", (l) => rd(25 * sc(l, 0.25)), "arcane", 1500),
 ];
 export const RES: Record<string, ResearchDef> = Object.fromEntries(RESEARCH.map((r) => [r.id, r]));
+export const resDesc = (id: string, lv = 1) => RES[id]?.tpl.replace("{v}", String(RES[id].val(lv))) ?? "";
+/** 연구 lv → lv+1 조각 */
+export const resUpCost = (id: string, lv: number) => (RES[id]?.cost ?? 0) * lv;
 
 /* ───────────────────────── 유물 ───────────────────────── */
 
 export interface RelicDef {
   id: string;
   name: string;
+  /** 1레벨 설명 (레벨별은 relicDesc) */
   desc: string;
+  /** 레벨 → 설명 */
+  at: (lv: number) => string;
   /** 희귀도 0 일반 · 1 희귀 · 2 전설 (상자 확률 · 코어 값) */
   tier: 0 | 1 | 2;
   /** 어울리는 길 (화면 안내 · 봇 루트) */
   route: "mono" | "mix" | "gamble" | "eco" | "boss" | "any";
 }
 
+/**
+ * 유물 레벨별 수치 — 희귀도가 높을수록 레벨당 덜 오름 (일반 +25% · 희귀 +20% · 전설 +15%, 5레벨이면 일반 2배)
+ * 시뮬은 modsOf 가 이 값을 읽음.
+ */
+export const RELIC_VAL = {
+  gold_gear: (l: number) => (l >= 5 ? 3 : l >= 3 ? 2 : 1),
+  gold_gear_wave: (l: number) => (Math.max(1, l) - 1) * 5,
+  first_harvest: (l: number) => 15 + 3 * (Math.max(1, l) - 1),
+  lucky_clover: (l: number) => (l >= 4 ? 2 : 1),
+  rift_cd: (l: number) => 30 + 5 * (Math.max(1, l) - 1),
+  rift_stone: (l: number) => (l >= 5 ? 2 : 1),
+  gambler_coin: (l: number) => rd(6 * sc(l, 0.2)),
+  hourglass: (l: number) => rd(10 * sc(l, 0.2)),
+  alchemy_gold: (l: number) => rd(80 * sc(l, 0.2)),
+  alchemy_stone: (l: number) => 2 + Math.floor((Math.max(1, l) - 1) / 2),
+  vaccine: (l: number) => rd(25 * sc(l, 0.2)),
+  pure_blood: (l: number) => rd(25 * sc(l, 0.15)),
+  rainbow: (l: number) => rd(12 * sc(l, 0.15)),
+  twin_star: (l: number) => rd(15 * sc(l, 0.15)),
+  war_banner: (l: number) => rd(40 * sc(l, 0.15)) / 10,
+};
+const V = RELIC_VAL;
+
+const relic = (id: string, name: string, at: (l: number) => string, tier: RelicDef["tier"], route: RelicDef["route"]): RelicDef => ({ id, name, at, tier, route, desc: at(1) });
+
 export const RELICS: RelicDef[] = [
-  { id: "gold_gear", name: "황금 톱니", desc: "적 처치 골드 +1", tier: 0, route: "eco" },
-  { id: "first_harvest", name: "첫 수확", desc: "1~15웨이브 동안 웨이브 골드 2배", tier: 0, route: "eco" },
-  { id: "lucky_clover", name: "네잎클로버", desc: "소환 확률 강화 1단계를 들고 시작", tier: 0, route: "any" },
-  { id: "rift_compass", name: "균열 나침반", desc: "균열 다시 열기 30% 빠름 · 닫으면 행운석 +1", tier: 0, route: "gamble" },
-  { id: "gambler_coin", name: "도박꾼의 동전", desc: "행운석 도박 성공률 +6%p", tier: 1, route: "gamble" },
-  { id: "hourglass", name: "시간의 모래", desc: "보스 제한 시간 +10초", tier: 1, route: "boss" },
-  { id: "alchemy", name: "연금술 노트", desc: "조합식으로 신화 · 히든을 만들면 골드 +80 · 행운석 +2", tier: 1, route: "any" },
-  { id: "vaccine", name: "글리치 백신", desc: "보스 · 엘리트 · 균열 적에게 주는 피해 +25%", tier: 1, route: "boss" },
-  { id: "pure_blood", name: "순수 혈통", desc: "필드에 한 세력만 있으면 (히든 제외) 모든 피해 +25%", tier: 2, route: "mono" },
-  { id: "rainbow", name: "무지개 연합", desc: "필드에 세 세력이 모두 있으면 모든 피해 +12%", tier: 2, route: "mix" },
-  { id: "twin_star", name: "쌍둥이 별", desc: "레전드 이상을 얻을 때 15% 확률로 같은 등급 같은 세력 1기 더 (빈 칸이 있으면)", tier: 2, route: "any" },
-  { id: "war_banner", name: "전쟁 깃발", desc: "세력 강화 레벨 합 10마다 모든 피해 +4%", tier: 2, route: "mix" },
+  relic("gold_gear", "황금 톱니", (l) => `적 처치 골드 +${V.gold_gear(l)}${V.gold_gear_wave(l) ? ` · 웨이브 골드 +${V.gold_gear_wave(l)}%` : ""}`, 0, "eco"),
+  relic("first_harvest", "첫 수확", (l) => `1~${V.first_harvest(l)}웨이브 동안 웨이브 골드 2배`, 0, "eco"),
+  relic("lucky_clover", "네잎클로버", (l) => `소환 확률 강화 ${V.lucky_clover(l)}단계를 들고 시작`, 0, "any"),
+  relic("rift_compass", "균열 나침반", (l) => `균열 다시 열기 ${V.rift_cd(l)}% 빠름 · 닫으면 행운석 +${V.rift_stone(l)}`, 0, "gamble"),
+  relic("gambler_coin", "도박꾼의 동전", (l) => `행운석 도박 성공률 +${V.gambler_coin(l)}%p`, 1, "gamble"),
+  relic("hourglass", "시간의 모래", (l) => `보스 제한 시간 +${V.hourglass(l)}초`, 1, "boss"),
+  relic("alchemy", "연금술 노트", (l) => `조합식으로 신화 · 히든을 만들면 골드 +${V.alchemy_gold(l)} · 행운석 +${V.alchemy_stone(l)}`, 1, "any"),
+  relic("vaccine", "글리치 백신", (l) => `보스 · 엘리트 · 균열 적에게 주는 피해 +${V.vaccine(l)}%`, 1, "boss"),
+  relic("pure_blood", "순수 혈통", (l) => `필드에 한 세력만 있으면 (히든 제외) 모든 피해 +${V.pure_blood(l)}%`, 2, "mono"),
+  relic("rainbow", "무지개 연합", (l) => `필드에 세 세력이 모두 있으면 모든 피해 +${V.rainbow(l)}%`, 2, "mix"),
+  relic("twin_star", "쌍둥이 별", (l) => `레전드 이상을 얻을 때 ${V.twin_star(l)}% 확률로 같은 등급 같은 세력 1기 더 (빈 칸이 있으면)`, 2, "any"),
+  relic("war_banner", "전쟁 깃발", (l) => `세력 강화 레벨 합 10마다 모든 피해 +${V.war_banner(l)}%`, 2, "mix"),
 ];
 export const RELIC: Record<string, RelicDef> = Object.fromEntries(RELICS.map((r) => [r.id, r]));
+export const relicDesc = (id: string, lv = 1) => RELIC[id]?.at(lv) ?? "";
 
 /* ───────────────────────── 오염 단계 ───────────────────────── */
 
@@ -168,11 +226,13 @@ export interface Mods {
   mechAspd: number;
   arcaneFx: number;
   killGold: number;
-  firstHarvest: boolean;
+  /** 이 웨이브까지 웨이브 골드 2배 (0 = 없음) */
+  firstHarvest: number;
   riftCd: number;
   riftStone: number;
   gamble: number;
-  alchemy: boolean;
+  alchemyGold: number;
+  alchemyStones: number;
   vaccine: number;
   pureBlood: number;
   rainbow: number;
@@ -182,6 +242,8 @@ export interface Mods {
   /** 장착한 연구 · 유물 id (화면 표시용, 시뮬은 위 값만 씀) */
   res: string[];
   relics: string[];
+  resLv: Record<string, number>;
+  relicLv: Record<string, number>;
 }
 
 const clampInt = (v: unknown, lo: number, hi: number) =>
@@ -197,11 +259,24 @@ export function cleanLoadout(lo: Loadout | null | undefined, unitIds?: Set<strin
   }
   const uniq = (a: unknown, ok: (s: string) => boolean, max: number) =>
     [...new Set(Array.isArray(a) ? a.filter((s): s is string => typeof s === "string" && ok(s)) : [])].slice(0, max);
+  const res = uniq(lo?.res, (s) => !!RES[s], RES_SLOTS);
+  const relics = uniq(lo?.relics, (s) => !!RELIC[s], RELIC_SLOTS);
+  // 레벨은 장착한 것만, 2 이상만 (1 은 기본이라 안 적음 — 예전 기록과 모양이 같게)
+  const lvs = (src: Record<string, number> | undefined, ids: string[], max: number) => {
+    const o: Record<string, number> = {};
+    for (const id of ids) {
+      const n = clampInt(src?.[id], 1, max);
+      if (n > 1) o[id] = n;
+    }
+    return o;
+  };
   return {
     lv,
-    res: uniq(lo?.res, (s) => !!RES[s], RES_SLOTS),
-    relics: uniq(lo?.relics, (s) => !!RELIC[s], RELIC_SLOTS),
+    res,
+    relics,
     glitch: clampInt(lo?.glitch, 0, GLITCH_MAX),
+    resLv: lvs(lo?.resLv, res, RES_MAX_LV),
+    relicLv: lvs(lo?.relicLv, relics, RELIC_MAX_LV),
   };
 }
 
@@ -209,37 +284,45 @@ export function modsOf(lo: Loadout | null | undefined): Mods {
   const L = cleanLoadout(lo);
   const r = new Set(L.res);
   const x = new Set(L.relics);
+  /** 장착한 연구 수치 (안 끼면 0) */
+  const R = (id: string) => (r.has(id) ? RES[id].val(L.resLv[id] ?? 1) : 0);
+  /** 장착한 유물 레벨 (안 끼면 0) */
+  const X = (id: string) => (x.has(id) ? (L.relicLv[id] ?? 1) : 0);
+  const has = (id: string) => x.has(id);
   return {
     lv: L.lv,
-    startGold: r.has("g_gold") ? 40 : 0,
-    startStones: r.has("g_stone") ? 2 : 0,
-    startLuck: x.has("lucky_clover") ? 1 : 0,
-    summonDisc: r.has("g_summon") ? 2 : 0,
-    waveGold: r.has("g_wave") ? 1.2 : 1,
-    sellMult: r.has("g_sell") ? 1.5 : 1,
-    bossSec: (r.has("g_boss") ? 8 : 0) + (x.has("hourglass") ? 10 : 0) + GLITCH[L.glitch].bossSec,
+    startGold: R("g_gold"),
+    startStones: R("g_stone"),
+    startLuck: has("lucky_clover") ? V.lucky_clover(X("lucky_clover")) : 0,
+    summonDisc: R("g_summon"),
+    waveGold: (1 + R("g_wave") / 100) * (1 + (has("gold_gear") ? V.gold_gear_wave(X("gold_gear")) : 0) / 100),
+    sellMult: 1 + R("g_sell") / 100,
+    bossSec: R("g_boss") + (has("hourglass") ? V.hourglass(X("hourglass")) : 0) + GLITCH[L.glitch].bossSec,
     fac: {
-      knight: r.has("k_drill") ? 1.1 : 1,
-      mech: r.has("m_drill") ? 1.1 : 1,
-      arcane: r.has("a_drill") ? 1.1 : 1,
+      knight: 1 + R("k_drill") / 100,
+      mech: 1 + R("m_drill") / 100,
+      arcane: 1 + R("a_drill") / 100,
     },
-    knightBig: r.has("k_tactic") ? 0.2 : 0,
-    mechAspd: r.has("m_tune") ? 0.1 : 0,
-    arcaneFx: r.has("a_focus") ? 1.25 : 1,
-    killGold: x.has("gold_gear") ? 1 : 0,
-    firstHarvest: x.has("first_harvest"),
-    riftCd: x.has("rift_compass") ? 0.7 : 1,
-    riftStone: x.has("rift_compass") ? 1 : 0,
-    gamble: x.has("gambler_coin") ? 0.06 : 0,
-    alchemy: x.has("alchemy"),
-    vaccine: x.has("vaccine") ? 1.25 : 1,
-    pureBlood: x.has("pure_blood") ? 1.25 : 1,
-    rainbow: x.has("rainbow") ? 1.12 : 1,
-    twinStar: x.has("twin_star") ? 0.15 : 0,
-    warBanner: x.has("war_banner") ? 0.04 : 0,
+    knightBig: R("k_tactic") / 100,
+    mechAspd: R("m_tune") / 100,
+    arcaneFx: 1 + R("a_focus") / 100,
+    killGold: has("gold_gear") ? V.gold_gear(X("gold_gear")) : 0,
+    firstHarvest: has("first_harvest") ? V.first_harvest(X("first_harvest")) : 0,
+    riftCd: has("rift_compass") ? 1 - V.rift_cd(X("rift_compass")) / 100 : 1,
+    riftStone: has("rift_compass") ? V.rift_stone(X("rift_compass")) : 0,
+    gamble: has("gambler_coin") ? V.gambler_coin(X("gambler_coin")) / 100 : 0,
+    alchemyGold: has("alchemy") ? V.alchemy_gold(X("alchemy")) : 0,
+    alchemyStones: has("alchemy") ? V.alchemy_stone(X("alchemy")) : 0,
+    vaccine: 1 + (has("vaccine") ? V.vaccine(X("vaccine")) : 0) / 100,
+    pureBlood: 1 + (has("pure_blood") ? V.pure_blood(X("pure_blood")) : 0) / 100,
+    rainbow: 1 + (has("rainbow") ? V.rainbow(X("rainbow")) : 0) / 100,
+    twinStar: has("twin_star") ? V.twin_star(X("twin_star")) / 100 : 0,
+    warBanner: has("war_banner") ? V.war_banner(X("war_banner")) / 100 : 0,
     glitch: GLITCH[L.glitch],
     res: L.res,
     relics: L.relics,
+    resLv: L.resLv,
+    relicLv: L.relicLv,
   };
 }
 
@@ -267,6 +350,52 @@ export const LV_GRADE_MULT = [0.5, 0.7, 1, 1.4, 2, 2];
 export function lvCost(grade: number, lv: number): { cards: number; pieces: number } {
   const c = LV_COST[Math.max(0, Math.min(UNIT_MAX_LV - 1, lv))];
   return { cards: c.cards, pieces: Math.round((c.pieces * (LV_GRADE_MULT[grade] ?? 1)) / 10) * 10 };
+}
+
+/**
+ * 일괄 강화 계획 — 가진 카드 · 조각으로 할 수 있는 만큼 (서버 · 화면 미리보기가 같은 함수).
+ * ids 순서대로 한 바퀴씩 1레벨씩 올리고, 조각이 모자라면 싼 것부터 계속 → 낮은 레벨이 고르게 오름.
+ * 결과: 유닛별 오를 레벨 수 · 쓸 카드 · 조각 (lv · cards 는 바꾸지 않음)
+ */
+export function planUpAll(
+  units: { id: string; grade: number }[],
+  lv: Record<string, number>,
+  cards: Record<string, number>,
+  pieces: number,
+): { ups: Record<string, number>; cards: Record<string, number>; pieces: number; n: number } {
+  const L: Record<string, number> = {};
+  const C: Record<string, number> = {};
+  for (const u of units) {
+    L[u.id] = lv[u.id] ?? 0;
+    C[u.id] = cards[u.id] ?? 0;
+  }
+  const ups: Record<string, number> = {};
+  const used: Record<string, number> = {};
+  let left = pieces;
+  let n = 0;
+  for (;;) {
+    let best: { id: string; grade: number } | null = null;
+    let bc = 0;
+    for (const u of units) {
+      if (L[u.id] >= UNIT_MAX_LV) continue;
+      const c = lvCost(u.grade, L[u.id]);
+      if (C[u.id] < c.cards || left < c.pieces) continue;
+      // 레벨 낮은 것 먼저, 같으면 조각 싼 것
+      if (!best || L[u.id] < L[best.id] || (L[u.id] === L[best.id] && c.pieces < bc)) {
+        best = u;
+        bc = c.pieces;
+      }
+    }
+    if (!best) break;
+    const c = lvCost(best.grade, L[best.id]);
+    C[best.id] -= c.cards;
+    used[best.id] = (used[best.id] ?? 0) + c.cards;
+    left -= c.pieces;
+    L[best.id]++;
+    ups[best.id] = (ups[best.id] ?? 0) + 1;
+    n++;
+  }
+  return { ups, cards: used, pieces: pieces - left, n };
 }
 
 /** 오염 단계를 처음 클리어하면 (단계마다 한 번) */
@@ -352,6 +481,8 @@ export const CHEST = {
 } as const;
 /** 코어로 원하는 유물 바로 사기 */
 export const RELIC_CORE_PRICE = [8, 15, 30] as const;
+/** 유물 lv → lv+1 글리치 코어 (일반 8 · 희귀 15 · 전설 30 × 지금 레벨) */
+export const relicUpCost = (id: string, lv: number) => (RELIC_CORE_PRICE[RELIC[id]?.tier ?? 0] ?? 0) * lv;
 
 /* ───────────────────────── 일일 · 주간 미션 ───────────────────────── */
 

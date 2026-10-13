@@ -45,7 +45,12 @@ function loadoutFor(cfg: BotCfg): Loadout | null {
       : cfg.focus
         ? ["pure_blood", "vaccine", "hourglass"]
         : ["rainbow", "war_banner", "vaccine"];
-  return { lv, res: metaLv === "mid" ? res.slice(0, 2) : res, relics, glitch };
+  // 연구 · 유물 레벨 (max 는 모두 5, late 3, mid 1)
+  const rl = metaLv === "max" ? 5 : metaLv === "late" ? 3 : 1;
+  const R = metaLv === "mid" ? res.slice(0, 2) : res;
+  const resLv = Object.fromEntries(R.map((id) => [id, rl]));
+  const relicLv = Object.fromEntries(relics.map((id) => [id, rl]));
+  return { lv, res: R, relics, glitch, resLv, relicLv };
 }
 
 interface Run {

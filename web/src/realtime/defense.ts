@@ -62,6 +62,9 @@ export interface DefenseProfile {
   lv: Record<string, number>;
   res: string[];
   relics: string[];
+  /** 연구 · 유물 레벨 (없으면 1) */
+  resLv?: Record<string, number>;
+  relicLv?: Record<string, number>;
   load: { res: string[]; relics: string[]; glitch: number };
   glitchOpen: number;
   glitchWin: number;
@@ -90,7 +93,12 @@ export const meta = {
   profile: () => P("defense.profile"),
   unitUp: (id: string) => P("defense.unit.up", { id }),
   unitDown: (id: string) => P("defense.unit.down", { id }),
+  /** id 없으면 모든 유닛 고르게 · 있으면 그 유닛만 최대한 */
+  unitUpAll: (id?: string) => P("defense.unit.upAll", id ? { id } : {}),
   resBuy: (id: string) => P("defense.res.buy", { id }),
+  /** dir 1 올리기 · -1 내리기 (전부 돌려받기) */
+  resLevel: (id: string, dir: 1 | -1) => P("defense.res.level", { id, dir }),
+  relicLevel: (id: string, dir: 1 | -1) => P("defense.relic.level", { id, dir }),
   relicBuy: (id: string) => P("defense.relic.buy", { id }),
   chestBuy: () => P("defense.chest.buy"),
   chestOpen: () => P("defense.chest.open"),

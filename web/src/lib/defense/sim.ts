@@ -470,10 +470,8 @@ export function apply(g: Game, p: number, cmd: Cmd): string | null {
       }
       b.dirty = true;
       give(b, r.id, "recipe");
-      if (b.mods.alchemy) {
-        b.gold += 80;
-        b.stones += 2;
-      }
+      b.gold += b.mods.alchemyGold;
+      b.stones += b.mods.alchemyStones;
       return null;
     }
     case "patch": {
@@ -636,7 +634,7 @@ function startWave(b: Board, w: number) {
 
 function endWave(b: Board) {
   const wg = Math.floor((B.waveGold.base + B.waveGold.per * b.wave) * b.mods.waveGold);
-  b.gold += b.mods.firstHarvest && b.wave <= 15 ? wg * 2 : wg;
+  b.gold += b.wave <= b.mods.firstHarvest ? wg * 2 : wg;
   if (b.patch === "interest") b.gold += Math.min(70, Math.floor(b.gold * 0.1));
 }
 

@@ -37,7 +37,7 @@ import {
 } from "@/lib/defense/units";
 import type { Controller } from "./controller";
 import { RelicIcon } from "./Hub";
-import { RELIC, RES } from "@/lib/defense/progress";
+import { RELIC, RES, relicDesc, resDesc } from "@/lib/defense/progress";
 import { FH2, FW, cellAt, draw, newView, pushFx } from "./render";
 import {
   Bar,
@@ -483,8 +483,8 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry }
             className="px-inset flex h-full shrink-0 items-center gap-1 px-1.5"
             title={[
               b.mods.glitch.lv ? `오염 ${b.mods.glitch.lv}단계 — 적 체력 ×${b.mods.glitch.hp} · 속도 ×${b.mods.glitch.spd}` : "",
-              ...b.mods.relics.map((id) => `${RELIC[id]?.name}: ${RELIC[id]?.desc}`),
-              ...b.mods.res.map((id) => `연구 ${RES[id]?.name}: ${RES[id]?.desc}`),
+              ...b.mods.relics.map((id) => `${RELIC[id]?.name} Lv.${b.mods.relicLv?.[id] ?? 1}: ${relicDesc(id, b.mods.relicLv?.[id] ?? 1)}`),
+              ...b.mods.res.map((id) => `연구 ${RES[id]?.name} Lv.${b.mods.resLv?.[id] ?? 1}: ${resDesc(id, b.mods.resLv?.[id] ?? 1)}`),
             ]
               .filter(Boolean)
               .join("\n")}

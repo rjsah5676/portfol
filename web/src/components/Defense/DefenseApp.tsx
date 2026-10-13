@@ -365,14 +365,14 @@ function Menu(p: {
       </div>
       {/* 재화 */}
       {pr && (
-        <div className="px-inset absolute top-[104px] right-[24px] flex items-center gap-3.5 px-3 py-1.5 text-[13px]">
+        <div className="px-inset absolute top-[104px] right-[24px] z-30 flex items-center gap-3.5 px-3 py-1.5 text-[13px]">
           <Tip text={curTip("piece")}>
             <Cur k="piece" n={fmtNum(pr.pieces)} />
           </Tip>
           <Tip text={curTip("core")} className="text-[#ffb3ee]">
             <Cur k="core" n={pr.cores} />
           </Tip>
-          <Tip text={curTip("gp")} className="text-[var(--green)]">
+          <Tip text={curTip("gp")} className="text-[var(--green)]" align="right">
             <Cur k="gp" n={fmtNum(pr.gp)} />
           </Tip>
           <span className="text-[12px] text-[var(--mute)]">
