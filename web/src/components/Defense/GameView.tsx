@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useReducer, useRef, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useReducer, useRef, useState, type ReactNode } from "react";
 import { B, BOSS_EVERY, CAP, LAST_WAVE, TPS, hpOf, sec } from "@/lib/defense/balance";
 import { BOSSES } from "@/lib/defense/enemies";
 import { MISSIONS, PATCHES, PATCH_DEADLINE } from "@/lib/defense/meta";
@@ -32,6 +32,7 @@ import {
   SIZE_MULT,
   UNIT,
   poolOf,
+  type Faction,
   type Grade,
 } from "@/lib/defense/units";
 import type { Controller } from "./controller";
@@ -1328,16 +1329,61 @@ function DpsMeter({ b }: { b: Board }) {
 
 function RecipeModal({ b, run, onClose }: { b: Board; run: (c: Cmd) => boolean; onClose(): void }) {
   const have = counts(b);
+  // 세력별로 모아 보기 (탭) — 만들 수 있는 것이 있는 세력은 탭에 점
+  const [tab, setTab] = useState<"all" | Faction>(() => {
+    try {
+      return (localStorage.getItem("pgd-recipe-tab") as "all" | Faction) || "all";
+    } catch {
+      return "all";
+    }
+  });
+  const pickTab = (t: "all" | Faction) => {
+    setTab(t);
+    try {
+      localStorage.setItem("pgd-recipe-tab", t);
+    } catch {}
+  };
+  const ORDER: Faction[] = ["knight", "mech", "arcane", "hidden"];
+  const list = [...RECIPES]
+    .filter((r) => tab === "all" || UNIT[r.id].faction === tab)
+    .sort((x, y) => ORDER.indexOf(UNIT[x.id].faction) - ORDER.indexOf(UNIT[y.id].faction));
+  const ready = (f: Faction) => RECIPES.some((r) => UNIT[r.id].faction === f && canRecipe(b, r.id));
   return (
     <Modal title="조합식 — 신화 · 히든" onClose={onClose} wide accent="#ffd23f">
+      <div className="mb-2.5 flex gap-1.5">
+        {(["all", ...ORDER] as const).map((t) => (
+          <Btn
+            key={t}
+            tone={tab === t ? (t === "all" ? "main" : t === "hidden" ? "cyan" : t) : "ghost"}
+            className="relative h-8 px-3 text-[12px] font-bold"
+            onClick={() => pickTab(t)}
+          >
+            {t !== "all" && <FactionIcon f={t} size={11} className="mr-1" />}
+            {t === "all" ? "전체" : FACTION_NAME[t]}
+            {t !== "all" && ready(t) && <i className="dfn-blink absolute top-0.5 right-0.5 block h-2 w-2 bg-[var(--gold)]" />}
+          </Btn>
+        ))}
+      </div>
       <div className="flex flex-col gap-2.5">
-        {RECIPES.map((r) => {
+        {list.map((r, i) => {
+          const head =
+            tab === "all" && (i === 0 || UNIT[list[i - 1].id].faction !== UNIT[r.id].faction) ? (
+              <p
+                key={`h-${r.id}`}
+                className="mt-1 flex items-center gap-1 text-[13px] font-bold"
+                style={{ color: FACTION_COLOR[UNIT[r.id].faction] }}
+              >
+                <FactionIcon f={UNIT[r.id].faction} size={12} /> {FACTION_NAME[UNIT[r.id].faction]}
+              </p>
+            ) : null;
           const known = !r.hidden || foundHidden(r.id);
           const ok = canRecipe(b, r.id);
           const d = UNIT[r.id];
           const need: Record<string, number> = {};
           for (const n of r.needs) need[n] = (need[n] ?? 0) + 1;
           return (
+            <Fragment key={r.id}>
+            {head}
             <div
               key={r.id}
               className="px-inset flex items-center gap-3 p-2.5"
@@ -1399,12 +1445,13 @@ function RecipeModal({ b, run, onClose }: { b: Board; run: (c: Cmd) => boolean; 
                 만들기
               </Btn>
             </div>
+            </Fragment>
           );
         })}
       </div>
       {b.patch === "core" && (
         <p className="mt-2 text-[12px] text-[var(--cyan)]">
-          단일 코어: 신화 · 히든은 1개만 만들 수 있어요.
+          단일 코어: 신화 · 히든은 한 종류만 만들 수 있어요 (같은 것은 여러 기).
         </p>
       )}
     </Modal>
