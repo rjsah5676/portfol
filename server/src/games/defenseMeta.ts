@@ -8,8 +8,12 @@ import {
   CHEST,
   CORE_EXCHANGE,
   GLITCH_MAX,
-  GLITCH_UNLOCK_WAVE,
-  LV_COST,
+  GP_SHOP,
+  glitchUnlocks,
+  FIRST_RUN_MULT,
+  collectReward,
+  glitchFirstClear,
+  lvCost,
   PASS,
   PASS_PREMIUM_GP,
   RELIC,
@@ -78,6 +82,12 @@ export interface Profile {
   week: Prog;
   season: { id: number; xp: number; free: number[]; prem: number[]; premium: boolean };
   coreBuys: { w: number; n: number };
+  /** 이번 주 GP 상점 산 횟수 */
+  gpBuys: { w: number; chest: number; cards: number };
+  /** 한 번이라도 얻은 유닛 (도감 수집 보상) */
+  seen: string[];
+  /** 오늘 첫 판 보너스를 받은 날 */
+  firstDay: string;
   /** 주간 도전 GP 를 확인한 마지막 주 */
   paidWeek: number;
   runs: number;
@@ -163,6 +173,9 @@ export function createDefenseMeta(db: Database, points: Points, now: () => numbe
       week: { key: weekOf(t), prog: {}, claimed: [] },
       season: { id: seasonOf(t), xp: 0, free: [], prem: [], premium: false },
       coreBuys: { w: weekOf(t), n: 0 },
+      seen: [],
+      firstDay: "",
+      gpBuys: { w: weekOf(t), chest: 0, cards: 0 },
       paidWeek: weekOf(t) - 1,
       runs: 0,
       at: new Date(t),
@@ -179,6 +192,7 @@ export function createDefenseMeta(db: Database, points: Points, now: () => numbe
     if (p.week.key !== w) p.week = { key: w, prog: {}, claimed: [] };
     if (p.season.id !== s) p.season = { id: s, xp: 0, free: [], prem: [], premium: false };
     if (p.coreBuys.w !== w) p.coreBuys = { w, n: 0 };
+    if (!p.gpBuys || p.gpBuys.w !== w) p.gpBuys = { w, chest: 0, cards: 0 };
     return p;
   };
 
@@ -282,6 +296,32 @@ export function createDefenseMeta(db: Database, points: Points, now: () => numbe
       return edit(uid, (p) => {
         const grades = Object.fromEntries(Object.keys(st.made).map((id) => [id, UNIT[id]?.grade ?? 0]));
         const rw = runReward(mode === "multi" && players < 2 ? "season" : mode, res, st.made, grades, glitch);
+        // 오늘 첫 판: 조각 ×2
+        const today = kstDayKey(now());
+        const first = p.firstDay !== today;
+        if (first) {
+          p.firstDay = today;
+          rw.pieces *= FIRST_RUN_MULT;
+        }
+        // 처음 얻은 유닛 (도감 수집)
+        const fresh: string[] = [];
+        for (const id of Object.keys(st.made).sort()) {
+          if (!unitIds.has(id) || p.seen.includes(id)) continue;
+          p.seen.push(id);
+          const cr = collectReward(UNIT[id].grade);
+          if (!cr) continue;
+          fresh.push(id);
+          rw.pieces += cr.pieces;
+          rw.cores += cr.cores ?? 0;
+        }
+        // 오염 단계 첫 클리어
+        let firstClear: { glitch: number; cores: number; chest: number } | null = null;
+        if (mode !== "weekly" && res.win && glitch > p.glitchWin) {
+          const fc = glitchFirstClear(glitch);
+          firstClear = { glitch, ...fc };
+          rw.cores += fc.cores;
+          p.chests += fc.chest;
+        }
         p.pieces += rw.pieces;
         p.cores += rw.cores;
         for (const [id, n] of Object.entries(rw.cards)) if (unitIds.has(id)) p.cards[id] = (p.cards[id] ?? 0) + n;
@@ -296,12 +336,12 @@ export function createDefenseMeta(db: Database, points: Points, now: () => numbe
         let opened = false;
         if (mode !== "weekly") {
           if (res.win) p.glitchWin = Math.max(p.glitchWin, glitch);
-          if ((res.win || res.wave >= GLITCH_UNLOCK_WAVE) && glitch >= p.glitchOpen && p.glitchOpen < GLITCH_MAX) {
+          if (glitchUnlocks(glitch, res) && glitch >= p.glitchOpen && p.glitchOpen < GLITCH_MAX) {
             p.glitchOpen = glitch + 1;
             opened = true;
           }
         }
-        return { ...rw, opened: opened ? p.glitchOpen : null, passTier: passTier(p.season.xp) };
+        return { ...rw, opened: opened ? p.glitchOpen : null, passTier: passTier(p.season.xp), first, fresh, firstClear };
       });
     },
 
@@ -310,12 +350,27 @@ export function createDefenseMeta(db: Database, points: Points, now: () => numbe
         if (!unitIds.has(id)) throw bad("없는 유닛이에요.");
         const lv = p.lv[id] ?? 0;
         need(lv < UNIT_MAX_LV, "이미 최고 레벨이에요.");
-        const c = LV_COST[lv];
+        const c = lvCost(UNIT[id].grade, lv);
         need((p.cards[id] ?? 0) >= c.cards, "카드가 모자라요.");
         need(p.pieces >= c.pieces, "픽셀 조각이 모자라요.");
         p.cards[id] -= c.cards;
         p.pieces -= c.pieces;
         p.lv[id] = lv + 1;
+        return wire(uid, p);
+      });
+    },
+
+    /** 레벨 내리기 — 그 레벨에 쓴 카드 · 조각을 모두 돌려줌 (여러 조합을 시험해 보게) */
+    unitDown(uid: string, id: string) {
+      return edit(uid, async (p) => {
+        if (!unitIds.has(id)) throw bad("없는 유닛이에요.");
+        const lv = p.lv[id] ?? 0;
+        need(lv > 0, "이미 0레벨이에요.");
+        const c = lvCost(UNIT[id].grade, lv - 1);
+        p.cards[id] = (p.cards[id] ?? 0) + c.cards;
+        p.pieces += c.pieces;
+        if (lv - 1 > 0) p.lv[id] = lv - 1;
+        else delete p.lv[id];
         return wire(uid, p);
       });
     },
@@ -455,6 +510,44 @@ export function createDefenseMeta(db: Database, points: Points, now: () => numbe
         need(!p.season.premium, "이미 프리미엄이에요.");
         await points.spend(uid, PASS_PREMIUM_GP, "defense", `pass:${p.season.id}`);
         p.season.premium = true;
+        return wire(uid, p);
+      });
+    },
+
+    /** GP 유물 상자: 유물 확정 (안 가진 것 우선) */
+    gpChest(uid: string) {
+      return edit(uid, async (p) => {
+        need(p.gpBuys.chest < GP_SHOP.chest.perWeek, "이번 주 GP 상자를 다 샀어요.");
+        await points.spend(uid, GP_SHOP.chest.gp, "defense", "gpchest");
+        p.gpBuys.chest++;
+        const left = RELICS.filter((r) => !p.relics.includes(r.id));
+        let got: { relic?: string; dup?: number };
+        if (!left.length) {
+          p.cores += GP_SHOP.chest.allOwnedCores;
+          got = { dup: GP_SHOP.chest.allOwnedCores };
+        } else {
+          const tr = randomInt(0, 1_000_000) / 1_000_000;
+          const o = GP_SHOP.chest.tierOdds;
+          const tier = tr < o[0] ? 0 : tr < o[0] + o[1] ? 1 : 2;
+          const pool = left.filter((r) => r.tier === tier);
+          const from = pool.length ? pool : left;
+          const pick = from[randomInt(0, from.length)];
+          p.relics.push(pick.id);
+          if (p.load.relics.length < RELIC_SLOTS) p.load.relics.push(pick.id);
+          got = { relic: pick.id };
+        }
+        return wire(uid, p, { got });
+      });
+    },
+
+    /** GP 카드 묶음: 고른 유닛 카드 10장 */
+    gpCards(uid: string, id: string) {
+      return edit(uid, async (p) => {
+        if (!unitIds.has(id)) throw bad("없는 유닛이에요.");
+        need(p.gpBuys.cards < GP_SHOP.cards.perWeek, "이번 주 카드 묶음을 다 샀어요.");
+        await points.spend(uid, GP_SHOP.cards.gp, "defense", `gpcards:${id}`);
+        p.gpBuys.cards++;
+        p.cards[id] = (p.cards[id] ?? 0) + GP_SHOP.cards.n;
         return wire(uid, p);
       });
     },

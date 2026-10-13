@@ -33,7 +33,17 @@ export type FinishOut = {
   rank: number;
   tops: string[];
   mode: RankBoard;
-  reward: (RunReward & { opened: number | null; passTier: number }) | null;
+  reward:
+    | (RunReward & {
+        opened: number | null;
+        passTier: number;
+        /** 오늘 첫 판 (조각 ×2) */
+        first?: boolean;
+        /** 처음 얻은 유닛 (도감 수집 보상) */
+        fresh?: string[];
+        firstClear?: { glitch: number; cores: number; chest: number } | null;
+      })
+    | null;
 };
 export const finishRun = (run: string, log: LogEntry[]) => rpc<FinishOut>("defense.finish", { run, log });
 export const getDefenseRank = (limit = 20, board: RankBoard = "season") =>
@@ -59,6 +69,9 @@ export interface DefenseProfile {
   day: { key: string };
   season: { id: number; xp: number; free: number[]; prem: number[]; premium: boolean };
   coreBuys: { w: number; n: number };
+  seen?: string[];
+  gpBuys?: { w: number; chest: number; cards: number };
+  firstDay?: string;
   runs: number;
   quests: { daily: QuestRow[]; weekly: QuestRow[] };
   passTier: number;
@@ -76,6 +89,7 @@ const P = (name: string, arg?: unknown) => rpc<DefenseProfile>(name, arg);
 export const meta = {
   profile: () => P("defense.profile"),
   unitUp: (id: string) => P("defense.unit.up", { id }),
+  unitDown: (id: string) => P("defense.unit.down", { id }),
   resBuy: (id: string) => P("defense.res.buy", { id }),
   relicBuy: (id: string) => P("defense.relic.buy", { id }),
   chestBuy: () => P("defense.chest.buy"),
@@ -86,6 +100,8 @@ export const meta = {
   passClaim: () => P("defense.pass.claim"),
   passBuy: () => P("defense.pass.buy"),
   coresBuy: () => P("defense.cores.buy"),
+  gpChest: () => P("defense.gp.chest"),
+  gpCards: (id: string) => P("defense.gp.cards", { id }),
 };
 
 // ── 멀티 ──

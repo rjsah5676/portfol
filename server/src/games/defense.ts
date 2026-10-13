@@ -29,7 +29,7 @@ import { createDefenseMeta, weeklyLoadout, weeklySeed } from "./defenseMeta";
  *   defense.rank { board, limit } → 시즌(이번 밸런스 버전 · 이번 시즌) 또는 이번 주 도전 순위
  *   defense.me { board }      → 내 최고 기록 · 순위
  *
- *  성장 (defenseMeta.ts): defense.profile · unit.up · res.buy · relic.buy · chest.buy · chest.open · load · theme
+ *  성장 (defenseMeta.ts): defense.profile · unit.up · unit.down · res.buy · relic.buy · chest.buy · chest.open · load · theme
  *                        · quest.claim · pass.claim · pass.buy(GP) · cores.buy(GP)
  *
  *  멀티 (락스텝 — 서버는 명령만 모아 뿌림)
@@ -297,6 +297,7 @@ export function registerDefense({ gateway, db, points }: Deps) {
   const id = z.object({ id: z.string().max(40) });
   gateway.rpc("defense.profile", (ctx) => (member(ctx), meta.profile(ctx.uid)));
   gateway.rpc("defense.unit.up", (ctx, raw) => (member(ctx), meta.unitUp(ctx.uid, id.parse(raw).id)));
+  gateway.rpc("defense.unit.down", (ctx, raw) => (member(ctx), meta.unitDown(ctx.uid, id.parse(raw).id)));
   gateway.rpc("defense.res.buy", (ctx, raw) => (member(ctx), meta.resBuy(ctx.uid, id.parse(raw).id)));
   gateway.rpc("defense.relic.buy", (ctx, raw) => (member(ctx), meta.relicBuy(ctx.uid, id.parse(raw).id)));
   gateway.rpc("defense.chest.buy", (ctx) => (member(ctx), meta.chestBuy(ctx.uid)));
@@ -307,6 +308,8 @@ export function registerDefense({ gateway, db, points }: Deps) {
   gateway.rpc("defense.pass.claim", (ctx) => (member(ctx), meta.passClaim(ctx.uid)));
   gateway.rpc("defense.pass.buy", (ctx) => (member(ctx), meta.passBuy(ctx.uid)));
   gateway.rpc("defense.cores.buy", (ctx) => (member(ctx), meta.coresBuy(ctx.uid)));
+  gateway.rpc("defense.gp.chest", (ctx) => (member(ctx), meta.gpChest(ctx.uid)));
+  gateway.rpc("defense.gp.cards", (ctx, raw) => (member(ctx), meta.gpCards(ctx.uid, id.parse(raw).id)));
 
   /* ── 멀티 ── */
 

@@ -4,7 +4,7 @@ import { BOTS, botTurn } from "../../web/src/lib/defense/bot";
 import { HASH_TICKS, TICKS_PER_TURN, TURN_MS, replay, replayer, scoreOf, validLog, type LogEntry } from "../../web/src/lib/defense/replay";
 import { CELLS, SLOTS, apply, hashGame, isCmd, newGame, step, unitCount, type Game } from "../../web/src/lib/defense/sim";
 import { RECIPES, UNIT, UNITS } from "../../web/src/lib/defense/units";
-import { CHEST, CORE_EXCHANGE, PASS_PREMIUM_GP, RESEARCH, modsOf, seasonScore, weeklyRelics, weekOf } from "../../web/src/lib/defense/progress";
+import { CHEST, CORE_EXCHANGE, GP_SHOP, PASS_PREMIUM_GP, RESEARCH, lvCost, modsOf, seasonScore, weeklyRelics, weekOf } from "../../web/src/lib/defense/progress";
 import { startTestServer, type TestClient, type TestServer } from "./helpers";
 
 /** 봇 한 판 (기록 포함) */
@@ -80,7 +80,28 @@ describe("픽셀 글리치 디펜스 엔진", () => {
     expect(hashGame(r.game)).toBe(hashGame(g));
     const m = modsOf({ res: ["nope", "g_gold"], relics: ["x"], glitch: 99 });
     expect(m.startGold).toBe(40);
-    expect(m.glitch.lv).toBe(10);
+    expect(m.glitch.lv).toBe(30);
+  });
+
+  it("v0.3: 포기 · 모든 유닛 판매 · 도박은 웨이브부터", () => {
+    const g = newGame(5, 1);
+    const b = g.boards[0];
+    // 도박: 처음엔 막힘 (상태 그대로)
+    b.stones = 10;
+    expect(apply(g, 0, { t: "gamble", g: "E" })).toBeTruthy();
+    expect(b.stones).toBe(10);
+    // 레전드 판매: 골드 + 행운석
+    b.cells[0].def = "k_commander";
+    b.cells[0].units = [{} as never];
+    const gold = b.gold;
+    expect(apply(g, 0, { t: "sell", c: 0 })).toBeNull();
+    expect(b.gold).toBeGreaterThan(gold);
+    expect(b.stones).toBe(11);
+    // 포기 → 결과
+    expect(isCmd({ t: "quit" })).toBe(true);
+    expect(apply(g, 0, { t: "quit" })).toBeNull();
+    expect(b.result?.reason).toBe("quit");
+    expect(g.boards.every((x) => x.result)).toBe(true);
   });
 
   it("보관함: 필드가 차면 보관함으로, 보관함 유닛은 공격 안 함", () => {
@@ -202,6 +223,14 @@ describe("픽셀 글리치 디펜스 서버", () => {
     expect(p2.pieces).toBe(5000 - r.cost);
     expect(p2.load.res).toEqual(["g_gold"]);
     await expect(c.rpc("defense.res.buy", { id: "g_gold" })).rejects.toThrow();
+    // 유닛 강화 → 내리면 그대로 돌려받음
+    await srv.db.col("defense_profile").updateOne({ _id: c.uid! } as never, { $set: { "cards.k_squire": 5 } });
+    const up = await c.rpc("defense.unit.up", { id: "k_squire" });
+    expect(up.lv.k_squire).toBe(1);
+    const down = await c.rpc("defense.unit.down", { id: "k_squire" });
+    expect(down.lv.k_squire ?? 0).toBe(0);
+    expect(down.cards.k_squire).toBe(5);
+    expect(down.pieces).toBe(up.pieces + lvCost(0, 0).pieces);
     // 상자
     const p3 = await c.rpc("defense.chest.open");
     expect(p3.got).toBeTruthy();
@@ -236,7 +265,12 @@ describe("픽셀 글리치 디펜스 서버", () => {
   it("GP: 패스 프리미엄 · 코어 교환은 GP 로 (모자라면 거절)", async () => {
     const c = await member();
     await expect(c.rpc("defense.pass.buy")).rejects.toThrow();
-    await srv.db.col("users").updateOne({ _id: c.uid! } as never, { $set: { points: PASS_PREMIUM_GP + CORE_EXCHANGE.gp } });
+    await srv.db.col("users").updateOne({ _id: c.uid! } as never, { $set: { points: PASS_PREMIUM_GP + CORE_EXCHANGE.gp + GP_SHOP.chest.gp + GP_SHOP.cards.gp } });
+    const gc = await c.rpc("defense.gp.chest");
+    expect(gc.got.relic).toBeTruthy();
+    expect(gc.relics).toContain(gc.got.relic);
+    const gk = await c.rpc("defense.gp.cards", { id: "a_void" });
+    expect(gk.cards.a_void).toBe(GP_SHOP.cards.n);
     const p = await c.rpc("defense.pass.buy");
     expect(p.season.premium).toBe(true);
     const q = await c.rpc("defense.cores.buy");

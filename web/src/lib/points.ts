@@ -110,8 +110,6 @@ export type AchGame = "poker" | "fight" | "defense" | "rhythm";
  * 업적이 보는 숫자 (서버가 기록에서 계산 — server/src/achievements.ts)
  *  poker.chips   지금 칩 − 포인트로 바꿔 받은 칩 (환전으로 얻은 칩은 빼고)
  *  fight.char.N  랭크전에서 그 캐릭터(lib/fight/chars 의 CHARS 순서)로 한 판 수
- *  fight.tut     튜토리얼을 끝까지 했으면 1
- *  fight.ai      AI 대전에서 이긴 가장 높은 단계 (입문 1 ~ 지존 7 — 서버가 입력 기록을 다시 돌려 확인)
  */
 export type AchMetric =
   | "poker.chips"
@@ -122,8 +120,6 @@ export type AchMetric =
   | "fight.wins"
   | "fight.streak"
   | "fight.peak"
-  | "fight.tut"
-  | "fight.ai"
   | `fight.char.${number}`
   | "defense.runs"
   | "defense.wave"
@@ -148,11 +144,6 @@ export interface Achievement {
   reward: number;
   /** 숫자 보여 주는 방법 (칩은 억 · 만) */
   fmt?: "chips";
-  /**
-   * 반복형: goal 만큼 쌓일 때마다 또 받음 (100판 → 200판 → …). 한 번에 여러 번 쌓였으면 한꺼번에.
-   * 받은 횟수는 회원 문서 achRep.<id 의 . 을 __ 로> 에
-   */
-  repeat?: boolean;
 }
 
 /** 격투 캐릭터 이름 (lib/fight/chars 의 CHARS 순서 — 그쪽 순서가 바뀌면 같이) */
@@ -187,29 +178,7 @@ const a = (
   ...(fmt && { fmt }),
 });
 
-/** 반복형 업적 */
-const r = (game: AchGame, id: string, title: string, desc: string, metric: AchMetric, goal: number, reward: number): Achievement => ({
-  id: `${game}.rep-${id}`,
-  game,
-  title,
-  desc,
-  metric,
-  goal,
-  reward,
-  repeat: true,
-});
-
 export const ACHIEVEMENTS: Achievement[] = [
-  // ── 반복형 (쌓일 때마다 또 받음) ──
-  r("poker", "hands", "꾸준한 손님", "100판 칠 때마다", "poker.hands", 100, 50),
-  r("poker", "wins", "승리 수당", "50판 이길 때마다", "poker.wins", 50, 80),
-  r("fight", "games", "링 위의 일상", "랭크전 10판 할 때마다", "fight.games", 10, 50),
-  r("fight", "wins", "승리 수당", "랭크전 10승 할 때마다", "fight.wins", 10, 80),
-  r("defense", "runs", "출근 도장", "랭킹 판 5번 끝낼 때마다", "defense.runs", 5, 50),
-  r("defense", "kills", "글리치 청소부", "적 5,000마리 처치할 때마다 (랭킹 판 누적)", "defense.kills", 5_000, 50),
-  r("rhythm", "plays", "매일 리듬", "20판 할 때마다", "rhythm.plays", 20, 50),
-  r("rhythm", "fc", "풀콤보 수당", "서로 다른 채보 5개 풀콤보 할 때마다", "rhythm.fc", 5, 100),
-
   // ANIME POKER
   a(
     "poker",
@@ -264,21 +233,7 @@ export const ACHIEVEMENTS: Achievement[] = [
     "chips",
   ),
 
-  // PIXEL FIGHT
-  a("fight", "tutorial", "첫걸음", "튜토리얼 끝까지 하기", "fight.tut", 1, 100),
-  // AI 대전 단계별 (lib/fight/ai 의 AI_LEVELS 순서). 높은 단계를 이기면 아래 단계도 같이 달성
-  ...(
-    [
-      ["입문", 50],
-      ["초급", 80],
-      ["중급", 120],
-      ["상급", 200],
-      ["고수", 350],
-      ["달인", 600],
-      ["지존", 1000],
-    ] as const
-  ).map(([n, gp], i) => a("fight", `ai-${i}`, `CPU ${n} 격파`, `AI 대전에서 CPU ${n} 이기기`, "fight.ai", i + 1, gp)),
-  // (아래는 랭크전 기준)
+  // PIXEL FIGHT (랭크전 기준)
   a(
     "fight",
     "games-10",
@@ -319,17 +274,6 @@ export const ACHIEVEMENTS: Achievement[] = [
     1500,
     1500,
   ),
-  // 등급 달성 (lib/fight/tiers 의 TIERS 하한 — 등급 기준이 바뀌면 같이). 최고 레이팅 기준
-  ...(
-    [
-      ["gold", "골드", 1100, 300],
-      ["platinum", "플래티넘", 1300, 600],
-      ["diamond", "다이아몬드", 1550, 1200],
-      ["master", "마스터", 1800, 2500],
-      ["grandmaster", "그랜드마스터", 2100, 5000],
-      ["legend", "레전드", 2400, 10000],
-    ] as const
-  ).map(([id, n, min, gp]) => a("fight", `tier-${id}`, `${n} 달성`, `랭크전 ${n} 등급 찍기 (레이팅 ${min.toLocaleString()})`, "fight.peak", min, gp)),
   ...FIGHT_CHAR_NAMES.map((n, i) =>
     a(
       "fight",
@@ -463,18 +407,8 @@ export interface AchState {
   id: string;
   /** 지금 숫자 */
   value: number;
-  /** 받은 시각 (안 받았으면 null). 반복형은 늘 null */
+  /** 받은 시각 (안 받았으면 null) */
   claimedAt: number | null;
-  /** 반복형: 지금까지 받은 횟수 */
-  times?: number;
-}
-
-/** 반복형 업적의 받은 횟수를 두는 필드 이름 (id 의 . 은 필드 경로가 되므로 __ 로) */
-export const repKey = (id: string) => `achRep.${id.replaceAll(".", "__")}`;
-/** 지금 받을 수 있는 횟수 (일회형은 0 또는 1) */
-export function claimableTimes(a: Achievement, s: Pick<AchState, "value" | "claimedAt" | "times">): number {
-  if (a.repeat) return Math.max(0, Math.floor(s.value / a.goal) - (s.times ?? 0));
-  return !s.claimedAt && s.value >= a.goal ? 1 : 0;
 }
 
 /** 업적 랭킹 한 줄 */
@@ -517,6 +451,10 @@ export function pointReason(r: Pick<PointLogRow, "reason" | "ref">): string {
     case "defense":
       return r.ref === "cores"
         ? "디펜스 · 글리치 코어 교환"
+        : r.ref === "gpchest"
+          ? "디펜스 · GP 유물 상자"
+          : r.ref?.startsWith("gpcards:")
+            ? "디펜스 · 카드 묶음"
         : r.ref?.startsWith("weekly:")
           ? `디펜스 · 주간 도전 ${r.ref.split(":")[2]}위`
           : r.ref?.startsWith("pass")
