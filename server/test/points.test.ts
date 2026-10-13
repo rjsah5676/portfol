@@ -130,4 +130,26 @@ describe("포인트", () => {
     const log = (await srv.http(`/api/admin/users/${a.uid}/points`, { token: admin })).body.log;
     expect(log[0]).toMatchObject({ delta: 1134, reason: "admin", bal: 1234 });
   });
+
+  it("반복형 업적: 쌓인 만큼 한꺼번에 받고, 다음 칸이 차야 또 받음 (동시에 눌러도 한 번), 업적 랭킹에도 들어감", async () => {
+    const a = await member();
+    const id = "poker.rep-hands";
+    const rep = achievementOf(id)!;
+    const claim = () => srv.http(`/api/points/achievements/${id}/claim`, { method: "POST", token: a.token });
+    await set(a.uid, { "stats.poker.hands": rep.goal * 2 + 30, points: 0 });
+    const rs = await Promise.all([claim(), claim(), claim()]);
+    const ok = rs.filter((r) => r.status === 200);
+    expect(ok).toHaveLength(1);
+    expect(ok[0].body.reward).toBe(rep.reward * 2);
+    expect((await claim()).body.error.code).toBe("NOT_YET");
+    let st = ((await srv.http("/api/points/achievements/poker", { token: a.token })).body.list as { id: string; times?: number }[]).find((x) => x.id === id);
+    expect(st?.times).toBe(2);
+    await set(a.uid, { "stats.poker.hands": rep.goal * 3 });
+    expect((await claim()).body.reward).toBe(rep.reward);
+    st = ((await srv.http("/api/points/achievements/poker", { token: a.token })).body.list as { id: string; times?: number }[]).find((x) => x.id === id);
+    expect(st?.times).toBe(3);
+    expect(((await users().findOne({ _id: a.uid })) as { points?: number }).points).toBe(rep.reward * 3);
+    const rank = (await srv.http("/api/points/achievements/poker/rank")).body.list as { nick: string; points: number; count: number }[];
+    expect(rank.some((r) => r.points >= rep.reward * 3 && r.count >= 3)).toBe(true);
+  });
 });

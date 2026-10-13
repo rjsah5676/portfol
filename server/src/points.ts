@@ -15,6 +15,8 @@ import {
   fmtPoint,
   shopItem,
   type AchGame,
+  claimableTimes,
+  repKey,
   type AchRankRow,
   type AchState,
   type PointLogRow,
@@ -28,6 +30,7 @@ import {
  *   points       잔액
  *   pointsDay    마지막으로 출석 포인트를 받은 날 (한국 시간)
  *   achs         받은 업적 [{ id, at }]
+ *   achRep       반복형 업적을 받은 횟수 { <id 의 . 을 __ 로>: n }
  *   inv.<게임>   포인트로 산 물건 (포커는 기존 poker.chars · poker.skins 를 그대로 씀)
  *   poker.exch   포인트 → 칩으로 바꿔 받은 칩 − 칩 → 포인트로 내준 칩 (포커 칩 업적에서 빼는 몫)
  * 잔액이 바뀌는 건 전부 조건부 updateOne 하나로 (두 번 눌러도 한 번만, 모자라면 안 바뀜) + 원장 point_log 에 한 줄.
@@ -37,6 +40,7 @@ type PointFields = Pick<UserDoc, "nick" | "money"> & {
   points?: number;
   pointsDay?: string;
   achs?: { id: string; at: number }[];
+  achRep?: Record<string, number>;
   poker?: { chars?: string[]; skins?: string[]; exch?: number };
   inv?: Record<string, string[]>;
 };
@@ -61,6 +65,9 @@ function grantOf(item: ShopItem): { owned: Record<string, unknown>; update: Reco
   return { owned: { [`inv.${item.game}`]: item.ref }, update: { $push: { [`inv.${item.game}`]: item.ref } } };
 }
 
+/** 반복형 업적을 받은 횟수 */
+const repTimes = (d: PointFields | null | undefined, id: string) => d?.achRep?.[repKey(id).slice("achRep.".length)] ?? 0;
+
 export type Points = ReturnType<typeof createPoints>;
 
 export function createPoints(db: Database, now: () => number = Date.now) {
@@ -72,7 +79,7 @@ export function createPoints(db: Database, now: () => number = Date.now) {
   const rankCache = new Map<AchGame, { at: number; rows: AchRankRow[] }>();
 
   const read = async (uid: string) =>
-    (await col.findOne({ _id: uid }, { projection: { nick: 1, money: 1, points: 1, pointsDay: 1, achs: 1, "poker.chars": 1, "poker.skins": 1, "poker.exch": 1, inv: 1 } })) as PointFields | null;
+    (await col.findOne({ _id: uid }, { projection: { nick: 1, money: 1, points: 1, pointsDay: 1, achs: 1, achRep: 1, "poker.chars": 1, "poker.skins": 1, "poker.exch": 1, inv: 1 } })) as PointFields | null;
 
   /** 잔액이 바뀐 뒤: 원장 한 줄 + 알림 */
   async function after(uid: string, delta: number, reason: string, ref?: string) {
@@ -187,7 +194,11 @@ export function createPoints(db: Database, now: () => number = Date.now) {
       if (!uid) return list.map((x) => ({ id: x.id, value: 0, claimedAt: null }));
       const [m, d] = await Promise.all([metricsOf(db, uid, game), read(uid)]);
       const got = new Map((d?.achs ?? []).map((x) => [x.id, x.at]));
-      return list.map((x) => ({ id: x.id, value: m[x.metric] ?? 0, claimedAt: got.get(x.id) ?? null }));
+      return list.map((x) =>
+        x.repeat
+          ? { id: x.id, value: m[x.metric] ?? 0, claimedAt: null, times: repTimes(d, x.id) }
+          : { id: x.id, value: m[x.metric] ?? 0, claimedAt: got.get(x.id) ?? null }
+      );
     },
 
     /** 업적 보상 받기: 조건을 서버가 기록으로 다시 확인하고, 아직 안 받았을 때만 (updateOne 하나) */
@@ -196,6 +207,22 @@ export function createPoints(db: Database, now: () => number = Date.now) {
       if (!ach) throw new AppError("BAD_REQUEST", "없는 업적이에요.", 400);
       const m = await metricsOf(db, uid, ach.game);
       if ((m[ach.metric] ?? 0) < ach.goal) throw new AppError("NOT_YET", "아직 달성하지 않은 업적이에요.", 409);
+      if (ach.repeat) {
+        // 반복형: 쌓인 만큼(여러 번이면 한꺼번에). 받은 횟수가 읽은 그대로일 때만 올림 — 두 번 눌러도 한 번만
+        const d = await read(uid);
+        if (!d?.nick) throw notMember();
+        const n = repTimes(d, ach.id);
+        const k = Math.floor((m[ach.metric] ?? 0) / ach.goal) - n;
+        if (k <= 0) throw new AppError("NOT_YET", "다음 보상까지 조금 더 해야 해요.", 409);
+        const key = repKey(ach.id);
+        const r = await col.updateOne(
+          { _id: uid, ...(n ? { [key]: n } : { $or: [{ [key]: { $exists: false } }, { [key]: 0 }] }) } as never,
+          { $set: { [key]: n + k }, $inc: { points: ach.reward * k } } as never
+        );
+        if (!r.modifiedCount) throw new AppError("CLAIMED", "이미 받았어요.", 409);
+        rankCache.delete(ach.game);
+        return { reward: ach.reward * k, points: await after(uid, ach.reward * k, "ach", ach.id) };
+      }
       const r = await col.updateOne(
         { _id: uid, nick: { $exists: true }, "achs.id": { $ne: ach.id } } as never,
         { $push: { achs: { id: ach.id, at: now() } }, $inc: { points: ach.reward } } as never
@@ -212,7 +239,10 @@ export function createPoints(db: Database, now: () => number = Date.now) {
     /** 받을 수 있는데 안 받은 업적 수 (게임별) — 버튼 점 표시용 */
     async claimable(uid: string, game: AchGame): Promise<number> {
       const s = await api.achievements(uid, game);
-      return s.filter((x) => !x.claimedAt && x.value >= (achievementOf(x.id)?.goal ?? Infinity)).length;
+      return s.filter((x) => {
+        const a = achievementOf(x.id);
+        return !!a && claimableTimes(a, x) > 0;
+      }).length;
     },
 
     /**
@@ -222,17 +252,24 @@ export function createPoints(db: Database, now: () => number = Date.now) {
     async achRank(game: AchGame, limit = 50): Promise<AchRankRow[]> {
       const hit = rankCache.get(game);
       if (hit && now() - hit.at < 30_000) return hit.rows.slice(0, limit);
-      const ids = new Map(achievementsOf(game).map((x) => [x.id, x.reward]));
-      const docs = await col.find({ "achs.0": { $exists: true } } as never, { projection: { nick: 1, achs: 1, "avatar.at": 1, photo: 1 } }).toArray();
+      const defs = achievementsOf(game);
+      const ids = new Map(defs.filter((x) => !x.repeat).map((x) => [x.id, x.reward]));
+      const reps = defs.filter((x) => x.repeat);
+      const docs = await col
+        .find({ $or: [{ "achs.0": { $exists: true } }, { achRep: { $exists: true } }] } as never, { projection: { nick: 1, achs: 1, achRep: 1, "avatar.at": 1, photo: 1 } })
+        .toArray();
       const rows = docs
         .map((d) => {
           const u = d as unknown as PointFields & { avatar?: { at?: number }; photo?: string | null };
           const mine = (u.achs ?? []).filter((x) => ids.has(x.id));
+          // 반복형은 받은 횟수 × 보상 (받은 시각은 따로 안 남겨서 순서 정할 때는 일회형만)
+          const repPts = reps.reduce((s, x) => s + repTimes(u, x.id) * x.reward, 0);
+          const repN = reps.reduce((s, x) => s + repTimes(u, x.id), 0);
           return {
             nick: u.nick,
             avatar: pictureOf(String(d._id), u),
-            points: mine.reduce((s, x) => s + (ids.get(x.id) ?? 0), 0),
-            count: mine.length,
+            points: mine.reduce((s, x) => s + (ids.get(x.id) ?? 0), 0) + repPts,
+            count: mine.length + repN,
             at: Math.max(0, ...mine.map((x) => x.at)),
           };
         })

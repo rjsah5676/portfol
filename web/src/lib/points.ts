@@ -144,6 +144,11 @@ export interface Achievement {
   reward: number;
   /** 숫자 보여 주는 방법 (칩은 억 · 만) */
   fmt?: "chips";
+  /**
+   * 반복형: goal 만큼 쌓일 때마다 또 받음 (100판 → 200판 → …). 한 번에 여러 번 쌓였으면 한꺼번에.
+   * 받은 횟수는 회원 문서 achRep.<id 의 . 을 __ 로> 에
+   */
+  repeat?: boolean;
 }
 
 /** 격투 캐릭터 이름 (lib/fight/chars 의 CHARS 순서 — 그쪽 순서가 바뀌면 같이) */
@@ -178,7 +183,29 @@ const a = (
   ...(fmt && { fmt }),
 });
 
+/** 반복형 업적 */
+const r = (game: AchGame, id: string, title: string, desc: string, metric: AchMetric, goal: number, reward: number): Achievement => ({
+  id: `${game}.rep-${id}`,
+  game,
+  title,
+  desc,
+  metric,
+  goal,
+  reward,
+  repeat: true,
+});
+
 export const ACHIEVEMENTS: Achievement[] = [
+  // ── 반복형 (쌓일 때마다 또 받음) ──
+  r("poker", "hands", "꾸준한 손님", "100판 칠 때마다", "poker.hands", 100, 50),
+  r("poker", "wins", "승리 수당", "50판 이길 때마다", "poker.wins", 50, 80),
+  r("fight", "games", "링 위의 일상", "랭크전 10판 할 때마다", "fight.games", 10, 50),
+  r("fight", "wins", "승리 수당", "랭크전 10승 할 때마다", "fight.wins", 10, 80),
+  r("defense", "runs", "출근 도장", "랭킹 판 5번 끝낼 때마다", "defense.runs", 5, 50),
+  r("defense", "kills", "글리치 청소부", "적 5,000마리 처치할 때마다 (랭킹 판 누적)", "defense.kills", 5_000, 50),
+  r("rhythm", "plays", "매일 리듬", "20판 할 때마다", "rhythm.plays", 20, 50),
+  r("rhythm", "fc", "풀콤보 수당", "서로 다른 채보 5개 풀콤보 할 때마다", "rhythm.fc", 5, 100),
+
   // ANIME POKER
   a(
     "poker",
@@ -407,8 +434,18 @@ export interface AchState {
   id: string;
   /** 지금 숫자 */
   value: number;
-  /** 받은 시각 (안 받았으면 null) */
+  /** 받은 시각 (안 받았으면 null). 반복형은 늘 null */
   claimedAt: number | null;
+  /** 반복형: 지금까지 받은 횟수 */
+  times?: number;
+}
+
+/** 반복형 업적의 받은 횟수를 두는 필드 이름 (id 의 . 은 필드 경로가 되므로 __ 로) */
+export const repKey = (id: string) => `achRep.${id.replaceAll(".", "__")}`;
+/** 지금 받을 수 있는 횟수 (일회형은 0 또는 1) */
+export function claimableTimes(a: Achievement, s: Pick<AchState, "value" | "claimedAt" | "times">): number {
+  if (a.repeat) return Math.max(0, Math.floor(s.value / a.goal) - (s.times ?? 0));
+  return !s.claimedAt && s.value >= a.goal ? 1 : 0;
 }
 
 /** 업적 랭킹 한 줄 */

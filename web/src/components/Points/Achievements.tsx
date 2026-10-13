@@ -12,6 +12,7 @@ import {
   POINT,
   achievementOf,
   achievementsOf,
+  claimableTimes,
   fmtPoint,
   type AchGame,
   type AchRankRow,
@@ -72,15 +73,20 @@ export function AchievementList({
   )
     .map((s) => ({ a: achievementOf(s.id)!, s }))
     .filter((r) => r.a);
-  const done = (r: Row) => r.s.value >= r.a.goal;
-  // 받을 수 있는 것 → 진행 중(많이 한 순) → 받은 것
-  const order = (r: Row) => (r.s.claimedAt ? 2 : done(r) ? 0 : 1);
-  rows.sort(
-    (x, y) =>
-      order(x) - order(y) || y.s.value / y.a.goal - x.s.value / x.a.goal,
-  );
-  const ready = rows.filter((r) => !r.s.claimedAt && done(r)).length;
-  const got = rows.filter((r) => r.s.claimedAt).length;
+  const done = (r: Row) => claimableTimes(r.a, r.s) > 0;
+  /** 다음 보상까지 얼마나 했는지 (반복형은 이번 칸 안에서) */
+  const prog = (r: Row) =>
+    r.a.repeat
+      ? done(r)
+        ? r.a.goal
+        : r.s.value - (r.s.times ?? 0) * r.a.goal
+      : Math.min(r.s.value, r.a.goal);
+  // 받을 수 있는 것 → 반복형 → 진행 중(많이 한 순) → 받은 것
+  const order = (r: Row) => (r.s.claimedAt ? 3 : done(r) ? 0 : r.a.repeat ? 1 : 2);
+  rows.sort((x, y) => order(x) - order(y) || prog(y) / y.a.goal - prog(x) / x.a.goal);
+  const ready = rows.filter(done).length;
+  const once = rows.filter((r) => !r.a.repeat);
+  const got = once.filter((r) => r.s.claimedAt).length;
 
   async function claim(id: string) {
     setBusy(id);
@@ -117,7 +123,7 @@ export function AchievementList({
           </span>
         )}
         <span className="font-mono text-xs whitespace-nowrap text-white/45">
-          {got}/{rows.length} 달성
+          {got}/{once.length} 달성
           {ready > 0 && (
             <b className="ml-1.5 text-[#FDE68A]">
               · 받을 수 있는 업적 {ready}개
@@ -145,9 +151,12 @@ export function AchievementList({
         </p>
       )}
       <ul className="flex flex-col gap-1.5">
-        {rows.map(({ a, s }) => {
-          const ok = s.value >= a.goal;
-          const pct = Math.min(100, (s.value / a.goal) * 100);
+        {rows.map((row) => {
+          const { a, s } = row;
+          const k = claimableTimes(a, s);
+          const ok = k > 0;
+          const now = prog(row);
+          const pct = Math.min(100, (now / a.goal) * 100);
           return (
             <li
               key={a.id}
@@ -160,7 +169,7 @@ export function AchievementList({
               }`}
             >
               <span className="text-center text-xl" aria-hidden>
-                {s.claimedAt ? "✅" : ok ? "🎁" : "🏅"}
+                {s.claimedAt ? "✅" : ok ? "🎁" : a.repeat ? "🔁" : "🏅"}
               </span>
               <span className="min-w-0">
                 <span className="flex flex-wrap items-baseline gap-x-2">
@@ -168,6 +177,11 @@ export function AchievementList({
                   <span className="font-mono text-[11px] whitespace-nowrap text-[#FDE68A]/80">
                     +{fmtPoint(a.reward)}
                   </span>
+                  {a.repeat && (
+                    <span className="rounded-full border border-[#8B84FF]/40 px-1.5 text-[10px] whitespace-nowrap text-[#B9B4FF]">
+                      반복{s.times ? ` · ${s.times}회 받음` : ""}
+                    </span>
+                  )}
                 </span>
                 <span className="block text-xs break-keep text-white/50">
                   {a.desc}
@@ -184,7 +198,7 @@ export function AchievementList({
                       />
                     </span>
                     <span className="font-mono text-[10px] whitespace-nowrap text-white/45 tabular-nums">
-                      {fmtVal(a, Math.min(s.value, a.goal))}/{fmtVal(a, a.goal)}
+                      {fmtVal(a, now)}/{fmtVal(a, a.goal)}
                     </span>
                   </span>
                 )}
@@ -201,7 +215,7 @@ export function AchievementList({
                     onClick={() => void claim(a.id)}
                     className="cursor-pointer rounded-lg bg-[#FDE047] px-3 py-1.5 text-xs font-bold whitespace-nowrap text-black hover:brightness-110 disabled:opacity-50"
                   >
-                    {busy === a.id ? "받는 중…" : "받기"}
+                    {busy === a.id ? "받는 중…" : k > 1 ? `받기 ×${k}` : "받기"}
                   </button>
                 ) : null}
               </span>
@@ -210,7 +224,7 @@ export function AchievementList({
         })}
       </ul>
       <p className="mt-3 text-[11px] leading-relaxed break-keep text-white/35">
-        업적 보상은 직접 「받기」를 눌러야 들어와요. {POINT.name}는 현금으로
+        업적 보상은 직접 「받기」를 눌러야 들어와요. 🔁 반복 업적은 쌓일 때마다 또 받을 수 있어요. {POINT.name}는 현금으로
         사거나 바꿀 수 없는 사이트 전용 재화예요.{" "}
         <Link
           href="/faq/#points"
