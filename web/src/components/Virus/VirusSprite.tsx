@@ -1,4 +1,5 @@
 import { useId } from "react";
+import { apexBody, virusBody } from "./BossArt";
 
 // 바이러스·파일 그림 (SVG)
 // 적 바이러스: 톱니 막 안에 seed로 정해지는 좌우 대칭 픽셀 무늬 — 종류마다 모양이 다름 · 내 바이러스: 업그레이드로 자람
@@ -74,6 +75,8 @@ export function VirusSprite({
   const px = pixels(seed);
   const ox = C - (GRID * cell) / 2;
   const oy = C - 6;
+  // 바이러스마다 고유 그림 (BossArt) — 없으면 아래 톱니 막 + 픽셀 무늬
+  const body = virusBody(seed, color);
   return (
     <svg
       viewBox="0 0 120 120"
@@ -103,6 +106,8 @@ export function VirusSprite({
           strokeDasharray="10 6"
         />
       </g>
+      {body ?? (
+        <>
       {/* 갈고리 가시 */}
       {Array.from({ length: barbs }, (_, i) => {
         const a = spin + (i / barbs) * Math.PI * 2;
@@ -152,6 +157,8 @@ export function VirusSprite({
           fill={color}
         />
       ))}
+        </>
+      )}
     </svg>
   );
 }
@@ -563,7 +570,7 @@ export function MyVirusSprite({
   );
 }
 
-/** 상위 보스 (보안 시스템): 방패 + 큰 감시 눈. index 로 위쪽 문장 · 양옆 날개 모양이 달라짐 */
+/** 상위 보스 (보안 시스템) · 최종 보스(index 10): 보안 시스템마다 다른 그림 (BossArt) + 경고 고리 */
 export function ApexSprite({
   index,
   color,
@@ -575,55 +582,6 @@ export function ApexSprite({
   size?: number;
   hit?: boolean;
 }) {
-  const fins = index % 3;
-  const emblem = (() => {
-    const s = { stroke: color, strokeWidth: 2, fill: "none", strokeLinecap: "round" as const };
-    switch (index) {
-      case 0: // 십자 (백신)
-        return <path d="M60 18v14M53 25h14" {...s} />;
-      case 1: // 벽돌 (방화벽)
-        return <path d="M50 20h20M50 26h20M50 32h20M57 20v6M63 26v6" {...s} strokeWidth={1.4} />;
-      case 2: // 작은 눈 (탐지)
-        return <ellipse cx={60} cy={26} rx={8} ry={4} {...s} />;
-      case 3: // 뱀 (필터)
-        return <path d="M52 20q8 0 8 6t8 6" {...s} />;
-      case 4: // 사슬 (샌드박스)
-        return (
-          <>
-            <ellipse cx={55} cy={26} rx={4} ry={3} {...s} />
-            <ellipse cx={63} cy={26} rx={4} ry={3} {...s} />
-          </>
-        );
-      case 5: // 기둥 (관제)
-        return <path d="M51 32h18M53 32V22M60 32V22M67 32V22M50 21h20" {...s} strokeWidth={1.6} />;
-      case 6: // 돋보기 (추적)
-        return (
-          <>
-            <circle cx={58} cy={24} r={5} {...s} />
-            <path d="M62 28l5 5" {...s} />
-          </>
-        );
-      case 7: // 벌집 (허니팟)
-        return <polygon points="60,18 66,22 66,29 60,33 54,29 54,22" {...s} />;
-      case 8: // 물결 (패킷 검사)
-        return <path d="M50 24q5-5 10 0t10 0M50 30q5-5 10 0t10 0" {...s} strokeWidth={1.6} />;
-      case 10: // 방사능 (최종 보스)
-        return (
-          <>
-            <circle cx={60} cy={25} r={2.5} fill={color} />
-            <path d="M60 22a8 8 0 0 0-6.9 4M60 22a8 8 0 0 1 6.9 4M53.5 29.5a8 8 0 0 0 13 0" {...s} strokeWidth={3} />
-          </>
-        );
-      default: // 별 (AI)
-        return (
-          <polygon
-            points="60,17 62.5,23 69,23 64,27 66,33 60,29.5 54,33 56,27 51,23 57.5,23"
-            {...s}
-            strokeWidth={1.4}
-          />
-        );
-    }
-  })();
   return (
     <svg
       viewBox="0 0 120 120"
@@ -653,50 +611,8 @@ export function ApexSprite({
           strokeDasharray="14 6"
         />
       </g>
-      <circle
-        cx={60}
-        cy={60}
-        r={52}
-        fill="none"
-        stroke={color}
-        strokeOpacity={0.3}
-        strokeWidth={1}
-      />
-      {/* 날개 (보스마다 0~2쌍) */}
-      {Array.from({ length: fins + 1 }, (_, k) =>
-        [1, -1].map((d) => (
-          <path
-            key={`${k}${d}`}
-            d={`M${60 + d * 34} ${40 + k * 16} l${d * 16} ${-6 + k * 4} l${-d * 4} 12 Z`}
-            fill={color}
-            fillOpacity={0.55}
-            stroke={color}
-            strokeWidth={1}
-          />
-        ))
-      )}
-      {/* 방패 */}
-      <path
-        d="M60 8 L100 22 L96 68 Q90 98 60 112 Q30 98 24 68 L20 22 Z"
-        fill="#0b0f1a"
-        stroke={color}
-        strokeWidth={3}
-        strokeLinejoin="round"
-      />
-      <path
-        d="M60 16 L92 27 L89 66 Q84 90 60 103 Q36 90 31 66 L28 27 Z"
-        fill="none"
-        stroke={color}
-        strokeOpacity={0.4}
-        strokeWidth={1.2}
-      />
-      {emblem}
-      {/* 큰 감시 눈 */}
-      <ellipse cx={60} cy={62} rx={24} ry={14} fill="#020617" stroke={color} strokeWidth={2} />
-      <circle cx={60} cy={62} r={9} fill={color} />
-      <circle cx={60} cy={62} r={4} fill="#020617" />
-      <circle cx={57} cy={59} r={1.8} fill="#fff" />
-      <line x1={38} y1={62} x2={82} y2={62} stroke="#ef4444" strokeOpacity={0.6} strokeWidth={1} />
+      {/* 보안 시스템마다 고유 그림 (BossArt) */}
+      {apexBody(index, color)}
     </svg>
   );
 }
