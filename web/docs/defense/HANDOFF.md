@@ -92,6 +92,8 @@ cd web && POKER_E2E=1 npx next dev            # → /games/defense/?fake=admin:�
 **밸런스** — `balance.ts` · 유닛/보스 수치 수정 → `defense-sim.ts` 로 확인 → `BALANCE_VER` 올림.
 봇은 사람보다 못함(배치 최적화 X, 균열 단순). 봇 클리어율 0~10%, 평균 30~45웨이브 정도면 사람 기준 적당하다고 봄 (알파 기준선).
 
+**새 유닛 · 새 콘텐츠를 만들 때는 `ASSETS.md` 맨 위 「만들 때 체크리스트」를 끝까지** (그림 · 공격 그림 · 타격 모양 · 소리 · 조합 재료 · 판매 · 봇 · 가이드 · 패치노트).
+
 **에셋 입히기** — `assets.ts` 의 `UNIT_ART / ENEMY_ART / BOSS_ART / FIELD_ART / SFX / BGM` 에 한 줄씩. 파일은 `web/public/defense/…`. 규격 · 만든 방법은 `ASSETS.md`.
 연결표에 없는 것은 자동으로 자리표시 그림(세력별 도트 인형)이라 일부만 넣어도 됨. 그림이 보는 방향이 왼쪽이면 `face: -1`.
 
@@ -159,10 +161,21 @@ cd web && POKER_E2E=1 npx next dev            # → /games/defense/?fake=admin:�
 - 화면: 이어하기(`DefenseApp` localStorage `pgd-resume:<uid>` 2초마다 → `Controller.restore` 로 기록을 다시 돌려 따라잡음, 3.5시간) · 포기하기 · DPS 창(필드 오른쪽 위) · 클릭 두 번 이동(빈 칸은 바로, 「이동」/M 뒤엔 다른 유닛과 바꿈) · 재화 말풍선(`ui.tsx Tip`, `Hub CUR_INFO`) · 도트 스크롤바 · 마우스 크기(소리 창, `data-cur` + `cursor-3x/4x/6x.png`)
 - 효과: 공격 모양 유닛별 `render.ts HIT_KIND/drawShot` · 공격 동작 세력별 `attackPose` · 소환 `Fx spawn`(빛기둥 + 고리) · 효과음 `spawn`(레어 · 에픽 소환) · `reward` · `chest-open`
 
+### v0.3.2 에서 바뀐 구조 (밸런스 b2 그대로 — 1레벨이 예전 수치라 예전 기록 다시 돌리기가 같음)
+- **연구 · 유물 레벨 1~5** (`RES_MAX_LV` · `RELIC_MAX_LV`): 연구 정의가 `res(id, 이름, "설명 {v}", 레벨→수치, …)` 로 바뀜 (`RES[id].val(lv)` · `resDesc`), 유물은 `RELIC_VAL` 표 · `relicDesc`. `modsOf` 가 레벨을 읽음. `Loadout.resLv · relicLv` 는 **2 이상만** 적음 (예전 기록 모양 그대로)
+  - 값: 연구 조각 `resUpCost = cost × 지금 레벨` · 유물 코어 `relicUpCost = (8·15·30) × 지금 레벨`. 내리면 전부 돌려받기 — rpc `defense.res.level` · `defense.relic.level { id, dir: 1 | -1 }`. 주간 도전은 레벨 없음
+  - `Mods.firstHarvest` 는 이제 웨이브 수(0 = 없음), `alchemy` → `alchemyGold · alchemyStones`
+  - 성장 봇: `--meta max` 는 연구 · 유물 5레벨, late 3. 다 모은 성장 기준 오염 10 = 0~33% · 20 = 17~48웨이브 (전엔 0~5% · 23~39)
+- **유닛 일괄 강화** `planUpAll` (progress.ts, 서버 · 화면이 같은 함수): 낮은 레벨부터 고르게 → rpc `defense.unit.upAll { id? }` (id 있으면 그 유닛만 최대한)
+- **보스 확정 뽑기권**: `b.tickets` 는 배열이라 이월됨. `pick` 은 아무 등급 뽑기권이나 골라 씀 (`tickets.indexOf(grade)`), 화면 `PickModal` 은 등급별 탭 + 남은 수
+- **말풍선** `ui.tsx Tip`: 눌러도 열리고 바깥을 누르거나 Esc 로 닫힘, `align` (가장자리면 right/left). 감싸는 줄의 z-index 가 아래 칸보다 낮으면 가려짐 → 정비소 머리 `z-30`
+- **효과음 배속**: `audio.ts setSfxSpeed` — 전투음(`COMBAT`)은 간격 × 배속 · 따로 6개까지 · 배속이면 꼬리를 짧게 끊음, 나머지 소리는 자리가 없으면 가장 오래된 전투음을 끊고 울림
+
 ### 콘텐츠 소모 속도 (설계 어림)
 - 연구 12개 전부 ≈ 조각 10,900 → 판당 300~600 이면 20~40판
 - 유닛 하나 Lv.10 = 카드 267장 · 조각 7,630 × 등급 배수 (노말 ×0.5 ~ 신화 ×2). 카드는 그 유닛을 얻을 때만 (판당 1~2장) → 주력 유닛 하나 만렙 ≈ 150~250판, 44종 전부는 사실상 끝없음 (GP 카드 묶음 · 상자로 조금 당김)
-- 유물 12개: 상자 35% · 코어 · GP 상자 → 2~4주
+- 유물 12개: 상자 35% · 코어 · GP 상자 → 2~4주. 유물 5레벨 = 코어 일반 80 · 희귀 150 · 전설 300 (전부 ≈ 2,300 코어) → 오래 가는 코어 소모처
+- 연구 5레벨 = 처음 값 × 10 더 (12개 전부 ≈ 조각 109,000) → 장착할 4개 위주로 올림
 - 오염 단계: 0~9 는 40웨이브로 빨리 열림 (알파 테스터가 하루에 9까지), 10부터 클리어 필요 + 심연 → 봇 기준 다 모은 성장으로도 20단계는 25~40웨이브. 끝 목표
 - 매일: 일일 미션 3 + 첫 판 ×2 / 매주: 주간 미션 · 주간 도전 순위 GP · GP 상점 횟수 초기화 / 4주: 시즌 패스
 
