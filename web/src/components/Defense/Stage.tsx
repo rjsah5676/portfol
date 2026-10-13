@@ -128,8 +128,15 @@ export default function Stage({ children }: { children: ReactNode }) {
       });
     on();
     window.addEventListener("resize", on);
-    const fsOn = () =>
-      setFsReal(!!document.fullscreenElement && document.fullscreenElement === rootRef.current);
+    const fsOn = () => {
+      const now = !!document.fullscreenElement && document.fullscreenElement === rootRef.current;
+      setFsReal(now);
+      // 전체화면에선 Esc 를 게임이 받게 (창 닫기 · 일시정지) — 키보드 잠금이 되는 브라우저(크롬 · 엣지)만.
+      // 전체화면을 끄려면 네모 버튼 · Esc 길게 누르기
+      const kb = (navigator as Navigator & { keyboard?: { lock?: (k: string[]) => Promise<void>; unlock?: () => void } }).keyboard;
+      if (now) kb?.lock?.(["Escape"]).catch(() => {});
+      else kb?.unlock?.();
+    };
     document.addEventListener("fullscreenchange", fsOn);
     document.body.classList.add("game-full");
     // 브라우저는 사용자가 한 번 누르기 전엔 소리를 막음 → 첫 누르기 · 키에서 소리 잠금 풀기

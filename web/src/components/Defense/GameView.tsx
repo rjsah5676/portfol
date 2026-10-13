@@ -131,7 +131,8 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry }
 
   const toast = (text: ReactNode, tone?: Toast["tone"]) => {
     const id = Math.random();
-    setToasts((t) => [...t.slice(-3), { id, text, tone }]);
+    // 같은 글자 알림은 하나만 (골드가 모자라요 연타 등) — 있던 것을 지우고 새로 띄워 시간만 늘림
+    setToasts((t) => [...t.filter((x) => typeof text !== "string" || x.text !== text).slice(-3), { id, text, tone }]);
     setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 2200);
   };
   const run = (cmd: Cmd) => {
@@ -392,9 +393,18 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry }
         force();
       } else if (k === "f" && !multi) cycleSpeed();
       else if (k === "escape") {
-        setMoveArm(false);
-        setSel(-1);
-        setModal(null);
+        // Esc: 열린 창 닫기 → 고른 칸 풀기 → 일시정지 메뉴 (전체화면에서도 — Stage 가 Esc 를 잠가 둠)
+        if (modal) {
+          if (modal === "pause") ctrl.setPaused(false);
+          setModal(null);
+        } else if (sel >= 0 || moveArm) {
+          setMoveArm(false);
+          setSel(-1);
+        } else if (!b.result) {
+          ctrl.setPaused(true);
+          setModal("pause");
+        }
+        force();
       } else return;
       e.preventDefault();
     };

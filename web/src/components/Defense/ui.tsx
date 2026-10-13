@@ -98,6 +98,15 @@ export function Modal({
   useEffect(() => {
     sfx("ui-click", 0.8, 1.2);
   }, []);
+  // Esc 로 닫기 (게임 화면은 GameView 가 따로 처리 — 같이 불려도 닫기만 함)
+  useEffect(() => {
+    if (!onClose) return;
+    const on = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", on);
+    return () => window.removeEventListener("keydown", on);
+  }, [onClose]);
   return (
     <div
       className="absolute inset-0 z-40 flex items-center justify-center bg-[#05040c]/75"
