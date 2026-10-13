@@ -1896,7 +1896,6 @@ export function offlineGain(s: Save, seconds: number) {
   const st = stats(s);
   const secs = Math.min(seconds, st.offlineHours * 3600);
   if (secs < 60) return { data: 0, secs: 0 };
-  // 연쇄 감염은 평균만큼 파일을 더 감염시킨다고 봄
   // 러브레터 미끼(명중마다 미리 빼내는 데이터)도 평균만큼
   const perSec = (dps(st) / mobHp(s.stage, st)) * mobData(s.stage, st) * (1 + st.fx.leech);
   return { data: perSec * secs * st.offlineRate, secs };

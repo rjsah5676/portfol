@@ -2117,7 +2117,8 @@ export default function VirusGame() {
                         [
                           ["power", "⚔️", "효율 강화"],
                           ["util", "🛠️", "편의성"],
-                          ...(s.clears > 0 || s.cores > 0
+                          // 커널: 스테이지 100을 돌파해 첫 코어를 받은 뒤로는 계속 (코어를 다 써도 사라지지 않게)
+                          ...(s.best > 100 || s.clears > 0 || s.cores > 0
                             ? ([["core", "🧩", `커널 ${s.cores}`]] as const)
                             : []),
                         ] as const
