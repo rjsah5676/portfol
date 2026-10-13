@@ -171,7 +171,7 @@ cd web && POKER_E2E=1 npx next dev            # → /games/defense/?fake=admin:�
 - **말풍선** `ui.tsx Tip`: 눌러도 열리고 바깥을 누르거나 Esc 로 닫힘, `align` (가장자리면 right/left). 감싸는 줄의 z-index 가 아래 칸보다 낮으면 가려짐 → 정비소 머리 `z-30`
 - **효과음 배속**: `audio.ts setSfxSpeed` — 전투음(`COMBAT`)은 간격 × 배속 · 따로 6개까지 · 배속이면 꼬리를 짧게 끊음, 나머지 소리는 자리가 없으면 가장 오래된 전투음을 끊고 울림
 
-- **공격 그림** `units/<id>-atk.webp` (160×160, 서 있기와 같은 발 위치): `assets.ts ATK` 에 id 를 넣으면 `SpriteSpec.atk` → `render.ts srcAt` 가 공격 뒤 240ms 동안 바꿔 그림 (등급 외곽선도 같은 그림으로). 만드는 법: ChatGPT 에 서 있기 시트(4×3) 를 참고로 올려 같은 칸에 공격 자세 → 체커 무늬 배경이면 `unchecker.py` → `slice.py` → `atk_fit.py`(서 있기 키 · 다리 위치에 맞춤). 1차: 기사단 12
+- **공격 그림** `units/<id>-atk.webp` (160×160, 서 있기와 같은 발 위치): `assets.ts ATK` 에 id 를 넣으면 `SpriteSpec.atk` → `render.ts srcAt` 가 공격 뒤 240ms 동안 바꿔 그림 (등급 외곽선도 같은 그림으로). 만드는 법: ChatGPT 에 서 있기 시트(4×3) 를 참고로 올려 같은 칸에 공격 자세 → 체커 무늬 배경이면 `unchecker.py` → `slice.py` → `atk_fit.py`(서 있기 몸 키 · 다리 위치에 맞춤, 효과 빛은 빼고 잼). 44종 전부 (2026-10-13). 새 유닛도 서 있기 + 공격 두 장이 기본
 
 ### 콘텐츠 소모 속도 (설계 어림)
 - 연구 12개 전부 ≈ 조각 10,900 → 판당 300~600 이면 20~40판

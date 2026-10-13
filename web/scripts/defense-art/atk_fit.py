@@ -11,8 +11,24 @@ ids = sys.argv[3:]
 S = 160
 
 
+def body(im):
+    """캐릭터 몸만 (효과 빛 · 불 · 번개처럼 밝고 진한 색, 반투명 빛은 뺌) — 가장 큰 덩어리"""
+    from scipy import ndimage
+    A = np.array(im).astype(int)
+    rgb, al = A[:, :, :3], A[:, :, 3]
+    mx, mn = rgb.max(2), rgb.min(2)
+    sat = (mx - mn) / np.maximum(mx, 1)
+    glow = (mx > 225) & ((sat > 0.45) | (mn > 215))
+    m = (al > 200) & ~glow
+    lab, n = ndimage.label(ndimage.binary_dilation(m, iterations=2))
+    if n == 0:
+        return al > 40
+    areas = ndimage.sum(m, lab, range(1, n + 1))
+    return (lab == int(np.argmax(areas)) + 1) & m
+
+
 def stats(im):
-    a = np.array(im)[:, :, 3] > 40
+    a = body(im)
     ys, xs = np.nonzero(a)
     top, bot = ys.min(), ys.max()
     h = bot - top + 1

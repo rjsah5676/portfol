@@ -44,8 +44,11 @@ export interface SpriteSpec {
 
 /** 공격 그림이 있는 유닛 (units/<id>-atk.webp, 같은 160×160 · 같은 발 위치) — 새로 받으면 여기에 id 추가 */
 const ATK = new Set<string>([
-  // 2026-10-13 ChatGPT 공격 그림 1차 (기사단 12) — web/scripts/defense-art/unchecker.py → slice.py → atk_fit.py
+  // 2026-10-13 ChatGPT 공격 그림 44종 전부 (4장 시트) — web/scripts/defense-art/unchecker.py → slice.py → atk_fit.py
   "k_squire", "k_shield", "k_spear", "k_twin", "k_knight", "k_axe", "k_paladin", "k_blade", "k_hunter", "k_commander", "k_gale", "k_saint",
+  "k_dragoon", "k_aegis", "m_bolt", "m_turret", "m_drone", "m_flame", "m_mortar", "m_coil", "m_rail", "m_missile", "m_scrap", "m_titan",
+  "m_orbit", "m_omega", "m_arsenal", "m_inferno", "a_novice", "a_frost", "a_star", "a_bolt", "a_venom", "a_wind", "a_chrono", "a_pyro",
+  "a_seal", "a_archmage", "a_sage", "a_void", "a_lord", "a_plague", "h_glitchpet", "h_debugger",
 ]);
 
 /** 한 장짜리 유닛 그림 (160×160, 발은 아래 4%) — ChatGPT 이미지로 만든 도트풍 SD (2026-10-13) */
