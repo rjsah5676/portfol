@@ -301,6 +301,17 @@ export const ACHIEVEMENTS: Achievement[] = [
     1500,
     1500,
   ),
+  // 등급 달성 (lib/fight/tiers 의 TIERS 하한 — 등급 기준이 바뀌면 같이). 최고 레이팅 기준
+  ...(
+    [
+      ["gold", "골드", 1100, 300],
+      ["platinum", "플래티넘", 1300, 600],
+      ["diamond", "다이아몬드", 1550, 1200],
+      ["master", "마스터", 1800, 2500],
+      ["grandmaster", "그랜드마스터", 2100, 5000],
+      ["legend", "레전드", 2400, 10000],
+    ] as const
+  ).map(([id, n, min, gp]) => a("fight", `tier-${id}`, `${n} 달성`, `랭크전 ${n} 등급 찍기 (레이팅 ${min.toLocaleString()})`, "fight.peak", min, gp)),
   ...FIGHT_CHAR_NAMES.map((n, i) =>
     a(
       "fight",
