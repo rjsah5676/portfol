@@ -317,10 +317,12 @@ export function ArchivePanel({ best }: { best: number }) {
   );
 }
 
-/** 기록 창 — 업적 (달성 · 진행 막대) / 통계 (누적 기록) */
-export function RecordsPanel({ s }: { s: Save }) {
+/** 기록 창 — 업적 (달성 · 진행 막대, 새 업적은 맨 앞에 NEW) / 통계 (누적 기록) */
+export function RecordsPanel({ s, fresh = [] }: { s: Save; fresh?: string[] }) {
   const [view, setView] = useState<"ach" | "stats">("ach");
   const got = new Set(s.ach);
+  const isNew = new Set(fresh);
+  const list = [...ACH.filter((d) => isNew.has(d.id)), ...ACH.filter((d) => !isNew.has(d.id))];
   const tabBtn = (k: "ach" | "stats", label: string) => (
     <button
       type="button"
@@ -371,7 +373,7 @@ export function RecordsPanel({ s }: { s: Save }) {
         <PagedList
           key="ach"
           className="grid grid-cols-1 gap-1.5 sm:grid-cols-2"
-          items={ACH.map((d) => {
+          items={list.map((d) => {
             const done = got.has(d.id);
             const [cur, goal] = d.prog(s);
             const show = (n: number) => (d.bytes ? fmtBytes(n) : fmt(n));
@@ -389,6 +391,11 @@ export function RecordsPanel({ s }: { s: Save }) {
                   <span
                     className={`vt-sm block truncate font-bold ${done ? "text-amber-100" : "text-white/90"}`}
                   >
+                    {isNew.has(d.id) && (
+                      <span className="vt-xs mr-1 rounded bg-rose-700 px-1 font-mono text-white">
+                        NEW
+                      </span>
+                    )}
                     {d.name}
                     {done && <span className="ml-1 text-emerald-300">✓</span>}
                   </span>
@@ -562,7 +569,7 @@ export const PATCH_NOTES: { ver: string; date: string; items: string[] }[] = [
     ver: "v0.5",
     date: "2026.10.13",
     items: [
-      "🏅 업적 34개 — 진행 · 변이 · 누적 · 도전 기록. 하나마다 피해 +2% (변이해도 남음), 달성하면 우측 상단에 알림",
+      "🏅 업적 34개 — 진행 · 변이 · 누적 · 도전 기록. 하나마다 피해 +2% (변이해도 남음). 새 업적이 생기면 위 막대 🏅 버튼에 ❗ — 누르면 기록 창에 NEW 표시로 맨 앞에",
       "📊 기록 창 (메뉴 · 시작 화면): 업적 진행 막대와 통계 — 플레이 시간 · 감염시킨 파일 · 격퇴한 보스 · KILLSWITCH 최단 기록 · 가장 큰 한 방 · 가장 오래 비운 시간 등",
       "💾 세이브 백업: 진행을 글자로 복사하거나 파일로 저장하고, 다른 브라우저 · 기기에서 붙여 넣거나 파일을 골라 불러오기",
       "🧩 모듈 세트 4종: 같은 계열 모듈이 모두 v3 · v6 · v10이면 단계가 오름 — 📧 메일 폭탄(데이터 ×1.2 → ×2) · 🪱 자가 전파(연쇄 감염 10% → 30%) · 💽 시스템 파괴(보스 피해 ×1.2 → ×2) · 🕵️ 국가급 작전(보스 시간 +3 → +10초). 코드 모듈 탭에서 확인",

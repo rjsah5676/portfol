@@ -165,8 +165,10 @@ export interface Save {
   formats: number;
   /** 누적 기록 (변이해도 유지) — 통계 화면 · 업적 */
   rec: Rec;
-  /** 달성한 업적 id */
+  /** 달성한 업적 id (달성한 순서) */
   ach: string[];
+  /** 기록 창에서 이미 본 업적 수 — ach 앞에서부터 이만큼은 봤음 (나머지는 새 업적 · 느낌표) */
+  achSeen: number;
   /** 진행 중인 챌린지 변이 (없으면 null) */
   chal: ChalKey | null;
   /** 끝낸 챌린지 (보상은 영구) */
@@ -260,6 +262,7 @@ export function newSave(): Save {
     formats: 0,
     rec: newRec(),
     ach: [],
+    achSeen: 0,
     chal: null,
     chalDone: [],
     savedAt: Date.now(),
@@ -309,6 +312,7 @@ export function parseSave(raw: string | null): Save {
       kills: s.stage > MAX_STAGE ? 0 : s.kills,
       rec,
       ach,
+      achSeen: Math.min(ach.length, Math.max(0, Math.floor(Number(s.achSeen) || 0))),
       chal,
       chalDone,
     };
@@ -1056,6 +1060,7 @@ export function format(s: Save): Save {
     formats: s.formats + 1,
     rec: { ...s.rec },
     ach: [...s.ach],
+    achSeen: s.achSeen,
     chalDone: [...s.chalDone],
   };
 }

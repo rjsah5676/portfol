@@ -56,6 +56,27 @@
   }
 }
 
+/* 위 막대 🏅 의 새 업적 느낌표: 톡톡 뛰며 눈에 띄게 (화면 효과를 끄면 가만히) */
+.vg-ach-new {
+  animation: vg-ach-new 1.6s ease-in-out infinite;
+}
+@keyframes vg-ach-new {
+  0%,
+  60%,
+  100% {
+    transform: none;
+  }
+  70% {
+    transform: translateY(-2px) scale(1.15);
+  }
+  80% {
+    transform: none;
+  }
+}
+.virus-calm .vg-ach-new {
+  animation: none;
+}
+
 .virus-pop {
   animation: virus-pop 0.35s ease-out;
 }

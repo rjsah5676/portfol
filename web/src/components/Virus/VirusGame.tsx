@@ -100,7 +100,6 @@ import {
   upgLocked,
   randLocked,
   ACH,
-  type AchDef,
   type ChalDef,
   type ChalKey,
 } from "@/lib/virus/logic";
@@ -196,8 +195,6 @@ interface Reward {
   apex?: { index: number; trait: string; effect: string; look: string };
   /** 최종 보스 격퇴 (몇 번째인지) */
   final?: { clears: number; cores: number };
-  /** 업적 달성 */
-  ach?: AchDef;
   /** 챌린지 변이 성공 */
   chal?: ChalDef;
 }
@@ -275,7 +272,7 @@ export default function VirusGame() {
   const finalIntro = useRef(false);
   /** 격퇴 연출이 끝나면 띄울 보상 창 */
   const pendingReward = useRef<Reward | null>(null);
-  /** 업적 · 챌린지 알림 — 연출이 없을 때 하나씩 */
+  /** 챌린지 성공 알림 — 연출이 없을 때 하나씩 (업적은 알림 대신 위 막대 🏅 에 느낌표) */
   const queued = useRef<Reward[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [scene, setScene] = useState<Scene>("title");
@@ -338,6 +335,8 @@ export default function VirusGame() {
   const [detail, setDetail] = useState<{ kind: "mod" | "apex" | "set"; i: number } | null>(null);
   /** 방금 랜덤 강화 결과 (잠깐 띄움) */
   const [randed, setRanded] = useState<{ id: number; key: UpgKey; n: number } | null>(null);
+  /** 기록 창을 열 때 새로 본 업적 (NEW 표시) */
+  const [freshAch, setFreshAch] = useState<string[]>([]);
   /** 방금 진화한 단계 (잠깐 띄움) */
   const [evolved, setEvolved] = useState<{ id: number; stage: number } | null>(null);
   /** 업그레이드 뒤 진화 단계가 올랐으면 알림 */
@@ -754,7 +753,7 @@ export default function VirusGame() {
     };
     /** 자동 최적 업그레이드 (크론 데몬) — 1초마다 */
     let lastAuto = 0;
-    /** 마지막 업적 확인 · 마지막 업적 알림 */
+    /** 마지막 업적 확인 · 마지막 챌린지 알림 */
     let lastAch = 0;
     let lastQueued = 0;
     const runAuto = (s: Save, force = false) => {
@@ -795,11 +794,10 @@ export default function VirusGame() {
       const real = Math.min(3600, (now - lastTick.current) / 1000);
       lastTick.current = now;
       s.rec.play += real;
-      // 업적은 1초마다 확인 · 알림은 연출이 없을 때 하나씩
+      // 업적은 1초마다 확인 (새 업적은 위 막대 🏅 에 느낌표)
       if (now - lastAch >= 1000) {
         lastAch = now;
-        for (const a of checkAch(s))
-          queued.current.push({ name: a.name, seed: "", color: "#fbbf24", ach: a });
+        checkAch(s);
       }
       // 보스 연출 중엔 멈춤, 끝나면 (격퇴였으면) 보상 창
       const c = cinemaRef.current;
@@ -1013,6 +1011,18 @@ export default function VirusGame() {
     });
   };
 
+  /** 기록 창 열기 — 새 업적은 NEW 표시로 보여 주고, 본 것으로 (위 막대 🏅 느낌표가 꺼짐) */
+  const openRecords = () => {
+    const cur = save.current;
+    setFreshAch(cur.ach.slice(cur.achSeen));
+    if (cur.achSeen !== cur.ach.length) {
+      cur.achSeen = cur.ach.length;
+      persist();
+      sync();
+    }
+    setOverlay("records");
+  };
+
   /** 백업 불러오기 — 확인 뒤 저장본을 바꾸고 시작 화면으로 */
   const askImport = (next: Save) =>
     setAsk({
@@ -1107,6 +1117,8 @@ export default function VirusGame() {
   const hitNow = hit && settings.effects;
   const progress = hasProgress(s);
   const achN = s.ach.length;
+  /** 아직 기록 창에서 못 본 새 업적 수 */
+  const achNew = Math.max(0, achN - s.achSeen);
   /** 진행 중인 챌린지 */
   const chal = CHAL.find((c) => c.key === s.chal) ?? null;
 
@@ -1132,8 +1144,8 @@ export default function VirusGame() {
         key: "records",
         label: "기록",
         en: "RECORDS",
-        sub: `업적 ${achN}/${ACH.length}`,
-        run: () => setOverlay("records"),
+        sub: `업적 ${achN}/${ACH.length}${achNew ? " · NEW" : ""}`,
+        run: openRecords,
       },
       { key: "guide", label: "게임 방법", en: "HOW TO PLAY", run: () => setOverlay("guide") },
       {
@@ -1154,7 +1166,7 @@ export default function VirusGame() {
     ],
     // newGame은 매 렌더 새로 만들어지지만 save.current만 읽어서 결과가 같음
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [progress, s.stage, s.root, owned, achN, fs, startPlay, toggleFs]
+    [progress, s.stage, s.root, owned, achN, achNew, fs, startPlay, toggleFs]
   );
 
   const muted = settings.bgmMute || settings.bgm === 0;
@@ -1303,6 +1315,23 @@ export default function VirusGame() {
                 <span className="hidden text-amber-200 @xl/vg:inline" title="루트 권한">
                   🔑 {fmt(s.root)}
                 </span>
+                <button
+                  type="button"
+                  onPointerDown={(ev) => ev.stopPropagation()}
+                  onClick={openRecords}
+                  title={achNew ? `새 업적 ${achNew}개` : `업적 ${achN}/${ACH.length}`}
+                  aria-label={achNew ? `업적 — 새 업적 ${achNew}개` : "업적"}
+                  className={`relative flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border bg-black/50 text-base transition-colors hover:border-amber-300/70 ${
+                    achNew ? "border-amber-300/70" : "border-white/15"
+                  }`}
+                >
+                  <span aria-hidden>🏅</span>
+                  {achNew > 0 && (
+                    <span className="vg-ach-new absolute -top-1.5 -right-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-600 px-1 font-sans text-[11px] leading-none font-black text-white shadow-[0_0_8px_rgba(244,63,94,0.8)]">
+                      !
+                    </span>
+                  )}
+                </button>
                 {fsButton}
                 {muteButton}
               </div>
@@ -2224,8 +2253,8 @@ export default function VirusGame() {
               />
               <MenuButton
                 label="기록 (업적 · 통계)"
-                sub={`${achN}/${ACH.length}`}
-                onClick={() => setOverlay("records")}
+                sub={`${achN}/${ACH.length}${achNew ? " · NEW" : ""}`}
+                onClick={openRecords}
               />
               <MenuButton label="게임 방법" onClick={() => setOverlay("guide")} />
               <MenuButton
@@ -2285,7 +2314,7 @@ export default function VirusGame() {
             fill
             onClose={() => setOverlay(scene === "play" ? "menu" : null)}
           >
-            <RecordsPanel s={s} />
+            <RecordsPanel s={s} fresh={freshAch} />
           </Window>
         )}
         {overlay === "backup" && (
@@ -2355,12 +2384,12 @@ export default function VirusGame() {
                 onClick={() => setToasts((ts) => ts.filter((x) => x.id !== id))}
               >
                 <div className="shrink-0">
-                  {r.ach || r.chal ? (
+                  {r.chal ? (
                     <span
                       className="flex h-10 w-10 items-center justify-center text-3xl"
                       aria-hidden
                     >
-                      {r.ach?.icon ?? r.chal?.icon}
+                      {r.chal.icon}
                     </span>
                   ) : r.final ? (
                     <ApexSprite index={10} color={r.color} size={44} />
@@ -2375,21 +2404,14 @@ export default function VirusGame() {
                     className="vt-sm break-keep [overflow-wrap:anywhere] font-bold"
                     style={{ color: r.color }}
                   >
-                    {r.ach
-                      ? `🏅 업적 달성 · ${r.name}`
-                      : r.chal
-                        ? `🎯 챌린지 성공 · ${r.name}`
-                        : r.final
-                          ? `최종 보스 ${r.name} 격퇴!`
-                          : r.apex
-                            ? `상위 보스 ${r.name} 처치!`
-                            : `${r.name} 격퇴!`}
+                    {r.chal
+                      ? `🎯 챌린지 성공 · ${r.name}`
+                      : r.final
+                        ? `최종 보스 ${r.name} 격퇴!`
+                        : r.apex
+                          ? `상위 보스 ${r.name} 처치!`
+                          : `${r.name} 격퇴!`}
                   </div>
-                  {r.ach && (
-                    <div className="vt-xs break-keep [overflow-wrap:anywhere] text-white/90">
-                      {r.ach.desc} · 피해 +{Math.round(BAL.achDmg * 100)}%
-                    </div>
-                  )}
                   {r.chal && (
                     <div className="vt-xs break-keep [overflow-wrap:anywhere] text-white/90">
                       제약이 풀렸어요 · 보상 {r.chal.reward} · 🧩 커널 코어 +1
