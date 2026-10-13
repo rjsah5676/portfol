@@ -55,8 +55,6 @@ const SAVE = {
   },
   auto: false,
   formats: 4,
-  chal: "single",
-  chalDone: ["rush"],
   ach: ["hello", "st11", "st31", "st51", "ks1", "fmt1", "gb", "tb"],
   rec: {
     play: 20000,

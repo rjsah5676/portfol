@@ -89,15 +89,7 @@ import {
   bossTimeOf,
   buyUpgrade,
   checkAch,
-  checkChal,
-  startChal,
-  chalOpen,
-  CHAL,
-  upgLocked,
-  randLocked,
   ACH,
-  type ChalDef,
-  type ChalKey,
   milestoneCore,
   dropFrag,
   dropKey,
@@ -230,8 +222,6 @@ interface Reward {
   final?: { clears: number; cores: number };
   /** 100스테이지마다 처음 넘어서 받은 커널 코어 (보유 수) */
   core?: number;
-  /** 챌린지 변이 성공 */
-  chal?: ChalDef;
 }
 
 /** 화면에 그릴 때 쓰는 복사본 (ref는 렌더 중에 읽지 않음) */
@@ -357,8 +347,6 @@ export default function VirusGame() {
   const finalIntro = useRef(false);
   /** 격퇴 연출이 끝나면 띄울 보상 창 */
   const pendingReward = useRef<Reward | null>(null);
-  /** 챌린지 성공 알림 — 연출이 없을 때 하나씩 (업적은 알림 대신 위 막대 🏅 에 느낌표) */
-  const queued = useRef<Reward[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [scene, setScene] = useState<Scene>("title");
   const [entered, setEntered] = useState(false);
@@ -642,9 +630,6 @@ export default function VirusGame() {
         if (next > s.best) s.best = next;
         if (!last) s.runTop = Math.max(s.runTop, next);
         if (!last) rollBoss(s);
-        // 챌린지 목표를 넘었으면 제약이 풀리고 보상
-        const cd = checkChal(s);
-        if (cd) queued.current.push({ name: cd.name, seed: "", color: "#f9a8d4", chal: cd });
         // 알림은 처음 가 보는 스테이지에서 이겼을 때만 (변이 뒤 다시 오를 때는 조용히 — 조각은 컴파일 막대에 쌓임)
         if (fresh) {
           pendingReward.current = {
@@ -939,7 +924,6 @@ export default function VirusGame() {
       setFloats([]);
       cinemaRef.current = null;
       pendingReward.current = null;
-      queued.current = [];
       enemy.current = spawn(save.current);
       if (enemy.current.boss)
         startCinema("appear", save.current.stage, enemy.current.apex, enemy.current.final);
@@ -1008,9 +992,8 @@ export default function VirusGame() {
     };
     /** 자동 최적 업그레이드 (크론 데몬) — 1초마다 */
     let lastAuto = 0;
-    /** 마지막 업적 확인 · 마지막 챌린지 알림 */
+    /** 마지막 업적 확인 */
     let lastAch = 0;
-    let lastQueued = 0;
     const runAuto = (s: Save, force = false) => {
       if (!s.auto || !s.shop.daemon) return;
       const now = performance.now();
@@ -1087,10 +1070,6 @@ export default function VirusGame() {
       if (!cinemaRef.current && pendingReward.current) {
         pushToast(pendingReward.current);
         pendingReward.current = null;
-      }
-      if (!cinemaRef.current && queued.current.length && now - lastQueued >= 900) {
-        lastQueued = now;
-        pushToast(queued.current.shift()!);
       }
       if (cinemaRef.current) {
         sync();
@@ -1282,7 +1261,7 @@ export default function VirusGame() {
     if (!canFormat(s)) return;
     setAsk({
       title: "☣️ 변이할까요?",
-      body: `지금 몸(업그레이드 · 데이터)을 버리고 새 변종으로 스테이지 ${formatStart(s.best)}부터 다시 퍼져요.\n루트 권한 +${fmt(pendingRoot(s))}을 받아요 (빼앗은 모듈 · 우회 기술 · 루트 상점은 그대로).${s.chal ? "\n진행 중인 챌린지는 보상 없이 끝나요." : ""}`,
+      body: `지금 몸(업그레이드 · 데이터)을 버리고 새 변종으로 스테이지 ${formatStart(s.best)}부터 다시 퍼져요.\n루트 권한 +${fmt(pendingRoot(s))}을 받아요 (빼앗은 모듈 · 우회 기술 · 루트 상점은 그대로).`,
       yes: "변이하기",
       onYes: formatNow,
     });
@@ -1292,7 +1271,7 @@ export default function VirusGame() {
     if (!canFormat(s)) return;
     reborn(format(s));
   };
-  /** 변이 · 챌린지 시작 뒤 새 몸으로 */
+  /** 변이 뒤 새 몸으로 */
   const reborn = (next: Save) => {
     save.current = next;
     pending.current = [];
@@ -1300,39 +1279,6 @@ export default function VirusGame() {
     bossLeft.current = timeFor(enemy.current, save.current);
     persist();
     sync();
-  };
-
-  /** 챌린지 변이 시작 — 스테이지 1부터 제약을 걸고 */
-  const doChal = (key: ChalKey) => {
-    const s = save.current;
-    const d = CHAL.find((c) => c.key === key)!;
-    if (!chalOpen(s) || s.chalDone.includes(key) || s.chal) return;
-    const root = pendingRoot(s);
-    setAsk({
-      title: `${d.icon} 챌린지 「${d.name}」`,
-      body: `제약: ${d.rule}\n목표: 스테이지 ${d.goal} 돌파 → ${d.reward} · 🧩 커널 코어 +1\n\n지금 몸(업그레이드 · 데이터)을 버리고 스테이지 1부터 시작해요${root > 0 ? ` (루트 권한 +${fmt(root)}은 받아요)` : ""}. 목표를 넘으면 제약이 풀리고 그대로 이어서 해요.`,
-      yes: "도전하기",
-      onYes: () => {
-        const cur = save.current;
-        if (!chalOpen(cur) || cur.chalDone.includes(key) || cur.chal) return;
-        reborn(startChal(cur, key));
-      },
-    });
-  };
-  const quitChal = () => {
-    const d = CHAL.find((c) => c.key === save.current.chal);
-    if (!d) return;
-    setAsk({
-      title: "챌린지를 포기할까요?",
-      body: `「${d.name}」 제약이 풀리고 지금 스테이지에서 그대로 이어서 해요. 보상은 받지 못해요 (나중에 다시 도전할 수 있어요).`,
-      yes: "포기하기",
-      danger: true,
-      onYes: () => {
-        save.current.chal = null;
-        persist();
-        sync();
-      },
-    });
   };
 
   /** 기록 창 열기 — 새 업적은 NEW 표시로 보여 주고, 본 것으로 (위 막대 🏅 느낌표가 꺼짐) */
@@ -1359,7 +1305,6 @@ export default function VirusGame() {
         save.current = next;
         cinemaRef.current = null;
         pendingReward.current = null;
-        queued.current = [];
         persist();
         setDetail(null);
         setToasts([]);
@@ -1448,8 +1393,6 @@ export default function VirusGame() {
   const achN = s.ach.length;
   /** 아직 기록 창에서 못 본 새 업적 수 */
   const achNew = Math.max(0, achN - s.achSeen);
-  /** 진행 중인 챌린지 */
-  const chal = CHAL.find((c) => c.key === s.chal) ?? null;
   /** 지금 띄울 새 모듈 소개 (자세히 보기 · 오프라인 수익 창이 없을 때) */
   const introNow = !detail && !away && intro.length ? intro[0] : null;
   const closeDetail = () => {
@@ -1638,17 +1581,6 @@ export default function VirusGame() {
                 <span className="font-mono text-emerald-400/90">&gt; </span>
                 <b className="text-white">{zoneOf(s.stage)}</b>
                 <span className="ml-1">· 스테이지 {s.stage}</span>
-                {chal && (
-                  <button
-                    type="button"
-                    onClick={() => pickTab("format")}
-                    title={`챌린지 「${chal.name}」: ${chal.rule} — 스테이지 ${chal.goal} 돌파하면 성공`}
-                    className="ml-1.5 rounded-full border border-pink-300/50 bg-pink-400/15 px-1.5 vt-xs font-bold text-pink-100"
-                  >
-                    {chal.icon}
-                    <span className="hidden @md/vg:inline"> {chal.name}</span> → {chal.goal}
-                  </button>
-                )}
               </div>
               <div className="hidden flex-1 items-center gap-1 @3xl/vg:flex">
                 {Array.from({ length: MOBS_PER_STAGE }, (_, i) => (
@@ -2234,9 +2166,6 @@ export default function VirusGame() {
                       const price = randPrice(s, u.key);
                       const upTop = advice?.best === u.key;
                       const randTop = advice?.best === `rand:${u.key}`;
-                      // 챌린지 제약으로 못 사는 것
-                      const locked = upgLocked(s, u.key);
-                      const rLocked = randLocked(s, u.key);
                       return (
                         <div key={u.key}>
                           {/* 좁은 패널(폰): 한 줄에 [정보] [▲ 업그레이드] [🎲 랜덤 강화] */}
@@ -2258,8 +2187,8 @@ export default function VirusGame() {
                             <button
                               type="button"
                               onClick={() => buy(u)}
-                              disabled={locked || s.data < cost}
-                              aria-label={`${u.name} 업그레이드 ${locked ? "봉인됨" : fmtBytes(cost)}`}
+                              disabled={s.data < cost}
+                              aria-label={`${u.name} 업그레이드 ${fmtBytes(cost)}`}
                               className={`relative flex h-10 min-w-[74px] shrink-0 flex-col items-center justify-center rounded-lg border px-2 transition-colors enabled:active:bg-emerald-400/25 ${
                                 upTop
                                   ? "border-emerald-200 bg-emerald-400/25 shadow-[0_0_14px_rgba(74,222,128,0.6)]"
@@ -2271,7 +2200,7 @@ export default function VirusGame() {
                                 ▲ 업그레이드
                               </span>
                               <span className="mt-0.5 font-mono vt-sm font-bold text-emerald-300">
-                                {locked ? "🔒 봉인" : fmtBytes(cost)}
+                                {fmtBytes(cost)}
                               </span>
                               {(many > 1 || advice) && (
                                 <span className="vt-xs leading-none text-emerald-200/90">
@@ -2283,8 +2212,8 @@ export default function VirusGame() {
                             <button
                               type="button"
                               onClick={() => doRand(u.key)}
-                              disabled={rLocked || s.data < price}
-                              aria-label={`${u.rand} ${rLocked ? "봉인됨" : fmtBytes(price)}`}
+                              disabled={s.data < price}
+                              aria-label={`${u.rand} ${fmtBytes(price)}`}
                               className={`relative flex h-10 min-w-[74px] shrink-0 flex-col items-center justify-center rounded-lg border px-2 transition-colors enabled:active:bg-violet-400/25 ${
                                 randTop
                                   ? "border-violet-100 bg-violet-400/30 shadow-[0_0_14px_rgba(167,139,250,0.65)]"
@@ -2294,7 +2223,7 @@ export default function VirusGame() {
                               {randTop && <AdviceBadge />}
                               <span className="vt-xs leading-none text-violet-200/90">🎲 +1~3</span>
                               <span className="mt-0.5 font-mono vt-sm font-bold text-violet-200">
-                                {rLocked ? "🔒 봉인" : fmtBytes(price)}
+                                {fmtBytes(price)}
                               </span>
                               {advice && (
                                 <span className="vt-xs leading-none text-violet-200/90">
@@ -2308,7 +2237,7 @@ export default function VirusGame() {
                             <button
                               type="button"
                               onClick={() => buy(u)}
-                              disabled={locked || s.data < cost}
+                              disabled={s.data < cost}
                               className={`relative flex items-center gap-3 rounded-xl border px-3 py-2 text-left transition-colors enabled:hover:border-emerald-400/50 ${
                                 upTop
                                   ? "border-emerald-300/80 bg-emerald-400/[0.1] shadow-[0_0_16px_rgba(74,222,128,0.35)]"
@@ -2338,8 +2267,8 @@ export default function VirusGame() {
                               </span>
                               <span className="flex shrink-0 flex-col items-end">
                                 <span className="font-mono vt-base font-bold text-emerald-300">
-                                  {locked ? "🔒 봉인" : fmtBytes(cost)}
-                                  {!locked && many > 1 && (
+                                  {fmtBytes(cost)}
+                                  {many > 1 && (
                                     <span className="ml-1 vt-xs text-emerald-200/90">×{many}</span>
                                   )}
                                 </span>
@@ -2351,7 +2280,7 @@ export default function VirusGame() {
                             <button
                               type="button"
                               onClick={() => doRand(u.key)}
-                              disabled={rLocked || s.data < price}
+                              disabled={s.data < price}
                               title={`랜덤 강화: ${u.name}${subj(u.name)} ${RAND_ODDS.map((p, k) => `${k + 1}레벨 ${Math.round(p * 100)}%`).join(" · ")} 확률로 올라요.`}
                               className={`relative flex items-center gap-2 rounded-lg border px-3 py-1.5 text-left vt-sm transition-colors enabled:hover:border-violet-300/70 ${KR} ${
                                 randTop
@@ -2371,7 +2300,7 @@ export default function VirusGame() {
                                 </span>
                               )}
                               <span className="ml-auto font-mono font-bold text-violet-200">
-                                {rLocked ? "🔒 봉인" : fmtBytes(price)}
+                                {fmtBytes(price)}
                               </span>
                               <span className="hidden rounded border border-white/15 px-1 font-mono vt-xs text-white/70 md:inline">
                                 {RAND_KEYS[i].slice(3)}
@@ -2673,71 +2602,6 @@ export default function VirusGame() {
                         {+(BAL.rootBonus * 100).toFixed(1)}% 늘어나요. 빼앗은 모듈과 루트 상점은
                         남아요.
                       </p>,
-                      // 챌린지 변이 (첫 KILLSWITCH 격퇴 뒤)
-                      chalOpen(s) ? (
-                        <p key="chal-h" className="vt-base mt-1 font-bold text-pink-200">
-                          🎯 챌린지 변이{" "}
-                          <span className="vt-sm font-normal text-white/75">
-                            {s.chalDone.length}/{CHAL.length} · 스테이지 1부터 제약을 걸고 목표까지
-                          </span>
-                        </p>
-                      ) : (
-                        <p key="chal-h" className="vt-sm text-white/75">
-                          🎯 챌린지 변이: 스테이지 100을 돌파하면 열려요.
-                        </p>
-                      ),
-                      ...(chalOpen(s)
-                        ? CHAL.map((d) => {
-                            const done = s.chalDone.includes(d.key);
-                            const now = s.chal === d.key;
-                            return (
-                              <div
-                                key={d.key}
-                                className={`flex items-center gap-2.5 rounded-xl border px-2.5 py-2 ${
-                                  now
-                                    ? "border-pink-300/70 bg-pink-400/10"
-                                    : done
-                                      ? "border-emerald-300/40 bg-emerald-400/[0.06]"
-                                      : "border-white/10"
-                                }`}
-                              >
-                                <span className="text-xl" aria-hidden>
-                                  {d.icon}
-                                </span>
-                                <span className="min-w-0 flex-1">
-                                  <span className="vt-sm block font-bold text-white">
-                                    {d.name}
-                                    <span className="ml-1.5 font-mono font-normal text-white/75">
-                                      → 스테이지 {d.goal}
-                                    </span>
-                                  </span>
-                                  <span className="vt-xs block text-white/75">{d.rule}</span>
-                                  <span className="vt-xs block text-amber-200/90">
-                                    보상: {d.reward} · 🧩 커널 코어 +1
-                                  </span>
-                                </span>
-                                {now ? (
-                                  <button
-                                    type="button"
-                                    onClick={quitChal}
-                                    className="vt-sm shrink-0 rounded-lg border border-rose-300/50 px-2.5 py-1.5 font-bold text-rose-200 hover:bg-rose-400/10"
-                                  >
-                                    포기
-                                  </button>
-                                ) : (
-                                  <button
-                                    type="button"
-                                    onClick={() => doChal(d.key)}
-                                    disabled={done || !!s.chal}
-                                    className="vt-sm shrink-0 rounded-lg border border-pink-300/50 bg-pink-400/15 px-2.5 py-1.5 font-bold text-pink-100 transition-colors enabled:hover:bg-pink-400/25 disabled:opacity-60"
-                                  >
-                                    {done ? "✓ 성공" : "도전"}
-                                  </button>
-                                )}
-                              </div>
-                            );
-                          })
-                        : []),
                     ]}
                   />
                 )}
@@ -2894,14 +2758,7 @@ export default function VirusGame() {
                 onClick={() => setToasts((ts) => ts.filter((x) => x.id !== id))}
               >
                 <div className="shrink-0">
-                  {r.chal ? (
-                    <span
-                      className="flex h-10 w-10 items-center justify-center text-3xl"
-                      aria-hidden
-                    >
-                      {r.chal.icon}
-                    </span>
-                  ) : r.final ? (
+                  {r.final ? (
                     <ApexSprite index={10} color={r.color} size={44} />
                   ) : r.apex ? (
                     <ApexSprite index={r.apex.index} color={r.color} size={40} />
@@ -2914,19 +2771,12 @@ export default function VirusGame() {
                     className="vt-sm break-keep [overflow-wrap:anywhere] font-bold"
                     style={{ color: r.color }}
                   >
-                    {r.chal
-                      ? `🎯 챌린지 성공 · ${r.name}`
-                      : r.final
-                        ? `최종 보스 ${r.name} 격퇴!`
-                        : r.apex
-                          ? `상위 보스 ${r.name} 처치!`
-                          : `${r.name} 격퇴!`}
+                    {r.final
+                      ? `최종 보스 ${r.name} 격퇴!`
+                      : r.apex
+                        ? `상위 보스 ${r.name} 처치!`
+                        : `${r.name} 격퇴!`}
                   </div>
-                  {r.chal && (
-                    <div className="vt-xs break-keep [overflow-wrap:anywhere] text-white/90">
-                      제약이 풀렸어요 · 보상 {r.chal.reward} · 🧩 커널 코어 +1
-                    </div>
-                  )}
                   {r.core != null && (
                     <div className="vt-xs break-keep [overflow-wrap:anywhere] text-amber-200">
                       🧩 100스테이지 돌파 · 커널 코어 +1 (보유 {r.core})

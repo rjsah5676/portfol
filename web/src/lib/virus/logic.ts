@@ -42,6 +42,9 @@ export const BAL = {
   hpGrowth: 1.18,
   lateFrom: 100,
   hpGrowthLate: 1.18,
+  /** 마지막 구역(글로벌 코어, endFrom 다음부터)은 체력 증가율을 낮춤 — 코드 모듈이 상한에 닿아 성장이 느려지는 끝을 밀어붙이게 */
+  endFrom: 900,
+  hpGrowthEnd: 1.15,
   /** 보스 체력 = 같은 스테이지 파일의 몇 배 */
   bossHp: 10,
   /** 보상 = 체력 ÷ 이 값 */
@@ -66,7 +69,7 @@ export const BAL = {
   rootDiv: 10,
   /**
    * 루트 권한 합계 = ((최고 스테이지 - 1) ÷ rootDiv)^rootPow (× 100을 넘은 스테이지마다 rootLate)
-   * 시뮬레이션(--auto --chal --rate, 최적 변이): 스테이지 100 ≈ 45분 · 500 ≈ 3시간 · 1000 ≈ 9.7시간 (변이 약 20번)
+   * 시뮬레이션(--auto --rate, 최적 변이): 스테이지 100 ≈ 1.5시간 · 500 ≈ 5.6시간 · 900 ≈ 25시간 · 1000 ≈ 45시간 (변이 약 38번)
    */
   rootPow: 2.17,
   /** 스테이지 lateFrom 을 넘은 뒤 최고 스테이지 1마다 루트 권한 합계 ×rootLate */
@@ -84,7 +87,7 @@ export const BAL = {
   fragK: 3,
   fragGrowth: 8,
   keyK: 3,
-  keyGrowth: 7.25,
+  keyGrowth: 7,
   /** 우회 기술 세기: v1 = 예전 공식(10스테이지마다 1버전)의 bypBase 버전어치, 그 뒤 1버전마다 bypScale 버전어치 */
   bypBase: 4,
   bypScale: 1,
@@ -120,8 +123,6 @@ export const BAL = {
   shopPoly: 0.03,
   /** 업적 하나마다 피해 +이 비율 */
   achDmg: 0.02,
-  /** 챌린지 「루트 차단」 보상: 루트 권한 1당 피해 +이만큼 더 */
-  chalRoot: 0.01,
 };
 
 const x = (n: number) => `×${Number(n.toFixed(2))}`;
@@ -207,10 +208,6 @@ export interface Save {
   runTop: number;
   /** 스테이지 반복: 보스를 잡아도 다음 스테이지로 안 감 */
   repeat: boolean;
-  /** 진행 중인 챌린지 변이 (없으면 null) */
-  chal: ChalKey | null;
-  /** 끝낸 챌린지 (보상은 영구) */
-  chalDone: ChalKey[];
   savedAt: number;
 }
 
@@ -308,8 +305,6 @@ export function newSave(): Save {
     bossIdx: -1,
     runTop: 1,
     repeat: false,
-    chal: null,
-    chalDone: [],
     savedAt: Date.now(),
   };
 }
@@ -356,7 +351,7 @@ export function parseSave(raw: string | null): Save {
       best = Math.max(best, stage);
     }
     const oldCap = !!s.finalReady && s.stage <= 100;
-    // 기록 · 업적 · 챌린지 (v0.5에서 생김 — 없으면 빈 값, 모르는 값은 버림)
+    // 기록 · 업적 (v0.5에서 생김 — 없으면 빈 값, 모르는 값은 버림)
     const rec = newRec();
     for (const k of Object.keys(rec) as (keyof Rec)[]) {
       const v = (s.rec as Partial<Rec> | undefined)?.[k];
@@ -364,12 +359,17 @@ export function parseSave(raw: string | null): Save {
     }
     const achIds = new Set(ACH.map((a) => a.id));
     const ach = Array.isArray(s.ach) ? [...new Set(s.ach.filter((id) => achIds.has(id)))] : [];
-    const isChal = (k: unknown): k is ChalKey => CHAL.some((c) => c.key === k);
-    const chal = isChal(s.chal) ? s.chal : null;
-    const chalDone = Array.isArray(s.chalDone) ? [...new Set(s.chalDone.filter(isChal))] : [];
+    // v0.7 까지의 챌린지 (삭제됨) 기록은 버림
+    const {
+      chal: _chal,
+      chalDone: _chalDone,
+      ...rest
+    } = s as Save & { chal?: unknown; chalDone?: unknown };
+    void _chal;
+    void _chalDone;
     return {
       ...newSave(),
-      ...s,
+      ...rest,
       lv,
       shop,
       rootSpent,
@@ -389,8 +389,6 @@ export function parseSave(raw: string | null): Save {
         Number.isInteger(s.bossIdx) && s.bossIdx! >= -2 && s.bossIdx! < ROSTER.length
           ? s.bossIdx!
           : pickBoss(stage, best),
-      chal,
-      chalDone,
     };
   } catch {
     return newSave();
@@ -863,7 +861,7 @@ export function bossOf(s: Save) {
   return bossDef(s.bossIdx);
 }
 
-/** 다음 스테이지로 (또는 변이 · 챌린지로 스테이지가 바뀌면) 새 보스를 뽑음 */
+/** 다음 스테이지로 (또는 변이 · 스테이지 고르기로 스테이지가 바뀌면) 새 보스를 뽑음 */
 export function rollBoss(s: Save, rand: () => number = Math.random) {
   s.bossIdx = pickBoss(s.stage, s.best, rand);
 }
@@ -1061,10 +1059,6 @@ export interface Stats {
   rootGain: number;
   offlineRate: number;
   offlineHours: number;
-  /** 보스 제한 시간 배율 (챌린지 「제로데이」는 절반) */
-  timeMul: number;
-  /** 랜덤 강화 가격 배율 */
-  randMul: number;
   /** 업적으로 받는 피해 배율 */
   achMul: number;
   /** 코드 모듈 공격 효과 수치 */
@@ -1089,25 +1083,16 @@ export function modCritOf(v: number) {
 }
 
 export function stats(s: Save): Stats {
-  // 챌린지 「모듈 봉인」: 코드 모듈 · 우회 기술 · 세트 없음 / 「루트 차단」: 루트 권한 보너스 · 효율 강화 상품 없음
-  const naked = s.chal === "naked";
-  const noRoot = s.chal === "noroot";
-  const zero = ROSTER.map(() => 0);
-  const m = naked ? zero : s.mods;
-  // 우회 기술: 버전 1 = 예전(최고 스테이지로 오르던 때) bypScale 버전만큼
-  const b = (naked ? zero : s.byp).map(bypEq);
+  const m = s.mods;
+  // 우회 기술: 버전 → 효과 계산용 「예전 버전」 (bypEq)
+  const b = s.byp.map(bypEq);
   const has = (i: number) => b[i] > 0;
   const fx = fxOf(m);
-  const done = (k: ChalKey) => s.chalDone.includes(k);
-  const rootMul = noRoot ? 1 : 1 + (BAL.rootBonus + (done("noroot") ? BAL.chalRoot : 0)) * s.root;
-  const shop = (k: "rootkit" | "miner") => (noRoot ? 0 : s.shop[k]);
+  const rootMul = 1 + BAL.rootBonus * s.root;
   const achMul = 1 + BAL.achDmg * s.ach.length;
   const atk =
     BAL.atkStep ** s.lv.atk * BAL.atkMilestoneMul ** Math.floor(s.lv.atk / BAL.atkMilestone);
-  const aps =
-    (1 + (BAL.spdMax - 1) * (1 - BAL.spdK ** s.lv.spd)) *
-    (has(8) ? tunnelSpd(b[8]) : 1) *
-    (done("single") ? 1.2 : 1);
+  const aps = (1 + (BAL.spdMax - 1) * (1 - BAL.spdK ** s.lv.spd)) * (has(8) ? tunnelSpd(b[8]) : 1);
   const critChance = Math.min(
     0.9,
     0.05 + (BAL.critMax - 0.05) * (1 - BAL.critK ** s.lv.crit) + (has(7) ? modCritOf(b[7]) : 0)
@@ -1125,28 +1110,25 @@ export function stats(s: Save): Stats {
       atk *
       (has(1) ? 1.5 * BAL.modDmg ** b[1] : 1) *
       rootMul *
-      BAL.shopRootkit ** shop("rootkit") *
+      BAL.shopRootkit ** s.shop.rootkit *
       BAL.corePatch ** s.shop.kpatch *
-      achMul *
-      (done("naked") ? 1.5 : 1),
+      achMul,
     aps,
     critChance,
     critMul: 2 + BAL.critMulStep * s.lv.crit + (has(4) ? 1 + 0.5 * b[4] : 0),
     dataMul:
       (has(3) ? 1.5 * BAL.modData ** b[3] : 1) *
-      BAL.shopMiner ** shop("miner") *
+      BAL.shopMiner ** s.shop.miner *
       BAL.coreComp ** s.shop.kcomp,
     costMul: has(9) ? 0.85 * BAL.modCost ** b[9] : 1,
     mobHpMul: has(0) ? 0.85 * BAL.modMobHp ** b[0] : 1,
     bossHpMul: has(2) ? BAL.modBossHp ** b[2] : 1,
-    bossTime: BOSS_TIME + (has(2) ? 5 : 0) + BAL.coreIrq * s.shop.kirq + (done("rush") ? 5 : 0),
+    bossTime: BOSS_TIME + (has(2) ? 5 : 0) + BAL.coreIrq * s.shop.kirq,
     rootGain: (has(7) ? 1.25 : 1) * (1 + BAL.coreEscal * s.shop.kescal),
     bossDmgMul: has(5) ? BAL.modBossDmg ** b[5] : 1,
     rootMul,
     offlineRate: has(6) ? offlineRateOf(b[6]) + 0.15 : 0.3,
     offlineHours: BAL.offHours,
-    timeMul: s.chal === "rush" ? 0.5 : 1,
-    randMul: done("lock") ? 0.85 : 1,
     achMul,
     fx,
     shotsMul,
@@ -1159,7 +1141,7 @@ export function stats(s: Save): Stats {
 export function bossTimeOf(kind: "boss" | "apex" | "final", st: Stats) {
   const extra = st.bossTime - BOSS_TIME;
   const base = kind === "final" ? FINAL_TIME : kind === "apex" ? APEX_TIME : BOSS_TIME;
-  return (base + extra) * st.timeMul;
+  return base + extra;
 }
 
 /** 공격 한 번의 평균 피해 (익스플로잇 반영) */
@@ -1180,11 +1162,12 @@ export function dps(st: Stats) {
 
 // ── 적 (보안 등급 = 체력) · 보상 ──
 
-/** 스테이지 lateFrom 까지는 hpGrowth 배씩, 그 뒤로는 hpGrowthLate 배씩 */
+/** 스테이지 lateFrom 까지는 hpGrowth 배씩, 그 뒤로는 hpGrowthLate 배씩, endFrom 뒤로는 hpGrowthEnd 배씩 */
 function baseHp(stage: number) {
   const a = Math.min(stage, BAL.lateFrom) - 1;
-  const b = Math.max(0, stage - BAL.lateFrom);
-  return BAL.hp0 * BAL.hpGrowth ** a * BAL.hpGrowthLate ** b;
+  const b = Math.max(0, Math.min(stage, BAL.endFrom) - BAL.lateFrom);
+  const c = Math.max(0, stage - BAL.endFrom);
+  return BAL.hp0 * BAL.hpGrowth ** a * BAL.hpGrowthLate ** b * BAL.hpGrowthEnd ** c;
 }
 /** 극초반 보정이 남은 정도 (1스테이지 1 → 점점 0) */
 const early = (stage: number) => BAL.earlyDecay ** (stage - 1);
@@ -1324,13 +1307,12 @@ function levelsCost(s: Save, key: UpgKey, n: number, st: Stats) {
 export function randPrice(s: Save, key: UpgKey) {
   const st = stats(s);
   const avg = RAND_ODDS.reduce((sum, p, i) => sum + p * levelsCost(s, key, i + 1, st), 0);
-  return Math.ceil(avg * BAL.randPrice * st.randMul);
+  return Math.ceil(avg * BAL.randPrice);
 }
 
 /** 실제 뽑기 확률 — 폴리모픽 엔진 레벨만큼 1레벨 확률을 3레벨로 옮김 (가격은 기본 확률 그대로라 순수한 이득) */
 export function randOdds(s: Save) {
-  const poly = s.chal === "noroot" ? 0 : s.shop.poly;
-  const move = Math.min(RAND_ODDS[0] - 0.1, BAL.shopPoly * poly);
+  const move = Math.min(RAND_ODDS[0] - 0.1, BAL.shopPoly * s.shop.poly);
   return [RAND_ODDS[0] - move, RAND_ODDS[1], RAND_ODDS[2] + move];
 }
 
@@ -1346,7 +1328,6 @@ export function rollRand(rand: () => number = Math.random, odds: number[] = RAND
 
 /** 랜덤 강화 실행: 값을 치르고 그 업그레이드를 1~3레벨 올림. 오른 레벨 수, 돈이 모자라면 0 */
 export function randUpgrade(s: Save, key: UpgKey, rand: () => number = Math.random) {
-  if (randLocked(s, key)) return 0;
   const price = randPrice(s, key);
   if (s.data < price) return 0;
   s.data -= price;
@@ -1358,18 +1339,8 @@ export function randUpgrade(s: Save, key: UpgKey, rand: () => number = Math.rand
   return n;
 }
 
-/** 챌린지 때문에 이 업그레이드를 못 사는지 (「업그레이드 봉인」은 전부 · 「단일 스레드」는 오버클럭) */
-export function upgLocked(s: Save, key: UpgKey) {
-  return s.chal === "lock" || (s.chal === "single" && key === "spd");
-}
-/** 랜덤 강화를 못 하는지 (「단일 스레드」의 클럭 스파이크) */
-export function randLocked(s: Save, key: UpgKey) {
-  return s.chal === "single" && key === "spd";
-}
-
 /** 업그레이드 n번 사기 (n = Infinity 면 살 수 있는 만큼) — 산 레벨 수 */
 export function buyUpgrade(s: Save, u: UpgDef, n: number) {
-  if (upgLocked(s, u.key)) return 0;
   const { cost, count } = bulkCost(s, u, n);
   if (!count || s.data < cost) return 0;
   s.data -= cost;
@@ -1438,7 +1409,6 @@ export function format(s: Save): Save {
     frag: [...s.frag],
     byp: [...s.byp],
     keys: [...s.keys],
-    chalDone: [...s.chalDone],
   };
   n.runTop = n.stage;
   rollBoss(n);
@@ -1660,9 +1630,7 @@ export function upgradeAdvice(s: Save, n: number): { list: Advice[]; best: strin
     const cost = b.count ? b.cost : upgCost(u, s.lv[u.key], st);
     const after = dps(stats({ ...s, lv: { ...s.lv, [u.key]: s.lv[u.key] + count } }));
     const g = Math.log(after / now);
-    if (!upgLocked(s, u.key))
-      list.push({ id: u.key, gain: (after / now - 1) * 100, score: g / cost });
-    if (randLocked(s, u.key)) continue;
+    list.push({ id: u.key, gain: (after / now - 1) * 100, score: g / cost });
     const eg = randExpectedGain(s, u.key);
     list.push({
       id: `rand:${u.key}`,
@@ -1794,7 +1762,6 @@ export function optimalPlan(s: Save, maxSteps = 5000): Plan {
     let pick: { key: UpgKey; n: number; cost: number } | null = null;
     let best = -Infinity;
     for (const u of UPGRADES) {
-      if (upgLocked(s, u.key)) continue;
       // 후보: 1레벨 · (페이로드는) 다음 「25레벨마다 ×2」까지 한 묶음 — 한 칸씩만 보면 큰 도약을 놓침
       const ns = [1];
       if (u.key === "atk") {
@@ -1846,91 +1813,9 @@ export function offlineGain(s: Save, seconds: number) {
   return { data: perSec * secs * st.offlineRate, secs };
 }
 
-// ── 챌린지 변이 (스테이지 100 돌파 뒤 열림) ──
-// 스테이지 1부터 제약을 걸고 다시 퍼짐. 목표 스테이지를 넘으면 제약이 풀리고 영구 보상 + 커널 코어. 그냥 변이하면 챌린지는 끝남.
-
-export type ChalKey = "lock" | "rush" | "naked" | "single" | "noroot";
-
-export interface ChalDef {
-  key: ChalKey;
-  name: string;
-  icon: string;
-  rule: string;
-  /** 이 스테이지의 보스(10의 배수면 상위 보스까지)를 넘으면 성공 */
-  goal: number;
-  reward: string;
-}
-
-export const CHAL: ChalDef[] = [
-  {
-    key: "single",
-    name: "단일 스레드",
-    icon: "🐌",
-    rule: "오버클럭 · 클럭 스파이크를 살 수 없음 (발사 속도 고정)",
-    goal: 90,
-    reward: "발사 속도 ×1.2",
-  },
-  {
-    key: "rush",
-    name: "제로데이",
-    icon: "⏱️",
-    rule: "모든 보스 제한 시간이 절반",
-    goal: 99,
-    reward: "보스 제한 시간 +5초",
-  },
-  {
-    key: "naked",
-    name: "모듈 봉인",
-    icon: "🧱",
-    rule: "코드 모듈 · 우회 기술 · 모듈 세트 효과 없음",
-    goal: 55,
-    reward: "피해 ×1.5",
-  },
-  {
-    key: "lock",
-    name: "업그레이드 봉인",
-    icon: "🔒",
-    rule: "일반 업그레이드 · 크론잡을 쓸 수 없고 랜덤 강화만",
-    goal: 95,
-    reward: "랜덤 강화 가격 ×0.85",
-  },
-  {
-    key: "noroot",
-    name: "루트 차단",
-    icon: "🚫",
-    rule: "루트 권한 피해 보너스 · 루트킷 · 데이터 마이닝 · 폴리모픽 엔진 효과 없음",
-    goal: 95,
-    reward: `루트 권한 1당 피해 +${BAL.chalRoot * 100}%p`,
-  },
-];
-
-/** 챌린지를 고를 수 있는지 (스테이지 100 돌파 뒤 — 루트 DNS 를 함락하면) */
-export function chalOpen(s: Save) {
-  return s.best > 100 || s.clears > 0;
-}
-
 /** 이 스테이지의 상위 보스를 처음 잡으면 커널 코어를 주는지 (100스테이지마다 · 마지막은 최종 보스가 줌) */
 export function milestoneCore(stage: number) {
   return stage % 100 === 0 && stage < MAX_STAGE;
-}
-
-/** 챌린지 시작: 변이처럼 몸을 버리지만 스테이지 1부터 (받을 루트 권한이 있으면 같이 받음) */
-export function startChal(s: Save, key: ChalKey): Save {
-  const n: Save = { ...format(s), stage: 1, runTop: 1, chal: key };
-  rollBoss(n);
-  return n;
-}
-
-/** 챌린지 목표를 넘었으면 끝내고 보상 — 끝낸 챌린지 (처음이면 커널 코어 +1) */
-export function checkChal(s: Save): ChalDef | null {
-  const d = CHAL.find((c) => c.key === s.chal);
-  if (!d || (s.stage <= d.goal && !s.finalReady)) return null;
-  s.chal = null;
-  if (!s.chalDone.includes(d.key)) {
-    s.chalDone.push(d.key);
-    s.cores++;
-  }
-  return d;
 }
 
 // ── 업적 ──
@@ -1992,17 +1877,12 @@ export const ACH: AchDef[] = [
     s.rec.bestFinal > 0 && s.rec.bestFinal <= 10 ? 1 : 0,
     1,
   ]),
-  // 변이 · 챌린지
+  // 변이
   ach("fmt1", "☣️", "첫 변이", "처음으로 변이", (s) => [s.formats, 1]),
   ach("fmt5", "🧫", "변종 다발", "변이 5번", (s) => [s.formats, 5]),
   ach("fmt10", "♾️", "끝없는 변이", "변이 10번", (s) => [s.formats, 10]),
   ach("root1k", "🔑", "관리자 권한", "루트 권한 1,000", (s) => [s.root, 1000]),
   ach("root1t", "👑", "시스템 소유자", "루트 권한 1T", (s) => [s.root, 1e12]),
-  ach("chal1", "🎯", "챌린저", "챌린지 변이 하나 성공", (s) => [s.chalDone.length, 1]),
-  ach("chalAll", "🏆", "완벽한 변종", "챌린지 변이 모두 성공", (s) => [
-    s.chalDone.length,
-    CHAL.length,
-  ]),
   // 누적
   ach("files1k", "📂", "대량 감염", "파일 1,000개 감염", (s) => [s.rec.files, 1000]),
   ach("files100k", "🦠", "팬데믹", "파일 100,000개 감염", (s) => [s.rec.files, 100000]),

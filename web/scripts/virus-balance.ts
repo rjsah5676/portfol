@@ -1,7 +1,7 @@
 /**
  * 바이러스 키우기 밸런스 시뮬레이션 — 계속 켜 두고 보는 플레이어를 흉내 내서 성장 속도를 뽑는다.
  *
- *   npx tsx scripts/virus-balance.ts [시간=72] [BAL키=값 ...] [--no-rand] [--no-shop] [--auto] [--chal]
+ *   npx tsx scripts/virus-balance.ts [시간=72] [BAL키=값 ...] [--no-rand] [--no-shop] [--auto] [--rate] [--to-end]
  *   예) npx tsx scripts/virus-balance.ts 24 hpGrowth=1.16 dataRatio=6
  *
  *  플레이어 행동
@@ -10,7 +10,6 @@
  *   - 보스에게 지면 파일을 RETRY_FARM 초 동안 감염시킨 뒤 재도전
  *   - 같은 스테이지에서 보스에게 STUCK_FAILS 번 지거나 STUCK_SECS 초 넘게 걸리면 포맷 (포맷할 수 있을 때)
  *   - 포맷하면 루트 권한 상점에서 프로파일러 · 크론잡 · 크론 데몬 먼저(모자라면 모아 둠), 그다음 가장 싼 것부터 살 수 있는 만큼 삼
- *   - --chal: 첫 KILLSWITCH 를 잡은 뒤 챌린지 변이를 차례로 하나씩 (각각 걸린 시간 · 1시간 안에 못 하면 포기)
  *
  *  목표 (보고서 기준)
  *   - 첫 30분: 20~30스테이지, 업그레이드를 5~20초마다 하나
@@ -57,15 +56,8 @@ import {
   buyUpgrade,
   checkAch,
   ACH,
-  CHAL,
-  checkChal,
-  startChal,
-  upgLocked,
-  randLocked,
   fmtBytes,
-  type ChalKey,
   avgHit,
-  chalOpen,
   milestoneCore,
   fmt,
   dropFrag,
@@ -83,8 +75,6 @@ const NO_RAND = process.argv.includes("--no-rand");
 const NO_SHOP = process.argv.includes("--no-shop");
 /** --auto: 크론 데몬을 산 뒤로는 자동 최적 업그레이드(크론잡)만 쓰는 플레이어 */
 const AUTO = process.argv.includes("--auto");
-/** --chal: 챌린지가 열리면 (스테이지 100 돌파) 막힐 때마다 변이 대신 챌린지를 하나씩 */
-const CHALS = process.argv.includes("--chal");
 /** --to-end: 마지막 스테이지까지 가서 최종 보스를 처음 잡으면 멈춤 */
 const TO_END = process.argv.includes("--to-end");
 /** --quiet: 100스테이지 표만 */
@@ -120,13 +110,6 @@ for (const a of args.filter((x) => x.includes("="))) {
     STUCK_SECS = Number(v);
     continue;
   }
-  // goal.single=100 → 챌린지 목표 스테이지 바꿔 보기
-  if (k.startsWith("goal.")) {
-    const c = CHAL.find((x) => x.key === k.slice(5));
-    if (!c) throw new Error(`없는 챌린지: ${k}`);
-    c.goal = Number(v);
-    continue;
-  }
   if (!(k in BAL)) throw new Error(`BAL에 없는 키: ${k}`);
   (BAL as Record<string, number>)[k] = Number(v);
 }
@@ -148,7 +131,6 @@ function bestUpgrade(s: Save) {
   const now = dps(st);
   let best: { key: (typeof UPGRADES)[number]["key"]; cost: number; score: number } | null = null;
   for (const u of UPGRADES) {
-    if (upgLocked(s, u.key)) continue;
     const cost = upgCost(u, s.lv[u.key], st);
     s.lv[u.key]++;
     const gain = Math.log(dps(stats(s)) / now);
@@ -180,8 +162,12 @@ const apexAt: Record<number, number> = {};
 
 let overflow = "";
 
-/** 루트 권한 쓰기: 프로파일러 → 크론잡 → 크론 데몬 먼저 (못 사면 모아 둠), 그다음 가장 싼 것부터 */
-const UTIL = ["profiler", "cron", "daemon", "kprof"];
+/**
+ * 루트 권한 쓰기: 프로파일러 → 크론잡 → 크론 데몬 먼저 (못 사면 모아 둠), 그다음 가장 싼 것부터
+ * (커널 프로파일러 · 자동 컴파일러는 추천 · 편의라 시뮬레이터엔 쓸모없음 — 사지 않음)
+ */
+const UTIL = ["profiler", "cron", "daemon"];
+const SKIP = ["kprof", "autoc"];
 function spendRoot(sv: Save) {
   for (const k of UTIL) {
     const key = k as (typeof SHOP)[number]["key"];
@@ -191,7 +177,10 @@ function spendRoot(sv: Save) {
   for (let i = 0; i < 500; i++) {
     const options = SHOP.filter(
       (d) =>
-        !UTIL.includes(d.key) && d.group !== "core" && (d.max == null || sv.shop[d.key] < d.max)
+        !UTIL.includes(d.key) &&
+        !SKIP.includes(d.key) &&
+        d.group !== "core" &&
+        (d.max == null || sv.shop[d.key] < d.max)
     );
     options.sort((a, b) => shopCost(a, sv.shop[a.key]) - shopCost(b, sv.shop[b.key]));
     if (!options.length || !buyShop(sv, options[0].key)) break;
@@ -209,7 +198,21 @@ function spendCores(sv: Save) {
 }
 /** 최고 스테이지가 처음 100 · 200 … 을 넘은 시각 · 그때 변이 횟수 */
 const bestAt: Record<number, { t: number; formats: number }> = {};
+const diagSeen = new Set<number>();
 function noteBest() {
+  if (
+    process.env.DIAG &&
+    s.best % 10 === 1 &&
+    s.best >= Number(process.env.DIAG_FROM ?? 81) &&
+    s.best <= Number(process.env.DIAG_TO ?? 221) &&
+    !diagSeen.has(s.best)
+  ) {
+    diagSeen.add(s.best);
+    const q = stats(s);
+    console.log(
+      `  [${fmtT(t)}] best ${s.best - 1} · 변이 ${s.formats} · 루트 ${fmt(s.root)} (×${fmt(q.rootMul)}) · lv ${JSON.stringify(s.lv)} · 모듈 ${s.mods.join(",")} · 우회 ${s.byp.join(",")} · dmg ${fmt(q.dmg)} · fx ×${q.fxMul.toFixed(1)} · 상점 ${s.shop.rootkit}/${s.shop.miner}`
+    );
+  }
   for (let n = 100; n <= MAX_STAGE; n += 100)
     if (s.best > n && bestAt[n] == null) bestAt[n] = { t, formats: s.formats };
 }
@@ -292,27 +295,10 @@ function nextEnemy() {
 }
 let leftMax = BOSS_TIME;
 const achAt: Record<string, number> = {};
-/** 챌린지: 지금 하는 것 · 시작 시각 · 결과 */
-let chalIdx = -1;
-let chalStart = 0;
-const chalLog: string[] = [];
-function nextChal() {
-  chalIdx++;
-  if (chalIdx >= CHAL.length) return;
-  s = startChal(s, CHAL[chalIdx].key as ChalKey);
-  if (!NO_SHOP) spendRoot(s);
-  peakRate = 0;
-  chalStart = t;
-  runStart = t;
-  stageStart = t;
-  fails = 0;
-  farmLeft = 0;
-  nextEnemy();
-}
 
 while (t < HOURS * 3600) {
   // 업그레이드 (한 틱에 최대 1000번 — 숫자가 무한대로 튀면 멈춤)
-  if (AUTO && s.shop.daemon && s.chal !== "lock") {
+  if (AUTO && s.shop.daemon) {
     const p = optimalPlan(s);
     if (applyPlan(s, p)) buys += p.count;
   } else
@@ -322,7 +308,6 @@ while (t < HOURS * 3600) {
       let f: { key: (typeof UPGRADES)[number]["key"]; price: number; score: number } | null = null;
       if (!NO_RAND || !b)
         for (const u of UPGRADES) {
-          if (randLocked(s, u.key)) continue;
           const price = randPrice(s, u.key);
           const score = randExpectedGain(s, u.key) / price;
           if (!f || score > f.score) f = { key: u.key, price, score };
@@ -437,11 +422,6 @@ while (t < HOURS * 3600) {
       s.kills = 0;
       fails = 0;
       stageStart = t;
-      const done = checkChal(s);
-      if (done) {
-        chalLog.push(`  ${done.icon} ${done.name} (목표 ${done.goal}): ${fmtT(t - chalStart)}`);
-        spendCores(s);
-      }
     } else {
       gainData(s, mobData(s.stage, st));
       s.kills = Math.min(MOBS_PER_STAGE, s.kills + 1);
@@ -454,17 +434,9 @@ while (t < HOURS * 3600) {
     farmLeft = RETRY_FARM;
     nextEnemy();
   }
-  // 챌린지 중 한 스테이지에 30분 넘게 막히면 포기 (제약만 풀고 그대로 이어서)
-  if (s.chal && t - stageStart > 1800) {
-    chalLog.push(
-      `  ${CHAL[chalIdx].icon} ${CHAL[chalIdx].name} (목표 ${CHAL[chalIdx].goal}): 스테이지 ${s.stage}에서 막혀 포기 (${fmtT(t - chalStart)})`
-    );
-    s.chal = null;
-    stageStart = t;
-  }
-  let stuck = (fails >= STUCK_FAILS || t - stageStart > STUCK_SECS) && !s.chal;
+  let stuck = fails >= STUCK_FAILS || t - stageStart > STUCK_SECS;
   // 변이 효율: 루트 권한으로 오를 피해 배율(로그) ÷ 이번 회차 시간 — 꺾이면 변이
-  if (RATE && !s.chal && Math.floor(t) % 5 === 0 && t - Math.floor(t) < DT) {
+  if (RATE && Math.floor(t) % 5 === 0 && t - Math.floor(t) < DT) {
     const pend = pendingRoot(s);
     const rate =
       pend > 0
@@ -474,10 +446,7 @@ while (t < HOURS * 3600) {
     if (rate > peakRate) peakRate = rate;
     else if (rate > 0 && rate < peakRate * RATE_DROP) stuck = true;
   }
-  // 막혔을 때: 챌린지가 남았으면 변이 대신 챌린지 (챌린지도 받을 루트 권한은 받음)
-  if (stuck && CHALS && chalOpen(s) && chalIdx + 1 < CHAL.length) {
-    nextChal();
-  } else if (stuck && canFormat(s)) {
+  if (stuck && canFormat(s)) {
     runs.push(
       `  회차 ${s.formats + 1}: ${fmtT(t - runStart)} 동안 스테이지 ${s.stage}까지 → 루트 권한 +${pendingRoot(s)} (합계 ${s.root + pendingRoot(s)}) · 끝난 시각 ${fmtT(t)} · 상점 ${Object.values(s.shop).join("/")}`
     );
@@ -515,7 +484,7 @@ for (let n = 100; n <= MAX_STAGE; n += 100) {
   prevT = b.t;
 }
 console.log(
-  `  끝 시각 ${fmtT(t)} · 최고 ${s.best - 1} · 지금 스테이지 ${s.stage} · 루트 권한 ${fmt(s.root)} · 코어 ${s.cores} · 챌린지 ${s.chalDone.length}`
+  `  끝 시각 ${fmtT(t)} · 최고 ${s.best - 1} · 지금 스테이지 ${s.stage} · 루트 권한 ${fmt(s.root)} · 코어 ${s.cores}`
 );
 console.log("\n모듈 · 우회 기술을 처음 열 때:");
 console.log(unlocks.join("\n") || "  없음");
@@ -561,4 +530,3 @@ console.log(`\n업적 ${s.ach.length}/${ACH.length} (피해 ×${stats(s).achMul.
 console.log(
   "  " + ACH.map((a) => `${a.name} ${achAt[a.id] == null ? "-" : fmtT(achAt[a.id])}`).join(" · ")
 );
-if (CHALS) console.log(`\n챌린지 변이:\n${chalLog.join("\n") || "  시작 못 함"}`);
