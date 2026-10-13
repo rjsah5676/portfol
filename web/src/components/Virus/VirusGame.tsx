@@ -1983,7 +1983,7 @@ export default function VirusGame() {
               {/* 진화 알림 */}
               {evolved && (
                 <div
-                  key={evolved.id}
+                  key={`evo-${evolved.id}`}
                   className={`vg-evo absolute top-12 left-1/2 z-10 -translate-x-1/2 rounded-full border border-emerald-300/60 bg-emerald-950/90 px-4 py-1.5 vt-sm whitespace-nowrap text-emerald-100 shadow-[0_0_24px_rgba(74,222,128,0.45)] ${KR}`}
                 >
                   🧬 진화! {evolved.stage + 1}단계 <b>{EVOLUTION[evolved.stage].name}</b>{" "}
@@ -1996,7 +1996,7 @@ export default function VirusGame() {
               {/* 랜덤 강화 결과 */}
               {randed && (
                 <div
-                  key={randed.id}
+                  key={`rand-${randed.id}`}
                   className={`virus-pop absolute top-3 left-1/2 z-10 -translate-x-1/2 rounded-full border border-violet-300/50 bg-violet-950/85 px-4 py-1.5 vt-sm whitespace-nowrap text-violet-100 shadow-[0_0_20px_rgba(167,139,250,0.35)] ${KR}`}
                 >
                   🎲 {UPGRADES.find((u) => u.key === randed.key)?.rand} · +{randed.n}레벨
