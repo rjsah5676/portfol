@@ -130,7 +130,7 @@ const GLYPHS = ["01", "</>", "0x", "{}", "#!", "&&", "rm", "fn", ">>", "$_"];
 
 type Scene = "title" | "play";
 type Overlay = null | "menu" | "settings" | "archive" | "guide" | "notes";
-type Tab = "upgrade" | "module" | "shop" | "format";
+type Tab = "upgrade" | "module" | "bypass" | "shop" | "format";
 /** 업그레이드 한 번에 몇 번 살지 */
 type BuyMode = 1 | 10 | "max";
 
@@ -274,6 +274,21 @@ export default function VirusGame() {
     setPage(0);
     setPages(1);
   };
+  // 화면 틀: 일반 화면 비율 = 모니터 비율(--ar), 배율(--vz) = 틀 크기 ÷ 기준 1180×664 (작으면 1)
+  useEffect(() => {
+    const el = frameRef.current;
+    if (!el) return;
+    const ar = window.screen.width / window.screen.height;
+    el.style.setProperty("--ar", String(Math.min(2.4, Math.max(0.5, ar || 16 / 9))));
+    const fit = () => {
+      const z = Math.max(1, Math.min(el.clientWidth / 1180, el.clientHeight / 664));
+      el.style.setProperty("--vz", z.toFixed(3));
+    };
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
   /** 마지막 틱 시각 — 실제로 흐른 시간만큼 진행 (뒤로 간 탭은 브라우저가 타이머를 늦춤) */
   const lastTick = useRef(0);
   const [settings, setSettings] = useState<VirusSettings>(DEFAULT_SETTINGS);
@@ -311,7 +326,7 @@ export default function VirusGame() {
     if (after <= before) return;
     const id = Date.now();
     setEvolved({ id, stage: after });
-    setTimeout(() => setEvolved((v) => (v?.id === id ? null : v)), 3200);
+    setTimeout(() => setEvolved((v) => (v?.id === id ? null : v)), 1800);
   }, []);
 
   const sync = useCallback((hit = false, fired = false) => {
@@ -326,31 +341,34 @@ export default function VirusGame() {
   }, []);
 
   /** 보스 연출 시작 — 날아가던 코드는 지우고, 끝날 때까지 공격 · 보스 시간 멈춤 */
-  const startCinema = useCallback((kind: Cinema["kind"], stage: number, apex = false, final = false) => {
-    // 탭이 가려져 있으면 연출 없이 바로 다음으로 (뒤에서 돌 때 시간이 멈추지 않게)
-    if (document.visibilityState === "hidden") return;
-    const { def, tier } = bossOf(stage);
-    const ax = apexOf(stage);
-    const now = performance.now();
-    cinemaRef.current = {
-      id: Math.floor(now),
-      kind,
-      seed: def.id,
-      color: final ? FINAL.color : apex ? ax.def.color : def.color,
-      name: final
-        ? `${FINAL.role} ${FINAL.name}${tierLabel(save.current.clears + 1)}`
-        : apex
-          ? `${ax.def.role} ${ax.def.name}${tierLabel(ax.tier)}`
-          : def.name + tierLabel(tier),
-      apex: final ? 10 : apex ? ax.index : undefined,
-      final,
-      until: now + (kind === "appear" ? APPEAR_MS : kind === "down" ? DOWN_MS : FAIL_MS),
-    };
-    pending.current = [];
-    atkAcc.current = 0;
-    setShots([]);
-    playVirusSfx(kind === "appear" ? "boss-appear" : kind === "down" ? "boss-down" : "boss-fail");
-  }, []);
+  const startCinema = useCallback(
+    (kind: Cinema["kind"], stage: number, apex = false, final = false) => {
+      // 탭이 가려져 있으면 연출 없이 바로 다음으로 (뒤에서 돌 때 시간이 멈추지 않게)
+      if (document.visibilityState === "hidden") return;
+      const { def, tier } = bossOf(stage);
+      const ax = apexOf(stage);
+      const now = performance.now();
+      cinemaRef.current = {
+        id: Math.floor(now),
+        kind,
+        seed: def.id,
+        color: final ? FINAL.color : apex ? ax.def.color : def.color,
+        name: final
+          ? `${FINAL.role} ${FINAL.name}${tierLabel(save.current.clears + 1)}`
+          : apex
+            ? `${ax.def.role} ${ax.def.name}${tierLabel(ax.tier)}`
+            : def.name + tierLabel(tier),
+        apex: final ? 10 : apex ? ax.index : undefined,
+        final,
+        until: now + (kind === "appear" ? APPEAR_MS : kind === "down" ? DOWN_MS : FAIL_MS),
+      };
+      pending.current = [];
+      atkAcc.current = 0;
+      setShots([]);
+      playVirusSfx(kind === "appear" ? "boss-appear" : kind === "down" ? "boss-down" : "boss-fail");
+    },
+    []
+  );
 
   const persist = useCallback(() => {
     save.current.savedAt = Date.now();
@@ -624,7 +642,8 @@ export default function VirusGame() {
       cinemaRef.current = null;
       pendingReward.current = null;
       enemy.current = spawn(save.current);
-      if (enemy.current.boss) startCinema("appear", save.current.stage, enemy.current.apex, enemy.current.final);
+      if (enemy.current.boss)
+        startCinema("appear", save.current.stage, enemy.current.apex, enemy.current.final);
       bossLeft.current = timeFor(enemy.current, save.current);
       persist();
       setOverlay(null);
@@ -884,7 +903,7 @@ export default function VirusGame() {
     if (!canFormat(s)) return;
     setAsk({
       title: "☣️ 변이할까요?",
-      body: `지금 몸(업그레이드 · 데이터)을 버리고 새 변종으로 스테이지 ${formatStart(s.best)}부터 다시 퍼져요.\n루트 권한 +${fmt(pendingRoot(s))}을 받아요 (빼앗은 모듈 · 특성 · 루트 상점은 그대로).`,
+      body: `지금 몸(업그레이드 · 데이터)을 버리고 새 변종으로 스테이지 ${formatStart(s.best)}부터 다시 퍼져요.\n루트 권한 +${fmt(pendingRoot(s))}을 받아요 (빼앗은 모듈 · 우회 기술 · 루트 상점은 그대로).`,
       yes: "변이하기",
       onYes: formatNow,
     });
@@ -943,9 +962,8 @@ export default function VirusGame() {
   const st = stats(s);
   const mods = moduleLevels(s.best);
   const owned = mods.filter((m) => m > 0).length;
-  /** code module tab = 10 modules + 10 apex traits */
-  const collected = owned + apexCount(s.apexBest);
-  const collectable = ROSTER.length + APEX.length;
+  /** 상위 보스에게서 빼앗은 우회 기술 수 */
+  const bypassN = apexCount(s.apexBest);
   // 내 바이러스와 날아가는 코드의 색: 마지막으로 빼앗은 모듈의 색
   const last = s.best > 1 ? bossOf(s.best - 1).def : null;
   const myColor = last?.color ?? ACCENT;
@@ -1061,7 +1079,8 @@ export default function VirusGame() {
 
   const tabs: { key: Tab; label: string; short?: string; badge?: string }[] = [
     { key: "upgrade", label: "업그레이드", short: "강화" },
-    { key: "module", label: "코드 모듈", short: "모듈", badge: `${collected}/${collectable}` },
+    { key: "module", label: "코드 모듈", short: "모듈", badge: `${owned}/${ROSTER.length}` },
+    { key: "bypass", label: "우회 기술", short: "우회", badge: `${bypassN}/${APEX.length}` },
     {
       key: "shop",
       label: "루트 상점",
@@ -1077,7 +1096,7 @@ export default function VirusGame() {
   ];
 
   return (
-    <section className="mx-auto w-full max-w-[960px] px-4 pb-16 text-left">
+    <section className="mx-auto w-full max-w-[1280px] px-4 pb-16 text-left">
       <GameHeader
         icon="👾"
         title="바이러스 키우기"
@@ -1093,7 +1112,7 @@ export default function VirusGame() {
         className={`vg-frame relative flex w-full flex-col overflow-hidden bg-[#050806] ${
           fs
             ? "vg-safe fixed inset-0 z-[100] h-[100dvh]"
-            : "h-[min(720px,calc(100svh-110px))] min-h-[540px] rounded-3xl border border-emerald-400/20 md:aspect-[16/10] md:h-auto md:min-h-0"
+            : "vg-window h-[min(720px,calc(100svh-110px))] min-h-[540px] rounded-3xl border border-emerald-400/20"
         } ${settings.effects ? "" : "virus-calm"} ${settings.big ? "vg-big" : ""}`}
       >
         {scene === "title" && (
@@ -1213,7 +1232,7 @@ export default function VirusGame() {
                     · {EVOLUTION[stage].name}
                     <span className="hidden @md/vg:inline">
                       {" "}
-                      · 모듈 {collected}/{collectable}
+                      · 모듈 {owned}/{ROSTER.length} · 우회 {bypassN}/{APEX.length}
                     </span>
                   </span>
                 </div>
@@ -1369,7 +1388,7 @@ export default function VirusGame() {
               {evolved && (
                 <div
                   key={evolved.id}
-                  className={`virus-pop absolute top-12 left-1/2 z-10 -translate-x-1/2 rounded-full border border-emerald-300/60 bg-emerald-950/90 px-4 py-1.5 vt-sm whitespace-nowrap text-emerald-100 shadow-[0_0_24px_rgba(74,222,128,0.45)] ${KR}`}
+                  className={`vg-evo absolute top-12 left-1/2 z-10 -translate-x-1/2 rounded-full border border-emerald-300/60 bg-emerald-950/90 px-4 py-1.5 vt-sm whitespace-nowrap text-emerald-100 shadow-[0_0_24px_rgba(74,222,128,0.45)] ${KR}`}
                 >
                   🧬 진화! {evolved.stage + 1}단계 <b>{EVOLUTION[evolved.stage].name}</b>{" "}
                   <span className="font-mono vt-xs text-emerald-300/90">
@@ -1430,32 +1449,34 @@ export default function VirusGame() {
             <div className="vg-panel @container/panel flex shrink-0 flex-col bg-[#070b09]">
               <div
                 data-fit="tabs"
-                className="flex items-end gap-1 overflow-hidden px-3 pt-2 @lg/panel:px-4"
+                className="flex flex-wrap items-end gap-x-1 overflow-hidden px-2 pt-2 @md/panel:px-3 @lg/panel:px-4"
               >
-                {tabs.map((t) => (
-                  <button
-                    key={t.key}
-                    type="button"
-                    onClick={() => pickTab(t.key)}
-                    className={`shrink-0 rounded-t-lg border-x border-t px-2 py-1.5 vt-sm font-bold whitespace-nowrap transition-colors @lg/panel:px-3 ${KR} ${
-                      tab === t.key
-                        ? "border-emerald-400/30 bg-emerald-400/10 text-white"
-                        : "border-transparent text-white/70 hover:text-white/80"
-                    }`}
-                  >
-                    <span className="@lg/panel:hidden">{t.short ?? t.label}</span>
-                    <span className="hidden @lg/panel:inline">{t.label}</span>
-                    {t.badge && (
-                      <span
-                        className={`ml-1.5 font-mono vt-xs ${t.key === "module" || t.key === "shop" ? "hidden @lg/panel:inline" : ""} ${
-                          t.key === "format" ? "text-amber-200" : "text-white/70"
-                        }`}
-                      >
-                        {t.badge}
-                      </span>
-                    )}
-                  </button>
-                ))}
+                <div className="flex shrink-0 items-end gap-0.5 @md/panel:gap-1">
+                  {tabs.map((t) => (
+                    <button
+                      key={t.key}
+                      type="button"
+                      onClick={() => pickTab(t.key)}
+                      className={`shrink-0 rounded-t-lg border-x border-t px-1.5 py-1.5 vt-sm font-bold whitespace-nowrap transition-colors @md/panel:px-2 @lg/panel:px-3 ${KR} ${
+                        tab === t.key
+                          ? "border-emerald-400/30 bg-emerald-400/10 text-white"
+                          : "border-transparent text-white/70 hover:text-white/80"
+                      }`}
+                    >
+                      <span className="@lg/panel:hidden">{t.short ?? t.label}</span>
+                      <span className="hidden @lg/panel:inline">{t.label}</span>
+                      {t.badge && (
+                        <span
+                          className={`ml-1.5 font-mono vt-xs ${t.key === "module" || t.key === "bypass" || t.key === "shop" ? "hidden @lg/panel:inline" : ""} ${
+                            t.key === "format" ? "text-amber-200" : "text-white/70"
+                          }`}
+                        >
+                          {t.badge}
+                        </span>
+                      )}
+                    </button>
+                  ))}
+                </div>
                 <div className="ml-auto flex shrink-0 items-center gap-1.5 pb-1">
                   {tab === "shop" && (
                     <div className={`flex overflow-hidden rounded-lg border border-white/20 ${KR}`}>
@@ -1765,7 +1786,17 @@ export default function VirusGame() {
                           </button>
                         );
                       }),
-                      // 상위 보스 특성 (처음 잡은 순서대로 열림)
+                    ]}
+                  />
+                )}
+
+                {tab === "bypass" && (
+                  <FitPages
+                    page={page}
+                    onPages={onPages}
+                    className="grid grid-cols-2 gap-2 @2xl/panel:grid-cols-5"
+                    items={[
+                      // 상위 보스에게서 빼앗은 우회 기술 (처음 잡은 순서대로 열림)
                       ...APEX.map((a, i) => {
                         const got = apexCount(s.apexBest) > i;
                         return (
@@ -1789,7 +1820,7 @@ export default function VirusGame() {
                             </div>
                             <div className={`min-w-0 ${KR}`}>
                               <div className="vt-sm truncate font-bold text-white/90">
-                                {got ? `🧠 ${a.trait}` : "??? 특성"}
+                                {got ? `🛡️ ${a.trait}` : "??? 우회 기술"}
                               </div>
                               <div className="vt-xs truncate text-white/75">
                                 {got ? a.effect : `${(i + 1) * 10}스테이지 상위 보스`}
@@ -1919,9 +1950,10 @@ export default function VirusGame() {
                             : "최고 스테이지를 넘어서야 루트 권한이 늘어나요."}
                       </p>,
                       <p key="desc" className="vt-sm leading-relaxed text-white/75">
-                        변이하면 지금 몸(업그레이드·데이터)을 버리고 새 변종으로 스테이지 {formatStart(s.best)}부터 다시 퍼져요. 루트 권한 1마다
-                        피해가 {+(BAL.rootBonus * 100).toFixed(1)}% 늘어나요. 빼앗은 모듈과 루트
-                        상점은 남아요.
+                        변이하면 지금 몸(업그레이드·데이터)을 버리고 새 변종으로 스테이지{" "}
+                        {formatStart(s.best)}부터 다시 퍼져요. 루트 권한 1마다 피해가{" "}
+                        {+(BAL.rootBonus * 100).toFixed(1)}% 늘어나요. 빼앗은 모듈과 루트 상점은
+                        남아요.
                       </p>,
                     ]}
                   />
@@ -2040,7 +2072,9 @@ export default function VirusGame() {
 
         {/* ── 격퇴 알림: 우측 상단에 잠깐 ── */}
         {scene === "play" && toasts.length > 0 && (
-          <div className={`vg-toasts pointer-events-none absolute top-14 right-3 z-40 flex max-h-[calc(100%-4.5rem)] w-[min(320px,calc(100%-24px))] flex-col items-stretch gap-2 overflow-hidden ${KR}`}>
+          <div
+            className={`vg-toasts pointer-events-none absolute top-14 right-3 z-40 flex max-h-[calc(100%-4.5rem)] w-[min(320px,calc(100%-24px))] flex-col items-stretch gap-2 overflow-hidden ${KR}`}
+          >
             {toasts.map(({ id, r }) => (
               <div
                 key={id}
@@ -2061,7 +2095,10 @@ export default function VirusGame() {
                   )}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <div className="vt-sm break-keep [overflow-wrap:anywhere] font-bold" style={{ color: r.color }}>
+                  <div
+                    className="vt-sm break-keep [overflow-wrap:anywhere] font-bold"
+                    style={{ color: r.color }}
+                  >
                     {r.final
                       ? `최종 보스 ${r.name} 격퇴!`
                       : r.apex
@@ -2077,9 +2114,11 @@ export default function VirusGame() {
                   {r.apex && (
                     <>
                       <div className="vt-xs break-keep [overflow-wrap:anywhere] text-white/90">
-                        🧠 {r.apex.trait} · {r.apex.effect}
+                        🛡️ {r.apex.trait} · {r.apex.effect}
                       </div>
-                      <div className="vt-xs break-keep [overflow-wrap:anywhere] text-emerald-200">🧬 외형 · {r.apex.look}</div>
+                      <div className="vt-xs break-keep [overflow-wrap:anywhere] text-emerald-200">
+                        🧬 외형 · {r.apex.look}
+                      </div>
                     </>
                   )}
                   {r.module && (
@@ -2136,7 +2175,7 @@ export default function VirusGame() {
                             {got ? (
                               <>
                                 <p className="mt-2 text-lg font-bold" style={{ color: a.color }}>
-                                  🧠 특성 「{a.trait}」
+                                  🛡️ 우회 기술 「{a.trait}」
                                 </p>
                                 <p className="vt-base mt-1 text-white/90">{a.effect}</p>
                                 <p className="vt-base mt-2 font-bold text-emerald-200">
@@ -2147,7 +2186,7 @@ export default function VirusGame() {
                             ) : (
                               <p className="vt-base mt-2 text-white/90">
                                 스테이지 {(detail.i + 1) * 10}에서 보스를 격퇴한 뒤 나오는 상위
-                                보스를 잡으면 특성과 새 외형을 얻어요.
+                                보스를 잡으면 우회 기술과 새 외형을 얻어요.
                               </p>
                             )}
                           </>
@@ -2158,7 +2197,9 @@ export default function VirusGame() {
                         const lv = mods[detail.i];
                         return (
                           <>
-                            <div className={`mb-2 flex justify-center ${lv ? "" : "opacity-25 grayscale"}`}>
+                            <div
+                              className={`mb-2 flex justify-center ${lv ? "" : "opacity-25 grayscale"}`}
+                            >
                               <VirusSprite seed={v.id} color={v.color} size={100} />
                             </div>
                             <p className="vt-base text-white/75">
@@ -2170,8 +2211,9 @@ export default function VirusGame() {
                                   📦 모듈 「{v.module}」 v{lv}
                                 </p>
                                 <p className="vt-base mt-1 font-bold text-white">{v.cur(lv)}</p>
-                                <p className="vt-sm mt-1 text-white/75">
-                                  버전마다 {v.effect} · 다음 v{lv + 1}: {v.cur(lv + 1)}
+                                <p className="vt-sm mt-1 text-white/75">버전마다 {v.effect}</p>
+                                <p className="vt-sm mt-0.5 text-emerald-200/90">
+                                  다음 v{lv + 1}: {v.cur(lv + 1)}
                                 </p>
                               </>
                             ) : (
@@ -2179,7 +2221,9 @@ export default function VirusGame() {
                                 스테이지 {detail.i + 1}의 보스를 격퇴하면 모듈을 얻어요.
                               </p>
                             )}
-                            <p className="vt-sm mt-3 text-left leading-relaxed text-white/75">{v.desc}</p>
+                            <p className="vt-sm mt-3 text-left leading-relaxed text-white/75">
+                              {v.desc}
+                            </p>
                           </>
                         );
                       })()}

@@ -7,6 +7,23 @@
   animation: virus-float 0.8s ease-out forwards;
   pointer-events: none;
 }
+/* 진화 알림: 톡 뜨고 1.8초 안에 사라짐 (가운데 정렬 transform 은 건드리지 않음) */
+.vg-evo {
+  animation: vg-evo 1.8s ease-out forwards;
+}
+@keyframes vg-evo {
+  0% {
+    opacity: 0;
+  }
+  10%,
+  75% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
 /* 격퇴 알림: 오른쪽에서 들어와 잠깐 머물다 사라짐 (길이는 style 의 animation-duration) */
 .vg-toast {
   animation: vg-toast 4.5s ease-out forwards;
@@ -664,17 +681,23 @@
 .vg-file {
   width: clamp(60px, calc(19cqmin / var(--vz, 1)), 190px);
 }
-/* 큰 화면 전체화면: 글자 · 버튼까지 통째로 키움 (zoom). 틀 비율로 정한 크기(cqh · cqmin)는 --vz 로 나눠서 비율 그대로 */
-@container vg (min-width: 1360px) and (min-height: 820px) {
-  .vg-frame > * {
-    zoom: 1.3;
-    --vz: 1.3;
-  }
+/* 큰 틀: 글자 · 버튼까지 통째로 키움 (zoom). --vz 는 틀 크기 ÷ 기준 크기(1180×664)로 JS 가 정함 —
+ * 일반 화면이든 전체화면이든 같은 크기 틀이면 같은 모습. 틀 비율로 정한 크기(cqh · cqmin)는 --vz 로 나눠서 비율 그대로 */
+.vg-frame > * {
+  zoom: var(--vz, 1);
 }
-@container vg (min-width: 1800px) and (min-height: 1000px) {
-  .vg-frame > * {
-    zoom: 1.55;
-    --vz: 1.55;
+/* 일반 화면(PC · 태블릿): 모니터와 같은 비율(--ar, JS)로 — 전체화면을 그대로 줄인 모습. 창 높이 안에 들어가게 폭을 제한 */
+@media (min-width: 768px) {
+  .vg-window {
+    height: auto;
+    min-height: 0;
+    aspect-ratio: var(--ar, 1.7778);
+    /* 높이는 최소 560px (그보다 낮으면 폰 가로 배치로 바뀌어서) */
+    width: min(
+      100%,
+      max(calc(560px * var(--ar, 1.7778)), calc((100svh - 210px) * var(--ar, 1.7778)))
+    );
+    margin-inline: auto;
   }
 }
 /* 아래 패널: 세로로 긴 틀(폰 세로)은 36%, 가로로 긴 틀(PC)은 32% */
