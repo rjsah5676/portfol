@@ -31,7 +31,7 @@ export interface UserStats {
   /** 스케치 퀴즈 */
   sketch?: { correct?: number; points?: number; games?: number };
   /** 격투 온라인 경기 수 */
-  fight?: { matches?: number };
+  fight?: { matches?: number; tut?: number; ai?: number };
   /** 포커: 앉은 횟수 · 친 판 수(전체, 게임별) · 이긴 판 · 한 판에 가장 크게 먹은 돈 */
   poker?: {
     games?: number;

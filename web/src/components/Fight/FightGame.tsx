@@ -3,8 +3,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { CHARS } from "@/lib/fight/chars";
 import { MAPS } from "@/lib/fight/maps";
-import { AI_LEVELS, FightAI, aiForRating, aiLevelFor } from "@/lib/fight/ai";
+import { AI_ID, AI_LEVELS, FightAI, aiForRating, aiLevelFor } from "@/lib/fight/ai";
 import {
+  BUILD_ID,
   IN,
   METER_MAX,
   ROUND_SEC,
@@ -62,7 +63,7 @@ import { useNick } from "@/lib/AuthContext";
 import { plainName } from "@/components/Nick";
 import Online, { type BotCfg, type MatchCfg } from "./Online";
 import { OnlineMatch } from "./onlineMatch";
-import { InputLog, WatchFeed, rankBotForfeit, rankBotReport, type RoomSession, type WatchSession } from "@/realtime/fight";
+import { InputLog, WatchFeed, aiClear, rankBotForfeit, rankBotReport, tutorialDone, type RoomSession, type WatchSession } from "@/realtime/fight";
 import { LEVEL } from "@/lib/soundLevel";
 
 
@@ -410,11 +411,26 @@ export default function FightGame() {
     };
     playBgm(MAPS[s.map].bgm ?? MENU_BGM, true);
     // AI: AI 대전은 고른 단계(캐릭터 보정 포함), 랭크전 AI전은 상대 레이팅 그대로 (서버가 같은 씨앗으로 다시 돌려 확인)
+    let aiSeed = (Date.now() & 0xffff) + 1;
     let ai = bot
       ? new FightAI(aiForRating(bot.botR, CHARS[bot.chars[1]].id), bot.seed)
-      : new FightAI(aiLevelFor(setup.level, CHARS[setup.c2]?.id), (Date.now() & 0xffff) + 1);
+      : new FightAI(aiLevelFor(setup.level, CHARS[setup.c2]?.id), aiSeed);
     /** AI전: 프레임마다 내 입력 (경기가 끝날 때까지) */
     const botLog: number[] = [];
+    // AI 대전: 이기면 내 입력 기록을 보내 서버가 같은 씨앗으로 다시 돌려 확인 → 단계별 업적 (회원만)
+    const aiMode = setup.mode === "ai" && !ol && !bot;
+    const aiLog: number[] = [];
+    let tutReported = false;
+    /** 입력 기록 → [값, 연속 프레임 수] */
+    const rleOf = (log: number[]) => {
+      const rle: [number, number][] = [];
+      for (const v of log) {
+        const t = rle[rle.length - 1];
+        if (t && t[0] === v) t[1]++;
+        else rle.push([v, 1]);
+      }
+      return rle;
+    };
     // 연습 모드: 허수아비는 가만히, 둘 다 체력 무한·시간 멈춤·내 게이지 가득. 콤보 피해를 잼
     const practice = setup.mode === "practice" && !ol;
     const fm = practice ? new FrameMeter() : null;
@@ -445,7 +461,9 @@ export default function FightGame() {
       if (ol || bot) return;
       s = newMatch([setup.c1, setup.c2], pickMap());
       playBgm(MAPS[s.map].bgm ?? MENU_BGM, true);
-      ai = new FightAI(aiLevelFor(setup.level, CHARS[setup.c2]?.id), (Date.now() & 0xffff) + 1);
+      aiSeed = (Date.now() & 0xffff) + 1;
+      ai = new FightAI(aiLevelFor(setup.level, CHARS[setup.c2]?.id), aiSeed);
+      aiLog.length = 0;
       if (tutorial) (tutorial.retry(), setTutView(tutorial.view()));
       hits = 0;
       doneReported = false;
@@ -592,6 +610,7 @@ export default function FightGame() {
             else if (guardAfter > 0) guardAfter--;
             p2 = g === "all" || (g === "after" && guardAfter > 0) ? IN.D : 0;
           } else p2 = ai.next(s, 1);
+          if (aiMode && s.phase !== "over") aiLog.push(p1);
           step(s, [p1, p2]);
           if (fm && fm.update(s)) setFrameView(fm.view());
           if (practice) {
@@ -609,6 +628,7 @@ export default function FightGame() {
             for (let k = 0; k < 2; k++) s.p[k].hp = CHARS[s.p[k].ch].hp;
             s.timer = ROUND_SEC * 60;
             if (tutorial.update(s)) setTutView(tutorial.view());
+            if (tutorial.finished && !tutReported) ((tutReported = true), void tutorialDone());
           }
         }
         // 소리
@@ -703,14 +723,10 @@ export default function FightGame() {
             s.winner === 0 || s.winner === 1 ? { rounds: Math.abs(s.wins[0] - s.wins[1]), hp: hpRatio(s.p[s.winner]) } : undefined;
           if (bot) {
             // 입력 기록을 [값, 연속 프레임 수]로 줄여 보냄 → 서버가 다시 돌려 확인 → 결과는 랭크전 상태로 옴
-            const rle: [number, number][] = [];
-            for (const v of botLog) {
-              const t = rle[rle.length - 1];
-              if (t && t[0] === v) t[1]++;
-              else rle.push([v, 1]);
-            }
-            rankBotReport(bot.id, rle).catch(() => {});
+            rankBotReport(bot.id, rleOf(botLog)).catch(() => {});
           }
+          if (aiMode && s.winner === 0)
+            void aiClear({ build: `${BUILD_ID}:${AI_ID}`, level: setup.level, chars: [s.p[0].ch, s.p[1].ch], map: s.map, seed: aiSeed, inputs: rleOf(aiLog) });
           if (ol && !watching) {
             // 내가 본 결과를 먼저 알리고(두 선수 결과가 맞으면 회원 전적에) 대기실 상태로
             sessRef.current?.reportResult(ol.match, s.winner, margin);

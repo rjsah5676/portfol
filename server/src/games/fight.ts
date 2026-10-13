@@ -1024,6 +1024,53 @@ export function registerFight({ gateway, users, db }: Deps, opts: FightOptions =
     return null;
   });
 
+  // ── 업적용 기록: 튜토리얼 · AI 대전 단계 (web lib/points.ts fight.tut · fight.ai) ──
+  /** 튜토리얼을 끝까지 함 (회원만) */
+  gateway.rpc("fight.tutorialDone", async (ctx) => {
+    if (!ctx.nick) return null;
+    await db.col("users").updateOne({ _id: ctx.uid } as never, { $max: { "stats.fight.tut": 1 } } as never);
+    return null;
+  });
+  /** AI 대전 승리: 랭크전 봇전처럼 내 입력 기록을 서버가 같은 씨앗으로 다시 돌려 이겼는지 확인 → 이긴 가장 높은 단계 */
+  const aiChecking = new Set<string>();
+  gateway.rpc("fight.aiClear", async (ctx, raw) => {
+    const o = z
+      .object({
+        build: z.string().max(80),
+        level: z.number().int().min(0).max(replayBot.levelCount() - 1),
+        chars: z.tuple([z.number().int().min(0).max(99), z.number().int().min(0).max(99)]),
+        map: z.number().int().min(0).max(99),
+        seed: z.number().int().min(0).max(0xffffffff),
+        inputs: z.array(z.tuple([z.number().int().min(0).max(0xffff), z.number().int().min(1).max(BOT_MAX_FRAMES)])).max(BOT_MAX_FRAMES),
+      })
+      .parse(raw);
+    const uid = ctx.uid;
+    // 비회원 · 다른 빌드(같은 입력이어도 결과가 다름) · 이미 확인 중이면 그냥 넘어감
+    if (!ctx.nick || o.build !== SERVER_BOT || aiChecking.has(uid)) return { ai: null };
+    const nCh = replayBot.charCount();
+    if (o.chars[0] >= nCh || o.chars[1] >= nCh) throw bad("없는 캐릭터예요.");
+    const users = db.col<{ _id: string; stats?: { fight?: { ai?: number } } }>("users");
+    const cur = (await users.findOne({ _id: uid }, { projection: { "stats.fight.ai": 1 } }))?.stats?.fight?.ai ?? 0;
+    if (cur > o.level) return { ai: cur };
+    const frames: number[] = [];
+    for (const [v, n] of o.inputs) {
+      if (frames.length + n > BOT_MAX_FRAMES) break;
+      for (let k = 0; k < n; k++) frames.push(v);
+    }
+    aiChecking.add(uid);
+    try {
+      const res = await replayBot({ chars: o.chars, map: o.map, seed: o.seed, botR: replayBot.levelRating(o.level), inputs: frames }).catch((e) => {
+        console.warn("[fight] AI 대전 확인 실패", e);
+        return null;
+      });
+      if (!res?.done || res.winner !== 0) return { ai: cur };
+      await users.updateOne({ _id: uid }, { $max: { "stats.fight.ai": o.level + 1 } } as never);
+      return { ai: Math.max(cur, o.level + 1) };
+    } finally {
+      aiChecking.delete(uid);
+    }
+  });
+
   /** 매칭된 두 사람의 전용 방 (맵은 여기서 랜덤, 두 사람 화면에 다 있는 맵 중에서) */
   function openRankRoom(a: QEntry, b: QEntry) {
     const now = Date.now();

@@ -110,6 +110,8 @@ export type AchGame = "poker" | "fight" | "defense" | "rhythm";
  * 업적이 보는 숫자 (서버가 기록에서 계산 — server/src/achievements.ts)
  *  poker.chips   지금 칩 − 포인트로 바꿔 받은 칩 (환전으로 얻은 칩은 빼고)
  *  fight.char.N  랭크전에서 그 캐릭터(lib/fight/chars 의 CHARS 순서)로 한 판 수
+ *  fight.tut     튜토리얼을 끝까지 했으면 1
+ *  fight.ai      AI 대전에서 이긴 가장 높은 단계 (입문 1 ~ 지존 7 — 서버가 입력 기록을 다시 돌려 확인)
  */
 export type AchMetric =
   | "poker.chips"
@@ -120,6 +122,8 @@ export type AchMetric =
   | "fight.wins"
   | "fight.streak"
   | "fight.peak"
+  | "fight.tut"
+  | "fight.ai"
   | `fight.char.${number}`
   | "defense.runs"
   | "defense.wave"
@@ -260,7 +264,21 @@ export const ACHIEVEMENTS: Achievement[] = [
     "chips",
   ),
 
-  // PIXEL FIGHT (랭크전 기준)
+  // PIXEL FIGHT
+  a("fight", "tutorial", "첫걸음", "튜토리얼 끝까지 하기", "fight.tut", 1, 100),
+  // AI 대전 단계별 (lib/fight/ai 의 AI_LEVELS 순서). 높은 단계를 이기면 아래 단계도 같이 달성
+  ...(
+    [
+      ["입문", 50],
+      ["초급", 80],
+      ["중급", 120],
+      ["상급", 200],
+      ["고수", 350],
+      ["달인", 600],
+      ["지존", 1000],
+    ] as const
+  ).map(([n, gp], i) => a("fight", `ai-${i}`, `CPU ${n} 격파`, `AI 대전에서 CPU ${n} 이기기`, "fight.ai", i + 1, gp)),
+  // (아래는 랭크전 기준)
   a(
     "fight",
     "games-10",

@@ -8,7 +8,7 @@
  */
 import { CHARS } from "../../../web/src/lib/fight/chars";
 import { BUILD_ID, hpRatio, newMatch, step } from "../../../web/src/lib/fight/sim";
-import { AI_ID, FightAI, aiForRating } from "../../../web/src/lib/fight/ai";
+import { AI_ID, AI_RATING, FightAI, aiForRating } from "../../../web/src/lib/fight/ai";
 import type { Margin } from "./fightRating";
 
 /** 봇전 빌드 지문: 게임 데이터 + AI (브라우저가 보내는 값과 같아야 함 — web realtime/fight.ts rankQueue) */
@@ -41,3 +41,6 @@ export async function replayBot(o: BotReplay): Promise<{ done: boolean; winner: 
   return { done: true, winner: w, margin, frames: k };
 }
 replayBot.charCount = () => CHARS.length;
+/** AI 대전 단계 수 · 그 단계의 레이팅 (aiLevelFor(i) = aiForRating(AI_RATING[i])) */
+replayBot.levelCount = () => AI_RATING.length;
+replayBot.levelRating = (i: number) => AI_RATING[i] ?? 0;

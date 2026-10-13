@@ -34,6 +34,10 @@ export async function metricsOf(db: Database, uid: string, game: AchGame): Promi
     m["fight.wins"] = r?.w ?? 0;
     m["fight.streak"] = Math.max(r?.bestStreak ?? 0, r?.streak ?? 0, 0);
     m["fight.peak"] = r?.n ? (r.peak ?? 0) : 0;
+    // 튜토리얼 · AI 대전 단계 (games/fight.ts fight.tutorialDone · fight.aiClear)
+    const u = (await users.findOne({ _id: uid }, { projection: { "stats.fight": 1 } })) as Doc | null;
+    m["fight.tut"] = u?.stats?.fight?.tut ?? 0;
+    m["fight.ai"] = u?.stats?.fight?.ai ?? 0;
     const games = await db.col("fight_rank_games").find({ uids: uid }, { projection: { uids: 1, chars: 1 } }).toArray();
     FIGHT_CHAR_NAMES.forEach((_, i) => (m[`fight.char.${i}`] = 0));
     for (const g of games as unknown as { uids: string[]; chars: number[] }[]) {

@@ -336,6 +336,8 @@ export class Tutorial {
   private pendingSetup = true;
   private c: Ctx = Tutorial.ctx();
   private seen = 0;
+  /** 마지막 실전 단계를 (건너뛰지 않고) 성공해서 끝까지 옴 — 업적 */
+  finished = false;
 
   private static ctx(): Ctx {
     return { t: 0, n: 0, minX: 0, maxX: 0, stage: 0, start: "", hits: {}, dmg: 0, airS: 0, cd: 40, grabbed: false };
@@ -420,6 +422,7 @@ export class Tutorial {
     if (st.info) return changed;
     if (this.clear > 0) {
       if (--this.clear === 0) {
+        if (this.i === TUT_STEPS.length - 2) this.finished = true;
         this.next();
         return true;
       }

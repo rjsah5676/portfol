@@ -16,6 +16,14 @@ export interface Patch {
 
 export const PATCHES: Patch[] = [
   {
+    ver: "v1.10",
+    name: "업적 · AI 공중전",
+    date: "2026.10.13",
+    lines: [
+      "업적 추가 — 튜토리얼 끝까지 하기, AI 대전 단계별(입문 ~ 지존) 이기기, 랭크전 등급(골드 ~ 레전드) 달성. AI 대전 승리는 서버가 경기를 다시 돌려 확인해요 (회원만)",
+    ],
+  },
+  {
     ver: "v1.9",
     name: "튜토리얼",
     date: "2026.10.12",
