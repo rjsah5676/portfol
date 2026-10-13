@@ -134,9 +134,14 @@ export const BOSS_ART: Record<string, SpriteSpec> = {
 /**
  * 유물 그림 (public/defense/relics/<유물 id>.webp, 정사각 한 장). 없으면 도트 아이콘.
  * 재화 · 상자 그림 (public/defense/items/<이름>.webp): piece · core · card · chest · chest-open
+ * 만든 곳: ChatGPT 이미지 (2026-10-13) — 시트를 web/scripts/defense-art/icons.py 로 잘라 128px
  */
-export const RELIC_ART: Record<string, string> = {};
-export const ITEM_ART: Record<string, string> = {};
+export const RELIC_ART: Record<string, string> = Object.fromEntries(
+  ["gold_gear", "first_harvest", "lucky_clover", "rift_compass", "gambler_coin", "hourglass", "alchemy", "vaccine", "pure_blood", "rainbow", "twin_star", "war_banner"].map((id) => [id, `/defense/relics/${id}.webp`])
+);
+export const ITEM_ART: Record<string, string> = Object.fromEntries(
+  ["piece", "core", "card", "chest", "chest-open"].map((id) => [id, `/defense/items/${id}.webp`])
+);
 
 /** 필드 배경 (없으면 코드로 그린 격자) */
 export const FIELD_ART: string | null = null;
@@ -169,6 +174,9 @@ export const SFX: Record<string, { src: string; vol?: number }> = {
   "ui-click": { src: "/defense/sfx/ui-click.mp3" },
   "ui-hover": { src: "/defense/sfx/ui-hover.mp3", vol: 0.8 },
   clear: { src: "/defense/sfx/clear.mp3" },
+  // 베타 (정비소): 미션 · 패스 보상 받기, 상자 열기
+  reward: { src: "/defense/sfx/reward.mp3" },
+  "chest-open": { src: "/defense/sfx/chest-open.mp3" },
   gameover: { src: "/defense/sfx/gameover.mp3" },
 };
 

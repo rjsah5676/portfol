@@ -514,7 +514,7 @@ function ChestTab({ p, act, busy }: TabProps) {
   const [got, setGot] = useState<DefenseProfile["got"] | null>(null);
   const open = async () => {
     setGot(null);
-    const np = await act(() => meta.chestOpen(), "myth");
+    const np = await act(() => meta.chestOpen(), "chest-open");
     if (np?.got) setGot(np.got);
   };
   return (
@@ -524,7 +524,7 @@ function ChestTab({ p, act, busy }: TabProps) {
       </H>
       <div className="mt-2 flex items-center gap-10">
         <div className="flex flex-col items-center">
-          {ITEM_ART.chest ? <img src={ITEM_ART.chest} alt="" width={128} height={128} className={busy ? "dfn-glitch" : "dfn-float"} /> : <Icon n="chest" size={112} className={busy ? "dfn-glitch" : "dfn-float"} />}
+          {ITEM_ART.chest ? <img src={got ? ITEM_ART["chest-open"] : ITEM_ART.chest} alt="" width={128} height={128} className={busy ? "dfn-glitch" : "dfn-float"} /> : <Icon n="chest" size={112} className={busy ? "dfn-glitch" : "dfn-float"} />}
           <p className="mt-2 text-[14px]">
             안 연 상자 <b className="text-[var(--gold)]">{p.chests}</b>개
           </p>
@@ -592,7 +592,7 @@ function QuestList({ list, act, busy }: { list: QuestRow[] } & Pick<TabProps, "a
               </div>
             </div>
             <RewardLine r={{ pieces: q.pieces, cores: q.cores, xp: q.xp }} />
-            <Btn tone={q.claimed ? "ghost" : "gold"} disabled={busy || q.claimed || !done} silent className="h-9 w-[64px] shrink-0 text-[12px] font-bold" onClick={() => void act(() => meta.questClaim(q.id), "mission")}>
+            <Btn tone={q.claimed ? "ghost" : "gold"} disabled={busy || q.claimed || !done} silent className="h-9 w-[64px] shrink-0 text-[12px] font-bold" onClick={() => void act(() => meta.questClaim(q.id), "reward")}>
               {q.claimed ? "받음" : "받기"}
             </Btn>
           </div>
@@ -644,7 +644,7 @@ function PassTab({ p, act, busy }: TabProps) {
       <div className="flex items-center gap-3">
         <H sub={`${left(p.seasonEnds)} 남음 · 판 · 미션으로 경험치`}>시즌 {p.season.id}</H>
         <div className="ml-auto flex items-center gap-2">
-          <Btn tone="gold" disabled={busy || claimable <= 0} silent className="h-9 px-3 text-[13px] font-bold" onClick={() => void act(() => meta.passClaim(), "mission")}>
+          <Btn tone="gold" disabled={busy || claimable <= 0} silent className="h-9 px-3 text-[13px] font-bold" onClick={() => void act(() => meta.passClaim(), "reward")}>
             모두 받기 {claimable > 0 ? `(${claimable})` : ""}
           </Btn>
           {!p.season.premium && (
