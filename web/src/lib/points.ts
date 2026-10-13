@@ -47,7 +47,7 @@ export type PointGame = "poker" | "fight" | "defense" | "rhythm" | "sketch";
 export const POINT_GAMES: Record<PointGame, string> = {
   poker: "ANIME POKER",
   fight: "PIXEL FIGHT",
-  defense: "PIXEL GLITCH DEFENSE",
+  defense: "PIXEL LUCKY DEFENSE",
   rhythm: "BEAT DASH",
   sketch: "스케치 퀴즈",
 };
@@ -92,7 +92,7 @@ export const SHOP: ShopItem[] = [
     name: "한여름의 연서",
     price: 30_000,
   },
-  // PIXEL GLITCH DEFENSE 블록 테마 (lib/defense/progress.ts 의 THEMES — 얼음 · 네온 · 황금은 시즌 패스 프리미엄에서도)
+  // PIXEL LUCKY DEFENSE 블록 테마 (lib/defense/progress.ts 의 THEMES — 얼음 · 네온 · 황금은 시즌 패스 프리미엄에서도)
   { id: "defense.theme.forest", game: "defense", kind: "item", ref: "theme.forest", name: "블록 테마 · 픽셀 숲", price: 3_000 },
   { id: "defense.theme.ice", game: "defense", kind: "item", ref: "theme.ice", name: "블록 테마 · 얼음 성채", price: 8_000 },
 ];
@@ -286,7 +286,7 @@ export const ACHIEVEMENTS: Achievement[] = [
     ),
   ),
 
-  // PIXEL GLITCH DEFENSE (랭킹 판 기준)
+  // PIXEL LUCKY DEFENSE (랭킹 판 기준)
   a(
     "defense",
     "runs-10",

@@ -338,7 +338,7 @@ function Menu(p: {
           PIXEL FIGHT 외전
         </p>
         <h1 className={`${TITLE} dfn-title mt-2 text-[56px] leading-[1.02]`}>
-          PIXEL GLITCH
+          PIXEL LUCKY
           <br />
           DEFENSE
         </h1>
