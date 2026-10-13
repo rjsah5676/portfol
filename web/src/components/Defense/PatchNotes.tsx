@@ -15,6 +15,15 @@ export interface Patch {
 
 export const PATCHES: Patch[] = [
   {
+    ver: "v0.2.1",
+    name: "PC 글자 · 전체화면",
+    date: "2026.10.13",
+    lines: [
+      "PC 에서 작은 글자가 깨져 보이던 것 고침 — 게임 화면을 화면 픽셀에 딱 맞는 크기로 그리고, 작은 글자는 도트 글꼴이 또렷한 12px 로",
+      "게임 화면 위에 「전체화면 플레이 권장」 띠 (PC · 폰 모두, 누르면 바로 전체화면)",
+    ],
+  },
+  {
     ver: "v0.2 BETA",
     name: "정비소 · 시즌 · 주간 도전",
     date: "2026.10.13",
@@ -67,7 +76,7 @@ export default function PatchNotes({ onClose }: { onClose: () => void }) {
           <section key={p.ver} className={i > 0 ? "border-t-2 border-[#2a2350] pt-4" : ""}>
             <div className="mb-2 flex items-center gap-2">
               {i === 0 && (
-                <span className="bg-[var(--pink)] px-1.5 py-0.5 text-[11px] font-bold text-white">
+                <span className="bg-[var(--pink)] px-1.5 py-0.5 text-[12px] font-bold text-white">
                   최신
                 </span>
               )}

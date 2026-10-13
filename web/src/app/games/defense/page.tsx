@@ -28,11 +28,11 @@ export default function DefensePage() {
   }, [open]);
   return (
     <Faded>
-      <div className="mx-auto max-w-5xl px-3 pt-6 pb-24 sm:px-6">
+      <div className="mx-auto max-w-[1076px] px-3 pt-6 pb-24 sm:px-6">
         <GameHeader
           icon="👾"
           title="PIXEL LUCKY DEFENSE"
-          en="PIXEL FIGHT 외전 · ALPHA"
+          en="PIXEL FIGHT 외전 · BETA"
           accent="#FF5CD6"
           desc="소환 · 합성으로 픽셀 세계를 지키는 랜덤 디펜스"
           tags={["운빨 디펜스", "랭킹모드", "멀티모드", "웹 디펜스 게임"]}

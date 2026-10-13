@@ -179,7 +179,7 @@ export function FactionIcon({
 export function GradeChip({ g }: { g: number }) {
   return (
     <span
-      className="inline-block px-1.5 py-[2px] text-[11px] leading-none font-bold"
+      className="inline-block px-1.5 py-[2px] text-[12px] leading-none font-bold"
       style={{
         color: g >= 3 ? "#160f00" : GRADE_COLOR[g],
         background: g >= 3 ? GRADE_COLOR[g] : GRADE_COLOR[g] + "22",
@@ -193,7 +193,7 @@ export function GradeChip({ g }: { g: number }) {
 export function FactionChip({ f }: { f: UnitDef["faction"] }) {
   return (
     <span
-      className="inline-flex items-center gap-1 px-1.5 py-[2px] text-[11px] leading-none font-bold"
+      className="inline-flex items-center gap-1 px-1.5 py-[2px] text-[12px] leading-none font-bold"
       style={{ color: FACTION_COLOR[f], background: FACTION_COLOR[f] + "1f" }}
     >
       <FactionIcon f={f} size={10} />
@@ -252,7 +252,7 @@ export function UnitIcon({ id, size = 40, dim }: { id: string; size?: number; di
       <FactionIcon f={d.faction} size={Math.round(size * 0.42)} />
       <span
         className="font-bold text-white"
-        style={{ fontSize: Math.max(9, Math.round(size * 0.24)), lineHeight: 1.1 }}
+        style={{ fontSize: Math.max(12, Math.round(size * 0.24)), lineHeight: 1.1 }}
       >
         {d.glyph}
       </span>

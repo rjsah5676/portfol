@@ -58,9 +58,55 @@ function useSize<T extends HTMLElement>(): [(el: T | null) => void, { w: number;
   return [attach, size];
 }
 
+/**
+ * 도트 글꼴(갈무리 11 = 12px 기준)은 화면 픽셀 배율이 정수일 때만 또렷함 (0.95 · 1.25 배면 획이 깨짐).
+ * PC 에서는 (무대 배율 × 화면 배율)이 정수에 조금 못 미치거나 조금 넘으면 그 정수로 맞춤 — 무대가 최대 22% 작아지는 대신 글자가 또렷.
+ * 차이가 크면(예: 1.6배) 그대로 (작게 줄이는 손해가 더 큼). 폰은 화면을 꽉 채우는 게 우선이라 그대로.
+ */
+function snapScale(k: number, phone: boolean) {
+  if (!k || phone || typeof window === "undefined") return k;
+  const dpr = window.devicePixelRatio || 1;
+  const s = k * dpr;
+  // 정수에 아주 조금 모자라면(0.98 이상, 사이트 테두리 · 스크롤바 몇 px) 그 정수로 — 가장자리 2px 쯤 잘림
+  const n = Math.floor(s + 0.02);
+  if (n >= 1 && s / n <= 1.28) return n / dpr;
+  return k;
+}
+
 export default function Stage({ children }: { children: ReactNode }) {
   const rootRef = useRef<HTMLDivElement>(null);
   const [boxRef, box] = useSize<HTMLDivElement>();
+  const boxEl = useRef<HTMLDivElement | null>(null);
+  const stageEl = useRef<HTMLDivElement | null>(null);
+  /** 상자가 화면에서 반 px 에 놓여 있으면 (가운데 맞춤 · 스크롤바) 그만큼 무대를 밀어 정수 px 에 맞춤 */
+  const [frac, setFrac] = useState({ x: 0, y: 0 });
+  useEffect(() => {
+    if (!boxEl.current) return;
+    // 무대가 실제로 놓인 자리를 재서 남는 소수 px 만큼 더 밂 (테두리 · 화면 배율 반올림까지 한 번에)
+    const fix = () => {
+      const el = stageEl.current;
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      const f = (v: number) => (Math.round(v * dpr) - v * dpr) / dpr;
+      const dx = f(r.left),
+        dy = f(r.top);
+      if (Math.abs(dx) > 0.01 || Math.abs(dy) > 0.01) setFrac((o) => ({ x: o.x + dx, y: o.y + dy }));
+    };
+    fix();
+    // 위쪽 내용(머리말 · 순위)이 늦게 그려져 상자가 밀려도 다시 맞춤
+    const ro = new ResizeObserver(fix);
+    ro.observe(document.body);
+    const t = setTimeout(fix, 1500);
+    window.addEventListener("scroll", fix, { passive: true });
+    window.addEventListener("resize", fix);
+    return () => {
+      ro.disconnect();
+      clearTimeout(t);
+      window.removeEventListener("scroll", fix);
+      window.removeEventListener("resize", fix);
+    };
+  }, [box.w, box.h]);
   const [fsReal, setFsReal] = useState(false);
   const [pseudoFs, setPseudoFs] = useState(false);
   const [canFs, setCanFs] = useState(false);
@@ -114,7 +160,7 @@ export default function Stage({ children }: { children: ReactNode }) {
   };
   const fsGate = phone && !fs && canFs && !isStandalone();
   const rotateGate = phone && !land && !fsGate;
-  const k = box.w && box.h ? Math.min(box.w / DW, box.h / DH) : 0;
+  const k = snapScale(box.w && box.h ? Math.min(box.w / DW, box.h / DH) : 0, phone);
 
   return (
     <Ctx.Provider value={{ fs, canFs, phone, toggleFs }}>
@@ -126,8 +172,25 @@ export default function Stage({ children }: { children: ReactNode }) {
             : "mx-auto w-full max-w-[min(1280px,calc((100dvh-120px)*16/9))]"
         }
       >
+        {!cover && canFs && (
+          <button
+            type="button"
+            onClick={toggleFs}
+            className="mb-3 flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl border border-[#FF5CD6]/45 bg-[linear-gradient(90deg,rgba(255,92,214,0.16),rgba(95,242,255,0.14))] px-4 py-2 font-['Nanum_Gothic',sans-serif] text-[13px] text-white/85 shadow-[0_0_24px_-6px_rgba(255,92,214,0.55)] transition-colors hover:border-[#FF5CD6] hover:text-white"
+          >
+            <span className="shrink-0 rounded-md bg-[#FF5CD6] px-1.5 py-0.5 font-mono text-[11px] font-bold text-white">⛶</span>
+            <b className="shrink-0 font-bold whitespace-nowrap text-white">전체화면 플레이 권장</b>
+            <span className="min-w-0 truncate text-white/55 [@media(pointer:coarse)]:hidden">
+              — 여기를 누르면 전체화면으로 (게임 안 오른쪽 위 네모 버튼으로도 켜고 끌 수 있어요)
+            </span>
+            <span className="hidden whitespace-nowrap text-white/55 [@media(pointer:coarse)]:inline">— 눌러서 크게</span>
+          </button>
+        )}
         <div
-          ref={boxRef}
+          ref={(el) => {
+            boxRef(el);
+            boxEl.current = el;
+          }}
           className={
             cover
               ? "relative h-full w-full"
@@ -137,12 +200,16 @@ export default function Stage({ children }: { children: ReactNode }) {
         >
           {k > 0 && (
             <div
-              className="dfn absolute top-1/2 left-1/2 select-none"
+              ref={stageEl}
+              className="dfn absolute select-none"
               style={{
                 width: DW,
                 height: DH,
-                transform: `translate(-50%, -50%) scale(${k})`,
-                transformOrigin: "center",
+                // 가운데 맞춤을 정수 px 로 (반 px 에 놓이면 글자가 흐려짐)
+                left: Math.round((box.w - DW * k) / 2) + frac.x,
+                top: Math.round((box.h - DH * k) / 2) + frac.y,
+                transform: `scale(${k})`,
+                transformOrigin: "0 0",
               }}
             >
               {children}

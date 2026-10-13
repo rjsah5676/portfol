@@ -388,8 +388,8 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry }
                   ? `BOSS ${b.wave}`
                   : `WAVE ${b.wave}`}
             </span>
-            <span className="text-[11px] text-[var(--dim)]">/{LAST_WAVE}</span>
-            <span className="ml-auto text-[11px] text-[var(--mute)]">{fmtTime(time)}</span>
+            <span className="text-[12px] text-[var(--dim)]">/{LAST_WAVE}</span>
+            <span className="ml-auto text-[12px] text-[var(--mute)]">{fmtTime(time)}</span>
           </div>
           <Bar
             className="mt-1.5"
@@ -399,7 +399,7 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry }
           />
         </div>
         <div className="px-box flex h-full w-[170px] shrink-0 flex-col justify-center px-2.5">
-          <div className="flex items-center justify-between text-[11px] leading-none">
+          <div className="flex items-center justify-between text-[12px] leading-none">
             <span className="text-[var(--mute)]">
               <Icon n="skull" size={10} /> 필드의 적
             </span>
@@ -407,7 +407,7 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry }
               className={`text-[14px] ${nEnemy >= CAP * 0.8 ? "dfn-blink text-[var(--red)]" : nEnemy >= CAP * 0.6 ? "text-[#ffb347]" : "text-white"}`}
             >
               {nEnemy}
-              <span className="text-[11px] text-[var(--dim)]">/{CAP}</span>
+              <span className="text-[12px] text-[var(--dim)]">/{CAP}</span>
             </b>
           </div>
           <Bar
@@ -441,7 +441,7 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry }
             className="px-box flex h-full w-[240px] shrink-0 flex-col justify-center px-2.5"
             style={{ "--b": BOSSES[boss.boss].color } as React.CSSProperties}
           >
-            <div className="flex items-baseline justify-between text-[11px] leading-none">
+            <div className="flex items-baseline justify-between text-[12px] leading-none">
               <b className="text-[13px]" style={{ color: BOSSES[boss.boss].color }}>
                 {BOSSES[boss.boss].name}
               </b>
@@ -498,7 +498,7 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry }
             <Btn
               tone="cyan"
               onClick={() => setModal("dev")}
-              className="h-[30px] px-2 text-[11px] font-bold"
+              className="h-[30px] px-2 text-[12px] font-bold"
               title="관리자 전용"
             >
               DEV
@@ -561,7 +561,7 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry }
         )}
         {multi && ctrl.desync > 0 && (
           <div
-            className="pointer-events-none absolute top-2 right-2 bg-[#5c1426] px-2 py-0.5 text-[11px] text-[#ffd0da]"
+            className="pointer-events-none absolute top-2 right-2 bg-[#5c1426] px-2 py-0.5 text-[12px] text-[#ffd0da]"
             title="보드끼리 상태가 달라졌어요 (서버에 기록됨)"
           >
             동기화 어긋남 {ctrl.desync}
@@ -631,12 +631,12 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry }
                 <b className="truncate text-[14px]">{selDef.name}</b>
                 <GradeChip g={selDef.grade} />
                 <FactionChip f={selDef.faction} />
-                <span className="text-[11px] text-[var(--mute)]">
+                <span className="text-[12px] text-[var(--mute)]">
                   ×{selCell.units.length}
                   {sel >= CELLS && " · 보관함"}
                 </span>
               </div>
-              <p className="mt-1 truncate text-[11px] text-[var(--mute)]" title={selDef.desc}>
+              <p className="mt-1 truncate text-[12px] text-[var(--mute)]" title={selDef.desc}>
                 {unitStats(selDef)} · {selDef.desc}
                 {usedIn(selDef.id) && <> · 재료: {usedIn(selDef.id)}</>}
               </p>
@@ -666,7 +666,7 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry }
           <DpsMeter b={b} />
         )}
         {multi && names && (
-          <div className="flex shrink-0 flex-col gap-0.5 border-l-2 border-[var(--line)] pl-2.5 text-[10px] leading-tight">
+          <div className="flex shrink-0 flex-col gap-0.5 border-l-2 border-[var(--line)] pl-2.5 text-[12px] leading-tight">
             {ctrl.game.boards.map((o, i) =>
               i === ctrl.seat ? null : (
                 <span key={i} className={o.result ? "text-[var(--dim)]" : ""}>
@@ -755,7 +755,7 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry }
         </Btn>
 
         <section className="px-box px-2.5 pt-1.5 pb-2.5">
-          <div className="mb-1.5 flex items-center text-[11px] text-[var(--mute)]">
+          <div className="mb-1.5 flex items-center text-[12px] text-[var(--mute)]">
             세력 강화 <span className="ml-1 text-[var(--dim)]">피해 +{B.up.perLv * 100}%/Lv</span>
           </div>
           <div className="grid grid-cols-3 gap-2">
@@ -775,7 +775,7 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry }
                     <FactionIcon f={f} size={14} color="#fff" />
                     {FACTION_NAME[f]}
                   </span>
-                  <span className="mt-0.5 flex items-center gap-1 px-2 text-[11px]">
+                  <span className="mt-0.5 flex items-center gap-1 px-2 text-[12px]">
                     <b className="text-white">Lv{b.up[f]}</b>
                     <span className="opacity-70">+{Math.round(b.up[f] * B.up.perLv * 100)}%</span>
                     <span className="ml-auto flex items-center gap-0.5 font-bold text-[var(--gold)]">
@@ -810,7 +810,7 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry }
         </section>
 
         <section className="px-box px-2.5 pt-1.5 pb-2.5">
-          <div className="mb-1.5 flex items-center text-[11px] text-[var(--mute)]">
+          <div className="mb-1.5 flex items-center text-[12px] text-[var(--mute)]">
             <Icon n="dice" size={11} className="mr-1" /> 행운석 도박
           </div>
           <div className="grid grid-cols-2 gap-2">
@@ -837,7 +837,7 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry }
               );
             })}
           </div>
-          <div className="mt-2 mb-1.5 flex items-center text-[11px] text-[var(--mute)]">
+          <div className="mt-2 mb-1.5 flex items-center text-[12px] text-[var(--mute)]">
             <Icon n="rift" size={11} className="mr-1" /> 글리치 균열
             <span className="ml-1 text-[var(--dim)]">미니 보스 · {B.rift.sec}초 안에</span>
             {b.riftCd > 0 && (
@@ -850,7 +850,7 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry }
                 key={t}
                 onClick={() => run({ t: "rift", tier: t })}
                 disabled={b.riftCd > 0 || b.wave < B.rift.from || b.enemies.some((e) => e.rift > 0)}
-                className="h-[36px] text-[11px]"
+                className="h-[36px] text-[12px]"
                 silent
               >
                 <b className="text-[var(--pink)]">{t}급</b> <Icon n="gem" size={10} />
@@ -935,7 +935,7 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry }
                       <UnitIcon id={u.id} size={40} />
                       <span className="min-w-0">
                         <b className="block text-[13px]">{u.name}</b>
-                        <span className="block text-[11px] leading-tight opacity-80">{u.desc}</span>
+                        <span className="block text-[12px] leading-tight opacity-80">{u.desc}</span>
                       </span>
                     </Btn>
                   ))}
@@ -1078,7 +1078,7 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry }
                 </Btn>
               </div>
             )}
-            <p className="text-[11px] text-[var(--dim)]">
+            <p className="text-[12px] text-[var(--dim)]">
               대량 시뮬은 서버 폴더에서: npx tsx scripts/defense-sim.ts -n 50 --curve
             </p>
           </div>
@@ -1130,7 +1130,7 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry }
 }
 
 function K({ children }: { children: ReactNode }) {
-  return <span className="px-key mx-[2px] inline-block !text-[11px] !text-white">{children}</span>;
+  return <span className="px-key mx-[2px] inline-block !text-[12px] !text-white">{children}</span>;
 }
 function Stat({ label, value }: { label: string; value: string }) {
   return (
@@ -1168,7 +1168,7 @@ function DpsMeter({ b }: { b: Board }) {
   const total = rows.reduce((a, [, v]) => a + v, 0);
   if (!rows.length)
     return (
-      <div className="flex min-w-0 flex-1 flex-col justify-center gap-1 text-[11px] leading-tight text-[var(--mute)]">
+      <div className="flex min-w-0 flex-1 flex-col justify-center gap-1 text-[12px] leading-tight text-[var(--mute)]">
         <p className="truncate">
           <b className="text-[var(--text)]">칸을 누르면</b> 정보 · <b className="text-[var(--text)]">끌면</b> 자리 바꾸기 (보관함 칸도) · 같은 유닛 3기 → 합성
         </p>
@@ -1188,7 +1188,7 @@ function DpsMeter({ b }: { b: Board }) {
   return (
     <div className="grid min-w-0 flex-1 grid-cols-2 gap-x-4 gap-y-1">
       {rows.slice(0, 4).map(([id, v]) => (
-        <div key={id} className="flex items-center gap-1.5 text-[10px]">
+        <div key={id} className="flex items-center gap-1.5 text-[12px]">
           <FactionIcon f={UNIT[id].faction} size={9} />
           <span className="w-[74px] truncate" style={{ color: GRADE_COLOR[UNIT[id].grade] }}>
             {UNIT[id].name}
@@ -1238,7 +1238,7 @@ function RecipeModal({ b, run, onClose }: { b: Board; run: (c: Cmd) => boolean; 
               )}
               <div className="w-[200px]">
                 <b className="text-[14px]">{known ? d.name : "???"}</b> <GradeChip g={d.grade} />
-                <p className="mt-0.5 text-[11px] leading-tight text-[var(--mute)]">
+                <p className="mt-0.5 text-[12px] leading-tight text-[var(--mute)]">
                   {known ? d.desc : "숨겨진 조합식 — 어떤 유닛들이 모이면…?"}
                 </p>
               </div>
@@ -1247,7 +1247,7 @@ function RecipeModal({ b, run, onClose }: { b: Board; run: (c: Cmd) => boolean; 
                   known ? (
                     <span
                       key={id}
-                      className="flex items-center gap-1 bg-[#0a0816]/60 px-1.5 py-1 text-[11px]"
+                      className="flex items-center gap-1 bg-[#0a0816]/60 px-1.5 py-1 text-[12px]"
                     >
                       <UnitIcon id={id} size={22} dim={(have[id] ?? 0) < n} />
                       <span style={{ color: (have[id] ?? 0) >= n ? "#6dff8f" : "#ff9ab0" }}>
@@ -1257,7 +1257,7 @@ function RecipeModal({ b, run, onClose }: { b: Board; run: (c: Cmd) => boolean; 
                   ) : (
                     <span
                       key={id}
-                      className="bg-[#0a0816]/60 px-2 py-1 text-[11px] text-[var(--dim)]"
+                      className="bg-[#0a0816]/60 px-2 py-1 text-[12px] text-[var(--dim)]"
                     >
                       {GRADE_NAME[UNIT[id].grade]} ?
                     </span>

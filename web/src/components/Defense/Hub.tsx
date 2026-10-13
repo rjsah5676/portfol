@@ -61,7 +61,8 @@ const TIER_COLOR = ["#a69cc9", "#5ff2ff", "#ffd23f"];
 
 /** 재화 한 칸 (그림이 있으면 그림) */
 export function Cur({ k, n, size = 16, className = "" }: { k: "piece" | "core" | "chest" | "gp" | "card"; n: ReactNode; size?: number; className?: string }) {
-  const art = ITEM_ART[k];
+  // 그림은 클 때만 (작게 줄이면 뭉개져서 알아보기 어려움 → 작은 곳은 도트 아이콘)
+  const art = size >= 20 ? ITEM_ART[k] : undefined;
   return (
     <span className={`inline-flex items-center gap-1 ${className}`}>
       {art ? <img src={art} alt="" width={size} height={size} className="shrink-0" /> : <Icon n={k} size={size} />}
@@ -189,7 +190,7 @@ export default function Hub({
               <Icon n={t.icon} size={16} />
               {t.name}
               {!!dots[t.k] && dots[t.k]! > 0 && (
-                <span className="absolute top-1 right-1 min-w-[16px] bg-[#ff4d6d] px-1 text-center text-[10px] leading-[16px] text-white shadow-[0_0_0_2px_#0a0816]">
+                <span className="absolute top-1 right-1 min-w-[16px] bg-[#ff4d6d] px-1 text-center text-[12px] leading-[16px] text-white shadow-[0_0_0_2px_#0a0816]">
                   {dots[t.k]}
                 </span>
               )}
@@ -224,7 +225,7 @@ interface TabProps {
 const H = ({ children, sub }: { children: ReactNode; sub?: ReactNode }) => (
   <div className="mb-2 flex items-baseline gap-2">
     <h3 className={`${TITLE} px-shadow text-[16px]`}>{children}</h3>
-    {sub && <span className="text-[11px] text-[var(--mute)]">{sub}</span>}
+    {sub && <span className="text-[12px] text-[var(--mute)]">{sub}</span>}
   </div>
 );
 
@@ -290,7 +291,7 @@ function LoadTab({ p, act, busy }: TabProps) {
                     {on ? "■ " : "□ "}
                     {RES[id].name}
                   </b>
-                  <span className="block text-[11px] opacity-75">{RES[id].desc}</span>
+                  <span className="block text-[12px] opacity-75">{RES[id].desc}</span>
                 </Btn>
               );
             })}
@@ -311,7 +312,7 @@ function LoadTab({ p, act, busy }: TabProps) {
                   <RelicIcon id={id} size={34} />
                   <span className="min-w-0">
                     <b className="block text-[13px]">{r.name}</b>
-                    <span className="block text-[11px] leading-tight opacity-80">{r.desc}</span>
+                    <span className="block text-[12px] leading-tight opacity-80">{r.desc}</span>
                   </span>
                 </Btn>
               );
@@ -387,7 +388,7 @@ function UnitsTab({ p, act, busy }: TabProps) {
                 style={{ "--b": GRADE_COLOR[x.grade] } as CSSProperties}
               >
                 <UnitIcon id={x.id} size={46} dim={!c && !l} />
-                <span className="text-[10px]" style={{ color: GRADE_COLOR[x.grade] }}>
+                <span className="text-[12px]" style={{ color: GRADE_COLOR[x.grade] }}>
                   Lv.{l}
                 </span>
                 {can && <i className="dfn-blink absolute top-0.5 right-0.5 block h-2 w-2 bg-[var(--green)]" />}
@@ -399,7 +400,7 @@ function UnitsTab({ p, act, busy }: TabProps) {
       <div className="px-inset flex w-[230px] shrink-0 flex-col items-center p-3 text-center" style={{ "--b": FACTION_COLOR[u.faction] } as CSSProperties}>
         <UnitIcon id={u.id} size={88} />
         <b className="mt-1 text-[15px]">{u.name}</b>
-        <span className="text-[11px]" style={{ color: GRADE_COLOR[u.grade] }}>
+        <span className="text-[12px]" style={{ color: GRADE_COLOR[u.grade] }}>
           {GRADE_NAME[u.grade]} · {FACTION_NAME[u.faction]}
         </span>
         <p className={`${TITLE} mt-2 text-[22px] text-[var(--gold)]`}>Lv.{lv}</p>
@@ -409,7 +410,7 @@ function UnitsTab({ p, act, busy }: TabProps) {
         {lv < UNIT_MAX_LV ? (
           <>
             <div className="mt-2 w-full">
-              <div className="mb-0.5 flex justify-between text-[11px]">
+              <div className="mb-0.5 flex justify-between text-[12px]">
                 <Cur k="card" n={`${cards}/${cost.cards}`} size={12} />
                 <Cur k="piece" n={cost.pieces} size={12} />
               </div>
@@ -428,7 +429,7 @@ function UnitsTab({ p, act, busy }: TabProps) {
         ) : (
           <p className="mt-3 text-[13px] text-[var(--gold)]">최고 레벨!</p>
         )}
-        <p className="mt-auto pt-2 text-[10.5px] leading-snug text-[var(--dim)]">카드는 판에서 그 유닛을 얻으면 (레전드 이상 2장) · 상자에서 나와요. 주간 도전에는 강화가 적용되지 않아요.</p>
+        <p className="mt-auto pt-2 text-[12px] leading-snug text-[var(--dim)]">카드는 판에서 그 유닛을 얻으면 (레전드 이상 2장) · 상자에서 나와요. 주간 도전에는 강화가 적용되지 않아요.</p>
       </div>
     </div>
   );
@@ -454,7 +455,7 @@ function ResTab({ p, act, busy }: TabProps) {
                 <div key={r.id} className="px-inset flex items-center gap-2 px-2.5 py-1.5" style={own ? ({ "--b": "#6dff8f" } as CSSProperties) : undefined}>
                   <span className="min-w-0 flex-1">
                     <b className="block text-[13px]">{r.name}</b>
-                    <span className="block text-[11px] text-[var(--mute)]">{r.desc}</span>
+                    <span className="block text-[12px] text-[var(--mute)]">{r.desc}</span>
                   </span>
                   {own ? (
                     <span className="text-[12px] text-[var(--green)]">{p.load.res.includes(r.id) ? "장착 중" : "보유"}</span>
@@ -488,10 +489,10 @@ function RelicTab({ p, act, busy }: TabProps) {
               <RelicIcon id={r.id} size={42} dim={!own} />
               <span className="min-w-0 flex-1">
                 <b className="text-[13px]">{r.name}</b>
-                <span className="ml-1.5 text-[10px]" style={{ color: TIER_COLOR[r.tier] }}>
+                <span className="ml-1.5 text-[12px]" style={{ color: TIER_COLOR[r.tier] }}>
                   {TIER_NAME[r.tier]}
                 </span>
-                <span className="block text-[11px] leading-tight text-[var(--mute)]">{r.desc}</span>
+                <span className="block text-[12px] leading-tight text-[var(--mute)]">{r.desc}</span>
               </span>
               {own ? (
                 <span className="shrink-0 text-[12px] text-[var(--green)]">{p.load.relics.includes(r.id) ? "장착 중" : "보유"}</span>
@@ -544,7 +545,7 @@ function ChestTab({ p, act, busy }: TabProps) {
             <div className="flex items-center justify-center gap-3">
               <RelicIcon id={got.relic} size={56} />
               <div className="text-left">
-                <p className="text-[11px]" style={{ color: TIER_COLOR[RELIC[got.relic].tier] }}>
+                <p className="text-[12px]" style={{ color: TIER_COLOR[RELIC[got.relic].tier] }}>
                   {TIER_NAME[RELIC[got.relic].tier]} 유물
                 </p>
                 <b className="text-[17px]">{RELIC[got.relic].name}</b>
@@ -558,7 +559,7 @@ function ChestTab({ p, act, busy }: TabProps) {
                 {Object.entries(got.cards ?? {}).map(([id, n]) => (
                   <span key={id} className="relative">
                     <UnitIcon id={id} size={44} />
-                    <b className="absolute right-0 bottom-0 bg-[#0a0816] px-1 text-[11px] text-[#ffb347]">×{n}</b>
+                    <b className="absolute right-0 bottom-0 bg-[#0a0816] px-1 text-[12px] text-[#ffb347]">×{n}</b>
                   </span>
                 ))}
               </div>
@@ -582,11 +583,11 @@ function QuestList({ list, act, busy }: { list: QuestRow[] } & Pick<TabProps, "a
             <div className="min-w-0 flex-1">
               <div className="flex items-baseline gap-2">
                 <b className="text-[13px]">{q.name}</b>
-                <span className="text-[11px] text-[var(--mute)]">{questDesc(q)}</span>
+                <span className="text-[12px] text-[var(--mute)]">{questDesc(q)}</span>
               </div>
               <div className="mt-1 flex items-center gap-2">
                 <Bar value={q.value / q.goal} color={done ? "#ffd23f" : "#5ff2ff"} h={6} className="flex-1" />
-                <span className="w-[54px] text-right text-[11px]">
+                <span className="w-[54px] text-right text-[12px]">
                   {q.value}/{q.goal}
                 </span>
               </div>
@@ -664,7 +665,7 @@ function PassTab({ p, act, busy }: TabProps) {
       </div>
       <div className="min-h-0 flex-1 overflow-x-auto pb-1">
         <div className="flex h-full gap-1.5">
-          <div className="flex w-[64px] shrink-0 flex-col gap-1.5 pt-[22px] text-[11px] text-[var(--mute)]">
+          <div className="flex w-[64px] shrink-0 flex-col gap-1.5 pt-[22px] text-[12px] text-[var(--mute)]">
             <span className="flex h-[96px] items-center">무료</span>
             <span className="flex h-[96px] items-center text-[var(--pink)]">프리미엄</span>
           </div>
@@ -682,23 +683,23 @@ function PassTab({ p, act, busy }: TabProps) {
                         <i key={k} className="block h-3.5 w-3.5" style={{ background: THEME[r.item!]?.top[k] }} />
                       ))}
                     </span>
-                    <span className="text-[10px] text-[var(--gold)]">{THEME[r.item]?.name}</span>
-                    {!!r.cores && <Cur k="core" n={r.cores} size={12} className="text-[11px]" />}
+                    <span className="text-[12px] text-[var(--gold)]">{THEME[r.item]?.name}</span>
+                    {!!r.cores && <Cur k="core" n={r.cores} size={12} className="text-[12px]" />}
                   </>
                 ) : (
-                  <span className="flex flex-col items-center gap-0.5 text-[11px]">
+                  <span className="flex flex-col items-center gap-0.5 text-[12px]">
                     {!!r.pieces && <Cur k="piece" n={r.pieces} size={14} />}
                     {!!r.cores && <Cur k="core" n={r.cores} size={14} />}
                     {!!r.chest && <Cur k="chest" n={r.chest} size={14} />}
                     {!!r.gp && <Cur k="gp" n={r.gp} size={14} />}
                   </span>
                 )}
-                {got && <span className="text-[9px] text-[var(--green)]">받음</span>}
+                {got && <span className="text-[12px] text-[var(--green)]">받음</span>}
               </div>
             );
             return (
               <div key={i} className="flex w-[74px] shrink-0 flex-col gap-1.5">
-                <span className={`h-4 text-center text-[11px] ${reached ? "text-[var(--gold)]" : "text-[var(--dim)]"}`}>{i + 1}</span>
+                <span className={`h-4 text-center text-[12px] ${reached ? "text-[var(--gold)]" : "text-[var(--dim)]"}`}>{i + 1}</span>
                 {cell(x.free, p.season.free.includes(i), false)}
                 {cell(x.premium, p.season.prem.includes(i), true)}
               </div>
@@ -726,7 +727,7 @@ function ShopTab({ p, act, busy }: TabProps) {
           <Cur k="gp" n={fmtNum(CORE_EXCHANGE.gp)} size={18} className="text-[15px] text-[var(--green)]" />
           <span className="text-[var(--dim)]">→</span>
           <Cur k="core" n={CORE_EXCHANGE.cores} size={18} className="text-[15px] text-[#ffb3ee]" />
-          <span className="text-[11px] text-[var(--mute)]">유물을 바로 사거나 모자란 코어를 채울 때</span>
+          <span className="text-[12px] text-[var(--mute)]">유물을 바로 사거나 모자란 코어를 채울 때</span>
           <Btn tone="arcane" disabled={busy || p.gp < CORE_EXCHANGE.gp || p.coreBuys.n >= CORE_EXCHANGE.maxPerWeek} silent className="ml-auto h-9 px-4 text-[13px] font-bold" onClick={() => void act(() => meta.coresBuy(), "upgrade")}>
             교환
           </Btn>
@@ -767,7 +768,7 @@ function ShopTab({ p, act, busy }: TabProps) {
             );
           })}
         </div>
-        <p className="mt-1 text-[11px] text-[var(--dim)]">얼음 성채 · 네온 시티 · 황금 신전은 시즌 패스 프리미엄 보상으로도 나와요.</p>
+        <p className="mt-1 text-[12px] text-[var(--dim)]">얼음 성채 · 네온 시티 · 황금 신전은 시즌 패스 프리미엄 보상으로도 나와요.</p>
         {msg && <p className="mt-1 text-[12px] text-[var(--green)]">{msg}</p>}
       </div>
     </div>

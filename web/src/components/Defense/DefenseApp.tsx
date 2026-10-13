@@ -328,7 +328,7 @@ function Menu(p: {
           <span title="GP" className="text-[var(--green)]">
             <Cur k="gp" n={fmtNum(pr.gp)} />
           </span>
-          <span className="text-[11px] text-[var(--mute)]">
+          <span className="text-[12px] text-[var(--mute)]">
             시즌 {pr.season.id} · 패스 {pr.passTier}단계
           </span>
         </div>
@@ -355,7 +355,7 @@ function Menu(p: {
           ))}
           의 수호자를 소환 · 합성해서 오염된 파이터들을 {LAST_WAVE}웨이브까지 막아 주세요.
         </p>
-        <span className="mt-2 inline-block bg-[var(--gold)] px-2 py-1 text-[11px] font-bold text-[#1a1000]">
+        <span className="mt-2 inline-block bg-[var(--gold)] px-2 py-1 text-[12px] font-bold text-[#1a1000]">
           BETA · 밸런스 {BALANCE_VER}
         </span>
       </div>
@@ -368,7 +368,7 @@ function Menu(p: {
           disabled={p.busy}
         >
           <span className="px-shadow">{p.busy ? "준비 중…" : p.member ? "시즌 도전" : "혼자 하기"}</span>
-          <span className="block text-[11px] font-normal opacity-85">
+          <span className="block text-[12px] font-normal opacity-85">
             {!p.member
               ? "연습 판 (회원은 랭킹 · 성장 · 보상)"
               : pr
@@ -385,7 +385,7 @@ function Menu(p: {
             title={p.member ? "이번 주 모두 같은 시드 · 같은 유물, 강화 없이 실력 겨루기" : "회원만"}
           >
             <b className="block text-[14px]">주간 도전</b>
-            <span className="flex items-center gap-1 text-[10px] opacity-85">
+            <span className="flex items-center gap-1 text-[12px] opacity-85">
               {pr ? (
                 <>
                   {pr.week.relics.map((id) => (
@@ -408,9 +408,9 @@ function Menu(p: {
             title={p.member ? "" : "회원만"}
           >
             <b className="block text-[14px]">정비소</b>
-            <span className="block text-[10px] opacity-85">강화 · 연구 · 유물 · 미션 · 패스</span>
+            <span className="block text-[12px] opacity-85">강화 · 연구 · 유물 · 미션</span>
             {hubDot > 0 && (
-              <span className="dfn-pulse absolute top-1 right-1 min-w-[18px] bg-[#ff4d6d] px-1 text-center text-[11px] leading-[18px] text-white shadow-[0_0_0_2px_#0a0816]">
+              <span className="dfn-pulse absolute top-1 right-1 min-w-[18px] bg-[#ff4d6d] px-1 text-center text-[12px] leading-[18px] text-white shadow-[0_0_0_2px_#0a0816]">
                 {hubDot}
               </span>
             )}
@@ -473,7 +473,7 @@ function Menu(p: {
         <FsButton />
         <Btn className="h-[34px] px-3 text-[13px]" onClick={p.onNotes}>
           <Icon n="note" size={14} /> 패치노트
-          <span className="ml-1.5 text-[11px] text-[var(--gold)]">{LATEST}</span>
+          <span className="ml-1.5 text-[12px] text-[var(--gold)]">{LATEST}</span>
         </Btn>
       </div>
     </div>
@@ -520,7 +520,7 @@ function RankTabs() {
         <Btn tone={board === "weekly" ? "gold" : "ghost"} className="h-8 px-3 text-[13px] font-bold" onClick={() => setBoard("weekly")}>
           주간 도전
         </Btn>
-        <span className="ml-2 text-[11px] text-[var(--mute)]">
+        <span className="ml-2 text-[12px] text-[var(--mute)]">
           {board === "season"
             ? `영구 성장 적용 · 오염 단계가 높을수록 위 · 밸런스 ${BALANCE_VER}`
             : "이번 주 모두 같은 판 · 강화 없음 · 주가 끝나면 순위 GP"}
@@ -790,7 +790,7 @@ function Room({
           >
             {p ? (
               <>
-                <span className="mb-2 text-[11px] text-[var(--dim)]">P{i + 1}</span>
+                <span className="mb-2 text-[12px] text-[var(--dim)]">P{i + 1}</span>
                 <b className="text-[17px]">{p.nick}</b>
                 <span className="mt-1 text-[12px] text-[var(--mute)]">
                   {p.uid === room.hostUid ? (

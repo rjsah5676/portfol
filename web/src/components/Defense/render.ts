@@ -549,7 +549,7 @@ export function draw(ctx: CanvasRenderingContext2D, b: Board, v: View, opt: { ra
     ctx.fillRect(0, FH, FW, BENCH_H);
     ctx.fillStyle = "#3d3468";
     ctx.fillRect(0, FH, FW, 2);
-    ctx.font = `bold 11px ${FONT}`;
+    ctx.font = `bold 12px ${FONT}`;
     ctx.textAlign = "left";
     ctx.textBaseline = "middle";
     ctx.fillStyle = "#6f6597";
@@ -780,7 +780,7 @@ export function drawStack(
     ctx.fillRect(bx - 2, by - 2, 24, 16);
     ctx.fillStyle = ready ? "#ffd23f" : "#3d3468";
     ctx.fillRect(bx, by, 20, 12);
-    ctx.font = `bold 11px ${FONT}`;
+    ctx.font = `bold 12px ${FONT}`;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillStyle = ready ? "#1a1000" : "#fff";
