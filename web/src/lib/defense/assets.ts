@@ -131,6 +131,13 @@ export const BOSS_ART: Record<string, SpriteSpec> = {
   ivan: BS("ivan"),
   kai: BS("kai"),
 };
+/**
+ * 유물 그림 (public/defense/relics/<유물 id>.webp, 정사각 한 장). 없으면 도트 아이콘.
+ * 재화 · 상자 그림 (public/defense/items/<이름>.webp): piece · core · card · chest · chest-open
+ */
+export const RELIC_ART: Record<string, string> = {};
+export const ITEM_ART: Record<string, string> = {};
+
 /** 필드 배경 (없으면 코드로 그린 격자) */
 export const FIELD_ART: string | null = null;
 

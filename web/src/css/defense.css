@@ -437,3 +437,26 @@
     animation: none;
   }
 }
+
+/* 보상 · 상자 결과가 튀어나옴 */
+.dfn-pop {
+  animation: dfn-pop 0.32s steps(4) both;
+}
+@keyframes dfn-pop {
+  0% {
+    transform: scale(0.6);
+    opacity: 0;
+  }
+  70% {
+    transform: scale(1.06);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dfn-pop {
+    animation: none;
+  }
+}

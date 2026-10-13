@@ -6,6 +6,7 @@
  *        받은 턴까지만 진행할 수 있음 → 모두의 화면이 같은 시뮬. 늦게 들어오면 기록으로 빨리 따라잡음.
  */
 import { TPS } from "@/lib/defense/balance";
+import type { Loadout } from "@/lib/defense/progress";
 import { HASH_TICKS, TICKS_PER_TURN, type LogEntry } from "@/lib/defense/replay";
 import {
   apply,
@@ -50,9 +51,11 @@ export class Controller {
     seed: number,
     players: number,
     readonly seat: number,
-    readonly mode: Mode
+    readonly mode: Mode,
+    /** 보드마다 들고 간 영구 성장 (서버가 정해 줌 — 검증 · 멀티가 같은 값으로 돌림) */
+    loadouts?: (Loadout | null)[]
   ) {
-    this.game = newGame(seed, players);
+    this.game = newGame(seed, players, loadouts);
     // 효과 · 알림은 내 보드 것만 모음 (남의 보드는 안 쌓음)
     const me = this.game.boards[seat];
     me.fx = [];

@@ -12,6 +12,7 @@ import {
   finishRun,
   getDefenseRank,
   joinRoom,
+  meta,
   leaveRoom,
   myRoom,
   reportOver,
@@ -21,13 +22,19 @@ import {
   startRun,
   watchLobby,
   watchRoom,
+  type DefenseProfile,
   type DefenseRankRow,
+  type FinishOut,
+  type RankBoard,
   type MpLobbyRoom,
   type MpRoom,
   type MpStanding,
 } from "@/realtime/defense";
 import Codex from "./Codex";
 import { Controller } from "./controller";
+import Hub, { Cur, RelicIcon, type HubTab } from "./Hub";
+import { setTheme } from "./render";
+import { GLITCH, RELIC, type Loadout } from "@/lib/defense/progress";
 import GameView from "./GameView";
 import Stage from "./Stage";
 import { playBgm } from "./audio";
@@ -40,6 +47,7 @@ import {
   SoundButton,
   TITLE,
   UnitIcon,
+  fmtNum,
   fmtTime,
 } from "./ui";
 import PatchNotes, { LATEST } from "./PatchNotes";
@@ -48,13 +56,16 @@ import { FACTION_COLOR, FACTION_NAME, FACTIONS } from "@/lib/defense/units";
 
 /*
  * PIXEL GLITCH DEFENSE(픽셀 글리치 디펜스) 몸통 — 무대(Stage) 안에서 메뉴 → 솔로 / 멀티(로비 → 방 → 판) / 도감 / 랭킹 이 바뀜.
- *  솔로: 회원이면 서버에서 시드를 받아 랭킹 판, 아니면 연습 판(기록 안 남음)
+ *  솔로: 회원이면 서버에서 시드 · 로드아웃을 받아 시즌 판(영구 성장 적용) 또는 주간 도전(모두 같은 시드 · 유물, 강화 없음),
+ *        아니면 연습 판(기록 안 남음). 끝나면 서버가 검증한 뒤 보상(픽셀 조각 · 카드 · 코어 · 패스 경험치)
+ *  정비소(Hub): 판 밖 성장 — 유닛 강화 · 연구 · 유물 · 상자 · 미션 · 시즌 패스 · GP 상점
  *  멀티: 회원만. 방장이 시작하면 각자 자기 보드를 막는 생존 경쟁 (남 돕기는 나중에)
  */
 
 type Screen =
   | { k: "menu" }
-  | { k: "solo"; ctrl: Controller; ranked: boolean; key: number }
+  | { k: "solo"; ctrl: Controller; ranked: boolean; key: number; mode: RankBoard }
+  | { k: "hub"; tab?: HubTab }
   | { k: "lobby" }
   | { k: "room"; id: string }
   | { k: "codex" }
@@ -67,17 +78,35 @@ export default function DefenseApp() {
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState("");
   const [notes, setNotes] = useState(false);
+  /** 판 밖 성장 (회원만) */
+  const [prof, setProf] = useState<DefenseProfile | null>(null);
+  const [paid, setPaid] = useState<DefenseProfile["paid"]>(null);
+  const loadProf = () =>
+    meta.profile().then(
+      (p) => {
+        setProf(p);
+        if (p.paid) setPaid(p.paid);
+      },
+      () => {}
+    );
+  useEffect(() => {
+    if (member) void loadProf();
+    else setProf(null);
+  }, [member]);
+  useEffect(() => setTheme(prof?.theme), [prof?.theme]);
 
-  const startSolo = async () => {
+  const startSolo = async (mode: RankBoard = "season") => {
     setBusy(true);
     setNote("");
     let seed = (Math.random() * 2 ** 31) >>> 0,
-      run: string | null = null;
+      run: string | null = null,
+      lo: Loadout | null = null;
     if (member) {
       try {
-        const r = await startRun();
+        const r = await startRun(mode);
         seed = r.seed;
         run = r.run;
+        lo = r.loadout;
       } catch (e) {
         setNote(`랭킹 서버에 닿지 않아 연습 판으로 시작해요 (${(e as Error).message})`);
       }
@@ -85,11 +114,14 @@ export default function DefenseApp() {
     setBusy(false);
     setScreen({
       k: "solo",
-      ctrl: new Controller(seed, 1, 0, { kind: "solo", run }),
+      ctrl: newCtrl(seed, run, lo),
       ranked: !!run,
       key: Date.now(),
+      mode,
     });
   };
+  const newCtrl = (seed: number, run: string | null, lo: Loadout | null) =>
+    new Controller(seed, 1, 0, { kind: "solo", run }, [lo]);
 
   // 메뉴 · 로비 · 방 화면은 메뉴 배경음 (판 안에서는 GameView 가 웨이브에 맞춰 바꿈)
   const inGame = screen.k === "solo";
@@ -106,8 +138,8 @@ export default function DefenseApp() {
         key={screen.key}
         ctrl={ctrl}
         admin={admin}
-        onExit={() => setScreen({ k: "menu" })}
-        onRetry={() => void startSolo()}
+        onExit={() => (setScreen({ k: "menu" }), void loadProf())}
+        onRetry={() => void startSolo(screen.mode)}
         finish={async () => {
           const run = ctrl.mode.kind === "solo" ? ctrl.mode.run : null;
           if (!run)
@@ -120,16 +152,8 @@ export default function DefenseApp() {
           if (ctrl.unranked || ctrl.speed > 3)
             return <span className="text-white/55">개발자 도구를 써서 기록하지 않았어요</span>;
           const r = await finishRun(run, ctrl.log);
-          return (
-            <span>
-              랭킹 <b className="text-[#ffd84a]">{r.rank}위</b>
-              {r.best ? (
-                <b className="ml-2 text-[#7ef3ff]">최고 기록 갱신!</b>
-              ) : (
-                <span className="ml-2 text-white/50">(최고 기록은 그대로)</span>
-              )}
-            </span>
-          );
+          void loadProf();
+          return <FinishNote r={r} />;
         }}
       />
     );
@@ -140,13 +164,21 @@ export default function DefenseApp() {
         onEnter={(id) => setScreen({ k: "room", id })}
       />
     );
+  else if (screen.k === "hub")
+    body = prof ? (
+      <Hub profile={prof} setProfile={setProf} tab={screen.tab} onBack={() => setScreen({ k: "menu" })} />
+    ) : (
+      <div className="px-stars absolute inset-0 flex items-center justify-center text-[var(--mute)]">
+        <span className="dfn-blink">불러오는 중…</span>
+      </div>
+    );
   else if (screen.k === "room")
     body = (
       <Room
         id={screen.id}
         admin={admin}
         myUid={account?.uid ?? ""}
-        onLeave={() => setScreen({ k: "lobby" })}
+        onLeave={() => (setScreen({ k: "lobby" }), void loadProf())}
       />
     );
   else
@@ -159,7 +191,10 @@ export default function DefenseApp() {
         busy={busy}
         note={note}
         onLogin={() => void login().catch(() => setNote("로그인하지 못했어요."))}
-        onSolo={() => void startSolo()}
+        prof={prof}
+        onSolo={() => void startSolo("season")}
+        onWeekly={() => void startSolo("weekly")}
+        onHub={(tab) => setScreen({ k: "hub", tab })}
         onMulti={() => setScreen({ k: "lobby" })}
         onCodex={() => setScreen({ k: "codex" })}
         onRank={() => setScreen({ k: "rank" })}
@@ -177,12 +212,19 @@ export default function DefenseApp() {
         </Modal>
       )}
       {screen.k === "rank" && (
-        <Modal
-          title={`랭킹 · 밸런스 ${BALANCE_VER}`}
-          onClose={() => setScreen({ k: "menu" })}
-          accent="#ffd23f"
-        >
-          <RankList />
+        <Modal title="랭킹" onClose={() => setScreen({ k: "menu" })} accent="#ffd23f">
+          <RankTabs />
+        </Modal>
+      )}
+      {paid && screen.k === "menu" && (
+        <Modal title="주간 도전 보상" onClose={() => setPaid(null)} accent="#6dff8f">
+          <div className="dfn-pop flex flex-col items-center gap-2 py-3 text-center">
+            <p className="text-[14px]">
+              지난주 주간 도전 <b className="text-[var(--gold)]">{paid.rank}위</b>
+            </p>
+            <Cur k="gp" n={`+${fmtNum(paid.gp)} GP`} size={22} className="text-[20px] text-[var(--green)]" />
+            <p className="text-[12px] text-[var(--mute)]">정비소 GP 상점에서 코어 · 테마 · 시즌 패스에 쓸 수 있어요</p>
+          </div>
         </Modal>
       )}
       {notes && screen.k === "menu" && <PatchNotes onClose={() => setNotes(false)} />}
@@ -199,8 +241,11 @@ function Menu(p: {
   nick: string | null;
   busy: boolean;
   note: string;
+  prof: DefenseProfile | null;
   onLogin(): void;
   onSolo(): void;
+  onWeekly(): void;
+  onHub(tab?: HubTab): void;
   onMulti(): void;
   onCodex(): void;
   onRank(): void;
@@ -214,6 +259,14 @@ function Menu(p: {
   }, [p.member]);
   // 메뉴에 세워 둘 대표 유닛 (그림이 있을 때만)
   const heroes = ["k_commander", "m_titan", "a_archmage"].filter((id) => UNIT_ART[id]);
+  const pr = p.prof;
+  const glitch = pr ? Math.min(pr.load.glitch, pr.glitchOpen) : 0;
+  // 정비소 알림 점: 받을 미션 · 패스 · 안 연 상자
+  const hubDot = pr
+    ? [...pr.quests.daily, ...pr.quests.weekly].filter((q) => !q.claimed && q.value >= q.goal).length +
+      (pr.passTier - pr.season.free.length) +
+      pr.chests
+    : 0;
   return (
     <div className="px-stars absolute inset-0 overflow-hidden">
       <div className="dfn-scan absolute inset-0 opacity-60" />
@@ -263,16 +316,33 @@ function Menu(p: {
           )
         )}
       </div>
-      <div className="absolute top-[60px] left-[64px]">
+      {/* 재화 */}
+      {pr && (
+        <div className="px-inset absolute top-[104px] right-[24px] flex items-center gap-3.5 px-3 py-1.5 text-[13px]">
+          <span title="픽셀 조각">
+            <Cur k="piece" n={fmtNum(pr.pieces)} />
+          </span>
+          <span title="글리치 코어" className="text-[#ffb3ee]">
+            <Cur k="core" n={pr.cores} />
+          </span>
+          <span title="GP" className="text-[var(--green)]">
+            <Cur k="gp" n={fmtNum(pr.gp)} />
+          </span>
+          <span className="text-[11px] text-[var(--mute)]">
+            시즌 {pr.season.id} · 패스 {pr.passTier}단계
+          </span>
+        </div>
+      )}
+      <div className="absolute top-[40px] left-[64px]">
         <p className="text-[13px] font-bold tracking-[0.4em] text-[var(--pink)]">
           PIXEL FIGHT 외전
         </p>
-        <h1 className={`${TITLE} dfn-title mt-3 text-[60px] leading-[1.02]`}>
-          PIXEL LUCKY
+        <h1 className={`${TITLE} dfn-title mt-2 text-[56px] leading-[1.02]`}>
+          PIXEL GLITCH
           <br />
           DEFENSE
         </h1>
-        <p className="mt-4 max-w-[500px] text-[14px] leading-relaxed text-[var(--mute)]">
+        <p className="mt-3 max-w-[500px] text-[13px] leading-relaxed text-[var(--mute)]">
           픽셀 세계가 버그에 먹히고 있어요.{" "}
           {FACTIONS.map((f, i) => (
             <span key={f}>
@@ -285,11 +355,11 @@ function Menu(p: {
           ))}
           의 수호자를 소환 · 합성해서 오염된 파이터들을 {LAST_WAVE}웨이브까지 막아 주세요.
         </p>
-        <span className="mt-3 inline-block bg-[var(--gold)] px-2 py-1 text-[11px] font-bold text-[#1a1000]">
-          ALPHA · 밸런스 {BALANCE_VER}
+        <span className="mt-2 inline-block bg-[var(--gold)] px-2 py-1 text-[11px] font-bold text-[#1a1000]">
+          BETA · 밸런스 {BALANCE_VER}
         </span>
       </div>
-      <div className="absolute top-[318px] left-[64px] flex w-[330px] flex-col gap-3">
+      <div className="absolute top-[268px] left-[64px] flex w-[372px] flex-col gap-2.5">
         <Btn
           tone="main"
           arrow
@@ -297,29 +367,72 @@ function Menu(p: {
           onClick={p.onSolo}
           disabled={p.busy}
         >
-          <span className="px-shadow">{p.busy ? "준비 중…" : "혼자 하기"}</span>
+          <span className="px-shadow">{p.busy ? "준비 중…" : p.member ? "시즌 도전" : "혼자 하기"}</span>
           <span className="block text-[11px] font-normal opacity-85">
-            {p.member ? "랭킹 기록 판" : "연습 판 (회원은 랭킹 기록)"}
+            {!p.member
+              ? "연습 판 (회원은 랭킹 · 성장 · 보상)"
+              : pr
+                ? `오염 ${glitch}단계 (보상 ×${GLITCH[glitch].reward}) · 연구 ${pr.load.res.length} · 유물 ${pr.load.relics.length} 장착`
+                : "시즌 랭킹 판"}
           </span>
         </Btn>
-        <div className="grid grid-cols-3 gap-2.5">
+        <div className="grid grid-cols-2 gap-2.5">
+          <Btn
+            tone="gold"
+            className="h-[50px] px-2 text-left"
+            onClick={p.onWeekly}
+            disabled={!p.member || p.busy}
+            title={p.member ? "이번 주 모두 같은 시드 · 같은 유물, 강화 없이 실력 겨루기" : "회원만"}
+          >
+            <b className="block text-[14px]">주간 도전</b>
+            <span className="flex items-center gap-1 text-[10px] opacity-85">
+              {pr ? (
+                <>
+                  {pr.week.relics.map((id) => (
+                    <span key={id} title={`${RELIC[id]?.name} — ${RELIC[id]?.desc}`}>
+                      <RelicIcon id={id} size={16} />
+                    </span>
+                  ))}
+                  <span className="ml-0.5">순위 GP</span>
+                </>
+              ) : (
+                "같은 시드 · 강화 없음"
+              )}
+            </span>
+          </Btn>
           <Btn
             tone="cyan"
-            className="h-[42px] text-[14px] font-bold"
+            className="relative h-[50px] px-2 text-left"
+            onClick={() => p.onHub()}
+            disabled={!p.member}
+            title={p.member ? "" : "회원만"}
+          >
+            <b className="block text-[14px]">정비소</b>
+            <span className="block text-[10px] opacity-85">강화 · 연구 · 유물 · 미션 · 패스</span>
+            {hubDot > 0 && (
+              <span className="dfn-pulse absolute top-1 right-1 min-w-[18px] bg-[#ff4d6d] px-1 text-center text-[11px] leading-[18px] text-white shadow-[0_0_0_2px_#0a0816]">
+                {hubDot}
+              </span>
+            )}
+          </Btn>
+        </div>
+        <div className="grid grid-cols-3 gap-2.5">
+          <Btn
+            className="h-[38px] text-[13px] font-bold"
             onClick={p.onMulti}
             disabled={!p.member}
             title={p.member ? "" : "회원만"}
           >
             함께 하기
           </Btn>
-          <Btn className="h-[42px] text-[14px]" onClick={p.onRank}>
+          <Btn className="h-[38px] text-[13px]" onClick={p.onRank}>
             <Icon n="star" size={12} /> 랭킹
           </Btn>
-          <Btn className="h-[42px] text-[14px]" onClick={p.onCodex}>
+          <Btn className="h-[38px] text-[13px]" onClick={p.onCodex}>
             <Icon n="book" size={12} /> 도감
           </Btn>
         </div>
-        <div className="mt-1 text-[12px] text-[var(--mute)]">
+        <div className="text-[12px] text-[var(--mute)]">
           {p.loading ? (
             <span className="dfn-blink">로그인 확인 중…</span>
           ) : p.member ? (
@@ -334,7 +447,7 @@ function Menu(p: {
               onClick={p.onLogin}
               className="underline underline-offset-4 hover:text-white"
             >
-              로그인하면 랭킹 · 멀티를 할 수 있어요
+              로그인하면 랭킹 · 성장 · 멀티를 할 수 있어요
             </button>
           )}
         </div>
@@ -343,7 +456,7 @@ function Menu(p: {
           <Btn
             tone="gold"
             arrow
-            className="dfn-pulse h-[40px] text-[13px] font-bold"
+            className="dfn-pulse h-[36px] text-[13px] font-bold"
             onClick={() =>
               void joinRoom(mine.id).then(
                 () => p.onRejoin(mine.id),
@@ -367,17 +480,66 @@ function Menu(p: {
   );
 }
 
+/* ───────────── 판 끝 (검증 · 보상) ───────────── */
+
+function FinishNote({ r }: { r: FinishOut }) {
+  const w = r.reward;
+  return (
+    <span className="flex flex-col items-center gap-1.5">
+      <span>
+        {r.mode === "weekly" ? "주간 도전" : "시즌 랭킹"} <b className="text-[#ffd84a]">{r.rank}위</b>
+        {r.best ? (
+          <b className="ml-2 text-[#7ef3ff]">최고 기록 갱신!</b>
+        ) : (
+          <span className="ml-2 text-white/50">(최고 기록은 그대로)</span>
+        )}
+      </span>
+      {w && (
+        <span className="dfn-pop flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[13px]">
+          <Cur k="piece" n={`+${w.pieces}`} />
+          {w.cores > 0 && <Cur k="core" n={`+${w.cores}`} className="text-[#ffb3ee]" />}
+          <Cur k="card" n={`+${Object.values(w.cards).reduce((a, b) => a + b, 0)}`} />
+          <span className="text-[var(--cyan)]">+{w.xp} XP</span>
+          {w.opened !== null && <b className="text-[var(--pink)]">오염 {w.opened}단계 열림!</b>}
+        </span>
+      )}
+    </span>
+  );
+}
+
 /* ───────────── 랭킹 ───────────── */
 
-export function RankList({ limit = 50 }: { limit?: number }) {
+function RankTabs() {
+  const [board, setBoard] = useState<RankBoard>("season");
+  return (
+    <div>
+      <div className="mb-3 flex items-center gap-2">
+        <Btn tone={board === "season" ? "main" : "ghost"} className="h-8 px-3 text-[13px] font-bold" onClick={() => setBoard("season")}>
+          시즌
+        </Btn>
+        <Btn tone={board === "weekly" ? "gold" : "ghost"} className="h-8 px-3 text-[13px] font-bold" onClick={() => setBoard("weekly")}>
+          주간 도전
+        </Btn>
+        <span className="ml-2 text-[11px] text-[var(--mute)]">
+          {board === "season"
+            ? `영구 성장 적용 · 오염 단계가 높을수록 위 · 밸런스 ${BALANCE_VER}`
+            : "이번 주 모두 같은 판 · 강화 없음 · 주가 끝나면 순위 GP"}
+        </span>
+      </div>
+      <RankList key={board} board={board} />
+    </div>
+  );
+}
+
+export function RankList({ limit = 50, board = "season" }: { limit?: number; board?: RankBoard }) {
   const [rows, setRows] = useState<DefenseRankRow[] | null>(null);
   const [err, setErr] = useState("");
   useEffect(() => {
-    getDefenseRank(limit).then(
+    getDefenseRank(limit, board).then(
       (r) => setRows(r.rows),
       (e: Error) => setErr(e.message)
     );
-  }, [limit]);
+  }, [limit, board]);
   if (err) return <p className="text-[13px] text-[#ff9ab0]">{err}</p>;
   if (!rows) return <p className="dfn-blink text-[13px] text-[var(--mute)]">불러오는 중…</p>;
   if (!rows.length)
@@ -404,7 +566,12 @@ export function RankList({ limit = 50 }: { limit?: number }) {
             {i + 1}
           </b>
           <b className="w-[110px] truncate">{r.nick}</b>
-          <span className={`w-[110px] ${r.win ? "text-[var(--cyan)]" : ""}`}>
+          {board === "season" && (
+            <span className="w-[54px] text-[12px] text-[var(--pink)]" title="오염 단계">
+              오염 {r.glitch}
+            </span>
+          )}
+          <span className={`w-[100px] ${r.win ? "text-[var(--cyan)]" : ""}`}>
             {r.win ? `클리어 ${fmtTime(r.sec)}` : `${r.wave}웨이브`}
           </span>
           <span className="w-[70px] text-[var(--mute)]">처치 {r.kills}</span>
@@ -510,13 +677,15 @@ function Room({
   const roomRef = useRef<MpRoom | null>(null);
 
   useEffect(() => {
-    const make = (seed: number, players: string[], uids: string[]) => {
+    const make = (seed: number, players: string[], uids: string[], loadouts?: Loadout[]) => {
       const seat = Math.max(0, uids.indexOf(myUid));
-      const c = new Controller(seed, players.length, seat, {
-        kind: "multi",
-        room: id,
-        send: (cmds) => sendCmds(id, cmds),
-      });
+      const c = new Controller(
+        seed,
+        players.length,
+        seat,
+        { kind: "multi", room: id, send: (cmds) => sendCmds(id, cmds) },
+        loadouts
+      );
       c.onHash = (tick, h) => void sendHash(id, tick, h).catch(() => {});
       ctrlRef.current = c;
       setCtrl(c);
@@ -535,12 +704,13 @@ function Room({
           make(
             game.seed,
             r.players.map((p) => p.nick),
-            r.players.map((p) => p.uid)
+            r.players.map((p) => p.uid),
+            game.loadouts
           ).loadLog(game.log, game.turn);
       },
       onStart: (d) => {
         const r = roomRef.current;
-        make(d.seed, d.players, r?.players.map((p) => p.uid) ?? []);
+        make(d.seed, d.players, r?.players.map((p) => p.uid) ?? [], d.loadouts);
       },
       onTurn: (d) => ctrlRef.current?.onTurn(d.n, d.c),
       onDesync: (d) => {
@@ -572,7 +742,7 @@ function Room({
         finish={async () => {
           const r = ctrl.board.result!;
           await reportOver(id, r.win, r.wave);
-          return <span className="text-white/60">모두 끝나면 순위가 나와요</span>;
+          return <span className="text-white/60">모두 끝나면 순위가 나오고, 보상(멀티 ×1.2)이 들어가요</span>;
         }}
       />
     );
