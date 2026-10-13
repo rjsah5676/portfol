@@ -1,8 +1,24 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import type { GuideDoc } from "@/components/GuideView";
-import { ROSTER, moduleLevels } from "@/lib/virus/logic";
+import {
+  ACH,
+  BAL,
+  CHAL,
+  EVOLUTION,
+  MAX_STAGE,
+  ROSTER,
+  APEX,
+  apexCount,
+  exportSave,
+  fmt,
+  fmtBytes,
+  fmtTime,
+  importSave,
+  moduleLevels,
+  type Save,
+} from "@/lib/virus/logic";
 import { VirusSprite } from "./VirusSprite";
 import { PagedList } from "./FitPages";
 
@@ -301,8 +317,260 @@ export function ArchivePanel({ best }: { best: number }) {
   );
 }
 
+/** 기록 창 — 업적 (달성 · 진행 막대) / 통계 (누적 기록) */
+export function RecordsPanel({ s }: { s: Save }) {
+  const [view, setView] = useState<"ach" | "stats">("ach");
+  const got = new Set(s.ach);
+  const tabBtn = (k: "ach" | "stats", label: string) => (
+    <button
+      type="button"
+      onClick={() => setView(k)}
+      aria-pressed={view === k}
+      className={`vt-sm rounded-lg border px-2.5 py-1 font-bold transition-colors ${
+        view === k
+          ? "border-emerald-300/80 bg-emerald-400/15 text-emerald-100"
+          : "border-white/15 text-white/75 hover:text-white"
+      }`}
+    >
+      {label}
+    </button>
+  );
+  const rows: [string, string][] = [
+    ["⌛ 게임 화면에서 보낸 시간", fmtTime(s.rec.play)],
+    ["💾 훔친 데이터 (누적)", fmtBytes(s.lifetime)],
+    ["📂 감염시킨 파일", fmt(s.rec.files)],
+    ["🔗 연쇄 감염", fmt(s.rec.chains)],
+    ["☠️ 격퇴한 보스", fmt(s.rec.bosses)],
+    ["🛡️ 처치한 상위 보스", fmt(s.rec.apexes)],
+    ["☢️ KILLSWITCH 격퇴", fmt(s.clears)],
+    ["🏎️ KILLSWITCH 최단 기록", s.rec.bestFinal ? `${s.rec.bestFinal.toFixed(1)}초` : "-"],
+    ["🚫 보스에게 차단당함", fmt(s.rec.fails)],
+    ["😰 1초 이하 남기고 격퇴", fmt(s.rec.clutch)],
+    ["💥 가장 큰 한 방", fmt(s.rec.maxHit)],
+    ["🔧 산 업그레이드 레벨", fmt(s.rec.ups)],
+    ["🎲 랜덤 강화 (잭팟)", `${fmt(s.rec.rands)} (${fmt(s.rec.jackpots)})`],
+    ["🧬 최고 진화 단계", EVOLUTION[s.rec.evo]?.name ?? "-"],
+    ["🗺️ 최고 스테이지", String(Math.min(s.best, MAX_STAGE))],
+    ["☣️ 변이 (챌린지 포함)", fmt(s.formats)],
+    ["🎯 끝낸 챌린지", `${s.chalDone.length}/${CHAL.length}`],
+    ["🔑 루트 권한", fmt(s.root)],
+    ["🛡️ 우회 기술", `${apexCount(s.apexBest)}/${APEX.length}`],
+    ["😴 가장 오래 비운 시간", fmtTime(s.rec.offMax)],
+    ["🖥️ 비운 동안 훔친 데이터", fmtBytes(s.rec.offData)],
+  ];
+  return (
+    <div className="flex min-h-0 flex-1 flex-col gap-2">
+      <div className="flex shrink-0 flex-wrap items-center gap-1.5">
+        {tabBtn("ach", `🏅 업적 ${s.ach.length}/${ACH.length}`)}
+        {tabBtn("stats", "📊 통계")}
+        <span className="vt-sm ml-auto text-amber-200">
+          업적 보너스 피해 +{Math.round(BAL.achDmg * 100 * s.ach.length)}%
+        </span>
+      </div>
+      {view === "ach" ? (
+        <PagedList
+          key="ach"
+          className="grid grid-cols-1 gap-1.5 sm:grid-cols-2"
+          items={ACH.map((d) => {
+            const done = got.has(d.id);
+            const [cur, goal] = d.prog(s);
+            const show = (n: number) => (d.bytes ? fmtBytes(n) : fmt(n));
+            return (
+              <div
+                key={d.id}
+                className={`flex items-center gap-2.5 rounded-lg border px-2.5 py-1.5 ${
+                  done ? "border-amber-300/50 bg-amber-300/[0.08]" : "border-white/10"
+                }`}
+              >
+                <span className={`text-xl ${done ? "" : "opacity-40 grayscale"}`} aria-hidden>
+                  {d.icon}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span
+                    className={`vt-sm block truncate font-bold ${done ? "text-amber-100" : "text-white/90"}`}
+                  >
+                    {d.name}
+                    {done && <span className="ml-1 text-emerald-300">✓</span>}
+                  </span>
+                  <span className="vt-xs block truncate text-white/75">{d.desc}</span>
+                  {!done && goal > 1 && (
+                    <span className="mt-0.5 flex items-center gap-1.5">
+                      <span className="h-1 flex-1 overflow-hidden rounded-full bg-white/10">
+                        <span
+                          className="block h-full rounded-full bg-emerald-400/80"
+                          style={{ width: `${Math.min(100, (Math.max(0, cur) / goal) * 100)}%` }}
+                        />
+                      </span>
+                      <span className="vt-xs font-mono text-white/75 tabular-nums">
+                        {show(Math.max(0, Math.min(cur, goal)))}/{show(goal)}
+                      </span>
+                    </span>
+                  )}
+                </span>
+              </div>
+            );
+          })}
+        />
+      ) : (
+        <PagedList
+          key="stats"
+          className="grid grid-cols-1 gap-x-4 gap-y-1 sm:grid-cols-2"
+          items={rows.map(([k, v]) => (
+            <div
+              key={k}
+              className="vt-sm flex items-center justify-between gap-3 border-b border-white/10 py-1"
+            >
+              <span className="truncate text-white/80">{k}</span>
+              <span className="shrink-0 font-mono font-bold text-white tabular-nums">{v}</span>
+            </div>
+          ))}
+        />
+      )}
+    </div>
+  );
+}
+
+/** 세이브 백업 — 지금 진행을 글자로 복사 · 파일로 저장, 붙여 넣거나 파일을 골라 불러오기 */
+export function BackupPanel({
+  s,
+  onImport,
+}: {
+  s: Save;
+  /** 알아본 저장본 — 확인은 부모가 받음 */
+  onImport: (next: Save) => void;
+}) {
+  // 창을 연 때의 진행 (게임은 계속 돌아가서 매 틱 바뀌면 고른 글자가 풀림)
+  const [code] = useState(() => exportSave(s));
+  const [paste, setPaste] = useState("");
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const copy = () => {
+    if (!navigator.clipboard) {
+      setMsg({ ok: false, text: "복사가 막혔어요. 위 글자를 직접 골라 복사하세요." });
+      return;
+    }
+    navigator.clipboard
+      .writeText(code)
+      .then(() => setMsg({ ok: true, text: "복사했어요. 메모장 등에 붙여 넣어 보관하세요." }))
+      .catch(() => setMsg({ ok: false, text: "복사가 막혔어요. 위 글자를 직접 골라 복사하세요." }));
+  };
+  const download = () => {
+    const url = URL.createObjectURL(new Blob([code], { type: "text/plain" }));
+    const a = document.createElement("a");
+    const d = new Date();
+    const pad = (n: number) => String(n).padStart(2, "0");
+    a.href = url;
+    a.download = `virus-idle-${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}.txt`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+  const tryImport = (text: string) => {
+    const next = importSave(text);
+    if (!next) {
+      setMsg({
+        ok: false,
+        text: "알아볼 수 없는 백업이에요. VIRUS1. 로 시작하는 글자가 전부 있어야 해요.",
+      });
+      return;
+    }
+    setMsg(null);
+    onImport(next);
+  };
+  const btn =
+    "vt-sm shrink-0 rounded-lg border px-3 py-1.5 font-bold transition-colors disabled:opacity-40";
+  return (
+    <div className="flex min-h-0 flex-1 flex-col gap-2.5">
+      <div className="flex flex-col gap-1.5">
+        <span className="vt-base font-bold text-white">📤 내보내기</span>
+        <textarea
+          readOnly
+          value={code}
+          onFocus={(e) => e.currentTarget.select()}
+          aria-label="백업 글자"
+          className="vt-xs h-14 w-full resize-none overflow-hidden rounded-lg border border-white/15 bg-black/40 p-2 font-mono break-all text-white/80"
+        />
+        <div className="flex gap-1.5">
+          <button
+            type="button"
+            onClick={copy}
+            className={`${btn} border-emerald-300/50 bg-emerald-400/15 text-emerald-100 hover:bg-emerald-400/25`}
+          >
+            📋 복사
+          </button>
+          <button
+            type="button"
+            onClick={download}
+            className={`${btn} border-white/20 text-white/90 hover:border-white/50`}
+          >
+            💾 파일로 저장
+          </button>
+        </div>
+      </div>
+      <div className="flex flex-col gap-1.5">
+        <span className="vt-base font-bold text-white">📥 불러오기</span>
+        <textarea
+          value={paste}
+          onChange={(e) => setPaste(e.target.value)}
+          placeholder="VIRUS1. 로 시작하는 백업 글자를 붙여 넣으세요"
+          aria-label="불러올 백업 글자"
+          className="vt-xs h-14 w-full resize-none overflow-hidden rounded-lg border border-white/15 bg-black/40 p-2 font-mono break-all text-white/90 placeholder:text-white/60"
+        />
+        <div className="flex gap-1.5">
+          <button
+            type="button"
+            onClick={() => tryImport(paste)}
+            disabled={!paste.trim()}
+            className={`${btn} border-amber-300/50 bg-amber-300/15 text-amber-100 enabled:hover:bg-amber-300/25`}
+          >
+            불러오기
+          </button>
+          <button
+            type="button"
+            onClick={() => fileRef.current?.click()}
+            className={`${btn} border-white/20 text-white/90 hover:border-white/50`}
+          >
+            📁 파일 고르기
+          </button>
+          <input
+            ref={fileRef}
+            type="file"
+            accept=".txt,.json,text/plain,application/json"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              e.target.value = "";
+              if (f) f.text().then(tryImport);
+            }}
+          />
+        </div>
+      </div>
+      {msg && (
+        <p className={`vt-sm ${msg.ok ? "text-emerald-200" : "text-rose-200"}`} role="status">
+          {msg.text}
+        </p>
+      )}
+      <p className="vt-xs text-white/75">
+        불러오면 지금 진행이 백업 내용으로 바뀌어요. 비운 시간 수익은 불러온 때부터 다시 세요.
+      </p>
+    </div>
+  );
+}
+
 /** 패치노트 — 새 버전을 맨 위에 */
 export const PATCH_NOTES: { ver: string; date: string; items: string[] }[] = [
+  {
+    ver: "v0.5",
+    date: "2026.10.13",
+    items: [
+      "🏅 업적 34개 — 진행 · 변이 · 누적 · 도전 기록. 하나마다 피해 +2% (변이해도 남음), 달성하면 우측 상단에 알림",
+      "📊 기록 창 (메뉴 · 시작 화면): 업적 진행 막대와 통계 — 플레이 시간 · 감염시킨 파일 · 격퇴한 보스 · KILLSWITCH 최단 기록 · 가장 큰 한 방 · 가장 오래 비운 시간 등",
+      "💾 세이브 백업: 진행을 글자로 복사하거나 파일로 저장하고, 다른 브라우저 · 기기에서 붙여 넣거나 파일을 골라 불러오기",
+      "🧩 모듈 세트 4종: 같은 계열 모듈이 모두 v3 · v6 · v10이면 단계가 오름 — 📧 메일 폭탄(데이터 ×1.2 → ×2) · 🪱 자가 전파(연쇄 감염 10% → 30%) · 💽 시스템 파괴(보스 피해 ×1.2 → ×2) · 🕵️ 국가급 작전(보스 시간 +3 → +10초). 코드 모듈 탭에서 확인",
+      "🔗 연쇄 감염: 파일을 감염시키면 그 확률로 다음 파일도 바로 감염 (데이터도 한 번 더 · 비운 동안 수익에도 반영)",
+      "🎯 챌린지 변이 5종 (KILLSWITCH 첫 격퇴 뒤, 변이 탭): 스테이지 1부터 제약을 걸고 목표까지 — 🐌 단일 스레드 → 90 · ⏱️ 제로데이 → 99 · 🧱 모듈 봉인 → 55 · 🔒 업그레이드 봉인 → 95 · 🚫 루트 차단 → 95. 성공하면 영구 보상(발사 속도 ×1.2 · 보스 시간 +5초 · 피해 ×1.5 · 랜덤 강화 ×0.85 · 루트 권한 1당 +1%p) + 🧩 커널 코어 1개",
+      "밸런스 시뮬레이터: 크론 데몬을 사려고 루트 권한을 모아 두는 플레이어로 · 세트 · 연쇄 감염 · 업적 · 챌린지까지 계산",
+    ],
+  },
   {
     ver: "v0.4",
     date: "2026.10.12",

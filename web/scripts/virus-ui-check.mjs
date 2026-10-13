@@ -27,20 +27,53 @@ const SIZES = [
   [1920, 1080, false],
 ];
 // 중반쯤 저장 (상점 · 프로파일러 · 자동 구매가 다 보이게)
+// 후반 저장 (상점 · 커널 · 세트 · 챌린지 진행 중 🔒 · 업적 일부까지 다 보이게)
 const SAVE = {
   v: 3,
   data: 5000,
-  lifetime: 90000,
-  stage: 150,
-  best: 220,
+  lifetime: 9e12,
+  stage: 60,
+  best: 101,
+  apexBest: 100,
+  clears: 2,
+  cores: 1,
   kills: 4,
   lv: { atk: 140, spd: 160, crit: 160 },
   bossFail: true,
-  root: 10360,
-  rootSpent: 9800,
-  shop: { rootkit: 7, miner: 7, golden: 3, poly: 4, profiler: 1, cron: 1, daemon: 1, kprof: 1 },
+  root: 257,
+  rootSpent: 200,
+  shop: {
+    rootkit: 1,
+    miner: 1,
+    poly: 0,
+    profiler: 1,
+    cron: 1,
+    daemon: 1,
+    kprof: 1,
+    kpatch: 1,
+    kescal: 1,
+  },
   auto: false,
-  formats: 3,
+  formats: 4,
+  chal: "single",
+  chalDone: ["rush"],
+  ach: ["hello", "st11", "st31", "st51", "ks1", "fmt1", "gb", "tb"],
+  rec: {
+    play: 20000,
+    files: 30000,
+    chains: 400,
+    bosses: 500,
+    apexes: 40,
+    fails: 120,
+    ups: 900,
+    rands: 300,
+    jackpots: 9,
+    maxHit: 3e9,
+    bestFinal: 12.4,
+    offMax: 4000,
+    offData: 1e11,
+    evo: 3,
+  },
   savedAt: Date.now(),
 };
 
@@ -226,19 +259,22 @@ const RUNS = FULL
     await key("Enter", "Enter", 13);
     await sleep(3200);
     for (const t of [
+      "강화",
       "업그레이드",
       "모듈",
       "코드 모듈",
+      "우회",
+      "우회 기술",
       "상점",
       "루트 상점",
-      "포맷",
-      "시스템 포맷",
+      "변이",
+      "☣️ 변이",
     ]) {
       if (!(await click(t))) continue;
       await sleep(500);
       await look(`탭 ${t}`);
     }
-    for (const win of ["바이러스 도감", "게임 방법", "패치노트", "설정"]) {
+    for (const win of ["바이러스 도감", "기록", "게임 방법", "패치노트", "설정", "세이브 백업"]) {
       await key("Escape", "Escape", 27);
       await sleep(300);
       if (!(await click(win))) {
@@ -247,6 +283,11 @@ const RUNS = FULL
       }
       await sleep(600);
       await look(`창 ${win}`);
+      // 기록 창은 통계 쪽도
+      if (win === "기록" && (await click("📊 통계"))) {
+        await sleep(400);
+        await look("창 기록 · 통계");
+      }
       await key("Escape", "Escape", 27);
     }
     await key("Escape", "Escape", 27);

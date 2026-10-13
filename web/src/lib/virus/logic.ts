@@ -62,7 +62,7 @@ export const BAL = {
   formatStage: 30,
   /** 루트 권한 합계 = ((최고 스테이지 - 1) ÷ rootDiv)^rootPow — 더 멀리 가야만 늘어남 */
   rootDiv: 10,
-  /** hpGrowth 1.18 · 2.17제곱 · 3%: 항상 최적으로 해도 최종 보스까지 약 1시간 53분 (변이 5번), 스테이지 30까지는 약 5분 */
+  /** hpGrowth 1.18 · 2.17제곱 · 3%: 자동 구매로 최종 보스까지 약 1시간 20분~1시간 40분 (v0.5 업적 · 세트 포함), 스테이지 30까지는 약 3분 */
   rootPow: 2.17,
   /** 루트 권한 1당 피해 +이 비율 */
   rootBonus: 0.03,
@@ -94,6 +94,10 @@ export const BAL = {
   shopMiner: 1.3,
   /** 폴리모픽 엔진: 랜덤 강화 3레벨 확률 +이만큼 (1레벨 확률에서 뺌) */
   shopPoly: 0.03,
+  /** 업적 하나마다 피해 +이 비율 */
+  achDmg: 0.02,
+  /** 챌린지 「루트 차단」 보상: 루트 권한 1당 피해 +이만큼 더 */
+  chalRoot: 0.01,
 };
 
 const x = (n: number) => `×${Number(n.toFixed(2))}`;
@@ -159,7 +163,67 @@ export interface Save {
   auto: boolean;
   /** 포맷한 횟수 */
   formats: number;
+  /** 누적 기록 (변이해도 유지) — 통계 화면 · 업적 */
+  rec: Rec;
+  /** 달성한 업적 id */
+  ach: string[];
+  /** 진행 중인 챌린지 변이 (없으면 null) */
+  chal: ChalKey | null;
+  /** 끝낸 챌린지 (보상은 영구) */
+  chalDone: ChalKey[];
   savedAt: number;
+}
+
+/** 누적 기록 — 화면에서 일어난 일을 셈 (변이해도 유지) */
+export interface Rec {
+  /** 게임 화면에서 보낸 시간 (초) */
+  play: number;
+  /** 감염시킨 파일 */
+  files: number;
+  /** 연쇄 감염으로 덤으로 감염시킨 파일 */
+  chains: number;
+  /** 격퇴한 보스 (상위 · 최종 보스 빼고) */
+  bosses: number;
+  /** 처치한 상위 보스 */
+  apexes: number;
+  /** 보스에게 차단당한 횟수 */
+  fails: number;
+  /** 남은 시간 1초 이하에서 보스 격퇴 */
+  clutch: number;
+  /** 산 업그레이드 레벨 합계 (랜덤 강화 포함) */
+  ups: number;
+  /** 랜덤 강화 횟수 · 그중 3레벨(잭팟) */
+  rands: number;
+  jackpots: number;
+  /** 한 번에 준 가장 큰 피해 */
+  maxHit: number;
+  /** KILLSWITCH 를 가장 빨리 잡은 시간 (초, 0 = 아직 없음) */
+  bestFinal: number;
+  /** 한 번에 가장 오래 비운 시간 (초) · 오프라인으로 번 데이터 합계 */
+  offMax: number;
+  offData: number;
+  /** 가장 높이 간 진화 단계 */
+  evo: number;
+}
+
+export function newRec(): Rec {
+  return {
+    play: 0,
+    files: 0,
+    chains: 0,
+    bosses: 0,
+    apexes: 0,
+    fails: 0,
+    clutch: 0,
+    ups: 0,
+    rands: 0,
+    jackpots: 0,
+    maxHit: 0,
+    bestFinal: 0,
+    offMax: 0,
+    offData: 0,
+    evo: 0,
+  };
 }
 
 export function newSave(): Save {
@@ -194,6 +258,10 @@ export function newSave(): Save {
     cores: 0,
     auto: false,
     formats: 0,
+    rec: newRec(),
+    ach: [],
+    chal: null,
+    chalDone: [],
     savedAt: Date.now(),
   };
 }
@@ -217,7 +285,33 @@ export function parseSave(raw: string | null): Save {
     const best = Math.min(Math.max(s.best || 1, s.stage), MAX_STAGE + 1);
     const apexBest = Math.min(s.apexBest || 0, MAX_STAGE);
     const finalReady = s.stage > MAX_STAGE || !!s.finalReady;
-    return { ...newSave(), ...s, lv, shop, rootSpent, stage, best, apexBest, finalReady, kills: s.stage > MAX_STAGE ? 0 : s.kills };
+    // 기록 · 업적 · 챌린지 (v0.5에서 생김 — 없으면 빈 값, 모르는 값은 버림)
+    const rec = newRec();
+    for (const k of Object.keys(rec) as (keyof Rec)[]) {
+      const v = (s.rec as Partial<Rec> | undefined)?.[k];
+      if (typeof v === "number" && Number.isFinite(v) && v >= 0) rec[k] = v;
+    }
+    const achIds = new Set(ACH.map((a) => a.id));
+    const ach = Array.isArray(s.ach) ? [...new Set(s.ach.filter((id) => achIds.has(id)))] : [];
+    const isChal = (k: unknown): k is ChalKey => CHAL.some((c) => c.key === k);
+    const chal = isChal(s.chal) ? s.chal : null;
+    const chalDone = Array.isArray(s.chalDone) ? [...new Set(s.chalDone.filter(isChal))] : [];
+    return {
+      ...newSave(),
+      ...s,
+      lv,
+      shop,
+      rootSpent,
+      stage,
+      best,
+      apexBest,
+      finalReady,
+      kills: s.stage > MAX_STAGE ? 0 : s.kills,
+      rec,
+      ach,
+      chal,
+      chalDone,
+    };
   } catch {
     return newSave();
   }
@@ -527,6 +621,68 @@ export function tierLabel(tier: number) {
   return tier > 1 ? ` v${tier}` : "";
 }
 
+// ── 모듈 세트 ──
+// 같은 계열 바이러스의 모듈이 모두 v3 · v6 · v10 이 되면 세트 효과 (단계마다 커짐). 모듈 버전처럼 최고 스테이지로 정해짐.
+
+export interface SetDef {
+  id: string;
+  name: string;
+  icon: string;
+  /** ROSTER 번호 */
+  members: number[];
+  /** 단계(1~3)별 효과 설명 */
+  effect: (tier: number) => string;
+}
+
+/** 세트 단계가 오르는 모듈 버전 (모든 구성 모듈이 이 버전 이상) */
+export const SET_TIERS = [3, 6, 10];
+/** 세트 단계별 수치 (0단계 = 효과 없음) */
+const SET_VAL = {
+  mail: [1, 1.2, 1.5, 2],
+  worm: [0, 0.1, 0.2, 0.3],
+  wiper: [1, 1.2, 1.5, 2],
+  apt: [0, 3, 6, 10],
+};
+
+export const SETS: SetDef[] = [
+  {
+    id: "mail",
+    name: "메일 폭탄",
+    icon: "📧",
+    members: [2, 4, 9],
+    effect: (t) => `데이터 탈취 ×${SET_VAL.mail[t]}`,
+  },
+  {
+    id: "worm",
+    name: "자가 전파",
+    icon: "🪱",
+    members: [1, 7, 8],
+    effect: (t) =>
+      `연쇄 감염 ${Math.round(SET_VAL.worm[t] * 100)}% — 파일을 감염시키면 그 확률로 다음 파일도 바로 감염`,
+  },
+  {
+    id: "wiper",
+    name: "시스템 파괴",
+    icon: "💽",
+    members: [0, 3],
+    effect: (t) => `보스에게 주는 피해 ×${SET_VAL.wiper[t]}`,
+  },
+  {
+    id: "apt",
+    name: "국가급 작전",
+    icon: "🕵️",
+    members: [5, 6],
+    effect: (t) => `보스 제한 시간 +${SET_VAL.apt[t]}초`,
+  },
+];
+
+/** 세트 단계 (0~3) — 구성 모듈 중 가장 낮은 버전으로 정해짐 */
+export function setTier(best: number, d: SetDef) {
+  const m = moduleLevels(best);
+  const low = Math.min(...d.members.map((i) => m[i]));
+  return SET_TIERS.filter((t) => low >= t).length;
+}
+
 // ── 능력치 ──
 
 export interface Stats {
@@ -549,6 +705,14 @@ export interface Stats {
   rootGain: number;
   offlineRate: number;
   offlineHours: number;
+  /** 보스 제한 시간 배율 (챌린지 「제로데이」는 절반) */
+  timeMul: number;
+  /** 파일을 감염시키면 다음 파일도 바로 감염될 확률 (세트 「자가 전파」) */
+  chain: number;
+  /** 랜덤 강화 가격 배율 */
+  randMul: number;
+  /** 업적으로 받는 피해 배율 */
+  achMul: number;
 }
 
 /** 버전 v일 때 상한 쪽으로 다가간 비율 (0 → 1) */
@@ -563,11 +727,24 @@ export function modCritOf(v: number) {
 }
 
 export function stats(s: Save): Stats {
-  const m = moduleLevels(s.best);
+  // 챌린지 「모듈 봉인」: 모듈 · 우회 기술 · 세트 없음 / 「루트 차단」: 루트 권한 보너스 · 효율 강화 상품 없음
+  const naked = s.chal === "naked";
+  const noRoot = s.chal === "noroot";
+  const m = naked ? ROSTER.map(() => 0) : moduleLevels(s.best);
   // 상위 보스 특성 (처음 잡은 순서대로 열림)
-  const ac = apexCount(s.apexBest);
+  const ac = naked ? 0 : apexCount(s.apexBest);
   const has = (i: number) => ac > i;
-  const rootMul = 1 + BAL.rootBonus * s.root;
+  const set = (id: string) =>
+    naked
+      ? 0
+      : setTier(
+          s.best,
+          SETS.find((d) => d.id === id)!
+        );
+  const done = (k: ChalKey) => s.chalDone.includes(k);
+  const rootMul = noRoot ? 1 : 1 + (BAL.rootBonus + (done("noroot") ? BAL.chalRoot : 0)) * s.root;
+  const shop = (k: "rootkit" | "miner") => (noRoot ? 0 : s.shop[k]);
+  const achMul = 1 + BAL.achDmg * s.ach.length;
   const atk =
     BAL.atkStep ** s.lv.atk * BAL.atkMilestoneMul ** Math.floor(s.lv.atk / BAL.atkMilestone);
   return {
@@ -575,13 +752,16 @@ export function stats(s: Save): Stats {
       atk *
       BAL.modDmg ** m[3] *
       rootMul *
-      BAL.shopRootkit ** s.shop.rootkit *
+      BAL.shopRootkit ** shop("rootkit") *
       BAL.corePatch ** s.shop.kpatch *
-      (has(8) ? 1.5 : 1),
+      (has(8) ? 1.5 : 1) *
+      achMul *
+      (done("naked") ? 1.5 : 1),
     aps:
       (1 + (BAL.spdMax - 1) * (1 - BAL.spdK ** s.lv.spd)) *
       BAL.modSpd ** m[1] *
-      (has(1) ? 1.15 : 1),
+      (has(1) ? 1.15 : 1) *
+      (done("single") ? 1.2 : 1),
     critChance: Math.min(
       0.9,
       0.05 + (BAL.critMax - 0.05) * (1 - BAL.critK ** s.lv.crit) + modCritOf(m[7])
@@ -589,19 +769,36 @@ export function stats(s: Save): Stats {
     critMul: 2 + BAL.critMulStep * s.lv.crit + 0.5 * m[8] + (has(4) ? 1 : 0),
     dataMul:
       BAL.modData ** m[2] *
-      BAL.shopMiner ** s.shop.miner *
+      BAL.shopMiner ** shop("miner") *
       BAL.coreComp ** s.shop.kcomp *
-      (has(3) ? 1.5 : 1),
+      (has(3) ? 1.5 : 1) *
+      SET_VAL.mail[set("mail")],
     costMul: BAL.modCost ** m[4] * (has(9) ? 0.85 : 1),
     mobHpMul: BAL.modMobHp ** m[0] * (has(0) ? 0.85 : 1),
     bossHpMul: BAL.modBossHp ** m[6] * (has(5) ? 0.85 : 1),
-    bossTime: BOSS_TIME + (has(2) ? 5 : 0) + BAL.coreIrq * s.shop.kirq,
+    bossTime:
+      BOSS_TIME +
+      (has(2) ? 5 : 0) +
+      BAL.coreIrq * s.shop.kirq +
+      SET_VAL.apt[set("apt")] +
+      (done("rush") ? 5 : 0),
     rootGain: (has(7) ? 1.25 : 1) * (1 + BAL.coreEscal * s.shop.kescal),
-    bossDmgMul: BAL.modBossDmg ** m[9],
+    bossDmgMul: BAL.modBossDmg ** m[9] * SET_VAL.wiper[set("wiper")],
     rootMul,
     offlineRate: offlineRateOf(m[5]) + (has(6) ? 0.15 : 0),
     offlineHours: BAL.offHours,
+    timeMul: s.chal === "rush" ? 0.5 : 1,
+    chain: SET_VAL.worm[set("worm")],
+    randMul: done("lock") ? 0.85 : 1,
+    achMul,
   };
+}
+
+/** 보스 제한 시간 (상위 보스 · 최종 보스는 기본 시간이 더 길고, 늘어난 시간은 똑같이 더함) */
+export function bossTimeOf(kind: "boss" | "apex" | "final", st: Stats) {
+  const extra = st.bossTime - BOSS_TIME;
+  const base = kind === "final" ? FINAL_TIME : kind === "apex" ? APEX_TIME : BOSS_TIME;
+  return (base + extra) * st.timeMul;
 }
 
 /** 공격 한 번의 평균 피해 (익스플로잇 반영) */
@@ -757,12 +954,13 @@ function levelsCost(s: Save, key: UpgKey, n: number, st: Stats) {
 export function randPrice(s: Save, key: UpgKey) {
   const st = stats(s);
   const avg = RAND_ODDS.reduce((sum, p, i) => sum + p * levelsCost(s, key, i + 1, st), 0);
-  return Math.ceil(avg * BAL.randPrice);
+  return Math.ceil(avg * BAL.randPrice * st.randMul);
 }
 
 /** 실제 뽑기 확률 — 폴리모픽 엔진 레벨만큼 1레벨 확률을 3레벨로 옮김 (가격은 기본 확률 그대로라 순수한 이득) */
 export function randOdds(s: Save) {
-  const move = Math.min(RAND_ODDS[0] - 0.1, BAL.shopPoly * s.shop.poly);
+  const poly = s.chal === "noroot" ? 0 : s.shop.poly;
+  const move = Math.min(RAND_ODDS[0] - 0.1, BAL.shopPoly * poly);
   return [RAND_ODDS[0] - move, RAND_ODDS[1], RAND_ODDS[2] + move];
 }
 
@@ -778,12 +976,36 @@ export function rollRand(rand: () => number = Math.random, odds: number[] = RAND
 
 /** 랜덤 강화 실행: 값을 치르고 그 업그레이드를 1~3레벨 올림. 오른 레벨 수, 돈이 모자라면 0 */
 export function randUpgrade(s: Save, key: UpgKey, rand: () => number = Math.random) {
+  if (randLocked(s, key)) return 0;
   const price = randPrice(s, key);
   if (s.data < price) return 0;
   s.data -= price;
   const n = rollRand(rand, randOdds(s));
   s.lv[key] += n;
+  s.rec.rands++;
+  s.rec.ups += n;
+  if (n === RAND_ODDS.length) s.rec.jackpots++;
   return n;
+}
+
+/** 챌린지 때문에 이 업그레이드를 못 사는지 (「업그레이드 봉인」은 전부 · 「단일 스레드」는 오버클럭) */
+export function upgLocked(s: Save, key: UpgKey) {
+  return s.chal === "lock" || (s.chal === "single" && key === "spd");
+}
+/** 랜덤 강화를 못 하는지 (「단일 스레드」의 클럭 스파이크) */
+export function randLocked(s: Save, key: UpgKey) {
+  return s.chal === "single" && key === "spd";
+}
+
+/** 업그레이드 n번 사기 (n = Infinity 면 살 수 있는 만큼) — 산 레벨 수 */
+export function buyUpgrade(s: Save, u: UpgDef, n: number) {
+  if (upgLocked(s, u.key)) return 0;
+  const { cost, count } = bulkCost(s, u, n);
+  if (!count || s.data < cost) return 0;
+  s.data -= cost;
+  s.lv[u.key] += count;
+  s.rec.ups += count;
+  return count;
 }
 
 /** 랜덤 강화의 평균 초당 피해 증가 (로그) — 시뮬레이터가 일반 업그레이드와 비교할 때 씀 */
@@ -832,6 +1054,9 @@ export function format(s: Save): Save {
     shop: { ...s.shop },
     auto: s.auto,
     formats: s.formats + 1,
+    rec: { ...s.rec },
+    ach: [...s.ach],
+    chalDone: [...s.chalDone],
   };
 }
 
@@ -1038,7 +1263,9 @@ export function upgradeAdvice(s: Save, n: number): { list: Advice[]; best: strin
     const cost = b.count ? b.cost : upgCost(u, s.lv[u.key], st);
     const after = dps(stats({ ...s, lv: { ...s.lv, [u.key]: s.lv[u.key] + count } }));
     const g = Math.log(after / now);
-    list.push({ id: u.key, gain: (after / now - 1) * 100, score: g / cost });
+    if (!upgLocked(s, u.key))
+      list.push({ id: u.key, gain: (after / now - 1) * 100, score: g / cost });
+    if (randLocked(s, u.key)) continue;
     const eg = randExpectedGain(s, u.key);
     list.push({
       id: `rand:${u.key}`,
@@ -1170,6 +1397,7 @@ export function optimalPlan(s: Save, maxSteps = 5000): Plan {
     let pick: { key: UpgKey; n: number; cost: number } | null = null;
     let best = -Infinity;
     for (const u of UPGRADES) {
+      if (upgLocked(s, u.key)) continue;
       // 후보: 1레벨 · (페이로드는) 다음 「25레벨마다 ×2」까지 한 묶음 — 한 칸씩만 보면 큰 도약을 놓침
       const ns = [1];
       if (u.key === "atk") {
@@ -1204,6 +1432,7 @@ export function applyPlan(s: Save, p: Plan) {
   if (!p.count || s.data < p.cost) return false;
   s.data -= p.cost;
   for (const k of Object.keys(p.add) as UpgKey[]) s.lv[k] += p.add[k];
+  s.rec.ups += p.count;
   return true;
 }
 
@@ -1214,8 +1443,214 @@ export function offlineGain(s: Save, seconds: number) {
   const st = stats(s);
   const secs = Math.min(seconds, st.offlineHours * 3600);
   if (secs < 60) return { data: 0, secs: 0 };
-  const perSec = (dps(st) / mobHp(s.stage, st)) * mobData(s.stage, st);
+  // 연쇄 감염은 평균만큼 파일을 더 감염시킨다고 봄
+  const perSec = (dps(st) / mobHp(s.stage, st)) * mobData(s.stage, st) * (1 + st.chain);
   return { data: perSec * secs * st.offlineRate, secs };
+}
+
+// ── 챌린지 변이 (첫 KILLSWITCH 격퇴 뒤 열림) ──
+// 스테이지 1부터 제약을 걸고 다시 퍼짐. 목표 스테이지를 넘으면 제약이 풀리고 영구 보상 + 커널 코어. 그냥 변이하면 챌린지는 끝남.
+
+export type ChalKey = "lock" | "rush" | "naked" | "single" | "noroot";
+
+export interface ChalDef {
+  key: ChalKey;
+  name: string;
+  icon: string;
+  rule: string;
+  /** 이 스테이지의 보스(10의 배수면 상위 보스까지)를 넘으면 성공 */
+  goal: number;
+  reward: string;
+}
+
+export const CHAL: ChalDef[] = [
+  {
+    key: "single",
+    name: "단일 스레드",
+    icon: "🐌",
+    rule: "오버클럭 · 클럭 스파이크를 살 수 없음 (발사 속도 고정)",
+    goal: 90,
+    reward: "발사 속도 ×1.2",
+  },
+  {
+    key: "rush",
+    name: "제로데이",
+    icon: "⏱️",
+    rule: "모든 보스 제한 시간이 절반",
+    goal: 99,
+    reward: "보스 제한 시간 +5초",
+  },
+  {
+    key: "naked",
+    name: "모듈 봉인",
+    icon: "🧱",
+    rule: "코드 모듈 · 우회 기술 · 모듈 세트 효과 없음",
+    goal: 55,
+    reward: "피해 ×1.5",
+  },
+  {
+    key: "lock",
+    name: "업그레이드 봉인",
+    icon: "🔒",
+    rule: "일반 업그레이드 · 크론잡을 쓸 수 없고 랜덤 강화만",
+    goal: 95,
+    reward: "랜덤 강화 가격 ×0.85",
+  },
+  {
+    key: "noroot",
+    name: "루트 차단",
+    icon: "🚫",
+    rule: "루트 권한 피해 보너스 · 루트킷 · 데이터 마이닝 · 폴리모픽 엔진 효과 없음",
+    goal: 95,
+    reward: `루트 권한 1당 피해 +${BAL.chalRoot * 100}%p`,
+  },
+];
+
+/** 챌린지를 고를 수 있는지 (첫 KILLSWITCH 격퇴 뒤) */
+export function chalOpen(s: Save) {
+  return s.clears > 0;
+}
+
+/** 챌린지 시작: 변이처럼 몸을 버리지만 스테이지 1부터 (받을 루트 권한이 있으면 같이 받음) */
+export function startChal(s: Save, key: ChalKey): Save {
+  return { ...format(s), stage: 1, chal: key };
+}
+
+/** 챌린지 목표를 넘었으면 끝내고 보상 — 끝낸 챌린지 (처음이면 커널 코어 +1) */
+export function checkChal(s: Save): ChalDef | null {
+  const d = CHAL.find((c) => c.key === s.chal);
+  if (!d || (s.stage <= d.goal && !s.finalReady)) return null;
+  s.chal = null;
+  if (!s.chalDone.includes(d.key)) {
+    s.chalDone.push(d.key);
+    s.cores++;
+  }
+  return d;
+}
+
+// ── 업적 ──
+// 업적 하나마다 피해 +BAL.achDmg. 조건은 저장본만 보고 판단 (화면에서 일어난 일은 rec 에 셈).
+
+export interface AchDef {
+  id: string;
+  icon: string;
+  name: string;
+  desc: string;
+  /** [지금, 목표] — 지금이 목표 이상이면 달성 */
+  prog: (s: Save) => [number, number];
+  /** 진행 수치를 바이트로 보여 줄지 */
+  bytes?: boolean;
+}
+
+const GB = 1024 ** 3;
+const TB = 1024 ** 4;
+const ach = (
+  id: string,
+  icon: string,
+  name: string,
+  desc: string,
+  prog: AchDef["prog"],
+  bytes = false
+): AchDef => ({ id, icon, name, desc, prog, bytes });
+
+export const ACH: AchDef[] = [
+  // 진행
+  ach("hello", "👋", "Hello, World", "처음으로 파일 감염", (s) => [s.rec.files, 1]),
+  ach("st11", "🖥️", "개인 PC 탈출", "스테이지 10 돌파", (s) => [s.best - 1, 10]),
+  ach("st31", "🏢", "사내 LAN 장악", "스테이지 30 돌파", (s) => [s.best - 1, 30]),
+  ach("st51", "🏦", "은행 전산망 침투", "스테이지 50 돌파", (s) => [s.best - 1, 50]),
+  ach("st81", "📡", "통신사 백본", "스테이지 80 돌파", (s) => [s.best - 1, 80]),
+  ach("st101", "🌐", "루트 DNS 함락", "스테이지 100 돌파", (s) => [s.best - 1, 100]),
+  ach("pure", "🧪", "순수 혈통", "변이하지 않고 스테이지 70 돌파", (s) => [
+    s.formats ? 0 : s.best - 1,
+    70,
+  ]),
+  ach("bypass5", "🛡️", "우회 전문가", "우회 기술 5개", (s) => [apexCount(s.apexBest), 5]),
+  ach("set1", "🧩", "세트 효과", "모듈 세트 하나를 1단계로", (s) => [
+    Math.max(...SETS.map((d) => setTier(s.best, d))),
+    1,
+  ]),
+  ach("set3", "💠", "완성된 무기고", "모듈 세트 하나를 3단계로", (s) => [
+    Math.max(...SETS.map((d) => setTier(s.best, d))),
+    3,
+  ]),
+  ach("ks1", "☢️", "스위치 오프", "KILLSWITCH 격퇴", (s) => [s.clears, 1]),
+  ach("ks5", "⚡", "연쇄 차단", "KILLSWITCH 5번 격퇴", (s) => [s.clears, 5]),
+  ach("ks10", "🌑", "인터넷의 종말", "KILLSWITCH 10번 격퇴", (s) => [s.clears, 10]),
+  ach("ksfast", "🏎️", "블리츠", "KILLSWITCH를 10초 안에 격퇴", (s) => [
+    s.rec.bestFinal > 0 && s.rec.bestFinal <= 10 ? 1 : 0,
+    1,
+  ]),
+  // 변이 · 챌린지
+  ach("fmt1", "☣️", "첫 변이", "처음으로 변이", (s) => [s.formats, 1]),
+  ach("fmt5", "🧫", "변종 다발", "변이 5번", (s) => [s.formats, 5]),
+  ach("fmt10", "♾️", "끝없는 변이", "변이 10번", (s) => [s.formats, 10]),
+  ach("root100", "🔑", "관리자 권한", "루트 권한 100", (s) => [s.root, 100]),
+  ach("root300", "👑", "시스템 소유자", "루트 권한 300", (s) => [s.root, 300]),
+  ach("chal1", "🎯", "챌린저", "챌린지 변이 하나 성공", (s) => [s.chalDone.length, 1]),
+  ach("chalAll", "🏆", "완벽한 변종", "챌린지 변이 모두 성공", (s) => [
+    s.chalDone.length,
+    CHAL.length,
+  ]),
+  // 누적
+  ach("files1k", "📂", "대량 감염", "파일 1,000개 감염", (s) => [s.rec.files, 1000]),
+  ach("files100k", "🦠", "팬데믹", "파일 100,000개 감염", (s) => [s.rec.files, 100000]),
+  ach("chain", "🔗", "연쇄 반응", "연쇄 감염 1,000번", (s) => [s.rec.chains, 1000]),
+  ach("gb", "💾", "기가바이트 도둑", "데이터 1GB 탈취 (누적)", (s) => [s.lifetime, GB], true),
+  ach("tb", "🗄️", "테라바이트 도둑", "데이터 1TB 탈취 (누적)", (s) => [s.lifetime, TB], true),
+  ach("tb50", "🏛️", "빅데이터", "데이터 50TB 탈취 (누적)", (s) => [s.lifetime, 50 * TB], true),
+  ach("ups1k", "🔧", "튜닝 중독", "업그레이드 1,000레벨", (s) => [s.rec.ups, 1000]),
+  ach("evo", "🧠", "오버마인드", "진화 마지막 단계", (s) => [s.rec.evo, EVOLUTION.length - 1]),
+  // 도전
+  ach("clutch", "😰", "아슬아슬", "남은 시간 1초 이하에서 보스 격퇴", (s) => [s.rec.clutch, 1]),
+  ach("fails", "🔁", "불굴의 코드", "보스에게 10번 차단당함", (s) => [s.rec.fails, 10]),
+  ach("jackpot", "🎰", "잭팟 중독", "랜덤 강화 잭팟(+3레벨) 10번", (s) => [s.rec.jackpots, 10]),
+  ach("idle", "😴", "장기 잠복", "한 번에 8시간 넘게 자리 비우기", (s) => [s.rec.offMax, 8 * 3600]),
+  ach("play", "⌛", "상주 프로세스", "게임 화면에서 10시간", (s) => [s.rec.play, 10 * 3600]),
+];
+
+/** 업적 확인 — 새로 달성한 것 (저장본에 기록함) */
+export function checkAch(s: Save): AchDef[] {
+  s.rec.evo = Math.max(s.rec.evo, evoStage(s.lv));
+  const got: AchDef[] = [];
+  for (const d of ACH) {
+    if (s.ach.includes(d.id)) continue;
+    const [cur, goal] = d.prog(s);
+    if (cur >= goal) {
+      s.ach.push(d.id);
+      got.push(d);
+    }
+  }
+  return got;
+}
+
+// ── 세이브 백업 (다른 브라우저 · 기기로 옮기기) ──
+
+const BACKUP_TAG = "VIRUS1.";
+
+/** 저장본 → 복사해 둘 수 있는 글자 (VIRUS1. + base64) */
+export function exportSave(s: Save) {
+  const bytes = new TextEncoder().encode(JSON.stringify(s));
+  let bin = "";
+  for (const b of bytes) bin += String.fromCharCode(b);
+  return BACKUP_TAG + btoa(bin);
+}
+
+/** 백업 글자 → 저장본 (알아볼 수 없으면 null) — 그냥 JSON 을 붙여 넣어도 됨 */
+export function importSave(code: string): Save | null {
+  const t = code.trim().replace(/\s+/g, "");
+  let json: string;
+  try {
+    if (t.startsWith(BACKUP_TAG)) {
+      const bin = atob(t.slice(BACKUP_TAG.length));
+      json = new TextDecoder().decode(Uint8Array.from(bin, (c) => c.charCodeAt(0)));
+    } else json = code.trim();
+    const raw = JSON.parse(json) as Partial<Save>;
+    if (raw?.v !== 3 || !(Number(raw.stage) >= 1) || !raw.lv) return null;
+  } catch {
+    return null;
+  }
+  return parseSave(json);
 }
 
 // ── 숫자 표시 ──
