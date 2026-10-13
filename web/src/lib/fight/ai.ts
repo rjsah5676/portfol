@@ -3,7 +3,7 @@
  * 반응 속도(몇 프레임 뒤에 알아채나), 가드·대공·콤보 확률로 단계를 나눔.
  * 오프라인 전용이라 결정론일 필요는 없지만, 같은 시드면 같은 행동을 하도록 자체 난수를 씀.
  */
-import { CHARS, SUB, type MoveDef } from "./chars";
+import { CHARS, SUB, type CharDef, type MoveDef } from "./chars";
 import { IN, VIEW_H, clone, isAir, mapOf, platBelow, step, type Fighter, type State } from "./sim";
 import type { Plat } from "./maps";
 import { ROUTES, type ComboRoute, type Starter } from "./combos";
@@ -265,6 +265,12 @@ type Intent =
 
 /** 기술 사거리(px): 박스 끝 + 여유 */
 const reachOf = (m: MoveDef, extra = 4) => m.box.x + m.box.w + extra;
+/** 공중에서 손이 닿는 거리 (공중 약 · 발차기 · 공중 아이덴티티 — 돌진은 돌진 거리, 탄은 멀리) */
+const airSReachOf = (c: CharDef) => {
+  const sa = { ...c.moves.S, ...(c.moves.S.air ?? {}) } as MoveDef;
+  return Math.min(sa.proj ? 230 : reachOf(sa) + (sa.rush ? Math.trunc((sa.rush.vx * sa.active) / SUB) : 0), 230);
+};
+const airReachOf = (c: CharDef) => Math.max(reachOf(c.moves.J), reachOf(c.moves.K), airSReachOf(c));
 
 /** 상대가 그 상황에서 한 행동 */
 type Act = "atk" | "throw" | "jump" | "block" | "wait";
@@ -308,6 +314,12 @@ export class FightAI {
   /** 뛰어들며 치는 공격을 처음 본 프레임 · 막을지 */
   private sawAir = -1;
   private airBlockDecision: boolean | null = null;
+  /** 상대가 뛰어서 공중 손 닿는 거리로 들어옴: 처음 본 프레임 · 어떻게 할지 (뛸 때 한 번 정함 — 공격이 나온 걸 보고 반응하는 게 아니라 뛰는 걸 보고 미리) */
+  private sawZone = -1;
+  private zonePlan: "guard" | "back" | "none" | null = null;
+  /** 내가 떠 있을 때 상대가 공중 아이덴티티로 받아치려고 뛰어오름: 피할지 (상대 점프마다 한 번 정함) */
+  private dodgeDecision: boolean | null = null;
+  private respect: boolean | null = null;
   private blockDecision: boolean | null = null;
   private aaDecision: boolean | null = null;
   private comboDecision: boolean | null = null;
@@ -326,6 +338,7 @@ export class FightAI {
   private routeFlip = false;
   private routeIdle = 0;
   private routeHp = 0;
+  private prevRoute = 0;
   /** 내다보고 고른 입력 (남은 프레임) */
   private plan: number[] = [];
   /** 대시 입력 (톡·떼고·톡) 남은 프레임 */
@@ -421,7 +434,15 @@ export class FightAI {
       if (this.lastPress & b) return;
       out |= b;
     };
+    // 공중에서 상대가 공중 아이덴티티를 쥔 채 올라오는데 내 공중 공격은 안 닿는 거리 — 허공에 휘둘러 굳지 말고 물러남
+    // (휘두르다 굳은 채 공중 L에 맞던 것, 10.13 · 한 번 마주칠 때마다 단계별 확률로 한 번 정함 — 늘 피하진 않음)
+    const oUpNow = air && isAir(s, o) && (o.st === "jump" || o.st === "atk") && o.cd === 0 && o.face > 0 === f.x > o.x;
+    if (!oUpNow) this.respect = null;
     const finish = () => {
+      if (oUpNow && out & (IN.A | IN.B) && dist > reachOf(c.moves.J) + 12 && dist < airReachOf(oc) + 60) {
+        if (this.respect === null) this.respect = this.r() < L.antiAir * 0.6 + (L.read ?? 0) * 0.3;
+        if (this.respect) out = (out & ~(IN.A | IN.B | IN.L | IN.R)) | away;
+      }
       this.lastPress = out & (IN.A | IN.B | IN.C | IN.X | IN.J);
       // 방금 톡 했던 방향을 다시 누르면 대시가 나감 → 대시 거리 안에 낭떠러지면 이번엔 안 누름
       if (!isAir(s, f) && !this.crossTo && f.st !== "dash") {
@@ -471,23 +492,44 @@ export class FightAI {
         this.routeFlip = o.x < f.x;
         this.routeIdle = 0;
         this.routeHp = o.hp;
+        this.prevRoute = 0;
       }
     }
     if (this.route) {
       const busy = o.st === "hit" || o.st === "down" || o.trapT > 0 || o.grabbed > 0;
       this.routeIdle = busy ? 0 : this.routeIdle + 1;
       // 콤보 길은 피해 ROUTE_CAP 까지만 (캐릭터마다 길이 달라 너무 아픈 길이 승률을 흔들지 않게) — 그다음은 원래 판단으로
-      if (this.routeI >= this.route.r.length || this.routeIdle > 3 || this.routeHp - o.hp >= ROUTE_CAP) this.route = null;
+      if (this.routeI >= this.route.r.length || this.routeIdle > 1 || this.routeHp - o.hp >= ROUTE_CAP) this.route = null;
       else {
-        let a = this.route.r[this.routeI++];
+        let a = this.route.r[this.routeI];
+        // 길을 그대로 따라가다 상대가 먼저 풀려 내가 공중에서 얻어맞던 것 (10.13) — 사람처럼, 다음 타가 안 들어갈 것 같으면
+        // 뛰거나 새로 치지 않고 길을 접음: 상대가 곧 풀리는데(땅에서 맞는 중 · 남은 경직 짧음) 새로 뛰려 하거나,
+        // 상대가 더는 맞는 중이 아닌데 공격을 새로 누르려 할 때
+        // (띄운 상대도 남은 경직이 이번 기술 발생보다 짧으면 공중에서 먼저 풀려 받아침 — 그땐 새로 안 침)
+        const held = o.grabbed > 0 || o.trapT > 0 || o.st === "down";
+        const fresh = a & ~this.prevRoute & (IN.J | IN.A | IN.B | IN.C);
+        const nm = !fresh ? undefined : fresh & IN.J ? undefined : air
+          ? fresh & IN.A ? c.moves.J : fresh & IN.B ? c.moves.K : c.moves.S.air
+          : fresh & IN.A ? c.moves.L : fresh & IN.B ? c.moves.H : c.moves.S;
+        const needT = fresh & IN.J ? 14 : (nm?.startup ?? 0) + 2;
+        if (fresh && !held && (o.st !== "hit" || o.stun < needT)) {
+          this.route = null;
+          this.prevRoute = 0;
+        } else {
+        this.routeI++;
+        this.prevRoute = a;
         if (this.routeFlip) a = (a & ~(IN.L | IN.R)) | (a & IN.L ? IN.R : 0) | (a & IN.R ? IN.L : 0);
         out = a;
         this.lastPress = 0;
         // (입력을 그대로 내보냄 — finish 의 대시 보정 등은 거치지 않음)
         this.prevDir = a & (IN.L | IN.R);
         return a;
+        }
       }
     }
+    // 미리 짜 둔 땅 수순을 따라가는 중에 상대가 이쪽으로 뛰어들어 온 걸 알아챘으면 수순을 접고 다시 판단
+    // (짜 둔 대로 발차기·잡기를 내밀다 공중 L에 맞던 것, 10.13 — 상황이 바뀌면 사람도 하던 걸 멈춤)
+    if (this.plan.length && !air && this.sawZone >= 0 && s.f - this.sawZone >= L.react && isAir(s, o) && o.st !== "hit") this.plan = [];
     if (this.plan.length) {
       out = this.plan.shift()!;
       return finish();
@@ -518,6 +560,19 @@ export class FightAI {
       this.dashSeq = [0, dir, dir, 0, 0, dir, dir, dir];
       return finish();
     };
+    // ── 공중에서 받아치기 피하기: 내가 떠 있는데 상대가 공중 아이덴티티(건모 Alt+Tab · 제나 뇌격돌 · 소영 채찍 …)를
+    // 쓸 수 있는 채로 뛰어오르며 다가오면 공중 대시로 빠짐 (공중에선 못 막아서 다 맞던 것, 10.13 — 보고 반응이 아니라 뛰는 걸 보고)
+    {
+      const oUp = isAir(s, o) && (o.st === "jump" || o.st === "atk") && o.cd === 0 && o.face > 0 === f.x > o.x;
+      if (!oUp) this.dodgeDecision = null;
+      else if (air && f.st === "jump" && !f.airDash && dist < airReachOf(oc) + 40 && dist > 50) {
+        if (this.dodgeDecision === null) this.dodgeDecision = this.r() < L.antiAir * 0.55 + (L.read ?? 0) * 0.25;
+        if (this.dodgeDecision) {
+          this.dodgeDecision = false;
+          return airDash(away);
+        }
+      }
+    }
     // ── 공중 노림수: 뛰어서 다가가는 중 — 상대가 하던 행동 비율로 공격 타이밍 · 2단 점프 · 공중 대시를 미리 돌려 보고 파고듦 ──
     if ((L.plan ?? 0) > 0 && air && f.st === "jump" && !isAir(s, o) && dist < 160 && Math.abs(dy) < 170 && s.f >= this.nextRead && o.st !== "hit") {
       this.nextRead = s.f + K.every;
@@ -650,6 +705,19 @@ export class FightAI {
     const noticed = (t: number) => t >= 0 && s.f - t >= L.react;
     // 뛰어들며 치는 공격 (공중 약 · 발차기 · 공중 아이덴티티 · 필살기): 나를 보고 위에서 떨어지며 닿을 거리 — 막음 (10.13: 공중 약은 공격으로 안 봐서 점프 약 연타에 다 맞던 것)
     const oAirAtk = !!om && isAir(s, o) && o.mv !== "T" && dy > -20 && dy < 150 && dist < 130 && o.face > 0 === f.x > o.x;
+    // 뛰어든 상대의 공중 손 닿는 거리 안 (나를 보고, 비슷한 높이 ~ 위)
+    // (이쪽으로 오며 뛰는 중이면 반응 시간 동안 다가올 거리만큼 더 멀리서부터 — 사람도 뛰는 걸 보고 미리 대비)
+    const oCome = o.vx !== 0 && o.vx > 0 === f.x > o.x ? Math.min(90, (Math.abs(o.vx) * (L.react + 6)) / SUB) : 0;
+    // 공중 아이덴티티가 준비됐고, 공중 약 · 발차기는 안 닿는데 그건 닿는 거리일 때만 (더 가까이 오면 평소처럼 대공 · 공중전 —
+    // 뛰어드는 상대마다 미리 웅크리면 점프 공격만 하는 상대에게 손을 못 써서 더 짐)
+    // (소영 채찍처럼 공중 약 · 발차기보다 훨씬 아래까지 닿는 거면 위에서 내려치는 거라 가까워도 막음)
+    const oSa = { ...oc.moves.S, ...(oc.moves.S.air ?? {}) } as MoveDef;
+    const oDeep = oSa.box.y - oSa.box.h < Math.min(oc.moves.J.box.y - oc.moves.J.box.h, oc.moves.K.box.y - oc.moves.K.box.h) - 40;
+    const oJR = oDeep ? 0 : Math.max(reachOf(oc.moves.J), reachOf(oc.moves.K));
+    const oZone =
+      isAir(s, o) && (o.st === "jump" || o.st === "atk") && (o.cd < 60 || o.st === "atk") && o.face > 0 === f.x > o.x && dy > -30 && dy < 170 && dist > oJR + 8 && dist < airSReachOf(oc) + 24 + oCome;
+    if (!isAir(s, o) || o.st === "hit") ((this.sawZone = -1), (this.zonePlan = null));
+    else if (oZone && this.sawZone < 0) this.sawZone = s.f;
     if (oAirAtk) {
       if (this.sawAir < 0) this.sawAir = s.f;
     } else {
@@ -679,7 +747,8 @@ export class FightAI {
         press(IN.J);
         return finish();
       }
-      if ((f.st === "idle" || f.st === "walk") && !air && dist < 60) {
+      // (뜬 상대가 곧 풀리면 쫓아 뛰거나 새로 치지 않음 — 공중에서 먼저 풀린 상대에게 받아치기 당하던 것, 10.13)
+      if ((f.st === "idle" || f.st === "walk") && !air && dist < 60 && o.stun >= 16) {
         out |= toward;
         press(IN.J);
         return finish();
@@ -687,7 +756,7 @@ export class FightAI {
       if (f.st === "jump" || (f.st === "atk" && f.hit && (f.mv === "J" || f.mv === "K"))) {
         out |= toward;
         // 공중 연속: 약 위주로 이어 치다 마지막은 발차기 (박자: 판정이 맞은 직후에 누름)
-        if (dist < 48 && dy > -25 && dy < 70 && this.r() < 0.35 + L.combo * 0.6) {
+        if (dist < 48 && dy > -25 && dy < 70 && o.stun >= c.moves.J.startup + 2 && this.r() < 0.35 + L.combo * 0.6) {
           if (c.moves.S.air?.hug && f.cd === 0 && !o.hugd && (o.combo >= 3 || f.airUsed >= 3) && this.r() < 0.5 + L.combo * 0.5) {
             // 곰 포옹으로 마무리: 안고 내리꽂아 기절 → 땅에서 이어 침
             press(IN.C);
@@ -737,6 +806,26 @@ export class FightAI {
     }
     const projDist = incoming ? Math.abs(incoming.x - f.x) / SUB : 999;
 
+    // ── 뛰어든 상대: 공중 공격이 나오기 전에 미리 (사람처럼 뛰는 걸 보고) 막거나 물러남 ──
+    // (10.13: 공중 L 처럼 빠른 공중 기술은 나온 걸 보고는 못 막아서 다 맞던 것 — 반응보다 흐름으로)
+    if ((free || blocking) && !air && oZone && noticed(this.sawZone)) {
+      if (this.zonePlan === null) {
+        const rd = L.read ?? 0;
+        const grab = !!oc.moves.S.air?.hug; // 이반 곰 포옹: 못 막음 → 물러남
+        const pg = grab ? 0 : L.block * (0.7 + 0.25 * rd);
+        const pb = grab ? 0.45 + 0.5 * L.block : 0.1 + 0.2 * rd;
+        const x = this.r();
+        this.zonePlan = x < pg ? "guard" : x < pg + pb ? "back" : "none";
+      }
+      if (this.zonePlan === "guard") {
+        out = IN.D;
+        return finish();
+      }
+      if (this.zonePlan === "back") {
+        out |= away;
+        return finish();
+      }
+    }
     // ── 뛰어드는 공격 막기 ──
     if ((free || blocking) && !air && oAirAtk && noticed(this.sawAir)) {
       if (this.airBlockDecision === null) this.airBlockDecision = this.r() < L.block;
@@ -1006,6 +1095,8 @@ export class FightAI {
     }
 
     // ── 높이 맞추기: 위로 점프 / 아래로 내려가기 ──
+    // 위 상대 손 닿는 거리: 평타 · 공중 아이덴티티가 곧 준비되면 그것까지 (뛰어오르는 나를 공중에서 받아침)
+    const oUpReach = Math.max(oReach, o.cd < 30 ? Math.min(airReachOf(oc), 200) : 0);
     if (free && !air) {
       // 한 번에 못 올라가는 높이(2단 점프로 약 228px)면 중간 발판을 거쳐 감
       if (dy > 50 && !isAir(s, o) && !this.climb) {
@@ -1022,7 +1113,8 @@ export class FightAI {
             // 높을수록, 상대 쪽일수록, 지금 자리에서 가까울수록
             // 거쳐 갈 발판에 내려앉는 자리가 위 상대 손 닿는 곳이면 피함 (거기로 뛰어오르다 맞고 떨어짐)
             const land = Math.max(p.x0 + 18, Math.min(p.x1 - 18, f.x / SUB));
-            const risky = p.y > o.h / SUB - 150 && Math.abs(land - o.x / SUB) < oReach + 45;
+            // (공중 아이덴티티가 곧 준비되면 그 거리까지 — 뛰어내리며 받아침, 10.13)
+            const risky = p.y > o.h / SUB - 150 && Math.abs(land - o.x / SUB) < oUpReach + 45;
             const sc = p.y * 2 - Math.abs(tx - o.x / SUB) * 0.6 - Math.abs(px - f.x / SUB) * 0.4 - (risky ? 400 : 0);
             if (sc > bs) ((bs = sc), (best = p));
           }
@@ -1043,7 +1135,7 @@ export class FightAI {
         const tp = platBelow(map, o.x, o.h);
         const here = platBelow(map, f.x, f.h);
         const oBusy = (o.st === "atk" && o.t > 3) || o.st === "hit" || o.st === "down" || o.st === "rise" || o.trapT > 0 || o.grabbed > 0;
-        const danger = oReach + 45;
+        const danger = oUpReach + 45;
         const hurry = s.timer < 25 * 60 && f.hp / c.hp <= o.hp / oc.hp;
         if (tp && here && this.upSmart && !oBusy && !hurry) {
           let ex: number | null = null;
@@ -1191,7 +1283,10 @@ export class FightAI {
       case "jumpIn":
         if (free) {
           out |= toward;
-          if (this.r() < 0.2 && !(isAir(s, o) && dist < 160)) press(IN.J);
+          // 상대가 공중 아이덴티티(건모 Alt+Tab · 제나 뇌격돌 · 소영 채찍 …)를 쓸 수 있으면 그 손 닿는 거리 안으로는 잘 안 뛰어듦
+          // — 뛰어들다 공중에서 받아치기 당하기만 함 (10.13). 가끔은 섞음
+          const oAA = o.cd < 30 && dist < airReachOf(oc) + 70 && this.r() > 0.05;
+          if (this.r() < 0.2 && !(isAir(s, o) && dist < 160) && !oAA) press(IN.J);
         } else if (f.st === "jump" && dist < 50 && dy < 10) {
           out |= toward;
           press(IN.B);
@@ -1436,6 +1531,12 @@ export class FightAI {
         cands.push(seq([toward, toward, IN.A | IN.B], IN.D));
         cands.push(seq([0, 0, 0, IN.A], IN.D));
       }
+    }
+    // 상대가 공중 아이덴티티를 쓸 수 있고 그 거리 안이면 뛰는 수는 빼고 봄 — 상대 대응 모형에 '뛰어서 공중 L' 이 없어서
+    // 내다보기가 점프를 좋게 보고 뛰었다가 공중에서 받아치기 당하던 것 (10.13). 가끔은 그대로 섞음
+    if (o.cd < 30 && Math.abs(o.x - f.x) / SUB < airReachOf(CHARS[o.ch]) + 70 && this.r() > 0.05) {
+      const nj = cands.filter((c) => !c.some((x) => x & IN.J));
+      if (nj.length) cands.splice(0, cands.length, ...nj);
     }
     const oTo = o.x < f.x ? IN.R : IN.L;
     // 상대 대응: [첫 2프레임 뒤 누를 입력, 무게]
