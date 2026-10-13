@@ -82,7 +82,7 @@ export const newView = (): View => ({
 });
 
 const FX_LIFE: Record<Fx["k"], number> = {
-  shot: 160,
+  shot: 260,
   aoe: 340,
   chain: 200,
   ult: 1000,
@@ -90,6 +90,7 @@ const FX_LIFE: Record<Fx["k"], number> = {
   miss: 450,
   whip: 700,
   heal: 650,
+  spawn: 620,
 };
 
 /** 시뮬에서 온 효과를 화면 효과로 (한 프레임에 너무 많으면 앞쪽은 버림 — 배속일 때) */
@@ -320,7 +321,9 @@ function sprite(
   now: number,
   attackT: number,
   dir = 1,
-  squash = 0
+  squash = 0,
+  /** 기울기 (라디안, 발 기준) — 공격 동작 */
+  tilt = 0
 ) {
   const im = img(s.src);
   if (!im) return false;
@@ -339,6 +342,7 @@ function sprite(
   ctx.imageSmoothingEnabled = !s.pixel;
   ctx.translate(Math.round(cx), Math.round(footY));
   if (flip) ctx.scale(-1, 1);
+  if (tilt) ctx.rotate(tilt * (s.face ?? 1));
   ctx.drawImage(im, f * s.w, row.row * s.h, s.w, s.h, -w * ax, -h * ay, w, h);
   ctx.restore();
   return true;
@@ -736,16 +740,17 @@ export function drawStack(
     const x = cx + ox,
       y = footY + oy;
     const since = now - shotT;
-    const attacking = since < 140;
-    // 숨쉬기 (2px 계단) · 공격: 앞으로 튀어나감 + 살짝 눌림
+    // 숨쉬기 (2px 계단) · 공격 동작은 세력마다 (attackPose)
     const bob = Math.floor((now / 380 + ci * 0.7 + k * 0.5) % 2) * 2;
-    const lunge = attacking ? (since < 70 ? 4 : 2) * dir : 0;
-    const squash = attacking ? 0.08 : bob ? 0.03 : 0;
+    const pose = attackPose(d.faction, since, dir, now + k * 37);
+    const lunge = pose.dx;
+    const squash = pose.squash || (bob ? 0.03 : 0);
     if (!lifted) shadow(ctx, x, y, size * 0.62);
-    const yy = y - (lifted ? 6 : 0);
+    const yy = y - (lifted ? 6 : 0) - pose.dy;
+    if (pose.cast > 0) castRing(ctx, d.faction, x, y, size, pose.cast);
     // 등급색 외곽선 (그림 둘레 2px) — 노말은 없음
-    if (art && g >= 1) gradeOutline(ctx, art, id, x + lunge, yy, size, dir, squash, now);
-    if (art && sprite(ctx, art, x + lunge, yy, size, now, shotT, dir, squash)) {
+    if (art && g >= 1) gradeOutline(ctx, art, id, x + lunge, yy, size, dir, squash, now, pose.tilt);
+    if (art && sprite(ctx, art, x + lunge, yy, size, now, shotT, dir, squash, pose.tilt)) {
       // 맞으면 흰 번쩍임은 생략 (그림 위 덧칠 비용) — 기절만 표시
     } else {
       const dl = doll(id);
@@ -862,7 +867,8 @@ function gradeOutline(
   size: number,
   dir: number,
   squash: number,
-  now: number
+  now: number,
+  tilt = 0
 ) {
   const g = UNIT[id].grade;
   const col = g >= 4 && Math.floor(now / 260) % 2 ? "#ffffff" : GRADE_COLOR[g];
@@ -878,6 +884,7 @@ function gradeOutline(
   ctx.imageSmoothingEnabled = !art.pixel;
   ctx.translate(Math.round(cx), Math.round(footY));
   if (flip) ctx.scale(-1, 1);
+  if (tilt) ctx.rotate(tilt * (art.face ?? 1));
   ctx.globalAlpha = g >= 2 ? 1 : 0.85;
   for (const [dx, dy] of [
     [-o, 0],
@@ -1012,6 +1019,44 @@ function drawEnemy(ctx: CanvasRenderingContext2D, e: Enemy, now: number) {
   }
 }
 
+/**
+ * 공격 동작 (그림 한 장으로 하는 코드 애니메이션, 200ms):
+ *  기사단 — 앞으로 내딛으며 앞으로 기울였다 돌아옴 (베기)
+ *  기계공방 — 뒤로 반동 + 덜컹 (발사)
+ *  마도회 — 살짝 떠오르고 발밑에 마법진 (시전)
+ *  히든 — 글리치처럼 좌우로 튐
+ */
+const ATK_MS = 200;
+function attackPose(f: string, since: number, dir: number, seed: number) {
+  const none = { dx: 0, dy: 0, tilt: 0, squash: 0, cast: 0 };
+  if (since < 0 || since >= ATK_MS) return none;
+  const q = since / ATK_MS; // 0 → 1
+  const step = Math.floor(q * 4); // 4계단 (도트 느낌)
+  switch (f) {
+    case "knight":
+      return { dx: [5, 7, 4, 1][step] * dir, dy: 0, tilt: [0.16, 0.24, 0.1, 0][step] * dir, squash: [0.06, 0.08, 0.03, 0][step], cast: 0 };
+    case "mech":
+      return { dx: [-4, -3, -1, 0][step] * dir + (step < 2 ? (Math.floor(seed / 30) % 2 ? 1 : -1) : 0), dy: 0, tilt: [-0.06, -0.04, -0.02, 0][step] * dir, squash: [0.1, 0.05, 0.02, 0][step], cast: 0 };
+    case "arcane":
+      return { dx: 0, dy: [2, 4, 4, 2][step], tilt: 0, squash: [0, -0.04, -0.03, 0][step], cast: 1 - q };
+    default:
+      return { dx: [3, -3, 2, 0][step], dy: [0, 2, 0, 0][step], tilt: 0, squash: 0.04, cast: 1 - q };
+  }
+}
+
+/** 시전 마법진 (발밑 타원 위 도트 점들 — 마도회 보라 · 히든 초록) */
+function castRing(ctx: CanvasRenderingContext2D, f: string, x: number, y: number, size: number, a: number) {
+  const col = f === "hidden" ? "76,255,176" : "192,140,255";
+  const r = size * 0.42;
+  ctx.fillStyle = `rgba(${col},${0.85 * a})`;
+  for (let k = 0; k < 14; k++) {
+    const ang = (k / 14) * Math.PI * 2 + (1 - a) * 2;
+    ctx.fillRect(P(x + Math.cos(ang) * r) - 2, P(y + Math.sin(ang) * r * 0.35) - 1, 4, 2);
+  }
+  ctx.fillStyle = `rgba(255,255,255,${0.7 * a})`;
+  for (let k = 0; k < 3; k++) ctx.fillRect(P(x - 6 + k * 6) - 1, P(y - 8 - (1 - a) * 18 - k * 4) - 1, 2, 2);
+}
+
 function stars(ctx: CanvasRenderingContext2D, x: number, y: number, now: number) {
   for (let i = 0; i < 3; i++) {
     const a = now / 200 + (i * Math.PI * 2) / 3;
@@ -1028,36 +1073,7 @@ function drawFx(ctx: CanvasRenderingContext2D, v: View) {
     const a = 1 - p;
     switch (fx.k) {
       case "shot": {
-        const d = UNIT[fx.def];
-        const color = fx.crit ? "#ffd23f" : FACTION_COLOR[d.faction];
-        const sx = cellX(fx.c) * CELL,
-          sy = cellY(fx.c) * CELL - 18;
-        const tx = fx.x * CELL,
-          ty = fx.y * CELL - 6;
-        const h0 = Math.min(1, p * 2.4);
-        const px = sx + (tx - sx) * h0,
-          py = sy + (ty - sy) * h0;
-        const sz = fx.crit ? 6 : d.grade >= 3 ? 6 : 4;
-        if (h0 < 1) {
-          // 꼬리 2개 + 탄
-          ctx.fillStyle = hexA(color, 0.35);
-          ctx.fillRect(
-            P(px - (tx - sx) * 0.08) - sz / 2,
-            P(py - (ty - sy) * 0.08) - sz / 2,
-            sz,
-            sz
-          );
-          ctx.fillStyle = "#ffffff";
-          ctx.fillRect(P(px) - sz / 2, P(py) - sz / 2, sz, sz);
-          ctx.fillStyle = color;
-          ctx.fillRect(P(px) - sz / 2 + 1, P(py) - sz / 2 + 1, sz - 2, sz - 2);
-        } else {
-          // 맞은 자리 번쩍
-          ctx.fillStyle = hexA(color, a);
-          ctx.fillRect(P(tx) - 6, P(ty) - 2, 12, 4);
-          ctx.fillRect(P(tx) - 2, P(ty) - 6, 4, 12);
-        }
-        if (fx.crit && p > 0.35) pxText(ctx, "CRIT!", tx, ty - 16 - p * 12, 12, "#ffd23f", a);
+        drawShot(ctx, fx, p, a);
         break;
       }
       case "aoe": {
@@ -1134,8 +1150,228 @@ function drawFx(ctx: CanvasRenderingContext2D, v: View) {
       case "heal":
         pxText(ctx, "+", fx.x * CELL, fx.y * CELL - 40 - p * 16, 18, "#6dff8f", a);
         break;
+      case "spawn":
+        drawSpawn(ctx, fx.c, fx.g, p);
+        break;
     }
   }
+}
+
+/**
+ * 소환 효과: 위에서 떨어지는 빛기둥 → 칸 바닥에 도트 고리가 퍼지고 반짝이가 튐.
+ * 등급이 높을수록 굵고 오래 · 반짝이 많이 (신화 · 히든은 흰색 섬광까지)
+ */
+function drawSpawn(ctx: CanvasRenderingContext2D, c: number, g: number, p: number) {
+  const [cx, cy] = slotCenter(c);
+  const fy = cy + (c < CELLS ? 26 : 18);
+  const col = GRADE_COLOR[g] ?? "#ffffff";
+  const a = 1 - p;
+  const sq = (x: number, y: number, w: number, h: number, cc: string) => {
+    ctx.fillStyle = cc;
+    ctx.fillRect(P(x) - Math.floor(w / 2), P(y) - Math.floor(h / 2), w, h);
+  };
+  // 빛기둥 (처음 35%): 위에서 내려오는 굵은 줄
+  if (p < 0.35) {
+    const q = p / 0.35;
+    const w = 6 + g * 3;
+    const top = fy - 120;
+    const bot = top + (fy - 10 - top) * Math.min(1, q * 1.6);
+    ctx.fillStyle = hexA(col, 0.55 * (1 - q * 0.5));
+    ctx.fillRect(P(cx - w / 2), P(top), w, P(bot - top));
+    ctx.fillStyle = `rgba(255,255,255,${0.7 * (1 - q)})`;
+    ctx.fillRect(P(cx - 1), P(top), 2, P(bot - top));
+  }
+  // 바닥 고리
+  const r = 8 + p * (22 + g * 4);
+  const n = 12 + g * 2;
+  for (let k = 0; k < n; k++) {
+    const ang = (k / n) * Math.PI * 2;
+    sq(cx + Math.cos(ang) * r, fy - 6 + Math.sin(ang) * r * 0.35, 4, 2, hexA(k % 3 ? col : "#ffffff", a));
+  }
+  // 튀는 반짝이 (높은 등급일수록 많이)
+  const m = 3 + g * 2;
+  for (let k = 0; k < m; k++) {
+    const ang = k * 2.39;
+    const d = p * (18 + g * 6);
+    sq(cx + Math.cos(ang) * d, fy - 24 - p * 30 + Math.sin(ang) * d * 0.5, 2, 2, hexA(k % 2 ? "#ffffff" : col, a));
+  }
+  // 신화 · 히든: 처음에 칸 전체 흰 섬광
+  if (g >= 4 && p < 0.18) {
+    ctx.fillStyle = `rgba(255,255,255,${0.5 * (1 - p / 0.18)})`;
+    ctx.fillRect(P(cx - 36), P(fy - 72), 72, 72);
+  }
+}
+
+/* ───────── 공격 효과 (유닛마다 고유) ───────── */
+
+type HitKind = "slash" | "pierce" | "bullet" | "shell" | "flame" | "spark" | "beam" | "orb" | "frost" | "poison" | "fire" | "star" | "glitch";
+/** 유닛 id → 공격 모양 (없으면 세력 · 능력으로 정함) */
+const HIT_KIND: Record<string, HitKind> = {
+  k_spear: "pierce", k_hunter: "pierce", k_dragoon: "pierce", k_aegis: "pierce",
+  m_turret: "bullet", m_bolt: "bullet", m_drone: "bullet", m_scrap: "spark", m_arsenal: "bullet",
+  m_mortar: "shell", m_missile: "shell", m_titan: "shell", m_omega: "shell", m_orbit: "beam",
+  m_flame: "flame", m_inferno: "flame", m_coil: "spark", m_rail: "beam",
+  a_frost: "frost", a_chrono: "frost", a_lord: "frost",
+  a_venom: "poison", a_plague: "poison",
+  a_pyro: "fire", a_archmage: "fire",
+  a_star: "star", a_sage: "star", a_bolt: "spark", a_wind: "orb", a_void: "orb", a_seal: "orb", a_novice: "orb",
+  h_glitchpet: "glitch", h_debugger: "glitch",
+};
+function hitKind(id: string): HitKind {
+  const k = HIT_KIND[id];
+  if (k) return k;
+  const f = UNIT[id]?.faction;
+  return f === "knight" ? "slash" : f === "mech" ? "bullet" : f === "arcane" ? "orb" : "glitch";
+}
+const HIT_COLOR: Partial<Record<HitKind, [string, string]>> = {
+  slash: ["#e8f4ff", "#6ec1ff"],
+  pierce: ["#ffffff", "#9fd8ff"],
+  bullet: ["#fff2b8", "#ffb347"],
+  shell: ["#ffd23f", "#ff7a2f"],
+  flame: ["#ffd23f", "#ff4f1f"],
+  spark: ["#e6fdff", "#5ff2ff"],
+  beam: ["#ffffff", "#ff9a3d"],
+  orb: ["#f2e6ff", "#c08cff"],
+  frost: ["#ffffff", "#8fe3ff"],
+  poison: ["#d6ffe0", "#6dff8f"],
+  fire: ["#fff2b8", "#ff6a2a"],
+  star: ["#fffbe0", "#ffd23f"],
+  glitch: ["#ffffff", "#4cffb0"],
+};
+
+/** 탄 하나: 날아가는 동안(h0<1)과 맞은 뒤(번쩍) — 모양은 유닛마다. 도트 사각형만 씀 */
+function drawShot(ctx: CanvasRenderingContext2D, fx: Extract<Fx, { k: "shot" }>, p: number, a: number) {
+  const d = UNIT[fx.def];
+  const kind = hitKind(fx.def);
+  const [hi, col] = fx.crit ? ["#ffffff", "#ffd23f"] : (HIT_COLOR[kind] ?? ["#ffffff", FACTION_COLOR[d.faction]]);
+  const sx = cellX(fx.c) * CELL,
+    sy = cellY(fx.c) * CELL - 18;
+  const tx = fx.x * CELL,
+    ty = fx.y * CELL - 6;
+  // 근접형(베기)은 날아가지 않고 바로 맞은 자리에 — 나머지는 탄이 날아감
+  const melee = kind === "slash";
+  const speed = kind === "beam" ? 6 : kind === "shell" ? 1.8 : 2.6;
+  const h0 = melee ? 1 : Math.min(1, p * speed);
+  const big = fx.crit || d.grade >= 3 ? 2 : 0;
+  // 도트를 한 단계 굵게 (2px → 3px 계단) — 맞는 느낌이 잘 보이게
+  const sq = (x: number, y: number, w: number, h: number, c: string) => {
+    const W = Math.max(2, Math.round(w * 1.5)),
+      H = Math.max(2, Math.round(h * 1.5));
+    ctx.fillStyle = c;
+    ctx.fillRect(P(x) - Math.floor(W / 2), P(y) - Math.floor(H / 2), W, H);
+  };
+  if (h0 < 1) {
+    const px = sx + (tx - sx) * h0;
+    // 포탄은 포물선
+    const arc = kind === "shell" ? -Math.sin(h0 * Math.PI) * 26 : 0;
+    const py = sy + (ty - sy) * h0 + arc;
+    const ux = (tx - sx) * 0.07,
+      uy = (ty - sy) * 0.07;
+    switch (kind) {
+      case "beam":
+        // 레이저: 쏜 곳부터 지금 끝까지 줄
+        for (let q = 0; q <= h0; q += 0.05) sq(sx + (tx - sx) * q, sy + (ty - sy) * q, 4 + big, 4 + big, q > h0 - 0.1 ? hi : col);
+        break;
+      case "flame":
+        for (let k = 0; k < 4; k++) sq(px - ux * k * 0.6 + ((k * 7) % 5) - 2, py - uy * k * 0.6 + ((k * 5) % 5) - 2, 6 - k, 6 - k, k ? col : hi);
+        break;
+      case "spark":
+        sq(px, py, 4 + big, 4 + big, hi);
+        sq(px - ux * 0.8 + 3, py - uy * 0.8 - 3, 2, 2, col);
+        sq(px - ux * 1.6 - 3, py - uy * 1.6 + 3, 2, 2, col);
+        break;
+      case "orb":
+      case "fire":
+      case "poison":
+      case "frost":
+      case "star":
+        // 마법탄: 십자 반짝이 + 꼬리
+        sq(px - ux, py - uy, 4, 4, hexA(col, 0.4));
+        sq(px, py, 6 + big, 2, col);
+        sq(px, py, 2, 6 + big, col);
+        sq(px, py, 2 + big, 2 + big, hi);
+        break;
+      case "glitch":
+        sq(px, py, 6, 4, col);
+        sq(px + 4, py - 3, 4, 2, "#ff4fd8");
+        sq(px - 3, py + 3, 2, 2, "#5ff2ff");
+        break;
+      default:
+        // 총알 · 창: 꼬리 + 탄
+        sq(px - ux, py - uy, 4 + big, 4 + big, hexA(col, 0.35));
+        sq(px, py, 4 + big, 4 + big, hi);
+        sq(px, py, 2 + big, 2 + big, col);
+    }
+    return;
+  }
+  // 맞은 자리 (p 를 다시 0~1 로)
+  const q = melee ? p : Math.min(1, (p - 1 / speed) / (1 - 1 / speed));
+  const al = Math.max(0, 1 - q);
+  ctx.globalAlpha = al;
+  switch (kind) {
+    case "slash": {
+      // 사선 베기 3줄 (치명타면 X 자)
+      const n = 6 + big * 2;
+      for (let k = -n; k <= n; k++) {
+        sq(tx + k * 2, ty - k * 2 + 2, 2, 2, k === 0 ? hi : col);
+        if (fx.crit) sq(tx + k * 2, ty + k * 2 - 2, 2, 2, col);
+        else if (Math.abs(k) < n - 2) sq(tx + k * 2 + 4, ty - k * 2 + 6, 2, 2, hexA(col, 0.6));
+      }
+      break;
+    }
+    case "pierce":
+      for (let k = 0; k < 5; k++) sq(tx + (tx - sx > 0 ? k : -k) * 4, ty, 4, 2, k ? col : hi);
+      sq(tx, ty, 2, 8, hi);
+      break;
+    case "shell":
+    case "fire":
+    case "flame": {
+      // 폭발: 퍼지는 도트 + 가운데 섬광
+      const r = 4 + q * (kind === "shell" ? 14 : 10);
+      for (let k = 0; k < 8; k++) {
+        const ang = k * 0.785;
+        sq(tx + Math.cos(ang) * r, ty + Math.sin(ang) * r * 0.7, 4, 4, k % 2 ? col : hi);
+      }
+      if (q < 0.4) sq(tx, ty, 8, 8, hi);
+      break;
+    }
+    case "spark":
+    case "beam":
+      sq(tx, ty, 12, 2, hi);
+      sq(tx, ty, 2, 12, hi);
+      sq(tx + 5, ty + 5, 2, 2, col);
+      sq(tx - 5, ty - 5, 2, 2, col);
+      sq(tx + 5, ty - 5, 2, 2, col);
+      sq(tx - 5, ty + 5, 2, 2, col);
+      break;
+    case "frost":
+      // 눈꽃 (6 갈래)
+      for (let k = 0; k < 6; k++) {
+        const ang = k * 1.047;
+        for (let r = 2; r <= 8; r += 3) sq(tx + Math.cos(ang) * r, ty + Math.sin(ang) * r, 2, 2, r > 6 ? col : hi);
+      }
+      break;
+    case "poison":
+      // 올라가는 거품
+      for (let k = 0; k < 4; k++) sq(tx - 6 + k * 4, ty - q * (8 + k * 3), k % 2 ? 4 : 2, k % 2 ? 4 : 2, k % 2 ? col : hi);
+      break;
+    case "star":
+      sq(tx, ty - q * 6, 10, 2, col);
+      sq(tx, ty - q * 6, 2, 10, col);
+      sq(tx, ty - q * 6, 4, 4, hi);
+      break;
+    case "glitch":
+      for (let k = 0; k < 5; k++) sq(tx + ((k * 13) % 17) - 8, ty + ((k * 7) % 11) - 5, 6 - (k % 3) * 2, 2 + (k % 2) * 2, ["#4cffb0", "#ff4fd8", "#5ff2ff", "#ffffff", "#ffd23f"][k]);
+      break;
+    default:
+      // 마법 · 총알: 십자 번쩍 + 작은 점 4개
+      sq(tx, ty, 10, 2, col);
+      sq(tx, ty, 2, 10, col);
+      sq(tx, ty, 4, 4, hi);
+      for (let k = 0; k < 4; k++) sq(tx + Math.cos(k * 1.57 + q) * (4 + q * 6), ty + Math.sin(k * 1.57 + q) * (4 + q * 6), 2, 2, hi);
+  }
+  ctx.globalAlpha = 1;
+  if (fx.crit && p > 0.35) pxText(ctx, "CRIT!", tx, ty - 16 - p * 12, 12, "#ffd23f", a);
 }
 
 /** 길 위 진행 표시용 (미니맵 등) */

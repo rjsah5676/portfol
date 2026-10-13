@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useReducer, useRef, useState, type ReactNode } from "react";
-import { B, BOSS_EVERY, CAP, LAST_WAVE, TPS, sec } from "@/lib/defense/balance";
+import { B, BOSS_EVERY, CAP, LAST_WAVE, TPS, hpOf, sec } from "@/lib/defense/balance";
 import { BOSSES } from "@/lib/defense/enemies";
 import { MISSIONS, PATCHES, PATCH_DEADLINE } from "@/lib/defense/meta";
 import { botByName, botTurn, BOTS } from "@/lib/defense/bot";
@@ -13,7 +13,7 @@ import {
   counts,
   hasEmpty,
   luckCost,
-  sellPrice,
+  sellOf,
   bossSecOf,
   summonCost,
   upCost,
@@ -98,6 +98,33 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry }
   const [bossLine, setBossLine] = useState<{ id: number; boss: number } | null>(null);
   const [over, setOver] = useState<{ note: ReactNode | null } | null>(null);
   const [bot, setBot] = useState<string | null>(null);
+  /** 레전드 이상 판매는 두 번 눌러야 (실수로 팔지 않게) — 한 번 누른 칸 */
+  const [sellArm, setSellArm] = useState(-1);
+  const [quitArm, setQuitArm] = useState(false);
+  /** 「이동」을 눌러 다음 클릭한 칸과 자리를 바꿀 준비 */
+  const [moveArm, setMoveArm] = useState(false);
+  const sellSel = () => {
+    if (sel < 0) return;
+    const d = b.cells[sel].def ? UNIT[b.cells[sel].def!] : null;
+    if (!d) return;
+    if (d.grade >= 3 && sellArm !== sel) {
+      setSellArm(sel);
+      toast("한 번 더 누르면 판매해요", "gold");
+      return;
+    }
+    setSellArm(-1);
+    run({ t: "sell", c: sel });
+  };
+  /** 최근 DPS (균열 위험도 · DPS 창) — 1초마다 넣은 피해 합을 10개까지 */
+  const dpsRef = useRef<{ t: number; v: number }[]>([]);
+  const [dpsNow, setDpsNow] = useState(0);
+  const [showDps, setShowDps] = useState(() => {
+    try {
+      return localStorage.getItem("pgd-dps") === "1";
+    } catch {
+      return false;
+    }
+  });
   const [dragging, setDragging] = useState(false);
   const b: Board = ctrl.board;
   const multi = ctrl.mode.kind === "multi";
@@ -130,6 +157,7 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry }
         else if (d.grade >= 3) sfx("legend");
         else if (e.how === "gamble") sfx("gamble-ok");
         else if (e.how === "merge") sfx("merge");
+        else if (d.grade >= 1) sfx("spawn", 1, 0.94 + d.grade * 0.08);
         else sfx("summon", 1, 0.96 + d.grade * 0.06);
         if (d.grade >= 2)
           setShout({
@@ -235,6 +263,14 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry }
       if (now - lastHud > 100) {
         lastHud = now;
         const bb = ctrl.board;
+        // 최근 DPS: 게임 시간 1초마다 넣은 피해 합 (배속 · 일시정지와 무관하게 tick 기준)
+        const sec0 = Math.floor(ctrl.game.tick / TPS);
+        const q = dpsRef.current;
+        if (!q.length || q[q.length - 1].t !== sec0) {
+          q.push({ t: sec0, v: Object.values(bb.dealt).reduce((a, x) => a + x, 0) });
+          if (q.length > 11) q.shift();
+          setDpsNow(recentDps(q));
+        }
         if (!bb.result)
           playBgm(bb.phase === "prep" ? "wave-early" : bgmFor(bb.phase, bb.wave, LAST_WAVE));
         force();
@@ -310,6 +346,17 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry }
       }
       return;
     }
+    // 클릭 두 번 이동: 고른 칸이 있을 때 빈 칸을 누르면 그리로 옮김 · 「이동」을 켠 뒤면 다른 유닛 칸과 자리 바꿈
+    if (sel >= 0 && s.from >= 0 && s.from !== sel && b.cells[sel].def && (moveArm || !b.cells[s.from].def)) {
+      setMoveArm(false);
+      if (run({ t: "swap", a: sel, b: s.from })) {
+        sfx("ui-click", 0.8, 1.3);
+        setSel(s.from);
+        v.sel = s.from;
+      }
+      return;
+    }
+    setMoveArm(false);
     const next = s.from >= 0 && b.cells[s.from].def && sel !== s.from ? s.from : -1;
     if (next >= 0) sfx("ui-click", 0.9, 1.15);
     setSel(next);
@@ -334,7 +381,8 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry }
       const k = e.key.toLowerCase();
       if (k === "q") run({ t: "summon" });
       else if (k === "w" && sel >= 0) run({ t: "merge", c: sel });
-      else if (k === "e" && sel >= 0) run({ t: "sell", c: sel });
+      else if (k === "e" && sel >= 0) sellSel();
+      else if (k === "m" && sel >= 0) setMoveArm((x) => !x);
       else if (k === "1" || k === "2" || k === "3") run({ t: "up", k: FACTIONS[Number(k) - 1] });
       else if (k === "4") run({ t: "luck" });
       else if (k === "r") setModal((m) => (m === "recipe" ? null : "recipe"));
@@ -344,6 +392,7 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry }
         force();
       } else if (k === "f" && !multi) cycleSpeed();
       else if (k === "escape") {
+        setMoveArm(false);
         setSel(-1);
         setModal(null);
       } else return;
@@ -536,6 +585,25 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry }
           onPointerLeave={() => (viewRef.current.hover = -1)}
         />
         <div className="dfn-scan pointer-events-none absolute inset-0 opacity-40" />
+        {/* 딜량 창 (오른쪽 위, 켜고 끄기 — 전체화면에서도 보이게 필드 위에 작게) */}
+        <div className="absolute top-1.5 right-1.5 z-10">
+          <button
+            type="button"
+            onClick={() => {
+              const v = !showDps;
+              setShowDps(v);
+              try {
+                localStorage.setItem("pgd-dps", v ? "1" : "0");
+              } catch {}
+            }}
+            className={`px-btn h-6 px-1.5 text-[12px] ${showDps ? "" : "opacity-70"}`}
+            style={{ "--c": showDps ? "#137f93" : "#2a2350" } as React.CSSProperties}
+            title="딜량 창 켜고 끄기"
+          >
+            DPS
+          </button>
+        </div>
+        {showDps && <DpsOverlay b={b} dps={dpsNow} />}
         {b.phase === "prep" && (
           <div className="pointer-events-none absolute inset-x-0 top-[36%] text-center">
             <p className={`${TITLE} px-shadow dfn-float text-[28px] text-white`}>
@@ -561,7 +629,7 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry }
         )}
         {multi && ctrl.desync > 0 && (
           <div
-            className="pointer-events-none absolute top-2 right-2 bg-[#5c1426] px-2 py-0.5 text-[12px] text-[#ffd0da]"
+            className="pointer-events-none absolute top-2 right-14 bg-[#5c1426] px-2 py-0.5 text-[12px] text-[#ffd0da]"
             title="보드끼리 상태가 달라졌어요 (서버에 기록됨)"
           >
             동기화 어긋남 {ctrl.desync}
@@ -642,6 +710,15 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry }
               </p>
             </div>
             <Btn
+              tone={moveArm ? "cyan" : "ghost"}
+              onClick={() => setMoveArm((x) => !x)}
+              className={`h-[36px] w-[56px] text-[12px] ${moveArm ? "dfn-pulse" : ""}`}
+              hot="M"
+              title="누르고 옮길 칸을 클릭 (빈 칸은 바로 클릭해도 옮겨져요 · 끌어서 옮기기도 돼요)"
+            >
+              {moveArm ? "어디로?" : "이동"}
+            </Btn>
+            <Btn
               tone={selCell.units.length >= STACK && selDef.grade < 3 ? "gold" : "ghost"}
               disabled={selCell.units.length < STACK || selDef.grade >= 3}
               onClick={() => run({ t: "merge", c: sel })}
@@ -653,13 +730,16 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry }
             </Btn>
             <Btn
               tone="danger"
-              disabled={selDef.grade > 2}
-              onClick={() => run({ t: "sell", c: sel })}
-              className="h-[36px] w-[84px] text-[12px]"
+              onClick={sellSel}
+              className={`h-[36px] w-[96px] text-[12px] ${sellArm === sel ? "dfn-pulse" : ""}`}
               hot="E"
               silent
+              title="레전드 이상은 두 번 눌러야 팔려요"
             >
-              {selDef.grade > 2 ? "판매 불가" : `판매 +${sellPrice(b, selDef.grade)}`}
+              {(() => {
+                const sp = sellOf(b, selDef);
+                return sellArm === sel ? "한 번 더!" : `판매 +${sp.gold}${sp.stones ? ` ◆${sp.stones}` : ""}`;
+              })()}
             </Btn>
           </>
         ) : (
@@ -816,7 +896,14 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry }
           <div className="grid grid-cols-2 gap-2">
             {(["E", "L"] as const).map((g) => {
               const gm = B.gamble[g];
-              const p = Math.round((gm.p + (b.patch === "gambler" ? 0.08 : 0)) * 100);
+              const p = Math.round((gm.p + (b.patch === "gambler" ? 0.1 : 0) + b.mods.gamble) * 100);
+              const locked = b.wave < gm.from;
+              if (locked)
+                return (
+                  <Btn key={g} disabled className="h-[36px] text-[12px]" title={`초반엔 막혀 있어요 — ${gm.from}웨이브부터`}>
+                    <Icon n="lock" size={10} /> {g === "E" ? "에픽" : "레전드"} {gm.from}W부터
+                  </Btn>
+                );
               return (
                 <Btn
                   key={g}
@@ -845,18 +932,30 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry }
             )}
           </div>
           <div className="grid grid-cols-3 gap-2">
-            {(["C", "B", "A"] as const).map((t) => (
-              <Btn
-                key={t}
-                onClick={() => run({ t: "rift", tier: t })}
-                disabled={b.riftCd > 0 || b.wave < B.rift.from || b.enemies.some((e) => e.rift > 0)}
-                className="h-[36px] text-[12px]"
-                silent
-              >
-                <b className="text-[var(--pink)]">{t}급</b> <Icon n="gem" size={10} />
-                {B.rift[t].stones} +{B.rift[t].gold}
-              </Btn>
-            ))}
+            {(["C", "B", "A"] as const).map((t) => {
+              const risk = riftRisk(b, t, dpsNow);
+              return (
+                <Btn
+                  key={t}
+                  onClick={() => run({ t: "rift", tier: t })}
+                  disabled={b.riftCd > 0 || b.wave < B.rift.from || b.enemies.some((e) => e.rift > 0)}
+                  className="relative h-[36px] text-[12px]"
+                  silent
+                  title={risk ? `지금 화력으로 ${B.rift.sec}초 안에 잡기: ${risk.label} (최근 DPS 기준 어림)` : ""}
+                >
+                  <b className="text-[var(--pink)]">{t}급</b> <Icon n="gem" size={10} />
+                  {B.rift[t].stones} +{B.rift[t].gold}
+                  {risk && b.wave >= B.rift.from && (
+                    <span
+                      className="absolute -top-2 right-0.5 px-1 text-[10px] leading-[13px] font-bold text-[#0a0816] shadow-[0_0_0_1px_#0a0816]"
+                      style={{ background: risk.color }}
+                    >
+                      {risk.label}
+                    </span>
+                  )}
+                </Btn>
+              );
+            })}
           </div>
         </section>
 
@@ -1009,8 +1108,24 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry }
             >
               {multi ? "돌아가기" : "▶ 계속하기"}
             </Btn>
+            {!b.result && (
+              <Btn
+                tone="gold"
+                arrow
+                className="h-[40px] text-[14px] font-bold"
+                onClick={() => {
+                  if (!quitArm) return setQuitArm(true);
+                  setQuitArm(false);
+                  setModal(null);
+                  ctrl.setPaused(false);
+                  run({ t: "quit" });
+                }}
+              >
+                {quitArm ? "정말 포기할까요? (한 번 더 누르기)" : `포기하기 — ${b.wave}웨이브에서 끝내고 기록 · 보상 받기`}
+              </Btn>
+            )}
             <Btn tone="danger" arrow className="h-[40px] text-[14px]" onClick={onExit}>
-              {multi ? "방에서 나가기 (내 보드는 그대로 진행돼요)" : "그만하기 (기록 안 남음)"}
+              {multi ? "방에서 나가기 (내 보드는 그대로 진행돼요)" : "나가기 (기록 · 보상 없음, 나중에 이어하기)"}
             </Btn>
             <div className="px-inset mt-1 p-3 text-[12px] leading-relaxed text-[var(--mute)]">
               <p className="mb-1 font-bold text-[var(--text)]">단축키</p>
@@ -1345,3 +1460,46 @@ function BossIntro({ boss, onDone }: { boss: number; onDone(): void }) {
     </div>
   );
 }
+
+/** 필드 위 작은 딜량 창 (위쪽 길 위에 — 유닛 칸을 가리지 않게): 최근 DPS + 유닛별 비중 3개 */
+function DpsOverlay({ b, dps }: { b: Board; dps: number }) {
+  const rows = Object.entries(b.dealt).sort((x, y) => y[1] - x[1]);
+  const total = rows.reduce((a, [, v]) => a + v, 0) || 1;
+  return (
+    <div className="pointer-events-none absolute top-1 right-[46px] z-10 w-[184px] bg-[#0a0816]/80 px-1.5 py-0.5 shadow-[0_0_0_2px_#2a2350]">
+      <p className="flex justify-between text-[12px] leading-[15px]">
+        <span className="text-[var(--mute)]">최근 DPS</span>
+        <b className="text-[var(--cyan)]">{fmtNum(dps)}</b>
+      </p>
+      {rows.slice(0, 3).map(([id, v]) => (
+        <div key={id} className="flex items-center gap-1 text-[12px] leading-[15px]">
+          <FactionIcon f={UNIT[id].faction} size={9} />
+          <span className="w-[72px] truncate" style={{ color: GRADE_COLOR[UNIT[id].grade] }}>
+            {UNIT[id].name}
+          </span>
+          <Bar className="flex-1" h={4} value={v / total} color={FACTION_COLOR[UNIT[id].faction]} />
+          <span className="w-[26px] text-right text-[var(--mute)]">{Math.round((v / total) * 100)}%</span>
+        </div>
+      ))}
+      {!rows.length && <p className="text-[12px] text-[var(--dim)]">아직 피해 기록 없음</p>}
+    </div>
+  );
+}
+
+/** 최근 10초 평균 DPS */
+function recentDps(q: { t: number; v: number }[]) {
+  if (q.length < 3) return 0;
+  const a = q[0],
+    z = q[q.length - 1];
+  return z.t > a.t ? (z.v - a.v) / (z.t - a.t) : 0;
+}
+
+/** 균열 위험도 어림: 균열 적 체력 ÷ 제한 시간 vs 최근 DPS (보스 · 졸개도 같이 치니 넉넉히 1.6배로 봄) */
+function riftRisk(b: Board, t: "C" | "B" | "A", dps: number) {
+  if (!dps) return null;
+  const hp = hpOf(Math.max(1, b.wave)) * B.rift[t].hp * b.mods.glitch.hp;
+  const need = (hp / B.rift.sec) * 1.6;
+  const r = dps / need;
+  return r >= 2 ? { label: "여유", color: "#6dff8f" } : r >= 1 ? { label: "적정", color: "#ffd23f" } : { label: "위험", color: "#ff4d6d" };
+}
+

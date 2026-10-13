@@ -62,6 +62,27 @@ export class Controller {
     me.ev = [];
   }
 
+  /**
+   * 솔로 이어하기: 저장해 둔 기록을 처음부터 빠르게 다시 돌려 그 tick 까지 따라잡음 (새로고침 · 튕김 뒤).
+   * 같은 시드 · 같은 로드아웃 · 같은 기록이면 결정론이라 똑같은 판이 됨. 따라잡은 뒤 일시정지 상태로.
+   */
+  restore(log: LogEntry[], tick: number) {
+    const g = this.game;
+    const me = this.board;
+    me.fx = null;
+    me.ev = null;
+    let k = 0;
+    while (g.tick < tick && !g.over) {
+      while (k < log.length && log[k][0] <= g.tick) apply(g, this.seat, log[k++][2]);
+      step(g);
+    }
+    while (k < log.length && log[k][0] <= g.tick) apply(g, this.seat, log[k++][2]);
+    this.log = log.slice(0, k);
+    me.fx = [];
+    me.ev = [];
+    this.paused = true;
+  }
+
   get board(): Board {
     return this.game.boards[this.seat];
   }

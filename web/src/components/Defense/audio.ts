@@ -13,9 +13,11 @@ export interface AudioPrefs {
   bgm: number;
   sfx: number;
   mute: boolean;
+  /** 마우스 커서 크기 (1 기본 · 2 크게 · 3 아주 크게 · 0 시스템 커서) — 소리와 같이 이 기기에 저장 */
+  cursor: number;
 }
 const KEY = "dfn_audio";
-const DEFAULT: AudioPrefs = { bgm: 0.5, sfx: 0.7, mute: false };
+const DEFAULT: AudioPrefs = { bgm: 0.5, sfx: 0.7, mute: false, cursor: 1 };
 
 let prefs: AudioPrefs = { ...DEFAULT };
 let loaded = false;

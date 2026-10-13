@@ -9,7 +9,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { unlock } from "./audio";
+import { getPrefs, onPrefs, unlock } from "./audio";
 
 /*
  * PIXEL GLITCH DEFENSE 무대 — 1024 × 576 디자인을 화면에 맞춰 통째로 키우고 줄임 (PC = 폰, 배치가 늘 같음).
@@ -76,6 +76,12 @@ function snapScale(k: number, phone: boolean) {
 export default function Stage({ children }: { children: ReactNode }) {
   const rootRef = useRef<HTMLDivElement>(null);
   const [boxRef, box] = useSize<HTMLDivElement>();
+  /** 커서 크기 설정 (data-cur → css/defense.css) */
+  const [cur, setCur] = useState(1);
+  useEffect(() => {
+    setCur(getPrefs().cursor ?? 1);
+    return onPrefs((p) => setCur(p.cursor ?? 1));
+  }, []);
   const boxEl = useRef<HTMLDivElement | null>(null);
   const stageEl = useRef<HTMLDivElement | null>(null);
   /** 상자가 화면에서 반 px 에 놓여 있으면 (가운데 맞춤 · 스크롤바) 그만큼 무대를 밀어 정수 px 에 맞춤 */
@@ -201,6 +207,7 @@ export default function Stage({ children }: { children: ReactNode }) {
           {k > 0 && (
             <div
               ref={stageEl}
+              data-cur={cur}
               className="dfn absolute select-none"
               style={{
                 width: DW,

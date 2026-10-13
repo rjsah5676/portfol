@@ -299,13 +299,13 @@ export function SoundButton({ className = "" }: { className?: string }) {
       <Btn
         onClick={() => setOpen((o) => !o)}
         className="h-[34px] w-[38px] text-[15px]"
-        title="소리"
+        title="소리 · 마우스 크기"
       >
         {icon}
       </Btn>
       {open && (
         <div
-          className="px-win absolute top-[44px] right-0 z-50 w-[220px] p-3 text-[13px]"
+          className="px-win absolute top-[44px] right-0 z-50 w-[240px] p-3 text-[13px]"
           onPointerLeave={() => setOpen(false)}
         >
           <Slider
@@ -328,6 +328,25 @@ export function SoundButton({ className = "" }: { className?: string }) {
           >
             {p.mute ? "소리 켜기" : "모두 끄기"}
           </Btn>
+          <div className="mt-3 mb-1 text-[var(--mute)]">마우스 크기</div>
+          <div className="grid grid-cols-4 gap-1">
+            {([
+              [1, "보통"],
+              [2, "크게"],
+              [3, "최대"],
+              [0, "기본"],
+            ] as const).map(([v, n]) => (
+              <Btn
+                key={v}
+                tone={p.cursor === v ? "cyan" : "ghost"}
+                className="h-[28px] text-[12px]"
+                title={v === 0 ? "운영체제 기본 커서" : `도트 커서 ${n}`}
+                onClick={() => setPrefs({ cursor: v })}
+              >
+                {n}
+              </Btn>
+            ))}
+          </div>
         </div>
       )}
     </div>
@@ -745,3 +764,22 @@ export function Bar({
     </div>
   );
 }
+
+/**
+ * 도트 말풍선 (마우스를 올리면 아래에) — 스크롤 상자 안에서는 잘릴 수 있어서 머리말 · 메뉴처럼 바깥쪽에 씀.
+ * 터치 기기에서는 누르고 있는 동안 (:active) 보임.
+ */
+export function Tip({ text, children, className = "", side = "bottom", width = 260 }: { text: ReactNode; children: ReactNode; className?: string; side?: "bottom" | "top"; width?: number }) {
+  return (
+    <span className={`group/tip relative inline-flex ${className}`}>
+      {children}
+      <span
+        className={`px-box pointer-events-none absolute left-1/2 z-[70] hidden -translate-x-1/2 p-2 text-left text-[12px] leading-relaxed font-normal text-[var(--text)] group-hover/tip:block group-active/tip:block ${side === "bottom" ? "top-[calc(100%+6px)]" : "bottom-[calc(100%+6px)]"}`}
+        style={{ width, "--b": "#5b4f96", "--f": "#120d22" } as CSSProperties}
+      >
+        {text}
+      </span>
+    </span>
+  );
+}
+

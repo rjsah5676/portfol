@@ -32,7 +32,7 @@ import {
 } from "@/realtime/defense";
 import Codex from "./Codex";
 import { Controller } from "./controller";
-import Hub, { Cur, RelicIcon, type HubTab } from "./Hub";
+import Hub, { Cur, RelicIcon, curTip, type HubTab } from "./Hub";
 import { setTheme } from "./render";
 import { GLITCH, RELIC, type Loadout } from "@/lib/defense/progress";
 import GameView from "./GameView";
@@ -46,6 +46,7 @@ import {
   Modal,
   SoundButton,
   TITLE,
+  Tip,
   UnitIcon,
   fmtNum,
   fmtTime,
@@ -64,7 +65,7 @@ import { FACTION_COLOR, FACTION_NAME, FACTIONS } from "@/lib/defense/units";
 
 type Screen =
   | { k: "menu" }
-  | { k: "solo"; ctrl: Controller; ranked: boolean; key: number; mode: RankBoard }
+  | { k: "solo"; ctrl: Controller; ranked: boolean; key: number; mode: RankBoard; lo: Loadout | null }
   | { k: "hub"; tab?: HubTab }
   | { k: "lobby" }
   | { k: "room"; id: string }
@@ -118,7 +119,47 @@ export default function DefenseApp() {
       ranked: !!run,
       key: Date.now(),
       mode,
+      lo,
     });
+  };
+
+  /* ── 이어하기: 솔로 판을 2초마다 이 기기에 저장 → 새로고침 · 튕김 뒤 메뉴에서 이어서 ── */
+  const saveKey = `pgd-resume:${account?.uid ?? "guest"}`;
+  const [resume, setResume] = useState<ResumeSave | null>(null);
+  useEffect(() => {
+    setResume(readResume(saveKey));
+  }, [saveKey, screen.k]);
+  useEffect(() => {
+    if (screen.k !== "solo") return;
+    const { ctrl, mode, lo } = screen;
+    const save = () => {
+      const b = ctrl.board;
+      if (b.result || ctrl.unranked) return clearResume(saveKey);
+      if (b.wave < 1) return;
+      writeResume(saveKey, {
+        v: BALANCE_VER,
+        at: Date.now(),
+        run: ctrl.mode.kind === "solo" ? ctrl.mode.run : null,
+        seed: ctrl.game.seed,
+        mode,
+        lo,
+        tick: ctrl.game.tick,
+        wave: b.wave,
+        log: ctrl.log,
+      });
+    };
+    const t = setInterval(save, 2000);
+    window.addEventListener("pagehide", save);
+    return () => {
+      clearInterval(t);
+      window.removeEventListener("pagehide", save);
+      save();
+    };
+  }, [screen, saveKey]);
+  const doResume = (r: ResumeSave) => {
+    const ctrl = newCtrl(r.seed, r.run, r.lo);
+    ctrl.restore(r.log, r.tick);
+    setScreen({ k: "solo", ctrl, ranked: !!r.run, key: Date.now(), mode: r.mode, lo: r.lo });
   };
   const newCtrl = (seed: number, run: string | null, lo: Loadout | null) =>
     new Controller(seed, 1, 0, { kind: "solo", run }, [lo]);
@@ -192,6 +233,9 @@ export default function DefenseApp() {
         note={note}
         onLogin={() => void login().catch(() => setNote("로그인하지 못했어요."))}
         prof={prof}
+        resume={resume}
+        onResume={() => resume && doResume(resume)}
+        onDropResume={() => (clearResume(saveKey), setResume(null))}
         onSolo={() => void startSolo("season")}
         onWeekly={() => void startSolo("weekly")}
         onHub={(tab) => setScreen({ k: "hub", tab })}
@@ -242,6 +286,9 @@ function Menu(p: {
   busy: boolean;
   note: string;
   prof: DefenseProfile | null;
+  resume: ResumeSave | null;
+  onResume(): void;
+  onDropResume(): void;
   onLogin(): void;
   onSolo(): void;
   onWeekly(): void;
@@ -319,15 +366,15 @@ function Menu(p: {
       {/* 재화 */}
       {pr && (
         <div className="px-inset absolute top-[104px] right-[24px] flex items-center gap-3.5 px-3 py-1.5 text-[13px]">
-          <span title="픽셀 조각">
+          <Tip text={curTip("piece")}>
             <Cur k="piece" n={fmtNum(pr.pieces)} />
-          </span>
-          <span title="글리치 코어" className="text-[#ffb3ee]">
+          </Tip>
+          <Tip text={curTip("core")} className="text-[#ffb3ee]">
             <Cur k="core" n={pr.cores} />
-          </span>
-          <span title="GP" className="text-[var(--green)]">
+          </Tip>
+          <Tip text={curTip("gp")} className="text-[var(--green)]">
             <Cur k="gp" n={fmtNum(pr.gp)} />
-          </span>
+          </Tip>
           <span className="text-[12px] text-[var(--mute)]">
             시즌 {pr.season.id} · 패스 {pr.passTier}단계
           </span>
@@ -355,11 +402,24 @@ function Menu(p: {
           ))}
           의 수호자를 소환 · 합성해서 오염된 파이터들을 {LAST_WAVE}웨이브까지 막아 주세요.
         </p>
-        <span className="mt-2 inline-block bg-[var(--gold)] px-2 py-1 text-[12px] font-bold text-[#1a1000]">
-          BETA · 밸런스 {BALANCE_VER}
-        </span>
+        <div className="mt-2 flex items-center gap-1.5">
+          <span className="inline-block bg-[var(--gold)] px-2 py-1 text-[12px] font-bold text-[#1a1000]">
+            BETA · 밸런스 {BALANCE_VER}
+          </span>
+          {p.resume && (
+            <>
+              <Btn tone="gold" arrow className="dfn-pulse h-[26px] px-3 text-[12px] font-bold" onClick={p.onResume} title="새로고침 · 튕기기 전에 하던 판을 그 자리부터">
+                ▶ 이어하기 — {p.resume.mode === "weekly" ? "주간 도전" : p.resume.run ? "시즌" : "연습"} {p.resume.wave}웨이브
+              </Btn>
+              <Btn className="h-[26px] w-[26px] text-[12px]" onClick={p.onDropResume} title="저장된 판 지우기">
+                ✕
+              </Btn>
+            </>
+          )}
+        </div>
       </div>
       <div className="absolute top-[268px] left-[64px] flex w-[372px] flex-col gap-2.5">
+
         <Btn
           tone="main"
           arrow
@@ -501,6 +561,22 @@ function FinishNote({ r }: { r: FinishOut }) {
           <Cur k="card" n={`+${Object.values(w.cards).reduce((a, b) => a + b, 0)}`} />
           <span className="text-[var(--cyan)]">+{w.xp} XP</span>
           {w.opened !== null && <b className="text-[var(--pink)]">오염 {w.opened}단계 열림!</b>}
+        </span>
+      )}
+      {w && (w.first || w.firstClear || (w.fresh?.length ?? 0) > 0) && (
+        <span className="dfn-pop flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[12px]">
+          {w.first && <span className="text-[var(--gold)]">오늘 첫 판 — 조각 ×2</span>}
+          {w.firstClear && (
+            <b className="text-[var(--pink)]">
+              오염 {w.firstClear.glitch}단계 첫 클리어! 코어 +{w.firstClear.cores} · 상자 +{w.firstClear.chest}
+            </b>
+          )}
+          {(w.fresh?.length ?? 0) > 0 && (
+            <span className="flex items-center gap-1 text-[var(--cyan)]">
+              도감 새로 수집
+              {w.fresh!.slice(0, 6).map((id) => (UNIT[id] ? <UnitIcon key={id} id={id} size={20} /> : null))}
+            </span>
+          )}
         </span>
       )}
     </span>
@@ -860,3 +936,39 @@ function Room({
     </div>
   );
 }
+
+/* ───────────── 이어하기 저장 (이 기기 localStorage) ───────────── */
+
+interface ResumeSave {
+  v: string;
+  at: number;
+  run: string | null;
+  seed: number;
+  mode: RankBoard;
+  lo: Loadout | null;
+  tick: number;
+  wave: number;
+  log: import("@/lib/defense/replay").LogEntry[];
+}
+/** 서버의 판(run)은 4시간 동안만 기록할 수 있음 → 그보다 오래된 저장은 버림 */
+const RESUME_TTL = 3.5 * 3600_000;
+function readResume(key: string): ResumeSave | null {
+  try {
+    const r = JSON.parse(localStorage.getItem(key) ?? "null") as ResumeSave | null;
+    if (!r || r.v !== BALANCE_VER || Date.now() - r.at > RESUME_TTL || !Array.isArray(r.log)) return null;
+    return r;
+  } catch {
+    return null;
+  }
+}
+function writeResume(key: string, r: ResumeSave) {
+  try {
+    localStorage.setItem(key, JSON.stringify(r));
+  } catch {}
+}
+function clearResume(key: string) {
+  try {
+    localStorage.removeItem(key);
+  } catch {}
+}
+
