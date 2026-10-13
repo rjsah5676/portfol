@@ -136,7 +136,8 @@ export default function PokerApp({ rank }: { rank: RankRow[] | null }) {
   useEffect(() => {
     const on = () => {
       const now = document.fullscreenElement === rootRef.current && !!rootRef.current;
-      if (!now && !selfExit.current && inTable.current && matchMedia("(pointer: coarse)").matches) {
+      // (홈 키로 내려가며 풀린 건 뒤로가기가 아님 — 나가기로 치지 않음)
+      if (!now && !selfExit.current && inTable.current && matchMedia("(pointer: coarse)").matches && !document.hidden) {
         // 게임방에서 폰 뒤로가기: 전체화면이 풀린 채 끝나지 않게 — 화면은 계속 덮어 그리고(가짜 전체화면) 나가기로 처리,
         // 다음에 화면을 한 번 누르면 진짜 전체화면으로 되돌림 (전체화면은 터치가 있어야 다시 켤 수 있음)
         setPseudoFs(true);

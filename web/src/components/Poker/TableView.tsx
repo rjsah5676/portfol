@@ -1304,7 +1304,8 @@ export default function TableView({
         className={`pk-sf absolute flex flex-col ${hero ? "pk-sf-me" : ""}`}
         data-turn={waiting ? "1" : undefined}
         data-win={wonHere > 0 && isTop(i) ? "1" : undefined}
-        style={box}
+        // 이모티콘이 떠 있는 틀은 통째로 위로 — 말풍선이 옆 · 위 틀(이름표)에 깔리지 않게 (둘이 같이 던지면 나중에 던진 쪽이 위)
+        style={emotes[i] ? { ...box, zIndex: 46 + Object.values(emotes).filter((e) => e.key < emotes[i].key).length } : box}
       >
         <div className={`flex min-h-0 flex-1 ${right ? "flex-row-reverse" : ""}`}>
           {/* 캐릭터 칸: 누르면 자리 정보(전적 · 강퇴 투표). 위엔 이번 구에 건 돈, 아래엔 행동 글자. 남은 시간은 이 칸 테두리를 따라 */}

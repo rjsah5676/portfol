@@ -1278,6 +1278,13 @@ export function registerPoker({ gateway, db, users, points }: Deps, opts: PokerO
     const s = findSeat(t, ctx.uid);
     if (!s) throw forbidden();
     const playing = inLiveRound(t, s) && !!t.round?.alive(s.seat) && !s.leaving;
+    // 쇼다운 결과를 보여 주는 중(판은 끝났고 다음 판 전)이고 내가 끝까지 간 사람이면: 결과는 다 보고 다음 판 직전에 나감
+    const watching = !t.round && !!t.lastView?.result?.showdown && !!t.lastView.players[s.seat] && !t.lastView.players[s.seat]!.folded;
+    if (on && watching && !s.leaving) {
+      s.exitAfter = "leave";
+      emit(t);
+      return { left: false };
+    }
     if (on && !playing) {
       leave(t, s);
       return { left: true };
