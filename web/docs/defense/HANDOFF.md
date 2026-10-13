@@ -161,6 +161,21 @@ cd web && POKER_E2E=1 npx next dev            # → /games/defense/?fake=admin:�
 - 화면: 이어하기(`DefenseApp` localStorage `pgd-resume:<uid>` 2초마다 → `Controller.restore` 로 기록을 다시 돌려 따라잡음, 3.5시간) · 포기하기 · DPS 창(필드 오른쪽 위) · 클릭 두 번 이동(빈 칸은 바로, 「이동」/M 뒤엔 다른 유닛과 바꿈) · 재화 말풍선(`ui.tsx Tip`, `Hub CUR_INFO`) · 도트 스크롤바 · 마우스 크기(소리 창, `data-cur` + `cursor-3x/4x/6x.png`)
 - 효과: 공격 모양 유닛별 `render.ts HIT_KIND/drawShot` · 공격 동작 세력별 `attackPose` · 소환 `Fx spawn`(빛기둥 + 고리) · 효과음 `spawn`(레어 · 에픽 소환) · `reward` · `chest-open`
 
+### v1.0 BETA (밸런스 beta1) 에서 바뀐 구조 — 데이터 초기화 후 시작
+- **판 7×4** (`sim.ts COLS/ROWS`, 길 한 바퀴 26칸, `pathPos` 일반식) · **보관함 오른쪽 세로 줄** (`render.ts BENCH_W = CELL`, 캔버스 `CW = FW + BENCH_W`). 칸 72px
+- **보관함 잠금**: `BENCH_MAX 6` 중 `b.mods.bench`(로드아웃 `bench`, 처음 `BENCH_BASE 3`)만 씀 — `usable(b, i)`, `hasEmpty` · `give` · `swap` 이 확인. 정비소 `defense.bench.buy` (조각 `BENCH_COST`)
+- **연구칸**: 공용 `RES_SLOTS 4` 는 group general 만, 세력 칸 `fslots`(0~3, `defense.fslot.buy` 코어 `FRES_COST`)는 세력 연구만 — `cleanLoadout` · `setLoad` 둘 다 검사
+- **초월 등급 6** (`TRANS = 6`, `TRANS_IDS`): 조합식은 `b.mods.trans` 에 있어야 열림 (`recipeOpen`). 정비소 `defense.trans {pay: cores|gp}` — 처음이면 `p.trans` 에 넣고, 겹치면 카드
+- **조합식 @ 재료**: `"@4"` 아무 신화 · `"@6"` 아무 초월 (`needMatch` · `needName`) — `recipePlan` 이 정해진 재료 먼저, @ 는 남은 것에서. 히든 노아 = @6 + @4 + @4
+- **히든 강화** `b.up.hidden`: 히든 피해는 안 오르고 `hiddenFx`(Lv 당 8%)가 삭제/정화 비율 · 방어 깎기 · 보스 배수에 붙음. 단축키 4 히든 · 5 확률
+- **균열 S** (`RIFT_TIERS`, 30웨이브부터) · 새 유닛 능력 `execute`(처형) · `pierce`(보스 보호막 무시)
+- **강화 레벨 버프**: `LV_BUFF 0.03` — 오라(공속 · 둔화 · 방어 깎기) · proc 확률 · 처형선에 `lvBuff`
+- **유물 보유 효과**: 로드아웃 `own`(가진 유물 전부 + 레벨) → `relicPassive` → `Mods.relicDmg`. 유물 강화는 **유물 조각**(`p.shards`, 상자에서 겹치면 +1) + 코어 (`relicUpCost` → {shards, cores})
+- **상자 개편** (`BOX`): 카드 상자(조각 · `boxes.card`) · 유물 상자(코어 · GP 주 3 · `boxes.relic`) · 초월 소환 — rpc `defense.box.buy/open {kind}` · `gp.relic` · `trans`. 옛 `chest` · `gp.chest` 없음
+- **관리자 초기화**: 관리자 → 랭킹 탭 아래 「픽셀 운빨 디펜스 데이터 초기화」 (`POST /api/admin/defense/reset`, 확인 문구 `디펜스 초기화`) — profile · rank · runs · users.stats.defense 삭제, GP 그대로
+- 그림: 새 10종 + 공격 그림 (ChatGPT 같은 대화에서 「same style」로 새 캐릭터 → 공격 시트), 상점 아이콘 `items/cardbox · relicbox · trans`
+- 봇 시뮬 (8판): 성장 없음 클리어 0~13% · 평균 44~53웨이브 / 다 모은 성장 오염 10 = 13~75% / 오염 25 = 0% (20~41웨이브)
+
 ### v0.3.2 에서 바뀐 구조 (밸런스 b2 그대로 — 1레벨이 예전 수치라 예전 기록 다시 돌리기가 같음)
 - **연구 · 유물 레벨 1~5** (`RES_MAX_LV` · `RELIC_MAX_LV`): 연구 정의가 `res(id, 이름, "설명 {v}", 레벨→수치, …)` 로 바뀜 (`RES[id].val(lv)` · `resDesc`), 유물은 `RELIC_VAL` 표 · `relicDesc`. `modsOf` 가 레벨을 읽음. `Loadout.resLv · relicLv` 는 **2 이상만** 적음 (예전 기록 모양 그대로)
   - 값: 연구 조각 `resUpCost = cost × 지금 레벨` · 유물 코어 `relicUpCost = (8·15·30) × 지금 레벨`. 내리면 전부 돌려받기 — rpc `defense.res.level` · `defense.relic.level { id, dir: 1 | -1 }`. 주간 도전은 레벨 없음
