@@ -88,6 +88,7 @@ import {
   type Save,
   type UpgDef,
   bossTimeOf,
+  MOD_ORDER,
   buyUpgrade,
   checkAch,
   ACH,
@@ -1804,7 +1805,7 @@ export default function VirusGame() {
                       className="flex max-w-[260px] flex-wrap justify-center gap-1"
                       aria-label="코드 모듈"
                     >
-                      {ROSTER.map((v, i) =>
+                      {MOD_ORDER.map((i) => [ROSTER[i], i] as const).map(([v, i]) =>
                         mods[i] ? (
                           <span
                             key={v.id}
@@ -2383,7 +2384,8 @@ export default function VirusGame() {
                     page={page}
                     onPages={onPages}
                     className="grid grid-cols-2 gap-2 @2xl/panel:grid-cols-5"
-                    items={ROSTER.map((v, i) => {
+                    items={MOD_ORDER.map((i) => {
+                      const v = ROSTER[i];
                       const lv = mods[i];
                       const joined = v.join <= Math.max(s.best - 1, s.stage);
                       const cost = fragCost(i, lv);

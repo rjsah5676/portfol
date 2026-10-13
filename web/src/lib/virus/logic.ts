@@ -893,6 +893,9 @@ export function rollBoss(s: Save, rand: () => number = Math.random) {
   s.bossIdx = pickBoss(s.stage, s.best, rand);
 }
 
+/** 화면에 보여 줄 코드 모듈 순서 — 합류 스테이지 순 (저장본 · 계산은 ROSTER 순서 그대로) */
+export const MOD_ORDER = ROSTER.map((_, i) => i).sort((a, b) => ROSTER[a].join - ROSTER[b].join);
+
 /** 지금까지 합류한 바이러스 (최고 스테이지 기준) */
 export function joinedCount(best: number) {
   return ROSTER.filter((v) => v.join <= best).length;
@@ -1003,7 +1006,7 @@ export function compileByp(s: Save, i: number) {
 /** 지금 컴파일하면 오를 것 (모듈 · 우회 기술 — 각각 올라갈 버전까지) */
 export function compileReady(s: Save): CompileItem[] {
   const out: CompileItem[] = [];
-  ROSTER.forEach((_, i) => {
+  MOD_ORDER.forEach((i) => {
     const p = planMod(s, i);
     if (p.to > s.mods[i]) out.push({ kind: "mod", i, to: p.to });
   });
@@ -1022,7 +1025,7 @@ export function compileReady(s: Save): CompileItem[] {
 /** 할 수 있는 컴파일을 전부 (컴파일 막대 · 자동 컴파일러 · 시뮬레이터) */
 export function compileAll(s: Save): CompileItem[] {
   const out: CompileItem[] = [];
-  ROSTER.forEach((_, i) => compileMod(s, i) && out.push({ kind: "mod", i, to: s.mods[i] }));
+  MOD_ORDER.forEach((i) => compileMod(s, i) && out.push({ kind: "mod", i, to: s.mods[i] }));
   APEX.forEach((_, i) => compileByp(s, i) && out.push({ kind: "byp", i, to: s.byp[i] }));
   return out;
 }

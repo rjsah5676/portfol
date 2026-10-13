@@ -16,6 +16,7 @@ import {
   fmtTime,
   importSave,
   PRIMITIVES,
+  MOD_ORDER,
   type Save,
 } from "@/lib/virus/logic";
 import { VirusSprite } from "./VirusSprite";
@@ -256,7 +257,7 @@ export function SettingsPanel({
 export function ArchivePanel({ s }: { s: Save }) {
   const list = [
     ...PRIMITIVES.map((p) => ({ ...p, prim: true as const, i: -1, join: 1 })),
-    ...ROSTER.map((v, i) => ({ ...v, prim: false as const, i })),
+    ...MOD_ORDER.map((i) => ({ ...ROSTER[i], prim: false as const, i })),
   ];
   const seen = (k: number) => list[k].prim || list[k].join < s.best;
   const [sel, setSel] = useState(0);
