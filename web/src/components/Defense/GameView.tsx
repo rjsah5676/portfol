@@ -35,6 +35,8 @@ import {
   type Grade,
 } from "@/lib/defense/units";
 import type { Controller } from "./controller";
+import { RelicIcon } from "./Hub";
+import { RELIC, RES } from "@/lib/defense/progress";
 import { FH2, FW, cellAt, draw, newView, pushFx } from "./render";
 import {
   Bar,
@@ -415,6 +417,25 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry }
             color={nEnemy >= CAP * 0.8 ? "#ff4d6d" : nEnemy >= CAP * 0.6 ? "#ffb347" : "#6dff8f"}
           />
         </div>
+        {(b.mods.relics.length > 0 || b.mods.glitch.lv > 0) && (
+          <div
+            className="px-inset flex h-full shrink-0 items-center gap-1 px-1.5"
+            title={[
+              b.mods.glitch.lv ? `오염 ${b.mods.glitch.lv}단계 — 적 체력 ×${b.mods.glitch.hp} · 속도 ×${b.mods.glitch.spd}` : "",
+              ...b.mods.relics.map((id) => `${RELIC[id]?.name}: ${RELIC[id]?.desc}`),
+              ...b.mods.res.map((id) => `연구 ${RES[id]?.name}: ${RES[id]?.desc}`),
+            ]
+              .filter(Boolean)
+              .join("\n")}
+          >
+            {b.mods.glitch.lv > 0 && (
+              <b className="dfn-glitch px-1 text-[12px] text-[var(--pink)]">G{b.mods.glitch.lv}</b>
+            )}
+            {b.mods.relics.map((id) => (
+              <RelicIcon key={id} id={id} size={24} />
+            ))}
+          </div>
+        )}
         {boss && (
           <div
             className="px-box flex h-full w-[240px] shrink-0 flex-col justify-center px-2.5"

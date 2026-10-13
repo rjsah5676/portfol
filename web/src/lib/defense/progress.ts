@@ -147,6 +147,9 @@ export interface Mods {
   twinStar: number;
   warBanner: number;
   glitch: GlitchDef;
+  /** 장착한 연구 · 유물 id (화면 표시용, 시뮬은 위 값만 씀) */
+  res: string[];
+  relics: string[];
 }
 
 const clampInt = (v: unknown, lo: number, hi: number) =>
@@ -203,6 +206,8 @@ export function modsOf(lo: Loadout | null | undefined): Mods {
     twinStar: x.has("twin_star") ? 0.15 : 0,
     warBanner: x.has("war_banner") ? 0.04 : 0,
     glitch: GLITCH[L.glitch],
+    res: L.res,
+    relics: L.relics,
   };
 }
 
