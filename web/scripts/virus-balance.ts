@@ -68,6 +68,13 @@ import {
   chalOpen,
   milestoneCore,
   fmt,
+  dropFrag,
+  rollBoss,
+  dropKey,
+  compileAuto,
+  type WildMode,
+  ROSTER,
+  APEX,
 } from "../src/lib/virus/logic";
 
 const args = process.argv.slice(2).filter((a) => !a.startsWith("--"));
@@ -83,6 +90,8 @@ const CHALS = process.argv.includes("--chal");
 const TO_END = process.argv.includes("--to-end");
 /** --quiet: 100스테이지 표만 */
 const QUIET = process.argv.includes("--quiet");
+/** wild=new|star|cheap|off: 제로데이 조각 규칙 (기본 new — 게임 기본값) */
+let WILD: WildMode = "new";
 /** stuck=600: 한 스테이지에 이 초 넘게 머물면 막혔다고 보고 변이 */
 let STUCK_SECS = 600;
 /**
@@ -108,6 +117,10 @@ for (const a of args.filter((x) => x.includes("="))) {
   }
   if (k === "drop") {
     RATE_DROP = Number(v);
+    continue;
+  }
+  if (k === "wild") {
+    WILD = v as WildMode;
     continue;
   }
   if (k === "stuck") {
@@ -154,6 +167,7 @@ function bestUpgrade(s: Save) {
 }
 
 let s = newSave();
+s.wildMode = WILD;
 let t = 0;
 let st = stats(s);
 let hp = mobHp(1, st);
@@ -207,6 +221,49 @@ function noteBest() {
   for (let n = 100; n <= MAX_STAGE; n += 100)
     if (s.best > n && bestAt[n] == null) bestAt[n] = { t, formats: s.formats };
 }
+/** 모듈 · 우회 기술을 처음 열 때 (시각 · 스테이지 · 그 순간 DPS 상승 — 보스 상대 기댓값) */
+const unlocks: string[] = [];
+/** 보스 · 상위 보스를 잡은 뒤: 조각 · 키를 얻고 바로 컴파일 (팝업을 바로 누르는 플레이어) */
+function loot(kind: "boss" | "apex", fresh: boolean) {
+  const before = feel();
+  const opened: string[] = [];
+  const dk = fresh ? "new" : s.stage >= s.runTop ? "run" : "again";
+  if (kind === "boss") dropFrag(s, dk);
+  else {
+    const k = dropKey(s, dk);
+    if (k.opened) opened.push(`🛡️ ${APEX[k.index].trait} v1`);
+  }
+  for (const c of compileAuto(s)) {
+    if (c.kind === "mod" && s.mods[c.i] === c.to && !unlockedMod.has(c.i)) {
+      unlockedMod.add(c.i);
+      opened.push(`📦 ${ROSTER[c.i].module} v${c.to}`);
+    }
+  }
+  if (opened.length) {
+    const after = feel();
+    const pc = (a: number, b: number) =>
+      `${a / b >= 1.005 ? "+" : ""}${((a / b - 1) * 100).toFixed(0)}%`;
+    unlocks.push(
+      `  ${fmtT(t).padStart(7)} · ${String(s.stage).padStart(4)} · ${opened.join(" + ")} → 보스 DPS ${pc(after.boss, before.boss)} · 파일 ${pc(after.file, before.file)} · 데이터 ${pc(after.data, before.data)} · 보스 시간 ${after.time - before.time >= 0 ? "+" : ""}${(after.time - before.time).toFixed(1)}초`
+    );
+  }
+}
+/** 체감 지표: 보스 DPS · 초당 파일 감염 (첫 발 강타 · 이월 반영) · 초당 데이터 · 보스 제한 시간 (암호화 잠금 상한 포함) */
+function feel() {
+  const q = stats(s);
+  const hp = mobHp(s.stage, q);
+  const d = dps(q);
+  const left =
+    Math.max(hp * 0.02, hp - Math.max(0, q.fx.first - 1) * avgHit(q)) * (1 - q.fx.carry * 0.5);
+  const file = d / left;
+  return {
+    boss: d * q.bossDmgMul * q.fxBossMul,
+    file,
+    data: file * mobData(s.stage, q) * (1 + q.fx.leech),
+    time: bossTimeOf("boss", q) + q.fx.lockCap,
+  };
+}
+const unlockedMod = new Set<number>();
 /** 백도어 이월로 다음 적에게 넘길 피해 · 이번 보스 전투에서 암호화 잠금으로 늘린 시간 */
 let carry = 0;
 /** 이번 회차 변이 효율 최고점 (--rate) */
@@ -345,6 +402,7 @@ while (t < HOURS * 3600) {
     } else if (boss && apex && s.stage >= MAX_STAGE) {
       // 마지막 상위 보스: 더 나아가지 않고 바로 최종 보스
       gainData(s, apexData(s.stage, st));
+      loot("apex", s.stage >= s.best);
       if (s.stage > s.apexBest && apexAt[apexCount(s.stage)] == null)
         apexAt[apexCount(s.stage)] = t;
       s.apexBest = Math.max(s.apexBest, s.stage);
@@ -357,10 +415,12 @@ while (t < HOURS * 3600) {
     } else if (boss && !apex && isApexStage(s.stage)) {
       // 보스는 잡았고 상위 보스가 남음 (스테이지는 그대로)
       gainData(s, bossData(s.stage, st));
+      loot("boss", s.stage >= s.best);
       s.bossDone = true;
       fails = 0;
     } else if (boss) {
       gainData(s, apex ? apexData(s.stage, st) : bossData(s.stage, st));
+      loot(apex ? "apex" : "boss", s.stage >= s.best);
       if (apex) {
         if (s.stage > s.apexBest && apexAt[apexCount(s.stage)] == null)
           apexAt[apexCount(s.stage)] = t;
@@ -380,6 +440,8 @@ while (t < HOURS * 3600) {
         );
       s.stage++;
       s.best = Math.max(s.best, s.stage);
+      s.runTop = Math.max(s.runTop, s.stage);
+      rollBoss(s);
       noteBest();
       s.kills = 0;
       fails = 0;
@@ -393,13 +455,6 @@ while (t < HOURS * 3600) {
       gainData(s, mobData(s.stage, st));
       s.kills = Math.min(MOBS_PER_STAGE, s.kills + 1);
       s.rec.files++;
-      // 연쇄 감염: 다음 파일도 바로
-      if (s.kills < MOBS_PER_STAGE && Math.random() < st.chain) {
-        gainData(s, mobData(s.stage, st));
-        s.kills++;
-        s.rec.files++;
-        s.rec.chains++;
-      }
     }
     nextEnemy();
   } else if (boss && left <= 0) {
@@ -471,6 +526,10 @@ for (let n = 100; n <= MAX_STAGE; n += 100) {
 console.log(
   `  끝 시각 ${fmtT(t)} · 최고 ${s.best - 1} · 지금 스테이지 ${s.stage} · 루트 권한 ${fmt(s.root)} · 코어 ${s.cores} · 챌린지 ${s.chalDone.length}`
 );
+console.log("\n모듈 · 우회 기술을 처음 열 때:");
+console.log(unlocks.join("\n") || "  없음");
+console.log(`  끝: 모듈 ${s.mods.map((v, i) => `${ROSTER[i].module} v${v}`).join(" · ")}`);
+console.log(`       우회 ${s.byp.map((v, i) => `${APEX[i].trait} v${v}`).join(" · ")}`);
 if (QUIET) process.exit(0);
 console.log("\n첫 회차 스테이지 도달 시각:");
 console.log(
@@ -505,7 +564,7 @@ console.log(
 console.log(`최종 보스 처음 격퇴: ${finalAt < 0 ? "없음" : fmtT(finalAt)} (모두 ${s.clears}번)`);
 console.log(`루트 권한 상점: ${JSON.stringify(s.shop)} · 남은 포인트 ${rootLeft(s)}`);
 console.log(
-  `누적 데이터 ${fmtBytes(s.lifetime)} · 파일 ${s.rec.files} (연쇄 ${s.rec.chains}) · 보스 ${s.rec.bosses} · 차단 ${s.rec.fails} · KILLSWITCH 최단 ${s.rec.bestFinal.toFixed(1)}초`
+  `누적 데이터 ${fmtBytes(s.lifetime)} · 파일 ${s.rec.files} · 보스 ${s.rec.bosses} · 차단 ${s.rec.fails} · KILLSWITCH 최단 ${s.rec.bestFinal.toFixed(1)}초`
 );
 console.log(`\n업적 ${s.ach.length}/${ACH.length} (피해 ×${stats(s).achMul.toFixed(2)}):`);
 console.log(

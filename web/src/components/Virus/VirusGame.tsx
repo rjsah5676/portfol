@@ -59,7 +59,6 @@ import {
   gainData,
   mobData,
   mobHp,
-  moduleLevels,
   newSave,
   offlineGain,
   parseSave,
@@ -94,16 +93,29 @@ import {
   startChal,
   chalOpen,
   CHAL,
-  SETS,
-  SET_TIERS,
-  setTier,
   upgLocked,
   randLocked,
   ACH,
   type ChalDef,
   type ChalKey,
   milestoneCore,
-  bypassLevels,
+  dropFrag,
+  dropKey,
+  dropKind,
+  gotoStage,
+  rollBoss,
+  compileAuto,
+  compileMod,
+  compileByp,
+  planMod,
+  wildSuggest,
+  fragCost,
+  keyCost,
+  modOpenable,
+  WILD_MODES,
+  DROP_NEW,
+  DROP_AGAIN,
+  type CompileItem,
   BUFF_MS,
   BURN_SECS,
   baseDps,
@@ -208,7 +220,10 @@ interface Reward {
   name: string;
   seed: string;
   color: string;
-  module?: { name: string; effect: string; level: number };
+  /** 보스에게서 얻은 코드 조각 (index -1 = 제로데이 조각) */
+  frag?: { index: number; n: number };
+  /** 상위 보스에게서 얻은 우회 키 (처음 잡았으면 apex 로 보여 줌) */
+  key?: { index: number; n: number };
   apex?: { index: number; trait: string; effect: string; look: string };
   /** 최종 보스 격퇴 (몇 번째인지) */
   final?: { clears: number; cores: number };
@@ -390,7 +405,9 @@ export default function VirusGame() {
     onYes: () => void;
   } | null>(null);
   /** 코드 모듈 탭에서 누른 모듈 · 특성 (크게 보기) */
-  const [detail, setDetail] = useState<{ kind: "mod" | "apex" | "set"; i: number } | null>(null);
+  const [detail, setDetail] = useState<{ kind: "mod" | "apex"; i: number } | null>(null);
+  /** 자세히 보기에서 고른 목표 버전 (null = 자기 조각만으로 되는 만큼) */
+  const [pickTo, setPickTo] = useState<number | null>(null);
   /** 방금 랜덤 강화 결과 (잠깐 띄움) */
   const [randed, setRanded] = useState<{ id: number; key: UpgKey; n: number } | null>(null);
   /** 기록 창을 열 때 새로 본 업적 (NEW 표시) */
@@ -424,8 +441,14 @@ export default function VirusGame() {
     (kind: Cinema["kind"], stage: number, apex = false, final = false) => {
       // 탭이 가려져 있으면 연출 없이 바로 다음으로 (뒤에서 돌 때 시간이 멈추지 않게)
       if (document.visibilityState === "hidden") return;
-      const { def, tier } = bossOf(stage);
+      const { def, index } = bossOf(save.current);
       const ax = apexOf(stage);
+      // 이 스테이지에 처음 합류하는 바이러스
+      const joined =
+        index >= 0 &&
+        ROSTER[index].join === stage &&
+        stage >= save.current.best &&
+        kind === "appear";
       const now = performance.now();
       cinemaRef.current = {
         id: Math.floor(now),
@@ -436,7 +459,9 @@ export default function VirusGame() {
           ? `${FINAL.role} ${FINAL.name}${tierLabel(save.current.clears + 1)}`
           : apex
             ? `${ax.def.role} ${ax.def.name}${tierLabel(ax.tier)}`
-            : def.name + tierLabel(tier),
+            : joined
+              ? `NEW · ${def.name}`
+              : def.name,
         apex: final ? 10 : apex ? ax.index : undefined,
         final,
         until: now + (kind === "appear" ? APPEAR_MS : kind === "down" ? DOWN_MS : FAIL_MS),
@@ -467,6 +492,94 @@ export default function VirusGame() {
 
   /** 보스 격퇴 소리가 나는 동안 배경음악을 줄이는 함수 (배경음악 코드가 아래에 있어서 ref로 연결) */
   const duckBgm = useRef<() => void>(() => {});
+
+  /** 새로 연 코드 모듈 소개 (처음 컴파일했을 때 한 번) */
+  const [intro, setIntro] = useState<number[]>([]);
+  /** 마지막 컴파일 되돌리기 — 그 전의 모듈 · 조각 · 우회 기술 (보스를 더 잡거나 변이하면 사라짐) */
+  const [undo, setUndo] = useState<{
+    id: number;
+    text: string;
+    snap: Pick<Save, "mods" | "frag" | "wild" | "byp" | "keys">;
+  } | null>(null);
+  /** 컴파일 막대를 닫은 때의 조각 · 키 합계 — 그보다 더 모이기 전엔 다시 안 띄움 */
+  const [barHidden, setBarHidden] = useState(-1);
+  /** 컴파일 뒤: 처음 연 모듈은 소개 */
+  const afterCompile = useCallback((before: number[], items: CompileItem[]) => {
+    const fresh = items.filter((c) => c.kind === "mod" && !before[c.i]).map((c) => c.i);
+    if (fresh.length) setIntro((q) => [...q, ...fresh.filter((i) => !q.includes(i))]);
+  }, []);
+  /** 컴파일 한 번 (버튼) — 되돌리기용으로 그 전 상태를 남김 */
+  const doCompile = useCallback(
+    (fn: (sv: Save) => CompileItem[]) => {
+      const sv = save.current;
+      const snap = {
+        mods: [...sv.mods],
+        frag: [...sv.frag],
+        wild: sv.wild,
+        byp: [...sv.byp],
+        keys: [...sv.keys],
+      };
+      const items = fn(sv);
+      if (!items.length) return;
+      afterCompile(snap.mods, items);
+      const wild = items.reduce((n, c) => n + (c.wild ?? 0), 0);
+      const id = Date.now();
+      setUndo({
+        id,
+        text: `${items.map((c) => (c.kind === "mod" ? `${ROSTER[c.i].icon} ${ROSTER[c.i].module} v${c.to}` : `🛡️ ${APEX[c.i].trait} v${c.to}`)).join(" · ")}${wild ? ` (✦ ${wild} 사용)` : ""}`,
+        snap,
+      });
+      setTimeout(() => setUndo((u) => (u?.id === id ? null : u)), 6000);
+      playVirusSfx("boss-down");
+      persist();
+      sync();
+    },
+    [afterCompile, persist, sync]
+  );
+  const undoNow = () => {
+    if (!undo) return;
+    Object.assign(save.current, {
+      mods: [...undo.snap.mods],
+      frag: [...undo.snap.frag],
+      wild: undo.snap.wild,
+      byp: [...undo.snap.byp],
+      keys: [...undo.snap.keys],
+    });
+    setIntro((q) => q.filter((i) => undo.snap.mods[i] === 0 && save.current.mods[i] > 0));
+    setUndo(null);
+    persist();
+    sync();
+  };
+
+  /**
+   * 보스 · 상위 보스를 잡은 뒤 조각 · 키 — 자동 컴파일러가 있으면 바로 컴파일 (제로데이 규칙대로).
+   * 되돌리기는 여기서 사라짐 (그 사이 조각이 바뀌어서)
+   */
+  const lootRef = useRef<
+    (apex: boolean) => { frag?: Reward["frag"]; key?: Reward["key"]; opened: boolean }
+  >(() => ({ opened: false }));
+  useEffect(() => {
+    lootRef.current = (apex: boolean) => {
+      const s = save.current;
+      // 처음 가는 스테이지 · 이번 회차에 처음 오르는 스테이지 · 다시 도는 스테이지 (보스 전투 시간에 비례한 확률)
+      const kind = dropKind(s);
+      const fight = Math.max(0, timeFor(enemy.current, s) - bossLeft.current);
+      let out: { frag?: Reward["frag"]; key?: Reward["key"]; opened: boolean };
+      if (apex) {
+        const k = dropKey(s, kind, fight);
+        out = { key: k.opened || !k.n ? undefined : { index: k.index, n: k.n }, opened: k.opened };
+      } else {
+        const f = dropFrag(s, kind, fight);
+        out = { frag: f.n ? f : undefined, opened: false };
+      }
+      setUndo(null);
+      if (s.shop.autoc) {
+        const before = [...s.mods];
+        afterCompile(before, compileAuto(s));
+      }
+      return out;
+    };
+  }, [afterCompile]);
 
   /** damage 를 자기 안에서 다시 부를 때 (백도어 이월로 다음 적까지 쓰러질 때) */
   const damageRef = useRef<(amount: number) => void>(() => {});
@@ -511,16 +624,20 @@ export default function VirusGame() {
         startCinema("down", s.stage);
         duckBgm.current();
         gainData(s, bossData(s.stage, st));
+        lootRef.current(false);
         s.bossDone = true;
         apexIntro.current = true;
         persist();
       } else if (e.boss) {
-        const { def, index, tier } = bossOf(s.stage);
+        const { def } = bossOf(s);
         const ax = apexOf(s.stage);
         const wasApex = e.apex;
+        const fresh = s.stage >= s.best;
         startCinema("down", s.stage, wasApex);
         duckBgm.current();
         gainData(s, wasApex ? apexData(s.stage, st) : bossData(s.stage, st));
+        // 코드 조각 (보스) · 우회 키 (상위 보스 — 처음이면 우회 기술 v1)
+        const got = lootRef.current(wasApex);
         // 상위 보스를 처음 잡으면 우회 기술 + 외형 (변이해도 남음) · 100스테이지마다 처음 넘으면 커널 코어
         const newApex = wasApex && s.stage > s.apexBest;
         const core = newApex && milestoneCore(s.stage);
@@ -537,29 +654,27 @@ export default function VirusGame() {
           finalIntro.current = true;
         }
         const next = s.stage + 1;
-        if (!last) s.stage = next;
+        // 반복 중이면 이 스테이지에 머물고 파일부터 다시 (그래도 이 스테이지는 지나온 것으로)
+        if (!last && !s.repeat) s.stage = next;
+        if (next > s.best) s.best = next;
+        if (!last) s.runTop = Math.max(s.runTop, next);
+        if (!last) rollBoss(s);
         // 챌린지 목표를 넘었으면 제약이 풀리고 보상
         const cd = checkChal(s);
         if (cd) queued.current.push({ name: cd.name, seed: "", color: "#f9a8d4", chal: cd });
-        // 처음 가 보는 스테이지에서 이겼을 때만 모듈 버전이 오름 (변이 뒤 다시 이기는 건 보상 없음)
-        if (next > s.best) {
-          s.best = next;
+        // 알림은 처음 가 보는 스테이지에서 이겼을 때만 (변이 뒤 다시 오를 때는 조용히 — 조각은 컴파일 막대에 쌓임)
+        if (fresh) {
           pendingReward.current = {
-            name: wasApex
-              ? `${ax.def.role} ${ax.def.name}${tierLabel(ax.tier)}`
-              : def.name + tierLabel(tier),
-            seed: def.id,
-            color: newApex ? ax.def.color : def.color,
-            module: {
-              name: def.module,
-              effect: def.cur(moduleLevels(s.best)[index]),
-              level: moduleLevels(s.best)[index],
-            },
-            apex: newApex
+            name: wasApex ? `${ax.def.role} ${ax.def.name}${tierLabel(ax.tier)}` : def.name,
+            seed: wasApex ? ax.def.id : def.id,
+            color: wasApex ? ax.def.color : def.color,
+            frag: got.frag,
+            key: got.key,
+            apex: got.opened
               ? {
                   index: ax.index,
                   trait: ax.def.trait,
-                  effect: ax.def.cur(bypassLevels(s.best, s.apexBest)[ax.index]),
+                  effect: ax.def.cur(s.byp[ax.index]),
                   look: ax.def.look,
                 }
               : undefined,
@@ -571,14 +686,6 @@ export default function VirusGame() {
         gainData(s, mobData(s.stage, st));
         s.kills = Math.min(MOBS_PER_STAGE, s.kills + 1);
         s.rec.files++;
-        // 연쇄 감염 (세트 「자가 전파」): 다음 파일도 바로
-        if (s.kills < MOBS_PER_STAGE && Math.random() < st.chain) {
-          gainData(s, mobData(s.stage, st));
-          s.kills++;
-          s.rec.files++;
-          s.rec.chains++;
-          if (document.visibilityState === "visible") addFloat("🔗 연쇄", false);
-        }
       }
       enemy.current = spawn(s);
       // 상위 보스 · 최종 보스는 앞 보스 격퇴 연출이 끝난 뒤에 등장 연출 (틱에서)
@@ -595,7 +702,7 @@ export default function VirusGame() {
         }
       }
     },
-    [persist, startCinema, addFloat]
+    [persist, startCinema]
   );
   useEffect(() => {
     damageRef.current = damage;
@@ -1100,6 +1207,27 @@ export default function VirusGame() {
     [sync, checkEvolve]
   );
 
+  /** 스테이지 고르기 (1 ~ 이번 회차에 오른 가장 높은 스테이지) — 파일부터 다시 */
+  const moveStage = (d: number) => {
+    const sv = save.current;
+    if (!gotoStage(sv, sv.stage + d)) return;
+    pending.current = [];
+    setShots([]);
+    cinemaRef.current = null;
+    apexIntro.current = false;
+    finalIntro.current = false;
+    enemy.current = spawn(sv);
+    bossLeft.current = timeFor(enemy.current, sv);
+    persist();
+    sync();
+  };
+  /** 스테이지 반복 켜기 · 끄기 */
+  const toggleRepeat = () => {
+    save.current.repeat = !save.current.repeat;
+    persist();
+    sync();
+  };
+
   const retryBoss = () => {
     const s = save.current;
     s.bossFail = false;
@@ -1210,11 +1338,23 @@ export default function VirusGame() {
         e.preventDefault();
         if (ask) setAsk(null);
         else if (detail) setDetail(null);
+        else if (intro.length) setIntro((q) => q.slice(1));
         else if (away) setAway(null);
         else setOverlay((o) => (o ? null : "menu"));
         return;
       }
-      if (overlay || detail || away || ask) return;
+      if (overlay || detail || away || ask || intro.length) return;
+      // F: 컴파일 (제로데이 규칙대로) · G: 제로데이 제안 쓰기
+      if (e.code === "KeyF") doCompile((sv) => compileAuto(sv));
+      if (e.code === "KeyG") {
+        const sg = wildSuggest(save.current);
+        if (sg)
+          doCompile((sv) =>
+            compileMod(sv, sg.i, sg.wild)
+              ? [{ kind: "mod", i: sg.i, to: sv.mods[sg.i], wild: sg.wild }]
+              : []
+          );
+      }
       const n = Number(e.key);
       if (n >= 1 && n <= UPGRADES.length) buy(UPGRADES[n - 1]);
       if (e.code === "KeyC") runCron();
@@ -1223,7 +1363,7 @@ export default function VirusGame() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [scene, overlay, detail, away, ask, buy, doRand, runCron]);
+  }, [scene, overlay, detail, away, ask, intro, buy, doRand, runCron, doCompile]);
 
   // 시작 화면의 창은 Esc로 닫기
   useEffect(() => {
@@ -1242,16 +1382,16 @@ export default function VirusGame() {
   /** 격퇴 실패 연출 중이면: 보스는 그대로 보이고 내 바이러스가 소멸 */
   const failing = cinema?.kind === "fail" ? cinema : null;
   const st = stats(s);
-  const mods = moduleLevels(s.best);
+  const mods = s.mods;
   const owned = mods.filter((m) => m > 0).length;
   /** 상위 보스에게서 빼앗은 우회 기술 수 */
-  const bypassN = apexCount(s.apexBest);
+  const bypassN = s.byp.filter((v) => v > 0).length;
   /** 우회 기술 버전 (못 잡은 것은 0) */
-  const bv = bypassLevels(s.best, s.apexBest);
-  // 내 바이러스와 날아가는 코드의 색: 마지막으로 빼앗은 모듈의 색
-  const last = s.best > 1 ? bossOf(s.best - 1).def : null;
-  const myColor = last?.color ?? ACCENT;
-  const boss = bossOf(s.stage);
+  const bv = s.byp;
+  // 내 바이러스와 날아가는 코드의 색: 버전이 가장 높은 코드 모듈의 색 (없으면 기본 초록)
+  const topMod = owned ? mods.indexOf(Math.max(...mods)) : -1;
+  const myColor = topMod >= 0 ? ROSTER[topMod].color : ACCENT;
+  const boss = bossOf(s);
   const apex = apexOf(s.stage);
   const file = FILE_TYPES[e.file];
   /** 이 적의 제한 시간 (막대 길이용) */
@@ -1279,6 +1419,51 @@ export default function VirusGame() {
   const achNew = Math.max(0, achN - s.achSeen);
   /** 진행 중인 챌린지 */
   const chal = CHAL.find((c) => c.key === s.chal) ?? null;
+  /** 지금 띄울 새 모듈 소개 (자세히 보기 · 오프라인 수익 창이 없을 때) */
+  const introNow = !detail && !away && intro.length ? intro[0] : null;
+  const closeDetail = () => {
+    if (detail) {
+      setDetail(null);
+      setPickTo(null);
+    } else if (introNow != null) setIntro((q) => q.slice(1));
+    else setAway(null);
+  };
+  const setStar = (i: number) => {
+    save.current.star = i;
+    persist();
+    sync();
+  };
+  const setWildMode = (m: (typeof WILD_MODES)[number]["key"]) => {
+    save.current.wildMode = m;
+    persist();
+    sync();
+  };
+  // 컴파일 막대: 지금 「컴파일」을 누르면 오를 것 (제로데이 규칙 포함) · 제로데이를 써야 오르는 것 중 제안 하나
+  const preview = (() => {
+    if (s.shop.autoc || scene !== "play") return [];
+    const c: Save = {
+      ...s,
+      mods: [...s.mods],
+      frag: [...s.frag],
+      byp: [...s.byp],
+      keys: [...s.keys],
+    };
+    return compileAuto(c);
+  })();
+  const previewWild = preview.reduce((n, c) => n + (c.wild ?? 0), 0);
+  const suggest =
+    s.shop.autoc || scene !== "play"
+      ? null
+      : (() => {
+          const sg = wildSuggest(s);
+          return sg && !preview.some((c) => c.kind === "mod" && c.i === sg.i) ? sg : null;
+        })();
+  const lootSum = s.frag.reduce((a, b) => a + b, 0) + s.wild + s.keys.reduce((a, b) => a + b, 0);
+  const showBar = !undo && (preview.length > 0 || suggest != null) && lootSum > barHidden;
+  const itemName = (c: CompileItem) =>
+    c.kind === "mod"
+      ? `${ROSTER[c.i].icon} ${ROSTER[c.i].module} v${c.to}`
+      : `🛡️ ${APEX[c.i].trait} v${c.to}`;
 
   const titleItems = useMemo<TitleItem[]>(
     () => [
@@ -1535,6 +1720,54 @@ export default function VirusGame() {
                 )}
               </div>
               {cinema && <BossCinema c={cinema} />}
+              {/* 오른쪽 위: 스테이지 고르기 · 반복 */}
+              <div className={`absolute top-2 right-3 z-10 flex flex-col items-end gap-1 ${KR}`}>
+                <div className="flex items-center overflow-hidden rounded-lg border border-white/15 bg-black/55">
+                  <button
+                    type="button"
+                    onClick={() => moveStage(-1)}
+                    disabled={s.stage <= 1}
+                    aria-label="이전 스테이지"
+                    title="이전 스테이지로 (파일부터 다시)"
+                    className="px-2 py-1 font-mono vt-sm text-white/85 enabled:hover:bg-white/10 disabled:opacity-30"
+                  >
+                    ◀
+                  </button>
+                  <button
+                    type="button"
+                    onClick={toggleRepeat}
+                    aria-pressed={s.repeat}
+                    title={`스테이지 반복: 보스를 잡아도 이 스테이지에 머물러요.\n이번 회차에 이미 지나온 스테이지에서는 코드 조각 · 우회 키가 보스를 잡는 데 걸린 시간에 비례한 확률로만 나와요 (${BAL.revisitSecs}초 이상이면 100%, 한 방에 잡히면 거의 0%).`}
+                    className={`border-x border-white/15 px-2 py-1 vt-xs font-bold whitespace-nowrap ${
+                      s.repeat ? "bg-sky-400/25 text-sky-100" : "text-white/80 hover:bg-white/10"
+                    }`}
+                  >
+                    🔁 {s.repeat ? "반복 ON" : "반복"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => moveStage(1)}
+                    disabled={s.stage >= s.runTop}
+                    aria-label="다음 스테이지"
+                    title="다음 스테이지로 (이번 회차에 오른 곳까지)"
+                    className="px-2 py-1 font-mono vt-sm text-white/85 enabled:hover:bg-white/10 disabled:opacity-30"
+                  >
+                    ▶
+                  </button>
+                </div>
+                {s.stage < s.runTop && (
+                  <span
+                    className="rounded-md bg-black/55 px-1.5 vt-xs text-sky-200"
+                    title={`보스를 ${BAL.revisitSecs}초 이상 걸려 잡으면 조각 100%`}
+                  >
+                    ↺ 다시 도는 중
+                    <span className="hidden @xl/vg:inline">
+                      {" "}
+                      · 조각 확률 = 보스 전투 시간 ÷ {BAL.revisitSecs}초
+                    </span>
+                  </span>
+                )}
+              </div>
               <div
                 key={cinema?.id ?? 0}
                 className={`absolute inset-0 grid grid-cols-2 items-center select-none ${
@@ -1678,7 +1911,7 @@ export default function VirusGame() {
                       </b>
                     ) : e.boss ? (
                       <b style={{ color: boss.def.color }}>
-                        ☠️ {boss.def.name + tierLabel(boss.tier)}{" "}
+                        ☠️ {boss.def.name}{" "}
                         <span className="font-mono vt-xs font-normal text-white/70">
                           ({boss.def.year})
                         </span>
@@ -1742,6 +1975,92 @@ export default function VirusGame() {
                 >
                   🎲 {UPGRADES.find((u) => u.key === randed.key)?.rand} · +{randed.n}레벨
                   {randed.n === RAND_ODDS.length && " 잭팟!"}
+                </div>
+              )}
+
+              {/* 컴파일 막대 · 되돌리기 */}
+              {(showBar || undo) && !cinema && (
+                <div
+                  className={`vg-compile absolute inset-x-3 bottom-11 z-20 mx-auto flex max-w-[560px] flex-col gap-1 rounded-xl border border-emerald-300/40 bg-[#07130d]/95 px-3 py-2 shadow-[0_0_18px_rgba(74,222,128,0.25)] ${KR}`}
+                >
+                  {undo ? (
+                    <div className="flex items-center gap-2 vt-sm">
+                      <span className="min-w-0 flex-1 truncate text-emerald-100">
+                        ✅ 컴파일됨 · {undo.text}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={undoNow}
+                        className="shrink-0 rounded-lg border border-white/25 px-2.5 py-1 vt-xs font-bold text-white/90 hover:border-white/50"
+                      >
+                        되돌리기
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      {preview.length > 0 && (
+                        <div className="flex items-center gap-2 vt-sm">
+                          <span className="min-w-0 flex-1 truncate text-white/90">
+                            🧬 {preview.map(itemName).join(" · ")}
+                            {previewWild > 0 && (
+                              <span className="ml-1 text-amber-200">(✦ {previewWild} 사용)</span>
+                            )}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => doCompile((sv) => compileAuto(sv))}
+                            className="shrink-0 rounded-lg bg-emerald-400 px-3 py-1 vt-xs font-bold text-black hover:bg-emerald-300"
+                          >
+                            컴파일
+                            <span className="ml-1 hidden font-mono opacity-70 md:inline">F</span>
+                          </button>
+                        </div>
+                      )}
+                      {suggest && (
+                        <div className="flex items-center gap-2 vt-sm">
+                          <span className="min-w-0 flex-1 truncate text-amber-100">
+                            ✦ 제로데이 {suggest.wild}개 더 쓰면 {ROSTER[suggest.i].icon}{" "}
+                            {ROSTER[suggest.i].module} v{suggest.to}
+                            {suggest.gain > 0.001 && (
+                              <span className="ml-1 text-amber-200/80">
+                                (보스 DPS +{(suggest.gain * 100).toFixed(1)}%)
+                              </span>
+                            )}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              doCompile((sv) =>
+                                compileMod(sv, suggest.i, suggest.wild)
+                                  ? [
+                                      {
+                                        kind: "mod",
+                                        i: suggest.i,
+                                        to: sv.mods[suggest.i],
+                                        wild: suggest.wild,
+                                      },
+                                    ]
+                                  : []
+                              )
+                            }
+                            className="shrink-0 rounded-lg border border-amber-300/60 bg-amber-300/15 px-3 py-1 vt-xs font-bold text-amber-100 hover:bg-amber-300/25"
+                          >
+                            쓰기
+                            <span className="ml-1 hidden font-mono opacity-70 md:inline">G</span>
+                          </button>
+                        </div>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => setBarHidden(lootSum)}
+                        aria-label="컴파일 막대 닫기 (조각이 더 모이면 다시 떠요)"
+                        title="닫기 — 조각이 더 모이면 다시 떠요"
+                        className="absolute -top-2 -right-2 flex h-5 w-5 items-center justify-center rounded-full border border-white/25 bg-[#07130d] vt-xs text-white/80 hover:text-white"
+                      >
+                        ✕
+                      </button>
+                    </>
+                  )}
                 </div>
               )}
 
@@ -1825,6 +2144,28 @@ export default function VirusGame() {
                   ))}
                 </div>
                 <div className="ml-auto flex shrink-0 items-center gap-1.5 pb-1">
+                  {tab === "module" && (
+                    <label
+                      className={`flex items-center gap-1 rounded-lg border border-amber-300/40 bg-amber-300/10 px-1.5 py-0.5 vt-xs font-bold text-amber-100 ${KR}`}
+                      title={`제로데이 조각 자동 사용 규칙 (컴파일 막대의 「컴파일」 · 자동 컴파일러가 따름)\n${WILD_MODES.map((w) => `${w.label}: ${w.desc}`).join("\n")}`}
+                    >
+                      ✦ {fmt(s.wild)}
+                      <select
+                        value={s.wildMode}
+                        onChange={(ev) =>
+                          setWildMode(ev.target.value as (typeof WILD_MODES)[number]["key"])
+                        }
+                        aria-label="제로데이 조각 자동 사용 규칙"
+                        className="rounded bg-[#0b130f] px-1 py-0.5 text-amber-50 outline-none"
+                      >
+                        {WILD_MODES.map((w) => (
+                          <option key={w.key} value={w.key}>
+                            {w.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  )}
                   {tab === "shop" && (
                     <div className={`flex overflow-hidden rounded-lg border border-white/20 ${KR}`}>
                       {(
@@ -2100,81 +2441,110 @@ export default function VirusGame() {
                     page={page}
                     onPages={onPages}
                     className="grid grid-cols-2 gap-2 @2xl/panel:grid-cols-5"
-                    items={[
-                      ...ROSTER.map((v, i) => {
-                        const lv = mods[i];
-                        return (
+                    items={ROSTER.map((v, i) => {
+                      const lv = mods[i];
+                      const joined = v.join <= Math.max(s.best - 1, s.stage);
+                      const cost = fragCost(lv);
+                      const own = s.frag[i];
+                      const openable = modOpenable(s, i);
+                      const ownUp = planMod(s, i, 0).to > lv;
+                      const fill = openable && !ownUp && own + s.wild >= cost;
+                      const ownPct = Math.min(100, (own / cost) * 100);
+                      const wildPct = openable ? Math.min(100 - ownPct, (s.wild / cost) * 100) : 0;
+                      return (
+                        <div
+                          key={v.id}
+                          className="flex flex-col gap-1 rounded-xl border px-2 py-1.5"
+                          style={{
+                            borderColor: lv ? `${v.color}66` : "rgba(255,255,255,0.12)",
+                            background: lv ? `${v.color}12` : "transparent",
+                          }}
+                        >
                           <button
                             type="button"
-                            key={v.id}
                             onClick={() => setDetail({ kind: "mod", i })}
-                            className="flex items-center gap-2 rounded-xl border px-2 py-2 text-left transition-colors hover:bg-white/[0.06]"
-                            style={{
-                              borderColor: lv ? `${v.color}66` : "rgba(255,255,255,0.08)",
-                              background: lv ? `${v.color}12` : "transparent",
-                            }}
+                            className="flex min-w-0 items-center gap-2 text-left"
                             title={
                               lv
                                 ? `${v.module} v${lv}: ${v.cur(lv)} — ${v.effect}`
-                                : `스테이지 ${i + 1} 보스를 격퇴하면 획득`
+                                : joined
+                                  ? `${v.name}을 잡아 조각을 모으면 열려요`
+                                  : `스테이지 ${v.join}에 합류`
                             }
                           >
-                            <div className={lv ? "" : "opacity-25 grayscale"}>
-                              <VirusSprite seed={v.id} color={v.color} size={30} />
+                            <div className={`shrink-0 ${lv ? "" : "opacity-30 grayscale"}`}>
+                              <VirusSprite seed={v.id} color={v.color} size={26} />
                             </div>
                             <div className={`min-w-0 ${KR}`}>
                               <div className="truncate vt-sm font-bold text-white/90">
-                                {lv ? v.module : "???"}
+                                {lv || joined ? `${v.icon} ${v.module}` : "??? 모듈"}
                                 {lv > 0 && (
                                   <span className="ml-1 font-mono vt-xs text-white/75">v{lv}</span>
                                 )}
+                                {s.star === i && <span className="ml-1 text-amber-200">★</span>}
                               </div>
                               <div className="truncate vt-xs text-white/70">
-                                {lv ? v.cur(lv) : v.name}
+                                {lv ? v.cur(lv) : joined ? v.name : `스테이지 ${v.join} 합류`}
                               </div>
                             </div>
                           </button>
-                        );
-                      }),
-                      // 모듈 세트 (구성 모듈이 모두 v3 · v6 · v10)
-                      ...SETS.map((d, i) => {
-                        const tier = setTier(s.best, d);
-                        return (
-                          <button
-                            type="button"
-                            key={d.id}
-                            onClick={() => setDetail({ kind: "set", i })}
-                            className={`flex items-center gap-2 rounded-xl border border-dashed px-2 py-2 text-left transition-colors hover:bg-white/[0.06] ${
-                              tier ? "border-teal-300/60 bg-teal-300/[0.08]" : "border-white/20"
-                            }`}
-                            title={`세트 「${d.name}」: ${d.members.map((m) => ROSTER[m].name).join(" + ")} 모듈이 모두 v${SET_TIERS.join(" · v")}이면 단계가 올라요`}
-                          >
-                            <span
-                              className={`w-[30px] shrink-0 text-center text-xl ${tier ? "" : "opacity-40 grayscale"}`}
-                              aria-hidden
-                            >
-                              {d.icon}
-                            </span>
-                            <div className={`min-w-0 ${KR}`}>
-                              <div className="truncate vt-sm font-bold text-white/90">
-                                {d.name}
-                                <span className="ml-1 font-mono vt-xs text-teal-200">
-                                  {"★".repeat(tier)}
-                                  <span className="text-white/40">
-                                    {"☆".repeat(SET_TIERS.length - tier)}
-                                  </span>
-                                </span>
+                          {joined && (
+                            <div className="flex items-center gap-1.5">
+                              {/* 조각 진행: 자기 조각(바이러스 색) · 제로데이로 채울 수 있는 만큼(금색 빗금) */}
+                              <div
+                                className="relative h-1.5 flex-1 overflow-hidden rounded-full bg-white/10"
+                                title={`조각 ${own}${openable ? ` + 제로데이 ${s.wild}` : ""} / ${cost}`}
+                              >
+                                <div
+                                  className="absolute inset-y-0 left-0 rounded-full"
+                                  style={{ width: `${ownPct}%`, background: v.color }}
+                                />
+                                <div
+                                  className="vg-wild-fill absolute inset-y-0"
+                                  style={{ left: `${ownPct}%`, width: `${wildPct}%` }}
+                                />
                               </div>
-                              <div className="truncate vt-xs text-white/70">
-                                {tier
-                                  ? d.effect(tier).replace(/ — .*$/, "")
-                                  : `세트 · 모두 v${SET_TIERS[0]}이면 열림`}
-                              </div>
+                              <span className="font-mono vt-xs text-white/75 tabular-nums">
+                                {own}/{cost}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  doCompile((sv) => {
+                                    const n = compileMod(sv, i, 0);
+                                    return n ? [{ kind: "mod", i, to: sv.mods[i] }] : [];
+                                  })
+                                }
+                                disabled={!ownUp}
+                                aria-label={`${v.module} 컴파일`}
+                                title="자기 조각으로 컴파일"
+                                className="rounded-md border border-emerald-300/50 bg-emerald-400/15 px-1.5 vt-xs font-bold text-emerald-100 enabled:hover:bg-emerald-400/25 disabled:opacity-35"
+                              >
+                                ▲
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  doCompile((sv) => {
+                                    const w = Math.max(0, fragCost(sv.mods[i]) - sv.frag[i]);
+                                    const n = compileMod(sv, i, w);
+                                    return n
+                                      ? [{ kind: "mod", i, to: sv.mods[i], wild: w || undefined }]
+                                      : [];
+                                  })
+                                }
+                                disabled={!fill}
+                                aria-label={`${v.module} 제로데이로 채우기`}
+                                title={`모자란 ${Math.max(0, cost - own)}개를 제로데이 조각으로 채워 한 버전`}
+                                className="rounded-md border border-amber-300/50 bg-amber-300/15 px-1.5 vt-xs font-bold text-amber-100 enabled:hover:bg-amber-300/25 disabled:opacity-35"
+                              >
+                                ✦
+                              </button>
                             </div>
-                          </button>
-                        );
-                      }),
-                    ]}
+                          )}
+                        </div>
+                      );
+                    })}
                   />
                 )}
 
@@ -2183,46 +2553,80 @@ export default function VirusGame() {
                     page={page}
                     onPages={onPages}
                     className="grid grid-cols-2 gap-2 @2xl/panel:grid-cols-5"
-                    items={[
-                      // 상위 보스에게서 빼앗은 우회 기술 (처음 잡은 순서대로 열림)
-                      ...APEX.map((a, i) => {
-                        const got = apexCount(s.apexBest) > i;
-                        return (
+                    items={APEX.map((a, i) => {
+                      const v = bv[i];
+                      const got = v > 0;
+                      const cost = keyCost(Math.max(1, v));
+                      const ready = got && s.keys[i] >= cost;
+                      return (
+                        <div
+                          key={a.id}
+                          className="flex flex-col gap-1 rounded-xl border px-2 py-1.5"
+                          style={{
+                            borderColor: got ? `${a.color}88` : "rgba(255,255,255,0.15)",
+                            background: got ? `${a.color}14` : "transparent",
+                          }}
+                        >
                           <button
                             type="button"
-                            key={a.id}
                             onClick={() => setDetail({ kind: "apex", i })}
-                            className="flex items-center gap-2 rounded-xl border px-2 py-2 text-left transition-colors hover:bg-white/[0.06]"
-                            style={{
-                              borderColor: got ? `${a.color}88` : "rgba(255,255,255,0.15)",
-                              background: got ? `${a.color}14` : "transparent",
-                            }}
+                            className="flex min-w-0 items-center gap-2 text-left"
                             title={
                               got
-                                ? `${a.role} ${a.name} 처치: ${a.trait} v${bv[i]} — ${a.cur(bv[i])} · 외형 ${a.look}`
+                                ? `${a.role} ${a.name}: ${a.trait} v${v} — ${a.cur(v)} · 외형 ${a.look}`
                                 : `스테이지 ${(i + 1) * 10}의 상위 보스를 잡으면 열려요`
                             }
                           >
-                            <div className={got ? "" : "opacity-30 grayscale"}>
-                              <ApexSprite index={i} color={a.color} size={30} />
+                            <div className={`shrink-0 ${got ? "" : "opacity-30 grayscale"}`}>
+                              <ApexSprite index={i} color={a.color} size={26} />
                             </div>
                             <div className={`min-w-0 ${KR}`}>
                               <div className="vt-sm truncate font-bold text-white/90">
                                 {got ? `🛡️ ${a.trait}` : "??? 우회 기술"}
                                 {got && (
-                                  <span className="ml-1 font-mono vt-xs text-white/75">
-                                    v{bv[i]}
-                                  </span>
+                                  <span className="ml-1 font-mono vt-xs text-white/75">v{v}</span>
                                 )}
                               </div>
                               <div className="vt-xs truncate text-white/75">
-                                {got ? a.cur(bv[i]) : `${(i + 1) * 10}스테이지 상위 보스`}
+                                {got ? a.cur(v) : `${(i + 1) * 10}스테이지 상위 보스`}
                               </div>
                             </div>
                           </button>
-                        );
-                      }),
-                    ]}
+                          {got && (
+                            <div className="flex items-center gap-1.5">
+                              <div
+                                className="relative h-1.5 flex-1 overflow-hidden rounded-full bg-white/10"
+                                title={`우회 키 ${s.keys[i]} / ${cost}`}
+                              >
+                                <div
+                                  className="absolute inset-y-0 left-0 rounded-full"
+                                  style={{
+                                    width: `${Math.min(100, (s.keys[i] / cost) * 100)}%`,
+                                    background: a.color,
+                                  }}
+                                />
+                              </div>
+                              <span className="font-mono vt-xs text-white/75 tabular-nums">
+                                🔑{s.keys[i]}/{cost}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  doCompile((sv) =>
+                                    compileByp(sv, i) ? [{ kind: "byp", i, to: sv.byp[i] }] : []
+                                  )
+                                }
+                                disabled={!ready}
+                                aria-label={`${a.trait} 컴파일`}
+                                className="rounded-md border border-emerald-300/50 bg-emerald-400/15 px-1.5 vt-xs font-bold text-emerald-100 enabled:hover:bg-emerald-400/25 disabled:opacity-35"
+                              >
+                                ▲
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   />
                 )}
 
@@ -2479,7 +2883,7 @@ export default function VirusGame() {
             wide
             onClose={() => setOverlay(scene === "play" ? "menu" : null)}
           >
-            <ArchivePanel best={s.best} />
+            <ArchivePanel s={s} />
           </Window>
         )}
         {overlay === "guide" && (
@@ -2623,10 +3027,18 @@ export default function VirusGame() {
                       </div>
                     </>
                   )}
-                  {r.module && (
+                  {r.frag && (
+                    <div
+                      className={`vt-xs break-keep [overflow-wrap:anywhere] ${r.frag.index < 0 ? "text-amber-200" : "text-white/90"}`}
+                    >
+                      {r.frag.index < 0
+                        ? `✦ 제로데이 조각 +${r.frag.n} (아무 모듈에나)`
+                        : `${ROSTER[r.frag.index].icon} ${ROSTER[r.frag.index].module} 조각 +${r.frag.n}`}
+                    </div>
+                  )}
+                  {r.key && (
                     <div className="vt-xs break-keep [overflow-wrap:anywhere] text-white/90">
-                      📦 {r.module.name} {r.module.level > 1 ? `v${r.module.level}` : "획득"} ·{" "}
-                      {r.module.effect}
+                      🔑 {APEX[r.key.index].trait} 우회 키 +{r.key.n}
                     </div>
                   )}
                 </div>
@@ -2635,190 +3047,254 @@ export default function VirusGame() {
           </div>
         )}
 
-        {/* ── 모듈 · 특성 크게 보기 · 오프라인 수익 ── */}
-        {scene === "play" && (detail || away) && (
+        {/* ── 모듈 · 우회 기술 크게 보기 · 새 모듈 소개 · 오프라인 수익 ── */}
+        {scene === "play" && (detail || away || introNow != null) && (
           <div
             className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
-            onClick={() => (detail ? setDetail(null) : setAway(null))}
+            onClick={closeDetail}
           >
             <div
-              className={`virus-pop w-full max-w-sm rounded-2xl border border-white/15 bg-[#0f1a14] p-6 text-center ${KR}`}
+              className={`virus-pop max-h-full w-full max-w-sm overflow-hidden rounded-2xl border border-white/15 bg-[#0f1a14] p-5 text-center ${KR}`}
               onClick={(ev) => ev.stopPropagation()}
             >
-              {detail ? (
-                <>
-                  {detail.kind === "set"
-                    ? (() => {
-                        const d = SETS[detail.i];
-                        const tier = setTier(s.best, d);
-                        return (
+              {detail?.kind === "apex"
+                ? (() => {
+                    const i = detail.i;
+                    const a = APEX[i];
+                    const v = bv[i];
+                    const got = v > 0;
+                    const cost = keyCost(Math.max(1, v));
+                    return (
+                      <>
+                        <div className="mb-1 flex items-center justify-center gap-3">
+                          <div className={got ? "" : "opacity-30 grayscale"}>
+                            <ApexSprite index={i} color={a.color} size={72} />
+                          </div>
+                          {got && (
+                            <>
+                              <span className="vt-base text-white/75">→</span>
+                              <MyVirusSprite
+                                color={myColor}
+                                lv={s.lv}
+                                stage={stage}
+                                mods={modColors}
+                                parts={parts}
+                                size={80}
+                              />
+                            </>
+                          )}
+                        </div>
+                        <p className="vt-base text-white/75">
+                          {a.icon} {a.role} {a.name} · 스테이지 {(i + 1) * 10}부터
+                        </p>
+                        {got ? (
                           <>
-                            <p className="text-4xl" aria-hidden>
-                              {d.icon}
+                            <p className="mt-2 text-lg font-bold" style={{ color: a.color }}>
+                              🛡️ 우회 기술 「{a.trait}」 v{v}
                             </p>
-                            <p className="mt-1 text-lg font-bold text-teal-200">
-                              세트 「{d.name}」 {tier}/{SET_TIERS.length}단계
+                            <p className="vt-base mt-1 font-bold text-white">{a.cur(v)}</p>
+                            <p className="vt-sm mt-0.5 text-emerald-200/90">
+                              다음 v{v + 1}: {a.cur(v + 1)}
                             </p>
-                            <div className="mt-3 flex justify-center gap-3">
-                              {d.members.map((m) => (
-                                <div key={m} className="flex flex-col items-center gap-1">
-                                  <div className={mods[m] ? "" : "opacity-25 grayscale"}>
-                                    <VirusSprite
-                                      seed={ROSTER[m].id}
-                                      color={ROSTER[m].color}
-                                      size={44}
-                                    />
-                                  </div>
-                                  <span className="vt-xs text-white/80">
-                                    {mods[m] ? ROSTER[m].name : "???"}
-                                  </span>
-                                  <span className="vt-xs font-mono text-white/75">v{mods[m]}</span>
-                                </div>
-                              ))}
-                            </div>
-                            <div className="mt-3 flex flex-col gap-1 text-left">
-                              {SET_TIERS.map((v, k) => (
-                                <p
-                                  key={v}
-                                  className={`vt-sm rounded-lg border px-2.5 py-1.5 ${
-                                    tier > k
-                                      ? "border-teal-300/50 bg-teal-300/10 text-white"
-                                      : "border-white/10 text-white/75"
-                                  }`}
-                                >
-                                  <b className="font-mono">
-                                    {tier > k ? "★" : "☆"} 모두 v{v}
-                                  </b>{" "}
-                                  · {d.effect(k + 1)}
-                                </p>
-                              ))}
-                            </div>
-                            <p className="vt-sm mt-2 text-white/75">
-                              모듈 버전처럼 최고 스테이지로 정해지고, 변이해도 사라지지 않아요
+                            <p className="vt-sm mt-2 text-white/80">
+                              🔑 우회 키 {s.keys[i]} / {cost} — 이 상위 보스를 잡으면 모여요 (처음
+                              가는 스테이지 {DROP_NEW}개 · 다시 {DROP_AGAIN}개)
+                            </p>
+                            <button
+                              type="button"
+                              disabled={s.keys[i] < cost}
+                              onClick={() =>
+                                doCompile((sv) =>
+                                  compileByp(sv, i) ? [{ kind: "byp", i, to: sv.byp[i] }] : []
+                                )
+                              }
+                              className="vt-base mt-2 rounded-full border border-emerald-300/60 bg-emerald-400/15 px-5 py-1.5 font-bold text-emerald-100 enabled:hover:bg-emerald-400/25 disabled:opacity-40"
+                            >
+                              ▲ 컴파일
+                            </button>
+                            <p className="vt-sm mt-2 font-bold text-emerald-200">
+                              🧬 외형 · {a.look}
                             </p>
                           </>
-                        );
-                      })()
-                    : detail.kind === "apex"
-                      ? (() => {
-                          const a = APEX[detail.i];
-                          const got = apexCount(s.apexBest) > detail.i;
-                          return (
+                        ) : (
+                          <p className="vt-base mt-2 text-white/90">
+                            스테이지 {(i + 1) * 10}에서 보스를 격퇴한 뒤 나오는 상위 보스를 잡으면
+                            우회 기술 v1과 새 외형을 얻어요.
+                          </p>
+                        )}
+                      </>
+                    );
+                  })()
+                : detail?.kind === "mod" || introNow != null
+                  ? (() => {
+                      const i = detail?.kind === "mod" ? detail.i : introNow!;
+                      const isIntro = detail?.kind !== "mod";
+                      const v = ROSTER[i];
+                      const lv = mods[i];
+                      const joined = v.join <= Math.max(s.best - 1, s.stage);
+                      const openable = modOpenable(s, i);
+                      const maxTo = planMod(s, i, s.wild).to;
+                      const to = Math.min(maxTo, Math.max(lv, pickTo ?? planMod(s, i, 0).to));
+                      // 목표 버전까지 드는 제로데이 조각 (자기 조각을 먼저 씀)
+                      let w = 0;
+                      for (let k = lv, own = s.frag[i]; k < to; k++) {
+                        const c = fragCost(k);
+                        const u = Math.min(c, own);
+                        own -= u;
+                        w += c - u;
+                      }
+                      return (
+                        <>
+                          {isIntro && (
+                            <p className="mb-1 vt-sm font-bold tracking-widest text-amber-200">
+                              🆕 새 코드 모듈
+                            </p>
+                          )}
+                          <div
+                            className={`mb-1 flex justify-center ${lv ? "" : "opacity-30 grayscale"}`}
+                          >
+                            <VirusSprite seed={v.id} color={v.color} size={isIntro ? 96 : 80} />
+                          </div>
+                          <p className="vt-base text-white/75">
+                            {joined ? `${v.name} (${v.year})` : "???"}
+                          </p>
+                          {lv || joined ? (
                             <>
-                              <div className="mb-1 flex items-center justify-center gap-3">
-                                <div className={got ? "" : "opacity-30 grayscale"}>
-                                  <ApexSprite index={detail.i} color={a.color} size={80} />
-                                </div>
-                                {got && (
-                                  <>
-                                    <span className="vt-base text-white/75">→</span>
-                                    <MyVirusSprite
-                                      color={myColor}
-                                      lv={s.lv}
-                                      stage={stage}
-                                      mods={modColors}
-                                      parts={parts}
-                                      size={92}
-                                    />
-                                  </>
-                                )}
-                              </div>
-                              <p className="vt-base text-white/75">
-                                {a.icon} {a.role} {a.name} · 스테이지 {(detail.i + 1) * 10}
+                              <p className="mt-1.5 text-lg font-bold" style={{ color: v.color }}>
+                                {v.icon} 「{v.module}」 {lv ? `v${lv}` : "미컴파일"}
                               </p>
-                              {got ? (
-                                <>
-                                  <p className="mt-2 text-lg font-bold" style={{ color: a.color }}>
-                                    🛡️ 우회 기술 「{a.trait}」 v{bv[detail.i]}
-                                  </p>
-                                  <p className="vt-base mt-1 font-bold text-white">
-                                    {a.cur(bv[detail.i])}
-                                  </p>
-                                  <p className="vt-sm mt-0.5 text-emerald-200/90">
-                                    다음 v{bv[detail.i] + 1}: {a.cur(bv[detail.i] + 1)}
-                                  </p>
-                                  <p className="vt-sm mt-1 text-white/75">
-                                    버전은 같은 번호의 코드 모듈처럼 최고 스테이지가 오를수록 올라요
-                                  </p>
-                                  <p className="vt-base mt-2 font-bold text-emerald-200">
-                                    🧬 외형 · {a.look}
-                                  </p>
-                                  <p className="vt-sm mt-2 text-white/75">
-                                    변이해도 사라지지 않아요
-                                  </p>
-                                </>
-                              ) : (
-                                <p className="vt-base mt-2 text-white/90">
-                                  스테이지 {(detail.i + 1) * 10}에서 보스를 격퇴한 뒤 나오는 상위
-                                  보스를 잡으면 우회 기술과 새 외형을 얻어요.
-                                </p>
+                              <p className="vt-sm mt-0.5 text-white/80">{v.effect}</p>
+                              {lv > 0 && (
+                                <p className="vt-base mt-1 font-bold text-white">{v.cur(lv)}</p>
                               )}
                             </>
-                          );
-                        })()
-                      : (() => {
-                          const v = ROSTER[detail.i];
-                          const lv = mods[detail.i];
-                          return (
-                            <>
-                              <div
-                                className={`mb-2 flex justify-center ${lv ? "" : "opacity-25 grayscale"}`}
-                              >
-                                <VirusSprite seed={v.id} color={v.color} size={100} />
-                              </div>
-                              <p className="vt-base text-white/75">
-                                {v.name} ({v.year})
+                          ) : (
+                            <p className="vt-base mt-2 text-white/90">
+                              스테이지 {v.join}에 이 네트워크로 합류해요.
+                            </p>
+                          )}
+                          {!isIntro && joined && (
+                            <div className="mt-3 rounded-xl border border-white/10 bg-white/[0.03] p-2.5 text-left">
+                              <p className="vt-sm text-white/85">
+                                조각 <b className="font-mono">{s.frag[i]}</b> · ✦ 제로데이{" "}
+                                <b className="font-mono text-amber-200">{s.wild}</b> · 다음 버전{" "}
+                                {fragCost(lv)}개
                               </p>
-                              {lv ? (
+                              {openable ? (
                                 <>
-                                  <p className="mt-2 text-lg font-bold" style={{ color: v.color }}>
-                                    📦 모듈 「{v.module}」 v{lv}
-                                  </p>
-                                  <p className="vt-base mt-1 font-bold text-white">{v.cur(lv)}</p>
-                                  <p className="vt-sm mt-1 text-white/75">{v.effect}</p>
-                                  <p className="vt-sm mt-0.5 text-emerald-200/90">
-                                    다음 v{lv + 1}: {v.cur(lv + 1)}
-                                  </p>
+                                  <div className="mt-2 flex items-center justify-center gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => setPickTo(Math.max(lv, to - 1))}
+                                      disabled={to <= lv}
+                                      aria-label="한 버전 낮게"
+                                      className="h-8 w-8 rounded-lg border border-white/20 font-mono text-white disabled:opacity-35"
+                                    >
+                                      −
+                                    </button>
+                                    <span className="min-w-[96px] text-center font-mono vt-base font-bold text-white">
+                                      v{lv} → v{to}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={() => setPickTo(Math.min(maxTo, to + 1))}
+                                      disabled={to >= maxTo}
+                                      aria-label="한 버전 높게"
+                                      className="h-8 w-8 rounded-lg border border-white/20 font-mono text-white disabled:opacity-35"
+                                    >
+                                      +
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => setPickTo(maxTo)}
+                                      disabled={to >= maxTo}
+                                      className="rounded-lg border border-amber-300/40 px-2 py-1 vt-xs font-bold text-amber-100 disabled:opacity-35"
+                                    >
+                                      최대
+                                    </button>
+                                  </div>
+                                  {to > lv && (
+                                    <p className="vt-sm mt-1.5 text-center text-emerald-200">
+                                      {v.cur(to)}
+                                      <span className="ml-1 text-amber-200">
+                                        {w ? `· ✦ ${w}개 사용` : "· 자기 조각만"}
+                                      </span>
+                                    </p>
+                                  )}
+                                  <div className="mt-2 flex items-center justify-center gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setStar(s.star === i ? -1 : i);
+                                      }}
+                                      className={`rounded-full border px-3 py-1.5 vt-sm font-bold ${
+                                        s.star === i
+                                          ? "border-amber-300/70 bg-amber-300/20 text-amber-100"
+                                          : "border-white/20 text-white/80"
+                                      }`}
+                                      title="제로데이 규칙이 「★ 우선 모듈에」일 때 이 모듈에 몰아줘요"
+                                    >
+                                      {s.star === i ? "★ 우선" : "☆ 우선으로"}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      disabled={to <= lv}
+                                      onClick={() => {
+                                        doCompile((sv) => {
+                                          const n = compileMod(sv, i, w);
+                                          return n
+                                            ? [
+                                                {
+                                                  kind: "mod",
+                                                  i,
+                                                  to: sv.mods[i],
+                                                  wild: w || undefined,
+                                                },
+                                              ]
+                                            : [];
+                                        });
+                                        setPickTo(null);
+                                      }}
+                                      className="rounded-full bg-emerald-400 px-4 py-1.5 vt-sm font-bold text-black enabled:hover:bg-emerald-300 disabled:opacity-40"
+                                    >
+                                      v{to}로 컴파일
+                                    </button>
+                                  </div>
                                 </>
                               ) : (
-                                <p className="vt-base mt-2 text-white/90">
-                                  스테이지 {detail.i + 1}의 보스를 격퇴하면 모듈을 얻어요.
+                                <p className="vt-sm mt-1 text-white/75">
+                                  {v.name}을 한 번 잡아 조각을 얻어야 열 수 있어요 (제로데이
+                                  조각만으로는 못 열어요).
                                 </p>
                               )}
-                              <p className="vt-sm mt-3 text-left leading-relaxed text-white/75">
-                                {v.desc}
-                              </p>
-                            </>
-                          );
-                        })()}
-                  <button
-                    type="button"
-                    onClick={() => setDetail(null)}
-                    className="vt-base mt-5 rounded-full bg-emerald-400 px-6 py-2 font-bold text-black hover:bg-emerald-300"
-                  >
-                    닫기
-                  </button>
-                </>
-              ) : (
-                away && (
-                  <>
-                    <p className="text-3xl">🖥️</p>
-                    <p className="mt-2 vt-base text-white/75">
-                      백그라운드에서 {fmtTime(away.secs)} 동안 몰래 실행
-                    </p>
-                    <p className="mt-1 text-lg font-bold text-emerald-300">
-                      💾 {fmtBytes(away.data)} 탈취
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() => setAway(null)}
-                      className="mt-5 rounded-full bg-emerald-400 px-6 py-2 vt-base font-bold text-black hover:bg-emerald-300"
-                    >
-                      받기
-                    </button>
-                  </>
-                )
-              )}
+                            </div>
+                          )}
+                          {joined && !isIntro && (
+                            <p className="vt-xs mt-2 text-left leading-relaxed text-white/70">
+                              {v.desc}
+                            </p>
+                          )}
+                        </>
+                      );
+                    })()
+                  : away && (
+                      <>
+                        <p className="text-3xl">🖥️</p>
+                        <p className="mt-2 vt-base text-white/75">
+                          백그라운드에서 {fmtTime(away.secs)} 동안 몰래 실행
+                        </p>
+                        <p className="mt-1 text-lg font-bold text-emerald-300">
+                          💾 {fmtBytes(away.data)} 탈취
+                        </p>
+                      </>
+                    )}
+              <button
+                type="button"
+                onClick={closeDetail}
+                className="vt-base mt-4 rounded-full border border-white/25 px-6 py-2 font-bold text-white/90 hover:border-white/50"
+              >
+                {detail ? "닫기" : introNow != null ? "확인" : "받기"}
+              </button>
             </div>
           </div>
         )}

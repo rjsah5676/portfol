@@ -74,6 +74,16 @@ const SAVE = {
     offData: 1e11,
     evo: 3,
   },
+  mods: [5, 12, 0, 8, 3, 0, 2, 0, 0, 4],
+  frag: [4, 30, 0, 7, 2, 0, 1, 0, 0, 3],
+  wild: 42,
+  byp: [6, 6, 5, 5, 4, 4, 3, 3, 2, 2],
+  keys: [3, 9, 0, 1, 0, 0, 0, 0, 0, 0],
+  bossIdx: 3,
+  runTop: 260,
+  repeat: true,
+  wildMode: "new",
+  star: 3,
   savedAt: Date.now(),
 };
 

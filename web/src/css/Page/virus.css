@@ -1108,3 +1108,12 @@
 .virus-calm .vg-burn .vg-sprite {
   animation: none;
 }
+
+/* 코드 모듈 카드: 제로데이 조각으로 채울 수 있는 만큼 (금색 빗금) */
+.vg-wild-fill {
+  background: repeating-linear-gradient(
+    135deg,
+    rgba(252, 211, 77, 0.85) 0 3px,
+    rgba(252, 211, 77, 0.25) 3px 6px
+  );
+}

@@ -16,7 +16,7 @@ import {
   fmtBytes,
   fmtTime,
   importSave,
-  moduleLevels,
+  PRIMITIVES,
   type Save,
 } from "@/lib/virus/logic";
 import { VirusSprite } from "./VirusSprite";
@@ -250,29 +250,39 @@ export function SettingsPanel({
   );
 }
 
-/** 바이러스 도감 — 위 아이콘을 누르면 그 바이러스의 기록 (격퇴한 보스만 내용이 열림) */
-export function ArchivePanel({ best }: { best: number }) {
-  const mods = moduleLevels(best);
+/**
+ * 바이러스 도감 — 원시 바이러스 2종 + 바이러스 10종. 만난 바이러스(최고 스테이지가 합류 스테이지를 넘음)만 내용이 열리고,
+ * 코드 모듈은 컴파일한 버전을 보여 줌
+ */
+export function ArchivePanel({ s }: { s: Save }) {
+  const list = [
+    ...PRIMITIVES.map((p) => ({ ...p, prim: true as const, i: -1, join: 1 })),
+    ...ROSTER.map((v, i) => ({ ...v, prim: false as const, i })),
+  ];
+  const seen = (k: number) => list[k].prim || list[k].join < s.best;
   const [sel, setSel] = useState(0);
-  const v = ROSTER[sel];
-  const lv = mods[sel];
+  const v = list[sel];
+  const met = seen(sel);
+  const lv = v.prim ? 0 : s.mods[v.i];
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
       <div className="flex flex-wrap justify-center gap-1.5">
-        {ROSTER.map((r, i) => (
+        {list.map((r, k) => (
           <button
             key={r.id}
             type="button"
-            onClick={() => setSel(i)}
-            aria-label={mods[i] ? r.name : `스테이지 ${i + 1}의 보스`}
-            aria-pressed={sel === i}
+            onClick={() => setSel(k)}
+            aria-label={seen(k) ? r.name : `스테이지 ${r.join}에 합류하는 바이러스`}
+            aria-pressed={sel === k}
             className={`rounded-lg border p-1 transition-colors ${
-              sel === i
+              sel === k
                 ? "border-emerald-300/80 bg-emerald-400/15"
-                : "border-white/15 hover:border-white/40"
+                : r.prim
+                  ? "border-dashed border-white/25 hover:border-white/50"
+                  : "border-white/15 hover:border-white/40"
             }`}
           >
-            <span className={`block ${mods[i] ? "" : "opacity-30 grayscale"}`}>
+            <span className={`block ${seen(k) ? "" : "opacity-30 grayscale"}`}>
               <VirusSprite seed={r.id} color={r.color} size={30} />
             </span>
           </button>
@@ -281,37 +291,42 @@ export function ArchivePanel({ best }: { best: number }) {
       <div
         className="flex min-h-0 flex-1 gap-3 overflow-hidden rounded-xl border p-3"
         style={{
-          borderColor: lv ? `${v.color}66` : "rgba(255,255,255,0.15)",
-          background: lv ? `${v.color}10` : "transparent",
+          borderColor: met ? `${v.color}66` : "rgba(255,255,255,0.15)",
+          background: met ? `${v.color}10` : "transparent",
         }}
       >
-        <div className={`shrink-0 ${lv ? "" : "opacity-30 grayscale"}`}>
+        <div className={`shrink-0 ${met ? "" : "opacity-30 grayscale"}`}>
           <VirusSprite seed={v.id} color={v.color} size={56} />
         </div>
         <div className="min-w-0">
-          <div className="vt-base font-bold" style={{ color: lv ? v.color : "#ffffffcc" }}>
-            {lv ? v.name : "??????"}
+          <div className="vt-base font-bold" style={{ color: met ? v.color : "#ffffffcc" }}>
+            {met ? v.name : "??????"}
             <span className="vt-sm ml-2 font-mono font-normal text-white/75">
-              {lv ? v.year : "????"} · {sel + 1}/{ROSTER.length}
+              {met ? v.year : "????"} · {v.prim ? "원시 바이러스" : `스테이지 ${v.join} 합류`}
             </span>
           </div>
-          {lv ? (
+          {met ? (
             <>
               <p className="vt-sm mt-1 leading-relaxed text-white/90">{v.desc}</p>
               <p className="vt-sm mt-1.5 text-white/90">
-                📦 {v.module} v{lv} · {v.cur(lv)} — {v.effect}
+                {v.prim
+                  ? "✦ 빼앗을 코드가 없는 장난 프로그램 — 잡으면 아무 모듈에나 쓰는 제로데이 조각을 줘요"
+                  : lv
+                    ? `${v.icon} ${v.module} v${lv} · ${v.cur(lv)} — ${v.effect}`
+                    : `${v.icon} ${v.module} — ${v.effect} (조각을 모아 컴파일하면 열려요)`}
               </p>
             </>
           ) : (
             <p className="vt-sm mt-1 text-white/90">
-              스테이지 {sel + 1}의 보스예요. 격퇴하면 기록이 열려요.
+              스테이지 {v.join}에 이 네트워크로 합류하는 바이러스예요. 만나면 기록이 열려요.
             </p>
           )}
         </div>
       </div>
       <p className="vt-xs text-center text-white/75">
-        모은 기록 {mods.filter((m) => m > 0).length}/{ROSTER.length} · 게임 속 수치는 지어낸 것이고,
-        설명은 실제 사건을 짧게 요약했어요
+        만난 바이러스 {list.filter((_, k) => seen(k)).length}/{list.length} · 컴파일한 모듈{" "}
+        {s.mods.filter((m) => m > 0).length}/{ROSTER.length} · 게임 속 수치는 지어낸 것이고, 설명은
+        실제 사건을 짧게 요약했어요
       </p>
     </div>
   );
@@ -341,7 +356,8 @@ export function RecordsPanel({ s, fresh = [] }: { s: Save; fresh?: string[] }) {
     ["⌛ 게임 화면에서 보낸 시간", fmtTime(s.rec.play)],
     ["💾 훔친 데이터 (누적)", fmtBytes(s.lifetime)],
     ["📂 감염시킨 파일", fmt(s.rec.files)],
-    ["🔗 연쇄 감염", fmt(s.rec.chains)],
+    ["🧬 컴파일한 모듈", `${s.mods.filter((m) => m > 0).length}/${ROSTER.length}`],
+    ["✦ 제로데이 조각", fmt(s.wild)],
     ["☠️ 격퇴한 보스", fmt(s.rec.bosses)],
     ["🛡️ 처치한 상위 보스", fmt(s.rec.apexes)],
     ["☢️ KILLSWITCH 격퇴", fmt(s.clears)],
@@ -565,6 +581,20 @@ export function BackupPanel({
 
 /** 패치노트 — 새 버전을 맨 위에 */
 export const PATCH_NOTES: { ver: string; date: string; items: string[] }[] = [
+  {
+    ver: "v0.7",
+    date: "2026.10.14",
+    items: [
+      "🧬 코드 모듈을 조각으로 컴파일: 보스를 잡으면 그 바이러스의 코드 조각 (처음 가는 스테이지 3개 · 변이 뒤 다시 1개), 모이면 화면 아래 컴파일 막대(F) · 코드 모듈 탭 ▲로 열고 버전을 올림. 첫 버전부터 효과가 큼 (상한의 35~40%)",
+      "🦠 원시 바이러스 Creeper · Elk Cloner: 스테이지 1~10의 보스, 모듈 대신 아무 모듈에나 쓰는 ✦ 제로데이 조각을 줌. 바이러스 도감 맨 앞",
+      "🆕 바이러스 합류: 11 Morris Worm · 25 CIH · 40 Mydoom · 60 Brain · 100 Melissa · 200 Stuxnet · 300 Conficker · 450 WannaCry · 600 Zeus · 800 ILOVEYOU — 처음 오면 NEW로 등장, 그 뒤 보스는 해금된 바이러스 중 무작위. 모듈을 처음 열면 소개 창",
+      "✦ 제로데이 조각 쓰기: 카드의 ✦(모자란 만큼), 자세히 보기에서 원하는 버전까지 (−/+/최대 · 바뀌는 수치 미리 보기), 컴파일 막대의 제안(G). 자동 사용 규칙: 새 모듈 열 때만(기본) · ★ 우선 모듈에 · 가장 싼 것부터 · 쓰지 않기. 컴파일 직후 「되돌리기」",
+      "🔑 우회 기술은 상위 보스를 처음 잡으면 v1, 그 뒤 같은 상위 보스에게서 우회 키를 모아 컴파일 (최고 스테이지로 저절로 오르던 것 대신)",
+      "🔁 스테이지 고르기(◀ ▶ — 이번 회차에 오른 곳까지) · 반복. 이미 지나온 스테이지에서는 조각 · 키가 보스 전투 시간에 비례한 확률로만 나옴 (20초 이상 100%) — 낮은 스테이지에서 원시 바이러스 등을 무한히 모으지 못하게",
+      "모듈 세트 · 연쇄 감염 삭제 (세트 업적은 컴파일 업적으로) · 루트 상점 편의성에 「자동 컴파일러」",
+      "v0.6 저장본: 만난 바이러스의 모듈 · 잡은 상위 보스의 우회 기술은 v1로 이어서",
+    ],
+  },
   {
     ver: "v0.6",
     date: "2026.10.14",
