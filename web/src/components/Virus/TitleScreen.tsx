@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { MyVirusSprite } from "./VirusSprite";
+import { PATCH_NOTES } from "./Panels";
 
 export interface TitleItem {
   key: string;
@@ -182,7 +183,8 @@ export default function TitleScreen({
       )}
 
       <div className="absolute right-4 bottom-2 font-mono vt-xs text-white/70">
-        v0.4 · {entered ? "↑ ↓ 이동 · Enter 선택" : "VIRUS IDLE"}
+        {/* 버전은 패치노트 맨 위 (따로 적어 두면 올릴 때 잊음) */}
+        {PATCH_NOTES[0].ver} · {entered ? "↑ ↓ 이동 · Enter 선택" : "VIRUS IDLE"}
       </div>
     </div>
   );
