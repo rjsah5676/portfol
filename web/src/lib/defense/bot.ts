@@ -36,6 +36,8 @@ export interface BotCfg {
   rift: boolean;
   /** 몇 tick 마다 생각하는지 (사람 손 속도 흉내) */
   every: number;
+  /** 이 골드는 남겨 둠 (이자 째기) — 필드가 위험하면 무시 */
+  keep?: number;
   /** 영구 성장 (루트별 연구 · 유물). 시뮬 스크립트가 newGame 에 넘김 */
   lo?: Loadout;
 }
@@ -77,6 +79,16 @@ export const BOTS: BotCfg[] = [
     gamble: true,
     rift: true,
     every: 15,
+  },
+  {
+    name: "이자째기",
+    focus: null,
+    patch: "interest",
+    upBias: 1.5,
+    gamble: true,
+    rift: true,
+    every: 15,
+    keep: 700,
   },
   {
     name: "도박사",
@@ -145,9 +157,9 @@ export function botMove(b: Board, cfg: BotCfg, skip: ReadonlySet<string> = new S
       if (c) return c;
     }
   }
-  // 조합식 (신화 · 히든)
+  // 조합식 (신화 · 히든) — 단일 코어면 길들인 글리치(약한 히든)로 한 종류를 정하지 않음
   for (const r of RECIPES)
-    if (canRecipe(b, r.id)) {
+    if (canRecipe(b, r.id) && !(b.patch === "core" && r.id === "h_glitchpet")) {
       const c = ok({ t: "recipe", id: r.id });
       if (c) return c;
     }
@@ -189,15 +201,18 @@ export function botMove(b: Board, cfg: BotCfg, skip: ReadonlySet<string> = new S
     (Object.entries(dps).sort((x, y) => y[1] - x[1] || x[0].localeCompare(y[0]))[0][0] as "knight");
   const sc = summonCost(b);
   const uc = upCost(b, main);
-  if (b.up[main] < B.up.max && uc <= b.gold && uc <= sc * cfg.upBias) {
+  // 이자 째기: 필드가 안전하면 keep 만큼은 남겨 둠
+  const keep = cfg.keep && b.enemies.length < 45 && b.phase !== "boss" ? cfg.keep : 0;
+  const gold = Math.max(0, b.gold - keep);
+  if (b.up[main] < B.up.max && uc <= gold && uc <= sc * cfg.upBias) {
     const c = ok({ t: "up", k: main });
     if (c) return c;
   }
-  if (b.wave >= 6 && luckCost(b) <= b.gold * 0.6) {
+  if (b.wave >= 6 && luckCost(b) <= gold * 0.6) {
     const c = ok({ t: "luck" });
     if (c) return c;
   }
-  if (hasEmpty(b) && (b.gold >= sc || b.free > 0)) {
+  if (hasEmpty(b) && (gold >= sc || b.free > 0)) {
     const c = ok({ t: "summon" });
     if (c) return c;
   }
@@ -209,7 +224,8 @@ export function botMove(b: Board, cfg: BotCfg, skip: ReadonlySet<string> = new S
       const c = b.cells[i];
       if (!c.def) continue;
       const d = UNIT[c.def];
-      if (d.grade > 1) continue;
+      // 팔 수 있는 건 다 팔 수 있지만 봇은 에픽까지만 (재료 · 주력은 아낌)
+      if (d.grade > 2) continue;
       const v =
         d.grade * 10 + c.units.length + (d.faction === main ? 5 : 0) + (MATERIAL.has(d.id) ? 20 : 0);
       if (v < worst) {
@@ -217,18 +233,18 @@ export function botMove(b: Board, cfg: BotCfg, skip: ReadonlySet<string> = new S
         sell = i;
       }
     }
-    if (sell >= 0 && b.gold >= sc) {
+    if (sell >= 0 && gold >= sc) {
       const c = ok({ t: "sell", c: sell });
       if (c) return c;
     }
   }
   // 남는 돈은 강화
-  if (b.up[main] < B.up.max && uc <= b.gold) {
+  if (b.up[main] < B.up.max && uc <= gold) {
     const c = ok({ t: "up", k: main });
     if (c) return c;
   }
   const others = FACTIONS.filter(
-    (f) => f !== main && dps[f] > 0 && b.up[f] < B.up.max && upCost(b, f) <= b.gold * 0.5
+    (f) => f !== main && dps[f] > 0 && b.up[f] < B.up.max && upCost(b, f) <= gold * 0.5
   );
   if (others.length) {
     const c = ok({ t: "up", k: others[0] });

@@ -30,7 +30,7 @@ export const UNIT_MAX_LV = 10;
 export const LV_DMG = 0.03;
 export const RES_SLOTS = 4;
 export const RELIC_SLOTS = 3;
-export const GLITCH_MAX = 10;
+export const GLITCH_MAX = 30;
 
 /* ───────────────────────── 연구 ───────────────────────── */
 
@@ -100,22 +100,54 @@ export interface GlitchDef {
   bossSec: number;
   /** 보상 배수 */
   reward: number;
+  /** 적 방어력 배수 (11단계부터) */
+  armor: number;
+  /** 보스 체력 배수 (11단계부터, 적 체력 배수에 더 곱함) */
+  boss: number;
   /** 이 단계에서 새로 붙는 규칙 (화면 안내) */
   rule: string;
 }
 /** 단계마다 앞 단계 규칙을 모두 포함 */
+const BASE_GLITCH: GlitchDef[] = [
+  { lv: 0, hp: 1, spd: 1, bossSec: 0, reward: 1, armor: 1, boss: 1, rule: "기본" },
+  { lv: 1, hp: 1.12, spd: 1, bossSec: 0, reward: 1.2, armor: 1, boss: 1, rule: "적 체력 +12%" },
+  { lv: 2, hp: 1.24, spd: 1, bossSec: -3, reward: 1.4, armor: 1, boss: 1, rule: "보스 제한 시간 -3초" },
+  { lv: 3, hp: 1.36, spd: 1.04, bossSec: -3, reward: 1.6, armor: 1, boss: 1, rule: "적 속도 +4%" },
+  { lv: 4, hp: 1.5, spd: 1.04, bossSec: -6, reward: 1.85, armor: 1, boss: 1, rule: "보스 제한 시간 -6초" },
+  { lv: 5, hp: 1.65, spd: 1.06, bossSec: -6, reward: 2.1, armor: 1, boss: 1, rule: "적 체력 +65% · 속도 +6%" },
+  { lv: 6, hp: 1.8, spd: 1.06, bossSec: -9, reward: 2.4, armor: 1, boss: 1, rule: "보스 제한 시간 -9초" },
+  { lv: 7, hp: 1.98, spd: 1.08, bossSec: -9, reward: 2.7, armor: 1, boss: 1, rule: "적 속도 +8%" },
+  { lv: 8, hp: 2.16, spd: 1.08, bossSec: -12, reward: 3, armor: 1, boss: 1, rule: "보스 제한 시간 -12초" },
+  { lv: 9, hp: 2.36, spd: 1.1, bossSec: -12, reward: 3.4, armor: 1, boss: 1, rule: "적 체력 +136% · 속도 +10%" },
+  { lv: 10, hp: 2.6, spd: 1.1, bossSec: -15, reward: 4, armor: 1, boss: 1, rule: "끝판 — 보스 제한 시간 -15초" },
+];
+/**
+ * 11~30단계 (심연): 10단계 위에 한 단계마다 적 체력 +9% · 보상 +0.25, 5단계마다 새 규칙
+ *  11~ 방어력 ×1.3 · 15~ 보스 체력 ×1.25 · 20~ 속도 ×1.15 · 방어력 ×1.6 · 25~ 보스 체력 ×1.5 · 보스 시간 -18 · 30 끝
+ */
+const DEEP_RULE: Record<number, string> = {
+  11: "심연 — 적 방어력 ×1.3",
+  15: "보스 체력 ×1.25",
+  20: "적 속도 ×1.15 · 방어력 ×1.6",
+  25: "보스 체력 ×1.5 · 보스 시간 -18초",
+  30: "끝없는 오염 — 마지막 단계",
+};
 export const GLITCH: GlitchDef[] = [
-  { lv: 0, hp: 1, spd: 1, bossSec: 0, reward: 1, rule: "기본" },
-  { lv: 1, hp: 1.12, spd: 1, bossSec: 0, reward: 1.2, rule: "적 체력 +12%" },
-  { lv: 2, hp: 1.24, spd: 1, bossSec: -3, reward: 1.4, rule: "보스 제한 시간 -3초" },
-  { lv: 3, hp: 1.36, spd: 1.04, bossSec: -3, reward: 1.6, rule: "적 속도 +4%" },
-  { lv: 4, hp: 1.5, spd: 1.04, bossSec: -6, reward: 1.85, rule: "보스 제한 시간 -6초" },
-  { lv: 5, hp: 1.65, spd: 1.06, bossSec: -6, reward: 2.1, rule: "적 체력 +65% · 속도 +6%" },
-  { lv: 6, hp: 1.8, spd: 1.06, bossSec: -9, reward: 2.4, rule: "보스 제한 시간 -9초" },
-  { lv: 7, hp: 1.98, spd: 1.08, bossSec: -9, reward: 2.7, rule: "적 속도 +8%" },
-  { lv: 8, hp: 2.16, spd: 1.08, bossSec: -12, reward: 3, rule: "보스 제한 시간 -12초" },
-  { lv: 9, hp: 2.36, spd: 1.1, bossSec: -12, reward: 3.4, rule: "적 체력 +136% · 속도 +10%" },
-  { lv: 10, hp: 2.6, spd: 1.1, bossSec: -15, reward: 4, rule: "끝판 — 보스 제한 시간 -15초" },
+  ...BASE_GLITCH,
+  ...Array.from({ length: 20 }, (_, i): GlitchDef => {
+    const lv = 11 + i;
+    const top = BASE_GLITCH[10];
+    return {
+      lv,
+      hp: Math.round(top.hp * (1 + 0.09 * (lv - 10)) * 100) / 100,
+      spd: lv >= 20 ? 1.15 : top.spd,
+      bossSec: lv >= 25 ? -18 : top.bossSec,
+      reward: Math.round((top.reward + 0.25 * (lv - 10)) * 100) / 100,
+      armor: lv >= 20 ? 1.6 : 1.3,
+      boss: lv >= 25 ? 1.5 : lv >= 15 ? 1.25 : 1,
+      rule: DEEP_RULE[lv] ?? `적 체력 +${Math.round(((top.hp * (1 + 0.09 * (lv - 10))) - 1) * 100)}%`,
+    };
+  }),
 ];
 
 /* ───────────────────────── 판에 붙는 효과 (시뮬이 읽음) ───────────────────────── */
@@ -227,6 +259,25 @@ export const LV_COST: { cards: number; pieces: number }[] = [
   { cards: 80, pieces: 2200 },
 ];
 
+/**
+ * 등급별 레벨업 조각 배수 — 같은 +3% 라도 신화 · 히든은 원래 피해가 훨씬 커서 실제로 늘어나는 피해가 큼 → 더 비싸게.
+ * (카드는 같은 수: 높은 등급은 판에서 얻기 어려워 카드 모으는 데서 이미 오래 걸림)
+ */
+export const LV_GRADE_MULT = [0.5, 0.7, 1, 1.4, 2, 2];
+export function lvCost(grade: number, lv: number): { cards: number; pieces: number } {
+  const c = LV_COST[Math.max(0, Math.min(UNIT_MAX_LV - 1, lv))];
+  return { cards: c.cards, pieces: Math.round((c.pieces * (LV_GRADE_MULT[grade] ?? 1)) / 10) * 10 };
+}
+
+/** 오염 단계를 처음 클리어하면 (단계마다 한 번) */
+export const glitchFirstClear = (g: number) => ({ cores: 3 + g, chest: 1 + Math.floor(g / 10) });
+/** 하루 첫 판 (검증된 판) 픽셀 조각 배수 */
+export const FIRST_RUN_MULT = 2;
+/** 처음 얻은 유닛 (도감 수집) 보상 — 에픽부터 */
+export function collectReward(grade: number): { pieces: number; cores?: number } | null {
+  return grade >= 5 ? { pieces: 500, cores: 5 } : grade === 4 ? { pieces: 300, cores: 3 } : grade === 3 ? { pieces: 100 } : grade === 2 ? { pieces: 40 } : null;
+}
+
 /* ───────────────────────── 판 보상 (서버가 검증 뒤 계산) ───────────────────────── */
 
 export type RunMode = "season" | "weekly" | "multi";
@@ -278,8 +329,11 @@ export function seasonScore(r: { win: boolean; wave: number; tick: number; kills
   return Math.max(0, Math.min(GLITCH_MAX, glitch | 0)) * 2e7 + base;
 }
 
-/** 다음 오염 단계가 열리는 웨이브 (그 단계에서 이만큼 버티거나 클리어) */
+/** 다음 오염 단계가 열리는 웨이브 (그 단계에서 이만큼 버티거나 클리어) — 10단계부터(심연으로 가는 문)는 클리어해야 열림 */
 export const GLITCH_UNLOCK_WAVE = 40;
+export const GLITCH_DEEP_FROM = 10;
+export const glitchUnlocks = (glitch: number, r: { win: boolean; wave: number }) =>
+  r.win || (glitch < GLITCH_DEEP_FROM && r.wave >= GLITCH_UNLOCK_WAVE);
 
 /* ───────────────────────── 상자 ───────────────────────── */
 
@@ -402,6 +456,16 @@ export const PASS: PassTier[] = Array.from({ length: 30 }, (_, i): PassTier => {
 });
 /** 프리미엄 줄 값 (GP) */
 export const PASS_PREMIUM_GP = 5000;
+
+/**
+ * GP 상점 (주마다 횟수 제한 — GP 가 많은 사람이 한 번에 다 사서 성장을 건너뛰지 못하게)
+ *  chest: 유물 확정 상자 (안 가진 유물 우선, 다 가졌으면 코어)
+ *  cards: 고른 유닛 카드 묶음
+ */
+export const GP_SHOP = {
+  chest: { gp: 1500, perWeek: 3, tierOdds: [0.45, 0.4, 0.15], allOwnedCores: 10 },
+  cards: { gp: 600, n: 10, perWeek: 5 },
+} as const;
 
 /** GP → 글리치 코어 교환 (주에 max 번) */
 export const CORE_EXCHANGE = { gp: 1000, cores: 4, maxPerWeek: 5 } as const;

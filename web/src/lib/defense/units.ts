@@ -63,6 +63,8 @@ export interface UnitDef {
   ult?: Ult;
   /** 처치할 때: 골드 · 행운석 확률 */
   onKill?: { gold?: number; goldChance?: number; stone?: number };
+  /** 판매 값 (없으면 등급 기본값 balance.ts B.sell · B.sellStones) */
+  sell?: { gold: number; stones: number };
   /** 한 줄 설명 (도감 · 선택 창) */
   desc: string;
   /** 그림 없을 때 보일 글자 (1~2자) */
@@ -270,6 +272,19 @@ export const UNITS: UnitDef[] = [
     ult: { every: 6, kind: "nova", r: 1.4, mult: 3, stun: 1.5, name: "용의 강하" },
     desc: "범위 공격 · 방어 깎기 30 · 6타마다 강하 (1.5초 기절)",
   }),
+  U({
+    id: "k_aegis",
+    name: "성녀 이지스",
+    faction: "knight",
+    grade: 4,
+    dmg: 420,
+    aps: 1.4,
+    range: 2.8,
+    glyph: "녀",
+    aura: { r: 2.2, aspd: 0.25 },
+    ult: { every: 8, kind: "nova", r: 1.6, mult: 4, stun: 1, name: "성역" },
+    desc: "주변 아군 공격 속도 +25% · 8타마다 성역 (범위 ×4 · 1초 기절)",
+  }),
 
   // ───────── 기계공방 ─────────
   U({
@@ -434,6 +449,20 @@ export const UNITS: UnitDef[] = [
     aura: { r: 4, shred: 30 },
     desc: "4마리로 튀는 연사 · 방어 깎기 30",
   }),
+  U({
+    id: "m_inferno",
+    name: "인페르노 기갑",
+    faction: "mech",
+    grade: 4,
+    dmg: 210,
+    aps: 3,
+    range: 2.4,
+    glyph: "인",
+    splash: { r: 1.2, pct: 0.8 },
+    aura: { r: 2.4, shred: 25 },
+    ult: { every: 12, kind: "nova", r: 2.2, mult: 5, name: "대화재" },
+    desc: "짧은 사거리 화염 연사 (넓게 태움) · 방어 깎기 25 · 12타마다 대화재 (×5)",
+  }),
 
   // ───────── 마도회 ─────────
   U({
@@ -518,9 +547,9 @@ export const UNITS: UnitDef[] = [
     aps: 1,
     range: 2.6,
     glyph: "시",
-    aura: { r: 2.6, slow: 0.25 },
+    aura: { r: 1.6, slow: 0.35 },
     procs: [{ chance: 0.08, kind: "stun", sec: 1 }],
-    desc: "주변 25% 둔화 · 8% 1초 기절",
+    desc: "가까운 적 35% 둔화 · 8% 1초 기절",
   }),
   U({
     id: "a_pyro",
@@ -602,6 +631,21 @@ export const UNITS: UnitDef[] = [
     ult: { every: 5, kind: "nova", r: 2.5, mult: 1, stun: 1.5, name: "시간 정지" },
     desc: "40% 둔화 · 지금 체력 8% · 5타마다 시간 정지 (넓은 1.5초 기절)",
   }),
+  U({
+    id: "a_plague",
+    name: "역병의 마녀",
+    faction: "arcane",
+    grade: 4,
+    dmg: 380,
+    aps: 1.1,
+    range: 3,
+    glyph: "역",
+    chain: { n: 3, pct: 0.8 },
+    aura: { r: 3, shred: 25 },
+    procs: [{ chance: 0.25, kind: "cur", pct: 0.07 }],
+    ult: { every: 7, kind: "nova", r: 1.8, mult: 3, cur: 0.1, name: "역병 폭발" },
+    desc: "3마리로 튐 · 방어 깎기 25 · 25% 지금 체력 7% · 7타마다 역병 폭발 (지금 체력 10%)",
+  }),
 
   // ───────── 히든 ─────────
   U({
@@ -610,13 +654,14 @@ export const UNITS: UnitDef[] = [
     faction: "hidden",
     grade: 5,
     dtype: "magic",
-    dmg: 40,
+    dmg: 110,
     aps: 1.5,
     range: 2.6,
     glyph: "?",
-    chain: { n: 2, pct: 0.8 },
-    procs: [{ chance: 0.1, kind: "cur", pct: 0.05 }],
-    desc: "세 세력 견습생이 주운 글리치. 튀는 공격 · 지금 체력 5%",
+    chain: { n: 3, pct: 0.8 },
+    procs: [{ chance: 0.12, kind: "cur", pct: 0.05 }],
+    sell: { gold: 60, stones: 1 },
+    desc: "세 세력 견습생이 주운 글리치. 3마리로 튀는 공격 · 지금 체력 5% · 팔면 60G + 행운석 1",
   }),
   U({
     id: "h_debugger",
@@ -657,6 +702,10 @@ export const RECIPES: Recipe[] = [
   { id: "m_arsenal", needs: ["m_orbit", "m_rail", "m_coil"] },
   { id: "a_void", needs: ["a_archmage", "a_chrono", "a_bolt"] },
   { id: "a_lord", needs: ["a_sage", "a_seal", "a_wind"] },
+  // v0.3: 쓰이지 않던 에픽 · 레어도 재료로 (칸만 차지하던 유닛이 없게)
+  { id: "k_aegis", needs: ["k_gale", "k_paladin", "k_twin"] },
+  { id: "m_inferno", needs: ["m_titan", "m_scrap", "m_flame"] },
+  { id: "a_plague", needs: ["a_sage", "a_pyro", "a_venom"] },
   {
     id: "h_glitchpet",
     needs: ["k_squire", "m_bolt", "a_novice"],

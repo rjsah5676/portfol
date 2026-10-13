@@ -119,7 +119,9 @@ export type Cmd =
   | { t: "recipe"; id: string }
   | { t: "patch"; id: string }
   | { t: "rift"; tier: "C" | "B" | "A" }
-  | { t: "pick"; id: string };
+  | { t: "pick"; id: string }
+  /** 포기 — 지금 웨이브에서 진 것으로 끝냄 (기록 · 보상은 거기까지) */
+  | { t: "quit" };
 
 /** 화면 효과 (시뮬 결과에 영향 없음 — fx 가 null 이면 안 쌓음) */
 export type Fx =
@@ -130,7 +132,9 @@ export type Fx =
   | { k: "die"; x: number; y: number; kind: string; boss: boolean; gold: number }
   | { k: "miss"; x: number; y: number }
   | { k: "whip"; c: number }
-  | { k: "heal"; x: number; y: number };
+  | { k: "heal"; x: number; y: number }
+  /** 유닛이 칸에 나타남 (소환 · 합성 · 도박 · 조합식) — g 등급 */
+  | { k: "spawn"; c: number; g: number };
 
 /** 화면 알림 (토스트 · 획득 연출) */
 export type Ev =
@@ -152,7 +156,7 @@ export interface Result {
   wave: number;
   tick: number;
   kills: number;
-  reason: "clear" | "cap" | "boss";
+  reason: "clear" | "cap" | "boss" | "quit";
 }
 
 export interface Board {
@@ -270,6 +274,11 @@ export const unitCount = (b: Board) => b.cells.reduce((n, c) => n + c.units.leng
 export const hasEmpty = (b: Board) => b.cells.some((c) => !c.def);
 /** 판매 금액 */
 export const sellPrice = (b: Board, grade: number) => Math.floor((B.sell[grade] ?? 0) * b.mods.sellMult);
+/** 판매 값 (골드 · 행운석). 모든 유닛을 팔 수 있음 — 레전드부터는 행운석도 (유닛마다 따로 정한 값이 있으면 그 값) */
+export const sellOf = (b: Board, d: UnitDef) => ({
+  gold: Math.floor((d.sell?.gold ?? B.sell[d.grade] ?? 0) * b.mods.sellMult),
+  stones: d.sell?.stones ?? B.sellStones[d.grade] ?? 0,
+});
 /** 보스 제한 시간 (초) */
 export const bossSecOf = (b: Board) => Math.max(20, B.bossSec + b.mods.bossSec);
 /** 보드에 있는 유닛 수 (id → 수) */
@@ -282,12 +291,18 @@ export function counts(b: Board): Record<string, number> {
 export function canRecipe(b: Board, id: string): boolean {
   const r = RECIPE[id];
   if (!r) return false;
-  if (b.patch === "core" && mythCount(b) >= 1) return false;
+  if (b.patch === "core" && coreBlocked(b, id)) return false;
   const have = counts(b);
   const need: Record<string, number> = {};
   for (const n of r.needs) need[n] = (need[n] ?? 0) + 1;
   return Object.entries(need).every(([k, v]) => (have[k] ?? 0) >= v);
 }
+/** 단일 코어: 신화 · 히든은 한 종류만 (같은 것은 여러 기) — 이미 다른 종류가 있으면 막힘 */
+export const coreKind = (b: Board) => b.cells.find((c) => c.def && UNIT[c.def].grade >= 4)?.def ?? null;
+const coreBlocked = (b: Board, id: string) => {
+  const k = coreKind(b);
+  return !!k && k !== id;
+};
 export const mythCount = (b: Board) =>
   b.cells.reduce((n, c) => n + (c.def && UNIT[c.def].grade >= 4 ? c.units.length : 0), 0);
 /** 세력 강화 배수 (히든은 세 세력 평균) */
@@ -324,6 +339,8 @@ export function isCmd(x: unknown): x is Cmd {
       return keys === 2 && typeof c.id === "string" && PATCHES.some((p) => p.id === c.id);
     case "rift":
       return keys === 2 && (c.tier === "C" || c.tier === "B" || c.tier === "A");
+    case "quit":
+      return keys === 1;
   }
   return false;
 }
@@ -374,10 +391,11 @@ export function apply(g: Game, p: number, cmd: Cmd): string | null {
       const c = b.cells[cmd.c];
       if (!c.def) return "빈 칸이에요";
       const d = UNIT[c.def];
-      if (d.grade > 2) return "레전드부터는 팔 수 없어요";
       c.units.pop();
       if (!c.units.length) c.def = null;
-      b.gold += sellPrice(b, d.grade);
+      const sp = sellOf(b, d);
+      b.gold += sp.gold;
+      b.stones += sp.stones;
       b.sold++;
       b.dirty = true;
       return null;
@@ -415,10 +433,11 @@ export function apply(g: Game, p: number, cmd: Cmd): string | null {
     }
     case "gamble": {
       const gm = B.gamble[cmd.g];
+      if (b.wave < gm.from) return `${gm.from}웨이브부터 할 수 있어요`;
       if (b.stones < gm.cost) return "행운석이 모자라요";
       if (!hasEmpty(b)) return "빈 칸이 없어요";
       b.stones -= gm.cost;
-      const p = gm.p + (b.patch === "gambler" ? 0.08 : 0) + b.mods.gamble;
+      const p = gm.p + (b.patch === "gambler" ? 0.1 : 0) + b.mods.gamble;
       if (rnd(b.rng) < p) {
         b.failStreak = 0;
         const def = pick(b.rng, poolOf(pick(b.rng, FACTIONS), cmd.g === "E" ? 2 : 3));
@@ -434,7 +453,7 @@ export function apply(g: Game, p: number, cmd: Cmd): string | null {
     case "recipe": {
       const r = RECIPE[cmd.id];
       if (!r) return "없는 조합식이에요";
-      if (b.patch === "core" && mythCount(b) >= 1) return "단일 코어: 신화 · 히든은 1개만";
+      if (b.patch === "core" && coreBlocked(b, cmd.id)) return "단일 코어: 신화 · 히든은 한 종류만";
       if (!canRecipe(b, cmd.id)) return "재료가 모자라요";
       // 재료가 여러 칸에 있으면 적게 쌓인 칸부터 뺌
       for (const n of r.needs) {
@@ -461,6 +480,8 @@ export function apply(g: Game, p: number, cmd: Cmd): string | null {
       if (b.patch) return "패치는 한 번만 고를 수 있어요";
       if (b.wave >= PATCH_DEADLINE) return "패치는 10웨이브 전까지만";
       b.patch = cmd.id;
+      // 도박사: 고르는 순간 행운석 +3 (도박이 5웨이브부터라 시작 밑천)
+      if (cmd.id === "gambler") b.stones += 3;
       b.ev?.push({ t: "patch", id: cmd.id, auto: false });
       return null;
     }
@@ -475,6 +496,10 @@ export function apply(g: Game, p: number, cmd: Cmd): string | null {
       e.size = 1;
       e.expire = sec(B.rift.sec);
       b.riftCd = Math.round(sec(B.rift.cd) * b.mods.riftCd);
+      return null;
+    }
+    case "quit": {
+      finish(g, b, false, "quit");
       return null;
     }
     case "pick": {
@@ -516,6 +541,7 @@ function give(
   const d = UNIT[id];
   if (d.grade >= 3 && b.patch === "union") b.free += 2;
   b.ev?.push({ t: "unit", def: id, how });
+  b.fx?.push({ k: "spawn", c: at, g: d.grade });
   // 쌍둥이 별: 레전드 이상을 얻으면 확률로 같은 등급 · 같은 세력 하나 더 (그 1기는 다시 굴리지 않음)
   if (b.mods.twinStar && d.grade >= 3 && d.faction !== "hidden" && how !== "twin" && hasEmpty(b)) {
     if (rnd(b.rng) < b.mods.twinStar) give(b, pick(b.rng, poolOf(d.faction, d.grade)).id, "twin");
@@ -535,7 +561,7 @@ function spawn(b: Board, kindId: string, hp: number): Enemy {
     elite: false,
     hp: hp * b.mods.glitch.hp,
     max: hp * b.mods.glitch.hp,
-    armor: Math.round(B.armorPerWave * w * k.armor),
+    armor: Math.round(B.armorPerWave * w * k.armor * b.mods.glitch.armor),
     mres: k.mres,
     pres: 0,
     size: k.size,
@@ -563,10 +589,10 @@ function spawn(b: Board, kindId: string, hp: number): Enemy {
 
 function spawnBoss(b: Board, def: BossDef) {
   const w = b.wave;
-  const e = spawn(b, "slime", hpOf(w) * B.bossHp * def.hp);
+  const e = spawn(b, "slime", hpOf(w) * B.bossHp * def.hp * b.mods.glitch.boss);
   e.kind = "boss";
   e.boss = BOSSES.indexOf(def);
-  e.armor = Math.round(B.armorPerWave * w * def.armor);
+  e.armor = Math.round(B.armorPerWave * w * def.armor * b.mods.glitch.armor);
   e.mres = def.mres;
   e.pres = def.pres;
   e.size = def.size;
@@ -809,7 +835,8 @@ function hit(b: Board, def: UnitDef, e: Enemy, raw: number): number {
   if (def.faction !== "hidden") m *= M.fac[def.faction];
   if (M.warBanner) m *= 1 + M.warBanner * Math.floor((b.up.knight + b.up.mech + b.up.arcane) / 10);
   if (M.vaccine !== 1 && (e.boss >= 0 || e.elite || e.rift)) m *= M.vaccine;
-  if (b.patch === "core") m *= 1.35;
+  // 단일 코어: 하나뿐인 신화 · 히든에 힘을 몰아줌
+  if (b.patch === "core") m *= def.grade >= 4 ? 2.5 : 3.6;
   if (e.boss >= 0 && def.boss) m *= def.boss;
   if (def.dtype === "phys") {
     let sz = SIZE_MULT[def.faction][e.size];
@@ -1014,7 +1041,7 @@ function die(g: Game, b: Board, e: Enemy): boolean {
     b.ev?.push({ t: "rift", tier: e.rift, ok: true });
   } else if (e.boss >= 0) {
     gold = B.bossGold.base + B.bossGold.per * b.wave;
-    const stones = B.bossStones + Math.floor(b.wave / 20);
+    const stones = B.bossStones + Math.floor(b.wave / 20) + (b.patch === "gambler" ? 1 : 0);
     b.stones += stones;
     const tk = B.bossTicket[b.wave];
     if (tk !== undefined) b.tickets.push(tk);

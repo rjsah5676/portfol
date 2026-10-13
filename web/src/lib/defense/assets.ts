@@ -52,11 +52,14 @@ const U = (id: string, face: 1 | -1 = 1): SpriteSpec => ({
 
 /** 유닛 id → 그림. 없는 유닛은 세력별 도트 인형으로 그림 */
 export const UNIT_ART: Record<string, SpriteSpec> = {
+  k_aegis: U("k_aegis"),
+  m_inferno: U("m_inferno"),
   a_archmage: U("a_archmage"),
   a_bolt: U("a_bolt"),
   a_chrono: U("a_chrono"),
   a_frost: U("a_frost"),
   a_lord: U("a_lord"),
+  a_plague: U("a_plague"),
   a_novice: U("a_novice"),
   a_pyro: U("a_pyro"),
   a_sage: U("a_sage"),
@@ -177,6 +180,8 @@ export const SFX: Record<string, { src: string; vol?: number }> = {
   // 베타 (정비소): 미션 · 패스 보상 받기, 상자 열기
   reward: { src: "/defense/sfx/reward.mp3" },
   "chest-open": { src: "/defense/sfx/chest-open.mp3" },
+  // v0.3: 레어 · 에픽이 소환될 때 (노말은 summon)
+  spawn: { src: "/defense/sfx/spawn.mp3" },
   gameover: { src: "/defense/sfx/gameover.mp3" },
 };
 

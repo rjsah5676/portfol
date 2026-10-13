@@ -7,7 +7,7 @@
  * 시간 단위는 tick (1초 = TPS tick). 거리 단위는 칸 (필드 8 × 5칸).
  */
 
-export const BALANCE_VER = "b1";
+export const BALANCE_VER = "b2";
 
 export const TPS = 30;
 /** 필드에 남은 적이 이 수에 닿으면 패배 */
@@ -31,7 +31,7 @@ export const B = {
   /** 보스를 잡고 다음 웨이브까지 */
   breakSec: 3,
   /** 적 체력: base × (1 + lin × w) × mult^w — from2 웨이브부터는 mult2 로 더 가파르게 (중후반 압박), from3 부터는 mult3 (끝판 숨 고르기) */
-  hp: { base: 26, lin: 0.4, mult: 1.068, mult2: 1.15, from2: 20, mult3: 1.06, from3: 50 },
+  hp: { base: 26, lin: 0.4, mult: 1.068, mult2: 1.15, from2: 20, mult3: 1.07, from3: 50 },
   /** 적 방어력 = perWave × w × 종류 배수 */
   armorPerWave: 1,
   /** 엘리트(5 · 15 · 25… 웨이브 마지막 한 마리) 체력 배수 */
@@ -51,7 +51,10 @@ export const B = {
   /** 웨이브를 넘기면: base + per × w */
   waveGold: { base: 20, per: 2 },
   /** 판매 금액 (노말 · 레어 · 에픽) — 레전드부터 판매 불가 */
-  sell: [8, 20, 50] as number[],
+  /** 판매 골드 (등급별: 노말 · 레어 · 에픽 · 레전드 · 신화 · 히든) */
+  sell: [8, 20, 50, 120, 250, 300] as number[],
+  /** 판매 행운석 (레전드부터) */
+  sellStones: [0, 0, 0, 1, 2, 2] as number[],
   /** 세력 강화: 비용 = base + step × lv, 피해 +perLv (곱 아닌 합) */
   up: {
     knight: { base: 30, step: 10 },
@@ -72,7 +75,8 @@ export const B = {
     [54, 32, 11.5, 2.5],
   ],
   /** 행운석 도박: cost 개 → p 확률로 그 등급 무작위 */
-  gamble: { E: { cost: 1, p: 0.5 }, L: { cost: 2, p: 0.2 } },
+  /** 행운석 도박 — from 웨이브부터 (초반에 행운석으로 에픽 · 레전드를 바로 뽑아 쉽게 넘기지 못하게) */
+  gamble: { E: { cost: 1, p: 0.5, from: 5 }, L: { cost: 2, p: 0.2, from: 10 } },
 
   // ── 보스 보상 ──
   bossGold: { base: 60, per: 5 },
