@@ -171,6 +171,22 @@ export const SHOP: ShopItem[] = [
     name: "학창시절 건모",
     price: 15_000,
   },
+  {
+    id: "fight.skin.zena-idol",
+    game: "fight",
+    kind: "skin",
+    ref: "zena-idol",
+    name: "아이돌 제나",
+    price: 15_000,
+  },
+  {
+    id: "fight.skin.ivan-winter",
+    game: "fight",
+    kind: "skin",
+    ref: "ivan-winter",
+    name: "시베리아 이반",
+    price: 15_000,
+  },
 ];
 export const shopItem = (id: unknown) => SHOP.find((s) => s.id === id);
 export const shopOf = (game: PointGame) => SHOP.filter((s) => s.game === game);

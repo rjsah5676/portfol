@@ -69,6 +69,7 @@ const PROJ_ANIM: Record<string, Partial<Record<"S" | "X", [string, number, numbe
   "igna-fw": { S: ["igna-fw-fireball", 4, 2.6, 0.8] },
   lily: { S: ["lily-bubble", 4, 1.3, 0.72], X: ["lily-wave", 4, 1.55, 0.5] },
   zena: { S: ["zena-spear", 4, 3.2, 0.75] },
+  "zena-idol": { S: ["zena-idol-spear", 4, 5.5, 0.82] },
 };
 /** v2 에셋의 소환(불기둥 등) 그림: 캐릭터 → [이름, 장 수] — 바닥 기준, 판정 높이에 맞춤 */
 const PILLAR_ANIM: Record<string, [string, number]> = { igna: ["igna-pillar", 4], "igna-fw": ["igna-fw-pillar", 4], zena: ["zena-bolt", 4] };
@@ -108,6 +109,8 @@ const FX_SETS: Record<string, Record<string, [number, number, boolean]>> = {
   },
   // 학창시절 건모: box · win 은 반투명 칠판(x 방정식), crash 는 깨지는 칠판, glitch 는 분필가루 — 나머지는 건모 기본
   "gunmo-school": { box: [4, 1, false], win: [4, 1, false], crash: [1, 1.1, false], glitch: [1, 0.7, true], ring: [1, 1.2, true] },
+  // 시베리아 이반: 이반 효과를 서리빛으로 (먼지는 기본)
+  "ivan-winter": { spark: [4, 0.7, true], guard: [2, 0.6, true], aura: [4, 0.95, true], wave: [4, 0.9, true], burst: [4, 1.35, true], crack: [4, 0.95, false] },
   // 이반: aura(철곰권 기 모으기)·wave(철곰권 충격파)·burst(붉은 폭풍)·crack(곰 포옹 내리꽂기 균열)는 따로 띄움
   ivan: {
     spark: [4, 0.7, true],
@@ -944,7 +947,7 @@ export class FightRenderer {
     if (CHARS[f.ch].id === "ivan" && f.st === "atk" && f.mv === "S" && f.aerial && cm?.air?.hug) {
       const am = cm.air;
       if (f.hug) {
-        const im = fxImg(`ivan-aura-${2 + (Math.floor(s.f / 3) % 2)}`);
+        const im = fxImg(`${this.lookOf(f) === "ivan-winter" ? "ivan-winter" : "ivan"}-aura-${2 + (Math.floor(s.f / 3) % 2)}`);
         if (im) {
           const w = (im.width / 1.72) * 1.2,
             h = (im.height / 1.72) * 1.2;
@@ -985,7 +988,7 @@ export class FightRenderer {
     if (CHARS[f.ch].id === "ivan" && cm?.charge && f.mv === "S" && !f.aerial && f.chg > 0 && f.t <= cm.charge.at + 1) {
       const full = f.chg >= cm.charge.max;
       const k = full ? 2 + (Math.floor(s.f / 3) % 2) : Math.min(2, Math.floor((f.chg * 3) / cm.charge.max));
-      const im = fxImg(`ivan-aura-${k}`);
+      const im = fxImg(`${this.lookOf(f) === "ivan-winter" ? "ivan-winter" : "ivan"}-aura-${k}`);
       if (im) {
         const z = 0.75 + (0.35 * Math.min(f.chg, cm.charge.max)) / cm.charge.max;
         const w = (im.width / 1.72) * 0.95 * z,

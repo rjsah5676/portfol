@@ -59,6 +59,22 @@ export const FIGHT_SKINS: FightSkin[] = [
     desc: "후줄근한 교복에 책가방, 흰 실내화. 안경 가운데엔 자물쇠가 채워져 있고 손엔 빈 급식판 — 선택 박스는 반투명 칠판이 되고, Alt+F4 는 강제 하교가 돼요.",
     color: "#3E8E6A",
   },
+  {
+    id: "zena-idol",
+    ch: "zena",
+    name: "아이돌 제나",
+    tag: "SONIC STAGE",
+    desc: "창 대신 은색 스탠딩 마이크를 든 걸그룹 메인보컬 제나. 큐빅 크롭 탑에 시스루 스커트, 번개처럼 빠른 음속의 무대 — 내지르는 마이크엔 음파와 번개가 함께 실려요.",
+    color: "#F5C842",
+  },
+  {
+    id: "ivan-winter",
+    ch: "ivan",
+    name: "시베리아 이반",
+    tag: "SIBERIAN BEAR",
+    desc: "불곰 가죽을 통째로 뒤집어쓴 혹한의 이반. 수염엔 서리가 맺히고 입김은 하얗게 — 붉은 기운 대신 눈보라와 얼음 결정이 주먹에 실려요.",
+    color: "#7FC8F0",
+  },
 ];
 
 export const skinOf = (id?: string | null): FightSkin | null => FIGHT_SKINS.find((s) => s.id === id) ?? null;
@@ -84,6 +100,8 @@ const AURA: Record<string, string> = {
   "kai-tkd": "/fight/shop/kai-tkd-aura.webp",
   "lily-frog": "/fight/shop/lily-frog-aura.webp",
   "gunmo-school": "/fight/shop/gunmo-school-aura.webp",
+  "zena-idol": "/fight/shop/zena-idol-aura.webp",
+  "ivan-winter": "/fight/shop/ivan-winter-aura.webp",
 };
 /** 오라 그림 가장자리를 부드럽게 흐려 네모 테두리가 안 보이게 */
 export const AURA_MASK = {
