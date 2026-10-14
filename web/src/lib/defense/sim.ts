@@ -24,7 +24,7 @@
  *   고른 효과는 b.cx 로 합쳐 둠 (피해 · 공속 · 골드 · 적 속도 …), 뽑기는 b.crng (소환 운과 따로).
  */
 import { B, BOSS_EVERY, CAP, LAST_WAVE, TPS, TUNE, countOf, hpOf, sec } from "./balance";
-import { BOSSES, BOSS_PHASE_GLITCH, KIND, bossOfWave, kindOfWave, type BossDef, type Size } from "./enemies";
+import { BOSSES, KIND, bossOfWave, kindOfWave, phaseOn, type BossDef, type Size, type TeleShape } from "./enemies";
 import { CHEAT, CHEATS, CHEAT_MULTI_SEC, CHEAT_OFFER, CHEAT_WAVES, cheatFx0, cheatFxOf, cheatOdds, type CheatFx } from "./cheats";
 import { MISSIONS, PATCHES } from "./meta";
 import { mixSeed, pick, rnd, rndInt, type Rng } from "./rng";
@@ -167,7 +167,7 @@ export type Ev =
   | { t: "boss"; boss: number }
   /** 보스 2페이즈 시작 · 예고 시작(warn) / 맞음(hit: 기절한 칸 수) */
   | { t: "phase"; boss: number }
-  | { t: "tele"; kind: "bolt" | "grab"; hit: number | null }
+  | { t: "tele"; name: string; snd: string; hit: number | null }
   | { t: "bossDown"; boss: number; gold: number; stones: number; ticket: number | null }
   | { t: "wave"; wave: number }
   | { t: "mission"; id: string }
@@ -198,7 +198,7 @@ export interface Board {
   spawned: number;
   bossT: number;
   /** 보스 2페이즈 예고: 이 칸들에 t tick 뒤 기절 sec (화면은 빨갛게 표시) */
-  tele: { kind: "bolt" | "grab"; cells: number[]; t: number; sec: number } | null;
+  tele: { name: string; snd: string; cells: number[]; t: number; sec: number } | null;
   cells: Cell[];
   enemies: Enemy[];
   nextId: number;
@@ -1194,9 +1194,9 @@ function bossTick(b: Board, e: Enemy) {
         break;
     }
   });
-  // 2페이즈 (오염 BOSS_PHASE_GLITCH 부터): 체력이 at 밑이면 예고 기술 — 예고 시간 동안 유닛을 옮기면 피함
+  // 2페이즈 (오염 단계마다 정해진 보스 둘 — PHASE_PAIRS): 체력이 at 밑이면 예고 기술 — 예고 시간 동안 유닛을 옮기면 피함
   const P = def.phase;
-  if (P && b.mods.glitch.lv >= BOSS_PHASE_GLITCH) {
+  if (P && phaseOn(b.mods.glitch.lv, def.wave)) {
     if (!e.ph && e.hp <= e.max * P.at) {
       e.ph = 1;
       e.sk2 = P.skills.map(() => sec(1.5));
@@ -1206,11 +1206,11 @@ function bossTick(b: Board, e: Enemy) {
       P.skills.forEach((s, k) => {
         if (--e.sk2[k] > 0 || b.tele) return;
         e.sk2[k] = sec(s.every);
-        if (s.kind !== "bolt" && s.kind !== "grab") return;
-        const cells = s.kind === "bolt" ? strongRow(b) : strongCell(b);
+        if (s.kind !== "tele") return;
+        const cells = teleCells(b, s.shape);
         if (cells.length) {
-          b.tele = { kind: s.kind, cells, t: sec(s.warn), sec: sec(s.sec) };
-          b.ev?.push({ t: "tele", kind: s.kind, hit: null });
+          b.tele = { name: s.name, snd: s.snd, cells, t: sec(s.warn), sec: sec(s.sec) };
+          b.ev?.push({ t: "tele", name: s.name, snd: s.snd, hit: null });
         }
       });
   }
@@ -1222,7 +1222,7 @@ function bossTick(b: Board, e: Enemy) {
       for (const u of b.cells[ci].units) u.stun = Math.max(u.stun, b.tele.sec);
       b.fx?.push({ k: "whip", c: ci });
     }
-    b.ev?.push({ t: "tele", kind: b.tele.kind, hit });
+    b.ev?.push({ t: "tele", name: b.tele.name, snd: b.tele.snd, hit });
     b.tele = null;
   }
 }
@@ -1234,32 +1234,57 @@ function cellPower(b: Board, i: number): number {
   const d = UNIT[c.def];
   return d.dmg * d.aps * c.units.length * (d.grade + 1);
 }
-/** 유닛이 가장 센 가로줄의 칸들 */
-export function strongRow(b: Board): number[] {
-  let best = -1,
+/** 후보 칸 묶음 중 세기 합이 가장 큰 것 (같으면 앞 — 결정론). 유닛이 하나도 없으면 [] */
+function strongest(b: Board, groups: number[][]): number[] {
+  let best: number[] = [],
     bv = 0;
-  for (let r = 0; r < ROWS; r++) {
+  for (const g of groups) {
     let v = 0;
-    for (let c = 0; c < COLS; c++) v += cellPower(b, r * COLS + c);
+    for (const i of g) v += cellPower(b, i);
     if (v > bv) {
       bv = v;
-      best = r;
+      best = g;
     }
   }
-  return best < 0 ? [] : Array.from({ length: COLS }, (_, c) => best * COLS + c);
+  return best;
 }
-/** 가장 센 칸 하나 */
-export function strongCell(b: Board): number[] {
-  let best = -1,
-    bv = 0;
-  for (let i = 0; i < CELLS; i++) {
-    const v = cellPower(b, i);
-    if (v > bv) {
-      bv = v;
-      best = i;
+const range = (n: number) => Array.from({ length: n }, (_, i) => i);
+/** 예고 모양대로 노릴 칸 (유닛이 가장 센 곳) */
+export function teleCells(b: Board, shape: TeleShape): number[] {
+  const at = (r: number, c: number) => r * COLS + c;
+  switch (shape) {
+    case "row":
+      return strongest(b, range(ROWS).map((r) => range(COLS).map((c) => at(r, c))));
+    case "col":
+      return strongest(b, range(COLS).map((c) => range(ROWS).map((r) => at(r, c))));
+    case "cell":
+      return strongest(b, range(CELLS).map((i) => [i]));
+    case "two": {
+      const one = strongest(b, range(CELLS).map((i) => [i]));
+      if (!one.length) return [];
+      const two = strongest(b, range(CELLS).filter((i) => i !== one[0]).map((i) => [i]));
+      return [...one, ...two];
     }
+    case "area":
+      return strongest(
+        b,
+        range(ROWS - 1).flatMap((r) => range(COLS - 1).map((c) => [at(r, c), at(r, c + 1), at(r + 1, c), at(r + 1, c + 1)]))
+      );
+    case "plus":
+      return strongest(
+        b,
+        range(CELLS).map((i) => {
+          const r = Math.floor(i / COLS),
+            c = i % COLS;
+          const g = [i];
+          if (r > 0) g.push(at(r - 1, c));
+          if (r < ROWS - 1) g.push(at(r + 1, c));
+          if (c > 0) g.push(at(r, c - 1));
+          if (c < COLS - 1) g.push(at(r, c + 1));
+          return g;
+        })
+      );
   }
-  return best < 0 ? [] : [best];
 }
 
 /** 처치 처리. 판이 끝나면 true */

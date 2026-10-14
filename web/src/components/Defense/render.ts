@@ -709,9 +709,16 @@ export function draw(ctx: CanvasRenderingContext2D, b: Board, v: View, opt: { ra
       ctx.fillRect(x + 2, y + 2, 3, CELL - 4);
       ctx.fillRect(x + CELL - 5, y + 2, 3, CELL - 4);
     }
-    const f = tl.cells[0];
-    const tx = tl.kind === "bolt" ? ((cellX(f) - 0.5) * CELL + (cellX(tl.cells[tl.cells.length - 1]) + 0.5) * CELL) / 2 : cellX(f) * CELL;
-    pxText(ctx, `${tl.kind === "bolt" ? "뇌섬일창" : "곰 포옹"} ${sec}`, tx, (cellY(f) - 0.5) * CELL - 4, 15, "#ff4d6d", 1);
+    // 이름 · 남은 초: 표시된 칸들의 가운데 위
+    let x0 = Infinity,
+      x1 = -Infinity,
+      y0 = Infinity;
+    for (const i of tl.cells) {
+      x0 = Math.min(x0, cellX(i));
+      x1 = Math.max(x1, cellX(i));
+      y0 = Math.min(y0, cellY(i));
+    }
+    pxText(ctx, `${tl.name} ${sec}`, ((x0 + x1) / 2) * CELL, (y0 - 0.5) * CELL - 4, 15, "#ff4d6d", 1);
   }
 
   // 위험: 테두리가 빨갛게 깜빡임

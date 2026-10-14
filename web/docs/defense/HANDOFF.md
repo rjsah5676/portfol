@@ -161,6 +161,13 @@ cd web && POKER_E2E=1 npx next dev            # → /games/defense/?fake=admin:�
 - 화면: 이어하기(`DefenseApp` localStorage `pgd-resume:<uid>` 2초마다 → `Controller.restore` 로 기록을 다시 돌려 따라잡음, 3.5시간) · 포기하기 · DPS 창(필드 오른쪽 위) · (v1.2.1 에서 클릭 이동 삭제 — 끌어서만) · 재화 말풍선(`ui.tsx Tip`, `Hub CUR_INFO`) · 도트 스크롤바 · 마우스 크기(소리 창, `data-cur` + `cursor-3x/4x/6x.png`)
 - 효과: 공격 모양 유닛별 `render.ts HIT_KIND/drawShot` · 공격 동작 세력별 `attackPose` · 소환 `Fx spawn`(빛기둥 + 고리) · 효과음 `spawn`(레어 · 에픽 소환) · `reward` · `chest-open`
 
+### v1.7 BETA — 보스 2페이즈 6명 · 단계마다 2명
+- 기술은 하나로 합침: `{ kind: "tele", shape, every, warn, sec, name, snd }` · 모양 `row · col · cell · two · area(2×2) · plus(십자)` → `sim.ts teleCells` (세기 합이 가장 큰 곳, 같으면 앞)
+  - 릴리 col 8s/2s/2.5s · 소영 two 7/2/3 · 제나 row 7/2/3 · 이그나 area 8/2/3 · 이반 cell 8/2.5/6 · 카이 plus 7/1.8/3 (every/warn/기절)
+- `PHASE_PAIRS` (`enemies.ts`): 오염 15~30 단계마다 2페이즈 보스 둘 — **고정표** (판마다 무작위면 쉬운 조합 나올 때까지 다시 시작하니까). 웨이브 합이 작은 조합부터 (15: 10·20 … 29 · 30: 50·60). `phaseOn(glitch, wave)` · `phaseText(glitch)`
+  - 화면: 정비소 오염 단계 아래 빨간 줄 · 메뉴 ▶ 설명 · 보스 등장 띠에 「2페이즈 있음 — …」
+- 효과음 `boss-phase · tele-warn · tele-{wave,whip,bolt,fire,grab,wind}` — **임시 합성음** (`web/scripts/defense-sfx-synth.py`, numpy · scipy · ffmpeg). 일레븐랩스로 바꾸려면 같은 이름으로 덮어쓰기 (프롬프트: 프로젝트 `claude/defense-boss-phase-asset-request.md`)
+
 ### v1.6 BETA (밸런스 beta5) — 보스 2페이즈 (오염 15+)
 - `BossDef.phase { at, skills, line }` + `BOSS_PHASE_GLITCH = 15` (`enemies.ts`). 보스 체력 ≤ at(0.5) 이면 `e.ph = 1` · `Ev phase`, 2페이즈 기술 쿨은 `e.sk2`
 - 새 기술 (예고형 — 배치로 받아치게): `bolt`(가장 센 가로줄) · `grab`(가장 센 칸). 노리는 곳은 `strongRow / strongCell` (칸 세기 = dmg × aps × 수 × (등급+1), 같으면 앞) — 난수 안 씀

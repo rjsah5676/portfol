@@ -4,6 +4,7 @@ import { BOTS, botTurn } from "../../web/src/lib/defense/bot";
 import { HASH_TICKS, TICKS_PER_TURN, TURN_MS, replay, replayer, scoreOf, validLog, type LogEntry } from "../../web/src/lib/defense/replay";
 import { CELLS, SLOTS, apply, hashGame, isCmd, newGame, pureT, step, unitCount, upCost, type Game } from "../../web/src/lib/defense/sim";
 import { RECIPES, UNIT, UNITS } from "../../web/src/lib/defense/units";
+import { PHASE_PAIRS, phaseOn } from "../../web/src/lib/defense/enemies";
 import { CHEATS, CHEAT_MULTI_SEC, cheatFxOf, cheatOdds } from "../../web/src/lib/defense/cheats";
 import { TPS } from "../../web/src/lib/defense/balance";
 import { GLITCH, relicShardsToMax, CHEAT_RES, BOX, BENCH_COST, FRES_COST, TRANS_IDS, GP_PACKS, GP_SELL, GP_STORE, PACK, PASS_PREMIUM_GP, RESEARCH, lvCost, modsOf, packPct, planUpAll, seasonScore, transRoll } from "../../web/src/lib/defense/progress";
@@ -159,11 +160,11 @@ describe("픽셀 글리치 디펜스 엔진", () => {
     expect(apply(g, 0, { t: "next" })).toBe("보스를 잡아야 넘어가요");
   });
 
-  it("보스 2페이즈 (오염 15+): 제나 체력 절반 밑이면 가장 센 줄 예고 → 남아 있던 유닛만 기절, 옮긴 유닛은 안 맞음", () => {
+  it("보스 2페이즈: 단계마다 정해진 보스 둘 — 16단계 제나는 체력 절반 밑이면 가장 센 줄 예고 → 남아 있던 유닛만 기절, 옮긴 유닛은 안 맞음", () => {
     const g = newGame(11, 1);
     const b = g.boards[0];
     expect(apply(g, 0, { t: "cheat", i: 0 })).toBeNull();
-    b.mods = { ...b.mods, glitch: GLITCH[15] };
+    b.mods = { ...b.mods, glitch: GLITCH[16] };
     const id = UNITS.find((u) => u.faction === "knight" && u.grade === 2)!.id;
     const put = (i: number) => ((b.cells[i] = { def: id, units: [{ cd: 0, ult: 0, stun: 0 }] }), (b.dirty = true));
     put(0);
@@ -177,7 +178,7 @@ describe("픽셀 글리치 디펜스 엔진", () => {
     const boss = b.enemies.find((e) => e.boss >= 0)!;
     boss.hp = boss.max * 0.4;
     for (let i = 0; i < TPS * 10 && !b.tele; i++) step(g);
-    expect(b.tele?.kind).toBe("bolt");
+    expect(b.tele?.name).toBe("뇌섬일창");
     expect(b.tele!.cells).toContain(0);
     expect(b.tele!.cells).not.toContain(CELLS - 1);
     // 예고 중에 1번 칸 유닛을 표시 밖으로 옮김
@@ -186,11 +187,14 @@ describe("픽셀 글리치 디펜스 엔진", () => {
     while (b.tele) step(g);
     expect(b.cells[0].units[0].stun).toBeGreaterThan(0);
     expect(b.cells[out].units[0].stun).toBe(0);
-    // 오염 14 이하는 2페이즈 없음
+    // 15단계는 릴리 · 소영만 → 제나는 2페이즈 없음 (같은 단계면 늘 같은 보스)
+    expect(PHASE_PAIRS[15]).toEqual([10, 20]);
+    expect(phaseOn(14, 30)).toBe(false);
+    expect(Object.values(PHASE_PAIRS).flat().filter((w, i, a) => a.indexOf(w) === i).sort((x, y) => x - y)).toEqual([10, 20, 30, 40, 50, 60]);
     const g2 = newGame(11, 1);
     const b2 = g2.boards[0];
     apply(g2, 0, { t: "cheat", i: 0 });
-    b2.mods = { ...b2.mods, glitch: GLITCH[14] };
+    b2.mods = { ...b2.mods, glitch: GLITCH[15] };
     b2.cells[0] = { def: id, units: [{ cd: 0, ult: 0, stun: 0 }] };
     b2.dirty = true;
     b2.phase = "wave";

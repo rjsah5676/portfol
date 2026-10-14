@@ -2,7 +2,7 @@
 
 import { Fragment, useEffect, useReducer, useRef, useState, type ReactNode } from "react";
 import { B, BOSS_EVERY, CAP, LAST_WAVE, TPS, TUNE, hpOf, sec } from "@/lib/defense/balance";
-import { BOSSES } from "@/lib/defense/enemies";
+import { BOSSES, phaseOn, phaseSkillName } from "@/lib/defense/enemies";
 import { MISSIONS, PATCHES } from "@/lib/defense/meta";
 import { CHEAT, CHEAT_CAT_NAME, CHEAT_MULTI_SEC, CHEAT_TIER_COLOR, CHEAT_TIER_NAME } from "@/lib/defense/cheats";
 import { botByName, botTurn, BOTS } from "@/lib/defense/bot";
@@ -204,8 +204,8 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry }
       case "tele":
         if (e.hit === null) sfx("tele-warn");
         else {
-          sfx(e.kind === "bolt" ? "tele-bolt" : "tele-grab");
-          if (e.hit > 0) toast(`${e.kind === "bolt" ? "뇌섬일창" : "곰 포옹"} — ${e.hit}칸 기절`, "bad");
+          sfx(`tele-${e.snd}`);
+          if (e.hit > 0) toast(`${e.name} — ${e.hit}칸 기절`, "bad");
           else toast("피했어요!");
         }
         break;
@@ -816,7 +816,12 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry }
         </div>
         {shout && <Shout key={shout.id} {...shout} onDone={() => setShout(null)} />}
         {bossLine && (
-          <BossIntro key={bossLine.id} boss={bossLine.boss} onDone={() => setBossLine(null)} />
+          <BossIntro
+            key={bossLine.id}
+            boss={bossLine.boss}
+            phase={phaseOn(b.mods.glitch.lv, BOSSES[bossLine.boss].wave)}
+            onDone={() => setBossLine(null)}
+          />
         )}
       </div>
 
@@ -1567,7 +1572,7 @@ function Shout({
   );
 }
 
-function BossIntro({ boss, onDone }: { boss: number; onDone(): void }) {
+function BossIntro({ boss, phase, onDone }: { boss: number; phase: boolean; onDone(): void }) {
   const d = BOSSES[boss];
   useEffect(() => {
     const t = setTimeout(onDone, 2600);
@@ -1597,6 +1602,11 @@ function BossIntro({ boss, onDone }: { boss: number; onDone(): void }) {
           {d.name}
         </p>
         <p className="text-[13px] text-[var(--text)]">“{d.line}”</p>
+        {phase && d.phase && (
+          <p className="mt-1 text-[12px] font-bold text-[var(--red)]">
+            2페이즈 있음 — 체력 {Math.round(d.phase.at * 100)}% 밑에서 「{phaseSkillName(d)}」
+          </p>
+        )}
       </div>
     </div>
   );

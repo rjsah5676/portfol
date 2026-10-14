@@ -146,13 +146,52 @@ export type BossSkill =
   | { kind: "summon"; every: number; n: number; hp: number }
   /** every 초마다 sec 초 동안 모든 피해 무시 */
   | { kind: "evade"; every: number; sec: number }
-  /** (2페이즈) 유닛이 가장 센 가로줄을 warn 초 동안 빨갛게 표시 → 그때 그 줄에 있는 유닛 sec 초 기절 (미리 빼면 피함) */
-  | { kind: "bolt"; every: number; warn: number; sec: number }
-  /** (2페이즈) 가장 센 칸 하나를 warn 초 동안 표시 → 그때 그 칸에 있는 유닛 sec 초 붙잡힘(기절) (약한 유닛과 바꿔 두면 미끼) */
-  | { kind: "grab"; every: number; warn: number; sec: number };
+  /**
+   * (2페이즈) 예고 기술: 유닛이 가장 센 곳을 shape 모양으로 warn 초 동안 빨갛게 표시 → 그때 그 칸에 **남아 있는** 유닛 sec 초 기절.
+   * 표시되는 동안 끌어서 옮기면 피함 (약한 유닛을 넣어 두면 미끼). snd = 맞을 때 효과음 tele-<snd>
+   */
+  | { kind: "tele"; shape: TeleShape; every: number; warn: number; sec: number; name: string; snd: string };
 
-/** 보스 2페이즈가 나오는 오염 단계 (이 단계부터, 보스 체력이 phase.at 밑으로 내려가면) */
+/** 예고 모양: 가로줄 · 세로줄 · 한 칸 · 센 칸 둘 · 2×2 · 십자(센 칸 + 상하좌우) */
+export type TeleShape = "row" | "col" | "cell" | "two" | "area" | "plus";
+
+/** 보스 2페이즈가 나오는 첫 오염 단계 */
 export const BOSS_PHASE_GLITCH = 15;
+/**
+ * 단계마다 2페이즈가 나오는 보스 둘 (보스 웨이브) — 단계마다 정해져 있음 (판마다 무작위가 아님 → 다시 시작해도 같음).
+ * 15단계부터 쉬운 조합 → 어려운 조합 순 (웨이브 합), 30단계는 50 · 60
+ */
+export const PHASE_PAIRS: Record<number, [number, number]> = {
+  15: [10, 20],
+  16: [10, 30],
+  17: [10, 40],
+  18: [20, 30],
+  19: [10, 50],
+  20: [20, 40],
+  21: [10, 60],
+  22: [20, 50],
+  23: [30, 40],
+  24: [20, 60],
+  25: [30, 50],
+  26: [30, 60],
+  27: [40, 50],
+  28: [40, 60],
+  29: [50, 60],
+  30: [50, 60],
+};
+/** 이 오염 단계에서 이 보스(웨이브)가 2페이즈를 쓰나 */
+export const phaseOn = (glitch: number, wave: number) => !!PHASE_PAIRS[glitch]?.includes(wave);
+/** 2페이즈 예고 기술 이름 */
+export const phaseSkillName = (d: BossDef) => {
+  const s = d.phase?.skills.find((x) => x.kind === "tele");
+  return s && s.kind === "tele" ? s.name : "";
+};
+/** 이 단계 2페이즈 보스 소개 ("제나 뇌섬일창 · 이반 곰 포옹"), 없으면 "" */
+export const phaseText = (glitch: number) =>
+  (PHASE_PAIRS[glitch] ?? [])
+    .map((w) => BOSSES.find((x) => x.wave === w))
+    .map((d) => (d ? `${d.name.replace("글리치 ", "")} ${phaseSkillName(d)}` : ""))
+    .join(" · ");
 
 export interface BossDef {
   wave: number;
@@ -187,6 +226,11 @@ export const BOSSES: BossDef[] = [
     mres: 0,
     pres: 0,
     skills: [{ kind: "heal", every: 6, pct: 0.04 }],
+    phase: {
+      at: 0.5,
+      skills: [{ kind: "tele", shape: "col", every: 8, warn: 2, sec: 2.5, name: "장마 파도", snd: "wave" }],
+      line: "비 와요… 우산 없으면… 다 젖어요!",
+    },
     line: "우산 밑은… 버그 안 와요… 헤헤…",
     color: "#7FD3FF",
   },
@@ -202,6 +246,11 @@ export const BOSSES: BossDef[] = [
     mres: 0,
     pres: 0,
     skills: [{ kind: "whip", every: 7, n: 2, sec: 2.5 }],
+    phase: {
+      at: 0.5,
+      skills: [{ kind: "tele", shape: "two", every: 7, warn: 2, sec: 3, name: "채찍 난무", snd: "whip" }],
+      line: "제일 잘난 두 명, 앞으로 나와요.",
+    },
     line: "수업 시간에 딴짓하는 유닛은 벌이에요.",
     color: "#FF8FB1",
   },
@@ -217,7 +266,11 @@ export const BOSSES: BossDef[] = [
     mres: 0.2,
     pres: 0,
     skills: [{ kind: "dash", every: 6, sec: 1.5, mult: 3 }],
-    phase: { at: 0.5, skills: [{ kind: "bolt", every: 7, warn: 2, sec: 3 }], line: "뇌섬일창— 그 줄, 다 태워 줄게!" },
+    phase: {
+      at: 0.5,
+      skills: [{ kind: "tele", shape: "row", every: 7, warn: 2, sec: 3, name: "뇌섬일창", snd: "bolt" }],
+      line: "뇌섬일창— 그 줄, 다 태워 줄게!",
+    },
     line: "번개보다 빠르게— 지지직—",
     color: "#FFE15C",
   },
@@ -233,6 +286,11 @@ export const BOSSES: BossDef[] = [
     mres: 0,
     pres: 0.35,
     skills: [{ kind: "shield", every: 10, pct: 0.05 }],
+    phase: {
+      at: 0.5,
+      skills: [{ kind: "tele", shape: "area", every: 8, warn: 2, sec: 3, name: "업화주", snd: "fire" }],
+      line: "불기둥이 따라간다. 도망쳐 봐.",
+    },
     line: "물리로는 못 꺼. 마법이면 몰라도.",
     color: "#FF6A3D",
   },
@@ -248,7 +306,11 @@ export const BOSSES: BossDef[] = [
     mres: 0.5,
     pres: 0,
     skills: [{ kind: "summon", every: 9, n: 3, hp: 1.5 }],
-    phase: { at: 0.5, skills: [{ kind: "grab", every: 8, warn: 2.5, sec: 6 }], line: "제일 센 놈부터… 곰 포옹이다!" },
+    phase: {
+      at: 0.5,
+      skills: [{ kind: "tele", shape: "cell", every: 8, warn: 2.5, sec: 6, name: "곰 포옹", snd: "grab" }],
+      line: "제일 센 놈부터… 곰 포옹이다!",
+    },
     line: "신병들! 저 방어선을 뚫어라!",
     color: "#9FB0C8",
   },
@@ -268,6 +330,11 @@ export const BOSSES: BossDef[] = [
       { kind: "evade", every: 9, sec: 1.2 },
       { kind: "heal", every: 10, pct: 0.03 },
     ],
+    phase: {
+      at: 0.5,
+      skills: [{ kind: "tele", shape: "plus", every: 7, warn: 1.8, sec: 3, name: "질풍 낙하", snd: "wind" }],
+      line: "바람이 내려앉는 곳엔… 아무것도 안 남아.",
+    },
     line: "바람은… 멈추지 않아… 이 세계가 끝날 때까지.",
     color: "#7CF2C2",
   },

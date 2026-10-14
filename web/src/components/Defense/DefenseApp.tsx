@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import NickForm from "@/components/Account/NickForm";
 import { useAuth } from "@/lib/AuthContext";
 import { BALANCE_VER, LAST_WAVE } from "@/lib/defense/balance";
-import { BOSSES } from "@/lib/defense/enemies";
+import { BOSSES, phaseText } from "@/lib/defense/enemies";
 import { UNIT } from "@/lib/defense/units";
 import {
   beginRoom,
@@ -450,7 +450,11 @@ function Menu(p: {
             <Btn
               className="h-[58px] w-[34px] shrink-0 px-0 text-[14px]"
               disabled={p.busy || glitch >= pr.glitchOpen}
-              title={glitch >= pr.glitchOpen ? "아직 열리지 않은 단계예요" : `오염 단계 올리기 — ${GLITCH[glitch + 1]?.rule ?? ""}`}
+              title={
+                glitch >= pr.glitchOpen
+                  ? "아직 열리지 않은 단계예요"
+                  : `오염 단계 올리기 — ${GLITCH[glitch + 1]?.rule ?? ""}${phaseText(glitch + 1) ? ` · 2페이즈: ${phaseText(glitch + 1)}` : ""}`
+              }
               onClick={() => p.onGlitch(glitch + 1)}
             >
               ▶
