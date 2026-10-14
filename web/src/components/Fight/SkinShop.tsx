@@ -200,7 +200,7 @@ export default function SkinShop({ initial = "shop", onClose }: { initial?: Shop
                 key={skin.id}
                 src={artUrl(chIndex(skin), skin.id)}
                 alt={skin.name}
-                className={`absolute bottom-0 left-[38%] h-[96%] -translate-x-1/2 object-contain object-bottom ${PX} [animation:modal-fade_300ms_ease-out]`}
+                className={`absolute bottom-0 left-[38%] h-[96%] -translate-x-1/2 object-contain object-bottom [animation:modal-fade_300ms_ease-out]`}
               />
               <div className="absolute right-[3%] bottom-[4%] flex flex-col items-center rounded-[0.8cqw] bg-black/35 px-[0.6cqw] pt-[0.4cqw]">
                 <span className="font-mono text-[0.85cqw] tracking-widest text-white/50">IN GAME</span>

@@ -703,7 +703,7 @@ export default function Select({
                   key={lookOf(sd)}
                   src={sd === 0 ? artUrl(setup.c1, wornSkin(setup.c1)) : art(c)}
                   alt={c.name}
-                  className={`absolute top-[13%] ${sd === 0 ? "left-[1cqw] object-left-bottom" : "right-[1cqw] object-right-bottom"} z-0 h-[76%] w-[26cqw] object-contain ${PX} transition-[filter,opacity] duration-300 [animation:modal-fade_250ms_ease-out] ${sd === 1 ? "scale-x-[-1]" : ""} ${
+                  className={`absolute top-[13%] ${sd === 0 ? "left-[1cqw] object-left-bottom" : "right-[1cqw] object-right-bottom"} z-0 h-[76%] w-[26cqw] object-contain ${lookOf(sd) === c.id ? PX : ""} transition-[filter,opacity] duration-300 [animation:modal-fade_250ms_ease-out] ${sd === 1 ? "scale-x-[-1]" : ""} ${
                     active || lock[sd] ? "" : "opacity-45 brightness-50"
                   }`}
                   style={{
