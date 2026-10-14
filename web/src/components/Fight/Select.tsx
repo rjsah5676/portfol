@@ -711,7 +711,7 @@ export default function Select({
                 />
                 )}
                 <div
-                  className={`gold-scroll absolute top-[8.8cqw] z-10 max-h-[34.4cqw] overflow-y-auto ${sd === 0 ? "left-[26cqw]" : "right-[26cqw] flex flex-col items-end text-right"} w-[23.4cqw] rounded-[1cqw] bg-black/45 px-[1cqw] py-[0.8cqw] backdrop-blur-[2px]`}
+                  className={`gold-scroll absolute top-[8.8cqw] z-10 max-h-[32.4cqw] overflow-y-auto ${sd === 0 ? "left-[26cqw]" : "right-[26cqw] flex flex-col items-end text-right"} w-[23.4cqw] rounded-[1cqw] bg-black/45 px-[1cqw] py-[0.8cqw] backdrop-blur-[2px]`}
                 >
                   <div className={`mb-[0.6cqw] flex items-center gap-[0.6cqw] ${sd === 1 ? "flex-row-reverse" : ""}`}>
                     <span
@@ -853,13 +853,6 @@ export default function Select({
               >
                 ▶
               </button>
-            </div>
-            <div className={`${KR} text-center text-[1.1cqw] text-white/45`}>
-              {ai
-                ? side === 0
-                  ? keyText("내 캐릭터 고르기 — WASD(방향키) 이동, J(Enter)·한 번 더 클릭 결정, Esc 뒤로")
-                  : `상대(${foe}) 캐릭터 고르기 — Esc(.) 내 캐릭터 다시`
-                : keyText("1P A·D + J 결정 · 2P ←→ + Enter 결정 (Esc / . 취소)")}
             </div>
           </div>
         </>
