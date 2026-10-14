@@ -132,6 +132,24 @@ export default function PokerApp({ rank }: { rank: RankRow[] | null }) {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- 브라우저에서만 알 수 있는 값
     setCanFs(canFullscreen());
   }, []);
+  // 아이폰 사파리: 전체화면이 안 되니 "홈 화면에 추가"(앱)로 안내. 「브라우저에서 계속」을 누르면 이번 접속 동안은 안 물음
+  const [iosWeb, setIosWeb] = useState(false);
+  const [iosSkip, setIosSkip] = useState(false);
+  useEffect(() => {
+    let skip = false;
+    try {
+      skip = sessionStorage.getItem("pk-ios-web") === "1";
+    } catch {}
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 브라우저에서만 알 수 있는 값
+    setIosWeb(isIOS() && !isStandalone());
+    setIosSkip(skip);
+  }, []);
+  const skipIos = () => {
+    setIosSkip(true);
+    try {
+      sessionStorage.setItem("pk-ios-web", "1");
+    } catch {}
+  };
   // 폰에서 뒤로가기가 전체화면만 풀어 버리면(안드로이드 크롬) 방 안에서는 나가기 버튼으로 (TableView 가 "pk-back" 을 받음)
   const selfExit = useRef(false);
   const inTable = useRef(false);
@@ -202,7 +220,8 @@ export default function PokerApp({ rank }: { rank: RankRow[] | null }) {
   // 페이지에 들어와 로비가 처음 뜨면 내 캐릭터가 인사 (소리는 브라우저가 막으면 첫 터치 · 클릭 때 나옴)
   const greeted = useRef(false);
   // 폰에서 "전체화면으로 플레이해 주세요" · "가로로 돌려 주세요" 안내가 덮고 있는 동안은 인사 안 함 (로비가 보일 때 함)
-  const gated = phone && ((!fs && canFs && !standalone) || !land);
+  const iosAsk = phone && iosWeb && !iosSkip;
+  const gated = phone && ((!fs && canFs && !standalone) || iosAsk || !land);
   useEffect(() => {
     if (greeted.current || onIntro || tableId || !wallet || gated) return;
     const look = lookOf(wallet.char, wallet.wear);
@@ -382,7 +401,8 @@ export default function PokerApp({ rank }: { rank: RankRow[] | null }) {
   const ready = !!wallet && !!account && !!profile;
   const fsGate = !fs && canFs && !standalone && phone && ready;
   // 전체화면인데(또는 전체화면이 안 되는 기기에서) 세로로 들고 있음
-  const rotateGate = !fsGate && phone && !land && ready;
+  const iosGate = !fsGate && iosAsk && ready;
+  const rotateGate = !fsGate && !iosGate && phone && !land && ready;
   const showFsBanner = !fs && canFs && !shortLand && !fsGate;
   const stageCls = fit
     ? "flex-none"
@@ -457,6 +477,44 @@ export default function PokerApp({ rank }: { rank: RankRow[] | null }) {
             </button>
           </div>
         )}
+        {/* 아이폰 사파리: 전체화면 대신 앱(홈 화면에 추가)으로 — 사파리 안에선 위를 누르면 주소창이 내려와 막을 수 없음 */}
+        {iosGate && (
+          <div className="pk-fsgate absolute inset-0 z-[60] flex flex-col items-center justify-center gap-[0.8em] overflow-hidden bg-black px-6 pt-[14%] text-center">
+            <GateBg />
+            <p className="relative font-['Black_Han_Sans',sans-serif] text-[1.5em] leading-tight text-white drop-shadow-[0_2px_6px_rgba(0,0,0,0.9)]">
+              아이폰은 앱으로 설치해서 전체화면으로
+            </p>
+            <ol className="relative flex flex-wrap items-stretch justify-center gap-[0.5em] text-[0.9em] text-white/85">
+              <li className="pk-ios-step">
+                <b>1</b>
+                <span>
+                  사파리
+                  <svg viewBox="0 0 24 24" className="mx-[0.25em] inline h-[1.2em] w-[1.2em] align-[-0.25em] text-[#4aa3ff]" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-label="공유">
+                    <path d="M12 3v12M7.5 7.5 12 3l4.5 4.5" />
+                    <path d="M8 10H6a1 1 0 0 0-1 1v9a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-9a1 1 0 0 0-1-1h-2" />
+                  </svg>
+                  공유 버튼
+                </span>
+              </li>
+              <li className="pk-ios-step">
+                <b>2</b>
+                <span>
+                  <span className="text-[#ffd84a]">홈 화면에 추가</span> → 추가
+                </span>
+              </li>
+              <li className="pk-ios-step">
+                <b>3</b>
+                <span>홈 화면의 ANIME POKER 실행</span>
+              </li>
+            </ol>
+            <p className="relative text-[0.8em] text-white/55 drop-shadow-[0_1px_4px_rgba(0,0,0,0.9)]">
+              앱에선 주소창 없이 화면 전체로 쳐요 · 처음 한 번은 다시 로그인해 주세요
+            </p>
+            <button type="button" onClick={skipIos} className="pk-btn pk-btn-ghost relative px-[1.2em] py-[0.45em] text-[0.85em]">
+              브라우저에서 계속
+            </button>
+          </div>
+        )}
         {rotateGate && (
           <div className="absolute inset-0 z-[60] flex flex-col items-center justify-center gap-[1em] bg-black/85 px-6 text-center backdrop-blur-[3px]">
             <svg viewBox="0 0 24 24" className="h-[3.2em] w-[3.2em] text-[#ffd84a]" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
@@ -522,7 +580,7 @@ export default function PokerApp({ rank }: { rank: RankRow[] | null }) {
           </div>
         )}
       </div>
-      {!fs && !shortLand && !standalone && isIOS() && (
+      {!fs && !shortLand && iosWeb && (
         <p className="mx-3 mt-2 text-center text-[11px] text-white/40 sm:mx-0">
           아이폰은 사파리 공유 → <b className="text-white/60">홈 화면에 추가</b>하면 전체화면 앱처럼
           할 수 있어요.

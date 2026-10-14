@@ -3713,6 +3713,29 @@
 }
 
 /* 폰 전체화면 안내 버튼: 가운데 크게, 금빛이 숨 쉬듯 번쩍 */
+/* 아이폰 앱 설치 안내 단계 */
+.pk-ios-step {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  padding: 0.55em 0.85em;
+  border: 1px solid rgba(214, 175, 92, 0.45);
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(3px);
+}
+.pk-ios-step > b {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 1.5em;
+  height: 1.5em;
+  border-radius: 999px;
+  background: #d6af5c;
+  color: #2a1e05;
+  font-size: 0.85em;
+}
 .pk-fsgate-btn {
   box-shadow:
     0 0 0 2px rgba(255, 226, 140, 0.55),
