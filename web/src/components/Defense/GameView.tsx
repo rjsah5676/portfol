@@ -385,7 +385,8 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry }
   useEffect(() => {
     const on = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.metaKey || e.ctrlKey) return;
-      const k = e.key.toLowerCase();
+      // 한/영 상태와 상관없이 (한글 입력이면 key 가 ㅂ · Process 로 옴) — 물리 키(code)로 읽음
+      const k = keyOf(e);
       if (k === "q") run({ t: "summon" });
       else if (k === "w" && sel >= 0) run({ t: "merge", c: sel });
       else if (k === "e" && sel >= 0) sellSel();
@@ -1600,6 +1601,16 @@ function PickModal({ b, run, onClose }: { b: Board; run: (c: Cmd) => boolean; on
 }
 
 const CHEAT_CAT_ICON = { unit: "star", gold: "coin", dmg: "up", buff: "flask" } as const;
+
+/** 눌린 물리 키 → 단축키 글자 (한글 자판 · IME 상태와 상관없이) */
+function keyOf(e: KeyboardEvent): string {
+  const c = e.code;
+  if (/^Key[A-Z]$/.test(c)) return c.slice(3).toLowerCase();
+  if (/^(Digit|Numpad)[0-9]$/.test(c)) return c.slice(-1);
+  if (c === "Space") return " ";
+  if (c === "Escape") return "escape";
+  return (e.key ?? "").toLowerCase();
+}
 
 /** 치트 코드 고르기 — 보스를 잡으면 필드 위에 3장 (고를 때까지 멈춤) */
 function CheatPicker({ b, multi, run }: { b: Board; multi: boolean; run: (c: Cmd) => boolean }) {
