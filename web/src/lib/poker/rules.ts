@@ -146,7 +146,7 @@ export const charOf = (id: unknown): CharId => (CHAR_IDS.includes(id as CharId) 
  * + (live) 로비 대기 영상 idle.webp · 터치 반응 touch-1~3.webp.
  * ready = 그림이 들어왔는지. false 면 원래 캐릭터 그림으로 보임 (사고 입는 것은 됨).
  */
-export type SkinId = "amy-summer" | "yeonseo-summer" | "taeyang-ts" | "mio-dracula";
+export type SkinId = "amy-summer" | "yeonseo-summer" | "taeyang-ts" | "mio-dracula" | "jinwoo-ramen" | "jeongmin-detective";
 export interface Skin {
   id: SkinId;
   char: CharId;
@@ -205,6 +205,26 @@ export const SKINS: Skin[] = [
     ready: true,
     live: true,
     emotes: true,
+  },  // 일반 스킨 (그림만 — 음성 · 이모티콘 · 움직이는 그림은 원래 캐릭터 것)
+  {
+    id: "jinwoo-ramen",
+    char: "jinwoo",
+    name: "라멘집 사장 진우",
+    price: skinPrice("jinwoo-ramen"),
+    blurb: "한 그릇 말아 줄까? 판돈은 국물까지 내가 먹는다!",
+    line: "오늘의 메뉴는 올인이다!",
+    ready: true,
+    live: false,
+  },
+  {
+    id: "jeongmin-detective",
+    char: "jeongmin",
+    name: "탐정 정민",
+    price: skinPrice("jeongmin-detective"),
+    blurb: "범인은… 네 패 안에 있어.",
+    line: "추리 끝. 네 블러핑은 다 보여.",
+    ready: true,
+    live: false,
   },
 ];
 export const SKIN_IDS = SKINS.map((s) => s.id);

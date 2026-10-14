@@ -303,6 +303,90 @@
 288,
 384
 ],
+"char/jeongmin-detective/cutin.webp": [
+1536,
+512
+],
+"char/jeongmin-detective/face-angry.webp": [
+256,
+256
+],
+"char/jeongmin-detective/face-idle.webp": [
+256,
+256
+],
+"char/jeongmin-detective/face-joy.webp": [
+256,
+256
+],
+"char/jeongmin-detective/face-sad.webp": [
+256,
+256
+],
+"char/jeongmin-detective/face-shock.webp": [
+256,
+256
+],
+"char/jeongmin-detective/face-smile.webp": [
+256,
+256
+],
+"char/jeongmin-detective/face-taunt.webp": [
+256,
+256
+],
+"char/jeongmin-detective/face-think.webp": [
+256,
+256
+],
+"char/jeongmin-detective/full.webp": [
+342,
+1024
+],
+"char/jeongmin-detective/hero-win.webp": [
+384,
+576
+],
+"char/jeongmin-detective/pose-idle.webp": [
+288,
+384
+],
+"char/jeongmin-detective/profile.webp": [
+256,
+256
+],
+"char/jeongmin-detective/seat-front-allin.webp": [
+288,
+384
+],
+"char/jeongmin-detective/seat-front-bet.webp": [
+288,
+384
+],
+"char/jeongmin-detective/seat-front-check.webp": [
+288,
+384
+],
+"char/jeongmin-detective/seat-front-die.webp": [
+288,
+384
+],
+"char/jeongmin-detective/seat-front-idle.webp": [
+288,
+384
+],
+"char/jeongmin-detective/seat-front-lose.webp": [
+288,
+384
+],
+"char/jeongmin-detective/seat-front-think.webp": [
+288,
+384
+],
+"char/jeongmin-detective/seat-front-win.webp": [
+288,
+384
+],
 "char/jeongmin/cutin.webp": [
 1536,
 512
@@ -472,6 +556,90 @@
 384
 ],
 "char/jeongmin/seat-side-win.webp": [
+288,
+384
+],
+"char/jinwoo-ramen/cutin.webp": [
+1536,
+512
+],
+"char/jinwoo-ramen/face-angry.webp": [
+256,
+256
+],
+"char/jinwoo-ramen/face-idle.webp": [
+256,
+256
+],
+"char/jinwoo-ramen/face-joy.webp": [
+256,
+256
+],
+"char/jinwoo-ramen/face-sad.webp": [
+256,
+256
+],
+"char/jinwoo-ramen/face-shock.webp": [
+256,
+256
+],
+"char/jinwoo-ramen/face-smile.webp": [
+256,
+256
+],
+"char/jinwoo-ramen/face-taunt.webp": [
+256,
+256
+],
+"char/jinwoo-ramen/face-think.webp": [
+256,
+256
+],
+"char/jinwoo-ramen/full.webp": [
+357,
+1024
+],
+"char/jinwoo-ramen/hero-win.webp": [
+384,
+576
+],
+"char/jinwoo-ramen/pose-idle.webp": [
+288,
+384
+],
+"char/jinwoo-ramen/profile.webp": [
+256,
+256
+],
+"char/jinwoo-ramen/seat-front-allin.webp": [
+288,
+384
+],
+"char/jinwoo-ramen/seat-front-bet.webp": [
+288,
+384
+],
+"char/jinwoo-ramen/seat-front-check.webp": [
+288,
+384
+],
+"char/jinwoo-ramen/seat-front-die.webp": [
+288,
+384
+],
+"char/jinwoo-ramen/seat-front-idle.webp": [
+288,
+384
+],
+"char/jinwoo-ramen/seat-front-lose.webp": [
+288,
+384
+],
+"char/jinwoo-ramen/seat-front-think.webp": [
+288,
+384
+],
+"char/jinwoo-ramen/seat-front-win.webp": [
 288,
 384
 ],

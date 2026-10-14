@@ -114,6 +114,22 @@ export const SHOP: ShopItem[] = [
     price: 20_000,
     was: 30_000,
   },
+  {
+    id: "poker.skin.jinwoo-ramen",
+    game: "poker",
+    kind: "skin",
+    ref: "jinwoo-ramen",
+    name: "라멘집 사장 진우",
+    price: 2_000,
+  },
+  {
+    id: "poker.skin.jeongmin-detective",
+    game: "poker",
+    kind: "skin",
+    ref: "jeongmin-detective",
+    name: "탐정 정민",
+    price: 2_000,
+  },
   // PIXEL FIGHT 스킨 (lib/fight/skins.ts) — 산 것은 inv.fight, 착용은 게임 안 보관함
   {
     id: "fight.skin.igna-fw",
