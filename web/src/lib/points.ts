@@ -92,6 +92,15 @@ export const SHOP: ShopItem[] = [
     name: "한여름의 연서",
     price: 30_000,
   },
+  // PIXEL FIGHT 스킨 (lib/fight/skins.ts) — 산 것은 inv.fight, 착용은 게임 안 보관함
+  {
+    id: "fight.skin.igna-fw",
+    game: "fight",
+    kind: "skin",
+    ref: "igna-fw",
+    name: "불꽃놀이 이그나",
+    price: 15_000,
+  },
 ];
 export const shopItem = (id: unknown) => SHOP.find((s) => s.id === id);
 export const shopOf = (game: PointGame) => SHOP.filter((s) => s.game === game);

@@ -66,14 +66,16 @@ function fxImg(name: string): HTMLImageElement | null {
 /** v2 에셋의 움직이는 탄 그림 (fx/<캐릭터>-<이름>-0..n): 캐릭터·기술 → [이름, 장 수, 판정 높이 대비 배율, 판정 중심 가로 위치] */
 const PROJ_ANIM: Record<string, Partial<Record<"S" | "X", [string, number, number, number]>>> = {
   igna: { S: ["igna-fireball", 4, 2.6, 0.8] },
+  "igna-fw": { S: ["igna-fw-fireball", 4, 2.6, 0.8] },
   lily: { S: ["lily-bubble", 4, 1.3, 0.72], X: ["lily-wave", 4, 1.55, 0.5] },
   zena: { S: ["zena-spear", 4, 3.2, 0.75] },
 };
 /** v2 에셋의 소환(불기둥 등) 그림: 캐릭터 → [이름, 장 수] — 바닥 기준, 판정 높이에 맞춤 */
-const PILLAR_ANIM: Record<string, [string, number]> = { igna: ["igna-pillar", 4], zena: ["zena-bolt", 4] };
+const PILLAR_ANIM: Record<string, [string, number]> = { igna: ["igna-pillar", 4], "igna-fw": ["igna-fw-pillar", 4], zena: ["zena-bolt", 4] };
 /** 캐릭터·기술별 탄 그림: [그림, 판정 크기 대비 그림 높이 배율, 판정 중심이 그림 가로 어디쯤(0~1)] */
 const PROJ_ART: Record<string, Partial<Record<"S" | "X", [string, number, number]>>> = {
   igna: { S: ["igna-fireball", 1.7, 0.78] },
+  "igna-fw": { S: ["igna-fw-fireball-0", 1.7, 0.78] },
 };
 
 /**
@@ -83,6 +85,8 @@ const PROJ_ART: Record<string, Partial<Record<"S" | "X", [string, number, number
 const FX_SETS: Record<string, Record<string, [number, number, boolean]>> = {
   kai: { spark: [4, 0.75, true], guard: [2, 0.6, true], dust: [4, 0.5, false], rush: [4, 0.7, true], burst: [4, 1.3, true] },
   igna: { spark: [4, 0.7, true], guard: [2, 0.6, true], dust: [4, 0.5, false] },
+  // 스킨 (lib/fight/skins.ts): 없는 효과는 캐릭터 기본 그림으로
+  "igna-fw": { spark: [4, 0.7, true], guard: [2, 0.6, true] },
   soyoung: { spark: [4, 0.6, true], guard: [2, 0.6, true], dust: [4, 0.5, false], burst: [4, 1.0, true] },
   lily: { spark: [4, 0.6, true], guard: [2, 0.6, true], dust: [4, 0.5, false] },
   // 제나: flash(일섬 빛줄기)·mark(낙인)·strike(낙뢰)는 drawZap 이, flash 는 공중 L 뇌격돌 꼬리로도 씀
@@ -115,7 +119,7 @@ const FX_SETS: Record<string, Record<string, [number, number, boolean]>> = {
 };
 /** 캐릭터 하나가 쓰는 그림 효과 파일 이름 전부 */
 /** 바닥에 남는 장판 그림 (fx/<이름>-0..3 반복, -in-0..1 나타나기, -out-0..1 꺼지기) — 이그나 업화주 불 장판 */
-const FLOOR_FX: Record<string, string> = { igna: "igna-floor" };
+const FLOOR_FX: Record<string, string> = { igna: "igna-floor", "igna-fw": "igna-fw-floor" };
 const floorNames = (b: string) => [0, 1, 2, 3].map((k) => `${b}-${k}`).concat([`${b}-in-0`, `${b}-in-1`, `${b}-out-0`, `${b}-out-1`]);
 
 function fxNames(id: string): string[] {
@@ -176,7 +180,7 @@ export class FightRenderer {
 
   /** 그림 효과 하나 띄우기 (그 캐릭터에 그 효과 그림이 있을 때만) — 성공하면 true */
   private spawnFx(
-    ch: number,
+    who: Fighter,
     name: string,
     x: number,
     y: number,
@@ -185,7 +189,8 @@ export class FightRenderer {
     ground = false,
     opt: { size?: [number, number]; from?: number; alpha?: number } = {}
   ) {
-    const id = CHARS[ch].id;
+    const own = this.lookOf(who);
+    const id = FX_SETS[own]?.[name] ? own : CHARS[who.ch].id;
     const d = FX_SETS[id]?.[name];
     if (!d) return false;
     this.fx.push({ key: `${id}-${name}`, n: d[0], x, y, t: 0, dur, flip: face < 0, k: d[1], glow: d[2], ground, ...opt });
@@ -218,6 +223,15 @@ export class FightRenderer {
   private bolts: { x: number; y: number; life: number; max: number }[] = [];
   private flashColor = "#fff";
   sheets: (LoadedSheet | null)[] = [null, null];
+  /** 스킨: 자리마다 그림 이름 (lib/fight/skins look — 캐릭터 id 또는 스킨 id, "" = 기본) */
+  looks: [string, string] = ["", ""];
+  /** 지금 그리는 판 (스킨을 자리로 찾으려고) */
+  private cur: State | null = null;
+  /** 그 선수의 그림 이름 (스킨이면 스킨 id) */
+  private lookOf(f: Fighter): string {
+    const i = this.cur && this.cur.p[1] === f ? 1 : 0;
+    return this.looks[i] || CHARS[f.ch].id;
+  }
 
   constructor(private canvas: HTMLCanvasElement) {
     this.g = canvas.getContext("2d")!;
@@ -240,12 +254,13 @@ export class FightRenderer {
   /** 시작 전에 그림이 다 준비됐나 (캐릭터 시트 둘 + 맵 배경 + 두 캐릭터의 탄·기둥·효과 그림) —
    *  덜 됐으면 대신 그린 임시 그림(네모 등)이 잠깐 보이지 않게 */
   ready(s: State) {
+    this.cur = s;
     const map = MAPS[s.map] ?? MAPS[0];
     if (!this.sheets[0] || !this.sheets[1] || (map.bg && !this.bgImage(map.id, map.bg))) return false;
     if (this.fxReady) return true;
     let all = true;
     for (const f of s.p) {
-      for (const n of fxNames(CHARS[f.ch].id)) {
+      for (const n of [...fxNames(CHARS[f.ch].id), ...(this.lookOf(f) !== CHARS[f.ch].id ? fxNames(this.lookOf(f)) : [])]) {
         fxImg(n);
         if (!fxDone.has(n)) all = false;
       }
@@ -309,27 +324,28 @@ export class FightRenderer {
 
   /** 시뮬레이션 이벤트 → 연출 */
   events(evs: Ev[], s: State) {
+    this.cur = s;
     for (const e of evs) {
       const x = e.x / SUB,
         y = screenY(e.h);
       if (e.k === "hit" || e.k === "throw") {
         const a = s.p[e.p];
-        this.spawnFx(a.ch, "spark", x, y, a.face, 12);
+        this.spawnFx(a, "spark", x, y, a.face, 12);
         if (e.k === "hit" && CHARS[a.ch].id === "ivan") {
           // 철곰권: 맞힌 자리에서 앞으로 퍼지는 충격파 / 붉은 폭풍: 큰 폭발
-          if (e.m === "S" && !a.aerial && !isAirF(s, a)) this.spawnFx(a.ch, "wave", x + a.face * 18, y, a.face, 16);
+          if (e.m === "S" && !a.aerial && !isAirF(s, a)) this.spawnFx(a, "wave", x + a.face * 18, y, a.face, 16);
           else if (e.m === "X") {
-            this.spawnFx(a.ch, "burst", x + a.face * 22, y, a.face, 28);
+            this.spawnFx(a, "burst", x + a.face * 22, y, a.face, 28);
             this.flash = 3;
             this.flashColor = "#FFD0D0";
           }
         }
       } else if (e.k === "block" || e.k === "just") {
         const d = s.p[1 - e.p];
-        this.spawnFx(d.ch, "guard", d.x / SUB + d.face * 12, y, d.face, 12);
+        this.spawnFx(d, "guard", d.x / SUB + d.face * 12, y, d.face, 12);
       } else if (e.k === "dash") {
         const a = s.p[e.p];
-        if (e.v === 0) this.spawnFx(a.ch, "dust", a.x / SUB - a.face * 22, screenY(a.h), a.face, 18, true);
+        if (e.v === 0) this.spawnFx(a, "dust", a.x / SUB - a.face * 22, screenY(a.h), a.face, 18, true);
       } else if (e.k === "swap") {
         // 건모 Alt+Tab: 맞히는 순간 공격 동작이 끝나 붙어 있던 창이 사라지므로 따로 띄움
         //  - 지금 두 사람을 감싸는 창 하나 (히트스톱 동안 꽉 참 → 깜빡 → 사라짐) = "창이 바뀜"
@@ -339,7 +355,7 @@ export class FightRenderer {
         const ax = a.x / SUB,
           dx = d.x / SUB;
         const cy = screenY(Math.max(a.h, d.h) + 32 * SUB);
-        this.spawnFx(a.ch, "win", (ax + dx) / 2, cy, a.face, 34, false, {
+        this.spawnFx(a, "win", (ax + dx) / 2, cy, a.face, 34, false, {
           size: [Math.abs(ax - dx) + 84, 96],
           from: 1,
           alpha: 0.85,
@@ -347,7 +363,7 @@ export class FightRenderer {
         const ox = e.x / SUB,
           oy = screenY(e.h + 32 * SUB);
         if (Math.abs(ox - ax) > 24 || Math.abs(oy - cy) > 24) {
-          this.spawnFx(a.ch, "win", ox, oy, a.face, 20, false, { size: [62, 76], from: 2, alpha: 0.5 });
+          this.spawnFx(a, "win", ox, oy, a.face, 20, false, { size: [62, 76], from: 2, alpha: 0.5 });
           for (let i = 0; i < 12; i++) {
             const u = i / 11;
             this.parts.push({
@@ -389,7 +405,7 @@ export class FightRenderer {
         const a = s.p[e.p];
         this.parts.push({ x, y: y - 22, vx: 0, vy: -0.5, life: 30, max: 30, color: "#FF4D4D", size: 1.3, kind: "text", text: "MAX!" });
         this.parts.push({ x, y, vx: 0, vy: 0, life: 14, max: 14, color: "#FF6B6B", size: 22, kind: "ring" });
-        this.spawnFx(a.ch, "aura", a.x / SUB, screenY(a.h + 34 * SUB), a.face, 12, false, { from: 3 });
+        this.spawnFx(a, "aura", a.x / SUB, screenY(a.h + 34 * SUB), a.face, 12, false, { from: 3 });
         this.shake = Math.max(this.shake, 2);
       } else if (e.k === "crush") {
         // 다 모은 철곰권이 가드를 부숨
@@ -401,7 +417,7 @@ export class FightRenderer {
             x, y, vx: (Math.random() - 0.5) * 6, vy: (Math.random() - 0.5) * 6, life: 18, max: 18,
             color: i % 2 ? "#CFEFFF" : "#FF6B6B", size: 1.5, kind: "shard",
           });
-        this.spawnFx(a.ch, "wave", x + a.face * 18, y, a.face, 18);
+        this.spawnFx(a, "wave", x + a.face * 18, y, a.face, 18);
         this.flash = 4;
         this.flashColor = "#fff";
         this.shake = Math.max(this.shake, 7);
@@ -440,9 +456,9 @@ export class FightRenderer {
         this.bsod = BSOD_T;
         this.shake = Math.max(this.shake, 8);
         const ga = s.p[e.p];
-        this.spawnFx(ga.ch, "crash", x, y - 4, ga.face, 30);
-        this.spawnFx(ga.ch, "ring", x, y - 4, ga.face, 22);
-        this.spawnFx(ga.ch, "glitch", x - ga.face * 6, y - 8, ga.face, 40);
+        this.spawnFx(ga, "crash", x, y - 4, ga.face, 30);
+        this.spawnFx(ga, "ring", x, y - 4, ga.face, 22);
+        this.spawnFx(ga, "glitch", x - ga.face * 6, y - 8, ga.face, 40);
         this.parts.push({ x, y: y - 14, vx: 0, vy: -0.5, life: 60, max: 60, color: "#9CC8FF", size: 1.5, kind: "text", text: "FORCE QUIT!" });
         this.parts.push({ x, y, vx: 0, vy: 0, life: 18, max: 18, color: "#5AA0FF", size: 30, kind: "ring" });
         for (let i = 0; i < 14; i++)
@@ -478,7 +494,7 @@ export class FightRenderer {
         this.parts.push({ x, y: y - 14, vx: 0, vy: -0.5, life: 32, max: 32, color: "#FF6B6B", size: 1.5, kind: "text", text: "GRAB!" });
         this.parts.push({ x, y, vx: 0, vy: 0, life: 14, max: 14, color: "#FF8A8A", size: 22, kind: "ring" });
         this.parts.push({ x, y, vx: 0, vy: 0, life: 20, max: 20, color: "#FF4D4D", size: 34, kind: "ring" });
-        this.spawnFx(a.ch, "spark", x, y, a.face, 12);
+        this.spawnFx(a, "spark", x, y, a.face, 12);
         for (let i = 0; i < 12; i++) {
           const an = (i / 12) * Math.PI * 2;
           this.parts.push({
@@ -526,7 +542,7 @@ export class FightRenderer {
         const sl = s.p[1 - e.p];
         if (CHARS[sl.ch].id === "ivan" && sl.st === "atk" && sl.mv === "S") {
           // 곰 포옹 내리꽂기: 균열 + 붉은 고리 (10.12 조금만 크게)
-          this.spawnFx(sl.ch, "crack", x, y + 6, sl.face, 30, true, { size: [160, 54] });
+          this.spawnFx(sl, "crack", x, y + 6, sl.face, 30, true, { size: [160, 54] });
           this.flash = 3;
           this.flashColor = "#FFD0D0";
           this.shake = Math.max(this.shake, 8);
@@ -587,6 +603,7 @@ export class FightRenderer {
 
   /** 연출 한 프레임 진행 (시뮬레이션이 진행됐을 때만) */
   tick(s: State) {
+    this.cur = s;
     if (this.flash > 0) this.flash--;
     if (this.bsod > 0) this.bsod--;
     if (s.stop > 0 || s.freeze > 0) {
@@ -871,7 +888,7 @@ export class FightRenderer {
     const mo = this.motion[i];
     mo.update(f, s, `${anim.list?.[frame] ?? anim.row * 100 + frame}`, fr, x, y);
     for (const sp of mo.spawn.splice(0))
-      this.spawnFx(f.ch, sp.name, x + sp.dx * f.face, y + sp.dy, f.face, sp.name === "burst" ? 26 : 18, true);
+      this.spawnFx(f, sp.name, x + sp.dx * f.face, y + sp.dy, f.face, sp.name === "burst" ? 26 : 18, true);
     // 돌진 아이덴티티: 주먹 앞에 바람 덩어리
     const cm = f.st === "atk" && f.mv ? CHARS[f.ch].moves[f.mv as keyof typeof CHARS[number]["moves"]] : null;
     if (cm && f.mv === "S" && cm.rush && !isAirF(s, f) && f.t >= cm.startup - 2 && f.t < cm.startup + cm.active + 2) {
@@ -950,7 +967,7 @@ export class FightRenderer {
         });
         if (f.t === 1) this.parts.push({ x: hx, y: hy, vx: 0, vy: 0, life: 12, max: 12, color: "#FF6B5A", size: 20, kind: "ring" });
       } else if (isAirF(s, f) && f.t === am.startup) {
-        this.spawnFx(f.ch, "wave", x + f.face * 40, y - 40, f.face, 14, false, { size: [120, 78], from: 1, alpha: 1 });
+        this.spawnFx(f, "wave", x + f.face * 40, y - 40, f.face, 14, false, { size: [120, 78], from: 1, alpha: 1 });
         this.parts.push({ x: x + f.face * 44, y: y - 40, vx: 0, vy: 0, life: 12, max: 12, color: "#FF4D4D", size: 30, kind: "ring" });
         for (let k = 0; k < 12; k++)
           this.parts.push({
@@ -1122,7 +1139,7 @@ export class FightRenderer {
     const w = fl.w;
     // 나타날 때·꺼질 때 서서히
     const a = Math.min(1, p.t / 6, p.life / 20);
-    const fb = FLOOR_FX[CHARS[s.p[p.o].ch].id];
+    const fb = FLOOR_FX[this.lookOf(s.p[p.o])] ?? FLOOR_FX[CHARS[s.p[p.o].ch].id];
     if (fb) {
       // 그림: 처음 8프레임 나타나기 → 일렁임 반복(6프레임마다) → 마지막 12프레임 꺼지기
       const name =
@@ -1202,7 +1219,7 @@ export class FightRenderer {
     const sh = this.sheets[p.o];
     const a = sh?.anims.pillar;
     const fade = Math.min(1, (sm.delay + sm.life - p.t) / 8);
-    const pa = PILLAR_ANIM[CHARS[s.p[p.o].ch].id];
+    const pa = PILLAR_ANIM[this.lookOf(s.p[p.o])] ?? PILLAR_ANIM[CHARS[s.p[p.o].ch].id];
     // 솟음 → 최대(반복) → 사그라짐
     const life = p.t - sm.delay;
     const pk = !pa ? 0 : life < 4 ? 0 : life < 8 ? 1 : sm.delay + sm.life - p.t < 8 ? pa[1] - 1 : 1 + (Math.floor(life / 4) % 2);
@@ -1280,9 +1297,10 @@ export class FightRenderer {
       g.translate(cx, cy);
       g.rotate(Math.atan2(-p.vh, Math.abs(p.vx)) * dir);
       g.translate(-cx, -cy);
-      const anim = PROJ_ANIM[ch.id]?.[p.mv ? "X" : "S"];
+      const lk = this.lookOf(s.p[p.o]);
+      const anim = (PROJ_ANIM[lk] ?? PROJ_ANIM[ch.id])?.[p.mv ? "X" : "S"];
       const aimg = anim ? fxImg(`${anim[0]}-${Math.floor(t / 4) % anim[1]}`) : null;
-      const art = PROJ_ART[ch.id]?.[p.mv ? "X" : "S"];
+      const art = (PROJ_ART[lk] ?? PROJ_ART[ch.id])?.[p.mv ? "X" : "S"];
       const img = art ? fxImg(art[0]) : null;
       if (anim && aimg) {
         const hgt = ((r.hi - r.lo) / SUB) * anim[2];
@@ -1556,6 +1574,7 @@ export class FightRenderer {
   }
 
   draw(s: State) {
+    this.cur = s;
     const g = this.g;
     const k = this.canvas.width / VIEW_W;
     g.setTransform(1, 0, 0, 1, 0, 0);

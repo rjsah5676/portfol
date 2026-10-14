@@ -9,6 +9,8 @@ import { forfeit, newResult, onEnd, settle, type FightResult, type Outcome } fro
 import { BOT_MAX, createFightRating, type Margin } from "./fightRating";
 import { uniqueNickname } from "./poker/nicknames";
 import { botBuild, replayBot } from "./fightBot";
+import { CHARS } from "../../../web/src/lib/fight/chars";
+import { skinOf } from "../../../web/src/lib/fight/skins";
 
 /*
  * 픽셀 격투 온라인 대전
@@ -55,6 +57,8 @@ interface RoomState {
   pick: number;
   delay: number;
   maxRb: number;
+  /** 경기 시작 때 두 선수가 그 캐릭터에 착용한 스킨 ("" = 기본) — 서버가 회원 문서에서 확인 */
+  skins: [string, string];
 }
 interface ChatMsg {
   id: string;
@@ -179,7 +183,7 @@ const BOT_PLAY_MS = 12 * 60_000;
 /** 봇전 결과로 받는 입력 기록 최대 프레임 (3라운드 × 99초 + 연출, 넉넉히) */
 const BOT_MAX_FRAMES = 40_000;
 
-const emptyState = (): RoomState => ({ phase: "wait", match: "", chars: [0, 1], map: 0, pick: -1, delay: 2, maxRb: 10 });
+const emptyState = (): RoomState => ({ phase: "wait", match: "", chars: [0, 1], map: 0, pick: -1, delay: 2, maxRb: 10, skins: ["", ""] });
 
 const CHAT_KEEP = 100;
 const CHAT_SNAPSHOT = 40;
@@ -599,12 +603,28 @@ export function registerFight({ gateway, users, db }: Deps, opts: FightOptions =
     delay: z.number().int().min(0).max(30),
     maxRb: z.number().int().min(0).max(120),
   });
-  gateway.rpc("fight.startMatch", (ctx, raw) => {
+  /** 그 회원이 그 캐릭터에 착용한 스킨 (가진 것만, 비회원 · 없으면 "") */
+  async function wornSkin(uid: string, ch: number): Promise<string> {
+    const id = CHARS[ch]?.id;
+    if (!uid || !id) return "";
+    const d = (await db.col("users").findOne({ _id: uid } as never, { projection: { fightWear: 1, "inv.fight": 1 } }).catch(() => null)) as {
+      fightWear?: Record<string, string>;
+      inv?: { fight?: string[] };
+    } | null;
+    const s = d?.fightWear?.[id];
+    return s && skinOf(s)?.ch === id && (d?.inv?.fight ?? []).includes(s) ? s : "";
+  }
+
+  gateway.rpc("fight.startMatch", async (ctx, raw) => {
     const o = startSchema.parse(raw);
     const { room, uid } = asPlayer(ctx, o.id);
     if (room.hostUid !== uid) throw forbidden();
     notWhileDraining();
     if (!room.players[room.seats[0]] || !room.players[room.seats[1]]) throw bad("상대가 없습니다.");
+    if (room.state.phase === "play") throw bad("이미 경기 중이에요.");
+    const skins = (await Promise.all([0, 1].map((k) => wornSkin(room.seats[k], o.chars[k])))) as [string, string];
+    // (스킨을 읽는 사이에 다른 시작 요청 · 자리 변화가 끼었으면 이번 건 버림)
+    if ((room.state.phase as RoomState["phase"]) === "play" || !room.players[room.seats[0]] || !room.players[room.seats[1]]) throw bad("이미 경기 중이에요.");
     // 랭크전: 한 판만, 맵은 서버가 정한 것
     if (room.rank) {
       if (room.rank.used) throw bad("랭크전은 한 판만 해요.");
@@ -616,7 +636,7 @@ export function registerFight({ gateway, users, db }: Deps, opts: FightOptions =
     const match = orderedId();
     room.watch = [[], []];
     room.watchMatch = match;
-    room.state = { ...room.state, phase: "play", match, chars: o.chars, map: o.map, delay: o.delay, maxRb: o.maxRb };
+    room.state = { ...room.state, phase: "play", match, chars: o.chars, map: o.map, delay: o.delay, maxRb: o.maxRb, skins };
     room.result = newResult(match, [room.seats[0], room.seats[1]]);
     changed(room);
     // 회원이면 온라인 경기 수를 세어 둠 (승패는 끝난 뒤 fight.result 로)
@@ -1022,6 +1042,30 @@ export function registerFight({ gateway, users, db }: Deps, opts: FightOptions =
     if (t.stage === "play") void finishBot(t, 1, null);
     else if (t.stage === "found" || t.stage === "room") (clearTicket(t), setRank(t.uid, { s: "idle" }));
     return null;
+  });
+
+  // ── 스킨: 산 것(inv.fight, 상점은 points.buy) · 캐릭터마다 착용(fightWear.<캐릭터 id>) ──
+  const skinsWire = async (uid: string) => {
+    const d = (await db.col("users").findOne({ _id: uid } as never, { projection: { fightWear: 1, "inv.fight": 1 } })) as {
+      fightWear?: Record<string, string>;
+      inv?: { fight?: string[] };
+    } | null;
+    const owned = (d?.inv?.fight ?? []).filter((x) => skinOf(x));
+    const wear = Object.fromEntries(Object.entries(d?.fightWear ?? {}).filter(([, s]) => owned.includes(s)));
+    return { owned, wear };
+  };
+  gateway.rpc("fight.skins", async (ctx) => (ctx.nick ? skinsWire(ctx.uid) : null));
+  gateway.rpc("fight.wearSkin", async (ctx, raw) => {
+    const o = z.object({ ch: z.string().max(20), skin: z.string().max(40).nullable() }).parse(raw);
+    if (!ctx.nick) throw new AppError("MEMBERS_ONLY", "회원만 쓸 수 있어요.", 403);
+    if (!CHARS.some((c) => c.id === o.ch)) throw bad("없는 캐릭터예요.");
+    if (o.skin === null) await db.col("users").updateOne({ _id: ctx.uid } as never, { $unset: { [`fightWear.${o.ch}`]: "" } } as never);
+    else {
+      if (skinOf(o.skin)?.ch !== o.ch) throw bad("그 캐릭터의 스킨이 아니에요.");
+      const r = await db.col("users").updateOne({ _id: ctx.uid, "inv.fight": o.skin } as never, { $set: { [`fightWear.${o.ch}`]: o.skin } } as never);
+      if (!r.matchedCount) throw new AppError("NOT_OWNED", "아직 갖고 있지 않은 스킨이에요.", 409);
+    }
+    return skinsWire(ctx.uid);
   });
 
   // ── 업적용 기록: 튜토리얼 · AI 대전 단계 (web lib/points.ts fight.tut · fight.ai) ──

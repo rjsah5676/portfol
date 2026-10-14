@@ -14,7 +14,7 @@ const KR = "font-['Nanum_Gothic',sans-serif]";
 const TITLE = "font-['Black_Han_Sans',sans-serif]";
 
 /** 금테 판 */
-function GoldFrame({ children, className = "" }: { children: ReactNode; className?: string }) {
+export function GoldFrame({ children, className = "" }: { children: ReactNode; className?: string }) {
   return (
     <div
       onClick={(e) => e.stopPropagation()}

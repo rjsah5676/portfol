@@ -4,6 +4,7 @@ import { newId } from "./ids";
 import { KeyedMutex } from "./mutex";
 import { metricsOf } from "./achievements";
 import { pictureOf, type UserDoc } from "./users";
+import { skinOf as fightSkinOf } from "../../web/src/lib/fight/skins";
 import { START_MONEY, kstDay, skinOf } from "../../web/src/lib/poker/rules";
 import {
   ACHIEVEMENTS,
@@ -69,6 +70,9 @@ function grantOf(item: ShopItem): { owned: Record<string, unknown>; update: Reco
     const char = skinOf(item.ref)?.char ?? item.ref.split("-")[0];
     return { owned: { "poker.skins": item.ref }, update: { $push: { "poker.skins": item.ref }, $set: { [`poker.wear.${char}`]: item.ref } } };
   }
+  // 격투 스킨: 사자마자 그 캐릭터에 착용 (보관함에서 바꿀 수 있음)
+  const fs = item.game === "fight" && item.kind === "skin" ? fightSkinOf(item.ref) : null;
+  if (fs) return { owned: { "inv.fight": item.ref }, update: { $push: { "inv.fight": item.ref }, $set: { [`fightWear.${fs.ch}`]: item.ref } } };
   return { owned: { [`inv.${item.game}`]: item.ref }, update: { $push: { [`inv.${item.game}`]: item.ref } } };
 }
 

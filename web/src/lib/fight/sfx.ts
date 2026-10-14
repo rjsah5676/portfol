@@ -66,6 +66,9 @@ const SAMPLES: Record<string, number> = {
   "kai-i": 0.55,
   "igna-l": 0.5,
   "igna-i": 0.55,
+  // 스킨 (lib/fight/skins.ts) — 불꽃놀이 이그나: 폭죽 로켓 · 불꽃놀이 연발
+  "igna-fw-l": 0.5,
+  "igna-fw-i": 0.6,
   "soyoung-l": 0.95,
   "soyoung-l-air": 0.45,
   "soyoung-i": 0.5,

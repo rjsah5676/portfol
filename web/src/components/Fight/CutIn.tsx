@@ -4,6 +4,7 @@
  */
 import { useState } from "react";
 import { CHARS } from "@/lib/fight/chars";
+import { artUrl, cutinUrl } from "@/lib/fight/skins";
 
 const KR = "font-['Black_Han_Sans','Nanum_Gothic',sans-serif]";
 
@@ -11,6 +12,7 @@ export interface CutInCfg {
   ch: number;
   right: boolean;
   key: number;
+  skin?: string | null;
 }
 
 export default function CutIn({ cfg }: { cfg: CutInCfg }) {
@@ -42,7 +44,7 @@ export default function CutIn({ cfg }: { cfg: CutInCfg }) {
         />
         <div className={`absolute inset-y-0 ${r ? "right-0 scale-x-[-1]" : "left-0"} w-[46%] overflow-hidden`}>
           <img
-            src={own ? `/fight/cutin/${c.id}.webp` : `/fight/art/${c.id}.webp`}
+            src={own ? cutinUrl(cfg.ch, cfg.skin) : artUrl(cfg.ch, cfg.skin)}
             alt=""
             onError={() => setOwn(false)}
             className={`absolute h-full w-full object-cover ${own ? "" : "object-top"}`}

@@ -16,6 +16,8 @@ import { getFightMe, type FightMe } from "@/firestore/fightRating";
 import { TierEmblem } from "./TierBadge";
 import { useAuth } from "@/lib/AuthContext";
 import { loadSheet } from "@/lib/fight/sprites";
+import { artUrl, look } from "@/lib/fight/skins";
+import { wornSkin } from "@/lib/fight/mySkins";
 import { sfxUi } from "@/lib/fight/sfx";
 import { keyText } from "./KeyCap";
 import { useChessUser } from "@/components/Chess/useChessUser";
@@ -105,6 +107,8 @@ export interface MatchCfg {
   delay: number;
   maxRb: number;
   names: [string, string];
+  /** 두 선수 착용 스킨 (서버가 산 것만 확인해 줌, 빈 값 = 기본) */
+  skins?: [string, string];
   /** 관전 (seat는 안 씀) */
   spectate?: boolean;
   /** 관전하는 방 id */
@@ -384,7 +388,7 @@ function BotRoom({ st, nick, onMatch }: { st: Extract<RankStatus, { s: "bot" }>;
     rankBotStart(st.id, mine)
       .then((r) => {
         const cfg: BotCfg = { id: st.id, chars: [mine, r.botCh], map: r.map, seed: r.seed, botR: r.botR, names: [nick, st.opp.nick] };
-        loadSheet(CHARS[mine].id).catch(() => {});
+        loadSheet(look(mine, wornSkin(mine))).catch(() => {});
         loadSheet(CHARS[r.botCh].id).catch(() => {});
         if (MAPS[r.map]?.bg) new Image().src = MAPS[r.map].bg!;
         setVs(cfg);
@@ -471,7 +475,7 @@ function BotRoom({ st, nick, onMatch }: { st: Extract<RankStatus, { s: "bot" }>;
       {c ? (
         <img
           key={c.id}
-          src={art(c)}
+          src={artUrl(CHARS.indexOf(c), wornSkin(CHARS.indexOf(c)))}
           alt={c.name}
           className={`absolute top-[16%] left-[1cqw] z-0 h-[64%] w-[22cqw] object-contain object-left-bottom ${PX} [animation:modal-fade_250ms_ease-out]`}
           style={{ filter: `drop-shadow(0 0 1cqw ${SEAT_COL[0]})` }}
@@ -937,8 +941,8 @@ function WatchRoom({
   const ps = w.players;
   useEffect(() => {
     if (!st || st.phase !== "play" || !st.match || played.has(st.match) || !ps[0] || !ps[1]) return;
-    loadSheet(CHARS[st.chars[0]].id).catch(() => {});
-    loadSheet(CHARS[st.chars[1]].id).catch(() => {});
+    loadSheet(look(st.chars[0], st.skins?.[0])).catch(() => {});
+    loadSheet(look(st.chars[1], st.skins?.[1])).catch(() => {});
     onMatch({
       match: st.match,
       seat: 0,
@@ -947,6 +951,7 @@ function WatchRoom({
       delay: st.delay,
       maxRb: st.maxRb,
       names: [ps[0].nick, ps[1].nick],
+      skins: st.skins,
       spectate: true,
       room: w.id,
     });
@@ -1112,9 +1117,9 @@ function Room({
     if (!st || st.phase !== "play" || !st.match || played.has(st.match) || vs || !foe || !me) return;
     const names: [string, string] = s.seat === 0 ? [me.nick, foe.nick] : [foe.nick, me.nick];
     // eslint-disable-next-line react-hooks/set-state-in-effect -- 방 상태 변화에 따라 VS 화면
-    setVs({ match: st.match, seat: s.seat, chars: st.chars, map: st.map, delay: st.delay, maxRb: st.maxRb, names });
-    loadSheet(CHARS[st.chars[0]].id).catch(() => {});
-    loadSheet(CHARS[st.chars[1]].id).catch(() => {});
+    setVs({ match: st.match, seat: s.seat, chars: st.chars, map: st.map, delay: st.delay, maxRb: st.maxRb, names, skins: st.skins });
+    loadSheet(look(st.chars[0], st.skins?.[0])).catch(() => {});
+    loadSheet(look(st.chars[1], st.skins?.[1])).catch(() => {});
     if (MAPS[st.map]?.bg) new Image().src = MAPS[st.map].bg!;
     s.setReady(false);
   }, [st, played, vs, foe, me, s]);
@@ -1330,7 +1335,7 @@ function Room({
             {p && c ? (
               <img
                 key={c.id}
-                src={art(c)}
+                src={mine ? artUrl(pch, wornSkin(pch)) : art(c)}
                 alt={c.name}
                 className={`absolute top-[16%] ${sd === 0 ? "left-[1cqw] object-left-bottom" : "right-[1cqw] object-right-bottom"} z-0 h-[64%] w-[22cqw] object-contain ${PX} [animation:modal-fade_250ms_ease-out] ${sd === 1 ? "scale-x-[-1]" : ""}`}
                 style={{ filter: p.ready ? "drop-shadow(0 0 0.2cqw #fff)" : `drop-shadow(0 0 1cqw ${col})` }}

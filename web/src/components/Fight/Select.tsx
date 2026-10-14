@@ -17,6 +17,10 @@ import { SettingsModal } from "./Settings";
 import TechGuide from "./TechGuide";
 import PixelPreview from "./PixelPreview";
 import { TUT_CHAR, TUT_FOE, TUT_MAP } from "@/lib/fight/tutorial";
+import { artUrl, look } from "@/lib/fight/skins";
+import { useMySkins, wornSkin } from "@/lib/fight/mySkins";
+import { useNick } from "@/lib/AuthContext";
+import SkinShop, { type ShopTab } from "./SkinShop";
 
 export type Mode = "tutorial" | "ai" | "online" | "practice";
 export interface Setup {
@@ -219,6 +223,10 @@ export default function Select({
   const [stage, setStage] = useState<"mode" | "char" | "map" | "vs">(entry);
   const [notes, setNotes] = useState(false);
   const [guide, setGuide] = useState(false);
+  /** 상점 · 보관함 창 */
+  const [shop, setShop] = useState<ShopTab | null>(null);
+  // 내 스킨 (착용한 스킨은 1P 쪽 그림 · 도트에 보임)
+  useMySkins(useNick());
   const [lock, setLock] = useState<[boolean, boolean]>([false, false]);
   const [mapCur, setMapCur] = useState(setup.map);
   /** 캐릭터 칸 커서가 '랜덤'에 있나 (쪽마다) */
@@ -563,8 +571,23 @@ export default function Select({
             >
               📖 기술 가이드
             </button>
+            {(["shop", "inv"] as const).map((t) => (
+              <button
+                key={t}
+                type="button"
+                onClick={() => {
+                  sfxUi("ok");
+                  setShop(t);
+                }}
+                className={`${KR} flex cursor-pointer items-center gap-[0.6cqw] rounded-full border-[0.15cqw] border-[#F2C35B]/70 bg-[#140A24]/75 px-[1.3cqw] py-[0.45cqw] text-[1.2cqw] font-bold text-[#FFE9A8] backdrop-blur-[3px] transition-colors hover:bg-[#2B1840]/90`}
+              >
+                {t === "shop" ? "🛒 상점" : "🎒 보관함"}
+                {t === "shop" && <span className="rounded-full bg-[#E8344E] px-[0.5cqw] font-mono text-[0.8cqw] text-white">NEW</span>}
+              </button>
+            ))}
           </div>
           {guide && <TechGuide onClose={() => setGuide(false)} />}
+          {shop && <SkinShop initial={shop} onClose={() => setShop(null)} />}
           {opts && settings && <SettingsModal onClose={() => setOpts(false)}>{settings}</SettingsModal>}
 
           {/* 아래 돌바닥 위: 모드 · 난이도 · 시작 */}
@@ -671,8 +694,8 @@ export default function Select({
                   </div>
                 ) : (
                 <img
-                  key={c.id}
-                  src={art(c)}
+                  key={sd === 0 ? look(setup.c1, wornSkin(setup.c1)) : c.id}
+                  src={sd === 0 ? artUrl(setup.c1, wornSkin(setup.c1)) : art(c)}
                   alt={c.name}
                   className={`absolute top-[13%] ${sd === 0 ? "left-[1cqw] object-left-bottom" : "right-[1cqw] object-right-bottom"} z-0 h-[76%] w-[26cqw] object-contain ${PX} transition-[filter,opacity] duration-300 [animation:modal-fade_250ms_ease-out] ${sd === 1 ? "scale-x-[-1]" : ""} ${
                     active || lock[sd] ? "" : "opacity-45 brightness-50"
@@ -723,7 +746,12 @@ export default function Select({
                     className={`absolute bottom-[1cqw] ${sd === 0 ? "left-[1cqw]" : "right-[1cqw]"} z-10 flex flex-col items-center rounded-[0.8cqw] border border-white/15 bg-black/55 px-[0.4cqw] pt-[0.3cqw] backdrop-blur-[2px]`}
                   >
                     <span className={`${KR} text-[0.9cqw] text-white/50`}>게임 속 모습</span>
-                    <PixelPreview key={c.id} id={c.id} flip={sd === 1} className="h-[10cqw] w-[9cqw]" />
+                    <PixelPreview
+                      key={sd === 0 ? look(setup.c1, wornSkin(setup.c1)) : c.id}
+                      id={sd === 0 ? look(setup.c1, wornSkin(setup.c1)) : c.id}
+                      flip={sd === 1}
+                      className="h-[10cqw] w-[9cqw]"
+                    />
                   </div>
                 )}
               </div>

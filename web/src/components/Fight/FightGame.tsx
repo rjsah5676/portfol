@@ -15,6 +15,8 @@ import {
   type State,
 } from "@/lib/fight/sim";
 import { loadSheet } from "@/lib/fight/sprites";
+import { look } from "@/lib/fight/skins";
+import { wornSkin } from "@/lib/fight/mySkins";
 import {
   sfxBell,
   sfxBlock,
@@ -141,6 +143,8 @@ export default function FightGame() {
   const [hud, setHud] = useState<Hud | null>(null);
   // 필살기 컷인 (쓴 순간 0.6초)
   const [cutin, setCutin] = useState<CutInCfg | null>(null);
+  /** 이번 경기 두 선수 스킨 (얼굴 · 컷인) */
+  const [skins, setSkins] = useState<[string | null, string | null]>([null, null]);
   const [muted, setMuted] = useState(false);
   /** 효과음·배경음 음량 (0~1) */
   const [vol, setVol] = useState({ sfx: 0.8, bgm: 0.7 });
@@ -385,6 +389,13 @@ export default function FightGame() {
           [setup.c1, setup.c2],
           setup.map < 0 && setup.rolled !== undefined && MAPS[setup.rolled] ? setup.rolled : pickMap()
         );
+    // 스킨: 온라인은 서버가 정해 준 것(산 것만), 그 밖엔 내 자리(1P)만 내가 착용한 것
+    const skinNow: [string | null, string | null] = ol
+      ? [ol.skins?.[0] || null, ol.skins?.[1] || null]
+      : [wornSkin(s.p[0].ch), null];
+    const looks: [string, string] = [look(s.p[0].ch, skinNow[0]), look(s.p[1].ch, skinNow[1])];
+    r.looks = looks;
+    setSkins(skinNow);
     const net = ol && !watching ? sessRef.current?.net : null;
     // 관전용: 내 확정 입력을 서버에 조금씩 올림 (관전자는 두 선수 입력으로 같은 경기를 다시 돌림)
     const log = ol && net && sessRef.current ? new InputLog(sessRef.current.id, ol.match, ol.seat, ol.delay) : null;
@@ -452,7 +463,13 @@ export default function FightGame() {
     let raf = 0;
     let doneReported = false;
     setResult(null);
-    Promise.all([loadSheet(CHARS[s.p[0].ch].id), loadSheet(CHARS[s.p[1].ch].id)])
+    const sheetOf = (i: number) =>
+      loadSheet(looks[i]).catch(() => {
+        // 스킨 시트를 못 받으면 기본 그림으로
+        r.looks[i] = CHARS[s.p[i].ch].id;
+        return loadSheet(CHARS[s.p[i].ch].id);
+      });
+    Promise.all([sheetOf(0), sheetOf(1)])
       .then(([a, b]) => {
         r.sheets = [a, b];
       })
@@ -634,9 +651,13 @@ export default function FightGame() {
         // 소리
         const elOf = (p: number) => SFX_EL[CHARS[s.p[p].ch].id] ?? "wind";
         // 지금 쓰는 L·I에 캐릭터 소리 파일이 있으면 탄·돌진 합성음은 생략
+        /** 기술 소리 파일 이름: 스킨 소리가 있으면 그것, 없으면 캐릭터 기본 */
+        const sndOf = (p: number, kind: "l" | "i", air: boolean) =>
+          hasSkillSfx(looks[p], kind, air) ? looks[p] : CHARS[s.p[p].ch].id;
         const skillFile = (p: number) => {
           const f = s.p[p];
-          return (f.mv === "S" || f.mv === "X") && hasSkillSfx(CHARS[f.ch].id, f.mv === "S" ? "l" : "i", !!f.aerial);
+          const kind = f.mv === "S" ? "l" : "i";
+          return (f.mv === "S" || f.mv === "X") && hasSkillSfx(sndOf(p, kind, !!f.aerial), kind, !!f.aerial);
         };
         evs ??= s.ev;
         for (const e of evs) {
@@ -657,7 +678,7 @@ export default function FightGame() {
             if (e.v === 1) sfxLand();
             // 이반 곰 포옹 내리꽂기
             const sl = s.p[1 - e.p];
-            if (e.v === 1 && sl.st === "atk" && sl.mv === "S" && sl.aerial && CHARS[sl.ch].moves.S.air?.hug) sfxSkill(CHARS[sl.ch].id, "l", true);
+            if (e.v === 1 && sl.st === "atk" && sl.mv === "S" && sl.aerial && CHARS[sl.ch].moves.S.air?.hug) sfxSkill(sndOf(1 - e.p, "l", true), "l", true);
           }
           else if (e.k === "proj") {
             if (!skillFile(e.p)) sfxProj(elOf(e.p), s.p[e.p].mv === "X");
@@ -671,7 +692,7 @@ export default function FightGame() {
           else if (e.k === "crush") sfxIvan("crush");
           else if (e.k === "super") {
             sfxSuper();
-            const cut = { ch: s.p[e.p].ch, right: e.p === 1, key: s.f };
+            const cut = { ch: s.p[e.p].ch, right: e.p === 1, key: s.f, skin: skinNow[e.p] };
             setCutin(cut);
             setTimeout(() => setCutin((c) => (c === cut ? null : c)), 650);
           }
@@ -702,7 +723,7 @@ export default function FightGame() {
             const hugM = f.mv === "S" && !!f.aerial && !!CHARS[f.ch].moves.S.air?.hug;
             // 곰 포옹 덮치기: 묵직하게 휙 (헛쳐도 들림)
             if (hugM && f.t >= su && (fresh || prevT[i] < su)) sfxWhoosh(true, "fist");
-            if (!hugM && f.t >= su && (fresh || prevT[i] < su)) sfxSkill(CHARS[f.ch].id, f.mv === "S" ? "l" : "i", !!f.aerial);
+            if (!hugM && f.t >= su && (fresh || prevT[i] < su)) sfxSkill(sndOf(i, f.mv === "S" ? "l" : "i", !!f.aerial), f.mv === "S" ? "l" : "i", !!f.aerial);
           }
         }
         if (process.env.NODE_ENV !== "production")
@@ -990,14 +1011,14 @@ export default function FightGame() {
         <canvas ref={canvasRef} className="block aspect-video w-full [image-rendering:pixelated]" />
         {fsBtn(true)}
         {cutin && <CutIn key={cutin.key} cfg={cutin} />}
-        {winCh && hud && hud.pt >= 80 && <WinQuote ch={hud.ch[hud.winner]} right={hud.winner === 1} />}
+        {winCh && hud && hud.pt >= 80 && <WinQuote ch={hud.ch[hud.winner]} right={hud.winner === 1} skin={skins[hud.winner]} />}
         {hud && (
           <div className="pointer-events-none absolute inset-0 flex flex-col justify-between px-[1.6cqw] py-[1.4cqw]">
             <style>{HUD_CSS}</style>
             <div className="flex items-start gap-[1.4cqw]">
-              <PlayerTop ch={hud.ch[0]} hp={hud.hp[0]} tag={names[0]} />
+              <PlayerTop ch={hud.ch[0]} hp={hud.hp[0]} tag={names[0]} skin={skins[0]} />
               <TimerBox sec={hud.sec} round={hud.round} wins={hud.wins} hurry={hud.sec <= 10 && hud.phase === "fight"} />
-              <PlayerTop ch={hud.ch[1]} hp={hud.hp[1]} tag={names[1]} right />
+              <PlayerTop ch={hud.ch[1]} hp={hud.hp[1]} tag={names[1]} skin={skins[1]} right />
             </div>
             <div className={`flex items-end justify-between ${result ? "invisible" : ""}`}>
               <PlayerBottom ch={hud.ch[0]} meter={hud.meter[0]} cd={hud.cd[0]} />
