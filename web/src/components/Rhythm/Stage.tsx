@@ -1316,12 +1316,14 @@ export default function Stage({
 
     const draw = (t: number) => {
       const laneW = W / 4;
-      // 박자 위상 (0: 박자 순간) → 판정선·배경이 박자에 맞춰 번쩍
+      // 마디 위상 (0: 마디 첫 박) → 판정선이 마디마다 한 번 살짝 번쩍
+      // (박마다 판정선·배경이 번쩍이던 건 눈에 거슬려서 마디마다로 줄이고 배경 번쩍임은 뺌)
       const bt = t - (song.beatOffset ?? 0);
-      const beatPh = bt > 0 ? (((bt % beatSec) + beatSec) % beatSec) / beatSec : 1;
-      const pulse = t > 0 ? Math.exp(-beatPh * 5) : 0;
+      const barSec = beatSec * 4;
+      const barPh = bt > 0 ? (((bt % barSec) + barSec) % barSec) / beatSec : 4;
+      const pulse = t > 0 ? Math.exp(-barPh * 5) : 0;
       shownScore += (engine.score - shownScore) * 0.18;
-      drawBackdrop(t, pulse);
+      drawBackdrop(t, 0);
       // 죽고 나서 보는 중이면 미니 화면은 지금 곡 시각으로 (내 레인만 멈춤)
       if (minis) drawMinis(watchingNow ? now() - judgeSec() : t);
       else drawBoard();
