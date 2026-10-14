@@ -161,6 +161,16 @@ cd web && POKER_E2E=1 npx next dev            # → /games/defense/?fake=admin:�
 - 화면: 이어하기(`DefenseApp` localStorage `pgd-resume:<uid>` 2초마다 → `Controller.restore` 로 기록을 다시 돌려 따라잡음, 3.5시간) · 포기하기 · DPS 창(필드 오른쪽 위) · (v1.2.1 에서 클릭 이동 삭제 — 끌어서만) · 재화 말풍선(`ui.tsx Tip`, `Hub CUR_INFO`) · 도트 스크롤바 · 마우스 크기(소리 창, `data-cur` + `cursor-3x/4x/6x.png`)
 - 효과: 공격 모양 유닛별 `render.ts HIT_KIND/drawShot` · 공격 동작 세력별 `attackPose` · 소환 `Fx spawn`(빛기둥 + 고리) · 효과음 `spawn`(레어 · 에픽 소환) · `reward` · `chest-open`
 
+### v1.9 BETA — 오늘의 도전 (고스트) · 심연 변이
+- **오늘의 도전** `defense.start {mode:"daily"}`: 시드 = `dailySeed(KST 날짜)` (모두 같음), 로드아웃 = `cleanLoadout(DAILY_RULE)` (영구 성장 없음 · 오염 0), 순위표 키 `${BALANCE_VER}:d${날짜}` — 판 수 제한 없이 최고 기록만
+  - finish: 판 보상 · 미션 · 패스 · 보물방 · 단계 기록은 안 함(onRun 안 부름). 그날 첫 완료만 `meta.dailyFirst` → `DAILY_FIRST` (조각 300 · 코어 2, 프로필 `dailyAt`). 최고 기록일 때 rank 문서에 `log` 저장 (rank 목록에선 projection 으로 뺌)
+  - `defense.ghost`: 오늘 1등(내가 1등이면 2등) · 내 최고의 log → 클라이언트 `GhostPanel`(GameView) 이 `replayer` 로 내 판과 같은 tick 까지 따라 돌림 (같은 시드 · 같은 규칙이라 기록만으로 그 판). 필드 왼쪽 위
+  - 화면: 메뉴 「오늘의 도전」(4칸 줄) · 랭킹 탭 · 판 끝 「오늘의 도전 n위 · 첫 완료 보상」 · 이어하기 표시
+- **심연 변이** `progress.ts MUTATORS` · `GlitchDef.mut` (deepGlitch 가 `mutatorsOf(lv)`):
+  - split 분열 16+: `die()` 에서 엘리트 · 대형(size 2) 적 → 체력 30% child 둘 (child · 보스 · 균열 · 보물은 안 갈라짐)
+  - lock 봉인 21+: `startWave` 에서 유닛 있는 칸 2개(b.rng) → `b.sealed`, 그 칸은 공격 안 함. 옮기면 풀림(칸 기준). 화면 보라 사슬 + 첫 번만 안내. 봇은 tele 피하기와 같은 `dodge`
+  - defense-sim (성장 max, 8판): 오염 18 클리어율 0~38% → 0~13%, 오염 23 0~25% → 0~10% (평균 웨이브는 비슷, 끝이 더 어려움) — 주인: 난이도 올라가도 됨
+
 ### v1.8.2 — 효과음 정식 (일레븐랩스 10개: boss-phase · tele-* · treasure-open · treasure-coin, 최대 -19~-25 dB 로 맞춤 · 앞뒤 무음 자름)
 
 ### v1.8 BETA — 보물방

@@ -11,6 +11,7 @@ import {
   createRoom,
   finishRun,
   getDefenseRank,
+  getGhost,
   joinRoom,
   meta,
   leaveRoom,
@@ -22,6 +23,7 @@ import {
   startRun,
   watchLobby,
   watchRoom,
+  type DefenseGhost,
   type DefenseProfile,
   type DefenseRankRow,
   type FinishOut,
@@ -66,7 +68,7 @@ import { FACTION_COLOR, FACTION_NAME, FACTIONS } from "@/lib/defense/units";
 
 type Screen =
   | { k: "menu" }
-  | { k: "solo"; ctrl: Controller; ranked: boolean; key: number; mode: RankBoard; lo: Loadout | null }
+  | { k: "solo"; ctrl: Controller; ranked: boolean; key: number; mode: RankBoard; lo: Loadout | null; ghost?: DefenseGhost | null }
   | { k: "hub"; tab?: HubTab }
   | { k: "shop"; tab?: HubTab }
   | { k: "lobby" }
@@ -99,13 +101,16 @@ export default function DefenseApp() {
     setNote("");
     let seed = (Math.random() * 2 ** 31) >>> 0,
       run: string | null = null,
-      lo: Loadout | null = null;
+      lo: Loadout | null = null,
+      ghost: DefenseGhost | null = null;
     if (member) {
       try {
         const r = await startRun(mode);
         seed = r.seed;
         run = r.run;
         lo = r.loadout;
+        // 오늘의 도전: 1등(내가 1등이면 2등) 고스트, 없으면 내 최고 기록
+        if (mode === "daily") ghost = await getGhost().then((g) => g.top ?? g.mine, () => null);
       } catch (e) {
         setNote(`랭킹 서버에 닿지 않아 연습 판으로 시작해요 (${(e as Error).message})`);
       }
@@ -118,6 +123,7 @@ export default function DefenseApp() {
       key: Date.now(),
       mode,
       lo,
+      ghost,
     });
   };
 
@@ -177,6 +183,7 @@ export default function DefenseApp() {
         key={screen.key}
         ctrl={ctrl}
         admin={admin}
+        ghost={screen.ghost ? { data: screen.ghost, lo: screen.lo } : null}
         onExit={() => (setScreen({ k: "menu" }), void loadProf())}
         onRetry={() => void startSolo(screen.mode)}
         finish={async () => {
@@ -242,6 +249,7 @@ export default function DefenseApp() {
         onResume={() => resume && doResume(resume)}
         onDropResume={() => (clearResume(saveKey), setResume(null))}
         onSolo={() => void startSolo("season")}
+        onDaily={() => void startSolo("daily")}
         onGlitch={(g) => prof && void meta.setLoad({ ...prof.load, glitch: g }).then(setProf, () => {})}
         onShop={() => setScreen({ k: "shop" })}
         onHub={(tab) => setScreen({ k: "hub", tab })}
@@ -286,6 +294,8 @@ function Menu(p: {
   onDropResume(): void;
   onLogin(): void;
   onSolo(): void;
+  /** 오늘의 도전 (회원) */
+  onDaily(): void;
   onShop(): void;
   /** 오염 단계 바꾸기 (메뉴에서 바로) */
   onGlitch(g: number): void;
@@ -408,7 +418,7 @@ function Menu(p: {
           {p.resume && (
             <>
               <Btn tone="gold" arrow className="dfn-pulse h-[26px] px-3 text-[12px] font-bold" onClick={p.onResume} title="새로고침 · 튕기기 전에 하던 판을 그 자리부터">
-                ▶ 이어하기 — {p.resume.run ? "시즌" : "연습"} {p.resume.wave}웨이브
+                ▶ 이어하기 — {p.resume.run ? (p.resume.mode === "daily" ? "오늘의 도전" : "시즌") : "연습"} {p.resume.wave}웨이브
               </Btn>
               <Btn className="h-[26px] w-[26px] text-[12px]" onClick={p.onDropResume} title="저장된 판 지우기">
                 ✕
@@ -501,19 +511,28 @@ function Menu(p: {
             )}
           </Btn>
         </div>
-        <div className="grid grid-cols-3 gap-2.5">
+        <div className="grid grid-cols-4 gap-2">
           <Btn
-            className="h-[38px] text-[13px] font-bold"
+            tone="arcane"
+            className="h-[38px] px-1 text-[13px] font-bold"
+            onClick={p.onDaily}
+            disabled={!p.member || p.busy}
+            title={p.member ? "오늘의 도전 — 모두 같은 시드 · 영구 성장 없이 실력만 · 1등 고스트와 같이 달려요 (하루 첫 판 보상)" : "회원만"}
+          >
+            오늘의 도전
+          </Btn>
+          <Btn
+            className="h-[38px] px-1 text-[13px] font-bold"
             onClick={p.onMulti}
             disabled={!p.member}
             title={p.member ? "" : "회원만"}
           >
             함께 하기
           </Btn>
-          <Btn className="h-[38px] text-[13px]" onClick={p.onRank}>
+          <Btn className="h-[38px] px-1 text-[13px]" onClick={p.onRank}>
             <Icon n="star" size={12} /> 랭킹
           </Btn>
-          <Btn className="h-[38px] text-[13px]" onClick={p.onCodex}>
+          <Btn className="h-[38px] px-1 text-[13px]" onClick={p.onCodex}>
             <Icon n="book" size={12} /> 도감
           </Btn>
         </div>
@@ -584,6 +603,22 @@ function FinishNote({ r }: { r: FinishOut }) {
   const w = r.reward;
   const gb = w?.gbest;
   const tr = w?.treasure;
+  if (r.mode === "daily")
+    return (
+      <span className="flex flex-col items-center gap-1.5">
+        <span>
+          오늘의 도전 <b className="text-[#c9a6ff]">{r.rank}위</b>
+          {r.best ? <b className="ml-2 text-[#7ef3ff]">오늘 최고 기록!</b> : <span className="ml-2 text-white/50">(오늘 최고 기록은 그대로)</span>}
+        </span>
+        {r.daily && (
+          <span className="dfn-pop flex items-center gap-3 text-[13px]">
+            <span className="text-[var(--gold)]">오늘 첫 완료</span>
+            {!!r.daily.pieces && <Cur k="piece" n={`+${r.daily.pieces}`} />}
+            {!!r.daily.cores && <Cur k="core" n={`+${r.daily.cores}`} className="text-[#ffb3ee]" />}
+          </span>
+        )}
+      </span>
+    );
   return (
     <span className="flex flex-col items-center gap-1.5">
       {tr && (
@@ -658,8 +693,13 @@ function RankTabs() {
         <Btn tone={board === "season" ? "main" : "ghost"} className="h-8 px-3 text-[13px] font-bold" onClick={() => setBoard("season")}>
           시즌
         </Btn>
+        <Btn tone={board === "daily" ? "arcane" : "ghost"} className="h-8 px-3 text-[13px] font-bold" onClick={() => setBoard("daily")}>
+          오늘의 도전
+        </Btn>
         <span className="ml-2 text-[12px] text-[var(--mute)]">
-          {`영구 성장 적용 · 오염 단계가 높을수록 위 · 밸런스 ${BALANCE_VER}`}
+          {board === "daily"
+            ? "오늘 하루 · 모두 같은 시드 · 영구 성장 없음 · 자정(KST)에 새로"
+            : `영구 성장 적용 · 오염 단계가 높을수록 위 · 밸런스 ${BALANCE_VER}`}
         </span>
       </div>
       <RankList key={board} board={board} />

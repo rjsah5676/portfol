@@ -694,6 +694,20 @@ export function draw(ctx: CanvasRenderingContext2D, b: Board, v: View, opt: { ra
 
   drawFx(ctx, v);
 
+  // 심연 변이 「봉인」: 보라색 사슬 (그 칸 유닛은 공격 안 함 — 옮기면 풀림)
+  for (const i of b.sealed) {
+    const x = (cellX(i) - 0.5) * CELL,
+      y = (cellY(i) - 0.5) * CELL;
+    ctx.fillStyle = "rgba(40,10,70,0.55)";
+    ctx.fillRect(x + 2, y + 2, CELL - 4, CELL - 4);
+    ctx.fillStyle = "#a66bff";
+    for (let k = 4; k < CELL - 4; k += 6) {
+      ctx.fillRect(P(x + k), P(y + k), 4, 4);
+      ctx.fillRect(P(x + CELL - k - 4), P(y + k), 4, 4);
+    }
+    pxText(ctx, "봉인", x + CELL / 2, y + CELL - 10, 11, "#d9c2ff", 1);
+  }
+
   // 보스 2페이즈 예고: 표시된 칸이 빨갛게 깜빡이고 남은 시간 막대 (그 전에 유닛을 옮기면 피함)
   if (b.tele) {
     const tl = b.tele;

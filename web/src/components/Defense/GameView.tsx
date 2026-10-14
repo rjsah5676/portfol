@@ -46,7 +46,9 @@ import {
 } from "@/lib/defense/units";
 import type { Controller } from "./controller";
 import { RelicIcon } from "./Hub";
-import { RELIC, RES, relicDesc, resDesc, treasureReward } from "@/lib/defense/progress";
+import { RELIC, RES, relicDesc, resDesc, treasureReward, type Loadout } from "@/lib/defense/progress";
+import { replayer, type Replayer } from "@/lib/defense/replay";
+import type { DefenseGhost } from "@/realtime/defense";
 import { BENCH_W, CW, FH2, cellAt, draw, newView, pushFx } from "./render";
 import {
   Bar,
@@ -88,12 +90,14 @@ export interface GameViewProps {
   finish?: () => Promise<ReactNode>;
   onExit(): void;
   onRetry?(): void;
+  /** 오늘의 도전 고스트 (같은 시드 · 같은 규칙 — 기록을 내 판과 같은 tick 까지 따라 돌림) */
+  ghost?: { data: DefenseGhost; lo: Loadout | null } | null;
 }
 
 type Toast = { id: number; text: ReactNode; tone?: "bad" | "good" | "gold" };
 type ModalKind = "patch" | "pick" | "recipe" | "mission" | "codex" | "pause" | "dev" | null;
 
-export default function GameView({ ctrl, names, admin, finish, onExit, onRetry }: GameViewProps) {
+export default function GameView({ ctrl, names, admin, finish, onExit, onRetry, ghost }: GameViewProps) {
   const [, force] = useReducer((x: number) => x + 1, 0);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const viewRef = useRef(newView());
@@ -146,6 +150,7 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry }
     }
   });
   const autoSent = useRef(-1);
+  const sealTold = useRef(false);
   // 이번 판 보물방 당첨이면 시작할 때 한 번 알림
   useEffect(() => {
     if (ctrl.board.mods.treasure > 0 && ctrl.board.wave === 0)
@@ -211,6 +216,12 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry }
       case "boss":
         sfx("boss");
         setBossLine({ id: Math.random(), boss: e.boss });
+        break;
+      case "seal":
+        if (!sealTold.current) {
+          sealTold.current = true;
+          toast("심연 변이 「봉인」 — 보라 사슬 칸의 유닛은 이번 웨이브 공격을 못 해요 (옮기면 풀려요)", "bad");
+        }
         break;
       case "tele":
         if (e.hit === null) sfx("tele-warn");
@@ -753,6 +764,7 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry }
           </button>
         </div>
         {showDps && <DpsOverlay b={b} dps={dpsNow} />}
+        {ghost && <GhostPanel ctrl={ctrl} ghost={ghost} />}
         {/* 다음 웨이브 부르기 (왼쪽 위) — 적이 다 나온 뒤 · 남은 시간만큼 골드 */}
         {!b.result && !b.cheat && b.phase !== "boss" && (
           <div className="absolute top-1.5 left-1.5 z-10 flex items-center gap-1">
@@ -1657,6 +1669,46 @@ function BossIntro({ boss, phase, onDone }: { boss: number; phase: boolean; onDo
           </p>
         )}
       </div>
+    </div>
+  );
+}
+
+/**
+ * 오늘의 도전 고스트: 1등(또는 2등) 기록을 내 판과 같은 tick 까지 돌려 옆에 보여 줌.
+ * 같은 시드 · 같은 규칙이라 기록만 다시 돌리면 그 사람 판 그대로 (HUD 가 다시 그릴 때마다 따라잡음)
+ */
+function GhostPanel({ ctrl, ghost }: { ctrl: Controller; ghost: { data: DefenseGhost; lo: Loadout | null } }) {
+  const [r] = useState<Replayer>(() => {
+    const x = replayer(ctrl.game.seed, 1, ghost.data.log, [ghost.lo]);
+    x.game.boards[0].fx = null;
+    x.game.boards[0].ev = null;
+    return x;
+  });
+  const gap = ctrl.game.tick - r.game.tick;
+  if (gap > 0) r.run(gap);
+  const gb = r.game.boards[0];
+  const me = ctrl.board;
+  const best = gb.cells.reduce((m, c) => (c.def && UNIT[c.def].grade > m ? UNIT[c.def].grade : m), -1);
+  const diff = me.wave - gb.wave;
+  return (
+    <div className="pointer-events-none absolute top-9 left-1.5 z-10 w-[200px] bg-[#0a0816]/85 px-1.5 py-1 text-[12px] leading-[16px] shadow-[0_0_0_2px_#2a2350]">
+      <p className="flex justify-between">
+        <b className="text-[#c9a6ff]">GHOST · {ghost.data.nick}</b>
+        <span className="text-[var(--dim)]">{ghost.data.rank}위</span>
+      </p>
+      {gb.result ? (
+        <p className="text-[var(--mute)]">{gb.result.win ? `클리어 ${fmtTime(gb.result.tick / TPS)}` : `W${gb.result.wave}에서 끝`}</p>
+      ) : (
+        <p className="text-[var(--mute)]">
+          W{gb.wave} · 처치 {gb.kills}
+          {best >= 0 && <span style={{ color: GRADE_COLOR[best] }}> · {GRADE_NAME[best]}</span>}
+        </p>
+      )}
+      {!gb.result && (
+        <p className={diff > 0 ? "text-[var(--green)]" : diff < 0 ? "text-[var(--red)]" : "text-[var(--mute)]"}>
+          나 W{me.wave} {diff > 0 ? `(+${diff} 앞섬)` : diff < 0 ? `(${diff} 뒤처짐)` : "(같음)"}
+        </p>
+      )}
     </div>
   );
 }

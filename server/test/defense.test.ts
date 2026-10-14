@@ -238,6 +238,35 @@ describe("픽셀 글리치 디펜스 엔진", () => {
     expect(modsOf({ treasure: 30 }).treasure).toBe(0);
   });
 
+  it("심연 변이: 분열(16+) 엘리트가 둘로 · 봉인(21+) 웨이브마다 유닛 칸 2개 공격 안 함", () => {
+    expect(GLITCH[15].mut).toEqual([]);
+    expect(GLITCH[16].mut).toEqual(["split"]);
+    expect(GLITCH[21].mut).toEqual(["split", "lock"]);
+    // 봉인
+    const g = newGame(21, 1, [{ glitch: 21 }]);
+    const b = g.boards[0];
+    expect(apply(g, 0, { t: "cheat", i: 0 })).toBeNull();
+    const id = UNITS.find((u) => u.faction === "knight" && u.grade === 2)!.id;
+    for (const i of [0, 1, 2]) b.cells[i] = { def: id, units: [{ cd: 0, ult: 0, stun: 0 }] };
+    b.dirty = true;
+    expect(apply(g, 0, { t: "next" })).toBeNull(); // 준비 건너뛰고 1웨이브
+    expect(b.sealed.length).toBe(2);
+    for (const i of b.sealed) expect(b.cells[i].def).toBe(id);
+    // 분열: 엘리트 하나를 쓰러뜨리면 child 둘
+    const g2 = newGame(5, 1, [{ glitch: 16 }]);
+    const b2 = g2.boards[0];
+    apply(g2, 0, { t: "cheat", i: 0 });
+    apply(g2, 0, { t: "next" });
+    for (let i = 0; i < 40; i++) step(g2);
+    const e = b2.enemies[0];
+    e.elite = true;
+    e.hp = 0;
+    const n = b2.enemies.length;
+    step(g2);
+    expect(b2.enemies.filter((x) => x.child).length).toBe(2);
+    expect(b2.enemies.length).toBeGreaterThanOrEqual(n + 1);
+  });
+
   it("치트 코드 멀티: 시간이 지나면 첫 카드를 자동으로", () => {
     const g = started(7, 2);
     const b = g.boards[0];

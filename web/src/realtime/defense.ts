@@ -23,8 +23,8 @@ export interface DefenseRankRow {
   at: number;
 }
 
-export type RankBoard = "season";
-export type RunStart = { run: string; seed: number; ver: string; mode: RankBoard; loadout: Loadout };
+export type RankBoard = "season" | "daily";
+export type RunStart = { run: string; seed: number; ver: string; mode: RankBoard; loadout: Loadout; day?: string };
 export const startRun = (mode: RankBoard = "season") => rpc<RunStart>("defense.start", { mode });
 export type FinishOut = {
   result: Result;
@@ -48,7 +48,12 @@ export type FinishOut = {
         treasure?: { wave: number; ratio: number; killed: boolean; reward: { pieces?: number; cores?: number; cardBox?: number } } | null;
       })
     | null;
+  /** 오늘의 도전 그날 첫 완료 보상 (이미 받았으면 null) */
+  daily?: { pieces?: number; cores?: number } | null;
 };
+/** 오늘의 도전 고스트 (1등 — 내가 1등이면 2등 · 내 최고) */
+export type DefenseGhost = { nick: string; rank: number; win: boolean; wave: number; sec: number; kills: number; log: LogEntry[] };
+export const getGhost = () => rpc<{ day: string; top: DefenseGhost | null; mine: DefenseGhost | null }>("defense.ghost", {});
 export const finishRun = (run: string, log: LogEntry[]) => rpc<FinishOut>("defense.finish", { run, log });
 export const getDefenseRank = (limit = 20, board: RankBoard = "season") =>
   rpc<{ ver: string; board: RankBoard; key: string; rows: DefenseRankRow[] }>("defense.rank", { limit, board });

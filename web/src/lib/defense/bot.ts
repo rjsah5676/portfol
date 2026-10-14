@@ -176,8 +176,9 @@ export function botMove(b: Board, cfg: BotCfg, skip: ReadonlySet<string> = new S
     return { t: "cheat", i: best };
   }
   // 보스 2페이즈 예고: 표시된 칸의 유닛을 빈 칸 · 약한 칸으로 피함 (사람이 끌어서 하는 것과 같은 swap)
-  if (b.tele && b.tele.t > 3) {
-    const c = dodge(b);
+  // 심연 변이 「봉인」: 봉인된 칸의 유닛도 같은 식으로 빼냄
+  if ((b.tele && b.tele.t > 3) || b.sealed.some((i) => b.cells[i].def)) {
+    const c = dodge(b, b.tele && b.tele.t > 3 ? b.tele.cells : b.sealed);
     if (c) {
       const d = ok(c);
       if (d) return d;
@@ -323,8 +324,8 @@ const powerOf = (b: Board, i: number) => {
   return d.dmg * d.aps * c.units.length * (d.grade + 1);
 };
 /** 예고된 칸에서 가장 센 유닛을 표시 밖 빈 칸(없으면 더 약한 칸)으로 옮기는 명령 하나 */
-function dodge(b: Board): Cmd | null {
-  const hit = new Set(b.tele!.cells);
+function dodge(b: Board, cells: number[]): Cmd | null {
+  const hit = new Set(cells);
   const from = [...hit].filter((i) => b.cells[i].def).sort((x, y) => powerOf(b, y) - powerOf(b, x) || x - y);
   for (const i of from) {
     const pi = powerOf(b, i);

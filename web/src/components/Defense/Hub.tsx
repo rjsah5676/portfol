@@ -5,6 +5,7 @@ import { ITEM_ART, RELIC_ART } from "@/lib/defense/assets";
 import { phaseText } from "@/lib/defense/enemies";
 import {
   GLITCH,
+  MUTATORS,
   GP_PACKS,
   GP_SELL,
   GP_STORE,
@@ -373,6 +374,16 @@ function LoadTab({ p, act, busy }: TabProps) {
           )}{" "}
           · 보상 <b className="text-[var(--gold)]">×{g.reward}</b> · 시즌 랭킹 점수가 단계마다 크게 올라요
         </p>
+        {!!g.mut?.length && (
+          <p className="mt-0.5 text-[12px] text-[#c9a6ff]">
+            심연 변이:{" "}
+            {g.mut.map((m) => (
+              <span key={m} className="mr-2">
+                <b>{MUTATORS[m].name}</b> — {MUTATORS[m].desc}
+              </span>
+            ))}
+          </p>
+        )}
         {phaseText(L.glitch) && (
           <p className="mt-0.5 text-[12px] text-[var(--red)]">
             보스 2페이즈 (체력 절반 밑): <b>{phaseText(L.glitch)}</b> — 빨갛게 표시된 칸에 남은 유닛이 기절, 끌어서 옮기면 피해요

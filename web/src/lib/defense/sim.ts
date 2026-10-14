@@ -116,6 +116,8 @@ export interface Enemy {
   sk: number[];
   /** 보물방 골렘 */
   tre: boolean;
+  /** 분열로 생긴 적 (다시 갈라지지 않음) */
+  child: boolean;
   /** 보스 2페이즈 (0 · 1) · 2페이즈 기술별 쿨 */
   ph: number;
   sk2: number[];
@@ -170,6 +172,8 @@ export type Ev =
   /** 보스 2페이즈 시작 · 예고 시작(warn) / 맞음(hit: 기절한 칸 수) */
   | { t: "phase"; boss: number }
   | { t: "tele"; name: string; snd: string; hit: number | null }
+  /** 심연 변이 「봉인」된 칸 (웨이브 시작) */
+  | { t: "seal"; cells: number[] }
   /** 보물방 시작 · 끝 (ratio = 깎은 체력 비율) */
   | { t: "treasure"; stage: "start" | "end"; wave: number; ratio?: number; killed?: boolean }
   | { t: "bossDown"; boss: number; gold: number; stones: number; ticket: number | null }
@@ -205,6 +209,8 @@ export interface Board {
   tele: { name: string; snd: string; cells: number[]; t: number; sec: number } | null;
   /** 보물방 진행 중 (남은 tick · 받은 골드 · 골렘 체력 · 잡았나) — 그동안 일반 적은 stash 에 */
   troom: { wave: number; t: number; max: number; killed: boolean } | null;
+  /** 심연 변이 「봉인」: 이번 웨이브 동안 공격 못 하는 칸 (웨이브 시작 때 정함, 유닛을 옮기면 풀림) */
+  sealed: number[];
   stash: Enemy[];
   /** 끝난 보물방 결과 (판 밖 보상 재료) */
   treasure: { wave: number; dmg: number; max: number; killed: boolean } | null;
@@ -274,6 +280,7 @@ export function newBoard(seed: number, idx: number, lo?: Loadout | null): Board 
     bossT: 0,
     tele: null,
     troom: null,
+    sealed: [],
     stash: [],
     treasure: null,
     cells: Array.from({ length: SLOTS }, () => ({ def: null, units: [] })),
@@ -706,6 +713,7 @@ function spawn(b: Board, kindId: string, hp: number): Enemy {
     dashMult: 1,
     sk: [],
     tre: false,
+    child: false,
     ph: 0,
     sk2: [],
     expire: 0,
@@ -797,6 +805,14 @@ function endTreasure(b: Board) {
 function startWave(b: Board, w: number) {
   if (w === b.mods.treasure && !b.treasure && !b.troom && w % BOSS_EVERY !== 0) return startTreasure(b, w);
   b.wave = w;
+  // 심연 변이 「봉인」: 유닛이 있는 칸 2개 (그 웨이브 동안)
+  b.sealed = [];
+  if (b.mods.glitch.mut?.includes("lock")) {
+    const has: number[] = [];
+    for (let i = 0; i < CELLS; i++) if (b.cells[i].def) has.push(i);
+    for (let k = 0; k < 2 && has.length; k++) b.sealed.push(has.splice(rndInt(b.rng, has.length), 1)[0]);
+    if (b.sealed.length) b.ev?.push({ t: "seal", cells: [...b.sealed] });
+  }
   b.wt = 0;
   b.spawned = 0;
   b.ev?.push({ t: "wave", wave: w });
@@ -916,6 +932,7 @@ function stepBoard(g: Game, b: Board) {
     const c = b.cells[i];
     if (!c.def) continue;
     const def = UNIT[c.def];
+    if (b.sealed.length && b.sealed.includes(i)) continue; // 봉인된 칸
     const sp = 1 + b.aspd[i] + b.cx.aspd + (def.faction === "hidden" ? 0 : b.mods.facAspd[def.faction]);
     const period = TPS / def.aps;
     for (const u of c.units) {
@@ -1350,6 +1367,21 @@ function die(g: Game, b: Board, e: Enemy): boolean {
     return false;
   }
   b.kills++;
+  // 심연 변이 「분열」: 엘리트 · 대형 적은 체력 30% 짜리 둘로 (분열로 생긴 적 · 보스 · 균열 · 보물은 빼고)
+  if (b.mods.glitch.mut?.includes("split") && !e.child && e.boss < 0 && !e.rift && (e.elite || e.size === 2)) {
+    for (let k = 0; k < 2; k++) {
+      const c = spawn(b, e.kind, 1);
+      c.hp = c.max = e.max * 0.3;
+      c.armor = e.armor;
+      c.mres = e.mres;
+      c.size = 1;
+      c.child = true;
+      c.d = e.d;
+      c.trav = e.trav - 0.25 * k;
+      c.x = e.x;
+      c.y = e.y;
+    }
+  }
   let gold = 0;
   if (e.rift) {
     const R = B.rift[RIFT_TIERS[e.rift - 1]];

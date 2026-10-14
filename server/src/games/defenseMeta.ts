@@ -50,6 +50,7 @@ import {
   weeklyOf,
   transRoll,
   type Goods,
+  DAILY_FIRST,
   TREASURE,
   TREASURE_WAVES,
   treasureChance,
@@ -114,6 +115,8 @@ export interface Profile {
   gbest?: Record<string, number>;
   /** 보물방: 지난 보물방 뒤로 쌓인 웨이브 (오염 1+ 시즌 판, 검증된 것만) — 확률 = treasureChance */
   twaves?: number;
+  /** 오늘의 도전 첫 완료 보상을 받은 날 (KST) */
+  dailyAt?: string;
   theme: string;
   day: Prog;
   week: Prog;
@@ -371,6 +374,16 @@ export function createDefenseMeta(db: Database, points: Points, now: () => numbe
 
   return {
     /** 시즌 판 · 멀티에 들고 갈 로드아웃 (서버가 정함) */
+    /** 오늘의 도전: 그날 처음 끝낸 판이면 DAILY_FIRST — 받은 것 (이미 받았으면 null) */
+    dailyFirst(uid: string, day: string): Promise<Goods | null> {
+      return edit(uid, async (p) => {
+        if (p.dailyAt === day) return null;
+        p.dailyAt = day;
+        await grantGoods(uid, p, DAILY_FIRST);
+        return DAILY_FIRST;
+      });
+    },
+
     /** 판 시작 때 보물방 뽑기 (시즌 판) — 뜨면 쌓인 웨이브 0 으로 · 열릴 웨이브(11~59, 보스 웨이브 빼고) 를 돌려줌, 아니면 0 */
     rollTreasure(uid: string, glitch: number): Promise<number> {
       return edit(uid, (p) => {

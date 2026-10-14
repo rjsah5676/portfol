@@ -46,6 +46,13 @@ export interface Loadout {
   treasure?: number;
 }
 
+/* ───────────────────────── 오늘의 도전 ───────────────────────── */
+
+/** 오늘의 도전: 모두 같은 시드(날짜) · 영구 성장 없이 이 규칙으로 — 실력만 겨룸 */
+export const DAILY_RULE: Loadout = { glitch: 0 };
+/** 오늘의 도전 그날 첫 완료 보상 */
+export const DAILY_FIRST: Goods = { pieces: 300, cores: 2 };
+
 /* ───────────────────────── 보물방 ───────────────────────── */
 
 /**
@@ -235,8 +242,22 @@ export const relicDesc = (id: string, lv = 1) => RELIC[id]?.at(lv) ?? "";
 
 /* ───────────────────────── 오염 단계 ───────────────────────── */
 
+/**
+ * 심연 변이 (판의 규칙이 바뀜 — 숫자만 오르는 것 말고):
+ *  split 분열 (16단계+): 엘리트 · 대형 적이 쓰러지면 체력 30% 짜리 둘로 갈라짐
+ *  lock  봉인 (21단계+): 웨이브마다 유닛이 있는 칸 2개가 그 웨이브 동안 봉인(공격 안 함) — 유닛을 다른 칸으로 옮기면 풀림
+ */
+export type Mutator = "split" | "lock";
+export const MUTATORS: Record<Mutator, { name: string; desc: string; from: number }> = {
+  split: { name: "분열", desc: "엘리트 · 대형 적이 쓰러지면 체력 30% 짜리 둘로 갈라져요", from: 16 },
+  lock: { name: "봉인", desc: "웨이브마다 유닛이 있는 칸 2개가 봉인돼 공격을 못 해요 — 다른 칸으로 옮기면 풀려요", from: 21 },
+};
+export const mutatorsOf = (lv: number): Mutator[] => (Object.keys(MUTATORS) as Mutator[]).filter((m) => lv >= MUTATORS[m].from);
+
 export interface GlitchDef {
   lv: number;
+  /** 심연 변이 (MUTATORS) */
+  mut?: Mutator[];
   /** 적 체력 배수 */
   hp: number;
   /** 적 속도 배수 */
@@ -305,6 +326,7 @@ export function deepGlitch(P: DeepParams): GlitchDef[] {
       reward: Math.round((top.reward + (P.rewardPerLv ?? 0.1) * (lv - 10)) * 100) / 100,
       armor: lv >= 20 ? P.armor20 : P.armor11,
       boss: lv >= 25 ? P.boss25 : lv >= 15 ? P.boss15 : 1,
+      mut: mutatorsOf(lv),
       rule: rules[lv] ?? `적 체력 +${Math.round((hp - 1) * 100)}%`,
     };
   });

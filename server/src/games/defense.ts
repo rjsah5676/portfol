@@ -10,7 +10,7 @@ import type { Ctx } from "../realtime/gateway";
 import { BALANCE_VER, TPS } from "../../../web/src/lib/defense/balance";
 import { HASH_TICKS, MAX_LOG, MAX_SPEED, MAX_TICKS, TICKS_PER_TURN, TURN_MS, scoreOf, validLog, type LogEntry } from "../../../web/src/lib/defense/replay";
 import { isCmd, type Cmd, type Result } from "../../../web/src/lib/defense/sim";
-import { seasonOf, seasonScore, type Loadout, type RunMode } from "../../../web/src/lib/defense/progress";
+import { DAILY_RULE, cleanLoadout, kstDayKey, seasonOf, seasonScore, type Loadout, type RunMode } from "../../../web/src/lib/defense/progress";
 import type { VerifyJob, VerifyOut } from "./defenseVerify.worker";
 import { createDefenseMeta } from "./defenseMeta";
 
@@ -23,6 +23,8 @@ import { createDefenseMeta } from "./defenseMeta";
  *   defense.start { mode }   → { run, seed, ver, mode, loadout }  판을 시작할 때. 시드 · 로드아웃은 서버가 정함
  *       mode "season": 무작위 시드 + 내 영구 성장(유닛 레벨 · 연구 · 유물 · 오염 단계) — 시즌 랭킹 (오염 단계 가중 점수)
  *       (주간 도전은 베타에서 없앰 — 그 자리는 상점)
+ *       mode "daily": 오늘의 도전 — 하루 한 시드(모두 같음) · 영구 성장 없이(DAILY_RULE) · 판 수 제한 없음, 최고 기록만.
+ *                     1등 · 내 기록은 명령 기록(log)도 저장 → defense.ghost 로 「고스트」(같은 시드라 기록만 다시 돌리면 그 판)
  *   defense.finish { run, log } → 명령 기록을 작업 스레드에서 처음부터 다시 돌려(defenseVerify.worker) 결과를 직접 계산
  *                              → 점수를 꾸며 보낼 수 없음. 걸린 시간도 봄 (최대 배속 MAX_SPEED 로도 그만큼은 걸려야)
  *                              → 검증된 판만 보상 · 미션 · 패스 경험치 (defenseMeta.onRun)
@@ -62,7 +64,9 @@ interface RunDoc {
   ver: string;
   at: Date;
   used: boolean;
-  mode?: "season";
+  mode?: "season" | "daily";
+  /** 오늘의 도전: 그 날 (KST yyyy-mm-dd) */
+  day?: string;
   /** 이 판에 들고 간 로드아웃 (시작 때 고정) */
   lo?: Loadout;
   /** 순위표 키 (시즌 · 주) */
@@ -81,7 +85,16 @@ export interface DefenseRankDoc {
   kills: number;
   tops: string[];
   at: Date;
+  /** 오늘의 도전: 이 기록의 명령 (고스트용) */
+  log?: LogEntry[];
 }
+
+/** 오늘의 도전 시드: 날짜로 정해짐 (모두 같음) */
+const dailySeed = (day: string) => {
+  let h = 2166136261;
+  for (const ch of `pld-daily:${day}`) h = Math.imul(h ^ ch.charCodeAt(0), 16777619) >>> 0;
+  return (h % (2 ** 31 - 2)) + 1;
+};
 
 /* ───────────── 검증 작업 스레드 ───────────── */
 
@@ -210,7 +223,8 @@ export function registerDefense({ gateway, db, points }: Deps) {
   const verifier = createVerifier();
   const meta = createDefenseMeta(db, points);
   const seasonKey = () => `${BALANCE_VER}:s${seasonOf(Date.now())}`;
-  const boardKey = (_b: unknown) => seasonKey();
+  const dailyKey = (day = kstDayKey(Date.now())) => `${BALANCE_VER}:d${day}`;
+  const boardKey = (b: "season" | "daily") => (b === "daily" ? dailyKey() : seasonKey());
   const rooms = new Map<string, Room>();
 
   /* ── 랭킹 ── */
@@ -218,10 +232,18 @@ export function registerDefense({ gateway, db, points }: Deps) {
   gateway.rpc("defense.start", async (ctx, raw) => {
     member(ctx);
     const uid = ctx.uid;
-    const { mode } = z.object({ mode: z.enum(["season"]).default("season") }).parse(raw ?? {});
+    const { mode } = z.object({ mode: z.enum(["season", "daily"]).default("season") }).parse(raw ?? {});
     const recent = await runs.countDocuments({ uid, at: { $gt: new Date(Date.now() - 3600_000) } });
     if (recent >= RUNS_PER_HOUR) throw new AppError("RATE_LIMITED", "잠시 후에 다시 시작해 주세요.", 429);
     const _id = newId();
+    if (mode === "daily") {
+      // 오늘의 도전: 날짜 시드 · 영구 성장 없음 → 모두 같은 판
+      const day = kstDayKey(Date.now());
+      const lo = cleanLoadout(DAILY_RULE);
+      const seed = dailySeed(day);
+      await runs.insertOne({ _id, uid, seed, ver: BALANCE_VER, at: new Date(), used: false, mode, lo, board: dailyKey(day), day });
+      return { run: _id, seed, ver: BALANCE_VER, mode, loadout: lo, day };
+    }
     const seed = randomInt(1, 2 ** 31 - 1);
     const lo = await meta.loadoutOf(uid);
     // 보물방: 쌓인 웨이브만큼 확률 → 뜨면 이 판 로드아웃에 열릴 웨이브를 적어 둠 (기록 검증도 같은 로드아웃으로)
@@ -240,7 +262,7 @@ export function registerDefense({ gateway, db, points }: Deps) {
     if (!doc) throw new AppError("RANK_REJECTED", "이미 끝났거나 없는 판이에요.", 400);
     if (doc.ver !== BALANCE_VER) throw new AppError("RANK_REJECTED", "밸런스가 바뀌어서 이 판은 기록할 수 없어요.", 400);
     if (Date.now() - doc.at.getTime() > RUN_TTL_MS) throw new AppError("RANK_REJECTED", "너무 오래된 판이에요.", 400);
-    const mode = "season" as const;
+    const mode = doc.mode === "daily" ? ("daily" as const) : ("season" as const);
     const lo = doc.lo ?? null;
     const out = await verifier.run({ seed: doc.seed, players: 1, log, loadouts: [lo] });
     const res = out.results[0];
@@ -249,10 +271,15 @@ export function registerDefense({ gateway, db, points }: Deps) {
     if (elapsed + 5 < res.tick / TPS / MAX_SPEED) throw new AppError("RANK_REJECTED", "기록을 확인할 수 없어요.", 400);
     const glitch = lo?.glitch ?? 0;
     const score = seasonScore(res, glitch);
-    const reward = await meta.onRun(uid, mode, res, out.stats[0], glitch).catch((e) => {
-      console.warn("[defense] 보상 저장 실패", e);
-      return null;
-    });
+    // 오늘의 도전은 판 보상 대신 그날 첫 완료 보상만 (성장 없는 판이라 미션 · 패스 · 보물방도 안 셈)
+    const reward =
+      mode === "daily"
+        ? null
+        : await meta.onRun(uid, mode, res, out.stats[0], glitch).catch((e) => {
+            console.warn("[defense] 보상 저장 실패", e);
+            return null;
+          });
+    const daily = mode === "daily" ? await meta.dailyFirst(uid, doc.day ?? kstDayKey(Date.now())).catch(() => null) : null;
     // 업적용 누적 (끝까지 검증된 판만)
     void db
       .col("users")
@@ -268,20 +295,20 @@ export function registerDefense({ gateway, db, points }: Deps) {
     if (best)
       await ranks.replaceOne(
         { _id: id },
-        { ver: key, uid, nick, score, glitch, win: res.win, wave: res.wave, tick: res.tick, kills: res.kills, tops: out.tops[0], at: new Date() },
+        { ver: key, uid, nick, score, glitch, win: res.win, wave: res.wave, tick: res.tick, kills: res.kills, tops: out.tops[0], at: new Date(), ...(mode === "daily" && { log }) },
         { upsert: true }
       );
     const myScore = best ? score : prev!.score;
     const rank = (await ranks.countDocuments({ ver: key, score: { $gt: myScore } })) + 1;
-    return { result: res, score, best, rank, tops: out.tops[0], mode, reward };
+    return { result: res, score, best, rank, tops: out.tops[0], mode, reward, daily };
   });
 
-  const boardArg = z.object({ board: z.enum(["season"]).default("season"), limit: z.number().int().min(1).max(100).default(20) });
+  const boardArg = z.object({ board: z.enum(["season", "daily"]).default("season"), limit: z.number().int().min(1).max(100).default(20) });
 
   gateway.rpc("defense.rank", async (_ctx, raw) => {
     const { board, limit } = boardArg.parse(raw ?? {});
     const key = boardKey(board);
-    const docs = await ranks.find({ ver: key }).sort({ score: -1, at: 1 }).limit(limit).toArray();
+    const docs = await ranks.find({ ver: key }, { projection: { log: 0 } }).sort({ score: -1, at: 1 }).limit(limit).toArray();
     const av = await avatarsOf(db, docs.map((d) => d.uid));
     return { ver: BALANCE_VER, board, key, rows: docs.map((d) => rankRow(d, av.get(d.uid) ?? null)) };
   });
@@ -293,6 +320,20 @@ export function registerDefense({ gateway, db, points }: Deps) {
     if (!d) return null;
     const rank = (await ranks.countDocuments({ ver: key, score: { $gt: d.score } })) + 1;
     return { ...rankRow(d, null), rank };
+  });
+
+  /** 오늘의 도전 고스트: 1등 기록 (내가 1등이면 2등) + 내 최고 기록 — 같은 시드 · 같은 규칙이라 명령만 다시 돌리면 그 판 */
+  gateway.rpc("defense.ghost", async (ctx) => {
+    member(ctx);
+    const key = dailyKey();
+    const top = await ranks.find({ ver: key }).sort({ score: -1, at: 1 }).limit(2).toArray();
+    const mine = await ranks.findOne({ _id: `${key}:${ctx.uid}` });
+    const other = top.find((d) => d.uid !== ctx.uid) ?? null;
+    const pack = (d: (DefenseRankDoc & { _id: string }) | null, rank: number) =>
+      d?.log ? { nick: d.nick, rank, win: d.win, wave: d.wave, sec: Math.round(d.tick / TPS), kills: d.kills, log: d.log } : null;
+    const otherRank = other ? (await ranks.countDocuments({ ver: key, score: { $gt: other.score } })) + 1 : 0;
+    const myRank = mine ? (await ranks.countDocuments({ ver: key, score: { $gt: mine.score } })) + 1 : 0;
+    return { day: kstDayKey(Date.now()), top: pack(other, otherRank), mine: pack(mine, myRank) };
   });
 
   /* ── 성장 (판 밖) ── */
