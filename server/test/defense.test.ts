@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { BALANCE_VER, LAST_WAVE } from "../../web/src/lib/defense/balance";
+import { B, BALANCE_VER, LAST_WAVE, countOf, sec } from "../../web/src/lib/defense/balance";
 import { BOTS, botTurn } from "../../web/src/lib/defense/bot";
 import { HASH_TICKS, TICKS_PER_TURN, TURN_MS, replay, replayer, scoreOf, validLog, type LogEntry } from "../../web/src/lib/defense/replay";
 import { CELLS, SLOTS, apply, hashGame, isCmd, newGame, pureT, step, unitCount, upCost, type Game } from "../../web/src/lib/defense/sim";
@@ -135,6 +135,28 @@ describe("픽셀 글리치 디펜스 엔진", () => {
     put(3, UNITS.find((u) => u.faction === "arcane" && u.grade === 0)!.id, 3);
     step(g);
     expect(b.pure).toBe(0);
+  });
+
+  it("다음 웨이브 부르기: 준비 시간 건너뛰기 · 적이 다 나온 뒤만 · 남은 시간만큼 골드 · 보스는 안 됨", () => {
+    const g = newGame(9, 1);
+    const b = g.boards[0];
+    expect(apply(g, 0, { t: "cheat", i: 0 })).toBeNull();
+    expect(b.phase).toBe("prep");
+    expect(apply(g, 0, { t: "next" })).toBeNull();
+    expect(b.wave).toBe(1);
+    expect(apply(g, 0, { t: "next" })).not.toBeNull(); // 아직 나오는 중 → 아무것도 안 바뀜
+    expect(b.wave).toBe(1);
+    while (b.spawned < countOf(1)) step(g);
+    const gold = b.gold;
+    const bonus = Math.floor((sec(B.waveSec) - b.wt) / TPS) * B.nextGold;
+    expect(bonus).toBeGreaterThan(0);
+    expect(apply(g, 0, { t: "next" })).toBeNull();
+    expect(b.wave).toBe(2);
+    expect(b.gold).toBeGreaterThanOrEqual(gold + bonus); // 웨이브 골드 + 보너스
+    expect(isCmd({ t: "next" })).toBe(true);
+    expect(isCmd({ t: "next", x: 1 })).toBe(false);
+    b.phase = "boss";
+    expect(apply(g, 0, { t: "next" })).toBe("보스를 잡아야 넘어가요");
   });
 
   it("치트 코드 멀티: 시간이 지나면 첫 카드를 자동으로", () => {

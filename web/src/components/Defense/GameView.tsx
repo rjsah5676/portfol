@@ -15,6 +15,8 @@ import {
   counts,
   hasEmpty,
   luckCost,
+  nextBlock,
+  nextBonus,
   sellOf,
   bossSecOf,
   capOf,
@@ -135,6 +137,21 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry }
   const [dragging, setDragging] = useState(false);
   const b: Board = ctrl.board;
   const multi = ctrl.mode.kind === "multi";
+  // 다음 웨이브 자동 부르기 (이 기기에 저장) — 필드가 비면 부름, 보스 웨이브 앞은 직접
+  const [autoNext, setAutoNext] = useState(() => {
+    try {
+      return localStorage.getItem("pgd-autonext") === "1";
+    } catch {
+      return false;
+    }
+  });
+  const autoSent = useRef(-1);
+  useEffect(() => {
+    if (!autoNext || b.result || b.cheat || ctrl.paused || b.phase !== "wave") return;
+    if (b.enemies.length > 0 || (b.wave + 1) % BOSS_EVERY === 0 || nextBlock(b) || autoSent.current === b.wave) return;
+    autoSent.current = b.wave;
+    if (!ctrl.issue({ t: "next" })) sfx("ui-click", 0.6, 1.3);
+  });
 
   const toast = (text: ReactNode, tone?: Toast["tone"]) => {
     const id = Math.random();
@@ -394,6 +411,7 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry }
       else if (k === "4") run({ t: "up", k: "hidden" });
       else if (k === "5") run({ t: "luck" });
       else if (k === "r") setModal((m) => (m === "recipe" ? null : "recipe"));
+      else if (k === "n") run({ t: "next" });
       else if (k === " " && !multi) {
         e.preventDefault();
         ctrl.togglePause();
@@ -671,6 +689,41 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry }
           </button>
         </div>
         {showDps && <DpsOverlay b={b} dps={dpsNow} />}
+        {/* 다음 웨이브 부르기 (왼쪽 위) — 적이 다 나온 뒤 · 남은 시간만큼 골드 */}
+        {!b.result && !b.cheat && b.phase !== "boss" && (
+          <div className="absolute top-1.5 left-1.5 z-10 flex items-center gap-1">
+            {!nextBlock(b) && (
+              <Btn
+                tone={b.phase === "prep" ? "main" : "cyan"}
+                className="h-7 px-2 text-[12px] font-bold"
+                onClick={() => run({ t: "next" })}
+                title="다음 웨이브 부르기 (N) — 남은 적은 그대로 남아요"
+              >
+                {b.phase === "prep" ? "▶ 바로 시작" : "▶▶ 다음 웨이브"}
+                {nextBonus(b) > 0 && (
+                  <span className="ml-1 text-[var(--gold)]">
+                    <Icon n="coin" size={10} />+{nextBonus(b)}
+                  </span>
+                )}
+              </Btn>
+            )}
+            <button
+              type="button"
+              onClick={() => {
+                const v = !autoNext;
+                setAutoNext(v);
+                try {
+                  localStorage.setItem("pgd-autonext", v ? "1" : "0");
+                } catch {}
+              }}
+              className={`px-btn h-6 px-1.5 text-[11px] ${autoNext ? "" : "opacity-70"}`}
+              style={{ "--c": autoNext ? "#137f93" : "#2a2350" } as React.CSSProperties}
+              title="자동: 필드가 비면 다음 웨이브를 바로 불러요 (보스 웨이브 앞은 직접)"
+            >
+              자동 {autoNext ? "ON" : "OFF"}
+            </button>
+          </div>
+        )}
         {b.phase === "prep" && (
           <div className="pointer-events-none absolute inset-x-0 top-[36%] text-center">
             <p className={`${TITLE} px-shadow dfn-float text-[28px] text-white`}>
@@ -1196,7 +1249,7 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry }
               {b.result?.win
                 ? `${LAST_WAVE}웨이브 돌파 · ${fmtTime(time)}`
                 : b.result?.reason === "boss"
-                  ? `${b.wave}웨이브 보스를 제한 시간 안에 못 잡았어요`
+                  ? `${b.wave}웨이브 보스를 제한 시간 안에 못 잡았어요${boss ? ` · 보스 체력 ${Math.max(1, Math.ceil((boss.hp / boss.max) * 100))}% 남음` : ""}`
                   : `${b.wave}웨이브 · 필드의 적이 ${capOf(b)}마리가 됐어요`}
             </p>
             <div className="mt-4 grid grid-cols-3 gap-2 text-[12px]">

@@ -562,10 +562,30 @@ function Menu(p: {
 
 /* ───────────── 판 끝 (검증 · 보상) ───────────── */
 
+const waveTxt = (w: number) => (w > LAST_WAVE ? "클리어" : `W${w}`);
+
 function FinishNote({ r }: { r: FinishOut }) {
   const w = r.reward;
+  const gb = w?.gbest;
   return (
     <span className="flex flex-col items-center gap-1.5">
+      {gb && (
+        <span className="text-[13px]">
+          오염 {gb.glitch}단계 최고{" "}
+          {gb.now > gb.prev && gb.prev > 0 ? (
+            <b className="dfn-pop text-[var(--cyan)]">
+              {waveTxt(gb.prev)} → {waveTxt(gb.now)} 갱신!
+            </b>
+          ) : gb.now > gb.prev ? (
+            <b className="dfn-pop text-[var(--cyan)]">{waveTxt(gb.now)} (첫 기록)</b>
+          ) : (
+            <span className="text-white/60">
+              {waveTxt(gb.now)} · 이번 {waveTxt(r.result.win ? LAST_WAVE + 1 : r.result.wave)}
+              {!r.result.win && gb.now <= LAST_WAVE && ` (${gb.now - r.result.wave}웨이브 차이)`}
+            </span>
+          )}
+        </span>
+      )}
       <span>
         시즌 랭킹 <b className="text-[#ffd84a]">{r.rank}위</b>
         {r.best ? (

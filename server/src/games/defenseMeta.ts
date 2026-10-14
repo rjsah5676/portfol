@@ -55,6 +55,7 @@ import {
   type QuestDef,
   type RunMode,
 } from "../../../web/src/lib/defense/progress";
+import { LAST_WAVE } from "../../../web/src/lib/defense/balance";
 import { RECIPE, UNIT, UNITS } from "../../../web/src/lib/defense/units";
 import type { Result } from "../../../web/src/lib/defense/sim";
 
@@ -105,6 +106,8 @@ export interface Profile {
   glitchOpen: number;
   /** 클리어한 가장 높은 오염 단계 (-1 = 아직) — 업적 */
   glitchWin: number;
+  /** 오염 단계별 최고 웨이브 (클리어 = LAST_WAVE + 1) — 진 판도 진척을 보여 주려고 */
+  gbest?: Record<string, number>;
   theme: string;
   day: Prog;
   week: Prog;
@@ -440,11 +443,17 @@ export function createDefenseMeta(db: Database, points: Points, now: () => numbe
           p.grit = pushed ? { g: glitch, n: 0 } : { g: glitch, n: Math.min(GRIT_MAX, (p.grit?.g === glitch ? p.grit.n : 0) + 1) };
         }
         if (res.win) p.glitchWin = Math.max(p.glitchWin, glitch);
+        // 이 단계 최고 웨이브 (진 판도 진척 표시)
+        const gb = (p.gbest ??= {});
+        const prevBest = gb[glitch] ?? 0;
+        const reach = res.win ? LAST_WAVE + 1 : res.wave;
+        if (reach > prevBest) gb[glitch] = reach;
+        const gbest = { glitch, prev: prevBest, now: Math.max(prevBest, reach) };
         if (glitchUnlocks(glitch, res) && glitch >= p.glitchOpen && p.glitchOpen < GLITCH_MAX) {
           p.glitchOpen = glitch + 1;
           opened = true;
         }
-        return { ...rw, opened: opened ? p.glitchOpen : null, passTier: passTier(p.season.xp), first, fresh, firstClear };
+        return { ...rw, opened: opened ? p.glitchOpen : null, passTier: passTier(p.season.xp), first, fresh, firstClear, gbest };
       });
     },
 

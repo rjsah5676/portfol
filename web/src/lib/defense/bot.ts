@@ -3,7 +3,7 @@
  * 시뮬 배치(scripts/defense-sim.ts) · 게임 안 개발자 창의 "자동 플레이"가 씀.
  * 같은 상태면 늘 같은 명령 (결정론) → 봇 판도 기록으로 다시 돌릴 수 있음.
  */
-import { B } from "./balance";
+import { B, BOSS_EVERY } from "./balance";
 import { CHEAT, type CheatDef } from "./cheats";
 import { PATCHES } from "./meta";
 import {
@@ -15,6 +15,7 @@ import {
   usable,
   hasEmpty,
   luckCost,
+  nextBlock,
   summonCost,
   upCost,
   type Board,
@@ -296,6 +297,11 @@ export function botMove(b: Board, cfg: BotCfg, skip: ReadonlySet<string> = new S
   );
   if (others.length) {
     const c = ok({ t: "up", k: others[0] });
+    if (c) return c;
+  }
+  // 할 거 다 했고 필드가 비었으면 다음 웨이브 부르기 (보스 웨이브 앞은 안 부름 — 사람도 보스 전엔 정비)
+  if (b.phase === "wave" && b.enemies.length === 0 && (b.wave + 1) % BOSS_EVERY !== 0 && !nextBlock(b)) {
+    const c = ok({ t: "next" });
     if (c) return c;
   }
   return null;

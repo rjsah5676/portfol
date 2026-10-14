@@ -140,7 +140,9 @@ export type Cmd =
   | { t: "cheat"; i: number }
   | { t: "reroll"; i: number }
   /** 포기 — 지금 웨이브에서 진 것으로 끝냄 (기록 · 보상은 거기까지) */
-  | { t: "quit" };
+  | { t: "quit" }
+  /** 다음 웨이브 부르기 — 이번 웨이브 적이 다 나왔으면 남은 시간을 건너뜀 (남은 1초마다 골드 B.nextGold). 남은 적은 그대로 */
+  | { t: "next" };
 
 /** 화면 효과 (시뮬 결과에 영향 없음 — fx 가 null 이면 안 쌓음) */
 export type Fx =
@@ -404,6 +406,7 @@ export function isCmd(x: unknown): x is Cmd {
     case "rift":
       return keys === 2 && RIFT_TIERS.includes(c.tier as RiftTier);
     case "quit":
+    case "next":
       return keys === 1;
     case "cheat":
     case "reroll":
@@ -562,6 +565,18 @@ export function apply(g: Game, p: number, cmd: Cmd): string | null {
       finish(g, b, false, "quit");
       return null;
     }
+    case "next": {
+      const why = nextBlock(b);
+      if (why) return why;
+      if (b.phase === "prep") {
+        startWave(b, 1);
+        return null;
+      }
+      if (b.phase === "wave") b.gold += nextBonus(b);
+      endWave(b);
+      startWave(b, b.wave + 1);
+      return null;
+    }
     case "cheat": {
       if (!b.cheat) return "고를 치트 코드가 없어요";
       const id = b.cheat.offer[cmd.i];
@@ -710,6 +725,17 @@ function finish(g: Game, b: Board, win: boolean, reason: Result["reason"]) {
   b.phase = "over";
   b.ev?.push({ t: "over", win });
 }
+
+/** 다음 웨이브를 부를 수 없는 이유 (부를 수 있으면 null) — 준비 시간 · 적이 다 나온 일반 웨이브 · 보스 뒤 쉬는 시간 */
+export function nextBlock(b: Board): string | null {
+  if (b.result) return "끝난 판이에요";
+  if (b.phase === "boss") return "보스를 잡아야 넘어가요";
+  if (b.phase === "wave" && b.spawned < countOf(b.wave)) return "이번 웨이브 적이 아직 나오는 중이에요";
+  return null;
+}
+/** 지금 부르면 받는 골드 */
+export const nextBonus = (b: Board) =>
+  b.phase === "wave" ? Math.floor(Math.max(0, sec(B.waveSec) - b.wt) / TPS) * B.nextGold : 0;
 
 function startWave(b: Board, w: number) {
   b.wave = w;

@@ -42,6 +42,8 @@ export type FinishOut = {
         /** 처음 얻은 유닛 (도감 수집 보상) */
         fresh?: string[];
         firstClear?: { glitch: number; cores: number; relicBox: number } | null;
+        /** 이 오염 단계 최고 웨이브 (이번 판 전 · 뒤, 클리어 = LAST_WAVE + 1) */
+        gbest?: { glitch: number; prev: number; now: number };
       })
     | null;
 };
