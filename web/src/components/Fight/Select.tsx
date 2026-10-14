@@ -46,9 +46,9 @@ const MODES = MODE_TILES.map(([m]) => m);
 const face = (c: CharDef) => `/fight/art/${c.id}-face.webp`;
 const art = (c: CharDef) => `/fight/art/${c.id}.webp`;
 /** 선택 화면 전신 그림 배율 (그림마다 인물이 차지하는 크기가 달라서 — 발 위치는 그대로) */
-const ART_SCALE: Record<string, number> = { soyoung: 0.86, "soyoung-bunny": 0.97 };
+const ART_SCALE: Record<string, number> = { soyoung: 0.86, "soyoung-bunny": 0.96 };
 /** 스킨 전신 그림이 기본보다 폭이 좁아 한쪽으로 쏠릴 때 안쪽으로 미는 양 (cqw) */
-const ART_DX: Record<string, number> = {};
+const ART_DX: Record<string, number> = { "soyoung-bunny": 2.5 };
 const PX = "[image-rendering:pixelated]";
 /** 캐릭터 고르기 칸: 한 줄에 몇 칸 (↑↓ 은 이만큼 건너뜀) */
 const FACE_COLS = 4;
