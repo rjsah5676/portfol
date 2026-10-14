@@ -242,6 +242,7 @@ export default function DefenseApp() {
         onResume={() => resume && doResume(resume)}
         onDropResume={() => (clearResume(saveKey), setResume(null))}
         onSolo={() => void startSolo("season")}
+        onGlitch={(g) => prof && void meta.setLoad({ ...prof.load, glitch: g }).then(setProf, () => {})}
         onShop={() => setScreen({ k: "shop" })}
         onHub={(tab) => setScreen({ k: "hub", tab })}
         onMulti={() => setScreen({ k: "lobby" })}
@@ -286,6 +287,8 @@ function Menu(p: {
   onLogin(): void;
   onSolo(): void;
   onShop(): void;
+  /** 오염 단계 바꾸기 (메뉴에서 바로) */
+  onGlitch(g: number): void;
   onHub(tab?: HubTab): void;
   onMulti(): void;
   onCodex(): void;
@@ -416,22 +419,44 @@ function Menu(p: {
       </div>
       <div className="absolute top-[268px] left-[64px] flex w-[372px] flex-col gap-2.5">
 
-        <Btn
-          tone="main"
-          arrow
-          className="h-[58px] text-[20px] font-bold"
-          onClick={p.onSolo}
-          disabled={p.busy}
-        >
-          <span className="px-shadow">{p.busy ? "준비 중…" : p.member ? "시즌 도전" : "혼자 하기"}</span>
-          <span className="block text-[12px] font-normal opacity-85">
-            {!p.member
-              ? "연습 판 (회원은 랭킹 · 성장 · 보상)"
-              : pr
-                ? `오염 ${glitch}단계 (보상 ×${GLITCH[glitch].reward}) · 연구 ${pr.load.res.length} · 유물 ${pr.load.relics.length}${grit ? ` · 끈기 +${Math.round(grit * GRIT_PER * 100)}%` : ""}`
-                : "시즌 랭킹 판"}
-          </span>
-        </Btn>
+        <div className="flex gap-1.5">
+          {p.member && pr && (
+            <Btn
+              className="h-[58px] w-[34px] shrink-0 px-0 text-[14px]"
+              disabled={p.busy || glitch <= 0}
+              title="오염 단계 낮추기"
+              onClick={() => p.onGlitch(glitch - 1)}
+            >
+              ◀
+            </Btn>
+          )}
+          <Btn
+            tone="main"
+            arrow
+            className="h-[58px] min-w-0 flex-1 text-[20px] font-bold"
+            onClick={p.onSolo}
+            disabled={p.busy}
+          >
+            <span className="px-shadow">{p.busy ? "준비 중…" : p.member ? "시즌 도전" : "혼자 하기"}</span>
+            <span className="block text-[12px] font-normal opacity-85">
+              {!p.member
+                ? "연습 판 (회원은 랭킹 · 성장 · 보상)"
+                : pr
+                  ? `오염 ${glitch}단계 (보상 ×${GLITCH[glitch].reward}) · 연구 ${pr.load.res.length} · 유물 ${pr.load.relics.length}${grit ? ` · 끈기 +${Math.round(grit * GRIT_PER * 100)}%` : ""}`
+                  : "시즌 랭킹 판"}
+            </span>
+          </Btn>
+          {p.member && pr && (
+            <Btn
+              className="h-[58px] w-[34px] shrink-0 px-0 text-[14px]"
+              disabled={p.busy || glitch >= pr.glitchOpen}
+              title={glitch >= pr.glitchOpen ? "아직 열리지 않은 단계예요" : `오염 단계 올리기 — ${GLITCH[glitch + 1]?.rule ?? ""}`}
+              onClick={() => p.onGlitch(glitch + 1)}
+            >
+              ▶
+            </Btn>
+          )}
+        </div>
         <div className="grid grid-cols-2 gap-2.5">
           <Btn
             tone="gold"
