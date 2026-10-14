@@ -106,7 +106,8 @@ export function TutorialCard({ b }: { b: Board }) {
   const n = STEPS.indexOf(step) + 1;
   const set = (v: Saved) => (save(v), setSt(v));
   return (
-    <div className="pointer-events-auto absolute inset-x-6 bottom-3 z-30 flex justify-center">
+    // 치트 고르는 창이 떠 있으면 카드를 가리지 않게 위쪽에
+    <div className={`pointer-events-auto absolute inset-x-6 z-30 flex justify-center ${b.cheat ? "top-2" : "bottom-3"}`}>
       <div className="px-box dfn-pop flex max-w-[620px] items-start gap-3 p-3" style={{ "--b": "#5ff2ff" } as React.CSSProperties}>
         <div className="min-w-0 flex-1">
           <p className="flex items-baseline gap-2">

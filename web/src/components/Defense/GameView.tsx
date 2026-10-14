@@ -483,7 +483,7 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry }
           />
         </div>
         {(b.patch || b.cheats.length > 0 || b.mods.grit > 0) && (
-          <div className="px-inset flex h-full shrink-0 items-center gap-1 px-1.5">
+          <div className="px-inset flex h-full min-w-0 shrink items-center gap-1 overflow-hidden px-1.5">
             {patch && (
               <span
                 className="flex h-6 w-6 items-center justify-center bg-[#0a0816]"
@@ -518,7 +518,7 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry }
         )}
         {(b.mods.relics.length > 0 || b.mods.glitch.lv > 0) && (
           <div
-            className="px-inset flex h-full shrink-0 items-center gap-1 px-1.5"
+            className="px-inset flex h-full min-w-0 shrink items-center gap-1 overflow-hidden px-1.5"
             title={[
               b.mods.glitch.lv ? `오염 ${b.mods.glitch.lv}단계 — 적 체력 ×${b.mods.glitch.hp} · 속도 ×${b.mods.glitch.spd}` : "",
               ...b.mods.relics.map((id) => `${RELIC[id]?.name} Lv.${b.mods.relicLv?.[id] ?? 1}: ${relicDesc(id, b.mods.relicLv?.[id] ?? 1)}`),
@@ -537,7 +537,7 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry }
         )}
         {boss && (
           <div
-            className="px-box flex h-full w-[240px] shrink-0 flex-col justify-center px-2.5"
+            className="px-box flex h-full min-w-[150px] max-w-[240px] flex-1 flex-col justify-center px-2.5"
             style={{ "--b": BOSSES[boss.boss].color } as React.CSSProperties}
           >
             <div className="flex items-baseline justify-between text-[12px] leading-none">

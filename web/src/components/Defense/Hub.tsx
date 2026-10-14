@@ -641,7 +641,7 @@ function ResTab({ p, act, busy }: TabProps) {
             <>
               {`공용 칸 ${RES_SLOTS}개 (공동 연구만) + 세력 칸 ${p.fslots}/${FRES_MAX} (세력 연구만) — 출전 준비에서 장착`}
               <br />
-              연구 강화는 동일한 비용으로 초기화가 가능해요
+              연구 강화는 동일한 비용으로 1레벨까지 초기화가 가능해요
             </>
           }
         >
@@ -733,7 +733,7 @@ function RelicTab({ p, act, busy }: TabProps) {
           <>
             {`현재 유물 보유효과 +${relicPassive(Object.fromEntries(p.relics.map((id) => [id, p.relicLv?.[id] ?? 1])))}%`}
             <br />
-            유물 강화는 동일한 비용으로 초기화가 가능해요
+            유물 강화는 동일한 비용으로 1레벨까지 초기화가 가능해요
           </>
         }
       >

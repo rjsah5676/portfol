@@ -147,7 +147,11 @@ export class Controller {
     const g = this.game;
     if (g.over) return false;
     // 솔로: 치트 코드를 고르는 동안은 시계를 멈춤 (멀티는 시뮬이 보드만 멈추고 시간이 지나면 자동 선택)
-    if (this.mode.kind === "solo" && this.board.cheat) return false;
+    if (this.mode.kind === "solo" && this.board.cheat) {
+      // 자동 플레이(개발자 봇)는 멈춘 동안에도 고를 수 있게
+      this.onTick?.(g);
+      return false;
+    }
     if (this.mode.kind === "multi") {
       if (g.tick >= (this.lastTurn + 1) * TICKS_PER_TURN) return false;
       if (g.tick % TICKS_PER_TURN === 0) {
