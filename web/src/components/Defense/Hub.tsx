@@ -728,7 +728,15 @@ function LvBtns({ lv, max, busy, can, cost, back, next, onUp, onDown }: { lv: nu
 function RelicTab({ p, act, busy }: TabProps) {
   return (
     <div>
-      <H sub={`현재 유물 보유효과 +${relicPassive(Object.fromEntries(p.relics.map((id) => [id, p.relicLv?.[id] ?? 1])))}%`}>
+      <H
+        sub={
+          <>
+            {`현재 유물 보유효과 +${relicPassive(Object.fromEntries(p.relics.map((id) => [id, p.relicLv?.[id] ?? 1])))}%`}
+            <br />
+            유물 강화는 동일한 비용으로 초기화가 가능해요
+          </>
+        }
+      >
         유물 {p.relics.length}/{RELICS.length}
       </H>
       <div className="grid grid-cols-2 gap-1.5">
