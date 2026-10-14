@@ -48,6 +48,9 @@ export function look(ch: number, skin?: string | null): string {
   const s = skinOf(skin);
   return s && s.ch === id ? s.id : id;
 }
-export const artUrl = (ch: number, skin?: string | null) => `/fight/art/${look(ch, skin)}.webp`;
-export const faceUrl = (ch: number, skin?: string | null) => `/fight/art/${look(ch, skin)}-face.webp`;
-export const cutinUrl = (ch: number, skin?: string | null) => `/fight/cutin/${look(ch, skin)}.webp`;
+/** 스킨 그림을 바꿨을 때 올려서 브라우저에 남은 예전 그림 대신 새로 받게 함 */
+const ART_VER: Record<string, number> = { "soyoung-bunny": 3 };
+const ver = (id: string) => (ART_VER[id] ? `?v=${ART_VER[id]}` : "");
+export const artUrl = (ch: number, skin?: string | null) => `/fight/art/${look(ch, skin)}.webp${ver(look(ch, skin))}`;
+export const faceUrl = (ch: number, skin?: string | null) => `/fight/art/${look(ch, skin)}-face.webp${ver(look(ch, skin))}`;
+export const cutinUrl = (ch: number, skin?: string | null) => `/fight/cutin/${look(ch, skin)}.webp${ver(look(ch, skin))}`;
