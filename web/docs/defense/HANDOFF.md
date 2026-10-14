@@ -161,6 +161,25 @@ cd web && POKER_E2E=1 npx next dev            # → /games/defense/?fake=admin:�
 - 화면: 이어하기(`DefenseApp` localStorage `pgd-resume:<uid>` 2초마다 → `Controller.restore` 로 기록을 다시 돌려 따라잡음, 3.5시간) · 포기하기 · DPS 창(필드 오른쪽 위) · 클릭 두 번 이동(빈 칸은 바로, 「이동」/M 뒤엔 다른 유닛과 바꿈) · 재화 말풍선(`ui.tsx Tip`, `Hub CUR_INFO`) · 도트 스크롤바 · 마우스 크기(소리 창, `data-cur` + `cursor-3x/4x/6x.png`)
 - 효과: 공격 모양 유닛별 `render.ts HIT_KIND/drawShot` · 공격 동작 세력별 `attackPose` · 소환 `Fx spawn`(빛기둥 + 고리) · 효과음 `spawn`(레어 · 에픽 소환) · `reward` · `chest-open`
 
+### v1.2 BETA (밸런스 beta3) — 치트 코드(증강) · 시작 치트 · 끈기 · 일일 패키지
+- **치트 코드** (`lib/defense/cheats.ts`, 다른 게임의 증강): 보스 10 · 20 · 30 · 40 · 50 을 잡으면 `offerCheat` 가 `b.cheat = { kind: "cheat", offer[3], rr[3], t }` → **고를 때까지 그 보드는 멈춤** (`step` 이 건너뜀). 명령 `{t:"cheat", i}` 고르기 · `{t:"reroll", i}` 그 카드 다시 뽑기 (카드마다 `mods.cheatReroll`, 기본 1). 고르는 중엔 다른 명령은 거절(포기만 됨)
+  - 솔로: `controller.tickOnce` 가 `b.cheat` 이면 시계를 멈춤 (게임 시간 tick 이 안 늘어남 → 랭킹 시간 검증 그대로). 멀티: 보드만 멈추고 `CHEAT_MULTI_SEC`(20초) 지나면 첫 카드 자동 (`ev cheat auto`)
+  - 뽑기는 보드의 따로 된 난수 `b.crng` (`mixSeed(seed, 77)`) — 소환 운과 섞이지 않음. 같은 시드 멀티는 모두 같은 카드가 나옴
+  - 등급 4 (기본 · 고급 · 비밀 · 금지, `cheatOdds(몇 번째, luck)` — 뒤 보스일수록 높은 등급) · 종류 4 (유닛 · 골드 · 피해 · 버프) · 39종, 한 판에 같은 것 한 번. 효과는 `cheatFxOf(고른 id)` → `b.cx` (피해 · 세력 · 보스 · 레전드 이하/신화 이상 · 한 세력/세 세력 · 공속 · 치명 · 적 속도 · 방어 깎기 · 골드 · 이자 · 할인 · 보스 시간 · 패배 기준 적 수 · 복제 · 도박), 바로 받는 것은 `now`(골드 · 행운석 · 무료 소환 · 골라 뽑기권 · 강화 레벨)
+  - 보정: 치트 보스를 하나 지날 때마다 모든 적 체력 +`TUNE.cheatHp`(0.15) — `cheatHpOf(웨이브)`, 고른 치트와 상관없이 웨이브로만
+  - 화면: `GameView CheatPicker`(필드 위 3장 · 다시 뽑기 버튼) · 고른 코드는 위쪽 HUD 「필드의 적」 오른쪽 칸에 아이콘으로 (맨 앞은 시작 치트) · 봇은 `bot.ts cheatScore`
+- **시작 치트 = 패치**: `newBoard` 가 `b.cheat = { kind: "patch", offer: 패치 4개 }` 로 시작 → 고를 때까지 준비 시간도 멈춤. 예전 「패치 고르기」 버튼 · `PATCH_DEADLINE` 자동 연합 없음 (`patch` 명령은 시작 창이 떠 있을 때만). 단일 코어 · 이자 수치는 `TUNE` (meta.ts 설명도 TUNE 에서 만듦)
+- **치트 연구** (`CHEAT_RES`, 로드아웃 `cheat`, 프로필 `cheatRes` · `load.cheat`): 리롤 회로(`x_reroll` 다시 뽑기 +1) · 확률 증폭기(`x_luck` 비밀 ×1.5 · 금지 ×2) — 각 코어 120 + 조각 12,000, rpc `defense.cheatres.buy {id}`, 출전 준비 1칸 · 상점 「상자 · 소환」 탭
+- **끈기** (`GRIT_PER 0.05` · `GRIT_MAX 10`, 로드아웃 `grit` → `Mods.gritDmg`): 가장 높은 열린 단계(아직 못 깬)에서 연달아 진 판 수 — 서버 `onRun` 이 `p.grit {g, n}` 에 셈, 단계를 넘기면 0, `gritOf` 로 시작 때 붙임. 메뉴 시즌 버튼 · 판 HUD 에 「끈기 +%」
+- **세력 연구 3번째** (`k_rally` 기사단 공속 · `m_bounty` 기계공방 보스 피해 · `a_echo` 마도회 공속) — 한 세력 원툴이 세력 칸 3개를 다 쓸 수 있게. `Mods.facAspd` (예전 `mechAspd` 대신) · `mechBoss`
+- **일일 패키지** `p_daily` 500GP 300% (`perDay`, 프로필 `shopDay {d, n}`)
+- **밸런스 손잡이 `TUNE`** (balance.ts — 객체라 시뮬이 `--tune k=v,…` 로 바꿔 봄): cheatHp · coreLow/High/Slow · interestPct/Max. 시뮬 도구 `--grit n` · `--cheathp`. tsx 에서 모듈이 두 벌이라 두 벌 다 고침 (createRequire)
+- 경제 · 밸런스 결과 (`defense-econ.ts`, 봇 · 배속 2 · 하루 8판, 시드 7 · 9 평균 — 오염 30 클리어까지):
+  이자째기 33.8h · 균형 37.9h · 도박사 42.3h · 마도회 44.2h · 단일 코어 45.1h · 기사단 48.1h · 기계공방 48.7h · 이자 51.1h → **가장 느린 길 ÷ 가장 빠른 길 = 1.51** (목표 1.6 이하).
+  오염 10 첫 클리어 2~6h · 20 은 13~30h · 30 은 34~51h, 한 단계에서 가장 오래 막힌 시간 3~8h (끈기 최대를 +50% → +75% 로 올려 12h 막힘을 없앰). 판 하나 게임 시간 10~18분(예전과 같음)
+  - 거쳐 온 조정: 치트만 넣으면 late/10 평균 웨이브 46.9 → 53.7 → `cheatHp 0.15` 로 47.9 · 원툴은 세력 연구가 2개뿐이라 3번째 추가 · 단일 코어 ×3.6/2.5 → ×7/4.5 (늦게 필드가 차서 지던 것) · 도박사 +10 → +15%p · 이자 웨이브 골드 +20% / 최대 70 → 40 (모아 두는 길만 너무 빨랐음) · 무지개 연합 12 → 9% · 삼색 동맹 25 → 20% · 심연 +2% → +4% · 레벨업 카드 ×1.25. `cheatHp 0.2` 는 원툴만 더 느려져(비율 2.0) 되돌림
+  - 봇 `소환만`(강화 · 조합을 거의 안 하는 시험용)은 비교에서 뺌. 봇은 초월을 안 씀 → 사람은 판 수가 덜 들지만 배속을 섞어 써서 40~80시간 어림
+
 ### v1.1 BETA (밸런스 beta2) — 상점 · GP 경제 · 심연 재조정
 - **주간 도전 없앰** (`weekly` 모드 · 순위표 · 순위 GP `WEEKLY_GP` · `weeklyRelics` · `paidWeek` 전부). 메뉴 그 자리 = **상점** 화면 (`Hub mode="shop"`: 패키지 · 상자 · 소환(+칸 해금) · 재화샵 · GP 교환). 정비소 상점 탭 없음
 - **프로필**: `coreBuys` · `gpBuys` · `paidWeek` 대신 `shop {w, n: id→이번 주 산 수}` · `packs` (한 번만 패키지) · `pity` (초월 천장)
