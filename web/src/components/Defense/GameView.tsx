@@ -222,7 +222,7 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry }
         break;
       case "treasure":
         if (e.stage === "start") {
-          sfx("boss");
+          sfx("treasure-open");
           setShout({
             id: Math.random(),
             title: "보물방!",
@@ -230,6 +230,7 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry }
             color: "#ffd23f",
           });
         } else {
+          sfx("treasure-coin");
           sfx("reward");
           setShout({
             id: Math.random(),

@@ -161,6 +161,8 @@ cd web && POKER_E2E=1 npx next dev            # → /games/defense/?fake=admin:�
 - 화면: 이어하기(`DefenseApp` localStorage `pgd-resume:<uid>` 2초마다 → `Controller.restore` 로 기록을 다시 돌려 따라잡음, 3.5시간) · 포기하기 · DPS 창(필드 오른쪽 위) · (v1.2.1 에서 클릭 이동 삭제 — 끌어서만) · 재화 말풍선(`ui.tsx Tip`, `Hub CUR_INFO`) · 도트 스크롤바 · 마우스 크기(소리 창, `data-cur` + `cursor-3x/4x/6x.png`)
 - 효과: 공격 모양 유닛별 `render.ts HIT_KIND/drawShot` · 공격 동작 세력별 `attackPose` · 소환 `Fx spawn`(빛기둥 + 고리) · 효과음 `spawn`(레어 · 에픽 소환) · `reward` · `chest-open`
 
+### v1.8.2 — 일일 미션 보상 3배 (`DAILY_POOL` pieces · xp ×3) · 효과음 정식 (일레븐랩스 10개: boss-phase · tele-* · treasure-open · treasure-coin, 최대 -19~-25 dB 로 맞춤 · 앞뒤 무음 자름)
+
 ### v1.8 BETA — 보물방
 - 확률: `progress.ts TREASURE { cap 500, exp 1.7 }` · `treasureChance(쌓인 웨이브, 오염)` = (w/500)^1.7 (오염 0 은 0). 쌓인 웨이브 = 프로필 `twaves` (오염 1+ 시즌 판, 검증된 판의 도달 웨이브 합, 500 에서 멈춤)
   - 몬테카를로: 판당 25~55웨이브면 중앙값 ≈ 240 (짧게 끊는 사람 195 · 길게 버티는 사람 260), 10~90% ≈ 125~360웨이브

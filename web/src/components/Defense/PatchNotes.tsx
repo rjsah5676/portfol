@@ -15,6 +15,15 @@ export interface Patch {
 
 export const PATCHES: Patch[] = [
   {
+    ver: "v1.8.2 BETA",
+    name: "일일 미션 · 효과음",
+    date: "2026.10.15",
+    lines: [
+      "일일 미션 보상 3배 — 픽셀 조각 · 패스 경험치 (예: 오늘의 출근 조각 80 → 240)",
+      "보스 2페이즈 · 예고 · 기술별 효과음과 보물방 열림 · 끝 효과음을 새로 (임시 소리 → 정식)",
+    ],
+  },
+  {
     ver: "v1.8.1 BETA",
     name: "편의",
     date: "2026.10.15",
