@@ -79,11 +79,11 @@ function SkillRow({ c, k }: { c: CharDef; k: "S" | "X" }) {
         >
           {isId ? "아이덴티티" : "필살기"} <KeyCap k={isId ? "L" : "I"} /> {isId ? c.idName : c.ultName}
         </span>
-        <span className="text-[1cqw] leading-snug break-keep text-white/80">{keyText(isId ? c.idDesc : c.ultDesc)}</span>
+        <span className="text-[1cqw] leading-snug break-keep text-white/80 [overflow-wrap:anywhere]">{keyText(isId ? c.idDesc : c.ultDesc)}</span>
         {isId && (
-          <span className={`flex items-start gap-[0.4cqw]`}>
+          <span className={`flex w-full min-w-0 items-start gap-[0.4cqw]`}>
             {c.airLabel && <SkillIcon key={`${c.id}-A`} c={c} k="A" small />}
-            <span className="text-[0.9cqw] leading-snug break-keep text-white/55">
+            <span className="min-w-0 text-[0.9cqw] leading-snug break-keep text-white/55 [overflow-wrap:anywhere]">
               <b className="text-[#FDE047]/80">{keyText(c.airLabel ?? "점프 중 L")}</b> {keyText(c.airDesc)}
             </span>
           </span>
@@ -112,7 +112,7 @@ function StatRadar({ c }: { c: CharDef }) {
   const poly = (f: (i: number) => number) => STAT_AXES.map((_, i) => pt(i, f(i)).join(",")).join(" ");
   return (
     // 옆 글자(콤보·체력·리치·기동력)가 그림 밖으로 잘리지 않게 좌우를 넉넉히
-    <svg viewBox="-26 4 152 92" className="h-[7.4cqw] w-[12.2cqw] shrink-0 overflow-visible" aria-label="능력치">
+    <svg viewBox="-26 4 152 92" className="h-[7.4cqw] w-[12.2cqw] min-w-0 shrink overflow-visible" aria-label="능력치">
       {[1, 0.8, 0.6, 0.4, 0.2].map((k) => (
         <polygon
           key={k}
@@ -162,7 +162,7 @@ function StatRadar({ c }: { c: CharDef }) {
 
 function CharInfo({ c, right }: { c: CharDef; right?: boolean }) {
   return (
-    <div className={`flex flex-col gap-[0.5cqw] ${right ? "items-end text-right" : ""}`}>
+    <div className={`flex w-full min-w-0 flex-col gap-[0.5cqw] ${right ? "items-end text-right" : ""}`}>
       <div className={`flex w-full items-center justify-between gap-[0.6cqw] ${right ? "flex-row-reverse" : ""}`}>
         <div className={`flex min-w-0 flex-col gap-[0.5cqw] ${right ? "items-end" : ""}`}>
       <div className="font-mono text-[1.1cqw] tracking-[0.25em] text-white/45">{c.tagline}</div>
@@ -281,6 +281,9 @@ export default function Select({
   const prac = setup.mode === "practice";
   const ai = setup.mode === "ai" || prac;
   const foe = prac ? "허수아비" : "CPU";
+  // 연습 모드 허수아비는 늘 건모 — 고르는 동안에도 건모로 보여 줌 (예전엔 지난번 상대가 보였다가 판에선 건모가 나옴)
+  const pracFoe = CHARS.findIndex((c) => c.id === "gunmo");
+  const c2i = prac && pracFoe >= 0 ? pracFoe : setup.c2;
   const n = CHARS.length;
   /** 지금 커서를 움직이는 쪽 (AI 대전: 1P가 끝나면 CPU 쪽) */
   const pickSide = (l: [boolean, boolean]) => (ai ? (l[0] ? 1 : 0) : -1);
@@ -326,9 +329,8 @@ export default function Select({
     // 연습 모드: 허수아비는 고르지 않고 건모로
     if (prac && side === 0 && !l[1]) {
       l[1] = true;
-      const gm = CHARS.findIndex((c) => c.id === "gunmo");
       setRnd((r) => [r[0], false]);
-      setSetup((s) => ({ ...s, c2: gm >= 0 ? gm : s.c2 }));
+      setSetup((s) => ({ ...s, c2: pracFoe >= 0 ? pracFoe : s.c2 }));
     }
     setLock(l);
     if (l[0] && l[1]) setStage("map");
@@ -487,7 +489,7 @@ export default function Select({
   }, [ai]);
 
   const c1 = CHARS[setup.c1],
-    c2 = CHARS[setup.c2];
+    c2 = CHARS[c2i];
   const side = pickSide(lock);
   const mapShownIdx = mapFlash ?? mapCur;
   const mapShown = mapShownIdx >= 0 ? MAPS[mapShownIdx] : null;
@@ -802,7 +804,7 @@ export default function Select({
               })()}
               {CHARS.map((c, i) => {
                 const on1 = setup.c1 === i && !rnd[0],
-                  on2 = setup.c2 === i && !rnd[1];
+                  on2 = c2i === i && !rnd[1];
                 const act1 = !lock[0] && (ai ? side === 0 : true);
                 const act2 = !lock[1] && (ai ? side === 1 : true);
                 const glow = (on1 && act1) || (on2 && act2);
