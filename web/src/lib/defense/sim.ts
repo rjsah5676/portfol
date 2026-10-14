@@ -114,6 +114,8 @@ export interface Enemy {
   dashMult: number;
   /** 보스 기술별 쿨 (tick) */
   sk: number[];
+  /** 보물방 골렘 */
+  tre: boolean;
   /** 보스 2페이즈 (0 · 1) · 2페이즈 기술별 쿨 */
   ph: number;
   sk2: number[];
@@ -168,6 +170,8 @@ export type Ev =
   /** 보스 2페이즈 시작 · 예고 시작(warn) / 맞음(hit: 기절한 칸 수) */
   | { t: "phase"; boss: number }
   | { t: "tele"; name: string; snd: string; hit: number | null }
+  /** 보물방 시작 · 끝 (ratio = 깎은 체력 비율) */
+  | { t: "treasure"; stage: "start" | "end"; wave: number; ratio?: number; killed?: boolean; gold?: number }
   | { t: "bossDown"; boss: number; gold: number; stones: number; ticket: number | null }
   | { t: "wave"; wave: number }
   | { t: "mission"; id: string }
@@ -177,7 +181,7 @@ export type Ev =
   | { t: "cheat"; id: string; auto: boolean }
   | { t: "over"; win: boolean };
 
-export type Phase = "prep" | "wave" | "boss" | "break" | "over";
+export type Phase = "prep" | "wave" | "boss" | "break" | "treasure" | "over";
 
 export interface Result {
   win: boolean;
@@ -199,6 +203,11 @@ export interface Board {
   bossT: number;
   /** 보스 2페이즈 예고: 이 칸들에 t tick 뒤 기절 sec (화면은 빨갛게 표시) */
   tele: { name: string; snd: string; cells: number[]; t: number; sec: number } | null;
+  /** 보물방 진행 중 (남은 tick · 받은 골드 · 골렘 체력 · 잡았나) — 그동안 일반 적은 stash 에 */
+  troom: { wave: number; t: number; gold: number; max: number; killed: boolean } | null;
+  stash: Enemy[];
+  /** 끝난 보물방 결과 (판 밖 보상 재료) */
+  treasure: { wave: number; dmg: number; max: number; killed: boolean; gold: number } | null;
   cells: Cell[];
   enemies: Enemy[];
   nextId: number;
@@ -264,6 +273,9 @@ export function newBoard(seed: number, idx: number, lo?: Loadout | null): Board 
     spawned: 0,
     bossT: 0,
     tele: null,
+    troom: null,
+    stash: [],
+    treasure: null,
     cells: Array.from({ length: SLOTS }, () => ({ def: null, units: [] })),
     enemies: [],
     nextId: 1,
@@ -555,6 +567,7 @@ export function apply(g: Game, p: number, cmd: Cmd): string | null {
       return null;
     }
     case "rift": {
+      if (b.phase === "treasure") return "보물방에선 균열을 못 열어요";
       if (b.wave < B.rift.from) return `${B.rift.from}웨이브부터 열 수 있어요`;
       if (b.riftCd > 0) return "균열이 아직 닫혀 있어요";
       if (b.enemies.some((e) => e.rift)) return "이미 열린 균열이 있어요";
@@ -692,6 +705,7 @@ function spawn(b: Board, kindId: string, hp: number): Enemy {
     dash: 0,
     dashMult: 1,
     sk: [],
+    tre: false,
     ph: 0,
     sk2: [],
     expire: 0,
@@ -740,6 +754,7 @@ function finish(g: Game, b: Board, win: boolean, reason: Result["reason"]) {
 /** 다음 웨이브를 부를 수 없는 이유 (부를 수 있으면 null) — 준비 시간 · 적이 다 나온 일반 웨이브 · 보스 뒤 쉬는 시간 */
 export function nextBlock(b: Board): string | null {
   if (b.result) return "끝난 판이에요";
+  if (b.phase === "treasure") return "보물방이 끝나야 넘어가요";
   if (b.phase === "boss") return "보스를 잡아야 넘어가요";
   if (b.phase === "wave" && b.spawned < countOf(b.wave)) return "이번 웨이브 적이 아직 나오는 중이에요";
   return null;
@@ -748,7 +763,39 @@ export function nextBlock(b: Board): string | null {
 export const nextBonus = (b: Board) =>
   b.phase === "wave" ? Math.floor(Math.max(0, sec(B.waveSec) - b.wt) / TPS) * B.nextGold : 0;
 
+/** 보물방 시작: 일반 적은 치워 두고 골렘 한 마리 · 시간 제한 */
+function startTreasure(b: Board, w: number) {
+  const T = B.treasure;
+  b.phase = "treasure";
+  b.wave = w;
+  b.wt = 0;
+  b.stash = b.enemies;
+  b.enemies = [];
+  b.tele = null;
+  const e = spawn(b, "golem", hpOf(T.hpWave) * B.bossHp * T.hp * b.mods.glitch.boss);
+  e.tre = true;
+  e.size = 1;
+  e.armor = 0;
+  e.mres = 0;
+  e.spd *= T.spd;
+  b.troom = { wave: w, t: sec(T.sec), gold: 0, max: e.max, killed: false };
+  b.ev?.push({ t: "treasure", stage: "start", wave: w });
+}
+/** 보물방 끝: 결과 남기고 치워 둔 적을 돌려놓고 그 웨이브 시작 */
+function endTreasure(b: Board) {
+  const r = b.troom!;
+  const e = b.enemies.find((x) => x.tre);
+  const dmg = r.killed ? r.max : Math.max(0, r.max - (e ? Math.max(0, e.hp) : 0));
+  b.treasure = { wave: r.wave, dmg, max: r.max, killed: r.killed, gold: r.gold };
+  b.enemies = b.stash;
+  b.stash = [];
+  b.troom = null;
+  b.ev?.push({ t: "treasure", stage: "end", wave: r.wave, ratio: dmg / r.max, killed: r.killed, gold: r.gold });
+  startWave(b, r.wave);
+}
+
 function startWave(b: Board, w: number) {
+  if (w === b.mods.treasure && !b.treasure && !b.troom && w % BOSS_EVERY !== 0) return startTreasure(b, w);
   b.wave = w;
   b.wt = 0;
   b.spawned = 0;
@@ -793,6 +840,14 @@ function stepBoard(g: Game, b: Board) {
     }
   } else if (b.phase === "boss") {
     if (--b.bossT <= 0) return finish(g, b, false, "boss");
+  } else if (b.phase === "treasure") {
+    const r = b.troom!;
+    if (--r.t % TPS === 0 && r.t > 0) {
+      const gold = Math.floor(B.treasure.goldBase + r.wave * B.treasure.goldPerW);
+      b.gold += gold;
+      r.gold += gold;
+    }
+    if (r.t <= 0 || r.killed) endTreasure(b);
   } else if (b.phase === "break") {
     if (++b.wt >= sec(B.breakSec)) {
       endWave(b);
@@ -1291,6 +1346,12 @@ export function teleCells(b: Board, shape: TeleShape): number[] {
 function die(g: Game, b: Board, e: Enemy): boolean {
   if (e.last === "~expire") {
     b.ev?.push({ t: "rift", tier: e.rift, ok: false });
+    return false;
+  }
+  if (e.tre) {
+    // 보물 골렘: 다음 tick 에 보물방이 끝남 (골드는 매초 받은 것)
+    if (b.troom) b.troom.killed = true;
+    b.fx?.push({ k: "die", x: e.x, y: e.y, kind: e.kind, boss: true, gold: 0 });
     return false;
   }
   b.kills++;

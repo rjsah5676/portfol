@@ -98,10 +98,13 @@ interface Run {
   dealt: Record<string, number>;
   snap: Record<number, { gold: number; stones: number; units: number; best: number; up: number }>;
   dps: Record<number, number>;
+  /** 보물방 깎은 비율 (열렸으면) · 처치 */
+  tre: { ratio: number; killed: boolean } | null;
 }
 
 function play(cfg: BotCfg, seed: number): Run {
-  const lo = loadoutFor(cfg);
+  const tw = Number(opt("--treasure") ?? 0);
+  const lo = tw ? { ...(loadoutFor(cfg) ?? {}), treasure: tw } : loadoutFor(cfg);
   const g: Game = newGame(seed, 1, [lo]);
   const b = g.boards[0];
   const log: LogEntry[] = [];
@@ -134,7 +137,8 @@ function play(cfg: BotCfg, seed: number): Run {
     if (again.wave !== r.wave || again.tick !== r.tick || again.kills !== r.kills || again.win !== r.win)
       throw new Error(`결정론 깨짐: ${cfg.name} seed ${seed} — ${JSON.stringify(r)} vs ${JSON.stringify(again)}`);
   }
-  return { bot: cfg.name, seed, win: r.win, wave: r.wave, reason: r.reason, min: r.tick / TPS / 60, kills: r.kills, ms, dealt: b.dealt, snap, dps };
+  const tre = b.treasure ? { ratio: b.treasure.dmg / b.treasure.max, killed: b.treasure.killed } : null;
+  return { bot: cfg.name, seed, win: r.win, wave: r.wave, reason: r.reason, min: r.tick / TPS / 60, kills: r.kills, ms, dealt: b.dealt, snap, dps, tre };
 }
 
 const bots = only ? [botByName(only)] : BOTS;
@@ -192,6 +196,15 @@ if (curve) {
   for (let w = 1; w <= LAST_WAVE; w += 3) {
     const d = runs.map((r) => r.dps[w]).filter((x) => x !== undefined);
     console.log(`  w${String(w).padStart(2)}  적 ${String(hpOf(w) * 20).padStart(9)}  처리량 ${avg(d).toFixed(0).padStart(9)}×20=${(avg(d) * 20).toFixed(0).padStart(10)}  (${d.length}판)`);
+  }
+}
+
+// --treasure W: 모든 판에 W 웨이브 보물방 → 깎은 비율
+if (opt("--treasure")) {
+  console.log(`\n보물방 W${opt("--treasure")} (전략별 평균 깎은 체력 · 처치 / 보물방까지 간 판)`);
+  for (const cfg of bots) {
+    const t = runs.filter((r) => r.bot === cfg.name && r.tre).map((r) => r.tre!);
+    if (t.length) console.log(`  ${cfg.name.padEnd(6)} ${(avg(t.map((x) => x.ratio)) * 100).toFixed(0).padStart(4)}%  처치 ${t.filter((x) => x.killed).length}/${t.length}`);
   }
 }
 

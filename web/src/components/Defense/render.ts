@@ -1034,14 +1034,19 @@ function drawEnemy(ctx: CanvasRenderingContext2D, e: Enemy, now: number) {
   }
   const k = KIND[e.kind];
   const size = (e.size === 0 ? 26 : e.size === 1 ? 34 : 44) * K;
-  const s = e.elite || e.rift ? size * 1.3 : size;
+  const s = e.tre ? size * 2.2 : e.elite || e.rift ? size * 1.3 : size;
   const hop = e.stun > 0 ? 0 : Math.floor(now / 160 + e.id) % 2 ? 2 : 0;
   shadow(ctx, x, foot, s * 0.8);
   if (e.rift) {
     ctx.fillStyle = Math.floor(now / 150) % 2 ? "rgba(255,79,216,0.45)" : "rgba(95,242,255,0.35)";
     ctx.fillRect(P(x - s * 0.6), P(foot - 6), P(s * 1.2), 8);
   }
-  const art = ENEMY_ART[e.kind];
+  // 보물 골렘: 금빛 깜빡임 (그림이 따로 있으면 ENEMY_ART.treasure)
+  if (e.tre) {
+    ctx.fillStyle = Math.floor(now / 200) % 2 ? "rgba(255,210,63,0.35)" : "rgba(255,240,160,0.22)";
+    ctx.fillRect(P(x - s * 0.8), P(foot - s * 1.5), P(s * 1.6), P(s * 1.6));
+  }
+  const art = (e.tre && ENEMY_ART.treasure) || ENEMY_ART[e.kind];
   const slowed = e.slowT > 0 || e.aSlow > 0;
   if (!(art && sprite(ctx, art, x, foot - hop, s * 1.25, now, 0, moveDir(e)))) {
     pixelBlob(ctx, e.kind, x, foot - hop, s, slowed ? "#9fe3ff" : k.color);
@@ -1051,7 +1056,7 @@ function drawEnemy(ctx: CanvasRenderingContext2D, e: Enemy, now: number) {
     ctx.fillRect(P(x - 6), P(foot - s - 4), 4, 4);
     ctx.fillRect(P(x + 2), P(foot - s - 8), 4, 4);
   }
-  if (e.elite) pxText(ctx, "♛", x, foot - s * 1.25 - 6, 12, "#ffd23f");
+  if (e.elite || e.tre) pxText(ctx, "♛", x, foot - s * 1.25 - 6, e.tre ? 18 : 12, "#ffd23f");
   if (e.stun > 0) stars(ctx, x, foot - s - 4, now);
   // 체력
   if (e.hp < e.max) {

@@ -161,6 +161,16 @@ cd web && POKER_E2E=1 npx next dev            # → /games/defense/?fake=admin:�
 - 화면: 이어하기(`DefenseApp` localStorage `pgd-resume:<uid>` 2초마다 → `Controller.restore` 로 기록을 다시 돌려 따라잡음, 3.5시간) · 포기하기 · DPS 창(필드 오른쪽 위) · (v1.2.1 에서 클릭 이동 삭제 — 끌어서만) · 재화 말풍선(`ui.tsx Tip`, `Hub CUR_INFO`) · 도트 스크롤바 · 마우스 크기(소리 창, `data-cur` + `cursor-3x/4x/6x.png`)
 - 효과: 공격 모양 유닛별 `render.ts HIT_KIND/drawShot` · 공격 동작 세력별 `attackPose` · 소환 `Fx spawn`(빛기둥 + 고리) · 효과음 `spawn`(레어 · 에픽 소환) · `reward` · `chest-open`
 
+### v1.8 BETA — 보물방
+- 확률: `progress.ts TREASURE { cap 500, exp 1.7 }` · `treasureChance(쌓인 웨이브, 오염)` = (w/500)^1.7 (오염 0 은 0). 쌓인 웨이브 = 프로필 `twaves` (오염 1+ 시즌 판, 검증된 판의 도달 웨이브 합, 500 에서 멈춤)
+  - 몬테카를로: 판당 25~55웨이브면 중앙값 ≈ 240 (짧게 끊는 사람 195 · 길게 버티는 사람 260), 10~90% ≈ 125~360웨이브
+  - 뽑기는 서버 `defense.start` → `meta.rollTreasure` (randomInt) — 뜨면 `twaves = 0` · `lo.treasure` = 11~59 중 보스 웨이브 뺀 무작위(`TREASURE_WAVES`). 로드아웃에 들어가서 기록 검증도 같은 값. 판을 버리면 그 보물방은 날아감(다시 시작으로 웨이브 고르기 X). 멀티는 없음
+- 판 안 (`sim.ts startTreasure / endTreasure`, `B.treasure`): 그 웨이브 시작 직전 phase `treasure` — 일반 적은 `b.stash` 로 치워 두고 보물 골렘(`e.tre`, kind golem) 하나, 30초. 체력 = hpOf(55) × bossHp × 오염 보스 배수 (웨이브와 상관없음 → 늦게 뜰수록 많이 깎음). 매초 골드 3 + 웨이브 × 0.34. 끝나면 적을 돌려놓고 그 웨이브 시작. 다음 웨이브 · 균열 막힘
+  - `b.treasure {wave, dmg, max, killed, gold}` → 검증 stats → `onRun` 이 `treasureReward(오염, …)` (조각 600 × 깎은 비율 × 오염 보상 배수 · 코어 8 × 비율 × (1 + 오염/10) · 처치 카드 상자 1) → `reward.treasure`
+  - defense-sim `--treasure W` 로 깎은 비율 확인: 균형 봇 W15 ≈ 10% · W35 ≈ 50~60% · W55 ≈ 90~100% (오염 1 mid ~ 오염 20 max 비슷)
+- 화면: 시즌 도전 버튼 위 「보물방 n%」 · 판 시작 「보물방 당첨!」 · 위 줄 「보물방 W37」 → 진행 중 TREASURE + 깎은 % · 남은 초 · 받은 골드 · 판 끝 보상 줄. 골렘 그림은 지금 데드픽셀 골렘 + 금빛 (그림 오면 `ENEMY_ART.treasure`)
+- econ: `--treasure 1`(기본)로 보물방 포함
+
 ### v1.7 BETA — 보스 2페이즈 6명 · 단계마다 2명
 - 기술은 하나로 합침: `{ kind: "tele", shape, every, warn, sec, name, snd }` · 모양 `row · col · cell · two · area(2×2) · plus(십자)` → `sim.ts teleCells` (세기 합이 가장 큰 곳, 같으면 앞)
   - 릴리 col 8s/2s/2.5s · 소영 two 7/2/3 · 제나 row 7/2/3 · 이그나 area 8/2/3 · 이반 cell 8/2.5/6 · 카이 plus 7/1.8/3 (every/warn/기절)

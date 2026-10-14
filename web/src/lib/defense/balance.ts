@@ -28,6 +28,12 @@ export const B = {
   spawnGap: 0.5,
   /** 다음 웨이브 부르기: 적이 다 나온 뒤 남은 웨이브 시간 1초마다 골드 (보스 웨이브 · 준비 시간 · 보스 뒤 쉬는 시간은 보너스 없음) */
   nextGold: 1,
+  /**
+   * 보물방 (판을 시작할 때 서버가 정한 웨이브 — Loadout.treasure): 그 웨이브 직전에 sec 초 동안 일반 적은 멈추고(치워 둠)
+   * 보물 골렘 한 마리. 체력은 웨이브와 상관없이 hpWave 웨이브 기준 (늦게 뜰수록 덱이 세서 많이 깎음) × bossHp × hp × 오염 단계.
+   * 매초 골드 goldBase + 웨이브 × goldPerW. 판 밖 보상(피해 비례)은 progress.ts treasureReward
+   */
+  treasure: { sec: 30, hpWave: 55, hp: 1, goldBase: 3, goldPerW: 0.34, spd: 0.6 },
   /** 보스 제한 시간 (못 잡으면 패배) */
   bossSec: 60,
   /** 보스를 잡고 다음 웨이브까지 */

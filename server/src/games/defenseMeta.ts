@@ -50,6 +50,10 @@ import {
   weeklyOf,
   transRoll,
   type Goods,
+  TREASURE,
+  TREASURE_WAVES,
+  treasureChance,
+  treasureReward,
   type Loadout,
   type PassReward,
   type QuestDef,
@@ -108,6 +112,8 @@ export interface Profile {
   glitchWin: number;
   /** 오염 단계별 최고 웨이브 (클리어 = LAST_WAVE + 1) — 진 판도 진척을 보여 주려고 */
   gbest?: Record<string, number>;
+  /** 보물방: 지난 보물방 뒤로 쌓인 웨이브 (오염 1+ 시즌 판, 검증된 것만) — 확률 = treasureChance */
+  twaves?: number;
   theme: string;
   day: Prog;
   week: Prog;
@@ -134,6 +140,8 @@ export interface Profile {
 export interface RunStats {
   made: Record<string, number>;
   rifts: number;
+  /** 보물방 결과 (그 판에 열렸으면) */
+  treasure?: { wave: number; dmg: number; max: number; killed: boolean; gold: number } | null;
 }
 
 /** 시작 선물 */
@@ -363,6 +371,16 @@ export function createDefenseMeta(db: Database, points: Points, now: () => numbe
 
   return {
     /** 시즌 판 · 멀티에 들고 갈 로드아웃 (서버가 정함) */
+    /** 판 시작 때 보물방 뽑기 (시즌 판) — 뜨면 쌓인 웨이브 0 으로 · 열릴 웨이브(11~59, 보스 웨이브 빼고) 를 돌려줌, 아니면 0 */
+    rollTreasure(uid: string, glitch: number): Promise<number> {
+      return edit(uid, (p) => {
+        const ch = treasureChance(p.twaves ?? 0, glitch);
+        if (ch <= 0 || randomInt(0, 1_000_000) >= Math.round(ch * 1_000_000)) return 0;
+        p.twaves = 0;
+        return TREASURE_WAVES[randomInt(0, TREASURE_WAVES.length)];
+      });
+    },
+
     async loadoutOf(uid: string): Promise<Required<Loadout>> {
       const p = await load(uid);
       const lv = Object.fromEntries(Object.entries(p.lv).filter(([, v]) => v > 0));
@@ -396,7 +414,7 @@ export function createDefenseMeta(db: Database, points: Points, now: () => numbe
 
     /** 검증된 판 하나 → 보상 · 미션 · 패스 경험치 · 오염 단계 열기 */
     async onRun(uid: string, mode: RunMode, res: Result, st: RunStats, glitch: number, players = 1) {
-      return edit(uid, (p) => {
+      return edit(uid, async (p) => {
         const grades = Object.fromEntries(Object.keys(st.made).map((id) => [id, UNIT[id]?.grade ?? 0]));
         const rw = runReward(mode === "multi" && players < 2 ? "season" : mode, res, st.made, grades, glitch);
         // 오늘 첫 판: 조각 ×2
@@ -449,11 +467,19 @@ export function createDefenseMeta(db: Database, points: Points, now: () => numbe
         const reach = res.win ? LAST_WAVE + 1 : res.wave;
         if (reach > prevBest) gb[glitch] = reach;
         const gbest = { glitch, prev: prevBest, now: Math.max(prevBest, reach) };
+        // 보물방: 오염 1+ 판은 도달한 웨이브만큼 쌓임 (천장까지) · 열렸던 판이면 깎은 만큼 보상
+        if (mode === "season" && glitch >= TREASURE.minGlitch) p.twaves = Math.min(TREASURE.cap, (p.twaves ?? 0) + res.wave);
+        let treasure: { wave: number; ratio: number; killed: boolean; gold: number; reward: Goods } | null = null;
+        if (st.treasure) {
+          const tg = treasureReward(glitch, st.treasure);
+          await grantGoods(uid, p, tg);
+          treasure = { wave: st.treasure.wave, ratio: st.treasure.max ? st.treasure.dmg / st.treasure.max : 0, killed: st.treasure.killed, gold: st.treasure.gold, reward: tg };
+        }
         if (glitchUnlocks(glitch, res) && glitch >= p.glitchOpen && p.glitchOpen < GLITCH_MAX) {
           p.glitchOpen = glitch + 1;
           opened = true;
         }
-        return { ...rw, opened: opened ? p.glitchOpen : null, passTier: passTier(p.season.xp), first, fresh, firstClear, gbest };
+        return { ...rw, opened: opened ? p.glitchOpen : null, passTier: passTier(p.season.xp), first, fresh, firstClear, gbest, treasure };
       });
     },
 

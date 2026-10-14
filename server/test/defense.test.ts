@@ -7,7 +7,7 @@ import { RECIPES, UNIT, UNITS } from "../../web/src/lib/defense/units";
 import { PHASE_PAIRS, phaseOn } from "../../web/src/lib/defense/enemies";
 import { CHEATS, CHEAT_MULTI_SEC, cheatFxOf, cheatOdds } from "../../web/src/lib/defense/cheats";
 import { TPS } from "../../web/src/lib/defense/balance";
-import { GLITCH, relicShardsToMax, CHEAT_RES, BOX, BENCH_COST, FRES_COST, TRANS_IDS, GP_PACKS, GP_SELL, GP_STORE, PACK, PASS_PREMIUM_GP, RESEARCH, lvCost, modsOf, packPct, planUpAll, seasonScore, transRoll } from "../../web/src/lib/defense/progress";
+import { GLITCH, TREASURE_WAVES, treasureChance, relicShardsToMax, CHEAT_RES, BOX, BENCH_COST, FRES_COST, TRANS_IDS, GP_PACKS, GP_SELL, GP_STORE, PACK, PASS_PREMIUM_GP, RESEARCH, lvCost, modsOf, packPct, planUpAll, seasonScore, transRoll } from "../../web/src/lib/defense/progress";
 import { startTestServer, type TestClient, type TestServer } from "./helpers";
 
 /** 봇 한 판 (기록 포함) */
@@ -204,6 +204,39 @@ describe("픽셀 글리치 디펜스 엔진", () => {
     b2.enemies.find((e) => e.boss >= 0)!.hp *= 0.4;
     for (let i = 0; i < TPS * 10; i++) step(g2);
     expect(b2.tele).toBeNull();
+  });
+
+  it("보물방: 정해진 웨이브 직전 30초 — 일반 적은 치워 두고 골렘만 · 매초 골드 · 끝나면 적을 돌려놓고 그 웨이브", () => {
+    const g = newGame(13, 1, [{ glitch: 1, treasure: 12 }]);
+    const b = g.boards[0];
+    const cfg = BOTS[0];
+    while (!g.over && !(b.phase === "treasure")) {
+      botTurn(g, 0, cfg);
+      step(g);
+    }
+    expect(b.phase).toBe("treasure");
+    expect(b.wave).toBe(12);
+    expect(b.enemies.length).toBe(1);
+    expect(b.enemies[0].tre).toBe(true);
+    const stashed = b.stash.length;
+    const gold = b.gold;
+    expect(apply(g, 0, { t: "next" })).toBe("보물방이 끝나야 넘어가요");
+    while (b.phase === "treasure") step(g);
+    expect(b.treasure?.wave).toBe(12);
+    expect(b.treasure!.gold).toBeGreaterThan(0);
+    expect(b.gold).toBeGreaterThanOrEqual(gold);
+    expect(b.enemies.some((e) => e.tre)).toBe(false);
+    expect(b.enemies.length).toBeGreaterThanOrEqual(stashed);
+    expect(b.phase).toBe("wave");
+    expect(b.wave).toBe(12);
+    // 확률 · 웨이브 · 로드아웃 정리
+    expect(treasureChance(0, 5)).toBe(0);
+    expect(treasureChance(500, 5)).toBe(1);
+    expect(treasureChance(400, 0)).toBe(0);
+    expect(TREASURE_WAVES).not.toContain(20);
+    expect(TREASURE_WAVES[0]).toBe(11);
+    expect(TREASURE_WAVES.at(-1)).toBe(59);
+    expect(modsOf({ treasure: 30 }).treasure).toBe(0);
   });
 
   it("치트 코드 멀티: 시간이 지나면 첫 카드를 자동으로", () => {

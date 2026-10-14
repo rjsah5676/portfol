@@ -146,6 +146,17 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry }
     }
   });
   const autoSent = useRef(-1);
+  // 이번 판 보물방 당첨이면 시작할 때 한 번 알림
+  useEffect(() => {
+    if (ctrl.board.mods.treasure > 0 && ctrl.board.wave === 0)
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- 판 시작 알림 한 번
+      setShout({
+        id: Math.random(),
+        title: "보물방 당첨!",
+        sub: `이번 판 ${ctrl.board.mods.treasure}웨이브 직전에 보물방이 열려요`,
+        color: "#ffd23f",
+      });
+  }, [ctrl]);
   useEffect(() => {
     if (!autoNext || b.result || b.cheat || ctrl.paused || b.phase !== "wave") return;
     if (b.enemies.length > 0 || (b.wave + 1) % BOSS_EVERY === 0 || nextBlock(b) || autoSent.current === b.wave) return;
@@ -207,6 +218,25 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry }
           sfx(`tele-${e.snd}`);
           if (e.hit > 0) toast(`${e.name} — ${e.hit}칸 기절`, "bad");
           else toast("피했어요!");
+        }
+        break;
+      case "treasure":
+        if (e.stage === "start") {
+          sfx("boss");
+          setShout({
+            id: Math.random(),
+            title: "보물방!",
+            sub: `${B.treasure.sec}초 동안 보물 골렘을 최대한 깎아요 — 매초 골드 · 깎은 만큼 보상 (일반 적은 잠시 멈춰요)`,
+            color: "#ffd23f",
+          });
+        } else {
+          sfx("reward");
+          setShout({
+            id: Math.random(),
+            title: e.killed ? "보물 골렘 처치!" : `${Math.round((e.ratio ?? 0) * 100)}% 깎음`,
+            sub: `보물방 끝 · 골드 +${e.gold ?? 0} · 판 끝에 보상`,
+            color: "#ffd23f",
+          });
         }
         break;
       case "phase": {
@@ -489,7 +519,9 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry }
                 ? "READY"
                 : b.phase === "boss"
                   ? `BOSS ${b.wave}`
-                  : `WAVE ${b.wave}`}
+                  : b.phase === "treasure"
+                    ? "TREASURE"
+                    : `WAVE ${b.wave}`}
             </span>
             <span className="text-[12px] text-[var(--dim)]">/{LAST_WAVE}</span>
             <span className="ml-auto text-[12px] text-[var(--mute)]">{fmtTime(time)}</span>
@@ -589,6 +621,17 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry }
               <RelicIcon key={id} id={id} size={24} />
             ))}
           </div>
+        )}
+        {b.troom && (
+          <TreasurePanel b={b} />
+        )}
+        {!b.troom && b.mods.treasure > 0 && !b.treasure && !b.result && (
+          <span
+            className="px-inset flex h-full shrink-0 items-center gap-1 px-2 text-[12px] font-bold whitespace-nowrap text-[var(--gold)]"
+            title={`이번 판 보물방 — ${b.mods.treasure}웨이브 직전에 열려요 (그때 덱이 셀수록 많이 깎고 보상도 커요)`}
+          >
+            <Icon n="coin" size={12} /> 보물방 W{b.mods.treasure}
+          </span>
         )}
         {boss && (
           <div
@@ -1608,6 +1651,24 @@ function BossIntro({ boss, phase, onDone }: { boss: number; phase: boolean; onDo
           </p>
         )}
       </div>
+    </div>
+  );
+}
+
+/** 보물방 진행 (위쪽 줄): 남은 시간 · 깎은 비율 · 받은 골드 */
+function TreasurePanel({ b }: { b: Board }) {
+  const r = b.troom!;
+  const e = b.enemies.find((x) => x.tre);
+  const ratio = r.killed || !e ? 1 : Math.max(0, Math.min(1, (r.max - Math.max(0, e.hp)) / r.max));
+  return (
+    <div className="px-box flex h-full min-w-[150px] max-w-[240px] flex-1 flex-col justify-center px-2.5" style={{ "--b": "#ffd23f" } as React.CSSProperties}>
+      <div className="flex items-baseline justify-between text-[12px] leading-none">
+        <b className="text-[13px] whitespace-nowrap text-[var(--gold)]">보물방</b>
+        <span className="whitespace-nowrap text-[var(--mute)]">
+          {Math.round(ratio * 100)}% 깎음 · {Math.ceil(r.t / TPS)}s · <Icon n="coin" size={10} />+{r.gold}
+        </span>
+      </div>
+      <Bar className="mt-1.5" h={6} value={1 - ratio} color="#ffd23f" />
     </div>
   );
 }

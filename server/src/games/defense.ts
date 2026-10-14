@@ -224,6 +224,8 @@ export function registerDefense({ gateway, db, points }: Deps) {
     const _id = newId();
     const seed = randomInt(1, 2 ** 31 - 1);
     const lo = await meta.loadoutOf(uid);
+    // 보물방: 쌓인 웨이브만큼 확률 → 뜨면 이 판 로드아웃에 열릴 웨이브를 적어 둠 (기록 검증도 같은 로드아웃으로)
+    lo.treasure = await meta.rollTreasure(uid, lo.glitch);
     const board = seasonKey();
     await runs.insertOne({ _id, uid, seed, ver: BALANCE_VER, at: new Date(), used: false, mode, lo, board });
     return { run: _id, seed, ver: BALANCE_VER, mode, loadout: lo };

@@ -52,6 +52,10 @@ import {
   resUpCost,
   runReward,
   transRoll,
+  TREASURE,
+  TREASURE_WAVES,
+  treasureChance,
+  treasureReward,
   type Loadout,
 } from "../../web/src/lib/defense/progress";
 
@@ -207,8 +211,17 @@ function loadout(): Loadout {
 /** 이 길에서 키울 유닛 (주력 세력 + 히든 + 초월). 균형이면 전부 */
 const mine = UNITS.filter((u) => !focus || u.faction === focus || u.faction === "hidden");
 
+/** 보물방 (서버 defense.start · onRun 과 같은 규칙) — --treasure 0 이면 끔 */
+const USE_TRE = opt("--treasure", "1") === "1";
+let twaves = 0,
+  treasures = 0;
 function play(seed: number) {
   const lo = loadout();
+  if (USE_TRE && R() < treasureChance(twaves, lo.glitch ?? 0)) {
+    lo.treasure = TREASURE_WAVES[Math.floor(R() * TREASURE_WAVES.length)];
+    twaves = 0;
+    treasures++;
+  }
   const g = newGame(seed, 1, [lo]);
   const b = g.boards[0];
   while (!g.over && g.tick < 220_000) {
@@ -217,6 +230,13 @@ function play(seed: number) {
       void c;
     }
     step(g);
+  }
+  if ((lo.glitch ?? 0) >= TREASURE.minGlitch) twaves = Math.min(TREASURE.cap, twaves + b.result!.wave);
+  if (b.treasure) {
+    const t = treasureReward(lo.glitch ?? 0, b.treasure);
+    p.pieces += t.pieces ?? 0;
+    p.cores += t.cores ?? 0;
+    p.boxes.card += t.cardBox ?? 0;
   }
   return { r: b.result!, made: b.made };
 }
@@ -505,6 +525,7 @@ for (let i = 0; i < MAXRUNS; i++) {
 console.log(`성장 경제 시뮬 — 봇 ${BOT} · 배속 ${SPEED} · 하루 ${RUNS_PER_DAY}판 · GP ${USE_GP ? "씀" : "안 씀"} · ${args.join(" ")}`);
 console.log(log.join("\n"));
 console.log("\n오염 단계 첫 클리어 시간: " + Object.entries(firstAt).map(([g, h]) => `${g}:${h.toFixed(0)}h`).join(" "));
+console.log(`보물방 ${treasures}번`);
 console.log(`총 ${p.stats.runs}판 · ${hours.toFixed(1)}시간 · 업적 GP ${gpTotal} · 판매 GP ${gpSold} · 패키지 ${JSON.stringify(p.bought)} · 계산 ${((Date.now() - t0) / 1000).toFixed(0)}s`);
 void B;
 void RELIC;

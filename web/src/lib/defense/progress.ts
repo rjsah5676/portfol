@@ -42,6 +42,37 @@ export interface Loadout {
   cheat?: string;
   /** 끈기: 열린 가장 높은 오염 단계에서 연달아 못 깬 판 수 (서버가 셈, 0..GRIT_MAX) */
   grit?: number;
+  /** 보물방이 열리는 웨이브 (서버가 판 시작 때 뽑음, 0 = 없음) — treasureWaveOk */
+  treasure?: number;
+}
+
+/* ───────────────────────── 보물방 ───────────────────────── */
+
+/**
+ * 보물방: 오염 1단계 이상 시즌 판을 시작할 때마다 (쌓인 웨이브 ÷ cap)^exp 확률 — cap(500)웨이브면 100% 천장.
+ * 쌓인 웨이브 = 지난 보물방 뒤로 검증된 판에서 도달한 웨이브 합 (건실하게 오래 버틸수록 빨리 참). 뜨면 0 으로.
+ * exp 1.7 → 판당 25~55웨이브면 중앙값 ≈ 240웨이브 (짧게 끊는 사람 ≈ 195, 길게 버티는 사람 ≈ 260), 10%~90% ≈ 125~360.
+ * 열리는 웨이브는 11~59 중 보스 웨이브 빼고 무작위 — 늦게 뜰수록 덱이 세서 많이 깎음(운).
+ */
+export const TREASURE = { cap: 500, exp: 1.7, from: 11, to: 59, minGlitch: 1 } as const;
+export const treasureWaveOk = (w: unknown) =>
+  Number.isInteger(w) && (w as number) >= TREASURE.from && (w as number) <= TREASURE.to && (w as number) % 10 !== 0;
+export const TREASURE_WAVES = Array.from({ length: TREASURE.to - TREASURE.from + 1 }, (_, i) => TREASURE.from + i).filter(treasureWaveOk);
+/** 이번 판 보물방 확률 (0~1) */
+export const treasureChance = (waves: number, glitch: number) =>
+  glitch < TREASURE.minGlitch ? 0 : Math.min(1, Math.pow(Math.max(0, waves) / TREASURE.cap, TREASURE.exp));
+/**
+ * 보물방 판 밖 보상: 깎은 체력 비율 r(0~1) 에 비례 × 오염 단계 보상 배수. 잡으면 카드 상자 +1.
+ * 다 깎으면 조각 ≈ 일반 판 2판 몫 · 코어 ≈ 클리어 한 번 몫
+ */
+export function treasureReward(glitch: number, t: { dmg: number; max: number; killed: boolean }): Goods {
+  const g = GLITCH[Math.max(0, Math.min(GLITCH_MAX, glitch))];
+  const r = t.max > 0 ? Math.max(0, Math.min(1, t.dmg / t.max)) : 0;
+  return {
+    pieces: Math.round(600 * r * g.reward),
+    cores: Math.floor(8 * r * (1 + glitch / 10)),
+    ...(t.killed ? { cardBox: 1 } : {}),
+  };
 }
 
 /**
@@ -333,6 +364,8 @@ export interface Mods {
   /** 끈기 판 수 · 모든 피해 배수 */
   grit: number;
   gritDmg: number;
+  /** 보물방 웨이브 (0 = 없음) */
+  treasure: number;
 }
 
 const clampInt = (v: unknown, lo: number, hi: number) =>
@@ -382,6 +415,7 @@ export function cleanLoadout(lo: Loadout | null | undefined, unitIds?: Set<strin
     trans: uniq(lo?.trans, (s) => (TRANS_IDS as readonly string[]).includes(s), TRANS_IDS.length).sort(),
     cheat: typeof lo?.cheat === "string" && CHEAT_RES_OF[lo.cheat] ? lo.cheat : "",
     grit: clampInt(lo?.grit, 0, GRIT_MAX),
+    treasure: treasureWaveOk(lo?.treasure) ? (lo!.treasure as number) : 0,
   };
 }
 
@@ -444,6 +478,7 @@ export function modsOf(lo: Loadout | null | undefined): Mods {
     cheat: L.cheat,
     grit: L.grit,
     gritDmg: 1 + GRIT_PER * L.grit,
+    treasure: L.treasure,
   };
 }
 

@@ -34,7 +34,7 @@ import Codex from "./Codex";
 import { Controller } from "./controller";
 import Hub, { Cur, curTip, type HubTab } from "./Hub";
 import { setTheme } from "./render";
-import { GLITCH, GRIT_PER, type Loadout } from "@/lib/defense/progress";
+import { GLITCH, GRIT_PER, TREASURE, treasureChance, type Loadout } from "@/lib/defense/progress";
 import { resetTutorial } from "./Tutorial";
 import GameView from "./GameView";
 import Stage from "./Stage";
@@ -403,7 +403,7 @@ function Menu(p: {
         </p>
         <div className="mt-2 flex items-center gap-1.5">
           <span className="inline-block bg-[var(--gold)] px-2 py-1 text-[12px] font-bold text-[#1a1000]">
-            BETA 1.2 · 밸런스 {BALANCE_VER}
+            BETA {LATEST.replace(/^v([\d.]+).*$/, "$1")} · 밸런스 {BALANCE_VER}
           </span>
           {p.resume && (
             <>
@@ -438,6 +438,14 @@ function Menu(p: {
             disabled={p.busy}
           >
             <span className="px-shadow">{p.busy ? "준비 중…" : p.member ? "시즌 도전" : "혼자 하기"}</span>
+            {p.member && pr && glitch >= TREASURE.minGlitch && (
+              <span
+                className="absolute -top-2.5 right-1 bg-[var(--gold)] px-1.5 py-0.5 text-[11px] font-bold text-[#1a1000] shadow-[0_0_0_2px_#0a0816]"
+                title={`이번 판 보물방이 열릴 확률 — 지난 보물방 뒤로 버틴 웨이브 ${pr.twaves ?? 0}/${TREASURE.cap} (오래 버틸수록 빠르게 올라 ${TREASURE.cap}웨이브면 100%)`}
+              >
+                보물방 {fmtChance(treasureChance(pr.twaves ?? 0, glitch))}
+              </span>
+            )}
             <span className="block text-[12px] font-normal opacity-85">
               {!p.member
                 ? "연습 판 (회원은 랭킹 · 성장 · 보상)"
@@ -566,13 +574,25 @@ function Menu(p: {
 
 /* ───────────── 판 끝 (검증 · 보상) ───────────── */
 
+/** 보물방 확률 표시 (0.2% · 12% · 100%) */
+const fmtChance = (c: number) => (c >= 1 ? "100%" : c >= 0.1 ? `${Math.round(c * 100)}%` : `${(Math.floor(c * 1000) / 10).toFixed(1)}%`);
+
 const waveTxt = (w: number) => (w > LAST_WAVE ? "클리어" : `W${w}`);
 
 function FinishNote({ r }: { r: FinishOut }) {
   const w = r.reward;
   const gb = w?.gbest;
+  const tr = w?.treasure;
   return (
     <span className="flex flex-col items-center gap-1.5">
+      {tr && (
+        <span className="dfn-pop flex flex-wrap items-center justify-center gap-x-2 text-[13px] text-[var(--gold)]">
+          <b>보물방 W{tr.wave} — {tr.killed ? "골렘 처치!" : `${Math.round(tr.ratio * 100)}% 깎음`}</b>
+          {!!tr.reward.pieces && <Cur k="piece" n={`+${tr.reward.pieces}`} />}
+          {!!tr.reward.cores && <Cur k="core" n={`+${tr.reward.cores}`} className="text-[#ffb3ee]" />}
+          {!!tr.reward.cardBox && <span>카드 상자 +{tr.reward.cardBox}</span>}
+        </span>
+      )}
       {gb && (
         <span className="text-[13px]">
           오염 {gb.glitch}단계 최고{" "}
