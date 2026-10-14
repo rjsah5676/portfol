@@ -108,55 +108,55 @@ export function VirusSprite({
       </g>
       {body ?? (
         <>
-      {/* 갈고리 가시 */}
-      {Array.from({ length: barbs }, (_, i) => {
-        const a = spin + (i / barbs) * Math.PI * 2;
-        const w = 0.2;
-        const base1 = [C + Math.cos(a - w) * (R - 3), C + Math.sin(a - w) * (R - 3)];
-        const base2 = [C + Math.cos(a + w) * (R - 3), C + Math.sin(a + w) * (R - 3)];
-        const tip = [C + Math.cos(a + 0.12) * (R + 17), C + Math.sin(a + 0.12) * (R + 17)];
-        const hook = [C + Math.cos(a + 0.3) * (R + 11), C + Math.sin(a + 0.3) * (R + 11)];
-        const pts = [base1, tip, hook, base2].map(([x, y]) => `${r2(x)},${r2(y)}`).join(" ");
-        return (
+          {/* 갈고리 가시 */}
+          {Array.from({ length: barbs }, (_, i) => {
+            const a = spin + (i / barbs) * Math.PI * 2;
+            const w = 0.2;
+            const base1 = [C + Math.cos(a - w) * (R - 3), C + Math.sin(a - w) * (R - 3)];
+            const base2 = [C + Math.cos(a + w) * (R - 3), C + Math.sin(a + w) * (R - 3)];
+            const tip = [C + Math.cos(a + 0.12) * (R + 17), C + Math.sin(a + 0.12) * (R + 17)];
+            const hook = [C + Math.cos(a + 0.3) * (R + 11), C + Math.sin(a + 0.3) * (R + 11)];
+            const pts = [base1, tip, hook, base2].map(([x, y]) => `${r2(x)},${r2(y)}`).join(" ");
+            return (
+              <polygon
+                key={i}
+                points={pts}
+                fill={color}
+                stroke="#3f0d0d"
+                strokeWidth={1.2}
+                strokeLinejoin="round"
+              />
+            );
+          })}
+          {/* 톱니 막 */}
           <polygon
-            key={i}
-            points={pts}
-            fill={color}
-            stroke="#3f0d0d"
-            strokeWidth={1.2}
+            points={membrane}
+            fill="#1a0709"
+            stroke={color}
+            strokeWidth={2.6}
             strokeLinejoin="round"
           />
-        );
-      })}
-      {/* 톱니 막 */}
-      <polygon
-        points={membrane}
-        fill="#1a0709"
-        stroke={color}
-        strokeWidth={2.6}
-        strokeLinejoin="round"
-      />
-      {/* 화난 눈 (안쪽이 아래로 기운 붉은 눈) */}
-      <polygon
-        points={`${C - 15},${C - 15} ${C - 4},${C - 11} ${C - 5},${C - 7} ${C - 14},${C - 9}`}
-        fill="#f87171"
-      />
-      <polygon
-        points={`${C + 15},${C - 15} ${C + 4},${C - 11} ${C + 5},${C - 7} ${C + 14},${C - 9}`}
-        fill="#f87171"
-      />
-      {/* 그 바이러스의 코드 (픽셀 무늬) */}
-      {px.map(([x, y]) => (
-        <rect
-          key={`${x}-${y}`}
-          x={r2(ox + x * cell)}
-          y={r2(oy + y * cell)}
-          width={cell - 0.8}
-          height={cell - 0.8}
-          rx={0.6}
-          fill={color}
-        />
-      ))}
+          {/* 화난 눈 (안쪽이 아래로 기운 붉은 눈) */}
+          <polygon
+            points={`${C - 15},${C - 15} ${C - 4},${C - 11} ${C - 5},${C - 7} ${C - 14},${C - 9}`}
+            fill="#f87171"
+          />
+          <polygon
+            points={`${C + 15},${C - 15} ${C + 4},${C - 11} ${C + 5},${C - 7} ${C + 14},${C - 9}`}
+            fill="#f87171"
+          />
+          {/* 그 바이러스의 코드 (픽셀 무늬) */}
+          {px.map(([x, y]) => (
+            <rect
+              key={`${x}-${y}`}
+              x={r2(ox + x * cell)}
+              y={r2(oy + y * cell)}
+              width={cell - 0.8}
+              height={cell - 0.8}
+              rx={0.6}
+              fill={color}
+            />
+          ))}
         </>
       )}
     </svg>
@@ -258,7 +258,7 @@ export function MyVirusSprite({
   lv: { atk: number; spd: number; crit: number };
   /** 상위 보스를 처음 잡을 때마다 하나씩 붙는 외형 (그 보스 색, 0~10개) */
   parts?: string[];
-  /** 진화 단계 (0~3) */
+  /** 진화 단계 (0~10 — 100스테이지마다) */
   stage: number;
   /** 모듈 10칸: 빼앗았으면 그 보스 색, 아니면 null */
   mods?: (string | null)[];
@@ -269,7 +269,7 @@ export function MyVirusSprite({
 }) {
   const C = 60;
   const core = 9 + Math.min(9, lv.atk / 12);
-  const R = 22 + stage * 2 + Math.min(4, lv.atk / 40);
+  const R = 22 + stage * 0.8 + Math.min(4, lv.atk / 40);
   const spikes = Math.min(20, 4 + Math.floor(lv.crit / 6));
   const spikeLen = 6 + Math.min(14, lv.crit / 6);
   const orbit = Math.min(6, 1 + Math.floor(lv.spd / 15));
@@ -283,9 +283,11 @@ export function MyVirusSprite({
   const membrane =
     stage === 0
       ? null
-      : stage === 3
+      : stage >= 8
         ? poly(8, R + 3, -Math.PI / 2, R - 3)
-        : poly(6, R, -Math.PI / 2);
+        : stage >= 4
+          ? poly(8, R, -Math.PI / 2)
+          : poly(6, R, -Math.PI / 2);
   return (
     <svg
       viewBox="0 0 120 120"
@@ -385,7 +387,7 @@ export function MyVirusSprite({
         ))}
       {/* 기운 (2단계부터) */}
       {stage >= 1 && (
-        <circle cx={C} cy={C} r={R + spikeLen + 10} fill={color} opacity={0.05 + stage * 0.03} />
+        <circle cx={C} cy={C} r={R + spikeLen + 10} fill={color} opacity={0.05 + stage * 0.01} />
       )}
       {/* 오버클럭: 궤도 */}
       <g

@@ -1190,3 +1190,25 @@
 .virus-calm .vg-tab-ping > span {
   animation: none;
 }
+
+/* 자동 업그레이드 로그: 아래에서 살짝 올라오고 끝날 때 흐려짐 (4초) */
+.vg-autolog {
+  animation: vg-autolog 4s ease-out forwards;
+}
+@keyframes vg-autolog {
+  0% {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  8%,
+  80% {
+    opacity: 1;
+    transform: none;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+.virus-calm .vg-autolog {
+  animation: none;
+}

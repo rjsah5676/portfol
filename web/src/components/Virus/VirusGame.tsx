@@ -483,6 +483,13 @@ export default function VirusGame() {
     setToasts((ts) => [...ts.slice(-2), { id, r }]);
     setTimeout(() => setToasts((ts) => ts.filter((x) => x.id !== id)), r.apex ? 6500 : 4500);
   }, []);
+  /** 자동 업그레이드 로그 — 크론 데몬이 산 업그레이드 (전투 화면 왼쪽 아래, 잠깐) */
+  const [autoLog, setAutoLog] = useState<{ id: number; text: string }[]>([]);
+  const pushAutoLog = useCallback((text: string) => {
+    const id = Date.now() + Math.random();
+    setAutoLog((l) => [...l.slice(-1), { id, text }]); // 최대 2줄
+    setTimeout(() => setAutoLog((l) => l.filter((x) => x.id !== id)), 4000);
+  }, []);
   /** 게임 안 확인 창 — 브라우저 confirm() 은 전체화면을 풀어 버려서 직접 그림 */
   const [ask, setAsk] = useState<{
     title: string;
@@ -501,13 +508,17 @@ export default function VirusGame() {
   const [freshAch, setFreshAch] = useState<string[]>([]);
   /** 방금 진화한 단계 (잠깐 띄움) */
   const [evolved, setEvolved] = useState<{ id: number; stage: number } | null>(null);
-  /** 업그레이드 뒤 진화 단계가 올랐으면 알림 */
-  const checkEvolve = useCallback((before: number) => {
-    const after = evoStage(save.current.lv);
-    if (after <= before) return;
+  /** 마지막으로 본 진화 단계 (-1 = 아직 — 처음 볼 때는 알림 없이 기억만) */
+  const evoSeen = useRef(-1);
+  /** 최고 스테이지가 올라 진화 단계가 올랐으면 알림 (추가 효과와 함께) */
+  const checkEvolve = useCallback(() => {
+    const after = evoStage(save.current.best);
+    const before = evoSeen.current;
+    evoSeen.current = after;
+    if (before < 0 || after <= before) return;
     const id = Date.now();
     setEvolved({ id, stage: after });
-    setTimeout(() => setEvolved((v) => (v?.id === id ? null : v)), 1800);
+    setTimeout(() => setEvolved((v) => (v?.id === id ? null : v)), 3200);
   }, []);
 
   const sync = useCallback((hit = false, fired = false) => {
@@ -1098,9 +1109,16 @@ export default function VirusGame() {
       // 커널 권한 「루트 권한 자동 투자」: 효율 강화를 효율 순으로
       if (autoRoot(s)) persist();
       if (!s.auto || !s.shop.daemon) return;
-      const before = evoStage(s.lv);
+      const lv = { ...s.lv };
       // 효율 1등을 곧(AUTO_WAIT_SECS 안에) 살 수 있으면 모아 두고, 아니면 추천 1등(랜덤 강화 포함)을 삼
-      if (autoBuy(s)) checkEvolve(before);
+      if (autoBuy(s)) {
+        checkEvolve();
+        // 무엇을 올렸는지 로그로 (예: 💣 페이로드 +2 → Lv.120)
+        const ups = UPGRADES.filter((u) => s.lv[u.key] > lv[u.key]).map(
+          (u) => `${u.icon} ${u.name} +${s.lv[u.key] - lv[u.key]} → Lv.${s.lv[u.key]}`
+        );
+        if (ups.length) pushAutoLog(ups.join(" · "));
+      }
     };
     /**
      * 화면 없이 빨리 돌리기 — 틱 사이가 길게 벌어졌을 때 (탭을 뒤로 보내면 브라우저가 타이머를 1초~1분에 한 번으로 늦춤).
@@ -1161,6 +1179,7 @@ export default function VirusGame() {
       if (now - lastAch >= 1000) {
         lastAch = now;
         checkAch(s);
+        checkEvolve();
       }
       // 보스 연출 중엔 멈춤, 끝나면 (격퇴였으면) 보상 창
       const c = cinemaRef.current;
@@ -1342,6 +1361,7 @@ export default function VirusGame() {
     checkEvolve,
     pushToast,
     startCatchUp,
+    pushAutoLog,
   ]);
 
   /** 업그레이드 사기 — ×1 · ×10 · 최대 (×10 은 10번 다 살 수 있을 때만) */
@@ -1349,9 +1369,8 @@ export default function VirusGame() {
     (u: UpgDef) => {
       const s = save.current;
       const n = buyMode === "max" ? Infinity : buyMode;
-      const before = evoStage(s.lv);
       if (!buyUpgrade(s, u, n)) return;
-      checkEvolve(before);
+      checkEvolve();
       sync();
     },
     [sync, checkEvolve, buyMode]
@@ -1373,9 +1392,8 @@ export default function VirusGame() {
   };
   const buyWith = (key: ShopKey, by: "root" | "gp") => {
     const s = save.current;
-    const before = evoStage(s.lv);
     if (by === "gp" ? !buyShopGp(s, key, spendGp) : !buyShop(s, key)) return;
-    checkEvolve(before);
+    checkEvolve();
     persist();
     sync();
   };
@@ -1384,9 +1402,8 @@ export default function VirusGame() {
   const runCron = useCallback(() => {
     const s = save.current;
     if (!s.shop.cron) return;
-    const before = evoStage(s.lv);
     if (!applyPlan(s, optimalPlan(s))) return;
-    checkEvolve(before);
+    checkEvolve();
     sync();
   }, [sync, checkEvolve]);
 
@@ -1401,13 +1418,12 @@ export default function VirusGame() {
   /** 랜덤 강화: 값을 치르고 그 업그레이드가 1~3레벨 무작위로 오름 */
   const doRand = useCallback(
     (key: UpgKey) => {
-      const before = evoStage(save.current.lv);
       const n = randUpgrade(save.current, key);
       if (!n) return;
       const id = Date.now();
       setRanded({ id, key, n });
       setTimeout(() => setRanded((f) => (f?.id === id ? null : f)), 2600);
-      checkEvolve(before);
+      checkEvolve();
       sync();
     },
     [sync, checkEvolve]
@@ -1626,7 +1642,7 @@ export default function VirusGame() {
   const timeMax = timeFor(e, s);
   /** 상위 보스를 처음 잡을 때마다 붙은 외형 (그 보스 색) */
   const parts = APEX.slice(0, apexCount(s.apexBest)).map((a) => a.color);
-  const stage = evoStage(s.lv);
+  const stage = evoStage(s.best);
   /** 내 바이러스 몸 둘레에 붙는 모듈 조각 (빼앗은 보스의 색) */
   const modColors = ROSTER.map((v, i) => (mods[i] ? v.color : null));
   /** 지금 적에게 들어가는 예상 초당 피해 */
@@ -1898,6 +1914,22 @@ export default function VirusGame() {
             <div
               className={`vg-battle virus-screen relative min-h-0 flex-1 ${view.ddos && settings.effects ? "vg-ddos" : ""}`}
             >
+              {/* 왼쪽 아래: 자동 업그레이드 로그 (크론 데몬) — 맨 아래 보스 시간 줄 위, 컴파일 막대가 뜨면 그보다 위 */}
+              {autoLog.length > 0 && (
+                <div
+                  className={`pointer-events-none absolute ${showBar && !cinema ? "bottom-24" : "bottom-10"} left-3 z-10 flex max-w-[calc(100%-24px)] flex-col items-start gap-0.5 ${KR}`}
+                  aria-live="polite"
+                >
+                  {autoLog.map((l) => (
+                    <div
+                      key={l.id}
+                      className="vg-autolog truncate rounded-md border border-sky-300/25 bg-black/60 px-2 py-0.5 font-mono vt-xs text-sky-100"
+                    >
+                      🔁 자동 · {l.text}
+                    </div>
+                  ))}
+                </div>
+              )}
               {/* 왼쪽 위: 지금 적에게 들어가는 예상 초당 피해 */}
               <div
                 className={`pointer-events-none absolute top-2 left-3 z-10 rounded-lg border border-emerald-400/20 bg-black/55 px-2.5 py-1 ${KR}`}
@@ -2062,7 +2094,16 @@ export default function VirusGame() {
                     <b className="font-mono" style={{ color: myColor }}>
                       me.exe
                     </b>{" "}
-                    · {EVOLUTION[stage].name}
+                    ·{" "}
+                    <span
+                      title={EVOLUTION.slice(1)
+                        .map(
+                          (e, i) => `${i + 1 <= stage ? "✓" : "·"} ${e.min} ${e.name} — ${e.perk}`
+                        )
+                        .join(String.fromCharCode(10))}
+                    >
+                      🧬 {EVOLUTION[stage].name}
+                    </span>
                     <span className="hidden @md/vg:inline">
                       {" "}
                       · 모듈 {owned}/{ROSTER.length} · 우회 {bypassN}/{APEX.length}
@@ -2267,10 +2308,11 @@ export default function VirusGame() {
                   key={`evo-${evolved.id}`}
                   className={`vg-evo absolute top-12 left-1/2 z-10 -translate-x-1/2 rounded-full border border-emerald-300/60 bg-emerald-950/90 px-4 py-1.5 vt-sm whitespace-nowrap text-emerald-100 shadow-[0_0_24px_rgba(74,222,128,0.45)] ${KR}`}
                 >
-                  🧬 진화! {evolved.stage + 1}단계 <b>{EVOLUTION[evolved.stage].name}</b>{" "}
+                  🧬 진화! {evolved.stage}단계 <b>{EVOLUTION[evolved.stage].name}</b>{" "}
                   <span className="font-mono vt-xs text-emerald-300/90">
                     {EVOLUTION[evolved.stage].en}
-                  </span>
+                  </span>{" "}
+                  · {EVOLUTION[evolved.stage].perk}
                 </div>
               )}
 

@@ -412,7 +412,7 @@ while (t < HOURS * 3600) {
     overflow = `${fmtT(t)}에 숫자가 무한대로 넘침 (스테이지 ${s.stage}) — 성장이 너무 빠름`;
     break;
   }
-  const evo = evoStage(s.lv);
+  const evo = evoStage(s.best);
   if (evoAt[evo] == null) evoAt[evo] = t;
   st = stats(s);
   hp -= dps(st) * (boss ? st.bossDmgMul * st.fxBossMul : 1) * DT;

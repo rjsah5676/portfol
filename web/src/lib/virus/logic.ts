@@ -46,8 +46,8 @@ export const BAL = {
    * 고정 배율이던 땐 코드 모듈이 상한에 닿고 업그레이드 · 우회 기술이 점점 덜 오르는 후반에 100스테이지마다 걸리는
    * 시간이 두 배씩 늘었음. 낮아지게 해서 100스테이지마다 비슷한 시간이 걸리게
    */
-  hpGrowthLate: 1.235,
-  hpGrowthEnd: 1.178,
+  hpGrowthLate: 1.237,
+  hpGrowthEnd: 1.187,
   /**
    * 숫자 규모: 진행에 따라 지수로 커지는 배율(체력 증가 · 피해 · 데이터 · 비용 증가 · 우회 기술 · 루트 권한 보너스 …)을
    * 모두 이 거듭제곱으로 — 레벨 · 버전 수는 그대로 두고 피해 · 체력 · 데이터의 크기만 줄임 (1000에서 초당 피해 ≈ YB).
@@ -448,6 +448,8 @@ export function parseSave(raw: string | null): Save {
           ? s.bossIdx!
           : pickBoss(stage, best),
     };
+    // 진화는 최고 스테이지로 정해짐 (v1.2 까지는 업그레이드 레벨 합계 4단계 — 기록을 다시 셈)
+    out.rec = { ...out.rec, evo: evoStage(out.best) };
     // v1.1 까지의 저장본: 숫자 규모가 커서 (BAL.mag 로 줄이기 전) 데이터 · 조각 · 키를 같은 거듭제곱으로 줄임
     if (Number((s as { scale?: unknown }).scale) !== SAVE_SCALE) {
       const sq = (v: number) => (v > 1 ? v ** BAL.mag : v);
@@ -993,7 +995,8 @@ export function keyCost(i: number, v: number) {
 /** 보스를 잡으면 조각 (보스 체력에 비례) — 어느 모듈의 조각인지 · 얼마나 (원시 바이러스는 index -1 · 0) */
 export function dropFrag(s: Save, fresh: boolean) {
   const index = s.bossIdx;
-  const n = dropAmount(s.stage, fresh);
+  // 진화 7단계 「하이브」: 조각 · 키 ×1.5
+  const n = dropAmount(s.stage, fresh) * (evoStage(s.best) >= 7 ? 1.5 : 1);
   if (index < 0) return { index, n: 0 };
   s.frag[index] += n;
   return { index, n };
@@ -1006,7 +1009,8 @@ export function dropKey(s: Save, fresh: boolean) {
     s.byp[index] = 1;
     return { index, n: 0, opened: true };
   }
-  const n = dropAmount(s.stage, fresh);
+  // 진화 7단계 「하이브」: 조각 · 키 ×1.5
+  const n = dropAmount(s.stage, fresh) * (evoStage(s.best) >= 7 ? 1.5 : 1);
   s.ukey += n;
   return { index, n, opened: false };
 }
@@ -1239,10 +1243,18 @@ export function stats(s: Save): Stats {
   const achMul = 1 + BAL.achDmg * s.ach.length;
   const atk =
     BAL.atkStep ** s.lv.atk * BAL.atkMilestoneMul ** Math.floor(s.lv.atk / BAL.atkMilestone);
-  const aps = (1 + (BAL.spdMax - 1) * (1 - BAL.spdK ** s.lv.spd)) * (has(8) ? tunnelSpd(b[8]) : 1);
+  // 진화 단계 추가 효과 (EVOLUTION — 단계마다 하나씩 쌓임)
+  const ev = evoStage(s.best);
+  const aps =
+    (1 + (BAL.spdMax - 1) * (1 - BAL.spdK ** s.lv.spd)) *
+    (has(8) ? tunnelSpd(b[8]) : 1) *
+    (ev >= 3 ? 1.15 : 1);
   const critChance = Math.min(
     0.9,
-    0.05 + (BAL.critMax - 0.05) * (1 - BAL.critK ** s.lv.crit) + (has(7) ? modCritOf(b[7]) : 0)
+    0.05 +
+      (BAL.critMax - 0.05) * (1 - BAL.critK ** s.lv.crit) +
+      (has(7) ? modCritOf(b[7]) : 0) +
+      (ev >= 8 ? 0.1 : 0)
   );
   // 확률 상한 초과분: 처음 기울기 그대로 올랐다면 쌓였을 레벨 중 상한 때문에 잃은 만큼 → 익스플로잇 피해로
   const critLost = s.lv.crit - (1 - BAL.critK ** s.lv.crit) / (1 - BAL.critK);
@@ -1263,7 +1275,8 @@ export function stats(s: Save): Stats {
           BAL.corePatch ** s.shop.kpatch
       ) *
       rootMul *
-      achMul,
+      achMul *
+      (ev >= 10 ? 2 : 1),
     aps,
     critChance,
     critMul: mag(
@@ -1271,15 +1284,17 @@ export function stats(s: Save): Stats {
         (has(4) ? sandboxMul(b[4]) : 1) *
         (1 + BAL.critOver * critLost)
     ),
-    dataMul: mag((has(3) ? 1.5 * BAL.modData ** b[3] : 1) * BAL.shopMiner ** s.shop.miner),
+    dataMul:
+      mag((has(3) ? 1.5 * BAL.modData ** b[3] : 1) * BAL.shopMiner ** s.shop.miner) *
+      (ev >= 1 ? 1.25 : 1),
     costMul: mag(has(9) ? 0.85 * BAL.modCost ** b[9] : 1),
     mobHpMul: mag(has(0) ? 0.85 * BAL.modMobHp ** b[0] : 1),
     bossHpMul: mag(has(2) ? BAL.modBossHp ** b[2] : 1),
-    bossTime: BOSS_TIME + (has(2) ? 5 : 0),
-    rootGain: has(7) ? 1.25 : 1,
-    bossDmgMul: has(5) ? socMul(b[5]) : 1,
+    bossTime: BOSS_TIME + (has(2) ? 5 : 0) + (ev >= 2 ? 5 : 0),
+    rootGain: (has(7) ? 1.25 : 1) * (ev >= 5 ? 1.25 : 1),
+    bossDmgMul: (has(5) ? socMul(b[5]) : 1) * (ev >= 9 ? 1.5 : 1),
     rootMul,
-    offlineRate: has(6) ? offlineRateOf(b[6]) + 0.15 : 0.3,
+    offlineRate: (has(6) ? offlineRateOf(b[6]) + 0.15 : 0.3) + (ev >= 4 ? 0.1 : 0),
     offlineHours: s.shop.kidle ? BAL.coreIdleHours : BAL.offHours,
     achMul,
     fx,
@@ -1343,11 +1358,19 @@ function baseHp(stage: number) {
 }
 /** 극초반 보정이 남은 정도 (1스테이지 1 → 점점 0) */
 const early = (stage: number) => BAL.earlyDecay ** (stage - 1);
+/** 적 보안 등급(체력)의 최소 — 1 B */
+export const MIN_HP = 1;
 export function mobHp(stage: number, st: Stats) {
-  return (baseHp(stage) * BAL.mobHpK * st.mobHpMul) / (1 + BAL.earlyHp * early(stage));
+  return Math.max(
+    MIN_HP,
+    (baseHp(stage) * BAL.mobHpK * st.mobHpMul) / (1 + BAL.earlyHp * early(stage))
+  );
 }
 export function bossHp(stage: number, st: Stats) {
-  return (baseHp(stage) * BAL.bossHp * st.bossHpMul) / (1 + BAL.earlyHp * early(stage));
+  return Math.max(
+    MIN_HP,
+    (baseHp(stage) * BAL.bossHp * st.bossHpMul) / (1 + BAL.earlyHp * early(stage))
+  );
 }
 /** 보상은 (모듈로 줄이기 전) 체력에 비례 — 스테이지가 올라도 체력 대비 보상이 같음 */
 export function mobData(stage: number, st: Stats) {
@@ -1393,18 +1416,29 @@ export const FILE_TYPES = [
 // ── 내 바이러스의 진화 ──
 // 업그레이드 총 레벨(페이로드 + 오버클럭 + 익스플로잇)이 늘면 형태가 바뀜. 포맷하면 레벨이 0이라 다시 1단계부터.
 
+/**
+ * 진화 — 넘은 최고 스테이지로 100스테이지마다 한 단계 (변이해도 유지), 단계마다 추가 효과가 하나씩 쌓임.
+ * (v1.2 까지는 업그레이드 레벨 합계로 4단계 — 초반 30분이면 끝까지 갔고 변이하면 다시 떨어졌음)
+ */
 export const EVOLUTION = [
-  { min: 0, name: "시드", en: "SEED" },
-  { min: 40, name: "웜", en: "WORM" },
-  { min: 120, name: "군체", en: "SWARM" },
-  { min: 300, name: "오버마인드", en: "OVERMIND" },
+  { min: 0, name: "시드", en: "SEED", perk: "" },
+  { min: 100, name: "웜", en: "WORM", perk: "데이터 ×1.25" },
+  { min: 200, name: "트로이", en: "TROJAN", perk: "보스 제한 시간 +5초" },
+  { min: 300, name: "군체", en: "SWARM", perk: "발사 속도 ×1.15" },
+  { min: 400, name: "봇넷", en: "BOTNET", perk: "오프라인 효율 +10%p" },
+  { min: 500, name: "변이체", en: "MUTANT", perk: "변이할 때 루트 권한 ×1.25" },
+  { min: 600, name: "폴리모프", en: "POLYMORPH", perk: "랜덤 강화 가격 -20%" },
+  { min: 700, name: "하이브", en: "HIVE", perk: "코드 조각 · 우회 키 ×1.5" },
+  { min: 800, name: "오버마인드", en: "OVERMIND", perk: "익스플로잇 확률 +10%p" },
+  { min: 900, name: "싱귤래리티", en: "SINGULARITY", perk: "보스에게 주는 피해 ×1.5" },
+  { min: 1000, name: "아포칼립스", en: "APOCALYPSE", perk: "모든 피해 ×2" },
 ];
 
-/** 지금 진화 단계 (0부터) */
-export function evoStage(lv: Record<UpgKey, number>) {
-  const total = lv.atk + lv.spd + lv.crit;
+/** 지금 진화 단계 (0부터) — 넘은 최고 스테이지(best - 1)로 */
+export function evoStage(best: number) {
+  const cleared = best - 1;
   let i = 0;
-  while (i + 1 < EVOLUTION.length && total >= EVOLUTION[i + 1].min) i++;
+  while (i + 1 < EVOLUTION.length && cleared >= EVOLUTION[i + 1].min) i++;
   return i;
 }
 
@@ -1479,7 +1513,8 @@ function levelsCost(s: Save, key: UpgKey, n: number, st: Stats) {
 export function randPrice(s: Save, key: UpgKey) {
   const st = stats(s);
   const avg = RAND_ODDS.reduce((sum, p, i) => sum + p * levelsCost(s, key, i + 1, st), 0);
-  return Math.ceil(avg * BAL.randPrice);
+  // 진화 6단계 「폴리모프」: 랜덤 강화 가격 -20%
+  return Math.ceil(avg * BAL.randPrice * (evoStage(s.best) >= 6 ? 0.8 : 1));
 }
 
 /** 실제 뽑기 확률 — 폴리모픽 엔진 레벨만큼 1레벨 확률을 3레벨로 옮김 (가격은 기본 확률 그대로라 순수한 이득) */
@@ -2466,7 +2501,7 @@ export const ACH: AchDef[] = [
   ach("pb", "🗄️", "페타바이트 도둑", "데이터 1PB 탈취 (누적)", (s) => [s.lifetime, PB], true),
   ach("yb", "🏛️", "요타바이트 도둑", "데이터 1YB 탈취 (누적)", (s) => [s.lifetime, YB], true),
   ach("ups1k", "🔧", "튜닝 중독", "업그레이드 1,000레벨", (s) => [s.rec.ups, 1000]),
-  ach("evo", "🧠", "오버마인드", "진화 마지막 단계", (s) => [s.rec.evo, EVOLUTION.length - 1]),
+  ach("evo", "🧠", "아포칼립스", "진화 마지막 단계", (s) => [s.rec.evo, EVOLUTION.length - 1]),
   // 도전
   ach("clutch", "😰", "아슬아슬", "남은 시간 1초 이하에서 보스 격퇴", (s) => [s.rec.clutch, 1]),
   ach("fails", "🔁", "불굴의 코드", "보스에게 10번 차단당함", (s) => [s.rec.fails, 10]),
@@ -2477,7 +2512,7 @@ export const ACH: AchDef[] = [
 
 /** 업적 확인 — 새로 달성한 것 (저장본에 기록함) */
 export function checkAch(s: Save): AchDef[] {
-  s.rec.evo = Math.max(s.rec.evo, evoStage(s.lv));
+  s.rec.evo = Math.max(s.rec.evo, evoStage(s.best));
   const got: AchDef[] = [];
   for (const d of ACH) {
     if (s.ach.includes(d.id)) continue;
