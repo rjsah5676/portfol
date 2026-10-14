@@ -38,13 +38,15 @@ export const BAL = {
   /** 커널 권한 「장기 잠복」: 오프라인 최대 시간 · 「모듈 오버클럭」: 코드 모듈 효과 상한 배율 */
   coreIdleHours: 48,
   coreOver: 1.1,
-  /** 스테이지마다 체력 배율 (lateFrom 까지) · 그 뒤로는 hpGrowthLate */
+  /** 스테이지마다 체력 배율 (lateFrom 까지) */
   hpGrowth: 1.18,
   lateFrom: 100,
-  /** (1.18 → 1.185: 보스가 다시 벽이 되며 변이를 제때 하게 되고 백도어 침투가 생겨 빨라진 만큼 — 1000 도달 시간 유지) */
+  /**
+   * lateFrom 뒤로는 hpGrowthLate 에서 마지막 스테이지의 hpGrowthEnd 까지 스테이지마다 조금씩 낮아짐 —
+   * 고정 배율이던 땐 코드 모듈이 상한에 닿고 업그레이드 · 우회 기술이 점점 덜 오르는 후반에 100스테이지마다 걸리는
+   * 시간이 두 배씩 늘었음. 낮아지게 해서 100스테이지마다 비슷한 시간이 걸리게
+   */
   hpGrowthLate: 1.185,
-  /** 마지막 구역(글로벌 코어, endFrom 다음부터)은 체력 증가율을 낮춤 — 코드 모듈이 상한에 닿아 성장이 느려지는 끝을 밀어붙이게 */
-  endFrom: 900,
   hpGrowthEnd: 1.15,
   /** 보스 체력 = 같은 스테이지 파일의 몇 배 */
   bossHp: 10,
@@ -1289,12 +1291,24 @@ export function dps(st: Stats) {
 
 // ── 적 (보안 등급 = 체력) · 보상 ──
 
-/** 스테이지 lateFrom 까지는 hpGrowth 배씩, 그 뒤로는 hpGrowthLate 배씩, endFrom 뒤로는 hpGrowthEnd 배씩 */
+/** 스테이지 s → s+1 의 체력 배율 (lateFrom 까지 hpGrowth, 그 뒤로는 hpGrowthLate → 마지막 스테이지 hpGrowthEnd 로 고르게) */
+function hpStep(s: number) {
+  if (s < BAL.lateFrom) return BAL.hpGrowth;
+  const f = Math.min(1, (s - BAL.lateFrom) / (MAX_STAGE - BAL.lateFrom));
+  return BAL.hpGrowthLate + (BAL.hpGrowthEnd - BAL.hpGrowthLate) * f;
+}
+/** 스테이지별 ln(체력 배율) 누적 (BAL 이 바뀌면 다시 셈 — 시뮬레이터가 바꿔 봄) */
+let hpLog: number[] = [];
+let hpKey = "";
 function baseHp(stage: number) {
-  const a = Math.min(stage, BAL.lateFrom) - 1;
-  const b = Math.max(0, Math.min(stage, BAL.endFrom) - BAL.lateFrom);
-  const c = Math.max(0, stage - BAL.endFrom);
-  return BAL.hp0 * BAL.hpGrowth ** a * BAL.hpGrowthLate ** b * BAL.hpGrowthEnd ** c;
+  const key = `${BAL.hpGrowth}/${BAL.lateFrom}/${BAL.hpGrowthLate}/${BAL.hpGrowthEnd}`;
+  if (key !== hpKey) {
+    hpKey = key;
+    hpLog = [0, 0];
+    for (let s = 1; s <= MAX_STAGE + 1; s++) hpLog[s + 1] = hpLog[s] + Math.log(hpStep(s));
+  }
+  const n = Math.max(1, Math.min(Math.floor(stage), MAX_STAGE + 1));
+  return BAL.hp0 * Math.exp(hpLog[n] + (stage - n) * Math.log(hpStep(n)));
 }
 /** 극초반 보정이 남은 정도 (1스테이지 1 → 점점 0) */
 const early = (stage: number) => BAL.earlyDecay ** (stage - 1);

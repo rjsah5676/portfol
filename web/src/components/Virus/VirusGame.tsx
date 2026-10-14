@@ -2068,12 +2068,9 @@ export default function VirusGame() {
                       · 모듈 {owned}/{ROSTER.length} · 우회 {bypassN}/{APEX.length}
                     </span>
                   </span>
-                  {/* 모듈 HUD: 컴파일한 코드 모듈 — 효과가 터지면 반짝 */}
+                  {/* 모듈 HUD: 코드 모듈 10칸 (5칸 × 2줄, 아직 없는 모듈은 빈칸) — 효과가 터지면 반짝 */}
                   {owned > 0 && (
-                    <div
-                      className="flex max-w-[260px] flex-wrap justify-center gap-1"
-                      aria-label="코드 모듈"
-                    >
+                    <div className="grid grid-cols-5 gap-1" aria-label="코드 모듈">
                       {MOD_ORDER.map((i) => [ROSTER[i], i] as const).map(([v, i]) =>
                         mods[i] ? (
                           <span
@@ -2090,7 +2087,13 @@ export default function VirusGame() {
                           >
                             {v.icon}
                           </span>
-                        ) : null
+                        ) : (
+                          <span
+                            key={v.id}
+                            aria-hidden
+                            className="h-6 w-6 rounded-md border border-dashed border-white/10"
+                          />
+                        )
                       )}
                     </div>
                   )}
