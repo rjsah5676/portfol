@@ -32,7 +32,6 @@ import {
   PASS_PREMIUM_GP,
   RELIC,
   RELICS,
-  RELIC_CORE_PRICE,
   RES,
   RES_SLOTS,
   RELIC_SLOTS,
@@ -503,20 +502,6 @@ export function createDefenseMeta(db: Database, points: Points, now: () => numbe
       });
     },
 
-    relicBuy(uid: string, id: string) {
-      return edit(uid, async (p) => {
-        const r = RELIC[id];
-        if (!r) throw bad("없는 유물이에요.");
-        need(!p.relics.includes(id), "이미 가진 유물이에요.");
-        const price = RELIC_CORE_PRICE[r.tier];
-        need(p.cores >= price, "글리치 코어가 모자라요.");
-        p.cores -= price;
-        p.relics.push(id);
-        if (p.load.relics.length < RELIC_SLOTS) p.load.relics.push(id);
-        return wire(uid, p);
-      });
-    },
-
     /** 연구 레벨 올리기 (조각) · 내리기 (쓴 조각 전부 돌려받기) */
     resLevel(uid: string, id: string, dir: 1 | -1) {
       return edit(uid, async (p) => {
@@ -641,14 +626,12 @@ export function createDefenseMeta(db: Database, points: Points, now: () => numbe
       });
     },
 
-    /** 재화샵: GP → 게임 재화 (주 한도) */
+    /** 재화샵: GP → 게임 재화 (횟수 제한 없음 — 효율이 낮아서) */
     storeBuy(uid: string, id: string) {
       return edit(uid, async (p) => {
         const it = GP_STORE.find((x) => x.id === id);
         if (!it) throw bad("없는 상품이에요.");
-        need(weekLeft(p, id, it.perWeek) > 0, "이번 주에 더 살 수 없어요.");
         await points.spend(uid, it.gp, "defense", `store:${id}`);
-        p.shop.n[id] = (p.shop.n[id] ?? 0) + 1;
         await grantGoods(uid, p, it.give);
         return wire(uid, p);
       });

@@ -462,9 +462,8 @@ describe("픽셀 글리치 디펜스 서버", () => {
     const after = await c.rpc("defense.profile");
     expect(after.gp).toBe(gp0 + x.gp * x.perWeek);
     expect(after.pieces).toBe(10_000 - x.pay.pieces! * x.perWeek);
-    // 재화샵 주 한도
-    for (let i = 0; i < s0.perWeek - 1; i++) await c.rpc("defense.store.buy", { id: "s_cores" });
-    await expect(c.rpc("defense.store.buy", { id: "s_cores" })).rejects.toThrow();
+    // 재화샵은 횟수 제한 없음 (GP 만 있으면)
+    for (let i = 0; i < 7; i++) await c.rpc("defense.store.buy", { id: "s_cores" });
     c.close();
   });
 

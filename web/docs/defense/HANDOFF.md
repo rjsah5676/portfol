@@ -158,8 +158,15 @@ cd web && POKER_E2E=1 npx next dev            # → /games/defense/?fake=admin:�
 - 오염 단계 0~30 (`GLITCH` 11~30 은 코드로 만듦, `armor` · `boss` 배수 추가) · 10단계부터는 클리어해야 다음이 열림 (`glitchUnlocks`)
 - 성장: 등급별 레벨 조각 값 `lvCost` · 내리기 `defense.unit.down`(전부 환불) · 오늘 첫 판 조각 ×2 · 도감 수집 `collectReward`(profile.seen) · 오염 첫 클리어 `glitchFirstClear`
 - GP: `GP_SHOP` 유물 확정 상자(1500, 주 3) · 고른 유닛 카드 10장(600, 주 5) — `defense.gp.chest` · `defense.gp.cards`
-- 화면: 이어하기(`DefenseApp` localStorage `pgd-resume:<uid>` 2초마다 → `Controller.restore` 로 기록을 다시 돌려 따라잡음, 3.5시간) · 포기하기 · DPS 창(필드 오른쪽 위) · 클릭 두 번 이동(빈 칸은 바로, 「이동」/M 뒤엔 다른 유닛과 바꿈) · 재화 말풍선(`ui.tsx Tip`, `Hub CUR_INFO`) · 도트 스크롤바 · 마우스 크기(소리 창, `data-cur` + `cursor-3x/4x/6x.png`)
+- 화면: 이어하기(`DefenseApp` localStorage `pgd-resume:<uid>` 2초마다 → `Controller.restore` 로 기록을 다시 돌려 따라잡음, 3.5시간) · 포기하기 · DPS 창(필드 오른쪽 위) · (v1.2.1 에서 클릭 이동 삭제 — 끌어서만) · 재화 말풍선(`ui.tsx Tip`, `Hub CUR_INFO`) · 도트 스크롤바 · 마우스 크기(소리 창, `data-cur` + `cursor-3x/4x/6x.png`)
 - 효과: 공격 모양 유닛별 `render.ts HIT_KIND/drawShot` · 공격 동작 세력별 `attackPose` · 소환 `Fx spawn`(빛기둥 + 고리) · 효과음 `spawn`(레어 · 에픽 소환) · `reward` · `chest-open`
+
+### v1.2.1 BETA (밸런스 그대로 beta3) — 튜토리얼 · 상점 정리
+- **튜토리얼** `components/Defense/Tutorial.tsx`: 판 안 안내 카드 9장 (`STEPS` — 조건 `when(b)` 이 맞으면 순서대로 하나씩, 판은 안 멈춤). 본 것은 이 기기 `localStorage pgd-tut {done, off}`, `resetTutorial()` 은 메뉴 왼쪽 아래 「튜토리얼」 · 일시정지 창
+- 유물 코어로 바로 사기 삭제 (rpc `defense.relic.buy` 없음) — 유물은 상자에서만. `RELIC_CORE_PRICE` 는 강화 코어 계산에만
+- 재화샵 `GP_STORE` 주간 제한 없음 (`perWeek` 빠짐, GP 교환 · 주간 패키지는 그대로 주 한도)
+- 시즌 패스 칸에 「카드 상자 · 유물 상자」 이름
+- 자리 옮기기는 끌어서만 (클릭 두 번 이동 · 「이동」 버튼 · M 키 삭제)
 
 ### v1.2 BETA (밸런스 beta3) — 치트 코드(증강) · 시작 치트 · 끈기 · 일일 패키지
 - **치트 코드** (`lib/defense/cheats.ts`, 다른 게임의 증강): 보스 10 · 20 · 30 · 40 · 50 을 잡으면 `offerCheat` 가 `b.cheat = { kind: "cheat", offer[3], rr[3], t }` → **고를 때까지 그 보드는 멈춤** (`step` 이 건너뜀). 명령 `{t:"cheat", i}` 고르기 · `{t:"reroll", i}` 그 카드 다시 뽑기 (카드마다 `mods.cheatReroll`, 기본 1). 고르는 중엔 다른 명령은 거절(포기만 됨)

@@ -64,6 +64,7 @@ import {
 } from "./ui";
 import { bgmFor, jingle, playBgm, preloadSfx, setSfxSpeed, sfx, sfxVar } from "./audio";
 import Codex, { foundHidden, markFound } from "./Codex";
+import { TutorialCard, resetTutorial } from "./Tutorial";
 
 /*
  * 게임 화면 (무대 1024×576 기준 배치)
@@ -109,8 +110,6 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry }
   /** 레전드 이상 판매는 두 번 눌러야 (실수로 팔지 않게) — 한 번 누른 칸 */
   const [sellArm, setSellArm] = useState(-1);
   const [quitArm, setQuitArm] = useState(false);
-  /** 「이동」을 눌러 다음 클릭한 칸과 자리를 바꿀 준비 */
-  const [moveArm, setMoveArm] = useState(false);
   const sellSel = () => {
     if (sel < 0) return;
     const d = b.cells[sel].def ? UNIT[b.cells[sel].def!] : null;
@@ -364,17 +363,7 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry }
       }
       return;
     }
-    // 클릭 두 번 이동: 고른 칸이 있을 때 빈 칸을 누르면 그리로 옮김 · 「이동」을 켠 뒤면 다른 유닛 칸과 자리 바꿈
-    if (sel >= 0 && s.from >= 0 && s.from !== sel && b.cells[sel].def && (moveArm || !b.cells[s.from].def)) {
-      setMoveArm(false);
-      if (run({ t: "swap", a: sel, b: s.from })) {
-        sfx("ui-click", 0.8, 1.3);
-        setSel(s.from);
-        v.sel = s.from;
-      }
-      return;
-    }
-    setMoveArm(false);
+    // 자리 옮기기는 끌어서만 (클릭은 고르기 · 풀기)
     const next = s.from >= 0 && b.cells[s.from].def && sel !== s.from ? s.from : -1;
     if (next >= 0) sfx("ui-click", 0.9, 1.15);
     setSel(next);
@@ -400,7 +389,6 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry }
       if (k === "q") run({ t: "summon" });
       else if (k === "w" && sel >= 0) run({ t: "merge", c: sel });
       else if (k === "e" && sel >= 0) sellSel();
-      else if (k === "m" && sel >= 0) setMoveArm((x) => !x);
       else if (k === "1" || k === "2" || k === "3") run({ t: "up", k: FACTIONS[Number(k) - 1] });
       else if (k === "4") run({ t: "up", k: "hidden" });
       else if (k === "5") run({ t: "luck" });
@@ -415,8 +403,7 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry }
         if (modal) {
           if (modal === "pause") ctrl.setPaused(false);
           setModal(null);
-        } else if (sel >= 0 || moveArm) {
-          setMoveArm(false);
+        } else if (sel >= 0) {
           setSel(-1);
         } else if (!b.result) {
           ctrl.setPaused(true);
@@ -678,6 +665,7 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry }
           </div>
         )}
         {b.cheat && !b.result && <CheatPicker b={b} multi={multi} run={run} />}
+        <TutorialCard b={b} />
         {ctrl.paused && !modal && (
           <div className="absolute inset-0 flex items-center justify-center bg-[#05040c]/60">
             <Btn
@@ -772,15 +760,6 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry }
                 {usedIn(selDef.id) && <> · 재료: {usedIn(selDef.id)}</>}
               </p>
             </div>
-            <Btn
-              tone={moveArm ? "cyan" : "ghost"}
-              onClick={() => setMoveArm((x) => !x)}
-              className={`h-[36px] w-[56px] text-[12px] ${moveArm ? "dfn-pulse" : ""}`}
-              hot="M"
-              title="누르고 옮길 칸을 클릭 (빈 칸은 바로 클릭해도 옮겨져요 · 끌어서 옮기기도 돼요)"
-            >
-              {moveArm ? "어디로?" : "이동"}
-            </Btn>
             <Btn
               tone={selCell.units.length >= STACK && selDef.grade < 3 ? "gold" : "ghost"}
               disabled={selCell.units.length < STACK || selDef.grade >= 3}
@@ -1097,6 +1076,9 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry }
                 {quitArm ? "정말 포기할까요? (한 번 더 누르기)" : `포기하기 — ${b.wave}웨이브에서 끝내고 기록 · 보상 받기`}
               </Btn>
             )}
+            <Btn className="h-[34px] text-[13px]" onClick={() => (resetTutorial(), setModal(null), ctrl.setPaused(false), force())}>
+              튜토리얼 다시 보기 (처음부터)
+            </Btn>
             <Btn tone="danger" arrow className="h-[40px] text-[14px]" onClick={onExit}>
               {multi ? "방에서 나가기 (내 보드는 그대로 진행돼요)" : "나가기 (기록 · 보상 없음, 나중에 이어하기)"}
             </Btn>
@@ -1326,7 +1308,8 @@ function RecipeModal({ b, run, onClose }: { b: Board; run: (c: Cmd) => boolean; 
   };
   const okNow = (id: string) => canRecipe(b, id);
   const base = [...RECIPES].filter((r) => tab === "all" || UNIT[r.id].faction === tab);
-  const readyList = base.filter((r) => okNow(r.id)).sort((x, y) => UNIT[y.id].grade - UNIT[x.id].grade);
+  // 지금 만들 수 있는 것은 어느 탭에서든 맨 위에 (다른 세력 것이어도)
+  const readyList = RECIPES.filter((r) => okNow(r.id)).sort((x, y) => UNIT[y.id].grade - UNIT[x.id].grade);
   const list = [
     ...readyList,
     ...base

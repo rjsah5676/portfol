@@ -649,15 +649,13 @@ export interface StoreItem {
   name: string;
   gp: number;
   give: Goods;
-  /** 한 주에 살 수 있는 수 */
-  perWeek: number;
 }
-/** 재화샵: GP → 게임 재화 (효율 낮음 — 판에서 버는 게 훨씬 빠름. 급할 때 · 남는 GP 용) */
+/** 재화샵: GP → 게임 재화 (효율 낮음 — 판에서 버는 게 훨씬 빠름. 급할 때 · 남는 GP 용) · 횟수 제한 없음 */
 export const GP_STORE: StoreItem[] = [
-  { id: "s_pieces", name: "픽셀 조각 500", gp: 1000, give: { pieces: 500 }, perWeek: 5 },
-  { id: "s_cores", name: "글리치 코어 4", gp: 1000, give: { cores: 4 }, perWeek: 5 },
-  { id: "s_card", name: "카드 상자", gp: 600, give: { cardBox: 1 }, perWeek: 5 },
-  { id: "s_relic", name: "유물 상자", gp: 3000, give: { relicBox: 1 }, perWeek: 2 },
+  { id: "s_pieces", name: "픽셀 조각 500", gp: 1000, give: { pieces: 500 } },
+  { id: "s_cores", name: "글리치 코어 4", gp: 1000, give: { cores: 4 } },
+  { id: "s_card", name: "카드 상자", gp: 600, give: { cardBox: 1 } },
+  { id: "s_relic", name: "유물 상자", gp: 3000, give: { relicBox: 1 } },
 ];
 export interface SellItem {
   id: string;
@@ -694,7 +692,7 @@ export const GP_PACKS: PackDef[] = [
   { id: "p_start", name: "신입 수호자 꾸러미", desc: "처음 한 번 — 정비소를 빠르게 시작", gp: 1000, once: true, give: { pieces: 1500, cardBox: 2, cores: 4 } },
   { id: "p_week", name: "주간 보급 꾸러미", desc: "매주 — 조각 · 카드 · 코어", gp: 1500, perWeek: 1, give: { pieces: 2500, cardBox: 3, cores: 6 } },
   { id: "p_relic", name: "유물 탐사 꾸러미", desc: "매주 — 유물 상자 3 + 강화용 코어", gp: 2000, perWeek: 1, give: { relicBox: 3, cores: 8 } },
-  { id: "p_trans", name: "초월 계약 꾸러미", desc: "매주 — 초월 소환 2번 (천장 횟수에 들어감)", gp: 3000, perWeek: 1, give: { trans: 2 } },
+  { id: "p_trans", name: "초월 계약 꾸러미", desc: "매주 — 초월 소환 2번", gp: 3000, perWeek: 1, give: { trans: 2 } },
   { id: "p_forest", name: "픽셀 숲 꾸러미", desc: "한 번 — 블록 테마 「픽셀 숲」 + 조각 · 카드", gp: 3000, once: true, give: { item: "theme.forest", pieces: 3000, cardBox: 5 } },
   { id: "p_deep10", name: "심연 개척 꾸러미", desc: "오염 10단계 클리어 뒤 한 번", gp: 4000, once: true, needWin: 10, give: { pieces: 6000, cores: 16, relicBox: 2, trans: 1 } },
   { id: "p_deep20", name: "심연 정복 꾸러미", desc: "오염 20단계 클리어 뒤 한 번", gp: 6000, once: true, needWin: 20, give: { pieces: 10000, cores: 24, relicBox: 3, trans: 1 } },
@@ -703,7 +701,7 @@ export const PACK: Record<string, PackDef> = Object.fromEntries(GP_PACKS.map((x)
 /** 패키지 이득 % (재화샵 값 대비, 꾸미기는 셈에서 뺌) */
 export const packPct = (pk: PackDef) => Math.round((goodsGp(pk.give) / pk.gp) * 100);
 
-/** 코어로 원하는 유물 바로 사기 (일반 · 희귀 · 전설) */
+/** 유물 희귀도 값 (일반 · 희귀 · 전설) — 강화 코어 계산용 (유물은 상자에서만 나옴) */
 export const RELIC_CORE_PRICE = [8, 15, 30] as const;
 /** 유물 lv → lv+1: 그 유물 조각(같은 유물이 또 나오면 1개) lv 개 + 코어 (희귀도 값 × lv ÷ 2) */
 export const relicUpCost = (id: string, lv: number) => ({

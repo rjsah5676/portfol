@@ -29,7 +29,7 @@ import { createDefenseMeta } from "./defenseMeta";
  *   defense.rank { board, limit } → 시즌(이번 밸런스 버전 · 이번 시즌) 순위
  *   defense.me { board }      → 내 최고 기록 · 순위
  *
- *  성장 (defenseMeta.ts): defense.profile · unit.up/upAll/down · res.buy/level · relic.buy/level · box.buy/open (card · relic)
+ *  성장 (defenseMeta.ts): defense.profile · unit.up/upAll/down · res.buy/level · relic.level · box.buy/open (card · relic)
  *                          · bench.buy · fslot.buy · cheatres.buy (치트 연구) · trans (초월 소환, 코어) · load · theme
  *                        · quest.claim · pass.claim · pass.buy(GP)
  *                        · store.buy(재화샵, GP) · store.sell(재화 → GP) · pack.buy(패키지, GP)
@@ -304,7 +304,6 @@ export function registerDefense({ gateway, db, points }: Deps) {
   const lvArg = z.object({ id: z.string().max(40), dir: z.union([z.literal(1), z.literal(-1)]) });
   gateway.rpc("defense.res.level", (ctx, raw) => (member(ctx), ((a) => meta.resLevel(ctx.uid, a.id, a.dir))(lvArg.parse(raw))));
   gateway.rpc("defense.relic.level", (ctx, raw) => (member(ctx), ((a) => meta.relicLevel(ctx.uid, a.id, a.dir))(lvArg.parse(raw))));
-  gateway.rpc("defense.relic.buy", (ctx, raw) => (member(ctx), meta.relicBuy(ctx.uid, id.parse(raw).id)));
   const boxKind = z.object({ kind: z.enum(["card", "relic"]) });
   gateway.rpc("defense.box.buy", (ctx, raw) => (member(ctx), meta.boxBuy(ctx.uid, boxKind.parse(raw).kind)));
   gateway.rpc("defense.box.open", (ctx, raw) => (member(ctx), meta.boxOpen(ctx.uid, boxKind.parse(raw).kind)));

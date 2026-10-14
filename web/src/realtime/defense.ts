@@ -131,7 +131,6 @@ export const meta = {
   /** dir 1 올리기 · -1 내리기 (전부 돌려받기) */
   resLevel: (id: string, dir: 1 | -1) => P("defense.res.level", { id, dir }),
   relicLevel: (id: string, dir: 1 | -1) => P("defense.relic.level", { id, dir }),
-  relicBuy: (id: string) => P("defense.relic.buy", { id }),
   boxBuy: (kind: "card" | "relic") => P("defense.box.buy", { kind }),
   boxOpen: (kind: "card" | "relic") => P("defense.box.open", { kind }),
   benchBuy: () => P("defense.bench.buy"),
