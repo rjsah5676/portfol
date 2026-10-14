@@ -24,6 +24,8 @@ COPY web/src/lib/fight /repo/web/src/lib/fight
 COPY web/src/lib/defense /repo/web/src/lib/defense
 # 포인트 (상품 · 업적 · 환전 정의)
 COPY web/src/lib/points.ts /repo/web/src/lib/points.ts
+COPY web/src/lib/mail.ts /repo/web/src/lib/mail.ts
+# DOODLE PARTY: 모드 · 제시어 (서버가 출제 · 정답 확인)
 COPY web/src/lib/sketch /repo/web/src/lib/sketch
 RUN npm run build
 
