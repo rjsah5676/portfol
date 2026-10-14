@@ -32,7 +32,7 @@ export const FIGHT_SKINS: FightSkin[] = [
     ch: "soyoung",
     name: "바니걸 소영",
     tag: "MIDNIGHT BUNNY",
-    desc: "안경을 벗고 머리를 풀어 내린 소영. 올블랙 바니 수트에 트럼프 카드 한 장 — 오늘 수업은 조금 다를 거예요.",
+    desc: "안경을 벗고 머리를 풀어 내린 소영. 올블랙 바니 수트에 망사 스타킹, 트럼프 카드 한 장 — 오늘 수업은 조금 다를 거예요.",
     color: "#B0305A",
   },
 ];
@@ -49,7 +49,7 @@ export function look(ch: number, skin?: string | null): string {
   return s && s.ch === id ? s.id : id;
 }
 /** 스킨 그림을 바꿨을 때 올려서 브라우저에 남은 예전 그림 대신 새로 받게 함 */
-const ART_VER: Record<string, number> = { "soyoung-bunny": 6 };
+const ART_VER: Record<string, number> = { "soyoung-bunny": 7 };
 const ver = (id: string) => (ART_VER[id] ? `?v=${ART_VER[id]}` : "");
 export const artUrl = (ch: number, skin?: string | null) => `/fight/art/${look(ch, skin)}.webp${ver(look(ch, skin))}`;
 export const faceUrl = (ch: number, skin?: string | null) => `/fight/art/${look(ch, skin)}-face.webp${ver(look(ch, skin))}`;
