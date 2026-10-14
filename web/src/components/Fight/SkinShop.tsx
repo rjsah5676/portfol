@@ -21,6 +21,9 @@ const PX = "[image-rendering:pixelated]";
 
 export type ShopTab = "shop" | "inv";
 
+/** 상점 미리보기 캐릭터 뒤 오라 그림 (검정 배경 · 밝게 겹쳐 그림) */
+const AURA: Record<string, string> = { "soyoung-bunny": "/fight/shop/soyoung-bunny-aura.webp" };
+
 const chIndex = (s: FightSkin) => CHARS.findIndex((c) => c.id === s.ch);
 const gp = (n: number) => n.toLocaleString("ko-KR");
 
@@ -184,11 +187,20 @@ export default function SkinShop({ initial = "shop", onClose }: { initial?: Shop
               style={{ background: `radial-gradient(ellipse at 50% 30%, ${skin.color}55, #120820 70%)` }}
             >
               {skin.id === "igna-fw" && <FireworksBg color={skin.color} />}
+              {AURA[skin.id] && (
+                <img
+                  key={`aura-${skin.id}`}
+                  src={AURA[skin.id]}
+                  alt=""
+                  className="pointer-events-none absolute bottom-0 left-[38%] h-full -translate-x-1/2 object-contain object-bottom mix-blend-screen [animation:shop-aura_3.2s_ease-in-out_infinite_alternate]"
+                />
+              )}
+              <style>{`@keyframes shop-aura{from{opacity:.7;filter:brightness(.9)}to{opacity:1;filter:brightness(1.15)}}`}</style>
               <img
                 key={skin.id}
                 src={artUrl(chIndex(skin), skin.id)}
                 alt={skin.name}
-                className={`absolute bottom-0 left-[4%] h-[96%] object-contain object-bottom ${PX} [animation:modal-fade_300ms_ease-out]`}
+                className={`absolute bottom-0 left-[38%] h-[96%] -translate-x-1/2 object-contain object-bottom ${PX} [animation:modal-fade_300ms_ease-out]`}
               />
               <div className="absolute right-[3%] bottom-[4%] flex flex-col items-center rounded-[0.8cqw] bg-black/35 px-[0.6cqw] pt-[0.4cqw]">
                 <span className="font-mono text-[0.85cqw] tracking-widest text-white/50">IN GAME</span>

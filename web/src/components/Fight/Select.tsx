@@ -46,7 +46,9 @@ const MODES = MODE_TILES.map(([m]) => m);
 const face = (c: CharDef) => `/fight/art/${c.id}-face.webp`;
 const art = (c: CharDef) => `/fight/art/${c.id}.webp`;
 /** 선택 화면 전신 그림 배율 (그림마다 인물이 차지하는 크기가 달라서 — 발 위치는 그대로) */
-const ART_SCALE: Record<string, number> = { soyoung: 0.86 };
+const ART_SCALE: Record<string, number> = { soyoung: 0.86, "soyoung-bunny": 0.96 };
+/** 스킨 전신 그림이 기본보다 폭이 좁아 한쪽으로 쏠릴 때 안쪽으로 미는 양 (cqw) */
+const ART_DX: Record<string, number> = { "soyoung-bunny": 3.2 };
 const PX = "[image-rendering:pixelated]";
 /** 캐릭터 고르기 칸: 한 줄에 몇 칸 (↑↓ 은 이만큼 건너뜀) */
 const FACE_COLS = 4;
@@ -488,6 +490,8 @@ export default function Select({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 최신 값은 stRef로
   }, [ai]);
 
+  /** 그림 이름: 1P 는 착용 스킨, 상대는 기본 */
+  const lookOf = (sd: number) => (sd === 0 ? look(setup.c1, wornSkin(setup.c1)) : CHARS[c2i].id);
   const c1 = CHARS[setup.c1],
     c2 = CHARS[c2i];
   const side = pickSide(lock);
@@ -696,14 +700,15 @@ export default function Select({
                   </div>
                 ) : (
                 <img
-                  key={sd === 0 ? look(setup.c1, wornSkin(setup.c1)) : c.id}
+                  key={lookOf(sd)}
                   src={sd === 0 ? artUrl(setup.c1, wornSkin(setup.c1)) : art(c)}
                   alt={c.name}
                   className={`absolute top-[13%] ${sd === 0 ? "left-[1cqw] object-left-bottom" : "right-[1cqw] object-right-bottom"} z-0 h-[76%] w-[26cqw] object-contain ${PX} transition-[filter,opacity] duration-300 [animation:modal-fade_250ms_ease-out] ${sd === 1 ? "scale-x-[-1]" : ""} ${
                     active || lock[sd] ? "" : "opacity-45 brightness-50"
                   }`}
                   style={{
-                    ...(ART_SCALE[c.id] ? { height: `${76 * ART_SCALE[c.id]}%`, top: `${89 - 76 * ART_SCALE[c.id]}%` } : {}),
+                    ...(ART_SCALE[lookOf(sd)] ? { height: `${76 * ART_SCALE[lookOf(sd)]}%`, top: `${89 - 76 * ART_SCALE[lookOf(sd)]}%` } : {}),
+                    ...(ART_DX[lookOf(sd)] ? { [sd === 0 ? "marginLeft" : "marginRight"]: `${ART_DX[lookOf(sd)]}cqw` } : {}),
                     filter: active
                       ? `drop-shadow(0 0 0.25cqw ${col}) drop-shadow(0 0 1.4cqw ${col})`
                       : lock[sd]
