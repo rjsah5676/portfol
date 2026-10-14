@@ -417,3 +417,4 @@ cd web && POKER_E2E=1 npx next dev            # → /games/defense/?fake=admin:�
   - status: start(시작만) · quit(메뉴로 나감, rpc `defense.quit`, 검증 없음) · done(서버 확인) · rejected(확인 실패 + why) · 멀티는 판 끝에 한 문서
 - 관리자: 디펜스 메뉴 아래 「플레이 기록 받기」 → GET /api/admin/defense/plays 를 끝까지 받아 JSON 저장
 - 요약: `npx tsx scripts/defense-plays-report.ts <json> [--ver beta5]` (server/) — 단계별 클리어율 · 죽은/나간 웨이브 · 유물/연구/패치 장착률 · 습관
+- **임시 기능 — 분석이 끝나면 제거 예정.** 지울 곳: server/src/games/defensePlays.ts · defense.ts 의 plays.* 호출과 `defense.quit` rpc · Room.startedAt · admin.ts `/defense/plays` 라우트와 TOP_LEVEL "defense_plays" · web realtime/defense.ts `quitRun` · DefenseApp 의 quitRun 호출 · onExport 버튼 · exportPlays · server/scripts/defense-plays-report.ts · (DB) defense_plays 컬렉션 drop
