@@ -1,5 +1,5 @@
 import { api } from "@/lib/api/http";
-import type { AchGame, AchRankRow, AchState, PointLogRow } from "@/lib/points";
+import type { AchGame, AchRankRow, AchState, DailyState, PointLogRow } from "@/lib/points";
 
 /** 포인트 API (server/src/http/points.ts) */
 export const getMyPoints = () =>
@@ -34,3 +34,16 @@ export const buyItem = (item: string) =>
     auth: true,
     body: { item },
   });
+
+export const getDaily = (game: AchGame) =>
+  api<{ list: DailyState[]; points: number | null }>(
+    `/api/points/daily/${game}`,
+    { auth: true },
+  );
+
+/** 일일 미션 받기 — id 가 없으면 받을 수 있는 것 전부 */
+export const claimDaily = (game: AchGame, id?: string) =>
+  api<{ reward: number; ids: string[]; points: number }>(
+    `/api/points/daily/${game}/claim`,
+    { method: "POST", auth: true, body: id ? { id } : {} },
+  );

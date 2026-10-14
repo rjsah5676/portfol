@@ -18,7 +18,7 @@ export const fmtPoint = (n: number) =>
 export const ATTEND_POINTS = 200;
 
 /** 짧은 설명 (툴팁 · 상점 · 업적 창 아래) */
-export const POINT_SHORT = `${POINT.name}는 출석 · 게임 업적으로 모으고, 게임 안 캐릭터 · 스킨을 사는 데 쓰는 사이트 전용 재화예요. 현금으로 사거나 바꿀 수 없어요.`;
+export const POINT_SHORT = `${POINT.name}는 출석 · 일일 미션 · 게임 업적으로 모으고, 게임 안 캐릭터 · 스킨을 사는 데 쓰는 사이트 전용 재화예요. 현금으로 사거나 바꿀 수 없어요.`;
 
 /** 현금성 재화가 아니라는 안내 (자주 묻는 질문 · 마이페이지 · 상점) */
 export const POINT_NOTICE = [
@@ -184,29 +184,7 @@ const a = (
   ...(fmt && { fmt }),
 });
 
-/** 반복형 업적 */
-const r = (game: AchGame, id: string, title: string, desc: string, metric: AchMetric, goal: number, reward: number): Achievement => ({
-  id: `${game}.rep-${id}`,
-  game,
-  title,
-  desc,
-  metric,
-  goal,
-  reward,
-  repeat: true,
-});
-
 export const ACHIEVEMENTS: Achievement[] = [
-  // ── 반복형 (쌓일 때마다 또 받음) ──
-  r("poker", "hands", "꾸준한 손님", "100판 칠 때마다", "poker.hands", 100, 50),
-  r("poker", "wins", "승리 수당", "50판 이길 때마다", "poker.wins", 50, 80),
-  r("fight", "games", "링 위의 일상", "랭크전 10판 할 때마다", "fight.games", 10, 50),
-  r("fight", "wins", "승리 수당", "랭크전 10승 할 때마다", "fight.wins", 10, 80),
-  r("defense", "runs", "출근 도장", "랭킹 판 5번 끝낼 때마다", "defense.runs", 5, 50),
-  r("defense", "kills", "글리치 청소부", "적 5,000마리 처치할 때마다 (랭킹 판 누적)", "defense.kills", 5_000, 50),
-  r("rhythm", "plays", "매일 리듬", "20판 할 때마다", "rhythm.plays", 20, 50),
-  r("rhythm", "fc", "풀콤보 수당", "서로 다른 채보 5개 풀콤보 할 때마다", "rhythm.fc", 5, 100),
-
   // ANIME POKER
   a(
     "poker",
@@ -484,6 +462,53 @@ export function claimableTimes(a: Achievement, s: Pick<AchState, "value" | "clai
   return !s.claimedAt && s.value >= a.goal ? 1 : 0;
 }
 
+/* ─────────────── 일일 미션 ─────────────── */
+
+/**
+ * 일일 미션: 오늘(한국 시간) 한 만큼 — 서버가 그날 처음 볼 때(출석 · 미션 창) 업적 숫자를 기준으로 적어 두고 그 뒤로 늘어난 만큼 셈.
+ * 받은 미션은 회원 문서 daily.got 에 (날이 바뀌면 새로). 업적 숫자 중 쌓이기만 하는 것만 씀
+ */
+export interface DailyMission {
+  id: string;
+  game: AchGame;
+  title: string;
+  metric: AchMetric;
+  goal: number;
+  reward: number;
+}
+const dm = (game: AchGame, id: string, title: string, metric: AchMetric, goal: number, reward: number): DailyMission => ({
+  id: `${game}.d-${id}`,
+  game,
+  title,
+  metric,
+  goal,
+  reward,
+});
+export const DAILY_MISSIONS: DailyMission[] = [
+  dm("poker", "hands", "포커 10판 치기", "poker.hands", 10, 30),
+  dm("poker", "hands30", "포커 30판 치기", "poker.hands", 30, 50),
+  dm("poker", "wins", "포커 3판 이기기", "poker.wins", 3, 40),
+  dm("fight", "games", "랭크전 3판 하기", "fight.games", 3, 40),
+  dm("fight", "win", "랭크전 1승", "fight.wins", 1, 30),
+  dm("fight", "wins", "랭크전 3승", "fight.wins", 3, 60),
+  dm("defense", "run", "랭킹 판 1번 끝내기", "defense.runs", 1, 30),
+  dm("defense", "runs", "랭킹 판 3번 끝내기", "defense.runs", 3, 60),
+  dm("defense", "kills", "적 1,000마리 처치 (랭킹 판)", "defense.kills", 1000, 40),
+  dm("rhythm", "plays", "3판 하기", "rhythm.plays", 3, 30),
+  dm("rhythm", "plays10", "10판 하기", "rhythm.plays", 10, 60),
+];
+/** 일일 미션이 보는 숫자 (기준값을 적어 둘 것) */
+export const DAILY_METRICS = [...new Set(DAILY_MISSIONS.map((x) => x.metric))];
+export const dailyMission = (id: unknown) => DAILY_MISSIONS.find((x) => x.id === id);
+export const dailyOf = (game: AchGame) => DAILY_MISSIONS.filter((x) => x.game === game);
+
+/** 미션 창에 내려가는 한 줄: 오늘 한 만큼 · 받았는지 */
+export interface DailyState {
+  id: string;
+  value: number;
+  got: boolean;
+}
+
 /** 업적 랭킹 한 줄 */
 export interface AchRankRow {
   nick: string;
@@ -515,6 +540,12 @@ export function pointReason(r: Pick<PointLogRow, "reason" | "ref">): string {
       return "출석";
     case "ach":
       return `업적 · ${achievementOf(r.ref)?.title ?? r.ref ?? ""}`;
+    case "daily": {
+      const ids = (r.ref ?? "").split(",").filter(Boolean);
+      return ids.length > 1
+        ? `일일 미션 · ${POINT_GAMES[dailyMission(ids[0])?.game ?? "poker"]} ${ids.length}개`
+        : `일일 미션 · ${dailyMission(ids[0])?.title ?? ""}`;
+    }
     case "buy":
       return `구매 · ${shopItem(r.ref)?.name ?? r.ref ?? ""}`;
     case "exchange":

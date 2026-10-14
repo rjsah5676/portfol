@@ -7,6 +7,7 @@ import HintBubble, { markHintSeen } from "@/components/HintBubble";
 import Nick from "@/components/Nick";
 import RankAvatar from "./RankAvatar";
 import { AchievementList, AchievementRank } from "@/components/Points/Achievements";
+import { DailyMissionList, useDailyReady } from "@/components/Points/DailyMissions";
 import type { AchGame } from "@/lib/points";
 
 export interface TopEntry {
@@ -71,7 +72,7 @@ export default function GameHeader({
   accent?: string;
   guide?: GuideDoc;
   rank?: RankSpec;
-  /** 업적이 있는 게임이면 [업적] 버튼 (랭킹 오른쪽) + 랭킹 모달에 「업적 랭킹」 탭 */
+  /** 업적이 있는 게임이면 [미션 · 업적] 버튼 (랭킹 오른쪽, 일일 미션 · 업적 탭) + 랭킹 모달에 「업적 랭킹」 탭 */
   ach?: AchGame;
   /** 가이드 · 랭킹 버튼 사이에 더 넣을 버튼 (pill 클래스명을 받음) */
   extra?: (pill: string) => ReactNode;
@@ -83,6 +84,10 @@ export default function GameHeader({
   const [guideOpen, setGuideOpen] = useState(false);
   const [rankOpenSelf, setRankOpenSelf] = useState(false);
   const [achOpen, setAchOpen] = useState(false);
+  /** 미션 · 업적 모달 탭 */
+  const [achTab, setAchTab] = useState<"daily" | "ach">("daily");
+  /** 받을 수 있는 일일 미션 수 (버튼 점) — 모달을 닫을 때 다시 셈 */
+  const dailyReady = useDailyReady(ach, achOpen);
   /** 랭킹 모달 탭: 게임 랭킹 / 업적 랭킹 */
   const [rankTab, setRankTab] = useState<"game" | "ach">("game");
   const rankOpen = rank?.open ?? rankOpenSelf;
@@ -190,11 +195,16 @@ export default function GameHeader({
             <button
               type="button"
               onClick={() => setAchOpen(true)}
-              aria-label="업적 보기"
-              className={`${pill} border-[#F472B6]/30 bg-[#F472B6]/[0.07] text-[#F9A8D4] hover:border-[#F472B6]/60`}
+              aria-label="일일 미션 · 업적 보기"
+              className={`${pill} relative border-[#F472B6]/30 bg-[#F472B6]/[0.07] text-[#F9A8D4] hover:border-[#F472B6]/60`}
             >
               <span aria-hidden>🏅</span>
-              <span>업적</span>
+              <span>미션 · 업적</span>
+              {dailyReady > 0 && (
+                <span className="absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-[#FDE047] px-1 font-mono text-[10px] font-bold text-black">
+                  {dailyReady}
+                </span>
+              )}
             </button>
           )}
         </div>
@@ -280,11 +290,35 @@ export default function GameHeader({
           closeButton
           title={
             <span className="flex items-center gap-2">
-              <span aria-hidden>🏅</span> {title} 업적
+              <span aria-hidden>🏅</span> {title} 미션 · 업적
             </span>
           }
         >
-          {achOpen && <AchievementList game={ach} accent={accent} />}
+          {achOpen && (
+            <>
+              <div className="mb-3 flex gap-1.5 font-['Nanum_Gothic',sans-serif]">
+                {(
+                  [
+                    ["daily", "📅 일일 미션"],
+                    ["ach", "🏅 업적"],
+                  ] as const
+                ).map(([k, label]) => (
+                  <button
+                    key={k}
+                    type="button"
+                    onClick={() => setAchTab(k)}
+                    className={`relative flex-1 cursor-pointer rounded-lg border py-1.5 text-sm transition-colors ${
+                      achTab === k ? "border-white/30 bg-white/[0.1] font-bold text-white" : "border-white/10 text-white/50 hover:text-white/80"
+                    }`}
+                  >
+                    {label}
+                    {k === "daily" && dailyReady > 0 && <span className="ml-1 text-[#FDE047]">●</span>}
+                  </button>
+                ))}
+              </div>
+              {achTab === "daily" ? <DailyMissionList game={ach} accent={accent} /> : <AchievementList game={ach} accent={accent} />}
+            </>
+          )}
         </Modal>
       )}
     </header>

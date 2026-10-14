@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { ATTEND_POINTS, POKER_EXCHANGE, achievementOf, shopFor } from "../../web/src/lib/points";
+import { ATTEND_POINTS, POKER_EXCHANGE, achievementOf, dailyMission, shopFor } from "../../web/src/lib/points";
 import { START_MONEY } from "../../web/src/lib/poker/rules";
 import type { Wallet } from "../../web/src/lib/poker/types";
 import { RpcError, sleep, startTestServer, type TestClient, type TestServer } from "./helpers";
@@ -131,25 +131,30 @@ describe("포인트", () => {
     expect(log[0]).toMatchObject({ delta: 1134, reason: "admin", bal: 1234 });
   });
 
-  it("반복형 업적: 쌓인 만큼 한꺼번에 받고, 다음 칸이 차야 또 받음 (동시에 눌러도 한 번), 업적 랭킹에도 들어감", async () => {
+  it("일일 미션: 그날 처음 본 뒤로 한 만큼 · 하나씩 / 모두 받기 · 두 번 못 받음 · 날이 바뀌면 새로", async () => {
     const a = await member();
-    const id = "poker.rep-hands";
-    const rep = achievementOf(id)!;
-    const claim = () => srv.http(`/api/points/achievements/${id}/claim`, { method: "POST", token: a.token });
-    await set(a.uid, { "stats.poker.hands": rep.goal * 2 + 30, points: 0 });
+    await set(a.uid, { "stats.poker.hands": 100, "stats.poker.holdem.wins": 10, points: 0 });
+    type Row = { id: string; value: number; got: boolean };
+    const list = async () => (await srv.http("/api/points/daily/poker", { token: a.token })).body.list as Row[];
+    const claim = (id?: string) => srv.http("/api/points/daily/poker/claim", { method: "POST", token: a.token, body: id ? { id } : {} });
+    expect((await list()).every((x) => x.value === 0 && !x.got)).toBe(true);
+    await set(a.uid, { "stats.poker.hands": 112, "stats.poker.holdem.wins": 13 });
+    expect((await list()).find((x) => x.id === "poker.d-hands")?.value).toBe(12);
+    const one = await claim("poker.d-hands");
+    expect(one.body.reward).toBe(dailyMission("poker.d-hands")!.reward);
+    expect((await claim("poker.d-hands30")).body.error.code).toBe("NOT_YET");
+    expect((await claim("fight.d-games")).body.error.code).toBe("BAD_REQUEST");
+    // 모두 받기: 남은 것(3승)만, 동시에 눌러도 한 번
     const rs = await Promise.all([claim(), claim(), claim()]);
     const ok = rs.filter((r) => r.status === 200);
     expect(ok).toHaveLength(1);
-    expect(ok[0].body.reward).toBe(rep.reward * 2);
+    expect(ok[0].body.ids).toEqual(["poker.d-wins"]);
     expect((await claim()).body.error.code).toBe("NOT_YET");
-    let st = ((await srv.http("/api/points/achievements/poker", { token: a.token })).body.list as { id: string; times?: number }[]).find((x) => x.id === id);
-    expect(st?.times).toBe(2);
-    await set(a.uid, { "stats.poker.hands": rep.goal * 3 });
-    expect((await claim()).body.reward).toBe(rep.reward);
-    st = ((await srv.http("/api/points/achievements/poker", { token: a.token })).body.list as { id: string; times?: number }[]).find((x) => x.id === id);
-    expect(st?.times).toBe(3);
-    expect(((await users().findOne({ _id: a.uid })) as { points?: number }).points).toBe(rep.reward * 3);
-    const rank = (await srv.http("/api/points/achievements/poker/rank")).body.list as { nick: string; points: number; count: number }[];
-    expect(rank.some((r) => r.points >= rep.reward * 3 && r.count >= 3)).toBe(true);
+    const total = dailyMission("poker.d-hands")!.reward + dailyMission("poker.d-wins")!.reward;
+    expect(((await users().findOne({ _id: a.uid })) as { points?: number }).points).toBe(total);
+    expect((await list()).filter((x) => x.got).map((x) => x.id)).toEqual(["poker.d-hands", "poker.d-wins"]);
+    // 다음 날: 그때 숫자부터 다시
+    await set(a.uid, { "daily.day": "2000-01-01" });
+    expect((await list()).every((x) => x.value === 0 && !x.got)).toBe(true);
   });
 });

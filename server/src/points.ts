@@ -8,6 +8,8 @@ import { START_MONEY, kstDay, skinOf } from "../../web/src/lib/poker/rules";
 import {
   ACHIEVEMENTS,
   ATTEND_POINTS,
+  DAILY_METRICS,
+  DAILY_MISSIONS,
   POINT,
   POKER_EXCHANGE,
   achievementOf,
@@ -16,7 +18,10 @@ import {
   shopItem,
   type AchGame,
   claimableTimes,
+  dailyMission,
+  dailyOf,
   repKey,
+  type DailyState,
   type AchRankRow,
   type AchState,
   type PointLogRow,
@@ -30,7 +35,8 @@ import {
  *   points       잔액
  *   pointsDay    마지막으로 출석 포인트를 받은 날 (한국 시간)
  *   achs         받은 업적 [{ id, at }]
- *   achRep       반복형 업적을 받은 횟수 { <id 의 . 을 __ 로>: n }
+ *   achRep       반복형 업적을 받은 횟수 { <id 의 . 을 __ 로>: n } (반복형은 10.14 일일 미션으로 바뀌어 지금은 안 씀)
+ *   daily        일일 미션 { day: 한국 날짜, base: 그날 처음 본 업적 숫자, got: 받은 미션 id }
  *   inv.<게임>   포인트로 산 물건 (포커는 기존 poker.chars · poker.skins 를 그대로 씀)
  *   poker.exch   포인트 → 칩으로 바꿔 받은 칩 − 칩 → 포인트로 내준 칩 (포커 칩 업적에서 빼는 몫)
  * 잔액이 바뀌는 건 전부 조건부 updateOne 하나로 (두 번 눌러도 한 번만, 모자라면 안 바뀜) + 원장 point_log 에 한 줄.
@@ -43,6 +49,7 @@ type PointFields = Pick<UserDoc, "nick" | "money"> & {
   achRep?: Record<string, number>;
   poker?: { chars?: string[]; skins?: string[]; exch?: number };
   inv?: Record<string, string[]>;
+  daily?: { day: string; base: Record<string, number>; got: string[] };
 };
 
 export interface PointsInfo {
@@ -79,7 +86,7 @@ export function createPoints(db: Database, now: () => number = Date.now) {
   const rankCache = new Map<AchGame, { at: number; rows: AchRankRow[] }>();
 
   const read = async (uid: string) =>
-    (await col.findOne({ _id: uid }, { projection: { nick: 1, money: 1, points: 1, pointsDay: 1, achs: 1, achRep: 1, "poker.chars": 1, "poker.skins": 1, "poker.exch": 1, inv: 1 } })) as PointFields | null;
+    (await col.findOne({ _id: uid }, { projection: { nick: 1, money: 1, points: 1, pointsDay: 1, achs: 1, achRep: 1, daily: 1, "poker.chars": 1, "poker.skins": 1, "poker.exch": 1, inv: 1 } })) as PointFields | null;
 
   /** 잔액이 바뀐 뒤: 원장 한 줄 + 알림 */
   async function after(uid: string, delta: number, reason: string, ref?: string) {
@@ -104,6 +111,18 @@ export function createPoints(db: Database, now: () => number = Date.now) {
     (uid: string, ...a: A) =>
       lock.run(`pt:${uid}`, () => fn(uid, ...a));
 
+  /** 오늘 일일 미션 기준: 오늘 처음이면 지금 업적 숫자를 적어 둠 (그 뒤로 늘어난 만큼이 오늘 한 것) */
+  async function dailyToday(uid: string, d: PointFields | null) {
+    const day = kstDay(now());
+    if (d?.daily?.day === day) return d.daily;
+    const games = [...new Set(DAILY_MISSIONS.map((x) => x.game))];
+    const ms: Record<string, number> = Object.assign({}, ...(await Promise.all(games.map((g) => metricsOf(db, uid, g)))));
+    const base = Object.fromEntries(DAILY_METRICS.map((k) => [k, ms[k] ?? 0]));
+    // 여러 곳에서 동시에 처음 열어도 한 번만 적음 (먼저 적은 쪽 기준)
+    await col.updateOne({ _id: uid, nick: { $exists: true }, "daily.day": { $ne: day } } as never, { $set: { daily: { day, base, got: [] } } } as never);
+    return (await read(uid))?.daily ?? { day, base, got: [] };
+  }
+
   const api = {
     async get(uid: string): Promise<PointsInfo | null> {
       const d = await read(uid);
@@ -120,6 +139,8 @@ export function createPoints(db: Database, now: () => number = Date.now) {
       );
       if (!r.modifiedCount) return 0;
       await after(uid, ATTEND_POINTS, "attend");
+      // 하루 처음 들어온 때를 일일 미션 기준으로
+      await dailyToday(uid, await read(uid)).catch((e) => console.warn("[points] 일일 미션 기준 저장 실패", e));
       return ATTEND_POINTS;
     },
 
@@ -236,6 +257,30 @@ export function createPoints(db: Database, now: () => number = Date.now) {
       return { reward: ach.reward, points: await after(uid, ach.reward, "ach", ach.id) };
     },
 
+    /** 일일 미션 (그 게임) — 오늘 한 만큼 · 받았는지. 비회원은 0 */
+    async daily(uid: string | null, game: AchGame): Promise<DailyState[]> {
+      const list = dailyOf(game);
+      const d = uid ? await read(uid) : null;
+      if (!uid || !d?.nick) return list.map((x) => ({ id: x.id, value: 0, got: false }));
+      const [dl, m] = await Promise.all([dailyToday(uid, d), metricsOf(db, uid, game)]);
+      return list.map((x) => ({ id: x.id, value: Math.max(0, (m[x.metric] ?? 0) - (dl.base[x.metric] ?? 0)), got: dl.got.includes(x.id) }));
+    },
+
+    /** 일일 미션 받기: id 를 주면 그것만, 안 주면 그 게임에서 받을 수 있는 것 전부 한 번에. 조건부 updateOne 하나 (두 번 눌러도 한 번) */
+    async claimDaily(uid: string, game: AchGame, id?: string): Promise<{ reward: number; ids: string[]; points: number }> {
+      if (id !== undefined && dailyMission(id)?.game !== game) throw new AppError("BAD_REQUEST", "없는 미션이에요.", 400);
+      const st = await api.daily(uid, game);
+      const ids = st.filter((s) => !s.got && s.value >= (dailyMission(s.id)?.goal ?? Infinity) && (!id || s.id === id)).map((s) => s.id);
+      if (!ids.length) throw new AppError("NOT_YET", id ? "아직 다 못 한 미션이에요." : "받을 수 있는 미션이 없어요.", 409);
+      const reward = ids.reduce((sum, x) => sum + (dailyMission(x)?.reward ?? 0), 0);
+      const r = await col.updateOne(
+        { _id: uid, nick: { $exists: true }, "daily.day": kstDay(now()), "daily.got": { $nin: ids } } as never,
+        { $push: { "daily.got": { $each: ids } }, $inc: { points: reward } } as never
+      );
+      if (!r.modifiedCount) throw new AppError("CLAIMED", "이미 받았어요.", 409);
+      return { reward, ids, points: await after(uid, reward, "daily", ids.join(",")) };
+    },
+
     /** 받을 수 있는데 안 받은 업적 수 (게임별) — 버튼 점 표시용 */
     async claimable(uid: string, game: AchGame): Promise<number> {
       const s = await api.achievements(uid, game);
@@ -332,6 +377,7 @@ export function createPoints(db: Database, now: () => number = Date.now) {
     chipsToPoints: locked(api.chipsToPoints),
     pointsToChips: locked(api.pointsToChips),
     claim: locked(api.claim),
+    claimDaily: locked(api.claimDaily),
     spend: locked(api.spend),
     grant: locked(api.grant),
     adminSet: locked(api.adminSet),
