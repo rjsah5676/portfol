@@ -203,7 +203,7 @@ export const SKINS: Skin[] = [
     blurb: "…트릭 오어 트릿. 칩 안 주면… 물어요.",
     line: "…할로윈이니까. 무서워요?",
     ready: true,
-    live: false,
+    live: true,
     emotes: true,
   },
 ];
