@@ -105,6 +105,31 @@ export function AchievementList({
     }
   }
 
+  /** 받을 수 있는 것 전부 (하나씩 서버에 받기 — 서버가 매번 다시 확인) */
+  async function claimAll() {
+    setBusy("*");
+    setMsg(null);
+    let sum = 0;
+    let n = 0;
+    for (const r of rows.filter(done)) {
+      try {
+        const res = await claimAchievement(r.a.id);
+        setPoints(res.points);
+        sum += res.reward;
+        n++;
+      } catch {
+        // 그새 받은 것 등은 건너뜀
+      }
+    }
+    setMsg(
+      n
+        ? `업적 ${n}개 · +${fmtPoint(sum)} 받았어요`
+        : "받지 못했어요. 잠시 뒤에 다시 해 주세요.",
+    );
+    setBusy(null);
+    load();
+  }
+
   return (
     <div className="font-['Nanum_Gothic',sans-serif]">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2.5">
@@ -130,6 +155,16 @@ export function AchievementList({
             </b>
           )}
         </span>
+        {profile && ready > 1 && (
+          <button
+            type="button"
+            disabled={busy !== null}
+            onClick={() => void claimAll()}
+            className="w-full cursor-pointer rounded-lg bg-[#FDE047] py-2 text-xs font-bold text-black hover:brightness-110 disabled:opacity-50"
+          >
+            {busy === "*" ? "받는 중…" : `모두 받기 (${ready}개)`}
+          </button>
+        )}
       </div>
       {!profile && (
         <button
@@ -211,7 +246,7 @@ export function AchievementList({
                 ) : ok && profile ? (
                   <button
                     type="button"
-                    disabled={busy === a.id}
+                    disabled={busy !== null}
                     onClick={() => void claim(a.id)}
                     className="cursor-pointer rounded-lg bg-[#FDE047] px-3 py-1.5 text-xs font-bold whitespace-nowrap text-black hover:brightness-110 disabled:opacity-50"
                   >

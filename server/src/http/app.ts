@@ -5,6 +5,8 @@ import type { Deps } from "../deps";
 import { createCaptcha, mongoPassStore } from "../captcha";
 import { toWireError } from "../errors";
 import { adminRouter, type AdminHooks } from "./admin";
+import { createMail } from "../mail";
+import { mailAdminRouter, mailRouter } from "./mail";
 import { meRouter } from "./me";
 import { pointsRouter } from "./points";
 import { rankingsRouter } from "./rankings";
@@ -109,6 +111,9 @@ export function createApp(deps: Deps, { pokerRank, pokerBuyRank, rhythmFiles, ..
   app.use("/api/rankings", rankingsRouter(deps, captcha));
   app.use("/api/me", meRouter(deps));
   app.use("/api/points", pointsRouter(deps));
+  const mail = createMail(deps.db, deps.points);
+  app.use("/api/mail", mailRouter(deps, mail));
+  app.use("/api/admin/mail", mailAdminRouter(deps, mail));
   app.use("/api/study-posts", studyPostsRouter(deps));
   if (rhythmFiles) app.use("/api/rhythm-online", rhythmFiles);
   app.use("/api/admin", adminRouter(deps, { guestChanged: site.publishGuest, ...hooks }));

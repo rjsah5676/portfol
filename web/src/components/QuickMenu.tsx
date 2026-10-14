@@ -3,6 +3,10 @@
 import { useEffect, useRef, useState } from "react";
 import Modal from "@/components/Modal/Modal";
 import { openSiteSearch } from "@/components/SiteSearch";
+import Mailbox from "@/components/Mail/Mailbox";
+import { useAuth } from "@/lib/AuthContext";
+import { getMailUnread } from "@/lib/api/mail";
+import { MAIL_EVENT } from "@/lib/mail";
 
 // 플로팅 버튼 아이콘 (색은 CSS의 color를 따라감)
 const svg = (body: string, extra = "") =>
@@ -23,6 +27,10 @@ const ICONS = {
 export default function QuickMenu() {
   const initialized = useRef(false);
   const [mailOpen, setMailOpen] = useState(false);
+  const [ready, setReady] = useState(false);
+  const [unread, setUnread] = useState(0);
+  const { profile } = useAuth();
+  const member = !!profile;
 
   useEffect(() => {
     // React 19 StrictMode(dev)는 effect를 두 번 실행하는데, jQuery로 만든 버튼들이
@@ -70,6 +78,7 @@ export default function QuickMenu() {
       searchButton.addEventListener("click", onSearch);
       mailButton.addEventListener("click", onMail);
 
+      setReady(true);
       cleanupFns.push(() => {
         upButton.removeEventListener("click", onUp);
         searchButton.removeEventListener("click", onSearch);
@@ -80,20 +89,53 @@ export default function QuickMenu() {
     return () => cleanupFns.forEach((fn) => fn());
   }, []);
 
+  // 안 받은 우편 수: 로그인했을 때 · 창으로 돌아올 때 · 5분마다 · 우편함에서 받았을 때
+  useEffect(() => {
+    if (!member) return;
+    const load = () =>
+      getMailUnread()
+        .then((r) => setUnread(r.unread))
+        .catch(() => {});
+    load();
+    const onEvent = (e: Event) => setUnread((e as CustomEvent<number>).detail);
+    const onVisible = () => document.visibilityState === "visible" && load();
+    const t = setInterval(load, 5 * 60 * 1000);
+    window.addEventListener(MAIL_EVENT, onEvent);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      clearInterval(t);
+      window.removeEventListener(MAIL_EVENT, onEvent);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [member]);
+
+  // 숫자 표시 (버튼은 jQuery 로 만든 것이라 DOM 에 직접)
+  const count = member ? unread : 0;
+  useEffect(() => {
+    if (!ready) return;
+    for (const id of ["list", "mail"]) {
+      const el = document.getElementById(id);
+      if (!el) continue;
+      let b = el.querySelector<HTMLElement>(".qm-badge");
+      if (!b) {
+        b = document.createElement("b");
+        b.className = "qm-badge";
+        el.appendChild(b);
+      }
+      b.textContent = count > 99 ? "99+" : String(count);
+      b.hidden = count === 0;
+    }
+    document.getElementById("mail")?.setAttribute("aria-label", count ? `우편함 (안 받은 우편 ${count}통)` : "우편함");
+  }, [ready, count]);
+
   return (
     <div
       data-quickmenu
       className="quick-menu-fab fixed top-[85%] right-[5%] z-[99999] m-auto h-[52px] w-[52px] text-white sm:h-[70px] sm:w-[70px]"
     >
       <div id="myMenu"></div>
-      {/* 우편함: 아직 기능 없음 — 빈 우편함만 보여 줌 */}
       <Modal open={mailOpen} onClose={() => setMailOpen(false)} title="우편함" size="sm" closeButton>
-        <div className="flex flex-col items-center gap-3 py-8 text-center">
-          <span className="text-4xl" aria-hidden="true">
-            📭
-          </span>
-          <p className="text-sm text-white/60">받은 우편이 없습니다</p>
-        </div>
+        {mailOpen && <Mailbox />}
       </Modal>
     </div>
   );

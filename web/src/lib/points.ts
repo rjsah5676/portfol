@@ -598,6 +598,8 @@ export function pointReason(r: Pick<PointLogRow, "reason" | "ref">): string {
                   : r.ref?.startsWith("weekly:")
                     ? "디펜스 · 주간 도전 (종료)"
                     : "디펜스";
+    case "mail":
+      return `우편 · ${r.ref ?? ""}`;
     default:
       return r.reason;
   }

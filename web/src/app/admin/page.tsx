@@ -12,12 +12,13 @@ import InquiryInbox from "@/components/Admin/InquiryInbox";
 import PostManager from "@/components/Admin/PostManager";
 import DataManager from "@/components/Admin/DataManager";
 import DefenseReset from "@/components/Admin/DefenseReset";
+import MailSender from "@/components/Admin/MailSender";
 import { subscribeInquiries, type Inquiry } from "@/firestore/inquiries";
 import { fetchStudyPostsLive, type StudyPost } from "@/firestore/studyPosts";
 
 /*
  * 관리자 화면. 왼쪽(좁은 화면은 위)에서 구역을 고르고 오른쪽에서 그 데이터를 다룸.
- *   한눈에 보기 · 유입 분석 · 회원 · 문의함 · 글 · 랭킹 · 방명록 · 방 · 방문자 · 전체 데이터
+ *   한눈에 보기 · 유입 분석 · 회원 · 우편 · 문의함 · 글 · 랭킹 · 방명록 · 방 · 방문자 · 전체 데이터
  * 구역은 주소의 ?tab= 으로 기억. 사이트의 큰 제목·메뉴·푸터는 이 화면에서만 숨김.
  */
 
@@ -25,6 +26,7 @@ const SECTIONS = [
   { key: "overview", label: "한눈에 보기", desc: "지금 사이트에서 일어나는 일" },
   { key: "traffic", label: "유입 분석", desc: "어디서 · 어떤 환경으로 들어왔는지" },
   { key: "members", label: "회원", desc: "별명·꾸밈 바꾸기, 올린 사진 지우기, 회원 지우기" },
+  { key: "mail", label: "우편", desc: "회원에게 우편 보내기 (GP 첨부) · 보낸 우편 회수" },
   { key: "inbox", label: "문의함", desc: "소개 페이지에서 들어온 문의" },
   { key: "posts", label: "글", desc: "개인 공부 · 프로젝트 회고" },
   { key: "rankings", label: "랭킹", desc: "게임별 기록 고치기 · 지우기 · 초기화" },
@@ -234,6 +236,7 @@ export default function AdminDashboard() {
         {tab === "overview" && <Overview onGo={go} />}
         {tab === "traffic" && <Traffic />}
         {tab === "members" && <Members />}
+        {tab === "mail" && <MailSender />}
         {tab === "inbox" && <InquiryInbox items={inquiries} loaded={inqLoaded} />}
         {tab === "posts" && <PostManager posts={posts} loaded={postsLoaded} onChanged={loadPosts} />}
         {tab === "rankings" && (
