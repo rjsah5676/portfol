@@ -65,6 +65,8 @@ export interface ShopItem {
   ref: string;
   name: string;
   price: number;
+  /** 할인 전 가격 — 있으면 상점에서 줄 긋고 할인율 표시 */
+  was?: number;
 }
 
 export const SHOP: ShopItem[] = [
@@ -82,7 +84,8 @@ export const SHOP: ShopItem[] = [
     kind: "skin",
     ref: "amy-summer",
     name: "한여름의 에이미",
-    price: 30_000,
+    price: 20_000,
+    was: 30_000,
   },
   {
     id: "poker.skin.yeonseo-summer",
@@ -90,7 +93,8 @@ export const SHOP: ShopItem[] = [
     kind: "skin",
     ref: "yeonseo-summer",
     name: "한여름의 연서",
-    price: 30_000,
+    price: 20_000,
+    was: 30_000,
   },
   {
     id: "poker.skin.taeyang-ts",
@@ -98,7 +102,8 @@ export const SHOP: ShopItem[] = [
     kind: "skin",
     ref: "taeyang-ts",
     name: "TS 금태양",
-    price: 30_000,
+    price: 20_000,
+    was: 30_000,
   },
   {
     id: "poker.skin.mio-dracula",
@@ -106,7 +111,8 @@ export const SHOP: ShopItem[] = [
     kind: "skin",
     ref: "mio-dracula",
     name: "드라큘라 미오",
-    price: 30_000,
+    price: 20_000,
+    was: 30_000,
   },
   // PIXEL FIGHT 스킨 (lib/fight/skins.ts) — 산 것은 inv.fight, 착용은 게임 안 보관함
   {

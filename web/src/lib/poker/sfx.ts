@@ -102,6 +102,15 @@ function unlock() {
   if (unlocked || typeof window === "undefined") return;
   unlocked = true;
   ac();
+  // 배경음악용 audio 를 이 터치 안에서 미리 깨워 둠 (아이폰은 이렇게 한 번 튼 audio 만 나중에 코드로 다시 틀 수 있음)
+  for (let i = 0; i < 3; i++) {
+    const el = new Audio(SILENT);
+    el.play().then(
+      () => el.pause(),
+      () => {}
+    );
+    pool.push(el);
+  }
   const w = wantNow();
   if (w) void startBgm(w);
   // 버튼 누름 소리는 처음 누를 때 받느라 늦지 않게 미리 받아 둠
@@ -335,6 +344,19 @@ let wantBgm: string | null = null;
 /** 살아 있는 오디오들과 각자의 섞는 비율(0~1) */
 const live = new Map<HTMLAudioElement, number>();
 let cur: HTMLAudioElement | null = null;
+/** 첫 입력 때 깨워 둔 배경음악 audio 들 — 곡이 끝나 다음 바퀴를 틀 때 새 audio 를 만들면 아이폰이 막아서(입력 없이 재생) 노래가 꺼졌음 */
+const pool: HTMLAudioElement[] = [];
+const SILENT = "data:audio/wav;base64,UklGRnQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YVAAAACAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgA==";
+/** 지금 안 쓰는 깨워 둔 audio (없으면 새로) */
+function takeAudio(url: string): HTMLAudioElement {
+  const el = pool.find((e) => !live.has(e)) ?? new Audio();
+  el.ontimeupdate = null;
+  delete el.dataset.next;
+  el.src = url;
+  // 다음 바퀴를 못 틀더라도(막힘) 이 곡이 처음부터 다시 돌게
+  el.loop = true;
+  return el;
+}
 /** 로비 곡 "번갈아" 설정일 때 이번 접속에 고른 번호 */
 let lobbyPick = 0;
 
@@ -382,7 +404,7 @@ async function startBgm(name: string) {
 }
 /** 새로 틀고 지금 곡은 페이드아웃 */
 async function spawn(url: string, real: string, ms: number) {
-  const el = new Audio(url);
+  const el = takeAudio(url);
   el.volume = 0;
   live.set(el, 0);
   try {

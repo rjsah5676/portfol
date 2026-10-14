@@ -183,9 +183,15 @@ export default function PokerApp({ rank }: { rank: RankRow[] | null }) {
   }, []);
   // 전체화면(가로 화면): 무대를 평소와 같은 1280×720 으로 그리고 화면에 맞게 통째로 키움 → 배치가 창 모드와 똑같음
   const [scr, setScr] = useState({ w: 0, h: 0, touch: false });
+  /** 마지막 가로 화면 크기 */
+  const [landScr, setLandScr] = useState<{ w: number; h: number } | null>(null);
   useEffect(() => {
-    const on = () =>
-      setScr({ w: window.innerWidth, h: window.innerHeight, touch: matchMedia("(pointer: coarse)").matches });
+    const on = () => {
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+      setScr({ w, h, touch: matchMedia("(pointer: coarse)").matches });
+      if (w > h * 1.2) setLandScr({ w, h });
+    };
     on();
     window.addEventListener("resize", on);
     return () => window.removeEventListener("resize", on);
@@ -194,10 +200,15 @@ export default function PokerApp({ rank }: { rank: RankRow[] | null }) {
   // 폰은 가로 전용: 가로면 화면을 덮어 그리고, 세로면 "가로로 돌려 주세요"
   const phone = scr.touch && Math.min(scr.w, scr.h) < 600;
   const land = scr.w > scr.h * 1.2;
-  const shortLand = !fs && phone && land;
+  // 폰을 잠깐 세로로 돌린 동안은 무대를 가로일 때 크기 그대로 둠 ("가로로 돌려 주세요"가 덮고 있음) —
+  // 세로 크기로 통째로 다시 그렸다가 가로로 또 다시 그리느라 아이폰이 가끔 튕겼음
+  const hold = phone && !land && landScr ? landScr : null;
+  const lay = hold ?? scr;
+  const layLand = land || !!hold;
+  const shortLand = !fs && phone && layLand;
   // 폰 가로는 1280×720 을 통째로 줄이면 글씨가 너무 작아서, 높이 540 짜리 무대(폭은 화면 비율대로)로 그려 키움
-  const D = phone && land ? { w: Math.round(Math.min(1280, Math.max(960, (540 * scr.w) / scr.h))), h: 540 } : DESIGN;
-  const fit = (fs || shortLand) && land ? Math.min(scr.w / D.w, scr.h / D.h) : 0;
+  const D = phone && layLand ? { w: Math.round(Math.min(1280, Math.max(960, (540 * lay.w) / lay.h))), h: 540 } : DESIGN;
+  const fit = (fs || shortLand) && layLand ? Math.min(lay.w / D.w, lay.h / D.h) : 0;
   // 무대 위에 사이트의 떠 있는 메뉴 버튼이 겹치지 않게
   useEffect(() => {
     document.body.classList.add("game-full");
@@ -444,6 +455,8 @@ export default function PokerApp({ rank }: { rank: RankRow[] | null }) {
                 transform: `scale(${fit})`,
                 fontSize: 15, // 무대 글씨 크기는 바깥 크기로 재는데, 통째로 줄인 무대는 PC 창(1280)과 같아야 하므로 고정
                 transformOrigin: "center",
+                // 세로로 돌린 동안: 안 보이는 무대는 그리지 않음 (움직이는 그림 · 애니메이션이 계속 돌지 않게)
+                visibility: hold ? "hidden" : undefined,
               }
             : undefined
         }
@@ -515,16 +528,6 @@ export default function PokerApp({ rank }: { rank: RankRow[] | null }) {
             </button>
           </div>
         )}
-        {rotateGate && (
-          <div className="absolute inset-0 z-[60] flex flex-col items-center justify-center gap-[1em] bg-black/85 px-6 text-center backdrop-blur-[3px]">
-            <svg viewBox="0 0 24 24" className="h-[3.2em] w-[3.2em] text-[#ffd84a]" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-              <rect x="7" y="2.5" width="10" height="19" rx="2" />
-              <path d="M3 9a9 9 0 0 1 4-5M21 15a9 9 0 0 1-4 5" />
-            </svg>
-            <p className="font-['Black_Han_Sans',sans-serif] text-[1.5em] leading-tight text-white">폰을 가로로 돌려 주세요</p>
-            <p className="text-[0.95em] text-white/60">폰에서는 가로 화면만 지원해요</p>
-          </div>
-        )}
         {shop && wallet && (
           <Shop
             wallet={wallet}
@@ -592,6 +595,17 @@ export default function PokerApp({ rank }: { rank: RankRow[] | null }) {
           <br />
           베타 버전 데이터는 정식 출시 때 초기화될 수 있어요.
         </p>
+      )}
+      {/* 세로: 무대 밖에서 화면 전체를 덮음 (무대는 가로일 때 크기 그대로 멈춰 있음) */}
+      {rotateGate && (
+        <div className="fixed inset-0 z-[110] flex flex-col items-center justify-center gap-[1em] bg-black px-6 text-center" style={{ fontSize: 15 }}>
+          <svg viewBox="0 0 24 24" className="h-[3.2em] w-[3.2em] text-[#ffd84a]" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <rect x="7" y="2.5" width="10" height="19" rx="2" />
+            <path d="M3 9a9 9 0 0 1 4-5M21 15a9 9 0 0 1-4 5" />
+          </svg>
+          <p className="font-['Black_Han_Sans',sans-serif] text-[1.5em] leading-tight text-white">폰을 가로로 돌려 주세요</p>
+          <p className="text-[0.95em] text-white/60">폰에서는 가로 화면만 지원해요</p>
+        </div>
       )}
     </div>
   );

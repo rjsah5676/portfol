@@ -17,7 +17,7 @@ import {
 import { playVoice } from "@/lib/poker/sfx";
 import type { Wallet } from "@/lib/poker/types";
 import { buyChar, buySkin, exchange, setChar, wearSkin } from "@/realtime/poker";
-import { POINT, POKER_EXCHANGE, fmtPoint } from "@/lib/points";
+import { POINT, POKER_EXCHANGE, SHOP, fmtPoint } from "@/lib/points";
 import PointInfo from "@/components/Points/PointInfo";
 import { Money } from "./parts";
 import Sheet from "./Sheet";
@@ -209,6 +209,7 @@ export default function Shop({
             ].map((sk) => {
               const owned = skins.includes(sk.id);
               const short = Math.max(0, sk.price - (wallet.points ?? 0));
+              const was = SHOP.find((it) => it.game === "poker" && it.kind === "skin" && it.ref === sk.id)?.was ?? 0;
               const asking = confirm === sk.id;
               return (
                 <li
@@ -234,8 +235,14 @@ export default function Shop({
                       </span>
                     </div>
                     <p className="text-[0.78em] leading-snug text-white/65">{sk.blurb}</p>
-                    <div className="mt-[0.2em] text-[0.95em]">
+                    <div className="mt-[0.2em] flex items-center gap-[0.45em] text-[0.95em]">
+                      {was > sk.price && <s className="text-[0.8em] font-bold text-white/40">{fmtPoint(was)}</s>}
                       <PointPrice n={sk.price} />
+                      {was > sk.price && (
+                        <span className="rounded-[0.3em] bg-[#e0344a] px-[0.35em] py-[0.05em] text-[0.72em] font-extrabold text-white">
+                          -{Math.round((1 - sk.price / was) * 100)}%
+                        </span>
+                      )}
                     </div>
                     {owned ? (
                       <button

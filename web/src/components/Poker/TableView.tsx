@@ -184,6 +184,31 @@ function useNow(active: boolean): number {
   return now;
 }
 
+/** 서버 시계 기준 현재 시각 — 남은 초가 바뀌는 순간에만 갱신 (테이블 전체는 1초에 한 번만 다시 그림. 예전엔 0.1초마다 통째로 다시 그려서 폰이 뜨거워졌음) */
+function useSecNow(deadline: number): number {
+  const [now, setNow] = useState(() => serverNow());
+  useEffect(() => {
+    if (!deadline) return;
+    let t: ReturnType<typeof setTimeout>;
+    const tick = () => {
+      const n = serverNow();
+      setNow(n);
+      const rem = (deadline - n) % 1000;
+      t = setTimeout(tick, (rem > 0 ? rem : 1000) + 15);
+    };
+    tick();
+    return () => clearTimeout(t);
+  }, [deadline]);
+  return now;
+}
+
+/** 줄어드는 남은 시간 테두리 — 이것만 0.1초마다 다시 그림 */
+function LiveTimer({ deadline, totalMs, ring }: { deadline: number; totalMs: number; ring?: { size: number; square: boolean } }) {
+  const now = useNow(true);
+  const frac = Math.max(0, Math.min(1, (deadline - now) / totalMs));
+  return ring ? <TimerRing size={ring.size} frac={frac} width={3} square={ring.square} /> : <PlateTimer frac={frac} />;
+}
+
 interface Timed<T> {
   v: T;
   until: number;
@@ -794,7 +819,7 @@ export default function TableView({
   const mySeat = me?.seat ?? -1;
   const hand = table?.hand ?? null;
   const deadline = hand && !hand.result ? hand.deadline : 0;
-  const now = useNow(deadline > 0);
+  const now = useSecNow(deadline);
 
   const tickRef = useRef(0);
   const hurryRef = useRef(0);
@@ -1063,7 +1088,6 @@ export default function TableView({
   };
   const base = table.game === "holdem" ? tier.bb : tier.ante;
   const totalMs = sv && sv.phase === "choice" ? CHOICE_MS : ACT_MS;
-  const frac = deadline ? Math.max(0, Math.min(1, (deadline - now) / totalMs)) : 0;
   /** 남은 초 (3초 이하면 3 · 2 · 1 카운트다운) */
   const secLeft = deadline ? Math.ceil((deadline - now) / 1000) : 0;
   const counting = secLeft >= 1 && secLeft <= 3;
@@ -1325,7 +1349,7 @@ export default function TableView({
             <span className="absolute inset-0 overflow-hidden" style={{ opacity: dim ? 0.5 : 1 }}>
               <CharSprite char={look} pose={poseOf(i)} seat="front" w={f.charW} dim={dim} />
             </span>
-            {waiting && deadline > 0 && <PlateTimer frac={frac} />}
+            {waiting && deadline > 0 && <LiveTimer deadline={deadline} totalMs={totalMs} />}
             {bet > 0 && (
               // 틀 크기에 비례 (내 틀이 크니 글씨도 같은 비율로 크게)
               <span className="pk-sf-bet pk-num" style={{ fontSize: `${(0.82 * f.cell) / SF!.cell}em` }}>
@@ -1602,7 +1626,7 @@ export default function TableView({
                       <FaceIcon char={look} face={faceOf(i)} size={avW} />
                     )}
                     {waiting && deadline > 0 && (
-                      <TimerRing size={avW} frac={frac} width={3} square={seven} />
+                      <LiveTimer deadline={deadline} totalMs={totalMs} ring={{ size: avW, square: seven }} />
                     )}
                     {badge && <span className="pk-badge">{badge}</span>}
                     {/* 이번 판 총 베팅: 얼굴 위 */}
@@ -1997,7 +2021,7 @@ export default function TableView({
             face={faceOf(mySeat)}
             pose={poseOf(mySeat)}
             waiting={myTurn}
-            frac={frac}
+            totalMs={totalMs}
             deadline={deadline}
             gain={gains[mySeat] && (res?.won[mySeat] ?? 0) > 0 ? gains[mySeat] : null}
             emote={emotes[mySeat] ?? null}
@@ -2792,7 +2816,7 @@ function HeroArea(props: {
   face: Face;
   pose: Pose;
   waiting: boolean;
-  frac: number;
+  totalMs: number;
   deadline: number;
   gain: { amt: number; key: number } | null;
   emote: (Timed<Emote> & { key: number }) | null;
@@ -2827,7 +2851,7 @@ function HeroArea(props: {
     face,
     pose,
     waiting,
-    frac,
+    totalMs,
     deadline,
     gain,
     emote,
@@ -2898,7 +2922,7 @@ function HeroArea(props: {
           ) : (
             <FaceIcon char={look} face={face} size={avW} />
           )}
-          {waiting && deadline > 0 && <TimerRing size={avW} frac={frac} width={3} square={seven} />}
+          {waiting && deadline > 0 && <LiveTimer deadline={deadline} totalMs={totalMs} ring={{ size: avW, square: seven }} />}
           {/* 이번 판 총 베팅: 얼굴 오른쪽 위 (바로 위는 옆자리 이름표와 닿아서) */}
           {p && p.invested > 0 && !res && (
             <span className="pk-face-bet pk-face-bet-me pk-num">
@@ -2974,7 +2998,7 @@ function HeroArea(props: {
                         : "대기 중"}
             </span>
           </div>
-          {waiting && deadline > 0 && <PlateTimer frac={frac} />}
+          {waiting && deadline > 0 && <LiveTimer deadline={deadline} totalMs={totalMs} />}
         </div>
       </div>
       {/* 내 카드 · 족보 · 건 돈 (테이블 앞쪽) */}
