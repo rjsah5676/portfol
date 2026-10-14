@@ -161,6 +161,15 @@ cd web && POKER_E2E=1 npx next dev            # → /games/defense/?fake=admin:�
 - 화면: 이어하기(`DefenseApp` localStorage `pgd-resume:<uid>` 2초마다 → `Controller.restore` 로 기록을 다시 돌려 따라잡음, 3.5시간) · 포기하기 · DPS 창(필드 오른쪽 위) · (v1.2.1 에서 클릭 이동 삭제 — 끌어서만) · 재화 말풍선(`ui.tsx Tip`, `Hub CUR_INFO`) · 도트 스크롤바 · 마우스 크기(소리 창, `data-cur` + `cursor-3x/4x/6x.png`)
 - 효과: 공격 모양 유닛별 `render.ts HIT_KIND/drawShot` · 공격 동작 세력별 `attackPose` · 소환 `Fx spawn`(빛기둥 + 고리) · 효과음 `spawn`(레어 · 에픽 소환) · `reward` · `chest-open`
 
+### v1.3 BETA (밸런스 beta4) — 순혈 프로토콜 (단일 코어 대신)
+- 시작 치트 `pure`: `rebuild` 가 필드 유닛 수로 세력 비율을 셈 (히든은 전체에만 셈, 보관함은 안 셈) → `b.mono`(가장 많은 세력) · `b.pure = pureT(비율)` (TUNE.pureFrom 0.4 이하 0, 100% 면 1)
+  - 그 세력 피해 × `1 + (pureDmg 2.8 − 1) × b.pure` (`hit`), 그 세력 강화 비용 × `1 − (1 − pureUp 0.7) × b.pure` (`upCost`)
+  - 치트 `c_mono`(단일 세력 코드)도 같은 `b.pure` 로 `b.team` 에 비례. 유물 「순수 혈통」은 예전처럼 한 세력뿐일 때만
+  - 단일 코어(`coreBlocked` · `TUNE.core*`) 삭제. 봇 `순혈`(기계공방 · pure): 필드의 다른 세력 에픽 이하를 보관함으로 빼고, 자리가 없으면 팖
+  - 밸런스 beta4: 이자 `TUNE.interestWave 1.35 · interestPct 0.08 · interestMax 20` · 도박사 `gamblerP 0.15` · 끈기 `GRIT_PER 0.06`(최대 +90%) · `LV_COST` 카드 ×1.25 (5·10·15·25·38·50·75·100·150·200 = 668장) · 연구 `a_echo` 15 · `k_tactic` 30
+  - econ 3시드 평균(봇 ×2 배속, 오염 30 60보스까지): 균형 28.5h · 이자째기 30.7 · 도박사 32.4 · 기계공방 37.6 · 마도회 38.7 · 순혈 39.1 · 기사단 41.7 · 이자 42.2 → 최대/최소 1.48 (≤1.6). 사람(배속 섞어 ~×1.5) 추정 40~55h — 시드 차가 커서 더 느리게 하려면 카드 · 조각을 고르게 늘릴 것
+  - 처음엔 「한 세력만 두면 켜짐 + 소환 편향」으로 만들었다가 주인 의견으로 비율 방식으로 (뽑기가 막히고, 판매 연구 · 세력 연구 몰빵이 강제되던 것)
+
 ### v1.2.1 BETA (밸런스 그대로 beta3) — 튜토리얼 · 상점 정리
 - **튜토리얼** `components/Defense/Tutorial.tsx`: 판 안 안내 카드 9장 (`STEPS` — 조건 `when(b)` 이 맞으면 순서대로 하나씩, 판은 안 멈춤). 본 것은 이 기기 `localStorage pgd-tut {done, off}`, `resetTutorial()` 은 메뉴 왼쪽 아래 「튜토리얼」 · 일시정지 창
 - 유물 코어로 바로 사기 삭제 (rpc `defense.relic.buy` 없음) — 유물은 상자에서만. `RELIC_CORE_PRICE` 는 강화 코어 계산에만

@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useEffect, useReducer, useRef, useState, type ReactNode } from "react";
-import { B, BOSS_EVERY, CAP, LAST_WAVE, TPS, hpOf, sec } from "@/lib/defense/balance";
+import { B, BOSS_EVERY, CAP, LAST_WAVE, TPS, TUNE, hpOf, sec } from "@/lib/defense/balance";
 import { BOSSES } from "@/lib/defense/enemies";
 import { MISSIONS, PATCHES } from "@/lib/defense/meta";
 import { CHEAT, CHEAT_CAT_NAME, CHEAT_MULTI_SEC, CHEAT_TIER_COLOR, CHEAT_TIER_NAME } from "@/lib/defense/cheats";
@@ -486,11 +486,28 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry }
           <div className="px-inset flex h-full min-w-0 shrink items-center gap-1 overflow-hidden px-1.5">
             {patch && (
               <span
-                className="flex h-6 w-6 items-center justify-center bg-[#0a0816]"
-                style={{ boxShadow: "inset 0 0 0 2px #ffd23f" }}
-                title={`시작 치트 · ${patch.name}\n${patch.desc}`}
+                className={`flex h-6 items-center justify-center gap-1 bg-[#0a0816] ${patch.id === "pure" ? "px-1.5" : "w-6"}`}
+                style={{
+                  boxShadow: `inset 0 0 0 2px ${patch.id === "pure" && b.pure <= 0 ? "#5a5276" : "#ffd23f"}`,
+                }}
+                title={`시작 치트 · ${patch.name}\n${patch.desc}${
+                  patch.id === "pure"
+                    ? b.mono && b.pure > 0
+                      ? `\n지금 ${FACTION_NAME[b.mono]} 피해 +${Math.round((TUNE.pureDmg - 1) * b.pure * 100)}% · 강화 비용 -${Math.round((1 - TUNE.pureUp) * b.pure * 100)}%`
+                      : `\n지금 꺼짐 — 가장 많은 세력이 ${Math.round(TUNE.pureFrom * 100)}%를 넘어야 해요`
+                    : ""
+                }`}
               >
-                <Icon n="gear" size={13} />
+                {patch.id === "pure" ? (
+                  <>
+                    {b.mono && <FactionIcon f={b.mono} size={12} />}
+                    <b className={`text-[12px] ${b.pure > 0 ? "text-[var(--gold)]" : "text-[var(--dim)]"}`}>
+                      +{Math.round((TUNE.pureDmg - 1) * b.pure * 100)}%
+                    </b>
+                  </>
+                ) : (
+                  <Icon n="gear" size={13} />
+                )}
               </span>
             )}
             {b.mods.grit > 0 && (
@@ -1431,9 +1448,9 @@ function RecipeModal({ b, run, onClose }: { b: Board; run: (c: Cmd) => boolean; 
           );
         })}
       </div>
-      {b.patch === "core" && (
+      {b.patch === "pure" && (
         <p className="mt-2 text-[12px] text-[var(--cyan)]">
-          단일 코어: 신화 · 히든은 한 종류만 만들 수 있어요 (같은 것은 여러 기).
+          순혈 프로토콜: 보관함은 비율에 안 세요 — 다른 세력 재료는 보관함에 모아 두면 효과가 덜 줄어요.
         </p>
       )}
     </Modal>

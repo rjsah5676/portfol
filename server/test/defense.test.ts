@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { BALANCE_VER, LAST_WAVE } from "../../web/src/lib/defense/balance";
 import { BOTS, botTurn } from "../../web/src/lib/defense/bot";
 import { HASH_TICKS, TICKS_PER_TURN, TURN_MS, replay, replayer, scoreOf, validLog, type LogEntry } from "../../web/src/lib/defense/replay";
-import { CELLS, SLOTS, apply, hashGame, isCmd, newGame, step, unitCount, type Game } from "../../web/src/lib/defense/sim";
+import { CELLS, SLOTS, apply, hashGame, isCmd, newGame, pureT, step, unitCount, upCost, type Game } from "../../web/src/lib/defense/sim";
 import { RECIPES, UNIT, UNITS } from "../../web/src/lib/defense/units";
 import { CHEATS, CHEAT_MULTI_SEC, cheatFxOf, cheatOdds } from "../../web/src/lib/defense/cheats";
 import { TPS } from "../../web/src/lib/defense/balance";
@@ -32,7 +32,7 @@ describe("픽셀 글리치 디펜스 엔진", () => {
     const g = newGame(3, 1);
     const b = g.boards[0];
     expect(b.cheat?.kind).toBe("patch");
-    expect(b.cheat?.offer).toEqual(["union", "gambler", "core", "interest"]);
+    expect(b.cheat?.offer).toEqual(["union", "gambler", "pure", "interest"]);
     expect(apply(g, 0, { t: "summon" })).toBeTruthy();
     expect(apply(g, 0, { t: "reroll", i: 0 })).toBeTruthy();
     for (let i = 0; i < 60; i++) step(g);
@@ -98,6 +98,40 @@ describe("픽셀 글리치 디펜스 엔진", () => {
     // 리롤 회로: 카드마다 2번
     expect(modsOf({ cheat: "x_reroll" }).cheatReroll).toBe(2);
     expect(modsOf({ cheat: "nope" }).cheatReroll).toBe(1);
+  });
+
+  it("순혈 프로토콜: 가장 많은 세력 비율만큼 (히든은 전체에 셈 · 보관함은 안 셈) · 강화 할인", () => {
+    const g = newGame(5, 1);
+    const b = g.boards[0];
+    expect(apply(g, 0, { t: "cheat", i: 2 })).toBeNull();
+    expect(b.patch).toBe("pure");
+    const mech = UNITS.find((u) => u.faction === "mech" && u.grade === 0)!.id;
+    const knight = UNITS.find((u) => u.faction === "knight" && u.grade === 0)!.id;
+    const hidden = UNITS.find((u) => u.faction === "hidden")!.id;
+    const put = (i: number, id: string, n = 1) => ((b.cells[i] = { def: id, units: Array.from({ length: n }, () => ({ cd: 0, ult: 0, stun: 0 })) }), (b.dirty = true));
+    const base = upCost(b, "mech");
+    put(0, mech, 3);
+    put(CELLS, knight, 3); // 보관함은 안 셈
+    step(g);
+    expect(b.mono).toBe("mech");
+    expect(b.pure).toBe(1);
+    expect(upCost(b, "mech")).toBeLessThan(base);
+    expect(upCost(b, "knight")).toBe(base);
+    // 히든 1 섞으면 3/4 = 75% → 비례해서 약해짐
+    put(1, hidden);
+    step(g);
+    expect(b.pure).toBeCloseTo(pureT(0.75));
+    expect(b.pure).toBeLessThan(1);
+    // 기사단이 더 많아지면 기사단 기준 (6/10)
+    put(2, knight, 3);
+    put(3, knight, 3);
+    step(g);
+    expect(b.mono).toBe("knight");
+    expect(b.pure).toBeCloseTo(pureT(0.6));
+    // 고르게 섞이면 (3 · 3 · 3 + 히든) 꺼짐
+    put(3, UNITS.find((u) => u.faction === "arcane" && u.grade === 0)!.id, 3);
+    step(g);
+    expect(b.pure).toBe(0);
   });
 
   it("치트 코드 멀티: 시간이 지나면 첫 카드를 자동으로", () => {
@@ -335,7 +369,7 @@ describe("픽셀 글리치 디펜스 서버", () => {
     await c.rpc("defense.profile");
     await expect(c.rpc("defense.unit.upAll", {})).rejects.toThrow();
     await srv.db.col("defense_profile").updateOne({ _id: c.uid! } as never, {
-      $set: { pieces: 100000, cards: { k_squire: 40, m_bolt: 4 } },
+      $set: { pieces: 100000, cards: { k_squire: 40, m_bolt: 5 } },
     });
     const one = await c.rpc("defense.unit.upAll", { id: "k_squire" });
     const plan = planUpAll([UNIT.k_squire], {}, { k_squire: 40 }, 100000);
@@ -380,7 +414,7 @@ describe("픽셀 글리치 디펜스 서버", () => {
     c.close();
   });
 
-  it("끈기: 가장 높은 단계에서 연달아 지면 다음 판 피해 +5%씩 · 단계를 넘기면 0", async () => {
+  it("끈기: 가장 높은 단계에서 연달아 지면 다음 판 피해 +6%씩 · 단계를 넘기면 0", async () => {
     const c = await member();
     for (let k = 1; k <= 2; k++) {
       const st = await c.rpc("defense.start", { mode: "season" });
@@ -390,7 +424,7 @@ describe("픽셀 글리치 디펜스 서버", () => {
     }
     const st = await c.rpc("defense.start", { mode: "season" });
     expect(st.loadout.grit).toBe(2);
-    expect(modsOf(st.loadout).gritDmg).toBeCloseTo(1.1);
+    expect(modsOf(st.loadout).gritDmg).toBeCloseTo(1.12);
     // 단계를 넘기면 (0~9 는 40웨이브) 끈기 0
     await srv.db.col("defense_profile").updateOne({ _id: c.uid! } as never, { $set: { glitchOpen: 1 } });
     expect((await c.rpc("defense.start", { mode: "season" })).loadout.grit).toBe(0);

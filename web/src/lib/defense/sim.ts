@@ -225,6 +225,9 @@ export interface Board {
   crng: Rng;
   /** 배치 따라 바뀌는 전체 피해 배수 (순수 혈통 · 무지개 연합) */
   team: number;
+  /** 필드에 가장 많은 세력 (히든 빼고) · 순혈 세기 0~1 (그 세력 비율이 pureFrom 이면 0, 100% 면 1) — 배치가 바뀌면 다시 계산 */
+  mono: Faction | null;
+  pure: number;
   fx: Fx[] | null;
   ev: Ev[] | null;
 }
@@ -279,6 +282,8 @@ export function newBoard(seed: number, idx: number, lo?: Loadout | null): Board 
     cx: cheatFx0(),
     crng: { r: mixSeed(seed, 77) },
     team: 1,
+    mono: null,
+    pure: 0,
     fx: null,
     ev: null,
   };
@@ -299,7 +304,9 @@ export function newGame(seed: number, players = 1, loadouts?: (Loadout | null)[]
 export const summonCost = (b: Board) =>
   Math.max(1, Math.min(B.summon.max, B.summon.base + B.summon.step * b.summons) - b.mods.summonDisc - b.cx.summonDisc);
 export const upCost = (b: Board, k: UpKey) =>
-  Math.round((B.up[k].base + B.up[k].step * b.up[k]) * b.cx.upCost);
+  Math.round(
+    (B.up[k].base + B.up[k].step * b.up[k]) * b.cx.upCost * (b.patch === "pure" && b.mono === k ? 1 - (1 - TUNE.pureUp) * b.pure : 1)
+  );
 export const luckCost = (b: Board) => (b.luck < B.luckCost.length ? B.luckCost[b.luck] : Infinity);
 export const unitCount = (b: Board) => b.cells.reduce((n, c) => n + c.units.length, 0);
 export const hasEmpty = (b: Board) => b.cells.some((c, i) => !c.def && usable(b, i));
@@ -347,15 +354,10 @@ export function recipePlan(b: Board, id: string): number[] | null {
 }
 /** 지금 만들 수 있는 조합식인지 */
 export function canRecipe(b: Board, id: string): boolean {
-  if (b.patch === "core" && coreBlocked(b, id)) return false;
   return !!recipePlan(b, id);
 }
-/** 단일 코어: 신화 · 히든은 한 종류만 (같은 것은 여러 기) — 이미 다른 종류가 있으면 막힘 */
-export const coreKind = (b: Board) => b.cells.find((c) => c.def && UNIT[c.def].grade >= 4)?.def ?? null;
-const coreBlocked = (b: Board, id: string) => {
-  const k = coreKind(b);
-  return !!k && k !== id;
-};
+/** 순혈 세기: 가장 많은 세력 비율 r → 0~1 (TUNE.pureFrom 이하 0, 100% 면 1, 사이는 비례) */
+export const pureT = (r: number) => Math.max(0, Math.min(1, (r - TUNE.pureFrom) / (1 - TUNE.pureFrom)));
 export const mythCount = (b: Board) =>
   b.cells.reduce((n, c) => n + (c.def && UNIT[c.def].grade >= 4 ? c.units.length : 0), 0);
 /** 세력 강화 피해 배수 — 히든은 피해 대신 고유 효과 (hiddenFx) */
@@ -515,7 +517,6 @@ export function apply(g: Game, p: number, cmd: Cmd): string | null {
     case "recipe": {
       const r = RECIPE[cmd.id];
       if (!r) return "없는 조합식이에요";
-      if (b.patch === "core" && coreBlocked(b, cmd.id)) return "단일 코어: 신화 · 히든은 한 종류만";
       if (!recipeOpen(b, cmd.id)) return "정비소에서 초월을 해금해야 해요";
       const plan = recipePlan(b, cmd.id);
       if (!plan) return "재료가 모자라요";
@@ -579,7 +580,6 @@ export function apply(g: Game, p: number, cmd: Cmd): string | null {
       // 쌓인(이월된) 뽑기권 중 그 등급 것을 아무거나 씀 (예전 기록은 늘 맨 앞 것과 같은 등급이라 결과 같음)
       const ti = b.tickets.indexOf(d.grade);
       if (ti < 0 || d.faction === "hidden") return "그 등급 뽑기권이 없어요";
-      if (b.patch === "core" && d.grade >= 4 && coreBlocked(b, d.id)) return "단일 코어: 신화 · 히든은 한 종류만";
       if (!hasEmpty(b) && !b.cells.some((c) => c.def === d.id && c.units.length < STACK))
         return "빈 칸이 없어요";
       b.tickets.splice(ti, 1);
@@ -792,7 +792,7 @@ function stepBoard(g: Game, b: Board) {
   }
 
   // ── 적 이동 · 보스 기술 ──
-  const coreSlow = (b.patch === "core" ? TUNE.coreSlow : 1) * (1 - b.cx.slow);
+  const coreSlow = 1 - b.cx.slow;
   for (const e of es) {
     if (e.evade > 0) e.evade--;
     if (e.expire > 0 && --e.expire === 0) {
@@ -896,8 +896,25 @@ function rebuild(b: Board) {
     else if (f === "arcane") fa = 1;
   }
   const kinds = fk + fm + fa;
+  // 세력 비율 (필드 유닛 수 기준, 히든도 전체에 셈 · 보관함은 안 셈) → 가장 많은 세력과 순혈 세기 0~1
+  const n = { knight: 0, mech: 0, arcane: 0 };
+  let all = 0;
+  for (let i = 0; i < CELLS; i++) {
+    const c = b.cells[i];
+    if (!c.def) continue;
+    all += c.units.length;
+    const f = UNIT[c.def].faction;
+    if (f !== "hidden") n[f] += c.units.length;
+  }
+  let top: Faction | null = null;
+  for (const f of FACTIONS) if (n[f] > 0 && (!top || n[f] > n[top as "knight"])) top = f;
+  b.mono = top;
+  b.pure = top && all ? pureT(n[top as "knight"] / all) : 0;
   b.team =
-    (kinds === 1 ? b.mods.pureBlood * b.cx.mono : 1) * (kinds === 3 ? b.mods.rainbow * b.cx.tri : 1) * b.cx.dmg;
+    (kinds === 1 ? b.mods.pureBlood : 1) *
+    (1 + (b.cx.mono - 1) * b.pure) *
+    (kinds === 3 ? b.mods.rainbow * b.cx.tri : 1) *
+    b.cx.dmg;
 }
 
 /** 사거리 안의 보스 우선, 없으면 가장 많이 간(가장 위험한) 적 */
@@ -933,7 +950,8 @@ function hit(b: Board, def: UnitDef, e: Enemy, raw: number): number {
   if (M.warBanner) m *= 1 + M.warBanner * Math.floor((b.up.knight + b.up.mech + b.up.arcane) / 10);
   if (M.vaccine !== 1 && (e.boss >= 0 || e.elite || e.rift)) m *= M.vaccine;
   // 단일 코어: 하나뿐인 신화 · 히든에 힘을 몰아줌
-  if (b.patch === "core") m *= def.grade >= 4 ? TUNE.coreHigh : TUNE.coreLow;
+  // 순혈 프로토콜: 가장 많은 세력 비율만큼 그 세력 피해 × (최대 pureDmg)
+  if (b.patch === "pure" && b.mono === def.faction) m *= 1 + (TUNE.pureDmg - 1) * b.pure;
   if (e.boss >= 0 && def.boss) m *= def.faction === "hidden" ? 1 + (def.boss - 1) * hiddenFx(b) : def.boss;
   if (def.dtype === "phys") {
     let sz = SIZE_MULT[def.faction][e.size];

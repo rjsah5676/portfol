@@ -12,6 +12,7 @@ import {
   STACK,
   apply,
   canRecipe,
+  usable,
   hasEmpty,
   luckCost,
   summonCost,
@@ -101,9 +102,9 @@ export const BOTS: BotCfg[] = [
     every: 15,
   },
   {
-    name: "단일코어",
-    focus: null,
-    patch: "core",
+    name: "순혈",
+    focus: "mech",
+    patch: "pure",
     upBias: 1.5,
     gamble: true,
     rift: true,
@@ -152,9 +153,7 @@ function cheatScore(b: Board, cfg: BotCfg, c: CheatDef): number {
   if (c.cat === "dmg" && !c.faction) v += 30;
   if (c.id === "c_compound" || c.id === "c_salary" || c.id === "c_infinite") v += cfg.patch === "interest" ? 60 : 0;
   if (c.id === "c_dice" || c.id === "c_pouch") v += cfg.patch === "gambler" ? 70 : -30;
-  if (c.id === "c_underdog") v += cfg.patch === "core" ? -60 : 0;
-  if (c.id === "c_legend") v += cfg.patch === "core" ? 50 : 0;
-  if (c.cat === "unit" && b.patch === "core" && c.id === "c_ticketM") v -= 120;
+  if (c.id === "c_mono") v += cfg.patch === "pure" ? 60 : 0;
   return v;
 }
 
@@ -196,8 +195,24 @@ export function botMove(b: Board, cfg: BotCfg, skip: ReadonlySet<string> = new S
       const c = ok({ t: "recipe", id: r.id });
       if (c) return c;
     }
+  // 순혈 프로토콜: 비율을 높이려고 필드의 다른 세력 낮은 등급(에픽 이하)은 보관함으로 (자리가 있을 때만 — 팔지는 않음)
+  if (cfg.patch === "pure" && cfg.focus) {
+    let j = -1;
+    for (let k = CELLS; k < SLOTS; k++)
+      if (usable(b, k) && !b.cells[k].def) {
+        j = k;
+        break;
+      }
+    for (let i = 0; i < CELLS; i++) {
+      const d = b.cells[i].def ? UNIT[b.cells[i].def!] : null;
+      if (!d || d.faction === cfg.focus || d.faction === "hidden" || d.grade > 2) continue;
+      // 보관함에 자리가 있으면 빼고, 없으면 에픽 이하는 팖 (조합식 재료는 남김)
+      const c = ok(j >= 0 ? { t: "swap", a: i, b: j } : !MATERIAL.has(d.id) ? { t: "sell", c: i } : { t: "luck" });
+      if (c && c.t !== "luck") return c;
+    }
+  }
   // 보관함 정리: 같은 유닛이 있는 칸으로 모으기 → 필드 빈 칸으로 올리기 → 필드의 약한 낱개와 바꾸기
-  const mv = benchMove(b);
+  const mv = benchMove(b, cfg.patch === "pure" ? cfg.focus : null);
   if (mv) {
     const c = ok(mv);
     if (c) return c;
@@ -292,11 +307,12 @@ const worth = (id: string, n: number) => {
   return (d.grade + 1) * 100 + n * 10 + d.dmg * d.aps * 0.01;
 };
 
-/** 보관함 → 필드 정리 명령 하나 */
-function benchMove(b: Board): Cmd | null {
+/** 보관함 → 필드 정리 명령 하나 (only: 이 세력 · 히든만 필드로 — 순혈) */
+function benchMove(b: Board, only: Faction | null = null): Cmd | null {
+  const fit = (id: string) => !only || UNIT[id].faction === only || UNIT[id].faction === "hidden";
   for (let j = CELLS; j < SLOTS; j++) {
     const bj = b.cells[j];
-    if (!bj.def) continue;
+    if (!bj.def || !fit(bj.def)) continue;
     // 같은 유닛이 필드에 덜 찬 칸이 있으면 그리로 모음
     for (let i = 0; i < CELLS; i++)
       if (b.cells[i].def === bj.def && b.cells[i].units.length < STACK) return { t: "swap", a: j, b: i };
@@ -307,7 +323,7 @@ function benchMove(b: Board): Cmd | null {
     bv = -1;
   for (let j = CELLS; j < SLOTS; j++) {
     const c = b.cells[j];
-    if (!c.def) continue;
+    if (!c.def || !fit(c.def)) continue;
     const v = worth(c.def, c.units.length);
     if (v > bv) {
       bv = v;

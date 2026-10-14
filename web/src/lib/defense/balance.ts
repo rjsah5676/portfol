@@ -7,7 +7,7 @@
  * 시간 단위는 tick (1초 = TPS tick). 거리 단위는 칸 (필드 8 × 5칸).
  */
 
-export const BALANCE_VER = "beta3";
+export const BALANCE_VER = "beta4";
 
 export const TPS = 30;
 /** 필드에 남은 적이 이 수에 닿으면 패배 */
@@ -116,16 +116,18 @@ export const B = {
  */
 export const TUNE = {
   cheatHp: 0.15,
-  /** 단일 코어 패치 피해 배수 (레전드 이하 · 신화 이상) */
-  coreLow: 7,
-  coreHigh: 4.5,
-  /** 단일 코어: 적 이동 속도 × */
-  coreSlow: 0.88,
+  /**
+   * 순혈 프로토콜 · 치트 「단일 세력 코드」: 필드에서 가장 많은 세력의 비율(히든도 전체에 셈, 보관함 안 셈)이
+   * pureFrom 넘으면 비례해서 세짐 → 100% 일 때 그 세력 피해 ×pureDmg · 강화 비용 ×pureUp. 히든 · 방깎 유닛을 섞을지는 선택
+   */
+  pureFrom: 0.4,
+  pureDmg: 2.8,
+  pureUp: 0.7,
   /** 이자 패치: 가진 골드 % · 최대 */
-  interestPct: 0.1,
-  interestMax: 40,
+  interestPct: 0.08,
+  interestMax: 20,
   /** 이자: 웨이브 골드 × (안 모아 두는 사람도 이득이 있게) */
-  interestWave: 1.2,
+  interestWave: 1.35,
   /** 도박사: 도박 성공률 + */
   gamblerP: 0.15,
 };

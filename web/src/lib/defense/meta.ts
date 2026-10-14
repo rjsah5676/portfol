@@ -19,9 +19,9 @@ export const PATCHES: PatchDef[] = [
     desc: `고르면 행운석 +3 · 도박 성공률 +${Math.round(TUNE.gamblerP * 100)}%p · 레전드 도박이 실패하면 행운석 1개 돌려받음 · 보스를 잡으면 행운석 +1`,
   },
   {
-    id: "core",
-    name: "단일 코어",
-    desc: `신화 · 히든은 한 종류만 만들 수 있지만 (같은 것은 여러 기), 레전드 이하 피해 ×${TUNE.coreLow} · 신화 · 히든 피해 ×${TUNE.coreHigh} · 적 이동 속도 -${Math.round((1 - TUNE.coreSlow) * 100)}%`,
+    id: "pure",
+    name: "순혈 프로토콜",
+    desc: `필드에서 가장 많은 세력의 비율이 ${Math.round(TUNE.pureFrom * 100)}%를 넘으면 비율만큼 그 세력이 세져요 — 100%면 피해 ×${TUNE.pureDmg} · 강화 비용 -${Math.round((1 - TUNE.pureUp) * 100)}% (히든도 비율에 셈 · 보관함은 안 셈)`,
   },
   {
     id: "interest",

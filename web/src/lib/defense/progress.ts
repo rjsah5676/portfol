@@ -47,7 +47,7 @@ export interface Loadout {
  * 끈기 — 가장 높은 오염 단계(새 단계)에서 연달아 지면 판마다 모든 피해 +GRIT_PER (최대 GRIT_MAX 판).
  * 그 단계를 깨거나(10~) 40웨이브를 넘겨 다음 단계를 열면(0~9) 0 으로. 전략 · 운에 따라 막히는 시간이 너무 벌어지지 않게.
  */
-export const GRIT_PER = 0.05;
+export const GRIT_PER = 0.06;
 export const GRIT_MAX = 15;
 
 /** 보관함: 처음 BENCH_BASE 칸, 정비소에서 1칸씩 BENCH_MAX 까지 (픽셀 조각) */
@@ -130,13 +130,13 @@ export const RESEARCH: ResearchDef[] = [
   res("g_boss", "버티기 훈련", "보스 제한 시간 +{v}초", (l) => rd(8 * sc(l, 0.25)), "general", 1200),
   res("g_sell", "고물상", "유닛 판매 금액 +{v}%", (l) => 50 + 10 * (Math.max(1, l) - 1), "general", 400),
   res("k_drill", "기사단 훈련", "기사단 피해 +{v}%", (l) => rd(10 * sc(l, 0.25)), "knight", 800),
-  res("k_tactic", "대형 진형", "기사단이 중형 · 대형 적에게 주는 피해 +{v}%p", (l) => rd(20 * sc(l, 0.25)), "knight", 1500),
+  res("k_tactic", "대형 진형", "기사단이 중형 · 대형 적에게 주는 피해 +{v}%p", (l) => rd(30 * sc(l, 0.25)), "knight", 1500),
   res("m_drill", "공방 개조", "기계공방 피해 +{v}%", (l) => rd(10 * sc(l, 0.25)), "mech", 800),
   res("m_tune", "과급 장치", "기계공방 공격 속도 +{v}%", (l) => rd(10 * sc(l, 0.25)), "mech", 1500),
   res("m_bounty", "대물 탄두", "기계공방이 보스 · 엘리트 · 균열에게 주는 피해 +{v}%", (l) => rd(20 * sc(l, 0.25)), "mech", 1500),
   res("k_rally", "돌격 나팔", "기사단 공격 속도 +{v}%", (l) => rd(10 * sc(l, 0.25)), "knight", 1500),
   res("a_drill", "마도 수련", "마도회 피해 +{v}%", (l) => rd(10 * sc(l, 0.25)), "arcane", 800),
-  res("a_echo", "마력 공명", "마도회 공격 속도 +{v}%", (l) => rd(10 * sc(l, 0.25)), "arcane", 1500),
+  res("a_echo", "마력 공명", "마도회 공격 속도 +{v}%", (l) => rd(15 * sc(l, 0.25)), "arcane", 1500),
   res("a_focus", "마력 집중", "마도회 둔화 · 체력 비례 피해 효과 +{v}%", (l) => rd(25 * sc(l, 0.25)), "arcane", 1500),
 ];
 export const RES: Record<string, ResearchDef> = Object.fromEntries(RESEARCH.map((r) => [r.id, r]));
@@ -450,16 +450,16 @@ export function modsOf(lo: Loadout | null | undefined): Mods {
 
 /** lv → lv+1 에 드는 카드 · 조각 */
 export const LV_COST: { cards: number; pieces: number }[] = [
-  { cards: 4, pieces: 50 },
-  { cards: 8, pieces: 100 },
-  { cards: 12, pieces: 180 },
-  { cards: 20, pieces: 300 },
-  { cards: 30, pieces: 450 },
-  { cards: 40, pieces: 650 },
-  { cards: 60, pieces: 900 },
-  { cards: 80, pieces: 1200 },
-  { cards: 120, pieces: 1600 },
-  { cards: 160, pieces: 2200 },
+  { cards: 5, pieces: 50 },
+  { cards: 10, pieces: 100 },
+  { cards: 15, pieces: 180 },
+  { cards: 25, pieces: 300 },
+  { cards: 38, pieces: 450 },
+  { cards: 50, pieces: 650 },
+  { cards: 75, pieces: 900 },
+  { cards: 100, pieces: 1200 },
+  { cards: 150, pieces: 1600 },
+  { cards: 200, pieces: 2200 },
 ];
 
 /**
