@@ -723,6 +723,10 @@
 384,
 576
 ],
+"char/taeyang-ts/idle.webp": [
+441,
+700
+],
 "char/taeyang-ts/pose-idle.webp": [
 288,
 384
@@ -747,6 +751,10 @@
 288,
 384
 ],
+"char/taeyang-ts/seat-front-idle-live.webp": [
+216,
+288
+],
 "char/taeyang-ts/seat-front-idle.webp": [
 288,
 384
@@ -762,6 +770,18 @@
 "char/taeyang-ts/seat-front-win.webp": [
 288,
 384
+],
+"char/taeyang-ts/touch-1.webp": [
+378,
+600
+],
+"char/taeyang-ts/touch-2.webp": [
+378,
+600
+],
+"char/taeyang-ts/touch-3.webp": [
+378,
+600
 ],
 "char/taeyang/cutin.webp": [
 1536,

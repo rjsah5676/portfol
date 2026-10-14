@@ -192,7 +192,7 @@ export const SKINS: Skin[] = [
     blurb: "어이~ 오늘은 누나가 다 털어간다?",
     line: "왜, 누나가 더 낫지?",
     ready: true,
-    live: false,
+    live: true,
     emotes: true,
   },
 ];
