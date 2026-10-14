@@ -7,7 +7,7 @@
  * 시간 단위는 tick (1초 = TPS tick). 거리 단위는 칸 (필드 8 × 5칸).
  */
 
-export const BALANCE_VER = "beta4";
+export const BALANCE_VER = "beta5";
 
 export const TPS = 30;
 /** 필드에 남은 적이 이 수에 닿으면 패배 */
@@ -117,19 +117,21 @@ export const B = {
 export const TUNE = {
   cheatHp: 0.15,
   /**
-   * 순혈 프로토콜 · 치트 「단일 세력 코드」: 필드에서 가장 많은 세력의 비율(히든도 전체에 셈, 보관함 안 셈)이
-   * pureFrom 넘으면 비례해서 세짐 → 100% 일 때 그 세력 피해 ×pureDmg · 강화 비용 ×pureUp. 히든 · 방깎 유닛을 섞을지는 선택
+   * 순혈 프로토콜 · 치트 「단일 세력 코드」 · 유물 「순수 혈통」: 필드에서 가장 많은 세력의 비율(히든도 전체에 셈, 보관함 안 셈)이
+   * pureFrom 이상이면 켜짐 (밑이면 꺼짐) → 그 비율에서 세기 pureBase, 100% 에서 1 (사이는 비례).
+   * 세기 1 일 때 그 세력 피해 ×pureDmg · 강화 비용 ×pureUp. 순수 혈통 유물은 켜지기만 하면 전부
    */
-  pureFrom: 0.4,
-  pureDmg: 2.8,
+  pureFrom: 0.7,
+  pureBase: 0.5,
+  pureDmg: 2.4,
   pureUp: 0.7,
   /** 이자 패치: 가진 골드 % · 최대 */
-  interestPct: 0.08,
-  interestMax: 20,
+  interestPct: 0.05,
+  interestMax: 16,
   /** 이자: 웨이브 골드 × (안 모아 두는 사람도 이득이 있게) */
-  interestWave: 1.35,
+  interestWave: 1.6,
   /** 도박사: 도박 성공률 + */
-  gamblerP: 0.15,
+  gamblerP: 0.2,
 };
 
 /** 웨이브별 일반 적 체력 (곱을 차례로 해서 미리 — Math.pow 는 엔진마다 끝자리가 다를 수 있어 안 씀) */

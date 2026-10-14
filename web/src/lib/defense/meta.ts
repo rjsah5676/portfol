@@ -21,7 +21,7 @@ export const PATCHES: PatchDef[] = [
   {
     id: "pure",
     name: "순혈 프로토콜",
-    desc: `필드에서 가장 많은 세력의 비율이 ${Math.round(TUNE.pureFrom * 100)}%를 넘으면 비율만큼 그 세력이 세져요 — 100%면 피해 ×${TUNE.pureDmg} · 강화 비용 -${Math.round((1 - TUNE.pureUp) * 100)}% (히든도 비율에 셈 · 보관함은 안 셈)`,
+    desc: `필드에서 가장 많은 세력이 ${Math.round(TUNE.pureFrom * 100)}% 이상이면 켜져서 그 세력이 세져요 (밑이면 꺼짐) — ${Math.round(TUNE.pureFrom * 100)}%에서 절반, 100%면 피해 ×${TUNE.pureDmg} · 강화 비용 -${Math.round((1 - TUNE.pureUp) * 100)}% (히든도 비율에 셈 · 보관함은 안 셈)`,
   },
   {
     id: "interest",

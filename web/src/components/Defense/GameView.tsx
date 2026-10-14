@@ -494,7 +494,7 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry }
                   patch.id === "pure"
                     ? b.mono && b.pure > 0
                       ? `\n지금 ${FACTION_NAME[b.mono]} 피해 +${Math.round((TUNE.pureDmg - 1) * b.pure * 100)}% · 강화 비용 -${Math.round((1 - TUNE.pureUp) * b.pure * 100)}%`
-                      : `\n지금 꺼짐 — 가장 많은 세력이 ${Math.round(TUNE.pureFrom * 100)}%를 넘어야 해요`
+                      : `\n지금 꺼짐 — 가장 많은 세력이 ${Math.round(TUNE.pureFrom * 100)}% 이상이어야 해요 (지금 ${Math.round(b.pureR * 100)}%)`
                     : ""
                 }`}
               >
@@ -992,7 +992,19 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry }
           </div>
         </section>
 
-        <div className="mt-auto grid grid-cols-3 gap-1.5">
+        {b.patch === "pure" && b.pure <= 0 && (
+          <p
+            className="mt-auto mb-1.5 text-center text-[12px] leading-tight font-bold text-[#ff4f6a] drop-shadow-[1px_1px_0_#000]"
+            title="보관함은 비율에 안 세요 — 다른 세력은 보관함으로 옮기면 비율이 올라가요"
+          >
+            순혈 프로토콜이 꺼졌어요
+            <span className="block text-[11px] font-normal text-[#ff8a9b]">
+              {b.mono ? `${FACTION_NAME[b.mono]} ${Math.round(b.pureR * 100)}%` : "필드에 유닛 없음"} · 한 세력{" "}
+              {Math.round(TUNE.pureFrom * 100)}% 이상이면 켜져요
+            </span>
+          </p>
+        )}
+        <div className={`${b.patch === "pure" && b.pure <= 0 ? "" : "mt-auto"} grid grid-cols-3 gap-1.5`}>
           <Btn
             tone={recipesReady ? "gold" : "ghost"}
             onClick={() => setModal("recipe")}

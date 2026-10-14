@@ -11,6 +11,7 @@
  *
  * 수치를 바꾸면 balance.ts 의 BALANCE_VER 도 올리기 (판 결과가 바뀜).
  */
+import { TUNE } from "./balance";
 import { CHEAT_REROLL } from "./cheats";
 import type { Faction } from "./units";
 
@@ -132,11 +133,11 @@ export const RESEARCH: ResearchDef[] = [
   res("k_drill", "기사단 훈련", "기사단 피해 +{v}%", (l) => rd(10 * sc(l, 0.25)), "knight", 800),
   res("k_tactic", "대형 진형", "기사단이 중형 · 대형 적에게 주는 피해 +{v}%p", (l) => rd(30 * sc(l, 0.25)), "knight", 1500),
   res("m_drill", "공방 개조", "기계공방 피해 +{v}%", (l) => rd(10 * sc(l, 0.25)), "mech", 800),
-  res("m_tune", "과급 장치", "기계공방 공격 속도 +{v}%", (l) => rd(10 * sc(l, 0.25)), "mech", 1500),
+  res("m_tune", "과급 장치", "기계공방 공격 속도 +{v}%", (l) => rd(13 * sc(l, 0.25)), "mech", 1500),
   res("m_bounty", "대물 탄두", "기계공방이 보스 · 엘리트 · 균열에게 주는 피해 +{v}%", (l) => rd(20 * sc(l, 0.25)), "mech", 1500),
   res("k_rally", "돌격 나팔", "기사단 공격 속도 +{v}%", (l) => rd(10 * sc(l, 0.25)), "knight", 1500),
   res("a_drill", "마도 수련", "마도회 피해 +{v}%", (l) => rd(10 * sc(l, 0.25)), "arcane", 800),
-  res("a_echo", "마력 공명", "마도회 공격 속도 +{v}%", (l) => rd(15 * sc(l, 0.25)), "arcane", 1500),
+  res("a_echo", "마력 공명", "마도회 공격 속도 +{v}%", (l) => rd(18 * sc(l, 0.25)), "arcane", 1500),
   res("a_focus", "마력 집중", "마도회 둔화 · 체력 비례 피해 효과 +{v}%", (l) => rd(25 * sc(l, 0.25)), "arcane", 1500),
 ];
 export const RES: Record<string, ResearchDef> = Object.fromEntries(RESEARCH.map((r) => [r.id, r]));
@@ -193,7 +194,7 @@ export const RELICS: RelicDef[] = [
   relic("hourglass", "시간의 모래", (l) => `보스 제한 시간 +${V.hourglass(l)}초`, 1, "boss"),
   relic("alchemy", "연금술 노트", (l) => `조합식으로 신화 · 히든을 만들면 골드 +${V.alchemy_gold(l)} · 행운석 +${V.alchemy_stone(l)}`, 1, "any"),
   relic("vaccine", "글리치 백신", (l) => `보스 · 엘리트 · 균열 적에게 주는 피해 +${V.vaccine(l)}%`, 1, "boss"),
-  relic("pure_blood", "순수 혈통", (l) => `필드에 한 세력만 있으면 (히든 제외) 모든 피해 +${V.pure_blood(l)}%`, 2, "mono"),
+  relic("pure_blood", "순수 혈통", (l) => `필드에서 한 세력이 ${Math.round(TUNE.pureFrom * 100)}% 이상이면 (보관함 제외) 모든 피해 +${V.pure_blood(l)}%`, 2, "mono"),
   relic("rainbow", "무지개 연합", (l) => `필드에 세 세력이 모두 있으면 모든 피해 +${V.rainbow(l)}%`, 2, "mix"),
   relic("twin_star", "쌍둥이 별", (l) => `레전드 이상을 얻을 때 ${V.twin_star(l)}% 확률로 같은 등급 같은 세력 1기 더 (빈 칸이 있으면)`, 2, "any"),
   relic("war_banner", "전쟁 깃발", (l) => `세력 강화 레벨 합 10마다 모든 피해 +${V.war_banner(l)}%`, 2, "mix"),
@@ -235,7 +236,7 @@ const BASE_GLITCH: GlitchDef[] = [
   { lv: 10, hp: 2.6, spd: 1.1, bossSec: -15, reward: 4, armor: 1, boss: 1, rule: "끝판 — 보스 제한 시간 -15초" },
 ];
 /**
- * 11~30단계 (심연): 10단계 위에 한 단계마다 적 체력 +4%(10단계 기준) · 보상 +0.1, 5단계마다 새 규칙 (DEEP_PARAMS)
+ * 11~30단계 (심연): 10단계 위에 한 단계마다 적 체력 +8.5%(10단계 기준) · 보상 +0.1, 5단계마다 새 규칙 (DEEP_PARAMS)
  *  11~ 방어력 · 15~ 보스 체력 · 20~ 속도 · 방어력 더 · 25~ 보스 체력 더 · 보스 시간 -18 · 30 끝
  *  (다 키운 봇이 30단계를 다섯 판에 한 번쯤 깨는 정도 — 사람은 배치 · 초월이 더 나아서 이보다 쉬움)
  */
@@ -258,7 +259,7 @@ export interface DeepParams {
   /** 단계마다 보상 배수 + (10단계 4 에서) */
   rewardPerLv?: number;
 }
-export const DEEP_PARAMS: DeepParams = { hpPerLv: 0.04, armor11: 1.15, armor20: 1.28, boss15: 1.08, boss25: 1.15, spd20: 1.1, rewardPerLv: 0.1 };
+export const DEEP_PARAMS: DeepParams = { hpPerLv: 0.085, armor11: 1.15, armor20: 1.28, boss15: 1.08, boss25: 1.15, spd20: 1.1, rewardPerLv: 0.1 };
 export function deepGlitch(P: DeepParams): GlitchDef[] {
   const top = BASE_GLITCH[10];
   const rules = deepRule(P);

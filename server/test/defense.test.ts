@@ -100,7 +100,7 @@ describe("픽셀 글리치 디펜스 엔진", () => {
     expect(modsOf({ cheat: "nope" }).cheatReroll).toBe(1);
   });
 
-  it("순혈 프로토콜: 가장 많은 세력 비율만큼 (히든은 전체에 셈 · 보관함은 안 셈) · 강화 할인", () => {
+  it("순혈 프로토콜: 가장 많은 세력 70% 이상이면 켜짐 (히든은 전체에 셈 · 보관함은 안 셈) · 강화 할인", () => {
     const g = newGame(5, 1);
     const b = g.boards[0];
     expect(apply(g, 0, { t: "cheat", i: 2 })).toBeNull();
@@ -117,17 +117,20 @@ describe("픽셀 글리치 디펜스 엔진", () => {
     expect(b.pure).toBe(1);
     expect(upCost(b, "mech")).toBeLessThan(base);
     expect(upCost(b, "knight")).toBe(base);
+    expect(pureT(0.69)).toBe(0);
+    expect(pureT(0.7)).toBeCloseTo(0.5);
     // 히든 1 섞으면 3/4 = 75% → 비례해서 약해짐
     put(1, hidden);
     step(g);
     expect(b.pure).toBeCloseTo(pureT(0.75));
     expect(b.pure).toBeLessThan(1);
-    // 기사단이 더 많아지면 기사단 기준 (6/10)
+    // 기사단이 더 많아지면 기사단 기준 (6/10 = 60% → 70% 밑이라 꺼짐)
     put(2, knight, 3);
     put(3, knight, 3);
     step(g);
     expect(b.mono).toBe("knight");
-    expect(b.pure).toBeCloseTo(pureT(0.6));
+    expect(b.pureR).toBeCloseTo(0.6);
+    expect(b.pure).toBe(0);
     // 고르게 섞이면 (3 · 3 · 3 + 히든) 꺼짐
     put(3, UNITS.find((u) => u.faction === "arcane" && u.grade === 0)!.id, 3);
     step(g);

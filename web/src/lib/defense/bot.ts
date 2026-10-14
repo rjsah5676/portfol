@@ -195,7 +195,8 @@ export function botMove(b: Board, cfg: BotCfg, skip: ReadonlySet<string> = new S
       const c = ok({ t: "recipe", id: r.id });
       if (c) return c;
     }
-  // 순혈 프로토콜: 비율을 높이려고 필드의 다른 세력 낮은 등급(에픽 이하)은 보관함으로 (자리가 있을 때만 — 팔지는 않음)
+  // 순혈 프로토콜: 비율(70%)을 맞추려고 필드의 다른 세력은 보관함으로, 자리가 없으면 팖
+  //  에픽 이하는 늘 · 레전드는 프로토콜이 꺼져 있을 때만 (신화 이상은 그대로). 다른 세력 조합식 재료도 안 남김
   if (cfg.patch === "pure" && cfg.focus) {
     let j = -1;
     for (let k = CELLS; k < SLOTS; k++)
@@ -205,10 +206,9 @@ export function botMove(b: Board, cfg: BotCfg, skip: ReadonlySet<string> = new S
       }
     for (let i = 0; i < CELLS; i++) {
       const d = b.cells[i].def ? UNIT[b.cells[i].def!] : null;
-      if (!d || d.faction === cfg.focus || d.faction === "hidden" || d.grade > 2) continue;
-      // 보관함에 자리가 있으면 빼고, 없으면 에픽 이하는 팖 (조합식 재료는 남김)
-      const c = ok(j >= 0 ? { t: "swap", a: i, b: j } : !MATERIAL.has(d.id) ? { t: "sell", c: i } : { t: "luck" });
-      if (c && c.t !== "luck") return c;
+      if (!d || d.faction === cfg.focus || d.faction === "hidden" || d.grade > (b.pure > 0 ? 2 : 3)) continue;
+      const c = ok(j >= 0 ? { t: "swap", a: i, b: j } : { t: "sell", c: i });
+      if (c) return c;
     }
   }
   // 보관함 정리: 같은 유닛이 있는 칸으로 모으기 → 필드 빈 칸으로 올리기 → 필드의 약한 낱개와 바꾸기

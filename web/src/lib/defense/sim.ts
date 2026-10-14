@@ -225,8 +225,9 @@ export interface Board {
   crng: Rng;
   /** 배치 따라 바뀌는 전체 피해 배수 (순수 혈통 · 무지개 연합) */
   team: number;
-  /** 필드에 가장 많은 세력 (히든 빼고) · 순혈 세기 0~1 (그 세력 비율이 pureFrom 이면 0, 100% 면 1) — 배치가 바뀌면 다시 계산 */
+  /** 필드에 가장 많은 세력 (히든 빼고) · 그 비율 0~1 · 순혈 세기 0~1 (비율이 pureFrom 밑이면 0, pureFrom 이면 pureBase, 100% 면 1) — 배치가 바뀌면 다시 계산 */
   mono: Faction | null;
+  pureR: number;
   pure: number;
   fx: Fx[] | null;
   ev: Ev[] | null;
@@ -283,6 +284,7 @@ export function newBoard(seed: number, idx: number, lo?: Loadout | null): Board 
     crng: { r: mixSeed(seed, 77) },
     team: 1,
     mono: null,
+    pureR: 0,
     pure: 0,
     fx: null,
     ev: null,
@@ -356,8 +358,11 @@ export function recipePlan(b: Board, id: string): number[] | null {
 export function canRecipe(b: Board, id: string): boolean {
   return !!recipePlan(b, id);
 }
-/** 순혈 세기: 가장 많은 세력 비율 r → 0~1 (TUNE.pureFrom 이하 0, 100% 면 1, 사이는 비례) */
-export const pureT = (r: number) => Math.max(0, Math.min(1, (r - TUNE.pureFrom) / (1 - TUNE.pureFrom)));
+/** 순혈 세기: 가장 많은 세력 비율 r → 0~1 (TUNE.pureFrom 밑이면 0 = 꺼짐, pureFrom 이면 pureBase, 100% 면 1, 사이는 비례) */
+export const pureT = (r: number) =>
+  r < TUNE.pureFrom - 1e-9
+    ? 0
+    : Math.min(1, TUNE.pureBase + ((1 - TUNE.pureBase) * (r - TUNE.pureFrom)) / (1 - TUNE.pureFrom));
 export const mythCount = (b: Board) =>
   b.cells.reduce((n, c) => n + (c.def && UNIT[c.def].grade >= 4 ? c.units.length : 0), 0);
 /** 세력 강화 피해 배수 — 히든은 피해 대신 고유 효과 (hiddenFx) */
@@ -885,7 +890,7 @@ function rebuild(b: Board) {
     }
   }
   b.auras = [...by.entries()].map(([id, cells]) => ({ def: UNIT[id], cells }));
-  // 순수 혈통 · 무지개 연합 (필드만, 히든은 안 셈)
+  // 무지개 연합 (필드만, 히든은 안 셈)
   let fk = 0,
     fm = 0,
     fa = 0;
@@ -909,9 +914,10 @@ function rebuild(b: Board) {
   let top: Faction | null = null;
   for (const f of FACTIONS) if (n[f] > 0 && (!top || n[f] > n[top as "knight"])) top = f;
   b.mono = top;
-  b.pure = top && all ? pureT(n[top as "knight"] / all) : 0;
+  b.pureR = top && all ? n[top as "knight"] / all : 0;
+  b.pure = pureT(b.pureR);
   b.team =
-    (kinds === 1 ? b.mods.pureBlood : 1) *
+    (b.pure > 0 ? b.mods.pureBlood : 1) *
     (1 + (b.cx.mono - 1) * b.pure) *
     (kinds === 3 ? b.mods.rainbow * b.cx.tri : 1) *
     b.cx.dmg;

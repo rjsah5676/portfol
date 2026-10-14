@@ -171,7 +171,7 @@ export const CHEATS: CheatDef[] = [
   { id: "c_underdog", name: "약자 보호법", desc: "레전드 이하 피해 +35%", tier: 2, cat: "dmg", fx: mul("low", 1.35) },
   { id: "c_legend", name: "신화 패치", desc: "신화 · 히든 · 초월 피해 +25%", tier: 2, cat: "dmg", fx: mul("high", 1.25) },
   { id: "c_tri", name: "삼색 동맹", desc: "필드에 세 세력이 모두 있으면 모든 피해 +20%", tier: 2, cat: "dmg", fx: mul("tri", 1.2) },
-  { id: "c_mono", name: "단일 세력 코드", desc: "필드에서 가장 많은 세력 비율만큼 모든 피해 + (40% 넘으면 비례, 100%면 +35%)", tier: 2, cat: "dmg", fx: mul("mono", 1.35) },
+  { id: "c_mono", name: "단일 세력 코드", desc: "필드에서 가장 많은 세력이 70% 이상이면 모든 피해 + (70%에서 +17%, 100%면 +35% · 보관함 제외)", tier: 2, cat: "dmg", fx: mul("mono", 1.35) },
   { id: "c_frame", name: "프레임 해제", desc: "모든 유닛 공격 속도 +15%", tier: 2, cat: "buff", fx: add("aspd", 0.15) },
   { id: "c_memory", name: "메모리 확장", desc: "패배 기준 적 수 +25", tier: 2, cat: "buff", fx: add("cap", 25) },
 
