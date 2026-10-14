@@ -11,6 +11,7 @@ import pixelfightImg from "@/img/Page/info/pixelfight/title.webp";
 import yoriJoriImg from "@/img/Page/info/YoriJori.png";
 import pokerImg from "@/img/Page/info/poker/title.webp";
 import sketchImg from "@/img/Page/info/sketch/title.webp";
+import defenseImg from "@/img/Page/info/defense/title.webp";
 
 export interface Project {
   /** 상세 페이지 주소: /infoPage/<idx> */
@@ -163,6 +164,16 @@ export const gameProjects: Project[] = [
     tech: ["TypeScript", "Canvas", "socket.io", "React"],
     period: "2026.10 –",
     playLink: "/games/sketch/",
+  },
+  {
+    idx: 16,
+    name: "PIXEL LUCKY DEFENSE",
+    imgLink: defenseImg,
+    title: "운빨 랜덤 디펜스 [PIXEL LUCKY DEFENSE]",
+    desc: "PIXEL FIGHT 외전. 수호자를 소환 · 합성해 60웨이브를 막는 랜덤 디펜스, 서버가 기록을 다시 돌려 검증하는 랭킹 · 최대 4명 멀티",
+    tech: ["TypeScript", "Canvas", "socket.io", "Worker Threads"],
+    period: "2026.10 –",
+    playLink: "/games/defense/",
   },
 ];
 
