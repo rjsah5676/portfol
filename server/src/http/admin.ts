@@ -15,12 +15,12 @@ import { h, ms, requireAdmin } from "./util";
  *   GET    /api/admin/traffic?from=YYYY-MM-DD&to=YYYY-MM-DD   기간 집계 + 최근 유입 100건 (원본 IP 포함)
  *                                         &human=1 이면 클라우드(AWS·GCP 등) IP 유입을 뺌
  * 회원
- *   GET    /api/admin/users?q=&limit=&skip=         목록 (별명·이메일로 찾기)
+ *   GET    /api/admin/users?q=&limit=&skip=&sort=   목록 (별명·이메일로 찾기 · 정렬 new|visit|points|visits · banned 는 정지된 회원만)
  *   PATCH  /api/admin/users/:uid   { nick?, badge?, money?, points? } 별명 · 꾸밈 · 포커 칩 · 포인트 바꾸기 (칩은 테이블 밖일 때 바로, 앉아 있으면 다음 판부터. 포인트는 원장에 '운영자 조정'으로 남음)
  *   GET    /api/admin/users/:uid/points  포인트 최근 내역
  *   DELETE /api/admin/users/:uid/avatar             올린 프로필 사진 지우기
  *   DELETE /api/admin/users/:uid?records=1          회원 지우기 (records=1 이면 랭킹·방명록도)
- * 열려 있는 방 (서버 메모리: 스케치 퀴즈 · 격투)
+ * 열려 있는 방 (서버 메모리: 스케치 퀴즈 · 격투 · 포커 · 리듬 · 디펜스 멀티)
  *   GET    /api/admin/live
  *   POST   /api/admin/live/close   { game, id }
  *   GET    /api/admin/poker/settings          · PUT { botBoost }
@@ -44,6 +44,12 @@ const TOP_LEVEL = new Set<string>([
   "rank_tickets",
   "traffic_hits",
   "traffic_daily",
+  // 격투 랭크전 · 디펜스 랭킹 · 디펜스 성장 · 우편 · 사이트 설정(공지)
+  "fight_rank_ratings",
+  "defense_rank",
+  "defense_profile",
+  "mail",
+  "site_config",
   // 메뉴에서 내린 예전 스케치 퀴즈 데이터
   "sketch_user",
   "sketch_user_room",
@@ -97,7 +103,7 @@ export interface LiveRoom {
   players: string[];
   createdAt: number;
 }
-export type LiveGame = "sketch" | "fight" | "poker" | "rhythm";
+export type LiveGame = "sketch" | "fight" | "poker" | "rhythm" | "defense";
 
 export interface AdminHooks {
   /** 방명록이 바뀜 → 구독자에게 다시 보냄 */
@@ -140,7 +146,7 @@ export function adminRouter({ db, auth, web, users, points, gateway, cfg, traffi
       const latest = (c: string, n: number, sort: Record<string, 1 | -1> = { createdAt: -1 }) =>
         db.col(c).find({}).sort(sort).limit(n).toArray();
 
-      const [total, daily, members, inqTotal, inqUnread, posts, guestTotal, rankCounts, rhythmCount, roomCounts, lastGuest, lastInq, lastRanks, trafficToday] =
+      const [total, daily, members, inqTotal, inqUnread, posts, guestTotal, rankCounts, rhythmCount, newRanks, roomCounts, lastGuest, lastInq, lastRanks, trafficToday] =
         await Promise.all([
           stats.findOne({ _id: "total" }),
           stats.find({ _id: { $in: days.map((d) => `daily_${d}`) } }).toArray(),
@@ -151,6 +157,7 @@ export function adminRouter({ db, auth, web, users, points, gateway, cfg, traffi
           count("guest"),
           Promise.all(RANK_COLLECTIONS.map(async (c) => [c, await count(c)] as const)),
           count("rhythm_rankings"),
+          Promise.all(["fight_rank_ratings", "defense_rank"].map(async (c) => [c, await count(c)] as const)),
           Promise.all(
             ROOM_COLLECTIONS.map(async (c) => [c, { total: await count(c), playing: await count(c, { status: "playing" }), waiting: await count(c, { status: "waiting" }) }] as const)
           ),
@@ -191,9 +198,9 @@ export function adminRouter({ db, auth, web, users, points, gateway, cfg, traffi
         inquiries: { total: inqTotal, unread: inqUnread },
         posts: { total: posts.length, retro: posts.filter((p) => p.section === "retro").length },
         guest: { total: guestTotal },
-        rankings: { ...Object.fromEntries(rankCounts), rhythm_rankings: rhythmCount },
+        rankings: { ...Object.fromEntries(rankCounts), rhythm_rankings: rhythmCount, ...Object.fromEntries(newRanks) },
         rooms: Object.fromEntries(roomCounts),
-        live: { sketch: liveOf(live.sketch), fight: liveOf(live.fight), poker: liveOf(live.poker) },
+        live: { sketch: liveOf(live.sketch), fight: liveOf(live.fight), poker: liveOf(live.poker), rhythm: liveOf(live.rhythm), defense: liveOf(live.defense) },
         server: {
           env: cfg.env,
           startedAt,
@@ -250,7 +257,12 @@ export function adminRouter({ db, auth, web, users, points, gateway, cfg, traffi
     "/users",
     h(async (req) => {
       const q = z
-        .object({ q: z.string().max(100).optional(), limit: z.coerce.number().int().min(1).max(200).optional(), skip: z.coerce.number().int().min(0).optional() })
+        .object({
+          q: z.string().max(100).optional(),
+          limit: z.coerce.number().int().min(1).max(200).optional(),
+          skip: z.coerce.number().int().min(0).optional(),
+          sort: z.enum(["new", "visit", "points", "visits", "banned"]).optional(),
+        })
         .parse(req.query);
       return users.adminList(q);
     })
@@ -302,7 +314,7 @@ export function adminRouter({ db, auth, web, users, points, gateway, cfg, traffi
   r.post(
     "/live/close",
     h(async (req) => {
-      const body = z.strictObject({ game: z.enum(["sketch", "fight", "poker", "rhythm"]), id: z.string().min(1).max(80) }).parse(req.body);
+      const body = z.strictObject({ game: z.enum(["sketch", "fight", "poker", "rhythm", "defense"]), id: z.string().min(1).max(80) }).parse(req.body);
       return { closed: hooks.closeLiveRoom(body.game, body.id) };
     })
   );

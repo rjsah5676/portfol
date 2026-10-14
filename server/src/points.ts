@@ -63,7 +63,7 @@ export interface PointsInfo {
 const LOG_TTL_DAYS = 365;
 
 /** 상품을 샀을 때 남는 곳: 이미 가졌는지 보는 조건 + 넣는 갱신 */
-function grantOf(item: ShopItem): { owned: Record<string, unknown>; update: Record<string, unknown> } {
+export function grantOf(item: ShopItem): { owned: Record<string, unknown>; update: Record<string, unknown> } {
   if (item.game === "poker" && item.kind === "char")
     return { owned: { "poker.chars": item.ref }, update: { $push: { "poker.chars": item.ref }, $set: { "poker.char": item.ref } } };
   if (item.game === "poker" && item.kind === "skin") {

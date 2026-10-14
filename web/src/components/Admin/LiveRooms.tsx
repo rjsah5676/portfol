@@ -14,7 +14,7 @@ import {
 import { ago } from "./Overview";
 
 /*
- * 지금 열려 있는 방 (스케치 퀴즈 · 픽셀 격투 · 포커 테이블). 서버 메모리에만 있는 방이라 여기서만 보임.
+ * 지금 열려 있는 방 (스케치 퀴즈 · 픽셀 격투 · 포커 테이블 · BEAT DASH · 디펜스 멀티). 서버 메모리에만 있는 방이라 여기서만 보임.
  * 방을 닫으면 안에 있던 사람들은 로비로 나가짐. 10초마다 다시 읽음.
  */
 
@@ -23,7 +23,8 @@ const GAMES: { key: LiveGame; label: string }[] = [
   { key: "sketch", label: "스케치 퀴즈" },
   { key: "fight", label: "픽셀 격투" },
   { key: "poker", label: "포커" },
-  { key: "rhythm", label: "리듬게임" },
+  { key: "rhythm", label: "BEAT DASH" },
+  { key: "defense", label: "디펜스 멀티" },
 ];
 const STATUS: Record<string, { label: string; on: boolean }> = {
   waiting: { label: "대기", on: false },
@@ -33,6 +34,8 @@ const STATUS: Record<string, { label: string; on: boolean }> = {
   drawing: { label: "진행 중", on: true },
   reveal: { label: "진행 중", on: true },
   play: { label: "대전 중", on: true },
+  playing: { label: "진행 중", on: true },
+  hand: { label: "진행 중", on: true },
 };
 
 export default function LiveRooms() {
@@ -76,7 +79,7 @@ export default function LiveRooms() {
     }
   };
 
-  const all = rooms ? GAMES.flatMap((g) => rooms[g.key].map((r) => ({ g, r }))) : [];
+  const all = rooms ? GAMES.flatMap((g) => (rooms[g.key] ?? []).map((r) => ({ g, r }))) : [];
 
   return (
     <div className="grid gap-3">

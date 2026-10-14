@@ -607,7 +607,14 @@ export function registerDefense({ gateway, db, points }: Deps) {
         players: r.players.map((p) => p.nick),
         turn: r.turn,
         desync: r.desync.length,
+        createdAt: r.createdAt,
       })),
+    /** (관리자) 방 닫기 — 들어와 있던 사람에게는 방이 사라진 것으로 보임 */
+    adminClose(id: string): boolean {
+      const r = rooms.get(id);
+      if (r) closeRoom(r);
+      return !!r;
+    },
     close() {
       for (const r of rooms.values()) if (r.timer) clearInterval(r.timer);
       rooms.clear();

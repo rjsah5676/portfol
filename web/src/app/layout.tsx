@@ -10,6 +10,7 @@ import Footer from "@/components/Footer";
 import Contact from "@/components/Contact";
 import QuickMenu from "@/components/QuickMenu";
 import ServerNotice from "@/components/ServerNotice";
+import SiteNoticeBar from "@/components/SiteNoticeBar";
 import PointToast from "@/components/Points/PointToast";
 import TrafficBeacon from "@/components/TrafficBeacon";
 import { AuthProvider } from "@/lib/AuthContext";
@@ -84,6 +85,7 @@ export default function RootLayout({
             <Header />
             <Nav />
             <SiteSearch />
+            <SiteNoticeBar />
             {children}
             <Footer />
             <Contact />

@@ -142,6 +142,8 @@ export interface AdminUser extends Profile {
   money: number;
   /** 포인트 */
   points: number;
+  /** 이용 정지 (moderation.ts) — 지난 정지도 그대로 옴, until 로 판단 */
+  ban?: { until: number | null; reason: string; at: number };
 }
 const toAdmin = (uid: string, d: UserDoc): AdminUser => ({
   uid,
@@ -152,6 +154,7 @@ const toAdmin = (uid: string, d: UserDoc): AdminUser => ({
   stats: d.stats ?? {},
   money: d.money ?? 0,
   points: d.points ?? 0,
+  ...((d as { ban?: AdminUser["ban"] }).ban && { ban: (d as { ban?: AdminUser["ban"] }).ban }),
 });
 const escapeRe = (v: string) => v.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 /** 회원의 이름이 저장되는 곳 (별명이 바뀌면 같이 바뀌고, 회원을 지울 때 같이 정리) */
@@ -285,16 +288,19 @@ export function createUsers(db: Database, cfg: Pick<Config, "adminNick">) {
     // ───────────── 관리자 ─────────────
 
     /** (관리자) 회원 목록: 별명·이메일로 찾기, 최근 가입 순 */
-    async adminList(opts: { q?: string; limit?: number; skip?: number } = {}): Promise<{ total: number; items: AdminUser[] }> {
+    async adminList(opts: { q?: string; limit?: number; skip?: number; sort?: "new" | "visit" | "points" | "visits" | "banned" } = {}): Promise<{ total: number; items: AdminUser[] }> {
       const q = (opts.q ?? "").trim();
-      const filter = q
+      const filter: Record<string, unknown> = q
         ? { $or: [{ nickKey: { $regex: escapeRe(q.toLowerCase()) } }, { email: { $regex: escapeRe(q), $options: "i" } }] }
         : {};
+      if (opts.sort === "banned") filter.ban = { $exists: true };
+      const sort: Record<string, 1 | -1> =
+        opts.sort === "visit" ? { lastVisitAt: -1 } : opts.sort === "points" ? { points: -1 } : opts.sort === "visits" ? { visits: -1 } : { createdAt: -1 };
       const [total, docs] = await Promise.all([
         col.countDocuments(filter),
         col
           .find(filter, { projection: { "avatar.data": 0 } })
-          .sort({ createdAt: -1 })
+          .sort({ ...sort, _id: 1 })
           .skip(opts.skip ?? 0)
           .limit(opts.limit ?? 100)
           .toArray(),
