@@ -152,7 +152,13 @@ export default function PokerApp({ rank }: { rank: RankRow[] | null }) {
   };
   // 전체화면이 풀리면(뒤로가기 · 풀기 버튼) 그냥 풀린 대로 — 폰은 "전체화면으로 플레이해 주세요" 안내가 다시 덮음
   useEffect(() => {
-    const on = () => setFsReal(document.fullscreenElement === rootRef.current && !!rootRef.current);
+    const on = () => {
+      const now = document.fullscreenElement === rootRef.current && !!rootRef.current;
+      setFsReal(now);
+      // 폰: 전체화면이 풀리면 페이지가 맨 아래로 내려가 있던 것 — 무대가 사이트 메뉴 바로 아래 오게 (세로로 돌아가는 시간 기다림)
+      if (!now && Math.min(window.innerWidth, window.innerHeight) < 600 && matchMedia("(pointer: coarse)").matches)
+        setTimeout(() => stageEl.current?.scrollIntoView({ block: "start" }), 350);
+    };
     document.addEventListener("fullscreenchange", on);
     return () => document.removeEventListener("fullscreenchange", on);
   }, []);
