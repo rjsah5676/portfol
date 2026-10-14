@@ -150,34 +150,9 @@ export default function PokerApp({ rank }: { rank: RankRow[] | null }) {
       sessionStorage.setItem("pk-ios-web", "1");
     } catch {}
   };
-  // 폰에서 뒤로가기가 전체화면만 풀어 버리면(안드로이드 크롬) 방 안에서는 나가기 버튼으로 (TableView 가 "pk-back" 을 받음)
-  const selfExit = useRef(false);
-  const inTable = useRef(false);
+  // 전체화면이 풀리면(뒤로가기 · 풀기 버튼) 그냥 풀린 대로 — 폰은 "전체화면으로 플레이해 주세요" 안내가 다시 덮음
   useEffect(() => {
-    inTable.current = !!tableId;
-  }, [tableId]);
-  useEffect(() => {
-    const on = () => {
-      const now = document.fullscreenElement === rootRef.current && !!rootRef.current;
-      // (홈 키로 내려가며 풀린 건 뒤로가기가 아님 — 나가기로 치지 않음)
-      if (!now && !selfExit.current && inTable.current && matchMedia("(pointer: coarse)").matches && !document.hidden) {
-        // 게임방에서 폰 뒤로가기: 전체화면이 풀린 채 끝나지 않게 — 화면은 계속 덮어 그리고(가짜 전체화면) 나가기로 처리,
-        // 다음에 화면을 한 번 누르면 진짜 전체화면으로 되돌림 (전체화면은 터치가 있어야 다시 켤 수 있음)
-        setPseudoFs(true);
-        const el = rootRef.current;
-        const again = () => {
-          if (!el || document.fullscreenElement) return;
-          el.requestFullscreen?.({ navigationUI: "hide" }).then(
-            () => setPseudoFs(false),
-            () => {}
-          );
-        };
-        el?.addEventListener("pointerup", again, { once: true });
-        window.dispatchEvent(new Event("pk-back"));
-      }
-      selfExit.current = false;
-      setFsReal(now);
-    };
+    const on = () => setFsReal(document.fullscreenElement === rootRef.current && !!rootRef.current);
     document.addEventListener("fullscreenchange", on);
     return () => document.removeEventListener("fullscreenchange", on);
   }, []);
@@ -202,7 +177,9 @@ export default function PokerApp({ rank }: { rank: RankRow[] | null }) {
   const land = scr.w > scr.h * 1.2;
   // 폰을 잠깐 세로로 돌린 동안은 무대를 가로일 때 크기 그대로 둠 ("가로로 돌려 주세요"가 덮고 있음) —
   // 세로 크기로 통째로 다시 그렸다가 가로로 또 다시 그리느라 아이폰이 가끔 튕겼음
-  const hold = phone && !land && landScr ? landScr : null;
+  // (전체화면 · 홈 화면 앱 안내가 무대 안에서 덮어야 할 때는 멈추지 않음 — 무대를 숨기면 안내까지 가려져 검은 화면만 남았음)
+  const inGate = (!fsReal && !pseudoFs && canFs && !standalone) || (iosWeb && !iosSkip);
+  const hold = phone && !land && landScr && !inGate ? landScr : null;
   const lay = hold ?? scr;
   const layLand = land || !!hold;
   const shortLand = !fs && phone && layLand;
@@ -271,10 +248,7 @@ export default function PokerApp({ rank }: { rank: RankRow[] | null }) {
     const el = rootRef.current;
     if (!el) return;
     if (pseudoFs) return setPseudoFs(false);
-    if (document.fullscreenElement) {
-      selfExit.current = true;
-      return void document.exitFullscreen().catch(() => {});
-    }
+    if (document.fullscreenElement) return void document.exitFullscreen().catch(() => {});
     // 폰: 전체화면이 되면 가로로 고정 (안드로이드 크롬 등 되는 기기만 — 안 되면 "가로로 돌려 주세요" 안내)
     const lockLand = () => {
       if (!matchMedia("(pointer: coarse)").matches) return;

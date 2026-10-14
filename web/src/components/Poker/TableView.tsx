@@ -231,7 +231,6 @@ export default function TableView({
   onExit,
   onWallet,
   topRight,
-  fs,
 }: {
   id: string;
   uid: string;
@@ -245,7 +244,7 @@ export default function TableView({
   /** 무대 공통 버튼 (전체화면 등) */
   /** 위 오른쪽 버튼들 (나가기 버튼을 받아 설정 왼쪽에 넣음) */
   topRight?: (exit: ReactNode) => ReactNode;
-  /** 전체화면(흉내 포함)으로 보는 중 — 이때 뒤로가기는 나가기 버튼처럼 */
+  /** 전체화면(흉내 포함)으로 보는 중 (지금은 안 씀 — 뒤로가기는 전체화면만 풂) */
   fs?: boolean;
 }) {
   const [table, setTable] = useState<TableWire | null | undefined>(undefined);
@@ -1019,35 +1018,6 @@ export default function TableView({
       setNotice((e as ApiError).message ?? "처리하지 못했어요.");
     }
   };
-
-  // 전체화면으로 방 안에 있을 때 뒤로가기 = 나가기 버튼 (뒤로가기가 전체화면만 풀어 버리는 폰은 PokerApp 이 "pk-back" 으로 알려 줌)
-  const backRef = useRef<() => void>(() => {});
-  useEffect(() => {
-    backRef.current = () => {
-      if (me?.exit) return setNotice("나가기 예약 중이에요 · 이번 판이 끝나면 나가요");
-      void exit();
-    };
-  });
-  useEffect(() => {
-    if (!fs) return;
-    let last = 0;
-    const back = () => {
-      if (Date.now() - last < 1000) return; // 전체화면 풀림 + 뒤로가기가 한 번에 와도 한 번만
-      last = Date.now();
-      backRef.current();
-    };
-    const onPop = () => {
-      history.pushState(history.state, "", location.href); // 방 화면은 그대로 두고
-      back();
-    };
-    history.pushState(history.state, "", location.href);
-    window.addEventListener("popstate", onPop);
-    window.addEventListener("pk-back", back);
-    return () => {
-      window.removeEventListener("popstate", onPop);
-      window.removeEventListener("pk-back", back);
-    };
-  }, [fs]);
 
   const u = Math.min(w, h) / 100;
   if (table === undefined)
