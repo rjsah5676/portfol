@@ -24,6 +24,8 @@ import { h, ms, requireAdmin } from "./util";
  *   GET    /api/admin/live
  *   POST   /api/admin/live/close   { game, id }
  *   GET    /api/admin/poker/settings          · PUT { botBoost }
+ * 디펜스 플레이 기록 (밸런스 분석용, 90일)
+ *   GET    /api/admin/defense/plays?from=ms&after=커서&limit=500   오래된 것부터 (next 커서로 이어 받기)
  * 데이터 (범용 조회·수정·삭제) — 경로는 기존 Firestore 컬렉션 경로 표기를 그대로 받음
  *   ("score", "rhythm_rankings/{곡_난이도}/scores" …)
  *   GET    /api/admin/docs?path=…
@@ -48,6 +50,7 @@ const TOP_LEVEL = new Set<string>([
   "fight_rank_ratings",
   "defense_rank",
   "defense_profile",
+  "defense_plays",
   "mail",
   "site_config",
   // 메뉴에서 내린 예전 스케치 퀴즈 데이터
@@ -133,6 +136,37 @@ export function adminRouter({ db, auth, web, users, points, gateway, cfg, traffi
   r.use((req, _res, next) => {
     requireAdmin(auth, req).then(() => next(), next);
   });
+
+  // ───────────── 디펜스 플레이 기록 ─────────────
+
+  r.get(
+    "/defense/plays",
+    h(async (req) => {
+      const q = z
+        .object({
+          from: z.coerce.number().int().min(0).optional(),
+          after: z.string().max(120).optional(),
+          limit: z.coerce.number().int().min(1).max(FETCH_LIMIT).optional(),
+        })
+        .parse(req.query);
+      // 커서 = "시각ms_id" (같은 시각이 여럿이어도 안 빠지게 id 까지)
+      let filter: Record<string, unknown> = q.from ? { at: { $gte: new Date(q.from) } } : {};
+      if (q.after) {
+        const i = q.after.indexOf("_");
+        const t = new Date(Number(q.after.slice(0, i)));
+        const id = q.after.slice(i + 1);
+        if (i < 1 || isNaN(t.getTime())) throw bad("커서가 잘못됐어요.");
+        filter = { $or: [{ at: { $gt: t } }, { at: t, _id: { $gt: id } }] };
+      }
+      const limit = q.limit ?? FETCH_LIMIT;
+      const docs = await db.col<{ _id: string; at: Date; end?: Date }>("defense_plays").find(filter).sort({ at: 1, _id: 1 }).limit(limit).toArray();
+      const last = docs[docs.length - 1];
+      return {
+        list: docs.map((d) => ({ ...d, at: ms(d.at), end: ms(d.end) })),
+        next: docs.length === limit && last ? `${last.at.getTime()}_${last._id}` : null,
+      };
+    })
+  );
 
   // ───────────── 한눈에 보기 ─────────────
 

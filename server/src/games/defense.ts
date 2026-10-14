@@ -13,6 +13,7 @@ import { isCmd, type Cmd, type Result } from "../../../web/src/lib/defense/sim";
 import { DAILY_RULE, cleanLoadout, kstDayKey, seasonOf, seasonScore, type Loadout, type RunMode } from "../../../web/src/lib/defense/progress";
 import type { VerifyJob, VerifyOut } from "./defenseVerify.worker";
 import { createDefenseMeta } from "./defenseMeta";
+import { createDefensePlays, resOf } from "./defensePlays";
 
 /*
  * 픽셀 글리치 디펜스 (PIXEL FIGHT 외전 랜덤 디펜스) — 랭킹 · 멀티
@@ -203,6 +204,8 @@ interface Room {
   pending: [number, Cmd][];
   timer: NodeJS.Timeout | null;
   createdAt: number;
+  /** 판 시작 시각 (플레이 기록용) */
+  startedAt?: number;
   standings: { nick: string; win: boolean; wave: number; sec: number; kills: number; tops: string[] }[] | null;
   /** 어긋남 감시: tick → (보드 → 해시) */
   hashes: Map<number, Map<number, number>>;
@@ -222,6 +225,7 @@ export function registerDefense({ gateway, db, points }: Deps) {
   void runs.createIndex({ at: 1 }, { expireAfterSeconds: 24 * 3600 }).catch(() => {});
   const verifier = createVerifier();
   const meta = createDefenseMeta(db, points);
+  const plays = createDefensePlays(db);
   const seasonKey = () => `${BALANCE_VER}:s${seasonOf(Date.now())}`;
   const dailyKey = (day = kstDayKey(Date.now())) => `${BALANCE_VER}:d${day}`;
   const boardKey = (b: "season" | "daily") => (b === "daily" ? dailyKey() : seasonKey());
@@ -230,7 +234,7 @@ export function registerDefense({ gateway, db, points }: Deps) {
   /* ── 랭킹 ── */
 
   gateway.rpc("defense.start", async (ctx, raw) => {
-    member(ctx);
+    const nick = member(ctx);
     const uid = ctx.uid;
     const { mode } = z.object({ mode: z.enum(["season", "daily"]).default("season") }).parse(raw ?? {});
     const recent = await runs.countDocuments({ uid, at: { $gt: new Date(Date.now() - 3600_000) } });
@@ -241,7 +245,9 @@ export function registerDefense({ gateway, db, points }: Deps) {
       const day = kstDayKey(Date.now());
       const lo = cleanLoadout(DAILY_RULE);
       const seed = dailySeed(day);
-      await runs.insertOne({ _id, uid, seed, ver: BALANCE_VER, at: new Date(), used: false, mode, lo, board: dailyKey(day), day });
+      const at = new Date();
+      await runs.insertOne({ _id, uid, seed, ver: BALANCE_VER, at, used: false, mode, lo, board: dailyKey(day), day });
+      plays.start({ _id, at, mode, ver: BALANCE_VER, board: dailyKey(day), seed, uids: [uid], nicks: [nick], lo: [lo] });
       return { run: _id, seed, ver: BALANCE_VER, mode, loadout: lo, day };
     }
     const seed = randomInt(1, 2 ** 31 - 1);
@@ -249,8 +255,21 @@ export function registerDefense({ gateway, db, points }: Deps) {
     // 보물방: 쌓인 웨이브만큼 확률 → 뜨면 이 판 로드아웃에 열릴 웨이브를 적어 둠 (기록 검증도 같은 로드아웃으로)
     lo.treasure = await meta.rollTreasure(uid, lo.glitch);
     const board = seasonKey();
-    await runs.insertOne({ _id, uid, seed, ver: BALANCE_VER, at: new Date(), used: false, mode, lo, board });
+    const at = new Date();
+    await runs.insertOne({ _id, uid, seed, ver: BALANCE_VER, at, used: false, mode, lo, board });
+    plays.start({ _id, at, mode, ver: BALANCE_VER, board, seed, uids: [uid], nicks: [nick], lo: [lo] });
     return { run: _id, seed, ver: BALANCE_VER, mode, loadout: lo };
+  });
+
+  // 판 도중 메뉴로 나감 — 플레이 기록에만 적음 (이어하기로 다시 끝내면 done 으로 바뀜). 검증 · 보상 없음
+  gateway.rpc("defense.quit", async (ctx, raw) => {
+    member(ctx);
+    const { run, log, tick, wave } = z
+      .object({ run: z.string().max(64), log: z.unknown(), tick: z.number().int().min(0).max(MAX_TICKS), wave: z.number().int().min(0).max(999) })
+      .parse(raw);
+    if (!validLog(log, 1)) throw bad("기록 모양이 잘못됐어요.");
+    plays.quit(run, ctx.uid, log as LogEntry[], tick, wave);
+    return { ok: true };
   });
 
   gateway.rpc("defense.finish", async (ctx, raw) => {
@@ -264,13 +283,23 @@ export function registerDefense({ gateway, db, points }: Deps) {
     if (Date.now() - doc.at.getTime() > RUN_TTL_MS) throw new AppError("RANK_REJECTED", "너무 오래된 판이에요.", 400);
     const mode = doc.mode === "daily" ? ("daily" as const) : ("season" as const);
     const lo = doc.lo ?? null;
-    const out = await verifier.run({ seed: doc.seed, players: 1, log, loadouts: [lo] });
+    const out = await verifier.run({ seed: doc.seed, players: 1, log, loadouts: [lo] }).catch((e: Error) => {
+      plays.rejected(run, log, `verify: ${e.message}`.slice(0, 300));
+      throw e;
+    });
     const res = out.results[0];
-    if (!res) throw new AppError("RANK_REJECTED", "끝나지 않은 판은 기록할 수 없어요.", 400);
+    if (!res) {
+      plays.rejected(run, log, `unfinished tick ${out.ticks}`);
+      throw new AppError("RANK_REJECTED", "끝나지 않은 판은 기록할 수 없어요.", 400);
+    }
     const elapsed = (Date.now() - doc.at.getTime()) / 1000;
-    if (elapsed + 5 < res.tick / TPS / MAX_SPEED) throw new AppError("RANK_REJECTED", "기록을 확인할 수 없어요.", 400);
+    if (elapsed + 5 < res.tick / TPS / MAX_SPEED) {
+      plays.rejected(run, log, `too fast ${Math.round(elapsed)}s < tick ${res.tick}`);
+      throw new AppError("RANK_REJECTED", "기록을 확인할 수 없어요.", 400);
+    }
     const glitch = lo?.glitch ?? 0;
     const score = seasonScore(res, glitch);
+    plays.done(run, log as LogEntry[], resOf(out, 0, score), Math.round(elapsed));
     // 오늘의 도전은 판 보상 대신 그날 첫 완료 보상만 (성장 없는 판이라 미션 · 패스 · 보물방도 안 셈)
     const reward =
       mode === "daily"
@@ -408,6 +437,18 @@ export function registerDefense({ gateway, db, points }: Deps) {
         const res = out.results[i];
         if (!res || p.left) return;
         void meta.onRun(p.uid, "multi", res, out.stats[i], r.loadouts[i]?.glitch ?? 0, n).catch((e) => console.warn("[defense] 멀티 보상 저장 실패", e));
+      });
+      plays.multi({
+        _id: `${r.id}:${Date.now()}`,
+        at: new Date(r.startedAt ?? r.createdAt),
+        end: new Date(),
+        ver: BALANCE_VER,
+        seed: r.seed,
+        uids: r.players.map((p) => p.uid),
+        nicks: r.players.map((p) => p.nick),
+        lo: r.loadouts,
+        log: r.log,
+        res: r.players.map((_, i) => resOf(out, i)),
       });
       r.standings = r.players
         .map((p, i) => {
@@ -571,6 +612,7 @@ export function registerDefense({ gateway, db, points }: Deps) {
     if ((r.phase as Room["phase"]) === "playing" || !rooms.has(r.id)) throw bad("이미 시작했어요.");
     r.loadouts = loadouts;
     r.phase = "playing";
+    r.startedAt = Date.now();
     r.seed = randomInt(1, 2 ** 31 - 1);
     r.turn = 0;
     r.log = [];

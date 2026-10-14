@@ -55,6 +55,9 @@ export type FinishOut = {
 export type DefenseGhost = { nick: string; rank: number; win: boolean; wave: number; sec: number; kills: number; log: LogEntry[] };
 export const getGhost = () => rpc<{ day: string; top: DefenseGhost | null; mine: DefenseGhost | null }>("defense.ghost", {});
 export const finishRun = (run: string, log: LogEntry[]) => rpc<FinishOut>("defense.finish", { run, log });
+/** 판 도중 메뉴로 나감 — 서버 플레이 기록(분석용)에만 남음 */
+export const quitRun = (run: string, log: LogEntry[], tick: number, wave: number) =>
+  rpc<{ ok: boolean }>("defense.quit", { run, log, tick, wave });
 export const getDefenseRank = (limit = 20, board: RankBoard = "season") =>
   rpc<{ ver: string; board: RankBoard; key: string; rows: DefenseRankRow[] }>("defense.rank", { limit, board });
 export const getMyDefense = (board: RankBoard = "season") =>

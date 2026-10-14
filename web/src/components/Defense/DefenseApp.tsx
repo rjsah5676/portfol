@@ -10,6 +10,7 @@ import {
   beginRoom,
   createRoom,
   finishRun,
+  quitRun,
   getDefenseRank,
   getGhost,
   joinRoom,
@@ -55,6 +56,7 @@ import {
   fmtTime,
 } from "./ui";
 import PatchNotes, { LATEST } from "./PatchNotes";
+import { api } from "@/lib/api/http";
 import { BOSS_ART, UNIT_ART } from "@/lib/defense/assets";
 import { FACTION_COLOR, FACTION_NAME, FACTIONS } from "@/lib/defense/units";
 
@@ -195,7 +197,14 @@ export default function DefenseApp() {
         ctrl={ctrl}
         admin={admin}
         ghost={screen.ghost ? { data: screen.ghost, lo: screen.lo } : null}
-        onExit={() => (setScreen({ k: "menu" }), void loadProf())}
+        onExit={() => {
+          // 판 도중 나가면 분석용 기록만 남김 (이어하기는 그대로)
+          const run = ctrl.mode.kind === "solo" ? ctrl.mode.run : null;
+          if (run && !ctrl.board.result && !ctrl.unranked)
+            void quitRun(run, ctrl.log, ctrl.game.tick, ctrl.board.wave).catch(() => {});
+          setScreen({ k: "menu" });
+          void loadProf();
+        }}
         onRetry={() => void startSolo(screen.mode)}
         finish={async () => {
           const run = ctrl.mode.kind === "solo" ? ctrl.mode.run : null;
@@ -269,6 +278,7 @@ export default function DefenseApp() {
         onRank={() => setScreen({ k: "rank" })}
         onRejoin={(id) => setScreen({ k: "room", id })}
         onNotes={() => setNotes(true)}
+        onExport={admin ? () => void exportPlays().then(setNote, (e: Error) => setNote(e.message)) : undefined}
       />
     );
 
@@ -316,6 +326,8 @@ function Menu(p: {
   onRank(): void;
   onRejoin(id: string): void;
   onNotes(): void;
+  /** 관리자: 플레이 기록 내려받기 */
+  onExport?: () => void;
 }) {
   const [tut, setTut] = useState(() => typeof window !== "undefined" && tutorialOn());
   // 새로고침했는데 멀티 판이 진행 중이면 돌아가기 버튼
@@ -598,6 +610,11 @@ function Menu(p: {
         >
           <Icon n="book" size={14} /> {tut ? "튜토리얼 켜짐" : "튜토리얼 꺼짐"}
         </Btn>
+        {p.onExport && (
+          <Btn className="h-[34px] px-3 text-[13px]" tone="ghost" title="관리자: 서버 플레이 기록(90일)을 JSON 으로" onClick={p.onExport}>
+            플레이 기록 받기
+          </Btn>
+        )}
       </div>
     </div>
   );
@@ -1083,3 +1100,22 @@ function clearResume(key: string) {
   } catch {}
 }
 
+/** 관리자: 서버 플레이 기록(defense_plays)을 전부 받아 JSON 파일로 저장 */
+async function exportPlays(): Promise<string> {
+  const all: unknown[] = [];
+  let after: string | null = null;
+  for (let i = 0; i < 400; i++) {
+    const q: string = after ? `?after=${encodeURIComponent(after)}` : "";
+    const r: { list: unknown[]; next: string | null } = await api(`/api/admin/defense/plays${q}`, { auth: true });
+    all.push(...r.list);
+    after = r.next;
+    if (!after) break;
+  }
+  const url = URL.createObjectURL(new Blob([JSON.stringify({ at: Date.now(), plays: all })], { type: "application/json" }));
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `defense-plays-${new Date().toISOString().slice(0, 10)}.json`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+  return `플레이 기록 ${all.length.toLocaleString()}판을 받았어요`;
+}
