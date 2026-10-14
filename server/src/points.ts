@@ -59,6 +59,10 @@ export interface PointsInfo {
   attendedToday: boolean;
 }
 
+/** 일일 미션 기준값 키: 지표 이름의 "." → "__" */
+const baseKey = (metric: string) => metric.replaceAll(".", "__");
+const baseOf = (base: Record<string, number>, metric: string) => base[baseKey(metric)] ?? base[metric] ?? 0;
+
 /** 원장 보관 기간 */
 const LOG_TTL_DAYS = 365;
 
@@ -121,7 +125,8 @@ export function createPoints(db: Database, now: () => number = Date.now) {
     if (d?.daily?.day === day) return d.daily;
     const games = [...new Set(DAILY_MISSIONS.map((x) => x.game))];
     const ms: Record<string, number> = Object.assign({}, ...(await Promise.all(games.map((g) => metricsOf(db, uid, g)))));
-    const base = Object.fromEntries(DAILY_METRICS.map((k) => [k, ms[k] ?? 0]));
+    // 키에 "." 를 넣지 않음 (몽고 계열 DB 마다 점 들어간 필드 이름을 막기도 함) — 읽을 때는 예전 점 키도 봄 (baseOf)
+    const base = Object.fromEntries(DAILY_METRICS.map((k) => [baseKey(k), ms[k] ?? 0]));
     // 여러 곳에서 동시에 처음 열어도 한 번만 적음 (먼저 적은 쪽 기준)
     await col.updateOne({ _id: uid, nick: { $exists: true }, "daily.day": { $ne: day } } as never, { $set: { daily: { day, base, got: [] } } } as never);
     return (await read(uid))?.daily ?? { day, base, got: [] };
@@ -267,7 +272,7 @@ export function createPoints(db: Database, now: () => number = Date.now) {
       const d = uid ? await read(uid) : null;
       if (!uid || !d?.nick) return list.map((x) => ({ id: x.id, value: 0, got: false }));
       const [dl, m] = await Promise.all([dailyToday(uid, d), metricsOf(db, uid, game)]);
-      return list.map((x) => ({ id: x.id, value: Math.max(0, (m[x.metric] ?? 0) - (dl.base[x.metric] ?? 0)), got: dl.got.includes(x.id) }));
+      return list.map((x) => ({ id: x.id, value: Math.max(0, (m[x.metric] ?? 0) - baseOf(dl.base, x.metric)), got: dl.got.includes(x.id) }));
     },
 
     /** 일일 미션 받기: id 를 주면 그것만, 안 주면 그 게임에서 받을 수 있는 것 전부 한 번에. 조건부 updateOne 하나 (두 번 눌러도 한 번) */

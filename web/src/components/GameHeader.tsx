@@ -6,7 +6,7 @@ import GuideView, { type GuideDoc } from "@/components/GuideView";
 import HintBubble, { markHintSeen } from "@/components/HintBubble";
 import Nick from "@/components/Nick";
 import RankAvatar from "./RankAvatar";
-import { AchievementList, AchievementRank } from "@/components/Points/Achievements";
+import { AchievementList, AchievementRank, useAchReady } from "@/components/Points/Achievements";
 import { DailyMissionList, useDailyReady } from "@/components/Points/DailyMissions";
 import type { AchGame } from "@/lib/points";
 
@@ -72,7 +72,7 @@ export default function GameHeader({
   accent?: string;
   guide?: GuideDoc;
   rank?: RankSpec;
-  /** 업적이 있는 게임이면 [미션 · 업적] 버튼 (랭킹 오른쪽, 일일 미션 · 업적 탭) + 랭킹 모달에 「업적 랭킹」 탭 */
+  /** 업적이 있는 게임이면 [일일 미션] [업적] 버튼 (랭킹 오른쪽, 각각 따로 창) + 랭킹 모달에 「업적 랭킹」 탭 */
   ach?: AchGame;
   /** 가이드 · 랭킹 버튼 사이에 더 넣을 버튼 (pill 클래스명을 받음) */
   extra?: (pill: string) => ReactNode;
@@ -84,10 +84,10 @@ export default function GameHeader({
   const [guideOpen, setGuideOpen] = useState(false);
   const [rankOpenSelf, setRankOpenSelf] = useState(false);
   const [achOpen, setAchOpen] = useState(false);
-  /** 미션 · 업적 모달 탭 */
-  const [achTab, setAchTab] = useState<"daily" | "ach">("daily");
-  /** 받을 수 있는 일일 미션 수 (버튼 점) — 모달을 닫을 때 다시 셈 */
-  const dailyReady = useDailyReady(ach, achOpen);
+  const [dailyOpen, setDailyOpen] = useState(false);
+  /** 받을 수 있는 일일 미션 · 업적 수 (버튼 숫자) — 모달을 닫을 때 다시 셈 */
+  const dailyReady = useDailyReady(ach, dailyOpen);
+  const achReady = useAchReady(ach, achOpen);
   /** 랭킹 모달 탭: 게임 랭킹 / 업적 랭킹 */
   const [rankTab, setRankTab] = useState<"game" | "ach">("game");
   const rankOpen = rank?.open ?? rankOpenSelf;
@@ -105,8 +105,9 @@ export default function GameHeader({
     return () => clearTimeout(id);
   }, [scroll]);
 
+  // 좁으면(폰) 버튼이 한 줄에 같은 폭으로 꽉 차게 (5개까지 줄바꿈 없이), 넓으면 원래 크기
   const pill =
-    "flex h-9 cursor-pointer items-center gap-1.5 rounded-full border px-3 font-['Nanum_Gothic',sans-serif] text-[13px] whitespace-nowrap transition-colors";
+    "flex h-9 w-full min-w-0 cursor-pointer items-center justify-center gap-1 rounded-full border px-1.5 font-['Nanum_Gothic',sans-serif] text-[12.5px] whitespace-nowrap transition-colors @2xl:w-auto @2xl:justify-start @2xl:gap-1.5 @2xl:px-3 @2xl:text-[13px]";
 
   return (
     <header
@@ -147,9 +148,9 @@ export default function GameHeader({
             ))}
           </p>
         </div>
-        <div className="flex w-full flex-wrap items-center gap-1.5 @2xl:w-auto @2xl:shrink-0 @2xl:flex-nowrap">
+        <div className="grid w-full auto-cols-fr grid-flow-col items-center gap-1.5 @2xl:flex @2xl:w-auto @2xl:shrink-0">
           {guide && (
-            <span className="relative">
+            <span className="relative min-w-0">
               <button
                 type="button"
                 onClick={() => {
@@ -192,20 +193,29 @@ export default function GameHeader({
             </button>
           )}
           {ach && (
-            <button
-              type="button"
-              onClick={() => setAchOpen(true)}
-              aria-label="일일 미션 · 업적 보기"
-              className={`${pill} relative border-[#F472B6]/30 bg-[#F472B6]/[0.07] text-[#F9A8D4] hover:border-[#F472B6]/60`}
-            >
-              <span aria-hidden>🏅</span>
-              <span>미션 · 업적</span>
-              {dailyReady > 0 && (
-                <span className="absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-[#FDE047] px-1 font-mono text-[10px] font-bold text-black">
-                  {dailyReady}
-                </span>
-              )}
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={() => setDailyOpen(true)}
+                aria-label={`일일 미션 보기${dailyReady ? ` (받을 수 있는 미션 ${dailyReady}개)` : ""}`}
+                className={`${pill} relative border-[#2DD4BF]/30 bg-[#2DD4BF]/[0.07] text-[#99F6E4] hover:border-[#2DD4BF]/60`}
+              >
+                <span aria-hidden>📅</span>
+                <span className="@md:hidden">미션</span>
+                <span className="hidden @md:inline">일일 미션</span>
+                <ReadyDot n={dailyReady} />
+              </button>
+              <button
+                type="button"
+                onClick={() => setAchOpen(true)}
+                aria-label={`업적 보기${achReady ? ` (받을 수 있는 업적 ${achReady}개)` : ""}`}
+                className={`${pill} relative border-[#F472B6]/30 bg-[#F472B6]/[0.07] text-[#F9A8D4] hover:border-[#F472B6]/60`}
+              >
+                <span aria-hidden>🏅</span>
+                <span>업적</span>
+                <ReadyDot n={achReady} />
+              </button>
+            </>
           )}
         </div>
       </div>
@@ -283,49 +293,50 @@ export default function GameHeader({
         </Modal>
       )}
       {ach && (
-        <Modal
-          open={achOpen}
-          onClose={() => setAchOpen(false)}
-          size="md"
-          closeButton
-          title={
-            <span className="flex items-center gap-2">
-              <span aria-hidden>🏅</span> {title} 미션 · 업적
-            </span>
-          }
-        >
-          {achOpen && (
-            <>
-              <div className="mb-3 flex gap-1.5 font-['Nanum_Gothic',sans-serif]">
-                {(
-                  [
-                    ["daily", "📅 일일 미션"],
-                    ["ach", "🏅 업적"],
-                  ] as const
-                ).map(([k, label]) => (
-                  <button
-                    key={k}
-                    type="button"
-                    onClick={() => setAchTab(k)}
-                    className={`relative flex-1 cursor-pointer rounded-lg border py-1.5 text-sm transition-colors ${
-                      achTab === k ? "border-white/30 bg-white/[0.1] font-bold text-white" : "border-white/10 text-white/50 hover:text-white/80"
-                    }`}
-                  >
-                    {label}
-                    {k === "daily" && dailyReady > 0 && <span className="ml-1 text-[#FDE047]">●</span>}
-                  </button>
-                ))}
-              </div>
-              {achTab === "daily" ? <DailyMissionList game={ach} accent={accent} /> : <AchievementList game={ach} accent={accent} />}
-            </>
-          )}
-        </Modal>
+        <>
+          <Modal
+            open={dailyOpen}
+            onClose={() => setDailyOpen(false)}
+            size="md"
+            closeButton
+            title={
+              <span className="flex items-center gap-2">
+                <span aria-hidden>📅</span> {title} 일일 미션
+              </span>
+            }
+          >
+            {dailyOpen && <DailyMissionList game={ach} accent={accent} />}
+          </Modal>
+          <Modal
+            open={achOpen}
+            onClose={() => setAchOpen(false)}
+            size="md"
+            closeButton
+            title={
+              <span className="flex items-center gap-2">
+                <span aria-hidden>🏅</span> {title} 업적
+              </span>
+            }
+          >
+            {achOpen && <AchievementList game={ach} accent={accent} />}
+          </Modal>
+        </>
       )}
     </header>
   );
 }
 
 const MEDAL = ["🥇", "🥈", "🥉"];
+
+/** 버튼 오른쪽 위: 받을 수 있는 수 */
+function ReadyDot({ n }: { n: number }) {
+  if (n <= 0) return null;
+  return (
+    <span className="absolute -top-1.5 -right-1.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-[#FDE047] px-1 font-mono text-[10px] font-bold text-black shadow-[0_0_0_2px_#121212]">
+      {n > 9 ? "9+" : n}
+    </span>
+  );
+}
 
 /** 랭킹 버튼 안: 1~3위를 몇 초마다 돌려 가며 (넓을 때만) */
 function TopTicker({ top }: { top: TopEntry[] }) {

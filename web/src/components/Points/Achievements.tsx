@@ -23,7 +23,7 @@ import PointInfo from "./PointInfo";
 import RankList from "@/components/RankList";
 
 /*
- * 업적 (게임 머리말의 [업적] 버튼 → 모달 안). 게임마다 같은 모양.
+ * 업적 (게임 머리말의 [업적] 버튼 → 모달 안, 일일 미션과 따로). 게임마다 같은 모양.
  * 숫자는 서버가 기록으로 계산하고, 받기도 서버가 다시 확인함 (lib/points.ts 의 ACHIEVEMENTS).
  */
 
@@ -40,6 +40,26 @@ const fmtVal = (a: Achievement, v: number) =>
   a.fmt === "chips" ? fmtChips(v) : Math.floor(v).toLocaleString("ko-KR");
 
 type Row = { a: Achievement; s: AchState };
+
+/** 받을 수 있는 업적 수 (버튼 숫자) — 로그인했을 때만, key 가 바뀌면 다시 셈 */
+export function useAchReady(game: AchGame | undefined, key: unknown) {
+  const { profile } = useAuth();
+  const [n, setN] = useState(0);
+  useEffect(() => {
+    if (!game || !profile) return;
+    let live = true;
+    getAchievements(game)
+      .then((r) => {
+        if (!live) return;
+        setN(r.list.filter((s) => { const a = achievementOf(s.id); return a && claimableTimes(a, s) > 0; }).length);
+      })
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [game, profile, key]);
+  return game && profile ? n : 0;
+}
 
 export function AchievementList({
   game,
@@ -85,6 +105,7 @@ export function AchievementList({
   const order = (r: Row) => (r.s.claimedAt ? 3 : done(r) ? 0 : r.a.repeat ? 1 : 2);
   rows.sort((x, y) => order(x) - order(y) || prog(y) / y.a.goal - prog(x) / x.a.goal);
   const ready = rows.filter(done).length;
+  const readySum = rows.filter(done).reduce((sum, r) => sum + r.a.reward * claimableTimes(r.a, r.s), 0);
   const once = rows.filter((r) => !r.a.repeat);
   const got = once.filter((r) => r.s.claimedAt).length;
 
@@ -155,24 +176,27 @@ export function AchievementList({
             </b>
           )}
         </span>
-        {profile && ready > 1 && (
-          <button
-            type="button"
-            disabled={busy !== null}
-            onClick={() => void claimAll()}
-            className="w-full cursor-pointer rounded-lg bg-[#FDE047] py-2 text-xs font-bold text-black hover:brightness-110 disabled:opacity-50"
-          >
-            {busy === "*" ? "받는 중…" : `모두 받기 (${ready}개)`}
-          </button>
-        )}
       </div>
-      {!profile && (
+      {!profile ? (
         <button
           type="button"
           onClick={() => void login()}
           className="mb-3 w-full cursor-pointer rounded-lg border border-white/15 bg-white/[0.06] py-2 text-sm text-white hover:border-white/35"
         >
           Google로 로그인
+        </button>
+      ) : (
+        <button
+          type="button"
+          disabled={!ready || busy !== null}
+          onClick={() => void claimAll()}
+          className="mb-3 w-full cursor-pointer rounded-lg bg-[#FDE047] py-2 text-sm font-bold text-black hover:brightness-110 disabled:cursor-default disabled:bg-white/10 disabled:text-white/35"
+        >
+          {busy === "*"
+            ? "받는 중…"
+            : ready
+              ? `모두 받기 · ${ready}개 +${fmtPoint(readySum)}`
+              : "받을 업적이 없어요"}
         </button>
       )}
       {msg && (
@@ -232,7 +256,7 @@ export function AchievementList({
                         }}
                       />
                     </span>
-                    <span className="font-mono text-[10px] whitespace-nowrap text-white/45 tabular-nums">
+                    <span className="font-mono text-[11px] whitespace-nowrap text-white/50 tabular-nums">
                       {fmtVal(a, now)}/{fmtVal(a, a.goal)}
                     </span>
                   </span>
@@ -259,7 +283,7 @@ export function AchievementList({
         })}
       </ul>
       <p className="mt-3 text-[11px] leading-relaxed break-keep text-white/35">
-        업적 보상은 직접 「받기」를 눌러야 들어와요. 매일 받는 보상은 「일일 미션」 탭에 있어요. {POINT.name}는 현금으로
+        업적 보상은 직접 「받기」를 눌러야 들어와요. 매일 새로 생기는 보상은 게임 위 「일일 미션」 버튼에 있어요. {POINT.name}는 현금으로
         사거나 바꿀 수 없는 사이트 전용 재화예요.{" "}
         <Link
           href="/faq/#points"

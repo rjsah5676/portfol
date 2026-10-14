@@ -15,7 +15,7 @@ import {
 import PointInfo from "./PointInfo";
 
 /*
- * 일일 미션 (게임 머리말의 [미션 · 업적] 버튼 → 모달의 「일일 미션」 탭). 한국 시간 자정에 새로.
+ * 일일 미션 (게임 머리말의 [일일 미션] 버튼 → 모달, 업적과 따로). 한국 시간 자정에 새로.
  * 오늘 한 만큼은 서버가 셈 (lib/points.ts 의 DAILY_MISSIONS) — 하나씩 받거나 「모두 받기」.
  */
 
@@ -164,7 +164,7 @@ export function DailyMissionList({ game, accent = "#8B84FF" }: { game: AchGame; 
                         style={{ width: `${(now / m.goal) * 100}%`, background: ok ? "#FDE047" : accent }}
                       />
                     </span>
-                    <span className="font-mono text-[10px] whitespace-nowrap text-white/45 tabular-nums">
+                    <span className="font-mono text-[11px] whitespace-nowrap text-white/50 tabular-nums">
                       {now.toLocaleString("ko-KR")}/{m.goal.toLocaleString("ko-KR")}
                     </span>
                   </span>
