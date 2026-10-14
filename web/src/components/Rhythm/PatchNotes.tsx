@@ -17,6 +17,20 @@ export interface Patch {
 
 export const PATCHES: Patch[] = [
   {
+    ver: "v1.4",
+    name: "채보 다듬기",
+    date: "2026.10.15",
+    lines: [
+      "osu 랭크 채보에 더해 Quaver 랭크 채보 400개와도 비교해서, 둘 다와 다르던 것만 고침 — 내장곡 14곡 HARD~ULTIMA 다시 뽑음 (EASY·NORMAL은 그대로)",
+      "NIGHTMARE·ULTIMA 기승전결 — 조용한 구간까지 꽉 차던 것을 곡 안 세기 순위대로 (조용한 구간 밀도: 중앙값의 0.8배 → 0.65배, osu·Quaver 0.5~0.66배)",
+      "NIGHTMARE·ULTIMA 16분은 곡에 16분 소리가 있는 박에만 — 나머지는 8분 + 동시치기, 16분 박도 소리 있는 칸만(갤럽)",
+      "ULTIMA 16분 잭(코드잭)·연속 동시치기 허용 — 잭 14 → 25%, 연속 동시치기 8 → 20% (osu·Quaver 19~26 · 12~19%)",
+      "두 레인만 번갈아 치는 트릴(A B A B)을 거의 없앰 (줄의 1~2% → 0~0.2%, osu·Quaver 0~0.3%)",
+      "HARD 잭 2 → 8%(osu·Quaver 7.5~10%), 3개 동시치기 없앰 · EX 잭 조금 늘림",
+      "레벨: ANiMA NIGHTMARE 17 · ULTIMA 20, Aragami ULTIMA 21, Monarch NIGHTMARE 16, Velocity ULTIMA 20, Crimson Cadenza ULTIMA 20, 휘모리 HARD 10 · ULTIMA 20 (나머지는 그대로)",
+    ],
+  },
+  {
     ver: "v1.3",
     name: "새 곡 · 정렬",
     date: "2026.10.12",

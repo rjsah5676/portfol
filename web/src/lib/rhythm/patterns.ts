@@ -61,10 +61,10 @@ const TIER: Record<Difficulty, number> = {
 const TRILL_W: Partial<Record<Difficulty, number>> = {
   easy: 0.05,
   normal: 0.08,
-  hard: 0.3,
-  expert: 0.7,
-  nightmare: 0.08,
-  explus: 0.08,
+  hard: 0,
+  expert: 0.3,
+  nightmare: 0.03,
+  explus: 0.03,
 };
 
 /** 기본 모양 — 좌우 반전·역방향은 아래에서 자동으로 만든다 */
@@ -149,7 +149,7 @@ const BASE: Pattern[] = [
     minLen: 8,
     tier: 0,
     // 나이트메어·ULTIMA도 낮게: ABAB가 두 번 이어져 트릴 통계를 끌어올림 (osu 0.1%)
-    wBy: { easy: 0.1, normal: 0.15, hard: 0.4, nightmare: 0.25, explus: 0.25 },
+    wBy: { easy: 0.1, normal: 0.15, hard: 0, expert: 0.5, nightmare: 0.1, explus: 0.1 },
   },
   // 앵커: 한 레인을 축으로 (D F D J D K) — 8분 이상 간격에서
   {
