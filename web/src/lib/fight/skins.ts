@@ -49,7 +49,7 @@ export function look(ch: number, skin?: string | null): string {
   return s && s.ch === id ? s.id : id;
 }
 /** 스킨 그림을 바꿨을 때 올려서 브라우저에 남은 예전 그림 대신 새로 받게 함 */
-const ART_VER: Record<string, number> = { "soyoung-bunny": 4 };
+const ART_VER: Record<string, number> = { "soyoung-bunny": 5 };
 const ver = (id: string) => (ART_VER[id] ? `?v=${ART_VER[id]}` : "");
 export const artUrl = (ch: number, skin?: string | null) => `/fight/art/${look(ch, skin)}.webp${ver(look(ch, skin))}`;
 export const faceUrl = (ch: number, skin?: string | null) => `/fight/art/${look(ch, skin)}-face.webp${ver(look(ch, skin))}`;
