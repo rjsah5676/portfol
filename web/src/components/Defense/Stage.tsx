@@ -208,7 +208,8 @@ export default function Stage({ children }: { children: ReactNode }) {
         className={
           cover
             ? "fixed inset-0 z-[100] flex items-center justify-center overflow-hidden bg-black"
-            : "mx-auto w-full max-w-[min(1280px,calc((100dvh-120px)*16/9))]"
+            : // isolate: 무대 안의 z-index(메뉴 버튼 z-30 · 안내 z-60)가 사이트 nav(sticky z-30) 펼친 메뉴 위로 못 올라오게
+              "isolate mx-auto w-full max-w-[min(1280px,calc((100dvh-120px)*16/9))]"
         }
       >
         {!cover && canFs && (
