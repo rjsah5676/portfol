@@ -249,7 +249,7 @@ export default function SkinShop({ initial = "shop", onClose }: { initial?: Shop
                   disabled={busy || (points ?? 0) < item.price}
                   onClick={() => void buy(skin)}
                   className="cursor-pointer rounded-[0.8cqw] py-[0.9cqw] text-[1.4cqw] font-bold text-[#1A0B2A] transition-transform hover:scale-[1.02] disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:scale-100"
-                  style={{ background: confirm === skin.id ? "#FDE047" : `linear-gradient(180deg, #FFD27A, ${skin.color})` }}
+                  style={{ background: confirm === skin.id ? "#FDE047" : "linear-gradient(180deg, #FFD27A, #F2A93B)" }}
                 >
                   {busy
                     ? "사는 중…"
