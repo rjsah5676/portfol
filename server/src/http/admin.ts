@@ -20,7 +20,7 @@ import { h, ms, requireAdmin } from "./util";
  *   GET    /api/admin/users/:uid/points  포인트 최근 내역
  *   DELETE /api/admin/users/:uid/avatar             올린 프로필 사진 지우기
  *   DELETE /api/admin/users/:uid?records=1          회원 지우기 (records=1 이면 랭킹·방명록도)
- * 열려 있는 방 (서버 메모리: 스케치 퀴즈 · 격투 · 포커 · 리듬 · 디펜스 멀티)
+ * 열려 있는 방 (서버 메모리: DOODLE PARTY · 격투 · 포커 · 리듬 · 디펜스 멀티)
  *   GET    /api/admin/live
  *   POST   /api/admin/live/close   { game, id }
  *   GET    /api/admin/poker/settings          · PUT { botBoost }
@@ -95,7 +95,7 @@ export function decode(v: unknown): unknown {
 
 const ids = z.array(z.string().min(1)).max(2000);
 
-/** 서버 메모리에만 있는 방 (스케치 퀴즈 · 격투 · 포커) */
+/** 서버 메모리에만 있는 방 (DOODLE PARTY · 격투 · 포커) */
 export interface LiveRoom {
   id: string;
   name: string;

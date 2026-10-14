@@ -12,7 +12,7 @@ export const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL || "https://gunmo.my")
 export const SITE_HOST = new URL(SITE_URL).host;
 export const SITE_NAME = "Gunmo's Dev Life";
 export const SITE_DESCRIPTION =
-  "풀스택 개발자 이건모(Gunmo Lee)의 포트폴리오. 프로젝트·개인 공부·회고 기록과 직접 만든 브라우저 게임(리듬게임·체스·스케치 퀴즈), 개발 도구를 담았습니다.";
+  "풀스택 개발자 이건모(Gunmo Lee)의 포트폴리오. 프로젝트·개인 공부·회고 기록과 직접 만든 브라우저 게임(리듬게임·포커·격투·디펜스·그림 파티게임 DOODLE PARTY), 개발 도구를 담았습니다.";
 
 // 링크 공유 미리보기 이미지 — 사이트 대표(홈) 이미지 (1200x630, web/assets/og/shots/index.jpg)
 export const OG_IMAGE = {

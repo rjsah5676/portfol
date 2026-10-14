@@ -1,4 +1,4 @@
-/* 스케치 퀴즈 — 스케치북 · 크레용 테마 (sk- 접두사) */
+/* DOODLE PARTY (두들 파티) — 스케치북 · 크레용 테마 (sk- 접두사) */
 @import url("https://fonts.googleapis.com/css2?family=Gaegu:wght@400;700&display=swap");
 
 /* components 층: Tailwind 유틸리티(absolute · hidden 등)가 이 규칙들을 덮어쓸 수 있게 */
@@ -413,6 +413,43 @@
   }
 
   /* 큰 알림 띠 (내 차례! · 시작!) */
+  /* 따봉이 위로 떠오름 */
+  .sk-like-float {
+    animation: sk-like-float 1.3s ease-out both;
+  }
+  @keyframes sk-like-float {
+    from {
+      transform: translate(-50%, 0) scale(0.6);
+      opacity: 0;
+    }
+    20% {
+      opacity: 1;
+      transform: translate(calc(-50% + var(--dx, 0px)), -14px) scale(1.15);
+    }
+    to {
+      transform: translate(calc(-50% + var(--dx, 0px)), -70px) scale(0.9);
+      opacity: 0;
+    }
+  }
+  /* 도화지 위로 떠오르는 따봉 (그림 맞히기) */
+  .sk-like-rise {
+    animation: sk-like-rise 1.8s ease-out both;
+  }
+  @keyframes sk-like-rise {
+    from {
+      transform: translateY(0) scale(0.5);
+      opacity: 0;
+    }
+    15% {
+      opacity: 1;
+      transform: translateY(-20px) scale(1.2);
+    }
+    to {
+      transform: translateY(-260px) scale(1);
+      opacity: 0;
+    }
+  }
+
   .sk-banner {
     animation: sk-banner 1.9s ease-in-out both;
   }

@@ -113,8 +113,8 @@ export const NAV_GROUPS: NavGroup[] = [
       {
         href: "/games/sketch",
         image: imgSketch,
-        label: "스케치 퀴즈",
-        desc: "최대 8명, 한 명이 그리고 나머지가 맞히기",
+        label: "DOODLE PARTY",
+        desc: "그림 맞히기 · 가짜 화가 · 그림 릴레이, 최대 8명 그림 파티게임",
         icon: "🎨",
       },
       {

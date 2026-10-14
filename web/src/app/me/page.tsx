@@ -334,7 +334,7 @@ export default function MyPage() {
                   );
                 })}
                 <div className="flex gap-8 border-t border-white/5 pt-4">
-                  <Stat name="스케치 퀴즈 게임" value={stats.sketch?.games ?? 0} />
+                  <Stat name="DOODLE PARTY 게임" value={stats.sketch?.games ?? 0} />
                   <Stat name="스케치 정답" value={stats.sketch?.correct ?? 0} />
                   <Stat
                     name="스케치 누적 점수"

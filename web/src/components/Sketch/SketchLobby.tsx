@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { plainName } from "@/components/Nick";
 import { DailyMissionList, useDailyReady } from "@/components/Points/DailyMissions";
 import { avatarOf } from "@/lib/sketch/assets";
+import { MODE_LIST, MODES, type GameMode } from "@/lib/sketch/modes";
+import { CUSTOM_MAX, parseCustomWords, TOPICS } from "@/lib/sketch/words";
 import { playBgm, playSfx } from "@/lib/sketch/sfx";
 import {
   cleanupEmptyRoom,
@@ -230,7 +232,12 @@ export default function SketchLobby({
                       {full ? "꽉 찼어요" : ph.t}
                     </span>
                     <span className="truncate">
-                      · {r.turnMode === "winner" ? "맞힌 사람이 다음" : "입장 순서대로"}
+                      ·{" "}
+                      {!r.mode || r.mode === "classic"
+                        ? r.turnMode === "winner"
+                          ? "맞힌 사람이 다음"
+                          : "입장 순서대로"
+                        : `${MODES[r.mode].emoji} ${MODES[r.mode].name}`}
                     </span>
                   </span>
                 </span>
@@ -332,9 +339,9 @@ export default function SketchLobby({
               style={{ rotate: "-1.5deg" }}
             >
               <div className="flex-1 text-[13px] leading-relaxed">
-                <b className="sk-hand block text-[19px]">이렇게 놀아요</b>내 차례엔 3개 중 하나를
-                골라 그리고, 남이 그릴 땐 떠오르는 답을 마구 입력! <b>초대 링크</b>로 들어온 친구는
-                비밀번호 없이 바로 입장해요.
+                <b className="sk-hand block text-[19px]">이렇게 놀아요</b>
+                <b>방 만들기</b>에서 모드를 골라요 — 🎨 그림 맞히기 · 🕵️ 가짜 화가 · 🤥 그림 속
+                거짓말 · 📞 그림 릴레이. <b>초대 링크</b>로 온 친구는 비밀번호 없이 바로 입장!
               </div>
               <Mascot pose="idle" size={92} />
             </div>
@@ -490,6 +497,12 @@ function CreateDialog({
   onCreated: (id: string) => void;
 }) {
   const { o } = useStage();
+  const [mode, setMode] = useState<GameMode>("classic");
+  const [challenge, setChallenge] = useState(true);
+  const [topics, setTopics] = useState<string[]>([]);
+  const [customText, setCustomText] = useState("");
+  const [customOnly, setCustomOnly] = useState(false);
+  const customWords = parseCustomWords(customText);
   const [name, setName] = useState("");
   const [max, setMax] = useState(8);
   const [turnMode, setTurnMode] = useState<TurnMode>("winner");
@@ -511,12 +524,17 @@ function CreateDialog({
     try {
       const id = await createRoom(uid, nick, {
         name,
-        max,
+        max: Math.max(MODES[mode].min, max),
         turnMode,
-        drawTime,
-        rounds,
+        drawTime: mode === "classic" ? drawTime : mode === "fake" ? 80 : modeTime,
+        rounds: mode === "fake" ? fakeGames : rounds,
         hints,
         password,
+        mode,
+        challenge,
+        topics,
+        custom: customWords,
+        customOnly: customOnly && customWords.length > 0,
       });
       playSfx("jingle-start");
       onCreated(id);
@@ -528,7 +546,65 @@ function CreateDialog({
     }
   };
 
+  const [fakeGames, setFakeGames] = useState(3);
+  const [modeTime, setModeTime] = useState(90);
   const label = (t: string) => <div className="sk-hand mb-1.5 text-[18px] leading-none">{t}</div>;
+  const wordsBox = (
+    <div className="grid gap-3">
+      <div>
+        <div className="mb-1 text-[13.5px] font-bold">
+          주제 고르기 <span className="text-[11.5px] text-[var(--ink3)]">(안 고르면 전체)</span>
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          {TOPICS.map((t) => (
+            <button
+              key={t}
+              type="button"
+              data-on={topics.includes(t)}
+              onClick={tap(() =>
+                setTopics((l) => (l.includes(t) ? l.filter((x) => x !== t) : [...l, t]))
+              )}
+              className="sk-chip text-[13.5px]"
+            >
+              {t}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div>
+        <div className="mb-1 text-[13.5px] font-bold">
+          우리끼리 제시어{" "}
+          <span className="text-[11.5px] text-[var(--ink3)]">
+            쉼표나 줄바꿈으로 나눠요 · 최대 {CUSTOM_MAX}개
+          </span>
+        </div>
+        <textarea
+          value={customText}
+          onChange={(e) => setCustomText(e.target.value)}
+          rows={2}
+          maxLength={1500}
+          placeholder="예: 우리 팀장님, 회식, 탕비실, 월요일 아침"
+          className="sk-input w-full resize-none text-[14px]"
+        />
+        <div className="mt-1 flex items-center justify-between gap-2 text-[12px] font-bold text-[var(--ink2)]">
+          <span>{customWords.length}개</span>
+          <label className="flex cursor-pointer items-center gap-1.5">
+            <input
+              type="checkbox"
+              checked={customOnly}
+              disabled={!customWords.length}
+              onChange={(e) => {
+                playSfx("sfx-click");
+                setCustomOnly(e.target.checked);
+              }}
+              className="h-4 w-4 accent-[#FF6B6B]"
+            />
+            우리끼리 제시어만 쓰기
+          </label>
+        </div>
+      </div>
+    </div>
+  );
   return (
     <Dialog onClose={onClose} title="방 만들기" className={o === "v" ? "w-full" : "w-[620px]"}>
       <div className="sk-scroll flex min-h-0 flex-col gap-4 overflow-y-auto px-5 pt-2 pb-5">
@@ -541,129 +617,201 @@ function CreateDialog({
           className="sk-input text-[16px]"
         />
         <div>
-          {label("게임 길이")}
+          {label("게임 모드")}
           <div className={`grid gap-2 ${o === "v" ? "grid-cols-2" : "grid-cols-4"}`}>
-            {PRESETS.map((p) => (
-              <button
-                key={p.id}
-                type="button"
-                onClick={tap(() => {
-                  setCustom(false);
-                  setDrawTime(p.drawTime);
-                  setRounds(p.rounds);
-                })}
-                className={`sk-btn flex-col gap-1 px-1 py-2.5 text-[19px] ${preset === p.id ? "sk-btn-sun" : ""}`}
-              >
-                {p.label}
-                <span className="font-['Nanum_Gothic',sans-serif] text-[10.5px] font-bold whitespace-normal text-[var(--ink2)]">
-                  {p.desc}
-                </span>
-              </button>
-            ))}
-            <button
-              type="button"
-              onClick={tap(() => setCustom(true))}
-              className={`sk-btn flex-col gap-1 px-1 py-2.5 text-[19px] ${preset === "custom" ? "sk-btn-sun" : ""}`}
-            >
-              ✏️ 직접
-              <span className="font-['Nanum_Gothic',sans-serif] text-[10.5px] font-bold whitespace-normal text-[var(--ink2)]">
-                {preset === "custom" ? `${drawTime}초 · ${rounds}번` : "시간 · 횟수 정하기"}
-              </span>
-            </button>
-          </div>
-          {preset === "custom" && (
-            <div className="sk-rise sk-card-soft mt-3 grid gap-3 p-3.5">
-              <div>
-                <div className="mb-1 flex items-baseline justify-between">
-                  <span className="sk-hand text-[17px]">그리는 시간</span>
-                  <NumInput
-                    value={drawTime}
-                    min={TIME_MIN}
-                    max={TIME_MAX}
-                    unit="초"
-                    onChange={setDrawTime}
-                  />
-                </div>
-                <input
-                  type="range"
-                  min={TIME_MIN}
-                  max={TIME_MAX}
-                  step={5}
-                  value={drawTime}
-                  aria-label="그리는 시간"
-                  onChange={(e) => setDrawTime(Number(e.target.value))}
-                  className="w-full accent-[#FF6B6B]"
-                />
-                <div className="flex justify-between text-[11px] font-bold text-[var(--ink3)]">
-                  <span>{TIME_MIN}초</span>
-                  <span>{TIME_MAX}초</span>
-                </div>
-              </div>
-              <div>
-                <div className="mb-1 flex items-baseline justify-between">
-                  <span className="sk-hand text-[17px]">한 사람당 그리는 횟수</span>
-                  <NumInput
-                    value={rounds}
-                    min={ROUNDS_MIN}
-                    max={ROUNDS_MAX}
-                    unit="번"
-                    onChange={setRounds}
-                  />
-                </div>
-                <div className="flex flex-wrap gap-1.5">
-                  {[1, 2, 3, 4, 5].map((n) => (
-                    <button
-                      key={n}
-                      type="button"
-                      data-on={rounds === n}
-                      onClick={tap(() => setRounds(n))}
-                      className="sk-chip min-w-[3em] text-[15px]"
-                    >
-                      {n}번
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-        <div>
-          {label("다음에 그릴 사람")}
-          <div className="grid grid-cols-2 gap-2">
-            {(
-              [
-                ["winner", "🏃 처음 맞힌 사람", "제일 먼저 맞히면 다음에 그려요"],
-                ["order", "🔁 들어온 순서대로", "돌아가면서 한 번씩 그려요"],
-              ] as const
-            ).map(([m, t, d]) => (
+            {MODE_LIST.map((m) => (
               <button
                 key={m}
                 type="button"
-                onClick={tap(() => setTurnMode(m))}
-                className={`sk-btn flex-col gap-1 px-1 py-2.5 text-[18px] ${turnMode === m ? "sk-btn-sun" : ""}`}
+                onClick={tap(() => setMode(m), "sfx-pick")}
+                className={`sk-btn flex-col gap-1 px-1.5 py-2.5 text-[18px] whitespace-normal ${mode === m ? "sk-btn-sun" : ""}`}
               >
-                {t}
-                <span className="font-['Nanum_Gothic',sans-serif] text-[10.5px] font-bold whitespace-normal text-[var(--ink2)]">
-                  {d}
+                <span className="text-[26px] leading-none">{MODES[m].emoji}</span>
+                {MODES[m].name}
+                <span className="font-['Nanum_Gothic',sans-serif] text-[10.5px] leading-snug font-bold break-keep text-[var(--ink2)]">
+                  {MODES[m].short}
+                </span>
+                <span className="font-['Nanum_Gothic',sans-serif] text-[10px] font-bold text-[var(--ink3)]">
+                  {MODES[m].min}명부터
                 </span>
               </button>
             ))}
           </div>
         </div>
+        {mode === "fake" && (
+          <div>
+            {label("몇 판 할까요?")}
+            <div className="flex flex-wrap gap-1.5">
+              {[1, 2, 3, 4, 5].map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  data-on={fakeGames === n}
+                  onClick={tap(() => setFakeGames(n))}
+                  className="sk-chip min-w-[3em] text-[15px]"
+                >
+                  {n}판
+                </button>
+              ))}
+            </div>
+            <p className="mt-1 text-[11.5px] text-[var(--ink3)]">
+              판마다 제시어와 가짜 화가가 새로 정해져요 · 한 획 {25}초
+            </p>
+          </div>
+        )}
+        {(mode === "lie" || mode === "relay") && (
+          <div>
+            {label("그리는 시간")}
+            <div className="flex flex-wrap gap-1.5">
+              {[60, 90, 120, 150].map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  data-on={modeTime === n}
+                  onClick={tap(() => setModeTime(n))}
+                  className="sk-chip min-w-[3.4em] text-[15px]"
+                >
+                  {n}초
+                </button>
+              ))}
+            </div>
+            <p className="mt-1 text-[11.5px] text-[var(--ink3)]">
+              {mode === "lie"
+                ? "다 같이 동시에 그려요 · 다 그리면 바로 다음으로"
+                : `인원수만큼 이어 가요 (최대 8단계) · 글은 50초`}
+            </p>
+          </div>
+        )}
+        {mode === "classic" && (
+          <div>
+            {label("게임 길이")}
+            <div className={`grid gap-2 ${o === "v" ? "grid-cols-2" : "grid-cols-4"}`}>
+              {PRESETS.map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={tap(() => {
+                    setCustom(false);
+                    setDrawTime(p.drawTime);
+                    setRounds(p.rounds);
+                  })}
+                  className={`sk-btn flex-col gap-1 px-1 py-2.5 text-[19px] ${preset === p.id ? "sk-btn-sun" : ""}`}
+                >
+                  {p.label}
+                  <span className="font-['Nanum_Gothic',sans-serif] text-[10.5px] font-bold whitespace-normal text-[var(--ink2)]">
+                    {p.desc}
+                  </span>
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={tap(() => setCustom(true))}
+                className={`sk-btn flex-col gap-1 px-1 py-2.5 text-[19px] ${preset === "custom" ? "sk-btn-sun" : ""}`}
+              >
+                ✏️ 직접
+                <span className="font-['Nanum_Gothic',sans-serif] text-[10.5px] font-bold whitespace-normal text-[var(--ink2)]">
+                  {preset === "custom" ? `${drawTime}초 · ${rounds}번` : "시간 · 횟수 정하기"}
+                </span>
+              </button>
+            </div>
+            {preset === "custom" && (
+              <div className="sk-rise sk-card-soft mt-3 grid gap-3 p-3.5">
+                <div>
+                  <div className="mb-1 flex items-baseline justify-between">
+                    <span className="sk-hand text-[17px]">그리는 시간</span>
+                    <NumInput
+                      value={drawTime}
+                      min={TIME_MIN}
+                      max={TIME_MAX}
+                      unit="초"
+                      onChange={setDrawTime}
+                    />
+                  </div>
+                  <input
+                    type="range"
+                    min={TIME_MIN}
+                    max={TIME_MAX}
+                    step={5}
+                    value={drawTime}
+                    aria-label="그리는 시간"
+                    onChange={(e) => setDrawTime(Number(e.target.value))}
+                    className="w-full accent-[#FF6B6B]"
+                  />
+                  <div className="flex justify-between text-[11px] font-bold text-[var(--ink3)]">
+                    <span>{TIME_MIN}초</span>
+                    <span>{TIME_MAX}초</span>
+                  </div>
+                </div>
+                <div>
+                  <div className="mb-1 flex items-baseline justify-between">
+                    <span className="sk-hand text-[17px]">한 사람당 그리는 횟수</span>
+                    <NumInput
+                      value={rounds}
+                      min={ROUNDS_MIN}
+                      max={ROUNDS_MAX}
+                      unit="번"
+                      onChange={setRounds}
+                    />
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {[1, 2, 3, 4, 5].map((n) => (
+                      <button
+                        key={n}
+                        type="button"
+                        data-on={rounds === n}
+                        onClick={tap(() => setRounds(n))}
+                        className="sk-chip min-w-[3em] text-[15px]"
+                      >
+                        {n}번
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+        {mode === "classic" && (
+          <div>
+            {label("다음에 그릴 사람")}
+            <div className="grid grid-cols-2 gap-2">
+              {(
+                [
+                  ["winner", "🏃 처음 맞힌 사람", "제일 먼저 맞히면 다음에 그려요"],
+                  ["order", "🔁 들어온 순서대로", "돌아가면서 한 번씩 그려요"],
+                ] as const
+              ).map(([m, t, d]) => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={tap(() => setTurnMode(m))}
+                  className={`sk-btn flex-col gap-1 px-1 py-2.5 text-[18px] ${turnMode === m ? "sk-btn-sun" : ""}`}
+                >
+                  {t}
+                  <span className="font-['Nanum_Gothic',sans-serif] text-[10.5px] font-bold whitespace-normal text-[var(--ink2)]">
+                    {d}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
         <div>
           {label("최대 인원")}
           <div className="flex flex-wrap gap-1.5">
-            {[2, 3, 4, 5, 6, 7, 8].map((n) => (
-              <button
-                key={n}
-                type="button"
-                data-on={max === n}
-                onClick={tap(() => setMax(n))}
-                className="sk-chip min-w-[2.6em] text-[16px]"
-              >
-                {n}
-              </button>
-            ))}
+            {[2, 3, 4, 5, 6, 7, 8]
+              .filter((n) => n >= MODES[mode].min)
+              .map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  data-on={Math.max(MODES[mode].min, max) === n}
+                  onClick={tap(() => setMax(n))}
+                  className="sk-chip min-w-[2.6em] text-[16px]"
+                >
+                  {n}
+                </button>
+              ))}
           </div>
         </div>
         <label className="flex flex-col">
@@ -680,15 +828,37 @@ function CreateDialog({
             초대 링크로 들어온 친구는 비밀번호 없이 들어와요
           </span>
         </label>
-        <button
-          type="button"
-          onClick={tap(() => setMore((x) => !x))}
-          className="sk-hand cursor-pointer self-start text-[17px] text-[var(--sky)]"
-        >
-          {more ? "▾ 자세한 설정 접기" : "▸ 자세한 설정 (힌트)"}
-        </button>
-        {more && (
+        {(mode === "classic" || mode === "fake") && (
+          <button
+            type="button"
+            onClick={tap(() => setMore((x) => !x))}
+            className="sk-hand cursor-pointer self-start text-[17px] text-[var(--sky)]"
+          >
+            {more
+              ? "▾ 자세한 설정 접기"
+              : mode === "classic"
+                ? "▸ 자세한 설정 (힌트 · 깜짝 챌린지 · 주제 · 우리끼리 제시어)"
+                : mode === "fake"
+                  ? "▸ 자세한 설정 (주제 · 우리끼리 제시어)"
+                  : null}
+          </button>
+        )}
+        {more && mode === "fake" && <div className="sk-rise">{wordsBox}</div>}
+        {more && mode === "classic" && (
           <div className="sk-rise grid gap-4">
+            <label className="flex cursor-pointer items-center gap-2 text-[14px] font-bold">
+              <input
+                type="checkbox"
+                checked={challenge}
+                onChange={(e) => {
+                  playSfx("sfx-click");
+                  setChallenge(e.target.checked);
+                }}
+                className="h-4 w-4 accent-[#FF6B6B]"
+              />
+              🎭 깜짝 챌린지 (가끔 한붓그리기 · 눈 가리고 · 검정 한 색, 점수 ×1.5)
+            </label>
+            {wordsBox}
             <label className="flex cursor-pointer items-center gap-2 text-[14px] font-bold">
               <input
                 type="checkbox"

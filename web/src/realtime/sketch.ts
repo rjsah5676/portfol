@@ -7,11 +7,12 @@ import {
 } from "@/lib/api/socket";
 import { WrongPasswordError } from "@/lib/roomLock";
 import { normalizeAnswer } from "@/lib/sketch/words";
+import type { Challenge, GameMode } from "@/lib/sketch/modes";
 
 export { WrongPasswordError };
 
 /*
- * 스케치 퀴즈 — 백엔드 서버와 소켓으로 통신 (server/src/games/sketch.ts)
+ * DOODLE PARTY — 백엔드 서버와 소켓으로 통신 (server/src/games/sketch.ts)
  *
  * 서버가 방 상태를 들고 권한 검사와 상태 변경을 맡음. 진행은 예전처럼 클라이언트가 나눠서 요청함
  *  - 그리는 사람: 제시어 선택, 정답 판정, 힌트, 시간 종료
@@ -27,7 +28,24 @@ export { WrongPasswordError };
  */
 
 export type TurnMode = "winner" | "order";
-export type Phase = "waiting" | "choosing" | "drawing" | "reveal" | "ended";
+export type Phase =
+  | "waiting"
+  | "choosing"
+  | "drawing"
+  | "reveal"
+  | "ended"
+  | "f-draw"
+  | "f-vote"
+  | "f-guess"
+  | "f-result"
+  | "l-draw"
+  | "l-write"
+  | "l-pick"
+  | "l-show"
+  | "r-write"
+  | "r-draw"
+  | "r-desc"
+  | "r-album";
 
 export interface SketchMeta {
   name: string;
@@ -39,6 +57,11 @@ export interface SketchMeta {
   hints: boolean;
   locked: boolean;
   createdAt: number;
+  mode: GameMode;
+  challenge: boolean;
+  topics: string[];
+  custom: string[];
+  customOnly: boolean;
 }
 
 export interface SketchPlayer {
@@ -70,6 +93,88 @@ export interface SketchState {
   drawn: Record<string, number>;
   /** 이번 제시어 난이도 (0 쉬움 · 1 보통 · 2 어려움) */
   level: number;
+  /** 단계 번호 (다른 모드의 제출 · 시간 끝 알림에 같이 보냄) */
+  step: number;
+  /** 이번 차례 깜짝 챌린지 */
+  challenge: Challenge;
+  /** 따봉: 그림 키 → 누른 사람 */
+  likes: Record<string, string[]>;
+  /** 건너뛰기 투표한 사람 */
+  skip: string[];
+  /** 다른 모드 진행 상태 */
+  m: ModeState | null;
+}
+
+export interface FakeState {
+  kind: "fake";
+  game: number;
+  games: number;
+  topic: string;
+  order: string[];
+  at: number;
+  colors: Record<string, string>;
+  voted: string[];
+  votes?: Record<string, string>;
+  faker?: string;
+  word?: string;
+  caught?: boolean;
+  guess?: string;
+  win?: "fake" | "artists" | "gone";
+}
+export interface LieOption {
+  id: string;
+  text: string;
+}
+export interface LieShow extends LieOption {
+  truth: boolean;
+  authors: string[];
+  pickers: string[];
+}
+export interface LieState {
+  kind: "lie";
+  players: string[];
+  order: string[];
+  idx: number;
+  artist: string;
+  done: string[];
+  options?: LieOption[];
+  show?: LieShow[];
+  prompt?: string;
+}
+export interface RelayState {
+  kind: "relay";
+  order: string[];
+  steps: number;
+  step: number;
+  done: string[];
+  album?: { chain: number; page: number };
+}
+export type ModeState = FakeState | LieState | RelayState;
+
+/** 나만 아는 것 (모드마다) */
+export interface FakeSecret {
+  topic: string;
+  faker?: boolean;
+  word?: string | null;
+  watching?: boolean;
+}
+export interface LieSecret {
+  prompt: string | null;
+  lie: string | null;
+  pick: string | null;
+  /** 내가 쓴 보기 id */
+  mine: string[];
+}
+export interface RelaySecret {
+  task: "write" | "draw" | "desc";
+  chain: number;
+  prev: { text: string | null; sheet: string | null } | null;
+  done: boolean;
+}
+export interface RelayEntry {
+  by: string;
+  text?: string;
+  sheet?: string;
 }
 
 export interface SketchRoom {
@@ -90,6 +195,7 @@ export interface LobbyRoom {
   count: number;
   phase: Phase;
   turnMode: TurnMode;
+  mode?: GameMode;
   createdAt: number;
 }
 
@@ -112,8 +218,8 @@ export interface ChatMsg {
   uid: string;
   nick: string;
   text: string;
-  /** msg: 일반, system: 안내, correct: 정답 알림, close: 거의 맞힘 (친 사람에게만 옴) */
-  kind: "msg" | "system" | "correct" | "close";
+  /** msg: 일반, system: 안내, correct: 정답 알림, close: 거의 맞힘 (친 사람에게만 옴), secret: 정답을 아는 사람끼리 */
+  kind: "msg" | "system" | "correct" | "close" | "secret";
   ts: number;
   /** close: 거의 맞힌 그 채팅의 id */
   of?: string;
@@ -155,13 +261,25 @@ const EMPTY_STATE: SketchState = {
   firstCorrect: "",
   drawn: {},
   level: 0,
+  step: 0,
+  challenge: "",
+  likes: {},
+  skip: [],
+  m: null,
+};
+const DEFAULT_META = {
+  mode: "classic" as GameMode,
+  challenge: true,
+  topics: [],
+  custom: [],
+  customOnly: false,
 };
 
 function normalizeRoom(id: string, v: Record<string, unknown> | null): SketchRoom | null {
   if (!v || !v.meta) return null;
   return {
     id,
-    meta: v.meta as SketchMeta,
+    meta: { ...DEFAULT_META, ...(v.meta as SketchMeta) },
     players: (v.players as Record<string, SketchPlayer>) ?? {},
     scores: (v.scores as Record<string, SketchScore>) ?? {},
     state: { ...EMPTY_STATE, ...((v.state as Partial<SketchState>) ?? {}) },
@@ -212,6 +330,11 @@ export interface CreateOptions {
   rounds: number;
   hints: boolean;
   password: string;
+  mode?: GameMode;
+  challenge?: boolean;
+  topics?: string[];
+  custom?: string[];
+  customOnly?: boolean;
 }
 
 /** 방 만들기 → 방 id. 비밀번호는 서버가 방 id와 섞어 해시로만 보관 */
@@ -225,6 +348,11 @@ export async function createRoom(_uid: string, nick: string, o: CreateOptions): 
     rounds: o.rounds,
     hints: o.hints,
     password: o.password,
+    mode: o.mode ?? "classic",
+    challenge: o.challenge ?? true,
+    topics: o.topics ?? [],
+    custom: o.custom ?? [],
+    customOnly: o.customOnly ?? false,
   });
 }
 
@@ -322,7 +450,6 @@ export function remainingTurns(room: SketchRoom): number {
 
 /** 리더: 게임 시작 (점수 초기화) */
 export async function startGame(room: SketchRoom) {
-  if (orderedPlayers(room).length < 2) return;
   await rpc("sketch.startGame", { id: room.id });
 }
 
@@ -527,4 +654,65 @@ export async function relayGuess(roomId: string, g: Guess, close = false) {
     guess: { uid: g.uid, nick: g.nick, text: g.text },
     ...(close ? { close: true } : {}),
   });
+}
+
+// ───────────── 따봉 · 건너뛰기 ─────────────
+
+/** 따봉 (한 그림에 한 번) — 키: 그림 맞히기는 turnId, 거짓말은 "l:<그린 사람>", 릴레이는 "r:<줄>:<칸>" */
+export async function likeDrawing(roomId: string, key: string) {
+  await rpc("sketch.like", { id: roomId, key }).catch(() => {});
+}
+export async function voteSkip(roomId: string, turnId: string) {
+  await rpc("sketch.voteSkip", { id: roomId, turnId }).catch(() => {});
+}
+
+// ───────────── 다른 모드 ─────────────
+
+/** 리더: 시간이 다 됐을 때 (force = 앨범 넘기기) */
+export async function tick(roomId: string, step: number, force = false) {
+  await rpc("sketch.tick", { id: roomId, step, ...(force ? { force } : {}) }).catch(() => {});
+}
+export async function submitSheet(roomId: string, step: number, strokes: Stroke[]) {
+  await rpc("sketch.submitSheet", { id: roomId, step, strokes });
+}
+/** 글 내기 — 거짓말에서 진짜 제목과 같으면 에러(TOO_CLOSE) */
+export async function submitText(roomId: string, step: number, text: string) {
+  await rpc("sketch.submitText", { id: roomId, step, text });
+}
+export async function pickOption(roomId: string, step: number, option: string) {
+  await rpc("sketch.pick", { id: roomId, step, option });
+}
+export async function voteFake(roomId: string, step: number, target: string) {
+  await rpc("sketch.vote", { id: roomId, step, target });
+}
+
+/** 나만 아는 것 (모드마다 모양이 다름) */
+export function subscribeSecret<T>(roomId: string, cb: (v: T | null) => void) {
+  return subscribe<T | null>(
+    "sketch.secret",
+    { id: roomId },
+    {
+      onSnapshot: (v) => cb(v ?? null),
+      onEvent: (type, data) => {
+        if (type === "value") cb((data as T | null) ?? null);
+      },
+      onError: () => cb(null),
+    }
+  );
+}
+/** 따로 그린 그림 한 장 */
+export function subscribeSheet(roomId: string, key: string, cb: (v: Stroke[] | null) => void) {
+  return subscribe<Stroke[] | null>(
+    "sketch.sheet",
+    { id: roomId, key },
+    { onSnapshot: (v) => cb(v ?? null), onError: () => cb(null) }
+  );
+}
+/** 릴레이 앨범 */
+export function subscribeAlbum(roomId: string, cb: (v: RelayEntry[][] | null) => void) {
+  return subscribe<RelayEntry[][] | null>(
+    "sketch.album",
+    { id: roomId },
+    { onSnapshot: (v) => cb(v ?? null), onError: () => cb(null) }
+  );
 }

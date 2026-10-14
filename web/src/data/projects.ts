@@ -157,10 +157,10 @@ export const gameProjects: Project[] = [
   },
   {
     idx: 15,
-    name: "SKETCH QUIZ",
+    name: "DOODLE PARTY",
     imgLink: sketchImg,
-    title: "실시간 그림 퀴즈 [SKETCH QUIZ]",
-    desc: "최대 8명, 한 명이 그리고 나머지가 채팅으로 맞히는 그림 퀴즈. 스케치북 테마의 전용 게임 화면",
+    title: "그림 파티게임 [DOODLE PARTY]",
+    desc: "최대 8명 실시간 그림 파티게임. 그림 맞히기 · 가짜 화가 · 그림 속 거짓말 · 그림 릴레이 4가지 모드, 스케치북 테마의 전용 게임 화면",
     tech: ["TypeScript", "Canvas", "socket.io", "React"],
     period: "2026.10 –",
     playLink: "/games/sketch/",

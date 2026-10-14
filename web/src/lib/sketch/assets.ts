@@ -1,5 +1,5 @@
 /*
- * 스케치 퀴즈 그림 에셋 (web/public/sketch/img/*.webp)
+ * DOODLE PARTY 그림 에셋 (web/public/sketch/img/*.webp)
  *  요청서: 프로젝트 문서 claude/sketch-asset-request.md
  *  파일을 넣으면 READY 에 이름을 추가 → 그 자리의 SVG·CSS 대체 그림이 진짜 그림으로 바뀜.
  *  (없는 그림을 불러서 404 가 나지 않게 목록으로 관리)

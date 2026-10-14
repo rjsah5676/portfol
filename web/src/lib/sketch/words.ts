@@ -1,4 +1,4 @@
-// 스케치 퀴즈 제시어 — 억지 단어 말고, 모양이 떠오르거나
+// DOODLE PARTY 제시어 — 억지 단어 말고, 모양이 떠오르거나
 // 그림 여러 개를 합쳐 설명할 수 있는(예: 포크레인 = 포크 + 비 + …) 단어 위주.
 // 그리는 사람은 쉬움·보통·어려움에서 하나씩 뽑은 3개 중 하나를 고름 (어려울수록 점수 ↑).
 
@@ -86,26 +86,118 @@ export interface WordChoice {
   level: WordLevel;
 }
 
+/** 방 설정에서 고르는 주제 (제시어 분류 이름 그대로) */
+export const TOPICS: string[] = [
+  ...new Set(Object.values(SKETCH_WORDS).flatMap((cats) => Object.keys(cats))),
+];
+/** 우리끼리 제시어: 몇 개까지 · 한 단어 길이 */
+export const CUSTOM_MAX = 60;
+export const CUSTOM_LEN = 20;
+
+/** 우리끼리 제시어 입력 정리: 쉼표 · 줄바꿈으로 나누고, 빈 것 · 너무 긴 것 · 겹치는 것 빼기 */
+export function parseCustomWords(text: string): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const raw of text.split(/[,\n]/)) {
+    const w = raw.replace(/\s+/g, " ").trim().slice(0, CUSTOM_LEN);
+    const k = normalizeAnswer(w);
+    if (!k || seen.has(k)) continue;
+    seen.add(k);
+    out.push(w);
+    if (out.length >= CUSTOM_MAX) break;
+  }
+  return out;
+}
+
+/** 제시어 고르는 설정 (방 설정) */
+export interface WordOptions {
+  /** 이 주제만 (비었으면 전체) */
+  topics?: string[];
+  /** 우리끼리 제시어 */
+  custom?: string[];
+  /** 우리끼리 제시어만 */
+  customOnly?: boolean;
+}
+
+/** 주제에 맞는 (분류, 단어) 목록 — 고른 주제에 단어가 없으면 전체 */
+function poolOf(level: WordLevel, topics?: string[]) {
+  const cats = Object.entries(SKETCH_WORDS[level]).filter(
+    ([cat]) => !topics?.length || topics.includes(cat)
+  );
+  return cats.flatMap(([cat, ws]) => ws.map((w) => ({ cat, w, k: normalizeAnswer(w) })));
+}
+
+const pickFrom = <T>(list: T[]) => list[Math.floor(Math.random() * list.length)];
+
 /**
  * 쉬움·보통·어려움에서 하나씩 후보 뽑기
  * - used: 이 방에서 이미 정답으로 나온 단어 → 웬만하면 제외
  * - seen: 이 브라우저에서 최근에 본 단어 → 남은 게 충분하면 제외
+ * - opt.topics: 그 주제만 (그 난이도에 없으면 다른 난이도에서)
+ * - opt.custom: 우리끼리 제시어 — 3개 중 하나(customOnly 면 셋 다)를 거기서
  */
-export function pickChoices(used: Set<string>, seen: Set<string>): WordChoice[] {
+export function pickChoices(
+  used: Set<string>,
+  seen: Set<string>,
+  opt: WordOptions = {}
+): WordChoice[] {
   const usedCats = new Set<string>();
-  return ([0, 1, 2] as WordLevel[]).map((level) => {
-    const all = Object.entries(SKETCH_WORDS[level]).flatMap(([cat, ws]) =>
-      ws.map((w) => ({ cat, w, k: normalizeAnswer(w) }))
-    );
-    const fresh = all.filter((x) => !used.has(x.k));
+  const taken = new Set<string>();
+  const custom = (opt.custom ?? []).map((w) => ({ cat: "우리끼리", w, k: normalizeAnswer(w) }));
+  const freshOf = <T extends { k: string }>(all: T[]) => {
+    const fresh = all.filter((x) => !used.has(x.k) && !taken.has(x.k));
     const unseen = fresh.filter((x) => !seen.has(x.k));
-    let pool = unseen.length >= 5 ? unseen : fresh.length ? fresh : all;
+    return unseen.length >= 5 ? unseen : fresh.length ? fresh : all.filter((x) => !taken.has(x.k));
+  };
+  const out: WordChoice[] = [];
+  // 우리끼리 제시어 칸: 보통(1) 자리 하나, 또는 전부
+  const customSlots = custom.length ? (opt.customOnly ? [0, 1, 2] : [1]) : [];
+  for (const level of [0, 1, 2] as WordLevel[]) {
+    if (customSlots.includes(level)) {
+      const pool = freshOf(custom);
+      const x = pool.length ? pickFrom(pool) : null;
+      if (x) {
+        taken.add(x.k);
+        out.push({ word: x.w, level });
+        continue;
+      }
+    }
+    // 이 난이도에 고른 주제 단어가 없으면 다른 난이도에서 (점수 배율은 원래 칸 그대로)
+    let all = poolOf(level, opt.topics);
+    if (!all.length) all = ([0, 1, 2] as WordLevel[]).flatMap((l) => poolOf(l, opt.topics));
+    if (!all.length) all = poolOf(level);
+    let pool = freshOf(all);
     const otherCat = pool.filter((x) => !usedCats.has(x.cat));
     if (otherCat.length) pool = otherCat;
-    const x = pool[Math.floor(Math.random() * pool.length)];
+    const x = pickFrom(pool);
     usedCats.add(x.cat);
-    return { word: x.w, level };
-  });
+    taken.add(x.k);
+    out.push({ word: x.w, level });
+  }
+  return out;
+}
+
+/**
+ * 단어 하나와 그 주제 (가짜 화가: 모두에게 주제를 알려 주고 가짜만 단어를 모름).
+ * 쉬움 · 보통 단어만 (어려움은 한 획씩 그리기엔 너무 어려움). 우리끼리 제시어가 있으면 그쪽에서도.
+ */
+export function pickWord(
+  used: Set<string>,
+  opt: WordOptions = {}
+): { topic: string; word: string } {
+  const custom = (opt.custom ?? []).map((w) => ({
+    cat: "우리끼리 제시어",
+    w,
+    k: normalizeAnswer(w),
+  }));
+  let all =
+    opt.customOnly && custom.length
+      ? custom
+      : [...poolOf(0, opt.topics), ...poolOf(1, opt.topics), ...custom];
+  if (!all.length) all = [...poolOf(0), ...poolOf(1)];
+  const fresh = all.filter((x) => !used.has(x.k));
+  const x = pickFrom(fresh.length ? fresh : all);
+  return { topic: x.cat, word: x.w };
 }
 
 // ───────────── 이 브라우저에서 최근 본 단어 ─────────────

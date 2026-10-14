@@ -9,7 +9,7 @@ server/   Express 5 + socket.io + MongoDB — API·실시간(게임 방·채팅�
 
 - Firebase 는 **로그인(Auth)만** 계속 씀 (게임용 익명 로그인, 관리자 이메일 로그인). 서버가 Firebase 토큰을 검증.
 - Firestore / Realtime Database 는 더 이상 쓰지 않음 → MongoDB + 웹소켓.
-- 체스·장기·오목 방은 DB 에 저장(서버를 재시작해도 이어짐). 스케치 퀴즈·격투 방·포커 테이블은 서버 메모리(재시작하면 사라짐).
+- 체스·장기·오목 방은 DB 에 저장(서버를 재시작해도 이어짐). DOODLE PARTY·격투 방·포커 테이블은 서버 메모리(재시작하면 사라짐).
 
 ## 로컬 실행
 

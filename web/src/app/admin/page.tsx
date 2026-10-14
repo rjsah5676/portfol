@@ -255,7 +255,7 @@ export default function AdminDashboard() {
         {tab === "guest" && <DataManager key="guest" groups={G_GUEST} />}
         {tab === "rooms" && (
           <div>
-            <SubHeading>지금 열려 있는 방 (스케치 퀴즈 · 격투 · 포커 · BEAT DASH · 디펜스)</SubHeading>
+            <SubHeading>지금 열려 있는 방 (DOODLE PARTY · 격투 · 포커 · BEAT DASH · 디펜스)</SubHeading>
             <LiveRooms />
             <SubHeading>대국 방 (체스 · 장기 · 오목)</SubHeading>
             <DataManager key="rooms" groups={G_ROOMS} />

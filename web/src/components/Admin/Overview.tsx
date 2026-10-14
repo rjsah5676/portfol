@@ -236,7 +236,7 @@ export default function Overview({ onGo }: { onGo: (tab: string) => void }) {
           <div className={heading}>지금</div>
           <Line label="접속 중인 연결">{n(data.server.connections)}</Line>
           <button type="button" onClick={() => onGo("rooms")} className="block w-full cursor-pointer text-left">
-            <Line label="스케치 퀴즈">
+            <Line label="DOODLE PARTY">
               {data.live.sketch.rooms}방 · {data.live.sketch.players}명
             </Line>
             <Line label="픽셀 격투">

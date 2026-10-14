@@ -1,7 +1,7 @@
 "use client";
 
 /*
- * 스케치 퀴즈 소리 — 배경음악 · 징글 · 효과음 · 진행 음성(☆).
+ * DOODLE PARTY 소리 — 배경음악 · 징글 · 효과음 · 진행 음성(☆).
  *  파일이 있으면 파일(/sketch/sound/…, manifest.json 에 적힌 것만)을 틀고, 없으면 Web Audio 합성음으로 대신한다.
  *  (배경음악 · 진행 음성은 파일이 있을 때만)
  *  브라우저 자동재생 정책 때문에 첫 클릭·터치·키 입력 이후에만 소리가 난다 (그 전에 틀려던 배경음악은 첫 입력 때 시작).
@@ -153,7 +153,10 @@ function noise(c: AudioContext): AudioBufferSourceNode {
 function env(c: AudioContext, peak: number, attack: number, decay: number, at: number): GainNode {
   const g = c.createGain();
   g.gain.setValueAtTime(0.0001, at);
-  g.gain.exponentialRampToValueAtTime(Math.max(0.0002, peak * getSound().sfx * LEVEL.sketch.sfx), at + attack);
+  g.gain.exponentialRampToValueAtTime(
+    Math.max(0.0002, peak * getSound().sfx * LEVEL.sketch.sfx),
+    at + attack
+  );
   g.gain.exponentialRampToValueAtTime(0.0001, at + attack + decay);
   g.connect(limiter(c));
   return g;
@@ -290,6 +293,18 @@ const synth: Record<string, (c: AudioContext) => void> = {
     tone(c, "square", 880, 0.05, 0.12, c.currentTime + 0.16);
     tone(c, "square", 660, 0.05, 0.3, c.currentTime + 0.32);
   },
+  // 모드 · 따봉 (파일이 오면 그걸로)
+  "sfx-like": (c) => arp(c, [1047, 1568], 0.05, "sine", 0.07, 0.12),
+  "sfx-submit": (c) => arp(c, [660, 990], 0.06, "triangle", 0.08, 0.12),
+  "sfx-vote": (c) => {
+    tone(c, "square", 330, 0.05, 0.08);
+    tone(c, "sine", 660, 0.06, 0.1, c.currentTime + 0.05);
+  },
+  "sfx-page": (c) => tone(c, "triangle", 420, 0.06, 0.12, c.currentTime, 760),
+  "sfx-stroke-turn": (c) => tone(c, "sine", 740, 0.06, 0.08, c.currentTime, 990),
+  "jingle-caught": (c) => arp(c, [392, 523, 659, 1047], 0.08, "square", 0.08, 0.2),
+  "jingle-fake-win": (c) => arp(c, [523, 466, 392, 311, 262], 0.09, "triangle", 0.1, 0.24),
+  "jingle-truth": (c) => arp(c, [659, 831, 988, 1319], 0.07, "triangle", 0.1, 0.22),
   "jingle-end": (c) => {
     arp(c, [523, 659, 784, 1047, 784, 1047, 1319], 0.1, "triangle", 0.1, 0.3);
   },

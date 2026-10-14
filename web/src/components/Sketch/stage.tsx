@@ -5,7 +5,7 @@ import { getSound, onSoundChange, playSfx, setSound } from "@/lib/sketch/sfx";
 import { Icon } from "./Art";
 
 /*
- * 스케치 퀴즈 무대 공통: 가로판(h, PC) / 세로판(v, 폰), 전체화면, 소리 버튼.
+ * DOODLE PARTY 무대 공통: 가로판(h, PC) / 세로판(v, 폰), 전체화면, 소리 버튼.
  *  - 가로판은 1280×720 기준으로 그려서 무대 크기에 맞게 통째로 줄이고 키움 → 어느 화면에서나 배치가 같음
  *  - 세로판은 화면 높이를 꽉 채우는 세로 배치
  */

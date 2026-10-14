@@ -12,6 +12,81 @@ import {
   type Stroke,
 } from "@/realtime/sketch";
 
+// ───────────── 그림 조각이 오가는 곳 ─────────────
+
+/**
+ * 도화지가 그림 조각을 주고받는 곳. 바뀌면(id) 새 도화지.
+ *  - 서버: 그림 맞히기 · 가짜 화가 (모두가 같은 도화지를 실시간으로)
+ *  - 내 화면: 거짓말 · 릴레이에서 혼자 그릴 때 (다 그리면 한꺼번에 냄)
+ *  - 고정: 낸 그림 보여 주기
+ */
+export interface StrokeSource {
+  id: string;
+  subscribe(onAdd: (key: string, s: Stroke) => void, onRemove: (key: string) => void): () => void;
+  add(s: Stroke): void;
+  remove(keys: string[]): void;
+  clear(): void;
+}
+
+export function serverSource(roomId: string, turnId: string): StrokeSource | null {
+  if (!turnId) return null;
+  return {
+    id: `${roomId}/${turnId}`,
+    subscribe: (onAdd, onRemove) => subscribeStrokes(roomId, turnId, onAdd, onRemove),
+    add: (st) => void addStroke(roomId, turnId, st).catch(() => {}),
+    remove: (keys) => void removeStrokes(roomId, turnId, keys).catch(() => {}),
+    clear: () => void clearStrokes(roomId, turnId).catch(() => {}),
+  };
+}
+
+/** 내 화면에만 쌓는 도화지 — all() 로 지금까지 그린 것 */
+export interface LocalSource extends StrokeSource {
+  all(): Stroke[];
+}
+export function localSource(id: string): LocalSource {
+  const items = new Map<string, Stroke>();
+  const subs = new Set<{ add: (k: string, s: Stroke) => void; remove: (k: string) => void }>();
+  let n = 0;
+  return {
+    id,
+    subscribe(onAdd, onRemove) {
+      const sub = { add: onAdd, remove: onRemove };
+      subs.add(sub);
+      for (const [k, st] of items) onAdd(k, st);
+      return () => void subs.delete(sub);
+    },
+    add(st) {
+      const k = `k${String(++n).padStart(7, "0")}`;
+      items.set(k, st);
+      subs.forEach((x) => x.add(k, st));
+    },
+    remove(keys) {
+      for (const k of keys) if (items.delete(k)) subs.forEach((x) => x.remove(k));
+    },
+    clear() {
+      for (const k of [...items.keys()]) {
+        items.delete(k);
+        subs.forEach((x) => x.remove(k));
+      }
+    },
+    all: () => [...items.values()],
+  };
+}
+
+/** 이미 다 그린 그림 보여 주기 */
+export function staticSource(id: string, strokes: Stroke[]): StrokeSource {
+  return {
+    id,
+    subscribe(onAdd) {
+      strokes.forEach((st, i) => onAdd(`k${String(i).padStart(7, "0")}`, st));
+      return () => {};
+    },
+    add() {},
+    remove() {},
+    clear() {},
+  };
+}
+
 /** 크레용 16색 (2줄 × 8) */
 export const COLORS = [
   "#1F1F2A",
@@ -192,23 +267,28 @@ function floodFill(ctx: CanvasRenderingContext2D, sx: number, sy: number, color:
 // ───────────── 컴포넌트 ─────────────
 
 export default function SketchCanvas({
-  roomId,
-  turnId,
+  source,
   canDraw,
   tool,
   color,
   width,
   apiRef,
+  onStrokeEnd,
+  hideInk,
   children,
 }: {
-  roomId: string;
-  turnId: string;
+  /** 그림 조각이 오가는 곳 (없으면 빈 도화지) */
+  source: StrokeSource | null;
   canDraw: boolean;
   tool: Tool;
   color: string;
   width: number;
   /** 되돌리기 · 전체 지우기 (도구 모음이 바깥에 있어서) */
   apiRef?: React.RefObject<CanvasApi | null>;
+  /** 한 획을 다 그었을 때 (손을 뗌) */
+  onStrokeEnd?: () => void;
+  /** 그리는 사람 화면에서 그림을 가림 (눈 가리고 그리기) */
+  hideInk?: boolean;
   /** 도화지 위에 덮을 것 (안내 · 도장) */
   children?: React.ReactNode;
 }) {
@@ -322,6 +402,11 @@ export default function SketchCanvas({
   }, [clearCanvas, ctx, apply, tails]);
 
   // 차례가 바뀌면 새 도화지
+  const sourceRef = useRef(source);
+  useEffect(() => {
+    sourceRef.current = source;
+  });
+  const sourceId = source?.id ?? "";
   useEffect(() => {
     strokesRef.current = new Map();
     groupsRef.current = new Map();
@@ -329,10 +414,9 @@ export default function SketchCanvas({
     lastKeyRef.current = "";
     clearCanvas();
     tails();
-    if (!turnId) return;
-    return subscribeStrokes(
-      roomId,
-      turnId,
+    const src = sourceRef.current;
+    if (!src) return;
+    return src.subscribe(
       (key, s) => {
         strokesRef.current.set(key, s);
         if (localRef.current.has(s.g)) {
@@ -352,7 +436,7 @@ export default function SketchCanvas({
         scheduleRedraw();
       }
     );
-  }, [roomId, turnId, scheduleRedraw, clearCanvas, ctx, apply, tails]);
+  }, [sourceId, scheduleRedraw, clearCanvas, ctx, apply, tails]);
 
   // ── 입력 (그리는 사람만) ──
   const drawing = useRef<{
@@ -379,13 +463,13 @@ export default function SketchCanvas({
     const from = Math.max(0, Math.min(d.sent, d.pts.length) - 1);
     const seg = d.pts.slice(from);
     d.sent = d.pts.length;
-    addStroke(roomId, turnId, {
+    sourceRef.current?.add({
       g: d.g,
       c: d.color,
       w: d.width,
       p: encode(seg),
       ...(final ? { e: 1 as const } : {}),
-    }).catch(() => {});
+    });
   };
 
   // 손바닥 무시: 펜을 한 번이라도 쓰면 그 뒤로 손가락 터치는 그리기에 안 씀,
@@ -412,13 +496,14 @@ export default function SketchCanvas({
         flushQueues(c);
         floodFill(c, pt[0], pt[1], color);
       }
-      addStroke(roomId, turnId, {
+      sourceRef.current?.add({
         g,
         c: color,
         t: "f",
         x: Math.round(pt[0]),
         y: Math.round(pt[1]),
-      }).catch(() => {});
+      });
+      onStrokeEnd?.();
       return;
     }
     e.currentTarget.setPointerCapture(e.pointerId);
@@ -487,6 +572,7 @@ export default function SketchCanvas({
       tails();
     }
     drawing.current = null;
+    onStrokeEnd?.();
   };
 
   // iPad · 애플펜슬: 사파리가 펜 입력을 길게 누르기(돋보기 · 글자 선택) · 손글씨 입력(Scribble) ·
@@ -528,16 +614,12 @@ export default function SketchCanvas({
     const lastG = strokesRef.current.get(keys[keys.length - 1] ?? "")?.g;
     if (!lastG) return;
     playSfx("sfx-undo");
-    removeStrokes(
-      roomId,
-      turnId,
-      keys.filter((k) => strokesRef.current.get(k)?.g === lastG)
-    ).catch(() => {});
+    sourceRef.current?.remove(keys.filter((k) => strokesRef.current.get(k)?.g === lastG));
   };
 
   const clear = () => {
     playSfx("sfx-clear");
-    clearStrokes(roomId, turnId).catch(() => {});
+    sourceRef.current?.clear();
   };
   useEffect(() => {
     if (!apiRef) return;
@@ -557,7 +639,7 @@ export default function SketchCanvas({
         ref={canvasRef}
         width={PW}
         height={PH}
-        className="absolute inset-0 h-full w-full touch-none rounded-[3px] select-none"
+        className={`absolute inset-0 h-full w-full touch-none rounded-[3px] select-none ${hideInk ? "opacity-0" : ""}`}
       />
       {/* 임시 꼬리 레이어 + 입력 받는 곳 */}
       <canvas
@@ -569,7 +651,7 @@ export default function SketchCanvas({
         onPointerUp={onUp}
         onPointerCancel={onUp}
         onPointerLeave={() => setCursor(null)}
-        className={`absolute inset-0 h-full w-full touch-none select-none ${cur}`}
+        className={`absolute inset-0 h-full w-full touch-none select-none ${cur} ${hideInk ? "opacity-0" : ""}`}
       />
       {canDraw && cursor && tool !== "fill" && (
         <span

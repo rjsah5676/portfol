@@ -81,7 +81,7 @@ const FEATURES: Feature[] = [
     items: [
       "BEAT DASH(4키 리듬게임) · PIXEL FIGHT(1:1 격투) — 포트폴리오 games에서 따로 소개",
       "온라인 체스 · 장기 · 오목: 방을 만들어 실시간 대국 · 관전 · 채팅, AI 랭킹전",
-      "스케치 퀴즈: 최대 8명, 한 명이 그리고 나머지가 맞히기",
+      "DOODLE PARTY: 최대 8명 그림 파티게임 — 그림 맞히기 · 가짜 화가 · 그림 속 거짓말 · 그림 릴레이",
       "멜론 게임(Canvas 드래그 퍼즐, 2분 타임어택) · 지뢰찾기(지뢰 99개) · 반응속도 테스트",
       "휴대폰: 터치 조작, 멜론 게임은 화면 폭에 맞춰 배율 고정",
     ],
@@ -357,7 +357,7 @@ export default function DevLifeProject() {
           </div>
           <p className="mt-4 font-['Nanum_Gothic',sans-serif] text-xs leading-relaxed text-white/45">
             격투게임의 경기 입력만 브라우저끼리 WebRTC로 직접 주고받고, 연결이 안 되면 API 서버가
-            중계합니다. 스케치 퀴즈 · 격투의 방 상태는 서버 메모리에, 대국은 MongoDB에 둡니다.
+            중계합니다. DOODLE PARTY · 격투의 방 상태는 서버 메모리에, 대국은 MongoDB에 둡니다.
           </p>
         </div>
       </Section>

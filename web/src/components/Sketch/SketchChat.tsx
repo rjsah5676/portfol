@@ -44,7 +44,7 @@ export default function SketchChat({
           !firstRef.current &&
           last &&
           last.uid !== uid &&
-          (last.kind === "msg" || last.kind === "close") &&
+          (last.kind === "msg" || last.kind === "close" || last.kind === "secret") &&
           last.id !== lastIdRef.current
         )
           playSfx(last.kind === "close" ? "sfx-hint" : "sfx-chat");
@@ -121,13 +121,23 @@ export default function SketchChat({
                 )}
                 <span
                   className={`max-w-full rounded-xl px-2.5 py-1 break-all ${
-                    m.uid === uid
-                      ? closeOf.has(m.id)
-                        ? "rounded-tr-sm bg-[#43A047] text-white ring-2 ring-[#A5D6A7]"
-                        : "rounded-tr-sm bg-[var(--ink)] text-white"
-                      : "rounded-tl-sm border-[1.5px] border-[var(--line)] bg-white"
+                    m.kind === "secret"
+                      ? `border-[1.5px] border-dashed border-[var(--grape)] bg-[#9B5DE5]/12 text-[#5B2A9E] ${m.uid === uid ? "rounded-tr-sm" : "rounded-tl-sm"}`
+                      : m.uid === uid
+                        ? closeOf.has(m.id)
+                          ? "rounded-tr-sm bg-[#43A047] text-white ring-2 ring-[#A5D6A7]"
+                          : "rounded-tr-sm bg-[var(--ink)] text-white"
+                        : "rounded-tl-sm border-[1.5px] border-[var(--line)] bg-white"
                   }`}
                 >
+                  {m.kind === "secret" && (
+                    <span
+                      className="mr-1 text-[11px] font-bold"
+                      title="정답을 아는 사람끼리만 보여요"
+                    >
+                      🤫
+                    </span>
+                  )}
                   {m.text}
                 </span>
               </div>

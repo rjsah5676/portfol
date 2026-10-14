@@ -3,11 +3,21 @@
 import { plainName } from "@/components/Nick";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import SketchCanvas, {
-  COLORS,
   WIDTHS,
+  serverSource,
   type CanvasApi,
-  type Tool,
 } from "@/components/Sketch/SketchCanvas";
+import Toolbar, { useTools } from "@/components/Sketch/Toolbar";
+import ModeCenter, {
+  isModePhase,
+  LikeButton,
+  ModeHow,
+  modeStatus,
+  phaseTotal,
+  useSecret,
+  type AnySecret,
+} from "@/components/Sketch/ModeViews";
+import { CHALLENGE_BONUS, CHALLENGES, MODES, MONO_COLOR, type Challenge } from "@/lib/sketch/modes";
 import SketchChat from "@/components/Sketch/SketchChat";
 import { AVATAR_COLOR, avatarOf, type StampName } from "@/lib/sketch/assets";
 import { playBgm, playSfx, playVoice } from "@/lib/sketch/sfx";
@@ -46,6 +56,8 @@ import {
   subscribeGuesses,
   subscribeWords,
   syncLobby,
+  tick,
+  voteSkip,
   type SketchRoom as Room,
   type TurnWords,
 } from "@/realtime/sketch";
@@ -54,6 +66,7 @@ import { Confetti, FsButton, nextKey, SoundButton, tap, useStage } from "./stage
 
 const LEVEL_COLOR = ["#2EC4B6", "#4EA8DE", "#FF6B6B"];
 const TURN_MODE_LABEL = { winner: "처음 맞힌 사람이 다음 차례", order: "들어온 순서대로" } as const;
+const LIKE_RISE_MAX = 6;
 
 /** 남은 시간(ms) — 250ms마다 갱신 */
 function useRemaining(endsAt: number) {
@@ -198,9 +211,13 @@ export default function SketchRoom({
   useEffect(() => {
     if (!isDrawer || state.phase !== "choosing") return;
     if (words && words.turnId === state.turnId) return;
-    const choices = pickChoices(new Set(Object.keys(room.used)), loadSeen());
+    const choices = pickChoices(new Set(Object.keys(room.used)), loadSeen(), {
+      topics: meta.topics,
+      custom: meta.custom,
+      customOnly: meta.customOnly,
+    });
     setChoices(roomId, state.turnId, choices).catch(() => {});
-  }, [isDrawer, state.phase, state.turnId, words, roomId, room.used]);
+  }, [isDrawer, state.phase, state.turnId, words, roomId, room.used, meta]);
 
   const myWord = words?.turnId === state.turnId ? words.word : undefined;
   const choices = words?.turnId === state.turnId ? (words.choices ?? []) : [];
@@ -270,6 +287,23 @@ export default function SketchRoom({
     else if (state.phase === "reveal" && remaining <= 0) nextTurn(room).catch(() => {});
   }, [isLeader, room, state, remaining, roomId]);
 
+  // ── 리더: 다른 모드는 시간이 다 되면 서버에 알림 (서버가 단계를 넘김) ──
+  const modePhase = isModePhase(state.phase);
+  const tickedRef = useRef("");
+  useEffect(() => {
+    if (!isLeader || !modePhase || !state.endsAt) return;
+    const late = serverNow() - state.endsAt;
+    // 같은 단계엔 2초에 한 번까지 (서버가 시간 확인)
+    const k = `${state.step}:${Math.floor(late / 2000)}`;
+    if (late >= 200 && tickedRef.current !== k) {
+      tickedRef.current = k;
+      tick(roomId, state.step);
+    }
+  }, [isLeader, modePhase, state.endsAt, state.step, remaining, roomId]);
+
+  // 나만 아는 것 (다른 모드)
+  const secret: AnySecret = useSecret(roomId, meta.mode !== "classic" && modePhase);
+
   // 방장이 나갔으면 리더가 방장 자리를 이어받음
   useEffect(() => {
     if (isLeader && meta.hostUid !== uid) claimHost(roomId, uid);
@@ -302,12 +336,10 @@ export default function SketchRoom({
   // ── 채팅 입력 ──
   const drawingNow = state.phase === "drawing";
   const guessing = drawingNow && !amDrawer && !iCorrect;
+  /** 정답을 아는 사람(그린 사람 · 맞힌 사람)끼리 하는 말 */
+  const secretChat = drawingNow && (amDrawer || iCorrect);
   const disabledReason =
-    drawingNow && amDrawer
-      ? "그리는 중에는 채팅할 수 없어요"
-      : drawingNow && iCorrect
-        ? "정답! 다른 사람이 맞힐 때까지 기다려요"
-        : "";
+    state.phase === "f-draw" ? "한 획씩 그리는 동안엔 채팅을 쉬어요 (투표 때 이야기해요)" : "";
   const onSend = (text: string) => {
     if (guessing) sendGuess(roomId, { uid, nick, text, turnId: state.turnId }).catch(() => {});
     else sendChat(roomId, uid, nick, text).catch(() => {});
@@ -328,8 +360,8 @@ export default function SketchRoom({
     if (v && typeof navigator.share === "function") {
       try {
         await navigator.share({
-          title: `스케치 퀴즈 · ${meta.name}`,
-          text: "같이 그림 맞히기 하자! 🎨",
+          title: `DOODLE PARTY · ${meta.name}`,
+          text: `같이 ${MODES[meta.mode].name} 하자! 🎨`,
           url,
         });
         return;
@@ -347,6 +379,7 @@ export default function SketchRoom({
     }
   };
 
+  const likeCount = (state.likes?.[state.turnId] ?? []).length;
   const ranking = useMemo(
     () =>
       Object.entries(room.scores)
@@ -358,8 +391,9 @@ export default function SketchRoom({
 
   const sec = Math.ceil(remaining / 1000);
   const turnsLeft = remainingTurns(room);
-  const timeRatio =
-    state.phase === "drawing"
+  const timeRatio = modePhase
+    ? remaining / phaseTotal(room)
+    : state.phase === "drawing"
       ? remaining / (meta.drawTime * 1000)
       : state.phase === "choosing"
         ? remaining / CHOOSE_MS
@@ -368,29 +402,31 @@ export default function SketchRoom({
           : 0;
 
   // ───────────── 도구 ─────────────
-  const [tool, setTool] = useState<Tool>("pen");
-  const [color, setColor] = useState(COLORS[0]);
-  const [width, setWidth] = useState(WIDTHS[1]);
+  const tools = useTools();
+  const resetTool = tools.resetTool;
+  const { tool, width } = tools;
   const apiRef = useRef<CanvasApi | null>(null);
-  const pickTool = (t: Tool) => {
-    playSfx("sfx-tool");
-    setTool(t);
-  };
-  const pickColor = (c: string) => {
-    playSfx("sfx-color");
-    setColor(c);
-    if (tool === "eraser") setTool("pen");
-  };
-  const pickWidth = (w: number) => {
-    playSfx("sfx-tool");
-    setWidth(w);
-    if (tool === "fill") setTool("pen");
-  };
-  const canDraw = amDrawer && state.phase === "drawing";
+  const challenge = state.phase === "drawing" || state.phase === "choosing" ? state.challenge : "";
+  // 한붓그리기: 한 획을 그었으면 (되돌리기 전까지) 더 못 그림
+  const [oneDone, setOneDone] = useState("");
+  const canDraw =
+    amDrawer && state.phase === "drawing" && !(challenge === "oneline" && oneDone === state.turnId);
+  const color = challenge === "mono" && tool !== "eraser" ? MONO_COLOR : tools.color;
+  const canvasSource = useMemo(() => serverSource(roomId, state.turnId), [roomId, state.turnId]);
 
   // ───────────── 연출: 소리 · 도장 · 색종이 ─────────────
   const [banner, setBanner] = useState<{ s: StampName; k: number } | null>(null);
   const [confetti, setConfetti] = useState(0);
+  /** 깜짝 챌린지 안내 (그리기 시작할 때 크게) */
+  const [challengeShow, setChallengeShow] = useState<{
+    c: Exclude<Challenge, "">;
+    k: number;
+  } | null>(null);
+  useEffect(() => {
+    if (!challengeShow) return;
+    const id = setTimeout(() => setChallengeShow(null), 2600);
+    return () => clearTimeout(id);
+  }, [challengeShow]);
   /** 방금 맞힌 사람 (이름표가 톡 튐) */
   const [flash, setFlash] = useState<string[]>([]);
   useEffect(() => {
@@ -411,6 +447,8 @@ export default function SketchRoom({
   const prev = useRef<{
     phase: string;
     turnId: string;
+    step: number;
+    drawer: string;
     correct: Set<string>;
     players: Set<string>;
     hint: string;
@@ -423,6 +461,8 @@ export default function SketchRoom({
     prev.current = {
       phase: state.phase,
       turnId: state.turnId,
+      step: state.step,
+      drawer: state.drawer,
       correct: correctNow,
       players: playersNow,
       hint: state.hint,
@@ -430,18 +470,43 @@ export default function SketchRoom({
     };
     if (!p) return; // 처음 들어온 순간은 조용히
     const turnChanged = p.phase !== state.phase || p.turnId !== state.turnId;
-    if (turnChanged) {
+    const stepChanged = p.step !== state.step;
+    if (isModePhase(state.phase) && (turnChanged || stepChanged)) {
+      // 다른 모드: 단계마다 소리 · 도장
+      const ph = state.phase;
+      const fm = state.m?.kind === "fake" ? state.m : null;
+      if (ph === "f-draw") {
+        if (state.drawer === uid) {
+          playSfx("sfx-stroke-turn");
+          if (p.phase !== "f-draw" || p.drawer !== uid) setBanner({ s: "myturn", k: nextKey() });
+        } else if (p.phase !== "f-draw") playSfx("jingle-start");
+      } else if (ph === "f-vote") playSfx("sfx-vote");
+      else if (ph === "f-guess") playSfx("jingle-caught");
+      else if (ph === "f-result") {
+        const fakeWon = fm?.win === "fake";
+        const iAmFake = fm?.faker === uid;
+        playSfx(fakeWon === iAmFake ? "jingle-allcorrect" : "jingle-fake-win");
+        if (fakeWon === iAmFake) setConfetti(nextKey());
+      } else if (ph === "l-draw" || ph === "r-write") {
+        playSfx("jingle-start");
+        setBanner({ s: "ready", k: nextKey() });
+      } else if (ph === "l-show") playSfx("jingle-truth");
+      else if (ph === "r-album") {
+        if (p.phase !== "r-album") playSfx("jingle-reveal");
+      } else playSfx("sfx-turn");
+    } else if (turnChanged) {
       if (state.phase === "choosing") {
         if (amDrawer) {
           playSfx("jingle-myturn");
           playVoice("myturn");
           setBanner({ s: "myturn", k: nextKey() });
-          setTool("pen");
+          resetTool();
         } else playSfx("sfx-turn");
       } else if (state.phase === "drawing") {
         playSfx("sfx-start");
         playVoice("start");
         setBanner({ s: "ready", k: nextKey() });
+        if (state.challenge) setChallengeShow({ c: state.challenge, k: nextKey() });
       } else if (state.phase === "reveal") {
         const got = correctNow.size;
         if (!state.reveal) playSfx("sfx-leave");
@@ -483,6 +548,11 @@ export default function SketchRoom({
   }, [
     state.phase,
     state.turnId,
+    state.step,
+    state.drawer,
+    state.challenge,
+    state.m,
+    resetTool,
     state.correct,
     state.hint,
     state.reveal,
@@ -516,26 +586,28 @@ export default function SketchRoom({
         if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") {
           e.preventDefault();
           apiRef.current?.undo();
+          setOneDone("");
           return;
         }
         if (e.ctrlKey || e.metaKey || e.altKey) return;
         const k = e.key.toLowerCase();
-        if (k === "b" || k === "p") pickTool("pen");
-        else if (k === "f" || k === "g") pickTool("fill");
-        else if (k === "e") pickTool("eraser");
+        if (k === "b" || k === "p") tools.setTool("pen");
+        else if ((k === "f" || k === "g") && challenge !== "oneline") tools.setTool("fill");
+        else if (k === "e" && challenge !== "oneline") tools.setTool("eraser");
         else if (k === "[" || k === "]") {
           const i = WIDTHS.indexOf(width);
           const n =
             WIDTHS[
               Math.max(0, Math.min(WIDTHS.length - 1, (i < 0 ? 1 : i) + (k === "]" ? 1 : -1)))
             ];
-          pickWidth(n);
+          tools.setWidth(n);
         }
         return;
       }
       // 아무 글자나 누르면 바로 채팅 · 정답 입력칸으로
       if (
         !disabledReason &&
+        !modePhase &&
         !e.ctrlKey &&
         !e.metaKey &&
         !e.altKey &&
@@ -550,6 +622,7 @@ export default function SketchRoom({
   // ───────────── 조각들 ─────────────
 
   const statusCenter = (big: boolean): ReactNode => {
+    if (modePhase) return modeStatus(room, uid, secret, big);
     if (state.phase === "drawing")
       return amDrawer ? (
         <span className="flex items-center gap-2">
@@ -557,6 +630,7 @@ export default function SketchRoom({
             제시어
           </span>
           <FitWord word={myWord ?? ""} size={big ? 34 : 26} />
+          {challenge && <ChallengeBadge c={challenge} />}
         </span>
       ) : (
         <span className="flex items-center gap-2">
@@ -574,6 +648,7 @@ export default function SketchRoom({
           <span className="shrink-0 text-[11px] font-bold text-[var(--ink3)]">
             {[...state.hint].filter((c) => c !== " ").length}글자
           </span>
+          {challenge && <ChallengeBadge c={challenge} />}
         </span>
       );
     if (state.phase === "choosing")
@@ -609,7 +684,7 @@ export default function SketchRoom({
   };
 
   const turnInfo =
-    state.phase === "waiting" || state.phase === "ended" ? null : (
+    state.phase === "waiting" || state.phase === "ended" || modePhase ? null : (
       <span className="text-right text-[11.5px] leading-tight font-bold text-[var(--ink2)]">
         {state.turnNo}번째 그림
         <br />
@@ -617,7 +692,7 @@ export default function SketchRoom({
       </span>
     );
   const timer =
-    state.phase === "drawing" || state.phase === "choosing" ? (
+    state.phase === "drawing" || state.phase === "choosing" || (modePhase && state.endsAt > 0) ? (
       <Timer sec={sec} ratio={timeRatio} size={v ? 42 : 54} />
     ) : null;
 
@@ -744,87 +819,42 @@ export default function SketchRoom({
     );
   };
 
-  // 도구 모음 (그리는 사람)
+  // 도구 모음 (그리는 사람) — 챌린지면 막을 것만 막음
   const toolbar = (compact: boolean) => (
-    <div
-      className={`sk-card-soft flex items-center ${compact ? "flex-col gap-2 px-2 py-2" : "gap-3 px-3 py-2"}`}
+    <Toolbar
+      compact={compact}
+      t={tools}
+      apiRef={apiRef}
+      colors={challenge === "mono" ? [MONO_COLOR] : undefined}
+      noFill={challenge === "oneline"}
+      noEraser={challenge === "oneline"}
+      extra={
+        challenge ? (
+          <span className={`shrink-0 ${compact ? "" : "ml-auto"}`}>
+            <ChallengeBadge c={challenge} />
+          </span>
+        ) : undefined
+      }
+    />
+  );
+
+  // 건너뛰기 투표 (그리는 사람 빼고 과반)
+  const skipButton = (
+    <button
+      type="button"
+      disabled={state.skip.includes(uid)}
+      onClick={() => {
+        playSfx("sfx-vote");
+        voteSkip(roomId, state.turnId);
+      }}
+      title="글씨로 알려 주거나 너무 어려우면 — 과반이 누르면 건너뛰어요"
+      className="sk-btn shrink-0 px-2.5 text-[14px]"
     >
-      <div
-        className={
-          compact
-            ? "grid w-full grid-cols-8 justify-items-center gap-y-1.5"
-            : "grid grid-cols-8 gap-1.5"
-        }
-      >
-        {COLORS.map((c) => (
-          <button
-            key={c}
-            type="button"
-            aria-label={`색 ${c}`}
-            data-on={color === c && tool !== "eraser"}
-            onClick={() => pickColor(c)}
-            className="sk-swatch shrink-0"
-            style={{ backgroundColor: c, width: compact ? 25 : 22, height: compact ? 25 : 22 }}
-          />
-        ))}
-      </div>
-      <div className={`flex items-center ${compact ? "w-full justify-between gap-1" : "gap-3"}`}>
-        <div className="flex items-center gap-0.5">
-          {WIDTHS.map((w) => (
-            <button
-              key={w}
-              type="button"
-              aria-label={`굵기 ${w}`}
-              onClick={() => pickWidth(w)}
-              className={`flex h-9 w-7 cursor-pointer items-center justify-center rounded-lg ${width === w ? "bg-[var(--ink)]/10 ring-2 ring-[var(--ink)]" : "hover:bg-[var(--ink)]/5"}`}
-            >
-              <span
-                className="rounded-full"
-                style={{
-                  width: Math.max(4, Math.min(24, w * 0.6)),
-                  height: Math.max(4, Math.min(24, w * 0.6)),
-                  background:
-                    tool === "eraser" ? "#9a9db3" : color === "#FFFFFF" ? "#C9CED6" : color,
-                }}
-              />
-            </button>
-          ))}
-        </div>
-        <div className="flex items-center gap-1">
-          {(
-            [
-              ["pen", "펜", "pen", "B"],
-              ["fill", "채우기", "fill", "F"],
-              ["eraser", "지우개", "eraser", "E"],
-            ] as const
-          ).map(([t, label, icon, key]) => (
-            <button
-              key={t}
-              type="button"
-              data-on={tool === t}
-              onClick={() => pickTool(t)}
-              title={`${label} (${key})`}
-              className={`sk-tool ${compact ? "h-10 w-10 text-[10.5px]" : "h-12 w-12 text-[13px]"}`}
-            >
-              <Icon name={icon} size={compact ? 18 : 20} />
-              {label}
-            </button>
-          ))}
-        </div>
-        <div className="flex items-center gap-1">
-          <button
-            type="button"
-            onClick={() => apiRef.current?.undo()}
-            title="되돌리기 (Ctrl+Z)"
-            className={`sk-tool ${compact ? "h-10 w-10 text-[10.5px]" : "h-12 w-12 text-[13px]"}`}
-          >
-            <Icon name="undo" size={compact ? 18 : 20} />
-            되돌리기
-          </button>
-          <ClearButton compact={compact} onClear={() => apiRef.current?.clear()} />
-        </div>
-      </div>
-    </div>
+      🗳️ 건너뛰기{" "}
+      <span className="sk-hand text-[16px]">
+        {state.skip.length}/{Math.floor(guessersAll.length / 2) + 1}
+      </span>
+    </button>
   );
 
   // 그리는 사람이 아닐 때 도화지 아래 안내
@@ -842,21 +872,57 @@ export default function SketchRoom({
                 : "아무 글자나 누르면 바로 정답 칸으로 가요 · 몇 번이든 입력 OK"}
             </span>
           </span>
-          {state.phase === "drawing" && meta.hints && (
-            <span className="shrink-0 rounded-full bg-[var(--ink)]/8 px-2 py-1 text-[11px] font-bold text-[var(--ink2)]">
-              💡 힌트 켜짐
-            </span>
+          {state.phase === "drawing" && (
+            <>
+              <LikeButton room={room} uid={uid} likeKey={state.turnId} author={state.drawer} />
+              {skipButton}
+            </>
           )}
         </>
       ) : (
         <>
           <Mascot pose={state.phase === "ended" ? "cheer" : "idle"} size={44} bob={false} />
           <span className="text-[13px] font-bold text-[var(--ink2)]">
-            {meta.drawTime}초 · 한 사람당 {meta.rounds}번 · {TURN_MODE_LABEL[meta.turnMode]}
-            {meta.hints ? " · 힌트" : ""}
+            {meta.mode === "classic" ? (
+              <>
+                {meta.drawTime}초 · 한 사람당 {meta.rounds}번 · {TURN_MODE_LABEL[meta.turnMode]}
+                {meta.hints ? " · 힌트" : ""}
+              </>
+            ) : (
+              `${MODES[meta.mode].emoji} ${MODES[meta.mode].name} · ${MODES[meta.mode].short}`
+            )}
           </span>
         </>
       )}
+    </div>
+  );
+
+  // 최종 결과 아래 버튼
+  const endButtons = (
+    <div className="mt-1 flex flex-wrap justify-center gap-2">
+      {isLeader ? (
+        <button
+          type="button"
+          onClick={() => {
+            playSfx("sfx-pick");
+            backToWaiting(roomId).catch(() => {});
+          }}
+          className={`sk-btn sk-btn-coral ${v ? "text-[18px]" : "text-[22px]"}`}
+        >
+          <Icon name="refresh" size={18} /> 한 판 더!
+        </button>
+      ) : (
+        <span className="sk-hand self-center text-[17px] text-[var(--ink2)]">
+          방장이 「한 판 더」를 누르면 다시 시작해요
+        </span>
+      )}
+      <button
+        type="button"
+        onClick={tap(onLeave, "sfx-close")}
+        className={`sk-btn ${v ? "text-[18px]" : "text-[22px]"}`}
+      >
+        로비로
+      </button>
     </div>
   );
 
@@ -871,7 +937,10 @@ export default function SketchRoom({
         </h3>
         {v ? (
           <p className="text-[13px] font-bold text-[var(--ink2)]">
-            {players.length}/{meta.max}명 · {meta.drawTime}초 · 한 사람당 {meta.rounds}번
+            {players.length}/{meta.max}명 ·{" "}
+            {meta.mode === "classic"
+              ? `${meta.drawTime}초 · 한 사람당 ${meta.rounds}번`
+              : `${MODES[meta.mode].emoji} ${MODES[meta.mode].name}`}
           </p>
         ) : (
           <div className="flex flex-wrap justify-center gap-1.5">
@@ -899,11 +968,16 @@ export default function SketchRoom({
             )}
           </div>
         )}
-        {!v && (
-          <p className="text-[13px] font-bold text-[var(--ink2)]">
-            {meta.drawTime}초 · 한 사람당 {meta.rounds}번 · {TURN_MODE_LABEL[meta.turnMode]}
-            {meta.hints ? " · 힌트" : ""}
-          </p>
+        {meta.mode === "classic" ? (
+          !v && (
+            <p className="text-[13px] font-bold text-[var(--ink2)]">
+              {meta.drawTime}초 · 한 사람당 {meta.rounds}번 · {TURN_MODE_LABEL[meta.turnMode]}
+              {meta.hints ? " · 힌트" : ""}
+              {meta.challenge ? " · 깜짝 챌린지" : ""}
+            </p>
+          )
+        ) : (
+          <ModeHow room={room} v={v} />
         )}
         <div className="flex flex-wrap justify-center gap-2">
           <button
@@ -916,14 +990,16 @@ export default function SketchRoom({
           {isLeader ? (
             <button
               type="button"
-              disabled={players.length < 2}
+              disabled={players.length < MODES[meta.mode].min}
               onClick={() => {
                 playSfx("jingle-start");
                 startGame(room).catch(() => {});
               }}
               className={`sk-btn sk-btn-coral ${v ? "text-[18px]" : "text-[24px]"}`}
             >
-              {players.length < 2 ? "2명부터 시작할 수 있어요" : "▶ 게임 시작!"}
+              {players.length < MODES[meta.mode].min
+                ? `${MODES[meta.mode].min}명부터 시작할 수 있어요`
+                : "▶ 게임 시작!"}
             </button>
           ) : (
             <span className="sk-hand flex items-center gap-1 text-[18px] text-[var(--ink2)]">
@@ -1002,7 +1078,8 @@ export default function SketchRoom({
     );
   } else if (state.phase === "reveal") {
     const got = Object.entries(state.correct ?? {}).sort((a, b) => b[1] - a[1]);
-    const stamp: StampName = !state.reveal ? "skip" : allCorrect ? "great" : "timeup";
+    const voted = state.skip.length * 2 > guessersAll.length;
+    const stamp: StampName = !state.reveal || voted ? "skip" : allCorrect ? "great" : "timeup";
     overlay = (
       <div className="flex w-full flex-col items-center gap-2 text-center">
         <Stamp name={stamp} size={v ? 0.6 : 0.9} />
@@ -1029,12 +1106,30 @@ export default function SketchRoom({
           </ul>
         ) : (
           <p className="text-[13px] font-bold text-[var(--ink2)]">
-            {state.reveal ? "아무도 못 맞혔어요 😢" : "그리는 사람이 자리를 비웠어요"}
+            {voted
+              ? "투표로 건너뛰었어요 🗳️"
+              : state.reveal
+                ? "아무도 못 맞혔어요 😢"
+                : "그리는 사람이 자리를 비웠어요"}
           </p>
+        )}
+        {state.reveal && (
+          <LikeButton room={room} uid={uid} likeKey={state.turnId} author={state.drawer} />
         )}
         <p className="text-[11.5px] text-[var(--ink3)]">
           {turnsLeft ? `${sec}초 뒤 다음 그림` : `${sec}초 뒤 최종 결과`}
         </p>
+      </div>
+    );
+  } else if (state.phase === "ended" && meta.mode === "relay") {
+    overlay = (
+      <div className="flex w-full max-w-[520px] flex-col items-center gap-3 text-center">
+        <Mascot pose="cheer" size={v ? 80 : 110} />
+        <h3 className="sk-hand leading-none" style={{ fontSize: v ? 26 : 38 }}>
+          📖 앨범 끝! 재밌었나요?
+        </h3>
+        <BestLine room={room} />
+        {endButtons}
       </div>
     );
   } else if (state.phase === "ended") {
@@ -1087,45 +1182,43 @@ export default function SketchRoom({
             ))}
           </ol>
         )}
-        <div className="mt-1 flex flex-wrap justify-center gap-2">
-          {isLeader ? (
-            <button
-              type="button"
-              onClick={() => {
-                playSfx("sfx-pick");
-                backToWaiting(roomId).catch(() => {});
-              }}
-              className={`sk-btn sk-btn-coral ${v ? "text-[18px]" : "text-[22px]"}`}
-            >
-              <Icon name="refresh" size={18} /> 한 판 더!
-            </button>
-          ) : (
-            <span className="sk-hand self-center text-[17px] text-[var(--ink2)]">
-              방장이 「한 판 더」를 누르면 다시 시작해요
-            </span>
-          )}
-          <button
-            type="button"
-            onClick={tap(onLeave, "sfx-close")}
-            className={`sk-btn ${v ? "text-[18px]" : "text-[22px]"}`}
-          >
-            로비로
-          </button>
-        </div>
+        <BestLine room={room} />
+        {endButtons}
       </div>
     );
   }
 
-  const canvas = (
+  const blind = challenge === "blind" && amDrawer && state.phase === "drawing";
+  const classicCanvas = (
     <SketchCanvas
-      roomId={roomId}
-      turnId={state.turnId}
+      source={canvasSource}
       canDraw={canDraw}
-      tool={tool}
+      tool={challenge === "oneline" ? "pen" : tool}
       color={color}
       width={width}
       apiRef={apiRef}
+      hideInk={blind}
+      onStrokeEnd={challenge === "oneline" ? () => setOneDone(state.turnId) : undefined}
     >
+      {blind && (
+        <div className="pointer-events-none absolute inset-0 z-[3] flex flex-col items-center justify-center gap-1 rounded-[3px] bg-[repeating-linear-gradient(45deg,#fdf6e3_0_14px,#f6ead0_14px_28px)]">
+          <span className="text-[54px] leading-none">🙈</span>
+          <span className="sk-hand text-[22px] text-[var(--ink2)]">
+            내 그림이 안 보여요! 감으로 그려요
+          </span>
+        </div>
+      )}
+      {challenge === "oneline" &&
+        amDrawer &&
+        oneDone === state.turnId &&
+        state.phase === "drawing" && (
+          <div className="pointer-events-none absolute inset-x-0 bottom-3 z-[5] flex justify-center">
+            <span className="sk-card-soft px-3 py-1 text-[13px] font-bold">
+              〰️ 한 획 끝! 다시 그리려면 「되돌리기」
+            </span>
+          </div>
+        )}
+      <LikeRise n={likeCount} turnId={state.turnId} />
       {overlay && <div className="sk-overlay sk-scroll overflow-y-auto">{overlay}</div>}
       {banner && (
         <div
@@ -1135,7 +1228,42 @@ export default function SketchRoom({
           <Stamp name={banner.s} size={v ? 0.8 : 1.3} />
         </div>
       )}
+      {challengeShow && (
+        <div
+          key={challengeShow.k}
+          className="sk-banner pointer-events-none absolute inset-x-0 top-[58%] z-[8] flex justify-center"
+          style={{ animationDelay: "0.5s" }}
+        >
+          <span
+            className="sk-card flex items-center gap-2 px-4 py-2 text-center"
+            style={{ rotate: "-2deg" }}
+          >
+            <span className="text-[30px]">{CHALLENGES[challengeShow.c].emoji}</span>
+            <span className="text-left">
+              <b className="sk-hand block text-[24px] leading-none text-[var(--grape)]">
+                깜짝 챌린지! {CHALLENGES[challengeShow.c].name}
+              </b>
+              <span className="text-[12.5px] font-bold text-[var(--ink2)]">
+                {CHALLENGES[challengeShow.c].desc} · 점수 ×{CHALLENGE_BONUS}
+              </span>
+            </span>
+          </span>
+        </div>
+      )}
     </SketchCanvas>
+  );
+  // 다른 모드 진행 중이면 가운데를 모드 화면으로
+  const canvas = modePhase ? (
+    <ModeCenter
+      room={room}
+      uid={uid}
+      v={v}
+      remaining={remaining}
+      isLeader={isLeader}
+      secret={secret}
+    />
+  ) : (
+    classicCanvas
   );
 
   const leaveBtn = (
@@ -1157,7 +1285,13 @@ export default function SketchRoom({
       uid={uid}
       disabledReason={disabledReason}
       guessing={guessing}
-      placeholder={guessing ? "정답을 입력하세요! (Enter)" : "채팅 입력 (Enter)"}
+      placeholder={
+        guessing
+          ? "정답을 입력하세요! (Enter)"
+          : secretChat
+            ? "🤫 정답 아는 사람끼리만 보이는 채팅"
+            : "채팅 입력 (Enter)"
+      }
       onSend={onSend}
       inputRef={inputRef}
       compact={v}
@@ -1190,7 +1324,15 @@ export default function SketchRoom({
           <FsButton />
         </div>
         <div className="relative shrink-0">{canvas}</div>
-        {canDraw ? toolbar(true) : null}
+        {!modePhase && amDrawer && state.phase === "drawing" ? toolbar(true) : null}
+        {!modePhase && !amDrawer && state.phase === "drawing" && (
+          <div className="flex items-center justify-end gap-1.5">
+            {challenge && <ChallengeBadge c={challenge} />}
+            <span className="flex-1" />
+            {skipButton}
+            <LikeButton room={room} uid={uid} likeKey={state.turnId} author={state.drawer} />
+          </div>
+        )}
         <ul className="sk-scroll flex shrink-0 gap-1 overflow-x-auto px-1 pt-2 pb-0.5">
           {players.map((p) => playerCard(p, true))}
         </ul>
@@ -1211,7 +1353,10 @@ export default function SketchRoom({
             <span className="truncate">{plainName(meta.name)}</span>
           </div>
           <div className="text-[11.5px] font-bold text-[var(--ink3)]">
-            {players.length}/{meta.max}명 · {meta.drawTime}초
+            {players.length}/{meta.max}명 ·{" "}
+            {meta.mode === "classic"
+              ? `${meta.drawTime}초`
+              : `${MODES[meta.mode].emoji} ${MODES[meta.mode].name}`}
           </div>
         </div>
         <div className="sk-card-soft flex h-[52px] min-w-0 flex-1 items-center justify-center overflow-hidden px-4">
@@ -1245,7 +1390,7 @@ export default function SketchRoom({
         </div>
         <div className="flex w-[712px] shrink-0 flex-col gap-2.5">
           {canvas}
-          {canDraw ? toolbar(false) : guesserBar}
+          {modePhase ? null : amDrawer && state.phase === "drawing" ? toolbar(false) : guesserBar}
         </div>
         <div className="flex min-w-0 flex-1 flex-col">{chat}</div>
       </div>
@@ -1254,32 +1399,59 @@ export default function SketchRoom({
   );
 }
 
-/** 전체 지우기 — 한 번 더 눌러야 */
-function ClearButton({ compact, onClear }: { compact: boolean; onClear: () => void }) {
-  const [sure, setSure] = useState(false);
-  useEffect(() => {
-    if (!sure) return;
-    const t = setTimeout(() => setSure(false), 2500);
-    return () => clearTimeout(t);
-  }, [sure]);
+/** 깜짝 챌린지 표시 */
+function ChallengeBadge({ c }: { c: Exclude<Challenge, ""> }) {
+  const info = CHALLENGES[c];
   return (
-    <button
-      type="button"
-      onClick={() => {
-        if (sure) {
-          setSure(false);
-          onClear();
-        } else {
-          playSfx("sfx-click");
-          setSure(true);
-        }
-      }}
-      title="전체 지우기"
-      data-on={sure}
-      className={`sk-tool ${compact ? "h-10 w-10 text-[10.5px]" : "h-12 w-12 text-[13px]"} ${sure ? "!bg-[var(--coral)] !text-white" : ""}`}
+    <span
+      title={info.desc}
+      className="sk-wiggle inline-flex shrink-0 items-center gap-1 rounded-full border-2 border-[var(--ink)] bg-[var(--grape)] px-2 py-0.5 text-[11.5px] font-extrabold whitespace-nowrap text-white"
     >
-      <Icon name="trash" size={compact ? 18 : 20} />
-      {sure ? "정말?" : "다 지움"}
-    </button>
+      {info.emoji} {info.name} ×{CHALLENGE_BONUS}
+    </span>
+  );
+}
+
+/** 그림 맞히기: 따봉이 늘면 도화지 위로 엄지가 떠오름 */
+function LikeRise({ n, turnId }: { n: number; turnId: string }) {
+  const [list, setList] = useState<{ k: number; x: number }[]>([]);
+  const prev = useRef({ n, turnId });
+  useEffect(() => {
+    const p = prev.current;
+    prev.current = { n, turnId };
+    if (p.turnId !== turnId || n <= p.n) return;
+    const add = Array.from({ length: Math.min(LIKE_RISE_MAX, n - p.n) }, (_, i) => ({
+      k: Date.now() + i,
+      x: 8 + Math.random() * 84,
+    }));
+    setList((l) => [...l, ...add]);
+    const t = setTimeout(() => setList((l) => l.filter((x) => !add.includes(x))), 1900);
+    return () => clearTimeout(t);
+  }, [n, turnId]);
+  return (
+    <>
+      {list.map((x) => (
+        <span
+          key={x.k}
+          className="sk-like-rise pointer-events-none absolute bottom-2 z-[6] text-[34px]"
+          style={{ left: `${x.x}%` }}
+        >
+          👍
+        </span>
+      ))}
+    </>
+  );
+}
+
+/** 이번 판 따봉 1등 */
+function BestLine({ room }: { room: Room }) {
+  // 판 끝 안내는 채팅에도 올라가지만, 화면에도 한 줄
+  const likes = room.state.likes ?? {};
+  const top = Object.entries(likes).sort((a, b) => b[1].length - a[1].length)[0];
+  if (!top || top[1].length < 1) return null;
+  return (
+    <p className="rounded-full border-2 border-[var(--ink)] bg-[var(--sun)] px-3 py-1 text-[13px] font-extrabold">
+      👍 이번 판 최고 인기 그림 — 따봉 {top[1].length}개
+    </p>
   );
 }
