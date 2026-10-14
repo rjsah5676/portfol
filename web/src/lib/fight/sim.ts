@@ -108,6 +108,9 @@ const LAND_S_BUF = 14;
 /** 그중 풀 수 있는 앞쪽 프레임 (잡히는 순간의 히트스톱 10프레임 동안 누른 것도 인정 → 약 0.33초, 철권 수준). 풀면 피해 없음
  *  (10.12 4 → 10 · 붙잡는 시간 8 → 14: 보고 풀기엔 0.23초가 너무 짧아 0.1초 늘림) */
 const THROW_TECH_WIN = 10;
+/** 잡기 풀기는 연달아 최대 이만큼 (그다음 잡기는 못 풂) — 사이에 맞거나 막거나 TECH_CHAIN_GAP 이 지나면 다시 셈 (10.14 잡기 → 풀기가 끝없이 반복되던 것) */
+const TECH_CHAIN = 2;
+const TECH_CHAIN_GAP = 150;
 /** 연속 동작 수: 약(L) 4단, 발차기(H) 2단 */
 const CHAIN_MAX: Partial<Record<MoveId, number>> = { L: 4, H: 2 };
 const CHAIN_STEP = 520;
@@ -378,6 +381,9 @@ export interface State {
   proj: Proj[];
   /** 히트스톱 (판 전체 멈춤) */
   stop: number;
+  /** 잡기 풀기가 연달아 나온 수 · 마지막으로 풀린 프레임 (TECH_CHAIN) */
+  techN: number;
+  techF: number;
   /** 초필살 연출 멈춤 */
   freeze: number;
   freezeBy: number;
@@ -536,6 +542,8 @@ export function newMatch(chars: [number, number], map = 0): State {
     p: [newFighter(chars[0], 0, m), newFighter(chars[1], 1, m)],
     proj: [],
     stop: 0,
+    techN: 0,
+    techF: -999,
     freeze: 0,
     freezeBy: -1,
     ev: [{ k: "round", p: -1, x: 0, h: 0, v: 1 }],
@@ -576,7 +584,7 @@ const cloneF = (f: Fighter): Fighter => ({ ...f, hist: f.hist.slice() });
  * 이 빌드의 게임 데이터 지문 (캐릭터 성능·맵) — 온라인에서 서로 다른 빌드끼리 붙었는지 확인.
  * 계산 방식(sim.ts)만 바꿨을 땐 SIM_REV를 올릴 것.
  */
-const SIM_REV = 21;
+const SIM_REV = 22;
 export const BUILD_ID = (() => {
   const str = SIM_REV + JSON.stringify(CHARS.map((c) => [c.hp, c.walk, c.jumpVx, c.dash, c.cd, c.glide, c.hurt, c.width, c.moves])) + JSON.stringify(MAPS.map((m) => [m.plats, m.spawn]));
   let h = 2166136261;
@@ -772,6 +780,13 @@ const airborneS = (s: State, f: Fighter) => !onGround(s, f);
 function gainMeter(f: Fighter, n: number) {
   if (f.mnerf > 0) n = Math.trunc((n * 7) / 10);
   f.meter = Math.min(METER_MAX, f.meter + n);
+}
+
+/** 지금 잡기를 풀 수 있나 (연달아 TECH_CHAIN 번까지) */
+const techOk = (s: State) => s.f - s.techF > TECH_CHAIN_GAP || s.techN < TECH_CHAIN;
+function countTech(s: State) {
+  s.techN = s.f - s.techF > TECH_CHAIN_GAP ? 1 : s.techN + 1;
+  s.techF = s.f;
 }
 
 function startMove(s: State, i: number, id: MoveId) {
@@ -1249,7 +1264,8 @@ function control(s: State, i: number) {
           f.vx = o.face * 220;
           f.stun = LAUNCH_STUN;
           s.ev.push({ k: "launch", p: 1 - i, x: f.x, h: f.h, v: 0 });
-        } else if (f.grabbed >= THROW_TECH_T - THROW_TECH_WIN && techIn) {
+        } else if (f.grabbed >= THROW_TECH_T - THROW_TECH_WIN && techIn && techOk(s)) {
+          countTech(s);
           const o = s.p[1 - i];
           f.grabbed = 0;
           f.grabDmg = 0;
@@ -1872,6 +1888,7 @@ function applyHit(s: State, ai: number, m: MoveDef, srcX: number, mid: MoveId, p
     gainMeter(d, (just ? 10 : 3));
     s.stop = Math.max(s.stop, m.hitstop - 3);
     s.ev.push({ k: just ? "just" : "block", p: ai, x: d.x - dir * 10 * SUB, h: eh, v: m.chip, m: mid });
+    s.techN = 0;
     // 막아도 화상은 쌓이는 기술 (이그나 업화주)
     if (m.burn && m.burnGuard) addBurn(s, ai, d);
   } else {
@@ -1926,6 +1943,7 @@ function applyHit(s: State, ai: number, m: MoveDef, srcX: number, mid: MoveId, p
     const decay = m.multi || m.summon ? 0 : Math.min(40, Math.max(0, d.combo - 3) * 6);
     // (발차기 2단 마무리가 맞으면 경직 더 — finStun, 이반: 맞혀도 -20이라 바로 반격당하던 것 10.14)
     d.stun = Math.max(6, Math.trunc(((m.hitstun + (fin ? (m.finStun ?? 0) : 0)) * (100 - decay)) / 100)) + (counter ? 6 : 0);
+    if (mid !== "T") s.techN = 0;
     if (counter) s.ev.push({ k: "counter", p: ai, x: d.x, h: d.h + 70 * SUB, v: 0 });
     d.vx = fin ? Math.trunc((dir * m.push * 16) / 10) : dir * m.push;
     // 끌어당기는 기술: 때린 쪽 바로 앞(약 34px)에 멈추게 — 땅 마찰(60/프레임)로 멈추는 거리에 맞춘 속도
@@ -2316,7 +2334,8 @@ function attacks(s: State) {
     hits.push(i);
   }
   // 둘 다 잡기면 서로 밀쳐 냄
-  if (hits.length === 2 && s.p[0].mv === "T" && s.p[1].mv === "T") {
+  if (hits.length === 2 && s.p[0].mv === "T" && s.p[1].mv === "T" && techOk(s)) {
+    countTech(s);
     for (let i = 0; i < 2; i++) {
       const f = s.p[i];
       f.st = "idle";
