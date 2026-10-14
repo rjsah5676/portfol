@@ -24,7 +24,7 @@ export interface VerifyOut {
   /** 보드마다 가장 높은 등급 유닛 3개 (순위표에 보여 줌) */
   tops: string[][];
   /** 보드마다 미션 숫자 재료 (얻은 유닛 · 닫은 균열) */
-  stats: { made: Record<string, number>; rifts: number; treasure?: { wave: number; dmg: number; max: number; killed: boolean; gold: number } | null }[];
+  stats: { made: Record<string, number>; rifts: number; treasure?: { wave: number; dmg: number; max: number; killed: boolean } | null }[];
   ticks: number;
   cpu: number;
 }

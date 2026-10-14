@@ -63,13 +63,13 @@ export const treasureChance = (waves: number, glitch: number) =>
   glitch < TREASURE.minGlitch ? 0 : Math.min(1, Math.pow(Math.max(0, waves) / TREASURE.cap, TREASURE.exp));
 /**
  * 보물방 판 밖 보상: 깎은 체력 비율 r(0~1) 에 비례 × 오염 단계 보상 배수. 잡으면 카드 상자 +1.
- * 다 깎으면 조각 ≈ 일반 판 2판 몫 · 코어 ≈ 클리어 한 번 몫
+ * 다 깎으면 조각 ≈ 일반 판 2~3판 몫 · 코어 ≈ 클리어 한 번 몫 (골드는 안 줌 — 판 밖 재화만)
  */
 export function treasureReward(glitch: number, t: { dmg: number; max: number; killed: boolean }): Goods {
   const g = GLITCH[Math.max(0, Math.min(GLITCH_MAX, glitch))];
   const r = t.max > 0 ? Math.max(0, Math.min(1, t.dmg / t.max)) : 0;
   return {
-    pieces: Math.round(600 * r * g.reward),
+    pieces: Math.round(800 * r * g.reward),
     cores: Math.floor(8 * r * (1 + glitch / 10)),
     ...(t.killed ? { cardBox: 1 } : {}),
   };

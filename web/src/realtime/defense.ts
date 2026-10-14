@@ -44,8 +44,8 @@ export type FinishOut = {
         firstClear?: { glitch: number; cores: number; relicBox: number } | null;
         /** 이 오염 단계 최고 웨이브 (이번 판 전 · 뒤, 클리어 = LAST_WAVE + 1) */
         gbest?: { glitch: number; prev: number; now: number };
-        /** 보물방 결과 (열렸던 판) — ratio 깎은 체력 비율 · gold 판 안에서 받은 골드 · reward 판 밖 보상 */
-        treasure?: { wave: number; ratio: number; killed: boolean; gold: number; reward: { pieces?: number; cores?: number; cardBox?: number } } | null;
+        /** 보물방 결과 (열렸던 판) — ratio 깎은 체력 비율 · reward 판 밖 보상 */
+        treasure?: { wave: number; ratio: number; killed: boolean; reward: { pieces?: number; cores?: number; cardBox?: number } } | null;
       })
     | null;
 };

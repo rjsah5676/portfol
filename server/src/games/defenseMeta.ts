@@ -141,7 +141,7 @@ export interface RunStats {
   made: Record<string, number>;
   rifts: number;
   /** 보물방 결과 (그 판에 열렸으면) */
-  treasure?: { wave: number; dmg: number; max: number; killed: boolean; gold: number } | null;
+  treasure?: { wave: number; dmg: number; max: number; killed: boolean } | null;
 }
 
 /** 시작 선물 */
@@ -469,11 +469,11 @@ export function createDefenseMeta(db: Database, points: Points, now: () => numbe
         const gbest = { glitch, prev: prevBest, now: Math.max(prevBest, reach) };
         // 보물방: 오염 1+ 판은 도달한 웨이브만큼 쌓임 (천장까지) · 열렸던 판이면 깎은 만큼 보상
         if (mode === "season" && glitch >= TREASURE.minGlitch) p.twaves = Math.min(TREASURE.cap, (p.twaves ?? 0) + res.wave);
-        let treasure: { wave: number; ratio: number; killed: boolean; gold: number; reward: Goods } | null = null;
+        let treasure: { wave: number; ratio: number; killed: boolean; reward: Goods } | null = null;
         if (st.treasure) {
           const tg = treasureReward(glitch, st.treasure);
           await grantGoods(uid, p, tg);
-          treasure = { wave: st.treasure.wave, ratio: st.treasure.max ? st.treasure.dmg / st.treasure.max : 0, killed: st.treasure.killed, gold: st.treasure.gold, reward: tg };
+          treasure = { wave: st.treasure.wave, ratio: st.treasure.max ? st.treasure.dmg / st.treasure.max : 0, killed: st.treasure.killed, reward: tg };
         }
         if (glitchUnlocks(glitch, res) && glitch >= p.glitchOpen && p.glitchOpen < GLITCH_MAX) {
           p.glitchOpen = glitch + 1;

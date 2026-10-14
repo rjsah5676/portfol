@@ -206,7 +206,7 @@ describe("픽셀 글리치 디펜스 엔진", () => {
     expect(b2.tele).toBeNull();
   });
 
-  it("보물방: 정해진 웨이브 직전 30초 — 일반 적은 치워 두고 골렘만 · 매초 골드 · 끝나면 적을 돌려놓고 그 웨이브", () => {
+  it("보물방: 정해진 웨이브 직전 30초 — 일반 적은 치워 두고 골렘만 · 골드 없음 · 끝나면 적을 돌려놓고 그 웨이브", () => {
     const g = newGame(13, 1, [{ glitch: 1, treasure: 12 }]);
     const b = g.boards[0];
     const cfg = BOTS[0];
@@ -223,8 +223,7 @@ describe("픽셀 글리치 디펜스 엔진", () => {
     expect(apply(g, 0, { t: "next" })).toBe("보물방이 끝나야 넘어가요");
     while (b.phase === "treasure") step(g);
     expect(b.treasure?.wave).toBe(12);
-    expect(b.treasure!.gold).toBeGreaterThan(0);
-    expect(b.gold).toBeGreaterThanOrEqual(gold);
+    expect(b.gold).toBe(gold); // 골드는 안 줌 (판 밖 재화만)
     expect(b.enemies.some((e) => e.tre)).toBe(false);
     expect(b.enemies.length).toBeGreaterThanOrEqual(stashed);
     expect(b.phase).toBe("wave");

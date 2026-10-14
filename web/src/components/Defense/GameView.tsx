@@ -46,7 +46,7 @@ import {
 } from "@/lib/defense/units";
 import type { Controller } from "./controller";
 import { RelicIcon } from "./Hub";
-import { RELIC, RES, relicDesc, resDesc } from "@/lib/defense/progress";
+import { RELIC, RES, relicDesc, resDesc, treasureReward } from "@/lib/defense/progress";
 import { BENCH_W, CW, FH2, cellAt, draw, newView, pushFx } from "./render";
 import {
   Bar,
@@ -226,7 +226,7 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry }
           setShout({
             id: Math.random(),
             title: "보물방!",
-            sub: `${B.treasure.sec}초 동안 보물 골렘을 최대한 깎아요 — 매초 골드 · 깎은 만큼 보상 (일반 적은 잠시 멈춰요)`,
+            sub: `${B.treasure.sec}초 동안 보물 골렘을 최대한 깎아요 — 깎은 만큼 픽셀 조각 · 글리치 코어 (일반 적은 잠시 멈춰요)`,
             color: "#ffd23f",
           });
         } else {
@@ -234,7 +234,7 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry }
           setShout({
             id: Math.random(),
             title: e.killed ? "보물 골렘 처치!" : `${Math.round((e.ratio ?? 0) * 100)}% 깎음`,
-            sub: `보물방 끝 · 골드 +${e.gold ?? 0} · 판 끝에 보상`,
+            sub: "보물방 끝 · 깎은 만큼 판이 끝나면 재화로 받아요",
             color: "#ffd23f",
           });
         }
@@ -1660,12 +1660,15 @@ function TreasurePanel({ b }: { b: Board }) {
   const r = b.troom!;
   const e = b.enemies.find((x) => x.tre);
   const ratio = r.killed || !e ? 1 : Math.max(0, Math.min(1, (r.max - Math.max(0, e.hp)) / r.max));
+  // 지금까지 깎은 만큼 판 끝에 받을 재화 (서버와 같은 계산)
+  const rw = treasureReward(b.mods.glitch.lv, { dmg: ratio * r.max, max: r.max, killed: r.killed });
   return (
     <div className="px-box flex h-full min-w-[150px] max-w-[240px] flex-1 flex-col justify-center px-2.5" style={{ "--b": "#ffd23f" } as React.CSSProperties}>
       <div className="flex items-baseline justify-between text-[12px] leading-none">
         <b className="text-[13px] whitespace-nowrap text-[var(--gold)]">보물방</b>
         <span className="whitespace-nowrap text-[var(--mute)]">
-          {Math.round(ratio * 100)}% 깎음 · {Math.ceil(r.t / TPS)}s · <Icon n="coin" size={10} />+{r.gold}
+          {Math.round(ratio * 100)}% · {Math.ceil(r.t / TPS)}s · 조각 +{rw.pieces ?? 0}
+          {!!rw.cores && ` · 코어 +${rw.cores}`}
         </span>
       </div>
       <Bar className="mt-1.5" h={6} value={1 - ratio} color="#ffd23f" />
