@@ -279,6 +279,27 @@ const RUNS = FULL
       await sleep(500);
       await look(`탭 ${t}`);
     }
+    // 루트 상점 편의성 · 재화 고르기 창
+    if ((await click("상점")) || (await click("루트 상점"))) {
+      await sleep(400);
+      if (await click("🛠️")) {
+        await sleep(500);
+        await look("상점 편의성");
+        if (await click("구매")) {
+          await sleep(500);
+          await look("창 재화 고르기");
+          await key("Escape", "Escape", 27);
+          await sleep(300);
+        }
+      }
+    }
+    // 스테이지 이동 칸
+    if (await click("🎯 이동")) {
+      await sleep(400);
+      await look("스테이지 이동 칸");
+      await key("Escape", "Escape", 27);
+      await sleep(300);
+    }
     for (const win of ["바이러스 도감", "기록", "게임 방법", "패치노트", "설정", "세이브 백업"]) {
       await key("Escape", "Escape", 27);
       await sleep(300);
@@ -298,6 +319,38 @@ const RUNS = FULL
     await key("Escape", "Escape", 27);
     await look("메뉴 창");
     await key("Escape", "Escape", 27);
+    // 3시간 비웠다가 이어하기 — 진행 막대 → 수령 창
+    const before2 = await ev("performance.timeOrigin");
+    await ev(
+      `localStorage.setItem('virus-idle-v3', ${JSON.stringify(JSON.stringify({ ...SAVE, savedAt: Date.now() - 3 * 3600 * 1000 }))}); location.reload(); true`
+    );
+    for (let i = 0; i < 80; i++) {
+      await sleep(500);
+      try {
+        if (
+          (await ev("performance.timeOrigin")) !== before2 &&
+          (await ev("!!document.querySelector('[data-virus-frame]')"))
+        )
+          break;
+      } catch {}
+    }
+    await sleep(1500);
+    if (!mobile) {
+      await ev(
+        "document.querySelector('[data-virus-frame]').requestFullscreen?.().catch(()=>{}); true"
+      );
+      await sleep(800);
+    }
+    await key("a", "KeyA", 65);
+    await sleep(900);
+    await key("Enter", "Enter", 13);
+    for (let i = 0; i < 40 && !(await ev("document.body.innerText.includes('수령하기')")); i++)
+      await sleep(500);
+    await sleep(500);
+    await look("창 자리를 비운 동안 (수령)");
+    await click("수령하기");
+    await sleep(800);
+    await look("수령 뒤");
   }
 }
 console.log(report.join("\n"));

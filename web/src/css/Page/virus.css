@@ -1139,3 +1139,54 @@
     opacity: 0;
   }
 }
+
+/* 자리를 비운 동안 진행 막대: 차오르며 반짝이는 줄 */
+.vg-away-bar {
+  transition: width 0.12s linear;
+  background-size: 24px 100%;
+  background-image: linear-gradient(
+    90deg,
+    rgba(16, 185, 129, 1) 0%,
+    rgba(110, 231, 183, 1) 50%,
+    rgba(16, 185, 129, 1) 100%
+  );
+  animation: vg-away-bar 0.6s linear infinite;
+}
+@keyframes vg-away-bar {
+  to {
+    background-position: 24px 0;
+  }
+}
+.virus-calm .vg-away-bar {
+  animation: none;
+}
+
+/* 탭: 컴파일할 수 있는 모듈 · 우회 기술이 있으면 오른쪽 위에 반짝이는 점 */
+.vg-tab-ping {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 8px;
+  height: 8px;
+  border-radius: 9999px;
+  background: #fbbf24;
+  box-shadow: 0 0 6px rgba(251, 191, 36, 0.9);
+  pointer-events: none;
+}
+.vg-tab-ping > span {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: #fbbf24;
+  animation: vg-tab-ping 1.2s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+@keyframes vg-tab-ping {
+  75%,
+  100% {
+    transform: scale(2.2);
+    opacity: 0;
+  }
+}
+.virus-calm .vg-tab-ping > span {
+  animation: none;
+}

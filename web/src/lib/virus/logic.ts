@@ -41,7 +41,8 @@ export const BAL = {
   /** 스테이지마다 체력 배율 (lateFrom 까지) · 그 뒤로는 hpGrowthLate */
   hpGrowth: 1.18,
   lateFrom: 100,
-  hpGrowthLate: 1.18,
+  /** (1.18 → 1.185: 보스가 다시 벽이 되며 변이를 제때 하게 되고 백도어 침투가 생겨 빨라진 만큼 — 1000 도달 시간 유지) */
+  hpGrowthLate: 1.185,
   /** 마지막 구역(글로벌 코어, endFrom 다음부터)은 체력 증가율을 낮춤 — 코드 모듈이 상한에 닿아 성장이 느려지는 끝을 밀어붙이게 */
   endFrom: 900,
   hpGrowthEnd: 1.15,
@@ -63,6 +64,11 @@ export const BAL = {
   critMax: 0.5,
   critK: 0.95,
   critMulStep: 0.05,
+  /**
+   * 익스플로잇 확률이 상한(critMax)에 다가가 못 오르게 된 만큼 — 그 레벨 1마다 익스플로잇 피해 배율 +이 값 (곱해짐)
+   * (확률이 꽉 차면 익스플로잇 업그레이드가 거의 쓸모없어지던 것. 레벨마다 곱하면 후반 레벨이 수백이라 폭주)
+   */
+  critOver: 0.002,
   /** 시스템 포맷이 열리는 스테이지 */
   formatStage: 30,
   /** 루트 권한 합계 = ((최고 스테이지 - 1) ÷ rootDiv)^rootPow — 더 멀리 가야만 늘어남 */
@@ -101,6 +107,20 @@ export const BAL = {
   modMobHp: 0.97,
   modBossHp: 0.97,
   modBossDmg: 1.15,
+  /** 코드 모듈 「백도어 침투」: 보스(상위 · 최종 포함)에게는 깎는 비율을 이만큼만 */
+  backdoorBoss: 0.5,
+  /**
+   * 우회 기술 「관제 우회」: 보스 피해 ×modBossDmg → 최대 ×이 값 (상한형 — 버전마다 곱하던 때는 우회 기술이 고르게 오르면
+   * 보스가 파일 하나보다 빨리 잡혀서, 진행을 막는 벽이 파일이 돼 버렸음)
+   */
+  bossDmgMax: 1.5,
+  /** 일반 파일 보안 등급(체력) 배율 — 보스가 파일보다 4배쯤 오래 걸리게 파일은 가볍게 (보스 = 스테이지의 벽) */
+  mobHpK: 0.5,
+  /**
+   * 우회 기술 「샌드박스 탈출」: 익스플로잇 피해 ×1.5 → 최대 ×이 값 (곱 — 더하기였을 땐 익스플로잇 업그레이드에 묻혔고,
+   * 버전마다 곱하면 우회 기술 버전이 90 가까이 올라 폭주해서 다른 상한형 우회 기술처럼 다가가게)
+   */
+  bypCritMax: 4,
   /**
    * 버전마다 점점 덜 오르는 모듈 (상한이 없으면 후반에 오프라인이 온라인보다 커지고, 익스플로잇 확률이 업그레이드 없이 꽉 참)
    *   Zeus: 오프라인 효율 30% → 최대 offRateMax
@@ -149,12 +169,11 @@ export type ShopKey =
   | "daemon"
   | "kprof"
   | "autoc"
+  | "kalloc"
   | "kretry"
   | "kidle"
-  | "kfast"
   | "kformat"
-  | "kpick"
-  | "kfast2"
+  | "kroot"
   | "kover"
   | "kpatch";
 
@@ -203,17 +222,17 @@ export interface Save {
   mods: number[];
   /** 바이러스별 코드 조각 (ROSTER 순서) */
   frag: number[];
-  /** 우회 기술 버전 (APEX 순서, 0 = 그 상위 보스를 아직 못 잡음) · 우회 키 */
+  /** 우회 기술 버전 (APEX 순서, 0 = 그 상위 보스를 아직 못 잡음) */
   byp: number[];
-  keys: number[];
+  /** 우회 키 — 공용 (어느 상위 보스를 잡든 같은 키, 어느 우회 기술에든 씀) */
+  ukey: number;
   /** 이번 스테이지 보스 (pickBoss — -1 · -2 = 원시 바이러스, 0~ = ROSTER) */
   bossIdx: number;
   /** 이번 회차(변이 뒤)에 처음 오를 스테이지 — 이보다 낮은 스테이지는 「다시 도는 중」 */
   runTop: number;
   /** 스테이지 반복: 보스를 잡아도 다음 스테이지로 안 감 */
   repeat: boolean;
-  /** 커널 권한 「보스 지정」으로 고른 바이러스 (ROSTER 번호, -1 = 없음) · 「자동 변이」 켜짐 */
-  pick: number;
+  /** 커널 권한 「자동 변이」 켜짐 */
   autoFmt: boolean;
   savedAt: number;
 }
@@ -294,12 +313,11 @@ export function newSave(): Save {
       daemon: 0,
       kprof: 0,
       autoc: 0,
+      kalloc: 0,
       kretry: 0,
       kidle: 0,
-      kfast: 0,
       kformat: 0,
-      kpick: 0,
-      kfast2: 0,
+      kroot: 0,
       kover: 0,
       kpatch: 0,
     },
@@ -312,11 +330,10 @@ export function newSave(): Save {
     mods: zeros(),
     frag: zeros(),
     byp: zeros(),
-    keys: zeros(),
+    ukey: 0,
     bossIdx: -1,
     runTop: 1,
     repeat: false,
-    pick: -1,
     autoFmt: false,
     savedAt: Date.now(),
   };
@@ -330,11 +347,15 @@ function codeOf(s: Partial<Save>, best: number, apexBest: number) {
       : null;
   const mods = arr(s.mods) ?? ROSTER.map((v) => (best > v.join ? 1 : 0));
   const byp = arr(s.byp) ?? APEX.map((_, i) => (i < apexCount(apexBest) ? 1 : 0));
+  // 우회 키: v1.0 까지는 상위 보스마다 따로 — 모두 같은 단위(스테이지 체력 비례)라 그냥 합침
+  const ukey = Number((s as { ukey?: unknown }).ukey);
+  const oldKeys = arr((s as { keys?: unknown }).keys, false);
   return {
     mods,
     frag: arr(s.frag, false) ?? zeros(),
     byp,
-    keys: arr(s.keys, false) ?? zeros(),
+    ukey:
+      Number.isFinite(ukey) && ukey > 0 ? ukey : oldKeys ? oldKeys.reduce((a, b) => a + b, 0) : 0,
   };
 }
 
@@ -356,6 +377,8 @@ export function parseSave(raw: string | null): Save {
     let coreRefund = 0;
     for (const k of ["kescal", "kcomp", "kirq"])
       for (let i = 0; i < (old[k] ?? 0); i++) coreRefund += i + 1;
+    // v1.0 까지의 「빠른 재감염」 I · II · 「보스 지정」 (코어 1개씩) 도 돌려줌
+    for (const k of ["kfast", "kfast2", "kpick"]) if ((old[k] ?? 0) > 0) coreRefund += 1;
     // 스테이지 상한: 넘은 저장본은 MAX_STAGE 로 (best = MAX_STAGE + 1 은 마지막 스테이지까지 통과)
     let stage = Math.min(s.stage, MAX_STAGE);
     let best = Math.min(Math.max(s.best || 1, s.stage), MAX_STAGE + 1);
@@ -377,13 +400,18 @@ export function parseSave(raw: string | null): Save {
     const achIds = new Set(ACH.map((a) => a.id));
     const ach = Array.isArray(s.ach) ? [...new Set(s.ach.filter((id) => achIds.has(id)))] : [];
     // v0.7 까지의 챌린지 (삭제됨) 기록은 버림
+    // v1.0 까지의 상위 보스별 우회 키(keys)는 codeOf 에서 공용 키로 합침
     const {
       chal: _chal,
       chalDone: _chalDone,
+      keys: _keys,
+      pick: _pick,
       ...rest
-    } = s as Save & { chal?: unknown; chalDone?: unknown };
+    } = s as Save & { chal?: unknown; chalDone?: unknown; keys?: unknown; pick?: unknown };
     void _chal;
     void _chalDone;
+    void _keys;
+    void _pick;
     return {
       ...newSave(),
       ...rest,
@@ -403,7 +431,6 @@ export function parseSave(raw: string | null): Save {
       ...codeOf(s, best, apexBest),
       runTop: Math.max(stage, Math.min(Number(s.runTop) || stage, best)),
       repeat: !!s.repeat,
-      pick: Number.isInteger(s.pick) && s.pick! >= 0 && s.pick! < ROSTER.length ? s.pick! : -1,
       autoFmt: !!s.autoFmt,
       bossIdx:
         Number.isInteger(s.bossIdx) && s.bossIdx! >= -2 && s.bossIdx! < ROSTER.length
@@ -444,6 +471,18 @@ export function fxCurve(v: number, v1: number, cap: number) {
   return v > 0 ? cap - (cap - v1) * BAL.fxK ** (v - 1) : 0;
 }
 
+/** 백도어 침투: 다음 적이 깎인 채로 나오는 비율 (보스는 backdoorBoss 배) */
+export function backdoorCut(fx: Fx, boss: boolean) {
+  return fx.carry * (boss ? BAL.backdoorBoss : 1);
+}
+
+/** 약점 분석: 보스 제한 시간(BOSS_TIME) 내내 공격했을 때의 평균 피해 보너스 (계산용 기댓값) */
+export function focusAvg(fx: Fx) {
+  const T = BOSS_TIME;
+  const C = Math.min(fx.stackMax, T);
+  return (fx.stack * (C * C * 0.5 + C * (T - C))) / T;
+}
+
 /** 점화가 타는 시간 (초) · 취약점 노출이 이어지는 시간 (ms) */
 export const BURN_SECS = 3;
 export const BUFF_MS = 4000;
@@ -461,9 +500,15 @@ export interface Fx {
   burn: number;
   /** Melissa: 이 발수마다 2발 더 */
   burstEvery: number;
-  /** Zeus: 적을 쓰러뜨리고 남은 피해를 다음 적에게 넘기는 비율 */
+  /**
+   * Zeus: 적을 쓰러뜨리면 다음 적이 최대 체력의 이 비율만큼 깎인 채로 나옴 (보스는 BAL.backdoorBoss 배 — backdoorCut).
+   * 예전엔 넘친 피해를 넘겼는데, 파일 하나에 수백 방이 드는 구간에선 넘친 피해가 한 방의 일부라 효과가 거의 없었음
+   */
   carry: number;
-  /** Stuxnet: 같은 적을 맞힐 때마다 받는 피해 +stack (stackMax 번까지) */
+  /**
+   * Stuxnet: 같은 적을 공격한 1초마다 받는 피해 +stack (stackMax 초까지) — 명중 횟수로 쌓으면 연사가 빨라
+   * 열리자마자 꽉 차서 늘 같은 배율이었음. 시간으로 쌓으니 오래 버티는 보스일수록 커짐
+   */
   stack: number;
   stackMax: number;
   /** Conficker: 익스플로잇이 터지면 BUFF_MS 동안 모든 피해 +buff */
@@ -488,14 +533,15 @@ export function fxOf(m: number[], over = 1): Fx {
     leech: c(2, 0.35, 1),
     burn: c(3, 0.4, 1.5),
     burstEvery: m[4] ? Math.max(3, Math.round(c(4, 6, 3))) : 0,
-    carry: c(5, 0.4, 1),
-    stack: c(6, 0.02, 0.05),
-    stackMax: Math.round(c(6, 20, 60)),
+    carry: c(5, 0.15, 0.5),
+    stack: c(6, 0.03, 0.2),
+    stackMax: c(6, 20, 40),
     buff: c(7, 0.35, 1),
     lockT: c(8, 0.2, 0.5),
     lockCap: c(8, 6, 20),
-    ddosEvery: c(9, 8, 3),
-    ddosMul: c(9, 5, 15),
+    // DDoS: 상한이 15배를 3초마다였을 땐 전체 피해의 80% 넘게 혼자 냈음 — 상한 +100% (비중 50%) 로
+    ddosEvery: c(9, 8, 6),
+    ddosMul: c(9, 4, 6),
   };
 }
 
@@ -573,9 +619,12 @@ export const ROSTER: VirusDef[] = [
     name: "Zeus",
     year: 2007,
     color: "#fbbf24",
-    module: "백도어 이월",
-    effect: "적을 쓰러뜨리고 남은 피해를 다음 적에게 넘김",
-    cur: (v) => `남은 피해 ${pc(fxAt(5, v).carry)} 이월`,
+    module: "백도어 침투",
+    effect: "적을 쓰러뜨릴 때 다음 적에게 백도어를 심어, 체력이 깎인 채로 나오게 함 (보스는 절반)",
+    cur: (v) => {
+      const f = fxAt(5, v).carry;
+      return `다음 적 체력 -${pc(f)} (보스 -${pc(f * BAL.backdoorBoss)})`;
+    },
     desc: "은행 계정 정보를 몰래 훔치는 트로이 목마예요. 감염된 PC를 묶어 거대한 봇넷을 만들었고, 소스 코드가 유출된 뒤 수많은 변종이 나왔어요.",
   },
   {
@@ -586,10 +635,10 @@ export const ROSTER: VirusDef[] = [
     year: 2010,
     color: "#94a3b8",
     module: "약점 분석",
-    effect: "같은 적을 맞힐수록 받는 피해가 쌓임 (보스에게 강함)",
+    effect: "같은 적을 오래 공격할수록 받는 피해가 쌓임 (오래 버티는 보스에게 강함)",
     cur: (v) => {
       const f = fxAt(6, v);
-      return `명중마다 +${(f.stack * 100).toFixed(1)}% (최대 ${f.stackMax}번)`;
+      return `공격 1초마다 +${(f.stack * 100).toFixed(1)}% (최대 ${f.stackMax.toFixed(0)}초 · +${Math.round(f.stack * f.stackMax * 100)}%)`;
     },
     desc: "이란 핵시설의 원심분리기를 제어하는 PLC를 노린 웜이에요. 여러 개의 제로데이 취약점을 동시에 쓰고, 들키지 않게 정상 값을 보여 주며 장비를 망가뜨렸어요.",
   },
@@ -734,7 +783,7 @@ export const APEX: ApexDef[] = [
     effect: "익스플로잇 피해 증가",
     cur: (n) => {
       const v = bypEq(n);
-      return `익스플로잇 피해 +${(1 + 0.5 * v).toFixed(1)}`;
+      return `익스플로잇 피해 ${x(sandboxMul(v))}`;
     },
     look: "결정 가시",
   },
@@ -748,7 +797,7 @@ export const APEX: ApexDef[] = [
     effect: "보스에게 주는 피해 증가",
     cur: (n) => {
       const v = bypEq(n);
-      return `보스에게 주는 피해 ${x(BAL.modBossDmg ** v)}`;
+      return `보스에게 주는 피해 ${x(socMul(v))}`;
     },
     look: "왕관",
   },
@@ -885,11 +934,6 @@ export function bossOf(s: Save) {
 
 /** 다음 스테이지로 (또는 변이 · 스테이지 고르기로 스테이지가 바뀌면) 새 보스를 뽑음 */
 export function rollBoss(s: Save, rand: () => number = Math.random) {
-  // 커널 권한 「보스 지정」: 반복 중이면 고른 바이러스만 (해금된 것일 때)
-  if (s.shop.kpick && s.repeat && s.pick >= 0 && bossPool(s.stage, s.best).includes(s.pick)) {
-    s.bossIdx = s.pick;
-    return;
-  }
   s.bossIdx = pickBoss(s.stage, s.best, rand);
 }
 
@@ -902,7 +946,7 @@ export function joinedCount(best: number) {
 }
 
 // ── 코드 조각 · 우회 키 · 컴파일 ──
-// 보스를 잡으면 그 바이러스의 코드 조각 (원시 바이러스는 없음), 상위 보스는 그 보안 시스템의 우회 키.
+// 보스를 잡으면 그 바이러스의 코드 조각 (원시 바이러스는 없음), 상위 보스는 공용 우회 키 (어느 우회 기술에든 씀).
 // 양은 잡은 보스의 기본 체력에 비례 (데이터 보상처럼 — 낮은 스테이지를 반복하면 지수적으로 적음), 처음 가는 스테이지는 더.
 // 모이면 컴파일해서 버전을 올림 — 버전마다 드는 양이 일정 배율로 늘어서 진행 속도가 정해짐.
 
@@ -941,7 +985,7 @@ export function dropKey(s: Save, fresh: boolean) {
     return { index, n: 0, opened: true };
   }
   const n = dropAmount(s.stage, fresh);
-  s.keys[index] += n;
+  s.ukey += n;
   return { index, n, opened: false };
 }
 
@@ -992,15 +1036,65 @@ export function compileMod(s: Save, i: number) {
   return gained;
 }
 
-/** 우회 기술 i 를 가진 키로 올릴 수 있는 만큼 — 오른 버전 수 */
+/** 우회 기술 i 를 한 버전 올림 (공용 우회 키로) — 올랐으면 true */
 export function compileByp(s: Save, i: number) {
-  let n = 0;
-  while (s.byp[i] > 0 && s.keys[i] >= keyCost(i, s.byp[i]) && n < 500) {
-    s.keys[i] -= keyCost(i, s.byp[i]);
-    s.byp[i]++;
-    n++;
+  if (!(s.byp[i] > 0) || s.ukey < keyCost(i, s.byp[i])) return false;
+  s.ukey -= keyCost(i, s.byp[i]);
+  s.byp[i]++;
+  return true;
+}
+
+/**
+ * 우회 기술 i 를 한 버전 올렸을 때의 가치 (ln 배율) — 보스를 잡는 빠르기 + 데이터 수입(초당 피해로 환산)
+ * + 오프라인 효율 (자리를 비운 시간 비율 OFFLINE_SHARE 만큼)
+ */
+export function bypGain(s: Save, i: number) {
+  if (!(s.byp[i] > 0)) return 0;
+  const a = stats(s);
+  const nx: Save = { ...s, byp: s.byp.map((v, j) => (j === i ? v + 1 : v)) };
+  const b = stats(nx);
+  const da = dps(a);
+  const db = dps(b);
+  // 보스: 초당 피해 × 보스 피해 배율 ÷ 보스 보안 등급
+  const boss =
+    (db * b.bossDmgMul * b.fxBossMul * a.bossHpMul) /
+    (da * a.bossDmgMul * a.fxBossMul * b.bossHpMul);
+  // 데이터 수입: 파일을 잡는 빠르기(초당 피해 ÷ 파일 보안 등급) × 데이터 배율 ÷ 업그레이드 비용
+  const mob = (db / mobHp(s.stage, b)) * (da > 0 ? mobHp(s.stage, a) / da : 1);
+  const data = (mob * b.dataMul * a.costMul) / (a.dataMul * b.costMul);
+  // 오프라인 효율: 자리를 비운 동안의 진행 속도 — 시간의 OFFLINE_SHARE 만큼은 자리를 비운다고 봄
+  const off = OFFLINE_SHARE * Math.log(b.offlineRate / a.offlineRate);
+  return Math.log(boss) + Math.log(dataToDps(s, data)) + off;
+}
+/** 우회 키 최적 배분에서 「자리를 비운 시간」으로 보는 비율 (오프라인 효율의 가치) */
+const OFFLINE_SHARE = 0.5;
+
+/**
+ * 공용 우회 키를 우회 기술에 나눠 씀 — 오른 것 (우회 기술마다 올라간 버전까지)
+ *   기본: 다음 버전이 가장 싼 것부터 한 버전씩 (고르게)
+ *   루트 상점 「우회 키 최적 배분」: 키 1개당 가치(bypGain)가 가장 큰 것부터
+ */
+export function allocKeys(s: Save): CompileItem[] {
+  const up = new Map<number, number>();
+  for (let n = 0; n < 2000; n++) {
+    let pick = -1;
+    let top = -Infinity;
+    for (let i = 0; i < APEX.length; i++) {
+      if (!(s.byp[i] > 0)) continue;
+      const cost = keyCost(i, s.byp[i]);
+      if (cost > s.ukey) continue;
+      const score = s.shop.kalloc ? bypGain(s, i) / cost : -cost;
+      if (score > top) {
+        top = score;
+        pick = i;
+      }
+    }
+    // 최적 배분: 가치가 없는 것(이미 상한 등)에는 안 씀
+    if (pick < 0 || (s.shop.kalloc && top <= 0)) break;
+    compileByp(s, pick);
+    up.set(pick, s.byp[pick]);
   }
-  return n;
+  return [...up].map(([i, to]) => ({ kind: "byp", i, to }));
 }
 
 /** 지금 컴파일하면 오를 것 (모듈 · 우회 기술 — 각각 올라갈 버전까지) */
@@ -1010,15 +1104,8 @@ export function compileReady(s: Save): CompileItem[] {
     const p = planMod(s, i);
     if (p.to > s.mods[i]) out.push({ kind: "mod", i, to: p.to });
   });
-  APEX.forEach((_, i) => {
-    let v = s.byp[i];
-    let k = s.keys[i];
-    while (v > 0 && k >= keyCost(i, v)) {
-      k -= keyCost(i, v);
-      v++;
-    }
-    if (v > s.byp[i]) out.push({ kind: "byp", i, to: v });
-  });
+  // 우회 기술: 공용 키를 나눠 쓰는 순서대로 (복사본으로 해 봄)
+  out.push(...allocKeys({ ...s, byp: [...s.byp] }));
   return out;
 }
 
@@ -1026,7 +1113,7 @@ export function compileReady(s: Save): CompileItem[] {
 export function compileAll(s: Save): CompileItem[] {
   const out: CompileItem[] = [];
   MOD_ORDER.forEach((i) => compileMod(s, i) && out.push({ kind: "mod", i, to: s.mods[i] }));
-  APEX.forEach((_, i) => compileByp(s, i) && out.push({ kind: "byp", i, to: s.byp[i] }));
+  out.push(...allocKeys(s));
   return out;
 }
 
@@ -1107,6 +1194,14 @@ const soft = (v: number) => 1 - BAL.modSoftK ** v;
 export function offlineRateOf(v: number) {
   return 0.3 + (BAL.offRateMax - 0.3) * soft(v);
 }
+/** 「관제 우회」 버전별 보스 피해 배율 (×modBossDmg → 최대 bossDmgMax) */
+export function socMul(v: number) {
+  return BAL.modBossDmg + (BAL.bossDmgMax - BAL.modBossDmg) * soft(v);
+}
+/** 「샌드박스 탈출」 버전별 익스플로잇 피해 배율 (×1.5 → 최대 bypCritMax) */
+export function sandboxMul(v: number) {
+  return 1.5 + (BAL.bypCritMax - 1.5) * soft(v);
+}
 /** 「미끼 역이용」 버전별 익스플로잇 확률 보너스 (최대 modCritMax) */
 export function modCritOf(v: number) {
   return BAL.modCritMax * soft(v);
@@ -1127,6 +1222,8 @@ export function stats(s: Save): Stats {
     0.9,
     0.05 + (BAL.critMax - 0.05) * (1 - BAL.critK ** s.lv.crit) + (has(7) ? modCritOf(b[7]) : 0)
   );
+  // 확률 상한 초과분: 처음 기울기 그대로 올랐다면 쌓였을 레벨 중 상한 때문에 잃은 만큼 → 익스플로잇 피해로
+  const critLost = s.lv.crit - (1 - BAL.critK ** s.lv.crit) / (1 - BAL.critK);
   // 코드 모듈 기댓값: 발 수 × 점화 × 취약점 노출(유지되는 비율) × DDoS
   const shotsMul = (1 + fx.extraP + fx.extraN) * (fx.burstEvery ? 1 + 2 / fx.burstEvery : 1);
   const uptime = 1 - Math.exp((-critChance * aps * shotsMul * BUFF_MS) / 1000);
@@ -1145,14 +1242,17 @@ export function stats(s: Save): Stats {
       achMul,
     aps,
     critChance,
-    critMul: 2 + BAL.critMulStep * s.lv.crit + (has(4) ? 1 + 0.5 * b[4] : 0),
+    critMul:
+      (2 + BAL.critMulStep * s.lv.crit) *
+      (has(4) ? sandboxMul(b[4]) : 1) *
+      (1 + BAL.critOver * critLost),
     dataMul: (has(3) ? 1.5 * BAL.modData ** b[3] : 1) * BAL.shopMiner ** s.shop.miner,
     costMul: has(9) ? 0.85 * BAL.modCost ** b[9] : 1,
     mobHpMul: has(0) ? 0.85 * BAL.modMobHp ** b[0] : 1,
     bossHpMul: has(2) ? BAL.modBossHp ** b[2] : 1,
     bossTime: BOSS_TIME + (has(2) ? 5 : 0),
     rootGain: has(7) ? 1.25 : 1,
-    bossDmgMul: has(5) ? BAL.modBossDmg ** b[5] : 1,
+    bossDmgMul: has(5) ? socMul(b[5]) : 1,
     rootMul,
     offlineRate: has(6) ? offlineRateOf(b[6]) + 0.15 : 0.3,
     offlineHours: s.shop.kidle ? BAL.coreIdleHours : BAL.offHours,
@@ -1160,7 +1260,7 @@ export function stats(s: Save): Stats {
     fx,
     shotsMul,
     fxMul,
-    fxBossMul: 1 + fx.stack * fx.stackMax,
+    fxBossMul: 1 + focusAvg(fx),
   };
 }
 
@@ -1199,7 +1299,7 @@ function baseHp(stage: number) {
 /** 극초반 보정이 남은 정도 (1스테이지 1 → 점점 0) */
 const early = (stage: number) => BAL.earlyDecay ** (stage - 1);
 export function mobHp(stage: number, st: Stats) {
-  return (baseHp(stage) * st.mobHpMul) / (1 + BAL.earlyHp * early(stage));
+  return (baseHp(stage) * BAL.mobHpK * st.mobHpMul) / (1 + BAL.earlyHp * early(stage));
 }
 export function bossHp(stage: number, st: Stats) {
   return (baseHp(stage) * BAL.bossHp * st.bossHpMul) / (1 + BAL.earlyHp * early(stage));
@@ -1289,7 +1389,7 @@ export const UPGRADES: UpgDef[] = [
     },
     label: (st, lv) => {
       const next = BAL.atkMilestone - (lv % BAL.atkMilestone);
-      return `피해 ${fmt(st.dmg)} · ${next}레벨 뒤 ×${BAL.atkMilestoneMul}`;
+      return `피해 ${fmtBytes(st.dmg)} · ${next}레벨 뒤 ×${BAL.atkMilestoneMul}`;
     },
   },
   {
@@ -1409,22 +1509,17 @@ export function canFormat(s: Save) {
 /**
  * 포맷 뒤 시작 스테이지: 최고 스테이지의 절반을 10 단위로 내리고 +1, 최대 51 (예: 68 → 31, 30 → 11, 682 → 51)
  * — 업그레이드 없이 시작하니 깊은 곳에서 다시 시작하면 그대로 막힘. 초반은 빨리 지나가니 51부터 다시 퍼짐
+ * (v1.0 까지의 커널 권한 「빠른 재감염」 I · II 는 없앰 — 공용 우회 키 · 크론 데몬 개선으로 다시 오르는 게 이미 빠름)
  */
-export function formatStart(best: number, fast = 0) {
-  // 커널 권한 「빠른 재감염」 I · II: 최대 51 → 101 → 151
-  return Math.floor(Math.min(best, 100 + 100 * fast) / 2 / 10) * 10 + 1;
-}
-
-/** 이 저장본의 「빠른 재감염」 단계 (0~2) */
-export function fastLv(s: Save) {
-  return s.shop.kfast + s.shop.kfast2;
+export function formatStart(best: number) {
+  return Math.floor(Math.min(best, 100) / 2 / 10) * 10 + 1;
 }
 
 /** 포맷: 업그레이드·데이터는 처음으로, 스테이지는 formatStart 부터. 루트 권한·상점·모듈·누적 기록은 유지 */
 export function format(s: Save): Save {
   const n: Save = {
     ...newSave(),
-    stage: formatStart(s.best, fastLv(s)),
+    stage: formatStart(s.best),
     lifetime: s.lifetime,
     best: s.best,
     apexBest: s.apexBest,
@@ -1434,7 +1529,6 @@ export function format(s: Save): Save {
     rootSpent: s.rootSpent,
     shop: { ...s.shop },
     auto: s.auto,
-    pick: s.pick,
     autoFmt: s.autoFmt,
     formats: s.formats + 1,
     rec: { ...s.rec },
@@ -1443,7 +1537,7 @@ export function format(s: Save): Save {
     mods: [...s.mods],
     frag: [...s.frag],
     byp: [...s.byp],
-    keys: [...s.keys],
+    ukey: s.ukey,
   };
   n.runTop = n.stage;
   rollBoss(n);
@@ -1461,6 +1555,8 @@ export interface ShopDef {
   max?: number;
   /** 이 상품을 먼저 사야 열림 */
   req?: ShopKey;
+  /** 편의성 상품을 모두 가져야 열림 */
+  needUtil?: boolean;
   /** 효율 강화(power) · 편의성(util) · 커널(core — 커널 코어로 삼) */
   group: "power" | "util" | "core";
   desc: string;
@@ -1505,7 +1601,7 @@ export const SHOP: ShopDef[] = [
     group: "util",
     name: "프로파일러",
     icon: "📊",
-    base: 40,
+    base: 20,
     growth: 1,
     max: 1,
     desc: "코드 성능을 재서, 데이터를 쓴 만큼 초당 피해가 가장 많이 오르는 업그레이드를 알려 줌",
@@ -1516,7 +1612,7 @@ export const SHOP: ShopDef[] = [
     group: "util",
     name: "크론잡",
     icon: "⏱️",
-    base: 60,
+    base: 40,
     growth: 1,
     max: 1,
     req: "profiler",
@@ -1528,19 +1624,19 @@ export const SHOP: ShopDef[] = [
     group: "util",
     name: "크론 데몬",
     icon: "🔁",
-    base: 150,
+    base: 100,
     growth: 1,
     max: 1,
     req: "cron",
-    desc: "크론잡을 백그라운드에 상주시켜, 데이터가 모일 때마다 최적 업그레이드를 알아서 실행",
-    label: (lv) => (lv ? "자동 최적 업그레이드 사용 가능" : "크론잡을 1초마다 자동 실행"),
+    desc: "크론잡을 백그라운드에 상주시켜, 가장 효율 좋은 업그레이드를 데이터가 모이는 대로 알아서 실행 (더 좋은 것이 곧 살 수 있으면 데이터를 모아 둠)",
+    label: (lv) => (lv ? "자동 최적 업그레이드 사용 가능" : "효율 1등 업그레이드를 자동 구매"),
   },
   {
     key: "kprof",
     group: "util",
     name: "커널 프로파일러",
     icon: "🧠",
-    base: 300,
+    base: 150,
     growth: 1,
     max: 1,
     req: "daemon",
@@ -1558,6 +1654,18 @@ export const SHOP: ShopDef[] = [
     req: "daemon",
     desc: "코드 조각 · 우회 키가 모이면 알림 없이 바로 컴파일",
     label: (lv) => (lv ? "자동 컴파일 켜짐" : "조각이 모이면 바로 컴파일"),
+  },
+  {
+    key: "kalloc",
+    group: "util",
+    name: "우회 키 최적 배분",
+    icon: "🗝️",
+    base: 60,
+    growth: 1,
+    max: 1,
+    req: "profiler",
+    desc: "우회 키를 컴파일할 때, 키 1개당 보스 처치 · 데이터 수입이 가장 많이 오르는 우회 기술부터 씀 (없으면 다음 버전이 가장 싼 것부터 고르게)",
+    label: (lv) => (lv ? "우회 키 최적 배분 켜짐" : "우회 키를 효율 순으로 자동 배분"),
   },
   // ── 커널 권한 (100스테이지마다 · KILLSWITCH 에게서 얻은 커널 코어로 삼) — 위에서부터 차례로만 열림 ──
   {
@@ -1584,18 +1692,6 @@ export const SHOP: ShopDef[] = [
     label: () => `오프라인 수익 최대 ${BAL.offHours} → ${BAL.coreIdleHours}시간`,
   },
   {
-    key: "kfast",
-    group: "core",
-    name: "빠른 재감염 I",
-    icon: "🚀",
-    base: 1,
-    growth: 1,
-    max: 1,
-    req: "kidle",
-    desc: "변이한 뒤 더 깊은 곳에서 다시 퍼짐",
-    label: () => "변이 시작 스테이지 최대 51 → 101",
-  },
-  {
     key: "kformat",
     group: "core",
     name: "자동 변이",
@@ -1603,33 +1699,22 @@ export const SHOP: ShopDef[] = [
     base: 2,
     growth: 1,
     max: 1,
-    req: "kfast",
+    req: "kidle",
     desc: "변이 효율이 꺾이면 (루트 권한이 덜 늘기 시작하면) 알아서 변이 — 변이 탭에서 켜고 끔",
     label: (lv) => (lv ? "자동 변이 사용 가능" : "변이 효율이 꺾이면 자동 변이"),
   },
   {
-    key: "kpick",
+    key: "kroot",
     group: "core",
-    name: "보스 지정",
-    icon: "📡",
+    name: "루트 권한 자동 투자",
+    icon: "📈",
     base: 1,
     growth: 1,
     max: 1,
     req: "kformat",
-    desc: "스테이지 반복 중에는 고른 바이러스만 보스로 — 늦게 합류한 모듈 따라잡기 (코드 모듈 자세히 보기에서 고름)",
-    label: (lv) => (lv ? "반복 중 보스 지정 가능" : "반복 중 원하는 바이러스만"),
-  },
-  {
-    key: "kfast2",
-    group: "core",
-    name: "빠른 재감염 II",
-    icon: "🚀",
-    base: 1,
-    growth: 1,
-    max: 1,
-    req: "kpick",
-    desc: "변이한 뒤 훨씬 깊은 곳에서 다시 퍼짐",
-    label: () => "변이 시작 스테이지 최대 101 → 151",
+    needUtil: true,
+    desc: "루트 권한이 생기면 효율 강화(루트킷 · 데이터 마이닝 · 폴리모픽 엔진) 중 루트 권한 1당 초당 피해가 가장 많이 오르는 것을 알아서 삼 — 편의성 상품을 모두 가져야 열림",
+    label: (lv) => (lv ? "효율 강화 자동 투자 켜짐" : "효율 강화를 효율 순으로 자동 구매"),
   },
   {
     key: "kover",
@@ -1639,7 +1724,7 @@ export const SHOP: ShopDef[] = [
     base: 2,
     growth: 1,
     max: 1,
-    req: "kfast2",
+    req: "kformat",
     desc: "코드 모듈의 한계를 넘김 — 모든 공격 효과의 상한이 올라감",
     label: () => `코드 모듈 효과 상한 ×${BAL.coreOver}`,
   },
@@ -1681,7 +1766,26 @@ export function canAffordShop(s: Save, d: ShopDef) {
 /** 상점에서 사기 — 성공하면 true */
 /** 먼저 사야 하는 상품이 아직 없어서 잠겨 있는지 */
 export function shopLocked(s: Save, d: ShopDef) {
-  return d.req != null && !s.shop[d.req];
+  return (
+    (d.req != null && !s.shop[d.req]) ||
+    (!!d.needUtil && SHOP.some((x) => x.group === "util" && !s.shop[x.key]))
+  );
+}
+
+/**
+ * 커널 권한 「루트 권한 자동 투자」: 효율 강화 중 루트 권한 1당 초당 피해가 가장 많이 오르는 것(rootAdvice)을 살 수 있는 만큼 —
+ * 1등을 살 수 없으면 그보다 못한 것을 사지 않고 모아 둠. 하나라도 샀으면 true
+ */
+export function autoRoot(s: Save) {
+  if (!s.shop.kroot) return false;
+  let bought = false;
+  for (let n = 0; n < 200; n++) {
+    const { best } = rootAdvice(s);
+    const d = best && SHOP.find((x) => x.key === best);
+    if (!d || !canAffordShop(s, d) || !buyShop(s, d.key)) break;
+    bought = true;
+  }
+  return bought;
 }
 
 export function buyShop(s: Save, key: ShopKey) {
@@ -1694,6 +1798,33 @@ export function buyShop(s: Save, key: ShopKey) {
   if (isCoreItem(d)) s.cores -= cost;
   else s.rootSpent += cost;
   s.shop[key] = lv + 1;
+  return true;
+}
+
+/** 루트 권한 1 = GP 이만큼 */
+export const GP_PER_ROOT = 10;
+
+/** GP로도 살 수 있는 상품인지 — 밸런스를 해치지 않게 편의성만 */
+export function gpPayable(d: ShopDef) {
+  return d.group === "util";
+}
+
+/** 이 상품의 GP 가격 (GP로 못 사면 null) */
+export function shopGpCost(s: Save, d: ShopDef) {
+  return gpPayable(d) ? shopCost(d, s.shop[d.key]) * GP_PER_ROOT : null;
+}
+
+/**
+ * GP로 사기 (루트 권한은 그대로) — 살 수 있는지 다 확인한 뒤에 pay(GP 가격) 로 GP를 빼고, 성공하면 true
+ * (GP 지갑은 게임 밖에 있어서 빼는 일은 부르는 쪽이 넘겨 줌)
+ */
+export function buyShopGp(s: Save, key: ShopKey, pay: (gp: number) => boolean) {
+  const d = SHOP.find((x) => x.key === key)!;
+  const cost = shopGpCost(s, d);
+  if (cost == null || shopLocked(s, d)) return false;
+  if (d.max != null && s.shop[key] >= d.max) return false;
+  if (!pay(cost)) return false;
+  s.shop[key]++;
   return true;
 }
 
@@ -1833,13 +1964,25 @@ export interface Plan {
   count: number;
 }
 
+/** 크론 데몬이 효율 1등을 사려고 기다리는 최대 시간 (초) — 더 걸리면 지금 살 수 있는 것 중 1등을 삼 (오래 안 사면 꺼진 것처럼 보임) */
+export const AUTO_WAIT_SECS = 60;
+
+/** 지금 파일을 감염시켜 버는 데이터 (초당 · 대략) — 크론 데몬이 기다릴지 정할 때 */
+export function dataRate(s: Save) {
+  const st = stats(s);
+  const ttk = Math.max(1 / Math.max(0.1, st.aps * st.shotsMul), mobHp(s.stage, st) / dps(st));
+  return (mobData(s.stage, st) * (1 + st.fx.leech)) / ttk;
+}
+
 /**
  * 크론잡: 가진 데이터를 다 써서 초당 피해가 가장 많이 오르는 조합 —
  * 살 수 있는 업그레이드 중 「데이터 1당 초당 피해 상승(ln 배율 ÷ 값)」이 가장 큰 것을 한 레벨씩 계속 고름.
  * (가격이 레벨마다 일정 배율로 오르는 구조라 이렇게 고르면 거의 최적. 랜덤 강화는 결과가 무작위라 뺌)
+ * waitSecs > 0 (크론 데몬): 효율 1등이 그 시간 안에 살 수 있으면 그보다 못한 것을 사지 않고 모아 둠
  */
-export function optimalPlan(s: Save, maxSteps = 5000): Plan {
+export function optimalPlan(s: Save, maxSteps = 5000, waitSecs = 0): Plan {
   const sim: Save = { ...s, lv: { ...s.lv } };
+  const rate = waitSecs > 0 ? dataRate(s) : 0;
   const add: Record<UpgKey, number> = { atk: 0, spd: 0, crit: 0 };
   const start = dps(stats(sim));
   let data = s.data;
@@ -1860,7 +2003,8 @@ export function optimalPlan(s: Save, maxSteps = 5000): Plan {
       for (const n of ns) {
         let c = 0;
         for (let i = 0; i < n; i++) c += upgCost(u, sim.lv[u.key] + i, st);
-        if (c > data) continue;
+        // 못 사는 것은 waitSecs 안에 모을 수 있을 때만 후보로 (효율 1등이면 모아 둠)
+        if (c > data && !(rate > 0 && (c - data) / rate <= waitSecs)) continue;
         sim.lv[u.key] += n;
         const score = Math.log(dps(stats(sim)) / now) / c;
         sim.lv[u.key] -= n;
@@ -1870,7 +2014,7 @@ export function optimalPlan(s: Save, maxSteps = 5000): Plan {
         }
       }
     }
-    if (!pick) break;
+    if (!pick || pick.cost > data) break;
     data -= pick.cost;
     cost += pick.cost;
     sim.lv[pick.key] += pick.n;
@@ -1889,6 +2033,22 @@ export function applyPlan(s: Save, p: Plan) {
   return true;
 }
 
+/**
+ * 크론 데몬 한 번 — 최적 계획(효율 1등을 곧 살 수 있으면 모아 둠)대로 사고, 그게 아무것도 안 사면
+ * 프로파일러 추천 1등(랜덤 강화 포함)을 살 수 있을 때 그것을 삼. 「추천이 떠 있고 돈도 있는데 안 산다」가 없게
+ */
+export function autoBuy(s: Save) {
+  if (applyPlan(s, optimalPlan(s, 400, AUTO_WAIT_SECS))) return true;
+  const best = upgradeAdvice(s, 1).best;
+  if (!best) return false;
+  if (best.startsWith("rand:")) {
+    const key = best.slice(5) as UpgKey;
+    return s.data >= randPrice(s, key) && randUpgrade(s, key) > 0;
+  }
+  const u = UPGRADES.find((x) => x.key === best)!;
+  return buyUpgrade(s, u, 1) > 0;
+}
+
 // ── 오프라인 수익 ──
 
 /** 자리를 비운 동안 훔친 데이터 (파일만 감염시켰다고 보고, 효율은 offlineRate) */
@@ -1899,6 +2059,288 @@ export function offlineGain(s: Save, seconds: number) {
   // 러브레터 미끼(명중마다 미리 빼내는 데이터)도 평균만큼
   const perSec = (dps(st) / mobHp(s.stage, st)) * mobData(s.stage, st) * (1 + st.fx.leech);
   return { data: perSec * secs * st.offlineRate, secs };
+}
+
+// ── 자리를 비운 동안 (백그라운드 · 오프라인) — 온라인과 같은 규칙으로 시뮬레이션 ──
+// 0.1초씩 끊지 않고 「다음 처치 · 보스 시간 초과 · 정기 점검(자동 구매 · 자동 변이 · 자동 재도전)」 사건 단위로 건너뜀 — 며칠치도 몇 초.
+// 코드 한 발씩이 아니라 평균 초당 피해(dps)로 계산 (부트 선점 · 암호화 잠금은 근사)
+
+/** 자리를 비운 동안 얻은 것 (수령 화면용) */
+export interface AwayReport {
+  /** 실행한 시간 (초) · 힘 (오프라인 효율 — 백그라운드는 1) */
+  secs: number;
+  power: number;
+  stageFrom: number;
+  stageTo: number;
+  bestFrom: number;
+  bestTo: number;
+  /** 탈취한 데이터 (누적 기준) · 지금 가진 데이터 변화 */
+  data: number;
+  files: number;
+  bosses: number;
+  apexes: number;
+  fails: number;
+  /** 업그레이드로 오른 레벨 (자동 최적 업그레이드) */
+  ups: number;
+  /** 모듈별 얻은 조각 · 얻은 우회 키 (공용) */
+  frags: number[];
+  keys: number;
+  /** 컴파일로 오른 버전 (자동 컴파일러) */
+  mods: number[];
+  byp: number[];
+  root: number;
+  cores: number;
+  formats: number;
+  clears: number;
+  /** 새로 단 업적 */
+  ach: number;
+}
+
+/** 자동 구매 · 자동 변이 · 자동 재도전을 확인하는 간격 (초, 시뮬레이션 시간) */
+const AWAY_CHECK = 30;
+/** 커널 권한 「자동 재도전」: 차단당한 뒤 이만큼 파일을 감염시키고 재도전 (초) */
+export const AUTO_RETRY_SECS = 30;
+
+/**
+ * 자리를 비운 동안 시뮬레이션 — 저장본 복사본으로 돌리고, 끝나면 finish() 로 새 저장본 + 보고서.
+ * advance(ms) 를 여러 번 불러 조금씩 (진행 막대). power = 피해 배율 (오프라인 효율)
+ */
+export function createAwaySim(start: Save, totalSecs: number, power = 1) {
+  const s: Save = JSON.parse(JSON.stringify(start));
+  const from = JSON.parse(JSON.stringify(start)) as Save;
+  let t = 0;
+  let st = stats(s);
+  let boss = false;
+  let apex = false;
+  let fin = false;
+  let hp = 0;
+  let left = 0;
+  let lockCap = 0;
+  let retryAt = 0;
+  let nextCheck = AWAY_CHECK;
+  let runStart = 0;
+  let peak = 0;
+  const fresh = () => s.stage >= s.best;
+  /** 이 스테이지의 다음 적 (게임 spawn 과 같은 규칙) */
+  const spawn = () => {
+    boss = s.kills >= MOBS_PER_STAGE && !s.bossFail;
+    fin = boss && s.finalReady;
+    apex = boss && s.bossDone && !fin;
+    hp = fin
+      ? finalHp(st, s.clears)
+      : apex
+        ? apexHp(s.stage, st)
+        : boss
+          ? bossHp(s.stage, st)
+          : mobHp(s.stage, st);
+    // 백도어 침투: 깎인 채로 · 부트 선점: 첫 발 강타만큼 미리
+    hp *= 1 - backdoorCut(st.fx, boss);
+    if (st.fx.first > 1) hp -= (st.fx.first - 1) * avgHit(st) * power;
+    left = boss ? bossTimeOf(fin ? "final" : apex ? "apex" : "boss", st) : 0;
+    lockCap = boss ? st.fx.lockCap : 0;
+  };
+  const loot = (isApex: boolean) => {
+    if (isApex) dropKey(s, fresh());
+    else dropFrag(s, fresh());
+    if (s.shop.autoc) {
+      compileAll(s);
+      st = stats(s);
+    }
+  };
+  const kill = () => {
+    const leech = 1 + st.fx.leech;
+    if (fin) {
+      gainData(s, finalData(st) * leech);
+      s.clears++;
+      s.cores++;
+      s.finalReady = false;
+      s.bossDone = false;
+      s.kills = 0;
+    } else if (boss && !apex && isApexStage(s.stage)) {
+      gainData(s, bossData(s.stage, st) * leech);
+      s.rec.bosses++;
+      loot(false);
+      s.bossDone = true;
+    } else if (boss) {
+      gainData(s, (apex ? apexData(s.stage, st) : bossData(s.stage, st)) * leech);
+      if (apex) s.rec.apexes++;
+      else s.rec.bosses++;
+      loot(apex);
+      const newApex = apex && s.stage > s.apexBest;
+      if (newApex && milestoneCore(s.stage)) s.cores++;
+      if (newApex) s.apexBest = s.stage;
+      s.bossDone = false;
+      s.kills = 0;
+      const last = apex && s.stage >= MAX_STAGE;
+      if (last) {
+        s.finalReady = true;
+        s.kills = MOBS_PER_STAGE;
+      }
+      const next = s.stage + 1;
+      if (!last && !s.repeat) s.stage = next;
+      if (next > s.best) s.best = next;
+      if (!last) {
+        s.runTop = Math.max(s.runTop, next);
+        rollBoss(s);
+      }
+    } else {
+      gainData(s, mobData(s.stage, st) * leech);
+      s.kills = Math.min(MOBS_PER_STAGE, s.kills + 1);
+      s.rec.files++;
+    }
+    st = stats(s);
+    spawn();
+  };
+  /** 정기 점검: 루트 권한 자동 투자 · 자동 최적 업그레이드 (크론 데몬) · 자동 변이 (커널 권한) */
+  const check = () => {
+    if (autoRoot(s)) {
+      st = stats(s);
+      if (!boss) spawn();
+    }
+    if (s.auto && s.shop.daemon && autoBuy(s)) {
+      st = stats(s);
+      if (!boss) spawn();
+    }
+    if (s.shop.kformat && s.autoFmt) {
+      const pend = pendingRoot(s);
+      const rate =
+        pend > 0
+          ? Math.log((1 + BAL.rootBonus * (s.root + pend)) / (1 + BAL.rootBonus * s.root)) /
+            Math.max(60, t - runStart)
+          : 0;
+      if (rate > peak) peak = rate;
+      else if (rate > 0 && rate < peak * 0.9 && canFormat(s)) {
+        const n = format(s);
+        Object.assign(s, n);
+        peak = 0;
+        runStart = t;
+        retryAt = 0;
+        st = stats(s);
+        spawn();
+      }
+    }
+  };
+  spawn();
+
+  /** 사건 하나 처리 — 끝났으면 false */
+  const event = () => {
+    if (t >= totalSecs) return false;
+    const until = Math.min(totalSecs, nextCheck, retryAt > t ? retryAt : Infinity);
+    const rate = dps(st) * power * (boss ? st.bossDmgMul * st.fxBossMul : 1);
+    // 한 마리를 잡는 데 드는 시간 — 쏘는 빠르기보다 빨리 잡을 수는 없음
+    const minKill = 1 / Math.max(0.1, st.aps * st.shotsMul);
+    const ttk = Math.max(minKill, Math.max(0, hp) / Math.max(rate, 1e-300));
+    if (!boss) {
+      // 파일: 다음 사건까지 몇 마리를 한꺼번에 (보스가 나오기 전까지)
+      const room = s.bossFail ? Infinity : MOBS_PER_STAGE - s.kills;
+      const n = Math.min(room, Math.floor((until - t) / ttk));
+      if (n >= 2) {
+        const leech = 1 + st.fx.leech;
+        gainData(s, mobData(s.stage, st) * leech * (n - 1));
+        s.kills = Math.min(MOBS_PER_STAGE, s.kills + (n - 1));
+        s.rec.files += n - 1;
+        t += ttk * (n - 1);
+      }
+    }
+    if (t + ttk <= until && (!boss || ttk <= left + lockCap * (st.critChance > 0 ? 1 : 0))) {
+      t += ttk;
+      kill();
+    } else if (boss && t + left <= until) {
+      // 보스 시간 초과 — 차단당하고 파일부터 (자동 재도전이면 잠시 뒤)
+      t += left + (st.critChance > 0 ? lockCap : 0);
+      s.bossFail = true;
+      s.rec.fails++;
+      retryAt = s.shop.kretry ? t + AUTO_RETRY_SECS : 0;
+      spawn();
+    } else {
+      // 다음 사건까지 피해만 주고 넘어감
+      const dt = until - t;
+      hp -= rate * dt;
+      if (boss) left -= dt;
+      t = until;
+    }
+    if (t >= nextCheck) {
+      nextCheck += AWAY_CHECK;
+      check();
+    }
+    if (retryAt && t >= retryAt && s.bossFail) {
+      retryAt = 0;
+      s.bossFail = false;
+      spawn();
+    }
+    return t < totalSecs;
+  };
+
+  return {
+    total: totalSecs,
+    /** 지금까지 시뮬레이션한 시간 (초) */
+    get done() {
+      return Math.min(t, totalSecs);
+    },
+    /** 지금 스테이지 · 최고 스테이지 (진행 화면용) */
+    get stage() {
+      return s.stage;
+    },
+    get best() {
+      return s.best;
+    },
+    /** ms 동안 조금씩 — 끝났으면 true */
+    advance(ms: number) {
+      const end = Date.now() + ms;
+      for (let k = 0; ; k++) {
+        if (!event()) return true;
+        if (k % 256 === 0 && Date.now() >= end) return false;
+      }
+    },
+    /** 새 저장본 + 얻은 것 */
+    finish(): { save: Save; report: AwayReport } {
+      s.rec.offMax = Math.max(s.rec.offMax, totalSecs);
+      checkAch(s);
+      const diff = (a: number[], b: number[]) => a.map((v, i) => Math.max(0, v - b[i]));
+      return {
+        save: s,
+        report: {
+          secs: totalSecs,
+          power,
+          stageFrom: from.stage,
+          stageTo: s.stage,
+          bestFrom: from.best,
+          bestTo: s.best,
+          data: s.lifetime - from.lifetime,
+          files: s.rec.files - from.rec.files,
+          bosses: s.rec.bosses - from.rec.bosses,
+          apexes: s.rec.apexes - from.rec.apexes,
+          fails: s.rec.fails - from.rec.fails,
+          ups: s.rec.ups - from.rec.ups,
+          // 얻은 조각 · 키 = 남은 것의 변화 + 자동 컴파일로 쓴 것
+          frags: s.frag.map((v, i) => Math.max(0, v - from.frag[i] + fragSpent(from, s, i))),
+          keys: Math.max(
+            0,
+            s.ukey - from.ukey + APEX.reduce((a, _, i) => a + keySpent(from, s, i), 0)
+          ),
+          mods: diff(s.mods, from.mods),
+          byp: diff(s.byp, from.byp),
+          root: s.root - from.root,
+          cores: s.cores - from.cores,
+          formats: s.formats - from.formats,
+          clears: s.clears - from.clears,
+          ach: s.ach.length - from.ach.length,
+        },
+      };
+    },
+  };
+}
+
+/** a → b 사이 컴파일로 쓴 조각 · 우회 키 (보고서의 「얻은 양」을 바르게) */
+function fragSpent(a: Save, b: Save, i: number) {
+  let spent = 0;
+  for (let v = a.mods[i]; v < b.mods[i]; v++) spent += fragCost(i, v);
+  return spent;
+}
+function keySpent(a: Save, b: Save, i: number) {
+  let spent = 0;
+  for (let v = Math.max(1, a.byp[i]); v < b.byp[i]; v++) spent += keyCost(i, v);
+  return spent;
 }
 
 /** 이 스테이지의 상위 보스를 처음 잡으면 커널 코어를 주는지 (100스테이지마다 · 마지막은 최종 보스가 줌) */

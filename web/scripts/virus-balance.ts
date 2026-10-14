@@ -51,6 +51,9 @@ import {
   finalHp,
   finalData,
   optimalPlan,
+  autoBuy,
+  autoRoot,
+  backdoorCut,
   evoStage,
   EVOLUTION,
   bossTimeOf,
@@ -76,6 +79,16 @@ const NO_RAND = process.argv.includes("--no-rand");
 const NO_SHOP = process.argv.includes("--no-shop");
 /** --auto: 크론 데몬을 산 뒤로는 자동 최적 업그레이드(크론잡)만 쓰는 플레이어 */
 const AUTO = process.argv.includes("--auto");
+/** --auto 에서 효율 1등을 못 사면 모아 두기 (크론 데몬) */
+const WAIT = process.argv.includes("--wait");
+/** 편의성(프로파일러 · 크론잡 · 크론 데몬)을 처음부터 가진 채 시작 (GP로 산 것처럼 — 루트 권한을 안 씀) */
+const UTIL_FREE = process.argv.includes("--util-free");
+/** 편의성을 아예 안 삼 */
+const NO_UTIL = process.argv.includes("--no-util");
+/** 우회 키 최적 배분: --kalloc 처음부터 가짐 · --kalloc-buy=가격 크론 데몬 다음으로 루트 권한으로 삼 */
+const KALLOC_FREE = process.argv.includes("--kalloc");
+const KALLOC_BUY = Number(process.argv.find((a) => a.startsWith("--kalloc-buy="))?.split("=")[1]);
+if (KALLOC_BUY > 0) SHOP.find((d) => d.key === "kalloc")!.base = KALLOC_BUY;
 /** --to-end: 마지막 스테이지까지 가서 최종 보스를 처음 잡으면 멈춤 */
 const TO_END = process.argv.includes("--to-end");
 /** --quiet: 100스테이지 표만 */
@@ -146,6 +159,13 @@ function bestUpgrade(s: Save) {
 
 let s = newSave();
 let t = 0;
+if (UTIL_FREE) Object.assign(s.shop, { profiler: 1, cron: 1, daemon: 1 });
+if (KALLOC_FREE) s.shop.kalloc = 1;
+/** 편의성을 산 때 (시각 · 그때 최고 스테이지) */
+const utilAt: string[] = [];
+/** 자동 구매 사이 가장 긴 공백 (자동으로 사는 플레이어가 「멈췄다」고 느끼는지) */
+let lastAutoBuy = 0;
+let autoGap = { secs: 0, at: 0, stage: 0 };
 let st = stats(s);
 let hp = mobHp(1, st);
 let boss = false;
@@ -160,6 +180,9 @@ let rands = 0;
 const stageAt: Record<number, number> = {};
 const slowStages: string[] = [];
 const runs: string[] = [];
+/** --runs: 회차마다 (번호 · 회차 시간 · 도달 스테이지 · 최고 · 받은 루트 권한 · 루트 합계 · 끝난 시각) 표로 */
+const RUNS_ALL = process.argv.includes("--runs");
+const runRows: string[] = [];
 const evoAt: Record<number, number> = {};
 const apexAt: Record<number, number> = {};
 
@@ -169,13 +192,23 @@ let overflow = "";
  * 루트 권한 쓰기: 프로파일러 → 크론잡 → 크론 데몬 먼저 (못 사면 모아 둠), 그다음 가장 싼 것부터
  * (커널 프로파일러 · 자동 컴파일러는 추천 · 편의라 시뮬레이터엔 쓸모없음 — 사지 않음)
  */
-const UTIL = ["profiler", "cron", "daemon"];
-const SKIP = ["kprof", "autoc"];
+/** --all-util: 편의성을 모두 사고 커널 권한 「루트 권한 자동 투자」로 효율 강화를 삼 */
+const ALL_UTIL = process.argv.includes("--all-util");
+const UTIL = ALL_UTIL
+  ? ["profiler", "cron", "daemon", "kprof", "autoc", "kalloc"]
+  : ["profiler", "cron", "daemon"];
+const SKIP = ["kprof", "autoc", "kalloc"];
 function spendRoot(sv: Save) {
-  for (const k of UTIL) {
+  for (const k of [...(NO_UTIL ? [] : UTIL), ...(KALLOC_BUY > 0 ? ["kalloc"] : [])]) {
     const key = k as (typeof SHOP)[number]["key"];
     if (sv.shop[key]) continue;
     if (!buyShop(sv, key)) return;
+    utilAt.push(`${SHOP.find((d) => d.key === key)!.name} ${fmtT(t)}(${sv.best})`);
+  }
+  // 루트 권한 자동 투자가 있으면 그것대로 (효율 순 · 1등을 못 사면 모아 둠)
+  if (sv.shop.kroot) {
+    autoRoot(sv);
+    return;
   }
   for (let i = 0; i < 500; i++) {
     const options = SHOP.filter(
@@ -207,7 +240,31 @@ const kernelAt: Record<string, { t: number; stage: number }> = {};
 /** 최고 스테이지가 처음 100 · 200 … 을 넘은 시각 · 그때 변이 횟수 */
 const bestAt: Record<number, { t: number; formats: number }> = {};
 const diagSeen = new Set<number>();
+/** --stages: 최고 스테이지가 처음 넘은 시각 (10스테이지마다) · 그때 그 스테이지 한 판(파일 10개 + 보스) 걸리는 시간 */
+const STAGES = process.argv.includes("--stages");
+const stageRows: string[] = [];
+let stageSeen = 0;
 function noteBest() {
+  if (STAGES)
+    while (stageSeen + 10 < s.best && stageSeen + 10 <= MAX_STAGE) {
+      stageSeen += 10;
+      const q = stats(s);
+      const d = dps(q);
+      const floor = 1 / Math.max(0.1, q.aps * q.shotsMul);
+      const mob = Math.max(floor, mobHp(stageSeen, q) / d);
+      const boss = Math.max(floor, bossHp(stageSeen, q) / (d * q.bossDmgMul * q.fxBossMul));
+      stageRows.push(
+        [
+          stageSeen,
+          fmtT(t),
+          s.formats,
+          (mob * 10 + boss).toFixed(1),
+          mob.toFixed(2),
+          boss.toFixed(2),
+          ((mobHp(stageSeen, q) / d) * q.aps * q.shotsMul).toFixed(1),
+        ].join("	")
+      );
+    }
   if (
     process.env.DIAG &&
     s.best % 10 === 1 &&
@@ -255,8 +312,10 @@ function feel() {
   const q = stats(s);
   const hp = mobHp(s.stage, q);
   const d = dps(q);
-  const left =
-    Math.max(hp * 0.02, hp - Math.max(0, q.fx.first - 1) * avgHit(q)) * (1 - q.fx.carry * 0.5);
+  const left = Math.max(
+    hp * 0.02,
+    hp * (1 - backdoorCut(q.fx, false)) - Math.max(0, q.fx.first - 1) * avgHit(q)
+  );
   const file = d / left;
   return {
     boss: d * q.bossDmgMul * q.fxBossMul,
@@ -266,13 +325,9 @@ function feel() {
   };
 }
 const unlockedMod = new Set<number>();
-/** 백도어 이월로 다음 적에게 넘길 피해 · 이번 보스 전투에서 암호화 잠금으로 늘린 시간 */
-let carry = 0;
+/** 이번 보스 전투에서 암호화 잠금으로 늘린 시간 */
 /** 이번 회차 변이 효율 최고점 (--rate) */
 let peakRate = 0;
-/** 지금 적의 최대 체력 · 이월만으로 쓰러진 적인지 (그 초과 피해는 다시 넘기지 않음) */
-let hpMax = 1;
-let carryKill = false;
 let lockGained = 0;
 
 let apex = false;
@@ -294,21 +349,40 @@ function nextEnemy() {
   left = bossTimeOf(fin ? "final" : apex ? "apex" : "boss", st);
   leftMax = left;
   lockGained = 0;
-  hpMax = hp;
-  // 백도어 이월 (이것만으로 쓰러지면 그 초과 피해는 다시 넘기지 않음) · 부트 선점(첫 발 강타)
-  hp -= carry;
-  carryKill = carry > 0 && hp <= 0;
-  carry = 0;
+  // 백도어 침투(깎인 채로) · 부트 선점(첫 발 강타)
+  hp *= 1 - backdoorCut(st.fx, boss);
   if (st.fx.first > 1) hp -= (st.fx.first - 1) * avgHit(st);
 }
 let leftMax = BOSS_TIME;
 const achAt: Record<string, number> = {};
 
+/** --ttk: 10분마다 지금 스테이지의 파일 10개 vs 보스 처치 시간 (우회 기술 때문에 보스가 파일보다 빨리 잡히는지) */
+const TTK = process.argv.includes("--ttk");
+let nextTtk = 0;
+const ttkRows: string[] = [];
 while (t < HOURS * 3600) {
+  if (TTK && t >= nextTtk) {
+    nextTtk += 600;
+    const q = stats(s);
+    const d = dps(q);
+    const floor = 1 / Math.max(0.1, q.aps * q.shotsMul);
+    const mob = Math.max(floor, mobHp(s.stage, q) / d);
+    const boss = Math.max(floor, bossHp(s.stage, q) / (d * q.bossDmgMul * q.fxBossMul));
+    ttkRows.push(
+      `${fmtT(t).padStart(8)} · 스테이지 ${String(s.stage).padStart(4)} · 파일 1개 ${mob.toFixed(2)}초 (10개 ${(mob * 10).toFixed(1)}초) · 보스 ${boss.toFixed(2)}초 · 보스/파일 ×${(boss / mob).toFixed(2)}`
+    );
+  }
   // 업그레이드 (한 틱에 최대 1000번 — 숫자가 무한대로 튀면 멈춤)
   if (AUTO && s.shop.daemon) {
-    const p = optimalPlan(s);
-    if (applyPlan(s, p)) buys += p.count;
+    // --wait: 게임의 크론 데몬과 같게 (autoBuy) · 아니면 예전처럼 가진 데이터로 최적 조합만
+    const ups = s.rec.ups;
+    const bought = WAIT ? autoBuy(s) : applyPlan(s, optimalPlan(s));
+    if (bought) {
+      buys += s.rec.ups - ups;
+      if (lastAutoBuy && t - lastAutoBuy > autoGap.secs)
+        autoGap = { secs: t - lastAutoBuy, at: t, stage: s.stage };
+      lastAutoBuy = t;
+    }
   } else
     for (let i = 0; i < 1000; i++) {
       const b = bestUpgrade(s);
@@ -360,8 +434,6 @@ while (t < HOURS * 3600) {
     for (const a of checkAch(s)) achAt[a.id] = t;
   }
   if (hp <= 0) {
-    // 백도어 이월: 넘친 피해 (쓰러뜨린 적의 최대 체력까지) × 이월 비율
-    carry = carryKill ? 0 : Math.min(-hp, hpMax) * st.fx.carry;
     // 러브레터 미끼: 명중마다 미리 빼낸 데이터 (평균만큼 보상에 얹음)
     const gainData = (sv: Save, n: number) => gainDataRaw(sv, n * (1 + st.fx.leech));
     if (boss) {
@@ -455,6 +527,17 @@ while (t < HOURS * 3600) {
     else if (rate > 0 && rate < peakRate * RATE_DROP) stuck = true;
   }
   if (stuck && canFormat(s)) {
+    runRows.push(
+      [
+        s.formats + 1,
+        fmtT(t - runStart),
+        s.stage,
+        s.best - 1,
+        fmt(pendingRoot(s)),
+        fmt(s.root + pendingRoot(s)),
+        fmtT(t),
+      ].join(String.fromCharCode(9))
+    );
     runs.push(
       `  회차 ${s.formats + 1}: ${fmtT(t - runStart)} 동안 스테이지 ${s.stage}까지 → 루트 권한 +${pendingRoot(s)} (합계 ${s.root + pendingRoot(s)}) · 끝난 시각 ${fmtT(t)} · 상점 ${Object.values(s.shop).join("/")}`
     );
@@ -494,6 +577,18 @@ for (let n = 100; n <= MAX_STAGE; n += 100) {
 console.log(
   `  끝 시각 ${fmtT(t)} · 최고 ${s.best - 1} · 지금 스테이지 ${s.stage} · 루트 권한 ${fmt(s.root)} · 코어 ${s.cores}`
 );
+if (AUTO)
+  console.log(
+    `자동 구매 최대 공백: ${fmtT(autoGap.secs)} (${fmtT(autoGap.at)} · 스테이지 ${autoGap.stage})`
+  );
+if (STAGES)
+  console.log(
+    ["스테이지	처음 도달	변이	한 판(초)	파일(초)	보스(초)	파일 명중 수", ...stageRows].join(
+      String.fromCharCode(10)
+    )
+  );
+if (TTK) console.log(["처치 시간 (10분마다):", ...ttkRows].join(String.fromCharCode(10)));
+console.log("편의성 산 때: " + (utilAt.join(" → ") || "없음"));
 console.log(
   "커널 권한 산 때: " +
     (SHOP.filter((d) => d.group === "core" && kernelAt[d.key])
@@ -517,6 +612,16 @@ console.log(
   `첫 30분: 업그레이드 ${buys30}번 (평균 ${buys30 ? (1800 / buys30).toFixed(1) : "-"}초마다)`
 );
 console.log(`\n회차 (포맷 ${runs.length}번):`);
+if (RUNS_ALL)
+  console.log(
+    [
+      "회차표",
+      ["회차", "회차 시간", "도달", "최고", "+루트", "루트 합계", "끝난 시각"].join(
+        String.fromCharCode(9)
+      ),
+      ...runRows,
+    ].join(String.fromCharCode(10))
+  );
 console.log(runs.slice(0, 12).join("\n") || "  없음");
 if (runs.length > 12) console.log(`  … (${runs.length - 12}회차 더)`);
 console.log(
