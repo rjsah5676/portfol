@@ -47,6 +47,8 @@ import {
   glitchUnlocks,
   lvCost,
   relicUpCost,
+  relicShardsToMax,
+  RELIC_DUP_CORES,
   resUpCost,
   runReward,
   transRoll,
@@ -330,7 +332,10 @@ function openBoxes() {
     const tier = tr < o[0] ? 0 : tr < o[0] + o[1] ? 1 : 2;
     const pool = RELICS.filter((r) => r.tier === tier);
     const pick = pool[Math.floor(R() * pool.length)];
-    if (p.relics.includes(pick.id)) p.shards[pick.id] = (p.shards[pick.id] ?? 0) + 1;
+    if (p.relics.includes(pick.id)) {
+      if ((p.shards[pick.id] ?? 0) >= relicShardsToMax(pick.id, p.relicLv[pick.id] ?? 1)) p.cores += RELIC_DUP_CORES[pick.tier];
+      else p.shards[pick.id] = (p.shards[pick.id] ?? 0) + 1;
+    }
     else p.relics.push(pick.id);
   }
 }

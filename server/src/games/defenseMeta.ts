@@ -28,6 +28,8 @@ import {
   RELIC_MAX_LV,
   resUpCost,
   relicUpCost,
+  relicShardsToMax,
+  RELIC_DUP_CORES,
   PASS,
   PASS_PREMIUM_GP,
   RELIC,
@@ -311,6 +313,12 @@ export function createDefenseMeta(db: Database, points: Points, now: () => numbe
     const pool = RELICS.filter((r) => r.tier === tier);
     const pick = pool[randomInt(0, pool.length)];
     if (p.relics.includes(pick.id)) {
+      // 최고 레벨까지 쓸 조각이 이미 있으면 (쓸모없는 조각 대신) 글리치 코어
+      if ((p.shards[pick.id] ?? 0) >= relicShardsToMax(pick.id, p.relicLv?.[pick.id] ?? 1)) {
+        const cores = RELIC_DUP_CORES[pick.tier];
+        p.cores += cores;
+        return { relic: pick.id, cores };
+      }
       p.shards[pick.id] = (p.shards[pick.id] ?? 0) + 1;
       return { relic: pick.id, shard: 1 };
     }

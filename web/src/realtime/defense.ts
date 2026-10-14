@@ -106,6 +106,8 @@ export interface DefenseProfile {
   got?: {
     relic?: string;
     shard?: number;
+    /** 최고 레벨 유물이 겹쳐서 받은 코어 */
+    cores?: number;
     cards?: Record<string, number>;
     /** 초월 소환 한 번 (trans 가 없으면 miss 의 재화) */
     trans?: string | TransGot[];

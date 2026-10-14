@@ -120,7 +120,7 @@ export const CUR_INFO: Record<keyof typeof CUR_NAME, { get: string; use: string 
   },
   relicbox: {
     get: `상점에서 글리치 코어 ${BOX.relic.cores} · 패키지 · 재화샵 · 오염 단계 첫 클리어 · 시즌 패스`,
-    use: "열면 유물 하나 — 새 유물이면 얻고, 가진 유물이면 그 유물 조각 +1",
+    use: "열면 유물 하나 — 새 유물이면 얻고, 가진 유물이면 그 유물 조각 +1 (최고 레벨까지 조각이 충분하면 대신 글리치 코어)",
   },
   shard: {
     get: "유물 상자에서 이미 가진 유물이 또 나오면 (그 유물 것)",
@@ -982,7 +982,7 @@ function GotBox({ got }: { got: Got }) {
               {TIER_NAME[RELIC[got.relic].tier]} 유물
             </p>
             <b className="text-[17px]">{RELIC[got.relic].name}</b>
-            <p className="text-[12px] text-[var(--mute)]">{got.shard ? `이미 가진 유물 → 유물 조각 +${got.shard} (유물 강화 재료)` : RELIC[got.relic].desc}</p>
+            <p className="text-[12px] text-[var(--mute)]">{got.cores ? `최고 레벨까지 조각이 충분해서 → 글리치 코어 +${got.cores}` : got.shard ? `이미 가진 유물 → 유물 조각 +${got.shard} (유물 강화 재료)` : RELIC[got.relic].desc}</p>
           </div>
         </div>
       ) : got.cards ? (

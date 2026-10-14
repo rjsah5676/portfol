@@ -703,6 +703,14 @@ export const packPct = (pk: PackDef) => Math.round((goodsGp(pk.give) / pk.gp) * 
 
 /** 유물 희귀도 값 (일반 · 희귀 · 전설) — 강화 코어 계산용 (유물은 상자에서만 나옴) */
 export const RELIC_CORE_PRICE = [8, 15, 30] as const;
+/** 최고 레벨까지 더 필요한 유물 조각 (지금 레벨 lv 에서) */
+export const relicShardsToMax = (id: string, lv: number) => {
+  let n = 0;
+  for (let l = Math.max(1, lv); l < RELIC_MAX_LV; l++) n += relicUpCost(id, l).shards;
+  return n;
+};
+/** 겹친 유물인데 조각이 이미 최고 레벨까지 충분하면 조각 대신 글리치 코어 (일반 · 희귀 · 전설) */
+export const RELIC_DUP_CORES = [3, 5, 8] as const;
 /** 유물 lv → lv+1: 그 유물 조각(같은 유물이 또 나오면 1개) lv 개 + 코어 (희귀도 값 × lv ÷ 2) */
 export const relicUpCost = (id: string, lv: number) => ({
   shards: lv,

@@ -169,6 +169,7 @@ cd web && POKER_E2E=1 npx next dev            # → /games/defense/?fake=admin:�
 - 자리 옮기기는 끌어서만 (클릭 두 번 이동 · 「이동」 버튼 · M 키 삭제)
 - 패키지 `give.trans` 는 바로 돌리지 않고 **초월 상자** `boxes.trans` 로 (rpc `defense.box.open {kind: "trans"}` = 초월 소환 1번, 사기는 없음 — 코어 소환은 `defense.trans`)
 - 한/영: 단축키는 `e.code` 로 읽음 (`GameView keyOf`)
+- 겹친 유물: `openRelic` 이 `relicShardsToMax(id, lv) <= 가진 조각` 이면 조각 대신 `RELIC_DUP_CORES[희귀도]` 코어 (got.cores) — Lv.5 뒤 쓸모없는 조각이 쌓이지 않게
 
 ### v1.2 BETA (밸런스 beta3) — 치트 코드(증강) · 시작 치트 · 끈기 · 일일 패키지
 - **치트 코드** (`lib/defense/cheats.ts`, 다른 게임의 증강): 보스 10 · 20 · 30 · 40 · 50 을 잡으면 `offerCheat` 가 `b.cheat = { kind: "cheat", offer[3], rr[3], t }` → **고를 때까지 그 보드는 멈춤** (`step` 이 건너뜀). 명령 `{t:"cheat", i}` 고르기 · `{t:"reroll", i}` 그 카드 다시 뽑기 (카드마다 `mods.cheatReroll`, 기본 1). 고르는 중엔 다른 명령은 거절(포기만 됨)

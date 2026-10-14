@@ -6,7 +6,7 @@ import { CELLS, SLOTS, apply, hashGame, isCmd, newGame, step, unitCount, type Ga
 import { RECIPES, UNIT, UNITS } from "../../web/src/lib/defense/units";
 import { CHEATS, CHEAT_MULTI_SEC, cheatFxOf, cheatOdds } from "../../web/src/lib/defense/cheats";
 import { TPS } from "../../web/src/lib/defense/balance";
-import { CHEAT_RES, BOX, BENCH_COST, FRES_COST, TRANS_IDS, GP_PACKS, GP_SELL, GP_STORE, PACK, PASS_PREMIUM_GP, RESEARCH, lvCost, modsOf, packPct, planUpAll, seasonScore, transRoll } from "../../web/src/lib/defense/progress";
+import { relicShardsToMax, CHEAT_RES, BOX, BENCH_COST, FRES_COST, TRANS_IDS, GP_PACKS, GP_SELL, GP_STORE, PACK, PASS_PREMIUM_GP, RESEARCH, lvCost, modsOf, packPct, planUpAll, seasonScore, transRoll } from "../../web/src/lib/defense/progress";
 import { startTestServer, type TestClient, type TestServer } from "./helpers";
 
 /** 봇 한 판 (기록 포함) */
@@ -550,6 +550,9 @@ describe("픽셀 글리치 디펜스 서버", () => {
     expect(loadout.trans).toEqual([t.got.trans]);
     expect(Object.keys(loadout.own).length).toBe(pr.relics.length);
     expect(modsOf(loadout).relicDmg).toBeGreaterThan(1);
+    // 겹친 유물: 최고 레벨까지 조각이 충분하면 조각 대신 코어
+    expect(relicShardsToMax("vaccine", 1)).toBe(10);
+    expect(relicShardsToMax("vaccine", 5)).toBe(0);
     c.close();
   });
 
