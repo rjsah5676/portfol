@@ -83,6 +83,23 @@ def feet(piece: np.ndarray, anchor="feet"):
     return float(near.mean()), float(foot + 1)
 
 
+def shrink_front(p: np.ndarray, cut: float, k: float) -> np.ndarray:
+    """cut 오른쪽만 가로로 k배 눌러 줄임 (오른쪽을 보는 그림, cut 에서 이어지게 — 이음매 없음)"""
+    h, w = p.shape[:2]
+    c = int(round(cut))
+    if c >= w - 1:
+        return p
+    right = p[:, c:]
+    nw = max(1, round(right.shape[1] * k))
+    f = right.astype(np.float32)
+    f[..., :3] *= f[..., 3:4] / 255
+    g = np.asarray(Image.fromarray(f.astype(np.uint8), "RGBA").resize((nw, h), Image.LANCZOS)).astype(np.float32)
+    g[..., :3] = np.where(g[..., 3:4] > 0, g[..., :3] * 255 / np.maximum(g[..., 3:4], 1), 0)
+    out = np.concatenate([p[:, :c], np.clip(g, 0, 255).astype(np.uint8)], 1)
+    xs = np.where(out[..., 3].max(0) > 0)[0]
+    return out[:, : xs.max() + 1].copy()
+
+
 class Sheets:
     def __init__(self, src: Path, cfg: dict):
         self.src = src
@@ -167,6 +184,12 @@ def build(src_root: Path, cid: str):
     for ref, xy in spec.get("anchorFix", {}).items():
         if ref in seen:
             anchors[seen[ref]] = (float(xy[0]), float(xy[1]))
+    # 앞으로 뻗은 이펙트가 판정보다 너무 커 보이는 프레임: 앞쪽(발 기준 x 픽셀부터)만 k배로 줄임 (몸은 그대로)
+    #   "shrinkFx": {"시트:행.칸": [x, k]} (저장 크기 기준)
+    for ref, (fx_x, k) in spec.get("shrinkFx", {}).items():
+        if ref in seen:
+            i = seen[ref]
+            pieces[i] = shrink_front(pieces[i], anchors[i][0] + fx_x, k)
     idle_h = float(np.median([pieces[i].shape[0] for i in anims["idle"]["list"]]))
     scale = round(idle_h / spec["body"], 3)
     atlas, pos = pack(pieces)
