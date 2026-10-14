@@ -46,6 +46,20 @@ export const BG_MODES: { key: BgMode; label: string; desc: string }[] = [
   },
   { key: "stage", label: "무대", desc: "기본 무대 그림" },
 ];
+/** 프레임: 60(120Hz 이상 화면에서도 초당 60번만 그림 — 발열·배터리) / 최대(화면 주사율대로) */
+export type FpsMode = "60" | "max";
+export const FPS_MODES: { key: FpsMode; label: string; desc: string }[] = [
+  {
+    key: "60",
+    label: "60",
+    desc: "120Hz 이상 화면에서도 초당 60번만 그려요 — 덜 뜨겁고 배터리가 오래가요 (판정은 그대로)",
+  },
+  {
+    key: "max",
+    label: "최대",
+    desc: "화면 주사율대로 (120Hz면 초당 120번) — 더 매끄럽지만 더 뜨거워요",
+  },
+];
 
 export interface Result {
   songId: string;
@@ -234,6 +248,8 @@ interface Props {
   autoplay?: boolean;
   /** 플레이 배경 (커버·뮤비 / 무대) */
   bg?: BgMode;
+  /** 프레임 (60 / 최대) */
+  fps?: FpsMode;
   /** 온라인 판 — 일시정지·다시 시작 없음, 시작 시각은 서버가 정함 */
   online?: OnlineStage;
 }
@@ -263,6 +279,7 @@ export default function Stage({
   portrait = false,
   autoplay = false,
   bg = "cover",
+  fps = "60",
   online,
 }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -424,6 +441,9 @@ export default function Stage({
     let perfInfo: { fps: number; p90: number; work90: number; hz: number } | null = null;
     // 가속이 꺼져 있으면 처음부터 가장 가볍게 (낮은 해상도·효과 최소) — 프레임이 남으면 measureFrame이 다시 올림
     if (gpuInfo().software) quality = 0;
+    /** 해상도를 한 번 낮췄으면 그 판 동안은 그대로 — 가벼워졌다고 다시 올리면 무거워져 또 내리고…
+     *  그때마다 캔버스 크기를 바꾸고 바닥 그림을 다시 그려서 몇 초마다 툭툭 끊겼음 */
+    let lowRes = quality === 0;
     const rebuild = () => {
       buildStatic();
       buildGear();
@@ -571,7 +591,7 @@ export default function Stage({
         canvas.style.height = `${(cssW * CH) / CW}px`;
       }
       // 프레임이 계속 떨어지는 기기는 해상도도 한 단계 낮춤 (1920 → 1280px)
-      const dpr = Math.min(window.devicePixelRatio || 1, 2, (quality === 0 ? 1280 : 1920) / cssW);
+      const dpr = Math.min(window.devicePixelRatio || 1, 2, (lowRes ? 1280 : 1920) / cssW);
       const nW = Math.round(cssW * dpr);
       if (nW === pxW && !force) return;
       pxW = nW;
@@ -812,20 +832,43 @@ export default function Stage({
     /** 휴대폰 세로: 위쪽 띠에 곡·점수·정확도·HP·진행 */
     // 콤보 글자 그림 캐시: "COMBO" 라벨 + 큰 숫자(테두리·은색/금색 광택). 숫자·금빛이 같으면 재사용
     const comboFont = "Impact, 'Arial Narrow', 'Arial Black', sans-serif";
-    const comboCache = new Map<string, { c: HTMLCanvasElement; w: number; h: number }>();
+    // (은색·금색 캔버스 두 장을 계속 다시 씀 — 콤보마다 새 캔버스를 만들면 초당 10~15장씩 쌓여
+    //  사파리는 장마다 GPU 메모리를 잡았다가 한꺼번에 치우면서 순간 끊김)
+    type ComboSlot = {
+      c: HTMLCanvasElement;
+      b: CanvasRenderingContext2D;
+      w: number;
+      h: number;
+      key: string;
+    };
+    const comboSlots: (ComboSlot | null)[] = [null, null];
     const comboSprite = (txt: string, gold: boolean) => {
-      const key = `${txt}|${gold ? 1 : 0}|${k.toFixed(2)}`;
-      let sp = comboCache.get(key);
-      if (sp) return sp;
-      if (comboCache.size > 12) comboCache.clear();
+      const key = `${txt}|${k.toFixed(2)}`;
+      const si = gold ? 1 : 0;
+      let sp = comboSlots[si];
+      if (sp && sp.key === key) return sp;
       const size = 72;
       const w = Math.max(160, txt.length * size * 0.6 + 40);
       const h = size + 60;
-      const c = document.createElement("canvas");
-      c.width = Math.ceil(w * k);
-      c.height = Math.ceil(h * k);
-      const b = c.getContext("2d")!;
-      b.scale(k, k);
+      if (!sp) {
+        const c = document.createElement("canvas");
+        sp = { c, b: c.getContext("2d")!, w, h, key };
+        comboSlots[si] = sp;
+      }
+      const { c, b } = sp;
+      const pw = Math.ceil(w * k);
+      const ph = Math.ceil(h * k);
+      if (c.width !== pw || c.height !== ph) {
+        c.width = pw;
+        c.height = ph;
+      } else {
+        b.setTransform(1, 0, 0, 1, 0, 0);
+        b.clearRect(0, 0, pw, ph);
+      }
+      sp.w = w;
+      sp.h = h;
+      sp.key = key;
+      b.setTransform(k, 0, 0, k, 0, 0);
       b.translate(w / 2, h / 2 + 10);
       b.textAlign = "center";
       b.textBaseline = "middle";
@@ -852,8 +895,6 @@ export default function Stage({
       gr.addColorStop(1, gold ? "#FEF3C7" : "#CBD5E1");
       b.fillStyle = gr;
       b.fillText(txt, 0, 4);
-      sp = { c, w, h };
-      comboCache.set(key, sp);
       return sp;
     };
     /** 프레임 통계 한 줄(분석 모드): fps/주사율 · 프레임 간격 p90 · 그리기 시간 p90 · 품질 · 간격 고정 · 캔버스 픽셀 */
@@ -1787,8 +1828,14 @@ export default function Stage({
         work90,
         hz: 1000 / baseDt,
       };
-      const want = baseDt * pace;
       const highHz = baseDt <= 11; // 90Hz 이상
+      // 60 고정: 100Hz 넘는 화면(120·144Hz)은 처음부터 한 칸 건너 그림 (90Hz는 45가 돼서 그대로)
+      const cap60 = fps === "60" && baseDt < 10;
+      if (cap60 && pace === 1) {
+        pace = 2;
+        paceHold = 0;
+      }
+      const want = baseDt * pace;
       if (p90 > want * 1.35) {
         // 떨어짐: 고주사율은 먼저 간격 고정, 60Hz는 효과부터
         if (pace === 1 && (highHz || quality === 0)) {
@@ -1797,7 +1844,10 @@ export default function Stage({
         } else if (quality > 0) {
           quality--;
           qualityHold = 0;
-          if (quality === 0) resize(true);
+          if (quality === 0 && !lowRes) {
+            lowRes = true;
+            resize(true);
+          }
           // 뮤비는 품질이 두 단계 내려가면 끔 (합성 부담 — 다시 켜지지 않음)
           if (quality <= 1 && video && !videoOff) {
             videoOff = true;
@@ -1807,13 +1857,12 @@ export default function Stage({
         }
       } else if (p90 < want * 1.08) {
         // 4번(약 6초) 연속 가벼우면 한 단계 되돌림 — 간격 고정은 그리는 시간이 주사 간격의 절반도 안 돼야 풂
-        if (pace === 2 && paceHold >= 4 && work90 < baseDt * 0.45) {
+        if (pace === 2 && !cap60 && paceHold >= 4 && work90 < baseDt * 0.45) {
           pace = 1;
           paceHold = 0;
         } else if (quality < 3 && qualityHold >= 4) {
           quality++;
           qualityHold = 0;
-          if (quality === 1) resize(true);
         }
       }
     };
