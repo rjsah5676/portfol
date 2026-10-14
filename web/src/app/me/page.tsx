@@ -77,7 +77,7 @@ function Stat({ name, value }: { name: string; value: string | number }) {
   return (
     <div className="flex flex-col">
       <span className="font-mono text-lg font-bold text-white tabular-nums">{value}</span>
-      <span className="font-['Nanum_Gothic',sans-serif] text-[11px] text-white/40">{name}</span>
+      <span className="font-['Nanum_Gothic',sans-serif] text-[11px] break-keep text-white/40">{name}</span>
     </div>
   );
 }
@@ -302,7 +302,7 @@ export default function MyPage() {
                   const s = stats.online?.[key] ?? {};
                   const total = (s.w ?? 0) + (s.l ?? 0) + (s.d ?? 0);
                   return (
-                    <div key={key} className="flex items-center gap-4">
+                    <div key={key} className="flex flex-wrap items-center gap-x-4 gap-y-2">
                       <Link
                         href={href}
                         className="w-14 shrink-0 font-['Nanum_Gothic',sans-serif] text-sm text-white/85 transition-colors hover:text-[#8B84FF]"
@@ -312,7 +312,7 @@ export default function MyPage() {
                       {total === 0 ? (
                         <span className="font-mono text-xs text-white/30">아직 기록이 없어요</span>
                       ) : (
-                        <span className="font-mono text-sm text-white/80 tabular-nums">
+                        <span className="font-mono text-sm whitespace-nowrap text-white/80 tabular-nums">
                           <b className="text-white">{s.w ?? 0}</b>승{" "}
                           <b className="text-white">{s.l ?? 0}</b>패{" "}
                           <b className="text-white">{s.d ?? 0}</b>무
@@ -327,13 +327,13 @@ export default function MyPage() {
                           n={data.fightRating.n}
                           showR
                           size={20}
-                          className="ml-auto rounded-full border border-white/10 bg-white/[0.03] py-0.5 pr-2.5 pl-1 font-['Nanum_Gothic',sans-serif] text-xs"
+                          className="ml-auto shrink-0 rounded-full border border-white/10 bg-white/[0.03] py-0.5 pr-2.5 pl-1 font-['Nanum_Gothic',sans-serif] text-xs whitespace-nowrap"
                         />
                       )}
                     </div>
                   );
                 })}
-                <div className="flex gap-8 border-t border-white/5 pt-4">
+                <div className="grid grid-cols-3 gap-4 border-t border-white/5 pt-4">
                   <Stat name="DOODLE PARTY 게임" value={stats.sketch?.games ?? 0} />
                   <Stat name="스케치 정답" value={stats.sketch?.correct ?? 0} />
                   <Stat
