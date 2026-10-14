@@ -148,7 +148,7 @@ export default function SkinShop({ initial = "shop", onClose }: { initial?: Shop
         {tab === "shop" && skin && (
           <div className="flex min-h-0 flex-1 gap-[1.6cqw] p-[1.6cqw]">
             {/* 왼쪽: 스킨 목록 */}
-            <div className="flex w-[17cqw] flex-col gap-[0.8cqw] overflow-y-auto">
+            <div className="gold-scroll flex w-[17cqw] flex-col gap-[0.8cqw] overflow-y-auto pr-[0.4cqw]">
               {FIGHT_SKINS.map((s) => {
                 const on = s.id === skin.id;
                 const it = shopItem(skinItem(s.id));
@@ -265,7 +265,7 @@ export default function SkinShop({ initial = "shop", onClose }: { initial?: Shop
         )}
 
         {tab === "inv" && (
-          <div className="min-h-0 flex-1 overflow-y-auto p-[1.6cqw]">
+          <div className="gold-scroll min-h-0 flex-1 overflow-y-auto p-[1.6cqw]">
             {!member ? (
               <Empty text="로그인하면 산 스킨을 여기서 착용할 수 있어요." />
             ) : invChars.length === 0 ? (
