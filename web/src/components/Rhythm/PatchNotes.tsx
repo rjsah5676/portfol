@@ -17,6 +17,18 @@ export interface Patch {
 
 export const PATCHES: Patch[] = [
   {
+    ver: "v1.5",
+    name: "롱노트 · 손 모양",
+    date: "2026.10.15",
+    lines: [
+      "HARD~ULTIMA 롱노트를 6%로 맞춤 (HARD 4 · EX 8 · NIGHTMARE 10%였음, osu 9% · Quaver 1~4%) — EASY·NORMAL은 그대로",
+      "같은 레인으로 한 칸 걸러 돌아오는 A B A 줄임 — EX~ULTIMA 빠른 단노트 셋 중 26~29% → 14~16% (osu 14~16%)",
+      "NIGHTMARE 16분 자리 일부를 동시치기로 — 빠른 동시치기 연속 1.7 → 5.9% (osu·Quaver 6~9%)",
+      "NIGHTMARE·ULTIMA 조용한 구간을 조금 더 채움 (조용한 4초 밀도 중앙값의 0.56배 → 0.61배, osu·Quaver 0.76배)",
+      "레벨: Jilju · Monarch · Velocity · Pixel Fighting NIGHTMARE 16 → 15 (롱노트가 줄어 같은 노트 수에 별점이 덜 나옴)",
+    ],
+  },
+  {
     ver: "v1.4",
     name: "채보 다듬기",
     date: "2026.10.15",
