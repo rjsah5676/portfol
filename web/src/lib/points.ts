@@ -253,7 +253,7 @@ export const FIGHT_CHAR_NAMES = [
 ] as const;
 
 const EOK = 100_000_000;
-/** 업적 · 일일 미션 보상 배수 (아래 숫자 × 이것 만큼 GP) */
+/** 일회형 업적 보상 배수 (아래 숫자 × 이것 만큼 GP) — 일일 미션은 숫자 자체를 3배로 적어 둠 */
 export const REWARD_X = 3;
 const a = (
   game: AchGame,
@@ -622,7 +622,7 @@ const dm = (game: AchGame, id: string, title: string, metric: AchMetric, goal: n
   title,
   metric,
   goal,
-  reward: reward * REWARD_X,
+  reward,
 });
 export const DAILY_MISSIONS: DailyMission[] = [
   dm("poker", "hands", "포커 10판 치기", "poker.hands", 10, 90),
