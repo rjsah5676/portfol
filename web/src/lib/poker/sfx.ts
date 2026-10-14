@@ -574,6 +574,19 @@ export function playVoice(char: string, name: string, big = false) {
   });
 }
 
+/** 로비 캐릭터를 눌렀을 때 대사: 줄 서지 않고, 나오던 대사(첫 입장 인사 등)를 끊고 바로 */
+export function playVoiceCut(char: string, name: string) {
+  const s = getSound();
+  if (s.mute || s.voice <= 0 || away()) return;
+  const url = voiceUrl(char, name);
+  const c = ac();
+  if (!url || !c) return;
+  speakQ.length = 0;
+  void buffer(url).then((buf) => {
+    if (buf) playBuf(c, buf, s.voice);
+  });
+}
+
 /**
  * 쇼다운 족보 대사: 줄 서지 않고 바로 (패 까는 박자와 딱 맞게). 앞사람 대사 끝자락과는 겹쳐서 같이 들림 — 끊지 않음.
  * 그동안 남의 짧은 베팅 대사는 안 끼어듦.
