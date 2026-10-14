@@ -520,6 +520,12 @@ export const DAILY_MISSIONS: DailyMission[] = [
   dm("defense", "kills", "적 1,000마리 처치 (랭킹 판)", "defense.kills", 1000, 40),
   dm("rhythm", "plays", "3판 하기", "rhythm.plays", 3, 30),
   dm("rhythm", "plays10", "10판 하기", "rhythm.plays", 10, 60),
+  dm("sketch", "game", "한 판 끝까지 하기", "sketch.games", 1, 30),
+  dm("sketch", "games", "세 판 끝까지 하기", "sketch.games", 3, 60),
+  dm("sketch", "correct", "정답 5번 맞히기", "sketch.correct", 5, 30),
+  dm("sketch", "first", "제일 먼저 맞히기 2번", "sketch.first", 2, 40),
+  dm("sketch", "drew", "내 그림이 맞혀지기 2번", "sketch.drew", 2, 40),
+  dm("sketch", "win", "1등 하기 (3명 이상 판)", "sketch.wins", 1, 50),
 ];
 /** 일일 미션이 보는 숫자 (기준값을 적어 둘 것) */
 export const DAILY_METRICS = [...new Set(DAILY_MISSIONS.map((x) => x.metric))];

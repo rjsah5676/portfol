@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { plainName } from "@/components/Nick";
+import { DailyMissionList, useDailyReady } from "@/components/Points/DailyMissions";
 import { avatarOf } from "@/lib/sketch/assets";
 import { playBgm, playSfx } from "@/lib/sketch/sfx";
 import {
@@ -68,6 +69,9 @@ export default function SketchLobby({
   const [onlyOpen, setOnlyOpen] = useState(false);
   const [editNick, setEditNick] = useState(false);
   const [toast, setToast] = useState<{ t: string; k: number } | null>(null);
+  const [missions, setMissions] = useState(false);
+  // 받을 수 있는 일일 미션 수 (창을 닫으면 다시 셈)
+  const ready = useDailyReady("sketch", missions);
 
   useEffect(() => playBgm("bgm-lobby"), []);
 
@@ -293,6 +297,19 @@ export default function SketchLobby({
         </button>
         <div className="flex-1" />
         {!v && me}
+        <button
+          type="button"
+          onClick={tap(() => setMissions(true), "sfx-open")}
+          title="오늘의 미션 · 매일 GP"
+          className={`sk-btn relative ${ready ? "sk-btn-sun" : ""} ${v ? "px-2.5 text-[15px]" : "text-[18px]"}`}
+        >
+          📅 {v ? "미션" : "오늘의 미션"}
+          {ready > 0 && (
+            <span className="absolute -top-2 -right-2 grid h-5 min-w-5 place-items-center rounded-full border-2 border-[var(--ink)] bg-[var(--coral)] px-1 text-[11px] font-extrabold text-white">
+              {ready}
+            </span>
+          )}
+        </button>
         <SoundButton />
         <FsButton />
       </div>
@@ -346,6 +363,17 @@ export default function SketchLobby({
             setEditNick(false);
           }}
         />
+      )}
+      {missions && (
+        <Dialog
+          onClose={() => setMissions(false)}
+          title="📅 오늘의 미션"
+          className="w-[min(460px,100%)]"
+        >
+          <div className="sk-scroll mx-4 mb-4 min-h-0 overflow-y-auto rounded-xl bg-[#2B2D42] p-3 text-white">
+            <DailyMissionList game="sketch" accent="#FF6B6B" />
+          </div>
+        </Dialog>
       )}
       {toast && (
         <div key={toast.k} className="sk-toast sk-card bottom-6 px-4 py-2 text-[14px] font-bold">
