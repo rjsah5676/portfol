@@ -35,7 +35,7 @@ import { Controller } from "./controller";
 import Hub, { Cur, curTip, type HubTab } from "./Hub";
 import { setTheme } from "./render";
 import { GLITCH, GRIT_PER, TREASURE, treasureChance, type Loadout } from "@/lib/defense/progress";
-import { resetTutorial } from "./Tutorial";
+import { resetTutorial, stopTutorial, tutorialOn } from "./Tutorial";
 import GameView from "./GameView";
 import Stage from "./Stage";
 import { playBgm } from "./audio";
@@ -296,7 +296,7 @@ function Menu(p: {
   onRejoin(id: string): void;
   onNotes(): void;
 }) {
-  const [tut, setTut] = useState(false);
+  const [tut, setTut] = useState(() => typeof window !== "undefined" && tutorialOn());
   // 새로고침했는데 멀티 판이 진행 중이면 돌아가기 버튼
   const [mine, setMine] = useState<{ id: string; name: string } | null>(null);
   useEffect(() => {
@@ -562,10 +562,11 @@ function Menu(p: {
         </Btn>
         <Btn
           className="h-[34px] px-3 text-[13px]"
-          title="판 안에서 상황마다 나오는 안내 카드를 처음부터 다시 보여 줘요"
-          onClick={() => (resetTutorial(), setTut(true))}
+          tone={tut ? "cyan" : "ghost"}
+          title={tut ? "누르면 튜토리얼 끄기" : "누르면 판 안 안내 카드를 처음부터 다시 켜요"}
+          onClick={() => (tut ? stopTutorial() : resetTutorial(), setTut(!tut))}
         >
-          <Icon n="book" size={14} /> {tut ? "튜토리얼 켜짐" : "튜토리얼"}
+          <Icon n="book" size={14} /> {tut ? "튜토리얼 켜짐" : "튜토리얼 꺼짐"}
         </Btn>
       </div>
     </div>

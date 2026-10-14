@@ -96,6 +96,15 @@ function save(v: Saved) {
 export function resetTutorial() {
   save({ done: [], off: false });
 }
+/** 끄기 (메뉴 버튼을 한 번 더 누르면) */
+export function stopTutorial() {
+  save({ ...load(), off: true });
+}
+/** 지금 켜져 있나 (꺼지지 않았고 아직 볼 카드가 남음) */
+export function tutorialOn() {
+  const v = load();
+  return !v.off && v.done.length < STEPS.length;
+}
 
 /** 지금 보여 줄 안내 카드 (필드 아래쪽에 겹쳐 그림) */
 export function TutorialCard({ b }: { b: Board }) {

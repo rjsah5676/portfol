@@ -1540,6 +1540,11 @@ function RecipeModal({ b, run, onClose }: { b: Board; run: (c: Cmd) => boolean; 
               )}
               <div className="w-[200px]">
                 <b className="text-[14px]">{known ? d.name : "???"}</b> <GradeChip g={d.grade} />
+                {(have[r.id] ?? 0) > 0 && (
+                  <span className="ml-1 bg-[#1f5a35] px-1 py-px text-[11px] font-bold text-[#6dff8f]" title="필드 · 보관함에 이미 있어요">
+                    보유 중{have[r.id] > 1 ? ` ×${have[r.id]}` : ""}
+                  </span>
+                )}
                 <p className="mt-0.5 text-[12px] leading-tight text-[var(--mute)]">
                   {known ? d.desc : "숨겨진 조합식 — 어떤 유닛들이 모이면…?"}
                 </p>
