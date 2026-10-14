@@ -6,6 +6,8 @@ import NickForm from "@/components/Account/NickForm";
 import { useAuth } from "@/lib/AuthContext";
 import DevPanel from "./DevPanel";
 import Mailbox from "./Mailbox";
+import Missions from "./Missions";
+import { useDailyReady } from "@/components/Points/DailyMissions";
 import { asset } from "@/lib/poker/assets";
 import {
   getSound,
@@ -83,6 +85,9 @@ export default function PokerApp({ rank }: { rank: RankRow[] | null }) {
   const [revived, setRevived] = useState<{ text: string; key: number } | null>(null);
   // 우편함 · 오늘 첫 접속 출석 보상 안내
   const [mailOpen, setMailOpen] = useState(false);
+  // 일일 미션 (GP) — 닫을 때 받을 수 있는 수 다시 셈
+  const [missionOpen, setMissionOpen] = useState(false);
+  const missionReady = useDailyReady("poker", missionOpen);
   const [attendNote, setAttendNote] = useState<{ text: string; key: number } | null>(null);
 
   useEffect(() => {
@@ -258,6 +263,21 @@ export default function PokerApp({ rank }: { rank: RankRow[] | null }) {
       {/* 게임방 안에서는 상점 없이 옷장(지금 캐릭터 스킨 갈아입기)만 */}
       {!tableId && <TopBtn label="상점" icon={SHOP_ICON} gold onClick={() => setShop("shop")} />}
       <TopBtn label="옷장" icon={CLOSET_ICON} onClick={() => setShop("closet")} />
+      {wallet && !tableId && (
+        <button
+          type="button"
+          onClick={() => setMissionOpen(true)}
+          title="오늘의 미션"
+          className={`pk-btn pk-btn-ghost relative flex h-[30px] items-center gap-[0.3em] px-[0.6em] text-[0.78em] ${missionReady ? "pk-mail-new" : ""}`}
+        >
+          <svg viewBox="0 0 24 24" className="h-[15px] w-[15px]" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <rect x="4" y="4" width="16" height="17" rx="2" />
+            <path d="M9 3v3M15 3v3M8.5 13l2.5 2.5 4.5-5" />
+          </svg>
+          <span className="hidden sm:inline">미션</span>
+          {missionReady > 0 && <span className="pk-mail-badge">{missionReady}</span>}
+        </button>
+      )}
       {wallet && !tableId && (
         <button
           type="button"
@@ -468,6 +488,9 @@ export default function PokerApp({ rank }: { rank: RankRow[] | null }) {
               go(id);
             }}
           />
+        )}
+        {missionOpen && wallet && !tableId && (
+          <Missions mobile={o === "v"} maxH={size.h - (o === "h" ? 24 : 8)} onClose={() => setMissionOpen(false)} />
         )}
         {mailOpen && wallet && (
           <Mailbox
