@@ -22,7 +22,10 @@ const PX = "[image-rendering:pixelated]";
 export type ShopTab = "shop" | "inv";
 
 /** 상점 미리보기 캐릭터 뒤 오라 그림 (검정 배경 · 밝게 겹쳐 그림) */
-const AURA: Record<string, string> = { "soyoung-bunny": "/fight/shop/soyoung-bunny-aura.webp" };
+const AURA: Record<string, string> = {
+  "soyoung-bunny": "/fight/shop/soyoung-bunny-aura.webp",
+  "kai-tkd": "/fight/shop/kai-tkd-aura.webp",
+};
 
 const chIndex = (s: FightSkin) => CHARS.findIndex((c) => c.id === s.ch);
 const gp = (n: number) => n.toLocaleString("ko-KR");

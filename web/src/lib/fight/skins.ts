@@ -35,6 +35,14 @@ export const FIGHT_SKINS: FightSkin[] = [
     desc: "안경을 벗고 머리를 풀어 내린 소영. 올블랙 바니 수트에 망사 스타킹, 트럼프 카드 한 장 — 오늘 수업은 조금 다를 거예요.",
     color: "#B0305A",
   },
+  {
+    id: "kai-tkd",
+    ch: "kai",
+    name: "국가대표 카이",
+    tag: "TEAM KOREA",
+    desc: "태극 마크를 단 흰 도복에 검은 띠, 이마엔 흰 머리띠. 맨발로 바람을 가르는 국가대표 카이 — 발차기 하나하나에 금메달의 무게가 실려요.",
+    color: "#3D8BFF",
+  },
 ];
 
 export const skinOf = (id?: string | null): FightSkin | null => FIGHT_SKINS.find((s) => s.id === id) ?? null;

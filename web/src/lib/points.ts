@@ -131,6 +131,14 @@ export const SHOP: ShopItem[] = [
     name: "바니걸 소영",
     price: 15_000,
   },
+  {
+    id: "fight.skin.kai-tkd",
+    game: "fight",
+    kind: "skin",
+    ref: "kai-tkd",
+    name: "국가대표 카이",
+    price: 15_000,
+  },
 ];
 export const shopItem = (id: unknown) => SHOP.find((s) => s.id === id);
 export const shopOf = (game: PointGame) => SHOP.filter((s) => s.game === game);
