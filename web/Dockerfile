@@ -3,7 +3,7 @@
 # 실행 중에 필요한 값: API_URL(백엔드 내부 주소), REVALIDATE_SECRET — docker-compose.yml 참고
 
 # ── 1) 빌드 ──
-FROM public.ecr.aws/docker/library/node:24-slim AS build
+FROM mirror.gcr.io/library/node:24-slim AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
@@ -21,7 +21,7 @@ ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL \
 RUN npm run build
 
 # ── 2) 실행: standalone 출력(필요한 파일만) + 정적 파일 ──
-FROM public.ecr.aws/docker/library/node:24-slim
+FROM mirror.gcr.io/library/node:24-slim
 ENV NODE_ENV=production \
     PORT=3000 \
     HOSTNAME=0.0.0.0 \
