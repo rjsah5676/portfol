@@ -385,5 +385,12 @@
   "voice/taeyang-ts/taeyang-ts-touch-1": "voice/taeyang-ts/taeyang-ts-touch-1.mp3",
   "voice/taeyang-ts/taeyang-ts-touch-2": "voice/taeyang-ts/taeyang-ts-touch-2.mp3",
   "voice/taeyang-ts/taeyang-ts-touch-3": "voice/taeyang-ts/taeyang-ts-touch-3.mp3",
-  "voice/taeyang-ts/taeyang-ts-win": "voice/taeyang-ts/taeyang-ts-win.mp3"
+  "voice/taeyang-ts/taeyang-ts-win": "voice/taeyang-ts/taeyang-ts-win.mp3",
+  "voice/mio-dracula/mio-dracula-hello": "voice/mio-dracula/mio-dracula-hello.mp3",
+  "voice/mio-dracula/mio-dracula-lose": "voice/mio-dracula/mio-dracula-lose.mp3",
+  "voice/mio-dracula/mio-dracula-select": "voice/mio-dracula/mio-dracula-select.mp3",
+  "voice/mio-dracula/mio-dracula-touch-1": "voice/mio-dracula/mio-dracula-touch-1.mp3",
+  "voice/mio-dracula/mio-dracula-touch-2": "voice/mio-dracula/mio-dracula-touch-2.mp3",
+  "voice/mio-dracula/mio-dracula-touch-3": "voice/mio-dracula/mio-dracula-touch-3.mp3",
+  "voice/mio-dracula/mio-dracula-win": "voice/mio-dracula/mio-dracula-win.mp3"
 }
