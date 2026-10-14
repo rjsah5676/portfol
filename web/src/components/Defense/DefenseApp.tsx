@@ -136,10 +136,17 @@ export default function DefenseApp() {
   useEffect(() => {
     if (screen.k !== "solo") return;
     const { ctrl, mode, lo } = screen;
-    const save = () => {
+    // 판이 길어지면 기록(log)이 커져 2초마다 통째로 쓰면 폰이 데워짐 → 새 조작이 있거나 10초 지났을 때만
+    let lastLen = -1,
+      lastAt = 0;
+    const save = (now?: boolean) => {
       const b = ctrl.board;
       if (b.result || ctrl.unranked) return clearResume(saveKey);
       if (b.wave < 1) return;
+      const t = Date.now();
+      if (!now && ctrl.log.length === lastLen && t - lastAt < 10000) return;
+      lastLen = ctrl.log.length;
+      lastAt = t;
       writeResume(saveKey, {
         v: BALANCE_VER,
         at: Date.now(),
@@ -152,12 +159,16 @@ export default function DefenseApp() {
         log: ctrl.log,
       });
     };
-    const t = setInterval(save, 2000);
-    window.addEventListener("pagehide", save);
+    const t = setInterval(() => save(), 2000);
+    const saveNow = () => save(true);
+    const onVis = () => document.hidden && save(true);
+    window.addEventListener("pagehide", saveNow);
+    document.addEventListener("visibilitychange", onVis);
     return () => {
       clearInterval(t);
-      window.removeEventListener("pagehide", save);
-      save();
+      window.removeEventListener("pagehide", saveNow);
+      document.removeEventListener("visibilitychange", onVis);
+      save(true);
     };
   }, [screen, saveKey]);
   const doResume = (r: ResumeSave) => {

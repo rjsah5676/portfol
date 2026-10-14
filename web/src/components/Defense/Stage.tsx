@@ -41,6 +41,12 @@ const isStandalone = () =>
   (window.matchMedia("(display-mode: standalone)").matches ||
     (navigator as Navigator & { standalone?: boolean }).standalone === true);
 
+const isIOS = () =>
+  typeof navigator !== "undefined" &&
+  (/iP(hone|ad|od)/.test(navigator.userAgent) ||
+    // 아이패드 사파리는 맥으로 자기를 소개함
+    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1));
+
 /** 요소 크기 재기 */
 function useSize<T extends HTMLElement>(): [(el: T | null) => void, { w: number; h: number }] {
   const [size, setSize] = useState({ w: 0, h: 0 });
@@ -171,8 +177,28 @@ export default function Stage({ children }: { children: ReactNode }) {
       el.requestFullscreen({ navigationUI: "hide" }).then(lockLand, () => setPseudoFs(true));
     else setPseudoFs(true);
   };
+  // 아이폰 사파리: 진짜 전체화면이 안 되니 「홈 화면에 추가」(앱)로 안내 — ANIME POKER 와 같은 방식.
+  // 「브라우저에서 계속」을 누르면 이번 접속 동안은 안 물음
+  const [iosWeb, setIosWeb] = useState(false);
+  const [iosSkip, setIosSkip] = useState(false);
+  useEffect(() => {
+    let skip = false;
+    try {
+      skip = sessionStorage.getItem("pgd-ios-web") === "1";
+    } catch {}
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 브라우저에서만 알 수 있는 값
+    setIosWeb(isIOS() && !isStandalone());
+    setIosSkip(skip);
+  }, []);
+  const skipIos = () => {
+    setIosSkip(true);
+    try {
+      sessionStorage.setItem("pgd-ios-web", "1");
+    } catch {}
+  };
   const fsGate = phone && !fs && canFs && !isStandalone();
-  const rotateGate = phone && !land && !fsGate;
+  const iosGate = phone && !fsGate && iosWeb && !iosSkip;
+  const rotateGate = phone && !land && !fsGate && !iosGate;
   const k = snapScale(box.w && box.h ? Math.min(box.w / DW, box.h / DH) : 0, phone);
 
   return (
@@ -227,6 +253,39 @@ export default function Stage({ children }: { children: ReactNode }) {
               }}
             >
               {children}
+            </div>
+          )}
+          {iosGate && (
+            <div className="dfn absolute inset-0 z-[60] flex flex-col items-center justify-center gap-3 bg-[#0b0918] px-6 text-center">
+              <p className="px-title text-2xl text-white">아이폰은 홈 화면에 추가해서 전체화면으로</p>
+              <ol className="flex flex-wrap items-stretch justify-center gap-2 text-sm text-[#d9d3f0]">
+                <li className="border-2 border-[#3d3468] bg-[#1a1533] px-3 py-2">
+                  <b className="mr-1.5 text-[#ff5cd6]">1</b>사파리
+                  <svg viewBox="0 0 24 24" className="mx-1 inline h-[1.2em] w-[1.2em] align-[-0.25em] text-[#4aa3ff]" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-label="공유">
+                    <path d="M12 3v12M7.5 7.5 12 3l4.5 4.5" />
+                    <path d="M8 10H6a1 1 0 0 0-1 1v9a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-9a1 1 0 0 0-1-1h-2" />
+                  </svg>
+                  공유 버튼
+                </li>
+                <li className="border-2 border-[#3d3468] bg-[#1a1533] px-3 py-2">
+                  <b className="mr-1.5 text-[#ff5cd6]">2</b>
+                  <span className="text-[#ffd23f]">홈 화면에 추가</span> → 추가
+                </li>
+                <li className="border-2 border-[#3d3468] bg-[#1a1533] px-3 py-2">
+                  <b className="mr-1.5 text-[#ff5cd6]">3</b>홈 화면의 픽셀 디펜스 실행
+                </li>
+              </ol>
+              <p className="text-xs text-[#a69cc9]">
+                앱에선 주소창 없이 화면 전체로 해요 · 처음 한 번은 다시 로그인해 주세요 (이어하기 기록도 앱 따로)
+              </p>
+              <button
+                type="button"
+                onClick={skipIos}
+                className="px-btn px-6 py-2 text-sm"
+                style={{ "--c": "#3d3468", "--t": "#fff" } as React.CSSProperties}
+              >
+                브라우저에서 계속
+              </button>
             </div>
           )}
           {(fsGate || rotateGate) && (

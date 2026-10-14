@@ -328,8 +328,17 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry, 
       ended = false;
     const cv = canvasRef.current!;
     const ctx = cv.getContext("2d")!;
+    // 발열 · 배터리: 캔버스 크기는 매 프레임 재지 않고 바뀔 때만 잼
+    let rect = cv.getBoundingClientRect();
+    const remeasure = () => (rect = cv.getBoundingClientRect());
+    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(remeasure) : null;
+    ro?.observe(cv);
+    window.addEventListener("resize", remeasure);
     const loop = (now: number) => {
       raf = requestAnimationFrame(loop);
+      // 120Hz 화면(아이폰 프로 · 고주사율 모니터)에서도 최대 60fps. 멈춤 · 끝난 화면은 15fps
+      const idle = ctrl.paused || !!ctrl.board.result;
+      if (now - last < (idle ? 66 : 12)) return;
       const dt = now - last;
       last = now;
       ctrl.frame(dt);
@@ -346,7 +355,6 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry, 
         for (const e of evs) onEv(e);
       }
       // 캔버스 크기: 화면에 보이는 크기 × 기기 배율
-      const rect = cv.getBoundingClientRect();
       const dpr = Math.min(2, window.devicePixelRatio || 1);
       const W = Math.round(rect.width * dpr),
         H = Math.round(rect.height * dpr);
@@ -356,7 +364,7 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry, 
       }
       ctx.setTransform(W / CW, 0, 0, H / FH2, 0, 0);
       draw(ctx, ctrl.board, v, { range: true });
-      if (now - lastHud > 100) {
+      if (now - lastHud > (idle ? 250 : 100)) {
         lastHud = now;
         const bb = ctrl.board;
         // 최근 DPS: 게임 시간 1초마다 넣은 피해 합 (배속 · 일시정지와 무관하게 tick 기준)
@@ -382,7 +390,11 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry, 
       }
     };
     raf = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(raf);
+    return () => {
+      cancelAnimationFrame(raf);
+      ro?.disconnect();
+      window.removeEventListener("resize", remeasure);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 판마다 한 번
   }, [ctrl]);
 

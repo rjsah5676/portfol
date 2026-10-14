@@ -119,8 +119,25 @@ function load(name: string): Promise<void> {
   return p;
 }
 
+/** 화면이 가려지면(다른 앱 · 탭 · 홈 화면) 소리 엔진과 배경음을 멈춰 배터리를 아낌 */
+let visHooked = false;
+function hookVisibility() {
+  if (visHooked || typeof document === "undefined") return;
+  visHooked = true;
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) {
+      void ctx?.suspend().catch(() => {});
+      bgm?.pause();
+    } else {
+      void ctx?.resume().catch(() => {});
+      if (bgmWanted && bgm?.paused) void bgm.play().catch(() => {});
+    }
+  });
+}
+
 /** 효과음 미리 불러오기 (게임 시작 때) */
 export function preloadSfx() {
+  hookVisibility();
   if (!ensureCtx()) return;
   for (const n of Object.keys(SFX)) void load(n);
 }
