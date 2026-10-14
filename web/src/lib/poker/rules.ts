@@ -146,7 +146,7 @@ export const charOf = (id: unknown): CharId => (CHAR_IDS.includes(id as CharId) 
  * + (live) 로비 대기 영상 idle.webp · 터치 반응 touch-1~3.webp.
  * ready = 그림이 들어왔는지. false 면 원래 캐릭터 그림으로 보임 (사고 입는 것은 됨).
  */
-export type SkinId = "amy-summer" | "yeonseo-summer";
+export type SkinId = "amy-summer" | "yeonseo-summer" | "taeyang-ts";
 export interface Skin {
   id: SkinId;
   char: CharId;
@@ -159,6 +159,8 @@ export interface Skin {
   ready: boolean;
   /** 로비에서 움직이는 그림(대기 · 터치 반응)이 들어왔는지. false 면 로비에서 전신 그림 한 장 */
   live: boolean;
+  /** 스킨 전용 이모티콘(emote-*.webp)이 있는지. 없으면 원래 캐릭터 이모티콘 */
+  emotes?: boolean;
 }
 const skinPrice = (id: SkinId) => SHOP.find((s) => s.game === "poker" && s.kind === "skin" && s.ref === id)?.price ?? 0;
 export const SKINS: Skin[] = [
@@ -181,6 +183,17 @@ export const SKINS: Skin[] = [
     line: "여름이니까요. …어울려요?",
     ready: true,
     live: true,
+  },
+  {
+    id: "taeyang-ts",
+    char: "taeyang",
+    name: "TS 금태양",
+    price: skinPrice("taeyang-ts"),
+    blurb: "어이~ 오늘은 누나가 다 털어간다?",
+    line: "왜, 누나가 더 낫지?",
+    ready: true,
+    live: false,
+    emotes: true,
   },
 ];
 export const SKIN_IDS = SKINS.map((s) => s.id);

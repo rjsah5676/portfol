@@ -43,8 +43,11 @@ export const asset = {
   /** 앉은 대기 동작 (6초 반복, 투명 배경 움직이는 webp) — 받기 전엔 한 장짜리 대기 그림 */
   seatLive: (c: Look) => `${BASE}/char/${dir(c)}/seat-front-idle-live.webp`,
   face: (c: Look, f: Face) => `${BASE}/char/${dir(c)}/face-${f}.webp`,
-  /** 이모티콘은 스킨을 입어도 원래 캐릭터 것 */
-  emote: (c: Look, e: Emote) => `${BASE}/char/${skinOf(c)?.char ?? c}/emote-${e}.webp`,
+  /** 이모티콘: 스킨 전용 이모티콘이 있으면 그것(성전환 스킨 등), 없으면 원래 캐릭터 것 */
+  emote: (c: Look, e: Emote) => {
+    const sk = skinOf(c);
+    return `${BASE}/char/${sk ? (sk.emotes && sk.ready ? sk.id : sk.char) : c}/emote-${e}.webp`;
+  },
   profile: (c: Look) => `${BASE}/char/${dir(c)}/profile.webp`,
   full: (c: Look) => `${BASE}/char/${dir(c)}/full.webp`,
   cutin: (c: Look) => `${BASE}/char/${dir(c)}/cutin.webp`,
