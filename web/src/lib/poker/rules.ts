@@ -99,6 +99,11 @@ export const tierLabel = (id: number) => `${leagueOf(id).name} · ${tierOf(id).n
 
 /** 한 번 행동하는 데 주는 시간 */
 export const ACT_MS = 7_000;
+/**
+ * 화면의 시간이 다 된 뒤에도 서버가 행동을 더 받아 주는 여유 (화면에는 안 보임).
+ * 남은 시간이 1~2초일 때 누른 행동이 전송 지연 · 서버 바쁨 · 시계 오차로 늦게 닿아 시간 초과(→ 나가기 예약)가 되던 것 (10.14)
+ */
+export const ACT_GRACE_MS = 1_500;
 /** 접속이 끊긴 사람에게 주는 시간 */
 export const ACT_AWAY_MS = 3_000;
 /** 7포커에서 버릴 카드·보여 줄 카드를 고르는 시간 */

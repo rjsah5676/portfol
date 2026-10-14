@@ -9,6 +9,7 @@ import type { Ctx } from "../../realtime/gateway";
 import { pictureOf, type UserDoc } from "../../users";
 import {
   ACT_AWAY_MS,
+  ACT_GRACE_MS,
   ACT_MS,
   BOT_CHAR_IDS,
   CHAR_IDS,
@@ -169,6 +170,8 @@ export interface PokerOptions {
   actMs?: number;
   choiceMs?: number;
   awayMs?: number;
+  /** 화면 시간이 다 된 뒤 더 받아 주는 여유 (기본 ACT_GRACE_MS · 시간을 줄인 테스트는 0) */
+  graceMs?: number;
   /** 정리 주기 (봇 입장도 이 주기로 확인) */
   sweepIntervalMs?: number;
   now?: () => number;
@@ -201,6 +204,7 @@ export function registerPoker({ gateway, db, users, points }: Deps, opts: PokerO
   const actMs = opts.actMs ?? ACT_MS;
   const choiceMs = opts.choiceMs ?? CHOICE_MS;
   const awayMs = opts.awayMs ?? ACT_AWAY_MS;
+  const graceMs = opts.graceMs ?? (opts.actMs !== undefined ? 0 : ACT_GRACE_MS);
   const wallet = createWallet(db, now, points);
   // 포인트가 바뀌면 (출석 · 업적 · 상점 · 환전 · 운영자) 포커 화면의 지갑도
   points.onChange((uid) => void wallet.refresh(uid).catch(() => {}));
@@ -636,7 +640,8 @@ export function registerPoker({ gateway, db, users, points }: Deps, opts: PokerO
         continue;
       }
       // 자리를 뜬 사람은 바로 죽음, 끊긴 사람은 짧게 기다림
-      const wait = s.leaving ? 0 : s.away ? Math.min(awayMs, Math.max(0, t.deadline - now())) : Math.max(0, t.deadline - now());
+      // (접속 중인 사람은 화면 시간 + 여유까지 기다림 — 끝나기 직전에 누른 게 늦게 닿아도 받아 줌)
+      const wait = s.leaving ? 0 : s.away ? Math.min(awayMs, Math.max(0, t.deadline - now())) : Math.max(0, t.deadline - now()) + ms(graceMs);
       if (s.away && !s.leaving && fresh && waiting.length === 1) t.deadline = now() + wait;
       t.actTimers.set(
         seatNo,
