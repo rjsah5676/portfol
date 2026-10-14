@@ -318,7 +318,13 @@ const EXPLUS_DEFAULT: Required<NightmareTweak> = {
   fineChord: 0,
 };
 /** 16분 점프스트림 몫 상한 — 나이트메어만 (ULTIMA는 이미 빠른 동시치기 연속이 osu·Quaver보다 많음) */
-const fineChordMax = (d: Difficulty) => (d === "nightmare" ? 0.12 : 0);
+const fineChordMax = (d: Difficulty, fast: boolean) =>
+  d === "nightmare" ? (fast ? 0.06 : 0.12) : 0;
+/** 동시치기 두께 배율 상한 — 빠른 곡(185 BPM↑)은 안 두껍게 (16분을 덜 여는 만큼 동시치기로 메우면 동시치기 66%·잭 37% 벽이 됨) */
+const chordMax = (_d: Difficulty, fast: boolean) => (fast ? 1 : 1.5);
+/** 16분 박을 여는 하한(fineS) — 빠른 곡은 이 밑으로 안 엶. 레벨이 덜 나와도 16분 자리 비중을 osu·Quaver에 맞춤
+ *  (185 BPM↑ 나이트메어·ULTIMA 16분 자리 32·45% → 19·26%, osu·Quaver 13~25%) */
+const fineMin = (d: Difficulty, fast: boolean) => (!fast ? -0.1 : d === "nightmare" ? 0.2 : 0.1);
 const nmDefault = (d: Difficulty) => (d === "explus" ? EXPLUS_DEFAULT : NIGHTMARE_DEFAULT);
 
 function nearestCen(an: Analysis, t: number) {
@@ -414,7 +420,9 @@ export function makeAutoChart(
   const tightGrid = beatSec / an.div < 0.07;
   if (tightGrid) R.pos[4] = 0;
   // 노트 사이 최소 72ms — 그보다 붙으면 손으로는 동시치기처럼 느껴져서 '살짝 어긋난 동시치기'가 됨
-  R.minGap = Math.max(R.minGap, 0.072);
+  // (나이트메어·ULTIMA는 16분 칸 간격까지 — 210 BPM 넘는 곡은 16분이 72ms 안쪽이라 16분을 못 쓰고 동시치기 벽이 됐음.
+  //  osu·Quaver 210~240 BPM 나이트메어·ULTIMA는 16분 자리 16~27%)
+  R.minGap = Math.max(R.minGap, isNm(diff) ? Math.min(0.072, (beatSec / 4) * 0.9) : 0.072);
   // 쉬움·보통: 최소 간격을 박 단위로 — 쉬움은 한 박(느린 곡은 반 박, 아주 빠른 곡은 두 박),
   // 보통은 반 박(빠른 곡은 한 박). 박에서 어긋난 짧은 간격이 별점만 올리고 치기엔 어색해서
   // (osu 쉬운 채보는 정박·반박만, 간격이 고름)
@@ -752,6 +760,7 @@ export function makeAutoChart(
       beatTimes: an.beats,
       rmsAt,
       rnd,
+      duringW: 0.15,
     });
     for (const n of nmHeld) {
       n.t += shift;
@@ -1118,7 +1127,14 @@ export function makeAutoChart(
 
   // 4) 롱노트: osu 랭크 채보처럼 노트의 일정 비율을 짧은 롱노트로 (정박·소리가 남는 자리부터)
   {
-    const held = addLongNotes(notes, { ...R.ln, beatSec, beatTimes: an.beats, rmsAt, rnd });
+    const held = addLongNotes(notes, {
+      ...R.ln,
+      beatSec,
+      beatTimes: an.beats,
+      rmsAt,
+      rnd,
+      duringW: diff === "easy" || diff === "normal" ? 0 : 0.15,
+    });
     notes.length = 0;
     notes.push(...held);
   }
@@ -1225,6 +1241,8 @@ function addLongNotes(
     beatTimes: number[];
     rmsAt: (t: number) => number;
     rnd: () => number;
+    /** 누르는 동안 다른 노트 하나당 감점 */
+    duringW?: number;
   }
 ): Note[] {
   const out = notes.map((n) => ({ ...n })).sort((x, y) => x.t - y.t || x.lane - y.lane);
@@ -1268,7 +1286,12 @@ function addLongNotes(
     let sus = 0;
     for (let k = 1; k <= 4; k++) sus += o.rmsAt(n.t + (len * k) / 4);
     const keep = Math.min(1.2, sus / 4 / head);
-    cands.push({ i, len, on, score: keep + o.rnd() * 0.3 });
+    // 누르는 동안 다른 레인 노트가 적은 자리 우선: 롱노트를 누른 채 치는 노트는 별점 ×1.25라
+    // 같은 레벨에 노트가 확 줄어듦 (매우 어려움 기준 롱노트가 레벨을 0.5 올렸음 — osu는 0.1)
+    let during = 0;
+    for (let j = i + 1; j < out.length && out[j].t < n.t + len; j++)
+      if (out[j].t > n.t + 1e-6) during++;
+    cands.push({ i, len, on, score: keep + o.rnd() * 0.3 - (o.duringW ?? 0) * during });
   });
   // 정박 비율을 맞춰 고름: 정박 몫 / 엇박 몫
   const onWant = Math.round(want * o.onBeat);
@@ -1358,7 +1381,7 @@ function nightmareNotes(
       slots.set(same, Math.max(slots.get(same)!, count));
       return;
     }
-    const flam = burst ? null : near(k, 0.072);
+    const flam = burst ? null : near(k, Math.min(0.072, (beatSec / 4) * 0.8));
     if (flam !== null) {
       slots.set(flam, 2);
       return;
@@ -1586,6 +1609,12 @@ export function makeAutoCharts(
 ): Partial<Record<Difficulty, Chart>> {
   const out: Partial<Record<Difficulty, Chart>> = {};
   let prevLevel = -Infinity;
+  // 185 BPM 이상(접어서 120~240): 16분이 81ms 안쪽이라 osu·Quaver는 16분 대신 동시치기로 레벨을 냄
+  //  (나이트메어·ULTIMA 16분 자리 osu 23~25% vs 우리 31~45%) → 16분 박을 덜 엶 (레벨은 그만큼 덜 나올 수 있음)
+  let foldBpm = displayBpm(an);
+  while (foldBpm < 120) foldBpm *= 2;
+  while (foldBpm >= 240) foldBpm /= 2;
+  const fastSong = foldBpm >= 185;
   for (const d of diffs) {
     const base = tweaks[d] ?? {};
     // 직접 정한 레벨은 그대로, 아니면 구간 가운데 (아래 난이도보다는 최소 1 높게)
@@ -1596,7 +1625,12 @@ export function makeAutoCharts(
     let density = base.density ?? 1;
     let fill = base.fill ?? 0;
     // 나이트메어는 밀도보다 16분 채우는 마디(full)·8분 마디(loud)·연타 간격으로 난이도가 정해짐
-    let nm: Required<NightmareTweak> = { ...nmDefault(d), ...(base.nightmare ?? {}) };
+    let nm: Required<NightmareTweak> = {
+      ...nmDefault(d),
+      // 210 BPM 이상은 8분마다 동시치기면 동시치기 벽(줄의 70%) — 박마다 하나로 (osu·Quaver 37~45%)
+      ...(foldBpm >= 210 ? { chordFull: 1 } : {}),
+      ...(base.nightmare ?? {}),
+    };
     let best: Chart | null = null;
     let bestRaw = 0;
     // 레벨이 맞으면 거기서 멈춤 (맞은 뒤에도 밀도를 올려 '같은 레벨에서 가장 빽빽한' 채보를 고르던 적이 있는데,
@@ -1649,7 +1683,7 @@ export function makeAutoCharts(
       // 나이트메어·ULTIMA는 밀도 대신 채우기 문턱·동시치기·16분 박으로 올림 (밀도를 키우면 곡의 잔타격(하이햇 16분)까지 다 고름 —
       //  다른 손잡이를 다 쓴 뒤에도 모자라면 그때 밀도를 올림)
       const nmMaxed =
-        nm.full <= 0.12 && nm.fineS <= -0.09 && nm.fineChord >= fineChordMax(d) - 0.01;
+        nm.full <= 0.12 && nm.fineS <= -0.09 && nm.fineChord >= fineChordMax(d, fastSong) - 0.01;
       density = isNm(d) && !nmMaxed ? Math.min(1.3, density * ratio) : density * ratio;
       // 밀도를 올려도 곡에서 찾은 타격이 모자라면 격자 채우기로 (너무 어려우면 채우기부터 줄임)
       // 오갈수록 조금씩 (안 그러면 두 값 사이를 계속 왔다 갔다)
@@ -1674,19 +1708,25 @@ export function makeAutoCharts(
             k > 0
               ? Math.max(1, nm.chordScale - 0.1 * k)
               : nm.full <= 0.22
-                ? Math.min(1.5, nm.chordScale - 0.1 * k2)
+                ? Math.min(chordMax(d, fastSong), nm.chordScale - 0.1 * k2)
                 : nm.chordScale,
           // 동시치기를 다 두껍게 한 뒤엔 16분 줄을 동시치기로(16분 점프스트림), 그래도 모자라면 16분 박을 넓힘
           fineChord:
             k > 0
               ? Math.max(0, nm.fineChord - 0.05 * k)
-              : nm.full <= 0.22 && nm.chordScale >= 1.45
-                ? Math.min(fineChordMax(d), nm.fineChord - 0.05 * k2)
+              : nm.full <= 0.22 && nm.chordScale >= chordMax(d, fastSong) - 0.05
+                ? Math.min(fineChordMax(d, fastSong), nm.fineChord - 0.05 * k2)
                 : nm.fineChord,
           fineS:
             k > 0 ||
-            (nm.full <= 0.22 && nm.chordScale >= 1.45 && nm.fineChord >= fineChordMax(d) - 0.01)
-              ? Math.max(-0.1, Math.min(0.6, nm.fineS + 0.05 * (k > 0 ? k : k2)))
+            (nm.full <= 0.22 &&
+              nm.chordScale >= chordMax(d, fastSong) - 0.05 &&
+              nm.fineChord >= fineChordMax(d, fastSong) - 0.01)
+              ? Math.max(
+                  // 아래 난이도보다 2레벨 넘게 높아질 때까지는 16분을 끝까지 열 수 있음 (난이도 사다리 유지)
+                  raw < prevLevel + (fastSong ? 1 : 2) ? -0.1 : fineMin(d, fastSong),
+                  Math.min(0.6, nm.fineS + 0.05 * (k > 0 ? k : k2))
+                )
               : nm.fineS,
         };
       }

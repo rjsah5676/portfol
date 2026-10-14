@@ -17,6 +17,17 @@ export interface Patch {
 
 export const PATCHES: Patch[] = [
   {
+    ver: "v1.6",
+    name: "빠른 곡 채보",
+    date: "2026.10.15",
+    lines: [
+      "185 BPM 넘는 곡 NIGHTMARE·ULTIMA는 16분을 덜 씀 — 16분 자리 32·45% → 19·26% (osu·Quaver 13~25%). 레벨보다 osu·Quaver와 같은 모양을 우선",
+      "210 BPM 넘는 곡은 16분이 72ms 안쪽이라 동시치기로 합쳐져 동시치기 벽(줄의 70~80%)이 되던 것 고침 — 16분 스트림으로 (동시치기 39%, osu·Quaver 37~45%)",
+      "HARD~ULTIMA 롱노트는 누르는 동안 다른 노트가 적은 자리부터 — 롱노트가 레벨을 올리는 몫 반으로 (같은 레벨에 노트가 조금 더)",
+      "레벨: Aragami NIGHTMARE 17 → 15 · ULTIMA 21 → 18, Crimson Cadenza NIGHTMARE 17 → 14 · ULTIMA 20 → 17, FREEDOM DiVE NIGHTMARE 15 → 14",
+    ],
+  },
+  {
     ver: "v1.5",
     name: "롱노트 · 손 모양",
     date: "2026.10.15",
