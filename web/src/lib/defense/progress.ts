@@ -51,7 +51,7 @@ export interface Loadout {
 /** 오늘의 도전: 모두 같은 시드(날짜) · 영구 성장 없이 이 규칙으로 — 실력만 겨룸 */
 export const DAILY_RULE: Loadout = { glitch: 0 };
 /** 오늘의 도전 그날 첫 완료 보상 */
-export const DAILY_FIRST: Goods = { pieces: 300, cores: 2 };
+export const DAILY_FIRST: Goods = { pieces: 1000, cores: 5 };
 
 /* ───────────────────────── 보물방 ───────────────────────── */
 

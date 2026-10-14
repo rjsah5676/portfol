@@ -163,7 +163,7 @@ cd web && POKER_E2E=1 npx next dev            # → /games/defense/?fake=admin:�
 
 ### v1.9 BETA — 오늘의 도전 (고스트) · 심연 변이
 - **오늘의 도전** `defense.start {mode:"daily"}`: 시드 = `dailySeed(KST 날짜)` (모두 같음), 로드아웃 = `cleanLoadout(DAILY_RULE)` (영구 성장 없음 · 오염 0), 순위표 키 `${BALANCE_VER}:d${날짜}` — 판 수 제한 없이 최고 기록만
-  - finish: 판 보상 · 미션 · 패스 · 보물방 · 단계 기록은 안 함(onRun 안 부름). 그날 첫 완료만 `meta.dailyFirst` → `DAILY_FIRST` (조각 300 · 코어 2, 프로필 `dailyAt`). 최고 기록일 때 rank 문서에 `log` 저장 (rank 목록에선 projection 으로 뺌)
+  - finish: 판 보상 · 미션 · 패스 · 보물방 · 단계 기록은 안 함(onRun 안 부름). 그날 첫 완료만 `meta.dailyFirst` → `DAILY_FIRST` (조각 1000 · 코어 5, 프로필 `dailyAt`). 최고 기록일 때 rank 문서에 `log` 저장 (rank 목록에선 projection 으로 뺌)
   - `defense.ghost`: 오늘 1등(내가 1등이면 2등) · 내 최고의 log → 클라이언트 `GhostPanel`(GameView) 이 `replayer` 로 내 판과 같은 tick 까지 따라 돌림 (같은 시드 · 같은 규칙이라 기록만으로 그 판). 필드 왼쪽 위
   - 화면: 메뉴 「오늘의 도전」(4칸 줄) · 랭킹 탭 · 판 끝 「오늘의 도전 n위 · 첫 완료 보상」 · 이어하기 표시
 - **심연 변이** `progress.ts MUTATORS` · `GlitchDef.mut` (deepGlitch 가 `mutatorsOf(lv)`):
