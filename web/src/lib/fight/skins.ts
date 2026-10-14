@@ -43,6 +43,14 @@ export const FIGHT_SKINS: FightSkin[] = [
     desc: "태극 마크를 단 흰 도복에 검은 띠, 이마엔 흰 머리띠. 맨발로 바람을 가르는 국가대표 카이 — 발차기 하나하나에 금메달의 무게가 실려요.",
     color: "#3D8BFF",
   },
+  {
+    id: "lily-frog",
+    ch: "lily",
+    name: "개굴개굴 릴리",
+    tag: "RAINY FROG",
+    desc: "개구리 후드 잠옷에 초록 장화, 커다란 연잎 우산을 든 릴리. 물방울 · 비눗방울이 톡톡 튀고, 올챙이 친구들이 함께 뛰어들어요. 비 오는 날이 제일 좋아!",
+    color: "#5CC85A",
+  },
 ];
 
 export const skinOf = (id?: string | null): FightSkin | null => FIGHT_SKINS.find((s) => s.id === id) ?? null;
@@ -61,4 +69,12 @@ const ART_VER: Record<string, number> = { "soyoung-bunny": 7 };
 const ver = (id: string) => (ART_VER[id] ? `?v=${ART_VER[id]}` : "");
 export const artUrl = (ch: number, skin?: string | null) => `/fight/art/${look(ch, skin)}.webp${ver(look(ch, skin))}`;
 export const faceUrl = (ch: number, skin?: string | null) => `/fight/art/${look(ch, skin)}-face.webp${ver(look(ch, skin))}`;
+/** 스킨 뒤에 까는 오라 그림 (검정 배경 · 화면 합성으로 밝게 겹침) — 상점 미리보기 · 캐릭터 선택 */
+const AURA: Record<string, string> = {
+  "igna-fw": "/fight/shop/igna-fw-aura.webp",
+  "soyoung-bunny": "/fight/shop/soyoung-bunny-aura.webp",
+  "kai-tkd": "/fight/shop/kai-tkd-aura.webp",
+  "lily-frog": "/fight/shop/lily-frog-aura.webp",
+};
+export const auraUrl = (id?: string | null) => (id && AURA[id] ? `${AURA[id]}${ver(id)}` : null);
 export const cutinUrl = (ch: number, skin?: string | null) => `/fight/cutin/${look(ch, skin)}.webp${ver(look(ch, skin))}`;

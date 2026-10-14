@@ -17,7 +17,15 @@ import { SettingsModal } from "./Settings";
 import TechGuide from "./TechGuide";
 import PixelPreview from "./PixelPreview";
 import { TUT_CHAR, TUT_FOE, TUT_MAP } from "@/lib/fight/tutorial";
-import { artUrl, look } from "@/lib/fight/skins";
+import { artUrl, auraUrl, look } from "@/lib/fight/skins";
+
+/** 오라 그림 가장자리를 부드럽게 흐려 네모 테두리가 안 보이게 */
+const AURA_MASK = {
+  maskImage: "linear-gradient(to right,transparent,#000 14%,#000 86%,transparent),linear-gradient(transparent,#000 8%,#000 92%,transparent)",
+  maskComposite: "intersect",
+  WebkitMaskImage: "linear-gradient(to right,transparent,#000 14%,#000 86%,transparent),linear-gradient(transparent,#000 8%,#000 92%,transparent)",
+  WebkitMaskComposite: "source-in",
+} as const;
 import { useMySkins, wornSkin } from "@/lib/fight/mySkins";
 import { useNick } from "@/lib/AuthContext";
 import SkinShop, { type ShopTab } from "./SkinShop";
@@ -690,6 +698,19 @@ export default function Select({
             const active = !lock[sd] && (ai ? side === sd : true);
             return (
               <div key={sd} className="contents">
+                {/* 착용 스킨 오라 (전신 그림 뒤) */}
+                {!rnd[sd] && auraUrl(lookOf(sd)) && (
+                  <img
+                    key={`aura-${lookOf(sd)}`}
+                    src={auraUrl(lookOf(sd))!}
+                    alt=""
+                    style={AURA_MASK}
+                    className={`pointer-events-none absolute top-[8%] ${sd === 0 ? "left-[-1cqw]" : "right-[-1cqw]"} z-0 h-[84%] w-[30cqw] object-contain object-bottom mix-blend-screen transition-opacity duration-300 [animation:sel-aura_3.2s_ease-in-out_infinite_alternate] ${
+                      active || lock[sd] ? "" : "opacity-40"
+                    }`}
+                  />
+                )}
+                <style>{`@keyframes sel-aura{from{filter:brightness(.85)}to{filter:brightness(1.15)}}`}</style>
                 {/* 전신 그림: 폭이 넓은 그림이어도 설명 글씨 칸을 밀지 않게 따로 띄움 (뒤에 깔림) */}
                 {rnd[sd] ? (
                   <div

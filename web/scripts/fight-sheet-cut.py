@@ -3,6 +3,7 @@
 단색 배경 스프라이트 시트 → 프레임 조각 (격투 에셋 v2 공용).
 
   초록(#00FF00) 배경: 초록 정도로 투명도, 가장자리 초록 번짐 제거
+  마젠타(#FF00FF) 배경: 초록 옷 캐릭터용, 같은 방식으로 분홍 정도로 투명도
   검정(#000000) 배경: 밝기를 투명도로 (빛나는 이펙트용, 번짐 유지)
 
 칸 격자를 믿지 않고 덩어리(이어진 그림)로 프레임을 찾음:
@@ -32,6 +33,20 @@ def key(img: Image.Image, bg: str) -> np.ndarray:
         b2 = np.clip(b / am, 0, 255)
         g2 = np.clip((g - (1 - alpha) * 255) / am, 0, 255)
         g2 = np.minimum(g2, np.maximum(r2, b2) + 8)  # 남은 초록 번짐 빼기
+        rgb = np.dstack([r2, g2, b2])
+    elif bg == "magenta":
+        # 마젠타(#FF00FF) 배경: 초록 옷 · 소품이 있는 캐릭터용 (초록 배경이면 옷까지 지워짐)
+        k = np.minimum(r, b) - g
+        alpha = np.clip(1 - (k - 30) / 110, 0, 1)
+        am = np.maximum(alpha, 0.05)
+        g2 = np.clip(g / am, 0, 255)
+        r2 = np.clip((r - (1 - alpha) * 255) / am, 0, 255)
+        b2 = np.clip((b - (1 - alpha) * 255) / am, 0, 255)
+        # 남은 분홍 번짐 빼기: 빨강 · 파랑이 둘 다 초록보다 크게 남은 가장자리
+        lim = g2 + 8
+        edge = alpha < 0.95
+        r2 = np.where(edge, np.minimum(r2, np.maximum(lim, b2 * 0 + lim)), r2)
+        b2 = np.where(edge, np.minimum(b2, lim + 40), b2)
         rgb = np.dstack([r2, g2, b2])
     else:
         m = a.max(2)

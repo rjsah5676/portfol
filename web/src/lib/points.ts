@@ -139,6 +139,14 @@ export const SHOP: ShopItem[] = [
     name: "국가대표 카이",
     price: 15_000,
   },
+  {
+    id: "fight.skin.lily-frog",
+    game: "fight",
+    kind: "skin",
+    ref: "lily-frog",
+    name: "개굴개굴 릴리",
+    price: 15_000,
+  },
 ];
 export const shopItem = (id: unknown) => SHOP.find((s) => s.id === id);
 export const shopOf = (game: PointGame) => SHOP.filter((s) => s.game === game);

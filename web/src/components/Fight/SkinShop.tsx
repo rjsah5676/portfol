@@ -7,7 +7,7 @@
  */
 import { useEffect, useState } from "react";
 import { CHARS } from "@/lib/fight/chars";
-import { FIGHT_SKINS, artUrl, faceUrl, skinItem, type FightSkin } from "@/lib/fight/skins";
+import { FIGHT_SKINS, artUrl, auraUrl, faceUrl, skinItem, type FightSkin } from "@/lib/fight/skins";
 import { reloadMySkins, useMySkins, wearMySkin } from "@/lib/fight/mySkins";
 import { shopItem } from "@/lib/points";
 import { buyItem } from "@/lib/api/points";
@@ -21,11 +21,6 @@ const PX = "[image-rendering:pixelated]";
 
 export type ShopTab = "shop" | "inv";
 
-/** 상점 미리보기 캐릭터 뒤 오라 그림 (검정 배경 · 밝게 겹쳐 그림) */
-const AURA: Record<string, string> = {
-  "soyoung-bunny": "/fight/shop/soyoung-bunny-aura.webp",
-  "kai-tkd": "/fight/shop/kai-tkd-aura.webp",
-};
 
 const chIndex = (s: FightSkin) => CHARS.findIndex((c) => c.id === s.ch);
 const gp = (n: number) => n.toLocaleString("ko-KR");
@@ -190,10 +185,10 @@ export default function SkinShop({ initial = "shop", onClose }: { initial?: Shop
               style={{ background: `radial-gradient(ellipse at 50% 30%, ${skin.color}55, #120820 70%)` }}
             >
               {skin.id === "igna-fw" && <FireworksBg color={skin.color} />}
-              {AURA[skin.id] && (
+              {skin.id !== "igna-fw" && auraUrl(skin.id) && (
                 <img
                   key={`aura-${skin.id}`}
-                  src={AURA[skin.id]}
+                  src={auraUrl(skin.id)!}
                   alt=""
                   className="pointer-events-none absolute bottom-0 left-[38%] h-full -translate-x-1/2 object-contain object-bottom mix-blend-screen [animation:shop-aura_3.2s_ease-in-out_infinite_alternate]"
                 />
