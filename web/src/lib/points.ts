@@ -258,8 +258,11 @@ export const FIGHT_CHAR_NAMES = [
 ] as const;
 
 const EOK = 100_000_000;
-/** 일회형 업적 보상 배수 (아래 숫자 × 이것 만큼 GP) — 일일 미션은 숫자 자체를 3배로 적어 둠 */
-export const REWARD_X = 3;
+/**
+ * 업적 보상 배수 — 업적 전체(일회형 · 반복형)를 한 번에 올리고 내릴 때만 바꿈. 아래 숫자는 지금 실제로 주는 GP 그대로 (10.15 정리: 그 전 3배는 숫자에 넣음).
+ * 일일 미션은 여기 안 걸림 (DAILY_MISSIONS 숫자 그대로).
+ */
+export const ACH_X = 1;
 const a = (
   game: AchGame,
   id: string,
@@ -276,8 +279,7 @@ const a = (
   desc,
   metric,
   goal,
-  // 디펜스 · 격투 일회형 업적은 3배 안 함 (주인 결정)
-  reward: game === "defense" || game === "fight" ? reward : reward * REWARD_X,
+  reward: Math.round(reward * ACH_X),
   ...(fmt && { fmt }),
 });
 
@@ -290,7 +292,7 @@ export const ACHIEVEMENTS: Achievement[] = [
     "칩 3억 모으기 (환전으로 받은 칩은 빼고)",
     "poker.chips",
     3 * EOK,
-    300,
+    900,
     "chips",
   ),
   a(
@@ -300,7 +302,7 @@ export const ACHIEVEMENTS: Achievement[] = [
     "칩 10억 모으기 (환전으로 받은 칩은 빼고)",
     "poker.chips",
     10 * EOK,
-    1000,
+    3000,
     "chips",
   ),
   a(
@@ -310,10 +312,10 @@ export const ACHIEVEMENTS: Achievement[] = [
     "칩 50억 모으기 (환전으로 받은 칩은 빼고)",
     "poker.chips",
     50 * EOK,
-    3000,
+    9000,
     "chips",
   ),
-  a("poker", "hands-100", "단골손님", "100판 치기", "poker.hands", 100, 200),
+  a("poker", "hands-100", "단골손님", "100판 치기", "poker.hands", 100, 600),
   a(
     "poker",
     "hands-1000",
@@ -321,10 +323,10 @@ export const ACHIEVEMENTS: Achievement[] = [
     "1,000판 치기",
     "poker.hands",
     1000,
-    1000,
+    3000,
   ),
-  a("poker", "wins-50", "이기는 습관", "50판 이기기", "poker.wins", 50, 300),
-  a("poker", "wins-500", "승부사", "500판 이기기", "poker.wins", 500, 1500),
+  a("poker", "wins-50", "이기는 습관", "50판 이기기", "poker.wins", 50, 900),
+  a("poker", "wins-500", "승부사", "500판 이기기", "poker.wins", 500, 4500),
   a(
     "poker",
     "best-1",
@@ -332,7 +334,7 @@ export const ACHIEVEMENTS: Achievement[] = [
     "한 판에 1억 넘게 가져가기",
     "poker.best",
     1 * EOK,
-    500,
+    1500,
     "chips",
   ),
 
@@ -495,7 +497,7 @@ export const ACHIEVEMENTS: Achievement[] = [
   a("defense", "relics-12", "유물 박물관", "유물 12개 모두 모으기", "defense.relics", 12, 2000),
 
   // BEAT DASH
-  a("rhythm", "plays-30", "리듬 입문", "30판 하기", "rhythm.plays", 30, 200),
+  a("rhythm", "plays-30", "리듬 입문", "30판 하기", "rhythm.plays", 30, 600),
   a(
     "rhythm",
     "plays-300",
@@ -503,7 +505,7 @@ export const ACHIEVEMENTS: Achievement[] = [
     "300판 하기",
     "rhythm.plays",
     300,
-    1000,
+    3000,
   ),
   a(
     "rhythm",
@@ -512,9 +514,9 @@ export const ACHIEVEMENTS: Achievement[] = [
     "서로 다른 곡 5개 끝까지 치기 (랭킹 기록)",
     "rhythm.songs",
     5,
-    300,
+    900,
   ),
-  a("rhythm", "fc-1", "첫 풀콤보", "풀콤보 1번", "rhythm.fc", 1, 300),
+  a("rhythm", "fc-1", "첫 풀콤보", "풀콤보 1번", "rhythm.fc", 1, 900),
   a(
     "rhythm",
     "fc-10",
@@ -522,9 +524,9 @@ export const ACHIEVEMENTS: Achievement[] = [
     "서로 다른 채보 10개 풀콤보",
     "rhythm.fc",
     10,
-    1000,
+    3000,
   ),
-  a("rhythm", "ap-1", "올 퍼펙트", "올 퍼펙트 1번", "rhythm.ap", 1, 1000),
+  a("rhythm", "ap-1", "올 퍼펙트", "올 퍼펙트 1번", "rhythm.ap", 1, 3000),
   a(
     "rhythm",
     "nightmare-1",
@@ -532,33 +534,33 @@ export const ACHIEVEMENTS: Achievement[] = [
     "NIGHTMARE 채보 끝까지 치기",
     "rhythm.nightmare",
     1,
-    700,
+    2100,
   ),
 
   // 스케치 퀴즈 (반복형 대신 일일 미션)
   // DOODLE PARTY (다른 게임 업적의 절반)
-  a("sketch", "games-1", "첫 두들", "한 판 끝까지 하기", "sketch.games", 1, 50),
-  a("sketch", "games-10", "두들 단골", "10판 끝까지 하기", "sketch.games", 10, 150),
-  a("sketch", "games-50", "스케치북 한 권", "50판 끝까지 하기", "sketch.games", 50, 500),
-  a("sketch", "games-200", "붓을 든 장인", "200판 끝까지 하기", "sketch.games", 200, 1500),
-  a("sketch", "correct-1", "첫 정답", "그림 맞히기에서 정답 1번", "sketch.correct", 1, 50),
-  a("sketch", "correct-50", "눈치 백단", "그림 맞히기에서 정답 50번", "sketch.correct", 50, 250),
-  a("sketch", "correct-300", "독심술사", "그림 맞히기에서 정답 300번", "sketch.correct", 300, 1000),
-  a("sketch", "first-10", "번개 손", "제일 먼저 맞히기 10번", "sketch.first", 10, 150),
-  a("sketch", "first-100", "광속 정답", "제일 먼저 맞히기 100번", "sketch.first", 100, 750),
-  a("sketch", "drew-10", "그림 실력 인증", "내 그림이 맞혀진 차례 10번", "sketch.drew", 10, 150),
-  a("sketch", "drew-100", "인기 화가", "내 그림이 맞혀진 차례 100번", "sketch.drew", 100, 750),
-  a("sketch", "wins-1", "오늘의 화백", "1등 하기 (3명 이상 판)", "sketch.wins", 1, 150),
-  a("sketch", "wins-10", "두들 챔피언", "1등 10번 (3명 이상 판)", "sketch.wins", 10, 750),
-  a("sketch", "points-20000", "점수 부자", "게임 점수 누적 20,000점", "sketch.points", 20_000, 400),
-  a("sketch", "likes-1", "첫 따봉", "내 그림에 따봉 1개 받기", "sketch.likes", 1, 50),
-  a("sketch", "likes-50", "따봉 맛집", "내 그림에 따봉 50개 받기", "sketch.likes", 50, 250),
-  a("sketch", "likes-300", "국민 화가", "내 그림에 따봉 300개 받기", "sketch.likes", 300, 1000),
-  a("sketch", "fake-win-1", "완벽한 위장", "가짜 화가로 이기기", "sketch.fakeWin", 1, 150),
-  a("sketch", "fake-win-10", "변장의 달인", "가짜 화가로 10번 이기기", "sketch.fakeWin", 10, 750),
-  a("sketch", "fake-found-10", "가짜 사냥꾼", "가짜 화가를 맞게 지목 10번", "sketch.fakeFound", 10, 250),
-  a("sketch", "fooled-10", "타고난 거짓말쟁이", "그림 속 거짓말에서 내 가짜 제목으로 10번 속이기", "sketch.fooled", 10, 250),
-  a("sketch", "relay-5", "릴레이 완주", "그림 릴레이 5판 끝까지", "sketch.relay", 5, 150),
+  a("sketch", "games-1", "첫 두들", "한 판 끝까지 하기", "sketch.games", 1, 150),
+  a("sketch", "games-10", "두들 단골", "10판 끝까지 하기", "sketch.games", 10, 450),
+  a("sketch", "games-50", "스케치북 한 권", "50판 끝까지 하기", "sketch.games", 50, 1500),
+  a("sketch", "games-200", "붓을 든 장인", "200판 끝까지 하기", "sketch.games", 200, 4500),
+  a("sketch", "correct-1", "첫 정답", "그림 맞히기에서 정답 1번", "sketch.correct", 1, 150),
+  a("sketch", "correct-50", "눈치 백단", "그림 맞히기에서 정답 50번", "sketch.correct", 50, 750),
+  a("sketch", "correct-300", "독심술사", "그림 맞히기에서 정답 300번", "sketch.correct", 300, 3000),
+  a("sketch", "first-10", "번개 손", "제일 먼저 맞히기 10번", "sketch.first", 10, 450),
+  a("sketch", "first-100", "광속 정답", "제일 먼저 맞히기 100번", "sketch.first", 100, 2250),
+  a("sketch", "drew-10", "그림 실력 인증", "내 그림이 맞혀진 차례 10번", "sketch.drew", 10, 450),
+  a("sketch", "drew-100", "인기 화가", "내 그림이 맞혀진 차례 100번", "sketch.drew", 100, 2250),
+  a("sketch", "wins-1", "오늘의 화백", "1등 하기 (3명 이상 판)", "sketch.wins", 1, 450),
+  a("sketch", "wins-10", "두들 챔피언", "1등 10번 (3명 이상 판)", "sketch.wins", 10, 2250),
+  a("sketch", "points-20000", "점수 부자", "게임 점수 누적 20,000점", "sketch.points", 20_000, 1200),
+  a("sketch", "likes-1", "첫 따봉", "내 그림에 따봉 1개 받기", "sketch.likes", 1, 150),
+  a("sketch", "likes-50", "따봉 맛집", "내 그림에 따봉 50개 받기", "sketch.likes", 50, 750),
+  a("sketch", "likes-300", "국민 화가", "내 그림에 따봉 300개 받기", "sketch.likes", 300, 3000),
+  a("sketch", "fake-win-1", "완벽한 위장", "가짜 화가로 이기기", "sketch.fakeWin", 1, 450),
+  a("sketch", "fake-win-10", "변장의 달인", "가짜 화가로 10번 이기기", "sketch.fakeWin", 10, 2250),
+  a("sketch", "fake-found-10", "가짜 사냥꾼", "가짜 화가를 맞게 지목 10번", "sketch.fakeFound", 10, 750),
+  a("sketch", "fooled-10", "타고난 거짓말쟁이", "그림 속 거짓말에서 내 가짜 제목으로 10번 속이기", "sketch.fooled", 10, 750),
+  a("sketch", "relay-5", "릴레이 완주", "그림 릴레이 5판 끝까지", "sketch.relay", 5, 450),
 ];
 /** 반복형 업적: 일회형 마지막 단계(from)를 넘은 뒤로 step 만큼 쌓일 때마다 reward */
 const r = (game: AchGame, id: string, title: string, unit: string, metric: AchMetric, from: number, step: number, reward: number): Achievement => ({
@@ -568,7 +570,7 @@ const r = (game: AchGame, id: string, title: string, unit: string, metric: AchMe
   desc: `${from.toLocaleString("ko-KR")}${unit} 다음부터 ${step.toLocaleString("ko-KR")}${unit}마다`,
   metric,
   goal: step,
-  reward,
+  reward: Math.round(reward * ACH_X),
   repeat: true,
   from,
 });
@@ -639,6 +641,7 @@ const dm = (game: AchGame, id: string, title: string, metric: AchMetric, goal: n
   goal,
   reward,
 });
+/** 일일 미션 보상: 처음 정한 숫자의 3배를 그대로 적어 둠 (배수 상수 없음 — 업적 배수 ACH_X 와도 따로) */
 export const DAILY_MISSIONS: DailyMission[] = [
   dm("poker", "hands", "포커 10판 치기", "poker.hands", 10, 90),
   dm("poker", "hands30", "포커 30판 치기", "poker.hands", 30, 150),
@@ -651,13 +654,13 @@ export const DAILY_MISSIONS: DailyMission[] = [
   dm("defense", "kills", "적 1,000마리 처치 (랭킹 판)", "defense.kills", 1000, 120),
   dm("rhythm", "plays", "3판 하기", "rhythm.plays", 3, 90),
   dm("rhythm", "plays10", "10판 하기", "rhythm.plays", 10, 180),
-  dm("sketch", "game", "한 판 끝까지 하기", "sketch.games", 1, 60),
-  dm("sketch", "games", "세 판 끝까지 하기", "sketch.games", 3, 120),
-  dm("sketch", "correct", "정답 5번 맞히기", "sketch.correct", 5, 60),
-  dm("sketch", "first", "제일 먼저 맞히기 2번", "sketch.first", 2, 80),
-  dm("sketch", "drew", "내 그림이 맞혀지기 2번", "sketch.drew", 2, 80),
-  dm("sketch", "win", "1등 하기 (3명 이상 판)", "sketch.wins", 1, 100),
-  dm("sketch", "likes", "내 그림에 따봉 2개 받기", "sketch.likes", 2, 80),
+  dm("sketch", "game", "한 판 끝까지 하기", "sketch.games", 1, 90),
+  dm("sketch", "games", "세 판 끝까지 하기", "sketch.games", 3, 180),
+  dm("sketch", "correct", "정답 5번 맞히기", "sketch.correct", 5, 90),
+  dm("sketch", "first", "제일 먼저 맞히기 2번", "sketch.first", 2, 120),
+  dm("sketch", "drew", "내 그림이 맞혀지기 2번", "sketch.drew", 2, 120),
+  dm("sketch", "win", "1등 하기 (3명 이상 판)", "sketch.wins", 1, 150),
+  dm("sketch", "likes", "내 그림에 따봉 2개 받기", "sketch.likes", 2, 120),
 ];
 /** 일일 미션이 보는 숫자 (기준값을 적어 둘 것) */
 export const DAILY_METRICS = [...new Set(DAILY_MISSIONS.map((x) => x.metric))];
