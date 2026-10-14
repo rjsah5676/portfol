@@ -101,7 +101,7 @@ export const shopFor = (game: PointGame, kind: ShopItem["kind"], ref: string) =>
 /* ─────────────── 업적 ─────────────── */
 
 /** 업적이 있는 게임 (게임 머리말의 [업적] 버튼) */
-export type AchGame = "poker" | "fight" | "defense" | "rhythm";
+export type AchGame = "poker" | "fight" | "defense" | "rhythm" | "sketch";
 
 /**
  * 업적이 보는 숫자 (서버가 기록에서 계산 — server/src/achievements.ts)
@@ -109,6 +109,8 @@ export type AchGame = "poker" | "fight" | "defense" | "rhythm";
  *  fight.char.N  랭크전에서 그 캐릭터(lib/fight/chars 의 CHARS 순서)로 한 판 수
  *  fight.tut     튜토리얼을 끝까지 했으면 1
  *  fight.ai      AI 대전에서 이긴 가장 높은 단계 (입문 1 ~ 지존 7 — 서버가 입력 기록을 다시 돌려 확인)
+ *  sketch.games  끝까지 한 판 수 (정답이 한 번이라도 나온 판만) · sketch.drew 내 그림을 누가 맞힌 차례 수
+ *  sketch.wins   1등 한 판 수 (3명 이상 판만)
  */
 export type AchMetric =
   | "poker.chips"
@@ -133,7 +135,13 @@ export type AchMetric =
   | "rhythm.songs"
   | "rhythm.fc"
   | "rhythm.ap"
-  | "rhythm.nightmare";
+  | "rhythm.nightmare"
+  | "sketch.games"
+  | "sketch.correct"
+  | "sketch.first"
+  | "sketch.drew"
+  | "sketch.wins"
+  | "sketch.points";
 
 export interface Achievement {
   id: string;
@@ -437,6 +445,22 @@ export const ACHIEVEMENTS: Achievement[] = [
     1,
     700,
   ),
+
+  // 스케치 퀴즈 (반복형 대신 일일 미션)
+  a("sketch", "games-1", "첫 스케치", "한 판 끝까지 하기", "sketch.games", 1, 100),
+  a("sketch", "games-10", "스케치 단골", "10판 끝까지 하기", "sketch.games", 10, 300),
+  a("sketch", "games-50", "스케치북 한 권", "50판 끝까지 하기", "sketch.games", 50, 1000),
+  a("sketch", "games-200", "붓을 든 장인", "200판 끝까지 하기", "sketch.games", 200, 3000),
+  a("sketch", "correct-1", "첫 정답", "정답 1번 맞히기", "sketch.correct", 1, 100),
+  a("sketch", "correct-50", "눈치 백단", "정답 50번 맞히기", "sketch.correct", 50, 500),
+  a("sketch", "correct-300", "독심술사", "정답 300번 맞히기", "sketch.correct", 300, 2000),
+  a("sketch", "first-10", "번개 손", "제일 먼저 맞히기 10번", "sketch.first", 10, 300),
+  a("sketch", "first-100", "광속 정답", "제일 먼저 맞히기 100번", "sketch.first", 100, 1500),
+  a("sketch", "drew-10", "그림 실력 인증", "내 그림이 맞혀진 차례 10번", "sketch.drew", 10, 300),
+  a("sketch", "drew-100", "인기 화가", "내 그림이 맞혀진 차례 100번", "sketch.drew", 100, 1500),
+  a("sketch", "wins-1", "오늘의 화백", "1등 하기 (3명 이상 판)", "sketch.wins", 1, 300),
+  a("sketch", "wins-10", "스케치 챔피언", "1등 10번 (3명 이상 판)", "sketch.wins", 10, 1500),
+  a("sketch", "points-20000", "점수 부자", "게임 점수 누적 20,000점", "sketch.points", 20_000, 800),
 ];
 export const achievementOf = (id: unknown) =>
   ACHIEVEMENTS.find((x) => x.id === id);

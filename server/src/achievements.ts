@@ -74,5 +74,17 @@ export async function metricsOf(db: Database, uid: string, game: AchGame): Promi
     m["rhythm.nightmare"] = recs.filter((r) => r.chart.endsWith("_nightmare")).length;
   }
 
+  if (game === "sketch") {
+    const d = (await users.findOne({ _id: uid }, { projection: { "stats.sketch": 1 } })) as Doc | null;
+    const k = d?.stats?.sketch ?? {};
+    // games: 끝까지 한 판 (10.14부터 셈 — 시작만 센 예전 games 는 안 씀)
+    m["sketch.games"] = k.done ?? 0;
+    m["sketch.correct"] = k.correct ?? 0;
+    m["sketch.first"] = k.first ?? 0;
+    m["sketch.drew"] = k.drew ?? 0;
+    m["sketch.wins"] = k.wins ?? 0;
+    m["sketch.points"] = k.points ?? 0;
+  }
+
   return m;
 }

@@ -29,7 +29,7 @@ export interface UserStats {
   /** 온라인 대국 전적 (체스·장기·오목·격투) */
   online?: Record<string, { w?: number; l?: number; d?: number }>;
   /** 스케치 퀴즈 */
-  sketch?: { correct?: number; points?: number; games?: number };
+  sketch?: { correct?: number; points?: number; games?: number; done?: number; first?: number; drew?: number; wins?: number };
   /** 격투 온라인 경기 수 */
   fight?: { matches?: number; tut?: number; ai?: number };
   /** 포커: 앉은 횟수 · 친 판 수(전체, 게임별) · 이긴 판 · 한 판에 가장 크게 먹은 돈 */

@@ -123,6 +123,10 @@ interface Room {
   owners: Map<string, string>;
   /** 게임 중에 들어와 아직 안 그린 사람 (들어온 순서) — 이번 바퀴가 끝난 뒤에 그림 */
   late: string[];
+  /** 처음 들어온 시각 (새로고침 · 잠깐 나갔다 와도 입장 순서 그대로, 나간 사람 다음 차례 계산용) */
+  seen: Record<string, number>;
+  /** 이번 판에 정답이 나왔는지 (정답 없이 건너뛰기만 한 판은 기록 안 함) */
+  scored: boolean;
   /** 아무도 없게 된 시각 (정리용) */
   emptySince: number;
 }
@@ -192,8 +196,9 @@ function nextDrawer(room: Room): string {
     pending = behind;
   }
   if (room.meta.turnMode === "winner" && firstCorrect && pending.includes(firstCorrect)) return firstCorrect;
-  // 입장 순서로 지금 사람 다음부터 돌면서 아직 덜 그린 사람
-  const start = all.indexOf(current);
+  // 입장 순서로 지금 사람 다음부터 돌면서 아직 덜 그린 사람 (지금 사람이 나갔으면 그 사람이 있던 자리 다음부터)
+  const at = room.seen[current];
+  const start = all.includes(current) ? all.indexOf(current) : at === undefined ? -1 : orderedPlayers(room).filter((p) => p.joinedAt <= at).length - 1;
   for (let k = 1; k <= all.length; k++) {
     const u = all[(start + k + all.length) % all.length];
     if (pending.includes(u)) return u;
@@ -475,6 +480,8 @@ export function registerSketch({ gateway, users }: Deps, opts: SketchOptions = {
       access: new Set(locked ? [uid] : []),
       owners: new Map(),
       late: [],
+      seen: {},
+      scored: false,
       emptySince: now,
     };
     rooms.set(id, room);
@@ -524,10 +531,13 @@ export function registerSketch({ gateway, users }: Deps, opts: SketchOptions = {
       throw new AppError("ROOM_FULL", "방이 가득 찼어요.", 409);
     // 입장 시각은 클라이언트가 보냄(잠깐 끊겼다 재연결이면 원래 값 → 입장 순서 유지). 미래·방 생성 전 값은 바로잡음
     const now = Date.now();
-    room.players[uid] = { nick, joinedAt: Math.max(room.meta.createdAt, Math.min(now, joinedAt ?? now)) };
-    // 게임 중에 처음 들어온 사람은 이번 바퀴 맨 뒤로
+    // 이 방에 왔던 사람이면 처음 들어온 시각 그대로 (새로고침해도 순서가 안 바뀜)
+    const first = room.seen[uid] ?? Math.max(room.meta.createdAt, Math.min(now, joinedAt ?? now));
+    room.seen[uid] = first;
+    room.players[uid] = { nick, joinedAt: first };
+    // 게임 중에 처음 들어온 사람은 이번 바퀴 맨 뒤로 (이번 판에 있던 사람이 다시 들어온 건 아님)
     const playing = room.state.phase !== "waiting" && room.state.phase !== "ended";
-    if (playing && room.state.drawn[uid] === undefined && !room.late.includes(uid)) room.late.push(uid);
+    if (playing && !room.scores[uid] && room.state.drawn[uid] === undefined && !room.late.includes(uid)) room.late.push(uid);
     room.owners.set(uid, ctx.socket.id);
     // 점수 자리 (새로고침으로 다시 들어온 경우 기존 점수 유지)
     const cur = room.scores[uid];
@@ -616,6 +626,18 @@ export function registerSketch({ gateway, users }: Deps, opts: SketchOptions = {
     };
   }
   /** 새 차례로 넘어가며 이전 차례의 그림·제시어·정답 시도를 비움 */
+  /** 판이 끝까지 갔을 때 기록 (업적 · 일일 미션): 끝까지 남은 사람은 「한 판」, 3명 이상 판의 1등은 「1등」 */
+  function recordGame(room: Room) {
+    if (!room.scored) return;
+    const here = Object.keys(room.players).filter((u) => room.scores[u]);
+    const top = Math.max(0, ...Object.values(room.scores).map((s) => Number(s.score) || 0));
+    const many = Object.keys(room.scores).length >= 3;
+    for (const u of here) {
+      const win = many && top > 0 && (Number(room.scores[u].score) || 0) === top;
+      users.bump(u, { "stats.sketch.done": 1, ...(win && { "stats.sketch.wins": 1 }) });
+    }
+  }
+
   function beginTurn(room: Room, patch: Partial<State>) {
     // 차례가 바뀌면 화면은 새 turnId 로 다시 구독하므로 이전 그림은 알림 없이 버림
     room.strokes = new Map();
@@ -639,6 +661,7 @@ export function registerSketch({ gateway, users }: Deps, opts: SketchOptions = {
     const first = list[0].uid;
     room.state = emptyState();
     room.late = [];
+    room.scored = false;
     beginTurn(room, { ...newTurn(room, first, 1), drawn: { [first]: 1 } });
     changed(room);
     systemChat(room, `게임 시작! 한 사람당 ${room.meta.rounds}번씩 그려요. 중간에 들어와도 같이 할 수 있어요.`);
@@ -721,8 +744,10 @@ export function registerSketch({ gateway, users }: Deps, opts: SketchOptions = {
     add(guess.uid, guess.nick, pts);
     add(drawer, cur.drawerNick, drawerPts);
     // 회원이면 전적에 반영 (비회원 uid 는 무시됨)
-    users.bump(guess.uid, { "stats.sketch.correct": 1, "stats.sketch.points": pts });
-    users.bump(drawer, { "stats.sketch.points": drawerPts });
+    users.bump(guess.uid, { "stats.sketch.correct": 1, "stats.sketch.points": pts, ...(first && { "stats.sketch.first": 1 }) });
+    // 그린 사람: 점수 + 이 차례 첫 정답이면 「내 그림이 맞혀진 차례」 1
+    users.bump(drawer, { "stats.sketch.points": drawerPts, ...(first && { "stats.sketch.drew": 1 }) });
+    room.scored = true;
     changed(room);
     pushChat(room, {
       uid: guess.uid,
@@ -761,6 +786,7 @@ export function registerSketch({ gateway, users }: Deps, opts: SketchOptions = {
     const drawer = orderedPlayers(room).length < 2 ? "" : nextDrawer(room);
     if (!drawer) {
       room.state = { ...cur, phase: "ended", endsAt: 0 };
+      recordGame(room);
       clearGuesses(room);
       setWords(room, null);
       changed(room);
@@ -906,6 +932,9 @@ export function registerSketch({ gateway, users }: Deps, opts: SketchOptions = {
         pw: r.pw,
         invite: r.invite,
         access: [...r.access],
+        late: r.late,
+        seen: r.seen,
+        scored: r.scored,
         emptySince: r.emptySince,
       })),
     restore(data, downMs) {
@@ -918,6 +947,10 @@ export function registerSketch({ gateway, users }: Deps, opts: SketchOptions = {
           strokes: new Map(r.strokes),
           access: new Set(r.access),
           owners: new Map(Object.keys(r.players).map((uid) => [uid, RESTORED])),
+          // 예전 저장본에는 없던 것
+          late: r.late ?? [],
+          seen: r.seen ?? Object.fromEntries(Object.entries(r.players).map(([uid, p]) => [uid, p.joinedAt])),
+          scored: r.scored ?? true,
         });
       }
       // 시간 안에 안 돌아온 사람은 나간 것으로

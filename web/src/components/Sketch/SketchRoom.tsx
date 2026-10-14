@@ -104,14 +104,51 @@ function Timer({ sec, ratio, size = 54 }: { sec: number; ratio: number; size?: n
 }
 
 /** 힌트 글자 칸: ○ = 빈칸, 공백 = 띄움, 나머지 = 공개된 글자 */
-function HintTiles({ hint, size }: { hint: string; size: number }) {
+/** 칸 수에 맞춰 글자 크기를 줄여 한 줄에 (속담처럼 긴 제시어도 줄바꿈 없이) */
+function useFitSize(size: number, ems: number, reserve = 120) {
+  const ref = useRef<HTMLSpanElement>(null);
+  const [w, setW] = useState(0);
+  useEffect(() => {
+    // 글자 옆 칸들을 묶은 줄(내용 크기)의 바깥 = 상태 칸
+    const el = ref.current?.parentElement?.parentElement;
+    if (!el) return;
+    const ro = new ResizeObserver(([e]) => setW(e.contentRect.width));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  // 부모 칸에서 옆 글자(난이도 · n글자)가 쓰는 자리를 빼고 남는 만큼
+  const room = w ? Math.max(60, w - reserve) : 0;
+  return [ref, room ? Math.max(10, Math.min(size, Math.floor(room / ems))) : size] as const;
+}
+
+/** 그리는 사람이 보는 제시어 (긴 속담도 한 줄) */
+function FitWord({ word, size }: { word: string; size: number }) {
+  const [ref, fs] = useFitSize(size, [...word].length * 0.95, 90);
   return (
     <span
-      className="inline-flex flex-wrap items-end justify-center gap-[0.18em]"
-      style={{ fontSize: size }}
+      ref={ref}
+      className="sk-hand shrink-0 leading-none whitespace-nowrap"
+      style={{ fontSize: fs }}
+    >
+      {word}
+    </span>
+  );
+}
+
+function HintTiles({ hint, size }: { hint: string; size: number }) {
+  const chars = [...hint];
+  const tiles = chars.filter((c) => c !== " ").length;
+  const gaps = chars.length - tiles;
+  // 칸 1.35em + 사이 0.18em, 띄어쓰기 0.6em
+  const [ref, fs] = useFitSize(size, tiles * 1.35 + gaps * 0.6 + (chars.length - 1) * 0.18);
+  return (
+    <span
+      ref={ref}
+      className="inline-flex shrink-0 flex-nowrap items-end justify-center gap-[0.18em]"
+      style={{ fontSize: fs }}
       aria-label={`힌트 ${hint.replace(/○/g, "_")}`}
     >
-      {[...hint].map((ch, i) =>
+      {chars.map((ch, i) =>
         ch === " " ? (
           <span key={i} className="sk-tile-gap" />
         ) : (
@@ -519,9 +556,7 @@ export default function SketchRoom({
           <span className="rounded-full border-2 border-[var(--ink)] bg-[var(--sun)] px-2 py-0.5 text-[12px] font-extrabold">
             제시어
           </span>
-          <span className="sk-hand leading-none" style={{ fontSize: big ? 34 : 26 }}>
-            {myWord}
-          </span>
+          <FitWord word={myWord ?? ""} size={big ? 34 : 26} />
         </span>
       ) : (
         <span className="flex items-center gap-2">
