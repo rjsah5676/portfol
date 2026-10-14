@@ -27,6 +27,14 @@ export const FIGHT_SKINS: FightSkin[] = [
     desc: "여름밤 축제의 불꽃놀이를 두른 이그나. 화염구는 폭죽 로켓, 업화주는 하늘로 솟구치는 분수 불꽃, 장판은 타닥타닥 튀는 선향 불꽃으로 바뀌어요.",
     color: "#FF8A3D",
   },
+  {
+    id: "soyoung-bunny",
+    ch: "soyoung",
+    name: "바니걸 소영",
+    tag: "MIDNIGHT BUNNY",
+    desc: "안경을 벗고 머리를 풀어 내린 소영. 올블랙 바니 수트에 망사 스타킹, 검은 채찍까지 — 오늘 수업은 조금 다를 거예요.",
+    color: "#B0305A",
+  },
 ];
 
 export const skinOf = (id?: string | null): FightSkin | null => FIGHT_SKINS.find((s) => s.id === id) ?? null;

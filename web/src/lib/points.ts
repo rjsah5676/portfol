@@ -117,6 +117,14 @@ export const SHOP: ShopItem[] = [
     name: "불꽃놀이 이그나",
     price: 15_000,
   },
+  {
+    id: "fight.skin.soyoung-bunny",
+    game: "fight",
+    kind: "skin",
+    ref: "soyoung-bunny",
+    name: "바니걸 소영",
+    price: 15_000,
+  },
 ];
 export const shopItem = (id: unknown) => SHOP.find((s) => s.id === id);
 export const shopOf = (game: PointGame) => SHOP.filter((s) => s.game === game);

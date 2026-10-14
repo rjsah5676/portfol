@@ -183,7 +183,7 @@ export default function SkinShop({ initial = "shop", onClose }: { initial?: Shop
               className="relative flex-1 overflow-hidden rounded-[0.9cqw]"
               style={{ background: `radial-gradient(ellipse at 50% 30%, ${skin.color}55, #120820 70%)` }}
             >
-              <FireworksBg color={skin.color} />
+              {skin.id === "igna-fw" && <FireworksBg color={skin.color} />}
               <img
                 key={skin.id}
                 src={artUrl(chIndex(skin), skin.id)}

@@ -100,6 +100,38 @@ def shrink_front(p: np.ndarray, cut: float, k: float) -> np.ndarray:
     return out[:, : xs.max() + 1].copy()
 
 
+def grid_frames(rgba: np.ndarray, grid: list):
+    """칸을 손으로 정한 시트: grid = [{"y": [y0, y1], "x": [x0, 자를 곳..., x끝]}, ...] (줄마다)
+    덩어리가 절반 넘게 그 칸 안에 있으면 통째로 그 프레임 (칸 경계를 넘는 발 · 귀 · 채찍 끝도 살림),
+    옆 칸까지 이어진 큰 덩어리는 칸 가로 범위만 잘라 씀. 프레임 = {"mask": 시트 크기 bool}"""
+    alpha = rgba[..., 3] > 30
+    lab, n = ndimage.label(ndimage.binary_closing(alpha, np.ones((5, 5))))
+    sizes = ndimage.sum(np.ones_like(lab), lab, range(1, n + 1))
+    objs = ndimage.find_objects(lab)
+    out = []
+    for row in grid:
+        y0, y1 = row["y"]
+        frs = []
+        for x0, x1 in zip(row["x"][:-1], row["x"][1:]):
+            cell = lab[y0:y1, x0:x1]
+            ids, cnt = np.unique(cell[cell > 0], return_counts=True)
+            # 옆 칸까지 크게 걸친 덩어리(붙어 버린 두 프레임 · 긴 채찍)는 통째로 안 가져옴
+            mg, mgy = 0.3 * (x1 - x0), 0.3 * (y1 - y0)
+            inside = lambda i: (
+                objs[i - 1][1].start >= x0 - mg and objs[i - 1][1].stop <= x1 + mg
+                and objs[i - 1][0].start >= y0 - mgy and objs[i - 1][0].stop <= y1 + mgy
+            )
+            full = [int(i) for i, k in zip(ids, cnt) if k >= 0.5 * sizes[i - 1] and inside(i)]
+            part = [int(i) for i, k in zip(ids, cnt) if int(i) not in full and (k >= 0.3 * sizes[i - 1] or k >= 6000)]
+            m = np.isin(lab, full)
+            pm = np.zeros_like(m)
+            pm[y0:y1, x0:x1] = np.isin(cell, part)
+            m |= pm
+            frs.append({"mask": m})
+        out.append(frs)
+    return out, lab
+
+
 class Sheets:
     def __init__(self, src: Path, cfg: dict):
         self.src = src
@@ -110,7 +142,10 @@ class Sheets:
         if name not in self.cache:
             c = self.cfg[name]
             rgba = cut.key(Image.open(self.src / c["file"]), c["bg"])
-            out, lab = cut.segment(rgba, c["rows"], {int(k): v for k, v in c.get("splits", {}).items()})
+            if "grid" in c:
+                out, lab = grid_frames(rgba, c["grid"])
+            else:
+                out, lab = cut.segment(rgba, c["rows"], {int(k): v for k, v in c.get("splits", {}).items()})
             self.cache[name] = (rgba, out, lab)
         return self.cache[name]
 
@@ -118,7 +153,13 @@ class Sheets:
         name, rc = ref.split(":")
         r, c = map(int, rc.split("."))
         rgba, out, lab = self.get(name)
-        piece, _ = cut.crop(rgba, lab, out[r][c])
+        fr = out[r][c]
+        if "mask" in fr:
+            ys, xs = np.where(fr["mask"] & (rgba[..., 3] > 30))
+            sub = rgba[ys.min() : ys.max() + 1, xs.min() : xs.max() + 1].copy()
+            sub[..., 3] = np.where(fr["mask"][ys.min() : ys.max() + 1, xs.min() : xs.max() + 1], sub[..., 3], 0)
+            return sub
+        piece, _ = cut.crop(rgba, lab, fr)
         return piece
 
     def size_factor(self, name: str, base_h: float) -> float:
