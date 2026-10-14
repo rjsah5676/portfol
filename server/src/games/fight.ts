@@ -9,6 +9,7 @@ import { forfeit, newResult, onEnd, settle, type FightResult, type Outcome } fro
 import { BOT_MAX, createFightRating, type Margin } from "./fightRating";
 import { uniqueNickname } from "./poker/nicknames";
 import { botBuild, replayBot } from "./fightBot";
+import { createFightReplays } from "./fightReplays";
 import { CHARS } from "../../../web/src/lib/fight/chars";
 import { skinOf } from "../../../web/src/lib/fight/skins";
 
@@ -208,6 +209,7 @@ export interface FightOptions {
 
 export function registerFight({ gateway, users, db }: Deps, opts: FightOptions = {}) {
   const rating = createFightRating(db, users);
+  const replays = createFightReplays(db);
   const rooms = new Map<string, Room>();
   const emptyRoomTtl = opts.emptyRoomTtlMs ?? 30 * 60_000;
 
@@ -293,6 +295,7 @@ export function registerFight({ gateway, users, db }: Deps, opts: FightOptions =
   function record(room: Room, out: Outcome | "void" | null) {
     const r = room.result;
     if (!r || out === null || out === "void") return;
+    saveOnline(room, r, out);
     for (const seat of [0, 1] as const) {
       const uid = r.uids[seat];
       if (!uid) continue;
@@ -318,6 +321,35 @@ export function registerFight({ gateway, users, db }: Deps, opts: FightOptions =
       });
     }
   }
+  /**
+   * 온라인 경기 기록: 관전용으로 받던 두 선수 확정 입력 조각을 그대로 저장 (경기마다 한 번).
+   * 마지막 조각이 결과보다 늦게 올 수 있어서 조금 기다렸다 저장 — 조각 목록은 그 경기 것 그대로 붙잡아 둠
+   */
+  const savedResults = new WeakSet<FightResult>();
+  function saveOnline(room: Room, r: FightResult, out: Outcome) {
+    if (savedResults.has(r) || room.watchMatch !== r.match) return;
+    savedResults.add(r);
+    const lists = room.watch;
+    const st = room.state;
+    const doc = {
+      mode: (room.rank ? "rank" : "pvp") as "rank" | "pvp",
+      build: SERVER_BOT,
+      uids: [r.uids[0] || null, r.uids[1] || null] as [string | null, string | null],
+      chars: [st.chars[0], st.chars[1]] as [number, number],
+      map: st.map,
+      delay: st.delay,
+      out,
+    };
+    setTimeout(() => {
+      const chunks = lists.map((l) => [...l].sort((a, b) => a.f - b.f).map((c) => ({ f: c.f, i: c.i }))) as [
+        { f: number; i: string }[],
+        { f: number; i: string }[],
+      ];
+      if (!chunks[0].length && !chunks[1].length) return;
+      void replays.save({ ...doc, chunks });
+    }, 8000);
+  }
+
   /** 경기에 나선 자리 (그 경기 선수가 아니면 -1) */
   const resultSeat = (room: Room, uid: string, match: string) =>
     room.result && room.result.match === match ? room.result.uids.indexOf(uid) : -1;
@@ -1032,6 +1064,18 @@ export function registerFight({ gateway, users, db }: Deps, opts: FightOptions =
       console.warn("[fight] 봇전 확인 실패", e);
       return null;
     });
+    void replays.save({
+      mode: "rankbot",
+      build: SERVER_BOT,
+      uids: [t.uid, null],
+      chars: [t.ch, t.botCh],
+      map: t.map,
+      seed: t.seed,
+      botR: t.opp.r,
+      out: res?.done ? (res.winner === 0 ? 0 : res.winner === 1 ? 1 : 2) : null,
+      inputs: [o.inputs, null],
+      frames: frames.length,
+    });
     if (!res) return finishBot(t, 2, null, "경기를 확인하지 못해 무승부로 처리됐어요");
     // 끝까지 안 간 기록(중간에 끊김) = 패배
     if (!res.done) return finishBot(t, 1, null, "경기 기록이 끝까지 오지 않아 패배로 처리됐어요");
@@ -1079,6 +1123,47 @@ export function registerFight({ gateway, users, db }: Deps, opts: FightOptions =
     await db.col("users").updateOne({ _id: ctx.uid } as never, { $max: { "stats.fight.tut": 1 } } as never);
     return null;
   });
+  /**
+   * CPU 대전 기록 (이기든 지든 한 판마다) — 승패 확인 없이 저장만 (AI 학습 데이터). 비회원도 받음.
+   * 한 사람 15초에 한 번까지, 같은 빌드만 (다른 빌드면 다시 돌려도 같은 경기가 안 나옴)
+   */
+  const aiLogAt = new Map<string, number>();
+  gateway.rpc("fight.aiRecord", (ctx, raw) => {
+    const o = z
+      .object({
+        build: z.string().max(80),
+        level: z.number().int().min(0).max(replayBot.levelCount() - 1),
+        chars: z.tuple([z.number().int().min(0).max(99), z.number().int().min(0).max(99)]),
+        map: z.number().int().min(0).max(99),
+        seed: z.number().int().min(0).max(0xffffffff),
+        winner: z.union([z.literal(0), z.literal(1), z.literal(2)]),
+        inputs: z.array(z.tuple([z.number().int().min(0).max(0xffff), z.number().int().min(1).max(BOT_MAX_FRAMES)])).max(BOT_MAX_FRAMES),
+      })
+      .parse(raw);
+    if (o.build !== SERVER_BOT) return null;
+    const now = Date.now();
+    if (now - (aiLogAt.get(ctx.uid) ?? 0) < 15_000) return null;
+    aiLogAt.set(ctx.uid, now);
+    if (aiLogAt.size > 5000) for (const [k, v] of aiLogAt) if (now - v > 60_000) aiLogAt.delete(k);
+    const frames = o.inputs.reduce((s, [, n]) => s + n, 0);
+    if (frames < 60 || frames > BOT_MAX_FRAMES) return null;
+    void replays.save({
+      mode: "ai",
+      build: o.build,
+      uids: [ctx.uid, null],
+      guest: [!ctx.nick, false],
+      chars: o.chars,
+      map: o.map,
+      seed: o.seed,
+      level: o.level,
+      botR: replayBot.levelRating(o.level),
+      out: o.winner,
+      inputs: [o.inputs, null],
+      frames,
+    });
+    return null;
+  });
+
   /** AI 대전 승리: 랭크전 봇전처럼 내 입력 기록을 서버가 같은 씨앗으로 다시 돌려 이겼는지 확인 → 이긴 가장 높은 단계 */
   const aiChecking = new Set<string>();
   gateway.rpc("fight.aiClear", async (ctx, raw) => {

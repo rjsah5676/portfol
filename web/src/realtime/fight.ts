@@ -189,6 +189,9 @@ export const wearSkin = (ch: string, skin: string | null) => rpc<MySkinsWire>("f
 /** 업적: 튜토리얼 끝 (회원만 기록) */
 export const tutorialDone = () => rpc("fight.tutorialDone").catch(() => {});
 /** 업적: AI 대전 승리 — 입력 기록 [값, 연속 프레임 수]을 서버가 같은 씨앗으로 다시 돌려 확인 */
+/** CPU 대전 한 판 기록 (이기든 지든) — AI 학습 데이터 */
+export const aiRecord = (o: { build: string; level: number; chars: [number, number]; map: number; seed: number; winner: 0 | 1 | 2; inputs: [number, number][] }) =>
+  rpc("fight.aiRecord", o).catch(() => null);
 export const aiClear = (o: { build: string; level: number; chars: [number, number]; map: number; seed: number; inputs: [number, number][] }) =>
   rpc<{ ai: number | null }>("fight.aiClear", o).catch(() => null);
 

@@ -65,7 +65,7 @@ import { useNick } from "@/lib/AuthContext";
 import { plainName } from "@/components/Nick";
 import Online, { type BotCfg, type MatchCfg } from "./Online";
 import { OnlineMatch } from "./onlineMatch";
-import { InputLog, WatchFeed, aiClear, rankBotForfeit, rankBotReport, tutorialDone, type RoomSession, type WatchSession } from "@/realtime/fight";
+import { InputLog, WatchFeed, aiClear, aiRecord, rankBotForfeit, rankBotReport, tutorialDone, type RoomSession, type WatchSession } from "@/realtime/fight";
 import { LEVEL } from "@/lib/soundLevel";
 
 
@@ -746,6 +746,16 @@ export default function FightGame() {
             // 입력 기록을 [값, 연속 프레임 수]로 줄여 보냄 → 서버가 다시 돌려 확인 → 결과는 랭크전 상태로 옴
             rankBotReport(bot.id, rleOf(botLog)).catch(() => {});
           }
+          if (aiMode && aiLog.length >= 60)
+            void aiRecord({
+              build: `${BUILD_ID}:${AI_ID}`,
+              level: setup.level,
+              chars: [s.p[0].ch, s.p[1].ch],
+              map: s.map,
+              seed: aiSeed,
+              winner: s.winner === 0 || s.winner === 1 ? s.winner : 2,
+              inputs: rleOf(aiLog),
+            });
           if (aiMode && s.winner === 0)
             void aiClear({ build: `${BUILD_ID}:${AI_ID}`, level: setup.level, chars: [s.p[0].ch, s.p[1].ch], map: s.map, seed: aiSeed, inputs: rleOf(aiLog) });
           if (ol && !watching) {

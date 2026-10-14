@@ -91,6 +91,9 @@ async function ensureIndexes({ db }: Database) {
   idx("fight_rank_log", { pair: 1, at: -1 });
   idx("fight_rank_log", { at: 1 }, { expireAfterSeconds: 2 * 24 * 60 * 60 });
   idx("fight_rank_games", { uids: 1 });
+  // 격투 경기 기록 (입력만 — AI 학습 · 리플레이)
+  idx("fight_replays", { mode: 1, at: -1 });
+  idx("fight_replays", { uids: 1 });
   // 격투 AI: 내 캐릭터마다 기록 하나 (캐릭터별 순위)
   idx("fight_ai_rankings", { ch: 1, score: -1 });
   idx("fight_ai_rankings", { uid: 1, ch: 1 });
