@@ -411,3 +411,9 @@ cd web && POKER_E2E=1 npx next dev            # → /games/defense/?fake=admin:�
 - 단일 코어 · 도박사는 봇이 잘 못 씀 (단일 코어는 사람이 신화 한 종류를 정해 재료를 모아야 함, 봇은 처음 되는 조합식으로 정해 버림) — 실제 기록이 쌓이면 다시 볼 것
 - 성장 봇: mid · 오염 3 = 0~30% (이자째기 30%), max · 오염 10 = 0~5% (평균 43~53웨이브), max · 오염 20 = 0% (23~39웨이브)
 
+
+## 플레이 기록 (2026-10-15)
+- 컬렉션 `defense_plays` (server/src/games/defensePlays.ts, 90일 TTL) — 시드 · 로드아웃 · 명령 기록 · 버전 + 요약(res)
+  - status: start(시작만) · quit(메뉴로 나감, rpc `defense.quit`, 검증 없음) · done(서버 확인) · rejected(확인 실패 + why) · 멀티는 판 끝에 한 문서
+- 관리자: 디펜스 메뉴 아래 「플레이 기록 받기」 → GET /api/admin/defense/plays 를 끝까지 받아 JSON 저장
+- 요약: `npx tsx scripts/defense-plays-report.ts <json> [--ver beta5]` (server/) — 단계별 클리어율 · 죽은/나간 웨이브 · 유물/연구/패치 장착률 · 습관
