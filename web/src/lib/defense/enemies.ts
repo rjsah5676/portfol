@@ -145,7 +145,14 @@ export type BossSkill =
   /** every 초마다 졸개 n 마리 (그 웨이브 적 체력 × hp) */
   | { kind: "summon"; every: number; n: number; hp: number }
   /** every 초마다 sec 초 동안 모든 피해 무시 */
-  | { kind: "evade"; every: number; sec: number };
+  | { kind: "evade"; every: number; sec: number }
+  /** (2페이즈) 유닛이 가장 센 가로줄을 warn 초 동안 빨갛게 표시 → 그때 그 줄에 있는 유닛 sec 초 기절 (미리 빼면 피함) */
+  | { kind: "bolt"; every: number; warn: number; sec: number }
+  /** (2페이즈) 가장 센 칸 하나를 warn 초 동안 표시 → 그때 그 칸에 있는 유닛 sec 초 붙잡힘(기절) (약한 유닛과 바꿔 두면 미끼) */
+  | { kind: "grab"; every: number; warn: number; sec: number };
+
+/** 보스 2페이즈가 나오는 오염 단계 (이 단계부터, 보스 체력이 phase.at 밑으로 내려가면) */
+export const BOSS_PHASE_GLITCH = 15;
 
 export interface BossDef {
   wave: number;
@@ -160,6 +167,8 @@ export interface BossDef {
   mres: number;
   pres: number;
   skills: BossSkill[];
+  /** 2페이즈 (오염 BOSS_PHASE_GLITCH 단계부터): 체력이 at 비율 밑이면 skills 를 더 씀 */
+  phase?: { at: number; skills: BossSkill[]; line: string };
   /** 보스 등장 대사 */
   line: string;
   color: string;
@@ -208,6 +217,7 @@ export const BOSSES: BossDef[] = [
     mres: 0.2,
     pres: 0,
     skills: [{ kind: "dash", every: 6, sec: 1.5, mult: 3 }],
+    phase: { at: 0.5, skills: [{ kind: "bolt", every: 7, warn: 2, sec: 3 }], line: "뇌섬일창— 그 줄, 다 태워 줄게!" },
     line: "번개보다 빠르게— 지지직—",
     color: "#FFE15C",
   },
@@ -238,6 +248,7 @@ export const BOSSES: BossDef[] = [
     mres: 0.5,
     pres: 0,
     skills: [{ kind: "summon", every: 9, n: 3, hp: 1.5 }],
+    phase: { at: 0.5, skills: [{ kind: "grab", every: 8, warn: 2.5, sec: 6 }], line: "제일 센 놈부터… 곰 포옹이다!" },
     line: "신병들! 저 방어선을 뚫어라!",
     color: "#9FB0C8",
   },

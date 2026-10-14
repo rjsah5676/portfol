@@ -161,6 +161,17 @@ cd web && POKER_E2E=1 npx next dev            # → /games/defense/?fake=admin:�
 - 화면: 이어하기(`DefenseApp` localStorage `pgd-resume:<uid>` 2초마다 → `Controller.restore` 로 기록을 다시 돌려 따라잡음, 3.5시간) · 포기하기 · DPS 창(필드 오른쪽 위) · (v1.2.1 에서 클릭 이동 삭제 — 끌어서만) · 재화 말풍선(`ui.tsx Tip`, `Hub CUR_INFO`) · 도트 스크롤바 · 마우스 크기(소리 창, `data-cur` + `cursor-3x/4x/6x.png`)
 - 효과: 공격 모양 유닛별 `render.ts HIT_KIND/drawShot` · 공격 동작 세력별 `attackPose` · 소환 `Fx spawn`(빛기둥 + 고리) · 효과음 `spawn`(레어 · 에픽 소환) · `reward` · `chest-open`
 
+### v1.6 BETA (밸런스 beta5) — 보스 2페이즈 (오염 15+)
+- `BossDef.phase { at, skills, line }` + `BOSS_PHASE_GLITCH = 15` (`enemies.ts`). 보스 체력 ≤ at(0.5) 이면 `e.ph = 1` · `Ev phase`, 2페이즈 기술 쿨은 `e.sk2`
+- 새 기술 (예고형 — 배치로 받아치게): `bolt`(가장 센 가로줄) · `grab`(가장 센 칸). 노리는 곳은 `strongRow / strongCell` (칸 세기 = dmg × aps × 수 × (등급+1), 같으면 앞) — 난수 안 씀
+  - `b.tele { kind, cells, t, sec }`: t tick 뒤 그 칸에 **그때 있는** 유닛 기절. 예고 중 swap 으로 옮기면 피함. 보스가 죽으면 지움. 한 번에 예고 하나
+  - 제나 W30: bolt 7초마다 · 예고 2초 · 기절 3초 / 이반 W50: grab 8초마다 · 예고 2.5초 · 6초
+  - 화면: `render.ts` 빨간 칸 깜빡임 + 기술 이름 · 남은 초, `Ev tele`(warn/hit) → 효과음 · 「피했어요!」/「N칸 기절」, 2페이즈 시작 외침
+  - 봇: 예고 중 표시된 칸의 가장 센 유닛을 표시 밖 빈 칸 · 더 약한 칸으로 swap (`bot.ts dodge`)
+- defense-sim (성장 max · 오염 20 · 전략별 12판) 2페이즈 있음/없음: 평균 웨이브 0~3 낮아짐 (균형 41.6 → 38.7, 이자 48.2 → 45.4, 순혈 53.8 → 53.0), 30보스 사망은 1판으로 같음 → 봇이 피하면 크게 어렵진 않음. econ 은 다시 안 돌림 (15단계 이후 조금 느려질 것)
+- 효과음 `boss-phase · tele-warn · tele-bolt · tele-grab` (`assets.ts SFX`) — 파일 없으면 무음. 요청서: 프로젝트 `claude/defense-boss-phase-asset-request.md`
+- 나머지 보스(릴리 · 소영 · 이그나 · 카이) 2페이즈는 주인이 해 보고 정함
+
 ### v1.5 BETA (밸런스 beta5 그대로) — 다음 웨이브 부르기 · 단계별 최고 기록
 - 명령 `{ t: "next" }` (`sim.ts nextBlock · nextBonus`): 준비 시간 · 적이 다 나온 일반 웨이브 · 보스 뒤 쉬는 시간에 다음 웨이브로. 일반 웨이브면 남은 1초마다 `B.nextGold`(1) 골드. 남은 적은 그대로 (겹치면 위험). 보스 웨이브 중엔 안 됨
   - 랭킹 점수(클리어 = 1e9 − tick)라 당기면 기록도 좋아짐. 멀티는 보드마다 따로 (웨이브 시계가 보드별)

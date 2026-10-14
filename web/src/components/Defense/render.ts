@@ -17,7 +17,7 @@ import {
   img,
   type SpriteSpec,
 } from "@/lib/defense/assets";
-import { CAP } from "@/lib/defense/balance";
+import { CAP, TPS } from "@/lib/defense/balance";
 import { THEME, type ThemeDef } from "@/lib/defense/progress";
 import {
   BENCH,
@@ -693,6 +693,26 @@ export function draw(ctx: CanvasRenderingContext2D, b: Board, v: View, opt: { ra
   }
 
   drawFx(ctx, v);
+
+  // 보스 2페이즈 예고: 표시된 칸이 빨갛게 깜빡이고 남은 시간 막대 (그 전에 유닛을 옮기면 피함)
+  if (b.tele) {
+    const tl = b.tele;
+    const sec = Math.ceil(tl.t / TPS);
+    for (const i of tl.cells) {
+      const x = (cellX(i) - 0.5) * CELL,
+        y = (cellY(i) - 0.5) * CELL;
+      ctx.fillStyle = blink ? "rgba(255,40,70,0.38)" : "rgba(255,40,70,0.2)";
+      ctx.fillRect(x + 2, y + 2, CELL - 4, CELL - 4);
+      ctx.fillStyle = "#ff4d6d";
+      ctx.fillRect(x + 2, y + 2, CELL - 4, 3);
+      ctx.fillRect(x + 2, y + CELL - 5, CELL - 4, 3);
+      ctx.fillRect(x + 2, y + 2, 3, CELL - 4);
+      ctx.fillRect(x + CELL - 5, y + 2, 3, CELL - 4);
+    }
+    const f = tl.cells[0];
+    const tx = tl.kind === "bolt" ? ((cellX(f) - 0.5) * CELL + (cellX(tl.cells[tl.cells.length - 1]) + 0.5) * CELL) / 2 : cellX(f) * CELL;
+    pxText(ctx, `${tl.kind === "bolt" ? "뇌섬일창" : "곰 포옹"} ${sec}`, tx, (cellY(f) - 0.5) * CELL - 4, 15, "#ff4d6d", 1);
+  }
 
   // 위험: 테두리가 빨갛게 깜빡임
   if (danger > 0) {

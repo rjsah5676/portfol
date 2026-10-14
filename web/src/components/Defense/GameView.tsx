@@ -201,6 +201,26 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry }
         sfx("boss");
         setBossLine({ id: Math.random(), boss: e.boss });
         break;
+      case "tele":
+        if (e.hit === null) sfx("tele-warn");
+        else {
+          sfx(e.kind === "bolt" ? "tele-bolt" : "tele-grab");
+          if (e.hit > 0) toast(`${e.kind === "bolt" ? "뇌섬일창" : "곰 포옹"} — ${e.hit}칸 기절`, "bad");
+          else toast("피했어요!");
+        }
+        break;
+      case "phase": {
+        const bd = BOSSES[e.boss];
+        sfx("boss");
+        sfx("boss-phase");
+        setShout({
+          id: Math.random(),
+          title: "2페이즈!",
+          sub: `${bd.name} — ${bd.phase?.line ?? ""} · 빨간 칸의 유닛을 끌어서 옮기면 피해요`,
+          color: bd.color,
+        });
+        break;
+      }
       case "bossDown":
         sfx("boss-down");
         setShout({

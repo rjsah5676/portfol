@@ -175,6 +175,14 @@ export function botMove(b: Board, cfg: BotCfg, skip: ReadonlySet<string> = new S
       return { t: "reroll", i: low };
     return { t: "cheat", i: best };
   }
+  // 보스 2페이즈 예고: 표시된 칸의 유닛을 빈 칸 · 약한 칸으로 피함 (사람이 끌어서 하는 것과 같은 swap)
+  if (b.tele && b.tele.t > 3) {
+    const c = dodge(b);
+    if (c) {
+      const d = ok(c);
+      if (d) return d;
+    }
+  }
   if (!b.patch && PATCHES.some((p) => p.id === cfg.patch)) {
     const c = ok({ t: "patch", id: cfg.patch });
     if (c) return c;
@@ -303,6 +311,34 @@ export function botMove(b: Board, cfg: BotCfg, skip: ReadonlySet<string> = new S
   if (b.phase === "wave" && b.enemies.length === 0 && (b.wave + 1) % BOSS_EVERY !== 0 && !nextBlock(b)) {
     const c = ok({ t: "next" });
     if (c) return c;
+  }
+  return null;
+}
+
+/** 칸 세기 (sim.ts cellPower 와 같은 어림) */
+const powerOf = (b: Board, i: number) => {
+  const c = b.cells[i];
+  if (!c.def) return 0;
+  const d = UNIT[c.def];
+  return d.dmg * d.aps * c.units.length * (d.grade + 1);
+};
+/** 예고된 칸에서 가장 센 유닛을 표시 밖 빈 칸(없으면 더 약한 칸)으로 옮기는 명령 하나 */
+function dodge(b: Board): Cmd | null {
+  const hit = new Set(b.tele!.cells);
+  const from = [...hit].filter((i) => b.cells[i].def).sort((x, y) => powerOf(b, y) - powerOf(b, x) || x - y);
+  for (const i of from) {
+    const pi = powerOf(b, i);
+    let j = -1,
+      jv = Infinity;
+    for (let k = 0; k < CELLS; k++) {
+      if (hit.has(k) || !usable(b, k)) continue;
+      const v = powerOf(b, k);
+      if (v < jv && v < pi) {
+        jv = v;
+        j = k;
+      }
+    }
+    if (j >= 0) return { t: "swap", a: i, b: j };
   }
   return null;
 }

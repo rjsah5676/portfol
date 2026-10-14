@@ -6,7 +6,7 @@ import { CELLS, SLOTS, apply, hashGame, isCmd, newGame, pureT, step, unitCount, 
 import { RECIPES, UNIT, UNITS } from "../../web/src/lib/defense/units";
 import { CHEATS, CHEAT_MULTI_SEC, cheatFxOf, cheatOdds } from "../../web/src/lib/defense/cheats";
 import { TPS } from "../../web/src/lib/defense/balance";
-import { relicShardsToMax, CHEAT_RES, BOX, BENCH_COST, FRES_COST, TRANS_IDS, GP_PACKS, GP_SELL, GP_STORE, PACK, PASS_PREMIUM_GP, RESEARCH, lvCost, modsOf, packPct, planUpAll, seasonScore, transRoll } from "../../web/src/lib/defense/progress";
+import { GLITCH, relicShardsToMax, CHEAT_RES, BOX, BENCH_COST, FRES_COST, TRANS_IDS, GP_PACKS, GP_SELL, GP_STORE, PACK, PASS_PREMIUM_GP, RESEARCH, lvCost, modsOf, packPct, planUpAll, seasonScore, transRoll } from "../../web/src/lib/defense/progress";
 import { startTestServer, type TestClient, type TestServer } from "./helpers";
 
 /** 봇 한 판 (기록 포함) */
@@ -157,6 +157,49 @@ describe("픽셀 글리치 디펜스 엔진", () => {
     expect(isCmd({ t: "next", x: 1 })).toBe(false);
     b.phase = "boss";
     expect(apply(g, 0, { t: "next" })).toBe("보스를 잡아야 넘어가요");
+  });
+
+  it("보스 2페이즈 (오염 15+): 제나 체력 절반 밑이면 가장 센 줄 예고 → 남아 있던 유닛만 기절, 옮긴 유닛은 안 맞음", () => {
+    const g = newGame(11, 1);
+    const b = g.boards[0];
+    expect(apply(g, 0, { t: "cheat", i: 0 })).toBeNull();
+    b.mods = { ...b.mods, glitch: GLITCH[15] };
+    const id = UNITS.find((u) => u.faction === "knight" && u.grade === 2)!.id;
+    const put = (i: number) => ((b.cells[i] = { def: id, units: [{ cd: 0, ult: 0, stun: 0 }] }), (b.dirty = true));
+    put(0);
+    put(1);
+    put(CELLS - 1); // 맨 아랫줄 1칸 → 윗줄(2칸)이 가장 셈
+    b.phase = "wave";
+    b.wave = 29;
+    b.spawned = countOf(29);
+    expect(apply(g, 0, { t: "next" })).toBeNull();
+    expect(b.phase).toBe("boss");
+    const boss = b.enemies.find((e) => e.boss >= 0)!;
+    boss.hp = boss.max * 0.4;
+    for (let i = 0; i < TPS * 10 && !b.tele; i++) step(g);
+    expect(b.tele?.kind).toBe("bolt");
+    expect(b.tele!.cells).toContain(0);
+    expect(b.tele!.cells).not.toContain(CELLS - 1);
+    // 예고 중에 1번 칸 유닛을 표시 밖으로 옮김
+    const out = CELLS - 2;
+    expect(apply(g, 0, { t: "swap", a: 1, b: out })).toBeNull();
+    while (b.tele) step(g);
+    expect(b.cells[0].units[0].stun).toBeGreaterThan(0);
+    expect(b.cells[out].units[0].stun).toBe(0);
+    // 오염 14 이하는 2페이즈 없음
+    const g2 = newGame(11, 1);
+    const b2 = g2.boards[0];
+    apply(g2, 0, { t: "cheat", i: 0 });
+    b2.mods = { ...b2.mods, glitch: GLITCH[14] };
+    b2.cells[0] = { def: id, units: [{ cd: 0, ult: 0, stun: 0 }] };
+    b2.dirty = true;
+    b2.phase = "wave";
+    b2.wave = 29;
+    b2.spawned = countOf(29);
+    apply(g2, 0, { t: "next" });
+    b2.enemies.find((e) => e.boss >= 0)!.hp *= 0.4;
+    for (let i = 0; i < TPS * 10; i++) step(g2);
+    expect(b2.tele).toBeNull();
   });
 
   it("치트 코드 멀티: 시간이 지나면 첫 카드를 자동으로", () => {

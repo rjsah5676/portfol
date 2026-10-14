@@ -186,6 +186,11 @@ export const SFX: Record<string, { src: string; vol?: number }> = {
   "gamble-fail": { src: "/defense/sfx/gamble-fail.mp3" },
   boss: { src: "/defense/sfx/boss.mp3" },
   "boss-down": { src: "/defense/sfx/boss-down.mp3" },
+  /** 보스 2페이즈 (오염 15+) — 파일이 없으면 무음 (요청서: 프로젝트 claude/defense-boss-phase-asset-request.md) */
+  "boss-phase": { src: "/defense/sfx/boss-phase.mp3" },
+  "tele-warn": { src: "/defense/sfx/tele-warn.mp3", vol: 0.8 },
+  "tele-bolt": { src: "/defense/sfx/tele-bolt.mp3" },
+  "tele-grab": { src: "/defense/sfx/tele-grab.mp3" },
   wave: { src: "/defense/sfx/wave.mp3", vol: 0.7 },
   "hit-phys": { src: "/defense/sfx/hit-phys.mp3", vol: 0.55 },
   "hit-mech": { src: "/defense/sfx/hit-mech.mp3", vol: 0.55 },

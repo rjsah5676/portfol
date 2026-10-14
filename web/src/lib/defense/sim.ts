@@ -24,7 +24,7 @@
  *   고른 효과는 b.cx 로 합쳐 둠 (피해 · 공속 · 골드 · 적 속도 …), 뽑기는 b.crng (소환 운과 따로).
  */
 import { B, BOSS_EVERY, CAP, LAST_WAVE, TPS, TUNE, countOf, hpOf, sec } from "./balance";
-import { BOSSES, KIND, bossOfWave, kindOfWave, type BossDef, type Size } from "./enemies";
+import { BOSSES, BOSS_PHASE_GLITCH, KIND, bossOfWave, kindOfWave, type BossDef, type Size } from "./enemies";
 import { CHEAT, CHEATS, CHEAT_MULTI_SEC, CHEAT_OFFER, CHEAT_WAVES, cheatFx0, cheatFxOf, cheatOdds, type CheatFx } from "./cheats";
 import { MISSIONS, PATCHES } from "./meta";
 import { mixSeed, pick, rnd, rndInt, type Rng } from "./rng";
@@ -114,6 +114,9 @@ export interface Enemy {
   dashMult: number;
   /** 보스 기술별 쿨 (tick) */
   sk: number[];
+  /** 보스 2페이즈 (0 · 1) · 2페이즈 기술별 쿨 */
+  ph: number;
+  sk2: number[];
   /** 균열: 사라질 때까지 (tick) */
   expire: number;
   /** 마지막으로 때린 유닛 (처치 효과) */
@@ -162,6 +165,9 @@ export type Ev =
   | { t: "unit"; def: string; how: "summon" | "merge" | "gamble" | "recipe" | "pick" | "twin" }
   | { t: "gambleFail"; g: "E" | "L"; refund: boolean }
   | { t: "boss"; boss: number }
+  /** 보스 2페이즈 시작 · 예고 시작(warn) / 맞음(hit: 기절한 칸 수) */
+  | { t: "phase"; boss: number }
+  | { t: "tele"; kind: "bolt" | "grab"; hit: number | null }
   | { t: "bossDown"; boss: number; gold: number; stones: number; ticket: number | null }
   | { t: "wave"; wave: number }
   | { t: "mission"; id: string }
@@ -191,6 +197,8 @@ export interface Board {
   wt: number;
   spawned: number;
   bossT: number;
+  /** 보스 2페이즈 예고: 이 칸들에 t tick 뒤 기절 sec (화면은 빨갛게 표시) */
+  tele: { kind: "bolt" | "grab"; cells: number[]; t: number; sec: number } | null;
   cells: Cell[];
   enemies: Enemy[];
   nextId: number;
@@ -255,6 +263,7 @@ export function newBoard(seed: number, idx: number, lo?: Loadout | null): Board 
     wt: -sec(B.prepSec),
     spawned: 0,
     bossT: 0,
+    tele: null,
     cells: Array.from({ length: SLOTS }, () => ({ def: null, units: [] })),
     enemies: [],
     nextId: 1,
@@ -683,6 +692,8 @@ function spawn(b: Board, kindId: string, hp: number): Enemy {
     dash: 0,
     dashMult: 1,
     sk: [],
+    ph: 0,
+    sk2: [],
     expire: 0,
     last: "",
   };
@@ -1183,6 +1194,72 @@ function bossTick(b: Board, e: Enemy) {
         break;
     }
   });
+  // 2페이즈 (오염 BOSS_PHASE_GLITCH 부터): 체력이 at 밑이면 예고 기술 — 예고 시간 동안 유닛을 옮기면 피함
+  const P = def.phase;
+  if (P && b.mods.glitch.lv >= BOSS_PHASE_GLITCH) {
+    if (!e.ph && e.hp <= e.max * P.at) {
+      e.ph = 1;
+      e.sk2 = P.skills.map(() => sec(1.5));
+      b.ev?.push({ t: "phase", boss: e.boss });
+    }
+    if (e.ph)
+      P.skills.forEach((s, k) => {
+        if (--e.sk2[k] > 0 || b.tele) return;
+        e.sk2[k] = sec(s.every);
+        if (s.kind !== "bolt" && s.kind !== "grab") return;
+        const cells = s.kind === "bolt" ? strongRow(b) : strongCell(b);
+        if (cells.length) {
+          b.tele = { kind: s.kind, cells, t: sec(s.warn), sec: sec(s.sec) };
+          b.ev?.push({ t: "tele", kind: s.kind, hit: null });
+        }
+      });
+  }
+  if (b.tele && --b.tele.t <= 0) {
+    let hit = 0;
+    for (const ci of b.tele.cells) {
+      if (!b.cells[ci].def) continue;
+      hit++;
+      for (const u of b.cells[ci].units) u.stun = Math.max(u.stun, b.tele.sec);
+      b.fx?.push({ k: "whip", c: ci });
+    }
+    b.ev?.push({ t: "tele", kind: b.tele.kind, hit });
+    b.tele = null;
+  }
+}
+
+/** 칸 하나의 세기 어림 (2페이즈 기술이 노릴 곳) — 결정론: 같으면 앞 칸 */
+function cellPower(b: Board, i: number): number {
+  const c = b.cells[i];
+  if (!c.def) return 0;
+  const d = UNIT[c.def];
+  return d.dmg * d.aps * c.units.length * (d.grade + 1);
+}
+/** 유닛이 가장 센 가로줄의 칸들 */
+export function strongRow(b: Board): number[] {
+  let best = -1,
+    bv = 0;
+  for (let r = 0; r < ROWS; r++) {
+    let v = 0;
+    for (let c = 0; c < COLS; c++) v += cellPower(b, r * COLS + c);
+    if (v > bv) {
+      bv = v;
+      best = r;
+    }
+  }
+  return best < 0 ? [] : Array.from({ length: COLS }, (_, c) => best * COLS + c);
+}
+/** 가장 센 칸 하나 */
+export function strongCell(b: Board): number[] {
+  let best = -1,
+    bv = 0;
+  for (let i = 0; i < CELLS; i++) {
+    const v = cellPower(b, i);
+    if (v > bv) {
+      bv = v;
+      best = i;
+    }
+  }
+  return best < 0 ? [] : [best];
 }
 
 /** 처치 처리. 판이 끝나면 true */
@@ -1200,6 +1277,7 @@ function die(g: Game, b: Board, e: Enemy): boolean {
     b.rifts++;
     b.ev?.push({ t: "rift", tier: e.rift, ok: true });
   } else if (e.boss >= 0) {
+    b.tele = null;
     gold = B.bossGold.base + B.bossGold.per * b.wave;
     const stones = B.bossStones + Math.floor(b.wave / 20) + (b.patch === "gambler" ? 1 : 0) + b.cx.bossStones;
     b.stones += stones;
