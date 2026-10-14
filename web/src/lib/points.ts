@@ -657,7 +657,7 @@ const dm = (game: AchGame, id: string, title: string, metric: AchMetric, goal: n
   goal,
   reward,
 });
-/** 일일 미션 보상: 처음 정한 숫자의 3배를 그대로 적어 둠 (배수 상수 없음 — 업적 배수 ACH_X 와도 따로) */
+/** 일일 미션 보상: 처음 정한 숫자의 3배를 그대로 적어 둠 (DOODLE PARTY 는 그 2/3) — 배수 상수 없음, 업적 배수 ACH_X 와도 따로 */
 export const DAILY_MISSIONS: DailyMission[] = [
   dm("poker", "hands", "포커 10판 치기", "poker.hands", 10, 90),
   dm("poker", "hands30", "포커 30판 치기", "poker.hands", 30, 150),
@@ -670,13 +670,13 @@ export const DAILY_MISSIONS: DailyMission[] = [
   dm("defense", "kills", "적 1,000마리 처치 (랭킹 판)", "defense.kills", 1000, 120),
   dm("rhythm", "plays", "3판 하기", "rhythm.plays", 3, 90),
   dm("rhythm", "plays10", "10판 하기", "rhythm.plays", 10, 180),
-  dm("sketch", "game", "한 판 끝까지 하기", "sketch.games", 1, 90),
-  dm("sketch", "games", "세 판 끝까지 하기", "sketch.games", 3, 180),
-  dm("sketch", "correct", "정답 5번 맞히기", "sketch.correct", 5, 90),
-  dm("sketch", "first", "제일 먼저 맞히기 2번", "sketch.first", 2, 120),
-  dm("sketch", "drew", "내 그림이 맞혀지기 2번", "sketch.drew", 2, 120),
-  dm("sketch", "win", "1등 하기 (3명 이상 판)", "sketch.wins", 1, 150),
-  dm("sketch", "likes", "내 그림에 따봉 2개 받기", "sketch.likes", 2, 120),
+  dm("sketch", "game", "한 판 끝까지 하기", "sketch.games", 1, 60),
+  dm("sketch", "games", "세 판 끝까지 하기", "sketch.games", 3, 120),
+  dm("sketch", "correct", "정답 5번 맞히기", "sketch.correct", 5, 60),
+  dm("sketch", "first", "제일 먼저 맞히기 2번", "sketch.first", 2, 80),
+  dm("sketch", "drew", "내 그림이 맞혀지기 2번", "sketch.drew", 2, 80),
+  dm("sketch", "win", "1등 하기 (3명 이상 판)", "sketch.wins", 1, 100),
+  dm("sketch", "likes", "내 그림에 따봉 2개 받기", "sketch.likes", 2, 80),
 ];
 /** 일일 미션이 보는 숫자 (기준값을 적어 둘 것) */
 export const DAILY_METRICS = [...new Set(DAILY_MISSIONS.map((x) => x.metric))];
