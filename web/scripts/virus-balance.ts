@@ -275,7 +275,7 @@ function noteBest() {
     diagSeen.add(s.best);
     const q = stats(s);
     console.log(
-      `  [${fmtT(t)}] best ${s.best - 1} · 변이 ${s.formats} · 루트 ${fmt(s.root)} (×${fmt(q.rootMul)}) · lv ${JSON.stringify(s.lv)} · 모듈 ${s.mods.join(",")} · 우회 ${s.byp.join(",")} · dmg ${fmt(q.dmg)} · fx ×${q.fxMul.toFixed(1)} · 상점 ${s.shop.rootkit}/${s.shop.miner}`
+      `  [${fmtT(t)}] best ${s.best - 1} · 변이 ${s.formats} · 루트 ${fmt(s.root)} (×${fmt(q.rootMul)}) · lv ${JSON.stringify(s.lv)} · 모듈 ${s.mods.join(",")} · 우회 ${s.byp.join(",")} · dmg ${fmt(q.dmg)} · dps ${fmtBytes(dps(q))} · fx ×${q.fxMul.toFixed(1)} · 상점 ${s.shop.rootkit}/${s.shop.miner}`
     );
   }
   for (let n = 100; n <= MAX_STAGE; n += 100)

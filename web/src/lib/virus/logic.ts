@@ -39,15 +39,21 @@ export const BAL = {
   coreIdleHours: 48,
   coreOver: 1.1,
   /** 스테이지마다 체력 배율 (lateFrom 까지) */
-  hpGrowth: 1.18,
+  hpGrowth: 1.4,
   lateFrom: 100,
   /**
    * lateFrom 뒤로는 hpGrowthLate 에서 마지막 스테이지의 hpGrowthEnd 까지 스테이지마다 조금씩 낮아짐 —
    * 고정 배율이던 땐 코드 모듈이 상한에 닿고 업그레이드 · 우회 기술이 점점 덜 오르는 후반에 100스테이지마다 걸리는
    * 시간이 두 배씩 늘었음. 낮아지게 해서 100스테이지마다 비슷한 시간이 걸리게
    */
-  hpGrowthLate: 1.185,
-  hpGrowthEnd: 1.15,
+  hpGrowthLate: 1.235,
+  hpGrowthEnd: 1.178,
+  /**
+   * 숫자 규모: 진행에 따라 지수로 커지는 배율(체력 증가 · 피해 · 데이터 · 비용 증가 · 우회 기술 · 루트 권한 보너스 …)을
+   * 모두 이 거듭제곱으로 — 레벨 · 버전 수는 그대로 두고 피해 · 체력 · 데이터의 크기만 줄임 (1000에서 초당 피해 ≈ YB).
+   * 발사 속도 · 보스/파일 체력 비율 · 제한 시간 · 상한이 있는 효과처럼 시간을 정하는 값은 그대로
+   */
+  mag: 0.295,
   /** 보스 체력 = 같은 스테이지 파일의 몇 배 */
   bossHp: 10,
   /** 보상 = 체력 ÷ 이 값 */
@@ -236,6 +242,8 @@ export interface Save {
   repeat: boolean;
   /** 커널 권한 「자동 변이」 켜짐 */
   autoFmt: boolean;
+  /** 숫자 규모 버전 (SAVE_SCALE — v1.1 까지의 저장본은 없음: 불러올 때 데이터 · 조각 · 키를 새 규모로 줄임) */
+  scale: number;
   savedAt: number;
 }
 
@@ -337,6 +345,7 @@ export function newSave(): Save {
     runTop: 1,
     repeat: false,
     autoFmt: false,
+    scale: SAVE_SCALE,
     savedAt: Date.now(),
   };
 }
@@ -414,7 +423,7 @@ export function parseSave(raw: string | null): Save {
     void _chalDone;
     void _keys;
     void _pick;
-    return {
+    const out: Save = {
       ...newSave(),
       ...rest,
       lv,
@@ -439,6 +448,17 @@ export function parseSave(raw: string | null): Save {
           ? s.bossIdx!
           : pickBoss(stage, best),
     };
+    // v1.1 까지의 저장본: 숫자 규모가 커서 (BAL.mag 로 줄이기 전) 데이터 · 조각 · 키를 같은 거듭제곱으로 줄임
+    if (Number((s as { scale?: unknown }).scale) !== SAVE_SCALE) {
+      const sq = (v: number) => (v > 1 ? v ** BAL.mag : v);
+      out.data = sq(out.data);
+      out.lifetime = sq(out.lifetime);
+      out.frag = out.frag.map(sq);
+      out.ukey = sq(out.ukey);
+      out.rec = { ...out.rec, maxHit: sq(out.rec.maxHit) };
+      out.scale = SAVE_SCALE;
+    }
+    return out;
   } catch {
     return newSave();
   }
@@ -729,7 +749,7 @@ export const APEX: ApexDef[] = [
     effect: "일반 파일 보안 등급 감소",
     cur: (n) => {
       const v = bypEq(n);
-      return `일반 파일 보안 등급 ${x(0.85 * BAL.modMobHp ** v)}`;
+      return `일반 파일 보안 등급 ${x(mag(0.85 * BAL.modMobHp ** v))}`;
     },
     look: "회로 링",
   },
@@ -743,7 +763,7 @@ export const APEX: ApexDef[] = [
     effect: "페이로드 피해 증가",
     cur: (n) => {
       const v = bypEq(n);
-      return `피해 ${x(1.5 * BAL.modDmg ** v)}`;
+      return `피해 ${x(mag(1.5 * BAL.modDmg ** v))}`;
     },
     look: "안테나 한 쌍",
   },
@@ -757,7 +777,7 @@ export const APEX: ApexDef[] = [
     effect: "보스 보안 등급 감소 · 보스 제한 시간 +5초",
     cur: (n) => {
       const v = bypEq(n);
-      return `보스 보안 등급 ${x(BAL.modBossHp ** v)} · 시간 +5초`;
+      return `보스 보안 등급 ${x(mag(BAL.modBossHp ** v))} · 시간 +5초`;
     },
     look: "반투명 외피",
   },
@@ -771,7 +791,7 @@ export const APEX: ApexDef[] = [
     effect: "데이터 탈취 증가",
     cur: (n) => {
       const v = bypEq(n);
-      return `데이터 ${x(1.5 * BAL.modData ** v)}`;
+      return `데이터 ${x(mag(1.5 * BAL.modData ** v))}`;
     },
     look: "촉수 3개",
   },
@@ -785,7 +805,7 @@ export const APEX: ApexDef[] = [
     effect: "익스플로잇 피해 증가",
     cur: (n) => {
       const v = bypEq(n);
-      return `익스플로잇 피해 ${x(sandboxMul(v))}`;
+      return `익스플로잇 피해 ${x(mag(sandboxMul(v)))}`;
     },
     look: "결정 가시",
   },
@@ -855,7 +875,7 @@ export const APEX: ApexDef[] = [
     effect: "업그레이드 비용 감소",
     cur: (n) => {
       const v = bypEq(n);
-      return `업그레이드 비용 ${x(0.85 * BAL.modCost ** v)}`;
+      return `업그레이드 비용 ${x(mag(0.85 * BAL.modCost ** v))}`;
     },
     look: "오라 · 세 번째 눈",
   },
@@ -963,11 +983,11 @@ export function dropAmount(stage: number, fresh: boolean) {
 
 /** 코드 모듈 i 의 v → v+1 에 드는 조각 (v0 → v1 은 합류 스테이지 보스를 처음 잡으면 딱 됨) */
 export function fragCost(i: number, v: number) {
-  return BAL.fragK * dropUnit(ROSTER[i].join) * BAL.fragGrowth ** v;
+  return BAL.fragK * dropUnit(ROSTER[i].join) * mag(BAL.fragGrowth) ** v;
 }
 /** 우회 기술 i 의 v → v+1 에 드는 우회 키 (v1 은 상위 보스를 처음 잡으면 바로) */
 export function keyCost(i: number, v: number) {
-  return BAL.keyK * dropUnit((i + 1) * 10) * BAL.keyGrowth ** (Math.max(1, v) - 1);
+  return BAL.keyK * dropUnit((i + 1) * 10) * mag(BAL.keyGrowth) ** (Math.max(1, v) - 1);
 }
 
 /** 보스를 잡으면 조각 (보스 체력에 비례) — 어느 모듈의 조각인지 · 얼마나 (원시 바이러스는 index -1 · 0) */
@@ -1215,7 +1235,7 @@ export function stats(s: Save): Stats {
   const b = s.byp.map(bypEq);
   const has = (i: number) => b[i] > 0;
   const fx = fxOf(m, s.shop.kover ? BAL.coreOver : 1);
-  const rootMul = 1 + BAL.rootBonus * s.root;
+  const rootMul = mag(1 + BAL.rootBonus * s.root);
   const achMul = 1 + BAL.achDmg * s.ach.length;
   const atk =
     BAL.atkStep ** s.lv.atk * BAL.atkMilestoneMul ** Math.floor(s.lv.atk / BAL.atkMilestone);
@@ -1236,22 +1256,25 @@ export function stats(s: Save): Stats {
     (fx.ddosEvery ? 1 + fx.ddosMul / fx.ddosEvery : 1);
   return {
     dmg:
-      atk *
-      (has(1) ? 1.5 * BAL.modDmg ** b[1] : 1) *
+      mag(
+        atk *
+          (has(1) ? 1.5 * BAL.modDmg ** b[1] : 1) *
+          BAL.shopRootkit ** s.shop.rootkit *
+          BAL.corePatch ** s.shop.kpatch
+      ) *
       rootMul *
-      BAL.shopRootkit ** s.shop.rootkit *
-      BAL.corePatch ** s.shop.kpatch *
       achMul,
     aps,
     critChance,
-    critMul:
+    critMul: mag(
       (2 + BAL.critMulStep * s.lv.crit) *
-      (has(4) ? sandboxMul(b[4]) : 1) *
-      (1 + BAL.critOver * critLost),
-    dataMul: (has(3) ? 1.5 * BAL.modData ** b[3] : 1) * BAL.shopMiner ** s.shop.miner,
-    costMul: has(9) ? 0.85 * BAL.modCost ** b[9] : 1,
-    mobHpMul: has(0) ? 0.85 * BAL.modMobHp ** b[0] : 1,
-    bossHpMul: has(2) ? BAL.modBossHp ** b[2] : 1,
+        (has(4) ? sandboxMul(b[4]) : 1) *
+        (1 + BAL.critOver * critLost)
+    ),
+    dataMul: mag((has(3) ? 1.5 * BAL.modData ** b[3] : 1) * BAL.shopMiner ** s.shop.miner),
+    costMul: mag(has(9) ? 0.85 * BAL.modCost ** b[9] : 1),
+    mobHpMul: mag(has(0) ? 0.85 * BAL.modMobHp ** b[0] : 1),
+    bossHpMul: mag(has(2) ? BAL.modBossHp ** b[2] : 1),
     bossTime: BOSS_TIME + (has(2) ? 5 : 0),
     rootGain: has(7) ? 1.25 : 1,
     bossDmgMul: has(5) ? socMul(b[5]) : 1,
@@ -1291,17 +1314,25 @@ export function dps(st: Stats) {
 
 // ── 적 (보안 등급 = 체력) · 보상 ──
 
+/** 저장본 숫자 규모 버전 — 2: v1.2 (BAL.mag 로 줄인 규모) */
+export const SAVE_SCALE = 2;
+
+/** 진행 배율을 숫자 규모(BAL.mag)로 줄임 */
+export function mag(x: number) {
+  return x ** BAL.mag;
+}
+
 /** 스테이지 s → s+1 의 체력 배율 (lateFrom 까지 hpGrowth, 그 뒤로는 hpGrowthLate → 마지막 스테이지 hpGrowthEnd 로 고르게) */
 function hpStep(s: number) {
-  if (s < BAL.lateFrom) return BAL.hpGrowth;
+  if (s < BAL.lateFrom) return mag(BAL.hpGrowth);
   const f = Math.min(1, (s - BAL.lateFrom) / (MAX_STAGE - BAL.lateFrom));
-  return BAL.hpGrowthLate + (BAL.hpGrowthEnd - BAL.hpGrowthLate) * f;
+  return mag(BAL.hpGrowthLate + (BAL.hpGrowthEnd - BAL.hpGrowthLate) * f);
 }
 /** 스테이지별 ln(체력 배율) 누적 (BAL 이 바뀌면 다시 셈 — 시뮬레이터가 바꿔 봄) */
 let hpLog: number[] = [];
 let hpKey = "";
 function baseHp(stage: number) {
-  const key = `${BAL.hpGrowth}/${BAL.lateFrom}/${BAL.hpGrowthLate}/${BAL.hpGrowthEnd}`;
+  const key = `${BAL.hpGrowth}/${BAL.lateFrom}/${BAL.hpGrowthLate}/${BAL.hpGrowthEnd}/${BAL.mag}`;
   if (key !== hpKey) {
     hpKey = key;
     hpLog = [0, 0];
@@ -1403,7 +1434,7 @@ export const UPGRADES: UpgDef[] = [
     },
     label: (st, lv) => {
       const next = BAL.atkMilestone - (lv % BAL.atkMilestone);
-      return `피해 ${fmtBytes(st.dmg)} · ${next}레벨 뒤 ×${BAL.atkMilestoneMul}`;
+      return `피해 ${fmtBytes(st.dmg)} · ${next}레벨 뒤 ×${mag(BAL.atkMilestoneMul).toFixed(2)}`;
     },
   },
   {
@@ -1427,7 +1458,7 @@ export const UPGRADES: UpgDef[] = [
 ];
 
 export function upgCost(u: UpgDef, lv: number, st: Stats) {
-  return Math.ceil(u.base * u.growth ** lv * st.costMul);
+  return Math.ceil(u.base * mag(u.growth) ** lv * st.costMul);
 }
 
 // ── 랜덤 강화 (업그레이드별로 1~3레벨 무작위) ──
@@ -1587,7 +1618,7 @@ export const SHOP: ShopDef[] = [
     base: 25,
     growth: 1.4,
     desc: "시스템 깊숙이 숨어 모든 공격을 강화",
-    label: (lv) => `피해 ×${fmt(BAL.shopRootkit ** lv)}`,
+    label: (lv) => `피해 ×${fmt(mag(BAL.shopRootkit ** lv))}`,
   },
   {
     key: "miner",
@@ -1597,7 +1628,7 @@ export const SHOP: ShopDef[] = [
     base: 25,
     growth: 1.4,
     desc: "감염시킨 파일에서 데이터를 더 많이 긁어 옴",
-    label: (lv) => `데이터 ×${fmt(BAL.shopMiner ** lv)}`,
+    label: (lv) => `데이터 ×${fmt(mag(BAL.shopMiner ** lv))}`,
   },
   {
     key: "poly",
@@ -1751,7 +1782,7 @@ export const SHOP: ShopDef[] = [
     growth: 1,
     req: "kover",
     desc: "운영체제 커널을 직접 고쳐 모든 공격을 강화 (반복 — 가격 = 레벨 + 1)",
-    label: (lv) => `피해 ×${fmt(BAL.corePatch ** lv)}`,
+    label: (lv) => `피해 ×${fmt(mag(BAL.corePatch ** lv))}`,
   },
 ];
 
@@ -1893,7 +1924,7 @@ function dataToDps(s: Save, f: number) {
   let best = 1;
   for (const u of UPGRADES) {
     const after = dps(stats({ ...s, lv: { ...s.lv, [u.key]: s.lv[u.key] + 1 } }));
-    best = Math.max(best, (after / now) ** (Math.log(f) / Math.log(u.growth)));
+    best = Math.max(best, (after / now) ** (Math.log(f) / Math.log(mag(u.growth))));
   }
   return best;
 }
@@ -1928,8 +1959,8 @@ export function rootAdvice(s: Save): { list: RootAdvice[]; best: ShopKey | null 
     const d = SHOP.find((x) => x.key === key)!;
     if (d.max != null && s.shop[key] >= d.max) continue;
     let mul: number;
-    if (key === "rootkit") mul = BAL.shopRootkit;
-    else if (key === "miner") mul = dataToDps(s, BAL.shopMiner);
+    if (key === "rootkit") mul = mag(BAL.shopRootkit);
+    else if (key === "miner") mul = dataToDps(s, mag(BAL.shopMiner));
     else {
       const next = { ...s, shop: { ...s.shop, poly: s.shop.poly + 1 } };
       mul = dataToDps(s, randEfficiency(next) / randEfficiency(s));
