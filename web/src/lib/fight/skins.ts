@@ -65,7 +65,7 @@ export function look(ch: number, skin?: string | null): string {
   return s && s.ch === id ? s.id : id;
 }
 /** 스킨 그림을 바꿨을 때 올려서 브라우저에 남은 예전 그림 대신 새로 받게 함 */
-const ART_VER: Record<string, number> = { "soyoung-bunny": 7 };
+const ART_VER: Record<string, number> = { "soyoung-bunny": 7, "igna-fw": 2 };
 const ver = (id: string) => (ART_VER[id] ? `?v=${ART_VER[id]}` : "");
 export const artUrl = (ch: number, skin?: string | null) => `/fight/art/${look(ch, skin)}.webp${ver(look(ch, skin))}`;
 export const faceUrl = (ch: number, skin?: string | null) => `/fight/art/${look(ch, skin)}-face.webp${ver(look(ch, skin))}`;
@@ -76,5 +76,12 @@ const AURA: Record<string, string> = {
   "kai-tkd": "/fight/shop/kai-tkd-aura.webp",
   "lily-frog": "/fight/shop/lily-frog-aura.webp",
 };
+/** 오라 그림 가장자리를 부드럽게 흐려 네모 테두리가 안 보이게 */
+export const AURA_MASK = {
+  maskImage: "linear-gradient(to right,transparent,#000 14%,#000 86%,transparent),linear-gradient(transparent,#000 8%,#000 92%,transparent)",
+  maskComposite: "intersect",
+  WebkitMaskImage: "linear-gradient(to right,transparent,#000 14%,#000 86%,transparent),linear-gradient(transparent,#000 8%,#000 92%,transparent)",
+  WebkitMaskComposite: "source-in",
+} as const;
 export const auraUrl = (id?: string | null) => (id && AURA[id] ? `${AURA[id]}${ver(id)}` : null);
 export const cutinUrl = (ch: number, skin?: string | null) => `/fight/cutin/${look(ch, skin)}.webp${ver(look(ch, skin))}`;

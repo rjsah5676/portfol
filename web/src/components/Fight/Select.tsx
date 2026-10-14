@@ -17,15 +17,7 @@ import { SettingsModal } from "./Settings";
 import TechGuide from "./TechGuide";
 import PixelPreview from "./PixelPreview";
 import { TUT_CHAR, TUT_FOE, TUT_MAP } from "@/lib/fight/tutorial";
-import { artUrl, auraUrl, look } from "@/lib/fight/skins";
-
-/** 오라 그림 가장자리를 부드럽게 흐려 네모 테두리가 안 보이게 */
-const AURA_MASK = {
-  maskImage: "linear-gradient(to right,transparent,#000 14%,#000 86%,transparent),linear-gradient(transparent,#000 8%,#000 92%,transparent)",
-  maskComposite: "intersect",
-  WebkitMaskImage: "linear-gradient(to right,transparent,#000 14%,#000 86%,transparent),linear-gradient(transparent,#000 8%,#000 92%,transparent)",
-  WebkitMaskComposite: "source-in",
-} as const;
+import { AURA_MASK, artUrl, auraUrl, look } from "@/lib/fight/skins";
 import { useMySkins, wornSkin } from "@/lib/fight/mySkins";
 import { useNick } from "@/lib/AuthContext";
 import SkinShop, { type ShopTab } from "./SkinShop";

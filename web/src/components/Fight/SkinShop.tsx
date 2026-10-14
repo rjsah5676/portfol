@@ -7,7 +7,7 @@
  */
 import { useEffect, useState } from "react";
 import { CHARS } from "@/lib/fight/chars";
-import { FIGHT_SKINS, artUrl, auraUrl, faceUrl, skinItem, type FightSkin } from "@/lib/fight/skins";
+import { AURA_MASK, FIGHT_SKINS, artUrl, auraUrl, faceUrl, skinItem, type FightSkin } from "@/lib/fight/skins";
 import { reloadMySkins, useMySkins, wearMySkin } from "@/lib/fight/mySkins";
 import { shopItem } from "@/lib/points";
 import { buyItem } from "@/lib/api/points";
@@ -190,9 +190,12 @@ export default function SkinShop({ initial = "shop", onClose }: { initial?: Shop
                   key={`aura-${skin.id}`}
                   src={auraUrl(skin.id)!}
                   alt=""
+                  style={AURA_MASK}
                   className="pointer-events-none absolute bottom-0 left-[38%] h-full -translate-x-1/2 object-contain object-bottom mix-blend-screen [animation:shop-aura_3.2s_ease-in-out_infinite_alternate]"
                 />
               )}
+              {/* 가장자리 어둡게 흐림 — 오라 · 불꽃이 칸 모서리에서 각지게 잘려 보이지 않게 */}
+              <div className="pointer-events-none absolute inset-0 shadow-[inset_0_0_3cqw_1.2cqw_#0a0414]" />
               <style>{`@keyframes shop-aura{from{opacity:.7;filter:brightness(.9)}to{opacity:1;filter:brightness(1.15)}}`}</style>
               <img
                 key={skin.id}
