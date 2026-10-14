@@ -178,7 +178,8 @@ function useNow(active: boolean): number {
   const [now, setNow] = useState(() => serverNow());
   useEffect(() => {
     if (!active) return;
-    const id = setInterval(() => setNow(serverNow()), 100);
+    // 0.25초마다 (테두리는 CSS 가 그 사이를 부드럽게 이어 줌 — 예전 0.1초는 폰 발열만 늘었음)
+    const id = setInterval(() => setNow(serverNow()), 250);
     return () => clearInterval(id);
   }, [active]);
   return now;
@@ -202,7 +203,7 @@ function useSecNow(deadline: number): number {
   return now;
 }
 
-/** 줄어드는 남은 시간 테두리 — 이것만 0.1초마다 다시 그림 */
+/** 줄어드는 남은 시간 테두리 — 이것만 0.25초마다 다시 그림 */
 function LiveTimer({ deadline, totalMs, ring }: { deadline: number; totalMs: number; ring?: { size: number; square: boolean } }) {
   const now = useNow(true);
   const frac = Math.max(0, Math.min(1, (deadline - now) / totalMs));

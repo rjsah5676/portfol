@@ -717,7 +717,7 @@ export function TimerRing({
     const len = side * 4;
     return (
       <svg
-        className="pointer-events-none absolute"
+        className="pk-timer-ring pointer-events-none absolute"
         style={{ left: -pad + 2, top: -pad + 2 }}
         width={box}
         height={box}
@@ -754,7 +754,7 @@ export function TimerRing({
   const c = 2 * Math.PI * r;
   return (
     <svg
-      className="pointer-events-none absolute -rotate-90"
+      className="pk-timer-ring pointer-events-none absolute -rotate-90"
       style={{ inset: -pad }}
       width={box}
       height={box}

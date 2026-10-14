@@ -908,6 +908,13 @@
     stroke-dasharray 0.25s linear,
     stroke 0.4s;
 }
+/* 얼굴 · 앉은 그림 둘레의 남은 시간: 0.25초마다 갱신되는 사이를 이어서 그림 */
+.pk-timer-ring rect,
+.pk-timer-ring circle {
+  transition:
+    stroke-dashoffset 0.25s linear,
+    stroke 0.4s;
+}
 .pk-seat-char .pk-sprite img {
   filter: drop-shadow(0 calc(var(--u) * 0.4) calc(var(--u) * 0.8) rgba(0, 0, 0, 0.5));
 }
