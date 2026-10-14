@@ -159,6 +159,8 @@ export type SeatCardsProps<V> = {
   maxW?: number;
   /** 7포커 내 히든(7번째 장)을 아직 안 열어 봄 → 엎은 채로 맨 끝, 누르면 열림 */
   hiddenShut?: boolean;
+  /** 큰 틀(구경 중 왼쪽 아래)에 앉은 남: 카드만 내 카드 크기로 */
+  big?: boolean;
   onPeek?: () => void;
 };
 
@@ -1252,6 +1254,8 @@ export default function TableView({
     const f = frameOf(i);
     const s = table.seats[i];
     const hero = i === mySeat;
+    // 구경 중엔 왼쪽 아래 큰 틀에 남이 앉음 → 카드 크기 · 자리만 내 틀처럼 (엿보기 · 족보 힌트는 없음)
+    const big = hero || (mySeat < 0 && f.w === SF!.me.w && f.y === SF!.me.y);
     const right = f.dir < 0;
     // 이모티콘이 떠 있는 동안은 그 틀을 다른 틀 · 위 바보다 위로 (말풍선이 위 틀 · 위 바에 가려지지 않게)
     const box: CSSProperties = { left: f.x, top: f.y, width: f.w, height: f.h, zIndex: emotes[i] ? 40 : hero ? 21 : 34 };
@@ -1289,6 +1293,7 @@ export default function TableView({
           sizes,
           side: "left",
           hide: !hero && !revealed(i),
+          big,
           settled: revealDone,
           dealDelay: dealOf(i),
           maxW: f.areaW - 6,
@@ -1345,9 +1350,9 @@ export default function TableView({
           </div>
           {/* 카드 칸: 캐릭터 칸에 딱 붙게, 엎은 카드 묶음 → 편 카드 차곡차곡. 족보 · 결과 글자는 카드 아랫단 위에 */}
           <div
-            className={`pk-sf-cards relative flex min-w-0 flex-1 justify-start ${hero ? "items-start" : "items-center"}`}
+            className={`pk-sf-cards relative flex min-w-0 flex-1 justify-start ${big ? "items-start" : "items-center"}`}
             // 카드는 늘 왼쪽부터 차곡차곡. 내 카드: 위에 메이드 카드가 떠오를 틈, 아래에 족보 글자 자리를 남김
-            style={{ padding: hero ? `${Math.round(f.cell * 0.075)}px 3px 0` : "0 3px" }}
+            style={{ padding: big ? `${Math.round(f.cell * 0.075)}px 3px 0` : "0 3px" }}
           >
             {hero && madeKey && !res && <span key={`burst-${madeKey}`} className="pk-made-burst" aria-hidden />}
             {cards}
@@ -1358,7 +1363,7 @@ export default function TableView({
                 {fmtShort(Math.abs(net))}
               </span>
             )}
-            <span className="pk-sf-label" style={hero ? { bottom: 2 } : undefined}>
+            <span className="pk-sf-label" style={big ? { bottom: 2 } : undefined}>
               {hero && hint && !res && !resultName && (
                 <span className={`pk-handtag pk-pop ${madeKey ? "pk-made" : ""}`}>
                   <span className="pk-tag-t">{hint}</span>

@@ -38,13 +38,14 @@ export function sevenSeatCards({
   dealDelay,
   maxW,
   hiddenShut,
+  big,
   onPeek,
 }: SeatCardsProps<SevenView>) {
   const p = view.players[seat];
   if (!p) return null;
   const best = view.result?.best[seat];
   const ended = !!view.result && !!settled;
-  const w = hero ? sizes.heroCard : sizes.card;
+  const w = hero || big ? sizes.heroCard : sizes.card;
   const count = p.cards?.length ?? (hero ? myHand?.cards.length : p.up.length + p.down) ?? 0;
   // 남 · 나 모두 한게임처럼 왼쪽부터 같은 간격으로 차곡차곡 (칸을 꽉 채우려고 벌리지 않음) — 모서리 숫자 · 무늬만 보이는 간격
   // 7장이 다 들어와도 칸 안에 들어가는 간격으로 고정 (칸이 그보다 좁으면 그때만 더 겹침)
