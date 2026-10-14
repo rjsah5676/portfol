@@ -48,6 +48,8 @@ const TOP_LEVEL = new Set<string>([
   "traffic_daily",
   // 격투 랭크전 · 디펜스 랭킹 · 디펜스 성장 · 우편 · 사이트 설정(공지)
   "fight_rank_ratings",
+  // 격투 경기 기록 (보기 전용 — 입력 데이터는 목록에서 뺌)
+  "fight_replays",
   "defense_rank",
   "defense_profile",
   "defense_plays",
@@ -373,7 +375,11 @@ export function adminRouter({ db, auth, web, users, points, gateway, cfg, traffi
     "/docs",
     h(async (req) => {
       const { col, scope } = resolve(String(req.query.path ?? ""));
-      const docs = await db.col(col).find(scope).limit(FETCH_LIMIT).toArray();
+      // 격투 경기 기록: 최신순, 무거운 입력 데이터(inputs · chunks)는 빼고 개수만
+      const docs =
+        col === "fight_replays"
+          ? (await db.col(col).find(scope, { projection: { inputs: 0, chunks: 0 } }).sort({ at: -1 }).limit(FETCH_LIMIT).toArray())
+          : await db.col(col).find(scope).limit(FETCH_LIMIT).toArray();
       return docs.map(({ _id, ...data }) => {
         for (const k of Object.keys(scope)) delete data[k];
         return { id: _id, data: encode(data) };

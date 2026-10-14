@@ -176,6 +176,16 @@ const SOURCES: Source[] = [
     note: "r = 레이팅 · n = 반영된 판 수 · 별명은 회원 정보에서 바꾸면 같이 바뀜",
   },
   {
+    key: "fightReplays",
+    label: "격투 경기 기록",
+    group: "랭킹",
+    path: () => "fight_replays",
+    columns: ["at", "mode", "chars", "map", "out", "rs", "level", "frames", "uids"],
+    sort: ["at", "desc"],
+    editable: false,
+    note: "AI 학습용 입력 기록 (최신 500판) · mode: pvp 온라인 / rank 랭크 / rankbot 랭크 봇전 / ai CPU 대전 · out: 0 = 1P 승, 1 = 2P 승, 2 = 무승부 · 입력 데이터는 목록에서 뺌",
+  },
+  {
     key: "defenseRank",
     label: "LUCKY DEFENSE",
     group: "랭킹",
