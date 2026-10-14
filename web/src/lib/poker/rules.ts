@@ -146,7 +146,7 @@ export const charOf = (id: unknown): CharId => (CHAR_IDS.includes(id as CharId) 
  * + (live) 로비 대기 영상 idle.webp · 터치 반응 touch-1~3.webp.
  * ready = 그림이 들어왔는지. false 면 원래 캐릭터 그림으로 보임 (사고 입는 것은 됨).
  */
-export type SkinId = "amy-summer" | "yeonseo-summer" | "taeyang-ts";
+export type SkinId = "amy-summer" | "yeonseo-summer" | "taeyang-ts" | "mio-dracula";
 export interface Skin {
   id: SkinId;
   char: CharId;
@@ -193,6 +193,17 @@ export const SKINS: Skin[] = [
     line: "왜, 누나가 더 낫지?",
     ready: true,
     live: true,
+    emotes: true,
+  },
+  {
+    id: "mio-dracula",
+    char: "mio",
+    name: "드라큘라 미오",
+    price: skinPrice("mio-dracula"),
+    blurb: "…트릭 오어 트릿. 칩 안 주면… 물어요.",
+    line: "…할로윈이니까. 무서워요?",
+    ready: true,
+    live: false,
     emotes: true,
   },
 ];

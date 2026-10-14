@@ -100,6 +100,14 @@ export const SHOP: ShopItem[] = [
     name: "TS 금태양",
     price: 30_000,
   },
+  {
+    id: "poker.skin.mio-dracula",
+    game: "poker",
+    kind: "skin",
+    ref: "mio-dracula",
+    name: "드라큘라 미오",
+    price: 30_000,
+  },
   // PIXEL FIGHT 스킨 (lib/fight/skins.ts) — 산 것은 inv.fight, 착용은 게임 안 보관함
   {
     id: "fight.skin.igna-fw",
