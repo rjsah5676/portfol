@@ -621,10 +621,14 @@ export function registerFight({ gateway, users, db }: Deps, opts: FightOptions =
     if (room.hostUid !== uid) throw forbidden();
     notWhileDraining();
     if (!room.players[room.seats[0]] || !room.players[room.seats[1]]) throw bad("상대가 없습니다.");
-    if (room.state.phase === "play") throw bad("이미 경기 중이에요.");
-    const skins = (await Promise.all([0, 1].map((k) => wornSkin(room.seats[k], o.chars[k])))) as [string, string];
-    // (스킨을 읽는 사이에 다른 시작 요청 · 자리 변화가 끼었으면 이번 건 버림)
-    if ((room.state.phase as RoomState["phase"]) === "play" || !room.players[room.seats[0]] || !room.players[room.seats[1]]) throw bad("이미 경기 중이에요.");
+    // (경기 중에 다시 시작하는 것은 원래대로 허용 — 새 경기로 바뀜)
+    const before = room.state.match;
+    const seats = [room.seats[0], room.seats[1]];
+    const skins = (await Promise.all([0, 1].map((k) => wornSkin(seats[k], o.chars[k])))) as [string, string];
+    // 스킨을 읽는 사이에 다른 시작 요청이 먼저 처리됐거나 자리가 바뀌었으면 이번 건 버림
+    if (room.state.match !== before || room.seats[0] !== seats[0] || room.seats[1] !== seats[1])
+      throw bad("이미 경기가 시작됐어요.");
+    if (!room.players[room.seats[0]] || !room.players[room.seats[1]]) throw bad("상대가 없습니다.");
     // 랭크전: 한 판만, 맵은 서버가 정한 것
     if (room.rank) {
       if (room.rank.used) throw bad("랭크전은 한 판만 해요.");
