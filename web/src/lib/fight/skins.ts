@@ -32,7 +32,7 @@ export const FIGHT_SKINS: FightSkin[] = [
     ch: "soyoung",
     name: "바니걸 소영",
     tag: "MIDNIGHT BUNNY",
-    desc: "안경을 벗고 머리를 풀어 내린 소영. 올블랙 바니 수트에 망사 스타킹, 검은 채찍까지 — 오늘 수업은 조금 다를 거예요.",
+    desc: "안경을 벗고 머리를 풀어 내린 소영. 올블랙 바니 수트에 트럼프 카드 한 장 — 오늘 수업은 조금 다를 거예요.",
     color: "#B0305A",
   },
 ];
