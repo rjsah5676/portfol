@@ -235,6 +235,8 @@ export interface Fighter {
   jumps: number;
   /** 가드 반격을 쓸 수 있는 남은 프레임 (공격을 막으면 채워짐) */
   gcT: number;
+  /** 건모 Alt+F4 뒤 게이지 덜 얻는 남은 프레임 */
+  mnerf: number;
   /** 띄워진 상태 (잡기·약 4단 마무리): 떨어지는 속도가 느려 공중 콤보를 넣기 쉬움, 땅에 닿으면 0 */
   float: number;
   /** 띄워진 채로 맞고 있는 프레임 (float 1·2, 땅에 닿으면 0) — 2초 넘으면 점점 빨리 떨어짐 */
@@ -485,6 +487,7 @@ function newFighter(ch: number, side: 0 | 1, map: MapDef): Fighter {
     fell: 0,
     jumps: 0,
     gcT: 0,
+    mnerf: 0,
     float: 0,
     floatT: 0,
     juggle: 0,
@@ -573,7 +576,7 @@ const cloneF = (f: Fighter): Fighter => ({ ...f, hist: f.hist.slice() });
  * 이 빌드의 게임 데이터 지문 (캐릭터 성능·맵) — 온라인에서 서로 다른 빌드끼리 붙었는지 확인.
  * 계산 방식(sim.ts)만 바꿨을 땐 SIM_REV를 올릴 것.
  */
-const SIM_REV = 20;
+const SIM_REV = 21;
 export const BUILD_ID = (() => {
   const str = SIM_REV + JSON.stringify(CHARS.map((c) => [c.hp, c.walk, c.jumpVx, c.dash, c.cd, c.glide, c.hurt, c.width, c.moves])) + JSON.stringify(MAPS.map((m) => [m.plats, m.spawn]));
   let h = 2166136261;
@@ -765,6 +768,12 @@ export function projRect(p: Proj, s: State): Rect {
 const onGround = (s: State, f: Fighter) => standingOn(mapOf(s), f) !== null;
 const airborneS = (s: State, f: Fighter) => !onGround(s, f);
 
+/** 게이지 얻기 — 건모 Alt+F4 를 쓴 뒤 3초 동안은 30% 덜 (mnerf) */
+function gainMeter(f: Fighter, n: number) {
+  if (f.mnerf > 0) n = Math.trunc((n * 7) / 10);
+  f.meter = Math.min(METER_MAX, f.meter + n);
+}
+
 function startMove(s: State, i: number, id: MoveId) {
   const f = s.p[i];
   // 같은 기술을 이어 누르면 다음 동작 (약 4단 · 발차기 2단)
@@ -787,6 +796,7 @@ function startMove(s: State, i: number, id: MoveId) {
   if (id === "S") f.cd = m.cd ?? charOf(f).cd; // (공중 버전만 재사용 대기가 다를 수 있음)
   f.chg = 0;
   if (id === "G") f.meter = Math.max(0, f.meter - GUARD_COUNTER_COST);
+  if (id === "X" && m.mnerf) f.mnerf = m.mnerf;
   if (id === "T" || id === "G") f.vx = 0;
   f.dk = 0;
   if (airborneS(s, f)) {
@@ -949,6 +959,7 @@ function control(s: State, i: number) {
   const map = mapOf(s);
   f.t++;
   if (f.gcT > 0) f.gcT--;
+  if (f.mnerf > 0) f.mnerf--;
   if (f.st !== "hit") ((f.mark = 0), (f.frz = 0));
   if (f.st !== "hit" && f.st !== "down") f.bsodd = 0;
   else if (f.frz > 0) {
@@ -1231,7 +1242,7 @@ function control(s: State, i: number) {
           const o = s.p[1 - i];
           f.hp = Math.max(0, f.hp - f.grabDmg);
           f.grabDmg = 0;
-          o.meter = Math.min(METER_MAX, o.meter + charOf(o).moves.T.meter);
+          gainMeter(o, charOf(o).moves.T.meter);
           f.vh = LAUNCH_VH;
           f.kd = 0;
           f.float = 1;
@@ -1368,7 +1379,7 @@ function landed(s: State, i: number, f: Fighter) {
       if (!imm) o.cc = 1;
       o.kd = 0;
       o.float = 0;
-      f.meter = Math.min(METER_MAX, f.meter + lm.meter);
+      gainMeter(f, lm.meter);
       s.stop = Math.max(s.stop, lm.hitstop);
       s.ev.push({ k: "hit", p: i, x: o.x, h: o.h + 20 * SUB, v: dmg, m: "S" });
       s.ev.push({ k: "slam", p: 1 - i, x: o.x, h: o.h, v: 1 });
@@ -1761,7 +1772,7 @@ function zapBurst(s: State, ai: number) {
   if (!z || d.st === "ko" || s.phase !== "fight") return;
   const dmg = z.dmg;
   d.hp = Math.max(0, d.hp - dmg);
-  a.meter = Math.min(METER_MAX, a.meter + 6);
+  gainMeter(a, 6);
   s.stop = Math.max(s.stop, 10);
   s.ev.push({ k: "zapBurst", p: ai, x: d.x, h: d.h + 40 * SUB, v: dmg });
   s.ev.push({ k: "hit", p: ai, x: d.x, h: d.h + 28 * SUB, v: dmg, m: "X" });
@@ -1814,7 +1825,7 @@ function applyHit(s: State, ai: number, m: MoveDef, srcX: number, mid: MoveId, p
     const dmg = Math.max(1, scaleDmg(m.dmg, d.combo) >> 1);
     d.hp -= dmg;
     d.combo++;
-    a.meter = Math.min(METER_MAX, a.meter + (m.meter >> 1));
+    gainMeter(a, (m.meter >> 1));
     s.stop = Math.max(s.stop, m.hitstop - 2);
     s.ev.push({ k: "hit", p: ai, x: d.x - dir * 8 * SUB, h: d.h + 14 * SUB, v: dmg, m: mid });
     if (d.hp <= 0) d.hp = 0;
@@ -1828,7 +1839,7 @@ function applyHit(s: State, ai: number, m: MoveDef, srcX: number, mid: MoveId, p
   ) {
     const dmg = Math.max(1, scaleDmg(m.dmg, d.combo));
     d.hp -= dmg;
-    a.meter = Math.min(METER_MAX, a.meter + (m.meter >> 1));
+    gainMeter(a, (m.meter >> 1));
     s.stop = Math.max(s.stop, m.hitstop - 3);
     s.ev.push({ k: "hit", p: ai, x: d.x - dir * 8 * SUB, h: eh, v: dmg, m: mid });
     s.ev.push({ k: "clash", p: 1 - ai, x: d.x, h: d.h + 30 * SUB, v: 0 });
@@ -1857,8 +1868,8 @@ function applyHit(s: State, ai: number, m: MoveDef, srcX: number, mid: MoveId, p
     // 막은 쪽은 조금, 때린 쪽도 밀려남 (가드 밀림 — 계속 붙어서 때리기 어렵게)
     d.vx = Math.trunc((dir * m.push * (just ? 3 : 6)) / 10);
     if (!m.proj && !m.summon && !m.multi) a.vx = -Math.trunc((dir * m.push * 3) / 10);
-    a.meter = Math.min(METER_MAX, a.meter + (m.meter >> 1));
-    d.meter = Math.min(METER_MAX, d.meter + (just ? 10 : 3));
+    gainMeter(a, (m.meter >> 1));
+    gainMeter(d, (just ? 10 : 3));
     s.stop = Math.max(s.stop, m.hitstop - 3);
     s.ev.push({ k: just ? "just" : "block", p: ai, x: d.x - dir * 10 * SUB, h: eh, v: m.chip, m: mid });
     // 막아도 화상은 쌓이는 기술 (이그나 업화주)
@@ -1913,7 +1924,8 @@ function applyHit(s: State, ai: number, m: MoveDef, srcX: number, mid: MoveId, p
     d.mv = "";
     // 경직 감소: 콤보가 길어질수록 맞는 경직이 줄어 무한 콤보 방지 (필살기 연타는 예외)
     const decay = m.multi || m.summon ? 0 : Math.min(40, Math.max(0, d.combo - 3) * 6);
-    d.stun = Math.max(6, Math.trunc((m.hitstun * (100 - decay)) / 100)) + (counter ? 6 : 0);
+    // (발차기 2단 마무리가 맞으면 경직 더 — finStun, 이반: 맞혀도 -20이라 바로 반격당하던 것 10.14)
+    d.stun = Math.max(6, Math.trunc(((m.hitstun + (fin ? (m.finStun ?? 0) : 0)) * (100 - decay)) / 100)) + (counter ? 6 : 0);
     if (counter) s.ev.push({ k: "counter", p: ai, x: d.x, h: d.h + 70 * SUB, v: 0 });
     d.vx = fin ? Math.trunc((dir * m.push * 16) / 10) : dir * m.push;
     // 끌어당기는 기술: 때린 쪽 바로 앞(약 34px)에 멈추게 — 땅 마찰(60/프레임)로 멈추는 거리에 맞춘 속도
@@ -2171,8 +2183,8 @@ function applyHit(s: State, ai: number, m: MoveDef, srcX: number, mid: MoveId, p
       s.ev.push({ k: "launch", p: ai, x: d.x, h: d.h, v: 4 });
     }
     // (잡기 게이지는 던질 때 — 풀리면 없음)
-    if (mid !== "T") a.meter = Math.min(METER_MAX, a.meter + m.meter);
-    d.meter = Math.min(METER_MAX, d.meter + (dmg >> 4));
+    if (mid !== "T") gainMeter(a, m.meter);
+    gainMeter(d, (dmg >> 4));
     s.stop = Math.max(s.stop, m.hitstop);
     s.ev.push({ k: mid === "T" ? "throw" : "hit", p: ai, x: d.x - dir * 8 * SUB, h: eh, v: dmg + popBonus, m: mid });
   }

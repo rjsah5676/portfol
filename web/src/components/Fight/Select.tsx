@@ -44,6 +44,8 @@ const art = (c: CharDef) => `/fight/art/${c.id}.webp`;
 /** 선택 화면 전신 그림 배율 (그림마다 인물이 차지하는 크기가 달라서 — 발 위치는 그대로) */
 const ART_SCALE: Record<string, number> = { soyoung: 0.86 };
 const PX = "[image-rendering:pixelated]";
+/** 캐릭터 고르기 칸: 한 줄에 몇 칸 (↑↓ 은 이만큼 건너뜀) */
+const FACE_COLS = 4;
 const KR = "font-['Nanum_Gothic',sans-serif]";
 const MENU_BG = "/fight/bg/title.webp";
 
@@ -411,15 +413,19 @@ export default function Select({
         return;
       }
       const k = e.code;
-      const p1 = { l: k === "KeyA", r: k === "KeyD", ok: k === "KeyJ" || k === "Space", no: k === "Escape" };
+      const p1 = { l: k === "KeyA", r: k === "KeyD", u: k === "KeyW", d: k === "KeyS", ok: k === "KeyJ" || k === "Space", no: k === "Escape" };
       const p2 = {
         l: k === "ArrowLeft",
         r: k === "ArrowRight",
+        u: k === "ArrowUp",
+        d: k === "ArrowDown",
         ok: k === "Enter" || k === "NumpadEnter" || k === "Comma",
         no: k === "Period" || k === "Backspace",
       };
       const any = p1.l || p1.r || p1.ok || p1.no || p2.l || p2.r || p2.ok || p2.no;
-      if (!any) return;
+      // 캐릭터 칸은 두 줄 — 위아래(W·S, ↑↓)로 한 줄씩
+      const vert = p1.u || p1.d || p2.u || p2.d;
+      if (!any && !(vert && stage === "char")) return;
       e.preventDefault();
       if (stage === "mode") {
         // ← → (A · D) 로 모드 고르기, Enter(J · Space) 로 시작
@@ -437,15 +443,21 @@ export default function Select({
           const side = (lock[0] ? 1 : 0) as 0 | 1;
           if (p1.l || p2.l) move(side, -1);
           if (p1.r || p2.r) move(side, 1);
+          if (p1.u || p2.u) move(side, -FACE_COLS);
+          if (p1.d || p2.d) move(side, FACE_COLS);
           if (p1.ok || p2.ok) confirm(side);
           if (p1.no || p2.no) cancel(side);
         } else {
           if (!lock[0] && p1.l) move(0, -1);
           if (!lock[0] && p1.r) move(0, 1);
+          if (!lock[0] && p1.u) move(0, -FACE_COLS);
+          if (!lock[0] && p1.d) move(0, FACE_COLS);
           if (p1.ok) confirm(0);
           if (p1.no) cancel(0);
           if (!lock[1] && p2.l) move(1, -1);
           if (!lock[1] && p2.r) move(1, 1);
+          if (!lock[1] && p2.u) move(1, -FACE_COLS);
+          if (!lock[1] && p2.d) move(1, FACE_COLS);
           if (p2.ok) confirm(1);
           if (p2.no) cancel(1);
         }
@@ -720,7 +732,7 @@ export default function Select({
 
           {/* 가운데 아래 얼굴 칸 */}
           <div className="absolute bottom-[1cqw] left-1/2 z-10 flex -translate-x-1/2 flex-col items-center gap-[0.6cqw] rounded-[1cqw] bg-black/50 px-[1.2cqw] pb-[0.7cqw] backdrop-blur-[2px]">
-            {/* 캐릭터가 늘어도 칸 크기는 그대로: 7칸만 보이고 ◀ ▶ (또는 고르는 칸 따라) 좌우로 넘김 */}
+            {/* 랜덤 + 캐릭터를 FACE_COLS 칸씩 여러 줄로 (←→ 한 칸 · ↑↓ 한 줄). 줄이 넘쳐 옆으로 넘길 일은 없어 ◀ ▶ 는 안 보임 */}
             <div className="relative flex items-center">
               <button
                 type="button"
@@ -733,7 +745,7 @@ export default function Select({
               <div
                 ref={stripRef}
                 onScroll={onStripScroll}
-                className="flex max-w-[52.2cqw] gap-[1cqw] overflow-x-auto pt-[1.6cqw] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                className="grid grid-cols-4 gap-x-[0.8cqw] gap-y-[1.7cqw] pt-[1.6cqw]"
               >
               {(() => {
                 const r1 = rnd[0] && !lock[0],
@@ -750,13 +762,13 @@ export default function Select({
                     className="relative cursor-pointer"
                   >
                     <span
-                      className={`flex h-[5.4cqw] w-[5.4cqw] items-center justify-center rounded-[0.5cqw] border-[0.3cqw] bg-black/60 font-mono text-[3.4cqw] font-black text-white/80 ${
+                      className={`flex h-[4.4cqw] w-[5.6cqw] items-center justify-center rounded-[0.5cqw] border-[0.3cqw] bg-black/60 font-mono text-[2.8cqw] font-black text-white/80 ${
                         r1 && r2 ? "border-[#A78BFA]" : r1 ? "border-[#3B82F6]" : r2 ? "border-[#F43F5E]" : "border-white/20"
                       } ${r1 || r2 ? "animate-pulse" : ""}`}
                     >
                       ?
                     </span>
-                    <span className={`${KR} block pt-[0.3cqw] text-center text-[1.2cqw] text-white/80`}>랜덤</span>
+                    <span className={`${KR} pointer-events-none absolute inset-x-[0.3cqw] bottom-[0.3cqw] rounded-b-[0.3cqw] bg-black/65 text-center text-[0.95cqw] leading-[1.4] text-white/85`}>랜덤</span>
                   </button>
                 );
               })()}
@@ -784,7 +796,7 @@ export default function Select({
                                         <img
                       src={face(c)}
                       alt={c.name}
-                      className={`h-[5.4cqw] w-[6.8cqw] rounded-[0.5cqw] border-[0.3cqw] object-cover ${PX} ${glow ? "animate-pulse" : ""} ${
+                      className={`h-[4.4cqw] w-[5.6cqw] rounded-[0.5cqw] border-[0.3cqw] object-cover ${PX} ${glow ? "animate-pulse" : ""} ${
                         on1 && on2
                           ? "border-[#A78BFA]"
                           : on1
@@ -800,7 +812,7 @@ export default function Select({
                         <span className="rounded-[0.2cqw] bg-[#F43F5E] px-[0.4cqw] text-white">{ai ? foe : "2P"}</span>
                       )}
                     </span>
-                    <span className={`${KR} block pt-[0.3cqw] text-center text-[1.2cqw] text-white/80`}>{c.name}</span>
+                    <span className={`${KR} pointer-events-none absolute inset-x-[0.3cqw] bottom-[0.3cqw] rounded-b-[0.3cqw] bg-black/65 text-center text-[0.95cqw] leading-[1.4] text-white/85`}>{c.name}</span>
                   </button>
                 );
               })}
@@ -817,7 +829,7 @@ export default function Select({
             <div className={`${KR} text-center text-[1.1cqw] text-white/45`}>
               {ai
                 ? side === 0
-                  ? keyText("내 캐릭터 고르기 — A·D(←→) 이동, J(Enter)·한 번 더 클릭 결정, Esc 뒤로")
+                  ? keyText("내 캐릭터 고르기 — WASD(방향키) 이동, J(Enter)·한 번 더 클릭 결정, Esc 뒤로")
                   : `상대(${foe}) 캐릭터 고르기 — Esc(.) 내 캐릭터 다시`
                 : keyText("1P A·D + J 결정 · 2P ←→ + Enter 결정 (Esc / . 취소)")}
             </div>

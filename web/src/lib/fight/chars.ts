@@ -42,6 +42,10 @@ export interface MoveDef {
   startup: number;
   active: number;
   recovery: number;
+  /** 약 4단 · 발차기 2단 마무리가 맞으면 더 붙는 경직 */
+  finStun?: number;
+  /** 필살기: 쓰고 나서 이 프레임 동안 게이지를 30% 덜 얻음 */
+  mnerf?: number;
   dmg: number;
   /** 막았을 때 깎이는 양 */
   chip: number;
@@ -983,6 +987,8 @@ const RAW: CharSrc[] = [
         meter: 0,
         box: { x: 0, y: 120, w: 64, h: 124 },
         bsod: 90,
+        // 쓰고 나서 3초 동안 게이지 30% 덜 (10.14 — 블루스크린 콤보로 게이지를 다시 금방 채우던 것)
+        mnerf: 180,
         // 공중: 공중 콤보 중간에 끊어 넣는 용 — 시작이 빠르고 그 자리에 떠서(안 떨어짐) 아래쪽까지 닿음.
         // 맞으면 콤보 초기화 + 상대는 떨어져 선 채로 멈춤 → 착지해서 한 콤보 더
         air: {
@@ -1048,6 +1054,8 @@ const RAW: CharSrc[] = [
         startup: 11, // 10.10 12→11 (가장 느린 발에 발차기까지 느려 다 맞고 시작)
         active: 4,
         recovery: 21,
+        // 2단(해머) 맞으면 경직 +16 — 맞혀도 -20이라 바로 반격당하던 것 → 맞히면 -4 (거리도 벌어져 피할 틈) (10.14)
+        finStun: 16,
         dmg: 115,
         chip: 0,
         hitstun: 21,
@@ -1122,9 +1130,11 @@ const RAW: CharSrc[] = [
       },
       X: {
         // 필살기 「붉은 폭풍」: 숨 들이쉬고(경직 면역) 돌진해 거대한 한 방
-        startup: 16,
-        active: 6,
-        recovery: 30,
+        // (10.14 더 쓸모 있게: 발생 16→14 · 돌진 6→10프레임(사거리 약 150→190px) · 회복 30→24 ·
+        //  판정 위로 높게(높이 44→104px) — 가까이 뛰어드는 상대도 받아침)
+        startup: 14,
+        active: 10,
+        recovery: 24,
         dmg: 300,
         chip: 30,
         hitstun: 40,
@@ -1132,7 +1142,7 @@ const RAW: CharSrc[] = [
         push: 2600,
         hitstop: 18,
         meter: 0,
-        box: { x: 4, y: 66, w: 70, h: 44 },
+        box: { x: 4, y: 104, w: 74, h: 104 },
         armor: true,
         kd: true,
         // 공중에서 쓰면 앞쪽 아래로 내리꽂고 → 착지하면 땅에서 그대로 돌진 (10.12 — 예전엔 공중에서 옆으로만 나가 서 있는 상대 위로 헛치거나 착지에 끊김)
