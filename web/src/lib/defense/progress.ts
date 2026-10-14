@@ -766,18 +766,18 @@ export interface QuestDef {
   xp: number;
 }
 
-/** 하루 3개 (날짜로 정해짐 · 모두 같음) — 보상(조각 · 패스 경험치)은 v1.8.2 에서 3배 */
+/** 하루 3개 (날짜로 정해짐 · 모두 같음) */
 export const DAILY_POOL: QuestDef[] = [
-  { id: "d_runs", name: "오늘의 출근", metric: "runs", goal: 2, pieces: 240, xp: 90 },
-  { id: "d_wave30", name: "30웨이브 넘기", metric: "wave", goal: 30, pieces: 360, xp: 120 },
-  { id: "d_bosses", name: "보스 사냥", metric: "bosses", goal: 5, pieces: 360, xp: 120 },
-  { id: "d_legend", name: "전설 수집", metric: "legend", goal: 3, pieces: 300, xp: 90 },
-  { id: "d_myth", name: "신화 강림", metric: "myth", goal: 1, pieces: 450, xp: 150 },
-  { id: "d_knight", name: "기사단의 날", metric: "knight", goal: 8, pieces: 300, xp: 90 },
-  { id: "d_mech", name: "기계공방의 날", metric: "mech", goal: 8, pieces: 300, xp: 90 },
-  { id: "d_arcane", name: "마도회의 날", metric: "arcane", goal: 8, pieces: 300, xp: 90 },
-  { id: "d_rift", name: "균열 닫기", metric: "rift", goal: 3, pieces: 300, xp: 90 },
-  { id: "d_multi", name: "같이 하자", metric: "multi", goal: 1, pieces: 360, xp: 120 },
+  { id: "d_runs", name: "오늘의 출근", metric: "runs", goal: 2, pieces: 80, xp: 30 },
+  { id: "d_wave30", name: "30웨이브 넘기", metric: "wave", goal: 30, pieces: 120, xp: 40 },
+  { id: "d_bosses", name: "보스 사냥", metric: "bosses", goal: 5, pieces: 120, xp: 40 },
+  { id: "d_legend", name: "전설 수집", metric: "legend", goal: 3, pieces: 100, xp: 30 },
+  { id: "d_myth", name: "신화 강림", metric: "myth", goal: 1, pieces: 150, xp: 50 },
+  { id: "d_knight", name: "기사단의 날", metric: "knight", goal: 8, pieces: 100, xp: 30 },
+  { id: "d_mech", name: "기계공방의 날", metric: "mech", goal: 8, pieces: 100, xp: 30 },
+  { id: "d_arcane", name: "마도회의 날", metric: "arcane", goal: 8, pieces: 100, xp: 30 },
+  { id: "d_rift", name: "균열 닫기", metric: "rift", goal: 3, pieces: 100, xp: 30 },
+  { id: "d_multi", name: "같이 하자", metric: "multi", goal: 1, pieces: 120, xp: 40 },
 ];
 /** 한 주 3개 */
 export const WEEKLY_POOL: QuestDef[] = [
