@@ -276,7 +276,8 @@ const a = (
   desc,
   metric,
   goal,
-  reward: game === "defense" ? reward : reward * REWARD_X, // 디펜스 일회형 업적은 3배 안 함 (주인 결정)
+  // 디펜스 · 격투 일회형 업적은 3배 안 함 (주인 결정)
+  reward: game === "defense" || game === "fight" ? reward : reward * REWARD_X,
   ...(fmt && { fmt }),
 });
 
