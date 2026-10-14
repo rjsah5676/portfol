@@ -12,7 +12,7 @@
  */
 import { writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
-import { BALANCE_VER, LAST_WAVE, TPS, hpOf } from "../../web/src/lib/defense/balance";
+import { BALANCE_VER, LAST_WAVE, TPS, TUNE, hpOf } from "../../web/src/lib/defense/balance";
 import { BOTS, botByName, botTurn, type BotCfg } from "../../web/src/lib/defense/bot";
 import { replay, type LogEntry } from "../../web/src/lib/defense/replay";
 import { newGame, step, unitCount, type Game } from "../../web/src/lib/defense/sim";
@@ -31,6 +31,22 @@ const curve = args.includes("--curve");
 const verify = !args.includes("--no-verify");
 const metaLv = opt("--meta");
 const glitch = Number(opt("--glitch") ?? 0);
+// --tune k=v,k=v : balance.ts TUNE 값 바꿔 보기 (두 벌 다)
+{
+  const tv = opt("--tune");
+  if (tv)
+    for (const T of new Set([TUNE, createRequire(import.meta.url)("../../web/src/lib/defense/balance.ts").TUNE]))
+      for (const kv of tv.split(",")) {
+        const [k, v] = kv.split("=");
+        (T as Record<string, number>)[k] = Number(v);
+      }
+}
+// --cheathp k : 치트 보스마다 적 체력 +k (balance TUNE.cheatHp)
+const chOpt = opt("--cheathp");
+if (chOpt) {
+  const req = createRequire(import.meta.url);
+  for (const T of new Set([TUNE, req("../../web/src/lib/defense/balance.ts").TUNE])) T.cheatHp = Number(chOpt);
+}
 // --deep hpPerLv,armor11,armor20,boss15,boss25,spd20 : 심연 곡선 바꿔 보기
 const deepOpt = opt("--deep");
 if (deepOpt) {
@@ -47,7 +63,7 @@ function loadoutFor(cfg: BotCfg): Loadout | null {
   const lvN = metaLv === "max" ? 10 : metaLv === "late" ? 6 : 3;
   const lv: Record<string, number> = {};
   for (const u of UNITS) if (!cfg.focus || u.faction === cfg.focus || u.faction === "hidden") lv[u.id] = cfg.focus ? lvN : Math.max(1, lvN - 1);
-  const fres: Record<string, string[]> = { knight: ["k_drill", "k_tactic"], mech: ["m_drill", "m_tune"], arcane: ["a_drill", "a_focus"] };
+  const fres: Record<string, string[]> = { knight: ["k_drill", "k_tactic", "k_rally"], mech: ["m_drill", "m_tune", "m_bounty"], arcane: ["a_drill", "a_focus", "a_echo"] };
   // 공용 4칸 + 세력 칸 (mid 0 · late 2 · max 3)
   const fs = metaLv === "max" ? 3 : metaLv === "late" ? 2 : 0;
   const fpool = cfg.focus ? fres[cfg.focus] : ["k_drill", "m_drill", "a_drill"];
@@ -66,7 +82,8 @@ function loadoutFor(cfg: BotCfg): Loadout | null {
   const trans = metaLv === "max" ? [...TRANS_IDS] : [];
   const resLv = Object.fromEntries(R.map((id) => [id, rl]));
   const relicLv = Object.fromEntries(relics.map((id) => [id, rl]));
-  return { lv, res: R, relics, glitch, resLv, relicLv, bench, fslots: fs, own, trans };
+  const cheat = metaLv === "max" ? "x_luck" : "";
+  return { lv, res: R, relics, glitch, resLv, relicLv, bench, fslots: fs, own, trans, cheat, grit: Number(opt("--grit") ?? 0) };
 }
 
 interface Run {

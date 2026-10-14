@@ -4,7 +4,9 @@ import { BOTS, botTurn } from "../../web/src/lib/defense/bot";
 import { HASH_TICKS, TICKS_PER_TURN, TURN_MS, replay, replayer, scoreOf, validLog, type LogEntry } from "../../web/src/lib/defense/replay";
 import { CELLS, SLOTS, apply, hashGame, isCmd, newGame, step, unitCount, type Game } from "../../web/src/lib/defense/sim";
 import { RECIPES, UNIT, UNITS } from "../../web/src/lib/defense/units";
-import { BOX, BENCH_COST, FRES_COST, TRANS_IDS, GP_PACKS, GP_SELL, GP_STORE, PACK, PASS_PREMIUM_GP, RESEARCH, lvCost, modsOf, packPct, planUpAll, seasonScore, transRoll } from "../../web/src/lib/defense/progress";
+import { CHEATS, CHEAT_MULTI_SEC, cheatFxOf, cheatOdds } from "../../web/src/lib/defense/cheats";
+import { TPS } from "../../web/src/lib/defense/balance";
+import { CHEAT_RES, BOX, BENCH_COST, FRES_COST, TRANS_IDS, GP_PACKS, GP_SELL, GP_STORE, PACK, PASS_PREMIUM_GP, RESEARCH, lvCost, modsOf, packPct, planUpAll, seasonScore, transRoll } from "../../web/src/lib/defense/progress";
 import { startTestServer, type TestClient, type TestServer } from "./helpers";
 
 /** 봇 한 판 (기록 포함) */
@@ -18,13 +20,98 @@ function botGame(seed: number, bot = 0, until = Infinity, lo?: Parameters<typeof
   return { g, log };
 }
 
+/** 새 판 + 시작 치트(패치) 를 첫 카드(연합)로 고른 상태 */
+function started(seed: number, players = 1, lo?: Parameters<typeof newGame>[2]): Game {
+  const g = newGame(seed, players, lo);
+  for (let p = 0; p < players; p++) apply(g, p, { t: "cheat", i: 0 });
+  return g;
+}
+
 describe("픽셀 글리치 디펜스 엔진", () => {
+  it("시작 치트: 패치 4개 중 하나를 고를 때까지 멈춤 · 도박사는 행운석 +3", () => {
+    const g = newGame(3, 1);
+    const b = g.boards[0];
+    expect(b.cheat?.kind).toBe("patch");
+    expect(b.cheat?.offer).toEqual(["union", "gambler", "core", "interest"]);
+    expect(apply(g, 0, { t: "summon" })).toBeTruthy();
+    expect(apply(g, 0, { t: "reroll", i: 0 })).toBeTruthy();
+    for (let i = 0; i < 60; i++) step(g);
+    expect(b.wt).toBeLessThan(0);
+    expect(b.wave).toBe(0);
+    const st = b.stones;
+    expect(apply(g, 0, { t: "cheat", i: 1 })).toBeNull();
+    expect(b.patch).toBe("gambler");
+    expect(b.stones).toBe(st + 3);
+    expect(b.cheat).toBeNull();
+    expect(b.cheats).toEqual([]);
+  });
+
   it("데이터: 조합식 재료 · 결과가 다 있는 유닛", () => {
     for (const r of RECIPES) {
       expect(UNIT[r.id]).toBeTruthy();
       for (const n of r.needs) expect(UNIT[n] || /^@[46]$/.test(n), n).toBeTruthy();
     }
     expect(new Set(UNITS.map((u) => u.id)).size).toBe(UNITS.length);
+  });
+
+  it("치트 코드: 보스를 잡으면 3장 · 고를 때까지 멈춤 · 카드마다 다시 뽑기 1번 · 효과", () => {
+    expect(new Set(CHEATS.map((c) => c.id)).size).toBe(CHEATS.length);
+    for (const t of [0, 1, 2, 3]) expect(CHEATS.filter((c) => c.tier === t).length).toBeGreaterThanOrEqual(6);
+    for (let n = 0; n < 5; n++)
+      for (const luck of [false, true]) {
+        const o = cheatOdds(n, luck);
+        expect(Math.round(o.reduce((a, x) => a + x, 0))).toBe(100);
+        expect(o.every((x) => x >= 0)).toBe(true);
+      }
+    const g = started(7, 1);
+    const b = g.boards[0];
+    while (!b.cheat && !g.over) {
+      botTurn(g, 0, BOTS[0]);
+      step(g);
+    }
+    expect(b.wave).toBe(10);
+    expect(b.cheat!.offer).toHaveLength(3);
+    expect(new Set(b.cheat!.offer).size).toBe(3);
+    expect(b.cheat!.rr).toEqual([1, 1, 1]);
+    // 멈춤: 시간이 가도 보드는 그대로, 다른 명령은 안 됨
+    const wt = b.wt,
+      hp = b.enemies.map((e) => e.hp);
+    for (let i = 0; i < 90; i++) step(g);
+    expect(b.wt).toBe(wt);
+    expect(b.enemies.map((e) => e.hp)).toEqual(hp);
+    expect(apply(g, 0, { t: "summon" })).toBeTruthy();
+    // 다시 뽑기: 다른 카드 · 한 번만
+    const before = b.cheat!.offer[0];
+    expect(apply(g, 0, { t: "reroll", i: 0 })).toBeNull();
+    expect(b.cheat!.offer[0]).not.toBe(before);
+    expect(b.cheat!.offer.filter((x) => x === b.cheat!.offer[0])).toHaveLength(1);
+    expect(apply(g, 0, { t: "reroll", i: 0 })).toBeTruthy();
+    const id = b.cheat!.offer[1];
+    expect(apply(g, 0, { t: "cheat", i: 1 })).toBeNull();
+    expect(b.cheat).toBeNull();
+    expect(b.cheats).toEqual([id]);
+    expect(b.cx).toEqual(cheatFxOf([id]));
+    expect(isCmd({ t: "cheat", i: 2 })).toBe(true);
+    expect(isCmd({ t: "cheat", i: 3 })).toBe(true);
+    expect(isCmd({ t: "cheat", i: 4 })).toBe(false);
+    expect(apply(g, 0, { t: "cheat", i: 3 })).toBeTruthy();
+    // 리롤 회로: 카드마다 2번
+    expect(modsOf({ cheat: "x_reroll" }).cheatReroll).toBe(2);
+    expect(modsOf({ cheat: "nope" }).cheatReroll).toBe(1);
+  });
+
+  it("치트 코드 멀티: 시간이 지나면 첫 카드를 자동으로", () => {
+    const g = started(7, 2);
+    const b = g.boards[0];
+    while (!b.cheat && !g.over) {
+      botTurn(g, 0, BOTS[0]);
+      if (!g.boards[1].cheat) botTurn(g, 1, BOTS[0]);
+      step(g);
+    }
+    const first = b.cheat!.offer[0];
+    for (let i = 0; i < CHEAT_MULTI_SEC * TPS + 1; i++) step(g);
+    expect(b.cheat).toBeNull();
+    expect(b.cheats).toEqual([first]);
   });
 
   it("결정론: 같은 시드 · 같은 기록이면 결과가 똑같음", () => {
@@ -36,7 +123,7 @@ describe("픽셀 글리치 디펜스 엔진", () => {
   });
 
   it("못 하는 명령은 아무것도 안 바꿈", () => {
-    const g = newGame(1, 1);
+    const g = started(1, 1);
     const b = g.boards[0];
     const before = JSON.stringify(b);
     expect(apply(g, 0, { t: "merge", c: 0 })).toBeTruthy();
@@ -47,7 +134,7 @@ describe("픽셀 글리치 디펜스 엔진", () => {
   });
 
   it("소환 → 같은 유닛 3기 합성 → 다음 등급", () => {
-    const g = newGame(7, 1);
+    const g = started(7, 1);
     const b = g.boards[0];
     b.gold = 10_000;
     for (let i = 0; i < 40 && b.cells.some((c) => !c.def); i++) apply(g, 0, { t: "summon" });
@@ -84,7 +171,7 @@ describe("픽셀 글리치 디펜스 엔진", () => {
   });
 
   it("v0.3: 포기 · 모든 유닛 판매 · 도박은 웨이브부터", () => {
-    const g = newGame(5, 1);
+    const g = started(5, 1);
     const b = g.boards[0];
     // 도박: 처음엔 막힘 (상태 그대로)
     b.stones = 10;
@@ -105,7 +192,7 @@ describe("픽셀 글리치 디펜스 엔진", () => {
   });
 
   it("보관함: 필드가 차면 보관함으로, 보관함 유닛은 공격 안 함", () => {
-    const g = newGame(3, 1);
+    const g = started(3, 1);
     const b = g.boards[0];
     b.gold = 100_000;
     for (let i = 0; i < 80; i++) apply(g, 0, { t: "summon" });
@@ -248,7 +335,7 @@ describe("픽셀 글리치 디펜스 서버", () => {
     await c.rpc("defense.profile");
     await expect(c.rpc("defense.unit.upAll", {})).rejects.toThrow();
     await srv.db.col("defense_profile").updateOne({ _id: c.uid! } as never, {
-      $set: { pieces: 100000, cards: { k_squire: 40, m_bolt: 3 } },
+      $set: { pieces: 100000, cards: { k_squire: 40, m_bolt: 4 } },
     });
     const one = await c.rpc("defense.unit.upAll", { id: "k_squire" });
     const plan = planUpAll([UNIT.k_squire], {}, { k_squire: 40 }, 100000);
@@ -293,6 +380,41 @@ describe("픽셀 글리치 디펜스 서버", () => {
     c.close();
   });
 
+  it("끈기: 가장 높은 단계에서 연달아 지면 다음 판 피해 +5%씩 · 단계를 넘기면 0", async () => {
+    const c = await member();
+    for (let k = 1; k <= 2; k++) {
+      const st = await c.rpc("defense.start", { mode: "season" });
+      expect(st.loadout.grit).toBe(k - 1);
+      const fin = await c.rpc("defense.finish", { run: st.run, log: [[5, 0, { t: "quit" }]] });
+      expect(fin.result.win).toBe(false);
+    }
+    const st = await c.rpc("defense.start", { mode: "season" });
+    expect(st.loadout.grit).toBe(2);
+    expect(modsOf(st.loadout).gritDmg).toBeCloseTo(1.1);
+    // 단계를 넘기면 (0~9 는 40웨이브) 끈기 0
+    await srv.db.col("defense_profile").updateOne({ _id: c.uid! } as never, { $set: { glitchOpen: 1 } });
+    expect((await c.rpc("defense.start", { mode: "season" })).loadout.grit).toBe(0);
+    c.close();
+  });
+
+  it("치트 연구: 상점에서 사고 (한 번) · 1칸에 끼면 로드아웃으로", async () => {
+    const c = await member();
+    const x = CHEAT_RES[0];
+    await expect(c.rpc("defense.cheatres.buy", { id: x.id })).rejects.toThrow();
+    await c.rpc("defense.profile");
+    await srv.db.col("defense_profile").updateOne({ _id: c.uid! } as never, { $set: { pieces: x.pieces * 3, cores: x.cores * 3 } });
+    const a = await c.rpc("defense.cheatres.buy", { id: x.id });
+    expect(a.cheatRes).toEqual([x.id]);
+    expect(a.load.cheat).toBe(x.id);
+    await expect(c.rpc("defense.cheatres.buy", { id: x.id })).rejects.toThrow();
+    await expect(c.rpc("defense.load", { res: [], relics: [], glitch: 0, cheat: CHEAT_RES[1].id })).rejects.toThrow();
+    const { loadout } = await c.rpc("defense.start", { mode: "season" });
+    expect(loadout.cheat).toBe(x.id);
+    await c.rpc("defense.load", { res: [], relics: [], glitch: 0, cheat: "" });
+    expect((await c.rpc("defense.start", { mode: "season" })).loadout.cheat).toBe("");
+    c.close();
+  });
+
   it("주간 도전은 없음 (weekly 모드 거절)", async () => {
     const a = await member();
     await expect(a.rpc("defense.start", { mode: "weekly" })).rejects.toThrow();
@@ -321,6 +443,10 @@ describe("픽셀 글리치 디펜스 서버", () => {
     await srv.db.col("users").updateOne({ _id: c.uid! } as never, { $set: { points: 100_000 } });
     await expect(c.rpc("defense.pack.buy", { id: "p_start" })).rejects.toThrow();
     await expect(c.rpc("defense.pack.buy", { id: "p_deep10" })).rejects.toThrow();
+    // 일일 패키지: 하루 1번 (300%)
+    expect(packPct(PACK.p_daily)).toBe(300);
+    await c.rpc("defense.pack.buy", { id: "p_daily" });
+    await expect(c.rpc("defense.pack.buy", { id: "p_daily" })).rejects.toThrow();
     // 주간 패키지: 주 1번
     await c.rpc("defense.pack.buy", { id: "p_week" });
     await expect(c.rpc("defense.pack.buy", { id: "p_week" })).rejects.toThrow();
@@ -425,7 +551,7 @@ describe("픽셀 글리치 디펜스 서버", () => {
   });
 
   it("베타 엔진: 7×4 · 잠긴 보관함 · 초월은 해금해야 조합 · 히든 @ 재료", () => {
-    const g = newGame(7, 1, [{ trans: [] }]);
+    const g = started(7, 1, [{ trans: [] }]);
     const b = g.boards[0];
     expect(CELLS).toBe(28);
     expect(apply(g, 0, { t: "swap", a: 0, b: CELLS + 4 })).toBeTruthy(); // 잠긴 칸
@@ -434,7 +560,7 @@ describe("픽셀 글리치 디펜스 서버", () => {
       b.cells[i] = { def: id, units: [{ cd: 0, ult: 0, stun: 0 }] };
     }
     expect(apply(g, 0, { t: "recipe", id: "k_astra" })).toBeTruthy();
-    const g2 = newGame(7, 1, [{ trans: ["k_astra"] }]);
+    const g2 = started(7, 1, [{ trans: ["k_astra"] }]);
     const b2 = g2.boards[0];
     for (const id of ["k_saint", "k_dragoon", "k_lion", "m_omega", "a_void"]) {
       const i = b2.cells.findIndex((c) => !c.def);

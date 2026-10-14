@@ -11,6 +11,7 @@
  *
  * 수치를 바꾸면 balance.ts 의 BALANCE_VER 도 올리기 (판 결과가 바뀜).
  */
+import { CHEAT_REROLL } from "./cheats";
 import type { Faction } from "./units";
 
 /* ───────────────────────── 로드아웃 ───────────────────────── */
@@ -36,7 +37,18 @@ export interface Loadout {
   own?: Record<string, number>;
   /** 해금한 초월 (조합식이 열림) */
   trans?: string[];
+  /** 치트 연구칸에 낀 것 (CHEAT_RES id, 없으면 "") */
+  cheat?: string;
+  /** 끈기: 열린 가장 높은 오염 단계에서 연달아 못 깬 판 수 (서버가 셈, 0..GRIT_MAX) */
+  grit?: number;
 }
+
+/**
+ * 끈기 — 가장 높은 오염 단계(새 단계)에서 연달아 지면 판마다 모든 피해 +GRIT_PER (최대 GRIT_MAX 판).
+ * 그 단계를 깨거나(10~) 40웨이브를 넘겨 다음 단계를 열면(0~9) 0 으로. 전략 · 운에 따라 막히는 시간이 너무 벌어지지 않게.
+ */
+export const GRIT_PER = 0.05;
+export const GRIT_MAX = 15;
 
 /** 보관함: 처음 BENCH_BASE 칸, 정비소에서 1칸씩 BENCH_MAX 까지 (픽셀 조각) */
 export const BENCH_BASE = 3;
@@ -49,6 +61,23 @@ export const FRES_COST = [15, 30, 60] as const;
 export const TRANS_IDS = ["k_astra", "m_deus", "a_origin"] as const;
 /** 유물 보유 효과: 가진 유물 하나 · 레벨 하나당 모든 피해 +% (일반 · 희귀 · 전설) */
 export const RELIC_PASSIVE = [0.4, 0.7, 1] as const;
+
+/**
+ * 치트 연구 — 치트 연구칸 1칸 (누구나), 상점에서 한 번 사면 계속. 둘 중 하나만 낌. 비쌈 (오래 하는 사람의 목표)
+ *  리롤 회로: 치트 코드 카드마다 다시 뽑기 +1 · 확률 증폭기: 비밀 등급 ×1.5 · 금지 등급 ×2
+ */
+export interface CheatResDef {
+  id: string;
+  name: string;
+  desc: string;
+  cores: number;
+  pieces: number;
+}
+export const CHEAT_RES: CheatResDef[] = [
+  { id: "x_reroll", name: "리롤 회로", desc: "치트 코드 카드마다 다시 뽑기 +1 (1번 → 2번)", cores: 120, pieces: 12000 },
+  { id: "x_luck", name: "확률 증폭기", desc: "치트 코드 비밀 등급 ×1.5 · 금지 등급 ×2 확률", cores: 120, pieces: 12000 },
+];
+export const CHEAT_RES_OF: Record<string, CheatResDef> = Object.fromEntries(CHEAT_RES.map((x) => [x.id, x]));
 
 export const UNIT_MAX_LV = 10;
 /** 유닛 레벨 하나당 그 유닛 피해 + */
@@ -104,7 +133,10 @@ export const RESEARCH: ResearchDef[] = [
   res("k_tactic", "대형 진형", "기사단이 중형 · 대형 적에게 주는 피해 +{v}%p", (l) => rd(20 * sc(l, 0.25)), "knight", 1500),
   res("m_drill", "공방 개조", "기계공방 피해 +{v}%", (l) => rd(10 * sc(l, 0.25)), "mech", 800),
   res("m_tune", "과급 장치", "기계공방 공격 속도 +{v}%", (l) => rd(10 * sc(l, 0.25)), "mech", 1500),
+  res("m_bounty", "대물 탄두", "기계공방이 보스 · 엘리트 · 균열에게 주는 피해 +{v}%", (l) => rd(20 * sc(l, 0.25)), "mech", 1500),
+  res("k_rally", "돌격 나팔", "기사단 공격 속도 +{v}%", (l) => rd(10 * sc(l, 0.25)), "knight", 1500),
   res("a_drill", "마도 수련", "마도회 피해 +{v}%", (l) => rd(10 * sc(l, 0.25)), "arcane", 800),
+  res("a_echo", "마력 공명", "마도회 공격 속도 +{v}%", (l) => rd(10 * sc(l, 0.25)), "arcane", 1500),
   res("a_focus", "마력 집중", "마도회 둔화 · 체력 비례 피해 효과 +{v}%", (l) => rd(25 * sc(l, 0.25)), "arcane", 1500),
 ];
 export const RES: Record<string, ResearchDef> = Object.fromEntries(RESEARCH.map((r) => [r.id, r]));
@@ -144,7 +176,7 @@ export const RELIC_VAL = {
   alchemy_stone: (l: number) => 2 + Math.floor((Math.max(1, l) - 1) / 2),
   vaccine: (l: number) => rd(25 * sc(l, 0.2)),
   pure_blood: (l: number) => rd(25 * sc(l, 0.15)),
-  rainbow: (l: number) => rd(12 * sc(l, 0.15)),
+  rainbow: (l: number) => rd(9 * sc(l, 0.15)),
   twin_star: (l: number) => rd(15 * sc(l, 0.15)),
   war_banner: (l: number) => rd(40 * sc(l, 0.15)) / 10,
 };
@@ -203,7 +235,7 @@ const BASE_GLITCH: GlitchDef[] = [
   { lv: 10, hp: 2.6, spd: 1.1, bossSec: -15, reward: 4, armor: 1, boss: 1, rule: "끝판 — 보스 제한 시간 -15초" },
 ];
 /**
- * 11~30단계 (심연): 10단계 위에 한 단계마다 적 체력 +2%(10단계 기준) · 보상 +0.1, 5단계마다 새 규칙 (DEEP_PARAMS)
+ * 11~30단계 (심연): 10단계 위에 한 단계마다 적 체력 +4%(10단계 기준) · 보상 +0.1, 5단계마다 새 규칙 (DEEP_PARAMS)
  *  11~ 방어력 · 15~ 보스 체력 · 20~ 속도 · 방어력 더 · 25~ 보스 체력 더 · 보스 시간 -18 · 30 끝
  *  (다 키운 봇이 30단계를 다섯 판에 한 번쯤 깨는 정도 — 사람은 배치 · 초월이 더 나아서 이보다 쉬움)
  */
@@ -226,7 +258,7 @@ export interface DeepParams {
   /** 단계마다 보상 배수 + (10단계 4 에서) */
   rewardPerLv?: number;
 }
-export const DEEP_PARAMS: DeepParams = { hpPerLv: 0.02, armor11: 1.1, armor20: 1.2, boss15: 1.05, boss25: 1.1, spd20: 1.08, rewardPerLv: 0.1 };
+export const DEEP_PARAMS: DeepParams = { hpPerLv: 0.04, armor11: 1.15, armor20: 1.28, boss15: 1.08, boss25: 1.15, spd20: 1.1, rewardPerLv: 0.1 };
 export function deepGlitch(P: DeepParams): GlitchDef[] {
   const top = BASE_GLITCH[10];
   const rules = deepRule(P);
@@ -262,7 +294,10 @@ export interface Mods {
   fac: Record<"knight" | "mech" | "arcane", number>;
   /** 기사단 중 · 대형 상성 더함 */
   knightBig: number;
-  mechAspd: number;
+  /** 세력별 공격 속도 + (연구) */
+  facAspd: Record<"knight" | "mech" | "arcane", number>;
+  /** 기계공방 보스 · 엘리트 · 균열 피해 × */
+  mechBoss: number;
   arcaneFx: number;
   killGold: number;
   /** 이 웨이브까지 웨이브 골드 2배 (0 = 없음) */
@@ -289,6 +324,14 @@ export interface Mods {
   trans: string[];
   /** 유물 보유 효과 (모든 피해 배수) */
   relicDmg: number;
+  /** 치트 코드: 카드마다 다시 뽑기 횟수 · 높은 등급 확률 */
+  cheatReroll: number;
+  cheatLuck: boolean;
+  /** 낀 치트 연구 (화면 표시) */
+  cheat: string;
+  /** 끈기 판 수 · 모든 피해 배수 */
+  grit: number;
+  gritDmg: number;
 }
 
 const clampInt = (v: unknown, lo: number, hi: number) =>
@@ -336,6 +379,8 @@ export function cleanLoadout(lo: Loadout | null | undefined, unitIds?: Set<strin
         .sort((a, b) => (a[0] < b[0] ? -1 : 1))
     ),
     trans: uniq(lo?.trans, (s) => (TRANS_IDS as readonly string[]).includes(s), TRANS_IDS.length).sort(),
+    cheat: typeof lo?.cheat === "string" && CHEAT_RES_OF[lo.cheat] ? lo.cheat : "",
+    grit: clampInt(lo?.grit, 0, GRIT_MAX),
   };
 }
 
@@ -370,7 +415,8 @@ export function modsOf(lo: Loadout | null | undefined): Mods {
       arcane: 1 + R("a_drill") / 100,
     },
     knightBig: R("k_tactic") / 100,
-    mechAspd: R("m_tune") / 100,
+    facAspd: { knight: R("k_rally") / 100, mech: R("m_tune") / 100, arcane: R("a_echo") / 100 },
+    mechBoss: 1 + R("m_bounty") / 100,
     arcaneFx: 1 + R("a_focus") / 100,
     killGold: has("gold_gear") ? V.gold_gear(X("gold_gear")) : 0,
     firstHarvest: has("first_harvest") ? V.first_harvest(X("first_harvest")) : 0,
@@ -392,6 +438,11 @@ export function modsOf(lo: Loadout | null | undefined): Mods {
     bench: L.bench,
     trans: L.trans,
     relicDmg: 1 + relicPassive(L.own) / 100,
+    cheatReroll: CHEAT_REROLL + (L.cheat === "x_reroll" ? 1 : 0),
+    cheatLuck: L.cheat === "x_luck",
+    cheat: L.cheat,
+    grit: L.grit,
+    gritDmg: 1 + GRIT_PER * L.grit,
   };
 }
 
@@ -399,16 +450,16 @@ export function modsOf(lo: Loadout | null | undefined): Mods {
 
 /** lv → lv+1 에 드는 카드 · 조각 */
 export const LV_COST: { cards: number; pieces: number }[] = [
-  { cards: 3, pieces: 50 },
-  { cards: 6, pieces: 100 },
-  { cards: 10, pieces: 180 },
-  { cards: 16, pieces: 300 },
-  { cards: 24, pieces: 450 },
-  { cards: 32, pieces: 650 },
-  { cards: 48, pieces: 900 },
-  { cards: 64, pieces: 1200 },
-  { cards: 96, pieces: 1600 },
-  { cards: 128, pieces: 2200 },
+  { cards: 4, pieces: 50 },
+  { cards: 8, pieces: 100 },
+  { cards: 12, pieces: 180 },
+  { cards: 20, pieces: 300 },
+  { cards: 30, pieces: 450 },
+  { cards: 40, pieces: 650 },
+  { cards: 60, pieces: 900 },
+  { cards: 80, pieces: 1200 },
+  { cards: 120, pieces: 1600 },
+  { cards: 160, pieces: 2200 },
 ];
 
 /**
@@ -630,13 +681,16 @@ export interface PackDef {
   give: Goods;
   /** 한 번만 (계정) */
   once?: boolean;
-  /** 주마다 (once 가 아니면) */
+  /** 주마다 (once · perDay 가 아니면) */
   perWeek?: number;
+  /** 하루마다 (한국 시간 0시에 다시) */
+  perDay?: number;
   /** 이 오염 단계를 클리어해야 보임 */
   needWin?: number;
 }
-/** 패키지: GP 로만. 재화샵 값의 5~8배 (이득 % = goodsGp ÷ gp) */
+/** 패키지: GP 로만. 재화샵 값의 3~8배 (이득 % = goodsGp ÷ gp) — 일일 300% · 주간 550~670% · 한 번짜리 520~800% */
 export const GP_PACKS: PackDef[] = [
+  { id: "p_daily", name: "일일 보급 꾸러미", desc: "매일 — 조각 · 카드 상자", gp: 500, perDay: 1, give: { pieces: 450, cardBox: 1 } },
   { id: "p_start", name: "신입 수호자 꾸러미", desc: "처음 한 번 — 정비소를 빠르게 시작", gp: 1000, once: true, give: { pieces: 1500, cardBox: 2, cores: 4 } },
   { id: "p_week", name: "주간 보급 꾸러미", desc: "매주 — 조각 · 카드 · 코어", gp: 1500, perWeek: 1, give: { pieces: 2500, cardBox: 3, cores: 6 } },
   { id: "p_relic", name: "유물 탐사 꾸러미", desc: "매주 — 유물 상자 3 + 강화용 코어", gp: 2000, perWeek: 1, give: { relicBox: 3, cores: 8 } },

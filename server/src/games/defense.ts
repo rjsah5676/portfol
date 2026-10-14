@@ -30,7 +30,7 @@ import { createDefenseMeta } from "./defenseMeta";
  *   defense.me { board }      → 내 최고 기록 · 순위
  *
  *  성장 (defenseMeta.ts): defense.profile · unit.up/upAll/down · res.buy/level · relic.buy/level · box.buy/open (card · relic)
- *                          · bench.buy · fslot.buy · trans (초월 소환, 코어) · load · theme
+ *                          · bench.buy · fslot.buy · cheatres.buy (치트 연구) · trans (초월 소환, 코어) · load · theme
  *                        · quest.claim · pass.claim · pass.buy(GP)
  *                        · store.buy(재화샵, GP) · store.sell(재화 → GP) · pack.buy(패키지, GP)
  *
@@ -310,6 +310,7 @@ export function registerDefense({ gateway, db, points }: Deps) {
   gateway.rpc("defense.box.open", (ctx, raw) => (member(ctx), meta.boxOpen(ctx.uid, boxKind.parse(raw).kind)));
   gateway.rpc("defense.bench.buy", (ctx) => (member(ctx), meta.benchBuy(ctx.uid)));
   gateway.rpc("defense.fslot.buy", (ctx) => (member(ctx), meta.fslotBuy(ctx.uid)));
+  gateway.rpc("defense.cheatres.buy", (ctx, raw) => (member(ctx), meta.cheatResBuy(ctx.uid, id.parse(raw).id)));
   gateway.rpc("defense.trans", (ctx) => (member(ctx), meta.transSummon(ctx.uid)));
   gateway.rpc("defense.store.buy", (ctx, raw) => (member(ctx), meta.storeBuy(ctx.uid, id.parse(raw).id)));
   gateway.rpc("defense.store.sell", (ctx, raw) => (member(ctx), meta.storeSell(ctx.uid, id.parse(raw).id)));

@@ -3,7 +3,8 @@
 import { Fragment, useEffect, useReducer, useRef, useState, type ReactNode } from "react";
 import { B, BOSS_EVERY, CAP, LAST_WAVE, TPS, hpOf, sec } from "@/lib/defense/balance";
 import { BOSSES } from "@/lib/defense/enemies";
-import { MISSIONS, PATCHES, PATCH_DEADLINE } from "@/lib/defense/meta";
+import { MISSIONS, PATCHES } from "@/lib/defense/meta";
+import { CHEAT, CHEAT_CAT_NAME, CHEAT_MULTI_SEC, CHEAT_TIER_COLOR, CHEAT_TIER_NAME } from "@/lib/defense/cheats";
 import { botByName, botTurn, BOTS } from "@/lib/defense/bot";
 import { BOSS_ART, preloadArt } from "@/lib/defense/assets";
 import {
@@ -16,6 +17,7 @@ import {
   luckCost,
   sellOf,
   bossSecOf,
+  capOf,
   summonCost,
   upCost,
   type Board,
@@ -222,8 +224,16 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry }
         );
         break;
       case "patch":
-        if (e.auto) toast("패치를 안 골라서 연합 프로토콜이 적용됐어요");
+        toast(<>시작 치트 · <b className="text-[#ffd23f]">{PATCHES.find((p) => p.id === e.id)?.name}</b>{e.auto ? " (시간이 지나 자동)" : ""}</>, "gold");
         break;
+      case "cheatOffer":
+        sfx("reward");
+        break;
+      case "cheat": {
+        const c = CHEAT[e.id];
+        if (c) toast(<>치트 코드 · <b style={{ color: CHEAT_TIER_COLOR[c.tier] }}>{c.name}</b>{e.auto ? " (시간이 지나 자동)" : ""}</>, "gold");
+        break;
+      }
       case "over":
         jingle(e.win ? "clear" : "gameover");
         break;
@@ -471,19 +481,53 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry }
               <Icon n="skull" size={10} /> 필드의 적
             </span>
             <b
-              className={`text-[14px] ${nEnemy >= CAP * 0.8 ? "dfn-blink text-[var(--red)]" : nEnemy >= CAP * 0.6 ? "text-[#ffb347]" : "text-white"}`}
+              className={`text-[14px] ${nEnemy >= capOf(b) * 0.8 ? "dfn-blink text-[var(--red)]" : nEnemy >= capOf(b) * 0.6 ? "text-[#ffb347]" : "text-white"}`}
             >
               {nEnemy}
-              <span className="text-[12px] text-[var(--dim)]">/{CAP}</span>
+              <span className="text-[12px] text-[var(--dim)]">/{capOf(b)}</span>
             </b>
           </div>
           <Bar
             className="mt-1.5"
             h={5}
-            value={nEnemy / CAP}
-            color={nEnemy >= CAP * 0.8 ? "#ff4d6d" : nEnemy >= CAP * 0.6 ? "#ffb347" : "#6dff8f"}
+            value={nEnemy / capOf(b)}
+            color={nEnemy >= capOf(b) * 0.8 ? "#ff4d6d" : nEnemy >= capOf(b) * 0.6 ? "#ffb347" : "#6dff8f"}
           />
         </div>
+        {(b.patch || b.cheats.length > 0 || b.mods.grit > 0) && (
+          <div className="px-inset flex h-full shrink-0 items-center gap-1 px-1.5">
+            {patch && (
+              <span
+                className="flex h-6 w-6 items-center justify-center bg-[#0a0816]"
+                style={{ boxShadow: "inset 0 0 0 2px #ffd23f" }}
+                title={`시작 치트 · ${patch.name}\n${patch.desc}`}
+              >
+                <Icon n="gear" size={13} />
+              </span>
+            )}
+            {b.mods.grit > 0 && (
+              <b
+                className="px-1 text-[12px] text-[var(--gold)]"
+                title={`끈기 — 이 단계에서 ${b.mods.grit}판 연달아 져서 모든 피해 +${Math.round((b.mods.gritDmg - 1) * 100)}% (깨면 0)`}
+              >
+                끈기+{Math.round((b.mods.gritDmg - 1) * 100)}%
+              </b>
+            )}
+            {b.cheats.map((id) => {
+              const c = CHEAT[id];
+              return (
+                <span
+                  key={id}
+                  className="flex h-6 w-6 items-center justify-center bg-[#0a0816]"
+                  style={{ boxShadow: `inset 0 0 0 2px ${CHEAT_TIER_COLOR[c.tier]}` }}
+                  title={`치트 코드 · ${CHEAT_TIER_NAME[c.tier]} · ${c.name}\n${c.desc}`}
+                >
+                  <Icon n={CHEAT_CAT_ICON[c.cat]} size={13} />
+                </span>
+              );
+            })}
+          </div>
+        )}
         {(b.mods.relics.length > 0 || b.mods.glitch.lv > 0) && (
           <div
             className="px-inset flex h-full shrink-0 items-center gap-1 px-1.5"
@@ -633,6 +677,7 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry }
             </p>
           </div>
         )}
+        {b.cheat && !b.result && <CheatPicker b={b} multi={multi} run={run} />}
         {ctrl.paused && !modal && (
           <div className="absolute inset-0 flex items-center justify-center bg-[#05040c]/60">
             <Btn
@@ -769,7 +814,7 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry }
               i === ctrl.seat ? null : (
                 <span key={i} className={o.result ? "text-[var(--dim)]" : ""}>
                   <b>{names[i]}</b>{" "}
-                  {o.result ? (o.result.win ? "클리어" : `탈락 W${o.result.wave}`) : `W${o.wave} · ${o.enemies.length}/${CAP}`}
+                  {o.result ? (o.result.win ? "클리어" : `탈락 W${o.result.wave}`) : `W${o.wave} · ${o.enemies.length}/${capOf(o)}`}
                 </span>
               )
             )}
@@ -788,17 +833,13 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry }
               <Icon n="ticket" size={13} /> 뽑기권 {b.tickets.length}
             </Btn>
           )}
-          {!b.patch && b.wave < PATCH_DEADLINE ? (
-            <Btn tone="cyan" onClick={() => setModal("patch")} className="dfn-pulse relative flex-1 text-[12px] font-bold" title={`${PATCH_DEADLINE}웨이브 전까지 하나 (안 고르면 연합)`}>
-              <Icon n="gear" size={13} /> 패치 고르기
-              <Badge>~{PATCH_DEADLINE}W</Badge>
-            </Btn>
-          ) : (
-            <div className="px-inset flex min-w-0 flex-1 items-center gap-1 px-2 text-[12px]" title={patch?.desc}>
-              <Icon n="gear" size={12} />
-              <b className="truncate">{patch?.name ?? "패치 없음"}</b>
-            </div>
-          )}
+          <div className="px-inset flex min-w-0 flex-1 items-center gap-1 px-2 text-[12px] text-[var(--mute)]" title="보스(10 · 20 · 30 · 40 · 50)를 잡으면 치트 코드 3장 중 하나">
+            <Icon n="flask" size={12} />
+            {(() => {
+              const next = [10, 20, 30, 40, 50].find((w) => w > b.wave || (w === b.wave && b.phase === "boss"));
+              return next ? <>다음 치트 코드 · <b className="text-[var(--text)]">{next}W 보스</b></> : <>치트 코드 {b.cheats.length}개</>;
+            })()}
+          </div>
         </div>
 
         <Btn
@@ -825,7 +866,7 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry }
           <span className="mt-1 flex items-center justify-center gap-1.5 text-[12px]">
             {odds.map((p, i) =>
               p > 0 ? (
-                <span key={i} style={{ color: i >= 2 ? GRADE_COLOR[i] : undefined }} className={i >= 2 ? "font-bold drop-shadow-[1px_1px_0_#000]" : "opacity-90"}>
+                <span key={i} style={{ color: i >= 1 ? GRADE_COLOR[i] : undefined }} className={i >= 1 ? "font-bold drop-shadow-[1px_1px_0_#000]" : "opacity-90"}>
                   {"NREL"[i]} {p}%
                 </span>
               ) : null
@@ -973,27 +1014,6 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry }
       </div>
 
       {/* ── 창 ── */}
-      {modal === "patch" && (
-        <Modal title="패치 고르기" onClose={() => setModal(null)} accent="#5ff2ff">
-          <p className="mb-3 text-[12px] text-[var(--mute)]">
-            한 번 고르면 못 바꿔요 · {PATCH_DEADLINE}웨이브까지 안 고르면 연합 프로토콜
-          </p>
-          <div className="grid grid-cols-2 gap-3">
-            {PATCHES.map((p) => (
-              <Btn
-                key={p.id}
-                tone="cyan"
-                onClick={() => run({ t: "patch", id: p.id }) && setModal(null)}
-                className="p-3 text-left"
-                silent
-              >
-                <b className="px-shadow block text-[16px]">{p.name}</b>
-                <span className="mt-1 block text-[12px] leading-snug opacity-85">{p.desc}</span>
-              </Btn>
-            ))}
-          </div>
-        </Modal>
-      )}
       {modal === "pick" && b.tickets.length > 0 && (
         <PickModal b={b} run={run} onClose={() => setModal(null)} />
       )}
@@ -1165,7 +1185,7 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry }
                 ? `${LAST_WAVE}웨이브 돌파 · ${fmtTime(time)}`
                 : b.result?.reason === "boss"
                   ? `${b.wave}웨이브 보스를 제한 시간 안에 못 잡았어요`
-                  : `${b.wave}웨이브 · 필드의 적이 ${CAP}마리가 됐어요`}
+                  : `${b.wave}웨이브 · 필드의 적이 ${capOf(b)}마리가 됐어요`}
             </p>
             <div className="mt-4 grid grid-cols-3 gap-2 text-[12px]">
               <Stat label="웨이브" value={`${b.result?.wave ?? b.wave}`} />
@@ -1596,3 +1616,84 @@ function PickModal({ b, run, onClose }: { b: Board; run: (c: Cmd) => boolean; on
   );
 }
 
+const CHEAT_CAT_ICON = { unit: "star", gold: "coin", dmg: "up", buff: "flask" } as const;
+
+/** 치트 코드 고르기 — 보스를 잡으면 필드 위에 3장 (고를 때까지 멈춤) */
+function CheatPicker({ b, multi, run }: { b: Board; multi: boolean; run: (c: Cmd) => boolean }) {
+  const o = b.cheat!;
+  if (o.kind === "patch") return <PatchPicker b={b} multi={multi} run={run} />;
+  const left = multi ? Math.max(0, Math.ceil(CHEAT_MULTI_SEC - o.t / TPS)) : null;
+  return (
+    <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-[#05040c]/75 px-6">
+      <div className="text-center">
+        <p className={`${TITLE} px-shadow dfn-pop text-[26px] text-white`}>치트 코드</p>
+        <p className="px-shadow text-[13px] text-[var(--mute)]">
+          하나를 골라 이 판 끝까지 · 카드마다 다시 뽑기 {o.rr.length ? `${Math.max(...o.rr)}번` : ""} · {multi ? `${left}초 뒤 첫 카드로` : "고르는 동안 게임이 멈춰요"}
+        </p>
+      </div>
+      <div className="flex w-full max-w-[640px] gap-3">
+        {o.offer.map((id, i) => {
+          const c = CHEAT[id];
+          const col = CHEAT_TIER_COLOR[c.tier];
+          return (
+            <div key={i} className="flex flex-1 flex-col gap-1.5">
+              <button
+                type="button"
+                className="px-box dfn-pop flex min-h-[170px] flex-col items-center gap-1.5 p-3 text-center transition-transform hover:-translate-y-1"
+                style={{ "--b": col } as React.CSSProperties}
+                onClick={() => {
+                  if (run({ t: "cheat", i })) sfx("myth");
+                }}
+              >
+                <span className="text-[12px] font-bold" style={{ color: col }}>
+                  {CHEAT_TIER_NAME[c.tier]} · {CHEAT_CAT_NAME[c.cat]}
+                </span>
+                <b className="px-shadow text-[17px] leading-tight text-white">{c.name}</b>
+                <span className="text-[13px] leading-snug text-[var(--text)]">{c.desc}</span>
+              </button>
+              <Btn className="h-8 text-[12px]" disabled={o.rr[i] <= 0} onClick={() => run({ t: "reroll", i })}>
+                다시 뽑기 ({o.rr[i]})
+              </Btn>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/** 시작 치트 (패치) — 판을 시작할 때 4개 중 하나, 고를 때까지 멈춤 */
+function PatchPicker({ b, multi, run }: { b: Board; multi: boolean; run: (c: Cmd) => boolean }) {
+  const o = b.cheat!;
+  const left = multi ? Math.max(0, Math.ceil(CHEAT_MULTI_SEC - o.t / TPS)) : null;
+  return (
+    <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-[#05040c]/75 px-6">
+      <div className="text-center">
+        <p className={`${TITLE} px-shadow dfn-pop text-[26px] text-white`}>시작 치트 코드</p>
+        <p className="px-shadow text-[13px] text-[var(--mute)]">
+          이 판의 운영 방식을 하나 골라요 (못 바꿔요) · {multi ? `${left}초 뒤 연합 프로토콜로` : "고르는 동안 게임이 멈춰요"}
+        </p>
+      </div>
+      <div className="grid w-full max-w-[680px] grid-cols-2 gap-3">
+        {o.offer.map((id, i) => {
+          const p = PATCHES.find((x) => x.id === id)!;
+          return (
+            <button
+              key={id}
+              type="button"
+              className="px-box dfn-pop flex min-h-[110px] flex-col items-center gap-1.5 p-3 text-center transition-transform hover:-translate-y-1"
+              style={{ "--b": "#ffd23f" } as React.CSSProperties}
+              onClick={() => {
+                if (run({ t: "cheat", i })) sfx("ui-click", 1, 0.9);
+              }}
+            >
+              <span className="text-[12px] font-bold text-[#ffd23f]">시작 · 운영</span>
+              <b className="px-shadow text-[17px] leading-tight text-white">{p.name}</b>
+              <span className="text-[12px] leading-snug text-[var(--text)]">{p.desc}</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}

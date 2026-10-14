@@ -7,7 +7,7 @@
  * 시간 단위는 tick (1초 = TPS tick). 거리 단위는 칸 (필드 8 × 5칸).
  */
 
-export const BALANCE_VER = "beta2";
+export const BALANCE_VER = "beta3";
 
 export const TPS = 30;
 /** 필드에 남은 적이 이 수에 닿으면 패배 */
@@ -109,6 +109,26 @@ export const B = {
   /** 보스에게는 크기 상성이 이보다 나쁘지 않음 (기사단도 중 · 대형 보스를 칠 수 있게) */
   bossSizeFloor: 0.8,
 } as const;
+
+/**
+ * 치트 코드 보정: 치트가 나오는 보스(10 · 20 · 30 · 40 · 50)를 지날 때마다 적 체력 +cheatHp (합) — 치트로 세진 만큼 판 길이 · 난이도를 맞춤.
+ * 고른 치트와 상관없이 웨이브로만 정함 (모두 같은 적). 밸런스 시뮬이 --cheathp 로 바꿔 볼 수 있게 객체로 둠.
+ */
+export const TUNE = {
+  cheatHp: 0.15,
+  /** 단일 코어 패치 피해 배수 (레전드 이하 · 신화 이상) */
+  coreLow: 7,
+  coreHigh: 4.5,
+  /** 단일 코어: 적 이동 속도 × */
+  coreSlow: 0.88,
+  /** 이자 패치: 가진 골드 % · 최대 */
+  interestPct: 0.1,
+  interestMax: 40,
+  /** 이자: 웨이브 골드 × (안 모아 두는 사람도 이득이 있게) */
+  interestWave: 1.2,
+  /** 도박사: 도박 성공률 + */
+  gamblerP: 0.15,
+};
 
 /** 웨이브별 일반 적 체력 (곱을 차례로 해서 미리 — Math.pow 는 엔진마다 끝자리가 다를 수 있어 안 씀) */
 export const HP_TABLE: number[] = (() => {

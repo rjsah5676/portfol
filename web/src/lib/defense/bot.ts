@@ -4,6 +4,7 @@
  * 같은 상태면 늘 같은 명령 (결정론) → 봇 판도 기록으로 다시 돌릴 수 있음.
  */
 import { B } from "./balance";
+import { CHEAT, type CheatDef } from "./cheats";
 import { PATCHES } from "./meta";
 import {
   CELLS,
@@ -137,10 +138,43 @@ function factionDps(b: Board): Record<Faction, number> {
   return out;
 }
 
+/**
+ * 치트 코드 점수 (봇이 고를 때) — 등급이 높을수록, 내 길(주력 세력 · 패치)에 맞을수록.
+ * 사람처럼 "그럭저럭 맞는 것"을 고르는 정도 (완벽한 계산 X)
+ */
+function cheatScore(b: Board, cfg: BotCfg, c: CheatDef): number {
+  let v = 100 + c.tier * 100;
+  const dps = factionDps(b);
+  const main = cfg.focus ?? (Object.entries(dps).sort((x, y) => y[1] - x[1] || x[0].localeCompare(y[0]))[0][0] as Faction);
+  if (c.faction) v += c.faction === main ? 60 : -150;
+  if (c.id === "c_mono") v += cfg.focus ? 80 : -120;
+  if (c.id === "c_tri") v += cfg.focus ? -150 : 20;
+  if (c.cat === "dmg" && !c.faction) v += 30;
+  if (c.id === "c_compound" || c.id === "c_salary" || c.id === "c_infinite") v += cfg.patch === "interest" ? 60 : 0;
+  if (c.id === "c_dice" || c.id === "c_pouch") v += cfg.patch === "gambler" ? 70 : -30;
+  if (c.id === "c_underdog") v += cfg.patch === "core" ? -60 : 0;
+  if (c.id === "c_legend") v += cfg.patch === "core" ? 50 : 0;
+  if (c.cat === "unit" && b.patch === "core" && c.id === "c_ticketM") v -= 120;
+  return v;
+}
+
 /** 이번 생각 차례에 할 명령 하나 (없으면 null) */
 export function botMove(b: Board, cfg: BotCfg, skip: ReadonlySet<string> = new Set()): Cmd | null {
   if (b.result) return null;
   const ok = (c: Cmd) => (skip.has(c.t) ? null : c);
+  if (b.cheat?.kind === "patch") {
+    const i = b.cheat.offer.indexOf(cfg.patch);
+    return { t: "cheat", i: Math.max(0, i) };
+  }
+  if (b.cheat) {
+    const sc = b.cheat.offer.map((id) => cheatScore(b, cfg, CHEAT[id]));
+    const best = sc.indexOf(Math.max(...sc));
+    // 가장 낮은 카드가 기본 등급이고 다시 뽑기가 남았으면 그 카드를 바꿔 봄
+    const low = sc.indexOf(Math.min(...sc));
+    if (!skip.has("reroll") && b.cheat.rr[low] > 0 && CHEAT[b.cheat.offer[low]].tier === 0 && low !== best)
+      return { t: "reroll", i: low };
+    return { t: "cheat", i: best };
+  }
   if (!b.patch && PATCHES.some((p) => p.id === cfg.patch)) {
     const c = ok({ t: "patch", id: cfg.patch });
     if (c) return c;
@@ -301,7 +335,7 @@ function benchMove(b: Board): Cmd | null {
 /** 봇 한 차례: 할 수 있는 동안 여러 번 (한 차례 최대 8개) — 실행한 명령을 돌려줌 */
 export function botTurn(g: Game, p: number, cfg: BotCfg): Cmd[] {
   const b = g.boards[p];
-  if (g.tick % cfg.every !== 0) return [];
+  if (g.tick % cfg.every !== 0 && !b.cheat) return [];
   const done: Cmd[] = [];
   const skip = new Set<string>();
   for (let n = 0; n < 12; n++) {

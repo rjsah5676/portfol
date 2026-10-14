@@ -34,7 +34,7 @@ import Codex from "./Codex";
 import { Controller } from "./controller";
 import Hub, { Cur, curTip, type HubTab } from "./Hub";
 import { setTheme } from "./render";
-import { GLITCH, type Loadout } from "@/lib/defense/progress";
+import { GLITCH, GRIT_PER, type Loadout } from "@/lib/defense/progress";
 import GameView from "./GameView";
 import Stage from "./Stage";
 import { playBgm } from "./audio";
@@ -301,6 +301,8 @@ function Menu(p: {
   const heroes = ["k_commander", "m_titan", "a_archmage"].filter((id) => UNIT_ART[id]);
   const pr = p.prof;
   const glitch = pr ? Math.min(pr.load.glitch, pr.glitchOpen) : 0;
+  /** 끈기 (서버 gritOf 와 같은 규칙) */
+  const grit = pr && glitch === pr.glitchOpen && glitch > pr.glitchWin && pr.grit?.g === glitch ? pr.grit.n : 0;
   // 정비소 알림 점: 받을 미션 · 패스 · 안 연 상자
   const hubDot = pr
     ? [...pr.quests.daily, ...pr.quests.weekly].filter((q) => !q.claimed && q.value >= q.goal).length +
@@ -398,7 +400,7 @@ function Menu(p: {
         </p>
         <div className="mt-2 flex items-center gap-1.5">
           <span className="inline-block bg-[var(--gold)] px-2 py-1 text-[12px] font-bold text-[#1a1000]">
-            BETA 1.1 · 밸런스 {BALANCE_VER}
+            BETA 1.2 · 밸런스 {BALANCE_VER}
           </span>
           {p.resume && (
             <>
@@ -426,7 +428,7 @@ function Menu(p: {
             {!p.member
               ? "연습 판 (회원은 랭킹 · 성장 · 보상)"
               : pr
-                ? `오염 ${glitch}단계 (보상 ×${GLITCH[glitch].reward}) · 연구 ${pr.load.res.length} · 유물 ${pr.load.relics.length} 장착`
+                ? `오염 ${glitch}단계 (보상 ×${GLITCH[glitch].reward}) · 연구 ${pr.load.res.length} · 유물 ${pr.load.relics.length}${grit ? ` · 끈기 +${Math.round(grit * GRIT_PER * 100)}%` : ""}`
                 : "시즌 랭킹 판"}
           </span>
         </Btn>

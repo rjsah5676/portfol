@@ -2,6 +2,7 @@
  * 판 운영 요소 — 패치(원랜디 항법) · 미션(원랜디 스토리 · 나랜디 히든 미션 같은 1회 보상).
  * 판정 · 보상 적용은 sim.ts, 여기는 정의만.
  */
+import { TUNE } from "./balance";
 
 export interface PatchDef {
   id: string;
@@ -9,23 +10,23 @@ export interface PatchDef {
   desc: string;
 }
 
-/** 패치: 10웨이브 전까지 하나 고름 (안 고르면 10웨이브에 연합 프로토콜) — 한 번 고르면 못 바꿈 */
+/** 패치 = 시작 치트 코드: 판을 시작할 때 4개 중 하나 (sim.ts newBoard 가 b.cheat 로 띄움, 멀티는 시간이 지나면 연합) — 한 번 고르면 못 바꿈 */
 export const PATCHES: PatchDef[] = [
   { id: "union", name: "연합 프로토콜", desc: "레전드 이상을 얻을 때마다 무료 소환 2회" },
   {
     id: "gambler",
     name: "도박사 패치",
-    desc: "고르면 행운석 +3 · 도박 성공률 +10%p · 레전드 도박이 실패하면 행운석 1개 돌려받음 · 보스를 잡으면 행운석 +1",
+    desc: `고르면 행운석 +3 · 도박 성공률 +${Math.round(TUNE.gamblerP * 100)}%p · 레전드 도박이 실패하면 행운석 1개 돌려받음 · 보스를 잡으면 행운석 +1`,
   },
   {
     id: "core",
     name: "단일 코어",
-    desc: "신화 · 히든은 한 종류만 만들 수 있지만 (같은 것은 여러 기), 레전드 이하 피해 ×3.6 · 신화 · 히든 피해 ×2.5 · 적 이동 속도 -8%",
+    desc: `신화 · 히든은 한 종류만 만들 수 있지만 (같은 것은 여러 기), 레전드 이하 피해 ×${TUNE.coreLow} · 신화 · 히든 피해 ×${TUNE.coreHigh} · 적 이동 속도 -${Math.round((1 - TUNE.coreSlow) * 100)}%`,
   },
   {
     id: "interest",
     name: "이자 프로토콜",
-    desc: "웨이브를 넘길 때마다 가진 골드의 10% 이자 (최대 70)",
+    desc: `웨이브 골드 +${Math.round((TUNE.interestWave - 1) * 100)}% · 웨이브를 넘길 때마다 가진 골드의 ${Math.round(TUNE.interestPct * 100)}% 이자 (최대 ${TUNE.interestMax})`,
   },
 ];
 export const PATCH_DEADLINE = 10;

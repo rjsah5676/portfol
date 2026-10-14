@@ -18,10 +18,15 @@
  *         소환 · 합성 결과는 필드 빈 칸이 먼저, 없으면 보관함으로.
  *
  * 영구 성장(로드아웃: 유닛 레벨 · 연구 · 유물 · 오염 단계)은 progress.ts 의 modsOf 로 보드마다 한 번 계산해 b.mods 에 붙임.
+ *
+ * 치트 코드 (cheats.ts): 보스(10~50웨이브)를 잡으면 b.cheat 에 3장이 놓이고, 고를 때까지 그 보드는 멈춤 (stepBoard 가 아무것도 안 함).
+ *   솔로는 화면(controller)이 시계를 멈추고, 멀티는 CHEAT_MULTI_SEC 이 지나면 첫 카드를 자동으로 고름.
+ *   고른 효과는 b.cx 로 합쳐 둠 (피해 · 공속 · 골드 · 적 속도 …), 뽑기는 b.crng (소환 운과 따로).
  */
-import { B, BOSS_EVERY, CAP, LAST_WAVE, TPS, countOf, hpOf, sec } from "./balance";
+import { B, BOSS_EVERY, CAP, LAST_WAVE, TPS, TUNE, countOf, hpOf, sec } from "./balance";
 import { BOSSES, KIND, bossOfWave, kindOfWave, type BossDef, type Size } from "./enemies";
-import { MISSIONS, PATCH_DEADLINE, PATCHES } from "./meta";
+import { CHEAT, CHEATS, CHEAT_MULTI_SEC, CHEAT_OFFER, CHEAT_WAVES, cheatFx0, cheatFxOf, cheatOdds, type CheatFx } from "./cheats";
+import { MISSIONS, PATCHES } from "./meta";
 import { mixSeed, pick, rnd, rndInt, type Rng } from "./rng";
 import { BENCH_MAX, LV_BUFF, LV_DMG, modsOf, type Loadout, type Mods } from "./progress";
 import {
@@ -131,6 +136,9 @@ export type Cmd =
   | { t: "patch"; id: string }
   | { t: "rift"; tier: RiftTier }
   | { t: "pick"; id: string }
+  /** 치트 코드: 고르기 · 그 카드 다시 뽑기 (i = 0..2) */
+  | { t: "cheat"; i: number }
+  | { t: "reroll"; i: number }
   /** 포기 — 지금 웨이브에서 진 것으로 끝냄 (기록 · 보상은 거기까지) */
   | { t: "quit" };
 
@@ -157,6 +165,8 @@ export type Ev =
   | { t: "mission"; id: string }
   | { t: "rift"; tier: number; ok: boolean }
   | { t: "patch"; id: string; auto: boolean }
+  | { t: "cheatOffer" }
+  | { t: "cheat"; id: string; auto: boolean }
   | { t: "over"; win: boolean };
 
 export type Phase = "prep" | "wave" | "boss" | "break" | "over";
@@ -208,6 +218,11 @@ export interface Board {
   auras: { def: UnitDef; cells: number[] }[];
   /** 영구 성장 효과 (판 시작 때 고정) */
   mods: Mods;
+  /** 치트 코드: 지금 고르는 중인 카드 (없으면 null — 있으면 보드가 멈춤) · 고른 것 · 합친 효과 · 뽑기 난수 */
+  cheat: { kind: "patch" | "cheat"; offer: string[]; rr: number[]; t: number } | null;
+  cheats: string[];
+  cx: CheatFx;
+  crng: Rng;
   /** 배치 따라 바뀌는 전체 피해 배수 (순수 혈통 · 무지개 연합) */
   team: number;
   fx: Fx[] | null;
@@ -258,6 +273,11 @@ export function newBoard(seed: number, idx: number, lo?: Loadout | null): Board 
     dirty: true,
     auras: [],
     mods,
+    // 시작 치트: 패치 4개 중 하나 (고를 때까지 멈춤, 다시 뽑기 없음)
+    cheat: { kind: "patch", offer: PATCHES.map((p) => p.id), rr: PATCHES.map(() => 0), t: 0 },
+    cheats: [],
+    cx: cheatFx0(),
+    crng: { r: mixSeed(seed, 77) },
     team: 1,
     fx: null,
     ev: null,
@@ -277,9 +297,9 @@ export function newGame(seed: number, players = 1, loadouts?: (Loadout | null)[]
 /* ───────────────────────── 조회 (UI · 봇 공용) ───────────────────────── */
 
 export const summonCost = (b: Board) =>
-  Math.min(B.summon.max, B.summon.base + B.summon.step * b.summons) - b.mods.summonDisc;
+  Math.max(1, Math.min(B.summon.max, B.summon.base + B.summon.step * b.summons) - b.mods.summonDisc - b.cx.summonDisc);
 export const upCost = (b: Board, k: UpKey) =>
-  B.up[k].base + B.up[k].step * b.up[k];
+  Math.round((B.up[k].base + B.up[k].step * b.up[k]) * b.cx.upCost);
 export const luckCost = (b: Board) => (b.luck < B.luckCost.length ? B.luckCost[b.luck] : Infinity);
 export const unitCount = (b: Board) => b.cells.reduce((n, c) => n + c.units.length, 0);
 export const hasEmpty = (b: Board) => b.cells.some((c, i) => !c.def && usable(b, i));
@@ -291,7 +311,9 @@ export const sellOf = (b: Board, d: UnitDef) => ({
   stones: d.sell?.stones ?? B.sellStones[d.grade] ?? 0,
 });
 /** 보스 제한 시간 (초) */
-export const bossSecOf = (b: Board) => Math.max(20, B.bossSec + b.mods.bossSec);
+export const bossSecOf = (b: Board) => Math.max(20, B.bossSec + b.mods.bossSec + b.cx.bossSec);
+/** 패배 기준 적 수 */
+export const capOf = (b: Board) => CAP + b.cx.cap;
 /** 보드에 있는 유닛 수 (id → 수) */
 export function counts(b: Board): Record<string, number> {
   const m: Record<string, number> = {};
@@ -376,6 +398,9 @@ export function isCmd(x: unknown): x is Cmd {
       return keys === 2 && RIFT_TIERS.includes(c.tier as RiftTier);
     case "quit":
       return keys === 1;
+    case "cheat":
+    case "reroll":
+      return keys === 2 && Number.isInteger(c.i) && (c.i as number) >= 0 && (c.i as number) < Math.max(CHEAT_OFFER, PATCHES.length);
   }
   return false;
 }
@@ -384,6 +409,7 @@ export function isCmd(x: unknown): x is Cmd {
 export function apply(g: Game, p: number, cmd: Cmd): string | null {
   const b = g.boards[p];
   if (!b || b.result) return "끝난 판이에요";
+  if (b.cheat && cmd.t !== "cheat" && cmd.t !== "reroll" && cmd.t !== "quit") return "치트 코드를 먼저 골라 주세요";
   switch (cmd.t) {
     case "summon": {
       if (!hasEmpty(b)) return "빈 칸이 없어요";
@@ -473,7 +499,7 @@ export function apply(g: Game, p: number, cmd: Cmd): string | null {
       if (b.stones < gm.cost) return "행운석이 모자라요";
       if (!hasEmpty(b)) return "빈 칸이 없어요";
       b.stones -= gm.cost;
-      const p = gm.p + (b.patch === "gambler" ? 0.1 : 0) + b.mods.gamble;
+      const p = gm.p + (b.patch === "gambler" ? TUNE.gamblerP : 0) + b.mods.gamble + b.cx.gamble;
       if (rnd(b.rng) < p) {
         b.failStreak = 0;
         const def = pick(b.rng, poolOf(pick(b.rng, FACTIONS), cmd.g === "E" ? 2 : 3));
@@ -505,12 +531,9 @@ export function apply(g: Game, p: number, cmd: Cmd): string | null {
       return null;
     }
     case "patch": {
-      if (b.patch) return "패치는 한 번만 고를 수 있어요";
-      if (b.wave >= PATCH_DEADLINE) return "패치는 10웨이브 전까지만";
-      b.patch = cmd.id;
-      // 도박사: 고르는 순간 행운석 +3 (도박이 5웨이브부터라 시작 밑천)
-      if (cmd.id === "gambler") b.stones += 3;
-      b.ev?.push({ t: "patch", id: cmd.id, auto: false });
+      // (예전 명령) 시작 치트 창에서 패치를 고르는 것과 같음
+      if (b.cheat?.kind !== "patch") return "패치는 판 시작 때 치트 코드로 골라요";
+      takeCheat(b, cmd.id, false);
       return null;
     }
     case "rift": {
@@ -529,7 +552,25 @@ export function apply(g: Game, p: number, cmd: Cmd): string | null {
       return null;
     }
     case "quit": {
+      b.cheat = null;
       finish(g, b, false, "quit");
+      return null;
+    }
+    case "cheat": {
+      if (!b.cheat) return "고를 치트 코드가 없어요";
+      const id = b.cheat.offer[cmd.i];
+      if (!id) return "없는 카드예요";
+      takeCheat(b, id, false);
+      return null;
+    }
+    case "reroll": {
+      const o = b.cheat;
+      if (!o) return "고를 치트 코드가 없어요";
+      if (!(o.rr[cmd.i] > 0)) return "이 카드는 더 못 바꿔요";
+      const nx = drawCheat(b, o.offer);
+      if (!nx) return "바꿀 치트 코드가 없어요";
+      o.rr[cmd.i]--;
+      o.offer[cmd.i] = nx;
       return null;
     }
     case "pick": {
@@ -538,6 +579,7 @@ export function apply(g: Game, p: number, cmd: Cmd): string | null {
       // 쌓인(이월된) 뽑기권 중 그 등급 것을 아무거나 씀 (예전 기록은 늘 맨 앞 것과 같은 등급이라 결과 같음)
       const ti = b.tickets.indexOf(d.grade);
       if (ti < 0 || d.faction === "hidden") return "그 등급 뽑기권이 없어요";
+      if (b.patch === "core" && d.grade >= 4 && coreBlocked(b, d.id)) return "단일 코어: 신화 · 히든은 한 종류만";
       if (!hasEmpty(b) && !b.cells.some((c) => c.def === d.id && c.units.length < STACK))
         return "빈 칸이 없어요";
       b.tickets.splice(ti, 1);
@@ -575,16 +617,25 @@ function give(
   b.ev?.push({ t: "unit", def: id, how });
   b.fx?.push({ k: "spawn", c: at, g: d.grade });
   // 쌍둥이 별: 레전드 이상을 얻으면 확률로 같은 등급 · 같은 세력 하나 더 (그 1기는 다시 굴리지 않음)
-  if (b.mods.twinStar && d.grade >= 3 && d.faction !== "hidden" && how !== "twin" && hasEmpty(b)) {
-    if (rnd(b.rng) < b.mods.twinStar) give(b, pick(b.rng, poolOf(d.faction, d.grade)).id, "twin");
+  const twin = b.mods.twinStar + b.cx.twin;
+  if (twin && d.grade >= 3 && d.faction !== "hidden" && how !== "twin" && hasEmpty(b)) {
+    if (rnd(b.rng) < twin) give(b, pick(b.rng, poolOf(d.faction, d.grade)).id, "twin");
   }
 }
 
 /* ───────────────────────── 적 ───────────────────────── */
 
+/** 치트 코드 보정 배수 (지난 치트 보스 수 × TUNE.cheatHp) */
+export function cheatHpOf(w: number): number {
+  let n = 0;
+  for (const cw of CHEAT_WAVES) if (w > cw) n++;
+  return 1 + TUNE.cheatHp * n;
+}
+
 function spawn(b: Board, kindId: string, hp: number): Enemy {
   const k = KIND[kindId];
   const w = Math.max(1, b.wave);
+  hp *= cheatHpOf(w);
   const e: Enemy = {
     id: b.nextId++,
     kind: kindId,
@@ -636,7 +687,15 @@ function spawnBoss(b: Board, def: BossDef) {
 /* ───────────────────────── 진행 ───────────────────────── */
 
 export function step(g: Game) {
-  for (const b of g.boards) if (!b.result) stepBoard(g, b);
+  for (const b of g.boards) {
+    if (b.result) continue;
+    if (b.cheat) {
+      // 고르는 동안 멈춤. 멀티만 시간이 지나면 첫 카드 (솔로는 화면이 시계를 멈춤)
+      if (g.boards.length > 1 && ++b.cheat.t >= sec(CHEAT_MULTI_SEC)) takeCheat(b, b.cheat.offer[0], true);
+      continue;
+    }
+    stepBoard(g, b);
+  }
   g.tick++;
   g.over = g.boards.every((b) => b.result);
 }
@@ -651,10 +710,6 @@ function startWave(b: Board, w: number) {
   b.wave = w;
   b.wt = 0;
   b.spawned = 0;
-  if (w >= PATCH_DEADLINE && !b.patch) {
-    b.patch = "union";
-    b.ev?.push({ t: "patch", id: "union", auto: true });
-  }
   b.ev?.push({ t: "wave", wave: w });
   const boss = w % BOSS_EVERY === 0 ? bossOfWave(w) : null;
   if (boss) {
@@ -665,9 +720,12 @@ function startWave(b: Board, w: number) {
 }
 
 function endWave(b: Board) {
-  const wg = Math.floor((B.waveGold.base + B.waveGold.per * b.wave) * b.mods.waveGold);
+  const wg = Math.floor(
+    (B.waveGold.base + B.waveGold.per * b.wave) * b.mods.waveGold * b.cx.waveGold * (b.patch === "interest" ? TUNE.interestWave : 1)
+  );
   b.gold += b.wave <= b.mods.firstHarvest ? wg * 2 : wg;
-  if (b.patch === "interest") b.gold += Math.min(70, Math.floor(b.gold * 0.1));
+  if (b.patch === "interest") b.gold += Math.min(TUNE.interestMax, Math.floor(b.gold * TUNE.interestPct));
+  if (b.cx.interest) b.gold += Math.min(b.cx.interestMax, Math.floor(b.gold * b.cx.interest));
 }
 
 const armorF = (a: number) => (a >= 0 ? 100 / (100 + a) : 2 - 100 / (100 - a));
@@ -711,7 +769,7 @@ function stepBoard(g: Game, b: Board) {
     e.x = x;
     e.y = y;
     e.aSlow = 0;
-    e.shred = 0;
+    e.shred = b.cx.shred;
   }
   for (const a of b.auras) {
     const r2 = a.def.aura!.r * a.def.aura!.r;
@@ -734,7 +792,7 @@ function stepBoard(g: Game, b: Board) {
   }
 
   // ── 적 이동 · 보스 기술 ──
-  const coreSlow = b.patch === "core" ? 0.92 : 1;
+  const coreSlow = (b.patch === "core" ? TUNE.coreSlow : 1) * (1 - b.cx.slow);
   for (const e of es) {
     if (e.evade > 0) e.evade--;
     if (e.expire > 0 && --e.expire === 0) {
@@ -766,7 +824,7 @@ function stepBoard(g: Game, b: Board) {
     const c = b.cells[i];
     if (!c.def) continue;
     const def = UNIT[c.def];
-    const sp = 1 + b.aspd[i] + (def.faction === "mech" ? b.mods.mechAspd : 0);
+    const sp = 1 + b.aspd[i] + b.cx.aspd + (def.faction === "hidden" ? 0 : b.mods.facAspd[def.faction]);
     const period = TPS / def.aps;
     for (const u of c.units) {
       if (u.stun > 0) {
@@ -796,7 +854,7 @@ function stepBoard(g: Game, b: Board) {
   }
   es.length = alive;
 
-  if (es.length >= CAP) return finish(g, b, false, "cap");
+  if (es.length >= capOf(b)) return finish(g, b, false, "cap");
   if ((g.tick & 7) === 0) checkMissions(b);
 }
 
@@ -838,7 +896,8 @@ function rebuild(b: Board) {
     else if (f === "arcane") fa = 1;
   }
   const kinds = fk + fm + fa;
-  b.team = (kinds === 1 ? b.mods.pureBlood : 1) * (kinds === 3 ? b.mods.rainbow : 1);
+  b.team =
+    (kinds === 1 ? b.mods.pureBlood * b.cx.mono : 1) * (kinds === 3 ? b.mods.rainbow * b.cx.tri : 1) * b.cx.dmg;
 }
 
 /** 사거리 안의 보스 우선, 없으면 가장 많이 간(가장 위험한) 적 */
@@ -866,12 +925,15 @@ function hit(b: Board, def: UnitDef, e: Enemy, raw: number): number {
   }
   let m = upMult(b, def.faction) * b.team;
   const M = b.mods;
-  m *= (1 + LV_DMG * (M.lv[def.id] ?? 0)) * M.relicDmg;
+  m *= (1 + LV_DMG * (M.lv[def.id] ?? 0)) * M.relicDmg * M.gritDmg;
   if (def.faction !== "hidden") m *= M.fac[def.faction];
+  const X = b.cx;
+  m *= X.fac[def.faction] * (def.grade >= 4 ? X.high : X.low);
+  if (e.boss >= 0 || e.elite || e.rift) m *= X.boss * (def.faction === "mech" ? M.mechBoss : 1);
   if (M.warBanner) m *= 1 + M.warBanner * Math.floor((b.up.knight + b.up.mech + b.up.arcane) / 10);
   if (M.vaccine !== 1 && (e.boss >= 0 || e.elite || e.rift)) m *= M.vaccine;
   // 단일 코어: 하나뿐인 신화 · 히든에 힘을 몰아줌
-  if (b.patch === "core") m *= def.grade >= 4 ? 2.5 : 3.6;
+  if (b.patch === "core") m *= def.grade >= 4 ? TUNE.coreHigh : TUNE.coreLow;
   if (e.boss >= 0 && def.boss) m *= def.faction === "hidden" ? 1 + (def.boss - 1) * hiddenFx(b) : def.boss;
   if (def.dtype === "phys") {
     let sz = SIZE_MULT[def.faction][e.size];
@@ -921,6 +983,10 @@ function attack(b: Board, ci: number, def: UnitDef, u: Unit, t: Enemy) {
   let crit = false;
   if (def.crit && rnd(b.rng) < def.crit.chance) {
     dmg *= def.crit.mult;
+    crit = true;
+  }
+  if (b.cx.crit && rnd(b.crng) < b.cx.crit) {
+    dmg *= 2;
     crit = true;
   }
   const tx = t.x,
@@ -1085,7 +1151,7 @@ function die(g: Game, b: Board, e: Enemy): boolean {
     b.ev?.push({ t: "rift", tier: e.rift, ok: true });
   } else if (e.boss >= 0) {
     gold = B.bossGold.base + B.bossGold.per * b.wave;
-    const stones = B.bossStones + Math.floor(b.wave / 20) + (b.patch === "gambler" ? 1 : 0);
+    const stones = B.bossStones + Math.floor(b.wave / 20) + (b.patch === "gambler" ? 1 : 0) + b.cx.bossStones;
     b.stones += stones;
     const tk = B.bossTicket[b.wave];
     if (tk !== undefined) b.tickets.push(tk);
@@ -1097,6 +1163,7 @@ function die(g: Game, b: Board, e: Enemy): boolean {
     }
     b.phase = "break";
     b.wt = 0;
+    offerCheat(b);
   } else {
     gold = B.killGold + Math.floor(b.wave / B.killGoldPer) + b.mods.killGold;
   }
@@ -1108,6 +1175,71 @@ function die(g: Game, b: Board, e: Enemy): boolean {
   b.gold += gold;
   b.fx?.push({ k: "die", x: e.x, y: e.y, kind: e.kind, boss: e.boss >= 0, gold });
   return false;
+}
+
+/* ───────────────────────── 치트 코드 ───────────────────────── */
+
+/** 카드 한 장 뽑기 (등급 → 그 등급에서 아직 안 고르고 지금 안 보이는 것). 없으면 아래 등급 */
+function drawCheat(b: Board, shown: readonly string[]): string | null {
+  const odds = cheatOdds(b.cheats.length, b.mods.cheatLuck);
+  const r = rnd(b.crng) * 100;
+  let tier = 0,
+    acc = 0;
+  for (let i = 0; i < odds.length; i++) {
+    acc += odds[i];
+    if (r < acc) {
+      tier = i;
+      break;
+    }
+  }
+  for (let t = tier; t >= 0; t--) {
+    const pool = CHEATS.filter((c) => c.tier === t && !b.cheats.includes(c.id) && !shown.includes(c.id));
+    if (pool.length) return pool[rndInt(b.crng, pool.length)].id;
+  }
+  const any = CHEATS.filter((c) => !b.cheats.includes(c.id) && !shown.includes(c.id));
+  return any.length ? any[rndInt(b.crng, any.length)].id : null;
+}
+
+/** 보스를 잡으면 (10 · 20 · 30 · 40 · 50) 카드 3장을 놓고 보드를 멈춤 */
+function offerCheat(b: Board) {
+  if (!(CHEAT_WAVES as readonly number[]).includes(b.wave)) return;
+  const offer: string[] = [];
+  for (let i = 0; i < CHEAT_OFFER; i++) {
+    const id = drawCheat(b, offer);
+    if (id) offer.push(id);
+  }
+  if (!offer.length) return;
+  b.cheat = { kind: "cheat", offer, rr: offer.map(() => b.mods.cheatReroll), t: 0 };
+  b.ev?.push({ t: "cheatOffer" });
+}
+
+function takeCheat(b: Board, id: string, auto: boolean) {
+  if (b.cheat?.kind === "patch") {
+    // 시작 치트 = 패치 (연합 · 도박사 · 단일 코어 · 이자) — 동작은 예전 패치 그대로
+    if (!PATCHES.some((p) => p.id === id)) return;
+    b.cheat = null;
+    b.patch = id;
+    // 도박사: 고르는 순간 행운석 +3 (도박이 5웨이브부터라 시작 밑천)
+    if (id === "gambler") b.stones += 3;
+    b.ev?.push({ t: "patch", id, auto });
+    return;
+  }
+  const c = CHEAT[id];
+  b.cheat = null;
+  if (!c) return;
+  b.cheats.push(id);
+  b.cx = cheatFxOf(b.cheats);
+  b.dirty = true;
+  const n = c.now;
+  if (n) {
+    b.gold += (n.gold ?? 0) + (n.goldPerWave ?? 0) * b.wave;
+    b.stones += n.stones ?? 0;
+    b.free += n.free ?? 0;
+    if (n.tickets) b.tickets.push(...n.tickets);
+    if (n.ups)
+      for (const k of ["knight", "mech", "arcane"] as const) b.up[k] = Math.min(B.up.max, b.up[k] + n.ups);
+  }
+  b.ev?.push({ t: "cheat", id, auto });
 }
 
 function checkMissions(b: Board) {
@@ -1166,6 +1298,7 @@ export function hashGame(g: Game): number {
     mix(b.kills);
     mix(b.enemies.length);
     mix(b.rng.r);
+    mix(b.cheats.length);
     for (const e of b.enemies) mix(e.hp);
   }
   return h >>> 0;

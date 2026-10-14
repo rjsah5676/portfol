@@ -10,7 +10,7 @@
  * 봇은 사람보다 배치 · 균열 · 조합이 서툴러서 실제 사람은 이보다 빠름 (봇 시간 ≈ 상한).
  */
 import { createRequire } from "node:module";
-import { B, TPS } from "../../web/src/lib/defense/balance";
+import { B, TPS, TUNE } from "../../web/src/lib/defense/balance";
 import { botByName, botTurn, type BotCfg } from "../../web/src/lib/defense/bot";
 import { newGame, step } from "../../web/src/lib/defense/sim";
 import { UNIT, UNITS, RECIPES } from "../../web/src/lib/defense/units";
@@ -20,12 +20,15 @@ import {
   BENCH_COST,
   BENCH_MAX,
   BOX,
+  CHEAT_RES,
   DAILY_POOL,
   FRES_COST,
   FRES_MAX,
   GLITCH,
   GLITCH_MAX,
+  GRIT_MAX,
   GP_PACKS,
+  packPct,
   GP_SELL,
   type Goods,
   PASS,
@@ -61,6 +64,8 @@ const MAXRUNS = Number(opt("--max", "1500"));
 const USE_GP = opt("--gp", "1") === "1";
 /** 봇은 초월 조합을 못 써서 기본은 초월 소환에 코어를 안 씀 (--trans 1 이면 씀) */
 const USE_TRANS = opt("--trans", "0") === "1";
+/** --nogrit 1: 끈기 없이 (비교용) */
+const NO_GRIT = opt("--nogrit", "0") === "1";
 const LOG = Number(opt("--log", "25"));
 const SEED = Number(opt("--seed", "7"));
 
@@ -82,6 +87,18 @@ const R = () => {
     for (const arr of both("GLITCH", GLITCH))
       d.forEach((x, i) => Object.assign(arr[11 + i], x, rslope ? { reward: Math.round((4 + Number(rslope) * (i + 1)) * 100) / 100 } : {}));
   }
+// --tune k=v,k=v : balance.ts TUNE 값 바꿔 보기 (두 벌 다)
+{
+  const tv = opt("--tune");
+  if (tv)
+    for (const T of new Set([TUNE, createRequire(import.meta.url)("../../web/src/lib/defense/balance.ts").TUNE]))
+      for (const kv of tv.split(",")) {
+        const [k, v] = kv.split("=");
+        (T as Record<string, number>)[k] = Number(v);
+      }
+}
+  const ch = opt("--cheathp");
+  if (ch) for (const T of new Set([TUNE, createRequire(import.meta.url)("../../web/src/lib/defense/balance.ts").TUNE])) T.cheatHp = Number(ch);
   const lvm = Number(opt("--lvmult", "1"));
   if (lvm !== 1) for (const arr of both("LV_COST", LV_COST)) for (const c of arr) c.pieces = Math.round(c.pieces * lvm);
   const cm = Number(opt("--cardmult", "1"));
@@ -106,6 +123,8 @@ interface P {
   fslots: number;
   trans: string[];
   pity: number;
+  cheatRes: string[];
+  grit: { g: number; n: number };
   glitchOpen: number;
   glitchWin: number;
   seen: Set<string>;
@@ -116,6 +135,7 @@ interface P {
   passGot: number;
   week: number;
   weekBuys: Record<string, number>;
+  dayBuys: Record<string, number>;
   stats: { runs: number; wins: number; kills: number; wave: number };
 }
 const p: P = {
@@ -133,6 +153,8 @@ const p: P = {
   fslots: 0,
   trans: [],
   pity: 0,
+  cheatRes: [],
+  grit: { g: 0, n: 0 },
   glitchOpen: 0,
   glitchWin: -1,
   seen: new Set(),
@@ -143,15 +165,16 @@ const p: P = {
   passGot: 0,
   week: -1,
   weekBuys: {},
+  dayBuys: {},
   stats: { runs: 0, wins: 0, kills: 0, wave: 0 },
 };
 
 /* ── 봇이 끼는 연구 · 유물 (그 길에 맞게) ── */
 const GEN_RES = ["g_gold", "g_wave", "g_summon", "g_boss", "g_stone", "g_sell"];
 const FAC_RES: Record<string, string[]> = {
-  knight: ["k_drill", "k_tactic"],
-  mech: ["m_drill", "m_tune"],
-  arcane: ["a_drill", "a_focus"],
+  knight: ["k_drill", "k_tactic", "k_rally"],
+  mech: ["m_drill", "m_tune", "m_bounty"],
+  arcane: ["a_drill", "a_focus", "a_echo"],
 };
 const facRes = focus ? FAC_RES[focus] : ["k_drill", "m_drill", "a_drill"];
 const RELIC_PREF = focus
@@ -173,6 +196,8 @@ function loadout(): Loadout {
     fslots: p.fslots,
     own: Object.fromEntries(p.relics.map((id) => [id, p.relicLv[id] ?? 1])),
     trans: [...p.trans],
+    cheat: p.cheatRes.includes("x_luck") ? "x_luck" : (p.cheatRes[0] ?? ""),
+    grit: NO_GRIT || p.glitchOpen <= p.glitchWin || p.grit.g !== p.glitchOpen ? 0 : p.grit.n,
   };
 }
 
@@ -210,6 +235,9 @@ const log: string[] = [];
 
 function reward(r: { win: boolean; wave: number; kills: number; tick: number }, made: Record<string, number>, glitch: number) {
   const grades = Object.fromEntries(Object.keys(made).map((id) => [id, UNIT[id]?.grade ?? 0]));
+  // 끈기 (서버 defenseMeta.onRun 과 같은 규칙)
+  if (glitch === p.glitchOpen && glitch > p.glitchWin)
+    p.grit = glitchUnlocks(glitch, r) || r.win ? { g: glitch, n: 0 } : { g: glitch, n: Math.min(GRIT_MAX, (p.grit.g === glitch ? p.grit.n : 0) + 1) };
   const rw = runReward("season", r, made, grades, glitch);
   if (p.stats.runs % RUNS_PER_DAY === 0) {
     rw.pieces *= 2; // 오늘 첫 판
@@ -326,16 +354,20 @@ function spend() {
         p.weekBuys[x.id] = (p.weekBuys[x.id] ?? 0) + 1;
       }
     }
-    for (const pk of GP_PACKS) {
+    for (const pk of [...GP_PACKS].sort((a, b) => packPct(b) - packPct(a))) {
       const n = p.bought[pk.id] ?? 0;
       if (pk.once && n) continue;
       if (pk.needWin !== undefined && p.glitchWin < pk.needWin) continue;
-      if (!pk.once && (p.weekBuys[pk.id] ?? 0) >= (pk.perWeek ?? 1)) continue;
+      const day = Math.floor(p.stats.runs / RUNS_PER_DAY);
+      if (pk.perDay) {
+        if ((p.dayBuys[`${day}:${pk.id}`] ?? 0) >= pk.perDay) continue;
+      } else if (!pk.once && (p.weekBuys[pk.id] ?? 0) >= (pk.perWeek ?? 1)) continue;
       if (pk.give.trans && !USE_TRANS) continue;
       if (p.gp >= pk.gp) {
         p.gp -= pk.gp;
         p.bought[pk.id] = n + 1;
-        p.weekBuys[pk.id] = (p.weekBuys[pk.id] ?? 0) + 1;
+        if (pk.perDay) p.dayBuys[`${day}:${pk.id}`] = (p.dayBuys[`${day}:${pk.id}`] ?? 0) + 1;
+        else p.weekBuys[pk.id] = (p.weekBuys[pk.id] ?? 0) + 1;
         addGoods(pk.give);
       }
     }
@@ -377,7 +409,8 @@ function spend() {
       continue;
     }
     // 남는 조각 → 카드 상자 (카드가 모자라 막혔을 때)
-    if (p.pieces >= BOX.card.pieces * 4) {
+    const reserve = p.fslots >= Math.min(FRES_MAX, facRes.length) && !p.cheatRes.includes("x_luck") ? 12000 : 0;
+    if (p.pieces >= BOX.card.pieces * 4 + reserve) {
       p.pieces -= BOX.card.pieces;
       p.boxes.card++;
       openBoxes();
@@ -391,6 +424,14 @@ function spend() {
     if (p.fslots < Math.min(FRES_MAX, facRes.length) && p.cores >= FRES_COST[p.fslots]) {
       p.cores -= FRES_COST[p.fslots];
       p.fslots++;
+      continue;
+    }
+    // 치트 연구: 세력칸을 다 산 뒤 (확률 증폭기 먼저)
+    const cr = CHEAT_RES.find((x) => !p.cheatRes.includes(x.id) && x.id === "x_luck");
+    if (p.fslots >= Math.min(FRES_MAX, facRes.length) && cr && p.cores >= cr.cores && p.pieces >= cr.pieces) {
+      p.cores -= cr.cores;
+      p.pieces -= cr.pieces;
+      p.cheatRes.push(cr.id);
       continue;
     }
     const myTrans = focus ? TRANS_IDS.filter((t) => UNIT[t].faction === focus) : [...TRANS_IDS];
@@ -409,7 +450,9 @@ function spend() {
       continue;
     }
     const relicsMaxed = p.relics.length === RELICS.length && RELICS.every((r) => (p.relicLv[r.id] ?? 1) >= RELIC_MAX_LV);
-    if (!relicsMaxed && p.cores >= BOX.relic.cores) {
+    // 치트 연구를 사려고 코어를 모으는 중이면 유물 상자는 미룸
+    const saving = p.fslots >= Math.min(FRES_MAX, facRes.length) && !p.cheatRes.includes("x_luck") ? 120 : 0;
+    if (!relicsMaxed && p.cores >= BOX.relic.cores + saving) {
       p.cores -= BOX.relic.cores;
       p.boxes.relic++;
       openBoxes();
@@ -449,7 +492,7 @@ for (let i = 0; i < MAXRUNS; i++) {
   if (r.win && firstAt[glitch] === undefined) firstAt[glitch] = hours;
   if (i % LOG === 0 || (r.win && glitch === GLITCH_MAX))
     log.push(
-      `${String(i).padStart(4)}판 ${hours.toFixed(1).padStart(5)}h 오염${String(glitch).padStart(2)} ${r.win ? "클리어" : `${r.wave}W`.padStart(4)} · 조각 ${p.pieces} 코어 ${p.cores} GP ${p.gp}/${gpTotal}+${gpSold} · 유닛평균Lv ${(mine.reduce((a, u) => a + (p.lv[u.id] ?? 0), 0) / mine.length).toFixed(1)} · 연구 ${Object.values(p.resLv).join("")} · 유물 ${p.relics.length}개 Lv합 ${p.relics.reduce((a, x) => a + (p.relicLv[x] ?? 1), 0)} · 보관 ${p.bench} 세력칸 ${p.fslots} · 초월 ${p.trans.length}`
+      `${String(i).padStart(4)}판 ${hours.toFixed(1).padStart(5)}h 오염${String(glitch).padStart(2)} ${r.win ? "클리어" : `${r.wave}W`.padStart(4)} · 조각 ${p.pieces} 코어 ${p.cores} GP ${p.gp}/${gpTotal}+${gpSold} · 유닛평균Lv ${(mine.reduce((a, u) => a + (p.lv[u.id] ?? 0), 0) / mine.length).toFixed(1)} · 연구 ${Object.values(p.resLv).join("")} · 유물 ${p.relics.length}개 Lv합 ${p.relics.reduce((a, x) => a + (p.relicLv[x] ?? 1), 0)} · 보관 ${p.bench} 세력칸 ${p.fslots} · 초월 ${p.trans.length} · 치트연구 ${p.cheatRes.join("")}`
     );
   if (r.win && glitch === GLITCH_MAX) break;
 }

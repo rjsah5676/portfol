@@ -12,7 +12,9 @@ import {
   FRES_COST,
   FRES_MAX,
   GLITCH_MAX,
+  CHEAT_RES_OF,
   GP_PACKS,
+  GRIT_MAX,
   GP_SELL,
   GP_STORE,
   PACK,
@@ -95,7 +97,9 @@ export interface Profile {
   /** 유물 레벨 (없으면 1) */
   relicLv?: Record<string, number>;
   /** 장착 (시즌 판 · 멀티에 들고 감) */
-  load: { res: string[]; relics: string[]; glitch: number };
+  load: { res: string[]; relics: string[]; glitch: number; cheat?: string };
+  /** 산 치트 연구 (CHEAT_RES id) — 한 번 사면 계속 */
+  cheatRes?: string[];
   /** 고를 수 있는 가장 높은 오염 단계 */
   glitchOpen: number;
   /** 클리어한 가장 높은 오염 단계 (-1 = 아직) — 업적 */
@@ -106,10 +110,14 @@ export interface Profile {
   season: { id: number; xp: number; free: number[]; prem: number[]; premium: boolean };
   /** 이번 주 상점(재화샵 · 재화 판매 · 주간 패키지) 산 횟수 (id → 수) */
   shop: { w: number; n: Record<string, number> };
+  /** 오늘 산 일일 패키지 (id → 수) */
+  shopDay?: { d: string; n: Record<string, number> };
   /** 한 번만 사는 패키지를 산 것 (id → 수) */
   packs: Record<string, number>;
   /** 초월 소환 천장 — 마지막 초월 뒤로 돌린 수 */
   pity: number;
+  /** 끈기: 가장 높은 오염 단계 g 에서 연달아 진 판 수 */
+  grit?: { g: number; n: number };
   /** 한 번이라도 얻은 유닛 (도감 수집 보상) */
   seen: string[];
   /** 오늘 첫 판 보너스를 받은 날 */
@@ -165,6 +173,10 @@ export const passTier = (xp: number) => PASS.filter((t) => xp >= t.xp).length;
 
 export type DefenseMeta = ReturnType<typeof createDefenseMeta>;
 
+/** 이 단계로 시작하면 받을 끈기 판 수 (가장 높은 열린 단계 · 아직 못 깬 단계일 때만) */
+export const gritOf = (p: Pick<Profile, "grit" | "glitchOpen" | "glitchWin">, glitch: number) =>
+  glitch === p.glitchOpen && glitch > p.glitchWin && p.grit?.g === glitch ? p.grit.n : 0;
+
 export function createDefenseMeta(db: Database, points: Points, now: () => number = Date.now) {
   const col = db.col<Profile>("defense_profile");
   const users = db.col("users");
@@ -187,7 +199,8 @@ export function createDefenseMeta(db: Database, points: Points, now: () => numbe
       lv: {},
       res: [],
       relics: [],
-      load: { res: [], relics: [], glitch: 0 },
+      load: { res: [], relics: [], glitch: 0, cheat: "" },
+      cheatRes: [],
       glitchOpen: 0,
       glitchWin: -1,
       theme: "theme.base",
@@ -214,6 +227,7 @@ export function createDefenseMeta(db: Database, points: Points, now: () => numbe
     if (p.week.key !== w) p.week = { key: w, prog: {}, claimed: [] };
     if (p.season.id !== s) p.season = { id: s, xp: 0, free: [], prem: [], premium: false };
     if (!p.shop || p.shop.w !== w) p.shop = { w, n: {} };
+    if (!p.shopDay || p.shopDay.d !== d) p.shopDay = { d, n: {} };
     return p;
   };
 
@@ -356,6 +370,8 @@ export function createDefenseMeta(db: Database, points: Points, now: () => numbe
           fslots: p.fslots,
           own,
           trans: p.trans,
+          cheat: p.load.cheat && (p.cheatRes ?? []).includes(p.load.cheat) ? p.load.cheat : "",
+          grit: gritOf(p, Math.min(p.load.glitch, p.glitchOpen)),
         },
         unitIds
       );
@@ -412,6 +428,11 @@ export function createDefenseMeta(db: Database, points: Points, now: () => numbe
             pr.prog[k] = k === "wave" ? Math.max(pr.prog[k] ?? 0, v) : (pr.prog[k] ?? 0) + v;
           }
         let opened = false;
+        // 끈기: 가장 높은 열린 단계에서 진 판을 셈 (그 단계를 넘기면 0)
+        if (glitch === p.glitchOpen && glitch > p.glitchWin) {
+          const pushed = glitchUnlocks(glitch, res) || (res.win && glitch >= GLITCH_MAX);
+          p.grit = pushed ? { g: glitch, n: 0 } : { g: glitch, n: Math.min(GRIT_MAX, (p.grit?.g === glitch ? p.grit.n : 0) + 1) };
+        }
         if (res.win) p.glitchWin = Math.max(p.glitchWin, glitch);
         if (glitchUnlocks(glitch, res) && glitch >= p.glitchOpen && p.glitchOpen < GLITCH_MAX) {
           p.glitchOpen = glitch + 1;
@@ -557,6 +578,23 @@ export function createDefenseMeta(db: Database, points: Points, now: () => numbe
     },
 
     /** 세력 전용 연구칸 하나 (글리치 코어) */
+    /** 치트 연구 사기 (글리치 코어 + 픽셀 조각, 한 번) — 칸이 비어 있으면 바로 낌 */
+    cheatResBuy(uid: string, id: string) {
+      return edit(uid, async (p) => {
+        const r = CHEAT_RES_OF[id];
+        if (!r) throw bad("없는 치트 연구예요.");
+        p.cheatRes ??= [];
+        need(!p.cheatRes.includes(id), "이미 산 치트 연구예요.");
+        need(p.cores >= r.cores, "글리치 코어가 모자라요.");
+        need(p.pieces >= r.pieces, "픽셀 조각이 모자라요.");
+        p.cores -= r.cores;
+        p.pieces -= r.pieces;
+        p.cheatRes.push(id);
+        if (!p.load.cheat) p.load.cheat = id;
+        return wire(uid, p);
+      });
+    },
+
     fslotBuy(uid: string) {
       return edit(uid, async (p) => {
         need(p.fslots < FRES_MAX, "세력 연구칸을 다 샀어요.");
@@ -639,11 +677,13 @@ export function createDefenseMeta(db: Database, points: Points, now: () => numbe
         const pk = PACK[id];
         if (!pk) throw bad("없는 패키지예요.");
         if (pk.once) need(!(p.packs[id] ?? 0), "이미 산 패키지예요.");
+        else if (pk.perDay) need((p.shopDay!.n[id] ?? 0) < pk.perDay, "오늘은 이미 샀어요.");
         else need(weekLeft(p, id, pk.perWeek ?? 1) > 0, "이번 주에 이미 샀어요.");
         if (pk.needWin !== undefined) need(p.glitchWin >= pk.needWin, `오염 ${pk.needWin}단계를 클리어하면 살 수 있어요.`);
         if (pk.give.item) need(!(await inv(uid)).items.includes(pk.give.item), "이미 가진 꾸미기가 들어 있어요.");
         await points.spend(uid, pk.gp, "defense", `pack:${id}`);
         if (pk.once) p.packs[id] = (p.packs[id] ?? 0) + 1;
+        else if (pk.perDay) p.shopDay!.n[id] = (p.shopDay!.n[id] ?? 0) + 1;
         else p.shop.n[id] = (p.shop.n[id] ?? 0) + 1;
         const trans = await grantGoods(uid, p, pk.give);
         return wire(uid, p, { got: { pack: id, trans } });
@@ -651,7 +691,7 @@ export function createDefenseMeta(db: Database, points: Points, now: () => numbe
     },
 
     setLoad(uid: string, raw: unknown) {
-      const v = z.object({ res: z.array(z.string()).max(RES_SLOTS + FRES_MAX), relics: z.array(z.string()).max(RELIC_SLOTS), glitch: z.number().int().min(0).max(GLITCH_MAX) }).parse(raw);
+      const v = z.object({ res: z.array(z.string()).max(RES_SLOTS + FRES_MAX), relics: z.array(z.string()).max(RELIC_SLOTS), glitch: z.number().int().min(0).max(GLITCH_MAX), cheat: z.string().max(20).optional() }).parse(raw);
       return edit(uid, async (p) => {
         need(v.res.every((r) => p.res.includes(r)), "열지 않은 연구가 있어요.");
         const gen = v.res.filter((r) => RES[r]?.group === "general").length;
@@ -659,7 +699,9 @@ export function createDefenseMeta(db: Database, points: Points, now: () => numbe
         need(v.res.length - gen <= p.fslots, "세력 연구칸이 모자라요 (정비소에서 살 수 있어요).");
         need(v.relics.every((r) => p.relics.includes(r)), "없는 유물이 있어요.");
         need(v.glitch <= p.glitchOpen, "아직 열리지 않은 오염 단계예요.");
-        p.load = { res: [...new Set(v.res)], relics: [...new Set(v.relics)], glitch: v.glitch };
+        const cheat = v.cheat ?? p.load.cheat ?? "";
+        need(!cheat || (p.cheatRes ?? []).includes(cheat), "사지 않은 치트 연구예요.");
+        p.load = { res: [...new Set(v.res)], relics: [...new Set(v.relics)], glitch: v.glitch, cheat };
         return wire(uid, p);
       });
     },

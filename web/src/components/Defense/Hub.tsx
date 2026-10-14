@@ -38,6 +38,7 @@ import {
   UNIT_MAX_LV,
   type PassReward,
   BOX,
+  CHEAT_RES,
   BENCH_BASE,
   BENCH_COST,
   BENCH_MAX,
@@ -415,6 +416,27 @@ function LoadTab({ p, act, busy }: TabProps) {
           </div>
         );
       })}
+      <div>
+        <H sub="치트 코드(보스를 잡을 때마다 3장 중 하나)를 바꾸는 연구 · 1칸 · 상점에서 사요">치트 연구</H>
+        {(p.cheatRes ?? []).length === 0 ? (
+          <p className="text-[12px] text-[var(--dim)]">아직 산 치트 연구가 없어요 — 메뉴 「상점 → 상자 · 소환」 에서 살 수 있어요</p>
+        ) : (
+          <div className="grid grid-cols-2 gap-1.5">
+            {CHEAT_RES.filter((x) => p.cheatRes!.includes(x.id)).map((x) => {
+              const eq = (L.cheat ?? "") === x.id;
+              return (
+                <Btn key={x.id} tone={eq ? "arcane" : "ghost"} disabled={busy} className="px-2 py-1 text-left" onClick={() => void save({ ...L, cheat: eq ? "" : x.id })}>
+                  <b className="block text-[12px]">
+                    {eq ? "■ " : "□ "}
+                    {x.name}
+                  </b>
+                  <span className="block truncate text-[12px] opacity-75">{x.desc}</span>
+                </Btn>
+              );
+            })}
+          </div>
+        )}
+      </div>
       <div>
         <H sub={`장착 ${L.relics.length}/${RELIC_SLOTS} · 가진 유물 보유 효과: 모든 피해 +${relicPassive(Object.fromEntries(p.relics.map((id) => [id, p.relicLv?.[id] ?? 1])))}% (장착 안 해도)`}>유물 장착</H>
         {p.relics.length === 0 ? (
@@ -985,11 +1007,12 @@ function PackTab({ p, act, busy }: TabProps) {
   const { got, run } = useGot(act);
   return (
     <div className="flex flex-col gap-2">
-      <H sub={`GP 로만 사요 · 재화샵 값의 ${Math.min(...GP_PACKS.map(packPct))}~${Math.max(...GP_PACKS.map(packPct))}% · 주간 패키지는 월요일 0시에 다시 열려요`}>패키지</H>
+      <H sub={`GP 로만 사요 · 재화샵 값의 ${Math.min(...GP_PACKS.map(packPct))}~${Math.max(...GP_PACKS.map(packPct))}% · 일일 패키지는 매일 0시 · 주간은 월요일 0시에 다시 열려요`}>패키지</H>
       {got && <GotBox got={got} />}
       <div className="grid grid-cols-2 gap-2">
         {GP_PACKS.map((pk) => {
-          const done = pk.once ? (p.packs?.[pk.id] ?? 0) > 0 : weekN(p, pk.id) >= (pk.perWeek ?? 1);
+          const dayN = p.shopDay?.n?.[pk.id] ?? 0;
+          const done = pk.once ? (p.packs?.[pk.id] ?? 0) > 0 : pk.perDay ? dayN >= pk.perDay : weekN(p, pk.id) >= (pk.perWeek ?? 1);
           const locked = pk.needWin !== undefined && p.glitchWin < pk.needWin;
           const owned = !!pk.give.item && p.themes.includes(pk.give.item);
           return (
@@ -998,7 +1021,7 @@ function PackTab({ p, act, busy }: TabProps) {
               <b className="pr-14 text-[14px]">{pk.name}</b>
               <p className="text-[12px] leading-snug text-[var(--mute)]">
                 {pk.desc}
-                {pk.once ? " · 한 번만" : ` · 이번 주 ${weekN(p, pk.id)}/${pk.perWeek ?? 1}`}
+                {pk.once ? " · 한 번만" : pk.perDay ? ` · 오늘 ${dayN}/${pk.perDay}` : ` · 이번 주 ${weekN(p, pk.id)}/${pk.perWeek ?? 1}`}
               </p>
               <GoodsLine g={pk.give} />
               <div className="mt-auto flex items-center gap-2 pt-1">
@@ -1010,7 +1033,7 @@ function PackTab({ p, act, busy }: TabProps) {
                   className={`ml-auto ${BTN}`}
                   onClick={() => void run(() => meta.packBuy(pk.id), "upgrade")}
                 >
-                  {locked ? `오염 ${pk.needWin} 클리어 필요` : done || owned ? (pk.once || owned ? "구매함" : "이번 주 구매함") : <Cur k="gp" n={fmtNum(pk.gp)} size={12} />}
+                  {locked ? `오염 ${pk.needWin} 클리어 필요` : done || owned ? (pk.once || owned ? "구매함" : pk.perDay ? "오늘 구매함" : "이번 주 구매함") : <Cur k="gp" n={fmtNum(pk.gp)} size={12} />}
                 </Btn>
               </div>
             </div>
@@ -1087,6 +1110,25 @@ function GoodsTab({ p, act, busy }: TabProps) {
           </Product>
         </div>
         {got && <GotBox got={got} />}
+      </div>
+      <div>
+        <H sub="한 번 사면 계속 · 출전 준비의 치트 연구칸(1칸)에 하나만 끼워요 · 치트 코드 = 보스를 잡을 때마다 3장 중 하나">치트 연구</H>
+        <div className="grid grid-cols-2 gap-1.5">
+          {CHEAT_RES.map((x) => {
+            const own = (p.cheatRes ?? []).includes(x.id);
+            return (
+              <Product key={x.id} k="trans" title={x.name} sub={x.desc}>
+                {own ? (
+                  <span className="text-[12px] text-[var(--green)]">보유</span>
+                ) : (
+                  <Btn tone="arcane" disabled={busy || p.cores < x.cores || p.pieces < x.pieces} silent className={BTN} onClick={() => void act(() => meta.cheatResBuy(x.id), "upgrade")}>
+                    <Cur k="core" n={x.cores} size={12} /> <Cur k="piece" n={fmtNum(x.pieces)} size={12} />
+                  </Btn>
+                )}
+              </Product>
+            );
+          })}
+        </div>
       </div>
       <div>
         <H sub="한 번 사면 계속">칸 해금</H>

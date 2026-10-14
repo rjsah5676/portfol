@@ -73,7 +73,9 @@ export interface DefenseProfile {
   /** 연구 · 유물 레벨 (없으면 1) */
   resLv?: Record<string, number>;
   relicLv?: Record<string, number>;
-  load: { res: string[]; relics: string[]; glitch: number };
+  load: { res: string[]; relics: string[]; glitch: number; cheat?: string };
+  /** 산 치트 연구 */
+  cheatRes?: string[];
   glitchOpen: number;
   glitchWin: number;
   theme: string;
@@ -82,8 +84,12 @@ export interface DefenseProfile {
   seen?: string[];
   /** 이번 주 상점(재화샵 · 판매 · 주간 패키지) 산 횟수 */
   shop: { w: number; n: Record<string, number> };
+  /** 오늘 산 일일 패키지 */
+  shopDay?: { d: string; n: Record<string, number> };
   /** 한 번만 사는 패키지 산 것 */
   packs: Record<string, number>;
+  /** 끈기 (가장 높은 오염 단계에서 연달아 진 판) */
+  grit?: { g: number; n: number };
   /** 초월 소환 천장 — 마지막 초월 뒤로 돌린 수 */
   pity: number;
   firstDay?: string;
@@ -134,7 +140,8 @@ export const meta = {
   storeBuy: (id: string) => P("defense.store.buy", { id }),
   storeSell: (id: string) => P("defense.store.sell", { id }),
   packBuy: (id: string) => P("defense.pack.buy", { id }),
-  setLoad: (load: { res: string[]; relics: string[]; glitch: number }) => P("defense.load", load),
+  setLoad: (load: { res: string[]; relics: string[]; glitch: number; cheat?: string }) => P("defense.load", load),
+  cheatResBuy: (id: string) => P("defense.cheatres.buy", { id }),
   setTheme: (id: string) => P("defense.theme", { id }),
   questClaim: (id: string) => P("defense.quest.claim", { id }),
   passClaim: () => P("defense.pass.claim"),
