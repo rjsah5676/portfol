@@ -51,6 +51,14 @@ export const FIGHT_SKINS: FightSkin[] = [
     desc: "개구리 후드 잠옷에 초록 장화, 커다란 연잎 우산을 든 릴리. 물방울 · 비눗방울이 톡톡 튀고, 올챙이 친구들이 함께 뛰어들어요. 비 오는 날이 제일 좋아!",
     color: "#5CC85A",
   },
+  {
+    id: "gunmo-school",
+    ch: "gunmo",
+    name: "학창시절 건모",
+    tag: "BACK TO SCHOOL",
+    desc: "후줄근한 교복에 책가방, 흰 실내화. 안경 가운데엔 자물쇠가 채워져 있고 손엔 빈 급식판 — 선택 박스는 반투명 칠판이 되고, Alt+F4 는 강제 하교가 돼요.",
+    color: "#3E8E6A",
+  },
 ];
 
 export const skinOf = (id?: string | null): FightSkin | null => FIGHT_SKINS.find((s) => s.id === id) ?? null;
@@ -75,6 +83,7 @@ const AURA: Record<string, string> = {
   "soyoung-bunny": "/fight/shop/soyoung-bunny-aura.webp",
   "kai-tkd": "/fight/shop/kai-tkd-aura.webp",
   "lily-frog": "/fight/shop/lily-frog-aura.webp",
+  "gunmo-school": "/fight/shop/gunmo-school-aura.webp",
 };
 /** 오라 그림 가장자리를 부드럽게 흐려 네모 테두리가 안 보이게 */
 export const AURA_MASK = {

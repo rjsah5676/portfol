@@ -106,6 +106,8 @@ const FX_SETS: Record<string, Record<string, [number, number, boolean]>> = {
     glitch: [1, 0.7, true],
     ring: [1, 1.2, true],
   },
+  // 학창시절 건모: box · win 은 반투명 칠판(x 방정식), crash 는 깨지는 칠판, glitch 는 분필가루 — 나머지는 건모 기본
+  "gunmo-school": { box: [4, 1, false], win: [4, 1, false], crash: [1, 1.1, false], glitch: [1, 0.7, true], ring: [1, 1.2, true] },
   // 이반: aura(철곰권 기 모으기)·wave(철곰권 충격파)·burst(붉은 폭풍)·crack(곰 포옹 내리꽂기 균열)는 따로 띄움
   ivan: {
     spark: [4, 0.7, true],
@@ -218,6 +220,8 @@ export class FightRenderer {
   private flash = 0;
   /** 건모 Alt+F4: 화면 전체 블루스크린 남은 프레임 */
   private bsod = 0;
+  /** 학창시절 건모 스킨: 블루스크린 대신 칠판 화면 */
+  private bsodSchool = false;
   /** 일섬 빛줄기 · 낙인 번개 (그림용) */
   private lines: { x0: number; x1: number; y: number; life: number; max: number }[] = [];
   private bolts: { x: number; y: number; life: number; max: number }[] = [];
@@ -456,10 +460,11 @@ export class FightRenderer {
         this.bsod = BSOD_T;
         this.shake = Math.max(this.shake, 8);
         const ga = s.p[e.p];
+        this.bsodSchool = this.looks[e.p] === "gunmo-school";
         this.spawnFx(ga, "crash", x, y - 4, ga.face, 30);
         this.spawnFx(ga, "ring", x, y - 4, ga.face, 22);
         this.spawnFx(ga, "glitch", x - ga.face * 6, y - 8, ga.face, 40);
-        this.parts.push({ x, y: y - 14, vx: 0, vy: -0.5, life: 60, max: 60, color: "#9CC8FF", size: 1.5, kind: "text", text: "FORCE QUIT!" });
+        this.parts.push({ x, y: y - 14, vx: 0, vy: -0.5, life: 60, max: 60, color: "#9CC8FF", size: 1.5, kind: "text", text: this.bsodSchool ? "강제 하교!" : "FORCE QUIT!" });
         this.parts.push({ x, y, vx: 0, vy: 0, life: 18, max: 18, color: "#5AA0FF", size: 30, kind: "ring" });
         for (let i = 0; i < 14; i++)
           this.parts.push({
@@ -1057,14 +1062,17 @@ export class FightRenderer {
       if (lt >= 0 && lt < dur) {
         const name = f.aerial ? "win" : "box";
         const k = lt < 2 ? 0 : lt < cm.active + 2 ? 1 + (lt % 2) : 3;
-        const im = fxImg(`gunmo-${name}-${k}`);
+        // 스킨(학창시절 칠판)은 빛이 아니라 반투명 판이라 그냥 겹쳐 그림
+        const lk = this.lookOf(f);
+        const board = lk !== "gunmo" && !!FX_SETS[lk]?.[name];
+        const im = fxImg(`${board ? lk : "gunmo"}-${name}-${k}`);
         if (im) {
           const b = cm.box;
           const w = b.w * 1.08,
             h = b.h * 1.08;
           g.save();
-          g.globalCompositeOperation = "lighter";
-          g.globalAlpha = lt >= cm.active + 2 ? 0.6 : 0.9;
+          if (!board) g.globalCompositeOperation = "lighter";
+          g.globalAlpha = (lt >= cm.active + 2 ? 0.6 : 0.9) * (board ? 0.82 : 1);
           g.translate(x + f.face * (b.x + b.w / 2), y - (b.y - b.h / 2));
           if (f.face < 0) g.scale(-1, 1);
           g.drawImage(im, -w / 2, -h / 2, w, h);
@@ -1452,26 +1460,50 @@ export class FightRenderer {
     const a = t < hold ? 0.92 : Math.max(0, 0.92 * (1 - (t - hold) / (BSOD_T - hold)));
     g.save();
     g.setTransform(1, 0, 0, 1, 0, 0);
+    const sc = this.bsodSchool;
+    const C0 = sc ? "#1F4A38" : "#1452B8",
+      C1 = sc ? "#2B5C46" : "#2A6BD6";
     if (t < hold) {
       g.globalAlpha = a;
-      g.fillStyle = "#1452B8";
+      g.fillStyle = C0;
       g.fillRect(0, 0, W, H);
+      if (sc) {
+        // 칠판 나무 테두리 + 분필 받침
+        g.fillStyle = "#6B4A2B";
+        g.fillRect(0, 0, W, H * 0.03);
+        g.fillRect(0, H * 0.94, W, H * 0.06);
+        g.fillStyle = "#EDE9DA";
+        g.fillRect(W * 0.72, H * 0.925, W * 0.05, H * 0.015);
+      }
     } else {
       // 걷히는 동안: 가로 줄무늬로 깨져 사라짐
       const rows = 18;
       for (let r = 0; r < rows; r++) {
         if ((r * 7 + t * 3) % 5 === 0) continue;
         g.globalAlpha = a * (0.6 + 0.4 * ((r * 13) % 7) / 7);
-        g.fillStyle = r % 3 ? "#1452B8" : "#2A6BD6";
+        g.fillStyle = r % 3 ? C0 : C1;
         const off = ((r * 37 + t * 11) % 40) - 20;
         g.fillRect(off * (W / 400), (r * H) / rows, W, H / rows + 1);
       }
     }
     g.globalAlpha = Math.min(1, a * 1.1);
-    g.fillStyle = "#FFFFFF";
+    g.fillStyle = sc ? "#EDE9DA" : "#FFFFFF";
     g.textAlign = "left";
     g.textBaseline = "top";
     const u = W / 100;
+    if (sc) {
+      g.font = `bold ${Math.round(u * 7)}px 'Nanum Gothic', sans-serif`;
+      g.fillText("x = ?", u * 10, H * 0.17);
+      g.font = `bold ${Math.round(u * 2.4)}px 'Nanum Gothic', sans-serif`;
+      g.fillText("종이 울렸습니다. 상대를 강제로 하교시켰습니다.", u * 10, H * 0.2 + u * 11);
+      g.font = `${Math.round(u * 1.8)}px 'Nanum Gothic', sans-serif`;
+      g.fillText(`${Math.min(100, t * 7)}% 하교 중`, u * 10, H * 0.2 + u * 15);
+      g.font = `${Math.round(u * 1.2)}px monospace`;
+      g.globalAlpha *= 0.7;
+      g.fillText("중지 코드: 4교시_종료_급식_ㄱㄱ", u * 10, H * 0.2 + u * 19);
+      g.restore();
+      return;
+    }
     g.font = `${Math.round(u * 9)}px 'Nanum Gothic', sans-serif`;
     g.fillText(":(", u * 10, H * 0.2);
     g.font = `bold ${Math.round(u * 2.4)}px 'Nanum Gothic', sans-serif`;

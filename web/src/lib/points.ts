@@ -163,6 +163,14 @@ export const SHOP: ShopItem[] = [
     name: "개굴개굴 릴리",
     price: 15_000,
   },
+  {
+    id: "fight.skin.gunmo-school",
+    game: "fight",
+    kind: "skin",
+    ref: "gunmo-school",
+    name: "학창시절 건모",
+    price: 15_000,
+  },
 ];
 export const shopItem = (id: unknown) => SHOP.find((s) => s.id === id);
 export const shopOf = (game: PointGame) => SHOP.filter((s) => s.game === game);
