@@ -22,6 +22,7 @@ import {
   dailyMission,
   dailyOf,
   repKey,
+  repDone,
   type DailyState,
   type AchRankRow,
   type AchState,
@@ -236,13 +237,13 @@ export function createPoints(db: Database, now: () => number = Date.now) {
       const ach = achievementOf(id);
       if (!ach) throw new AppError("BAD_REQUEST", "없는 업적이에요.", 400);
       const m = await metricsOf(db, uid, ach.game);
-      if ((m[ach.metric] ?? 0) < ach.goal) throw new AppError("NOT_YET", "아직 달성하지 않은 업적이에요.", 409);
+      if ((m[ach.metric] ?? 0) < (ach.from ?? 0) + ach.goal) throw new AppError("NOT_YET", "아직 달성하지 않은 업적이에요.", 409);
       if (ach.repeat) {
         // 반복형: 쌓인 만큼(여러 번이면 한꺼번에). 받은 횟수가 읽은 그대로일 때만 올림 — 두 번 눌러도 한 번만
         const d = await read(uid);
         if (!d?.nick) throw notMember();
         const n = repTimes(d, ach.id);
-        const k = Math.floor((m[ach.metric] ?? 0) / ach.goal) - n;
+        const k = repDone(ach, m[ach.metric] ?? 0) - n;
         if (k <= 0) throw new AppError("NOT_YET", "다음 보상까지 조금 더 해야 해요.", 409);
         const key = repKey(ach.id);
         const r = await col.updateOne(

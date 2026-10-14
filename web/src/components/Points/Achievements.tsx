@@ -13,6 +13,7 @@ import {
   achievementOf,
   achievementsOf,
   claimableTimes,
+  repTarget,
   fmtPoint,
   type AchGame,
   type AchRankRow,
@@ -92,14 +93,15 @@ export function AchievementList({
     achievementsOf(game).map((a) => ({ id: a.id, value: 0, claimedAt: null }))
   )
     .map((s) => ({ a: achievementOf(s.id)!, s }))
-    .filter((r) => r.a);
+    // 일회형 마지막 단계에 이어지는 반복형은 그 단계를 넘은 뒤에만 보임
+    .filter((r) => r.a && !(r.a.repeat && r.a.from && r.s.value < r.a.from));
   const done = (r: Row) => claimableTimes(r.a, r.s) > 0;
   /** 다음 보상까지 얼마나 했는지 (반복형은 이번 칸 안에서) */
   const prog = (r: Row) =>
     r.a.repeat
       ? done(r)
         ? r.a.goal
-        : r.s.value - (r.s.times ?? 0) * r.a.goal
+        : r.s.value - (r.a.from ?? 0) - (r.s.times ?? 0) * r.a.goal
       : Math.min(r.s.value, r.a.goal);
   // 받을 수 있는 것 → 반복형 → 진행 중(많이 한 순) → 받은 것
   const order = (r: Row) => (r.s.claimedAt ? 3 : done(r) ? 0 : r.a.repeat ? 1 : 2);
@@ -257,7 +259,9 @@ export function AchievementList({
                       />
                     </span>
                     <span className="font-mono text-[11px] whitespace-nowrap text-white/50 tabular-nums">
-                      {fmtVal(a, now)}/{fmtVal(a, a.goal)}
+                      {a.repeat
+                        ? `${fmtVal(a, s.value)}/${fmtVal(a, repTarget(a, (s.times ?? 0) + (ok ? k - 1 : 0)))}`
+                        : `${fmtVal(a, now)}/${fmtVal(a, a.goal)}`}
                     </span>
                   </span>
                 )}

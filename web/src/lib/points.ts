@@ -237,6 +237,8 @@ export interface Achievement {
    * 받은 횟수는 회원 문서 achRep.<id 의 . 을 __ 로> 에
    */
   repeat?: boolean;
+  /** 반복형: 이 숫자를 넘은 뒤부터 셈 (일회형 마지막 단계에 이어서 — 소영 20판 → 40 · 60 · …) */
+  from?: number;
 }
 
 /** 격투 캐릭터 이름 (lib/fight/chars 의 CHARS 순서 — 그쪽 순서가 바뀌면 같이) */
@@ -543,6 +545,35 @@ export const ACHIEVEMENTS: Achievement[] = [
   a("sketch", "wins-10", "스케치 챔피언", "1등 10번 (3명 이상 판)", "sketch.wins", 10, 1500),
   a("sketch", "points-20000", "점수 부자", "게임 점수 누적 20,000점", "sketch.points", 20_000, 800),
 ];
+/** 반복형 업적: 일회형 마지막 단계(from)를 넘은 뒤로 step 만큼 쌓일 때마다 reward */
+const r = (game: AchGame, id: string, title: string, unit: string, metric: AchMetric, from: number, step: number, reward: number): Achievement => ({
+  id: `${game}.rep-${id}`,
+  game,
+  title,
+  desc: `${from.toLocaleString("ko-KR")}${unit} 다음부터 ${step.toLocaleString("ko-KR")}${unit}마다`,
+  metric,
+  goal: step,
+  reward,
+  repeat: true,
+  from,
+});
+ACHIEVEMENTS.push(
+  r("poker", "hands", "단골손님 · 계속", "판", "poker.hands", 1000, 500, 400),
+  r("poker", "wins", "승부사 · 계속", "승", "poker.wins", 500, 250, 600),
+  r("fight", "games", "단련된 주먹 · 계속", "판", "fight.games", 100, 50, 400),
+  r("fight", "wins", "이기는 맛 · 계속", "승", "fight.wins", 30, 30, 400),
+  ...FIGHT_CHAR_NAMES.map((n, i) => r("fight", `char-${i}`, `${n} 장인 · 계속`, "판", `fight.char.${i}` as AchMetric, 20, 20, 200)),
+  r("defense", "runs", "평생 수호자 · 계속", "판", "defense.runs", 400, 100, 600),
+  r("defense", "wins", "백전백승 · 계속", "번 클리어", "defense.wins", 100, 50, 1500),
+  r("defense", "kills", "글리치 멸절자 · 계속", "마리", "defense.kills", 200_000, 100_000, 1000),
+  r("rhythm", "plays", "리듬 중독 · 계속", "판", "rhythm.plays", 300, 150, 500),
+  r("sketch", "games", "붓을 든 장인 · 계속", "판", "sketch.games", 200, 100, 1500),
+  r("sketch", "correct", "독심술사 · 계속", "번", "sketch.correct", 300, 150, 1000),
+  r("sketch", "first", "광속 정답 · 계속", "번", "sketch.first", 100, 50, 700),
+  r("sketch", "drew", "인기 화가 · 계속", "번", "sketch.drew", 100, 50, 700),
+  r("sketch", "wins", "스케치 챔피언 · 계속", "번", "sketch.wins", 10, 10, 1500),
+  r("sketch", "points", "점수 부자 · 계속", "점", "sketch.points", 20_000, 20_000, 800),
+);
 export const achievementOf = (id: unknown) =>
   ACHIEVEMENTS.find((x) => x.id === id);
 export const achievementsOf = (game: AchGame) =>
@@ -561,9 +592,13 @@ export interface AchState {
 
 /** 반복형 업적의 받은 횟수를 두는 필드 이름 (id 의 . 은 필드 경로가 되므로 __ 로) */
 export const repKey = (id: string) => `achRep.${id.replaceAll(".", "__")}`;
+/** 반복형: 지금 숫자로 채운 칸 수 (from 넘은 뒤로) */
+export const repDone = (a: Achievement, value: number) => Math.floor(Math.max(0, value - (a.from ?? 0)) / a.goal);
+/** 반복형: 다음에 받을 칸의 목표 숫자 (소영 40판 · 60판 …) */
+export const repTarget = (a: Achievement, times: number) => (a.from ?? 0) + (times + 1) * a.goal;
 /** 지금 받을 수 있는 횟수 (일회형은 0 또는 1) */
 export function claimableTimes(a: Achievement, s: Pick<AchState, "value" | "claimedAt" | "times">): number {
-  if (a.repeat) return Math.max(0, Math.floor(s.value / a.goal) - (s.times ?? 0));
+  if (a.repeat) return Math.max(0, repDone(a, s.value) - (s.times ?? 0));
   return !s.claimedAt && s.value >= a.goal ? 1 : 0;
 }
 
@@ -590,23 +625,23 @@ const dm = (game: AchGame, id: string, title: string, metric: AchMetric, goal: n
   reward: reward * REWARD_X,
 });
 export const DAILY_MISSIONS: DailyMission[] = [
-  dm("poker", "hands", "포커 10판 치기", "poker.hands", 10, 30),
-  dm("poker", "hands30", "포커 30판 치기", "poker.hands", 30, 50),
-  dm("poker", "wins", "포커 3판 이기기", "poker.wins", 3, 40),
-  dm("fight", "games", "랭크전 3판 하기", "fight.games", 3, 40),
-  dm("fight", "win", "랭크전 1승", "fight.wins", 1, 30),
-  dm("fight", "wins", "랭크전 3승", "fight.wins", 3, 60),
-  dm("defense", "run", "랭킹 판 1번 끝내기", "defense.runs", 1, 30),
-  dm("defense", "runs", "랭킹 판 3번 끝내기", "defense.runs", 3, 60),
-  dm("defense", "kills", "적 1,000마리 처치 (랭킹 판)", "defense.kills", 1000, 40),
-  dm("rhythm", "plays", "3판 하기", "rhythm.plays", 3, 30),
-  dm("rhythm", "plays10", "10판 하기", "rhythm.plays", 10, 60),
-  dm("sketch", "game", "한 판 끝까지 하기", "sketch.games", 1, 30),
-  dm("sketch", "games", "세 판 끝까지 하기", "sketch.games", 3, 60),
-  dm("sketch", "correct", "정답 5번 맞히기", "sketch.correct", 5, 30),
-  dm("sketch", "first", "제일 먼저 맞히기 2번", "sketch.first", 2, 40),
-  dm("sketch", "drew", "내 그림이 맞혀지기 2번", "sketch.drew", 2, 40),
-  dm("sketch", "win", "1등 하기 (3명 이상 판)", "sketch.wins", 1, 50),
+  dm("poker", "hands", "포커 10판 치기", "poker.hands", 10, 90),
+  dm("poker", "hands30", "포커 30판 치기", "poker.hands", 30, 150),
+  dm("poker", "wins", "포커 3판 이기기", "poker.wins", 3, 120),
+  dm("fight", "games", "랭크전 3판 하기", "fight.games", 3, 120),
+  dm("fight", "win", "랭크전 1승", "fight.wins", 1, 90),
+  dm("fight", "wins", "랭크전 3승", "fight.wins", 3, 180),
+  dm("defense", "run", "랭킹 판 1번 끝내기", "defense.runs", 1, 90),
+  dm("defense", "runs", "랭킹 판 3번 끝내기", "defense.runs", 3, 180),
+  dm("defense", "kills", "적 1,000마리 처치 (랭킹 판)", "defense.kills", 1000, 120),
+  dm("rhythm", "plays", "3판 하기", "rhythm.plays", 3, 90),
+  dm("rhythm", "plays10", "10판 하기", "rhythm.plays", 10, 180),
+  dm("sketch", "game", "한 판 끝까지 하기", "sketch.games", 1, 90),
+  dm("sketch", "games", "세 판 끝까지 하기", "sketch.games", 3, 180),
+  dm("sketch", "correct", "정답 5번 맞히기", "sketch.correct", 5, 90),
+  dm("sketch", "first", "제일 먼저 맞히기 2번", "sketch.first", 2, 120),
+  dm("sketch", "drew", "내 그림이 맞혀지기 2번", "sketch.drew", 2, 120),
+  dm("sketch", "win", "1등 하기 (3명 이상 판)", "sketch.wins", 1, 150),
 ];
 /** 일일 미션이 보는 숫자 (기준값을 적어 둘 것) */
 export const DAILY_METRICS = [...new Set(DAILY_MISSIONS.map((x) => x.metric))];
