@@ -173,6 +173,7 @@ export const SKINS: Skin[] = [
     line: "뭘 그렇게 봐! …어울리긴 해?",
     ready: true,
     live: true,
+    emotes: true,
   },
   {
     id: "yeonseo-summer",
@@ -183,6 +184,7 @@ export const SKINS: Skin[] = [
     line: "여름이니까요. …어울려요?",
     ready: true,
     live: true,
+    emotes: true,
   },
   {
     id: "taeyang-ts",
