@@ -58,7 +58,8 @@ export interface DefenseProfile {
   pieces: number;
   cores: number;
   /** 안 연 상자 */
-  boxes: { card: number; relic: number };
+  /** trans = 초월 상자 (패키지에서 받은 초월 소환) */
+  boxes: { card: number; relic: number; trans?: number };
   /** 유물 조각 (유물 강화 재료) */
   shards: Record<string, number>;
   /** 해금한 초월 */
@@ -132,7 +133,7 @@ export const meta = {
   resLevel: (id: string, dir: 1 | -1) => P("defense.res.level", { id, dir }),
   relicLevel: (id: string, dir: 1 | -1) => P("defense.relic.level", { id, dir }),
   boxBuy: (kind: "card" | "relic") => P("defense.box.buy", { kind }),
-  boxOpen: (kind: "card" | "relic") => P("defense.box.open", { kind }),
+  boxOpen: (kind: "card" | "relic" | "trans") => P("defense.box.open", { kind }),
   benchBuy: () => P("defense.bench.buy"),
   fslotBuy: () => P("defense.fslot.buy"),
   transSummon: () => P("defense.trans"),

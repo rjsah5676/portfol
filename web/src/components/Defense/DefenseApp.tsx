@@ -305,12 +305,10 @@ function Menu(p: {
   const glitch = pr ? Math.min(pr.load.glitch, pr.glitchOpen) : 0;
   /** 끈기 (서버 gritOf 와 같은 규칙) */
   const grit = pr && glitch === pr.glitchOpen && glitch > pr.glitchWin && pr.grit?.g === glitch ? pr.grit.n : 0;
-  // 정비소 알림 점: 받을 미션 · 패스 · 안 연 상자
+  // 정비소 알림 점: 받을 미션 · 패스 (안 연 상자는 상점 버튼에)
   const hubDot = pr
     ? [...pr.quests.daily, ...pr.quests.weekly].filter((q) => !q.claimed && q.value >= q.goal).length +
-      (pr.passTier - pr.season.free.length) +
-      pr.boxes.card +
-      pr.boxes.relic
+      (pr.passTier - pr.season.free.length)
     : 0;
   return (
     <div className="px-stars absolute inset-0 overflow-hidden">
@@ -444,9 +442,9 @@ function Menu(p: {
           >
             <b className="block text-[14px]">상점</b>
             <span className="block truncate text-[12px] opacity-85">패키지 · 상자 · 초월 소환</span>
-            {!!pr && pr.boxes.card + pr.boxes.relic > 0 && (
+            {!!pr && pr.boxes.card + pr.boxes.relic + (pr.boxes.trans ?? 0) > 0 && (
               <span className="absolute top-1 right-1 min-w-[16px] bg-[#ff4d6d] px-1 text-center text-[12px] leading-[16px] text-white shadow-[0_0_0_2px_#0a0816]">
-                {pr.boxes.card + pr.boxes.relic}
+                {pr.boxes.card + pr.boxes.relic + (pr.boxes.trans ?? 0)}
               </span>
             )}
           </Btn>

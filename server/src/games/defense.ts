@@ -306,7 +306,7 @@ export function registerDefense({ gateway, db, points }: Deps) {
   gateway.rpc("defense.relic.level", (ctx, raw) => (member(ctx), ((a) => meta.relicLevel(ctx.uid, a.id, a.dir))(lvArg.parse(raw))));
   const boxKind = z.object({ kind: z.enum(["card", "relic"]) });
   gateway.rpc("defense.box.buy", (ctx, raw) => (member(ctx), meta.boxBuy(ctx.uid, boxKind.parse(raw).kind)));
-  gateway.rpc("defense.box.open", (ctx, raw) => (member(ctx), meta.boxOpen(ctx.uid, boxKind.parse(raw).kind)));
+  gateway.rpc("defense.box.open", (ctx, raw) => (member(ctx), meta.boxOpen(ctx.uid, z.object({ kind: z.enum(["card", "relic", "trans"]) }).parse(raw).kind)));
   gateway.rpc("defense.bench.buy", (ctx) => (member(ctx), meta.benchBuy(ctx.uid)));
   gateway.rpc("defense.fslot.buy", (ctx) => (member(ctx), meta.fslotBuy(ctx.uid)));
   gateway.rpc("defense.cheatres.buy", (ctx, raw) => (member(ctx), meta.cheatResBuy(ctx.uid, id.parse(raw).id)));

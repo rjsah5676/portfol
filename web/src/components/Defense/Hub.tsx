@@ -221,7 +221,7 @@ export default function Hub({
   const dots: Partial<Record<HubTab, number>> = {
     quest: [...p.quests.daily, ...p.quests.weekly].filter((q) => !q.claimed && q.value >= q.goal).length,
     pass: p.passTier - p.season.free.length + (p.season.premium ? p.passTier - p.season.prem.length : 0),
-    goods: p.boxes.card + p.boxes.relic,
+    goods: p.boxes.card + p.boxes.relic + (p.boxes.trans ?? 0),
   };
   const ctx: TabProps = { p, act, busy };
 
@@ -636,7 +636,17 @@ function ResTab({ p, act, busy }: TabProps) {
   return (
     <div>
       <div className="mb-2 flex items-center gap-2">
-        <H sub={`공용 칸 ${RES_SLOTS}개 (공동 연구만) + 세력 칸 ${p.fslots}/${FRES_MAX} (세력 연구만) — 출전 준비에서 장착`}>연구</H>
+        <H
+          sub={
+            <>
+              {`공용 칸 ${RES_SLOTS}개 (공동 연구만) + 세력 칸 ${p.fslots}/${FRES_MAX} (세력 연구만) — 출전 준비에서 장착`}
+              <br />
+              연구 강화는 동일한 비용으로 초기화가 가능해요
+            </>
+          }
+        >
+          연구
+        </H>
         {p.fslots < FRES_MAX && (
           <Btn tone="arcane" disabled={busy || p.cores < FRES_COST[p.fslots]} silent className="ml-auto h-8 shrink-0 px-2 text-[12px]" onClick={() => void act(() => meta.fslotBuy(), "upgrade")}>
             세력 연구칸 +1 · <Cur k="core" n={FRES_COST[p.fslots]} size={12} />
@@ -929,7 +939,7 @@ function GoodsLine({ g, size = 13 }: { g: Goods; size?: number }) {
       {!!g.cores && <Cur k="core" n={g.cores} size={size} className="text-[#ffb3ee]" />}
       {!!g.cardBox && <Cur k="cardbox" n={`카드 상자 ${g.cardBox}`} size={size} />}
       {!!g.relicBox && <Cur k="relicbox" n={`유물 상자 ${g.relicBox}`} size={size} />}
-      {!!g.trans && <Cur k="trans" n={`초월 소환 ${g.trans}`} size={size} className="text-[#fff6d6]" />}
+      {!!g.trans && <Cur k="trans" n={`초월 상자 ${g.trans}`} size={size} className="text-[#fff6d6]" />}
       {g.item && <span className="text-[var(--gold)]">{THEME[g.item]?.name ?? g.item} 테마</span>}
     </span>
   );
@@ -948,7 +958,7 @@ function TransRow({ t }: { t: TransGot }) {
     </div>
   ) : (
     <div className="flex items-center justify-center gap-2 text-[13px]">
-      <span className="text-[var(--mute)]">초월은 아니었어요 →</span>
+      <span className="text-[var(--mute)]">획득</span>
       <GoodsLine g={t.miss ?? {}} size={14} />
       <span className="text-[12px] text-[var(--dim)]">
         (천장까지 {BOX.trans.pity - t.pity}번)
@@ -959,13 +969,11 @@ function TransRow({ t }: { t: TransGot }) {
 
 function GotBox({ got }: { got: Got }) {
   const one: TransGot | null = typeof got.trans === "string" || got.miss ? { trans: typeof got.trans === "string" ? got.trans : undefined, dup: got.dup, miss: got.miss, pity: got.pity ?? 0 } : null;
-  const many = Array.isArray(got.trans) ? got.trans : null;
-  const col = got.relic ? TIER_COLOR[RELIC[got.relic].tier] : one?.trans || many?.some((t) => t.trans) ? "#fff6d6" : "#ffb347";
+  const col = got.relic ? TIER_COLOR[RELIC[got.relic].tier] : one?.trans ? "#fff6d6" : "#ffb347";
   return (
     <div className="px-box dfn-pop mt-2 flex flex-col gap-2 p-3 text-center" style={{ "--b": col } as CSSProperties}>
       {got.pack && <p className="text-[13px] text-[var(--green)]">패키지를 받았어요 — 상자는 「상자 · 소환」 탭에서 열어요</p>}
       {one && <TransRow t={one} />}
-      {many?.map((t, i) => <TransRow key={i} t={t} />)}
       {got.relic ? (
         <div className="flex items-center justify-center gap-3">
           <RelicIcon id={got.relic} size={56} />
@@ -1079,7 +1087,7 @@ function GoodsTab({ p, act, busy }: TabProps) {
           </Product>
           <Product
             k="trans"
-            title="초월 소환"
+            title={<>초월 소환 <span className="text-[12px] font-normal text-[var(--gold)]">초월 상자 {p.boxes.trans ?? 0}</span></>}
             sub={
               <>
                 {Math.round(BOX.trans.rate * 100)}%로 초월 유닛 해금
@@ -1088,6 +1096,9 @@ function GoodsTab({ p, act, busy }: TabProps) {
               </>
             }
           >
+            <Btn tone="gold" disabled={busy || (p.boxes.trans ?? 0) < 1} silent className={BTN} onClick={() => void run(() => meta.boxOpen("trans"), "myth")}>
+              열기
+            </Btn>
             <Btn tone="arcane" disabled={busy || p.cores < BOX.trans.cores} silent className={BTN} onClick={() => void run(() => meta.transSummon(), "myth")}>
               소환 <Cur k="core" n={BOX.trans.cores} size={12} />
             </Btn>

@@ -627,7 +627,7 @@ export interface Goods {
   cores?: number;
   cardBox?: number;
   relicBox?: number;
-  /** 초월 소환 횟수 (받는 즉시 돌림) */
+  /** 초월 상자 (초월 소환 1번씩 — 상점 「상자 · 소환」 탭에서 열기) */
   trans?: number;
   /** 꾸미기 id (inv.defense) */
   item?: string;
@@ -692,7 +692,7 @@ export const GP_PACKS: PackDef[] = [
   { id: "p_start", name: "신입 수호자 꾸러미", desc: "처음 한 번 — 정비소를 빠르게 시작", gp: 1000, once: true, give: { pieces: 1500, cardBox: 2, cores: 4 } },
   { id: "p_week", name: "주간 보급 꾸러미", desc: "매주 — 조각 · 카드 · 코어", gp: 1500, perWeek: 1, give: { pieces: 2500, cardBox: 3, cores: 6 } },
   { id: "p_relic", name: "유물 탐사 꾸러미", desc: "매주 — 유물 상자 3 + 강화용 코어", gp: 2000, perWeek: 1, give: { relicBox: 3, cores: 8 } },
-  { id: "p_trans", name: "초월 계약 꾸러미", desc: "매주 — 초월 소환 2번", gp: 3000, perWeek: 1, give: { trans: 2 } },
+  { id: "p_trans", name: "초월 계약 꾸러미", desc: "매주 — 초월 상자 2개", gp: 3000, perWeek: 1, give: { trans: 2 } },
   { id: "p_forest", name: "픽셀 숲 꾸러미", desc: "한 번 — 블록 테마 「픽셀 숲」 + 조각 · 카드", gp: 3000, once: true, give: { item: "theme.forest", pieces: 3000, cardBox: 5 } },
   { id: "p_deep10", name: "심연 개척 꾸러미", desc: "오염 10단계 클리어 뒤 한 번", gp: 4000, once: true, needWin: 10, give: { pieces: 6000, cores: 16, relicBox: 2, trans: 1 } },
   { id: "p_deep20", name: "심연 정복 꾸러미", desc: "오염 20단계 클리어 뒤 한 번", gp: 6000, once: true, needWin: 20, give: { pieces: 10000, cores: 24, relicBox: 3, trans: 1 } },

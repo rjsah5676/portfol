@@ -450,9 +450,13 @@ describe("픽셀 글리치 디펜스 서버", () => {
     // 주간 패키지: 주 1번
     await c.rpc("defense.pack.buy", { id: "p_week" });
     await expect(c.rpc("defense.pack.buy", { id: "p_week" })).rejects.toThrow();
-    // 초월 패키지: 소환 2번 (천장 횟수에 들어감)
+    // 초월 패키지: 초월 상자 2개 (바로 돌리지 않음) → 상점에서 열면 초월 소환 1번씩
     const t = await c.rpc("defense.pack.buy", { id: "p_trans" });
-    expect(t.got.trans).toHaveLength(2);
+    expect(t.boxes.trans).toBe(2);
+    const o = await c.rpc("defense.box.open", { kind: "trans" });
+    expect(o.boxes.trans).toBe(1);
+    expect(o.got.pity === 0 ? !!o.got.trans : !!o.got.miss).toBe(true);
+    await expect(c.rpc("defense.box.buy", { kind: "trans" })).rejects.toThrow();
     // 재화 → GP: 재화샵 값의 절반 · 주 한도
     const x = GP_SELL.find((q) => q.id === "x_pieces")!;
     await srv.db.col("defense_profile").updateOne({ _id: c.uid! } as never, { $set: { pieces: 10_000 } });
@@ -513,7 +517,7 @@ describe("픽셀 글리치 디펜스 서버", () => {
     const c = await member();
     const p0 = await c.rpc("defense.profile");
     expect(p0.bench).toBe(3);
-    expect(p0.boxes).toEqual({ card: 1, relic: 1 });
+    expect(p0.boxes).toEqual({ card: 1, relic: 1, trans: 0 });
     await expect(c.rpc("defense.fslot.buy")).rejects.toThrow();
     await srv.db.col("defense_profile").updateOne({ _id: c.uid! } as never, { $set: { pieces: 20000, cores: 500, res: ["g_gold", "k_drill"], pity: BOX.trans.pity - 1 } });
     const b = await c.rpc("defense.bench.buy");

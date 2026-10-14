@@ -75,7 +75,7 @@ export interface Profile {
   pieces: number;
   cores: number;
   /** 안 연 상자 (카드 상자 · 유물 상자) */
-  boxes: { card: number; relic: number };
+  boxes: { card: number; relic: number; trans?: number };
   /** 유물 조각 (같은 유물이 또 나오면 +1 — 유물 강화 재료) */
   shards: Record<string, number>;
   /** 해금한 초월 */
@@ -226,6 +226,7 @@ export function createDefenseMeta(db: Database, points: Points, now: () => numbe
     if (p.week.key !== w) p.week = { key: w, prog: {}, claimed: [] };
     if (p.season.id !== s) p.season = { id: s, xp: 0, free: [], prem: [], premium: false };
     if (!p.shop || p.shop.w !== w) p.shop = { w, n: {} };
+    p.boxes.trans ??= 0;
     if (!p.shopDay || p.shopDay.d !== d) p.shopDay = { d, n: {} };
     return p;
   };
@@ -318,16 +319,14 @@ export function createDefenseMeta(db: Database, points: Points, now: () => numbe
     return { relic: pick.id };
   };
 
-  /** 상점에서 받는 것 넣기 (초월 소환은 바로 돌림) */
+  /** 상점에서 받는 것 넣기 (초월 소환은 초월 상자로 — 상점 「상자 · 소환」 탭에서 열어요) */
   async function grantGoods(uid: string, p: Profile, g: Goods) {
     p.pieces += g.pieces ?? 0;
     p.cores += g.cores ?? 0;
     p.boxes.card += g.cardBox ?? 0;
     p.boxes.relic += g.relicBox ?? 0;
-    const trans = [];
-    for (let i = 0; i < (g.trans ?? 0); i++) trans.push(pullTrans(p));
+    p.boxes.trans = (p.boxes.trans ?? 0) + (g.trans ?? 0);
     if (g.item) await users.updateOne({ _id: uid } as never, { $addToSet: { "inv.defense": g.item } } as never);
-    return trans;
   }
 
   /** 초월 소환 한 번 (15% · 10번째 천장). 초월이 아니면 게임 재화 */
@@ -607,12 +606,12 @@ export function createDefenseMeta(db: Database, points: Points, now: () => numbe
       });
     },
 
-    /** 상자 열기 (가진 것 하나) */
-    boxOpen(uid: string, kind: "card" | "relic") {
+    /** 상자 열기 (가진 것 하나) — trans 는 초월 상자 (패키지에서 받은 초월 소환 1번) */
+    boxOpen(uid: string, kind: "card" | "relic" | "trans") {
       return edit(uid, async (p) => {
-        need(p.boxes[kind] >= 1, "상자가 없어요.");
-        p.boxes[kind]--;
-        const got = kind === "card" ? openCards(p) : openRelic(p, BOX.relic.tierOdds);
+        need((p.boxes[kind] ?? 0) >= 1, "상자가 없어요.");
+        p.boxes[kind] = (p.boxes[kind] ?? 0) - 1;
+        const got = kind === "card" ? openCards(p) : kind === "relic" ? openRelic(p, BOX.relic.tierOdds) : pullTrans(p);
         return wire(uid, p, { got });
       });
     },
@@ -668,8 +667,8 @@ export function createDefenseMeta(db: Database, points: Points, now: () => numbe
         if (pk.once) p.packs[id] = (p.packs[id] ?? 0) + 1;
         else if (pk.perDay) p.shopDay!.n[id] = (p.shopDay!.n[id] ?? 0) + 1;
         else p.shop.n[id] = (p.shop.n[id] ?? 0) + 1;
-        const trans = await grantGoods(uid, p, pk.give);
-        return wire(uid, p, { got: { pack: id, trans } });
+        await grantGoods(uid, p, pk.give);
+        return wire(uid, p, { got: { pack: id } });
       });
     },
 
