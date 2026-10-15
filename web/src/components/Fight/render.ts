@@ -554,17 +554,36 @@ export class FightRenderer {
         this.flashColor = "#fff";
         this.shake = Math.max(this.shake, 6);
       } else if (e.k === "rewind") {
-        // 포르테 태엽 되감기: 시계판 + 거꾸로 도는 빛 (v = 1 은 같이 되감긴 상대)
+        // 포르테 태엽 되감기 (v ≥ 0: 되감긴 자리 · 되찾은 체력, -1: 떠난 자리, -2: 같이 되감긴 상대)
         const a = s.p[e.p];
-        if (!e.v) this.spawnFx(a, "clock", x, y - 36, a.face, 22);
-        this.parts.push({ x, y: y - 36, vx: 0, vy: 0, life: 16, max: 16, color: "#FFE08A", size: e.v ? 16 : 26, kind: "ring" });
-        if (!e.v) this.parts.push({ x, y: y - 70, vx: 0, vy: -0.4, life: 30, max: 30, color: "#FFE08A", size: 1.2, kind: "text", text: "REWIND" });
-        for (let i = 0; i < 10; i++) {
-          const an = (i / 10) * Math.PI * 2;
-          this.parts.push({
-            x: x + Math.cos(an) * 26, y: y - 36 + Math.sin(an) * 26, vx: Math.sin(an) * 1.6, vy: -Math.cos(an) * 1.6,
-            life: 14, max: 14, color: i % 2 ? "#FFE08A" : "#F7A8C8", size: 1.2, kind: "spark",
-          });
+        if (e.v === -1) {
+          // 떠난 자리 → 지금 자리로 빨려 들어가는 빛줄기 · 시계 잔상
+          const tx = a.x / SUB,
+            ty = screenY(a.h) - 36;
+          const dx = tx - x,
+            dy = ty - (y - 36);
+          for (let i = 0; i < 14; i++) {
+            const k = i / 14;
+            this.parts.push({
+              x: x + dx * k + (Math.random() - 0.5) * 8, y: y - 36 + dy * k + (Math.random() - 0.5) * 10, vx: dx * 0.06, vy: dy * 0.06,
+              life: 10 + i, max: 10 + i, color: i % 2 ? "#FFE08A" : "#F7A8C8", size: 1.3, kind: "spark",
+            });
+          }
+          this.spawnFx(a, "clock", x, y - 36, a.face, 14, false, { from: 2, alpha: 0.6 });
+        } else if (e.v === -2) {
+          this.parts.push({ x, y: y - 30, vx: 0, vy: 0, life: 14, max: 14, color: "#FFE08A", size: 18, kind: "ring" });
+        } else {
+          this.spawnFx(a, "clock", x, y - 36, a.face, 22);
+          this.parts.push({ x, y: y - 36, vx: 0, vy: 0, life: 16, max: 16, color: "#FFE08A", size: 26, kind: "ring" });
+          this.parts.push({ x, y: y - 70, vx: 0, vy: -0.4, life: 30, max: 30, color: "#FFE08A", size: 1.2, kind: "text", text: "REWIND" });
+          if (e.v > 0) this.parts.push({ x: x + 14, y: y - 52, vx: 0, vy: -0.5, life: 34, max: 34, color: "#7CFFB2", size: 1.1, kind: "text", text: `+${e.v}` });
+          for (let i = 0; i < 10; i++) {
+            const an = (i / 10) * Math.PI * 2;
+            this.parts.push({
+              x: x + Math.cos(an) * 26, y: y - 36 + Math.sin(an) * 26, vx: Math.sin(an) * 1.6, vy: -Math.cos(an) * 1.6,
+              life: 14, max: 14, color: i % 2 ? "#FFE08A" : "#F7A8C8", size: 1.2, kind: "spark",
+            });
+          }
         }
       } else if (e.k === "catch") {
         // 돌아온 태엽 팽이를 받음
