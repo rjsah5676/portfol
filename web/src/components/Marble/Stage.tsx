@@ -80,6 +80,11 @@ function snapScale(k: number, phone: boolean) {
   return k;
 }
 
+/** 폰 안내 화면 바탕: 타이틀 그림을 어둡게 깔아 뒤 화면이 비치지 않게 */
+const GATE_BG: React.CSSProperties = {
+  background: "linear-gradient(rgba(20,14,60,0.82), rgba(14,10,44,0.92)), url(/marble/art/title.webp) center / cover no-repeat, #1b1650",
+};
+
 export default function Stage({ children }: { children: ReactNode }) {
   const rootRef = useRef<HTMLDivElement>(null);
   const [boxRef, box] = useSize<HTMLDivElement>();
@@ -251,7 +256,7 @@ export default function Stage({ children }: { children: ReactNode }) {
             </div>
           )}
           {iosGate && (
-            <div className="mb mb-sky absolute inset-0 z-[60] flex flex-col items-center justify-center gap-3 px-6 text-center">
+            <div style={GATE_BG} className="mb absolute inset-0 z-[60] flex flex-col items-center justify-center gap-3 px-6 text-center">
               <p className="mb-title mb-out text-2xl text-white">아이폰은 홈 화면에 추가해서 전체화면으로</p>
               <ol className="flex flex-wrap items-stretch justify-center gap-2 text-sm">
                 <li className="mb-box px-3 py-2">
@@ -282,7 +287,7 @@ export default function Stage({ children }: { children: ReactNode }) {
             </div>
           )}
           {(fsGate || rotateGate) && (
-            <div className="mb mb-sky absolute inset-0 z-[60] flex flex-col items-center justify-center gap-4 px-6 text-center">
+            <div style={GATE_BG} className="mb absolute inset-0 z-[60] flex flex-col items-center justify-center gap-4 px-6 text-center">
               <p className="mb-title mb-out text-2xl text-white">
                 {fsGate ? "전체화면으로 플레이해 주세요" : "폰을 가로로 돌려 주세요"}
               </p>
