@@ -170,6 +170,31 @@ export function adminRouter({ db, auth, web, users, points, gateway, cfg, traffi
     })
   );
 
+  // ───────────── 격투 경기 기록 (AI 학습용 — 입력 포함 전부) ─────────────
+
+  r.get(
+    "/fight/replays",
+    h(async (req) => {
+      const q = z.object({ after: z.string().max(120).optional() }).parse(req.query);
+      // 커서 = "시각ms_id"
+      let filter: Record<string, unknown> = {};
+      if (q.after) {
+        const i = q.after.indexOf("_");
+        const t = new Date(Number(q.after.slice(0, i)));
+        const id = q.after.slice(i + 1);
+        if (i < 1 || isNaN(t.getTime())) throw bad("커서가 잘못됐어요.");
+        filter = { $or: [{ at: { $gt: t } }, { at: t, _id: { $gt: id } }] };
+      }
+      const limit = 200;
+      const docs = await db.col<{ _id: string; at: Date }>("fight_replays").find(filter).sort({ at: 1, _id: 1 }).limit(limit).toArray();
+      const last = docs[docs.length - 1];
+      return {
+        list: docs.map((d) => ({ ...d, at: ms(d.at) })),
+        next: docs.length === limit && last ? `${last.at.getTime()}_${last._id}` : null,
+      };
+    })
+  );
+
   // ───────────── 한눈에 보기 ─────────────
 
   r.get(

@@ -13,6 +13,26 @@ export interface AdminDoc {
   data: DocumentData;
 }
 
+/** 격투 경기 기록(fight_replays)을 입력까지 전부 받아 JSON 파일로 저장 */
+export async function exportFightReplays(): Promise<number> {
+  const all: unknown[] = [];
+  let after: string | null = null;
+  for (let i = 0; i < 500; i++) {
+    const q: string = after ? `?after=${encodeURIComponent(after)}` : "";
+    const r: { list: unknown[]; next: string | null } = await api(`/api/admin/fight/replays${q}`, { auth: true });
+    all.push(...r.list);
+    after = r.next;
+    if (!after) break;
+  }
+  const url = URL.createObjectURL(new Blob([JSON.stringify({ at: Date.now(), replays: all })], { type: "application/json" }));
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `fight-replays-${new Date().toISOString().slice(0, 10)}.json`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+  return all.length;
+}
+
 export async function listDocs(path: string): Promise<AdminDoc[]> {
   const docs = await api<AdminDoc[]>(`/api/admin/docs?path=${encodeURIComponent(path)}`, {
     auth: true,

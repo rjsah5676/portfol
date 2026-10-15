@@ -5,6 +5,7 @@ import { useModal } from "@/components/Modal/ModalProvider";
 import { SONGS } from "@/lib/rhythm/music";
 import {
   FETCH_LIMIT,
+  exportFightReplays,
   formatCell,
   fromEditableJson,
   listDocs,
@@ -500,6 +501,20 @@ export default function DataManager({ groups: only }: { groups?: string[] } = {}
           ? "…"
           : `${docs.length}개${docs.length >= FETCH_LIMIT ? ` (최대 ${FETCH_LIMIT}개까지만 조회)` : ""}`}
         {src.note && ` · ${src.note}`}
+        {src.key === "fightReplays" && (
+          <button
+            type="button"
+            className="ml-2 rounded border border-white/15 px-2 py-0.5 text-white/60 hover:text-white"
+            onClick={() =>
+              exportFightReplays().then(
+                (n) => void modal.alert({ title: "격투 경기 기록", message: `${n.toLocaleString()}판을 받았어요` }),
+                (e) => void modal.alert({ title: "받지 못했어요", message: (e as Error).message || "잠시 뒤 다시 해 주세요" })
+              )
+            }
+          >
+            전체 JSON 받기 (입력 포함)
+          </button>
+        )}
       </p>
 
       {error ? (
