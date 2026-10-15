@@ -69,8 +69,9 @@ export default function Token({ sprite, anim = "idle", h = 48, face = 1, classNa
   const ref = sh.frames[sh.anims.idle?.list?.[0] ?? 0];
   let s = h / ref[3];
   if (maxW) {
-    // 동작 칸 중 발 기준으로 가장 멀리 뻗는 쪽이 maxW 안에 들어오게
-    const reach = Math.max(...a.list.map((i) => Math.max(sh.frames[i][4], sh.frames[i][2] - sh.frames[i][4])));
+    // 모든 동작 칸 중 발 기준으로 가장 멀리 뻗는 쪽이 maxW 안에 들어오게 (동작이 바뀌어도 크기 그대로)
+    const all = Object.values(sh.anims).flatMap((x) => x.list ?? []);
+    const reach = Math.max(...all.map((i) => Math.max(sh.frames[i][4], sh.frames[i][2] - sh.frames[i][4])));
     s = Math.min(s, maxW / (2 * reach));
   }
   const flip = (sh.facing === "left" ? -1 : 1) * face < 0;
