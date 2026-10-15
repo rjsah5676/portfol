@@ -14,6 +14,7 @@ import { CHARS, ITEMS } from "@/lib/marble/data";
 import { MAP_IDS } from "@/lib/marble/maps";
 
 import titleImg from "@/img/Page/info/marble/title.webp";
+import menuImg from "@/img/Page/info/marble/menu.webp";
 import boardImg from "@/img/Page/info/marble/board.webp";
 import diceImg from "@/img/Page/info/marble/dice.webp";
 import ladderImg from "@/img/Page/info/marble/ladder.webp";
@@ -141,7 +142,7 @@ export default function DiceTownProject() {
       </div>
 
       <div className="mt-8">
-        <Shot img={boardImg} alt="해피 타운 — 땅 · 건물 · 세 사람의 말" />
+        <Shot img={titleImg} alt="타이틀 화면" />
       </div>
 
       <StatGrid stats={STATS} />
@@ -195,12 +196,11 @@ export default function DiceTownProject() {
 
       <Section num="04" title="화면">
         <div className="grid gap-4 sm:grid-cols-2">
-          <Shot img={titleImg} alt="메뉴 — 내 캐릭터 · 맵 고르기 · 열린 방" />
+          <Shot img={boardImg} alt="해피 타운 — 땅 · 건물 · 세 사람의 말" />
+          <Shot img={menuImg} alt="메뉴 — 내 캐릭터 · 맵 고르기 · 열린 방" />
           <Shot img={ladderImg} alt="사다리로 차례 정하기" />
           <Shot img={diceImg} alt="주사위 굴리기" />
           <Shot img={skillImg} alt="이동 전 스킬 쓰기 (질풍 다시 굴리기)" />
-        </div>
-        <div className="mt-4">
           <Shot img={gachaImg} alt="뽑기 — 한정 배너" />
         </div>
       </Section>

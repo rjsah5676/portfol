@@ -12,7 +12,7 @@ import yoriJoriImg from "@/img/Page/info/YoriJori.png";
 import pokerImg from "@/img/Page/info/poker/title.webp";
 import sketchImg from "@/img/Page/info/sketch/title.webp";
 import defenseImg from "@/img/Page/info/defense/title.webp";
-import marbleImg from "@/img/Page/info/marble/board.webp";
+import marbleImg from "@/img/Page/info/marble/title.webp";
 
 export interface Project {
   /** 상세 페이지 주소: /infoPage/<idx> */
