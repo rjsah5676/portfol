@@ -167,7 +167,7 @@ export const BOSS_ART: Record<string, SpriteSpec> = {
  * 만든 곳: ChatGPT 이미지 (2026-10-13) — 시트를 web/scripts/defense-art/icons.py 로 잘라 128px
  */
 export const RELIC_ART: Record<string, string> = Object.fromEntries(
-  ["gold_gear", "first_harvest", "lucky_clover", "rift_compass", "gambler_coin", "hourglass", "alchemy", "vaccine", "pure_blood", "rainbow", "twin_star", "war_banner"].map((id) => [id, `/defense/relics/${id}.webp`])
+  ["gold_gear", "first_harvest", "lucky_clover", "rift_compass", "gambler_coin", "hourglass", "alchemy", "vaccine", "pure_blood", "rainbow", "twin_star", "war_banner", "myth_seal", "overdrive", "chrono_core", "void_stone", "lucky_dice", "golden_deed", "moa_card", "forte_box"].map((id) => [id, `/defense/relics/${id}.webp`])
 );
 export const ITEM_ART: Record<string, string> = Object.fromEntries(
   ["piece", "core", "card", "chest", "chest-open", "cardbox", "relicbox", "trans"].map((id) => [id, `/defense/items/${id}.webp`])

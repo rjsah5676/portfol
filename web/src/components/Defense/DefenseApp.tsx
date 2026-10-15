@@ -563,9 +563,9 @@ function Menu(p: {
                 ◀
               </Btn>
             )}
-            <Btn tone="gold" arrow className="relative h-[52px] min-w-0 flex-1 text-[20px] font-bold" onClick={p.onSolo} disabled={p.busy}>
-              {/* 금색 바탕엔 그림자 없이 진한 글씨 (그림자가 있으면 번져 보여 눈이 아픔) */}
-              <span className="text-[#1a1000]">{p.busy ? "준비 중…" : townReady ? `${TOWN_NAME} 도전` : `${TOWN_NAME} 체험`}</span>
+            <Btn tone="gold" arrow className="relative h-[52px] min-w-0 flex-1 text-[20px]" onClick={p.onSolo} disabled={p.busy}>
+              {/* 금색 바탕엔 그림자 · 굵게 없이 진한 글씨 (도트 글꼴을 억지로 굵게 하면 획이 번져 눈이 아픔) */}
+              <span className={`${TITLE} text-[#1a1000]`}>{p.busy ? "준비 중…" : townReady ? `${TOWN_NAME} 도전` : `${TOWN_NAME} 체험`}</span>
               {townReady && pr && !(pr.townDone ?? []).includes(townLv) && (
                 <span
                   className="absolute top-1 right-1 bg-[#ff4d6d] px-1.5 py-0.5 text-[11px] font-bold text-white shadow-[0_0_0_2px_#0a0816]"
@@ -708,11 +708,7 @@ function Menu(p: {
         <div className="text-[12px] text-[var(--mute)]">
           {p.loading ? (
             <span className="dfn-blink">로그인 확인 중…</span>
-          ) : p.member ? (
-            <>
-              <b className="text-[var(--text)]">{p.nick}</b> 님으로 기록돼요
-            </>
-          ) : p.account ? (
+          ) : p.member ? null : p.account ? (
             <NickForm submitLabel="별명 정하기" />
           ) : (
             <button

@@ -607,6 +607,43 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry, 
   const odds = B.odds[b.luck];
   const time = ctrl.game.tick / TPS;
 
+  /** 다음 웨이브 · 자동 (필드 왼쪽 위, 해피 타운은 위쪽 줄) */
+  const nextCtl = (pos: string, compact = false) =>
+    !b.result && !b.cheat && b.phase !== "boss" ? (
+          <div className={`${pos} flex items-center gap-1`}>
+            {!nextBlock(b) && (
+              <Btn
+                tone={b.phase === "prep" ? "main" : "cyan"}
+                className="h-7 px-2 text-[12px] font-bold"
+                onClick={() => run({ t: "next" })}
+                title="다음 웨이브 부르기 (N) — 남은 적은 그대로 남아요"
+              >
+                {b.phase === "prep" ? (compact ? "▶ 시작" : "▶ 바로 시작") : compact ? "▶▶ 다음" : "▶▶ 다음 웨이브"}
+                {nextBonus(b) > 0 && (
+                  <span className="ml-1 text-[var(--gold)]">
+                    <Icon n="coin" size={10} />+{nextBonus(b)}
+                  </span>
+                )}
+              </Btn>
+            )}
+            <button
+              type="button"
+              onClick={() => {
+                const v = !autoNext;
+                setAutoNext(v);
+                try {
+                  localStorage.setItem("pgd-autonext", v ? "1" : "0");
+                } catch {}
+              }}
+              className={`px-btn h-6 px-1.5 text-[11px] ${autoNext ? "" : "opacity-70"}`}
+              style={{ "--c": autoNext ? "#137f93" : "#2a2350" } as React.CSSProperties}
+              title="자동: 필드가 비면 다음 웨이브를 바로 불러요 (보스 웨이브 앞은 직접)"
+            >
+              {compact ? "자동" : `자동 ${autoNext ? "ON" : "OFF"}`}
+            </button>
+          </div>
+    ) : null;
+
   return (
     <div className="px-stars absolute inset-0 overflow-hidden text-[var(--text)]">
       {/* ── 위: 상태 줄 ── */}
@@ -734,6 +771,7 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry, 
           <TreasurePanel b={b} />
         )}
         {b.stage === "town" && !boss && <TownChip b={b} />}
+        {b.stage === "town" && nextCtl("h-full shrink-0", true)}
         {!b.troom && b.mods.treasure > 0 && !b.treasure && !b.result && (
           <span
             className="px-inset flex h-full shrink-0 items-center gap-1 px-2 text-[12px] font-bold whitespace-nowrap text-[var(--gold)]"
@@ -862,41 +900,8 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry, 
         </div>
         {showDps && <DpsOverlay b={b} dps={dpsNow} />}
         {ghost && <GhostPanel ctrl={ctrl} ghost={ghost} />}
-        {/* 다음 웨이브 부르기 (왼쪽 위) — 적이 다 나온 뒤 · 남은 시간만큼 골드 */}
-        {!b.result && !b.cheat && b.phase !== "boss" && (
-          <div className="absolute top-1.5 left-1.5 z-10 flex items-center gap-1">
-            {!nextBlock(b) && (
-              <Btn
-                tone={b.phase === "prep" ? "main" : "cyan"}
-                className="h-7 px-2 text-[12px] font-bold"
-                onClick={() => run({ t: "next" })}
-                title="다음 웨이브 부르기 (N) — 남은 적은 그대로 남아요"
-              >
-                {b.phase === "prep" ? "▶ 바로 시작" : "▶▶ 다음 웨이브"}
-                {nextBonus(b) > 0 && (
-                  <span className="ml-1 text-[var(--gold)]">
-                    <Icon n="coin" size={10} />+{nextBonus(b)}
-                  </span>
-                )}
-              </Btn>
-            )}
-            <button
-              type="button"
-              onClick={() => {
-                const v = !autoNext;
-                setAutoNext(v);
-                try {
-                  localStorage.setItem("pgd-autonext", v ? "1" : "0");
-                } catch {}
-              }}
-              className={`px-btn h-6 px-1.5 text-[11px] ${autoNext ? "" : "opacity-70"}`}
-              style={{ "--c": autoNext ? "#137f93" : "#2a2350" } as React.CSSProperties}
-              title="자동: 필드가 비면 다음 웨이브를 바로 불러요 (보스 웨이브 앞은 직접)"
-            >
-              자동 {autoNext ? "ON" : "OFF"}
-            </button>
-          </div>
-        )}
+        {/* 다음 웨이브 부르기 (왼쪽 위) — 적이 다 나온 뒤 · 남은 시간만큼 골드. 해피 타운은 왼쪽 위가 동네 칸이라 위쪽 줄로 */}
+        {b.stage !== "town" && nextCtl("absolute top-1.5 left-1.5 z-10")}
         {b.phase === "prep" && (
           <div className="pointer-events-none absolute inset-x-0 top-[36%] text-center">
             <p className={`${TITLE} px-shadow dfn-float text-[28px] text-white`}>
