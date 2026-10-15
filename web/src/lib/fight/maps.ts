@@ -107,4 +107,22 @@ export const MAPS: MapDef[] = [
     // 「Crown of Permafrost」 (끝 무음 2초 자름, 음량 다른 맵 곡에 맞춤)
     bgm: "/fight/bgm-aurora.mp3",
   },
+  {
+    // 그림: public/fight/bg/pier.webp (GPT 원본 1672×941 → 판 ×0.689, 판 y = 648 - 그림 y × 0.689)
+    // 부두 판자 윗면 그림 y≈560 · 뗏목 446 · 감시탑 난간 층 367 · 감시탑 지붕 240 · 매점 지붕 388
+    id: "pier",
+    name: "한여름 부두",
+    desc: "쨍한 한낮 바다 위 나무 부두 — 끝까지 이어진 넓은 바닥, 가운데 매달린 뗏목과 양쪽 감시탑 · 매점 지붕",
+    plats: [
+      { x0: 0, x1: 1152, y: 262, solid: true, kind: "floor" },
+      { x0: 469, x1: 682, y: 341, kind: "raft" },
+      { x0: 86, x1: 196, y: 395, kind: "tower" },
+      { x0: 69, x1: 207, y: 483, kind: "roof" },
+      { x0: 968, x1: 1147, y: 381, kind: "roof" },
+    ],
+    spawn: [380, 772],
+    respawn: [300, 576, 850],
+    bg: "/fight/bg/pier.webp",
+    bgPlats: true,
+  },
 ];
