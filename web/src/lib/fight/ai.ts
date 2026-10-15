@@ -44,6 +44,11 @@ export interface AILevel {
   plan?: number;
   /** 내다볼 때 상대의 대응(가만히·가드·약·점프)을 이만큼 같이 돌려 보고 가장 나쁜 경우로 값을 매김 (1이면 지금 입력 그대로만) */
   robust?: number;
+  /**
+   * 사람 섞기 0~1 (10.15 경기 기록 분석 — 1600~2100 사람 vs 같은 판 봇): 레이팅 1500 위에서만 조금씩.
+   * 반응 가드 대신 물러남·받아치기 · 미리 가드 · 공대공/약 대공 · 공중 콤보 끝 필살기 · 일어나자마자 약 · 대시 · 덜 서 있기, 저스트 가드는 덜
+   */
+  human?: number;
 }
 
 export const AI_LEVELS: AILevel[] = [
@@ -149,6 +154,10 @@ export const RANK_TIERS: (AILevel & { rating: number })[] = [
   { ...AI_LEVELS[6], id: "9", name: "신화", rating: 2400, tech: 0.36, read: 1, plan: 1, aggro: 0.87, just: 1, interrupt: 0.95, robust: 4, look: 32 },
   { ...AI_LEVELS[6], id: "10", name: "초월", rating: 2600, tech: 0.38, read: 1, plan: 1, react: 8, aggro: 0.9, just: 1, interrupt: 1, robust: 5, look: 32 },
 ];
+/** 사람 섞기: (보정 넣은) 레이팅 HUMAN.from 부터 HUMAN.full 까지 0 → HUMAN.max, 그 위는 HUMAN.top 까지 천천히 */
+export const HUMAN = { from: 1450, full: 2000, max: 0.4, top: 0.5 };
+const humanAt = (e: number) =>
+  e <= HUMAN.from ? 0 : e < HUMAN.full ? ((e - HUMAN.from) / (HUMAN.full - HUMAN.from)) * HUMAN.max : Math.min(HUMAN.top, HUMAN.max + ((e - HUMAN.full) / 600) * (HUMAN.top - HUMAN.max));
 /** 랭크전 봇 레이팅 상한 */
 export const BOT_MAX = 2600;
 
@@ -216,6 +225,8 @@ export function aiForRating(r: number, charId?: string): AILevel {
     react: Math.round(mix.react),
     robust: Math.round(mix.robust),
   };
+  const hu = humanAt(e);
+  if (hu > 0) lv.human = Math.round(hu * 1000) / 1000;
   // 내다보기: 아래 단계에 없으면 위 단계 쪽으로 갈수록 자주 씀
   if (a.l.look || b.l.look) {
     lv.look = Math.round(a.l.look && b.l.look ? a.l.look + (b.l.look - a.l.look) * t : (b.l.look ?? a.l.look)!);
@@ -228,9 +239,9 @@ export function aiForRating(r: number, charId?: string): AILevel {
  * AI 지문: 랭크전 봇전은 서버가 같은 경기를 다시 돌려 확인하니, 브라우저와 서버의 AI가 똑같아야 함.
  * 단계 값·보정·콤보 길은 자동으로 들어가고, next() 같은 판단 코드를 바꿨으면 AI_REV 를 올릴 것.
  */
-const AI_REV = 10;
+const AI_REV = 11;
 export const AI_ID = (() => {
-  const str = AI_REV + JSON.stringify([AI_LEVELS, RANK_TIERS, AI_RATING, ADJ_AT, CHAR_ADJ, ROUTES, ROUTE_CAP]);
+  const str = AI_REV + JSON.stringify([AI_LEVELS, RANK_TIERS, AI_RATING, ADJ_AT, CHAR_ADJ, ROUTES, ROUTE_CAP, HUMAN]);
   let h = 0x811c9dc5;
   for (let i = 0; i < str.length; i++) h = Math.imul(h ^ str.charCodeAt(i), 0x01000193);
   return (h >>> 0).toString(36);
@@ -395,6 +406,10 @@ export class FightAI {
   private dirTapAt: Record<number, number> = { [IN.L]: -99, [IN.R]: -99 };
   /** 저스트 가드 노리기: 상대 판정이 나오기 이 프레임 전에 ↓ */
   private justPlan = -1;
+  /** 사람 섞기: 상대 공격을 보고 가드 대신 할 것 · 대공을 어떻게 · 내가 일어난 프레임 */
+  private humanReact: "back" | "cut" | null = null;
+  private aaHuman: "jab" | "air" | null | false = null;
+  private wokeAt = -99;
 
   constructor(
     public level: AILevel,
@@ -415,6 +430,7 @@ export class FightAI {
     const dist = Math.abs(o.x - f.x) / SUB;
     const dy = (o.h - f.h) / SUB;
     const L = this.level;
+    const hu = L.human ?? 0;
     const air = isAir(s, f);
     let out = 0;
     // 상대가 가만히 있나 (서 있거나 가드, 거의 안 움직임)
@@ -424,6 +440,7 @@ export class FightAI {
     const passive = this.oStill > 90;
     // 밑에서 올라가다(위의 상대에게) 맞은 횟수
     if (f.st === "hit" && this.prevSt !== "hit" && dy > 30) this.upHits = Math.min(4, this.upHits + 1);
+    if (this.prevSt === "rise" && f.st !== "rise") this.wokeAt = s.f;
     this.prevSt = f.st;
     if (dy < 30) this.upSmart = null;
     this.observe(s, me, dist);
@@ -694,6 +711,7 @@ export class FightAI {
       this.blockDecision = null;
       this.cutDecision = null;
       this.justPlan = -1;
+      this.humanReact = null;
     }
     const oJumpIn = isAir(s, o) && dy > 20 && dy < 120 && dist < 90 && o.vh < 0;
     if (oJumpIn) {
@@ -701,6 +719,7 @@ export class FightAI {
     } else {
       this.sawJump = -1;
       this.aaDecision = null;
+      this.aaHuman = null;
     }
     const noticed = (t: number) => t >= 0 && s.f - t >= L.react;
     // 뛰어들며 치는 공격 (공중 약 · 발차기 · 공중 아이덴티티 · 필살기): 나를 보고 위에서 떨어지며 닿을 거리 — 막음 (10.13: 공중 약은 공격으로 안 봐서 점프 약 연타에 다 맞던 것)
@@ -760,6 +779,9 @@ export class FightAI {
           if (c.moves.S.air?.hug && f.cd === 0 && !o.hugd && (o.combo >= 3 || f.airUsed >= 3) && this.r() < 0.5 + L.combo * 0.5) {
             // 곰 포옹으로 마무리: 안고 내리꽂아 기절 → 땅에서 이어 침
             press(IN.C);
+          } else if (hu > 0 && f.meter >= 100 && o.combo >= 4 && this.r() < hu && this.ultHits(s, me, 0)) {
+            // 사람: 공중 콤보 끝을 필살기로 (G J J K K J K → X)
+            press(IN.X);
           } else if ((o.floatT > 90 || o.combo >= 6 || (f.airUsed >= 4 && f.airK >= 2)) && f.airS === 0) {
             // 오래 띄웠거나 다 썼으면 ↓ + K 마무리 내려찍기
             out |= IN.D;
@@ -781,6 +803,11 @@ export class FightAI {
         else if (f.mv === "S" && c.moves.X.bsod && o.mark === 1 && f.meter >= 100 && this.r() < 0.7 && this.ultHits(s, me, 0)) press(IN.X);
         else if (f.mv === "S" && (o.pulled || o.mark === 1)) press(this.r() < 0.5 ? IN.A | IN.B : IN.A);
         else if (f.mv === "L") press(f.chain < 4 && this.r() < 0.6 ? IN.A : IN.B);
+        // 사람: 공중 약 · 발차기가 맞으면 공중에서 이어 침 (J → J · J → K · K → K)
+        else if (hu > 0 && air && (f.mv === "J" || f.mv === "K") && f.airUsed < 4 && this.r() < hu * 1.5) {
+          out |= toward;
+          press(f.airK >= 2 || (f.mv === "J" && this.r() < 0.5) ? IN.A : IN.B);
+        }
         else if (f.mv === "H") {
           if (f.meter >= 100 && this.r() < 0.6 && this.ultHits(s, me, 0)) press(IN.X);
           else if (f.cd === 0 && !sm.proj) press(IN.C);
@@ -888,6 +915,12 @@ export class FightAI {
 
     if ((free || blocking) && !air) {
       const rd = L.read ?? 0;
+      // 사람: 일어나자마자 약 (가까우면) — 기록에서 사람은 일어나면 거의 바로 때림
+      if (hu > 0 && free && s.f - this.wokeAt <= 2 && dist < lReach + 8 && aligned && this.r() < hu * 0.8) {
+        this.wokeAt = -99;
+        hitBtn(IN.A);
+        return finish();
+      }
       // ── 읽기: 미리 가드 (상대가 이 상황에서 잘 때리면 보기 전에 막고 있음) ──
       if (this.guardUntil >= s.f && aligned) {
         out = IN.D;
@@ -989,7 +1022,7 @@ export class FightAI {
       // ── 읽기: 가까이서 상대가 자주 때리면 가끔 미리 가드 (반응으로는 빠른 약을 못 막으니) ──
       if (free && aligned && dist < oReach + 8 && !oAtk && rd > 0) {
         const busy = Math.min(1, this.closeAtk * 30);
-        if (this.r() < rd * L.block * busy * 0.06) {
+        if (this.r() < rd * L.block * busy * (0.06 + hu * 0.08)) {
           this.guardUntil = s.f + 8 + Math.floor(this.r() * 8);
           out = IN.D;
           return finish();
@@ -1008,7 +1041,21 @@ export class FightAI {
       if (oAtk && noticed(this.sawAtk) && aligned && (dist < reach || o.mv === "X")) {
         if (this.blockDecision === null) {
           this.blockDecision = this.r() < L.block;
-          this.justPlan = this.r() < (L.just ?? L.combo * 0.6) ? 2 + Math.floor(this.r() * 3) : -1;
+          this.justPlan = this.r() < (L.just ?? L.combo * 0.6) * (1 - hu * 0.8) ? 2 + Math.floor(this.r() * 3) : -1;
+          // 사람: 보고 가드하기보다 물러나거나 더 빠른 약으로 받아침
+          if (hu > 0 && this.blockDecision && this.r() < hu * 0.45) {
+            const cut = faceOk && dist < lReach && om!.startup - o.t > c.moves.L.startup && this.r() < 0.5;
+            this.humanReact = cut ? "cut" : dist > reach - 30 ? "back" : null;
+            if (this.humanReact) this.blockDecision = false;
+          }
+        }
+        if (this.humanReact === "cut") {
+          press(IN.A);
+          return finish();
+        }
+        if (this.humanReact === "back") {
+          out |= away;
+          return finish();
         }
         if (this.blockDecision) {
           const untilHit = om!.startup - o.t;
@@ -1037,6 +1084,18 @@ export class FightAI {
         // (10.13) 땅 발차기 대공은 시작이 느리고 판정이 낮아 공중 약에 지기만 함 → 막고 착지 빈틈에 반격
         // (마주 뛰어올라 공중 약으로 받아치기도 해 봤는데 시뮬에서 더 많이 짐)
         if (this.aaDecision && dist < 70) {
+          // 사람: 막기만 하지 않고 약으로 떨구거나 마주 뛰어 공중 약 (가끔)
+          if (hu > 0 && this.aaHuman === null) this.aaHuman = this.r() < hu * 0.5 ? (dist < lReach + 4 ? "jab" : "air") : false;
+          if (this.aaHuman === "jab" && faceOk) {
+            press(IN.A);
+            return finish();
+          }
+          if (this.aaHuman === "air") {
+            this.aaHuman = false;
+            out |= toward;
+            press(IN.J);
+            return finish();
+          }
           out = IN.D;
           return finish();
         }
@@ -1087,7 +1146,7 @@ export class FightAI {
       const rx = c.moves.X.rush;
       const ultReach = c.moves.X.summon || c.moves.X.proj ? 400 : sx.x + sx.w + 8 + (rx ? Math.trunc((rx.vx * c.moves.X.active) / SUB) : 0);
       // 허공에 쓰지 않게: 지금 쓰면 맞는지(막혀도 X) 미리 돌려 보고 씀 — 반응 시간 전에 본 상대 공격은 아직 모르는 걸로
-      if (f.meter >= 100 && dist < ultReach && ((om && noticed(this.sawAtk) && o.t < 10) || this.r() < 0.02) && this.ultHits(s, me, toward)) {
+      if (f.meter >= 100 && dist < ultReach && ((om && noticed(this.sawAtk) && o.t < 10) || this.r() < 0.02 + hu * 0.04) && this.ultHits(s, me, toward)) {
         out |= toward;
         press(IN.X);
         return finish();
@@ -1244,7 +1303,7 @@ export class FightAI {
         const stopAt = hReach > oReach + 10 ? Math.max(oReach + 6, hReach - 10) : 0;
         if (dist > stopAt) out |= toward;
         else if (free && aligned && this.r() < 0.3 + L.aggro * 0.3) hitBtn(dist < lReach ? IN.A : IN.B);
-        if (free && !air && dist > 200 && this.r() < 0.05 + L.aggro * 0.05 && platBelow(map, f.x + (toward === IN.R ? 220 : -220) * SUB, f.h)?.y === platBelow(map, f.x, f.h)?.y)
+        if (free && !air && dist > 200 - hu * 120 && this.r() < 0.05 + L.aggro * 0.05 + hu * 0.12 && platBelow(map, f.x + (toward === IN.R ? 220 : -220) * SUB, f.h)?.y === platBelow(map, f.x, f.h)?.y)
           this.dashSeq = [0, toward, toward, toward];
         if (dist < lReach && free && aligned && this.r() < L.aggro * 0.2) hitBtn(IN.A);
         break;
@@ -1286,10 +1345,10 @@ export class FightAI {
           // 상대가 공중 아이덴티티(건모 Alt+Tab · 제나 뇌격돌 · 소영 채찍 …)를 쓸 수 있으면 그 손 닿는 거리 안으로는 잘 안 뛰어듦
           // — 뛰어들다 공중에서 받아치기 당하기만 함 (10.13). 가끔은 섞음
           const oAA = o.cd < 30 && dist < airReachOf(oc) + 70 && this.r() > 0.05;
-          if (this.r() < 0.2 && !(isAir(s, o) && dist < 160) && !oAA) press(IN.J);
-        } else if (f.st === "jump" && dist < 50 && dy < 10) {
+          if (this.r() < 0.2 + hu * 0.3 && !(isAir(s, o) && dist < 160) && !oAA) press(IN.J);
+        } else if (f.st === "jump" && dist < 50 + hu * 30 && dy < 10) {
           out |= toward;
-          press(IN.B);
+          press(hu > 0 && f.airUsed === 0 && this.r() < hu ? IN.A : IN.B);
         }
         break;
       case "poke":
@@ -1633,6 +1692,9 @@ export class FightAI {
       else this.intent = "wait";
       this.hold = 4 + Math.floor(this.r() * 10);
     }
+    // 사람: 서서 기다리기보다 뛰어들거나 찔러 봄 (기록에서 사람은 가만히 32% · 봇 51%)
+    const hu = L.human ?? 0;
+    if (hu > 0 && this.intent === "wait" && this.r() < hu * 1.2) this.intent = dist > 55 && this.r() < 0.6 ? "jumpIn" : "poke";
     void lReach;
   }
 }
