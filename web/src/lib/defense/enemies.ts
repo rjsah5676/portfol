@@ -185,8 +185,11 @@ export const PHASE_PAIRS: Record<number, [number, number]> = {
   29: [50, 60],
   30: [50, 60],
 };
+/** 심연 2막: 31~39 단계는 셋 (40 · 50 · 60), 40단계부터는 여섯 모두 */
+export const phaseWaves = (glitch: number): number[] =>
+  glitch >= 40 ? [10, 20, 30, 40, 50, 60] : glitch > 30 ? [40, 50, 60] : (PHASE_PAIRS[glitch] ?? []);
 /** 이 오염 단계에서 이 보스(웨이브)가 2페이즈를 쓰나 */
-export const phaseOn = (glitch: number, wave: number) => !!PHASE_PAIRS[glitch]?.includes(wave);
+export const phaseOn = (glitch: number, wave: number) => phaseWaves(glitch).includes(wave);
 /** 2페이즈 예고 기술 이름 */
 export const phaseSkillName = (d: BossDef) => {
   const s = d.phase?.skills.find((x) => x.kind === "tele");
@@ -194,7 +197,7 @@ export const phaseSkillName = (d: BossDef) => {
 };
 /** 이 단계 2페이즈 보스 소개 ("제나 뇌섬일창 · 이반 곰 포옹"), 없으면 "" */
 export const phaseText = (glitch: number) =>
-  (PHASE_PAIRS[glitch] ?? [])
+  phaseWaves(glitch)
     .map((w) => BOSSES.find((x) => !x.stage && x.wave === w))
     .map((d) => (d ? `${d.name.replace("글리치 ", "")} ${phaseSkillName(d)}` : ""))
     .join(" · ");

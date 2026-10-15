@@ -432,3 +432,11 @@ PIXEL MARBLE 「해피 타운」 맵 테마. 길 · 칸 배치는 글리치 시�
 - 보스 그림: `web/scripts/defense-art/town-bosses.py` 가 마블 말 도트를 「오염」시켜 `public/defense/bosses/ur-*.webp`
 - 밸런스 확인: `npx tsx scripts/defense-sim.ts --meta mid --town 1` (적 세기 같은 메인 단계와 비교)
 - 다음: 땅문서 · 도시 보너스(타운 전용 재화 → 메인 영구 보너스) · 메인 31~50단계 + 새 유물 · 연구 · 변이
+
+## v2.1 심연 2막 · 도시 개발 (2026-10-16)
+- GLITCH_MAX 30 → 50 (`GLITCH_ACT1` 30). 31~ 체력 기울기 `DEEP_PARAMS.hpPerLv2`(0.06), 50단계 보스 ×boss50. 2페이즈: `phaseWaves` — 31~39 셋(40·50·60) · 40~ 여섯
+- 심연 변이 추가: rush 정예(35+, 모든 웨이브 마지막 적 엘리트) · ward 방벽(40+, 보스 보호막 15%) · fog 안개(45+, 사거리 -0.5)
+- 유물 8종 추가 `RelicDef.from`: deep(오염 30 클리어 뒤 상자 — `DEEP_RELIC_WIN`) myth_seal · overdrive · chrono_core · void_stone / town(타운 5·10·15·20 첫 클리어만 — `TOWN_RELIC`) lucky_dice · golden_deed · moa_card · forte_box. 그림 없음(도트 아이콘)
+- 땅문서(deeds) · 도시 개발(`CITY`, Loadout.city): 타운 판마다 `townDeeds` · 첫 클리어 `townFirstClear.deeds`, rpc `defense.city.up`, 정비소 「도시 개발」 탭. modsOf 가 모든 스테이지에 적용
+- TOWN_MAX 23. 업적 glitch-40 · glitch-50 (points.ts)
+- 시뮬 `--meta abyss` (max + 새 유물 + 도시 개발 전부): 봇 기준 50단계 클리어 드묾 (~2%)

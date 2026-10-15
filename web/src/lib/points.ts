@@ -532,6 +532,8 @@ export const ACHIEVEMENTS: Achievement[] = [
   a("defense", "glitch-20", "심연 탐험가", "오염 20단계 클리어", "defense.glitch", 21, 3000),
   a("defense", "glitch-25", "심연 사냥꾼", "오염 25단계 클리어", "defense.glitch", 26, 4000),
   a("defense", "glitch-30", "끝없는 오염의 끝", "오염 30단계 클리어", "defense.glitch", 31, 6000),
+  a("defense", "glitch-40", "심연 2막", "오염 40단계 클리어", "defense.glitch", 41, 8000),
+  a("defense", "glitch-50", "글리치의 심장", "오염 50단계 클리어", "defense.glitch", 51, 12000),
   a("defense", "runs-150", "단골 수호자", "랭킹 판 150번 끝내기", "defense.runs", 150, 1000),
   a("defense", "runs-400", "평생 수호자", "랭킹 판 400번 끝내기", "defense.runs", 400, 2500),
   a("defense", "win-30", "든든한 방벽", "60웨이브 30번 클리어", "defense.wins", 30, 2000),

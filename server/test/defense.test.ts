@@ -326,6 +326,37 @@ describe("픽셀 글리치 디펜스 엔진", () => {
     expect(modsOf({ ...lo, treasure: 15 }).treasure).toBe(0);
   });
 
+  it("심연 2막: 50단계까지 · 31+ 2페이즈 셋 · 40+ 여섯 · 정예 · 방벽 · 안개 · 도시 개발 · 새 유물", () => {
+    expect(GLITCH.length).toBe(51);
+    expect(GLITCH[50].hp).toBeGreaterThan(GLITCH[30].hp);
+    expect(GLITCH[35].mut).toContain("rush");
+    expect(GLITCH[40].mut).toContain("ward");
+    expect(GLITCH[45].mut).toContain("fog");
+    expect(GLITCH[34].mut).not.toContain("rush");
+    expect(phaseOn(31, 40) && phaseOn(31, 60) && !phaseOn(31, 10)).toBe(true);
+    expect([10, 20, 30, 40, 50, 60].every((w) => phaseOn(40, w))).toBe(true);
+    // 방벽: 40단계 보스는 보호막을 두르고 나옴
+    const g = started(4, 1, [{ glitch: 40 }]);
+    const b = g.boards[0];
+    b.cells[0] = { def: "k_squire", units: [{ cd: 0, ult: 0, stun: 0 }] };
+    for (let i = 0; i < 200000 && b.wave < 10 && !b.result; i++) {
+      if (b.cheat) apply(g, 0, { t: "cheat", i: 0 });
+      apply(g, 0, { t: "next" });
+      step(g);
+    }
+    const boss = b.enemies.find((e) => e.boss >= 0);
+    if (boss) expect(boss.shield).toBeGreaterThan(0);
+    // 도시 개발 · 새 유물 → mods
+    const m = modsOf({ city: { c_gold: 2, c_clock: 3, c_power: 5, x: 9 }, relics: ["myth_seal", "overdrive", "lucky_dice"] });
+    expect(m.startGold).toBe(50);
+    expect(m.cityDmg).toBeCloseTo(1.1);
+    expect(m.mythDmg).toBeGreaterThan(1);
+    expect(m.aspdAll).toBeGreaterThan(0);
+    expect(m.bossFree).toBe(2);
+    expect(modsOf({ city: { c_clock: 3 } }).bossSec - modsOf({}).bossSec).toBe(6);
+    expect(Object.keys(modsOf({ city: { nope: 3 } }).city)).toEqual([]);
+  });
+
   it("결정론: 같은 시드 · 같은 기록이면 결과가 똑같음", () => {
     const { g, log } = botGame(42);
     const again = replay(42, 1, log);
@@ -379,7 +410,7 @@ describe("픽셀 글리치 디펜스 엔진", () => {
     expect(hashGame(r.game)).toBe(hashGame(g));
     const m = modsOf({ res: ["nope", "g_gold"], relics: ["x"], glitch: 99 });
     expect(m.startGold).toBe(40);
-    expect(m.glitch.lv).toBe(30);
+    expect(m.glitch.lv).toBe(50);
   });
 
   it("v0.3: 포기 · 모든 유닛 판매 · 도박은 웨이브부터", () => {

@@ -41,6 +41,7 @@ import { setTheme } from "./render";
 import {
   GLITCH,
   GRIT_PER,
+  RELIC,
   TOWN_FROM,
   TOWN_MAX,
   TOWN_REWARD,
@@ -528,7 +529,8 @@ function Menu(p: {
           )}
         </div>
       </div>
-      <div className="absolute top-[252px] left-[64px] flex w-[372px] flex-col gap-2.5">
+      {/* 이어하기 줄(BETA 표시 옆) 밑으로 — 스테이지 탭이 이어하기 버튼을 가리지 않게 */}
+      <div className="absolute top-[280px] left-[64px] flex w-[372px] flex-col gap-2">
         {/* 스테이지: 글리치 시티(메인) · 해피 타운(확장) */}
         <div className="flex h-[26px] gap-1.5">
           <Btn
@@ -557,12 +559,13 @@ function Menu(p: {
         {town ? (
           <div className="flex gap-1.5">
             {townReady && pr && (
-              <Btn className="h-[58px] w-[34px] shrink-0 px-0 text-[14px]" disabled={p.busy || townLv <= 1} title="타운 단계 낮추기" onClick={() => p.onTownLv(townLv - 1)}>
+              <Btn className="h-[52px] w-[34px] shrink-0 px-0 text-[14px]" disabled={p.busy || townLv <= 1} title="타운 단계 낮추기" onClick={() => p.onTownLv(townLv - 1)}>
                 ◀
               </Btn>
             )}
-            <Btn tone="gold" arrow className="relative h-[58px] min-w-0 flex-1 text-[20px] font-bold" onClick={p.onSolo} disabled={p.busy}>
-              <span className="px-shadow">{p.busy ? "준비 중…" : townReady ? `${TOWN_NAME} 도전` : `${TOWN_NAME} 체험`}</span>
+            <Btn tone="gold" arrow className="relative h-[52px] min-w-0 flex-1 text-[20px] font-bold" onClick={p.onSolo} disabled={p.busy}>
+              {/* 금색 바탕엔 그림자 없이 진한 글씨 (그림자가 있으면 번져 보여 눈이 아픔) */}
+              <span className="text-[#1a1000]">{p.busy ? "준비 중…" : townReady ? `${TOWN_NAME} 도전` : `${TOWN_NAME} 체험`}</span>
               {townReady && pr && !(pr.townDone ?? []).includes(townLv) && (
                 <span
                   className="absolute top-1 right-1 bg-[#ff4d6d] px-1.5 py-0.5 text-[11px] font-bold text-white shadow-[0_0_0_2px_#0a0816]"
@@ -571,7 +574,7 @@ function Menu(p: {
                   첫 클리어 보상
                 </span>
               )}
-              <span className="block text-[12px] font-normal opacity-85">
+              <span className="block text-[12px] font-normal text-[#3a2a00]">
                 {townReady
                   ? `타운 ${townLv}단계 · 적 = 오염 ${townGlitchLv(townLv)}단계 · 보상 ×${(GLITCH[townGlitchLv(townLv)].reward * TOWN_REWARD).toFixed(1)}`
                   : `연습 판 (기록 · 보상 없음) · 메인 오염 ${TOWN_FROM}단계가 열리면 정식 오픈`}
@@ -579,7 +582,7 @@ function Menu(p: {
             </Btn>
             {townReady && pr && (
               <Btn
-                className="h-[58px] w-[34px] shrink-0 px-0 text-[14px]"
+                className="h-[52px] w-[34px] shrink-0 px-0 text-[14px]"
                 disabled={p.busy || townLv >= townOpen}
                 title={townLv >= townOpen ? (townLv >= TOWN_MAX ? "마지막 단계예요" : `다음 단계는 메인 오염 ${townNeed(townLv + 1)}단계가 열리면`) : "타운 단계 올리기"}
                 onClick={() => p.onTownLv(townLv + 1)}
@@ -592,7 +595,7 @@ function Menu(p: {
         <div className="flex gap-1.5">
           {p.member && pr && (
             <Btn
-              className="h-[58px] w-[34px] shrink-0 px-0 text-[14px]"
+              className="h-[52px] w-[34px] shrink-0 px-0 text-[14px]"
               disabled={p.busy || glitch <= 0}
               title="오염 단계 낮추기"
               onClick={() => p.onGlitch(glitch - 1)}
@@ -603,7 +606,7 @@ function Menu(p: {
           <Btn
             tone="main"
             arrow
-            className="h-[58px] min-w-0 flex-1 text-[20px] font-bold"
+            className="h-[52px] min-w-0 flex-1 text-[20px] font-bold"
             onClick={p.onSolo}
             disabled={p.busy}
           >
@@ -626,7 +629,7 @@ function Menu(p: {
           </Btn>
           {p.member && pr && (
             <Btn
-              className="h-[58px] w-[34px] shrink-0 px-0 text-[14px]"
+              className="h-[52px] w-[34px] shrink-0 px-0 text-[14px]"
               disabled={p.busy || glitch >= pr.glitchOpen}
               title={
                 glitch >= pr.glitchOpen
@@ -643,7 +646,7 @@ function Menu(p: {
         <div className="grid grid-cols-2 gap-2.5">
           <Btn
             tone="gold"
-            className="relative h-[50px] px-2 text-left"
+            className="relative h-[46px] px-2 text-left"
             onClick={p.onShop}
             disabled={!p.member || p.busy}
             title={p.member ? "패키지 · 상자 · 초월 소환 · 재화샵 · GP 교환" : "회원만"}
@@ -658,7 +661,7 @@ function Menu(p: {
           </Btn>
           <Btn
             tone="cyan"
-            className="relative h-[50px] px-2 text-left"
+            className="relative h-[46px] px-2 text-left"
             onClick={() => p.onHub()}
             disabled={!p.member}
             title={p.member ? "" : "회원만"}
@@ -806,8 +809,11 @@ function FinishNote({ r }: { r: FinishOut }) {
           {!!w.townClear.give.cores && <Cur k="core" n={`+${w.townClear.give.cores}`} className="text-[#ffb3ee]" />}
           {!!w.townClear.give.relicBox && <span>유물 상자 +{w.townClear.give.relicBox}</span>}
           {!!w.townClear.give.cardBox && <span>카드 상자 +{w.townClear.give.cardBox}</span>}
+          {!!w.townClear.give.deeds && <span>땅문서 +{w.townClear.give.deeds}</span>}
+          {w.townClear.relic && <b className="text-[#ffb3ee]">유물 「{RELIC[w.townClear.relic]?.name}」</b>}
         </span>
       )}
+      {!!w?.deeds && <span className="text-[13px] text-[#ffd36b]">땅문서 +{w.deeds} (정비소 「도시 개발」)</span>}
       {gb && (
         <span className="text-[13px]">
           {r.mode === "town" ? `${TOWN_NAME} ${gb.glitch}단계` : `오염 ${gb.glitch}단계`} 최고{" "}
@@ -1395,7 +1401,7 @@ function TownIntro({
     },
     {
       title: "UR 보스",
-      text: "10 · 30 · 50웨이브 — 마블 UR 셋이 글리치에 먹혀 나와요: DICE 순간이동 · MOA 건물 빼앗기 · FORTE 앙코르",
+      text: "10 · 30 · 50웨이브 — 다이스 타운 UR 셋이 글리치에 먹혀 나와요: DICE 순간이동 · MOA 건물 빼앗기 · FORTE 앙코르",
       art: (
         <span className="flex">
           {TOWN_BOSSES.map((x) => (
@@ -1409,7 +1415,7 @@ function TownIntro({
     <Modal title={`${TOWN_NAME} · ${TOWN_EN}`} onClose={onClose} accent="#ffd36b">
       <div className="flex flex-col gap-3">
         <p className="text-[13px] leading-relaxed text-[#d9d3f0]">
-          PIXEL MARBLE 의 동네가 글리치에 먹혔어요. 적이 도는 길이 마블 판의 동네 칸 — 기본은 글리치 시티와 같고, <b className="text-white">길에 건물을 지어 통행료로 골드를 버는 것</b>이 달라요.
+          다이스 타운의 동네가 글리치에 먹혔어요. 적이 도는 길이 마블 판의 동네 칸 — 기본은 글리치 시티와 같고, <b className="text-white">길에 건물을 지어 통행료로 골드를 버는 것</b>이 달라요.
         </p>
         <div className="grid grid-cols-2 gap-2">
           {cards.map((c) => (

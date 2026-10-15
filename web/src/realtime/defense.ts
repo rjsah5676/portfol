@@ -47,7 +47,9 @@ export type FinishOut = {
         /** 보물방 결과 (열렸던 판) — ratio 깎은 체력 비율 · reward 판 밖 보상 */
         treasure?: { wave: number; ratio: number; killed: boolean; reward: { pieces?: number; cores?: number; cardBox?: number } } | null;
         /** 해피 타운 단계 첫 클리어 보상 */
-        townClear?: { town: number; give: Goods } | null;
+        townClear?: { town: number; give: Goods; relic?: string } | null;
+        /** 해피 타운 판 땅문서 */
+        deeds?: number;
       })
     | null;
   /** 오늘의 도전 그날 첫 완료 보상 (이미 받았으면 null) */
@@ -96,6 +98,9 @@ export interface DefenseProfile {
   /** 해피 타운: 클리어한 단계 · 단계별 최고 웨이브 (클리어 = LAST_WAVE + 1) */
   townDone?: number[];
   tbest?: Record<string, number>;
+  /** 땅문서 · 도시 개발 레벨 */
+  deeds?: number;
+  city?: Record<string, number>;
   /** 산 치트 연구 */
   cheatRes?: string[];
   glitchOpen: number;
@@ -154,6 +159,8 @@ export const meta = {
   /** id 없으면 모든 유닛 고르게 · 있으면 그 유닛만 최대한 · faction 이면 그 세력 탭만 고르게 */
   unitUpAll: (id?: string, faction?: string) => P("defense.unit.upAll", id ? { id } : faction ? { faction } : {}),
   resBuy: (id: string) => P("defense.res.buy", { id }),
+  /** 도시 개발 한 단계 (땅문서) */
+  cityUp: (id: string) => P("defense.city.up", { id }),
   /** dir 1 올리기 · -1 내리기 (전부 돌려받기) */
   resLevel: (id: string, dir: 1 | -1) => P("defense.res.level", { id, dir }),
   relicLevel: (id: string, dir: 1 | -1) => P("defense.relic.level", { id, dir }),

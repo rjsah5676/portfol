@@ -48,6 +48,8 @@ export interface Loadout {
   stage?: Stage;
   /** 픽셀 타운 단계 1..TOWN_MAX (stage 가 town 일 때만 씀) */
   town?: number;
+  /** 도시 개발 (해피 타운 땅문서로 산 영구 보너스, id → 레벨) — 모든 스테이지에 */
+  city?: Record<string, number>;
 }
 
 /* ───────────────────────── 스테이지 ───────────────────────── */
@@ -61,7 +63,7 @@ export type Stage = "main" | "town";
  */
 export const TOWN_FROM = 6;
 export const TOWN_EVERY = 2;
-export const TOWN_MAX = 13;
+export const TOWN_MAX = 23;
 export const TOWN_REWARD = 1.3;
 /** 메인에서 연 오염 단계 → 열린 픽셀 타운 단계 (0 = 아직) */
 export const townOpenOf = (glitchOpen: number) =>
@@ -71,7 +73,37 @@ export const townNeed = (lv: number) => TOWN_FROM + (Math.max(1, lv) - 1) * TOWN
 /** 픽셀 타운 단계의 적 세기 (메인 오염 단계로) */
 export const townGlitchLv = (lv: number) => Math.min(GLITCH_MAX, 2 + 2 * Math.max(1, Math.min(TOWN_MAX, lv)));
 /** 픽셀 타운 단계를 처음 클리어하면 */
-export const townFirstClear = (lv: number): Goods => ({ cores: 4 + lv, relicBox: 1, cardBox: 1 });
+export const townFirstClear = (lv: number): Goods => ({ cores: 4 + lv, relicBox: 1, cardBox: 1, deeds: 10 + 2 * lv });
+/** 해피 타운 판 하나 땅문서 (검증된 판) — 10웨이브마다 · 단계가 높을수록 · 클리어 보너스 */
+export const townDeeds = (r: { win: boolean; wave: number }, lv: number) =>
+  Math.floor(Math.min(r.wave, 60) / 10) * (1 + Math.floor(lv / 4)) + (r.win ? 5 + lv : 0);
+/** 해피 타운 단계 첫 클리어로만 얻는 유물 (상자에선 안 나옴) */
+export const TOWN_RELIC: Record<number, string> = { 5: "lucky_dice", 10: "golden_deed", 15: "moa_card", 20: "forte_box" };
+
+/* ───────────────────────── 도시 개발 (땅문서) ───────────────────────── */
+
+/**
+ * 해피 타운에서만 버는 땅문서로 사는 영구 보너스 — 글리치 시티 · 해피 타운 모두에 붙음 (Loadout.city).
+ * 앞의 것은 싸고 빨리 체감, 「수호자 후원」은 오래 모으는 목표.
+ */
+export interface CityDef {
+  id: string;
+  name: string;
+  /** 레벨별 설명 */
+  at: (lv: number) => string;
+  max: number;
+  /** lv → lv+1 땅문서 */
+  cost: (lv: number) => number;
+}
+export const CITY: CityDef[] = [
+  { id: "c_gold", name: "시작 자금", at: (l) => `시작 골드 +${25 * l}`, max: 5, cost: (l) => 10 * (l + 1) },
+  { id: "c_wave", name: "동네 상권", at: (l) => `웨이브 골드 +${6 * l}%`, max: 5, cost: (l) => 12 * (l + 1) },
+  { id: "c_clock", name: "시계탑", at: (l) => `보스 제한 시간 +${2 * l}초`, max: 5, cost: (l) => 15 * (l + 1) },
+  { id: "c_summon", name: "소환소", at: (l) => `소환 비용 -${l}G`, max: 3, cost: (l) => 20 * (l + 1) },
+  { id: "c_stone", name: "행운 가게", at: (l) => `시작 행운석 +${l}`, max: 3, cost: (l) => 20 * (l + 1) },
+  { id: "c_power", name: "수호자 후원", at: (l) => `모든 피해 +${2 * l}%`, max: 10, cost: (l) => 25 * (l + 1) },
+];
+export const CITY_OF: Record<string, CityDef> = Object.fromEntries(CITY.map((c) => [c.id, c]));
 
 /* ───────────────────────── 오늘의 도전 ───────────────────────── */
 
@@ -158,7 +190,9 @@ export const LV_DMG = 0.03;
 export const LV_BUFF = 0.03;
 export const RES_SLOTS = 4;
 export const RELIC_SLOTS = 3;
-export const GLITCH_MAX = 30;
+export const GLITCH_MAX = 50;
+/** 심연 1막 끝 (예전 마지막 단계 — 업적 · 문구 기준) */
+export const GLITCH_ACT1 = 30;
 
 /* ───────────────────────── 연구 ───────────────────────── */
 
@@ -229,6 +263,8 @@ export interface RelicDef {
   tier: 0 | 1 | 2;
   /** 어울리는 길 (화면 안내 · 봇 루트) */
   route: "mono" | "mix" | "gamble" | "eco" | "boss" | "any";
+  /** 얻는 곳 — 없으면 유물 상자 · deep = 오염 30 클리어 뒤 유물 상자 · town = 해피 타운 단계 첫 클리어(상자에선 안 나옴) */
+  from?: "deep" | "town";
 }
 
 /**
@@ -251,10 +287,29 @@ export const RELIC_VAL = {
   rainbow: (l: number) => rd(9 * sc(l, 0.15)),
   twin_star: (l: number) => rd(15 * sc(l, 0.15)),
   war_banner: (l: number) => rd(40 * sc(l, 0.15)) / 10,
+  // 심연 2막 (오염 30 클리어 뒤 상자) · 해피 타운 첫 클리어
+  myth_seal: (l: number) => rd(15 * sc(l, 0.15)),
+  overdrive: (l: number) => rd(8 * sc(l, 0.15)),
+  chrono_core: (l: number) => rd(6 * sc(l, 0.2)),
+  void_stone: (l: number) => rd(30 * sc(l, 0.2)),
+  lucky_dice: (l: number) => (l >= 5 ? 4 : l >= 3 ? 3 : 2),
+  golden_deed: (l: number) => (l >= 4 ? 2 : 1),
+  moa_card: (l: number) => rd(30 * sc(l, 0.2)),
+  forte_box: (l: number) => rd(15 * sc(l, 0.15)),
 };
 const V = RELIC_VAL;
 
-const relic = (id: string, name: string, at: (l: number) => string, tier: RelicDef["tier"], route: RelicDef["route"]): RelicDef => ({ id, name, at, tier, route, desc: at(1) });
+const relic = (id: string, name: string, at: (l: number) => string, tier: RelicDef["tier"], route: RelicDef["route"], from?: RelicDef["from"]): RelicDef => ({
+  id,
+  name,
+  at,
+  tier,
+  route,
+  desc: at(1),
+  ...(from && { from }),
+});
+/** 심연 2막 유물이 상자에 나오기 시작하는 클리어 단계 */
+export const DEEP_RELIC_WIN = 30;
 
 export const RELICS: RelicDef[] = [
   relic("gold_gear", "황금 톱니", (l) => `적 처치 골드 +${V.gold_gear(l)}${V.gold_gear_wave(l) ? ` · 웨이브 골드 +${V.gold_gear_wave(l)}%` : ""}`, 0, "eco"),
@@ -269,6 +324,14 @@ export const RELICS: RelicDef[] = [
   relic("rainbow", "무지개 연합", (l) => `필드에 세 세력이 모두 있으면 모든 피해 +${V.rainbow(l)}%`, 2, "mix"),
   relic("twin_star", "쌍둥이 별", (l) => `레전드 이상을 얻을 때 ${V.twin_star(l)}% 확률로 같은 등급 같은 세력 1기 더 (빈 칸이 있으면)`, 2, "any"),
   relic("war_banner", "전쟁 깃발", (l) => `세력 강화 레벨 합 10마다 모든 피해 +${V.war_banner(l)}%`, 2, "mix"),
+  relic("myth_seal", "신화의 인장", (l) => `신화 · 히든 · 초월이 주는 피해 +${V.myth_seal(l)}%`, 2, "any", "deep"),
+  relic("overdrive", "과부하 회로", (l) => `모든 유닛 공격 속도 +${V.overdrive(l)}%`, 2, "any", "deep"),
+  relic("chrono_core", "크로노 코어", (l) => `보스 제한 시간 +${V.chrono_core(l)}초 · 보스 처치 골드 +50%`, 1, "boss", "deep"),
+  relic("void_stone", "공허석", (l) => `균열 적에게 주는 피해 +${V.void_stone(l)}% · 균열을 닫으면 행운석 +1`, 1, "gamble", "deep"),
+  relic("lucky_dice", "행운 주사위", (l) => `보스를 잡으면 무료 소환 ${V.lucky_dice(l)}회`, 1, "any", "town"),
+  relic("golden_deed", "황금 땅문서", (l) => `적 처치 골드 +${V.golden_deed(l)} · 해피 타운 통행료 +${V.golden_deed(l)}`, 1, "eco", "town"),
+  relic("moa_card", "MOA 의 명함", (l) => `유닛 판매 금액 +${V.moa_card(l)}% · 레전드 이상을 팔면 행운석 +1`, 2, "eco", "town"),
+  relic("forte_box", "FORTE 의 오르골", (l) => `공격할 때 ${V.forte_box(l)}% 확률로 궁극기 충전 +1`, 2, "any", "town"),
 ];
 export const RELIC: Record<string, RelicDef> = Object.fromEntries(RELICS.map((r) => [r.id, r]));
 export const relicDesc = (id: string, lv = 1) => RELIC[id]?.at(lv) ?? "";
@@ -280,10 +343,13 @@ export const relicDesc = (id: string, lv = 1) => RELIC[id]?.at(lv) ?? "";
  *  split 분열 (16단계+): 엘리트 · 대형 적이 쓰러지면 체력 30% 짜리 둘로 갈라짐
  *  lock  봉인 (21단계+): 웨이브마다 유닛이 있는 칸 2개가 그 웨이브 동안 봉인(공격 안 함) — 유닛을 다른 칸으로 옮기면 풀림
  */
-export type Mutator = "split" | "lock";
+export type Mutator = "split" | "lock" | "rush" | "ward" | "fog";
 export const MUTATORS: Record<Mutator, { name: string; desc: string; from: number }> = {
   split: { name: "분열", desc: "엘리트 · 대형 적이 쓰러지면 체력 30% 짜리 둘로 갈라져요", from: 16 },
   lock: { name: "봉인", desc: "웨이브마다 유닛이 있는 칸 2개가 봉인돼 공격을 못 해요 — 다른 칸으로 옮기면 풀려요", from: 21 },
+  rush: { name: "정예", desc: "모든 일반 웨이브 마지막 적이 엘리트예요 (원래는 5웨이브마다)", from: 35 },
+  ward: { name: "방벽", desc: "보스가 최대 체력 15% 보호막을 두르고 나와요", from: 40 },
+  fog: { name: "안개", desc: "모든 유닛 사거리 -0.5칸", from: 45 },
 };
 export const mutatorsOf = (lv: number): Mutator[] => (Object.keys(MUTATORS) as Mutator[]).filter((m) => lv >= MUTATORS[m].from);
 
@@ -331,7 +397,12 @@ const deepRule = (P: DeepParams): Record<number, string> => ({
   15: `보스 체력 ${x100(P.boss15)}`,
   20: `적 속도 ${x100(P.spd20)} · 방어력 ${x100(P.armor20)}`,
   25: `보스 체력 ${x100(P.boss25)} · 보스 시간 -18초`,
-  30: "끝없는 오염 — 마지막 단계",
+  30: "끝없는 오염 — 심연 1막 끝",
+  31: "심연 2막 — 보스 2페이즈 셋 (40 · 50 · 60웨이브)",
+  35: "심연 변이 「정예」",
+  40: "보스 6명 모두 2페이즈 · 심연 변이 「방벽」",
+  45: "심연 변이 「안개」",
+  50: `글리치의 심장 — 보스 체력 ${x100(P.boss50 ?? 1.1)} · 마지막 단계`,
 });
 /** 심연 곡선 값 (밸런스 시뮬이 --deep 으로 바꿔 볼 수 있음) */
 export interface DeepParams {
@@ -343,14 +414,19 @@ export interface DeepParams {
   spd20: number;
   /** 단계마다 보상 배수 + (10단계 4 에서) */
   rewardPerLv?: number;
+  /** 31단계부터 단계마다 적 체력 + (10단계 기준, 없으면 hpPerLv) · 50단계 보스 체력 */
+  hpPerLv2?: number;
+  boss50?: number;
 }
-export const DEEP_PARAMS: DeepParams = { hpPerLv: 0.085, armor11: 1.15, armor20: 1.28, boss15: 1.08, boss25: 1.15, spd20: 1.1, rewardPerLv: 0.1 };
+export const DEEP_PARAMS: DeepParams = { hpPerLv: 0.085, armor11: 1.15, armor20: 1.28, boss15: 1.08, boss25: 1.15, spd20: 1.1, rewardPerLv: 0.1, hpPerLv2: 0.06, boss50: 1.1 };
 export function deepGlitch(P: DeepParams): GlitchDef[] {
   const top = BASE_GLITCH[10];
   const rules = deepRule(P);
-  return Array.from({ length: 20 }, (_, i): GlitchDef => {
+  return Array.from({ length: GLITCH_MAX - 10 }, (_, i): GlitchDef => {
     const lv = 11 + i;
-    const hp = Math.round(top.hp * (1 + P.hpPerLv * (lv - 10)) * 100) / 100;
+    // 31단계부터는 기울기 hpPerLv2 (새 유물 · 도시 개발 · 다 키운 성장이 받쳐 주는 만큼)
+    const k = lv <= 30 ? P.hpPerLv * (lv - 10) : P.hpPerLv * 20 + (P.hpPerLv2 ?? P.hpPerLv) * (lv - 30);
+    const hp = Math.round(top.hp * (1 + k) * 100) / 100;
     return {
       lv,
       hp,
@@ -358,7 +434,7 @@ export function deepGlitch(P: DeepParams): GlitchDef[] {
       bossSec: lv >= 25 ? -18 : top.bossSec,
       reward: Math.round((top.reward + (P.rewardPerLv ?? 0.1) * (lv - 10)) * 100) / 100,
       armor: lv >= 20 ? P.armor20 : P.armor11,
-      boss: lv >= 25 ? P.boss25 : lv >= 15 ? P.boss15 : 1,
+      boss: lv >= 50 ? P.boss25 * (P.boss50 ?? 1.1) : lv >= 25 ? P.boss25 : lv >= 15 ? P.boss15 : 1,
       mut: mutatorsOf(lv),
       rule: rules[lv] ?? `적 체력 +${Math.round((hp - 1) * 100)}%`,
     };
@@ -424,6 +500,18 @@ export interface Mods {
   /** 스테이지 · 픽셀 타운 단계 (main 이면 0) */
   stage: Stage;
   town: number;
+  /** 도시 개발 (화면 표시) · 모든 피해 배수 */
+  city: Record<string, number>;
+  cityDmg: number;
+  /** 심연 2막 · 해피 타운 유물 */
+  mythDmg: number;
+  aspdAll: number;
+  bossGold: number;
+  riftDmg: number;
+  bossFree: number;
+  tollAdd: number;
+  sellStone: number;
+  ultCharge: number;
 }
 
 const clampInt = (v: unknown, lo: number, hi: number) =>
@@ -476,6 +564,13 @@ export function cleanLoadout(lo: Loadout | null | undefined, unitIds?: Set<strin
     treasure: lo?.stage === "town" ? 0 : treasureWaveOk(lo?.treasure) ? (lo!.treasure as number) : 0,
     stage: lo?.stage === "town" ? "town" : "main",
     town: lo?.stage === "town" ? clampInt(lo?.town, 1, TOWN_MAX) : 0,
+    city: Object.fromEntries(
+      Object.entries(lo?.city ?? {})
+        .filter(([k]) => !!CITY_OF[k])
+        .map(([k, v]) => [k, clampInt(v, 0, CITY_OF[k].max)] as [string, number])
+        .filter(([, v]) => v > 0)
+        .sort((a, b) => (a[0] < b[0] ? -1 : 1))
+    ),
   };
 }
 
@@ -495,15 +590,22 @@ export function modsOf(lo: Loadout | null | undefined): Mods {
   /** 장착한 유물 레벨 (안 끼면 0) */
   const X = (id: string) => (x.has(id) ? (L.relicLv[id] ?? 1) : 0);
   const has = (id: string) => x.has(id);
+  /** 도시 개발 레벨 */
+  const C = (id: string) => L.city[id] ?? 0;
   return {
     lv: L.lv,
-    startGold: R("g_gold"),
-    startStones: R("g_stone"),
+    startGold: R("g_gold") + 25 * C("c_gold"),
+    startStones: R("g_stone") + C("c_stone"),
     startLuck: has("lucky_clover") ? V.lucky_clover(X("lucky_clover")) : 0,
-    summonDisc: R("g_summon"),
-    waveGold: (1 + R("g_wave") / 100) * (1 + (has("gold_gear") ? V.gold_gear_wave(X("gold_gear")) : 0) / 100),
-    sellMult: 1 + R("g_sell") / 100,
-    bossSec: R("g_boss") + (has("hourglass") ? V.hourglass(X("hourglass")) : 0) + GLITCH[L.stage === "town" ? townGlitchLv(L.town) : L.glitch].bossSec,
+    summonDisc: R("g_summon") + C("c_summon"),
+    waveGold: (1 + R("g_wave") / 100) * (1 + (has("gold_gear") ? V.gold_gear_wave(X("gold_gear")) : 0) / 100) * (1 + (6 * C("c_wave")) / 100),
+    sellMult: 1 + R("g_sell") / 100 + (has("moa_card") ? V.moa_card(X("moa_card")) / 100 : 0),
+    bossSec:
+      R("g_boss") +
+      (has("hourglass") ? V.hourglass(X("hourglass")) : 0) +
+      (has("chrono_core") ? V.chrono_core(X("chrono_core")) : 0) +
+      2 * C("c_clock") +
+      GLITCH[L.stage === "town" ? townGlitchLv(L.town) : L.glitch].bossSec,
     fac: {
       knight: 1 + R("k_drill") / 100,
       mech: 1 + R("m_drill") / 100,
@@ -513,10 +615,10 @@ export function modsOf(lo: Loadout | null | undefined): Mods {
     facAspd: { knight: R("k_rally") / 100, mech: R("m_tune") / 100, arcane: R("a_echo") / 100 },
     mechBoss: 1 + R("m_bounty") / 100,
     arcaneFx: 1 + R("a_focus") / 100,
-    killGold: has("gold_gear") ? V.gold_gear(X("gold_gear")) : 0,
+    killGold: (has("gold_gear") ? V.gold_gear(X("gold_gear")) : 0) + (has("golden_deed") ? V.golden_deed(X("golden_deed")) : 0),
     firstHarvest: has("first_harvest") ? V.first_harvest(X("first_harvest")) : 0,
     riftCd: has("rift_compass") ? 1 - V.rift_cd(X("rift_compass")) / 100 : 1,
-    riftStone: has("rift_compass") ? V.rift_stone(X("rift_compass")) : 0,
+    riftStone: (has("rift_compass") ? V.rift_stone(X("rift_compass")) : 0) + (has("void_stone") ? 1 : 0),
     gamble: has("gambler_coin") ? V.gambler_coin(X("gambler_coin")) / 100 : 0,
     alchemyGold: has("alchemy") ? V.alchemy_gold(X("alchemy")) : 0,
     alchemyStones: has("alchemy") ? V.alchemy_stone(X("alchemy")) : 0,
@@ -542,6 +644,16 @@ export function modsOf(lo: Loadout | null | undefined): Mods {
     treasure: L.treasure,
     stage: L.stage,
     town: L.town,
+    city: L.city,
+    cityDmg: 1 + (2 * C("c_power")) / 100,
+    mythDmg: 1 + (has("myth_seal") ? V.myth_seal(X("myth_seal")) : 0) / 100,
+    aspdAll: has("overdrive") ? V.overdrive(X("overdrive")) / 100 : 0,
+    bossGold: has("chrono_core") ? 1.5 : 1,
+    riftDmg: 1 + (has("void_stone") ? V.void_stone(X("void_stone")) : 0) / 100,
+    bossFree: has("lucky_dice") ? V.lucky_dice(X("lucky_dice")) : 0,
+    tollAdd: has("golden_deed") ? V.golden_deed(X("golden_deed")) : 0,
+    sellStone: has("moa_card") ? 1 : 0,
+    ultCharge: has("forte_box") ? V.forte_box(X("forte_box")) / 100 : 0,
   };
 }
 
@@ -730,6 +842,8 @@ export interface Goods {
   trans?: number;
   /** 꾸미기 id (inv.defense) */
   item?: string;
+  /** 땅문서 (해피 타운 · 도시 개발) */
+  deeds?: number;
 }
 /**
  * GP 기준값 — 재화샵 값 (= 100%). 패키지 이득 % 는 이 값으로 셈.

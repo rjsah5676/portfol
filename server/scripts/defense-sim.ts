@@ -17,7 +17,7 @@ import { BOTS, botByName, botTurn, type BotCfg } from "../../web/src/lib/defense
 import { replay, type LogEntry } from "../../web/src/lib/defense/replay";
 import { newGame, step, unitCount, type Game } from "../../web/src/lib/defense/sim";
 import { GRADE_NAME, UNIT, UNITS } from "../../web/src/lib/defense/units";
-import { GLITCH, RELICS, TRANS_IDS, deepGlitch, type Loadout } from "../../web/src/lib/defense/progress";
+import { CITY, GLITCH, RELICS, TRANS_IDS, deepGlitch, type Loadout } from "../../web/src/lib/defense/progress";
 
 const args = process.argv.slice(2);
 const opt = (k: string) => {
@@ -63,30 +63,35 @@ if (deepOpt) {
 /** 봇 길에 맞춘 영구 성장 (그 길을 꾸준히 한 사람이 들고 올 만한 것) */
 function loadoutFor(cfg: BotCfg): Loadout | null {
   if (!metaLv) return townLv ? stageLo : null;
-  const lvN = metaLv === "max" ? 10 : metaLv === "late" ? 6 : 3;
+  // abyss = max + 심연 2막 유물 · 도시 개발 전부 (31~50단계 확인용)
+  const abyss = metaLv === "abyss";
+  const lvN = metaLv === "max" || abyss ? 10 : metaLv === "late" ? 6 : 3;
   const lv: Record<string, number> = {};
   for (const u of UNITS) if (!cfg.focus || u.faction === cfg.focus || u.faction === "hidden") lv[u.id] = cfg.focus ? lvN : Math.max(1, lvN - 1);
   const fres: Record<string, string[]> = { knight: ["k_drill", "k_tactic", "k_rally"], mech: ["m_drill", "m_tune", "m_bounty"], arcane: ["a_drill", "a_focus", "a_echo"] };
   // 공용 4칸 + 세력 칸 (mid 0 · late 2 · max 3)
-  const fs = metaLv === "max" ? 3 : metaLv === "late" ? 2 : 0;
+  const fs = metaLv === "max" || abyss ? 3 : metaLv === "late" ? 2 : 0;
   const fpool = cfg.focus ? fres[cfg.focus] : ["k_drill", "m_drill", "a_drill"];
   const res = ["g_gold", "g_wave", "g_boss", "g_summon", ...fpool.slice(0, fs)];
   const relics =
     metaLv === "mid"
       ? ["gold_gear", "first_harvest", cfg.gamble ? "gambler_coin" : "lucky_clover"]
+      : abyss
+        ? ["myth_seal", "overdrive", cfg.focus ? "pure_blood" : "war_banner"]
       : cfg.focus
         ? ["pure_blood", "vaccine", "hourglass"]
         : ["rainbow", "war_banner", "vaccine"];
   // 연구 · 유물 레벨 (max 는 모두 5, late 3, mid 1)
-  const rl = metaLv === "max" ? 5 : metaLv === "late" ? 3 : 1;
+  const rl = metaLv === "max" || abyss ? 5 : metaLv === "late" ? 3 : 1;
   const R = metaLv === "mid" ? res.slice(0, 2) : res;
-  const bench = metaLv === "max" ? 6 : metaLv === "late" ? 5 : 4;
+  const bench = metaLv === "max" || abyss ? 6 : metaLv === "late" ? 5 : 4;
   const own = Object.fromEntries((metaLv === "mid" ? RELICS.slice(0, 4) : RELICS).map((r) => [r.id, rl]));
-  const trans = metaLv === "max" ? [...TRANS_IDS] : [];
+  const trans = metaLv === "max" || abyss ? [...TRANS_IDS] : [];
   const resLv = Object.fromEntries(R.map((id) => [id, rl]));
   const relicLv = Object.fromEntries(relics.map((id) => [id, rl]));
-  const cheat = metaLv === "max" ? "x_luck" : "";
-  return { lv, res: R, relics, glitch, resLv, relicLv, bench, fslots: fs, own, trans, cheat, grit: Number(opt("--grit") ?? 0), ...stageLo };
+  const cheat = metaLv === "max" || abyss ? "x_luck" : "";
+  const city = abyss ? Object.fromEntries(CITY.map((c) => [c.id, c.max])) : {};
+  return { lv, res: R, relics, glitch, resLv, relicLv, bench, fslots: fs, own, trans, cheat, grit: Number(opt("--grit") ?? 0), city, ...stageLo };
 }
 
 interface Run {

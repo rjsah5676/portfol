@@ -63,6 +63,10 @@ import {
   townFirstClear,
   townGlitchLv,
   townOpenOf,
+  townDeeds,
+  TOWN_RELIC,
+  CITY_OF,
+  DEEP_RELIC_WIN,
 } from "../../../web/src/lib/defense/progress";
 import { LAST_WAVE } from "../../../web/src/lib/defense/balance";
 import { RECIPE, UNIT, UNITS } from "../../../web/src/lib/defense/units";
@@ -112,6 +116,9 @@ export interface Profile {
   /** 해피 타운: 클리어한 단계들 (첫 클리어 보상) · 단계별 최고 웨이브 (클리어 = LAST_WAVE + 1) */
   townDone?: number[];
   tbest?: Record<string, number>;
+  /** 땅문서 (해피 타운에서만) · 도시 개발 레벨 (id → 레벨) */
+  deeds?: number;
+  city?: Record<string, number>;
   /** 산 치트 연구 (CHEAT_RES id) — 한 번 사면 계속 */
   cheatRes?: string[];
   /** 고를 수 있는 가장 높은 오염 단계 */
@@ -331,7 +338,8 @@ export function createDefenseMeta(db: Database, points: Points, now: () => numbe
   const openRelic = (p: Profile, odds: readonly number[]) => {
     const tr = randomInt(0, 1_000_000) / 1_000_000;
     const tier = tr < odds[0] ? 0 : tr < odds[0] + odds[1] ? 1 : 2;
-    const pool = RELICS.filter((r) => r.tier === tier);
+    // 해피 타운 유물은 상자에서 안 나옴 · 심연 2막 유물은 오염 30 클리어 뒤부터
+    const pool = RELICS.filter((r) => r.tier === tier && r.from !== "town" && (r.from !== "deep" || p.glitchWin >= DEEP_RELIC_WIN));
     const pick = pool[randomInt(0, pool.length)];
     if (p.relics.includes(pick.id)) {
       // 최고 레벨까지 쓸 조각이 이미 있으면 (쓸모없는 조각 대신) 글리치 코어
@@ -348,6 +356,18 @@ export function createDefenseMeta(db: Database, points: Points, now: () => numbe
     return { relic: pick.id };
   };
 
+  /** 유물 하나 직접 주기 (해피 타운 첫 클리어) — 없으면 얻고, 있으면 조각 +1 */
+  const giveRelic = (p: Profile, id: string) => {
+    if (!RELIC[id]) return null;
+    if (p.relics.includes(id)) {
+      p.shards[id] = (p.shards[id] ?? 0) + 1;
+      return { relic: id, shard: 1 };
+    }
+    p.relics.push(id);
+    if (p.load.relics.length < RELIC_SLOTS) p.load.relics.push(id);
+    return { relic: id };
+  };
+
   /** 상점에서 받는 것 넣기 (초월 소환은 초월 상자로 — 상점 「상자 · 소환」 탭에서 열어요) */
   async function grantGoods(uid: string, p: Profile, g: Goods) {
     p.pieces += g.pieces ?? 0;
@@ -355,6 +375,7 @@ export function createDefenseMeta(db: Database, points: Points, now: () => numbe
     p.boxes.card += g.cardBox ?? 0;
     p.boxes.relic += g.relicBox ?? 0;
     p.boxes.trans = (p.boxes.trans ?? 0) + (g.trans ?? 0);
+    p.deeds = (p.deeds ?? 0) + (g.deeds ?? 0);
     if (g.item) await users.updateOne({ _id: uid } as never, { $addToSet: { "inv.defense": g.item } } as never);
   }
 
@@ -423,6 +444,7 @@ export function createDefenseMeta(db: Database, points: Points, now: () => numbe
           cheat: p.load.cheat && (p.cheatRes ?? []).includes(p.load.cheat) ? p.load.cheat : "",
           grit: stage === "town" ? 0 : gritOf(p, Math.min(p.load.glitch, p.glitchOpen)),
           ...(stage === "town" && townOpen > 0 && { stage: "town" as const, town: Math.max(1, Math.min(p.load.town ?? townOpen, townOpen)) }),
+          city: p.city ?? {},
         },
         unitIds
       );
@@ -530,15 +552,19 @@ export function createDefenseMeta(db: Database, points: Points, now: () => numbe
           rw.cores += cr.cores ?? 0;
         }
         // 타운 단계 첫 클리어
-        let townClear: { town: number; give: Goods } | null = null;
+        let townClear: { town: number; give: Goods; relic?: string } | null = null;
         const done = (p.townDone ??= []);
         if (res.win && !done.includes(lv)) {
           done.push(lv);
           done.sort((a, b) => a - b);
           const g = townFirstClear(lv);
           await grantGoods(uid, p, g);
-          townClear = { town: lv, give: g };
+          const tr = TOWN_RELIC[lv] ? giveRelic(p, TOWN_RELIC[lv]) : null;
+          townClear = { town: lv, give: g, ...(tr && { relic: tr.relic }) };
         }
+        // 땅문서 (판마다)
+        const deeds = townDeeds(res, lv);
+        p.deeds = (p.deeds ?? 0) + deeds;
         p.pieces += rw.pieces;
         p.cores += rw.cores;
         for (const [id, n] of Object.entries(rw.cards)) if (unitIds.has(id)) p.cards[id] = (p.cards[id] ?? 0) + n;
@@ -564,6 +590,7 @@ export function createDefenseMeta(db: Database, points: Points, now: () => numbe
           gbest: { glitch: lv, prev: prevBest, now: Math.max(prevBest, reach) },
           treasure: null,
           townClear,
+          deeds,
         };
       });
     },
@@ -632,6 +659,21 @@ export function createDefenseMeta(db: Database, points: Points, now: () => numbe
         }
         need(n > 0, "내릴 유닛이 없어요.");
         return { ...(await wire(uid, p)), downs: n };
+      });
+    },
+
+    /** 도시 개발 한 단계 (땅문서) */
+    cityUp(uid: string, id: string) {
+      return edit(uid, async (p) => {
+        const c = CITY_OF[id];
+        if (!c) throw bad("없는 도시 개발이에요.");
+        const lv = p.city?.[id] ?? 0;
+        need(lv < c.max, "이미 최고 단계예요.");
+        const cost = c.cost(lv);
+        need((p.deeds ?? 0) >= cost, "땅문서가 모자라요.");
+        p.deeds = (p.deeds ?? 0) - cost;
+        p.city = { ...(p.city ?? {}), [id]: lv + 1 };
+        return wire(uid, p);
       });
     },
 

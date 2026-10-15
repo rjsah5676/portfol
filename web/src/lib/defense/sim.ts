@@ -433,7 +433,7 @@ export function buildBlock(b: Board, t: number): string | null {
 /** 해피 타운: 칸 t 에서 쓰러진 적 하나가 내는 통행료 (지금 기준) */
 export function tollOf(b: Board, t: number): number {
   const lv = tileOpen(b, t) ? b.bld[t] : 0;
-  let g: number = TOWN.toll[lv];
+  let g: number = TOWN.toll[lv] + (lv ? b.mods.tollAdd : 0);
   if (b.dice?.gold === t) g = lv ? g * TOWN.gold : TOWN.goldBare;
   return g;
 }
@@ -582,7 +582,7 @@ export function apply(g: Game, p: number, cmd: Cmd): string | null {
       if (!c.units.length) c.def = null;
       const sp = sellOf(b, d);
       b.gold += sp.gold;
-      b.stones += sp.stones;
+      b.stones += sp.stones + (d.grade >= 3 ? b.mods.sellStone : 0);
       b.sold++;
       b.dirty = true;
       return null;
@@ -830,6 +830,8 @@ function spawnBoss(b: Board, def: BossDef) {
   e.size = def.size;
   e.spd = (B.enemySpd * def.spd * b.mods.glitch.spd) / TPS;
   e.sk = def.skills.map((s) => sec(s.every));
+  // 심연 변이 「방벽」: 보호막을 두르고 나옴
+  if (b.mods.glitch.mut?.includes("ward")) e.shield = e.max * 0.15;
   b.ev?.push({ t: "boss", boss: e.boss });
 }
 
@@ -962,7 +964,8 @@ function stepBoard(g: Game, b: Board) {
     const n = countOf(b.wave);
     if (b.spawned < n && b.wt % gap === 0) {
       const last = b.spawned === n - 1;
-      const elite = last && b.wave % 5 === 0;
+      // 엘리트: 5웨이브마다 마지막 적 · 심연 변이 「정예」면 모든 웨이브
+      const elite = last && (b.wave % 5 === 0 || !!b.mods.glitch.mut?.includes("rush"));
       const e = spawn(b, kindOfWave(b.wave), hpOf(b.wave) * (elite ? B.eliteHp : 1));
       if (elite) e.elite = true;
       b.spawned++;
@@ -1057,7 +1060,7 @@ function stepBoard(g: Game, b: Board) {
     if (!c.def) continue;
     const def = UNIT[c.def];
     if (b.sealed.length && b.sealed.includes(i)) continue; // 봉인된 칸
-    const sp = 1 + b.aspd[i] + b.cx.aspd + (def.faction === "hidden" ? 0 : b.mods.facAspd[def.faction]);
+    const sp = 1 + b.aspd[i] + b.cx.aspd + b.mods.aspdAll + (def.faction === "hidden" ? 0 : b.mods.facAspd[def.faction]);
     const period = TPS / def.aps;
     for (const u of c.units) {
       if (u.stun > 0) {
@@ -1153,6 +1156,8 @@ function rebuild(b: Board) {
 
 /** 사거리 안의 보스 우선, 없으면 가장 많이 간(가장 위험한) 적 */
 function target(b: Board, ci: number, range: number): Enemy | null {
+  // 심연 변이 「안개」: 사거리 -0.5칸 (1칸 밑으로는 안 줄임)
+  if (b.mods.glitch.mut?.includes("fog")) range = Math.max(1, range - 0.5);
   const cx = cellX(ci),
     cy = cellY(ci),
     r2 = range * range;
@@ -1176,7 +1181,9 @@ function hit(b: Board, def: UnitDef, e: Enemy, raw: number): number {
   }
   let m = upMult(b, def.faction) * b.team;
   const M = b.mods;
-  m *= (1 + LV_DMG * (M.lv[def.id] ?? 0)) * M.relicDmg * M.gritDmg;
+  m *= (1 + LV_DMG * (M.lv[def.id] ?? 0)) * M.relicDmg * M.gritDmg * M.cityDmg;
+  if (def.grade >= 4) m *= M.mythDmg;
+  if (e.rift) m *= M.riftDmg;
   if (def.faction !== "hidden") m *= M.fac[def.faction];
   const X = b.cx;
   m *= X.fac[def.faction] * (def.grade >= 4 ? X.high : X.low);
@@ -1294,6 +1301,8 @@ function attack(b: Board, ci: number, def: UnitDef, u: Unit, t: Enemy) {
     t.hp = 0;
     t.last = def.id;
   }
+  // FORTE 의 오르골: 확률로 궁극기 충전 +1 (낀 판만 난수를 씀)
+  if (def.ult && b.mods.ultCharge && rnd(b.rng) < b.mods.ultCharge) u.ult++;
   if (def.ult && ++u.ult >= def.ult.every) {
     u.ult = 0;
     ult(b, ci, def, t, tx, ty);
@@ -1556,7 +1565,8 @@ function die(g: Game, b: Board, e: Enemy): boolean {
   } else if (e.boss >= 0) {
     b.tele = null;
     b.seized = [];
-    gold = B.bossGold.base + B.bossGold.per * b.wave;
+    gold = Math.floor((B.bossGold.base + B.bossGold.per * b.wave) * b.mods.bossGold);
+    b.free += b.mods.bossFree;
     const stones = B.bossStones + Math.floor(b.wave / 20) + (b.patch === "gambler" ? 1 : 0) + b.cx.bossStones;
     b.stones += stones;
     const tk = B.bossTicket[b.wave];

@@ -105,7 +105,7 @@ const TOWN_STEPS: Step[] = [
   {
     id: "t_boss",
     title: "UR 보스",
-    text: "10 · 30 · 50웨이브는 마블의 UR 셋이 글리치에 먹혀 나와요. DICE 는 주사위만큼 순간이동, MOA 는 건물을 빼앗고, FORTE 는 앙코르로 체력을 되찾아요.",
+    text: "10 · 30 · 50웨이브는 다이스 타운의 UR 셋이 글리치에 먹혀 나와요. DICE 는 주사위만큼 순간이동, MOA 는 건물을 빼앗고, FORTE 는 앙코르로 체력을 되찾아요.",
     when: (b) => b.phase === "boss" && b.wave % 20 === 10,
   },
 ];
