@@ -64,7 +64,7 @@ export async function metricsOf(db: Database, uid: string, game: AchGame): Promi
   if (game === "rhythm") {
     const d = (await users.findOne({ _id: uid }, { projection: { "stats.plays": 1 } })) as Doc | null;
     // 사이트에 들어 있는 곡만 (내 음악으로 만든 채보는 빼고)
-    const recs = ((await db.col("rhythm_rankings").find({ uid }, { projection: { chart: 1, fc: 1, ap: 1 } }).toArray()) as unknown as { chart: string; fc?: boolean; ap?: boolean }[]).filter(
+    const recs = ((await db.col("rhythm_rankings").find({ uid }, { projection: { chart: 1, fc: 1, ap: 1, acc: 1, maxCombo: 1 } }).toArray()) as unknown as { chart: string; fc?: boolean; ap?: boolean; acc?: number; maxCombo?: number }[]).filter(
       (r) => RHYTHM_CHARTS.has(r.chart)
     );
     m["rhythm.plays"] = d?.stats?.plays?.rhythm ?? 0;
@@ -72,6 +72,15 @@ export async function metricsOf(db: Database, uid: string, game: AchGame): Promi
     m["rhythm.fc"] = new Set(recs.filter((r) => r.fc).map((r) => r.chart)).size;
     m["rhythm.ap"] = new Set(recs.filter((r) => r.ap).map((r) => r.chart)).size;
     m["rhythm.nightmare"] = recs.filter((r) => r.chart.endsWith("_nightmare")).length;
+    // 서로 다른 채보 수로 셈 (같은 채보 기록이 여러 줄이어도 한 번)
+    const charts = (f: (r: (typeof recs)[number]) => boolean) => new Set(recs.filter(f).map((r) => r.chart)).size;
+    m["rhythm.nmCharts"] = charts((r) => r.chart.endsWith("_nightmare"));
+    m["rhythm.expert"] = charts((r) => r.chart.endsWith("_expert"));
+    m["rhythm.ultima"] = charts((r) => r.chart.endsWith("_explus"));
+    m["rhythm.nmFc"] = charts((r) => !!r.fc && (r.chart.endsWith("_nightmare") || r.chart.endsWith("_explus")));
+    m["rhythm.sRank"] = charts((r) => (r.acc ?? 0) >= 94);
+    m["rhythm.splus"] = charts((r) => (r.acc ?? 0) >= 97);
+    m["rhythm.combo"] = Math.max(0, ...recs.map((r) => r.maxCombo ?? 0));
   }
 
   if (game === "sketch") {

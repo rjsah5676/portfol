@@ -240,6 +240,13 @@ export type AchMetric =
   | "rhythm.fc"
   | "rhythm.ap"
   | "rhythm.nightmare"
+  | "rhythm.nmCharts"
+  | "rhythm.expert"
+  | "rhythm.ultima"
+  | "rhythm.nmFc"
+  | "rhythm.sRank"
+  | "rhythm.splus"
+  | "rhythm.combo"
   | "sketch.games"
   | "sketch.correct"
   | "sketch.first"
@@ -561,6 +568,20 @@ export const ACHIEVEMENTS: Achievement[] = [
     1,
     2100,
   ),
+  a("rhythm", "plays-100", "리듬 단골", "100판 하기", "rhythm.plays", 100, 1500),
+  a("rhythm", "songs-10", "곡 탐험가", "서로 다른 곡 10개 끝까지 치기 (랭킹 기록)", "rhythm.songs", 10, 1800),
+  a("rhythm", "expert-5", "EX 정복", "서로 다른 EX 채보 5개 끝까지 치기", "rhythm.expert", 5, 1500),
+  a("rhythm", "nightmare-5", "악몽 단골", "서로 다른 NIGHTMARE 채보 5개 끝까지 치기", "rhythm.nmCharts", 5, 3000),
+  a("rhythm", "ultima-1", "ULTIMATE", "ULTIMA 채보 끝까지 치기", "rhythm.ultima", 1, 3000),
+  a("rhythm", "ultima-5", "한계 돌파", "서로 다른 ULTIMA 채보 5개 끝까지 치기", "rhythm.ultima", 5, 6000),
+  a("rhythm", "s-1", "S 랭크", "정확도 94% 이상으로 끝내기", "rhythm.sRank", 1, 900),
+  a("rhythm", "s-20", "S 랭크 컬렉션", "서로 다른 채보 20개를 S 랭크 이상으로", "rhythm.sRank", 20, 3000),
+  a("rhythm", "splus-5", "S+ 마스터", "서로 다른 채보 5개를 S+ (정확도 97% 이상)로", "rhythm.splus", 5, 3000),
+  a("rhythm", "combo-500", "500 콤보", "한 판 최대 콤보 500", "rhythm.combo", 500, 1200),
+  a("rhythm", "combo-1000", "천 콤보", "한 판 최대 콤보 1,000", "rhythm.combo", 1000, 2500),
+  a("rhythm", "fc-30", "풀콤보 장인", "서로 다른 채보 30개 풀콤보", "rhythm.fc", 30, 5000),
+  a("rhythm", "nmfc-1", "악몽 지배자", "NIGHTMARE · ULTIMA 채보 풀콤보", "rhythm.nmFc", 1, 5000),
+  a("rhythm", "ap-5", "완벽주의자", "서로 다른 채보 5개 올 퍼펙트", "rhythm.ap", 5, 6000),
 
   // 스케치 퀴즈 (반복형 대신 일일 미션)
   // DOODLE PARTY (다른 게임 업적의 절반)
