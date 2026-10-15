@@ -1891,6 +1891,11 @@ function TilePanel({ b, t, run }: { b: Board; t: number; run: (c: Cmd) => boolea
           <b className="text-[var(--text)]">{b.tkLast[t]}</b>
           {owner ? ` · 주인 ${owner.name}` : " · 안쪽 칸이 비었어요"}
         </p>
+        {lv < 3 && open && (
+          <p className="mt-0.5 truncate text-[11px] text-[#9be7a8]">
+            {BUILD_NAME[lv + 1]}이면 처치마다 +{nextToll}G{b.tkLast[t] ? ` — 지난 웨이브 그대로면 웨이브당 약 +${b.tkLast[t] * nextToll}G` : " — 센 유닛 앞일수록 많이 쓰러져요"}
+          </p>
+        )}
       </div>
       {lv < 3 ? (
         <Btn

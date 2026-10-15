@@ -429,7 +429,7 @@ PIXEL MARBLE 「해피 타운」 맵 테마. 길 · 칸 배치는 글리치 시�
   - UR 보스 `enemies.ts TOWN_BOSSES` (BOSSES 뒤에 붙음, `bossOfWave(w, stage)`): DICE warp · MOA seize(보스 처치 시 돌려줌) · FORTE encore
 - 서버: `defense.start { mode: "town" }` · 순위표 `${ver}:t${시즌}` · 보상 `meta.onTownRun` (runReward "town" ×1.3 · 단계 첫 클리어 `townFirstClear` · `townDone` · `tbest`) · `setLoad { town }`
 - 화면: 메뉴 스테이지 탭 · `TownIntro` 소개 창 · 길 칸 누르기 → 아래 `TilePanel` (짓기 W) · 위 `TownChip` · `render.ts drawTown` (마블 건물 · 랜드마크 · 특수 칸 그림 재사용) · 안내 카드 `Tutorial.tsx TOWN_STEPS` (pgd-tut-town)
-- 보스 그림: `web/scripts/defense-art/town-bosses.py` 가 마블 말 도트를 「오염」시켜 `public/defense/bosses/ur-*.webp`
+- 보스 그림: `public/defense/bosses/ur-*.webp` — 마블 UR 그림을 참고로 GPT 이미지로 그린 글리치 보스 (192×192, 바닥 184 · 키 173 맞춤 · 다른 보스와 같은 틀)
 - 밸런스 확인: `npx tsx scripts/defense-sim.ts --meta mid --town 1` (적 세기 같은 메인 단계와 비교)
 - 다음: 땅문서 · 도시 보너스(타운 전용 재화 → 메인 영구 보너스) · 메인 31~50단계 + 새 유물 · 연구 · 변이
 
