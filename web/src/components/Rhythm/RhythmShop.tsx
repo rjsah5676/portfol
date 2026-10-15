@@ -212,7 +212,7 @@ export default function RhythmShop({
                     : busy
                       ? "사는 중…"
                       : confirm
-                        ? `${gp(item?.price ?? 0)} GP 쓸까요? 한 번 더`
+                        ? `${gp(item?.price ?? 0)} GP 쓸까요?`
                         : `${gp(item?.price ?? 0)} GP로 사기`}
                 </button>
               )}
