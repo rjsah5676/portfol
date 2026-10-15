@@ -16,6 +16,7 @@
 !web/src/lib/poker
 !web/src/lib/fight
 !web/src/lib/defense
+!web/src/lib/marble
 !web/src/lib/points.ts
 !web/src/lib/mail.ts
 !web/src/lib/sketch
