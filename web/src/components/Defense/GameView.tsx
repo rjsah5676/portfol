@@ -1732,24 +1732,25 @@ function GhostPanel({ ctrl, ghost }: { ctrl: Controller; ghost: { data: DefenseG
   const me = ctrl.board;
   const best = gb.cells.reduce((m, c) => (c.def && UNIT[c.def].grade > m ? UNIT[c.def].grade : m), -1);
   const diff = me.wave - gb.wave;
+  // 한 줄만 (필드를 가리지 않게) — 고스트 웨이브 · 나보다 앞/뒤
   return (
-    <div className="pointer-events-none absolute top-9 left-1.5 z-10 w-[200px] bg-[#0a0816]/85 px-1.5 py-1 text-[12px] leading-[16px] shadow-[0_0_0_2px_#2a2350]">
-      <p className="flex justify-between">
-        <b className="text-[#c9a6ff]">GHOST · {ghost.data.nick}</b>
-        <span className="text-[var(--dim)]">{ghost.data.rank}위</span>
-      </p>
+    <div
+      className="pointer-events-none absolute top-9 left-1.5 z-10 flex items-center gap-1.5 bg-[#0a0816]/75 px-1.5 text-[11px] leading-[18px] whitespace-nowrap shadow-[0_0_0_1px_#2a2350]"
+      title={`고스트 ${ghost.data.nick} (${ghost.data.rank}위)`}
+    >
+      <b className="max-w-[72px] truncate text-[#c9a6ff]">👻 {ghost.data.nick}</b>
       {gb.result ? (
-        <p className="text-[var(--mute)]">{gb.result.win ? `클리어 ${fmtTime(gb.result.tick / TPS)}` : `W${gb.result.wave}에서 끝`}</p>
+        <span className="text-[var(--mute)]">{gb.result.win ? `클리어 ${fmtTime(gb.result.tick / TPS)}` : `W${gb.result.wave} 끝`}</span>
       ) : (
-        <p className="text-[var(--mute)]">
-          W{gb.wave} · 처치 {gb.kills}
-          {best >= 0 && <span style={{ color: GRADE_COLOR[best] }}> · {GRADE_NAME[best]}</span>}
-        </p>
-      )}
-      {!gb.result && (
-        <p className={diff > 0 ? "text-[var(--green)]" : diff < 0 ? "text-[var(--red)]" : "text-[var(--mute)]"}>
-          나 W{me.wave} {diff > 0 ? `(+${diff} 앞섬)` : diff < 0 ? `(${diff} 뒤처짐)` : "(같음)"}
-        </p>
+        <>
+          <span className="text-[var(--mute)]">
+            W{gb.wave}
+            {best >= 0 && <span style={{ color: GRADE_COLOR[best] }}> {GRADE_NAME[best]}</span>}
+          </span>
+          <span className={diff > 0 ? "text-[var(--green)]" : diff < 0 ? "text-[var(--red)]" : "text-[var(--mute)]"}>
+            {diff > 0 ? `+${diff}` : diff < 0 ? `${diff}` : "="}
+          </span>
+        </>
       )}
     </div>
   );

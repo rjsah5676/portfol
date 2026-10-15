@@ -69,6 +69,8 @@ export type QuestRow = QuestDef & { value: number; claimed: boolean };
 export interface DefenseProfile {
   /** 보물방: 지난 보물방 뒤로 쌓인 웨이브 (확률 = treasureChance) */
   twaves?: number;
+  /** 오늘의 도전 첫 완료 보상을 받은 날 (KST yyyy-mm-dd) */
+  dailyAt?: string;
   pieces: number;
   cores: number;
   /** 안 연 상자 */

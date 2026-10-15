@@ -50,7 +50,7 @@ import {
   weeklyOf,
   transRoll,
   type Goods,
-  DAILY_FIRST,
+  dailyFirstOf,
   TREASURE,
   TREASURE_WAVES,
   treasureChance,
@@ -374,13 +374,14 @@ export function createDefenseMeta(db: Database, points: Points, now: () => numbe
 
   return {
     /** 시즌 판 · 멀티에 들고 갈 로드아웃 (서버가 정함) */
-    /** 오늘의 도전: 그날 처음 끝낸 판이면 DAILY_FIRST — 받은 것 (이미 받았으면 null) */
+    /** 오늘의 도전: 그날 처음 끝낸 판이면 dailyFirstOf(연 오염 단계) — 받은 것 (이미 받았으면 null) */
     dailyFirst(uid: string, day: string): Promise<Goods | null> {
       return edit(uid, async (p) => {
         if (p.dailyAt === day) return null;
         p.dailyAt = day;
-        await grantGoods(uid, p, DAILY_FIRST);
-        return DAILY_FIRST;
+        const g = dailyFirstOf(p.glitchOpen);
+        await grantGoods(uid, p, g);
+        return g;
       });
     },
 

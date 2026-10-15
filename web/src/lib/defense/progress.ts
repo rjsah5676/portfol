@@ -50,8 +50,14 @@ export interface Loadout {
 
 /** 오늘의 도전: 모두 같은 시드(날짜) · 영구 성장 없이 이 규칙으로 — 실력만 겨룸 */
 export const DAILY_RULE: Loadout = { glitch: 0 };
-/** 오늘의 도전 그날 첫 완료 보상 */
-export const DAILY_FIRST: Goods = { pieces: 1000, cores: 5 };
+/**
+ * 오늘의 도전 그날 첫 완료 보상 — 연 오염 단계(glitchOpen)가 높을수록 많이.
+ * 조각 = 1,000 × 그 단계 시즌 보상 배율 (50 단위), 코어 = 5 + 단계
+ */
+export const dailyFirstOf = (g: number): Goods => {
+  const lv = Math.max(0, Math.min(GLITCH_MAX, g));
+  return { pieces: Math.round((1000 * GLITCH[lv].reward) / 50) * 50, cores: 5 + lv };
+};
 
 /* ───────────────────────── 보물방 ───────────────────────── */
 

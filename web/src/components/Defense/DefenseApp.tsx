@@ -37,7 +37,7 @@ import Codex from "./Codex";
 import { Controller } from "./controller";
 import Hub, { Cur, curTip, type HubTab } from "./Hub";
 import { setTheme } from "./render";
-import { GLITCH, GRIT_PER, TREASURE, treasureChance, type Loadout } from "@/lib/defense/progress";
+import { GLITCH, GRIT_PER, TREASURE, dailyFirstOf, kstDayKey, treasureChance, type Loadout } from "@/lib/defense/progress";
 import { resetTutorial, stopTutorial, tutorialOn } from "./Tutorial";
 import GameView from "./GameView";
 import Stage from "./Stage";
@@ -85,6 +85,7 @@ export default function DefenseApp() {
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState("");
   const [notes, setNotes] = useState(false);
+  const [dailyInfo, setDailyInfo] = useState(false);
   /** 판 밖 성장 (회원만) */
   const [prof, setProf] = useState<DefenseProfile | null>(null);
   const loadProf = () =>
@@ -269,7 +270,7 @@ export default function DefenseApp() {
         onResume={() => resume && doResume(resume)}
         onDropResume={() => (clearResume(saveKey), setResume(null))}
         onSolo={() => void startSolo("season")}
-        onDaily={() => void startSolo("daily")}
+        onDaily={() => setDailyInfo(true)}
         onGlitch={(g) => prof && void meta.setLoad({ ...prof.load, glitch: g }).then(setProf, () => {})}
         onShop={() => setScreen({ k: "shop" })}
         onHub={(tab) => setScreen({ k: "hub", tab })}
@@ -296,6 +297,14 @@ export default function DefenseApp() {
         </Modal>
       )}
       {notes && screen.k === "menu" && <PatchNotes onClose={() => setNotes(false)} />}
+      {dailyInfo && screen.k === "menu" && (
+        <DailyInfo
+          prof={prof}
+          busy={busy}
+          onClose={() => setDailyInfo(false)}
+          onStart={() => (setDailyInfo(false), void startSolo("daily"))}
+        />
+      )}
     </Stage>
   );
 }
@@ -473,7 +482,7 @@ function Menu(p: {
             <span className="px-shadow">{p.busy ? "준비 중…" : p.member ? "시즌 도전" : "혼자 하기"}</span>
             {p.member && pr && glitch >= TREASURE.minGlitch && (
               <span
-                className="absolute -top-2.5 right-1 bg-[var(--gold)] px-1.5 py-0.5 text-[11px] font-bold text-[#1a1000] shadow-[0_0_0_2px_#0a0816]"
+                className="absolute top-1 right-1 bg-[var(--gold)] px-1.5 py-0.5 text-[11px] font-bold text-[#1a1000] shadow-[0_0_0_2px_#0a0816]"
                 title={`이번 판 보물방이 열릴 확률 — 지난 보물방 뒤로 버틴 웨이브 ${pr.twaves ?? 0}/${TREASURE.cap} (오래 버틸수록 빠르게 올라 ${TREASURE.cap}웨이브면 100%)`}
               >
                 보물방 {fmtChance(treasureChance(pr.twaves ?? 0, glitch))}
@@ -540,7 +549,7 @@ function Menu(p: {
             className="h-[38px] px-1 text-[13px] font-bold"
             onClick={p.onDaily}
             disabled={!p.member || p.busy}
-            title={p.member ? "오늘의 도전 — 모두 같은 시드 · 영구 성장 없이 실력만 · 1등 고스트와 같이 달려요 (하루 첫 판 보상)" : "회원만"}
+            title={p.member ? "오늘의 도전 — 누르면 설명과 보상을 보고 시작해요" : "회원만"}
           >
             오늘의 도전
           </Btn>
@@ -1118,4 +1127,61 @@ async function exportPlays(): Promise<string> {
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 5000);
   return `플레이 기록 ${all.length.toLocaleString()}판을 받았어요`;
+}
+
+/** 오늘의 도전 설명 창 — 메뉴 버튼을 누르면 먼저 이걸 보고 시작 */
+function DailyInfo({
+  prof,
+  busy,
+  onClose,
+  onStart,
+}: {
+  prof: DefenseProfile | null;
+  busy: boolean;
+  onClose(): void;
+  onStart(): void;
+}) {
+  const g = prof?.glitchOpen ?? 0;
+  const rw = dailyFirstOf(g);
+  const got = prof?.dailyAt === kstDayKey(Date.now());
+  const rows: [string, ReactNode][] = [
+    ["같은 판", "하루 동안(자정 KST 까지) 모두 같은 시드 — 같은 적 · 같은 소환 운으로 겨뤄요"],
+    ["실력만", "유닛 강화 · 연구 · 유물 같은 영구 성장 없이, 오염 0단계 기본 규칙으로 해요"],
+    ["기록", "몇 판이든 다시 할 수 있고, 가장 좋은 기록만 랭킹 「오늘의 도전」 탭에 올라가요"],
+    ["고스트", "오늘 1등(내가 1등이면 2등)의 판이 내 판과 같은 시간으로 같이 흘러가요 — 왼쪽 위 한 줄에 그 사람 웨이브 · 나보다 앞/뒤"],
+    ["없는 것", "시즌 판 보상 · 미션 · 시즌 패스 · 보물방은 없어요"],
+  ];
+  return (
+    <Modal title="오늘의 도전" onClose={onClose} accent="#c08cff">
+      <div className="flex flex-col gap-3">
+        <ul className="flex flex-col gap-1.5">
+          {rows.map(([k, v]) => (
+            <li key={k} className="flex gap-2 text-[13px] leading-relaxed text-[#d9d3f0]">
+              <b className="w-[56px] shrink-0 text-[#c9a6ff]">{k}</b>
+              <span className="break-keep">{v}</span>
+            </li>
+          ))}
+        </ul>
+        <div className="px-box flex items-center gap-3 p-2.5" style={{ "--b": "#ffd23f" } as React.CSSProperties}>
+          <div className="min-w-0 flex-1 text-[13px] leading-snug">
+            <b className="text-[var(--gold)]">그날 첫 완료 보상</b>
+            <span className="ml-1.5 text-[12px] text-[var(--mute)]">(클리어든 탈락이든 끝까지 하면 · 연 오염 {g}단계 기준, 높을수록 많이)</span>
+            <div className="mt-1 flex gap-3">
+              <Cur k="piece" n={rw.pieces?.toLocaleString()} />
+              <Cur k="core" n={rw.cores} />
+            </div>
+          </div>
+          {got && <span className="shrink-0 text-[12px] text-[var(--green)]">오늘 받음 ✓</span>}
+        </div>
+        <div className="flex justify-end gap-2">
+          <Btn className="h-[38px] px-4 text-[13px]" onClick={onClose}>
+            닫기
+          </Btn>
+          <Btn tone="arcane" arrow className="h-[38px] px-6 text-[14px] font-bold" disabled={busy} onClick={onStart}>
+            {busy ? "준비 중…" : "도전 시작"}
+          </Btn>
+        </div>
+      </div>
+    </Modal>
+  );
 }
