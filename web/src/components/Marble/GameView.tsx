@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { serverNow } from "@/lib/api/socket";
-import { CHAR, ITEM, SKILL_TARGET, artOf, faceOf, power } from "@/lib/marble/data";
+import { CHAR, ITEM, MATCH_STARS, SKILL_TARGET, artOf, faceOf, power } from "@/lib/marble/data";
 import {
   CARDS,
   LANDMARK,
@@ -26,7 +26,7 @@ import { MAPS } from "@/lib/marble/maps";
 import type { GameWire, RoomWire } from "@/lib/marble/wire";
 import { marble } from "@/realtime/marble";
 import { playBgm, sfx, stopBgm } from "./audio";
-import { GradeFx, ItemIcon } from "./Gacha";
+import { ItemIcon } from "./Gacha";
 import { CharHero, XGrade } from "./ui";
 import Board, { iso, slotXY as slotPos, spriteOf, type TokenView } from "./Board";
 import { Btn, Cur, DiceFace, GradeTag, Icon, PCOLOR, PNAME_BG, fmt, CurIcon } from "./pixel";
@@ -97,7 +97,7 @@ export default function GameView({ room, me, onLeave }: { room: RoomWire; me: st
     const c = slotPos(map, slot);
     return { x: c.x, y: c.y - 30 };
   };
-  const diceAt = { x: iso(4, 4).x, y: iso(4, 4).y - 140 };
+  const diceAt = { x: iso(4, 4).x, y: iso(4, 4).y + 52 };
   const cardXY = (pi: number) => {
     const n = view.players.length;
     const c = cornerRect(myPi >= 0 ? (pi - myPi + n) % n : pi);
@@ -124,6 +124,11 @@ export default function GameView({ room, me, onLeave }: { room: RoomWire; me: st
         const from = thrown ? cardXY(e.p) : null;
         setDice({ d: e.d, roll: ++fid, p: e.p, dur, from: from ? { x: from.x - diceAt.x, y: from.y - diceAt.y } : null, spin: thrown ? 2 + Math.round((e.power ?? 0) * 4) : 1 });
         sfx("dice");
+        // 굴린 결과는 잠깐만 보여 주고 치움 (다음 ROLL 버튼 · 스킬과 안 겹치게)
+        {
+          const id = fid;
+          setTimeout(() => setDice((d) => (d && d.roll === id ? null : d)), dur + 2600);
+        }
         await wait(dur);
         if (e.ctrl) {
           sfx("card");
@@ -497,9 +502,6 @@ export default function GameView({ room, me, onLeave }: { room: RoomWire; me: st
         <div className="mb-wood flex items-center gap-3 px-4 py-1" style={{ "--bar": map.id === "orgel" ? "#ff7fb0" : map.id === "cross" ? "#ff9a3d" : "#5b6cff" } as CSSProperties}>
           <b className="mb-title mb-out text-[16px] text-white">{map.name}</b>
           <GuideDot onOpen={() => guide.show(map.id)} className="!h-[20px] !w-[20px] !text-[12px]" />
-          <span className="mb-out text-[15px] font-bold text-white">
-            {Math.min(g.round, g.rounds)} / {g.rounds} 바퀴
-          </span>
         </div>
         {g.town && (
           <div className="mb-chip text-[12px]" style={{ "--c": "#bff7e8" } as CSSProperties} title={TOWN_EVENTS[g.town.id].desc}>
@@ -516,8 +518,35 @@ export default function GameView({ room, me, onLeave }: { room: RoomWire; me: st
         <RoomTools room={live} me={me} onLeave={onLeave} inGame vertical />
       </div>
 
-      {/* 가운데: 주사위 · 차례 */}
-      {live.phase !== "end" && <CenterDice g={g} dice={dice} nameOf={nameOf} log={log} at={diceAt} />}
+      {/* 가운데: 꼭 필요한 것만 — 바퀴 · 누구 차례 · 판돈 */}
+      {live.phase !== "end" && (
+        <div className="mbx pointer-events-none absolute top-[138px] left-1/2 z-[300] flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-[#140f3a]/80 px-2 py-1 text-[13px] text-white shadow-[0_4px_14px_rgba(0,0,0,0.4)] ring-1 ring-white/20 backdrop-blur">
+          <span className="rounded-full bg-white/10 px-2.5 py-[2px] font-black">
+            {Math.min(g.round, g.rounds)}
+            <span className="font-bold text-white/60"> / {g.rounds} 바퀴</span>
+          </span>
+          {(g.prompt?.p ?? -1) >= 0 && (
+            <span className="flex items-center gap-1 rounded-full px-2.5 py-[2px] font-black" style={{ background: PCOLOR[g.prompt!.p] }}>
+              {nameOf(g.prompt!.p)} 차례
+            </span>
+          )}
+          <span className="flex items-center gap-1 rounded-full bg-[#ffd23a]/20 px-2.5 py-[2px] font-black text-[#ffe08a]">
+            판돈 <CurIcon k="star" size={14} /> {MATCH_STARS.win}
+          </span>
+        </div>
+      )}
+      {live.phase !== "end" && <CenterDice dice={dice} at={diceAt} />}
+
+      {/* 진행 소식: 오른쪽 위 빈자리 (보드 바깥) */}
+      {log.length > 0 && (
+        <div className="mbx pointer-events-none absolute top-[146px] right-[8px] z-[300] flex w-[180px] flex-col gap-1">
+          {log.slice(-4).map((l, k, arr) => (
+            <div key={`${l}${k}`} className="rounded-lg bg-[#140f3a]/75 px-2 py-1 text-[11px] leading-[14px] text-white backdrop-blur" style={{ opacity: 0.45 + (0.55 * (k + 1)) / arr.length }}>
+              {l}
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* 플레이어 (네 귀퉁이) */}
       {view.players.map((p, i) => (
@@ -549,7 +578,7 @@ export default function GameView({ room, me, onLeave }: { room: RoomWire; me: st
       {live.phase === "play" && (
         <div
           className="absolute z-[460] flex -translate-x-1/2 justify-center"
-          style={dim ? { left: 512, top: 150, width: 440 } : { left: 512, top: 252, width: 440 }}
+          style={{ left: 512, top: 176, width: 440 }}
         >
           <ActionPanel
             g={g}
@@ -661,9 +690,10 @@ function PlayerCard({
         {/* 얼굴 (띠 위로 튀어나오게) */}
         <div className="absolute top-[-10px] left-[8px] h-[72px] w-[72px] overflow-hidden bg-white" style={{ boxShadow: "0 0 0 3px #232a4d" }}>
           {c && (
-            <GradeFx g={c.grade} color={c.color}>
-              <img src={faceOf(c)} alt="" className="relative h-full w-full object-cover" style={{ padding: c.grade === "R" ? 0 : 4 }} />
-            </GradeFx>
+            <>
+              <img src={`/marble/art/bg-${c.grade}.webp`} alt="" className="absolute inset-0 h-full w-full object-cover" />
+              <img src={faceOf(c)} alt="" className="relative h-full w-full object-cover object-top" />
+            </>
           )}
           {c && <GradeTag g={c.grade} className="absolute bottom-[3px] left-[3px] scale-90" />}
         </div>
@@ -1009,8 +1039,7 @@ function Pips({ n }: { n: number }) {
   );
 }
 
-function CenterDice({ g, dice, nameOf, log, at }: { g: GameWire; dice: DiceView | null; nameOf(pi: number): string; log: string[]; at: { x: number; y: number } }) {
-  const turnP = g.prompt?.p ?? -1;
+function CenterDice({ dice, at }: { dice: DiceView | null; at: { x: number; y: number } }) {
   return (
     <div className="pointer-events-none absolute z-[300] flex flex-col items-center gap-1.5" style={{ left: at.x, top: at.y, transform: "translateX(-50%)" }}>
       <div className="flex gap-3">
@@ -1019,20 +1048,16 @@ function CenterDice({ g, dice, nameOf, log, at }: { g: GameWire; dice: DiceView 
             <ThrownDie key={`a${dice.roll}`} v={dice.d[0]} dv={dice} delay={0} />
             <ThrownDie key={`b${dice.roll}`} v={dice.d[1]} dv={dice} delay={70} />
           </>
-        ) : (
-          <div className="flex gap-3 opacity-60">
-            <ThrownDie v={5} dv={{ d: [5, 2], roll: 0, p: 0, dur: 1, from: null, spin: 0 }} delay={0} />
-            <ThrownDie v={2} dv={{ d: [5, 2], roll: 0, p: 0, dur: 1, from: null, spin: 0 }} delay={1} />
-          </div>
-        )}
+        ) : null}
       </div>
-      {dice && <b className="mb-out text-[20px] text-white">{dice.d[0] + dice.d[1]}{dice.d[0] === dice.d[1] ? " 더블!" : ""}</b>}
-      {turnP >= 0 && (
-        <div className="mb-chip text-[13px]" style={{ "--c": "#ffffff" } as CSSProperties}>
-          <span className="inline-block h-[10px] w-[10px]" style={{ background: PCOLOR[turnP], boxShadow: "0 0 0 2px #232a4d" }} /> <b>{nameOf(turnP)}</b> 차례
+      {dice && (
+        <div key={`n${dice.roll}`} className="mbx-num relative flex items-center gap-2" style={{ animationDelay: `${dice.dur}ms` }}>
+          <b className="text-[54px] leading-[56px] font-black" style={{ background: "linear-gradient(180deg, #fffbe0 10%, #ffd23a 60%, #f59a1e)", WebkitBackgroundClip: "text", color: "transparent", filter: "drop-shadow(0 3px 0 #7a3e00) drop-shadow(0 0 12px rgba(255,200,60,0.8))" }}>
+            {dice.d[0] + dice.d[1]}
+          </b>
+          {dice.d[0] === dice.d[1] && <span className="mbx-ready rotate-[-8deg] rounded-lg bg-[#ff2d6f] px-2 py-0.5 text-[18px] font-black text-white shadow-lg">더블!</span>}
         </div>
       )}
-      {log.length > 0 && <div className="mb-out-s max-w-[300px] truncate text-center text-[12px] text-white">{log[log.length - 1]}</div>}
     </div>
   );
 }
@@ -1092,7 +1117,7 @@ function ActionPanel({
   sending,
   skill,
   compact,
-  busy,
+  busy: _busy,
   auto,
   onManual,
 }: {
@@ -1135,7 +1160,7 @@ function ActionPanel({
       )}
     </div>
   );
-  if (auto && !busy)
+  if (auto)
     return box(
       <>
         <span className="text-[12px]">자리를 비운 동안 AI 가 대신 두고 있어요</span>
@@ -1149,10 +1174,24 @@ function ActionPanel({
   const me = g.players[myPi];
   const c = CHAR[me.lo.char.id];
   const skillOk = canSkill(gg, myPi);
-  const skillBtn = skillOk && (
-    <Btn tone="violet" className="h-[36px] px-3 text-[13px] font-bold" disabled={sending} onClick={skill} title={c?.active.desc(power(c.grade, me.lo.char.lv))}>
-      <Icon n="star" size={12} /> {c?.active.name}
-    </Btn>
+  const skillBtn = skillOk && c && (
+    <button
+      type="button"
+      disabled={sending}
+      onClick={() => {
+        sfx("click");
+        skill();
+      }}
+      title={c.active.desc(power(c.grade, me.lo.char.lv))}
+      className="mbx-skill relative flex h-[50px] items-center gap-2 rounded-full pr-4 pl-1 text-left text-white transition hover:scale-105 disabled:opacity-50"
+      style={{ background: "linear-gradient(135deg, #b46bff, #ff5fa2)", boxShadow: "0 0 0 2px #fff, 0 4px 0 #6a2a9a, 0 0 22px 4px rgba(255,95,162,0.65)" }}
+    >
+      <img src={faceOf(c)} alt="" className="h-[42px] w-[42px] rounded-full object-cover" style={{ boxShadow: "0 0 0 2px #fff" }} />
+      <span className="flex flex-col leading-[15px]">
+        <span className="text-[10px] font-black tracking-[0.15em] text-[#ffe08a]">SKILL 준비됨!</span>
+        <b className="text-[15px]">{c.active.name}</b>
+      </span>
+    </button>
   );
 
   // 스킬 숫자 · 상대 고르기
@@ -1414,27 +1453,45 @@ function SkillCutin({ b }: { b: Banner }) {
 function BannerView({ b }: { b: Banner }) {
   if (b.art) return <SkillCutin b={b} />;
   return (
-    <div className="pointer-events-none absolute inset-x-0 top-[200px] z-[60] overflow-hidden">
-      <div className="mb-banner flex h-[110px] items-center justify-center gap-4" style={{ "--d": `${b.ms}ms`, background: b.color, boxShadow: "0 -4px 0 0 #232a4d, 0 4px 0 0 #232a4d" } as CSSProperties}>
-        {b.art && <img src={b.art} alt="" className="h-[150px] -translate-y-[10px] object-contain" />}
-        <div>
-          <div className="mb-title mb-out text-[34px] text-white">{b.title}</div>
-          {b.sub && <div className="mb-out text-[15px] text-white">{b.sub}</div>}
+    <div className="mbx pointer-events-none absolute inset-x-0 top-[190px] z-[620] flex justify-center" style={{ "--d": `${b.ms}ms` } as CSSProperties}>
+      <div className="mbx-banner relative flex h-[118px] w-full items-center justify-center overflow-hidden" style={{ background: `linear-gradient(90deg, transparent, ${b.color}e6 18%, ${b.color} 50%, ${b.color}e6 82%, transparent)` }}>
+        <div className="mbx-rays absolute" style={{ left: "50%", top: "50%", background: `repeating-conic-gradient(from 0deg, rgba(255,255,255,0.22) 0 8deg, transparent 8deg 22deg)` }} />
+        <div className="mbx-sheen absolute inset-0 opacity-60" />
+        <div className="absolute inset-x-0 top-0 h-[3px]" style={{ background: "linear-gradient(90deg, transparent, #fff, transparent)" }} />
+        <div className="absolute inset-x-0 bottom-0 h-[3px]" style={{ background: "linear-gradient(90deg, transparent, #fff, transparent)" }} />
+        <div className="mbx-banner-text relative text-center">
+          <div className="text-[46px] leading-[50px] font-black tracking-tight text-white" style={{ textShadow: `0 3px 0 rgba(38,43,82,0.6), 0 0 22px ${b.color}` }}>
+            {b.title}
+          </div>
+          {b.sub && <div className="mt-0.5 text-[15px] font-bold text-white/95" style={{ textShadow: "0 1px 3px rgba(0,0,0,0.5)" }}>{b.sub}</div>}
         </div>
       </div>
     </div>
   );
 }
 
+/** 럭키 박스 카드: 상자에서 카드가 휙 뒤집혀 나옴 (좋은 카드 금빛 · 나쁜 카드 붉은빛) */
 function CardPop({ id, name }: { id: keyof typeof CARDS; name: string }) {
   const c = CARDS[id];
+  const good = c.good >= 0;
+  const c1 = good ? "#ffd84d" : "#ff6b8a";
+  const c2 = good ? "#ff9f2e" : "#b03a6a";
   return (
-    <div className="pointer-events-none absolute inset-0 z-[55] flex items-center justify-center">
-      <div className="mb-pop mb-box flex w-[220px] flex-col items-center gap-2 px-4 py-4 text-center" style={{ "--bg": c.good >= 0 ? "#fff3c9" : "#ffe1e1" } as CSSProperties}>
-        <Icon n="box" size={40} />
-        <span className="text-[12px] text-[var(--mute)]">{name} · 럭키 박스</span>
-        <b className="mb-title text-[22px]">{c.name}</b>
-        <span className="text-[13px]">{c.desc}</span>
+    <div className="mbx pointer-events-none absolute inset-0 z-[610] flex items-center justify-center" style={{ background: "radial-gradient(circle, rgba(10,8,30,0.25), rgba(10,8,30,0.6))" }}>
+      <div className="absolute h-[520px] w-[520px] rounded-full mbx-up-rays" style={{ background: `repeating-conic-gradient(from 0deg, ${c1}44 0 8deg, transparent 8deg 22deg)` }} />
+      <div className="mbx-card-in relative flex h-[320px] w-[230px] flex-col items-center overflow-hidden rounded-[18px] p-[4px]" style={{ background: `linear-gradient(160deg, #fff6c8, ${c1} 40%, ${c2})`, boxShadow: `0 0 0 2px #262b52, 0 0 36px 6px ${c1}aa, 0 14px 30px rgba(0,0,0,0.5)` }}>
+        <div className="relative flex h-full w-full flex-col items-center rounded-[14px] px-4 pt-3 pb-4 text-center" style={{ background: "linear-gradient(180deg, #2a2470, #171245)" }}>
+          <div className="absolute inset-[6px] rounded-[10px] border border-[#ffd76a]/50" />
+          <span className="text-[11px] font-black tracking-[0.3em] text-[#ffd76a]">LUCKY BOX</span>
+          <div className="mt-3 flex h-[96px] w-[96px] items-center justify-center rounded-full" style={{ background: `radial-gradient(circle, ${c1}66, transparent 70%)` }}>
+            <Icon n={good ? "box" : "x"} size={64} />
+          </div>
+          <b className="mt-2 text-[26px] leading-[30px] font-black text-white">{c.name}</b>
+          <span className="mt-2 rounded-full px-3 py-1 text-[14px] font-bold" style={{ background: `${c1}33`, color: good ? "#ffe8a0" : "#ffc2cf", boxShadow: `inset 0 0 0 1px ${c1}88` }}>
+            {c.desc}
+          </span>
+          <span className="mt-auto text-[12px] text-white/60">{name} 님이 뽑았어요</span>
+        </div>
       </div>
     </div>
   );

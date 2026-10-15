@@ -224,7 +224,7 @@ export function LivingPixels({ sprites, className = "", style, bg }: { sprites: 
         const row = i % 2;
         return (
           <div key={s + i} className="absolute" style={{ left: k.x, bottom: `${7 + row * 5}%`, transform: `translateY(${k.bob}px)`, zIndex: 10 - row * 5 + i }}>
-            <Token sprite={s} h={52} maxW={46} face={k.dir} anim={k.mode === "walk" ? "walk" : k.mode === "cheer" ? "win" : "idle"} fps={k.mode === "walk" ? WALK_FPS : undefined} />
+            <Token sprite={s} h={52} maxW={60} face={k.dir} anim={k.mode === "walk" ? "walk" : k.mode === "cheer" ? "win" : "idle"} fps={k.mode === "walk" ? WALK_FPS : undefined} />
           </div>
         );
       })}

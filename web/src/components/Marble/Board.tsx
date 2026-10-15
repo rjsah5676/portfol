@@ -243,16 +243,10 @@ export default function Board({
         const mult = t.owner >= 0 ? tollMult(gg, tile) : 1;
         const fest = t.owner >= 0 && g.players[t.owner]?.fest === tile;
         const sp = KIND[d.kind];
-        const band = sp ? sp.fill : d.kind === "spot" ? "#ffb21e" : m.groups[d.group ?? 0].color;
-        const long = d.name.length >= 5;
         return (
           <div key={`n${slot}`} className="pointer-events-none absolute flex flex-col items-center" style={{ left: p.x, top: p.y + 6, zIndex: 3000 + Math.round(p.y), transform: `translateX(-50%) scale(${Math.min(1.08, p.k)})`, transformOrigin: "50% 0" }}>
-            <span className={`rounded-[6px] px-[4px] text-center font-extrabold whitespace-nowrap ${long ? "text-[9px] leading-[12px]" : "text-[10px] leading-[13px]"}`} style={{ background: sp ? "#fffaf0" : band, color: sp ? INK : "#fff", boxShadow: `0 0 0 1.5px ${INK}, 0 2px 0 rgba(20,24,60,0.35)`, textShadow: sp ? "none" : "0 1px 1px rgba(0,0,0,0.45)" }}>
-              {d.kind === "spot" && "★"}
-              {d.name}
-            </span>
             {!sp && (
-              <span className="relative mt-[2px] flex items-center gap-[2px]">
+              <span className="relative flex items-center gap-[2px]">
                 {pc ? (
                   <span className="rounded-[5px] px-[4px] text-[10px] leading-[13px] font-extrabold text-white" style={{ background: pc, boxShadow: `0 0 0 1.5px ${INK}` }}>
                     {fmtToll(tollOf(gg, tile))}
@@ -284,10 +278,14 @@ function TileFace({ m, d, owner, sx, sy }: { m: MapDef; d: TileDef; owner: numbe
   if (sp)
     return (
       <div className="relative flex h-full w-full items-center justify-center overflow-hidden rounded-[10px]" style={{ background: `radial-gradient(circle at 35% 30%, ${mix(sp.fill, 0.55)}, ${sp.fill} 60%, ${dark(sp.fill, 0.85)})`, boxShadow: `inset 0 0 0 2px ${dark(sp.fill, 0.7)}, inset 0 3px 0 rgba(255,255,255,0.5)` }}>
-        {/* 그림은 화면에서 똑바로 보이게 판 회전(45°)을 되돌림 */}
-        <span style={{ transform: "rotate(-45deg)" }}>
-          <Glyph n={sp.glyph} size={sx % 8 === 0 && sy % 8 === 0 ? 46 : 30} color={sp.ink === "#fff" ? "#fff" : mix(sp.fill, 0.55)} />
-        </span>
+        <FloorText sx={sx} sy={sy}>
+          <span className="flex flex-col items-center gap-[2px]">
+            <Glyph n={sp.glyph} size={sx % 8 === 0 && sy % 8 === 0 ? 40 : 24} color={sp.ink === "#fff" ? "#fff" : mix(sp.fill, 0.55)} />
+            <b className={`whitespace-nowrap ${sx % 8 === 0 && sy % 8 === 0 ? "text-[17px]" : "text-[13px]"} leading-none font-black`} style={{ color: sp.ink, textShadow: sp.ink === "#fff" ? "0 1px 2px rgba(0,0,0,0.5)" : "none" }}>
+              {d.name}
+            </b>
+          </span>
+        </FloorText>
       </div>
     );
   const band = d.kind === "spot" ? "#ffb21e" : m.groups[d.group ?? 0].color;
@@ -298,12 +296,23 @@ function TileFace({ m, d, owner, sx, sy }: { m: MapDef; d: TileDef; owner: numbe
   return (
     <div className="relative h-full w-full overflow-hidden rounded-[10px]" style={{ background: pc ? `linear-gradient(135deg, ${mix(pc, 0.35)}, ${pc})` : `linear-gradient(135deg, #fffdf6, ${mix(band, 0.78)})`, boxShadow: pc ? `inset 0 0 0 2.5px ${dark(pc, 0.6)}, inset 0 3px 0 rgba(255,255,255,0.45)` : `inset 0 0 0 1.5px ${dark(band, 0.6)}` }}>
       <div className="absolute" style={{ ...bandStyle, background: `linear-gradient(135deg, ${mix(band, 0.2)}, ${band})` }} />
-      {d.kind === "spot" && (
-        <span className="absolute inset-0 flex items-center justify-center" style={{ transform: "rotate(-45deg)" }}>
-          <Glyph n="star" size={22} color={pc ? "#fff" : "#ffd65a"} />
-        </span>
-      )}
+      <FloorText sx={sx} sy={sy}>
+        <b className={`block max-w-[64px] text-center leading-[15px] font-black break-keep ${d.name.length >= 5 ? "text-[12px]" : "text-[14px]"}`} style={{ color: pc ? "#fff" : INK, textShadow: pc ? "0 1px 2px rgba(0,0,0,0.55)" : "0 1px 0 rgba(255,255,255,0.8)" }}>
+          {d.kind === "spot" && "★"}
+          {d.name}
+        </b>
+      </FloorText>
     </div>
+  );
+}
+
+/** 판 바닥에 찍힌 글씨: 그 변을 따라 대각선으로 (위 · 아래 줄은 판 가로 방향 ↘, 왼쪽 · 오른쪽 줄은 세로 방향 ↗) */
+function FloorText({ sx, sy, children }: { sx: number; sy: number; children: ReactNode }) {
+  const col = (sx <= 0 || sx >= 8) && !(sy <= 0 || sy >= 8);
+  return (
+    <span className="pointer-events-none absolute inset-0 flex items-center justify-center">
+      <span style={{ transform: col ? "rotate(-90deg)" : undefined }}>{children}</span>
+    </span>
   );
 }
 

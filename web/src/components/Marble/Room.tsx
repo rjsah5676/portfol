@@ -297,18 +297,18 @@ function ChatBox({ room, me, side }: { room: RoomWire; me: string; side?: boolea
   }, [room.chat.length]);
   const can = room.seats.some((s) => s?.uid === me);
   return (
-    <div className={`mb-box absolute z-50 flex w-[260px] flex-col ${side ? "top-0 left-[48px]" : "top-[44px] right-0"}`}>
-      <div ref={list} className="mb-scroll h-[160px] overflow-y-auto px-2 py-1.5 text-[12px] leading-[16px]">
+    <div className={`mbx absolute z-50 flex w-[270px] flex-col overflow-hidden rounded-2xl border border-white/15 bg-[#1b1650]/95 text-white shadow-[0_12px_30px_rgba(0,0,0,0.5)] backdrop-blur ${side ? "top-0 left-[48px]" : "top-[44px] right-0"}`}>
+      <div ref={list} className="h-[170px] overflow-y-auto px-3 py-2 text-[12.5px] leading-[18px]">
         {room.chat.map((c, i) => (
-          <div key={i} className="break-all">
-            <b style={{ color: c.bot ? "#6b4a32" : "#232a4d" }}>{c.name}</b> {c.text}
+          <div key={i} className="break-all text-white/90">
+            <b style={{ color: c.bot ? "#9fb3d8" : "#ffd65a" }}>{c.name}</b> {c.text}
           </div>
         ))}
-        {!room.chat.length && <div className="text-[var(--mute)]">인사해 보세요</div>}
+        {!room.chat.length && <div className="text-white/45">인사해 보세요</div>}
       </div>
       {can && (
         <form
-          className="flex gap-1 p-1.5"
+          className="flex gap-1.5 border-t border-white/10 p-2"
           onSubmit={(e) => {
             e.preventDefault();
             const t = text.trim();
@@ -321,13 +321,13 @@ function ChatBox({ room, me, side }: { room: RoomWire; me: string; side?: boolea
             value={text}
             maxLength={60}
             onChange={(e) => setText(e.target.value)}
-            className="mb-inset min-w-0 flex-1 px-2 py-1 text-[12px] outline-none"
+            className="mbx-input min-w-0 flex-1 !h-[32px] text-[12.5px]"
             placeholder="말하기"
             onKeyDown={(e) => e.stopPropagation()}
           />
-          <Btn className="h-[28px] px-2 text-[12px]" type="submit">
+          <button type="submit" className="h-[32px] rounded-lg bg-gradient-to-b from-[#ffe27a] to-[#f5a524] px-3 text-[12.5px] font-bold text-[#3a2500]">
             보내기
-          </Btn>
+          </button>
         </form>
       )}
     </div>
@@ -360,7 +360,7 @@ export function SoundButton({ up = false, side = false, glass = false }: { up?: 
         <Icon n={p.mute ? "mute" : "speaker"} size={15} />
       </Btn>
       {open && (
-        <div className={`mb-box absolute z-50 w-[220px] p-3 text-[12px] ${side ? "top-0 left-[48px]" : up ? "bottom-[44px] left-0" : "top-[44px] right-0"}`} onPointerLeave={() => setOpen(false)}>
+        <div className={`mb-box absolute z-50 w-[220px] p-3 text-[12px] text-[#232a4d] ${side ? "top-0 left-[48px]" : up ? "bottom-[44px] left-0" : "top-[44px] right-0"}`} onPointerLeave={() => setOpen(false)}>
           {(["bgm", "sfx"] as const).map((k) => (
             <label key={k} className="mb-2 flex items-center gap-2">
               <span className="w-[44px]">{k === "bgm" ? "배경음" : "효과음"}</span>

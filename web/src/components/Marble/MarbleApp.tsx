@@ -165,7 +165,8 @@ function Menu(p: {
   const guide = useMapGuide();
   return (
     <div className="mbx absolute inset-0 overflow-hidden" style={{ background: "radial-gradient(120% 90% at 20% 0%, #4b3bb5 0%, #241a63 45%, #120d33 100%)" }}>
-      <img key={map ?? "any"} src={map ? `/marble/bg/center-${map}.webp` : "/marble/art/banner-ur.webp"} alt="" className="mbx-fade absolute inset-0 h-full w-full object-cover opacity-[0.22] blur-[2px]" />
+      <img src="/marble/art/lobby-bg.webp" alt="" className="absolute inset-0 h-full w-full object-cover opacity-[0.75]" />
+      <div className="absolute inset-0" style={{ background: "radial-gradient(ellipse at 50% 45%, rgba(18,13,51,0.25), rgba(18,13,51,0.75))" }} />
 
       {/* 위 막대 */}
       <div className="absolute inset-x-0 top-0 z-[40] flex h-[52px] items-center gap-2 border-b border-white/10 bg-black/25 px-4 backdrop-blur">
@@ -281,11 +282,12 @@ function Menu(p: {
             바로 시작
             <span className="text-[11px] font-semibold opacity-80">열린 방 아무 데나 · 2~4인 · 빈자리는 AI</span>
           </XBtn>
-          <XBtn className="h-[68px] w-[96px] flex-col gap-0 text-[15px]" disabled={!p.member || !hasChar} onClick={p.onMake}>
+          <XBtn tone="sky" className="h-[68px] w-[104px] flex-col !gap-0 text-[15px]" disabled={!p.member || !hasChar} onClick={p.onMake}>
             방 만들기
+            <span className="text-[10px] font-semibold opacity-85">친구 · 비밀방</span>
           </XBtn>
         </div>
-        <div className="rounded-xl border border-white/10 bg-black/25 px-3 py-2 text-[12px] text-white/85">
+        <div className="rounded-xl border border-white/15 bg-[#140f3a]/85 px-3 py-2 text-[12px] text-white/90 shadow-[0_4px_14px_rgba(0,0,0,0.35)] backdrop-blur">
           {p.loading ? (
             <span>로그인 확인 중…</span>
           ) : p.member ? (
@@ -347,6 +349,7 @@ function Lobby({ me, onBack, onGo }: { me: string; onBack(): void; onGo(f: () =>
   void me;
   return (
     <div className="mbx absolute inset-0 overflow-hidden" style={{ background: "radial-gradient(circle at 50% 0%, #2f2a75, #120d33 70%)" }}>
+      <img src="/marble/art/lobby-bg.webp" alt="" className="absolute inset-0 h-full w-full object-cover opacity-40 blur-[3px]" />
       <div className="absolute inset-x-0 top-0 z-[30] flex h-[52px] items-center gap-2 border-b border-white/10 bg-black/25 px-3 backdrop-blur">
         <XBtn className="h-[34px] px-3 text-[13px]" onClick={onBack}>
           ‹ 돌아가기
