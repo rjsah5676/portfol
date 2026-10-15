@@ -12,6 +12,7 @@ import yoriJoriImg from "@/img/Page/info/YoriJori.png";
 import pokerImg from "@/img/Page/info/poker/title.webp";
 import sketchImg from "@/img/Page/info/sketch/title.webp";
 import defenseImg from "@/img/Page/info/defense/title.webp";
+import marbleImg from "@/img/Page/info/marble/board.webp";
 
 export interface Project {
   /** 상세 페이지 주소: /infoPage/<idx> */
@@ -174,6 +175,16 @@ export const gameProjects: Project[] = [
     tech: ["TypeScript", "Canvas", "socket.io", "Worker Threads"],
     period: "2026.10 –",
     playLink: "/games/defense/",
+  },
+  {
+    idx: 17,
+    name: "DICE TOWN",
+    imgLink: marbleImg,
+    title: "웹 보드게임 [DICE TOWN]",
+    desc: "주사위로 땅을 사고 짓고 인수하는 부루마블 스타일 보드게임. PIXEL FIGHT 세계관 캐릭터 스킬 · 맵 3종, 최대 4명 · AI 대전, 서버가 판을 진행하는 결정적 엔진",
+    tech: ["TypeScript", "React", "socket.io", "MongoDB"],
+    period: "2026.10 –",
+    playLink: "/games/marble/",
   },
 ];
 
