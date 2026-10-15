@@ -12,6 +12,7 @@ import Bag, { Shop } from "./Bag";
 import Gacha from "./Gacha";
 import GameView from "./GameView";
 import Ladder from "./Ladder";
+import Title from "./Title";
 import { applyCursor } from "./cursor";
 import { GuideDot, useMapGuide } from "./MapGuide";
 import { Cur, Stars } from "./pixel";
@@ -86,6 +87,8 @@ function App() {
     }
   };
 
+  // 로그인 전 · 별명 전: 타이틀 화면
+  if (!loading && !member) return <Title account={!!account} onLogin={login} />;
   if (screen.k === "room")
     return (
       <RoomScreen

@@ -2,7 +2,7 @@
 
 import type { CSSProperties, ReactNode } from "react";
 import { CHAR } from "@/lib/marble/data";
-import { LANDMARK, builtOf, tollMult, tollOf, type Game } from "@/lib/marble/engine";
+import { LANDMARK, tollMult, tollOf, type Game } from "@/lib/marble/engine";
 import { MAPS, type MapDef, type TileDef } from "@/lib/marble/maps";
 import type { GameWire } from "@/lib/marble/wire";
 import { PCOLOR } from "./pixel";
@@ -177,7 +177,7 @@ export default function Board({
               type="button"
               aria-label={d.name}
               onClick={() => (can ? onPick?.(tile) : onInfo?.(tile))}
-              className="absolute cursor-pointer p-[3px]"
+              className={`absolute p-[3px] ${can ? "cursor-pointer" : "cursor-help"}`}
               style={{ left: r.x, top: r.y, width: r.w, height: r.h }}
             >
               <TileFace m={m} d={d} owner={t.owner} sx={sd.x} sy={sd.y} toll={t.owner >= 0 ? tollOf(gg, tile) : 0} mult={t.owner >= 0 ? tollMult(gg, tile) : 1} fest={t.owner >= 0 && g.players[t.owner]?.fest === tile} boost={t.boostLeft > 0} tw={r.w - 6} th={r.h - 6} />
@@ -194,44 +194,15 @@ export default function Board({
         const tile = g.order[slot];
         const d = m.tiles[tile];
         const t = g.tiles[tile];
-        if (t.owner < 0 || (d.kind !== "city" && d.kind !== "spot")) return null;
+        if (t.owner < 0 || d.kind !== "city" || t.lv <= 0) return null;
         const b = bldAt(sd.x, sd.y);
+        const p = proj(b.x, b.y);
         const lv = Math.min(t.lv, LANDMARK);
-        const color = PCOLOR[t.owner];
-        if (lv <= 0 || d.kind === "spot") {
-          // 땅만 산 칸: 주인 깃발 하나 꽂아 둠
-          const q = proj(b.x, b.y);
-          return (
-            <div key={`b${slot}`} className="pointer-events-none absolute" style={{ left: q.x, top: q.y + 2, zIndex: 100 + Math.round(q.y), transform: `translate(-30%, -100%) scale(${q.k})`, transformOrigin: "30% 100%" }}>
-              <span key={`${t.owner}-f`} className="mb-pop block" style={{ filter: "drop-shadow(0 2px 1.5px rgba(20,24,60,0.4))" }}>
-                <Glyph n="flag" size={30} color={color} />
-              </span>
-            </div>
-          );
-        }
-        if (lv >= LANDMARK) {
-          // 랜드마크: 칸 가운데 쪽에 하나 크게 (칸마다 다른 그림)
-          const c = proj((b.x + axis(sd.x)) / 2, (b.y + axis(sd.y)) / 2);
-          return (
-            <div key={`b${slot}`} className="pointer-events-none absolute" style={{ left: c.x, top: c.y + 6, zIndex: 100 + Math.round(c.y), transform: `translate(-50%, -100%) scale(${c.k})`, transformOrigin: "50% 100%" }}>
-              <Landmark key={`${t.owner}-lm`} src={`/marble/lm/${m.id}-${tile}.webp`} color={color} />
-            </div>
-          );
-        }
-        // 빌라 · 빌딩 · 호텔: 칸의 변 방향(대각선)을 따라 나란히 — 조각마다 따로 투영해서 판과 같은 기울기로
-        const along = sd.y <= 0 || sd.y >= 8 ? { x: 1, y: 0 } : { x: 0, y: 1 };
-        const gap = 19;
-        // 건물마다 자리 고정 (오두막 · 하우스 · 타워 = 다 찼을 때 자리 그대로)
-        return builtOf(t).map((k) => {
-          const i = k - 1;
-          const o = (i - 1) * gap;
-          const q = proj(b.x + along.x * o, b.y + along.y * o);
-          return (
-            <div key={`b${slot}-${i}`} className="pointer-events-none absolute" style={{ left: q.x, top: q.y + 3, zIndex: 100 + Math.round(q.y), transform: `translate(-50%, -100%) scale(${q.k})`, transformOrigin: "50% 100%" }}>
-              <Piece key={`${t.owner}-${i}`} n={i} owner={t.owner} />
-            </div>
-          );
-        });
+        return (
+          <div key={`b${slot}`} className="pointer-events-none absolute" style={{ left: p.x, top: p.y - 4, zIndex: 100 + Math.round(p.y), transform: `translate(-50%, -100%) scale(${p.k})`, transformOrigin: "50% 100%" }}>
+            <Building lv={lv} color={PCOLOR[t.owner]} lmSrc={`/marble/lm/${m.id}-${tile}.webp`} key={`${t.owner}-${lv}`} />
+          </div>
+        );
       })}
 
       {/* 말 */}
@@ -277,25 +248,19 @@ export default function Board({
 /** 판 위에 눕는 칸 바닥 */
 function TileFace({ m, d, owner, sx, sy, toll, mult, fest, boost, tw, th }: { m: MapDef; d: TileDef; owner: number; sx: number; sy: number; toll: number; mult: number; fest: boolean; boost: boolean; tw: number; th: number }) {
   const sp = KIND[d.kind];
-  if (sp) {
-    const corner = sx % 8 === 0 && sy % 8 === 0;
-    const along = (sx <= 0 || sx >= 8) && !(sy <= 0 || sy >= 8) ? th : tw;
-    const len = [...d.name].reduce((a, ch) => a + (ch === " " ? 0.45 : 1), 0);
-    // 양옆 여백 남기고 한 줄
-    const fs = Math.min(corner ? 19 : 15, Math.floor(((along - 10) / Math.max(1, len)) * 10) / 10);
+  if (sp)
     return (
       <div className="relative flex h-full w-full items-center justify-center overflow-hidden rounded-[10px]" style={{ background: `radial-gradient(circle at 35% 30%, ${mix(sp.fill, 0.55)}, ${sp.fill} 60%, ${dark(sp.fill, 0.85)})`, boxShadow: `inset 0 0 0 2px ${dark(sp.fill, 0.7)}, inset 0 3px 0 rgba(255,255,255,0.5)` }}>
         <FloorText sx={sx} sy={sy}>
           <span className="flex flex-col items-center gap-[2px]">
             <Glyph n={sp.glyph} size={sx % 8 === 0 && sy % 8 === 0 ? 40 : 24} color={sp.ink === "#fff" ? "#fff" : mix(sp.fill, 0.55)} />
-            <b className="whitespace-nowrap leading-none font-black" style={{ fontSize: fs, color: sp.ink, textShadow: sp.ink === "#fff" ? "0 1px 2px rgba(0,0,0,0.5)" : "none" }}>
+            <b className={`whitespace-nowrap ${sx % 8 === 0 && sy % 8 === 0 ? "text-[19px]" : "text-[15px]"} leading-none font-black`} style={{ color: sp.ink, textShadow: sp.ink === "#fff" ? "0 1px 2px rgba(0,0,0,0.5)" : "none" }}>
               {d.name}
             </b>
           </span>
         </FloorText>
       </div>
     );
-  }
   const band = d.kind === "spot" ? "#ffb21e" : m.groups[d.group ?? 0].color;
   const pc = owner >= 0 ? PCOLOR[owner] : null;
   const col = sx <= 0 || sx >= 8;
@@ -303,7 +268,7 @@ function TileFace({ m, d, owner, sx, sy, toll, mult, fest, boost, tw, th }: { m:
   const near = sy >= 8 || sx >= 8;
   // 이름은 무조건 한 줄 — 길면 글씨를 줄임
   const nameLen = [...d.name].reduce((a, ch) => a + (ch === " " ? 0.45 : 1), d.kind === "spot" ? 0.8 : 0);
-  const nameSize = Math.min(16, Math.floor((((col ? th : tw) - 6) / Math.max(1, nameLen)) * 10) / 10);
+  const nameSize = Math.min(16, Math.floor((62 / Math.max(1, nameLen)) * 10) / 10);
   const parts = [
     <div key="b" className="shrink-0" style={{ height: BLD_ZONE }} />,
     <b key="n" className="block text-center leading-none font-black whitespace-nowrap" style={{ fontSize: nameSize, color: pc ? "#fff" : INK, textShadow: pc ? "0 1px 2px rgba(0,0,0,0.55)" : "0 1px 0 rgba(255,255,255,0.8)" }}>
@@ -322,7 +287,7 @@ function TileFace({ m, d, owner, sx, sy, toll, mult, fest, boost, tw, th }: { m:
       )}
       {/* 배율 · 축제 · 불꽃은 값 위 구석에 작게 (칸 너비를 넘지 않게) */}
       {(mult > 1 || fest || boost) && (
-        <span className="absolute -top-[10px] -right-[7px] flex items-center gap-[1px]">
+        <span className="absolute -top-[11px] -right-[14px] flex items-center gap-[1px]">
           {mult > 1 && (
             <span className="rounded-full px-[3px] text-[10px] leading-[13px] font-black" style={{ background: mult >= 4 ? "#ff3d6e" : "#ffd23a", color: mult >= 4 ? "#fff" : "#3a2500", boxShadow: `0 0 0 1.2px ${INK}` }}>
               x{mult}
@@ -357,23 +322,33 @@ function FloorText({ sx, sy, children }: { sx: number; sy: number; children: Rea
   );
 }
 
-/** 건물 조각 하나 (빌라 · 빌딩 · 호텔) — 주인 색 지붕 · 차양이 칠해진 그림 */
-export function Piece({ n, owner, h }: { n: number; owner: number; h?: number }) {
+/** 서 있는 건물: 모두의마블처럼 오두막 · 하우스 · 타워를 단계만큼 나란히 (주인 색), 랜드마크만 큰 3D 그림 */
+function Building({ lv, color, lmSrc }: { lv: number; color: string; lmSrc: string }) {
+  if (lv >= LANDMARK) {
+    // 랜드마크: 칸마다 다른 건물 그림 (예전 랜드마크 세트) + 주인 색 받침 · 깃발
+    return (
+      <div className="mb-pop relative flex flex-col items-center">
+        <span className="absolute -bottom-[4px] left-1/2 h-[10px] w-[46px] -translate-x-1/2 rounded-[50%]" style={{ background: color, boxShadow: "0 0 0 1.5px #262b52, 0 0 12px 2px " + color }} />
+        <img src={lmSrc} alt="" className="relative block max-w-none" style={{ height: 50, filter: "drop-shadow(0 3px 2px rgba(20,24,60,0.4))" }} />
+        <span className="mb-bob absolute -top-[12px] right-[0px]">
+          <Glyph n="flag" size={17} color={color} />
+        </span>
+      </div>
+    );
+  }
+  // 빌라 · 빌딩 · 호텔 조각을 차곡차곡 붙여서 (흰 조각을 주인 색으로 물들임)
+  const H = [22, 26, 30];
   return (
-    <span className="mb-pop relative block" style={{ animationDelay: `${n * 80}ms`, filter: "drop-shadow(0 2px 1.5px rgba(20,24,60,0.45))" }}>
-      <img src={`/marble/b3d/p${Math.max(0, owner) % 4}-${n + 1}.webp`} alt="" className="block max-w-none" style={{ height: h ?? [24, 30, 32][n] }} />
-    </span>
-  );
-}
-
-/** 랜드마크: 칸마다 다른 그림 + 주인 깃발 (밑 그림자 없음) */
-function Landmark({ src, color }: { src: string; color: string }) {
-  return (
-    <div className="mb-pop relative flex flex-col items-center">
-      <img src={src} alt="" className="relative block max-w-none" style={{ height: 54, filter: "drop-shadow(0 3px 3px rgba(20,24,60,0.35))" }} />
-      <span className="mb-bob absolute -top-[12px] right-[0px]">
-        <Glyph n="flag" size={17} color={color} />
-      </span>
+    <div className="flex items-end" style={{ filter: "drop-shadow(0 2px 1.5px rgba(20,24,60,0.45))" }}>
+      {Array.from({ length: lv }, (_, i) => {
+        const src = `/marble/b3d/s${i + 1}.webp`;
+        return (
+          <span key={i} className="mb-pop relative -ml-[2px] block first:ml-0" style={{ animationDelay: `${i * 80}ms` }}>
+            <img src={src} alt="" className="block max-w-none" style={{ height: H[i] }} />
+            <span className="pointer-events-none absolute inset-0" style={{ background: color, WebkitMaskImage: `url(${src})`, maskImage: `url(${src})`, WebkitMaskSize: "100% 100%", maskSize: "100% 100%", mixBlendMode: "multiply", opacity: 0.85 }} />
+          </span>
+        );
+      })}
     </div>
   );
 }

@@ -7,7 +7,7 @@ import type { RoomWire } from "@/lib/marble/wire";
 import { marble } from "@/realtime/marble";
 import { serverNow } from "@/lib/api/socket";
 import { getPrefs, onPrefs, setPrefs, sfx } from "./audio";
-import { CURSOR_IDS, applyCursor, cursorName, cursorPreview, getCursor, setCursor } from "./cursor";
+import { CURSOR_IDS, applyCursor, cursorName, cursorPointPreview, cursorPreview, getCursor, setCursor } from "./cursor";
 import { Btn, GradeTag, Icon, PCOLOR, Stars } from "./pixel";
 import { useStage } from "./Stage";
 import { CharHero, ItemBadge, XBtn, XChip, XGrade, XPanel } from "./ui";
@@ -401,7 +401,14 @@ export function SoundButton({ up = false, side = false, glass = false }: { up?: 
                 className="flex h-[34px] items-center justify-center rounded-md bg-white text-[#232a4d]"
                 style={{ boxShadow: cur === id ? "0 0 0 2px #232a4d, inset 0 0 0 2px #ffd84d" : "0 0 0 1px #9fb3c8" }}
               >
-                {id !== "system" ? <img src={cursorPreview(id)} alt="" width={24} height={24} /> : <span className="text-[10px]">기본</span>}
+                {id !== "system" ? (
+                  <span className="flex items-center">
+                    <img src={cursorPreview(id)} alt="" width={20} height={20} />
+                    <img src={cursorPointPreview(id)} alt="" width={16} height={16} className="-ml-[3px] opacity-90" />
+                  </span>
+                ) : (
+                  <span className="text-[10px]">기본</span>
+                )}
               </button>
             ))}
           </div>

@@ -988,3 +988,18 @@ html[data-mbcur] .mb :is(button, a, label, select, summary, [role="button"], [ta
   50% { filter: brightness(1.35); }
 }
 @media (prefers-reduced-motion: reduce) { .mb .mbx-skilltag { animation: none; } }
+
+/* ───────── 타이틀 (로그인 전) ───────── */
+.mb .mbx-title-bg { animation: mbx-title-zoom 24s ease-in-out infinite alternate; transform-origin: 50% 60%; }
+@keyframes mbx-title-zoom { from { transform: scale(1.02); } to { transform: scale(1.09); } }
+.mb .mbx-title-logo {
+  background: linear-gradient(180deg, #fff6c8 0%, #ffd23a 48%, #ff9f1a 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-stroke: 3px #3a1d6e;
+  paint-order: stroke fill;
+  filter: drop-shadow(0 6px 0 #3a1d6e) drop-shadow(0 10px 18px rgba(0, 0, 0, 0.45));
+  font-family: Pretendard, "Apple SD Gothic Neo", system-ui, sans-serif;
+}
+@media (prefers-reduced-motion: reduce) { .mb .mbx-title-bg { animation: none; } }
