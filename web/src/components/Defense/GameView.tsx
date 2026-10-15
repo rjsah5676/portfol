@@ -841,7 +841,7 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry, 
           </div>
         )}
         {b.cheat && !b.result && <CheatPicker b={b} multi={multi} run={run} />}
-        <TutorialCard b={b} />
+        <TutorialCard b={b} onHold={(on) => ctrl.setHold(on)} />
         {ctrl.paused && !modal && (
           <div className="absolute inset-0 flex items-center justify-center bg-[#05040c]/60">
             <Btn
@@ -1738,7 +1738,7 @@ function GhostPanel({ ctrl, ghost }: { ctrl: Controller; ghost: { data: DefenseG
       className="pointer-events-none absolute top-9 left-1.5 z-10 flex items-center gap-1.5 bg-[#0a0816]/75 px-1.5 text-[11px] leading-[18px] whitespace-nowrap shadow-[0_0_0_1px_#2a2350]"
       title={`고스트 ${ghost.data.nick} (${ghost.data.rank}위)`}
     >
-      <b className="max-w-[72px] truncate text-[#c9a6ff]">👻 {ghost.data.nick}</b>
+      <b className="max-w-[90px] truncate text-[#c9a6ff]">GHOST {ghost.data.nick}</b>
       {gb.result ? (
         <span className="text-[var(--mute)]">{gb.result.win ? `클리어 ${fmtTime(gb.result.tick / TPS)}` : `W${gb.result.wave} 끝`}</span>
       ) : (

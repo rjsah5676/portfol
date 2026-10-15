@@ -175,6 +175,11 @@ export class Controller {
   setPaused(v: boolean) {
     if (this.mode.kind === "solo") this.paused = v;
   }
+  /** 튜토리얼 카드가 떠 있는 동안 멈춤 (일시정지 창과 따로 — 솔로만) */
+  hold = false;
+  setHold(v: boolean) {
+    this.hold = this.mode.kind === "solo" && v;
+  }
   togglePause() {
     this.setPaused(!this.paused);
   }
@@ -211,7 +216,7 @@ export class Controller {
           }
         }
       }
-    } else if (!this.paused) {
+    } else if (!this.paused && !this.hold) {
       this.acc += Math.min(dt, 250) * this.speed;
       let n = 0;
       while (this.acc >= per && n++ < 40) {

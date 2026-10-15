@@ -3,9 +3,9 @@
 /**
  * 튜토리얼 — 판 안에서 상황이 오면 한 장씩 나오는 안내 카드 (처음 하는 사람용).
  * 본 카드는 이 기기에 기억 (localStorage pgd-tut) · 「튜토리얼 끄기」 · 메뉴/일시정지의 「튜토리얼 다시 보기」 로 처음부터.
- * 판을 멈추지 않음 (시작 치트 · 치트 코드 창은 원래 멈춰 있음). 순서대로 하나씩만.
+ * 카드가 떠 있는 동안은 판이 멈춤 (솔로 — 「알겠어요」를 누르면 다시 흐름). 순서대로 하나씩만.
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { B, BOSS_EVERY } from "@/lib/defense/balance";
 import { STACK, type Board } from "@/lib/defense/sim";
 import { UNIT } from "@/lib/defense/units";
@@ -107,10 +107,16 @@ export function tutorialOn() {
 }
 
 /** 지금 보여 줄 안내 카드 (필드 아래쪽에 겹쳐 그림) */
-export function TutorialCard({ b }: { b: Board }) {
+export function TutorialCard({ b, onHold }: { b: Board; onHold?: (on: boolean) => void }) {
   const [st, setSt] = useState<Saved>(load);
-  if (st.off) return null;
-  const step = STEPS.find((s) => !st.done.includes(s.id) && s.when(b));
+  const step = st.off ? undefined : STEPS.find((s) => !st.done.includes(s.id) && s.when(b));
+  // 카드가 떠 있는 동안 판을 멈춤 (읽을 시간) — 「알겠어요」를 누르면 다시 흘러감
+  const id = step?.id;
+  useEffect(() => {
+    onHold?.(!!id);
+    return () => onHold?.(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 카드가 바뀔 때만
+  }, [id]);
   if (!step) return null;
   const n = STEPS.indexOf(step) + 1;
   const set = (v: Saved) => (save(v), setSt(v));
