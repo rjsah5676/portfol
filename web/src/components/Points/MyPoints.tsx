@@ -7,6 +7,7 @@ import { getMyPoints } from "@/lib/api/points";
 import {
   ATTEND_POINTS,
   POINT,
+  POINT_BETA,
   fmtPoint,
   pointReason,
   type PointLogRow,
@@ -61,22 +62,15 @@ export default function MyPoints({
           <ul className="mt-1 list-disc pl-4 text-xs leading-relaxed text-white/55">
             <li>매일 첫 접속 출석 {fmtPoint(ATTEND_POINTS)}</li>
             <li>게임 업적 달성 (게임 화면 위 🏅 업적)</li>
-            <li>ANIME POKER 상점 「환전」에서 칩으로</li>
+            <li>일일 미션 (게임 화면 위 📅 일일 미션)</li>
+            <li>게임 상점의 「환전」에서 게임 재화를 {POINT.name}로</li>
           </ul>
         </div>
         <div className="rounded-xl bg-white/[0.03] px-3 py-2.5">
           <b className="text-white/85">쓰는 곳</b>
           <ul className="mt-1 list-disc pl-4 text-xs leading-relaxed text-white/55">
-            <li>
-              <Link
-                href="/games/poker"
-                className="underline underline-offset-2 hover:text-white"
-              >
-                ANIME POKER
-              </Link>{" "}
-              캐릭터 · 스킨, 칩 환전
-            </li>
-            <li>다른 게임 상점도 차례로 열려요</li>
+            <li>이 사이트 게임들의 상점 — 캐릭터 · 스킨 · 패키지 같은 게임 안 아이템</li>
+            <li>게임 상점의 「환전」에서 {POINT.name}를 게임 재화로</li>
           </ul>
         </div>
       </div>
@@ -132,6 +126,9 @@ export default function MyPoints({
         >
           자주 묻는 질문
         </Link>
+      </p>
+      <p className="mt-1.5 font-['Nanum_Gothic',sans-serif] text-[11px] leading-relaxed break-keep text-[#FCA5A5]/80">
+        ⚠ {POINT_BETA}
       </p>
     </section>
   );
