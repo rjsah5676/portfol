@@ -96,15 +96,46 @@ export function makeHitSound(ctx: BaseAudioContext, hit: HitSound = "thump") {
 // ───────────────────────── 노트 스킨 ─────────────────────────
 // 모양은 전부 기본 바 노트를 따르고, 색·질감만 조금씩 다르게
 
-export type Skin = "bar" | "neon" | "metal" | "pastel" | "pixel";
+export type Skin = "bar" | "neon" | "metal" | "pastel" | "pixel" | "zena";
 
-export const SKINS: { key: Skin; label: string }[] = [
+/** shop: 상점에서 GP로 사야 쓰는 스킨 (lib/points SHOP 의 ref) */
+export const SKINS: { key: Skin; label: string; shop?: string }[] = [
   { key: "bar", label: "기본" },
   { key: "neon", label: "네온" },
   { key: "metal", label: "메탈" },
   { key: "pastel", label: "파스텔" },
   { key: "pixel", label: "픽셀" },
+  { key: "zena", label: "아이돌 제나", shop: "zena" },
 ];
+
+/**
+ * 테마 스킨: 노트 말고도 레인 틀(기어) · 무대 그림 · 무대 위 캐릭터까지 바뀜.
+ * 기어 그림은 gear.webp 와 크기 · 레인 · 패드 위치가 같아야 함 (Stage 의 GEAR 좌표를 그대로 씀)
+ */
+export interface SkinTheme {
+  gear: string;
+  stage: string;
+  /** 무대 위 도트 캐릭터 (격투 스프라이트 시트 · 승리 포즈를 박자에 맞춰) */
+  idol?: { sheet: string; meta: string; sing: number[]; cheer: number[]; scale: number };
+  /** 상점 미리보기 그림 */
+  preview: string;
+  desc: string;
+}
+export const SKIN_THEME: Partial<Record<Skin, SkinTheme>> = {
+  zena: {
+    gear: "/rhythm/skin/zena-gear.webp",
+    stage: "/rhythm/skin/zena-stage.webp",
+    idol: {
+      sheet: "/fight/zena-idol.webp",
+      meta: "/fight/zena-idol.json",
+      sing: [31, 32],
+      cheer: [33, 34],
+      scale: 1.35,
+    },
+    preview: "/rhythm/skin/zena-preview.webp",
+    desc: 'PIXEL FIGHT 아이돌 제나의 단독 콘서트 "SONIC STAGE" — 금빛 레인 틀과 콘서트 무대, 무대 구석에서 제나가 박자에 맞춰 노래하고 50콤보마다 환호해요',
+  },
+};
 
 /** 스킨별 레인 색: 기본은 가운데 두 줄만 곡 색 */
 export function laneColors(skin: Skin, accent: string): string[] {
@@ -117,6 +148,8 @@ export function laneColors(skin: Skin, accent: string): string[] {
       return ["#FBCFE8", "#BAE6FD", "#BBF7D0", "#FDE68A"];
     case "pixel":
       return ["#FF6B6B", "#4ECDC4", "#FFE66D", "#A78BFA"];
+    case "zena":
+      return ["#F9A8D4", "#F5C842", "#F5C842", "#F9A8D4"];
     default:
       return ["#E6E8EF", accent, accent, "#E6E8EF"];
   }
@@ -267,6 +300,32 @@ function paintHead(
       g.fill();
       break;
     }
+    case "zena": {
+      // 무대 조명 받은 금속 + 진한 테두리(밝은 무대에서도 노트 윤곽이 보이게) + 가운데 반짝이 별
+      const grad = g.createLinearGradient(0, top, 0, top + h);
+      grad.addColorStop(0, "#FFFDF5");
+      grad.addColorStop(0.4, color);
+      grad.addColorStop(0.62, shade(color, -0.3));
+      grad.addColorStop(1, shade(color, 0.15));
+      g.fillStyle = grad;
+      roundRect(g, nx, top, nw, h, 5);
+      g.fill();
+      g.strokeStyle = "rgba(40,12,36,0.9)";
+      g.lineWidth = 1.5;
+      g.stroke();
+      // 네 갈래 별
+      const cx = x + laneW / 2;
+      const r = Math.min(h * 0.55, 8);
+      g.fillStyle = "#FFFFFF";
+      g.beginPath();
+      g.moveTo(cx, y - r);
+      g.quadraticCurveTo(cx, y, cx + r * 1.6, y);
+      g.quadraticCurveTo(cx, y, cx, y + r);
+      g.quadraticCurveTo(cx, y, cx - r * 1.6, y);
+      g.quadraticCurveTo(cx, y, cx, y - r);
+      g.fill();
+      break;
+    }
     case "pixel": {
       // 계단 모서리 + 위 밝은 줄·아래 어두운 줄 (8비트 게임 느낌)
       g.fillStyle = color;
@@ -352,6 +411,21 @@ export function drawHoldBody(
       roundRect(g, bx, yTail - 4, bw, h + 4, bw / 2);
       g.fill();
       break;
+    case "zena": {
+      // 금속 관 + 가운데 흰 마이크 줄
+      g.fillStyle = holdGrad(g, `z|${color}|${bx}|${bw}`, bx, bw, [
+        [0, shade(color, -0.45)],
+        [0.35, color],
+        [0.5, "#FFF7DA"],
+        [0.65, color],
+        [1, shade(color, -0.45)],
+      ]);
+      g.fillRect(bx, yTail, bw, h);
+      g.fillStyle = "rgba(40,12,36,0.55)";
+      g.fillRect(bx, yTail, 1.5, h);
+      g.fillRect(bx + bw - 1.5, yTail, 1.5, h);
+      break;
+    }
     case "pixel":
       g.fillRect(bx, yTail, bw, h);
       // 가로 줄무늬

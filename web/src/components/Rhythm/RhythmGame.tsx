@@ -62,6 +62,8 @@ import { beginRun } from "@/lib/api/rankRun";
 import { getBpTop, rhythmBoard, type BpRanking } from "@/firestore/rhythmRankings";
 import RankList from "@/components/RankList";
 import { bpChartLabel } from "./RankingBoard";
+import RhythmShop from "./RhythmShop";
+import { canWear, useRhythmItems } from "@/lib/rhythm/myItems";
 
 const SETTINGS_KEY = "rhythm_settings";
 const BGM_MUTE_KEY = "rhythm_bgm_mute";
@@ -215,7 +217,11 @@ export default function RhythmGame() {
     };
   }, [bpRefresh]);
   // 분석 모드(관리자만): 채보를 올퍼펙으로 자동 연주해서 곡과 맞는지 감상. 기록·랭킹에 안 올림
-  const { admin } = useAuth();
+  const { admin, profile } = useAuth();
+  // 상점에서 산 테마 스킨 — 산 것만 착용 (설정에 남아 있어도 안 샀으면 메탈로)
+  const ownedItems = useRhythmItems(profile?.nick ?? "");
+  const wornSkin = canWear(settings.skin, ownedItems) ? settings.skin : "metal";
+  const [shopOpen, setShopOpen] = useState(false);
   const [analyze, setAnalyze] = useState(false);
   const autoplay = admin && analyze;
   /** 자동 싱크(사용자에겐 안 보임): 기기·입력 방식별 프로필로 저장. 플레이 시작 때 불러오고 판이 끝나면 저장 */
@@ -1195,12 +1201,13 @@ export default function RhythmGame() {
               onStart={() => setScreen("select")}
               onSettings={() => setSettingsOpen(true)}
               onRanking={() => setRankOpen(true)}
+              onShop={() => setShopOpen(true)}
               onOnline={openOnline}
               bgmMute={bgmMute}
               onToggleBgm={toggleBgm}
               fs={fs}
               onToggleFs={toggleFs}
-              blocked={settingsOpen}
+              blocked={settingsOpen || shopOpen}
             />
           )}
           {screen === "select" && (
@@ -1230,9 +1237,10 @@ export default function RhythmGame() {
                 } else setScreen("title");
               }}
               onSettings={() => setSettingsOpen(true)}
+              onShop={() => setShopOpen(true)}
               bgmMute={bgmMute}
               onToggleBgm={toggleBgm}
-              blocked={settingsOpen}
+              blocked={settingsOpen || shopOpen}
               fs={fs}
               onToggleFs={toggleFs}
               analyze={admin && !pickMode ? analyze : undefined}
@@ -1258,7 +1266,7 @@ export default function RhythmGame() {
               musicVolume={settings.music}
               onSettings={onLiveSettings}
               hitSound={settings.hitSound}
-              skin={settings.skin}
+              skin={wornSkin}
               field={settings.field}
               fs={fs}
               onToggleFs={toggleFs}
@@ -1333,12 +1341,27 @@ export default function RhythmGame() {
               starting={loading}
             />
           )}
+          {shopOpen && (
+            <RhythmShop
+              wearing={wornSkin}
+              onWear={(k) => setSettings((st) => ({ ...st, skin: k }))}
+              onClose={() => {
+                setShopOpen(false);
+                sfx("ui-back", 0.7);
+              }}
+            />
+          )}
           {settingsOpen && (
             <SettingsModal
               settings={settings}
               setSettings={setSettings}
               color={song?.color ?? "#A78BFA"}
               onClose={() => setSettingsOpen(false)}
+              owned={ownedItems}
+              onShop={() => {
+                setSettingsOpen(false);
+                setShopOpen(true);
+              }}
               onResetAuto={() => {
                 clearAutoSync();
                 migratedAuto.current = null;

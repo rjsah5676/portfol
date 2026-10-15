@@ -20,6 +20,7 @@ import {
   drawHoldBody,
   laneColors,
   makeHitSound,
+  SKIN_THEME,
   hitSoundBuffer,
   type HitSound,
   type Skin,
@@ -289,9 +290,11 @@ export default function Stage({
   // 데스크탑(마우스)·가로 화면에서만 — 캔버스가 투명해져 합성 부담이 조금 늘어서 폰은 무대 그림 그대로. 뮤비는 프레임이 떨어지면 자동으로 끔
   // 내 음악인데 파일에 재킷이 없으면(기본 그림) 무대 그림 그대로
   const hasCover = !song.custom || (!!song.cover && song.cover !== CUSTOM_COVER);
+  // 테마 스킨(SKIN_THEME)은 재킷 대신 스킨의 무대 그림 (뮤비가 있는 곡은 뮤비 그대로)
+  const theme = SKIN_THEME[skin];
   const domBg =
     bg === "cover" &&
-    (hasCover || !!song.video) &&
+    (theme ? !!song.video : hasCover || !!song.video) &&
     !portrait &&
     typeof window !== "undefined" &&
     window.matchMedia("(pointer: fine)").matches;
@@ -450,11 +453,51 @@ export default function Stage({
       buildGlow();
     };
     const bgImg = loadImg(
-      // 곡 색이 따뜻하면 분홍 무대, 아니면 파란 무대
-      warm(song.color) ? "/rhythm/play-pink.webp" : "/rhythm/play-blue.webp",
+      // 테마 스킨은 그 무대, 아니면 곡 색이 따뜻하면 분홍 무대 · 아니면 파란 무대
+      theme?.stage ?? (warm(song.color) ? "/rhythm/play-pink.webp" : "/rhythm/play-blue.webp"),
       () => buildStatic()
     );
-    const gearImg = loadImg("/rhythm/gear.webp", () => buildGear());
+    const gearImg = loadImg(theme?.gear ?? "/rhythm/gear.webp", () => buildGear());
+    // 테마 스킨의 무대 위 도트 캐릭터: 정보판 반대쪽이 아닌 바깥 아래 구석에 서서 박자마다 노래(sing 두 장 번갈아),
+    // 50콤보 링이 뜨면 잠깐 환호(cheer). 그림 한 장 찍기라 가벼움. 세로 화면 · 온라인 미니 화면이 있으면 안 나옴
+    const idolDef = theme?.idol;
+    let idol: { img: HTMLImageElement; frames: number[][] } | null = null;
+    if (idolDef && !portrait && !(online && side)) {
+      const img = loadImg(idolDef.sheet, () => {});
+      void fetch(idolDef.meta)
+        .then((r) => r.json())
+        .then((m: { frames: number[][] }) => {
+          if (Array.isArray(m.frames)) idol = { img, frames: m.frames };
+        })
+        .catch(() => {});
+    }
+    /** 캐릭터 발 위치(x · y) · 레인 쪽을 보게 좌우 뒤집을지 */
+    const idolAt =
+      side === "left" ? { x: 70, y: LH - 4, flip: false } : { x: LW - 70, y: LH - 4, flip: true };
+    const drawIdol = (t: number) => {
+      if (!idol || !idolDef || !ready(idol.img)) return;
+      const bt = t - (song.beatOffset ?? 0);
+      const beat = Math.floor(Math.max(0, bt) / beatSec);
+      const ph = bt > 0 ? (bt % beatSec) / beatSec : 1;
+      const cheerAge = t - ringAt;
+      const list = cheerAge >= 0 && cheerAge < 0.9 ? idolDef.cheer : idolDef.sing;
+      const fi =
+        list === idolDef.cheer
+          ? list[Math.min(list.length - 1, Math.floor(cheerAge * 6))]
+          : list[beat % list.length];
+      const f = idol.frames[fi];
+      if (!f) return;
+      const [sx, sy, sw, sh, ax, ay] = f;
+      const sc = idolDef.scale;
+      // 박자에 맞춰 살짝 눌렸다 펴짐
+      const squash = t > 0 ? 0.035 * Math.exp(-ph * 7) : 0;
+      g.save();
+      g.imageSmoothingEnabled = false;
+      g.translate(idolAt.x, idolAt.y);
+      g.scale((idolAt.flip ? -1 : 1) * sc * (1 + squash), sc * (1 - squash));
+      g.drawImage(idol.img, sx, sy, sw, sh, -ax, -ay, sw, sh);
+      g.restore();
+    };
     const coverImg = loadImg(coverOf(song), () => buildStatic());
     const hitImg = loadImg("/rhythm/hit.webp", () => {});
     const ringImg = loadImg("/rhythm/ring.webp", () => {});
@@ -1365,6 +1408,7 @@ export default function Stage({
       const pulse = t > 0 ? Math.exp(-barPh * 5) : 0;
       shownScore += (engine.score - shownScore) * 0.18;
       drawBackdrop(t, 0);
+      if (idol) drawIdol(t);
       // 죽고 나서 보는 중이면 미니 화면은 지금 곡 시각으로 (내 레인만 멈춤)
       if (minis) drawMinis(watchingNow ? now() - judgeSec() : t);
       else drawBoard();

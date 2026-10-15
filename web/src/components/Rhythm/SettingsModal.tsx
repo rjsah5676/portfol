@@ -1,5 +1,6 @@
 "use client";
 
+import { canWear } from "@/lib/rhythm/myItems";
 import {
   useEffect,
   useRef,
@@ -131,11 +132,16 @@ export default function SettingsModal({
   color,
   onClose,
   onResetAuto,
+  owned = [],
+  onShop,
 }: {
   settings: Settings;
   setSettings: Dispatch<SetStateAction<Settings>>;
   color: string;
   onClose: () => void;
+  /** 상점에서 산 물건 (테마 스킨 ref) — 안 산 스킨은 자물쇠, 누르면 상점으로 */
+  owned?: string[];
+  onShop?: () => void;
   /** 자동 싱크(치는 동안 쌓인 값)를 지움 */
   onResetAuto?: () => void;
 }) {
@@ -295,25 +301,41 @@ export default function SettingsModal({
                   ))}
                 </div>
               </Row>
-              <Row label="노트 스킨">
-                <div className="grid grid-cols-5 gap-[0.7cqw]">
-                  {SKINS.map((k) => (
-                    <button
-                      key={k.key}
-                      type="button"
-                      onClick={() => set({ skin: k.key })}
-                      className={`cursor-pointer overflow-hidden rounded-[0.6cqw] border transition-colors ${
-                        settings.skin === k.key
-                          ? "border-[#A78BFA] bg-[#A78BFA]/15"
-                          : "border-white/10 hover:border-white/30"
-                      }`}
-                    >
-                      <SkinPreview skin={k.key} color={color} size={settings.noteSize} />
-                      <div className="pb-[0.3cqw] font-mono text-[0.95cqw] text-white/65">
-                        {k.label}
-                      </div>
-                    </button>
-                  ))}
+              <Row
+                label="노트 스킨"
+                hint={
+                  SKINS.some((k) => k.shop)
+                    ? "🔒 테마 스킨은 상점에서 — 레인 틀 · 무대까지 바뀌어요"
+                    : undefined
+                }
+              >
+                <div className="grid grid-cols-6 gap-[0.7cqw]">
+                  {SKINS.map((k) => {
+                    const locked = !!k.shop && !owned.includes(k.shop);
+                    return (
+                      <button
+                        key={k.key}
+                        type="button"
+                        onClick={() => (locked ? onShop?.() : set({ skin: k.key }))}
+                        title={locked ? "상점에서 사면 쓸 수 있어요" : undefined}
+                        className={`relative cursor-pointer overflow-hidden rounded-[0.6cqw] border transition-colors ${
+                          settings.skin === k.key && !locked
+                            ? "border-[#A78BFA] bg-[#A78BFA]/15"
+                            : k.shop
+                              ? "border-[#F5C842]/40 hover:border-[#F5C842]"
+                              : "border-white/10 hover:border-white/30"
+                        }`}
+                      >
+                        <SkinPreview skin={k.key} color={color} size={settings.noteSize} />
+                        <div
+                          className={`truncate px-[0.3cqw] pb-[0.3cqw] font-mono text-[0.95cqw] ${k.shop ? "text-[#FDE68A]" : "text-white/65"}`}
+                        >
+                          {locked ? "🔒 " : ""}
+                          {k.label}
+                        </div>
+                      </button>
+                    );
+                  })}
                 </div>
               </Row>
               <Row label="노트 두께">
@@ -507,7 +529,7 @@ export default function SettingsModal({
             sfx("ui-back", 0.7);
           }}
           speed={settings.speed}
-          skin={settings.skin}
+          skin={canWear(settings.skin, owned) ? settings.skin : "metal"}
         />
       )}
     </div>

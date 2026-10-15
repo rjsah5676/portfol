@@ -13,6 +13,7 @@ import { h, userOf } from "./util";
  *   GET  /api/points/daily/:game             그 게임 일일 미션 (오늘 한 만큼 · 받았는지). 로그인 안 했으면 숫자 0
  *   POST /api/points/daily/:game/claim       { id? } 일일 미션 보상 받기 (id 가 없으면 받을 수 있는 것 전부)
  *   POST /api/points/buy                     { item } 상품 사기 (포커 상품은 포커 상점에서도 같은 것)
+ *   GET  /api/points/inventory/:game         그 게임에서 산 물건 ref 목록 (inv.<게임>). 로그인 안 했으면 빈 목록
  * 출석 포인트는 GET /api/me (사이트에 들어올 때) 에서 하루 한 번 들어감.
  */
 export function pointsRouter({ auth, points }: Deps): Router {
@@ -83,6 +84,15 @@ export function pointsRouter({ auth, points }: Deps): Router {
       const user = await member(req);
       const { item } = z.object({ item: z.string().max(80) }).parse(req.body);
       return { points: await points.buy(user.uid, item) };
+    })
+  );
+
+  r.get(
+    "/inventory/:game",
+    h(async (req) => {
+      const g = game.parse(req.params.game);
+      const user = await userOf(auth, req);
+      return { list: user && !user.anonymous ? await points.inventory(user.uid, g) : [] };
     })
   );
 

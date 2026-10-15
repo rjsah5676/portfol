@@ -15,6 +15,7 @@ export default function TitleScreen({
   onStart,
   onSettings,
   onRanking,
+  onShop,
   onOnline,
   bgmMute,
   onToggleBgm,
@@ -28,6 +29,8 @@ export default function TitleScreen({
   onSettings: () => void;
   /** 회원 BP 랭킹 (게임 머리말의 랭킹 창을 엶) */
   onRanking: () => void;
+  /** 상점 (테마 스킨) */
+  onShop: () => void;
   onOnline: () => void;
   /** 메뉴 배경음 꺼짐 — B 키는 부모가 받음 */
   bgmMute: boolean;
@@ -45,6 +48,7 @@ export default function TitleScreen({
     { label: "ONLINE", sub: "온라인 모드", run: onOnline },
     { label: "SETTINGS", sub: "속도 · 싱크 · 레인 위치", run: onSettings },
     { label: "RANKING", sub: "BP 랭킹 — 곡별 최고 BP 상위 20곡 합", run: onRanking },
+    { label: "SHOP", sub: "상점 — 테마 스킨", run: onShop },
     { label: "HOW TO PLAY", sub: "게임 가이드", run: () => setGuide(true) },
     { label: fs ? "WINDOW" : "FULLSCREEN", sub: fs ? "창모드로" : "전체화면으로", run: onToggleFs },
   ];

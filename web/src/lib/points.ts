@@ -187,6 +187,15 @@ export const SHOP: ShopItem[] = [
     name: "시베리아 이반",
     price: 15_000,
   },
+  // BEAT DASH 테마 스킨 (lib/rhythm/fx.ts SKINS · SKIN_THEME) — 산 것은 inv.rhythm, 착용은 설정의 노트 스킨
+  {
+    id: "rhythm.skin.zena",
+    game: "rhythm",
+    kind: "skin",
+    ref: "zena",
+    name: "아이돌 제나 — SONIC STAGE",
+    price: 15_000,
+  },
 ];
 export const shopItem = (id: unknown) => SHOP.find((s) => s.id === id);
 export const shopOf = (game: PointGame) => SHOP.filter((s) => s.game === game);

@@ -46,6 +46,7 @@ export default function SongSelect({
   err,
   onBack,
   onSettings,
+  onShop,
   bgmMute,
   onToggleBgm,
   blocked,
@@ -76,6 +77,8 @@ export default function SongSelect({
   err: string;
   onBack: () => void;
   onSettings: () => void;
+  /** 상점 (테마 스킨) */
+  onShop: () => void;
   /** 메뉴 배경음(미리 듣기 포함) 꺼짐 — B 키는 부모가 받음 */
   bgmMute: boolean;
   onToggleBgm: () => void;
@@ -282,6 +285,7 @@ export default function SongSelect({
             />
             <K>B</K>
           </TopBtn>
+          <TopBtn onClick={onShop}>🛒 상점</TopBtn>
           <TopBtn onClick={onSettings}>
             ⚙ 설정 <K>S</K>
           </TopBtn>

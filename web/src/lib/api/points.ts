@@ -35,6 +35,10 @@ export const buyItem = (item: string) =>
     body: { item },
   });
 
+/** 그 게임에서 산 물건 ref 목록 (비회원은 빈 목록) */
+export const getInventory = (game: AchGame) =>
+  api<{ list: string[] }>(`/api/points/inventory/${game}`, { auth: true }).then((r) => r.list);
+
 export const getDaily = (game: AchGame) =>
   api<{ list: DailyState[]; points: number | null }>(
     `/api/points/daily/${game}`,
