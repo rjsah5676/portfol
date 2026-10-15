@@ -124,5 +124,7 @@ export const MAPS: MapDef[] = [
     respawn: [300, 576, 850],
     bg: "/fight/bg/pier.webp",
     bgPlats: true,
+    // 「Sunny Pier Showdown」 (tunee, 끝 무음 1.3초 자름, 음량 다른 맵 곡에 맞춤)
+    bgm: "/fight/bgm-pier.mp3",
   },
 ];
