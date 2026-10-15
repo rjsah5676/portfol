@@ -219,7 +219,9 @@ export type Ev =
   | { t: "bankrupt"; p: number }
   | { t: "loan"; p: number; amt: number; debt: number }
   | { t: "repay"; p: number; amt: number; left: number }
-  | { t: "over"; winner: number; how: WinHow; detail?: number };
+  | { t: "over"; winner: number; how: WinHow; detail?: number }
+  /** 못 하고 넘어감 — 이유 안내 (need = 모자란 비용) */
+  | { t: "nope"; p: number; why: string; tile?: number; need?: number };
 
 export interface Game {
   map: MapId;
@@ -945,7 +947,10 @@ function land(g: Game, pi: number): void {
       return endTurn(g);
     case "fest": {
       const mine = ownedCities(g, pi);
-      if (!mine.length) return endTurn(g);
+      if (!mine.length) {
+        emit(g, { t: "nope", p: pi, why: "축제를 열 내 땅이 없어요" });
+        return endTurn(g);
+      }
       g.prompt = { k: "fest", p: pi, tiles: mine };
       return;
     }
@@ -964,7 +969,10 @@ function land(g: Game, pi: number): void {
     case "start": {
       // 출발 포털에 딱 서면: 내 땅 하나 골라 더 짓기
       const opts = startBuildable(g, pi);
-      if (!opts.length) return endTurn(g);
+      if (!opts.length) {
+        emit(g, { t: "nope", p: pi, why: ownedCities(g, pi).length ? "더 지을 수 있는 내 땅이 없어요" : "아직 가진 땅이 없어요" });
+        return endTurn(g);
+      }
       g.prompt = { k: "start", p: pi, tiles: opts };
       return;
     }
@@ -1024,7 +1032,10 @@ function offerBuy(g: Game, pi: number, tile: number, from: number): void {
   const p = g.players[pi];
   const d = mapOf(g).tiles[tile];
   const items = buyItems(g, tile, from);
-  if (!items.length) return endTurn(g);
+  if (!items.length) {
+    if (d.kind === "spot" && from >= 0) emit(g, { t: "nope", p: pi, why: "명소는 더 지을 수 없어요", tile });
+    return endTurn(g);
+  }
   const costs = items.map((k) => itemCost(g, pi, tile, k));
   // 무료 공사권: 이번에 고를 수 있는 첫 건물 하나 무료
   if (p.keep.free && d.kind === "city") {
@@ -1033,7 +1044,10 @@ function offerBuy(g: Game, pi: number, tile: number, from: number): void {
   }
   // 하나도 못 사면 넘어감 (빈 땅은 땅값부터)
   const need = from < 0 ? costs[0] : Math.min(...costs);
-  if (need > p.cash) return endTurn(g);
+  if (need > p.cash) {
+    emit(g, { t: "nope", p: pi, why: from < 0 ? "땅값이 모자라요" : items.includes(LANDMARK) ? "랜드마크 지을 돈이 모자라요" : "건물 지을 돈이 모자라요", tile, need });
+    return endTurn(g);
+  }
   g.prompt = { k: "buy", p: pi, tile, from, items, costs };
 }
 
@@ -1069,7 +1083,8 @@ function afterToll(g: Game, pi: number, tile: number): void {
       g.prompt = { k: "acq", p: pi, tile, cost };
       return;
     }
-  }
+    emit(g, { t: "nope", p: pi, why: "인수 비용이 모자라요", tile, need: cost });
+  } else if (d.kind === "city") emit(g, { t: "nope", p: pi, why: "랜드마크는 인수할 수 없어요", tile });
   return endTurn(g);
 }
 
@@ -1310,7 +1325,10 @@ function drawCard(g: Game, pi: number): void {
       return endTurn(g);
     case "festInvite": {
       const mine = ownedCities(g, pi);
-      if (!mine.length) return endTurn(g);
+      if (!mine.length) {
+        emit(g, { t: "nope", p: pi, why: "축제를 열 내 땅이 없어요" });
+        return endTurn(g);
+      }
       g.prompt = { k: "fest", p: pi, tiles: mine };
       return;
     }

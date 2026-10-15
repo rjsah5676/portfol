@@ -146,6 +146,9 @@ export function animMs(evs: Ev[]): number {
       case "loan":
         t += 800;
         break;
+      case "nope":
+        t += 600;
+        break;
       case "salary":
       case "sell":
       case "adjust":
