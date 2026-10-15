@@ -357,7 +357,11 @@ export function SoundButton({ up = false, side = false, glass = false }: { up?: 
   return (
     <div className="relative">
       <Btn className={glass ? "h-[34px] w-[38px] !rounded-xl !border !border-white/15 !bg-white/10 !shadow-none hover:!bg-white/20 mbx-iconwhite" : "h-[34px] w-[38px]"} onClick={() => setOpen((o) => !o)} title="설정 (소리 · 커서)">
-        <Icon n="gear" size={15} />
+        {/* 매끈한 톱니바퀴 */}
+        <svg viewBox="0 0 24 24" width={19} height={19} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+          <path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z" />
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+        </svg>
       </Btn>
       {open && (
         <div className={`mbx-modal absolute z-50 w-[230px] rounded-2xl p-3 text-[12px] text-white ${side ? "top-0 left-[48px]" : up ? "bottom-[44px] left-0" : "top-[44px] right-0"}`} style={{ background: "linear-gradient(180deg, rgba(48,40,122,0.98), rgba(24,19,68,0.98))", boxShadow: "0 0 0 1.5px rgba(255,255,255,0.2), 0 0 0 4px rgba(255,210,90,0.22), 0 18px 44px rgba(0,0,0,0.5)" }} onPointerLeave={() => setOpen(false)}>
