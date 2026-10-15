@@ -735,11 +735,11 @@ html[data-mbcur] .mb * {
   100% { transform: translateY(-20px); opacity: 0; }
 }
 .mb .mbx-ready {
-  animation: mbx-ready 1s ease-in-out infinite;
+  animation: mbx-ready 1.6s ease-in-out infinite;
 }
 @keyframes mbx-ready {
   0%, 100% { box-shadow: 0 0 0 0 rgba(255, 210, 58, 0); }
-  50% { box-shadow: 0 0 14px 3px rgba(255, 210, 58, 0.75); }
+  50% { box-shadow: 0 0 12px 2px rgba(255, 210, 58, 0.5); }
 }
 /* 상점 패스 카드: 금테 + 빛이 스쳐 지나감 */
 .mb .mbx-pass {
@@ -981,9 +981,9 @@ html[data-mbcur] .mb :is(button, a, label, select, summary, [role="button"], [ta
   animation: mbx-spin 40s linear infinite;
 }
 /* 스킬 준비됨 꼬리표: 반짝 */
-.mb .mbx-ready { animation: mbx-ready 0.9s ease-in-out infinite; }
-@keyframes mbx-ready {
-  0%, 100% { background: #2a1250; color: #ffe08a; }
-  50% { background: #ffe08a; color: #2a1250; }
+.mb .mbx-skilltag { background: #2a1250; color: #ffe08a; animation: mbx-skilltag 1.4s ease-in-out infinite; }
+@keyframes mbx-skilltag {
+  0%, 100% { filter: brightness(1); }
+  50% { filter: brightness(1.35); }
 }
-@media (prefers-reduced-motion: reduce) { .mb .mbx-ready { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .mb .mbx-skilltag { animation: none; } }

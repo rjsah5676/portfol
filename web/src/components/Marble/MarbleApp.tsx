@@ -11,6 +11,7 @@ import { playBgm, sfx, stopBgm } from "./audio";
 import Bag, { Shop } from "./Bag";
 import Gacha from "./Gacha";
 import GameView from "./GameView";
+import Ladder from "./Ladder";
 import { applyCursor } from "./cursor";
 import { GuideDot, useMapGuide } from "./MapGuide";
 import { Cur, Stars } from "./pixel";
@@ -530,7 +531,12 @@ function RoomScreen({ id, me, onLeave, onGone }: { id: string; me: string; onLea
   }, [id]);
   if (!room) return <div className="mb-sky absolute inset-0 flex items-center justify-center text-[14px]">방에 들어가는 중…</div>;
   if ((room.phase === "play" || room.phase === "end") && room.game) return <GameView key={room.game.seed} room={room} me={me} onLeave={onLeave} />;
-  return <WaitRoom room={room} me={me} onLeave={onLeave} />;
+  return (
+    <>
+      <WaitRoom room={room} me={me} onLeave={onLeave} />
+      {room.phase === "play" && room.ladder && <Ladder room={room} me={me} />}
+    </>
+  );
 }
 
 export { LoadoutLine };

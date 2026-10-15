@@ -11,7 +11,8 @@ import { CHARS, ITEMS, charOn, type Grade, type Loadout } from "../../../../web/
 import { ActError, act, newGame, standings, timeoutAction, type Action, type Ev, type Game } from "../../../../web/src/lib/marble/engine";
 import { botAction, type BotStyle } from "../../../../web/src/lib/marble/bot";
 import { MAP_IDS, type MapId } from "../../../../web/src/lib/marble/maps";
-import type { LobbyRoom, RoomWire, SeatWire } from "../../../../web/src/lib/marble/wire";
+import type { LadderWire, LobbyRoom, RoomWire, SeatWire } from "../../../../web/src/lib/marble/wire";
+import { LADDER_ROWS, makeRungs, trace } from "../../../../web/src/lib/marble/ladder";
 
 /*
  * DICE TOWN 온라인 — 방(서버 메모리) · AI 입장 · 판 진행(서버가 엔진을 돌림) · 보상.
@@ -26,6 +27,9 @@ import type { LobbyRoom, RoomWire, SeatWire } from "../../../../web/src/lib/marb
  */
 
 /** 프롬프트별 사람 제한 시간 */
+/** 사다리: 고르는 시간 · 결과 보여 주는 시간 */
+const LADDER_PICK_MS = 10_000;
+const LADDER_SHOW_MS = 4_200;
 const LIMIT: Record<string, number> = { turn: 15_000, post: 10_000, fork: 8_000, buy: 12_000, acq: 10_000, fest: 10_000 };
 /** 제한 시간을 연달아 넘기면 자동 진행 */
 const AUTO_AFTER_TIMEOUTS = 2;
@@ -87,6 +91,8 @@ interface Room {
   chat: { name: string; text: string; at: number; bot?: boolean }[];
   /** 방장이 내보낸 사람 (이 방엔 다시 못 들어옴) */
   kicked: Set<string>;
+  /** 시작 전 사다리 (phase 는 play, game 은 아직 없음) */
+  ladder: (LadderWire & { seats: number[]; botAt: number[] }) | null;
 }
 
 const hashPw = (id: string, pw: string) => createHash("sha256").update(`${id}:${pw}`).digest("hex");
@@ -229,6 +235,7 @@ export function registerMarble({ gateway, db, points, users }: Deps, opts: Marbl
   };
   const wire = (r: Room): RoomWire => ({
     kicked: [...r.kicked],
+    ladder: r.ladder ? { cols: r.ladder.cols, rows: r.ladder.rows, rungs: r.ladder.rungs, picks: r.ladder.picks, deadline: r.ladder.deadline, revealUntil: r.ladder.revealUntil } : null,
     id: r.id,
     name: r.name,
     owner: r.owner,
@@ -314,6 +321,7 @@ export function registerMarble({ gateway, db, points, users }: Deps, opts: Marbl
       botRoomUntil: 0,
       chat: [],
       kicked: new Set(),
+      ladder: null,
     };
     rooms.set(id, r);
     lobbyChanged();
@@ -405,11 +413,71 @@ export function registerMarble({ gateway, db, points, users }: Deps, opts: Marbl
     }
   }
 
-  function startGame(r: Room) {
+  /** 모두 준비 → 사다리부터 (차례 정하기). 판은 사다리가 끝나야 만들어짐 */
+  function beginLadder(r: Room) {
     r.startAt = 0;
-    r.order = r.seats.map((s, i) => (s ? i : -1)).filter((i) => i >= 0);
+    const seats = r.seats.map((s, i) => (s ? i : -1)).filter((i) => i >= 0);
+    const n = seats.length;
+    const now = Date.now();
+    r.phase = "play";
+    r.game = null;
+    r.result = null;
+    r.ladder = {
+      cols: n,
+      rows: LADDER_ROWS,
+      rungs: makeRungs(n, rnd),
+      picks: Array.from({ length: n }, () => -1),
+      deadline: now + ms(LADDER_PICK_MS),
+      revealUntil: 0,
+      seats,
+      // AI · 자동 진행은 조금 뜸 들이다 고름
+      botAt: seats.map(() => now + ms(900 + rnd(2_600))),
+    };
+    push(r);
+    lobbyChanged();
+  }
+
+  function ladderPick(r: Room, seat: number, col: number) {
+    const L = r.ladder!;
+    if (L.revealUntil || L.picks.includes(seat) || L.picks[col] !== -1) return;
+    L.picks[col] = seat;
+    if (L.picks.every((x) => x >= 0)) {
+      L.revealUntil = Date.now() + ms(LADDER_SHOW_MS);
+      L.deadline = 0;
+    }
+    push(r);
+  }
+
+  function ladderTick(r: Room, now: number) {
+    const L = r.ladder!;
+    if (L.revealUntil) {
+      if (now < L.revealUntil) return;
+      // 아래 칸 번호 = 차례
+      const order: number[] = [];
+      L.picks.forEach((seat, col) => (order[trace(L.cols, L.rows, L.rungs, col).end] = seat));
+      r.ladder = null;
+      startGame(r, order);
+      return;
+    }
+    const pickFor = (seat: number) => {
+      const free = L.picks.map((x, c) => (x < 0 ? c : -1)).filter((c) => c >= 0);
+      if (free.length) ladderPick(r, seat, free[rnd(free.length)]);
+    };
+    L.seats.forEach((si, k) => {
+      const s = r.seats[si];
+      if (L.picks.includes(si)) return;
+      if (!s || s.bot || s.auto || s.left) {
+        if (now >= L.botAt[k]) pickFor(si);
+      } else if (now >= L.deadline) pickFor(si);
+    });
+  }
+
+  function startGame(r: Room, order?: number[]) {
+    r.startAt = 0;
+    r.order = order?.length ? order : r.seats.map((s, i) => (s ? i : -1)).filter((i) => i >= 0);
     const seed = randomInt(0, 2 ** 31);
     r.game = newGame({
+      ...(order?.length && { first: 0 }),
       map: r.map,
       seed,
       players: r.order.map((si) => {
@@ -501,6 +569,7 @@ export function registerMarble({ gateway, db, points, users }: Deps, opts: Marbl
     if (!rooms.has(r.id) || r.phase !== "end") return;
     r.phase = "wait";
     r.game = null;
+    r.ladder = null;
     r.order = [];
     r.ev = [];
     // 나간 사람 · 자동 진행 자리 정리, AI 는 반쯤 남음
@@ -525,7 +594,7 @@ export function registerMarble({ gateway, db, points, users }: Deps, opts: Marbl
       try {
         if (r.phase === "wait") {
           if (r.startAt && now >= r.startAt) {
-            startGame(r);
+            beginLadder(r);
             continue;
           }
           if (r.botNext && now >= r.botNext) {
@@ -542,6 +611,10 @@ export function registerMarble({ gateway, db, points, users }: Deps, opts: Marbl
               if (now >= r.botRoomUntil && !gateway.subscribers(roomKey(r.id)).length) closeRoom(r);
             } else if (now - r.emptySince >= EMPTY_TTL_MS) closeRoom(r);
           }
+          continue;
+        }
+        if (r.phase === "play" && r.ladder) {
+          ladderTick(r, now);
           continue;
         }
         if (r.phase !== "play" || !r.game || r.game.over || !r.game.prompt) continue;
@@ -772,6 +845,7 @@ export function registerMarble({ gateway, db, points, users }: Deps, opts: Marbl
             target: z.number().int().optional(),
             d: z.literal(1).optional(),
             lv: z.number().int().optional(),
+            pick: z.array(z.number().int().min(0).max(4)).max(5).optional(),
             yes: z.boolean().optional(),
             tile: z.number().int().optional(),
             power: z.number().min(0).max(1).optional(),
@@ -796,7 +870,20 @@ export function registerMarble({ gateway, db, points, users }: Deps, opts: Marbl
     return { seq: r.seq };
   });
 
-  /** 자동 진행 끄기 · 켜기 (내가 다시 할게요) */
+  /** 사다리 위 칸 고르기 */
+  gateway.rpc("marble.ladder", (ctx, raw) => {
+    const { id, col } = z.object({ id: z.string(), col: z.number().int().min(0).max(7) }).parse(raw);
+    const r = roomOf(id);
+    const L = r.ladder;
+    if (r.phase !== "play" || !L || L.revealUntil) throw bad("지금은 고를 수 없어요.");
+    const i = seatIdx(r, ctx.uid);
+    if (i < 0 || !L.seats.includes(i)) throw bad();
+    if (col >= L.cols || L.picks[col] !== -1) throw bad("이미 누가 골랐어요.");
+    ladderPick(r, i, col);
+    return null;
+  });
+
+    /** 자동 진행 끄기 · 켜기 (내가 다시 할게요) */
   gateway.rpc("marble.auto", (ctx, raw) => {
     const { id, on } = z.object({ id: z.string(), on: z.boolean() }).parse(raw);
     const r = roomOf(id);

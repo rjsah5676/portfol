@@ -285,16 +285,14 @@ export function botAction(g: Game, style: BotStyle = DEFAULT_STYLE): Action {
         const others = m.tiles.filter((x, i) => x.group === d.group && i !== pr.tile);
         completes = others.every((x) => g.tiles[m.tiles.indexOf(x)].owner === pi);
       }
-      let pick = -1;
-      for (let lv = pr.max; lv > pr.from; lv--) {
-        const c = pr.costs[lv - pr.from - 1];
-        const keep = lv === LANDMARK ? res * 0.6 : completes ? res * 0.5 : lv <= 0 ? res * 0.6 : res;
-        if (p.cash - c >= keep) {
-          pick = lv;
-          break;
-        }
+      // 앞에서부터 차례로 (땅 → 오두막 → 하우스 → 타워) 여유가 되는 데까지
+      for (let n = pr.items.length; n > 0; n--) {
+        const c = pr.costs.slice(0, n).reduce((a, b) => a + b, 0);
+        const top = pr.items[n - 1];
+        const keep = top === LANDMARK ? res * 0.6 : completes ? res * 0.5 : top <= 0 ? res * 0.6 : res;
+        if (p.cash - c >= keep) return { t: "buy", lv: top, pick: pr.items.slice(0, n) };
       }
-      return { t: "buy", lv: pick };
+      return { t: "buy", lv: -1 };
     }
     case "acq": {
       const d = m.tiles[pr.tile];

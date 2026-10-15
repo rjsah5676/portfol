@@ -129,7 +129,7 @@ describe("픽셀 마블 서버", () => {
     const sub = await c.sub("marble.room", { id });
     // 내 자리 자동 진행 (끝까지 AI 가 대신)
     await c.rpc("marble.auto", { id, on: true }).catch(() => {});
-    const start = await sub.wait((e) => e.t === "room" && e.d.phase === "play", 8000);
+    const start = await sub.wait((e) => e.t === "room" && e.d.phase === "play" && !!e.d.game, 15000);
     expect(start.d.seats.filter(Boolean)).toHaveLength(2);
     expect(start.d.game.rng).toBeUndefined();
     await c.rpc("marble.auto", { id, on: true });

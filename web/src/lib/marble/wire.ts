@@ -19,6 +19,20 @@ export interface SeatWire {
 
 export type GameWire = Omit<Game, "rng">;
 
+/** 시작 전 사다리 (차례 정하기) — 위 칸을 고르면 아래 칸 번호가 차례 */
+export interface LadderWire {
+  /** 줄 수 (= 사람 수) · 가로대 칸 수 */
+  cols: number;
+  rows: number;
+  /** 가로대 [줄, 왼쪽 세로줄] — 그 줄에서 왼쪽 세로줄과 오른쪽을 이음 */
+  rungs: [number, number][];
+  /** 위 칸 → 고른 자리 번호 (-1 = 아직) */
+  picks: number[];
+  /** 고르기 마감 · 결과 공개 끝 (0 = 아직 고르는 중) */
+  deadline: number;
+  revealUntil: number;
+}
+
 export interface ResultRow {
   seat: number;
   name: string;
@@ -62,6 +76,8 @@ export interface RoomWire {
   chat: ChatRow[];
   /** 강퇴된 uid */
   kicked?: string[];
+  /** 시작 전 사다리 (판이 만들어지기 전) */
+  ladder?: LadderWire | null;
   /** 보낸 시각 (서버) */
   now: number;
 }

@@ -129,7 +129,7 @@ export default function Gacha({ prof, onProf, onBack }: { prof: ProfileWire; onP
         <div className="ml-auto flex items-center gap-3 rounded-full bg-black/40 px-4 py-1.5 text-[13px] text-white backdrop-blur">
           <Cur k="star" n={prof.stars} />
           <Cur k="parts" n={prof.parts} />
-          <span title="10연차 티켓 (캐릭터 · 아이템)" className="inline-flex items-center">
+          <span title="10연차 티켓 (캐릭터 · 아이템)">
             <Cur k="ticket" n={`${prof.tickets.char} · ${prof.tickets.item}`} />
           </span>
         </div>
@@ -147,7 +147,7 @@ export default function Gacha({ prof, onProf, onBack }: { prof: ProfileWire; onP
             }}
             className={`relative h-[78px] overflow-hidden rounded-xl text-left transition ${tab === k ? "ring-[3px] ring-[#ffd23a]" : "opacity-70 ring-1 ring-white/20 hover:opacity-100"}`}
           >
-            <img src={k === "char" ? "/marble/art/banner-ur.webp" : "/marble/art/banner-item.webp"} alt="" className="absolute inset-0 h-full w-full object-cover" style={{ objectPosition: k === "char" ? "center" : "60% 40%" }} />
+            {k === "char" ? <img src="/marble/art/banner-ur.webp" alt="" className="absolute inset-0 h-full w-full object-cover" /> : <div className="absolute inset-0" style={{ background: "linear-gradient(135deg, #2f6fd6, #6f4fd6)" }} />}
             <div className="absolute inset-0 bg-gradient-to-t from-black/75 to-transparent" />
             <div className="absolute bottom-[6px] left-[8px]">
               <b className="block text-[14px] text-white">{k === "char" ? "마블 축제" : "장착 아이템"}</b>
@@ -311,12 +311,10 @@ function Reveal({ got, onClose }: { got: (CharPull | ItemPull)[]; onClose(): voi
 /** 카드 뒷면: 남색 카드 · 금테 · 주사위 문장. 테두리 빛으로 등급 힌트 (R 은빛 · SR 보라 · SSR 금빛 · UR 무지개가 돎) */
 function CardBack({ x, w, h, onClick }: { x: CharPull | ItemPull; w: number; h: number; onClick(): void }) {
   const g: Grade = x.k === "parts" ? "R" : x.grade;
-  // R 은빛 · SR 진한 보라(+보라 빛) · SSR 금빛 · UR 무지개 — 한눈에 구분되게
-  const rim = g === "UR" ? "" : g === "SSR" ? "#ffcf4a" : g === "SR" ? "linear-gradient(160deg, #d6a8ff, #8f3dff)" : "linear-gradient(160deg, #eef1f6, #aab3c4)";
-  const face = g === "SR" ? "radial-gradient(circle at 50% 40%, #5a2fa8, #22104f 75%)" : g === "SSR" ? "radial-gradient(circle at 50% 40%, #5a4320, #22183a 75%)" : "radial-gradient(circle at 50% 40%, #2c3048, #15172a 75%)";
+  const rim = g === "UR" ? "" : g === "SSR" ? "#ffcf4a" : g === "SR" ? "#b98bff" : "#9fb3d8";
   return (
-    <button type="button" onClick={onClick} className={`mbx-back group relative cursor-pointer rounded-[14px] p-[3px] transition hover:-translate-y-1 ${g === "UR" ? "mbx-back-ur" : ""} ${g === "SSR" ? "mbx-back-ssr" : ""} ${g === "SR" ? "mbx-back-sr" : ""}`} style={{ width: w, height: h, background: g === "UR" ? undefined : rim }}>
-      <div className="relative h-full w-full overflow-hidden rounded-[11px]" style={{ background: face }}>
+    <button type="button" onClick={onClick} className={`mbx-back group relative cursor-pointer rounded-[14px] p-[3px] transition hover:-translate-y-1 ${g === "UR" ? "mbx-back-ur" : ""} ${g === "SSR" ? "mbx-back-ssr" : ""}`} style={{ width: w, height: h, background: g === "UR" ? undefined : rim }}>
+      <div className="relative h-full w-full overflow-hidden rounded-[11px]" style={{ background: "radial-gradient(circle at 50% 40%, #2c2a7a, #141038 75%)" }}>
         {/* 마름모 무늬 */}
         <div className="absolute inset-0 opacity-[0.18]" style={{ background: "repeating-linear-gradient(45deg, #fff 0 1px, transparent 1px 14px), repeating-linear-gradient(-45deg, #fff 0 1px, transparent 1px 14px)" }} />
         {/* 안쪽 금테 */}

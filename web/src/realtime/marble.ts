@@ -39,6 +39,7 @@ export const marble = {
   opts: (id: string, o: { map?: MapId; max?: number; quick?: boolean; bots?: boolean; kick?: number; kickBot?: number; addBot?: boolean }) => rpc("marble.opts", { id, ...o }),
   act: (id: string, a: Action) => rpc<{ seq: number }>("marble.act", { id, a }),
   auto: (id: string, on: boolean) => rpc("marble.auto", { id, on }),
+  ladder: (id: string, col: number) => rpc("marble.ladder", { id, col }),
   chat: (id: string, text: string) => rpc("marble.chat", { id, text }),
   mine: () => rpc<{ id: string; name: string } | null>("marble.mine"),
 };

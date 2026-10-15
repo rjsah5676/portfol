@@ -63,6 +63,17 @@ export const LANDMARK = 4;
 export const investedOf = (price: number, lv: number) => Math.round(price * RULE.cost.slice(0, lv + 1).reduce((a, b) => a + b, 0));
 export const baseToll = (price: number, lv: number) => Math.round(investedOf(price, lv) * RULE.toll[lv]);
 
+/* 건물은 오두막 · 하우스 · 타워를 따로따로 (모두의마블처럼 골라 짓기) — b = 지은 건물 비트 (1 오두막 · 2 하우스 · 4 타워) */
+const popcount = (b: number) => (b & 1) + ((b >> 1) & 1) + ((b >> 2) & 1);
+/** 그 칸에 서 있는 건물 비트 (옛 저장본은 lv 로 채움) */
+export const bitsOf = (t: { lv: number; b?: number }) => (t.lv >= LANDMARK ? 7 : (t.b ?? (1 << Math.min(t.lv, 3)) - 1));
+/** 지은 건물 번호들 (1 오두막 · 2 하우스 · 3 타워) */
+export const builtOf = (t: { lv: number; b?: number }) => [1, 2, 3].filter((k) => (bitsOf(t) >> (k - 1)) & 1);
+/** 칸 상태 기준 투자액 · 통행료 */
+export const investedT = (price: number, t: { lv: number; b?: number }) =>
+  Math.round(price * (RULE.cost[0] + builtOf(t).reduce((a, k) => a + RULE.cost[k], 0) + (t.lv >= LANDMARK ? RULE.cost[LANDMARK] : 0)));
+export const baseTollT = (price: number, t: { lv: number; b?: number }) => Math.round(investedT(price, t) * RULE.toll[Math.min(t.lv, LANDMARK)]);
+
 /* ───────────── 마을 소식 (해피 타운) ───────────── */
 
 export type TownEventId = "rain" | "festa" | "boom" | "slump" | "build";
@@ -141,7 +152,10 @@ export interface PState {
 
 export interface TState {
   owner: number;
+  /** 건물 수 (0 땅만 · 1~3 · 4 랜드마크) */
   lv: number;
+  /** 지은 건물 비트 (1 오두막 · 2 하우스 · 4 타워) */
+  b?: number;
   /** 스킬 통행료 배수 · 남은 바퀴 */
   boost: number;
   boostLeft: number;
@@ -152,7 +166,8 @@ export type Prompt =
   | { k: "post"; p: number; dice: [number, number]; steps: number }
   | { k: "fork"; p: number; opts: number[]; steps: number }
   | { k: "rail"; p: number; opts: number[] }
-  | { k: "buy"; p: number; tile: number; from: number; max: number; costs: number[] }
+  /** items: 고를 수 있는 것 (0 땅 · 1 오두막 · 2 하우스 · 3 타워 · 4 랜드마크), costs: 그 하나씩 값 */
+  | { k: "buy"; p: number; tile: number; from: number; items: number[]; costs: number[] }
   | { k: "acq"; p: number; tile: number; cost: number }
   | { k: "fest"; p: number; tiles: number[] }
   /** 통행료가 가진 돈보다 많음: 대출할지 (안 하면 땅 팔기 → 파산) */
@@ -171,7 +186,7 @@ export type Action =
   | { t: "adjust"; d: 1 }
   | { t: "fork"; to: number }
   | { t: "rail"; to: number }
-  | { t: "buy"; lv: number } // -1 = 안 삼
+  | { t: "buy"; lv: number; pick?: number[] } // lv -1 = 안 삼 · pick = 고른 것들 (없으면 lv 단계까지)
   | { t: "acq"; yes: boolean }
   | { t: "fest"; tile: number }
   | { t: "start"; tile: number } // -1 = 안 지음
@@ -188,7 +203,7 @@ export type Ev =
   | { t: "move"; p: number; path: number[]; warp?: boolean; pull?: boolean; rail?: boolean }
   | { t: "salary"; p: number; amt: number; half?: boolean }
   | { t: "pay"; from: number; to: number; amt: number; why: string; tile?: number; shock?: boolean }
-  | { t: "buy"; p: number; tile: number; lv: number; cost: number }
+  | { t: "buy"; p: number; tile: number; lv: number; cost: number; b?: number; top?: number }
   | { t: "acq"; p: number; from: number; tile: number; cost: number }
   | { t: "block"; p: number; tile: number }
   | { t: "sell"; p: number; tile: number; got: number }
@@ -273,7 +288,7 @@ export function tollOf(g: Game, tile: number): number {
     v = d.price * RULE.spotToll * 2 ** Math.max(0, n - 1);
     if (g.town?.id === "rain") v *= 0.5;
   } else {
-    v = baseToll(d.price, t.lv);
+    v = baseTollT(d.price, t);
     if (d.group !== undefined && groupOwned(g, d.group) === t.owner) v *= RULE.monoMult;
     if (owner.fest === tile) v *= RULE.festMult;
     if (g.town?.id === "festa" && g.town.group === d.group) v *= 2;
@@ -337,7 +352,7 @@ export function acqCost(g: Game, pi: number, tile: number): number {
   const t = g.tiles[tile];
   const p = g.players[pi];
   const owner = g.players[t.owner];
-  let v = investedOf(d.price ?? 0, t.lv) * RULE.acqMult;
+  let v = investedT(d.price ?? 0, t) * RULE.acqMult;
   v *= 1 + owner.fx.defend;
   v *= 1 - p.fx.acq;
   if (p.sale) v *= 1 - p.sale;
@@ -354,7 +369,7 @@ export function buyoutCost(g: Game, pi: number, tile: number): number {
 export function assetsOf(g: Game, pi: number): number {
   const m = mapOf(g);
   let a = g.players[pi].cash - g.players[pi].debt;
-  for (let i = 0; i < m.tiles.length; i++) if (g.tiles[i].owner === pi) a += investedOf(m.tiles[i].price ?? 0, g.tiles[i].lv);
+  for (let i = 0; i < m.tiles.length; i++) if (g.tiles[i].owner === pi) a += investedT(m.tiles[i].price ?? 0, g.tiles[i]);
   return a;
 }
 
@@ -397,7 +412,7 @@ export function newGame(o: { map: MapId; seed: number; players: PlayerIn[]; roun
         stat: { paid: 0, got: 0, built: 0, lm: 0, acq: 0, skill: 0, mono: 0 },
       };
     }),
-    tiles: m.tiles.map(() => ({ owner: -1, lv: 0, boost: 1, boostLeft: 0 })),
+    tiles: m.tiles.map(() => ({ owner: -1, lv: 0, b: 0, boost: 1, boostLeft: 0 })),
     order: m.tiles.map((_, i) => i),
     cur: 0,
     round: 1,
@@ -583,13 +598,17 @@ export function act(g: Game, pi: number, a: Action): void {
     case "buy": {
       const b = pr as Extract<Prompt, { k: "buy" }>;
       if (a.t !== "buy") bad("지을지 골라 주세요");
-      const lv = (a as { lv: number }).lv;
+      const { lv, pick } = a as { lv: number; pick?: number[] };
+      let sel = pick ? [...new Set(pick)] : lv >= 0 ? b.items.filter((k) => k <= lv) : [];
+      if (lv < 0 && !pick) sel = [];
+      if (sel.some((k) => !b.items.includes(k))) bad("고를 수 없는 건물이에요");
+      // 빈 땅은 땅부터
+      if (sel.length && b.from < 0 && !sel.includes(0)) bad("땅부터 사야 해요");
+      const cost = sel.reduce((s2, k) => s2 + b.costs[b.items.indexOf(k)], 0);
+      if (cost > p.cash) bad("돈이 모자라요");
       g.prompt = null;
-      if (lv >= 0) {
-        if (lv <= b.from || lv > b.max) bad("고를 수 없는 단계예요");
-        const cost = b.costs[lv - b.from - 1];
-        if (cost > p.cash) bad("돈이 모자라요");
-        build(g, pi, b.tile, b.from, lv, cost);
+      if (sel.length) {
+        build(g, pi, b.tile, b.from, sel, cost);
         if (g.over) return;
       }
       return endTurn(g);
@@ -973,48 +992,68 @@ const ownedCities = (g: Game, pi: number) =>
 export function startBuildable(g: Game, pi: number): number[] {
   const p = g.players[pi];
   return ownedCities(g, pi).filter((i) => {
-    const lv = g.tiles[i].lv;
-    if (lv >= LANDMARK) return false;
-    const next = lv === 3 ? LANDMARK : lv + 1;
-    return buildCost(g, pi, i, lv, next) <= p.cash;
+    const items = buyItems(g, i, g.tiles[i].lv);
+    return items.length > 0 && Math.min(...items.map((k) => itemCost(g, pi, i, k))) <= p.cash;
   });
+}
+
+/** 그 칸에서 지금 고를 수 있는 것 (0 땅 · 1 오두막 · 2 하우스 · 3 타워 · 4 랜드마크) */
+function buyItems(g: Game, tile: number, from: number): number[] {
+  const d = mapOf(g).tiles[tile];
+  if (d.kind === "spot") return from < 0 ? [0] : [];
+  if (d.kind !== "city") return [];
+  if (from < 0) return [0, 1, 2, 3].filter((k) => k <= RULE.buyMaxLv);
+  if (from >= LANDMARK) return [];
+  if (from === 3) return [LANDMARK];
+  const has = bitsOf(g.tiles[tile]);
+  return [1, 2, 3].filter((k) => !((has >> (k - 1)) & 1));
+}
+
+/** 하나씩 값 (땅값은 할인 없음) */
+function itemCost(g: Game, pi: number, tile: number, k: number): number {
+  const d = mapOf(g).tiles[tile];
+  if (!d.price) return 0;
+  if (k === 0) return d.price;
+  let m = 1 - g.players[pi].fx.build;
+  if (g.town?.id === "build") m *= 0.7;
+  return Math.round(d.price * RULE.cost[k] * m);
 }
 
 /** 사기 / 짓기 프롬프트 (from = 지금 단계, -1 = 빈 땅) */
 function offerBuy(g: Game, pi: number, tile: number, from: number): void {
   const p = g.players[pi];
   const d = mapOf(g).tiles[tile];
-  let max: number;
-  if (d.kind === "spot") max = from < 0 ? 0 : -1;
-  else if (from < 0) max = RULE.buyMaxLv;
-  else if (from >= LANDMARK) max = -1;
-  else if (from === 3) max = LANDMARK;
-  else max = 3;
-  if (max <= from) return endTurn(g);
-  const costs: number[] = [];
-  const b0 = Math.max(from, 0);
-  // 무료 공사권: 이번에 짓는 첫 건물 단계 하나 무료
-  const free = p.keep.free && d.kind === "city" && b0 < LANDMARK ? buildCost(g, pi, tile, b0, b0 + 1) : 0;
-  for (let lv = from + 1; lv <= max; lv++) {
-    let c = buildCost(g, pi, tile, from, lv);
-    if (free && lv >= b0 + 1) c -= free;
-    costs.push(Math.max(0, c));
+  const items = buyItems(g, tile, from);
+  if (!items.length) return endTurn(g);
+  const costs = items.map((k) => itemCost(g, pi, tile, k));
+  // 무료 공사권: 이번에 고를 수 있는 첫 건물 하나 무료
+  if (p.keep.free && d.kind === "city") {
+    const j = items.findIndex((k) => k >= 1);
+    if (j >= 0) costs[j] = 0;
   }
-  // 하나도 못 사면 넘어감
-  if (costs[0] > p.cash) return endTurn(g);
-  g.prompt = { k: "buy", p: pi, tile, from, max, costs };
+  // 하나도 못 사면 넘어감 (빈 땅은 땅값부터)
+  const need = from < 0 ? costs[0] : Math.min(...costs);
+  if (need > p.cash) return endTurn(g);
+  g.prompt = { k: "buy", p: pi, tile, from, items, costs };
 }
 
-function build(g: Game, pi: number, tile: number, from: number, lv: number, cost: number) {
+function build(g: Game, pi: number, tile: number, from: number, sel: number[], cost: number) {
   const p = g.players[pi];
   const t = g.tiles[tile];
-  if (p.keep.free && lv >= Math.max(from, 0) + 1) p.keep.free = 0;
+  if (p.keep.free && sel.some((k) => k >= 1)) p.keep.free = 0;
   p.cash -= cost;
   t.owner = pi;
-  t.lv = lv;
-  p.stat.built += Math.max(0, lv - Math.max(0, from));
-  if (lv === LANDMARK) p.stat.lm++;
-  emit(g, { t: "buy", p: pi, tile, lv, cost });
+  const blds = sel.filter((k) => k >= 1 && k <= 3);
+  if (from < 0) t.b = 0;
+  else t.b = bitsOf(t);
+  for (const k of blds) t.b |= 1 << (k - 1);
+  if (sel.includes(LANDMARK)) {
+    t.lv = LANDMARK;
+    t.b = 7;
+  } else t.lv = popcount(t.b);
+  p.stat.built += blds.length + (sel.includes(LANDMARK) ? 1 : 0);
+  if (t.lv === LANDMARK) p.stat.lm++;
+  emit(g, { t: "buy", p: pi, tile, lv: t.lv, cost, b: t.b, top: Math.max(...sel) });
   checkWin(g, pi, tile);
 }
 
@@ -1038,7 +1077,7 @@ function afterToll(g: Game, pi: number, tile: number): void {
 export function sellValue(g: Game, pi: number): number {
   const m = mapOf(g);
   let v = 0;
-  for (let i = 0; i < m.tiles.length; i++) if (g.tiles[i].owner === pi) v += Math.round(investedOf(m.tiles[i].price ?? 0, g.tiles[i].lv) * RULE.sellRate);
+  for (let i = 0; i < m.tiles.length; i++) if (g.tiles[i].owner === pi) v += Math.round(investedT(m.tiles[i].price ?? 0, g.tiles[i]) * RULE.sellRate);
   return v;
 }
 
@@ -1096,8 +1135,11 @@ function acquire(g: Game, pi: number, tile: number, cost: number): void {
   p.stat.acq++;
   emit(g, { t: "acq", p: pi, from, tile, cost });
   if (p.fx.freeUpAfterAcq && t.lv < 3) {
-    t.lv++;
-    emit(g, { t: "buy", p: pi, tile, lv: t.lv, cost: 0 });
+    const has = bitsOf(t);
+    const k = [1, 2, 3].find((x) => !((has >> (x - 1)) & 1))!;
+    t.b = has | (1 << (k - 1));
+    t.lv = popcount(t.b);
+    emit(g, { t: "buy", p: pi, tile, lv: t.lv, cost: 0, b: t.b, top: k });
   }
   checkWin(g, pi, tile);
   if (g.over) return;
@@ -1127,7 +1169,7 @@ function raise(g: Game, pi: number, need: number) {
   const p = g.players[pi];
   const m = mapOf(g);
   const mine = m.tiles
-    .map((d, i) => ({ i, v: g.tiles[i].owner === pi ? investedOf(d.price ?? 0, g.tiles[i].lv) : -1 }))
+    .map((d, i) => ({ i, v: g.tiles[i].owner === pi ? investedT(d.price ?? 0, g.tiles[i]) : -1 }))
     .filter((x) => x.v >= 0)
     .sort((a, b) => a.v - b.v || a.i - b.i);
   for (const x of mine) {
@@ -1137,6 +1179,7 @@ function raise(g: Game, pi: number, need: number) {
     const t = g.tiles[x.i];
     t.owner = -1;
     t.lv = 0;
+    t.b = 0;
     t.boost = 1;
     t.boostLeft = 0;
     if (p.fest === x.i) p.fest = -1;
@@ -1153,6 +1196,7 @@ function bankrupt(g: Game, pi: number) {
     if (t.owner === pi) {
       t.owner = -1;
       t.lv = 0;
+      t.b = 0;
       t.boost = 1;
       t.boostLeft = 0;
     }
@@ -1331,6 +1375,8 @@ export function canSkill(g: Game, pi: number): boolean {
   const p = g.players[pi];
   const pr = g.prompt;
   if (!pr || pr.p !== pi || p.cd > 0) return false;
+  // 첫 바퀴(각자 첫 차례)엔 스킬 못 씀
+  if (g.round <= 1) return false;
   const when = SKILL_TIME[p.skill.kind];
   if (pr.k === "turn" && (pr.jail || pr.warp)) return false;
   if (!((pr.k === "turn" && when === "pre") || (pr.k === "post" && when === "post"))) return false;
@@ -1415,7 +1461,16 @@ function doSkill(g: Game, pi: number, a: { target?: number; n?: number }, when: 
     }
     case "debug": {
       const t = g.tiles[a.target!];
-      t.lv = Math.max(0, t.lv - 1);
+      // 가장 높은 건물 하나 허묾 (랜드마크면 랜드마크만)
+      if (t.lv >= LANDMARK) {
+        t.lv = 3;
+        t.b = 7;
+      } else {
+        const has = bitsOf(t);
+        const k = [3, 2, 1].find((x) => (has >> (x - 1)) & 1);
+        t.b = k ? has & ~(1 << (k - 1)) : 0;
+        t.lv = popcount(t.b);
+      }
       emit(g, ev);
       return;
     }

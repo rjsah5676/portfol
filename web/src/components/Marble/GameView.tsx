@@ -10,8 +10,8 @@ import {
   LEVEL_NAME,
   TOWN_EVENTS,
   assetsOf,
-  baseToll,
-  investedOf,
+  builtOf,
+  investedT,
   canSkill,
   controlChance,
   powerZone,
@@ -212,13 +212,14 @@ export default function GameView({ room, me, onLeave }: { room: RoomWire; me: st
         return;
       }
       case "buy": {
-        patchTile(e.tile, { owner: e.p, lv: e.lv });
+        patchTile(e.tile, { owner: e.p, lv: e.lv, ...(e.b !== undefined && { b: e.b }) });
         setCash((c) => c.map((x, i) => (i === e.p ? x - e.cost : x)));
         flashTile(e.tile, PCOLOR[e.p]);
         const xy = slotXY(slotOfTile(cur, e.tile));
-        float(xy.x, xy.y - 30, e.lv >= LANDMARK ? "랜드마크!" : e.cost === 0 ? `${LEVEL_NAME[e.lv]} (무료)` : LEVEL_NAME[e.lv], PCOLOR[e.p]);
+        const nm = LEVEL_NAME[e.top ?? e.lv];
+        float(xy.x, xy.y - 30, e.lv >= LANDMARK ? "랜드마크!" : e.cost === 0 ? `${nm} (무료)` : nm, PCOLOR[e.p]);
         sfx(e.lv >= LANDMARK ? "landmark" : "build");
-        say(`${P(e.p)} ${MAPS[cur.map].tiles[e.tile].name} ${LEVEL_NAME[e.lv]}${e.cost ? ` (${fmt(e.cost)})` : ""}`);
+        say(`${P(e.p)} ${MAPS[cur.map].tiles[e.tile].name} ${nm}${e.cost ? ` (${fmt(e.cost)})` : ""}`);
         await wait(800);
         return;
       }
@@ -241,7 +242,7 @@ export default function GameView({ room, me, onLeave }: { room: RoomWire; me: st
         return;
       }
       case "sell": {
-        patchTile(e.tile, { owner: -1, lv: 0 });
+        patchTile(e.tile, { owner: -1, lv: 0, b: 0 });
         setCash((c) => c.map((x, i) => (i === e.p ? x + e.got : x)));
         const xy = slotXY(slotOfTile(cur, e.tile));
         float(xy.x, xy.y - 30, `팔림 +${fmt(e.got)}`, "#8c7259");
@@ -355,7 +356,7 @@ export default function GameView({ room, me, onLeave }: { room: RoomWire; me: st
     posRef.current = posRef.current.map((x, i) => (i === pi ? s : x));
     setPos(posRef.current);
   };
-  const patchTile = (tile: number, patch: { owner?: number; lv?: number }) =>
+  const patchTile = (tile: number, patch: { owner?: number; lv?: number; b?: number }) =>
     setView((v) => ({ ...v, tiles: v.tiles.map((t, i) => (i === tile ? { ...t, ...patch } : t)) }));
   const flashTile = (tile: number, c: string) => {
     setFlash((f) => ({ ...f, [tile]: c }));
@@ -1119,17 +1120,17 @@ function TileInfo({ g, tile, onClose }: { g: GameWire; tile: number; onClose(): 
               {rows.length > 1 && (
                 <div className="overflow-hidden rounded-xl ring-1 ring-white/10">
                   <div className="grid grid-cols-[1fr_1fr_1fr] bg-white/10 px-3 py-1.5 text-[11px] font-bold text-white/65">
-                    <span>단계</span>
-                    <span className="text-right">넣은 돈</span>
-                    <span className="text-right">통행료</span>
+                    <span>건물</span>
+                    <span className="text-right">값</span>
+                    <span className="text-right">지음</span>
                   </div>
                   {rows.map((lv) => {
-                    const cur = owner && t.lv === lv;
+                    const has = owner && (lv === 0 || (lv === LANDMARK ? t.lv >= LANDMARK : builtOf(t).includes(lv)));
                     return (
-                      <div key={lv} className="grid grid-cols-[1fr_1fr_1fr] px-3 py-1.5" style={cur ? { background: `${PCOLOR[t.owner]}44`, fontWeight: 800 } : undefined}>
+                      <div key={lv} className="grid grid-cols-[1fr_1fr_1fr] px-3 py-1.5" style={has ? { background: `${PCOLOR[t.owner]}33`, fontWeight: 800 } : undefined}>
                         <span>{LEVEL_NAME[lv]}</span>
-                        <span className="text-right text-white/80">{fmt(investedOf(d.price ?? 0, lv))}</span>
-                        <span className="text-right font-bold text-[#ffe08a]">{fmt(baseToll(d.price ?? 0, lv))}</span>
+                        <span className="text-right text-white/80">{fmt(Math.round((d.price ?? 0) * RULE.cost[lv]))}</span>
+                        <span className="text-right font-bold text-[#ffe08a]">{has ? "✓" : ""}</span>
                       </div>
                     );
                   })}
@@ -1137,7 +1138,7 @@ function TileInfo({ g, tile, onClose }: { g: GameWire; tile: number; onClose(): 
               )}
               {owner && d.kind === "city" && t.lv < LANDMARK && (
                 <div className="text-[12px] text-white/65">
-                  인수하려면 <b className="text-white">{fmt(investedOf(d.price ?? 0, t.lv))}</b> · 랜드마크가 되면 인수 불가
+                  인수하려면 <b className="text-white">{fmt(investedT(d.price ?? 0, t))}</b> · 랜드마크가 되면 인수 불가
                 </div>
               )}
             </>
@@ -1233,7 +1234,7 @@ function ActionPanel({
     >
       <img src={faceOf(c)} alt="" className="h-[42px] w-[42px] rounded-full object-cover" style={{ boxShadow: "0 0 0 2px #fff" }} />
       <span className="flex flex-col leading-[15px]">
-        <span className="mbx-ready mb-[2px] self-start rounded-full bg-[#2a1250] px-[7px] text-[11px] leading-[16px] font-black tracking-[0.08em] text-[#ffe08a]" style={{ boxShadow: "0 0 0 1.5px #ffe08a" }}>
+        <span className="mbx-skilltag mb-[2px] self-start rounded-full bg-[#2a1250] px-[7px] text-[11px] leading-[16px] font-black tracking-[0.08em] text-[#ffe08a]" style={{ boxShadow: "0 0 0 1.5px #ffe08a" }}>
           ★ 스킬 준비됨!
         </span>
         <b className="text-[16px] leading-[18px]" style={{ textShadow: "0 1px 2px rgba(60,10,80,0.6)" }}>
@@ -1242,6 +1243,43 @@ function ActionPanel({
       </span>
     </button>
   );
+  /** 굴리기 옆 큰 스킬 버튼 (ROLL 과 나란히) */
+  const skillOrb = c ? (
+    skillOk ? (
+      <button
+        type="button"
+        disabled={sending}
+        onClick={() => {
+          sfx("click");
+          skill();
+        }}
+        title={c.active.desc(power(c.grade, me.lo.char.lv))}
+        className="mbx-skill group relative flex h-[112px] w-[112px] cursor-pointer flex-col items-center justify-center rounded-full transition hover:scale-105 disabled:opacity-50"
+        style={{ background: "conic-gradient(from 0deg, #ff5fa2, #b46bff, #5fb8ff, #ffe08a, #ff5fa2)", boxShadow: "0 0 0 3px #fff, 0 6px 0 #6a2a9a, 0 0 30px 8px rgba(255,95,162,0.7)" }}
+      >
+        <img src={faceOf(c)} alt="" className="h-[98px] w-[98px] rounded-full object-cover" style={{ boxShadow: "inset 0 0 0 2px #fff" }} />
+        <span className="mbx-skilltag absolute -top-[10px] rounded-full px-[8px] text-[12px] leading-[18px] font-black tracking-[0.12em]" style={{ boxShadow: "0 0 0 2px #ffe08a, 0 2px 6px rgba(0,0,0,0.4)" }}>
+          SKILL
+        </span>
+        <span className="absolute -bottom-[12px] max-w-[130px] truncate rounded-full bg-gradient-to-r from-[#b46bff] to-[#ff5fa2] px-[10px] text-[13px] leading-[22px] font-black whitespace-nowrap text-white" style={{ boxShadow: "0 0 0 2px #fff, 0 2px 6px rgba(0,0,0,0.4)" }}>
+          {c.active.name}
+        </span>
+      </button>
+    ) : g.round <= 1 && pr.k === "turn" && !pr.jail && !pr.warp ? (
+      <span className="relative flex h-[96px] w-[96px] flex-col items-center justify-center rounded-full bg-black/35 ring-2 ring-white/30">
+        <img src={faceOf(c)} alt="" className="h-[84px] w-[84px] rounded-full object-cover opacity-50 grayscale" />
+        <span className="absolute -bottom-[10px] rounded-full bg-[#2a2550] px-[8px] text-[11px] leading-[20px] font-bold whitespace-nowrap text-white/85 ring-1 ring-white/30">스킬은 2바퀴부터</span>
+      </span>
+    ) : null
+  ) : null;
+  const skillBox =
+    skillBtn ||
+    (g.round <= 1 && pr.k === "turn" && !pr.jail && !pr.warp && c ? (
+      <span className="flex h-[30px] items-center gap-1.5 rounded-full bg-white/10 px-3 text-[12px] font-bold text-white/70 ring-1 ring-white/15">
+        <img src={faceOf(c)} alt="" className="h-[22px] w-[22px] rounded-full object-cover opacity-60 grayscale" />
+        스킬은 2바퀴부터 쓸 수 있어요
+      </span>
+    ) : null);
 
   // 스킬 숫자 · 상대 고르기
   if (mode?.k === "skillNum" && mode.range) {
@@ -1311,9 +1349,11 @@ function ActionPanel({
         );
       return bare(
         <>
-          <PowerRoll disabled={sending} chance={controlChance(me)} onThrow={(power) => void send(power === undefined ? { t: "roll" } : { t: "roll", power })} />
+          <div className="relative">
+            <PowerRoll disabled={sending} chance={controlChance(me)} onThrow={(power) => void send(power === undefined ? { t: "roll" } : { t: "roll", power })} />
+            {skillOrb && <div className="absolute top-[80px] left-[calc(50%+96px)] -translate-y-1/2">{skillOrb}</div>}
+          </div>
           <div className="flex flex-wrap justify-center gap-1.5">
-            {skillBtn}
             {me.uses.pick > 0 && (
               <PickDice onPick={(n) => void send({ t: "pick", n })} uses={me.uses.pick} />
             )}
@@ -1343,7 +1383,7 @@ function ActionPanel({
                 한 칸 더 ({me.uses.adjust})
               </Btn>
             )}
-            {skillBtn}
+            {skillBox}
           </div>
         </>,
         "어떻게 할까요?"
@@ -1370,24 +1410,7 @@ function ActionPanel({
             {d.group !== undefined && <span className="mr-1 inline-block h-[10px] w-[10px] align-middle" style={{ background: m.groups[d.group].color, boxShadow: "0 0 0 2px #232a4d" }} />}
             {d.group !== undefined ? m.groups[d.group].name : "명소"} · 지금 {owned ? `${LEVEL_NAME[t.lv]} · 통행료 ${fmt(tollOf(gg, pr.tile))}` : `땅값 ${fmt(d.price ?? 0)}`}
           </div>
-          <div className="flex flex-wrap justify-center gap-1.5">
-            {pr.costs.map((cost, k) => {
-              const lv = pr.from + 1 + k;
-              const can = cost <= me.cash;
-              return (
-                <Btn key={lv} tone={lv >= LANDMARK ? "pink" : "gold"} className="h-[86px] min-w-[74px] flex-col gap-0 px-2 leading-[15px]" disabled={!can || sending} onClick={() => void send({ t: "buy", lv })}>
-                  <span className="flex h-[40px] items-end justify-center">
-                    {lv <= 0 ? <Glyph n="flag" size={30} color={PCOLOR[myPi]} /> : lv >= LANDMARK ? <img src={`/marble/lm/${m.id}-${pr.tile}.webp`} alt="" className="h-[40px] max-w-none" /> : <Piece n={lv - 1} owner={myPi} h={38} />}
-                  </span>
-                  <b className="text-[13px]">{LEVEL_NAME[lv]}</b>
-                  <span className="text-[11px]">{fmt(cost)}</span>
-                </Btn>
-              );
-            })}
-          </div>
-          <Btn className="h-[28px] px-3 text-[12px]" disabled={sending} onClick={() => void send({ t: "buy", lv: -1 })}>
-            {owned ? "안 지어요" : "안 사요"}
-          </Btn>
+          <BuyPick key={`${pr.tile}-${pr.from}`} pr={pr} cash={me.cash} mapId={m.id} pi={myPi} sending={sending} send={send} />
         </>,
         d.name
       );
@@ -1599,5 +1622,81 @@ function Result({ room, me, onLeave }: { room: RoomWire; me: string; onLeave(): 
         </div>
       </div>
     </div>
+  );
+}
+
+/** 짓기 고르기: 살 수 있는 건 처음부터 다 골라 둠 · 눌러서 빼고 넣기 · 땅을 빼면 전부 빠짐 */
+function BuyPick({ pr, cash, mapId, pi, sending, send }: { pr: Extract<Prompt, { k: "buy" }>; cash: number; mapId: string; pi: number; sending: boolean; send(a: Action): Promise<unknown> }) {
+  const owned = pr.from >= 0;
+  const costOf = (k: number) => pr.costs[pr.items.indexOf(k)];
+  const [sel, setSel] = useState<number[]>(() => {
+    const out: number[] = [];
+    let left = cash;
+    for (const k of pr.items) {
+      const c = costOf(k);
+      if (!owned && k !== 0 && !out.includes(0)) break;
+      if (c <= left) {
+        out.push(k);
+        left -= c;
+      } else if (!owned && k === 0) break;
+    }
+    return out;
+  });
+  const total = sel.reduce((a, k) => a + costOf(k), 0);
+  const over = total > cash;
+  const toggle = (k: number) => {
+    sfx("click");
+    setSel((cur) => {
+      if (cur.includes(k)) return k === 0 ? [] : cur.filter((x) => x !== k);
+      const next = [...cur, k];
+      if (!owned && !next.includes(0)) next.push(0);
+      return next.sort((a, b) => a - b);
+    });
+  };
+  return (
+    <>
+      <div className="flex flex-wrap justify-center gap-1.5">
+        {pr.items.map((k) => {
+          const on = sel.includes(k);
+          const cost = costOf(k);
+          return (
+            <button
+              key={k}
+              type="button"
+              disabled={sending}
+              onClick={() => toggle(k)}
+              className="relative flex h-[90px] w-[74px] cursor-pointer flex-col items-center justify-end rounded-xl pb-1.5 transition hover:-translate-y-0.5"
+              style={{
+                background: on ? (k >= LANDMARK ? "linear-gradient(180deg,#ffb3d6,#ff6fae)" : "linear-gradient(180deg,#ffe48a,#ffbf35)") : "rgba(255,255,255,0.08)",
+                boxShadow: on ? "0 3px 0 #b9741a, 0 0 0 2px #fff" : "inset 0 0 0 1.5px rgba(255,255,255,0.25)",
+                color: on ? "#3a2500" : "rgba(255,255,255,0.6)",
+              }}
+            >
+              <span className={`absolute top-1 right-1 flex h-[17px] w-[17px] items-center justify-center rounded-full text-[11px] font-black ${on ? "bg-[#2fc37a] text-white" : "bg-black/30 text-transparent ring-1 ring-white/30"}`}>✓</span>
+              <span className="flex h-[40px] items-end justify-center" style={on ? undefined : { filter: "grayscale(0.85)", opacity: 0.5 }}>
+                {k <= 0 ? <Glyph n="flag" size={30} color={PCOLOR[pi]} /> : k >= LANDMARK ? <img src={`/marble/lm/${mapId}-${pr.tile}.webp`} alt="" className="h-[40px] max-w-none" /> : <Piece n={k - 1} owner={pi} h={38} />}
+              </span>
+              <b className="text-[13px] leading-[16px]">{LEVEL_NAME[k]}</b>
+              <span className="text-[12px] leading-[14px] font-bold">{cost === 0 ? "무료" : fmt(cost)}</span>
+            </button>
+          );
+        })}
+      </div>
+      <div className="flex w-full items-center justify-center gap-2">
+        <span className="flex items-baseline gap-1.5 rounded-full bg-black/30 px-3 py-1 ring-1 ring-white/15">
+          <span className="text-[11px] text-white/60">합계</span>
+          <b className={`text-[20px] leading-none ${over ? "text-[#ff7b8a]" : "text-[#ffe08a]"}`}>{fmt(total)}</b>
+          <span className="text-[11px] text-white/50">/ 가진 돈 {fmt(cash)}</span>
+        </span>
+      </div>
+      <div className="flex gap-2">
+        <Btn tone="gold" className="h-[36px] min-w-[120px] px-4 text-[14px] font-black" disabled={sending || over || !sel.length} onClick={() => void send({ t: "buy", lv: Math.max(...sel), pick: sel })}>
+          {over ? "돈이 모자라요" : owned ? "짓기" : "사기"}
+        </Btn>
+        <Btn className="h-[36px] px-3 text-[13px]" disabled={sending} onClick={() => void send({ t: "buy", lv: -1 })}>
+          {owned ? "안 지어요" : "안 사요"}
+        </Btn>
+      </div>
+    </>
   );
 }
