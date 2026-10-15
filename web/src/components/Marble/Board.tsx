@@ -194,15 +194,42 @@ export default function Board({
         const tile = g.order[slot];
         const d = m.tiles[tile];
         const t = g.tiles[tile];
-        if (t.owner < 0 || d.kind !== "city" || t.lv <= 0) return null;
+        if (t.owner < 0 || d.kind !== "city") return null;
         const b = bldAt(sd.x, sd.y);
-        const p = proj(b.x, b.y);
         const lv = Math.min(t.lv, LANDMARK);
-        return (
-          <div key={`b${slot}`} className="pointer-events-none absolute" style={{ left: p.x, top: p.y - 4, zIndex: 100 + Math.round(p.y), transform: `translate(-50%, -100%) scale(${p.k})`, transformOrigin: "50% 100%" }}>
-            <Building lv={lv} color={PCOLOR[t.owner]} lmSrc={`/marble/lm/${m.id}-${tile}.webp`} key={`${t.owner}-${lv}`} />
-          </div>
-        );
+        const color = PCOLOR[t.owner];
+        if (lv <= 0) {
+          // 땅만 산 칸: 주인 깃발 하나 꽂아 둠
+          const q = proj(b.x, b.y);
+          return (
+            <div key={`b${slot}`} className="pointer-events-none absolute" style={{ left: q.x, top: q.y + 2, zIndex: 100 + Math.round(q.y), transform: `translate(-30%, -100%) scale(${q.k})`, transformOrigin: "30% 100%" }}>
+              <span key={`${t.owner}-f`} className="mb-pop block" style={{ filter: "drop-shadow(0 2px 1.5px rgba(20,24,60,0.4))" }}>
+                <Glyph n="flag" size={26} color={color} />
+              </span>
+            </div>
+          );
+        }
+        if (lv >= LANDMARK) {
+          // 랜드마크: 칸 가운데 쪽에 하나 크게 (칸마다 다른 그림)
+          const c = proj((b.x + axis(sd.x)) / 2, (b.y + axis(sd.y)) / 2);
+          return (
+            <div key={`b${slot}`} className="pointer-events-none absolute" style={{ left: c.x, top: c.y + 6, zIndex: 100 + Math.round(c.y), transform: `translate(-50%, -100%) scale(${c.k})`, transformOrigin: "50% 100%" }}>
+              <Landmark key={`${t.owner}-lm`} src={`/marble/lm/${m.id}-${tile}.webp`} color={color} />
+            </div>
+          );
+        }
+        // 빌라 · 빌딩 · 호텔: 칸의 변 방향(대각선)을 따라 나란히 — 조각마다 따로 투영해서 판과 같은 기울기로
+        const along = sd.y <= 0 || sd.y >= 8 ? { x: 1, y: 0 } : { x: 0, y: 1 };
+        const gap = 19;
+        return Array.from({ length: lv }, (_, i) => {
+          const o = (i - (lv - 1) / 2) * gap;
+          const q = proj(b.x + along.x * o, b.y + along.y * o);
+          return (
+            <div key={`b${slot}-${i}`} className="pointer-events-none absolute" style={{ left: q.x, top: q.y + 3, zIndex: 100 + Math.round(q.y), transform: `translate(-50%, -100%) scale(${q.k})`, transformOrigin: "50% 100%" }}>
+              <Piece key={`${t.owner}-${i}`} n={i} owner={t.owner} />
+            </div>
+          );
+        });
       })}
 
       {/* 말 */}
@@ -268,7 +295,7 @@ function TileFace({ m, d, owner, sx, sy, toll, mult, fest, boost, tw, th }: { m:
   const near = sy >= 8 || sx >= 8;
   // 이름은 무조건 한 줄 — 길면 글씨를 줄임
   const nameLen = [...d.name].reduce((a, ch) => a + (ch === " " ? 0.45 : 1), d.kind === "spot" ? 0.8 : 0);
-  const nameSize = Math.min(16, Math.floor((62 / Math.max(1, nameLen)) * 10) / 10);
+  const nameSize = Math.min(15, Math.floor((54 / Math.max(1, nameLen)) * 10) / 10);
   const parts = [
     <div key="b" className="shrink-0" style={{ height: BLD_ZONE }} />,
     <b key="n" className="block text-center leading-none font-black whitespace-nowrap" style={{ fontSize: nameSize, color: pc ? "#fff" : INK, textShadow: pc ? "0 1px 2px rgba(0,0,0,0.55)" : "0 1px 0 rgba(255,255,255,0.8)" }}>
@@ -322,33 +349,23 @@ function FloorText({ sx, sy, children }: { sx: number; sy: number; children: Rea
   );
 }
 
-/** 서 있는 건물: 모두의마블처럼 오두막 · 하우스 · 타워를 단계만큼 나란히 (주인 색), 랜드마크만 큰 3D 그림 */
-function Building({ lv, color, lmSrc }: { lv: number; color: string; lmSrc: string }) {
-  if (lv >= LANDMARK) {
-    // 랜드마크: 칸마다 다른 건물 그림 (예전 랜드마크 세트) + 주인 색 받침 · 깃발
-    return (
-      <div className="mb-pop relative flex flex-col items-center">
-        <span className="absolute -bottom-[4px] left-1/2 h-[10px] w-[46px] -translate-x-1/2 rounded-[50%]" style={{ background: color, boxShadow: "0 0 0 1.5px #262b52, 0 0 12px 2px " + color }} />
-        <img src={lmSrc} alt="" className="relative block max-w-none" style={{ height: 50, filter: "drop-shadow(0 3px 2px rgba(20,24,60,0.4))" }} />
-        <span className="mb-bob absolute -top-[12px] right-[0px]">
-          <Glyph n="flag" size={17} color={color} />
-        </span>
-      </div>
-    );
-  }
-  // 빌라 · 빌딩 · 호텔 조각을 차곡차곡 붙여서 (흰 조각을 주인 색으로 물들임)
-  const H = [22, 26, 30];
+/** 건물 조각 하나 (빌라 · 빌딩 · 호텔) — 주인 색 지붕 · 차양이 칠해진 그림 */
+export function Piece({ n, owner, h }: { n: number; owner: number; h?: number }) {
   return (
-    <div className="flex items-end" style={{ filter: "drop-shadow(0 2px 1.5px rgba(20,24,60,0.45))" }}>
-      {Array.from({ length: lv }, (_, i) => {
-        const src = `/marble/b3d/s${i + 1}.webp`;
-        return (
-          <span key={i} className="mb-pop relative -ml-[2px] block first:ml-0" style={{ animationDelay: `${i * 80}ms` }}>
-            <img src={src} alt="" className="block max-w-none" style={{ height: H[i] }} />
-            <span className="pointer-events-none absolute inset-0" style={{ background: color, WebkitMaskImage: `url(${src})`, maskImage: `url(${src})`, WebkitMaskSize: "100% 100%", maskSize: "100% 100%", mixBlendMode: "multiply", opacity: 0.85 }} />
-          </span>
-        );
-      })}
+    <span className="mb-pop relative block" style={{ animationDelay: `${n * 80}ms`, filter: "drop-shadow(0 2px 1.5px rgba(20,24,60,0.45))" }}>
+      <img src={`/marble/b3d/p${Math.max(0, owner) % 4}-${n + 1}.webp`} alt="" className="block max-w-none" style={{ height: h ?? [24, 30, 32][n] }} />
+    </span>
+  );
+}
+
+/** 랜드마크: 칸마다 다른 그림 + 주인 깃발 (밑 그림자 없음) */
+function Landmark({ src, color }: { src: string; color: string }) {
+  return (
+    <div className="mb-pop relative flex flex-col items-center">
+      <img src={src} alt="" className="relative block max-w-none" style={{ height: 54, filter: "drop-shadow(0 3px 3px rgba(20,24,60,0.35))" }} />
+      <span className="mb-bob absolute -top-[12px] right-[0px]">
+        <Glyph n="flag" size={17} color={color} />
+      </span>
     </div>
   );
 }

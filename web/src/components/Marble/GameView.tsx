@@ -29,7 +29,7 @@ import { marble } from "@/realtime/marble";
 import { playBgm, sfx, stopBgm } from "./audio";
 import { ItemIcon } from "./Gacha";
 import { CharHero, XGrade } from "./ui";
-import Board, { iso, slotXY as slotPos, spriteOf, type TokenView } from "./Board";
+import Board, { Glyph, Piece, iso, slotXY as slotPos, spriteOf, type TokenView } from "./Board";
 import { Btn, Cur, DiceFace, GradeTag, Icon, PCOLOR, fmt, CurIcon } from "./pixel";
 import { GuideDot, useMapGuide } from "./MapGuide";
 import { RoomTools } from "./Room";
@@ -1371,7 +1371,10 @@ function ActionPanel({
               const lv = pr.from + 1 + k;
               const can = cost <= me.cash;
               return (
-                <Btn key={lv} tone={lv >= LANDMARK ? "pink" : "gold"} className="h-[46px] min-w-[70px] flex-col gap-0 px-2 leading-[15px]" disabled={!can || sending} onClick={() => void send({ t: "buy", lv })}>
+                <Btn key={lv} tone={lv >= LANDMARK ? "pink" : "gold"} className="h-[86px] min-w-[74px] flex-col gap-0 px-2 leading-[15px]" disabled={!can || sending} onClick={() => void send({ t: "buy", lv })}>
+                  <span className="flex h-[40px] items-end justify-center">
+                    {lv <= 0 ? <Glyph n="flag" size={30} color={PCOLOR[myPi]} /> : lv >= LANDMARK ? <img src={`/marble/lm/${m.id}-${pr.tile}.webp`} alt="" className="h-[40px] max-w-none" /> : <Piece n={lv - 1} owner={myPi} h={38} />}
+                  </span>
                   <b className="text-[13px]">{LEVEL_NAME[lv]}</b>
                   <span className="text-[11px]">{fmt(cost)}</span>
                 </Btn>
