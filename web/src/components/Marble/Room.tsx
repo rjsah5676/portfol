@@ -273,7 +273,7 @@ export function RoomTools({ room, me, onLeave, inGame, vertical, glass = false }
       )}
       {chat && <ChatBox room={room} me={me} side={vertical} />}
       {askLeave && (
-        <div className={`mb-box absolute z-50 w-[230px] p-3 text-[12px] ${vertical ? "top-[120px] left-[48px]" : "top-[44px] right-0"}`}>
+        <div className={`mbx-modal absolute z-50 w-[230px] p-3 text-[12px] ${vertical ? "top-[120px] left-[48px]" : "top-[44px] right-0"}`}>
           판 도중에 나가면 그 자리는 AI 가 이어서 하고 <b>진 것으로</b> 쳐요.
           <div className="mt-2 flex justify-end gap-1.5">
             <Btn className="h-[28px] px-3" onClick={() => setAskLeave(false)}>
@@ -297,18 +297,18 @@ function ChatBox({ room, me, side }: { room: RoomWire; me: string; side?: boolea
   }, [room.chat.length]);
   const can = room.seats.some((s) => s?.uid === me);
   return (
-    <div className={`mb-box absolute z-50 flex w-[260px] flex-col ${side ? "top-0 left-[48px]" : "top-[44px] right-0"}`}>
-      <div ref={list} className="mb-scroll h-[160px] overflow-y-auto px-2 py-1.5 text-[12px] leading-[16px]">
+    <div className={`mbx absolute z-50 flex w-[270px] flex-col overflow-hidden rounded-2xl border border-white/15 bg-[#1b1650]/95 text-white shadow-[0_12px_30px_rgba(0,0,0,0.5)] backdrop-blur ${side ? "top-0 left-[48px]" : "top-[44px] right-0"}`}>
+      <div ref={list} className="h-[170px] overflow-y-auto px-3 py-2 text-[12.5px] leading-[18px]">
         {room.chat.map((c, i) => (
-          <div key={i} className="break-all">
-            <b style={{ color: c.bot ? "#6b4a32" : "#232a4d" }}>{c.name}</b> {c.text}
+          <div key={i} className="break-all text-white/90">
+            <b style={{ color: c.bot ? "#9fb3d8" : "#ffd65a" }}>{c.name}</b> {c.text}
           </div>
         ))}
-        {!room.chat.length && <div className="text-[var(--mute)]">인사해 보세요</div>}
+        {!room.chat.length && <div className="text-white/45">인사해 보세요</div>}
       </div>
       {can && (
         <form
-          className="flex gap-1 p-1.5"
+          className="flex gap-1.5 border-t border-white/10 p-2"
           onSubmit={(e) => {
             e.preventDefault();
             const t = text.trim();
@@ -321,13 +321,13 @@ function ChatBox({ room, me, side }: { room: RoomWire; me: string; side?: boolea
             value={text}
             maxLength={60}
             onChange={(e) => setText(e.target.value)}
-            className="mb-inset min-w-0 flex-1 px-2 py-1 text-[12px] outline-none"
+            className="mbx-input min-w-0 flex-1 !h-[32px] text-[12.5px]"
             placeholder="말하기"
             onKeyDown={(e) => e.stopPropagation()}
           />
-          <Btn className="h-[28px] px-2 text-[12px]" type="submit">
+          <button type="submit" className="h-[32px] rounded-lg bg-gradient-to-b from-[#ffe27a] to-[#f5a524] px-3 text-[12.5px] font-bold text-[#3a2500]">
             보내기
-          </Btn>
+          </button>
         </form>
       )}
     </div>
@@ -356,14 +356,15 @@ export function SoundButton({ up = false, side = false, glass = false }: { up?: 
   }, []);
   return (
     <div className="relative">
-      <Btn className={glass ? "h-[34px] w-[38px] !rounded-xl !border !border-white/15 !bg-white/10 !shadow-none hover:!bg-white/20 mbx-iconwhite" : "h-[34px] w-[38px]"} onClick={() => setOpen((o) => !o)} title="소리 · 커서">
-        <Icon n={p.mute ? "mute" : "speaker"} size={15} />
+      <Btn className={glass ? "h-[34px] w-[38px] !rounded-xl !border !border-white/15 !bg-white/10 !shadow-none hover:!bg-white/20 mbx-iconwhite" : "h-[34px] w-[38px]"} onClick={() => setOpen((o) => !o)} title="설정 (소리 · 커서)">
+        <Icon n="gear" size={15} />
       </Btn>
       {open && (
-        <div className={`mb-box absolute z-50 w-[220px] p-3 text-[12px] ${side ? "top-0 left-[48px]" : up ? "bottom-[44px] left-0" : "top-[44px] right-0"}`} onPointerLeave={() => setOpen(false)}>
+        <div className={`mbx-modal absolute z-50 w-[230px] rounded-2xl p-3 text-[12px] text-white ${side ? "top-0 left-[48px]" : up ? "bottom-[44px] left-0" : "top-[44px] right-0"}`} style={{ background: "linear-gradient(180deg, rgba(48,40,122,0.98), rgba(24,19,68,0.98))", boxShadow: "0 0 0 1.5px rgba(255,255,255,0.2), 0 0 0 4px rgba(255,210,90,0.22), 0 18px 44px rgba(0,0,0,0.5)" }} onPointerLeave={() => setOpen(false)}>
+          <div className="mb-2 text-[13px] font-black text-[#ffe08a]">설정</div>
           {(["bgm", "sfx"] as const).map((k) => (
             <label key={k} className="mb-2 flex items-center gap-2">
-              <span className="w-[44px]">{k === "bgm" ? "배경음" : "효과음"}</span>
+              <span className="w-[44px] font-bold text-white/90">{k === "bgm" ? "배경음" : "효과음"}</span>
               <input
                 type="range"
                 min={0}
@@ -381,7 +382,7 @@ export function SoundButton({ up = false, side = false, glass = false }: { up?: 
           <Btn tone={p.mute ? "red" : "paper"} className="h-[28px] w-full text-[12px]" onClick={() => setPrefs({ mute: !p.mute })}>
             {p.mute ? "소리 켜기" : "모두 끄기"}
           </Btn>
-          <div className="mt-3 mb-1 font-bold">커서</div>
+          <div className="mt-3 mb-1 font-bold text-white/90">커서</div>
           <div className="grid grid-cols-5 gap-1">
             {CURSOR_IDS.map((id) => (
               <button
@@ -393,7 +394,7 @@ export function SoundButton({ up = false, side = false, glass = false }: { up?: 
                   setCur(id);
                   sfx("click");
                 }}
-                className="flex h-[34px] items-center justify-center bg-white"
+                className="flex h-[34px] items-center justify-center rounded-md bg-white text-[#232a4d]"
                 style={{ boxShadow: cur === id ? "0 0 0 2px #232a4d, inset 0 0 0 2px #ffd84d" : "0 0 0 1px #9fb3c8" }}
               >
                 {id !== "system" ? <img src={cursorPreview(id)} alt="" width={24} height={24} /> : <span className="text-[10px]">기본</span>}

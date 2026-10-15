@@ -89,18 +89,18 @@ export const TOWN_EVENTS: Record<TownEventId, { name: string; desc: string }> = 
 
 export type CardId = "allow" | "fine" | "toStart" | "toJail" | "toWarp" | "freeBuild" | "halfToll" | "acqSale" | "festInvite" | "back3" | "gift" | "congrats";
 export const CARDS: Record<CardId, { name: string; desc: string; w: number; good: number }> = {
-  allow: { name: "용돈", desc: "+150", w: 3, good: 2 },
-  fine: { name: "과속 딱지", desc: "−100", w: 2, good: -2 },
+  allow: { name: "용돈", desc: "+150코인", w: 3, good: 2 },
+  fine: { name: "과속 딱지", desc: "−100코인", w: 2, good: -2 },
   toStart: { name: "출발 포털로", desc: "출발 포털로 바로 가서 월급", w: 1, good: 2 },
   toJail: { name: "수리소 호출", desc: "도트 수리소로", w: 1, good: -3 },
   toWarp: { name: "워프 티켓", desc: "워프 게이트로", w: 1, good: 1 },
-  freeBuild: { name: "무료 공사권", desc: "다음 건설 한 단계 무료 (가지고 있음)", w: 2, good: 3 },
+  freeBuild: { name: "무료 공사권", desc: "다음에 짓는 건물 하나 무료 (가지고 있음)", w: 2, good: 3 },
   halfToll: { name: "반값 쿠폰", desc: "다음 통행료 반값 (가지고 있음)", w: 2, good: 3 },
   acqSale: { name: "부동산 세일", desc: "다음 인수 30% 할인 (가지고 있음)", w: 1, good: 2 },
   festInvite: { name: "축제 초대장", desc: "내 땅 하나에 축제", w: 1, good: 2 },
   back3: { name: "뒤로 세 칸", desc: "세 칸 뒤로", w: 1, good: 0 },
-  gift: { name: "기부 천사", desc: "상대마다 50씩 줌", w: 1, good: -1 },
-  congrats: { name: "축하 파티", desc: "상대마다 50씩 받음", w: 1, good: 2 },
+  gift: { name: "기부 천사", desc: "상대마다 50코인씩 줌", w: 1, good: -1 },
+  congrats: { name: "축하 파티", desc: "상대마다 50코인씩 받음", w: 1, good: 2 },
 };
 const CARD_IDS = Object.keys(CARDS) as CardId[];
 

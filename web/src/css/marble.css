@@ -963,7 +963,8 @@ html[data-mbcur] .mb :is(button, a, label, select, summary, [role="button"], [ta
 html[data-mbcur] .mb :is(button, a, label, select, summary, [role="button"], [tabindex="0"], input[type="checkbox"], input[type="range"], .cursor-pointer):not(:disabled) * {
   cursor: var(--mb-cur-pt), pointer !important;
 }
-.mb :is(button, a, label, select, summary, [role="button"], input[type="checkbox"], input[type="range"]):not(:disabled) {
+.mb :is(button, a, label, select, summary, [role="button"], [tabindex="0"], input[type="checkbox"], input[type="range"], .cursor-pointer):not(:disabled),
+.mb :is(button, a, label, select, summary, [role="button"], [tabindex="0"], input[type="checkbox"], input[type="range"], .cursor-pointer):not(:disabled) * {
   cursor: pointer;
 }
 

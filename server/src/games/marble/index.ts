@@ -28,8 +28,8 @@ import { LADDER_ROWS, makeRungs, trace } from "../../../../web/src/lib/marble/la
 
 /** 프롬프트별 사람 제한 시간 */
 /** 사다리: 고르는 시간 · 결과 보여 주는 시간 */
-const LADDER_PICK_MS = 10_000;
-const LADDER_SHOW_MS = 4_200;
+const LADDER_PICK_MS = 6_000;
+const LADDER_SHOW_MS = 2_600;
 const LIMIT: Record<string, number> = { turn: 15_000, post: 10_000, fork: 8_000, buy: 12_000, acq: 10_000, fest: 10_000 };
 /** 제한 시간을 연달아 넘기면 자동 진행 */
 const AUTO_AFTER_TIMEOUTS = 2;
@@ -431,7 +431,7 @@ export function registerMarble({ gateway, db, points, users }: Deps, opts: Marbl
       revealUntil: 0,
       seats,
       // AI · 자동 진행은 조금 뜸 들이다 고름
-      botAt: seats.map(() => now + ms(900 + rnd(2_600))),
+      botAt: seats.map(() => now + ms(300 + rnd(900))),
     };
     push(r);
     lobbyChanged();

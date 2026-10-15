@@ -177,7 +177,7 @@ export default function Board({
               type="button"
               aria-label={d.name}
               onClick={() => (can ? onPick?.(tile) : onInfo?.(tile))}
-              className={`absolute p-[3px] ${can ? "cursor-pointer" : "cursor-help"}`}
+              className="absolute cursor-pointer p-[3px]"
               style={{ left: r.x, top: r.y, width: r.w, height: r.h }}
             >
               <TileFace m={m} d={d} owner={t.owner} sx={sd.x} sy={sd.y} toll={t.owner >= 0 ? tollOf(gg, tile) : 0} mult={t.owner >= 0 ? tollMult(gg, tile) : 1} fest={t.owner >= 0 && g.players[t.owner]?.fest === tile} boost={t.boostLeft > 0} tw={r.w - 6} th={r.h - 6} />

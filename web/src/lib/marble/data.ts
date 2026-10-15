@@ -431,7 +431,7 @@ export const CHARS: CharDef[] = [
     passive: {
       name: "카드 트릭",
       fx: (p) => ({ salary: P(lin(k("mirage").sal, p)), doubleBonus: P(lin(k("mirage").dbl, p)), control: P(lin(k("mirage").ctl, p)) }),
-      desc: (p) => `출발 월급 +${pct(P(lin(k("mirage").sal, p)))} · 더블이면 +${Math.round(P(lin(k("mirage").dbl, p)))} · 힘 조절 +${pct(P(lin(k("mirage").ctl, p)))}`,
+      desc: (p) => `출발 월급 +${pct(P(lin(k("mirage").sal, p)))} · 더블이면 +${Math.round(P(lin(k("mirage").dbl, p)))}코인 · 힘 조절 +${pct(P(lin(k("mirage").ctl, p)))}`,
     },
     active: { name: "마술 굴리기", kind: "pick", cd: cdOf(k("mirage")), mag: () => 12, desc: () => "원하는 눈(2~12)으로 굴려요 (더블 아님)" },
     on: true,
@@ -488,7 +488,7 @@ export const CHARS: CharDef[] = [
     passive: {
       name: "요정의 눈짓",
       fx: (p) => ({ twin: P(lin(k("ur-dice").twin, p)), doubleBonus: P(lin(k("ur-dice").dbl, p)), control: P(lin(k("ur-dice").ctl, p)) }),
-      desc: (p) => `더블 확률 ↑ (${pct(P(lin(k("ur-dice").twin, p)))}) · 더블이면 +${Math.round(P(lin(k("ur-dice").dbl, p)))} · 힘 조절 +${pct(P(lin(k("ur-dice").ctl, p)))}`,
+      desc: (p) => `더블 확률 ↑ (${pct(P(lin(k("ur-dice").twin, p)))}) · 더블이면 +${Math.round(P(lin(k("ur-dice").dbl, p)))}코인 · 힘 조절 +${pct(P(lin(k("ur-dice").ctl, p)))}`,
     },
     active: { name: "운명의 주사위", kind: "fate", cd: cdOf(k("ur-dice")), mag: () => 6, desc: () => "원하는 더블(1·1 ~ 6·6)로 굴려요 — 더블이라 한 번 더" },
     on: true,
@@ -610,7 +610,7 @@ export const ITEMS: ItemDef[] = [
     name: "반짝 주사위",
     grade: "R",
     fx: (p) => ({ doubleBonus: I(lin(ik("d_spark").dbl, p)) }),
-    desc: (p) => `더블이 나오면 +${Math.round(I(lin(ik("d_spark").dbl, p)))}`,
+    desc: (p) => `더블이 나오면 +${Math.round(I(lin(ik("d_spark").dbl, p)))}코인`,
   },
   {
     id: "d_twin",
@@ -618,7 +618,7 @@ export const ITEMS: ItemDef[] = [
     name: "쌍둥이 주사위",
     grade: "SR",
     fx: (p) => ({ twin: I(lin(ik("d_twin").twin, p)), doubleBonus: I(lin(ik("d_twin").dbl, p)) }),
-    desc: (p) => `더블 확률 ↑ (안 나오면 ${pct(I(lin(ik("d_twin").twin, p)))} 확률로 맞춰짐) · 더블이면 +${Math.round(I(lin(ik("d_twin").dbl, p)))}`,
+    desc: (p) => `더블 확률 ↑ (안 나오면 ${pct(I(lin(ik("d_twin").twin, p)))} 확률로 맞춰짐) · 더블이면 +${Math.round(I(lin(ik("d_twin").dbl, p)))}코인`,
   },
   {
     id: "d_slide",
@@ -635,7 +635,7 @@ export const ITEMS: ItemDef[] = [
     name: "황금 주사위",
     grade: "SSR",
     fx: (p) => ({ usesPick: usesAt(1, ik("d_gold").at)(p), doubleBonus: I(lin(ik("d_gold").dbl, p)) }),
-    desc: (p) => `원하는 눈(2~12)으로 굴리기 (판당 ${usesAt(1, ik("d_gold").at)(p)}번) · 더블이면 +${Math.round(I(lin(ik("d_gold").dbl, p)))}`,
+    desc: (p) => `원하는 눈(2~12)으로 굴리기 (판당 ${usesAt(1, ik("d_gold").at)(p)}번) · 더블이면 +${Math.round(I(lin(ik("d_gold").dbl, p)))}코인`,
   },
   {
     id: "d_time",
@@ -643,7 +643,7 @@ export const ITEMS: ItemDef[] = [
     name: "시간 주사위",
     grade: "SSR",
     fx: (p) => ({ rewind: I(lin(ik("d_time").rewind, p)) }),
-    desc: (p) => `판당 한 번, ${ik("d_time").min} 넘는 통행료를 낼 때 시간을 되감아 ${pct(Math.min(1, I(lin(ik("d_time").rewind, p))))} 돌려받아요`,
+    desc: (p) => `판당 한 번, ${ik("d_time").min}코인 넘는 통행료를 낼 때 시간을 되감아 ${pct(Math.min(1, I(lin(ik("d_time").rewind, p))))} 돌려받아요`,
   },
   /* 동행 */
   {

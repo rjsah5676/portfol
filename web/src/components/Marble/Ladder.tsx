@@ -14,7 +14,7 @@ import { PCOLOR } from "./pixel";
 
 const W = 560;
 const H = 250;
-const DRAW_MS = 2400;
+const DRAW_MS = 1400;
 
 export default function Ladder({ room, me }: { room: RoomWire; me: string }) {
   const L = room.ladder!;
@@ -57,7 +57,7 @@ export default function Ladder({ room, me }: { room: RoomWire; me: string }) {
   const mySeat = room.seats.findIndex((s) => s?.uid === me);
   const mine = L.picks.indexOf(mySeat);
   const left = Math.max(0, Math.ceil((L.deadline - (now + skew)) / 1000));
-  const showResult = revealing && drawn && now + skew >= L.revealUntil - 4200 + DRAW_MS;
+  const showResult = revealing && drawn && now + skew >= L.revealUntil - 2600 + DRAW_MS;
   const seatOf = (col: number) => (L.picks[col] >= 0 ? room.seats[L.picks[col]] : null);
   const face = (si: number) => {
     const c = room.seats[si] ? CHAR[room.seats[si]!.lo.char.id] : null;

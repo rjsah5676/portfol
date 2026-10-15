@@ -670,14 +670,14 @@ function PlayerCard({
   const r = cornerRect(corner);
   const uses = p.uses.adjust + p.uses.pick + p.uses.reroll + p.uses.rewind;
   return (
-    <div className={`absolute z-[420] ${shake ? "mb-shake" : ""} ${pickable ? "mb-blink cursor-pointer" : ""}`} style={r.y > 288 ? { left: r.x, bottom: 10, width: r.w } : { left: r.x, top: r.y, width: r.w }} onClick={pickable ? onPick : onInfo} title={pickable ? undefined : "눌러서 장착 · 효과 보기"}>
+    <div className={`absolute z-[420] cursor-pointer ${shake ? "mb-shake" : ""} ${pickable ? "mb-blink" : ""}`} style={r.y > 288 ? { left: r.x, bottom: 10, width: r.w } : { left: r.x, top: r.y, width: r.w }} onClick={pickable ? onPick : onInfo} title={pickable ? undefined : "눌러서 장착 · 효과 보기"}>
       {/* 모두의마블처럼 카드 옆 빈자리에 쌓인 금화 */}
       <div className={`pointer-events-none absolute ${r.x < 512 ? "left-[calc(100%+8px)]" : "right-[calc(100%+8px)]"} ${r.y < 288 ? "top-[22px]" : "bottom-[10px]"}`}>
         <CoinStack cash={cash} />
       </div>
       <div className={`mb-box relative overflow-visible ${turn ? "mb-turn" : ""}`} style={{ "--c": PCOLOR[i], "--bg": "#ffffff", opacity: p.alive ? 1 : 0.55 } as CSSProperties}>
         {/* 이름 띠 */}
-        <div className="flex h-[26px] items-center gap-1.5 pr-2 pl-[86px]" style={{ background: PCOLOR[i], boxShadow: "inset 0 -3px 0 rgba(0,0,0,0.18), inset 0 3px 0 rgba(255,255,255,0.3)" }}>
+        <div className="flex h-[26px] items-center gap-1.5 rounded-t-[14px] pr-2 pl-[86px]" style={{ background: PCOLOR[i], boxShadow: "inset 0 -3px 0 rgba(0,0,0,0.18), inset 0 3px 0 rgba(255,255,255,0.3)" }}>
           {seat?.bot ? <Icon n="bot" size={13} /> : me ? <Icon n="crown" size={13} /> : null}
           <span className="rounded-[4px] bg-white px-[4px] text-[10px] leading-[14px] font-black" style={{ color: PCOLOR[i] }}>
             {i + 1}P
@@ -688,7 +688,7 @@ function PlayerCard({
           {!p.alive && <span className="mb-chip text-[10px]">파산</span>}
         </div>
         {/* 얼굴 (띠 위로 튀어나오게) */}
-        <div className="absolute top-[-10px] left-[8px] h-[72px] w-[72px] overflow-hidden bg-white" style={{ boxShadow: "0 0 0 3px #232a4d" }}>
+        <div className="absolute top-[-10px] left-[8px] h-[72px] w-[72px] overflow-hidden rounded-[12px] bg-white" style={{ boxShadow: "0 0 0 3px #232a4d" }}>
           {c && (
             <>
               <img src={`/marble/art/bg-${c.grade}.webp`} alt="" className="absolute inset-0 h-full w-full object-cover" />
@@ -1076,11 +1076,11 @@ function TileInfo({ g, tile, onClose }: { g: GameWire; tile: number; onClose(): 
     start: "지나가거나 서면 월급. 딱 서면 내 땅 하나를 골라 바로 지을 수 있어요.",
     start2: "지나가면 월급의 70%",
     box: "카드 한 장 — 좋은 일일 수도, 나쁜 일일 수도!",
-    jail: `더블이 나오거나 두 번 쉬어야 나가요. ${RULE.jailPay} 내면 바로 나가요.`,
+    jail: `더블이 나오거나 두 번 쉬어야 나가요. ${RULE.jailPay}코인 내면 바로 나가요.`,
     fest: "내 땅 하나를 골라 축제 (통행료 2배)",
     warp: "다음 차례에 원하는 칸으로 순간이동",
     tax: "땅 · 건물 값의 10% 를 세금으로",
-    bonus: `서면 +${RULE.bonus}`,
+    bonus: `서면 +${RULE.bonus}코인`,
     rail: "다른 기차역으로 바로 갈 수 있어요 (그냥 남아도 돼요)",
   };
   const owner = t.owner >= 0 ? g.players[t.owner] : null;
@@ -1502,7 +1502,7 @@ function SkillCutin({ b }: { b: Banner }) {
   const g = b.grade ?? "R";
   const rays = g === "SSR" || g === "UR";
   return (
-    <div className="pointer-events-none absolute inset-0 z-[60]" style={{ "--d": `${b.ms}ms` } as CSSProperties}>
+    <div className="pointer-events-none absolute inset-0 z-[630]" style={{ "--d": `${b.ms}ms` } as CSSProperties}>
       <div className="mbx-flash absolute inset-0" />
       <div className="mbx-cut absolute inset-x-[-40px] top-[170px] h-[210px] overflow-hidden" style={{ transform: "skewY(-5deg)", boxShadow: "0 -5px 0 0 #fff, 0 5px 0 0 #fff, 0 -9px 0 0 #232a4d, 0 9px 0 0 #232a4d" }}>
         <img src={`/marble/art/bg-${g}.webp`} alt="" className="absolute inset-0 h-full w-full object-cover" style={{ objectPosition: "center 30%" }} />
