@@ -579,7 +579,7 @@ const cloneF = (f: Fighter): Fighter => ({ ...f, hist: f.hist.slice() });
  * 이 빌드의 게임 데이터 지문 (캐릭터 성능·맵) — 온라인에서 서로 다른 빌드끼리 붙었는지 확인.
  * 계산 방식(sim.ts)만 바꿨을 땐 SIM_REV를 올릴 것.
  */
-const SIM_REV = 23;
+const SIM_REV = 24;
 export const BUILD_ID = (() => {
   const str = SIM_REV + JSON.stringify(CHARS.map((c) => [c.hp, c.walk, c.jumpVx, c.dash, c.cd, c.glide, c.hurt, c.width, c.moves])) + JSON.stringify(MAPS.map((m) => [m.plats, m.spawn]));
   let h = 2166136261;
@@ -1364,6 +1364,18 @@ function landed(s: State, i: number, f: Fighter) {
   f.airDash = 0;
   f.dashT = 0;
   const lm = moveOf(f);
+  // 땅에 닿기 직전에 낸 공중 아이덴티티: 판정이 나오기 전에 착지하면 아무것도 안 나가고 재사용 대기만 돌던 것 (10.16 제나)
+  // → 땅 버전으로 이어서 냄 (지난 시작 프레임은 그대로 셈, 재사용 대기는 땅 버전 값)
+  if (f.st === "atk" && f.aerial && f.mv === "S" && lm && f.t < lm.startup && !f.hit) {
+    const gm = charOf(f).moves.S;
+    f.aerial = 0;
+    f.dive = 0;
+    f.vx = 0;
+    f.t = Math.min(f.t, gm.startup - 1);
+    f.cd = gm.cd ?? charOf(f).cd;
+    s.ev.push({ k: "land", p: i, x: f.x, h: f.h, v: 0 });
+    return;
+  }
   if (f.st === "atk" && f.aerial && f.mv === "S" && lm?.hug) {
     if (f.hug) {
       // 안고 떨어져 착지: 바닥에 내리꽂음 → 기절 (그 자리에서 비틀거림, 이어 치기)
