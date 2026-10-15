@@ -175,7 +175,7 @@ const med = (xs: number[]) => (xs.length ? [...xs].sort((a, b) => a - b)[Math.fl
 const top = <K>(m: Map<K, number>, n: number) => [...m].sort((a, b) => b[1] - a[1]).slice(0, n);
 const hr = (t: string) => console.log(`\n── ${t} ──`);
 
-console.log("기술: L 약 · H 발차기(강) · J 위+약 · K 아래+발차기 · S 아이덴티티 · X 필살기 · T 잡기 · G 가드 반격 (실제 키 조합은 캐릭터마다 조금 다름)");
+console.log("기술: L 약 · H 발차기 · J 공중 약 · K 공중 발차기 · S 아이덴티티 · X 필살기 · T 잡기 · G 가드 반격");
 const modes = new Map<string, number>();
 for (const r of all) inc(modes, `${r.mode}`);
 hr(`전체 ${all.length}판 · 사람 ${new Set(all.flatMap((r) => r.uids.filter(Boolean))).size}명`);
