@@ -37,8 +37,24 @@ function fmtChips(n: number) {
   if (n >= MAN) return `${Math.floor(n / MAN).toLocaleString("ko-KR")}만`;
   return n.toLocaleString("ko-KR");
 }
+const BYTE_UNITS = ["B", "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB"];
+/** 바이트: 1024 단위 (바이러스 키우기 누적 데이터) */
+function fmtBytesShort(n: number) {
+  let u = 0;
+  while (n >= 1024 && u < BYTE_UNITS.length - 1) {
+    n /= 1024;
+    u++;
+  }
+  return `${u ? n.toFixed(n < 10 ? 1 : 0) : Math.floor(n)}${BYTE_UNITS[u]}`;
+}
 const fmtVal = (a: Achievement, v: number) =>
-  a.fmt === "chips" ? fmtChips(v) : Math.floor(v).toLocaleString("ko-KR");
+  a.fmt === "chips"
+    ? fmtChips(v)
+    : a.fmt === "bytes"
+      ? fmtBytesShort(v)
+      : a.fmt === "time"
+        ? `${Math.floor(v / 3600).toLocaleString("ko-KR")}시간`
+        : Math.floor(v).toLocaleString("ko-KR");
 
 type Row = { a: Achievement; s: AchState };
 

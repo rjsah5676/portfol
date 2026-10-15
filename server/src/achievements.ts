@@ -91,5 +91,13 @@ export async function metricsOf(db: Database, uid: string, game: AchGame): Promi
     m["sketch.relay"] = k.relay ?? 0;
   }
 
+  if (game === "virus") {
+    const d = (await users.findOne({ _id: uid }, { projection: { "stats.virus": 1 } })) as Doc | null;
+    const v = d?.stats?.virus ?? {};
+    // 게임이 보고한 기록 그대로 (http/virus.ts) — 키 이름이 업적 숫자 virus.<키>
+    for (const [k, n] of Object.entries(v)) if (typeof n === "number") m[`virus.${k}`] = n;
+    for (const k of ["best", "clears", "formats", "files", "bosses"]) m[`virus.${k}`] ??= 0;
+  }
+
   return m;
 }

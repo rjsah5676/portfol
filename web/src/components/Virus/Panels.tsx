@@ -31,10 +31,13 @@ export interface VirusSettings {
   bgm: number;
   /** 효과음 크기 0~1 (타격 · 익스플로잇 · 보스) */
   sfx: number;
-  /** 배경음악 끔 (오른쪽 위 버튼 · M 키) */
+  /** 배경음악 끔 (오른쪽 위 버튼 · M 키) · 효과음 끔 (그 옆 버튼 · N 키) */
   bgmMute: boolean;
+  sfxMute: boolean;
   /** 글자 크게 (모든 글자 1.15배) */
   big: boolean;
+  /** 착용한 스킨 (lib/virus/skins.ts id — 가진 것만 보임, 빈 값 = 기본) */
+  skin: string;
 }
 
 export const DEFAULT_SETTINGS: VirusSettings = {
@@ -43,7 +46,9 @@ export const DEFAULT_SETTINGS: VirusSettings = {
   bgm: 0.7,
   sfx: 0.8,
   bgmMute: false,
+  sfxMute: false,
   big: false,
+  skin: "",
 };
 export const SETTINGS_KEY = "virus-idle-settings";
 
@@ -214,9 +219,11 @@ export function SettingsPanel({
           key="sfx"
           label="효과음"
           value={settings.sfx}
-          shown={settings.sfx > 0 ? `${Math.round(settings.sfx * 100)}` : "꺼짐"}
-          desc="타격 · 익스플로잇 · 보스 등장 · 격퇴 · 실패"
-          onChange={(v) => onChange({ ...settings, sfx: v })}
+          shown={
+            settings.sfxMute || settings.sfx === 0 ? "꺼짐" : `${Math.round(settings.sfx * 100)}`
+          }
+          desc="타격 · 익스플로잇 · 보스 등장 · 격퇴 · 실패 · 🔔 버튼이나 N 키로 끄고 켜요"
+          onChange={(v) => onChange({ ...settings, sfx: v, sfxMute: false })}
         />,
         <Toggle
           key="big"
@@ -379,8 +386,11 @@ export function RecordsPanel({ s, fresh = [] }: { s: Save; fresh?: string[] }) {
       <div className="flex shrink-0 flex-wrap items-center gap-1.5">
         {tabBtn("ach", `🏅 업적 ${s.ach.length}/${ACH.length}`)}
         {tabBtn("stats", "📊 통계")}
-        <span className="vt-sm ml-auto text-amber-200">
+        <span className="vt-sm ml-auto text-right text-amber-200">
           업적 보너스 피해 +{Math.round(BAL.achDmg * 100 * s.ach.length)}%
+          <span className="vt-xs block text-sky-200/90">
+            💎 GP는 위 [업적] 버튼에서 받아요 (로그인)
+          </span>
         </span>
       </div>
       {view === "ach" ? (
@@ -412,6 +422,9 @@ export function RecordsPanel({ s, fresh = [] }: { s: Save; fresh?: string[] }) {
                     )}
                     {d.name}
                     {done && <span className="ml-1 text-emerald-300">✓</span>}
+                    <span className="vt-xs ml-1.5 font-mono font-normal text-sky-200/90">
+                      💎{d.reward.toLocaleString("ko-KR")}
+                    </span>
                   </span>
                   <span className="vt-xs block truncate text-white/75">{d.desc}</span>
                   {!done && goal > 1 && (
@@ -579,6 +592,22 @@ export function BackupPanel({
 
 /** 패치노트 — 새 버전을 맨 위에 */
 export const PATCH_NOTES: { ver: string; date: string; items: string[] }[] = [
+  {
+    ver: "v1.4",
+    date: "2026.10.16",
+    items: [
+      "💎 사이트 GP 연결 (로그인): 위 막대 💎 버튼의 GP 상점 창 — 디펜스와 같은 모델로 패키지(일일 보급 · 신입 해커 · 주간 보급 · 커널 꾸러미 · 스테이지 500 · 1000 돌파 꾸러미, 재화샵 값의 3~6배) · 재화샵(커널 코어 1,000 · 시간 가속 1시간 500) · 커널 코어 → GP(주 2번). 산 것은 바로 받아요",
+      "⏩ 시간 가속: 받으면 진행 막대로 그 시간만큼 바로 진행 (100% 효율, 한 번에 최대 48시간)",
+      "🛠️ 편의성: 루트 권한으로는 진행 조건을 넘으면 (프로파일러 스테이지 50 · 크론잡 100 · 크론 데몬 200 · 자동 컴파일러 300 · 우회 키 최적 배분 400 · 커널 프로파일러 500), 사이트 GP로는 조건 없이 바로 (500 · 1,000 · 3,000 · 2,000 · 1,500 · 1,500) — GP로 산 것은 계정에 남아 새 게임 · 다른 기기에서도 열려 있음",
+      "🎨 꾸미기 스킨 (능력 변화 없음): 🧊 프로스트 · 🔥 인페르노 3,000 · 👑 골드 루트킷 5,000 · 🌈 글리치 RGB 8,000 · 🕳️ 보이드(「보이드 꾸러미」 전용) — 내 바이러스 · 날아가는 코드의 색과 글자가 바뀜, GP 상점 「꾸미기」에서 착용",
+      "🏅 업적 하나로: 게임 안 업적 37개를 사이트 업적으로 옮김 — 달성하면 지금처럼 피해 +2%, 위 [업적]에서 GP도 (합계 36,200) · 일일 미션 3개 (파일 3,000개 · 보스 30마리 · 변이 1번) — 로그인하면 기록을 1분마다 서버에 보고",
+      "🔔 효과음만 끄는 버튼 (배경음악 버튼 옆 · N 키)",
+      "🔌 부트 선점 아이콘을 전원으로 (부팅)",
+      "☢️ KILLSWITCH 스테이지 분리: 스테이지 1000의 상위 보스를 잡으면 따로 된 KILLSWITCH 스테이지로 — 파일 없이 최종 보스만, 지면 그 스테이지 파일부터",
+      "♾️ 무한 모드 (다음 패치까지): 버전마다 체력 ×2 (버전이 오를수록 증가율도 ×1.05씩) · 잡을 때마다 「각인」 모든 피해 ×1.5 (영구) · 지면 「패치 분석」 다음 도전 피해 ×1.1씩 (잡으면 처음으로) · 버전 하나 = 루트 권한 스테이지 20개 · 10버전마다 커널 코어 +5 · 사이트 업적 「인터넷의 종말 · 계속」(10버전마다 1,500 GP) · 이정표 스킨 ☢️ 킬스위치(v10) · 🕷️ 제로데이(v20) · ⬛ 엔드 오브 라인(v30)",
+      "🧹 UI 개편: 업그레이드 카드 2줄 · ▲ / 🎲 버튼 같은 크기, 코드 모듈 · 우회 기술은 2칸(넓으면 5칸) 작은 카드, 페이지 넘김 줄임, 모듈 오버클럭 · 커널 패치 설명 보강",
+    ],
+  },
   {
     ver: "v1.3",
     date: "2026.10.15",

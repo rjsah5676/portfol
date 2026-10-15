@@ -721,14 +721,14 @@
     margin-inline: auto;
   }
 }
-/* 아래 패널: 세로로 긴 틀(폰 세로)은 36%, 가로로 긴 틀(PC)은 35% */
+/* 아래 패널: 세로로 긴 틀(폰 세로)은 46%, 가로로 긴 틀(PC)은 44% — 카드가 두세 줄은 보이게 (전투 화면은 빈 곳이 많음) */
 .vg-panel {
-  height: clamp(200px, calc(36cqh / var(--vz, 1)), 420px);
+  height: clamp(230px, calc(46cqh / var(--vz, 1)), 480px);
   border-top: 1px solid rgba(74, 222, 128, 0.15);
 }
 @container vg (min-aspect-ratio: 4/3) {
   .vg-panel {
-    height: calc(35cqh / var(--vz, 1));
+    height: calc(44cqh / var(--vz, 1));
   }
 }
 /* 폰 가로 (낮고 넓은 틀): 왼쪽 전투 · 오른쪽 패널 */
@@ -1210,5 +1210,18 @@
   }
 }
 .virus-calm .vg-autolog {
+  animation: none;
+}
+
+/* 스킨 「글리치 RGB」: 색이 계속 바뀜 */
+.vg-rgb {
+  animation: vg-rgb 4s linear infinite;
+}
+@keyframes vg-rgb {
+  to {
+    filter: hue-rotate(360deg);
+  }
+}
+.virus-calm .vg-rgb {
   animation: none;
 }

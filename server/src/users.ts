@@ -28,6 +28,14 @@ export interface UserStats {
   plays?: Record<string, number>;
   /** 온라인 대국 전적 (체스·장기·오목·격투) */
   online?: Record<string, { w?: number; l?: number; d?: number }>;
+  /** VIRUS IDLE — 게임이 보고한 기록 (http/virus.ts · best · clears 는 최고값, files · bosses · formats 는 누적) */
+  virus?: Record<string, number | undefined> & {
+    best?: number;
+    clears?: number;
+    files?: number;
+    bosses?: number;
+    formats?: number;
+  };
   /** DOODLE PARTY (예전 스케치 퀴즈) */
   sketch?: {
     correct?: number;

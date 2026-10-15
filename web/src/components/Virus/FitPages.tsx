@@ -88,14 +88,16 @@ export function Pager({
   page,
   pages,
   onPage,
+  small = false,
 }: {
   page: number;
   pages: number;
   onPage: (p: number) => void;
+  /** 작게 (게임 아래 패널 — 카드가 한 줄 더 들어가게) */
+  small?: boolean;
 }) {
   if (pages <= 1) return null;
-  const btn =
-    "flex h-7 w-7 items-center justify-center rounded-md border border-white/20 text-white/90 transition-colors enabled:hover:border-emerald-300/70";
+  const btn = `flex ${small ? "h-5 w-6 text-[10px]" : "h-7 w-7"} items-center justify-center rounded-md border border-white/20 text-white/90 transition-colors enabled:hover:border-emerald-300/70`;
   return (
     <div className="flex shrink-0 items-center gap-1 font-mono">
       <button
@@ -106,7 +108,9 @@ export function Pager({
       >
         ◀
       </button>
-      <span className="vt-sm min-w-9 text-center text-white/90 tabular-nums">
+      <span
+        className={`${small ? "vt-xs min-w-7" : "vt-sm min-w-9"} text-center text-white/90 tabular-nums`}
+      >
         {page + 1}/{pages}
       </span>
       <button

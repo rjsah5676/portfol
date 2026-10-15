@@ -48,6 +48,9 @@ import {
   apexCount,
   isApexStage,
   MAX_STAGE,
+  FINAL_STAGE,
+  isFinalStage,
+  ksCores,
   finalHp,
   finalData,
   optimalPlan,
@@ -159,6 +162,8 @@ function bestUpgrade(s: Save) {
 
 let s = newSave();
 let t = 0;
+/** KILLSWITCH 버전마다 잡은 시각 */
+const ksAt: number[] = [];
 if (UTIL_FREE) Object.assign(s.shop, { profiler: 1, cron: 1, daemon: 1 });
 if (KALLOC_FREE) s.shop.kalloc = 1;
 /** 편의성을 산 때 (시각 · 그때 최고 스테이지) */
@@ -335,9 +340,9 @@ let fin = false;
 let finalAt = -1;
 function nextEnemy() {
   st = stats(s);
-  boss = s.kills >= MOBS_PER_STAGE && farmLeft <= 0;
-  // 스테이지 100 상위 보스까지 잡으면 최종 보스, 10스테이지마다 보스를 잡으면 상위 보스(보안 시스템)
-  fin = boss && s.finalReady;
+  // KILLSWITCH 스테이지는 파일 없이 바로 최종 보스, 10스테이지마다 보스를 잡으면 상위 보스(보안 시스템)
+  boss = (s.kills >= MOBS_PER_STAGE || isFinalStage(s.stage)) && farmLeft <= 0;
+  fin = boss && isFinalStage(s.stage);
   apex = boss && s.bossDone && !fin;
   hp = fin
     ? finalHp(st, s.clears)
@@ -445,18 +450,19 @@ while (t < HOURS * 3600) {
       else s.rec.bosses++;
     }
     if (fin) {
-      // 최종 보스: 스테이지 100에 머물며 다시 파일부터
+      // 최종 보스: KILLSWITCH 스테이지에 머물며 다음 버전
       gainData(s, finalData(st));
       if (finalAt < 0) finalAt = t;
       s.clears++;
-      s.cores++;
+      s.ksStudy = 0;
+      ksAt.push(t);
+      s.cores += ksCores(s.clears);
       spendCores(s);
-      s.finalReady = false;
       s.kills = 0;
       fails = 0;
       if (TO_END) break;
     } else if (boss && apex && s.stage >= MAX_STAGE) {
-      // 마지막 상위 보스: 더 나아가지 않고 바로 최종 보스
+      // 마지막 상위 보스: KILLSWITCH 스테이지로
       gainData(s, apexData(s.stage, st));
       loot("apex", s.stage >= s.best);
       if (s.stage > s.apexBest && apexAt[apexCount(s.stage)] == null)
@@ -464,7 +470,9 @@ while (t < HOURS * 3600) {
       s.apexBest = Math.max(s.apexBest, s.stage);
       if (s.formats === 0 && stageAt[MAX_STAGE] == null) stageAt[MAX_STAGE] = t;
       s.bossDone = false;
-      s.finalReady = true;
+      s.kills = 0;
+      s.stage = FINAL_STAGE;
+      s.runTop = Math.max(s.runTop, FINAL_STAGE);
       s.best = Math.max(s.best, MAX_STAGE + 1);
       noteBest();
       fails = 0;
@@ -511,6 +519,7 @@ while (t < HOURS * 3600) {
   } else if (boss && left <= 0) {
     fails++;
     s.rec.fails++;
+    if (isFinalStage(s.stage)) s.ksStudy++;
     farmLeft = RETRY_FARM;
     nextEnemy();
   }
@@ -575,7 +584,7 @@ for (let n = 100; n <= MAX_STAGE; n += 100) {
   prevT = b.t;
 }
 console.log(
-  `  끝 시각 ${fmtT(t)} · 최고 ${s.best - 1} · 지금 스테이지 ${s.stage} · 루트 권한 ${fmt(s.root)} · 코어 ${s.cores}`
+  `  끝 시각 ${fmtT(t)} · 최고 ${s.best - 1} · 지금 스테이지 ${s.stage} · 루트 권한 ${fmt(s.root)} · 코어 ${s.cores} · KILLSWITCH ${s.clears}번`
 );
 if (AUTO)
   console.log(
@@ -641,6 +650,13 @@ console.log(
       .join(" · ") || "없음")
 );
 console.log(`최종 보스 처음 격퇴: ${finalAt < 0 ? "없음" : fmtT(finalAt)} (모두 ${s.clears}번)`);
+if (ksAt.length)
+  console.log(
+    `KILLSWITCH 버전별: ${[1, 2, 5, 10, 15, 20, 30, 50, 75, 100, 150, 200, 300]
+      .filter((n) => n <= ksAt.length)
+      .map((n) => `v${n} ${fmtT(ksAt[n - 1])}`)
+      .join(" · ")} (모두 ${ksAt.length}번)`
+  );
 console.log(`루트 권한 상점: ${JSON.stringify(s.shop)} · 남은 포인트 ${rootLeft(s)}`);
 console.log(
   `누적 데이터 ${fmtBytes(s.lifetime)} · 파일 ${s.rec.files} · 보스 ${s.rec.bosses} · 차단 ${s.rec.fails} · KILLSWITCH 최단 ${s.rec.bestFinal.toFixed(1)}초`

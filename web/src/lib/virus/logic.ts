@@ -14,6 +14,8 @@
 //   - 모듈은 버전마다 작은 배율로 곱해짐 (10스테이지마다 오르므로 크면 성장이 폭주)
 //   - 루트 권한은 최고 스테이지의 거듭제곱 — 누적 데이터(지수적으로 늘어남)로 정하면 포맷마다 폭주함
 
+import { ACHIEVEMENTS, shopItem } from "../points";
+
 /** 밸런스 수치 — 한곳에서 조정 */
 export const BAL = {
   /** 1스테이지 파일의 보안 등급(체력) */
@@ -32,7 +34,20 @@ export const BAL = {
   finalHp: 3,
   finalData: 10,
   /** KILLSWITCH 를 잡을 때마다 다음 버전 체력 배율 */
-  finalGrowth: 1.5,
+  finalGrowth: 2,
+  /** KILLSWITCH 버전마다 증가율이 이 배씩 더 (v n 의 증가율 = finalGrowth × finalAccel^(n-1)) */
+  finalAccel: 1.05,
+  /**
+   * 무한 KILLSWITCH: 격퇴할 때마다 모든 피해 ×이 값 (영구 「KILLSWITCH 각인」) — 다음 버전(체력 ×finalGrowth)보다 조금 모자라
+   * 파일 감염 · 업그레이드 · 커널 패치로 메워야 함 (1000 뒤로는 루트 권한이 안 늘어서, 이게 없으면 몇 버전 만에 멈춤)
+   */
+  ksBonus: 1.5,
+  /** KILLSWITCH 10버전마다 커널 코어 더 */
+  ksMilestoneCores: 5,
+  /** KILLSWITCH 버전 하나를 루트 권한에서 스테이지 몇 개로 칠지 */
+  ksRootStages: 20,
+  /** 「패치 분석」: KILLSWITCH 에 질 때마다 피해 ×이 값 (잡으면 처음으로) — 언젠가는 반드시 잡힘 */
+  ksStudy: 1.1,
   /** 커널 상점: 커널 패치 피해 · 권한 상승 루트 권한 획득 · 데이터 압축 데이터 · 인터럽트 지연 보스 시간(초) */
   corePatch: 1.25,
   /** 커널 권한 「장기 잠복」: 오프라인 최대 시간 · 「모듈 오버클럭」: 코드 모듈 효과 상한 배율 */
@@ -206,6 +221,8 @@ export interface Save {
   finalReady: boolean;
   /** 최종 보스를 잡은 횟수 (변이해도 유지) — 다음 KILLSWITCH 는 v(clears+1) */
   clears: number;
+  /** 「패치 분석」: 지금 KILLSWITCH 버전에 진 횟수 — 질 때마다 피해 ×ksStudy, 잡으면 0 (변이해도 유지) */
+  ksStudy: number;
   /** 아직 안 쓴 커널 코어 (최종 보스를 잡을 때마다 1, 변이해도 유지) */
   cores: number;
   /** 상위 보스를 처음 잡은 가장 높은 스테이지 (포맷해도 유지) — 특성 · 외형은 이걸로 정해짐 */
@@ -244,6 +261,8 @@ export interface Save {
   autoFmt: boolean;
   /** 숫자 규모 버전 (SAVE_SCALE — v1.1 까지의 저장본은 없음: 불러올 때 데이터 · 조각 · 키를 새 규모로 줄임) */
   scale: number;
+  /** 서버에 마지막으로 보고한 누적 기록 (http/virus.ts — 늘어난 만큼만 보냄) */
+  rep?: { files: number; bosses: number; formats: number };
   savedAt: number;
 }
 
@@ -311,6 +330,7 @@ export function newSave(): Save {
     bossDone: false,
     finalReady: false,
     clears: 0,
+    ksStudy: 0,
     apexBest: 0,
     root: 0,
     rootSpent: 0,
@@ -391,16 +411,19 @@ export function parseSave(raw: string | null): Save {
     // v1.0 까지의 「빠른 재감염」 I · II · 「보스 지정」 (코어 1개씩) 도 돌려줌
     for (const k of ["kfast", "kfast2", "kpick"]) if ((old[k] ?? 0) > 0) coreRefund += 1;
     // 스테이지 상한: 넘은 저장본은 MAX_STAGE 로 (best = MAX_STAGE + 1 은 마지막 스테이지까지 통과)
-    let stage = Math.min(s.stage, MAX_STAGE);
-    let best = Math.min(Math.max(s.best || 1, s.stage), MAX_STAGE + 1);
+    let stage = Math.min(s.stage, FINAL_STAGE);
+    let best = Math.min(Math.max(s.best || 1, Math.min(s.stage, MAX_STAGE)), MAX_STAGE + 1);
     const apexBest = Math.min(s.apexBest || 0, MAX_STAGE);
-    let finalReady = s.stage > MAX_STAGE || !!s.finalReady;
     // v0.5 까지는 스테이지 100이 끝 — 거기서 최종 보스를 기다리던 저장본은 101부터 이어서
-    if (finalReady && stage < MAX_STAGE) {
-      finalReady = false;
+    if (s.finalReady && stage < MAX_STAGE) {
       stage += 1;
       best = Math.max(best, stage);
+    } else if (s.finalReady || isFinalStage(stage)) {
+      // v1.4 까지: 마지막 스테이지에서 KILLSWITCH 를 기다리던 진행 → KILLSWITCH 스테이지로
+      stage = FINAL_STAGE;
+      best = MAX_STAGE + 1;
     }
+    const finalReady = false;
     const oldCap = !!s.finalReady && s.stage <= 100;
     // 기록 · 업적 (v0.5에서 생김 — 없으면 빈 값, 모르는 값은 버림)
     const rec = newRec();
@@ -409,7 +432,18 @@ export function parseSave(raw: string | null): Save {
       if (typeof v === "number" && Number.isFinite(v) && v >= 0) rec[k] = v;
     }
     const achIds = new Set(ACH.map((a) => a.id));
-    const ach = Array.isArray(s.ach) ? [...new Set(s.ach.filter((id) => achIds.has(id)))] : [];
+    // v1.4 까지 게임 안 업적 id (st11 …) → 사이트 업적과 하나 (virus.st11 …)
+    const ach = Array.isArray(s.ach)
+      ? [
+          ...new Set(
+            s.ach
+              .map((id) =>
+                typeof id === "string" && !id.startsWith("virus.") ? `virus.${id}` : id
+              )
+              .filter((id) => achIds.has(id))
+          ),
+        ]
+      : [];
     // v0.7 까지의 챌린지 (삭제됨) 기록은 버림
     // v1.0 까지의 상위 보스별 우회 키(keys)는 codeOf 에서 공용 키로 합침
     const {
@@ -433,14 +467,18 @@ export function parseSave(raw: string | null): Save {
       best,
       apexBest,
       finalReady,
-      kills: s.stage > MAX_STAGE || oldCap ? 0 : s.kills,
+      kills: isFinalStage(stage) || oldCap ? 0 : s.kills,
+      ksStudy: Math.max(0, Math.floor(Number(s.ksStudy) || 0)),
       cores: Math.max(0, Number(s.cores) || 0) + coreRefund,
       bossDone: oldCap ? false : !!s.bossDone,
       rec,
       ach,
       achSeen: Math.min(ach.length, Math.max(0, Math.floor(Number(s.achSeen) || 0))),
       ...codeOf(s, best, apexBest),
-      runTop: Math.max(stage, Math.min(Number(s.runTop) || stage, best)),
+      runTop: Math.max(
+        stage,
+        Math.min(Number(s.runTop) || stage, isFinalStage(stage) ? FINAL_STAGE : best)
+      ),
       repeat: !!s.repeat,
       autoFmt: !!s.autoFmt,
       bossIdx:
@@ -575,7 +613,7 @@ const fxAt = (i: number, v: number) => fxOf(ROSTER.map((_, k) => (k === i ? v : 
 export const ROSTER: VirusDef[] = [
   {
     id: "brain",
-    icon: "🥾",
+    icon: "🔌",
     join: 60,
     name: "Brain",
     year: 1986,
@@ -1017,13 +1055,13 @@ export function dropKey(s: Save, fresh: boolean) {
 
 /** 스테이지 고르기 (1 ~ 이번 회차에 오른 가장 높은 스테이지) — 파일부터 다시, 보스는 새로 뽑음 */
 export function gotoStage(s: Save, stage: number) {
-  const n = Math.max(1, Math.min(stage, s.runTop, MAX_STAGE));
+  const n = Math.max(1, Math.min(stage, s.runTop, FINAL_STAGE));
   if (n === s.stage) return false;
   s.stage = n;
   s.kills = 0;
   s.bossFail = false;
   s.bossDone = false;
-  if (n < MAX_STAGE) s.finalReady = false;
+  s.finalReady = false;
   rollBoss(s);
   return true;
 }
@@ -1167,8 +1205,20 @@ const WORLDS = [
   "궤도 정거장",
   "글로벌 코어",
 ];
+/**
+ * KILLSWITCH 스테이지 — 마지막 스테이지(MAX_STAGE)의 상위 보스를 잡으면 들어가는 따로 된 스테이지.
+ * 파일 없이 KILLSWITCH 만 나오고, 잡으면 그대로 머물며 다음 버전(체력 ×finalGrowth)이 나옴. 지면 그 스테이지 파일부터
+ */
+export const FINAL_STAGE = MAX_STAGE + 1;
+/** KILLSWITCH 를 n번째로 잡을 때 받는 커널 코어 (10번마다 이정표 — 더) */
+export function ksCores(n: number) {
+  return 1 + (n % 10 === 0 ? BAL.ksMilestoneCores : 0);
+}
+export const isFinalStage = (stage: number) => stage > MAX_STAGE;
+
 /** 네트워크 이름 (1~100은 10스테이지마다, 그 뒤로는 100스테이지마다 + 구역) */
 export function zoneOf(stage: number) {
+  if (isFinalStage(stage)) return "☢️ KILLSWITCH";
   const z = Math.floor((stage - 1) / 10);
   if (z < ZONES.length) return ZONES[z];
   const w = Math.min(WORLDS.length - 1, Math.floor((stage - 1) / 100) - 1);
@@ -1276,7 +1326,9 @@ export function stats(s: Save): Stats {
       ) *
       rootMul *
       achMul *
-      (ev >= 10 ? 2 : 1),
+      (ev >= 10 ? 2 : 1) *
+      BAL.ksBonus ** s.clears *
+      BAL.ksStudy ** s.ksStudy,
     aps,
     critChance,
     critMul: mag(
@@ -1388,7 +1440,13 @@ export function apexData(stage: number, st: Stats) {
 }
 /** 최종 보스: 마지막 스테이지 상위 보스의 finalHp 배 체력 · finalData 배 보상 */
 export function finalHp(st: Stats, clears: number) {
-  return apexHp(MAX_STAGE, st) * BAL.finalHp * BAL.finalGrowth ** clears;
+  // 버전마다 증가율도 finalAccel 배씩 — 각인 · 루트 권한이 따라잡다가 점점 벽이 됨
+  return (
+    apexHp(MAX_STAGE, st) *
+    BAL.finalHp *
+    BAL.finalGrowth ** clears *
+    BAL.finalAccel ** ((clears * (clears - 1)) / 2)
+  );
 }
 export function finalData(st: Stats) {
   return apexData(MAX_STAGE, st) * BAL.finalData;
@@ -1571,14 +1629,15 @@ export function randExpectedGain(s: Save, key: UpgKey) {
  * 최고 스테이지에 따른 루트 권한 합계 — 100까지는 거듭제곱, 그 뒤로는 스테이지마다 rootLate 배씩 더
  * (적 체력이 지수로 늘어나는 후반에 거듭제곱만 쓰면 변이할수록 덜 밀려서 결국 벽에 막힘)
  */
-export function rootTotal(best: number) {
-  const late = Math.max(0, best - 1 - BAL.lateFrom);
+export function rootTotal(best: number, clears = 0) {
+  // KILLSWITCH 버전 하나 = 스테이지 ksRootStages 개 (1000 뒤로도 변이할 이유가 생김)
+  const late = Math.max(0, best - 1 - BAL.lateFrom) + clears * BAL.ksRootStages;
   return Math.floor(((best - 1) / BAL.rootDiv) ** BAL.rootPow * BAL.rootLate ** late);
 }
 
 /** 지금 포맷하면 새로 받는 루트 권한 (전보다 더 멀리 가야 생김) */
 export function pendingRoot(s: Save) {
-  return Math.max(0, Math.floor(rootTotal(s.best) * stats(s).rootGain) - s.root);
+  return Math.max(0, Math.floor(rootTotal(s.best, s.clears) * stats(s).rootGain) - s.root);
 }
 
 /** 포맷할 수 있는지 (이번 회차에 formatStage 이상 + 받을 루트 권한이 있음) */
@@ -1604,6 +1663,7 @@ export function format(s: Save): Save {
     best: s.best,
     apexBest: s.apexBest,
     clears: s.clears,
+    ksStudy: s.ksStudy,
     cores: s.cores,
     root: s.root + pendingRoot(s),
     rootSpent: s.rootSpent,
@@ -1618,6 +1678,7 @@ export function format(s: Save): Save {
     frag: [...s.frag],
     byp: [...s.byp],
     ukey: s.ukey,
+    rep: s.rep,
   };
   n.runTop = n.stage;
   rollBoss(n);
@@ -1637,6 +1698,11 @@ export interface ShopDef {
   req?: ShopKey;
   /** 편의성 상품을 모두 가져야 열림 */
   needUtil?: boolean;
+  /**
+   * 루트 권한으로 사려면 이 스테이지를 넘어야 함 (편의성 — 루트 권한은 금방 넘쳐서 가격 대신 진행으로 막음).
+   * 사이트 GP로 사면 조건 없이 바로 (canBuyShopGp)
+   */
+  needBest?: number;
   /** 효율 강화(power) · 편의성(util) · 커널(core — 커널 코어로 삼) */
   group: "power" | "util" | "core";
   desc: string;
@@ -1684,6 +1750,7 @@ export const SHOP: ShopDef[] = [
     base: 20,
     growth: 1,
     max: 1,
+    needBest: 50,
     desc: "코드 성능을 재서, 데이터를 쓴 만큼 초당 피해가 가장 많이 오르는 업그레이드를 알려 줌",
     label: (lv) => (lv ? "업그레이드 추천 켜짐" : "업그레이드 탭에서 효율 1등 추천"),
   },
@@ -1695,6 +1762,7 @@ export const SHOP: ShopDef[] = [
     base: 40,
     growth: 1,
     max: 1,
+    needBest: 100,
     req: "profiler",
     desc: "가진 데이터를 모두 써서 초당 피해가 가장 많이 오르는 조합으로 한 번에 업그레이드하는 예약 작업",
     label: (lv) => (lv ? "⚡ 최적 업그레이드 버튼 사용 가능" : "⚡ 최적 업그레이드 버튼 열기"),
@@ -1707,6 +1775,7 @@ export const SHOP: ShopDef[] = [
     base: 100,
     growth: 1,
     max: 1,
+    needBest: 200,
     req: "cron",
     desc: "크론잡을 백그라운드에 상주시켜, 가장 효율 좋은 업그레이드를 데이터가 모이는 대로 알아서 실행 (더 좋은 것이 곧 살 수 있으면 데이터를 모아 둠)",
     label: (lv) => (lv ? "자동 최적 업그레이드 사용 가능" : "효율 1등 업그레이드를 자동 구매"),
@@ -1719,6 +1788,7 @@ export const SHOP: ShopDef[] = [
     base: 150,
     growth: 1,
     max: 1,
+    needBest: 500,
     req: "daemon",
     desc: "루트 권한을 쓴 만큼 초당 피해가 가장 많이 오르는 상품(루트킷 · 데이터 마이닝 · 폴리모픽 엔진)을 알려 줌",
     label: (lv) => (lv ? "루트 상점 추천 켜짐" : "루트 상점에서 효율 1등 추천"),
@@ -1731,6 +1801,7 @@ export const SHOP: ShopDef[] = [
     base: 120,
     growth: 1,
     max: 1,
+    needBest: 300,
     req: "daemon",
     desc: "코드 조각 · 우회 키가 모이면 알림 없이 바로 컴파일",
     label: (lv) => (lv ? "자동 컴파일 켜짐" : "조각이 모이면 바로 컴파일"),
@@ -1743,6 +1814,7 @@ export const SHOP: ShopDef[] = [
     base: 60,
     growth: 1,
     max: 1,
+    needBest: 400,
     req: "profiler",
     desc: "우회 키를 컴파일할 때, 키 1개당 보스 처치 · 데이터 수입이 가장 많이 오르는 우회 기술부터 씀 (없으면 다음 버전이 가장 싼 것부터 고르게)",
     label: (lv) => (lv ? "우회 키 최적 배분 켜짐" : "우회 키를 효율 순으로 자동 배분"),
@@ -1805,7 +1877,7 @@ export const SHOP: ShopDef[] = [
     growth: 1,
     max: 1,
     req: "kformat",
-    desc: "코드 모듈의 한계를 넘김 — 모든 공격 효과의 상한이 올라감",
+    desc: "코드 모듈의 한계를 넘김 — 모든 공격 효과의 상한이 올라감 (버전이 높은 모듈일수록 크게: v10 절반 · v30 약 90% · v50 거의 전부, 보통 살 때쯤이면 초당 피해 +25% · 보스 +34%)",
     label: () => `코드 모듈 효과 상한 ×${BAL.coreOver}`,
   },
   {
@@ -1848,7 +1920,8 @@ export function canAffordShop(s: Save, d: ShopDef) {
 export function shopLocked(s: Save, d: ShopDef) {
   return (
     (d.req != null && !s.shop[d.req]) ||
-    (!!d.needUtil && SHOP.some((x) => x.group === "util" && !s.shop[x.key]))
+    (!!d.needUtil && SHOP.some((x) => x.group === "util" && !s.shop[x.key])) ||
+    (d.needBest != null && s.best - 1 < d.needBest)
   );
 }
 
@@ -1881,31 +1954,38 @@ export function buyShop(s: Save, key: ShopKey) {
   return true;
 }
 
-/** 루트 권한 1 = GP 이만큼 */
-export const GP_PER_ROOT = 10;
+/** 사이트 GP 상점 상품 id (lib/points.ts SHOP — 서버가 사고 inv.virus 에 남김) */
+export const gpItemId = (key: ShopKey) => `virus.util.${key}`;
 
-/** GP로도 살 수 있는 상품인지 — 밸런스를 해치지 않게 편의성만 */
+/** GP로도 살 수 있는 상품인지 — 밸런스를 해치지 않게 편의성만 (사이트 상점에 있는 것) */
 export function gpPayable(d: ShopDef) {
-  return d.group === "util";
+  return d.group === "util" && !!shopItem(gpItemId(d.key));
 }
 
-/** 이 상품의 GP 가격 (GP로 못 사면 null) */
-export function shopGpCost(s: Save, d: ShopDef) {
-  return gpPayable(d) ? shopCost(d, s.shop[d.key]) * GP_PER_ROOT : null;
+/** 이 상품의 GP 가격 (GP로 못 사면 null) — 사이트 상점 가격 */
+export function shopGpCost(d: ShopDef) {
+  return gpPayable(d) ? (shopItem(gpItemId(d.key))?.price ?? null) : null;
+}
+
+/** GP로 살 수 있는 상태인지 (GP 상품이 있고 아직 없음) — 진행 조건 · 앞 상품 순서는 건너뜀, GP는 서버가 뺌 */
+export function canBuyShopGp(s: Save, key: ShopKey) {
+  const d = SHOP.find((x) => x.key === key)!;
+  if (shopGpCost(d) == null) return false;
+  return !(d.max != null && s.shop[key] >= d.max);
 }
 
 /**
- * GP로 사기 (루트 권한은 그대로) — 살 수 있는지 다 확인한 뒤에 pay(GP 가격) 로 GP를 빼고, 성공하면 true
- * (GP 지갑은 게임 밖에 있어서 빼는 일은 부르는 쪽이 넘겨 줌)
+ * 계정에서 GP로 산 편의성 (서버 inv.virus — 상품 ref = 상점 key) 을 이 저장본에 열어 둠.
+ * 계정에 남는 것이라 새 게임 · 다른 기기에서도 열림. 새로 열린 게 있으면 true
  */
-export function buyShopGp(s: Save, key: ShopKey, pay: (gp: number) => boolean) {
-  const d = SHOP.find((x) => x.key === key)!;
-  const cost = shopGpCost(s, d);
-  if (cost == null || shopLocked(s, d)) return false;
-  if (d.max != null && s.shop[key] >= d.max) return false;
-  if (!pay(cost)) return false;
-  s.shop[key]++;
-  return true;
+export function applyOwnedUtil(s: Save, owned: readonly string[]) {
+  let changed = false;
+  for (const d of SHOP)
+    if (d.group === "util" && owned.includes(d.key) && !s.shop[d.key]) {
+      s.shop[d.key] = 1;
+      changed = true;
+    }
+  return changed;
 }
 
 // ── 업그레이드 추천 (프로파일러) ──
@@ -2203,8 +2283,8 @@ export function createAwaySim(start: Save, totalSecs: number, power = 1) {
   const fresh = () => s.stage >= s.best;
   /** 이 스테이지의 다음 적 (게임 spawn 과 같은 규칙) */
   const spawn = () => {
-    boss = s.kills >= MOBS_PER_STAGE && !s.bossFail;
-    fin = boss && s.finalReady;
+    boss = (s.kills >= MOBS_PER_STAGE || isFinalStage(s.stage)) && !s.bossFail;
+    fin = boss && isFinalStage(s.stage);
     apex = boss && s.bossDone && !fin;
     hp = fin
       ? finalHp(st, s.clears)
@@ -2232,8 +2312,8 @@ export function createAwaySim(start: Save, totalSecs: number, power = 1) {
     if (fin) {
       gainData(s, finalData(st) * leech);
       s.clears++;
-      s.cores++;
-      s.finalReady = false;
+      s.ksStudy = 0;
+      s.cores += ksCores(s.clears);
       s.bossDone = false;
       s.kills = 0;
     } else if (boss && !apex && isApexStage(s.stage)) {
@@ -2251,18 +2331,11 @@ export function createAwaySim(start: Save, totalSecs: number, power = 1) {
       if (newApex) s.apexBest = s.stage;
       s.bossDone = false;
       s.kills = 0;
-      const last = apex && s.stage >= MAX_STAGE;
-      if (last) {
-        s.finalReady = true;
-        s.kills = MOBS_PER_STAGE;
-      }
       const next = s.stage + 1;
-      if (!last && !s.repeat) s.stage = next;
-      if (next > s.best) s.best = next;
-      if (!last) {
-        s.runTop = Math.max(s.runTop, next);
-        rollBoss(s);
-      }
+      if (!s.repeat) s.stage = next;
+      if (next > s.best) s.best = Math.min(next, MAX_STAGE + 1);
+      s.runTop = Math.max(s.runTop, next);
+      rollBoss(s);
     } else {
       gainData(s, mobData(s.stage, st) * leech);
       s.kills = Math.min(MOBS_PER_STAGE, s.kills + 1);
@@ -2330,6 +2403,7 @@ export function createAwaySim(start: Save, totalSecs: number, power = 1) {
       t += left + (st.critChance > 0 ? lockCap : 0);
       s.bossFail = true;
       s.rec.fails++;
+      if (fin) s.ksStudy++;
       retryAt = s.shop.kretry ? t + AUTO_RETRY_SECS : 0;
       spawn();
     } else {
@@ -2440,75 +2514,112 @@ export interface AchDef {
   prog: (s: Save) => [number, number];
   /** 진행 수치를 바이트로 보여 줄지 */
   bytes?: boolean;
+  /** 사이트 업적으로 받는 GP (머리말 [업적]) */
+  reward: number;
 }
 
-const GB = 1024 ** 3;
-const PB = 1024 ** 5;
-const YB = 1024 ** 8;
-const ach = (
-  id: string,
-  icon: string,
-  name: string,
-  desc: string,
-  prog: AchDef["prog"],
-  bytes = false
-): AchDef => ({ id, icon, name, desc, prog, bytes });
+/** 업적 아이콘 (사이트 업적 id 의 virus. 뒤) */
+const ACH_ICON: Record<string, string> = {
+  hello: "👋",
+  st11: "🖥️",
+  st31: "🏢",
+  st51: "🏦",
+  st81: "📡",
+  st101: "🌐",
+  st201: "🕳️",
+  st301: "🎖️",
+  st501: "🔌",
+  st701: "🌊",
+  st1001: "🌍",
+  pure: "🧪",
+  bypass5: "🛡️",
+  compile1: "🧩",
+  compile10: "💠",
+  ks1: "☢️",
+  ks5: "⚡",
+  ks10: "🌑",
+  ksfast: "🏎️",
+  fmt1: "☣️",
+  fmt5: "🧫",
+  fmt10: "♾️",
+  root1k: "🔑",
+  root1t: "👑",
+  files1k: "📂",
+  files100k: "🦠",
+  mod20: "🔧",
+  gb: "💾",
+  pb: "🗄️",
+  yb: "🏛️",
+  ups1k: "🔧",
+  evo: "🧠",
+  clutch: "😰",
+  fails: "🔁",
+  jackpot: "🎰",
+  idle: "😴",
+  play: "⌛",
+};
 
-export const ACH: AchDef[] = [
-  // 진행
-  ach("hello", "👋", "Hello, World", "처음으로 파일 감염", (s) => [s.rec.files, 1]),
-  ach("st11", "🖥️", "개인 PC 탈출", "스테이지 10 돌파", (s) => [s.best - 1, 10]),
-  ach("st31", "🏢", "사내 LAN 장악", "스테이지 30 돌파", (s) => [s.best - 1, 30]),
-  ach("st51", "🏦", "은행 전산망 침투", "스테이지 50 돌파", (s) => [s.best - 1, 50]),
-  ach("st81", "📡", "통신사 백본", "스테이지 80 돌파", (s) => [s.best - 1, 80]),
-  ach("st101", "🌐", "루트 DNS 함락", "스테이지 100 돌파", (s) => [s.best - 1, 100]),
-  ach("st201", "🕳️", "다크넷 장악", "스테이지 200 돌파", (s) => [s.best - 1, 200]),
-  ach("st301", "🎖️", "국방망 침투", "스테이지 300 돌파", (s) => [s.best - 1, 300]),
-  ach("st501", "🔌", "전력망 장악", "스테이지 500 돌파", (s) => [s.best - 1, 500]),
-  ach("st701", "🌊", "해저 케이블 장악", "스테이지 700 돌파", (s) => [s.best - 1, 700]),
-  ach("st1001", "🌍", "글로벌 코어 함락", "스테이지 1000 돌파", (s) => [s.best - 1, 1000]),
-  ach("pure", "🧪", "순수 혈통", "변이하지 않고 스테이지 70 돌파", (s) => [
-    s.formats ? 0 : s.best - 1,
-    70,
-  ]),
-  ach("bypass5", "🛡️", "우회 전문가", "우회 기술 5개", (s) => [apexCount(s.apexBest), 5]),
-  ach("compile1", "🧩", "첫 컴파일", "코드 모듈 하나를 컴파일", (s) => [
-    s.mods.filter((v) => v > 0).length,
-    1,
-  ]),
-  ach("compile10", "💠", "완성된 무기고", "코드 모듈 10종 모두 컴파일", (s) => [
-    s.mods.filter((v) => v > 0).length,
-    10,
-  ]),
-  ach("ks1", "☢️", "스위치 오프", "KILLSWITCH 격퇴", (s) => [s.clears, 1]),
-  ach("ks5", "⚡", "연쇄 차단", "KILLSWITCH 5번 격퇴", (s) => [s.clears, 5]),
-  ach("ks10", "🌑", "인터넷의 종말", "KILLSWITCH 10번 격퇴", (s) => [s.clears, 10]),
-  ach("ksfast", "🏎️", "블리츠", "KILLSWITCH를 10초 안에 격퇴", (s) => [
-    s.rec.bestFinal > 0 && s.rec.bestFinal <= 10 ? 1 : 0,
-    1,
-  ]),
-  // 변이
-  ach("fmt1", "☣️", "첫 변이", "처음으로 변이", (s) => [s.formats, 1]),
-  ach("fmt5", "🧫", "변종 다발", "변이 5번", (s) => [s.formats, 5]),
-  ach("fmt10", "♾️", "끝없는 변이", "변이 10번", (s) => [s.formats, 10]),
-  ach("root1k", "🔑", "관리자 권한", "루트 권한 1,000", (s) => [s.root, 1000]),
-  ach("root1t", "👑", "시스템 소유자", "루트 권한 1T", (s) => [s.root, 1e12]),
-  // 누적
-  ach("files1k", "📂", "대량 감염", "파일 1,000개 감염", (s) => [s.rec.files, 1000]),
-  ach("files100k", "🦠", "팬데믹", "파일 100,000개 감염", (s) => [s.rec.files, 100000]),
-  ach("mod20", "🔧", "숙련된 코더", "코드 모듈 하나를 v20으로", (s) => [Math.max(...s.mods), 20]),
-  ach("gb", "💾", "기가바이트 도둑", "데이터 1GB 탈취 (누적)", (s) => [s.lifetime, GB], true),
-  ach("pb", "🗄️", "페타바이트 도둑", "데이터 1PB 탈취 (누적)", (s) => [s.lifetime, PB], true),
-  ach("yb", "🏛️", "요타바이트 도둑", "데이터 1YB 탈취 (누적)", (s) => [s.lifetime, YB], true),
-  ach("ups1k", "🔧", "튜닝 중독", "업그레이드 1,000레벨", (s) => [s.rec.ups, 1000]),
-  ach("evo", "🧠", "아포칼립스", "진화 마지막 단계", (s) => [s.rec.evo, EVOLUTION.length - 1]),
-  // 도전
-  ach("clutch", "😰", "아슬아슬", "남은 시간 1초 이하에서 보스 격퇴", (s) => [s.rec.clutch, 1]),
-  ach("fails", "🔁", "불굴의 코드", "보스에게 10번 차단당함", (s) => [s.rec.fails, 10]),
-  ach("jackpot", "🎰", "잭팟 중독", "랜덤 강화 잭팟(+3레벨) 10번", (s) => [s.rec.jackpots, 10]),
-  ach("idle", "😴", "장기 잠복", "한 번에 8시간 넘게 자리 비우기", (s) => [s.rec.offMax, 8 * 3600]),
-  ach("play", "⌛", "상주 프로세스", "게임 화면에서 10시간", (s) => [s.rec.play, 10 * 3600]),
-];
+/**
+ * 업적이 보는 숫자 (lib/points.ts 의 virus.* — 서버에도 같은 숫자를 보고함, http/virus.ts)
+ * 게임 안에서는 저장본으로 바로 판정 (로그인하지 않아도 피해 보너스는 받음)
+ */
+export function virusMetric(s: Save, metric: string): number {
+  switch (metric) {
+    case "virus.best":
+      return Math.min(MAX_STAGE, s.best - 1);
+    case "virus.clears":
+      return s.clears;
+    case "virus.formats":
+      return s.formats;
+    case "virus.files":
+      return s.rec.files;
+    case "virus.bosses":
+      return s.rec.bosses + s.rec.apexes + s.clears;
+    case "virus.pure":
+      return s.formats ? 0 : Math.min(MAX_STAGE, s.best - 1);
+    case "virus.bypass":
+      return apexCount(s.apexBest);
+    case "virus.mods":
+      return s.mods.filter((v) => v > 0).length;
+    case "virus.modMax":
+      return Math.max(0, ...s.mods);
+    case "virus.blitz":
+      return s.rec.bestFinal > 0 && s.rec.bestFinal <= 10 ? 1 : 0;
+    case "virus.root":
+      return s.root;
+    case "virus.lifetime":
+      return s.lifetime;
+    case "virus.ups":
+      return s.rec.ups;
+    case "virus.evo":
+      return s.rec.evo;
+    case "virus.clutch":
+      return s.rec.clutch;
+    case "virus.fails":
+      return s.rec.fails;
+    case "virus.jackpots":
+      return s.rec.jackpots;
+    case "virus.offMax":
+      return s.rec.offMax;
+    case "virus.play":
+      return s.rec.play;
+    default:
+      return 0;
+  }
+}
+
+/** 업적 — 사이트 업적(lib/points.ts ACHIEVEMENTS 의 virus)과 하나. 달성하면 피해 +BAL.achDmg, GP는 머리말 [업적]에서 */
+export const ACH: AchDef[] = ACHIEVEMENTS.filter((x) => x.game === "virus" && !x.repeat).map(
+  (x) => ({
+    id: x.id,
+    icon: ACH_ICON[x.id.slice("virus.".length)] ?? "🏅",
+    name: x.title,
+    desc: x.desc,
+    prog: (s: Save) => [virusMetric(s, x.metric), x.goal],
+    bytes: x.fmt === "bytes",
+    reward: x.reward,
+  })
+);
 
 /** 업적 확인 — 새로 달성한 것 (저장본에 기록함) */
 export function checkAch(s: Save): AchDef[] {

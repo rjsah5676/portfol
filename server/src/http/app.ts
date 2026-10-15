@@ -13,6 +13,7 @@ import { noticeRouters } from "./notice";
 import { mailAdminRouter, mailRouter } from "./mail";
 import { meRouter } from "./me";
 import { pointsRouter } from "./points";
+import { virusRouter } from "./virus";
 import { rankingsRouter } from "./rankings";
 import { siteRouter } from "./site";
 import { studyPostsRouter } from "./studyPosts";
@@ -119,6 +120,7 @@ export function createApp(deps: Deps, { pokerRank, pokerBuyRank, rhythmFiles, ..
   app.use("/api/rankings", rankingsRouter(deps, captcha));
   app.use("/api/me", meRouter(deps));
   app.use("/api/points", pointsRouter(deps));
+  app.use("/api/virus", virusRouter(deps));
   const mail = createMail(deps.db, deps.points);
   app.use("/api/mail", mailRouter(deps, mail));
   app.use("/api/admin/mail", mailAdminRouter(deps, mail));

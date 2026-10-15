@@ -157,4 +157,82 @@ describe("포인트", () => {
     await set(a.uid, { "daily.day": "2000-01-01" });
     expect((await list()).every((x) => x.value === 0 && !x.got)).toBe(true);
   });
+
+  it("VIRUS IDLE: 기록 보고(최고값 · 누적) → 업적 · 일일 미션, 편의성은 GP로 사서 inv.virus 에 (회원만)", async () => {
+    const a = await member();
+    await set(a.uid, { points: 0 });
+    const report = (body: Record<string, number>) => srv.http("/api/virus/stats", { method: "POST", token: a.token, body });
+    // 비회원은 못 보냄 · 숫자 범위 밖은 BAD_REQUEST
+    expect((await srv.http("/api/virus/stats", { method: "POST", body: { best: 1, clears: 0, files: 0, bosses: 0, formats: 0 } })).status).toBe(401);
+    expect((await report({ best: 5000, clears: 0, files: 0, bosses: 0, formats: 0 })).status).toBe(400);
+    // 일일 미션 기준을 먼저 적어 둠
+    type Row = { id: string; value: number; got: boolean };
+    const daily = async () => (await srv.http("/api/points/daily/virus", { token: a.token })).body.list as Row[];
+    expect((await daily()).every((x) => x.value === 0)).toBe(true);
+    // best · clears 는 최고값만, 나머지는 더함
+    expect((await report({ best: 120, clears: 0, files: 2000, bosses: 20, formats: 1 })).status).toBe(200);
+    expect((await report({ best: 80, clears: 0, files: 1500, bosses: 15, formats: 0 })).status).toBe(200);
+    const v = ((await users().findOne({ _id: a.uid })) as { stats?: { virus?: Record<string, number> } }).stats?.virus;
+    expect(v).toMatchObject({ best: 120, files: 3500, bosses: 35, formats: 1 });
+    // 업적: 스테이지 100 돌파 → 받기 (한 번만)
+    const claim = (id: string) => srv.http(`/api/points/achievements/${id}/claim`, { method: "POST", token: a.token });
+    const got = await claim("virus.st101");
+    expect(got.body.reward).toBe(achievementOf("virus.st101")!.reward);
+    expect((await claim("virus.st101")).status).not.toBe(200);
+    expect((await claim("virus.st201")).body.error.code).toBe("NOT_YET");
+    // 게임 안 업적과 같은 기록 (최고값만): 잭팟 10번 · 루트 권한 1T · 누적 데이터 1PB
+    expect((await report({ best: 0, clears: 0, files: 0, bosses: 0, formats: 0, jackpots: 10, root: 2e12, lifetime: 1024 ** 5 })).status).toBe(200);
+    expect((await report({ best: 0, clears: 0, files: 0, bosses: 0, formats: 0, jackpots: 3 })).status).toBe(200);
+    for (const id of ["virus.jackpot", "virus.root1t", "virus.pb"]) expect((await claim(id)).status).toBe(200);
+    expect((await claim("virus.yb")).body.error.code).toBe("NOT_YET");
+    // 일일 미션 셋 다 채움
+    const all = await srv.http("/api/points/daily/virus/claim", { method: "POST", token: a.token, body: {} });
+    expect([...all.body.ids].sort()).toEqual(["virus.d-bosses", "virus.d-files", "virus.d-format"]);
+    // 편의성: 크론 데몬을 GP로 → inv.virus · 두 번 못 삼
+    const daemon = shopFor("virus", "item", "daemon")!;
+    await set(a.uid, { points: daemon.price });
+    const buy = () => srv.http("/api/points/buy", { method: "POST", token: a.token, body: { item: daemon.id } });
+    expect((await buy()).body.points).toBe(0);
+    expect((await srv.http("/api/points/inv/virus", { token: a.token })).body.list).toEqual(["daemon"]);
+    await set(a.uid, { points: daemon.price });
+    expect((await buy()).body.error.code).toBe("OWNED");
+  });
+
+  it("VIRUS IDLE GP 상점: 재화샵 · 패키지(하루 · 주 · 한 번 · 스테이지 조건) · 코어 → GP(주 한도) · 받을 물건 받기", async () => {
+    const a = await member();
+    const post = (path: string, body: Record<string, unknown> = {}) =>
+      srv.http(`/api/virus/${path}`, { method: "POST", token: a.token, body });
+    await set(a.uid, { points: 100_000 });
+    // 재화샵: 코어 1 · 시간 가속 1시간 → 받을 물건
+    expect((await post("store", { id: "s_core" })).body.points).toBe(99_000);
+    expect((await post("store", { id: "s_warp1" })).body.pending).toEqual({ cores: 1, warpH: 1 });
+    // 일일 보급: 하루 한 번
+    expect((await post("pack", { id: "p_daily" })).status).toBe(200);
+    expect((await post("pack", { id: "p_daily" })).body.error.code).toBe("NEED");
+    // 스테이지 조건: 500을 넘기 전엔 못 삼
+    expect((await post("pack", { id: "p_dark" })).body.error.code).toBe("NEED");
+    // 신입 해커: 크론 데몬은 계정 보유 목록에 바로 · 한 번만
+    const start = await post("pack", { id: "p_start" });
+    expect(start.body.utils).toEqual(["daemon"]);
+    expect((await srv.http("/api/points/inv/virus", { token: a.token })).body.list).toContain("daemon");
+    expect((await post("pack", { id: "p_start" })).body.error.code).toBe("NEED");
+    // 보이드 꾸러미: 스킨은 계정 보유 목록에 · 한 번만
+    expect((await post("pack", { id: "p_void" })).body.items).toEqual(["skin.void"]);
+    expect((await srv.http("/api/points/inv/virus", { token: a.token })).body.list).toContain("skin.void");
+    expect((await post("pack", { id: "p_void" })).body.error.code).toBe("NEED");
+    // 코어 → GP: 가진 코어가 모자라면 안 됨 · 주 2번
+    expect((await post("sell", { id: "x_core", have: 0 })).body.error.code).toBe("NEED");
+    const sold = await post("sell", { id: "x_core", have: 5 });
+    expect(sold.body.paid).toBe(1);
+    expect((await post("sell", { id: "x_core", have: 5 })).status).toBe(200);
+    expect((await post("sell", { id: "x_core", have: 5 })).body.error.code).toBe("NEED");
+    // 받기: 코어 1 · 시간 가속 1 + 2 + 3 = 6시간 → 넘겨주고 비움
+    const got = await post("claim");
+    expect(got.body.got).toEqual({ cores: 3, warpH: 12 });
+    expect((await post("claim")).body.got).toEqual({ cores: 0, warpH: 0 });
+    // 시간 가속은 한 번에 48시간까지 (나머지는 다음에)
+    await set(a.uid, { "virusShop.pending": { cores: 0, warpH: 60 } });
+    expect((await post("claim")).body.got.warpH).toBe(48);
+    expect((await post("claim")).body.got.warpH).toBe(12);
+  });
 });

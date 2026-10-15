@@ -6,12 +6,32 @@ import GameHeader from "@/components/GameHeader";
 import SpeakerIcon from "@/components/Rhythm/SpeakerIcon";
 import { LEVEL } from "@/lib/soundLevel";
 import { lockScroll } from "@/lib/scrollLock";
-import { spendGp, useGp } from "@/lib/gp";
+import { useAuth } from "@/lib/AuthContext";
+import {
+  buyItem,
+  getInventory,
+  getVirusShop,
+  reportVirus,
+  virusClaim,
+  virusPack,
+  virusSell,
+  virusStore,
+} from "@/lib/api/points";
+import {
+  VGP_PACKS,
+  VGP_SELL,
+  VGP_STORE,
+  vpackPct,
+  type VGoods,
+  type VShopState,
+} from "@/lib/virus/gpShop";
+import { VIRUS_SKINS, skinOf, skinOwned, skinRef } from "@/lib/virus/skins";
+import { fmtPoint, shopItem } from "@/lib/points";
 import { playVirusSfx, setVirusSfxVolume, unlockVirusSfx } from "@/lib/virus/sfx";
 import { VIRUS_GUIDE } from "@/data/gameGuides";
 import { ApexSprite, FileSprite, MyVirusSprite, VirusSprite } from "./VirusSprite";
 import TitleScreen, { type TitleItem } from "./TitleScreen";
-import FitPages, { Pager } from "./FitPages";
+import FitPages, { PagedList, Pager } from "./FitPages";
 import BossCinema, { BossShards, type Cinema } from "./BossCinema";
 import {
   ArchivePanel,
@@ -34,6 +54,7 @@ import {
   finalData,
   finalHp,
   BAL,
+  mag,
   BOSS_TIME,
   apexCount,
   apexData,
@@ -76,6 +97,7 @@ import {
   optimalPlan,
   autoBuy,
   autoRoot,
+  virusMetric,
   backdoorCut,
   shopLocked,
   bulkCost,
@@ -83,9 +105,9 @@ import {
   rootLeft,
   shopCost,
   shopGpCost,
-  buyShopGp,
-  gpPayable,
-  GP_PER_ROOT,
+  canBuyShopGp,
+  applyOwnedUtil,
+  gpItemId,
   type ShopKey,
   upgradeAdvice,
   rootAdvice,
@@ -102,6 +124,8 @@ import {
   checkAch,
   ACH,
   milestoneCore,
+  isFinalStage,
+  ksCores,
   dropFrag,
   dropKey,
   gotoStage,
@@ -143,7 +167,7 @@ const KR = "font-['Nanum_Gothic',sans-serif]";
 /** 프로파일러 추천 배지 (버튼 위에 걸침) */
 function AdviceBadge() {
   return (
-    <span className="pointer-events-none absolute -top-2 -right-1 z-10 rounded-full border border-emerald-200/80 bg-[#06120b] px-1.5 font-mono vt-xs leading-4 font-bold whitespace-nowrap text-emerald-200 shadow-[0_0_8px_rgba(74,222,128,0.5)]">
+    <span className="pointer-events-none absolute -top-2 right-2 z-10 rounded-full border border-emerald-200/80 bg-[#06120b] px-1.5 font-mono vt-xs leading-4 font-bold whitespace-nowrap text-emerald-200 shadow-[0_0_8px_rgba(74,222,128,0.5)]">
       ★ 추천
     </span>
   );
@@ -152,12 +176,6 @@ function AdviceBadge() {
 /** 초당 피해 상승 % (작으면 소수점 더) */
 function pct(n: number) {
   return `${n >= 10 ? n.toFixed(0) : n >= 1 ? n.toFixed(1) : n.toFixed(2)}%`;
-}
-
-/** 받침이 있으면 "이", 없으면 "가" (오버클럭이 · 페이로드가) */
-function subj(word: string) {
-  const c = word.charCodeAt(word.length - 1) - 0xac00;
-  return c >= 0 && c < 11172 && c % 28 ? "이" : "가";
 }
 
 /** 업그레이드별 랜덤 강화 단축키 (1~3 업그레이드 바로 아래 줄) */
@@ -180,7 +198,9 @@ const GLYPHS = [
   "&&cd/",
   "0day!",
 ];
-function glyph() {
+function glyph(set?: string[]) {
+  // 스킨 코드가 있으면 대부분 그것으로
+  if (set?.length && Math.random() < 0.7) return set[Math.floor(Math.random() * set.length)];
   const r = Math.random();
   if (r < 0.2)
     return `0x${Math.floor(Math.random() * 0x1000)
@@ -192,7 +212,8 @@ function glyph() {
 }
 
 type Scene = "title" | "play";
-type Overlay = null | "menu" | "settings" | "archive" | "guide" | "notes" | "records" | "backup";
+type Overlay =
+  null | "menu" | "settings" | "archive" | "guide" | "notes" | "records" | "backup" | "gp";
 type Tab = "upgrade" | "module" | "bypass" | "shop" | "format";
 /** 업그레이드 한 번에 몇 번 살지 */
 type BuyMode = 1 | 10 | "max";
@@ -305,10 +326,10 @@ const START_ENEMY: Enemy = {
 
 function spawn(s: Save): Enemy {
   const st = stats(s);
-  const boss = s.kills >= MOBS_PER_STAGE && !s.bossFail;
+  // KILLSWITCH 스테이지는 파일 없이 바로 최종 보스 (차단당했으면 그 스테이지 파일부터)
+  const boss = (s.kills >= MOBS_PER_STAGE || isFinalStage(s.stage)) && !s.bossFail;
   // 10스테이지마다 보스를 잡고 나면 그 자리에 상위 보스
-  // 마지막 스테이지 상위 보스까지 잡으면 최종 보스
-  const final = boss && s.finalReady;
+  const final = boss && isFinalStage(s.stage);
   const apex = boss && s.bossDone && !final;
   const max = final
     ? finalHp(st, s.clears)
@@ -351,6 +372,170 @@ function hasProgress(s: Save) {
   return s.stage > 1 || s.kills > 0 || s.data > 0 || s.formats > 0 || s.best > 1;
 }
 
+/** 아래 패널 카드 — 2줄 (이름 · 배지 / 한 줄 설명) + 오른쪽 버튼들 (PanelBtn, 같은 크기). 진행 막대는 아래 가장자리에 얇게 */
+function PanelCard(o: {
+  icon: React.ReactNode;
+  title: string;
+  badge?: string;
+  sub?: string;
+  /** 추천 (테두리가 빛남 + ★ 추천) */
+  top?: boolean;
+  /** 카드 색 (모듈 · 우회 기술의 바이러스 색) */
+  color?: string;
+  /** 아직 없는 것 (아이콘 흐리게) */
+  dim?: boolean;
+  /** 진행 (0 ~ 1) — 조각 · 키 */
+  progress?: number;
+  tip?: string;
+  /** 왼쪽(정보)을 누르면 — 자세히 보기 */
+  onInfo?: () => void;
+  /** 작은 카드 (모듈 · 우회 기술 — 한 줄에 여럿) */
+  compact?: boolean;
+  children?: React.ReactNode;
+}) {
+  const info = (
+    <>
+      <span
+        className={`flex w-6 shrink-0 justify-center text-lg @md/panel:w-7 @md/panel:text-xl ${o.dim ? "opacity-30 grayscale" : ""}`}
+        aria-hidden
+      >
+        {o.icon}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="flex min-w-0 items-center gap-1.5">
+          <span className="truncate vt-sm font-bold text-white">{o.title}</span>
+          {o.badge && (
+            <span className="shrink-0 rounded bg-white/10 px-1 font-mono vt-xs leading-4 text-white/85">
+              {o.badge}
+            </span>
+          )}
+        </span>
+        {o.sub && <span className="block truncate vt-xs text-white/70">{o.sub}</span>}
+      </span>
+    </>
+  );
+  return (
+    <div
+      title={o.tip}
+      className={`relative flex min-h-[48px] items-center gap-1.5 rounded-xl border py-1 pr-1 pl-1.5 ${o.compact ? "" : "@md/panel:gap-2 @md/panel:pr-1.5 @md/panel:pl-2"} ${KR} ${
+        o.top
+          ? "border-emerald-300/80 bg-emerald-400/[0.08] shadow-[0_0_14px_rgba(74,222,128,0.3)]"
+          : "border-white/10 bg-white/[0.03]"
+      }`}
+      style={
+        !o.top && o.color ? { borderColor: `${o.color}55`, background: `${o.color}10` } : undefined
+      }
+    >
+      {o.top && <AdviceBadge />}
+      {o.onInfo ? (
+        <button
+          type="button"
+          onClick={o.onInfo}
+          className="flex min-w-0 flex-1 items-center gap-2 text-left"
+        >
+          {info}
+        </button>
+      ) : (
+        <span className="flex min-w-0 flex-1 items-center gap-2">{info}</span>
+      )}
+      {o.children}
+      {o.progress != null && (
+        <span className="pointer-events-none absolute inset-x-2.5 bottom-[3px] h-[3px] overflow-hidden rounded-full bg-white/10">
+          <span
+            className="block h-full rounded-full"
+            style={{
+              width: `${Math.round(Math.min(1, Math.max(0, o.progress)) * 100)}%`,
+              background: o.color ?? "#4ade80",
+            }}
+          />
+        </span>
+      )}
+    </div>
+  );
+}
+
+/** 패널 카드 버튼 — 모두 같은 크기, 2줄 (무엇을 · 값), 단축키는 오른쪽 위에 작게 */
+const BTN_TONE = {
+  emerald: [
+    "border-emerald-400/40 bg-emerald-400/10 text-emerald-200 enabled:hover:bg-emerald-400/20",
+    "border-emerald-200 bg-emerald-400/25 text-emerald-100 shadow-[0_0_12px_rgba(74,222,128,0.55)]",
+  ],
+  violet: [
+    "border-violet-300/40 bg-violet-400/10 text-violet-200 enabled:hover:bg-violet-400/20",
+    "border-violet-100 bg-violet-400/30 text-violet-100 shadow-[0_0_12px_rgba(167,139,250,0.6)]",
+  ],
+  amber: [
+    "border-amber-300/45 bg-amber-300/10 text-amber-200 enabled:hover:bg-amber-300/20",
+    "border-amber-200 bg-amber-300/25 text-amber-100 shadow-[0_0_12px_rgba(252,211,77,0.5)]",
+  ],
+  sky: [
+    "border-sky-300/45 bg-sky-300/10 text-sky-200 enabled:hover:bg-sky-300/20",
+    "border-sky-200 bg-sky-300/25 text-sky-100 shadow-[0_0_12px_rgba(125,211,252,0.5)]",
+  ],
+} as const;
+function PanelBtn(o: {
+  tone: keyof typeof BTN_TONE;
+  label: string;
+  value: string;
+  /** 정사각형 작은 버튼 (작은 카드용) */
+  square?: boolean;
+  kbd?: string;
+  top?: boolean;
+  disabled?: boolean;
+  tip?: string;
+  aria?: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={o.onClick}
+      disabled={o.disabled}
+      title={o.tip}
+      aria-label={o.aria}
+      className={`relative flex h-10 shrink-0 flex-col items-center justify-center rounded-lg border px-1 leading-tight transition-colors disabled:opacity-40 ${o.square ? "w-10" : "w-[72px] @md/panel:w-[84px] @2xl/panel:w-[100px]"} ${BTN_TONE[o.tone][o.top ? 1 : 0]}`}
+    >
+      {o.kbd && (
+        <span className="absolute top-0.5 right-1 hidden font-mono text-[9px] leading-none opacity-60 md:inline">
+          {o.kbd}
+        </span>
+      )}
+      <span className="max-w-full truncate vt-xs opacity-90">{o.label}</span>
+      <span className="max-w-full truncate font-mono vt-sm font-bold">{o.value}</span>
+    </button>
+  );
+}
+
+/** 💎 GP 상점 카드 */
+function GpCard(o: {
+  icon: string;
+  name: string;
+  lines: string[];
+  badge?: string;
+  status?: string;
+  price: string;
+  disabled: boolean;
+  onBuy: () => void;
+}) {
+  return (
+    <PanelCard
+      icon={o.icon}
+      title={o.name}
+      badge={o.badge}
+      sub={o.lines[0]}
+      tip={o.lines.join(" · ")}
+    >
+      <PanelBtn
+        tone="sky"
+        label={o.status ?? "구매"}
+        value={o.price}
+        disabled={o.disabled}
+        onClick={o.onBuy}
+      />
+    </PanelCard>
+  );
+}
+
 export default function VirusGame() {
   const frameRef = useRef<HTMLDivElement>(null);
   const save = useRef<Save>(newSave());
@@ -376,6 +561,12 @@ export default function VirusGame() {
   /** 커널 권한 「자동 재도전」: 이 시각(performance.now)에 보스 재도전 (0 = 없음) */
   const autoRetryAt = useRef(0);
   /** 커널 권한 「자동 변이」: 이번 회차 시작 시각 · 변이 효율 최고점 */
+  /**
+   * 게임 시계 (초) — 실제 시간 × 배속을 쌓은 값. 자동 변이의 회차 시간 · 확인 간격은 이걸로 셈
+   * (실제 시간으로 재면 어드민 배속을 바꾸는 순간 효율이 꺾인 것처럼 보여 바로 변이해 버렸음)
+   */
+  const gameClock = useRef(0);
+  /** 이번 회차가 시작된 게임 시계 */
   const runStartAt = useRef(0);
   const peakRate = useRef(0);
   /** 코드 모듈 효과가 마지막으로 터진 시각 (ROSTER 번호별) · DDoS 가 터진 시각 */
@@ -403,10 +594,23 @@ export default function VirusGame() {
   const [buyMode, setBuyMode] = useState<BuyMode>(1);
   /** 루트 상점 분류: 효율 강화 · 편의성 */
   const [shopCat, setShopCat] = useState<"power" | "util" | "core">("power");
-  /** 편의성 상품을 살 때 재화 고르기 (루트 권한 · GP) */
-  const [pay, setPay] = useState<ShopKey | null>(null);
-  /** 사이트 가상 재화 GP */
-  const gp = useGp();
+  /** GP 상점 창 분류 */
+  const [gpCat, setGpCat] = useState<"pack" | "store" | "skin">("pack");
+  /** GP 상점 상태 (서버 — 회원만) */
+  const [vshop, setVshop] = useState<VShopState | null>(null);
+  /** 사이트 GP (서버 — 회원만, 아니면 null) · 배속 (어드민만 — 1 ~ 100배, 새로고침하면 1배) */
+  const { admin, account, points, setPoints } = useAuth();
+  const gp = points;
+  /** 계정에서 GP로 산 편의성 (서버 inv.virus) — 새 게임에도 다시 열어 줌 */
+  const ownedUtil = useRef<string[]>([]);
+  const [ownedList, setOwnedList] = useState<string[]>([]);
+  /** GP 구매 중 · 실패 안내 */
+  const [gpBusy, setGpBusy] = useState(false);
+  const [speed, setSpeed] = useState(1);
+  const speedRef = useRef(1);
+  useEffect(() => {
+    speedRef.current = admin ? speed : 1;
+  }, [admin, speed]);
   /** 아래 패널 목록의 페이지 (칸에 다 안 들어가면 나눔 — 스크롤 없음) */
   const [page, setPage] = useState(0);
   const [pages, setPages] = useState(1);
@@ -442,7 +646,7 @@ export default function VirusGame() {
   const [audioOk, setAudioOk] = useState(false);
   /** 자리를 비운 동안 시뮬레이션 — 진행 막대 → 얻은 것 팝업 → 수령 (그동안 게임은 멈춤) */
   const [catchUp, setCatchUp] = useState<{
-    kind: "background" | "offline";
+    kind: "background" | "offline" | "warp";
     /** 시뮬레이션할 시간 · 실제로 비운 시간 (초) · 힘 (오프라인 효율) */
     total: number;
     real: number;
@@ -459,7 +663,7 @@ export default function VirusGame() {
   const catchingUp = useRef(false);
   /** 자리를 비운 동안 시뮬레이션 시작 */
   const startCatchUp = useCallback(
-    (kind: "background" | "offline", secs: number, power: number, real: number) => {
+    (kind: "background" | "offline" | "warp", secs: number, power: number, real: number) => {
       awaySim.current = createAwaySim(save.current, secs, power);
       awayResult.current = null;
       awayStartedAt.current = performance.now();
@@ -571,7 +775,10 @@ export default function VirusGame() {
               : def.name,
         apex: final ? 10 : apex ? ax.index : undefined,
         final,
-        until: now + (kind === "appear" ? APPEAR_MS : kind === "down" ? DOWN_MS : FAIL_MS),
+        // 배속이면 연출도 그만큼 짧게
+        until:
+          now +
+          (kind === "appear" ? APPEAR_MS : kind === "down" ? DOWN_MS : FAIL_MS) / speedRef.current,
       };
       pending.current = [];
       atkAcc.current = 0;
@@ -587,6 +794,89 @@ export default function VirusGame() {
       localStorage.setItem(SAVE_KEY, JSON.stringify(save.current));
     } catch {}
   }, []);
+
+  // 로그인하면 계정에서 GP로 산 편의성(inv.virus)을 받아 이 저장본에 열어 둠
+  useEffect(() => {
+    if (!account) {
+      ownedUtil.current = [];
+      setOwnedList(ownedUtil.current);
+      return;
+    }
+    let alive = true;
+    getInventory("virus")
+      .then((list) => {
+        if (!alive) return;
+        ownedUtil.current = list;
+        setOwnedList(ownedUtil.current);
+        if (applyOwnedUtil(save.current, list)) {
+          persist();
+          sync();
+        }
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [account, persist, sync]);
+
+  // 기록 보고 (업적 · 일일 미션 — 서버 stats.virus): 1분마다 · 페이지를 떠날 때, 지난 보고 뒤로 늘어난 만큼
+  useEffect(() => {
+    if (!account) return;
+    const send = () => {
+      const s = save.current;
+      const cur = {
+        files: s.rec.files,
+        bosses: s.rec.bosses + s.rec.apexes + s.clears,
+        formats: s.formats,
+      };
+      // 새 게임 · 저장 삭제로 기록이 줄었으면 0부터 다시
+      const last = s.rep ?? { files: 0, bosses: 0, formats: 0 };
+      const d = (k: keyof typeof cur) =>
+        Math.max(0, Math.floor(cur[k] - (cur[k] < last[k] ? 0 : last[k])));
+      const body = {
+        best: Math.max(0, Math.min(1001, s.best - 1)),
+        clears: s.clears,
+        files: Math.min(10_000_000, d("files")),
+        bosses: Math.min(1_000_000, d("bosses")),
+        formats: Math.min(10_000, d("formats")),
+        // 업적용 최고값 (서버는 큰 쪽만 남김)
+        ...Object.fromEntries(
+          [
+            "pure",
+            "bypass",
+            "mods",
+            "modMax",
+            "blitz",
+            "root",
+            "lifetime",
+            "ups",
+            "evo",
+            "clutch",
+            "fails",
+            "jackpots",
+            "offMax",
+            "play",
+          ].map((k) => [k, Math.max(0, virusMetric(s, `virus.${k}`))])
+        ),
+      };
+      if (!body.best && !body.files && !body.bosses && !body.formats && !body.clears) return;
+      reportVirus(body)
+        .then(() => {
+          save.current.rep = cur;
+          persist();
+        })
+        .catch(() => {});
+    };
+    const id = setInterval(send, 60_000);
+    const onHide = () => document.visibilityState === "hidden" && send();
+    document.addEventListener("visibilitychange", onHide);
+    window.addEventListener("pagehide", send);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener("visibilitychange", onHide);
+      window.removeEventListener("pagehide", send);
+    };
+  }, [account, persist]);
 
   const addFloat = useCallback((text: string, crit: boolean, tone?: string, big = false) => {
     const id = ++floatId.current;
@@ -679,15 +969,16 @@ export default function VirusGame() {
         else s.rec.bosses++;
       }
       if (e.final) {
-        // 최종 보스: 마지막 스테이지에 머물며 다시 파일부터 (반복해서 잡을 수 있음)
+        // 최종 보스: KILLSWITCH 스테이지에 머물며 다음 버전이 바로 (격퇴 연출 뒤 등장 연출)
         startCinema("down", s.stage, false, true);
         duckBgm.current();
         gainData(s, finalData(st));
         s.clears += 1;
-        s.cores += 1;
-        s.finalReady = false;
+        s.ksStudy = 0;
+        s.cores += ksCores(s.clears);
         s.bossDone = false;
         s.kills = 0;
+        finalIntro.current = true;
         pendingReward.current = {
           name: `${FINAL.role} ${FINAL.name}${tierLabel(s.clears)}`,
           seed: FINAL.id,
@@ -721,20 +1012,15 @@ export default function VirusGame() {
         if (newApex) s.apexBest = s.stage;
         s.bossDone = false;
         s.kills = 0;
-        // 마지막 스테이지의 상위 보스를 잡으면 더 나아가지 않고 최종 보스 (best 는 101 = 100 통과)
-        const last = wasApex && s.stage >= MAX_STAGE;
-        if (last) {
-          s.finalReady = true;
-          // 파일 없이 바로 최종 보스
-          s.kills = MOBS_PER_STAGE;
-          finalIntro.current = true;
-        }
+        // 마지막 스테이지의 상위 보스를 잡으면 KILLSWITCH 스테이지로 (best 는 MAX_STAGE + 1 = 마지막 스테이지 통과)
         const next = s.stage + 1;
         // 반복 중이면 이 스테이지에 머물고 파일부터 다시 (그래도 이 스테이지는 지나온 것으로)
-        if (!last && !s.repeat) s.stage = next;
-        if (next > s.best) s.best = next;
-        if (!last) s.runTop = Math.max(s.runTop, next);
-        if (!last) rollBoss(s);
+        if (!s.repeat) s.stage = next;
+        if (next > s.best) s.best = Math.min(next, MAX_STAGE + 1);
+        s.runTop = Math.max(s.runTop, next);
+        rollBoss(s);
+        // KILLSWITCH 스테이지에 들어서면 격퇴 연출 뒤 등장 연출
+        if (isFinalStage(s.stage)) finalIntro.current = true;
         // 알림은 처음 가 보는 스테이지에서 이겼을 때만 (변이 뒤 다시 오를 때는 조용히 — 조각은 컴파일 막대에 쌓임)
         if (fresh) {
           pendingReward.current = {
@@ -877,6 +1163,11 @@ export default function VirusGame() {
 
   // ── 배경음악: 테마곡을 반복 재생, 음소거 · 크기는 설정 따라 ──
   const settingsRef = useRef(settings);
+  /** 착용한 스킨 (가진 것만 — 틱에서 씀) */
+  const skinGlyphs = () => {
+    const sk = skinOf(settingsRef.current.skin);
+    return sk && skinOwned(sk, ownedUtil.current, save.current.clears) ? sk.glyphs : undefined;
+  };
   useEffect(() => {
     settingsRef.current = settings;
   }, [settings]);
@@ -913,8 +1204,8 @@ export default function VirusGame() {
 
   // 효과음 크기
   useEffect(() => {
-    setVirusSfxVolume(settings.sfx);
-  }, [settings.sfx]);
+    setVirusSfxVolume(settings.sfxMute ? 0 : settings.sfx);
+  }, [settings.sfx, settings.sfxMute]);
 
   // 탭을 가리면 멈추고, 돌아오면 다시 · 페이지를 떠나면 끔
   useEffect(() => {
@@ -949,17 +1240,33 @@ export default function VirusGame() {
     applyBgm(true);
   }, [applyBgm]);
 
-  // M 키: 배경음악 끄기 · 켜기 (시작 화면에서 메뉴가 열린 뒤 · 게임 중)
+  /** 효과음만 끄기 · 켜기 (배경음악은 그대로) */
+  const toggleSfx = useCallback(() => {
+    const next = { ...settingsRef.current, sfxMute: !settingsRef.current.sfxMute };
+    settingsRef.current = next;
+    setSettings(next);
+    try {
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify(next));
+    } catch {}
+  }, []);
+
+  // M 키: 배경음악 · N 키: 효과음 끄기 · 켜기 (시작 화면에서 메뉴가 열린 뒤 · 게임 중)
   useEffect(() => {
     if (!entered) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.code !== "KeyM" || e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
-      e.preventDefault();
-      toggleMute();
+      if (e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.target instanceof HTMLInputElement) return;
+      if (e.code === "KeyM") {
+        e.preventDefault();
+        toggleMute();
+      } else if (e.code === "KeyN") {
+        e.preventDefault();
+        toggleSfx();
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [entered, toggleMute]);
+  }, [entered, toggleMute, toggleSfx]);
 
   // ── 전체화면: 되는 브라우저는 진짜 전체화면, 안 되면(아이폰 사파리 등) 게임 틀이 화면을 덮음 ──
   const nativeFs = useRef(false);
@@ -1007,6 +1314,7 @@ export default function VirusGame() {
       let offline: { secs: number; power: number; real: number } | null = null;
       if (fresh) {
         save.current = newSave();
+        applyOwnedUtil(save.current, ownedUtil.current);
       } else {
         // 창을 닫아 둔 동안: 오프라인 효율만큼의 힘으로, 최대 오프라인 시간까지 시뮬레이션
         const s = save.current;
@@ -1021,7 +1329,7 @@ export default function VirusGame() {
         }
       }
       pending.current = [];
-      runStartAt.current = performance.now();
+      runStartAt.current = gameClock.current;
       peakRate.current = 0;
       atkAcc.current = 0;
       setShots([]);
@@ -1074,6 +1382,7 @@ export default function VirusGame() {
     });
   const wipeNow = () => {
     save.current = newSave();
+    applyOwnedUtil(save.current, ownedUtil.current);
     try {
       localStorage.removeItem(SAVE_KEY);
     } catch {}
@@ -1092,10 +1401,13 @@ export default function VirusGame() {
       if (cinemaRef.current) duckBgm.current();
       s.bossFail = true;
       s.rec.fails++;
+      if (enemy.current.final) s.ksStudy += 1;
       enemy.current = spawn(s);
       bossLeft.current = timeFor(enemy.current, save.current);
       // 커널 권한 「자동 재도전」: 30초 동안 파일을 감염시킨 뒤
-      autoRetryAt.current = s.shop.kretry ? performance.now() + AUTO_RETRY_MS : 0;
+      autoRetryAt.current = s.shop.kretry
+        ? performance.now() + AUTO_RETRY_MS / speedRef.current
+        : 0;
     };
     /** 자동 최적 업그레이드 (크론 데몬) — 1초마다 */
     let lastAuto = 0;
@@ -1175,6 +1487,8 @@ export default function VirusGame() {
         return;
       }
       s.rec.play += real;
+      // 게임 시계: 배속만큼 (자동 변이는 이것으로 — 배속과 상관없이 1배속과 같은 때 변이)
+      gameClock.current += real * speedRef.current;
       // 업적은 1초마다 확인 (새 업적은 위 막대 🏅 에 느낌표)
       if (now - lastAch >= 1000) {
         lastAch = now;
@@ -1216,8 +1530,9 @@ export default function VirusGame() {
         sync();
         return;
       }
-      // 틱이 늦게 왔으면 밀린 시간을 먼저 계산
-      if (real - dt > 0.15) fastForward(real - dt);
+      // 틱이 늦게 왔으면 밀린 시간을 먼저 계산 · 배속(어드민)이면 그만큼 더 (게임 시간 = 실제 시간 × 배속)
+      const game = real * speedRef.current;
+      if (game - dt > 0.15) fastForward(game - dt);
       runAuto(s);
       // 커널 권한 「자동 재도전」
       if (s.bossFail && autoRetryAt.current && now >= autoRetryAt.current && s.shop.kretry) {
@@ -1229,10 +1544,10 @@ export default function VirusGame() {
         bossLeft.current = timeFor(enemy.current, s);
       }
       // 커널 권한 「자동 변이」: 5초마다 변이 효율(루트 권한으로 오를 피해 배율의 로그 ÷ 회차 시간)이 최고점에서 꺾였는지
-      if (s.shop.kformat && s.autoFmt && now - lastFmtCheck >= 5000) {
-        lastFmtCheck = now;
+      if (s.shop.kformat && s.autoFmt && gameClock.current - lastFmtCheck >= 5) {
+        lastFmtCheck = gameClock.current;
         const pend = pendingRoot(s);
-        const secs = Math.max(60, (now - runStartAt.current) / 1000);
+        const secs = Math.max(60, gameClock.current - runStartAt.current);
         const rate =
           pend > 0
             ? Math.log((1 + BAL.rootBonus * (s.root + pend)) / (1 + BAL.rootBonus * s.root)) / secs
@@ -1241,7 +1556,7 @@ export default function VirusGame() {
         else if (rate > 0 && rate < peakRate.current * 0.9 && canFormat(s)) {
           save.current = format(s);
           peakRate.current = 0;
-          runStartAt.current = now;
+          runStartAt.current = gameClock.current;
           pending.current = [];
           setShots([]);
           enemy.current = spawn(save.current);
@@ -1267,7 +1582,7 @@ export default function VirusGame() {
           pending.current.push({ id, landAt: now + SHOT_MS + j * 30, crit });
           launched.push({
             id,
-            glyph: glyph(),
+            glyph: glyph(skinGlyphs()),
             crit,
             dy: Math.round((Math.random() - 0.5) * 24) + (j ? (j % 2 ? 14 : -14) : 0),
             tone: j === 0 ? undefined : j <= v.extra ? ROSTER[1].color : ROSTER[4].color,
@@ -1291,7 +1606,7 @@ export default function VirusGame() {
           // 이 틱에 보스가 나타나거나 쓰러졌으면 나머지는 버림 (연출 시작)
           if (cinemaRef.current) return;
           const r = strike(p.crit, now);
-          if (r.boot) addFloat(`🥾 BOOT ×${r.boot.toFixed(1)}`, true, ROSTER[0].color, true);
+          if (r.boot) addFloat(`🔌 BOOT ×${r.boot.toFixed(1)}`, true, ROSTER[0].color, true);
           if (r.lock) addFloat(`🔐 +${r.lock.toFixed(1)}s`, false, ROSTER[8].color);
           if (r.dmg > top.dmg) top = { dmg: r.dmg, crit: p.crit };
         });
@@ -1306,7 +1621,7 @@ export default function VirusGame() {
           if (settingsRef.current.effects) {
             const volleyShots: Shot[] = Array.from({ length: 10 }, () => ({
               id: ++floatId.current,
-              glyph: glyph(),
+              glyph: glyph(skinGlyphs()),
               crit: false,
               dy: Math.round((Math.random() - 0.5) * 90),
               tone: ROSTER[9].color,
@@ -1376,26 +1691,130 @@ export default function VirusGame() {
     [sync, checkEvolve, buyMode]
   );
 
-  /** 루트 권한 상점에서 사기 — 편의성은 먼저 재화(루트 권한 · GP)를 고름 */
-  const buyRoot = (key: ShopKey) => {
-    if (gpPayable(SHOP.find((d) => d.key === key)!)) {
-      setPay(key);
-      return;
-    }
-    buyWith(key, "root");
-  };
-  /** 재화 고르기 창에서 고름 */
-  const pickPay = (by: "root" | "gp") => {
-    const key = pay;
-    setPay(null);
-    if (key) buyWith(key, by);
-  };
-  const buyWith = (key: ShopKey, by: "root" | "gp") => {
+  const buyWith = (key: ShopKey) => {
     const s = save.current;
-    if (by === "gp" ? !buyShopGp(s, key, spendGp) : !buyShop(s, key)) return;
+    if (!buyShop(s, key)) return;
     checkEvolve();
     persist();
     sync();
+  };
+  /** GP 상점에서 산 물건 받기 — 커널 코어는 저장본에, 시간 가속은 진행 막대 시뮬레이션으로 (게임 화면 · 다른 막대가 없을 때) */
+  const claimVirus = useCallback(async () => {
+    if (!account || scene !== "play" || catchingUp.current) return;
+    try {
+      const r = await virusClaim();
+      setVshop(r);
+      if (r.got.cores) {
+        save.current.cores += r.got.cores;
+        persist();
+        sync();
+      }
+      if (r.got.warpH > 0 && !catchingUp.current) {
+        const secs = r.got.warpH * 3600;
+        startCatchUp("warp", secs, 1, secs);
+      }
+    } catch {}
+  }, [account, scene, persist, sync, startCatchUp]);
+  // 게임 화면에 들어오면 · 로그인하면 받을 물건 받기
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 서버에서 받을 물건을 가져와 넣음
+    void claimVirus();
+  }, [claimVirus]);
+  // GP 상점을 열면 상태를 새로
+  useEffect(() => {
+    if (!account || overlay !== "gp") return;
+    let alive = true;
+    getVirusShop()
+      .then((r) => alive && setVshop(r))
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [account, overlay]);
+  /** GP 상점 구매 · 판매 공통: 서버 응답으로 GP · 상태를 맞추고 받을 물건 받기 */
+  const vshopDo = async (
+    run: () => Promise<
+      VShopState & { points: number; utils?: string[]; items?: string[]; paid?: number }
+    >
+  ) => {
+    if (gpBusy) return;
+    setGpBusy(true);
+    try {
+      const r = await run();
+      setPoints(r.points);
+      setVshop(r);
+      if (r.items?.length) {
+        ownedUtil.current = [...new Set([...ownedUtil.current, ...r.items])];
+        setOwnedList(ownedUtil.current);
+      }
+      if (r.utils?.length) {
+        ownedUtil.current = [...new Set([...ownedUtil.current, ...r.utils])];
+        setOwnedList(ownedUtil.current);
+        applyOwnedUtil(save.current, ownedUtil.current);
+      }
+      if (r.paid) save.current.cores = Math.max(0, save.current.cores - r.paid);
+      persist();
+      sync();
+      await claimVirus();
+    } catch (e) {
+      setAsk({
+        title: "처리하지 못했어요",
+        body: (e as Error).message || "잠시 뒤 다시 해 보세요.",
+        yes: "확인",
+        onYes: () => {},
+      });
+    } finally {
+      setGpBusy(false);
+    }
+  };
+
+  /** 스킨 사기 (사이트 상점 — inv.virus 에 skin.<id>) · 사면 바로 착용 */
+  const buySkin = async (id: string) => {
+    if (gpBusy) return;
+    setGpBusy(true);
+    try {
+      const r = await buyItem(`virus.skin.${id}`);
+      setPoints(r.points);
+      ownedUtil.current = [...new Set([...ownedUtil.current, skinRef(id)])];
+      setOwnedList(ownedUtil.current);
+      changeSettings({ ...settingsRef.current, skin: id });
+    } catch (e) {
+      setAsk({
+        title: "사지 못했어요",
+        body: (e as Error).message || "잠시 뒤 다시 해 보세요.",
+        yes: "확인",
+        onYes: () => {},
+      });
+    } finally {
+      setGpBusy(false);
+    }
+  };
+  /** 스킨 착용 · 해제 (기기마다 — 게임 설정) */
+  const wearSkin = (id: string) =>
+    changeSettings({ ...settingsRef.current, skin: settingsRef.current.skin === id ? "" : id });
+
+  /** 사이트 GP로 사기 — 서버가 GP를 빼고 계정(inv.virus)에 남김, 그 뒤 이 저장본에 열어 둠 */
+  const buyGp = async (key: ShopKey) => {
+    if (gpBusy || !canBuyShopGp(save.current, key)) return;
+    setGpBusy(true);
+    try {
+      const r = await buyItem(gpItemId(key));
+      setPoints(r.points);
+      ownedUtil.current = [...new Set([...ownedUtil.current, key])];
+      setOwnedList(ownedUtil.current);
+      applyOwnedUtil(save.current, ownedUtil.current);
+      persist();
+      sync();
+    } catch (e) {
+      setAsk({
+        title: "GP로 사지 못했어요",
+        body: (e as Error).message || "잠시 뒤 다시 해 보세요.",
+        yes: "확인",
+        onYes: () => {},
+      });
+    } finally {
+      setGpBusy(false);
+    }
   };
 
   /** 크론잡: 가진 데이터를 다 써서 최적 조합으로 업그레이드 */
@@ -1486,7 +1905,7 @@ export default function VirusGame() {
   /** 변이 뒤 새 몸으로 */
   const reborn = (next: Save) => {
     save.current = next;
-    runStartAt.current = performance.now();
+    runStartAt.current = gameClock.current;
     peakRate.current = 0;
     pending.current = [];
     enemy.current = spawn(save.current);
@@ -1521,7 +1940,10 @@ export default function VirusGame() {
   const claimAway = () => {
     const next = awayResult.current;
     if (!next || !catchUp?.report) return;
-    next.rec.offMax = Math.max(next.rec.offMax, catchUp.real);
+    // 시간 가속(GP)은 자리를 비운 게 아니라서 「장기 잠복」 기록에 안 셈
+    if (catchUp.kind !== "warp") next.rec.offMax = Math.max(next.rec.offMax, catchUp.real);
+    // 시간 가속이 더 남았으면 (한 번에 최대 48시간) 이어서
+    if (catchUp.kind === "warp") setTimeout(() => void claimVirus(), 300);
     if (catchUp.kind === "offline") next.rec.offData += catchUp.report.data;
     next.savedAt = Date.now();
     save.current = next;
@@ -1535,7 +1957,7 @@ export default function VirusGame() {
     enemy.current = spawn(next);
     bossLeft.current = timeFor(enemy.current, next);
     lastTick.current = performance.now();
-    runStartAt.current = performance.now();
+    runStartAt.current = gameClock.current;
     peakRate.current = 0;
     awaySim.current = null;
     awayResult.current = null;
@@ -1587,14 +2009,13 @@ export default function VirusGame() {
       if (e.code === "Escape") {
         e.preventDefault();
         if (ask) setAsk(null);
-        else if (pay) setPay(null);
         else if (detail) setDetail(null);
         else if (intro.length) setIntro((q) => q.slice(1));
         else if (jump != null) setJump(null);
         else setOverlay((o) => (o ? null : "menu"));
         return;
       }
-      if (overlay || detail || ask || pay || intro.length || catchingUp.current) return;
+      if (overlay || detail || ask || intro.length || catchingUp.current) return;
       // 스테이지 이동 칸에 숫자를 치는 중이면 단축키 아님
       if (e.target instanceof HTMLInputElement) return;
       // F: 컴파일
@@ -1607,7 +2028,7 @@ export default function VirusGame() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [scene, overlay, detail, ask, pay, intro, jump, buy, doRand, runCron, doCompile]);
+  }, [scene, overlay, detail, ask, intro, jump, buy, doRand, runCron, doCompile]);
 
   // 시작 화면의 창은 Esc로 닫기
   useEffect(() => {
@@ -1634,7 +2055,10 @@ export default function VirusGame() {
   const bv = s.byp;
   // 내 바이러스와 날아가는 코드의 색: 버전이 가장 높은 코드 모듈의 색 (없으면 기본 초록)
   const topMod = owned ? mods.indexOf(Math.max(...mods)) : -1;
-  const myColor = topMod >= 0 ? ROSTER[topMod].color : ACCENT;
+  // 스킨을 착용했으면 그 색 (가진 것만)
+  const worn0 = skinOf(settings.skin);
+  const skin = worn0 && skinOwned(worn0, ownedList, s.clears) ? worn0 : null;
+  const myColor = skin ? skin.color : topMod >= 0 ? ROSTER[topMod].color : ACCENT;
   const boss = bossOf(s);
   const apex = apexOf(s.stage);
   const file = FILE_TYPES[e.file];
@@ -1649,6 +2073,151 @@ export default function VirusGame() {
   const curDps = dps(st) * (e.boss ? st.bossDmgMul * st.fxBossMul : 1);
   /** 프로파일러가 있으면: 데이터 대비 초당 피해가 가장 많이 오르는 업그레이드 · 랜덤 강화 */
   const advice = s.shop.profiler ? upgradeAdvice(s, buyMode === "max" ? Infinity : buyMode) : null;
+
+  // ── 💎 GP 상점 (디펜스와 같은 모델 — 패키지 · 재화샵 · 코어 → GP) ──
+  const goodsText = (g: VGoods) =>
+    [
+      g.utils
+        ?.map(
+          (k) =>
+            `${SHOP.find((d) => d.key === k)?.icon ?? ""} ${SHOP.find((d) => d.key === k)?.name ?? k}`
+        )
+        .join(" · "),
+      g.warpH ? `⏩ 시간 가속 ${g.warpH}시간` : "",
+      g.cores ? `🧩 커널 코어 ${g.cores}` : "",
+    ]
+      .filter(Boolean)
+      .join(" · ");
+  const gpReady = !!account && gp != null && !gpBusy;
+  /** 커널 권한을 하나 더 사면 오르는 초당 피해 · 보스 피해 (모듈 오버클럭은 모듈 버전이 높을수록 커짐) */
+  const kernelGain = (key: ShopKey) => {
+    const nx = stats({ ...s, shop: { ...s.shop, [key]: s.shop[key] + 1 } });
+    const a = dps(st);
+    const b = dps(nx);
+    return {
+      dps: pct((b / a - 1) * 100),
+      boss: pct(((b * nx.fxBossMul) / (a * st.fxBossMul) - 1) * 100),
+    };
+  };
+  /** 커널 권한이 하는 일 (한 줄) — 효과 숫자만으로는 무엇인지 몰라서 */
+  const kernelWhat: Partial<Record<ShopKey, string>> = {
+    kover: "모듈 효과 상한 ×1.1 · 버전 높은 모듈일수록 큼",
+    kpatch: `모든 피해 ×${mag(BAL.corePatch).toFixed(2)}씩 · 반복 구매 (가격 +1)`,
+  };
+  const gpPackItems = [
+    ...VGP_PACKS.filter((pk) => !pk.needBest || (vshop?.best ?? 0) >= pk.needBest - 100).map(
+      (pk) => {
+        const bought = pk.once
+          ? !!vshop?.once.includes(pk.id)
+          : pk.perDay
+            ? (vshop?.day[pk.id] ?? 0) >= pk.perDay
+            : (vshop?.week[pk.id] ?? 0) >= (pk.perWeek ?? 1);
+        const lockedBest = !!pk.needBest && (vshop?.best ?? 0) < pk.needBest;
+        const ownedAll = !!pk.give.utils?.some((k) => ownedList.includes(k));
+        return (
+          <GpCard
+            key={`pack-${pk.id}`}
+            {...{
+              icon: "🎁",
+              name: pk.name,
+              lines: [`이득 ${vpackPct(pk)}% · ${goodsText(pk.give)}`, pk.desc],
+              status: lockedBest
+                ? `🔒 ${pk.needBest}`
+                : bought || ownedAll
+                  ? pk.once || ownedAll
+                    ? "보유"
+                    : pk.perDay
+                      ? "내일 다시"
+                      : "다음 주"
+                  : "구매",
+              price: fmtPoint(pk.gp),
+              disabled: !gpReady || bought || lockedBest || ownedAll || (gp ?? 0) < pk.gp,
+              onBuy: () => void vshopDo(() => virusPack(pk.id)),
+            }}
+          />
+        );
+      }
+    ),
+  ];
+  // 꾸미기 (능력 변화 없음)
+  const gpSkinItems = [
+    ...VIRUS_SKINS.map((sk) => {
+      const own = skinOwned(sk, ownedList, s.clears);
+      const worn = own && settings.skin === sk.id;
+      const item = sk.needClears ? undefined : shopItem(`virus.skin.${sk.id}`);
+      return (
+        <GpCard
+          key={`skin-${sk.id}`}
+          icon={sk.icon}
+          name={`스킨 · ${sk.name}`}
+          lines={[
+            sk.rainbow
+              ? "색이 계속 바뀜 · 랜덤 코드"
+              : `코드 ${sk.glyphs?.slice(0, 3).join(" ") ?? ""}`,
+            sk.needClears
+              ? `KILLSWITCH v${sk.needClears} 격퇴 보상 (${Math.min(s.clears, sk.needClears)}/${sk.needClears})`
+              : "꾸미기 — 능력 변화 없음",
+          ]}
+          status={
+            own
+              ? worn
+                ? "착용 중"
+                : "착용"
+              : sk.needClears
+                ? "이정표"
+                : sk.packOnly
+                  ? "패키지"
+                  : "구매"
+          }
+          price={
+            own
+              ? worn
+                ? "해제"
+                : "보유"
+              : sk.needClears
+                ? `v${sk.needClears}`
+                : item
+                  ? fmtPoint(item.price)
+                  : "꾸러미"
+          }
+          disabled={own ? false : !item || !gpReady || (gp ?? 0) < item.price}
+          onBuy={() => (own ? wearSkin(sk.id) : void buySkin(sk.id))}
+        />
+      );
+    }),
+  ];
+  const gpStoreItems = [
+    ...VGP_STORE.map((it) => (
+      <GpCard
+        key={`store-${it.id}`}
+        {...{
+          icon: it.give.cores ? "🧩" : "⏩",
+          name: it.name,
+          lines: ["재화샵 — 횟수 제한 없음"],
+          price: fmtPoint(it.gp),
+          disabled: !gpReady || (gp ?? 0) < it.gp,
+          onBuy: () => void vshopDo(() => virusStore(it.id)),
+        }}
+      />
+    )),
+    ...VGP_SELL.map((it) => {
+      const used = vshop?.week[it.id] ?? 0;
+      return (
+        <GpCard
+          key={`sell-${it.id}`}
+          {...{
+            icon: "💱",
+            name: it.name,
+            lines: [`이번 주 ${used}/${it.perWeek} · 가진 코어 ${s.cores}`],
+            status: "팔기",
+            price: `+${fmtPoint(it.gp)}`,
+            disabled: !gpReady || used >= it.perWeek || s.cores < it.cores,
+            onBuy: () => void vshopDo(() => virusSell(it.id, save.current.cores)),
+          }}
+        />
+      );
+    }),
+  ];
   const gainOf = (id: string) => advice?.list.find((a) => a.id === id)?.gain ?? 0;
   /** 크론잡이 있으면: 지금 데이터로 할 수 있는 최적 업그레이드 미리 보기 (화면용 — 누를 때 다시 계산) */
   const cronPlan = s.shop.cron && tab === "upgrade" ? optimalPlan(s, 300) : null;
@@ -1747,6 +2316,27 @@ export default function VirusGame() {
     </button>
   );
 
+  /** 효과음 끄기 · 켜기 (배경음악 버튼 옆) */
+  const sfxOff = settings.sfxMute || settings.sfx === 0;
+  const sfxButton = (
+    <button
+      type="button"
+      onPointerDown={(ev) => ev.stopPropagation()}
+      onClick={toggleSfx}
+      title={sfxOff ? "효과음 켜기 (N)" : "효과음 끄기 (N)"}
+      aria-label={sfxOff ? "효과음 켜기" : "효과음 끄기"}
+      aria-pressed={sfxOff}
+      className={`flex h-8 shrink-0 items-center gap-1.5 rounded-lg border bg-black/50 px-2 font-mono vt-sm transition-colors hover:border-emerald-300/60 ${
+        sfxOff ? "border-white/15 text-white/70" : "border-emerald-300/40 text-emerald-200"
+      }`}
+    >
+      <span aria-hidden className={sfxOff ? "opacity-60" : ""}>
+        {sfxOff ? "🔕" : "🔔"}
+      </span>
+      <span className="hidden rounded border border-white/20 px-1 leading-tight md:inline">N</span>
+    </button>
+  );
+
   /** 전체화면 켜기 · 끄기 (음소거 버튼 옆) */
   const fsButton = (
     <button
@@ -1817,6 +2407,7 @@ export default function VirusGame() {
         desc="파일을 감염시켜 데이터를 훔치고, 네트워크를 장악한 악명 높은 바이러스를 격퇴해 코드를 빼앗기"
         accent={ACCENT}
         guide={VIRUS_GUIDE}
+        ach="virus"
       />
 
       <div
@@ -1832,6 +2423,7 @@ export default function VirusGame() {
           <div className="absolute top-3 right-3 z-30 flex gap-1.5">
             {fsButton}
             {muteButton}
+            {sfxButton}
           </div>
         )}
         {scene === "title" ? (
@@ -1862,7 +2454,18 @@ export default function VirusGame() {
               <div className={`min-w-0 truncate vt-sm text-white/70 @xl/vg:text-sm ${KR}`}>
                 <span className="font-mono text-emerald-400/90">&gt; </span>
                 <b className="text-white">{zoneOf(s.stage)}</b>
-                <span className="ml-1">· 스테이지 {s.stage}</span>
+                <span className="ml-1">
+                  · {isFinalStage(s.stage) ? `v${s.clears + 1}` : `스테이지 ${s.stage}`}
+                </span>
+                {isFinalStage(s.stage) && (s.clears > 0 || s.ksStudy > 0) && (
+                  <span
+                    className="ml-1 font-mono vt-xs text-red-300/90"
+                    title={`KILLSWITCH 각인: 격퇴할 때마다 피해 ×${BAL.ksBonus} (영구)${String.fromCharCode(10)}패치 분석: 질 때마다 피해 ×${BAL.ksStudy} (다음 버전을 잡으면 처음으로)`}
+                  >
+                    · 각인 ×{fmt(BAL.ksBonus ** s.clears)}
+                    {s.ksStudy > 0 && ` · 분석 ×${fmt(BAL.ksStudy ** s.ksStudy)}`}
+                  </span>
+                )}
               </div>
               <div className="hidden flex-1 items-center gap-1 @3xl/vg:flex">
                 {Array.from({ length: MOBS_PER_STAGE }, (_, i) => (
@@ -1878,6 +2481,17 @@ export default function VirusGame() {
                 <span className="hidden text-amber-200 @xl/vg:inline" title="루트 권한">
                   🔑 {fmt(s.root)}
                 </span>
+                <button
+                  type="button"
+                  onPointerDown={(ev) => ev.stopPropagation()}
+                  onClick={() => setOverlay("gp")}
+                  title="GP 상점 — 패키지 · 재화샵 · 꾸미기 · 교환"
+                  aria-label="GP 상점"
+                  className="flex h-8 shrink-0 items-center gap-1 rounded-lg border border-sky-300/40 bg-black/50 px-2 font-mono vt-sm text-sky-200 transition-colors hover:border-sky-300/80"
+                >
+                  <span aria-hidden>💎</span>
+                  {gp != null && <span className="hidden @md/vg:inline">{fmtPoint(gp)}</span>}
+                </button>
                 <button
                   type="button"
                   onPointerDown={(ev) => ev.stopPropagation()}
@@ -1897,6 +2511,7 @@ export default function VirusGame() {
                 </button>
                 {fsButton}
                 {muteButton}
+                {sfxButton}
               </div>
             </div>
             {/* 좁은 화면: 진행 막대를 따로 한 줄 */}
@@ -2010,6 +2625,26 @@ export default function VirusGame() {
                     🎯 이동
                   </button>
                 </div>
+                {/* 배속 (어드민만) */}
+                {admin && (
+                  <label
+                    className="flex items-center gap-1.5 rounded-lg border border-amber-300/30 bg-black/60 px-2 py-1 vt-xs text-amber-100"
+                    title="배속 (어드민) — 게임 시간을 실제 시간의 이 배수로 진행"
+                  >
+                    ⏩
+                    <input
+                      type="range"
+                      min={1}
+                      max={100}
+                      step={1}
+                      value={speed}
+                      onChange={(ev) => setSpeed(Number(ev.target.value))}
+                      aria-label="배속"
+                      className="w-20 accent-amber-300"
+                    />
+                    <span className="w-9 text-right font-mono tabular-nums">×{speed}</span>
+                  </label>
+                )}
                 {/* 스테이지 이동: 번호를 넣거나 1 · 최고로 바로 */}
                 {jump != null && (
                   <form
@@ -2077,7 +2712,9 @@ export default function VirusGame() {
               >
                 <div className="flex flex-col items-center gap-2">
                   <div className="relative">
-                    <div className={`vg-sprite vg-me ${failing ? "vf-me" : ""}`}>
+                    <div
+                      className={`vg-sprite vg-me ${failing ? "vf-me" : ""} ${skin?.rainbow ? "vg-rgb" : ""}`}
+                    >
                       <MyVirusSprite
                         color={myColor}
                         lv={s.lv}
@@ -2404,7 +3041,7 @@ export default function VirusGame() {
                       type="button"
                       onClick={() => pickTab(t.key)}
                       title={t.ping ? "컴파일할 수 있는 것이 있어요" : undefined}
-                      className={`relative shrink-0 rounded-t-lg border-x border-t px-1.5 py-1.5 vt-sm font-bold whitespace-nowrap transition-colors @md/panel:px-2 @lg/panel:px-3 ${KR} ${
+                      className={`relative shrink-0 rounded-t-lg border-x border-t px-1 py-1.5 vt-sm font-bold whitespace-nowrap transition-colors @md/panel:px-2 @lg/panel:px-3 ${KR} ${
                         tab === t.key
                           ? "border-emerald-400/30 bg-emerald-400/10 text-white"
                           : "border-transparent text-white/70 hover:text-white/80"
@@ -2416,8 +3053,8 @@ export default function VirusGame() {
                           <span />
                         </span>
                       )}
-                      <span className="@lg/panel:hidden">{t.short ?? t.label}</span>
-                      <span className="hidden @lg/panel:inline">{t.label}</span>
+                      <span className="@7xl/panel:hidden">{t.short ?? t.label}</span>
+                      <span className="hidden @7xl/panel:inline">{t.label}</span>
                       {t.badge && (
                         <span
                           className={`ml-1.5 font-mono vt-xs ${t.key === "module" || t.key === "bypass" || t.key === "shop" ? "hidden @lg/panel:inline" : ""} ${
@@ -2455,10 +3092,8 @@ export default function VirusGame() {
                         [
                           ["power", "⚔️", "효율 강화"],
                           ["util", "🛠️", "편의성"],
-                          // 커널: 스테이지 100을 돌파해 첫 코어를 받은 뒤로는 계속 (코어를 다 써도 사라지지 않게)
-                          ...(s.best > 100 || s.clears > 0 || s.cores > 0
-                            ? ([["core", "🧩", `커널 ${s.cores}`]] as const)
-                            : []),
+                          // 커널: 처음부터 (GP로 산 코어를 다 써도 사라지지 않게)
+                          ["core", "🧩", `커널 ${s.cores}`],
                         ] as const
                       ).map(([k, icon, label]) => (
                         <button
@@ -2471,7 +3106,7 @@ export default function VirusGame() {
                           }}
                           aria-pressed={shopCat === k}
                           title={label}
-                          className={`vt-xs px-2 py-1 font-bold whitespace-nowrap transition-colors ${
+                          className={`vt-xs px-1 py-1 font-bold whitespace-nowrap transition-colors @md/panel:px-2 ${
                             shopCat === k
                               ? "bg-amber-300/20 text-amber-100"
                               : "text-white/75 hover:text-white"
@@ -2561,7 +3196,7 @@ export default function VirusGame() {
                   <FitPages
                     page={page}
                     onPages={onPages}
-                    className="grid grid-cols-[minmax(0,1fr)] gap-2 pt-2 @2xl/panel:grid-cols-3 @2xl/panel:gap-3"
+                    className="grid grid-cols-1 gap-1.5 pt-2"
                     items={UPGRADES.map((u, i) => {
                       const lv = s.lv[u.key];
                       const bulk = bulkCost(s, u, buyMode === "max" ? Infinity : buyMode);
@@ -2572,147 +3207,41 @@ export default function VirusGame() {
                       const upTop = advice?.best === u.key;
                       const randTop = advice?.best === `rand:${u.key}`;
                       return (
-                        <div key={u.key}>
-                          {/* 좁은 패널(폰): 한 줄에 [정보] [▲ 업그레이드] [🎲 랜덤 강화] */}
-                          <div
-                            className={`flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] py-1.5 pr-1.5 pl-2.5 @2xl/panel:hidden ${KR}`}
-                          >
-                            <span className="text-lg" aria-hidden>
-                              {u.icon}
-                            </span>
-                            <span className="min-w-0 flex-1">
-                              <span className="block truncate vt-md font-bold text-white">
-                                {u.name}{" "}
-                                <span className="font-mono vt-sm text-white/75">Lv.{lv}</span>
-                              </span>
-                              <span className="block truncate vt-xs text-white/75">
-                                {u.label(st, lv)}
-                              </span>
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => buy(u)}
-                              disabled={s.data < cost}
-                              aria-label={`${u.name} 업그레이드 ${fmtBytes(cost)}`}
-                              className={`relative flex h-10 min-w-[74px] shrink-0 flex-col items-center justify-center rounded-lg border px-2 transition-colors enabled:active:bg-emerald-400/25 ${
-                                upTop
-                                  ? "border-emerald-200 bg-emerald-400/25 shadow-[0_0_14px_rgba(74,222,128,0.6)]"
-                                  : "border-emerald-400/40 bg-emerald-400/10"
-                              }`}
-                            >
-                              {upTop && <AdviceBadge />}
-                              <span className="vt-xs leading-none text-emerald-200/90">
-                                ▲ 업그레이드
-                              </span>
-                              <span className="mt-0.5 font-mono vt-sm font-bold text-emerald-300">
-                                {fmtBytes(cost)}
-                              </span>
-                              {(many > 1 || advice) && (
-                                <span className="vt-xs leading-none text-emerald-200/90">
-                                  {many > 1 && `×${many}`}
-                                  {advice && ` DPS+${pct(gainOf(u.key))}`}
-                                </span>
-                              )}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => doRand(u.key)}
-                              disabled={s.data < price}
-                              aria-label={`${u.rand} ${fmtBytes(price)}`}
-                              className={`relative flex h-10 min-w-[74px] shrink-0 flex-col items-center justify-center rounded-lg border px-2 transition-colors enabled:active:bg-violet-400/25 ${
-                                randTop
-                                  ? "border-violet-100 bg-violet-400/30 shadow-[0_0_14px_rgba(167,139,250,0.65)]"
-                                  : "border-violet-300/40 bg-violet-400/10"
-                              }`}
-                            >
-                              {randTop && <AdviceBadge />}
-                              <span className="vt-xs leading-none text-violet-200/90">🎲 +1~3</span>
-                              <span className="mt-0.5 font-mono vt-sm font-bold text-violet-200">
-                                {fmtBytes(price)}
-                              </span>
-                              {advice && (
-                                <span className="vt-xs leading-none text-violet-200/90">
-                                  DPS+{pct(gainOf(`rand:${u.key}`))}
-                                </span>
-                              )}
-                            </button>
-                          </div>
-                          {/* 넓은 패널: 업그레이드 카드 + 아래 랜덤 강화 */}
-                          <div className="hidden flex-col gap-1 @2xl/panel:flex">
-                            <button
-                              type="button"
-                              onClick={() => buy(u)}
-                              disabled={s.data < cost}
-                              className={`relative flex items-center gap-3 rounded-xl border px-3 py-2 text-left transition-colors enabled:hover:border-emerald-400/50 ${
-                                upTop
-                                  ? "border-emerald-300/80 bg-emerald-400/[0.1] shadow-[0_0_16px_rgba(74,222,128,0.35)]"
-                                  : "border-white/10 bg-white/[0.03]"
-                              }`}
-                            >
-                              {upTop && <AdviceBadge />}
-                              <span className="text-xl" aria-hidden>
-                                {u.icon}
-                              </span>
-                              <span className={`min-w-0 flex-1 ${KR}`}>
-                                <span className="block vt-base font-bold text-white">
-                                  {u.name}{" "}
-                                  <span className="font-mono vt-sm text-white/75">Lv.{lv}</span>
-                                </span>
-                                <span className="block truncate vt-sm text-white/75">
-                                  {u.label(st, lv)}
-                                  {/* 프로파일러: 같은 줄에 (카드를 2줄로 — 넓은 화면 패널 높이에 맞게) */}
-                                  {advice && (
-                                    <span
-                                      className={`ml-1.5 font-mono vt-xs ${upTop ? "text-emerald-200" : "text-white/70"}`}
-                                    >
-                                      DPS +{pct(gainOf(u.key))}
-                                    </span>
-                                  )}
-                                </span>
-                              </span>
-                              <span className="flex shrink-0 flex-col items-end">
-                                <span className="font-mono vt-base font-bold text-emerald-300">
-                                  {fmtBytes(cost)}
-                                  {many > 1 && (
-                                    <span className="ml-1 vt-xs text-emerald-200/90">×{many}</span>
-                                  )}
-                                </span>
-                                <span className="hidden rounded border border-white/15 px-1 font-mono vt-xs text-white/70 md:inline">
-                                  {i + 1}
-                                </span>
-                              </span>
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => doRand(u.key)}
-                              disabled={s.data < price}
-                              title={`랜덤 강화: ${u.name}${subj(u.name)} ${RAND_ODDS.map((p, k) => `${k + 1}레벨 ${Math.round(p * 100)}%`).join(" · ")} 확률로 올라요.`}
-                              className={`relative flex items-center gap-2 rounded-lg border px-3 py-1.5 text-left vt-sm transition-colors enabled:hover:border-violet-300/70 ${KR} ${
-                                randTop
-                                  ? "border-violet-200/90 bg-violet-400/[0.18] shadow-[0_0_14px_rgba(167,139,250,0.45)]"
-                                  : "border-violet-300/25 bg-violet-400/[0.06]"
-                              }`}
-                            >
-                              {randTop && <AdviceBadge />}
-                              <span aria-hidden>🎲</span>
-                              <span className="truncate font-bold text-violet-100">{u.rand}</span>
-                              {!advice && <span className="text-white/70">+1~3</span>}
-                              {advice && (
-                                <span
-                                  className={`shrink-0 font-mono vt-xs whitespace-nowrap ${randTop ? "text-violet-100" : "text-white/70"}`}
-                                >
-                                  DPS +{pct(gainOf(`rand:${u.key}`))}
-                                </span>
-                              )}
-                              <span className="ml-auto font-mono font-bold text-violet-200">
-                                {fmtBytes(price)}
-                              </span>
-                              <span className="hidden rounded border border-white/15 px-1 font-mono vt-xs text-white/70 md:inline">
-                                {RAND_KEYS[i].slice(3)}
-                              </span>
-                            </button>
-                          </div>
-                        </div>
+                        <PanelCard
+                          key={u.key}
+                          icon={u.icon}
+                          title={u.name}
+                          badge={`Lv.${lv}`}
+                          sub={u.label(st, lv)}
+                          top={upTop || randTop}
+                          tip={
+                            advice
+                              ? `업그레이드 DPS +${pct(gainOf(u.key))} · 랜덤 강화 평균 DPS +${pct(gainOf(`rand:${u.key}`))}`
+                              : undefined
+                          }
+                        >
+                          <PanelBtn
+                            tone="emerald"
+                            label={`▲ +${Math.max(1, many)}`}
+                            value={fmtBytes(cost)}
+                            kbd={String(i + 1)}
+                            top={upTop}
+                            disabled={s.data < cost}
+                            aria={`${u.name} 업그레이드 ${fmtBytes(cost)}`}
+                            onClick={() => buy(u)}
+                          />
+                          <PanelBtn
+                            tone="violet"
+                            label="🎲 +1~3"
+                            value={fmtBytes(price)}
+                            kbd={RAND_KEYS[i].slice(3)}
+                            top={randTop}
+                            disabled={s.data < price}
+                            tip={`랜덤 강화 「${u.rand}」: ${RAND_ODDS.map((p, k) => `${k + 1}레벨 ${Math.round(p * 100)}%`).join(" · ")}`}
+                            aria={`${u.rand} ${fmtBytes(price)}`}
+                            onClick={() => doRand(u.key)}
+                          />
+                        </PanelCard>
                       );
                     })}
                   />
@@ -2722,7 +3251,7 @@ export default function VirusGame() {
                   <FitPages
                     page={page}
                     onPages={onPages}
-                    className="grid grid-cols-2 gap-2 @2xl/panel:grid-cols-5"
+                    className="grid grid-cols-2 gap-1.5 pt-2 @2xl/panel:grid-cols-4"
                     items={MOD_ORDER.map((i) => {
                       const v = ROSTER[i];
                       const lv = mods[i];
@@ -2730,75 +3259,43 @@ export default function VirusGame() {
                       const cost = fragCost(i, lv);
                       const own = s.frag[i];
                       const ownUp = planMod(s, i).to > lv;
-                      const ownPct = Math.min(100, (own / cost) * 100);
                       return (
-                        <div
+                        <PanelCard
                           key={v.id}
-                          className="flex flex-col gap-1 rounded-xl border px-2 py-1.5"
-                          style={{
-                            borderColor: lv ? `${v.color}66` : "rgba(255,255,255,0.12)",
-                            background: lv ? `${v.color}12` : "transparent",
-                          }}
+                          icon={<VirusSprite seed={v.id} color={v.color} size={26} />}
+                          dim={!lv}
+                          color={lv ? v.color : undefined}
+                          compact
+                          title={lv || joined ? v.module : "??? 모듈"}
+                          sub={
+                            lv
+                              ? `v${lv} · ${v.cur(lv)}`
+                              : joined
+                                ? `${v.name} 조각을 모으면`
+                                : `스테이지 ${v.join} 합류`
+                          }
+                          progress={joined ? own / cost : undefined}
+                          tip={lv ? `${v.module} v${lv}: ${v.cur(lv)} — ${v.effect}` : undefined}
+                          onInfo={() => setDetail({ kind: "mod", i })}
                         >
-                          <button
-                            type="button"
-                            onClick={() => setDetail({ kind: "mod", i })}
-                            className="flex min-w-0 items-center gap-2 text-left"
-                            title={
-                              lv
-                                ? `${v.module} v${lv}: ${v.cur(lv)} — ${v.effect}`
-                                : joined
-                                  ? `${v.name}을 잡아 조각을 모으면 열려요`
-                                  : `스테이지 ${v.join}에 합류`
-                            }
-                          >
-                            <div className={`shrink-0 ${lv ? "" : "opacity-30 grayscale"}`}>
-                              <VirusSprite seed={v.id} color={v.color} size={26} />
-                            </div>
-                            <div className={`min-w-0 ${KR}`}>
-                              <div className="truncate vt-sm font-bold text-white/90">
-                                {lv || joined ? `${v.icon} ${v.module}` : "??? 모듈"}
-                                {lv > 0 && (
-                                  <span className="ml-1 font-mono vt-xs text-white/75">v{lv}</span>
-                                )}
-                              </div>
-                              <div className="truncate vt-xs text-white/70">
-                                {lv ? v.cur(lv) : joined ? v.name : `스테이지 ${v.join} 합류`}
-                              </div>
-                            </div>
-                          </button>
                           {joined && (
-                            <div className="flex items-center gap-1.5">
-                              <div
-                                className="relative h-1.5 flex-1 overflow-hidden rounded-full bg-white/10"
-                                title={`조각 ${fmtBytes(own)} / ${fmtBytes(cost)}`}
-                              >
-                                <div
-                                  className="absolute inset-y-0 left-0 rounded-full"
-                                  style={{ width: `${ownPct}%`, background: v.color }}
-                                />
-                              </div>
-                              <span className="font-mono vt-xs text-white/75 tabular-nums">
-                                {fmtBytes(own)}/{fmtBytes(cost)}
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  doCompile((sv) => {
-                                    const n = compileMod(sv, i);
-                                    return n ? [{ kind: "mod", i, to: sv.mods[i] }] : [];
-                                  })
-                                }
-                                disabled={!ownUp}
-                                aria-label={`${v.module} 컴파일`}
-                                title="모인 조각으로 컴파일"
-                                className="rounded-md border border-emerald-300/50 bg-emerald-400/15 px-1.5 vt-xs font-bold text-emerald-100 enabled:hover:bg-emerald-400/25 disabled:opacity-35"
-                              >
-                                ▲
-                              </button>
-                            </div>
+                            <PanelBtn
+                              tone="emerald"
+                              square
+                              label="▲"
+                              value={`${Math.min(999, Math.floor((own / cost) * 100))}%`}
+                              disabled={!ownUp}
+                              tip={`조각 ${fmtBytes(own)} / ${fmtBytes(cost)}`}
+                              aria={`${v.module} 컴파일`}
+                              onClick={() =>
+                                doCompile((sv) => {
+                                  const n = compileMod(sv, i);
+                                  return n ? [{ kind: "mod", i, to: sv.mods[i] }] : [];
+                                })
+                              }
+                            />
                           )}
-                        </div>
+                        </PanelCard>
                       );
                     })}
                   />
@@ -2808,79 +3305,46 @@ export default function VirusGame() {
                   <FitPages
                     page={page}
                     onPages={onPages}
-                    className="grid grid-cols-2 gap-2 @2xl/panel:grid-cols-5"
+                    className="grid grid-cols-2 gap-1.5 pt-2 @2xl/panel:grid-cols-4"
                     items={APEX.map((a, i) => {
                       const v = bv[i];
                       const got = v > 0;
                       const cost = keyCost(i, v);
                       const ready = got && s.ukey >= cost;
                       return (
-                        <div
+                        <PanelCard
                           key={a.id}
-                          className="flex flex-col gap-1 rounded-xl border px-2 py-1.5"
-                          style={{
-                            borderColor: got ? `${a.color}88` : "rgba(255,255,255,0.15)",
-                            background: got ? `${a.color}14` : "transparent",
-                          }}
+                          icon={<ApexSprite index={i} color={a.color} size={26} />}
+                          dim={!got}
+                          color={got ? a.color : undefined}
+                          compact
+                          title={got ? a.trait : "??? 우회 기술"}
+                          sub={got ? `v${v} · ${a.cur(v)}` : `${(i + 1) * 10}스테이지 상위 보스`}
+                          progress={got ? s.ukey / cost : undefined}
+                          tip={
+                            got
+                              ? `${a.role} ${a.name}: ${a.trait} v${v} — ${a.cur(v)} · 외형 ${a.look}`
+                              : `스테이지 ${(i + 1) * 10}의 상위 보스를 잡으면 열려요`
+                          }
+                          onInfo={() => setDetail({ kind: "apex", i })}
                         >
-                          <button
-                            type="button"
-                            onClick={() => setDetail({ kind: "apex", i })}
-                            className="flex min-w-0 items-center gap-2 text-left"
-                            title={
-                              got
-                                ? `${a.role} ${a.name}: ${a.trait} v${v} — ${a.cur(v)} · 외형 ${a.look}`
-                                : `스테이지 ${(i + 1) * 10}의 상위 보스를 잡으면 열려요`
-                            }
-                          >
-                            <div className={`shrink-0 ${got ? "" : "opacity-30 grayscale"}`}>
-                              <ApexSprite index={i} color={a.color} size={26} />
-                            </div>
-                            <div className={`min-w-0 ${KR}`}>
-                              <div className="vt-sm truncate font-bold text-white/90">
-                                {got ? `🛡️ ${a.trait}` : "??? 우회 기술"}
-                                {got && (
-                                  <span className="ml-1 font-mono vt-xs text-white/75">v{v}</span>
-                                )}
-                              </div>
-                              <div className="vt-xs truncate text-white/75">
-                                {got ? a.cur(v) : `${(i + 1) * 10}스테이지 상위 보스`}
-                              </div>
-                            </div>
-                          </button>
                           {got && (
-                            <div className="flex items-center gap-1.5">
-                              <div
-                                className="relative h-1.5 flex-1 overflow-hidden rounded-full bg-white/10"
-                                title={`공용 우회 키 ${fmtBytes(s.ukey)} / 다음 버전 ${fmtBytes(cost)}`}
-                              >
-                                <div
-                                  className="absolute inset-y-0 left-0 rounded-full"
-                                  style={{
-                                    width: `${Math.min(100, (s.ukey / cost) * 100)}%`,
-                                    background: a.color,
-                                  }}
-                                />
-                              </div>
-                              <span className="font-mono vt-xs text-white/75 tabular-nums">
-                                🔑{fmtBytes(cost)}
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  doCompile((sv) =>
-                                    compileByp(sv, i) ? [{ kind: "byp", i, to: sv.byp[i] }] : []
-                                  )
-                                }
-                                disabled={!ready}
-                                aria-label={`${a.trait} 컴파일`}
-                                className="rounded-md border border-emerald-300/50 bg-emerald-400/15 px-1.5 vt-xs font-bold text-emerald-100 enabled:hover:bg-emerald-400/25 disabled:opacity-35"
-                              >
-                                ▲
-                              </button>
-                            </div>
+                            <PanelBtn
+                              tone="emerald"
+                              square
+                              label="▲"
+                              value={`${Math.min(999, Math.floor((s.ukey / cost) * 100))}%`}
+                              disabled={!ready}
+                              tip={`공용 우회 키 ${fmtBytes(s.ukey)} / 다음 버전 ${fmtBytes(cost)}`}
+                              aria={`${a.trait} 컴파일`}
+                              onClick={() =>
+                                doCompile((sv) =>
+                                  compileByp(sv, i) ? [{ kind: "byp", i, to: sv.byp[i] }] : []
+                                )
+                              }
+                            />
                           )}
-                        </div>
+                        </PanelCard>
                       );
                     })}
                   />
@@ -2891,86 +3355,81 @@ export default function VirusGame() {
                     key={shopCat}
                     page={page}
                     onPages={onPages}
-                    className={`grid grid-cols-2 gap-2 @2xl/panel:grid-cols-3 ${KR}`}
+                    className="grid grid-cols-1 gap-1.5 pt-2 @2xl/panel:grid-cols-2"
                     items={SHOP.filter((d) => d.group === shopCat).map((d) => {
                       const lv = s.shop[d.key];
                       const maxed = d.max != null && lv >= d.max;
                       const cost = shopCost(d, lv);
                       const locked = shopLocked(s, d);
-                      // 편의성은 GP로도 살 수 있음
-                      const gpCost = shopGpCost(s, d);
-                      const canPay = canAffordShop(s, d) || (gpCost != null && gp >= gpCost);
-                      // 앞 상품이 먼저, 아니면 편의성을 모두 가져야 (루트 권한 자동 투자)
+                      // 편의성은 GP로도 (진행 조건 없이 바로)
+                      const gpCost = shopGpCost(d);
+                      // 잠긴 이유: 앞 상품 · 편의성 모두 (루트 권한 자동 투자) · 진행 조건 (편의성)
                       const reqName =
                         d.req && !s.shop[d.req]
-                          ? SHOP.find((x) => x.key === d.req)?.name
-                          : "편의성 모두";
+                          ? `${SHOP.find((x) => x.key === d.req)?.name} 먼저`
+                          : d.needBest != null && s.best - 1 < d.needBest
+                            ? `스테이지 ${d.needBest}`
+                            : "편의성 모두 먼저";
                       const ra = rAdvice?.list.find((a) => a.key === d.key);
                       const top = rAdvice?.best === d.key;
                       return (
-                        <div
+                        <PanelCard
                           key={d.key}
-                          className={`relative flex flex-col gap-1.5 rounded-xl border p-2 ${
-                            top
-                              ? "border-emerald-300/80 bg-emerald-400/[0.1] shadow-[0_0_16px_rgba(74,222,128,0.35)]"
-                              : "border-amber-300/25 bg-amber-300/[0.05]"
-                          } @2xl/panel:flex-row @2xl/panel:items-center @2xl/panel:gap-2.5 @2xl/panel:py-2 @2xl/panel:pr-2 @2xl/panel:pl-2.5`}
-                          title={`${d.desc} — 루트 권한을 써도 피해 보너스(×${fmt(st.rootMul)})는 줄지 않고, 변이해도 남아요${
-                            ra?.converted
-                              ? " · DPS 수치는 데이터 · 랜덤 강화 효율이 늘어난 만큼 업그레이드를 더 산다고 보고 환산한 값"
+                          icon={d.icon}
+                          title={d.name}
+                          badge={
+                            kernelWhat[d.key] && !maxed
+                              ? `${d.max === 1 ? "" : `Lv.${lv} · `}DPS +${kernelGain(d.key).dps}`
+                              : d.max === 1
+                                ? lv
+                                  ? "보유"
+                                  : undefined
+                                : `Lv.${lv}`
+                          }
+                          sub={
+                            ra
+                              ? `${d.label(lv)} · DPS ×${ra.mul.toFixed(2)}`
+                              : (kernelWhat[d.key] ?? d.label(lv))
+                          }
+                          top={top}
+                          tip={`${d.desc}${ra ? ` — 🔑100당 DPS +${pct(ra.per100)}${ra.converted ? " (환산)" : ""}` : ""}${
+                            kernelWhat[d.key] && !maxed
+                              ? ` — 지금 사면 DPS +${kernelGain(d.key).dps} · 보스 +${kernelGain(d.key).boss} · 지금 ${d.label(lv)}`
                               : ""
                           }`}
                         >
-                          {top && <AdviceBadge />}
-                          <span className="flex min-w-0 flex-1 items-center gap-2">
-                            <span className="text-lg" aria-hidden>
-                              {d.icon}
-                            </span>
-                            <span className="min-w-0 flex-1">
-                              <span className="vt-md block truncate font-bold text-white">
-                                {d.name}{" "}
-                                <span className="vt-sm font-mono text-white/75">
-                                  {d.max === 1 ? (lv ? "보유" : "") : `Lv.${lv}`}
-                                </span>
-                              </span>
-                              <span className="vt-xs block truncate text-white/75">
-                                {d.label(lv)}
-                              </span>
-                              {ra && (
-                                <span
-                                  className={`vt-xs block truncate font-mono ${top ? "text-emerald-200" : "text-white/75"}`}
-                                >
-                                  DPS ×{ra.mul.toFixed(2)} · 🔑100당 +{pct(ra.per100)}
-                                  {ra.converted ? " (환산)" : ""}
-                                </span>
+                          {maxed ? (
+                            <PanelBtn
+                              tone="amber"
+                              label="완료"
+                              value="MAX"
+                              disabled
+                              onClick={() => {}}
+                            />
+                          ) : (
+                            <>
+                              <PanelBtn
+                                tone="amber"
+                                label={locked ? `🔒 ${reqName}` : "구매"}
+                                value={isCoreItem(d) ? `🧩${cost}` : `🔑${fmt(cost)}`}
+                                disabled={locked || !canAffordShop(s, d)}
+                                onClick={() => buyWith(d.key)}
+                              />
+                              {gpCost != null && (
+                                <PanelBtn
+                                  tone="sky"
+                                  label={gp == null ? "로그인 필요" : "💎 GP로 바로"}
+                                  value={fmtPoint(gpCost)}
+                                  disabled={
+                                    !canBuyShopGp(s, d.key) || gp == null || gp < gpCost || gpBusy
+                                  }
+                                  tip="GP로 사면 진행 조건 없이 바로 열리고, 계정에 남아 새 게임 · 다른 기기에서도 열려 있어요"
+                                  onClick={() => void buyGp(d.key)}
+                                />
                               )}
-                            </span>
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => buyRoot(d.key)}
-                            disabled={maxed || locked || !canPay}
-                            className="flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-lg border border-amber-300/50 bg-amber-300/15 px-2 transition-colors enabled:hover:bg-amber-300/25 @2xl/panel:h-10 @2xl/panel:min-w-[74px] @2xl/panel:flex-col @2xl/panel:gap-0"
-                          >
-                            <span className="vt-xs leading-none text-amber-100/90">
-                              {maxed ? "완료" : locked ? "🔒 잠김" : "구매"}
-                            </span>
-                            <span className="vt-sm font-mono font-bold text-amber-200">
-                              {maxed
-                                ? "MAX"
-                                : locked
-                                  ? `${reqName} 먼저`
-                                  : isCoreItem(d)
-                                    ? `🧩${cost}`
-                                    : `🔑${fmt(cost)}`}
-                              {!maxed && !locked && gpCost != null && (
-                                <span className="vt-xs ml-1 font-normal text-sky-200 @2xl/panel:ml-0 @2xl/panel:block">
-                                  · {fmt(gpCost)}GP
-                                </span>
-                              )}
-                            </span>
-                          </button>
-                        </div>
+                            </>
+                          )}
+                        </PanelCard>
                       );
                     })}
                   />
@@ -3045,8 +3504,8 @@ export default function VirusGame() {
                   />
                 )}
                 {pages > 1 && (
-                  <div className="flex shrink-0 justify-end pt-1.5">
-                    <Pager page={Math.min(page, pages - 1)} pages={pages} onPage={setPage} />
+                  <div className="flex shrink-0 justify-end pt-1">
+                    <Pager small page={Math.min(page, pages - 1)} pages={pages} onPage={setPage} />
                   </div>
                 )}
               </div>
@@ -3140,6 +3599,55 @@ export default function VirusGame() {
           </Window>
         )}
 
+        {overlay === "gp" && (
+          <Window title="gp_shop.exe" wide fill onClose={() => setOverlay(null)}>
+            <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center">
+              <span className="min-w-0 sm:flex-1">
+                <span className="block font-mono vt-md font-bold text-sky-200">
+                  💎 {account ? fmtPoint(gp ?? 0) : "로그인이 필요해요"}
+                </span>
+                <span className="block truncate vt-xs text-white/75">
+                  {!account
+                    ? "로그인하면 사이트 GP로 커널 코어 · 시간 가속 · 패키지 · 스킨을 살 수 있어요"
+                    : vshop && (vshop.pending.cores > 0 || vshop.pending.warpH > 0)
+                      ? `받을 물건: ${goodsText({ cores: vshop.pending.cores, warpH: vshop.pending.warpH })}`
+                      : "산 것은 바로 받아요 · 편의성 · 스킨은 계정에 남아요"}
+                </span>
+              </span>
+              <div className="flex self-start overflow-hidden rounded-lg border border-white/20">
+                {(
+                  [
+                    ["pack", "🎁", "패키지"],
+                    ["store", "🧩", "재화샵 · 교환"],
+                    ["skin", "🎨", "꾸미기"],
+                  ] as const
+                ).map(([k, icon, label]) => (
+                  <button
+                    key={k}
+                    type="button"
+                    onClick={() => setGpCat(k)}
+                    aria-pressed={gpCat === k}
+                    className={`px-2.5 py-1 vt-xs font-bold whitespace-nowrap transition-colors ${
+                      gpCat === k ? "bg-sky-300/20 text-sky-100" : "text-white/75 hover:text-white"
+                    }`}
+                  >
+                    {icon} {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="@container/panel flex min-h-0 flex-1 flex-col">
+              <PagedList
+                key={gpCat}
+                className="grid grid-cols-1 gap-1.5 pt-2 @md/panel:grid-cols-2"
+                items={
+                  gpCat === "pack" ? gpPackItems : gpCat === "skin" ? gpSkinItems : gpStoreItems
+                }
+              />
+            </div>
+          </Window>
+        )}
+
         {/* ── 확인 창 ── */}
         {ask && (
           <div
@@ -3180,71 +3688,6 @@ export default function VirusGame() {
             </div>
           </div>
         )}
-
-        {/* ── 편의성 상품: 어느 재화로 살지 ── */}
-        {pay &&
-          (() => {
-            const d = SHOP.find((x) => x.key === pay)!;
-            const root = shopCost(d, s.shop[d.key]);
-            const gpCost = shopGpCost(s, d) ?? 0;
-            const close = () => setPay(null);
-            const opt =
-              "vt-base flex flex-1 flex-col items-center gap-0.5 rounded-xl border px-3 py-2.5 font-bold transition-colors disabled:opacity-40";
-            return (
-              <div
-                className="absolute inset-0 z-[60] flex items-center justify-center bg-black/65 p-4"
-                onClick={close}
-              >
-                <div
-                  role="dialog"
-                  aria-modal
-                  aria-label={`${d.name} 구매 — 재화 고르기`}
-                  className={`virus-pop w-full max-w-sm rounded-2xl border border-white/15 bg-[#0f1a14] p-6 text-center ${KR}`}
-                  onClick={(ev) => ev.stopPropagation()}
-                >
-                  <p className="text-lg font-bold text-white">
-                    {d.icon} {d.name}
-                  </p>
-                  <p className="vt-sm mt-1 text-white/80">어느 재화로 살까요?</p>
-                  <div className="mt-4 flex gap-2">
-                    <button
-                      type="button"
-                      autoFocus
-                      onClick={() => pickPay("root")}
-                      disabled={!canAffordShop(s, d)}
-                      className={`${opt} border-amber-300/50 bg-amber-300/15 text-amber-100 enabled:hover:bg-amber-300/25`}
-                    >
-                      <span>🔑 루트 권한</span>
-                      <span className="vt-sm font-mono text-amber-200">{fmt(root)}</span>
-                      <span className="vt-xs font-normal text-white/75">
-                        남은 {fmt(rootLeft(s))}
-                      </span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => pickPay("gp")}
-                      disabled={gp < gpCost}
-                      className={`${opt} border-sky-300/50 bg-sky-300/15 text-sky-100 enabled:hover:bg-sky-300/25`}
-                    >
-                      <span>💎 GP</span>
-                      <span className="vt-sm font-mono text-sky-200">{fmt(gpCost)}</span>
-                      <span className="vt-xs font-normal text-white/75">가진 {fmt(gp)}</span>
-                    </button>
-                  </div>
-                  <p className="vt-xs mt-3 text-white/70">
-                    GP로 사면 루트 권한은 그대로 남아요 (루트 권한 1 = {GP_PER_ROOT}GP)
-                  </p>
-                  <button
-                    type="button"
-                    onClick={close}
-                    className="vt-base mt-4 rounded-full border border-white/25 px-5 py-2 font-bold text-white/90 hover:border-white/50"
-                  >
-                    취소
-                  </button>
-                </div>
-              </div>
-            );
-          })()}
 
         {/* ── 격퇴 알림: 우측 상단에 잠깐 ── */}
         {scene === "play" && toasts.length > 0 && (
@@ -3329,9 +3772,11 @@ export default function VirusGame() {
                 🖥️
               </p>
               <p className="mt-1 text-center vt-base font-bold text-white">
-                {catchUp.kind === "offline"
-                  ? "자리를 비운 동안 몰래 실행"
-                  : "백그라운드에서 몰래 실행"}
+                {catchUp.kind === "warp"
+                  ? "⏩ 시간 가속"
+                  : catchUp.kind === "offline"
+                    ? "자리를 비운 동안 몰래 실행"
+                    : "백그라운드에서 몰래 실행"}
               </p>
               <p className="text-center vt-sm text-white/75">
                 {fmtTime(catchUp.real)}

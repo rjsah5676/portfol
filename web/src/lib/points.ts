@@ -11,8 +11,7 @@
 /** 포인트 이름 · 단위 (이름을 정하면 여기만 바꾸면 됨) */
 export const POINT = { name: "GP", unit: "GP" } as const;
 
-export const fmtPoint = (n: number) =>
-  `${Math.trunc(n).toLocaleString("ko-KR")}${POINT.unit}`;
+export const fmtPoint = (n: number) => `${Math.trunc(n).toLocaleString("ko-KR")}${POINT.unit}`;
 
 /** 매일 첫 접속(한국 시간 날짜 기준) 출석 포인트 */
 export const ATTEND_POINTS = 200;
@@ -43,13 +42,14 @@ export const POKER_EXCHANGE = {
 /* ─────────────── 상점 ─────────────── */
 
 /** 포인트를 쓰는 게임 (상점이 들어갈 곳). 지금 화면까지 붙은 건 포커 */
-export type PointGame = "poker" | "fight" | "defense" | "rhythm" | "sketch";
+export type PointGame = "poker" | "fight" | "defense" | "rhythm" | "sketch" | "virus";
 export const POINT_GAMES: Record<PointGame, string> = {
   poker: "ANIME POKER",
   fight: "PIXEL FIGHT",
   defense: "PIXEL LUCKY DEFENSE",
   rhythm: "BEAT DASH",
   sketch: "DOODLE PARTY",
+  virus: "VIRUS IDLE",
 };
 
 /**
@@ -187,6 +187,81 @@ export const SHOP: ShopItem[] = [
     name: "시베리아 이반",
     price: 15_000,
   },
+  // VIRUS IDLE 루트 상점 편의성 (lib/virus/logic.ts SHOP 의 util) — 산 것은 inv.virus, 계정에 남아 새 게임에서도 열려 있음
+  {
+    id: "virus.util.profiler",
+    game: "virus",
+    kind: "item",
+    ref: "profiler",
+    name: "프로파일러",
+    price: 500,
+  },
+  { id: "virus.util.cron", game: "virus", kind: "item", ref: "cron", name: "크론잡", price: 1_000 },
+  {
+    id: "virus.util.daemon",
+    game: "virus",
+    kind: "item",
+    ref: "daemon",
+    name: "크론 데몬",
+    price: 3_000,
+  },
+  {
+    id: "virus.util.kprof",
+    game: "virus",
+    kind: "item",
+    ref: "kprof",
+    name: "커널 프로파일러",
+    price: 1_500,
+  },
+  {
+    id: "virus.util.autoc",
+    game: "virus",
+    kind: "item",
+    ref: "autoc",
+    name: "자동 컴파일러",
+    price: 2_000,
+  },
+  {
+    id: "virus.util.kalloc",
+    game: "virus",
+    kind: "item",
+    ref: "kalloc",
+    name: "우회 키 최적 배분",
+    price: 1_500,
+  },
+  // VIRUS IDLE 꾸미기 스킨 (lib/virus/skins.ts — 능력 변화 없음, 보이드는 패키지로만)
+  {
+    id: "virus.skin.frost",
+    game: "virus",
+    kind: "item",
+    ref: "skin.frost",
+    name: "스킨 · 프로스트",
+    price: 3_000,
+  },
+  {
+    id: "virus.skin.inferno",
+    game: "virus",
+    kind: "item",
+    ref: "skin.inferno",
+    name: "스킨 · 인페르노",
+    price: 3_000,
+  },
+  {
+    id: "virus.skin.gold",
+    game: "virus",
+    kind: "item",
+    ref: "skin.gold",
+    name: "스킨 · 골드 루트킷",
+    price: 5_000,
+  },
+  {
+    id: "virus.skin.rgb",
+    game: "virus",
+    kind: "item",
+    ref: "skin.rgb",
+    name: "스킨 · 글리치 RGB",
+    price: 8_000,
+  },
 ];
 export const shopItem = (id: unknown) => SHOP.find((s) => s.id === id);
 export const shopOf = (game: PointGame) => SHOP.filter((s) => s.game === game);
@@ -196,7 +271,7 @@ export const shopFor = (game: PointGame, kind: ShopItem["kind"], ref: string) =>
 /* ─────────────── 업적 ─────────────── */
 
 /** 업적이 있는 게임 (게임 머리말의 [업적] 버튼) */
-export type AchGame = "poker" | "fight" | "defense" | "rhythm" | "sketch";
+export type AchGame = "poker" | "fight" | "defense" | "rhythm" | "sketch" | "virus";
 
 /**
  * 업적이 보는 숫자 (서버가 기록에서 계산 — server/src/achievements.ts)
@@ -241,7 +316,27 @@ export type AchMetric =
   | "sketch.fakeWin"
   | "sketch.fakeFound"
   | "sketch.fooled"
-  | "sketch.relay";
+  | "sketch.relay"
+  // VIRUS IDLE: 게임이 보고한 기록 (stats.virus — files · bosses · formats 는 누적, 나머지는 최고값)
+  | "virus.best"
+  | "virus.clears"
+  | "virus.formats"
+  | "virus.files"
+  | "virus.bosses"
+  | "virus.pure"
+  | "virus.bypass"
+  | "virus.mods"
+  | "virus.modMax"
+  | "virus.blitz"
+  | "virus.root"
+  | "virus.lifetime"
+  | "virus.ups"
+  | "virus.evo"
+  | "virus.clutch"
+  | "virus.fails"
+  | "virus.jackpots"
+  | "virus.offMax"
+  | "virus.play";
 
 export interface Achievement {
   id: string;
@@ -251,8 +346,8 @@ export interface Achievement {
   metric: AchMetric;
   goal: number;
   reward: number;
-  /** 숫자 보여 주는 방법 (칩은 억 · 만) */
-  fmt?: "chips";
+  /** 숫자 보여 주는 방법 (칩은 억 · 만, bytes 는 KB · MB …, time 은 시간) */
+  fmt?: "chips" | "bytes" | "time";
   /**
    * 반복형: goal 만큼 쌓일 때마다 또 받음 (100판 → 200판 → …). 한 번에 여러 번 쌓였으면 한꺼번에.
    * 받은 횟수는 회원 문서 achRep.<id 의 . 을 __ 로> 에
@@ -263,15 +358,7 @@ export interface Achievement {
 }
 
 /** 격투 캐릭터 이름 (lib/fight/chars 의 CHARS 순서 — 그쪽 순서가 바뀌면 같이) */
-export const FIGHT_CHAR_NAMES = [
-  "카이",
-  "이그나",
-  "소영",
-  "릴리",
-  "제나",
-  "건모",
-  "이반",
-] as const;
+export const FIGHT_CHAR_NAMES = ["카이", "이그나", "소영", "릴리", "제나", "건모", "이반"] as const;
 
 const EOK = 100_000_000;
 /**
@@ -287,7 +374,7 @@ const a = (
   metric: AchMetric,
   goal: number,
   reward: number,
-  fmt?: "chips",
+  fmt?: "chips" | "bytes" | "time"
 ): Achievement => ({
   id: `${game}.${id}`,
   game,
@@ -309,7 +396,7 @@ export const ACHIEVEMENTS: Achievement[] = [
     "poker.chips",
     3 * EOK,
     900,
-    "chips",
+    "chips"
   ),
   a(
     "poker",
@@ -319,7 +406,7 @@ export const ACHIEVEMENTS: Achievement[] = [
     "poker.chips",
     10 * EOK,
     3000,
-    "chips",
+    "chips"
   ),
   a(
     "poker",
@@ -329,30 +416,13 @@ export const ACHIEVEMENTS: Achievement[] = [
     "poker.chips",
     50 * EOK,
     9000,
-    "chips",
+    "chips"
   ),
   a("poker", "hands-100", "단골손님", "100판 치기", "poker.hands", 100, 600),
-  a(
-    "poker",
-    "hands-1000",
-    "테이블의 주인",
-    "1,000판 치기",
-    "poker.hands",
-    1000,
-    3000,
-  ),
+  a("poker", "hands-1000", "테이블의 주인", "1,000판 치기", "poker.hands", 1000, 3000),
   a("poker", "wins-50", "이기는 습관", "50판 이기기", "poker.wins", 50, 900),
   a("poker", "wins-500", "승부사", "500판 이기기", "poker.wins", 500, 4500),
-  a(
-    "poker",
-    "best-1",
-    "한 방",
-    "한 판에 1억 넘게 가져가기",
-    "poker.best",
-    1 * EOK,
-    1500,
-    "chips",
-  ),
+  a("poker", "best-1", "한 방", "한 판에 1억 넘게 가져가기", "poker.best", 1 * EOK, 1500, "chips"),
 
   // PIXEL FIGHT
   a("fight", "tutorial", "첫걸음", "튜토리얼 끝까지 하기", "fight.tut", 1, 100),
@@ -367,48 +437,18 @@ export const ACHIEVEMENTS: Achievement[] = [
       ["달인", 600],
       ["지존", 1000],
     ] as const
-  ).map(([n, gp], i) => a("fight", `ai-${i}`, `CPU ${n} 격파`, `AI 대전에서 CPU ${n} 이기기`, "fight.ai", i + 1, gp)),
+  ).map(([n, gp], i) =>
+    a("fight", `ai-${i}`, `CPU ${n} 격파`, `AI 대전에서 CPU ${n} 이기기`, "fight.ai", i + 1, gp)
+  ),
   // (아래는 랭크전 기준)
-  a(
-    "fight",
-    "games-10",
-    "첫 랭크전",
-    "랭크전 10판 하기",
-    "fight.games",
-    10,
-    200,
-  ),
-  a(
-    "fight",
-    "games-100",
-    "단련된 주먹",
-    "랭크전 100판 하기",
-    "fight.games",
-    100,
-    1000,
-  ),
+  a("fight", "games-10", "첫 랭크전", "랭크전 10판 하기", "fight.games", 10, 200),
+  a("fight", "games-100", "단련된 주먹", "랭크전 100판 하기", "fight.games", 100, 1000),
   a("fight", "wins-30", "이기는 맛", "랭크전 30승", "fight.wins", 30, 500),
   a("fight", "streak-3", "3연승", "랭크전 3연승", "fight.streak", 3, 300),
   a("fight", "streak-5", "5연승", "랭크전 5연승", "fight.streak", 5, 700),
   a("fight", "streak-10", "10연승", "랭크전 10연승", "fight.streak", 10, 2000),
-  a(
-    "fight",
-    "peak-1200",
-    "실력자",
-    "랭크전 레이팅 1,200 찍기",
-    "fight.peak",
-    1200,
-    500,
-  ),
-  a(
-    "fight",
-    "peak-1500",
-    "고수",
-    "랭크전 레이팅 1,500 찍기",
-    "fight.peak",
-    1500,
-    1500,
-  ),
+  a("fight", "peak-1200", "실력자", "랭크전 레이팅 1,200 찍기", "fight.peak", 1200, 500),
+  a("fight", "peak-1500", "고수", "랭크전 레이팅 1,500 찍기", "fight.peak", 1500, 1500),
   // 등급 달성 (lib/fight/tiers 의 TIERS 하한 — 등급 기준이 바뀌면 같이). 최고 레이팅 기준
   ...(
     [
@@ -419,7 +459,17 @@ export const ACHIEVEMENTS: Achievement[] = [
       ["grandmaster", "그랜드마스터", 2100, 5000],
       ["legend", "레전드", 2400, 10000],
     ] as const
-  ).map(([id, n, min, gp]) => a("fight", `tier-${id}`, `${n} 달성`, `랭크전 ${n} 등급 찍기 (레이팅 ${min.toLocaleString()})`, "fight.peak", min, gp)),
+  ).map(([id, n, min, gp]) =>
+    a(
+      "fight",
+      `tier-${id}`,
+      `${n} 달성`,
+      `랭크전 ${n} 등급 찍기 (레이팅 ${min.toLocaleString()})`,
+      "fight.peak",
+      min,
+      gp
+    )
+  ),
   ...FIGHT_CHAR_NAMES.map((n, i) =>
     a(
       "fight",
@@ -428,65 +478,17 @@ export const ACHIEVEMENTS: Achievement[] = [
       `랭크전에서 ${n}(으)로 20판 하기`,
       `fight.char.${i}`,
       20,
-      200,
-    ),
+      200
+    )
   ),
 
   // PIXEL LUCKY DEFENSE (랭킹 판 기준)
-  a(
-    "defense",
-    "runs-10",
-    "수호자 입문",
-    "랭킹 판 10번 끝내기",
-    "defense.runs",
-    10,
-    200,
-  ),
-  a(
-    "defense",
-    "runs-50",
-    "베테랑 수호자",
-    "랭킹 판 50번 끝내기",
-    "defense.runs",
-    50,
-    800,
-  ),
-  a(
-    "defense",
-    "wave-20",
-    "버티기",
-    "20웨이브까지 버티기",
-    "defense.wave",
-    20,
-    200,
-  ),
-  a(
-    "defense",
-    "wave-40",
-    "끈질긴 방어",
-    "40웨이브까지 버티기",
-    "defense.wave",
-    40,
-    600,
-  ),
-  a(
-    "defense",
-    "win-1",
-    "세계를 지키다",
-    "60웨이브 클리어",
-    "defense.wins",
-    1,
-    1500,
-  ),
-  a(
-    "defense",
-    "win-10",
-    "운빨도 실력",
-    "60웨이브 10번 클리어",
-    "defense.wins",
-    10,
-    3000,
-  ),
+  a("defense", "runs-10", "수호자 입문", "랭킹 판 10번 끝내기", "defense.runs", 10, 200),
+  a("defense", "runs-50", "베테랑 수호자", "랭킹 판 50번 끝내기", "defense.runs", 50, 800),
+  a("defense", "wave-20", "버티기", "20웨이브까지 버티기", "defense.wave", 20, 200),
+  a("defense", "wave-40", "끈질긴 방어", "40웨이브까지 버티기", "defense.wave", 40, 600),
+  a("defense", "win-1", "세계를 지키다", "60웨이브 클리어", "defense.wins", 1, 1500),
+  a("defense", "win-10", "운빨도 실력", "60웨이브 10번 클리어", "defense.wins", 10, 3000),
   a(
     "defense",
     "kills-10000",
@@ -494,7 +496,7 @@ export const ACHIEVEMENTS: Achievement[] = [
     "적 10,000마리 처치 (랭킹 판 누적)",
     "defense.kills",
     10_000,
-    500,
+    500
   ),
   a("defense", "glitch-3", "오염 적응", "오염 3단계 클리어", "defense.glitch", 4, 1500),
   a("defense", "glitch-10", "글리치 정복자", "오염 10단계 클리어", "defense.glitch", 11, 5000),
@@ -506,23 +508,31 @@ export const ACHIEVEMENTS: Achievement[] = [
   a("defense", "runs-400", "평생 수호자", "랭킹 판 400번 끝내기", "defense.runs", 400, 2500),
   a("defense", "win-30", "든든한 방벽", "60웨이브 30번 클리어", "defense.wins", 30, 2000),
   a("defense", "win-100", "백전백승", "60웨이브 100번 클리어", "defense.wins", 100, 4000),
-  a("defense", "kills-50000", "글리치 소탕", "적 50,000마리 처치 (랭킹 판 누적)", "defense.kills", 50_000, 1000),
-  a("defense", "kills-200000", "글리치 멸절자", "적 200,000마리 처치 (랭킹 판 누적)", "defense.kills", 200_000, 2000),
+  a(
+    "defense",
+    "kills-50000",
+    "글리치 소탕",
+    "적 50,000마리 처치 (랭킹 판 누적)",
+    "defense.kills",
+    50_000,
+    1000
+  ),
+  a(
+    "defense",
+    "kills-200000",
+    "글리치 멸절자",
+    "적 200,000마리 처치 (랭킹 판 누적)",
+    "defense.kills",
+    200_000,
+    2000
+  ),
   a("defense", "maxlv-1", "만렙 유닛", "유닛 하나를 최고 레벨(10)까지", "defense.maxlv", 10, 1000),
   a("defense", "relics-6", "유물 수집가", "유물 6개 모으기", "defense.relics", 6, 500),
   a("defense", "relics-12", "유물 박물관", "유물 12개 모두 모으기", "defense.relics", 12, 2000),
 
   // BEAT DASH
   a("rhythm", "plays-30", "리듬 입문", "30판 하기", "rhythm.plays", 30, 600),
-  a(
-    "rhythm",
-    "plays-300",
-    "리듬 중독",
-    "300판 하기",
-    "rhythm.plays",
-    300,
-    3000,
-  ),
+  a("rhythm", "plays-300", "리듬 중독", "300판 하기", "rhythm.plays", 300, 3000),
   a(
     "rhythm",
     "songs-5",
@@ -530,18 +540,10 @@ export const ACHIEVEMENTS: Achievement[] = [
     "서로 다른 곡 5개 끝까지 치기 (랭킹 기록)",
     "rhythm.songs",
     5,
-    900,
+    900
   ),
   a("rhythm", "fc-1", "첫 풀콤보", "풀콤보 1번", "rhythm.fc", 1, 900),
-  a(
-    "rhythm",
-    "fc-10",
-    "풀콤보 수집가",
-    "서로 다른 채보 10개 풀콤보",
-    "rhythm.fc",
-    10,
-    3000,
-  ),
+  a("rhythm", "fc-10", "풀콤보 수집가", "서로 다른 채보 10개 풀콤보", "rhythm.fc", 10, 3000),
   a("rhythm", "ap-1", "올 퍼펙트", "올 퍼펙트 1번", "rhythm.ap", 1, 3000),
   a(
     "rhythm",
@@ -550,7 +552,7 @@ export const ACHIEVEMENTS: Achievement[] = [
     "NIGHTMARE 채보 끝까지 치기",
     "rhythm.nightmare",
     1,
-    2100,
+    2100
   ),
 
   // 스케치 퀴즈 (반복형 대신 일일 미션)
@@ -568,18 +570,135 @@ export const ACHIEVEMENTS: Achievement[] = [
   a("sketch", "drew-100", "인기 화가", "내 그림이 맞혀진 차례 100번", "sketch.drew", 100, 2250),
   a("sketch", "wins-1", "오늘의 화백", "1등 하기 (3명 이상 판)", "sketch.wins", 1, 450),
   a("sketch", "wins-10", "두들 챔피언", "1등 10번 (3명 이상 판)", "sketch.wins", 10, 2250),
-  a("sketch", "points-20000", "점수 부자", "게임 점수 누적 20,000점", "sketch.points", 20_000, 1200),
+  a(
+    "sketch",
+    "points-20000",
+    "점수 부자",
+    "게임 점수 누적 20,000점",
+    "sketch.points",
+    20_000,
+    1200
+  ),
   a("sketch", "likes-1", "첫 따봉", "내 그림에 따봉 1개 받기", "sketch.likes", 1, 150),
   a("sketch", "likes-50", "따봉 맛집", "내 그림에 따봉 50개 받기", "sketch.likes", 50, 750),
   a("sketch", "likes-300", "국민 화가", "내 그림에 따봉 300개 받기", "sketch.likes", 300, 3000),
   a("sketch", "fake-win-1", "완벽한 위장", "가짜 화가로 이기기", "sketch.fakeWin", 1, 450),
   a("sketch", "fake-win-10", "변장의 달인", "가짜 화가로 10번 이기기", "sketch.fakeWin", 10, 2250),
-  a("sketch", "fake-found-10", "가짜 사냥꾼", "가짜 화가를 맞게 지목 10번", "sketch.fakeFound", 10, 750),
-  a("sketch", "fooled-10", "타고난 거짓말쟁이", "그림 속 거짓말에서 내 가짜 제목으로 10번 속이기", "sketch.fooled", 10, 750),
+  a(
+    "sketch",
+    "fake-found-10",
+    "가짜 사냥꾼",
+    "가짜 화가를 맞게 지목 10번",
+    "sketch.fakeFound",
+    10,
+    750
+  ),
+  a(
+    "sketch",
+    "fooled-10",
+    "타고난 거짓말쟁이",
+    "그림 속 거짓말에서 내 가짜 제목으로 10번 속이기",
+    "sketch.fooled",
+    10,
+    750
+  ),
   a("sketch", "relay-5", "릴레이 완주", "그림 릴레이 5판 끝까지", "sketch.relay", 5, 450),
+  // VIRUS IDLE — 게임 안 업적과 하나 (달성하면 게임 안 피해 +2% · 여기서 GP. 아이콘 · 판정은 lib/virus/logic.ts 의 ACH)
+  // 합계 36,200 GP (37개 — 디펜스 22개 44,300 · 두들 파티 22개 28,350 사이)
+  a("virus", "hello", "Hello, World", "처음으로 파일 감염", "virus.files", 1, 100),
+  a("virus", "st11", "개인 PC 탈출", "스테이지 10 돌파", "virus.best", 10, 100),
+  a("virus", "st31", "사내 LAN 장악", "스테이지 30 돌파", "virus.best", 30, 200),
+  a("virus", "st51", "은행 전산망 침투", "스테이지 50 돌파", "virus.best", 50, 300),
+  a("virus", "st81", "통신사 백본", "스테이지 80 돌파", "virus.best", 80, 400),
+  a("virus", "st101", "루트 DNS 함락", "스테이지 100 돌파", "virus.best", 100, 500),
+  a("virus", "st201", "다크넷 장악", "스테이지 200 돌파", "virus.best", 200, 800),
+  a("virus", "st301", "국방망 침투", "스테이지 300 돌파", "virus.best", 300, 1000),
+  a("virus", "st501", "전력망 장악", "스테이지 500 돌파", "virus.best", 500, 1500),
+  a("virus", "st701", "해저 케이블 장악", "스테이지 700 돌파", "virus.best", 700, 2000),
+  a("virus", "st1001", "글로벌 코어 함락", "스테이지 1000 돌파", "virus.best", 1000, 3000),
+  a("virus", "pure", "순수 혈통", "변이하지 않고 스테이지 70 돌파", "virus.pure", 70, 1000),
+  a("virus", "bypass5", "우회 전문가", "우회 기술 5개", "virus.bypass", 5, 300),
+  a("virus", "compile1", "첫 컴파일", "코드 모듈 하나를 컴파일", "virus.mods", 1, 100),
+  a("virus", "compile10", "완성된 무기고", "코드 모듈 10종 모두 컴파일", "virus.mods", 10, 1500),
+  a("virus", "ks1", "스위치 오프", "KILLSWITCH 격퇴", "virus.clears", 1, 2000),
+  a("virus", "ks5", "연쇄 차단", "KILLSWITCH 5번 격퇴", "virus.clears", 5, 3000),
+  a("virus", "ks10", "인터넷의 종말", "KILLSWITCH 10번 격퇴", "virus.clears", 10, 4000),
+  a("virus", "ksfast", "블리츠", "KILLSWITCH를 10초 안에 격퇴", "virus.blitz", 1, 2000),
+  a("virus", "fmt1", "첫 변이", "처음으로 변이", "virus.formats", 1, 100),
+  a("virus", "fmt5", "변종 다발", "변이 5번", "virus.formats", 5, 300),
+  a("virus", "fmt10", "끝없는 변이", "변이 10번", "virus.formats", 10, 500),
+  a("virus", "root1k", "관리자 권한", "루트 권한 1,000", "virus.root", 1000, 300),
+  a("virus", "root1t", "시스템 소유자", "루트 권한 1T", "virus.root", 1e12, 1500),
+  a("virus", "files1k", "대량 감염", "파일 1,000개 감염", "virus.files", 1000, 100),
+  a("virus", "files100k", "팬데믹", "파일 100,000개 감염", "virus.files", 100_000, 500),
+  a("virus", "mod20", "숙련된 코더", "코드 모듈 하나를 v20으로", "virus.modMax", 20, 500),
+  a(
+    "virus",
+    "gb",
+    "기가바이트 도둑",
+    "데이터 1GB 탈취 (누적)",
+    "virus.lifetime",
+    1024 ** 3,
+    200,
+    "bytes"
+  ),
+  a(
+    "virus",
+    "pb",
+    "페타바이트 도둑",
+    "데이터 1PB 탈취 (누적)",
+    "virus.lifetime",
+    1024 ** 5,
+    800,
+    "bytes"
+  ),
+  a(
+    "virus",
+    "yb",
+    "요타바이트 도둑",
+    "데이터 1YB 탈취 (누적)",
+    "virus.lifetime",
+    1024 ** 8,
+    2000,
+    "bytes"
+  ),
+  a("virus", "ups1k", "튜닝 중독", "업그레이드 1,000레벨", "virus.ups", 1000, 300),
+  a("virus", "evo", "아포칼립스", "진화 마지막 단계", "virus.evo", 10, 3000),
+  a("virus", "clutch", "아슬아슬", "남은 시간 1초 이하에서 보스 격퇴", "virus.clutch", 1, 300),
+  a("virus", "fails", "불굴의 코드", "보스에게 10번 차단당함", "virus.fails", 10, 200),
+  a("virus", "jackpot", "잭팟 중독", "랜덤 강화 잭팟(+3레벨) 10번", "virus.jackpots", 10, 300),
+  a(
+    "virus",
+    "idle",
+    "장기 잠복",
+    "한 번에 8시간 넘게 자리 비우기",
+    "virus.offMax",
+    8 * 3600,
+    500,
+    "time"
+  ),
+  a(
+    "virus",
+    "play",
+    "상주 프로세스",
+    "게임 화면에서 10시간",
+    "virus.play",
+    10 * 3600,
+    1000,
+    "time"
+  ),
 ];
 /** 반복형 업적: 일회형 마지막 단계(from)를 넘은 뒤로 step 만큼 쌓일 때마다 reward */
-const r = (game: AchGame, id: string, title: string, unit: string, metric: AchMetric, from: number, step: number, reward: number): Achievement => ({
+const r = (
+  game: AchGame,
+  id: string,
+  title: string,
+  unit: string,
+  metric: AchMetric,
+  from: number,
+  step: number,
+  reward: number
+): Achievement => ({
   id: `${game}.rep-${id}`,
   game,
   title,
@@ -595,7 +714,9 @@ ACHIEVEMENTS.push(
   r("poker", "wins", "승부사 · 계속", "승", "poker.wins", 500, 250, 600),
   r("fight", "games", "단련된 주먹 · 계속", "판", "fight.games", 100, 50, 400),
   r("fight", "wins", "이기는 맛 · 계속", "승", "fight.wins", 30, 30, 400),
-  ...FIGHT_CHAR_NAMES.map((n, i) => r("fight", `char-${i}`, `${n} 장인 · 계속`, "판", `fight.char.${i}` as AchMetric, 20, 20, 200)),
+  ...FIGHT_CHAR_NAMES.map((n, i) =>
+    r("fight", `char-${i}`, `${n} 장인 · 계속`, "판", `fight.char.${i}` as AchMetric, 20, 20, 200)
+  ),
   r("defense", "runs", "평생 수호자 · 계속", "판", "defense.runs", 400, 100, 600),
   r("defense", "wins", "백전백승 · 계속", "번 클리어", "defense.wins", 100, 50, 1500),
   r("defense", "kills", "글리치 멸절자 · 계속", "마리", "defense.kills", 200_000, 100_000, 1000),
@@ -605,12 +726,14 @@ ACHIEVEMENTS.push(
   r("sketch", "first", "광속 정답 · 계속", "번", "sketch.first", 100, 50, 350),
   r("sketch", "drew", "인기 화가 · 계속", "번", "sketch.drew", 100, 50, 350),
   r("sketch", "wins", "두들 챔피언 · 계속", "번", "sketch.wins", 10, 10, 750),
-  r("sketch", "points", "점수 부자 · 계속", "점", "sketch.points", 20_000, 20_000, 400),
+  r("sketch", "points", "점수 부자 · 계속", "점", "sketch.points", 20_000, 20_000, 400)
 );
-export const achievementOf = (id: unknown) =>
-  ACHIEVEMENTS.find((x) => x.id === id);
-export const achievementsOf = (game: AchGame) =>
-  ACHIEVEMENTS.filter((x) => x.game === game);
+// VIRUS IDLE 무한 KILLSWITCH: 10번 다음부터 10번마다 (게임 안 업적 목록 · 피해 보너스에는 안 셈)
+ACHIEVEMENTS.push(
+  r("virus", "ks", "인터넷의 종말 · 계속", "번 격퇴", "virus.clears", 10, 10, 1500)
+);
+export const achievementOf = (id: unknown) => ACHIEVEMENTS.find((x) => x.id === id);
+export const achievementsOf = (game: AchGame) => ACHIEVEMENTS.filter((x) => x.game === game);
 
 /** 업적 창에 내려가는 한 줄 */
 export interface AchState {
@@ -626,11 +749,15 @@ export interface AchState {
 /** 반복형 업적의 받은 횟수를 두는 필드 이름 (id 의 . 은 필드 경로가 되므로 __ 로) */
 export const repKey = (id: string) => `achRep.${id.replaceAll(".", "__")}`;
 /** 반복형: 지금 숫자로 채운 칸 수 (from 넘은 뒤로) */
-export const repDone = (a: Achievement, value: number) => Math.floor(Math.max(0, value - (a.from ?? 0)) / a.goal);
+export const repDone = (a: Achievement, value: number) =>
+  Math.floor(Math.max(0, value - (a.from ?? 0)) / a.goal);
 /** 반복형: 다음에 받을 칸의 목표 숫자 (소영 40판 · 60판 …) */
 export const repTarget = (a: Achievement, times: number) => (a.from ?? 0) + (times + 1) * a.goal;
 /** 지금 받을 수 있는 횟수 (일회형은 0 또는 1) */
-export function claimableTimes(a: Achievement, s: Pick<AchState, "value" | "claimedAt" | "times">): number {
+export function claimableTimes(
+  a: Achievement,
+  s: Pick<AchState, "value" | "claimedAt" | "times">
+): number {
   if (a.repeat) return Math.max(0, repDone(a, s.value) - (s.times ?? 0));
   return !s.claimedAt && s.value >= a.goal ? 1 : 0;
 }
@@ -649,7 +776,14 @@ export interface DailyMission {
   goal: number;
   reward: number;
 }
-const dm = (game: AchGame, id: string, title: string, metric: AchMetric, goal: number, reward: number): DailyMission => ({
+const dm = (
+  game: AchGame,
+  id: string,
+  title: string,
+  metric: AchMetric,
+  goal: number,
+  reward: number
+): DailyMission => ({
   id: `${game}.d-${id}`,
   game,
   title,
@@ -677,6 +811,9 @@ export const DAILY_MISSIONS: DailyMission[] = [
   dm("sketch", "drew", "내 그림이 맞혀지기 2번", "sketch.drew", 2, 80),
   dm("sketch", "win", "1등 하기 (3명 이상 판)", "sketch.wins", 1, 100),
   dm("sketch", "likes", "내 그림에 따봉 2개 받기", "sketch.likes", 2, 80),
+  dm("virus", "files", "파일 3,000개 감염", "virus.files", 3000, 90),
+  dm("virus", "bosses", "보스 30마리 격퇴", "virus.bosses", 30, 120),
+  dm("virus", "format", "변이 1번", "virus.formats", 1, 120),
 ];
 /** 일일 미션이 보는 숫자 (기준값을 적어 둘 것) */
 export const DAILY_METRICS = [...new Set(DAILY_MISSIONS.map((x) => x.metric))];
@@ -733,6 +870,12 @@ export function pointReason(r: Pick<PointLogRow, "reason" | "ref">): string {
       return r.ref === "toChips" ? "환전 · 포커 칩으로" : "환전 · 포커 칩에서";
     case "admin":
       return "운영자 조정";
+    case "virus":
+      return r.ref?.startsWith("store:")
+        ? "바이러스 · 재화샵"
+        : r.ref?.startsWith("sell:")
+          ? "바이러스 · 커널 코어 → GP"
+          : "바이러스 · 패키지";
     case "defense":
       return r.ref?.startsWith("store:")
         ? "디펜스 · 재화샵"
@@ -744,7 +887,11 @@ export function pointReason(r: Pick<PointLogRow, "reason" | "ref">): string {
               ? "디펜스 · 시즌 패스"
               : r.ref?.startsWith("quest:")
                 ? "디펜스 · 미션"
-                : r.ref === "cores" || r.ref === "gpchest" || r.ref === "gprelic" || r.ref === "gptrans" || r.ref?.startsWith("gpcards:")
+                : r.ref === "cores" ||
+                    r.ref === "gpchest" ||
+                    r.ref === "gprelic" ||
+                    r.ref === "gptrans" ||
+                    r.ref?.startsWith("gpcards:")
                   ? "디펜스 · 옛 GP 상점"
                   : r.ref?.startsWith("weekly:")
                     ? "디펜스 · 주간 도전 (종료)"

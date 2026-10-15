@@ -282,15 +282,15 @@ const RUNS = FULL
     // 루트 상점 편의성 · 재화 고르기 창
     if ((await click("상점")) || (await click("루트 상점"))) {
       await sleep(400);
+      if (await click("💎")) {
+        await sleep(600);
+        await look("창 GP 상점");
+        await key("Escape", "Escape", 27);
+        await sleep(300);
+      }
       if (await click("🛠️")) {
         await sleep(500);
         await look("상점 편의성");
-        if (await click("구매")) {
-          await sleep(500);
-          await look("창 재화 고르기");
-          await key("Escape", "Escape", 27);
-          await sleep(300);
-        }
       }
     }
     // 스테이지 이동 칸
