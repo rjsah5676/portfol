@@ -222,7 +222,7 @@ export default function PokerApp({ rank }: { rank: RankRow[] | null }) {
     const say = () => {
       if (greeted.current) return;
       greeted.current = true;
-      playVoice(look, "hello");
+      playVoice(look, "hello-lobby");
     };
     // 아직 페이지를 한 번도 누르지 않았으면(소리가 막힌 상태) 바로 틀지 않고 포커 화면을 처음 누를 때 —
     // 바로 틀어 두면 소리가 풀리는 순간(예: 사이트 메뉴를 눌러 다른 페이지로 갈 때) 뒤늦게 인사가 나왔음

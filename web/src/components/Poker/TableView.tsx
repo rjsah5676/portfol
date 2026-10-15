@@ -865,7 +865,8 @@ export default function TableView({
   const tense = !!hand && !hand.result && Object.values(hand.players).some((p) => p.allIn);
   const tierId = table?.tier ?? 0;
   useEffect(() => {
-    if (tierId) playBgm(tense ? "bgm-allin" : `bgm-${["low", "mid", "vip"][tierId - 1]}`);
+    // 단계 1~9 → 리그(일반 · 도박꾼 · 타짜) 곡. 예전엔 단계 번호를 그대로 써서 4단계 이상 방은 곡을 못 찾아 대기실 곡이 계속 나왔음
+    if (tierId) playBgm(tense ? "bgm-allin" : `bgm-${["low", "mid", "vip"][Math.min(2, Math.ceil(tierId / 3) - 1)]}`);
   }, [tierId, tense]);
 
   /** 7포커: 히든을 아직 안 열었으면 그 장은 빼고 셈 (열어 보는 순간 메이드면 그때 대사) */

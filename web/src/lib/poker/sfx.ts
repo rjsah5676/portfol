@@ -396,6 +396,12 @@ async function startBgm(name: string) {
   if (!url) {
     // 목록이 아직 안 왔으면 조금 뒤에 다시
     if (!manifest) setTimeout(() => wantNow() === name && void startBgm(name), 400);
+    // 그 곡 파일이 없으면 나오던 곡을 끔 (다른 화면의 곡이 계속 남지 않게)
+    else {
+      for (const el of live.keys()) fade(el, 0, 600);
+      cur = null;
+      bgmName = null;
+    }
     return;
   }
   if (bgmName === real && cur && !cur.paused) return;
@@ -509,7 +515,8 @@ function voiceUrl(char: string, name: string, big = false): string | null {
     return (
       (big && fileOf(`${key}-big`)) ||
       fileOf(key) ||
-      (name === "select" ? fileOf(`voice/${who}/${who}-hello`) : null)
+      // 캐릭터 고를 때 대사 · 대기실 인사가 없으면 입장 인사로
+      (name === "select" || name === "hello-lobby" ? fileOf(`voice/${who}/${who}-hello`) : null)
     );
   };
   const base = lookChar(char);

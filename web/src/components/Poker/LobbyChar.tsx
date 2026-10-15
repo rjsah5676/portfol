@@ -78,7 +78,7 @@ export default function LobbyChar({
   const poke = () => {
     if (!touchable || Date.now() < busyUntil.current) return;
     // 누르면 나오던 대사(첫 입장 인사 등)를 끊고 바로
-    const greet = () => playVoiceCut(look, Math.random() < 0.5 ? "select" : "hello");
+    const greet = () => playVoiceCut(look, Math.random() < 0.5 ? "select" : "hello-lobby");
     if (!touches.length) {
       greet();
       busyUntil.current = Date.now() + 1400;
