@@ -681,8 +681,10 @@ function ResTab({ p, act, busy }: TabProps) {
               const own = p.res.includes(r.id);
               const lv = p.resLv?.[r.id] ?? 1;
               const up = resUpCost(r.id, lv);
+              // 초록 테두리 = 지금 장착한 것만 (예전엔 연 연구 전부라 다 장착한 것처럼 보였음), 열었지만 안 낀 건 연보라
+              const border = own ? (p.load.res.includes(r.id) ? "#6dff8f" : "#6b5fa8") : undefined;
               return (
-                <div key={r.id} className="px-inset flex items-center gap-2 px-2.5 py-1.5" style={own ? ({ "--b": "#6dff8f" } as CSSProperties) : undefined}>
+                <div key={r.id} className="px-inset flex items-center gap-2 px-2.5 py-1.5" style={border ? ({ "--b": border } as CSSProperties) : undefined}>
                   <span className="min-w-0 flex-1">
                     <b className="block text-[13px]">
                       {r.name}
