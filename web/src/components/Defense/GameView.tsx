@@ -46,6 +46,7 @@ import {
 } from "@/lib/defense/units";
 import type { Controller } from "./controller";
 import { RelicIcon } from "./Hub";
+import { useStage } from "./Stage";
 import { RELIC, RES, relicDesc, resDesc, treasureReward, type Loadout } from "@/lib/defense/progress";
 import { replayer, type Replayer } from "@/lib/defense/replay";
 import type { DefenseGhost } from "@/realtime/defense";
@@ -115,6 +116,11 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry, 
   const [bot, setBot] = useState<string | null>(null);
   /** 레전드 이상 판매는 두 번 눌러야 (실수로 팔지 않게) — 한 번 누른 칸 */
   const [sellArm, setSellArm] = useState(-1);
+  // 폰 전용: 끌면 손가락이 칸을 가려서 「누르고 → 누르기」로도 옮김
+  //  - 유닛을 고른 채 빈 칸을 누르면 그리로 옮김
+  //  - 「옮기기」를 누른 뒤 다른 유닛 칸을 누르면 자리를 바꿈 (같은 칸 · 칸 밖을 누르면 취소)
+  const { phone } = useStage();
+  const [moveArm, setMoveArm] = useState(-1);
   const [quitArm, setQuitArm] = useState(false);
   const sellSel = () => {
     if (sel < 0) return;
@@ -454,7 +460,18 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry, 
       }
       return;
     }
-    // 자리 옮기기는 끌어서만 (클릭은 고르기 · 풀기)
+    if (phone && sel >= 0 && b.cells[sel].def && s.from !== sel) {
+      const armed = moveArm === sel;
+      setMoveArm(-1);
+      if (s.from >= 0 && (armed || !b.cells[s.from].def)) {
+        if (run({ t: "swap", a: sel, b: s.from })) {
+          setSel(s.from);
+          v.sel = s.from;
+        }
+        return;
+      }
+    } else setMoveArm(-1);
+    // PC 는 자리 옮기기를 끌어서만 (클릭은 고르기 · 풀기)
     const next = s.from >= 0 && b.cells[s.from].def && sel !== s.from ? s.from : -1;
     if (next >= 0) sfx("ui-click", 0.9, 1.15);
     setSel(next);
@@ -924,6 +941,19 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry, 
                 {usedIn(selDef.id) && <> · 재료: {usedIn(selDef.id)}</>}
               </p>
             </div>
+            {phone && (
+              <Btn
+                tone={moveArm === sel ? "cyan" : "ghost"}
+                onClick={() => {
+                  const on = moveArm !== sel;
+                  setMoveArm(on ? sel : -1);
+                  if (on) toast("바꿀 칸을 누르세요 (빈 칸은 그냥 눌러도 옮겨져요)");
+                }}
+                className={`h-[36px] w-[72px] text-[12px] ${moveArm === sel ? "dfn-pulse" : ""}`}
+              >
+                {moveArm === sel ? "취소" : "옮기기"}
+              </Btn>
+            )}
             <Btn
               tone={selCell.units.length >= STACK && selDef.grade < 3 ? "gold" : "ghost"}
               disabled={selCell.units.length < STACK || selDef.grade >= 3}
