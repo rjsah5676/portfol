@@ -35,7 +35,7 @@ export interface MarbleProfile {
   chars: Record<string, { lv: number; dup: number }>;
   items: Record<string, { lv: number }>;
   load: { char: string | null; dice: string | null; buddy: string | null };
-  pity: { char: number; item: number };
+  pity: { char: number; item: number; ur?: number };
   tickets: { char: number; item: number };
   /** 이번 주 상점 산 수 */
   shop: { w: number; n: Record<string, number> };
@@ -73,7 +73,7 @@ export function createMarbleMeta(db: Database, points: Points, now: () => number
     chars: {},
     items: {},
     load: { char: null, dice: null, buddy: null },
-    pity: { char: 0, item: 0 },
+    pity: { char: 0, item: 0, ur: 0 },
     tickets: { char: STARTER.charTickets, item: STARTER.itemTickets },
     shop: { w: kstWeek(now()), n: {} },
     packs: {},
@@ -139,7 +139,7 @@ export function createMarbleMeta(db: Database, points: Points, now: () => number
       chars: d.chars,
       items: d.items,
       load: d.load,
-      pity: d.pity,
+      pity: { ...d.pity, ur: d.pity.ur ?? 0 },
       tickets: d.tickets,
       shop: d.shop.n,
       packs: d.packs,

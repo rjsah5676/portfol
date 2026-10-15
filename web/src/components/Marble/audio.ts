@@ -206,6 +206,15 @@ export function stopBgm() {
   bgmEl?.pause();
 }
 
+/** 탭을 숨기면 배경음 쉬고, 돌아오면 이어서 */
+if (typeof document !== "undefined") {
+  document.addEventListener("visibilitychange", () => {
+    if (!bgmEl || !bgmName) return;
+    if (document.hidden) bgmEl.pause();
+    else void bgmEl.play().catch(() => {});
+  });
+}
+
 /** 첫 누르기: 소리 잠금 풀기 + 자주 쓰는 소리 미리 불러오기 */
 export function unlock() {
   const c = ensureCtx();

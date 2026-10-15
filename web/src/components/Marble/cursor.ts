@@ -1,50 +1,50 @@
 /*
- * 마우스 커서 고르기 (설정 → 커서). 16×16 도트를 2배로 그린 SVG 를 cursor: url() 로.
+ * 마우스 커서 고르기 (설정 → 커서). 32×32 매끈한 SVG 를 cursor: url() 로. 처음엔 다이스 화살표.
  * 고른 값은 이 브라우저(localStorage)에만. html[data-mbcur] 일 때 .mb 안에서만 적용 (css/marble.css).
  */
 
-const PAL: Record<string, string> = { k: "#232a4d", w: "#ffffff", y: "#ffd84d", o: "#ff9f2e", p: "#ff9ad5", b: "#6f9bff", g: "#b8c4d6", r: "#ff6b6b", m: "#c48bff" };
-
-const ART: Record<string, { name: string; px: string[]; hot: [number, number] }> = {
+const INK = "#262b52";
+/** 매끈한 SVG 커서 (32×32, hot = 클릭 지점) */
+const ART: Record<string, { name: string; svg: string; hot: [number, number] }> = {
   arrow: {
-    name: "픽셀 화살표",
-    hot: [1, 1],
-    px: ["k", "kk", "kwk", "kwwk", "kwwwk", "kwwwwk", "kwwwwwk", "kwwwwwwk", "kwwwwwwwk", "kwwwwkkkk", "kwwkwk", "kwk.kwk", "kk..kwk", "k....kwk", ".....kk"],
+    name: "다이스 화살표",
+    hot: [3, 2],
+    svg: `<path d='M4 3 L4 25 L10 19.5 L14 28 L18.5 26 L14.6 17.6 L22.5 17.2 Z' fill='#ffd84d' stroke='${INK}' stroke-width='2.2' stroke-linejoin='round'/><path d='M7 8 L7 18' stroke='#fff7c2' stroke-width='2' stroke-linecap='round'/>`,
   },
   dice: {
     name: "주사위",
-    hot: [1, 1],
-    px: ["kkk", "kwk", "kkwk", "..kwkkkkkkk", "...kwwwwwwk", "...kwkwwkwk", "...kwwwwwwk", "...kwwkwwwk", "...kwwwwwwk", "...kwkwwkwk", "...kwwwwwwk", "...kkkkkkkk"],
+    hot: [3, 2],
+    svg: `<path d='M3 2 L3 15 L6.5 11.8 L9 17 L11.5 16 L9.2 11 L13.8 10.7 Z' fill='#fff' stroke='${INK}' stroke-width='1.8' stroke-linejoin='round'/><rect x='13' y='13' width='16' height='16' rx='4' fill='#fff' stroke='${INK}' stroke-width='2'/><circle cx='17.5' cy='17.5' r='1.7' fill='#ff5f8f'/><circle cx='21' cy='21' r='1.7' fill='${INK}'/><circle cx='24.5' cy='24.5' r='1.7' fill='${INK}'/>`,
   },
   paw: {
     name: "고양이 발",
-    hot: [7, 7],
-    px: ["..kk....kk", ".kppk..kppk", ".kppk..kppk", "..kk.kk.kk", "kk..kppk..kk", "kppkkppkkppk", "kppkkkkkkppk", ".kkkwwwwkkk", "..kwwwwwwk", ".kwwwppwwwk", ".kwwppppwwk", ".kwwppppwwk", "..kwwwwwwk", "...kkkkkk"],
+    hot: [16, 16],
+    svg: `<ellipse cx='16' cy='20' rx='7.5' ry='6.5' fill='#fff' stroke='${INK}' stroke-width='2'/><ellipse cx='16' cy='20.5' rx='3.6' ry='3' fill='#ff9ad5'/><circle cx='8' cy='12' r='3.4' fill='#fff' stroke='${INK}' stroke-width='2'/><circle cx='13' cy='7.5' r='3.4' fill='#fff' stroke='${INK}' stroke-width='2'/><circle cx='19' cy='7.5' r='3.4' fill='#fff' stroke='${INK}' stroke-width='2'/><circle cx='24' cy='12' r='3.4' fill='#fff' stroke='${INK}' stroke-width='2'/>`,
   },
   wand: {
     name: "별 지팡이",
-    hot: [3, 3],
-    px: ["...k", "..kyk", "kkkyykkk", "kyyyyyyk", ".kyyyyk", "..kykyk", ".kyk.kyk", ".kk.k.kk", ".....kmk", "......kmk", ".......kmk", "........kmk", ".........kmk", "..........kk"],
+    hot: [6, 6],
+    svg: `<path d='M12 12 L28 28' stroke='${INK}' stroke-width='5' stroke-linecap='round'/><path d='M12 12 L28 28' stroke='#c48bff' stroke-width='2.4' stroke-linecap='round'/><path d='M7 1.5 L8.8 5.2 L12.9 5.7 L9.9 8.5 L10.7 12.5 L7 10.5 L3.3 12.5 L4.1 8.5 L1.1 5.7 L5.2 5.2 Z' fill='#ffd84d' stroke='${INK}' stroke-width='1.6' stroke-linejoin='round'/>`,
   },
 };
 
-export const CURSOR_IDS = ["", ...Object.keys(ART)] as const;
-export const cursorName = (id: string) => (id ? (ART[id]?.name ?? "기본") : "기본");
+/** "system" = 브라우저 기본 커서 */
+export const CURSOR_IDS = [...Object.keys(ART), "system"] as const;
+export const cursorName = (id: string) => (id === "system" ? "기본" : (ART[id]?.name ?? "기본"));
 
 function svgOf(id: string): string {
   const a = ART[id];
-  const s = 2;
-  let rects = "";
-  a.px.forEach((row, y) => [...row].forEach((ch, x) => PAL[ch] && (rects += `<rect x='${x * s}' y='${y * s}' width='${s}' height='${s}' fill='${PAL[ch]}'/>`)));
-  return `url("data:image/svg+xml,${encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' width='32' height='32' shape-rendering='crispEdges'>${rects}</svg>`)}") ${a.hot[0] * s} ${a.hot[1] * s}`;
+  return `url("data:image/svg+xml,${encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'>${a.svg}</svg>`)}") ${a.hot[0]} ${a.hot[1]}`;
 }
 
 const KEY = "mb-cursor";
 export function getCursor(): string {
   try {
-    return localStorage.getItem(KEY) ?? "";
+    // 처음엔 다이스 화살표 (예전 "" = 기본 커서는 그대로 존중)
+    const v = localStorage.getItem(KEY);
+    return v === null ? "arrow" : v === "" ? "system" : v;
   } catch {
-    return "";
+    return "arrow";
   }
 }
 export function applyCursor(id = getCursor()) {

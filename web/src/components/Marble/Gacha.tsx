@@ -1,13 +1,13 @@
 "use client";
 
 import { useEffect, useState, type CSSProperties } from "react";
-import { CHAR, GACHA, GRADE_COLOR, ITEM, ITEMS, artOf, charOn, type Grade } from "@/lib/marble/data";
+import { CHAR, GACHA, GRADE_COLOR, ITEM, ITEMS, artOf, charOn, power, type Grade } from "@/lib/marble/data";
 import { CHAR_RATES, type CharPull, type ItemPull } from "@/lib/marble/gacha";
 import type { ProfileWire } from "@/lib/marble/wire";
 import { marble } from "@/realtime/marble";
 import { playBgm, sfx } from "./audio";
 import { XBtn, XGrade } from "./ui";
-import { Btn, Cur, DiceFace, GradeTag, Icon, fmt, CurIcon } from "./pixel";
+import { Cur, CurIcon, DiceFace, Icon, fmt } from "./pixel";
 
 /*
  * 뽑기 — 캐릭터 · 장착 아이템 두 가지. 별사탕 또는 10연차 티켓.
@@ -99,14 +99,21 @@ export default function Gacha({ prof, onProf, onBack }: { prof: ProfileWire; onP
           <div className="absolute inset-x-0 bottom-0 h-[160px]" style={{ background: "linear-gradient(transparent, rgba(18,13,51,0.9))" }} />
         </div>
       ) : (
-        <div key="item" className="mbx-enter absolute inset-0" style={{ background: "radial-gradient(circle at 60% 45%, #2f6fd6, #16124a 70%)" }}>
-          <div className="absolute top-[86px] left-[200px] grid grid-cols-6 gap-4">
-            {ITEMS.map((it) => (
-              <div key={it.id} className="mbx-breathe flex flex-col items-center gap-1" title={it.name} style={{ animationDelay: `${(ITEMS.indexOf(it) % 6) * 0.25}s` }}>
-                <ItemIcon id={it.id} size={64} />
-                <span className="text-[11px] font-bold text-white/85">{it.name}</span>
-              </div>
-            ))}
+        <div key="item" className="mbx-enter absolute inset-0">
+          <img src="/marble/art/banner-item.webp" alt="" className="absolute inset-0 h-full w-full object-cover" />
+          <div className="mbx-sheen absolute inset-0 opacity-30" />
+          <div className="absolute inset-0" style={{ background: "linear-gradient(90deg, rgba(18,13,51,0.9) 0%, rgba(18,13,51,0.45) 40%, transparent 65%, rgba(18,13,51,0.4) 100%)" }} />
+          <div className="absolute inset-x-0 bottom-0 h-[160px]" style={{ background: "linear-gradient(transparent, rgba(18,13,51,0.9))" }} />
+          {/* 라인업: 제목 아래 작은 아이콘 줄 */}
+          <div className="absolute top-[168px] left-[196px] w-[300px] rounded-2xl border border-white/12 bg-black/40 p-2.5 backdrop-blur">
+            <div className="mb-1.5 text-[11px] font-bold text-[#ffe08a]">라인업 · 주사위 6 · 동행 6</div>
+            <div className="grid grid-cols-6 gap-1.5">
+              {ITEMS.map((it) => (
+                <div key={it.id} title={`${it.name} — ${it.desc(power(it.grade, 0))}`}>
+                  <ItemIcon id={it.id} size={40} />
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       )}
@@ -175,7 +182,15 @@ export default function Gacha({ prof, onProf, onBack }: { prof: ProfileWire; onP
         <div className="mb-1.5 flex items-center justify-between">
           <b className="text-[#ffe08a]">확률</b>
           <span className="text-[11px] text-white/60">
-            {tab === "char" ? <>SSR 이상 확정까지 <b className="text-white">{GACHA.char.pity - prof.pity.char}</b>번</> : <>SSR 확정까지 <b className="text-white">{GACHA.item.pity - prof.pity.item}</b>번</>}
+            {tab === "char" ? (
+              <>
+                SSR+ <b className="text-white">{GACHA.char.pity - prof.pity.char}</b> · <span className="text-[#ffb3e6]">UR</span> <b className="text-white">{GACHA.char.urPity - (prof.pity.ur ?? 0)}</b>번 남음
+              </>
+            ) : (
+              <>
+                SSR 확정까지 <b className="text-white">{GACHA.item.pity - prof.pity.item}</b>번
+              </>
+            )}
           </span>
         </div>
         {tab === "char" ? (
@@ -202,7 +217,7 @@ export default function Gacha({ prof, onProf, onBack }: { prof: ProfileWire; onP
             </div>
           </div>
         )}
-        <p className="mt-1.5 text-[10.5px] leading-[14px] text-white/55">{tab === "char" ? "10연차는 SR 이상 1장 보장 · 같은 캐릭터는 강화 카드로 쌓여요" : "10연차는 아이템 1개 보장 · 이미 가진 아이템은 부품으로 바뀌어요"}</p>
+        <p className="mt-1.5 text-[10.5px] leading-[14px] text-white/55">{tab === "char" ? `10연차는 SR 이상 1장 보장 · ${GACHA.char.urPity}번 안에 UR 확정 · 같은 캐릭터는 강화 카드로 쌓여요` : "10연차는 아이템 1개 보장 · 이미 가진 아이템은 부품으로 바뀌어요"}</p>
       </div>
 
       {/* 아래 오른쪽: 뽑기 버튼 */}
@@ -238,6 +253,10 @@ function Reveal({ got, onClose }: { got: (CharPull | ItemPull)[]; onClose(): voi
   const [open, setOpen] = useState<boolean[]>(() => got.map(() => false));
   const [auto, setAuto] = useState(false);
   const all = open.every(Boolean);
+  const isUR = (x: CharPull | ItemPull) => x.k === "char" && x.grade === "UR";
+  // 모두 보기는 UR 을 빼고 엶 (UR 은 직접 눌러서)
+  const autoLeft = open.some((v, i) => !v && !isUR(got[i]));
+  const urLeft = open.some((v, i) => !v && isUR(got[i]));
   const flip = (i: number) => {
     setOpen((o) => {
       if (o[i]) return o;
@@ -248,10 +267,10 @@ function Reveal({ got, onClose }: { got: (CharPull | ItemPull)[]; onClose(): voi
       return n;
     });
   };
-  // 모두 보기: 앞에서부터 차례로 (높은 등급은 조금 뜸 들임)
+  // 모두 보기: 앞에서부터 차례로 (높은 등급은 조금 뜸 들임, UR 은 건너뜀)
   useEffect(() => {
     if (!auto) return;
-    const i = open.findIndex((v) => !v);
+    const i = open.findIndex((v, k) => !v && !isUR(got[k]));
     if (i < 0) return;
     const x = got[i];
     const t = setTimeout(() => flip(i), x.k !== "parts" && ORDER[x.grade] >= 2 ? 520 : 140);
@@ -259,10 +278,10 @@ function Reveal({ got, onClose }: { got: (CharPull | ItemPull)[]; onClose(): voi
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [auto, open]);
   const big = got.length === 1;
-  const w = big ? 200 : 132;
-  const h = big ? 270 : 180;
+  const w = big ? 200 : 136;
+  const h = big ? 280 : 184;
   return (
-    <div className="absolute inset-0 z-[80] flex flex-col items-center justify-center gap-4" style={{ background: "rgba(35,42,77,0.85)" }}>
+    <div className="mbx absolute inset-0 z-[80] flex flex-col items-center justify-center gap-4" style={{ background: "radial-gradient(circle at 50% 45%, rgba(60,40,140,0.92), rgba(10,8,30,0.96))" }}>
       <div className={`grid gap-3 ${got.length > 1 ? "grid-cols-5" : "grid-cols-1"}`}>
         {got.map((x, i) =>
           open[i] ? (
@@ -270,49 +289,79 @@ function Reveal({ got, onClose }: { got: (CharPull | ItemPull)[]; onClose(): voi
               <PullCard x={x} big={big} />
             </div>
           ) : (
-            <button key={i} type="button" className={`relative flex cursor-pointer items-center justify-center overflow-hidden ${backGlow(x)}`} style={{ width: w, height: h, ...backStyle(x) }} onClick={() => flip(i)}>
-              <Icon n="star" size={34} className="mb-bob" />
-              <span className="mb-out absolute bottom-[8px] text-[10px] text-white">눌러서 열기</span>
-            </button>
+            <CardBack key={i} x={x} w={w} h={h} onClick={() => flip(i)} />
           )
         )}
       </div>
       {all ? (
-        <Btn tone="gold" className="h-[38px] px-6 text-[15px] font-bold" onClick={onClose}>
+        <XBtn tone="gold" className="h-[42px] px-8 text-[15px]" onClick={onClose}>
           닫기
-        </Btn>
-      ) : (
-        <Btn tone="pink" className="h-[38px] px-6 text-[15px] font-bold" onClick={() => setAuto(true)} disabled={auto}>
+        </XBtn>
+      ) : autoLeft ? (
+        <XBtn tone="pink" className="h-[42px] px-8 text-[15px]" onClick={() => setAuto(true)} disabled={auto}>
           모두 보기
-        </Btn>
+        </XBtn>
+      ) : (
+        urLeft && <div className="mbx-ready rounded-full bg-gradient-to-r from-[#ff9ad5] via-[#ffe27a] to-[#8ff0d0] px-5 py-2 text-[14px] font-black text-[#2a1a4a]">무지개 카드는 직접 눌러서 열어 보세요!</div>
       )}
     </div>
   );
 }
 
-/** 뒷면: R 나무 · SR 보라 반짝 · SSR 금빛 · UR 무지개 */
-function backStyle(x: CharPull | ItemPull): CSSProperties {
-  const g = x.k === "parts" ? "R" : x.grade;
-  const bg =
-    g === "UR"
-      ? "conic-gradient(from 0deg, #ff7ad9, #ffe066, #7fe0c8, #6f9bff, #c48bff, #ff7ad9)"
-      : g === "SSR"
-        ? "linear-gradient(135deg, #ffe58a, #ffb52e 55%, #fff1b8)"
-        : g === "SR"
-          ? "linear-gradient(135deg, #c9a2ff, #8f6bff)"
-          : "linear-gradient(135deg, #d9a56b, #b9793f)";
-  return { background: bg, boxShadow: "0 0 0 3px #232a4d, 0 4px 0 3px #232a4d", "--g": g === "UR" ? "#ff7ad9" : "#ffc94a" } as CSSProperties;
+/** 카드 뒷면: 남색 카드 · 금테 · 주사위 문장. 테두리 빛으로 등급 힌트 (R 은빛 · SR 보라 · SSR 금빛 · UR 무지개가 돎) */
+function CardBack({ x, w, h, onClick }: { x: CharPull | ItemPull; w: number; h: number; onClick(): void }) {
+  const g: Grade = x.k === "parts" ? "R" : x.grade;
+  const rim = g === "UR" ? "" : g === "SSR" ? "#ffcf4a" : g === "SR" ? "#b98bff" : "#9fb3d8";
+  return (
+    <button type="button" onClick={onClick} className={`mbx-back group relative cursor-pointer rounded-[14px] p-[3px] transition hover:-translate-y-1 ${g === "UR" ? "mbx-back-ur" : ""} ${g === "SSR" ? "mbx-back-ssr" : ""}`} style={{ width: w, height: h, background: g === "UR" ? undefined : rim }}>
+      <div className="relative h-full w-full overflow-hidden rounded-[11px]" style={{ background: "radial-gradient(circle at 50% 40%, #2c2a7a, #141038 75%)" }}>
+        {/* 마름모 무늬 */}
+        <div className="absolute inset-0 opacity-[0.18]" style={{ background: "repeating-linear-gradient(45deg, #fff 0 1px, transparent 1px 14px), repeating-linear-gradient(-45deg, #fff 0 1px, transparent 1px 14px)" }} />
+        {/* 안쪽 금테 */}
+        <div className="absolute inset-[7px] rounded-[8px] border border-[#ffd76a]/70" />
+        <div className="absolute inset-[11px] rounded-[6px] border border-[#ffd76a]/30" />
+        {/* 문장: 주사위 + 별 */}
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5">
+          <div className="relative transition group-hover:rotate-[8deg]">
+            <svg viewBox="0 0 48 48" width={w * 0.42} height={w * 0.42} aria-hidden>
+              <defs>
+                <linearGradient id="dtg" x1="0" y1="0" x2="1" y2="1">
+                  <stop offset="0" stopColor="#fff6c8" />
+                  <stop offset="1" stopColor="#f5b52e" />
+                </linearGradient>
+              </defs>
+              <path d="M24 3 L44 14 L44 34 L24 45 L4 34 L4 14 Z" fill="url(#dtg)" stroke="#7a4b00" strokeWidth="2" strokeLinejoin="round" />
+              <path d="M24 3 L44 14 L24 25 L4 14 Z" fill="#fff8dc" opacity="0.55" />
+              <path d="M24 25 L24 45" stroke="#7a4b00" strokeWidth="1.5" opacity="0.6" />
+              <circle cx="24" cy="14" r="2.6" fill="#ff5f8f" />
+              <circle cx="14" cy="27" r="2.4" fill="#262b52" />
+              <circle cx="16" cy="35" r="2.4" fill="#262b52" />
+              <circle cx="32" cy="27" r="2.4" fill="#262b52" />
+              <circle cx="34" cy="35" r="2.4" fill="#262b52" />
+            </svg>
+          </div>
+          <span className="text-[10px] font-black tracking-[0.3em] text-[#ffd76a]">DICE TOWN</span>
+        </div>
+        {g === "UR" && <div className="mbx-sheen absolute inset-0 opacity-70" />}
+        <span className="absolute inset-x-0 bottom-[14px] text-center text-[10px] text-white/60">눌러서 열기</span>
+      </div>
+    </button>
+  );
 }
-const backGlow = (x: CharPull | ItemPull) => (x.k === "parts" ? "" : x.grade === "UR" || x.grade === "SSR" ? "mb-glow" : "");
+
+function NewTag() {
+  return <span className="rounded-full bg-[#ff5f8f] px-1.5 text-[10px] leading-[16px] font-black text-white">NEW</span>;
+}
 
 function PullCard({ x, big }: { x: CharPull | ItemPull; big: boolean }) {
-  const w = big ? 200 : 132;
-  const h = big ? 270 : 180;
+  const w = big ? 200 : 136;
+  const h = big ? 280 : 184;
   if (x.k === "parts")
     return (
-      <div className="mb-box flex flex-col items-center justify-center gap-2" style={{ width: w, height: h, "--bg": "#eef2f5" } as CSSProperties}>
-        <CurIcon k="parts" size={48} />
-        <b className="text-[15px]">부품 {x.n}</b>
+      <div className="flex flex-col items-center justify-center gap-2 rounded-[14px] border border-white/15 text-white" style={{ width: w, height: h, background: "linear-gradient(160deg, #3b4a7a, #1d2350)" }}>
+        <CurIcon k="parts" size={big ? 64 : 48} />
+        <b className="text-[16px]">부품 {x.n}</b>
+        <span className="text-[10px] text-white/55">아이템 강화 재료</span>
       </div>
     );
   const g = x.grade;
@@ -320,30 +369,35 @@ function PullCard({ x, big }: { x: CharPull | ItemPull; big: boolean }) {
   if (x.k === "char") {
     const c = CHAR[x.id];
     return (
-      <div className={`mb-box flex flex-col overflow-hidden ${glow ? "mb-glow" : ""}`} style={{ width: w, height: h, "--g": GRADE_COLOR[g] } as CSSProperties}>
-        <CharCardArt id={x.id} h={h - 46} />
-        <div className="flex flex-1 flex-col justify-center px-2 text-center leading-[15px]">
+      <div className={`relative overflow-hidden rounded-[14px] ${glow ? "mbx-ready" : ""}`} style={{ width: w, height: h, boxShadow: `0 0 0 2px ${GRADE_COLOR[g]}` }}>
+        <CharCardArt id={x.id} h={h} />
+        <div className="absolute inset-x-0 bottom-0 px-2 pt-6 pb-2 text-center text-white" style={{ background: "linear-gradient(transparent, rgba(10,8,30,0.92) 45%)" }}>
           <div className="flex items-center justify-center gap-1">
-            <GradeTag g={g} />
-            {x.fresh && <span className="mb-chip text-[10px]" style={{ "--c": "#ff7fa8", "--t": "#fff" } as CSSProperties}>NEW</span>}
+            <XGrade g={g} />
+            {x.fresh && <NewTag />}
           </div>
-          <b className="truncate text-[13px]">{c && c.title.includes(c.name) ? c.title : c?.name}</b>
-          {c && !c.title.includes(c.name) && <span className="truncate text-[10px] text-[var(--ink2)]">{c.title}</span>}
-          {!x.fresh && <span className="text-[10px] text-[var(--mute)]">{x.stars ? `별사탕 +${fmt(x.stars)}` : "강화 카드 +1"}</span>}
+          <b className="mt-0.5 block truncate text-[13px]">{c?.name}</b>
+          <span className="block truncate text-[10px] text-white/65">{x.fresh ? c?.title : x.stars ? `별사탕 +${fmt(x.stars)}` : "강화 카드 +1"}</span>
         </div>
       </div>
     );
   }
   const it = ITEM[x.id];
   return (
-    <div className={`mb-box flex flex-col items-center justify-center gap-2 px-2 text-center ${glow ? "mb-glow" : ""}`} style={{ width: w, height: h, "--g": GRADE_COLOR[g] } as CSSProperties}>
-      <ItemIcon id={x.id} size={big ? 90 : 64} />
-      <div className="flex items-center gap-1">
-        <GradeTag g={g} />
-        {x.fresh && <span className="mb-chip text-[10px]" style={{ "--c": "#ff7fa8", "--t": "#fff" } as CSSProperties}>NEW</span>}
+    <div className={`relative flex flex-col items-center justify-center gap-2 overflow-hidden rounded-[14px] px-2 text-center text-white ${glow ? "mbx-ready" : ""}`} style={{ width: w, height: h, boxShadow: `0 0 0 2px ${GRADE_COLOR[g]}` }}>
+      <img src={`/marble/art/bg-${g}.webp`} alt="" className="absolute inset-0 h-full w-full object-cover opacity-60" />
+      <div className="absolute inset-0 bg-[#100c30]/45" />
+      <div className="relative">
+        <ItemIcon id={x.id} size={big ? 96 : 66} />
       </div>
-      <b className="text-[13px]">{it?.name}</b>
-      {!x.fresh && <span className="text-[10px] text-[var(--mute)]">부품 +{x.parts}</span>}
+      <div className="relative flex items-center gap-1">
+        <XGrade g={g} />
+        {x.fresh && <NewTag />}
+      </div>
+      <b className="relative text-[13px]" style={{ textShadow: "0 1px 3px rgba(0,0,0,0.7)" }}>
+        {it?.name}
+      </b>
+      {!x.fresh && <span className="relative text-[10px] text-white/75">이미 있음 · 부품 +{x.parts}</span>}
     </div>
   );
 }

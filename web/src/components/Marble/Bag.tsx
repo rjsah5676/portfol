@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import { CHAR, GRADE_COLOR, ITEM, ITEMS, MAX_LV, STORE, artOf, charOn, faceOf, giveValueGp, itemUpCost, power, storeBonus, type CharDef, type Grade, type ItemDef, type ItemSlot, type StoreItem } from "@/lib/marble/data";
 import { charUpNeed } from "@/lib/marble/gacha";
 import type { ProfileWire } from "@/lib/marble/wire";
@@ -40,10 +40,10 @@ export default function Bag({ prof, onProf, onBack }: { prof: ProfileWire; onPro
   const [pane, setPane] = useState<Pane>("info");
   const [grade, setGrade] = useState<Grade | "ALL">("ALL");
   const [err, setErr] = useState("");
-  const [burst, setBurst] = useState<{ id: number; lv: number } | null>(null);
+  const [burst, setBurst] = useState<{ id: number; target: string; kind: "char" | "item"; lv: number } | null>(null);
   useEffect(() => {
     if (!burst) return;
-    const t = setTimeout(() => setBurst(null), 1700);
+    const t = setTimeout(() => setBurst(null), 2800);
     return () => clearTimeout(t);
   }, [burst]);
   const run = async (f: () => Promise<ProfileWire>, snd = "click", up = false) => {
@@ -52,7 +52,7 @@ export default function Bag({ prof, onProf, onBack }: { prof: ProfileWire; onPro
       const np = await f();
       onProf(np);
       sfx(snd);
-      if (up && sel) setBurst({ id: Date.now(), lv: (tab === "char" ? np.chars[sel]?.lv : np.items[sel]?.lv) ?? 0 });
+      if (up && sel) setBurst({ id: Date.now(), target: sel, kind: tab === "char" ? "char" : "item", lv: (tab === "char" ? np.chars[sel]?.lv : np.items[sel]?.lv) ?? 0 });
     } catch (e) {
       sfx("deny");
       setErr((e as Error).message);
@@ -101,7 +101,7 @@ export default function Bag({ prof, onProf, onBack }: { prof: ProfileWire; onPro
       </div>
 
       {/* 왼쪽: 큰 그림 */}
-      <div className="absolute top-[52px] bottom-[118px] left-0 w-[470px]">
+      <div className="absolute top-[52px] bottom-[128px] left-0 w-[470px]">
         {c ? (
           <div key={c.id} className="mbx-enter absolute inset-0">
             <div className="absolute inset-0">
@@ -143,21 +143,10 @@ export default function Bag({ prof, onProf, onBack }: { prof: ProfileWire; onPro
         ) : (
           <div className="flex h-full items-center justify-center text-[14px] text-white/60">아래에서 골라 주세요</div>
         )}
-        {burst && (
-          <div key={burst.id} className="pointer-events-none absolute inset-0 z-[20] flex items-center justify-center">
-            <div className="mbx-burst absolute inset-0" />
-            <div className="mbx-burst-text text-center">
-              <div className="text-[40px] font-black text-white" style={{ textShadow: "0 0 18px #ffb800, 0 3px 0 #8a4b00" }}>
-                강화 성공!
-              </div>
-              <XStars lv={burst.lv} size={26} />
-            </div>
-          </div>
-        )}
       </div>
 
       {/* 오른쪽: 탭 */}
-      <div className="absolute top-[62px] right-[12px] bottom-[128px] left-[482px] flex flex-col overflow-hidden rounded-2xl border border-white/12 bg-[#191545]/85 shadow-[0_10px_30px_rgba(0,0,0,0.35)] backdrop-blur">
+      <div className="absolute top-[62px] right-[12px] bottom-[138px] left-[482px] flex flex-col overflow-hidden rounded-2xl border border-white/12 bg-[#191545]/85 shadow-[0_10px_30px_rgba(0,0,0,0.35)] backdrop-blur">
         <div className="flex gap-1 border-b border-white/10 px-2 pt-2">
           {(["info", "skill", "up"] as Pane[]).map((k) => (
             <button
@@ -207,7 +196,7 @@ export default function Bag({ prof, onProf, onBack }: { prof: ProfileWire; onPro
       </div>
 
       {/* 아래: 보유 목록 띠 */}
-      <div className="absolute inset-x-[12px] bottom-[8px] h-[112px] rounded-2xl border border-white/12 bg-black/30 px-2 pt-1.5 backdrop-blur">
+      <div className="absolute inset-x-[12px] bottom-[6px] h-[122px] rounded-2xl border border-white/12 bg-black/30 px-2 pt-1.5 backdrop-blur">
         <div className="flex items-center gap-1 px-1">
           {GRADES.map((g) => (
             <button
@@ -223,13 +212,66 @@ export default function Bag({ prof, onProf, onBack }: { prof: ProfileWire; onPro
             보유 {tab === "char" ? Object.keys(prof.chars).length : ITEMS.filter((x) => x.slot === tab && prof.items[x.id]).length} / {tab === "char" ? charOn().length : ITEMS.filter((x) => x.slot === tab).length}
           </span>
         </div>
-        <div className="mbx-hscroll mt-1 flex gap-2 overflow-x-auto pb-1.5">
+        <div className="mbx-hscroll flex gap-2 overflow-x-auto px-[4px] pt-[6px] pb-[6px]">
           {tab === "char"
             ? chars.map((d) => <FaceTile key={d.id} d={d} own={prof.chars[d.id]} sel={sel === d.id} on={prof.load.char === d.id} onClick={() => pick(d.id)} />)
             : items.map((d) => <ItemFace key={d.id} d={d} own={prof.items[d.id]} sel={sel === d.id} on={prof.load[d.slot] === d.id} onClick={() => pick(d.id)} />)}
         </div>
       </div>
+      {burst && <UpgradeFx key={burst.id} b={burst} onDone={() => setBurst(null)} />}
     </div>
+  );
+}
+
+/** 강화 성공 연출: 번쩍 → 빛줄기 · 충격파 고리 · 빛 조각 → 그림이 쾅 → 금빛 글자 · 새 별이 톡 (누르면 닫힘) */
+function UpgradeFx({ b, onDone }: { b: { target: string; kind: "char" | "item"; lv: number }; onDone(): void }) {
+  const c = b.kind === "char" ? CHAR[b.target] : null;
+  const it = b.kind === "item" ? ITEM[b.target] : null;
+  const g: Grade = c?.grade ?? it?.grade ?? "R";
+  const col = GRADE_COLOR[g];
+  const bits = Array.from({ length: 22 }, (_, i) => {
+    const a = (i / 22) * Math.PI * 2 + (i % 3) * 0.2;
+    const d = 180 + ((i * 53) % 140);
+    return { dx: Math.cos(a) * d, dy: Math.sin(a) * d * 0.8, delay: 0.25 + (i % 5) * 0.04, size: 4 + (i % 4) * 2 };
+  });
+  return (
+    <button type="button" onClick={onDone} className="absolute inset-0 z-[90] cursor-pointer overflow-hidden" style={{ background: "radial-gradient(circle at 50% 45%, rgba(40,26,110,0.9), rgba(6,4,20,0.96))" }}>
+      <div className="mbx-up-rays absolute top-1/2 left-1/2 h-[1400px] w-[1400px]" style={{ background: `repeating-conic-gradient(from 0deg, ${col}55 0 7deg, transparent 7deg 20deg)` }} />
+      <div className="absolute top-1/2 left-1/2 h-[520px] w-[520px] -translate-x-1/2 -translate-y-1/2 rounded-full" style={{ background: `radial-gradient(circle, ${col}88, transparent 65%)` }} />
+      {[0, 0.18, 0.36].map((d) => (
+        <div key={d} className="mbx-up-ring absolute top-1/2 left-1/2 h-[140px] w-[140px] rounded-full" style={{ border: `5px solid ${d ? "#ffe27a" : "#fff"}`, animationDelay: `${0.22 + d}s` }} />
+      ))}
+      {bits.map((p, i) => (
+        <span key={i} className="mbx-up-bit absolute top-1/2 left-1/2 rounded-full" style={{ width: p.size, height: p.size, background: i % 3 ? "#ffe27a" : "#fff", boxShadow: `0 0 8px ${col}`, "--dx": `${p.dx}px`, "--dy": `${p.dy}px`, animationDelay: `${p.delay}s` } as CSSProperties} />
+      ))}
+      <div className="mbx-up-art absolute top-[40px] left-1/2 h-[330px] w-[360px] -translate-x-1/2">
+        {c ? (
+          <img src={artOf(c)} alt="" className="h-full w-full object-contain" style={{ filter: `drop-shadow(0 0 22px ${col}) drop-shadow(0 6px 10px rgba(0,0,0,0.5))` }} />
+        ) : it ? (
+          <div className="flex h-full items-center justify-center" style={{ filter: `drop-shadow(0 0 22px ${col})` }}>
+            <ItemIcon id={it.id} size={200} />
+          </div>
+        ) : null}
+      </div>
+      <div className="absolute inset-x-0 top-[372px] flex flex-col items-center">
+        <div className="mbx-up-title text-[48px] leading-[52px] font-black" style={{ background: "linear-gradient(180deg, #fffbe0 10%, #ffd23a 55%, #f59a1e)", WebkitBackgroundClip: "text", color: "transparent", filter: "drop-shadow(0 3px 0 #7a3e00) drop-shadow(0 0 14px rgba(255,190,40,0.7))" }}>
+          강화 성공!
+        </div>
+        <div className="mt-2 flex gap-1.5">
+          {Array.from({ length: MAX_LV }, (_, i) => (
+            <span key={i} className={i === b.lv - 1 ? "mbx-up-star" : ""} style={i === b.lv - 1 ? { animationDelay: "0.85s" } : undefined}>
+              <svg viewBox="0 0 24 24" width={34} height={34} aria-hidden>
+                <path d="M12 2.8l2.8 5.8 6.4.9-4.6 4.5 1.1 6.3L12 17.3l-5.7 3 1.1-6.3L2.8 9.5l6.4-.9z" fill={i < b.lv ? "#ffd23a" : "rgba(255,255,255,0.15)"} stroke={i < b.lv ? "#a86a00" : "rgba(255,255,255,0.3)"} strokeWidth={1.2} />
+              </svg>
+            </span>
+          ))}
+        </div>
+        <div className="mbx-up-sub mt-2 text-[14px] font-bold text-white/85">
+          {c?.name ?? it?.name} · 강화 {b.lv} / {MAX_LV}
+        </div>
+      </div>
+      <div className="mbx-up-flash pointer-events-none absolute inset-0 bg-white" />
+    </button>
   );
 }
 

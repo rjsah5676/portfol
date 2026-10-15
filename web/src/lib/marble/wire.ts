@@ -87,7 +87,7 @@ export interface ProfileWire {
   chars: Record<string, { lv: number; dup: number }>;
   items: Record<string, { lv: number }>;
   load: { char: string | null; dice: string | null; buddy: string | null };
-  pity: { char: number; item: number };
+  pity: { char: number; item: number; ur?: number };
   tickets: { char: number; item: number };
   shop: Record<string, number>;
   packs: Record<string, number>;

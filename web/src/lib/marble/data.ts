@@ -743,6 +743,8 @@ export const GACHA = {
     rate: { R: 0.7, SR: 0.24, SSR: 0.054, UR: 0.006 } as Record<Grade, number>,
     /** 이 횟수 안에 SSR 이상이 안 나오면 확정 */
     pity: 80,
+    /** 이 횟수 안에 UR 이 안 나오면 UR 확정 */
+    urPity: 150,
   },
   item: {
     one: 100,

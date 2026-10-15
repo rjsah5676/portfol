@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { CHAR } from "@/lib/marble/data";
 import { LANDMARK, tollMult, tollOf, type Game } from "@/lib/marble/engine";
 import { MAPS, type MapDef, type TileDef } from "@/lib/marble/maps";
@@ -9,54 +9,70 @@ import { PCOLOR } from "./pixel";
 import Token, { type TokenAnim } from "./Token";
 
 /*
- * 탑뷰 보드 (모두의마블식) — 9×9 격자 둘레 32칸을 무대(1024×576) 가운데 납작하게 깔아 둠.
- *  - 칸은 카드: 동네 색 띠 + 큰 이름, 아래에 건물 · 땅값/통행료. 산 땅은 테두리 · 바탕이 플레이어 색.
- *  - 특수칸은 칸 전체를 그 칸 색으로 칠하고 그림 표식만 (세우는 건물 없음).
- *  - 말(캐릭터)만 도트. 출발은 오른쪽 아래 모서리, 시계 방향으로 돎.
+ * 2.5D 보드 (모두의마블식) — 9×9 둘레 32칸을 정사각 판(S×S)에 깔고, CSS 3D 로 45° 돌려 눕힘(마름모 · 출발이 맨 아래 꼭짓점).
+ *  - 판 위(눕는 것): 칸 바닥색 · 동네 띠 · 산 땅은 플레이어 색으로 꽉 · 특수칸 그림 · 가운데 맵 그림
+ *  - 판 밖(서는 것, 화면 기준 똑바로): 건물(칸 뒤쪽) · 말(칸 가운데) · 이름판(칸 앞쪽, 맨 위 층 — 무엇에도 안 가림)
+ *  - proj() 가 CSS 변환과 같은 계산이라 서는 것들이 정확히 그 칸 위에 섬
+ *  - 말(캐릭터)만 도트. 네 귀퉁이는 비워서 플레이어 카드 자리.
  * 칸 좌표 = 맵 격자 (x, y). orgel 은 자리마다 지금 놓인 칸(game.order)을 그림.
  */
 
-/** 보드 영역 (좌우 플레이어 카드 사이) */
-const L = 226;
-const R = 798;
-const T = 6;
-const B = 570;
-/** 모서리 칸 크기 · 변 칸 크기 */
-const C = 84;
-const SW = (R - L - 2 * C) / 7;
-const SH = (B - T - 2 * C) / 7;
+/** 판 한 변 · 모서리 칸 · 변 칸 */
+const S = 680;
+const C = 96;
+const SW = (S - 2 * C) / 7;
+/** 무대에서 판 가운데 · 기울기 · 원근 */
+const CX = 512;
+const CY = 286;
+const TILT = (60 * Math.PI) / 180;
+const PERSP = 3000;
+const PLANE_TF = `perspective(${PERSP}px) rotateX(60deg) rotateZ(45deg)`;
+
+/** 판 위 좌표(px, 왼쪽 위 0) → 무대 좌표 + 원근 배율 (CSS 의 rotateZ(45) → rotateX → perspective 와 같은 계산) */
+export function proj(px: number, py: number) {
+  const X = px - S / 2;
+  const Y = py - S / 2;
+  const x1 = (X - Y) * Math.SQRT1_2;
+  const y1 = (X + Y) * Math.SQRT1_2;
+  const y2 = y1 * Math.cos(TILT);
+  const z = y1 * Math.sin(TILT);
+  const k = PERSP / (PERSP - z);
+  return { x: CX + x1 * k, y: CY + y2 * k, k };
+}
 
 /** 격자 한 축의 [시작, 끝] (모서리 칸은 크게) */
-const span = (g: number, a: number, s: number): [number, number] => (g <= 0 ? [a, a + C] : g >= 8 ? [a + C + 7 * s, a + 2 * C + 7 * s] : [a + C + (g - 1) * s, a + C + g * s]);
-/** 격자(소수 가능) → 축 좌표 (칸 가운데끼리 이어 붙임) */
-const axis = (g: number, a: number, s: number) => {
-  const mid = (k: number) => {
-    const [p, q] = span(k, a, s);
-    return (p + q) / 2;
-  };
+const span = (g: number): [number, number] => (g <= 0 ? [0, C] : g >= 8 ? [C + 7 * SW, S] : [C + (g - 1) * SW, C + g * SW]);
+const mid = (g: number) => {
+  const [p, q] = span(g);
+  return (p + q) / 2;
+};
+/** 격자(소수 가능) → 판 좌표 (칸 가운데끼리 이어 붙임) */
+const axis = (g: number) => {
   const lo = Math.max(0, Math.min(7, Math.floor(g)));
   return mid(lo) + (mid(lo + 1) - mid(lo)) * (g - lo);
 };
+const rectOf = (gx: number, gy: number) => {
+  const [x0, x1] = span(gx);
+  const [y0, y1] = span(gy);
+  return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+};
+/** 칸 가운데 → 판 가운데 쪽으로 t 만큼 (뒤 · 앞 고르기용) */
+const toward = (gx: number, gy: number, t: number) => {
+  const cx = axis(gx);
+  const cy = axis(gy);
+  return { x: cx + (S / 2 - cx) * t, y: cy + (S / 2 - cy) * t };
+};
 
-/** 격자 좌표 → 무대 좌표 (칸 가운데) — 이름은 예전 아이소 그대로 둠 */
-export const iso = (gx: number, gy: number) => ({ x: axis(gx, L, SW), y: axis(gy, T, SH) });
-/** 자리 → 무대 좌표 (말 발끝): 칸 안쪽 가장자리에 세워 칸 이름 · 값을 안 가림 */
+/** 격자 좌표 → 무대 좌표 (칸 가운데) */
+export const iso = (gx: number, gy: number) => {
+  const p = proj(axis(gx), axis(gy));
+  return { x: p.x, y: p.y };
+};
+/** 자리 → 무대 좌표 (말 발끝) */
 export const slotXY = (m: MapDef, slot: number) => {
   const { x: gx, y: gy } = m.tiles[slot];
-  const r = rectOf(gx, gy);
-  const cx = r.x + r.w / 2;
-  const cy = r.y + r.h / 2;
-  const dx = gx >= 8 ? -1 : gx <= 0 ? 1 : 0;
-  const dy = gy >= 8 ? -1 : gy <= 0 ? 1 : 0;
-  return {
-    x: dx ? cx + dx * (r.w / 2 + 14) : cx,
-    y: dy < 0 ? r.y + 4 : dy > 0 ? r.y + r.h + 46 : cy + 22,
-  };
-};
-const rectOf = (gx: number, gy: number) => {
-  const [x0, x1] = span(gx, L, SW);
-  const [y0, y1] = span(gy, T, SH);
-  return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+  const p = proj(axis(gx), axis(gy));
+  return { x: p.x, y: p.y };
 };
 
 function rgb(hex: string): [number, number, number] {
@@ -75,7 +91,7 @@ export function dark(hex: string, k: number) {
   return `rgb(${Math.round(r * k)},${Math.round(g * k)},${Math.round(b * k)})`;
 }
 
-type GlyphName = "flag" | "coin" | "gift" | "wrench" | "note" | "portal" | "bag" | "train" | "star" | "house" | "tower" | "crown" | "fire";
+type GlyphName = "flag" | "coin" | "gift" | "wrench" | "note" | "portal" | "bag" | "train" | "star" | "hut" | "house" | "tower" | "crown" | "fire";
 
 /** 특수칸: 바탕색 · 그림 */
 const KIND: Record<string, { fill: string; ink: string; glyph: GlyphName }> = {
@@ -89,6 +105,17 @@ const KIND: Record<string, { fill: string; ink: string; glyph: GlyphName }> = {
   bonus: { fill: "#ffd23a", ink: "#5a3a00", glyph: "coin" },
   rail: { fill: "#47b6ff", ink: "#fff", glyph: "train" },
 };
+
+/** 맵마다 판 바탕 · 옆면 */
+const PLATE: Record<string, { top: string; side: string }> = {
+  town: { top: "#f6e3b4", side: "#a86f3a" },
+  cross: { top: "#f3d6a6", side: "#9a5d2e" },
+  orgel: { top: "#f8d9e8", side: "#a8577f" },
+};
+
+/** 건물 그림 (있으면 그림, 없으면 매끈한 표식) — 단계 1 오두막 · 2 하우스 · 3 타워 · 4 랜드마크 */
+const BLD = ["", "/marble/b3d/1.webp", "/marble/b3d/2.webp", "/marble/b3d/3.webp", "/marble/b3d/4.webp"];
+const BLD_H = [0, 36, 42, 54, 60];
 
 export interface TokenView {
   pi: number;
@@ -121,28 +148,57 @@ export default function Board({
 }) {
   const m = MAPS[g.map];
   const gg = g as unknown as Game;
+  const plate = PLATE[m.id] ?? PLATE.town;
+  const planeBox: CSSProperties = { left: CX - S / 2, top: CY - S / 2, width: S, height: S, transformOrigin: "50% 50%" };
+  const FR = 16;
+  const frameBox: CSSProperties = { left: CX - S / 2 - FR, top: CY - S / 2 - FR, width: S + 2 * FR, height: S + 2 * FR, transformOrigin: "50% 50%" };
   return (
     <div className="mbx absolute inset-0">
-      <Center m={m} />
+      {/* 판 옆면(두께) · 흰 테두리 — 칸 바깥으로 FR 만큼 큰 판을 같은 변환으로 */}
+      <div className="pointer-events-none absolute rounded-[34px]" style={{ ...frameBox, transform: `translateY(22px) ${PLANE_TF}`, background: `linear-gradient(135deg, ${plate.side}, ${dark(plate.side, 0.7)})`, boxShadow: "0 0 70px 14px rgba(10,8,30,0.55)" }} />
+      <div className="pointer-events-none absolute rounded-[34px]" style={{ ...frameBox, transform: `translateY(11px) ${PLANE_TF}`, background: dark(plate.side, 0.85) }} />
+      <div className="pointer-events-none absolute rounded-[34px]" style={{ ...frameBox, transform: PLANE_TF, background: "linear-gradient(135deg, #ffffff, #e8ecf6)", boxShadow: "inset 0 0 0 3px rgba(255,255,255,0.9), inset 0 -4px 10px rgba(38,43,82,0.15)" }} />
+      {/* 판 윗면 */}
+      <div className="absolute rounded-[26px]" style={{ ...planeBox, transform: PLANE_TF, background: `linear-gradient(135deg, ${mix(plate.top, 0.4)}, ${plate.top})`, boxShadow: "inset 0 0 0 4px rgba(255,255,255,0.6)" }}>
+        <Center m={m} />
+        {m.tiles.map((sd, slot) => {
+          const tile = g.order[slot];
+          const d = m.tiles[tile];
+          const t = g.tiles[tile];
+          const r = rectOf(sd.x, sd.y);
+          const can = !!pick?.includes(tile);
+          const here = tokens.filter((tk) => tk.slot === slot && !tk.dim).map((tk) => tk.pi);
+          return (
+            <button
+              key={slot}
+              type="button"
+              aria-label={d.name}
+              onClick={() => (can ? onPick?.(tile) : onInfo?.(tile))}
+              className={`absolute p-[3px] ${can ? "cursor-pointer" : "cursor-help"}`}
+              style={{ left: r.x, top: r.y, width: r.w, height: r.h }}
+            >
+              <TileFace m={m} d={d} owner={t.owner} sx={sd.x} sy={sd.y} />
+              {here.length > 0 && <span className="pointer-events-none absolute inset-[2px] rounded-[10px]" style={{ boxShadow: `inset 0 0 0 4px ${PCOLOR[here[0]]}, 0 0 16px 3px ${PCOLOR[here[0]]}` }} />}
+              {can && <span className="mbx-pick pointer-events-none absolute inset-[2px] rounded-[10px]" />}
+              {flash?.[tile] && <span className="pointer-events-none absolute inset-[3px] rounded-[9px]" style={{ boxShadow: `inset 0 0 0 5px ${flash[tile]}`, background: "rgba(255,255,255,0.4)" }} />}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* 서는 것들: 건물(칸 뒤쪽) */}
       {m.tiles.map((sd, slot) => {
         const tile = g.order[slot];
         const d = m.tiles[tile];
         const t = g.tiles[tile];
-        const r = rectOf(sd.x, sd.y);
-        const can = !!pick?.includes(tile);
+        if (t.owner < 0 || d.kind !== "city" || t.lv <= 0) return null;
+        const b = toward(sd.x, sd.y, 0.035);
+        const p = proj(b.x, b.y);
+        const lv = Math.min(t.lv, LANDMARK);
         return (
-          <button
-            key={slot}
-            type="button"
-            aria-label={d.name}
-            onClick={() => (can ? onPick?.(tile) : onInfo?.(tile))}
-            className={`absolute p-[2px] ${can ? "z-[60] cursor-pointer" : "z-[5] cursor-help"}`}
-            style={{ left: r.x, top: r.y, width: r.w, height: r.h }}
-          >
-            <TileCard g={gg} m={m} d={d} tile={tile} owner={t.owner} lv={t.lv} boost={t.boostLeft > 0} fest={t.owner >= 0 && g.players[t.owner]?.fest === tile} big={r.w > 70 && r.h > 70} />
-            {can && <span className="mbx-pick pointer-events-none absolute inset-[1px] rounded-[10px]" />}
-            {flash?.[tile] && <span className="pointer-events-none absolute inset-[2px] rounded-[9px]" style={{ boxShadow: `inset 0 0 0 4px ${flash[tile]}`, background: "rgba(255,255,255,0.35)" }} />}
-          </button>
+          <div key={`b${slot}`} className="pointer-events-none absolute" style={{ left: p.x, top: p.y - 4, zIndex: 100 + Math.round(p.y), transform: `translate(-50%, -100%) scale(${p.k})`, transformOrigin: "50% 100%" }}>
+            <Building lv={lv} color={PCOLOR[t.owner]} key={`${t.owner}-${lv}`} />
+          </div>
         );
       })}
 
@@ -151,25 +207,70 @@ export default function Board({
         const c = slotXY(m, tk.slot);
         const same = tokens.filter((o) => o.slot === tk.slot);
         const k = same.indexOf(tk);
-        const off = same.length > 1 ? (k - (same.length - 1) / 2) * 18 : 0;
+        const off = same.length > 1 ? (k - (same.length - 1) / 2) * 16 : 0;
+        const kk = proj(axis(m.tiles[tk.slot].x), axis(m.tiles[tk.slot].y)).k;
         return (
           <div
             key={tk.pi}
             className="pointer-events-none absolute"
             style={{
               left: c.x + off,
-              top: c.y + (same.length > 1 ? (k % 2) * 3 : 0),
-              zIndex: 80 + k,
-              transform: "translate(-50%, -100%)",
+              top: c.y + 2 + (same.length > 1 ? (k % 2) * 3 : 0),
+              zIndex: 101 + Math.round(c.y) + k,
+              transform: `translate(-50%, -100%) scale(${kk})`,
+              transformOrigin: "50% 100%",
               transition: "left 160ms ease-out, top 160ms ease-out",
               opacity: tk.dim ? 0.35 : 1,
             }}
           >
-            <div className="absolute bottom-[-3px] left-1/2 h-[8px] w-[32px] -translate-x-1/2 rounded-[50%]" style={{ background: "rgba(20,24,60,0.3)" }} />
+            <div className="absolute bottom-[-3px] left-1/2 h-[9px] w-[34px] -translate-x-1/2 rounded-[50%]" style={{ background: "rgba(20,24,60,0.35)" }} />
             <div key={tk.hop} className={tk.hop ? "mb-hop" : undefined}>
-              <Token sprite={tk.sprite} anim={tk.anim} h={50} face={tk.face} />
+              <Token sprite={tk.sprite} anim={tk.anim} h={46} face={tk.face} />
             </div>
-            <div className="absolute -top-[4px] left-1/2 h-[10px] w-[10px] -translate-x-1/2 rounded-full" style={{ background: PCOLOR[tk.pi], boxShadow: "0 0 0 2px #fff, 0 1px 3px rgba(0,0,0,0.4)" }} />
+            <div className="absolute -top-[7px] left-1/2 h-[9px] w-[9px] -translate-x-1/2 rotate-45 rounded-[2px]" style={{ background: PCOLOR[tk.pi], boxShadow: "0 0 0 1.5px #fff, 0 1px 3px rgba(0,0,0,0.4)" }} />
+          </div>
+        );
+      })}
+
+      {/* 이름판: 칸 앞쪽, 맨 위 층 */}
+      {m.tiles.map((sd, slot) => {
+        const tile = g.order[slot];
+        const d = m.tiles[tile];
+        const t = g.tiles[tile];
+        const f = toward(sd.x, sd.y, -0.012);
+        const p = proj(f.x, f.y);
+        const pc = t.owner >= 0 ? PCOLOR[t.owner] : null;
+        const mult = t.owner >= 0 ? tollMult(gg, tile) : 1;
+        const fest = t.owner >= 0 && g.players[t.owner]?.fest === tile;
+        const sp = KIND[d.kind];
+        const band = sp ? sp.fill : d.kind === "spot" ? "#ffb21e" : m.groups[d.group ?? 0].color;
+        const long = d.name.length >= 5;
+        return (
+          <div key={`n${slot}`} className="pointer-events-none absolute flex flex-col items-center" style={{ left: p.x, top: p.y + 6, zIndex: 3000 + Math.round(p.y), transform: `translateX(-50%) scale(${Math.min(1.08, p.k)})`, transformOrigin: "50% 0" }}>
+            <span className={`rounded-[6px] px-[4px] text-center font-extrabold whitespace-nowrap ${long ? "text-[9px] leading-[12px]" : "text-[10px] leading-[13px]"}`} style={{ background: sp ? "#fffaf0" : band, color: sp ? INK : "#fff", boxShadow: `0 0 0 1.5px ${INK}, 0 2px 0 rgba(20,24,60,0.35)`, textShadow: sp ? "none" : "0 1px 1px rgba(0,0,0,0.45)" }}>
+              {d.kind === "spot" && "★"}
+              {d.name}
+            </span>
+            {!sp && (
+              <span className="relative mt-[2px] flex items-center gap-[2px]">
+                {pc ? (
+                  <span className="rounded-[5px] px-[4px] text-[10px] leading-[13px] font-extrabold text-white" style={{ background: pc, boxShadow: `0 0 0 1.5px ${INK}` }}>
+                    {fmtToll(tollOf(gg, tile))}
+                  </span>
+                ) : (
+                  <span className="rounded-[5px] bg-white px-[3px] text-[9.5px] leading-[12px] font-bold text-[#5a6090]" style={{ boxShadow: `0 0 0 1.2px ${INK}` }}>
+                    {d.price}
+                  </span>
+                )}
+                {mult > 1 && (
+                  <span className="mbx-mult rounded-full px-[4px] text-[9.5px] leading-[13px] font-black" style={{ background: mult >= 4 ? "#ff3d6e" : "#ffd23a", color: mult >= 4 ? "#fff" : "#3a2500" }}>
+                    x{mult}
+                  </span>
+                )}
+                {fest && <Glyph n="note" size={13} color="#b07bff" />}
+                {t.boostLeft > 0 && <Glyph n="fire" size={13} color="#ff6a2b" />}
+              </span>
+            )}
           </div>
         );
       })}
@@ -177,78 +278,61 @@ export default function Board({
   );
 }
 
-/** 칸 카드 하나 */
-function TileCard({ g, m, d, tile, owner, lv, boost, fest, big }: { g: Game; m: MapDef; d: TileDef; tile: number; owner: number; lv: number; boost: boolean; fest: boolean; big: boolean }) {
+/** 판 위에 눕는 칸 바닥 */
+function TileFace({ m, d, owner, sx, sy }: { m: MapDef; d: TileDef; owner: number; sx: number; sy: number }) {
   const sp = KIND[d.kind];
-  if (sp) {
+  if (sp)
     return (
-      <div className="relative flex h-full w-full flex-col items-center justify-center gap-[2px] overflow-hidden rounded-[9px]" style={{ background: `linear-gradient(160deg, ${mix(sp.fill, 0.3)}, ${sp.fill})`, boxShadow: `inset 0 0 0 2px ${dark(sp.fill, 0.72)}, 0 2px 0 rgba(20,24,60,0.35)` }}>
-        <Glyph n={sp.glyph} size={big ? 36 : 24} color={sp.ink === "#fff" ? "#fff" : mix(sp.fill, 0.55)} />
-        <span className={`px-[2px] text-center leading-[12px] font-extrabold break-keep ${big ? "text-[12.5px]" : "text-[10.5px]"}`} style={{ color: sp.ink, textShadow: sp.ink === "#fff" ? "0 1px 1px rgba(0,0,0,0.35)" : "none" }}>
-          {d.name}
+      <div className="relative flex h-full w-full items-center justify-center overflow-hidden rounded-[10px]" style={{ background: `radial-gradient(circle at 35% 30%, ${mix(sp.fill, 0.55)}, ${sp.fill} 60%, ${dark(sp.fill, 0.85)})`, boxShadow: `inset 0 0 0 2px ${dark(sp.fill, 0.7)}, inset 0 3px 0 rgba(255,255,255,0.5)` }}>
+        {/* 그림은 화면에서 똑바로 보이게 판 회전(45°)을 되돌림 */}
+        <span style={{ transform: "rotate(-45deg)" }}>
+          <Glyph n={sp.glyph} size={sx % 8 === 0 && sy % 8 === 0 ? 46 : 30} color={sp.ink === "#fff" ? "#fff" : mix(sp.fill, 0.55)} />
         </span>
       </div>
     );
-  }
-  const spot = d.kind === "spot";
-  const band = spot ? "#ffb21e" : m.groups[d.group ?? 0].color;
+  const band = d.kind === "spot" ? "#ffb21e" : m.groups[d.group ?? 0].color;
   const pc = owner >= 0 ? PCOLOR[owner] : null;
-  const toll = owner >= 0 ? tollOf(g, tile) : 0;
-  const mult = owner >= 0 ? tollMult(g, tile) : 1;
-  const inset = pc ? 3.5 : 1.5;
+  // 동네 띠는 칸의 바깥쪽 변에
+  const side = sy >= 8 ? "bottom" : sy <= 0 ? "top" : sx <= 0 ? "left" : "right";
+  const bandStyle: CSSProperties = side === "bottom" ? { left: 0, right: 0, bottom: 0, height: 13 } : side === "top" ? { left: 0, right: 0, top: 0, height: 13 } : side === "left" ? { top: 0, bottom: 0, left: 0, width: 13 } : { top: 0, bottom: 0, right: 0, width: 13 };
   return (
-    <div
-      className="relative flex h-full w-full flex-col overflow-hidden rounded-[9px]"
-      style={{
-        background: pc ? mix(pc, 0.8) : "#fffdf6",
-        boxShadow: pc ? `inset 0 0 0 3.5px ${pc}, 0 0 0 1.5px ${INK}, 0 2px 0 rgba(20,24,60,0.35)` : `inset 0 0 0 1.5px ${INK}, 0 2px 0 rgba(20,24,60,0.35)`,
-      }}
-    >
-      {/* 동네 색 띠 + 이름 */}
-      <div className="flex min-h-[17px] items-center justify-center px-[2px] py-[1px]" style={{ background: band, margin: `${inset}px ${inset}px 0`, borderRadius: "7px 7px 0 0" }}>
-        <span className="text-center text-[10.5px] leading-[12px] font-extrabold break-keep text-white" style={{ textShadow: "0 1px 1px rgba(0,0,0,0.45)" }}>
-          {d.name}
+    <div className="relative h-full w-full overflow-hidden rounded-[10px]" style={{ background: pc ? `linear-gradient(135deg, ${mix(pc, 0.35)}, ${pc})` : `linear-gradient(135deg, #fffdf6, ${mix(band, 0.78)})`, boxShadow: pc ? `inset 0 0 0 2.5px ${dark(pc, 0.6)}, inset 0 3px 0 rgba(255,255,255,0.45)` : `inset 0 0 0 1.5px ${dark(band, 0.6)}` }}>
+      <div className="absolute" style={{ ...bandStyle, background: `linear-gradient(135deg, ${mix(band, 0.2)}, ${band})` }} />
+      {d.kind === "spot" && (
+        <span className="absolute inset-0 flex items-center justify-center" style={{ transform: "rotate(-45deg)" }}>
+          <Glyph n="star" size={22} color={pc ? "#fff" : "#ffd65a"} />
         </span>
-      </div>
-      {/* 건물 · 표식 */}
-      <div className="flex min-h-0 flex-1 items-center justify-center gap-[1px]">
-        {spot && owner < 0 && <Glyph n="star" size={16} color="#ffd65a" />}
-        {owner >= 0 && !spot && <Buildings lv={lv} color={pc!} />}
-        {owner >= 0 && spot && <Glyph n="star" size={20} color={pc!} />}
-        {fest && <Glyph n="note" size={14} color="#b07bff" />}
-        {boost && <Glyph n="fire" size={14} color="#ff6a2b" />}
-      </div>
-      {/* 값 */}
-      <div className="flex items-center justify-center gap-[2px] pb-[4px]">
-        {owner >= 0 ? (
-          <>
-            <span className="rounded-[5px] px-[4px] text-[10.5px] leading-[13px] font-extrabold text-white" style={{ background: pc! }}>
-              {fmtToll(toll)}
-            </span>
-            {mult > 1 && (
-              <span className="mbx-mult rounded-[5px] px-[3px] text-[10.5px] leading-[13px] font-black" style={{ background: mult >= 4 ? "#ff3d6e" : "#ffd23a", color: mult >= 4 ? "#fff" : "#3a2500" }}>
-                x{mult}
-              </span>
-            )}
-          </>
-        ) : (
-          <span className="text-[10px] leading-[12px] font-bold text-[#6a6f93]">{d.price}</span>
-        )}
-      </div>
+      )}
     </div>
   );
 }
 
-/** 건물 단계: 깃발(땅만) · 집 1~2채 · 빌딩 · 랜드마크 */
-function Buildings({ lv, color }: { lv: number; color: string }) {
-  if (lv <= 0) return <Glyph n="flag" size={16} color={color} />;
-  if (lv >= LANDMARK) return <Glyph n="crown" size={24} color={color} />;
+/** 서 있는 건물 (그림이 오면 그림, 없으면 표식). 주인 색 바닥 고리로 누구 건물인지 */
+function Building({ lv, color }: { lv: number; color: string }) {
+  const h = BLD_H[lv];
   return (
-    <>
-      {Array.from({ length: lv }, (_, i) => (
-        <Glyph key={i} n={i === 2 ? "tower" : "house"} size={i === 2 ? 19 : 15} color={color} />
-      ))}
-    </>
+    <div className="mb-pop relative flex flex-col items-center">
+      <img
+        src={BLD[lv]}
+        alt=""
+        className="block max-w-none"
+        style={{ height: h, filter: "drop-shadow(0 3px 2px rgba(20,24,60,0.35))" }}
+        onError={(e) => {
+          (e.currentTarget as HTMLImageElement).style.display = "none";
+          (e.currentTarget.nextSibling as HTMLElement | null)?.style.removeProperty("display");
+        }}
+      />
+      {/* 건물 전체를 주인 색으로 물들임 (그림 모양대로 가린 색 판을 곱하기로) */}
+      <span className="pointer-events-none absolute inset-0" style={{ background: color, WebkitMaskImage: `url(${BLD[lv]})`, maskImage: `url(${BLD[lv]})`, WebkitMaskSize: "100% 100%", maskSize: "100% 100%", mixBlendMode: "multiply", opacity: 0.72 }} />
+      <span style={{ display: "none" }}>
+        <Glyph n={(["hut", "hut", "house", "tower", "crown"] as GlyphName[])[lv]} size={h * 0.7} color={color} />
+      </span>
+      {/* 주인 깃발 (랜드마크는 흔들흔들) */}
+      <span className={`absolute -top-[9px] right-[2px] ${lv >= LANDMARK ? "mb-bob" : ""}`}>
+        <Glyph n="flag" size={lv >= LANDMARK ? 17 : 14} color={color} />
+      </span>
+      <span className="absolute -bottom-[3px] left-1/2 h-[7px] w-[70%] -translate-x-1/2 rounded-[50%]" style={{ background: color, boxShadow: `0 0 0 1.5px ${INK}`, opacity: 0.9, zIndex: -1 }} />
+    </div>
   );
 }
 
@@ -305,10 +389,20 @@ export function Glyph({ n, size = 20, color = INK }: { n: GlyphName; size?: numb
       </>
     ),
     star: <path d="M12 2.8l2.8 5.8 6.4.9-4.6 4.5 1.1 6.3L12 17.3l-5.7 3 1.1-6.3L2.8 9.5l6.4-.9z" fill={color} {...s} />,
+    hut: (
+      <>
+        <path d="M3 13 Q12 3 21 13 L19 13 L19 21 L5 21 L5 13 Z" fill={color} {...s} />
+        <path d="M10 21v-5a2 2 0 014 0v5" fill="#fff" {...s} />
+      </>
+    ),
     house: (
       <>
-        <path d="M4 11l8-7 8 7v10H4z" fill={color} {...s} />
-        <rect x="10" y="14.5" width="4" height="6.5" fill="#fff" {...s} />
+        <path d="M16 6V3h2.5v5" fill="#fff" {...s} />
+        <path d="M3 11l9-8 9 8v10H3z" fill={color} {...s} />
+        <path d="M3 15h18" stroke={INK} strokeWidth={1.2} />
+        <rect x="6" y="11.5" width="3" height="2.5" fill="#fff" stroke={INK} strokeWidth={1} />
+        <rect x="15" y="11.5" width="3" height="2.5" fill="#fff" stroke={INK} strokeWidth={1} />
+        <rect x="10.5" y="16.5" width="3" height="4.5" fill="#fff" stroke={INK} strokeWidth={1} />
       </>
     ),
     tower: (
@@ -333,16 +427,20 @@ export function Glyph({ n, size = 20, color = INK }: { n: GlyphName; size?: numb
   );
 }
 
-/** 판 가운데: 맵 그림 (분수 광장 · 십자 철로 중앙역 · 오르골 회전목마) */
+/** 판 가운데: 맵 그림 (판 회전을 되돌려 화면에서 똑바로) + 맵 이름 */
 function Center({ m }: { m: MapDef }) {
-  const x0 = L + C + 5;
-  const y0 = T + C + 5;
-  const w = R - L - 2 * C - 10;
-  const h = B - T - 2 * C - 10;
+  const inset = C + 8;
+  const w = S - 2 * inset;
   return (
-    <div className="pointer-events-none absolute overflow-hidden rounded-[18px]" style={{ left: x0, top: y0, width: w, height: h, background: m.sky, boxShadow: "inset 0 0 0 2px rgba(255,255,255,0.6), 0 6px 24px rgba(20,24,60,0.25)" }}>
-      <img src={`/marble/bg/center-${m.id}.webp`} alt="" className="absolute inset-0 h-full w-full object-cover" />
-      <div className="absolute inset-0" style={{ background: "radial-gradient(circle at 50% 50%, transparent 45%, rgba(18,20,60,0.35))" }} />
+    <div className="pointer-events-none absolute overflow-hidden rounded-[18px]" style={{ left: inset, top: inset, width: w, height: w, boxShadow: "0 0 0 4px #f5c451, 0 0 0 7px #8a5a12, inset 0 0 40px rgba(20,16,50,0.35)" }}>
+      <img src={`/marble/bg/center-${m.id}.webp`} alt="" className="absolute top-1/2 left-1/2 max-w-none" style={{ width: w * 1.42, height: w * 1.42, transform: "translate(-50%, -50%) rotate(-45deg)", objectFit: "cover", filter: "saturate(0.85) brightness(0.8)" }} />
+      <div className="absolute inset-0" style={{ background: "radial-gradient(circle, rgba(20,16,50,0.15) 20%, rgba(20,16,50,0.55))" }} />
+      {/* 판에 찍힌 로고 (똑바로 읽히게 판 회전을 되돌림) */}
+      <div className="absolute top-1/2 left-1/2 text-center" style={{ transform: "translate(-50%, -50%) rotate(-45deg)" }}>
+        <div className="text-[64px] leading-none font-black tracking-tight whitespace-nowrap" style={{ color: "rgba(255,255,255,0.28)", textShadow: "0 4px 0 rgba(38,43,82,0.25)" }}>
+          DICE TOWN
+        </div>
+      </div>
     </div>
   );
 }

@@ -19,7 +19,8 @@ export interface Owned {
   items: Record<string, { lv: number }>;
   stars: number;
   parts: number;
-  pity: { char: number; item: number };
+  /** ur: UR 천장 (예전 프로필엔 없음) */
+  pity: { char: number; item: number; ur?: number };
 }
 
 export type CharPull = { k: "char"; id: string; grade: Grade; fresh: boolean; stars?: number };
@@ -60,12 +61,16 @@ export function pullChars(o: Owned, n: number, rand: () => number): CharPull[] {
   const pool = (g: Grade) => charOn().filter((c) => c.grade === g);
   for (let i = 0; i < n; i++) {
     o.pity.char++;
+    o.pity.ur = (o.pity.ur ?? 0) + 1;
     let g = pickGrade(rates, rand());
+    // UR 천장: 이 횟수 안에 UR 이 안 나오면 UR 확정
+    if (rates.UR > 0 && o.pity.ur >= GACHA.char.urPity) g = "UR";
     // 천장: SSR 이상 확정 (UR · SSR 비율대로)
     if (o.pity.char >= GACHA.char.pity && g !== "SSR" && g !== "UR") g = rates.UR > 0 && rand() < rates.UR / (rates.UR + rates.SSR) ? "UR" : "SSR";
     // 10연차 마지막: 앞에 SR 이상이 없으면 SR 확정
     if (n >= 10 && i === n - 1 && g === "R" && !out.some((x) => x.grade !== "R")) g = "SR";
     if (g === "SSR" || g === "UR") o.pity.char = 0;
+    if (g === "UR") o.pity.ur = 0;
     const list = pool(g);
     const c = list[Math.floor(rand() * list.length)] ?? charOn()[0];
     out.push(giveChar(o, c.id, c.grade));

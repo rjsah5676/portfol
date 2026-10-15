@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { CHAR, ITEM, artOf, power, type Grade } from "@/lib/marble/data";
 import { sfx } from "./audio";
 import { ItemIcon } from "./Gacha";
@@ -88,34 +89,50 @@ export function GradeBackdrop({ g, color }: { g: Grade; color?: string }) {
   );
 }
 
-/** 아이템: 아이콘만, 올리면 아이콘 · 이름 · 설명 */
+/** 아이템: 아이콘만, 올리면 아이콘 · 이름 · 설명 (말풍선은 무대 맨 위 층에 그려서 패널에 안 잘림) */
 export function ItemBadge({ slot, item, size = 36, up = false }: { slot: "dice" | "buddy"; item: { id: string; lv: number } | null; size?: number; up?: boolean }) {
   const it = item ? ITEM[item.id] : null;
+  const [tip, setTip] = useState<{ x: number; y: number; root: HTMLElement; up: boolean } | null>(null);
   if (!it || !item)
     return (
       <div className="flex items-center justify-center rounded-lg border border-dashed border-white/25 text-[10px] text-white/50" style={{ width: size, height: size }}>
         {slot === "dice" ? "주사위" : "동행"}
       </div>
     );
+  const show = (el: HTMLElement) => {
+    // 무대(.mb, 1024×576 을 늘리거나 줄여 그림) 기준 좌표로
+    const root = el.closest(".mb") as HTMLElement | null;
+    if (!root) return;
+    const rr = root.getBoundingClientRect();
+    const k = rr.width / root.offsetWidth || 1;
+    const r = el.getBoundingClientRect();
+    const cx = (r.left + r.width / 2 - rr.left) / k;
+    const top = (r.top - rr.top) / k;
+    const bottom = (r.bottom - rr.top) / k;
+    const goUp = up || bottom + 110 > root.offsetHeight;
+    setTip({ x: Math.max(8, Math.min(root.offsetWidth - 238, cx - 115)), y: goUp ? top - 8 : bottom + 8, root, up: goUp });
+  };
   return (
-    <div className="group relative" tabIndex={0}>
-      <div className="relative">
-        <ItemIcon id={it.id} size={size} />
-        {item.lv > 0 && <span className="absolute -right-1 -bottom-1 rounded bg-[#232a4d] px-1 text-[9px] leading-[13px] font-bold text-[#ffe08a]">+{item.lv}</span>}
-      </div>
-      <div className={`pointer-events-none absolute left-1/2 z-[90] hidden w-[220px] -translate-x-1/2 group-hover:block group-focus:block ${up ? "bottom-[calc(100%+8px)]" : "top-[calc(100%+8px)]"}`}>
-        <div className="mbx-panel flex gap-2 p-2.5 text-left">
-          <ItemIcon id={it.id} size={44} />
-          <div className="min-w-0">
-            <div className="flex items-center gap-1">
-              <XGrade g={it.grade} />
-              <b className="truncate text-[13px] text-white">{it.name}</b>
-              <span className="text-[11px] text-[#ffe08a]">+{item.lv}</span>
+    <div className="relative" tabIndex={0} onMouseEnter={(e) => show(e.currentTarget)} onMouseLeave={() => setTip(null)} onFocus={(e) => show(e.currentTarget)} onBlur={() => setTip(null)}>
+      <ItemIcon id={it.id} size={size} />
+      {item.lv > 0 && <span className="absolute -right-1 -bottom-1 rounded bg-[#232a4d] px-1 text-[9px] leading-[13px] font-bold text-[#ffe08a]">+{item.lv}</span>}
+      {tip &&
+        createPortal(
+          <div className="mbx pointer-events-none absolute z-[999] w-[230px]" style={{ left: tip.x, top: tip.y, transform: tip.up ? "translateY(-100%)" : undefined }}>
+            <div className="flex gap-2.5 rounded-xl border border-white/15 bg-[#1b1650]/95 p-2.5 text-left shadow-[0_10px_28px_rgba(0,0,0,0.45)] backdrop-blur">
+              <ItemIcon id={it.id} size={44} />
+              <div className="min-w-0">
+                <div className="flex items-center gap-1">
+                  <XGrade g={it.grade} />
+                  <b className="truncate text-[13px] text-white">{it.name}</b>
+                  <span className="text-[11px] text-[#ffe08a]">+{item.lv}</span>
+                </div>
+                <p className="mt-1 text-[11.5px] leading-[16px] text-white/85">{it.desc(power(it.grade, item.lv))}</p>
+              </div>
             </div>
-            <p className="mt-1 text-[11px] leading-[15px] text-white/80">{it.desc(power(it.grade, item.lv))}</p>
-          </div>
-        </div>
-      </div>
+          </div>,
+          tip.root
+        )}
     </div>
   );
 }
@@ -134,28 +151,80 @@ export function CharHero({ id, className = "", children }: { id: string; classNa
   );
 }
 
-/** 살아 숨쉬는 도트: 풀밭 위에서 캐릭터들이 걷다 서다 */
-export function LivingPixels({ sprites, className = "", style }: { sprites: string[]; className?: string; style?: CSSProperties }) {
-  const [t, setT] = useState(0);
+/** 살아 숨쉬는 도트: 풀밭 위에서 캐릭터들이 제각각 걷다 쉬다 (위치는 매 프레임 이어서 움직이고, 발걸음은 걷는 속도에 맞춰 천천히) */
+type Walker = { x: number; dir: 1 | -1; speed: number; until: number; mode: "walk" | "rest" | "cheer" };
+const WALK_FPS = 5;
+export function LivingPixels({ sprites, className = "", style, bg }: { sprites: string[]; className?: string; style?: CSSProperties; /** 도트 배경 그림 (맵 고르면 바뀜) */ bg?: string }) {
+  const box = useRef<HTMLDivElement>(null);
+  const [view, setView] = useState<(Walker & { bob: number })[]>([]);
+  const ws = useRef<Walker[]>([]);
   useEffect(() => {
-    const id = setInterval(() => setT((x) => x + 1), 1600);
-    return () => clearInterval(id);
-  }, []);
+    const w = box.current?.clientWidth ?? 300;
+    const now = performance.now();
+    ws.current = sprites.map((_, i) => ({
+      x: 20 + ((i * 97) % Math.max(40, w - 80)),
+      dir: i % 2 ? -1 : 1,
+      // 한 걸음(두 칸) 에 몸이 움직이는 거리가 맞도록: 대략 초당 14~20px
+      speed: 14 + ((i * 7) % 7),
+      until: now + 1500 + i * 700,
+      mode: i % 3 === 2 ? "rest" : "walk",
+    }));
+    let raf = 0;
+    let last = now;
+    const tick = (t: number) => {
+      const dt = Math.min(0.05, (t - last) / 1000);
+      last = t;
+      const width = box.current?.clientWidth ?? 300;
+      for (const k of ws.current) {
+        if (k.mode === "walk") {
+          k.x += k.dir * k.speed * dt;
+          if (k.x < 10) (k.x = 10), (k.dir = 1);
+          if (k.x > width - 50) (k.x = width - 50), (k.dir = -1);
+        }
+        if (t > k.until) {
+          // 걷기 → 쉬기(가끔 기뻐하기) → 걷기 (방향은 가끔 바꿈)
+          if (k.mode === "walk") {
+            k.mode = Math.random() < 0.25 ? "cheer" : "rest";
+            k.until = t + 1200 + Math.random() * 1800;
+          } else {
+            k.mode = "walk";
+            if (Math.random() < 0.5) k.dir = (k.dir * -1) as 1 | -1;
+            k.until = t + 2500 + Math.random() * 3500;
+          }
+        }
+      }
+      // 걸을 때 발걸음에 맞춰 살짝 통통 (한 걸음 = 1/WALK_FPS 초)
+      const bob = -Math.abs(Math.sin((t / 1000) * Math.PI * WALK_FPS)) * 2;
+      setView(ws.current.map((k) => ({ ...k, bob: k.mode === "walk" ? bob : 0 })));
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+    // 부모가 다시 그려질 때마다 새 배열이 와도 같은 얼굴들이면 걷던 자리 그대로
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sprites.join("|")]);
   return (
-    <div className={`overflow-hidden rounded-2xl border border-white/15 ${className.includes("absolute") ? "" : "relative"} ${className}`} style={{ background: "linear-gradient(#8fd6ff 0 58%, #7cd36b 58% 100%)", imageRendering: "pixelated", ...style }}>
-      <div className="mbx-cloud absolute top-[12%] left-[8%] h-[14px] w-[46px] rounded-full bg-white/90" />
-      <div className="mbx-cloud absolute top-[22%] left-[60%] h-[12px] w-[38px] rounded-full bg-white/80" style={{ animationDelay: "-6s" }} />
-      <div className="absolute inset-x-0 bottom-[30%] h-[4px] bg-[#5fae55]" />
+    <div ref={box} className={`overflow-hidden rounded-2xl border border-white/15 ${className.includes("absolute") ? "" : "relative"} ${className}`} style={{ background: "#8fd6ff", imageRendering: "pixelated", ...style }}>
+      {/* 도트 배경: 고른 맵 풍경 (바뀔 때 살짝 겹쳐 바뀜) */}
+      {bg && <img key={bg} src={bg} alt="" className="mbx-fade absolute inset-0 h-[78%] w-full object-cover object-bottom" style={{ imageRendering: "pixelated" }} />}
+      {!bg && (
+        <>
+          <div className="mbx-cloud absolute top-[12%] left-[8%] h-[14px] w-[46px] rounded-full bg-white/90" />
+          <div className="mbx-cloud absolute top-[22%] left-[60%] h-[12px] w-[38px] rounded-full bg-white/80" style={{ animationDelay: "-6s" }} />
+        </>
+      )}
+      {/* 도트 풀밭 길: 위 가장자리 톱니 · 아래 흙길 */}
+      <div className="absolute inset-x-0 bottom-0 h-[26%]" style={{ background: "linear-gradient(#6fcf5a 0 30%, #5bb64b 30% 55%, #d9b073 55% 100%)" }} />
+      <div className="absolute inset-x-0 bottom-[26%] h-[4px]" style={{ background: "repeating-linear-gradient(90deg, #6fcf5a 0 6px, transparent 6px 10px)" }} />
+      <div className="absolute inset-x-0 bottom-[11%] h-[2px]" style={{ background: "repeating-linear-gradient(90deg, #c2955a 0 8px, transparent 8px 18px)" }} />
       {sprites.map((s, i) => {
-        // 8박자: 오른쪽으로 3걸음 · 쉼 · 왼쪽으로 3걸음 · 쉼 (사람마다 박자 다르게)
-        const ph = (t + i * 3) % 8;
-        const off = ph <= 3 ? Math.min(ph, 3) : 3 - Math.min(ph - 4, 3);
-        const walking = ph !== 3 && ph !== 7;
-        const face: 1 | -1 = ph < 4 ? 1 : -1;
-        const x = 6 + ((i * 24) % 66) + off * 5;
+        const k = view[i];
+        if (!k) return null;
+        // 뒤에 있는 사람(위쪽 줄)이 먼저 그려지게 줄을 두 개로
+        const row = i % 2;
         return (
-          <div key={s + i} className="absolute bottom-[10%] transition-[left] duration-[1600ms] ease-linear" style={{ left: `${x}%`, zIndex: 2 + i }}>
-            <Token sprite={s} h={i === 0 ? 70 : 54} face={face} anim={walking ? "walk" : i === 0 ? "win" : "idle"} />
+          <div key={s + i} className="absolute" style={{ left: k.x, bottom: `${7 + row * 5}%`, transform: `translateY(${k.bob}px)`, zIndex: 10 - row * 5 + i }}>
+            <Token sprite={s} h={52} maxW={46} face={k.dir} anim={k.mode === "walk" ? "walk" : k.mode === "cheer" ? "win" : "idle"} fps={k.mode === "walk" ? WALK_FPS : undefined} />
           </div>
         );
       })}

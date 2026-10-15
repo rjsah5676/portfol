@@ -40,7 +40,7 @@ function loadSheet(id: string): Promise<Sheet> {
 export type TokenAnim = "idle" | "walk" | "win" | "hit" | "ko";
 
 /** h = 그림 높이(px) 기준. face = 1 오른쪽 · -1 왼쪽 */
-export default function Token({ sprite, anim = "idle", h = 48, face = 1, className = "", shadow = true, maxW }: { sprite: string; anim?: TokenAnim; h?: number; face?: 1 | -1; className?: string; shadow?: boolean; maxW?: number }) {
+export default function Token({ sprite, anim = "idle", h = 48, face = 1, className = "", shadow = true, maxW, fps: fpsOver }: { sprite: string; anim?: TokenAnim; h?: number; face?: 1 | -1; className?: string; shadow?: boolean; maxW?: number; /** 동작 속도 직접 (걷기 기본 12) */ fps?: number }) {
   const [sh, setSh] = useState<Sheet | null>(null);
   const [k, setK] = useState(0);
   useEffect(() => {
@@ -59,10 +59,10 @@ export default function Token({ sprite, anim = "idle", h = 48, face = 1, classNa
     if (!a) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- 동작이 바뀌면 첫 칸부터
     setK(0);
-    const fps = anim === "walk" ? 12 : Math.max(2, a.fps);
+    const fps = fpsOver ?? (anim === "walk" ? 12 : Math.max(2, a.fps));
     const id = setInterval(() => setK((x) => (a.loop || x < n - 1 ? (x + 1) % n : x)), 1000 / fps);
     return () => clearInterval(id);
-  }, [a, n, anim]);
+  }, [a, n, anim, fpsOver]);
   if (!sh || !a?.list) return <div className={className} style={{ width: h * 0.7, height: h }} />;
   const f = sh.frames[a.list[k % n]];
   // 서기 동작의 첫 칸 키를 기준으로 크기를 맞춤 (동작마다 크기가 들쭉날쭉하지 않게)

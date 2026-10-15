@@ -7,10 +7,12 @@ import { CHAR, power } from "@/lib/marble/data";
 import { MAPS, MAP_IDS, type MapId } from "@/lib/marble/maps";
 import type { LobbyRoom, ProfileWire, RoomWire } from "@/lib/marble/wire";
 import { marble, watchLobby, watchRoom } from "@/realtime/marble";
-import { playBgm, sfx } from "./audio";
+import { playBgm, sfx, stopBgm } from "./audio";
 import Bag, { Shop } from "./Bag";
 import Gacha from "./Gacha";
 import GameView from "./GameView";
+import { applyCursor } from "./cursor";
+import { GuideDot, useMapGuide } from "./MapGuide";
 import { Cur, Stars } from "./pixel";
 import { FsButton, LoadoutLine, SoundButton, WaitRoom } from "./Room";
 import Stage from "./Stage";
@@ -39,6 +41,11 @@ function App() {
   const [prof, setProf] = useState<ProfileWire | null>(null);
   const [note, setNote] = useState("");
   const [making, setMaking] = useState(false);
+  // 저장된(처음엔 다이스 화살표) 커서를 바로 씀 · 게임 화면을 떠나면 배경음 끔
+  useEffect(() => {
+    applyCursor();
+    return () => stopBgm();
+  }, []);
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- 로그아웃하면 프로필을 비움
     if (!member) return setProf(null);
@@ -155,12 +162,13 @@ function Menu(p: {
   // 오른쪽 아래 도트 친구들: 내 캐릭터 + 가진 높은 등급 몇
   const friends = [c?.sprite ?? "kai", ...(pr ? Object.keys(pr.chars) : ["igna", "lily", "ivan"]).filter((id) => id !== c?.id && CHAR[id]).sort((x, y) => GRADE_RANK[CHAR[y].grade] - GRADE_RANK[CHAR[x].grade]).slice(0, 3).map((id) => CHAR[id].sprite)];
   const open = (rooms ?? []).filter((r) => r.phase === "wait");
+  const guide = useMapGuide();
   return (
     <div className="mbx absolute inset-0 overflow-hidden" style={{ background: "radial-gradient(120% 90% at 20% 0%, #4b3bb5 0%, #241a63 45%, #120d33 100%)" }}>
-      <img src="/marble/art/banner-ur.webp" alt="" className="absolute inset-0 h-full w-full object-cover opacity-[0.16] blur-[2px]" />
+      <img key={map ?? "any"} src={map ? `/marble/bg/center-${map}.webp` : "/marble/art/banner-ur.webp"} alt="" className="mbx-fade absolute inset-0 h-full w-full object-cover opacity-[0.22] blur-[2px]" />
 
       {/* 위 막대 */}
-      <div className="absolute inset-x-0 top-0 flex h-[52px] items-center gap-2 border-b border-white/10 bg-black/25 px-4 backdrop-blur">
+      <div className="absolute inset-x-0 top-0 z-[40] flex h-[52px] items-center gap-2 border-b border-white/10 bg-black/25 px-4 backdrop-blur">
         <div className="flex items-baseline gap-2">
           <b className="text-[20px] font-black tracking-tight text-[#ffd65a]" style={{ textShadow: "0 2px 0 #8a4b00" }}>
             DICE TOWN
@@ -261,7 +269,8 @@ function Menu(p: {
                     <b className="text-[14px]">{id ? MAPS[id].name : "아무 맵"}</b>
                     <p className="truncate text-[10px] text-white/75">{id ? MAPS[id].desc : "세 맵 중 무작위"}</p>
                   </div>
-                  {on && <span className="absolute top-1.5 right-1.5 rounded-full bg-[#ffd65a] px-2 text-[10px] leading-[18px] font-black text-[#3a2500]">선택</span>}
+                  {on && <span className="absolute top-1.5 left-1.5 rounded-full bg-[#ffd65a] px-2 text-[10px] leading-[18px] font-black text-[#3a2500]">선택</span>}
+                  {id && <GuideDot className="absolute top-1.5 right-1.5" onOpen={() => guide.show(id)} />}
                 </button>
               );
             })}
@@ -320,7 +329,8 @@ function Menu(p: {
           )}
         </div>
       </XPanel>
-      <LivingPixels sprites={friends} className="absolute right-[14px] bottom-[14px] h-[186px] w-[284px]" />
+      <LivingPixels sprites={friends} bg={`/marble/bg/${map ?? "town"}.webp`} className="absolute right-[14px] bottom-[14px] h-[186px] w-[284px]" />
+      {guide.node}
     </div>
   );
 }

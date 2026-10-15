@@ -53,7 +53,7 @@ export function WaitRoom({ room, me, onLeave }: { room: RoomWire; me: string; on
       <div className="absolute inset-0 bg-gradient-to-b from-[#120d33cc] via-[#120d3388] to-[#120d33ee]" />
 
       {/* 위 막대 */}
-      <div className="absolute inset-x-0 top-0 flex h-[52px] items-center gap-2 border-b border-white/10 bg-black/25 px-4 backdrop-blur">
+      <div className="absolute inset-x-0 top-0 z-[40] flex h-[52px] items-center gap-2 border-b border-white/10 bg-black/25 px-4 backdrop-blur">
         <XBtn className="h-[34px] px-3 text-[13px]" onClick={onLeave}>
           ‹ 나가기
         </XBtn>
@@ -396,7 +396,7 @@ export function SoundButton({ up = false, side = false, glass = false }: { up?: 
                 className="flex h-[34px] items-center justify-center bg-white"
                 style={{ boxShadow: cur === id ? "0 0 0 2px #232a4d, inset 0 0 0 2px #ffd84d" : "0 0 0 1px #9fb3c8" }}
               >
-                {id ? <img src={cursorPreview(id)} alt="" width={24} height={24} style={{ imageRendering: "pixelated" }} /> : <span className="text-[10px]">기본</span>}
+                {id !== "system" ? <img src={cursorPreview(id)} alt="" width={24} height={24} /> : <span className="text-[10px]">기본</span>}
               </button>
             ))}
           </div>

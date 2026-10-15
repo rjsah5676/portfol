@@ -397,7 +397,7 @@ export function CurIcon({ k, size = 16 }: { k: "star" | "parts" | "gp" | "ticket
       </>
     ) : k === "parts" ? (
       <>
-        <path d="M12 2.8l1.6 2.3 2.7-.7.6 2.7 2.6 1-1 2.6 1.8 2.1-2.4 1.4.2 2.8-2.8-.1-1.3 2.5-2-1.9-2.6 1.1-.7-2.7-2.7-.8 1.1-2.6L4 10.2l2.4-1.4-.3-2.8 2.8.2L10.2 3.7z" fill="#b9c4dc" stroke={ink} strokeWidth={1.3} strokeLinejoin="round" />
+        <path d="M19.26 9.74 L22.02 10.09 L22.02 13.91 L19.26 14.26 L18.73 15.54 L20.44 17.73 L17.73 20.44 L15.54 18.73 L14.26 19.26 L13.91 22.02 L10.09 22.02 L9.74 19.26 L8.46 18.73 L6.27 20.44 L3.56 17.73 L5.27 15.54 L4.74 14.26 L1.98 13.91 L1.98 10.09 L4.74 9.74 L5.27 8.46 L3.56 6.27 L6.27 3.56 L8.46 5.27 L9.74 4.74 L10.09 1.98 L13.91 1.98 L14.26 4.74 L15.54 5.27 L17.73 3.56 L20.44 6.27 L18.73 8.46 Z" fill="#b9c4dc" stroke={ink} strokeWidth={1.3} strokeLinejoin="round" />
         <circle cx="12" cy="12" r="3.2" fill="#eef2fb" stroke={ink} strokeWidth={1.3} />
       </>
     ) : k === "gp" ? (
@@ -410,9 +410,9 @@ export function CurIcon({ k, size = 16 }: { k: "star" | "parts" | "gp" | "ticket
       </>
     ) : k === "ticket" ? (
       <>
-        <path d="M3 7h18v3a2 2 0 000 4v3H3v-3a2 2 0 000-4z" fill="#ffc94a" stroke={ink} strokeWidth={1.4} strokeLinejoin="round" />
-        <path d="M14 7v10" stroke={ink} strokeWidth={1.2} strokeDasharray="1.6 1.6" />
-        <path d="M8.5 10l.9 1.8 2 .3-1.4 1.4.3 2-1.8-1-1.8 1 .3-2-1.4-1.4 2-.3z" fill="#ff7fb8" />
+        <path d="M2 5.5h20v4a2.5 2.5 0 000 5v4H2v-4a2.5 2.5 0 000-5z" fill="#ffc94a" stroke={ink} strokeWidth={1.4} strokeLinejoin="round" />
+        <path d="M15 5.5v13" stroke={ink} strokeWidth={1.2} strokeDasharray="1.8 1.6" />
+        <path d="M8.5 8.2l1.1 2.2 2.4.35-1.75 1.7.42 2.4-2.17-1.15-2.17 1.15.42-2.4L5 10.75l2.4-.35z" fill="#ff7fb8" stroke={ink} strokeWidth={0.8} strokeLinejoin="round" />
       </>
     ) : (
       <>
