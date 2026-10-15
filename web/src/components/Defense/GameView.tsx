@@ -1168,19 +1168,19 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry, 
           </div>
         </section>
 
-        {b.patch === "pure" && b.pure <= 0 && (
-          <p
-            className="mt-auto mb-1.5 text-center text-[12px] leading-tight font-bold text-[#ff4f6a] drop-shadow-[1px_1px_0_#000]"
-            title="보관함은 비율에 안 세요 — 다른 세력은 보관함으로 옮기면 비율이 올라가요"
-          >
-            순혈 프로토콜이 꺼졌어요
-            <span className="block text-[11px] font-normal text-[#ff8a9b]">
-              {b.mono ? `${FACTION_NAME[b.mono]} ${Math.round(b.pureR * 100)}%` : "필드에 유닛 없음"} · 한 세력{" "}
-              {Math.round(TUNE.pureFrom * 100)}% 이상이면 켜져요
-            </span>
-          </p>
-        )}
-        <div className={`${b.patch === "pure" && b.pure <= 0 ? "" : "mt-auto"} grid grid-cols-3 gap-1.5`}>
+        {/* 순혈 꺼짐 알림은 버튼 줄 위에 겹쳐 한 줄로 (자리를 차지하면 위 소환 칸이 눌려 잘림) */}
+        <div className="relative mt-auto grid grid-cols-3 gap-1.5">
+          {b.patch === "pure" && b.pure <= 0 && (
+            <p
+              className="absolute right-0 bottom-full left-0 mb-0.5 truncate text-center text-[11px] leading-[14px] font-bold text-[#ff4f6a] drop-shadow-[1px_1px_0_#000]"
+              title={`순혈 프로토콜이 꺼졌어요 — 필드에서 한 세력 ${Math.round(TUNE.pureFrom * 100)}% 이상이면 켜져요 (보관함은 비율에 안 세요 — 다른 세력은 보관함으로 옮기면 비율이 올라가요)`}
+            >
+              순혈 꺼짐{" "}
+              <span className="font-normal text-[#ff8a9b]">
+                · {b.mono ? `${FACTION_NAME[b.mono]} ${Math.round(b.pureR * 100)}%` : "필드 비었음"} / {Math.round(TUNE.pureFrom * 100)}% 필요
+              </span>
+            </p>
+          )}
           <Btn
             tone={recipesReady ? "gold" : "ghost"}
             onClick={() => setModal("recipe")}

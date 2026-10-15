@@ -513,10 +513,12 @@ export function createDefenseMeta(db: Database, points: Points, now: () => numbe
     },
 
     /** 일괄 강화 — id 가 있으면 그 유닛만 최대한, 없으면 모든 유닛을 고르게 (planUpAll) */
-    unitUpAll(uid: string, id?: string) {
+    /** id: 그 유닛만 최대한 · faction: 그 세력(히든 포함 탭)만 고르게 · 둘 다 없으면 전부 고르게 */
+    unitUpAll(uid: string, id?: string, faction?: string) {
       return edit(uid, async (p) => {
         if (id && !unitIds.has(id)) throw bad("없는 유닛이에요.");
-        const pool = id ? [UNIT[id]] : UNITS;
+        const pool = id ? [UNIT[id]] : faction ? UNITS.filter((u) => u.faction === faction) : UNITS;
+        need(pool.length > 0, "없는 세력이에요.");
         const plan = planUpAll(pool, p.lv, p.cards, p.pieces);
         need(plan.n > 0, "지금 올릴 수 있는 유닛이 없어요.");
         for (const [k, n] of Object.entries(plan.ups)) {
@@ -540,6 +542,25 @@ export function createDefenseMeta(db: Database, points: Points, now: () => numbe
         if (lv - 1 > 0) p.lv[id] = lv - 1;
         else delete p.lv[id];
         return wire(uid, p);
+      });
+    },
+
+    /** 일괄 내리기 — 모든 유닛을 0레벨로, 쓴 카드 · 조각을 전부 돌려줌 */
+    unitDownAll(uid: string) {
+      return edit(uid, async (p) => {
+        let n = 0;
+        for (const [id, lv] of Object.entries(p.lv)) {
+          if (!unitIds.has(id) || !(lv > 0)) continue;
+          for (let i = 0; i < lv; i++) {
+            const c = lvCost(UNIT[id].grade, i);
+            p.cards[id] = (p.cards[id] ?? 0) + c.cards;
+            p.pieces += c.pieces;
+          }
+          n += lv;
+          delete p.lv[id];
+        }
+        need(n > 0, "내릴 유닛이 없어요.");
+        return { ...(await wire(uid, p)), downs: n };
       });
     },
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { ITEM_ART, RELIC_ART } from "@/lib/defense/assets";
 import { phaseText } from "@/lib/defense/enemies";
 import {
@@ -523,6 +523,27 @@ function UnitsTab({ p, act, busy }: TabProps) {
   const collectable = UNITS.filter((x) => collectReward(x.grade));
   const all = planUpAll(UNITS, p.lv, p.cards, p.pieces);
   const one = planUpAll([u], p.lv, p.cards, p.pieces);
+  const tabAll = planUpAll(list, p.lv, p.cards, p.pieces);
+  // 일괄 내리기: 돌려받을 합계 (두 번 눌러야 — 실수 방지)
+  const refund = UNITS.reduce(
+    (a, x) => {
+      const l = p.lv[x.id] ?? 0;
+      for (let i = 0; i < l; i++) {
+        const c = lvCost(x.grade, i);
+        a.cards += c.cards;
+        a.pieces += c.pieces;
+      }
+      a.n += l;
+      return a;
+    },
+    { n: 0, cards: 0, pieces: 0 }
+  );
+  const [downArm, setDownArm] = useState(false);
+  useEffect(() => {
+    if (!downArm) return;
+    const t = setTimeout(() => setDownArm(false), 3000);
+    return () => clearTimeout(t);
+  }, [downArm]);
   return (
     <div className="flex h-full gap-3">
       <div className="flex min-w-0 flex-1 flex-col">
@@ -534,14 +555,38 @@ function UnitsTab({ p, act, busy }: TabProps) {
             </Btn>
           ))}
           <Btn
+            tone={fac === "hidden" ? "cyan" : fac}
+            disabled={busy || !tabAll.n}
+            silent
+            className="ml-auto h-8 px-3 text-[12px] font-bold"
+            title={tabAll.n ? `${FACTION_NAME[fac]} 유닛만 낮은 레벨부터 고르게 ${tabAll.n}번 강화 — 조각 ${fmtNum(tabAll.pieces)} 사용` : `지금 올릴 수 있는 ${FACTION_NAME[fac]} 유닛이 없어요`}
+            onClick={() => void act(() => meta.unitUpAll(undefined, fac), "upgrade")}
+          >
+            {FACTION_NAME[fac]}만{tabAll.n ? ` ×${tabAll.n}` : ""}
+          </Btn>
+          <Btn
             tone="main"
             disabled={busy || !all.n}
             silent
-            className="ml-auto h-8 px-3 text-[12px] font-bold"
+            className="h-8 px-3 text-[12px] font-bold"
             title={all.n ? `모든 세력 유닛을 낮은 레벨부터 고르게 ${all.n}번 강화 — 조각 ${fmtNum(all.pieces)} 사용 (「−」로 하나씩 되돌릴 수 있어요)` : "지금 올릴 수 있는 유닛이 없어요"}
             onClick={() => void act(() => meta.unitUpAll(), "upgrade")}
           >
             일괄 강화{all.n ? ` ×${all.n}` : ""}
+          </Btn>
+          <Btn
+            tone={downArm ? "danger" : "ghost"}
+            disabled={busy || !refund.n}
+            silent
+            className={`h-8 px-3 text-[12px] ${downArm ? "dfn-pulse" : ""}`}
+            title={refund.n ? `모든 유닛을 0레벨로 — 카드 ${fmtNum(refund.cards)} · 조각 ${fmtNum(refund.pieces)} 전부 돌려받아요` : "올린 유닛이 없어요"}
+            onClick={() => {
+              if (!downArm) return setDownArm(true);
+              setDownArm(false);
+              void act(() => meta.unitDownAll(), "sell");
+            }}
+          >
+            {downArm ? `한 번 더 — 조각 +${fmtNum(refund.pieces)}` : "일괄 내리기"}
           </Btn>
         </div>
         <p className="mb-1.5 text-[12px] text-[var(--mute)]">

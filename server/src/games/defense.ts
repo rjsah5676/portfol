@@ -370,8 +370,13 @@ export function registerDefense({ gateway, db, points }: Deps) {
   const id = z.object({ id: z.string().max(40) });
   gateway.rpc("defense.profile", (ctx) => (member(ctx), meta.profile(ctx.uid)));
   gateway.rpc("defense.unit.up", (ctx, raw) => (member(ctx), meta.unitUp(ctx.uid, id.parse(raw).id)));
-  gateway.rpc("defense.unit.upAll", (ctx, raw) => (member(ctx), meta.unitUpAll(ctx.uid, z.object({ id: z.string().max(40).optional() }).parse(raw ?? {}).id)));
+  gateway.rpc("defense.unit.upAll", (ctx, raw) => {
+    member(ctx);
+    const q = z.object({ id: z.string().max(40).optional(), faction: z.enum(["knight", "mech", "arcane", "hidden"]).optional() }).parse(raw ?? {});
+    return meta.unitUpAll(ctx.uid, q.id, q.faction);
+  });
   gateway.rpc("defense.unit.down", (ctx, raw) => (member(ctx), meta.unitDown(ctx.uid, id.parse(raw).id)));
+  gateway.rpc("defense.unit.downAll", (ctx) => (member(ctx), meta.unitDownAll(ctx.uid)));
   gateway.rpc("defense.res.buy", (ctx, raw) => (member(ctx), meta.resBuy(ctx.uid, id.parse(raw).id)));
   const lvArg = z.object({ id: z.string().max(40), dir: z.union([z.literal(1), z.literal(-1)]) });
   gateway.rpc("defense.res.level", (ctx, raw) => (member(ctx), ((a) => meta.resLevel(ctx.uid, a.id, a.dir))(lvArg.parse(raw))));
