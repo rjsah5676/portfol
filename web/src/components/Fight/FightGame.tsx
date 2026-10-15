@@ -693,6 +693,7 @@ export default function FightGame() {
           else if (e.k === "crush") sfxIvan("crush");
           else if (e.k === "encore") sfxForte("encore");
           else if (e.k === "catch") sfxForte("catch");
+          else if (e.k === "timeStop") sfxStatus("pause");
           else if (e.k === "super") {
             sfxSuper();
             const cut = { ch: s.p[e.p].ch, right: e.p === 1, key: s.f, skin: skinNow[e.p] };

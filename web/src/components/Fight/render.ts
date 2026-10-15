@@ -585,6 +585,12 @@ export class FightRenderer {
             });
           }
         }
+      } else if (e.k === "timeStop") {
+        // 포르테 되감기 낙하에 맞아 시간 정지: 머리 위 글자 + 시계 (멈춰 있는 동안은 drawFighter 가 시계를 겹침)
+        this.parts.push({ x, y: y - 6, vx: 0, vy: -0.35, life: 36, max: 36, color: "#FFE08A", size: 1.25, kind: "text", text: "TIME STOP" });
+        this.parts.push({ x, y: y + 34, vx: 0, vy: 0, life: 14, max: 14, color: "#FFF3C4", size: 30, kind: "ring" });
+        this.flash = Math.max(this.flash, 2);
+        this.flashColor = "#FFE9B0";
       } else if (e.k === "catch") {
         // 돌아온 태엽 팽이를 받음
         this.parts.push({ x, y, vx: 0, vy: 0, life: 10, max: 10, color: "#FFE08A", size: 12, kind: "ring" });
@@ -1058,6 +1064,19 @@ export class FightRenderer {
             x: x + f.face * 30, y: y - 40 + (Math.random() - 0.5) * 30, vx: f.face * (2 + Math.random() * 2), vy: (Math.random() - 0.5) * 0.6,
             life: 10, max: 10, color: k % 2 ? "#FFD0C0" : "#FF4D4D", size: 1.4, kind: "streak",
           });
+      }
+    }
+    // 시간 정지 (포르테 되감기 낙하에 맞음): 몸 위로 반투명 시계가 천천히 돌고 몸은 잿빛으로
+    if (f.tsT > 0) {
+      const im = fxImg(`forte-clock-${1 + (Math.floor(s.f / 6) % 2)}`);
+      if (im) {
+        const w = (im.width / 1.72) * 0.9,
+          h = (im.height / 1.72) * 0.9;
+        g.save();
+        g.globalCompositeOperation = "lighter";
+        g.globalAlpha = 0.45 + 0.25 * Math.min(1, f.tsT / 10);
+        g.drawImage(im, x - w / 2, y - 34 - h / 2, w, h);
+        g.restore();
       }
     }
     // 포르테 되감기 낙하: 내리찍는 동안 위로 남는 분홍 · 금빛 줄 (되감겨 돌아갈 길)

@@ -303,6 +303,8 @@ export interface Fighter {
   /** 포르테 공중 「되감기 낙하」를 시작한 자리 (내리찍은 뒤 여기로 되돌아옴) */
   rwX: number;
   rwH: number;
+  /** 시간 정지 남은 프레임 (포르테 되감기 낙하에 맞음): 그 자리에 멈춰 안 떨어지고 안 밀려남 */
+  tsT: number;
   /** 앙코르 기록: 최근 내가 맞힌 타격 [프레임, 피해] 쌍 (오래된 건 지움) */
   enc: number[];
   /** 앙코르 진행 프레임 (0 = 아님) · 다시 넣을 타격 [몇 프레임째, 피해] 쌍 · 붙잡아 둔 상대 자리 */
@@ -371,7 +373,9 @@ export type EvKind =
   /** 포르테: 태엽 되감기 (p = 되감긴 쪽) · 돌아온 팽이 받음 · 앙코르 시작 */
   | "rewind"
   | "catch"
-  | "encore";
+  | "encore"
+  /** 시간 정지 (포르테 되감기 낙하) — v = 프레임 */
+  | "timeStop";
 export interface Ev {
   k: EvKind;
   /** 관련 플레이어 (hit/block은 때린 쪽) */
@@ -542,6 +546,7 @@ function newFighter(ch: number, side: 0 | 1, map: MapDef): Fighter {
     hist: new Array(HIST).fill(0),
     rwX: x,
     rwH: h,
+    tsT: 0,
     enc: [],
     encT: 0,
     encQ: [],
@@ -603,7 +608,7 @@ const cloneF = (f: Fighter): Fighter => ({ ...f, hist: f.hist.slice(), enc: f.en
  * 이 빌드의 게임 데이터 지문 (캐릭터 성능·맵) — 온라인에서 서로 다른 빌드끼리 붙었는지 확인.
  * 계산 방식(sim.ts)만 바꿨을 땐 SIM_REV를 올릴 것.
  */
-const SIM_REV = 27;
+const SIM_REV = 28;
 export const BUILD_ID = (() => {
   const str = SIM_REV + JSON.stringify(CHARS.map((c) => [c.hp, c.walk, c.jumpVx, c.dash, c.cd, c.glide, c.hurt, c.width, c.moves])) + JSON.stringify(MAPS.map((m) => [m.plats, m.spawn]));
   let h = 2166136261;
@@ -638,6 +643,7 @@ export function hash(s: State): number {
     mix(f.stun);
     mix(f.combo);
     mix(f.encT);
+    mix(f.tsT);
     mix(f.enc.length);
     mix(f.jumps);
     mix(f.dashT);
@@ -990,7 +996,7 @@ function control(s: State, i: number) {
   f.t++;
   if (f.gcT > 0) f.gcT--;
   if (f.mnerf > 0) f.mnerf--;
-  if (f.st !== "hit") ((f.mark = 0), (f.frz = 0));
+  if (f.st !== "hit") ((f.mark = 0), (f.frz = 0), (f.tsT = 0));
   if (f.st !== "hit" && f.st !== "down") f.bsodd = 0;
   else if (f.frz > 0) {
     // 공중에서 맞으면 멈춘 채로 떨어지고, 땅에 닿은 뒤부터 1.5초가 줄어듦
@@ -1552,6 +1558,13 @@ function physics(s: State, i: number) {
   // 다음에 띄울 때(잡기 등) 처음부터 무거운 중력으로 낮게 뜨던 것
   if (!f.float) f.floatT = 0;
   const hb = s.p[1 - i];
+  if (f.tsT > 0 && f.st === "hit") {
+    // 시간 정지: 그 자리에 멈춤 (중력 · 밀려남 없음)
+    f.tsT--;
+    f.vx = 0;
+    f.vh = 0;
+    return;
+  }
   if (hb.hug && f.st === "hit") {
     // 곰 포옹에 안김: 안은 쪽 바로 앞에 붙어서 같이 떨어짐
     f.x = hb.x + hb.face * 22 * SUB;
@@ -1985,7 +1998,7 @@ function applyHit(s: State, ai: number, m: MoveDef, srcX: number, mid: MoveId, p
     const immune = (d.cc > 0 && !cont) || d.imm > 0;
     // (이미 감전 중이면 새 상태 이상이 아니라 감전 연장 — 제나 L 뒤 천뢰강림 3연타가 매번 IMMUNE 뜨던 것)
     const shockOn = !!m.shock && d.shock > 0;
-    const hasStatus = !!(m.pull || m.pullUp || m.pause || m.swap || (m.trap && !popBonus) || (m.shock && !shockOn) || m.dizzy);
+    const hasStatus = !!(m.timeStop || m.pull || m.pullUp || m.pause || m.swap || (m.trap && !popBonus) || (m.shock && !shockOn) || m.dizzy);
     let gotStatus = false;
     if (hasStatus && immune) s.ev.push({ k: "immune", p: ai, x: d.x, h: d.h + 74 * SUB, v: 0 });
     // 긴 경직이 곧 상태 이상인 기술(카이 기절·건모 일시정지·혼란 등): 면역이면 보통 경직으로
@@ -2103,6 +2116,16 @@ function applyHit(s: State, ai: number, m: MoveDef, srcX: number, mid: MoveId, p
       d.kd = 0;
     }
     d.mark = 0; // 다른 기술에 맞으면 ⏸/💫 표시는 사라짐 (아래에서 다시 붙음)
+    if (m.timeStop && !kd && !immune) {
+      // 시간 정지: 그 자리에 멈춤 (경직 = 멈춘 시간 이상, 콤보 보정으로 줄지 않게)
+      gotStatus = true;
+      d.tsT = m.timeStop;
+      d.stun = Math.max(d.stun, m.timeStop);
+      d.vx = 0;
+      d.vh = 0;
+      d.float = 0;
+      s.ev.push({ k: "timeStop", p: ai, x: d.x, h: d.h + 70 * SUB, v: m.timeStop });
+    }
     if (m.pause && !kd && !immune) {
       gotStatus = true;
       // ⏸ 일시정지: 긴 경직 그대로 (콤보 보정으로 줄지 않게)
@@ -2460,24 +2483,12 @@ function rewindDive(s: State, i: number) {
   f.mv = "";
   f.t = 0;
   f.aerial = 0;
-  f.airUsed = 0;
-  f.airK = 0;
-  f.airS = 0;
+  // 공중 약 2번만큼 다시 채움 (공중 콤보에 끼워 이어 칠 수 있게, 끝없이는 안 되게)
+  f.airUsed = Math.max(0, f.airUsed - 2);
   s.ev.push({ k: "rewind", p: i, x: fx, h: fh, v: -1 });
   s.ev.push({ k: "rewind", p: i, x: f.x, h: f.h, v: 0 });
-  if (hit) {
-    // 끌어올리기: 내 높이 조금 아래까지 솟구치게 (천천히 떨어지는 상태), 가로로는 내 앞으로
-    const dh = Math.max(0, f.h - 24 * SUB - o.h);
-    // 약 12프레임 만에 내 앞 높이까지 올라오게 (꼭대기가 거기쯤) — 바로 공중 약으로 받아 침
-    o.vh = Math.max(isqrt(2 * FLOAT_G * 60 * SUB), Math.trunc(dh / 12) + FLOAT_G * 6);
-    o.vx = 0;
-    o.float = 1;
-    o.stun = Math.max(o.stun, LAUNCH_STUN - 6);
-    o.pullX = f.x + f.face * 34 * SUB;
-    o.pullT = 10;
-    f.juggle = JUGGLE_HANG;
-    s.ev.push({ k: "rewind", p: 1 - i, x: o.x, h: o.h, v: -2 });
-  }
+  // (맞힌 상대는 시간 정지로 그 자리에 멈춰 있음 — applyHit timeStop)
+  void hit;
 }
 
 /** 포르테 「앙코르」: 맞힌 타격 기록 · 필살기가 맞으면 기록한 타격을 같은 박자로 다시 넣음 */

@@ -241,7 +241,7 @@ export function aiForRating(r: number, charId?: string): AILevel {
  * AI 지문: 랭크전 봇전은 서버가 같은 경기를 다시 돌려 확인하니, 브라우저와 서버의 AI가 똑같아야 함.
  * 단계 값·보정·콤보 길은 자동으로 들어가고, next() 같은 판단 코드를 바꿨으면 AI_REV 를 올릴 것.
  */
-const AI_REV = 12;
+const AI_REV = 13;
 export const AI_ID = (() => {
   const str = AI_REV + JSON.stringify([AI_LEVELS, RANK_TIERS, AI_RATING, ADJ_AT, CHAR_ADJ, ROUTES, ROUTE_CAP, HUMAN]);
   let h = 0x811c9dc5;
@@ -801,6 +801,8 @@ export class FightAI {
         // 끌어당김(소영)·일시정지(건모) 뒤: 잡기로 띄우거나 약 콤보
         // 건모: 공중 콤보 중간에 Alt+F4 → 콤보 초기화, 착지해서 한 콤보 더
         if ((f.mv === "J" || f.mv === "K") && c.moves.X.bsod && !o.bsodd && f.meter >= 100 && this.r() < 0.6 && this.ultHits(s, me, 0)) press(IN.X);
+        // 포르테: 공중 약을 두 번 넣었으면 되감기 낙하로 캔슬 → 시간 정지된 상대를 이어 침
+        else if (c.moves.S.air?.rwDive && air && (f.mv === "J" || f.mv === "K") && f.cd === 0 && f.airUsed >= 2 && this.r() < 0.4 + L.combo * 0.5) press(IN.C);
         // 포르테: 콤보를 몇 대 넣었으면 앙코르로 캔슬 (기록한 타격이 많을수록 셈)
         else if (c.moves.X.encore && f.meter >= 100 && f.enc.length >= 8 && (f.mv === "L" || f.mv === "H") && this.r() < 0.4 + L.combo * 0.5 && this.ultHits(s, me, 0)) press(IN.X);
         // 건모: ⏸ 일시정지 → 필살기 Alt+F4 로 캔슬 (느린 시작도 확정)
