@@ -15,11 +15,13 @@ function SketchPage() {
       <div className="mx-auto max-w-5xl px-3 pt-6 sm:px-6">
         <GameHeader
           icon="🎨"
-          title="스케치 퀴즈"
-          en="Sketch Quiz"
+          title="DOODLE PARTY"
+          en="Drawing Party Game"
           accent="#FF6B6B"
-          desc="한 명이 그리고 나머지가 맞히는 실시간 그림 퀴즈"
+          desc="그림 맞히기 · 가짜 화가 · 그림 속 거짓말 · 그림 릴레이, 최대 8명 그림 파티게임"
+          tags={["최대 8명", "초대 링크", "캐치마인드류", "온라인 그림 게임"]}
           guide={SKETCH_GUIDE}
+          ach="sketch"
           scroll={!inRoom}
         />
       </div>

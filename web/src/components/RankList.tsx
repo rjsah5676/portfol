@@ -32,7 +32,15 @@ export default function RankList({
   /** 위쪽 몇 등은 빼고 (시상대로 따로 보여 줄 때). 순위 번호는 그대로 */
   skip?: number;
 }) {
-  if (!rows.length) return <p className="py-3 font-mono text-xs text-white/30">{empty}</p>;
+  if (!rows.length)
+    return (
+      <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-white/10 px-4 py-8 text-center">
+        <span className="text-3xl opacity-60" aria-hidden>
+          🏆
+        </span>
+        <p className="font-['Nanum_Gothic',sans-serif] text-sm leading-relaxed break-keep text-white/55">{empty}</p>
+      </div>
+    );
   if (rows.length <= skip) return null;
   return (
     <ol className="flex flex-col">

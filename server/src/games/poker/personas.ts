@@ -73,7 +73,7 @@ export function randomPersona(rand: () => number = Math.random): Persona {
   };
 }
 
-/** 단계별 실력: 동네판 봇은 읽기가 거칠고 실수가 있고, VIP 봇은 상대 성향까지 반영 */
+/** 단계별 실력 기준 (승률 계산 횟수 · 재미 보정은 여기서도 가져다 씀 — 실제 봇은 아래 randomSkill 의 세 부류로) */
 export interface Skill {
   /** 승률 계산 횟수 (많을수록 정확) */
   sims: number;
@@ -85,6 +85,8 @@ export interface Skill {
   adapt: number;
   /** 재미 보정 (0 = 정석대로, 1 = 동네판 아재): 넓게 들어오고 잘 안 죽고 자주 지름 — 판이 자주 쇼다운까지 가게 */
   fun: number;
+  /** 실력 부류 (못 치는 봇 · 보통 · 센 봇) */
+  level?: SkillLevel;
 }
 export const SKILL: Record<TierId, Skill> = {
   // 일반
@@ -101,11 +103,45 @@ export const SKILL: Record<TierId, Skill> = {
   9: { sims: 550, noise: 0.006, read: 1, adapt: 1, fun: 0.25 },
 };
 
-/** 같은 단계 안에서도 봇마다 실력이 조금씩 다름 */
+/**
+ * 봇 실력은 세 부류로 나눠 뽑음 — 한 테이블에 잘 치는 봇 · 보통 봇 · 못 치는 봇이 섞여 있어야 재미있음.
+ * 낮은 단계일수록 못 치는 봇(호구)이 많고, 높은 단계일수록 센 봇이 많음. 부류 안에서도 봇마다 조금씩 다름.
+ */
+export type SkillLevel = "weak" | "mid" | "strong";
+const LEVEL: Record<SkillLevel, Omit<Skill, "fun" | "level"> & { fun: number }> = {
+  // 못 치는 봇: 승률 계산이 거칠고 상대 행동을 잘 안 읽음, 넓게 들어와서 잘 안 죽음
+  weak: { sims: 160, noise: 0.075, read: 0.35, adapt: 0, fun: 1 },
+  mid: { sims: 300, noise: 0.03, read: 0.8, adapt: 0.5, fun: 0.5 },
+  // 센 봇: 계산이 정확하고 행동 · 성향을 다 읽음
+  strong: { sims: 500, noise: 0.008, read: 1, adapt: 1, fun: 0.15 },
+};
+/** 단계별 부류 비율 [못 치는 봇, 보통, 센 봇] */
+export const LEVEL_MIX: Record<TierId, [number, number, number]> = {
+  1: [0.55, 0.35, 0.1],
+  2: [0.42, 0.43, 0.15],
+  3: [0.3, 0.48, 0.22],
+  4: [0.3, 0.45, 0.25],
+  5: [0.25, 0.45, 0.3],
+  6: [0.2, 0.45, 0.35],
+  7: [0.15, 0.4, 0.45],
+  8: [0.1, 0.4, 0.5],
+  9: [0.08, 0.32, 0.6],
+};
 export function randomSkill(tier: TierId, rand: () => number = Math.random): Skill {
-  const s = SKILL[tier];
-  const f = 0.7 + rand() * 0.6;
-  return { sims: s.sims, noise: clamp(s.noise * (2 - f), 0.005, 0.12), read: clamp(s.read * f, 0, 1), adapt: clamp(s.adapt * f, 0, 1), fun: clamp(s.fun + (rand() - 0.5) * 0.3, 0, 1) };
+  const [w, m] = LEVEL_MIX[tier];
+  const x = rand();
+  const level: SkillLevel = x < w ? "weak" : x < w + m ? "mid" : "strong";
+  const s = LEVEL[level];
+  const f = 0.85 + rand() * 0.3;
+  return {
+    sims: level === "strong" ? Math.max(s.sims, SKILL[tier].sims) : s.sims,
+    noise: clamp(s.noise * (2 - f), 0.005, 0.12),
+    read: clamp(s.read * f, 0, 1),
+    adapt: clamp(s.adapt * f, 0, 1),
+    // 판이 클수록(단계가 높을수록) 재미 보정은 줄어듦 — 부류 기준과 단계 기준의 가운데
+    fun: clamp((s.fun + SKILL[tier].fun) / 2 + (rand() - 0.5) * 0.2, 0, 1),
+    level,
+  };
 }
 
 /** 봇 한 명의 테이블 안 상태 (자리에 앉아 있는 동안 유지) */

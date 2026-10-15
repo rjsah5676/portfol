@@ -9,7 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import { RANKS, rankOf, suitOf, type Card } from "@/lib/poker/cards";
-import { asset, chipColor } from "@/lib/poker/assets";
+import { asset, chipColor, seatLive } from "@/lib/poker/assets";
 import {
   CHARS,
   FACES,
@@ -41,6 +41,18 @@ const SUIT_PATH = [
   // ♣
   "M12 2.2a4.4 4.4 0 1 1 0 8.8 4.4 4.4 0 0 1 0-8.8z M6.3 9.6a4.4 4.4 0 1 1 0 8.8 4.4 4.4 0 0 1 0-8.8z M17.7 9.6a4.4 4.4 0 1 1 0 8.8 4.4 4.4 0 0 1 0-8.8z M10.7 14.6h2.6c.1 2.9.8 5.1 2.1 6.5V22H8.6v-.9c1.3-1.4 2-3.6 2.1-6.5z",
 ];
+/** 7포커 손패 SVG 카드 전용 무늬 */
+/** 무늬 (0~100 상자). 스페이드는 뾰족한 머리 + 매끈한 몸통, 클로버는 또렷한 동그라미 셋 — 작게 봐도 안 헷갈리게 */
+const FACE_PATH = [
+  // ♠
+  "M50 3C40 22 8 38 8 60c0 14 10 23 22 23 7 0 13-3 17-9-1 12-5 20-13 24h32c-8-4-12-12-13-24 4 6 10 9 17 9 12 0 22-9 22-23C92 38 60 22 50 3z",
+  // ♥
+  "M50 93C21 71 5 55 5 34 5 18 17 7 31 7c9 0 15 8 19 17 4-9 10-17 19-17 14 0 26 11 26 27 0 21-16 37-45 59z",
+  // ◆
+  "M50 2 88 50 50 98 12 50z",
+  // ♣
+  "M50 6a19 19 0 1 1 0 38 19 19 0 0 1 0-38zM27 39a19 19 0 1 1 0 38 19 19 0 0 1 0-38zM73 39a19 19 0 1 1 0 38 19 19 0 0 1 0-38zM50 44a12 12 0 1 1 0 24 12 12 0 0 1 0-24zM46 60c0 15-4 26-12 35h32c-8-9-12-20-12-35z",
+];
 /** 무늬 하나 (글자 크기 = 한 변) */
 export function Suit({ s }: { s: number }) {
   return (
@@ -67,6 +79,8 @@ export function PlayingCard({
   deal,
   delay = 0,
   down,
+  covered,
+  svg = true,
   className = "",
   style,
 }: {
@@ -84,6 +98,10 @@ export function PlayingCard({
   delay?: number;
   /** 7포커: 내가 엎어 둔 카드 (남은 안 보임) 표시 */
   down?: boolean;
+  /** 새 SVG 앞면 (기본). false 면 예전 글자 앞면 */
+  svg?: boolean;
+  /** 다른 카드에 덮여 모서리만 보임 → 가운데 무늬 · 그림은 안 그림 (겹친 틈으로 조각이 삐져나오지 않게) */
+  covered?: boolean;
   className?: string;
   style?: CSSProperties;
 }) {
@@ -118,37 +136,181 @@ export function PlayingCard({
       className={`pk-card ${deal ? "pk-deal" : ""} ${className}`}
       style={base}
     >
-      <span
-        className="pk-card-rank"
-        style={
-          r === "10"
-            ? {
-                letterSpacing: "0.02em",
-                fontSize: "calc(var(--w) * 0.46)",
-                left: "calc(var(--w) * 0.05)",
-                top: "calc(var(--w) * 0.08)",
-              }
-            : undefined
-        }
-      >
-        {r}
-      </span>
-      <span className="pk-card-pip">
-        <Suit s={s} />
-      </span>
-      {court ? (
-        <img src={asset.court(s, rank)} alt="" draggable={false} className="pk-card-court" />
-      ) : rank === 12 ? (
-        <span className="pk-card-ace">
-          <Suit s={s} />
-        </span>
+      {svg ? (
+        <CardFace rank={rank} r={r} s={s} court={court} covered={covered} />
       ) : (
-        <span className="pk-card-suit">
-          <Suit s={s} />
-        </span>
+        <>
+          <span
+            className="pk-card-rank"
+            style={
+              r === "10"
+                ? {
+                    letterSpacing: "0.02em",
+                    fontSize: "calc(var(--w) * 0.46)",
+                    left: "calc(var(--w) * 0.05)",
+                    top: "calc(var(--w) * 0.08)",
+                  }
+                : undefined
+            }
+          >
+            {r}
+          </span>
+          <span className="pk-card-pip">
+            <Suit s={s} />
+          </span>
+          {court ? (
+            <img src={asset.court(s, rank)} alt="" draggable={false} className="pk-card-court" />
+          ) : rank === 12 ? (
+            <span className="pk-card-ace">
+              <Suit s={s} />
+            </span>
+          ) : (
+            <span className="pk-card-suit">
+              <Suit s={s} />
+            </span>
+          )}
+        </>
       )}
       {down && <span className="pk-card-down">엎음</span>}
     </span>
+  );
+}
+
+/*
+ * 카드 앞면 (100 × 140 상자에 SVG 로): 숫자 크기 · 자리 · 무늬 배치가 52장 모두 같은 규칙.
+ *  - 모서리: 왼쪽 위 숫자(얇고 또렷한 좁은 글꼴, 모든 숫자 같은 크기 · 같은 가운데 줄) + 그 아래 작은 무늬, 오른쪽 아래에 뒤집어 하나 더
+ *  - 2~10: 정식 무늬 배치 (아래 절반은 뒤집힘) · A: 가운데 큰 무늬 하나 · J Q K: 가운데 틀 안에 캐릭터 그림, 숫자는 양쪽 모서리
+ */
+// 실제 카드 비율: 모서리 숫자는 작게 가장자리에 붙고, 무늬는 크게 · 넓게 (가로 30% / 70% 두 줄, 세로 21% ~ 79%)
+const IDX_X = 15;
+// 한게임식: 왼쪽 세로줄은 숫자 · 무늬, 오른쪽 아래 숫자는 없음 → 무늬는 오른쪽 넓은 칸(가로 33~95 · 세로 13~127)에 크게
+const COL_L = 47;
+const COL_R = 81;
+const COL_C = 64;
+const PIP = 24;
+const Y1 = 17;
+const Y4 = 123;
+const yAt = (k: number) => Y1 + ((Y4 - Y1) * k) / 6; // 7줄 눈금 (0 ~ 6)
+/** 숫자별 무늬 자리 [x, 눈금] — 눈금 3 위로는 바로, 아래로는 뒤집어 그림 */
+const PIPS: Record<number, [number, number][]> = {
+  2: [[COL_C, 0], [COL_C, 6]],
+  3: [[COL_C, 0], [COL_C, 3], [COL_C, 6]],
+  4: [[COL_L, 0], [COL_R, 0], [COL_L, 6], [COL_R, 6]],
+  5: [[COL_L, 0], [COL_R, 0], [COL_C, 3], [COL_L, 6], [COL_R, 6]],
+  6: [[COL_L, 0], [COL_R, 0], [COL_L, 3], [COL_R, 3], [COL_L, 6], [COL_R, 6]],
+  7: [[COL_L, 0], [COL_R, 0], [COL_C, 1.5], [COL_L, 3], [COL_R, 3], [COL_L, 6], [COL_R, 6]],
+  8: [[COL_L, 0], [COL_R, 0], [COL_C, 1.5], [COL_L, 3], [COL_R, 3], [COL_C, 4.5], [COL_L, 6], [COL_R, 6]],
+  9: [[COL_L, 0], [COL_R, 0], [COL_L, 2], [COL_R, 2], [COL_C, 3], [COL_L, 4], [COL_R, 4], [COL_L, 6], [COL_R, 6]],
+  10: [[COL_L, 0], [COL_R, 0], [COL_C, 1], [COL_L, 2], [COL_R, 2], [COL_L, 4], [COL_R, 4], [COL_C, 5], [COL_L, 6], [COL_R, 6]],
+};
+
+/** 무늬별 높이 맞춤 (그림 상자 안 실제 높이가 달라서 — 스페이드 95 · 하트 86 · 다이아 96 · 클로버 89) → 같은 size 면 네 무늬 키가 같음 */
+const SUIT_NORM = [96 / 95, 96 / 86, 1, 96 / 89];
+/** 무늬별 폭 맞춤: 네 무늬 모두 폭/키 약 0.91 (스페이드 · 클로버 비율) — 하트는 좁히고 다이아는 넓힘 */
+const SUIT_SX = [1, 0.87, 1.15, 1];
+
+function Pip({ s, x, y, size, flip, sx = 1 }: { s: number; x: number; y: number; size: number; flip?: boolean; sx?: number }) {
+  const k = (size / 100) * SUIT_NORM[s];
+  return (
+    <path
+      d={FACE_PATH[s]}
+      transform={`translate(${x} ${y})${flip ? " rotate(180)" : ""} scale(${k * sx * SUIT_SX[s]} ${k}) translate(-50 -50)`}
+    />
+  );
+}
+
+/** 모서리 글자의 세로 자리 (모든 숫자 같은 높이: 글자 윗선 BASE-CAP ~ 바닥선 BASE) */
+const BASE = 37;
+const CAP = 28;
+const STROKE = 4;
+
+function Index({ r, s }: { r: string; s: number }) {
+  const x = IDX_X;
+  const top = BASE - CAP;
+  const pip = 24;
+  return (
+    <>
+      {r === "4" ? (
+        // 정석 4: 닫힌 삼각 머리 + 곧은 기둥 + 가로대
+        <path
+          d={`M${x + 2.4} ${BASE} V${top + STROKE / 2} L${x - 6.4} ${BASE - 10} H${x + 7.8}`}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={STROKE}
+          strokeLinejoin="round"
+        />
+      ) : r === "Q" ? (
+        // 정석 Q: 둥근 O + 오른쪽 아래로 빠지는 꼬리
+        <g fill="none" stroke="currentColor" strokeWidth={STROKE}>
+          <ellipse cx={x} cy={top + CAP / 2} rx={6.2} ry={CAP / 2 - STROKE / 2} />
+          <path d={`M${x + 1} ${BASE - 8} L${x + 5.8} ${BASE - 1.8}`} strokeLinecap="round" />
+        </g>
+      ) : r === "A" ? (
+        // A: 가운데 가로대를 조금 높게 (글꼴 A 는 가로대가 낮음)
+        (() => {
+          const hw = 6.4;
+          const yb = BASE - 10.5;
+          const bw = (hw * (yb - top)) / CAP - STROKE * 0.35;
+          return (
+            <g fill="none" stroke="currentColor" strokeWidth={STROKE} strokeLinejoin="round">
+              <path d={`M${x - hw} ${BASE - 0.2} L${x} ${top + STROKE / 2} L${x + hw} ${BASE - 0.2}`} />
+              <path d={`M${x - bw} ${yb} H${x + bw}`} />
+            </g>
+          );
+        })()
+      ) : r === "10" ? (
+        // 10: 글자를 눌러 담으면 다른 숫자와 모양이 달라 튀어 보여서, 1 과 0 을 원래 모양 그대로 바짝 붙여 씀
+        // 키는 다른 숫자와 똑같이, 폭만 아주 살짝(0.92) 좁혀 칸에 맞춤
+        <g className="pk-idx pk-idx-10" transform={`translate(${x} 0) scale(0.92 1) translate(${-x} 0)`}>
+          <text x={x - 7.2} y={BASE} textAnchor="middle">
+            1
+          </text>
+          <text x={x + 5.8} y={BASE} textAnchor="middle">
+            0
+          </text>
+        </g>
+      ) : (
+        <text x={x} y={BASE} className="pk-idx" textAnchor="middle">
+          {r}
+        </text>
+      )}
+      {/* 모서리 무늬는 가운데 무늬보다 크게 (겹쳐 놓았을 때 이것만 보이니까) */}
+      {/* 다이아는 높이만 크게, 폭은 가운데 무늬와 같게 (넓적해 보이지 않게) */}
+      <Pip s={s} x={x} y={54} size={pip} />
+    </>
+  );
+}
+
+function CardFace({ rank, r, s, court, covered }: { rank: number; r: string; s: number; court: boolean; covered?: boolean }) {
+  const n = rank + 2; // 2 ~ 14 (A)
+  return (
+    <svg viewBox="0 0 100 140" className="pk-face" fill="currentColor" aria-hidden>
+      <g className={covered ? "pk-face-in pk-face-in-off" : "pk-face-in"}>
+      {court ? (
+        <>
+          <clipPath id={`cc-${rank}-${s}`}>
+            <rect x={31} y={6} width={63} height={128} rx={4} />
+          </clipPath>
+          <image
+            href={asset.court(s, rank)}
+            x={31}
+            y={6}
+            width={63}
+            height={128}
+            preserveAspectRatio="xMidYMid slice"
+            clipPath={`url(#cc-${rank}-${s})`}
+          />
+          <rect x={31} y={6} width={63} height={128} rx={4} fill="none" stroke="currentColor" strokeOpacity={0.35} strokeWidth={0.9} />
+        </>
+      ) : n === 14 ? (
+        // A: 오른쪽 아래에 큰 무늬 하나 (한게임처럼)
+        <Pip s={s} x={62} y={96} size={s === 1 ? 50 : 56} />
+      ) : (
+        PIPS[n].map(([x, k], i) => <Pip key={i} s={s} x={x} y={yAt(k)} size={PIP} />)
+      )}
+      </g>
+      <Index r={r} s={s} />
+    </svg>
   );
 }
 
@@ -336,8 +498,8 @@ export function PotChips({ ratio, size = 40 }: { ratio: number; size?: number })
 // ───────────── 캐릭터 ─────────────
 
 /**
- * 테이블 뒤에 서 있는 캐릭터. 모든 포즈 그림을 겹쳐 두고 지금 포즈만 보여 줘서 바뀔 때 깜빡이지 않음.
- * 숨쉬기 · 포즈별 작은 움직임은 CSS (pk-pose-*). flip = 왼쪽 자리(오른쪽을 보게 뒤집음).
+ * 7포커 자리 캐릭터 (앉은 정면 상반신). 모든 포즈 그림을 겹쳐 두고 지금 포즈만 보여 줘서 바뀔 때 깜빡이지 않음.
+ * 숨쉬기 · 포즈별 작은 움직임은 CSS (pk-pose-*).
  */
 export function CharSprite({
   char,
@@ -345,14 +507,13 @@ export function CharSprite({
   flip,
   dim,
   w,
-  seat,
   className = "",
   style,
 }: {
   char: Look;
   pose: Pose;
-  /** 앉은 그림 (없으면 서 있는 그림) */
-  seat?: "front" | "side";
+  /** 앉은 정면 그림만 (옆모습 · 서 있는 그림은 정리함) — 예전 호출 호환용 */
+  seat?: "front";
   flip?: boolean;
   dim?: boolean;
   /** 폭(px). 높이는 4:3 → w*4/3 */
@@ -360,6 +521,17 @@ export function CharSprite({
   className?: string;
   style?: CSSProperties;
 }) {
+  // 앉은 대기 동작: 받아지면 한 장짜리 대기 그림 대신 (다른 포즈는 그대로 한 장)
+  const live = seatLive(char) ? asset.seatLive(char) : null;
+  const [liveOk, setLiveOk] = useState<string | null>(null);
+  // 자리마다 0~6초 늦게 틀기 시작 — 다 같이 같은 박자로 숨 쉬지 않게
+  const [liveGo, setLiveGo] = useState(false);
+  useEffect(() => {
+    if (!live) return;
+    const t = setTimeout(() => setLiveGo(true), Math.random() * 6000);
+    return () => clearTimeout(t);
+  }, [live]);
+  const liveOn = !!live && liveGo && liveOk === live && pose === "idle";
   return (
     <span
       className={`pk-sprite ${className}`}
@@ -376,29 +548,22 @@ export function CharSprite({
       {POSES.map((p) => (
         <img
           key={p}
-          src={seat ? asset.seat(char, seat, p) : asset.pose(char, p)}
+          src={asset.seat(char, "front", p)}
           alt=""
           draggable={false}
-          data-on={p === pose ? "1" : undefined}
+          data-on={p === pose && !(liveOn && p === "idle") ? "1" : undefined}
         />
       ))}
-    </span>
-  );
-}
-
-/** 내 캐릭터 전신 그림 (2:3, 포즈 8장을 겹쳐 두고 바뀔 때 서서히). 높이(px)로 크기를 줌 */
-export function HeroSprite({ char, pose, h, dim }: { char: Look; pose: Pose; h: number; dim?: boolean }) {
-  return (
-    <span
-      className="pk-sprite"
-      data-pose={pose}
-      data-dim={dim ? "1" : undefined}
-      style={{ width: Math.round((h * 2) / 3), height: Math.round(h) }}
-      aria-hidden
-    >
-      {POSES.map((p) => (
-        <img key={p} src={asset.hero(char, p)} alt="" draggable={false} data-on={p === pose ? "1" : undefined} />
-      ))}
+      {live && liveGo && (
+        <img
+          src={live}
+          alt=""
+          draggable={false}
+          className="pk-sprite-live"
+          data-on={liveOn ? "1" : undefined}
+          onLoad={() => setLiveOk(live)}
+        />
+      )}
     </span>
   );
 }
@@ -552,7 +717,7 @@ export function TimerRing({
     const len = side * 4;
     return (
       <svg
-        className="pointer-events-none absolute"
+        className="pk-timer-ring pointer-events-none absolute"
         style={{ left: -pad + 2, top: -pad + 2 }}
         width={box}
         height={box}
@@ -589,7 +754,7 @@ export function TimerRing({
   const c = 2 * Math.PI * r;
   return (
     <svg
-      className="pointer-events-none absolute -rotate-90"
+      className="pk-timer-ring pointer-events-none absolute -rotate-90"
       style={{ inset: -pad }}
       width={box}
       height={box}

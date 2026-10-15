@@ -4,8 +4,10 @@ import crimsoncadenza from "../../../web/src/data/rhythm/crimsoncadenza.json";
 import freedomdive from "../../../web/src/data/rhythm/freedomdive.json";
 import fullcombo from "../../../web/src/data/rhythm/fullcombo.json";
 import hwimori from "../../../web/src/data/rhythm/hwimori.json";
+import luckyseven from "../../../web/src/data/rhythm/luckyseven.json";
 import jilju from "../../../web/src/data/rhythm/jilju.json";
 import monarch from "../../../web/src/data/rhythm/monarch.json";
+import pixelfighting from "../../../web/src/data/rhythm/pixelfighting.json";
 import natsukasumi from "../../../web/src/data/rhythm/natsukasumi.json";
 import newdim from "../../../web/src/data/rhythm/newdim.json";
 import rinkaku from "../../../web/src/data/rhythm/rinkaku.json";
@@ -31,6 +33,8 @@ const SONGS: Record<string, SongData> = {
   freedomdive,
   fullcombo,
   hwimori,
+  luckyseven,
+  pixelfighting,
   jilju,
   monarch,
   natsukasumi,

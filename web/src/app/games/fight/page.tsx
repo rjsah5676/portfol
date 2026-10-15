@@ -32,8 +32,17 @@ const ratingRows = (rows: FightRatingRow[]) =>
     member: true,
     avatar: r.avatar,
     value: r.r.toLocaleString(),
-    // 등급 · 전적 (배치 중이면 ratingSub 가 "배치 n/10" 을 붙임)
-    sub: `${r.n >= 10 ? `${rankTierOf(r.r, r.n).label} · ` : ""}${ratingSub(r)}`,
+    // 등급(색, 한 줄) + 전적(배치 중이면 ratingSub 가 "배치 n/10" 을 붙임) — 한 줄에 다 넣으면 시상대 · 목록에서 등급이 잘려서 두 줄로
+    sub: (
+      <>
+        {r.n >= 10 && (
+          <span className="block truncate font-bold" style={{ color: rankTierOf(r.r, r.n).tier.color }}>
+            {rankTierOf(r.r, r.n).label}
+          </span>
+        )}
+        <span className="block truncate">{ratingSub(r)}</span>
+      </>
+    ),
     date: r.at,
   }));
 
@@ -49,10 +58,12 @@ export default function FightPage() {
       <div className="mx-auto max-w-5xl px-3 pt-6 pb-24 sm:px-6">
         <GameHeader
           icon="🥊"
-          title="픽셀 격투"
-          en="Pixel Fighter"
+          title="PIXEL FIGHT"
+          en="Fighting Game"
           accent="#FF8A3D"
-          desc="도트 캐릭터 6명의 1:1 플랫폼 대전 — AI, 한 키보드 2인, 온라인 · 랭크전"
+          desc="도트 캐릭터 7명의 1:1 플랫폼 대전"
+          tags={["AI 대전", "온라인 대전", "랭크전", "웹 격투게임"]}
+          ach="fight"
           guide={FIGHT_GUIDE}
           extra={(pill) => (
             <button
@@ -62,7 +73,7 @@ export default function FightPage() {
               className={`${pill} border-[#FF8A3D]/30 bg-[#FF8A3D]/[0.07] text-[#FFC79E] hover:border-[#FF8A3D]/60`}
             >
               <span aria-hidden>📊</span>
-              <span className="hidden @sm:inline">통계</span>
+              <span>통계</span>
             </button>
           )}
           rank={{

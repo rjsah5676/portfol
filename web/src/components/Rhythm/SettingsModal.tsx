@@ -24,7 +24,16 @@ import {
 import { audio, sfx } from "@/lib/rhythm/sfx";
 import HoldButton from "./HoldButton";
 import SyncCalibrate from "./SyncCalibrate";
-import { BG_MODES, COVERS_OPT, FIELD_POS, type BgMode, type Cover, type FieldPos } from "./Stage";
+import {
+  BG_MODES,
+  COVERS_OPT,
+  FIELD_POS,
+  FPS_MODES,
+  type BgMode,
+  type Cover,
+  type FieldPos,
+  type FpsMode,
+} from "./Stage";
 
 export type LaneMod = "none" | "mirror" | "random";
 export const LANE_MODS: { key: LaneMod; label: string; desc: string }[] = [
@@ -58,6 +67,8 @@ export interface Settings {
   field: FieldPos;
   /** 플레이 배경: 커버·뮤비 / 무대 */
   bg: BgMode;
+  /** 프레임: 60 / 최대 */
+  fps: FpsMode;
 }
 
 const signed = (n: number) => `${n > 0 ? "+" : ""}${n}`;
@@ -364,6 +375,23 @@ export default function SettingsModal({
                       type="button"
                       onClick={() => set({ bg: m.key })}
                       className={chip(settings.bg === m.key)}
+                    >
+                      {m.label}
+                    </button>
+                  ))}
+                </div>
+              </Row>
+              <Row
+                label="프레임"
+                hint={FPS_MODES.find((m) => m.key === settings.fps)!.desc || undefined}
+              >
+                <div className="flex flex-wrap gap-[0.6cqw]">
+                  {FPS_MODES.map((m) => (
+                    <button
+                      key={m.key}
+                      type="button"
+                      onClick={() => set({ fps: m.key })}
+                      className={chip(settings.fps === m.key)}
                     >
                       {m.label}
                     </button>

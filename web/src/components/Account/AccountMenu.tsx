@@ -8,6 +8,8 @@ import { useModal } from "@/components/Modal/ModalProvider";
 import { useAuth } from "@/lib/AuthContext";
 import Avatar from "./Avatar";
 import NickForm from "./NickForm";
+import PointInfo from "@/components/Points/PointInfo";
+import { POINT, fmtPoint } from "@/lib/points";
 
 /*
  * 상단 오른쪽: login 글자 → (로그인 후) 관리자 링크 · 내 별명.
@@ -22,7 +24,7 @@ const hoverable = () => window.matchMedia("(hover: hover) and (pointer: fine)").
 const daysSince = (ms: number) => Math.max(1, Math.floor((Date.now() - ms) / 86_400_000) + 1);
 
 export default function AccountMenu() {
-  const { loading, account, profile, admin, login, logout, refresh } = useAuth();
+  const { loading, account, profile, admin, login, logout, refresh, points } = useAuth();
   const modal = useModal();
   const pathname = usePathname();
   const path = pathname.replace(/\/+$/, "") || "/";
@@ -209,6 +211,21 @@ export default function AccountMenu() {
                       >
                         로그아웃
                       </button>
+                    </div>
+
+                    {/* 보유 GP (누르면 마이페이지의 GP 칸) */}
+                    <div className="flex items-center justify-between gap-3 border-t border-white/[0.07] px-4 py-2.5">
+                      <span className={`flex items-center gap-1.5 text-xs text-white/55 ${KR}`}>
+                        보유 {POINT.name} <PointInfo align="left" />
+                      </span>
+                      <Link
+                        href="/me#points"
+                        role="menuitem"
+                        onClick={() => setOpen(false)}
+                        className="font-mono text-sm font-bold text-[#FDE68A] tabular-nums hover:underline"
+                      >
+                        {fmtPoint(points ?? 0)}
+                      </Link>
                     </div>
 
                     <dl className="grid grid-cols-3 border-t border-white/[0.07] py-3 text-center">

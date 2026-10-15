@@ -20,9 +20,9 @@ import {
   type TierId,
   lookName,
 } from "@/lib/poker/rules";
+import { fmtPoint } from "@/lib/points";
 import type { BuyRankRow, LobbyTable, RankRow, Wallet } from "@/lib/poker/types";
 import { createTable, getBuyRank, quickJoin, setChar, subscribeLobby } from "@/realtime/poker";
-import type { Orient } from "./layout";
 import MyPage from "./MyPage";
 import PatchNotes, { LATEST } from "./PatchNotes";
 import LobbyChar from "./LobbyChar";
@@ -42,11 +42,13 @@ function stakeLine(game: GameKind, t: Tier) {
     : `판돈 ${fmtShort(t.ante)}`;
 }
 
+/** 이번 접속에서 로비에 마지막으로 고른 단계 (페이지를 새로 열 때까지 유지) */
+let lastTier: TierId | null = null;
+
 export default function Lobby({
   wallet,
   rank,
   myNick,
-  o,
   h,
   onEnter,
   onShop,
@@ -55,7 +57,6 @@ export default function Lobby({
   wallet: Wallet;
   rank: RankRow[] | null;
   myNick: string;
-  o: Orient;
   w: number;
   h: number;
   onEnter: (id: string) => void;
@@ -65,7 +66,13 @@ export default function Lobby({
   topRight?: ReactNode;
 }) {
   const [game, setGameState] = useState<GameKind>("holdem");
-  const [tier, setTier] = useState<TierId>(1);
+  // 처음 고른 방: 접속해서 처음 로비가 뜰 때만 내 칩으로 앉을 수 있는 가장 높은 단계, 그 뒤로는(방에서 나와 돌아와도) 마지막에 고른 단계
+  const [tier, setTier] = useState<TierId>(
+    () => (lastTier ??= [...TIERS].reverse().find((t) => wallet.money >= t.min)?.id ?? 1)
+  );
+  useEffect(() => {
+    lastTier = tier;
+  }, [tier]);
   const [tables, setTables] = useState<LobbyTable[] | null>(null);
   const [busy, setBusy] = useState("");
   const [sheet, setSheet] = useState<"" | "create" | "char" | "rank" | "me" | "mychar">("");
@@ -118,7 +125,6 @@ export default function Lobby({
   /** 리그 탭: 같은 순서(1~3번째 방)를 유지하며 옮김 */
   const pickLeague = (lg: number) => setTier(((lg - 1) * 3 + T.step) as TierId);
   const locked = wallet.money < T.min;
-  const H = o === "h";
   const bar = 44;
   const info = CHARS[wallet.char];
   /** 그림 열쇠 (스킨을 입었으면 스킨) */
@@ -139,7 +145,7 @@ export default function Lobby({
         src={asset.logo}
         alt="ANIME POKER"
         draggable={false}
-        style={{ height: H ? bar - 8 : bar - 14, width: "auto" }}
+        style={{ height: bar - 8, width: "auto" }}
       />
       <span className="rounded-[4px] bg-[var(--pk-danger)] px-[0.45em] text-[0.62em] leading-[1.6em] font-extrabold tracking-wider">
         BETA
@@ -289,7 +295,7 @@ export default function Lobby({
   );
 
   const mode = (
-    <div className="grid shrink-0 grid-cols-2 gap-[0.5em]" style={{ height: H ? "100%" : 112 }}>
+    <div className="grid shrink-0 grid-cols-2 gap-[0.5em]" style={{ height: "100%" }}>
       {(["holdem", "seven"] as const).map((g) => (
         <button
           key={g}
@@ -312,7 +318,7 @@ export default function Lobby({
                   "repeating-linear-gradient(45deg, rgba(0,0,0,0.25) 0 2px, transparent 2px 5px)",
               }}
             />
-            <ModeCards game={g} h={H} />
+            <ModeCards game={g} h />
           </div>
           <div className="flex min-w-0 items-baseline gap-[0.5em] border-t border-[rgba(214,175,92,0.3)] bg-black/70 px-[0.7em] py-[0.35em]">
             <span className="shrink-0 text-[1.1em] font-extrabold whitespace-nowrap">
@@ -333,7 +339,7 @@ export default function Lobby({
   const tiers = (
     <div
       className="grid h-full gap-[0.5em]"
-      style={{ gridTemplateRows: H ? "1fr auto" : "auto auto" }}
+      style={{ gridTemplateRows: "1fr auto" }}
     >
       <div className="grid min-h-0 gap-[0.45em]" style={{ gridTemplateRows: "auto 1fr" }}>
         {/* 리그 탭: 일반 · 도박꾼 · 타짜 */}
@@ -537,12 +543,12 @@ export default function Lobby({
       <div
         className="pk-bg"
         style={{
-          backgroundImage: `url(${asset.room("lobby", o)})`,
+          backgroundImage: `url(${asset.room("lobby", "h")})`,
           filter: "brightness(0.5) saturate(0.85)",
         }}
       />
       {top}
-      {H ? (
+      {(
         <div
           className="absolute inset-x-0 bottom-0 grid grid-cols-[27%_1fr_26%] gap-[0.7em] p-[0.8em]"
           style={{ top: bar }}
@@ -554,69 +560,12 @@ export default function Lobby({
           </div>
           <div className="flex min-h-0 flex-col">{rooms}</div>
         </div>
-      ) : (
-        // 세로판: 화면이 낮으면(전체화면 아닐 때) 열린 방이 찌그러지지 않게 전체가 스크롤됨
-        <div
-          className="pk-scroll absolute inset-x-0 bottom-0 flex flex-col gap-[0.55em] overflow-y-auto overscroll-contain p-[0.6em]"
-          style={{ top: bar }}
-        >
-          {/* 세로판: 내 정보 한 줄 */}
-          <div
-            className="pk-frame pk-me relative isolate flex shrink-0 items-center gap-[0.6em] overflow-hidden p-[0.5em]"
-            style={{ "--c": info.color } as CSSProperties}
-          >
-            <div className="pk-me-glow absolute inset-0 -z-10" />
-            <button
-              type="button"
-              onClick={() => setSheet("mychar")}
-              className="shrink-0 cursor-pointer"
-              aria-label="내 캐릭터"
-            >
-              <Profile char={look} size={44} className="ring-2 ring-[var(--pk-brass)]" />
-            </button>
-            <button
-              type="button"
-              onClick={() => setSheet("me")}
-              className="min-w-0 flex-1 cursor-pointer text-left"
-              aria-label="마이페이지"
-            >
-              <div className="flex items-baseline gap-[0.4em]">
-                <span className="min-w-0 truncate text-[1.1em] font-extrabold">{myNick}</span>
-                <span
-                  className="max-w-[45%] min-w-0 shrink truncate text-[0.8em] font-bold"
-                  style={{ color: info.color }}
-                >
-                  {lookName(look)}
-                </span>
-                <span className="ml-auto shrink-0 text-[0.68em] text-white/40">마이페이지 ›</span>
-              </div>
-              <div className="flex items-center gap-[0.3em]">
-                {}
-                <img src={asset.chip("gold", "top")} alt="" className="h-[1.1em] w-[1.1em]" />
-                <Money won={wallet.money} className="text-[1.2em] text-[#ffd84a]" />
-              </div>
-            </button>
-            {myRank > 0 && (
-              <button
-                type="button"
-                onClick={() => setSheet("rank")}
-                className="flex shrink-0 flex-col items-center rounded-[8px] border border-[rgba(255,201,60,0.45)] bg-black/45 px-[0.8em] py-[0.2em] leading-tight"
-              >
-                <span className="text-[0.68em] text-white/55">순위</span>
-                <span className="text-[1.2em] font-extrabold text-[#ffd84a]">{myRank}위</span>
-              </button>
-            )}
-          </div>
-          {mode}
-          <div className="pk-frame shrink-0 p-[0.6em]">{tiers}</div>
-          <div className="flex min-h-[17em] flex-1 flex-col">{rooms}</div>
-        </div>
       )}
 
       {notes && <PatchNotes onClose={() => setNotes(false)} />}
       {/* 알림 토스트 */}
       {toast && (
-        <div key={toast.key} role="status" className="pk-toast" style={{ bottom: H ? 90 : 110 }}>
+        <div key={toast.key} role="status" className="pk-toast" style={{ bottom: 90 }}>
           {toast.text}
         </div>
       )}
@@ -625,8 +574,8 @@ export default function Lobby({
       {sheet && (
         <Sheet
           key="sheet"
-          mobile={!H}
-          maxH={sheet === "me" ? h - (H ? 24 : 8) : Math.min(h - (H ? 24 : 8), H ? h : h * 0.9)}
+          mobile={false}
+          maxH={h - 24}
           wide={sheet === "me" ? 760 : 640}
           fill={sheet === "me"}
           title={
@@ -711,7 +660,6 @@ export default function Lobby({
             <CharSelect
               current={wallet.char}
               owned={wallet.chars}
-              o={o}
               onPick={(c) => void run("char", async () => (await setChar(c), setSheet("")))}
               onShop={() => (setSheet(""), onShop?.("chars"))}
             />
@@ -719,7 +667,7 @@ export default function Lobby({
           {sheet === "me" && (
             <MyPage
               wallet={wallet}
-              compact={!H}
+              compact={false}
               onChar={() => setSheet("char")}
               onRank={() => setSheet("rank")}
             />
@@ -832,13 +780,11 @@ function ModeCards({ game, h }: { game: "holdem" | "seven"; h: boolean }) {
 function CharSelect({
   current,
   owned,
-  o,
   onPick,
   onShop,
 }: {
   current: CharId;
   owned: CharId[];
-  o: Orient;
   onPick: (c: CharId) => void;
   onShop: () => void;
 }) {
@@ -851,14 +797,14 @@ function CharSelect({
       {/* 고른 캐릭터 */}
       <div
         className="pk-cs-hero"
-        style={{ "--c": info.color, height: o === "h" ? 230 : 200 } as React.CSSProperties}
+        style={{ "--c": info.color, height: 230 } as React.CSSProperties}
       >
         {}
         <img src={asset.pose(sel, "idle")} alt="" draggable={false} className="pk-cs-bust" />
         <div className="relative z-10 flex min-w-0 flex-1 flex-col justify-center gap-[0.25em] py-[0.6em] pr-[0.9em]">
           <div className="flex items-baseline gap-[0.45em]">
             <span className="text-[1.5em] leading-none font-extrabold">{info.name}</span>
-            {locked && <span className="pk-cs-lock">🔒 {fmtEok(price)}</span>}
+            {locked && <span className="pk-cs-lock">🔒 {fmtPoint(price)}</span>}
           </div>
           <div className="pk-num text-[0.82em] text-white/75">
             {info.age}세 · {info.birthday} ({info.sign})
@@ -983,7 +929,7 @@ export function PokerRanks({
   );
 }
 
-/** 구매 순위: 스킨 · 캐릭터에 쓴 칩 합계, 산 개수 */
+/** 구매 순위: 스킨 · 캐릭터 값(지금 포인트 가격) 합계, 산 개수 */
 function BuyRankTable({ rank, myNick }: { rank: BuyRankRow[] | null; myNick?: string }) {
   if (rank === null) return <p className="py-6 text-center text-sm text-white/40">불러오는 중…</p>;
   if (!rank.length)
@@ -1017,7 +963,7 @@ function BuyRankTable({ rank, myNick }: { rank: BuyRankRow[] | null; myNick?: st
               <br />
               캐릭터 {r.chars}
             </span>
-            <Money won={r.spent} className="text-base text-white" />
+            <span className="pk-num text-base whitespace-nowrap text-[#b9a8ff]">{fmtPoint(r.spent)}</span>
           </li>
         );
       })}

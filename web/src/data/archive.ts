@@ -1,7 +1,7 @@
 // 아카이브(개발 기록) 데이터. 최신순으로 정렬해서 사용.
 // sort: 정렬/연도 그룹용 키(YYYY-MM-DD), date: 화면 표시용 문자열
 
-export type ArchiveTag = "사이트" | "프로젝트" | "실무" | "학습" | "이력";
+export type ArchiveTag = "사이트" | "프로젝트" | "실무" | "이력";
 
 export interface ArchiveEntry {
   sort: string;
@@ -13,10 +13,23 @@ export interface ArchiveEntry {
   href?: string;
 }
 
-export const ARCHIVE_TAGS: ArchiveTag[] = ["사이트", "프로젝트", "실무", "학습", "이력"];
+export const ARCHIVE_TAGS: ArchiveTag[] = ["사이트", "프로젝트", "실무", "이력"];
 
 const entries: ArchiveEntry[] = [
   // ───────────── 2026 ─────────────
+  {
+    sort: "2026-10-14",
+    date: "2026.10.14",
+    tag: "사이트",
+    title: "PIXEL LUCKY DEFENSE — PIXEL FIGHT 외전 랜덤 디펜스",
+    items: [
+      "기사단 · 기계공방 · 마도회 세 세력(적 크기별 상성)을 소환 · 합성, 신화 · 히든은 조합식 · 그 위로 초월, 10웨이브마다 오염된 PIXEL FIGHT 파이터 보스 · 60웨이브 클리어",
+      "결정론 시뮬 하나를 화면 · 서버 · 밸런스 봇이 같이 씀 — 랭킹은 서버가 명령 기록을 작업 스레드에서 다시 돌려 검증, 멀티(최대 4명)는 100ms 락스텝 + 5초마다 상태 해시 비교",
+      "보스마다 치트 코드 3장 중 하나, 판 밖 성장(유닛 강화 · 연구 · 유물 · 오염 단계 · 시즌 패스 · 상점), 사이트 GP와 연결",
+      "도트 2.5D 필드 · 도트 UI · 유닛 공격 그림 · 효과음/배경음, 튜토리얼 · 도감 · 패치노트, 폰 가로 화면",
+    ],
+    href: "/infoPage/16/",
+  },
   {
     sort: "2026-10-10c",
     date: "2026.10.10",
@@ -29,17 +42,6 @@ const entries: ArchiveEntry[] = [
       "AI와 두기는 같은 페이지에서 게임 카드로 고르고, 랭킹은 게임별 탭. 예전 주소(/games/chess 등)·초대 링크는 새 페이지로 그대로 넘어감",
     ],
     href: "/games/board/",
-  },
-  {
-    sort: "2026-10-10b",
-    date: "2026.10.10",
-    tag: "학습",
-    title: "개인 공부 8편 · 프로젝트 회고 4편 추가",
-    items: [
-      "개인 공부: String/StringBuilder, var·let·const, TCP vs UDP, JVM 메모리와 GC, DB 정규화, 브라우저 렌더링, Express 미들웨어, MVCC와 InnoDB 잠금",
-      "프로젝트 회고: 정적 사이트에 백엔드 붙이기, 랭킹 조작 방지(1회용 티켓·최소 소요 시간), 클라우드 IP 유입 판별, 격투 랭크전 AI전 서버 재연산",
-    ],
-    href: "/study/",
   },
   {
     sort: "2026-10-10a",
@@ -511,17 +513,6 @@ const entries: ArchiveEntry[] = [
     href: "/study/",
   },
   {
-    sort: "2026-09-29e",
-    date: "2026.09.29",
-    tag: "학습",
-    title: "개인공부 글 추가 및 정리",
-    items: [
-      "실무에서 겪은 문제 위주로 9편 추가 (권한 설계, 트랜잭션 경계, stale closure, 다중 DataSource 등)",
-      "기존 글 작성일 정리, 일괄 등록은 글 주소를 유지한 채 작성일만 맞추도록 변경",
-    ],
-    href: "/study/",
-  },
-  {
     sort: "2026-09-29d",
     date: "2026.09.29",
     tag: "사이트",
@@ -951,14 +942,6 @@ const entries: ArchiveEntry[] = [
     tag: "이력",
     title: "육군 5사단 복무",
     items: ["병역 의무 이행"],
-  },
-  {
-    sort: "2016-06-01",
-    date: "2016.06 –",
-    tag: "학습",
-    title: "알고리즘 문제 풀이 시작",
-    items: ["백준 온라인 저지에서 C++, Java, Python으로 문제 풀이 진행"],
-    href: "/infoPage/5/",
   },
   {
     sort: "2016-03-01",

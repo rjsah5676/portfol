@@ -6,6 +6,9 @@ import GuideView, { type GuideDoc } from "@/components/GuideView";
 import HintBubble, { markHintSeen } from "@/components/HintBubble";
 import Nick from "@/components/Nick";
 import RankAvatar from "./RankAvatar";
+import { AchievementList, AchievementRank, useAchReady } from "@/components/Points/Achievements";
+import { DailyMissionList, useDailyReady } from "@/components/Points/DailyMissions";
+import type { AchGame } from "@/lib/points";
 
 export interface TopEntry {
   name: string;
@@ -51,9 +54,11 @@ export default function GameHeader({
   title,
   en,
   desc,
+  tags,
   accent = "#8B84FF",
   guide,
   rank,
+  ach,
   extra,
   scroll = true,
   className = "",
@@ -62,9 +67,13 @@ export default function GameHeader({
   title: string;
   en: string;
   desc: string;
+  /** 설명 뒤에 붙는 해시태그 ("#" 없이) */
+  tags?: string[];
   accent?: string;
   guide?: GuideDoc;
   rank?: RankSpec;
+  /** 업적이 있는 게임이면 [일일 미션] [업적] 버튼 (랭킹 오른쪽, 각각 따로 창) + 랭킹 모달에 「업적 랭킹」 탭 */
+  ach?: AchGame;
   /** 가이드 · 랭킹 버튼 사이에 더 넣을 버튼 (pill 클래스명을 받음) */
   extra?: (pill: string) => ReactNode;
   /** 처음 들어올 때 게임 위치로 스크롤 */
@@ -74,6 +83,13 @@ export default function GameHeader({
   const ref = useRef<HTMLElement>(null);
   const [guideOpen, setGuideOpen] = useState(false);
   const [rankOpenSelf, setRankOpenSelf] = useState(false);
+  const [achOpen, setAchOpen] = useState(false);
+  const [dailyOpen, setDailyOpen] = useState(false);
+  /** 받을 수 있는 일일 미션 · 업적 수 (버튼 숫자) — 모달을 닫을 때 다시 셈 */
+  const dailyReady = useDailyReady(ach, dailyOpen);
+  const achReady = useAchReady(ach, achOpen);
+  /** 랭킹 모달 탭: 게임 랭킹 / 업적 랭킹 */
+  const [rankTab, setRankTab] = useState<"game" | "ach">("game");
   const rankOpen = rank?.open ?? rankOpenSelf;
   const setRankOpen = (o: boolean) => {
     if (rank?.onOpenChange) rank.onOpenChange(o);
@@ -89,8 +105,9 @@ export default function GameHeader({
     return () => clearTimeout(id);
   }, [scroll]);
 
+  // 좁으면(폰) 버튼이 한 줄에 같은 폭으로 꽉 차게 (5개까지 줄바꿈 없이), 넓으면 원래 크기
   const pill =
-    "flex h-9 cursor-pointer items-center gap-1.5 rounded-full border px-3 font-['Nanum_Gothic',sans-serif] text-[13px] whitespace-nowrap transition-colors";
+    "flex h-9 w-full min-w-0 cursor-pointer items-center justify-center gap-1 rounded-full border px-1.5 font-['Nanum_Gothic',sans-serif] text-[12.5px] whitespace-nowrap transition-colors @2xl:w-auto @2xl:justify-start @2xl:gap-1.5 @2xl:px-3 @2xl:text-[13px]";
 
   return (
     <header
@@ -98,7 +115,8 @@ export default function GameHeader({
       data-game-header
       className={`@container mb-4 scroll-mt-[114px] text-left sm:mb-5 ${className}`}
     >
-      <div className="flex items-center gap-3">
+      {/* 좁으면(폰) 버튼들은 아래 줄로 — 제목 · 설명이 버튼에 밀려 글자 단위로 깨지지 않게 */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2.5 @2xl:flex-nowrap">
         <div
           className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border text-2xl text-white sm:h-12 sm:w-12"
           style={{
@@ -109,7 +127,7 @@ export default function GameHeader({
         >
           {icon}
         </div>
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 flex-1 basis-[calc(100%-3.5rem)] @2xl:basis-0">
           <div className="flex items-baseline gap-2">
             <h1 className="truncate font-['Nanum_Gothic',sans-serif] text-lg font-bold text-white sm:text-xl">
               {title}
@@ -121,13 +139,18 @@ export default function GameHeader({
               {en}
             </span>
           </div>
-          <p className="truncate font-['Nanum_Gothic',sans-serif] text-xs text-white/45 sm:text-[13px]">
-            {desc}
+          <p className="flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5 font-['Nanum_Gothic',sans-serif] text-xs break-keep text-white/45 sm:text-[13px]">
+            <span>{desc}</span>
+            {tags?.map((t) => (
+              <span key={t} className="whitespace-nowrap opacity-80" style={{ color: accent }}>
+                #{t}
+              </span>
+            ))}
           </p>
         </div>
-        <div className="flex shrink-0 items-center gap-1.5">
+        <div className="grid w-full auto-cols-fr grid-flow-col items-center gap-1.5 @2xl:flex @2xl:w-auto @2xl:shrink-0">
           {guide && (
-            <span className="relative">
+            <span className="relative min-w-0">
               <button
                 type="button"
                 onClick={() => {
@@ -165,9 +188,34 @@ export default function GameHeader({
               className={`${pill} border-[#FDE047]/30 bg-[#FDE047]/[0.07] text-[#FDE68A] hover:border-[#FDE047]/60`}
             >
               <span aria-hidden>🏆</span>
-              <span className="hidden @sm:inline">랭킹</span>
+              <span>랭킹</span>
               {!!rank.top?.length && <TopTicker top={rank.top} />}
             </button>
+          )}
+          {ach && (
+            <>
+              <button
+                type="button"
+                onClick={() => setDailyOpen(true)}
+                aria-label={`일일 미션 보기${dailyReady ? ` (받을 수 있는 미션 ${dailyReady}개)` : ""}`}
+                className={`${pill} relative border-[#2DD4BF]/30 bg-[#2DD4BF]/[0.07] text-[#99F6E4] hover:border-[#2DD4BF]/60`}
+              >
+                <span aria-hidden>📅</span>
+                <span className="@md:hidden">미션</span>
+                <span className="hidden @md:inline">일일 미션</span>
+                <ReadyDot n={dailyReady} />
+              </button>
+              <button
+                type="button"
+                onClick={() => setAchOpen(true)}
+                aria-label={`업적 보기${achReady ? ` (받을 수 있는 업적 ${achReady}개)` : ""}`}
+                className={`${pill} relative border-[#F472B6]/30 bg-[#F472B6]/[0.07] text-[#F9A8D4] hover:border-[#F472B6]/60`}
+              >
+                <span aria-hidden>🏅</span>
+                <span>업적</span>
+                <ReadyDot n={achReady} />
+              </button>
+            </>
           )}
         </div>
       </div>
@@ -208,18 +256,87 @@ export default function GameHeader({
         >
           {rankOpen && (
             <>
-              {rank.head?.()}
-              {!!(rank.podium ?? rank.top)?.length && <Podium top={(rank.podium ?? rank.top)!} />}
-              {rank.render()}
+              {ach && (
+                <div role="tablist" className="mb-4 grid grid-cols-2 gap-1 rounded-xl border border-white/10 bg-white/[0.03] p-1 font-['Nanum_Gothic',sans-serif] text-sm">
+                  {(
+                    [
+                      ["game", "🏆 기록 랭킹"],
+                      ["ach", "🏅 업적 랭킹"],
+                    ] as const
+                  ).map(([k, label]) => (
+                    <button
+                      key={k}
+                      type="button"
+                      role="tab"
+                      aria-selected={rankTab === k}
+                      onClick={() => setRankTab(k)}
+                      className={`cursor-pointer rounded-lg py-1.5 whitespace-nowrap transition-colors ${
+                        rankTab === k ? "bg-white/12 font-bold text-white" : "text-white/50 hover:text-white/80"
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {ach && rankTab === "ach" ? (
+                <AchievementRank game={ach} />
+              ) : (
+                <>
+                  {rank.head?.()}
+                  {!!(rank.podium ?? rank.top)?.length && <Podium top={(rank.podium ?? rank.top)!} />}
+                  {rank.render()}
+                </>
+              )}
             </>
           )}
         </Modal>
+      )}
+      {ach && (
+        <>
+          <Modal
+            open={dailyOpen}
+            onClose={() => setDailyOpen(false)}
+            size="md"
+            closeButton
+            title={
+              <span className="flex items-center gap-2">
+                <span aria-hidden>📅</span> {title} 일일 미션
+              </span>
+            }
+          >
+            {dailyOpen && <DailyMissionList game={ach} accent={accent} />}
+          </Modal>
+          <Modal
+            open={achOpen}
+            onClose={() => setAchOpen(false)}
+            size="md"
+            closeButton
+            title={
+              <span className="flex items-center gap-2">
+                <span aria-hidden>🏅</span> {title} 업적
+              </span>
+            }
+          >
+            {achOpen && <AchievementList game={ach} accent={accent} />}
+          </Modal>
+        </>
       )}
     </header>
   );
 }
 
 const MEDAL = ["🥇", "🥈", "🥉"];
+
+/** 버튼 오른쪽 위: 받을 수 있는 수 */
+function ReadyDot({ n }: { n: number }) {
+  if (n <= 0) return null;
+  return (
+    <span className="absolute -top-1.5 -right-1.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-[#FDE047] px-1 font-mono text-[10px] font-bold text-black shadow-[0_0_0_2px_#121212]">
+      {n > 9 ? "9+" : n}
+    </span>
+  );
+}
 
 /** 랭킹 버튼 안: 1~3위를 몇 초마다 돌려 가며 (넓을 때만) */
 function TopTicker({ top }: { top: TopEntry[] }) {
@@ -256,7 +373,7 @@ function Podium({ top }: { top: TopEntry[] }) {
         const st = style[n];
         return (
           <div key={n} className="flex w-1/3 max-w-[9.5rem] min-w-0 flex-col items-center">
-            <div className={`text-center ${n === 0 ? "rank-crown" : ""}`}>
+            <div className={`w-full min-w-0 text-center ${n === 0 ? "rank-crown" : ""}`}>
               <div className={n === 0 ? "text-3xl" : "text-2xl"}>{MEDAL[n]}</div>
               <div className="mt-1 flex justify-center">
                 <RankAvatar avatar={e.avatar} name={e.name} guest={!e.member} size="lg" />
@@ -264,7 +381,7 @@ function Podium({ top }: { top: TopEntry[] }) {
               <div className="mt-0.5 max-w-full truncate px-1 text-sm font-bold text-white">
                 <Nick name={e.name} guest={!e.member} />
               </div>
-              <div className="font-mono text-xs tabular-nums" style={{ color: st.ring }}>
+              <div className="max-w-full truncate px-1 font-mono text-xs tabular-nums" style={{ color: st.ring }}>
                 {e.value}
               </div>
               {e.sub && (

@@ -6,6 +6,7 @@ import BeatDashProject from "./BeatDashProject";
 import BojProject from "./BojProject";
 import DevLifeProject from "./DevLifeProject";
 import KickeatProject from "./KickeatProject";
+import LuckyDefenseProject from "./LuckyDefenseProject";
 import MimyoProject from "./MimyoProject";
 import OhsoriProject from "./OhsoriProject";
 import PixelFightProject from "./PixelFightProject";
@@ -26,6 +27,7 @@ const PROJECT_PAGES: Record<number, ComponentType> = {
   13: PixelFightProject,
   14: AnimePokerProject,
   15: SketchQuizProject,
+  16: LuckyDefenseProject,
 };
 
 function InfoContents({ idx }: { idx: number }) {

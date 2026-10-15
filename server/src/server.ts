@@ -5,6 +5,7 @@ import type { Config } from "./config";
 import { connectDatabase, type Database } from "./db";
 import type { Deps } from "./deps";
 import { registerBoardGames } from "./games/board";
+import { registerDefense } from "./games/defense";
 import { registerFight } from "./games/fight";
 import { registerPoker, type PokerOptions } from "./games/poker";
 import { registerRhythmOnline } from "./games/rhythmOnline";
@@ -13,6 +14,7 @@ import { createApp } from "./http/app";
 import { restoreLive, saveLive, waitIdle, type LiveGame } from "./live";
 import { Gateway } from "./realtime/gateway";
 import { createTraffic } from "./traffic";
+import { createPoints } from "./points";
 import { createUsers } from "./users";
 import { createWebNotifier, type WebNotifier } from "./webNotify";
 
@@ -42,13 +44,15 @@ export async function createAppServer(
   gateway.nickOf = (user) => users.nickOf(user);
   users.onRename((uid, nick) => gateway.setNick(uid, nick));
   const traffic = createTraffic(db, { geo: cfg.trafficGeo, cloud: cfg.trafficCloud });
-  const deps: Deps = { cfg, db, auth, gateway, users, traffic, web: overrides.web ?? createWebNotifier(cfg) };
+  const points = createPoints(db);
+  const deps: Deps = { cfg, db, auth, gateway, users, points, traffic, web: overrides.web ?? createWebNotifier(cfg) };
 
   const board = registerBoardGames(deps);
   const sketch = registerSketch(deps);
   const fight = registerFight(deps);
   const poker = registerPoker(deps, overrides.poker);
   const rhythm = registerRhythmOnline(deps);
+  const defense = registerDefense(deps);
   const live = { sketch, fight, poker, rhythm };
   const liveGames: Record<string, LiveGame> = { sketch: sketch.live, fight: fight.live, poker: poker.live, rhythm: rhythm.live };
   // 배포 직전에 저장해 둔 방이 있으면 이어받음
@@ -66,11 +70,18 @@ export async function createAppServer(
         fight: fight.adminList(),
         poker: poker.adminList(),
         rhythm: rhythm.adminList(),
+        defense: defense.adminList().map((r) => ({
+          id: r.id,
+          name: r.name,
+          status: r.phase === "playing" ? "play" : r.phase === "lobby" ? "waiting" : "ended",
+          players: r.players,
+          createdAt: r.createdAt,
+        })),
       }),
       rhythmFiles: rhythm.router,
       pokerRank: () => poker.wallet.rank(),
       pokerBuyRank: () => poker.wallet.buyRank(),
-      closeLiveRoom: (game, id) => live[game].adminClose(id),
+      closeLiveRoom: (game, id) => (game === "defense" ? defense : live[game]).adminClose(id),
       pokerSettings: () => poker.adminSettings(),
       setPokerSettings: (p) => poker.adminSetSettings(p),
     })
@@ -87,6 +98,7 @@ export async function createAppServer(
     fight.close();
     poker.close();
     rhythm.close();
+    defense.close();
     await gateway.close();
     await new Promise<void>((res) => http.close(() => res()));
     if (!overrides.db) await db.close();

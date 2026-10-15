@@ -19,6 +19,8 @@ import freedomdiveData from "@/data/rhythm/freedomdive.json";
 import aragamiData from "@/data/rhythm/aragami.json";
 import crimsonData from "@/data/rhythm/crimsoncadenza.json";
 import hwimoriData from "@/data/rhythm/hwimori.json";
+import luckysevenData from "@/data/rhythm/luckyseven.json";
+import pixelfightingData from "@/data/rhythm/pixelfighting.json";
 
 export type Kind =
   | "kick"
@@ -399,6 +401,28 @@ const HWIMORI = audioSong("hwimori", "휘모리", "/audio/hwimori.mp3", hwimoriD
   desc: "175 BPM · 국악 DRUM & BASS · AI 자작곡 (tunee.ai)",
 });
 
+const LUCKYSEVEN = audioSong(
+  "luckyseven",
+  "Lucky Seven Rush",
+  "/audio/luckyseven.mp3",
+  luckysevenData,
+  {
+    color: "#F43F5E",
+    desc: "176 BPM · ELECTRO SWING · AI 자작곡 (tunee.ai)",
+  }
+);
+
+const PIXELFIGHTING = audioSong(
+  "pixelfighting",
+  "Pixel Fighting",
+  "/audio/pixelfighting.mp3",
+  pixelfightingData,
+  {
+    color: "#A855F7",
+    desc: "180 BPM · CHIPTUNE ROCK · AI 자작곡 (tunee.ai)",
+  }
+);
+
 // xi의 곡 — 제작자 표기 필수 (artist는 곡 선택·플레이·결과·랭킹에 함께 나옴)
 const ANIMA = audioSong("anima", "ANiMA", "/audio/anima.mp3", animaData, {
   color: "#D9A066",
@@ -425,17 +449,19 @@ const FREEDOMDIVE = audioSong(
 /*
  * 채보 다시 뽑기 (npm run rhythm-chart -- <id> ...) — --levels는 직접 쳐 보고 정한 레벨 (쉬움부터)
  *   fullcombo   --bpm-label 180 --boss '{"loud":0.48,"full":0.78}' --levels 3,6,9,13,16
- *   jilju       --boss '{}' --tweak '{"hard":{"fill":0.3},"expert":{"fill":0.15}}' --levels 3,5,8,12,16   (나이트메어 자동 16)
+ *   jilju       --boss '{}' --tweak '{"hard":{"fill":0.3},"expert":{"fill":0.15}}' --levels 3,5,8,12,16   (나이트메어 자동 15)
  *   natsukasumi --boss '{}' --tweak '{"hard":{"fill":0.9},"expert":{"fill":1.3}}' --levels 2,4,7,12   (나이트메어 자동 16)
  *   rinkaku     --boss '{}' --tweak '{"expert":{"fill":0.4}}' --levels 2,4,8,12   (나이트메어 자동 14)
  *   newdim      --boss '{"loud":0.55,"full":0.85,"burstEvery":8}' --tweak '{"expert":{"fill":0.4}}' --levels 3,6,10,13,15
- *   monarch     --bpm-label 150 --boss '{"burstEvery":2}' --tweak '{"hard":{"fill":0.35},"expert":{"fill":0.3},"nightmare":{"fill":0.4}}' --levels 3,6,11,13,16
- *   velocity    --bpm-label 180 --boss '{"loud":0.45,"full":0.72,"burstEvery":4,"burstSub":6}' --explus '{}' --levels 3,6,11,14,17,20   (ULTIMA는 19)
- *   anima       --boss '{}' --explus '{}' --levels 3,6,9,13,17,20   (ULTIMA는 18)
- *   aragami     --boss '{}' --explus '{}' --levels 3,6,9,13,17,21   (ULTIMA는 19)
- *   crimsoncadenza --double --boss '{}' --explus '{}'   (자동 레벨 3,6,10,12,17,19 — 절반 템포 100으로 잡혀서 --double)
- *   hwimori     --boss '{}' --explus '{}'   (자동 레벨 3,6,9,13,16,19)
- *   freedomdive --boss '{}' --explus '{}' --levels 3,5,9,12,15,20   (ULTIMA는 17 — 222 BPM이라 16분 스트림이 한계)   (222 BPM 8분·16분이 꽉 차도 별점 12·15 — 그 위는 24분·잭이 필요)
+ *   monarch     --bpm-label 150 --boss '{"burstEvery":2}' --tweak '{"hard":{"fill":0.35},"expert":{"fill":0.3},"nightmare":{"fill":0.4}}' --levels 3,6,11,13,16   (NIGHTMARE는 15)
+ *   velocity    --bpm-label 180 --boss '{"loud":0.45,"full":0.72,"burstEvery":4,"burstSub":6}' --explus '{}' --levels 3,6,11,14,17,20   (NIGHTMARE는 15)
+ *   anima       --boss '{}' --explus '{}' --levels 3,6,9,13,17,20
+ *   aragami     --boss '{}' --explus '{}' --levels 3,6,9,13,17,21   (NIGHTMARE 15 · ULTIMA 18 — 185 BPM 넘는 곡은 16분을 덜 엶)
+ *   crimsoncadenza --double --boss '{}' --explus '{}'   (자동 레벨 3,6,10,12,14,17 — 절반 템포 100으로 잡혀서 --double)
+ *   hwimori     --boss '{}' --explus '{}'   (자동 레벨 3,6,10,13,16,20)
+ *   luckyseven  --double --boss '{}' --explus '{}' --levels 3,6,9,13,16,19   (NIGHTMARE는 15 — 절반 템포 88로 잡혀서 --double)
+ *   pixelfighting --boss '{}' --explus '{}' --levels 3,6,9,13,16,18   (NIGHTMARE는 15)
+ *   freedomdive --boss '{}' --explus '{}' --levels 3,5,9,12,15,20   (NIGHTMARE 14 · ULTIMA 17 — 222 BPM이라 16분 스트림이 한계)   (222 BPM 8분·16분이 꽉 차도 별점 12·15 — 그 위는 24분·잭이 필요)
  */
 // ───────────────────────── 연습곡 ─────────────────────────
 // 박자만 또렷한 신스 반주(킥·스네어·하이햇·베이스·패드) 위에 패턴 구간(practice.ts)을 차례로
@@ -484,6 +510,8 @@ const PRACTICE: Song = {
 
 /** 새 곡은 항상 맨 앞에 (연습곡은 맨 끝) */
 export const SONGS: Song[] = [
+  LUCKYSEVEN,
+  PIXELFIGHTING,
   CRIMSON,
   HWIMORI,
   FULLCOMBO,

@@ -230,7 +230,8 @@ function BoardApp() {
         title="온라인 보드게임"
         en="Board Games"
         accent={shownGame ? GAMES[shownGame].accent : "#8B84FF"}
-        desc="체스·장기·오목을 한곳에서 — 실시간 대국·관전, AI와 한 판"
+        desc="체스·장기·오목을 한곳에서"
+        tags={["실시간 대국", "관전", "AI 대전", "랭킹모드"]}
         guide={shownGame ? GUIDES[shownGame] : BOARD_GUIDE}
         rank={{
           sub: `${GAMES[rg].name} AI 랭킹전`,

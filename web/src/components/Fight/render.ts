@@ -43,6 +43,9 @@ const ELEMENT: Record<string, "fire" | "bolt" | "ice" | "wind" | "whip" | "water
   ivan: "fire",
 };
 
+/** 건모 Alt+F4 블루스크린 길이 (프레임) */
+const BSOD_T = 40;
+
 /** 탄 그림 (public/fight/fx/<이름>.webp, 오른쪽을 보는 그림) — 처음 쓸 때 불러옴 */
 const fxCache = new Map<string, HTMLImageElement | null>();
 /** 불러오기가 끝난 그림 (실패 포함) — 시작 전에 다 받아 두려고 */
@@ -63,14 +66,17 @@ function fxImg(name: string): HTMLImageElement | null {
 /** v2 에셋의 움직이는 탄 그림 (fx/<캐릭터>-<이름>-0..n): 캐릭터·기술 → [이름, 장 수, 판정 높이 대비 배율, 판정 중심 가로 위치] */
 const PROJ_ANIM: Record<string, Partial<Record<"S" | "X", [string, number, number, number]>>> = {
   igna: { S: ["igna-fireball", 4, 2.6, 0.8] },
+  "igna-fw": { S: ["igna-fw-fireball", 4, 2.6, 0.8] },
   lily: { S: ["lily-bubble", 4, 1.3, 0.72], X: ["lily-wave", 4, 1.55, 0.5] },
   zena: { S: ["zena-spear", 4, 3.2, 0.75] },
+  "zena-idol": { S: ["zena-idol-spear", 4, 5.5, 0.82] },
 };
 /** v2 에셋의 소환(불기둥 등) 그림: 캐릭터 → [이름, 장 수] — 바닥 기준, 판정 높이에 맞춤 */
-const PILLAR_ANIM: Record<string, [string, number]> = { igna: ["igna-pillar", 4], zena: ["zena-bolt", 4] };
+const PILLAR_ANIM: Record<string, [string, number]> = { igna: ["igna-pillar", 4], "igna-fw": ["igna-fw-pillar", 4], zena: ["zena-bolt", 4] };
 /** 캐릭터·기술별 탄 그림: [그림, 판정 크기 대비 그림 높이 배율, 판정 중심이 그림 가로 어디쯤(0~1)] */
 const PROJ_ART: Record<string, Partial<Record<"S" | "X", [string, number, number]>>> = {
   igna: { S: ["igna-fireball", 1.7, 0.78] },
+  "igna-fw": { S: ["igna-fw-fireball-0", 1.7, 0.78] },
 };
 
 /**
@@ -80,9 +86,12 @@ const PROJ_ART: Record<string, Partial<Record<"S" | "X", [string, number, number
 const FX_SETS: Record<string, Record<string, [number, number, boolean]>> = {
   kai: { spark: [4, 0.75, true], guard: [2, 0.6, true], dust: [4, 0.5, false], rush: [4, 0.7, true], burst: [4, 1.3, true] },
   igna: { spark: [4, 0.7, true], guard: [2, 0.6, true], dust: [4, 0.5, false] },
+  // 스킨 (lib/fight/skins.ts): 없는 효과는 캐릭터 기본 그림으로
+  "igna-fw": { spark: [4, 0.7, true], guard: [2, 0.6, true] },
   soyoung: { spark: [4, 0.6, true], guard: [2, 0.6, true], dust: [4, 0.5, false], burst: [4, 1.0, true] },
   lily: { spark: [4, 0.6, true], guard: [2, 0.6, true], dust: [4, 0.5, false] },
-  zena: { spark: [4, 0.6, true], guard: [2, 0.6, true], dust: [4, 0.5, false] },
+  // 제나: flash(일섬 빛줄기)·mark(낙인)·strike(낙뢰)는 drawZap 이, flash 는 공중 L 뇌격돌 꼬리로도 씀
+  zena: { spark: [4, 0.6, true], guard: [2, 0.6, true], dust: [4, 0.5, false], flash: [1, 1, true], mark: [1, 1, true], strike: [1, 1, true] },
   // 건모: box(Ctrl+A 선택 박스)·win(Alt+Tab 창)·err(금요일 배포 블록)·pause(⏸)·confuse(💫 로딩 원)는 따로 그림
   gunmo: {
     spark: [4, 0.6, true],
@@ -93,7 +102,15 @@ const FX_SETS: Record<string, Record<string, [number, number, boolean]>> = {
     err: [4, 1, true],
     pause: [2, 1, true],
     confuse: [2, 1, true],
+    // Alt+F4: crash(깨지는 창)·ring(충격파)는 강제 종료 맞은 자리, glitch(파란 픽셀 조각)는 (응답 없음) 동안
+    crash: [1, 1.1, true],
+    glitch: [1, 0.7, true],
+    ring: [1, 1.2, true],
   },
+  // 학창시절 건모: box · win 은 반투명 칠판(x 방정식), crash 는 깨지는 칠판, glitch 는 분필가루 — 나머지는 건모 기본
+  "gunmo-school": { box: [4, 1, false], win: [4, 1, false], crash: [1, 1.1, false], glitch: [1, 0.7, true], ring: [1, 1.2, true] },
+  // 시베리아 이반: 이반 효과를 서리빛으로 (먼지는 기본)
+  "ivan-winter": { spark: [4, 0.7, true], guard: [2, 0.6, true], aura: [4, 0.95, true], wave: [4, 0.9, true], burst: [4, 1.35, true], crack: [4, 0.95, false] },
   // 이반: aura(철곰권 기 모으기)·wave(철곰권 충격파)·burst(붉은 폭풍)·crack(곰 포옹 내리꽂기 균열)는 따로 띄움
   ivan: {
     spark: [4, 0.7, true],
@@ -107,7 +124,7 @@ const FX_SETS: Record<string, Record<string, [number, number, boolean]>> = {
 };
 /** 캐릭터 하나가 쓰는 그림 효과 파일 이름 전부 */
 /** 바닥에 남는 장판 그림 (fx/<이름>-0..3 반복, -in-0..1 나타나기, -out-0..1 꺼지기) — 이그나 업화주 불 장판 */
-const FLOOR_FX: Record<string, string> = { igna: "igna-floor" };
+const FLOOR_FX: Record<string, string> = { igna: "igna-floor", "igna-fw": "igna-fw-floor" };
 const floorNames = (b: string) => [0, 1, 2, 3].map((k) => `${b}-${k}`).concat([`${b}-in-0`, `${b}-in-1`, `${b}-out-0`, `${b}-out-1`]);
 
 function fxNames(id: string): string[] {
@@ -168,7 +185,7 @@ export class FightRenderer {
 
   /** 그림 효과 하나 띄우기 (그 캐릭터에 그 효과 그림이 있을 때만) — 성공하면 true */
   private spawnFx(
-    ch: number,
+    who: Fighter,
     name: string,
     x: number,
     y: number,
@@ -177,7 +194,8 @@ export class FightRenderer {
     ground = false,
     opt: { size?: [number, number]; from?: number; alpha?: number } = {}
   ) {
-    const id = CHARS[ch].id;
+    const own = this.lookOf(who);
+    const id = FX_SETS[own]?.[name] ? own : CHARS[who.ch].id;
     const d = FX_SETS[id]?.[name];
     if (!d) return false;
     this.fx.push({ key: `${id}-${name}`, n: d[0], x, y, t: 0, dur, flip: face < 0, k: d[1], glow: d[2], ground, ...opt });
@@ -203,8 +221,24 @@ export class FightRenderer {
     }
   }
   private flash = 0;
+  /** 건모 Alt+F4: 화면 전체 블루스크린 남은 프레임 */
+  private bsod = 0;
+  /** 학창시절 건모 스킨: 블루스크린 대신 칠판 화면 */
+  private bsodSchool = false;
+  /** 일섬 빛줄기 · 낙인 번개 (그림용) */
+  private lines: { x0: number; x1: number; y: number; life: number; max: number }[] = [];
+  private bolts: { x: number; y: number; life: number; max: number }[] = [];
   private flashColor = "#fff";
   sheets: (LoadedSheet | null)[] = [null, null];
+  /** 스킨: 자리마다 그림 이름 (lib/fight/skins look — 캐릭터 id 또는 스킨 id, "" = 기본) */
+  looks: [string, string] = ["", ""];
+  /** 지금 그리는 판 (스킨을 자리로 찾으려고) */
+  private cur: State | null = null;
+  /** 그 선수의 그림 이름 (스킨이면 스킨 id) */
+  private lookOf(f: Fighter): string {
+    const i = this.cur && this.cur.p[1] === f ? 1 : 0;
+    return this.looks[i] || CHARS[f.ch].id;
+  }
 
   constructor(private canvas: HTMLCanvasElement) {
     this.g = canvas.getContext("2d")!;
@@ -227,12 +261,13 @@ export class FightRenderer {
   /** 시작 전에 그림이 다 준비됐나 (캐릭터 시트 둘 + 맵 배경 + 두 캐릭터의 탄·기둥·효과 그림) —
    *  덜 됐으면 대신 그린 임시 그림(네모 등)이 잠깐 보이지 않게 */
   ready(s: State) {
+    this.cur = s;
     const map = MAPS[s.map] ?? MAPS[0];
     if (!this.sheets[0] || !this.sheets[1] || (map.bg && !this.bgImage(map.id, map.bg))) return false;
     if (this.fxReady) return true;
     let all = true;
     for (const f of s.p) {
-      for (const n of fxNames(CHARS[f.ch].id)) {
+      for (const n of [...fxNames(CHARS[f.ch].id), ...(this.lookOf(f) !== CHARS[f.ch].id ? fxNames(this.lookOf(f)) : [])]) {
         fxImg(n);
         if (!fxDone.has(n)) all = false;
       }
@@ -296,27 +331,28 @@ export class FightRenderer {
 
   /** 시뮬레이션 이벤트 → 연출 */
   events(evs: Ev[], s: State) {
+    this.cur = s;
     for (const e of evs) {
       const x = e.x / SUB,
         y = screenY(e.h);
       if (e.k === "hit" || e.k === "throw") {
         const a = s.p[e.p];
-        this.spawnFx(a.ch, "spark", x, y, a.face, 12);
+        this.spawnFx(a, "spark", x, y, a.face, 12);
         if (e.k === "hit" && CHARS[a.ch].id === "ivan") {
           // 철곰권: 맞힌 자리에서 앞으로 퍼지는 충격파 / 붉은 폭풍: 큰 폭발
-          if (e.m === "S" && !a.aerial && !isAirF(s, a)) this.spawnFx(a.ch, "wave", x + a.face * 18, y, a.face, 16);
+          if (e.m === "S" && !a.aerial && !isAirF(s, a)) this.spawnFx(a, "wave", x + a.face * 18, y, a.face, 16);
           else if (e.m === "X") {
-            this.spawnFx(a.ch, "burst", x + a.face * 22, y, a.face, 28);
+            this.spawnFx(a, "burst", x + a.face * 22, y, a.face, 28);
             this.flash = 3;
             this.flashColor = "#FFD0D0";
           }
         }
       } else if (e.k === "block" || e.k === "just") {
         const d = s.p[1 - e.p];
-        this.spawnFx(d.ch, "guard", d.x / SUB + d.face * 12, y, d.face, 12);
+        this.spawnFx(d, "guard", d.x / SUB + d.face * 12, y, d.face, 12);
       } else if (e.k === "dash") {
         const a = s.p[e.p];
-        if (e.v === 0) this.spawnFx(a.ch, "dust", a.x / SUB - a.face * 22, screenY(a.h), a.face, 18, true);
+        if (e.v === 0) this.spawnFx(a, "dust", a.x / SUB - a.face * 22, screenY(a.h), a.face, 18, true);
       } else if (e.k === "swap") {
         // 건모 Alt+Tab: 맞히는 순간 공격 동작이 끝나 붙어 있던 창이 사라지므로 따로 띄움
         //  - 지금 두 사람을 감싸는 창 하나 (히트스톱 동안 꽉 참 → 깜빡 → 사라짐) = "창이 바뀜"
@@ -326,7 +362,7 @@ export class FightRenderer {
         const ax = a.x / SUB,
           dx = d.x / SUB;
         const cy = screenY(Math.max(a.h, d.h) + 32 * SUB);
-        this.spawnFx(a.ch, "win", (ax + dx) / 2, cy, a.face, 34, false, {
+        this.spawnFx(a, "win", (ax + dx) / 2, cy, a.face, 34, false, {
           size: [Math.abs(ax - dx) + 84, 96],
           from: 1,
           alpha: 0.85,
@@ -334,7 +370,7 @@ export class FightRenderer {
         const ox = e.x / SUB,
           oy = screenY(e.h + 32 * SUB);
         if (Math.abs(ox - ax) > 24 || Math.abs(oy - cy) > 24) {
-          this.spawnFx(a.ch, "win", ox, oy, a.face, 20, false, { size: [62, 76], from: 2, alpha: 0.5 });
+          this.spawnFx(a, "win", ox, oy, a.face, 20, false, { size: [62, 76], from: 2, alpha: 0.5 });
           for (let i = 0; i < 12; i++) {
             const u = i / 11;
             this.parts.push({
@@ -376,7 +412,7 @@ export class FightRenderer {
         const a = s.p[e.p];
         this.parts.push({ x, y: y - 22, vx: 0, vy: -0.5, life: 30, max: 30, color: "#FF4D4D", size: 1.3, kind: "text", text: "MAX!" });
         this.parts.push({ x, y, vx: 0, vy: 0, life: 14, max: 14, color: "#FF6B6B", size: 22, kind: "ring" });
-        this.spawnFx(a.ch, "aura", a.x / SUB, screenY(a.h + 34 * SUB), a.face, 12, false, { from: 3 });
+        this.spawnFx(a, "aura", a.x / SUB, screenY(a.h + 34 * SUB), a.face, 12, false, { from: 3 });
         this.shake = Math.max(this.shake, 2);
       } else if (e.k === "crush") {
         // 다 모은 철곰권이 가드를 부숨
@@ -388,7 +424,7 @@ export class FightRenderer {
             x, y, vx: (Math.random() - 0.5) * 6, vy: (Math.random() - 0.5) * 6, life: 18, max: 18,
             color: i % 2 ? "#CFEFFF" : "#FF6B6B", size: 1.5, kind: "shard",
           });
-        this.spawnFx(a.ch, "wave", x + a.face * 18, y, a.face, 18);
+        this.spawnFx(a, "wave", x + a.face * 18, y, a.face, 18);
         this.flash = 4;
         this.flashColor = "#fff";
         this.shake = Math.max(this.shake, 7);
@@ -399,8 +435,47 @@ export class FightRenderer {
             x, y: y - 20, vx: (Math.random() - 0.5) * 5, vy: (Math.random() - 0.5) * 5, life: 14, max: 14,
             color: "#FFF27A", size: 1, kind: "bolt",
           });
+      } else if (e.k === "zapMark") {
+        // 일섬 낙인: 보라·흰 번개 고리
+        this.parts.push({ x, y: y - 6, vx: 0, vy: -0.5, life: 40, max: 40, color: "#E9D8FF", size: 1.25, kind: "text", text: "MARKED" });
+        this.parts.push({ x, y: y + 30, vx: 0, vy: 0, life: 18, max: 18, color: "#C9A7FF", size: 22, kind: "ring" });
+      } else if (e.k === "zapLine") {
+        // 일섬이 지나간 자리: 화면을 가르는 빛줄기 (잠깐 남았다 사라짐)
+        this.lines.push({ x0: e.x / SUB, x1: e.v / SUB, y, life: 22, max: 22 });
+        this.flash = Math.max(this.flash, 3);
+        this.flashColor = "#FFF6C8";
+        this.shake = Math.max(this.shake, 4);
+      } else if (e.k === "zapBurst") {
+        // 낙인이 터짐: 하늘에서 번개가 내리꽂힘
+        this.bolts.push({ x, y: y + 40, life: 16, max: 16 });
+        this.parts.push({ x, y: y - 30, vx: 0, vy: -0.6, life: 40, max: 40, color: "#FFF27A", size: 1.6, kind: "text", text: `⚡ ${e.v}` });
+        this.parts.push({ x, y, vx: 0, vy: 0, life: 20, max: 20, color: "#FFF6A8", size: 34, kind: "ring" });
+        for (let i = 0; i < 16; i++)
+          this.parts.push({
+            x, y, vx: (Math.random() - 0.5) * 8, vy: (Math.random() - 0.5) * 8, life: 16, max: 16,
+            color: i % 2 ? "#FFFFFF" : "#FFE45C", size: 1.2, kind: "bolt",
+          });
+        this.flash = 6;
+        this.flashColor = "#FFF6C8";
+        this.shake = Math.max(this.shake, 10);
+      } else if (e.k === "bsod") {
+        // Alt+F4 강제 종료: 화면 전체 블루스크린 + 맞은 자리에 깨진 창 조각
+        this.bsod = BSOD_T;
+        this.shake = Math.max(this.shake, 8);
+        const ga = s.p[e.p];
+        this.bsodSchool = this.looks[e.p] === "gunmo-school";
+        this.spawnFx(ga, "crash", x, y - 4, ga.face, 30);
+        this.spawnFx(ga, "ring", x, y - 4, ga.face, 22);
+        this.spawnFx(ga, "glitch", x - ga.face * 6, y - 8, ga.face, 40);
+        this.parts.push({ x, y: y - 14, vx: 0, vy: -0.5, life: 60, max: 60, color: "#9CC8FF", size: 1.5, kind: "text", text: this.bsodSchool ? "강제 하교!" : "FORCE QUIT!" });
+        this.parts.push({ x, y, vx: 0, vy: 0, life: 18, max: 18, color: "#5AA0FF", size: 30, kind: "ring" });
+        for (let i = 0; i < 14; i++)
+          this.parts.push({
+            x, y: y - 10, vx: (Math.random() - 0.5) * 7, vy: -1 - Math.random() * 4, life: 22, max: 22,
+            color: i % 3 ? "#1E6FE0" : "#FFFFFF", size: 1.6, kind: "spark",
+          });
       } else if (e.k === "burn") {
-        this.parts.push({ x, y: y - 6, vx: 0, vy: -0.6, life: 34, max: 34, color: "#FF8A3D", size: 1.25, kind: "text", text: "BURN!" });
+        this.parts.push({ x, y: y - 6, vx: 0, vy: -0.6, life: 34, max: 34, color: "#FF8A3D", size: 1.25, kind: "text", text: e.v > 1 ? `BURN ×${e.v}` : "BURN!" });
         for (let i = 0; i < 10; i++)
           this.parts.push({
             x: x + (Math.random() - 0.5) * 20, y: y - 10, vx: (Math.random() - 0.5) * 2, vy: -1 - Math.random() * 2, life: 18, max: 18,
@@ -424,19 +499,23 @@ export class FightRenderer {
       } else if (e.k === "throw" && e.m === "S") {
         // 이반 곰 포옹: 공중에서 붙잡음
         const a = s.p[e.p];
-        this.parts.push({ x, y: y - 14, vx: 0, vy: -0.5, life: 30, max: 30, color: "#FF6B6B", size: 1.4, kind: "text", text: "GRAB!" });
+        this.parts.push({ x, y: y - 14, vx: 0, vy: -0.5, life: 32, max: 32, color: "#FF6B6B", size: 1.5, kind: "text", text: "GRAB!" });
         this.parts.push({ x, y, vx: 0, vy: 0, life: 14, max: 14, color: "#FF8A8A", size: 22, kind: "ring" });
-        this.spawnFx(a.ch, "spark", x, y, a.face, 12);
-        for (let i = 0; i < 10; i++) {
-          const an = (i / 10) * Math.PI * 2;
+        this.parts.push({ x, y, vx: 0, vy: 0, life: 20, max: 20, color: "#FF4D4D", size: 34, kind: "ring" });
+        this.spawnFx(a, "spark", x, y, a.face, 12);
+        for (let i = 0; i < 12; i++) {
+          const an = (i / 12) * Math.PI * 2;
           this.parts.push({
-            x, y, vx: Math.cos(an) * 2.5, vy: Math.sin(an) * 2.5, life: 14, max: 14,
+            x, y, vx: Math.cos(an) * 2.8, vy: Math.sin(an) * 2.8, life: 14, max: 14,
             color: i % 2 ? "#FFD0C0" : "#FF4D4D", size: 1.3, kind: "spark",
           });
         }
-        this.shake = Math.max(this.shake, 4);
+        this.shake = Math.max(this.shake, 5);
       } else if (e.k === "throw") {
-        this.parts.push({ x, y, vx: 0, vy: 0, life: 12, max: 12, color: "#fff", size: 12, kind: "ring" });
+        // 잡기 성공: 보라색 고리 + 글자 (타격과 다른 색으로 한눈에)
+        this.parts.push({ x, y, vx: 0, vy: 0, life: 14, max: 14, color: "#E9D5FF", size: 20, kind: "ring" });
+        this.parts.push({ x, y, vx: 0, vy: 0, life: 20, max: 20, color: "#A855F7", size: 32, kind: "ring" });
+        this.parts.push({ x, y: y - 16, vx: 0, vy: -0.5, life: 30, max: 30, color: "#D8B4FE", size: 1.55, kind: "text", text: "GRAB!" });
         this.shake = Math.max(this.shake, 4);
       } else if (e.k === "block") {
         this.parts.push({ x, y, vx: 0, vy: 0, life: 12, max: 12, color: "#8FD3FF", size: 11, kind: "ring" });
@@ -470,9 +549,12 @@ export class FightRenderer {
         // 바닥에 처박힘: 크게 퍼지는 충격파 + 흙먼지 (이반 곰 포옹이면 바닥 균열도)
         const sl = s.p[1 - e.p];
         if (CHARS[sl.ch].id === "ivan" && sl.st === "atk" && sl.mv === "S") {
-          this.spawnFx(sl.ch, "crack", x, y + 6, sl.face, 26, true);
+          // 곰 포옹 내리꽂기: 균열 + 붉은 고리 (10.12 조금만 크게)
+          this.spawnFx(sl, "crack", x, y + 6, sl.face, 30, true, { size: [160, 54] });
           this.flash = 3;
           this.flashColor = "#FFD0D0";
+          this.shake = Math.max(this.shake, 8);
+          this.parts.push({ x, y: y - 4, vx: 0, vy: 0, life: 20, max: 20, color: "#FF6B5A", size: 40, kind: "ring" });
         }
         for (let i = 0; i < 24; i++) {
           const d = i % 2 ? 1 : -1;
@@ -529,7 +611,9 @@ export class FightRenderer {
 
   /** 연출 한 프레임 진행 (시뮬레이션이 진행됐을 때만) */
   tick(s: State) {
+    this.cur = s;
     if (this.flash > 0) this.flash--;
+    if (this.bsod > 0) this.bsod--;
     if (s.stop > 0 || s.freeze > 0) {
       this.shake *= 0.85;
       return;
@@ -554,6 +638,9 @@ export class FightRenderer {
 
   /** 이름표: 머리 위 1P(파랑)·2P/CPU(빨강) 표시 — 둘이 겹쳐도 내 캐릭터를 알 수 있게 */
   tags: [string, string] = ["1P", "2P"];
+  /** 차지 게이지(이반 철곰권)를 보여 줄 자리 — 직접 조작하는 사람에게만 (상대 · 관전자에겐 안 보임) */
+  gauge: [boolean, boolean] = [false, false];
+  private tagF = 0;
   private drawTag(f: Fighter, i: number) {
     if (f.st === "ko" || f.h / SUB > VIEW_H) return;
     const g = this.g;
@@ -577,6 +664,32 @@ export class FightRenderer {
     g.fillStyle = "#fff";
     g.textAlign = "center";
     g.fillText(label, x, y - 3);
+    // 차지 게이지: 이름표 오른쪽 세로 막대 (다 모으면 번쩍)
+    const cm = CHARS[f.ch].moves.S.charge;
+    if (this.gauge[i] && cm && f.st === "atk" && f.mv === "S" && !f.aerial && f.chg > 0 && f.t <= cm.at + 1) {
+      const k = Math.min(1, f.chg / cm.max);
+      const full = k >= 1;
+      const gx = x + tw / 2 + 3,
+        gh = 22,
+        gy = y + 4 - gh;
+      g.globalAlpha = 1;
+      g.fillStyle = "rgba(0,0,0,0.6)";
+      g.fillRect(gx - 1, gy - 1, 6, gh + 2);
+      g.fillStyle = full ? (Math.floor(this.tagF / 3) % 2 ? "#FFFFFF" : "#FFD34D") : k > 0.66 ? "#FF6B3D" : "#FF4D4D";
+      g.fillRect(gx, gy + gh * (1 - k), 4, gh * k);
+      // 1/3 · 2/3 눈금
+      g.fillStyle = "rgba(255,255,255,0.45)";
+      g.fillRect(gx, gy + gh / 3, 4, 0.8);
+      g.fillRect(gx, gy + (gh * 2) / 3, 4, 0.8);
+      if (full) {
+        g.fillStyle = "#FFD34D";
+        g.font = "bold 8px ui-monospace, monospace";
+        g.textAlign = "left";
+        g.fillText("MAX", gx + 7, gy + 7);
+        g.textAlign = "center";
+      }
+      g.font = "bold 9px ui-monospace, monospace";
+    }
     if (f.shock > 0) {
       // 감전 표시 (남은 시간만큼 줄어드는 노란 막대)
       g.globalAlpha = 1;
@@ -591,8 +704,18 @@ export class FightRenderer {
       g.globalAlpha = 1;
       g.fillStyle = "#FF8A3D";
       g.font = "bold 8px ui-monospace, monospace";
-      g.fillText("🔥화상", x, by);
-      g.fillRect(x - 12, by + 2, Math.min(24, (24 * f.burn) / 180), 1.5);
+      g.fillText(f.burnN > 1 ? `🔥화상×${f.burnN}` : "🔥화상", x, by);
+      g.fillRect(x - 12, by + 2, Math.min(24, (24 * f.burn) / 300), 1.5);
+    }
+    if (f.zap > 0) {
+      // 일섬 낙인: 터질 때까지 줄어드는 보라 막대 (위쪽에)
+      const zy = y - 14 - (f.shock > 0 ? 10 : 0) - (f.burn > 0 ? 10 : 0);
+      g.globalAlpha = 0.75 + 0.25 * Math.sin(this.tagF * 0.6);
+      g.fillStyle = "#D8B4FE";
+      g.font = "bold 8px ui-monospace, monospace";
+      g.fillText("⚡낙인", x, zy);
+      g.fillRect(x - 12, zy + 2, Math.min(24, (24 * f.zap) / 120), 1.5);
+      g.globalAlpha = 1;
     }
     g.restore();
   }
@@ -724,11 +847,56 @@ export class FightRenderer {
         life: 14, max: 14, color: Math.random() < 0.5 ? "#FFB347" : "#FF5A1F", size: 1.2, kind: "spark",
       });
     }
+    // 잡기: 손을 뻗는 동안 손끝에 보라색 손아귀 — 원이 오므라들며 잡는 순간까지 (10.13: 모션만으론 잡기인지 알아보기 힘들어서)
+    // (10.13 조금 더 눈에 띄게: 원 두 겹 · 굵게 · 손에 보라 빛 · 모이는 불티)
+    if (f.st === "atk" && f.mv === "T" && !f.hit && f.t <= (f.lg ? 14 : 8)) {
+      const k = Math.min(1, f.t / (f.lg ? 14 : 8));
+      const hx = x + f.face * (26 + k * 10),
+        hy = y - 44;
+      g.save();
+      g.globalCompositeOperation = "lighter";
+      const glow = g.createRadialGradient(hx, hy, 0, hx, hy, 26);
+      glow.addColorStop(0, `rgba(216,180,254,${0.45 + 0.35 * k})`);
+      glow.addColorStop(1, "rgba(168,85,247,0)");
+      g.fillStyle = glow;
+      g.beginPath();
+      g.arc(hx, hy, 26, 0, Math.PI * 2);
+      g.fill();
+      g.strokeStyle = `rgba(216,180,254,${0.7 + 0.3 * k})`;
+      g.lineWidth = 3;
+      g.beginPath();
+      g.arc(hx, hy, 24 - k * 13, 0, Math.PI * 2);
+      g.stroke();
+      g.strokeStyle = `rgba(168,85,247,${0.5 + 0.4 * k})`;
+      g.lineWidth = 1.6;
+      g.beginPath();
+      g.arc(hx, hy, 32 - k * 14, 0, Math.PI * 2);
+      g.stroke();
+      // 손톱 세 줄이 가운데로 모임
+      g.strokeStyle = "rgba(245,235,255,0.95)";
+      g.lineWidth = 2.2;
+      for (let n = -1; n <= 1; n++) {
+        const an = (f.face > 0 ? Math.PI : 0) + n * 0.55;
+        const r0 = 30 - k * 14;
+        g.beginPath();
+        g.moveTo(hx + Math.cos(an) * r0, hy + Math.sin(an) * r0);
+        g.lineTo(hx + Math.cos(an) * (r0 - 9), hy + Math.sin(an) * (r0 - 9));
+        g.stroke();
+      }
+      g.restore();
+      if (s.f % 2 === 0) {
+        const an = Math.random() * Math.PI * 2;
+        this.parts.push({
+          x: hx + Math.cos(an) * 26, y: hy + Math.sin(an) * 26, vx: -Math.cos(an) * 2.2, vy: -Math.sin(an) * 2.2,
+          life: 8, max: 8, color: Math.random() < 0.5 ? "#F5EBFF" : "#C084FC", size: 1.2, kind: "spark",
+        });
+      }
+    }
     // 움직임 연출 (발 기준 늘이기·기울이기·밀기, 잔상)
     const mo = this.motion[i];
     mo.update(f, s, `${anim.list?.[frame] ?? anim.row * 100 + frame}`, fr, x, y);
     for (const sp of mo.spawn.splice(0))
-      this.spawnFx(f.ch, sp.name, x + sp.dx * f.face, y + sp.dy, f.face, sp.name === "burst" ? 26 : 18, true);
+      this.spawnFx(f, sp.name, x + sp.dx * f.face, y + sp.dy, f.face, sp.name === "burst" ? 26 : 18, true);
     // 돌진 아이덴티티: 주먹 앞에 바람 덩어리
     const cm = f.st === "atk" && f.mv ? CHARS[f.ch].moves[f.mv as keyof typeof CHARS[number]["moves"]] : null;
     if (cm && f.mv === "S" && cm.rush && !isAirF(s, f) && f.t >= cm.startup - 2 && f.t < cm.startup + cm.active + 2) {
@@ -745,30 +913,71 @@ export class FightRenderer {
         g.restore();
       }
     }
+    // 제나 공중 L 뇌격돌: 몸 뒤로 번개 꼬리 + 창끝·몸 둘레에 찌릿 (돌진하는 동안)
+    if (CHARS[f.ch].id === "zena" && f.st === "atk" && f.mv === "S" && f.aerial && cm?.air) {
+      const am = { ...cm, ...cm.air };
+      const t0 = f.t - am.startup;
+      if (t0 >= -3 && t0 < am.active + 4) {
+        const on = t0 >= 0 && t0 < am.active;
+        const im = fxImg("zena-flash-0");
+        if (im && t0 >= 0) {
+          const fade = on ? 1 : Math.max(0, 1 - (t0 - am.active) / 4);
+          const w = 120 * (on ? Math.min(1, (t0 + 2) / 4) : 1),
+            h = 30;
+          g.save();
+          g.globalCompositeOperation = "lighter";
+          g.globalAlpha = (0.55 + 0.25 * Math.random()) * fade;
+          g.translate(x + f.face * 6, y - 40);
+          if (f.face < 0) g.scale(-1, 1);
+          g.drawImage(im, -w, -h / 2, w, h);
+          g.restore();
+        }
+        if (s.f % 2 === 0)
+          for (let k = 0; k < (on ? 3 : 1); k++) {
+            const tip = Math.random() < 0.5;
+            this.parts.push({
+              x: x + f.face * (tip ? 40 + Math.random() * 20 : (Math.random() - 0.5) * 36), y: y - 40 + (Math.random() - 0.5) * (tip ? 16 : 40),
+              vx: (Math.random() - 0.5) * 3, vy: (Math.random() - 0.5) * 3, life: 8, max: 8,
+              color: Math.random() < 0.4 ? "#FFFFFF" : "#FFE45C", size: 0.9 + Math.random() * 0.5, kind: "bolt",
+            });
+          }
+      }
+    }
     // 이반 곰 포옹: 덮칠 때 손끝에 붉은 휘두름, 안고 떨어질 때 붉은 기 + 위로 속도선
     if (CHARS[f.ch].id === "ivan" && f.st === "atk" && f.mv === "S" && f.aerial && cm?.air?.hug) {
       const am = cm.air;
       if (f.hug) {
-        const im = fxImg(`ivan-aura-${2 + (Math.floor(s.f / 3) % 2)}`);
+        const im = fxImg(`${this.lookOf(f) === "ivan-winter" ? "ivan-winter" : "ivan"}-aura-${2 + (Math.floor(s.f / 3) % 2)}`);
         if (im) {
-          const w = (im.width / 1.72) * 1.1,
-            h = (im.height / 1.72) * 1.1;
+          const w = (im.width / 1.72) * 1.2,
+            h = (im.height / 1.72) * 1.2;
           g.save();
           g.globalCompositeOperation = "lighter";
-          g.globalAlpha = 0.75;
+          g.globalAlpha = 0.8;
           g.translate(x + f.face * 10, y - 34);
           if (f.face < 0) g.scale(-1, 1);
           g.drawImage(im, -w / 2, -h / 2, w, h);
           g.restore();
         }
-        for (let k = 0; k < 2; k++)
+        for (let k = 0; k < 3; k++)
           this.parts.push({
-            x: x + f.face * 10 + (Math.random() - 0.5) * 56, y: y - 70 - Math.random() * 30, vx: 0, vy: -1.5, life: 8, max: 8,
+            x: x + f.face * 10 + (Math.random() - 0.5) * 60, y: y - 65 - Math.random() * 35, vx: 0, vy: -1.8, life: 8, max: 8,
             color: Math.random() < 0.5 ? "rgba(255,255,255,0.8)" : "#FF6B6B", size: 1 + Math.random(), kind: "vstreak",
           });
+      } else if (isAirF(s, f) && f.t < (am.startup ?? 0)) {
+        // 덮치기 직전: 손에 붉은 기가 모임 (곰 포옹 예고)
+        const hx = x + f.face * 26,
+          hy = y - 44;
+        const an = Math.random() * Math.PI * 2;
+        this.parts.push({
+          x: hx + Math.cos(an) * 26, y: hy + Math.sin(an) * 20, vx: -Math.cos(an) * 2.4, vy: -Math.sin(an) * 2,
+          life: 9, max: 9, color: Math.random() < 0.5 ? "#FFD0C0" : "#FF4D4D", size: 1.3, kind: "spark",
+        });
+        if (f.t === 1) this.parts.push({ x: hx, y: hy, vx: 0, vy: 0, life: 12, max: 12, color: "#FF6B5A", size: 20, kind: "ring" });
       } else if (isAirF(s, f) && f.t === am.startup) {
-        this.spawnFx(f.ch, "wave", x + f.face * 34, y - 40, f.face, 10, false, { size: [70, 46], from: 1, alpha: 0.9 });
-        for (let k = 0; k < 6; k++)
+        this.spawnFx(f, "wave", x + f.face * 40, y - 40, f.face, 14, false, { size: [120, 78], from: 1, alpha: 1 });
+        this.parts.push({ x: x + f.face * 44, y: y - 40, vx: 0, vy: 0, life: 12, max: 12, color: "#FF4D4D", size: 30, kind: "ring" });
+        for (let k = 0; k < 12; k++)
           this.parts.push({
             x: x + f.face * 30, y: y - 40 + (Math.random() - 0.5) * 30, vx: f.face * (2 + Math.random() * 2), vy: (Math.random() - 0.5) * 0.6,
             life: 10, max: 10, color: k % 2 ? "#FFD0C0" : "#FF4D4D", size: 1.4, kind: "streak",
@@ -779,7 +988,7 @@ export class FightRenderer {
     if (CHARS[f.ch].id === "ivan" && cm?.charge && f.mv === "S" && !f.aerial && f.chg > 0 && f.t <= cm.charge.at + 1) {
       const full = f.chg >= cm.charge.max;
       const k = full ? 2 + (Math.floor(s.f / 3) % 2) : Math.min(2, Math.floor((f.chg * 3) / cm.charge.max));
-      const im = fxImg(`ivan-aura-${k}`);
+      const im = fxImg(`${this.lookOf(f) === "ivan-winter" ? "ivan-winter" : "ivan"}-aura-${k}`);
       if (im) {
         const z = 0.75 + (0.35 * Math.min(f.chg, cm.charge.max)) / cm.charge.max;
         const w = (im.width / 1.72) * 0.95 * z,
@@ -856,20 +1065,43 @@ export class FightRenderer {
       if (lt >= 0 && lt < dur) {
         const name = f.aerial ? "win" : "box";
         const k = lt < 2 ? 0 : lt < cm.active + 2 ? 1 + (lt % 2) : 3;
-        const im = fxImg(`gunmo-${name}-${k}`);
+        // 스킨(학창시절 칠판)은 빛이 아니라 반투명 판이라 그냥 겹쳐 그림
+        const lk = this.lookOf(f);
+        const board = lk !== "gunmo" && !!FX_SETS[lk]?.[name];
+        const im = fxImg(`${board ? lk : "gunmo"}-${name}-${k}`);
         if (im) {
           const b = cm.box;
           const w = b.w * 1.08,
             h = b.h * 1.08;
           g.save();
-          g.globalCompositeOperation = "lighter";
-          g.globalAlpha = lt >= cm.active + 2 ? 0.6 : 0.9;
+          if (!board) g.globalCompositeOperation = "lighter";
+          g.globalAlpha = (lt >= cm.active + 2 ? 0.6 : 0.9) * (board ? 0.82 : 1);
           g.translate(x + f.face * (b.x + b.w / 2), y - (b.y - b.h / 2));
           if (f.face < 0) g.scale(-1, 1);
           g.drawImage(im, -w / 2, -h / 2, w, h);
           g.restore();
         }
       }
+    }
+    // Alt+F4로 멈춘 상대: 몸에 파란 글리치 줄 + 머리 위 (응답 없음)
+    if (f.frz > 0 && f.st === "hit") {
+      const hh = (fr.sh / sc) * 0.9;
+      g.save();
+      g.globalAlpha = 0.55;
+      for (let k = 0; k < 4; k++) {
+        const gy = y - ((s.f * 3 + k * 23) % Math.max(1, Math.round(hh)));
+        g.fillStyle = k % 2 ? "#2B7BFF" : "#9CC8FF";
+        g.fillRect(x - 18 + ((s.f * 7 + k * 13) % 9) - 4, gy, 36, 2);
+      }
+      g.globalAlpha = 1;
+      g.font = "bold 9px 'Nanum Gothic', sans-serif";
+      g.textAlign = "center";
+      g.lineWidth = 2;
+      g.strokeStyle = "rgba(0,0,0,0.85)";
+      g.strokeText("(응답 없음)", x, y - 100);
+      g.fillStyle = "#CFE3FF";
+      g.fillText("(응답 없음)", x, y - 100);
+      g.restore();
     }
     if (f.mark && f.st === "hit") {
       // 머리 위: ⏸ 일시정지 / 💫 혼란 로딩 원
@@ -918,7 +1150,7 @@ export class FightRenderer {
     const w = fl.w;
     // 나타날 때·꺼질 때 서서히
     const a = Math.min(1, p.t / 6, p.life / 20);
-    const fb = FLOOR_FX[CHARS[s.p[p.o].ch].id];
+    const fb = FLOOR_FX[this.lookOf(s.p[p.o])] ?? FLOOR_FX[CHARS[s.p[p.o].ch].id];
     if (fb) {
       // 그림: 처음 8프레임 나타나기 → 일렁임 반복(6프레임마다) → 마지막 12프레임 꺼지기
       const name =
@@ -998,7 +1230,7 @@ export class FightRenderer {
     const sh = this.sheets[p.o];
     const a = sh?.anims.pillar;
     const fade = Math.min(1, (sm.delay + sm.life - p.t) / 8);
-    const pa = PILLAR_ANIM[CHARS[s.p[p.o].ch].id];
+    const pa = PILLAR_ANIM[this.lookOf(s.p[p.o])] ?? PILLAR_ANIM[CHARS[s.p[p.o].ch].id];
     // 솟음 → 최대(반복) → 사그라짐
     const life = p.t - sm.delay;
     const pk = !pa ? 0 : life < 4 ? 0 : life < 8 ? 1 : sm.delay + sm.life - p.t < 8 ? pa[1] - 1 : 1 + (Math.floor(life / 4) % 2);
@@ -1076,9 +1308,10 @@ export class FightRenderer {
       g.translate(cx, cy);
       g.rotate(Math.atan2(-p.vh, Math.abs(p.vx)) * dir);
       g.translate(-cx, -cy);
-      const anim = PROJ_ANIM[ch.id]?.[p.mv ? "X" : "S"];
+      const lk = this.lookOf(s.p[p.o]);
+      const anim = (PROJ_ANIM[lk] ?? PROJ_ANIM[ch.id])?.[p.mv ? "X" : "S"];
       const aimg = anim ? fxImg(`${anim[0]}-${Math.floor(t / 4) % anim[1]}`) : null;
-      const art = PROJ_ART[ch.id]?.[p.mv ? "X" : "S"];
+      const art = (PROJ_ART[lk] ?? PROJ_ART[ch.id])?.[p.mv ? "X" : "S"];
       const img = art ? fxImg(art[0]) : null;
       if (anim && aimg) {
         const hgt = ((r.hi - r.lo) / SUB) * anim[2];
@@ -1220,7 +1453,163 @@ export class FightRenderer {
     }
   }
 
+  /** 건모 Alt+F4: 화면 전체가 잠깐 블루스크린 (처음엔 꽉 차게, 뒤로 갈수록 줄무늬로 깨지며 걷힘) */
+  private drawBsod() {
+    const g = this.g;
+    const W = this.canvas.width,
+      H = this.canvas.height;
+    const t = BSOD_T - this.bsod; // 지난 프레임
+    const hold = 16;
+    const a = t < hold ? 0.92 : Math.max(0, 0.92 * (1 - (t - hold) / (BSOD_T - hold)));
+    g.save();
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    const sc = this.bsodSchool;
+    const C0 = sc ? "#1F4A38" : "#1452B8",
+      C1 = sc ? "#2B5C46" : "#2A6BD6";
+    if (t < hold) {
+      g.globalAlpha = a;
+      g.fillStyle = C0;
+      g.fillRect(0, 0, W, H);
+      if (sc) {
+        // 칠판 나무 테두리 + 분필 받침
+        g.fillStyle = "#6B4A2B";
+        g.fillRect(0, 0, W, H * 0.03);
+        g.fillRect(0, H * 0.94, W, H * 0.06);
+        g.fillStyle = "#EDE9DA";
+        g.fillRect(W * 0.72, H * 0.925, W * 0.05, H * 0.015);
+      }
+    } else {
+      // 걷히는 동안: 가로 줄무늬로 깨져 사라짐
+      const rows = 18;
+      for (let r = 0; r < rows; r++) {
+        if ((r * 7 + t * 3) % 5 === 0) continue;
+        g.globalAlpha = a * (0.6 + 0.4 * ((r * 13) % 7) / 7);
+        g.fillStyle = r % 3 ? C0 : C1;
+        const off = ((r * 37 + t * 11) % 40) - 20;
+        g.fillRect(off * (W / 400), (r * H) / rows, W, H / rows + 1);
+      }
+    }
+    g.globalAlpha = Math.min(1, a * 1.1);
+    g.fillStyle = sc ? "#EDE9DA" : "#FFFFFF";
+    g.textAlign = "left";
+    g.textBaseline = "top";
+    const u = W / 100;
+    if (sc) {
+      g.font = `bold ${Math.round(u * 7)}px 'Nanum Gothic', sans-serif`;
+      g.fillText("x = ?", u * 10, H * 0.17);
+      g.font = `bold ${Math.round(u * 2.4)}px 'Nanum Gothic', sans-serif`;
+      g.fillText("종이 울렸습니다. 상대를 강제로 하교시켰습니다.", u * 10, H * 0.2 + u * 11);
+      g.font = `${Math.round(u * 1.8)}px 'Nanum Gothic', sans-serif`;
+      g.fillText(`${Math.min(100, t * 7)}% 하교 중`, u * 10, H * 0.2 + u * 15);
+      g.font = `${Math.round(u * 1.2)}px monospace`;
+      g.globalAlpha *= 0.7;
+      g.fillText("중지 코드: 4교시_종료_급식_ㄱㄱ", u * 10, H * 0.2 + u * 19);
+      g.restore();
+      return;
+    }
+    g.font = `${Math.round(u * 9)}px 'Nanum Gothic', sans-serif`;
+    g.fillText(":(", u * 10, H * 0.2);
+    g.font = `bold ${Math.round(u * 2.4)}px 'Nanum Gothic', sans-serif`;
+    g.fillText("상대 프로그램이 응답하지 않아 강제로 종료했습니다.", u * 10, H * 0.2 + u * 11);
+    g.font = `${Math.round(u * 1.8)}px 'Nanum Gothic', sans-serif`;
+    g.fillText(`${Math.min(100, t * 7)}% 완료`, u * 10, H * 0.2 + u * 15);
+    g.font = `${Math.round(u * 1.2)}px monospace`;
+    g.globalAlpha *= 0.7;
+    g.fillText("중지 코드: ALT_F4_FORCE_QUIT", u * 10, H * 0.2 + u * 19);
+    g.restore();
+  }
+
+  /** 제나 일섬: 지나간 빛줄기, 낙인 몸 둘레 고리, 낙인이 터지는 번개 */
+  private drawZap(s: State) {
+    const g = this.g;
+    g.save();
+    g.globalCompositeOperation = "lighter";
+    const flash = fxImg("zena-flash-0"),
+      strike = fxImg("zena-strike-0"),
+      mark = fxImg("zena-mark-0");
+    for (const l of this.lines) {
+      const a = l.life / l.max;
+      if (flash) {
+        // 그림은 오른쪽(x1 쪽)이 끝 — 일섬이 간 방향으로 뒤집음
+        const dir = l.x1 >= l.x0 ? 1 : -1;
+        const len = Math.abs(l.x1 - l.x0) + 40;
+        g.save();
+        g.globalAlpha = Math.min(1, a * 1.3);
+        g.translate(l.x0 - dir * 20, l.y);
+        g.scale(dir, 1);
+        g.drawImage(flash, 0, -(26 + 16 * a) / 2, len, 26 + 16 * a);
+        g.restore();
+      }
+      const th = 2 + 10 * a;
+      const grad = g.createLinearGradient(l.x0, 0, l.x1, 0);
+      grad.addColorStop(0, "rgba(255,240,150,0)");
+      grad.addColorStop(0.15, `rgba(255,245,180,${0.9 * a})`);
+      grad.addColorStop(1, `rgba(255,255,255,${a})`);
+      g.fillStyle = grad;
+      g.fillRect(Math.min(l.x0, l.x1), l.y - th / 2, Math.abs(l.x1 - l.x0), th);
+      g.fillStyle = `rgba(255,255,255,${a})`;
+      g.fillRect(Math.min(l.x0, l.x1), l.y - th / 6, Math.abs(l.x1 - l.x0), th / 3);
+    }
+    for (const b of this.bolts) {
+      const a = b.life / b.max;
+      if (strike) {
+        // 낙뢰 그림: 바닥(b.y) 기준, 위로 화면 끝까지 늘림
+        const w = 110,
+          h = Math.max(140, b.y + 10);
+        g.save();
+        g.globalAlpha = Math.min(1, a * 1.5);
+        g.drawImage(strike, b.x - w / 2, b.y - h, w, h);
+        g.restore();
+      }
+      g.strokeStyle = `rgba(255,250,200,${a})`;
+      g.lineWidth = 2 + 4 * a;
+      g.beginPath();
+      let px = b.x,
+        py = -10;
+      g.moveTo(px, py);
+      while (py < b.y) {
+        py = Math.min(b.y, py + 22 + Math.random() * 18);
+        px = b.x + (Math.random() - 0.5) * (py < b.y ? 26 : 0);
+        g.lineTo(px, py);
+      }
+      g.stroke();
+    }
+    // 낙인 찍힌 상대: 몸 둘레에 도는 보라 번개
+    for (const f of s.p) {
+      if (f.zap <= 0) continue;
+      const x = f.x / SUB,
+        y = screenY(f.h) - 32;
+      if (mark) {
+        // 낙인 문양: 몸 위에서 천천히 돌며 깜빡, 터질 때가 가까울수록 커지고 진해짐
+        const near = 1 - f.zap / 120;
+        const z = 38 + 10 * near + 3 * Math.sin(s.f * 0.5);
+        g.save();
+        g.globalAlpha = 0.45 + 0.4 * near + 0.15 * Math.sin(s.f * 0.7);
+        g.translate(x, y);
+        g.rotate(s.f * 0.05);
+        g.drawImage(mark, -z / 2, -z / 2, z, z);
+        g.restore();
+      }
+      const r = 22 + 4 * Math.sin(s.f * 0.4);
+      g.strokeStyle = `rgba(200,160,255,${0.35 + 0.3 * (1 - f.zap / 120)})`;
+      g.lineWidth = 1.5;
+      g.beginPath();
+      for (let k = 0; k <= 12; k++) {
+        const t = (k / 12) * Math.PI * 2 + s.f * 0.15;
+        const rr = r + (k % 2 ? 3 : -3);
+        g.lineTo(x + Math.cos(t) * rr, y + Math.sin(t) * rr * 1.4);
+      }
+      g.stroke();
+    }
+    g.restore();
+    for (const l of this.lines) l.life--;
+    for (const b of this.bolts) b.life--;
+    this.lines = this.lines.filter((l) => l.life > 0);
+    this.bolts = this.bolts.filter((b) => b.life > 0);
+  }
+
   draw(s: State) {
+    this.cur = s;
     const g = this.g;
     const k = this.canvas.width / VIEW_W;
     g.setTransform(1, 0, 0, 1, 0, 0);
@@ -1242,9 +1631,11 @@ export class FightRenderer {
       this.drawFighter(s.p[i], i, s);
       this.drawWindAura(s.p[i], s);
     }
+    this.tagF = s.f;
     for (let i = 0; i < 2; i++) this.drawTag(s.p[i], i);
     this.drawProj(s);
     this.drawFx();
+    this.drawZap(s);
 
     for (const p of this.parts) {
       const a = p.life / p.max;
@@ -1309,6 +1700,7 @@ export class FightRenderer {
     }
     g.globalAlpha = 1;
 
+    if (this.bsod > 0) this.drawBsod();
     if (this.flash > 0) {
       g.setTransform(1, 0, 0, 1, 0, 0);
       g.globalAlpha = this.flash / 20;

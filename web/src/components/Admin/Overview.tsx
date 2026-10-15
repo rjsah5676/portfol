@@ -26,6 +26,8 @@ export const BOARD_LABEL: Record<string, string> = {
   janggi_ai_rankings: "장기 AI",
   omok_ai_rankings: "오목 AI",
   fight_ai_rankings: "픽셀 격투 AI",
+  fight_rank_ratings: "격투 랭크전",
+  defense_rank: "LUCKY DEFENSE",
 };
 const ROOM_LABEL: Record<string, string> = {
   chess_rooms: "체스",
@@ -234,7 +236,7 @@ export default function Overview({ onGo }: { onGo: (tab: string) => void }) {
           <div className={heading}>지금</div>
           <Line label="접속 중인 연결">{n(data.server.connections)}</Line>
           <button type="button" onClick={() => onGo("rooms")} className="block w-full cursor-pointer text-left">
-            <Line label="스케치 퀴즈">
+            <Line label="DOODLE PARTY">
               {data.live.sketch.rooms}방 · {data.live.sketch.players}명
             </Line>
             <Line label="픽셀 격투">
@@ -242,6 +244,12 @@ export default function Overview({ onGo }: { onGo: (tab: string) => void }) {
             </Line>
             <Line label="포커">
               {data.live.poker?.rooms ?? 0}테이블 · {data.live.poker?.players ?? 0}명
+            </Line>
+            <Line label="BEAT DASH 온라인">
+              {data.live.rhythm?.rooms ?? 0}방 · {data.live.rhythm?.players ?? 0}명
+            </Line>
+            <Line label="디펜스 멀티">
+              {data.live.defense?.rooms ?? 0}방 · {data.live.defense?.players ?? 0}명
             </Line>
             {Object.entries(data.rooms).map(([c, r]) => (
               <Line key={c} label={ROOM_LABEL[c] ?? c}>

@@ -13,7 +13,7 @@ import { artUrl, hasArt } from "@/lib/sketch/assets";
 import { DESIGN, FsButton, SoundButton, StageCtx, useStage, type Orient } from "./stage";
 
 /*
- * 스케치 퀴즈 = 하나의 게임 화면(무대) 안에서 타이틀 → 로비 → 방이 바뀜 (ANIME POKER · PIXEL FIGHT 처럼).
+ * DOODLE PARTY = 하나의 게임 화면(무대) 안에서 타이틀 → 로비 → 방이 바뀜 (ANIME POKER · PIXEL FIGHT 처럼).
  *  - 가로판(PC): 1280×720 으로 그리고 무대 크기에 맞게 통째로 줄이고 키움
  *  - 세로판(폰): 화면 높이를 꽉 채우는 세로 배치
  *  - 방은 ?room=ID(&k=초대키) 쿼리로 구분 — 초대 링크로 오면 타이틀 없이 바로 입장
@@ -76,12 +76,61 @@ export default function SketchApp() {
   const [pseudoFs, setPseudoFs] = useState(false);
   const fs = fsReal || pseudoFs;
   const [canFs, setCanFs] = useState(false);
+  const fsByUs = useRef(false); // 우리 버튼으로 끈 건지
+  const typedAt = useRef(0); // 마지막으로 입력칸을 누른 때
   useEffect(() => {
     setCanFs(canFullscreen()); // eslint-disable-line react-hooks/set-state-in-effect -- 브라우저에서만 아는 값
-    const on = () => setFsReal(!!rootRef.current && document.fullscreenElement === rootRef.current);
+    const on = () => {
+      const root = rootRef.current;
+      const real = !!root && document.fullscreenElement === root;
+      setFsReal(real);
+      if (real || !root) return;
+      // 폰: 채팅 치려고 키보드를 올리면 브라우저가 전체화면을 풀어 버림 → 흉내 전체화면으로 이어감
+      const a = document.activeElement;
+      const typing =
+        (a instanceof HTMLInputElement || a instanceof HTMLTextAreaElement) && root.contains(a);
+      if (!fsByUs.current && (typing || Date.now() - typedAt.current < 1500)) setPseudoFs(true);
+      fsByUs.current = false;
+    };
+    const focusIn = (e: FocusEvent) => {
+      const t = e.target;
+      if (t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement)
+        typedAt.current = Date.now();
+    };
     document.addEventListener("fullscreenchange", on);
-    return () => document.removeEventListener("fullscreenchange", on);
+    document.addEventListener("focusin", focusIn);
+    return () => {
+      document.removeEventListener("fullscreenchange", on);
+      document.removeEventListener("focusin", focusIn);
+    };
   }, []);
+  // 전체화면 동안엔 뒤 페이지가 같이 밀리지 않게 잠그고,
+  // 흉내 전체화면은 키보드가 올라와도 보이는 영역(visualViewport)에 딱 맞춤
+  const [vv, setVv] = useState<{ top: number; h: number } | null>(null);
+  useEffect(() => {
+    if (!fs) return;
+    const html = document.documentElement;
+    html.classList.add("sk-lock");
+    const v = window.visualViewport;
+    const fit = () => {
+      if (!v) return;
+      setVv({ top: v.offsetTop, h: v.height });
+      // iOS 가 입력칸을 보이게 하려고 페이지를 밀어 올린 것 되돌리기
+      if (!document.activeElement?.matches("input, textarea") && window.scrollY)
+        window.scrollTo(0, 0);
+    };
+    if (pseudoFs && v) {
+      fit();
+      v.addEventListener("resize", fit);
+      v.addEventListener("scroll", fit);
+    }
+    return () => {
+      html.classList.remove("sk-lock");
+      v?.removeEventListener("resize", fit);
+      v?.removeEventListener("scroll", fit);
+      setVv(null);
+    };
+  }, [fs, pseudoFs]);
   // 흉내 전체화면은 Esc 로도 끝냄
   useEffect(() => {
     if (!pseudoFs) return;
@@ -93,7 +142,10 @@ export default function SketchApp() {
     const el = rootRef.current;
     if (!el) return;
     if (pseudoFs) return setPseudoFs(false);
-    if (document.fullscreenElement) return void document.exitFullscreen().catch(() => {});
+    if (document.fullscreenElement) {
+      fsByUs.current = true;
+      return void document.exitFullscreen().catch(() => {});
+    }
     if (typeof el.requestFullscreen === "function")
       el.requestFullscreen({ navigationUI: "hide" }).catch(() => setPseudoFs(true));
     else setPseudoFs(true);
@@ -177,7 +229,11 @@ export default function SketchApp() {
 
   return (
     <StageCtx.Provider value={{ o, fs, canFs, toggleFs }}>
-      <div ref={rootRef} className={`sk ${outer}`}>
+      <div
+        ref={rootRef}
+        className={`sk ${outer}`}
+        style={pseudoFs && vv ? { top: vv.top, height: vv.h, bottom: "auto" } : undefined}
+      >
         {/* 전체화면 띠 (다른 게임들처럼 무대 위에) */}
         {!fs && (
           <button
@@ -278,9 +334,10 @@ function Title({
     onStart(n);
   };
   const STEPS = [
-    ["🎨", "한 명이 제시어를 그림"],
-    ["💬", "나머지는 채팅으로 맞히기"],
-    ["⚡", "빨리 맞힐수록 높은 점수"],
+    ["🎨", "그림 맞히기"],
+    ["🕵️", "가짜 화가 찾기"],
+    ["🤥", "그림 속 거짓말"],
+    ["📞", "그림 릴레이"],
   ];
   return (
     <div className="relative flex h-full flex-col items-center justify-center gap-5 px-5 py-6">
@@ -307,7 +364,7 @@ function Title({
         className="sk-hand relative text-center text-[22px] text-[var(--ink2)] sk-rise"
         style={{ animationDelay: "0.1s" }}
       >
-        그리고, 맞히고, 웃고! 최대 8명 실시간 그림 퀴즈
+        그리고, 맞히고, 속이고, 웃고! 최대 8명 그림 파티게임
       </p>
       <div
         className="relative flex flex-wrap justify-center gap-2 sk-rise"

@@ -3,10 +3,8 @@
  *  파일이 있으면 파일(/poker/sound/…, manifest.json 에 적힌 것만)을 틀고, 없으면 Web Audio 로 즉석 합성한 소리로 대신한다.
  *  브라우저 자동재생 정책 때문에 첫 클릭·터치 이후에만 소리가 난다 (그 전에 틀려던 배경음악은 첫 입력 때 시작).
  *  음량은 세 줄(배경음악 · 효과음 · 음성) + 전체 음소거, localStorage 에 저장.
- *  실제 크기는 슬라이더 값 × 게임별 보정(lib/soundLevel.ts — 측정해서 맞춤), 효과음·음성은 리미터를 거쳐 겹쳐도 찢어지지 않게.
  */
 
-import { LEVEL, limiter } from "@/lib/soundLevel";
 import { lookChar } from "./rules";
 
 const KEY = "poker_sound";
@@ -50,6 +48,11 @@ export function onSoundChange(cb: () => void): () => void {
 /** 예전 코드 호환 */
 export const isMuted = () => getSound().mute;
 export const setMuted = (v: boolean) => setSound({ mute: v });
+
+/** 폰 "전체화면으로 플레이해 주세요" · "가로로 돌려 주세요" 안내 중 — 타이틀 곡만 나오고 다른 소리는 전부 끔 */
+let gate = false;
+/** 탭을 가렸거나 앱을 내려 둠(폰 홈 키) · 폰 안내 중 — 연결은 그대로 두고 소리(대사 · 효과음)만 안 냄 */
+const away = () => gate || (typeof document !== "undefined" && document.hidden);
 
 // ───────────── 파일 목록 ─────────────
 
@@ -99,12 +102,37 @@ function unlock() {
   if (unlocked || typeof window === "undefined") return;
   unlocked = true;
   ac();
-  if (wantBgm) void startBgm(wantBgm);
+  // 배경음악용 audio 를 이 터치 안에서 미리 깨워 둠 (아이폰은 이렇게 한 번 튼 audio 만 나중에 코드로 다시 틀 수 있음)
+  for (let i = 0; i < 3; i++) {
+    const el = new Audio(SILENT);
+    el.play().then(
+      () => el.pause(),
+      () => {}
+    );
+    pool.push(el);
+  }
+  const w = wantNow();
+  if (w) void startBgm(w);
+  // 버튼 누름 소리는 처음 누를 때 받느라 늦지 않게 미리 받아 둠
+  void manifestLoading?.then(() => {
+    for (const n of ["sfx-press-die", "sfx-press-call", "sfx-press-bet", "sfx-press-ui", "sfx-check"]) {
+      const u = fileOf(n);
+      if (u) void buffer(u);
+    }
+  });
 }
 if (typeof window !== "undefined") {
   loadManifest();
   // 탭을 가리면 배경음악 멈춤, 돌아오면 이어서
   document.addEventListener("visibilitychange", () => {
+    // 가리는 순간 나오던 대사 · 줄 선 대사도 끊고, 효과음까지 통째로 멈춤 (돌아오면 다시 켬)
+    if (document.hidden) {
+      speakQ.length = 0;
+      try {
+        voiceNow?.src.stop();
+      } catch {}
+      void ctx?.suspend().catch(() => {});
+    } else if (ctx && unlocked) void ctx.resume().catch(() => {});
     for (const el of live.keys()) {
       if (document.hidden) el.pause();
       else if (wantBgm) void el.play().catch(() => {});
@@ -153,7 +181,7 @@ function playFile(name: string, vol: number, onEnd?: () => void): boolean {
     const g = c.createGain();
     g.gain.value = vol;
     src.connect(g);
-    g.connect(limiter(c));
+    g.connect(c.destination);
     src.start();
     if (onEnd) src.onended = onEnd;
   });
@@ -176,9 +204,9 @@ function noise(c: AudioContext): AudioBufferSourceNode {
 function env(c: AudioContext, peak: number, attack: number, decay: number, at: number): GainNode {
   const g = c.createGain();
   g.gain.setValueAtTime(0.0001, at);
-  g.gain.exponentialRampToValueAtTime(Math.max(0.0002, peak * getSound().sfx * LEVEL.poker.sfx), at + attack);
+  g.gain.exponentialRampToValueAtTime(Math.max(0.0002, peak * getSound().sfx), at + attack);
   g.gain.exponentialRampToValueAtTime(0.0001, at + attack + decay);
-  g.connect(limiter(c));
+  g.connect(c.destination);
   return g;
 }
 function tone(
@@ -316,10 +344,23 @@ let wantBgm: string | null = null;
 /** 살아 있는 오디오들과 각자의 섞는 비율(0~1) */
 const live = new Map<HTMLAudioElement, number>();
 let cur: HTMLAudioElement | null = null;
+/** 첫 입력 때 깨워 둔 배경음악 audio 들 — 곡이 끝나 다음 바퀴를 틀 때 새 audio 를 만들면 아이폰이 막아서(입력 없이 재생) 노래가 꺼졌음 */
+const pool: HTMLAudioElement[] = [];
+const SILENT = "data:audio/wav;base64,UklGRnQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YVAAAACAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgA==";
+/** 지금 안 쓰는 깨워 둔 audio (없으면 새로) */
+function takeAudio(url: string): HTMLAudioElement {
+  const el = pool.find((e) => !live.has(e)) ?? new Audio();
+  el.ontimeupdate = null;
+  delete el.dataset.next;
+  el.src = url;
+  // 다음 바퀴를 못 틀더라도(막힘) 이 곡이 처음부터 다시 돌게
+  el.loop = true;
+  return el;
+}
 /** 로비 곡 "번갈아" 설정일 때 이번 접속에 고른 번호 */
 let lobbyPick = 0;
 
-const bgmTarget = () => (getSound().mute ? 0 : getSound().bgm * LEVEL.poker.bgm);
+const bgmTarget = () => (getSound().mute ? 0 : getSound().bgm);
 function applyBgmVolume() {
   const v = bgmTarget();
   for (const [el, mix] of live) el.volume = Math.min(1, v * mix);
@@ -354,7 +395,7 @@ async function startBgm(name: string) {
   const url = fileOf(real) ?? fileOf(name);
   if (!url) {
     // 목록이 아직 안 왔으면 조금 뒤에 다시
-    if (!manifest) setTimeout(() => wantBgm === name && void startBgm(name), 400);
+    if (!manifest) setTimeout(() => wantNow() === name && void startBgm(name), 400);
     return;
   }
   if (bgmName === real && cur && !cur.paused) return;
@@ -363,7 +404,7 @@ async function startBgm(name: string) {
 }
 /** 새로 틀고 지금 곡은 페이드아웃 */
 async function spawn(url: string, real: string, ms: number) {
-  const el = new Audio(url);
+  const el = takeAudio(url);
   el.volume = 0;
   live.set(el, 0);
   try {
@@ -398,11 +439,39 @@ async function spawn(url: string, real: string, ms: number) {
 /** 그 이름의 소리 파일이 있나 */
 export const hasSound = (name: string) => !!fileOf(name);
 
-/** 짧은 소리. 파일이 있으면 파일, 없으면 합성음 */
-export function playSfx(name: string) {
+/** 관리자 테스트: 소리 파일 이름 전부 (manifest 를 받은 뒤) */
+export async function soundNames(): Promise<string[]> {
+  loadManifest();
+  await manifestLoading;
+  return Object.keys(manifest ?? {}).sort();
+}
+
+/** 관리자 테스트: manifest 이름 그대로 한 번 틂 (음성은 음성 크기 · 앞 음성 끊음, 나머지는 효과음 크기). 길이(초)를 돌려줌 */
+export async function playExact(name: string): Promise<number> {
   const s = getSound();
-  if (s.mute || s.sfx <= 0) return;
-  if (playFile(name, s.sfx * LEVEL.poker.sfx)) return;
+  const file = manifest?.[name];
+  const c = ac();
+  if (!file || !c || s.mute) return 0;
+  const buf = await buffer(`${BASE}/${file}`);
+  if (!buf) return 0;
+  if (name.startsWith("voice/")) playBuf(c, buf, s.voice);
+  else {
+    const src = c.createBufferSource();
+    src.buffer = buf;
+    const g = c.createGain();
+    g.gain.value = s.sfx;
+    src.connect(g);
+    g.connect(c.destination);
+    src.start();
+  }
+  return buf.duration;
+}
+
+/** 짧은 소리. 파일이 있으면 파일, 없으면 합성음 */
+export function playSfx(name: string, gain = 1) {
+  const s = getSound();
+  if (s.mute || s.sfx <= 0 || away()) return;
+  if (playFile(name, s.sfx * gain)) return;
   const c = ac();
   const f = synth[name];
   if (c && f) f(c);
@@ -465,9 +534,9 @@ function playBuf(c: AudioContext, buf: AudioBuffer, vol: number, onEnd?: () => v
   const src = c.createBufferSource();
   src.buffer = buf;
   const g = c.createGain();
-  g.gain.value = vol * LEVEL.poker.voice;
+  g.gain.value = vol;
   src.connect(g);
-  g.connect(limiter(c));
+  g.connect(c.destination);
   const me = { src, gain: g };
   voiceNow = me;
   src.onended = () => {
@@ -479,21 +548,28 @@ function playBuf(c: AudioContext, buf: AudioBuffer, vol: number, onEnd?: () => v
 }
 
 /** 대사 줄에서 다음 것 (나오는 음성이 없을 때만) */
+/** 메이드 · 족보 대사는 중요 — 그동안 남의 삥 · 콜 같은 짧은 베팅 대사가 끊어 먹지 않게 (그 베팅 대사는 건너뜀) */
+const isVip = (name: string) => name === "made" || name.startsWith("hand-");
+let vipUntil = 0;
+
 function pumpSpeak() {
   if (speaking || voiceNow || !speakQ.length) return;
   const next = speakQ.shift()!;
   const s = getSound();
   const url = voiceUrl(next.char, next.name, next.big);
   const c = ac();
-  if (Date.now() - next.at > 5000 || !url || !c || s.mute || s.voice <= 0) return pumpSpeak();
+  if (Date.now() - next.at > 5000 || !url || !c || s.mute || s.voice <= 0 || away()) return pumpSpeak();
   speaking = true;
+  const vip = isVip(next.name);
   void buffer(url).then((buf) => {
     if (!buf) {
       speaking = false;
       return pumpSpeak();
     }
+    if (vip) vipUntil = Date.now() + buf.duration * 1000;
     playBuf(c, buf, s.voice * (next.big ? 1.15 : 1), () => {
       speaking = false;
+      if (vip) vipUntil = 0;
     });
   });
 }
@@ -501,7 +577,7 @@ function pumpSpeak() {
 /** 캐릭터 음성 (파일 있을 때만). big = 크게 외치는 버전(없으면 보통 버전) */
 export function playVoice(char: string, name: string, big = false) {
   const s = getSound();
-  if (s.mute || s.voice <= 0) return;
+  if (s.mute || s.voice <= 0 || away()) return;
   // 스킨이면 스킨 전용 음성이 있을 때 그것, 없으면 원래 캐릭터 음성
   const url = voiceUrl(char, name, big);
   if (!url) return;
@@ -514,14 +590,69 @@ export function playVoice(char: string, name: string, big = false) {
     pumpSpeak();
     return;
   }
+  if (Date.now() < vipUntil) return;
   void buffer(url).then((buf) => {
-    if (buf) playBuf(c, buf, s.voice * (big ? 1.15 : 1));
+    if (buf && Date.now() >= vipUntil) playBuf(c, buf, s.voice * (big ? 1.15 : 1));
+  });
+}
+
+/** 로비 캐릭터를 눌렀을 때 대사: 줄 서지 않고, 나오던 대사(첫 입장 인사 등)를 끊고 바로 */
+export function playVoiceCut(char: string, name: string) {
+  const s = getSound();
+  if (s.mute || s.voice <= 0 || away()) return;
+  const url = voiceUrl(char, name);
+  const c = ac();
+  if (!url || !c) return;
+  speakQ.length = 0;
+  void buffer(url).then((buf) => {
+    if (buf) playBuf(c, buf, s.voice);
+  });
+}
+
+/**
+ * 쇼다운 족보 대사: 줄 서지 않고 바로 (패 까는 박자와 딱 맞게). 앞사람 대사 끝자락과는 겹쳐서 같이 들림 — 끊지 않음.
+ * 그동안 남의 짧은 베팅 대사는 안 끼어듦.
+ */
+export function playVoiceNow(char: string, name: string) {
+  const s = getSound();
+  if (s.mute || s.voice <= 0 || away()) return;
+  const url = voiceUrl(char, name);
+  const c = ac();
+  if (!url || !c) return;
+  void buffer(url).then((buf) => {
+    if (!buf) return;
+    vipUntil = Math.max(vipUntil, Date.now() + buf.duration * 1000);
+    const src = c.createBufferSource();
+    src.buffer = buf;
+    const g = c.createGain();
+    g.gain.value = s.voice;
+    src.connect(g);
+    g.connect(c.destination);
+    src.start();
   });
 }
 
 /** 배경음악 바꾸기 (null = 끔). 파일이 없으면 조용히 아무것도 안 함 */
+/** 지금 틀어야 할 곡: 폰 안내 중이면 타이틀 곡 */
+const wantNow = () => (gate && wantBgm ? "bgm-intro" : wantBgm);
+
+/** 폰 전체화면 · 가로 안내를 켜고 끔 (켜지면 나오던 대사도 끊고 타이틀 곡으로, 꺼지면 원래 곡으로) */
+export function setGate(on: boolean) {
+  if (gate === on) return;
+  gate = on;
+  if (on) {
+    speakQ.length = 0;
+    try {
+      voiceNow?.src.stop();
+    } catch {}
+  }
+  const w = wantNow();
+  if (w && unlocked) void startBgm(w);
+}
+
 export function playBgm(name: string | null) {
   wantBgm = name;
+  if (name && gate) name = "bgm-intro";
   if (!name) {
     for (const el of live.keys()) fade(el, 0, 600);
     cur = null;
@@ -533,12 +664,17 @@ export function playBgm(name: string | null) {
 
 /** 로비 곡 설정을 바꿨을 때 지금 로비면 바로 바꿔 틂 */
 export function refreshBgm() {
-  if (wantBgm && unlocked) void startBgm(wantBgm);
+  const w = wantNow();
+  if (w && unlocked) void startBgm(w);
 }
 
 /** 큰 베팅 기준: 그 방 판돈의 100배 이상이면 "크게" 외침 */
 export const BIG_X = 100;
 export const isBig = (amt: number, ante: number) => amt >= ante * BIG_X;
+
+/** 내가 방금 행동 버튼을 눌렀나 — 그 행동이 서버에서 돌아올 때 칩 · 다이 · 체크 소리를 또 내지 않게 (누름 소리가 대신함) */
+let pressedAt = 0;
+export const pressedJust = () => Date.now() - pressedAt < 1500;
 
 /** 예전 호출 호환 */
 export const sfx = {
@@ -554,6 +690,15 @@ export const sfx = {
   tick: () => playSfx("sfx-tick"),
   tickLast: () => playSfx("sfx-tick-last"),
   click: () => playSfx("sfx-click"),
+  /** 행동 버튼 누름: 다이 = 테이블 톡, 콜·삥 = 칩 탁, 체크 = 똑똑, 따당·쿼터·하프·레이즈 = 칩 짤랑, 미리 누르기·금액 고르기 = 버튼 딸깍(미리 누르기는 조금 크게) */
+  press: (k: "die" | "call" | "bet" | "ui" | "check" | "pre") => {
+    if (k !== "ui" && k !== "pre") pressedAt = Date.now();
+    // 체크는 남이 체크할 때와 같은 똑똑 소리
+    if (k === "check") playSfx("sfx-check");
+    // 미리 누르기(예약)만 같은 딸깍을 조금 크게 (+4dB) — 금액 고르기 딸깍은 그대로
+    else if (k === "pre") playSfx("sfx-press-ui", 1.6);
+    else playSfx(`sfx-press-${k}`);
+  },
   emote: () => playSfx("sfx-emote"),
   coin: () => playSfx("sfx-coin"),
   join: () => playSfx("sfx-join"),

@@ -21,6 +21,7 @@ bash research/rhythm/setup.sh        # 스크립트가 쓰는 고정 경로로 �
 | 파일 | 내용 |
 |---|---|
 | `data/osu-mania-4k-charts.json.gz` | osu!mania 4K 랭크 채보 540개 파싱 결과 (set, ver, stars, tps=[시작ms, 박ms, 박자], notes=[ms, 레인, 끝ms?]) |
+| `data/quaver-4k-charts.json.gz` | Quaver 4K 랭크 채보 397개(맵셋 49개, osu와 겹친 곡 빼고) — 같은 형식, stars는 우리 별점 계산기 값 (음원 없음, 맵셋 id는 `data/quaver-mapset-ids.txt`) |
 | `data/osu-beatmapset-ids.txt` | 위 채보들의 세트 id (음원 다시 받을 때) |
 
 ## 자주 쓰는 흐름
@@ -62,3 +63,9 @@ python3 jack.py ours_gen_vX          # 잭(같은 레인 빠른 연타) 비율·
 | 잭(빠른 연속 중 같은 레인) % | 5.0 / 5.8 | 12.6 / 15.1 |
 | 롱노트 % | 8 / 7.7 | 8~10 / 7.8 (빠른 곡은 2~4) |
 | 두 레인 트릴 % | 0.7 / 0.3 | 1.5 / 0.1 |
+
+## 2026-10-15 Quaver 비교 도구 (tools/)
+- `cache.mjs` — osu 음원 106곡 + 내장곡 14곡 분석 결과를 v8 직렬화로 캐시 (분석은 한 번만, 채보기만 반복 실행)
+- `run.mjs OUT shard/n` — 캐시로 현재 src 채보기를 돌려 채보 JSON (내장곡은 music.ts 주석 명령과 같은 설정, `lib.mjs`의 BUILTIN)
+- `eval.py OUT` — (난이도 밴드 × 빠르기 160 BPM 기준)별 중앙값을 osu·Quaver와 비교, 둘 다의 범위 밖이면 `*` + 벗어난 정도 점수
+- 경로는 작업 때 쓴 /tmp/claude-0/qvs, /home/claude/osz2 기준 — 옮기면 맨 위 경로만 바꾸면 됨

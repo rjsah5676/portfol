@@ -72,6 +72,10 @@ export interface AdminUser {
   avatar: string | null;
   /** 포커 칩 */
   money: number;
+  /** 포인트 */
+  points: number;
+  /** 이용 정지 (지난 것도 옴 — until 로 판단) */
+  ban?: MemberBan;
   stats: {
     plays?: Record<string, number>;
     online?: Record<string, { w?: number; l?: number; d?: number }>;
@@ -104,7 +108,7 @@ export interface AdminOverview {
   activity: AdminActivity[];
 }
 
-export type LiveGame = "sketch" | "fight" | "poker" | "rhythm";
+export type LiveGame = "sketch" | "fight" | "poker" | "rhythm" | "defense";
 export interface LiveRoom {
   id: string;
   name: string;
@@ -179,13 +183,85 @@ export interface TrafficReport {
 export const getTraffic = (from: string, to: string, human = false) =>
   api<TrafficReport>(`/api/admin/traffic?from=${from}&to=${to}${human ? "&human=1" : ""}`, { auth: true });
 
-export const listUsers = (q = "") =>
+export type MemberSort = "new" | "visit" | "points" | "visits" | "banned";
+export const listUsers = (q = "", sort: MemberSort = "new", skip = 0) =>
   api<{ total: number; items: AdminUser[] }>(
-    `/api/admin/users?limit=200${q ? `&q=${encodeURIComponent(q)}` : ""}`,
+    `/api/admin/users?limit=100&skip=${skip}&sort=${sort}${q ? `&q=${encodeURIComponent(q)}` : ""}`,
     { auth: true }
   );
 
-export const updateUser = (uid: string, patch: { nick?: string; badge?: string | null; money?: number }) =>
+/* ── 회원 더 보기 (server/src/http/adminMembers.ts) ── */
+export interface MemberBan {
+  until: number | null;
+  reason: string;
+  at: number;
+}
+export interface MemberDetail {
+  items: string[];
+  shop: { id: string; game: string; name: string; price: number }[];
+  achs: number;
+  fight: { r: number; n: number; w: number; l: number; peak: number } | null;
+  defense: { wave: number; win: boolean; glitch: number; ver: string } | null;
+  ban: MemberBan | null;
+}
+export const getMemberDetail = (uid: string) =>
+  api<MemberDetail>(`/api/admin/members/${encodeURIComponent(uid)}`, { auth: true });
+export const setMemberItem = (uid: string, item: string, give: boolean) =>
+  api<{ items: string[] }>(`/api/admin/members/${encodeURIComponent(uid)}/items`, {
+    method: "POST",
+    auth: true,
+    body: { item, give },
+  });
+/** days: null = 기한 없음, 0 = 풀기 */
+export const setMemberBan = (uid: string, days: number | null, reason: string) =>
+  api<{ ban: MemberBan | null }>(`/api/admin/members/${encodeURIComponent(uid)}/ban`, {
+    method: "PUT",
+    auth: true,
+    body: { days, reason },
+  });
+
+/* ── GP 경제 (server/src/http/adminEconomy.ts) ── */
+export interface Economy {
+  total: number;
+  members: number;
+  withPoints: number;
+  top: { uid: string; nick: string; points: number }[];
+  days: number;
+  reasons: { reason: string; in: number; out: number; n: number }[];
+  daily: { date: string; in: number; out: number }[];
+  truncated: boolean;
+}
+export interface EconomyRow {
+  uid: string;
+  nick: string;
+  at: number;
+  delta: number;
+  reason: string;
+  ref?: string;
+  bal?: number;
+}
+export const getEconomy = (days: number) => api<Economy>(`/api/admin/economy?days=${days}`, { auth: true });
+export const getEconomyLog = (o: { reason?: string; q?: string; skip?: number }) =>
+  api<{ rows: EconomyRow[]; more: boolean }>(
+    `/api/admin/economy/log?skip=${o.skip ?? 0}${o.reason ? `&reason=${encodeURIComponent(o.reason)}` : ""}${o.q ? `&q=${encodeURIComponent(o.q)}` : ""}`,
+    { auth: true }
+  );
+
+/* ── 사이트 공지 (server/src/http/notice.ts) ── */
+export interface SiteNotice {
+  id: string;
+  text: string;
+  link?: string;
+  tone: "info" | "event" | "warn";
+  until: number | null;
+  at: number;
+}
+export const getAdminNotice = () => api<{ notice: SiteNotice | null }>("/api/admin/notice", { auth: true });
+export const putNotice = (n: { text: string; link?: string; tone: SiteNotice["tone"]; until: number | null }) =>
+  api<{ notice: SiteNotice }>("/api/admin/notice", { method: "PUT", auth: true, body: n });
+export const removeNotice = () => api("/api/admin/notice", { method: "DELETE", auth: true });
+
+export const updateUser = (uid: string, patch: { nick?: string; badge?: string | null; money?: number; points?: number }) =>
   api<AdminUser>(`/api/admin/users/${encodeURIComponent(uid)}`, {
     method: "PATCH",
     body: patch,
@@ -270,6 +346,10 @@ export function formatCell(v: unknown): string {
   }
   if (typeof v === "boolean") return v ? "✓" : "";
   if (typeof v === "object") return JSON.stringify(encode(v));
+  // 부동소수 끝자리(121.69999999999999)는 잘라서 보여 줌 — 편집 창에는 원래 값 그대로
+  if (typeof v === "number" && !Number.isInteger(v)) return String(Number(v.toFixed(4)));
+  // 시각(ms)처럼 보이는 큰 정수는 날짜로
+  if (typeof v === "number" && v > 1e12 && v < 1e13) return formatCell(Timestamp.fromMillis(v));
   return String(v);
 }
 
@@ -280,3 +360,17 @@ export function sortValue(v: unknown): number | string {
   if (typeof v === "boolean") return v ? 1 : 0;
   return v === undefined || v === null ? "" : String(v);
 }
+
+/** 회원의 포인트 최근 내역 (관리자) */
+export const getUserPointLog = (uid: string) =>
+  api<{ log: import("@/lib/points").PointLogRow[] }>(`/api/admin/users/${encodeURIComponent(uid)}/points`, { auth: true }).then((r) => r.log);
+
+/** 디펜스 데이터 (프로필 · 랭킹 · 판 기록) 개수 / 모두 지우기 — GP 는 그대로 */
+export const getDefenseStats = () =>
+  api<{ profiles: number; ranks: number; runs: number }>("/api/admin/defense/stats", { auth: true });
+export const resetDefense = () =>
+  api<Record<string, number>>("/api/admin/defense/reset", {
+    method: "POST",
+    body: { confirm: "디펜스 초기화" },
+    auth: true,
+  });

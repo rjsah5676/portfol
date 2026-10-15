@@ -9,6 +9,7 @@ import type { Ctx } from "../../realtime/gateway";
 import { pictureOf, type UserDoc } from "../../users";
 import {
   ACT_AWAY_MS,
+  ACT_GRACE_MS,
   ACT_MS,
   BOT_CHAR_IDS,
   CHAR_IDS,
@@ -35,13 +36,14 @@ import {
   type Tier,
   type TierId,
 } from "../../../../web/src/lib/poker/rules";
-import type { ChatMsg, HoldemView, LobbyTable, MyHand, MyPage, PokerEvent, SeatWire, SevenView, TableWire, Wallet } from "../../../../web/src/lib/poker/types";
+import type { ChatMsg, DevOpts, HoldemView, LobbyTable, MyHand, MyPage, PokerEvent, SeatWire, SevenView, TableWire, Wallet } from "../../../../web/src/lib/poker/types";
 import { holdem } from "./holdem/round";
 import { emptyStats, playStats, type HandDoc } from "./mystats";
 import { uniqueNickname } from "./nicknames";
 import { coolDown, line, newBrain, type Brain } from "./personas";
 import { RoundError, type GameDef, type Round } from "./round";
 import { seven } from "./seven/round";
+import { POKER_EXCHANGE } from "../../../../web/src/lib/points";
 import { createWallet, skinsOf, type SettleEntry } from "./wallet";
 
 /*
@@ -103,6 +105,8 @@ const KICK_MIN_HANDS = 3;
 const KICK_BAN_MS = 30 * 60_000;
 
 interface Table {
+  /** 방금 누가 행동함 → 다음 카드 · 쇼다운 전에 잠깐 쉼 (행동 글자 · 칩 · 올인 컷인이 패 까기와 겹치지 않게). allin = 올인 컷인 길이만큼 */
+  grace?: "act" | "allin";
   id: string;
   name: string;
   game: GameKind;
@@ -154,7 +158,10 @@ interface Table {
   banned: Map<string, number>;
   /** 봇이 연 방: 사람이 안 오면 이 시각에 닫고 새 방으로 교체 */
   botRoomUntil: number;
+  /** 관리자 테스트 방: 지갑 · 기록 · 로비와 무관, 진행 속도 · 봇 행동을 마음대로 */
+  dev?: DevOpts;
 }
+
 
 export interface PokerOptions {
   /** 진행 속도 배수 (테스트는 0 = 기다림 없이) */
@@ -163,6 +170,8 @@ export interface PokerOptions {
   actMs?: number;
   choiceMs?: number;
   awayMs?: number;
+  /** 화면 시간이 다 된 뒤 더 받아 주는 여유 (기본 ACT_GRACE_MS · 시간을 줄인 테스트는 0) */
+  graceMs?: number;
   /** 정리 주기 (봇 입장도 이 주기로 확인) */
   sweepIntervalMs?: number;
   now?: () => number;
@@ -186,14 +195,19 @@ const AWAY_KICK_MS = 45_000;
 /** 사람이 없는 테이블은 이만큼 뒤에 정리 */
 const EMPTY_TTL_MS = 20_000;
 
-export function registerPoker({ gateway, db, users }: Deps, opts: PokerOptions = {}) {
+export function registerPoker({ gateway, db, users, points }: Deps, opts: PokerOptions = {}) {
   const now = opts.now ?? Date.now;
   const speed = opts.speed ?? 1;
   const ms = (t: number) => Math.round(t * speed);
+  /** 테이블별 진행 시간: 관리자 테스트 방은 그 방의 속도 배수까지 */
+  const msT = (t: Table, x: number) => ms(x * (t.dev?.speed ?? 1));
   const actMs = opts.actMs ?? ACT_MS;
   const choiceMs = opts.choiceMs ?? CHOICE_MS;
   const awayMs = opts.awayMs ?? ACT_AWAY_MS;
-  const wallet = createWallet(db, now);
+  const graceMs = opts.graceMs ?? (opts.actMs !== undefined ? 0 : ACT_GRACE_MS);
+  const wallet = createWallet(db, now, points);
+  // 포인트가 바뀌면 (출석 · 업적 · 상점 · 환전 · 운영자) 포커 화면의 지갑도
+  points.onChange((uid) => void wallet.refresh(uid).catch(() => {}));
   void wallet.ensure().catch((e) => console.warn("[poker] 시작 자금 채우기 실패", e));
 
   const tables = new Map<string, Table>();
@@ -251,10 +265,12 @@ export function registerPoker({ gateway, db, users }: Deps, opts: PokerOptions =
     nextAt: t.nextAt,
     ev,
     seq: t.seq,
+    ...(t.dev ? { dev: { ...t.dev } } : {}),
   });
 
   const lobbyWire = (): LobbyTable[] =>
     [...tables.values()]
+      .filter((t) => !t.dev)
       .map((t) => ({
         id: t.id,
         name: t.name,
@@ -283,6 +299,7 @@ export function registerPoker({ gateway, db, users }: Deps, opts: PokerOptions =
   function emit(t: Table, ...ev: PokerEvent[]) {
     if (t.closed) return;
     t.ev.push(...ev);
+    for (const e of ev) if (e.t === "act") t.grace = e.a === "allin" || t.grace === "allin" ? "allin" : "act";
     for (const e of t.ev) {
       if (e.t !== "say") continue;
       const s = t.seats[e.seat];
@@ -403,12 +420,12 @@ export function registerPoker({ gateway, db, users }: Deps, opts: PokerOptions =
   }
 
   /** 유저봇 한 명이 들어와 앉음 (별명·캐릭터·성격·자금 전부 그때그때 다름) */
-  function addBot(t: Table): boolean {
+  function addBot(t: Table, pick?: CharId): boolean {
     const free = freeSeats(t);
     if (free.length - t.joining <= 1) return false;
     const seat = free[randomInt(free.length)];
-    // 사야 쓰는 캐릭터는 봇이 안 씀
-    const char = BOT_CHAR_IDS[randomInt(BOT_CHAR_IDS.length)];
+    // 사야 쓰는 캐릭터는 봇이 안 씀 (관리자 테스트 방은 고른 캐릭터)
+    const char = pick ?? BOT_CHAR_IDS[randomInt(BOT_CHAR_IDS.length)];
     const name = uniqueNickname(t.seats.map((x) => x?.name ?? ""));
     // 들고 오는 돈: 기준의 0.6~2.2배, 적어도 입장컷의 1.5배
     const money = Math.max(Math.round(t.tier.min * 1.5), Math.round(t.tier.botMoney * (0.6 + randomInt(161) / 100)));
@@ -532,6 +549,27 @@ export function registerPoker({ gateway, db, users }: Deps, opts: PokerOptions =
     scheduleNext(t, 3000);
   }
 
+  /** 관리자 테스트 방의 봇 행동 덮어쓰기 (늘 콜 · 늘 올인). 해당 없으면 null → 평소 봇 판단 */
+  function devMove(t: Table, round: Round, seat: number): unknown {
+    const mode = t.dev?.mode;
+    if (!mode || mode === "normal" || round.waitKind() !== "act") return null;
+    const v = round.view(0);
+    if (v.toAct !== seat || !v.legal) return null;
+    if (t.game === "holdem") {
+      const lg = (v as HoldemView).legal!;
+      if (mode === "allin" && lg.canRaise) return { a: "raise", amt: lg.maxTo };
+      return { a: lg.canCheck ? "check" : "call" };
+    }
+    const lg = (v as SevenView).legal!;
+    if (mode === "allin") {
+      const big = (["full", "half", "quarter", "ddadang", "bbing"] as const).find((k) => lg.bets[k] !== undefined);
+      if (big) return { a: big };
+    }
+    if (lg.toCall > 0) return { a: "call" };
+    const low = (["bbing", "ddadang", "quarter", "half", "full"] as const).find((k) => lg.bets[k] !== undefined);
+    return low ? { a: low } : null;
+  }
+
   /** 판을 한 걸음 진행: 기다릴 사람이 있으면 타이머를 걸고, 없으면 다음 카드로 */
   function pump(t: Table) {
     const round = t.round;
@@ -539,6 +577,14 @@ export function registerPoker({ gateway, db, users }: Deps, opts: PokerOptions =
     if (round.done()) return settle(t);
 
     const waiting = round.waiting();
+    if (!waiting.length && t.grace) {
+      // 베팅이 막 끝남: 마지막 행동 연출을 보여 주고 넘어감 (올인은 컷인 1.7초를 다 보여 줌)
+      const g = t.grace === "allin" ? 1700 : 550;
+      t.grace = undefined;
+      t.deadline = 0;
+      return later(t, msT(t, g), () => pump(t));
+    }
+    t.grace = undefined;
     if (!waiting.length) {
       for (const h of t.actTimers.values()) clearTimeout(h);
       t.actTimers.clear();
@@ -548,7 +594,7 @@ export function registerPoker({ gateway, db, users }: Deps, opts: PokerOptions =
       // 엎은 카드를 받았을 수 있으니(7포커) 내 패를 다시 보냄
       for (const s of t.inRound.values()) sendHand(t, s);
       emit(t, ...ev);
-      return later(t, ms(pause), () => pump(t));
+      return later(t, msT(t, pause), () => pump(t));
     }
 
     // 같은 기다림이면 타이머는 그대로 둠 (7포커의 카드 고르기처럼 여럿이 동시에 기다릴 때 한 명이 끝내도 나머지 시간은 유지)
@@ -561,7 +607,7 @@ export function registerPoker({ gateway, db, users }: Deps, opts: PokerOptions =
     if (mark === t.waitMark && !fresh) return;
     t.waitMark = mark;
 
-    const limit = round.waitKind() === "choice" ? choiceMs : actMs;
+    const limit = t.dev ? t.dev.limit : round.waitKind() === "choice" ? choiceMs : actMs;
     if (fresh) t.deadline = now() + limit;
     for (const seatNo of waiting) {
       if (t.actTimers.has(seatNo)) continue;
@@ -569,7 +615,8 @@ export function registerPoker({ gateway, db, users }: Deps, opts: PokerOptions =
       if (s.brain) {
         const move = round.botMove(seatNo, s.brain);
         // 봇이 생각하는 시간: 성격 · 판 크기에 따른 시간의 0.75배 (예전보다 조금 빠르게). 최소 0.93초, 제한 시간 0.9초 전까지
-        const think = ms(Math.max(930, Math.min(limit - 900, move.thinkMs * 0.75 * (0.9 + Math.random() * 0.5))));
+        const think = msT(t, Math.max(930, Math.min(limit - 900, move.thinkMs * 0.75 * (0.9 + Math.random() * 0.5))));
+        const input = devMove(t, round, seatNo) ?? move.input;
         t.actTimers.set(
           seatNo,
           setTimeout(() => {
@@ -578,7 +625,7 @@ export function registerPoker({ gateway, db, users }: Deps, opts: PokerOptions =
             safely(t, () => {
               let ev: PokerEvent[];
               try {
-                ev = round.act(seatNo, move.input);
+                ev = round.act(seatNo, input);
               } catch (e) {
                 if (!(e instanceof RoundError)) throw e;
                 console.warn(`[poker] 봇 행동이 규칙에 안 맞음 (${s.name})`, e.message);
@@ -593,7 +640,8 @@ export function registerPoker({ gateway, db, users }: Deps, opts: PokerOptions =
         continue;
       }
       // 자리를 뜬 사람은 바로 죽음, 끊긴 사람은 짧게 기다림
-      const wait = s.leaving ? 0 : s.away ? Math.min(awayMs, Math.max(0, t.deadline - now())) : Math.max(0, t.deadline - now());
+      // (접속 중인 사람은 화면 시간 + 여유까지 기다림 — 끝나기 직전에 누른 게 늦게 닿아도 받아 줌)
+      const wait = s.leaving ? 0 : s.away ? Math.min(awayMs, Math.max(0, t.deadline - now())) : Math.max(0, t.deadline - now()) + ms(graceMs);
       if (s.away && !s.leaving && fresh && waiting.length === 1) t.deadline = now() + wait;
       t.actTimers.set(
         seatNo,
@@ -601,9 +649,11 @@ export function registerPoker({ gateway, db, users }: Deps, opts: PokerOptions =
           t.actTimers.delete(seatNo);
           if (t.closed || t.round !== round) return;
           safely(t, () => {
+            // 7포커 처음 카드 고르기는 안 골라도 대신 골라 줄 뿐, 자리 비움으로 치지 않음
+            const choosing = round.waitKind() === "choice";
             const ev = round.timeout(seatNo, s.leaving);
             // 시간 초과가 이어지면 나가기 예약 (이번 판 끝나면 자리에서 일어남)
-            if (!s.leaving && ++s.timeouts >= TIMEOUTS_TO_SITOUT && !s.exitAfter) s.exitAfter = "idle";
+            if (!s.leaving && !choosing && ++s.timeouts >= TIMEOUTS_TO_SITOUT && !s.exitAfter) s.exitAfter = "idle";
             emit(t, ...ev);
             pump(t);
           });
@@ -663,14 +713,15 @@ export function registerPoker({ gateway, db, users }: Deps, opts: PokerOptions =
     };
     const resView = round.view(0).result;
     const showdown = !!resView?.showdown;
-    // 쇼다운이면 화면에서 패를 한 자리씩 까는 시간(자리당 0.5초) + 승리 연출 3초
+    // 쇼다운이면 화면에서 패를 까는 시간(7포커 자리당 0.38초 · 홀덤은 거의 동시) + 결과 연출 3.3초
     const shown = resView ? Object.keys(resView.names).length : 0;
     const leftEarly = [...t.inRound.values()].filter((x) => x.uid && t.seats[x.seat] !== x).map((x) => x.uid!);
     t.lastView = round.view(0);
     t.round = null;
     t.inRound.clear();
 
-    // 돈 반영 (다음 판은 이게 끝난 뒤에 시작)
+    // 돈 반영 (다음 판은 이게 끝난 뒤에 시작) — 관리자 테스트 방은 지갑 · 기록과 무관
+    if (t.dev) entries.length = 0;
     const writing = wallet
       .settle(entries)
       .catch((e) => console.error(`[poker] 정산 저장 실패 (테이블 ${t.id}, ${t.handNo}번째 판)`, e, entries));
@@ -679,9 +730,10 @@ export function registerPoker({ gateway, db, users }: Deps, opts: PokerOptions =
       settlingOf.set(e.uid, writing);
       void writing.then(() => settlingOf.get(e.uid) === writing && settlingOf.delete(e.uid));
     }
-    db.col("poker_hands")
-      .insertOne(audit as never)
-      .catch((e) => console.warn("[poker] 핸드 기록 실패", e));
+    if (!t.dev)
+      db.col("poker_hands")
+        .insertOne(audit as never)
+        .catch((e) => console.warn("[poker] 핸드 기록 실패", e));
 
     // 판 도중에 먼저 나간 사람: 정산이 끝나면 칩이 바닥났는지 확인
     for (const uid of leftEarly)
@@ -695,14 +747,17 @@ export function registerPoker({ gateway, db, users }: Deps, opts: PokerOptions =
       if (s.leaving || (s.exitAfter && (!p || p.folded))) removeSeat(t, s, exitWhy(s));
     }
     emit(t, ...says);
-    // (+1.5초: 승리 · 패배 대사를 다 듣고 다음 판으로)
-    scheduleNext(t, showdown ? 4500 + 500 * Math.max(2, shown) + 1500 : 3900);
+    // 쇼다운: 깐 사람마다 족보를 읊는 시간(한 사람 1초 안팎)만큼 더 기다린 뒤 결과를 보고 다음 판
+    // (쇼다운 전체를 예전의 0.6배로 — 테스트 방에서 맞춰 본 값. 화면의 패 까기 간격도 같은 배수)
+    scheduleNext(t, showdown ? Math.round(((t.game === "seven" ? 800 + 770 * shown : 800 + 680 * shown) + 3300) * 0.6) : 3000, showdown ? "sd" : undefined);
   }
 
-  function scheduleNext(t: Table, delay: number) {
+  /** kind = "sd": 쇼다운 연출 시간 (테스트 방은 쇼다운 배수, 아니면 진행 배수) */
+  function scheduleNext(t: Table, delay: number, kind?: "sd") {
     if (t.closed) return;
-    t.nextAt = now() + ms(delay);
-    later(t, ms(delay), () => void tryStart(t));
+    const d = ms(delay * (t.dev ? (kind === "sd" ? t.dev.sd : t.dev.speed) : 1));
+    t.nextAt = now() + d;
+    later(t, d, () => void tryStart(t));
   }
 
   /** 다음 판 시작 (조건이 안 되면 대기) */
@@ -725,19 +780,25 @@ export function registerPoker({ gateway, db, users }: Deps, opts: PokerOptions =
         else if (s.away && now() - s.awayAt >= ms(AWAY_KICK_MS)) removeSeat(t, s, "idle");
         else if (s.status === "out" && now() - s.outAt >= ms(SITOUT_KICK_MS)) removeSeat(t, s, "idle");
       }
-      tendBots(t);
-      arriveBots(t);
-
-      // 사람은 DB 의 금액으로 칩을 다시 맞춤 (회생 등 반영). 입장컷 밑이면 내려옴
       const hs = humans(t);
-      await settled(hs.map((s) => s.uid!));
-      const money = await wallet.moneyOf(hs.map((s) => s.uid!));
-      if (t.closed || t.round) return;
-      for (const s of hs) {
-        if (t.seats[s.seat] !== s) continue;
-        const m = money.get(s.uid!) ?? 0;
-        s.stack = Math.floor(m / UNIT) * UNIT;
-        if (m < t.tier.min) removeSeat(t, s, s.stack < t.def.minStack(t.tier) ? "bust" : "cut");
+      if (t.dev) {
+        // 테스트 방: 봇은 안 나가고, 칩이 모자라면 사람 · 봇 다 다시 채움
+        const need = t.def.minStack(t.tier);
+        for (const s of t.seats) if (s && s.stack < Math.max(need, t.tier.min)) s.stack = s.uid ? t.dev.stack : Math.max(t.dev.stack, Math.round(t.tier.botMoney));
+      } else {
+        tendBots(t);
+        arriveBots(t);
+
+        // 사람은 DB 의 금액으로 칩을 다시 맞춤 (회생 등 반영). 입장컷 밑이면 내려옴
+        await settled(hs.map((s) => s.uid!));
+        const money = await wallet.moneyOf(hs.map((s) => s.uid!));
+        if (t.closed || t.round) return;
+        for (const s of hs) {
+          if (t.seats[s.seat] !== s) continue;
+          const m = money.get(s.uid!) ?? 0;
+          s.stack = Math.floor(m / UNIT) * UNIT;
+          if (m < t.tier.min) removeSeat(t, s, s.stack < t.def.minStack(t.tier) ? "bust" : "cut");
+        }
       }
 
       // 금액을 읽는 사이에 앉은 사람은 이번 판에 넣지 않음 (다음 판을 시작할 때 금액을 다시 읽고 참가)
@@ -768,7 +829,7 @@ export function registerPoker({ gateway, db, users }: Deps, opts: PokerOptions =
       t.deadline = 0; // 지난 판의 마감시각이 첫 상태에 실리지 않게 (화면의 카운트다운이 헛뜨던 원인)
       for (const s of ready) sendHand(t, s);
       emit(t, ...ev);
-      later(t, ms(pause), () => pump(t));
+      later(t, msT(t, pause), () => pump(t));
     } catch (e) {
       console.error(`[poker] 테이블 ${t.id} 판 시작 오류`, e);
       t.round = null;
@@ -880,11 +941,13 @@ export function registerPoker({ gateway, db, users }: Deps, opts: PokerOptions =
   gateway.channel("poker.wallet", {
     key: (ctx) => walletKey(member(ctx).uid),
     async snapshot(ctx) {
+      // 오늘 첫 접속이면 출석 보상 우편 (받기는 우편함에서)
+      const attended = await wallet.attend(ctx.uid).catch(() => 0);
       // 접속했을 때 칩이 바닥나 있으면 기본 칩부터 지급
       const got = await autoRevive(ctx.uid).catch(() => null);
-      if (got) return got;
+      if (got) return attended ? { ...got, attended } : got;
       const w = await wallet.get(ctx.uid);
-      return w ? walletWire(ctx.uid, w) : null;
+      return w ? { ...walletWire(ctx.uid, w), ...(attended ? { attended } : {}) } : null;
     },
   });
 
@@ -1015,6 +1078,78 @@ export function registerPoker({ gateway, db, users }: Deps, opts: PokerOptions =
     return createTable({ game: o.game, tier, name: `${tier.name} ${n}번`, bots: true, password: "", ownerUid: uid }).id;
   });
 
+  // ───────────── 관리자 테스트 방 ─────────────
+
+  const devSchema = z.object({
+    speed: z.number().min(0.1).max(3).optional(),
+    sd: z.number().min(0.3).max(3).optional(),
+    mode: z.enum(["normal", "call", "allin"]).optional(),
+    stack: z.number().int().min(UNIT).max(1e15).optional(),
+    limit: z.number().int().min(3_000).max(600_000).optional(),
+  });
+  const charSchema = z.enum(CHAR_IDS as [CharId, ...CharId[]]);
+  /** 관리자 테스트 방 열기: 지갑 · 기록 · 로비와 무관, 봇을 원하는 캐릭터로 앉혀 둠. 돌려준 id 로 poker.sit */
+  gateway.rpc("poker.devCreate", (ctx, raw) => {
+    ctx.requireAdmin();
+    const { uid } = member(ctx);
+    const o = devSchema
+      .extend({ game: gameSchema, tier: tierSchema, bots: z.array(charSchema).max(6).default([]) })
+      .parse(raw);
+    const mine = seatOf.get(uid);
+    const old = mine ? tables.get(mine) : undefined;
+    if (old) {
+      if (!old.dev) throw new AppError("ALREADY_SEATED", "다른 테이블에 앉아 있어요. 먼저 나와 주세요.", 409, { table: old.id });
+      closeTable(old);
+    }
+    const tier = tierOf(o.tier);
+    const t = createTable({ game: o.game, tier, name: "테스트 테이블", bots: false, quick: false, password: "", ownerUid: uid });
+    t.dev = {
+      speed: o.speed ?? 1,
+      sd: o.sd ?? 1,
+      mode: o.mode ?? "normal",
+      stack: o.stack ?? Math.max(tier.min * 3, tier.botMoney),
+      limit: o.limit ?? actMs,
+    };
+    const want = o.bots.slice(0, t.seats.length - 1);
+    for (const c of want) addBot(t, c);
+    for (const s of bots(t)) s.stack = s.joinStack = Math.max(s.stack, Math.round(tier.botMoney));
+    lobbyChanged();
+    return t.id;
+  });
+
+  /** 테스트 방 바꾸기: 속도 · 쇼다운 배수 · 봇 행동 · 칩 채우기 · 봇 넣고 빼기 · 다음 판 바로 */
+  gateway.rpc("poker.devSet", (ctx, raw) => {
+    ctx.requireAdmin();
+    const o = devSchema
+      .extend({ id: tableId, refill: z.boolean().optional(), addBot: charSchema.optional(), removeSeat: z.number().int().min(0).max(8).optional(), next: z.boolean().optional() })
+      .parse(raw);
+    const t = getTable(o.id);
+    if (!t.dev) throw forbidden("테스트 방이 아니에요.");
+    for (const k of ["speed", "sd", "mode", "stack", "limit"] as const) if (o[k] !== undefined) (t.dev as unknown as Record<string, unknown>)[k] = o[k];
+    if (o.refill) for (const s of t.seats) if (s && !inLiveRound(t, s)) s.stack = s.uid ? t.dev.stack : Math.max(t.dev.stack, Math.round(t.tier.botMoney));
+    if (o.addBot) {
+      if (!addBot(t, o.addBot)) throw bad("빈자리가 없어요 (내 자리 하나는 남겨 둬요).");
+      const b = bots(t).find((x) => x.status === "wait" && x.hands === 0 && x.char === o.addBot);
+      if (b) b.stack = b.joinStack = Math.max(b.stack, Math.round(t.tier.botMoney));
+    }
+    if (o.removeSeat !== undefined) {
+      const s = t.seats[o.removeSeat];
+      if (s?.brain) {
+        if (inLiveRound(t, s)) s.leaving = true;
+        else removeSeat(t, s, "leave");
+      }
+    }
+    // 다음 판 바로: 판 사이 기다림이면 지금 시작
+    if (o.next && !t.round && !t.starting) {
+      if (t.timer) clearTimeout(t.timer);
+      t.timer = null;
+      void tryStart(t);
+    }
+    emit(t);
+    if (!t.round && !t.starting && !t.timer) nudge(t, 300);
+    return { ...t.dev };
+  });
+
   // 비밀번호 대입 방지
   const tries = new Map<string, { at: number; n: number }>();
   function countTry(key: string) {
@@ -1042,6 +1177,7 @@ export function registerPoker({ gateway, db, users }: Deps, opts: PokerOptions =
       nudge(t);
       return { seat: cur.seat };
     }
+    if (t.dev && t.ownerUid !== uid) throw forbidden("관리자 테스트 방이에요.");
     const banUntil = t.banned.get(uid) ?? 0;
     if (banUntil > now()) throw new AppError("BANNED", `투표로 강퇴된 방이에요. ${Math.ceil((banUntil - now()) / 60_000)}분 뒤에 다시 앉을 수 있어요.`, 403, { until: banUntil });
     const other = seatOf.get(uid);
@@ -1063,7 +1199,7 @@ export function registerPoker({ gateway, db, users }: Deps, opts: PokerOptions =
       await settlingOf.get(uid);
       const w = await wallet.get(uid);
       if (!w) throw new AppError("MEMBERS_ONLY", "회원만 이용할 수 있어요.", 403);
-      if (w.money < t.tier.min) throw new AppError("NEED_MONEY", `이 테이블(${t.tier.name})에는 칩 ${fmtWon(t.tier.min)}부터 앉을 수 있어요.`, 409, { min: t.tier.min, money: w.money });
+      if (!t.dev && w.money < t.tier.min) throw new AppError("NEED_MONEY", `이 테이블(${t.tier.name})에는 칩 ${fmtWon(t.tier.min)}부터 앉을 수 있어요.`, 409, { min: t.tier.min, money: w.money });
       if (t.closed || tables.get(id) !== t) throw new AppError("NO_TABLE", "테이블이 없어요.", 404);
       const still = freeSeats(t);
       if (!still.length) throw new AppError("TABLE_FULL", "자리가 없어요.", 409);
@@ -1076,7 +1212,7 @@ export function registerPoker({ gateway, db, users }: Deps, opts: PokerOptions =
         name: nick,
         char: w.char,
         look: lookOf(w.char, w.wear),
-        stack: Math.floor(w.money / UNIT) * UNIT,
+        stack: t.dev ? t.dev.stack : Math.floor(w.money / UNIT) * UNIT,
         status: "wait",
         away: gateway.subscribers(meKey(id, uid)).length === 0,
         awayAt: now(),
@@ -1085,13 +1221,13 @@ export function registerPoker({ gateway, db, users }: Deps, opts: PokerOptions =
         outAt: 0,
         leaving: false,
         exitAfter: "",
-        joinStack: Math.floor(w.money / UNIT) * UNIT,
+        joinStack: t.dev ? t.dev.stack : Math.floor(w.money / UNIT) * UNIT,
         hands: 0,
         wins: 0,
         kickVotes: new Map(),
         kickByHuman: false,
       };
-      users.bump(uid, { "stats.poker.games": 1 });
+      if (!t.dev) users.bump(uid, { "stats.poker.games": 1 });
       lobbyChanged();
       pushWallet(uid);
       emit(t, { t: "sit", seat, name: nick });
@@ -1147,6 +1283,13 @@ export function registerPoker({ gateway, db, users }: Deps, opts: PokerOptions =
     const s = findSeat(t, ctx.uid);
     if (!s) throw forbidden();
     const playing = inLiveRound(t, s) && !!t.round?.alive(s.seat) && !s.leaving;
+    // 쇼다운 결과를 보여 주는 중(판은 끝났고 다음 판 전)이고 내가 끝까지 간 사람이면: 결과는 다 보고 다음 판 직전에 나감
+    const watching = !t.round && !!t.lastView?.result?.showdown && !!t.lastView.players[s.seat] && !t.lastView.players[s.seat]!.folded;
+    if (on && watching && !s.leaving) {
+      s.exitAfter = "leave";
+      emit(t);
+      return { left: false };
+    }
     if (on && !playing) {
       leave(t, s);
       return { left: true };
@@ -1343,6 +1486,8 @@ export function registerPoker({ gateway, db, users }: Deps, opts: PokerOptions =
   gateway.rpc("poker.char", async (ctx, raw) => {
     const { uid } = member(ctx);
     const { char } = z.object({ char: z.enum(CHAR_IDS as [CharId, ...CharId[]]) }).parse(raw);
+    // 게임방 안에서는 캐릭터를 못 바꿈 (스킨만 갈아입을 수 있음)
+    if (seatOf.has(uid)) throw new AppError("SEATED", "테이블에서는 캐릭터를 바꿀 수 없어요. 나간 뒤에 바꿔 주세요.", 409);
     if (CHAR_PRICE[char]) {
       const own = await wallet.get(uid);
       if (!own || !charOwned(char, own.chars)) throw new AppError("NOT_OWNED", "아직 없는 캐릭터예요. 상점에서 살 수 있어요.", 409);
@@ -1379,6 +1524,16 @@ export function registerPoker({ gateway, db, users }: Deps, opts: PokerOptions =
     await settlingOf.get(uid);
     const w = await wallet.buyChar(uid, char);
     return (await autoRevive(uid).catch(() => null)) ?? walletWire(uid, w);
+  });
+
+  /** 환전: 칩 ↔ 포인트 (테이블에 앉아 있으면 안 됨 — 앉은 동안의 칩은 판에 들고 있어서) */
+  gateway.rpc("poker.exchange", async (ctx, raw) => {
+    const { uid } = member(ctx);
+    const { dir, units } = z.object({ dir: z.enum(["toPoints", "toChips"]), units: z.number().int().min(1).max(POKER_EXCHANGE.maxUnits) }).parse(raw);
+    if (seatOf.has(uid)) throw new AppError("SEATED", "테이블에서 일어난 뒤에 바꿀 수 있어요.", 409);
+    await settlingOf.get(uid);
+    const w = await wallet.exchange(uid, dir, units);
+    return walletWire(uid, w);
   });
 
   /** 옷장: 스킨 입기 / 벗기 (앉아 있으면 그 자리 그림도 바로) */
@@ -1446,6 +1601,19 @@ export function registerPoker({ gateway, db, users }: Deps, opts: PokerOptions =
       recent,
       stats,
     };
+  });
+
+  /** 우편함 */
+  gateway.rpc("poker.mail", async (ctx) => wallet.mail(member(ctx).uid));
+  /** 우편 받기 (id 없으면 전부) */
+  gateway.rpc("poker.mailClaim", async (ctx, raw) => {
+    const { uid } = member(ctx);
+    const { id } = z.object({ id: z.string().max(40).optional() }).parse(raw ?? {});
+    const r = await wallet.claim(uid, id);
+    // 앉아 있는 테이블이 쉬고 있으면 늘어난 칩으로 바로 다음 판을 시도
+    const t = tables.get(seatOf.get(uid) ?? "");
+    if (t && r.got) nudge(t, 600);
+    return { got: r.got, wallet: r.wallet ? walletWire(uid, r.wallet) : null };
   });
 
   gateway.rpc("poker.revive", async (ctx) => {
@@ -1541,7 +1709,7 @@ export function registerPoker({ gateway, db, users }: Deps, opts: PokerOptions =
   };
   const live: LiveGame = {
     // 판 도중에는 카드·베팅이 서버에만 있어서 끝나길 기다림 (최대 DRAIN_MS — 넘으면 그 판은 없던 일, 돈은 판이 끝날 때만 바뀌어서 그대로)
-    busy: () => [...tables.values()].some((t) => !!t.round || t.starting),
+    busy: () => [...tables.values()].some((t) => !t.dev && (!!t.round || t.starting)),
     drain() {
       draining = true;
     },
@@ -1552,7 +1720,7 @@ export function registerPoker({ gateway, db, users }: Deps, opts: PokerOptions =
     // 사람이 앉은 테이블만 (봇만 있는 로비 방은 다시 켜지면 새로 열림)
     snapshot: () =>
       [...tables.values()]
-        .filter((t) => !t.closed && humans(t).length)
+        .filter((t) => !t.closed && !t.dev && humans(t).length)
         .map((t) => ({
           id: t.id,
           name: t.name,

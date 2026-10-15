@@ -58,6 +58,8 @@ export interface RoomState {
   pick: number;
   delay: number;
   maxRb: number;
+  /** 두 선수가 착용한 스킨 ("" = 기본, 예전 서버면 없음) */
+  skins?: [string, string];
 }
 
 export interface ChatMsg {
@@ -176,6 +178,22 @@ export const rankBotStart = (id: string, ch: number) =>
 /** AI전 끝: 내 입력 기록 [값, 연속 프레임 수]... → 서버가 같은 경기를 다시 돌려 확인 */
 export const rankBotReport = (id: string, inputs: [number, number][]) => rpc<RankStatus | null>("fight.rankBotReport", { id, inputs });
 export const rankBotForfeit = (id: string) => rpc("fight.rankBotForfeit", { id }).catch(() => {});
+/** 내 격투 스킨: 산 것 · 캐릭터마다 착용한 것 (비회원 null) */
+export interface MySkinsWire {
+  owned: string[];
+  wear: Record<string, string>;
+}
+export const getMySkins = () => rpc<MySkinsWire | null>("fight.skins");
+/** 착용 (skin = null 이면 기본) */
+export const wearSkin = (ch: string, skin: string | null) => rpc<MySkinsWire>("fight.wearSkin", { ch, skin });
+/** 업적: 튜토리얼 끝 (회원만 기록) */
+export const tutorialDone = () => rpc("fight.tutorialDone").catch(() => {});
+/** 업적: AI 대전 승리 — 입력 기록 [값, 연속 프레임 수]을 서버가 같은 씨앗으로 다시 돌려 확인 */
+/** CPU 대전 한 판 기록 (이기든 지든) — AI 학습 데이터 */
+export const aiRecord = (o: { build: string; level: number; chars: [number, number]; map: number; seed: number; winner: 0 | 1 | 2; inputs: [number, number][] }) =>
+  rpc("fight.aiRecord", o).catch(() => null);
+export const aiClear = (o: { build: string; level: number; chars: [number, number]; map: number; seed: number; inputs: [number, number][] }) =>
+  rpc<{ ai: number | null }>("fight.aiClear", o).catch(() => null);
 
 /**
  * 방 하나에 들어가 있는 동안의 연결 (대기실 ↔ 경기 화면을 오가도 유지)

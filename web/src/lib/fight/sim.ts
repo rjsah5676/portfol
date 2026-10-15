@@ -98,9 +98,19 @@ const AIR_ACC = 70;
 /** 저스트 가드 판정 프레임 (가드 올린 뒤 이 안에 막으면) */
 const JUST_T = 5;
 /** 잡힌 뒤 던져질 때까지 붙잡혀 있는 프레임 */
-const THROW_TECH_T = 8;
-/** 그중 풀 수 있는 앞쪽 프레임 (잡히는 순간의 히트스톱 10프레임 동안 누른 것도 인정 → 약 0.23초). 풀면 피해 없음 */
-const THROW_TECH_WIN = 4;
+const THROW_TECH_T = 14;
+/** 제나 공중 뇌격돌을 맞힌 뒤 상대 앞에 붙는 거리(px) */
+const ZAP_AIR_GAP = 34;
+/** 이반: 바닥에서 이 높이(px) 안쪽으로 떨어지는 중엔 L 이 곰 포옹이 아니라 착지 후 철곰권 */
+const LAND_S_H = 60;
+/** 착지 직후 철곰권 입력을 봐 주는 프레임 (공중에서 미리 누른 L) */
+const LAND_S_BUF = 14;
+/** 그중 풀 수 있는 앞쪽 프레임 (잡히는 순간의 히트스톱 10프레임 동안 누른 것도 인정 → 약 0.33초, 철권 수준). 풀면 피해 없음
+ *  (10.12 4 → 10 · 붙잡는 시간 8 → 14: 보고 풀기엔 0.23초가 너무 짧아 0.1초 늘림) */
+const THROW_TECH_WIN = 10;
+/** 잡기 풀기: 잡은 쪽을 밀쳐 냄 — 밀려나는 속도 · 휘청이는 프레임 (10.14 풀자마자 바로 붙어 다시 잡고 푸는 게 끝없이 반복되던 것) */
+const TECH_SHOVE_VX = 2600;
+const TECH_SHOVE_T = 10;
 /** 연속 동작 수: 약(L) 4단, 발차기(H) 2단 */
 const CHAIN_MAX: Partial<Record<MoveId, number>> = { L: 4, H: 2 };
 const CHAIN_STEP = 520;
@@ -135,17 +145,18 @@ const GC_GRACE = 10;
 /** 잡기 성공 후 위로 띄우는 세기와 그동안의 경직 */
 const LAUNCH_VH = 1725;
 const LAUNCH_STUN = 60;
-/** 화상: 이만큼마다 체력 -BURN_DMG */
+/** 화상: BURN_EVERY 프레임마다 겹수 × 최대 체력 × 0.05% (= 겹마다 초당 0.2%), 지속 BURN_T, 최대 BURN_MAX 겹 */
 const BURN_EVERY = 15;
-const BURN_DMG = 2;
+const BURN_T = 300;
+const BURN_MAX = 5;
 /** 감전 처음 걸릴 때 짧게 기절 (경직 +) */
 const SHOCK_STUN = 10;
 /** 상태 이상(기절·방울·끌려옴·감전·일시정지·혼란)이 풀린 뒤 다시 안 걸리는 시간 (2초) — 그 사이엔 피해만 들어가고 IMMUNE */
 const STATUS_IMM = 120;
 /** 면역일 때 기절 대신 주는 경직 */
 const DIZZY_IMM_STUN = 18;
-/** 화상 중인 상대: 태울 수 있는 캐릭터(이그나)의 공격이 이만큼(%) 더 아픔 */
-const BURN_BONUS = 10;
+/** 화상 중인 상대: 태울 수 있는 캐릭터(이그나)의 공격이 겹마다 이만큼(%) 더 아픔 */
+const BURN_BONUS = 5;
 /** 건모 Alt+Tab 뒤 공중에서 안 떨어지는 시간 (0.3초) */
 const SWAP_HOLD = 18;
 /** 대시가 끝난 뒤에도 이 프레임 안에 잡기를 누르면 돌진 잡기 */
@@ -227,6 +238,8 @@ export interface Fighter {
   jumps: number;
   /** 가드 반격을 쓸 수 있는 남은 프레임 (공격을 막으면 채워짐) */
   gcT: number;
+  /** 건모 Alt+F4 뒤 게이지 덜 얻는 남은 프레임 */
+  mnerf: number;
   /** 띄워진 상태 (잡기·약 4단 마무리): 떨어지는 속도가 느려 공중 콤보를 넣기 쉬움, 땅에 닿으면 0 */
   float: number;
   /** 띄워진 채로 맞고 있는 프레임 (float 1·2, 땅에 닿으면 0) — 2초 넘으면 점점 빨리 떨어짐 */
@@ -239,6 +252,20 @@ export interface Fighter {
   shock: number;
   /** 화상 남은 프레임 (이그나 — 15프레임마다 체력이 조금씩 닳음, 화상으로는 안 죽음) */
   burn: number;
+  /** 화상 겹수 (1~5) · 틱 피해 나머지(1/10000 체력) */
+  burnN: number;
+  burnAcc: number;
+  /** 일섬 낙인: 남은 프레임 (0이 되는 순간 터짐) */
+  zap: number;
+  /** 일섬 시작 자리 (그림용) */
+  zx: number;
+  /** 건모 Alt+F4 강제 종료: 남은 멈춤 프레임 (그동안 맞아도 멈춤이 안 풀림) */
+  frz: number;
+  /** 이번 콤보에서 이미 강제 종료를 맞음 (콤보 초기화로 무한 반복 안 되게 — 다시 맞아도 피해만) */
+  bsodd: number;
+  /** 불 장판: 마지막으로 피해 · 화상 겹을 받은 프레임 (장판 여러 개가 겹쳐도 한 번만) */
+  flT: number;
+  flB: number;
   /** 지금 기술을 공중에서 시작했나 (공중 버전 기술용) */
   aerial: number;
   /** 아래로 내리꽂힌 상태: 땅에 닿으면 한 번 튀어 오름 */
@@ -321,6 +348,11 @@ export type EvKind =
   /** 철곰권 기를 다 모음 · 가드 부숨 (이반) */
   | "charged"
   | "crush"
+  /** 일섬 낙인 (제나) · 낙인이 터짐 · 일섬이 지나간 선 (x = 시작, v = 끝 x) */
+  | "zapMark"
+  | "zapBurst"
+  | "bsod"
+  | "zapLine"
   | "stun"
   | "immune";
 export interface Ev {
@@ -458,12 +490,21 @@ function newFighter(ch: number, side: 0 | 1, map: MapDef): Fighter {
     fell: 0,
     jumps: 0,
     gcT: 0,
+    mnerf: 0,
     float: 0,
     floatT: 0,
     juggle: 0,
     mark: 0,
     shock: 0,
     burn: 0,
+    burnN: 0,
+    burnAcc: 0,
+    zap: 0,
+    zx: 0,
+    frz: 0,
+    bsodd: 0,
+    flT: -1,
+    flB: -999,
     aerial: 0,
     spiked: 0,
     dk: 0,
@@ -538,7 +579,7 @@ const cloneF = (f: Fighter): Fighter => ({ ...f, hist: f.hist.slice() });
  * 이 빌드의 게임 데이터 지문 (캐릭터 성능·맵) — 온라인에서 서로 다른 빌드끼리 붙었는지 확인.
  * 계산 방식(sim.ts)만 바꿨을 땐 SIM_REV를 올릴 것.
  */
-const SIM_REV = 12;
+const SIM_REV = 23;
 export const BUILD_ID = (() => {
   const str = SIM_REV + JSON.stringify(CHARS.map((c) => [c.hp, c.walk, c.jumpVx, c.dash, c.cd, c.glide, c.hurt, c.width, c.moves])) + JSON.stringify(MAPS.map((m) => [m.plats, m.spawn]));
   let h = 2166136261;
@@ -596,6 +637,14 @@ export function hash(s: State): number {
     mix(f.mark);
     mix(f.shock);
     mix(f.burn);
+    mix(f.burnN);
+    mix(f.burnAcc);
+    mix(f.zap);
+    mix(f.zx);
+    mix(f.frz);
+    mix(f.bsodd);
+    mix(f.flT);
+    mix(f.flB);
     mix(f.aerial);
     mix(f.spiked);
     mix(f.dk);
@@ -722,6 +771,12 @@ export function projRect(p: Proj, s: State): Rect {
 const onGround = (s: State, f: Fighter) => standingOn(mapOf(s), f) !== null;
 const airborneS = (s: State, f: Fighter) => !onGround(s, f);
 
+/** 게이지 얻기 — 건모 Alt+F4 를 쓴 뒤 3초 동안은 30% 덜 (mnerf) */
+function gainMeter(f: Fighter, n: number) {
+  if (f.mnerf > 0) n = Math.trunc((n * 7) / 10);
+  f.meter = Math.min(METER_MAX, f.meter + n);
+}
+
 function startMove(s: State, i: number, id: MoveId) {
   const f = s.p[i];
   // 같은 기술을 이어 누르면 다음 동작 (약 4단 · 발차기 2단)
@@ -744,6 +799,7 @@ function startMove(s: State, i: number, id: MoveId) {
   if (id === "S") f.cd = m.cd ?? charOf(f).cd; // (공중 버전만 재사용 대기가 다를 수 있음)
   f.chg = 0;
   if (id === "G") f.meter = Math.max(0, f.meter - GUARD_COUNTER_COST);
+  if (id === "X" && m.mnerf) f.mnerf = m.mnerf;
   if (id === "T" || id === "G") f.vx = 0;
   f.dk = 0;
   if (airborneS(s, f)) {
@@ -757,6 +813,8 @@ function startMove(s: State, i: number, id: MoveId) {
       f.vx = f.face * m.lunge;
       f.vh = Math.max(f.vh, 300);
     }
+    // 건모 공중 Alt+Tab+F4: 판정 끝날 때까지 그 자리에 떠 있음
+    if (m.bsod) ((f.vh = Math.min(f.vh, 0)), (f.vx = 0), (f.hold = m.startup + m.active));
   } else {
     // 대시 남은 프레임은 여기서 끝 (안 지우면 나중에 점프했을 때 공중 조작이 잠깐 안 먹음)
     f.dashT = 0;
@@ -799,7 +857,9 @@ function tryAttack(s: State, i: number, allow: MoveId[]): boolean {
   }
   // (대시 중 약·발차기 하나만 누르면 기다리지 않고 바로 나감 — 곧바로 나머지를 누르면 control의 atk에서 돌진 잡기로 바뀜)
   const late = 3;
-  if (allow.includes("S") && f.cd === 0 && pressed(f, IN.C, 3)) {
+  // 이반 철곰권: 착지 직전에 누른 L(공중 곰 포옹 대신 미리 누른 것)도 착지하자마자 나가게 — 착지 뒤 몇 프레임은 입력을 길게 봐 줌
+  const sBuf = charOf(f).moves.S.charge && f.st === "idle" && f.t < 6 ? LAND_S_BUF : 3;
+  if (allow.includes("S") && f.cd === 0 && pressed(f, IN.C, sBuf)) {
     startMove(s, i, "S");
     return true;
   }
@@ -851,7 +911,14 @@ function airAttack(s: State, i: number): boolean {
     startMove(s, i, "X");
     return true;
   }
-  if (f.cd === 0 && pressed(f, IN.C, 3)) {
+  // 이반: 떨어지다 바닥에 거의 닿았으면 곰 포옹 대신 착지해서 철곰권 (위 tryAttack 의 LAND_S_BUF)
+  const nearLand = (() => {
+    const am = charOf(f).moves.S;
+    if (!am.charge || !am.air?.hug || f.vh >= 0) return false;
+    const pl = platBelow(mapOf(s), f.x, f.h);
+    return !!pl && f.h - pl.y * SUB < LAND_S_H * SUB;
+  })();
+  if (f.cd === 0 && pressed(f, IN.C, 3) && !nearLand) {
     turn();
     startMove(s, i, "S");
     return true;
@@ -895,7 +962,14 @@ function control(s: State, i: number) {
   const map = mapOf(s);
   f.t++;
   if (f.gcT > 0) f.gcT--;
-  if (f.st !== "hit") f.mark = 0;
+  if (f.mnerf > 0) f.mnerf--;
+  if (f.st !== "hit") ((f.mark = 0), (f.frz = 0));
+  if (f.st !== "hit" && f.st !== "down") f.bsodd = 0;
+  else if (f.frz > 0) {
+    // 공중에서 맞으면 멈춘 채로 떨어지고, 땅에 닿은 뒤부터 1.5초가 줄어듦
+    if (!airborneS(s, f)) f.frz--;
+    f.stun = Math.max(f.stun, f.frz);
+  }
   // 상태 이상이 다 풀리면(다시 움직일 수 있게 되면) 2초 면역
   if (f.imm > 0) f.imm--;
   if (f.cc && f.st !== "hit" && f.st !== "down" && f.st !== "rise" && f.trapT === 0 && f.grabbed === 0 && !s.p[1 - i].hug) {
@@ -1031,14 +1105,20 @@ function control(s: State, i: number) {
           return;
         }
       }
-      // 방향키 우선: 기술 중에도 누르는 쪽으로 돎 (돌진기는 돌진 시작 전까지만)
-      if (f.mv !== "T" && f.mv !== "G" && (!(m.rush || m.lunge) || f.t < m.startup)) steerFace(f);
+      // 방향키 우선: 기술 중에도 누르는 쪽으로 돎 (돌진기는 돌진 시작 전까지만, 필살기는 쓴 순간 본 쪽 그대로)
+      if (f.mv !== "T" && f.mv !== "G" && f.mv !== "X" && (!(m.rush || m.lunge) || f.t < m.startup)) steerFace(f);
       if (air) {
         if ((!m.lunge && !m.rush) || f.t > m.startup + m.active) airSteer(f);
       } else if ((f.mv === "L" || f.mv === "H") && f.vx * f.face < c.walk) {
         // 걸으면서 때림: 보는 쪽을 누르고 있으면 걷는 속도의 70%로 계속 나감
         const fwd = f.face > 0 ? IN.R : IN.L;
         if (holding(f, fwd)) f.vx = Math.trunc((c.walk * 7) / 10) * f.face;
+      }
+      // 일섬이 지나간 선 (그림용): 시작 자리 기억 → 끝날 때 선
+      if (m.zap && f.t === m.startup) f.zx = f.x;
+      if (m.zap && f.t === m.startup + m.active) {
+        f.vx = 0;
+        s.ev.push({ k: "zapLine", p: i, x: f.zx, h: f.h + 40 * SUB, v: f.x });
       }
       if (m.rush && f.t === m.startup) {
         // 돌진: 땅에선 앞으로, 공중에선 앞쪽 아래로 내리꽂음
@@ -1060,8 +1140,15 @@ function control(s: State, i: number) {
       }
       // 돌진 잡기: 잡을 때까지 앞으로 파고듦
       if (f.mv === "T" && f.lg && f.t < m.startup + m.active) f.vx = f.face * DASH_GRAB_V;
-      // 연타 돌진기는 판정 동안 계속 나아감
-      if (m.multi && m.rush && f.t >= m.startup && f.t < m.startup + m.active) f.vx = f.face * m.rush.vx;
+      // 연타 돌진기 · 일섬 · 공중 뇌격돌은 판정 동안 계속 나아감 (공중 뇌격돌은 맞히면 멈춤 — applyHit)
+      if ((m.multi || m.zap) && m.rush && f.t >= m.startup && f.t < m.startup + m.active) f.vx = f.face * m.rush.vx;
+      // 공중 뇌격돌: 돌진이 끝나면 확 느려짐 (끝없이 날아가지 않게)
+      if (m.rush && m.rush.airVh === 0 && !m.zap && !m.multi && air && f.t === m.startup + m.active) f.vx = Math.trunc(f.vx / 5);
+      // 공중 뇌격돌을 맞혔으면: 상대 바로 앞(ZAP_AIR_GAP)까지 마저 파고든 뒤 멈춤 — 판정 끝(약 90px)에서 맞으면 너무 멀어 후속타가 안 닿던 것 (10.12)
+      if (airRushHit(f, m) && air) {
+        const gap = Math.abs(s.p[1 - i].x - f.x) - ZAP_AIR_GAP * SUB;
+        f.vx = gap > 0 ? f.face * Math.min(m.rush!.vx, gap) : 0;
+      }
       // 연타기: 일정 프레임마다 다시 맞을 수 있게
       if (m.multi && f.t > m.startup && (f.t - m.startup) % m.multi === 0) f.hit = 0;
       if (m.proj && f.t === m.startup) {
@@ -1074,7 +1161,8 @@ function control(s: State, i: number) {
           n: d.hits ?? 1,
           t: 0,
           o: i,
-          x: f.x + f.face * 24 * SUB,
+          // 여러 번 맞는 파도(릴리 장마 파도)는 몸에서부터 — 딱 붙은 상대도 맞게 (10.12)
+          x: f.x + f.face * (d.hits && d.hits > 1 ? 4 : 24) * SUB,
           h: f.h + d.y * SUB,
           vx: f.face * (dive ? Math.trunc((d.speed * 3) / 4) : d.speed),
           vh: dive ? -Math.trunc((d.speed * 3) / 5) : 0,
@@ -1095,7 +1183,8 @@ function control(s: State, i: number) {
         return;
       }
       // 공중 끌어올리기가 맞으면: 판정 끝난 뒤 바로 점프·공중 약·발차기로 이어감 (공중 콤보)
-      if (f.hit && f.aerial && m.pullUp && f.t >= m.startup + m.active - 2) {
+      // (제나 공중 뇌격돌도: 맞히면 남은 돌진·빈틈 없이 바로)
+      if (f.hit && f.aerial && ((m.pullUp && f.t >= m.startup + m.active - 2) || airRushHit(f, m))) {
         if (f.jumps < 2 && pressed(f, JUMP_BITS, 10)) {
           f.mv = "";
           jump(s, i, JUMP2_V);
@@ -1156,7 +1245,7 @@ function control(s: State, i: number) {
           const o = s.p[1 - i];
           f.hp = Math.max(0, f.hp - f.grabDmg);
           f.grabDmg = 0;
-          o.meter = Math.min(METER_MAX, o.meter + charOf(o).moves.T.meter);
+          gainMeter(o, charOf(o).moves.T.meter);
           f.vh = LAUNCH_VH;
           f.kd = 0;
           f.float = 1;
@@ -1172,14 +1261,16 @@ function control(s: State, i: number) {
           f.stun = 0;
           f.combo = 0;
           f.kd = 0;
-          f.vx = -f.face * 900;
+          f.vx = -f.face * 400;
           // 푸는 데 쓴 약·발차기 입력은 여기서 소진 (안 그러면 풀자마자 그 입력으로 발차기가 나감)
           for (let k = HIST - 4; k < HIST; k++) f.hist[k] |= AB;
+          // 잡은 쪽을 밀쳐 냄: 멀리 밀려나며 잠깐 휘청 (공격 · 잡기 못 함 — 바로 다시 붙어 잡지 못하게)
           if (o.st === "atk" && o.mv === "T") {
-            o.st = "idle";
+            o.st = "block";
             o.mv = "";
             o.t = 0;
-            o.vx = -o.face * 900;
+            o.stun = TECH_SHOVE_T;
+            o.vx = f.x < o.x ? TECH_SHOVE_VX : -TECH_SHOVE_VX;
           }
           s.ev.push({ k: "tech", p: i, x: (f.x + o.x) >> 1, h: f.h + 30 * SUB, v: 0 });
           return;
@@ -1293,7 +1384,7 @@ function landed(s: State, i: number, f: Fighter) {
       if (!imm) o.cc = 1;
       o.kd = 0;
       o.float = 0;
-      f.meter = Math.min(METER_MAX, f.meter + lm.meter);
+      gainMeter(f, lm.meter);
       s.stop = Math.max(s.stop, lm.hitstop);
       s.ev.push({ k: "hit", p: i, x: o.x, h: o.h + 20 * SUB, v: dmg, m: "S" });
       s.ev.push({ k: "slam", p: 1 - i, x: o.x, h: o.h, v: 1 });
@@ -1319,10 +1410,19 @@ function landed(s: State, i: number, f: Fighter) {
   }
   f.dive = 0;
   // 연타 돌진 필살기(카이 천풍난무)는 공중에서 써도 착지 뒤 땅에서 마저 돌진 (끊기지 않게)
-  const keepRush = f.st === "atk" && f.mv === "X" && !!lm?.rush && !!lm.multi && f.t < lm.startup + lm.active;
+  // 제나 뇌섬일창도 떨어지다 쓰면 착지에 끊겨서(10.12) 땅에서 마저 꿰뚫고 마무리까지
+  const keepRush =
+    f.st === "atk" && f.mv === "X" && !!lm?.rush && ((!!lm.multi && f.t < lm.startup + lm.active) || !!lm.zap);
+  const landRush = f.st === "atk" && f.mv === "X" && !!lm?.rush?.landRush && f.t < lm.startup + lm.active;
   if (keepRush) {
     f.vh = 0;
     f.aerial = 0;
+  } else if (landRush && lm) {
+    // 이반 붉은 폭풍: 내리꽂다 착지 → 땅에서 돌진을 처음부터 (다음 프레임에 시작 = 돌진 속도)
+    f.vh = 0;
+    f.aerial = 0;
+    f.dive = 0;
+    if (f.t >= lm.startup) ((f.t = lm.startup - 1), (f.vx = 0));
   } else if (f.st === "jump" || (f.st === "atk" && (f.mv === "J" || f.mv === "K" || lm?.lunge || lm?.rush || (f.aerial && f.mv && charOf(f).moves[f.mv].air)))) {
     f.st = "idle";
     f.mv = "";
@@ -1545,6 +1645,11 @@ function carryDashGrab(s: State, x0: number[]) {
 function separate(s: State) {
   const [a, b] = s.p;
   if (Math.abs(a.h - b.h) > 40 * SUB) return;
+  // 일섬으로 꿰뚫고 지나가는 중엔 몸끼리 안 막힘
+  for (const f of s.p) {
+    const m = f.st === "atk" ? moveOf(f) : null;
+    if (m?.zap && f.t >= m.startup && f.t < m.startup + m.active + 2) return;
+  }
   const need = Math.trunc(((charOf(a).width + charOf(b).width) * SUB) / 2);
   const dx = b.x - a.x;
   if (Math.abs(dx) >= need) return;
@@ -1564,6 +1669,11 @@ function releaseHug(s: State, i: number) {
     const o = s.p[1 - k];
     if (o.st === "hit" && o.stun > 100) o.stun = 12;
   }
+}
+
+/** 제나 공중 뇌격돌(수평 돌진 아이덴티티)을 맞힌 상태 */
+function airRushHit(f: Fighter, m: MoveDef) {
+  return f.mv === "S" && f.hit > 0 && !!f.aerial && !!m.rush && m.rush.airVh === 0 && !m.zap && !m.multi && !m.rush.landBurst;
 }
 
 /** 공중 잡기(곰 포옹)가 상대를 붙잡음 — 막을 수 없음, 같이 떨어져 착지하면 내리꽂음 */
@@ -1649,6 +1759,48 @@ function scaleDmg(dmg: number, combo: number) {
   return Math.max(1, Math.trunc((dmg * Math.max(floor, 100 - 12 * combo)) / 100));
 }
 
+/** 화상 1겹 더함 (최대 BURN_MAX) — 지속은 BURN_T 로 다시 */
+function addBurn(s: State, ai: number, d: Fighter) {
+  if (d.st === "ko") return;
+  if (d.burn === 0) ((d.burnN = 0), (d.burnAcc = 0));
+  const up = d.burnN < BURN_MAX;
+  d.burnN = Math.min(BURN_MAX, d.burnN + 1);
+  d.burn = BURN_T;
+  if (up) s.ev.push({ k: "burn", p: ai, x: d.x, h: d.h + 60 * SUB, v: d.burnN });
+}
+
+/** 일섬 낙인이 터짐: 큰 피해 + 감전 (가드 · 무적 무시, 누워 있어도 다 들어감) */
+function zapBurst(s: State, ai: number) {
+  const a = s.p[ai];
+  const d = s.p[1 - ai];
+  const z = CHARS[a.ch].moves.X.zap;
+  if (!z || d.st === "ko" || s.phase !== "fight") return;
+  const dmg = z.dmg;
+  d.hp = Math.max(0, d.hp - dmg);
+  gainMeter(a, 6);
+  s.stop = Math.max(s.stop, 10);
+  s.ev.push({ k: "zapBurst", p: ai, x: d.x, h: d.h + 40 * SUB, v: dmg });
+  s.ev.push({ k: "hit", p: ai, x: d.x, h: d.h + 28 * SUB, v: dmg, m: "X" });
+  if (d.st === "down" || d.st === "rise") return;
+  // 하던 걸 끊고 경직 — 감전은 상태 이상 면역 규칙 그대로
+  if (d.hug) releaseHug(s, 1 - ai);
+  d.grabbed = 0;
+  d.st = "hit";
+  d.t = 0;
+  d.mv = "";
+  d.combo++;
+  d.stun = 24;
+  d.vx = 0;
+  if (airborneS(s, d)) ((d.vh = 600), (d.float = 2));
+  // 낙인의 감전은 1차 감전의 마무리라 면역 무시
+  if (d.shock === 0) s.ev.push({ k: "shock", p: ai, x: d.x, h: d.h + 70 * SUB, v: 0 });
+  d.shock = Math.max(d.shock, z.shock);
+  d.stun += SHOCK_STUN;
+  d.cc = 1;
+  d.imm = 0;
+  if (d.hp <= 0) d.hp = 0;
+}
+
 /** 동시에 맞을 때: 때린 쪽이 (먼저 맞아서 상태가 바뀌기 전) 원래 어떤 상태였나 */
 interface PreHit {
   fin: boolean;
@@ -1678,7 +1830,7 @@ function applyHit(s: State, ai: number, m: MoveDef, srcX: number, mid: MoveId, p
     const dmg = Math.max(1, scaleDmg(m.dmg, d.combo) >> 1);
     d.hp -= dmg;
     d.combo++;
-    a.meter = Math.min(METER_MAX, a.meter + (m.meter >> 1));
+    gainMeter(a, (m.meter >> 1));
     s.stop = Math.max(s.stop, m.hitstop - 2);
     s.ev.push({ k: "hit", p: ai, x: d.x - dir * 8 * SUB, h: d.h + 14 * SUB, v: dmg, m: mid });
     if (d.hp <= 0) d.hp = 0;
@@ -1692,7 +1844,7 @@ function applyHit(s: State, ai: number, m: MoveDef, srcX: number, mid: MoveId, p
   ) {
     const dmg = Math.max(1, scaleDmg(m.dmg, d.combo));
     d.hp -= dmg;
-    a.meter = Math.min(METER_MAX, a.meter + (m.meter >> 1));
+    gainMeter(a, (m.meter >> 1));
     s.stop = Math.max(s.stop, m.hitstop - 3);
     s.ev.push({ k: "hit", p: ai, x: d.x - dir * 8 * SUB, h: eh, v: dmg, m: mid });
     s.ev.push({ k: "clash", p: 1 - ai, x: d.x, h: d.h + 30 * SUB, v: 0 });
@@ -1701,7 +1853,7 @@ function applyHit(s: State, ai: number, m: MoveDef, srcX: number, mid: MoveId, p
   }
   // 가드 부수기 (끝까지 모은 철곰권): 막고 있어도 그냥 맞음
   if (m.crush && canBlock(s, d, srcX)) s.ev.push({ k: "crush", p: ai, x: d.x, h: d.h + 40 * SUB, v: 0 });
-  if (mid !== "T" && !m.crush && canBlock(s, d, srcX)) {
+  if (mid !== "T" && !m.crush && !m.bsod && canBlock(s, d, srcX)) {
     // 저스트 가드: 가드를 올린 지 JUST_T 프레임 안에 막으면 경직 반, 깎임 없음, 게이지 보너스
     const wasBlocking = d.st === "block";
     // (↓를 새로 눌러야 함 — 다운·경직 중부터 누르고만 있던 가드는 보통 가드)
@@ -1721,10 +1873,12 @@ function applyHit(s: State, ai: number, m: MoveDef, srcX: number, mid: MoveId, p
     // 막은 쪽은 조금, 때린 쪽도 밀려남 (가드 밀림 — 계속 붙어서 때리기 어렵게)
     d.vx = Math.trunc((dir * m.push * (just ? 3 : 6)) / 10);
     if (!m.proj && !m.summon && !m.multi) a.vx = -Math.trunc((dir * m.push * 3) / 10);
-    a.meter = Math.min(METER_MAX, a.meter + (m.meter >> 1));
-    d.meter = Math.min(METER_MAX, d.meter + (just ? 10 : 3));
+    gainMeter(a, (m.meter >> 1));
+    gainMeter(d, (just ? 10 : 3));
     s.stop = Math.max(s.stop, m.hitstop - 3);
     s.ev.push({ k: just ? "just" : "block", p: ai, x: d.x - dir * 10 * SUB, h: eh, v: m.chip, m: mid });
+    // 막아도 화상은 쌓이는 기술 (이그나 업화주)
+    if (m.burn && m.burnGuard) addBurn(s, ai, d);
   } else {
     // 연타·소환 필살기는 콤보 보정 없이 매 타 같은 피해
     const fin = pre ? pre.fin : (mid === "L" || mid === "H") && isFinisher(a);
@@ -1739,7 +1893,7 @@ function applyHit(s: State, ai: number, m: MoveDef, srcX: number, mid: MoveId, p
     if (d.shock > 0 && shocker) base = Math.trunc((base * 110) / 100);
     // 화상 중인 상대: 태울 수 있는 캐릭터(이그나)의 모든 공격이 더 아픔
     const burner = CHARS[a.ch].moves.S.burn !== undefined || CHARS[a.ch].moves.X.burn !== undefined;
-    if (d.burn > 0 && burner) base = Math.trunc((base * (100 + BURN_BONUS)) / 100);
+    if (d.burn > 0 && burner) base = Math.trunc((base * (100 + BURN_BONUS * d.burnN)) / 100);
     const wasAir = airborneS(s, d);
     const slam = mid === "K" && a.dk === 1 && wasAir;
     if (slam) base = Math.trunc((base * SLAM_DMG) / 100);
@@ -1775,7 +1929,8 @@ function applyHit(s: State, ai: number, m: MoveDef, srcX: number, mid: MoveId, p
     d.mv = "";
     // 경직 감소: 콤보가 길어질수록 맞는 경직이 줄어 무한 콤보 방지 (필살기 연타는 예외)
     const decay = m.multi || m.summon ? 0 : Math.min(40, Math.max(0, d.combo - 3) * 6);
-    d.stun = Math.max(6, Math.trunc((m.hitstun * (100 - decay)) / 100)) + (counter ? 6 : 0);
+    // (발차기 2단 마무리가 맞으면 경직 더 — finStun, 이반: 맞혀도 -20이라 바로 반격당하던 것 10.14)
+    d.stun = Math.max(6, Math.trunc(((m.hitstun + (fin ? (m.finStun ?? 0) : 0)) * (100 - decay)) / 100)) + (counter ? 6 : 0);
     if (counter) s.ev.push({ k: "counter", p: ai, x: d.x, h: d.h + 70 * SUB, v: 0 });
     d.vx = fin ? Math.trunc((dir * m.push * 16) / 10) : dir * m.push;
     // 끌어당기는 기술: 때린 쪽 바로 앞(약 34px)에 멈추게 — 땅 마찰(60/프레임)로 멈추는 거리에 맞춘 속도
@@ -1830,6 +1985,12 @@ function applyHit(s: State, ai: number, m: MoveDef, srcX: number, mid: MoveId, p
         d.vx = Math.trunc((dir * m.push * JUGGLE_PUSH) / 100);
         d.stun = Math.max(d.stun, JUGGLE_STUN);
       }
+    }
+    // 제자리 연타 필살기(소영 보충수업 등)를 공중에서 맞음: 매 타 위로 튕겨 판정 밖으로 빠져 나머지 타가 헛치던 것 → 그 자리에 붙잡아 둠
+    if (wasAir && !kd && m.multi && !m.rush && !m.proj && !m.summon && mid === "X" && !airborneS(s, a)) {
+      d.vh = 160;
+      d.vx = Math.trunc((dir * m.push) / 10);
+      d.float = 2;
     }
     if (m.launch && wasAir && !kd && prevFloat === 1) {
       d.vh = Math.max(d.vh, prevVh);
@@ -1904,6 +2065,38 @@ function applyHit(s: State, ai: number, m: MoveDef, srcX: number, mid: MoveId, p
       d.mark = 1;
       s.ev.push({ k: "pause", p: ai, x: d.x, h: d.h + 70 * SUB, v: 0 });
     }
+    if (m.bsod && !d.bsodd) {
+      // Alt+F4: 강제 종료 — 면역 무시, 그 자리에 멈춤 (공중이면 둥실 멈춤)
+      gotStatus = true;
+      d.frz = m.bsod;
+      d.bsodd = 1;
+      d.stun = Math.max(d.stun, m.bsod);
+      d.mark = 1;
+      d.vx = 0;
+      d.kd = 0;
+      // 콤보 초기화: 피해 보정 · 경직 감소 · 공중 낙하 가속 · 섞기 · 콤보마다 한 번 기술(곰 포옹 등)이 처음부터 → 멈춘 동안 한 콤보 더
+      d.combo = 0;
+      d.floatT = 0;
+      d.mixM = 0;
+      d.mixN = 0;
+      d.otg = 0;
+      d.hugd = 0;
+      // 공중이면 그대로 땅에 떨어져 선 채로 멈춤 (멈춘 동안 다시 땅 콤보부터)
+      if (airborneS(s, d)) ((d.vh = Math.min(d.vh, 0)), (d.float = 0));
+      s.ev.push({ k: "bsod", p: ai, x: d.x, h: d.h + 70 * SUB, v: 0 });
+    } else if (m.bsod) {
+      // 같은 콤보에 두 번째 강제 종료: 이미 꺼진 창 — 멈춤 · 초기화 없이 경직도 짧게 (무한 반복 막기)
+      d.stun = Math.min(d.stun, 10);
+    } else if (d.frz > 0 && !kd && d.vh > 0 && !wasAir) {
+      // 멈춘 상대를 띄우는 타(약 4단 · 가드 반격): 멈춤이 풀리고 그대로 공중 콤보로
+      d.frz = 0;
+    } else if (d.frz > 0 && !kd) {
+      // 멈춘 동안 맞은 타: 멈춤은 그대로(남은 만큼 경직), 멀리 안 밀려남
+      d.stun = Math.max(d.stun, d.frz);
+      d.mark = 1;
+      d.vx = Math.trunc(d.vx / 3);
+      if (airborneS(s, d)) ((d.vh = Math.min(d.vh, 0)), (d.float = 0));
+    }
     if (m.swap && !immune) {
       gotStatus = true;
       // Alt+Tab: 자리를 바꾸고 💫 혼란 — 그 자리에 떠 있다가 넘어짐 (아래에 발판이 없으면 안 넘어뜨림)
@@ -1971,9 +2164,18 @@ function applyHit(s: State, ai: number, m: MoveDef, srcX: number, mid: MoveId, p
       if (!d.kd) d.stun += fresh ? SHOCK_STUN : 3;
     }
     if (gotStatus) d.cc = 1;
-    if (m.burn) {
-      if (d.burn === 0) s.ev.push({ k: "burn", p: ai, x: d.x, h: d.h + 60 * SUB, v: 0 });
-      d.burn = Math.max(d.burn, m.burn);
+    if (m.burn) addBurn(s, ai, d);
+    // 공중 뇌격돌(제나): 맞히면 돌진을 멈춰 상대 앞에 붙음 → 공중 콤보
+    if (mid === "S" && m.rush && !m.rush.landBurst && m.rush.airVh === 0 && !m.zap && airborneS(s, a)) {
+      a.vx = Math.trunc(a.vx / 6);
+      // 공중에 뜬 상대는 띄운 상태(저글)로 — 둘 다 같은 느린 중력으로 내려와서 공중 약·발차기가 이어짐 (10.12)
+      if (airborneS(s, d) && !kd) ((d.float = 1), (d.vh = 0), (a.juggle = JUGGLE_HANG));
+    }
+    // 일섬 낙인: 막지 못하고 맞으면 delay 뒤 터짐
+    if (m.zap && !kd) d.stun = Math.max(d.stun, m.zap.stun);
+    if (m.zap && d.zap === 0) {
+      d.zap = m.zap.delay;
+      s.ev.push({ k: "zapMark", p: ai, x: d.x, h: d.h + 70 * SUB, v: 0 });
     }
     if (m.launch && !kd && !wasAir) {
       // 띄우는 후속타 (카이 질풍권 · 공중 질풍권 착지 충격파)
@@ -1986,8 +2188,8 @@ function applyHit(s: State, ai: number, m: MoveDef, srcX: number, mid: MoveId, p
       s.ev.push({ k: "launch", p: ai, x: d.x, h: d.h, v: 4 });
     }
     // (잡기 게이지는 던질 때 — 풀리면 없음)
-    if (mid !== "T") a.meter = Math.min(METER_MAX, a.meter + m.meter);
-    d.meter = Math.min(METER_MAX, d.meter + (dmg >> 4));
+    if (mid !== "T") gainMeter(a, m.meter);
+    gainMeter(d, (dmg >> 4));
     s.stop = Math.max(s.stop, m.hitstop);
     s.ev.push({ k: mid === "T" ? "throw" : "hit", p: ai, x: d.x - dir * 8 * SUB, h: eh, v: dmg + popBonus, m: mid });
   }
@@ -2041,9 +2243,13 @@ function projectiles(s: State) {
       const fl = CHARS[s.p[p.o].ch].moves.X.summon!.floor!;
       const r = projRect(p, s);
       const on = d.x >= r.l && d.x <= r.r && d.h >= r.lo && d.h <= r.hi && d.st !== "ko" && d.inv === 0;
-      if (on && p.t % fl.every === 0) {
-        if (d.burn === 0) s.ev.push({ k: "burn", p: p.o, x: d.x, h: d.h + 60 * SUB, v: 0 });
-        d.burn = Math.max(d.burn, fl.burn);
+      // (장판이 여러 개 겹쳐 있어도 한 번만 — 피해는 그 프레임에 한 번, 화상 겹은 1초에 한 번)
+      if (on && p.t % fl.every === 0 && d.flT !== s.f) {
+        d.flT = s.f;
+        if (s.f - d.flB >= 60) {
+          d.flB = s.f;
+          addBurn(s, p.o, d);
+        } else if (d.burn > 0) d.burn = BURN_T;
         if (d.hp > 1) d.hp = Math.max(1, d.hp - fl.dmg);
       }
       continue;
@@ -2053,8 +2259,8 @@ function projectiles(s: State) {
       const X = CHARS[s.p[p.o].ch].moves.X;
       const sm = X.summon!;
       const at = p.t - sm.delay;
-      if (sm.track && d.shock > 0 && at >= 0 && at % sm.every === 0) {
-        // 추적: 감전된 상대라면 타마다 상대 발밑으로 따라감 (지금 선 발판 높이)
+      if (sm.track && (sm.track === "burn" ? d.burn > 0 : d.shock > 0) && at >= 0 && at % sm.every === 0) {
+        // 추적: 감전(화상)된 상대라면 타마다 상대 발밑으로 따라감 (지금 선 발판 높이)
         p.x = d.x;
         const under = platBelow(map, d.x, d.h);
         p.h = under ? under.y * SUB : d.h;
@@ -2069,9 +2275,11 @@ function projectiles(s: State) {
     const pd = pm.proj!;
     if (pd.hits && pd.hits > 1) {
       // 여러 번 맞는 탄: every 프레임마다, 마지막 타에만 다운
-      if (p.t % (pd.every ?? 8) === 0 && h && overlap(projRect(p, s), h)) {
+      // (나오자마자 첫 타 — 예전엔 every 프레임 뒤라 붙어 있던 상대를 지나쳐 버림)
+      if (p.t % (pd.every ?? 8) === 1 && h && overlap(projRect(p, s), h)) {
         p.n--;
-        applyHit(s, p.o, { ...pm, multi: pd.every ?? 8, kd: !!pm.kd && p.n <= 0 }, p.x - p.vx * 4, p.mv ? "X" : "S");
+        // 밀어내는 쪽은 파도가 나아가는 쪽 (파도 가운데가 상대를 지나치면 거꾸로 당겨져 남은 타가 빗나가던 것)
+        applyHit(s, p.o, { ...pm, multi: pd.every ?? 8, kd: !!pm.kd && p.n <= 0 }, d.x - Math.sign(p.vx) * SUB, p.mv ? "X" : "S");
         if (p.n <= 0) p.life = 0;
       }
     } else if (h && overlap(projRect(p, s), h)) {
@@ -2119,7 +2327,7 @@ function attacks(s: State) {
       f.st = "idle";
       f.mv = "";
       f.t = 0;
-      f.vx = -f.face * 900;
+      f.vx = -f.face * (TECH_SHOVE_VX >> 1);
     }
     s.ev.push({ k: "tech", p: -1, x: (s.p[0].x + s.p[1].x) >> 1, h: s.p[0].h + 30 * SUB, v: 0 });
     return;
@@ -2217,8 +2425,20 @@ export function step(s: State, input: [number, number]): State {
       if (f.shock > 0) f.shock--;
       if (f.burn > 0) {
         f.burn--;
-        if (f.burn % BURN_EVERY === 0 && f.hp > 1) f.hp = Math.max(1, f.hp - BURN_DMG);
+        if (f.burn % BURN_EVERY === 0 && f.hp > 1) {
+          // 겹마다 초당 최대 체력 0.2% (15프레임마다 0.05%) — 나머지는 모아 둠
+          f.burnAcc += CHARS[f.ch].hp * f.burnN * 5;
+          const dmg = Math.trunc(f.burnAcc / 10000);
+          f.burnAcc -= dmg * 10000;
+          if (dmg) f.hp = Math.max(1, f.hp - dmg);
+        }
+        if (f.burn === 0) ((f.burnN = 0), (f.burnAcc = 0));
       }
+    }
+    // 일섬 낙인이 터짐 (때린 쪽 = 상대)
+    for (let i = 0; i < 2; i++) {
+      const f = s.p[i];
+      if (f.zap > 0 && --f.zap === 0) zapBurst(s, 1 - i);
     }
     control(s, 0);
     control(s, 1);
@@ -2265,3 +2485,9 @@ export const hpRatio = (f: Fighter) => f.hp / CHARS[f.ch].hp;
 /** 공중인지 (AI·그림용) */
 export const isAir = (s: State, f: Fighter) => airborneS(s, f);
 export { charOf, moveOf, totalOf, mapOf, finishRec };
+
+/** 지금 하는 기술의 정의 (연습 모드 프레임 데이터용 — 연속 동작 마무리 빈틈 · 공중 · 돌진 잡기 · 모으기 반영) */
+export const moveData = (f: Fighter) => {
+  const m = moveOf(f);
+  return m ? { ...m, recovery: m.recovery + finishRec(f) } : null;
+};

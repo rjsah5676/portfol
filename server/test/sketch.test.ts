@@ -362,6 +362,43 @@ describe("진행", () => {
     void a;
   });
 
+  it("게임 중에 들어온 사람은 먼저 맞혀도 이번 바퀴 맨 뒤에 그림", async () => {
+    const { host, others, id } = await roomWith(3, { turnMode: "winner", rounds: 1 });
+    const [a, b] = others;
+    await host.rpc("sketch.startGame", { id });
+    const late = await user("late");
+    await join(late, id, "늦음");
+    const next = async (guesser?: TestClient) => {
+      const st = (await peek(id)).state;
+      const drawer = [host, a, b, late].find((c) => c.uid === st.drawer)!;
+      const t = await toDrawing(id, drawer);
+      if (guesser) await drawer.rpc("sketch.markCorrect", { id, guess: { uid: guesser.uid, nick: "x", turnId: t } });
+      await drawer.rpc("sketch.endTurn", { id, turnId: t, reveal: "사과" });
+      await host.rpc("sketch.nextTurn", { id, turnId: t });
+      return (await peek(id)).state;
+    };
+    expect((await next(late)).drawer).toBe(a.uid); // 늦게 온 사람이 맞혔지만 원래 있던 사람 먼저
+    expect((await next(late)).drawer).toBe(b.uid);
+    expect((await next()).drawer).toBe(late.uid); // 바퀴가 끝나면 늦게 온 사람
+    expect((await next()).phase).toBe("ended");
+  });
+
+  it("순서 모드: 새로고침(새 입장 시각)으로 다시 들어와도 원래 순서, 맞힌 사람이 아니라 다음 순서가 그림", async () => {
+    const { host, others, id } = await roomWith(3, { turnMode: "order", rounds: 1 });
+    const [a, b] = others;
+    await host.rpc("sketch.startGame", { id });
+    // 참가1이 새로고침: 끊기고 새 입장 시각으로 다시 들어옴
+    a.close();
+    await sleep(50);
+    const a2 = await s.client(a.uid!);
+    await join(a2, id, "참가1", { joinedAt: Date.now() });
+    const t = await toDrawing(id, host);
+    await host.rpc("sketch.markCorrect", { id, guess: { uid: b.uid, nick: "참가2", turnId: t } });
+    await host.rpc("sketch.endTurn", { id, turnId: t, reveal: "사과" });
+    await host.rpc("sketch.nextTurn", { id, turnId: t });
+    expect((await peek(id)).state.drawer).toBe(a.uid);
+  });
+
   it("그리는 사람이 나가면 리더가 차례를 넘길 수 있음", async () => {
     const { host, others, id } = await roomWith(3, { rounds: 2 });
     const [a, b] = others;
@@ -375,9 +412,8 @@ describe("진행", () => {
     expect((await peek(id)).players[a.uid!]).toBeUndefined();
     await host.rpc("sketch.endTurn", { id, turnId: t2, reveal: "" });
     await host.rpc("sketch.nextTurn", { id, turnId: t2 });
-    // 나간 사람 "다음"을 알 수 없으면 입장 순서 맨 앞에서부터 아직 덜 그린 사람 (기존 규칙 그대로)
-    expect((await peek(id)).state.drawer).toBe(host.uid);
-    void b;
+    // 나간 사람이 있던 자리 다음 사람부터 (순서 모드에서 엉뚱한 사람으로 건너뛰지 않게)
+    expect((await peek(id)).state.drawer).toBe(b.uid);
   });
 });
 
@@ -409,7 +445,7 @@ describe("오래 비어 있는 방", () => {
     const http = createServer();
     const cfg = loadConfig({ NODE_ENV: "test", PORT: "0" });
     const gateway = new Gateway(http, cfg, { verify: async (t) => ({ uid: t, email: null, anonymous: true, admin: false }) });
-    const sk = registerSketch({ cfg, gateway, auth: null as never, db: null as never, web: null as never, traffic: null as never, users: { bump() {} } as never }, { emptyRoomTtlMs: 30, sweepIntervalMs: 20 });
+    const sk = registerSketch({ cfg, gateway, auth: null as never, db: null as never, web: null as never, traffic: null as never, points: null as never, users: { bump() {} } as never }, { emptyRoomTtlMs: 30, sweepIntervalMs: 20 });
     await new Promise<void>((r) => http.listen(0, r));
     const { io } = await import("socket.io-client");
     const port = (http.address() as { port: number }).port;

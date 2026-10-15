@@ -65,6 +65,8 @@ function PokerPage() {
           en="Hold'em · 7 Poker"
           accent="#FFC93C"
           desc="애니풍 캐릭터와 즐기는 홀덤 · 7포커"
+          tags={["실시간 멀티", "무료 포커", "웹 홀덤"]}
+          ach="poker"
           guide={POKER_GUIDE}
           scroll={!inTable}
           rank={{

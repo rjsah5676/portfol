@@ -3,7 +3,7 @@
 # (서버가 web/src 의 게임 규칙·점수 계산·채보를 상대 경로로 import 해서 server/ 만으로는 빌드할 수 없음)
 
 # ── 1) 빌드: 의존성 전체 설치 → tsup 으로 dist/index.js 한 파일로 묶음 ──
-FROM public.ecr.aws/docker/library/node:24-slim AS build
+FROM mirror.gcr.io/library/node:24-slim AS build
 # 레포와 같은 상대 위치(/repo/server, /repo/web/src/lib/…)로 둬야 ../../../../web/src/lib/… import 가 맞음
 WORKDIR /repo/server
 COPY server/package.json server/package-lock.json ./
@@ -20,10 +20,17 @@ COPY web/src/data/rhythm /repo/web/src/data/rhythm
 COPY web/src/lib/poker /repo/web/src/lib/poker
 # 랭크전 봇전 확인: 브라우저에서 한 경기를 서버가 같은 입력으로 다시 돌림 (games/fightBot.ts)
 COPY web/src/lib/fight /repo/web/src/lib/fight
+# 글리치 디펜스: 랭킹 기록 검증 · 멀티 순위 (서버가 같은 시뮬을 다시 돌림, games/defense.ts)
+COPY web/src/lib/defense /repo/web/src/lib/defense
+# 포인트 (상품 · 업적 · 환전 정의)
+COPY web/src/lib/points.ts /repo/web/src/lib/points.ts
+COPY web/src/lib/mail.ts /repo/web/src/lib/mail.ts
+# DOODLE PARTY: 모드 · 제시어 (서버가 출제 · 정답 확인)
+COPY web/src/lib/sketch /repo/web/src/lib/sketch
 RUN npm run build
 
 # ── 2) 실행: 운영 의존성 + dist 만 ──
-FROM public.ecr.aws/docker/library/node:24-slim
+FROM mirror.gcr.io/library/node:24-slim
 ENV NODE_ENV=production
 WORKDIR /app
 COPY server/package.json server/package-lock.json ./

@@ -56,7 +56,7 @@ describe("관리자: 한눈에 보기", () => {
     expect(body.guest.total).toBe(1);
     expect(body.rankings.score).toBe(1);
     expect(body.rooms.chess_rooms).toEqual({ total: 0, playing: 0, waiting: 0 });
-    expect(body.live).toEqual({ sketch: { rooms: 0, players: 0 }, fight: { rooms: 0, players: 0 }, poker: { rooms: 0, players: 0 } });
+    expect(body.live).toEqual({ sketch: { rooms: 0, players: 0 }, fight: { rooms: 0, players: 0 }, poker: { rooms: 0, players: 0 }, rhythm: { rooms: 0, players: 0 }, defense: { rooms: 0, players: 0 } });
     expect(body.server.node).toMatch(/^v\d+/);
     const kinds = body.activity.map((a: any) => a.kind);
     expect(kinds).toEqual(expect.arrayContaining(["member", "guest", "inquiry", "rank"]));
@@ -138,7 +138,7 @@ describe("관리자: 열려 있는 방", () => {
     const live = (await s.http("/api/admin/live", { token: admin })).body;
     expect(live.sketch).toEqual([expect.objectContaining({ id: sk, name: "그림방", status: "waiting", players: ["◦그림"] })]);
     expect(live.fight).toEqual([expect.objectContaining({ id: f, name: "격투방", status: "wait", players: ["◦격투"] })]);
-    expect((await s.http("/api/admin/overview", { token: admin })).body.live).toEqual({ sketch: { rooms: 1, players: 1 }, fight: { rooms: 1, players: 1 }, poker: { rooms: 0, players: 0 } });
+    expect((await s.http("/api/admin/overview", { token: admin })).body.live).toEqual({ sketch: { rooms: 1, players: 1 }, fight: { rooms: 1, players: 1 }, poker: { rooms: 0, players: 0 }, rhythm: { rooms: 0, players: 0 }, defense: { rooms: 0, players: 0 } });
 
     const room = await a.sub("sketch.room", { id: sk });
     const close = (game: string, id: string) => s.http("/api/admin/live/close", { method: "POST", token: admin, body: { game, id } });
@@ -147,6 +147,6 @@ describe("관리자: 열려 있는 방", () => {
     expect((await close("sketch", sk)).body).toEqual({ closed: false });
     expect((await close("fight", f)).body).toEqual({ closed: true });
     expect((await close("chess", "x")).status).toBe(400);
-    expect((await s.http("/api/admin/live", { token: admin })).body).toEqual({ sketch: [], fight: [], poker: [], rhythm: [] });
+    expect((await s.http("/api/admin/live", { token: admin })).body).toEqual({ sketch: [], fight: [], poker: [], rhythm: [], defense: [] });
   });
 });

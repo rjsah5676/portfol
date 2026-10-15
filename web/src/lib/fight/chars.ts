@@ -42,6 +42,10 @@ export interface MoveDef {
   startup: number;
   active: number;
   recovery: number;
+  /** 약 4단 · 발차기 2단 마무리가 맞으면 더 붙는 경직 */
+  finStun?: number;
+  /** 필살기: 쓰고 나서 이 프레임 동안 게이지를 30% 덜 얻음 */
+  mnerf?: number;
   dmg: number;
   /** 막았을 때 깎이는 양 */
   chip: number;
@@ -77,6 +81,8 @@ export interface MoveDef {
     airDmg?: number;
     /** 공중에서 쓰면 판정 동안 이 속도보다 빨리 안 떨어짐 (공중에서 버티며 때림) */
     airFall?: number;
+    /** 공중에서 쓰면 내리꽂다가 착지하는 순간 땅에서 돌진을 처음부터 (이반 붉은 폭풍 — 공중에서 씹히지 않게) */
+    landRush?: boolean;
   };
   /** 여러 번 맞는 기술: 판정 동안 이 프레임마다 다시 맞음 (마지막 타만 다운) */
   multi?: number;
@@ -94,8 +100,8 @@ export interface MoveDef {
     delay: number;
     life: number;
     every: number;
-    /** 타마다 상대 발밑으로 다시 떨어짐 (추적) */
-    track?: boolean;
+    /** 타마다 상대 발밑으로 다시 떨어짐 (추적) — "burn" 이면 화상 중인 상대만 */
+    track?: boolean | "burn";
     /** 상대 발밑 대신 내 앞 이 거리(px)에 세움 (넓은 범위기) */
     front?: number;
     /** 기둥이 사그라진 자리에 불 장판 (life 프레임) — 밟고 있으면 every 프레임마다 dmg + 화상 */
@@ -103,8 +109,15 @@ export interface MoveDef {
   };
   /** 맞히면 상대를 감전시키는 프레임 수 (느려지고, 같은 캐릭터의 공격에 더 아픔) */
   shock?: number;
-  /** 맞으면 화상 (프레임) — 15프레임마다 체력 -2 */
+  /** 맞으면 화상 1겹 (최대 5겹, 새로 걸리면 5초로) — 겹마다 초당 최대 체력 0.2% · 이그나 공격 +5% */
   burn?: number;
+  /** 막혀도 화상은 쌓임 (이그나 업화주) */
+  burnGuard?: boolean;
+  /**
+   * 일섬 (제나 필살기): 판정 동안 rush 속도로 일자로 꿰뚫고 지나감 (몸끼리 안 막힘).
+   * 막히지 않고 맞으면 낙인 — delay 프레임 뒤 dmg 피해 + 감전 (그땐 막아도 맞음). 처음에 막히면 아무 일 없음
+   */
+  zap?: { delay: number; dmg: number; shock: number; stun: number };
   /** 맞으면 위로 띄움 (후속타) */
   launch?: boolean;
   /** launch로 띄우는 속도 (없으면 기본 — 낮을수록 짧은 공중 콤보) */
@@ -140,6 +153,8 @@ export interface MoveDef {
   dizzy?: boolean;
   /** (계산용) 가드를 부숨 — 끝까지 모은 철곰권 */
   crush?: boolean;
+  /** 건모 「Alt+F4」: 가드 불가 · 맞으면 이 프레임 동안 멈춤(⏸, 면역 무시) — 그 사이 맞는 타는 멈춤을 안 풀고 남은 만큼 경직 유지 */
+  bsod?: number;
 }
 
 export interface CharDef {
@@ -197,7 +212,7 @@ const RAW: CharSrc[] = [
     name: "카이",
     title: "맨손 격투 · 바람",
     desc: "빠른 주먹·발차기로 붙어서 몰아치는 맨손 격투가",
-    hp: 1160, // 질풍권 띄우기 추가로 1350→1250, 10.07 승률 분석(달인 74%)으로 →1160
+    hp: 1200, // 질풍권 띄우기 추가로 1350→1250, 10.07 승률 분석(달인 74%)으로 →1160, 10.12 →1200 (전 등급 40%대)
     walk: 1160, // 1240→1160
     jumpVx: 1050,
     dash: 2700,
@@ -338,10 +353,10 @@ const RAW: CharSrc[] = [
     difficulty: 1,
     stats: { atk: 4, reach: 4, move: 3, control: 3, combo: 3, hp: 2 },
     idName: "화염구",
-    idDesc: "빠르게 날아가는 불꽃 탄. 맞으면 화상 — 한동안 체력이 조금씩 닳고, 그동안 이그나의 공격이 10% 더 아픔",
+    idDesc: "빠르게 날아가는 불꽃 탄. 맞으면(막아도) 화상 1겹 — 최대 5겹, 5초 · 겹마다 체력이 조금씩 닳고 이그나의 공격이 5%씩 더 아픔",
     ultName: "업화주",
-    ultDesc: "상대 발밑에서 큰 불기둥이 솟아 4연타 — 오래 화상, 꺼진 자리엔 2초 동안 불 장판",
-    airDesc: "화염구를 앞쪽 아래로 비스듬히 쏨 — 아래 발판의 상대를 노림",
+    ultDesc: "상대 발밑에서 불기둥이 솟아 4연타 — 타마다 화상 1겹(막아도 쌓임), 화상 중인 상대는 도망쳐도 따라감, 꺼진 자리엔 불 장판",
+    airDesc: "화염구를 앞쪽 아래로 비스듬히 쏨 — 아래 발판의 상대를 노림 (막아도 화상은 쌓임)",
     moves: {
       L: {
         startup: 4,
@@ -414,7 +429,8 @@ const RAW: CharSrc[] = [
         meter: 7,
         box: { x: 0, y: 0, w: 0, h: 0 },
         proj: { speed: 1750, y: 36, w: 30, h: 24, life: 95 },
-        burn: 150, // 화상 120→150
+        burn: 1, // 화상 1겹 (10.12 겹치기) — 막아도 쌓임
+        burnGuard: true,
       },
       X: {
         // 필살기 「업화주」: 상대 발밑에서 불기둥이 솟아 4연타 — 어디 있든 쫓아감
@@ -438,9 +454,12 @@ const RAW: CharSrc[] = [
           life: 40,
           every: 10,
           // 불기둥이 꺼진 자리에 2초 동안 불 장판: 밟고 있으면 0.25초마다 8 피해 + 화상
-          floor: { life: 120, w: 110, every: 15, dmg: 8, burn: 90 },
+          floor: { life: 120, w: 110, every: 15, dmg: 8, burn: 1 },
+          // 화상 중인 상대는 타마다 발밑으로 따라감 (10.12 — 예전 제나 천뢰강림처럼)
+          track: "burn",
         },
-        burn: 220, // 화상 180→220
+        burn: 1, // 타마다 화상 1겹, 막아도 쌓임
+        burnGuard: true,
       },
     },
   },
@@ -450,7 +469,7 @@ const RAW: CharSrc[] = [
     name: "소영",
     title: "선생님 · 채찍",
     desc: "긴 채찍으로 거리를 지배하는 엄한 선생님. 붙으면 약함",
-    hp: 1280, // 1210→1280 (10.07 승률 35%)
+    hp: 1250, // 1210→1280 (10.07 승률 35%) → 1250 (10.12 중간 등급 80%대)
     walk: 1020,
     jumpVx: 900,
     dash: 2300,
@@ -474,21 +493,21 @@ const RAW: CharSrc[] = [
         startup: 5,
         active: 3,
         recovery: 10,
-        dmg: 30, // 26→30 (10.07)
+        dmg: 26, // 26→30 (10.07) → 26 (10.12)
         chip: 0,
         hitstun: 13,
         blockstun: 8,
         push: 800,
         hitstop: 4,
         meter: 5,
-        box: { x: 8, y: 46, w: 92, h: 14 }, // 채찍 끝까지 (그림에 맞춤)
+        box: { x: 8, y: 46, w: 84, h: 14 }, // 채찍 끝까지 (그림에 맞춤) — 10.12 앞 100→92px
         cancel: ["H", "S", "X"],
       },
       H: {
         startup: 12,
         active: 4,
         recovery: 20,
-        dmg: 90, // 80→90
+        dmg: 84, // 80→90 → 84 (10.12)
         chip: 0,
         hitstun: 19,
         blockstun: 13,
@@ -583,11 +602,11 @@ const RAW: CharSrc[] = [
     name: "릴리",
     title: "유치원생 · 우산과 물",
     desc: "우산으로 둥실 떠다니며 물방울을 띄우는 꼬마. 작아서 잘 안 맞음",
-    hp: 1250, // 1170→1210 (10.07) → 1250 (10.10 상태 이상 면역 보전)
+    hp: 1220, // 1170→1210 (10.07) → 1250 (10.10 상태 이상 면역 보전) → 1220 (10.12 위쪽 등급 70%)
     walk: 1120,
     jumpVx: 1050,
     dash: 2500,
-    cd: 84, // 92→84 (10.10)
+    cd: 96, // 92→84 (10.10) → 96 (10.12)
     glide: 520,
     hurt: { x: -8, y: 50, w: 16, h: 50 },
     width: 16,
@@ -600,7 +619,7 @@ const RAW: CharSrc[] = [
     idName: "비눗방울",
     idDesc: "느리고 오래 가는 큰 비눗방울로 길목을 막음 — 맞으면 갇혀서 둥실 떠오름 (때리면 터짐, 연타로 탈출, 갇힌 상대는 방울로 다시 못 가둠)",
     ultName: "장마 파도",
-    ultDesc: "바닥을 휩쓰는 큰 파도가 지나가며 5번 때림",
+    ultDesc: "릴리 몸에서부터 바닥을 휩쓰는 큰 파도가 지나가며 5번 때림 — 딱 붙어 있어도 다 맞음",
     airDesc: "점프를 누르고 있으면 우산으로 천천히 활강",
     airLabel: "점프 홀딩",
     moves: {
@@ -674,14 +693,14 @@ const RAW: CharSrc[] = [
         box: { x: 0, y: 0, w: 0, h: 0 },
         proj: { speed: 520, y: 40, w: 34, h: 34, life: 230, flat: true },
         // 갇힌 상대를 다른 방울이 맞히면 터지기만 하고 다시 가두지 않음 (방울로 계속 가두기 막음)
-        trap: 55,
+        trap: 45, // 55→45 (10.12)
       },
       X: {
         // 필살기 「장마 파도」: 바닥을 따라가는 큰 파도 5연타
         startup: 10,
         active: 1,
         recovery: 28,
-        dmg: 52,
+        dmg: 48, // 52→48 (10.12 붙어서도 다 맞게 바꾼 만큼)
         chip: 10,
         hitstun: 20,
         blockstun: 12,
@@ -690,7 +709,7 @@ const RAW: CharSrc[] = [
         meter: 0,
         box: { x: 0, y: 0, w: 0, h: 0 },
         kd: true,
-        proj: { speed: 900, y: 34, w: 80, h: 70, life: 120, hits: 5, every: 8, flat: true },
+        proj: { speed: 900, y: 34, w: 100, h: 70, life: 120, hits: 5, every: 8, flat: true }, // 폭 80→100 (10.12 붙어서 쓰면 마지막 타가 빠지던 것)
       },
     },
   },
@@ -700,11 +719,11 @@ const RAW: CharSrc[] = [
     name: "제나",
     title: "창술 · 번개",
     desc: "번개 두른 창으로 중거리를 지배하는 장난꾸러기",
-    hp: 1250, // 1140→1200 (10.07 승률 25%), 10.08 →1250 (지존 승률 30%)
+    hp: 1320, // 1140→1200 (10.07 승률 25%), 10.08 →1250 (지존 승률 30%), 10.12 →1320 (개편 · 위쪽 등급 30%대)
     walk: 1120,
     jumpVx: 1000,
     dash: 2600,
-    cd: 130,
+    cd: 110, // 130→110 (10.12 땅 L 뇌창이 유일한 탄이 됨)
     hurt: { x: -9, y: 58, w: 18, h: 58 },
     width: 18,
     color: "#FFD43B",
@@ -715,15 +734,16 @@ const RAW: CharSrc[] = [
     stats: { atk: 5, reach: 4, move: 3, control: 3, combo: 3, hp: 3 },
     idName: "뇌창",
     idDesc: "번개 창을 아주 빠르게 던짐. 맞으면 감전 — 잠깐 몸이 굳고, 한동안 느려지며 제나의 공격에 더 아프게 맞음",
-    ultName: "천뢰강림",
-    ultDesc: "상대 발밑에 번개가 3번 내리꽂힘 — 감전 중인 상대는 도망쳐도 따라감",
-    airDesc: "뇌창을 앞쪽 아래로 비스듬히 던짐 — 아래 발판의 상대를 노림",
+    ultName: "뇌섬일창",
+    ultDesc: "번개가 되어 정면으로 길게 꿰뚫고 지나감 — 막지 못하고 맞으면 낙인, 2초 뒤 큰 피해 + 감전 (그땐 막아도 맞음). 처음에 막으면 아무 일 없음",
+    airDesc: "공중에서 앞으로 번개처럼 돌진하며 창을 찌름 — 맞으면 감전, 떨어지는 동안 거리를 확 좁히거나 발판으로 돌아올 때",
+    airLabel: "공중 L 뇌격돌",
     moves: {
       L: {
         startup: 5,
         active: 3,
         recovery: 7, // 9→7 (10.07)
-        dmg: 38,
+        dmg: 42, // 38→42 (10.12)
         chip: 0,
         hitstun: 13,
         blockstun: 8,
@@ -789,23 +809,43 @@ const RAW: CharSrc[] = [
         box: { x: 0, y: 0, w: 0, h: 0 },
         proj: { speed: 2600, y: 38, w: 40, h: 14, life: 70 },
         shock: 110,
+        // 공중 「뇌격돌」: 앞으로 번개처럼 돌진하며 창 찌르기 (돌진하는 동안 안 떨어짐) — 맞으면 감전, 막히면 튕겨 나옴
+        air: {
+          proj: undefined,
+          startup: 6,
+          active: 12,
+          recovery: 16,
+          dmg: 62,
+          chip: 6,
+          hitstun: 35, // 10.12 20 → 35: 감전으로 굳는 시간 0.5 → 0.75초 (맞힌 뒤 공중 콤보 잇기 쉽게)
+          blockstun: 12,
+          push: 700,
+          hitstop: 7,
+          meter: 7,
+          box: { x: 0, y: 46, w: 90, h: 28 },
+          rush: { vx: 3600, airVh: 0, airVx: 3600, airFall: 0 },
+          shock: 110,
+        },
       },
       X: {
-        // 필살기 「천뢰강림」: 상대 발밑에 번개 창 3연타
-        startup: 10,
-        active: 1,
-        recovery: 28,
-        dmg: 70,
-        chip: 14,
-        hitstun: 26,
-        blockstun: 14,
-        push: 400,
-        hitstop: 6,
+        // 필살기 「뇌섬일창」: 번개가 되어 정면으로 길게 일자로 꿰뚫음 (약 400px). 막지 못하고 맞으면 낙인 → 2초 뒤 큰 피해 + 감전 (가드 무시)
+        // 처음에 막히면 아무 일 없음 · 끝나면 상대 뒤쪽에 서 있어 빈틈이 큼
+        startup: 12,
+        active: 7,
+        recovery: 30,
+        dmg: 40,
+        chip: 0,
+        // 1차: 약한 피해 + 짧은 감전 — 감전으로 굳어 있는 동안(zap.stun) 제나가 자세를 잡음 (바로 반격 못 하게)
+        hitstun: 12,
+        blockstun: 16,
+        push: 200,
+        hitstop: 8,
         meter: 0,
-        box: { x: 0, y: 0, w: 0, h: 0 },
-        kd: true,
-        summon: { w: 48, h: 160, delay: 16, life: 36, every: 12, track: true },
-        shock: 90,
+        box: { x: -70, y: 60, w: 140, h: 64 },
+        rush: { vx: 15000, airVh: 0, airVx: 15000, airFall: 0 },
+        shock: 50,
+        // 2차(2초 뒤): 큰 피해 + 감전 (가드 · 면역 무시)
+        zap: { delay: 120, dmg: 280, shock: 110, stun: 44 },
       },
     },
   },
@@ -829,8 +869,8 @@ const RAW: CharSrc[] = [
     stats: { atk: 2, reach: 3, move: 2, control: 5, combo: 5, hp: 4 },
     idName: "Ctrl+A",
     idDesc: "넓은 파란 선택 박스를 펼쳐, 맞은 상대를 ⏸ 일시정지 (1초 동안 꼼짝 못 함)",
-    ultName: "금요일 배포",
-    ultDesc: "앞쪽 넓게 에러 블록이 빗발쳐 5연타, 마지막 타에 넘어뜨림",
+    ultName: "Alt+F4",
+    ultDesc: "가드 불가 · 손을 뻗어 강제 종료 — 맞으면 블루스크린, 콤보가 처음부터(초기화)되고 상대가 1.5초 멈춤. 공중 콤보 중간에 넣으면 상대가 떨어져 멈춘 사이 한 콤보 더 (콤보마다 한 번)",
     airLabel: "공중 L Alt+Tab",
     airDesc: "앞에 큰 창을 띄워 맞히면 상대와 자리를 바꾸고 💫 혼란 — 건모는 잠깐 공중에 멈춰 바로 이어 침",
     moves: {
@@ -933,20 +973,38 @@ const RAW: CharSrc[] = [
         },
       },
       X: {
-        // 필살기 「금요일 배포」: 내 앞 넓은 범위에 에러 블록이 빗발침 (5연타, 마지막 타 다운)
-        startup: 10,
-        active: 1,
-        recovery: 30,
-        dmg: 34,
-        chip: 6,
-        hitstun: 20,
-        blockstun: 14,
-        push: 300,
-        hitstop: 4,
+        // 필살기 「Alt+F4」 (10.12, 금요일 배포 대신): 손을 뻗어 상대 프로그램을 강제 종료 — 가드 불가,
+        // 시작이 느리고(0.3초) 앞 64px만 닿는 대신 맞으면 화면이 블루스크린 · 상대는 1.5초 멈춤(⏸, 면역 무시) → 그동안 콤보
+        startup: 18,
+        active: 4,
+        recovery: 26,
+        dmg: 40,
+        chip: 0,
+        hitstun: 90,
+        blockstun: 0,
+        push: 0,
+        hitstop: 16,
         meter: 0,
-        box: { x: 0, y: 0, w: 0, h: 0 },
-        kd: true,
-        summon: { w: 180, h: 160, delay: 18, life: 40, every: 8, front: 110 },
+        box: { x: 0, y: 120, w: 64, h: 124 },
+        bsod: 90,
+        // 쓰고 나서 3초 동안 게이지 30% 덜 (10.14 — 블루스크린 콤보로 게이지를 다시 금방 채우던 것)
+        mnerf: 180,
+        // 공중: 공중 콤보 중간에 끊어 넣는 용 — 시작이 빠르고 그 자리에 떠서(안 떨어짐) 아래쪽까지 닿음.
+        // 맞으면 콤보 초기화 + 상대는 떨어져 선 채로 멈춤 → 착지해서 한 콤보 더
+        air: {
+          startup: 8,
+          active: 5,
+          recovery: 22,
+          dmg: 40,
+          chip: 0,
+          hitstun: 90,
+          blockstun: 0,
+          push: 0,
+          hitstop: 16,
+          meter: 0,
+          box: { x: 0, y: 96, w: 72, h: 156 },
+          bsod: 90,
+        },
       },
     },
   },
@@ -981,7 +1039,7 @@ const RAW: CharSrc[] = [
         startup: 5,
         active: 3,
         recovery: 7, // 10.10 8→7
-        dmg: 52,
+        dmg: 48, // 52→48 (10.12)
         chip: 0,
         hitstun: 15,
         blockstun: 9,
@@ -996,6 +1054,8 @@ const RAW: CharSrc[] = [
         startup: 11, // 10.10 12→11 (가장 느린 발에 발차기까지 느려 다 맞고 시작)
         active: 4,
         recovery: 21,
+        // 2단(해머) 맞으면 경직 +16 — 맞혀도 -20이라 바로 반격당하던 것 → 맞히면 -4 (거리도 벌어져 피할 틈) (10.14)
+        finStun: 16,
         dmg: 115,
         chip: 0,
         hitstun: 21,
@@ -1048,7 +1108,7 @@ const RAW: CharSrc[] = [
         push: 1500,
         hitstop: 10,
         meter: 8,
-        box: { x: 6, y: 60, w: 76, h: 30 },
+        box: { x: 6, y: 60, w: 88, h: 30 }, // 10.11 앞 82 → 94px (철곰권이 정면에서 잘 안 닿던 것)
         step: 420,
         onBlock: -10,
         charge: { at: 6, max: 40, dmg: 210, armor: true },
@@ -1062,7 +1122,7 @@ const RAW: CharSrc[] = [
           push: 0,
           hitstop: 12,
           meter: 12,
-          box: { x: 0, y: 46, w: 40, h: 76 },
+          box: { x: 0, y: 46, w: 55, h: 76 }, // 10.12 앞 40 → 55px
           hug: { dmg: 150, stun: 46, fall: 1800 },
           step: undefined,
           charge: undefined,
@@ -1070,9 +1130,11 @@ const RAW: CharSrc[] = [
       },
       X: {
         // 필살기 「붉은 폭풍」: 숨 들이쉬고(경직 면역) 돌진해 거대한 한 방
-        startup: 16,
-        active: 6,
-        recovery: 30,
+        // (10.14 더 쓸모 있게: 발생 16→14 · 돌진 6→10프레임(사거리 약 150→190px) · 회복 30→24 ·
+        //  판정 위로 높게(높이 44→104px) — 가까이 뛰어드는 상대도 받아침)
+        startup: 14,
+        active: 10,
+        recovery: 24,
         dmg: 300,
         chip: 30,
         hitstun: 40,
@@ -1080,10 +1142,11 @@ const RAW: CharSrc[] = [
         push: 2600,
         hitstop: 18,
         meter: 0,
-        box: { x: 4, y: 66, w: 70, h: 44 },
+        box: { x: 4, y: 104, w: 74, h: 104 },
         armor: true,
         kd: true,
-        rush: { vx: 3400, airVh: 0, airFall: 900 },
+        // 공중에서 쓰면 앞쪽 아래로 내리꽂고 → 착지하면 땅에서 그대로 돌진 (10.12 — 예전엔 공중에서 옆으로만 나가 서 있는 상대 위로 헛치거나 착지에 끊김)
+        rush: { vx: 3400, airVh: -2600, airVx: 1600, landRush: true },
       },
     },
   },

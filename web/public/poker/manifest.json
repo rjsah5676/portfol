@@ -131,6 +131,38 @@
 220,
 320
 ],
+"char/amy-summer/emote-angry.webp": [
+160,
+160
+],
+"char/amy-summer/emote-cry.webp": [
+160,
+160
+],
+"char/amy-summer/emote-good.webp": [
+160,
+160
+],
+"char/amy-summer/emote-hi.webp": [
+160,
+160
+],
+"char/amy-summer/emote-huh.webp": [
+160,
+160
+],
+"char/amy-summer/emote-lol.webp": [
+160,
+160
+],
+"char/amy-summer/emote-tease.webp": [
+160,
+160
+],
+"char/amy-summer/emote-wow.webp": [
+160,
+160
+],
 "char/amy/cutin.webp": [
 1536,
 512
@@ -300,6 +332,90 @@
 384
 ],
 "char/amy/seat-side-win.webp": [
+288,
+384
+],
+"char/jeongmin-detective/cutin.webp": [
+1536,
+512
+],
+"char/jeongmin-detective/face-angry.webp": [
+256,
+256
+],
+"char/jeongmin-detective/face-idle.webp": [
+256,
+256
+],
+"char/jeongmin-detective/face-joy.webp": [
+256,
+256
+],
+"char/jeongmin-detective/face-sad.webp": [
+256,
+256
+],
+"char/jeongmin-detective/face-shock.webp": [
+256,
+256
+],
+"char/jeongmin-detective/face-smile.webp": [
+256,
+256
+],
+"char/jeongmin-detective/face-taunt.webp": [
+256,
+256
+],
+"char/jeongmin-detective/face-think.webp": [
+256,
+256
+],
+"char/jeongmin-detective/full.webp": [
+422,
+1024
+],
+"char/jeongmin-detective/hero-win.webp": [
+384,
+576
+],
+"char/jeongmin-detective/pose-idle.webp": [
+288,
+384
+],
+"char/jeongmin-detective/profile.webp": [
+256,
+256
+],
+"char/jeongmin-detective/seat-front-allin.webp": [
+288,
+384
+],
+"char/jeongmin-detective/seat-front-bet.webp": [
+288,
+384
+],
+"char/jeongmin-detective/seat-front-check.webp": [
+288,
+384
+],
+"char/jeongmin-detective/seat-front-die.webp": [
+288,
+384
+],
+"char/jeongmin-detective/seat-front-idle.webp": [
+288,
+384
+],
+"char/jeongmin-detective/seat-front-lose.webp": [
+288,
+384
+],
+"char/jeongmin-detective/seat-front-think.webp": [
+288,
+384
+],
+"char/jeongmin-detective/seat-front-win.webp": [
 288,
 384
 ],
@@ -475,6 +591,90 @@
 288,
 384
 ],
+"char/jinwoo-ramen/cutin.webp": [
+1536,
+512
+],
+"char/jinwoo-ramen/face-angry.webp": [
+256,
+256
+],
+"char/jinwoo-ramen/face-idle.webp": [
+256,
+256
+],
+"char/jinwoo-ramen/face-joy.webp": [
+256,
+256
+],
+"char/jinwoo-ramen/face-sad.webp": [
+256,
+256
+],
+"char/jinwoo-ramen/face-shock.webp": [
+256,
+256
+],
+"char/jinwoo-ramen/face-smile.webp": [
+256,
+256
+],
+"char/jinwoo-ramen/face-taunt.webp": [
+256,
+256
+],
+"char/jinwoo-ramen/face-think.webp": [
+256,
+256
+],
+"char/jinwoo-ramen/full.webp": [
+357,
+1024
+],
+"char/jinwoo-ramen/hero-win.webp": [
+384,
+576
+],
+"char/jinwoo-ramen/pose-idle.webp": [
+288,
+384
+],
+"char/jinwoo-ramen/profile.webp": [
+256,
+256
+],
+"char/jinwoo-ramen/seat-front-allin.webp": [
+288,
+384
+],
+"char/jinwoo-ramen/seat-front-bet.webp": [
+288,
+384
+],
+"char/jinwoo-ramen/seat-front-check.webp": [
+288,
+384
+],
+"char/jinwoo-ramen/seat-front-die.webp": [
+288,
+384
+],
+"char/jinwoo-ramen/seat-front-idle.webp": [
+288,
+384
+],
+"char/jinwoo-ramen/seat-front-lose.webp": [
+288,
+384
+],
+"char/jinwoo-ramen/seat-front-think.webp": [
+288,
+384
+],
+"char/jinwoo-ramen/seat-front-win.webp": [
+288,
+384
+],
 "char/jinwoo/cutin.webp": [
 1536,
 512
@@ -647,6 +847,258 @@
 288,
 384
 ],
+"char/mio-dracula/cutin.webp": [
+1536,
+512
+],
+"char/mio-dracula/emote-angry.webp": [
+160,
+160
+],
+"char/mio-dracula/emote-cry.webp": [
+160,
+160
+],
+"char/mio-dracula/emote-good.webp": [
+160,
+160
+],
+"char/mio-dracula/emote-hi.webp": [
+160,
+160
+],
+"char/mio-dracula/emote-huh.webp": [
+160,
+160
+],
+"char/mio-dracula/emote-lol.webp": [
+160,
+160
+],
+"char/mio-dracula/emote-tease.webp": [
+160,
+160
+],
+"char/mio-dracula/emote-wow.webp": [
+160,
+160
+],
+"char/mio-dracula/face-angry.webp": [
+256,
+256
+],
+"char/mio-dracula/face-idle.webp": [
+256,
+256
+],
+"char/mio-dracula/face-joy.webp": [
+256,
+256
+],
+"char/mio-dracula/face-sad.webp": [
+256,
+256
+],
+"char/mio-dracula/face-shock.webp": [
+256,
+256
+],
+"char/mio-dracula/face-smile.webp": [
+256,
+256
+],
+"char/mio-dracula/face-taunt.webp": [
+256,
+256
+],
+"char/mio-dracula/face-think.webp": [
+256,
+256
+],
+"char/mio-dracula/full.webp": [
+451,
+1024
+],
+"char/mio-dracula/hero-win.webp": [
+384,
+576
+],
+"char/mio-dracula/pose-idle.webp": [
+288,
+384
+],
+"char/mio-dracula/profile.webp": [
+256,
+256
+],
+"char/mio-dracula/seat-front-allin.webp": [
+288,
+384
+],
+"char/mio-dracula/seat-front-bet.webp": [
+288,
+384
+],
+"char/mio-dracula/seat-front-check.webp": [
+288,
+384
+],
+"char/mio-dracula/seat-front-die.webp": [
+288,
+384
+],
+"char/mio-dracula/seat-front-idle.webp": [
+288,
+384
+],
+"char/mio-dracula/seat-front-lose.webp": [
+288,
+384
+],
+"char/mio-dracula/seat-front-think.webp": [
+288,
+384
+],
+"char/mio-dracula/seat-front-win.webp": [
+288,
+384
+],
+"char/taeyang-ts/cutin.webp": [
+1536,
+512
+],
+"char/taeyang-ts/emote-angry.webp": [
+160,
+160
+],
+"char/taeyang-ts/emote-cry.webp": [
+160,
+160
+],
+"char/taeyang-ts/emote-good.webp": [
+160,
+160
+],
+"char/taeyang-ts/emote-hi.webp": [
+160,
+160
+],
+"char/taeyang-ts/emote-huh.webp": [
+160,
+160
+],
+"char/taeyang-ts/emote-lol.webp": [
+160,
+160
+],
+"char/taeyang-ts/emote-tease.webp": [
+160,
+160
+],
+"char/taeyang-ts/emote-wow.webp": [
+160,
+160
+],
+"char/taeyang-ts/face-angry.webp": [
+256,
+256
+],
+"char/taeyang-ts/face-idle.webp": [
+256,
+256
+],
+"char/taeyang-ts/face-joy.webp": [
+256,
+256
+],
+"char/taeyang-ts/face-sad.webp": [
+256,
+256
+],
+"char/taeyang-ts/face-shock.webp": [
+256,
+256
+],
+"char/taeyang-ts/face-smile.webp": [
+256,
+256
+],
+"char/taeyang-ts/face-taunt.webp": [
+256,
+256
+],
+"char/taeyang-ts/face-think.webp": [
+256,
+256
+],
+"char/taeyang-ts/full.webp": [
+430,
+1024
+],
+"char/taeyang-ts/hero-win.webp": [
+384,
+576
+],
+"char/taeyang-ts/idle.webp": [
+441,
+700
+],
+"char/taeyang-ts/pose-idle.webp": [
+288,
+384
+],
+"char/taeyang-ts/profile.webp": [
+256,
+256
+],
+"char/taeyang-ts/seat-front-allin.webp": [
+288,
+384
+],
+"char/taeyang-ts/seat-front-bet.webp": [
+288,
+384
+],
+"char/taeyang-ts/seat-front-check.webp": [
+288,
+384
+],
+"char/taeyang-ts/seat-front-die.webp": [
+288,
+384
+],
+"char/taeyang-ts/seat-front-idle-live.webp": [
+216,
+288
+],
+"char/taeyang-ts/seat-front-idle.webp": [
+288,
+384
+],
+"char/taeyang-ts/seat-front-lose.webp": [
+288,
+384
+],
+"char/taeyang-ts/seat-front-think.webp": [
+288,
+384
+],
+"char/taeyang-ts/seat-front-win.webp": [
+288,
+384
+],
+"char/taeyang-ts/touch-1.webp": [
+378,
+600
+],
+"char/taeyang-ts/touch-2.webp": [
+378,
+600
+],
+"char/taeyang-ts/touch-3.webp": [
+378,
+600
+],
 "char/taeyang/cutin.webp": [
 1536,
 512
@@ -818,6 +1270,38 @@
 "char/taeyang/seat-side-win.webp": [
 288,
 384
+],
+"char/yeonseo-summer/emote-angry.webp": [
+160,
+160
+],
+"char/yeonseo-summer/emote-cry.webp": [
+160,
+160
+],
+"char/yeonseo-summer/emote-good.webp": [
+160,
+160
+],
+"char/yeonseo-summer/emote-hi.webp": [
+160,
+160
+],
+"char/yeonseo-summer/emote-huh.webp": [
+160,
+160
+],
+"char/yeonseo-summer/emote-lol.webp": [
+160,
+160
+],
+"char/yeonseo-summer/emote-tease.webp": [
+160,
+160
+],
+"char/yeonseo-summer/emote-wow.webp": [
+160,
+160
 ],
 "char/yeonseo/cutin.webp": [
 1536,

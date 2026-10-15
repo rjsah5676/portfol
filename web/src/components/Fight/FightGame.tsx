@@ -3,8 +3,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { CHARS } from "@/lib/fight/chars";
 import { MAPS } from "@/lib/fight/maps";
-import { AI_LEVELS, FightAI, aiForRating, aiLevelFor } from "@/lib/fight/ai";
+import { AI_ID, AI_LEVELS, FightAI, aiForRating, aiLevelFor } from "@/lib/fight/ai";
 import {
+  BUILD_ID,
+  IN,
   METER_MAX,
   ROUND_SEC,
   hpRatio,
@@ -13,6 +15,8 @@ import {
   type State,
 } from "@/lib/fight/sim";
 import { loadSheet } from "@/lib/fight/sprites";
+import { look } from "@/lib/fight/skins";
+import { wornSkin } from "@/lib/fight/mySkins";
 import {
   sfxBell,
   sfxBlock,
@@ -33,6 +37,8 @@ import {
   sfxSkill,
   sfxStatus,
   sfxIvan,
+  sfxZena,
+  sfxGunmo,
   hasSkillSfx,
   setFightVolume,
   type Element,
@@ -43,6 +49,12 @@ const SFX_EL: Record<string, Element> = { kai: "wind", igna: "fire", soyoung: "w
 import { FightRenderer } from "./render";
 import { FightInput } from "./input";
 import HowTo from "./HowTo";
+import PracticeGuide from "./PracticeGuide";
+import { TutorialOverlay, type TutView } from "./Tutorial";
+import FrameData, { type DummyGuard } from "./FrameData";
+import { FrameMeter, type FrameView } from "@/lib/fight/framedata";
+import { Tutorial } from "@/lib/fight/tutorial";
+import CutIn, { type CutInCfg } from "./CutIn";
 import { Banner, Combo, HUD_CSS, PlayerBottom, PlayerTop, TimerBox, WinQuote, type BannerKind } from "./Hud";
 import Select, { type Setup } from "./Select";
 import { scrollToGameTop } from "@/components/GameHeader";
@@ -53,7 +65,7 @@ import { useNick } from "@/lib/AuthContext";
 import { plainName } from "@/components/Nick";
 import Online, { type BotCfg, type MatchCfg } from "./Online";
 import { OnlineMatch } from "./onlineMatch";
-import { InputLog, WatchFeed, rankBotForfeit, rankBotReport, type RoomSession, type WatchSession } from "@/realtime/fight";
+import { InputLog, WatchFeed, aiClear, aiRecord, rankBotForfeit, rankBotReport, tutorialDone, type RoomSession, type WatchSession } from "@/realtime/fight";
 import { LEVEL } from "@/lib/soundLevel";
 
 
@@ -129,6 +141,10 @@ export default function FightGame() {
   const myName = memberNick ?? guestNick;
   const [paused, setPaused] = useState(false);
   const [hud, setHud] = useState<Hud | null>(null);
+  // 필살기 컷인 (쓴 순간 0.6초)
+  const [cutin, setCutin] = useState<CutInCfg | null>(null);
+  /** 이번 경기 두 선수 스킨 (얼굴 · 컷인) */
+  const [skins, setSkins] = useState<[string | null, string | null]>([null, null]);
   const [muted, setMuted] = useState(false);
   /** 효과음·배경음 음량 (0~1) */
   const [vol, setVol] = useState({ sfx: 0.8, bgm: 0.7 });
@@ -136,8 +152,17 @@ export default function FightGame() {
   const [coarse, setCoarse] = useState(false);
   /** 휴대폰 이동 방식: 스틱 / 키 */
   const [moveMode, setMoveMode] = useState<MoveMode>("stick");
-  /** 연습 모드: 마지막 콤보 (히트 수·피해)와 최고 피해 */
-  const [prac, setPrac] = useState<{ hits: number; dmg: number; best: number }>({ hits: 0, dmg: 0, best: 0 });
+  /** 튜토리얼: 지금 단계 (화면용) · 진행 객체 · 끝나고 "AI 대전" 누르면 */
+  const [tutView, setTutView] = useState<TutView | null>(null);
+  const tutRef = useRef<Tutorial | null>(null);
+  const tutAiRef = useRef<() => void>(() => {});
+  /** 연습 모드: 프레임 데이터 · 허수아비 가드 */
+  const [frameView, setFrameView] = useState<FrameView | null>(null);
+  const [dummyGuard, setDummyGuard] = useState<DummyGuard>("none");
+  const guardRef = useRef<DummyGuard>("none");
+  useEffect(() => {
+    guardRef.current = dummyGuard;
+  }, [dummyGuard]);
   const [result, setResult] = useState<{
     win: boolean;
     seconds: number;
@@ -348,9 +373,11 @@ export default function FightGame() {
         ? ol.seat === 0
           ? ["YOU", "2P"]
           : ["1P", "YOU"]
-        : ["1P", setup.mode === "ai" ? "CPU" : setup.mode === "practice" ? "허수아비" : "2P"];
+        : ["1P", setup.mode === "ai" ? "CPU" : setup.mode === "practice" ? "허수아비" : "연습 상대"];
+    // 차지 게이지는 직접 조작하는 사람에게만 (관전 · 상대 자리 · CPU 자리는 안 보임)
+    r.gauge = watching ? [false, false] : ol ? [ol.seat === 0, ol.seat === 1] : bot ? [true, false] : [true, false];
     rendererRef.current = r;
-    input.configure(setup.mode === "2p");
+    input.configure(false);
     const pickMap = () =>
       setup.map >= 0 ? setup.map : Math.floor(Math.random() * MAPS.length);
     // 랜덤 맵: 첫 판은 선택 화면에서 섞어 뽑힌 맵, 다시하기는 새로 뽑음
@@ -362,6 +389,13 @@ export default function FightGame() {
           [setup.c1, setup.c2],
           setup.map < 0 && setup.rolled !== undefined && MAPS[setup.rolled] ? setup.rolled : pickMap()
         );
+    // 스킨: 온라인은 서버가 정해 준 것(산 것만), 그 밖엔 내 자리(1P)만 내가 착용한 것
+    const skinNow: [string | null, string | null] = ol
+      ? [ol.skins?.[0] || null, ol.skins?.[1] || null]
+      : [wornSkin(s.p[0].ch), null];
+    const looks: [string, string] = [look(s.p[0].ch, skinNow[0]), look(s.p[1].ch, skinNow[1])];
+    r.looks = looks;
+    setSkins(skinNow);
     const net = ol && !watching ? sessRef.current?.net : null;
     // 관전용: 내 확정 입력을 서버에 조금씩 올림 (관전자는 두 선수 입력으로 같은 경기를 다시 돌림)
     const log = ol && net && sessRef.current ? new InputLog(sessRef.current.id, ol.match, ol.seat, ol.delay) : null;
@@ -388,17 +422,38 @@ export default function FightGame() {
     };
     playBgm(MAPS[s.map].bgm ?? MENU_BGM, true);
     // AI: AI 대전은 고른 단계(캐릭터 보정 포함), 랭크전 AI전은 상대 레이팅 그대로 (서버가 같은 씨앗으로 다시 돌려 확인)
+    let aiSeed = (Date.now() & 0xffff) + 1;
     let ai = bot
       ? new FightAI(aiForRating(bot.botR, CHARS[bot.chars[1]].id), bot.seed)
-      : new FightAI(aiLevelFor(setup.level, CHARS[setup.c2]?.id), (Date.now() & 0xffff) + 1);
+      : new FightAI(aiLevelFor(setup.level, CHARS[setup.c2]?.id), aiSeed);
     /** AI전: 프레임마다 내 입력 (경기가 끝날 때까지) */
     const botLog: number[] = [];
+    // AI 대전: 이기면 내 입력 기록을 보내 서버가 같은 씨앗으로 다시 돌려 확인 → 단계별 업적 (회원만)
+    const aiMode = setup.mode === "ai" && !ol && !bot;
+    const aiLog: number[] = [];
+    let tutReported = false;
+    /** 입력 기록 → [값, 연속 프레임 수] */
+    const rleOf = (log: number[]) => {
+      const rle: [number, number][] = [];
+      for (const v of log) {
+        const t = rle[rle.length - 1];
+        if (t && t[0] === v) t[1]++;
+        else rle.push([v, 1]);
+      }
+      return rle;
+    };
     // 연습 모드: 허수아비는 가만히, 둘 다 체력 무한·시간 멈춤·내 게이지 가득. 콤보 피해를 잼
     const practice = setup.mode === "practice" && !ol;
-    let pracDmg = 0,
-      pracHits = 0,
-      pracBest = 0;
-    setPrac({ hits: 0, dmg: 0, best: 0 });
+    const fm = practice ? new FrameMeter() : null;
+    setFrameView(fm ? fm.view() : null);
+    /** 허수아비 "첫 타 뒤 막음": 맞은 뒤 남은 프레임 (그동안 가드) */
+    let guardAfter = 0;
+    // 튜토리얼: 카이 vs 연습 상대, 단계마다 상대 움직임 · 성공 판정 (lib/fight/tutorial)
+    const tutorial = setup.mode === "tutorial" && !ol && !bot ? new Tutorial() : null;
+    tutRef.current = tutorial;
+    let tutHeld = false,
+      tutMask = 0;
+    setTutView(tutorial ? tutorial.view() : null);
     let hits = 0;
     const prevMeter = [0, 0];
     const prevChg = [0, 0];
@@ -408,7 +463,13 @@ export default function FightGame() {
     let raf = 0;
     let doneReported = false;
     setResult(null);
-    Promise.all([loadSheet(CHARS[s.p[0].ch].id), loadSheet(CHARS[s.p[1].ch].id)])
+    const sheetOf = (i: number) =>
+      loadSheet(looks[i]).catch(() => {
+        // 스킨 시트를 못 받으면 기본 그림으로
+        r.looks[i] = CHARS[s.p[i].ch].id;
+        return loadSheet(CHARS[s.p[i].ch].id);
+      });
+    Promise.all([sheetOf(0), sheetOf(1)])
       .then(([a, b]) => {
         r.sheets = [a, b];
       })
@@ -417,7 +478,10 @@ export default function FightGame() {
       if (ol || bot) return;
       s = newMatch([setup.c1, setup.c2], pickMap());
       playBgm(MAPS[s.map].bgm ?? MENU_BGM, true);
-      ai = new FightAI(aiLevelFor(setup.level, CHARS[setup.c2]?.id), (Date.now() & 0xffff) + 1);
+      aiSeed = (Date.now() & 0xffff) + 1;
+      ai = new FightAI(aiLevelFor(setup.level, CHARS[setup.c2]?.id), aiSeed);
+      aiLog.length = 0;
+      if (tutorial) (tutorial.retry(), setTutView(tutorial.view()));
       hits = 0;
       doneReported = false;
       setResult(null);
@@ -434,6 +498,11 @@ export default function FightGame() {
       const t = e.target as HTMLElement | null;
       if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA")) return;
       if (e.code === "Escape" || e.code === "KeyP") setPaused((p) => !p);
+      // 튜토리얼: N 건너뛰기 (설명 카드 넘기기 J · Space 는 게임 입력으로 — 아래 frame)
+      if (tutorial && !pausedRef.current && e.code === "KeyN" && !tutorial.done) (tutorial.skip(), setTutView(tutorial.view()));
+      // 연습 모드: 1 · 2 · 3 허수아비 가드
+      if (practice && (e.code === "Digit1" || e.code === "Digit2" || e.code === "Digit3"))
+        setDummyGuard(e.code === "Digit1" ? "none" : e.code === "Digit2" ? "all" : "after");
     };
     window.addEventListener("keydown", onKey);
 
@@ -453,6 +522,20 @@ export default function FightGame() {
       // 그림이 다 불러와질 때까지는 판을 멈춰 두고 검은 화면 (임시 그림이 잠깐 보이는 것 방지, 보통 한두 프레임)
       if (!r.ready(s)) {
         r.drawLoading();
+        return;
+      }
+      // 튜토리얼 설명 카드: 판을 멈춰 둠 (처음 ROUND · FIGHT 는 그대로 지나감). J · Space 로 넘김
+      if (tutorial?.blocking && s.phase === "fight") {
+        const b = input.read(0) & (IN.A | IN.J);
+        if (b && !tutHeld) {
+          if (tutorial.done) tutAiRef.current();
+          else (tutorial.next(), setTutView(tutorial.view()));
+          // 카드를 넘긴 그 키를 떼기 전까지는 공격 · 점프로 안 들어가게
+          tutMask = IN.A | IN.J;
+        }
+        tutHeld = !!b;
+        r.draw(s);
+        acc = 0;
         return;
       }
       if (feed && !doneReported && s.phase !== "over") {
@@ -530,36 +613,51 @@ export default function FightGame() {
           if (s.phase !== "over") botLog.push(p1);
           step(s, [p1, s.phase === "over" ? 0 : ai.next(s, 1)]);
         } else {
-          const p1 = input.read(0);
-          const p2 = setup.mode === "2p" ? input.read(1) : practice ? 0 : ai.next(s, 1);
-          const hp0 = s.p[1].hp;
+          let p1 = input.read(0);
+          if (tutMask) {
+            if (p1 & tutMask) p1 &= ~tutMask;
+            else tutMask = 0;
+          }
+          let p2 = 0;
+          if (tutorial) p2 = tutorial.input(s);
+          else if (practice) {
+            // 허수아비 가드: 안 막음 / 전부 / 첫 타 뒤 (맞고 나서 2초 동안, 콤보 중엔 못 막음)
+            const g = guardRef.current;
+            if (s.p[1].combo > 0) guardAfter = 120;
+            else if (guardAfter > 0) guardAfter--;
+            p2 = g === "all" || (g === "after" && guardAfter > 0) ? IN.D : 0;
+          } else p2 = ai.next(s, 1);
+          if (aiMode && s.phase !== "over") aiLog.push(p1);
           step(s, [p1, p2]);
+          if (fm && fm.update(s)) setFrameView(fm.view());
           if (practice) {
-            const d = s.p[1];
-            if (d.combo > 0) {
-              pracDmg += Math.max(0, hp0 - d.hp);
-              pracHits = Math.max(pracHits, d.combo);
-            } else if (pracHits > 0) {
-              // 콤보가 끝남 → 결과 표시
-              pracBest = Math.max(pracBest, pracDmg);
-              setPrac({ hits: pracHits, dmg: pracDmg, best: pracBest });
-              pracDmg = 0;
-              pracHits = 0;
-            }
+            // (콤보 히트 · 피해 · 최고 피해는 프레임 데이터(fm)가 잼)
             // 허수아비가 낭떠러지로 떨어지면 처음 자리(시작 위치)로 — 보통 대전처럼 떨어진 자리 위에서 다시 내려오면
             // 가만히 있는 허수아비는 또 떨어지기만 함
             if (s.ev.some((e) => e.k === "fall" && e.p === 1)) s.p[1] = newMatch([s.p[0].ch, s.p[1].ch], s.map).p[1];
             for (let k = 0; k < 2; k++) s.p[k].hp = CHARS[s.p[k].ch].hp;
             s.p[0].meter = METER_MAX;
             s.timer = ROUND_SEC * 60;
+            fm?.syncHp(s);
+          }
+          if (tutorial) {
+            // 체력 무한 · 시간 멈춤 (게이지는 단계마다 tutorial 이 정함)
+            for (let k = 0; k < 2; k++) s.p[k].hp = CHARS[s.p[k].ch].hp;
+            s.timer = ROUND_SEC * 60;
+            if (tutorial.update(s)) setTutView(tutorial.view());
+            if (tutorial.finished && !tutReported) ((tutReported = true), void tutorialDone());
           }
         }
         // 소리
         const elOf = (p: number) => SFX_EL[CHARS[s.p[p].ch].id] ?? "wind";
         // 지금 쓰는 L·I에 캐릭터 소리 파일이 있으면 탄·돌진 합성음은 생략
+        /** 기술 소리 파일 이름: 스킨 소리가 있으면 그것, 없으면 캐릭터 기본 */
+        const sndOf = (p: number, kind: "l" | "i", air: boolean) =>
+          hasSkillSfx(looks[p], kind, air) ? looks[p] : CHARS[s.p[p].ch].id;
         const skillFile = (p: number) => {
           const f = s.p[p];
-          return (f.mv === "S" || f.mv === "X") && hasSkillSfx(CHARS[f.ch].id, f.mv === "S" ? "l" : "i", !!f.aerial);
+          const kind = f.mv === "S" ? "l" : "i";
+          return (f.mv === "S" || f.mv === "X") && hasSkillSfx(sndOf(p, kind, !!f.aerial), kind, !!f.aerial);
         };
         evs ??= s.ev;
         for (const e of evs) {
@@ -580,15 +678,24 @@ export default function FightGame() {
             if (e.v === 1) sfxLand();
             // 이반 곰 포옹 내리꽂기
             const sl = s.p[1 - e.p];
-            if (e.v === 1 && sl.st === "atk" && sl.mv === "S" && sl.aerial && CHARS[sl.ch].moves.S.air?.hug) sfxSkill(CHARS[sl.ch].id, "l", true);
+            if (e.v === 1 && sl.st === "atk" && sl.mv === "S" && sl.aerial && CHARS[sl.ch].moves.S.air?.hug) sfxSkill(sndOf(1 - e.p, "l", true), "l", true);
           }
           else if (e.k === "proj") {
             if (!skillFile(e.p)) sfxProj(elOf(e.p), s.p[e.p].mv === "X");
           } else if (e.k === "burn" || e.k === "shock" || e.k === "trap" || e.k === "pop" || e.k === "pause" || e.k === "swap") sfxStatus(e.k);
           else if (e.k === "immune") sfxTech();
+          else if (e.k === "zapMark") sfxZena("mark");
+          else if (e.k === "zapLine") sfxDash();
+          else if (e.k === "zapBurst") sfxZena("burst");
+          else if (e.k === "bsod") sfxGunmo();
           else if (e.k === "charged") sfxIvan("max");
           else if (e.k === "crush") sfxIvan("crush");
-          else if (e.k === "super") sfxSuper();
+          else if (e.k === "super") {
+            sfxSuper();
+            const cut = { ch: s.p[e.p].ch, right: e.p === 1, key: s.f, skin: skinNow[e.p] };
+            setCutin(cut);
+            setTimeout(() => setCutin((c) => (c === cut ? null : c)), 650);
+          }
           else if (e.k === "ko") sfxKO();
           else if (e.k === "jump") sfxJump();
           else if (e.k === "land") sfxLand();
@@ -616,7 +723,7 @@ export default function FightGame() {
             const hugM = f.mv === "S" && !!f.aerial && !!CHARS[f.ch].moves.S.air?.hug;
             // 곰 포옹 덮치기: 묵직하게 휙 (헛쳐도 들림)
             if (hugM && f.t >= su && (fresh || prevT[i] < su)) sfxWhoosh(true, "fist");
-            if (!hugM && f.t >= su && (fresh || prevT[i] < su)) sfxSkill(CHARS[f.ch].id, f.mv === "S" ? "l" : "i", !!f.aerial);
+            if (!hugM && f.t >= su && (fresh || prevT[i] < su)) sfxSkill(sndOf(i, f.mv === "S" ? "l" : "i", !!f.aerial), f.mv === "S" ? "l" : "i", !!f.aerial);
           }
         }
         if (process.env.NODE_ENV !== "production")
@@ -637,14 +744,20 @@ export default function FightGame() {
             s.winner === 0 || s.winner === 1 ? { rounds: Math.abs(s.wins[0] - s.wins[1]), hp: hpRatio(s.p[s.winner]) } : undefined;
           if (bot) {
             // 입력 기록을 [값, 연속 프레임 수]로 줄여 보냄 → 서버가 다시 돌려 확인 → 결과는 랭크전 상태로 옴
-            const rle: [number, number][] = [];
-            for (const v of botLog) {
-              const t = rle[rle.length - 1];
-              if (t && t[0] === v) t[1]++;
-              else rle.push([v, 1]);
-            }
-            rankBotReport(bot.id, rle).catch(() => {});
+            rankBotReport(bot.id, rleOf(botLog)).catch(() => {});
           }
+          if (aiMode && aiLog.length >= 60)
+            void aiRecord({
+              build: `${BUILD_ID}:${AI_ID}`,
+              level: setup.level,
+              chars: [s.p[0].ch, s.p[1].ch],
+              map: s.map,
+              seed: aiSeed,
+              winner: s.winner === 0 || s.winner === 1 ? s.winner : 2,
+              inputs: rleOf(aiLog),
+            });
+          if (aiMode && s.winner === 0)
+            void aiClear({ build: `${BUILD_ID}:${AI_ID}`, level: setup.level, chars: [s.p[0].ch, s.p[1].ch], map: s.map, seed: aiSeed, inputs: rleOf(aiLog) });
           if (ol && !watching) {
             // 내가 본 결과를 먼저 알리고(두 선수 결과가 맞으면 회원 전적에) 대기실 상태로
             sessRef.current?.reportResult(ol.match, s.winner, margin);
@@ -695,6 +808,9 @@ export default function FightGame() {
     botRef.current = null;
     setBotCfg(null);
     setPaused(false);
+    // 전 판 결과창 · 체력바가 새 판 첫 화면에 잠깐 보이지 않게 (게임 루프가 돌기 전에 지움)
+    setResult(null);
+    setHud(null);
     setPlaying(true);
     setTimeout(scrollToGameTop, 50);
   }, []);
@@ -707,6 +823,9 @@ export default function FightGame() {
     setBotCfg(cfg);
     setNetEnd("");
     setPaused(false);
+    // 전 판 결과창 · 체력바가 새 판 첫 화면에 잠깐 보이지 않게 (게임 루프가 돌기 전에 지움)
+    setResult(null);
+    setHud(null);
     setPlaying(true);
     setTimeout(scrollToGameTop, 50);
   }, [played]);
@@ -719,6 +838,9 @@ export default function FightGame() {
     setOlCfg(cfg);
     setNetEnd("");
     setPaused(false);
+    // 전 판 결과창 · 체력바가 새 판 첫 화면에 잠깐 보이지 않게 (게임 루프가 돌기 전에 지움)
+    setResult(null);
+    setHud(null);
     setPlaying(true);
     setTimeout(scrollToGameTop, 50);
   }, [played]);
@@ -737,6 +859,7 @@ export default function FightGame() {
     setPlaying(false);
     setPaused(false);
     setHud(null);
+    setResult(null);
   }, [playBgm]);
   /** 온라인: 대기실로 (again = 바로 준비 — 방장은 빼고: 방장까지 준비돼 있으면 상대가 준비하자마자 바로 시작돼 버림) */
   const toRoom = useCallback(
@@ -751,6 +874,12 @@ export default function FightGame() {
     toMenu();
     setEntry("char");
   }, [toMenu]);
+  useEffect(() => {
+    tutAiRef.current = () => {
+      setSetup((st) => ({ ...st, mode: "ai", c1: 0, map: -1 }));
+      toChars();
+    };
+  }, [toChars]);
   // 음량 바뀌면 바로 반영 + 저장
   useEffect(() => {
     volRef.current = vol;
@@ -857,7 +986,7 @@ export default function FightGame() {
     ? [plainName(ol.names[0]) + (ol.seat === 0 ? " (나)" : ""), plainName(ol.names[1]) + (ol.seat === 1 ? " (나)" : "")]
     : bot
     ? [plainName(bot.names[0]) + " (나)", plainName(bot.names[1])]
-    : [setup.mode === "2p" ? "1P" : myName || "1P", setup.mode === "ai" ? `CPU ${level.name}` : setup.mode === "practice" ? "허수아비" : "2P"];
+    : [myName || "1P", setup.mode === "ai" ? `CPU ${level.name}` : setup.mode === "practice" ? "허수아비" : "연습 상대"];
   const meSeat = ol?.seat ?? 0;
 
   let banner: { kind: BannerKind; text: string; name?: string; nameColor?: string } | null = null;
@@ -891,14 +1020,15 @@ export default function FightGame() {
       <div className="fs-screen relative isolate w-full overflow-hidden rounded-xl border border-white/10 bg-black [container-type:inline-size]">
         <canvas ref={canvasRef} className="block aspect-video w-full [image-rendering:pixelated]" />
         {fsBtn(true)}
-        {winCh && hud && hud.pt >= 80 && <WinQuote ch={hud.ch[hud.winner]} right={hud.winner === 1} />}
+        {cutin && <CutIn key={cutin.key} cfg={cutin} />}
+        {winCh && hud && hud.pt >= 80 && <WinQuote ch={hud.ch[hud.winner]} right={hud.winner === 1} skin={skins[hud.winner]} />}
         {hud && (
           <div className="pointer-events-none absolute inset-0 flex flex-col justify-between px-[1.6cqw] py-[1.4cqw]">
             <style>{HUD_CSS}</style>
             <div className="flex items-start gap-[1.4cqw]">
-              <PlayerTop ch={hud.ch[0]} hp={hud.hp[0]} tag={names[0]} />
+              <PlayerTop ch={hud.ch[0]} hp={hud.hp[0]} tag={names[0]} skin={skins[0]} />
               <TimerBox sec={hud.sec} round={hud.round} wins={hud.wins} hurry={hud.sec <= 10 && hud.phase === "fight"} />
-              <PlayerTop ch={hud.ch[1]} hp={hud.hp[1]} tag={names[1]} right />
+              <PlayerTop ch={hud.ch[1]} hp={hud.hp[1]} tag={names[1]} skin={skins[1]} right />
             </div>
             <div className={`flex items-end justify-between ${result ? "invisible" : ""}`}>
               <PlayerBottom ch={hud.ch[0]} meter={hud.meter[0]} cd={hud.cd[0]} />
@@ -908,14 +1038,24 @@ export default function FightGame() {
             {banner && <Banner {...banner} top={result ? "15%" : undefined} />}
           </div>
         )}
-        {setup.mode === "practice" && !ol && hud && (
-          <div className="pointer-events-none absolute top-[10.6cqw] left-1/2 z-10 flex -translate-x-1/2 items-center gap-[1cqw] rounded-full bg-black/60 px-[1.4cqw] py-[0.35cqw] font-['Nanum_Gothic',sans-serif] text-[1.15cqw] text-white/80">
-            <span className="font-bold text-[#FFC86B]">연습 모드</span>
-            <span>
-              마지막 콤보 <b className="text-white">{prac.hits}</b>히트 · <b className="text-white">{prac.dmg}</b> 피해
-            </span>
-            <span className="text-white/50">최고 {prac.best}</span>
-          </div>
+        {setup.mode === "practice" && !ol && hud && frameView && !result && (
+          <FrameData view={frameView} guard={dummyGuard} onGuard={setDummyGuard} />
+        )}
+        {setup.mode === "practice" && !ol && hud && !result && <PracticeGuide ch={hud.ch[0]} />}
+        {setup.mode === "tutorial" && !ol && !bot && tutView && hud && !paused && (
+          <TutorialOverlay
+            view={tutView}
+            onNext={() => {
+              const t = tutRef.current;
+              if (t) (t.next(), setTutView(t.view()));
+            }}
+            onSkip={() => {
+              const t = tutRef.current;
+              if (t && !t.done) (t.skip(), setTutView(t.view()));
+            }}
+            onAi={() => tutAiRef.current()}
+            onMenu={toMenu}
+          />
         )}
         {watching && hud && (
           <div className="pointer-events-none absolute top-[8.6cqw] left-1/2 z-10 -translate-x-1/2 rounded-full bg-black/55 px-[1.2cqw] py-[0.3cqw] font-['Nanum_Gothic',sans-serif] text-[1.2cqw] font-bold text-[#67E8F9]">
@@ -959,13 +1099,13 @@ export default function FightGame() {
               ...(!ol && !bot
                 ? [
                     {
-                      label: "다시하기",
+                      label: setup.mode === "tutorial" ? "이 단계 다시" : "다시하기",
                       onClick: () => {
                         restartRef.current();
                         setPaused(false);
                       },
                     },
-                    { label: "캐릭터 선택", onClick: toChars },
+                    ...(setup.mode === "tutorial" ? [] : [{ label: "캐릭터 선택", onClick: toChars }]),
                   ]
                 : []),
               {

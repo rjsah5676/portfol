@@ -53,6 +53,15 @@ function Section({ group, children }: { group: NavGroup; children: ReactNode }) 
             <span className="text-base font-medium text-[color:var(--accent)]">{group.items.length}</span>
           </h2>
           <p className={`mt-2 text-sm break-keep text-white/50 ${KR}`}>{group.desc}</p>
+          {group.tags && (
+            <p className={`mt-1.5 flex flex-wrap gap-x-1.5 gap-y-0.5 text-xs text-[color:var(--accent)] opacity-80 ${KR}`}>
+              {group.tags.map((t) => (
+                <span key={t} className="whitespace-nowrap">
+                  #{t}
+                </span>
+              ))}
+            </p>
+          )}
         </div>
         <Link
           href={`${group.href}/`}
@@ -210,6 +219,15 @@ function RowGroup({ group, thumb }: { group: NavGroup; thumb: boolean }) {
         </Link>
       </div>
       <p className={`mt-2 text-sm break-keep text-white/50 ${KR}`}>{group.desc}</p>
+      {group.tags && (
+        <p className={`mt-1.5 flex flex-wrap gap-x-1.5 gap-y-0.5 text-xs text-[color:var(--accent)] opacity-80 ${KR}`}>
+          {group.tags.map((t) => (
+            <span key={t} className="whitespace-nowrap">
+              #{t}
+            </span>
+          ))}
+        </p>
+      )}
       <ul className="mt-6 border-t border-white/10">
         {group.items.map((item) => (
           <Row key={item.href} item={item} thumb={thumb} />

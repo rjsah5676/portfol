@@ -5,7 +5,14 @@ import type { Deps } from "../deps";
 import { createCaptcha, mongoPassStore } from "../captcha";
 import { toWireError } from "../errors";
 import { adminRouter, type AdminHooks } from "./admin";
+import { createMail } from "../mail";
+import { banGuard, createModeration } from "../moderation";
+import { adminEconomyRouter } from "./adminEconomy";
+import { adminMembersRouter } from "./adminMembers";
+import { noticeRouters } from "./notice";
+import { mailAdminRouter, mailRouter } from "./mail";
 import { meRouter } from "./me";
+import { pointsRouter } from "./points";
 import { rankingsRouter } from "./rankings";
 import { siteRouter } from "./site";
 import { studyPostsRouter } from "./studyPosts";
@@ -104,11 +111,24 @@ export function createApp(deps: Deps, { pokerRank, pokerBuyRank, rhythmFiles, ..
   // 익명 쓰기(랭킹 · 방명록 · 문의) 사람 확인 — TURNSTILE_* 가 없으면 꺼져 있음
   const captcha = createCaptcha(mongoPassStore(deps.db));
   const site = siteRouter(deps, captcha);
+  // 이용 정지: 정지된 회원의 쓰기 요청 · 실시간 요청을 막음
+  const mod = createModeration(deps.db);
+  deps.gateway.blocked = mod.blocked;
+  app.use("/api", banGuard(deps.auth, mod));
   app.use("/api", trackRouter(deps));
   app.use("/api/rankings", rankingsRouter(deps, captcha));
   app.use("/api/me", meRouter(deps));
+  app.use("/api/points", pointsRouter(deps));
+  const mail = createMail(deps.db, deps.points);
+  app.use("/api/mail", mailRouter(deps, mail));
+  app.use("/api/admin/mail", mailAdminRouter(deps, mail));
   app.use("/api/study-posts", studyPostsRouter(deps));
   if (rhythmFiles) app.use("/api/rhythm-online", rhythmFiles);
+  const notice = noticeRouters(deps);
+  app.use("/api/notice", notice.pub);
+  app.use("/api/admin/notice", notice.admin);
+  app.use("/api/admin/economy", adminEconomyRouter(deps));
+  app.use("/api/admin/members", adminMembersRouter(deps, mod));
   app.use("/api/admin", adminRouter(deps, { guestChanged: site.publishGuest, ...hooks }));
   app.use("/api", site.router);
 

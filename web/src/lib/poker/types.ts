@@ -43,6 +43,23 @@ export interface Wallet {
   chars: CharId[];
   /** 방금 칩이 바닥나서 기본 칩을 자동으로 받았으면 (알림용, 그때 한 번만 옴) */
   revived?: { amount: number; left: number };
+  /** 우편함에 안 받은 우편 수 */
+  mail: number;
+  /** 오늘 첫 접속이라 출석 보상이 우편함에 막 들어왔으면 그 금액 (알림용, 그때 한 번만 옴) */
+  attended?: number;
+  /** 포인트 (사이트 공용 — 캐릭터 · 스킨을 사고 칩과 환전) */
+  points: number;
+}
+
+/** 우편 (받기를 눌러야 칩이 들어옴) */
+export interface MailItem {
+  id: string;
+  kind: "attend";
+  /** 받을 칩 */
+  amount: number;
+  /** 보낸 날 (KST "YYYY-MM-DD") */
+  day: string;
+  at: number;
 }
 
 export interface SeatWire {
@@ -221,6 +238,17 @@ export interface TableWire {
   /** 직전 상태 이후에 일어난 일 */
   ev: PokerEvent[];
   seq: number;
+  /** 관리자 테스트 방 설정 (테스트 방일 때만) */
+  dev?: DevOpts;
+}
+
+/** 관리자 테스트 방: speed = 진행 기다림 배수, sd = 쇼다운 연출 배수, mode = 봇 행동, stack = 내 칩, limit = 내 제한 시간(ms) */
+export interface DevOpts {
+  speed: number;
+  sd: number;
+  mode: "normal" | "call" | "allin";
+  stack: number;
+  limit: number;
 }
 
 /** 나만 보는 것 */
@@ -262,7 +290,7 @@ export interface BuyRankRow {
   avatar?: string | null;
   char: CharId;
   look?: Look;
-  /** 산 스킨 · 캐릭터 값의 합 (지금 가격 기준) */
+  /** 산 스킨 · 캐릭터 값의 합 — 포인트, 지금 가격 기준 (예전에 칩으로 산 것도 지금 포인트 가격으로) */
   spent: number;
   skins: number;
   chars: number;

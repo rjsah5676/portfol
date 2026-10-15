@@ -17,6 +17,64 @@ export interface Patch {
 
 export const PATCHES: Patch[] = [
   {
+    ver: "v1.7",
+    name: "발열 줄이기",
+    date: "2026.10.15",
+    lines: [
+      "설정 → 프레임: 기본 60 — 120Hz 이상 화면(맥북 프로 · 아이패드 프로 등)에서도 초당 60번만 그려서 덜 뜨거워요. 판정은 그대로, '최대'로 바꾸면 예전처럼",
+      "콤보 숫자를 칠 때마다 그림을 새로 만들던 것을 두 장으로 돌려 씀 — 사파리에서 가끔 툭 끊기던 것",
+      "무거운 기기에서 해상도를 한 번 낮추면 그 판 동안 그대로 — 올렸다 내렸다 하며 몇 초마다 끊기던 것",
+    ],
+  },
+  {
+    ver: "v1.6",
+    name: "빠른 곡 채보",
+    date: "2026.10.15",
+    lines: [
+      "185 BPM 넘는 곡 NIGHTMARE·ULTIMA는 16분을 덜 씀 — 16분 자리 32·45% → 19·26% (osu·Quaver 13~25%). 레벨보다 osu·Quaver와 같은 모양을 우선",
+      "210 BPM 넘는 곡은 16분이 72ms 안쪽이라 동시치기로 합쳐져 동시치기 벽(줄의 70~80%)이 되던 것 고침 — 16분 스트림으로 (동시치기 39%, osu·Quaver 37~45%)",
+      "HARD~ULTIMA 롱노트는 누르는 동안 다른 노트가 적은 자리부터 — 롱노트가 레벨을 올리는 몫 반으로 (같은 레벨에 노트가 조금 더)",
+      "레벨: Aragami NIGHTMARE 17 → 15 · ULTIMA 21 → 18, Crimson Cadenza NIGHTMARE 17 → 14 · ULTIMA 20 → 17, FREEDOM DiVE NIGHTMARE 15 → 14",
+    ],
+  },
+  {
+    ver: "v1.5",
+    name: "롱노트 · 손 모양",
+    date: "2026.10.15",
+    lines: [
+      "HARD~ULTIMA 롱노트를 6%로 맞춤 (HARD 4 · EX 8 · NIGHTMARE 10%였음, osu 9% · Quaver 1~4%) — EASY·NORMAL은 그대로",
+      "같은 레인으로 한 칸 걸러 돌아오는 A B A 줄임 — EX~ULTIMA 빠른 단노트 셋 중 26~29% → 14~16% (osu 14~16%)",
+      "NIGHTMARE 16분 자리 일부를 동시치기로 — 빠른 동시치기 연속 1.7 → 5.9% (osu·Quaver 6~9%)",
+      "NIGHTMARE·ULTIMA 조용한 구간을 조금 더 채움 (조용한 4초 밀도 중앙값의 0.56배 → 0.61배, osu·Quaver 0.76배)",
+      "레벨: Jilju · Monarch · Velocity · Pixel Fighting NIGHTMARE 16 → 15 (롱노트가 줄어 같은 노트 수에 별점이 덜 나옴)",
+    ],
+  },
+  {
+    ver: "v1.4",
+    name: "채보 다듬기",
+    date: "2026.10.15",
+    lines: [
+      "osu 랭크 채보에 더해 Quaver 랭크 채보 400개와도 비교해서, 둘 다와 다르던 것만 고침 — 내장곡 14곡 HARD~ULTIMA 다시 뽑음 (EASY·NORMAL은 그대로)",
+      "NIGHTMARE·ULTIMA 기승전결 — 조용한 구간까지 꽉 차던 것을 곡 안 세기 순위대로 (조용한 구간 밀도: 중앙값의 0.8배 → 0.65배, osu·Quaver 0.5~0.66배)",
+      "NIGHTMARE·ULTIMA 16분은 곡에 16분 소리가 있는 박에만 — 나머지는 8분 + 동시치기, 16분 박도 소리 있는 칸만(갤럽)",
+      "ULTIMA 16분 잭(코드잭)·연속 동시치기 허용 — 잭 14 → 25%, 연속 동시치기 8 → 20% (osu·Quaver 19~26 · 12~19%)",
+      "두 레인만 번갈아 치는 트릴(A B A B)을 거의 없앰 (줄의 1~2% → 0~0.2%, osu·Quaver 0~0.3%)",
+      "HARD 잭 2 → 8%(osu·Quaver 7.5~10%), 3개 동시치기 없앰 · EX 잭 조금 늘림",
+      "레벨: ANiMA NIGHTMARE 17 · ULTIMA 20, Aragami ULTIMA 21, Monarch NIGHTMARE 16, Velocity ULTIMA 20, Crimson Cadenza ULTIMA 20, 휘모리 HARD 10 · ULTIMA 20 (나머지는 그대로)",
+    ],
+  },
+  {
+    ver: "v1.3",
+    name: "새 곡 · 정렬",
+    date: "2026.10.12",
+    lines: [
+      "새 곡 — 「Lucky Seven Rush」(176 BPM 일렉트로 스윙, 카지노 · NIGHTMARE Lv15 · ULTIMA Lv19) · 「Pixel Fighting」(180 BPM 칩튠 록, 도트 격투 · NIGHTMARE Lv16 · ULTIMA Lv18)",
+      "곡 목록 정렬 — 최신 순(기본) · 가나다 순 · 난이도 순(지금 고른 난이도의 레벨 낮은 순), 고른 정렬은 기억",
+      "온라인 방 대기실 채팅",
+      "자동 싱크가 오래 쌓이면 노트가 소리와 어긋나던 것 — 한 번 모두 0부터 다시 맞춤, 설정 → 싱크에 '자동 싱크 초기화'",
+    ],
+  },
+  {
     ver: "v1.2",
     name: "온라인",
     date: "2026.10.10",

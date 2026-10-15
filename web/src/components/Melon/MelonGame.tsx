@@ -19,7 +19,6 @@ import "@/css/Page/melon.css";
 import GameHeader from "@/components/GameHeader";
 import { MELON_GUIDE } from "@/data/gameGuides";
 import { lockScroll } from "@/lib/scrollLock";
-import { rankDateLabel } from "@/lib/rankDate";
 import {
   getTopMelonScores,
   addMelonScore,
@@ -29,8 +28,7 @@ import {
 } from "@/firestore/melonGame";
 import { useInitial } from "@/lib/api/InitialData";
 import { beginRun } from "@/lib/api/rankRun";
-import Nick from "@/components/Nick";
-import RankAvatar from "@/components/RankAvatar";
+import RankList from "@/components/RankList";
 import { useAutoRank } from "@/lib/useAutoRank";
 import { LEVEL } from "@/lib/soundLevel";
 import {
@@ -614,6 +612,7 @@ export default function MelonGame() {
           en="Melon"
           accent="#7ED957"
           desc="합이 10·20이 되게 묶어 터뜨리는 2분 타임어택"
+          tags={["랭킹모드", "숫자 퍼즐", "웹 퍼즐게임"]}
           guide={MELON_GUIDE}
           rank={{
             top: ranks
@@ -629,39 +628,17 @@ export default function MelonGame() {
             render: () =>
               ranks === null ? (
                 <p className="text-sm text-white/35">불러오는 중…</p>
-              ) : ranks.length === 0 ? (
-                <p className="text-sm text-white/35">아직 기록이 없어요</p>
               ) : (
-                <ol className={`flex flex-col gap-1 ${jua}`}>
-                  {ranks.map((r, i) =>
-                    i < 3 ? null : (
-                      <li
-                        key={i}
-                        className="flex items-center gap-3 rounded-xl px-2 py-1 text-base"
-                      >
-                        <span className="w-7 text-center">
-                          {i < 3 ? (
-                            ["🥇", "🥈", "🥉"][i]
-                          ) : (
-                            <span className="text-white/35">{i + 1}</span>
-                          )}
-                        </span>
-                        <RankAvatar avatar={r.avatar} name={r.name} guest={!r.member} size="sm" />
-                        <Nick
-                          name={r.name}
-                          guest={!r.member}
-                          className="flex-1 truncate text-white/85"
-                        />
-                        <span className="w-14 text-right text-[#B6F36A] tabular-nums">
-                          {r.score}점
-                        </span>
-                        <span className="w-[3.75rem] text-right text-xs text-white/30 tabular-nums">
-                          {rankDateLabel(r.createdAt)}
-                        </span>
-                      </li>
-                    )
-                  )}
-                </ol>
+                <RankList
+                  skip={3}
+                  rows={ranks.map((r) => ({
+                    name: r.name,
+                    member: r.member,
+                    avatar: r.avatar,
+                    value: `${r.score}점`,
+                    date: r.createdAt,
+                  }))}
+                />
               ),
           }}
         />

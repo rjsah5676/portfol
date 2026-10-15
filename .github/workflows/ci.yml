@@ -19,7 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       mongo:
-        image: public.ecr.aws/docker/library/mongo:7  # Docker Hub 대신 같은 공식 이미지의 AWS 미러 (GitHub 러너는 Docker Hub 받기 횟수 제한에 자주 걸림)
+        image: mirror.gcr.io/library/mongo:7  # Docker Hub 대신 같은 공식 이미지의 Google 미러 (Docker Hub 는 횟수 제한, AWS 공개 미러는 러너 IP 공용 데이터 한도 429)
         ports:
           - 27017:27017
         options: >-

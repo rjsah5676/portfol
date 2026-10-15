@@ -15,8 +15,14 @@ import { KeyCap, keyText } from "./KeyCap";
 import PatchNotes, { LATEST } from "./PatchNotes";
 import { SettingsModal } from "./Settings";
 import TechGuide from "./TechGuide";
+import PixelPreview from "./PixelPreview";
+import { TUT_CHAR, TUT_FOE, TUT_MAP } from "@/lib/fight/tutorial";
+import { AURA_MASK, artUrl, auraUrl, look } from "@/lib/fight/skins";
+import { useMySkins, wornSkin } from "@/lib/fight/mySkins";
+import { useNick } from "@/lib/AuthContext";
+import SkinShop, { type ShopTab } from "./SkinShop";
 
-export type Mode = "ai" | "2p" | "online" | "practice";
+export type Mode = "tutorial" | "ai" | "online" | "practice";
 export interface Setup {
   mode: Mode;
   c1: number;
@@ -30,16 +36,22 @@ export interface Setup {
 
 /** 메인 화면의 모드 칸 (← → 로 고르는 순서) */
 const MODE_TILES: readonly (readonly [Mode, string, string])[] = [
+  ["tutorial", "튜토리얼", "카이로 기본 배우기"],
   ["ai", "AI 대전", "CPU와 1:1"],
-  ["2p", "2인 대전", "한 키보드로 둘이서"],
-  ["online", "온라인 대전", "방 만들고 1:1 · 관전"],
+  ["online", "온라인 대전", "방 만들고 1:1 · 랭크전"],
   ["practice", "연습 모드", "허수아비로 콤보 연습"],
 ];
 const MODES = MODE_TILES.map(([m]) => m);
 
 const face = (c: CharDef) => `/fight/art/${c.id}-face.webp`;
 const art = (c: CharDef) => `/fight/art/${c.id}.webp`;
+/** 선택 화면 전신 그림 배율 (그림마다 인물이 차지하는 크기가 달라서 — 발 위치는 그대로) */
+const ART_SCALE: Record<string, number> = { soyoung: 0.86, "soyoung-bunny": 0.96 };
+/** 스킨 전신 그림이 기본보다 폭이 좁아 한쪽으로 쏠릴 때 안쪽으로 미는 양 (cqw) */
+const ART_DX: Record<string, number> = { "soyoung-bunny": 3.4 };
 const PX = "[image-rendering:pixelated]";
+/** 캐릭터 고르기 칸: 한 줄에 몇 칸 (↑↓ 은 이만큼 건너뜀) */
+const FACE_COLS = 4;
 const KR = "font-['Nanum_Gothic',sans-serif]";
 const MENU_BG = "/fight/bg/title.webp";
 
@@ -69,11 +81,11 @@ function SkillRow({ c, k }: { c: CharDef; k: "S" | "X" }) {
         >
           {isId ? "아이덴티티" : "필살기"} <KeyCap k={isId ? "L" : "I"} /> {isId ? c.idName : c.ultName}
         </span>
-        <span className="text-[1cqw] leading-snug break-keep text-white/80">{keyText(isId ? c.idDesc : c.ultDesc)}</span>
+        <span className="text-[1cqw] leading-snug break-keep text-white/80 [overflow-wrap:anywhere]">{keyText(isId ? c.idDesc : c.ultDesc)}</span>
         {isId && (
-          <span className={`flex items-start gap-[0.4cqw]`}>
+          <span className={`flex w-full min-w-0 items-start gap-[0.4cqw]`}>
             {c.airLabel && <SkillIcon key={`${c.id}-A`} c={c} k="A" small />}
-            <span className="text-[0.9cqw] leading-snug break-keep text-white/55">
+            <span className="min-w-0 text-[0.9cqw] leading-snug break-keep text-white/55 [overflow-wrap:anywhere]">
               <b className="text-[#FDE047]/80">{keyText(c.airLabel ?? "점프 중 L")}</b> {keyText(c.airDesc)}
             </span>
           </span>
@@ -102,7 +114,7 @@ function StatRadar({ c }: { c: CharDef }) {
   const poly = (f: (i: number) => number) => STAT_AXES.map((_, i) => pt(i, f(i)).join(",")).join(" ");
   return (
     // 옆 글자(콤보·체력·리치·기동력)가 그림 밖으로 잘리지 않게 좌우를 넉넉히
-    <svg viewBox="-26 4 152 92" className="h-[7.4cqw] w-[12.2cqw] shrink-0 overflow-visible" aria-label="능력치">
+    <svg viewBox="-26 4 152 92" className="h-[7.4cqw] w-[12.2cqw] min-w-0 shrink overflow-visible" aria-label="능력치">
       {[1, 0.8, 0.6, 0.4, 0.2].map((k) => (
         <polygon
           key={k}
@@ -152,7 +164,7 @@ function StatRadar({ c }: { c: CharDef }) {
 
 function CharInfo({ c, right }: { c: CharDef; right?: boolean }) {
   return (
-    <div className={`flex flex-col gap-[0.5cqw] ${right ? "items-end text-right" : ""}`}>
+    <div className={`flex w-full min-w-0 flex-col gap-[0.5cqw] ${right ? "items-end text-right" : ""}`}>
       <div className={`flex w-full items-center justify-between gap-[0.6cqw] ${right ? "flex-row-reverse" : ""}`}>
         <div className={`flex min-w-0 flex-col gap-[0.5cqw] ${right ? "items-end" : ""}`}>
       <div className="font-mono text-[1.1cqw] tracking-[0.25em] text-white/45">{c.tagline}</div>
@@ -213,6 +225,10 @@ export default function Select({
   const [stage, setStage] = useState<"mode" | "char" | "map" | "vs">(entry);
   const [notes, setNotes] = useState(false);
   const [guide, setGuide] = useState(false);
+  /** 상점 · 보관함 창 */
+  const [shop, setShop] = useState<ShopTab | null>(null);
+  // 내 스킨 (착용한 스킨은 1P 쪽 그림 · 도트에 보임)
+  useMySkins(useNick());
   const [lock, setLock] = useState<[boolean, boolean]>([false, false]);
   const [mapCur, setMapCur] = useState(setup.map);
   /** 캐릭터 칸 커서가 '랜덤'에 있나 (쪽마다) */
@@ -263,10 +279,13 @@ export default function Select({
     return () => clearTimeout(t);
   }, [stage, onStart]);
 
-  // 연습 모드도 AI 대전처럼 1P가 고른 뒤 상대(허수아비) 캐릭터를 고름
+  // 연습 모드: 1P만 고르면 허수아비는 건모로 (lockSide)
   const prac = setup.mode === "practice";
   const ai = setup.mode === "ai" || prac;
   const foe = prac ? "허수아비" : "CPU";
+  // 연습 모드 허수아비는 늘 건모 — 고르는 동안에도 건모로 보여 줌 (예전엔 지난번 상대가 보였다가 판에선 건모가 나옴)
+  const pracFoe = CHARS.findIndex((c) => c.id === "gunmo");
+  const c2i = prac && pracFoe >= 0 ? pracFoe : setup.c2;
   const n = CHARS.length;
   /** 지금 커서를 움직이는 쪽 (AI 대전: 1P가 끝나면 CPU 쪽) */
   const pickSide = (l: [boolean, boolean]) => (ai ? (l[0] ? 1 : 0) : -1);
@@ -309,6 +328,12 @@ export default function Select({
     sfxUi("ok");
     const l: [boolean, boolean] = [...stRef.current.lock];
     l[side] = true;
+    // 연습 모드: 허수아비는 고르지 않고 건모로
+    if (prac && side === 0 && !l[1]) {
+      l[1] = true;
+      setRnd((r) => [r[0], false]);
+      setSetup((s) => ({ ...s, c2: pracFoe >= 0 ? pracFoe : s.c2 }));
+    }
     setLock(l);
     if (l[0] && l[1]) setStage("map");
   };
@@ -379,6 +404,12 @@ export default function Select({
       onOnline?.();
       return;
     }
+    if (stRef.current.setup.mode === "tutorial") {
+      // 튜토리얼: 캐릭터 · 맵 고르기 없이 카이 vs 연습 상대, 노을 옥상
+      setSetup((s) => ({ ...s, c1: TUT_CHAR, c2: TUT_FOE, map: TUT_MAP, rolled: undefined }));
+      setStage("vs");
+      return;
+    }
     setLock([false, false]);
     setStage("char");
   };
@@ -394,15 +425,19 @@ export default function Select({
         return;
       }
       const k = e.code;
-      const p1 = { l: k === "KeyA", r: k === "KeyD", ok: k === "KeyJ" || k === "Space", no: k === "Escape" };
+      const p1 = { l: k === "KeyA", r: k === "KeyD", u: k === "KeyW", d: k === "KeyS", ok: k === "KeyJ" || k === "Space", no: k === "Escape" };
       const p2 = {
         l: k === "ArrowLeft",
         r: k === "ArrowRight",
+        u: k === "ArrowUp",
+        d: k === "ArrowDown",
         ok: k === "Enter" || k === "NumpadEnter" || k === "Comma",
         no: k === "Period" || k === "Backspace",
       };
       const any = p1.l || p1.r || p1.ok || p1.no || p2.l || p2.r || p2.ok || p2.no;
-      if (!any) return;
+      // 캐릭터 칸은 두 줄 — 위아래(W·S, ↑↓)로 한 줄씩
+      const vert = p1.u || p1.d || p2.u || p2.d;
+      if (!any && !(vert && stage === "char")) return;
       e.preventDefault();
       if (stage === "mode") {
         // ← → (A · D) 로 모드 고르기, Enter(J · Space) 로 시작
@@ -420,15 +455,21 @@ export default function Select({
           const side = (lock[0] ? 1 : 0) as 0 | 1;
           if (p1.l || p2.l) move(side, -1);
           if (p1.r || p2.r) move(side, 1);
+          if (p1.u || p2.u) move(side, -FACE_COLS);
+          if (p1.d || p2.d) move(side, FACE_COLS);
           if (p1.ok || p2.ok) confirm(side);
           if (p1.no || p2.no) cancel(side);
         } else {
           if (!lock[0] && p1.l) move(0, -1);
           if (!lock[0] && p1.r) move(0, 1);
+          if (!lock[0] && p1.u) move(0, -FACE_COLS);
+          if (!lock[0] && p1.d) move(0, FACE_COLS);
           if (p1.ok) confirm(0);
           if (p1.no) cancel(0);
           if (!lock[1] && p2.l) move(1, -1);
           if (!lock[1] && p2.r) move(1, 1);
+          if (!lock[1] && p2.u) move(1, -FACE_COLS);
+          if (!lock[1] && p2.d) move(1, FACE_COLS);
           if (p2.ok) confirm(1);
           if (p2.no) cancel(1);
         }
@@ -449,8 +490,10 @@ export default function Select({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 최신 값은 stRef로
   }, [ai]);
 
+  /** 그림 이름: 1P 는 착용 스킨, 상대는 기본 */
+  const lookOf = (sd: number) => (sd === 0 ? look(setup.c1, wornSkin(setup.c1)) : CHARS[c2i].id);
   const c1 = CHARS[setup.c1],
-    c2 = CHARS[setup.c2];
+    c2 = CHARS[c2i];
   const side = pickSide(lock);
   const mapShownIdx = mapFlash ?? mapCur;
   const mapShown = mapShownIdx >= 0 ? MAPS[mapShownIdx] : null;
@@ -534,8 +577,23 @@ export default function Select({
             >
               📖 기술 가이드
             </button>
+            {(["shop", "inv"] as const).map((t) => (
+              <button
+                key={t}
+                type="button"
+                onClick={() => {
+                  sfxUi("ok");
+                  setShop(t);
+                }}
+                className={`${KR} flex cursor-pointer items-center gap-[0.6cqw] rounded-full border-[0.15cqw] border-[#F2C35B]/70 bg-[#140A24]/75 px-[1.3cqw] py-[0.45cqw] text-[1.2cqw] font-bold text-[#FFE9A8] backdrop-blur-[3px] transition-colors hover:bg-[#2B1840]/90`}
+              >
+                {t === "shop" ? "🛒 상점" : "🎒 보관함"}
+                {t === "shop" && <span className="rounded-full bg-[#E8344E] px-[0.5cqw] font-mono text-[0.8cqw] text-white">NEW</span>}
+              </button>
+            ))}
           </div>
           {guide && <TechGuide onClose={() => setGuide(false)} />}
+          {shop && <SkinShop initial={shop} onClose={() => setShop(null)} />}
           {opts && settings && <SettingsModal onClose={() => setOpts(false)}>{settings}</SettingsModal>}
 
           {/* 아래 돌바닥 위: 모드 · 난이도 · 시작 */}
@@ -613,7 +671,7 @@ export default function Select({
               CHARACTER SELECT
             </div>
             <div className={`${KR} text-[1.2cqw] text-white/55`}>
-              {prac ? "연습 모드 · 허수아비 캐릭터도 골라요" : ai ? `AI 대전 · CPU ${AI_LEVELS[setup.level].name}` : "2인 대전"}
+              {prac ? "연습 모드 · 허수아비는 건모" : ai ? `AI 대전 · CPU ${AI_LEVELS[setup.level].name}` : "튜토리얼"}
             </div>
           </div>
           <button
@@ -632,6 +690,19 @@ export default function Select({
             const active = !lock[sd] && (ai ? side === sd : true);
             return (
               <div key={sd} className="contents">
+                {/* 착용 스킨 오라 (전신 그림 뒤) */}
+                {!rnd[sd] && auraUrl(lookOf(sd)) && (
+                  <img
+                    key={`aura-${lookOf(sd)}`}
+                    src={auraUrl(lookOf(sd))!}
+                    alt=""
+                    style={AURA_MASK}
+                    className={`pointer-events-none absolute top-[8%] ${sd === 0 ? "left-[-1cqw]" : "right-[-1cqw]"} z-0 h-[84%] w-[30cqw] object-contain object-bottom mix-blend-screen transition-opacity duration-300 [animation:sel-aura_3.2s_ease-in-out_infinite_alternate] ${
+                      active || lock[sd] ? "" : "opacity-40"
+                    }`}
+                  />
+                )}
+                <style>{`@keyframes sel-aura{from{filter:brightness(.85)}to{filter:brightness(1.15)}}`}</style>
                 {/* 전신 그림: 폭이 넓은 그림이어도 설명 글씨 칸을 밀지 않게 따로 띄움 (뒤에 깔림) */}
                 {rnd[sd] ? (
                   <div
@@ -642,13 +713,15 @@ export default function Select({
                   </div>
                 ) : (
                 <img
-                  key={c.id}
-                  src={art(c)}
+                  key={lookOf(sd)}
+                  src={sd === 0 ? artUrl(setup.c1, wornSkin(setup.c1)) : art(c)}
                   alt={c.name}
-                  className={`absolute top-[13%] ${sd === 0 ? "left-[1cqw] object-left-bottom" : "right-[1cqw] object-right-bottom"} z-0 h-[76%] w-[26cqw] object-contain ${PX} transition-[filter,opacity] duration-300 [animation:modal-fade_250ms_ease-out] ${sd === 1 ? "scale-x-[-1]" : ""} ${
+                  className={`absolute top-[13%] ${sd === 0 ? "left-[1cqw] object-left-bottom" : "right-[1cqw] object-right-bottom"} z-0 h-[76%] w-[26cqw] object-contain ${lookOf(sd) === c.id ? PX : ""} transition-[filter,opacity] duration-300 [animation:modal-fade_250ms_ease-out] ${sd === 1 ? "scale-x-[-1]" : ""} ${
                     active || lock[sd] ? "" : "opacity-45 brightness-50"
                   }`}
                   style={{
+                    ...(ART_SCALE[lookOf(sd)] ? { height: `${76 * ART_SCALE[lookOf(sd)]}%`, top: `${89 - 76 * ART_SCALE[lookOf(sd)]}%` } : {}),
+                    ...(ART_DX[lookOf(sd)] ? { [sd === 0 ? "marginLeft" : "marginRight"]: `${ART_DX[lookOf(sd)]}cqw` } : {}),
                     filter: active
                       ? `drop-shadow(0 0 0.25cqw ${col}) drop-shadow(0 0 1.4cqw ${col})`
                       : lock[sd]
@@ -658,7 +731,7 @@ export default function Select({
                 />
                 )}
                 <div
-                  className={`gold-scroll absolute top-[8.8cqw] z-10 max-h-[34.4cqw] overflow-y-auto ${sd === 0 ? "left-[26cqw]" : "right-[26cqw] flex flex-col items-end text-right"} w-[23.4cqw] rounded-[1cqw] bg-black/45 px-[1cqw] py-[0.8cqw] backdrop-blur-[2px]`}
+                  className={`gold-scroll absolute top-[8.8cqw] z-10 max-h-[32.4cqw] overflow-y-auto ${sd === 0 ? "left-[26cqw]" : "right-[26cqw] flex flex-col items-end text-right"} w-[23.4cqw] rounded-[1cqw] bg-black/45 px-[1cqw] py-[0.8cqw] backdrop-blur-[2px]`}
                 >
                   <div className={`mb-[0.6cqw] flex items-center gap-[0.6cqw] ${sd === 1 ? "flex-row-reverse" : ""}`}>
                     <span
@@ -687,13 +760,27 @@ export default function Select({
                     <CharInfo c={c} right={sd === 1} />
                   )}
                 </div>
+                {/* 게임 속 도트 모습 (동작을 돌아가며) — 전신 그림 발치 */}
+                {!rnd[sd] && (
+                  <div
+                    className={`absolute bottom-[1cqw] ${sd === 0 ? "left-[1cqw]" : "right-[1cqw]"} z-10 flex flex-col items-center rounded-[0.8cqw] border border-white/15 bg-black/55 px-[0.4cqw] pt-[0.3cqw] backdrop-blur-[2px]`}
+                  >
+                    <span className={`${KR} text-[0.9cqw] text-white/50`}>게임 속 모습</span>
+                    <PixelPreview
+                      key={sd === 0 ? look(setup.c1, wornSkin(setup.c1)) : c.id}
+                      id={sd === 0 ? look(setup.c1, wornSkin(setup.c1)) : c.id}
+                      flip={sd === 1}
+                      className="h-[10cqw] w-[9cqw]"
+                    />
+                  </div>
+                )}
               </div>
             );
           })}
 
           {/* 가운데 아래 얼굴 칸 */}
           <div className="absolute bottom-[1cqw] left-1/2 z-10 flex -translate-x-1/2 flex-col items-center gap-[0.6cqw] rounded-[1cqw] bg-black/50 px-[1.2cqw] pb-[0.7cqw] backdrop-blur-[2px]">
-            {/* 캐릭터가 늘어도 칸 크기는 그대로: 7칸만 보이고 ◀ ▶ (또는 고르는 칸 따라) 좌우로 넘김 */}
+            {/* 랜덤 + 캐릭터를 FACE_COLS 칸씩 여러 줄로 (←→ 한 칸 · ↑↓ 한 줄). 줄이 넘쳐 옆으로 넘길 일은 없어 ◀ ▶ 는 안 보임 */}
             <div className="relative flex items-center">
               <button
                 type="button"
@@ -706,7 +793,7 @@ export default function Select({
               <div
                 ref={stripRef}
                 onScroll={onStripScroll}
-                className="flex max-w-[52.2cqw] gap-[1cqw] overflow-x-auto pt-[1.6cqw] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                className="grid grid-cols-4 gap-x-[0.8cqw] gap-y-[1.7cqw] pt-[1.6cqw]"
               >
               {(() => {
                 const r1 = rnd[0] && !lock[0],
@@ -723,19 +810,19 @@ export default function Select({
                     className="relative cursor-pointer"
                   >
                     <span
-                      className={`flex h-[5.4cqw] w-[5.4cqw] items-center justify-center rounded-[0.5cqw] border-[0.3cqw] bg-black/60 font-mono text-[3.4cqw] font-black text-white/80 ${
+                      className={`flex h-[4.4cqw] w-[5.6cqw] items-center justify-center rounded-[0.5cqw] border-[0.3cqw] bg-black/60 font-mono text-[2.8cqw] font-black text-white/80 ${
                         r1 && r2 ? "border-[#A78BFA]" : r1 ? "border-[#3B82F6]" : r2 ? "border-[#F43F5E]" : "border-white/20"
                       } ${r1 || r2 ? "animate-pulse" : ""}`}
                     >
                       ?
                     </span>
-                    <span className={`${KR} block pt-[0.3cqw] text-center text-[1.2cqw] text-white/80`}>랜덤</span>
+                    <span className={`${KR} pointer-events-none absolute inset-x-[0.3cqw] bottom-[0.3cqw] rounded-b-[0.3cqw] bg-black/65 text-center text-[0.95cqw] leading-[1.4] text-white/85`}>랜덤</span>
                   </button>
                 );
               })()}
               {CHARS.map((c, i) => {
                 const on1 = setup.c1 === i && !rnd[0],
-                  on2 = setup.c2 === i && !rnd[1];
+                  on2 = c2i === i && !rnd[1];
                 const act1 = !lock[0] && (ai ? side === 0 : true);
                 const act2 = !lock[1] && (ai ? side === 1 : true);
                 const glow = (on1 && act1) || (on2 && act2);
@@ -757,7 +844,7 @@ export default function Select({
                                         <img
                       src={face(c)}
                       alt={c.name}
-                      className={`h-[5.4cqw] w-[6.8cqw] rounded-[0.5cqw] border-[0.3cqw] object-cover ${PX} ${glow ? "animate-pulse" : ""} ${
+                      className={`h-[4.4cqw] w-[5.6cqw] rounded-[0.5cqw] border-[0.3cqw] object-cover ${PX} ${glow ? "animate-pulse" : ""} ${
                         on1 && on2
                           ? "border-[#A78BFA]"
                           : on1
@@ -773,7 +860,7 @@ export default function Select({
                         <span className="rounded-[0.2cqw] bg-[#F43F5E] px-[0.4cqw] text-white">{ai ? foe : "2P"}</span>
                       )}
                     </span>
-                    <span className={`${KR} block pt-[0.3cqw] text-center text-[1.2cqw] text-white/80`}>{c.name}</span>
+                    <span className={`${KR} pointer-events-none absolute inset-x-[0.3cqw] bottom-[0.3cqw] rounded-b-[0.3cqw] bg-black/65 text-center text-[0.95cqw] leading-[1.4] text-white/85`}>{c.name}</span>
                   </button>
                 );
               })}
@@ -786,13 +873,6 @@ export default function Select({
               >
                 ▶
               </button>
-            </div>
-            <div className={`${KR} text-center text-[1.1cqw] text-white/45`}>
-              {ai
-                ? side === 0
-                  ? keyText("내 캐릭터 고르기 — A·D(←→) 이동, J(Enter)·한 번 더 클릭 결정, Esc 뒤로")
-                  : `상대(${foe}) 캐릭터 고르기 — Esc(.) 내 캐릭터 다시`
-                : keyText("1P A·D + J 결정 · 2P ←→ + Enter 결정 (Esc / . 취소)")}
             </div>
           </div>
         </>

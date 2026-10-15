@@ -8,7 +8,6 @@ export const TAG_STYLE: Record<ArchiveTag, { dot: string; pill: string }> = {
     pill: "border-emerald-400/25 bg-emerald-400/10 text-emerald-300",
   },
   실무: { dot: "bg-amber-400", pill: "border-amber-400/25 bg-amber-400/10 text-amber-300" },
-  학습: { dot: "bg-sky-400", pill: "border-sky-400/25 bg-sky-400/10 text-sky-300" },
   이력: { dot: "bg-white/50", pill: "border-white/15 bg-white/5 text-white/60" },
 };
 

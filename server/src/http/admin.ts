@@ -15,14 +15,17 @@ import { h, ms, requireAdmin } from "./util";
  *   GET    /api/admin/traffic?from=YYYY-MM-DD&to=YYYY-MM-DD   기간 집계 + 최근 유입 100건 (원본 IP 포함)
  *                                         &human=1 이면 클라우드(AWS·GCP 등) IP 유입을 뺌
  * 회원
- *   GET    /api/admin/users?q=&limit=&skip=         목록 (별명·이메일로 찾기)
- *   PATCH  /api/admin/users/:uid   { nick?, badge?, money? } 별명 · 꾸밈 · 포커 칩 바꾸기 (칩은 테이블 밖일 때 바로, 앉아 있으면 다음 판부터)
+ *   GET    /api/admin/users?q=&limit=&skip=&sort=   목록 (별명·이메일로 찾기 · 정렬 new|visit|points|visits · banned 는 정지된 회원만)
+ *   PATCH  /api/admin/users/:uid   { nick?, badge?, money?, points? } 별명 · 꾸밈 · 포커 칩 · 포인트 바꾸기 (칩은 테이블 밖일 때 바로, 앉아 있으면 다음 판부터. 포인트는 원장에 '운영자 조정'으로 남음)
+ *   GET    /api/admin/users/:uid/points  포인트 최근 내역
  *   DELETE /api/admin/users/:uid/avatar             올린 프로필 사진 지우기
  *   DELETE /api/admin/users/:uid?records=1          회원 지우기 (records=1 이면 랭킹·방명록도)
- * 열려 있는 방 (서버 메모리: 스케치 퀴즈 · 격투)
+ * 열려 있는 방 (서버 메모리: DOODLE PARTY · 격투 · 포커 · 리듬 · 디펜스 멀티)
  *   GET    /api/admin/live
  *   POST   /api/admin/live/close   { game, id }
  *   GET    /api/admin/poker/settings          · PUT { botBoost }
+ * 디펜스 플레이 기록 (밸런스 분석용, 90일)
+ *   GET    /api/admin/defense/plays?from=ms&after=커서&limit=500   오래된 것부터 (next 커서로 이어 받기)
  * 데이터 (범용 조회·수정·삭제) — 경로는 기존 Firestore 컬렉션 경로 표기를 그대로 받음
  *   ("score", "rhythm_rankings/{곡_난이도}/scores" …)
  *   GET    /api/admin/docs?path=…
@@ -43,6 +46,15 @@ const TOP_LEVEL = new Set<string>([
   "rank_tickets",
   "traffic_hits",
   "traffic_daily",
+  // 격투 랭크전 · 디펜스 랭킹 · 디펜스 성장 · 우편 · 사이트 설정(공지)
+  "fight_rank_ratings",
+  // 격투 경기 기록 (보기 전용 — 입력 데이터는 목록에서 뺌)
+  "fight_replays",
+  "defense_rank",
+  "defense_profile",
+  "defense_plays",
+  "mail",
+  "site_config",
   // 메뉴에서 내린 예전 스케치 퀴즈 데이터
   "sketch_user",
   "sketch_user_room",
@@ -88,7 +100,7 @@ export function decode(v: unknown): unknown {
 
 const ids = z.array(z.string().min(1)).max(2000);
 
-/** 서버 메모리에만 있는 방 (스케치 퀴즈 · 격투 · 포커) */
+/** 서버 메모리에만 있는 방 (DOODLE PARTY · 격투 · 포커) */
 export interface LiveRoom {
   id: string;
   name: string;
@@ -96,7 +108,7 @@ export interface LiveRoom {
   players: string[];
   createdAt: number;
 }
-export type LiveGame = "sketch" | "fight" | "poker" | "rhythm";
+export type LiveGame = "sketch" | "fight" | "poker" | "rhythm" | "defense";
 
 export interface AdminHooks {
   /** 방명록이 바뀜 → 구독자에게 다시 보냄 */
@@ -121,11 +133,42 @@ const DATE_KEY = /^\d{4}-\d{2}-\d{2}$/;
 /** 유입 분석에서 한 번에 볼 수 있는 기간 */
 export const TRAFFIC_MAX_DAYS = 366;
 
-export function adminRouter({ db, auth, web, users, gateway, cfg, traffic }: Deps, hooks: AdminHooks): Router {
+export function adminRouter({ db, auth, web, users, points, gateway, cfg, traffic }: Deps, hooks: AdminHooks): Router {
   const r = Router();
   r.use((req, _res, next) => {
     requireAdmin(auth, req).then(() => next(), next);
   });
+
+  // ───────────── 디펜스 플레이 기록 ─────────────
+
+  r.get(
+    "/defense/plays",
+    h(async (req) => {
+      const q = z
+        .object({
+          from: z.coerce.number().int().min(0).optional(),
+          after: z.string().max(120).optional(),
+          limit: z.coerce.number().int().min(1).max(FETCH_LIMIT).optional(),
+        })
+        .parse(req.query);
+      // 커서 = "시각ms_id" (같은 시각이 여럿이어도 안 빠지게 id 까지)
+      let filter: Record<string, unknown> = q.from ? { at: { $gte: new Date(q.from) } } : {};
+      if (q.after) {
+        const i = q.after.indexOf("_");
+        const t = new Date(Number(q.after.slice(0, i)));
+        const id = q.after.slice(i + 1);
+        if (i < 1 || isNaN(t.getTime())) throw bad("커서가 잘못됐어요.");
+        filter = { $or: [{ at: { $gt: t } }, { at: t, _id: { $gt: id } }] };
+      }
+      const limit = q.limit ?? FETCH_LIMIT;
+      const docs = await db.col<{ _id: string; at: Date; end?: Date }>("defense_plays").find(filter).sort({ at: 1, _id: 1 }).limit(limit).toArray();
+      const last = docs[docs.length - 1];
+      return {
+        list: docs.map((d) => ({ ...d, at: ms(d.at), end: ms(d.end) })),
+        next: docs.length === limit && last ? `${last.at.getTime()}_${last._id}` : null,
+      };
+    })
+  );
 
   // ───────────── 한눈에 보기 ─────────────
 
@@ -139,7 +182,7 @@ export function adminRouter({ db, auth, web, users, gateway, cfg, traffic }: Dep
       const latest = (c: string, n: number, sort: Record<string, 1 | -1> = { createdAt: -1 }) =>
         db.col(c).find({}).sort(sort).limit(n).toArray();
 
-      const [total, daily, members, inqTotal, inqUnread, posts, guestTotal, rankCounts, rhythmCount, roomCounts, lastGuest, lastInq, lastRanks, trafficToday] =
+      const [total, daily, members, inqTotal, inqUnread, posts, guestTotal, rankCounts, rhythmCount, newRanks, roomCounts, lastGuest, lastInq, lastRanks, trafficToday] =
         await Promise.all([
           stats.findOne({ _id: "total" }),
           stats.find({ _id: { $in: days.map((d) => `daily_${d}`) } }).toArray(),
@@ -150,6 +193,7 @@ export function adminRouter({ db, auth, web, users, gateway, cfg, traffic }: Dep
           count("guest"),
           Promise.all(RANK_COLLECTIONS.map(async (c) => [c, await count(c)] as const)),
           count("rhythm_rankings"),
+          Promise.all(["fight_rank_ratings", "defense_rank"].map(async (c) => [c, await count(c)] as const)),
           Promise.all(
             ROOM_COLLECTIONS.map(async (c) => [c, { total: await count(c), playing: await count(c, { status: "playing" }), waiting: await count(c, { status: "waiting" }) }] as const)
           ),
@@ -190,9 +234,9 @@ export function adminRouter({ db, auth, web, users, gateway, cfg, traffic }: Dep
         inquiries: { total: inqTotal, unread: inqUnread },
         posts: { total: posts.length, retro: posts.filter((p) => p.section === "retro").length },
         guest: { total: guestTotal },
-        rankings: { ...Object.fromEntries(rankCounts), rhythm_rankings: rhythmCount },
+        rankings: { ...Object.fromEntries(rankCounts), rhythm_rankings: rhythmCount, ...Object.fromEntries(newRanks) },
         rooms: Object.fromEntries(roomCounts),
-        live: { sketch: liveOf(live.sketch), fight: liveOf(live.fight), poker: liveOf(live.poker) },
+        live: { sketch: liveOf(live.sketch), fight: liveOf(live.fight), poker: liveOf(live.poker), rhythm: liveOf(live.rhythm), defense: liveOf(live.defense) },
         server: {
           env: cfg.env,
           startedAt,
@@ -202,6 +246,29 @@ export function adminRouter({ db, auth, web, users, gateway, cfg, traffic }: Dep
         },
         activity: acts,
       };
+    })
+  );
+
+  // ───────────── 디펜스 초기화 (베타 승급 등) ─────────────
+  // 디펜스 프로필 · 랭킹 · 판 기록 · 회원 디펜스 통계를 모두 지움. GP 잔액 · 원장 · 블록 테마(GP 로 산 것)는 그대로.
+  r.get(
+    "/defense/stats",
+    h(async () => {
+      const [profiles, ranks, runs] = await Promise.all(
+        ["defense_profile", "defense_rank", "defense_runs"].map((c) => db.col(c).countDocuments({}))
+      );
+      return { profiles, ranks, runs };
+    })
+  );
+  r.post(
+    "/defense/reset",
+    h(async (req) => {
+      z.object({ confirm: z.literal("디펜스 초기화") }).parse(req.body);
+      const out: Record<string, number> = {};
+      for (const c of ["defense_profile", "defense_rank", "defense_runs"]) out[c] = (await db.col(c).deleteMany({})).deletedCount ?? 0;
+      out.users = (await db.col("users").updateMany({ "stats.defense": { $exists: true } } as never, { $unset: { "stats.defense": "" } } as never)).modifiedCount;
+      console.warn("[admin] 디펜스 데이터 초기화", JSON.stringify(out));
+      return out;
     })
   );
 
@@ -226,7 +293,12 @@ export function adminRouter({ db, auth, web, users, gateway, cfg, traffic }: Dep
     "/users",
     h(async (req) => {
       const q = z
-        .object({ q: z.string().max(100).optional(), limit: z.coerce.number().int().min(1).max(200).optional(), skip: z.coerce.number().int().min(0).optional() })
+        .object({
+          q: z.string().max(100).optional(),
+          limit: z.coerce.number().int().min(1).max(200).optional(),
+          skip: z.coerce.number().int().min(0).optional(),
+          sort: z.enum(["new", "visit", "points", "visits", "banned"]).optional(),
+        })
         .parse(req.query);
       return users.adminList(q);
     })
@@ -234,12 +306,24 @@ export function adminRouter({ db, auth, web, users, gateway, cfg, traffic }: Dep
   r.patch(
     "/users/:uid",
     h(async (req) => {
-      const patch = z.strictObject({ nick: z.string().max(40).optional(), badge: z.string().max(40).nullable().optional(), money: z.number().int().min(0).max(1e15).optional() }).parse(req.body);
+      const { points: pts, ...patch } = z
+        .strictObject({
+          nick: z.string().max(40).optional(),
+          badge: z.string().max(40).nullable().optional(),
+          money: z.number().int().min(0).max(1e15).optional(),
+          points: z.number().int().min(0).max(1e9).optional(),
+        })
+        .parse(req.body);
+      if (pts !== undefined) await points.adminSet(String(req.params.uid), pts);
       const user = await users.adminUpdate(String(req.params.uid), patch);
       // 별명이 바뀌면 방명록의 이름도 같이 바뀜
       if (patch.nick !== undefined) hooks.guestChanged();
       return user;
     })
+  );
+  r.get(
+    "/users/:uid/points",
+    h(async (req) => ({ log: await points.log(String(req.params.uid), 50) }))
   );
   r.delete(
     "/users/:uid/avatar",
@@ -266,7 +350,7 @@ export function adminRouter({ db, auth, web, users, gateway, cfg, traffic }: Dep
   r.post(
     "/live/close",
     h(async (req) => {
-      const body = z.strictObject({ game: z.enum(["sketch", "fight", "poker", "rhythm"]), id: z.string().min(1).max(80) }).parse(req.body);
+      const body = z.strictObject({ game: z.enum(["sketch", "fight", "poker", "rhythm", "defense"]), id: z.string().min(1).max(80) }).parse(req.body);
       return { closed: hooks.closeLiveRoom(body.game, body.id) };
     })
   );
@@ -291,7 +375,11 @@ export function adminRouter({ db, auth, web, users, gateway, cfg, traffic }: Dep
     "/docs",
     h(async (req) => {
       const { col, scope } = resolve(String(req.query.path ?? ""));
-      const docs = await db.col(col).find(scope).limit(FETCH_LIMIT).toArray();
+      // 격투 경기 기록: 최신순, 무거운 입력 데이터(inputs · chunks)는 빼고 개수만
+      const docs =
+        col === "fight_replays"
+          ? (await db.col(col).find(scope, { projection: { inputs: 0, chunks: 0 } }).sort({ at: -1 }).limit(FETCH_LIMIT).toArray())
+          : await db.col(col).find(scope).limit(FETCH_LIMIT).toArray();
       return docs.map(({ _id, ...data }) => {
         for (const k of Object.keys(scope)) delete data[k];
         return { id: _id, data: encode(data) };

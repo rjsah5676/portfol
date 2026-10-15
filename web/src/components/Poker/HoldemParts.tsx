@@ -1,19 +1,46 @@
 "use client";
 
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
-import { evaluate, handName, rankOf } from "@/lib/poker/cards";
+import { evaluate, handName, rankOf, type Card } from "@/lib/poker/cards";
 import { UNIT, fmtWon, type TierId } from "@/lib/poker/rules";
 import type { HoldemAction, HoldemView, MyHand } from "@/lib/poker/types";
 import { Money, PlayingCard } from "./parts";
+import { sfx } from "@/lib/poker/sfx";
 import type { SeatCardsProps, Sizes } from "./TableView";
 import { isTopSeat, topHands } from "@/lib/poker/showdown";
 
 /* 홀덤에서만 쓰는 화면 조각: 바닥 카드, 자리의 패, 행동 버튼 */
 
+const RANK_CH = ["2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K", "A"];
+/**
+ * 시작 패 등급: 2 = 프리미엄(AA · KK · QQ · JJ · AK · AQs — 상위 4%쯤, 메이드처럼 강조 · 대사), 1 = 괜찮은 시작(그 밖의 포켓 페어 · A 수딧 · KQ 등), 0 = 보통
+ */
+export function preflopGrade(cards: readonly Card[]): 0 | 1 | 2 {
+  if (cards.length < 2) return 0;
+  const a = rankOf(cards[0]);
+  const b = rankOf(cards[1]);
+  const hi = Math.max(a, b);
+  const lo = Math.min(a, b);
+  const suited = (cards[0] & 3) === (cards[1] & 3);
+  if (a === b) return hi >= 9 ? 2 : 1; // JJ 이상
+  if (hi === 12 && (lo === 11 || (lo === 10 && suited))) return 2; // AK · AQs
+  if (hi === 12 && (lo >= 9 || suited)) return 1; // AQ · AJ · A 수딧
+  if (hi === 11 && lo >= 10 && suited) return 1; // KQs · KJs
+  if (hi === 11 && lo === 10) return 1; // KQ
+  return 0;
+}
+
 export function holdemHint(my: MyHand, view: HoldemView): string {
   if (my.cards.length < 2) return "";
   if (view.board.length >= 3) return handName(evaluate([...my.cards, ...view.board]));
-  return rankOf(my.cards[0]) === rankOf(my.cards[1]) ? "포켓 페어" : "";
+  const a = rankOf(my.cards[0]);
+  const b = rankOf(my.cards[1]);
+  const g = preflopGrade(my.cards);
+  if (a === b) return g === 2 ? `${RANK_CH[a]} 포켓 페어 · 프리미엄` : `${RANK_CH[a]} 포켓 페어`;
+  const suited = (my.cards[0] & 3) === (my.cards[1] & 3);
+  const name = `${RANK_CH[Math.max(a, b)]}·${RANK_CH[Math.min(a, b)]}${suited ? " 수딧" : ""}`;
+  // 첫 두 장도 늘 알려 줌 (프리미엄만 따로 표시)
+  return g === 2 ? `${name} · 프리미엄` : name;
 }
 
 export function holdemSeatCards({
@@ -33,7 +60,7 @@ export function holdemSeatCards({
   const ended = !!view.result && !!settled;
   // 쇼다운에서 깐 패 (아직 안 깐 자리는 뒷면 그대로, 깔 때 뒤집힘)
   if (p.cards && !hide) {
-    const w = hero ? sizes.heroCard : Math.round(sizes.card * 1.3);
+    const w = hero ? sizes.heroCard : sizes.card;
     return (
       <span className="flex gap-[0.15em]">
         {p.cards.map((c, i) => (
@@ -227,7 +254,10 @@ export function HoldemActions({
                   key={label}
                   type="button"
                   aria-pressed={on}
-                  onClick={() => setK(kk)}
+                  onClick={() => {
+                    sfx.press("ui");
+                    setK(kk);
+                  }}
                   className="pk-preset"
                 >
                   {label}
@@ -267,7 +297,10 @@ export function HoldemActions({
           <button
             type="button"
             disabled={busy}
-            onClick={() => onAct({ a: "fold" })}
+            onClick={() => {
+              sfx.press("die");
+              onAct({ a: "fold" });
+            }}
             className={`${big} pk-btn-fold`}
           >
             <span className="text-[1.05em]">폴드</span>
@@ -276,7 +309,10 @@ export function HoldemActions({
         <button
           type="button"
           disabled={busy}
-          onClick={() => onAct({ a: lg.canCheck ? "check" : "call" })}
+          onClick={() => {
+            sfx.press(lg.canCheck ? "check" : "call");
+            onAct({ a: lg.canCheck ? "check" : "call" });
+          }}
           className={`${big} pk-btn-call`}
         >
           <span className="text-[1.05em]">{lg.canCheck ? "체크" : callAll ? "올인 콜" : "콜"}</span>
@@ -286,7 +322,10 @@ export function HoldemActions({
           <button
             type="button"
             disabled={busy}
-            onClick={() => onAct({ a: "raise", amt: amount })}
+            onClick={() => {
+              sfx.press("bet");
+              onAct({ a: "raise", amt: amount });
+            }}
             className={`${big} ${allIn ? "pk-btn-allin" : "pk-btn-raise"}`}
           >
             <span className="text-[1.05em]">

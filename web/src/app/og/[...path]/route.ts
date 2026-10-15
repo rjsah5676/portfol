@@ -1,7 +1,11 @@
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { SITE_NAME } from "@/lib/seo";
+import { SHOT_KEYS, shotFile } from "@/lib/og/shots";
 import { renderCard } from "@/lib/og/card";
 
 // 링크 공유 미리보기 이미지: /og/<페이지 경로>.png
+//   /og/games/fight.jpg → 실제 게임 화면 사진 (lib/og/shots.ts 에 있는 페이지만, web/assets/og/shots)
 //   /og/index.png → 홈,  /og/games/chess.png → /games/chess/,  /og/study/<글 id>.png → 그 글
 // 그 페이지를 이 서버에서 직접 읽어 제목·설명을 뽑아 그림 → 실제로 있는 페이지의 이미지만 만들어지고,
 // 글 제목을 고치면 이미지도 따라 바뀜. 없는 페이지면 404.
@@ -46,10 +50,10 @@ async function readPage(pagePath: string, req: Request): Promise<string | null> 
   return null;
 }
 
-const png = (data: ArrayBuffer) =>
+const png = (data: ArrayBuffer | Uint8Array<ArrayBuffer>, type = "image/png") =>
   new Response(data, {
     headers: {
-      "Content-Type": "image/png",
+      "Content-Type": type,
       // 미리보기를 가져가는 쪽(메신저·SNS)과 CDN이 하루 정도 들고 있어도 됨
       "Cache-Control": "public, max-age=3600, s-maxage=86400, stale-while-revalidate=604800",
     },
@@ -58,6 +62,16 @@ const png = (data: ArrayBuffer) =>
 export async function GET(req: Request, ctx: { params: Promise<{ path: string[] }> }) {
   const { path } = await ctx.params;
   const last = path[path.length - 1] ?? "";
+  if (last.endsWith(".jpg")) {
+    const key = [...path.slice(0, -1), last.slice(0, -4)].join("/");
+    if (!SHOT_KEYS.has(key)) return new Response(null, { status: 404 });
+    try {
+      const buf = await readFile(join(process.cwd(), "assets/og/shots", shotFile(key)));
+      return png(new Uint8Array(buf), "image/jpeg");
+    } catch {
+      return new Response(null, { status: 404 });
+    }
+  }
   if (!last.endsWith(".png")) return new Response(null, { status: 404 });
   const segments = [...path.slice(0, -1), last.slice(0, -4)];
   if (segments.length > 6 || !segments.every((s) => SEGMENT.test(s)))

@@ -2,6 +2,7 @@ import Link from "next/link";
 import gitImg from "../img/footer/github.png";
 import FooterWidgets from "./FooterWidgets";
 import ContactButton from "./ContactButton";
+import InquiryButton from "./InquiryButton";
 
 export default function Footer() {
   return (
@@ -24,10 +25,15 @@ export default function Footer() {
         <Link href="/guest" className="transition-colors hover:text-white">
           guest box
         </Link>
+        <Link href="/faq" className="transition-colors hover:text-white">
+          faq
+        </Link>
       </nav>
-      <div className="flex items-center justify-center gap-2 font-mono text-xs text-white/40">
+      <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1.5 px-4 font-mono text-xs text-white/40 [&>*]:whitespace-nowrap">
         {/* 모바일에서 오른쪽 아래 플로팅 버튼에 가리지 않게 맨 앞에 둠 */}
         <ContactButton />
+        <span className="text-white/20">·</span>
+        <InquiryButton />
         <span className="text-white/20">·</span>
         <a
           href="https://github.com/rjsah5676"

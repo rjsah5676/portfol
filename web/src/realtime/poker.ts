@@ -4,8 +4,10 @@ import type { ApiError } from "@/lib/api/errors";
 import type { CharId, Emote, GameKind, SkinId, TierId } from "@/lib/poker/rules";
 import type {
   ChatMsg,
+  DevOpts,
   HoldemAction,
   LobbyTable,
+  MailItem,
   MyHand,
   MyPage,
   BuyRankRow,
@@ -94,6 +96,18 @@ export const createTable = (o: {
 /** 방 설정 (바로 입장 허용 · 봇 참가 가능): 값을 안 주면 읽기만. 바꾸는 건 방장만 */
 export const roomOpts = (id: string, set?: { quick?: boolean; bots?: boolean }) =>
   rpc<{ owner: boolean; quick: boolean; bots: boolean }>("poker.roomOpts", { id, ...set });
+/** 관리자 테스트 방 열기 (돌려준 id 로 sit) */
+export const devCreate = (o: { game: GameKind; tier: TierId; bots: CharId[] } & Partial<DevOpts>) =>
+  rpc<string>("poker.devCreate", o);
+/** 테스트 방 바꾸기 */
+export const devSet = (
+  id: string,
+  o: Partial<DevOpts> & { refill?: boolean; addBot?: CharId; removeSeat?: number; next?: boolean }
+) => rpc<DevOpts>("poker.devSet", { id, ...o });
+/** 우편함 (최근 것부터) */
+export const getMail = () => rpc<MailItem[]>("poker.mail");
+/** 우편 받기 (id 없으면 전부) */
+export const claimMail = (id?: string) => rpc<{ got: number; wallet: Wallet | null }>("poker.mailClaim", { id });
 export const sit = (id: string, password?: string) =>
   rpc<{ seat: number }>("poker.sit", { id, password });
 export const leave = (id: string) => rpc("poker.leave", { id });
@@ -117,6 +131,8 @@ export const revive = () => rpc<Wallet>("poker.revive");
 export const buySkin = (skin: SkinId) => rpc<Wallet>("poker.buy", { skin });
 /** 상점: 사야 쓰는 캐릭터 사기 (사면 바로 그 캐릭터로) */
 export const buyChar = (char: CharId) => rpc<Wallet>("poker.buyChar", { char });
+/** 환전: 칩 ↔ 포인트 (units 칸 — 1칸 = lib/points.ts 의 POKER_EXCHANGE) */
+export const exchange = (dir: "toPoints" | "toChips", units: number) => rpc<Wallet>("poker.exchange", { dir, units });
 export const wearSkin = (char: CharId, skin: SkinId | null) => rpc<Wallet>("poker.wear", { char, skin });
 
 /** 자금 순위 (한 판이라도 친 회원, 보유금액 순) */

@@ -5,6 +5,7 @@
  */
 import type { CSSProperties, ReactNode } from "react";
 import { CHARS } from "@/lib/fight/chars";
+import { faceUrl } from "@/lib/fight/skins";
 import { METER_MAX, ROUND_SEC, WINS_NEEDED } from "@/lib/fight/sim";
 import { KeyCap } from "./KeyCap";
 
@@ -119,11 +120,14 @@ export function PlayerTop({
   hp,
   tag,
   right,
+  skin,
 }: {
   ch: number;
   hp: number;
   tag: string;
   right?: boolean;
+  /** 착용 스킨 (얼굴 그림) */
+  skin?: string | null;
 }) {
   const c = CHARS[ch];
   const mir: CSSProperties = right ? { transform: "scaleX(-1)" } : {};
@@ -216,7 +220,7 @@ export function PlayerTop({
         inner={{ background: `radial-gradient(circle at 40% 35%, ${c.color}, #1A0B2A 75%)` }}
       >
         <img
-          src={`/fight/art/${c.id}-face.webp`}
+          src={faceUrl(ch, skin)}
           alt={c.name}
           style={{
             width: "100%",
@@ -700,7 +704,7 @@ export function Combo({ n, right }: { n: number; right?: boolean }) {
 }
 
 /** 최종 승리: 이긴 캐릭터 얼굴 + 도발 대사 */
-export function WinQuote({ ch, right }: { ch: number; right?: boolean }) {
+export function WinQuote({ ch, right, skin }: { ch: number; right?: boolean; skin?: string | null }) {
   const c = CHARS[ch];
   return (
     <div
@@ -722,7 +726,7 @@ export function WinQuote({ ch, right }: { ch: number; right?: boolean }) {
         inner={{ background: `radial-gradient(circle at 40% 35%, ${c.color}, #1A0B2A 75%)` }}
       >
         <img
-          src={`/fight/art/${c.id}-face.webp`}
+          src={faceUrl(ch, skin)}
           alt=""
           style={{ width: "100%", height: "100%", objectFit: "cover" }}
         />

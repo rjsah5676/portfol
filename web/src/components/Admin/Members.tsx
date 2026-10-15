@@ -1,5 +1,6 @@
 "use client";
 
+import { POINT, fmtPoint, pointReason, type PointLogRow } from "@/lib/points";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Avatar from "@/components/Account/Avatar";
 import { useModal } from "@/components/Modal/ModalProvider";
@@ -7,11 +8,13 @@ import {
   clearUserAvatar,
   listUsers,
   removeUser,
-  updateUser,
+  updateUser, getUserPointLog,
   type AdminUser,
+  type MemberSort,
 } from "@/firestore/adminData";
 import { refreshBadges } from "@/lib/badges";
 import { ago, BOARD_LABEL } from "./Overview";
+import MemberExtra, { banActive } from "./MemberExtra";
 
 /*
  * 회원 관리: 별명·이메일로 찾기 → 줄을 누르면 펼쳐서 별명·꾸밈 바꾸기, 올린 사진 지우기, 회원 지우기.
@@ -25,6 +28,15 @@ const dangerBtn =
   "cursor-pointer rounded-full border border-red-400/30 px-3 py-1.5 font-mono text-xs whitespace-nowrap text-red-300/90 transition-colors hover:border-red-400/70 hover:text-red-200 disabled:cursor-default disabled:opacity-35";
 const input =
   "min-w-0 rounded-full border border-white/10 bg-[#121212] px-4 py-2 text-sm text-white placeholder:text-white/30 focus:border-[#6C63FF]/60 focus:outline-none";
+
+/** 목록 정렬 */
+const SORTS: { key: MemberSort; label: string }[] = [
+  { key: "new", label: "새로 가입한 순" },
+  { key: "visit", label: "최근 방문 순" },
+  { key: "visits", label: "방문 많은 순" },
+  { key: "points", label: "GP 많은 순" },
+  { key: "banned", label: "정지된 회원" },
+];
 
 /** 꾸밈으로 자주 쓸 만한 것 */
 const BADGES = ["👑", "⭐", "🔥", "💎", "🎮", "🐛", "🍈", "🥇"];
@@ -58,19 +70,34 @@ function Detail({
   const [nick, setNick] = useState(user.nick);
   const [badge, setBadge] = useState(user.badge ?? "");
   const [money, setMoney] = useState(String(user.money ?? 0));
+  const [pts, setPts] = useState(String(user.points ?? 0));
+  const [ptLog, setPtLog] = useState<PointLogRow[] | null>(null);
   const [records, setRecords] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
   const moneyNum = Math.max(0, Math.floor(Number(money.replaceAll(",", "")) || 0));
-  const dirty = nick.trim() !== user.nick || badge.trim() !== (user.badge ?? "") || moneyNum !== (user.money ?? 0);
+  const ptsNum = Math.max(0, Math.floor(Number(pts.replaceAll(",", "")) || 0));
+  const dirty =
+    nick.trim() !== user.nick ||
+    badge.trim() !== (user.badge ?? "") ||
+    moneyNum !== (user.money ?? 0) ||
+    ptsNum !== (user.points ?? 0);
 
   const save = async () => {
     if (busy || !dirty) return;
     setBusy(true);
     setError("");
     try {
-      onSaved(await updateUser(user.uid, { nick: nick.trim(), badge: badge.trim() || null, money: moneyNum }));
+      onSaved(
+        await updateUser(user.uid, {
+          nick: nick.trim(),
+          badge: badge.trim() || null,
+          money: moneyNum,
+          ...(ptsNum !== (user.points ?? 0) && { points: ptsNum }),
+        })
+      );
+      if (ptLog) setPtLog(await getUserPointLog(user.uid).catch(() => ptLog));
       refreshBadges(true); // 랭킹·방명록의 이름 옆 꾸밈도 바로 바뀌게
     } catch (e) {
       setError(e instanceof Error ? e.message : "저장하지 못했어요.");
@@ -124,7 +151,7 @@ function Detail({
 
   return (
     <div className="grid gap-6 border-t border-white/[0.07] bg-[#17181D] px-4 py-5 md:grid-cols-[1.2fr_1fr] md:px-5">
-      <div>
+      <div className="min-w-0">
         <form
           className="flex flex-col gap-3"
           onSubmit={(e) => {
@@ -194,9 +221,54 @@ function Detail({
             />
             <span className={`shrink-0 text-xs text-white/40 ${KR}`}>{moneyNum.toLocaleString()}칩</span>
           </label>
+          <label className="flex items-center gap-3">
+            <span className={`w-10 shrink-0 text-xs text-white/45 ${KR}`}>{POINT.name}</span>
+            <input
+              value={pts}
+              inputMode="numeric"
+              autoComplete="off"
+              spellCheck={false}
+              aria-label={POINT.name}
+              onChange={(e) => {
+                setPts(e.target.value.replace(/[^\d,]/g, ""));
+                setError("");
+              }}
+              className={`${input} flex-1 font-mono`}
+            />
+            <span className={`shrink-0 text-xs text-white/40 ${KR}`}>{fmtPoint(ptsNum)}</span>
+          </label>
+          <div className={`text-xs text-white/45 ${KR}`}>
+            <button
+              type="button"
+              className="cursor-pointer underline underline-offset-2 hover:text-white"
+              onClick={() =>
+                ptLog ? setPtLog(null) : void getUserPointLog(user.uid).then(setPtLog).catch(() => setPtLog([]))
+              }
+            >
+              {ptLog ? `${POINT.name} 내역 접기` : `${POINT.name} 내역 보기`}
+            </button>
+            {ptLog && (
+              <ul className="mt-1.5 max-h-48 overflow-y-auto rounded-lg bg-white/[0.03] px-2 py-1">
+                {!ptLog.length && <li className="py-1 text-white/30">내역이 없어요.</li>}
+                {ptLog.map((r, i) => (
+                  <li key={i} className="flex gap-2 py-0.5">
+                    <span className="w-24 shrink-0 font-mono text-white/30">
+                      {new Date(r.at).toLocaleString("ko-KR", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                    </span>
+                    <span className="min-w-0 flex-1 truncate">{pointReason(r)}</span>
+                    <span className={`font-mono ${r.delta >= 0 ? "text-[#FDE68A]" : "text-white/45"}`}>
+                      {r.delta >= 0 ? "+" : ""}
+                      {fmtPoint(r.delta)}
+                    </span>
+                    {r.bal !== undefined && <span className="w-16 text-right font-mono text-white/30">{fmtPoint(r.bal)}</span>}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
           <p className={`text-xs ${error ? "text-red-400" : "text-white/35"} ${KR}`}>
             {error ||
-              "별명을 바꾸면 랭킹·방명록 이름도 같이 바뀌어요. 꾸밈은 별명 앞에 붙어요(8자까지). 칩은 테이블 밖일 때 바로, 앉아 있으면 다음 판부터 반영돼요."}
+              `별명을 바꾸면 랭킹·방명록 이름도 같이 바뀌어요. 꾸밈은 별명 앞에 붙어요(8자까지). 칩은 테이블 밖일 때 바로, 앉아 있으면 다음 판부터 반영돼요. ${POINT.name}는 바꾸면 회원의 내역에 '운영자 조정'으로 남아요.`}
           </p>
           <div className="flex flex-wrap items-center gap-2">
             <button
@@ -267,6 +339,7 @@ function Detail({
         ) : (
           <p className={`mt-4 text-xs text-white/30 ${KR}`}>아직 게임 기록이 없어요.</p>
         )}
+        <MemberExtra uid={user.uid} nick={user.nick} onBan={(ban) => onSaved({ ...user, ban: ban ?? undefined })} />
       </div>
     </div>
   );
@@ -279,15 +352,16 @@ export default function Members() {
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
+  const [sort, setSort] = useState<MemberSort>("new");
   const seq = useRef(0);
 
-  const load = useCallback(async (query: string) => {
+  const load = useCallback(async (query: string, sort: MemberSort, skip = 0) => {
     const mine = ++seq.current;
     setLoading(true);
     try {
-      const res = await listUsers(query.trim());
+      const res = await listUsers(query.trim(), sort, skip);
       if (mine !== seq.current) return; // 그 사이에 다른 검색이 나감
-      setItems(res.items);
+      setItems((cur) => (skip ? [...cur, ...res.items.filter((u) => !cur.some((x) => x.uid === u.uid))] : res.items));
       setTotal(res.total);
       setFailed(false);
     } catch (e) {
@@ -300,9 +374,9 @@ export default function Members() {
 
   // 입력이 멈추면 찾기
   useEffect(() => {
-    const id = setTimeout(() => load(q), q ? 250 : 0);
+    const id = setTimeout(() => load(q, sort), q ? 250 : 0);
     return () => clearTimeout(id);
-  }, [q, load]);
+  }, [q, sort, load]);
 
   return (
     <div>
@@ -313,24 +387,40 @@ export default function Members() {
           placeholder="별명·이메일로 찾기"
           className={`${input} flex-1 bg-[#1C1E24] ${KR}`}
         />
-        <button type="button" onClick={() => load(q)} disabled={loading} className={btn}>
+        <button type="button" onClick={() => load(q, sort)} disabled={loading} className={btn}>
           새로고침
         </button>
       </div>
+      <div className="mb-3 flex flex-wrap gap-1.5">
+        {SORTS.map((x) => (
+          <button
+            key={x.key}
+            type="button"
+            onClick={() => setSort(x.key)}
+            className={`cursor-pointer rounded-full border px-3 py-1 text-xs whitespace-nowrap transition-colors ${KR} ${
+              sort === x.key
+                ? "border-[#6C63FF] bg-[#6C63FF]/15 text-white"
+                : "border-white/10 text-white/50 hover:border-white/30 hover:text-white/80"
+            }`}
+          >
+            {x.label}
+          </button>
+        ))}
+      </div>
       <p className="mb-3 font-mono text-[11px] text-white/30">
         {loading ? "…" : failed ? "불러오지 못했어요" : `${total.toLocaleString()}명`}
-        {!loading && !failed && items.length < total && ` · 최근 ${items.length}명만 보여요 (찾기로 좁혀주세요)`}
+        {!loading && !failed && items.length < total && ` · ${items.length}명 보는 중`}
       </p>
 
       <div className="overflow-hidden rounded-2xl border border-white/10 bg-[#1C1E24]">
         <div
-          className={`hidden grid-cols-[minmax(0,1.3fr)_minmax(0,1.4fr)_5rem_4rem_4rem_5.5rem] gap-3 border-b border-white/10 px-5 py-2.5 text-[11px] text-white/35 md:grid ${KR}`}
+          className={`hidden grid-cols-[minmax(0,1.3fr)_minmax(0,1.4fr)_5rem_4rem_5.5rem_5.5rem] gap-3 border-b border-white/10 px-5 py-2.5 text-[11px] text-white/35 md:grid ${KR}`}
         >
           <span>별명</span>
           <span>이메일</span>
           <span>가입</span>
           <span className="text-right">방문</span>
-          <span className="text-right">게임</span>
+          <span className="text-right">{POINT.name}</span>
           <span className="text-right">마지막 방문</span>
         </div>
         {items.length === 0 ? (
@@ -347,7 +437,7 @@ export default function Members() {
                     type="button"
                     aria-expanded={open}
                     onClick={() => setOpenId(open ? null : u.uid)}
-                    className={`grid w-full cursor-pointer grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-4 py-3 text-left transition-colors md:grid-cols-[minmax(0,1.3fr)_minmax(0,1.4fr)_5rem_4rem_4rem_5.5rem] md:px-5 ${
+                    className={`grid w-full cursor-pointer grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-4 py-3 text-left transition-colors md:grid-cols-[minmax(0,1.3fr)_minmax(0,1.4fr)_5rem_4rem_5.5rem_5.5rem] md:px-5 ${
                       open ? "bg-white/[0.04]" : "hover:bg-white/[0.03]"
                     }`}
                   >
@@ -357,6 +447,9 @@ export default function Members() {
                         <span className={`block truncate text-sm text-white/90 ${KR}`}>
                           {u.badge && <span className="mr-1">{u.badge}</span>}
                           {u.nick}
+                          {banActive(u.ban) && (
+                            <span className="ml-1.5 rounded-full border border-red-400/40 px-1.5 text-[10px] text-red-300">정지</span>
+                          )}
                         </span>
                         <span className="block truncate font-mono text-[11px] text-white/30 md:hidden">
                           {u.email}
@@ -372,8 +465,8 @@ export default function Members() {
                     <span className="hidden text-right font-mono text-xs text-white/75 tabular-nums md:block">
                       {u.visits.toLocaleString()}
                     </span>
-                    <span className="hidden text-right font-mono text-xs text-white/75 tabular-nums md:block">
-                      {u.plays.toLocaleString()}
+                    <span className="hidden text-right font-mono text-xs text-[#FDE68A]/80 tabular-nums md:block">
+                      {(u.points ?? 0).toLocaleString()}
                     </span>
                     <span className="text-right font-mono text-xs text-white/45">
                       {u.lastVisitAt ? ago(u.lastVisitAt) : "—"}
@@ -397,6 +490,16 @@ export default function Members() {
           </ul>
         )}
       </div>
+      {items.length < total && !failed && (
+        <button
+          type="button"
+          disabled={loading}
+          onClick={() => void load(q, sort, items.length)}
+          className={`mt-3 w-full cursor-pointer rounded-full border border-white/15 py-2 text-xs text-white/60 hover:border-[#6C63FF]/60 hover:text-white disabled:opacity-40 ${KR}`}
+        >
+          {loading ? "불러오는 중…" : `더 보기 (${(total - items.length).toLocaleString()}명 남음)`}
+        </button>
+      )}
     </div>
   );
 }

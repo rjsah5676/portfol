@@ -34,6 +34,9 @@ const SIZE = { sm: "max-w-sm", md: "max-w-md", lg: "max-w-xl" } as const;
  * 뒤로가기 처리: 열릴 때 같은 URL로 히스토리를 하나 쌓고(pushState), popstate가 오면 닫음.
  * 버튼 등으로 닫을 땐 쌓아둔 히스토리를 history.back()으로 소비해서 뒤로가기 한 번이 낭비되지 않게 함.
  * Next App Router는 window.history.pushState를 패치해서 내부 상태를 같이 복사하므로 라우터와 충돌 없음.
+ *
+ * 제목 · 닫기(×)는 위에 고정하고 내용만 스크롤. 폰(아래에서 올라오는 시트)에서는 위쪽 손잡이 · 제목을 잡거나,
+ * 내용이 맨 위까지 올라간 상태에서 아래로 끌면 시트가 따라 내려오고, 충분히 끌면 닫힘.
  */
 export default function Modal({
   open,
@@ -48,6 +51,8 @@ export default function Modal({
 }: ModalProps) {
   const [mounted, setMounted] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const headRef = useRef<HTMLDivElement>(null);
   const titleId = useId();
   const onCloseRef = useRef(onClose);
 
@@ -107,6 +112,68 @@ export default function Modal({
     };
   }, [open, initialFocusRef]);
 
+  // 폰: 아래로 끌어서 닫기
+  useEffect(() => {
+    if (!open || !mounted) return;
+    const panel = panelRef.current;
+    if (!panel) return;
+    let y0 = 0;
+    let t0 = 0;
+    let dy = 0;
+    let state: "idle" | "maybe" | "drag" | "no" = "idle";
+    const sheet = () => window.matchMedia("(max-width: 639.98px)").matches;
+    const set = (v: number, anim: boolean) => {
+      panel.style.transition = anim ? "transform 200ms ease-out" : "none";
+      panel.style.transform = v ? `translateY(${v}px)` : "";
+    };
+    const start = (e: TouchEvent) => {
+      if (!sheet() || e.touches.length !== 1) return;
+      const fromHead = !!headRef.current?.contains(e.target as Node);
+      const atTop = (bodyRef.current?.scrollTop ?? 0) <= 0;
+      // 가로로 넘기는 것(카드 넘김 등) · 입력 칸은 건드리지 않음
+      if ((e.target as HTMLElement).closest("input,textarea,select,[data-no-sheet-drag]")) return;
+      state = fromHead || atTop ? "maybe" : "no";
+      y0 = e.touches[0].clientY;
+      t0 = performance.now();
+      dy = 0;
+    };
+    const move = (e: TouchEvent) => {
+      if (state === "idle" || state === "no") return;
+      const d = e.touches[0].clientY - y0;
+      if (state === "maybe") {
+        if (d > 6) state = "drag";
+        else if (d < -6) {
+          state = "no";
+          return;
+        } else return;
+      }
+      dy = Math.max(0, d);
+      e.preventDefault();
+      set(dy, false);
+    };
+    const end = () => {
+      if (state === "drag") {
+        const v = dy / Math.max(1, performance.now() - t0);
+        if (dy > Math.min(160, panel.offsetHeight * 0.3) || v > 0.6) {
+          set(panel.offsetHeight + 40, true);
+          setTimeout(() => onCloseRef.current("backdrop"), 180);
+        } else set(0, true);
+      }
+      state = "idle";
+    };
+    panel.addEventListener("touchstart", start, { passive: true });
+    panel.addEventListener("touchmove", move, { passive: false });
+    panel.addEventListener("touchend", end);
+    panel.addEventListener("touchcancel", end);
+    return () => {
+      panel.removeEventListener("touchstart", start);
+      panel.removeEventListener("touchmove", move);
+      panel.removeEventListener("touchend", end);
+      panel.removeEventListener("touchcancel", end);
+      panel.style.transform = "";
+    };
+  }, [open, mounted]);
+
   if (!mounted || !open) return null;
 
   return createPortal(
@@ -123,32 +190,43 @@ export default function Modal({
         aria-modal="true"
         aria-labelledby={title ? titleId : undefined}
         tabIndex={-1}
-        className={`thin-scroll modal-panel relative max-h-[92dvh] w-full ${SIZE[size]} overflow-x-hidden overflow-y-auto overscroll-contain rounded-t-2xl border border-white/10 bg-[#1C1E24] px-4 pt-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] break-words shadow-2xl outline-none sm:max-h-[88dvh] sm:rounded-2xl sm:p-7`}
+        className={`modal-panel relative flex max-h-[92dvh] w-full ${SIZE[size]} flex-col overflow-hidden rounded-t-2xl border border-white/10 bg-[#1C1E24] break-words shadow-2xl outline-none sm:max-h-[88dvh] sm:rounded-2xl`}
       >
-        {closeButton && (
-          <button
-            type="button"
-            aria-label="닫기"
-            onClick={() => onCloseRef.current("backdrop")}
-            className="absolute top-4 right-4 flex h-8 w-8 cursor-pointer items-center justify-center rounded-full text-lg text-white/40 transition-colors hover:bg-white/10 hover:text-white"
-          >
-            ×
-          </button>
-        )}
-        {title && (
-          <h2
-            id={titleId}
-            className={`mb-3 font-mono text-base font-medium text-white ${closeButton ? "pr-8" : ""}`}
-          >
-            {title}
-          </h2>
-        )}
-        {children && (
-          <div className="font-['Nanum_Gothic',sans-serif] text-sm leading-relaxed break-keep text-white/70">
-            {children}
-          </div>
-        )}
-        {footer && <div className="mt-6 flex justify-end gap-2">{footer}</div>}
+        {/* 위: 손잡이(폰) · 제목 · 닫기 — 스크롤해도 그대로 */}
+        <div ref={headRef} className="relative shrink-0 touch-none px-4 pt-2.5 sm:px-7 sm:pt-6">
+          <div className="mx-auto mb-2.5 h-1 w-10 rounded-full bg-white/20 sm:hidden" aria-hidden />
+          {closeButton && (
+            <button
+              type="button"
+              aria-label="닫기"
+              onClick={() => onCloseRef.current("backdrop")}
+              className="absolute top-3 right-3 flex h-9 w-9 cursor-pointer items-center justify-center rounded-full text-xl text-white/45 transition-colors hover:bg-white/10 hover:text-white sm:top-4 sm:right-4"
+            >
+              ×
+            </button>
+          )}
+          {title ? (
+            <h2
+              id={titleId}
+              className={`pb-3 font-mono text-base font-medium text-white ${closeButton ? "pr-10" : ""}`}
+            >
+              {title}
+            </h2>
+          ) : (
+            closeButton && <div className="h-6" />
+          )}
+        </div>
+        <div
+          ref={bodyRef}
+          className="thin-scroll min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain px-4 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:px-7 sm:pb-7"
+        >
+          {children && (
+            <div className="font-['Nanum_Gothic',sans-serif] text-sm leading-relaxed break-keep text-white/70">
+              {children}
+            </div>
+          )}
+          {footer && <div className="mt-6 flex justify-end gap-2">{footer}</div>}
+        </div>
       </div>
     </div>,
     document.body

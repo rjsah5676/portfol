@@ -10,6 +10,7 @@ import imgRhythm from "@/img/menu/rhythm.jpg";
 import imgSketch from "@/img/menu/sketch.jpg";
 import imgPoker from "@/img/menu/poker.jpg";
 import imgVirus from "@/img/menu/virus.jpg";
+import imgDefense from "@/img/menu/defense.jpg";
 import imgLadder from "@/img/menu/ladder.jpg";
 import imgRoulette from "@/img/menu/roulette.jpg";
 import imgCalorie from "@/img/menu/calorie.jpg";
@@ -40,6 +41,8 @@ export interface NavGroup {
   href: string;
   title: string;
   desc: string;
+  /** 설명 아래 해시태그 줄 ("#" 없이) */
+  tags?: string[];
   items: NavMenuItem[];
 }
 
@@ -73,7 +76,8 @@ export const NAV_GROUPS: NavGroup[] = [
     label: "games",
     href: "/games",
     title: "Games",
-    desc: "직접 만든 브라우저 게임. 대부분 랭킹이 있습니다.",
+    desc: "어디서든 즐길 수 있는 웹 게임 공간. 지루함을 달래보세요.",
+    tags: ["월루용 게임", "랭킹게임", "웹 게임", "무료 게임", "설치 없이", "실시간 대전"],
     items: [
       {
         href: "/games/rhythm",
@@ -100,12 +104,19 @@ export const NAV_GROUPS: NavGroup[] = [
         featured: true,
       },
       {
+        href: "/games/defense",
+        image: imgDefense,
+        label: "PIXEL LUCKY DEFENSE",
+        desc: "소환 · 합성으로 막는 운빨 랜덤 디펜스, 랭킹 · 멀티",
+        icon: "👾",
+        featured: true,
+      },
+      {
         href: "/games/sketch",
         image: imgSketch,
-        label: "스케치 퀴즈",
-        desc: "최대 8명, 한 명이 그리고 나머지가 맞히기",
+        label: "DOODLE PARTY",
+        desc: "그림 맞히기 · 가짜 화가 · 그림 릴레이, 최대 8명 그림 파티게임",
         icon: "🎨",
-        featured: true,
       },
       {
         href: "/games/virus",

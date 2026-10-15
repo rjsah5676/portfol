@@ -61,11 +61,18 @@ const TIER: Record<Difficulty, number> = {
 const TRILL_W: Partial<Record<Difficulty, number>> = {
   easy: 0.05,
   normal: 0.08,
-  hard: 0.3,
-  expert: 0.7,
-  nightmare: 0.08,
-  explus: 0.08,
+  hard: 0,
+  expert: 0.15,
+  nightmare: 0.03,
+  explus: 0.03,
 };
+
+/** 같은 레인으로 한 칸 걸러 돌아오는(A B A) 모양 배율 — 매우 어려움↑.
+ *  osu 랭크 매우 어려움·나이트메어급은 빠른 단노트 셋 중 A B A가 14~16%인데 우리는 29%: 같은 레인 부담이 커서
+ *  같은 레벨에 노트가 osu보다 15% 적었음 (초당 8.3 vs 9.4~10.2) */
+const ABA_W: Partial<Record<Difficulty, number>> = { expert: 0.4, nightmare: 0.4, explus: 0.4 };
+/** 네 레인을 다 돌고 돌아오는 모양(롤·벌림) 배율 — 매우 어려움↑ */
+const ROLL_W: Partial<Record<Difficulty, number>> = { expert: 1.5, nightmare: 1.5, explus: 1.5 };
 
 /** 기본 모양 — 좌우 반전·역방향은 아래에서 자동으로 만든다 */
 const BASE: Pattern[] = [
@@ -77,8 +84,18 @@ const BASE: Pattern[] = [
     w: 2.5,
     minLen: 6,
     tier: 0,
+    wBy: { expert: 0.6, nightmare: 0.6, explus: 0.6 },
   },
-  { name: "stair3", family: "stair3", steps: [0, 1, 2, 1], dir: 1, w: 1.5, minLen: 4, tier: 0 },
+  {
+    name: "stair3",
+    family: "stair3",
+    steps: [0, 1, 2, 1],
+    dir: 1,
+    w: 1.5,
+    minLen: 4,
+    tier: 0,
+    wBy: ABA_W,
+  },
   {
     name: "s-stair",
     family: "stair3",
@@ -87,10 +104,19 @@ const BASE: Pattern[] = [
     w: 1.8,
     minLen: 6,
     tier: 0,
-    wBy: { easy: 0.3, normal: 0.4, hard: 0.6 },
+    wBy: { easy: 0.3, normal: 0.4, hard: 0.6, ...ABA_W },
   },
-  { name: "trill", family: "trill", steps: [0, 1, 3, 2], w: 2, minLen: 4, tier: 0 },
-  { name: "split", family: "split", steps: [0, 2, 1, 3], dir: 1, w: 1.3, minLen: 4, tier: 0 },
+  { name: "trill", family: "trill", steps: [0, 1, 3, 2], w: 2, minLen: 4, tier: 0, wBy: ROLL_W },
+  {
+    name: "split",
+    family: "split",
+    steps: [0, 2, 1, 3],
+    dir: 1,
+    w: 1.3,
+    minLen: 4,
+    tier: 0,
+    wBy: ROLL_W,
+  },
   // 네 레인을 다 쓰는 긴 모양 (한 바퀴 8칸): 같은 레인이 2칸 안에 안 돌아옴
   { name: "w", family: "wave", steps: [0, 1, 0, 2, 1, 3, 2, 3], w: 1.4, minLen: 8, tier: 1 },
   {
@@ -101,8 +127,17 @@ const BASE: Pattern[] = [
     w: 1.3,
     minLen: 8,
     tier: 1,
+    wBy: ABA_W,
   },
-  { name: "bounce", family: "split", steps: [0, 2, 1, 3, 2, 0, 3, 1], w: 1.2, minLen: 8, tier: 1 },
+  {
+    name: "bounce",
+    family: "split",
+    steps: [0, 2, 1, 3, 2, 0, 3, 1],
+    w: 1.2,
+    minLen: 8,
+    tier: 1,
+    wBy: ROLL_W,
+  },
   {
     name: "pendulum",
     family: "wave",
@@ -111,6 +146,7 @@ const BASE: Pattern[] = [
     w: 1.2,
     minLen: 6,
     tier: 1,
+    wBy: ROLL_W,
   },
   // 두 레인 트릴: 양손(벌림·안쪽·바깥)은 길어도 괜찮고, 한 손(D F)은 짧게만
   {
@@ -149,7 +185,7 @@ const BASE: Pattern[] = [
     minLen: 8,
     tier: 0,
     // 나이트메어·ULTIMA도 낮게: ABAB가 두 번 이어져 트릴 통계를 끌어올림 (osu 0.1%)
-    wBy: { easy: 0.1, normal: 0.15, hard: 0.4, nightmare: 0.25, explus: 0.25 },
+    wBy: { easy: 0.1, normal: 0.15, hard: 0, expert: 0.25, nightmare: 0.1, explus: 0.1 },
   },
   // 앵커: 한 레인을 축으로 (D F D J D K) — 8분 이상 간격에서
   {
@@ -160,7 +196,7 @@ const BASE: Pattern[] = [
     w: 1.3,
     minLen: 6,
     tier: 2,
-    wBy: { nightmare: 2, explus: 2 },
+    wBy: { expert: 0.4, nightmare: 0.8, explus: 0.8 },
   },
   {
     name: "anchor-in",
@@ -169,7 +205,7 @@ const BASE: Pattern[] = [
     w: 1.0,
     minLen: 6,
     tier: 2,
-    wBy: { nightmare: 2, explus: 2 },
+    wBy: { expert: 0.4, nightmare: 0.8, explus: 0.8 },
   },
   // 잭(같은 레인 두 번): 연타 간격을 넘는 느린 간격에서만 통과되므로 자연히 어려움↑에서만
   {

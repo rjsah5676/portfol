@@ -9,6 +9,9 @@ import { forfeit, newResult, onEnd, settle, type FightResult, type Outcome } fro
 import { BOT_MAX, createFightRating, type Margin } from "./fightRating";
 import { uniqueNickname } from "./poker/nicknames";
 import { botBuild, replayBot } from "./fightBot";
+import { createFightReplays } from "./fightReplays";
+import { CHARS } from "../../../web/src/lib/fight/chars";
+import { skinOf } from "../../../web/src/lib/fight/skins";
 
 /*
  * 픽셀 격투 온라인 대전
@@ -55,6 +58,8 @@ interface RoomState {
   pick: number;
   delay: number;
   maxRb: number;
+  /** 경기 시작 때 두 선수가 그 캐릭터에 착용한 스킨 ("" = 기본) — 서버가 회원 문서에서 확인 */
+  skins: [string, string];
 }
 interface ChatMsg {
   id: string;
@@ -179,7 +184,7 @@ const BOT_PLAY_MS = 12 * 60_000;
 /** 봇전 결과로 받는 입력 기록 최대 프레임 (3라운드 × 99초 + 연출, 넉넉히) */
 const BOT_MAX_FRAMES = 40_000;
 
-const emptyState = (): RoomState => ({ phase: "wait", match: "", chars: [0, 1], map: 0, pick: -1, delay: 2, maxRb: 10 });
+const emptyState = (): RoomState => ({ phase: "wait", match: "", chars: [0, 1], map: 0, pick: -1, delay: 2, maxRb: 10, skins: ["", ""] });
 
 const CHAT_KEEP = 100;
 const CHAT_SNAPSHOT = 40;
@@ -204,6 +209,7 @@ export interface FightOptions {
 
 export function registerFight({ gateway, users, db }: Deps, opts: FightOptions = {}) {
   const rating = createFightRating(db, users);
+  const replays = createFightReplays(db);
   const rooms = new Map<string, Room>();
   const emptyRoomTtl = opts.emptyRoomTtlMs ?? 30 * 60_000;
 
@@ -289,6 +295,7 @@ export function registerFight({ gateway, users, db }: Deps, opts: FightOptions =
   function record(room: Room, out: Outcome | "void" | null) {
     const r = room.result;
     if (!r || out === null || out === "void") return;
+    saveOnline(room, r, out);
     for (const seat of [0, 1] as const) {
       const uid = r.uids[seat];
       if (!uid) continue;
@@ -314,6 +321,35 @@ export function registerFight({ gateway, users, db }: Deps, opts: FightOptions =
       });
     }
   }
+  /**
+   * 온라인 경기 기록: 관전용으로 받던 두 선수 확정 입력 조각을 그대로 저장 (경기마다 한 번).
+   * 마지막 조각이 결과보다 늦게 올 수 있어서 조금 기다렸다 저장 — 조각 목록은 그 경기 것 그대로 붙잡아 둠
+   */
+  const savedResults = new WeakSet<FightResult>();
+  function saveOnline(room: Room, r: FightResult, out: Outcome) {
+    if (savedResults.has(r) || room.watchMatch !== r.match) return;
+    savedResults.add(r);
+    const lists = room.watch;
+    const st = room.state;
+    const doc = {
+      mode: (room.rank ? "rank" : "pvp") as "rank" | "pvp",
+      build: SERVER_BOT,
+      uids: [r.uids[0] || null, r.uids[1] || null] as [string | null, string | null],
+      chars: [st.chars[0], st.chars[1]] as [number, number],
+      map: st.map,
+      delay: st.delay,
+      out,
+    };
+    setTimeout(() => {
+      const chunks = lists.map((l) => [...l].sort((a, b) => a.f - b.f).map((c) => ({ f: c.f, i: c.i }))) as [
+        { f: number; i: string }[],
+        { f: number; i: string }[],
+      ];
+      if (!chunks[0].length && !chunks[1].length) return;
+      void replays.save({ ...doc, chunks });
+    }, 8000);
+  }
+
   /** 경기에 나선 자리 (그 경기 선수가 아니면 -1) */
   const resultSeat = (room: Room, uid: string, match: string) =>
     room.result && room.result.match === match ? room.result.uids.indexOf(uid) : -1;
@@ -599,11 +635,31 @@ export function registerFight({ gateway, users, db }: Deps, opts: FightOptions =
     delay: z.number().int().min(0).max(30),
     maxRb: z.number().int().min(0).max(120),
   });
-  gateway.rpc("fight.startMatch", (ctx, raw) => {
+  /** 그 회원이 그 캐릭터에 착용한 스킨 (가진 것만, 비회원 · 없으면 "") */
+  async function wornSkin(uid: string, ch: number): Promise<string> {
+    const id = CHARS[ch]?.id;
+    if (!uid || !id) return "";
+    const d = (await db.col("users").findOne({ _id: uid } as never, { projection: { fightWear: 1, "inv.fight": 1 } }).catch(() => null)) as {
+      fightWear?: Record<string, string>;
+      inv?: { fight?: string[] };
+    } | null;
+    const s = d?.fightWear?.[id];
+    return s && skinOf(s)?.ch === id && (d?.inv?.fight ?? []).includes(s) ? s : "";
+  }
+
+  gateway.rpc("fight.startMatch", async (ctx, raw) => {
     const o = startSchema.parse(raw);
     const { room, uid } = asPlayer(ctx, o.id);
     if (room.hostUid !== uid) throw forbidden();
     notWhileDraining();
+    if (!room.players[room.seats[0]] || !room.players[room.seats[1]]) throw bad("상대가 없습니다.");
+    // (경기 중에 다시 시작하는 것은 원래대로 허용 — 새 경기로 바뀜)
+    const before = room.state.match;
+    const seats = [room.seats[0], room.seats[1]];
+    const skins = (await Promise.all([0, 1].map((k) => wornSkin(seats[k], o.chars[k])))) as [string, string];
+    // 스킨을 읽는 사이에 다른 시작 요청이 먼저 처리됐거나 자리가 바뀌었으면 이번 건 버림
+    if (room.state.match !== before || room.seats[0] !== seats[0] || room.seats[1] !== seats[1])
+      throw bad("이미 경기가 시작됐어요.");
     if (!room.players[room.seats[0]] || !room.players[room.seats[1]]) throw bad("상대가 없습니다.");
     // 랭크전: 한 판만, 맵은 서버가 정한 것
     if (room.rank) {
@@ -616,7 +672,7 @@ export function registerFight({ gateway, users, db }: Deps, opts: FightOptions =
     const match = orderedId();
     room.watch = [[], []];
     room.watchMatch = match;
-    room.state = { ...room.state, phase: "play", match, chars: o.chars, map: o.map, delay: o.delay, maxRb: o.maxRb };
+    room.state = { ...room.state, phase: "play", match, chars: o.chars, map: o.map, delay: o.delay, maxRb: o.maxRb, skins };
     room.result = newResult(match, [room.seats[0], room.seats[1]]);
     changed(room);
     // 회원이면 온라인 경기 수를 세어 둠 (승패는 끝난 뒤 fight.result 로)
@@ -1008,6 +1064,18 @@ export function registerFight({ gateway, users, db }: Deps, opts: FightOptions =
       console.warn("[fight] 봇전 확인 실패", e);
       return null;
     });
+    void replays.save({
+      mode: "rankbot",
+      build: SERVER_BOT,
+      uids: [t.uid, null],
+      chars: [t.ch, t.botCh],
+      map: t.map,
+      seed: t.seed,
+      botR: t.opp.r,
+      out: res?.done ? (res.winner === 0 ? 0 : res.winner === 1 ? 1 : 2) : null,
+      inputs: [o.inputs, null],
+      frames: frames.length,
+    });
     if (!res) return finishBot(t, 2, null, "경기를 확인하지 못해 무승부로 처리됐어요");
     // 끝까지 안 간 기록(중간에 끊김) = 패배
     if (!res.done) return finishBot(t, 1, null, "경기 기록이 끝까지 오지 않아 패배로 처리됐어요");
@@ -1022,6 +1090,118 @@ export function registerFight({ gateway, users, db }: Deps, opts: FightOptions =
     if (t.stage === "play") void finishBot(t, 1, null);
     else if (t.stage === "found" || t.stage === "room") (clearTicket(t), setRank(t.uid, { s: "idle" }));
     return null;
+  });
+
+  // ── 스킨: 산 것(inv.fight, 상점은 points.buy) · 캐릭터마다 착용(fightWear.<캐릭터 id>) ──
+  const skinsWire = async (uid: string) => {
+    const d = (await db.col("users").findOne({ _id: uid } as never, { projection: { fightWear: 1, "inv.fight": 1 } })) as {
+      fightWear?: Record<string, string>;
+      inv?: { fight?: string[] };
+    } | null;
+    const owned = (d?.inv?.fight ?? []).filter((x) => skinOf(x));
+    const wear = Object.fromEntries(Object.entries(d?.fightWear ?? {}).filter(([, s]) => owned.includes(s)));
+    return { owned, wear };
+  };
+  gateway.rpc("fight.skins", async (ctx) => (ctx.nick ? skinsWire(ctx.uid) : null));
+  gateway.rpc("fight.wearSkin", async (ctx, raw) => {
+    const o = z.object({ ch: z.string().max(20), skin: z.string().max(40).nullable() }).parse(raw);
+    if (!ctx.nick) throw new AppError("MEMBERS_ONLY", "회원만 쓸 수 있어요.", 403);
+    if (!CHARS.some((c) => c.id === o.ch)) throw bad("없는 캐릭터예요.");
+    if (o.skin === null) await db.col("users").updateOne({ _id: ctx.uid } as never, { $unset: { [`fightWear.${o.ch}`]: "" } } as never);
+    else {
+      if (skinOf(o.skin)?.ch !== o.ch) throw bad("그 캐릭터의 스킨이 아니에요.");
+      const r = await db.col("users").updateOne({ _id: ctx.uid, "inv.fight": o.skin } as never, { $set: { [`fightWear.${o.ch}`]: o.skin } } as never);
+      if (!r.matchedCount) throw new AppError("NOT_OWNED", "아직 갖고 있지 않은 스킨이에요.", 409);
+    }
+    return skinsWire(ctx.uid);
+  });
+
+  // ── 업적용 기록: 튜토리얼 · AI 대전 단계 (web lib/points.ts fight.tut · fight.ai) ──
+  /** 튜토리얼을 끝까지 함 (회원만) */
+  gateway.rpc("fight.tutorialDone", async (ctx) => {
+    if (!ctx.nick) return null;
+    await db.col("users").updateOne({ _id: ctx.uid } as never, { $max: { "stats.fight.tut": 1 } } as never);
+    return null;
+  });
+  /**
+   * CPU 대전 기록 (이기든 지든 한 판마다) — 승패 확인 없이 저장만 (AI 학습 데이터). 비회원도 받음.
+   * 한 사람 15초에 한 번까지, 같은 빌드만 (다른 빌드면 다시 돌려도 같은 경기가 안 나옴)
+   */
+  const aiLogAt = new Map<string, number>();
+  gateway.rpc("fight.aiRecord", (ctx, raw) => {
+    const o = z
+      .object({
+        build: z.string().max(80),
+        level: z.number().int().min(0).max(replayBot.levelCount() - 1),
+        chars: z.tuple([z.number().int().min(0).max(99), z.number().int().min(0).max(99)]),
+        map: z.number().int().min(0).max(99),
+        seed: z.number().int().min(0).max(0xffffffff),
+        winner: z.union([z.literal(0), z.literal(1), z.literal(2)]),
+        inputs: z.array(z.tuple([z.number().int().min(0).max(0xffff), z.number().int().min(1).max(BOT_MAX_FRAMES)])).max(BOT_MAX_FRAMES),
+      })
+      .parse(raw);
+    if (o.build !== SERVER_BOT) return null;
+    const now = Date.now();
+    if (now - (aiLogAt.get(ctx.uid) ?? 0) < 15_000) return null;
+    aiLogAt.set(ctx.uid, now);
+    if (aiLogAt.size > 5000) for (const [k, v] of aiLogAt) if (now - v > 60_000) aiLogAt.delete(k);
+    const frames = o.inputs.reduce((s, [, n]) => s + n, 0);
+    if (frames < 60 || frames > BOT_MAX_FRAMES) return null;
+    void replays.save({
+      mode: "ai",
+      build: o.build,
+      uids: [ctx.uid, null],
+      guest: [!ctx.nick, false],
+      chars: o.chars,
+      map: o.map,
+      seed: o.seed,
+      level: o.level,
+      botR: replayBot.levelRating(o.level),
+      out: o.winner,
+      inputs: [o.inputs, null],
+      frames,
+    });
+    return null;
+  });
+
+  /** AI 대전 승리: 랭크전 봇전처럼 내 입력 기록을 서버가 같은 씨앗으로 다시 돌려 이겼는지 확인 → 이긴 가장 높은 단계 */
+  const aiChecking = new Set<string>();
+  gateway.rpc("fight.aiClear", async (ctx, raw) => {
+    const o = z
+      .object({
+        build: z.string().max(80),
+        level: z.number().int().min(0).max(replayBot.levelCount() - 1),
+        chars: z.tuple([z.number().int().min(0).max(99), z.number().int().min(0).max(99)]),
+        map: z.number().int().min(0).max(99),
+        seed: z.number().int().min(0).max(0xffffffff),
+        inputs: z.array(z.tuple([z.number().int().min(0).max(0xffff), z.number().int().min(1).max(BOT_MAX_FRAMES)])).max(BOT_MAX_FRAMES),
+      })
+      .parse(raw);
+    const uid = ctx.uid;
+    // 비회원 · 다른 빌드(같은 입력이어도 결과가 다름) · 이미 확인 중이면 그냥 넘어감
+    if (!ctx.nick || o.build !== SERVER_BOT || aiChecking.has(uid)) return { ai: null };
+    const nCh = replayBot.charCount();
+    if (o.chars[0] >= nCh || o.chars[1] >= nCh) throw bad("없는 캐릭터예요.");
+    const users = db.col<{ _id: string; stats?: { fight?: { ai?: number } } }>("users");
+    const cur = (await users.findOne({ _id: uid }, { projection: { "stats.fight.ai": 1 } }))?.stats?.fight?.ai ?? 0;
+    if (cur > o.level) return { ai: cur };
+    const frames: number[] = [];
+    for (const [v, n] of o.inputs) {
+      if (frames.length + n > BOT_MAX_FRAMES) break;
+      for (let k = 0; k < n; k++) frames.push(v);
+    }
+    aiChecking.add(uid);
+    try {
+      const res = await replayBot({ chars: o.chars, map: o.map, seed: o.seed, botR: replayBot.levelRating(o.level), inputs: frames }).catch((e) => {
+        console.warn("[fight] AI 대전 확인 실패", e);
+        return null;
+      });
+      if (!res?.done || res.winner !== 0) return { ai: cur };
+      await users.updateOne({ _id: uid }, { $max: { "stats.fight.ai": o.level + 1 } } as never);
+      return { ai: Math.max(cur, o.level + 1) };
+    } finally {
+      aiChecking.delete(uid);
+    }
   });
 
   /** 매칭된 두 사람의 전용 방 (맵은 여기서 랜덤, 두 사람 화면에 다 있는 맵 중에서) */

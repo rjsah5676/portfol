@@ -31,6 +31,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { path: "/games/sketch/", priority: 0.5, changeFrequency: "monthly" },
     { path: "/games/poker/", priority: 0.5, changeFrequency: "monthly" },
     { path: "/games/virus/", priority: 0.5, changeFrequency: "monthly" },
+    { path: "/games/defense/", priority: 0.5, changeFrequency: "monthly" },
     { path: "/devtools/json/", priority: 0.6, changeFrequency: "monthly" },
     { path: "/devtools/mybatis-log/", priority: 0.6, changeFrequency: "monthly" },
     { path: "/devtools/ddl-to-java/", priority: 0.6, changeFrequency: "monthly" },
@@ -39,6 +40,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { path: "/tools/ladder/", priority: 0.6, changeFrequency: "monthly" },
     { path: "/tools/roulette/", priority: 0.6, changeFrequency: "monthly" },
     { path: "/tools/calorie/", priority: 0.7, changeFrequency: "monthly" },
+    { path: "/faq/", priority: 0.4, changeFrequency: "monthly" },
     { path: "/privacy/", priority: 0.2, changeFrequency: "monthly" },
   ];
 

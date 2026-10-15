@@ -12,7 +12,7 @@ import {
 } from "@/lib/sketch/assets";
 
 /*
- * 스케치 퀴즈 그림. 진짜 그림(assets.ts READY)이 있으면 그 그림, 없으면 여기서 그린 SVG 낙서로 대신.
+ * DOODLE PARTY 그림. 진짜 그림(assets.ts READY)이 있으면 그 그림, 없으면 여기서 그린 SVG 낙서로 대신.
  */
 
 const INK = "#2B2D42";
@@ -397,18 +397,18 @@ export function Logo({ size = 1, className = "" }: { size?: number; className?: 
     return (
       <Img
         name="logo"
-        alt="스케치 퀴즈"
+        alt="DOODLE PARTY 두들 파티"
         className={className}
         style={{ height: 120 * size, width: "auto" }}
       />
     );
-  const word = "스케치퀴즈";
+  const word = "두들파티";
   return (
     <span
       className={`sk-logo inline-flex flex-col items-center ${className}`}
       style={{ fontSize: 64 * size }}
       role="img"
-      aria-label="스케치 퀴즈"
+      aria-label="DOODLE PARTY 두들 파티"
     >
       <span className="flex items-end leading-none">
         {[...word].map((ch, i) => (
@@ -418,7 +418,7 @@ export function Logo({ size = 1, className = "" }: { size?: number; className?: 
             style={{
               color: LOGO_COLORS[i % LOGO_COLORS.length],
               rotate: `${[-6, 4, -3, 5, -4][i]}deg`,
-              marginLeft: i === 3 ? "0.28em" : undefined,
+              marginLeft: i === 2 ? "0.28em" : undefined,
               animationDelay: `${i * 0.08}s`,
             }}
           >
@@ -437,7 +437,7 @@ export function Logo({ size = 1, className = "" }: { size?: number; className?: 
         />
       </svg>
       <span className="mt-[0.1em] font-mono text-[0.2em] font-bold tracking-[0.5em] text-[#2B2D42]/70">
-        SKETCH QUIZ
+        DOODLE PARTY
       </span>
     </span>
   );
@@ -645,7 +645,7 @@ export function Icon({
   );
 }
 
-/** 이름 — 스케치 퀴즈는 대부분 비회원이라 GUEST 표시는 빼고, 회원만 꾸밈(배지)을 붙임 */
+/** 이름 — DOODLE PARTY는 대부분 비회원이라 GUEST 표시는 빼고, 회원만 꾸밈(배지)을 붙임 */
 export function Who({ name }: { name: string }) {
   return isGuestName(name) ? <>{plainName(name)}</> : <Nick name={name} tone="paper" />;
 }

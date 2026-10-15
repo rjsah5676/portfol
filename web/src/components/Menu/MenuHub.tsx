@@ -10,7 +10,16 @@ export default function MenuHub({ group }: { group: string }) {
       <div className="mx-auto max-w-4xl px-6 pt-16 pb-24">
         <div className="mb-2 font-mono text-sm text-[#8B84FF]">{g.label}</div>
         <h1 className="font-mono text-2xl font-bold text-white sm:text-3xl">{g.title}</h1>
-        <p className="mt-3 font-['Nanum_Gothic',sans-serif] text-sm text-white/50">{g.desc}</p>
+        <p className="mt-3 font-['Nanum_Gothic',sans-serif] text-sm break-keep text-white/50">{g.desc}</p>
+        {g.tags && (
+          <p className="mt-1.5 flex flex-wrap gap-x-1.5 gap-y-0.5 font-['Nanum_Gothic',sans-serif] text-xs text-[#8B84FF]/80">
+            {g.tags.map((t) => (
+              <span key={t} className="whitespace-nowrap">
+                #{t}
+              </span>
+            ))}
+          </p>
+        )}
 
         <ul className="mt-10 grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4">
           {g.items.map((item, i) => (

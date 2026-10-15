@@ -198,6 +198,7 @@ export default function RhythmGame() {
     cover: "none",
     field: "left",
     bg: "cover",
+    fps: "60",
   });
   const [settingsOpen, setSettingsOpen] = useState(false);
   // 회원 BP 랭킹: 게임 머리말(랭킹 버튼·창)에 — 들어올 때와 판이 끝날 때마다 다시 불러옴
@@ -499,6 +500,7 @@ export default function RhythmGame() {
           cover: COVERS_OPT.some((k) => k.key === s.cover) ? s.cover : "none",
           field: FIELD_POS.some((k) => k.key === s.field) ? s.field : "left",
           bg: s.bg === "stage" ? "stage" : "cover",
+          fps: s.fps === "max" ? "max" : "60",
         });
         // 예전 설정(v2 이하)의 음악·타격 싱크는 자동 싱크가 들고 있던 값 → 자동 싱크 저장소로 옮김 (수동 싱크는 0부터)
         if ((Number(s.v) || 1) < 3 && (Number(s.offset) || Number(s.judge))) {
@@ -1108,7 +1110,9 @@ export default function RhythmGame() {
         title="BEAT DASH"
         en="Rhythm Game"
         accent="#EC4899"
-        desc="DFJK 4키 리듬게임 — 곡·난이도별 랭킹, 내 mp3도 자동 채보"
+        desc="DFJK 4키 리듬게임"
+        tags={["랭킹모드", "온라인모드", "mp3 자동 채보", "웹 리듬게임"]}
+        ach="rhythm"
         guide={RHYTHM_GUIDE}
         rank={{
           top: bpTop?.slice(0, 3).map((r) => ({
@@ -1243,6 +1247,7 @@ export default function RhythmGame() {
               chart={applyLaneMod(playingOnline ? oPrep!.chart : chart!, settings.lanes, play.seed)}
               cover={settings.cover}
               bg={settings.bg}
+              fps={settings.fps}
               buffer={play.buffer}
               ctx={play.ctx}
               speed={settings.speed}

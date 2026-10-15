@@ -4,6 +4,10 @@ import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 
 import { useRouter, useSearchParams } from "next/navigation";
 import NickForm from "@/components/Account/NickForm";
 import { useAuth } from "@/lib/AuthContext";
+import DevPanel from "./DevPanel";
+import Mailbox from "./Mailbox";
+import Missions from "./Missions";
+import { useDailyReady } from "@/components/Points/DailyMissions";
 import { asset } from "@/lib/poker/assets";
 import {
   getSound,
@@ -11,6 +15,7 @@ import {
   playBgm,
   playVoice,
   refreshBgm,
+  setGate,
   setSound,
   type SoundSettings,
 } from "@/lib/poker/sfx";
@@ -70,12 +75,21 @@ export default function PokerApp({ rank }: { rank: RankRow[] | null }) {
   const router = useRouter();
   const params = useSearchParams();
   const tableId = params.get("t");
-  const { loading, account, profile, login } = useAuth();
+  const { loading, account, profile, login, admin } = useAuth();
+  // 관리자 전용 개발자 창 (테스트 방 · 음성 · 효과음)
+  const [devOpen, setDevOpen] = useState(false);
   const [wallet, setWallet] = useState<Wallet | null>(null);
   const [shop, setShop] = useState<ShopTab | "">("");
   const [failed, setFailed] = useState("");
   const [loginError, setLoginError] = useState("");
   const [revived, setRevived] = useState<{ text: string; key: number } | null>(null);
+  // 우편함 · 오늘 첫 접속 출석 보상 안내
+  const [mailOpen, setMailOpen] = useState(false);
+  // 일일 미션 (GP) — 닫을 때 받을 수 있는 수 다시 셈
+  const [missionOpen, setMissionOpen] = useState(false);
+  const missionReady = useDailyReady("poker", missionOpen);
+  const [attendNote, setAttendNote] = useState<{ text: string; key: number } | null>(null);
+
   useEffect(() => {
     if (!revived) return;
     const t = setTimeout(() => setRevived(null), 3200);
@@ -90,6 +104,11 @@ export default function PokerApp({ rank }: { rank: RankRow[] | null }) {
       (w) => {
         setWallet(w);
         setFailed("");
+        if (w?.attended)
+          setAttendNote({
+            text: `출석 보상 칩 ${fmtShort(w.attended)}이 우편함에 도착했어요 · 우편함에서 받아 주세요`,
+            key: Date.now(),
+          });
         if (w?.revived)
           setRevived({
             text: `기본 칩 ${fmtShort(w.revived.amount)}이 지급됐어요 · 오늘 ${w.revived.left}회 남았어요`,
@@ -113,28 +132,47 @@ export default function PokerApp({ rank }: { rank: RankRow[] | null }) {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- 브라우저에서만 알 수 있는 값
     setCanFs(canFullscreen());
   }, []);
-  // 폰에서 뒤로가기가 전체화면만 풀어 버리면(안드로이드 크롬) 방 안에서는 나가기 버튼으로 (TableView 가 "pk-back" 을 받음)
-  const selfExit = useRef(false);
-  const inTable = useRef(false);
+  // 아이폰 사파리: 전체화면이 안 되니 "홈 화면에 추가"(앱)로 안내. 「브라우저에서 계속」을 누르면 이번 접속 동안은 안 물음
+  const [iosWeb, setIosWeb] = useState(false);
+  const [iosSkip, setIosSkip] = useState(false);
   useEffect(() => {
-    inTable.current = !!tableId;
-  }, [tableId]);
+    let skip = false;
+    try {
+      skip = sessionStorage.getItem("pk-ios-web") === "1";
+    } catch {}
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 브라우저에서만 알 수 있는 값
+    setIosWeb(isIOS() && !isStandalone());
+    setIosSkip(skip);
+  }, []);
+  const skipIos = () => {
+    setIosSkip(true);
+    try {
+      sessionStorage.setItem("pk-ios-web", "1");
+    } catch {}
+  };
+  // 전체화면이 풀리면(뒤로가기 · 풀기 버튼) 그냥 풀린 대로 — 폰은 "전체화면으로 플레이해 주세요" 안내가 다시 덮음
   useEffect(() => {
     const on = () => {
       const now = document.fullscreenElement === rootRef.current && !!rootRef.current;
-      if (!now && !selfExit.current && inTable.current && matchMedia("(pointer: coarse)").matches)
-        window.dispatchEvent(new Event("pk-back"));
-      selfExit.current = false;
       setFsReal(now);
+      // 폰: 전체화면이 풀리면 페이지가 맨 아래로 내려가 있던 것 — 무대가 사이트 메뉴 바로 아래 오게 (세로로 돌아가는 시간 기다림)
+      if (!now && Math.min(window.innerWidth, window.innerHeight) < 600 && matchMedia("(pointer: coarse)").matches)
+        setTimeout(() => stageEl.current?.scrollIntoView({ block: "start" }), 350);
     };
     document.addEventListener("fullscreenchange", on);
     return () => document.removeEventListener("fullscreenchange", on);
   }, []);
   // 전체화면(가로 화면): 무대를 평소와 같은 1280×720 으로 그리고 화면에 맞게 통째로 키움 → 배치가 창 모드와 똑같음
   const [scr, setScr] = useState({ w: 0, h: 0, touch: false });
+  /** 마지막 가로 화면 크기 */
+  const [landScr, setLandScr] = useState<{ w: number; h: number } | null>(null);
   useEffect(() => {
-    const on = () =>
-      setScr({ w: window.innerWidth, h: window.innerHeight, touch: matchMedia("(pointer: coarse)").matches });
+    const on = () => {
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+      setScr({ w, h, touch: matchMedia("(pointer: coarse)").matches });
+      if (w > h * 1.2) setLandScr({ w, h });
+    };
     on();
     window.addEventListener("resize", on);
     return () => window.removeEventListener("resize", on);
@@ -143,10 +181,17 @@ export default function PokerApp({ rank }: { rank: RankRow[] | null }) {
   // 폰은 가로 전용: 가로면 화면을 덮어 그리고, 세로면 "가로로 돌려 주세요"
   const phone = scr.touch && Math.min(scr.w, scr.h) < 600;
   const land = scr.w > scr.h * 1.2;
-  const shortLand = !fs && phone && land;
+  // 폰을 잠깐 세로로 돌린 동안은 무대를 가로일 때 크기 그대로 둠 ("가로로 돌려 주세요"가 덮고 있음) —
+  // 세로 크기로 통째로 다시 그렸다가 가로로 또 다시 그리느라 아이폰이 가끔 튕겼음
+  // (전체화면 · 홈 화면 앱 안내가 무대 안에서 덮어야 할 때는 멈추지 않음 — 무대를 숨기면 안내까지 가려져 검은 화면만 남았음)
+  const inGate = (!fsReal && !pseudoFs && canFs && !standalone) || (iosWeb && !iosSkip);
+  const hold = phone && !land && landScr && !inGate ? landScr : null;
+  const lay = hold ?? scr;
+  const layLand = land || !!hold;
+  const shortLand = !fs && phone && layLand;
   // 폰 가로는 1280×720 을 통째로 줄이면 글씨가 너무 작아서, 높이 540 짜리 무대(폭은 화면 비율대로)로 그려 키움
-  const D = phone && land ? { w: Math.round(Math.min(1280, Math.max(960, (540 * scr.w) / scr.h))), h: 540 } : DESIGN;
-  const fit = (fs || shortLand) && land ? Math.min(scr.w / D.w, scr.h / D.h) : 0;
+  const D = phone && layLand ? { w: Math.round(Math.min(1280, Math.max(960, (540 * lay.w) / lay.h))), h: 540 } : DESIGN;
+  const fit = (fs || shortLand) && layLand ? Math.min(lay.w / D.w, lay.h / D.h) : 0;
   // 무대 위에 사이트의 떠 있는 메뉴 버튼이 겹치지 않게
   useEffect(() => {
     document.body.classList.add("game-full");
@@ -168,8 +213,11 @@ export default function PokerApp({ rank }: { rank: RankRow[] | null }) {
   }, [tableId, onIntro]);
   // 페이지에 들어와 로비가 처음 뜨면 내 캐릭터가 인사 (소리는 브라우저가 막으면 첫 터치 · 클릭 때 나옴)
   const greeted = useRef(false);
+  // 폰에서 "전체화면으로 플레이해 주세요" · "가로로 돌려 주세요" 안내가 덮고 있는 동안은 인사 안 함 (로비가 보일 때 함)
+  const iosAsk = phone && iosWeb && !iosSkip;
+  const gated = phone && ((!fs && canFs && !standalone) || iosAsk || !land);
   useEffect(() => {
-    if (greeted.current || onIntro || tableId || !wallet) return;
+    if (greeted.current || onIntro || tableId || !wallet || gated) return;
     const look = lookOf(wallet.char, wallet.wear);
     const say = () => {
       if (greeted.current) return;
@@ -188,17 +236,25 @@ export default function PokerApp({ rank }: { rank: RankRow[] | null }) {
       el.removeEventListener("pointerdown", say);
       window.removeEventListener("keydown", say);
     };
-  }, [onIntro, tableId, wallet]);
+  }, [onIntro, tableId, wallet, gated]);
+  // 폰 전체화면 · 가로 안내 중: 타이틀 곡만, 다른 소리는 전부 끔 (판 중에 전체화면이 풀려도)
+  useEffect(() => {
+    setGate(gated);
+    return () => setGate(false);
+  }, [gated]);
+  // 출석 안내: 폰 전체화면 안내에 가려 안 보인 채 지나가지 않게, 로비가 보일 때부터 5초
+  useEffect(() => {
+    if (!attendNote || gated) return;
+    const t = setTimeout(() => setAttendNote(null), 5000);
+    return () => clearTimeout(t);
+  }, [attendNote, gated]);
   // 포커 페이지를 떠나면 배경음악 끔 (사이트 안에서 다른 페이지로 가도 계속 나오던 것)
   useEffect(() => () => playBgm(null), []);
   const toggleFs = () => {
     const el = rootRef.current;
     if (!el) return;
     if (pseudoFs) return setPseudoFs(false);
-    if (document.fullscreenElement) {
-      selfExit.current = true;
-      return void document.exitFullscreen().catch(() => {});
-    }
+    if (document.fullscreenElement) return void document.exitFullscreen().catch(() => {});
     // 폰: 전체화면이 되면 가로로 고정 (안드로이드 크롬 등 되는 기기만 — 안 되면 "가로로 돌려 주세요" 안내)
     const lockLand = () => {
       if (!matchMedia("(pointer: coarse)").matches) return;
@@ -210,10 +266,44 @@ export default function PokerApp({ rank }: { rank: RankRow[] | null }) {
     else setPseudoFs(true);
   };
   const o: Orient = size.w > size.h * 1.05 ? "h" : "v";
-  const topRight = (
+  /** 위 오른쪽 버튼들. exit = 게임방의 나가기 버튼 (설정 바로 왼쪽에 들어감) */
+  const topRightFor = (exit?: ReactNode) => (
     <>
-      <TopBtn label="상점" icon={SHOP_ICON} gold onClick={() => setShop("shop")} />
+      {admin && <TopBtn label="테스트" icon={DEV_ICON} onClick={() => setDevOpen(true)} />}
+      {/* 게임방 안에서는 상점 없이 옷장(지금 캐릭터 스킨 갈아입기)만 */}
+      {!tableId && <TopBtn label="상점" icon={SHOP_ICON} gold onClick={() => setShop("shop")} />}
       <TopBtn label="옷장" icon={CLOSET_ICON} onClick={() => setShop("closet")} />
+      {wallet && !tableId && (
+        <button
+          type="button"
+          onClick={() => setMissionOpen(true)}
+          title="오늘의 미션"
+          className={`pk-btn pk-btn-ghost relative flex h-[30px] items-center gap-[0.3em] px-[0.6em] text-[0.78em] ${missionReady ? "pk-mail-new" : ""}`}
+        >
+          <svg viewBox="0 0 24 24" className="h-[15px] w-[15px]" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <rect x="4" y="4" width="16" height="17" rx="2" />
+            <path d="M9 3v3M15 3v3M8.5 13l2.5 2.5 4.5-5" />
+          </svg>
+          <span className="hidden sm:inline">미션</span>
+          {missionReady > 0 && <span className="pk-mail-badge">{missionReady}</span>}
+        </button>
+      )}
+      {wallet && !tableId && (
+        <button
+          type="button"
+          onClick={() => setMailOpen(true)}
+          title="우편함"
+          className={`pk-btn pk-btn-ghost relative flex h-[30px] items-center gap-[0.3em] px-[0.6em] text-[0.78em] ${wallet.mail ? "pk-mail-new" : ""}`}
+        >
+          <svg viewBox="0 0 24 24" className="h-[15px] w-[15px]" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <rect x="3" y="5" width="18" height="14" rx="2" />
+            <path d="m3.5 6.5 8.5 6.5 8.5-6.5" />
+          </svg>
+          <span className="hidden sm:inline">우편함</span>
+          {wallet.mail > 0 && <span className="pk-mail-badge">{wallet.mail}</span>}
+        </button>
+      )}
+      {exit}
       <Settings tableId={tableId} />
       {(canFs || fs) && (
         <button
@@ -271,7 +361,7 @@ export default function PokerApp({ rank }: { rank: RankRow[] | null }) {
         h={size.h}
         onExit={() => go(null)}
         onWallet={setWallet}
-        topRight={topRight}
+        topRight={topRightFor}
         fs={fs}
       />
     );
@@ -281,13 +371,12 @@ export default function PokerApp({ rank }: { rank: RankRow[] | null }) {
         wallet={wallet}
         rank={rank}
         myNick={profile.nick}
-        o={o}
         w={size.w}
         h={size.h}
         onEnter={go}
         onWallet={setWallet}
         onShop={setShop}
-        topRight={topRight}
+        topRight={topRightFor()}
       />
     );
 
@@ -303,7 +392,8 @@ export default function PokerApp({ rank }: { rank: RankRow[] | null }) {
   const ready = !!wallet && !!account && !!profile;
   const fsGate = !fs && canFs && !standalone && phone && ready;
   // 전체화면인데(또는 전체화면이 안 되는 기기에서) 세로로 들고 있음
-  const rotateGate = !fsGate && phone && !land && ready;
+  const iosGate = !fsGate && iosAsk && ready;
+  const rotateGate = !fsGate && !iosGate && phone && !land && ready;
   const showFsBanner = !fs && canFs && !shortLand && !fsGate;
   const stageCls = fit
     ? "flex-none"
@@ -345,6 +435,8 @@ export default function PokerApp({ rank }: { rank: RankRow[] | null }) {
                 transform: `scale(${fit})`,
                 fontSize: 15, // 무대 글씨 크기는 바깥 크기로 재는데, 통째로 줄인 무대는 PC 창(1280)과 같아야 하므로 고정
                 transformOrigin: "center",
+                // 세로로 돌린 동안: 안 보이는 무대는 그리지 않음 (움직이는 그림 · 애니메이션이 계속 돌지 않게)
+                visibility: hold ? "hidden" : undefined,
               }
             : undefined
         }
@@ -352,15 +444,16 @@ export default function PokerApp({ rank }: { rank: RankRow[] | null }) {
       >
         {size.w > 0 && screen}
         {fsGate && (
-          <div className="pk-fsgate absolute inset-0 z-[60] flex flex-col items-center justify-center gap-[1.1em] bg-black/75 px-6 text-center backdrop-blur-[3px]">
-            <p className="font-['Black_Han_Sans',sans-serif] text-[1.6em] leading-tight text-white">
+          <div className="pk-fsgate absolute inset-0 z-[60] flex flex-col items-center justify-center gap-[1.1em] overflow-hidden bg-black px-6 pt-[18%] text-center">
+            <GateBg />
+            <p className="relative font-['Black_Han_Sans',sans-serif] text-[1.6em] leading-tight text-white drop-shadow-[0_2px_6px_rgba(0,0,0,0.9)]">
               전체화면으로 플레이해 주세요
             </p>
-            <p className="text-[0.95em] text-white/60">폰은 가로 화면으로 쳐요 · 누르면 가로로 돌아가요</p>
+            <p className="relative text-[0.95em] text-white/75 drop-shadow-[0_1px_4px_rgba(0,0,0,0.9)]">폰은 가로 화면으로 쳐요 · 누르면 가로로 돌아가요</p>
             <button
               type="button"
               onClick={toggleFs}
-              className="pk-btn pk-btn-gold flex items-center gap-[0.5em] px-[1.6em] py-[0.8em] text-[1.1em]"
+              className="pk-btn pk-btn-gold pk-fsgate-btn relative flex items-center gap-[0.5em] px-[2em] py-[0.95em] text-[1.3em]"
             >
               <svg
                 viewBox="0 0 24 24"
@@ -377,26 +470,87 @@ export default function PokerApp({ rank }: { rank: RankRow[] | null }) {
             </button>
           </div>
         )}
-        {rotateGate && (
-          <div className="absolute inset-0 z-[60] flex flex-col items-center justify-center gap-[1em] bg-black/85 px-6 text-center backdrop-blur-[3px]">
-            <svg viewBox="0 0 24 24" className="h-[3.2em] w-[3.2em] text-[#ffd84a]" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-              <rect x="7" y="2.5" width="10" height="19" rx="2" />
-              <path d="M3 9a9 9 0 0 1 4-5M21 15a9 9 0 0 1-4 5" />
-            </svg>
-            <p className="font-['Black_Han_Sans',sans-serif] text-[1.5em] leading-tight text-white">폰을 가로로 돌려 주세요</p>
-            <p className="text-[0.95em] text-white/60">폰에서는 가로 화면만 지원해요</p>
+        {/* 아이폰 사파리: 전체화면 대신 앱(홈 화면에 추가)으로 — 사파리 안에선 위를 누르면 주소창이 내려와 막을 수 없음 */}
+        {iosGate && (
+          <div className="pk-fsgate absolute inset-0 z-[60] flex flex-col items-center justify-center gap-[0.8em] overflow-hidden bg-black px-6 pt-[14%] text-center">
+            <GateBg />
+            <p className="relative font-['Black_Han_Sans',sans-serif] text-[1.5em] leading-tight text-white drop-shadow-[0_2px_6px_rgba(0,0,0,0.9)]">
+              아이폰은 앱으로 설치해서 전체화면으로
+            </p>
+            <ol className="relative flex flex-wrap items-stretch justify-center gap-[0.5em] text-[0.9em] text-white/85">
+              <li className="pk-ios-step">
+                <b>1</b>
+                <span>
+                  사파리
+                  <svg viewBox="0 0 24 24" className="mx-[0.25em] inline h-[1.2em] w-[1.2em] align-[-0.25em] text-[#4aa3ff]" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-label="공유">
+                    <path d="M12 3v12M7.5 7.5 12 3l4.5 4.5" />
+                    <path d="M8 10H6a1 1 0 0 0-1 1v9a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-9a1 1 0 0 0-1-1h-2" />
+                  </svg>
+                  공유 버튼
+                </span>
+              </li>
+              <li className="pk-ios-step">
+                <b>2</b>
+                <span>
+                  <span className="text-[#ffd84a]">홈 화면에 추가</span> → 추가
+                </span>
+              </li>
+              <li className="pk-ios-step">
+                <b>3</b>
+                <span>홈 화면의 ANIME POKER 실행</span>
+              </li>
+            </ol>
+            <p className="relative text-[0.8em] text-white/55 drop-shadow-[0_1px_4px_rgba(0,0,0,0.9)]">
+              앱에선 주소창 없이 화면 전체로 쳐요 · 처음 한 번은 다시 로그인해 주세요
+            </p>
+            <button type="button" onClick={skipIos} className="pk-btn pk-btn-ghost relative px-[1.2em] py-[0.45em] text-[0.85em]">
+              브라우저에서 계속
+            </button>
           </div>
         )}
         {shop && wallet && (
           <Shop
             wallet={wallet}
             inGame={!!tableId}
-            tab={shop}
+            tab={tableId ? "closet" : shop}
             setTab={setShop}
             mobile={o === "v"}
             maxH={size.h - (o === "h" ? 24 : 8)}
             onClose={() => setShop("")}
           />
+        )}
+        {admin && devOpen && (
+          <DevPanel
+            mobile={o === "v"}
+            maxH={size.h - (o === "h" ? 24 : 8)}
+            onClose={() => setDevOpen(false)}
+            onEnter={(id) => {
+              setDevOpen(false);
+              go(id);
+            }}
+          />
+        )}
+        {missionOpen && wallet && !tableId && (
+          <Missions mobile={o === "v"} maxH={size.h - (o === "h" ? 24 : 8)} onClose={() => setMissionOpen(false)} />
+        )}
+        {mailOpen && wallet && (
+          <Mailbox
+            mobile={o === "v"}
+            maxH={size.h - (o === "h" ? 24 : 8)}
+            onClose={() => setMailOpen(false)}
+            onWallet={setWallet}
+          />
+        )}
+        {attendNote && !gated && (
+          <button
+            type="button"
+            key={attendNote.key}
+            className="pk-toast pk-attend-toast"
+            style={{ top: 52, bottom: "auto", animationDuration: "5s" }}
+            onClick={() => (setAttendNote(null), setMailOpen(true))}
+          >
+            🎁 {attendNote.text}
+          </button>
         )}
         {revived && (
           <div
@@ -409,7 +563,7 @@ export default function PokerApp({ rank }: { rank: RankRow[] | null }) {
           </div>
         )}
       </div>
-      {!fs && !shortLand && !standalone && isIOS() && (
+      {!fs && !shortLand && iosWeb && (
         <p className="mx-3 mt-2 text-center text-[11px] text-white/40 sm:mx-0">
           아이폰은 사파리 공유 → <b className="text-white/60">홈 화면에 추가</b>하면 전체화면 앱처럼
           할 수 있어요.
@@ -422,11 +576,45 @@ export default function PokerApp({ rank }: { rank: RankRow[] | null }) {
           베타 버전 데이터는 정식 출시 때 초기화될 수 있어요.
         </p>
       )}
+      {/* 세로: 무대 밖에서 화면 전체를 덮음 (무대는 가로일 때 크기 그대로 멈춰 있음) */}
+      {rotateGate && (
+        <div className="fixed inset-0 z-[110] flex flex-col items-center justify-center gap-[1em] bg-black px-6 text-center" style={{ fontSize: 15 }}>
+          <svg viewBox="0 0 24 24" className="h-[3.2em] w-[3.2em] text-[#ffd84a]" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <rect x="7" y="2.5" width="10" height="19" rx="2" />
+            <path d="M3 9a9 9 0 0 1 4-5M21 15a9 9 0 0 1-4 5" />
+          </svg>
+          <p className="font-['Black_Han_Sans',sans-serif] text-[1.5em] leading-tight text-white">폰을 가로로 돌려 주세요</p>
+          <p className="text-[0.95em] text-white/60">폰에서는 가로 화면만 지원해요</p>
+        </div>
+      )}
     </div>
   );
 }
 
 /** 머리말 버튼 (상점 · 옷장) */
+/** 폰 전체화면 안내 뒤 배경: 타이틀 영상(세로) + 위 로고, 가운데 글자 · 버튼 뒤는 어둡게 */
+function GateBg() {
+  return (
+    <>
+      <video
+        className="absolute inset-0 h-full w-full object-cover"
+        src={asset.intro("v")}
+        poster={asset.introPoster("v")}
+        autoPlay
+        muted
+        loop
+        playsInline
+        aria-hidden
+      />
+      {/* 살짝 어둡게 (예전처럼 뒤가 흐려 보이게) — 로고 · 글자 · 버튼은 그 위라 그대로 또렷 */}
+      <div className="absolute inset-0 bg-black/45" />
+      <div className="absolute inset-x-0 top-0 h-[30%] bg-[linear-gradient(180deg,rgba(0,0,0,0.6),transparent)]" />
+      <img src="/poker/ui/logo.webp" alt="ANIME POKER" className="absolute top-[4%] left-1/2 w-[62%] -translate-x-1/2 drop-shadow-[0_4px_12px_rgba(0,0,0,0.8)]" />
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_75%_32%_at_50%_58%,rgba(0,0,0,0.82),rgba(0,0,0,0.35)_70%,transparent)]" />
+    </>
+  );
+}
+
 function TopBtn({
   label,
   icon,
@@ -461,6 +649,7 @@ function TopBtn({
     </button>
   );
 }
+const DEV_ICON = <path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.6 2.6-2.4-.6-.6-2.4z" />;
 const SHOP_ICON = (
   <>
     <path d="M5 8h14l-1.2 11.2a1 1 0 0 1-1 .8H7.2a1 1 0 0 1-1-.8z" />

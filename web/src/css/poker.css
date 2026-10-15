@@ -4,6 +4,15 @@
  * 숫자(돈)는 Big Shoulders Display, 큰 한글은 Black Han Sans, 대사는 Jua.
  */
 
+/* 카드 숫자: 얇고 폭 좁은 글꼴 (모든 숫자 같은 크기 · 10 도 한 칸에) */
+@font-face {
+  font-family: "Barlow Condensed";
+  src: url("../fonts/BarlowCondensed-SemiBold.woff2") format("woff2");
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+
 @font-face {
   font-family: "Big Shoulders Display";
   src: url("../fonts/BigShouldersDisplay-ExtraBold.woff2") format("woff2");
@@ -130,6 +139,10 @@
 }
 .pk-sprite img[data-on="1"] {
   opacity: 1;
+}
+/* 앉은 대기 동작은 영상 안에서 숨을 쉬니 숨쉬기 흔들림은 안 얹음 */
+.pk-sprite img.pk-sprite-live {
+  animation: none !important;
 }
 .pk-sprite[data-dim="1"] {
   filter: grayscale(0.9) brightness(0.55);
@@ -895,11 +908,55 @@
     stroke-dasharray 0.25s linear,
     stroke 0.4s;
 }
+/* 얼굴 · 앉은 그림 둘레의 남은 시간: 0.25초마다 갱신되는 사이를 이어서 그림 */
+.pk-timer-ring rect,
+.pk-timer-ring circle {
+  transition:
+    stroke-dashoffset 0.25s linear,
+    stroke 0.4s;
+}
 .pk-seat-char .pk-sprite img {
   filter: drop-shadow(0 calc(var(--u) * 0.4) calc(var(--u) * 0.8) rgba(0, 0, 0, 0.5));
 }
 .pk-seat-win .pk-sprite img {
   filter: drop-shadow(0 0 calc(var(--u) * 1.2) rgba(255, 210, 63, 0.85));
+}
+/* 자리 틀 아래 띠: 이름(왼쪽) · 칩(오른쪽) 한 줄, 틀 폭 전부 */
+.pk-strip {
+  display: flex;
+  align-items: center;
+  gap: 0.4em;
+  padding: 0 0.5em;
+  margin-top: 3px;
+  font-size: 1em;
+  border-radius: 6px;
+}
+.pk-strip .pk-name {
+  font-size: 0.8em;
+}
+.pk-strip .pk-stack {
+  margin-top: 0;
+  font-size: 1.05em;
+}
+.pk-seat-cards > span {
+  max-width: 100%;
+}
+/* 아바타 틀: 행동 글자 · 배지 · 초 세기가 이 안에 붙음 */
+.pk-av {
+  flex: none;
+}
+.pk-av .pk-sprite img {
+  filter: drop-shadow(0 calc(var(--u) * 0.3) calc(var(--u) * 0.6) rgba(0, 0, 0, 0.55));
+}
+.pk-av .pk-face {
+  box-shadow: 0 0 0 2px rgba(214, 175, 92, 0.55), 0 4px 10px rgba(0, 0, 0, 0.6);
+}
+.pk-av[data-turn="1"] .pk-face {
+  box-shadow: 0 0 0 3px #ffd84a, 0 0 16px rgba(255, 216, 74, 0.6);
+}
+.pk-av .pk-acttag {
+  bottom: auto;
+  top: -0.6em;
 }
 /* 보유 칩: 크고 밝게 */
 .pk-plate .pk-stack {
@@ -1458,11 +1515,41 @@
     inset 0 1px 0 rgba(255, 230, 160, 0.1);
   line-height: 1.25;
 }
+/* 큰 아바타 아래 붙는 내 정보 띠 */
+.pk-hero-hud2 {
+  min-width: 0;
+  max-width: none;
+  margin-top: 2px;
+  padding: 0.2em 0.55em 0.25em;
+}
 .pk-hero-hud[data-turn="1"] {
   border-color: #ffd84a;
   box-shadow:
     0 0 0 2px rgba(255, 216, 74, 0.35),
     0 0 16px rgba(255, 216, 74, 0.5);
+}
+/* 결과 뒤 손익: 이름표 위 왼쪽 (+ 금빛 · − 붉게) */
+.pk-net {
+  position: absolute;
+  left: 0.3em;
+  top: -1.05em;
+  font-size: 0.78em;
+  font-weight: 800;
+  padding: 0 0.4em;
+  border-radius: 4px;
+  background: rgba(6, 7, 12, 0.85);
+  line-height: 1.3;
+  animation: pk-fade 0.25s ease-out backwards;
+}
+.pk-net-up {
+  color: #ffd84a;
+}
+.pk-net-down {
+  color: #ff7d86;
+}
+/* 「기권」 꼬리표: 흐리게 */
+.pk-resulttag-out {
+  opacity: 0.6;
 }
 /* 나가기 예약 표시 */
 .pk-exit-mark {
@@ -1613,6 +1700,30 @@
   100% {
     transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(0.7);
     opacity: 0;
+  }
+}
+/* 베팅 칩 던지기: 위로 살짝 떴다가 떨어지며 돌아감 (--arc 만큼 솟음) */
+.pk-toss {
+  transform: translate(-50%, -50%);
+  animation: pk-toss 0.42s cubic-bezier(0.3, 0, 0.6, 1) both;
+}
+.pk-toss img {
+  filter: drop-shadow(0 3px 4px rgba(0, 0, 0, 0.6));
+}
+@keyframes pk-toss {
+  0% {
+    transform: translate(-50%, -50%) rotate(0) scale(0.8);
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+  }
+  50% {
+    transform: translate(calc(-50% + var(--dx) * 0.5), calc(-50% + var(--dy) * 0.5 + var(--arc))) rotate(180deg) scale(1.1);
+  }
+  100% {
+    transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) rotate(360deg) scale(0.95);
+    opacity: 1;
   }
 }
 /* 앉은 그림의 칸 가장자리(머리카락이 잘린 선)를 부드럽게 흐리고, 테이블 선 아래는 가림 (그림에 붙여 같이 움직임) */
@@ -2551,6 +2662,25 @@
 }
 
 /* ───────── 가로판 오른쪽 패널 ───────── */
+/* 오른쪽 위 작은 상자 (족보 · 기록) */
+.pk-infobox {
+  width: 15em;
+  max-height: 62%;
+  font-size: 0.95em;
+  background: rgba(8, 9, 14, 0.9);
+}
+.pk-infobox .pk-ranks {
+  padding: 0 0.4em 0.4em;
+}
+.pk-seg-sm > button {
+  padding: 0.1em 0.55em;
+  font-size: 0.72em;
+}
+/* 이모티콘 여는 버튼 */
+.pk-emote-open-on {
+  border-color: #ffd84a;
+  color: #ffd84a;
+}
 .pk-side-head {
   display: grid;
   gap: 0.35em;
@@ -2739,6 +2869,13 @@
   right: -8px;
   transform: translateY(-50%) rotate(225deg);
 }
+/* 꼬리 아래 가운데 (머리 위에 뜬 말풍선) */
+.pk-emote-bubble[data-tail="b"]::after {
+  top: auto;
+  bottom: -8px;
+  left: 50%;
+  transform: translateX(-50%) rotate(-45deg);
+}
 .pk-emote-bubble img {
   position: relative;
   z-index: 2;
@@ -2824,4 +2961,845 @@
   font-weight: 900;
   font-size: 1.14em;
   letter-spacing: 0.01em;
+}
+
+/* ── 7포커 자리 틀: [캐릭터 칸][카드 칸] + 아래 이름 · 칩 띠 ── */
+.pk-sf {
+  border: 2px solid rgba(214, 175, 92, 0.45);
+  border-radius: 8px;
+  background: linear-gradient(180deg, rgba(14, 15, 24, 0.78), rgba(6, 7, 12, 0.84));
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.55);
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.pk-sf-me {
+  border-color: rgba(255, 201, 60, 0.6);
+}
+/* 그 사람 차례: 틀 전체가 빛남 */
+.pk-sf[data-turn="1"] {
+  border-color: #ffd84a;
+  box-shadow:
+    0 0 0 2px rgba(255, 216, 74, 0.4),
+    0 0 22px rgba(255, 216, 74, 0.55);
+}
+.pk-sf[data-win="1"] {
+  border-color: var(--pk-brass);
+  box-shadow:
+    0 0 0 2px rgba(255, 210, 63, 0.45),
+    0 0 26px rgba(255, 210, 63, 0.6);
+}
+.pk-sf-empty {
+  border-style: dashed;
+  border-color: rgba(255, 255, 255, 0.12);
+  background: rgba(6, 7, 12, 0.45);
+  box-shadow: none;
+}
+.pk-sf-char {
+  border-right: 1px solid rgba(214, 175, 92, 0.3);
+  border-radius: 6px 0 0 0;
+}
+.pk-sf-char-r {
+  border-right: 0;
+  border-left: 1px solid rgba(214, 175, 92, 0.3);
+  border-radius: 0 6px 0 0;
+}
+.pk-sf-char .pk-plate-ring rect {
+  stroke-width: 4px;
+}
+/* 이번 구에 건 돈: 캐릭터 머리 위 */
+.pk-sf-bet {
+  position: absolute;
+  top: 3px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 6;
+  padding: 0.05em 0.5em;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.72);
+  border: 1px solid rgba(255, 216, 74, 0.45);
+  color: #ffd84a;
+  font-size: 0.82em;
+  white-space: nowrap;
+}
+/* 행동 글자: 캐릭터 칸 아래쪽 */
+.pk-sf-act {
+  position: absolute;
+  left: 50%;
+  bottom: 6%;
+  transform: translateX(-50%);
+  z-index: 7;
+  pointer-events: none;
+}
+.pk-sf-act .pk-acttag-img {
+  height: 2.3em;
+}
+/* 내 행동 글자는 더 크게 */
+.pk-sf-me .pk-sf-act .pk-acttag-img {
+  height: 3.8em;
+}
+.pk-sf-me .pk-sf-act .pk-acttag {
+  font-size: 2em;
+}
+/* 족보 · 결과 글자: 카드 칸 아랫단 위 */
+.pk-sf-label {
+  position: absolute;
+  left: 50%;
+  bottom: 7%;
+  transform: translateX(-50%);
+  z-index: 8;
+  pointer-events: none;
+  white-space: nowrap;
+}
+.pk-sf-strip {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  padding: 0 0.6em;
+  border-top: 1px solid rgba(214, 175, 92, 0.35);
+  background: linear-gradient(180deg, rgba(28, 30, 44, 0.95), rgba(6, 7, 12, 0.95));
+  border-radius: 0 0 6px 6px;
+}
+.pk-sf-strip .pk-name {
+  font-size: 0.82em;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.92);
+}
+.pk-sf-strip .pk-stack {
+  font-size: 1.05em;
+  color: #ffd84a;
+  text-shadow: 0 1px 0 #000;
+}
+/* 족보 · 기록 상자 접기/펴기 탭: 상자 왼쪽 끝에 딱 붙음 */
+.pk-dock-tab {
+  position: absolute;
+  z-index: 26;
+  width: 1.6em;
+  height: 3.2em;
+  border-radius: 6px 0 0 6px;
+  border-right: 0 !important;
+  border: 1.5px solid rgba(214, 175, 92, 0.55);
+  background: rgba(10, 11, 18, 0.92);
+  color: #ffd84a;
+  font-size: 1.1em;
+  font-weight: 900;
+  line-height: 1;
+  cursor: pointer;
+}
+.pk-dock-tab:hover {
+  background: rgba(30, 32, 46, 0.95);
+}
+
+/* 붙박이 족보 · 기록 · 이모티콘 탭: 상자 폭을 셋이 나눠 씀 */
+.pk-seg-dock {
+  display: flex;
+}
+.pk-seg-dock > button {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 0.22em 0.3em;
+  font-size: 0.8em;
+  white-space: nowrap;
+}
+
+/* ── 7포커 베팅 칸 (한게임식): 늘 같은 다섯 칸, 어두운 바탕에 행동마다 글자 색. 켜진 칸만 밝게 ── */
+.pk-sbtn {
+  --lc: #fff;
+  cursor: pointer;
+  border-radius: 9px;
+  background: linear-gradient(180deg, #17323d, #0b1820);
+  border: 1.5px solid rgba(110, 200, 220, 0.45);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 3px 8px rgba(0, 0, 0, 0.5);
+  transition:
+    transform 0.07s ease,
+    filter 0.12s ease,
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+.pk-sbtn[data-k="die"] { --lc: #ff6b8a; }
+.pk-sbtn[data-k="bbing"] { --lc: #ff9f43; }
+.pk-sbtn[data-k="ddadang"] { --lc: #ffbe3d; }
+.pk-sbtn[data-k="call"] { --lc: #3ee08f; }
+.pk-sbtn[data-k="quarter"] { --lc: #d07bff; }
+.pk-sbtn[data-k="half"] { --lc: #ff7a50; }
+.pk-sbtn[data-k="allin"] { --lc: #ff3b5c; }
+.pk-sbtn-t {
+  font-family: "Black Han Sans", "Nanum Gothic", sans-serif;
+  font-size: 1.45em;
+  line-height: 1;
+  letter-spacing: 0.04em;
+  color: var(--lc);
+  text-shadow:
+    0 2px 0 rgba(0, 0, 0, 0.55),
+    0 0 12px color-mix(in srgb, var(--lc) 45%, transparent);
+}
+/* 가리킴 효과는 마우스에서만 (폰은 누른 뒤에도 밝게 남아 있어 눌린 건지 헷갈림) */
+@media (hover: hover) {
+  .pk-sbtn:hover:not(:disabled) {
+    filter: brightness(1.15);
+  }
+}
+/* 누르는 동안: 확 눌리고 밝아짐 (폰에서도 손가락 밑에서 바로 보이게) */
+.pk-sbtn:active:not(:disabled) {
+  transform: translateY(2px) scale(0.95);
+  filter: brightness(1.35);
+  border-color: rgba(255, 230, 140, 0.95) !important;
+  box-shadow:
+    inset 0 0 14px rgba(255, 220, 120, 0.35),
+    0 0 10px rgba(255, 210, 90, 0.5) !important;
+  transition-duration: 0.03s;
+}
+/* 내 차례에 켜진 칸: 테두리 · 바탕이 살아남 */
+.pk-sevenbar[data-live="1"] .pk-sbtn:not(:disabled) {
+  background: linear-gradient(180deg, #1d4b59, #0e2630);
+  border-color: rgba(120, 225, 245, 0.75);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    0 0 14px rgba(90, 210, 240, 0.28),
+    0 3px 8px rgba(0, 0, 0, 0.5);
+}
+/* 잠긴 칸 (남의 차례 · 못 하는 행동): 바탕 · 글자 다 어둡게 */
+.pk-sbtn:disabled {
+  cursor: default;
+  background: linear-gradient(180deg, #121c22, #0a1015);
+  border-color: rgba(110, 200, 220, 0.14);
+  box-shadow: none;
+}
+.pk-sbtn:disabled .pk-sbtn-t {
+  color: rgba(200, 215, 225, 0.22);
+  text-shadow: none;
+}
+/* 남의 차례에 미리 누를 수 있는 칸: 어둡지만 누를 수 있음, 눌러 두면 테두리만 금색으로 강조 */
+.pk-sevenbar:not([data-live="1"]) .pk-sbtn:not(:disabled) {
+  background: linear-gradient(180deg, #13222a, #0a1318);
+  border-color: rgba(110, 200, 220, 0.22);
+}
+.pk-sevenbar:not([data-live="1"]) .pk-sbtn:not(:disabled) .pk-sbtn-t {
+  color: color-mix(in srgb, var(--lc) 45%, #2a3640);
+  text-shadow: none;
+}
+.pk-sbtn[aria-pressed="true"] {
+  border: 2px solid #ffd84a !important;
+  box-shadow:
+    0 0 0 1px rgba(255, 216, 74, 0.35),
+    0 0 14px rgba(255, 216, 74, 0.55) !important;
+}
+.pk-sbtn[aria-pressed="true"] .pk-sbtn-t {
+  color: var(--lc) !important;
+}
+/* 왼쪽 위 동그란 불: 평소엔 꺼진 전구, 미리 눌러 두면(테두리 금색과 같이) 불이 들어옴 */
+.pk-sbtn-lamp {
+  position: absolute;
+  top: 0.4em;
+  left: 0.4em;
+  width: 0.62em;
+  height: 0.62em;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #3a4850, #141c21 70%);
+  box-shadow:
+    inset 0 1px 1px rgba(0, 0, 0, 0.6),
+    0 0 0 1px rgba(255, 255, 255, 0.08);
+  pointer-events: none;
+  transition:
+    background 0.12s ease,
+    box-shadow 0.12s ease;
+}
+.pk-sbtn[aria-pressed="true"] .pk-sbtn-lamp {
+  background: radial-gradient(circle at 35% 35%, #fffbe0, #ffd84a 45%, #e8a10f 80%);
+  box-shadow:
+    0 0 0 1px rgba(255, 230, 140, 0.6),
+    0 0 6px 1px rgba(255, 216, 74, 0.85),
+    0 0 14px 3px rgba(255, 196, 40, 0.45);
+}
+.pk-sbtn:disabled .pk-sbtn-lamp {
+  opacity: 0.45;
+}
+/* 금액: 칸 위에 걸친 알약 (크게) */
+.pk-sbtn-amt {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translate(-50%, -55%);
+  padding: 0.05em 0.6em;
+  border-radius: 999px;
+  background: #05080b;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: #fff;
+  font-size: 1em;
+  font-weight: 800;
+  line-height: 1.3;
+  white-space: nowrap;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.6);
+}
+
+/* ── 내 차례 3 · 2 · 1: 둥근 시계 (테두리가 1초 동안 줄어듦) ── */
+.pk-cd {
+  width: 2.1em;
+  height: 2.1em;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: radial-gradient(circle at 50% 38%, rgba(40, 36, 30, 0.95), rgba(8, 8, 12, 0.95) 70%);
+  box-shadow:
+    0 0 0 0.05em rgba(255, 255, 255, 0.12),
+    0 0.12em 0.4em rgba(0, 0, 0, 0.6);
+  animation: pk-cd-pop 0.35s cubic-bezier(0.2, 1.5, 0.35, 1) both;
+  --cc: #ffd84a;
+}
+.pk-cd[data-n="2"] { --cc: #ff9f43; }
+.pk-cd[data-n="1"] { --cc: #ff4d5e; }
+.pk-cd svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+  overflow: visible;
+}
+.pk-cd-track {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.1);
+  stroke-width: 6;
+}
+.pk-cd-ring {
+  fill: none;
+  stroke: var(--cc);
+  stroke-width: 6;
+  stroke-linecap: round;
+  stroke-dasharray: 100 100;
+  filter: drop-shadow(0 0 4px var(--cc));
+  animation: pk-cd-ring 1s linear forwards;
+}
+.pk-cd b {
+  position: relative;
+  font-family: "Black Han Sans", sans-serif;
+  font-weight: 400;
+  font-size: 1.15em;
+  line-height: 1;
+  color: #fff;
+  text-shadow:
+    0 0 0.25em var(--cc),
+    0 0.05em 0 rgba(0, 0, 0, 0.6);
+}
+@keyframes pk-cd-ring {
+  from { stroke-dashoffset: 0; }
+  to { stroke-dashoffset: 100; }
+}
+@keyframes pk-cd-pop {
+  0% { transform: translate(-50%, -50%) scale(1.4); opacity: 0; }
+  100% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+}
+/* 틀 안 작은 초 세기: 캐릭터 칸 오른쪽 위 안쪽 */
+.pk-sf-char .pk-count-sm {
+  right: 4px;
+  top: 4px;
+  left: auto;
+  font-size: 1.05em;
+  background: radial-gradient(circle at 50% 38%, #3a3328, #0b0b10 70%);
+  border: 2px solid #ff4d5e;
+  box-shadow: 0 0 10px rgba(255, 77, 94, 0.7);
+}
+.pk-sf-char-r .pk-count-sm {
+  right: auto;
+  left: 4px;
+}
+/* 7포커: 「내 차례!」는 버튼 줄 왼쪽 위 (족보 상자를 안 가리게) */
+.pk-turn-flag-l {
+  left: 0;
+  translate: 50% 0; /* 움직임의 translateX(-50%) 를 되돌림 → 왼쪽 끝에 맞춤 */
+}
+
+/* 7포커 내 차례: 「내 차례!」 딱지 대신 내 틀이 금빛으로 숨 쉬듯 빛나고, 버튼 줄이 한 번 번쩍 */
+.pk-sf-me[data-turn="1"] {
+  animation: pk-me-turn 1.1s ease-in-out infinite;
+}
+@keyframes pk-me-turn {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 2px rgba(255, 216, 74, 0.45),
+      0 0 16px rgba(255, 216, 74, 0.45);
+  }
+  50% {
+    box-shadow:
+      0 0 0 3px rgba(255, 216, 74, 0.85),
+      0 0 34px rgba(255, 216, 74, 0.8);
+  }
+}
+.pk-sevenbar[data-live="1"] {
+  border-radius: 10px;
+  animation: pk-bar-live 0.6s ease-out both;
+}
+@keyframes pk-bar-live {
+  0% {
+    box-shadow: 0 0 0 0 rgba(120, 225, 245, 0);
+  }
+  40% {
+    box-shadow: 0 0 0 4px rgba(120, 225, 245, 0.55), 0 0 30px rgba(120, 225, 245, 0.5);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(120, 225, 245, 0);
+  }
+}
+
+/* 베팅 칸 글자 그림: 칸 높이에 맞춰 크게. 잠긴 칸은 흑백 · 흐리게, 미리 누를 수 있는 칸은 반쯤 */
+.pk-sbtn-img {
+  display: block;
+  height: 70%;
+  margin-top: 0.55em; /* 위에 걸친 금액 알약 아래로 — 글자를 안 가리게 */
+  max-width: 94%;
+  width: auto;
+  object-fit: contain;
+  pointer-events: none;
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.6));
+  transition: filter 0.15s, opacity 0.15s;
+}
+.pk-sbtn:disabled .pk-sbtn-img {
+  filter: grayscale(1) brightness(0.7);
+  opacity: 0.28;
+}
+.pk-sevenbar:not([data-live="1"]) .pk-sbtn:not(:disabled) .pk-sbtn-img {
+  filter: grayscale(0.45) brightness(0.85);
+  opacity: 0.72;
+}
+.pk-sbtn[aria-pressed="true"] .pk-sbtn-img {
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.6)) !important;
+  opacity: 1 !important;
+}
+
+/* 틀 안 족보 · 결과 글자: 또렷하게 (그라데이션 글자 대신 흰 글자 + 진한 그림자), 조금 크게 */
+.pk-sf-label .pk-handtag,
+.pk-sf-label .pk-resulttag {
+  font-size: 1.42em;
+  letter-spacing: 0.02em;
+  padding: 0.14em 0.8em 0.1em;
+}
+.pk-sf-label .pk-handtag.pk-made {
+  font-size: 1.55em;
+}
+.pk-sf-label .pk-tag-t,
+.pk-handtag .pk-tag-t {
+  background: none !important;
+  color: #fff;
+  -webkit-text-fill-color: #fff;
+  text-shadow:
+    0 2px 0 rgba(0, 0, 0, 0.85),
+    0 0 6px rgba(0, 0, 0, 0.6);
+}
+.pk-handtag.pk-made .pk-tag-t,
+.pk-sf-label .pk-made .pk-tag-t,
+.pk-sf-label .pk-resulttag-win .pk-tag-t {
+  color: #ffe58a;
+  -webkit-text-fill-color: #ffe58a;
+}
+/* 내 히든: 엎은 채로 맨 끝, 눌러서 열어 보라고 숨 쉬듯 빛남 */
+.pk-peek {
+  animation: pk-peek 1.1s ease-in-out infinite;
+}
+@keyframes pk-peek {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 0 rgba(255, 216, 74, 0));
+    transform: translateY(0);
+  }
+  50% {
+    filter: drop-shadow(0 0 10px rgba(255, 216, 74, 0.95));
+    transform: translateY(-4%);
+  }
+}
+.pk-peek-tag {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  padding: 0.15em 0.55em;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.82);
+  border: 1.5px solid #ffd84a;
+  color: #ffd84a;
+  font-size: 0.78em;
+  font-weight: 800;
+  white-space: nowrap;
+  pointer-events: none;
+}
+/* 7포커 이번 구 정보 줄 (팟 아래) */
+.pk-roundinfo {
+  display: flex;
+  gap: 0.4em;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+.pk-ri {
+  padding: 0.08em 0.65em;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 0.95em;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.pk-ri-call {
+  color: #3ee08f;
+  border-color: rgba(62, 224, 143, 0.5);
+}
+/* 7포커 띠 가운데: 이번 판 총 베팅 */
+.pk-sf-total {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.3em;
+  font-size: 0.92em;
+  font-weight: 800;
+  color: #fff;
+}
+.pk-sf-total-l {
+  font-size: 0.78em;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.5);
+}
+/* 판 끝 손익: 카드 칸 오른쪽 위에 크게 */
+.pk-sf-net {
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  z-index: 9;
+  padding: 0.05em 0.55em;
+  border-radius: 8px;
+  background: rgba(6, 7, 12, 0.88);
+  font-size: 1.35em;
+  font-weight: 900;
+  line-height: 1.25;
+  white-space: nowrap;
+  pointer-events: none;
+  animation: pk-acttag 0.45s cubic-bezier(0.2, 1.5, 0.35, 1) both;
+}
+.pk-sf-net-up {
+  color: #ffd84a;
+  border: 1.5px solid rgba(255, 216, 74, 0.7);
+  text-shadow: 0 0 10px rgba(255, 216, 74, 0.6);
+}
+.pk-sf-net-down {
+  color: #ff7d86;
+  border: 1.5px solid rgba(255, 125, 134, 0.55);
+}
+/* 캐릭터 칸 남은 시간 테두리: 칸 안쪽으로 들여서 아래가 띠에 안 가리게 */
+.pk-sf-char .pk-plate-ring {
+  left: 2px;
+  top: 2px;
+  width: calc(100% - 4px);
+  height: calc(100% - 4px);
+}
+/* 판 위 칩: 구가 넘어가면 가운데로 쓸려 모이는 움직임 */
+.pk-pilechip {
+  transition:
+    left 0.55s cubic-bezier(0.3, 0.8, 0.3, 1),
+    top 0.55s cubic-bezier(0.3, 0.8, 0.3, 1);
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.6));
+}
+/* 홀덤 이번 판 총 베팅: 얼굴 아이콘 위 가운데 */
+.pk-face-bet {
+  position: absolute;
+  left: 50%;
+  /* 얼굴 윗선에 걸쳐서 — 얼굴 위로 올리면 위 자리 이름표 · 칩을 가림 */
+  top: 0;
+  transform: translate(-50%, -40%);
+  z-index: 6;
+  padding: 0.05em 0.55em;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.78);
+  border: 1px solid rgba(255, 216, 74, 0.45);
+  color: #ffd84a;
+  font-size: 0.85em;
+  font-weight: 800;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.pk-face-bet-me {
+  left: auto;
+  right: -0.9em;
+  bottom: auto;
+  top: 2px;
+  transform: none;
+  font-size: 0.9em;
+}
+
+/* ── 승자 컷인 ── */
+.pk-cutwin {
+  display: flex;
+  align-items: flex-end;
+}
+.pk-cutwin img {
+  filter: drop-shadow(0 0 18px rgba(255, 210, 63, 0.55)) drop-shadow(0 8px 16px rgba(0, 0, 0, 0.6));
+}
+.pk-cutwin-glow {
+  position: absolute;
+  left: 50%;
+  bottom: 8%;
+  width: 140%;
+  aspect-ratio: 1;
+  transform: translateX(-50%);
+  border-radius: 999px;
+  background:
+    repeating-conic-gradient(from 0deg, rgba(255, 220, 110, 0.22) 0 8deg, transparent 8deg 22deg),
+    radial-gradient(circle, rgba(255, 210, 63, 0.45), rgba(255, 210, 63, 0) 62%);
+  mask: radial-gradient(circle, #000 35%, transparent 70%);
+  animation: pk-cut-rays 6s linear infinite;
+}
+@keyframes pk-cut-rays {
+  to {
+    transform: translateX(-50%) rotate(360deg);
+  }
+}
+/* 내 승리: 아래에서 크게 올라와 WIN 글자와 같이 머묾 (결과가 지워질 때 같이 사라짐) */
+.pk-cutwin-me {
+  animation: pk-cut-me 0.6s cubic-bezier(0.2, 0.9, 0.3, 1) forwards;
+}
+@keyframes pk-cut-me {
+  0% {
+    opacity: 0;
+    transform: translateY(30%) scale(0.92);
+  }
+  64% {
+    opacity: 1;
+    transform: translateY(0) scale(1.03);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+/* 남의 승리: 그 사람 쪽에서 작게 튀어나와 통통 튀고 들어감 */
+.pk-cutwin-other {
+  animation: pk-cut-other 3.2s cubic-bezier(0.2, 0.9, 0.3, 1) forwards;
+}
+.pk-cutwin-other[data-side="l"] {
+  --dx: -40%;
+}
+.pk-cutwin-other[data-side="r"] {
+  --dx: 40%;
+}
+@keyframes pk-cut-other {
+  0% {
+    opacity: 0;
+    transform: translate(var(--dx), 20%);
+  }
+  11% {
+    opacity: 1;
+    transform: translate(0, -4%);
+  }
+  17% {
+    transform: translate(0, 0);
+  }
+  24% {
+    transform: translate(0, -3%);
+  }
+  31%,
+  86% {
+    opacity: 1;
+    transform: translate(0, 0);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(var(--dx), 6%);
+  }
+}
+/* WIN! 아래 딴 돈 */
+.pk-winamt {
+  margin-top: 0.1em;
+  font-size: 1.5em;
+  font-weight: 900;
+  color: #ffe58a;
+  text-shadow:
+    0 2px 0 rgba(0, 0, 0, 0.7),
+    0 0 14px rgba(255, 210, 63, 0.7);
+}
+/* 캐릭터 칸을 띠보다 위에 그려서 남은 시간 테두리 아랫변이 띠에 안 가리게 */
+.pk-sf-char {
+  z-index: 2;
+}
+
+/* 카드 앞면 SVG (숫자 · 무늬 · 그림 전부 이 안에) */
+.pk-card .pk-face {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.pk-card .pk-idx {
+  font-family: "Barlow Condensed", "Arial Narrow", sans-serif;
+  font-weight: 600;
+  font-size: 40px;
+}
+/* 10 은 두 글자라 폭만 맞춰 조금 좁게 (높이는 다른 숫자와 거의 같게) */
+.pk-card .pk-idx-10 {
+  font-size: 40px;
+}
+/* 붙박이 이모티콘 줄: 정사각형 칸, 상자 높이에 맞춰 크기, 넘치면 좌우로 밀기 */
+.pk-emote-row {
+  display: flex;
+  align-items: center;
+  gap: 0.35em;
+  width: 100%;
+  height: 100%;
+  padding: 0.4em;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+  /* 스크롤 막대 숨김: 막대가 아래 자리를 먹어 칸이 위로 쏠렸음 (밀기 · 휠은 그대로) */
+  scrollbar-width: none;
+}
+.pk-emote-row::-webkit-scrollbar {
+  display: none;
+}
+/* 칸은 언제나 같은 크기 (상자 높이 · 화면 크기와 상관없이), 넘치면 좌우로 밀기 */
+.pk-emote-row .pk-emote-btn {
+  flex: none;
+  /* 정사각형, 상자가 낮으면 상자 안에 들어오게 (아래 얇은 막대 자리 남김) */
+  height: min(4.2em, 100%);
+  width: auto;
+  aspect-ratio: 1;
+}
+.pk-emote-row[data-drag="1"] {
+  cursor: grab;
+}
+.pk-emote-row[data-drag="1"]:active {
+  cursor: grabbing;
+}
+/* 옆에 더 있다는 표시: 칸 아래 얇은 막대 (자리를 안 먹게 겹쳐 그림) */
+.pk-emote-track {
+  position: absolute;
+  left: 0.6em;
+  right: 0.6em;
+  bottom: 0.12em;
+  height: 0.2em;
+  min-height: 2px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  pointer-events: none;
+}
+.pk-emote-thumb {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-radius: 999px;
+  background: rgba(240, 196, 92, 0.75);
+}
+/* 가리켜도 크기는 그대로 (커지면 줄이 밀려 맨 앞 칸이 흔들림) — 테두리 · 바탕만 바뀜 */
+.pk-emote-row .pk-emote-btn:hover,
+.pk-emote-row .pk-emote-btn:focus-visible {
+  transform: none;
+}
+/* 덮이는 카드의 안쪽 무늬 · 그림: 다음 카드가 날아와 덮을 즈음 스르륵 사라짐 (바로 지우면 날아오는 동안 빈 카드가 보임) */
+.pk-card .pk-face-in {
+  transition: opacity 0.2s ease 0.75s;
+}
+.pk-card .pk-face-in-off {
+  opacity: 0;
+}
+/* 승리 컷인 전신: 올라온 뒤 위로만 살짝 들썩 (좌우 흔들림 · 숨쉬기 크기 변화는 정신없어서 뺌). translate 속성이라 좌우 뒤집기(transform)와 안 겹침 */
+@media (prefers-reduced-motion: no-preference) {
+  .pk-cutwin img {
+    animation: pk-cut-hop 1.4s ease-in-out 0.6s infinite;
+  }
+}
+@keyframes pk-cut-hop {
+  0%,
+  100% {
+    translate: 0 0;
+  }
+  40% {
+    translate: 0 -1%;
+  }
+  70% {
+    translate: 0 0;
+  }
+}
+
+/* 폰 전체화면 안내 버튼: 가운데 크게, 금빛이 숨 쉬듯 번쩍 */
+/* 아이폰 앱 설치 안내 단계 */
+.pk-ios-step {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  padding: 0.55em 0.85em;
+  border: 1px solid rgba(214, 175, 92, 0.45);
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(3px);
+}
+.pk-ios-step > b {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 1.5em;
+  height: 1.5em;
+  border-radius: 999px;
+  background: #d6af5c;
+  color: #2a1e05;
+  font-size: 0.85em;
+}
+.pk-fsgate-btn {
+  box-shadow:
+    0 0 0 2px rgba(255, 226, 140, 0.55),
+    0 0 26px 6px rgba(255, 196, 60, 0.55),
+    0 6px 16px rgba(0, 0, 0, 0.6);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .pk-fsgate-btn {
+    animation: pk-fsgate-glow 1.6s ease-in-out infinite;
+  }
+}
+@keyframes pk-fsgate-glow {
+  0%,
+  100% {
+    transform: scale(1);
+    filter: brightness(1);
+  }
+  50% {
+    transform: scale(1.05);
+    filter: brightness(1.15);
+  }
+}
+
+/* 우편함: 안 받은 우편 수 · 있으면 버튼이 금빛으로 살짝 번쩍 */
+.pk-mail-badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: #ff3b5c;
+  color: #fff;
+  font-size: 10.5px;
+  font-weight: 800;
+  line-height: 17px;
+  text-align: center;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.55);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .pk-mail-new {
+    animation: pk-mail-glow 1.8s ease-in-out infinite;
+  }
+}
+@keyframes pk-mail-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(255, 216, 74, 0);
+  }
+  50% {
+    box-shadow: 0 0 10px 2px rgba(255, 216, 74, 0.6);
+  }
+}
+/* 출석 보상 안내: 위쪽에 크게, 누르면 우편함 */
+.pk-attend-toast {
+  cursor: pointer;
+  border: 1.5px solid rgba(255, 216, 74, 0.7);
+  font-weight: 700;
 }

@@ -182,12 +182,12 @@ describe("회원 전용 · 자금", () => {
     expect(await a.c.rpc("poker.sit", { id })).toMatchObject({ seat: expect.any(Number) });
   });
 
-  it("상점 · 옷장: 10억 스킨은 돈이 모자라면 못 사고, 사면 칩이 빠지고 바로 입음, 앉은 자리 그림도 바뀜, 두 번은 못 삼", async () => {
+  it("상점 · 옷장: 스킨은 포인트가 모자라면 못 사고, 사면 포인트가 빠지고(칩은 그대로) 바로 입음, 앉은 자리 그림도 바뀜, 두 번은 못 삼", async () => {
     const a = await member();
     const sk = SKINS[0];
-    expect(await a.c.rpc("poker.buy", { skin: sk.id }).catch((e) => (e as RpcError).code)).toBe("NEED_MONEY");
+    expect(await a.c.rpc("poker.buy", { skin: sk.id }).catch((e) => (e as RpcError).code)).toBe("NEED_POINTS");
     await a.c.rpc("poker.char", { char: sk.char });
-    await setMoney(a.uid, sk.price + 5 * 10 ** 8);
+    await setMoney(a.uid, 5 * 10 ** 8, { points: sk.price + 500 });
     // 앉아 있으면 못 삼 (봇 없는 방 — 판이 시작되지 않게)
     const id = await a.c.rpc<string>("poker.create", { game: "holdem", tier: 1, bots: false });
     await a.c.sub("poker.me", { id });
@@ -199,6 +199,7 @@ describe("회원 전용 · 자금", () => {
     expect(w.skins).toEqual([sk.id]);
     expect(w.wear[sk.char]).toBe(sk.id);
     expect(w.money).toBe(5 * 10 ** 8);
+    expect(w.points).toBe(500);
     expect(await a.c.rpc("poker.buy", { skin: sk.id }).catch((e) => (e as RpcError).code)).toBe("OWNED");
     // 앉으면 자리 그림 열쇠가 스킨
     const sub = await a.c.sub<{ table: TableWire }>("poker.table", { id });
@@ -641,16 +642,16 @@ describe("7포커 테이블", () => {
     await a.c.rpc("poker.sit", { id });
     const sat = await sub.wait((e) => e.t === "state" && e.d?.seats.some((s: any) => s?.uid === a.uid));
     expect(sat.d.seats.find((s: any) => s?.uid === a.uid).char).toBe("amy");
-    // 앉은 채로 바꾸면 자리도 바로 바뀜
-    await a.c.rpc("poker.char", { char: "taeyang" });
-    await sub.wait((e) => e.t === "state" && e.d?.seats.find((s: any) => s?.uid === a.uid)?.char === "taeyang");
+    // 게임방 안에서는 캐릭터를 못 바꿈 (스킨만) — 지갑 · 자리 그대로
+    expect(await code(a.c.rpc("poker.char", { char: "taeyang" }))).toBe("SEATED");
+    expect((await a.c.rpc<Wallet>("poker.wallet")).char).toBe("amy");
 
     expect(await code(a.c.rpc("poker.emote", { id, emote: "nope" }))).toBe("BAD_REQUEST");
     expect(await code(a.c.rpc("poker.emote", { id, emote: "lol" }))).toBe("OK");
     // 1.2초에 한 번
     expect(await code(a.c.rpc("poker.emote", { id, emote: "cry" }))).toBe("RATE_LIMITED");
     const chat = await sub.wait((e) => e.t === "chat" && e.d.emote === "lol");
-    expect(chat.d).toMatchObject({ uid: a.uid, name: a.nick, char: "taeyang", text: "", emote: "lol" });
+    expect(chat.d).toMatchObject({ uid: a.uid, name: a.nick, char: "amy", text: "", emote: "lol" });
     const ev = await sub.wait((e) => e.t === "state" && e.d?.ev.some((x: any) => x.t === "emote" && x.emote === "lol"));
     expect(ev.d.ev.find((x: any) => x.t === "emote")).toMatchObject({ seat: sat.d.seats.findIndex((s: any) => s?.uid === a.uid), emote: "lol" });
     await a.c.rpc("poker.leave", { id });

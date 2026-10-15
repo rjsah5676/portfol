@@ -74,6 +74,8 @@ export class Gateway {
   private frozen = false;
   /** 로그인한 사용자의 별명을 찾는 방법 (server.ts 에서 연결) */
   nickOf: (user: AuthUser) => Promise<string | null> = async () => null;
+  /** 이용 정지된 uid 면 안내 문구 (rpc 를 막음 — 구독해서 보기는 됨) */
+  blocked: (uid: string) => string | null = () => null;
 
   constructor(http: HttpServer, cfg: Config, private auth: Auth) {
     this.io = new Server(http, {
@@ -280,6 +282,8 @@ export class Gateway {
         const { m, a } = (msg ?? {}) as { m?: unknown; a?: unknown };
         const handler = typeof m === "string" ? this.rpcs.get(m) : undefined;
         if (!handler) throw bad("알 수 없는 요청입니다.");
+        const why = data.user ? this.blocked(data.user.uid) : null;
+        if (why) throw new AppError("BANNED", why, 403);
         return handler(ctx, a);
       })
     );

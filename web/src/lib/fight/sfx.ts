@@ -66,6 +66,9 @@ const SAMPLES: Record<string, number> = {
   "kai-i": 0.55,
   "igna-l": 0.5,
   "igna-i": 0.55,
+  // 스킨 (lib/fight/skins.ts) — 불꽃놀이 이그나: 폭죽 로켓 · 불꽃놀이 연발
+  "igna-fw-l": 0.5,
+  "igna-fw-i": 0.6,
   "soyoung-l": 0.95,
   "soyoung-l-air": 0.45,
   "soyoung-i": 0.5,
@@ -73,12 +76,17 @@ const SAMPLES: Record<string, number> = {
   "lily-i": 0.5,
   "zena-l": 0.55,
   "zena-i": 0.5,
+  // (10.12 새 소리 — 파일이 오기 전엔 합성음 · 감전 소리로)
+  "zena-l-air": 0.5,
+  "zena-mark": 0.5,
+  "zena-burst": 0.7,
   "gunmo-l": 0.55,
   "gunmo-l-air": 0.55,
   "gunmo-i": 0.55,
   "gunmo-pause": 0.5,
   "gunmo-confuse": 0.45,
   "gunmo-whoosh": 0.3,
+  "gunmo-bsod": 0.6,
   "ivan-l": 0.6,
   "ivan-l-air": 0.55,
   "ivan-i": 0.6,
@@ -456,6 +464,26 @@ export function sfxStatus(kind: "burn" | "shock" | "trap" | "pop" | "pause" | "s
   else sample(kind === "trap" || kind === "pop" ? `lily-${kind}` : kind);
 }
 /** 이반 철곰권: 기 모으기 시작 · 다 모음 · 가드 부숨 */
+/** 제나 뇌섬일창: 낙인 찍힘 · 낙인이 터지는 낙뢰 (파일이 없으면 감전 소리 + 합성 천둥) */
+export function sfxZena(kind: "mark" | "burst") {
+  if (sample(`zena-${kind}`)) return;
+  sample("shock");
+  if (kind !== "burst") return;
+  const c = ac();
+  if (!c) return;
+  const t = c.currentTime;
+  burst(c, t, 2400, 1, 0.5, 0.25, "lowpass", 0.35);
+  tone(c, t, "sine", 120, 35, 0.8, 0.4, 3);
+}
+/** 건모 Alt+F4 강제 종료가 맞음 (파일 없으면 일시정지 소리 + 낮게 꺼지는 소리) */
+export function sfxGunmo() {
+  if (sample("gunmo-bsod")) return;
+  sample("gunmo-pause");
+  const c = ac();
+  if (!c) return;
+  const t = c.currentTime;
+  tone(c, t, "square", 880, 110, 0.22, 0.6);
+}
 export function sfxIvan(kind: "charge" | "max" | "crush") {
   if (sample(`ivan-${kind}`)) return;
   const c = ac();
