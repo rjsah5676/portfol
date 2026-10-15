@@ -175,6 +175,8 @@ export const CHAR_ADJ: Record<string, number[]> = {
   zena: [-120, -259, -401, -309, 33, 184, 508],
   gunmo: [172, 414, 466, 364, 64, -46, -46],
   ivan: [-52, -156, -222, 14, 10, -124, -402],
+  // 포르테 (10.16 같은 레이팅 AI끼리 56판씩으로 맞춤 — 표본이 작아 대략)
+  forte: [0, 170, 280, 230, 60, 0, 0],
 };
 function charAdj(r: number, id: string) {
   const t = CHAR_ADJ[id];
@@ -776,7 +778,10 @@ export class FightAI {
         out |= toward;
         // 공중 연속: 약 위주로 이어 치다 마지막은 발차기 (박자: 판정이 맞은 직후에 누름)
         if (dist < 48 && dy > -25 && dy < 70 && o.stun >= c.moves.J.startup + 2 && this.r() < 0.35 + L.combo * 0.6) {
-          if (c.moves.S.air?.hug && f.cd === 0 && !o.hugd && (o.combo >= 3 || f.airUsed >= 3) && this.r() < 0.5 + L.combo * 0.5) {
+          if (c.moves.S.air?.rewind && f.cd === 0 && f.airUsed + f.airK >= 4 && o.floatT < 90 && this.r() < 0.4 + L.combo * 0.6) {
+            // 포르테: 공중 약 · 발차기를 다 쓰면 태엽 되감기로 상대와 같이 다시 떠올라 이어 침
+            press(IN.C);
+          } else if (c.moves.S.air?.hug && f.cd === 0 && !o.hugd && (o.combo >= 3 || f.airUsed >= 3) && this.r() < 0.5 + L.combo * 0.5) {
             // 곰 포옹으로 마무리: 안고 내리꽂아 기절 → 땅에서 이어 침
             press(IN.C);
           } else if (hu > 0 && f.meter >= 100 && o.combo >= 4 && this.r() < hu && this.ultHits(s, me, 0)) {
@@ -799,6 +804,8 @@ export class FightAI {
         // 끌어당김(소영)·일시정지(건모) 뒤: 잡기로 띄우거나 약 콤보
         // 건모: 공중 콤보 중간에 Alt+F4 → 콤보 초기화, 착지해서 한 콤보 더
         if ((f.mv === "J" || f.mv === "K") && c.moves.X.bsod && !o.bsodd && f.meter >= 100 && this.r() < 0.6 && this.ultHits(s, me, 0)) press(IN.X);
+        // 포르테: 콤보를 몇 대 넣었으면 앙코르로 캔슬 (기록한 타격이 많을수록 셈)
+        else if (c.moves.X.encore && f.meter >= 100 && f.enc.length >= 8 && (f.mv === "L" || f.mv === "H") && this.r() < 0.4 + L.combo * 0.5 && this.ultHits(s, me, 0)) press(IN.X);
         // 건모: ⏸ 일시정지 → 필살기 Alt+F4 로 캔슬 (느린 시작도 확정)
         else if (f.mv === "S" && c.moves.X.bsod && o.mark === 1 && f.meter >= 100 && this.r() < 0.7 && this.ultHits(s, me, 0)) press(IN.X);
         else if (f.mv === "S" && (o.pulled || o.mark === 1)) press(this.r() < 0.5 ? IN.A | IN.B : IN.A);

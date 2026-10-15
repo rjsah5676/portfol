@@ -47,7 +47,7 @@ const MENU_BG = "/fight/bg/title.webp";
 const face = (c: CharDef) => `/fight/art/${c.id}-face.webp`;
 
 /** 캐릭터 고르기 격자 한 줄 칸 수 (랜덤 + 캐릭터들을 이만큼씩 여러 줄로) */
-const PICK_COLS = 4;
+const PICK_COLS = 5;
 /** 위·아래로 한 줄 옮김 (격자 밖이면 그대로) — 칸 번호는 랜덤(-1)부터 */
 const pickVert = (ch: number, d: number) => {
   const p = ch + 1 + d * PICK_COLS;

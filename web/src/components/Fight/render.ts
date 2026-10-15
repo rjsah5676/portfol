@@ -41,6 +41,7 @@ const ELEMENT: Record<string, "fire" | "bolt" | "ice" | "wind" | "whip" | "water
   lily: "water",
   gunmo: "ice",
   ivan: "fire",
+  forte: "wind",
 };
 
 /** 건모 Alt+F4 블루스크린 길이 (프레임) */
@@ -70,7 +71,11 @@ const PROJ_ANIM: Record<string, Partial<Record<"S" | "X", [string, number, numbe
   lily: { S: ["lily-bubble", 4, 1.3, 0.72], X: ["lily-wave", 4, 1.55, 0.5] },
   zena: { S: ["zena-spear", 4, 3.2, 0.75] },
   "zena-idol": { S: ["zena-idol-spear", 4, 5.5, 0.82] },
+  // 포르테 태엽 팽이: 빛이 아니라 물체라 보통 합성 (PROJ_SOLID)
+  forte: { S: ["forte-top", 4, 1.25, 0.5] },
 };
+/** 더하기 합성(빛)이 아니라 보통으로 그리는 탄 그림 */
+const PROJ_SOLID = new Set(["forte-top"]);
 /** v2 에셋의 소환(불기둥 등) 그림: 캐릭터 → [이름, 장 수] — 바닥 기준, 판정 높이에 맞춤 */
 const PILLAR_ANIM: Record<string, [string, number]> = { igna: ["igna-pillar", 4], "igna-fw": ["igna-fw-pillar", 4], zena: ["zena-bolt", 4] };
 /** 캐릭터·기술별 탄 그림: [그림, 판정 크기 대비 그림 높이 배율, 판정 중심이 그림 가로 어디쯤(0~1)] */
@@ -111,6 +116,8 @@ const FX_SETS: Record<string, Record<string, [number, number, boolean]>> = {
   "gunmo-school": { box: [4, 1, false], win: [4, 1, false], crash: [1, 1.1, false], glitch: [1, 0.7, true], ring: [1, 1.2, true] },
   // 시베리아 이반: 이반 효과를 서리빛으로 (먼지는 기본)
   "ivan-winter": { spark: [4, 0.7, true], guard: [2, 0.6, true], aura: [4, 0.95, true], wave: [4, 0.9, true], burst: [4, 1.35, true], crack: [4, 0.95, false] },
+  // 포르테: clock(태엽 되감기 시계) · encore(앙코르 음표 폭발)는 이벤트로 띄움
+  forte: { spark: [4, 0.6, true], clock: [4, 1.1, true], encore: [4, 1.4, true] },
   // 이반: aura(철곰권 기 모으기)·wave(철곰권 충격파)·burst(붉은 폭풍)·crack(곰 포옹 내리꽂기 균열)는 따로 띄움
   ivan: {
     spark: [4, 0.7, true],
@@ -136,6 +143,13 @@ function fxNames(id: string): string[] {
   if (pa) for (let k = 0; k < pa[1]; k++) out.push(`${pa[0]}-${k}`);
   for (const a of Object.values(PROJ_ART[id] ?? {})) if (a) out.push(a[0]);
   return out;
+}
+
+interface EncSnap {
+  fr: FrameRect;
+  pose: Pose;
+  dx: number;
+  dy: number;
 }
 
 interface FxAnim {
@@ -182,6 +196,10 @@ export class FightRenderer {
   /** 캐릭터별 움직임 연출 상태 (숨쉬기·착지·잔상 등) */
   private motion: [Motion, Motion] = [new Motion(), new Motion()];
   private fx: FxAnim[] = [];
+  /** 포르테 앙코르 잔상: 프레임마다 내 그림 · 상대 기준 자리 기록, 최근 맞힌 프레임, 잔상이 다시 그릴 첫 프레임 */
+  private encRec: [Map<number, EncSnap>, Map<number, EncSnap>] = [new Map(), new Map()];
+  private encHits: [number[], number[]] = [[], []];
+  private encBase: [number, number] = [0, 0];
 
   /** 그림 효과 하나 띄우기 (그 캐릭터에 그 효과 그림이 있을 때만) — 성공하면 true */
   private spawnFx(
@@ -338,6 +356,10 @@ export class FightRenderer {
       if (e.k === "hit" || e.k === "throw") {
         const a = s.p[e.p];
         this.spawnFx(a, "spark", x, y, a.face, 12);
+        if (e.k === "hit" && e.m !== "X" && CHARS[a.ch].moves.X.encore && a.encT === 0) {
+          this.encHits[e.p].push(s.f);
+          if (this.encHits[e.p].length > 40) this.encHits[e.p].shift();
+        }
         if (e.k === "hit" && CHARS[a.ch].id === "ivan") {
           // 철곰권: 맞힌 자리에서 앞으로 퍼지는 충격파 / 붉은 폭풍: 큰 폭발
           if (e.m === "S" && !a.aerial && !isAirF(s, a)) this.spawnFx(a, "wave", x + a.face * 18, y, a.face, 16);
@@ -531,6 +553,39 @@ export class FightRenderer {
         this.flash = 4;
         this.flashColor = "#fff";
         this.shake = Math.max(this.shake, 6);
+      } else if (e.k === "rewind") {
+        // 포르테 태엽 되감기: 시계판 + 거꾸로 도는 빛 (v = 1 은 같이 되감긴 상대)
+        const a = s.p[e.p];
+        if (!e.v) this.spawnFx(a, "clock", x, y - 36, a.face, 22);
+        this.parts.push({ x, y: y - 36, vx: 0, vy: 0, life: 16, max: 16, color: "#FFE08A", size: e.v ? 16 : 26, kind: "ring" });
+        if (!e.v) this.parts.push({ x, y: y - 70, vx: 0, vy: -0.4, life: 30, max: 30, color: "#FFE08A", size: 1.2, kind: "text", text: "REWIND" });
+        for (let i = 0; i < 10; i++) {
+          const an = (i / 10) * Math.PI * 2;
+          this.parts.push({
+            x: x + Math.cos(an) * 26, y: y - 36 + Math.sin(an) * 26, vx: Math.sin(an) * 1.6, vy: -Math.cos(an) * 1.6,
+            life: 14, max: 14, color: i % 2 ? "#FFE08A" : "#F7A8C8", size: 1.2, kind: "spark",
+          });
+        }
+      } else if (e.k === "catch") {
+        // 돌아온 태엽 팽이를 받음
+        this.parts.push({ x, y, vx: 0, vy: 0, life: 10, max: 10, color: "#FFE08A", size: 12, kind: "ring" });
+        for (let i = 0; i < 5; i++)
+          this.parts.push({
+            x, y, vx: (Math.random() - 0.5) * 2.5, vy: -1 - Math.random() * 1.5, life: 14, max: 14,
+            color: i % 2 ? "#FFF3C4" : "#F7A8C8", size: 1, kind: "spark",
+          });
+      } else if (e.k === "encore") {
+        // 포르테 앙코르: 붙잡힌 상대에게 잔상이 방금 맞힌 공격을 다시 (잔상은 drawFighter)
+        const a = s.p[e.p];
+        const hs = this.encHits[e.p].filter((t) => t >= s.f - 120);
+        this.encBase[e.p] = (hs.length ? hs[0] : s.f) - 14;
+        this.encHits[e.p] = [];
+        this.spawnFx(a, "encore", x, y - 30, a.face, 30);
+        this.parts.push({ x, y: y - 50, vx: 0, vy: -0.5, life: 50, max: 50, color: "#F7A8C8", size: 1.7, kind: "text", text: "ENCORE!" });
+        this.parts.push({ x, y: y - 30, vx: 0, vy: 0, life: 20, max: 20, color: "#FFE08A", size: 40, kind: "ring" });
+        this.flash = 5;
+        this.flashColor = "#FFD6E8";
+        this.shake = Math.max(this.shake, 4);
       } else if (e.k === "immune") {
         // 상태 이상 면역 (풀린 지 2초 안 / 이미 걸린 채): 피해만 들어감
         this.parts.push({ x, y, vx: 0, vy: -0.45, life: 34, max: 34, color: "#C4B5FD", size: 1.2, kind: "text", text: "IMMUNE" });
@@ -801,6 +856,8 @@ export class FightRenderer {
       return;
     }
     let { anim, frame } = pickFrame(sh, f, s);
+    // 포르테 앙코르 중: 음표 폭발 그림(가장 큰 프레임)이 상대를 가려서 마무리 자세로 (잔상이 보이게)
+    if (f.encT > 0 && sh.anims.X) ((anim = sh.anims.X), (frame = sh.anims.X.frames - 1));
     // 착지·대시 멈춤·급강하 착지 그림 (상태가 막 바뀐 직후 잠깐)
     const mo0 = this.motion[i];
     if (mo0.after && sh.anims[mo0.after.name]) {
@@ -1030,6 +1087,33 @@ export class FightRenderer {
     if (mo.smear > 0 && mo.smearRect) {
       g.globalAlpha = baseA * 0.28 * (mo.smear / 3);
       this.blit(sh.img, mo.smearRect.sx, mo.smearRect.sy, mo.smearRect, sc, x, y, mo.pose, mirror);
+    }
+    // 포르테: 앙코르 잔상용으로 지금 그림 기록 (상대 기준 자리) · 앙코르 중이면 기록을 다시 그림
+    if (CHARS[f.ch].moves.X.encore) {
+      const o = s.p[1 - i];
+      const rec = this.encRec[i];
+      if (f.encT === 0) {
+        rec.set(s.f, { fr, pose: { ...mo.pose }, dx: x - o.x / SUB, dy: y - screenY(o.h) });
+        for (const k of rec.keys()) if (k < s.f - 200) rec.delete(k);
+      } else {
+        const sn = rec.get(this.encBase[i] + f.encT);
+        if (sn) {
+          const ox = o.x / SUB,
+            oy = screenY(o.h);
+          g.save();
+          g.globalAlpha = 0.75;
+          this.blit(sh.img, sn.fr.sx, sn.fr.sy, sn.fr, sc, ox + sn.dx, oy + sn.dy, sn.pose, mirror);
+          g.globalCompositeOperation = "lighter";
+          g.globalAlpha = 0.45;
+          this.blit(sh.img, sn.fr.sx, sn.fr.sy, sn.fr, sc, ox + sn.dx, oy + sn.dy, sn.pose, mirror);
+          g.restore();
+          if (s.f % 3 === 0)
+            this.parts.push({
+              x: ox + sn.dx + (Math.random() - 0.5) * 20, y: oy + sn.dy - Math.random() * 50, vx: 0, vy: -0.8, life: 16, max: 16,
+              color: Math.random() < 0.5 ? "#F7A8C8" : "#FFE08A", size: 1, kind: "spark",
+            });
+        }
+      }
     }
     g.globalAlpha = baseA;
     this.blit(src, ssx, ssy, fr, sc, x, y, mo.pose, mirror);
@@ -1319,7 +1403,7 @@ export class FightRenderer {
         g.save();
         g.translate(cx, cy);
         g.scale(dir || 1, 1);
-        g.globalCompositeOperation = "lighter";
+        if (!PROJ_SOLID.has(anim[0])) g.globalCompositeOperation = "lighter";
         g.drawImage(aimg, -wid * anim[3], -hgt / 2, wid, hgt);
         g.restore();
       } else if (art && img) {

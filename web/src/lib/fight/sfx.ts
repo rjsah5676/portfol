@@ -93,6 +93,12 @@ const SAMPLES: Record<string, number> = {
   "ivan-charge": 0.4,
   "ivan-max": 0.45,
   "ivan-crush": 0.6,
+  // 포르테: 태엽 팽이 던지기 · 태엽 되감기 · 앙코르(필살기 시작) · 앙코르 잔상 시작 · 돌아온 팽이 받기
+  "forte-l": 0.5,
+  "forte-l-air": 0.5,
+  "forte-i": 0.55,
+  "forte-encore": 0.6,
+  "forte-catch": 0.4,
   // 상태 이상
   burn: 0.35,
   shock: 0.4,
@@ -462,6 +468,10 @@ export function sfxStatus(kind: "burn" | "shock" | "trap" | "pop" | "pause" | "s
   if (kind === "pause") sample("gunmo-pause");
   else if (kind === "swap") sample("gunmo-confuse");
   else sample(kind === "trap" || kind === "pop" ? `lily-${kind}` : kind);
+}
+/** 포르테: 앙코르 잔상 시작 · 돌아온 팽이 받기 */
+export function sfxForte(kind: "encore" | "catch") {
+  sample(`forte-${kind}`);
 }
 /** 이반 철곰권: 기 모으기 시작 · 다 모음 · 가드 부숨 */
 /** 제나 뇌섬일창: 낙인 찍힘 · 낙인이 터지는 낙뢰 (파일이 없으면 감전 소리 + 합성 천둥) */

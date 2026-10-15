@@ -296,6 +296,7 @@ export const FIGHT_CHAR_NAMES = [
   "제나",
   "건모",
   "이반",
+  "포르테",
 ] as const;
 
 const EOK = 100_000_000;

@@ -80,6 +80,8 @@ export const IN = {
 const IN_MASK = 511;
 
 const HIST = 24;
+/** 높이 기록 칸 수 (포르테 공중 「태엽 되감기」가 몇 프레임 전 높이로 되감을 수 있나) */
+const HH = 32;
 const INTRO = 100;
 const ROUND_END = 170;
 export const ROUND_SEC = 90;
@@ -300,6 +302,15 @@ export interface Fighter {
   inv: number;
   /** 최근 입력 (마지막이 이번 프레임) */
   hist: number[];
+  /** 최근 높이 (마지막이 이번 프레임, HH 칸) — 공중 「태엽 되감기」 */
+  hh: number[];
+  /** 앙코르 기록: 최근 내가 맞힌 타격 [프레임, 피해] 쌍 (오래된 건 지움) */
+  enc: number[];
+  /** 앙코르 진행 프레임 (0 = 아님) · 다시 넣을 타격 [몇 프레임째, 피해] 쌍 · 붙잡아 둔 상대 자리 */
+  encT: number;
+  encQ: number[];
+  encX: number;
+  encH: number;
 }
 
 export interface Proj {
@@ -318,6 +329,9 @@ export interface Proj {
   /** 위아래 속도 (공중에서 쏘면 아래로 내리꽂힘) */
   vh: number;
   life: number;
+  /** 부메랑 탄(태엽 팽이): 쏜 방향 · 맞힌 길 (1 가는 길, 2 오는 길) */
+  d?: number;
+  hb?: number;
 }
 
 export type EvKind =
@@ -354,7 +368,11 @@ export type EvKind =
   | "bsod"
   | "zapLine"
   | "stun"
-  | "immune";
+  | "immune"
+  /** 포르테: 태엽 되감기 (p = 되감긴 쪽) · 돌아온 팽이 받음 · 앙코르 시작 */
+  | "rewind"
+  | "catch"
+  | "encore";
 export interface Ev {
   k: EvKind;
   /** 관련 플레이어 (hit/block은 때린 쪽) */
@@ -523,6 +541,12 @@ function newFighter(ch: number, side: 0 | 1, map: MapDef): Fighter {
     recov: 0,
     inv: 0,
     hist: new Array(HIST).fill(0),
+    hh: new Array(HH).fill(0),
+    enc: [],
+    encT: 0,
+    encQ: [],
+    encX: 0,
+    encH: 0,
   };
 }
 
@@ -573,13 +597,13 @@ export function clone(s: State): State {
     ev: s.ev.slice(),
   };
 }
-const cloneF = (f: Fighter): Fighter => ({ ...f, hist: f.hist.slice() });
+const cloneF = (f: Fighter): Fighter => ({ ...f, hist: f.hist.slice(), hh: f.hh.slice(), enc: f.enc.slice(), encQ: f.encQ.slice() });
 
 /**
  * 이 빌드의 게임 데이터 지문 (캐릭터 성능·맵) — 온라인에서 서로 다른 빌드끼리 붙었는지 확인.
  * 계산 방식(sim.ts)만 바꿨을 땐 SIM_REV를 올릴 것.
  */
-const SIM_REV = 24;
+const SIM_REV = 25;
 export const BUILD_ID = (() => {
   const str = SIM_REV + JSON.stringify(CHARS.map((c) => [c.hp, c.walk, c.jumpVx, c.dash, c.cd, c.glide, c.hurt, c.width, c.moves])) + JSON.stringify(MAPS.map((m) => [m.plats, m.spawn]));
   let h = 2166136261;
@@ -613,6 +637,8 @@ export function hash(s: State): number {
     mix(f.t);
     mix(f.stun);
     mix(f.combo);
+    mix(f.encT);
+    mix(f.enc.length);
     mix(f.jumps);
     mix(f.dashT);
     mix(f.dive);
@@ -734,7 +760,7 @@ export function hurtRect(f: Fighter): Rect | null {
 /** 지금 판정이 살아 있는 공격 박스 */
 export function hitRect(f: Fighter): Rect | null {
   const m = moveOf(f);
-  if (f.st !== "atk" || !m || m.proj || m.summon || f.hit) return null;
+  if (f.st !== "atk" || !m || m.proj || m.summon || m.rewind || f.hit) return null;
   if (f.t < m.startup || f.t >= m.startup + m.active) return null;
   return boxRect(f, m.box);
 }
@@ -1151,6 +1177,7 @@ function control(s: State, i: number) {
       }
       // 연타기: 일정 프레임마다 다시 맞을 수 있게
       if (m.multi && f.t > m.startup && (f.t - m.startup) % m.multi === 0) f.hit = 0;
+      if (m.rewind && f.t === m.startup) rewindAir(s, i, m.rewind);
       if (m.proj && f.t === m.startup) {
         const d = m.proj;
         // 공중에서 쏘면 앞쪽 아래로 비스듬히 내리꽂음 (flat 탄은 수평)
@@ -1167,6 +1194,7 @@ function control(s: State, i: number) {
           vx: f.face * (dive ? Math.trunc((d.speed * 3) / 4) : d.speed),
           vh: dive ? -Math.trunc((d.speed * 3) / 5) : 0,
           life: d.life,
+          ...(d.boomer ? { d: f.face, hb: 0 } : {}),
         });
         s.ev.push({ k: "proj", p: i, x: f.x, h: f.h, v: 0 });
       }
@@ -2220,10 +2248,27 @@ function projectiles(s: State) {
       continue;
     }
     const prev = p.h;
+    const bm = p.k === 0 ? projDef(p, s).boomer : undefined;
+    if (bm && p.t > bm.turn) {
+      // 태엽 팽이: 쏜 사람 쪽으로 방향을 틀어 되돌아옴 (가로 최고 속도 = 처음 속도), 높이는 쏜 사람 쪽으로 서서히
+      const o = s.p[p.o];
+      const pd = projDef(p, s);
+      const tx = o.x - p.x;
+      p.vx += Math.sign(tx || -(p.d ?? 1)) * bm.accel;
+      if (Math.abs(p.vx) > pd.speed) p.vx = Math.sign(p.vx) * pd.speed;
+      p.vh = Math.trunc((o.h + pd.y * SUB - p.h) / 10);
+      // 돌아오는 중 쏜 사람에게 닿으면 받아서 사라짐 — 재사용 대기가 줄어듦
+      if (Math.sign(p.vx) !== (p.d ?? 1) && Math.abs(tx) < 22 * SUB && Math.abs(o.h + pd.y * SUB - p.h) < 50 * SUB) {
+        p.life = 0;
+        o.cd = Math.max(0, o.cd - bm.catchCd);
+        s.ev.push({ k: "catch", p: p.o, x: p.x, h: p.h, v: 0 });
+        continue;
+      }
+    }
     p.x += p.vx;
     p.h += p.vh;
     p.life--;
-    if (p.vh < 0) {
+    if (p.vh < 0 && !bm) {
       // 내리꽂는 탄은 발판·바닥에 닿으면 터짐
       for (const q of map.plats) {
         const top = q.y * SUB;
@@ -2294,11 +2339,19 @@ function projectiles(s: State) {
         applyHit(s, p.o, { ...pm, multi: pd.every ?? 8, kd: !!pm.kd && p.n <= 0 }, d.x - Math.sign(p.vx) * SUB, p.mv ? "X" : "S");
         if (p.n <= 0) p.life = 0;
       }
+    } else if (pd.boomer) {
+      // 태엽 팽이: 가는 길 한 번 · 오는 길 한 번 (오는 길은 쏜 사람 쪽으로 밀어 옴)
+      const leg = Math.sign(p.vx) === (p.d ?? 1) ? 1 : 2;
+      if (!((p.hb ?? 0) & leg) && h && overlap(projRect(p, s), h)) {
+        p.hb = (p.hb ?? 0) | leg;
+        applyHit(s, p.o, pm, p.x - p.vx * 4, "S");
+      }
+      if (p.x < -60 * SUB || p.x > (VIEW_W + 60) * SUB) p.life = 0;
     } else if (h && overlap(projRect(p, s), h)) {
       applyHit(s, p.o, pm, p.x - p.vx * 4, p.mv ? "X" : "S");
       p.life = 0;
     }
-    if (p.x < -20 * SUB || p.x > (VIEW_W + 20) * SUB) p.life = 0;
+    if (!pd.boomer && (p.x < -20 * SUB || p.x > (VIEW_W + 20) * SUB)) p.life = 0;
   }
   s.proj = s.proj.filter((p) => p.life > 0);
 }
@@ -2383,6 +2436,102 @@ function checkKO(s: State) {
   endRound(s, ka && kb ? 2 : ka ? 1 : 0);
 }
 
+/**
+ * 포르테 공중 「태엽 되감기」: 내 높이를 back 프레임 전으로 (더 높았을 때만) + 공중 약 · 발차기 횟수 초기화.
+ * 가까운 상대가 공중에서 맞는 중(공중 콤보)이면 상대 높이도 되감고 경직을 이어 줌
+ */
+function rewindAir(s: State, i: number, back: number) {
+  const f = s.p[i];
+  const o = s.p[1 - i];
+  const k = Math.max(0, HH - 1 - back);
+  f.h = Math.max(f.h, f.hh[k]);
+  f.vh = 0;
+  f.airUsed = 0;
+  f.airK = 0;
+  f.airS = 0;
+  s.ev.push({ k: "rewind", p: i, x: f.x, h: f.h, v: 0 });
+  if (o.st === "hit" && airborneS(s, o) && o.combo > 0 && Math.abs(o.x - f.x) < 140 * SUB) {
+    o.h = Math.max(o.h, o.hh[k]);
+    o.vh = 0;
+    o.stun = Math.max(o.stun, 18);
+    s.ev.push({ k: "rewind", p: 1 - i, x: o.x, h: o.h, v: 1 });
+  }
+}
+
+/** 포르테 「앙코르」: 맞힌 타격 기록 · 필살기가 맞으면 기록한 타격을 같은 박자로 다시 넣음 */
+function encoreStep(s: State) {
+  for (let i = 0; i < 2; i++) {
+    const f = s.p[i];
+    const X = charOf(f).moves.X;
+    const en = X.encore;
+    if (!en) continue;
+    const o = s.p[1 - i];
+    // 기록: 이번 프레임 내가 맞힌 타 (앙코르 자체 · 필살기 빼고)
+    if (f.encT === 0)
+      for (const e of s.ev)
+        if (e.k === "hit" && e.p === i && e.m !== "X" && e.v > 0) f.enc.push(s.f, e.v);
+    while (f.enc.length && s.f - f.enc[0] > en.win) f.enc.splice(0, 2);
+    while (f.enc.length > en.max * 2) f.enc.splice(0, 2);
+    // 시작: 필살기가 막히지 않고 맞음
+    if (f.encT === 0 && f.st === "atk" && f.mv === "X" && s.ev.some((e) => e.k === "hit" && e.p === i && e.m === "X")) {
+      const t0 = f.enc.length ? f.enc[0] : s.f;
+      f.encQ = [];
+      for (let k = 0; k < f.enc.length; k += 2) f.encQ.push(f.enc[k] - t0 + 14, f.enc[k + 1]);
+      f.enc = [];
+      f.encT = 1;
+      f.encX = o.x;
+      f.encH = o.h;
+      s.ev.push({ k: "encore", p: i, x: o.x, h: o.h, v: f.encQ.length >> 1 });
+      continue;
+    }
+    if (f.encT === 0) continue;
+    if (o.hp <= 0 || s.phase !== "fight") {
+      f.encT = 0;
+      f.encQ = [];
+      continue;
+    }
+    f.encT++;
+    // 붙잡아 둠: 포르테는 필살기 자세 그대로, 상대는 그 자리에서 맞는 중
+    f.st = "atk";
+    f.mv = "X";
+    f.t = X.startup + X.active - 1;
+    f.vx = 0;
+    f.vh = 0;
+    o.st = "hit";
+    o.stun = Math.max(o.stun, 12);
+    o.kd = 0;
+    o.x = f.encX;
+    o.h = f.encH;
+    o.vx = 0;
+    o.vh = 0;
+    for (let k = 0; k < f.encQ.length; k += 2)
+      if (f.encQ[k] === f.encT) {
+        const dmg = Math.max(1, Math.trunc((f.encQ[k + 1] * en.pct) / 100));
+        o.hp = Math.max(0, o.hp - dmg);
+        o.combo++;
+        s.stop = Math.max(s.stop, 2);
+        s.ev.push({ k: "hit", p: i, x: o.x, h: o.h + 28 * SUB, v: dmg, m: "X" });
+      }
+    const last = f.encQ.length ? f.encQ[f.encQ.length - 2] : 0;
+    if (f.encT >= last + 18) {
+      // 마무리: 날려 버림
+      f.encT = 0;
+      f.encQ = [];
+      f.t = X.startup + X.active;
+      const dmg = Math.max(1, scaleDmg(en.fin, o.combo));
+      o.hp = Math.max(0, o.hp - dmg);
+      o.combo++;
+      o.kd = 1;
+      o.stun = 30;
+      o.vh = 1400;
+      o.h += SUB;
+      o.vx = (o.x >= f.x ? 1 : -1) * 900;
+      s.stop = Math.max(s.stop, 10);
+      s.ev.push({ k: "hit", p: i, x: o.x, h: o.h + 28 * SUB, v: dmg, m: "X" });
+    }
+  }
+}
+
 /** 한 프레임 진행 (s를 직접 바꿈 — 보관이 필요하면 clone 먼저) */
 export function step(s: State, input: [number, number]): State {
   s.ev = [];
@@ -2452,6 +2601,10 @@ export function step(s: State, input: [number, number]): State {
       const f = s.p[i];
       if (f.zap > 0 && --f.zap === 0) zapBurst(s, 1 - i);
     }
+    for (const f of s.p) {
+      f.hh.shift();
+      f.hh.push(f.h);
+    }
     control(s, 0);
     control(s, 1);
   } else {
@@ -2469,6 +2622,7 @@ export function step(s: State, input: [number, number]): State {
   if (s.phase === "fight") {
     projectiles(s);
     attacks(s);
+    encoreStep(s);
     // 경직에서 풀린 프레임에 안 맞았으면 콤보 끝
     for (const f of s.p) {
       if (f.recov && f.st !== "hit" && f.st !== "down") f.combo = 0;

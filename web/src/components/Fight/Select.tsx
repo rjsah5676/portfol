@@ -51,7 +51,7 @@ const ART_SCALE: Record<string, number> = { soyoung: 0.86, "soyoung-bunny": 0.96
 const ART_DX: Record<string, number> = { "soyoung-bunny": 3.4 };
 const PX = "[image-rendering:pixelated]";
 /** 캐릭터 고르기 칸: 한 줄에 몇 칸 (↑↓ 은 이만큼 건너뜀) */
-const FACE_COLS = 4;
+const FACE_COLS = 5;
 const KR = "font-['Nanum_Gothic',sans-serif]";
 const MENU_BG = "/fight/bg/title.webp";
 
@@ -793,7 +793,7 @@ export default function Select({
               <div
                 ref={stripRef}
                 onScroll={onStripScroll}
-                className="grid grid-cols-4 gap-x-[0.8cqw] gap-y-[1.7cqw] pt-[1.6cqw]"
+                className="grid grid-cols-5 gap-x-[0.8cqw] gap-y-[1.7cqw] pt-[1.6cqw]"
               >
               {(() => {
                 const r1 = rnd[0] && !lock[0],

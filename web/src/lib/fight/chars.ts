@@ -36,6 +36,11 @@ export interface ProjDef {
   every?: number;
   /** 공중에서 쏴도 내리꽂지 않고 수평으로 */
   flat?: boolean;
+  /**
+   * 부메랑 (포르테 태엽 팽이): turn 프레임 뒤부터 쏜 사람 쪽으로 accel 씩 방향을 틀어 되돌아옴 (가로 최고 속도 = speed).
+   * 가는 길 한 번 · 오는 길 한 번 맞힘 — 오는 길은 쏜 사람 쪽으로 밀어 옴. 쏜 사람에게 돌아오면 사라지고 재사용 대기가 catchCd 줄어듦
+   */
+  boomer?: { turn: number; accel: number; catchCd: number };
 }
 
 export interface MoveDef {
@@ -155,6 +160,16 @@ export interface MoveDef {
   crush?: boolean;
   /** 건모 「Alt+F4」: 가드 불가 · 맞으면 이 프레임 동안 멈춤(⏸, 면역 무시) — 그 사이 맞는 타는 멈춤을 안 풀고 남은 만큼 경직 유지 */
   bsod?: number;
+  /**
+   * 포르테 공중 「태엽 되감기」: 판정 프레임에 내 높이를 이 프레임 전 높이로 되감음 (더 높았으면) — 공중 약 · 발차기 횟수도 다시 채움.
+   * 가까이서 공중 콤보 중(상대가 공중에서 맞는 중)이면 상대 높이도 같이 되감고 경직을 이어 줌
+   */
+  rewind?: number;
+  /**
+   * 포르테 「앙코르」: 맞히면 상대를 붙잡아 두고, 직전 win 프레임 동안 내가 맞힌 타격들을 같은 박자로 pct% 피해로 다시 넣은 뒤 fin 피해로 날림.
+   * 막히면 그냥 끝
+   */
+  encore?: { win: number; pct: number; fin: number; max: number };
 }
 
 export interface CharDef {
@@ -1147,6 +1162,141 @@ const RAW: CharSrc[] = [
         kd: true,
         // 공중에서 쓰면 앞쪽 아래로 내리꽂고 → 착지하면 땅에서 그대로 돌진 (10.12 — 예전엔 공중에서 옆으로만 나가 서 있는 상대 위로 헛치거나 착지에 끊김)
         rush: { vx: 3400, airVh: -2600, airVx: 1600, landRush: true },
+      },
+    },
+  },
+  {
+    // 다이스 타운에서 놀러 온 오르골 소년. 땅에선 태엽 팽이로 견제, 공중 되감기로 공중 콤보를 늘리고, 앙코르로 방금 콤보를 한 번 더
+    id: "forte",
+    name: "포르테",
+    title: "오르골 소년 · 태엽과 시간",
+    desc: "다이스 타운에서 놀러 온 오르골 소년. 태엽 팽이로 견제하고, 시간을 되감아 공중 콤보를 이어 감",
+    hp: 1240,
+    walk: 1150,
+    jumpVx: 1080,
+    dash: 2600,
+    cd: 80,
+    hurt: { x: -9, y: 56, w: 18, h: 56 },
+    width: 17,
+    color: "#F7A8C8",
+    quote: "태엽은 다 감았어. 한 곡 들어 볼래?",
+    winQuote: "앙코르는… 다음 판에 해 줄게♪",
+    tagline: "CLOCKWORK ENCORE",
+    difficulty: 3,
+    stats: { atk: 3, reach: 3, move: 3, control: 2, combo: 5, hp: 2 },
+    idName: "태엽 팽이",
+    idDesc: "굴려 보낸 팽이가 되감기듯 돌아옴 — 가는 길 · 오는 길 한 번씩 때리고, 오는 길에 맞으면 포르테 쪽으로 끌려옴. 받으면 재사용 대기 줄어듦",
+    ultName: "앙코르",
+    ultDesc: "「앙코르!」 — 맞으면 잔상이 방금 2초 동안 맞힌 공격을 같은 박자로 한 번 더 넣고 날려 버림. 콤보 뒤에 쓸수록 셈",
+    airDesc: "0.5초 전 높이로 되감아 다시 떠오름 — 공중 콤보 중이면 상대도 같이 되감겨 공중 약 · 발차기를 다시 씀",
+    airLabel: "점프 중 L 「태엽 되감기」",
+    moves: {
+      L: {
+        // 약 (J): 손에 든 태엽 열쇠로 톡톡 — 4타는 열쇠를 위로 감아 올려침
+        startup: 4,
+        active: 3,
+        recovery: 6,
+        dmg: 38,
+        chip: 0,
+        hitstun: 14,
+        blockstun: 9,
+        push: 580,
+        hitstop: 5,
+        meter: 5,
+        box: { x: 4, y: 48, w: 44, h: 22 },
+        cancel: ["H", "S", "X"],
+      },
+      H: {
+        // 발차기 (K): 리본 돌려차기 → 2타 뒤꿈치 회전차기
+        startup: 9,
+        active: 4,
+        recovery: 17,
+        dmg: 88,
+        chip: 0,
+        hitstun: 19,
+        blockstun: 13,
+        push: 1050,
+        hitstop: 8,
+        meter: 9,
+        box: { x: 2, y: 58, w: 56, h: 34 },
+        cancel: ["S", "X"],
+        step: 200,
+      },
+      J: {
+        // 공중 약: 열쇠 휘두르기 (빠르고 판정 넓음 — 공중 콤보 주력)
+        startup: 4,
+        active: 8,
+        recovery: 6,
+        dmg: 52,
+        chip: 0,
+        hitstun: 16,
+        blockstun: 10,
+        push: 560,
+        hitstop: 6,
+        meter: 5,
+        box: { x: -4, y: 48, w: 54, h: 36 },
+      },
+      K: {
+        // 공중 발차기: 앞쪽 아래로 드릴처럼 찍어 차기
+        startup: 6,
+        active: 8,
+        recovery: 10,
+        dmg: 84,
+        chip: 0,
+        hitstun: 19,
+        blockstun: 12,
+        push: 1200,
+        hitstop: 7,
+        meter: 7,
+        box: { x: -2, y: 40, w: 58, h: 30 },
+        lunge: 1700,
+      },
+      S: {
+        // 아이덴티티 「태엽 팽이」: 굴려 보낸 팽이가 되감기듯 돌아옴 (부메랑)
+        startup: 11,
+        active: 1,
+        recovery: 15,
+        dmg: 56,
+        chip: 8,
+        hitstun: 26,
+        blockstun: 12,
+        push: 650,
+        hitstop: 6,
+        meter: 6,
+        box: { x: 0, y: 0, w: 0, h: 0 },
+        proj: { speed: 1500, y: 22, w: 30, h: 30, life: 150, flat: true, boomer: { turn: 24, accel: 130, catchCd: 30 } },
+        // 공중 「태엽 되감기」: 0.5초 전 높이로 되감음 (공중 콤보 중이면 상대도) — 재사용 대기 2.5초
+        air: {
+          proj: undefined,
+          startup: 5,
+          active: 1,
+          recovery: 9,
+          dmg: 0,
+          chip: 0,
+          hitstun: 0,
+          blockstun: 0,
+          push: 0,
+          hitstop: 0,
+          meter: 0,
+          box: { x: 0, y: 0, w: 0, h: 0 },
+          rewind: 30,
+          cd: 150,
+        },
+      },
+      X: {
+        // 필살기 「앙코르」: 태엽 끝까지 감고 앞으로 음표 폭발 → 맞으면 잔상이 방금 맞힌 공격을 한 번 더
+        startup: 14,
+        active: 6,
+        recovery: 26,
+        dmg: 110,
+        chip: 20,
+        hitstun: 40,
+        blockstun: 12,
+        push: 0,
+        hitstop: 10,
+        meter: 0,
+        box: { x: 0, y: 78, w: 84, h: 78 },
+        encore: { win: 120, pct: 75, fin: 80, max: 20 },
       },
     },
   },

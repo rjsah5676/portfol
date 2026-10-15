@@ -37,6 +37,7 @@ import {
   sfxSkill,
   sfxStatus,
   sfxIvan,
+  sfxForte,
   sfxZena,
   sfxGunmo,
   hasSkillSfx,
@@ -45,7 +46,7 @@ import {
 } from "@/lib/fight/sfx";
 
 /** 캐릭터별 효과음 성격 */
-const SFX_EL: Record<string, Element> = { kai: "wind", igna: "fire", soyoung: "whip", lily: "water", zena: "bolt", gunmo: "key", ivan: "fist" };
+const SFX_EL: Record<string, Element> = { kai: "wind", igna: "fire", soyoung: "whip", lily: "water", zena: "bolt", gunmo: "key", ivan: "fist", forte: "key" };
 import { FightRenderer } from "./render";
 import { FightInput } from "./input";
 import HowTo from "./HowTo";
@@ -690,6 +691,8 @@ export default function FightGame() {
           else if (e.k === "bsod") sfxGunmo();
           else if (e.k === "charged") sfxIvan("max");
           else if (e.k === "crush") sfxIvan("crush");
+          else if (e.k === "encore") sfxForte("encore");
+          else if (e.k === "catch") sfxForte("catch");
           else if (e.k === "super") {
             sfxSuper();
             const cut = { ch: s.p[e.p].ch, right: e.p === 1, key: s.f, skin: skinNow[e.p] };
