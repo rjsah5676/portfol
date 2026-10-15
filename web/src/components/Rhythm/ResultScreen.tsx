@@ -8,6 +8,7 @@ import { sfx, tick } from "@/lib/rhythm/sfx";
 import { coverOf } from "./SongCarousel";
 import { RankEmblem, type Result } from "./Stage";
 import { SubmitRanking } from "./RankingBoard";
+import type { SkinTheme } from "@/lib/rhythm/fx";
 
 const DISP = "font-['Arial_Black','Segoe_UI_Black',Impact,sans-serif] font-black italic";
 const KR = "font-['Nanum_Gothic',sans-serif]";
@@ -22,12 +23,15 @@ export default function ResultScreen({
   onRetry,
   onSelect,
   starting,
+  theme,
 }: {
   result: Result & { newBest: boolean };
   song: Song;
   onRetry: () => void;
   onSelect: () => void;
   starting: boolean;
+  /** 착용한 테마 스킨 — 무대 배경 + 캐릭터가 결과에 맞춰 한마디 */
+  theme?: SkinTheme;
 }) {
   const d = DIFFICULTIES.find((x) => x.key === result.diff)!;
   // BP: 내장곡(랭킹 있는 곡)을 끝까지 쳤을 때만 — 곡별 최고 BP 상위 20곡 합이 회원 랭킹
@@ -116,11 +120,21 @@ export default function ResultScreen({
   return (
     <div className="absolute inset-0 overflow-hidden bg-[#06041a]">
       <img
-        src={result.failed ? "/rhythm/play-pink.webp" : "/rhythm/play-blue.webp"}
+        src={
+          theme ? theme.stage : result.failed ? "/rhythm/play-pink.webp" : "/rhythm/play-blue.webp"
+        }
         alt=""
         className="absolute inset-0 h-full w-full object-cover opacity-55"
       />
       <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(6,4,26,0.9),rgba(6,4,26,0.55)_50%,rgba(6,4,26,0.9))]" />
+      {/* 테마 캐릭터: 왼쪽에 크게 (실패면 아쉬운 얼굴) + 아래 말풍선 */}
+      {theme?.art && (
+        <img
+          src={result.failed ? theme.art.lose : theme.art.cheer}
+          alt=""
+          className="pointer-events-none absolute -bottom-[16cqw] -left-[7cqw] h-[54cqw] max-w-none drop-shadow-[0_0_2cqw_rgba(245,200,66,0.35)] [animation:bd-slide-up_600ms_200ms_ease-out_backwards]"
+        />
+      )}
 
       {/* 위: 배너 */}
       <img
@@ -149,7 +163,9 @@ export default function ResultScreen({
             </div>
           </div>
         </div>
-        <div className="relative mt-[1cqw] h-[22cqw] w-[22cqw]">
+        <div
+          className={`relative ${theme?.art ? "mt-[0.6cqw] mr-[-1cqw] ml-auto h-[15cqw] w-[15cqw]" : "mt-[1cqw] h-[22cqw] w-[22cqw]"}`}
+        >
           {el >= T.rank && (
             <>
               <div className="absolute inset-[10%] rounded-full bg-white/20 blur-[3cqw] [animation:modal-fade_400ms_ease-out]" />
@@ -247,6 +263,19 @@ export default function ResultScreen({
 
       {/* 아래 */}
       <div className="absolute inset-x-0 bottom-0 flex h-[5cqw] items-center justify-end gap-[1cqw] border-t border-white/10 bg-black/55 px-[2.4cqw]">
+        {theme?.lines && (
+          <div
+            className={`${KR} mr-auto ml-[14cqw] rounded-[1cqw] border border-[#F5C842]/60 bg-[#1a1024]/90 px-[1.2cqw] py-[0.5cqw] text-[1.2cqw] text-[#FFF3C4] shadow-[0_0_1.4cqw_rgba(245,200,66,0.35)] [animation:modal-pop_300ms_900ms_ease-out_backwards]`}
+          >
+            {result.failed
+              ? theme.lines.fail
+              : result.ap
+                ? theme.lines.ap
+                : result.fc
+                  ? theme.lines.fc
+                  : theme.lines.clear}
+          </div>
+        )}
         <button
           type="button"
           onClick={() => {

@@ -120,6 +120,28 @@ export interface SkinTheme {
   /** 상점 미리보기 그림 */
   preview: string;
   desc: string;
+  /** 정보판 테두리 · 진행 막대 등 강조색 (없으면 곡 색) */
+  accent: string;
+  /** 캐릭터 일러스트 (투명 배경): 곡 고르기 · 시작 연출 · 카운트다운 · 결과 화면 */
+  art?: {
+    /** 기본 전신 (곡 고르기 아래 구석에서 빼꼼) */
+    stand: string;
+    /** 곡 시작 — 마이크 들고 가리키며 윙크 */
+    intro: string;
+    /** 환호 — 클리어 · 풀콤보 */
+    cheer: string;
+    /** 아쉬움 — 실패 */
+    lose: string;
+  };
+  /** 캐릭터 말 (곡 고르기 말풍선 · 결과 화면) */
+  lines?: { select: string[]; ap: string; fc: string; clear: string; fail: string };
+  /** 카운트다운: 띠 그라데이션 양끝 · READY 글자 · 3 · 2 · 1 · GO! 색 */
+  countdown: {
+    band: [string, string];
+    ready: string;
+    nums: [string, string, string, string];
+    stroke: string;
+  };
 }
 export const SKIN_THEME: Partial<Record<Skin, SkinTheme>> = {
   zena: {
@@ -133,6 +155,32 @@ export const SKIN_THEME: Partial<Record<Skin, SkinTheme>> = {
       scale: 1.35,
     },
     preview: "/rhythm/skin/zena-preview.webp",
+    accent: "#F5C842",
+    art: {
+      stand: "/fight/art/zena-idol.webp",
+      intro: "/rhythm/skin/zena-intro.webp",
+      cheer: "/rhythm/skin/zena-cheer.webp",
+      lose: "/rhythm/skin/zena-lose.webp",
+    },
+    lines: {
+      select: [
+        "이 곡 좋아! 같이 불러 보자 ⚡",
+        "오늘 무대 세트리스트, 네가 골라 줘!",
+        "준비됐어? 관객들이 기다리고 있어!",
+        "어려운 곡도 우리 둘이면 문제없지!",
+        "리허설은 끝! 이제 진짜 무대야 ✨",
+      ],
+      ap: "완벽해…! 오늘 무대, 전설로 남겠어!",
+      fc: "풀콤보! 역시 내 최고의 파트너야!",
+      clear: "좋았어! 다음 곡도 같이 가자!",
+      fail: "괜찮아, 리허설이었다고 치자! 한 번 더?",
+    },
+    countdown: {
+      band: ["245,200,66", "249,168,212"],
+      ready: "#FDE68A",
+      nums: ["#FDE68A", "#F9A8D4", "#F5C842", "#FFF3C4"],
+      stroke: "rgba(46,22,6,0.92)",
+    },
     desc: 'PIXEL FIGHT 아이돌 제나의 단독 콘서트 "SONIC STAGE" — 금빛 레인 틀과 콘서트 무대, 무대 구석에서 제나가 박자에 맞춰 노래하고 50콤보마다 환호해요',
   },
 };

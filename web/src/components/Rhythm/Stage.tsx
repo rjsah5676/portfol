@@ -21,6 +21,7 @@ import {
   laneColors,
   makeHitSound,
   SKIN_THEME,
+  type SkinTheme,
   hitSoundBuffer,
   type HitSound,
   type Skin,
@@ -292,6 +293,8 @@ export default function Stage({
   const hasCover = !song.custom || (!!song.cover && song.cover !== CUSTOM_COVER);
   // 테마 스킨(SKIN_THEME)은 재킷 대신 스킨의 무대 그림 (뮤비가 있는 곡은 뮤비 그대로)
   const theme = SKIN_THEME[skin];
+  /** 정보판 테두리 · 진행 막대 · 박자 빛 색 — 테마 스킨은 스킨 색, 아니면 곡 색 */
+  const accent = theme?.accent ?? song.color;
   const domBg =
     bg === "cover" &&
     (theme ? !!song.video : hasCover || !!song.video) &&
@@ -473,7 +476,57 @@ export default function Stage({
     }
     /** 캐릭터 발 위치(x · y) · 레인 쪽을 보게 좌우 뒤집을지 */
     const idolAt =
-      side === "left" ? { x: 70, y: LH - 4, flip: false } : { x: LW - 70, y: LH - 4, flip: true };
+      side === "left" ? { x: 110, y: LH - 4, flip: false } : { x: LW - 110, y: LH - 4, flip: true };
+    // 테마 캐릭터 일러스트: 카운트다운 동안 정보판 쪽에서 쓱 들어와 윙크(intro), 100콤보마다 환호 컷인(cheer)
+    const introImg = theme?.art && !portrait ? loadImg(theme.art.intro, () => {}) : null;
+    const cheerImg = theme?.art && !portrait ? loadImg(theme.art.cheer, () => {}) : null;
+    let cheerAt = -10;
+    /** 일러스트가 서는 쪽: 정보판 쪽 (레인이 가운데면 오른쪽) */
+    const artRight = side !== "left";
+    const drawCutins = (t: number) => {
+      const s = t + leadIn;
+      // 곡 시작: READY ~ GO! 동안
+      if (introImg && ready(introImg) && s >= 0 && s < cdEnd + 0.7) {
+        const h = 640;
+        const w = (introImg.naturalWidth / introImg.naturalHeight) * h;
+        const inP = Math.min(1, s / 0.45);
+        const out = s > cdEnd + 0.2 ? Math.min(1, (s - cdEnd - 0.2) / 0.5) : 0;
+        const ease = 1 - Math.pow(1 - inP, 3);
+        const slide = (1 - ease) * 260 + out * 120;
+        const x = artRight ? LW - w + 30 + slide : -30 - slide;
+        g.save();
+        g.globalAlpha = Math.min(1, inP * 1.5) * (1 - out);
+        g.drawImage(introImg, x, LH - h + 40, w, h);
+        g.restore();
+      }
+      // 100콤보마다: 비스듬한 금빛 띠 + 환호 일러스트가 쓱 들어왔다 사라짐 (1.1초)
+      const age = t - cheerAt;
+      if (cheerImg && ready(cheerImg) && age >= 0 && age < 1.1) {
+        const h = 520;
+        const w = (cheerImg.naturalWidth / cheerImg.naturalHeight) * h;
+        const inP = Math.min(1, age / 0.22);
+        const out = age > 0.8 ? (age - 0.8) / 0.3 : 0;
+        const ease = 1 - Math.pow(1 - inP, 3);
+        const x = artRight ? LW - w - 10 + (1 - ease) * 300 : 10 - (1 - ease) * 300;
+        g.save();
+        g.globalAlpha = (1 - out) * 0.9;
+        g.translate(artRight ? LW - 330 : 330, LH - 250);
+        g.transform(1, -0.12, 0, 1, 0, 0);
+        const bw = 700 * ease;
+        const band = g.createLinearGradient(-bw / 2, 0, bw / 2, 0);
+        band.addColorStop(0, `${accent}00`);
+        band.addColorStop(0.3, `${accent}cc`);
+        band.addColorStop(0.7, "#F9A8D4cc");
+        band.addColorStop(1, "#F9A8D400");
+        g.fillStyle = band;
+        g.fillRect(-bw / 2, -60, bw, 120);
+        g.restore();
+        g.save();
+        g.globalAlpha = Math.min(1, inP * 1.4) * (1 - out);
+        g.drawImage(cheerImg, x, LH - h + 30 + out * 40, w, h);
+        g.restore();
+      }
+    };
     const drawIdol = (t: number) => {
       if (!idol || !idolDef || !ready(idol.img)) return;
       const bt = t - (song.beatOffset ?? 0);
@@ -502,6 +555,7 @@ export default function Stage({
     const hitImg = loadImg("/rhythm/hit.webp", () => {});
     const ringImg = loadImg("/rhythm/ring.webp", () => {});
     setCountdownRing(ringImg);
+    setCountdownTheme(theme?.countdown ?? null);
     const failImg = loadImg("/rhythm/banner-failed.webp", () => {});
     const judgeImg: Record<Judge, HTMLImageElement> = {
       perfect: loadImg("/rhythm/judge-perfect.webp", () => {}),
@@ -562,9 +616,8 @@ export default function Stage({
           b.fillStyle = rail;
           b.fillRect(x, laneTop, 3, gearY + 60 - laneTop);
         }
-        glass(b, 12, 12, CW - 24, HUD_H - 24, song.color);
-      } else
-        for (const box of [infoBox, scoreBox]) glass(b, box.x, box.y, box.w, box.h, song.color);
+        glass(b, 12, 12, CW - 24, HUD_H - 24, accent);
+      } else for (const box of [infoBox, scoreBox]) glass(b, box.x, box.y, box.w, box.h, accent);
       // 곡 커버 (정보판 왼쪽, 세로 화면은 위 띠 왼쪽)
       const cs = portrait ? HUD_H - 56 : coverSize;
       const cx = portrait ? 28 : infoBox.x + 20;
@@ -584,7 +637,7 @@ export default function Stage({
         );
         b.restore();
       } else {
-        b.fillStyle = `${song.color}33`;
+        b.fillStyle = `${accent}33`;
         b.beginPath();
         b.roundRect(cx, cy, cs, cs, 10);
         b.fill();
@@ -615,8 +668,8 @@ export default function Stage({
       b.scale(c.width / CW, c.height / CH);
       const mx = gx + W / 2;
       const gr = b.createRadialGradient(mx, CH * 0.55, W * 0.4, mx, CH * 0.55, CW * 0.55);
-      gr.addColorStop(0, `${song.color}50`);
-      gr.addColorStop(1, `${song.color}00`);
+      gr.addColorStop(0, `${accent}50`);
+      gr.addColorStop(1, `${accent}00`);
       b.fillStyle = gr;
       b.fillRect(0, 0, CW, CH);
       beatGlow = c;
@@ -989,7 +1042,7 @@ export default function Stage({
       const prog = Math.max(0, Math.min(1, t / songEnd));
       g.fillStyle = "rgba(255,255,255,0.12)";
       g.fillRect(x0, 138, right - x0, 4);
-      g.fillStyle = song.color;
+      g.fillStyle = accent;
       g.fillRect(x0, 138, (right - x0) * prog, 4);
       if (autoplay && perfInfo) {
         g.fillStyle = "rgba(253,230,138,0.85)";
@@ -1055,7 +1108,7 @@ export default function Stage({
         g.fillText("🔍 분석 모드 · 자동 연주", tx, y0 + 70, tw);
       }
       if (sec) {
-        g.fillStyle = song.color;
+        g.fillStyle = accent;
         g.font = `800 12px ${mono}`;
         g.fillText(
           `▶ ${sec.toUpperCase()}`,
@@ -1073,7 +1126,7 @@ export default function Stage({
       g.beginPath();
       g.roundRect(px0, py, pw, 6, 3);
       g.fill();
-      g.fillStyle = song.color;
+      g.fillStyle = accent;
       g.beginPath();
       g.roundRect(px0, py, Math.max(6, pw * prog), 6, 3);
       g.fill();
@@ -1209,7 +1262,7 @@ export default function Stage({
         b.font = `italic 900 17px ${disp}`;
         b.fillText(`RANK ${myRank || "-"} / ${rows.length}`, boardBox.w / 2, boardBox.h / 2 + 1);
       } else {
-        glass(b, 0, 0, boardBox.w, boardBox.h, song.color);
+        glass(b, 0, 0, boardBox.w, boardBox.h, accent);
         const cols = boardBox.cols;
         const colW = (boardBox.w - 24) / cols;
         const rowH = Math.min(26, (boardBox.h - 16) / boardBox.rowsPer);
@@ -1224,7 +1277,7 @@ export default function Stage({
           const x = 12 + col * colW;
           const y = 8 + (i % boardBox.rowsPer) * rowH + rowH / 2;
           if (r.me) {
-            b.fillStyle = `${song.color}33`;
+            b.fillStyle = `${accent}33`;
             roundRectFill(b, x - 4, y - rowH / 2 + 2, colW - 6, rowH - 4, 6);
           }
           b.globalAlpha = r.dead ? 0.45 : 1;
@@ -1769,6 +1822,7 @@ export default function Stage({
         g.restore();
       }
       g.restore();
+      if (introImg || cheerImg) drawCutins(t);
     };
 
     let raf = 0;
@@ -1982,6 +2036,7 @@ export default function Stage({
       const cc = engine.combo;
       if (cc > prevCombo && Math.floor(cc / 50) > Math.floor(prevCombo / 50)) {
         ringAt = t;
+        if (Math.floor(cc / 100) > Math.floor(prevCombo / 100)) cheerAt = t;
         sfx("combo-milestone", 0.55);
       } else if (cc < prevCombo && prevCombo >= 20) {
         breakAt = t;
@@ -2688,6 +2743,11 @@ let cdRing: HTMLImageElement | null = null;
 const setCountdownRing = (im: HTMLImageElement) => {
   cdRing = im;
 };
+/** 테마 스킨의 카운트다운 색 (없으면 기본 분홍·보라 띠 · 파랑/노랑/빨강/분홍 숫자) */
+let cdPal: SkinTheme["countdown"] | null = null;
+const setCountdownTheme = (p: SkinTheme["countdown"] | null) => {
+  cdPal = p;
+};
 
 /** s: 시작 후 흐른 시간(초) — 비스듬한 띠 위에 숫자가 쾅, 뒤로 금빛 링 */
 function drawCountdown(
@@ -2723,10 +2783,11 @@ function drawCountdown(
   g.transform(1, -0.12, 0, 1, 0, 0);
   const bw = (W + 80) * easeOutBack(inP);
   const band = g.createLinearGradient(-bw / 2, 0, bw / 2, 0);
-  band.addColorStop(0, "rgba(219,39,119,0)");
-  band.addColorStop(0.15, "rgba(219,39,119,0.85)");
-  band.addColorStop(0.85, "rgba(124,58,237,0.85)");
-  band.addColorStop(1, "rgba(124,58,237,0)");
+  const [b0, b1] = cdPal?.band ?? ["219,39,119", "124,58,237"];
+  band.addColorStop(0, `rgba(${b0},0)`);
+  band.addColorStop(0.15, `rgba(${b0},0.85)`);
+  band.addColorStop(0.85, `rgba(${b1},0.85)`);
+  band.addColorStop(1, `rgba(${b1},0)`);
   g.fillStyle = band;
   g.fillRect(-bw / 2, -bandH / 2, bw, bandH);
   g.fillStyle = "rgba(255,255,255,0.75)";
@@ -2761,14 +2822,16 @@ function drawCountdown(
   if (ready) (g as CanvasRenderingContext2D & { letterSpacing?: string }).letterSpacing = "8px";
   g.lineJoin = "round";
   g.lineWidth = ready ? 6 : 10;
-  g.strokeStyle = "rgba(20,6,40,0.9)";
+  g.strokeStyle = cdPal?.stroke ?? "rgba(20,6,40,0.9)";
   g.strokeText(ph.label, 0, 4);
+  const numI = ["3", "2", "1", "GO!"].indexOf(ph.label);
+  const col = cdPal && numI >= 0 ? cdPal.nums[numI] : ph.color;
   const gr = g.createLinearGradient(0, -size / 2, 0, size / 2);
   gr.addColorStop(0, "#FFFFFF");
-  gr.addColorStop(0.5, ready ? "#F5D0FE" : ph.color);
-  gr.addColorStop(1, ready ? "#E9D5FF" : ph.color);
+  gr.addColorStop(0.5, ready ? (cdPal?.ready ?? "#F5D0FE") : col);
+  gr.addColorStop(1, ready ? (cdPal?.ready ?? "#E9D5FF") : col);
   g.fillStyle = gr;
-  g.shadowColor = ready ? "#F472B6" : ph.color;
+  g.shadowColor = ready ? (cdPal?.ready ?? "#F472B6") : col;
   g.shadowBlur = 18;
   g.fillText(ph.label, 0, 4);
   g.shadowBlur = 0;

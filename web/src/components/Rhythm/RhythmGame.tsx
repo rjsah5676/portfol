@@ -16,7 +16,7 @@ import {
   saveAutoSync,
   type AutoSyncState,
 } from "@/lib/rhythm/autosync";
-import { HIT_SOUNDS, NOTE_SIZES, setNoteSize, SKINS } from "@/lib/rhythm/fx";
+import { HIT_SOUNDS, NOTE_SIZES, setNoteSize, SKIN_THEME, SKINS } from "@/lib/rhythm/fx";
 import { audio, loadSfx, playBgm, setSfxVolume, sfx, stopBgm } from "@/lib/rhythm/sfx";
 import { fitGain, LEVEL } from "@/lib/soundLevel";
 import { accelSettingsUrl, gpuInfo } from "@/lib/rhythm/gpu";
@@ -1238,6 +1238,7 @@ export default function RhythmGame() {
               }}
               onSettings={() => setSettingsOpen(true)}
               onShop={() => setShopOpen(true)}
+              theme={SKIN_THEME[wornSkin]}
               bgmMute={bgmMute}
               onToggleBgm={toggleBgm}
               blocked={settingsOpen || shopOpen}
@@ -1339,6 +1340,7 @@ export default function RhythmGame() {
               onRetry={start}
               onSelect={toSelect}
               starting={loading}
+              theme={SKIN_THEME[wornSkin]}
             />
           )}
           {shopOpen && (

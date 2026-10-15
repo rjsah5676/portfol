@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Song } from "@/lib/rhythm/music";
+import type { SkinTheme } from "@/lib/rhythm/fx";
 import { DIFFICULTIES, type Chart, type Difficulty } from "@/lib/rhythm/chart";
 import { audio, sfx } from "@/lib/rhythm/sfx";
 import { COVERS, coverOf, CUSTOM_COVER } from "./SongCarousel";
@@ -54,6 +55,7 @@ export default function SongSelect({
   onToggleFs,
   analyze,
   onAnalyze,
+  theme,
 }: {
   songs: Song[];
   sel: number;
@@ -88,12 +90,18 @@ export default function SongSelect({
   /** 분석 모드(관리자만 값이 옴): 자동 연주로 채보 감상 */
   analyze?: boolean;
   onAnalyze?: (on: boolean) => void;
+  /** 착용한 테마 스킨 — 배경 · 강조색이 바뀌고 캐릭터가 구석에서 말을 걸음 */
+  theme?: SkinTheme;
 }) {
   // 내 음악: 재킷을 눌러도 파일 고르기
   const pickRef = useRef<(() => void) | null>(null);
   const custom = sel === songs.length;
   const practice = !custom && !!songs[sel]?.practice;
-  const color = custom ? CUSTOM_COLOR : (song?.color ?? CUSTOM_COLOR);
+  const color = theme ? theme.accent : custom ? CUSTOM_COLOR : (song?.color ?? CUSTOM_COLOR);
+  // 테마 캐릭터 말풍선: 곡을 바꿀 때마다 다른 말 (곡 번호로 골라서 같은 곡은 같은 말)
+  const line = theme?.lines?.select.length
+    ? theme.lines.select[sel % theme.lines.select.length]
+    : "";
   const chartOf = (d: Difficulty): Chart | null =>
     custom ? (customCharts?.[d] ?? null) : (charts[songs[sel].id][d] ?? null);
   const bestKey = (d: Difficulty) => (song ? `${song.id}:${d}` : "");
@@ -233,8 +241,14 @@ export default function SongSelect({
 
   return (
     <div className="absolute inset-0 overflow-hidden bg-[#06041a]">
-      {/* 배경: 고른 곡 커버를 크게 흐리게 */}
-      {cover ? (
+      {/* 배경: 테마 스킨은 그 무대, 아니면 고른 곡 커버를 크게 흐리게 */}
+      {theme ? (
+        <img
+          src={theme.stage}
+          alt=""
+          className="absolute inset-0 h-full w-full object-cover opacity-70"
+        />
+      ) : cover ? (
         <img
           key={cover}
           src={cover}
@@ -257,7 +271,11 @@ export default function SongSelect({
       {/* 위 */}
       <div className="absolute inset-x-0 top-0 z-30 flex h-[5.4cqw] items-center justify-between border-b border-white/10 bg-black/35 px-[2.4cqw] backdrop-blur-[2px]">
         <div className="flex items-baseline gap-[1.2cqw]">
-          <span className={`${DISP} text-[2.2cqw] tracking-[0.06em] text-white`}>SELECT MUSIC</span>
+          <span
+            className={`${DISP} text-[2.2cqw] tracking-[0.06em] ${theme ? "bg-[linear-gradient(180deg,#FFFDF0,#F5C842_60%,#F9A8D4)] bg-clip-text text-transparent" : "text-white"}`}
+          >
+            SELECT MUSIC
+          </span>
           <span className={`${KR} text-[1.1cqw] text-white/45`}>곡 선택</span>
         </div>
         <div className="flex items-center gap-[0.6cqw]">
@@ -691,6 +709,28 @@ export default function SongSelect({
         })}
       </div>
 
+      {/* 테마 캐릭터: 아래 시작 버튼 옆에서 빼꼼 + 말풍선 */}
+      {theme?.art && (
+        <div className="pointer-events-none absolute right-[18cqw] bottom-[4.2cqw] z-20 flex items-end">
+          {line && (
+            <div
+              key={line}
+              className={`${KR} relative mr-[0.6cqw] mb-[5.6cqw] max-w-[17cqw] rounded-[1cqw] border border-[#F5C842]/60 bg-[#1a1024]/90 px-[1cqw] py-[0.6cqw] text-[1.05cqw] leading-snug text-[#FFF3C4] shadow-[0_0_1.4cqw_rgba(245,200,66,0.35)] [animation:modal-pop_260ms_ease-out]`}
+            >
+              {line}
+              <span className="absolute top-1/2 -right-[0.5cqw] h-[0.9cqw] w-[0.9cqw] -translate-y-1/2 rotate-45 border-t border-r border-[#F5C842]/60 bg-[#1a1024]" />
+            </div>
+          )}
+          <div className="relative h-[11cqw] w-[9cqw] overflow-hidden">
+            <img
+              src={theme.art.stand}
+              alt=""
+              className="absolute top-0 left-1/2 w-[17cqw] max-w-none -translate-x-[46%] drop-shadow-[0_0_1cqw_rgba(245,200,66,0.45)]"
+            />
+          </div>
+        </div>
+      )}
+
       {/* 아래 */}
       <div className="absolute inset-x-0 bottom-0 flex h-[5cqw] items-center justify-between border-t border-white/10 bg-black/55 px-[2.4cqw]">
         <div className="flex items-center gap-[1.4cqw] font-mono text-[1cqw] text-white/50">
@@ -737,6 +777,13 @@ export default function SongSelect({
       {/* 시작 연출: 재킷이 들어오고 GET READY */}
       {launching && song && (
         <div className="absolute inset-0 z-50 flex items-center overflow-hidden bg-[#05030f]/90 [animation:bd-launch_1.5s_ease-out]">
+          {theme?.art && (
+            <img
+              src={theme.art.intro}
+              alt=""
+              className="pointer-events-none absolute right-[2cqw] -bottom-[4cqw] h-[58cqw] max-w-none drop-shadow-[0_0_2cqw_rgba(245,200,66,0.5)] [animation:bd-slide-left_500ms_ease-out_backwards]"
+            />
+          )}
           <div
             className="absolute inset-x-0 top-1/2 h-[18cqw] -translate-y-1/2 -skew-y-3"
             style={{ background: `linear-gradient(90deg, transparent, ${color}55, transparent)` }}
