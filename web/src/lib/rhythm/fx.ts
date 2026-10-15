@@ -351,15 +351,16 @@ function paintHead(
     case "zena": {
       // 무대 조명 받은 금속 + 진한 테두리(밝은 무대에서도 노트 윤곽이 보이게) + 가운데 반짝이 별
       const grad = g.createLinearGradient(0, top, 0, top + h);
-      grad.addColorStop(0, "#FFFDF5");
-      grad.addColorStop(0.4, color);
-      grad.addColorStop(0.62, shade(color, -0.3));
-      grad.addColorStop(1, shade(color, 0.15));
+      // 흰빛은 맨 위 얇게만 — 색이 꽉 차 보이게 (흰 쪽이 넓으면 밝은 무대에서 비쳐 보임)
+      grad.addColorStop(0, shade(color, 0.55));
+      grad.addColorStop(0.3, color);
+      grad.addColorStop(0.7, shade(color, -0.22));
+      grad.addColorStop(1, shade(color, -0.42));
       g.fillStyle = grad;
       roundRect(g, nx, top, nw, h, 5);
       g.fill();
-      g.strokeStyle = "rgba(40,12,36,0.9)";
-      g.lineWidth = 1.5;
+      g.strokeStyle = "#280C24";
+      g.lineWidth = 2;
       g.stroke();
       // 네 갈래 별
       const cx = x + laneW / 2;
@@ -460,16 +461,17 @@ export function drawHoldBody(
       g.fill();
       break;
     case "zena": {
-      // 금속 관 + 가운데 흰 마이크 줄
+      // 금속 관 + 가운데 흰 마이크 줄 — 다른 스킨보다 진하게 (반투명이면 밝은 무대가 비쳐 노트가 흐려 보임)
+      if (alpha > 0.3) g.globalAlpha = Math.max(alpha, 0.92);
       g.fillStyle = holdGrad(g, `z|${color}|${bx}|${bw}`, bx, bw, [
         [0, shade(color, -0.45)],
         [0.35, color],
-        [0.5, "#FFF7DA"],
+        [0.5, shade(color, 0.6)],
         [0.65, color],
         [1, shade(color, -0.45)],
       ]);
       g.fillRect(bx, yTail, bw, h);
-      g.fillStyle = "rgba(40,12,36,0.55)";
+      g.fillStyle = "rgba(40,12,36,0.85)";
       g.fillRect(bx, yTail, 1.5, h);
       g.fillRect(bx + bw - 1.5, yTail, 1.5, h);
       break;
