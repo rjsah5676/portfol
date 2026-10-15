@@ -295,7 +295,7 @@ function TileFace({ m, d, owner, sx, sy, toll, mult, fest, boost, tw, th }: { m:
   const near = sy >= 8 || sx >= 8;
   // 이름은 무조건 한 줄 — 길면 글씨를 줄임
   const nameLen = [...d.name].reduce((a, ch) => a + (ch === " " ? 0.45 : 1), d.kind === "spot" ? 0.8 : 0);
-  const nameSize = Math.min(15, Math.floor((54 / Math.max(1, nameLen)) * 10) / 10);
+  const nameSize = Math.min(14, Math.floor((((col ? th : tw) - 18) / Math.max(1, nameLen)) * 10) / 10);
   const parts = [
     <div key="b" className="shrink-0" style={{ height: BLD_ZONE }} />,
     <b key="n" className="block text-center leading-none font-black whitespace-nowrap" style={{ fontSize: nameSize, color: pc ? "#fff" : INK, textShadow: pc ? "0 1px 2px rgba(0,0,0,0.55)" : "0 1px 0 rgba(255,255,255,0.8)" }}>
@@ -314,7 +314,7 @@ function TileFace({ m, d, owner, sx, sy, toll, mult, fest, boost, tw, th }: { m:
       )}
       {/* 배율 · 축제 · 불꽃은 값 위 구석에 작게 (칸 너비를 넘지 않게) */}
       {(mult > 1 || fest || boost) && (
-        <span className="absolute -top-[11px] -right-[14px] flex items-center gap-[1px]">
+        <span className="absolute -top-[10px] -right-[7px] flex items-center gap-[1px]">
           {mult > 1 && (
             <span className="rounded-full px-[3px] text-[10px] leading-[13px] font-black" style={{ background: mult >= 4 ? "#ff3d6e" : "#ffd23a", color: mult >= 4 ? "#fff" : "#3a2500", boxShadow: `0 0 0 1.2px ${INK}` }}>
               x{mult}

@@ -1228,13 +1228,17 @@ function ActionPanel({
         skill();
       }}
       title={c.active.desc(power(c.grade, me.lo.char.lv))}
-      className="mbx-skill relative flex h-[50px] items-center gap-2 rounded-full pr-4 pl-1 text-left text-white transition hover:scale-105 disabled:opacity-50"
+      className="mbx-skill relative flex h-[54px] items-center gap-2 rounded-full pr-4 pl-1 text-left text-white transition hover:scale-105 disabled:opacity-50"
       style={{ background: "linear-gradient(135deg, #b46bff, #ff5fa2)", boxShadow: "0 0 0 2px #fff, 0 4px 0 #6a2a9a, 0 0 22px 4px rgba(255,95,162,0.65)" }}
     >
       <img src={faceOf(c)} alt="" className="h-[42px] w-[42px] rounded-full object-cover" style={{ boxShadow: "0 0 0 2px #fff" }} />
       <span className="flex flex-col leading-[15px]">
-        <span className="text-[10px] font-black tracking-[0.15em] text-[#ffe08a]">SKILL 준비됨!</span>
-        <b className="text-[15px]">{c.active.name}</b>
+        <span className="mbx-ready mb-[2px] self-start rounded-full bg-[#2a1250] px-[7px] text-[11px] leading-[16px] font-black tracking-[0.08em] text-[#ffe08a]" style={{ boxShadow: "0 0 0 1.5px #ffe08a" }}>
+          ★ 스킬 준비됨!
+        </span>
+        <b className="text-[16px] leading-[18px]" style={{ textShadow: "0 1px 2px rgba(60,10,80,0.6)" }}>
+          {c.active.name} <span className="text-[11px] font-bold text-white/85">· 눌러서 쓰기</span>
+        </b>
       </span>
     </button>
   );
