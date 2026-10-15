@@ -440,7 +440,7 @@ export function Cur({ k, n, size = 16 }: { k: "star" | "parts" | "gp" | "ticket"
 /** 창: 제목 띠 + 닫기 */
 export function Win({ title, onClose, children, className = "", style }: { title?: ReactNode; onClose?: () => void; children: ReactNode; className?: string; style?: CSSProperties }) {
   return (
-    <div className={`mb-box flex flex-col ${className}`} style={style}>
+    <div className={`mbx-modal flex flex-col overflow-hidden ${className}`} style={style}>
       {(title || onClose) && (
         <div className="mb-wood flex h-[34px] shrink-0 items-center justify-between px-3">
           <b className="mb-title mb-out text-[15px] text-white">{title}</b>

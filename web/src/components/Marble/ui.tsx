@@ -80,7 +80,7 @@ export function GradeBackdrop({ g, color }: { g: Grade; color?: string }) {
       {/* 등급 배경 그림 (R 하늘 · SR 보라 마법진 · SSR 금빛 햇살 · UR 무지개 오로라) */}
       <img src={`/marble/art/bg-${g}.webp`} alt="" className="absolute inset-0 h-full w-full object-cover" />
       {g === "R" && color && <div className="absolute inset-0" style={{ background: `radial-gradient(circle at 50% 40%, ${color}33, transparent 70%)` }} />}
-      {(g === "SSR" || g === "UR") && <div className={`mbx-rays mbx-rays-${g}`} style={{ opacity: 0.35 }} />}
+      {(g === "SSR" || g === "UR") && <div className="mbx-rays mbx-soft" style={{ "--ray": g === "UR" ? "rgba(255,240,255,0.55)" : "rgba(255,236,170,0.55)", opacity: 0.4 } as CSSProperties} />}
       {g !== "R" &&
         Array.from({ length: g === "UR" ? 10 : g === "SSR" ? 6 : 3 }, (_, i) => (
           <span key={i} className="mbx-spark" style={{ left: `${(i * 37 + 9) % 94}%`, top: `${(i * 29 + 6) % 80}%`, animationDelay: `${(i % 5) * 0.35}s` }} />
@@ -224,7 +224,7 @@ export function LivingPixels({ sprites, className = "", style, bg }: { sprites: 
         const row = i % 2;
         return (
           <div key={s + i} className="absolute" style={{ left: k.x, bottom: `${7 + row * 5}%`, transform: `translateY(${k.bob}px)`, zIndex: 10 - row * 5 + i }}>
-            <Token sprite={s} h={52} maxW={46} face={k.dir} anim={k.mode === "walk" ? "walk" : k.mode === "cheer" ? "win" : "idle"} fps={k.mode === "walk" ? WALK_FPS : undefined} />
+            <Token sprite={s} h={52} maxW={60} face={k.dir} anim={k.mode === "walk" ? "walk" : k.mode === "cheer" ? "win" : "idle"} fps={k.mode === "walk" ? WALK_FPS : undefined} />
           </div>
         );
       })}

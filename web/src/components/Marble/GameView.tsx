@@ -92,6 +92,13 @@ export default function GameView({ room, me, onLeave }: { room: RoomWire; me: st
   const order = room.order;
   const myPi = useMemo(() => order.findIndex((si) => room.seats[si]?.uid === me), [order, room.seats, me]);
   const nameOf = useCallback((pi: number) => view.players[pi]?.name ?? "?", [view.players]);
+  // 사다리 뒤 막 시작한 판: 내 순번을 가운데에 잠깐
+  const [intro, setIntro] = useState(() => (room.game?.steps ?? 1) === 0 && myPi >= 0);
+  useEffect(() => {
+    if (!intro) return;
+    const id = setTimeout(() => setIntro(false), 1800);
+    return () => clearTimeout(id);
+  }, [intro]);
 
   /* ── 좌표 (무대 기준) ── */
   const slotXY = (slot: number) => {
@@ -608,6 +615,7 @@ export default function GameView({ room, me, onLeave }: { room: RoomWire; me: st
 
       {banner && <BannerView key={banner.id} b={banner} />}
       {card && <CardPop id={card.id} name={nameOf(card.p)} />}
+      {intro && <OrderIntro pi={myPi} n={g0.players.length} />}
       {live.phase === "end" && live.result && !busy && <Result room={live} me={me} onLeave={onLeave} />}
     </div>
   );
@@ -1698,5 +1706,25 @@ function BuyPick({ pr, cash, mapId, pi, sending, send }: { pr: Extract<Prompt, {
         </Btn>
       </div>
     </>
+  );
+}
+
+/** 판 시작: 내 순번 (사다리 결과) */
+function OrderIntro({ pi, n }: { pi: number; n: number }) {
+  return (
+    <div className="mbx pointer-events-none absolute inset-0 z-[640] flex items-center justify-center bg-[rgba(10,8,30,0.66)] backdrop-blur-[2px]">
+      <div className="mbx-pop flex flex-col items-center">
+        <div className="text-[14px] font-black tracking-[0.3em] text-[#ffe08a]" style={{ textShadow: "0 2px 0 #232a4d" }}>
+          내 순서
+        </div>
+        <div className="flex items-baseline gap-2 text-white" style={{ WebkitTextStroke: "4px #232a4d", paintOrder: "stroke fill", textShadow: "0 5px 0 #232a4d" }}>
+          <b className="text-[88px] leading-[96px]" style={{ color: PCOLOR[pi] }}>{pi + 1}</b>
+          <b className="text-[40px]">번째</b>
+        </div>
+        <span className="mt-1 rounded-full px-4 text-[16px] leading-[30px] font-black text-white" style={{ background: PCOLOR[pi], boxShadow: "0 0 0 2.5px #fff, 0 4px 0 rgba(0,0,0,0.3)" }}>
+          {pi + 1}P · {n}명 중
+        </span>
+      </div>
+    </div>
   );
 }

@@ -194,17 +194,17 @@ export default function Board({
         const tile = g.order[slot];
         const d = m.tiles[tile];
         const t = g.tiles[tile];
-        if (t.owner < 0 || d.kind !== "city") return null;
+        if (t.owner < 0 || (d.kind !== "city" && d.kind !== "spot")) return null;
         const b = bldAt(sd.x, sd.y);
         const lv = Math.min(t.lv, LANDMARK);
         const color = PCOLOR[t.owner];
-        if (lv <= 0) {
+        if (lv <= 0 || d.kind === "spot") {
           // 땅만 산 칸: 주인 깃발 하나 꽂아 둠
           const q = proj(b.x, b.y);
           return (
             <div key={`b${slot}`} className="pointer-events-none absolute" style={{ left: q.x, top: q.y + 2, zIndex: 100 + Math.round(q.y), transform: `translate(-30%, -100%) scale(${q.k})`, transformOrigin: "30% 100%" }}>
               <span key={`${t.owner}-f`} className="mb-pop block" style={{ filter: "drop-shadow(0 2px 1.5px rgba(20,24,60,0.4))" }}>
-                <Glyph n="flag" size={26} color={color} />
+                <Glyph n="flag" size={30} color={color} />
               </span>
             </div>
           );

@@ -30,6 +30,8 @@ import { LADDER_ROWS, makeRungs, trace } from "../../../../web/src/lib/marble/la
 /** 사다리: 고르는 시간 · 결과 보여 주는 시간 */
 const LADDER_PICK_MS = 6_000;
 const LADDER_SHOW_MS = 2_600;
+/** 판 시작 직후 내 순번 보여 주는 시간 */
+const INTRO_MS = 1_900;
 const LIMIT: Record<string, number> = { turn: 15_000, post: 10_000, fork: 8_000, buy: 12_000, acq: 10_000, fest: 10_000 };
 /** 제한 시간을 연달아 넘기면 자동 진행 */
 const AUTO_AFTER_TIMEOUTS = 2;
@@ -489,14 +491,15 @@ export function registerMarble({ gateway, db, points, users }: Deps, opts: Marbl
     r.result = null;
     for (const s of r.seats) if (s) s.timeouts = 0;
     r.ev = [...r.game.ev];
-    afterStep(r);
+    // 시작하자마자 화면이 내 순번을 보여 주는 동안 기다림
+    afterStep(r, ms(INTRO_MS));
   }
 
   /** 행동 뒤: 연출 시간 · 다음 마감 · 끝났으면 정산 */
-  function afterStep(r: Room) {
+  function afterStep(r: Room, extra = 0) {
     const g = r.game!;
     const now = Date.now();
-    r.busyUntil = now + ms(animMs(r.ev));
+    r.busyUntil = now + extra + ms(animMs(r.ev));
     if (g.over) {
       r.deadline = 0;
       push(r);
