@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import {
   FACTION_COLOR,
   FACTION_NAME,
@@ -12,7 +13,7 @@ import {
 } from "@/lib/defense/units";
 import { UNIT_ART } from "@/lib/defense/assets";
 import { getPrefs, onPrefs, setPrefs, sfx, type AudioPrefs } from "./audio";
-import { useStage } from "./Stage";
+import { DH, DW, useStage } from "./Stage";
 
 /* PIXEL GLITCH DEFENSE 공용 UI 조각 (무대 1024×576 안에서 쓰는 크기) — 도트 규칙은 css/defense.css */
 
@@ -796,7 +797,16 @@ export function Tip({
   width?: number;
 }) {
   const [open, setOpen] = useState(false);
+  const [hover, setHover] = useState(false);
+  const show = open || hover;
   const ref = useRef<HTMLSpanElement>(null);
+  const tipRef = useRef<HTMLSpanElement>(null);
+  /**
+   * 말풍선은 무대(data-cur) 맨 위에 따로 그림 (portal).
+   * 예전엔 글자 옆에 absolute 로 붙어 있어서, 스크롤 상자(정비소 연구 목록) 바닥 근처에선 말풍선이 상자를 늘림 →
+   * 스크롤바가 생겨 줄이 밀림 → 마우스가 빠져 말풍선이 닫힘 → 스크롤바가 사라짐… 을 무한 반복(화면 흔들림)
+   */
+  const [pos, setPos] = useState<{ host: HTMLElement; x: number; y: number; a: number; b: number; up: boolean; done: boolean } | null>(null);
   useEffect(() => {
     if (!open) return;
     const off = (e: PointerEvent) => {
@@ -810,19 +820,62 @@ export function Tip({
       document.removeEventListener("keydown", esc, true);
     };
   }, [open]);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    const host = show ? el?.closest<HTMLElement>("[data-cur]") : null;
+    if (!el || !host) {
+      setPos(null);
+      return;
+    }
+    const hr = host.getBoundingClientRect(),
+      r = el.getBoundingClientRect();
+    const k = hr.width / DW || 1;
+    const top = (r.top - hr.top) / k,
+      bottom = (r.bottom - hr.top) / k,
+      left = (r.left - hr.left) / k,
+      right = (r.right - hr.left) / k;
+    const x0 = align === "center" ? (left + right) / 2 - width / 2 : align === "right" ? right - width : left;
+    const x = Math.max(4, Math.min(DW - width - 4, x0));
+    const up = side === "top";
+    setPos({ host, x, y: up ? top - 6 : bottom + 6, a: top, b: bottom, up, done: false });
+  }, [show, align, side, width]);
+  // 그려 본 뒤 무대 위 · 아래로 넘치면 한 번만 반대쪽으로
+  useLayoutEffect(() => {
+    if (!pos || pos.done || !tipRef.current) return;
+    const h = tipRef.current.offsetHeight;
+    const flip = pos.up ? pos.y - h < 4 : pos.y + h > DH - 4;
+    setPos(flip ? { ...pos, up: !pos.up, y: pos.up ? pos.b + 6 : pos.a - 6, done: true } : { ...pos, done: true });
+  }, [pos]);
   return (
     <span
       ref={ref}
-      className={`group/tip relative inline-flex cursor-help ${className}`}
+      className={`relative inline-flex cursor-help ${className}`}
       onClick={() => setOpen((o) => !o)}
+      onPointerEnter={(e) => e.pointerType === "mouse" && setHover(true)}
+      onPointerLeave={() => setHover(false)}
     >
       {children}
-      <span
-        className={`px-box pointer-events-none absolute z-[70] ${align === "center" ? "left-1/2 -translate-x-1/2" : align === "right" ? "right-0" : "left-0"} p-2 text-left text-[12px] leading-relaxed font-normal text-[var(--text)] group-hover/tip:block ${open ? "block" : "hidden"} ${side === "bottom" ? "top-[calc(100%+6px)]" : "bottom-[calc(100%+6px)]"}`}
-        style={{ width, "--b": "#5b4f96", "--f": "#120d22" } as CSSProperties}
-      >
-        {text}
-      </span>
+      {pos &&
+        createPortal(
+          <span
+            ref={tipRef}
+            className="px-box pointer-events-none absolute z-[200] block p-2 text-left text-[12px] leading-relaxed font-normal text-[var(--text)]"
+            style={
+              {
+                left: pos.x,
+                top: pos.y,
+                width,
+                transform: pos.up ? "translateY(-100%)" : undefined,
+                visibility: pos.done ? undefined : "hidden",
+                "--b": "#5b4f96",
+                "--f": "#120d22",
+              } as CSSProperties
+            }
+          >
+            {text}
+          </span>,
+          pos.host
+        )}
     </span>
   );
 }
