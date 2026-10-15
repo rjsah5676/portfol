@@ -220,7 +220,7 @@ export default function GameView({ room, me, onLeave }: { room: RoomWire; me: st
           // 끌려감: 경로 숫자 없이, 맞은 자세로 빠르게 미끄러짐
           const a0 = slotXY(posRef.current[e.p]);
           float(a0.x, a0.y - 44, "끌려가요!", "#e0558c");
-          sfx("warp");
+          sfx("pull");
           setAnim((a) => a.map((x, i) => (i === e.p ? "hit" : x)));
           for (const s of e.path) {
             setPosOf(e.p, s);
@@ -251,6 +251,7 @@ export default function GameView({ room, me, onLeave }: { room: RoomWire; me: st
           if (plus && k === base) {
             const q = slotXY(s);
             float(q.x, q.y - 44, `${e.bonusWhy ?? "폴짝"}! +${plus}칸`, "#2fa36a");
+            sfx("hop");
             setAnim((a) => a.map((x, i) => (i === e.p ? "win" : x)));
           }
           setHop((h) => h.map((x, i) => (i === e.p ? x + 1 : x)));
@@ -292,14 +293,20 @@ export default function GameView({ room, me, onLeave }: { room: RoomWire; me: st
           const b = cardXY(e.to);
           float(b.x, b.y, `+${fmt(e.amt)}`, "#2f8a3a");
         }
-        if (e.to >= 0) coinsFly(e.from, e.to, e.amt >= 300 ? 5 : 3);
+        if (e.to >= 0) {
+          coinsFly(e.from, e.to, e.amt >= 300 ? 5 : 3);
+          sfx("coins");
+        }
         if (e.tile !== undefined) {
           const q = slotXY(slotOfTile(cur, e.tile));
           float(q.x, q.y - 30, `${e.why} ${fmt(e.amt)}${e.shock ? " ⚡감전" : ""}`, "#d43a3a");
           // 깎였으면: 무엇이 얼마를 깎았는지 (방패 · 할인 · 쿠폰)
           if (e.orig && e.by?.length) {
             const skillCut = e.by.find((x) => x !== "통행료 할인" && x !== "반값 쿠폰");
-            if (skillCut) spawn("ring", q.x, q.y + 26);
+            if (skillCut) {
+              spawn("ring", q.x, q.y + 26);
+              sfx("shield");
+            }
             float(q.x, q.y - 58, `${skillCut ? `${skillCut}! ` : `${e.by.join(" · ")} `}${fmt(e.orig)} → ${fmt(e.amt)}`, "#2f8fc4");
             if (skillCut) patchPlayer(e.from, { shield: 0 });
           }
@@ -378,6 +385,7 @@ export default function GameView({ room, me, onLeave }: { room: RoomWire; me: st
         {
           const q = slotXY(posRef.current[e.p]);
           spawn("zzz", q.x + 10, q.y - 30);
+          sfx("sleep");
           float(q.x, q.y - 50, "쿨쿨… 이번 차례는 쉬어요", "#5b6bd6");
           await wait(1100);
           patchPlayer(e.p, { frozen: 0 });
@@ -448,10 +456,15 @@ export default function GameView({ room, me, onLeave }: { room: RoomWire; me: st
           patchPlayer(e.target, { frozen: 1 });
           const q = slotXY(posRef.current[e.target]);
           spawn("zzz", q.x + 10, q.y - 30);
+          sfx("sleep");
           float(q.x, q.y - 50, "쿨쿨… 다음 차례 쉬어요", "#5b6bd6");
           await wait(500);
         }
-        if (e.kind === "shield") patchPlayer(e.p, { shield: cur.players[e.p].shield || 0.5 });
+        if (e.kind === "shield") {
+          patchPlayer(e.p, { shield: cur.players[e.p].shield || 0.5 });
+          sfx("shield");
+        }
+        if (e.kind === "hop") sfx("hop");
         if (e.kind === "sale") patchPlayer(e.p, { sale: cur.players[e.p].sale || 0.5 });
         if (e.kind === "encore") patchPlayer(e.p, { encore: true });
         if (e.kind === "hop") patchPlayer(e.p, { hop: true });
@@ -460,7 +473,7 @@ export default function GameView({ room, me, onLeave }: { room: RoomWire; me: st
           patchTile(e.target, { lv: cur.tiles[e.target].lv, b: cur.tiles[e.target].b });
           flashTile(e.target, "#ff4b3d");
           spawn("boom", q.x, q.y - 18);
-          sfx("bankrupt");
+          sfx("boom");
           float(q.x, q.y - 50, `쾅! ${e.lost !== undefined ? LEVEL_NAME[e.lost] : "건물"} 부서짐`, "#d43a3a");
           await wait(500);
         }

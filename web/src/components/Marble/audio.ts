@@ -46,6 +46,13 @@ export const SFX: Record<string, { gain?: number; synth: Synth }> = {
   upgrade: { synth: { f: 440, d: 0.4, type: "square", v: 0.14, to: 1320 } },
   ready: { synth: { f: 660, d: 0.1, type: "square", v: 0.12, to: 990 } },
   join: { synth: { f: 523, d: 0.15, type: "triangle", v: 0.14, to: 784 } },
+  // 스킬 · 상태 이펙트 (일레븐랩스)
+  sleep: { gain: 0.9, synth: { f: 600, d: 0.4, type: "sine", v: 0.12, to: 300 } },
+  shield: { synth: { f: 500, d: 0.25, type: "sine", v: 0.15, to: 1200 } },
+  hop: { synth: { f: 400, d: 0.18, type: "triangle", v: 0.15, to: 900 } },
+  boom: { synth: { f: 120, d: 0.4, type: "noise", v: 0.25 } },
+  pull: { synth: { f: 900, d: 0.25, type: "sawtooth", v: 0.1, to: 200 } },
+  coins: { gain: 0.8, synth: { f: 1200, d: 0.15, type: "square", v: 0.1, to: 1600 } },
 };
 
 /** 배경음 (주인이 만들어 넣음 — 없으면 조용) */
@@ -181,7 +188,7 @@ export function sfx(name: string) {
 }
 
 /** 실제 파일이 있는 효과음 (없는 건 합성음) */
-const FILES = ["dice", "step", "coin", "pay", "build", "landmark", "acquire", "skill", "jail", "news", "rotate", "mono", "bankrupt", "win", "lose", "gacha-pull", "gacha-ssr", "gacha-ur", "upgrade", "card", "warp", "fest", "turn", "gacha-sr", "click", "deny", "ready", "join"];
+const FILES = ["dice", "step", "coin", "pay", "build", "landmark", "acquire", "skill", "jail", "news", "rotate", "mono", "bankrupt", "win", "lose", "gacha-pull", "gacha-ssr", "gacha-ur", "upgrade", "card", "warp", "fest", "turn", "gacha-sr", "click", "deny", "ready", "join", "sleep", "shield", "hop", "boom", "pull", "coins"];
 
 /* ───────── 배경음 ───────── */
 
