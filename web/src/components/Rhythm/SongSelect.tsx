@@ -98,10 +98,6 @@ export default function SongSelect({
   const custom = sel === songs.length;
   const practice = !custom && !!songs[sel]?.practice;
   const color = theme ? theme.accent : custom ? CUSTOM_COLOR : (song?.color ?? CUSTOM_COLOR);
-  // 테마 캐릭터 말풍선: 곡을 바꿀 때마다 다른 말 (곡 번호로 골라서 같은 곡은 같은 말)
-  const line = theme?.lines?.select.length
-    ? theme.lines.select[sel % theme.lines.select.length]
-    : "";
   const chartOf = (d: Difficulty): Chart | null =>
     custom ? (customCharts?.[d] ?? null) : (charts[songs[sel].id][d] ?? null);
   const bestKey = (d: Difficulty) => (song ? `${song.id}:${d}` : "");
@@ -708,28 +704,6 @@ export default function SongSelect({
           );
         })}
       </div>
-
-      {/* 테마 캐릭터: 아래 시작 버튼 옆에서 빼꼼 + 말풍선 */}
-      {theme?.art && (
-        <div className="pointer-events-none absolute right-[18cqw] bottom-[4.2cqw] z-20 flex items-end">
-          {line && (
-            <div
-              key={line}
-              className={`${KR} relative mr-[0.6cqw] mb-[5.6cqw] max-w-[17cqw] rounded-[1cqw] border border-[#F5C842]/60 bg-[#1a1024]/90 px-[1cqw] py-[0.6cqw] text-[1.05cqw] leading-snug text-[#FFF3C4] shadow-[0_0_1.4cqw_rgba(245,200,66,0.35)] [animation:modal-pop_260ms_ease-out]`}
-            >
-              {line}
-              <span className="absolute top-1/2 -right-[0.5cqw] h-[0.9cqw] w-[0.9cqw] -translate-y-1/2 rotate-45 border-t border-r border-[#F5C842]/60 bg-[#1a1024]" />
-            </div>
-          )}
-          <div className="relative h-[11cqw] w-[9cqw] overflow-hidden">
-            <img
-              src={theme.art.stand}
-              alt=""
-              className="absolute top-0 left-1/2 w-[17cqw] max-w-none -translate-x-[46%] drop-shadow-[0_0_1cqw_rgba(245,200,66,0.45)]"
-            />
-          </div>
-        </div>
-      )}
 
       {/* 아래 */}
       <div className="absolute inset-x-0 bottom-0 flex h-[5cqw] items-center justify-between border-t border-white/10 bg-black/55 px-[2.4cqw]">
