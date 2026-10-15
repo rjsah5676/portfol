@@ -6,6 +6,7 @@ import { CHAR, ITEM, MATCH_STARS, SKILL_TARGET, artOf, faceOf, power } from "@/l
 import {
   CARDS,
   LANDMARK,
+  RULE,
   LEVEL_NAME,
   TOWN_EVENTS,
   assetsOf,
@@ -79,7 +80,7 @@ export default function GameView({ room, me, onLeave }: { room: RoomWire; me: st
   const [banner, setBanner] = useState<Banner | null>(null);
   const [card, setCard] = useState<{ id: keyof typeof CARDS; p: number } | null>(null);
   const [flash, setFlash] = useState<Record<number, string>>({});
-  const [log, setLog] = useState<string[]>([]);
+  const [, setLog] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [shake, setShake] = useState<number | null>(null);
   /** 받은 방 상태 (연출 대기열) */
@@ -542,16 +543,6 @@ export default function GameView({ room, me, onLeave }: { room: RoomWire; me: st
       )}
       {live.phase !== "end" && <CenterDice dice={dice} at={diceAt} />}
 
-      {/* 진행 소식: 오른쪽 위 빈자리 (보드 바깥) */}
-      {log.length > 0 && (
-        <div className="mbx pointer-events-none absolute top-[146px] right-[8px] z-[300] flex w-[180px] flex-col gap-1">
-          {log.slice(-4).map((l, k, arr) => (
-            <div key={`${l}${k}`} className="rounded-lg bg-[#140f3a]/75 px-2 py-1 text-[11px] leading-[14px] text-white backdrop-blur" style={{ opacity: 0.45 + (0.55 * (k + 1)) / arr.length }}>
-              {l}
-            </div>
-          ))}
-        </div>
-      )}
 
       {/* 플레이어 (네 귀퉁이) */}
       {view.players.map((p, i) => (
@@ -687,6 +678,9 @@ function PlayerCard({
         {/* 이름 띠 */}
         <div className="flex h-[26px] items-center gap-1.5 pr-2 pl-[86px]" style={{ background: PCOLOR[i], boxShadow: "inset 0 -3px 0 rgba(0,0,0,0.18), inset 0 3px 0 rgba(255,255,255,0.3)" }}>
           {seat?.bot ? <Icon n="bot" size={13} /> : me ? <Icon n="crown" size={13} /> : null}
+          <span className="rounded-[4px] bg-white px-[4px] text-[10px] leading-[14px] font-black" style={{ color: PCOLOR[i] }}>
+            {i + 1}P
+          </span>
           <b className="mb-out-s min-w-0 flex-1 truncate text-[14px] text-white">{p.name}</b>
           {seat?.auto && <span className="mb-chip text-[10px]">자동</span>}
           {seat?.away && <span className="mb-chip text-[10px]">끊김</span>}
@@ -977,8 +971,8 @@ const ZONE_NAME = { low: "약하게", mid: "적당히", high: "세게" } as cons
 
 /** 주사위 하나 (3D 정육면체): 던진 사람 쪽에서 포물선으로 날아와 데굴데굴 구르다 그 눈이 앞을 보며 멈춤 */
 const DIE = 48;
-/** 그 눈이 앞(화면 쪽)으로 오게 하는 회전 — 앞 1 · 뒤 6 · 오른쪽 3 · 왼쪽 4 · 위 2 · 아래 5 */
-const FACE_ROT: Record<number, [number, number]> = { 1: [0, 0], 6: [0, 180], 3: [0, -90], 4: [0, 90], 2: [-90, 0], 5: [90, 0] };
+/** 그 눈이 윗면으로 오게 하는 회전 (주사위는 윗면 숫자로 셈) — 면: 앞 1 · 뒤 6 · 오른쪽 3 · 왼쪽 4 · 위 2 · 아래 5 */
+const FACE_ROT: Record<number, [number, number]> = { 2: [0, 0], 1: [90, 0], 6: [-90, 0], 5: [180, 0], 3: [90, -90], 4: [90, 90] };
 function ThrownDie({ v, dv, delay }: { v: number; dv: DiceView; delay: number }) {
   const [rx, ry] = FACE_ROT[v] ?? [0, 0];
   const turns = Math.max(1, dv.spin);
@@ -1011,7 +1005,7 @@ function ThrownDie({ v, dv, delay }: { v: number; dv: DiceView; delay: number })
       <div className="absolute bottom-[-12px] left-1/2 h-[10px] w-[46px] -translate-x-1/2 rounded-[50%] bg-black/30 blur-[1px]" />
       {/* 살짝 위에서 내려다보게 기울인 무대 */}
       <div style={{ width: DIE, height: DIE, perspective: 600 }}>
-        <div style={{ width: DIE, height: DIE, transformStyle: "preserve-3d", transform: "rotateX(-24deg) rotateY(30deg)" }}>
+        <div style={{ width: DIE, height: DIE, transformStyle: "preserve-3d", transform: "rotateX(-40deg) rotateY(28deg)" }}>
           <div className="mbx-tumble relative" style={{ ...cube, width: DIE, height: DIE, transformStyle: "preserve-3d" }}>
             {faces.map(([n, tf]) => (
               <div key={n} className="absolute inset-0 rounded-[9px]" style={{ transform: tf, background: "linear-gradient(145deg, #ffffff, #e9ecf7)", boxShadow: "inset 0 0 0 1.5px #c9cfe6, inset 0 -3px 6px rgba(38,43,82,0.12)", backfaceVisibility: "hidden" }}>
@@ -1081,11 +1075,11 @@ function TileInfo({ g, tile, onClose }: { g: GameWire; tile: number; onClose(): 
     start: "지나가거나 서면 월급. 딱 서면 내 땅 하나를 골라 바로 지을 수 있어요.",
     start2: "지나가면 월급의 70%",
     box: "카드 한 장 — 좋은 일일 수도, 나쁜 일일 수도!",
-    jail: "더블이 나오거나 두 번 쉬어야 나가요. 100 내면 바로 나가요.",
+    jail: `더블이 나오거나 두 번 쉬어야 나가요. ${RULE.jailPay} 내면 바로 나가요.`,
     fest: "내 땅 하나를 골라 축제 (통행료 2배)",
     warp: "다음 차례에 원하는 칸으로 순간이동",
     tax: "땅 · 건물 값의 10% 를 세금으로",
-    bonus: "서면 +200",
+    bonus: `서면 +${RULE.bonus}`,
     rail: "다른 기차역으로 바로 갈 수 있어요 (그냥 남아도 돼요)",
   };
   const owner = t.owner >= 0 ? g.players[t.owner] : null;
@@ -1304,8 +1298,8 @@ function ActionPanel({
               <Btn tone="gold" className="h-[40px] px-4 text-[15px] font-bold" disabled={sending} onClick={() => void send({ t: "roll" })} silent>
                 더블 노리기
               </Btn>
-              <Btn className="h-[40px] px-3 text-[13px]" disabled={sending || me.cash < 100} onClick={() => void send({ t: "pay" })}>
-                <Cur k="coin" n={100} size={12} /> 내고 나가기
+              <Btn className="h-[40px] px-3 text-[13px]" disabled={sending || me.cash < RULE.jailPay} onClick={() => void send({ t: "pay" })}>
+                <Cur k="coin" n={RULE.jailPay} size={12} /> 내고 나가기
               </Btn>
             </div>
           </>,

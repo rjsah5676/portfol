@@ -345,8 +345,14 @@ function Lobby({ me, onBack, onGo }: { me: string; onBack(): void; onGo(f: () =>
   const [rooms, setRooms] = useState<LobbyRoom[] | null>(null);
   const [make, setMake] = useState(false);
   const [pw, setPw] = useState<{ id: string; v: string } | null>(null);
+  const [q, setQ] = useState("");
   useEffect(() => watchLobby(setRooms), []);
   void me;
+  // 방 검색: 방 이름 · 맵 이름으로
+  const shown = (rooms ?? []).filter((r) => {
+    const k = q.trim().toLowerCase();
+    return !k || r.name.toLowerCase().includes(k) || MAPS[r.map].name.includes(k);
+  });
   return (
     <div className="mbx absolute inset-0 overflow-hidden" style={{ background: "radial-gradient(circle at 50% 0%, #2f2a75, #120d33 70%)" }}>
       <img src="/marble/art/lobby-bg.webp" alt="" className="absolute inset-0 h-full w-full object-cover opacity-40 blur-[3px]" />
@@ -355,7 +361,8 @@ function Lobby({ me, onBack, onGo }: { me: string; onBack(): void; onGo(f: () =>
           ‹ 돌아가기
         </XBtn>
         <b className="ml-1 text-[19px] font-black text-white">방 목록</b>
-        <span className="text-[12px] text-white/50">{rooms ? `${rooms.length}개` : ""}</span>
+        <span className="text-[12px] text-white/50">{rooms ? `${shown.length}${q ? ` / ${rooms.length}` : ""}개` : ""}</span>
+        <input value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.stopPropagation()} placeholder="🔍 방 이름 · 맵 검색" maxLength={20} className="mbx-input ml-3 !h-[34px] w-[220px] text-[13px]" />
         <div className="ml-auto flex items-center gap-1.5">
           <XBtn tone="gold" className="h-[34px] px-4 text-[14px]" onClick={() => setMake(true)}>
             ＋ 방 만들기
@@ -367,16 +374,16 @@ function Lobby({ me, onBack, onGo }: { me: string; onBack(): void; onGo(f: () =>
       <div className="mbx-hscroll absolute top-[64px] right-[12px] bottom-[12px] left-[12px] overflow-y-auto">
         {!rooms ? (
           <p className="p-4 text-[13px] text-white/60">불러오는 중…</p>
-        ) : !rooms.length ? (
+        ) : !shown.length ? (
           <div className="flex h-full flex-col items-center justify-center gap-3 text-white/60">
-            <p className="text-[14px]">열린 방이 없어요</p>
+            <p className="text-[14px]">{q ? `「${q}」 에 맞는 방이 없어요` : "열린 방이 없어요"}</p>
             <XBtn tone="gold" className="h-[40px] px-5 text-[14px]" onClick={() => setMake(true)}>
               첫 방 만들기
             </XBtn>
           </div>
         ) : (
           <div className="grid grid-cols-3 gap-3">
-            {rooms.map((r) => {
+            {shown.map((r) => {
               const open = r.phase === "wait" && r.players < r.max;
               return (
                 <button
