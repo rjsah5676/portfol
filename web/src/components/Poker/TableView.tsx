@@ -689,6 +689,9 @@ export default function TableView({
     };
   }, [id, uid, digest]);
 
+  /** 이모티콘이 떠 있는 자리는 그 자리 전체(이름표 포함)를 다른 자리 · 내 틀보다 위로 — 나중에 던진 쪽이 더 위 (0 = 이모티콘 없음) */
+  const emoteZ = (i: number) => (emotes[i] ? 46 + Object.values(emotes).filter((e) => e.key < emotes[i].key).length : 0);
+
   // 시간이 지난 말풍선 · 포즈 · 표정은 지움
   const transient =
     Object.keys(poses).length +
@@ -1306,7 +1309,7 @@ export default function TableView({
         data-turn={waiting ? "1" : undefined}
         data-win={wonHere > 0 && isTop(i) ? "1" : undefined}
         // 이모티콘이 떠 있는 틀은 통째로 위로 — 말풍선이 옆 · 위 틀(이름표)에 깔리지 않게 (둘이 같이 던지면 나중에 던진 쪽이 위)
-        style={emotes[i] ? { ...box, zIndex: 46 + Object.values(emotes).filter((e) => e.key < emotes[i].key).length } : box}
+        style={emotes[i] ? { ...box, zIndex: emoteZ(i) } : box}
       >
         <div className={`flex min-h-0 flex-1 ${right ? "flex-row-reverse" : ""}`}>
           {/* 캐릭터 칸: 누르면 자리 정보(전적 · 강퇴 투표). 위엔 이번 구에 건 돈, 아래엔 행동 글자. 남은 시간은 이 칸 테두리를 따라 */}
@@ -1579,7 +1582,7 @@ export default function TableView({
             <div key={i}>
               <div
                 className={`pk-seat absolute flex flex-col ${dir > 0 ? "items-start" : "items-end"}`}
-                style={{ ...edge, top: y - cardH / 2, width: frameW, zIndex: 34 }}
+                style={{ ...edge, top: y - cardH / 2, width: frameW, zIndex: emoteZ(i) || 34 }}
               >
                 {/* 윗줄: 아바타 + 카드 칸 (아래 끝 맞춤) */}
                 <div className={`flex items-end gap-[6px] ${dir > 0 ? "" : "flex-row-reverse"}`}>
@@ -1696,7 +1699,7 @@ export default function TableView({
                     <div
                       key={emotes[i].key}
                       className="pk-emote pointer-events-none absolute w-max"
-                      style={{ left: ex - size / 2 - 4, top: ey, zIndex: 40 }}
+                      style={{ left: ex - size / 2 - 4, top: ey, zIndex: emoteZ(i) }}
                     >
                       <EmoteBubble tail="b">
                         <EmoteImg char={look} emote={emotes[i].v} size={size} />
@@ -1997,6 +2000,7 @@ export default function TableView({
             deadline={deadline}
             gain={gains[mySeat] && (res?.won[mySeat] ?? 0) > 0 ? gains[mySeat] : null}
             emote={emotes[mySeat] ?? null}
+            emoteZ={emoteZ(mySeat)}
             avW={heroAvW}
             avH={heroAvH}
             frameW={heroW}
@@ -2792,6 +2796,8 @@ function HeroArea(props: {
   deadline: number;
   gain: { amt: number; key: number } | null;
   emote: (Timed<Emote> & { key: number }) | null;
+  /** 내 이모티콘이 떠 있는 동안 내 틀을 올릴 높이 (0 = 평소) — 위 자리 이름표에 말풍선이 깔리지 않게 */
+  emoteZ: number;
   /** 아바타 크기 (7포커: 앉은 캐릭터 그림 3:4 · 홀덤: 얼굴 아이콘) */
   avW: number;
   avH: number;
@@ -2878,7 +2884,7 @@ function HeroArea(props: {
       {/* 왼쪽 아래: 내 아바타(크게 — 7포커 앉은 그림 · 홀덤 얼굴) 과 그 아래 내 정보 띠 */}
       <div
         className="absolute flex flex-col items-center"
-        style={{ left: 12, bottom: 8, width: frameW, zIndex: 36, fontSize: "1.12em" }}
+        style={{ left: 12, bottom: 8, width: frameW, zIndex: props.emoteZ || 36, fontSize: "1.12em" }}
       >
         <div
           role="button"
