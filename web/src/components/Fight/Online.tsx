@@ -47,41 +47,36 @@ const MENU_BG = "/fight/bg/title.webp";
 const face = (c: CharDef) => `/fight/art/${c.id}-face.webp`;
 
 /** 캐릭터 고르기 격자 한 줄 칸 수 (랜덤 + 캐릭터들을 이만큼씩 여러 줄로) */
-const PICK_COLS = 6;
+const PICK_COLS = 4;
 /** 위·아래로 한 줄 옮김 (격자 밖이면 그대로) — 칸 번호는 랜덤(-1)부터 */
 const pickVert = (ch: number, d: number) => {
   const p = ch + 1 + d * PICK_COLS;
   return p >= 0 && p <= CHARS.length ? p - 1 : ch;
 };
 
-/** 철권식 캐릭터 고르기 격자: 정사각 초상화, 이름은 칸 아래 띠, 고른 칸은 자리 색 테두리 · 빛 */
-function PickGrid({ sel, color, disabled, onPick }: { sel: number; color: string; disabled: boolean; onPick: (i: number) => void }) {
-  const cell = 5.4,
-    gap = 0.3;
+/** 캐릭터 고르기 격자 — 혼자 하기 선택 화면(Select)과 같은 모양: 넓은 얼굴 칸 4줄, 이름은 칸 아래 띠, 고른 칸은 자리 색 테두리 + 위에 자리 표시 */
+function PickGrid({ sel, color, label, disabled, onPick }: { sel: number; color: string; label: string; disabled: boolean; onPick: (i: number) => void }) {
   return (
-    <div className="flex flex-wrap justify-center" style={{ width: `${PICK_COLS * cell + (PICK_COLS - 1) * gap}cqw`, gap: `${gap}cqw` }}>
+    <div className="grid gap-x-[0.8cqw] gap-y-[1.7cqw] pt-[1.6cqw]" style={{ gridTemplateColumns: `repeat(${PICK_COLS}, auto)` }}>
       {[-1, ...CHARS.map((_, i) => i)].map((i) => {
         const on = sel === i;
         const c = i >= 0 ? CHARS[i] : null;
-        const col = on ? color : "rgba(255,255,255,0.18)";
+        const box = `h-[4.4cqw] w-[5.6cqw] rounded-[0.5cqw] border-[0.3cqw] ${on ? "animate-pulse" : "border-white/20"}`;
         return (
-          <button
-            key={i}
-            type="button"
-            disabled={disabled}
-            onClick={() => onPick(i)}
-            className={`relative cursor-pointer overflow-hidden rounded-[0.3cqw] border-[0.22cqw] bg-black/60 transition-transform disabled:cursor-not-allowed ${on ? "z-10 scale-[1.08]" : ""}`}
-            style={{ width: `${cell}cqw`, height: `${cell}cqw`, borderColor: col, boxShadow: on ? `0 0 1.2cqw ${col}` : undefined }}
-          >
+          <button key={i} type="button" disabled={disabled} onClick={() => onPick(i)} className="relative cursor-pointer disabled:cursor-not-allowed">
             {c ? (
-              <img src={face(c)} alt={c.name} className={`absolute inset-0 h-full w-full object-cover object-top ${PX} ${on ? "" : "brightness-75 grayscale-[55%]"}`} />
+              <img src={face(c)} alt={c.name} className={`${box} object-cover ${PX} ${on ? "" : "grayscale-[60%]"}`} style={on ? { borderColor: color } : undefined} />
             ) : (
-              <span className="absolute inset-0 flex items-center justify-center pb-[1cqw] font-mono text-[2.6cqw] font-black text-white/80">?</span>
+              <span className={`${box} flex items-center justify-center bg-black/60 font-mono text-[2.8cqw] font-black text-white/80`} style={on ? { borderColor: color } : undefined}>
+                ?
+              </span>
             )}
-            <span
-              className={`${KR} absolute inset-x-0 bottom-0 truncate px-[0.2cqw] text-center text-[0.85cqw] leading-[1.35] text-white`}
-              style={{ background: on ? color : "rgba(0,0,0,0.65)" }}
-            >
+            {on && (
+              <span className="absolute -top-[1.6cqw] left-0 rounded-[0.2cqw] px-[0.4cqw] font-mono text-[1.1cqw] font-black whitespace-nowrap text-white" style={{ background: color }}>
+                {label}
+              </span>
+            )}
+            <span className={`${KR} pointer-events-none absolute inset-x-[0.3cqw] bottom-[0.3cqw] rounded-b-[0.3cqw] bg-black/65 text-center text-[0.95cqw] leading-[1.4] text-white/85`}>
               {c ? c.name : "랜덤"}
             </span>
           </button>
@@ -525,7 +520,7 @@ function BotRoom({ st, nick, onMatch }: { st: Extract<RankStatus, { s: "bot" }>;
       {/* 아래: 캐릭터 고르기 + 시작 */}
       <div className="absolute bottom-[1cqw] left-1/2 z-10 flex -translate-x-1/2 items-end gap-[1.4cqw] rounded-[1cqw] bg-black/50 px-[1.2cqw] pt-[0.8cqw] pb-[0.7cqw] backdrop-blur-[2px]">
         <div className="flex flex-col items-center gap-[0.4cqw]">
-          <PickGrid sel={shown} color={SEAT_COL[0]} disabled={busy || shuffle.cur !== null} onPick={(i) => (sfxUi("move"), setCh(i))} />
+          <PickGrid sel={shown} color={SEAT_COL[0]} label="1P" disabled={busy || shuffle.cur !== null} onPick={(i) => (sfxUi("move"), setCh(i))} />
           <div className={`${KR} text-[1cqw] text-white/40`}>
             {err ? <span className="text-[#F87171]">{err}</span> : keyText("A·D·W·S(←→↑↓) 고르기 · J(Enter) 시작 · Esc 취소")}
           </div>
@@ -1444,7 +1439,7 @@ function Room({
       {/* 아래: 내 캐릭터 고르기 + 준비 */}
       <div className="absolute bottom-[1cqw] left-1/2 z-10 flex -translate-x-1/2 items-end gap-[1.4cqw] rounded-[1cqw] bg-black/50 px-[1.2cqw] pt-[0.8cqw] pb-[0.7cqw] backdrop-blur-[2px]">
         <div className="flex flex-col items-center gap-[0.4cqw]">
-          <PickGrid sel={shuffle.cur ?? me.ch} color={SEAT_COL[s.seat]} disabled={me.ready || shuffle.cur !== null} onPick={(i) => (sfxUi("move"), s.setChar(i))} />
+          <PickGrid sel={shuffle.cur ?? me.ch} color={SEAT_COL[s.seat]} label={s.seat === 0 ? "1P" : "2P"} disabled={me.ready || shuffle.cur !== null} onPick={(i) => (sfxUi("move"), s.setChar(i))} />
           <div className={`${KR} text-[1cqw] text-white/40`}>{keyText("A·D·W·S(←→↑↓) 고르기 · J(Enter) 준비 · Esc 나가기 · 둘 다 준비하면 시작")}</div>
         </div>
         <button type="button" disabled={(!foe && !me.ready) || shuffle.cur !== null} onClick={() => toggleRef.current()} className={`${bigBtn} mb-[1.6cqw] min-w-[12cqw]`}>
