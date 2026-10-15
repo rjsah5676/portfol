@@ -399,5 +399,8 @@
   "voice/jeongmin/jeongmin-hello-lobby": "voice/jeongmin/jeongmin-hello-lobby.mp3",
   "voice/mio/mio-hello-lobby": "voice/mio/mio-hello-lobby.mp3",
   "voice/yeonseo-summer/yeonseo-summer-hello-lobby": "voice/yeonseo-summer/yeonseo-summer-hello-lobby.mp3",
-  "voice/taeyang-ts/taeyang-ts-hello-lobby": "voice/taeyang-ts/taeyang-ts-hello-lobby.mp3"
+  "voice/taeyang-ts/taeyang-ts-hello-lobby": "voice/taeyang-ts/taeyang-ts-hello-lobby.mp3",
+  "voice/amy/amy-hello-lobby": "voice/amy/amy-hello-lobby.mp3",
+  "voice/amy-summer/amy-summer-hello-lobby": "voice/amy-summer/amy-summer-hello-lobby.mp3",
+  "voice/mio-dracula/mio-dracula-hello-lobby": "voice/mio-dracula/mio-dracula-hello-lobby.mp3"
 }

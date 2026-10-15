@@ -2993,16 +2993,27 @@ function HeroArea(props: {
         </div>
         {/* 족보 · 행동 · 결과 글자는 카드보다 위에 (카드가 커지거나 떠오를 때 가리지 않게) */}
         <div className="relative z-20 flex flex-col items-center gap-[0.4em]">
-          {hint && !res && !myName && (
-            <span className={`pk-handtag pk-pop ${madeKey ? "pk-made" : ""}`}>
-              <span className="pk-tag-t">{hint}</span>
-            </span>
-          )}
-          {p?.last &&
-            !res &&
-            !(!p.folded && !p.allIn && (hv ?? sv) && p.bet < (hv ?? sv)!.currentBet) && (
-              <ActWord key={p.last.a} a={p.last.a} className="pk-acttag-me" />
-            )}
+          {(() => {
+            const showHint = !!hint && !res && !myName;
+            const act =
+              p?.last && !res && !(!p.folded && !p.allIn && (hv ?? sv) && p.bet < (hv ?? sv)!.currentBet) ? (
+                <ActWord key={p.last.a} a={p.last.a} className="pk-acttag-me" />
+              ) : null;
+            return (
+              <>
+                {showHint && (
+                  <span className="relative inline-flex">
+                    <span className={`pk-handtag pk-pop ${madeKey ? "pk-made" : ""}`}>
+                      <span className="pk-tag-t">{hint}</span>
+                    </span>
+                    {/* 족보 글자가 있으면 행동 글자는 그 왼쪽에 — 밑에 쌓으면 화면 아래로 잘렸음 */}
+                    {act && <span className="absolute top-1/2 right-full mr-[0.6em] -translate-y-1/2">{act}</span>}
+                  </span>
+                )}
+                {!showHint && act}
+              </>
+            );
+          })()}
           {myName && myRevealed && (
             <span
               key={settled ? 1 : 0}
