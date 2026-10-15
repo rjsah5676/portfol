@@ -418,3 +418,17 @@ cd web && POKER_E2E=1 npx next dev            # → /games/defense/?fake=admin:�
 - 관리자: 디펜스 메뉴 아래 「플레이 기록 받기」 → GET /api/admin/defense/plays 를 끝까지 받아 JSON 저장
 - 요약: `npx tsx scripts/defense-plays-report.ts <json> [--ver beta5]` (server/) — 단계별 클리어율 · 죽은/나간 웨이브 · 유물/연구/패치 장착률 · 습관
 - **임시 기능 — 분석이 끝나면 제거 예정.** 지울 곳: server/src/games/defensePlays.ts · defense.ts 의 plays.* 호출과 `defense.quit` rpc · Room.startedAt · admin.ts `/defense/plays` 라우트와 TOP_LEVEL "defense_plays" · web realtime/defense.ts `quitRun` · DefenseApp 의 quitRun 호출 · onExport 버튼 · exportPlays · server/scripts/defense-plays-report.ts · (DB) defense_plays 컬렉션 drop
+
+## v2.0 해피 타운 (2026-10-16) — 확장 스테이지
+PIXEL MARBLE 「해피 타운」 맵 테마. 길 · 칸 배치는 글리치 시티와 같음 (7×4 + 둘레 26칸), 규칙만 다름.
+- 로드아웃 `stage: "town"` · `town: 단계` (progress.ts) → `modsOf` 가 적 세기를 `GLITCH[townGlitchLv(단계)]` 로 (2+2×단계). 보물방 · 끈기 없음
+- 열림: `townOpenOf(glitchOpen)` — 메인 6단계 열면 1단계, 2단계마다 +1 (TOWN_MAX 13, 메인 50단계 확장 때 늘릴 것). 안 열렸으면 1단계 연습 판 (화면만)
+- 규칙 수치 · 칸 이름: `lib/defense/town.ts` (건물 비용 · 통행료 · 둔화 · 주사위). 시뮬: `sim.ts` 의 `tileXY · tileCell · cellTiles · tileOpen · buildCost · buildBlock · tollOf · townWave`, 명령 `{ t: "build", p: 길 칸 }`
+  - 건물은 길 칸 바로 안쪽 유닛 칸에 유닛이 있어야 짓고 · 영업 (없으면 휴업). 그 칸에서 쓰러진 적 = 통행료, 2층집부터 둔화
+  - 주사위: 보스 아닌 웨이브 시작마다 `b.trng` (소환 운과 따로) — 황금 칸 · 늪 · 축제 · 더블
+  - UR 보스 `enemies.ts TOWN_BOSSES` (BOSSES 뒤에 붙음, `bossOfWave(w, stage)`): DICE warp · MOA seize(보스 처치 시 돌려줌) · FORTE encore
+- 서버: `defense.start { mode: "town" }` · 순위표 `${ver}:t${시즌}` · 보상 `meta.onTownRun` (runReward "town" ×1.3 · 단계 첫 클리어 `townFirstClear` · `townDone` · `tbest`) · `setLoad { town }`
+- 화면: 메뉴 스테이지 탭 · `TownIntro` 소개 창 · 길 칸 누르기 → 아래 `TilePanel` (짓기 W) · 위 `TownChip` · `render.ts drawTown` (마블 건물 · 랜드마크 · 특수 칸 그림 재사용) · 안내 카드 `Tutorial.tsx TOWN_STEPS` (pgd-tut-town)
+- 보스 그림: `web/scripts/defense-art/town-bosses.py` 가 마블 말 도트를 「오염」시켜 `public/defense/bosses/ur-*.webp`
+- 밸런스 확인: `npx tsx scripts/defense-sim.ts --meta mid --town 1` (적 세기 같은 메인 단계와 비교)
+- 다음: 땅문서 · 도시 보너스(타운 전용 재화 → 메인 영구 보너스) · 메인 31~50단계 + 새 유물 · 연구 · 변이

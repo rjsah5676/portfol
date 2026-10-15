@@ -23,7 +23,7 @@ export interface DefenseRankRow {
   at: number;
 }
 
-export type RankBoard = "season" | "daily";
+export type RankBoard = "season" | "daily" | "town";
 export type RunStart = { run: string; seed: number; ver: string; mode: RankBoard; loadout: Loadout; day?: string };
 export const startRun = (mode: RankBoard = "season") => rpc<RunStart>("defense.start", { mode });
 export type FinishOut = {
@@ -46,6 +46,8 @@ export type FinishOut = {
         gbest?: { glitch: number; prev: number; now: number };
         /** 보물방 결과 (열렸던 판) — ratio 깎은 체력 비율 · reward 판 밖 보상 */
         treasure?: { wave: number; ratio: number; killed: boolean; reward: { pieces?: number; cores?: number; cardBox?: number } } | null;
+        /** 해피 타운 단계 첫 클리어 보상 */
+        townClear?: { town: number; give: Goods } | null;
       })
     | null;
   /** 오늘의 도전 그날 첫 완료 보상 (이미 받았으면 null) */
@@ -90,7 +92,10 @@ export interface DefenseProfile {
   /** 연구 · 유물 레벨 (없으면 1) */
   resLv?: Record<string, number>;
   relicLv?: Record<string, number>;
-  load: { res: string[]; relics: string[]; glitch: number; cheat?: string };
+  load: { res: string[]; relics: string[]; glitch: number; cheat?: string; town?: number };
+  /** 해피 타운: 클리어한 단계 · 단계별 최고 웨이브 (클리어 = LAST_WAVE + 1) */
+  townDone?: number[];
+  tbest?: Record<string, number>;
   /** 산 치트 연구 */
   cheatRes?: string[];
   glitchOpen: number;
@@ -160,7 +165,7 @@ export const meta = {
   storeBuy: (id: string) => P("defense.store.buy", { id }),
   storeSell: (id: string) => P("defense.store.sell", { id }),
   packBuy: (id: string) => P("defense.pack.buy", { id }),
-  setLoad: (load: { res: string[]; relics: string[]; glitch: number; cheat?: string }) => P("defense.load", load),
+  setLoad: (load: { res: string[]; relics: string[]; glitch: number; cheat?: string; town?: number }) => P("defense.load", load),
   cheatResBuy: (id: string) => P("defense.cheatres.buy", { id }),
   setTheme: (id: string) => P("defense.theme", { id }),
   questClaim: (id: string) => P("defense.quest.claim", { id }),

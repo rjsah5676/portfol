@@ -28,7 +28,8 @@ import { BOSSES, KIND, bossOfWave, kindOfWave, phaseOn, type BossDef, type Size,
 import { CHEAT, CHEATS, CHEAT_MULTI_SEC, CHEAT_OFFER, CHEAT_WAVES, cheatFx0, cheatFxOf, cheatOdds, type CheatFx } from "./cheats";
 import { MISSIONS, PATCHES } from "./meta";
 import { mixSeed, pick, rnd, rndInt, type Rng } from "./rng";
-import { BENCH_MAX, LV_BUFF, LV_DMG, modsOf, type Loadout, type Mods } from "./progress";
+import { BENCH_MAX, LV_BUFF, LV_DMG, modsOf, type Loadout, type Mods, type Stage } from "./progress";
+import { TOWN, diceKindOf, type DiceKind } from "./town";
 import {
   FACTIONS,
   RECIPE,
@@ -64,6 +65,31 @@ export function pathPos(d: number): [number, number] {
   if (d < W + H) return [W + 0.5, 0.5 + (d - W)];
   if (d < 2 * W + H) return [W + 0.5 - (d - W - H), H + 0.5];
   return [0.5, H + 0.5 - (d - 2 * W - H)];
+}
+/** 길 칸(0..PERIM-1) → 격자 좌표 (왼쪽 위 0,0 · 시계 방향) */
+export function tileXY(t: number): [number, number] {
+  const W = FIELD_W - 1,
+    H = FIELD_H - 1;
+  if (t < W) return [t, 0];
+  if (t < W + H) return [W, t - W];
+  if (t < 2 * W + H) return [W - (t - W - H), H];
+  return [0, H - (t - 2 * W - H)];
+}
+/** 모서리 길 칸 (해피 타운 특수 칸) */
+export const CORNERS = [0, FIELD_W - 1, FIELD_W + FIELD_H - 2, 2 * (FIELD_W - 1) + FIELD_H - 1];
+/** 길 칸 바로 안쪽 유닛 칸 (모서리는 -1) — 해피 타운: 이 칸에 유닛이 있어야 건물 영업 */
+export function tileCell(t: number): number {
+  if (CORNERS.includes(t)) return -1;
+  const [gx, gy] = tileXY(t);
+  const c = Math.min(COLS, Math.max(1, gx)) - 1,
+    r = Math.min(ROWS, Math.max(1, gy)) - 1;
+  return r * COLS + c;
+}
+/** 유닛 칸 → 그 앞 길 칸들 (가장자리 칸만, 귀퉁이 칸은 둘) */
+export function cellTiles(i: number): number[] {
+  const out: number[] = [];
+  for (let t = 0; t < PERIM; t++) if (tileCell(t) === i) out.push(t);
+  return out;
 }
 export const cellX = (i: number) => 1.5 + (i % COLS);
 export const cellY = (i: number) => 1.5 + Math.floor(i / COLS);
@@ -149,7 +175,9 @@ export type Cmd =
   /** 포기 — 지금 웨이브에서 진 것으로 끝냄 (기록 · 보상은 거기까지) */
   | { t: "quit" }
   /** 다음 웨이브 부르기 — 이번 웨이브 적이 다 나왔으면 남은 시간을 건너뜀 (남은 1초마다 골드 B.nextGold). 남은 적은 그대로 */
-  | { t: "next" };
+  | { t: "next" }
+  /** 해피 타운: 길 칸 p 에 건물 짓기 · 한 단계 올리기 */
+  | { t: "build"; p: number };
 
 /** 화면 효과 (시뮬 결과에 영향 없음 — fx 가 null 이면 안 쌓음) */
 export type Fx =
@@ -183,6 +211,12 @@ export type Ev =
   | { t: "patch"; id: string; auto: boolean }
   | { t: "cheatOffer" }
   | { t: "cheat"; id: string; auto: boolean }
+  /** 해피 타운: 건물 · 웨이브 주사위 · 보스 기술 (DICE 순간이동 · MOA 빼앗기 · FORTE 앙코르) */
+  | { t: "build"; tile: number; lv: number }
+  | { t: "dice"; roll: number; kind: DiceKind; gold: number; mud: number }
+  | { t: "warp"; roll: number }
+  | { t: "seize"; tile: number }
+  | { t: "encore" }
   | { t: "over"; win: boolean };
 
 export type Phase = "prep" | "wave" | "boss" | "break" | "treasure" | "over";
@@ -254,6 +288,23 @@ export interface Board {
   mono: Faction | null;
   pureR: number;
   pure: number;
+  /** 스테이지 (main 글리치 시티 · town 해피 타운) */
+  stage: Stage;
+  /** 해피 타운: 길 칸별 건물 단계 0~3 (모서리 · 글리치 시티는 늘 0) */
+  bld: number[];
+  /** 해피 타운: 이번 웨이브 주사위 (황금 칸 · 늪 칸, 없으면 -1) */
+  dice: { roll: number; kind: DiceKind; gold: number; mud: number; fest: boolean } | null;
+  /** 해피 타운: MOA 에게 빼앗긴 건물 칸 (보스를 잡으면 돌아옴) */
+  seized: number[];
+  /** 해피 타운: 받은 통행료 합 · 이번 웨이브 · 지난 웨이브 */
+  toll: number;
+  tollW: number;
+  tollLast: number;
+  /** 해피 타운: 길 칸별 이번 웨이브 · 지난 웨이브에 쓰러진 적 수 (어디에 지을지 고르는 근거) */
+  tk: number[];
+  tkLast: number[];
+  /** 해피 타운 주사위 · 보스 기술 난수 (소환 운과 따로) */
+  trng: Rng;
   fx: Fx[] | null;
   ev: Ev[] | null;
 }
@@ -316,6 +367,16 @@ export function newBoard(seed: number, idx: number, lo?: Loadout | null): Board 
     mono: null,
     pureR: 0,
     pure: 0,
+    stage: mods.stage,
+    bld: new Array(PERIM).fill(0),
+    dice: null,
+    seized: [],
+    toll: 0,
+    tollW: 0,
+    tollLast: 0,
+    tk: new Array(PERIM).fill(0),
+    tkLast: new Array(PERIM).fill(0),
+    trng: { r: mixSeed(seed, 131) },
     fx: null,
     ev: null,
   };
@@ -351,6 +412,31 @@ export const sellOf = (b: Board, d: UnitDef) => ({
 });
 /** 보스 제한 시간 (초) */
 export const bossSecOf = (b: Board) => Math.max(20, B.bossSec + b.mods.bossSec + b.cx.bossSec);
+/** 해피 타운: 길 칸 t 건물이 영업 중인가 (앞 칸에 유닛 · 빼앗기지 않음) */
+export const tileOpen = (b: Board, t: number) => {
+  const ci = tileCell(t);
+  return ci >= 0 && !!b.cells[ci].def && !b.seized.includes(t);
+};
+/** 해피 타운: 길 칸 t 건물 짓기 · 올리기 비용 (최고 단계면 Infinity) */
+export const buildCost = (b: Board, t: number) => (b.bld[t] >= TOWN.build.length ? Infinity : TOWN.build[b.bld[t]]);
+/** 해피 타운: 지금 지을 수 없는 이유 (지을 수 있으면 null) */
+export function buildBlock(b: Board, t: number): string | null {
+  if (b.stage !== "town") return "해피 타운에서만 지을 수 있어요";
+  const ci = tileCell(t);
+  if (ci < 0) return "모서리 특수 칸엔 못 지어요";
+  if (b.bld[t] >= TOWN.build.length) return "최고 단계예요";
+  if (b.seized.includes(t)) return "MOA 에게 빼앗긴 칸이에요 — MOA 를 잡으면 돌아와요";
+  if (!b.cells[ci].def) return "바로 안쪽 칸에 유닛이 있어야 지을 수 있어요";
+  if (b.gold < buildCost(b, t)) return "골드가 모자라요";
+  return null;
+}
+/** 해피 타운: 칸 t 에서 쓰러진 적 하나가 내는 통행료 (지금 기준) */
+export function tollOf(b: Board, t: number): number {
+  const lv = tileOpen(b, t) ? b.bld[t] : 0;
+  let g: number = TOWN.toll[lv];
+  if (b.dice?.gold === t) g = lv ? g * TOWN.gold : TOWN.goldBare;
+  return g;
+}
 /** 패배 기준 적 수 */
 export const capOf = (b: Board) => CAP + b.cx.cap;
 /** 보드에 있는 유닛 수 (id → 수) */
@@ -436,6 +522,8 @@ export function isCmd(x: unknown): x is Cmd {
     case "quit":
     case "next":
       return keys === 1;
+    case "build":
+      return keys === 2 && Number.isInteger(c.p) && (c.p as number) >= 0 && (c.p as number) < PERIM;
     case "cheat":
     case "reroll":
       return keys === 2 && Number.isInteger(c.i) && (c.i as number) >= 0 && (c.i as number) < Math.max(CHEAT_OFFER, PATCHES.length);
@@ -621,6 +709,14 @@ export function apply(g: Game, p: number, cmd: Cmd): string | null {
       if (!nx) return "바꿀 치트 코드가 없어요";
       o.rr[cmd.i]--;
       o.offer[cmd.i] = nx;
+      return null;
+    }
+    case "build": {
+      const why = buildBlock(b, cmd.p);
+      if (why) return why;
+      b.gold -= buildCost(b, cmd.p);
+      b.bld[cmd.p]++;
+      b.ev?.push({ t: "build", tile: cmd.p, lv: b.bld[cmd.p] });
       return null;
     }
     case "pick": {
@@ -816,12 +912,33 @@ function startWave(b: Board, w: number) {
   b.wt = 0;
   b.spawned = 0;
   b.ev?.push({ t: "wave", wave: w });
-  const boss = w % BOSS_EVERY === 0 ? bossOfWave(w) : null;
+  if (b.stage === "town") townWave(b, w);
+  const boss = w % BOSS_EVERY === 0 ? bossOfWave(w, b.stage) : null;
   if (boss) {
     b.phase = "boss";
     b.bossT = sec(bossSecOf(b));
     spawnBoss(b, boss);
   } else b.phase = "wave";
+}
+
+/** 해피 타운 웨이브 시작: 칸별 처치 수 · 통행료를 넘기고, 보스가 아니면 주사위 (2웨이브부터) */
+function townWave(b: Board, w: number) {
+  for (let t = 0; t < PERIM; t++) {
+    b.tkLast[t] = b.tk[t];
+    b.tk[t] = 0;
+  }
+  b.tollLast = b.tollW;
+  b.tollW = 0;
+  b.dice = null;
+  if (w < 2 || w % BOSS_EVERY === 0) return;
+  const roll = rndInt(b.trng, 6) + 1;
+  const kind = diceKindOf(roll);
+  const land: number[] = [];
+  for (let t = 0; t < PERIM; t++) if (!CORNERS.includes(t)) land.push(t);
+  const gold = kind === "gold" || kind === "double" ? land.splice(rndInt(b.trng, land.length), 1)[0] : -1;
+  const mud = kind === "mud" || kind === "double" ? land[rndInt(b.trng, land.length)] : -1;
+  b.dice = { roll, kind, gold, mud, fest: kind === "fest" };
+  b.ev?.push({ t: "dice", roll, kind, gold, mud });
 }
 
 function endWave(b: Board) {
@@ -872,12 +989,19 @@ function stepBoard(g: Game, b: Board) {
 
   // ── 적 위치 · 범위 효과 ──
   const es = b.enemies;
+  const town = b.stage === "town";
   for (const e of es) {
     const [x, y] = pathPos(e.d);
     e.x = x;
     e.y = y;
     e.aSlow = 0;
     e.shred = b.cx.shred;
+    if (town) {
+      // 해피 타운: 2층집부터 그 칸을 지나는 적이 느려짐 · 주사위 늪
+      const t = Math.floor(e.d);
+      const bs = tileOpen(b, t) ? TOWN.slow[b.bld[t]] : 0;
+      e.aSlow = Math.max(bs, b.dice?.mud === t ? TOWN.mud : 0);
+    }
   }
   for (const a of b.auras) {
     const r2 = a.def.aura!.r * a.def.aura!.r;
@@ -1224,6 +1348,20 @@ function ult(b: Board, ci: number, def: UnitDef, t: Enemy, tx: number, ty: numbe
 function bossTick(b: Board, e: Enemy) {
   const def = BOSSES[e.boss];
   def.skills.forEach((s, k) => {
+    if (s.kind === "encore") {
+      // 앙코르: 체력이 at 밑으로 처음 내려가면 한 번 (sk = -1 이면 이미 씀)
+      if (e.sk[k] < 0 || e.hp > e.max * s.at) return;
+      e.sk[k] = -1;
+      e.hp = Math.min(e.max, e.hp + e.max * s.pct);
+      for (const o of b.enemies)
+        if (o !== e && o.hp > 0) {
+          o.dash = sec(2);
+          o.dashMult = 2;
+        }
+      b.fx?.push({ k: "heal", x: e.x, y: e.y });
+      b.ev?.push({ t: "encore" });
+      return;
+    }
     if (--e.sk[k] > 0) return;
     e.sk[k] = sec(s.every);
     switch (s.kind) {
@@ -1259,6 +1397,30 @@ function bossTick(b: Board, e: Enemy) {
       case "evade":
         e.evade = sec(s.sec);
         break;
+      case "warp": {
+        // 주사위 눈만큼 앞으로 순간이동
+        const roll = rndInt(b.trng, 6) + 1;
+        e.d += roll;
+        if (e.d >= PERIM) e.d -= PERIM;
+        e.trav += roll;
+        [e.x, e.y] = pathPos(e.d);
+        b.ev?.push({ t: "warp", roll });
+        break;
+      }
+      case "seize": {
+        // 가장 높은 건물 (같으면 지난 웨이브에 많이 잡은 칸 · 앞 칸) 하나를 빼앗음
+        let best = -1;
+        for (let t = 0; t < PERIM; t++) {
+          if (!b.bld[t] || b.seized.includes(t)) continue;
+          if (best < 0 || b.bld[t] > b.bld[best] || (b.bld[t] === b.bld[best] && b.tkLast[t] > b.tkLast[best])) best = t;
+        }
+        if (best >= 0) {
+          b.seized.push(best);
+          e.shield += e.max * s.pct;
+          b.ev?.push({ t: "seize", tile: best });
+        }
+        break;
+      }
     }
   });
   // 2페이즈 (오염 단계마다 정해진 보스 둘 — PHASE_PAIRS): 체력이 at 밑이면 예고 기술 — 예고 시간 동안 유닛을 옮기면 피함
@@ -1383,6 +1545,8 @@ function die(g: Game, b: Board, e: Enemy): boolean {
     }
   }
   let gold = 0;
+  const tile = Math.floor(e.d) % PERIM;
+  if (b.stage === "town") b.tk[tile]++;
   if (e.rift) {
     const R = B.rift[RIFT_TIERS[e.rift - 1]];
     b.stones += R.stones + b.mods.riftStone;
@@ -1391,6 +1555,7 @@ function die(g: Game, b: Board, e: Enemy): boolean {
     b.ev?.push({ t: "rift", tier: e.rift, ok: true });
   } else if (e.boss >= 0) {
     b.tele = null;
+    b.seized = [];
     gold = B.bossGold.base + B.bossGold.per * b.wave;
     const stones = B.bossStones + Math.floor(b.wave / 20) + (b.patch === "gambler" ? 1 : 0) + b.cx.bossStones;
     b.stones += stones;
@@ -1407,6 +1572,13 @@ function die(g: Game, b: Board, e: Enemy): boolean {
     offerCheat(b);
   } else {
     gold = B.killGold + Math.floor(b.wave / B.killGoldPer) + b.mods.killGold;
+    if (b.stage === "town") {
+      // 해피 타운: 그 칸 통행료 · 축제
+      const tl = tollOf(b, tile) + (b.dice?.fest ? TOWN.fest : 0);
+      gold += tl;
+      b.toll += tl;
+      b.tollW += tl;
+    }
   }
   const k = UNIT[e.last]?.onKill;
   if (k) {
@@ -1540,6 +1712,7 @@ export function hashGame(g: Game): number {
     mix(b.enemies.length);
     mix(b.rng.r);
     mix(b.cheats.length);
+    mix(b.toll);
     for (const e of b.enemies) mix(e.hp);
   }
   return h >>> 0;

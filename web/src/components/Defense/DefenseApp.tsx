@@ -4,7 +4,8 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import NickForm from "@/components/Account/NickForm";
 import { useAuth } from "@/lib/AuthContext";
 import { BALANCE_VER, LAST_WAVE } from "@/lib/defense/balance";
-import { BOSSES, phaseText } from "@/lib/defense/enemies";
+import { MAIN_BOSSES, TOWN_BOSSES, bossOfWave, phaseText } from "@/lib/defense/enemies";
+import { TOWN, TOWN_EN, TOWN_NAME } from "@/lib/defense/town";
 import { UNIT } from "@/lib/defense/units";
 import {
   beginRoom,
@@ -37,7 +38,23 @@ import Codex from "./Codex";
 import { Controller } from "./controller";
 import Hub, { Cur, curTip, type HubTab } from "./Hub";
 import { setTheme } from "./render";
-import { GLITCH, GRIT_PER, TREASURE, dailyFirstOf, kstDayKey, treasureChance, type Loadout } from "@/lib/defense/progress";
+import {
+  GLITCH,
+  GRIT_PER,
+  TOWN_FROM,
+  TOWN_MAX,
+  TOWN_REWARD,
+  TREASURE,
+  dailyFirstOf,
+  kstDayKey,
+  townFirstClear,
+  townGlitchLv,
+  townNeed,
+  townOpenOf,
+  treasureChance,
+  type Loadout,
+  type Stage as StageId,
+} from "@/lib/defense/progress";
 import { resetTutorial, stopTutorial, tutorialOn } from "./Tutorial";
 import GameView from "./GameView";
 import Stage from "./Stage";
@@ -57,7 +74,7 @@ import {
 } from "./ui";
 import PatchNotes, { LATEST } from "./PatchNotes";
 import { api } from "@/lib/api/http";
-import { BOSS_ART, UNIT_ART } from "@/lib/defense/assets";
+import { BOSS_ART, TOWN_ART, UNIT_ART } from "@/lib/defense/assets";
 import { FACTION_COLOR, FACTION_NAME, FACTIONS } from "@/lib/defense/units";
 
 /*
@@ -86,6 +103,26 @@ export default function DefenseApp() {
   const [note, setNote] = useState("");
   const [notes, setNotes] = useState(false);
   const [dailyInfo, setDailyInfo] = useState(false);
+  /** 메뉴에서 고른 스테이지 (이 기기에 기억) · 해피 타운 소개 창 */
+  const [stage, setStageRaw] = useState<StageId>(() => {
+    try {
+      return localStorage.getItem("pgd-stage") === "town" ? "town" : "main";
+    } catch {
+      return "main";
+    }
+  });
+  const [townIntro, setTownIntro] = useState(false);
+  const setStage = (v: StageId) => {
+    setStageRaw(v);
+    try {
+      localStorage.setItem("pgd-stage", v);
+      // 처음 해피 타운을 고르면 소개부터
+      if (v === "town" && localStorage.getItem("pgd-town-intro") !== "1") {
+        localStorage.setItem("pgd-town-intro", "1");
+        setTownIntro(true);
+      }
+    } catch {}
+  };
   /** 판 밖 성장 (회원만) */
   const [prof, setProf] = useState<DefenseProfile | null>(null);
   const loadProf = () =>
@@ -106,6 +143,14 @@ export default function DefenseApp() {
       run: string | null = null,
       lo: Loadout | null = null,
       ghost: DefenseGhost | null = null;
+    // 해피 타운이 아직 안 열렸거나 비회원이면: 1단계 연습 판으로 둘러보기 (기록 · 보상 없음)
+    const townOpen = prof ? townOpenOf(prof.glitchOpen) : 0;
+    if (mode === "town" && (!member || townOpen < 1)) {
+      setBusy(false);
+      const tlo: Loadout = { ...(prof ? {} : {}), stage: "town", town: 1 };
+      setScreen({ k: "solo", ctrl: newCtrl(seed, null, tlo), ranked: false, key: Date.now(), mode, lo: tlo, ghost: null });
+      return;
+    }
     if (member) {
       try {
         const r = await startRun(mode);
@@ -269,9 +314,13 @@ export default function DefenseApp() {
         resume={resume}
         onResume={() => resume && doResume(resume)}
         onDropResume={() => (clearResume(saveKey), setResume(null))}
-        onSolo={() => void startSolo("season")}
+        onSolo={() => void startSolo(stage === "town" ? "town" : "season")}
         onDaily={() => setDailyInfo(true)}
         onGlitch={(g) => prof && void meta.setLoad({ ...prof.load, glitch: g }).then(setProf, () => {})}
+        onTownLv={(lv) => prof && void meta.setLoad({ ...prof.load, town: lv }).then(setProf, () => {})}
+        stage={stage}
+        onStage={setStage}
+        onTownIntro={() => setTownIntro(true)}
         onShop={() => setScreen({ k: "shop" })}
         onHub={(tab) => setScreen({ k: "hub", tab })}
         onMulti={() => setScreen({ k: "lobby" })}
@@ -297,6 +346,15 @@ export default function DefenseApp() {
         </Modal>
       )}
       {notes && screen.k === "menu" && <PatchNotes onClose={() => setNotes(false)} />}
+      {townIntro && screen.k === "menu" && (
+        <TownIntro
+          prof={prof}
+          member={member}
+          busy={busy}
+          onClose={() => setTownIntro(false)}
+          onStart={() => (setTownIntro(false), setStage("town"), void startSolo("town"))}
+        />
+      )}
       {dailyInfo && screen.k === "menu" && (
         <DailyInfo
           prof={prof}
@@ -337,6 +395,11 @@ function Menu(p: {
   onNotes(): void;
   /** 관리자: 플레이 기록 내려받기 */
   onExport?: () => void;
+  /** 스테이지 고르기 (글리치 시티 · 해피 타운) · 타운 단계 바꾸기 · 타운 소개 */
+  stage: StageId;
+  onStage(s: StageId): void;
+  onTownLv(lv: number): void;
+  onTownIntro(): void;
 }) {
   const [tut, setTut] = useState(() => typeof window !== "undefined" && tutorialOn());
   // 새로고침했는데 멀티 판이 진행 중이면 돌아가기 버튼
@@ -348,6 +411,10 @@ function Menu(p: {
   const heroes = ["k_commander", "m_titan", "a_archmage"].filter((id) => UNIT_ART[id]);
   const pr = p.prof;
   const glitch = pr ? Math.min(pr.load.glitch, pr.glitchOpen) : 0;
+  const town = p.stage === "town";
+  const townOpen = pr ? townOpenOf(pr.glitchOpen) : 0;
+  const townLv = townOpen ? Math.max(1, Math.min(pr?.load.town ?? townOpen, townOpen)) : 1;
+  const townReady = p.member && townOpen > 0;
   /** 끈기 (서버 gritOf 와 같은 규칙) */
   const grit = pr && glitch === pr.glitchOpen && glitch > pr.glitchWin && pr.grit?.g === glitch ? pr.grit.n : 0;
   // 정비소 알림 점: 받을 미션 · 패스 (안 연 상자는 상점 버튼에)
@@ -384,7 +451,7 @@ function Menu(p: {
       )}
       {/* 오염된 파이터들 */}
       <div className="absolute top-[18px] right-[24px] flex gap-1">
-        {BOSSES.map((b, i) =>
+        {(town ? [10, 20, 30, 40, 50, 60].map((w) => bossOfWave(w, "town")!) : MAIN_BOSSES).map((b, i) =>
           BOSS_ART[b.fighter] ? (
             <img
               key={b.wave}
@@ -452,7 +519,7 @@ function Menu(p: {
           {p.resume && (
             <>
               <Btn tone="gold" arrow className="dfn-pulse h-[26px] px-3 text-[12px] font-bold" onClick={p.onResume} title="새로고침 · 튕기기 전에 하던 판을 그 자리부터">
-                ▶ 이어하기 — {p.resume.run ? (p.resume.mode === "daily" ? "오늘의 도전" : "시즌") : "연습"} {p.resume.wave}웨이브
+                ▶ 이어하기 — {p.resume.mode === "town" ? TOWN_NAME : p.resume.run ? (p.resume.mode === "daily" ? "오늘의 도전" : "시즌") : "연습"} {p.resume.wave}웨이브
               </Btn>
               <Btn className="h-[26px] w-[26px] text-[12px]" onClick={p.onDropResume} title="저장된 판 지우기">
                 ✕
@@ -461,8 +528,67 @@ function Menu(p: {
           )}
         </div>
       </div>
-      <div className="absolute top-[268px] left-[64px] flex w-[372px] flex-col gap-2.5">
-
+      <div className="absolute top-[252px] left-[64px] flex w-[372px] flex-col gap-2.5">
+        {/* 스테이지: 글리치 시티(메인) · 해피 타운(확장) */}
+        <div className="flex h-[26px] gap-1.5">
+          <Btn
+            tone={town ? "ghost" : "main"}
+            className="h-[26px] flex-1 px-2 text-[12px] font-bold"
+            onClick={() => p.onStage("main")}
+            title="메인 스테이지 — 오염 단계를 올리며 시즌 랭킹"
+          >
+            글리치 시티
+          </Btn>
+          <Btn
+            tone={town ? "gold" : "ghost"}
+            className={`relative h-[26px] flex-1 px-2 text-[12px] font-bold ${!town && townReady ? "dfn-pulse" : ""}`}
+            onClick={() => p.onStage("town")}
+            title={townReady ? `${TOWN_NAME} — 길에 건물을 지어 통행료를 받는 확장 스테이지` : `${TOWN_NAME} — 메인 오염 ${TOWN_FROM}단계가 열리면 정식 오픈 (지금은 연습 판으로 체험)`}
+          >
+            {TOWN_NAME}
+            <span className={`absolute -top-2 -right-1 px-1 text-[10px] leading-[14px] font-bold shadow-[0_0_0_2px_#0a0816] ${townReady ? "bg-[#ff4d6d] text-white" : "bg-[#3d3468] text-[#cfc6ff]"}`}>
+              {townReady ? "NEW" : `오염 ${TOWN_FROM}`}
+            </span>
+          </Btn>
+          <Btn className="h-[26px] w-[26px] shrink-0 px-0 text-[12px]" onClick={p.onTownIntro} title={`${TOWN_NAME} 소개`}>
+            ?
+          </Btn>
+        </div>
+        {town ? (
+          <div className="flex gap-1.5">
+            {townReady && pr && (
+              <Btn className="h-[58px] w-[34px] shrink-0 px-0 text-[14px]" disabled={p.busy || townLv <= 1} title="타운 단계 낮추기" onClick={() => p.onTownLv(townLv - 1)}>
+                ◀
+              </Btn>
+            )}
+            <Btn tone="gold" arrow className="relative h-[58px] min-w-0 flex-1 text-[20px] font-bold" onClick={p.onSolo} disabled={p.busy}>
+              <span className="px-shadow">{p.busy ? "준비 중…" : townReady ? `${TOWN_NAME} 도전` : `${TOWN_NAME} 체험`}</span>
+              {townReady && pr && !(pr.townDone ?? []).includes(townLv) && (
+                <span
+                  className="absolute top-1 right-1 bg-[#ff4d6d] px-1.5 py-0.5 text-[11px] font-bold text-white shadow-[0_0_0_2px_#0a0816]"
+                  title={`이 단계를 처음 클리어하면 — 코어 ${townFirstClear(townLv).cores} · 유물 상자 · 카드 상자`}
+                >
+                  첫 클리어 보상
+                </span>
+              )}
+              <span className="block text-[12px] font-normal opacity-85">
+                {townReady
+                  ? `타운 ${townLv}단계 · 적 = 오염 ${townGlitchLv(townLv)}단계 · 보상 ×${(GLITCH[townGlitchLv(townLv)].reward * TOWN_REWARD).toFixed(1)}`
+                  : `연습 판 (기록 · 보상 없음) · 메인 오염 ${TOWN_FROM}단계가 열리면 정식 오픈`}
+              </span>
+            </Btn>
+            {townReady && pr && (
+              <Btn
+                className="h-[58px] w-[34px] shrink-0 px-0 text-[14px]"
+                disabled={p.busy || townLv >= townOpen}
+                title={townLv >= townOpen ? (townLv >= TOWN_MAX ? "마지막 단계예요" : `다음 단계는 메인 오염 ${townNeed(townLv + 1)}단계가 열리면`) : "타운 단계 올리기"}
+                onClick={() => p.onTownLv(townLv + 1)}
+              >
+                ▶
+              </Btn>
+            )}
+          </div>
+        ) : (
         <div className="flex gap-1.5">
           {p.member && pr && (
             <Btn
@@ -513,6 +639,7 @@ function Menu(p: {
             </Btn>
           )}
         </div>
+        )}
         <div className="grid grid-cols-2 gap-2.5">
           <Btn
             tone="gold"
@@ -673,9 +800,17 @@ function FinishNote({ r }: { r: FinishOut }) {
           {!!tr.reward.cardBox && <span>카드 상자 +{tr.reward.cardBox}</span>}
         </span>
       )}
+      {w?.townClear && (
+        <span className="dfn-pop flex flex-wrap items-center justify-center gap-x-2 text-[13px] text-[#ffd36b]">
+          <b>{TOWN_NAME} {w.townClear.town}단계 첫 클리어!</b>
+          {!!w.townClear.give.cores && <Cur k="core" n={`+${w.townClear.give.cores}`} className="text-[#ffb3ee]" />}
+          {!!w.townClear.give.relicBox && <span>유물 상자 +{w.townClear.give.relicBox}</span>}
+          {!!w.townClear.give.cardBox && <span>카드 상자 +{w.townClear.give.cardBox}</span>}
+        </span>
+      )}
       {gb && (
         <span className="text-[13px]">
-          오염 {gb.glitch}단계 최고{" "}
+          {r.mode === "town" ? `${TOWN_NAME} ${gb.glitch}단계` : `오염 ${gb.glitch}단계`} 최고{" "}
           {gb.now > gb.prev && gb.prev > 0 ? (
             <b className="dfn-pop text-[var(--cyan)]">
               {waveTxt(gb.prev)} → {waveTxt(gb.now)} 갱신!
@@ -691,7 +826,7 @@ function FinishNote({ r }: { r: FinishOut }) {
         </span>
       )}
       <span>
-        시즌 랭킹 <b className="text-[#ffd84a]">{r.rank}위</b>
+        {r.mode === "town" ? `${TOWN_NAME} 랭킹` : "시즌 랭킹"} <b className="text-[#ffd84a]">{r.rank}위</b>
         {r.best ? (
           <b className="ml-2 text-[#7ef3ff]">최고 기록 갱신!</b>
         ) : (
@@ -740,10 +875,15 @@ function RankTabs() {
         <Btn tone={board === "daily" ? "arcane" : "ghost"} className="h-8 px-3 text-[13px] font-bold" onClick={() => setBoard("daily")}>
           오늘의 도전
         </Btn>
+        <Btn tone={board === "town" ? "gold" : "ghost"} className="h-8 px-3 text-[13px] font-bold" onClick={() => setBoard("town")}>
+          {TOWN_NAME}
+        </Btn>
         <span className="ml-2 text-[12px] text-[var(--mute)]">
           {board === "daily"
             ? "오늘 하루 · 모두 같은 시드 · 영구 성장 없음 · 자정(KST)에 새로"
-            : `영구 성장 적용 · 오염 단계가 높을수록 위 · 밸런스 ${BALANCE_VER}`}
+            : board === "town"
+              ? `이번 시즌 · 타운 단계가 높을수록 위 · 밸런스 ${BALANCE_VER}`
+              : `영구 성장 적용 · 오염 단계가 높을수록 위 · 밸런스 ${BALANCE_VER}`}
         </span>
       </div>
       <RankList key={board} board={board} />
@@ -789,6 +929,11 @@ export function RankList({ limit = 50, board = "season" }: { limit?: number; boa
           {board === "season" && (
             <span className="w-[54px] text-[12px] text-[var(--pink)]" title="오염 단계">
               오염 {r.glitch}
+            </span>
+          )}
+          {board === "town" && (
+            <span className="w-[54px] text-[12px] text-[#ffd36b]" title="해피 타운 단계">
+              타운 {r.glitch}
             </span>
           )}
           <span className={`w-[100px] ${r.win ? "text-[var(--cyan)]" : ""}`}>
@@ -1188,6 +1333,112 @@ function DailyInfo({
           </Btn>
           <Btn tone="arcane" arrow className="h-[38px] px-6 text-[14px] font-bold" disabled={busy} onClick={onStart}>
             {busy ? "준비 중…" : "도전 시작"}
+          </Btn>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+/** 해피 타운 소개 — 처음 고르면 · 「?」 버튼. 한눈에 「이런 거구나」 하고 바로 시작할 수 있게 */
+function TownIntro({
+  prof,
+  member,
+  busy,
+  onClose,
+  onStart,
+}: {
+  prof: DefenseProfile | null;
+  member: boolean;
+  busy: boolean;
+  onClose(): void;
+  onStart(): void;
+}) {
+  const open = prof ? townOpenOf(prof.glitchOpen) : 0;
+  const cards: { title: string; text: ReactNode; art: ReactNode }[] = [
+    {
+      title: "길에 건물 짓기",
+      text: (
+        <>
+          유닛 바로 바깥 길 칸을 누르면 골드로 <b className="text-white">오두막 → 2층집 → 빌딩</b> (−{TOWN.build.join(" · −")}G). 단축키 W
+        </>
+      ),
+      art: (
+        <span className="flex items-end gap-1">
+          {[1, 2, 3].map((lv) => (
+            <img key={lv} src={TOWN_ART.bld(lv)} alt="" className="w-[22px] object-contain object-bottom" style={{ height: 18 + lv * 8 }} />
+          ))}
+        </span>
+      ),
+    },
+    {
+      title: "통행료",
+      text: (
+        <>
+          건물 칸에서 쓰러진 적이 <b className="text-[var(--gold)]">통행료 +{TOWN.toll.slice(1).join(" · +")}G</b>. 센 유닛 앞에 지을수록 이득 · 2층집부터 적이 느려져요
+        </>
+      ),
+      art: <Icon n="coin" size={40} />,
+    },
+    {
+      title: "웨이브 주사위",
+      text: "웨이브마다 주사위! 황금 칸(통행료 ×3) · 늪(적 느리게) · 축제(처치 골드 +1) · 더블",
+      art: (
+        <span className="flex gap-1.5">
+          {[3, 6].map((n) => (
+            <span key={n} className="flex h-9 w-9 items-center justify-center bg-[#fff6d8] text-[18px] font-bold text-[#1a1000] shadow-[0_0_0_3px_#0a0816]">
+              {n}
+            </span>
+          ))}
+        </span>
+      ),
+    },
+    {
+      title: "UR 보스",
+      text: "10 · 30 · 50웨이브 — 마블 UR 셋이 글리치에 먹혀 나와요: DICE 순간이동 · MOA 건물 빼앗기 · FORTE 앙코르",
+      art: (
+        <span className="flex">
+          {TOWN_BOSSES.map((x) => (
+            <img key={x.fighter} src={BOSS_ART[x.fighter]?.src} alt="" className="-mx-1.5 h-[44px] w-[34px] object-cover" />
+          ))}
+        </span>
+      ),
+    },
+  ];
+  return (
+    <Modal title={`${TOWN_NAME} · ${TOWN_EN}`} onClose={onClose} accent="#ffd36b">
+      <div className="flex flex-col gap-3">
+        <p className="text-[13px] leading-relaxed text-[#d9d3f0]">
+          PIXEL MARBLE 의 동네가 글리치에 먹혔어요. 적이 도는 길이 마블 판의 동네 칸 — 기본은 글리치 시티와 같고, <b className="text-white">길에 건물을 지어 통행료로 골드를 버는 것</b>이 달라요.
+        </p>
+        <div className="grid grid-cols-2 gap-2">
+          {cards.map((c) => (
+            <div key={c.title} className="px-inset flex items-center gap-2.5 p-2.5">
+              <span className="flex h-[52px] w-[80px] shrink-0 items-center justify-center overflow-hidden">{c.art}</span>
+              <span className="min-w-0">
+                <b className="block text-[13px] text-[#ffd36b]">{c.title}</b>
+                <span className="block text-[12px] leading-snug text-[var(--mute)]">{c.text}</span>
+              </span>
+            </div>
+          ))}
+        </div>
+        <p className="text-[12px] leading-relaxed text-[var(--mute)]">
+          {member && open > 0 ? (
+            <>
+              지금 <b className="text-white">{open}단계</b>까지 열려 있어요. 메인(글리치 시티)에서 오염 단계를 2개 열 때마다 다음 단계가 열리고, 단계마다 처음 클리어하면 코어 · 유물 상자 · 카드 상자. 보상은 같은 세기 메인 판의 ×{TOWN_REWARD} — 메인이 막히면 여기서 성장을 앞당겨요.
+            </>
+          ) : (
+            <>
+              메인(글리치 시티)에서 <b className="text-white">오염 {TOWN_FROM}단계</b>가 열리면 정식으로 열려요 (보상 · 랭킹). 그 전엔 1단계 연습 판으로 바로 해 볼 수 있어요.
+            </>
+          )}
+        </p>
+        <div className="flex justify-end gap-2">
+          <Btn className="h-[38px] px-4 text-[13px]" onClick={onClose}>
+            닫기
+          </Btn>
+          <Btn tone="gold" arrow className="h-[38px] px-6 text-[14px] font-bold" disabled={busy} onClick={onStart}>
+            {member && open > 0 ? `${TOWN_NAME} 시작` : "연습 판으로 해 보기"}
           </Btn>
         </div>
       </div>

@@ -44,7 +44,34 @@ export interface Loadout {
   grit?: number;
   /** 보물방이 열리는 웨이브 (서버가 판 시작 때 뽑음, 0 = 없음) — treasureWaveOk */
   treasure?: number;
+  /** 스테이지 — 없거나 "main" = 글리치 시티 (기본) · "town" = 픽셀 타운 */
+  stage?: Stage;
+  /** 픽셀 타운 단계 1..TOWN_MAX (stage 가 town 일 때만 씀) */
+  town?: number;
 }
+
+/* ───────────────────────── 스테이지 ───────────────────────── */
+
+export type Stage = "main" | "town";
+/**
+ * 픽셀 타운 (PIXEL MARBLE 맵 테마 확장 스테이지) — 메인(글리치 시티)을 밀면 단계가 열리고, 성장을 앞당겨 주는 곳.
+ *  - 메인에서 오염 단계를 TOWN_EVERY 개 열 때마다 1단계씩 (메인 TOWN_FROM 단계가 열리면 1단계)
+ *  - 적 세기 = 메인 오염 townGlitchLv(단계) 수준 (지금 막힌 곳보다 조금 아래) · 보상은 그 단계 × TOWN_REWARD
+ *  - 고유 규칙: 길 칸에 건물(유닛 앞 칸이면 골드로 지음 → 그 칸에서 쓰러진 적이 통행료) · 웨이브 주사위 · UR 보스 (town.ts)
+ */
+export const TOWN_FROM = 6;
+export const TOWN_EVERY = 2;
+export const TOWN_MAX = 13;
+export const TOWN_REWARD = 1.3;
+/** 메인에서 연 오염 단계 → 열린 픽셀 타운 단계 (0 = 아직) */
+export const townOpenOf = (glitchOpen: number) =>
+  glitchOpen < TOWN_FROM ? 0 : Math.min(TOWN_MAX, 1 + Math.floor((glitchOpen - TOWN_FROM) / TOWN_EVERY));
+/** 이 픽셀 타운 단계가 열리는 메인 오염 단계 */
+export const townNeed = (lv: number) => TOWN_FROM + (Math.max(1, lv) - 1) * TOWN_EVERY;
+/** 픽셀 타운 단계의 적 세기 (메인 오염 단계로) */
+export const townGlitchLv = (lv: number) => Math.min(GLITCH_MAX, 2 + 2 * Math.max(1, Math.min(TOWN_MAX, lv)));
+/** 픽셀 타운 단계를 처음 클리어하면 */
+export const townFirstClear = (lv: number): Goods => ({ cores: 4 + lv, relicBox: 1, cardBox: 1 });
 
 /* ───────────────────────── 오늘의 도전 ───────────────────────── */
 
@@ -394,6 +421,9 @@ export interface Mods {
   gritDmg: number;
   /** 보물방 웨이브 (0 = 없음) */
   treasure: number;
+  /** 스테이지 · 픽셀 타운 단계 (main 이면 0) */
+  stage: Stage;
+  town: number;
 }
 
 const clampInt = (v: unknown, lo: number, hi: number) =>
@@ -443,7 +473,9 @@ export function cleanLoadout(lo: Loadout | null | undefined, unitIds?: Set<strin
     trans: uniq(lo?.trans, (s) => (TRANS_IDS as readonly string[]).includes(s), TRANS_IDS.length).sort(),
     cheat: typeof lo?.cheat === "string" && CHEAT_RES_OF[lo.cheat] ? lo.cheat : "",
     grit: clampInt(lo?.grit, 0, GRIT_MAX),
-    treasure: treasureWaveOk(lo?.treasure) ? (lo!.treasure as number) : 0,
+    treasure: lo?.stage === "town" ? 0 : treasureWaveOk(lo?.treasure) ? (lo!.treasure as number) : 0,
+    stage: lo?.stage === "town" ? "town" : "main",
+    town: lo?.stage === "town" ? clampInt(lo?.town, 1, TOWN_MAX) : 0,
   };
 }
 
@@ -471,7 +503,7 @@ export function modsOf(lo: Loadout | null | undefined): Mods {
     summonDisc: R("g_summon"),
     waveGold: (1 + R("g_wave") / 100) * (1 + (has("gold_gear") ? V.gold_gear_wave(X("gold_gear")) : 0) / 100),
     sellMult: 1 + R("g_sell") / 100,
-    bossSec: R("g_boss") + (has("hourglass") ? V.hourglass(X("hourglass")) : 0) + GLITCH[L.glitch].bossSec,
+    bossSec: R("g_boss") + (has("hourglass") ? V.hourglass(X("hourglass")) : 0) + GLITCH[L.stage === "town" ? townGlitchLv(L.town) : L.glitch].bossSec,
     fac: {
       knight: 1 + R("k_drill") / 100,
       mech: 1 + R("m_drill") / 100,
@@ -493,7 +525,8 @@ export function modsOf(lo: Loadout | null | undefined): Mods {
     rainbow: 1 + (has("rainbow") ? V.rainbow(X("rainbow")) : 0) / 100,
     twinStar: has("twin_star") ? V.twin_star(X("twin_star")) / 100 : 0,
     warBanner: has("war_banner") ? V.war_banner(X("war_banner")) / 100 : 0,
-    glitch: GLITCH[L.glitch],
+    // 픽셀 타운은 단계에 맞는 메인 오염 단계 세기 (오염 단계 규칙 · 2페이즈 · 심연 변이도 그 단계 것)
+    glitch: L.stage === "town" ? GLITCH[townGlitchLv(L.town)] : GLITCH[L.glitch],
     res: L.res,
     relics: L.relics,
     resLv: L.resLv,
@@ -507,6 +540,8 @@ export function modsOf(lo: Loadout | null | undefined): Mods {
     grit: L.grit,
     gritDmg: 1 + GRIT_PER * L.grit,
     treasure: L.treasure,
+    stage: L.stage,
+    town: L.town,
   };
 }
 
@@ -593,7 +628,7 @@ export function collectReward(grade: number): { pieces: number; cores?: number }
 
 /* ───────────────────────── 판 보상 (서버가 검증 뒤 계산) ───────────────────────── */
 
-export type RunMode = "season" | "multi";
+export type RunMode = "season" | "multi" | "town";
 
 export interface RunReward {
   pieces: number;
@@ -617,7 +652,7 @@ export function runReward(
 ): RunReward {
   const bosses = Math.floor(Math.min(r.wave - (r.win ? 0 : 1), 60) / 10);
   const g = GLITCH[Math.max(0, Math.min(GLITCH_MAX, glitch))];
-  const modeMult = mode === "multi" ? 1.2 : 1;
+  const modeMult = mode === "multi" ? 1.2 : mode === "town" ? TOWN_REWARD : 1;
   const base = 20 + r.wave * 3 + bosses * 20 + (r.win ? 250 : 0) + Math.floor(Math.min(r.kills, 3000) / 30);
   const pieces = Math.round(base * g.reward * modeMult);
   const cards: Record<string, number> = {};

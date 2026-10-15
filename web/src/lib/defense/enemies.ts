@@ -146,6 +146,12 @@ export type BossSkill =
   | { kind: "summon"; every: number; n: number; hp: number }
   /** every 초마다 sec 초 동안 모든 피해 무시 */
   | { kind: "evade"; every: number; sec: number }
+  /** (픽셀 타운 DICE) every 초마다 주사위 — 눈(1~6)만큼 길을 순간이동 */
+  | { kind: "warp"; every: number }
+  /** (픽셀 타운 MOA) every 초마다 가장 높은 건물 하나를 빼앗음 (보스를 잡을 때까지 영업 정지) · 빼앗을 때마다 최대 체력 pct 보호막 */
+  | { kind: "seize"; every: number; pct: number }
+  /** (픽셀 타운 FORTE) 체력이 at 밑으로 처음 내려가면 한 번: 최대 체력 pct 회복 + 필드의 다른 적 2초 질주 (every 는 안 씀) */
+  | { kind: "encore"; every: number; at: number; pct: number }
   /**
    * (2페이즈) 예고 기술: 유닛이 가장 센 곳을 shape 모양으로 warn 초 동안 빨갛게 표시 → 그때 그 칸에 **남아 있는** 유닛 sec 초 기절.
    * 표시되는 동안 끌어서 옮기면 피함 (약한 유닛을 넣어 두면 미끼). snd = 맞을 때 효과음 tele-<snd>
@@ -189,12 +195,14 @@ export const phaseSkillName = (d: BossDef) => {
 /** 이 단계 2페이즈 보스 소개 ("제나 뇌섬일창 · 이반 곰 포옹"), 없으면 "" */
 export const phaseText = (glitch: number) =>
   (PHASE_PAIRS[glitch] ?? [])
-    .map((w) => BOSSES.find((x) => x.wave === w))
+    .map((w) => BOSSES.find((x) => !x.stage && x.wave === w))
     .map((d) => (d ? `${d.name.replace("글리치 ", "")} ${phaseSkillName(d)}` : ""))
     .join(" · ");
 
 export interface BossDef {
   wave: number;
+  /** 이 스테이지에서만 나오는 보스 (없으면 글리치 시티 = 기본) */
+  stage?: "town";
   /** PIXEL FIGHT 캐릭터 id (그림 · 이름) */
   fighter: string;
   name: string;
@@ -339,4 +347,71 @@ export const BOSSES: BossDef[] = [
     color: "#7CF2C2",
   },
 ];
-export const bossOfWave = (w: number) => BOSSES.find((b) => b.wave === w) ?? null;
+/**
+ * 픽셀 타운 보스 — PIXEL MARBLE 의 UR 셋이 글리치에 먹힘 (10 · 30 · 50웨이브). 20 · 40 · 60 은 글리치 시티 보스 그대로.
+ * 그림: public/defense/bosses/ur-*.webp (fighter 가 그림 id)
+ */
+export const TOWN_BOSSES: BossDef[] = [
+  {
+    wave: 10,
+    stage: "town",
+    fighter: "ur-dice",
+    name: "글리치 DICE",
+    title: "오염된 주사위 요정",
+    size: 0,
+    spd: 0.9,
+    hp: 0.45,
+    armor: 0.5,
+    mres: 0,
+    pres: 0,
+    skills: [
+      { kind: "warp", every: 5 },
+      { kind: "heal", every: 8, pct: 0.03 },
+    ],
+    line: "주사위 굴려 볼까? 몇 칸 갈지는… 운명이 정해!",
+    color: "#7fe8d8",
+  },
+  {
+    wave: 30,
+    stage: "town",
+    fighter: "ur-moa",
+    name: "글리치 MOA",
+    title: "오염된 고양이 재벌",
+    size: 1,
+    spd: 0.85,
+    hp: 0.95,
+    armor: 1.2,
+    mres: 0.2,
+    pres: 0,
+    skills: [{ kind: "seize", every: 7, pct: 0.04 }],
+    line: "이 동네 건물, 전부 내가 사 줄게. 원격 매입이야냥.",
+    color: "#ffd36b",
+  },
+  {
+    wave: 50,
+    stage: "town",
+    fighter: "ur-forte",
+    name: "글리치 FORTE",
+    title: "오염된 오르골 소년",
+    size: 1,
+    spd: 0.8,
+    hp: 0.5,
+    armor: 1.8,
+    mres: 0.35,
+    pres: 0,
+    skills: [
+      { kind: "summon", every: 8, n: 3, hp: 1.3 },
+      { kind: "encore", every: 1, at: 0.4, pct: 0.3 },
+    ],
+    line: "박수는… 아직이야. 앙코르가 남았거든.",
+    color: "#ff9ec7",
+  },
+];
+BOSSES.push(...TOWN_BOSSES);
+/** 이 웨이브 보스 — 픽셀 타운은 10 · 30 · 50 이 UR 보스, 나머지는 글리치 시티 보스 */
+export const bossOfWave = (w: number, stage: "main" | "town" = "main") =>
+  (stage === "town" ? BOSSES.find((b) => b.stage === "town" && b.wave === w) : null) ??
+  BOSSES.find((b) => !b.stage && b.wave === w) ??
+  null;
+/** 글리치 시티(기본) 보스 6명 */
+export const MAIN_BOSSES = BOSSES.filter((b) => !b.stage);

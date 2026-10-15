@@ -59,6 +59,10 @@ import {
   type PassReward,
   type QuestDef,
   type RunMode,
+  TOWN_MAX,
+  townFirstClear,
+  townGlitchLv,
+  townOpenOf,
 } from "../../../web/src/lib/defense/progress";
 import { LAST_WAVE } from "../../../web/src/lib/defense/balance";
 import { RECIPE, UNIT, UNITS } from "../../../web/src/lib/defense/units";
@@ -104,7 +108,10 @@ export interface Profile {
   /** 유물 레벨 (없으면 1) */
   relicLv?: Record<string, number>;
   /** 장착 (시즌 판 · 멀티에 들고 감) */
-  load: { res: string[]; relics: string[]; glitch: number; cheat?: string };
+  load: { res: string[]; relics: string[]; glitch: number; cheat?: string; town?: number };
+  /** 해피 타운: 클리어한 단계들 (첫 클리어 보상) · 단계별 최고 웨이브 (클리어 = LAST_WAVE + 1) */
+  townDone?: number[];
+  tbest?: Record<string, number>;
   /** 산 치트 연구 (CHEAT_RES id) — 한 번 사면 계속 */
   cheatRes?: string[];
   /** 고를 수 있는 가장 높은 오염 단계 */
@@ -395,8 +402,10 @@ export function createDefenseMeta(db: Database, points: Points, now: () => numbe
       });
     },
 
-    async loadoutOf(uid: string): Promise<Required<Loadout>> {
+    /** stage town 이면 해피 타운 (고른 단계 — 열린 단계까지, 안 열렸으면 town 0) */
+    async loadoutOf(uid: string, stage: "main" | "town" = "main"): Promise<Required<Loadout>> {
       const p = await load(uid);
+      const townOpen = townOpenOf(p.glitchOpen);
       const lv = Object.fromEntries(Object.entries(p.lv).filter(([, v]) => v > 0));
       const own = Object.fromEntries(p.relics.map((id) => [id, p.relicLv?.[id] ?? 1]));
       return cleanLoadout(
@@ -412,7 +421,8 @@ export function createDefenseMeta(db: Database, points: Points, now: () => numbe
           own,
           trans: p.trans,
           cheat: p.load.cheat && (p.cheatRes ?? []).includes(p.load.cheat) ? p.load.cheat : "",
-          grit: gritOf(p, Math.min(p.load.glitch, p.glitchOpen)),
+          grit: stage === "town" ? 0 : gritOf(p, Math.min(p.load.glitch, p.glitchOpen)),
+          ...(stage === "town" && townOpen > 0 && { stage: "town" as const, town: Math.max(1, Math.min(p.load.town ?? townOpen, townOpen)) }),
         },
         unitIds
       );
@@ -428,6 +438,7 @@ export function createDefenseMeta(db: Database, points: Points, now: () => numbe
 
     /** 검증된 판 하나 → 보상 · 미션 · 패스 경험치 · 오염 단계 열기 */
     async onRun(uid: string, mode: RunMode, res: Result, st: RunStats, glitch: number, players = 1) {
+      if (mode === "town") return this.onTownRun(uid, res, st, glitch);
       return edit(uid, async (p) => {
         const grades = Object.fromEntries(Object.keys(st.made).map((id) => [id, UNIT[id]?.grade ?? 0]));
         const rw = runReward(mode === "multi" && players < 2 ? "season" : mode, res, st.made, grades, glitch);
@@ -494,6 +505,66 @@ export function createDefenseMeta(db: Database, points: Points, now: () => numbe
           opened = true;
         }
         return { ...rw, opened: opened ? p.glitchOpen : null, passTier: passTier(p.season.xp), first, fresh, firstClear, gbest, treasure };
+      });
+    },
+
+    /** 해피 타운 판 — 보상(그 단계 적 세기의 메인 보상 × TOWN_REWARD) · 첫 클리어 · 미션 · 패스. 오염 단계 · 끈기 · 보물방은 안 건드림 */
+    async onTownRun(uid: string, res: Result, st: RunStats, lv: number) {
+      return edit(uid, async (p) => {
+        const grades = Object.fromEntries(Object.keys(st.made).map((id) => [id, UNIT[id]?.grade ?? 0]));
+        const rw = runReward("town", res, st.made, grades, townGlitchLv(lv));
+        const today = kstDayKey(now());
+        const first = p.firstDay !== today;
+        if (first) {
+          p.firstDay = today;
+          rw.pieces *= FIRST_RUN_MULT;
+        }
+        const fresh: string[] = [];
+        for (const id of Object.keys(st.made).sort()) {
+          if (!unitIds.has(id) || p.seen.includes(id)) continue;
+          p.seen.push(id);
+          const cr = collectReward(UNIT[id].grade);
+          if (!cr) continue;
+          fresh.push(id);
+          rw.pieces += cr.pieces;
+          rw.cores += cr.cores ?? 0;
+        }
+        // 타운 단계 첫 클리어
+        let townClear: { town: number; give: Goods } | null = null;
+        const done = (p.townDone ??= []);
+        if (res.win && !done.includes(lv)) {
+          done.push(lv);
+          done.sort((a, b) => a - b);
+          const g = townFirstClear(lv);
+          await grantGoods(uid, p, g);
+          townClear = { town: lv, give: g };
+        }
+        p.pieces += rw.pieces;
+        p.cores += rw.cores;
+        for (const [id, n] of Object.entries(rw.cards)) if (unitIds.has(id)) p.cards[id] = (p.cards[id] ?? 0) + n;
+        p.season.xp += rw.xp;
+        p.runs++;
+        const qv = questValues("season", res, st, 1);
+        for (const pr of [p.day, p.week])
+          for (const [k, v] of Object.entries(qv)) {
+            if (!v) continue;
+            pr.prog[k] = k === "wave" ? Math.max(pr.prog[k] ?? 0, v) : (pr.prog[k] ?? 0) + v;
+          }
+        const tb = (p.tbest ??= {});
+        const prevBest = tb[lv] ?? 0;
+        const reach = res.win ? LAST_WAVE + 1 : res.wave;
+        if (reach > prevBest) tb[lv] = reach;
+        return {
+          ...rw,
+          opened: null,
+          passTier: passTier(p.season.xp),
+          first,
+          fresh,
+          firstClear: null,
+          gbest: { glitch: lv, prev: prevBest, now: Math.max(prevBest, reach) },
+          treasure: null,
+          townClear,
+        };
       });
     },
 
@@ -751,7 +822,15 @@ export function createDefenseMeta(db: Database, points: Points, now: () => numbe
     },
 
     setLoad(uid: string, raw: unknown) {
-      const v = z.object({ res: z.array(z.string()).max(RES_SLOTS + FRES_MAX), relics: z.array(z.string()).max(RELIC_SLOTS), glitch: z.number().int().min(0).max(GLITCH_MAX), cheat: z.string().max(20).optional() }).parse(raw);
+      const v = z
+        .object({
+          res: z.array(z.string()).max(RES_SLOTS + FRES_MAX),
+          relics: z.array(z.string()).max(RELIC_SLOTS),
+          glitch: z.number().int().min(0).max(GLITCH_MAX),
+          cheat: z.string().max(20).optional(),
+          town: z.number().int().min(1).max(TOWN_MAX).optional(),
+        })
+        .parse(raw);
       return edit(uid, async (p) => {
         need(v.res.every((r) => p.res.includes(r)), "열지 않은 연구가 있어요.");
         const gen = v.res.filter((r) => RES[r]?.group === "general").length;
@@ -761,7 +840,9 @@ export function createDefenseMeta(db: Database, points: Points, now: () => numbe
         need(v.glitch <= p.glitchOpen, "아직 열리지 않은 오염 단계예요.");
         const cheat = v.cheat ?? p.load.cheat ?? "";
         need(!cheat || (p.cheatRes ?? []).includes(cheat), "사지 않은 치트 연구예요.");
-        p.load = { res: [...new Set(v.res)], relics: [...new Set(v.relics)], glitch: v.glitch, cheat };
+        const town = v.town ?? p.load.town;
+        need(!v.town || v.town <= townOpenOf(p.glitchOpen), "아직 열리지 않은 해피 타운 단계예요.");
+        p.load = { res: [...new Set(v.res)], relics: [...new Set(v.relics)], glitch: v.glitch, cheat, ...(town && { town }) };
         return wire(uid, p);
       });
     },

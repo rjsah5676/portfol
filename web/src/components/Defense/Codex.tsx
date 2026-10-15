@@ -84,7 +84,7 @@ export default function Codex({ have }: { have?: Record<string, number> }) {
           <div>
             <p className="mb-1 text-[13px] text-[var(--dim)]">오염된 파이터 (10웨이브마다)</p>
             {BOSSES.map((x) => (
-              <div key={x.wave} className="px-inset mb-2 flex items-center gap-2 px-2 py-1.5">
+              <div key={x.fighter} className="px-inset mb-2 flex items-center gap-2 px-2 py-1.5">
                 {BOSS_ART[x.fighter] ? (
                   <img src={BOSS_ART[x.fighter].src} alt="" className="h-11 w-11 object-contain" />
                 ) : (
@@ -97,7 +97,7 @@ export default function Codex({ have }: { have?: Record<string, number> }) {
                 )}
                 <div className="text-[13px] leading-tight">
                   <b style={{ color: x.color }}>
-                    W{x.wave} {x.name}
+                    {x.stage === "town" ? `해피 타운 W${x.wave}` : `W${x.wave}`} {x.name}
                   </b>{" "}
                   <span className="text-[var(--dim)]">{x.title}</span>
                   <p className="text-[var(--mute)]">{bossDesc(x)}</p>
@@ -177,7 +177,15 @@ function bossDesc(x: (typeof BOSSES)[number]) {
             ? `${k.every}초마다 보호막`
             : k.kind === "summon"
               ? `${k.every}초마다 졸개 ${k.n}마리`
-              : `${k.every}초마다 ${k.sec}초 회피`
+              : k.kind === "evade"
+                ? `${k.every}초마다 ${k.sec}초 회피`
+                : k.kind === "warp"
+                  ? `${k.every}초마다 주사위 눈만큼 순간이동`
+                  : k.kind === "seize"
+                    ? `${k.every}초마다 가장 높은 건물을 빼앗음 (잡으면 돌아옴)`
+                    : k.kind === "encore"
+                      ? `체력 ${k.at * 100}%에서 한 번 앙코르 (체력 ${k.pct * 100}% 회복)`
+                      : "예고 기술"
   );
   if (x.pres) s.push(`물리 저항 ${x.pres * 100}%`);
   if (x.mres) s.push(`마법 저항 ${x.mres * 100}%`);

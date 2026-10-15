@@ -8,7 +8,10 @@ import { CHEAT, type CheatDef } from "./cheats";
 import { PATCHES } from "./meta";
 import {
   CELLS,
+  PERIM,
   SLOTS,
+  buildBlock,
+  buildCost,
   STACK,
   apply,
   canRecipe,
@@ -262,6 +265,18 @@ export function botMove(b: Board, cfg: BotCfg, skip: ReadonlySet<string> = new S
   // 이자 째기: 필드가 안전하면 keep 만큼은 남겨 둠
   const keep = cfg.keep && b.enemies.length < 45 && b.phase !== "boss" ? cfg.keep : 0;
   const gold = Math.max(0, b.gold - keep);
+  // 해피 타운: 지난 웨이브에 적이 많이 쓰러진 영업 칸부터 건물 (골드의 절반 안에서)
+  if (b.stage === "town" && b.wave >= 3) {
+    let best = -1;
+    for (let t = 0; t < PERIM; t++) {
+      if (b.tkLast[t] < 3 || buildBlock(b, t) || buildCost(b, t) > gold * 0.5) continue;
+      if (best < 0 || b.tkLast[t] / (b.bld[t] + 1) > b.tkLast[best] / (b.bld[best] + 1)) best = t;
+    }
+    if (best >= 0) {
+      const c = ok({ t: "build", p: best });
+      if (c) return c;
+    }
+  }
   if (b.up[main] < B.up.max && uc <= gold && uc <= sc * cfg.upBias) {
     const c = ok({ t: "up", k: main });
     if (c) return c;

@@ -156,6 +156,10 @@ export const BOSS_ART: Record<string, SpriteSpec> = {
   igna: BS("igna"),
   ivan: BS("ivan"),
   kai: BS("kai"),
+  // 해피 타운 UR 보스 — 마블 말 도트를 「오염」시킨 그림 (web/scripts/defense-art/town-bosses.py)
+  "ur-dice": BS("ur-dice"),
+  "ur-moa": BS("ur-moa"),
+  "ur-forte": BS("ur-forte"),
 };
 /**
  * 유물 그림 (public/defense/relics/<유물 id>.webp, 정사각 한 장). 없으면 도트 아이콘.
@@ -217,6 +221,28 @@ export const SFX: Record<string, { src: string; vol?: number }> = {
   // v0.3: 레어 · 에픽이 소환될 때 (노말은 summon)
   spawn: { src: "/defense/sfx/spawn.mp3" },
   gameover: { src: "/defense/sfx/gameover.mp3" },
+  // 해피 타운 — PIXEL MARBLE 효과음 그대로 (public/marble/sfx)
+  "town-dice": { src: "/marble/sfx/dice.mp3", vol: 0.8 },
+  "town-build": { src: "/marble/sfx/build.mp3", vol: 0.8 },
+  "town-up": { src: "/marble/sfx/upgrade.mp3", vol: 0.8 },
+  "town-landmark": { src: "/marble/sfx/landmark.mp3", vol: 0.8 },
+  "town-coin": { src: "/marble/sfx/coin.mp3", vol: 0.6 },
+  "town-warp": { src: "/marble/sfx/warp.mp3", vol: 0.8 },
+  "town-fest": { src: "/marble/sfx/fest.mp3", vol: 0.8 },
+  "town-seize": { src: "/marble/sfx/acquire.mp3", vol: 0.8 },
+  "town-mud": { src: "/marble/sfx/jail.mp3", vol: 0.7 },
+  "town-encore": { src: "/marble/sfx/skill.mp3", vol: 0.8 },
+};
+
+/**
+ * 해피 타운 그림 (PIXEL MARBLE 「해피 타운」 에셋 재사용)
+ *  건물: 오두막 · 2층집 = marble/bld/b0-1 · b0-2, 빌딩 = 그 칸 랜드마크(marble/lm/town-<칸>) — 없으면 b0-3
+ *  모서리 특수 칸: marble/deco/sp-*.webp
+ */
+export const TOWN_ART = {
+  bld: (lv: number) => `/marble/bld/b0-${lv}.webp`,
+  lm: (n: number) => `/marble/lm/town-${n}.webp`,
+  sp: (k: string) => `/marble/deco/sp-${k}.webp`,
 };
 
 /**

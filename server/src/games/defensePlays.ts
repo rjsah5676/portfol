@@ -14,7 +14,7 @@ import type { VerifyOut } from "./defenseVerify.worker";
  *  - status rejected : 제출했는데 확인 실패 (why) — 어긋남 · 버그 찾기용
  * 멀티는 판이 끝날 때 한 문서 (자리마다 res · uids · lo).
  */
-export type PlayMode = "season" | "daily" | "multi";
+export type PlayMode = "season" | "daily" | "multi" | "town";
 export type PlayStatus = "start" | "quit" | "done" | "rejected";
 export interface PlayRes {
   win: boolean;

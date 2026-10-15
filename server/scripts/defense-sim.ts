@@ -31,6 +31,9 @@ const curve = args.includes("--curve");
 const verify = !args.includes("--no-verify");
 const metaLv = opt("--meta");
 const glitch = Number(opt("--glitch") ?? 0);
+// --town L : 해피 타운 L단계 (적 세기는 그 단계에 맞는 오염 단계 — --glitch 는 무시)
+const townLv = Number(opt("--town") ?? 0);
+const stageLo: Loadout = townLv ? { stage: "town", town: townLv } : {};
 // --tune k=v,k=v : balance.ts TUNE 값 바꿔 보기 (두 벌 다)
 {
   const tv = opt("--tune");
@@ -59,7 +62,7 @@ if (deepOpt) {
 
 /** 봇 길에 맞춘 영구 성장 (그 길을 꾸준히 한 사람이 들고 올 만한 것) */
 function loadoutFor(cfg: BotCfg): Loadout | null {
-  if (!metaLv) return null;
+  if (!metaLv) return townLv ? stageLo : null;
   const lvN = metaLv === "max" ? 10 : metaLv === "late" ? 6 : 3;
   const lv: Record<string, number> = {};
   for (const u of UNITS) if (!cfg.focus || u.faction === cfg.focus || u.faction === "hidden") lv[u.id] = cfg.focus ? lvN : Math.max(1, lvN - 1);
@@ -83,7 +86,7 @@ function loadoutFor(cfg: BotCfg): Loadout | null {
   const resLv = Object.fromEntries(R.map((id) => [id, rl]));
   const relicLv = Object.fromEntries(relics.map((id) => [id, rl]));
   const cheat = metaLv === "max" ? "x_luck" : "";
-  return { lv, res: R, relics, glitch, resLv, relicLv, bench, fslots: fs, own, trans, cheat, grit: Number(opt("--grit") ?? 0) };
+  return { lv, res: R, relics, glitch, resLv, relicLv, bench, fslots: fs, own, trans, cheat, grit: Number(opt("--grit") ?? 0), ...stageLo };
 }
 
 interface Run {

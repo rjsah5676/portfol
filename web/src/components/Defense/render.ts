@@ -12,11 +12,13 @@ import {
   BOSS_ART,
   ENEMY_ART,
   FIELD_ART,
+  TOWN_ART,
   UNIT_ART,
   bossFace,
   img,
   type SpriteSpec,
 } from "@/lib/defense/assets";
+import { TOWN_TILES } from "@/lib/defense/town";
 import { CAP, TPS } from "@/lib/defense/balance";
 import { THEME, type ThemeDef } from "@/lib/defense/progress";
 import {
@@ -27,9 +29,13 @@ import {
   FIELD_W,
   PERIM,
   STACK,
+  buildBlock,
   cellX,
   cellY,
   pathPos,
+  tileCell,
+  tileOpen,
+  tileXY,
   type Board,
   type Enemy,
   type Fx,
@@ -66,6 +72,9 @@ export interface Vfx {
 }
 export interface View {
   sel: number;
+  /** 해피 타운: 고른 길 칸 · 마우스가 올라간 길 칸 (-1 = 없음) */
+  selTile: number;
+  hoverTile: number;
   /** 끌고 있는 칸 · 지금 손가락 위치 (디자인 px) */
   drag: { from: number; x: number; y: number } | null;
   hover: number;
@@ -77,6 +86,8 @@ export interface View {
 }
 export const newView = (): View => ({
   sel: -1,
+  selTile: -1,
+  hoverTile: -1,
   drag: null,
   hover: -1,
   vfx: [],
@@ -120,6 +131,18 @@ export const cellAt = (x: number, y: number) => {
     r = Math.floor(y / CELL) - 1;
   if (c < 0 || c >= COLS || r < 0 || r >= CELLS / COLS) return -1;
   return r * COLS + c;
+};
+
+/** 디자인 px → 길 칸 번호 (길이 아니면 -1) — 해피 타운 건물 고르기 */
+export const tileAt = (x: number, y: number) => {
+  if (x < 0 || y < 0 || x >= FW || y >= FH) return -1;
+  const gx = Math.floor(x / CELL),
+    gy = Math.floor(y / CELL);
+  for (let t = 0; t < PERIM; t++) {
+    const [tx, ty] = tileXY(t);
+    if (tx === gx && ty === gy) return t;
+  }
+  return -1;
 };
 
 /* ───────── 도움 ───────── */
@@ -509,6 +532,7 @@ export function draw(ctx: CanvasRenderingContext2D, b: Board, v: View, opt: { ra
   }
   const danger = Math.min(1, Math.max(0, (b.enemies.length - CAP * 0.6) / (CAP * 0.4)));
   const blink = Math.floor(now / 250) % 2;
+  if (b.stage === "town") drawTown(ctx, b, v, now, blink);
 
   // 길 위 흐르는 화살표 (적이 가는 방향)
   ctx.fillStyle = danger > 0 ? `rgba(255,77,109,${0.2 + danger * 0.3})` : "rgba(191,179,255,0.16)";
@@ -615,6 +639,7 @@ export function draw(ctx: CanvasRenderingContext2D, b: Board, v: View, opt: { ra
   };
   if (opt.range && v.sel >= 0 && v.sel < CELLS) showRange(v.sel);
   if (v.sel >= 0) brackets(ctx, v.sel, "#ffffff", now);
+  if (b.stage === "town" && v.selTile >= 0) tileBrackets(ctx, v.selTile, "#ffd23f", now);
   if (v.drag && v.hover >= 0 && v.hover !== v.drag.from) brackets(ctx, v.hover, "#5ff2ff", now);
 
   // 유닛 · 적: 발 y 순서로
@@ -743,6 +768,178 @@ export function draw(ctx: CanvasRenderingContext2D, b: Board, v: View, opt: { ra
     ctx.fillRect(0, FH - 6, FW, 6);
     ctx.fillRect(0, 0, 6, FH);
     ctx.fillRect(FW - 6, 0, 6, FH);
+  }
+}
+
+/* ───────── 해피 타운 ───────── */
+
+let townCache: HTMLCanvasElement | null = null;
+/** 동네 길 바닥 (한 번 그려 두고 재사용): 따뜻한 벽돌길 + 칸마다 동네 색 띠 + 칸 경계 */
+function townFloor(): HTMLCanvasElement | null {
+  if (typeof document === "undefined") return null;
+  if (townCache) return townCache;
+  const cv = document.createElement("canvas");
+  cv.width = FW;
+  cv.height = FH;
+  const ctx = cv.getContext("2d")!;
+  let h = 7654321;
+  const rnd = () => ((h = Math.imul(h ^ (h >>> 15), 2246822519) >>> 0), h / 4294967296);
+  for (let t = 0; t < PERIM; t++) {
+    const [gx, gy] = tileXY(t);
+    const x = gx * CELL,
+      y = gy * CELL;
+    const tt = TOWN_TILES[t];
+    const corner = tileCell(t) < 0;
+    // 바탕: 따뜻한 돌길 (모서리 특수 칸은 밝게)
+    ctx.fillStyle = corner ? "#5a4a7a" : "#4a3d63";
+    ctx.fillRect(x, y, CELL, CELL);
+    for (let r = 0; r < 4; r++) {
+      const off = r % 2 ? CELL / 4 : 0;
+      for (let c = -1; c < 3; c++) {
+        const bx = x + c * (CELL / 2) + off,
+          by = y + r * (CELL / 4);
+        const tone = rnd();
+        ctx.fillStyle = corner ? (tone > 0.5 ? "#6a5a8c" : "#625284") : tone > 0.66 ? "#5a4b78" : tone > 0.33 ? "#52446f" : "#4a3d66";
+        const x0 = Math.max(x, bx + 2),
+          x1 = Math.min(x + CELL, bx + CELL / 2 - 2);
+        if (x1 > x0) {
+          ctx.fillRect(x0, by + 2, x1 - x0, CELL / 4 - 4);
+          ctx.fillStyle = "rgba(255,255,255,0.06)";
+          ctx.fillRect(x0, by + 2, x1 - x0, 2);
+        }
+      }
+    }
+    // 동네 색 띠 (유닛 쪽 가장자리) — 마블 판의 이름판 색
+    if (!corner) {
+      ctx.fillStyle = tt.color;
+      ctx.globalAlpha = 0.85;
+      if (gy === 0) ctx.fillRect(x + 2, y + CELL - 7, CELL - 4, 5);
+      else if (gy === FIELD_H - 1) ctx.fillRect(x + 2, y + 2, CELL - 4, 5);
+      else if (gx === 0) ctx.fillRect(x + CELL - 7, y + 2, 5, CELL - 4);
+      else ctx.fillRect(x + 2, y + 2, 5, CELL - 4);
+      ctx.globalAlpha = 1;
+    }
+    // 칸 경계
+    ctx.fillStyle = "rgba(10,8,22,0.55)";
+    ctx.fillRect(x, y, CELL, 2);
+    ctx.fillRect(x, y, 2, CELL);
+  }
+  townCache = cv;
+  return cv;
+}
+
+/** 길 칸 왼쪽 위 (디자인 px) */
+const tileOrigin = (t: number): [number, number] => {
+  const [gx, gy] = tileXY(t);
+  return [gx * CELL, gy * CELL];
+};
+
+/** 해피 타운: 바닥 · 모서리 특수 칸 · 주사위 칸 · 건물 · 지을 수 있는 칸 표시 */
+function drawTown(ctx: CanvasRenderingContext2D, b: Board, v: View, now: number, blink: number) {
+  const f = townFloor();
+  if (f) {
+    // 길 고리만 덮음 (가운데 마당 · 블록은 그대로)
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, 0, FW, CELL);
+    ctx.rect(0, FH - CELL, FW, CELL);
+    ctx.rect(0, CELL, CELL, FH - 2 * CELL);
+    ctx.rect(FW - CELL, CELL, CELL, FH - 2 * CELL);
+    ctx.clip();
+    ctx.drawImage(f, 0, 0);
+    ctx.restore();
+  }
+  for (let t = 0; t < PERIM; t++) {
+    const [x, y] = tileOrigin(t);
+    const tt = TOWN_TILES[t];
+    // 모서리 특수 칸 그림 (마블)
+    if (tt.sp) {
+      const im = img(TOWN_ART.sp(tt.sp));
+      if (im) {
+        const k = Math.min((CELL - 6) / im.naturalWidth, (CELL - 6) / im.naturalHeight);
+        const w = im.naturalWidth * k,
+          hh = im.naturalHeight * k;
+        ctx.imageSmoothingEnabled = true;
+        ctx.drawImage(im, x + (CELL - w) / 2, y + CELL - hh - 3, w, hh);
+        ctx.imageSmoothingEnabled = false;
+      }
+      continue;
+    }
+    // 주사위: 황금 칸 · 늪
+    if (b.dice?.gold === t) {
+      ctx.fillStyle = blink ? "rgba(255,210,63,0.42)" : "rgba(255,210,63,0.24)";
+      ctx.fillRect(x + 2, y + 2, CELL - 4, CELL - 4);
+      ctx.fillStyle = "#ffd23f";
+      ctx.fillRect(x + 2, y + 2, CELL - 4, 3);
+      ctx.fillRect(x + 2, y + CELL - 5, CELL - 4, 3);
+      ctx.fillRect(x + 2, y + 2, 3, CELL - 4);
+      ctx.fillRect(x + CELL - 5, y + 2, 3, CELL - 4);
+    }
+    if (b.dice?.mud === t) {
+      ctx.fillStyle = "rgba(92,62,30,0.6)";
+      ctx.fillRect(x + 4, y + 4, CELL - 8, CELL - 8);
+      ctx.fillStyle = "#a07a4a";
+      for (let k = 0; k < 7; k++) ctx.fillRect(P(x + 10 + ((k * 23 + Math.floor(now / 300)) % (CELL - 20))), P(y + 12 + ((k * 17) % (CELL - 24))), 4, 2);
+    }
+    if (v.hoverTile === t && v.selTile !== t) {
+      ctx.fillStyle = "rgba(255,255,255,0.08)";
+      ctx.fillRect(x + 2, y + 2, CELL - 4, CELL - 4);
+    }
+    // 건물
+    const lv = b.bld[t];
+    if (lv > 0) {
+      const src = lv >= 3 ? (tt.lm ? TOWN_ART.lm(tt.lm) : TOWN_ART.bld(3)) : TOWN_ART.bld(lv);
+      const im = img(src) ?? img(TOWN_ART.bld(Math.min(3, lv)));
+      const open = tileOpen(b, t);
+      const seized = b.seized.includes(t);
+      if (im) {
+        const H = CELL * (lv === 1 ? 0.56 : lv === 2 ? 0.7 : 0.86);
+        const k = Math.min(H / im.naturalHeight, (CELL - 6) / im.naturalWidth);
+        const w = im.naturalWidth * k,
+          hh = im.naturalHeight * k;
+        ctx.save();
+        ctx.globalAlpha = open ? 1 : 0.42;
+        ctx.imageSmoothingEnabled = true;
+        ctx.drawImage(im, x + (CELL - w) / 2, y + CELL - hh - 4, w, hh);
+        ctx.restore();
+      }
+      if (seized) {
+        ctx.fillStyle = blink ? "rgba(255,211,107,0.35)" : "rgba(80,50,10,0.45)";
+        ctx.fillRect(x + 2, y + 2, CELL - 4, CELL - 4);
+        pxText(ctx, "MOA", x + CELL / 2, y + CELL / 2, 13, "#ffd36b");
+      } else if (!open) pxText(ctx, "휴업", x + CELL / 2, y + CELL - 10, 11, "#bfb3ff", 0.9);
+      // 단계 점 (1~3)
+      for (let k = 0; k < lv; k++) {
+        ctx.fillStyle = "#07060f";
+        ctx.fillRect(x + 5 + k * 8, y + 5, 6, 6);
+        ctx.fillStyle = open ? "#ffd23f" : "#7a6aa8";
+        ctx.fillRect(x + 6 + k * 8, y + 6, 4, 4);
+      }
+    }
+    // 지금 지을 수 있는 칸: 모서리에 깜빡이는 초록 점
+    if (!buildBlock(b, t) && blink) {
+      ctx.fillStyle = "#07060f";
+      ctx.fillRect(x + CELL - 13, y + 5, 9, 9);
+      ctx.fillStyle = "#6dff8f";
+      ctx.fillRect(x + CELL - 12, y + 6, 7, 7);
+    }
+  }
+}
+
+/** 고른 길 칸 표시 (네 귀퉁이) */
+function tileBrackets(ctx: CanvasRenderingContext2D, t: number, color: string, now: number) {
+  const [x, y] = tileOrigin(t);
+  const o = Math.floor(now / 250) % 2 ? 1 : 3;
+  const L = 12;
+  ctx.fillStyle = color;
+  for (const [cx, cy, sx, sy] of [
+    [x + o, y + o, 1, 1],
+    [x + CELL - o, y + o, -1, 1],
+    [x + o, y + CELL - o, 1, -1],
+    [x + CELL - o, y + CELL - o, -1, -1],
+  ]) {
+    ctx.fillRect(sx > 0 ? cx : cx - L, sy > 0 ? cy : cy - 3, L, 3);
+    ctx.fillRect(sx > 0 ? cx : cx - 3, sy > 0 ? cy : cy - L, 3, L);
   }
 }
 

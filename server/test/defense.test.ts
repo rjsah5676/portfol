@@ -2,12 +2,13 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { B, BALANCE_VER, LAST_WAVE, countOf, sec } from "../../web/src/lib/defense/balance";
 import { BOTS, botTurn } from "../../web/src/lib/defense/bot";
 import { HASH_TICKS, TICKS_PER_TURN, TURN_MS, replay, replayer, scoreOf, validLog, type LogEntry } from "../../web/src/lib/defense/replay";
-import { CELLS, SLOTS, apply, hashGame, isCmd, newGame, pureT, step, unitCount, upCost, type Game } from "../../web/src/lib/defense/sim";
+import { CELLS, CORNERS, SLOTS, apply, cellTiles, hashGame, isCmd, newGame, pureT, step, tileCell, tileOpen, tollOf, unitCount, upCost, type Game } from "../../web/src/lib/defense/sim";
+import { TOWN } from "../../web/src/lib/defense/town";
 import { RECIPES, UNIT, UNITS } from "../../web/src/lib/defense/units";
-import { PHASE_PAIRS, phaseOn } from "../../web/src/lib/defense/enemies";
+import { PHASE_PAIRS, bossOfWave, phaseOn } from "../../web/src/lib/defense/enemies";
 import { CHEATS, CHEAT_MULTI_SEC, cheatFxOf, cheatOdds } from "../../web/src/lib/defense/cheats";
 import { TPS } from "../../web/src/lib/defense/balance";
-import { GLITCH, TREASURE_WAVES, treasureChance, relicShardsToMax, CHEAT_RES, BOX, BENCH_COST, FRES_COST, TRANS_IDS, GP_PACKS, GP_SELL, GP_STORE, PACK, PASS_PREMIUM_GP, RESEARCH, lvCost, modsOf, packPct, planUpAll, seasonScore, transRoll } from "../../web/src/lib/defense/progress";
+import { GLITCH, TREASURE_WAVES, treasureChance, relicShardsToMax, CHEAT_RES, BOX, BENCH_COST, FRES_COST, TRANS_IDS, GP_PACKS, GP_SELL, GP_STORE, PACK, PASS_PREMIUM_GP, RESEARCH, lvCost, modsOf, packPct, planUpAll, seasonScore, townGlitchLv, townOpenOf, transRoll } from "../../web/src/lib/defense/progress";
 import { startTestServer, type TestClient, type TestServer } from "./helpers";
 
 /** 봇 한 판 (기록 포함) */
@@ -279,6 +280,50 @@ describe("픽셀 글리치 디펜스 엔진", () => {
     for (let i = 0; i < CHEAT_MULTI_SEC * TPS + 1; i++) step(g);
     expect(b.cheat).toBeNull();
     expect(b.cheats).toEqual([first]);
+  });
+
+  it("해피 타운: 안쪽 칸 유닛이 있어야 짓기 · 통행료 · 휴업 · 모서리 불가 · 주사위 · UR 보스 · 결정론", () => {
+    const lo = { stage: "town" as const, town: 1 };
+    const g = started(5, 1, [lo]);
+    const b = g.boards[0];
+    expect(b.stage).toBe("town");
+    expect(CORNERS).toEqual([0, 8, 13, 21]);
+    // 유닛 칸 0 의 앞 길 칸은 1(위) · 25(왼쪽)
+    expect(cellTiles(0)).toEqual([1, 25]);
+    expect(tileCell(0)).toBe(-1);
+    expect(apply(g, 0, { t: "build", p: 1 })).toBeTruthy(); // 안쪽 칸이 빔
+    expect(apply(g, 0, { t: "build", p: 0 })).toBeTruthy(); // 모서리
+    b.cells[0] = { def: "k_squire", units: [{ cd: 0, ult: 0, stun: 0 }] };
+    b.gold = 1000;
+    expect(apply(g, 0, { t: "build", p: 1 })).toBeNull();
+    expect(b.bld[1]).toBe(1);
+    expect(b.gold).toBe(1000 - TOWN.build[0]);
+    expect(tollOf(b, 1)).toBe(TOWN.toll[1]);
+    b.cells[0] = { def: null, units: [] };
+    expect(tileOpen(b, 1)).toBe(false);
+    expect(tollOf(b, 1)).toBe(0);
+    // 메인은 짓기 불가
+    const m = started(5, 1);
+    m.boards[0].cells[0] = { def: "k_squire", units: [{ cd: 0, ult: 0, stun: 0 }] };
+    m.boards[0].gold = 1000;
+    expect(apply(m, 0, { t: "build", p: 1 })).toBeTruthy();
+    expect(isCmd({ t: "build", p: 3 })).toBe(true);
+    expect(isCmd({ t: "build", p: 26 })).toBe(false);
+    // 주사위: 2웨이브부터 보스 웨이브 빼고 · UR 보스
+    expect(bossOfWave(10, "town")?.fighter).toBe("ur-dice");
+    expect(bossOfWave(20, "town")?.fighter).toBe("soyoung");
+    expect(bossOfWave(10)?.fighter).toBe("lily");
+    const { g: a, log } = botGame(9, 0, Infinity, [lo]);
+    const r = replay(9, 1, log, [lo]);
+    expect(r.boards[0].result).toEqual(a.boards[0].result);
+    expect(a.boards[0].toll).toBe(r.boards[0].toll);
+    expect(a.boards[0].bld.some((x) => x > 0)).toBe(true);
+    // 타운 단계 → 적 세기 · 열림
+    expect(modsOf(lo).glitch.lv).toBe(townGlitchLv(1));
+    expect(townOpenOf(5)).toBe(0);
+    expect(townOpenOf(6)).toBe(1);
+    expect(townOpenOf(8)).toBe(2);
+    expect(modsOf({ ...lo, treasure: 15 }).treasure).toBe(0);
   });
 
   it("결정론: 같은 시드 · 같은 기록이면 결과가 똑같음", () => {

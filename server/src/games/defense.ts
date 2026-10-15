@@ -65,7 +65,7 @@ interface RunDoc {
   ver: string;
   at: Date;
   used: boolean;
-  mode?: "season" | "daily";
+  mode?: "season" | "daily" | "town";
   /** 오늘의 도전: 그 날 (KST yyyy-mm-dd) */
   day?: string;
   /** 이 판에 들고 간 로드아웃 (시작 때 고정) */
@@ -228,7 +228,9 @@ export function registerDefense({ gateway, db, points }: Deps) {
   const plays = createDefensePlays(db);
   const seasonKey = () => `${BALANCE_VER}:s${seasonOf(Date.now())}`;
   const dailyKey = (day = kstDayKey(Date.now())) => `${BALANCE_VER}:d${day}`;
-  const boardKey = (b: "season" | "daily") => (b === "daily" ? dailyKey() : seasonKey());
+  /** 해피 타운 시즌 순위표 (메인과 따로) */
+  const townKey = () => `${BALANCE_VER}:t${seasonOf(Date.now())}`;
+  const boardKey = (b: "season" | "daily" | "town") => (b === "daily" ? dailyKey() : b === "town" ? townKey() : seasonKey());
   const rooms = new Map<string, Room>();
 
   /* ── 랭킹 ── */
@@ -236,7 +238,7 @@ export function registerDefense({ gateway, db, points }: Deps) {
   gateway.rpc("defense.start", async (ctx, raw) => {
     const nick = member(ctx);
     const uid = ctx.uid;
-    const { mode } = z.object({ mode: z.enum(["season", "daily"]).default("season") }).parse(raw ?? {});
+    const { mode } = z.object({ mode: z.enum(["season", "daily", "town"]).default("season") }).parse(raw ?? {});
     const recent = await runs.countDocuments({ uid, at: { $gt: new Date(Date.now() - 3600_000) } });
     if (recent >= RUNS_PER_HOUR) throw new AppError("RATE_LIMITED", "잠시 후에 다시 시작해 주세요.", 429);
     const _id = newId();
@@ -251,6 +253,16 @@ export function registerDefense({ gateway, db, points }: Deps) {
       return { run: _id, seed, ver: BALANCE_VER, mode, loadout: lo, day };
     }
     const seed = randomInt(1, 2 ** 31 - 1);
+    if (mode === "town") {
+      // 해피 타운: 같은 성장 + 고른 타운 단계 (보물방 없음)
+      const lo = await meta.loadoutOf(uid, "town");
+      if (!lo.town) throw new AppError("NEED", "해피 타운은 메인에서 오염 단계를 더 열면 열려요.", 409);
+      const board = townKey();
+      const at = new Date();
+      await runs.insertOne({ _id, uid, seed, ver: BALANCE_VER, at, used: false, mode, lo, board });
+      plays.start({ _id, at, mode, ver: BALANCE_VER, board, seed, uids: [uid], nicks: [nick], lo: [lo] });
+      return { run: _id, seed, ver: BALANCE_VER, mode, loadout: lo };
+    }
     const lo = await meta.loadoutOf(uid);
     // 보물방: 쌓인 웨이브만큼 확률 → 뜨면 이 판 로드아웃에 열릴 웨이브를 적어 둠 (기록 검증도 같은 로드아웃으로)
     lo.treasure = await meta.rollTreasure(uid, lo.glitch);
@@ -281,7 +293,7 @@ export function registerDefense({ gateway, db, points }: Deps) {
     if (!doc) throw new AppError("RANK_REJECTED", "이미 끝났거나 없는 판이에요.", 400);
     if (doc.ver !== BALANCE_VER) throw new AppError("RANK_REJECTED", "밸런스가 바뀌어서 이 판은 기록할 수 없어요.", 400);
     if (Date.now() - doc.at.getTime() > RUN_TTL_MS) throw new AppError("RANK_REJECTED", "너무 오래된 판이에요.", 400);
-    const mode = doc.mode === "daily" ? ("daily" as const) : ("season" as const);
+    const mode = doc.mode === "daily" ? ("daily" as const) : doc.mode === "town" ? ("town" as const) : ("season" as const);
     const lo = doc.lo ?? null;
     const out = await verifier.run({ seed: doc.seed, players: 1, log, loadouts: [lo] }).catch((e: Error) => {
       plays.rejected(run, log, `verify: ${e.message}`.slice(0, 300));
@@ -297,7 +309,8 @@ export function registerDefense({ gateway, db, points }: Deps) {
       plays.rejected(run, log, `too fast ${Math.round(elapsed)}s < tick ${res.tick}`);
       throw new AppError("RANK_REJECTED", "기록을 확인할 수 없어요.", 400);
     }
-    const glitch = lo?.glitch ?? 0;
+    // 순위 점수 · 기록에 쓰는 단계 (해피 타운은 타운 단계)
+    const glitch = mode === "town" ? (lo?.town ?? 1) : (lo?.glitch ?? 0);
     const score = seasonScore(res, glitch);
     plays.done(run, log as LogEntry[], resOf(out, 0, score), Math.round(elapsed));
     // 오늘의 도전은 판 보상 대신 그날 첫 완료 보상만 (성장 없는 판이라 미션 · 패스 · 보물방도 안 셈)
@@ -332,7 +345,7 @@ export function registerDefense({ gateway, db, points }: Deps) {
     return { result: res, score, best, rank, tops: out.tops[0], mode, reward, daily };
   });
 
-  const boardArg = z.object({ board: z.enum(["season", "daily"]).default("season"), limit: z.number().int().min(1).max(100).default(20) });
+  const boardArg = z.object({ board: z.enum(["season", "daily", "town"]).default("season"), limit: z.number().int().min(1).max(100).default(20) });
 
   gateway.rpc("defense.rank", async (_ctx, raw) => {
     const { board, limit } = boardArg.parse(raw ?? {});

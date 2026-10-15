@@ -28,7 +28,13 @@ import {
   type Fx,
   RIFT_TIERS,
   type RiftTier,
+  buildBlock,
+  buildCost,
+  tileCell,
+  tileOpen,
+  tollOf,
 } from "@/lib/defense/sim";
+import { BUILD_NAME, DICE_TEXT, TOWN, TOWN_NAME, TOWN_TILES } from "@/lib/defense/town";
 import {
   FACTIONS,
   FACTION_COLOR,
@@ -50,7 +56,7 @@ import { useStage } from "./Stage";
 import { RELIC, RES, relicDesc, resDesc, treasureReward, type Loadout } from "@/lib/defense/progress";
 import { replayer, type Replayer } from "@/lib/defense/replay";
 import type { DefenseGhost } from "@/realtime/defense";
-import { BENCH_W, CW, FH2, cellAt, draw, newView, pushFx } from "./render";
+import { BENCH_W, CW, FH2, cellAt, draw, newView, pushFx, tileAt } from "./render";
 import {
   Bar,
   Btn,
@@ -103,6 +109,8 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry, 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const viewRef = useRef(newView());
   const [sel, setSel] = useState(-1);
+  /** 해피 타운: 고른 길 칸 (건물 정보 · 짓기) */
+  const [selTile, setSelTile] = useState(-1);
   const [modal, setModal] = useState<ModalKind>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [shout, setShout] = useState<{
@@ -190,6 +198,10 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry, 
     else if (cmd.t === "sell") sfx("sell");
     else if (cmd.t === "rift") sfx("rift");
     else if (cmd.t === "swap" || cmd.t === "patch") sfx("ui-click", 1, 0.9);
+    else if (cmd.t === "build") {
+      const lv = b.bld[cmd.p];
+      sfx(lv >= 3 ? "town-landmark" : lv === 1 ? "town-build" : "town-up");
+    }
     force();
     return !err;
   };
@@ -256,6 +268,34 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry, 
             color: "#ffd23f",
           });
         }
+        break;
+      case "dice": {
+        sfx("town-dice");
+        const dt = DICE_TEXT[e.kind];
+        const where = [e.gold >= 0 && `황금 칸 ${TOWN_TILES[e.gold].name}`, e.mud >= 0 && `늪 ${TOWN_TILES[e.mud].name}`].filter(Boolean).join(" · ");
+        if (e.kind === "fest") sfx("town-fest");
+        toast(
+          <>
+            주사위 <b className="text-[#ffd23f]">{e.roll}</b> — <b className="text-[#ffd23f]">{dt.name}</b>
+            {where ? ` · ${where}` : ` · ${dt.desc}`}
+          </>,
+          "gold"
+        );
+        break;
+      }
+      case "warp":
+        sfx("town-warp");
+        toast(<>DICE 주사위 <b className="text-[#7fe8d8]">{e.roll}</b> — {e.roll}칸 순간이동!</>, "bad");
+        break;
+      case "seize":
+        sfx("town-seize");
+        toast(<>MOA 원격 매입 — <b className="text-[#ffd36b]">{TOWN_TILES[e.tile].name}</b> 영업 정지 (MOA 를 잡으면 돌아와요)</>, "bad");
+        break;
+      case "encore":
+        sfx("town-encore");
+        setShout({ id: Math.random(), title: "앙코르!", sub: "FORTE 가 체력을 되찾고, 다른 적들이 잠깐 빨라져요", color: "#ff9ec7" });
+        break;
+      case "build":
         break;
       case "phase": {
         const bd = BOSSES[e.boss];
@@ -433,6 +473,7 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry, 
     const p = toField(e);
     const v = viewRef.current;
     v.hover = cellAt(p.x, p.y);
+    v.hoverTile = b.stage === "town" ? tileAt(p.x, p.y) : -1;
     const s = press.current;
     if (!s || s.from < 0 || !b.cells[s.from].def) return;
     if (!s.moved && Math.hypot(p.x - s.x, p.y - s.y) > 10) s.moved = true;
@@ -459,6 +500,24 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry, 
         v.sel = to;
       }
       return;
+    }
+    // 해피 타운: 길 칸을 누르면 그 칸 (건물 정보 · 짓기) — 다시 누르면 풀기
+    if (b.stage === "town" && s.from < 0) {
+      const t = tileAt(p.x, p.y);
+      if (t >= 0) {
+        setMoveArm(-1);
+        setSel(-1);
+        v.sel = -1;
+        const nt = selTile === t ? -1 : t;
+        setSelTile(nt);
+        v.selTile = nt;
+        if (nt >= 0) sfx("ui-click", 0.9, 1.05);
+        return;
+      }
+    }
+    if (selTile >= 0) {
+      setSelTile(-1);
+      v.selTile = -1;
     }
     if (phone && sel >= 0 && b.cells[sel].def && s.from !== sel) {
       const armed = moveArm === sel;
@@ -496,6 +555,7 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry, 
       // 한/영 상태와 상관없이 (한글 입력이면 key 가 ㅂ · Process 로 옴) — 물리 키(code)로 읽음
       const k = keyOf(e);
       if (k === "q") run({ t: "summon" });
+      else if (k === "w" && selTile >= 0) run({ t: "build", p: selTile });
       else if (k === "w" && sel >= 0) run({ t: "merge", c: sel });
       else if (k === "e" && sel >= 0) sellSel();
       else if (k === "1" || k === "2" || k === "3") run({ t: "up", k: FACTIONS[Number(k) - 1] });
@@ -513,6 +573,9 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry, 
         if (modal) {
           if (modal === "pause") ctrl.setPaused(false);
           setModal(null);
+        } else if (selTile >= 0) {
+          setSelTile(-1);
+          viewRef.current.selTile = -1;
         } else if (sel >= 0) {
           setSel(-1);
         } else if (!b.result) {
@@ -655,8 +718,12 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry, 
               .filter(Boolean)
               .join("\n")}
           >
-            {b.mods.glitch.lv > 0 && (
-              <b className="dfn-glitch px-1 text-[12px] text-[var(--pink)]">G{b.mods.glitch.lv}</b>
+            {b.stage === "town" ? (
+              <b className="px-1 text-[12px] text-[#ffd36b]" title={`${TOWN_NAME} ${b.mods.town}단계 — 적 세기 = 오염 ${b.mods.glitch.lv}단계`}>
+                T{b.mods.town}
+              </b>
+            ) : (
+              b.mods.glitch.lv > 0 && <b className="dfn-glitch px-1 text-[12px] text-[var(--pink)]">G{b.mods.glitch.lv}</b>
             )}
             {b.mods.relics.map((id) => (
               <RelicIcon key={id} id={id} size={24} />
@@ -666,6 +733,7 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry, 
         {b.troom && (
           <TreasurePanel b={b} />
         )}
+        {b.stage === "town" && !boss && <TownChip b={b} />}
         {!b.troom && b.mods.treasure > 0 && !b.treasure && !b.result && (
           <span
             className="px-inset flex h-full shrink-0 items-center gap-1 px-2 text-[12px] font-bold whitespace-nowrap text-[var(--gold)]"
@@ -904,7 +972,7 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry, 
           <BossIntro
             key={bossLine.id}
             boss={bossLine.boss}
-            phase={phaseOn(b.mods.glitch.lv, BOSSES[bossLine.boss].wave)}
+            phase={!!BOSSES[bossLine.boss].phase && phaseOn(b.mods.glitch.lv, BOSSES[bossLine.boss].wave)}
             onDone={() => setBossLine(null)}
           />
         )}
@@ -923,7 +991,9 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry, 
           } as React.CSSProperties
         }
       >
-        {selDef && selCell ? (
+        {b.stage === "town" && selTile >= 0 ? (
+          <TilePanel b={b} t={selTile} run={run} />
+        ) : selDef && selCell ? (
           <>
             <UnitIcon id={selDef.id} size={38} />
             <div className="min-w-0 flex-1 leading-tight">
@@ -1753,6 +1823,91 @@ function GhostPanel({ ctrl, ghost }: { ctrl: Controller; ghost: { data: DefenseG
         </>
       )}
     </div>
+  );
+}
+
+/** 해피 타운 위쪽 줄: 이번 웨이브 주사위 · 받은 통행료 */
+function TownChip({ b }: { b: Board }) {
+  const d = b.dice;
+  return (
+    <div
+      className="px-inset flex h-full shrink-0 items-center gap-2 px-2 text-[12px] whitespace-nowrap"
+      title={`${TOWN_NAME} — 길 칸을 눌러 건물을 지어요. 그 칸에서 쓰러진 적이 통행료를 내요.\n이번 웨이브 통행료 ${b.tollW} · 지난 웨이브 ${b.tollLast} · 이번 판 합계 ${b.toll}${d ? `\n주사위 ${d.roll} — ${DICE_TEXT[d.kind].name}: ${DICE_TEXT[d.kind].desc}` : ""}`}
+    >
+      {d && (
+        <span className="flex items-center gap-1 font-bold text-[#ffd23f]">
+          <span className="flex h-[18px] w-[18px] items-center justify-center bg-[#fff6d8] text-[12px] text-[#1a1000] shadow-[0_0_0_2px_#0a0816]">{d.roll}</span>
+          {DICE_TEXT[d.kind].name}
+        </span>
+      )}
+      <span className="flex items-center gap-1 text-[var(--gold)]">
+        <Icon n="coin" size={12} /> 통행료 <b>+{b.tollW}</b>
+      </span>
+    </div>
+  );
+}
+
+/** 해피 타운: 고른 길 칸 — 이름 · 건물 · 통행료 · 짓기 (W) */
+function TilePanel({ b, t, run }: { b: Board; t: number; run: (c: Cmd) => boolean }) {
+  const tt = TOWN_TILES[t];
+  const ci = tileCell(t);
+  if (ci < 0)
+    return (
+      <div className="min-w-0 flex-1 leading-tight">
+        <b className="text-[14px]">{tt.name}</b>
+        <p className="mt-1 text-[12px] text-[var(--mute)]">
+          {t === 0 ? "적이 나오는 출발 포털이에요." : "모서리 특수 칸 — 건물은 못 지어요."} 유닛 바로 바깥 길 칸을 눌러 건물을 지어요.
+        </p>
+      </div>
+    );
+  const lv = b.bld[t];
+  const open = tileOpen(b, t);
+  const seized = b.seized.includes(t);
+  const why = buildBlock(b, t);
+  const cost = buildCost(b, t);
+  const nextToll = lv < 3 ? TOWN.toll[lv + 1] : 0;
+  const owner = b.cells[ci].def ? UNIT[b.cells[ci].def!] : null;
+  return (
+    <>
+      <span className="flex h-[38px] w-[38px] shrink-0 items-center justify-center bg-[#0a0816] text-[12px] font-bold" style={{ boxShadow: `inset 0 0 0 2px ${tt.color}`, color: tt.color }}>
+        {lv ? `Lv${lv}` : "땅"}
+      </span>
+      <div className="min-w-0 flex-1 leading-tight">
+        <div className="flex items-center gap-1.5">
+          <b className="truncate text-[14px]" style={{ color: tt.color }}>
+            {tt.name}
+          </b>
+          <span className="text-[12px] text-[var(--text)]">{BUILD_NAME[lv]}</span>
+          {b.dice?.gold === t && <span className="bg-[#ffd23f] px-1 text-[11px] font-bold text-[#1a1000]">황금 칸</span>}
+          {b.dice?.mud === t && <span className="bg-[#a07a4a] px-1 text-[11px] font-bold text-[#1a1000]">늪</span>}
+          {seized ? (
+            <span className="text-[12px] text-[#ffd36b]">MOA 에게 빼앗김</span>
+          ) : lv > 0 && !open ? (
+            <span className="text-[12px] text-[#ff9aa8]">휴업 — 안쪽 칸에 유닛을 놓으면 영업</span>
+          ) : null}
+        </div>
+        <p className="mt-1 truncate text-[12px] text-[var(--mute)]">
+          {lv > 0 ? `쓰러진 적마다 통행료 +${tollOf(b, t)}G${TOWN.slow[lv] ? ` · 지나는 적 ${Math.round(TOWN.slow[lv] * 100)}% 느리게` : ""}` : "아직 빈 땅"} · 지난 웨이브 이 칸에서 쓰러진 적{" "}
+          <b className="text-[var(--text)]">{b.tkLast[t]}</b>
+          {owner ? ` · 주인 ${owner.name}` : " · 안쪽 칸이 비었어요"}
+        </p>
+      </div>
+      {lv < 3 ? (
+        <Btn
+          tone={why ? "ghost" : "gold"}
+          disabled={!!why && why !== "골드가 모자라요"}
+          onClick={() => run({ t: "build", p: t })}
+          className="h-[36px] w-[150px] text-[12px] font-bold"
+          hot="W"
+          silent
+          title={why ?? `${BUILD_NAME[lv + 1]} — 통행료 처치마다 +${nextToll}G${TOWN.slow[lv + 1] ? ` · 적 ${Math.round(TOWN.slow[lv + 1] * 100)}% 느리게` : ""}`}
+        >
+          {BUILD_NAME[lv + 1]} {lv ? "올리기" : "짓기"} −{cost}G
+        </Btn>
+      ) : (
+        <span className="w-[150px] text-center text-[13px] font-bold text-[var(--gold)]">최고 단계 빌딩</span>
+      )}
+    </>
   );
 }
 
