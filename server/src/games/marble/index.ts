@@ -34,7 +34,7 @@ const LADDER_SHOW_MS = 2_600;
 const INTRO_MS = 1_900;
 const LIMIT: Record<string, number> = { turn: 15_000, post: 10_000, fork: 8_000, buy: 12_000, acq: 10_000, fest: 10_000 };
 /** 제한 시간을 연달아 넘기면 자동 진행 */
-const AUTO_AFTER_TIMEOUTS = 2;
+const AUTO_AFTER_TIMEOUTS = 3;
 /** 판 도중 끊긴 채 이만큼 지나면 자동 진행 */
 const AWAY_AUTO_MS = 30_000;
 const MAX_ROOMS = 120;
@@ -165,7 +165,9 @@ export function animMs(evs: Ev[]): number {
 function botLoadout(): Loadout {
   const r = rand01();
   const grade: Grade = r < 0.55 ? "R" : r < 0.88 ? "SR" : "SSR";
-  const pool = charOn().filter((c) => c.grade === grade);
+  // 화면 확인용 (dev-fake): MARBLE_BOT_CHARS=mongle,soyoung,… 이면 그중에서만
+  const only = process.env.MARBLE_BOT_CHARS?.split(",").filter((id) => CHARS.some((c) => c.id === id)) ?? [];
+  const pool = only.length ? CHARS.filter((c) => only.includes(c.id)) : charOn().filter((c) => c.grade === grade);
   const c = pool[rnd(pool.length)] ?? CHARS[0];
   const ig = (): Exclude<Grade, "UR"> => {
     const x = rand01();
@@ -671,8 +673,14 @@ export function registerMarble({ gateway, db, points, users }: Deps, opts: Marbl
       void ctx.uid;
       return roomKey(roomOf((params as { id?: unknown })?.id).id);
     },
-    snapshot: (_ctx, _key, params) => {
+    snapshot: (ctx, _key, params) => {
       const r = roomOf((params as { id?: unknown }).id);
+      // 다시 붙음 (폰 앱 전환 · 끊김 뒤) → 끊김 표시는 지움 (자동 진행은 내가 끄기 전까지 그대로)
+      const i = ctx.user?.uid ? seatIdx(r, ctx.user.uid) : -1;
+      if (i >= 0 && r.seats[i]!.away) {
+        r.seats[i]!.away = 0;
+        setTimeout(() => push(r), 0);
+      }
       return { ...wire(r), ev: [] };
     },
   });
@@ -867,6 +875,7 @@ export function registerMarble({ gateway, db, points, users }: Deps, opts: Marbl
     const s = r.seats[r.order[pi]]!;
     s.timeouts = 0;
     s.auto = false;
+    s.away = 0;
     try {
       doAct(r, pi, a as Action);
     } catch (e) {
@@ -897,6 +906,8 @@ export function registerMarble({ gateway, db, points, users }: Deps, opts: Marbl
     if (i < 0) throw bad();
     r.seats[i]!.auto = on;
     r.seats[i]!.timeouts = 0;
+    // 내가 다시 할게요 → 예전 끊김 시각 때문에 곧바로 다시 자동으로 넘어가지 않게
+    if (!on) r.seats[i]!.away = 0;
     if (!on && r.game?.prompt && r.order[r.game.prompt.p] === i) {
       r.actAt = 0;
       r.deadline = Math.max(r.busyUntil, Date.now()) + ms(LIMIT[r.game.prompt.k] ?? 12_000);

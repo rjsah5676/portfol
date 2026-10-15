@@ -130,6 +130,8 @@ export interface Trail {
   /** 도착 칸 위에 크게 띄울 숫자 (굴린 눈) */
   n: number;
   dbl?: boolean;
+  /** 마지막 몇 칸은 폴짝 · 묵직한 주사위로 더 간 칸 */
+  plus?: number;
 }
 
 export interface TokenView {
@@ -142,6 +144,9 @@ export interface TokenView {
   dim?: boolean;
   /** 머리 위 말풍선 (남의 차례: 뭘 하는 중인지) */
   say?: string;
+  /** 자장가에 걸려 자는 중 · 물방울 방패 */
+  sleep?: boolean;
+  shield?: boolean;
 }
 
 const fmtToll = (v: number) => (v >= 10000 ? `${Math.round(v / 1000)}k` : v >= 1000 ? `${(v / 1000).toFixed(1)}k` : String(v));
@@ -196,7 +201,7 @@ export default function Board({
               className="absolute cursor-pointer p-[3px]"
               style={{ left: r.x, top: r.y, width: r.w, height: r.h }}
             >
-              <TileFace m={m} d={d} owner={t.owner} sx={sd.x} sy={sd.y} toll={t.owner >= 0 ? tollOf(gg, tile) : 0} mult={t.owner >= 0 ? tollMult(gg, tile) : 1} fest={t.owner >= 0 && g.players[t.owner]?.fest === tile} boost={t.boostLeft > 0} tw={r.w - 6} th={r.h - 6} />
+              <TileFace m={m} d={d} owner={t.owner} sx={sd.x} sy={sd.y} toll={t.owner >= 0 ? tollOf(gg, tile) : 0} mult={t.owner >= 0 ? tollMult(gg, tile) : 1} fest={t.owner >= 0 && g.players[t.owner]?.fest === tile} boost={t.boostLeft > 0 ? t.boostLeft : 0} tw={r.w - 6} th={r.h - 6} />
               {here.length > 0 && <span className="pointer-events-none absolute inset-[2px] rounded-[10px]" style={{ boxShadow: `inset 0 0 0 4px ${PCOLOR[here[0]]}, 0 0 16px 3px ${PCOLOR[here[0]]}` }} />}
               {can && <span className="mbx-pick pointer-events-none absolute inset-[2px] rounded-[10px]" />}
               {flash?.[tile] && <span className="pointer-events-none absolute inset-[3px] rounded-[9px]" style={{ boxShadow: `inset 0 0 0 5px ${flash[tile]}`, background: "rgba(255,255,255,0.4)" }} />}
@@ -281,6 +286,7 @@ export default function Board({
                 <span className="flex h-[52px] min-w-[52px] items-center justify-center rounded-full px-2 text-[30px] font-black" style={{ background: "radial-gradient(circle at 35% 30%, #fffbe8, #ffd23a 60%, #f0a020)", color: "#4a2600", boxShadow: `0 0 0 3px #fff, 0 0 0 6px ${trail.color}, 0 6px 0 rgba(0,0,0,0.25), 0 0 26px 6px ${trail.color}88` }}>
                   {trail.n}
                 </span>
+                {!!trail.plus && <span className="-mt-1 rounded-full bg-[#2fc37a] px-2 text-[13px] leading-[18px] font-black text-white shadow-[0_0_0_2px_#fff]">+{trail.plus}</span>}
               </div>
               </div>
             </div>
@@ -309,9 +315,17 @@ export default function Board({
             }}
           >
             <div className="absolute bottom-[-3px] left-1/2 h-[9px] w-[34px] -translate-x-1/2 rounded-[50%]" style={{ background: "rgba(20,24,60,0.35)" }} />
-            <div key={tk.hop} className={tk.hop ? "mb-hop" : undefined}>
+            <div key={tk.hop} className={tk.hop ? "mb-hop" : undefined} style={tk.sleep ? { filter: "saturate(0.55) brightness(0.92)" } : undefined}>
               <Token sprite={tk.sprite} anim={tk.anim} h={46} face={tk.face} />
             </div>
+            {tk.shield && <span className="mbx-bubble pointer-events-none absolute bottom-[-6px] left-1/2 h-[66px] w-[60px] -translate-x-1/2 rounded-[50%]" />}
+            {tk.sleep && (
+              <span className="pointer-events-none absolute -top-[30px] left-[62%] block h-[30px] w-[30px]">
+                <i className="mbx-zz" style={{ left: 0, animationDelay: "0ms" }}>Z</i>
+                <i className="mbx-zz" style={{ left: 8, animationDelay: "600ms", fontSize: 15 }}>Z</i>
+                <i className="mbx-zz" style={{ left: 15, animationDelay: "1200ms", fontSize: 19 }}>Z</i>
+              </span>
+            )}
             {tk.say && (
               <div className="absolute -top-[54px] left-1/2 -translate-x-1/2">
                 <div key={tk.say} className="mbx-pop relative rounded-full bg-white px-2.5 text-[12px] leading-[22px] font-bold whitespace-nowrap text-[#262b52]" style={{ boxShadow: `0 0 0 2px ${PCOLOR[tk.pi]}, 0 3px 8px rgba(0,0,0,0.3)` }}>
@@ -338,6 +352,7 @@ export default function Board({
 /** 이동 경로 숫자 (칸 바닥) — 지나간 칸은 흐려지고, 지금 칸 · 도착 칸은 크게 */
 function TrailChip({ k, trail, sx, sy }: { k: number; trail: Trail; sx: number; sy: number }) {
   const last = k === trail.slots.length - 1;
+  const bonus = !!trail.plus && k >= trail.slots.length - trail.plus;
   const passed = k < trail.at - 1;
   const now = k === trail.at - 1;
   const col = (sx <= 0 || sx >= 8) && !(sy <= 0 || sy >= 8);
@@ -356,7 +371,7 @@ function TrailChip({ k, trail, sx, sy }: { k: number; trail: Trail; sx: number; 
           fontSize: last ? 18 : 14,
           color: passed ? "rgba(255,255,255,0.85)" : now || last ? "#fff" : trail.color,
           background: passed ? `${trail.color}88` : now || last ? trail.color : "rgba(255,255,255,0.92)",
-          boxShadow: `0 0 0 2px ${now || last ? "#fff" : trail.color}, 0 2px 4px rgba(0,0,0,0.3)`,
+          boxShadow: bonus ? `0 0 0 2px #2fc37a, 0 0 10px 2px #2fc37a, 0 2px 4px rgba(0,0,0,0.3)` : `0 0 0 2px ${now || last ? "#fff" : trail.color}, 0 2px 4px rgba(0,0,0,0.3)`,
           transform: `${col ? "rotate(-90deg) " : ""}scale(${now ? 1.1 : 1})`,
           transition: "all 150ms",
           opacity: passed ? 0.6 : 1,
@@ -369,7 +384,7 @@ function TrailChip({ k, trail, sx, sy }: { k: number; trail: Trail; sx: number; 
 }
 
 /** 판 위에 눕는 칸 바닥 */
-function TileFace({ m, d, owner, sx, sy, toll, mult, fest, boost, tw, th }: { m: MapDef; d: TileDef; owner: number; sx: number; sy: number; toll: number; mult: number; fest: boolean; boost: boolean; tw: number; th: number }) {
+function TileFace({ m, d, owner, sx, sy, toll, mult, fest, boost, tw, th }: { m: MapDef; d: TileDef; owner: number; sx: number; sy: number; toll: number; mult: number; fest: boolean; /** 불꽃(스킬 부스트) 남은 바퀴 · 0 = 없음 */ boost: number; tw: number; th: number }) {
   const sp = KIND[d.kind];
   if (sp) {
     const corner = sx % 8 === 0 && sy % 8 === 0;
@@ -406,7 +421,7 @@ function TileFace({ m, d, owner, sx, sy, toll, mult, fest, boost, tw, th }: { m:
     </b>,
     <span key="p" className="relative flex items-center justify-center gap-[2px]">
       {pc ? (
-        <span className="rounded-full bg-white px-[6px] text-[14px] leading-[18px] font-black" style={{ color: dark(pc, 0.7), boxShadow: `0 0 0 1.5px ${INK}` }}>
+        <span className={`rounded-full bg-white px-[6px] text-[14px] leading-[18px] font-black ${boost ? "mbx-hot" : ""}`} style={{ color: boost ? "#d2401a" : dark(pc, 0.7), ...(boost ? {} : { boxShadow: `0 0 0 1.5px ${INK}` }) }}>
           {fmtToll(toll)}
         </span>
       ) : (
@@ -415,7 +430,7 @@ function TileFace({ m, d, owner, sx, sy, toll, mult, fest, boost, tw, th }: { m:
         </span>
       )}
       {/* 배율 · 축제 · 불꽃은 값 위 구석에 작게 (칸 너비를 넘지 않게) */}
-      {(mult > 1 || fest || boost) && (
+      {(mult > 1 || fest || boost > 0) && (
         <span className="absolute -top-[10px] -right-[7px] flex items-center gap-[1px]">
           {mult > 1 && (
             <span className="rounded-full px-[3px] text-[10px] leading-[13px] font-black" style={{ background: mult >= 4 ? "#ff3d6e" : "#ffd23a", color: mult >= 4 ? "#fff" : "#3a2500", boxShadow: `0 0 0 1.2px ${INK}` }}>
@@ -423,7 +438,12 @@ function TileFace({ m, d, owner, sx, sy, toll, mult, fest, boost, tw, th }: { m:
             </span>
           )}
           {fest && <Glyph n="note" size={12} color="#b07bff" />}
-          {boost && <Glyph n="fire" size={12} color="#ff6a2b" />}
+          {boost > 0 && (
+            <span className="flex items-center rounded-full bg-[#ff6a2b] pr-[3px] text-[9px] leading-[12px] font-black text-white" title={`불꽃 ${boost}바퀴 남음`}>
+              <Glyph n="fire" size={11} color="#ffd23a" />
+              {boost}
+            </span>
+          )}
         </span>
       )}
     </span>,

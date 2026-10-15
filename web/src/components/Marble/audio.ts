@@ -159,7 +159,7 @@ function synth(c: AudioContext, s: Synth, vol: number) {
 /** 효과음 (같은 소리는 40ms 안에 두 번 안 남) */
 export function sfx(name: string) {
   const p = getPrefs();
-  if (p.mute || p.sfx <= 0) return;
+  if (p.mute || p.sfx <= 0 || quiet()) return;
   const c = ensureCtx();
   if (!c || c.state !== "running") return;
   const now = performance.now();
@@ -199,26 +199,52 @@ export function playBgm(name: string) {
   bgmEl.src = src;
   bgmEl.loop = name !== "win";
   bgmEl.volume = getPrefs().mute ? 0 : getPrefs().bgm * 0.6;
-  void bgmEl.play().catch(() => {});
+  if (!quiet()) void bgmEl.play().catch(() => {});
 }
 export function stopBgm() {
   bgmName = "";
   bgmEl?.pause();
 }
 
-/** 탭을 숨기면 배경음 쉬고, 돌아오면 이어서 */
+/* ───────── 조용히 해야 할 때 ─────────
+ * 숨김: 폰 홈 · 앱 전환 · 탭 숨김 → 효과음 · 배경음 모두 멈춤 (포커와 같음)
+ * 관문: 폰 「전체화면으로 플레이」· 「가로로 돌려 주세요」 안내 화면 → 소리 없음 */
+let hidden = false;
+let gated = false;
+const quiet = () => hidden || gated;
+function applyQuiet() {
+  if (quiet()) {
+    bgmEl?.pause();
+    if (ctx && ctx.state === "running") void ctx.suspend().catch(() => {});
+  } else {
+    if (ctx && ctx.state === "suspended") void ctx.resume().catch(() => {});
+    if (bgmEl && bgmName) void bgmEl.play().catch(() => {});
+  }
+}
+/** 안내 화면(관문) 동안 소리 끔 — Stage 가 부름 */
+export function setGate(on: boolean) {
+  if (gated === on) return;
+  gated = on;
+  applyQuiet();
+}
 if (typeof document !== "undefined") {
-  document.addEventListener("visibilitychange", () => {
-    if (!bgmEl || !bgmName) return;
-    if (document.hidden) bgmEl.pause();
-    else void bgmEl.play().catch(() => {});
+  const onVis = () => {
+    hidden = document.hidden;
+    applyQuiet();
+  };
+  document.addEventListener("visibilitychange", onVis);
+  window.addEventListener("pagehide", () => {
+    hidden = true;
+    applyQuiet();
   });
+  window.addEventListener("pageshow", onVis);
 }
 
 /** 첫 누르기: 소리 잠금 풀기 + 자주 쓰는 소리 미리 불러오기 */
 export function unlock() {
   const c = ensureCtx();
-  if (c && c.state !== "running") void c.resume().catch(() => {});
   for (const n of FILES) void load(n);
+  if (quiet()) return;
+  if (c && c.state !== "running") void c.resume().catch(() => {});
   if (bgmEl && bgmEl.paused && bgmName) void bgmEl.play().catch(() => {});
 }

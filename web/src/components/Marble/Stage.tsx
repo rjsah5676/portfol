@@ -9,7 +9,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { unlock } from "./audio";
+import { setGate, unlock } from "./audio";
 
 /*
  * DICE TOWN 무대 — 픽셀 럭키 디펜스(components/Defense/Stage.tsx)와 같은 방식.
@@ -200,6 +200,12 @@ export default function Stage({ children }: { children: ReactNode }) {
   const iosGate = phone && !fsGate && iosWeb && !iosSkip;
   const rotateGate = phone && !land && !fsGate && !iosGate;
   const k = snapScale(box.w && box.h ? Math.min(box.w / DW, box.h / DH) : 0, phone);
+  // 폰 안내 화면(전체화면 · 홈 화면 추가 · 가로 돌리기) 동안은 음악 · 효과음 없음
+  const gate = fsGate || iosGate || rotateGate;
+  useEffect(() => {
+    setGate(gate);
+    return () => setGate(false);
+  }, [gate]);
 
   return (
     <Ctx.Provider value={{ fs, canFs, phone, toggleFs }}>

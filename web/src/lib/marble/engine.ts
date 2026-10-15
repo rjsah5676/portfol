@@ -171,7 +171,7 @@ export type Prompt =
   | { k: "acq"; p: number; tile: number; cost: number }
   | { k: "fest"; p: number; tiles: number[] }
   /** 통행료가 가진 돈보다 많음: 대출할지 (안 하면 땅 팔기 → 파산) */
-  | { k: "loan"; p: number; tile: number; amt: number; need: number; debt: number; sell: number; shock: boolean }
+  | { k: "loan"; p: number; tile: number; amt: number; need: number; debt: number; sell: number; shock: boolean; orig?: number; by?: string[] }
   /** 출발 포털: 내 땅 하나 골라 짓기 */
   | { k: "start"; p: number; tiles: number[] };
 
@@ -196,13 +196,13 @@ export type WinHow = "bankrupt" | "triple" | "line" | "spot" | "rounds";
 
 export type Ev =
   | { t: "turn"; p: number; round: number }
-  | { t: "roll"; p: number; d: [number, number]; dbl: boolean; how?: "pick" | "reroll" | "jail"; power?: number; ctrl?: boolean }
+  | { t: "roll"; p: number; d: [number, number]; dbl: boolean; how?: "pick" | "reroll" | "jail"; power?: number; ctrl?: boolean; twin?: boolean }
   | { t: "adjust"; p: number; steps: number; why: string }
   | { t: "rewind"; p: number; amt: number }
   | { t: "encore"; p: number }
-  | { t: "move"; p: number; path: number[]; warp?: boolean; pull?: boolean; rail?: boolean }
-  | { t: "salary"; p: number; amt: number; half?: boolean }
-  | { t: "pay"; from: number; to: number; amt: number; why: string; tile?: number; shock?: boolean }
+  | { t: "move"; p: number; path: number[]; warp?: boolean; pull?: boolean; rail?: boolean; /** 마지막 몇 칸이 폴짝 · 묵직한 주사위로 더 간 칸 */ bonus?: number; bonusWhy?: string }
+  | { t: "salary"; p: number; amt: number; half?: boolean; why?: string }
+  | { t: "pay"; from: number; to: number; amt: number; why: string; tile?: number; shock?: boolean; /** 깎이기 전 금액 · 깎은 것들 */ orig?: number; by?: string[] }
   | { t: "buy"; p: number; tile: number; lv: number; cost: number; b?: number; top?: number }
   | { t: "acq"; p: number; from: number; tile: number; cost: number }
   | { t: "block"; p: number; tile: number }
@@ -211,7 +211,7 @@ export type Ev =
   | { t: "jail"; p: number; turns: number }
   | { t: "free"; p: number; why: string }
   | { t: "fest"; p: number; tile: number }
-  | { t: "skill"; p: number; kind: SkillKind; name: string; target?: number; n?: number; tiles?: number[] }
+  | { t: "skill"; p: number; kind: SkillKind; name: string; target?: number; n?: number; tiles?: number[]; /** 상륙 돌격으로 부서진 것 (1~3 건물 · 4 랜드마크) */ lost?: number }
   | { t: "frozen"; p: number }
   | { t: "town"; ev: TownEventId; group?: number }
   | { t: "rotate"; order: number[] }
@@ -644,7 +644,7 @@ export function act(g: Game, pi: number, a: Action): void {
         p.debt += l.debt;
         emit(g, { t: "loan", p: pi, amt: l.need, debt: l.debt });
       }
-      pay(g, pi, g.tiles[l.tile].owner, l.amt, "통행료", l.tile, l.shock);
+      pay(g, pi, g.tiles[l.tile].owner, l.amt, "통행료", l.tile, l.shock, l.by ? { orig: l.orig ?? l.amt, by: l.by } : undefined);
       return afterToll(g, pi, l.tile);
     }
     case "start": {
@@ -698,21 +698,30 @@ export const ZONE_SUM: Record<"low" | "mid" | "high", [number, number]> = { low:
 export const controlChance = (p: { fx: Fx }) => Math.min(0.6, RULE.controlBase + p.fx.control);
 
 /** 주사위 두 개. power(0~1)를 주면 컨트롤 확률만큼 그 구간 합으로 */
-function rollDice(g: Game, pi: number, power?: number): { d: [number, number]; ctrl: boolean } {
+function rollDice(g: Game, pi: number, power?: number): { d: [number, number]; ctrl: boolean; twin: boolean } {
   const p = g.players[pi];
+  let twin = false;
   const one = (): [number, number] => {
+    twin = false;
     const a = 1 + rndInt(g.rng, 6);
     let b = 1 + rndInt(g.rng, 6);
-    if (a !== b && p.fx.twin > 0 && rnd(g.rng) < p.fx.twin) b = a;
+    if (a !== b && p.fx.twin > 0 && rnd(g.rng) < p.fx.twin) {
+      b = a;
+      twin = true;
+    }
     return [a, b];
   };
-  if (power === undefined || !(power >= 0 && power <= 1) || rnd(g.rng) >= controlChance(p)) return { d: one(), ctrl: false };
+  if (power === undefined || !(power >= 0 && power <= 1) || rnd(g.rng) >= controlChance(p)) {
+    const d = one();
+    return { d, ctrl: false, twin };
+  }
   const [lo, hi] = ZONE_SUM[powerZone(power)];
   for (let i = 0; i < 40; i++) {
     const d = one();
-    if (d[0] + d[1] >= lo && d[0] + d[1] <= hi) return { d, ctrl: true };
+    if (d[0] + d[1] >= lo && d[0] + d[1] <= hi) return { d, ctrl: true, twin };
   }
-  return { d: one(), ctrl: false };
+  const d = one();
+  return { d, ctrl: false, twin };
 }
 
 /** 쓸 수 있는 "굴린 뒤" 선택이 있으면 post 로 물음 */
@@ -723,8 +732,8 @@ function hasPost(g: Game, pi: number): boolean {
 
 function roll(g: Game, pi: number, power?: number): void {
   const p = g.players[pi];
-  const { d, ctrl } = rollDice(g, pi, power);
-  const pw = power !== undefined ? { power: Math.round(power * 100) / 100, ...(ctrl && { ctrl }) } : {};
+  const { d, ctrl, twin } = rollDice(g, pi, power);
+  const pw = { ...(power !== undefined && { power: Math.round(power * 100) / 100, ...(ctrl && { ctrl }) }), ...(twin && { twin }) };
   const dbl = d[0] === d[1];
   if (p.jail > 0) {
     emit(g, { t: "roll", p: pi, d, dbl, how: "jail", ...pw });
@@ -749,9 +758,9 @@ function roll(g: Game, pi: number, power?: number): void {
 }
 
 function reroll(g: Game, pi: number, why: "reroll"): void {
-  const { d } = rollDice(g, pi);
+  const { d, twin } = rollDice(g, pi);
   g.dice = d;
-  emit(g, { t: "roll", p: pi, d, dbl: d[0] === d[1], how: why });
+  emit(g, { t: "roll", p: pi, d, dbl: d[0] === d[1], how: why, ...(twin && { twin }) });
   if (hasPost(g, pi)) {
     g.prompt = { k: "post", p: pi, dice: d, steps: d[0] + d[1] };
     return;
@@ -786,7 +795,7 @@ function commitMove(g: Game, pi: number, steps: number): void {
     if (p.fx.doubleBonus > 0) {
       const amt = Math.round(p.fx.doubleBonus);
       p.cash += amt;
-      emit(g, { t: "salary", p: pi, amt, half: true });
+      emit(g, { t: "salary", p: pi, amt, half: true, why: "더블 보너스" });
     }
     if (p.doubles >= 3) {
       p.doubles = 0;
@@ -825,26 +834,28 @@ function walk(g: Game, pi: number, steps: number, fork?: number): void {
     const t = g.tiles[tileAt(g, slot)];
     return t.owner >= 0 && t.owner !== pi;
   };
+  const base = path.length;
+  let bonusWhy: string | undefined;
   if (p.hop && foeAt(s)) {
     for (let k = 0; k < 3 && foeAt(s); k++) {
       s = nextSlot(g, s, s === m.junction ? fork : undefined);
       path.push(s);
     }
-    emit(g, { t: "adjust", p: pi, steps: path.length, why: "폴짝" });
+    bonusWhy = "폴짝";
   } else if (p.fx.dodge > 0 && foeAt(s) && rnd(g.rng) < p.fx.dodge) {
     s = nextSlot(g, s, s === m.junction ? fork : undefined);
     path.push(s);
-    emit(g, { t: "adjust", p: pi, steps: path.length, why: "묵직한 주사위" });
+    bonusWhy = "묵직한 주사위";
   }
-  moveAlong(g, pi, path);
+  moveAlong(g, pi, path, bonusWhy ? { bonus: path.length - base, bonusWhy } : {});
   if (g.over || !p.alive) return g.over ? undefined : endTurn(g);
   land(g, pi);
 }
 
 /** 길을 따라 이동 — 출발 · 골든 포털 월급, 출석 체크(지나가기만 해도) */
-function moveAlong(g: Game, pi: number, path: number[], opt: { warp?: boolean; pull?: boolean } = {}) {
+function moveAlong(g: Game, pi: number, path: number[], opt: { warp?: boolean; pull?: boolean; bonus?: number; bonusWhy?: string } = {}) {
   const p = g.players[pi];
-  emit(g, { t: "move", p: pi, path, ...(opt.warp && { warp: true }), ...(opt.pull && { pull: true }) });
+  emit(g, { t: "move", p: pi, path, ...(opt.warp && { warp: true }), ...(opt.pull && { pull: true }), ...(opt.bonus && { bonus: opt.bonus, bonusWhy: opt.bonusWhy }) });
   path.forEach((s, k) => {
     if (!p.alive) return;
     const d = defAt(g, s);
@@ -928,10 +939,10 @@ function land(g: Game, pi: number): void {
       const due = tollDue(g, pi, tile);
       if (due.amt > p.cash && p.loans < RULE.loanTimes) {
         const need = due.amt - p.cash;
-        g.prompt = { k: "loan", p: pi, tile, amt: due.amt, need, debt: Math.round(need * RULE.loanRate), sell: sellValue(g, pi), shock: due.shock };
+        g.prompt = { k: "loan", p: pi, tile, amt: due.amt, need, debt: Math.round(need * RULE.loanRate), sell: sellValue(g, pi), shock: due.shock, ...(due.by.length && { orig: due.orig, by: due.by }) };
         return;
       }
-      if (due.amt > 0) pay(g, pi, t.owner, due.amt, "통행료", tile, due.shock);
+      if (due.amt > 0) pay(g, pi, t.owner, due.amt, "통행료", tile, due.shock, due);
       return afterToll(g, pi, tile);
     }
     case "box":
@@ -984,7 +995,7 @@ function land(g: Game, pi: number): void {
     }
     case "bonus":
       p.cash += RULE.bonus;
-      emit(g, { t: "salary", p: pi, amt: RULE.bonus, half: true });
+      emit(g, { t: "salary", p: pi, amt: RULE.bonus, half: true, why: "황금 다리" });
       return endTurn(g);
     default:
       return endTurn(g);
@@ -1098,11 +1109,11 @@ export function sellValue(g: Game, pi: number): number {
 
 function payToll(g: Game, pi: number, tile: number, k = 1) {
   const due = tollDue(g, pi, tile, k);
-  if (due.amt > 0) pay(g, pi, g.tiles[tile].owner, due.amt, "통행료", tile, due.shock);
+  if (due.amt > 0) pay(g, pi, g.tiles[tile].owner, due.amt, "통행료", tile, due.shock, due);
 }
 
 /** 낼 통행료 (깎기 · 되감기 다 반영, 쓴 효과는 소모) */
-function tollDue(g: Game, pi: number, tile: number, k = 1): { amt: number; shock: boolean } {
+function tollDue(g: Game, pi: number, tile: number, k = 1): { amt: number; shock: boolean; orig: number; by: string[] } {
   const p = g.players[pi];
   const t = g.tiles[tile];
   const owner = g.players[t.owner];
@@ -1112,14 +1123,21 @@ function tollDue(g: Game, pi: number, tile: number, k = 1): { amt: number; shock
     amt = Math.round(amt * 1.5);
     shock = true;
   }
-  amt *= 1 - p.fx.tollPay;
+  const orig = Math.round(amt);
+  const by: string[] = [];
+  if (p.fx.tollPay > 0) {
+    amt *= 1 - p.fx.tollPay;
+    by.push("통행료 할인");
+  }
   if (p.shield) {
     amt *= 1 - p.shield;
     p.shield = 0;
+    by.push(CHAR[p.lo.char.id]?.active.name ?? "방패");
   }
   if (p.keep.half) {
     amt *= 0.5;
     p.keep.half = 0;
+    by.push("반값 쿠폰");
   }
   amt = Math.round(amt);
   // 시간 주사위: 큰 통행료 한 번 되감기
@@ -1129,7 +1147,7 @@ function tollDue(g: Game, pi: number, tile: number, k = 1): { amt: number; shock
     amt -= back;
     emit(g, { t: "rewind", p: pi, amt: back });
   }
-  return { amt, shock };
+  return { amt, shock, orig, by };
 }
 
 function acquire(g: Game, pi: number, tile: number, cost: number): void {
@@ -1165,7 +1183,7 @@ function acquire(g: Game, pi: number, tile: number, cost: number): void {
 /* ───────────── 돈 ───────────── */
 
 /** from → to(-1 = 은행). 모자라면 땅을 팔고, 그래도 모자라면 파산 */
-function pay(g: Game, from: number, to: number, amt: number, why: string, tile?: number, shock?: boolean) {
+function pay(g: Game, from: number, to: number, amt: number, why: string, tile?: number, shock?: boolean, cut?: { orig: number; by: string[] }) {
   const p = g.players[from];
   if (p.cash < amt) raise(g, from, amt);
   const paid = Math.min(p.cash, amt);
@@ -1175,7 +1193,7 @@ function pay(g: Game, from: number, to: number, amt: number, why: string, tile?:
     g.players[to].cash += paid;
     g.players[to].stat.got += paid;
   }
-  emit(g, { t: "pay", from, to, amt: paid, why, ...(tile !== undefined && { tile }), ...(shock && { shock }) });
+  emit(g, { t: "pay", from, to, amt: paid, why, ...(tile !== undefined && { tile }), ...(shock && { shock }), ...(cut && cut.by.length && cut.orig > amt && { orig: cut.orig, by: cut.by }) });
   if (paid < amt) bankrupt(g, from);
 }
 
@@ -1483,11 +1501,13 @@ function doSkill(g: Game, pi: number, a: { target?: number; n?: number }, when: 
       if (t.lv >= LANDMARK) {
         t.lv = 3;
         t.b = 7;
+        ev.lost = LANDMARK;
       } else {
         const has = bitsOf(t);
         const k = [3, 2, 1].find((x) => (has >> (x - 1)) & 1);
         t.b = k ? has & ~(1 << (k - 1)) : 0;
         t.lv = popcount(t.b);
+        if (k) ev.lost = k;
       }
       emit(g, ev);
       return;
