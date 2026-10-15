@@ -32,6 +32,10 @@ const ART: Record<string, { name: string; svg: string; hot: [number, number] }> 
 export const CURSOR_IDS = [...Object.keys(ART), "system"] as const;
 export const cursorName = (id: string) => (id === "system" ? "기본" : (ART[id]?.name ?? "기본"));
 
+/** 누를 수 있는 곳 위: 금빛 가리키는 손 (모든 커서 공통) */
+const POINT = `<path d='M11 3.5a2.2 2.2 0 014.4 0V13l1.3-.4a2.2 2.2 0 012.7 1.3l.2.6 1.2-.2a2.2 2.2 0 012.5 1.7l.1.6a2.2 2.2 0 011.9 2.1V22c0 4-3 7-7 7h-2.5a6 6 0 01-4.6-2.2L5.6 20.4a2.2 2.2 0 013.2-3l2.2 2.1z' fill='#ffd84d' stroke='${INK}' stroke-width='2' stroke-linejoin='round'/><path d='M13.2 5v9' stroke='#fff7c2' stroke-width='1.6' stroke-linecap='round'/>`;
+const POINT_URL = `url("data:image/svg+xml,${encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'>${POINT}</svg>`)}") 13 3`;
+
 function svgOf(id: string): string {
   const a = ART[id];
   return `url("data:image/svg+xml,${encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'>${a.svg}</svg>`)}") ${a.hot[0]} ${a.hot[1]}`;
@@ -57,6 +61,7 @@ export function applyCursor(id = getCursor()) {
   }
   el.setAttribute("data-mbcur", id);
   el.style.setProperty("--mb-cur", svgOf(id));
+  el.style.setProperty("--mb-cur-pt", POINT_URL);
 }
 export function setCursor(id: string) {
   try {

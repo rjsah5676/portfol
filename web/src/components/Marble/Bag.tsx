@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { CHAR, GRADE_COLOR, ITEM, ITEMS, MAX_LV, STORE, artOf, charOn, faceOf, giveValueGp, itemUpCost, power, storeBonus, type CharDef, type Grade, type ItemDef, type ItemSlot, type StoreItem } from "@/lib/marble/data";
 import { charUpNeed } from "@/lib/marble/gacha";
 import type { ProfileWire } from "@/lib/marble/wire";
@@ -36,7 +36,7 @@ export function XStars({ lv, size = 14 }: { lv: number; size?: number }) {
 
 export default function Bag({ prof, onProf, onBack }: { prof: ProfileWire; onProf(p: ProfileWire): void; onBack(): void }) {
   const [tab, setTab] = useState<Tab>("char");
-  const [sel, setSel] = useState<string | null>(prof.load.char);
+  const [sel, setSel] = useState<string | null>(prof.load.char ?? Object.keys(prof.chars)[0] ?? charOn()[0]?.id ?? null);
   const [pane, setPane] = useState<Pane>("info");
   const [grade, setGrade] = useState<Grade | "ALL">("ALL");
   const [err, setErr] = useState("");
@@ -87,7 +87,7 @@ export default function Bag({ prof, onProf, onBack }: { prof: ProfileWire; onPro
                 sfx("click");
                 setTab(k);
                 setPane("info");
-                setSel(k === "char" ? prof.load.char : (prof.load[k] ?? ITEMS.find((x) => x.slot === k && prof.items[x.id])?.id ?? ITEMS.find((x) => x.slot === k)?.id ?? null));
+                setSel(k === "char" ? (prof.load.char ?? charOn()[0]?.id ?? null) : (prof.load[k] ?? ITEMS.find((x) => x.slot === k && prof.items[x.id])?.id ?? ITEMS.find((x) => x.slot === k)?.id ?? null));
               }}
             >
               {k === "char" ? "캐릭터" : k === "dice" ? "주사위" : "동행"}
@@ -212,11 +212,11 @@ export default function Bag({ prof, onProf, onBack }: { prof: ProfileWire; onPro
             보유 {tab === "char" ? Object.keys(prof.chars).length : ITEMS.filter((x) => x.slot === tab && prof.items[x.id]).length} / {tab === "char" ? charOn().length : ITEMS.filter((x) => x.slot === tab).length}
           </span>
         </div>
-        <div className="mbx-hscroll flex gap-2 overflow-x-auto px-[4px] pt-[6px] pb-[6px]">
+        <DragStrip className="mbx-hscroll flex gap-2 overflow-x-auto px-[4px] pt-[6px] pb-[6px]">
           {tab === "char"
             ? chars.map((d) => <FaceTile key={d.id} d={d} own={prof.chars[d.id]} sel={sel === d.id} on={prof.load.char === d.id} onClick={() => pick(d.id)} />)
             : items.map((d) => <ItemFace key={d.id} d={d} own={prof.items[d.id]} sel={sel === d.id} on={prof.load[d.slot] === d.id} onClick={() => pick(d.id)} />)}
-        </div>
+        </DragStrip>
       </div>
       {burst && <UpgradeFx key={burst.id} b={burst} onDone={() => setBurst(null)} />}
     </div>
@@ -236,7 +236,7 @@ function UpgradeFx({ b, onDone }: { b: { target: string; kind: "char" | "item"; 
   });
   return (
     <button type="button" onClick={onDone} className="absolute inset-0 z-[90] cursor-pointer overflow-hidden" style={{ background: "radial-gradient(circle at 50% 45%, rgba(40,26,110,0.9), rgba(6,4,20,0.96))" }}>
-      <div className="mbx-up-rays absolute top-1/2 left-1/2 h-[1400px] w-[1400px]" style={{ background: `repeating-conic-gradient(from 0deg, ${col}55 0 7deg, transparent 7deg 20deg)` }} />
+      <div className="mbx-up-rays mbx-soft absolute top-1/2 left-1/2 h-[1100px] w-[1100px]" style={{ "--ray": `${col}aa`, opacity: 0.7 } as CSSProperties} />
       <div className="absolute top-1/2 left-1/2 h-[520px] w-[520px] -translate-x-1/2 -translate-y-1/2 rounded-full" style={{ background: `radial-gradient(circle, ${col}88, transparent 65%)` }} />
       {[0, 0.18, 0.36].map((d) => (
         <div key={d} className="mbx-up-ring absolute top-1/2 left-1/2 h-[140px] w-[140px] rounded-full" style={{ border: `5px solid ${d ? "#ffe27a" : "#fff"}`, animationDelay: `${0.22 + d}s` }} />
@@ -272,6 +272,47 @@ function UpgradeFx({ b, onDone }: { b: { target: string; kind: "char" | "item"; 
       </div>
       <div className="mbx-up-flash pointer-events-none absolute inset-0 bg-white" />
     </button>
+  );
+}
+
+/** 가로 목록: 마우스로 끌어서 좌우로 (끌면 누르기는 안 됨) · 휠도 좌우로 */
+function DragStrip({ className, children }: { className: string; children: React.ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const drag = useRef<{ x: number; left: number; moved: boolean } | null>(null);
+  return (
+    <div
+      ref={ref}
+      className={`${className} select-none`}
+      onPointerDown={(e) => {
+        if (e.pointerType !== "mouse" || !ref.current) return;
+        drag.current = { x: e.clientX, left: ref.current.scrollLeft, moved: false };
+      }}
+      onPointerMove={(e) => {
+        const d = drag.current;
+        if (!d || !ref.current) return;
+        const dx = e.clientX - d.x;
+        if (Math.abs(dx) > 5) d.moved = true;
+        if (d.moved) ref.current.scrollLeft = d.left - dx;
+      }}
+      onPointerUp={() => {
+        // 끌었으면 이번 누르기는 무시
+        if (drag.current?.moved) setTimeout(() => (drag.current = null), 0);
+        else drag.current = null;
+      }}
+      onPointerLeave={() => (drag.current = null)}
+      onClickCapture={(e) => {
+        if (drag.current?.moved) {
+          e.stopPropagation();
+          e.preventDefault();
+        }
+      }}
+      onWheel={(e) => {
+        if (ref.current && Math.abs(e.deltaY) > Math.abs(e.deltaX)) ref.current.scrollLeft += e.deltaY;
+      }}
+      onDragStart={(e) => e.preventDefault()}
+    >
+      {children}
+    </div>
   );
 }
 

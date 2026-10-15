@@ -153,7 +153,7 @@ export default function Board({
   const FR = 16;
   const frameBox: CSSProperties = { left: CX - S / 2 - FR, top: CY - S / 2 - FR, width: S + 2 * FR, height: S + 2 * FR, transformOrigin: "50% 50%" };
   return (
-    <div className="mbx absolute inset-0">
+    <div className="mbx absolute inset-0 isolate">
       {/* 판 옆면(두께) · 흰 테두리 — 칸 바깥으로 FR 만큼 큰 판을 같은 변환으로 */}
       <div className="pointer-events-none absolute rounded-[34px]" style={{ ...frameBox, transform: `translateY(22px) ${PLANE_TF}`, background: `linear-gradient(135deg, ${plate.side}, ${dark(plate.side, 0.7)})`, boxShadow: "0 0 70px 14px rgba(10,8,30,0.55)" }} />
       <div className="pointer-events-none absolute rounded-[34px]" style={{ ...frameBox, transform: `translateY(11px) ${PLANE_TF}`, background: dark(plate.side, 0.85) }} />
@@ -177,7 +177,7 @@ export default function Board({
               className={`absolute p-[3px] ${can ? "cursor-pointer" : "cursor-help"}`}
               style={{ left: r.x, top: r.y, width: r.w, height: r.h }}
             >
-              <TileFace m={m} d={d} owner={t.owner} sx={sd.x} sy={sd.y} />
+              <TileFace m={m} d={d} owner={t.owner} sx={sd.x} sy={sd.y} toll={t.owner >= 0 ? tollOf(gg, tile) : 0} mult={t.owner >= 0 ? tollMult(gg, tile) : 1} fest={t.owner >= 0 && g.players[t.owner]?.fest === tile} boost={t.boostLeft > 0} />
               {here.length > 0 && <span className="pointer-events-none absolute inset-[2px] rounded-[10px]" style={{ boxShadow: `inset 0 0 0 4px ${PCOLOR[here[0]]}, 0 0 16px 3px ${PCOLOR[here[0]]}` }} />}
               {can && <span className="mbx-pick pointer-events-none absolute inset-[2px] rounded-[10px]" />}
               {flash?.[tile] && <span className="pointer-events-none absolute inset-[3px] rounded-[9px]" style={{ boxShadow: `inset 0 0 0 5px ${flash[tile]}`, background: "rgba(255,255,255,0.4)" }} />}
@@ -232,48 +232,12 @@ export default function Board({
         );
       })}
 
-      {/* 이름판: 칸 앞쪽, 맨 위 층 */}
-      {m.tiles.map((sd, slot) => {
-        const tile = g.order[slot];
-        const d = m.tiles[tile];
-        const t = g.tiles[tile];
-        const f = toward(sd.x, sd.y, -0.012);
-        const p = proj(f.x, f.y);
-        const pc = t.owner >= 0 ? PCOLOR[t.owner] : null;
-        const mult = t.owner >= 0 ? tollMult(gg, tile) : 1;
-        const fest = t.owner >= 0 && g.players[t.owner]?.fest === tile;
-        const sp = KIND[d.kind];
-        return (
-          <div key={`n${slot}`} className="pointer-events-none absolute flex flex-col items-center" style={{ left: p.x, top: p.y + 6, zIndex: 3000 + Math.round(p.y), transform: `translateX(-50%) scale(${Math.min(1.08, p.k)})`, transformOrigin: "50% 0" }}>
-            {!sp && (
-              <span className="relative flex items-center gap-[2px]">
-                {pc ? (
-                  <span className="rounded-[5px] px-[4px] text-[10px] leading-[13px] font-extrabold text-white" style={{ background: pc, boxShadow: `0 0 0 1.5px ${INK}` }}>
-                    {fmtToll(tollOf(gg, tile))}
-                  </span>
-                ) : (
-                  <span className="rounded-[5px] bg-white px-[3px] text-[9.5px] leading-[12px] font-bold text-[#5a6090]" style={{ boxShadow: `0 0 0 1.2px ${INK}` }}>
-                    {d.price}
-                  </span>
-                )}
-                {mult > 1 && (
-                  <span className="mbx-mult rounded-full px-[4px] text-[9.5px] leading-[13px] font-black" style={{ background: mult >= 4 ? "#ff3d6e" : "#ffd23a", color: mult >= 4 ? "#fff" : "#3a2500" }}>
-                    x{mult}
-                  </span>
-                )}
-                {fest && <Glyph n="note" size={13} color="#b07bff" />}
-                {t.boostLeft > 0 && <Glyph n="fire" size={13} color="#ff6a2b" />}
-              </span>
-            )}
-          </div>
-        );
-      })}
     </div>
   );
 }
 
 /** 판 위에 눕는 칸 바닥 */
-function TileFace({ m, d, owner, sx, sy }: { m: MapDef; d: TileDef; owner: number; sx: number; sy: number }) {
+function TileFace({ m, d, owner, sx, sy, toll, mult, fest, boost }: { m: MapDef; d: TileDef; owner: number; sx: number; sy: number; toll: number; mult: number; fest: boolean; boost: boolean }) {
   const sp = KIND[d.kind];
   if (sp)
     return (
@@ -281,7 +245,7 @@ function TileFace({ m, d, owner, sx, sy }: { m: MapDef; d: TileDef; owner: numbe
         <FloorText sx={sx} sy={sy}>
           <span className="flex flex-col items-center gap-[2px]">
             <Glyph n={sp.glyph} size={sx % 8 === 0 && sy % 8 === 0 ? 40 : 24} color={sp.ink === "#fff" ? "#fff" : mix(sp.fill, 0.55)} />
-            <b className={`whitespace-nowrap ${sx % 8 === 0 && sy % 8 === 0 ? "text-[17px]" : "text-[13px]"} leading-none font-black`} style={{ color: sp.ink, textShadow: sp.ink === "#fff" ? "0 1px 2px rgba(0,0,0,0.5)" : "none" }}>
+            <b className={`whitespace-nowrap ${sx % 8 === 0 && sy % 8 === 0 ? "text-[19px]" : "text-[15px]"} leading-none font-black`} style={{ color: sp.ink, textShadow: sp.ink === "#fff" ? "0 1px 2px rgba(0,0,0,0.5)" : "none" }}>
               {d.name}
             </b>
           </span>
@@ -294,14 +258,37 @@ function TileFace({ m, d, owner, sx, sy }: { m: MapDef; d: TileDef; owner: numbe
   const side = sy >= 8 ? "bottom" : sy <= 0 ? "top" : sx <= 0 ? "left" : "right";
   const bandStyle: CSSProperties = side === "bottom" ? { left: 0, right: 0, bottom: 0, height: 13 } : side === "top" ? { left: 0, right: 0, top: 0, height: 13 } : side === "left" ? { top: 0, bottom: 0, left: 0, width: 13 } : { top: 0, bottom: 0, right: 0, width: 13 };
   return (
-    <div className="relative h-full w-full overflow-hidden rounded-[10px]" style={{ background: pc ? `linear-gradient(135deg, ${mix(pc, 0.35)}, ${pc})` : `linear-gradient(135deg, #fffdf6, ${mix(band, 0.78)})`, boxShadow: pc ? `inset 0 0 0 2.5px ${dark(pc, 0.6)}, inset 0 3px 0 rgba(255,255,255,0.45)` : `inset 0 0 0 1.5px ${dark(band, 0.6)}` }}>
+    <div className="relative h-full w-full overflow-hidden rounded-[10px]" style={{ background: pc ? `linear-gradient(135deg, ${mix(pc, 0.35)}, ${pc})` : `linear-gradient(135deg, #fffdf6, ${mix(band, 0.78)})` }}>
       <div className="absolute" style={{ ...bandStyle, background: `linear-gradient(135deg, ${mix(band, 0.2)}, ${band})` }} />
       <FloorText sx={sx} sy={sy}>
-        <b className={`block max-w-[64px] text-center leading-[15px] font-black break-keep ${d.name.length >= 5 ? "text-[12px]" : "text-[14px]"}`} style={{ color: pc ? "#fff" : INK, textShadow: pc ? "0 1px 2px rgba(0,0,0,0.55)" : "0 1px 0 rgba(255,255,255,0.8)" }}>
-          {d.kind === "spot" && "★"}
-          {d.name}
-        </b>
+        <span className="flex flex-col items-center gap-[3px]">
+          <b className={`block max-w-[68px] text-center font-black break-keep ${d.name.length >= 5 ? "text-[14px] leading-[15px]" : "text-[17px] leading-[18px]"}`} style={{ color: pc ? "#fff" : INK, textShadow: pc ? "0 1px 2px rgba(0,0,0,0.55)" : "0 1px 0 rgba(255,255,255,0.8)" }}>
+            {d.kind === "spot" && "★"}
+            {d.name}
+          </b>
+          {/* 값: 빈 땅은 땅값, 산 땅은 통행료(크게) + 배율 */}
+          <span className="flex items-center gap-[2px]">
+            {pc ? (
+              <span className="rounded-full bg-white px-[7px] text-[15px] leading-[19px] font-black" style={{ color: dark(pc, 0.7), boxShadow: `0 0 0 1.5px ${INK}` }}>
+                {fmtToll(toll)}
+              </span>
+            ) : (
+              <span className="rounded-full px-[7px] text-[14px] leading-[18px] font-black text-white" style={{ background: dark(band, 0.85), boxShadow: `0 0 0 1.2px ${INK}` }}>
+                {d.price}
+              </span>
+            )}
+            {mult > 1 && (
+              <span className="rounded-full px-[4px] text-[11px] leading-[16px] font-black" style={{ background: mult >= 4 ? "#ff3d6e" : "#ffd23a", color: mult >= 4 ? "#fff" : "#3a2500", boxShadow: `0 0 0 1.2px ${INK}` }}>
+                x{mult}
+              </span>
+            )}
+            {fest && <Glyph n="note" size={14} color="#b07bff" />}
+            {boost && <Glyph n="fire" size={14} color="#ff6a2b" />}
+          </span>
+        </span>
       </FloorText>
+      {/* 테두리는 맨 위에 다시 그려서 동네 색 띠까지 감쌈 */}
+      <div className="pointer-events-none absolute inset-0 rounded-[10px]" style={{ boxShadow: pc ? `inset 0 0 0 2.5px ${dark(pc, 0.6)}, inset 0 3px 0 rgba(255,255,255,0.35)` : `inset 0 0 0 1.8px ${dark(band, 0.55)}` }} />
     </div>
   );
 }
@@ -316,31 +303,27 @@ function FloorText({ sx, sy, children }: { sx: number; sy: number; children: Rea
   );
 }
 
-/** 서 있는 건물 (그림이 오면 그림, 없으면 표식). 주인 색 바닥 고리로 누구 건물인지 */
+/** 서 있는 건물: 모두의마블처럼 오두막 · 하우스 · 타워를 단계만큼 나란히 (주인 색), 랜드마크만 큰 3D 그림 */
 function Building({ lv, color }: { lv: number; color: string }) {
-  const h = BLD_H[lv];
+  if (lv >= LANDMARK) {
+    const h = BLD_H[LANDMARK];
+    return (
+      <div className="mb-pop relative flex flex-col items-center">
+        <img src={BLD[LANDMARK]} alt="" className="block max-w-none" style={{ height: h, filter: "drop-shadow(0 3px 2px rgba(20,24,60,0.35))" }} />
+        <span className="pointer-events-none absolute inset-0" style={{ background: color, WebkitMaskImage: `url(${BLD[LANDMARK]})`, maskImage: `url(${BLD[LANDMARK]})`, WebkitMaskSize: "100% 100%", maskSize: "100% 100%", mixBlendMode: "multiply", opacity: 0.6 }} />
+        <span className="mb-bob absolute -top-[10px] right-[2px]">
+          <Glyph n="flag" size={17} color={color} />
+        </span>
+      </div>
+    );
+  }
   return (
-    <div className="mb-pop relative flex flex-col items-center">
-      <img
-        src={BLD[lv]}
-        alt=""
-        className="block max-w-none"
-        style={{ height: h, filter: "drop-shadow(0 3px 2px rgba(20,24,60,0.35))" }}
-        onError={(e) => {
-          (e.currentTarget as HTMLImageElement).style.display = "none";
-          (e.currentTarget.nextSibling as HTMLElement | null)?.style.removeProperty("display");
-        }}
-      />
-      {/* 건물 전체를 주인 색으로 물들임 (그림 모양대로 가린 색 판을 곱하기로) */}
-      <span className="pointer-events-none absolute inset-0" style={{ background: color, WebkitMaskImage: `url(${BLD[lv]})`, maskImage: `url(${BLD[lv]})`, WebkitMaskSize: "100% 100%", maskSize: "100% 100%", mixBlendMode: "multiply", opacity: 0.72 }} />
-      <span style={{ display: "none" }}>
-        <Glyph n={(["hut", "hut", "house", "tower", "crown"] as GlyphName[])[lv]} size={h * 0.7} color={color} />
-      </span>
-      {/* 주인 깃발 (랜드마크는 흔들흔들) */}
-      <span className={`absolute -top-[9px] right-[2px] ${lv >= LANDMARK ? "mb-bob" : ""}`}>
-        <Glyph n="flag" size={lv >= LANDMARK ? 17 : 14} color={color} />
-      </span>
-      <span className="absolute -bottom-[3px] left-1/2 h-[7px] w-[70%] -translate-x-1/2 rounded-[50%]" style={{ background: color, boxShadow: `0 0 0 1.5px ${INK}`, opacity: 0.9, zIndex: -1 }} />
+    <div className="flex items-end gap-[1px]" style={{ filter: "drop-shadow(0 2px 1px rgba(20,24,60,0.4))" }}>
+      {Array.from({ length: lv }, (_, i) => (
+        <span key={i} className="mb-pop block" style={{ animationDelay: `${i * 80}ms` }}>
+          <Glyph n={(["hut", "house", "tower"] as const)[i]} size={[18, 21, 25][i]} color={color} />
+        </span>
+      ))}
     </div>
   );
 }

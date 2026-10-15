@@ -29,7 +29,7 @@ import { playBgm, sfx, stopBgm } from "./audio";
 import { ItemIcon } from "./Gacha";
 import { CharHero, XGrade } from "./ui";
 import Board, { iso, slotXY as slotPos, spriteOf, type TokenView } from "./Board";
-import { Btn, Cur, DiceFace, GradeTag, Icon, PCOLOR, PNAME_BG, fmt, CurIcon } from "./pixel";
+import { Btn, Cur, DiceFace, GradeTag, Icon, PCOLOR, fmt, CurIcon } from "./pixel";
 import { GuideDot, useMapGuide } from "./MapGuide";
 import { RoomTools } from "./Room";
 import Token, { type TokenAnim } from "./Token";
@@ -503,16 +503,6 @@ export default function GameView({ room, me, onLeave }: { room: RoomWire; me: st
           <b className="mb-title mb-out text-[16px] text-white">{map.name}</b>
           <GuideDot onOpen={() => guide.show(map.id)} className="!h-[20px] !w-[20px] !text-[12px]" />
         </div>
-        {g.town && (
-          <div className="mb-chip text-[12px]" style={{ "--c": "#bff7e8" } as CSSProperties} title={TOWN_EVENTS[g.town.id].desc}>
-            <Icon n="note" size={11} /> 마을 소식 <b>{TOWN_EVENTS[g.town.id].name}</b> · {g.town.id === "festa" ? `${map.groups[g.town.group]?.name} 통행료 2배` : TOWN_EVENTS[g.town.id].desc}
-          </div>
-        )}
-        {map.id === "orgel" && map.every && (
-          <div className="mb-chip text-[12px]" style={{ "--c": "#ffe1ef" } as CSSProperties}>
-            <Icon n="clock" size={11} /> 태엽 회전까지 {map.every - ((g.round - 1) % map.every)}바퀴
-          </div>
-        )}
       </div>
       <div className="absolute top-[150px] left-[10px] z-[430]">
         <RoomTools room={live} me={me} onLeave={onLeave} inGame vertical />
@@ -520,7 +510,7 @@ export default function GameView({ room, me, onLeave }: { room: RoomWire; me: st
 
       {/* 가운데: 꼭 필요한 것만 — 바퀴 · 누구 차례 · 판돈 */}
       {live.phase !== "end" && (
-        <div className="mbx pointer-events-none absolute top-[138px] left-1/2 z-[300] flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-[#140f3a]/80 px-2 py-1 text-[13px] text-white shadow-[0_4px_14px_rgba(0,0,0,0.4)] ring-1 ring-white/20 backdrop-blur">
+        <div className="mbx pointer-events-none absolute top-[288px] left-1/2 z-[300] flex -translate-x-1/2 -translate-y-1/2 items-center gap-1.5 rounded-full bg-[#140f3a]/80 px-2 py-1 text-[13px] text-white shadow-[0_4px_14px_rgba(0,0,0,0.4)] ring-1 ring-white/20 backdrop-blur">
           <span className="rounded-full bg-white/10 px-2.5 py-[2px] font-black">
             {Math.min(g.round, g.rounds)}
             <span className="font-bold text-white/60"> / {g.rounds} 바퀴</span>
@@ -533,6 +523,21 @@ export default function GameView({ room, me, onLeave }: { room: RoomWire; me: st
           <span className="flex items-center gap-1 rounded-full bg-[#ffd23a]/20 px-2.5 py-[2px] font-black text-[#ffe08a]">
             판돈 <CurIcon k="star" size={14} /> {MATCH_STARS.win}
           </span>
+        </div>
+      )}
+      {/* 마을 소식 · 태엽: 가운데 띠 바로 위 */}
+      {live.phase !== "end" && (
+        <div className="pointer-events-none absolute top-[262px] left-1/2 z-[300] flex -translate-x-1/2 -translate-y-full flex-col items-center gap-1">
+        {g.town && (
+          <div className="mb-chip text-[12px] shadow-[0_3px_10px_rgba(0,0,0,0.35)]" style={{ "--c": "#bff7e8" } as CSSProperties} title={TOWN_EVENTS[g.town.id].desc}>
+            <Icon n="note" size={11} /> 마을 소식 <b>{TOWN_EVENTS[g.town.id].name}</b> · {g.town.id === "festa" ? `${map.groups[g.town.group]?.name} 통행료 2배` : TOWN_EVENTS[g.town.id].desc}
+          </div>
+        )}
+        {map.id === "orgel" && map.every && (
+          <div className="mb-chip text-[12px] shadow-[0_3px_10px_rgba(0,0,0,0.35)]" style={{ "--c": "#ffe1ef" } as CSSProperties}>
+            <Icon n="clock" size={11} /> 태엽 회전까지 {map.every - ((g.round - 1) % map.every)}바퀴
+          </div>
+        )}
         </div>
       )}
       {live.phase !== "end" && <CenterDice dice={dice} at={diceAt} />}
@@ -578,7 +583,7 @@ export default function GameView({ room, me, onLeave }: { room: RoomWire; me: st
       {live.phase === "play" && (
         <div
           className="absolute z-[460] flex -translate-x-1/2 justify-center"
-          style={{ left: 512, top: 176, width: 440 }}
+          style={{ left: 512, top: dim ? 150 : 314, width: 440 }}
         >
           <ActionPanel
             g={g}
@@ -1064,40 +1069,86 @@ function CenterDice({ dice, at }: { dice: DiceView | null; at: { x: number; y: n
 
 /* ───────────── 칸 정보 ───────────── */
 
+/** 칸 정보: 화면 가운데 모달 (뒤는 살짝 어둡게, 바깥 누르면 닫힘) */
 function TileInfo({ g, tile, onClose }: { g: GameWire; tile: number; onClose(): void }) {
   const m = MAPS[g.map];
   const d = m.tiles[tile];
   const t = g.tiles[tile];
   const gg = g as unknown as Game;
-  const c = slotPos(m, g.order.indexOf(tile));
-  const lines: string[] = [];
-  if (d.kind === "city" || d.kind === "spot") {
-    lines.push(d.kind === "spot" ? "명소 — 가진 명소 수만큼 통행료 2배씩, 4곳이면 승리" : `${m.groups[d.group!].name} (${m.tiles.filter((x) => x.group === d.group).length}칸)`);
-    lines.push(`땅값 ${fmt(d.price ?? 0)}`);
-    if (t.owner >= 0) {
-      lines.push(`주인 ${g.players[t.owner].name} · ${LEVEL_NAME[t.lv]}`);
-      lines.push(`통행료 ${fmt(tollOf(gg, tile))}${t.lv < LANDMARK && d.kind === "city" ? ` · 인수 ${fmt(investedOf(d.price ?? 0, t.lv))}` : ""}`);
-    } else if (d.kind === "city") lines.push(`통행료 땅 ${fmt(baseToll(d.price!, 0))} → 랜드마크 ${fmt(baseToll(d.price!, LANDMARK))}`);
-  } else {
-    const DESC: Record<string, string> = {
-      start: "지나가거나 서면 월급",
-      start2: "지나가면 월급의 70%",
-      box: "카드 한 장 (좋은 일 · 나쁜 일)",
-      jail: "더블이 나오거나 두 번 쉬어야 나감 · 100 내면 바로",
-      fest: "내 땅 하나에 축제 (통행료 2배)",
-      warp: "다음 차례에 원하는 칸으로",
-      tax: "건물 값의 10%",
-      bonus: "서면 +200",
-    };
-    lines.push(DESC[d.kind] ?? "");
-  }
+  const ownable = d.kind === "city" || d.kind === "spot";
+  const band = d.kind === "spot" ? "#ffb21e" : d.group !== undefined ? m.groups[d.group].color : "#8d9bb3";
+  const DESC: Record<string, string> = {
+    start: "지나가거나 서면 월급. 딱 서면 내 땅 하나를 골라 바로 지을 수 있어요.",
+    start2: "지나가면 월급의 70%",
+    box: "카드 한 장 — 좋은 일일 수도, 나쁜 일일 수도!",
+    jail: "더블이 나오거나 두 번 쉬어야 나가요. 100 내면 바로 나가요.",
+    fest: "내 땅 하나를 골라 축제 (통행료 2배)",
+    warp: "다음 차례에 원하는 칸으로 순간이동",
+    tax: "땅 · 건물 값의 10% 를 세금으로",
+    bonus: "서면 +200",
+    rail: "다른 기차역으로 바로 갈 수 있어요 (그냥 남아도 돼요)",
+  };
+  const owner = t.owner >= 0 ? g.players[t.owner] : null;
+  const rows = d.kind === "city" ? [0, 1, 2, 3, LANDMARK] : d.kind === "spot" ? [0] : [];
   return (
-    <div className="absolute inset-0 z-[480]" onClick={onClose}>
-      <div className="mb-box mb-pop absolute w-[230px] px-3 py-2 text-[12px] leading-[17px]" style={{ left: Math.min(1024 - 240, Math.max(10, c.x - 115)), top: c.y > 300 ? c.y - 150 : c.y + 34 }}>
-        <b className="mb-title text-[15px]">{d.name}</b>
-        {lines.map((l, k) => (
-          <div key={k}>{l}</div>
-        ))}
+    <div className="mbx absolute inset-0 z-[650] flex items-center justify-center bg-[rgba(10,8,30,0.55)]" onClick={onClose}>
+      <div className="mbx-pop w-[400px] overflow-hidden rounded-2xl border border-white/15 bg-[#1b1650]/95 text-white shadow-[0_20px_50px_rgba(0,0,0,0.5)]" onClick={(e) => e.stopPropagation()}>
+        <div className="relative px-4 pt-3 pb-3" style={{ background: `linear-gradient(135deg, ${band}, ${band}99)` }}>
+          <div className="text-[11px] font-black tracking-[0.15em] text-white/85">{d.kind === "city" ? m.groups[d.group!].name : d.kind === "spot" ? "명소" : "특수 칸"}</div>
+          <b className="text-[24px] leading-[30px] font-black" style={{ textShadow: "0 2px 0 rgba(38,43,82,0.4)" }}>
+            {d.name}
+          </b>
+          <button type="button" onClick={onClose} className="absolute top-3 right-3 flex h-[28px] w-[28px] items-center justify-center rounded-full bg-black/25 text-[16px] hover:bg-black/40" aria-label="닫기">
+            ×
+          </button>
+        </div>
+        <div className="flex flex-col gap-2.5 p-4 text-[13px]">
+          {!ownable && <p className="leading-[20px] text-white/90">{DESC[d.kind] ?? ""}</p>}
+          {ownable && (
+            <>
+              {owner ? (
+                <div className="flex items-center gap-2 rounded-xl px-3 py-2" style={{ background: `${PCOLOR[t.owner]}33`, boxShadow: `inset 0 0 0 1.5px ${PCOLOR[t.owner]}` }}>
+                  <span className="h-[12px] w-[12px] rounded-full" style={{ background: PCOLOR[t.owner] }} />
+                  <b>{owner.name}</b>
+                  <span className="text-white/70">· {LEVEL_NAME[t.lv]}</span>
+                  <span className="ml-auto text-right">
+                    <span className="block text-[10px] text-white/60">지금 통행료</span>
+                    <b className="text-[18px] text-[#ffe08a]">{fmt(tollOf(gg, tile))}</b>
+                  </span>
+                </div>
+              ) : (
+                <div className="rounded-xl bg-white/[0.07] px-3 py-2 text-white/80">
+                  빈 땅 · 땅값 <b className="text-white">{fmt(d.price ?? 0)}</b>
+                  {d.kind === "spot" && " · 가진 명소 수만큼 통행료 2배씩, 4곳이면 승리"}
+                </div>
+              )}
+              {rows.length > 1 && (
+                <div className="overflow-hidden rounded-xl ring-1 ring-white/10">
+                  <div className="grid grid-cols-[1fr_1fr_1fr] bg-white/10 px-3 py-1.5 text-[11px] font-bold text-white/65">
+                    <span>단계</span>
+                    <span className="text-right">넣은 돈</span>
+                    <span className="text-right">통행료</span>
+                  </div>
+                  {rows.map((lv) => {
+                    const cur = owner && t.lv === lv;
+                    return (
+                      <div key={lv} className="grid grid-cols-[1fr_1fr_1fr] px-3 py-1.5" style={cur ? { background: `${PCOLOR[t.owner]}44`, fontWeight: 800 } : undefined}>
+                        <span>{LEVEL_NAME[lv]}</span>
+                        <span className="text-right text-white/80">{fmt(investedOf(d.price ?? 0, lv))}</span>
+                        <span className="text-right font-bold text-[#ffe08a]">{fmt(baseToll(d.price ?? 0, lv))}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              {owner && d.kind === "city" && t.lv < LANDMARK && (
+                <div className="text-[12px] text-white/65">
+                  인수하려면 <b className="text-white">{fmt(investedOf(d.price ?? 0, t.lv))}</b> · 랜드마크가 되면 인수 불가
+                </div>
+              )}
+            </>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -1139,7 +1190,7 @@ function ActionPanel({
   const gg = g as unknown as Game;
   const m = MAPS[g.map];
   const box = (children: ReactNode, title?: string) => (
-    <div className="mb-box flex w-full flex-col items-center gap-2 px-3 py-2.5 text-center" style={{ maxWidth: compact ? 300 : 390 }}>
+    <div className="mbx-modal flex w-full flex-col items-center gap-2 px-4 py-3 text-center" style={{ maxWidth: compact ? 300 : 390 }}>
       {title && <b className="mb-title text-[15px]">{title}</b>}
       {children}
       {mine && left > 0 && (
@@ -1455,7 +1506,7 @@ function BannerView({ b }: { b: Banner }) {
   return (
     <div className="mbx pointer-events-none absolute inset-x-0 top-[190px] z-[620] flex justify-center" style={{ "--d": `${b.ms}ms` } as CSSProperties}>
       <div className="mbx-banner relative flex h-[118px] w-full items-center justify-center overflow-hidden" style={{ background: `linear-gradient(90deg, transparent, ${b.color}e6 18%, ${b.color} 50%, ${b.color}e6 82%, transparent)` }}>
-        <div className="mbx-rays absolute" style={{ left: "50%", top: "50%", background: `repeating-conic-gradient(from 0deg, rgba(255,255,255,0.22) 0 8deg, transparent 8deg 22deg)` }} />
+        <div className="mbx-rays mbx-soft absolute" style={{ left: "50%", top: "50%", "--ray": "rgba(255,255,255,0.45)", opacity: 0.5 } as CSSProperties} />
         <div className="mbx-sheen absolute inset-0 opacity-60" />
         <div className="absolute inset-x-0 top-0 h-[3px]" style={{ background: "linear-gradient(90deg, transparent, #fff, transparent)" }} />
         <div className="absolute inset-x-0 bottom-0 h-[3px]" style={{ background: "linear-gradient(90deg, transparent, #fff, transparent)" }} />
@@ -1478,7 +1529,7 @@ function CardPop({ id, name }: { id: keyof typeof CARDS; name: string }) {
   const c2 = good ? "#ff9f2e" : "#b03a6a";
   return (
     <div className="mbx pointer-events-none absolute inset-0 z-[610] flex items-center justify-center" style={{ background: "radial-gradient(circle, rgba(10,8,30,0.25), rgba(10,8,30,0.6))" }}>
-      <div className="absolute h-[520px] w-[520px] rounded-full mbx-up-rays" style={{ background: `repeating-conic-gradient(from 0deg, ${c1}44 0 8deg, transparent 8deg 22deg)` }} />
+      <div className="mbx-up-rays mbx-soft absolute h-[620px] w-[620px]" style={{ "--ray": `${c1}cc`, opacity: 0.6 } as CSSProperties} />
       <div className="mbx-card-in relative flex h-[320px] w-[230px] flex-col items-center overflow-hidden rounded-[18px] p-[4px]" style={{ background: `linear-gradient(160deg, #fff6c8, ${c1} 40%, ${c2})`, boxShadow: `0 0 0 2px #262b52, 0 0 36px 6px ${c1}aa, 0 14px 30px rgba(0,0,0,0.5)` }}>
         <div className="relative flex h-full w-full flex-col items-center rounded-[14px] px-4 pt-3 pb-4 text-center" style={{ background: "linear-gradient(180deg, #2a2470, #171245)" }}>
           <div className="absolute inset-[6px] rounded-[10px] border border-[#ffd76a]/50" />
@@ -1510,7 +1561,7 @@ function Result({ room, me, onLeave }: { room: RoomWire; me: string; onLeave(): 
   const HOW: Record<string, string> = { bankrupt: "파산승", triple: "트리플 독점", line: "라인 독점", spot: "명소 독점", rounds: "바퀴 끝 · 자산 1등" };
   return (
     <div className="absolute inset-0 z-[700] flex items-center justify-center bg-[rgba(35,42,77,0.45)]">
-      <div className="mb-box mb-pop w-[460px] px-5 py-4">
+      <div className="mbx-modal mb-pop w-[460px] px-5 py-4">
         <div className="text-center">
           <div className="mb-title mb-out text-[34px] text-white" style={{ color: mine?.place === 1 ? "#ffc94a" : "#fff" }}>
             {mine ? (mine.place === 1 ? "승리!" : `${mine.place}등`) : "판 끝"}
@@ -1522,7 +1573,7 @@ function Result({ room, me, onLeave }: { room: RoomWire; me: string; onLeave(): 
             const pi = room.order.indexOf(r.seat);
             const p = g.players[pi];
             return (
-              <div key={r.seat} className="mb-inset flex items-center gap-2 px-2 py-1.5" style={{ "--bg": PNAME_BG[pi] } as CSSProperties}>
+              <div key={r.seat} className="mb-inset flex items-center gap-2 px-2 py-1.5" style={{ "--bg": `${PCOLOR[pi]}40` } as CSSProperties}>
                 <b className="w-[34px] text-center text-[18px]">{r.place}</b>
                 <img src={faceOf(CHAR[p.lo.char.id] ?? CHAR.kai)} alt="" className="h-[34px] w-[34px] object-cover" style={{ boxShadow: "0 0 0 2px #232a4d" }} />
                 <b className="min-w-0 flex-1 truncate text-[14px]">

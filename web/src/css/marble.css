@@ -926,3 +926,57 @@ html[data-mbcur] .mb * {
 .mb .mbx-back-sr {
   box-shadow: 0 8px 18px rgba(0, 0, 0, 0.45), 0 0 18px 3px rgba(168, 92, 255, 0.7);
 }
+
+/* ───────── 모든 창(모달) 공통: 남색 유리 + 금빛 테 ───────── */
+.mb .mbx-modal {
+  --ink: #ffffff;
+  --ink2: rgba(255, 255, 255, 0.85);
+  --mute: rgba(255, 255, 255, 0.58);
+  color: #fff;
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(48, 40, 122, 0.97), rgba(24, 19, 68, 0.97));
+  box-shadow:
+    0 0 0 1.5px rgba(255, 255, 255, 0.2),
+    0 0 0 4px rgba(255, 210, 90, 0.22),
+    0 18px 44px rgba(0, 0, 0, 0.5);
+  font-family: Pretendard, "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif;
+}
+.mb .mbx-modal .mb-title {
+  color: #ffe08a;
+}
+.mb .mbx-modal .mb-chip {
+  --ink: #232a4d;
+  color: var(--t, #232a4d);
+}
+.mb .mbx-modal .mb-inset {
+  background: var(--bg, rgba(255, 255, 255, 0.08));
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+  color: #fff;
+}
+.mb .mbx-modal .mb-bar {
+  background: rgba(255, 255, 255, 0.12);
+  box-shadow: none;
+}
+
+/* 누를 수 있는 곳 위에서는 가리키는 손 (기본 커서를 고르면 브라우저 손) */
+html[data-mbcur] .mb :is(button, a, label, select, summary, [role="button"], [tabindex="0"], input[type="checkbox"], input[type="range"], .cursor-pointer):not(:disabled),
+html[data-mbcur] .mb :is(button, a, label, select, summary, [role="button"], [tabindex="0"], input[type="checkbox"], input[type="range"], .cursor-pointer):not(:disabled) * {
+  cursor: var(--mb-cur-pt), pointer !important;
+}
+.mb :is(button, a, label, select, summary, [role="button"], input[type="checkbox"], input[type="range"]):not(:disabled) {
+  cursor: pointer;
+}
+
+/* 세련된 빛줄기: 부드러운 가장자리의 빛살 + 가운데에서 바깥으로 사라짐 + 은은한 번짐, 천천히 돎 (--ray 색) */
+.mb .mbx-soft {
+  --ray: rgba(255, 255, 255, 0.5);
+  background:
+    radial-gradient(circle, var(--ray) 0%, transparent 38%),
+    repeating-conic-gradient(from 0deg, transparent 0deg, var(--ray) 4deg, transparent 9deg, transparent 22deg);
+  -webkit-mask-image: radial-gradient(circle, #000 8%, rgba(0, 0, 0, 0.55) 30%, transparent 62%);
+  mask-image: radial-gradient(circle, #000 8%, rgba(0, 0, 0, 0.55) 30%, transparent 62%);
+  filter: blur(1.5px);
+  opacity: 0.55;
+  border-radius: 50%;
+  animation: mbx-spin 40s linear infinite;
+}

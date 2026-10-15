@@ -273,7 +273,7 @@ export function RoomTools({ room, me, onLeave, inGame, vertical, glass = false }
       )}
       {chat && <ChatBox room={room} me={me} side={vertical} />}
       {askLeave && (
-        <div className={`mb-box absolute z-50 w-[230px] p-3 text-[12px] ${vertical ? "top-[120px] left-[48px]" : "top-[44px] right-0"}`}>
+        <div className={`mbx-modal absolute z-50 w-[230px] p-3 text-[12px] ${vertical ? "top-[120px] left-[48px]" : "top-[44px] right-0"}`}>
           판 도중에 나가면 그 자리는 AI 가 이어서 하고 <b>진 것으로</b> 쳐요.
           <div className="mt-2 flex justify-end gap-1.5">
             <Btn className="h-[28px] px-3" onClick={() => setAskLeave(false)}>
@@ -360,7 +360,7 @@ export function SoundButton({ up = false, side = false, glass = false }: { up?: 
         <Icon n={p.mute ? "mute" : "speaker"} size={15} />
       </Btn>
       {open && (
-        <div className={`mb-box absolute z-50 w-[220px] p-3 text-[12px] text-[#232a4d] ${side ? "top-0 left-[48px]" : up ? "bottom-[44px] left-0" : "top-[44px] right-0"}`} onPointerLeave={() => setOpen(false)}>
+        <div className={`mbx-modal absolute z-50 w-[220px] p-3 text-[12px] ${side ? "top-0 left-[48px]" : up ? "bottom-[44px] left-0" : "top-[44px] right-0"}`} onPointerLeave={() => setOpen(false)}>
           {(["bgm", "sfx"] as const).map((k) => (
             <label key={k} className="mb-2 flex items-center gap-2">
               <span className="w-[44px]">{k === "bgm" ? "배경음" : "효과음"}</span>
