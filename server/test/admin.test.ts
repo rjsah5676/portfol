@@ -147,6 +147,6 @@ describe("관리자: 열려 있는 방", () => {
     expect((await close("sketch", sk)).body).toEqual({ closed: false });
     expect((await close("fight", f)).body).toEqual({ closed: true });
     expect((await close("chess", "x")).status).toBe(400);
-    expect((await s.http("/api/admin/live", { token: admin })).body).toEqual({ sketch: [], fight: [], poker: [], rhythm: [], defense: [] });
+    expect((await s.http("/api/admin/live", { token: admin })).body).toEqual({ sketch: [], fight: [], poker: [], rhythm: [], defense: [], marble: [] });
   });
 });

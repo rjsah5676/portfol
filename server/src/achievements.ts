@@ -3,6 +3,7 @@ import type { UserDoc } from "./users";
 import { START_MONEY } from "../../web/src/lib/poker/rules";
 import { RHYTHM_CHARTS } from "./http/rhythmCharts";
 import { FIGHT_CHAR_NAMES, type AchGame } from "../../web/src/lib/points";
+import { CHAR as MARBLE_CHAR } from "../../web/src/lib/marble/data";
 
 /*
  * 업적이 보는 숫자를 기존 기록에서 계산 (업적 정의는 web/src/lib/points.ts 의 ACHIEVEMENTS).
@@ -98,6 +99,22 @@ export async function metricsOf(db: Database, uid: string, game: AchGame): Promi
     m["sketch.fakeFound"] = k.fakeFound ?? 0;
     m["sketch.fooled"] = k.fooled ?? 0;
     m["sketch.relay"] = k.relay ?? 0;
+  }
+
+  if (game === "marble") {
+    const d = (await users.findOne({ _id: uid }, { projection: { "stats.marble": 1 } })) as (Doc & { stats?: { marble?: { games?: number; wins?: number; lm?: number; mono?: number } } }) | null;
+    const s = d?.stats?.marble ?? {};
+    m["marble.games"] = s.games ?? 0;
+    m["marble.wins"] = s.wins ?? 0;
+    m["marble.lm"] = s.lm ?? 0;
+    m["marble.mono"] = s.mono ?? 0;
+    // 판 밖 성장 (games/marble/meta.ts 의 marble_profile)
+    const pf = (await db.col("marble_profile").findOne({ _id: uid } as never, { projection: { chars: 1, pulls: 1 } })) as { chars?: Record<string, { lv: number }>; pulls?: { char?: number; item?: number } } | null;
+    const chars = Object.entries(pf?.chars ?? {}).filter(([id]) => MARBLE_CHAR[id]);
+    m["marble.chars"] = chars.length;
+    m["marble.ssr"] = chars.filter(([id]) => MARBLE_CHAR[id].grade === "SSR" || MARBLE_CHAR[id].grade === "UR").length;
+    m["marble.maxlv"] = chars.filter(([, c]) => c.lv >= 5).length;
+    m["marble.pulls"] = (pf?.pulls?.char ?? 0) + (pf?.pulls?.item ?? 0);
   }
 
   return m;

@@ -43,13 +43,14 @@ export const POKER_EXCHANGE = {
 /* ─────────────── 상점 ─────────────── */
 
 /** 포인트를 쓰는 게임 (상점이 들어갈 곳). 지금 화면까지 붙은 건 포커 */
-export type PointGame = "poker" | "fight" | "defense" | "rhythm" | "sketch";
+export type PointGame = "poker" | "fight" | "defense" | "rhythm" | "sketch" | "marble";
 export const POINT_GAMES: Record<PointGame, string> = {
   poker: "ANIME POKER",
   fight: "PIXEL FIGHT",
   defense: "PIXEL LUCKY DEFENSE",
   rhythm: "BEAT DASH",
   sketch: "DOODLE PARTY",
+  marble: "PIXEL MARBLE",
 };
 
 /**
@@ -205,7 +206,7 @@ export const shopFor = (game: PointGame, kind: ShopItem["kind"], ref: string) =>
 /* ─────────────── 업적 ─────────────── */
 
 /** 업적이 있는 게임 (게임 머리말의 [업적] 버튼) */
-export type AchGame = "poker" | "fight" | "defense" | "rhythm" | "sketch";
+export type AchGame = "poker" | "fight" | "defense" | "rhythm" | "sketch" | "marble";
 
 /**
  * 업적이 보는 숫자 (서버가 기록에서 계산 — server/src/achievements.ts)
@@ -257,7 +258,15 @@ export type AchMetric =
   | "sketch.fakeWin"
   | "sketch.fakeFound"
   | "sketch.fooled"
-  | "sketch.relay";
+  | "sketch.relay"
+  | "marble.games"
+  | "marble.wins"
+  | "marble.lm"
+  | "marble.mono"
+  | "marble.chars"
+  | "marble.ssr"
+  | "marble.maxlv"
+  | "marble.pulls";
 
 export interface Achievement {
   id: string;
@@ -607,6 +616,25 @@ export const ACHIEVEMENTS: Achievement[] = [
   a("sketch", "fake-found-10", "가짜 사냥꾼", "가짜 화가를 맞게 지목 10번", "sketch.fakeFound", 10, 750),
   a("sketch", "fooled-10", "타고난 거짓말쟁이", "그림 속 거짓말에서 내 가짜 제목으로 10번 속이기", "sketch.fooled", 10, 750),
   a("sketch", "relay-5", "릴레이 완주", "그림 릴레이 5판 끝까지", "sketch.relay", 5, 450),
+
+  // PIXEL MARBLE
+  a("marble", "games-1", "첫 여행", "한 판 끝까지 하기", "marble.games", 1, 150),
+  a("marble", "games-10", "동네 한 바퀴", "10판 끝까지 하기", "marble.games", 10, 450),
+  a("marble", "games-50", "여행 중독", "50판 끝까지 하기", "marble.games", 50, 1500),
+  a("marble", "games-200", "세계 일주", "200판 끝까지 하기", "marble.games", 200, 4500),
+  a("marble", "wins-1", "첫 승리", "1등 하기", "marble.wins", 1, 300),
+  a("marble", "wins-20", "부동산 고수", "1등 20번", "marble.wins", 20, 1500),
+  a("marble", "wins-100", "마블 재벌", "1등 100번", "marble.wins", 100, 4500),
+  a("marble", "lm-10", "건축가", "랜드마크 10개 세우기", "marble.lm", 10, 600),
+  a("marble", "lm-50", "스카이라인", "랜드마크 50개 세우기", "marble.lm", 50, 2000),
+  a("marble", "mono-1", "독점의 맛", "독점(트리플 · 라인 · 명소)으로 이기기", "marble.mono", 1, 450),
+  a("marble", "mono-20", "독점 재벌", "독점으로 20번 이기기", "marble.mono", 20, 2500),
+  a("marble", "chars-5", "친구 모으기", "캐릭터 5종 모으기", "marble.chars", 5, 450),
+  a("marble", "chars-10", "캐릭터 도감", "캐릭터 10종 모으기", "marble.chars", 10, 1500),
+  a("marble", "ssr-1", "반짝이는 카드", "SSR 이상 캐릭터 얻기", "marble.ssr", 1, 600),
+  a("marble", "ssr-5", "빛나는 파티", "SSR 이상 캐릭터 5종", "marble.ssr", 5, 3000),
+  a("marble", "maxlv-1", "풀강의 맛", "캐릭터 하나 5강까지", "marble.maxlv", 1, 1500),
+  a("marble", "pulls-100", "뽑기 장인", "뽑기 100번 (캐릭터 · 아이템)", "marble.pulls", 100, 900),
 ];
 /** 반복형 업적: 일회형 마지막 단계(from)를 넘은 뒤로 step 만큼 쌓일 때마다 reward */
 const r = (game: AchGame, id: string, title: string, unit: string, metric: AchMetric, from: number, step: number, reward: number): Achievement => ({
@@ -636,6 +664,8 @@ ACHIEVEMENTS.push(
   r("sketch", "drew", "인기 화가 · 계속", "번", "sketch.drew", 100, 50, 350),
   r("sketch", "wins", "두들 챔피언 · 계속", "번", "sketch.wins", 10, 10, 750),
   r("sketch", "points", "점수 부자 · 계속", "점", "sketch.points", 20_000, 20_000, 400),
+  r("marble", "games", "세계 일주 · 계속", "판", "marble.games", 200, 100, 750),
+  r("marble", "wins", "마블 재벌 · 계속", "승", "marble.wins", 100, 50, 1500),
 );
 export const achievementOf = (id: unknown) =>
   ACHIEVEMENTS.find((x) => x.id === id);
@@ -707,6 +737,9 @@ export const DAILY_MISSIONS: DailyMission[] = [
   dm("sketch", "drew", "내 그림이 맞혀지기 2번", "sketch.drew", 2, 80),
   dm("sketch", "win", "1등 하기 (3명 이상 판)", "sketch.wins", 1, 100),
   dm("sketch", "likes", "내 그림에 따봉 2개 받기", "sketch.likes", 2, 80),
+  dm("marble", "game", "한 판 끝까지 하기", "marble.games", 1, 90),
+  dm("marble", "games", "세 판 끝까지 하기", "marble.games", 3, 180),
+  dm("marble", "win", "1등 하기", "marble.wins", 1, 120),
 ];
 /** 일일 미션이 보는 숫자 (기준값을 적어 둘 것) */
 export const DAILY_METRICS = [...new Set(DAILY_MISSIONS.map((x) => x.metric))];
@@ -779,6 +812,8 @@ export function pointReason(r: Pick<PointLogRow, "reason" | "ref">): string {
                   : r.ref?.startsWith("weekly:")
                     ? "디펜스 · 주간 도전 (종료)"
                     : "디펜스";
+    case "marble":
+      return r.ref?.startsWith("store:") ? "마블 · 상점" : "PIXEL MARBLE";
     case "mail":
       return `우편 · ${r.ref ?? ""}`;
     default:

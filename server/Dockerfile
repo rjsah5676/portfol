@@ -22,6 +22,8 @@ COPY web/src/lib/poker /repo/web/src/lib/poker
 COPY web/src/lib/fight /repo/web/src/lib/fight
 # 글리치 디펜스: 랭킹 기록 검증 · 멀티 순위 (서버가 같은 시뮬을 다시 돌림, games/defense.ts)
 COPY web/src/lib/defense /repo/web/src/lib/defense
+# 픽셀 마블: 판 엔진 · AI · 가챠 (서버가 판을 돌림, games/marble)
+COPY web/src/lib/marble /repo/web/src/lib/marble
 # 포인트 (상품 · 업적 · 환전 정의)
 COPY web/src/lib/points.ts /repo/web/src/lib/points.ts
 COPY web/src/lib/mail.ts /repo/web/src/lib/mail.ts

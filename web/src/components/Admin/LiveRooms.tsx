@@ -25,6 +25,7 @@ const GAMES: { key: LiveGame; label: string }[] = [
   { key: "poker", label: "포커" },
   { key: "rhythm", label: "BEAT DASH" },
   { key: "defense", label: "디펜스 멀티" },
+  { key: "marble", label: "픽셀 마블" },
 ];
 const STATUS: Record<string, { label: string; on: boolean }> = {
   waiting: { label: "대기", on: false },

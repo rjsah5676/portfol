@@ -24,7 +24,7 @@ export function pointsRouter({ auth, points }: Deps): Router {
     if (!user || user.anonymous) throw unauthenticated();
     return user;
   };
-  const game = z.enum(["poker", "fight", "defense", "rhythm", "sketch"]);
+  const game = z.enum(["poker", "fight", "defense", "rhythm", "sketch", "marble"]);
 
   r.get(
     "/",

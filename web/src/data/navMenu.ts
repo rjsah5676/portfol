@@ -10,6 +10,7 @@ import imgRhythm from "@/img/menu/rhythm.jpg";
 import imgSketch from "@/img/menu/sketch.jpg";
 import imgPoker from "@/img/menu/poker.jpg";
 import imgDefense from "@/img/menu/defense.jpg";
+import imgMarble from "@/img/menu/marble.jpg";
 import imgLadder from "@/img/menu/ladder.jpg";
 import imgRoulette from "@/img/menu/roulette.jpg";
 import imgCalorie from "@/img/menu/calorie.jpg";
@@ -108,6 +109,14 @@ export const NAV_GROUPS: NavGroup[] = [
         label: "PIXEL LUCKY DEFENSE",
         desc: "소환 · 합성으로 막는 운빨 랜덤 디펜스, 랭킹 · 멀티",
         icon: "👾",
+        featured: true,
+      },
+      {
+        href: "/games/marble",
+        image: imgMarble,
+        label: "PIXEL MARBLE",
+        desc: "주사위로 땅을 사고 짓고 인수하는 픽셀 보드게임, 1:1 · AI 대전",
+        icon: "🎲",
         featured: true,
       },
       {
