@@ -241,7 +241,7 @@ export function aiForRating(r: number, charId?: string): AILevel {
  * AI 지문: 랭크전 봇전은 서버가 같은 경기를 다시 돌려 확인하니, 브라우저와 서버의 AI가 똑같아야 함.
  * 단계 값·보정·콤보 길은 자동으로 들어가고, next() 같은 판단 코드를 바꿨으면 AI_REV 를 올릴 것.
  */
-const AI_REV = 11;
+const AI_REV = 12;
 export const AI_ID = (() => {
   const str = AI_REV + JSON.stringify([AI_LEVELS, RANK_TIERS, AI_RATING, ADJ_AT, CHAR_ADJ, ROUTES, ROUTE_CAP, HUMAN]);
   let h = 0x811c9dc5;
@@ -778,10 +778,7 @@ export class FightAI {
         out |= toward;
         // 공중 연속: 약 위주로 이어 치다 마지막은 발차기 (박자: 판정이 맞은 직후에 누름)
         if (dist < 48 && dy > -25 && dy < 70 && o.stun >= c.moves.J.startup + 2 && this.r() < 0.35 + L.combo * 0.6) {
-          if (c.moves.S.air?.rewind && f.cd === 0 && f.airUsed + f.airK >= 4 && o.floatT < 90 && this.r() < 0.4 + L.combo * 0.6) {
-            // 포르테: 공중 약 · 발차기를 다 쓰면 태엽 되감기로 상대와 같이 다시 떠올라 이어 침
-            press(IN.C);
-          } else if (c.moves.S.air?.hug && f.cd === 0 && !o.hugd && (o.combo >= 3 || f.airUsed >= 3) && this.r() < 0.5 + L.combo * 0.5) {
+          if (c.moves.S.air?.hug && f.cd === 0 && !o.hugd && (o.combo >= 3 || f.airUsed >= 3) && this.r() < 0.5 + L.combo * 0.5) {
             // 곰 포옹으로 마무리: 안고 내리꽂아 기절 → 땅에서 이어 침
             press(IN.C);
           } else if (hu > 0 && f.meter >= 100 && o.combo >= 4 && this.r() < hu && this.ultHits(s, me, 0)) {
@@ -1285,6 +1282,11 @@ export class FightAI {
     // 공중 아이덴티티로 자리 바꾸기 (건모 Alt+Tab): 상대 위에서 내려오는 중이면 가끔
     if (f.st === "jump" && f.cd === 0 && c.moves.S.air?.swap && dist < 50 && dy < -10 && dy > -70 && this.r() < L.aggro * 0.2) {
       out |= toward;
+      press(IN.C);
+      return finish();
+    }
+    // 포르테 되감기 낙하: 아래 앞쪽 상대에게 내리찍음 (빗나가도 되감겨 돌아오니 부담 없이)
+    if (f.st === "jump" && f.cd === 0 && c.moves.S.air?.rwDive && dy < -30 && dy > -200 && dist > 10 && dist < 130 && o.st !== "down" && faceOk && this.r() < 0.03 + L.aggro * 0.06) {
       press(IN.C);
       return finish();
     }

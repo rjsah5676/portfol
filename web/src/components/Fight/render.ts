@@ -1060,6 +1060,13 @@ export class FightRenderer {
           });
       }
     }
+    // 포르테 되감기 낙하: 내리찍는 동안 위로 남는 분홍 · 금빛 줄 (되감겨 돌아갈 길)
+    if (cm?.air?.rwDive && f.st === "atk" && f.mv === "S" && f.aerial && f.dive && s.f % 2 === 0)
+      for (let k = 0; k < 2; k++)
+        this.parts.push({
+          x: x + (Math.random() - 0.5) * 18, y: y - 20 - Math.random() * 30, vx: 0, vy: -1.6, life: 10, max: 10,
+          color: Math.random() < 0.5 ? "#F7A8C8" : "#FFE08A", size: 1.2, kind: "vstreak",
+        });
     // 이반 철곰권 기 모으기: 몸 둘레로 붉은 기가 소용돌이 (모을수록 커지고, 다 모으면 번쩍임)
     if (CHARS[f.ch].id === "ivan" && cm?.charge && f.mv === "S" && !f.aerial && f.chg > 0 && f.t <= cm.charge.at + 1) {
       const full = f.chg >= cm.charge.max;

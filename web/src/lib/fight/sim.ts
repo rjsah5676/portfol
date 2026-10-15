@@ -80,8 +80,6 @@ export const IN = {
 const IN_MASK = 511;
 
 const HIST = 24;
-/** 높이 기록 칸 수 (포르테 공중 「태엽 되감기」가 몇 프레임 전 높이로 되감을 수 있나) */
-const HH = 32;
 const INTRO = 100;
 const ROUND_END = 170;
 export const ROUND_SEC = 90;
@@ -302,10 +300,9 @@ export interface Fighter {
   inv: number;
   /** 최근 입력 (마지막이 이번 프레임) */
   hist: number[];
-  /** 최근 자리 · 체력 (마지막이 이번 프레임, HH 칸) — 포르테 「태엽 되감기」 */
-  hh: number[];
-  hx: number[];
-  hhp: number[];
+  /** 포르테 공중 「되감기 낙하」를 시작한 자리 (내리찍은 뒤 여기로 되돌아옴) */
+  rwX: number;
+  rwH: number;
   /** 앙코르 기록: 최근 내가 맞힌 타격 [프레임, 피해] 쌍 (오래된 건 지움) */
   enc: number[];
   /** 앙코르 진행 프레임 (0 = 아님) · 다시 넣을 타격 [몇 프레임째, 피해] 쌍 · 붙잡아 둔 상대 자리 */
@@ -543,9 +540,8 @@ function newFighter(ch: number, side: 0 | 1, map: MapDef): Fighter {
     recov: 0,
     inv: 0,
     hist: new Array(HIST).fill(0),
-    hh: new Array(HH).fill(h),
-    hx: new Array(HH).fill(x),
-    hhp: new Array(HH).fill(CHARS[ch].hp),
+    rwX: x,
+    rwH: h,
     enc: [],
     encT: 0,
     encQ: [],
@@ -601,13 +597,13 @@ export function clone(s: State): State {
     ev: s.ev.slice(),
   };
 }
-const cloneF = (f: Fighter): Fighter => ({ ...f, hist: f.hist.slice(), hh: f.hh.slice(), hx: f.hx.slice(), hhp: f.hhp.slice(), enc: f.enc.slice(), encQ: f.encQ.slice() });
+const cloneF = (f: Fighter): Fighter => ({ ...f, hist: f.hist.slice(), enc: f.enc.slice(), encQ: f.encQ.slice() });
 
 /**
  * 이 빌드의 게임 데이터 지문 (캐릭터 성능·맵) — 온라인에서 서로 다른 빌드끼리 붙었는지 확인.
  * 계산 방식(sim.ts)만 바꿨을 땐 SIM_REV를 올릴 것.
  */
-const SIM_REV = 26;
+const SIM_REV = 27;
 export const BUILD_ID = (() => {
   const str = SIM_REV + JSON.stringify(CHARS.map((c) => [c.hp, c.walk, c.jumpVx, c.dash, c.cd, c.glide, c.hurt, c.width, c.moves])) + JSON.stringify(MAPS.map((m) => [m.plats, m.spawn]));
   let h = 2166136261;
@@ -764,7 +760,7 @@ export function hurtRect(f: Fighter): Rect | null {
 /** 지금 판정이 살아 있는 공격 박스 */
 export function hitRect(f: Fighter): Rect | null {
   const m = moveOf(f);
-  if (f.st !== "atk" || !m || m.proj || m.summon || m.rewind || f.hit) return null;
+  if (f.st !== "atk" || !m || m.proj || m.summon || f.hit) return null;
   if (f.t < m.startup || f.t >= m.startup + m.active) return null;
   return boxRect(f, m.box);
 }
@@ -826,6 +822,7 @@ function startMove(s: State, i: number, id: MoveId) {
   f.aerial = airborneS(s, f) ? 1 : 0;
   const m = moveOf(f)!;
   if (f.aerial && m.hover) f.vh = Math.max(f.vh, m.hover);
+  if (f.aerial && m.rwDive) ((f.rwX = f.x), (f.rwH = f.h));
   if (id === "S") f.cd = m.cd ?? charOf(f).cd; // (공중 버전만 재사용 대기가 다를 수 있음)
   f.chg = 0;
   if (id === "G") f.meter = Math.max(0, f.meter - GUARD_COUNTER_COST);
@@ -1181,7 +1178,6 @@ function control(s: State, i: number) {
       }
       // 연타기: 일정 프레임마다 다시 맞을 수 있게
       if (m.multi && f.t > m.startup && (f.t - m.startup) % m.multi === 0) f.hit = 0;
-      if (m.rewind && f.t === m.startup) rewindAir(s, i, m.rewind);
       if (m.proj && f.t === m.startup) {
         const d = m.proj;
         // 공중에서 쏘면 앞쪽 아래로 비스듬히 내리꽂음 (flat 탄은 수평)
@@ -1230,8 +1226,6 @@ function control(s: State, i: number) {
           return;
         }
       }
-      // 태엽 되감기 뒤: 남은 동작 없이 바로 공중 약 · 발차기 (공중 콤보를 끊김 없이 이어 감)
-      if (m.rewind && f.t > m.startup && !onGround(s, f) && airAttack(s, i)) return;
       // 공중 연속 공격: 공중 약·발차기를 맞히면 짧은 창 안에 다음 공중 약·발차기로 이어 침 (약 4 + 발차기 2까지)
       if (air && f.hit && (f.mv === "J" || f.mv === "K") && f.t > m.startup && f.t <= m.startup + m.active + AIR_CHAIN_WIN) {
         if (airAttack(s, i)) return;
@@ -1398,6 +1392,11 @@ function landed(s: State, i: number, f: Fighter) {
   f.airDash = 0;
   f.dashT = 0;
   const lm = moveOf(f);
+  // 포르테 되감기 낙하: 땅에 닿으면 (판정이 나온 뒤) 시작한 공중 자리로 되돌아감
+  if (f.st === "atk" && f.aerial && f.mv === "S" && lm?.rwDive && f.t >= lm.startup) {
+    rewindDive(s, i);
+    return;
+  }
   // 땅에 닿기 직전에 낸 공중 아이덴티티: 판정이 나오기 전에 착지하면 아무것도 안 나가고 재사용 대기만 돌던 것 (10.16 제나)
   // → 땅 버전으로 이어서 냄 (지난 시작 프레임은 그대로 셈, 재사용 대기는 땅 버전 값)
   if (f.st === "atk" && f.aerial && f.mv === "S" && lm && f.t < lm.startup && !f.hit) {
@@ -1542,10 +1541,6 @@ function respawn(s: State, i: number) {
   f.mark = 0;
   f.trapT = 0;
   f.inv = again ? 0 : RESPAWN_INV;
-  // 되감기 기록도 새 자리로 (떨어지던 자리로 되감지 않게)
-  f.hh.fill(f.h);
-  f.hx.fill(f.x);
-  f.hhp.fill(f.hp);
 }
 
 function physics(s: State, i: number) {
@@ -2447,52 +2442,40 @@ function checkKO(s: State) {
 }
 
 /**
- * 포르테 공중 「태엽 되감기」: 내 높이를 back 프레임 전으로 (더 높았을 때만) + 공중 약 · 발차기 횟수 초기화.
- * 가까운 상대가 공중에서 맞는 중(공중 콤보)이면 상대 높이도 되감고 경직을 이어 줌
+ * 포르테 공중 「되감기 낙하」: 내리찍기가 맞거나(막혀도) 땅에 닿으면 시작한 공중 자리로 되돌아감 (빈틈 없음).
+ * 맞혔으면 상대를 내 앞 · 내 높이 쪽으로 끌어올려 띄움 → 바로 공중 콤보
  */
-function rewindAir(s: State, i: number, back: number) {
+function rewindDive(s: State, i: number) {
   const f = s.p[i];
   const o = s.p[1 - i];
-  const k = Math.max(0, HH - 1 - back);
-  // 콤보 중이면 (가까운 상대가 맞는 중) 둘이 같이 — 판단은 되감기 전 자리로
-  const combo = o.st === "hit" && o.combo > 0 && o.hp > 0 && !o.kd && Math.abs(o.x - f.x) < 160 * SUB;
+  const hit = f.hit && o.st === "hit" && !o.kd && o.hp > 0;
   const fx = f.x,
     fh = f.h;
-  if (combo) {
-    // 같이 되감기: 서로 자리(간격)는 그대로 두고, 둘 다 지난 0.5초 중 가장 높았던 높이까지 거슬러 올라감 → 그대로 이어 침
-    // (0.5초 전 자리로 각자 돌아가면 띄우기 전 자리가 섞여 간격이 엉망이 됨)
-    let top = f.h;
-    for (let j = k; j < HH; j++) top = Math.max(top, f.hh[j]);
-    const dh = top - f.h;
-    f.h += dh;
-    o.h += dh;
-    o.x = f.x + (o.x - f.x);
-  } else {
-    f.x = f.hx[k];
-    f.h = f.hh[k];
-  }
+  f.x = f.rwX;
+  f.h = f.rwH;
   f.vx = 0;
   f.vh = 0;
+  f.dive = 0;
+  f.st = "jump";
+  f.mv = "";
+  f.t = 0;
+  f.aerial = 0;
   f.airUsed = 0;
   f.airK = 0;
   f.airS = 0;
-  // 되감는 동안 잃은 체력의 절반을 되찾음
-  const lost = f.hhp[k] - f.hp;
-  if (lost > 0) f.hp = Math.min(CHARS[f.ch].hp, f.hp + (lost >> 1));
-  // 이 프레임부터 기록도 되감긴 자리로 (바로 또 써도 같은 자리)
-  f.hh.fill(f.h);
-  f.hx.fill(f.x);
-  f.hhp.fill(f.hp);
-  s.ev.push({ k: "rewind", p: i, x: f.x, h: f.h, v: Math.max(0, lost >> 1) });
-  if (fx !== f.x || fh !== f.h) s.ev.push({ k: "rewind", p: i, x: fx, h: fh, v: -1 });
-  if (combo) {
+  s.ev.push({ k: "rewind", p: i, x: fx, h: fh, v: -1 });
+  s.ev.push({ k: "rewind", p: i, x: f.x, h: f.h, v: 0 });
+  if (hit) {
+    // 끌어올리기: 내 높이 조금 아래까지 솟구치게 (천천히 떨어지는 상태), 가로로는 내 앞으로
+    const dh = Math.max(0, f.h - 24 * SUB - o.h);
+    // 약 12프레임 만에 내 앞 높이까지 올라오게 (꼭대기가 거기쯤) — 바로 공중 약으로 받아 침
+    o.vh = Math.max(isqrt(2 * FLOAT_G * 60 * SUB), Math.trunc(dh / 12) + FLOAT_G * 6);
     o.vx = 0;
-    o.vh = 0;
-    o.stun = Math.max(o.stun, 26);
-    // 공중이면 띄운 상태로 (같이 느리게 떨어지며 이어 침)
-    if (airborneS(s, o)) ((o.float = 1), (f.juggle = JUGGLE_HANG));
-    o.hh.fill(o.h);
-    o.hx.fill(o.x);
+    o.float = 1;
+    o.stun = Math.max(o.stun, LAUNCH_STUN - 6);
+    o.pullX = f.x + f.face * 34 * SUB;
+    o.pullT = 10;
+    f.juggle = JUGGLE_HANG;
     s.ev.push({ k: "rewind", p: 1 - i, x: o.x, h: o.h, v: -2 });
   }
 }
@@ -2640,14 +2623,6 @@ export function step(s: State, input: [number, number]): State {
       const f = s.p[i];
       if (f.zap > 0 && --f.zap === 0) zapBurst(s, 1 - i);
     }
-    for (const f of s.p) {
-      f.hh.shift();
-      f.hh.push(f.h);
-      f.hx.shift();
-      f.hx.push(f.x);
-      f.hhp.shift();
-      f.hhp.push(f.hp);
-    }
     control(s, 0);
     control(s, 1);
   } else {
@@ -2665,6 +2640,11 @@ export function step(s: State, input: [number, number]): State {
   if (s.phase === "fight") {
     projectiles(s);
     attacks(s);
+    for (let i = 0; i < 2; i++) {
+      const f = s.p[i];
+      // (낭떠러지로 내리찍어 떨어지는 중이면 260px 아래에서 되감음)
+      if (f.st === "atk" && f.mv === "S" && f.aerial && moveOf(f)?.rwDive && (f.hit || (f.dive && f.rwH - f.h > 260 * SUB))) rewindDive(s, i);
+    }
     encoreStep(s);
     // 경직에서 풀린 프레임에 안 맞았으면 콤보 끝
     for (const f of s.p) {
