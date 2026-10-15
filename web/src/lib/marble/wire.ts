@@ -1,5 +1,5 @@
 /*
- * PIXEL MARBLE 서버 ↔ 화면 주고받는 모양 (server/src/games/marble · web/src/realtime/marble.ts 가 같이 씀)
+ * DICE TOWN 서버 ↔ 화면 주고받는 모양 (server/src/games/marble · web/src/realtime/marble.ts 가 같이 씀)
  */
 import type { Loadout } from "./data";
 import type { Ev, Game } from "./engine";
@@ -60,6 +60,8 @@ export interface RoomWire {
   seq: number;
   result: ResultRow[] | null;
   chat: ChatRow[];
+  /** 강퇴된 uid */
+  kicked?: string[];
   /** 보낸 시각 (서버) */
   now: number;
 }
@@ -90,6 +92,10 @@ export interface ProfileWire {
   shop: Record<string, number>;
   packs: Record<string, number>;
   winToday: boolean;
+  /** 일일 패스 (없거나 끝났으면 null) · today 오늘 받음 */
+  pass: { until: string; today: boolean; left: number } | null;
+  /** 방금 일일 패스로 받은 것 (프로필 불러올 때 한 번) */
+  passGot?: { stars: number; parts: number };
   games: number;
   wins: number;
 }

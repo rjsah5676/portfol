@@ -25,11 +25,11 @@ export default function MarblePage() {
       <div className="mx-auto max-w-[1076px] px-3 pt-6 pb-24 sm:px-6">
         <GameHeader
           icon="🎲"
-          title="PIXEL MARBLE"
-          en="PIXEL FIGHT 외전 · BETA"
+          title="DICE TOWN"
+          en="PIXEL FIGHT 세계관 · BETA"
           accent="#FFC94A"
-          desc="주사위를 굴려 땅을 사고 짓고 인수하는 픽셀 보드게임"
-          tags={["보드게임", "부루마블 스타일", "1:1 대전", "AI 대전", "웹 보드게임"]}
+          desc="주사위를 굴려 땅을 사고 짓고 인수하는 보드게임"
+          tags={["보드게임", "부루마블 스타일", "최대 4명", "AI 대전", "웹 보드게임"]}
           ach="marble"
           guide={MARBLE_GUIDE}
           rank={{

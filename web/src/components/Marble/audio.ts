@@ -1,5 +1,5 @@
 /**
- * PIXEL MARBLE 소리 — 효과음(Web Audio) · 배경음(<audio> 반복) · 음량 설정.
+ * DICE TOWN 소리 — 효과음(Web Audio) · 배경음(<audio> 반복) · 음량 설정.
  * 파일: public/marble/sfx/<이름>.mp3 · public/marble/bgm/<이름>.mp3 (목록은 아래 SFX · BGM).
  * 파일이 아직 없거나 못 불러오면 효과음은 짧은 합성음(삑 · 딸깍)으로 대신하고, 배경음은 조용히 넘어감.
  * 첫 누르기에서 unlock() (Stage 가 부름). 음량 · 끄기는 이 기기에 저장.
@@ -197,6 +197,7 @@ export function playBgm(name: string) {
     bgmEl.loop = true;
   }
   bgmEl.src = src;
+  bgmEl.loop = name !== "win";
   bgmEl.volume = getPrefs().mute ? 0 : getPrefs().bgm * 0.6;
   void bgmEl.play().catch(() => {});
 }

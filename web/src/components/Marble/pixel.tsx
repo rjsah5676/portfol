@@ -5,7 +5,7 @@ import { GRADE_COLOR, type Grade } from "@/lib/marble/data";
 import { sfx } from "./audio";
 
 /*
- * PIXEL MARBLE 공용 도트 UI — 도트 아이콘(문자 비트맵 → SVG 네모) · 버튼 · 상자 · 등급 · 재화.
+ * DICE TOWN 공용 도트 UI — 도트 아이콘(문자 비트맵 → SVG 네모) · 버튼 · 상자 · 등급 · 재화.
  * 이모지 대신 여기 아이콘을 씀 (어느 기기에서나 같은 도트로 보이게).
  */
 
@@ -386,11 +386,52 @@ export function Stars({ lv, max = 5, size = 10 }: { lv: number; max?: number; si
 export const fmt = (n: number) => Math.round(n).toLocaleString("ko-KR");
 
 /** 재화 한 줄 */
+/** 재화 그림 (매끈한 SVG) — 별사탕 · 부품 · GP · 티켓 · 판 돈 */
+export function CurIcon({ k, size = 16 }: { k: "star" | "parts" | "gp" | "ticket" | "coin"; size?: number }) {
+  const ink = "#262b52";
+  const body =
+    k === "star" ? (
+      <>
+        <path d="M12 2.5l2.7 5.6 6.1.8-4.4 4.3 1 6.1L12 16.4l-5.4 2.9 1-6.1-4.4-4.3 6.1-.8z" fill="#ff7fb8" stroke={ink} strokeWidth={1.4} strokeLinejoin="round" />
+        <path d="M9.5 8.8l1.5-.2" stroke="#fff" strokeWidth={1.6} strokeLinecap="round" />
+      </>
+    ) : k === "parts" ? (
+      <>
+        <path d="M12 2.8l1.6 2.3 2.7-.7.6 2.7 2.6 1-1 2.6 1.8 2.1-2.4 1.4.2 2.8-2.8-.1-1.3 2.5-2-1.9-2.6 1.1-.7-2.7-2.7-.8 1.1-2.6L4 10.2l2.4-1.4-.3-2.8 2.8.2L10.2 3.7z" fill="#b9c4dc" stroke={ink} strokeWidth={1.3} strokeLinejoin="round" />
+        <circle cx="12" cy="12" r="3.2" fill="#eef2fb" stroke={ink} strokeWidth={1.3} />
+      </>
+    ) : k === "gp" ? (
+      <>
+        <circle cx="12" cy="12" r="9" fill="#3fcf8e" stroke={ink} strokeWidth={1.4} />
+        <circle cx="12" cy="12" r="6.6" fill="none" stroke="#c9ffe6" strokeWidth={1.2} />
+        <text x="12" y="15.3" textAnchor="middle" fontSize="8.5" fontWeight="900" fill={ink}>
+          G
+        </text>
+      </>
+    ) : k === "ticket" ? (
+      <>
+        <path d="M3 7h18v3a2 2 0 000 4v3H3v-3a2 2 0 000-4z" fill="#ffc94a" stroke={ink} strokeWidth={1.4} strokeLinejoin="round" />
+        <path d="M14 7v10" stroke={ink} strokeWidth={1.2} strokeDasharray="1.6 1.6" />
+        <path d="M8.5 10l.9 1.8 2 .3-1.4 1.4.3 2-1.8-1-1.8 1 .3-2-1.4-1.4 2-.3z" fill="#ff7fb8" />
+      </>
+    ) : (
+      <>
+        <circle cx="12" cy="12" r="9" fill="#ffd23a" stroke={ink} strokeWidth={1.4} />
+        <circle cx="12" cy="12" r="6.4" fill="none" stroke="#fff1a8" strokeWidth={1.4} />
+        <path d="M10 8.5h3.2a1.8 1.8 0 010 3.6H10V8.5zm0 3.6h3.6a1.8 1.8 0 010 3.6H10z" fill="none" stroke={ink} strokeWidth={1.3} />
+      </>
+    );
+  return (
+    <svg viewBox="0 0 24 24" width={size} height={size} className="block shrink-0" aria-hidden>
+      {body}
+    </svg>
+  );
+}
+
 export function Cur({ k, n, size = 16 }: { k: "star" | "parts" | "gp" | "ticket" | "coin"; n: number | string; size?: number }) {
-  const icon = k === "star" ? "candy" : k === "parts" ? "gear" : k === "gp" ? "gp" : k === "ticket" ? "ticket" : "coin";
   return (
     <span className="inline-flex items-center gap-1 whitespace-nowrap">
-      <Icon n={icon} size={size} />
+      <CurIcon k={k} size={size} />
       <b>{typeof n === "number" ? fmt(n) : n}</b>
     </span>
   );

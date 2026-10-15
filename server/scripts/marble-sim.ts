@@ -1,5 +1,5 @@
 /*
- * PIXEL MARBLE 밸런스 시뮬 — AI 끼리 1:1 을 잔뜩 돌려 승률을 봄.
+ * DICE TOWN 밸런스 시뮬 — AI 끼리 1:1 을 잔뜩 돌려 승률을 봄.
  *
  *   npx tsx scripts/marble-sim.ts                     # 풀세팅(SSR 5강 + SSR 아이템 5강 둘) vs 전부 R 0강, 맵별
  *   npx tsx scripts/marble-sim.ts --mode mirror       # 같은 세팅끼리 (선 · 맵 치우침 확인, 50% 근처여야)
@@ -110,7 +110,7 @@ const lo = (char: string, clv: number, dice?: string | null, dlv = 0, buddy?: st
 const baseR = (items = true): Loadout =>
   lo(pickOf(charsOf("R")).id, 0, items ? pickOf(itemsOf("dice", "R")).id : null, 0, items ? pickOf(itemsOf("buddy", "R")).id : null, 0);
 
-console.log(`PIXEL MARBLE 시뮬 — 모드 ${MODE}, 맵당 ${N}판, TUNE ${JSON.stringify(TUNE)} ${opt("--rule", "")} ${ROUNDS ?? ""}`);
+console.log(`DICE TOWN 시뮬 — 모드 ${MODE}, 맵당 ${N}판, TUNE ${JSON.stringify(TUNE)} ${opt("--rule", "")} ${ROUNDS ?? ""}`);
 if (MODE === "full") {
   run("풀(UR5+SSR5×2) vs R0+R0×2", () => [lo(pickOf(charsOf("UR")).id, 5, pickOf(itemsOf("dice", "SSR")).id, 5, pickOf(itemsOf("buddy", "SSR")).id, 5), baseR()]);
   run("풀(SSR5+SSR5×2) vs R0+R0×2", () => [lo(pickOf(charsOf("SSR")).id, 5, pickOf(itemsOf("dice", "SSR")).id, 5, pickOf(itemsOf("buddy", "SSR")).id, 5), baseR()]);

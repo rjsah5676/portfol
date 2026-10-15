@@ -7,9 +7,10 @@ import type { RoomWire } from "@/lib/marble/wire";
 import { marble } from "@/realtime/marble";
 import { serverNow } from "@/lib/api/socket";
 import { getPrefs, onPrefs, setPrefs, sfx } from "./audio";
-import { Btn, GradeTag, Icon, PCOLOR, Stars, Win } from "./pixel";
+import { CURSOR_IDS, applyCursor, cursorName, cursorPreview, getCursor, setCursor } from "./cursor";
+import { Btn, GradeTag, Icon, PCOLOR, Stars } from "./pixel";
 import { useStage } from "./Stage";
-import Token from "./Token";
+import { CharHero, ItemBadge, XBtn, XChip, XGrade, XPanel } from "./ui";
 
 /*
  * 대기실 — 자리(최대 4) · 준비 · 방장 설정(맵 · 인원 · 바로 입장 허용 · AI 입장 허용 · AI 넣고 빼기) · 채팅.
@@ -32,126 +33,168 @@ export function WaitRoom({ room, me, onLeave }: { room: RoomWire; me: string; on
     const id = setInterval(() => tick((x) => x + 1), 200);
     return () => clearInterval(id);
   }, [room.startAt]);
+  const kicked = !!room.kicked?.includes(me);
+  const leave = useRef(onLeave);
+  useEffect(() => {
+    leave.current = onLeave;
+  }, [onLeave]);
+  useEffect(() => {
+    if (!kicked) return;
+    alert("방장이 방에서 내보냈어요.");
+    leave.current();
+  }, [kicked]);
   const count = room.startAt ? Math.max(0, Math.ceil((room.startAt - serverNow()) / 1000)) : 0;
   const opt = (o: Parameters<typeof marble.opts>[1]) => void marble.opts(room.id, o).catch((e) => alert((e as Error).message));
+  const seats = room.seats.length <= 2 ? "grid-cols-2" : "grid-cols-2";
   return (
-    <div className="mb-sky absolute inset-0">
-      <div className="absolute top-[10px] left-[12px] flex items-center gap-2">
-        <Btn className="h-[34px] px-3 text-[13px]" onClick={onLeave}>
-          <Icon n="back" size={12} /> 나가기
-        </Btn>
-        <div className="mb-wood px-3 py-1.5">
-          <b className="mb-title mb-out text-[17px] text-white">{room.name}</b>
-          {room.locked && <Icon n="lock" size={13} className="ml-1.5" />}
+    <div className="mbx absolute inset-0 overflow-hidden" style={{ background: "#120d33" }}>
+      {/* 배경: 고른 맵 그림을 흐리게 */}
+      <img src={`/marble/bg/${room.map}.webp`} alt="" className="absolute inset-0 h-full w-full scale-105 object-cover opacity-60 blur-[3px]" />
+      <div className="absolute inset-0 bg-gradient-to-b from-[#120d33cc] via-[#120d3388] to-[#120d33ee]" />
+
+      {/* 위 막대 */}
+      <div className="absolute inset-x-0 top-0 flex h-[52px] items-center gap-2 border-b border-white/10 bg-black/25 px-4 backdrop-blur">
+        <XBtn className="h-[34px] px-3 text-[13px]" onClick={onLeave}>
+          ‹ 나가기
+        </XBtn>
+        <b className="ml-1 truncate text-[17px]">{room.name}</b>
+        {room.locked && <XChip color="#ffffff22">🔒 비밀방</XChip>}
+        <XChip color="#ffd65a" text="#3a2500">
+          {m.name}
+        </XChip>
+        <XChip>{room.max === 2 ? "1:1" : `${room.max}인`}</XChip>
+        <div className="ml-auto">
+          <RoomTools room={room} me={me} onLeave={onLeave} glass />
         </div>
-      </div>
-      <div className="absolute top-[10px] right-[12px]">
-        <RoomTools room={room} me={me} onLeave={onLeave} />
       </div>
 
       {/* 자리 */}
-      <div className="absolute top-[64px] left-[12px] grid w-[640px] grid-cols-2 gap-3">
-        {room.seats.map((s, i) => (
-          <div key={i} className="mb-box flex h-[196px] gap-2 p-2" style={{ "--bg": s ? "#fffaf0" : "#f1e6cc" } as CSSProperties}>
-            {s ? (
-              <>
-                <div className="mb-grass relative flex w-[120px] shrink-0 items-end justify-center pb-3" style={{ boxShadow: "0 0 0 2px #232a4d" }}>
-                  <Token sprite={CHAR[s.lo.char.id]?.sprite ?? "kai"} h={110} />
-                  <div className="absolute top-1 left-1 h-[10px] w-[18px]" style={{ background: PCOLOR[i], boxShadow: "0 0 0 2px #232a4d" }} />
-                </div>
-                <div className="flex min-w-0 flex-1 flex-col gap-1 text-[12px]">
-                  <div className="flex items-center gap-1">
-                    {s.bot && <Icon n="bot" size={13} />}
-                    {room.owner && s.uid === room.owner && <Icon n="crown" size={13} />}
-                    <b className="truncate text-[15px]">{s.name}</b>
+      <div className={`absolute top-[64px] left-[14px] grid w-[632px] ${seats} gap-3`}>
+        {room.seats.map((s, i) => {
+          const c = s ? CHAR[s.lo.char.id] : null;
+          const isMe = s?.uid === me;
+          const hi = c && (c.grade === "SSR" || c.grade === "UR");
+          return (
+            <div
+              key={i}
+              className={`mbx-panel relative flex h-[238px] overflow-hidden ${isMe ? "ring-[3px] ring-[#ffd65a]" : ""}`}
+              style={hi ? { boxShadow: `0 0 0 2px ${c!.grade === "UR" ? "#ff9ad5" : "#ffd257"}, 0 0 24px ${c!.grade === "UR" ? "rgba(255,140,220,0.55)" : "rgba(255,196,60,0.5)"}` } : undefined}
+            >
+              {s && c ? (
+                <>
+                  <CharHero id={c.id} className="h-full w-[132px] shrink-0">
+                    <span className="absolute top-2 left-2 h-[12px] w-[22px] rounded-sm ring-2 ring-white/80" style={{ background: PCOLOR[i] }} />
+                  </CharHero>
+                  <div className="flex min-w-0 flex-1 flex-col gap-1.5 p-3 text-[12px]">
+                    <div className="flex items-center gap-1.5">
+                      {isMe && <XChip color="#ff5f8f">나</XChip>}
+                      {s.bot && <XChip color="#ffffff22">AI</XChip>}
+                      {room.owner && s.uid === room.owner && <span title="방장">👑</span>}
+                      <b className="truncate text-[16px]">{s.name}</b>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <XGrade g={c.grade} />
+                      <span className="truncate text-white/85">{c.title}</span>
+                      <Stars lv={s.lo.char.lv} size={9} />
+                    </div>
+                    <p className="line-clamp-3 leading-[16px] text-white/75">
+                      <b className="text-[#ffe08a]">{c.passive.name}</b> {c.passive.desc(power(c.grade, s.lo.char.lv))}
+                    </p>
+                    <div className="flex items-center gap-1.5">
+                      <ItemBadge slot="dice" item={s.lo.dice ?? null} size={34} />
+                      <ItemBadge slot="buddy" item={s.lo.buddy ?? null} size={34} />
+                    </div>
+                    <div className="mt-auto flex items-center gap-1.5">
+                      {s.ready ? (
+                        <XChip color="#2fc3a0">✓ 준비</XChip>
+                      ) : (
+                        <XChip color="#ffffff22" text="#ffffffcc">
+                          기다리는 중
+                        </XChip>
+                      )}
+                      {owner && !isMe && (
+                        <XBtn tone="dark" className="ml-auto h-[24px] px-2 text-[11px] text-[#ff9aa8]" onClick={() => (s.bot || confirm(`${s.name} 님을 강퇴할까요?`)) && opt({ kick: i })}>
+                          강퇴
+                        </XBtn>
+                      )}
+                    </div>
                   </div>
-                  <LoadoutLine lo={s.lo} />
-                  <div className="mt-auto flex items-center gap-1.5">
-                    {s.ready ? (
-                      <span className="mb-chip text-[12px] font-bold" style={{ "--c": "#4fd1b5" } as CSSProperties}>
-                        <Icon n="check" size={10} /> 준비
-                      </span>
-                    ) : (
-                      <span className="mb-chip text-[12px]">기다리는 중</span>
-                    )}
-                    {s.bot && owner && (
-                      <Btn className="h-[24px] px-2 text-[11px]" onClick={() => opt({ kickBot: i })}>
-                        AI 빼기
-                      </Btn>
-                    )}
-                  </div>
+                </>
+              ) : (
+                <div className="flex flex-1 flex-col items-center justify-center gap-2 text-[13px] text-white/60">
+                  <span className="text-[34px] opacity-40">+</span>
+                  빈 자리
+                  {owner && room.bots && (
+                    <XBtn tone="mint" className="h-[32px] px-3 text-[12px]" onClick={() => opt({ addBot: true })}>
+                      AI 넣기
+                    </XBtn>
+                  )}
+                  {!room.bots && <span className="text-[11px]">AI 입장 꺼짐</span>}
                 </div>
-              </>
-            ) : (
-              <div className="flex flex-1 flex-col items-center justify-center gap-2 text-[13px] text-[var(--mute)]">
-                빈 자리
-                {owner && room.bots && (
-                  <Btn tone="mint" className="h-[30px] px-3 text-[12px]" onClick={() => opt({ addBot: true })}>
-                    <Icon n="bot" size={12} /> AI 넣기
-                  </Btn>
-                )}
-                {!room.bots && <span className="text-[11px]">AI 입장 꺼짐</span>}
-              </div>
-            )}
-          </div>
-        ))}
+              )}
+            </div>
+          );
+        })}
       </div>
 
       {/* 방 설정 · 시작 */}
-      <div className="absolute top-[64px] right-[12px] flex w-[346px] flex-col gap-3">
-        <Win title="방 설정">
-          <div className="flex flex-col gap-2 p-3 text-[13px]">
+      <div className="absolute top-[64px] right-[14px] flex w-[350px] flex-col gap-3">
+        <XPanel title="방 설정" right={!owner && <span className="text-[11px] text-white/55">방장만 바꿀 수 있어요</span>}>
+          <div className="flex flex-col gap-2.5 p-3 text-[13px]">
+            <div className="relative h-[150px] overflow-hidden rounded-xl ring-1 ring-white/15">
+              <img src={`/marble/bg/map-${room.map}.webp`} alt={`${m.name} 미리보기`} className="h-full w-full object-cover" />
+              <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent px-2.5 pt-6 pb-1.5">
+                <b className="text-[14px]">{m.name}</b>
+                <p className="text-[10px] leading-[13px] text-white/80">{m.desc}</p>
+              </div>
+            </div>
             <div className="grid grid-cols-3 gap-1.5">
               {MAP_IDS.map((id) => (
-                <Btn
+                <button
                   key={id}
-                  tone={room.map === id ? "gold" : "paper"}
-                  className="h-[52px] flex-col gap-0.5 px-1 text-[12px]"
+                  type="button"
                   disabled={!owner}
                   onClick={() => opt({ map: id })}
+                  className={`relative h-[46px] overflow-hidden rounded-lg text-[11px] font-bold disabled:cursor-default ${room.map === id ? "ring-2 ring-[#ffd65a]" : "opacity-75 ring-1 ring-white/15 hover:opacity-100"}`}
                   title={MAPS[id].desc}
                 >
-                  <Icon n={MAP_ART[id].icon} size={18} />
-                  <b>{MAPS[id].name}</b>
-                </Btn>
+                  <img src={`/marble/bg/map-${id}.webp`} alt="" className="absolute inset-0 h-full w-full object-cover" />
+                  <span className="absolute inset-x-0 bottom-0 bg-black/60 py-[1px]">{MAPS[id].name}</span>
+                </button>
               ))}
             </div>
-            <p className="text-[11px] leading-[15px] text-[var(--mute)]">{m.desc}</p>
             <div className="flex items-center gap-1.5">
-              <span className="w-[52px]">인원</span>
+              <span className="w-[44px] text-white/70">인원</span>
               {[2, 3, 4].map((n) => (
-                <Btn key={n} tone={room.max === n ? "gold" : "paper"} className="h-[28px] w-[40px] text-[13px]" disabled={!owner} onClick={() => opt({ max: n })}>
+                <XBtn key={n} tone={room.max === n ? "gold" : "glass"} className="h-[30px] w-[42px] text-[13px]" disabled={!owner} onClick={() => opt({ max: n })}>
                   {n}
-                </Btn>
+                </XBtn>
               ))}
-              <span className="ml-1 text-[11px] text-[var(--mute)]">{room.max === 2 ? "1:1" : `${room.max}인`}</span>
             </div>
             <Toggle label="바로 입장 허용" on={room.quick} disabled={!owner} onChange={(v) => opt({ quick: v })} hint="끄면 링크 · 목록으로만 들어와요 (친구 방)" />
             <Toggle label="AI 입장 허용" on={room.bots} disabled={!owner || !room.quick} onChange={(v) => opt({ bots: v })} hint="바로 입장을 허용한 방에만 AI 가 들어와요" />
           </div>
-        </Win>
-        <div className="flex flex-col items-stretch gap-2">
-          {room.startAt ? (
-            <div className="mb-box py-3 text-center">
-              <b className="mb-title text-[20px]">{count}초 뒤 시작!</b>
-            </div>
-          ) : (
-            <p className="text-center text-[12px] text-[var(--mute)]">{room.seats.filter(Boolean).length < 2 ? "두 명 이상이면 시작해요" : "모두 준비하면 3초 뒤 시작"}</p>
-          )}
-          {mine && (
-            <Btn
-              tone={mine.ready ? "paper" : "gold"}
-              className="h-[54px] text-[20px] font-bold"
-              onClick={() => {
-                sfx("ready");
-                void marble.ready(room.id, !mine.ready);
-              }}
-              silent
-            >
-              {mine.ready ? "준비 취소" : "준비!"}
-            </Btn>
-          )}
-        </div>
+        </XPanel>
+        {room.startAt ? (
+          <div className="mbx-panel py-3 text-center">
+            <b className="text-[22px] text-[#ffd65a]">{count}초 뒤 시작!</b>
+          </div>
+        ) : (
+          <p className="text-center text-[12px] text-white/60">{room.seats.filter(Boolean).length < 2 ? "두 명 이상이면 시작해요" : "모두 준비하면 3초 뒤 시작"}</p>
+        )}
+        {mine && (
+          <XBtn
+            tone={mine.ready ? "glass" : "gold"}
+            className="h-[56px] text-[20px]"
+            onClick={() => {
+              sfx("ready");
+              void marble.ready(room.id, !mine.ready);
+            }}
+            silent
+          >
+            {mine.ready ? "준비 취소" : "준비!"}
+          </XBtn>
+        )}
       </div>
     </div>
   );
@@ -160,8 +203,8 @@ export function WaitRoom({ room, me, onLeave }: { room: RoomWire; me: string; on
 function Toggle({ label, on, disabled, onChange, hint }: { label: string; on: boolean; disabled?: boolean; onChange(v: boolean): void; hint?: string }) {
   return (
     <button type="button" disabled={disabled} onClick={() => onChange(!on)} className="flex items-center gap-2 text-left disabled:opacity-60" title={hint}>
-      <span className="relative h-[18px] w-[34px] shrink-0" style={{ background: on ? "#4fd1b5" : "#e0d3b8", boxShadow: "0 0 0 2px #232a4d" }}>
-        <span className="absolute top-[2px] h-[14px] w-[14px] bg-white" style={{ left: on ? 18 : 2, boxShadow: "0 0 0 2px #232a4d" }} />
+      <span className={`relative h-[20px] w-[36px] shrink-0 rounded-full transition ${on ? "bg-[#2fc3a0]" : "bg-white/20"}`}>
+        <span className="absolute top-[2px] h-[16px] w-[16px] rounded-full bg-white shadow transition-all" style={{ left: on ? 18 : 2 }} />
       </span>
       <span className="text-[13px]">{label}</span>
     </button>
@@ -203,7 +246,7 @@ export function LoadoutLine({ lo }: { lo: Loadout }) {
 }
 
 /** 위 오른쪽 도구: 채팅 · 소리 · 전체화면 (판 중이면 나가기도) */
-export function RoomTools({ room, me, onLeave, inGame, vertical }: { room: RoomWire; me: string; onLeave(): void; inGame?: boolean; vertical?: boolean }) {
+export function RoomTools({ room, me, onLeave, inGame, vertical, glass = false }: { room: RoomWire; me: string; onLeave(): void; inGame?: boolean; vertical?: boolean; glass?: boolean }) {
   const [chat, setChat] = useState(false);
   const [unread, setUnread] = useState(0);
   const seen = useRef(room.chat.length);
@@ -217,12 +260,12 @@ export function RoomTools({ room, me, onLeave, inGame, vertical }: { room: RoomW
   const [askLeave, setAskLeave] = useState(false);
   return (
     <div className={`relative flex items-center gap-1.5 ${vertical ? "flex-col" : ""}`}>
-      <Btn className="relative h-[34px] w-[38px]" onClick={() => setChat((c) => !c)} title="채팅">
+      <Btn className={glass ? "relative h-[34px] w-[38px] !rounded-xl !border !border-white/15 !bg-white/10 !shadow-none hover:!bg-white/20 mbx-iconwhite" : "relative h-[34px] w-[38px]"} onClick={() => setChat((c) => !c)} title="채팅">
         <Icon n="chat" size={16} />
-        {unread > 0 && <span className="absolute -top-2 -right-2 min-w-[16px] bg-[#ff5d5d] px-1 text-[11px] leading-[16px] text-white" style={{ boxShadow: "0 0 0 2px #232a4d" }}>{unread}</span>}
+        {unread > 0 && <span className="absolute top-[1px] right-[1px] z-10 min-w-[16px] bg-[#ff5d5d] px-1 text-[11px] leading-[16px] text-white" style={{ boxShadow: "0 0 0 2px #232a4d" }}>{unread}</span>}
       </Btn>
-      <SoundButton side={vertical} />
-      <FsButton />
+      <SoundButton side={vertical} glass={glass} />
+      <FsButton glass={glass} />
       {inGame && (
         <Btn className="h-[34px] px-2 text-[12px]" onClick={() => setAskLeave(true)}>
           나가기
@@ -291,22 +334,29 @@ function ChatBox({ room, me, side }: { room: RoomWire; me: string; side?: boolea
   );
 }
 
-export function FsButton() {
+export function FsButton({ glass = false }: { glass?: boolean }) {
   const st = useStage();
   return (
-    <Btn className="h-[34px] w-[38px]" onClick={st.toggleFs} title={st.fs ? "전체화면 끄기" : "전체화면"}>
+    <Btn className={glass ? "h-[34px] w-[38px] !rounded-xl !border !border-white/15 !bg-white/10 !shadow-none hover:!bg-white/20 mbx-iconwhite" : "h-[34px] w-[38px]"} onClick={st.toggleFs} title={st.fs ? "전체화면 끄기" : "전체화면"}>
       <Icon n={st.fs ? "unfull" : "full"} size={15} />
     </Btn>
   );
 }
 
-export function SoundButton({ up = false, side = false }: { up?: boolean; side?: boolean }) {
+export function SoundButton({ up = false, side = false, glass = false }: { up?: boolean; side?: boolean; glass?: boolean }) {
   const [p, setP] = useState(getPrefs);
   useEffect(() => onPrefs(setP), []);
   const [open, setOpen] = useState(false);
+  const [cur, setCur] = useState("");
+  useEffect(() => {
+    const c = getCursor();
+    applyCursor(c);
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 저장된 커서를 처음 한 번 읽기
+    setCur(c);
+  }, []);
   return (
     <div className="relative">
-      <Btn className="h-[34px] w-[38px]" onClick={() => setOpen((o) => !o)} title="소리">
+      <Btn className={glass ? "h-[34px] w-[38px] !rounded-xl !border !border-white/15 !bg-white/10 !shadow-none hover:!bg-white/20 mbx-iconwhite" : "h-[34px] w-[38px]"} onClick={() => setOpen((o) => !o)} title="소리 · 커서">
         <Icon n={p.mute ? "mute" : "speaker"} size={15} />
       </Btn>
       {open && (
@@ -331,6 +381,25 @@ export function SoundButton({ up = false, side = false }: { up?: boolean; side?:
           <Btn tone={p.mute ? "red" : "paper"} className="h-[28px] w-full text-[12px]" onClick={() => setPrefs({ mute: !p.mute })}>
             {p.mute ? "소리 켜기" : "모두 끄기"}
           </Btn>
+          <div className="mt-3 mb-1 font-bold">커서</div>
+          <div className="grid grid-cols-5 gap-1">
+            {CURSOR_IDS.map((id) => (
+              <button
+                key={id || "def"}
+                type="button"
+                title={cursorName(id)}
+                onClick={() => {
+                  setCursor(id);
+                  setCur(id);
+                  sfx("click");
+                }}
+                className="flex h-[34px] items-center justify-center bg-white"
+                style={{ boxShadow: cur === id ? "0 0 0 2px #232a4d, inset 0 0 0 2px #ffd84d" : "0 0 0 1px #9fb3c8" }}
+              >
+                {id ? <img src={cursorPreview(id)} alt="" width={24} height={24} style={{ imageRendering: "pixelated" }} /> : <span className="text-[10px]">기본</span>}
+              </button>
+            ))}
+          </div>
         </div>
       )}
     </div>

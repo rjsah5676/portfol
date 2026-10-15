@@ -1,9 +1,10 @@
 /*
- * PIXEL MARBLE AI — 지금 프롬프트에 대한 행동 하나를 고름. 서버의 AI 플레이어와 밸런스 시뮬이 같이 씀.
+ * DICE TOWN AI — 지금 프롬프트에 대한 행동 하나를 고름. 서버의 AI 플레이어와 밸런스 시뮬이 같이 씀.
  * 사람처럼 "다음 굴림 위험(남 땅 통행료 기대값)" 만큼 돈을 남겨 두고 사고 · 짓고 · 인수함.
  */
 
 import {
+  startBuildable,
   LANDMARK,
   RULE,
   assetsOf,
@@ -15,6 +16,7 @@ import {
   skillRange,
   skillTargets,
   tollOf,
+  ZONE_SUM,
   type Action,
   type Game,
 } from "./engine";
@@ -30,10 +32,8 @@ export const DEFAULT_STYLE: BotStyle = { greed: 0 };
 
 function next1(g: Game, s: number, fork?: number): number {
   const m = MAPS[g.map];
-  if (m.id === "cross") {
-    const nx = m.tiles[s].next;
-    return nx.length > 1 ? (fork !== undefined && nx.includes(fork) ? fork : nx[0]) : nx[0];
-  }
+  const nx = m.tiles[s]?.next;
+  if (nx && nx.length > 1) return fork !== undefined && nx.includes(fork) ? fork : nx[0];
   return (s + 1) % m.tiles.length;
 }
 /** steps 칸 뒤 자리 (갈림길은 fork 쪽) */
@@ -131,7 +131,7 @@ function landValue(g: Game, pi: number, slot: number): number {
       return 60 + (d.price ?? 0) * (t.lv === 3 ? 1.2 : 0.5);
     }
     case "start":
-      return RULE.salary * (1 + p.fx.salary);
+      return RULE.salary * (1 + p.fx.salary) + (startBuildable(g, pi).length ? 80 : 0);
     case "start2":
       return RULE.salary * RULE.start2;
     case "bonus":
@@ -146,6 +146,8 @@ function landValue(g: Game, pi: number, slot: number): number {
       return 70;
     case "tax":
       return -Math.max(RULE.taxMin, (assetsOf(g, pi) - p.cash) * RULE.taxRate);
+    case "rail":
+      return 60;
   }
 }
 
@@ -216,7 +218,7 @@ export function botAction(g: Game, style: BotStyle = DEFAULT_STYLE): Action {
         }
         if (bv - expectedRoll(g, pi) > 220) return { t: "pick", n: bn };
       }
-      return { t: "roll" };
+      return { t: "roll", power: botPower(g, pi) };
     }
     case "post": {
       const cur = stepsValue(g, pi, pr.steps);
@@ -256,6 +258,24 @@ export function botAction(g: Game, style: BotStyle = DEFAULT_STYLE): Action {
         }
       }
       return { t: "fork", to: best };
+    }
+    case "rail": {
+      // 다음 굴림의 기대값이 가장 좋은 역 (남는 것도 후보)
+      const nextValue = (from: number) => {
+        let v = 0;
+        for (let n = 2; n <= 12; n++) v += stepsValue(g, pi, n, from) * SUM_P[n];
+        return v;
+      };
+      let best = -1,
+        bv = nextValue(p.pos) + 15;
+      for (const o of pr.opts) {
+        const v = nextValue(o);
+        if (v > bv) {
+          bv = v;
+          best = o;
+        }
+      }
+      return { t: "rail", to: best };
     }
     case "buy": {
       const d = m.tiles[pr.tile];
@@ -302,7 +322,49 @@ export function botAction(g: Game, style: BotStyle = DEFAULT_STYLE): Action {
       }
       return { t: "fest", tile: best };
     }
+    case "loan":
+      // 파산보다는 빚: 땅 다 팔아도 못 내거나, 팔면 땅을 절반 넘게 잃을 때
+      return { t: "loan", yes: pr.sell + p.cash < pr.amt || pr.need > pr.sell * 0.35 };
+    case "start": {
+      // 출발 포털: 통행료가 가장 크게 오를 땅 (돈 여유 있을 때만)
+      if (p.cash < reserve(g, pi, style) * 0.8) return { t: "start", tile: -1 };
+      let best = -1,
+        bv = -1;
+      for (const t of pr.tiles) {
+        const v = (m.tiles[t].price ?? 0) * (g.tiles[t].lv === 3 ? 1.5 : 1) + tollOf(g, t);
+        if (v > bv) {
+          bv = v;
+          best = t;
+        }
+      }
+      return { t: "start", tile: best };
+    }
   }
+}
+
+/** 힘 조절: 약 · 중 · 강 구간 중 평균 값이 가장 좋은 쪽 가운데로 */
+const SUM_P = [0, 0, 1, 2, 3, 4, 5, 6, 5, 4, 3, 2, 1].map((x) => x / 36);
+function botPower(g: Game, pi: number): number {
+  let best = 0.5,
+    bv = -Infinity;
+  for (const [pw, zone] of [
+    [1 / 6, "low"],
+    [0.5, "mid"],
+    [5 / 6, "high"],
+  ] as const) {
+    const [lo, hi] = ZONE_SUM[zone];
+    let v = 0,
+      w = 0;
+    for (let n = lo; n <= hi; n++) {
+      v += stepsValue(g, pi, n) * SUM_P[n];
+      w += SUM_P[n];
+    }
+    if (v / w > bv) {
+      bv = v / w;
+      best = pw;
+    }
+  }
+  return best;
 }
 
 /** 굴리기 전 스킬: 쓸 만하면 행동, 아니면 null */

@@ -11,6 +11,7 @@ import {
   MATCH_STARS,
   MAX_LV,
   STARTER,
+  PASS_DAY,
   STORE,
   itemUpCost,
   storeItem,
@@ -20,7 +21,7 @@ import { charUpNeed, pullChars, pullItems, type CharPull, type ItemPull } from "
 import type { ProfileWire } from "../../../../web/src/lib/marble/wire";
 
 /*
- * PIXEL MARBLE — 판 밖 성장 (별사탕 · 부품 · 캐릭터 · 아이템 · 장착 · 가챠 · GP 상점).
+ * DICE TOWN — 판 밖 성장 (별사탕 · 부품 · 캐릭터 · 아이템 · 장착 · 가챠 · GP 상점).
  * 수치 정의는 web/src/lib/marble/data.ts · gacha.ts. 여기선 저장 · 지급만.
  *
  * marble_profile (회원당 문서 하나, _id = uid). 바꾸는 일은 회원별 잠금 안에서 읽고 → 고치고 → 통째로 저장.
@@ -46,6 +47,8 @@ export interface MarbleProfile {
   wins: number;
   /** 가챠 누적 (업적 · 통계) */
   pulls: { char: number; item: number };
+  /** 일일 패스: until 까지(한국 날짜, 포함) · last 마지막으로 받은 날 */
+  pass?: { until: string; last: string };
   at: Date;
 }
 
@@ -87,6 +90,13 @@ export function createMarbleMeta(db: Database, points: Points, now: () => number
     // 주가 바뀌면 상점 한도 새로
     if (p.shop.w !== kstWeek(now())) p.shop = { w: kstWeek(now()), n: {} };
     p.pulls ??= { char: 0, item: 0 };
+    // 없어진 캐릭터(개편 전 스킨 등)는 빼고 별사탕으로 돌려줌
+    for (const id of Object.keys(p.chars)) {
+      if (CHAR[id]) continue;
+      delete p.chars[id];
+      p.stars += 450;
+      if (p.load.char === id) p.load.char = null;
+    }
     return p;
   }
   async function save(p: MarbleProfile) {
@@ -101,6 +111,23 @@ export function createMarbleMeta(db: Database, points: Points, now: () => number
       await save(p);
       return r;
     });
+
+  /** 일일 패스: 오늘 아직 안 받았으면 지급 (받았으면 true) */
+  function claimPass(p: MarbleProfile): boolean {
+    const today = kstDay(now());
+    if (!p.pass || p.pass.until < today || p.pass.last === today) return false;
+    p.pass.last = today;
+    p.stars += PASS_DAY.stars;
+    p.parts += PASS_DAY.parts;
+    return true;
+  }
+  /** 패스 날 수 더하기 (이미 있으면 끝에 이어 붙임) */
+  function addPass(p: MarbleProfile, days: number) {
+    const today = kstDay(now());
+    const from = p.pass && p.pass.until >= today ? p.pass.until : kstDay(now() - DAY);
+    p.pass = { until: new Date(Date.parse(from + "T00:00:00Z") + days * DAY).toISOString().slice(0, 10), last: p.pass?.last ?? "" };
+    claimPass(p);
+  }
 
   async function wire(uid: string, p?: MarbleProfile): Promise<ProfileWire> {
     const d = p ?? (await read(uid));
@@ -117,6 +144,10 @@ export function createMarbleMeta(db: Database, points: Points, now: () => number
       shop: d.shop.n,
       packs: d.packs,
       winToday: d.winDay === kstDay(now()),
+      pass:
+        d.pass && d.pass.until >= kstDay(now())
+          ? { until: d.pass.until, today: d.pass.last === kstDay(now()), left: Math.round((Date.parse(d.pass.until) - Date.parse(kstDay(now()))) / DAY) + 1 }
+          : null,
       games: d.games,
       wins: d.wins,
     };
@@ -136,7 +167,10 @@ export function createMarbleMeta(db: Database, points: Points, now: () => number
     loadoutOf,
 
     async profile(uid: string) {
-      return edit(uid, (p) => wire(uid, p));
+      return edit(uid, async (p) => {
+        const got = claimPass(p);
+        return { ...(await wire(uid, p)), ...(got && { passGot: { ...PASS_DAY } }) };
+      });
     },
 
     /** 가챠: kind char | item · n 1 | 10 · ticket 이면 10연차 티켓 */
@@ -214,20 +248,27 @@ export function createMarbleMeta(db: Database, points: Points, now: () => number
     },
 
     /** GP 상점 — GP 를 먼저 쓰고 (모자라면 여기서 멈춤) 받을 것을 넣음 */
-    async buy(uid: string, raw: unknown) {
+    async buy(uid: string, raw: unknown, admin = false) {
       const { id } = z.object({ id: z.string().max(40) }).parse(raw);
       const it = storeItem(id);
       if (!it) throw bad("없는 상품이에요.");
+      if (it.kind === "admin" && !admin) throw new AppError("FORBIDDEN", "관리자만 살 수 있어요.", 403);
       return edit(uid, async (p) => {
         if (it.once && (p.packs[id] ?? 0) >= 1) throw new AppError("SOLD_OUT", "이미 산 패키지예요.", 409);
         if (it.perWeek && (p.shop.n[id] ?? 0) >= it.perWeek) throw new AppError("SOLD_OUT", "이번 주에 살 수 있는 만큼 샀어요.", 409);
-        await points.spend(uid, it.gp, "marble", `store:${id}`);
+        if ((it.cost?.stars ?? 0) > p.stars) throw new AppError("NOT_ENOUGH", "별사탕이 모자라요.", 400);
+        if ((it.cost?.parts ?? 0) > p.parts) throw new AppError("NOT_ENOUGH", "부품이 모자라요.", 400);
+        if (it.gp > 0) await points.spend(uid, it.gp, "marble", `store:${id}`);
+        p.stars -= it.cost?.stars ?? 0;
+        p.parts -= it.cost?.parts ?? 0;
         if (it.once) p.packs[id] = (p.packs[id] ?? 0) + 1;
         if (it.perWeek) p.shop.n[id] = (p.shop.n[id] ?? 0) + 1;
         p.stars += it.give.stars ?? 0;
         p.parts += it.give.parts ?? 0;
         p.tickets.char += it.give.charTickets ?? 0;
         p.tickets.item += it.give.itemTickets ?? 0;
+        if (it.give.passDays) addPass(p, it.give.passDays);
+        if (it.give.gp) await points.grant(uid, it.give.gp, "marble", `store:${id}`);
         return wire(uid, p);
       });
     },

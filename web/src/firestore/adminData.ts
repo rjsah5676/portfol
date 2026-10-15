@@ -394,3 +394,11 @@ export const resetDefense = () =>
     body: { confirm: "디펜스 초기화" },
     auth: true,
   });
+
+export const getMarbleStats = () => api<{ profiles: number; players: number }>("/api/admin/marble/stats", { auth: true });
+export const resetMarble = () =>
+  api<Record<string, number>>("/api/admin/marble/reset", {
+    method: "POST",
+    body: { confirm: "마블 초기화" },
+    auth: true,
+  });

@@ -12,7 +12,7 @@ import {
 import { unlock } from "./audio";
 
 /*
- * PIXEL MARBLE 무대 — 픽셀 럭키 디펜스(components/Defense/Stage.tsx)와 같은 방식.
+ * DICE TOWN 무대 — 픽셀 럭키 디펜스(components/Defense/Stage.tsx)와 같은 방식.
  * 1024 × 576 디자인을 화면에 맞춰 통째로 키우고 줄임 (PC = 폰, 배치가 늘 같음).
  *  PC: 사이트 안 16:9 상자 (전체화면 버튼으로 크게)
  *  폰: 가로 전용 (ANIME POKER 와 같은 방식) — 세로면 "가로로 돌려 주세요", 전체화면이 되는 기기는 전체화면부터 권함
@@ -267,7 +267,7 @@ export default function Stage({ children }: { children: ReactNode }) {
                   <span className="text-[#c46f00]">홈 화면에 추가</span> → 추가
                 </li>
                 <li className="mb-box px-3 py-2">
-                  <b className="mr-1.5 text-[#e0558c]">3</b>홈 화면의 픽셀 마블 실행
+                  <b className="mr-1.5 text-[#e0558c]">3</b>홈 화면의 다이스 타운 실행
                 </li>
               </ol>
               <p className="mb-out text-xs text-white">앱에선 주소창 없이 화면 전체로 해요 · 처음 한 번은 다시 로그인해 주세요</p>

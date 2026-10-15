@@ -114,8 +114,8 @@ export const NAV_GROUPS: NavGroup[] = [
       {
         href: "/games/marble",
         image: imgMarble,
-        label: "PIXEL MARBLE",
-        desc: "주사위로 땅을 사고 짓고 인수하는 픽셀 보드게임, 1:1 · AI 대전",
+        label: "DICE TOWN",
+        desc: "주사위로 땅을 사고 짓고 인수하는 보드게임, 최대 4명 · AI 대전",
         icon: "🎲",
         featured: true,
       },

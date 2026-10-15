@@ -5,7 +5,7 @@ import type { MapId } from "@/lib/marble/maps";
 import type { LobbyRoom, ProfileWire, RankRow, RoomWire } from "@/lib/marble/wire";
 
 /*
- * PIXEL MARBLE — 백엔드(server/src/games/marble)와 통신
+ * DICE TOWN — 백엔드(server/src/games/marble)와 통신
  *  로비 · 방 구독, 방 만들기 · 바로 입장 · 들어가기 · 준비 · 설정 · 행동 · 채팅
  *  판 밖 성장: 프로필 · 가챠 · 강화 · 장착 · GP 상점 · 순위
  */
@@ -36,7 +36,7 @@ export const marble = {
   join: (id: string, pw?: string) => rpc<{ id: string }>("marble.join", { id, ...(pw && { pw }) }),
   leave: (id: string) => rpc("marble.leave", { id }),
   ready: (id: string, ready: boolean) => rpc("marble.ready", { id, ready }),
-  opts: (id: string, o: { map?: MapId; max?: number; quick?: boolean; bots?: boolean; kickBot?: number; addBot?: boolean }) => rpc("marble.opts", { id, ...o }),
+  opts: (id: string, o: { map?: MapId; max?: number; quick?: boolean; bots?: boolean; kick?: number; kickBot?: number; addBot?: boolean }) => rpc("marble.opts", { id, ...o }),
   act: (id: string, a: Action) => rpc<{ seq: number }>("marble.act", { id, a }),
   auto: (id: string, on: boolean) => rpc("marble.auto", { id, on }),
   chat: (id: string, text: string) => rpc("marble.chat", { id, text }),

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { serverNow } from "@/lib/api/socket";
-import { CHAR, GRADE_COLOR, ITEM, SKILL_TARGET, artOf, faceOf, power } from "@/lib/marble/data";
+import { CHAR, ITEM, SKILL_TARGET, artOf, faceOf, power } from "@/lib/marble/data";
 import {
   CARDS,
   LANDMARK,
@@ -12,6 +12,8 @@ import {
   baseToll,
   investedOf,
   canSkill,
+  controlChance,
+  powerZone,
   skillRange,
   skillTargets,
   tollOf,
@@ -23,11 +25,12 @@ import {
 import { MAPS } from "@/lib/marble/maps";
 import type { GameWire, RoomWire } from "@/lib/marble/wire";
 import { marble } from "@/realtime/marble";
-import { sfx } from "./audio";
+import { playBgm, sfx, stopBgm } from "./audio";
+import { GradeFx } from "./Gacha";
 import Board, { iso, slotXY as slotPos, spriteOf, type TokenView } from "./Board";
-import { Btn, Cur, DiceFace, GradeTag, Icon, PCOLOR, PNAME_BG, fmt } from "./pixel";
+import { Btn, Cur, DiceFace, GradeTag, Icon, PCOLOR, PNAME_BG, fmt, CurIcon } from "./pixel";
 import { RoomTools } from "./Room";
-import type { TokenAnim } from "./Token";
+import Token, { type TokenAnim } from "./Token";
 
 /*
  * 판 화면 — 서버가 보낸 방 상태(RoomWire)의 ev 를 하나씩 연출하고(주사위 · 이동 · 돈 · 건설 · 카드 · 스킬 · 소식),
@@ -50,6 +53,8 @@ interface Banner {
   color: string;
   art?: string;
   ms: number;
+  /** 스킬 컷인이면 등급 (높을수록 화려) */
+  grade?: "R" | "SR" | "SSR" | "UR";
 }
 
 let fid = 0;
@@ -62,10 +67,12 @@ export default function GameView({ room, me, onLeave }: { room: RoomWire; me: st
   const [view, setView] = useState<GameWire>(g0);
   const [pos, setPos] = useState<number[]>(() => g0.players.map((p) => p.pos));
   const [anim, setAnim] = useState<TokenAnim[]>(() => g0.players.map(() => "idle"));
+  const [hide, setHide] = useState<boolean[]>(() => g0.players.map(() => false));
+  const [train, setTrain] = useState<{ id: number; pts: { x: number; y: number }[]; pi: number } | null>(null);
   const [face, setFace] = useState<(1 | -1)[]>(() => g0.players.map(() => 1));
   const [hop, setHop] = useState<number[]>(() => g0.players.map(() => 0));
   const [cash, setCash] = useState<number[]>(() => g0.players.map((p) => p.cash));
-  const [dice, setDice] = useState<{ d: [number, number]; roll: number; p: number } | null>(null);
+  const [dice, setDice] = useState<DiceView | null>(null);
   const [floaters, setFloaters] = useState<Floater[]>([]);
   const [banner, setBanner] = useState<Banner | null>(null);
   const [card, setCard] = useState<{ id: keyof typeof CARDS; p: number } | null>(null);
@@ -88,6 +95,7 @@ export default function GameView({ room, me, onLeave }: { room: RoomWire; me: st
     const c = slotPos(map, slot);
     return { x: c.x, y: c.y - 30 };
   };
+  const diceAt = { x: iso(4, 4).x, y: iso(4, 4).y - 30 };
   const cardXY = (pi: number) => {
     const n = view.players.length;
     const c = cornerRect(myPi >= 0 ? (pi - myPi + n) % n : pi);
@@ -108,15 +116,42 @@ export default function GameView({ room, me, onLeave }: { room: RoomWire; me: st
         if (e.p === myPi) sfx("turn");
         return;
       case "roll": {
-        setDice({ d: e.d, roll: ++fid, p: e.p });
+        // 힘 조절로 던졌으면 굴린 사람 카드 쪽에서 날아와 굴러감 (세게 던질수록 빠르고 많이 돎)
+        const thrown = e.power !== undefined;
+        const dur = thrown ? Math.round(950 - (e.power ?? 0) * 300) : 700;
+        const from = thrown ? cardXY(e.p) : null;
+        setDice({ d: e.d, roll: ++fid, p: e.p, dur, from: from ? { x: from.x - diceAt.x, y: from.y - diceAt.y } : null, spin: thrown ? 2 + Math.round((e.power ?? 0) * 4) : 1 });
         sfx("dice");
-        await wait(700);
+        await wait(dur);
+        if (e.ctrl) {
+          sfx("card");
+          float(diceAt.x, diceAt.y + 40, `힘 조절 성공! ${ZONE_NAME[powerZone(e.power ?? 0.5)]}`, "#ff7a2e");
+        }
         say(`${P(e.p)} 주사위 ${e.d[0]}+${e.d[1]}${e.dbl ? " 더블!" : ""}${e.how === "pick" ? " (골라 굴림)" : e.how === "reroll" ? " (다시 굴림)" : ""}`);
         if (e.dbl) float(slotXY(posRef.current[e.p]).x, slotXY(posRef.current[e.p]).y - 40, "더블!", "#e0558c");
         await wait(400);
         return;
       }
       case "move": {
+        if (e.rail) {
+          // 십자 철로: 출발 역 → 중앙역 → 도착 역으로 열차가 달림
+          const fromS = posRef.current[e.p];
+          const toS = e.path[e.path.length - 1];
+          const a = slotPos(map, fromS);
+          const b = slotPos(map, toS);
+          const c = iso(4, 4);
+          sfx("warp");
+          setTrain({ id: ++fid, pts: [a, c, b], pi: e.p });
+          setAnim((x) => x.map((v, i) => (i === e.p ? "walk" : v)));
+          setHide((h) => h.map((v, i) => (i === e.p ? true : v)));
+          await wait(1100);
+          setPosOf(e.p, toS);
+          setHide((h) => h.map((v, i) => (i === e.p ? false : v)));
+          setTrain(null);
+          setAnim((x) => x.map((v, i) => (i === e.p ? "idle" : v)));
+          await wait(150);
+          return;
+        }
         if (e.warp) {
           setAnim((a) => a.map((x, i) => (i === e.p ? "win" : x)));
           sfx("warp");
@@ -231,6 +266,20 @@ export default function GameView({ room, me, onLeave }: { room: RoomWire; me: st
         float(slotXY(posRef.current[e.p]).x, slotXY(posRef.current[e.p]).y - 40, "꽁꽁! 쉬어요", "#2f8fc4");
         await wait(800);
         return;
+      case "loan": {
+        const c = cardXY(e.p);
+        sfx("coin");
+        float(c.x, c.y, `대출 +${fmt(e.amt)}`, "#2f6fd6");
+        say(`${P(e.p)} 은행 대출 ${fmt(e.amt)} (갚을 돈 ${fmt(e.debt)})`);
+        await wait(900);
+        return;
+      }
+      case "repay": {
+        const c = cardXY(e.p);
+        float(c.x, c.y + 18, `빚 상환 -${fmt(e.amt)}${e.left ? "" : " · 완납!"}`, "#5a6b7a");
+        await wait(500);
+        return;
+      }
       case "rewind": {
         const c = cardXY(e.p);
         float(c.x, c.y, `되감기 +${fmt(e.amt)}`, "#7a5cd6");
@@ -251,7 +300,7 @@ export default function GameView({ room, me, onLeave }: { room: RoomWire; me: st
         const pl = cur.players[e.p];
         const c = CHAR[pl.lo.char.id];
         sfx("skill");
-        setBanner({ id: ++fid, title: e.name, sub: `${P(e.p)} · ${c?.title ?? ""}`, color: c?.color ?? "#ffc94a", art: c ? artOf(c) : undefined, ms: 1200 });
+        setBanner({ id: ++fid, title: e.name, sub: `${P(e.p)} · ${c?.title ?? ""}`, color: c?.color ?? "#ffc94a", art: c ? artOf(c) : undefined, ms: 1400, grade: c?.grade });
         say(`${P(e.p)} 스킬 「${e.name}」`);
         if (e.tiles) for (const t of e.tiles) flashTile(t, "#ff9a3d");
         await wait(1200);
@@ -393,9 +442,15 @@ export default function GameView({ room, me, onLeave }: { room: RoomWire; me: st
     } else if (pr.k === "fest") {
       pick = pr.tiles;
       onPick = (t) => void send({ t: "fest", tile: t });
+    } else if (pr.k === "start") {
+      pick = pr.tiles;
+      onPick = (t) => void send({ t: "start", tile: t });
     } else if (pr.k === "turn" && pr.warp) {
       pick = map.tiles.map((_, s) => g.order[s]).filter((t) => map.tiles[t].kind !== "warp");
       onPick = (t) => void send({ t: "warp", to: g.order.indexOf(t) });
+    } else if (pr.k === "rail") {
+      pick = pr.opts.map((s) => g.order[s]);
+      onPick = (t) => void send({ t: "rail", to: g.order.indexOf(t) });
     } else if (pr.k === "fork") {
       pick = pr.opts.map((s) => g.order[s]);
       onPick = (t) => void send({ t: "fork", to: g.order.indexOf(t) });
@@ -410,7 +465,7 @@ export default function GameView({ room, me, onLeave }: { room: RoomWire; me: st
   }, []);
   const left = live.deadline ? Math.max(0, live.deadline - serverNow()) : 0;
 
-  const tokens: TokenView[] = view.players.map((p, i) => ({
+  const tokens: TokenView[] = view.players.flatMap((p, i) => (hide[i] ? [] : [{
     pi: i,
     slot: pos[i],
     sprite: spriteOf(p.lo.char.id),
@@ -418,7 +473,7 @@ export default function GameView({ room, me, onLeave }: { room: RoomWire; me: st
     face: face[i],
     hop: hop[i],
     dim: !p.alive,
-  }));
+  }]));
 
   const n = view.players.length;
   /** 화면 자리: 나는 늘 왼쪽 아래 (모두의마블처럼), 1:1 상대는 오른쪽 위 */
@@ -426,11 +481,12 @@ export default function GameView({ room, me, onLeave }: { room: RoomWire; me: st
   const dim = mine && pr && (pr.k === "buy" || pr.k === "acq");
 
   return (
-    <div className="mb-sky absolute inset-0 overflow-hidden" style={{ backgroundImage: `url(/marble/bg/${view.map}.webp)`, backgroundSize: "cover", backgroundPosition: "center", imageRendering: "pixelated" }}>
+    <div className="mb-sky absolute inset-0 overflow-hidden" style={{ background: BOARD_BG[view.map] }}>
       <Board g={view} tokens={tokens} pick={pick} onPick={onPick} onInfo={(t) => setInfo(t)} flash={flash} />
+      {train && <TrainRide key={train.id} pts={train.pts} sprite={spriteOf(view.players[train.pi].lo.char.id)} />}
 
       {/* 위 가운데: 맵 · 바퀴 · 마을 소식 · 최근 일 */}
-      <div className="absolute top-[8px] left-1/2 z-[400] flex -translate-x-1/2 flex-col items-center gap-1">
+      <div className="absolute top-[142px] left-1/2 z-[400] flex -translate-x-1/2 flex-col items-center gap-1">
         <div className="mb-wood flex items-center gap-3 px-4 py-1" style={{ "--bar": map.id === "orgel" ? "#ff7fb0" : map.id === "cross" ? "#ff9a3d" : "#5b6cff" } as CSSProperties}>
           <b className="mb-title mb-out text-[16px] text-white">{map.name}</b>
           <span className="mb-out text-[15px] font-bold text-white">
@@ -453,7 +509,7 @@ export default function GameView({ room, me, onLeave }: { room: RoomWire; me: st
       </div>
 
       {/* 가운데: 주사위 · 차례 */}
-      <CenterDice g={g} dice={dice} nameOf={nameOf} log={log} at={map.id === "cross" ? { x: iso(6.5, 1.5).x, y: iso(6.5, 1.5).y - 80 } : { x: iso(4, 4).x, y: iso(4, 4).y - 168 }} />
+      <CenterDice g={g} dice={dice} nameOf={nameOf} log={log} at={diceAt} />
 
       {/* 플레이어 (네 귀퉁이) */}
       {view.players.map((p, i) => (
@@ -481,7 +537,7 @@ export default function GameView({ room, me, onLeave }: { room: RoomWire; me: st
       {live.phase === "play" && (
         <div
           className="absolute z-[460] flex -translate-x-1/2 justify-center"
-          style={dim ? { left: 512, top: 150, width: 440 } : map.id === "cross" ? { left: iso(1.5, 6.5).x, top: iso(1.5, 6.5).y - 70, width: 320 } : { left: 512, top: 262, width: 440 }}
+          style={dim ? { left: 512, top: 150, width: 440 } : { left: 512, top: 262, width: 440 }}
         >
           <ActionPanel
             g={g}
@@ -494,7 +550,7 @@ export default function GameView({ room, me, onLeave }: { room: RoomWire; me: st
             send={send}
             sending={sending}
             skill={onSkill}
-            compact={map.id === "cross"}
+            compact={false}
             busy={busy}
             auto={!!mySeat?.auto}
             onManual={() => void marble.auto(room.id, false)}
@@ -522,12 +578,20 @@ export default function GameView({ room, me, onLeave }: { room: RoomWire; me: st
 /* ───────────── 배경 · 위치 ───────────── */
 
 /** 귀퉁이 0 왼쪽 아래(나) · 1 오른쪽 위 · 2 왼쪽 위 · 3 오른쪽 아래 */
+/** 탑뷰 판 바깥 바탕 (맵마다 매끈한 그라데이션) */
+const BOARD_BG: Record<string, string> = {
+  town: "radial-gradient(circle at 50% 45%, #bfe9ff 0%, #7cc4f2 55%, #4c8fd6 100%)",
+  cross: "radial-gradient(circle at 50% 45%, #ffe3b0 0%, #f5b36b 55%, #d97a45 100%)",
+  orgel: "radial-gradient(circle at 50% 45%, #ffe0f0 0%, #f4a8cf 55%, #c46aa6 100%)",
+};
+
 function cornerRect(corner: number) {
-  const w = 248;
+  // 보드 양옆 기둥: 왼쪽 아래 · 왼쪽 위 · 오른쪽 위 · 오른쪽 아래 (보드 L=226 · R=798 사이를 안 가림)
+  const w = 208;
   const h = 118;
-  const left = corner === 0 || corner === 2;
+  const left = corner === 0 || corner === 1;
   const topSide = corner === 1 || corner === 2;
-  return { x: left ? 10 : 1024 - 10 - w, y: topSide ? 10 : 576 - 10 - h, w, h };
+  return { x: left ? 8 : 1024 - 8 - w, y: topSide ? 10 : 576 - 10 - h, w, h };
 }
 const slotOfTile = (g: GameWire, tile: number) => g.order.indexOf(tile);
 
@@ -577,8 +641,12 @@ function PlayerCard({
           {!p.alive && <span className="mb-chip text-[10px]">파산</span>}
         </div>
         {/* 얼굴 (띠 위로 튀어나오게) */}
-        <div className="absolute top-[-10px] left-[8px] h-[72px] w-[72px] overflow-hidden bg-white" style={{ boxShadow: `0 0 0 3px #232a4d, inset 0 0 0 4px ${c ? GRADE_COLOR[c.grade] : "#ccc"}` }}>
-          {c && <img src={faceOf(c)} alt="" className="h-full w-full object-cover" />}
+        <div className="absolute top-[-10px] left-[8px] h-[72px] w-[72px] overflow-hidden bg-white" style={{ boxShadow: "0 0 0 3px #232a4d" }}>
+          {c && (
+            <GradeFx g={c.grade} color={c.color}>
+              <img src={faceOf(c)} alt="" className="relative h-full w-full object-cover" style={{ padding: c.grade === "R" ? 0 : 4 }} />
+            </GradeFx>
+          )}
           {c && <GradeTag g={c.grade} className="absolute bottom-[3px] left-[3px] scale-90" />}
         </div>
         <div className="pt-[3px] pr-2 pb-1 pl-[88px]">
@@ -619,21 +687,190 @@ function PlayerCard({
   );
 }
 
+/* ───────────── 기차 (크로스 익스프레스) ───────────── */
+
+/** 열차가 pts 를 따라 1초 동안 달림 (말이 타고 있음) */
+function TrainRide({ pts, sprite }: { pts: { x: number; y: number }[]; sprite: string }) {
+  const [t, setT] = useState(0);
+  useEffect(() => {
+    const t0 = performance.now();
+    let raf = 0;
+    const step = () => {
+      const k = Math.min(1, (performance.now() - t0) / 1000);
+      setT(k);
+      if (k < 1) raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, []);
+  // 구간 길이 비례로 위치
+  const seg = pts.slice(1).map((b, i) => Math.hypot(b.x - pts[i].x, b.y - pts[i].y));
+  const total = seg.reduce((a, b) => a + b, 0);
+  const ease = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+  let d = ease * total,
+    i = 0;
+  while (i < seg.length - 1 && d > seg[i]) d -= seg[i++];
+  const a = pts[i],
+    b = pts[i + 1];
+  const k = seg[i] ? d / seg[i] : 0;
+  const x = a.x + (b.x - a.x) * k,
+    y = a.y + (b.y - a.y) * k;
+  const face = b.x >= a.x ? 1 : -1;
+  return (
+    <div className="pointer-events-none absolute z-[260]" style={{ left: x, top: y, transform: "translate(-50%, -100%)" }}>
+      <div className="relative flex flex-col items-center">
+        <Token sprite={sprite} h={46} face={face} anim="win" />
+        <div className="-mt-[14px] flex items-end gap-[2px]" style={{ transform: face < 0 ? "scaleX(-1)" : undefined }}>
+          <div className="h-[20px] w-[34px] bg-[#ff6b6b]" style={{ boxShadow: "0 0 0 2px #232a4d", borderRadius: "4px 10px 2px 2px" }}>
+            <div className="mt-[4px] ml-[18px] h-[7px] w-[10px] bg-[#cdeeff]" style={{ boxShadow: "0 0 0 1px #232a4d" }} />
+          </div>
+          <div className="h-[16px] w-[26px] bg-[#ffd65a]" style={{ boxShadow: "0 0 0 2px #232a4d", borderRadius: 2 }} />
+        </div>
+        <div className="mt-[1px] text-[11px] font-bold text-white" style={{ textShadow: "0 1px 0 #232a4d" }}>
+          칙칙폭폭!
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ───────────── 힘 조절 굴리기 ───────────── */
+
+/**
+ * 꾹 누르면 게이지가 왔다 갔다, 놓으면 던짐. 약(낮은 합) · 중 · 강(높은 합) 구간을 노리면
+ * chance 확률로 그 구간이 나옴 (기본 10% + 캐릭터 · 아이템). 톡 누르기만 하면 그냥 굴림. 스페이스바도 됨.
+ */
+function PowerRoll({ disabled, chance, onThrow }: { disabled: boolean; chance: number; onThrow(power?: number): void }) {
+  const [v, setV] = useState(0);
+  const [hold, setHold] = useState(false);
+  const t0 = useRef(0);
+  const raf = useRef(0);
+  const val = useRef(0);
+  const start = useCallback(() => {
+    if (disabled || hold) return;
+    setHold(true);
+    sfx("click");
+    t0.current = performance.now();
+    const step = () => {
+      const t = (performance.now() - t0.current) / 1100;
+      const x = t % 2 < 1 ? t % 1 : 1 - (t % 1); // 0→1→0 왕복
+      val.current = x;
+      setV(x);
+      raf.current = requestAnimationFrame(step);
+    };
+    raf.current = requestAnimationFrame(step);
+  }, [disabled, hold]);
+  const release = useCallback(() => {
+    if (!hold) return;
+    cancelAnimationFrame(raf.current);
+    setHold(false);
+    const held = performance.now() - t0.current;
+    onThrow(held < 160 ? undefined : Math.round(val.current * 100) / 100);
+    setV(0);
+  }, [hold, onThrow]);
+  useEffect(() => () => cancelAnimationFrame(raf.current), []);
+  useEffect(() => {
+    const down = (e: KeyboardEvent) => {
+      if (e.code === "Space" && !e.repeat) {
+        e.preventDefault();
+        start();
+      }
+    };
+    const up = (e: KeyboardEvent) => {
+      if (e.code === "Space") release();
+    };
+    window.addEventListener("keydown", down);
+    window.addEventListener("keyup", up);
+    return () => {
+      window.removeEventListener("keydown", down);
+      window.removeEventListener("keyup", up);
+    };
+  }, [start, release]);
+  const zone = powerZone(v);
+  return (
+    <div className="flex w-full flex-col gap-1">
+      <Btn
+        tone="gold"
+        className={`h-[50px] w-full text-[18px] font-bold ${hold ? "mb-shake" : ""}`}
+        disabled={disabled}
+        silent
+        onPointerDown={(e) => {
+          e.currentTarget.setPointerCapture(e.pointerId);
+          start();
+        }}
+        onPointerUp={release}
+        onPointerCancel={release}
+      >
+        <DiceFace v={hold ? 1 + Math.floor(v * 5.99) : 6} size={26} /> {hold ? `${ZONE_NAME[zone]}!` : "꾹 눌러 던지기"}
+      </Btn>
+      {/* 게이지: 약 · 중 · 강 */}
+      <div className="relative h-[16px] w-full" style={{ boxShadow: "0 0 0 2px #232a4d", background: "linear-gradient(90deg, #6fb7ff 0 33.3%, #8fe08a 33.3% 66.6%, #ff7a6b 66.6% 100%)" }}>
+        <div className="absolute inset-y-0 left-0 bg-[rgba(255,255,255,0.55)]" style={{ width: `${v * 100}%` }} />
+        <div className="absolute -top-[4px] h-[24px] w-[4px] bg-[#232a4d]" style={{ left: `calc(${v * 100}% - 2px)` }} />
+        <div className="absolute inset-0 flex text-[10px] leading-[16px] font-bold text-[#232a4d]">
+          <span className="flex-1 text-center">약 · 2~6</span>
+          <span className="flex-1 text-center">중 · 6~8</span>
+          <span className="flex-1 text-center">강 · 8~12</span>
+        </div>
+      </div>
+      <span className="text-center text-[10px] text-[var(--ink2)]">노린 구간이 나올 확률 {Math.round(chance * 100)}% · 톡 누르면 그냥 굴림 · 스페이스바도 돼요</span>
+    </div>
+  );
+}
+
 /* ───────────── 가운데 주사위 ───────────── */
 
-function CenterDice({ g, dice, nameOf, log, at }: { g: GameWire; dice: { d: [number, number]; roll: number; p: number } | null; nameOf(pi: number): string; log: string[]; at: { x: number; y: number } }) {
+interface DiceView {
+  d: [number, number];
+  roll: number;
+  p: number;
+  /** 굴러가는 시간 */
+  dur: number;
+  /** 던진 곳 (가운데 기준 상대 위치) — 없으면 제자리에서 굴림 */
+  from: { x: number; y: number } | null;
+  /** 몇 바퀴 */
+  spin: number;
+}
+const ZONE_NAME = { low: "약하게", mid: "적당히", high: "세게" } as const;
+
+/** 주사위 하나: 날아오는 동안 눈이 바뀌다가 떨어지면 결과 */
+function ThrownDie({ v, dv, delay }: { v: number; dv: DiceView; delay: number }) {
+  const [face, setFace] = useState(v);
+  useEffect(() => {
+    let k = 0;
+    const id = setInterval(() => setFace(1 + ((v + ++k * 3) % 6)), 70);
+    const t = setTimeout(() => {
+      clearInterval(id);
+      setFace(v);
+    }, dv.dur - 120);
+    return () => {
+      clearInterval(id);
+      clearTimeout(t);
+    };
+  }, [v, dv]);
+  const style = {
+    "--fx": `${(dv.from?.x ?? 0) + (delay ? 30 : -30)}px`,
+    "--fy": `${dv.from?.y ?? -30}px`,
+    "--spin": `${dv.spin * 360 + (delay ? 90 : 0)}deg`,
+    animationDuration: `${dv.dur}ms`,
+    animationDelay: `${delay}ms`,
+  } as CSSProperties;
+  return (
+    <div className={dv.from ? "mb-throw" : "mb-dice-roll"} style={style}>
+      <DiceFace v={face} size={58} />
+    </div>
+  );
+}
+
+function CenterDice({ g, dice, nameOf, log, at }: { g: GameWire; dice: DiceView | null; nameOf(pi: number): string; log: string[]; at: { x: number; y: number } }) {
   const turnP = g.prompt?.p ?? -1;
   return (
     <div className="pointer-events-none absolute z-[300] flex flex-col items-center gap-1.5" style={{ left: at.x, top: at.y, transform: "translateX(-50%)" }}>
       <div className="flex gap-3">
         {dice ? (
           <>
-            <div key={`a${dice.roll}`} className="mb-dice-roll">
-              <DiceFace v={dice.d[0]} size={58} />
-            </div>
-            <div key={`b${dice.roll}`} className="mb-dice-roll" style={{ animationDelay: "70ms" }}>
-              <DiceFace v={dice.d[1]} size={58} />
-            </div>
+            <ThrownDie key={`a${dice.roll}`} v={dice.d[0]} dv={dice} delay={0} />
+            <ThrownDie key={`b${dice.roll}`} v={dice.d[1]} dv={dice} delay={70} />
           </>
         ) : (
           <div className="flex gap-3 opacity-50">
@@ -828,9 +1065,7 @@ function ActionPanel({
         );
       return box(
         <>
-          <Btn tone="gold" className="h-[50px] w-full text-[20px] font-bold" disabled={sending} onClick={() => void send({ t: "roll" })} silent>
-            <DiceFace v={6} size={26} /> 주사위 굴리기
-          </Btn>
+          <PowerRoll disabled={sending} chance={controlChance(me)} onThrow={(power) => void send(power === undefined ? { t: "roll" } : { t: "roll", power })} />
           <div className="flex flex-wrap justify-center gap-1.5">
             {skillBtn}
             {me.uses.pick > 0 && (
@@ -868,18 +1103,16 @@ function ActionPanel({
         "어떻게 할까요?"
       );
     case "fork":
+      return box(<span className="text-[13px]">보드에서 반짝이는 칸을 눌러 갈 길을 골라요</span>, "어느 길로?");
+    case "rail":
       return box(
         <>
-          <span className="text-[12px]">반짝이는 칸 쪽으로 가요</span>
-          <div className="flex gap-2">
-            {pr.opts.map((o) => (
-              <Btn key={o} tone={o === 1 ? "sky" : "pink"} className="h-[38px] px-3 text-[14px] font-bold" disabled={sending} onClick={() => void send({ t: "fork", to: o })}>
-                {o === 1 ? "왼쪽 마을" : "오른쪽 마을"}
-              </Btn>
-            ))}
-          </div>
+          <span className="text-[13px]">반짝이는 역을 누르면 열차로 바로 가요</span>
+          <Btn className="h-[34px] px-4 text-[13px]" disabled={sending} onClick={() => void send({ t: "rail", to: -1 })}>
+            그냥 남기
+          </Btn>
         </>,
-        "어느 길로?"
+        "기차역"
       );
     case "buy": {
       const d = m.tiles[pr.tile];
@@ -932,6 +1165,35 @@ function ActionPanel({
     }
     case "fest":
       return box(<span className="text-[13px]">축제를 열 내 땅을 보드에서 눌러요 (통행료 2배)</span>, "축제 무대");
+    case "loan":
+      return box(
+        <>
+          <div className="text-[12px] leading-[17px]">
+            통행료 <b>{fmt(pr.amt)}</b> · 가진 돈 {fmt(me.cash)} · <b className="text-[#d6455d]">{fmt(pr.need)} 모자라요</b>
+            <br />
+            대출하면 {fmt(pr.need)}을 빌리고 <b>{fmt(pr.debt)}</b>을 월급의 절반씩 갚아요 (판마다 1번)
+          </div>
+          <div className="flex gap-2">
+            <Btn tone="gold" className="h-[40px] px-4 text-[15px] font-bold" disabled={sending} onClick={() => void send({ t: "loan", yes: true })}>
+              대출 받기
+            </Btn>
+            <Btn className="h-[40px] px-3 text-[13px]" disabled={sending} onClick={() => void send({ t: "loan", yes: false })}>
+              {pr.sell + me.cash >= pr.amt ? "땅 팔아서 내기" : "파산하기"}
+            </Btn>
+          </div>
+        </>,
+        "파산 위기! 대출할까요?"
+      );
+    case "start":
+      return box(
+        <>
+          <span className="text-[13px]">반짝이는 내 땅을 누르면 바로 건물을 올려요</span>
+          <Btn className="h-[34px] px-4 text-[13px]" disabled={sending} onClick={() => void send({ t: "start", tile: -1 })}>
+            안 지을래요
+          </Btn>
+        </>,
+        "출발 포털 · 건설"
+      );
   }
 }
 
@@ -947,7 +1209,7 @@ function PickDice({ onPick, uses }: { onPick(n: number): void; uses: number }) {
   if (!open)
     return (
       <Btn tone="gold" className="h-[36px] px-3 text-[13px]" onClick={() => setOpen(true)}>
-        <Icon n="coin" size={12} /> 황금 주사위 ({uses})
+        <CurIcon k="coin" size={12} /> 황금 주사위 ({uses})
       </Btn>
     );
   return (
@@ -963,7 +1225,36 @@ function PickDice({ onPick, uses }: { onPick(n: number): void; uses: number }) {
 
 /* ───────────── 띠 · 카드 · 결과 ───────────── */
 
+/** 스킬 컷인: 번쩍 → 비스듬한 띠 + 속도선 → 캐릭터가 미끄러져 들어옴 (그림은 안 잘리게 띠 밖에서) */
+function SkillCutin({ b }: { b: Banner }) {
+  const g = b.grade ?? "R";
+  const rays = g === "SSR" || g === "UR";
+  return (
+    <div className="pointer-events-none absolute inset-0 z-[60]" style={{ "--d": `${b.ms}ms` } as CSSProperties}>
+      <div className="mbx-flash absolute inset-0" />
+      <div className="mbx-cut absolute inset-x-[-40px] top-[170px] h-[210px] overflow-hidden" style={{ transform: "skewY(-5deg)", boxShadow: "0 -5px 0 0 #fff, 0 5px 0 0 #fff, 0 -9px 0 0 #232a4d, 0 9px 0 0 #232a4d" }}>
+        <img src={`/marble/art/bg-${g}.webp`} alt="" className="absolute inset-0 h-full w-full object-cover" style={{ objectPosition: "center 30%" }} />
+        {g === "R" && <div className="absolute inset-0" style={{ background: `linear-gradient(90deg, ${b.color}88, transparent)` }} />}
+        {rays && <div className={`mbx-rays mbx-rays-${g}`} style={{ left: "26%", top: "50%" }} />}
+        <div className="mbx-speed absolute inset-0" />
+        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-transparent to-[rgba(18,13,51,0.55)]" />
+      </div>
+      {b.art && (
+        <img src={b.art} alt="" className="mbx-slide absolute left-[40px] max-w-none object-contain" style={{ top: 96, height: 300, width: 320, filter: "drop-shadow(0 6px 0 rgba(35,42,77,0.5))" }} />
+      )}
+      <div className="mbx-slide-r absolute right-[70px] top-[222px] max-w-[520px] text-right">
+        {g !== "R" && <div className="mb-1 inline-block rounded bg-black/40 px-2 text-[13px] font-black tracking-[0.3em] text-white">{g} SKILL</div>}
+        <div className="mb-title text-[46px] leading-[50px] text-white" style={{ WebkitTextStroke: "3px #232a4d", paintOrder: "stroke fill", textShadow: "0 4px 0 #232a4d" }}>
+          {b.title}
+        </div>
+        {b.sub && <div className="mb-out mt-1 text-[16px] text-white">{b.sub}</div>}
+      </div>
+    </div>
+  );
+}
+
 function BannerView({ b }: { b: Banner }) {
+  if (b.art) return <SkillCutin b={b} />;
   return (
     <div className="pointer-events-none absolute inset-x-0 top-[200px] z-[60] overflow-hidden">
       <div className="mb-banner flex h-[110px] items-center justify-center gap-4" style={{ "--d": `${b.ms}ms`, background: b.color, boxShadow: "0 -4px 0 0 #232a4d, 0 4px 0 0 #232a4d" } as CSSProperties}>
@@ -995,7 +1286,11 @@ function Result({ room, me, onLeave }: { room: RoomWire; me: string; onLeave(): 
   const g = room.game!;
   const mine = room.result!.find((r) => room.seats[r.seat]?.uid === me);
   useEffect(() => {
-    sfx(mine?.place === 1 ? "win" : "lose");
+    if (mine?.place === 1) playBgm("win");
+    else {
+      stopBgm();
+      sfx("lose");
+    }
   }, [mine?.place]);
   const HOW: Record<string, string> = { bankrupt: "파산승", triple: "트리플 독점", line: "라인 독점", spot: "명소 독점", rounds: "바퀴 끝 · 자산 1등" };
   return (

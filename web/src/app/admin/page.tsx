@@ -12,6 +12,7 @@ import InquiryInbox from "@/components/Admin/InquiryInbox";
 import PostManager from "@/components/Admin/PostManager";
 import DataManager from "@/components/Admin/DataManager";
 import DefenseReset from "@/components/Admin/DefenseReset";
+import MarbleReset from "@/components/Admin/MarbleReset";
 import MailSender from "@/components/Admin/MailSender";
 import Economy from "@/components/Admin/Economy";
 import NoticeEditor from "@/components/Admin/NoticeEditor";
@@ -250,6 +251,8 @@ export default function AdminDashboard() {
             <DataManager key="rankings" groups={G_RANK} />
             <SubHeading>픽셀 운빨 디펜스</SubHeading>
             <DefenseReset />
+            <SubHeading>다이스 타운</SubHeading>
+            <MarbleReset />
           </div>
         )}
         {tab === "guest" && <DataManager key="guest" groups={G_GUEST} />}

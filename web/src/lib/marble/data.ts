@@ -1,5 +1,5 @@
 /*
- * PIXEL MARBLE — 캐릭터 · 장착 아이템 · 등급 · 강화 정의 (서버 · 화면 · 밸런스 시뮬이 같이 씀).
+ * DICE TOWN — 캐릭터 · 장착 아이템 · 등급 · 강화 정의 (서버 · 화면 · 밸런스 시뮬이 같이 씀).
  *
  * 강도는 "파워" p 하나로 셈: p = 등급 바닥(R 0 · SR 5 · SSR 10 · UR 15) + 강화 단계(0~5).
  *   → 아랫 등급 5강(풀강) = 윗 등급 0강. 효과 수치는 전부 p 의 일차식이라 그대로 이어짐.
@@ -126,6 +126,8 @@ export interface Fx {
   pullPay: number;
   /** 판당 한 번, 큰 통행료(RULE.rewindMin 이상)를 이 비율만큼 되돌려 받음 */
   rewind: number;
+  /** 힘 조절 굴리기: 노린 구간이 나올 확률 + */
+  control: number;
   /** 판당 횟수: +1 조정 · 눈 고르기 · 다시 굴리기 */
   usesAdjust: number;
   usesPick: number;
@@ -149,6 +151,7 @@ export const ZERO_FX: Fx = {
   freeUpAfterAcq: 0,
   pullPay: 0,
   rewind: 0,
+  control: 0,
   usesAdjust: 0,
   usesPick: 0,
   usesReroll: 0,
@@ -177,8 +180,10 @@ export interface CharDef {
   /** 카드 그림 (없으면 픽셀파이트 얼굴) */
   art?: string;
   color: string;
-  /** 판 안 한 줄 소개 */
+  /** 판 안 한 줄 소개 (대사) */
   line: string;
+  /** 가방 프로필 소개 */
+  bio?: string;
   passive: { name: string; fx: (p: number) => Partial<Fx>; desc: (p: number) => string };
   active: { name: string; kind: SkillKind; cd: (p: number) => number; mag: (p: number) => number; desc: (p: number) => string };
   /** 그림 승인 전이면 false (가챠 · 도감에 안 나옴) */
@@ -199,17 +204,17 @@ export const CK = {
   igna: { cd: 5, recv: [0.22, 0.02], boost: [1.0, 0.04] },
   lily: { cd: 7, pay: [0.05, 0.012], shield: [0.5, 0.025] },
   ivan: { cd: 6, build: [0.2, 0.02], sale: [0.5, 0.02] },
-  soyoung: { cd: 9, fee: [0.006, 0.001], pull: 2, pay: [0.3, 0.02] },
+  soyoung: { cd: 9, fee: [0.005, 0.0008], pull: 2, pay: [0.25, 0.015] },
   zena: { cd: 5, shock: [0.15, 0.02], dash: 8 },
-  "kai-tkd": { cd: 8, sal: [0.06, 0.015], dbl: [20, 5] },
-  "igna-fw": { cd: 4, recv: [0.22, 0.02], boost: [1.2, 0.05], spark: [0.15, 0.015] },
-  "lily-frog": { cd: 5, pay: [0.05, 0.012] },
-  "ivan-winter": { cd: 9, build: [0.15, 0.015], def: [0.1, 0.02] },
-  "soyoung-bunny": { cd: 7, fee: [0.012, 0.0015] },
-  "zena-idol": { cd: 7, shock: [0.12, 0.015], fan: [0.06, 0.004] },
-  "gunmo-school": { cd: 6, acq: [0.2, 0.015] },
-  "ur-dice": { cd: 9, twin: [0.11, 0.005], dbl: [40, 3] },
-  "ur-moa": { cd: 10, acq: [0.08, 0.006], build: [0.05, 0.004], buy: [1.6, -0.015] },
+  "ivan-marine": { cd: 6, def: [0.15, 0.02] },
+  "igna-student": { cd: 5, recv: [0.2, 0.02], boost: [0.6, 0.03] },
+  "lily-hood": { cd: 5, pay: [0.06, 0.012] },
+  toto: { cd: 7, fee: [0.005, 0.0008] },
+  mirage: { cd: 7, sal: [0.04, 0.01], dbl: [20, 3], ctl: [0.06, 0.004] },
+  lolo: { cd: 6, shock: [0.22, 0.022], fan: [0.06, 0.004] },
+  mongle: { cd: 6, pay: [0.2, 0.008] },
+  "ur-dice": { cd: 9, twin: [0.08, 0.004], dbl: [40, 3], ctl: [0.05, 0.004] },
+  "ur-moa": { cd: 10, acq: [0.12, 0.008], build: [0.08, 0.005], buy: [1.6, -0.015] },
   "ur-forte": { cd: 5, sal: [0.4, 0.02], recv: [0.18, 0.01] },
 };
 const k = <T extends keyof typeof CK>(id: T) => CK[id];
@@ -227,6 +232,7 @@ export const CHARS: CharDef[] = [
     sprite: "kai",
     color: "#4a7dff",
     line: "출발할 때마다 바람처럼 돈이 붙는 여행 체질",
+    bio: "바람처럼 떠도는 거리의 격투가. 출발 포털을 지날 때마다 왠지 지갑이 두둑해지는 여행 체질이에요.",
     passive: { name: "순풍", fx: (p) => ({ salary: P(lin(k("kai").sal, p)) }), desc: (p) => `출발 월급 +${pct(P(lin(k("kai").sal, p)))}` },
     active: { name: "질풍 다시 굴리기", kind: "reroll", cd: cdOf(k("kai")), mag: () => 1, desc: () => "굴린 뒤 한 번 다시 굴려요" },
     on: true,
@@ -240,6 +246,7 @@ export const CHARS: CharDef[] = [
     sprite: "igna",
     color: "#ff6a3d",
     line: "내 땅에 불을 지펴 통행료를 끓어오르게",
+    bio: "불꽃을 다루는 술사. 자기 땅에 불을 지펴 통행료를 펄펄 끓게 만드는 게 특기예요.",
     passive: { name: "뜨끈한 장사", fx: (p) => ({ tollRecv: P(lin(k("igna").recv, p)) }), desc: (p) => `내 땅 통행료 +${pct(P(lin(k("igna").recv, p)))}` },
     active: {
       name: "열기 축제",
@@ -259,6 +266,7 @@ export const CHARS: CharDef[] = [
     sprite: "lily",
     color: "#46c9ff",
     line: "우산으로 통행료 비를 막는 꼬마",
+    bio: "우산과 오리 장화를 좋아하는 꼬마. 남의 땅에서도 우산을 쓰윽 펴서 통행료를 깎아요.",
     passive: { name: "작은 우산", fx: (p) => ({ tollPay: P(lin(k("lily").pay, p)) }), desc: (p) => `남 땅 통행료 −${pct(P(lin(k("lily").pay, p)))}` },
     active: {
       name: "물방울 방패",
@@ -278,6 +286,7 @@ export const CHARS: CharDef[] = [
     sprite: "ivan",
     color: "#8a9bb0",
     line: "튼튼하게 짓고 거침없이 사들이는 교관",
+    bio: "엄격한 교관. 기초부터 튼튼하게 짓고, 마음에 드는 땅은 정권 한 방으로 사들여요.",
     passive: { name: "튼튼한 기초", fx: (p) => ({ build: P(lin(k("ivan").build, p)) }), desc: (p) => `건설비 −${pct(P(lin(k("ivan").build, p)))}` },
     active: {
       name: "정권 인수",
@@ -299,6 +308,7 @@ export const CHARS: CharDef[] = [
     sprite: "soyoung",
     color: "#c05bff",
     line: "내 땅 앞을 지나가기만 해도 출석 체크",
+    bio: "규칙에 엄한 선생님. 내 땅 앞을 지나가는 학생들의 출석을 꼭 체크해요.",
     passive: {
       name: "출석 체크",
       fx: (p) => ({ passFee: P(lin(k("soyoung").fee, p)), pullPay: Math.min(1, A(lin(k("soyoung").pay, p))) }),
@@ -322,6 +332,7 @@ export const CHARS: CharDef[] = [
     sprite: "zena",
     color: "#ffd23f",
     line: "통행료에 번개를 실어 찌릿",
+    bio: "번개 창을 든 창술사. 통행료에 정전기를 실어 찌릿하게 받아내요.",
     passive: { name: "정전기", fx: (p) => ({ shock: P(lin(k("zena").shock, p)) }), desc: (p) => `내 통행료를 낼 때 ${pct(P(lin(k("zena").shock, p)))} 확률로 50% 더` },
     active: {
       name: "번개 질주",
@@ -333,136 +344,132 @@ export const CHARS: CharDef[] = [
     on: true,
   },
 
-  /* ── SSR: 픽셀파이트 스킨 버전 ── */
+  /* ── SR: 픽셀파이트 캐릭터 + 마블 오리지널 스킨 ── */
   {
-    id: "kai-tkd",
-    name: "카이",
-    title: "태권 카이",
-    grade: "SSR",
-    base: "kai",
-    sprite: "kai-tkd",
-    color: "#3d6bff",
-    line: "기합 한 번에 원하는 눈이 나온다",
-    passive: {
-      name: "도복 순풍",
-      fx: (p) => ({ salary: P(lin(k("kai-tkd").sal, p)), doubleBonus: P(lin(k("kai-tkd").dbl, p)) }),
-      desc: (p) => `출발 월급 +${pct(P(lin(k("kai-tkd").sal, p)))} · 더블이면 +${Math.round(P(lin(k("kai-tkd").dbl, p)))}`,
-    },
-    active: { name: "기합 굴리기", kind: "pick", cd: cdOf(k("kai-tkd")), mag: () => 12, desc: () => "원하는 눈(2~12)으로 굴려요 (더블 아님)" },
-    on: true,
-  },
-  {
-    id: "igna-fw",
-    name: "이그나",
-    title: "불꽃놀이 이그나",
-    grade: "SSR",
-    base: "igna",
-    sprite: "igna-fw",
-    color: "#ff4fa0",
-    line: "불꽃놀이는 이웃 땅까지 번진다",
-    passive: {
-      name: "축제 장사",
-      fx: (p) => ({ tollRecv: P(lin(k("igna-fw").recv, p)), shock: P(lin(k("igna-fw").spark, p)) }),
-      desc: (p) => `내 땅 통행료 +${pct(P(lin(k("igna-fw").recv, p)))} · 낼 때 ${pct(P(lin(k("igna-fw").spark, p)))} 확률로 불꽃이 튀어 50% 더`,
-    },
-    active: {
-      name: "연쇄 불꽃놀이",
-      kind: "fireworks",
-      cd: cdOf(k("igna-fw")),
-      mag: (p) => 1 + A(lin(k("igna-fw").boost, p)),
-      desc: (p) => `고른 내 땅의 동네 + 양옆 두 칸 안의 내 땅까지 통행료 ×${(1 + A(lin(k("igna-fw").boost, p))).toFixed(2)} (3바퀴)`,
-    },
-    on: true,
-  },
-  {
-    id: "lily-frog",
-    name: "릴리",
-    title: "개구리 릴리",
-    grade: "SSR",
-    base: "lily",
-    sprite: "lily-frog",
-    color: "#5fd35a",
-    line: "개굴! 남의 땅은 폴짝 건너뛰기",
-    passive: {
-      name: "개구리 우비",
-      fx: (p) => ({ tollPay: P(lin(k("lily-frog").pay, p)), jailFree: 1 }),
-      desc: (p) => `남 땅 통행료 −${pct(P(lin(k("lily-frog").pay, p)))} · 수리소에 서도 바로 나감`,
-    },
-    active: { name: "폴짝", kind: "hop", cd: cdOf(k("lily-frog")), mag: () => 3, desc: () => "이번 이동에 남 땅에 서면 다음 안전한 칸까지 뛰어요 (최대 3칸)" },
-    on: true,
-  },
-  {
-    id: "ivan-winter",
+    id: "ivan-marine",
     name: "이반",
-    title: "겨울 이반",
-    grade: "SSR",
+    title: "오도해병 이반",
+    grade: "SR",
     base: "ivan",
-    sprite: "ivan-winter",
-    color: "#8fd8ff",
-    line: "얼어붙은 땅은 누구도 못 뺏는다",
-    passive: {
-      name: "동토의 성벽",
-      fx: (p) => ({ build: P(lin(k("ivan-winter").build, p)), defend: P(lin(k("ivan-winter").def, p)) }),
-      desc: (p) => `건설비 −${pct(P(lin(k("ivan-winter").build, p)))} · 내 땅 인수당하면 ${pct(P(lin(k("ivan-winter").def, p)))} 더 받음`,
-    },
-    active: { name: "얼음 감옥", kind: "freeze", cd: cdOf(k("ivan-winter")), mag: () => 1, desc: () => "상대 한 명이 다음 차례를 쉬어요" },
+    sprite: "ivan-marine",
+    art: "/marble/art/ivan-marine.webp",
+    color: "#d8402f",
+    line: "필승! 남의 건물도 정신교육부터",
+    bio: "오늘부터 해병대 체험! 필승 구호와 함께 남의 건물부터 정신교육(?) 시키는 열혈 이반.",
+    passive: { name: "철통 경계", fx: (p) => ({ defend: P(lin(k("ivan-marine").def, p)) }), desc: (p) => `내 땅 인수 비용 +${pct(P(lin(k("ivan-marine").def, p)))}` },
+    active: { name: "상륙 돌격", kind: "debug", cd: cdOf(k("ivan-marine")), mag: () => 1, desc: () => "상대 땅 하나의 건물을 한 단계 부숴요 (랜드마크 제외)" },
     on: true,
   },
   {
-    id: "soyoung-bunny",
-    name: "소영",
-    title: "바니 소영",
-    grade: "SSR",
-    base: "soyoung",
-    sprite: "soyoung-bunny",
-    color: "#ff7ad9",
-    line: "깡총깡총, 한 발 더 가면 내 땅",
-    passive: {
-      name: "출석부 바니",
-      fx: (p) => ({ passFee: P(lin(k("soyoung-bunny").fee, p)) }),
-      desc: (p) => `남이 내 땅을 지나가면 그 통행료의 ${pct(P(lin(k("soyoung-bunny").fee, p)))}`,
-    },
-    active: { name: "깡총 점프", kind: "bunny", cd: cdOf(k("soyoung-bunny")), mag: () => 3, desc: () => "굴린 뒤 0~3칸 더 가요" },
-    on: true,
-  },
-  {
-    id: "zena-idol",
-    name: "제나",
-    title: "아이돌 제나",
-    grade: "SSR",
-    base: "zena",
-    sprite: "zena-idol",
-    color: "#ffe066",
-    line: "무대 위 정전기는 팬서비스",
-    passive: {
-      name: "무대 정전기",
-      fx: (p) => ({ shock: P(lin(k("zena-idol").shock, p)) }),
-      desc: (p) => `내 통행료를 낼 때 ${pct(P(lin(k("zena-idol").shock, p)))} 확률로 50% 더`,
-    },
+    id: "igna-student",
+    name: "이그나",
+    title: "학생 이그나",
+    grade: "SR",
+    base: "igna",
+    sprite: "igna-student",
+    art: "/marble/art/igna-student.webp",
+    color: "#3a2f4f",
+    line: "검은 머리로 바꿔도 불꽃은 그대로",
+    bio: "검은 머리로 변신한 모범생(?) 이그나. 필기 노트에서 불꽃이 튀어 내 동네 통행료가 들썩여요.",
+    passive: { name: "열공 모드", fx: (p) => ({ tollRecv: P(lin(k("igna-student").recv, p)) }), desc: (p) => `내 땅 통행료 +${pct(P(lin(k("igna-student").recv, p)))}` },
     active: {
-      name: "팬 사인회",
-      kind: "concert",
-      cd: cdOf(k("zena-idol")),
-      mag: (p) => A(lin(k("zena-idol").fan, p)),
-      desc: (p) => `상대마다 가진 돈의 ${pct(A(lin(k("zena-idol").fan, p)))}를 사인회 값으로 받아요`,
+      name: "불꽃 필기",
+      kind: "fireworks",
+      cd: cdOf(k("igna-student")),
+      mag: (p) => 1 + A(lin(k("igna-student").boost, p)),
+      desc: (p) => `고른 내 땅의 동네 + 양옆 두 칸 안의 내 땅 통행료 ×${(1 + A(lin(k("igna-student").boost, p))).toFixed(2)} (3바퀴)`,
     },
     on: true,
   },
   {
-    id: "gunmo-school",
-    name: "건모",
-    title: "학생 건모",
+    id: "lily-hood",
+    name: "릴리",
+    title: "빨간망토 릴리",
+    grade: "SR",
+    base: "lily",
+    sprite: "lily-hood",
+    art: "/marble/art/lily-hood.webp",
+    color: "#e2394b",
+    line: "늑대 소굴은 폴짝 건너뛰어요",
+    bio: "할머니 댁에 심부름 가는 빨간망토 릴리. 늑대 소굴(남의 땅)은 폴짝 건너뛰는 게 요령이에요.",
+    passive: { name: "할머니 심부름", fx: (p) => ({ tollPay: P(lin(k("lily-hood").pay, p)) }), desc: (p) => `남 땅 통행료 −${pct(P(lin(k("lily-hood").pay, p)))}` },
+    active: { name: "폴짝 지름길", kind: "hop", cd: cdOf(k("lily-hood")), mag: () => 1, desc: () => "이번 이동에 남 땅에 서면 다음 안전한 칸까지 폴짝 넘어가요" },
+    on: true,
+  },
+
+  /* ── SSR: 마블 오리지널 ── */
+  {
+    id: "toto",
+    name: "토토",
+    title: "달토끼 배달부",
     grade: "SSR",
-    base: "gunmo",
-    sprite: "gunmo-school",
-    color: "#7c8cff",
-    line: "남의 건물도 버그면 지운다",
+    base: "orig",
+    sprite: "toto",
+    art: "/marble/art/toto.webp",
+    color: "#3d4f9a",
+    line: "달빛 편지 배달 왔어요~ 한 칸 더!",
+    bio: "달나라 우체국의 배달부 토끼. 롤러스케이트로 한 칸 더 달려가고, 지나가는 손님에게 배달비를 받아요.",
     passive: {
-      name: "코드 리뷰",
-      fx: (p) => ({ acq: P(lin(k("gunmo-school").acq, p)) }),
-      desc: (p) => `인수 비용 −${pct(P(lin(k("gunmo-school").acq, p)))}`,
+      name: "배달 수수료",
+      fx: (p) => ({ passFee: P(lin(k("toto").fee, p)) }),
+      desc: (p) => `남이 내 땅을 지나가면 그 통행료의 ${pct(P(lin(k("toto").fee, p)))}`,
     },
-    active: { name: "디버그", kind: "debug", cd: cdOf(k("gunmo-school")), mag: () => 1, desc: () => "상대 땅 하나의 건물을 한 단계 지워요 (랜드마크 제외)" },
+    active: { name: "달토끼 점프", kind: "bunny", cd: cdOf(k("toto")), mag: () => 3, desc: () => "굴린 뒤 0~3칸 더 가요" },
+    on: true,
+  },
+  {
+    id: "mirage",
+    name: "미라쥬",
+    title: "꼬마 마술사",
+    grade: "SSR",
+    base: "orig",
+    sprite: "mirage",
+    art: "/marble/art/mirage.webp",
+    color: "#7b4fd6",
+    line: "자, 이 주사위를 잘 보세요… 짠!",
+    bio: "주사위를 카드처럼 다루는 꼬마 마술사. 원하는 눈을 짠! 하고 꺼내 보이는 게 장기예요.",
+    passive: {
+      name: "카드 트릭",
+      fx: (p) => ({ salary: P(lin(k("mirage").sal, p)), doubleBonus: P(lin(k("mirage").dbl, p)), control: P(lin(k("mirage").ctl, p)) }),
+      desc: (p) => `출발 월급 +${pct(P(lin(k("mirage").sal, p)))} · 더블이면 +${Math.round(P(lin(k("mirage").dbl, p)))} · 힘 조절 +${pct(P(lin(k("mirage").ctl, p)))}`,
+    },
+    active: { name: "마술 굴리기", kind: "pick", cd: cdOf(k("mirage")), mag: () => 12, desc: () => "원하는 눈(2~12)으로 굴려요 (더블 아님)" },
+    on: true,
+  },
+  {
+    id: "lolo",
+    name: "롤로",
+    title: "서커스 단장",
+    grade: "SSR",
+    base: "orig",
+    sprite: "lolo",
+    art: "/marble/art/lolo.webp",
+    color: "#e0442f",
+    line: "레이디스 앤 젠틀맨! 관람료는 선불이에요",
+    bio: "서커스단의 당찬 단장. 물개 파트너와 함께 공연을 열어 모두에게 관람료를 걷어요.",
+    passive: { name: "특등석", fx: (p) => ({ shock: P(lin(k("lolo").shock, p)) }), desc: (p) => `내 통행료를 낼 때 ${pct(P(lin(k("lolo").shock, p)))} 확률로 50% 더` },
+    active: {
+      name: "서커스 공연",
+      kind: "concert",
+      cd: cdOf(k("lolo")),
+      mag: (p) => A(lin(k("lolo").fan, p)),
+      desc: (p) => `상대마다 가진 돈의 ${pct(A(lin(k("lolo").fan, p)))}를 관람료로 받아요`,
+    },
+    on: true,
+  },
+  {
+    id: "mongle",
+    name: "몽글",
+    title: "잠꾸러기 양",
+    grade: "SSR",
+    base: "orig",
+    sprite: "mongle",
+    art: "/marble/art/mongle.webp",
+    color: "#8fb4ff",
+    line: "양 한 마리… 양 두 마리… 쿨쿨",
+    bio: "구름처럼 폭신한 잠꾸러기 양. 자장가 한 곡이면 누구든 한 차례 꿈나라로 보내요.",
+    passive: { name: "포근한 털", fx: (p) => ({ tollPay: P(lin(k("mongle").pay, p)) }), desc: (p) => `남 땅 통행료 −${pct(P(lin(k("mongle").pay, p)))}` },
+    active: { name: "자장가", kind: "freeze", cd: cdOf(k("mongle")), mag: () => 1, desc: () => "상대 한 명이 다음 차례를 쿨쿨 자며 쉬어요" },
     on: true,
   },
 
@@ -477,10 +484,11 @@ export const CHARS: CharDef[] = [
     art: "/marble/art/ur-dice.webp",
     color: "#7fe0c8",
     line: "주사위가 굴러가는 곳엔 언제나 내가 있어!",
+    bio: "주사위의 요정. 굴러가는 모든 주사위에 깃들어 있다가, 마음에 드는 사람에게 원하는 더블을 선물해요.",
     passive: {
       name: "요정의 눈짓",
-      fx: (p) => ({ twin: P(lin(k("ur-dice").twin, p)), doubleBonus: P(lin(k("ur-dice").dbl, p)) }),
-      desc: (p) => `더블 확률 ↑ (${pct(P(lin(k("ur-dice").twin, p)))}) · 더블이면 +${Math.round(P(lin(k("ur-dice").dbl, p)))}`,
+      fx: (p) => ({ twin: P(lin(k("ur-dice").twin, p)), doubleBonus: P(lin(k("ur-dice").dbl, p)), control: P(lin(k("ur-dice").ctl, p)) }),
+      desc: (p) => `더블 확률 ↑ (${pct(P(lin(k("ur-dice").twin, p)))}) · 더블이면 +${Math.round(P(lin(k("ur-dice").dbl, p)))} · 힘 조절 +${pct(P(lin(k("ur-dice").ctl, p)))}`,
     },
     active: { name: "운명의 주사위", kind: "fate", cd: cdOf(k("ur-dice")), mag: () => 6, desc: () => "원하는 더블(1·1 ~ 6·6)로 굴려요 — 더블이라 한 번 더" },
     on: true,
@@ -495,6 +503,7 @@ export const CHARS: CharDef[] = [
     art: "/marble/art/ur-moa.webp",
     color: "#e8c25a",
     line: "이 동네, 통째로 사도 될까냥?",
+    bio: "마블 월드 최고의 부동산 재벌 고양이. 이 동네를 통째로 사도 되냐고 묻는 건 농담이 아니에요.",
     passive: {
       name: "큰손",
       fx: (p) => ({ acq: P(lin(k("ur-moa").acq, p)), build: P(lin(k("ur-moa").build, p)) }),
@@ -519,6 +528,7 @@ export const CHARS: CharDef[] = [
     art: "/marble/art/ur-forte.webp",
     color: "#ff9ec7",
     line: "태엽을 한 번 더 감으면, 춤도 한 번 더",
+    bio: "오르골 정원에서 태어난 태엽 소년. 태엽을 한 번 더 감으면 춤도, 차례도 한 번 더!",
     passive: {
       name: "태엽 장단",
       fx: (p) => ({ salary: P(lin(k("ur-forte").sal, p)), tollRecv: P(lin(k("ur-forte").recv, p)) }),
@@ -569,7 +579,7 @@ const usesAt = (base: number, at: number) => (p: number) => base + (p >= at ? 1 
 
 /** 아이템 수치표 — 목표(인형 상대, 아이템 하나만): 파워 0 ≈ 52% · 파워 15 ≈ 58% */
 export const IK = {
-  d_heavy: { dodge: [0.15, 0.015] },
+  d_heavy: { dodge: [0.15, 0.015], ctl: [0.03, 0.004] },
   d_spark: { dbl: [60, 15] },
   d_twin: { twin: [0.15, 0.01], dbl: [40, 8] },
   d_slide: { at: 99, dodge: [0, 0.006] },
@@ -591,8 +601,8 @@ export const ITEMS: ItemDef[] = [
     slot: "dice",
     name: "묵직한 주사위",
     grade: "R",
-    fx: (p) => ({ dodge: I(lin(ik("d_heavy").dodge, p)) }),
-    desc: (p) => `남 땅에 서게 되면 ${pct(I(lin(ik("d_heavy").dodge, p)))} 확률로 한 칸 더 굴러가요`,
+    fx: (p) => ({ dodge: I(lin(ik("d_heavy").dodge, p)), control: I(lin(ik("d_heavy").ctl, p)) }),
+    desc: (p) => `남 땅에 서게 되면 ${pct(I(lin(ik("d_heavy").dodge, p)))} 확률로 한 칸 더 · 힘 조절 +${pct(I(lin(ik("d_heavy").ctl, p)))}`,
   },
   {
     id: "d_spark",
@@ -767,21 +777,51 @@ export const MATCH_STARS = { win: 60, lose: 25, firstWinOfDay: 100, aiOnlyMult: 
 /** 처음 들어오면: 캐릭터 · 아이템 10연차 티켓 한 장씩 + 별사탕 */
 export const STARTER = { stars: 300, charTickets: 1, itemTickets: 1 };
 
+export interface StoreGive {
+  stars?: number;
+  parts?: number;
+  charTickets?: number;
+  itemTickets?: number;
+  /** 사이트 포인트(GP) 돌려받기 */
+  gp?: number;
+  /** 일일 패스 날 수 (매일 PASS_DAY 만큼) */
+  passDays?: number;
+}
 export interface StoreItem {
   id: string;
   name: string;
+  /** pass 패스 · pack 패키지 · cur 재화 · swap GP 로 바꾸기 · admin 관리자 */
+  kind: "pass" | "pack" | "cur" | "swap" | "admin";
   gp: number;
-  give: { stars?: number; parts?: number; charTickets?: number; itemTickets?: number };
+  /** GP 대신 재화로 사는 것 (swap) */
+  cost?: { stars?: number; parts?: number };
+  give: StoreGive;
   /** 한 주(한국 시간 월요일 시작) 살 수 있는 수 · 한 번만(once) */
   perWeek?: number;
   once?: boolean;
   desc: string;
 }
-/** GP 로 사는 것 — 재화는 1,000GP ≈ 별사탕 300 (10연차 ≈ 4,500GP), 패키지는 그보다 3~4배 이득 */
+/** 일일 패스: 하루 한 번 (메뉴에 들어오면 자동으로) */
+export const PASS_DAY = { stars: 100, parts: 10 };
+/** GP 환산 (이득 % 계산용): 1,000GP = 별사탕 300 · 600GP = 부품 60 */
+const GP_PER = { star: 1000 / 300, part: 10 };
+export function giveValueGp(g: StoreGive): number {
+  const stars = (g.stars ?? 0) + (g.charTickets ?? 0) * GACHA.char.ten + (g.itemTickets ?? 0) * GACHA.item.ten + (g.passDays ?? 0) * PASS_DAY.stars;
+  const parts = (g.parts ?? 0) + (g.passDays ?? 0) * PASS_DAY.parts;
+  return Math.round(stars * GP_PER.star + parts * GP_PER.part + (g.gp ?? 0));
+}
+/** 값 대비 이득 % (GP 로 사는 것만) */
+export const storeBonus = (it: StoreItem) => (it.gp > 0 ? Math.round((giveValueGp(it.give) / it.gp - 1) * 100) : 0);
+
+/** GP 상점 — 재화는 1,000GP = 별사탕 300 (10연차 ≈ 4,500GP), 패스 · 패키지는 몇 배 이득. GP 로 되돌리기는 절반 값 */
 export const STORE: StoreItem[] = [
-  { id: "s_star", name: "별사탕 300", gp: 1000, give: { stars: 300 }, perWeek: 5, desc: "캐릭터 2번 · 아이템 3번" },
-  { id: "s_parts", name: "부품 60", gp: 600, give: { parts: 60 }, perWeek: 5, desc: "아이템 강화 재료" },
-  { id: "p_start", name: "새내기 여행 가방", gp: 1000, give: { stars: 1350, parts: 100 }, once: true, desc: "캐릭터 10연차 한 번 + 부품 100" },
-  { id: "p_week", name: "주간 여행 꾸러미", gp: 2000, give: { charTickets: 1, itemTickets: 1, parts: 120 }, perWeek: 1, desc: "캐릭터 · 아이템 10연차 티켓 한 장씩 + 부품 120" },
+  { id: "p_daily", kind: "pass", name: "일일 패스 14일", gp: 2000, give: { stars: 300, passDays: 14 }, desc: `바로 별사탕 300 + 14일 동안 매일 별사탕 ${PASS_DAY.stars} · 부품 ${PASS_DAY.parts}` },
+  { id: "p_week", kind: "pass", name: "주간 여행 꾸러미", gp: 2000, give: { charTickets: 1, itemTickets: 1, parts: 120 }, perWeek: 1, desc: "캐릭터 · 아이템 10연차 티켓 한 장씩 + 부품 120 (주 1회)" },
+  { id: "p_start", kind: "pack", name: "첫 손님 패키지", gp: 1000, give: { stars: 1500, parts: 200, charTickets: 1, itemTickets: 1, passDays: 7 }, once: true, desc: "별사탕 1,500 · 부품 200 · 10연차 티켓 둘 · 일일 패스 7일 (한 번만)" },
+  { id: "s_star", kind: "cur", name: "별사탕 300", gp: 1000, give: { stars: 300 }, desc: "캐릭터 2번 · 아이템 3번" },
+  { id: "s_parts", kind: "cur", name: "부품 60", gp: 600, give: { parts: 60 }, desc: "아이템 강화 재료" },
+  { id: "x_star", kind: "swap", name: "별사탕 → GP", gp: 0, cost: { stars: 300 }, give: { gp: 500 }, desc: "별사탕 300 을 500GP 로 (절반 값)" },
+  { id: "x_parts", kind: "swap", name: "부품 → GP", gp: 0, cost: { parts: 60 }, give: { gp: 300 }, desc: "부품 60 을 300GP 로 (절반 값)" },
+  { id: "a_all", kind: "admin", name: "관리자 지원금", gp: 0, give: { stars: 10000, parts: 10000, gp: 10000, charTickets: 10, itemTickets: 10 }, desc: "모든 재화 +10,000 · 티켓 +10 (관리자만, 무제한)" },
 ];
 export const storeItem = (id: unknown) => STORE.find((s) => s.id === id);

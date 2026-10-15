@@ -50,7 +50,7 @@ export const POINT_GAMES: Record<PointGame, string> = {
   defense: "PIXEL LUCKY DEFENSE",
   rhythm: "BEAT DASH",
   sketch: "DOODLE PARTY",
-  marble: "PIXEL MARBLE",
+  marble: "DICE TOWN",
 };
 
 /**
@@ -617,7 +617,7 @@ export const ACHIEVEMENTS: Achievement[] = [
   a("sketch", "fooled-10", "타고난 거짓말쟁이", "그림 속 거짓말에서 내 가짜 제목으로 10번 속이기", "sketch.fooled", 10, 750),
   a("sketch", "relay-5", "릴레이 완주", "그림 릴레이 5판 끝까지", "sketch.relay", 5, 450),
 
-  // PIXEL MARBLE
+  // DICE TOWN
   a("marble", "games-1", "첫 여행", "한 판 끝까지 하기", "marble.games", 1, 150),
   a("marble", "games-10", "동네 한 바퀴", "10판 끝까지 하기", "marble.games", 10, 450),
   a("marble", "games-50", "여행 중독", "50판 끝까지 하기", "marble.games", 50, 1500),
@@ -813,7 +813,7 @@ export function pointReason(r: Pick<PointLogRow, "reason" | "ref">): string {
                     ? "디펜스 · 주간 도전 (종료)"
                     : "디펜스";
     case "marble":
-      return r.ref?.startsWith("store:") ? "마블 · 상점" : "PIXEL MARBLE";
+      return r.ref?.startsWith("store:") ? "마블 · 상점" : "DICE TOWN";
     case "mail":
       return `우편 · ${r.ref ?? ""}`;
     default:

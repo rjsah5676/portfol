@@ -1,5 +1,5 @@
 /**
- * PIXEL MARBLE 난수 (mulberry32) — 상태가 숫자 하나라 판 상태에 그대로 넣고 복제 · 저장됨.
+ * DICE TOWN 난수 (mulberry32) — 상태가 숫자 하나라 판 상태에 그대로 넣고 복제 · 저장됨.
  * 서버가 판을 돌리고, 밸런스 시뮬도 같은 코드라 시드만 같으면 같은 판이 나옴.
  */
 export interface Rng {

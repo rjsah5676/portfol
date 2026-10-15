@@ -14,7 +14,7 @@ import { MAP_IDS, type MapId } from "../../../../web/src/lib/marble/maps";
 import type { LobbyRoom, RoomWire, SeatWire } from "../../../../web/src/lib/marble/wire";
 
 /*
- * PIXEL MARBLE 온라인 — 방(서버 메모리) · AI 입장 · 판 진행(서버가 엔진을 돌림) · 보상.
+ * DICE TOWN 온라인 — 방(서버 메모리) · AI 입장 · 판 진행(서버가 엔진을 돌림) · 보상.
  *
  *  로비 marble:lobby            방 목록
  *  방   marble:room:<id>        방 상태 전체 (판 상태 · 이번에 생긴 일 ev · 마감 시각)
@@ -85,6 +85,8 @@ interface Room {
   /** AI 가 연 방: 사람이 안 오면 이때 닫음 */
   botRoomUntil: number;
   chat: { name: string; text: string; at: number; bot?: boolean }[];
+  /** 방장이 내보낸 사람 (이 방엔 다시 못 들어옴) */
+  kicked: Set<string>;
 }
 
 const hashPw = (id: string, pw: string) => createHash("sha256").update(`${id}:${pw}`).digest("hex");
@@ -102,10 +104,10 @@ export function animMs(evs: Ev[]): number {
   for (const e of evs) {
     switch (e.t) {
       case "roll":
-        t += 1100;
+        t += e.power !== undefined ? 1500 : 1100;
         break;
       case "move":
-        t += e.warp ? 700 : 250 + 210 * e.path.length;
+        t += e.rail ? 1300 : e.warp ? 700 : 250 + 210 * e.path.length;
         break;
       case "pay":
         t += 650;
@@ -133,12 +135,14 @@ export function animMs(evs: Ev[]): number {
       case "frozen":
       case "block":
       case "rewind":
+      case "loan":
         t += 800;
         break;
       case "salary":
       case "sell":
       case "adjust":
       case "free":
+      case "repay":
         t += 300;
         break;
     }
@@ -224,6 +228,7 @@ export function registerMarble({ gateway, db, points, users }: Deps, opts: Marbl
     return { ...rest, ev: [] };
   };
   const wire = (r: Room): RoomWire => ({
+    kicked: [...r.kicked],
     id: r.id,
     name: r.name,
     owner: r.owner,
@@ -308,6 +313,7 @@ export function registerMarble({ gateway, db, points, users }: Deps, opts: Marbl
       botNext: 0,
       botRoomUntil: 0,
       chat: [],
+      kicked: new Set(),
     };
     rooms.set(id, r);
     lobbyChanged();
@@ -639,10 +645,13 @@ export function registerMarble({ gateway, db, points, users }: Deps, opts: Marbl
     const cur = playingRoom(ctx.uid);
     if (cur) return { id: cur.id };
     leaveOthers(ctx.uid);
-    const fits = (r: Room) => r.phase === "wait" && r.quick && !r.pw && freeSeats(r).length > 0 && (!map || r.map === map) && (!max || r.max === max);
-    const cands = [...rooms.values()].filter(fits).sort((a, b) => present(b).length - present(a).length || a.createdAt - b.createdAt);
-    let r = cands[0];
-    if (!r) r = createRoom({ name: `${nick}의 마블`, map: map ?? "town", max: max ?? 2, quick: true, bots: true, pw: "", owner: ctx.uid });
+    const fits = (r: Room) => r.phase === "wait" && r.quick && !r.pw && freeSeats(r).length > 0 && !r.kicked.has(ctx.uid) && (!map || r.map === map) && (!max || r.max === max);
+    // 열린 방 중 아무 데나 (사람이 있는 방을 먼저, 그 안에서 무작위) — 없으면 인원 2~4 무작위로 새 방
+    const cands = [...rooms.values()].filter(fits);
+    const withPeople = cands.filter((x) => present(x).length > 0);
+    const pool = withPeople.length ? withPeople : cands;
+    let r = pool.length ? pool[randomInt(pool.length)] : undefined;
+    if (!r) r = createRoom({ name: `${nick}의 마블`, map: map ?? MAP_IDS[randomInt(MAP_IDS.length)], max: max ?? 2 + randomInt(3), quick: true, bots: true, pw: "", owner: ctx.uid });
     const i = await seatHuman(r, ctx, nick);
     r.seats[i]!.ready = true;
     push(r);
@@ -667,6 +676,7 @@ export function registerMarble({ gateway, db, points, users }: Deps, opts: Marbl
       }
       if (r.phase === "play") throw forbidden("나간 판에는 다시 들어갈 수 없어요.");
     }
+    if (r.kicked.has(ctx.uid)) throw forbidden("강퇴된 방이에요.");
     if (r.phase !== "wait") throw forbidden("이미 시작한 방이에요. 끝나면 들어갈 수 있어요.");
     if (r.pw && !(pw && safeEq(r.pw, hashPw(r.id, pw)))) throw new AppError("BAD_PASSWORD", "비밀번호가 맞지 않아요.", 403);
     if (playingRoom(ctx.uid)) throw forbidden("진행 중인 판이 있어요.");
@@ -704,6 +714,7 @@ export function registerMarble({ gateway, db, points, users }: Deps, opts: Marbl
         quick: z.boolean().optional(),
         bots: z.boolean().optional(),
         kickBot: z.number().int().min(0).max(3).optional(),
+        kick: z.number().int().min(0).max(3).optional(),
         addBot: z.boolean().optional(),
       })
       .parse(raw);
@@ -729,6 +740,17 @@ export function registerMarble({ gateway, db, points, users }: Deps, opts: Marbl
     r.bots = r.bots && r.quick;
     if (!r.bots) r.seats = r.seats.map((s) => (s?.bot ? null : s));
     if (o.kickBot !== undefined && r.seats[o.kickBot]?.bot) r.seats[o.kickBot] = null;
+    if (o.kick !== undefined) {
+      // 강퇴: AI 든 사람이든 (나 빼고)
+      const ks = r.seats[o.kick];
+      if (ks && ks.uid !== ctx.uid) {
+        if (!ks.bot && ks.uid) {
+          r.kicked.add(ks.uid);
+          say(r, "알림", `${ks.name} 님이 강퇴됐어요.`, true);
+        }
+        r.seats[o.kick] = null;
+      }
+    }
     if (o.addBot && r.bots) addBot(r);
     r.botNext = 0;
     planBot(r);
@@ -744,7 +766,7 @@ export function registerMarble({ gateway, db, points, users }: Deps, opts: Marbl
         seq: z.number().int().optional(),
         a: z
           .object({
-            t: z.enum(["roll", "pay", "warp", "pick", "skill", "keep", "reroll", "adjust", "fork", "buy", "acq", "fest"]),
+            t: z.enum(["roll", "pay", "warp", "pick", "skill", "keep", "reroll", "adjust", "fork", "rail", "buy", "acq", "fest", "start", "loan"]),
             to: z.number().int().optional(),
             n: z.number().int().optional(),
             target: z.number().int().optional(),
@@ -752,6 +774,7 @@ export function registerMarble({ gateway, db, points, users }: Deps, opts: Marbl
             lv: z.number().int().optional(),
             yes: z.boolean().optional(),
             tile: z.number().int().optional(),
+            power: z.number().min(0).max(1).optional(),
           })
           .strict(),
       })
@@ -854,7 +877,7 @@ export function registerMarble({ gateway, db, points, users }: Deps, opts: Marbl
   });
   gateway.rpc("marble.buy", (ctx, raw) => {
     member(ctx);
-    return meta.buy(ctx.uid, raw);
+    return meta.buy(ctx.uid, raw, !!ctx.user?.admin);
   });
 
   /** 승수 순위 */

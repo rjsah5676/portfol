@@ -1,45 +1,70 @@
 "use client";
 
-import type { CSSProperties } from "react";
+import type { ReactNode } from "react";
 import { CHAR } from "@/lib/marble/data";
-import { LANDMARK, tollOf, type Game } from "@/lib/marble/engine";
+import { LANDMARK, tollMult, tollOf, type Game } from "@/lib/marble/engine";
 import { MAPS, type MapDef, type TileDef } from "@/lib/marble/maps";
 import type { GameWire } from "@/lib/marble/wire";
-import { Icon, PCOLOR } from "./pixel";
+import { PCOLOR } from "./pixel";
 import Token, { type TokenAnim } from "./Token";
 
 /*
- * 2.5D 보드 (도트 아이소메트릭) — 9×9 격자를 마름모로 눕혀 무대(1024×576) 가운데 섬처럼 놓음.
- *  - 바닥(섬 · 칸 윗면 · 옆면)은 SVG 한 장 (모서리가 계단처럼 깨지게 crispEdges)
- *  - 칸 이름 · 건물 · 말은 HTML 을 그 위에 세워서 (뒤 칸부터 앞 칸 순서로 겹침)
- *  - 출발 포털이 맨 아래 꼭짓점, 말은 시계 방향으로 돎 (모두의마블처럼)
+ * 탑뷰 보드 (모두의마블식) — 9×9 격자 둘레 32칸을 무대(1024×576) 가운데 납작하게 깔아 둠.
+ *  - 칸은 카드: 동네 색 띠 + 큰 이름, 아래에 건물 · 땅값/통행료. 산 땅은 테두리 · 바탕이 플레이어 색.
+ *  - 특수칸은 칸 전체를 그 칸 색으로 칠하고 그림 표식만 (세우는 건물 없음).
+ *  - 말(캐릭터)만 도트. 출발은 오른쪽 아래 모서리, 시계 방향으로 돎.
  * 칸 좌표 = 맵 격자 (x, y). orgel 은 자리마다 지금 놓인 칸(game.order)을 그림.
  */
 
-/** 건물 그림 높이 (단계별) */
-const BH = [0, 46, 60, 74, 78];
+/** 보드 영역 (좌우 플레이어 카드 사이) */
+const L = 226;
+const R = 798;
+const T = 6;
+const B = 570;
+/** 모서리 칸 크기 · 변 칸 크기 */
+const C = 84;
+const SW = (R - L - 2 * C) / 7;
+const SH = (B - T - 2 * C) / 7;
 
-export const TW = 100;
-export const TH = 50;
-const DEPTH = 12;
-const CX = 512;
-const CY = 290;
+/** 격자 한 축의 [시작, 끝] (모서리 칸은 크게) */
+const span = (g: number, a: number, s: number): [number, number] => (g <= 0 ? [a, a + C] : g >= 8 ? [a + C + 7 * s, a + 2 * C + 7 * s] : [a + C + (g - 1) * s, a + C + g * s]);
+/** 격자(소수 가능) → 축 좌표 (칸 가운데끼리 이어 붙임) */
+const axis = (g: number, a: number, s: number) => {
+  const mid = (k: number) => {
+    const [p, q] = span(k, a, s);
+    return (p + q) / 2;
+  };
+  const lo = Math.max(0, Math.min(7, Math.floor(g)));
+  return mid(lo) + (mid(lo + 1) - mid(lo)) * (g - lo);
+};
 
-/** 격자 좌표 → 무대 좌표 (칸 가운데) */
-export const iso = (gx: number, gy: number) => ({ x: CX + ((gx - gy) * TW) / 2, y: CY + ((gx + gy - 8) * TH) / 2 });
-/** 자리 → 무대 좌표 */
-export const slotXY = (m: MapDef, slot: number) => iso(m.tiles[slot].x, m.tiles[slot].y);
+/** 격자 좌표 → 무대 좌표 (칸 가운데) — 이름은 예전 아이소 그대로 둠 */
+export const iso = (gx: number, gy: number) => ({ x: axis(gx, L, SW), y: axis(gy, T, SH) });
+/** 자리 → 무대 좌표 (말 발끝): 칸 안쪽 가장자리에 세워 칸 이름 · 값을 안 가림 */
+export const slotXY = (m: MapDef, slot: number) => {
+  const { x: gx, y: gy } = m.tiles[slot];
+  const r = rectOf(gx, gy);
+  const cx = r.x + r.w / 2;
+  const cy = r.y + r.h / 2;
+  const dx = gx >= 8 ? -1 : gx <= 0 ? 1 : 0;
+  const dy = gy >= 8 ? -1 : gy <= 0 ? 1 : 0;
+  return {
+    x: dx ? cx + dx * (r.w / 2 + 14) : cx,
+    y: dy < 0 ? r.y + 4 : dy > 0 ? r.y + r.h + 46 : cy + 22,
+  };
+};
+const rectOf = (gx: number, gy: number) => {
+  const [x0, x1] = span(gx, L, SW);
+  const [y0, y1] = span(gy, T, SH);
+  return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+};
 
-const pts = (a: { x: number; y: number }[]) => a.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ");
-function diamond(gx: number, gy: number, inset = 0) {
-  const k = 0.5 - inset;
-  return [iso(gx - k, gy - k), iso(gx + k, gy - k), iso(gx + k, gy + k), iso(gx - k, gy + k)];
-}
 function rgb(hex: string): [number, number, number] {
   if (hex.startsWith("rgb")) return hex.match(/\d+/g)!.slice(0, 3).map(Number) as [number, number, number];
   const n = parseInt(hex.slice(1), 16);
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 }
+/** 흰색과 섞기 (white 0~1) */
 export function mix(hex: string, white: number) {
   const [r, g, b] = rgb(hex);
   const f = (v: number) => Math.round(v + (255 - v) * white);
@@ -50,28 +75,19 @@ export function dark(hex: string, k: number) {
   return `rgb(${Math.round(r * k)},${Math.round(g * k)},${Math.round(b * k)})`;
 }
 
-/** 특수칸 그림 이름 (같은 그림을 나눠 씀) */
-const SP: Record<string, string> = { start2: "bonus", bonus: "bonus" };
+type GlyphName = "flag" | "coin" | "gift" | "wrench" | "note" | "portal" | "bag" | "train" | "star" | "house" | "tower" | "crown" | "fire";
 
-/** 동네별 바닥 그림이 준비된 맵 (public/marble/tex/<맵>-<동네>.webp) */
-const TEX = new Set(["town", "cross", "orgel"]);
-
-/** 맵 · 동네별 바닥 무늬 */
-const PATS: Record<string, string[]> = {
-  town: ["stone", "grass", "plank", "stone", "dot", "plank", "stone", "dot"],
-  cross: ["flower", "grass", "plank", "wave", "snow", "sand", "grass", "sand"],
-  orgel: ["flower", "grass", "wave", "flower", "grass", "dot", "star", "stone"],
-};
-
-const KIND: Record<string, { fill: string; icon: string }> = {
-  start: { fill: "#ffd84d", icon: "flag" },
-  start2: { fill: "#ffe680", icon: "gold" },
-  box: { fill: "#ff9ec4", icon: "box" },
-  jail: { fill: "#b8c4d6", icon: "wrench" },
-  fest: { fill: "#d6a8ff", icon: "note" },
-  warp: { fill: "#a796ff", icon: "warp" },
-  tax: { fill: "#e3c79f", icon: "bag" },
-  bonus: { fill: "#ffe680", icon: "gold" },
+/** 특수칸: 바탕색 · 그림 */
+const KIND: Record<string, { fill: string; ink: string; glyph: GlyphName }> = {
+  start: { fill: "#ffcf3f", ink: "#5a3a00", glyph: "flag" },
+  start2: { fill: "#ffe680", ink: "#5a3a00", glyph: "coin" },
+  box: { fill: "#ff8fbf", ink: "#fff", glyph: "gift" },
+  jail: { fill: "#8d9bb3", ink: "#fff", glyph: "wrench" },
+  fest: { fill: "#b07bff", ink: "#fff", glyph: "note" },
+  warp: { fill: "#6f7bff", ink: "#fff", glyph: "portal" },
+  tax: { fill: "#d9a35e", ink: "#fff", glyph: "bag" },
+  bonus: { fill: "#ffd23a", ink: "#5a3a00", glyph: "coin" },
+  rail: { fill: "#47b6ff", ink: "#fff", glyph: "train" },
 };
 
 export interface TokenView {
@@ -85,6 +101,7 @@ export interface TokenView {
 }
 
 const fmtToll = (v: number) => (v >= 10000 ? `${Math.round(v / 1000)}k` : v >= 1000 ? `${(v / 1000).toFixed(1)}k` : String(v));
+const INK = "#262b52";
 
 export default function Board({
   g,
@@ -104,225 +121,55 @@ export default function Board({
 }) {
   const m = MAPS[g.map];
   const gg = g as unknown as Game;
-  // 뒤(위) 칸부터 그림
-  const order = m.tiles.map((_, s) => s).sort((a, b) => m.tiles[a].x + m.tiles[a].y - (m.tiles[b].x + m.tiles[b].y) || m.tiles[a].x - m.tiles[b].x);
-  /** 안쪽 바닥 */
-  const fillOf = (d: TileDef, owner: number) => {
-    if (KIND[d.kind]) return mix(KIND[d.kind].fill, 0.35);
-    if (d.kind === "spot") return owner >= 0 ? mix(PCOLOR[owner], 0.55) : "#fff6cf";
-    const base = mix(m.groups[d.group ?? 0].color, 0.62);
-    return owner >= 0 ? mix(PCOLOR[owner], 0.55) : base;
-  };
-  /** 테두리 띠: 주인 색이 먼저, 없으면 동네 색 */
-  const rimOf = (d: TileDef, owner: number) => {
-    if (owner >= 0) return PCOLOR[owner];
-    if (KIND[d.kind]) return KIND[d.kind].fill;
-    if (d.kind === "spot") return "#ffc94a";
-    return m.groups[d.group ?? 0].color;
-  };
-  /** 바닥 무늬 (동네 분위기) */
-  const patOf = (d: TileDef) => (KIND[d.kind] ? "star" : d.kind === "spot" ? "star" : (PATS[m.id]?.[d.group ?? 0] ?? "dot"));
   return (
-    <div className="absolute inset-0">
-      <svg viewBox="0 0 1024 576" width={1024} height={576} className="absolute inset-0" style={{ shapeRendering: "crispEdges" }}>
-        <defs>
-          <pattern id="mb-brick" width="12" height="6" patternUnits="userSpaceOnUse">
-            <path d="M0 0.5H12M0 3.5H12M3 0.5V3.5M9 3.5V6.5" stroke="rgba(35,42,77,0.22)" strokeWidth="1" fill="none" />
-          </pattern>
-          <pattern id="mb-pat-dot" width="10" height="5" patternUnits="userSpaceOnUse">
-            <rect x="2" y="1" width="2" height="1" fill="rgba(255,255,255,0.55)" />
-            <rect x="7" y="3" width="2" height="1" fill="rgba(35,42,77,0.12)" />
-          </pattern>
-          <pattern id="mb-pat-grass" width="12" height="6" patternUnits="userSpaceOnUse">
-            <path d="M2 4l1-2 1 2M8 2l1-2 1 2" stroke="rgba(40,120,50,0.35)" strokeWidth="1" fill="none" />
-          </pattern>
-          <pattern id="mb-pat-stone" width="16" height="8" patternUnits="userSpaceOnUse">
-            <path d="M0 4L8 0L16 4L8 8Z" fill="none" stroke="rgba(35,42,77,0.16)" strokeWidth="1" />
-          </pattern>
-          <pattern id="mb-pat-sand" width="8" height="4" patternUnits="userSpaceOnUse">
-            <rect x="1" y="1" width="1" height="1" fill="rgba(160,110,40,0.35)" />
-            <rect x="5" y="3" width="1" height="1" fill="rgba(255,255,255,0.6)" />
-          </pattern>
-          <pattern id="mb-pat-snow" width="10" height="6" patternUnits="userSpaceOnUse">
-            <rect x="2" y="1" width="2" height="2" fill="rgba(255,255,255,0.9)" />
-            <rect x="7" y="4" width="1" height="1" fill="rgba(120,160,220,0.4)" />
-          </pattern>
-          <pattern id="mb-pat-wave" width="14" height="6" patternUnits="userSpaceOnUse">
-            <path d="M0 3q3.5-2 7 0t7 0" stroke="rgba(255,255,255,0.55)" strokeWidth="1" fill="none" />
-          </pattern>
-          <pattern id="mb-pat-plank" width="14" height="7" patternUnits="userSpaceOnUse">
-            <path d="M0 7L14 0" stroke="rgba(120,70,30,0.22)" strokeWidth="1.5" fill="none" />
-          </pattern>
-          <pattern id="mb-pat-star" width="16" height="8" patternUnits="userSpaceOnUse">
-            <path d="M4 2h1v1h1v1h-1v1h-1v-1h-1v-1h1z" fill="rgba(255,255,255,0.7)" />
-            <rect x="12" y="6" width="1" height="1" fill="rgba(255,255,255,0.7)" />
-          </pattern>
-          <pattern id="mb-pat-flower" width="12" height="6" patternUnits="userSpaceOnUse">
-            <rect x="2" y="1" width="2" height="1" fill="rgba(255,255,255,0.75)" />
-            <rect x="8" y="4" width="1" height="1" fill="rgba(255,90,140,0.45)" />
-          </pattern>
-        </defs>
-        <Island m={m} />
-        {order.map((slot) => {
-          const sd = m.tiles[slot];
-          const tile = g.order[slot];
-          const d = m.tiles[tile];
-          const t = g.tiles[tile];
-          const top = diamond(sd.x, sd.y, 0.04);
-          const fill = fillOf(d, t.owner);
-          const rim = rimOf(d, t.owner);
-          const inner = diamond(sd.x, sd.y, t.owner >= 0 ? 0.13 : 0.1);
-          const pat = patOf(d);
-          const tex = d.kind === "city" && TEX.has(m.id) ? `/marble/tex/${m.id}-${d.group ?? 0}.webp` : null;
-          const [a, b, c, e] = top;
-          const can = !!pick?.includes(tile);
-          return (
-            <g key={slot}>
-              <polygon points={pts([e, c, { x: c.x, y: c.y + DEPTH }, { x: e.x, y: e.y + DEPTH }])} fill={dark(rim, 0.78)} stroke="#232a4d" strokeWidth={2} />
-              <polygon points={pts([e, c, { x: c.x, y: c.y + DEPTH }, { x: e.x, y: e.y + DEPTH }])} fill="url(#mb-brick)" />
-              <polygon points={pts([c, b, { x: b.x, y: b.y + DEPTH }, { x: c.x, y: c.y + DEPTH }])} fill={dark(rim, 0.62)} stroke="#232a4d" strokeWidth={2} />
-              <polygon points={pts([c, b, { x: b.x, y: b.y + DEPTH }, { x: c.x, y: c.y + DEPTH }])} fill="url(#mb-brick)" />
-              {/* 윗면: 테두리 띠(동네 색 · 주인 색) + 안쪽 바닥 + 무늬 */}
-              <polygon points={pts(top)} fill={rim} stroke="#232a4d" strokeWidth={2.5} />
-              <polygon points={pts(inner)} fill={fill} />
-              {tex ? (
-                <>
-                  <image href={tex} x={inner[3].x} y={inner[0].y} width={inner[1].x - inner[3].x} height={inner[2].y - inner[0].y} preserveAspectRatio="none" />
-                  {t.owner >= 0 && <polygon points={pts(inner)} fill={PCOLOR[t.owner]} opacity={0.22} />}
-                </>
-              ) : (
-                <polygon points={pts(inner)} fill={`url(#mb-pat-${pat})`} />
-              )}
-              <polyline points={pts([inner[3], inner[0], inner[1]])} fill="none" stroke="rgba(35,42,77,0.35)" strokeWidth={1.5} />
-              <polyline points={pts([e, a, b])} fill="none" stroke="rgba(255,255,255,0.55)" strokeWidth={2} transform="translate(0,2.5)" />
-              {can && <polygon className="mb-blink" points={pts(diamond(sd.x, sd.y, 0.02))} fill="rgba(255,226,74,0.6)" stroke="#ffe24a" strokeWidth={4} />}
-              {flash?.[tile] && <polygon points={pts(diamond(sd.x, sd.y, 0))} fill="rgba(255,255,255,0.5)" stroke={flash[tile]} strokeWidth={5} />}
-            </g>
-          );
-        })}
-      </svg>
-
-      {/* 칸 위에 세우는 것: 이름 · 건물 · 통행료 */}
-      {order.map((slot) => {
-        const sd = m.tiles[slot];
+    <div className="mbx absolute inset-0">
+      <Center m={m} />
+      {m.tiles.map((sd, slot) => {
         const tile = g.order[slot];
         const d = m.tiles[tile];
         const t = g.tiles[tile];
-        const c = iso(sd.x, sd.y);
-        const z = 10 + (sd.x + sd.y) * 3;
+        const r = rectOf(sd.x, sd.y);
         const can = !!pick?.includes(tile);
-        const special = KIND[d.kind];
-        const toll = t.owner >= 0 ? tollOf(gg, tile) : 0;
-        const fest = t.owner >= 0 && g.players[t.owner]?.fest === tile;
-        // 바닥 소품: 특수칸 그림 · 관광지 · 건물 없는 땅의 동네 소품
-        const deco = special
-          ? { src: `/marble/deco/sp-${SP[d.kind] ?? d.kind}.webp`, h: 50 }
-          : d.kind === "spot"
-            ? { src: "/marble/deco/sp-spot.webp", h: 44, dim: false }
-            : null;
         return (
-          <div key={slot}>
-            <button
-              type="button"
-              aria-label={d.name}
-              onClick={() => (can ? onPick?.(tile) : onInfo?.(tile))}
-              className={`absolute ${can ? "cursor-pointer" : "cursor-help"}`}
-              style={{ left: c.x - TW / 2, top: c.y - TH / 2, width: TW, height: TH, clipPath: "polygon(50% 0,100% 50%,50% 100%,0 50%)", zIndex: can ? 300 : z }}
-            />
-            {deco && (
-              <div className="pointer-events-none absolute" style={{ left: c.x, top: c.y + (special ? 10 : 8), transform: "translate(-50%, -100%)", zIndex: z + 1 }}>
-                <img src={deco.src} alt="" className="block max-w-none" style={{ height: deco.h, imageRendering: "pixelated", opacity: deco.dim ? 0.9 : 1 }} />
-              </div>
-            )}
-            {t.owner >= 0 && t.lv > 0 && d.kind !== "spot" && (
-              <div className="pointer-events-none absolute" style={{ left: c.x, top: c.y + 8, transform: "translate(-50%, -100%)", zIndex: z + 1 }}>
-                <img
-                  key={`b${t.owner}-${t.lv}`}
-                  src={t.lv >= LANDMARK ? `/marble/lm/${m.id}-${tile}.webp` : `/marble/bld/b${t.owner}-${t.lv}.webp`}
-                  alt=""
-                  className="mb-pop block max-w-none origin-bottom"
-                  style={{ height: BH[Math.min(t.lv, LANDMARK)], imageRendering: "pixelated" }}
-                />
-                {t.lv >= LANDMARK && (
-                  <span className="mb-bob absolute -top-[14px] -right-[4px]">
-                    <Icon n="flag" size={22} tint={PCOLOR[t.owner]} />
-                  </span>
-                )}
-              </div>
-            )}
-            {/* 칸 앞 이름판: 동네 색 띠 + 이름, 아래에 값(빈 땅) · 통행료(산 땅) */}
-            <div className="pointer-events-none absolute flex flex-col items-center" style={{ left: c.x, top: c.y + TH / 2 - 9, zIndex: z + 2, transform: "translateX(-50%)" }}>
-              <span
-                className="max-w-[92px] px-[4px] text-center text-[10px] leading-[12px] font-bold break-keep whitespace-nowrap"
-                style={{ background: special ? "#fff8e7" : rimOf(d, -1), color: special || d.kind === "spot" ? "#232a4d" : "#fff", boxShadow: "0 0 0 2px #232a4d", textShadow: special || d.kind === "spot" ? "none" : "0 1px 0 rgba(35,42,77,0.6)" }}
-              >
-                {d.name}
-              </span>
-              {!special &&
-                (t.owner >= 0 ? (
-                  <span className="mt-[3px] px-[4px] text-[11px] leading-[12px] font-bold whitespace-nowrap text-white" style={{ background: PCOLOR[t.owner], boxShadow: "0 0 0 2px #232a4d" }}>
-                    {fmtToll(toll)}
-                  </span>
-                ) : (
-                  <span className="mt-[3px] bg-white px-[3px] text-[10px] leading-[11px] font-bold text-[#4a5384]" style={{ boxShadow: "0 0 0 2px #232a4d" }}>
-                    {d.price}
-                  </span>
-                ))}
-            </div>
-            <div className="pointer-events-none absolute" style={{ left: c.x, top: c.y, zIndex: z + 1 }}>
-              {t.owner >= 0 && d.kind !== "spot" && t.lv === 0 && (
-                <span className="absolute -top-[26px] -left-[9px]">
-                  <Icon n="flag" size={18} tint={PCOLOR[t.owner]} />
-                </span>
-              )}
-              {t.boostLeft > 0 && (
-                <span className="absolute -top-[40px] left-[14px]" title={`통행료 ×${t.boost.toFixed(2)}`}>
-                  <Icon n="fire" size={18} className="mb-sparkle" />
-                </span>
-              )}
-              {fest && (
-                <span className="absolute -top-[40px] -left-[32px]" title="축제 (통행료 2배)">
-                  <Icon n="note" size={18} className="mb-sparkle" />
-                </span>
-              )}
-            </div>
-          </div>
+          <button
+            key={slot}
+            type="button"
+            aria-label={d.name}
+            onClick={() => (can ? onPick?.(tile) : onInfo?.(tile))}
+            className={`absolute p-[2px] ${can ? "z-[60] cursor-pointer" : "z-[5] cursor-help"}`}
+            style={{ left: r.x, top: r.y, width: r.w, height: r.h }}
+          >
+            <TileCard g={gg} m={m} d={d} tile={tile} owner={t.owner} lv={t.lv} boost={t.boostLeft > 0} fest={t.owner >= 0 && g.players[t.owner]?.fest === tile} big={r.w > 70 && r.h > 70} />
+            {can && <span className="mbx-pick pointer-events-none absolute inset-[1px] rounded-[10px]" />}
+            {flash?.[tile] && <span className="pointer-events-none absolute inset-[2px] rounded-[9px]" style={{ boxShadow: `inset 0 0 0 4px ${flash[tile]}`, background: "rgba(255,255,255,0.35)" }} />}
+          </button>
         );
       })}
 
-      {/* 갈림길 표시 (크로스로드) */}
-      {m.junction !== undefined && (
-        <div className="pointer-events-none absolute z-[200]" style={{ left: slotXY(m, m.junction).x, top: slotXY(m, m.junction).y + 16, transform: "translateX(-50%)" }}>
-          <span className="mb-chip text-[10px] font-bold" style={{ "--c": "#ffe24a" } as CSSProperties}>
-            갈림길
-          </span>
-        </div>
-      )}
-
       {/* 말 */}
       {tokens.map((tk) => {
-        const sd = m.tiles[tk.slot];
-        const c = iso(sd.x, sd.y);
+        const c = slotXY(m, tk.slot);
         const same = tokens.filter((o) => o.slot === tk.slot);
         const k = same.indexOf(tk);
-        const off = same.length > 1 ? (k - (same.length - 1) / 2) * 24 : 0;
+        const off = same.length > 1 ? (k - (same.length - 1) / 2) * 18 : 0;
         return (
           <div
             key={tk.pi}
             className="pointer-events-none absolute"
             style={{
               left: c.x + off,
-              top: c.y + 10 + (same.length > 1 ? (k % 2) * 4 : 0),
-              zIndex: 12 + (sd.x + sd.y) * 3 + 2,
+              top: c.y + (same.length > 1 ? (k % 2) * 3 : 0),
+              zIndex: 80 + k,
               transform: "translate(-50%, -100%)",
-              transition: "left 160ms steps(3), top 160ms steps(3)",
+              transition: "left 160ms ease-out, top 160ms ease-out",
               opacity: tk.dim ? 0.35 : 1,
             }}
           >
+            <div className="absolute bottom-[-3px] left-1/2 h-[8px] w-[32px] -translate-x-1/2 rounded-[50%]" style={{ background: "rgba(20,24,60,0.3)" }} />
             <div key={tk.hop} className={tk.hop ? "mb-hop" : undefined}>
-              <Token sprite={tk.sprite} anim={tk.anim} h={62} face={tk.face} />
+              <Token sprite={tk.sprite} anim={tk.anim} h={50} face={tk.face} />
             </div>
-            <div className="absolute -top-[6px] left-1/2 h-[9px] w-[9px] -translate-x-1/2 rotate-45" style={{ background: PCOLOR[tk.pi], boxShadow: "0 0 0 2px #232a4d" }} />
+            <div className="absolute -top-[4px] left-1/2 h-[10px] w-[10px] -translate-x-1/2 rounded-full" style={{ background: PCOLOR[tk.pi], boxShadow: "0 0 0 2px #fff, 0 1px 3px rgba(0,0,0,0.4)" }} />
           </div>
         );
       })}
@@ -330,64 +177,174 @@ export default function Board({
   );
 }
 
-/** 섬: 풀밭 윗면 + 흙 옆면, 안쪽은 맵 분위기 */
-function Island({ m }: { m: MapDef }) {
-  const e = 0.45;
-  const top = [iso(-0.5 - e, -0.5 - e), iso(8.5 + e, -0.5 - e), iso(8.5 + e, 8.5 + e), iso(-0.5 - e, 8.5 + e)];
-  const D = 28;
-  const [, b, c, d] = top;
-  const inner = m.id === "cross" ? null : [iso(0.5, 0.5), iso(7.5, 0.5), iso(7.5, 7.5), iso(0.5, 7.5)];
-  const innerFill = m.id === "orgel" ? "#ffd6ea" : "#cdeeff";
+/** 칸 카드 하나 */
+function TileCard({ g, m, d, tile, owner, lv, boost, fest, big }: { g: Game; m: MapDef; d: TileDef; tile: number; owner: number; lv: number; boost: boolean; fest: boolean; big: boolean }) {
+  const sp = KIND[d.kind];
+  if (sp) {
+    return (
+      <div className="relative flex h-full w-full flex-col items-center justify-center gap-[2px] overflow-hidden rounded-[9px]" style={{ background: `linear-gradient(160deg, ${mix(sp.fill, 0.3)}, ${sp.fill})`, boxShadow: `inset 0 0 0 2px ${dark(sp.fill, 0.72)}, 0 2px 0 rgba(20,24,60,0.35)` }}>
+        <Glyph n={sp.glyph} size={big ? 36 : 24} color={sp.ink === "#fff" ? "#fff" : mix(sp.fill, 0.55)} />
+        <span className={`px-[2px] text-center leading-[12px] font-extrabold break-keep ${big ? "text-[12.5px]" : "text-[10.5px]"}`} style={{ color: sp.ink, textShadow: sp.ink === "#fff" ? "0 1px 1px rgba(0,0,0,0.35)" : "none" }}>
+          {d.name}
+        </span>
+      </div>
+    );
+  }
+  const spot = d.kind === "spot";
+  const band = spot ? "#ffb21e" : m.groups[d.group ?? 0].color;
+  const pc = owner >= 0 ? PCOLOR[owner] : null;
+  const toll = owner >= 0 ? tollOf(g, tile) : 0;
+  const mult = owner >= 0 ? tollMult(g, tile) : 1;
+  const inset = pc ? 3.5 : 1.5;
   return (
-    <g>
-      <polygon points={pts([d, c, { x: c.x, y: c.y + D }, { x: d.x, y: d.y + D }])} fill="#b9793f" stroke="#232a4d" strokeWidth={3} />
-      <polygon points={pts([c, b, { x: b.x, y: b.y + D }, { x: c.x, y: c.y + D }])} fill="#94592b" stroke="#232a4d" strokeWidth={3} />
-      <polygon points={pts([d, c, { x: c.x, y: c.y + 8 }, { x: d.x, y: d.y + 8 }])} fill="#5fbf55" />
-      <polygon points={pts([c, b, { x: b.x, y: b.y + 8 }, { x: c.x, y: c.y + 8 }])} fill="#4aa344" />
-      <polygon points={pts(top)} fill="#8fdc7c" stroke="#232a4d" strokeWidth={3} />
-      {inner && <polygon points={pts(inner)} fill={innerFill} stroke="#232a4d" strokeWidth={2} strokeDasharray="6 4" />}
-      {inner && <Plaza src={`/marble/bg/plaza-${m.id}.webp`} a={0.5} b={7.5} />}
-      {m.id === "cross" && (
-        <>
-          <polygon points={pts([iso(0.5, 0.5), iso(3.5, 0.5), iso(3.5, 3.5), iso(0.5, 3.5)])} fill="#ffe2a8" stroke="#232a4d" strokeWidth={2} strokeDasharray="6 4" />
-          <polygon points={pts([iso(4.5, 4.5), iso(7.5, 4.5), iso(7.5, 7.5), iso(4.5, 7.5)])} fill="#ffd0a0" stroke="#232a4d" strokeWidth={2} strokeDasharray="6 4" />
-          <Plaza src="/marble/bg/plaza-cross.webp" a={0.5} b={3.5} />
-          <Plaza src="/marble/bg/plaza-town.webp" a={4.5} b={7.5} />
-          {/* 빈 두 귀퉁이: 여행지 소품 */}
-          {SCENERY.map(([gx, gy, k, h], i) => {
-            const p = iso(gx, gy);
-            return <image key={i} href={`/marble/deco/cross-${k}.webp`} x={p.x - h * 0.55} y={p.y - h * 0.8} height={h} width={h * 1.1} preserveAspectRatio="xMidYMax meet" style={{ imageRendering: "pixelated" }} />;
-          })}
-        </>
-      )}
-    </g>
+    <div
+      className="relative flex h-full w-full flex-col overflow-hidden rounded-[9px]"
+      style={{
+        background: pc ? mix(pc, 0.8) : "#fffdf6",
+        boxShadow: pc ? `inset 0 0 0 3.5px ${pc}, 0 0 0 1.5px ${INK}, 0 2px 0 rgba(20,24,60,0.35)` : `inset 0 0 0 1.5px ${INK}, 0 2px 0 rgba(20,24,60,0.35)`,
+      }}
+    >
+      {/* 동네 색 띠 + 이름 */}
+      <div className="flex min-h-[17px] items-center justify-center px-[2px] py-[1px]" style={{ background: band, margin: `${inset}px ${inset}px 0`, borderRadius: "7px 7px 0 0" }}>
+        <span className="text-center text-[10.5px] leading-[12px] font-extrabold break-keep text-white" style={{ textShadow: "0 1px 1px rgba(0,0,0,0.45)" }}>
+          {d.name}
+        </span>
+      </div>
+      {/* 건물 · 표식 */}
+      <div className="flex min-h-0 flex-1 items-center justify-center gap-[1px]">
+        {spot && owner < 0 && <Glyph n="star" size={16} color="#ffd65a" />}
+        {owner >= 0 && !spot && <Buildings lv={lv} color={pc!} />}
+        {owner >= 0 && spot && <Glyph n="star" size={20} color={pc!} />}
+        {fest && <Glyph n="note" size={14} color="#b07bff" />}
+        {boost && <Glyph n="fire" size={14} color="#ff6a2b" />}
+      </div>
+      {/* 값 */}
+      <div className="flex items-center justify-center gap-[2px] pb-[4px]">
+        {owner >= 0 ? (
+          <>
+            <span className="rounded-[5px] px-[4px] text-[10.5px] leading-[13px] font-extrabold text-white" style={{ background: pc! }}>
+              {fmtToll(toll)}
+            </span>
+            {mult > 1 && (
+              <span className="mbx-mult rounded-[5px] px-[3px] text-[10.5px] leading-[13px] font-black" style={{ background: mult >= 4 ? "#ff3d6e" : "#ffd23a", color: mult >= 4 ? "#fff" : "#3a2500" }}>
+                x{mult}
+              </span>
+            )}
+          </>
+        ) : (
+          <span className="text-[10px] leading-[12px] font-bold text-[#6a6f93]">{d.price}</span>
+        )}
+      </div>
+    </div>
   );
 }
 
-/** 크로스로드 빈 귀퉁이 소품: [격자 x, y, 그림 번호, 높이] (뒤에서 앞 순서) */
-const SCENERY: [number, number, number, number][] = [
-  [6.6, 0.2, 4, 58],
-  [5.4, 1.2, 1, 62],
-  [7.6, 1.4, 6, 60],
-  [6.4, 2.6, 0, 46],
-  [7.8, 3.0, 5, 50],
-  [1.2, 5.4, 7, 60],
-  [0.2, 6.6, 3, 56],
-  [2.6, 6.4, 2, 50],
-  [1.4, 7.6, 5, 52],
-  [3.0, 7.8, 6, 58],
-];
+/** 건물 단계: 깃발(땅만) · 집 1~2채 · 빌딩 · 랜드마크 */
+function Buildings({ lv, color }: { lv: number; color: string }) {
+  if (lv <= 0) return <Glyph n="flag" size={16} color={color} />;
+  if (lv >= LANDMARK) return <Glyph n="crown" size={24} color={color} />;
+  return (
+    <>
+      {Array.from({ length: lv }, (_, i) => (
+        <Glyph key={i} n={i === 2 ? "tower" : "house"} size={i === 2 ? 19 : 15} color={color} />
+      ))}
+    </>
+  );
+}
 
-/** 판 가운데 광장 그림 (격자 a~b 마름모에 맞춤, 그림 크기 707×504 · 윗면 아래 끝이 바닥에서 약 4%) */
-function Plaza({ src, a, b }: { src: string; a: number; b: number }) {
-  const left = iso(a, b).x;
-  const right = iso(b, a).x;
-  const bottom = iso(b, b).y;
-  const w = (right - left) * 0.86;
-  const h = (w * 504) / 707;
-  const cy = iso((a + b) / 2, (a + b) / 2).y;
-  // 그림의 윗면 가운데(세로 약 52%)를 마름모 가운데에 맞춤
-  return <image href={src} x={(left + right) / 2 - w / 2} y={cy - h * 0.53 + (bottom - cy) * 0.08} width={w} height={h} style={{ imageRendering: "pixelated" }} />;
+/** 매끈한 그림 표식 (보드는 도트 아님) */
+export function Glyph({ n, size = 20, color = INK }: { n: GlyphName; size?: number; color?: string }) {
+  const s = { stroke: INK, strokeWidth: 1.6, strokeLinejoin: "round" as const, strokeLinecap: "round" as const };
+  const body: Record<GlyphName, ReactNode> = {
+    flag: (
+      <>
+        <path d="M6 3v19" {...s} fill="none" />
+        <path d="M6 4h12l-3 4 3 4H6z" fill={color} {...s} />
+      </>
+    ),
+    coin: (
+      <>
+        <circle cx="12" cy="12" r="8.5" fill={color} {...s} />
+        <path d="M12 7.5v9M14.5 9.5h-4a1.8 1.8 0 000 3.5h3a1.8 1.8 0 010 3.5h-4" fill="none" {...s} />
+      </>
+    ),
+    gift: (
+      <>
+        <rect x="4" y="9" width="16" height="12" rx="2" fill={color} {...s} />
+        <rect x="3" y="6.5" width="18" height="4" rx="1.5" fill="#ffe14a" {...s} />
+        <path d="M12 6.5V21M12 6.5c-2-4-6-3-5 0M12 6.5c2-4 6-3 5 0" fill="none" {...s} />
+      </>
+    ),
+    wrench: <path d="M15 3a5 5 0 00-4.6 6.9L3.5 16.8a1.8 1.8 0 002.6 2.6l6.9-6.9A5 5 0 0019 7.5l-3 3-2.5-.5-.5-2.5 3-3A5 5 0 0015 3z" fill={color} {...s} />,
+    note: (
+      <>
+        <path d="M9 18V5l11-2v13" fill="none" {...s} />
+        <circle cx="6.5" cy="18" r="3" fill={color} {...s} />
+        <circle cx="17.5" cy="16" r="3" fill={color} {...s} />
+      </>
+    ),
+    portal: (
+      <>
+        <circle cx="12" cy="12" r="9" fill={color} {...s} />
+        <path d="M12 6a6 6 0 016 6 4 4 0 01-4 4 2.5 2.5 0 01-2.5-2.5" fill="none" stroke={INK} strokeWidth={2} strokeLinecap="round" />
+      </>
+    ),
+    bag: (
+      <>
+        <path d="M8 7l-2-3h12l-2 3" fill={color} {...s} />
+        <path d="M8 7h8c3 3 5 7 4 10.5-.6 2.2-2.6 3.5-5 3.5H9c-2.4 0-4.4-1.3-5-3.5C3 14 5 10 8 7z" fill={color} {...s} />
+      </>
+    ),
+    train: (
+      <>
+        <rect x="5" y="3" width="14" height="14" rx="3.5" fill={color} {...s} />
+        <rect x="7.5" y="6" width="9" height="5" rx="1" fill="#bfe6ff" {...s} />
+        <circle cx="9" cy="14" r="1.2" fill={INK} />
+        <circle cx="15" cy="14" r="1.2" fill={INK} />
+        <path d="M8 17l-2.5 4M16 17l2.5 4" {...s} />
+      </>
+    ),
+    star: <path d="M12 2.8l2.8 5.8 6.4.9-4.6 4.5 1.1 6.3L12 17.3l-5.7 3 1.1-6.3L2.8 9.5l6.4-.9z" fill={color} {...s} />,
+    house: (
+      <>
+        <path d="M4 11l8-7 8 7v10H4z" fill={color} {...s} />
+        <rect x="10" y="14.5" width="4" height="6.5" fill="#fff" {...s} />
+      </>
+    ),
+    tower: (
+      <>
+        <rect x="6" y="4" width="12" height="17" rx="1.5" fill={color} {...s} />
+        <path d="M9 8h2M13 8h2M9 12h2M13 12h2M9 16h2M13 16h2" stroke="#fff" strokeWidth={2} />
+      </>
+    ),
+    crown: (
+      <>
+        <path d="M3 8l4.5 4L12 4l4.5 8L21 8l-2 12H5z" fill={color} {...s} />
+        <path d="M5.5 17h13" stroke="#fff" strokeWidth={2} />
+        <circle cx="12" cy="12.5" r="1.6" fill="#ffe14a" stroke={INK} strokeWidth={1} />
+      </>
+    ),
+    fire: <path d="M12 2.5c1 4 5 5.5 5 10.5a5 5 0 01-10 0c0-2.5 1.2-3.8 2.2-5 .2 1.8 1 2.7 2 3-.8-3 0-6 .8-8.5z" fill={color} {...s} />,
+  };
+  return (
+    <svg viewBox="0 0 24 24" width={size} height={size} className="block shrink-0" aria-hidden>
+      {body[n]}
+    </svg>
+  );
+}
+
+/** 판 가운데: 맵 그림 (분수 광장 · 십자 철로 중앙역 · 오르골 회전목마) */
+function Center({ m }: { m: MapDef }) {
+  const x0 = L + C + 5;
+  const y0 = T + C + 5;
+  const w = R - L - 2 * C - 10;
+  const h = B - T - 2 * C - 10;
+  return (
+    <div className="pointer-events-none absolute overflow-hidden rounded-[18px]" style={{ left: x0, top: y0, width: w, height: h, background: m.sky, boxShadow: "inset 0 0 0 2px rgba(255,255,255,0.6), 0 6px 24px rgba(20,24,60,0.25)" }}>
+      <img src={`/marble/bg/center-${m.id}.webp`} alt="" className="absolute inset-0 h-full w-full object-cover" />
+      <div className="absolute inset-0" style={{ background: "radial-gradient(circle at 50% 50%, transparent 45%, rgba(18,20,60,0.35))" }} />
+    </div>
+  );
 }
 
 /** 캐릭터 말 그림 id */

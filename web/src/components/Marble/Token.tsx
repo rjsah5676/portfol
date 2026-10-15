@@ -40,7 +40,7 @@ function loadSheet(id: string): Promise<Sheet> {
 export type TokenAnim = "idle" | "walk" | "win" | "hit" | "ko";
 
 /** h = 그림 높이(px) 기준. face = 1 오른쪽 · -1 왼쪽 */
-export default function Token({ sprite, anim = "idle", h = 48, face = 1, className = "", shadow = true }: { sprite: string; anim?: TokenAnim; h?: number; face?: 1 | -1; className?: string; shadow?: boolean }) {
+export default function Token({ sprite, anim = "idle", h = 48, face = 1, className = "", shadow = true, maxW }: { sprite: string; anim?: TokenAnim; h?: number; face?: 1 | -1; className?: string; shadow?: boolean; maxW?: number }) {
   const [sh, setSh] = useState<Sheet | null>(null);
   const [k, setK] = useState(0);
   useEffect(() => {
@@ -67,11 +67,16 @@ export default function Token({ sprite, anim = "idle", h = 48, face = 1, classNa
   const f = sh.frames[a.list[k % n]];
   // 서기 동작의 첫 칸 키를 기준으로 크기를 맞춤 (동작마다 크기가 들쭉날쭉하지 않게)
   const ref = sh.frames[sh.anims.idle?.list?.[0] ?? 0];
-  const s = h / ref[3];
+  let s = h / ref[3];
+  if (maxW) {
+    // 동작 칸 중 발 기준으로 가장 멀리 뻗는 쪽이 maxW 안에 들어오게
+    const reach = Math.max(...a.list.map((i) => Math.max(sh.frames[i][4], sh.frames[i][2] - sh.frames[i][4])));
+    s = Math.min(s, maxW / (2 * reach));
+  }
   const flip = (sh.facing === "left" ? -1 : 1) * face < 0;
   const w = f[2] * s;
   return (
-    <div className={`relative ${className}`} style={{ width: ref[2] * s, height: h }}>
+    <div className={`relative ${className}`} style={{ width: ref[2] * s, height: ref[3] * s }}>
       {shadow && <div className="absolute bottom-[-3px] left-1/2 h-[6px] w-[70%] -translate-x-1/2 bg-[rgba(35,42,77,0.28)]" />}
       <div
         className="absolute bottom-0"

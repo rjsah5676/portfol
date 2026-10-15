@@ -297,6 +297,28 @@ export function adminRouter({ db, auth, web, users, points, gateway, cfg, traffi
     })
   );
 
+  // ───────────── 다이스 타운 초기화 (베타 승급 등) ─────────────
+  // 마블 프로필(별사탕 · 부품 · 캐릭터 · 아이템 · 패스) · 회원 마블 통계를 지움. GP 잔액 · 원장은 그대로.
+  r.get(
+    "/marble/stats",
+    h(async () => {
+      const profiles = await db.col("marble_profile").countDocuments({});
+      const players = await db.col("users").countDocuments({ "stats.marble": { $exists: true } } as never);
+      return { profiles, players };
+    })
+  );
+  r.post(
+    "/marble/reset",
+    h(async (req) => {
+      z.object({ confirm: z.literal("마블 초기화") }).parse(req.body);
+      const out: Record<string, number> = {};
+      out.marble_profile = (await db.col("marble_profile").deleteMany({})).deletedCount ?? 0;
+      out.users = (await db.col("users").updateMany({ "stats.marble": { $exists: true } } as never, { $unset: { "stats.marble": "" } } as never)).modifiedCount;
+      console.warn("[admin] 마블 데이터 초기화", JSON.stringify(out));
+      return out;
+    })
+  );
+
   // ───────────── 유입 분석 ─────────────
 
   r.get(
