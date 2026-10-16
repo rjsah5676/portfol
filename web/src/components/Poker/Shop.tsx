@@ -474,20 +474,21 @@ function CharShop({
   );
 }
 
-/** 환전 칸 수 고르기 */
+/** 환전 칸 수 고르기: −100 −10 −1 · 칸 · +1 +10 +100 · 최대 */
 function Stepper({ v, set, max }: { v: number; set: (n: number) => void; max: number }) {
+  const add = (d: number) => set(Math.max(1, Math.min(Math.max(1, max), v + d)));
+  const btn = "pk-btn pk-btn-ghost min-w-[2.6em] px-[0.4em] py-[0.35em] text-[0.85em] tabular-nums";
   return (
-    <div className="flex flex-wrap items-center gap-[0.35em]">
-      <button type="button" className="pk-btn pk-btn-ghost w-[2.2em] py-[0.35em]" disabled={v <= 1} onClick={() => set(Math.max(1, v - 1))}>
-        −
-      </button>
+    <div className="flex flex-wrap items-center gap-[0.3em]">
+      {[-100, -10, -1].map((d) => (
+        <button key={d} type="button" className={btn} disabled={v <= 1} onClick={() => add(d)}>
+          −{-d}
+        </button>
+      ))}
       <span className="min-w-[3.2em] text-center font-extrabold tabular-nums">{v}칸</span>
-      <button type="button" className="pk-btn pk-btn-ghost w-[2.2em] py-[0.35em]" disabled={v >= max} onClick={() => set(Math.min(max, v + 1))}>
-        +
-      </button>
-      {[5, 10].map((n) => (
-        <button key={n} type="button" className="pk-shop-chip" disabled={max < 1} onClick={() => set(Math.max(1, Math.min(max, n)))}>
-          {n}칸
+      {[1, 10, 100].map((d) => (
+        <button key={d} type="button" className={btn} disabled={v >= max} onClick={() => add(d)}>
+          +{d}
         </button>
       ))}
       <button type="button" className="pk-shop-chip" disabled={max < 1} onClick={() => set(Math.max(1, max))}>
