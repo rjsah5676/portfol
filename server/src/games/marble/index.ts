@@ -32,7 +32,7 @@ const LADDER_PICK_MS = 6_000;
 const LADDER_SHOW_MS = 2_600;
 /** 판 시작 직후 내 순번 보여 주는 시간 */
 const INTRO_MS = 1_900;
-const LIMIT: Record<string, number> = { turn: 15_000, post: 10_000, fork: 8_000, buy: 12_000, acq: 10_000, fest: 10_000 };
+const LIMIT: Record<string, number> = { turn: 15_000, dice: 25_000, foe: 9_000, warp: 10_000, more: 8_000 };
 /** 제한 시간을 연달아 넘기면 자동 진행 */
 const AUTO_AFTER_TIMEOUTS = 3;
 /** 판 도중 끊긴 채 이만큼 지나면 자동 진행 */
@@ -106,62 +106,71 @@ const safeEq = (a: string, b: string) => {
 const rnd = (n: number) => randomInt(0, Math.max(1, n));
 const rand01 = () => randomInt(0, 1 << 30) / (1 << 30);
 
-/** 연출 시간 어림 (화면의 애니메이션 길이와 맞춤 — components/Marble/anim.ts) */
+/** 연출 시간 어림 (화면의 애니메이션 길이와 맞춤 — components/Marble/GameView playEv) */
 export function animMs(evs: Ev[]): number {
   let t = 0;
   for (const e of evs) {
     switch (e.t) {
+      case "turn":
+        t += e.again ? 1100 : 350;
+        break;
+      case "round":
+        t += e.frenzy ? 2400 : e.round > 1 ? 900 : 0;
+        break;
+      case "frenzy":
+        t += 1300;
+        break;
       case "roll":
-        t += e.power !== undefined ? 1500 : 1100;
+        t += e.re ? 1000 : 1300;
+        break;
+      case "die":
+        t += 550;
+        break;
+      case "hand":
+        t += e.hand === "yacht" ? 2800 : e.hand === "four" || e.hand === "large" ? 1500 : e.hand === "triple" || e.hand === "small" || e.hand === "full" ? 1100 : 250;
         break;
       case "move":
-        t += e.rail ? 1300 : e.warp ? 700 : 250 + 210 * e.path.length;
+        t += e.why === "warp" || e.why === "jump" || e.why === "swap" ? 750 : 250 + 190 * e.path.length;
         break;
-      case "pay":
-        t += 650;
+      case "coin":
+        t += 260;
         break;
-      case "buy":
-      case "acq":
-        t += 800;
+      case "star":
+        t += e.why === "yacht" ? 600 : e.why === "bonus" ? 900 : 1900;
+        break;
+      case "starMove":
+        t += 1100;
         break;
       case "card":
-        t += 1700;
+        t += e.use ? 900 : 850;
         break;
       case "skill":
-        t += 1200;
+        t += 1300;
         break;
-      case "town":
-      case "rotate":
-        t += 1900;
+      case "vs":
+        t += 2700;
         break;
-      case "mono":
+      case "fest":
+        t += 1500;
+        break;
+      case "event":
+        t += 1800;
+        break;
+      case "trap":
+      case "debuff":
+      case "block":
+      case "swap":
+        t += 700;
+        break;
+      case "bonus":
         t += 2300;
         break;
-      case "threat":
-      case "bankrupt":
-        t += 1400;
-        break;
-      case "jail":
-      case "fest":
-      case "frozen":
-      case "block":
-      case "rewind":
-      case "loan":
-        t += 800;
-        break;
       case "nope":
-        t += 600;
-        break;
-      case "salary":
-      case "sell":
-      case "adjust":
-      case "free":
-      case "repay":
-        t += 300;
+        t += 450;
         break;
     }
   }
-  return Math.min(12_000, t);
+  return Math.min(16_000, t);
 }
 
 /** AI 장비: 사람들과 비슷한 수준 (대부분 R · SR, 가끔 SSR) */
@@ -187,8 +196,9 @@ function botLoadout(): Loadout {
 
 const BOT_LINES = {
   hello: ["안녕하세요~", "한 판 해요!", "잘 부탁해요", "ㅎㅇ", "주사위 운 좀 주세요"],
-  lm: ["랜드마크 완성!", "여기 지나가면 각오해요", "후후"],
-  ouch: ["으악", "아파요...", "통행료 너무해", "ㅠㅠ"],
+  star: ["별 get!", "반짝반짝", "후후", "이 별은 제 거예요"],
+  yacht: ["야추!!!", "와 실화?", "주사위 신이 오셨다"],
+  ouch: ["으악", "아파요...", "내 코인...", "ㅠㅠ"],
   win: ["gg", "재밌었어요!", "한 판 더?"],
   lose: ["gg ㅠ", "다음엔 안 져요", "잘하시네요"],
 };
@@ -529,12 +539,12 @@ export function registerMarble({ gateway, db, points, users }: Deps, opts: Marbl
     }
     // AI 한마디
     for (const e of r.ev) {
-      if (e.t === "buy" && e.lv === 4) {
+      if (e.t === "star" && e.why !== "bonus") {
         const bs = r.seats[r.order[e.p]];
-        if (bs?.bot && rand01() < 0.5) say(r, bs.name, pickLine("lm"), true);
+        if (bs?.bot && rand01() < 0.4) say(r, bs.name, pickLine(e.why === "yacht" ? "yacht" : "star"), true);
       }
-      if (e.t === "pay" && e.amt >= 800 && e.from >= 0) {
-        const bs = r.seats[r.order[e.from]];
+      if (e.t === "coin" && e.amt <= -5 && (e.why === "steal" || e.why === "thief" || e.why === "vs")) {
+        const bs = r.seats[r.order[e.p]];
         if (bs?.bot && rand01() < 0.4) say(r, bs.name, pickLine("ouch"), true);
       }
     }
@@ -560,9 +570,10 @@ export function registerMarble({ gateway, db, points, users }: Deps, opts: Marbl
       const row: NonNullable<Room["result"]>[number] = { seat: si, name: g.players[pi].name, place, bot: !s || !!s.bot };
       if (s && !s.bot && s.uid && !s.left) {
         const won = place === 1;
-        const mono = won && ["triple", "line", "spot"].includes(g.over!.how);
+        // 막판 뒤집기: 막판 시작 때 1등이 아니었는데 이김
+        const mono = won && g.lead >= 0 && g.lead !== pi;
         try {
-          const rw = await meta.onMatch(s.uid, { place, n, how: g.over!.how, lm: g.players[pi].stat.lm, mono });
+          const rw = await meta.onMatch(s.uid, { place, n, how: g.over!.how, lm: g.players[pi].stat.yacht, mono });
           row.stars = rw.stars;
           row.first = rw.first;
         } catch (e) {
@@ -662,7 +673,7 @@ export function registerMarble({ gateway, db, points, users }: Deps, opts: Marbl
       const map = MAP_IDS[rnd(MAP_IDS.length)];
       const max = [2, 2, 3, 4][rnd(4)];
       const host = uniqueNickname([]);
-      const r = createRoom({ name: `${host}의 마블`, map, max, quick: true, bots: true, pw: "", owner: "" });
+      const r = createRoom({ name: `${host}의 다이스 타운`, map, max, quick: true, bots: true, pw: "", owner: "" });
       r.botRoomUntil = Date.now() + (5 + rnd(8)) * 60_000;
       addBot(r);
       r.seats.find(Boolean)!.name = host;
@@ -694,7 +705,8 @@ export function registerMarble({ gateway, db, points, users }: Deps, opts: Marbl
 
   /* ───────────── 방 rpc ───────────── */
 
-  const mapSchema = z.enum(["town", "cross", "orgel"]);
+  // v2 는 해피 타운 하나 (예전 화면이 다른 맵을 보내도 해피 타운으로)
+  const mapSchema = z.enum(["town", "cross", "orgel"]).transform((): MapId => "town");
   const roomOpts = z.object({
     name: z.string().max(20).optional(),
     map: mapSchema.default("town"),
@@ -721,7 +733,7 @@ export function registerMarble({ gateway, db, points, users }: Deps, opts: Marbl
     const o = roomOpts.parse(raw ?? {});
     if (playingRoom(ctx.uid)) throw forbidden("진행 중인 판이 있어요.");
     leaveOthers(ctx.uid);
-    const r = createRoom({ name: o.name?.trim() || `${nick}의 마블`, map: o.map, max: o.max, quick: o.quick, bots: o.bots, pw: o.pw, owner: ctx.uid });
+    const r = createRoom({ name: o.name?.trim() || `${nick}의 다이스 타운`, map: o.map, max: o.max, quick: o.quick, bots: o.bots, pw: o.pw, owner: ctx.uid });
     try {
       await seatHuman(r, ctx, nick);
     } catch (e) {
@@ -745,7 +757,7 @@ export function registerMarble({ gateway, db, points, users }: Deps, opts: Marbl
     const withPeople = cands.filter((x) => present(x).length > 0);
     const pool = withPeople.length ? withPeople : cands;
     let r = pool.length ? pool[randomInt(pool.length)] : undefined;
-    if (!r) r = createRoom({ name: `${nick}의 마블`, map: map ?? MAP_IDS[randomInt(MAP_IDS.length)], max: max ?? 2 + randomInt(3), quick: true, bots: true, pw: "", owner: ctx.uid });
+    if (!r) r = createRoom({ name: `${nick}의 다이스 타운`, map: map ?? MAP_IDS[randomInt(MAP_IDS.length)], max: max ?? 2 + randomInt(3), quick: true, bots: true, pw: "", owner: ctx.uid });
     const i = await seatHuman(r, ctx, nick);
     r.seats[i]!.ready = true;
     push(r);
@@ -860,16 +872,15 @@ export function registerMarble({ gateway, db, points, users }: Deps, opts: Marbl
         seq: z.number().int().optional(),
         a: z
           .object({
-            t: z.enum(["roll", "pay", "warp", "pick", "skill", "keep", "reroll", "adjust", "fork", "rail", "buy", "acq", "fest", "start", "loan"]),
-            to: z.number().int().optional(),
-            n: z.number().int().optional(),
-            target: z.number().int().optional(),
-            d: z.literal(1).optional(),
-            lv: z.number().int().optional(),
-            pick: z.array(z.number().int().min(0).max(4)).max(5).optional(),
-            sell: z.array(z.number().int().min(0).max(63)).max(40).optional(),
-            yes: z.boolean().optional(),
-            tile: z.number().int().optional(),
+            t: z.enum(["roll", "hold", "reroll", "move", "skill", "card", "gear", "target", "warp", "more"]),
+            id: z.enum(["gold", "boost", "reroll", "thief", "swap", "starmove", "trap", "shield"]).optional(),
+            n: z.number().int().min(-12).max(12).optional(),
+            d: z.number().int().min(-1).max(1).optional(),
+            die: z.number().int().min(0).max(5).optional(),
+            target: z.number().int().min(0).max(3).optional(),
+            pick: z.array(z.number().int().min(0).max(5)).max(6).optional(),
+            vals: z.array(z.number().int().min(1).max(6)).max(2).optional(),
+            tile: z.number().int().min(0).max(63).optional(),
             power: z.number().min(0).max(1).optional(),
           })
           .strict(),
@@ -885,6 +896,13 @@ export function registerMarble({ gateway, db, points, users }: Deps, opts: Marbl
     s.auto = false;
     s.away = 0;
     try {
+      // 잠그기는 보는 사람에게 알려 주기만 (마감 · 연출 시간 그대로)
+      if (a.t === "hold") {
+        act(r.game, pi, a as Action);
+        r.ev = [...r.game.ev];
+        push(r);
+        return { seq: r.seq };
+      }
       doAct(r, pi, a as Action);
     } catch (e) {
       if (e instanceof ActError) throw bad(e.message);

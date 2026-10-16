@@ -2,28 +2,26 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { serverNow } from "@/lib/api/socket";
-import { CHAR, ITEM, SKILL_TARGET, artOf, faceOf, power } from "@/lib/marble/data";
+import { CHAR, ITEM, SKILL_TARGET, SKILL_TIME, artOf, faceOf, power } from "@/lib/marble/data";
 import {
   CARDS,
-  LANDMARK,
+  EVENTS,
+  HANDS,
   RULE,
-  LEVEL_NAME,
-  TOWN_EVENTS,
-  assetsOf,
-  baseToll,
-  bitsOf,
-  builtOf,
-  groupOwned,
-  investedT,
-  canSkill,
-  controlChance,
-  powerZone,
-  skillRange,
-  skillTargets,
-  tollOf,
+  bestMove,
+  cardBlock,
+  handOf,
+  moveSums,
+  pathOf,
+  pickFor,
+  skillBlock,
+  standings,
+  starPrice,
   type Action,
+  type CardId,
   type Ev,
   type Game,
+  type HandId,
   type Prompt,
 } from "@/lib/marble/engine";
 import { MAPS } from "@/lib/marble/maps";
@@ -32,18 +30,18 @@ import { marble } from "@/realtime/marble";
 import { playBgm, sfx, stopBgm } from "./audio";
 import { ItemIcon } from "./Gacha";
 import { CharHero, XGrade } from "./ui";
-import Board, { Glyph, Piece, type Trail, iso, slotXY as slotPos, spriteOf, type TokenView } from "./Board";
-import { Btn, Cur, DiceFace, GradeTag, Icon, PCOLOR, fmt, CurIcon } from "./pixel";
+import Board, { Glyph, KIND, type GlyphName, type Trail, slotXY as slotPos, spriteOf, type TokenView } from "./Board";
+import { Btn, Cur, GradeTag, Icon, PCOLOR, fmt } from "./pixel";
 import { GuideDot, useMapGuide } from "./MapGuide";
 import { RoomTools } from "./Room";
-import Token, { type TokenAnim } from "./Token";
+import { type TokenAnim } from "./Token";
 
 /*
- * 판 화면 — 서버가 보낸 방 상태(RoomWire)의 ev 를 하나씩 연출하고(주사위 · 이동 · 돈 · 건설 · 카드 · 스킬 · 소식),
- * 연출이 다 끝나면 지금 상태로 맞춘 뒤 내 차례면 고르기 창을 보여 줌.
+ * 판 화면 (v2 야추 × 보드) — 서버가 보낸 방 상태(RoomWire)의 ev 를 하나씩 연출하고
+ * (주사위 · 족보 · 이동 · 코인 · 별 · 아이템 · 스킬 · 대결 · 소식), 연출이 다 끝나면 지금 상태로 맞춘 뒤
+ * 내 차례면 판 가운데 주사위 접시에서 고르게 함.
  * 연출 길이는 서버 animMs(server/src/games/marble) 와 같게 — 서버는 그만큼 기다렸다가 AI 를 두게 하고 사람 시간을 셈.
  */
-
 
 interface Floater {
   id: number;
@@ -51,6 +49,7 @@ interface Floater {
   y: number;
   text: string;
   color: string;
+  big?: boolean;
 }
 interface Banner {
   id: number;
@@ -65,20 +64,79 @@ interface Banner {
   desc?: string;
   target?: string;
 }
-
 /** 한 번 터지고 사라지는 이펙트 (무대 좌표) */
 interface Fx {
   id: number;
-  k: "boom" | "ring" | "flame" | "coin" | "zzz";
+  k: "boom" | "ring" | "coin" | "zzz" | "star";
   x: number;
   y: number;
   dx?: number;
   dy?: number;
   delay?: number;
 }
+/** 판 가운데 주사위 접시 (그 차례 사람의 주사위) */
+interface TrayView {
+  p: number;
+  dice: number[];
+  held: boolean[];
+  /** 주사위마다 굴린 번호 (바뀌면 다시 굴러 떨어짐) */
+  ids: number[];
+}
+type Pop =
+  | { k: "hand"; id: number; p: number; hand: HandId; x2?: boolean }
+  | { k: "card"; id: number; p: number; card: CardId }
+  | { k: "event"; id: number; p: number; ev: keyof typeof EVENTS; alt?: keyof typeof EVENTS }
+  | { k: "vs"; id: number; e: Extract<Ev, { t: "vs" }> };
 
 let fid = 0;
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+/** 프롬프트별 제한 시간 (서버 LIMIT 과 같게 — 시간 막대 비율만) */
+const LIMIT: Record<string, number> = { turn: 15_000, dice: 25_000, foe: 9_000, warp: 10_000, more: 8_000 };
+const TRAY = { x: 512, y: 290 };
+
+function trayOf(g: GameWire): TrayView {
+  const t = g.turn;
+  const p = g.prompt?.p ?? g.cur;
+  if (!t || !t.rolled) return { p, dice: [], held: [], ids: [] };
+  return { p, dice: [...t.dice], held: [...t.held], ids: t.dice.map(() => 0) };
+}
+
+/** 이동 고르기 후보 */
+interface MoveOpt {
+  steps: number;
+  pick?: number[];
+  n?: number;
+  jump?: boolean;
+  path: number[];
+  dest: number;
+  /** 지나가며 별을 살 수 있음 */
+  star: boolean;
+}
+function moveOptions(g: Game, pi: number, slide: number): MoveOpt[] {
+  const t = g.turn;
+  if (!t || !t.rolled || t.dice.some((d) => d < 1)) return [];
+  const p = g.players[pi];
+  const h = handOf(t.dice);
+  const coins = p.coins + HANDS[h].coins * (t.dbl ? 2 : 1);
+  const price = starPrice(g, pi);
+  if (h === "large") {
+    return [{ steps: (g.star - p.pos + 32) % 32, jump: true, path: [g.star], dest: g.star, star: coins >= price }];
+  }
+  const k = t.tri ? 3 : 2;
+  const sums = h === "small" ? Array.from({ length: 12 }, (_, i) => i + 1) : moveSums(t.dice, k);
+  return sums.map((s) => {
+    const steps = Math.max(1, s + t.boost + slide);
+    const path = pathOf(g, p.pos, steps);
+    const passStart = path.some((x) => x === 0);
+    return {
+      steps,
+      ...(h === "small" ? { n: s } : { pick: pickFor(t.dice, k, s)! }),
+      path,
+      dest: path[path.length - 1],
+      star: path.includes(g.star) && coins + (passStart ? RULE.start : 0) >= price,
+    };
+  });
+}
 
 export default function GameView({ room, me, onLeave }: { room: RoomWire; me: string; onLeave(): void }) {
   const g0 = room.game!;
@@ -87,23 +145,23 @@ export default function GameView({ room, me, onLeave }: { room: RoomWire; me: st
   const [view, setView] = useState<GameWire>(g0);
   const [pos, setPos] = useState<number[]>(() => g0.players.map((p) => p.pos));
   const [anim, setAnim] = useState<TokenAnim[]>(() => g0.players.map(() => "idle"));
-  const [hide, setHide] = useState<boolean[]>(() => g0.players.map(() => false));
-  const [train, setTrain] = useState<{ id: number; pts: { x: number; y: number }[]; pi: number } | null>(null);
   const [face, setFace] = useState<(1 | -1)[]>(() => g0.players.map(() => 1));
   const [hop, setHop] = useState<number[]>(() => g0.players.map(() => 0));
-  const [cash, setCash] = useState<number[]>(() => g0.players.map((p) => p.cash));
-  const [dice, setDice] = useState<DiceView | null>(null);
+  const [coins, setCoins] = useState<number[]>(() => g0.players.map((p) => p.coins));
+  const [stars, setStars] = useState<number[]>(() => g0.players.map((p) => p.stars));
+  const [starAt, setStarAt] = useState(g0.star);
+  const [tray, setTray] = useState<TrayView>(() => trayOf(g0));
+  /** 내 차례: 잠근 주사위 (누르는 즉시 바뀌게 화면에서 들고 있음) */
+  const [held, setHeld] = useState<boolean[]>(() => g0.turn?.held ?? []);
   const [floaters, setFloaters] = useState<Floater[]>([]);
   const [fxs, setFxs] = useState<Fx[]>([]);
   const [banner, setBanner] = useState<Banner | null>(null);
-  const [card, setCard] = useState<{ id: keyof typeof CARDS; p: number } | null>(null);
+  const [pop, setPop] = useState<Pop | null>(null);
+  const [yacht, setYacht] = useState<{ id: number; p: number; x2?: boolean } | null>(null);
+  const [flyStar, setFlyStar] = useState<{ id: number; a: { x: number; y: number }; b: { x: number; y: number } } | null>(null);
   const [flash, setFlash] = useState<Record<number, string>>({});
-  // 이동 경로 숫자 · 도착 칸 숫자 (보드에 그림)
   const [trail, setTrail] = useState<Trail | null>(null);
-  // 못 하고 넘어갈 때 이유 (내 것만 가운데 작은 창)
-  const [nope, setNope] = useState<{ id: number; why: string; need?: number; cash: number } | null>(null);
-  const lastRoll = useRef<{ p: number; sum: number; dbl: boolean } | null>(null);
-  const [, setLog] = useState<string[]>([]);
+  const [nope, setNope] = useState<{ id: number; why: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [shake, setShake] = useState<number | null>(null);
   /** 받은 방 상태 (연출 대기열) */
@@ -114,7 +172,6 @@ export default function GameView({ room, me, onLeave }: { room: RoomWire; me: st
 
   const order = room.order;
   const myPi = useMemo(() => order.findIndex((si) => room.seats[si]?.uid === me), [order, room.seats, me]);
-  const nameOf = useCallback((pi: number) => view.players[pi]?.name ?? "?", [view.players]);
   // 사다리 뒤 막 시작한 판: 내 순번을 가운데에 잠깐
   const [intro, setIntro] = useState(() => (room.game?.steps ?? 1) === 0 && myPi >= 0);
   useEffect(() => {
@@ -128,414 +185,34 @@ export default function GameView({ room, me, onLeave }: { room: RoomWire; me: st
     const c = slotPos(map, slot);
     return { x: c.x, y: c.y - 30 };
   };
-  const diceAt = { x: iso(4, 4).x, y: iso(4, 4).y + 52 };
+  const n = view.players.length;
+  /** 화면 자리: 나는 늘 왼쪽 아래, 1:1 상대는 오른쪽 위 */
+  const viewIdx = (pi: number) => (myPi >= 0 ? (pi - myPi + n) % n : pi);
   const cardXY = (pi: number) => {
-    const n = view.players.length;
-    const c = cornerRect(myPi >= 0 ? (pi - myPi + n) % n : pi);
-    return { x: c.x + 150, y: c.y + 30 };
+    const c = cornerRect(viewIdx(pi), n);
+    return { x: c.x + 150, y: c.y + 40 };
   };
-  const float = (x: number, y: number, text: string, color = "#232a4d") => {
+  const float = (x: number, y: number, text: string, color = "#232a4d", big = false) => {
     // 화면 가장자리에서 글자가 잘리지 않게 (글자 폭 어림)
-    const half = Math.min(300, text.length * 9 + 10);
-    const f = { id: ++fid, x: Math.max(half, Math.min(1024 - half, x)), y: Math.max(20, y), text, color };
+    const half = Math.min(300, text.length * (big ? 12 : 9) + 10);
+    const f = { id: ++fid, x: Math.max(half, Math.min(1024 - half, x)), y: Math.max(20, y), text, color, big };
     setFloaters((a) => [...a.slice(-14), f]);
-    setTimeout(() => setFloaters((a) => a.filter((o) => o.id !== f.id)), 1200);
+    setTimeout(() => setFloaters((a) => a.filter((o) => o.id !== f.id)), 1300);
   };
-  const say = (s: string) => setLog((l) => [...l.slice(-5), s]);
   const spawn = (k: Fx["k"], x: number, y: number, extra: Partial<Fx> = {}, ms = 1300) => {
     const f: Fx = { id: ++fid, k, x, y, ...extra };
     setFxs((a) => [...a.slice(-24), f]);
     setTimeout(() => setFxs((a) => a.filter((o) => o.id !== f.id)), ms + (extra.delay ?? 0));
   };
-  /** 카드 → 카드 금화 몇 개 날리기 */
-  const coinsFly = (from: number, to: number, n = 4) => {
-    const a = cardXY(from);
-    const b = cardXY(to);
-    for (let k = 0; k < n; k++) spawn("coin", a.x - 60 + k * 8, a.y + 10, { dx: b.x - a.x + 60 - k * 8, dy: b.y - a.y, delay: k * 70 }, 900);
+  /** 한 곳 → 카드로 금화 몇 개 */
+  const coinsFly = (a: { x: number; y: number }, b: { x: number; y: number }, k = 4) => {
+    for (let j = 0; j < k; j++) spawn("coin", a.x - 12 + j * 8, a.y, { dx: b.x - a.x + 12 - j * 8, dy: b.y - a.y, delay: j * 70 }, 900);
   };
-  const tileXY = (cur: GameWire, tile: number) => {
-    const c = slotPos(map, slotOfTile(cur, tile));
-    return { x: c.x, y: c.y };
+  const flashTile = (slot: number, c: string) => {
+    setFlash((f) => ({ ...f, [slot]: c }));
+    setTimeout(() => setFlash((f) => Object.fromEntries(Object.entries(f).filter(([k]) => Number(k) !== slot))), 900);
   };
 
-  /* ── 연출 하나 ── */
-  const playEv = async (e: Ev, cur: GameWire) => {
-    const P = (pi: number) => cur.players[pi]?.name ?? "?";
-    switch (e.t) {
-      case "turn":
-        if (e.p === myPi) sfx("turn");
-        return;
-      case "roll": {
-        // 힘 조절로 던졌으면 굴린 사람 카드 쪽에서 날아와 굴러감 (세게 던질수록 빠르고 많이 돎)
-        const thrown = e.power !== undefined;
-        const dur = thrown ? Math.round(950 - (e.power ?? 0) * 300) : 700;
-        const from = thrown ? cardXY(e.p) : null;
-        setDice({ d: e.d, roll: ++fid, p: e.p, dur, from: from ? { x: from.x - diceAt.x, y: from.y - diceAt.y } : null, spin: thrown ? 2 + Math.round((e.power ?? 0) * 4) : 1 });
-        sfx("dice");
-        // 굴린 결과는 잠깐만 보여 주고 치움 (다음 ROLL 버튼 · 스킬과 안 겹치게)
-        {
-          const id = fid;
-          setTimeout(() => setDice((d) => (d && d.roll === id ? null : d)), dur + 2600);
-        }
-        await wait(dur);
-        if (e.ctrl) {
-          sfx("card");
-          float(diceAt.x, diceAt.y + 40, `힘 조절 성공! ${ZONE_NAME[powerZone(e.power ?? 0.5)]}`, "#ff7a2e");
-        }
-        say(`${P(e.p)} 주사위 ${e.d[0]}+${e.d[1]}${e.dbl ? " 더블!" : ""}${e.how === "pick" ? " (골라 굴림)" : e.how === "reroll" ? " (다시 굴림)" : ""}`);
-        lastRoll.current = { p: e.p, sum: e.d[0] + e.d[1], dbl: !!e.dbl };
-        if (e.twin) float(diceAt.x, diceAt.y + 70, "쌍둥이 주사위! 더블로 맞춰짐", "#b05cff");
-        await wait(400);
-        return;
-      }
-      case "move": {
-        if (e.rail) {
-          // 십자 철로: 출발 역 → 중앙역 → 도착 역으로 열차가 달림
-          const fromS = posRef.current[e.p];
-          const toS = e.path[e.path.length - 1];
-          const a = slotPos(map, fromS);
-          const b = slotPos(map, toS);
-          const c = iso(4, 4);
-          sfx("warp");
-          setTrain({ id: ++fid, pts: [a, c, b], pi: e.p });
-          setAnim((x) => x.map((v, i) => (i === e.p ? "walk" : v)));
-          setHide((h) => h.map((v, i) => (i === e.p ? true : v)));
-          await wait(1100);
-          setPosOf(e.p, toS);
-          setHide((h) => h.map((v, i) => (i === e.p ? false : v)));
-          setTrain(null);
-          setAnim((x) => x.map((v, i) => (i === e.p ? "idle" : v)));
-          await wait(150);
-          return;
-        }
-        if (e.warp) {
-          setAnim((a) => a.map((x, i) => (i === e.p ? "win" : x)));
-          sfx("warp");
-          await wait(300);
-          setPosOf(e.p, e.path[e.path.length - 1]);
-          await wait(400);
-          setAnim((a) => a.map((x, i) => (i === e.p ? "idle" : x)));
-          return;
-        }
-        if (e.pull) {
-          // 끌려감: 경로 숫자 없이, 맞은 자세로 빠르게 미끄러짐
-          const a0 = slotXY(posRef.current[e.p]);
-          float(a0.x, a0.y - 44, "끌려가요!", "#e0558c");
-          sfx("pull");
-          setAnim((a) => a.map((x, i) => (i === e.p ? "hit" : x)));
-          for (const s of e.path) {
-            setPosOf(e.p, s);
-            await wait(110);
-          }
-          setAnim((a) => a.map((x, i) => (i === e.p ? "idle" : x)));
-          const b0 = slotXY(e.path[e.path.length - 1]);
-          spawn("ring", b0.x, b0.y + 26);
-          await wait(250);
-          return;
-        }
-        // 경로 숫자 1 · 2 · 3 … + 도착 칸 위 굴린 눈 (굴린 바로 뒤 이동일 때만 더블 표시) · 폴짝/묵직한 주사위로 더 간 칸은 +
-        const lr = lastRoll.current;
-        lastRoll.current = null;
-        const tid = ++fid;
-        const plus = e.bonus ?? 0;
-        const base = e.path.length - plus;
-        setTrail({ id: tid, slots: e.path, at: 0, color: PCOLOR[e.p], n: base, plus, dbl: !!lr && lr.p === e.p && lr.dbl && lr.sum === base });
-        setAnim((a) => a.map((x, i) => (i === e.p ? "walk" : x)));
-        await wait(260);
-        for (const [k, s] of e.path.entries()) {
-          const from = map.tiles[posRef.current[e.p]];
-          const to = map.tiles[s];
-          const dx = to.x - from.x;
-          if (dx) setFace((f) => f.map((x, i) => (i === e.p ? (dx > 0 ? 1 : -1) : x)));
-          setPosOf(e.p, s);
-          setTrail((t) => (t && t.id === tid ? { ...t, at: k + 1 } : t));
-          if (plus && k === base) {
-            const q = slotXY(s);
-            float(q.x, q.y - 44, `${e.bonusWhy ?? "폴짝"}! +${plus}칸`, "#2fa36a");
-            sfx("hop");
-            setAnim((a) => a.map((x, i) => (i === e.p ? "win" : x)));
-          }
-          setHop((h) => h.map((x, i) => (i === e.p ? x + 1 : x)));
-          sfx("step");
-          await wait(210);
-        }
-        setAnim((a) => a.map((x, i) => (i === e.p ? "idle" : x)));
-        // 도착 숫자는 잠깐 더 남겼다가 치움 (흐름은 안 막음)
-        setTimeout(() => setTrail((t) => (t && t.id === tid ? null : t)), 900);
-        await wait(130);
-        return;
-      }
-      case "nope": {
-        if (e.p === myPi) {
-          const id = ++fid;
-          setNope({ id, why: e.why, need: e.need, cash: cur.players[e.p]?.cash ?? 0 });
-          sfx("deny");
-          setTimeout(() => setNope((n) => (n && n.id === id ? null : n)), 2000);
-        } else {
-          const xy = slotXY(posRef.current[e.p]);
-          float(xy.x, xy.y - 40, e.why, "#6b7280");
-        }
-        await wait(600);
-        return;
-      }
-      case "salary": {
-        setCash((c) => c.map((x, i) => (i === e.p ? x + e.amt : x)));
-        const c = cardXY(e.p);
-        float(c.x, c.y, e.why ? `${e.why} +${fmt(e.amt)}` : `+${fmt(e.amt)}`, "#2f8a3a");
-        sfx(e.pot ? "coins" : "coin");
-        if (e.pot) {
-          // 황금 다리 잭팟: 크게
-          setBanner({ id: ++fid, title: `잭팟! +${fmt(e.amt)}`, sub: `${P(e.p)} · 황금 다리에 쌓인 세금 · 벌금을 몽땅`, color: "#ffb21e", ms: 1700 });
-          const q = slotXY(posRef.current[e.p]);
-          for (let k = 0; k < 8; k++) spawn("coin", q.x, q.y, { dx: c.x - q.x + (k - 4) * 6, dy: c.y - q.y, delay: k * 60 }, 900);
-          await wait(1500);
-        }
-        await wait(300);
-        return;
-      }
-      case "pay": {
-        setCash((c) => c.map((x, i) => (i === e.from ? x - e.amt : i === e.to ? x + e.amt : x)));
-        const a = cardXY(e.from);
-        float(a.x, a.y, `-${fmt(e.amt)}`, "#d43a3a");
-        if (e.to >= 0) {
-          const b = cardXY(e.to);
-          float(b.x, b.y, `+${fmt(e.amt)}`, "#2f8a3a");
-        }
-        if (e.to >= 0) {
-          coinsFly(e.from, e.to, e.amt >= 300 ? 5 : 3);
-          sfx("coins");
-        }
-        if (e.tile !== undefined) {
-          const q = slotXY(slotOfTile(cur, e.tile));
-          float(q.x, q.y - 30, `${e.why} ${fmt(e.amt)}${e.shock ? " ⚡감전" : ""}`, "#d43a3a");
-          // 깎였으면: 무엇이 얼마를 깎았는지 (방패 · 할인 · 쿠폰)
-          if (e.orig && e.by?.length) {
-            const skillCut = e.by.find((x) => x !== "통행료 할인" && x !== "반값 쿠폰");
-            if (skillCut) {
-              spawn("ring", q.x, q.y + 26);
-              sfx("shield");
-            }
-            float(q.x, q.y - 58, `${skillCut ? `${skillCut}! ` : `${e.by.join(" · ")} `}${fmt(e.orig)} → ${fmt(e.amt)}`, "#2f8fc4");
-            if (skillCut) patchPlayer(e.from, { shield: 0 });
-          }
-        }
-        setShake(e.from);
-        setAnim((x) => x.map((v, i) => (i === e.from && e.amt >= 300 ? "hit" : v)));
-        sfx("pay");
-        say(`${P(e.from)} → ${e.to >= 0 ? P(e.to) : "은행"} ${fmt(e.amt)} (${e.why}${e.shock ? " · 감전!" : ""})`);
-        await wait(650);
-        setShake(null);
-        setAnim((x) => x.map((v, i) => (i === e.from && v === "hit" ? "idle" : v)));
-        return;
-      }
-      case "buy": {
-        patchTile(e.tile, { owner: e.p, lv: e.lv, ...(e.b !== undefined && { b: e.b }) });
-        setCash((c) => c.map((x, i) => (i === e.p ? x - e.cost : x)));
-        flashTile(e.tile, PCOLOR[e.p]);
-        const xy = slotXY(slotOfTile(cur, e.tile));
-        const nm = LEVEL_NAME[e.top ?? e.lv];
-        float(xy.x, xy.y - 30, e.lv >= LANDMARK ? "랜드마크!" : e.cost === 0 ? `${nm} (무료)` : nm, PCOLOR[e.p]);
-        sfx(e.lv >= LANDMARK ? "landmark" : "build");
-        say(`${P(e.p)} ${MAPS[cur.map].tiles[e.tile].name} ${nm}${e.cost ? ` (${fmt(e.cost)})` : ""}`);
-        await wait(800);
-        return;
-      }
-      case "acq": {
-        patchTile(e.tile, { owner: e.p });
-        setCash((c) => c.map((x, i) => (i === e.p ? x - e.cost : i === e.from ? x + e.cost : x)));
-        flashTile(e.tile, PCOLOR[e.p]);
-        const xy = slotXY(slotOfTile(cur, e.tile));
-        float(xy.x, xy.y - 30, "인수!", PCOLOR[e.p]);
-        spawn("ring", xy.x, xy.y + 56);
-        sfx("acquire");
-        say(`${P(e.p)} ← ${P(e.from)} ${MAPS[cur.map].tiles[e.tile].name} 인수 (${fmt(e.cost)})`);
-        await wait(800);
-        return;
-      }
-      case "block": {
-        const xy = slotXY(slotOfTile(cur, e.tile));
-        float(xy.x, xy.y - 30, "경비견이 막았어요!", "#2f5fc4");
-        sfx("deny");
-        await wait(800);
-        return;
-      }
-      case "sell": {
-        patchTile(e.tile, { owner: -1, lv: 0, b: 0 });
-        setCash((c) => c.map((x, i) => (i === e.p ? x + e.got : x)));
-        const xy = slotXY(slotOfTile(cur, e.tile));
-        float(xy.x, xy.y - 30, `팔림 +${fmt(e.got)}`, "#8c7259");
-        await wait(300);
-        return;
-      }
-      case "card":
-        setCard({ id: e.card, p: e.p });
-        sfx("card");
-        say(`${P(e.p)} 럭키 박스 「${CARDS[e.card].name}」`);
-        await wait(1700);
-        setCard(null);
-        return;
-      case "jail":
-        sfx("jail");
-        float(slotXY(posRef.current[e.p]).x, slotXY(posRef.current[e.p]).y - 40, `수리소 ${e.turns}턴`, "#5a6b7a");
-        await wait(800);
-        return;
-      case "free":
-        float(slotXY(posRef.current[e.p]).x, slotXY(posRef.current[e.p]).y - 40, e.why === "수리비" ? "수리 끝!" : "탈출!", "#2f8a3a");
-        await wait(300);
-        return;
-      case "fest":
-        flashTile(e.tile, "#b58cff");
-        sfx("fest");
-        say(`${P(e.p)} ${MAPS[cur.map].tiles[e.tile].name}에서 축제!`);
-        await wait(800);
-        return;
-      case "frozen":
-        {
-          const q = slotXY(posRef.current[e.p]);
-          spawn("zzz", q.x + 10, q.y - 30);
-          sfx("sleep");
-          float(q.x, q.y - 50, "쿨쿨… 이번 차례는 쉬어요", "#5b6bd6");
-          await wait(1100);
-          patchPlayer(e.p, { frozen: 0 });
-        }
-        return;
-      case "loan": {
-        const c = cardXY(e.p);
-        sfx("coin");
-        float(c.x, c.y, `대출 +${fmt(e.amt)}`, "#2f6fd6");
-        say(`${P(e.p)} 은행 대출 ${fmt(e.amt)} (갚을 돈 ${fmt(e.debt)})`);
-        await wait(900);
-        return;
-      }
-      case "repay": {
-        const c = cardXY(e.p);
-        float(c.x, c.y + 18, `빚 상환 -${fmt(e.amt)}${e.left ? "" : " · 완납!"}`, "#5a6b7a");
-        await wait(500);
-        return;
-      }
-      case "rewind": {
-        const c = cardXY(e.p);
-        float(c.x, c.y, `되감기 +${fmt(e.amt)}`, "#7a5cd6");
-        await wait(800);
-        return;
-      }
-      case "encore": {
-        const c = cardXY(e.p);
-        float(c.x, c.y, "앙코르! 한 번 더", "#ff7fb0");
-        patchPlayer(e.p, { encore: false });
-        await wait(700);
-        return;
-      }
-      case "adjust":
-        float(slotXY(posRef.current[e.p]).x, slotXY(posRef.current[e.p]).y - 40, e.why, "#c46f00");
-        await wait(300);
-        return;
-      case "skill": {
-        const pl = cur.players[e.p];
-        const c = CHAR[pl.lo.char.id];
-        sfx("skill");
-        const tg = SKILL_TARGET[e.kind];
-        const target =
-          e.target === undefined ? (e.n !== undefined && tg === "num" ? `${e.n}` : undefined) : tg === "foe" ? P(e.target) : MAPS[cur.map].tiles[e.target]?.name;
-        setBanner({
-          id: ++fid,
-          title: e.name,
-          sub: `${P(e.p)} · ${c?.title ?? ""}`,
-          color: c?.color ?? "#ffc94a",
-          art: c ? artOf(c) : undefined,
-          ms: 1500,
-          grade: c?.grade,
-          desc: c ? c.active.desc(power(c.grade, pl.lo.char.lv)) : undefined,
-          target: target && (tg === "num" ? (e.kind === "dash" ? `${target}칸 이동` : e.kind === "bunny" ? `+${target}칸` : `눈 ${target}`) : `→ ${target}`),
-        });
-        say(`${P(e.p)} 스킬 「${e.name}」${target ? ` → ${target}` : ""}`);
-        await wait(1300);
-        // 스킬마다 판 위에 남는 흔적
-        if (e.tiles) {
-          for (const t of e.tiles) {
-            flashTile(t, "#ff9a3d");
-            const q = tileXY(cur, t);
-            spawn("flame", q.x, q.y);
-            patchTile(t, { boostLeft: cur.tiles[t].boostLeft, boost: cur.tiles[t].boost });
-          }
-          sfx("fest");
-        }
-        if (e.kind === "freeze" && e.target !== undefined) {
-          patchPlayer(e.target, { frozen: 1 });
-          const q = slotXY(posRef.current[e.target]);
-          spawn("zzz", q.x + 10, q.y - 30);
-          sfx("sleep");
-          float(q.x, q.y - 50, "쿨쿨… 다음 차례 쉬어요", "#5b6bd6");
-          await wait(500);
-        }
-        if (e.kind === "shield") {
-          patchPlayer(e.p, { shield: cur.players[e.p].shield || 0.5 });
-          sfx("shield");
-        }
-        if (e.kind === "hop") sfx("hop");
-        if (e.kind === "sale") patchPlayer(e.p, { sale: cur.players[e.p].sale || 0.5 });
-        if (e.kind === "encore") patchPlayer(e.p, { encore: true });
-        if (e.kind === "hop") patchPlayer(e.p, { hop: true });
-        if (e.kind === "debug" && e.target !== undefined) {
-          const q = tileXY(cur, e.target);
-          patchTile(e.target, { lv: cur.tiles[e.target].lv, b: cur.tiles[e.target].b });
-          flashTile(e.target, "#ff4b3d");
-          spawn("boom", q.x, q.y - 18);
-          sfx("boom");
-          float(q.x, q.y - 50, `쾅! ${e.lost !== undefined ? LEVEL_NAME[e.lost] : "건물"} 부서짐`, "#d43a3a");
-          await wait(500);
-        }
-        return;
-      }
-      case "town": {
-        const t = TOWN_EVENTS[e.ev];
-        sfx("news");
-        const grp = e.group !== undefined ? MAPS[cur.map].groups[e.group]?.name : "";
-        setBanner({ id: ++fid, title: `마을 소식 · ${t.name}`, sub: e.ev === "festa" ? `${grp} 통행료 2배 (3바퀴)` : `${t.desc} (3바퀴)`, color: "#4fd1b5", ms: 1900 });
-        await wait(1900);
-        return;
-      }
-      case "rotate":
-        sfx("rotate");
-        setBanner({ id: ++fid, title: "태엽이 감겨요!", sub: "정원의 네 변이 한 칸씩 돌아가요", color: "#ff7fa8", ms: 1900 });
-        await wait(900);
-        setView((v) => ({ ...v, order: e.order }));
-        await wait(1000);
-        return;
-      case "mono":
-        sfx("mono");
-        setBanner({ id: ++fid, title: "독점!", sub: `${P(e.p)} · ${MAPS[cur.map].groups[e.group]?.name} 통행료 2배`, color: PCOLOR[e.p], ms: 2300 });
-        await wait(2200);
-        return;
-      case "threat":
-        sfx("mono");
-        setBanner({
-          id: ++fid,
-          title: e.kind === "spot" ? "명소 독점 위기!" : e.kind === "triple" ? "트리플 독점 위기!" : "라인 독점 위기!",
-          sub:
-            e.kind === "spot"
-              ? `${P(e.p)} · 명소 ${e.have}/${e.need} — 남은 명소 하나만 사면 승리`
-              : e.kind === "triple"
-                ? `${P(e.p)} · 동네 ${e.have}/${e.need} 독점 — 하나만 더 하면 승리`
-                : `${P(e.p)} · 한 줄 ${e.have}/${e.need}칸 — 한 칸만 더 가지면 승리`,
-          color: "#ffb21e",
-          ms: 1700,
-        });
-        await wait(1400);
-        return;
-      case "bankrupt":
-        sfx("bankrupt");
-        setAnim((a) => a.map((x, i) => (i === e.p ? "ko" : x)));
-        setBanner({ id: ++fid, title: "파산", sub: P(e.p), color: "#8c7259", ms: 1400 });
-        await wait(1400);
-        return;
-      case "over":
-        return;
-    }
-  };
-
-  const [who, setWho] = useState<number | null>(null);
-  const guide = useMapGuide();
   const posRef = useRef(pos);
   useEffect(() => {
     posRef.current = pos;
@@ -546,14 +223,396 @@ export default function GameView({ room, me, onLeave }: { room: RoomWire; me: st
   };
   const patchPlayer = (pi: number, patch: Partial<GameWire["players"][number]>) =>
     setView((v) => ({ ...v, players: v.players.map((p, i) => (i === pi ? { ...p, ...patch } : p)) }));
-  const patchTile = (tile: number, patch: { owner?: number; lv?: number; b?: number; boost?: number; boostLeft?: number }) =>
-    setView((v) => ({ ...v, tiles: v.tiles.map((t, i) => (i === tile ? { ...t, ...patch } : t)) }));
-  const flashTile = (tile: number, c: string) => {
-    setFlash((f) => ({ ...f, [tile]: c }));
-    setTimeout(() => setFlash((f) => Object.fromEntries(Object.entries(f).filter(([k]) => Number(k) !== tile))), 900);
+  const addCoins = (pi: number, d: number) => setCoins((c) => c.map((x, i) => (i === pi ? Math.max(0, x + d) : x)));
+  const setAnimOf = (pi: number, a: TokenAnim) => setAnim((x) => x.map((v, i) => (i === pi ? a : v)));
+  const starXY = (slot: number) => {
+    const c = slotPos(map, slot);
+    return { x: c.x, y: c.y - 70 };
   };
 
+  /* ── 연출 하나 ── */
+  const COIN_LABEL: Record<string, string> = {
+    start: "출발",
+    blue: "",
+    red: "",
+    empty: "별 자리",
+    hand: "족보",
+    card: "아이템",
+    steal: "뺏기",
+    thief: "코인 도둑",
+    vs: "대결",
+    fest: "축제",
+    jackpot: "잭팟!",
+    event: "소식",
+    trap: "함정",
+    circus: "관람료",
+    pass: "배달비",
+    shield: "방패",
+    catchup: "막판 위로금",
+  };
+  const walkTo = async (pi: number, path: number[], color: string, speed = 200) => {
+    const tid = ++fid;
+    setTrail({ id: tid, slots: path, at: 0, color, n: path.length });
+    setAnimOf(pi, "walk");
+    await wait(220);
+    for (const [k, s] of path.entries()) {
+      const from = map.tiles[posRef.current[pi]];
+      const to = map.tiles[s];
+      const dx = to.x - from.x;
+      if (dx) setFace((f) => f.map((x, i) => (i === pi ? (dx > 0 ? 1 : -1) : x)));
+      setPosOf(pi, s);
+      setTrail((t) => (t && t.id === tid ? { ...t, at: k + 1 } : t));
+      setHop((h) => h.map((x, i) => (i === pi ? x + 1 : x)));
+      sfx("step");
+      await wait(speed);
+    }
+    setAnimOf(pi, "idle");
+    setTimeout(() => setTrail((t) => (t && t.id === tid ? null : t)), 800);
+  };
+
+  const playEv = async (e: Ev, cur: GameWire) => {
+    const P = (pi: number) => cur.players[pi]?.name ?? "?";
+    switch (e.t) {
+      case "turn":
+        setTray({ p: e.p, dice: [], held: [], ids: [] });
+        if (e.p === myPi && !e.again) float(TRAY.x, TRAY.y - 30, "내 차례!", PCOLOR[e.p], true);
+        if (e.again) {
+          setBanner({ id: ++fid, title: "앙코르!", sub: `${P(e.p)} · 한 번 더`, color: "#ff7fb0", ms: 1100 });
+          sfx("skill");
+          await wait(1100);
+        } else {
+          if (e.p === myPi) sfx("turn");
+          await wait(350);
+        }
+        return;
+      case "round":
+        if (e.frenzy) {
+          sfx("mono");
+          setBanner({ id: ++fid, title: `막판 ${RULE.frenzyRounds}바퀴!`, sub: "파랑 · 빨강 칸 두 배 · 꼴찌에게 위로금", color: "#ff6a2b", ms: 2400 });
+          setView((v) => ({ ...v, frenzy: true, round: e.round }));
+          await wait(2400);
+        } else if (e.round > 1) {
+          setView((v) => ({ ...v, round: e.round }));
+          setBanner({ id: ++fid, title: `${e.round} / ${cur.rounds} 바퀴`, color: "#5b6cff", ms: 900 });
+          await wait(900);
+        }
+        return;
+      case "frenzy":
+        for (const i of e.last) {
+          const c = cardXY(i);
+          float(c.x, c.y - 20, "꼴찌 위로금!", "#ff6a2b");
+        }
+        await wait(1300);
+        return;
+      case "roll": {
+        setTray((t) => {
+          const ids = e.dice.map((_, i) => (e.held[i] ? (t.ids[i] ?? 0) : ++fid));
+          return { p: e.p, dice: [...e.dice], held: [...e.held], ids };
+        });
+        if (e.p === myPi) setHeld([...e.held]);
+        sfx("dice");
+        await wait(e.re ? 820 : 1080);
+        if (e.lucky !== undefined) float(TRAY.x, TRAY.y - 70, "짝이 맞춰졌어요!", "#b05cff");
+        await wait(e.re ? 180 : 220);
+        return;
+      }
+      case "hold":
+        setTray((t) => ({ ...t, held: [...e.held] }));
+        return;
+      case "die": {
+        setTray((t) => ({ ...t, dice: t.dice.map((v, i) => (i === e.i ? e.to : v)), ids: t.ids.map((v, i) => (i === e.i ? ++fid : v)) }));
+        sfx("card");
+        float(TRAY.x - 120 + e.i * 60, TRAY.y - 60, `${e.from} → ${e.to}`, "#ff7a2e");
+        await wait(550);
+        return;
+      }
+      case "hand": {
+        if (e.hand === "yacht") {
+          setYacht({ id: ++fid, p: e.p, x2: e.x2 });
+          sfx("mono");
+          await wait(2800);
+          setYacht(null);
+          return;
+        }
+        const ms = e.hand === "four" || e.hand === "large" ? 1500 : e.hand === "triple" || e.hand === "small" || e.hand === "full" ? 1100 : 250;
+        if (ms >= 1100) {
+          setPop({ k: "hand", id: ++fid, p: e.p, hand: e.hand, x2: e.x2 });
+          sfx(ms >= 1100 ? "fest" : "coin");
+        }
+        await wait(ms);
+        setPop((x) => (x?.k === "hand" ? null : x));
+        return;
+      }
+      case "move": {
+        if (e.why === "warp" || e.why === "jump" || e.why === "swap") {
+          setAnimOf(e.p, "win");
+          sfx("warp");
+          const a = slotXY(posRef.current[e.p]);
+          spawn("ring", a.x, a.y + 26);
+          await wait(320);
+          setPosOf(e.p, e.path[e.path.length - 1]);
+          const b = slotXY(e.path[e.path.length - 1]);
+          spawn("ring", b.x, b.y + 26);
+          if (e.why === "jump") float(b.x, b.y - 50, "별로 순간이동!", "#ff9f1a");
+          await wait(430);
+          setAnimOf(e.p, "idle");
+          return;
+        }
+        if (e.why === "pull") {
+          // 끌려감: 경로 숫자 없이, 맞은 자세로 빠르게 미끄러짐
+          const a0 = slotXY(posRef.current[e.p]);
+          float(a0.x, a0.y - 44, "끌려가요!", "#e0558c");
+          sfx("pull");
+          setAnimOf(e.p, "hit");
+          for (const s of e.path) {
+            setPosOf(e.p, s);
+            await wait(110);
+          }
+          setAnimOf(e.p, "idle");
+          const b0 = slotXY(e.path[e.path.length - 1]);
+          spawn("ring", b0.x, b0.y + 26);
+          await wait(250);
+          return;
+        }
+        if (e.why === "hop") {
+          const q = slotXY(posRef.current[e.p]);
+          float(q.x, q.y - 44, "폴짝!", "#2fa36a");
+          sfx("hop");
+        }
+        if (e.why === "gust") {
+          const q = slotXY(posRef.current[e.p]);
+          float(q.x, q.y - 44, `돌풍! +${e.path.length}칸`, "#2fa3c4");
+        }
+        await walkTo(e.p, e.path, PCOLOR[e.p], 190);
+        await wait(60);
+        return;
+      }
+      case "coin": {
+        addCoins(e.p, e.amt);
+        if (e.pot !== undefined) setView((v) => ({ ...v, pot: e.pot! }));
+        const c = cardXY(e.p);
+        const label = COIN_LABEL[e.why] ?? "";
+        float(c.x, c.y - 10, `${label ? `${label} ` : ""}${e.amt > 0 ? "+" : "−"}${Math.abs(e.amt)}`, e.amt > 0 ? "#2f8a3a" : "#d43a3a");
+        const onTile = ["blue", "red", "empty", "fest", "jackpot", "trap", "event", "pass"].includes(e.why);
+        if (onTile && e.from === undefined) {
+          const q = slotXY(posRef.current[e.p]);
+          flashTile(posRef.current[e.p], e.amt > 0 ? "#ffd23a" : "#ff5a6e");
+          if (e.amt > 0) coinsFly(q, c, Math.min(6, 2 + Math.floor(e.amt / 3)));
+          else coinsFly(c, q, 3);
+          if (e.why === "jackpot") {
+            setBanner({ id: ++fid, title: `잭팟! +${e.amt}`, sub: `${P(e.p)} · 쌓인 코인을 몽땅`, color: "#ffb21e", ms: 1400 });
+            for (let k = 0; k < 8; k++) spawn("coin", q.x, q.y, { dx: c.x - q.x + (k - 4) * 6, dy: c.y - q.y, delay: k * 60 }, 900);
+          }
+        }
+        if (e.from !== undefined && e.amt > 0) coinsFly(cardXY(e.from), c, 4);
+        if (e.amt < 0) {
+          setShake(e.p);
+          setTimeout(() => setShake((s) => (s === e.p ? null : s)), 450);
+        }
+        sfx(e.amt > 0 ? (e.amt >= 6 ? "coins" : "coin") : "pay");
+        await wait(e.why === "jackpot" ? 1400 : 260);
+        return;
+      }
+      case "star": {
+        const c = cardXY(e.p);
+        if (e.why === "buy" || e.why === "vip") {
+          addCoins(e.p, -e.price);
+          const a = starXY(e.at);
+          setStarAt(-1);
+          setFlyStar({ id: ++fid, a, b: c });
+          sfx("landmark");
+          setBanner({ id: ++fid, title: "별 획득!", sub: `${P(e.p)} · ${e.price}코인${e.why === "vip" ? " · VIP 쇼핑" : ""}`, color: "#ffb21e", ms: 1700 });
+          await wait(1100);
+          setStars((s) => s.map((x, i) => (i === e.p ? x + 1 : x)));
+          spawn("star", c.x - 60, c.y);
+          await wait(800);
+          setFlyStar(null);
+          return;
+        }
+        if (e.why === "yacht") {
+          setFlyStar({ id: ++fid, a: { x: TRAY.x, y: TRAY.y - 40 }, b: c });
+          await wait(550);
+          setStars((s) => s.map((x, i) => (i === e.p ? x + 1 : x)));
+          spawn("star", c.x - 60, c.y);
+          setFlyStar(null);
+          return;
+        }
+        // 보너스 별
+        setFlyStar({ id: ++fid, a: { x: 512, y: 240 }, b: c });
+        sfx("coins");
+        await wait(650);
+        setStars((s) => s.map((x, i) => (i === e.p ? x + 1 : x)));
+        spawn("star", c.x - 60, c.y);
+        await wait(250);
+        setFlyStar(null);
+        return;
+      }
+      case "starMove": {
+        const a = starXY(e.from);
+        const b = starXY(e.to);
+        setStarAt(-1);
+        setFlyStar({ id: ++fid, a, b });
+        sfx("warp");
+        float(b.x, b.y - 30, "별이 이사 왔어요!", "#ff9f1a");
+        await wait(1000);
+        setFlyStar(null);
+        setStarAt(e.to);
+        setView((v) => ({ ...v, star: e.to }));
+        await wait(100);
+        return;
+      }
+      case "card": {
+        if (e.use) {
+          patchPlayer(e.p, { cards: removeOne(cur.players[e.p] ? viewCards(e.p) : [], e.id) });
+          const c = cardXY(e.p);
+          float(c.x, c.y - 30, `${CARDS[e.id].name}!`, "#7a4bd6");
+          sfx("card");
+          await wait(900);
+          return;
+        }
+        patchPlayer(e.p, { cards: [...viewCards(e.p), e.id].slice(0, RULE.maxCards) });
+        setPop({ k: "card", id: ++fid, p: e.p, card: e.id });
+        sfx("card");
+        await wait(850);
+        setPop((x) => (x?.k === "card" ? null : x));
+        return;
+      }
+      case "skill": {
+        const pl = cur.players[e.p];
+        const c = CHAR[pl.lo.char.id];
+        sfx("skill");
+        setBanner({
+          id: ++fid,
+          title: c?.active.name ?? "스킬",
+          sub: `${P(e.p)} · ${c?.title ?? ""}`,
+          color: c?.color ?? "#ffc94a",
+          art: c ? artOf(c) : undefined,
+          ms: 1500,
+          grade: c?.grade,
+          desc: c ? c.active.desc(power(c.grade, pl.lo.char.lv)) : undefined,
+          target: e.target !== undefined ? `→ ${P(e.target)}` : undefined,
+        });
+        await wait(1300);
+        if (e.kind === "shield") {
+          patchPlayer(e.p, { shield: Math.max(1, pl.shield) });
+          sfx("shield");
+        }
+        return;
+      }
+      case "vs":
+        setPop({ k: "vs", id: ++fid, e });
+        sfx("dice");
+        await wait(1300);
+        sfx(e.win >= 0 ? "acquire" : "deny");
+        await wait(1400);
+        setPop((x) => (x?.k === "vs" ? null : x));
+        return;
+      case "fest":
+        sfx("fest");
+        setBanner({ id: ++fid, title: `축제! 주사위 ${e.d}`, sub: `${P(e.p)} · 코인 +${e.amt}`, color: "#b07bff", ms: 1500 });
+        await wait(1500);
+        return;
+      case "event":
+        sfx("news");
+        setPop({ k: "event", id: ++fid, p: e.p, ev: e.id, alt: e.alt });
+        await wait(1800);
+        setPop((x) => (x?.k === "event" ? null : x));
+        return;
+      case "trap": {
+        setView((v) => ({ ...v, traps: v.traps.map((x, i) => (i === e.at ? e.p : x)) }));
+        const q = slotXY(e.at);
+        float(q.x, q.y - 40, "함정 설치!", "#5a6b7a");
+        sfx("build");
+        await wait(700);
+        return;
+      }
+      case "debuff": {
+        const q = slotXY(posRef.current[e.p]);
+        // 걸림(다음 차례에) · 차례 시작에 효과가 나옴(이번 차례 — 머리 위 상태는 지움)
+        const now = e.kind !== "trap" && e.by === undefined;
+        if (e.kind === "seal") {
+          patchPlayer(e.p, { seal: now ? 0 : 1 });
+          float(q.x, q.y - 50, now ? "주사위 하나 압수당했어요!" : "주사위 하나 압수!", "#d8402f");
+          sfx("boom");
+        } else {
+          patchPlayer(e.p, { sleep: !now });
+          spawn("zzz", q.x + 10, q.y - 30);
+          sfx(e.kind === "trap" ? "jail" : "sleep");
+          float(q.x, q.y - 50, now ? "쿨쿨… 이번 차례 다시 굴리기 0번" : e.kind === "trap" ? "함정! 다음 차례 다시 굴리기 0번" : "쿨쿨… 다음 차례 다시 굴리기 0번", "#5b6bd6");
+        }
+        await wait(700);
+        return;
+      }
+      case "block": {
+        const q = slotXY(posRef.current[e.p]);
+        spawn("ring", q.x, q.y + 26);
+        sfx("shield");
+        float(q.x, q.y - 50, e.why === "guard" ? "경비견이 막았어요!" : e.why === "immune" ? "면역!" : "방패로 막았어요!", "#2f5fc4");
+        if (e.why === "shield") patchPlayer(e.p, { shield: Math.max(0, (cur.players[e.p]?.shield ?? 1) - 1) });
+        await wait(700);
+        return;
+      }
+      case "swap": {
+        sfx("warp");
+        const pa = posRef.current[e.a];
+        const pb = posRef.current[e.b];
+        setAnimOf(e.a, "win");
+        setAnimOf(e.b, "win");
+        await wait(300);
+        setPosOf(e.a, pb);
+        setPosOf(e.b, pa);
+        float(slotXY(pb).x, slotXY(pb).y - 50, "자리 바꾸기!", "#6f7bff");
+        await wait(400);
+        setAnimOf(e.a, "idle");
+        setAnimOf(e.b, "idle");
+        return;
+      }
+      case "bonus": {
+        const T: Record<string, [string, string]> = { coin: ["코인왕", "판 동안 코인을 가장 많이 번 사람"], hand: ["족보왕", "족보 점수가 가장 높은 사람"], unlucky: ["불운왕", "코인을 가장 많이 잃은 사람 (위로의 별)"] };
+        setTray((t) => ({ ...t, dice: [], held: [], ids: [] }));
+        sfx("news");
+        setBanner({ id: ++fid, title: `보너스 별 · ${T[e.kind][0]}`, sub: `${e.ps.map(P).join(" · ")} — ${T[e.kind][1]} (${e.val})`, color: "#ff9f1a", ms: 2300 });
+        await wait(1700);
+        return;
+      }
+      case "nope": {
+        if (e.p === myPi) {
+          const id = ++fid;
+          setNope({ id, why: e.why });
+          sfx("deny");
+          setTimeout(() => setNope((x) => (x && x.id === id ? null : x)), 1800);
+        } else {
+          const xy = slotXY(posRef.current[e.p]);
+          float(xy.x, xy.y - 40, e.why, "#6b7280");
+        }
+        await wait(450);
+        return;
+      }
+    }
+  };
+  const viewRef = useRef(view);
+  useEffect(() => {
+    viewRef.current = view;
+  }, [view]);
+  const viewCards = (pi: number) => viewRef.current.players[pi]?.cards ?? [];
+
+  const [who, setWho] = useState<number | null>(null);
+  const guide = useMapGuide();
+
   /* ── 대기열 돌리기 ── */
+  const syncTo = (gw: GameWire) => {
+    setView(gw);
+    setPos(gw.players.map((p) => p.pos));
+    setCoins(gw.players.map((p) => p.coins));
+    setStars(gw.players.map((p) => p.stars));
+    setStarAt(gw.star);
+    setAnim(gw.players.map(() => "idle"));
+    setTray((t) => {
+      const nt = trayOf(gw);
+      if (nt.p === t.p && nt.dice.length === t.dice.length && nt.dice.every((d, i) => d === t.dice[i])) return { ...nt, ids: t.ids };
+      return nt;
+    });
+  };
   const pump = useCallback(async () => {
     if (running.current) return;
     running.current = true;
@@ -563,12 +622,7 @@ export default function GameView({ room, me, onLeave }: { room: RoomWire; me: st
       // 많이 밀렸으면 (탭을 내려 뒀다 옴) 연출 없이 맞춤
       const skip = queue.current.length >= 3;
       if (!skip && w.game) for (const e of w.ev) await playEv(e, w.game);
-      if (w.game) {
-        setView(w.game);
-        setPos(w.game.players.map((p) => p.pos));
-        setCash(w.game.players.map((p) => p.cash));
-        setAnim(w.game.players.map((p) => (p.alive ? "idle" : "ko")));
-      }
+      if (w.game) syncTo(w.game);
       setLive(w);
     }
     running.current = false;
@@ -582,10 +636,16 @@ export default function GameView({ room, me, onLeave }: { room: RoomWire; me: st
       return;
     }
     lastSeq.current = room.seq;
-    if (!room.ev.length && !running.current && !queue.current.length) {
+    // 잠그기만 바뀐 상태는 연출 없이 바로 (내 화면이 깜빡이지 않게)
+    const light = room.ev.length > 0 && room.ev.every((e) => e.t === "hold");
+    if ((!room.ev.length || light) && !running.current && !queue.current.length) {
       setLive(room);
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- 서버에서 새 방 상태가 오면 화면 상태를 맞춤
-      if (room.game) setView(room.game);
+      if (room.game) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- 서버에서 새 방 상태가 오면 화면 상태를 맞춤
+        setView(room.game);
+        const t = room.game.turn;
+        if (light && t) setTray((x) => ({ ...x, held: [...t.held] }));
+      }
       return;
     }
     queue.current.push(room);
@@ -598,11 +658,25 @@ export default function GameView({ room, me, onLeave }: { room: RoomWire; me: st
   const pr: Prompt | null = !busy && live.phase === "play" ? g.prompt : null;
   const mine = !!pr && pr.p === myPi;
   const mySeat = myPi >= 0 ? room.seats[order[myPi]] : null;
-  const [mode, setMode] = useState<null | { k: "skillTile"; tiles: number[] } | { k: "skillNum"; range: [number, number] } | { k: "skillFoe"; foes: number[]; n?: boolean } | { k: "pullN"; foe: number } | { k: "pick" }>(null);
+  const [mode, setMode] = useState<Mode>(null);
   const [sending, setSending] = useState(false);
   const [info, setInfo] = useState<number | null>(null);
-  // eslint-disable-next-line react-hooks/set-state-in-effect -- 서버에서 새 방 상태가 오면 화면 상태를 맞춤
+  const [slide, setSlide] = useState(0);
+  const [sel, setSel] = useState<number | null>(null);
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- 서버에서 새 상태가 오면 고르던 것 정리
   useEffect(() => setMode(null), [live.seq]);
+  // 새 굴림 · 주사위가 바뀌면 이동 추천을 다시
+  const diceKey = g.turn ? `${g.cur}:${g.turn.dice.join("")}:${g.turn.tri}:${g.turn.boost}:${g.turn.dbl}:${slide}` : "";
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 주사위가 바뀌면 추천 이동으로
+    setSel(null);
+  }, [diceKey]);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 새 차례면 미끄럼 · 잠금 초기화
+    setSlide(0);
+    if (g.turn) setHeld([...g.turn.held]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [g.cur, g.round, g.turn?.rolled, g.turn?.again]);
 
   const send = async (a: Action) => {
     if (sending) return;
@@ -612,61 +686,133 @@ export default function GameView({ room, me, onLeave }: { room: RoomWire; me: st
       await marble.act(room.id, a);
     } catch (e) {
       sfx("deny");
-      say(`⚠ ${(e as Error).message}`);
+      const id = ++fid;
+      setNope({ id, why: (e as Error).message });
+      setTimeout(() => setNope((x) => (x && x.id === id ? null : x)), 1800);
     } finally {
       setSending(false);
     }
   };
+  /** 잠그기는 기다리지 않고 바로 (보는 사람에게 알려 주기만) */
+  const toggleHold = (i: number) => {
+    if (!mine || !pr || pr.k !== "dice") return;
+    sfx("click");
+    const next = (held.length ? held : g.turn!.dice.map(() => false)).map((v, k) => (k === i ? !v : v));
+    setHeld(next);
+    setTray((t) => ({ ...t, held: next }));
+    void marble.act(room.id, { t: "hold", pick: next.flatMap((v, k) => (v ? [k] : [])) }).catch(() => {});
+  };
+
+  const opts = useMemo(() => (mine && pr?.k === "dice" ? moveOptions(gg, myPi, slide) : []), [mine, pr?.k, gg, myPi, slide]);
+  const best = useMemo(() => {
+    if (!mine || pr?.k !== "dice" || !opts.length) return null;
+    try {
+      const b = bestMove(gg, myPi);
+      return opts.find((o) => o.steps === b.steps + slide) ?? opts[0];
+    } catch {
+      return opts[0];
+    }
+  }, [mine, pr?.k, opts, gg, myPi, slide]);
+  const chosen = opts.find((o) => o.steps === sel) ?? best;
 
   const onSkill = () => {
-    if (!mine || !canSkill(gg, myPi)) return;
+    if (!mine || skillBlock(gg, myPi)) return;
     const k = g.players[myPi].skill.kind;
     const tg = SKILL_TARGET[k];
+    sfx("click");
     if (tg === "none") return void send({ t: "skill" });
-    if (tg === "ownCity" || tg === "foeCity" || tg === "foeLand") return setMode({ k: "skillTile", tiles: skillTargets(gg, myPi) });
     if (tg === "foe") {
-      const foes = skillTargets(gg, myPi);
-      if (k === "pull") return foes.length === 1 ? setMode({ k: "pullN", foe: foes[0] }) : setMode({ k: "skillFoe", foes, n: true });
-      return foes.length === 1 ? void send({ t: "skill", target: foes[0] }) : setMode({ k: "skillFoe", foes });
+      const foes = g.players.map((_, i) => i).filter((i) => i !== myPi);
+      return foes.length === 1 ? void send({ t: "skill", target: foes[0] }) : setMode({ k: "foe", for: "skill" });
     }
-    const r = skillRange(gg, myPi);
-    if (r) setMode({ k: "skillNum", range: r });
+    if (tg === "pull") return setMode({ k: "pull" });
+    setMode({ k: "die", for: tg === "die" ? "six" : tg, picks: [], vals: [] });
+  };
+  const onCard = (id: CardId) => {
+    if (!mine || cardBlock(gg, myPi, id)) return;
+    sfx("click");
+    const c = CARDS[id];
+    if (c.target === "foe") {
+      const foes = g.players.map((_, i) => i).filter((i) => i !== myPi);
+      return foes.length === 1 ? void send({ t: "card", id, target: foes[0] }) : setMode({ k: "foe", for: id });
+    }
+    if (c.target === "die") return setMode({ k: "die", for: "gold", picks: [], vals: [] });
+    if (c.target === "star") return setMode({ k: "star" });
+    void send({ t: "card", id });
+  };
+  /** 주사위 고르기 모드에서 주사위를 누름 */
+  const onDiePick = (i: number) => {
+    if (mode?.k !== "die") return;
+    sfx("click");
+    const m = mode;
+    const t = g.turn!;
+    if (m.for === "six") return void send({ t: "skill", die: i });
+    if (m.for === "copy") {
+      if (!m.picks.length) return setMode({ ...m, picks: [i] });
+      if (i === m.picks[0]) return;
+      const rest = m.picks.slice(1);
+      const has = rest.includes(i);
+      const next = has ? rest.filter((x) => x !== i) : [...rest, i].slice(-g.players[myPi].skill.mag);
+      return setMode({ ...m, picks: [m.picks[0], ...next] });
+    }
+    // gold · gear · nudge · magic: 주사위 고르면 눈 고르기
+    if (m.picks.length === m.vals.length) {
+      if (m.picks.includes(i)) return;
+      setMode({ ...m, picks: [...m.picks, i] });
+    }
+    void t;
+  };
+  const onFace = (v: number) => {
+    if (mode?.k !== "die") return;
+    const m = mode;
+    const i = m.picks[m.picks.length - 1];
+    sfx("click");
+    if (m.for === "gold") return void send({ t: "card", id: "gold", die: i, n: v });
+    if (m.for === "gear") return void send({ t: "gear", die: i, n: v });
+    if (m.for === "nudge") return void send({ t: "skill", die: i, n: v - g.turn!.dice[i] });
+    if (m.for === "magic") {
+      const vals = [...m.vals, v];
+      if (vals.length < 2) return setMode({ ...m, vals });
+      return void send({ t: "skill", pick: m.picks, vals });
+    }
   };
 
   /* 보드에서 고를 칸 */
   let pick: number[] | null = null;
-  let onPick: ((t: number) => void) | undefined;
+  let onPick: ((slot: number) => void) | undefined;
   if (mine && pr) {
-    if (mode?.k === "skillTile") {
-      pick = mode.tiles;
-      onPick = (t) => void send({ t: "skill", target: t });
-    } else if (pr.k === "fest") {
-      pick = pr.tiles;
-      onPick = (t) => void send({ t: "fest", tile: t });
-    } else if (pr.k === "start") {
-      pick = pr.tiles;
-      onPick = (t) => void send({ t: "start", tile: t });
-    } else if (pr.k === "turn" && pr.warp) {
-      pick = map.tiles.map((_, s) => g.order[s]).filter((t) => map.tiles[t].kind !== "warp");
-      onPick = (t) => void send({ t: "warp", to: g.order.indexOf(t) });
-    } else if (pr.k === "rail") {
-      pick = pr.opts.map((s) => g.order[s]);
-      onPick = (t) => void send({ t: "rail", to: g.order.indexOf(t) });
-    } else if (pr.k === "fork") {
-      pick = pr.opts.map((s) => g.order[s]);
-      onPick = (t) => void send({ t: "fork", to: g.order.indexOf(t) });
+    if (mode?.k === "star") {
+      pick = g.stars.filter((s) => s !== g.star);
+      onPick = (s) => void send({ t: "card", id: "starmove", tile: s });
+    } else if (pr.k === "warp") {
+      pick = map.tiles.map((_, s) => s).filter((s) => s !== g.players[myPi].pos && s !== g.star && map.tiles[s].kind !== "warp");
+      onPick = (s) => void send({ t: "warp", tile: s });
     }
   }
-
-  // 내 차례 굴리기 전: 2~12칸 앞이 어디인지 칸에 숫자로
-  let reach: Record<number, number> | null = null;
-  if (mine && pr && pr.k === "turn" && !pr.jail && !pr.warp && !mode && !trail && myPi >= 0) {
+  // 이동 고르기: 갈 수 있는 칸 숫자 + 고른 길 미리 보기
+  let reach: Record<number, { n: number; on: boolean }> | null = null;
+  let preview: Trail | null = null;
+  if (mine && pr?.k === "dice" && !mode && opts.length && !trail) {
     reach = {};
-    for (let n = 2; n <= 12; n++) {
-      const s = slotAhead(gg as unknown as GameWire, pos[myPi], n);
-      if (reach[s] === undefined) reach[s] = n;
-    }
+    for (const o of opts) if (!reach[o.dest] || o === chosen) reach[o.dest] = { n: o.steps, on: o === chosen };
+    if (chosen) preview = { id: -1, slots: chosen.path, at: 0, color: PCOLOR[myPi], n: chosen.steps, preview: true };
   }
+  if (mine && pr?.k === "more" && !trail) {
+    reach = {};
+    for (let k = 1; k <= pr.max; k++) reach[(g.players[myPi].pos + k) % 32] = { n: k, on: false };
+  }
+  const onReach = (slot: number) => {
+    if (pr?.k === "more") {
+      const k = (slot - g.players[myPi].pos + 32) % 32;
+      if (k >= 1 && k <= pr.max) void send({ t: "more", n: k });
+      return;
+    }
+    const o = opts.find((x) => x.dest === slot);
+    if (o) {
+      sfx("click");
+      setSel(o.steps);
+    }
+  };
 
   // 시간 막대
   const [, tick] = useState(0);
@@ -676,49 +822,38 @@ export default function GameView({ room, me, onLeave }: { room: RoomWire; me: st
   }, []);
   const left = live.deadline ? Math.max(0, live.deadline - serverNow()) : 0;
 
-  // 남이 독점 찬스 칸에서 고민 중이면 머리 위에 크게 (한 번만)
-  const chanceKey = pr && pr.k === "buy" && !mine ? `${pr.p}-${pr.tile}-${g.steps}` : "";
-  const lastChance = useRef("");
-  useEffect(() => {
-    if (!chanceKey || chanceKey === lastChance.current || !pr || pr.k !== "buy") return;
-    lastChance.current = chanceKey;
-    const c = chanceOf(gg, pr.p, pr.tile);
-    if (!c) return;
-    const q = slotXY(posRef.current[pr.p]);
-    float(q.x, q.y - 74, `독점 찬스! ${c}`, "#ff6a2b");
-    sfx("news");
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- 프롬프트가 바뀔 때만
-  }, [chanceKey]);
-  const tokens: TokenView[] = view.players.flatMap((p, i) => (hide[i] ? [] : [{
+  const tokens: TokenView[] = view.players.map((p, i) => ({
     pi: i,
     slot: pos[i],
     sprite: spriteOf(p.lo.char.id),
     anim: anim[i],
     face: face[i],
     hop: hop[i],
-    dim: !p.alive,
     say: pr && !mine && pr.p === i ? thinking(pr) : undefined,
-    sleep: p.frozen > 0,
-    shield: p.shield > 0,
-  }]));
-
-  const n = view.players.length;
-  /** 화면 자리: 나는 늘 왼쪽 아래 (모두의마블처럼), 1:1 상대는 오른쪽 위 */
-  const viewIdx = (pi: number) => (myPi >= 0 ? (pi - myPi + n) % n : pi);
-  const dim = mine && pr && (pr.k === "buy" || pr.k === "acq");
+    sleep: p.sleep,
+    shield: p.shield > 0 || p.cards.includes("shield"),
+  }));
+  const rank = standingsOf(view, stars, coins);
+  const dim = mine && pr && (pr.k === "foe" || mode?.k === "foe" || mode?.k === "pull");
 
   return (
-    <div className="mb-sky absolute inset-0 overflow-hidden" style={{ background: BOARD_BG[view.map] }}>
+    <div className="mb-sky absolute inset-0 overflow-hidden" style={{ background: "radial-gradient(circle at 50% 45%, #bfe9ff 0%, #7cc4f2 55%, #4c8fd6 100%)" }}>
       {/* 바깥 배경: 맵 그림을 크게 흐리게 + 가장자리 어둡게 */}
       <img src={`/marble/bg/center-${view.map}.webp`} alt="" className="pointer-events-none absolute inset-0 h-full w-full scale-110 object-cover opacity-70 blur-[10px]" />
-      <div className="pointer-events-none absolute inset-0" style={{ background: "radial-gradient(ellipse at 50% 50%, rgba(10,8,30,0.05) 35%, rgba(10,8,30,0.6) 100%)" }} />
-      <Board g={view} tokens={tokens} pick={pick} onPick={onPick} onInfo={(t) => setInfo(t)} flash={flash} trail={trail} reach={reach} />
-      {train && <TrainRide key={train.id} pts={train.pts} sprite={spriteOf(view.players[train.pi].lo.char.id)} />}
+      <div className="pointer-events-none absolute inset-0" style={{ background: view.frenzy ? "radial-gradient(ellipse at 50% 50%, rgba(255,120,40,0.08) 35%, rgba(120,20,0,0.55) 100%)" : "radial-gradient(ellipse at 50% 50%, rgba(10,8,30,0.05) 35%, rgba(10,8,30,0.6) 100%)" }} />
+      <Board g={view} tokens={tokens} star={starAt} pick={pick} onPick={onPick} onInfo={(s) => setInfo(s)} flash={flash} trail={trail ?? preview} reach={reach} onReach={onReach} frenzy={view.frenzy} />
 
-      {/* 위 가운데: 맵 · 바퀴 · 마을 소식 · 최근 일 */}
-      <div className="absolute top-[6px] left-1/2 z-[400] flex -translate-x-1/2 flex-col items-center gap-1">
-        <div className="mb-wood flex items-center gap-3 px-4 py-1" style={{ "--bar": map.id === "orgel" ? "#ff7fb0" : map.id === "cross" ? "#ff9a3d" : "#5b6cff" } as CSSProperties}>
-          <b className="mb-title mb-out text-[16px] text-white">{map.name}</b>
+      {/* 위 가운데: 바퀴 · 막판 · 별 값 */}
+      <div className="absolute top-[6px] left-1/2 z-[400] flex -translate-x-1/2 items-center gap-1.5">
+        <div className="mb-wood flex items-center gap-2.5 px-3.5 py-1" style={{ "--bar": view.frenzy ? "#ff6a2b" : "#5b6cff" } as CSSProperties}>
+          <b className="mb-title mb-out text-[15px] text-white whitespace-nowrap">
+            {Math.min(view.round, view.rounds)}
+            <span className="text-white/70"> / {view.rounds} 바퀴</span>
+          </b>
+          {view.frenzy && <span className="mbx-hot rounded-full bg-[#ff6a2b] px-2 text-[12px] leading-[18px] font-black whitespace-nowrap text-white">막판 2배!</span>}
+          <span className="flex items-center gap-1 rounded-full bg-black/25 px-2 text-[12px] leading-[20px] font-bold whitespace-nowrap text-[#ffe08a]">
+            <Glyph n="star" size={13} color="#ffd23a" /> {RULE.starPrice}코인
+          </span>
           <GuideDot onOpen={() => guide.show(map.id)} className="!h-[20px] !w-[20px] !text-[12px]" />
         </div>
       </div>
@@ -726,155 +861,197 @@ export default function GameView({ room, me, onLeave }: { room: RoomWire; me: st
         <RoomTools room={live} me={me} onLeave={onLeave} inGame vertical />
       </div>
 
-      {/* 가운데: 꼭 필요한 것만 — 바퀴 · 누구 차례 · 판돈 */}
-      {live.phase !== "end" && (
-        <div className="mbx pointer-events-none absolute top-[288px] left-1/2 z-[300] flex -translate-x-1/2 -translate-y-1/2 items-center gap-1.5 rounded-full bg-[#140f3a]/80 px-2 py-1 text-[13px] text-white shadow-[0_4px_14px_rgba(0,0,0,0.4)] ring-1 ring-white/20 backdrop-blur">
-          <span className="rounded-full bg-white/10 px-2.5 py-[2px] font-black">
-            {Math.min(g.round, g.rounds)}
-            <span className="font-bold text-white/60"> / {g.rounds} 바퀴</span>
-          </span>
-          {(g.prompt?.p ?? -1) >= 0 && (
-            <span className="flex items-center gap-1 rounded-full px-2.5 py-[2px] font-black" style={{ background: PCOLOR[g.prompt!.p] }}>
-              {nameOf(g.prompt!.p)} 차례
-            </span>
-          )}
-          <span className="flex items-center gap-1 rounded-full bg-[#ffd23a]/20 px-2.5 py-[2px] font-black text-[#ffe08a]">
-            판돈 <CurIcon k="coin" size={14} /> {fmt(cash.reduce((t, c, i) => t + (view.players[i]?.alive ? Math.max(0, c) : 0), 0))}
-          </span>
-        </div>
-      )}
-      {/* 마을 소식 · 태엽: 가운데 띠 바로 위 */}
-      {live.phase !== "end" && (
-        <div className="pointer-events-none absolute top-[262px] left-1/2 z-[300] flex -translate-x-1/2 -translate-y-full flex-col items-center gap-1">
-        {g.town && (
-          <div className="mb-chip text-[12px] shadow-[0_3px_10px_rgba(0,0,0,0.35)]" style={{ "--c": "#bff7e8" } as CSSProperties} title={TOWN_EVENTS[g.town.id].desc}>
-            <Icon n="note" size={11} /> 마을 소식 <b>{TOWN_EVENTS[g.town.id].name}</b> · {g.town.id === "festa" ? `${map.groups[g.town.group]?.name} 통행료 2배` : TOWN_EVENTS[g.town.id].desc}
-          </div>
-        )}
-        {map.id === "orgel" && map.every && (
-          <div className="mb-chip text-[12px] shadow-[0_3px_10px_rgba(0,0,0,0.35)]" style={{ "--c": "#ffe1ef" } as CSSProperties}>
-            <Icon n="clock" size={11} /> 태엽 회전까지 {map.every - ((g.round - 1) % map.every)}바퀴
-          </div>
-        )}
-        </div>
-      )}
-      {live.phase !== "end" && <CenterDice dice={dice} at={diceAt} />}
-
-
       {/* 플레이어 (네 귀퉁이) */}
       {view.players.map((p, i) => (
         <PlayerCard
           key={i}
           i={i}
           g={view}
-          cash={cash[i]}
+          coins={coins[i]}
+          stars={stars[i]}
+          rank={rank.indexOf(i) + 1}
           me={i === myPi}
           turn={(live.game?.prompt?.p ?? -1) === i && live.phase === "play"}
           secs={(live.game?.prompt?.p ?? -1) === i && !busy && left > 0 ? Math.ceil(left / 1000) : 0}
           seat={room.seats[order[i]]}
           shake={shake === i}
           corner={viewIdx(i)}
-          pickable={mode?.k === "skillFoe" && mode.foes.includes(i)}
+          n={n}
           onInfo={() => setWho(i)}
-          onPick={() => {
-            if (mode?.k !== "skillFoe") return;
-            if (mode.n) setMode({ k: "pullN", foe: i });
-            else void send({ t: "skill", target: i });
-          }}
         />
       ))}
 
-      {guide.node}
-      {who !== null && view.players[who] && <PlayerInfo g={view} i={who} onClose={() => setWho(null)} />}
-
-      {/* 고르기 창 (사고 · 인수는 보드를 어둡게) */}
-      {dim && <div className="absolute inset-0 z-[450] bg-[rgba(35,42,77,0.35)]" />}
+      {/* 판 가운데: 주사위 접시 · 굴리기 · 이동 고르기 */}
       {live.phase === "play" && (
-        <div
-          className="absolute z-[460] flex -translate-x-1/2 justify-center"
-          style={{ left: 512, top: dim ? 150 : 314, width: 440 }}
-        >
-          <ActionPanel
-            g={g}
-            pr={pr}
-            mine={mine}
-            myPi={myPi}
-            left={left}
-            mode={mode}
-            setMode={setMode}
-            send={send}
-            sending={sending}
-            skill={onSkill}
-            compact={false}
-            busy={busy}
-            auto={!!mySeat?.auto}
-            onManual={() => void marble.auto(room.id, false)}
-          />
+        <DiceTray
+          g={g}
+          tray={tray}
+          pr={pr}
+          mine={mine}
+          myPi={myPi}
+          held={held}
+          busy={busy}
+          sending={sending}
+          left={left}
+          mode={mode}
+          opts={opts}
+          chosen={chosen}
+          slide={slide}
+          auto={!!mySeat?.auto}
+          onManual={() => void marble.auto(room.id, false)}
+          onRoll={(power) => void send(power === undefined ? { t: "roll" } : { t: "roll", power })}
+          onHold={toggleHold}
+          onReroll={() => {
+            sfx("click");
+            void send({ t: "reroll", pick: held.flatMap((v, k) => (v ? [k] : [])) });
+          }}
+          onMove={() => {
+            if (!chosen) return;
+            sfx("click");
+            void send(chosen.n !== undefined ? { t: "move", n: chosen.n, ...(slide && { d: slide }) } : { t: "move", pick: chosen.pick ?? [], ...(slide && !chosen.jump && { d: slide }) });
+          }}
+          onSel={(d) => {
+            if (!opts.length || !chosen) return;
+            const k = opts.indexOf(chosen);
+            sfx("click");
+            setSel(opts[(k + d + opts.length) % opts.length].steps);
+          }}
+          onSlide={(d) => {
+            sfx("click");
+            setSlide((s) => (s === d ? 0 : d));
+          }}
+          onSkill={onSkill}
+          onDiePick={onDiePick}
+          onFace={onFace}
+          onCopy={() => mode?.k === "die" && mode.picks.length > 1 && void send({ t: "skill", die: mode.picks[0], pick: mode.picks.slice(1) })}
+          onCancel={() => setMode(null)}
+          onMore={(k) => void send({ t: "more", n: k })}
+          hidden={!!yacht}
+        />
+      )}
+      {/* 내 아이템 (내 카드 위) */}
+      {myPi >= 0 && live.phase === "play" && !mySeat?.auto && (
+        <ItemDock g={g} myPi={myPi} mine={mine} pr={pr} sending={sending} onCard={onCard} onGear={() => setMode({ k: "die", for: "gear", picks: [], vals: [] })} />
+      )}
+      {/* 별 이사 · 별 고르기 · 워프 안내 */}
+      {mine && pr && (mode?.k === "star" || pr.k === "warp") && (
+        <div className="pointer-events-none absolute top-[44px] left-1/2 z-[470] -translate-x-1/2">
+          <div className="mbx-pop flex items-center gap-2 rounded-full bg-[#1b1650]/90 px-4 py-1.5 text-[13px] font-bold whitespace-nowrap text-white shadow-[0_6px_18px_rgba(0,0,0,0.4)] ring-2 ring-[#ffd23a]">
+            {pr.k === "warp" ? "워프할 칸을 판에서 눌러요 (별 칸 빼고)" : "별을 옮길 별 자리를 판에서 눌러요"}
+            {mode?.k === "star" && (
+              <button type="button" className="pointer-events-auto rounded-full bg-white/15 px-2 text-[12px] hover:bg-white/25" onClick={() => setMode(null)}>
+                취소
+              </button>
+            )}
+          </div>
         </div>
       )}
 
-      {/* 칸 정보 */}
-      {info !== null && <TileInfo g={view} tile={info} onClose={() => setInfo(null)} />}
+      {/* 상대 고르기 (풀하우스 · VS · 스킬 · 아이템) — 가운데 창, 뒤 어둡게 */}
+      {dim && <div className="absolute inset-0 z-[450] bg-[rgba(20,16,50,0.5)]" />}
+      {mine && pr && (pr.k === "foe" || mode?.k === "foe" || mode?.k === "pull") && (
+        <FoePick
+          g={g}
+          coins={coins}
+          stars={stars}
+          title={pr.k === "foe" ? (pr.why === "steal" ? "풀하우스! 누구에게서 뺏을까요?" : "VS 대결! 누구랑 할까요?") : mode?.k === "pull" ? `${CHAR[g.players[myPi].lo.char.id]?.active.name ?? "끌어오기"} — 누구를?` : mode?.k === "foe" && mode.for !== "skill" ? `${CARDS[mode.for].name} — 누구에게?` : `${CHAR[g.players[myPi].lo.char.id]?.active.name ?? "스킬"} — 누구에게?`}
+          opts={pr.k === "foe" ? pr.opts : g.players.map((_, i) => i).filter((i) => i !== myPi)}
+          pull={mode?.k === "pull" ? g.players[myPi].skill.mag : 0}
+          onPick={(q, k) => {
+            if (pr.k === "foe") return void send({ t: "target", target: q });
+            if (mode?.k === "pull") return void send({ t: "skill", target: q, n: k });
+            if (mode?.k === "foe") return void send(mode.for === "skill" ? { t: "skill", target: q } : { t: "card", id: mode.for, target: q });
+          }}
+          onCancel={pr.k === "foe" ? undefined : () => setMode(null)}
+          sending={sending}
+          left={pr.k === "foe" ? left : 0}
+        />
+      )}
+
+      {guide.node}
+      {who !== null && view.players[who] && <PlayerInfo g={view} i={who} onClose={() => setWho(null)} />}
+      {info !== null && <TileInfo g={view} slot={info} star={starAt} onClose={() => setInfo(null)} />}
 
       {/* 떠오르는 글자 */}
       {floaters.map((f) => (
-        <div key={f.id} className="mb-float pointer-events-none absolute z-[500] text-[17px] font-bold whitespace-nowrap text-white" style={{ left: f.x, top: f.y, textShadow: `2px 0 0 ${f.color}, -2px 0 0 ${f.color}, 0 2px 0 ${f.color}, 0 -2px 0 ${f.color}, 2px 2px 0 ${f.color}, -2px -2px 0 ${f.color}, 2px -2px 0 ${f.color}, -2px 2px 0 ${f.color}, 0 4px 0 #232a4d` }}>
+        <div
+          key={f.id}
+          className="mb-float pointer-events-none absolute z-[500] font-bold whitespace-nowrap text-white"
+          style={{ left: f.x, top: f.y, fontSize: f.big ? 24 : 17, textShadow: `2px 0 0 ${f.color}, -2px 0 0 ${f.color}, 0 2px 0 ${f.color}, 0 -2px 0 ${f.color}, 2px 2px 0 ${f.color}, -2px -2px 0 ${f.color}, 2px -2px 0 ${f.color}, -2px 2px 0 ${f.color}, 0 4px 0 #232a4d` }}
+        >
           {f.text}
         </div>
       ))}
-
       {fxs.map((f) => (
         <FxView key={f.id} f={f} />
       ))}
+      {flyStar && <FlyStar key={flyStar.id} a={flyStar.a} b={flyStar.b} />}
 
       {banner && <BannerView key={banner.id} b={banner} />}
-      {card && <CardPop id={card.id} name={nameOf(card.p)} />}
-      {nope && <NopeToast key={nope.id} why={nope.why} need={nope.need} cash={nope.cash} />}
+      {pop?.k === "hand" && <HandPop key={pop.id} hand={pop.hand} x2={pop.x2} color={PCOLOR[pop.p]} />}
+      {pop?.k === "card" && <ItemPop key={pop.id} id={pop.card} name={view.players[pop.p]?.name ?? ""} />}
+      {pop?.k === "event" && <EventPop key={pop.id} id={pop.ev} alt={pop.alt} name={view.players[pop.p]?.name ?? ""} />}
+      {pop?.k === "vs" && <VsPop key={pop.id} e={pop.e} g={view} />}
+      {yacht && <YachtCutin key={yacht.id} name={view.players[yacht.p]?.name ?? ""} char={view.players[yacht.p]?.lo.char.id ?? "kai"} x2={yacht.x2} />}
+      {nope && <NopeToast key={nope.id} why={nope.why} />}
       {intro && <OrderIntro pi={myPi} n={g0.players.length} />}
       {live.phase === "end" && live.result && !busy && <Result room={live} me={me} onLeave={onLeave} />}
     </div>
   );
 }
 
-/* ───────────── 배경 · 위치 ───────────── */
+type Mode =
+  | null
+  | { k: "foe"; for: "skill" | CardId }
+  | { k: "pull" }
+  | { k: "die"; for: "six" | "gold" | "gear" | "nudge" | "magic" | "copy"; picks: number[]; vals: number[] }
+  | { k: "star" };
 
-/** 귀퉁이 0 왼쪽 아래(나) · 1 오른쪽 위 · 2 왼쪽 위 · 3 오른쪽 아래 */
-/** 탑뷰 판 바깥 바탕 (맵마다 매끈한 그라데이션) */
-const BOARD_BG: Record<string, string> = {
-  town: "radial-gradient(circle at 50% 45%, #bfe9ff 0%, #7cc4f2 55%, #4c8fd6 100%)",
-  cross: "radial-gradient(circle at 50% 45%, #ffe3b0 0%, #f5b36b 55%, #d97a45 100%)",
-  orgel: "radial-gradient(circle at 50% 45%, #ffe0f0 0%, #f4a8cf 55%, #c46aa6 100%)",
+const removeOne = <T,>(a: T[], x: T) => {
+  const i = a.indexOf(x);
+  return i < 0 ? a : [...a.slice(0, i), ...a.slice(i + 1)];
 };
 
-function cornerRect(corner: number) {
-  // 네 귀퉁이 (마름모 보드가 비워 둔 자리): 왼쪽 아래(나) · 왼쪽 위 · 오른쪽 위 · 오른쪽 아래
-  const w = 236;
-  const h = 118;
-  const left = corner === 0 || corner === 1;
-  const topSide = corner === 1 || corner === 2;
+/** 순위 (보이는 별 · 코인 기준) */
+function standingsOf(g: GameWire, stars: number[], coins: number[]): number[] {
+  return standings({ ...(g as unknown as Game), players: g.players.map((p, i) => ({ ...p, stars: stars[i] ?? p.stars, coins: coins[i] ?? p.coins })) });
+}
+
+/* ───────────── 배경 · 위치 ───────────── */
+
+/** 귀퉁이 0 왼쪽 아래(나) · 1 오른쪽 위 · 2 왼쪽 위 · 3 오른쪽 아래 (2인이면 0 · 1) */
+function cornerRect(corner: number, n: number) {
+  const w = 228;
+  const h = 104;
+  // 3 · 4인: 0 왼쪽 아래 · 1 왼쪽 위 · 2 오른쪽 위 · 3 오른쪽 아래 (시계 방향) / 2인: 왼쪽 아래 · 오른쪽 위
+  const at = n <= 2 ? [0, 2][corner] : corner;
+  const left = at === 0 || at === 1;
+  const topSide = at === 1 || at === 2;
   return { x: left ? 8 : 1024 - 8 - w, y: topSide ? 18 : 576 - 10 - h, w, h };
 }
-const slotOfTile = (g: GameWire, tile: number) => g.order.indexOf(tile);
 
 /* ───────────── 플레이어 카드 ───────────── */
 
 function PlayerCard({
   i,
   g,
-  cash,
+  coins,
+  stars,
+  rank,
   me,
   turn,
   secs,
   seat,
   shake,
   corner,
-  pickable,
-  onPick,
+  n,
   onInfo,
 }: {
   i: number;
   g: GameWire;
-  cash: number;
+  coins: number;
+  stars: number;
+  rank: number;
   me: boolean;
   turn: boolean;
   /** 이 사람 차례 남은 초 (사람만, 0 = 안 보임) */
@@ -882,47 +1059,27 @@ function PlayerCard({
   seat: RoomWire["seats"][number];
   shake: boolean;
   corner: number;
-  pickable: boolean;
-  onPick(): void;
+  n: number;
   onInfo(): void;
 }) {
   const p = g.players[i];
   const c = CHAR[p.lo.char.id];
-  const gg = g as unknown as Game;
-  const assets = assetsOf(gg, i);
-  const tiles = g.tiles.filter((t) => t.owner === i).length;
-  // 동네별로 가진 칸 수 (색 점)
-  const m = MAPS[g.map];
-  const spotAll = m.tiles.filter((d) => d.kind === "spot").length;
-  const spotN = m.tiles.filter((d, ti) => d.kind === "spot" && g.tiles[ti].owner === i).length;
-  const groups = m.groups.map((gr, gi) => ({ color: gr.color, n: m.tiles.filter((d, ti) => d.group === gi && g.tiles[ti].owner === i).length })).filter((x) => x.n > 0);
-  const dice = p.lo.dice ? ITEM[p.lo.dice.id] : null;
-  const buddy = p.lo.buddy ? ITEM[p.lo.buddy.id] : null;
-  const r = cornerRect(corner);
-  const uses = p.uses.adjust + p.uses.pick + p.uses.reroll + p.uses.rewind;
+  const r = cornerRect(corner, n);
+  const ready = p.cd === 0 && g.round > 1;
+  const MEDAL = ["#ffc93a", "#cfd6e6", "#e0a46a", "#9aa3b8"];
   return (
-    <div className={`absolute z-[420] cursor-pointer ${shake ? "mb-shake" : ""} ${pickable ? "mb-blink" : ""}`} style={r.y > 288 ? { left: r.x, bottom: 10, width: r.w } : { left: r.x, top: r.y, width: r.w }} onClick={pickable ? onPick : onInfo} title={pickable ? undefined : "눌러서 장착 · 효과 보기"}>
-      {/* 모두의마블처럼 카드 옆 빈자리에 쌓인 금화 */}
-      <div className={`pointer-events-none absolute ${r.x < 512 ? "left-[calc(100%+8px)]" : "right-[calc(100%+8px)]"} ${r.y < 288 ? "top-[22px]" : "bottom-[10px]"}`}>
-        <CoinStack cash={cash} />
-      </div>
-      <div className={`mb-box relative overflow-visible ${turn ? "mb-turn" : ""}`} style={{ "--c": PCOLOR[i], "--bg": "#ffffff", opacity: p.alive ? 1 : 0.55 } as CSSProperties}>
+    <div className={`absolute z-[420] cursor-pointer ${shake ? "mb-shake" : ""}`} style={r.y > 288 ? { left: r.x, bottom: 10, width: r.w } : { left: r.x, top: r.y, width: r.w }} onClick={onInfo} title="눌러서 캐릭터 · 장착 효과 보기">
+      <div className={`mb-box relative overflow-visible ${turn ? "mb-turn" : ""}`} style={{ "--c": PCOLOR[i], "--bg": "#ffffff" } as CSSProperties}>
         {/* 이름 띠 */}
-        <div className="flex h-[26px] items-center gap-1.5 rounded-t-[14px] pr-2 pl-[86px]" style={{ background: PCOLOR[i], boxShadow: "inset 0 -3px 0 rgba(0,0,0,0.18), inset 0 3px 0 rgba(255,255,255,0.3)" }}>
+        <div className="flex h-[26px] items-center gap-1.5 rounded-t-[14px] pr-2 pl-[84px]" style={{ background: PCOLOR[i], boxShadow: "inset 0 -3px 0 rgba(0,0,0,0.18), inset 0 3px 0 rgba(255,255,255,0.3)" }}>
           {seat?.bot ? <Icon n="bot" size={13} /> : me ? <Icon n="crown" size={13} /> : null}
-          <span className="rounded-[4px] bg-white px-[4px] text-[10px] leading-[14px] font-black" style={{ color: PCOLOR[i] }}>
-            {i + 1}P
-          </span>
           <b className="mb-out-s min-w-0 flex-1 truncate text-[14px] text-white">{p.name}</b>
           {seat?.auto && <span className="mb-chip text-[10px]">자동</span>}
           {seat?.away && <span className="mb-chip text-[10px]">끊김</span>}
-          {!p.alive && <span className="mb-chip text-[10px]">파산</span>}
-          {secs > 0 && (
-            <span className={`rounded-full px-1.5 text-[11px] leading-[16px] font-black ${secs <= 5 ? "bg-[#ff3d6e] text-white" : "bg-white/90 text-[#232a4d]"}`}>{secs}초</span>
-          )}
+          {secs > 0 && <span className={`rounded-full px-1.5 text-[11px] leading-[16px] font-black ${secs <= 5 ? "bg-[#ff3d6e] text-white" : "bg-white/90 text-[#232a4d]"}`}>{secs}초</span>}
         </div>
-        {/* 얼굴 (띠 위로 튀어나오게) */}
-        <div className="absolute top-[-10px] left-[8px] h-[72px] w-[72px] overflow-hidden rounded-[12px] bg-white" style={{ boxShadow: "0 0 0 3px #232a4d" }}>
+        {/* 얼굴 (띠 위로 튀어나오게) + 순위 메달 */}
+        <div className="absolute top-[-10px] left-[8px] h-[68px] w-[68px] overflow-hidden rounded-[12px] bg-white" style={{ boxShadow: "0 0 0 3px #232a4d" }}>
           {c && (
             <>
               <img src={`/marble/art/bg-${c.grade}.webp`} alt="" className="absolute inset-0 h-full w-full object-cover" />
@@ -931,79 +1088,67 @@ function PlayerCard({
           )}
           {c && <GradeTag g={c.grade} className="absolute bottom-[3px] left-[3px] scale-90" />}
         </div>
-        <div className="pt-[3px] pr-2 pb-1 pl-[88px]">
-          <div className="text-[24px] leading-[28px] font-bold tracking-[-0.02em]" style={{ color: cash < 300 ? "#e0384b" : "#232a4d" }}>
-            <Cur k="coin" n={Math.max(0, cash)} size={18} />
-          </div>
-          <div className="flex items-center gap-1 text-[11px] leading-[14px] whitespace-nowrap text-[var(--mute)]">
-            자산 <b className="text-[var(--ink2)]">{fmt(Math.max(0, assets + p.debt))}</b>
-            {p.debt > 0 ? <b className="text-[#e0384b]">· 빚 {fmt(p.debt)}</b> : <span>· 땅 {tiles}</span>}
-          </div>
-          <div className="mt-[2px] flex h-[13px] items-center gap-1 text-[10px] leading-none whitespace-nowrap text-[var(--mute)]">
-            {p.debt > 0 && <span>땅 {tiles}</span>}
-            {spotN > 0 && (
-              <span className="flex h-[12px] items-center rounded-[3px] px-[3px] text-[9px] leading-none font-black text-[#5a3a00]" style={{ background: spotN === spotAll - 1 ? "#ff6a2b" : "#ffb21e", color: spotN === spotAll - 1 ? "#fff" : "#5a3a00", boxShadow: "0 0 0 1px rgba(35,42,77,0.5)" }} title={`명소 ${spotN}/${spotAll} — 전부 가지면 승리`}>
-                ★{spotN}/{spotAll}
-              </span>
-            )}
-            {groups.length > 0 && (
-              <span className="flex items-center gap-[2px]" title="동네별 가진 칸">
-                {groups.slice(0, 6).map((x, k) => (
-                  <span key={k} className="flex h-[12px] min-w-[12px] items-center justify-center rounded-[3px] px-[2px] text-[9px] leading-none font-black text-white" style={{ background: x.color, boxShadow: "0 0 0 1px rgba(35,42,77,0.5)" }}>
-                    {x.n}
-                  </span>
-                ))}
-              </span>
-            )}
-          </div>
-        </div>
-        <div className="flex flex-wrap items-center gap-1 px-2 pt-1.5 pb-2 text-[11px]">
-          <span className="mb-chip" title={c ? `${c.active.name} — ${c.active.desc(power(c.grade, p.lo.char.lv))}` : ""} style={{ "--c": p.cd === 0 ? "#ffe24a" : "#e3e8f7" } as CSSProperties}>
-            <Icon n="star" size={10} />
-            {c?.active.name}
-            {p.cd > 0 && <span className="text-[var(--mute)]">{p.cd}턴</span>}
+        <span className="absolute top-[-14px] left-[-6px] flex h-[26px] w-[26px] items-center justify-center rounded-full text-[13px] font-black text-[#3a2500]" style={{ background: MEDAL[rank - 1] ?? MEDAL[3], boxShadow: "0 0 0 2px #fff, 0 0 0 3.5px #232a4d, 0 2px 4px rgba(0,0,0,0.35)" }} title={`지금 ${rank}등`}>
+          {rank}
+        </span>
+        <div className="flex items-center gap-2.5 pt-[4px] pr-2 pl-[84px]">
+          <span className="flex items-center gap-1 text-[26px] leading-[30px] font-black text-[#232a4d]" title="별">
+            <span key={stars} className="mb-pop">
+              <Glyph n="star" size={24} color="#ffd23a" />
+            </span>
+            {stars}
           </span>
-          {dice && (
-            <span className="mb-chip !p-0 !pr-1" title={`${dice.name} — ${dice.desc(power(dice.grade, p.lo.dice!.lv))}`}>
-              <img src={`/marble/items/${dice.id}.webp`} alt="" className="h-[18px] w-[18px]" />
-              {uses > 0 && <b>{uses}</b>}
-            </span>
-          )}
-          {buddy && (
-            <span className="mb-chip !p-0" title={`${buddy.name} — ${buddy.desc(power(buddy.grade, p.lo.buddy!.lv))}`}>
-              <img src={`/marble/items/${buddy.id}.webp`} alt="" className="h-[18px] w-[18px]" />
-            </span>
-          )}
-          {p.jail > 0 && <span className="mb-chip" style={{ "--c": "#d9e2ea" } as CSSProperties}><Icon n="wrench" size={10} />수리 {p.jail}</span>}
-          {p.warp && <span className="mb-chip" style={{ "--c": "#d8d0ff" } as CSSProperties}><Icon n="warp" size={10} />워프</span>}
-          {p.frozen > 0 && <span className="mb-chip" style={{ "--c": "#dfe3ff" } as CSSProperties}><b style={{ color: "#5b6bd6" }}>Zz</b>쿨쿨 1턴</span>}
-          {p.shield > 0 && <span className="mb-chip" style={{ "--c": "#cdefff" } as CSSProperties}><Icon n="shield" size={10} />방패 −{Math.round(p.shield * 100)}%</span>}
-          {p.encore && <span className="mb-chip" style={{ "--c": "#ffe1ef" } as CSSProperties}>앙코르 대기</span>}
-          {p.hop && <span className="mb-chip" style={{ "--c": "#d8f7e4" } as CSSProperties}>폴짝 준비</span>}
-          {p.keep.half > 0 && <span className="mb-chip">반값</span>}
-          {p.keep.free > 0 && <span className="mb-chip">무료공사</span>}
-          {(p.keep.acq > 0 || p.sale > 0) && <span className="mb-chip">인수할인{p.sale > 0 ? ` −${Math.round(p.sale * 100)}%` : ""}</span>}
+          <span className="flex items-center gap-1 text-[18px] leading-[30px] font-bold text-[#5a4a20]" title="코인">
+            <Glyph n="coin" size={17} color="#ffd23a" />
+            {fmt(coins)}
+          </span>
+        </div>
+        <div className="flex h-[30px] items-center gap-1 px-2 pt-0.5 pb-1.5">
+          <span className="mb-chip shrink-0 text-[10.5px]" title={c ? `${c.active.name} — ${c.active.desc(power(c.grade, p.lo.char.lv))}` : ""} style={{ "--c": ready ? "#ffe24a" : "#e3e8f7" } as CSSProperties}>
+            <Icon n="star" size={10} />
+            {g.round <= 1 ? "2바퀴부터" : ready ? "스킬 준비" : `${p.cd}턴`}
+          </span>
+          <span className="flex min-w-0 items-center gap-[3px]" title="아이템">
+            {Array.from({ length: RULE.maxCards }, (_, k) => {
+              const id = p.cards[k];
+              return id ? <CardIcon key={k} id={id} size={20} /> : <span key={k} className="h-[20px] w-[20px] rounded-[6px] bg-[#232a4d]/10 ring-1 ring-[#232a4d]/15" />;
+            })}
+          </span>
+          <span className="ml-auto flex items-center gap-[3px]">
+            {p.sleep && <StatusDot c="#5b6bd6" t="다음 차례 다시 굴리기 0번" label="Zz" />}
+            {p.seal > 0 && <StatusDot c="#d8402f" t="다음 차례 주사위 하나 봉인" label="봉" />}
+            {p.shield > 0 && <StatusDot c="#2f8fc4" t={`방패 ${p.shield}`} label="막" />}
+          </span>
         </div>
       </div>
     </div>
   );
 }
-
-/** 모두의마블처럼 프로필 앞에 쌓인 금화 (가진 돈 만큼 더미가 늘고 줄어듦) */
-function CoinStack({ cash }: { cash: number }) {
-  // 금화 1개 = 100, 더미당 최대 8개, 최대 4더미 (3000 이상이면 꽉)
-  const coins = Math.max(0, Math.min(32, Math.round(cash / 100)));
-  const piles = Array.from({ length: Math.ceil(coins / 8) }, (_, k) => Math.min(8, coins - k * 8));
+function StatusDot({ c, t, label }: { c: string; t: string; label: string }) {
   return (
-    <div className="flex h-[52px] items-end gap-[3px] pb-[2px]" aria-hidden style={{ filter: "drop-shadow(0 3px 3px rgba(10,8,30,0.45))" }}>
-      {piles.map((n, k) => (
-        <div key={k} className="relative w-[20px]" style={{ height: 8 + n * 5 }}>
-          {Array.from({ length: n }, (_, j) => (
-            <span key={j} className="mbx-coin absolute left-0 h-[8px] w-[20px] rounded-[50%]" style={{ bottom: j * 5, background: "linear-gradient(180deg, #fff1a0, #ffc93a 55%, #d98e0b)", boxShadow: "0 0 0 1px #8a5a00, inset 0 -1px 0 rgba(0,0,0,0.25)", animationDelay: `${(k * 6 + j) * 18}ms` }} />
-          ))}
-        </div>
-      ))}
-    </div>
+    <span className="flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1 text-[10px] font-black text-white" style={{ background: c, boxShadow: "0 0 0 1.5px #fff" }} title={t}>
+      {label}
+    </span>
+  );
+}
+
+/** 아이템 카드 그림 (작은 정사각) */
+const CARD_LOOK: Record<CardId, { g: GlyphName; c: string; bg: string }> = {
+  gold: { g: "dice", c: "#ffd23a", bg: "#7a4b00" },
+  boost: { g: "boot", c: "#ff7a5c", bg: "#6a2010" },
+  reroll: { g: "dice", c: "#9fdcff", bg: "#123a6a" },
+  thief: { g: "bag", c: "#b9c2d6", bg: "#2a2550" },
+  swap: { g: "portal", c: "#b5a6ff", bg: "#2a1f6a" },
+  starmove: { g: "star", c: "#ffd23a", bg: "#5a3a00" },
+  trap: { g: "trap", c: "#cfd6e6", bg: "#3a4050" },
+  shield: { g: "shield", c: "#7fd7ff", bg: "#0f4a6a" },
+};
+export function CardIcon({ id, size = 24 }: { id: CardId; size?: number }) {
+  const l = CARD_LOOK[id];
+  return (
+    <span className="flex shrink-0 items-center justify-center rounded-[6px]" style={{ width: size, height: size, background: `linear-gradient(160deg, ${l.bg}cc, ${l.bg})`, boxShadow: "0 0 0 1.5px #fff, 0 0 0 2.5px #232a4d" }} title={`${CARDS[id].name} — ${CARDS[id].desc}`}>
+      <Glyph n={l.g} size={Math.round(size * 0.78)} color={l.c} />
+    </span>
   );
 }
 
@@ -1038,7 +1183,7 @@ function PlayerInfo({ g, i, onClose }: { g: GameWire; i: number; onClose(): void
               </div>
               <div className="rounded-xl bg-white/[0.07] px-3 py-2">
                 <div className="text-[11.5px] font-bold text-[#ffe08a]">
-                  스킬 · {c.active.name} <span className="font-normal text-white/50">({p.cd > 0 ? `${p.cd}턴 뒤` : "지금 쓸 수 있음"})</span>
+                  스킬 · {c.active.name} <span className="font-normal text-white/50">({g.round <= 1 ? "2바퀴부터" : p.cd > 0 ? `${p.cd}턴 뒤` : "지금 쓸 수 있음"})</span>
                 </div>
                 {c.active.desc(cp)}
               </div>
@@ -1064,94 +1209,497 @@ function PlayerInfo({ g, i, onClose }: { g: GameWire; i: number; onClose(): void
           ) : (
             <div className="text-white/50">장착한 아이템 없음</div>
           )}
+          {p.cards.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1.5 rounded-xl bg-white/[0.07] px-3 py-2">
+              <span className="text-[11.5px] font-bold text-[#ffe08a]">들고 있는 아이템</span>
+              {p.cards.map((id, k) => (
+                <span key={k} className="flex items-center gap-1 text-[11.5px]">
+                  <CardIcon id={id} size={18} />
+                  {CARDS[id].name}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>
   );
 }
 
-/* ───────────── 기차 (크로스 익스프레스) ───────────── */
+/* ───────────── 주사위 ───────────── */
 
-/** 열차가 pts 를 따라 1초 동안 달림 (말이 타고 있음) */
-function TrainRide({ pts, sprite }: { pts: { x: number; y: number }[]; sprite: string }) {
-  const [t, setT] = useState(0);
-  useEffect(() => {
-    const t0 = performance.now();
-    let raf = 0;
-    const step = () => {
-      const k = Math.min(1, (performance.now() - t0) / 1000);
-      setT(k);
-      if (k < 1) raf = requestAnimationFrame(step);
-    };
-    raf = requestAnimationFrame(step);
-    return () => cancelAnimationFrame(raf);
-  }, []);
-  // 구간 길이 비례로 위치
-  const seg = pts.slice(1).map((b, i) => Math.hypot(b.x - pts[i].x, b.y - pts[i].y));
-  const total = seg.reduce((a, b) => a + b, 0);
-  const ease = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
-  let d = ease * total,
-    i = 0;
-  while (i < seg.length - 1 && d > seg[i]) d -= seg[i++];
-  const a = pts[i],
-    b = pts[i + 1];
-  const k = seg[i] ? d / seg[i] : 0;
-  const x = a.x + (b.x - a.x) * k,
-    y = a.y + (b.y - a.y) * k;
-  const face = b.x >= a.x ? 1 : -1;
+/** 그 눈이 앞으로 오게 하는 회전 — 면: 앞 1 · 뒤 6 · 오른쪽 3 · 왼쪽 4 · 위 2 · 아래 5 */
+const FACE_ROT: Record<number, [number, number]> = { 1: [0, 0], 6: [0, 180], 3: [0, -90], 4: [0, 90], 2: [-90, 0], 5: [90, 0] };
+/** 주사위 하나 (3D 정육면체): roll 이 바뀌면 위에서 떨어지며 데굴데굴 구르다 그 눈이 앞을 보며 멈춤 */
+function Die3D({ v, roll, size = 52, held, pick, dim, onClick, title }: { v: number; roll: number; size?: number; held?: boolean; pick?: boolean; dim?: boolean; onClick?(): void; title?: string }) {
+  const [rx, ry] = FACE_ROT[v] ?? [0, 0];
+  const half = size / 2;
+  const moving = roll > 0;
+  const seed = roll % 7;
+  const cube = {
+    "--rx0": `${rx + 360 * 2 + 40 + seed * 20}deg`,
+    "--ry0": `${ry - 360 * 2 + 70 - seed * 15}deg`,
+    "--rz0": `${seed % 2 ? 160 : -140}deg`,
+    "--rx1": `${rx}deg`,
+    "--ry1": `${ry}deg`,
+    animationDuration: moving ? "820ms" : "0ms",
+    transform: moving ? undefined : `rotateX(${rx}deg) rotateY(${ry}deg)`,
+  } as CSSProperties;
+  const faces: [number, string][] = [
+    [1, `translateZ(${half}px)`],
+    [6, `rotateY(180deg) translateZ(${half}px)`],
+    [3, `rotateY(90deg) translateZ(${half}px)`],
+    [4, `rotateY(-90deg) translateZ(${half}px)`],
+    [2, `rotateX(90deg) translateZ(${half}px)`],
+    [5, `rotateX(-90deg) translateZ(${half}px)`],
+  ];
+  const Tag = onClick ? "button" : "div";
   return (
-    <div className="pointer-events-none absolute z-[260]" style={{ left: x, top: y, transform: "translate(-50%, -100%)" }}>
-      <div className="relative flex flex-col items-center">
-        <Token sprite={sprite} h={46} face={face} anim="win" />
-        <div className="-mt-[14px] flex items-end gap-[2px]" style={{ transform: face < 0 ? "scaleX(-1)" : undefined }}>
-          <div className="h-[20px] w-[34px] bg-[#ff6b6b]" style={{ boxShadow: "0 0 0 2px #232a4d", borderRadius: "4px 10px 2px 2px" }}>
-            <div className="mt-[4px] ml-[18px] h-[7px] w-[10px] bg-[#cdeeff]" style={{ boxShadow: "0 0 0 1px #232a4d" }} />
+    <Tag
+      {...(onClick && { type: "button" as const, onClick })}
+      title={title}
+      className={`relative shrink-0 transition-transform duration-150 ${onClick ? "cursor-pointer hover:-translate-y-1" : ""} ${held ? "-translate-y-[7px]" : ""}`}
+      style={{ width: size, height: size + 10, opacity: dim ? 0.45 : 1 }}
+    >
+      <div className={moving ? "mbx-drop" : undefined} key={roll} style={{ width: size, height: size, "--fy": "-70px", animationDuration: moving ? "820ms" : "0ms" } as CSSProperties}>
+        <div className="absolute bottom-[-9px] left-1/2 h-[9px] w-[80%] -translate-x-1/2 rounded-[50%] bg-black/30 blur-[1px]" />
+        <div style={{ width: size, height: size, perspective: 600 }}>
+          <div style={{ width: size, height: size, transformStyle: "preserve-3d", transform: "rotateX(-14deg) rotateY(14deg)" }}>
+            <div className={moving ? "mbx-tumble" : undefined} style={{ ...cube, width: size, height: size, transformStyle: "preserve-3d", position: "relative" }}>
+              {faces.map(([k, tf]) => (
+                <div key={k} className="absolute inset-0 rounded-[10px]" style={{ transform: tf, background: held ? "linear-gradient(145deg, #fff7d0, #ffd96a)" : "linear-gradient(145deg, #ffffff, #e9ecf7)", boxShadow: held ? "inset 0 0 0 2.5px #f0a020, inset 0 -3px 6px rgba(120,70,0,0.18)" : "inset 0 0 0 1.5px #c9cfe6, inset 0 -3px 6px rgba(38,43,82,0.12)", backfaceVisibility: "hidden" }}>
+                  <Pips n={k} />
+                </div>
+              ))}
+            </div>
           </div>
-          <div className="h-[16px] w-[26px] bg-[#ffd65a]" style={{ boxShadow: "0 0 0 2px #232a4d", borderRadius: 2 }} />
-        </div>
-        <div className="mt-[1px] text-[11px] font-bold text-white" style={{ textShadow: "0 1px 0 #232a4d" }}>
-          칙칙폭폭!
         </div>
       </div>
-    </div>
+      {held && (
+        <span className="absolute -top-[9px] -right-[7px] flex h-[22px] w-[22px] items-center justify-center rounded-full bg-[#f0a020]" style={{ boxShadow: "0 0 0 2px #fff, 0 2px 4px rgba(0,0,0,0.35)" }}>
+          <Glyph n="lock" size={15} color="#fff6c0" />
+        </span>
+      )}
+      {pick && <span className="mbx-pick pointer-events-none absolute inset-x-[-3px] top-[-3px] h-[calc(100%-4px)] rounded-[12px]" />}
+    </Tag>
   );
 }
 
-/* ───────────── 힘 조절 굴리기 ───────────── */
+/** 주사위 눈 (1 은 빨간 큰 점) */
+function Pips({ n }: { n: number }) {
+  const P: Record<number, [number, number][]> = {
+    1: [[50, 50]],
+    2: [
+      [28, 28],
+      [72, 72],
+    ],
+    3: [
+      [26, 26],
+      [50, 50],
+      [74, 74],
+    ],
+    4: [
+      [28, 28],
+      [72, 28],
+      [28, 72],
+      [72, 72],
+    ],
+    5: [
+      [26, 26],
+      [74, 26],
+      [50, 50],
+      [26, 74],
+      [74, 74],
+    ],
+    6: [
+      [28, 24],
+      [72, 24],
+      [28, 50],
+      [72, 50],
+      [28, 76],
+      [72, 76],
+    ],
+  };
+  return (
+    <svg viewBox="0 0 100 100" className="absolute inset-0 h-full w-full" aria-hidden>
+      {(P[n] ?? []).map(([x, y], i) => (
+        <circle key={i} cx={x} cy={y} r={n === 1 ? 15 : 9.5} fill={n === 1 ? "#ff3d5e" : "#262b52"} />
+      ))}
+    </svg>
+  );
+}
+/** 작은 2D 주사위 (VS · 버튼 안) */
+function MiniDie({ v, size = 30 }: { v: number; size?: number }) {
+  return (
+    <span className="relative inline-block shrink-0 rounded-[7px]" style={{ width: size, height: size, background: "linear-gradient(145deg, #ffffff, #e9ecf7)", boxShadow: "inset 0 0 0 1.5px #c9cfe6, 0 2px 0 rgba(38,43,82,0.35)" }}>
+      <Pips n={v} />
+    </span>
+  );
+}
 
-/**
- * 꾹 누르면 게이지가 왔다 갔다, 놓으면 던짐. 약(낮은 합) · 중 · 강(높은 합) 구간을 노리면
- * chance 확률로 그 구간이 나옴 (기본 10% + 캐릭터 · 아이템). 톡 누르기만 하면 그냥 굴림. 스페이스바도 됨.
- */
-function PowerRoll({ disabled, chance, onThrow }: { disabled: boolean; chance: number; onThrow(power?: number): void }) {
-  const [v, setV] = useState(0);
+/* ───────────── 주사위 접시 (판 가운데) ───────────── */
+
+function DiceTray({
+  g,
+  tray,
+  pr,
+  mine,
+  myPi,
+  held,
+  busy,
+  sending,
+  left,
+  mode,
+  opts,
+  chosen,
+  slide,
+  auto,
+  hidden,
+  onManual,
+  onRoll,
+  onHold,
+  onReroll,
+  onMove,
+  onSel,
+  onSlide,
+  onSkill,
+  onDiePick,
+  onFace,
+  onCopy,
+  onCancel,
+  onMore,
+}: {
+  g: GameWire;
+  tray: TrayView;
+  pr: Prompt | null;
+  mine: boolean;
+  myPi: number;
+  held: boolean[];
+  busy: boolean;
+  sending: boolean;
+  left: number;
+  mode: Mode;
+  opts: MoveOpt[];
+  chosen: MoveOpt | null | undefined;
+  slide: number;
+  auto: boolean;
+  hidden: boolean;
+  onManual(): void;
+  onRoll(power?: number): void;
+  onHold(i: number): void;
+  onReroll(): void;
+  onMove(): void;
+  onSel(d: number): void;
+  onSlide(d: number): void;
+  onSkill(): void;
+  onDiePick(i: number): void;
+  onFace(v: number): void;
+  onCopy(): void;
+  onCancel(): void;
+  onMore(k: number): void;
+}) {
+  const gg = g as unknown as Game;
+  const t = g.turn;
+  const me = myPi >= 0 ? g.players[myPi] : null;
+  const c = me ? CHAR[me.lo.char.id] : null;
+  const timeBar = (k: string) =>
+    mine && left > 0 ? (
+      <div className="mb-bar w-[200px]" title={`${Math.ceil(left / 1000)}초`}>
+        <i style={{ width: `${Math.min(100, (left / (LIMIT[k] ?? 15000)) * 100)}%`, "--c": left < 4000 ? "#ff6b6b" : "#4fd1b5" } as CSSProperties} />
+      </div>
+    ) : null;
+  const wrap = (children: ReactNode) => (
+    <div className="pointer-events-none absolute z-[460] flex flex-col items-center" style={{ left: TRAY.x, top: TRAY.y, transform: "translate(-50%, -50%)", opacity: hidden ? 0 : 1, transition: "opacity 200ms" }}>
+      <div className="pointer-events-auto flex flex-col items-center gap-2">{children}</div>
+    </div>
+  );
+  if (auto && myPi >= 0)
+    return wrap(
+      <div className="mbx-modal flex flex-col items-center gap-2 px-5 py-3 text-center">
+        <b className="mb-title text-[15px]">자동 진행 중</b>
+        <span className="text-[12px]">자리를 비운 동안 AI 가 대신 두고 있어요</span>
+        <Btn tone="gold" className="h-[34px] px-4 text-[14px] font-bold" onClick={onManual}>
+          내가 다시 할게요
+        </Btn>
+      </div>
+    );
+
+  const skillErr = mine && me ? skillBlock(gg, myPi) : "x";
+  const skillOk = !skillErr && !sending;
+  const kind = me?.skill.kind;
+  // 굴리기 전에 쓸 수 있는 스킬만 굴리기 전 버튼에 (주사위를 만지는 건 굴린 뒤)
+  const skillOrb = (pre: boolean) =>
+    c && me ? (
+      skillOk && (!pre || (kind && SKILL_TIME[kind] === "any")) ? (
+        <button
+          type="button"
+          onClick={onSkill}
+          title={c.active.desc(power(c.grade, me.lo.char.lv))}
+          className="mbx-skill relative flex h-[84px] w-[84px] shrink-0 cursor-pointer flex-col items-center justify-center rounded-full transition hover:scale-105"
+          style={{ background: "conic-gradient(from 0deg, #ff5fa2, #b46bff, #5fb8ff, #ffe08a, #ff5fa2)", boxShadow: "0 0 0 3px #fff, 0 5px 0 #6a2a9a, 0 0 26px 6px rgba(255,95,162,0.7)" }}
+        >
+          <img src={faceOf(c)} alt="" className="h-[72px] w-[72px] rounded-full object-cover" style={{ boxShadow: "inset 0 0 0 2px #fff" }} />
+          <span className="mbx-skilltag absolute -top-[9px] rounded-full px-[7px] text-[11px] leading-[17px] font-black tracking-[0.12em]" style={{ boxShadow: "0 0 0 2px #ffe08a, 0 2px 6px rgba(0,0,0,0.4)" }}>
+            SKILL
+          </span>
+          <span className="absolute -bottom-[11px] max-w-[120px] truncate rounded-full bg-gradient-to-r from-[#b46bff] to-[#ff5fa2] px-[8px] text-[12px] leading-[20px] font-black whitespace-nowrap text-white" style={{ boxShadow: "0 0 0 2px #fff, 0 2px 6px rgba(0,0,0,0.4)" }}>
+            {c.active.name}
+          </span>
+        </button>
+      ) : (
+        <span className="relative flex h-[72px] w-[72px] shrink-0 flex-col items-center justify-center rounded-full bg-black/35 ring-2 ring-white/30" title={skillErr ?? ""}>
+          <img src={faceOf(c)} alt="" className="h-[62px] w-[62px] rounded-full object-cover opacity-50 grayscale" />
+          <span className="absolute -bottom-[9px] rounded-full bg-[#2a2550] px-[7px] text-[10.5px] leading-[18px] font-bold whitespace-nowrap text-white/85 ring-1 ring-white/30">
+            {g.round <= 1 ? "2바퀴부터" : me.cd > 0 ? `${me.cd}턴 뒤` : SKILL_TIME[me.skill.kind] === "dice" && pr?.k === "turn" ? "굴린 뒤에" : "스킬"}
+          </span>
+        </span>
+      )
+    ) : null;
+  /* 굴리기 전 (내 차례) */
+  if (mine && pr?.k === "turn")
+    return wrap(
+      <>
+        <div className="flex items-center gap-5">
+          <div className="w-[84px]" />
+          <RollButton disabled={sending} onThrow={onRoll} />
+          <div className="flex w-[84px] justify-center">{skillOrb(true)}</div>
+        </div>
+        {t && t.n < 5 && <span className="rounded-full bg-[#d8402f] px-3 text-[12px] leading-[22px] font-bold text-white">주사위 하나 압수! 이번엔 {t.n}개</span>}
+        {t && t.rolls === 0 && <span className="rounded-full bg-[#5b6bd6] px-3 text-[12px] leading-[22px] font-bold text-white">쿨쿨… 이번 차례는 다시 굴리기 0번</span>}
+        {timeBar("turn")}
+      </>
+    );
+  /* 몇 칸 더 (토토) */
+  if (mine && pr?.k === "more")
+    return wrap(
+      <div className="mbx-modal flex flex-col items-center gap-2 px-4 py-3">
+        <b className="mb-title text-[15px]">몇 칸 더 갈까요?</b>
+        <div className="flex gap-1.5">
+          {Array.from({ length: pr.max + 1 }, (_, k) => {
+            const slot = ((me?.pos ?? 0) + k) % 32;
+            const kd = MAPS[g.map].tiles[slot].kind;
+            return (
+              <Btn key={k} tone={k ? "gold" : "paper"} className="h-[46px] min-w-[54px] flex-col !gap-0 px-2 text-[14px] font-black" disabled={sending} onClick={() => onMore(k)}>
+                {k ? `+${k}` : "그대로"}
+                <span className="flex items-center gap-0.5 text-[10px] font-bold opacity-80">
+                  <Glyph n={slot === g.star ? "star" : KIND[kd].glyph} size={11} color={KIND[kd].fill} />
+                  {slot === g.star ? "별" : KIND[kd].label}
+                </span>
+              </Btn>
+            );
+          })}
+        </div>
+        {timeBar("more")}
+      </div>
+    );
+
+  /* 굴린 주사위 */
+  if (!t || !tray.dice.length) {
+    if (!pr || mine || !g.players[pr.p]) return null;
+    // 남의 차례 · 아직 안 굴림
+    return wrap(
+      <span className="rounded-full bg-[#1b1650]/80 px-4 py-1.5 text-[13px] font-bold text-white ring-1 ring-white/20" style={{ boxShadow: `0 0 0 2px ${PCOLOR[pr.p]}` }}>
+        {g.players[pr.p].name} 차례
+      </span>
+    );
+  }
+  const dicePhase = mine && pr?.k === "dice";
+  const hand = handOf(tray.dice);
+  const h = HANDS[hand];
+  const dieMode = dicePhase && mode?.k === "die" ? mode : null;
+  const myHeld = dicePhase ? held : tray.held;
+  const canRe = dicePhase && t && (t.rolls > 0 || (me?.uses.reroll ?? 0) > 0);
+  const allHeld = myHeld.length >= tray.dice.length && myHeld.every(Boolean);
+  // 주사위 고르기 모드 안내 · 눈 고르기
+  let modeBar: ReactNode = null;
+  if (dieMode) {
+    const needFace = dieMode.picks.length > dieMode.vals.length && dieMode.for !== "six" && dieMode.for !== "copy";
+    const label: Record<string, string> = {
+      six: "6으로 바꿀 주사위를 눌러요",
+      gold: "바꿀 주사위를 눌러요",
+      gear: "바꿀 주사위를 눌러요",
+      nudge: "±할 주사위를 눌러요",
+      magic: dieMode.picks.length ? "두 번째 주사위를 눌러요" : "바꿀 주사위 두 개 중 첫째를 눌러요",
+      copy: dieMode.picks.length ? `바꿀 주사위를 눌러요 (${dieMode.picks.length - 1}/${me?.skill.mag ?? 2})` : "복사할 눈의 주사위를 눌러요",
+    };
+    const faces = dieMode.for === "nudge" && needFace ? nudgeFaces(tray.dice[dieMode.picks[dieMode.picks.length - 1]], me?.skill.mag ?? 1) : [1, 2, 3, 4, 5, 6];
+    modeBar = (
+      <div className="mbx-pop flex flex-col items-center gap-1.5 rounded-2xl bg-[#1b1650]/92 px-3 py-2 ring-2 ring-[#ffd23a]">
+        <span className="text-[12.5px] font-bold text-white">{needFace ? "어떤 눈으로 바꿀까요?" : label[dieMode.for]}</span>
+        {needFace && (
+          <div className="flex gap-1">
+            {faces.map((v) => (
+              <button key={v} type="button" className="cursor-pointer rounded-[8px] transition hover:-translate-y-0.5" onClick={() => onFace(v)}>
+                <MiniDie v={v} size={32} />
+              </button>
+            ))}
+          </div>
+        )}
+        <div className="flex gap-1.5">
+          {dieMode.for === "copy" && dieMode.picks.length > 1 && (
+            <Btn tone="gold" className="h-[28px] px-3 text-[12.5px] font-black" onClick={onCopy}>
+              복사!
+            </Btn>
+          )}
+          <Btn className="h-[26px] px-3 text-[12px]" onClick={onCancel}>
+            취소
+          </Btn>
+        </div>
+      </div>
+    );
+  }
+  return wrap(
+    <>
+      {/* 지금 족보 */}
+      <div className="flex items-center gap-1.5 rounded-full bg-[#1b1650]/85 py-[3px] pr-3 pl-1.5 text-white ring-1 ring-white/20" style={{ boxShadow: hand !== "none" ? `0 0 0 2px ${HAND_COLOR[hand]}, 0 0 16px 2px ${HAND_COLOR[hand]}88` : undefined }}>
+        <span className="rounded-full px-2 text-[13px] leading-[22px] font-black" style={{ background: HAND_COLOR[hand], color: hand === "none" ? "#fff" : "#2a1600" }}>
+          {h.name}
+        </span>
+        <span className="text-[12px] font-bold whitespace-nowrap text-white/90">
+          {h.desc}
+          {t.dbl && hand !== "none" ? " ×2" : ""}
+        </span>
+      </div>
+      {/* 주사위 (+ 굴린 뒤 쓸 수 있는 스킬은 바로 옆) */}
+      <div className="flex items-center gap-3">
+      {dicePhase && !dieMode && skillOk && <div className="w-[84px] shrink-0" />}
+      <div className="flex items-end gap-2.5 rounded-[20px] bg-[#1b1650]/55 px-3 pt-3 pb-1 ring-1 ring-white/15" style={{ boxShadow: "inset 0 2px 10px rgba(0,0,0,0.35)" }}>
+        {tray.dice.map((v, i) => (
+          <Die3D
+            key={i}
+            v={v}
+            roll={tray.ids[i] ?? 0}
+            held={!!myHeld[i]}
+            pick={!!dieMode && !dieMode.picks.includes(i)}
+            dim={!!dieMode && dieMode.picks.includes(i) && dieMode.for !== "copy" ? false : undefined}
+            onClick={dicePhase && !busy ? () => (dieMode ? onDiePick(i) : canRe ? onHold(i) : undefined) : undefined}
+            title={dicePhase ? (dieMode ? "이 주사위" : canRe ? (myHeld[i] ? "잠금 풀기" : "잠그기 (다시 굴릴 때 그대로)") : undefined) : undefined}
+          />
+        ))}
+      </div>
+      {dicePhase && !dieMode && skillOk && skillOrb(false)}
+      </div>
+      {dicePhase && !dieMode && canRe && !myHeld.some(Boolean) && <span className="-mt-1 rounded-full bg-black/40 px-2.5 text-[11px] leading-[18px] font-bold text-white/85">주사위를 누르면 잠겨요 · 잠근 건 다시 굴릴 때 그대로</span>}
+      {modeBar}
+      {dicePhase && !dieMode && (
+        <>
+          {/* 이동 고르기 */}
+          {chosen && (
+            <div className="flex items-center gap-1.5">
+              {opts.length > 1 && (
+                <button type="button" onClick={() => onSel(-1)} className="flex h-[30px] w-[30px] cursor-pointer items-center justify-center rounded-full bg-white/90 text-[16px] font-black text-[#232a4d] shadow-[0_2px_0_rgba(0,0,0,0.3)] hover:bg-white" aria-label="이전 이동">
+                  ‹
+                </button>
+              )}
+              <div className="flex h-[36px] min-w-[200px] items-center justify-center gap-1.5 rounded-full bg-white px-3 text-[#232a4d] shadow-[0_3px_0_rgba(0,0,0,0.3)]" style={{ boxShadow: `0 0 0 2.5px ${PCOLOR[myPi]}, 0 3px 0 rgba(0,0,0,0.3)` }}>
+                {chosen.jump ? (
+                  <b className="text-[14px]">별로 순간이동!</b>
+                ) : (
+                  <>
+                    {chosen.pick && chosen.pick.map((k) => <MiniDie key={k} v={tray.dice[k]} size={22} />)}
+                    <b className="text-[17px]">{chosen.steps}칸</b>
+                  </>
+                )}
+                <span className="text-[#9aa3b8]">→</span>
+                <DestTag g={g} o={chosen} />
+              </div>
+              {opts.length > 1 && (
+                <button type="button" onClick={() => onSel(1)} className="flex h-[30px] w-[30px] cursor-pointer items-center justify-center rounded-full bg-white/90 text-[16px] font-black text-[#232a4d] shadow-[0_2px_0_rgba(0,0,0,0.3)] hover:bg-white" aria-label="다음 이동">
+                  ›
+                </button>
+              )}
+            </div>
+          )}
+          <div className="flex items-center gap-2">
+            {(t.rolls > 0 || (me?.uses.reroll ?? 0) > 0) && (
+              <Btn tone="sky" className="h-[42px] px-4 text-[14px] font-black" disabled={sending || allHeld} onClick={onReroll} title={allHeld ? "다시 굴릴 주사위를 남겨 주세요" : "잠근 주사위는 그대로, 나머지를 다시 굴려요"}>
+                <Glyph n="dice" size={18} color="#fff" />
+                다시 굴리기
+                <span className="rounded-full bg-black/25 px-1.5 text-[12px]">{t.rolls > 0 ? `${t.rolls}` : `판당 ${me?.uses.reroll}`}</span>
+              </Btn>
+            )}
+            {me && me.uses.slide > 0 && !chosen?.jump && (
+              <span className="flex items-center gap-0.5 rounded-full bg-white/15 p-[3px] ring-1 ring-white/25" title={`미끄럼 주사위: 한 칸 더 · 덜 (판당 ${me.uses.slide})`}>
+                {[-1, 1].map((d) => (
+                  <button key={d} type="button" onClick={() => onSlide(d)} className={`h-[30px] cursor-pointer rounded-full px-2 text-[12px] font-black ${slide === d ? "bg-[#7fe0c8] text-[#123]" : "text-white hover:bg-white/15"}`}>
+                    {d > 0 ? "+1" : "−1"}
+                  </button>
+                ))}
+              </span>
+            )}
+            <Btn tone="gold" className="h-[42px] min-w-[110px] px-5 text-[16px] font-black" disabled={sending || !chosen} onClick={onMove}>
+              출발!
+            </Btn>
+          </div>
+          {timeBar("dice")}
+        </>
+      )}
+      {!dicePhase && pr && g.players[pr.p] && (
+        <span className="rounded-full bg-[#1b1650]/80 px-3 text-[12px] leading-[24px] font-bold text-white/90 ring-1 ring-white/20">
+          {g.players[pr.p].name} {thinking(pr)}
+        </span>
+      )}
+    </>
+  );
+}
+
+const HAND_COLOR: Record<HandId, string> = {
+  none: "#6b7280",
+  pair: "#9fdcff",
+  two: "#7fe0c8",
+  triple: "#b5a6ff",
+  small: "#8fe08a",
+  full: "#ff9ec7",
+  large: "#ffb35a",
+  four: "#ffd23a",
+  yacht: "#ff6a2b",
+};
+
+function nudgeFaces(v: number, mag: number): number[] {
+  const out: number[] = [];
+  for (let d = -mag; d <= mag; d++) if (d && v + d >= 1 && v + d <= 6) out.push(v + d);
+  return out;
+}
+
+/** 이동 고르기: 도착 칸 이름표 (별 사기 · 칸 종류) */
+function DestTag({ g, o }: { g: GameWire; o: MoveOpt }) {
+  const d = MAPS[g.map].tiles[o.dest];
+  const k = KIND[d.kind];
+  if (o.star)
+    return (
+      <span className="flex items-center gap-1 rounded-full bg-[#ffd23a] px-2 text-[13px] leading-[24px] font-black whitespace-nowrap text-[#4a2600]">
+        <Glyph n="star" size={14} color="#fff" /> 별 사기!
+      </span>
+    );
+  const x = g.frenzy ? 2 : 1;
+  const val = d.kind === "blue" ? ` +${RULE.blue * x}` : d.kind === "red" ? ` −${RULE.red * x}` : d.kind === "jackpot" ? ` ${g.pot}` : "";
+  const trap = g.traps[o.dest] >= 0;
+  return (
+    <span className="flex items-center gap-1 rounded-full px-2 text-[13px] leading-[24px] font-black whitespace-nowrap text-white" style={{ background: d.kind === "star" ? "#c9a03a" : k.fill }}>
+      <Glyph n={k.glyph} size={14} color="#fff" />
+      {k.label}
+      {val}
+      {trap && <Glyph n="trap" size={13} color="#fff" />}
+    </span>
+  );
+}
+
+/** 굴리기 버튼: 꾹 누르면 주사위가 손 안에서 흔들리다 놓으면 던짐 (스페이스바도 됨) */
+function RollButton({ disabled, onThrow }: { disabled: boolean; onThrow(power?: number): void }) {
   const [hold, setHold] = useState(false);
   const t0 = useRef(0);
-  const raf = useRef(0);
-  const val = useRef(0);
   const start = useCallback(() => {
     if (disabled || hold) return;
     setHold(true);
     sfx("click");
     t0.current = performance.now();
-    const step = () => {
-      const t = (performance.now() - t0.current) / 1100;
-      const x = t % 2 < 1 ? t % 1 : 1 - (t % 1); // 0→1→0 왕복
-      val.current = x;
-      setV(x);
-      raf.current = requestAnimationFrame(step);
-    };
-    raf.current = requestAnimationFrame(step);
   }, [disabled, hold]);
   const release = useCallback(() => {
     if (!hold) return;
-    cancelAnimationFrame(raf.current);
     setHold(false);
     const held = performance.now() - t0.current;
-    onThrow(held < 160 ? undefined : Math.round(val.current * 100) / 100);
-    setV(0);
+    onThrow(held < 160 ? undefined : Math.min(1, Math.round((held / 1200) * 100) / 100));
   }, [hold, onThrow]);
-  useEffect(() => () => cancelAnimationFrame(raf.current), []);
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
       if (e.code === "Space" && !e.repeat) {
@@ -1169,140 +1717,171 @@ function PowerRoll({ disabled, chance, onThrow }: { disabled: boolean; chance: n
       window.removeEventListener("keyup", up);
     };
   }, [start, release]);
-  const zone = powerZone(v);
-  const R = 64;
-  const L = 2 * Math.PI * R;
-  // 링: 약(파랑) · 중(초록) · 강(빨강) 세 칸 위에 지금 힘만큼 밝게 채움 (위에서 시계 방향)
-  const seg = (from: number, to: number, c: string, o: number) => (
-    <circle cx={80} cy={80} r={R} fill="none" stroke={c} strokeOpacity={o} strokeWidth={12} strokeDasharray={`${(to - from) * L - 3} ${L}`} strokeDashoffset={-from * L} transform="rotate(-90 80 80)" />
-  );
   return (
-    <div className="flex flex-col items-center gap-1">
-      <div className="relative h-[160px] w-[160px]">
-        <svg viewBox="0 0 160 160" className="absolute inset-0" aria-hidden>
-          <circle cx={80} cy={80} r={R} fill="rgba(20,16,50,0.55)" stroke="none" />
-          {seg(0, 1 / 3, "#6fb7ff", 0.35)}
-          {seg(1 / 3, 2 / 3, "#7fe08a", 0.35)}
-          {seg(2 / 3, 1, "#ff7a6b", 0.35)}
-          {hold && <circle cx={80} cy={80} r={R} fill="none" stroke={zone === "low" ? "#6fb7ff" : zone === "mid" ? "#7fe08a" : "#ff7a6b"} strokeWidth={12} strokeLinecap="round" strokeDasharray={`${v * L} ${L}`} transform="rotate(-90 80 80)" style={{ filter: "drop-shadow(0 0 6px rgba(255,255,255,0.8))" }} />}
-        </svg>
-        <button
-          type="button"
-          disabled={disabled}
-          className={`absolute top-1/2 left-1/2 flex h-[104px] w-[104px] -translate-x-1/2 -translate-y-1/2 flex-col items-center justify-center rounded-full text-[#3a2500] transition disabled:opacity-50 ${hold ? "scale-95" : "mbx-ready hover:scale-105"}`}
-          style={{ background: "radial-gradient(circle at 35% 30%, #fff6c0, #ffd23a 45%, #f59a1e)", boxShadow: "0 6px 0 #b86e00, 0 10px 22px rgba(0,0,0,0.45), inset 0 2px 0 rgba(255,255,255,0.7)" }}
-          onPointerDown={(e) => {
-            e.currentTarget.setPointerCapture(e.pointerId);
-            start();
-          }}
-          onPointerUp={release}
-          onPointerCancel={release}
-        >
-          <span className="text-[26px] leading-none font-black tracking-wide">{hold ? `${ZONE_NAME[zone]}!` : "ROLL"}</span>
-          <span className="mt-1 text-[10px] font-bold opacity-80">{hold ? "놓으면 던져요" : "꾹 눌러 던지기"}</span>
-        </button>
-      </div>
-      <span className="rounded-full bg-black/45 px-3 py-[2px] text-[10.5px] text-white/90">
-        <b className="text-[#6fb7ff]">약 2~6</b> · <b className="text-[#7fe08a]">중 6~8</b> · <b className="text-[#ff9a8b]">강 8~12</b> · 노린 구간 {Math.round(chance * 100)}% · 스페이스바
+    <button
+      type="button"
+      disabled={disabled}
+      className={`relative flex h-[118px] w-[118px] shrink-0 cursor-pointer flex-col items-center justify-center rounded-full text-[#3a2500] transition disabled:opacity-50 ${hold ? "mbx-shake-soft scale-95" : "hover:scale-105"}`}
+      style={{ background: "radial-gradient(circle at 35% 30%, #fff6c0, #ffd23a 45%, #f59a1e)", boxShadow: "0 6px 0 #b86e00, 0 10px 22px rgba(0,0,0,0.45), inset 0 2px 0 rgba(255,255,255,0.7), 0 0 0 4px #fff" }}
+      onPointerDown={(e) => {
+        e.currentTarget.setPointerCapture(e.pointerId);
+        start();
+      }}
+      onPointerUp={release}
+      onPointerCancel={release}
+    >
+      <span className="flex gap-[3px]">
+        {[3, 5, 1].map((v) => (
+          <MiniDie key={v} v={v} size={20} />
+        ))}
       </span>
+      <span className="mt-1 text-[24px] leading-none font-black tracking-wide">{hold ? "놓으면!" : "ROLL"}</span>
+      <span className="mt-0.5 text-[10px] font-bold opacity-75">주사위 5개 · 스페이스</span>
+    </button>
+  );
+}
+
+/* ───────────── 내 아이템 (왼쪽 아래 내 카드 위) ───────────── */
+
+function ItemDock({ g, myPi, mine, pr, sending, onCard, onGear }: { g: GameWire; myPi: number; mine: boolean; pr: Prompt | null; sending: boolean; onCard(id: CardId): void; onGear(): void }) {
+  const gg = g as unknown as Game;
+  const me = g.players[myPi];
+  const gold = mine && pr?.k === "dice" && me.uses.gold > 0;
+  return (
+    <div className="absolute bottom-[122px] left-[8px] z-[425] flex items-end gap-1.5 rounded-2xl bg-[#1b1650]/80 px-2 pt-1 pb-1.5 ring-1 ring-white/20 backdrop-blur-[2px]">
+      <span className="mb-[14px] w-[14px] text-[10.5px] leading-[12px] font-black text-white/75 [writing-mode:vertical-rl]">아이템</span>
+      {Array.from({ length: RULE.maxCards }, (_, k) => {
+        const id = me.cards[k];
+        if (!id)
+          return (
+            <span key={k} className="flex w-[52px] flex-col items-center gap-0.5">
+              <span className="h-[44px] w-[44px] rounded-[10px] bg-white/[0.06] ring-1 ring-white/15 ring-inset" />
+              <span className="text-[10px] leading-[12px] text-white/30">빈 칸</span>
+            </span>
+          );
+        const why = mine ? cardBlock(gg, myPi, id) : "내 차례에 써요";
+        const ok = !why && !sending;
+        return (
+          <button
+            key={k}
+            type="button"
+            disabled={!ok}
+            onClick={() => onCard(id)}
+            title={`${CARDS[id].name} — ${CARDS[id].desc}${why ? ` (${why})` : ""}`}
+            className={`relative flex w-[52px] cursor-pointer flex-col items-center gap-0.5 transition disabled:cursor-default ${ok ? "hover:-translate-y-1" : ""}`}
+          >
+            <span className={`rounded-[10px] ${ok ? "mbx-skill" : ""}`} style={{ opacity: ok || !mine ? 1 : 0.5 }}>
+              <CardIcon id={id} size={44} />
+            </span>
+            <span className={`max-w-[56px] truncate text-[10px] leading-[12px] font-bold ${ok ? "text-[#ffe08a]" : "text-white/70"}`}>{CARDS[id].name}</span>
+          </button>
+        );
+      })}
+      {gold && (
+        <button type="button" disabled={sending} onClick={onGear} title="장착한 황금 주사위: 주사위 하나를 원하는 눈으로" className="flex w-[52px] cursor-pointer flex-col items-center gap-0.5 transition hover:-translate-y-1">
+          <span className="mbx-skill rounded-[10px]">
+            <ItemIcon id="d_gold" size={44} />
+          </span>
+          <span className="text-[10px] leading-[12px] font-bold text-[#ffe08a]">황금 눈 {me.uses.gold}</span>
+        </button>
+      )}
     </div>
   );
 }
 
-/* ───────────── 가운데 주사위 ───────────── */
+/* ───────────── 상대 고르기 ───────────── */
 
-interface DiceView {
-  d: [number, number];
-  roll: number;
-  p: number;
-  /** 굴러가는 시간 */
-  dur: number;
-  /** 던진 곳 (가운데 기준 상대 위치) — 없으면 제자리에서 굴림 */
-  from: { x: number; y: number } | null;
-  /** 몇 바퀴 */
-  spin: number;
-}
-const ZONE_NAME = { low: "약하게", mid: "적당히", high: "세게" } as const;
-
-/** 주사위 하나 (3D 정육면체): 던진 사람 쪽에서 포물선으로 날아와 데굴데굴 구르다 그 눈이 앞을 보며 멈춤 */
-const DIE = 48;
-/** 그 눈이 윗면으로 오게 하는 회전 (주사위는 윗면 숫자로 셈) — 면: 앞 1 · 뒤 6 · 오른쪽 3 · 왼쪽 4 · 위 2 · 아래 5 */
-const FACE_ROT: Record<number, [number, number]> = { 2: [0, 0], 1: [90, 0], 6: [-90, 0], 5: [180, 0], 3: [90, -90], 4: [90, 90] };
-function ThrownDie({ v, dv, delay }: { v: number; dv: DiceView; delay: number }) {
-  const [rx, ry] = FACE_ROT[v] ?? [0, 0];
-  const turns = Math.max(1, dv.spin);
-  const style = {
-    "--fx": `${(dv.from?.x ?? 0) + (delay ? 34 : -34)}px`,
-    "--fy": `${dv.from?.y ?? -40}px`,
-    animationDuration: `${dv.dur}ms`,
-    animationDelay: `${delay}ms`,
-  } as CSSProperties;
-  const cube = {
-    "--rx0": `${rx + 360 * turns + (delay ? 140 : 60)}deg`,
-    "--ry0": `${ry - 360 * turns + (delay ? -80 : 120)}deg`,
-    "--rz0": `${delay ? 200 : -160}deg`,
-    "--rx1": `${rx}deg`,
-    "--ry1": `${ry}deg`,
-    animationDuration: `${Math.round(dv.dur * 0.92)}ms`,
-    animationDelay: `${delay}ms`,
-  } as CSSProperties;
-  const half = DIE / 2;
-  const faces: [number, string][] = [
-    [1, `translateZ(${half}px)`],
-    [6, `rotateY(180deg) translateZ(${half}px)`],
-    [3, `rotateY(90deg) translateZ(${half}px)`],
-    [4, `rotateY(-90deg) translateZ(${half}px)`],
-    [2, `rotateX(90deg) translateZ(${half}px)`],
-    [5, `rotateX(-90deg) translateZ(${half}px)`],
-  ];
+function FoePick({
+  g,
+  coins,
+  stars,
+  title,
+  opts,
+  pull,
+  onPick,
+  onCancel,
+  sending,
+  left,
+}: {
+  g: GameWire;
+  coins: number[];
+  stars: number[];
+  title: string;
+  opts: number[];
+  /** 끌어오기 최대 칸 (0 = 상대만 고름) */
+  pull: number;
+  onPick(q: number, n?: number): void;
+  onCancel?(): void;
+  sending: boolean;
+  left: number;
+}) {
+  const [foe, setFoe] = useState<number | null>(null);
+  const m = MAPS[g.map];
   return (
-    <div className="mbx-arc relative" style={{ ...style, width: DIE, height: DIE }}>
-      <div className="absolute bottom-[-12px] left-1/2 h-[10px] w-[46px] -translate-x-1/2 rounded-[50%] bg-black/30 blur-[1px]" />
-      {/* 살짝 위에서 내려다보게 기울인 무대 */}
-      <div style={{ width: DIE, height: DIE, perspective: 600 }}>
-        <div style={{ width: DIE, height: DIE, transformStyle: "preserve-3d", transform: "rotateX(-40deg) rotateY(28deg)" }}>
-          <div className="mbx-tumble relative" style={{ ...cube, width: DIE, height: DIE, transformStyle: "preserve-3d" }}>
-            {faces.map(([n, tf]) => (
-              <div key={n} className="absolute inset-0 rounded-[9px]" style={{ transform: tf, background: "linear-gradient(145deg, #ffffff, #e9ecf7)", boxShadow: "inset 0 0 0 1.5px #c9cfe6, inset 0 -3px 6px rgba(38,43,82,0.12)", backfaceVisibility: "hidden" }}>
-                <Pips n={n} />
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/** 주사위 눈 (1 은 빨간 큰 점) */
-function Pips({ n }: { n: number }) {
-  const P: Record<number, [number, number][]> = {
-    1: [[50, 50]],
-    2: [[28, 28], [72, 72]],
-    3: [[26, 26], [50, 50], [74, 74]],
-    4: [[28, 28], [72, 28], [28, 72], [72, 72]],
-    5: [[26, 26], [74, 26], [50, 50], [26, 74], [74, 74]],
-    6: [[28, 24], [72, 24], [28, 50], [72, 50], [28, 76], [72, 76]],
-  };
-  return (
-    <svg viewBox="0 0 100 100" className="absolute inset-0 h-full w-full" aria-hidden>
-      {P[n].map(([x, y], i) => (
-        <circle key={i} cx={x} cy={y} r={n === 1 ? 15 : 9.5} fill={n === 1 ? "#ff3d5e" : "#262b52"} />
-      ))}
-    </svg>
-  );
-}
-
-function CenterDice({ dice, at }: { dice: DiceView | null; at: { x: number; y: number } }) {
-  return (
-    <div className="pointer-events-none absolute z-[300] flex flex-col items-center gap-1.5" style={{ left: at.x, top: at.y, transform: "translateX(-50%)" }}>
-      <div className="flex gap-3">
-        {dice ? (
+    <div className="absolute inset-0 z-[480] flex items-center justify-center">
+      <div className="mbx-modal mbx-pop flex w-[420px] flex-col items-center gap-2.5 px-5 py-4">
+        <b className="mb-title text-center text-[16px]">{title}</b>
+        {pull > 0 && foe !== null ? (
           <>
-            <ThrownDie key={`a${dice.roll}`} v={dice.d[0]} dv={dice} delay={0} />
-            <ThrownDie key={`b${dice.roll}`} v={dice.d[1]} dv={dice} delay={70} />
+            <span className="text-[12.5px] text-white/80">{g.players[foe].name} 말을 몇 칸 끌어올까요?</span>
+            <div className="flex flex-wrap justify-center gap-1.5">
+              {Array.from({ length: pull * 2 + 1 }, (_, k) => k - pull)
+                .filter((d) => d !== 0)
+                .map((d) => {
+                  const slot = (g.players[foe].pos + d + 32) % 32;
+                  const kd = m.tiles[slot].kind;
+                  const trap = g.traps[slot] >= 0 && g.traps[slot] !== foe;
+                  return (
+                    <Btn key={d} tone={kd === "red" || kd === "trap" || trap ? "pink" : "paper"} className="h-[48px] min-w-[56px] flex-col !gap-0 px-2 text-[14px] font-black" disabled={sending} onClick={() => onPick(foe, d)}>
+                      {d < 0 ? `뒤로 ${-d}` : `앞으로 ${d}`}
+                      <span className="flex items-center gap-0.5 text-[10px] font-bold opacity-85">
+                        <Glyph n={trap ? "trap" : KIND[kd].glyph} size={11} color={KIND[kd].fill} />
+                        {trap ? "함정" : KIND[kd].label}
+                      </span>
+                    </Btn>
+                  );
+                })}
+            </div>
           </>
-        ) : null}
+        ) : (
+          <div className="flex w-full flex-col gap-1.5">
+            {opts.map((q) => {
+              const p = g.players[q];
+              const c = CHAR[p.lo.char.id];
+              return (
+                <button
+                  key={q}
+                  type="button"
+                  disabled={sending}
+                  onClick={() => (pull > 0 ? setFoe(q) : onPick(q))}
+                  className="flex cursor-pointer items-center gap-2.5 rounded-xl bg-white/[0.08] px-3 py-2 text-left transition hover:bg-white/[0.16] disabled:opacity-50"
+                  style={{ boxShadow: `inset 0 0 0 2px ${PCOLOR[q]}` }}
+                >
+                  {c && <img src={faceOf(c)} alt="" className="h-[40px] w-[40px] rounded-full object-cover" style={{ boxShadow: `0 0 0 2px ${PCOLOR[q]}` }} />}
+                  <b className="min-w-0 flex-1 truncate text-[15px]">{p.name}</b>
+                  <span className="flex items-center gap-1 text-[15px] font-black">
+                    <Glyph n="star" size={16} color="#ffd23a" />
+                    {stars[q]}
+                  </span>
+                  <span className="flex items-center gap-1 text-[14px] font-bold text-[#ffe08a]">
+                    <Glyph n="coin" size={15} color="#ffd23a" />
+                    {coins[q]}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+        {(onCancel || (pull > 0 && foe !== null)) && (
+          <Btn className="h-[28px] px-3 text-[12px]" onClick={() => (pull > 0 && foe !== null ? setFoe(null) : onCancel?.())}>
+            {pull > 0 && foe !== null ? "다시 고르기" : "취소"}
+          </Btn>
+        )}
+        {left > 0 && (
+          <div className="mb-bar w-full">
+            <i style={{ width: `${Math.min(100, (left / LIMIT.foe) * 100)}%`, "--c": left < 3000 ? "#ff6b6b" : "#4fd1b5" } as CSSProperties} />
+          </div>
+        )}
       </div>
     </div>
   );
@@ -1310,433 +1889,50 @@ function CenterDice({ dice, at }: { dice: DiceView | null; at: { x: number; y: n
 
 /* ───────────── 칸 정보 ───────────── */
 
-/** 칸 정보: 화면 가운데 모달 (뒤는 살짝 어둡게, 바깥 누르면 닫힘) */
-function TileInfo({ g, tile, onClose }: { g: GameWire; tile: number; onClose(): void }) {
-  const m = MAPS[g.map];
-  const d = m.tiles[tile];
-  const t = g.tiles[tile];
-  const gg = g as unknown as Game;
-  const ownable = d.kind === "city" || d.kind === "spot";
-  const band = d.kind === "spot" ? "#ffb21e" : d.group !== undefined ? m.groups[d.group].color : "#8d9bb3";
-  const DESC: Record<string, string> = {
-    start: "지나가거나 서면 월급. 딱 서면 내 땅 하나를 골라 바로 지을 수 있어요.",
-    start2: "지나가면 월급의 70%",
-    box: "카드 한 장 — 좋은 일일 수도, 나쁜 일일 수도!",
-    jail: `더블이 나오거나 두 번 쉬어야 나가요. ${RULE.jailPay}코인 내면 바로 나가요.`,
-    fest: "내 땅 하나를 골라 축제 (통행료 2배)",
-    warp: "다음 차례에 원하는 칸으로 순간이동",
-    tax: "땅 · 건물 값의 10% 를 세금으로",
-    bonus: `서면 +${RULE.bonus}코인 + 잭팟 (세금 · 벌금 · 수리비로 은행에 낸 돈이 여기 쌓여요)`,
-    rail: "다른 기차역으로 바로 갈 수 있어요 (그냥 남아도 돼요)",
-  };
-  const owner = t.owner >= 0 ? g.players[t.owner] : null;
-  const rows = d.kind === "city" ? [0, 1, 2, 3, LANDMARK] : d.kind === "spot" ? [0] : [];
+function TileInfo({ g, slot, star, onClose }: { g: GameWire; slot: number; star: number; onClose(): void }) {
+  const d = MAPS[g.map].tiles[slot];
+  const k = KIND[d.kind];
+  const trap = g.traps[slot];
   return (
     <div className="mbx absolute inset-0 z-[650] flex items-center justify-center bg-[rgba(10,8,30,0.55)]" onClick={onClose}>
-      <div className="mbx-pop w-[400px] overflow-hidden rounded-2xl border border-white/15 bg-[#1b1650]/95 text-white shadow-[0_20px_50px_rgba(0,0,0,0.5)]" onClick={(e) => e.stopPropagation()}>
-        <div className="relative px-4 pt-3 pb-3" style={{ background: `linear-gradient(135deg, ${band}, ${band}99)` }}>
-          <div className="text-[11px] font-black tracking-[0.15em] text-white/85">{d.kind === "city" ? m.groups[d.group!].name : d.kind === "spot" ? "명소" : "특수 칸"}</div>
-          <b className="text-[24px] leading-[30px] font-black" style={{ textShadow: "0 2px 0 rgba(38,43,82,0.4)" }}>
-            {d.name}
-          </b>
+      <div className="mbx-pop w-[360px] overflow-hidden rounded-2xl border border-white/15 bg-[#1b1650]/95 text-white shadow-[0_20px_50px_rgba(0,0,0,0.5)]" onClick={(e) => e.stopPropagation()}>
+        <div className="relative flex items-center gap-3 px-4 pt-3 pb-3" style={{ background: `linear-gradient(135deg, ${k.fill}, ${dark2(k.fill)})` }}>
+          <span className="flex h-[48px] w-[48px] items-center justify-center rounded-xl bg-black/20">
+            <Glyph n={slot === star ? "star" : k.glyph} size={34} color="#fff" />
+          </span>
+          <div className="min-w-0">
+            <div className="text-[11px] font-black tracking-[0.15em] text-white/85">{k.label}</div>
+            <b className="block truncate text-[22px] leading-[28px] font-black" style={{ textShadow: "0 2px 0 rgba(38,43,82,0.4)" }}>
+              {d.name}
+            </b>
+          </div>
           <button type="button" onClick={onClose} className="absolute top-3 right-3 flex h-[28px] w-[28px] items-center justify-center rounded-full bg-black/25 text-[16px] hover:bg-black/40" aria-label="닫기">
             ×
           </button>
         </div>
-        <div className="flex flex-col gap-2.5 p-4 text-[13px]">
-          {!ownable && <p className="leading-[20px] text-white/90">{DESC[d.kind] ?? ""}</p>}
-          {ownable && (
-            <>
-              {owner ? (
-                <div className="flex items-center gap-2 rounded-xl px-3 py-2" style={{ background: `${PCOLOR[t.owner]}33`, boxShadow: `inset 0 0 0 1.5px ${PCOLOR[t.owner]}` }}>
-                  <span className="h-[12px] w-[12px] rounded-full" style={{ background: PCOLOR[t.owner] }} />
-                  <b>{owner.name}</b>
-                  <span className="text-white/70">· {LEVEL_NAME[t.lv]}</span>
-                  <span className="ml-auto text-right">
-                    <span className="block text-[10px] text-white/60">지금 통행료</span>
-                    <b className="text-[18px] text-[#ffe08a]">{fmt(tollOf(gg, tile))}</b>
-                  </span>
-                </div>
-              ) : (
-                <div className="rounded-xl bg-white/[0.07] px-3 py-2 text-white/80">
-                  빈 땅 · 땅값 <b className="text-white">{fmt(d.price ?? 0)}</b>
-                  {d.kind === "spot" && " · 가진 명소 수만큼 통행료 2배씩, 전부 가지면 명소 독점 승리 · 인수나 스킬로 뺏기지 않아요"}
-                </div>
-              )}
-              {rows.length > 1 && (
-                <div className="overflow-hidden rounded-xl ring-1 ring-white/10">
-                  <div className="grid grid-cols-[1.1fr_0.9fr_1.3fr_0.5fr] bg-white/10 px-3 py-1.5 text-[11px] font-bold text-white/65">
-                    <span>건물</span>
-                    <span className="text-right">값</span>
-                    <span className="text-right">다 지으면 통행료</span>
-                    <span className="text-right">지음</span>
-                  </div>
-                  {rows.map((lv) => {
-                    const has = owner && (lv === 0 || (lv === LANDMARK ? t.lv >= LANDMARK : builtOf(t).includes(lv)));
-                    return (
-                      <div key={lv} className="grid grid-cols-[1.1fr_0.9fr_1.3fr_0.5fr] px-3 py-1.5" style={has ? { background: `${PCOLOR[t.owner]}33`, fontWeight: 800 } : undefined}>
-                        <span>{LEVEL_NAME[lv]}</span>
-                        <span className="text-right text-white/80">{fmt(Math.round((d.price ?? 0) * RULE.cost[lv]))}</span>
-                        <span className="text-right text-[#ffe08a]">{fmt(baseToll(d.price ?? 0, lv))}</span>
-                        <span className="text-right font-bold text-[#7dffb0]">{has ? "✓" : ""}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-              {owner && d.kind === "city" && t.lv < LANDMARK && (
-                <div className="text-[12px] text-white/65">
-                  인수하려면 <b className="text-white">{fmt(investedT(d.price ?? 0, t))}</b> · 랜드마크가 되면 인수 불가
-                </div>
-              )}
-            </>
+        <div className="flex flex-col gap-2 p-4 text-[13px] leading-[20px]">
+          <p className="text-white/90">{k.desc}</p>
+          {slot === star && <p className="rounded-xl bg-[#ffd23a]/15 px-3 py-2 font-bold text-[#ffe08a] ring-1 ring-[#ffd23a]/50">지금 별이 여기 있어요! 지나가기만 해도 {RULE.starPrice}코인에 사요</p>}
+          {d.kind === "jackpot" && <p className="font-bold text-[#ffe08a]">지금 잭팟 {g.pot}코인</p>}
+          {trap >= 0 && (
+            <p className="rounded-xl bg-white/[0.08] px-3 py-2">
+              <b style={{ color: PCOLOR[trap] }}>{g.players[trap]?.name}</b> 의 함정 — 다른 사람이 서면 {RULE.trapFee}코인을 내요
+            </p>
           )}
         </div>
       </div>
     </div>
   );
 }
+const dark2 = (hex: string) => {
+  const n = parseInt(hex.slice(1), 16);
+  const f = (v: number) => Math.round(v * 0.72);
+  return `rgb(${f((n >> 16) & 255)},${f((n >> 8) & 255)},${f(n & 255)})`;
+};
 
-/* ───────────── 고르기 창 ───────────── */
+/* ───────────── 띠 · 컷인 · 카드 ───────────── */
 
-function ActionPanel({
-  g,
-  pr,
-  mine,
-  myPi,
-  left,
-  mode,
-  setMode,
-  send,
-  sending,
-  skill,
-  compact,
-  busy: _busy,
-  auto,
-  onManual,
-}: {
-  g: GameWire;
-  pr: Prompt | null;
-  mine: boolean;
-  myPi: number;
-  left: number;
-  mode: { k: string; range?: [number, number]; foe?: number } | null;
-  setMode(m: null): void;
-  send(a: Action): Promise<void>;
-  sending: boolean;
-  skill(): void;
-  compact: boolean;
-  busy: boolean;
-  auto: boolean;
-  onManual(): void;
-}) {
-  const gg = g as unknown as Game;
-  const m = MAPS[g.map];
-  const box = (children: ReactNode, title?: string) => (
-    <div className="mbx-modal flex w-full flex-col items-center gap-2 px-4 py-3 text-center" style={{ maxWidth: compact ? 300 : 390 }}>
-      {title && <b className="mb-title text-[15px]">{title}</b>}
-      {children}
-      {mine && left > 0 && (
-        <div className="mb-bar w-full" title={`${Math.ceil(left / 1000)}초`}>
-          <i style={{ width: `${Math.min(100, (left / 15000) * 100)}%`, "--c": left < 4000 ? "#ff6b6b" : "#4fd1b5" } as CSSProperties} />
-        </div>
-      )}
-    </div>
-  );
-  /** 상자 없이 판 위에 바로 (굴리기) */
-  const bare = (children: ReactNode) => (
-    <div className="flex w-full flex-col items-center gap-2 text-center" style={{ maxWidth: 390 }}>
-      {children}
-      {mine && left > 0 && (
-        <div className="mb-bar w-[160px]" title={`${Math.ceil(left / 1000)}초`}>
-          <i style={{ width: `${Math.min(100, (left / 15000) * 100)}%`, "--c": left < 4000 ? "#ff6b6b" : "#4fd1b5" } as CSSProperties} />
-        </div>
-      )}
-    </div>
-  );
-  if (auto)
-    return box(
-      <>
-        <span className="text-[12px]">자리를 비운 동안 AI 가 대신 두고 있어요</span>
-        <Btn tone="gold" className="h-[34px] px-4 text-[14px] font-bold" onClick={onManual}>
-          내가 다시 할게요
-        </Btn>
-      </>,
-      "자동 진행 중"
-    );
-  if (!pr || !mine) return null;
-  const me = g.players[myPi];
-  const c = CHAR[me.lo.char.id];
-  const skillOk = canSkill(gg, myPi);
-  const skillBtn = skillOk && c && (
-    <button
-      type="button"
-      disabled={sending}
-      onClick={() => {
-        sfx("click");
-        skill();
-      }}
-      title={c.active.desc(power(c.grade, me.lo.char.lv))}
-      className="mbx-skill relative flex h-[54px] items-center gap-2 rounded-full pr-4 pl-1 text-left text-white transition hover:scale-105 disabled:opacity-50"
-      style={{ background: "linear-gradient(135deg, #b46bff, #ff5fa2)", boxShadow: "0 0 0 2px #fff, 0 4px 0 #6a2a9a, 0 0 22px 4px rgba(255,95,162,0.65)" }}
-    >
-      <img src={faceOf(c)} alt="" className="h-[42px] w-[42px] rounded-full object-cover" style={{ boxShadow: "0 0 0 2px #fff" }} />
-      <span className="flex flex-col leading-[15px]">
-        <span className="mbx-skilltag mb-[2px] self-start rounded-full bg-[#2a1250] px-[7px] text-[11px] leading-[16px] font-black tracking-[0.08em] text-[#ffe08a]" style={{ boxShadow: "0 0 0 1.5px #ffe08a" }}>
-          ★ 스킬 준비됨!
-        </span>
-        <b className="text-[16px] leading-[18px]" style={{ textShadow: "0 1px 2px rgba(60,10,80,0.6)" }}>
-          {c.active.name} <span className="text-[11px] font-bold text-white/85">· 눌러서 쓰기</span>
-        </b>
-      </span>
-    </button>
-  );
-  /** 굴리기 옆 큰 스킬 버튼 (ROLL 과 나란히) */
-  const skillOrb = c ? (
-    skillOk ? (
-      <button
-        type="button"
-        disabled={sending}
-        onClick={() => {
-          sfx("click");
-          skill();
-        }}
-        title={c.active.desc(power(c.grade, me.lo.char.lv))}
-        className="mbx-skill group relative flex h-[112px] w-[112px] cursor-pointer flex-col items-center justify-center rounded-full transition hover:scale-105 disabled:opacity-50"
-        style={{ background: "conic-gradient(from 0deg, #ff5fa2, #b46bff, #5fb8ff, #ffe08a, #ff5fa2)", boxShadow: "0 0 0 3px #fff, 0 6px 0 #6a2a9a, 0 0 30px 8px rgba(255,95,162,0.7)" }}
-      >
-        <img src={faceOf(c)} alt="" className="h-[98px] w-[98px] rounded-full object-cover" style={{ boxShadow: "inset 0 0 0 2px #fff" }} />
-        <span className="mbx-skilltag absolute -top-[10px] rounded-full px-[8px] text-[12px] leading-[18px] font-black tracking-[0.12em]" style={{ boxShadow: "0 0 0 2px #ffe08a, 0 2px 6px rgba(0,0,0,0.4)" }}>
-          SKILL
-        </span>
-        <span className="absolute -bottom-[12px] max-w-[130px] truncate rounded-full bg-gradient-to-r from-[#b46bff] to-[#ff5fa2] px-[10px] text-[13px] leading-[22px] font-black whitespace-nowrap text-white" style={{ boxShadow: "0 0 0 2px #fff, 0 2px 6px rgba(0,0,0,0.4)" }}>
-          {c.active.name}
-        </span>
-      </button>
-    ) : g.round <= 1 && pr.k === "turn" && !pr.jail && !pr.warp ? (
-      <span className="relative flex h-[96px] w-[96px] flex-col items-center justify-center rounded-full bg-black/35 ring-2 ring-white/30">
-        <img src={faceOf(c)} alt="" className="h-[84px] w-[84px] rounded-full object-cover opacity-50 grayscale" />
-        <span className="absolute -bottom-[10px] rounded-full bg-[#2a2550] px-[8px] text-[11px] leading-[20px] font-bold whitespace-nowrap text-white/85 ring-1 ring-white/30">스킬은 2바퀴부터</span>
-      </span>
-    ) : null
-  ) : null;
-  const skillBox =
-    skillBtn ||
-    (g.round <= 1 && pr.k === "turn" && !pr.jail && !pr.warp && c ? (
-      <span className="flex h-[30px] items-center gap-1.5 rounded-full bg-white/10 px-3 text-[12px] font-bold text-white/70 ring-1 ring-white/15">
-        <img src={faceOf(c)} alt="" className="h-[22px] w-[22px] rounded-full object-cover opacity-60 grayscale" />
-        스킬은 2바퀴부터 쓸 수 있어요
-      </span>
-    ) : null);
-
-  // 스킬 숫자 · 상대 고르기
-  if (mode?.k === "skillNum" && mode.range) {
-    const [a, b] = mode.range;
-    return box(
-      <>
-        <div className="flex flex-wrap justify-center gap-1.5">
-          {Array.from({ length: b - a + 1 }, (_, k) => a + k).map((n) => (
-            <Btn key={n} tone="gold" className="h-[32px] min-w-[34px] px-2 text-[14px] font-bold" onClick={() => void send(pr.k === "post" ? { t: "skill", n } : { t: "skill", n })}>
-              {me.skill.kind === "fate" ? `${n}·${n}` : n}
-            </Btn>
-          ))}
-        </div>
-        <Btn className="h-[26px] px-3 text-[12px]" onClick={() => setMode(null)}>
-          취소
-        </Btn>
-      </>,
-      `${c?.active.name} — 몇?`
-    );
-  }
-  if (mode?.k === "pullN" && mode.foe !== undefined) {
-    const r = skillRange(gg, myPi) ?? [1, 2];
-    return box(
-      <>
-        <div className="flex gap-1.5">
-          {Array.from({ length: r[1] - r[0] + 1 }, (_, k) => r[0] + k).map((n) => (
-            <Btn key={n} tone="gold" className="h-[32px] min-w-[44px] px-2 text-[14px] font-bold" onClick={() => void send({ t: "skill", target: mode.foe, n })}>
-              {n}칸
-            </Btn>
-          ))}
-        </div>
-        <Btn className="h-[26px] px-3 text-[12px]" onClick={() => setMode(null)}>
-          취소
-        </Btn>
-      </>,
-      `${g.players[mode.foe].name} 끌어오기`
-    );
-  }
-  if (mode?.k === "skillTile" || mode?.k === "skillFoe")
-    return box(
-      <>
-        <span className="text-[13px]">{mode.k === "skillTile" ? (me.skill.kind === "buyout" ? `살 땅을 눌러요 (인수 비용의 ${Math.round(me.skill.mag * 100)}%)` : "보드에서 반짝이는 칸을 눌러요") : "상대 카드를 눌러요"}</span>
-        <Btn className="h-[26px] px-3 text-[12px]" onClick={() => setMode(null)}>
-          취소
-        </Btn>
-      </>,
-      c?.active.name
-    );
-
-  switch (pr.k) {
-    case "turn": {
-      if (pr.warp) return box(<span className="text-[13px]">워프할 칸을 보드에서 눌러요 (출발 포털을 넘으면 월급)</span>, "워프 게이트");
-      if (pr.jail)
-        return box(
-          <>
-            <span className="text-[12px]">더블이 나오면 바로 나가요 · 남은 {me.jail}번</span>
-            <div className="flex gap-2">
-              <Btn tone="gold" className="h-[40px] px-4 text-[15px] font-bold" disabled={sending} onClick={() => void send({ t: "roll" })} silent>
-                더블 노리기
-              </Btn>
-              <Btn className="h-[40px] px-3 text-[13px]" disabled={sending || me.cash < RULE.jailPay} onClick={() => void send({ t: "pay" })}>
-                <Cur k="coin" n={RULE.jailPay} size={12} /> 내고 나가기
-              </Btn>
-            </div>
-          </>,
-          "도트 수리소"
-        );
-      return bare(
-        <>
-          <div className="relative">
-            <PowerRoll disabled={sending} chance={controlChance(me)} onThrow={(power) => void send(power === undefined ? { t: "roll" } : { t: "roll", power })} />
-            {skillOrb && <div className="absolute top-[80px] left-[calc(50%+96px)] -translate-y-1/2">{skillOrb}</div>}
-          </div>
-          <div className="flex flex-wrap justify-center gap-1.5">
-            {me.uses.pick > 0 && (
-              <PickDice onPick={(n) => void send({ t: "pick", n })} uses={me.uses.pick} />
-            )}
-          </div>
-        </>
-      );
-    }
-    case "post":
-      return box(
-        <>
-          <div className="flex items-center gap-2 text-[14px]">
-            <DiceFace v={pr.dice[0]} size={26} />
-            <DiceFace v={pr.dice[1]} size={26} />
-            <b>{pr.steps}칸</b> → <span className="max-w-[120px] truncate">{m.tiles[g.order[slotAhead(g, me.pos, pr.steps)]]?.name}</span>
-          </div>
-          <div className="flex flex-wrap justify-center gap-1.5">
-            <Btn tone="gold" className="h-[36px] px-4 text-[15px] font-bold" disabled={sending} onClick={() => void send({ t: "keep" })}>
-              이대로 가기
-            </Btn>
-            {me.uses.reroll > 0 && (
-              <Btn tone="sky" className="h-[36px] px-3 text-[13px]" disabled={sending} onClick={() => void send({ t: "reroll" })}>
-                다시 굴리기 ({me.uses.reroll})
-              </Btn>
-            )}
-            {me.uses.adjust > 0 && (
-              <Btn tone="mint" className="h-[36px] px-3 text-[13px]" disabled={sending} onClick={() => void send({ t: "adjust", d: 1 })}>
-                한 칸 더 ({me.uses.adjust})
-              </Btn>
-            )}
-            {skillBox}
-          </div>
-        </>,
-        "어떻게 할까요?"
-      );
-    case "fork":
-      return box(<span className="text-[13px]">보드에서 반짝이는 칸을 눌러 갈 길을 골라요</span>, "어느 길로?");
-    case "rail":
-      return box(
-        <>
-          <span className="text-[13px]">반짝이는 역을 누르면 열차로 바로 가요</span>
-          <Btn className="h-[34px] px-4 text-[13px]" disabled={sending} onClick={() => void send({ t: "rail", to: -1 })}>
-            그냥 남기
-          </Btn>
-        </>,
-        "기차역"
-      );
-    case "buy": {
-      const d = m.tiles[pr.tile];
-      const t = g.tiles[pr.tile];
-      const owned = pr.from >= 0;
-      return box(
-        <>
-          <div className="text-[12px]">
-            {d.group !== undefined && <span className="mr-1 inline-block h-[10px] w-[10px] align-middle" style={{ background: m.groups[d.group].color, boxShadow: "0 0 0 2px #232a4d" }} />}
-            {d.group !== undefined ? m.groups[d.group].name : "명소"} · 지금 {owned ? `${LEVEL_NAME[t.lv]} · 통행료 ${fmt(tollOf(gg, pr.tile))}` : `땅값 ${fmt(d.price ?? 0)}`}
-          </div>
-          {chanceOf(gg, myPi, pr.tile) && (
-            <span className="mbx-hot rounded-full bg-[#ff6a2b] px-3 text-[13px] leading-[24px] font-black text-white">독점 찬스! {chanceOf(gg, myPi, pr.tile)}</span>
-          )}
-          <BuyPick key={`${pr.tile}-${pr.from}`} g={gg} pr={pr} cash={me.cash} mapId={m.id} pi={myPi} sending={sending} send={send} />
-        </>,
-        d.name
-      );
-    }
-    case "acq": {
-      const d = m.tiles[pr.tile];
-      const t = g.tiles[pr.tile];
-      return box(
-        <>
-          <span className="text-[12px]">
-            {g.players[t.owner]?.name} 의 {LEVEL_NAME[t.lv]} · 통행료 {fmt(tollOf(gg, pr.tile))}
-          </span>
-          {(me.sale > 0 || me.keep.acq > 0) && (
-            <span className="rounded-full bg-[#2fc37a]/20 px-2.5 text-[12px] leading-[20px] font-bold text-[#7dffb0] ring-1 ring-[#2fc37a]/50">
-              {[me.sale > 0 && `${CHAR[me.lo.char.id]?.active.name ?? "스킬"} −${Math.round(me.sale * 100)}%`, me.keep.acq > 0 && "부동산 세일 −30%"].filter(Boolean).join(" · ")} 적용됨
-            </span>
-          )}
-          <div className="flex gap-2">
-            <Btn tone="pink" className="h-[40px] px-4 text-[15px] font-bold" disabled={sending || pr.cost > me.cash} onClick={() => void send({ t: "acq", yes: true })}>
-              인수 <Cur k="coin" n={pr.cost} size={12} />
-            </Btn>
-            <Btn className="h-[40px] px-3 text-[13px]" disabled={sending} onClick={() => void send({ t: "acq", yes: false })}>
-              안 해요
-            </Btn>
-          </div>
-        </>,
-        `${d.name} 인수할까요?`
-      );
-    }
-    case "fest":
-      return box(<span className="text-[13px]">축제를 열 내 땅을 보드에서 눌러요 (통행료 2배)</span>, "축제 무대");
-    case "loan":
-      return box(<SellPick key={`${pr.tile}-${g.steps}`} g={gg} pr={pr} cash={me.cash} sending={sending} send={send} />, "통행료가 모자라요!");
-    case "start":
-      return box(
-        <>
-          <span className="text-[13px]">반짝이는 내 땅을 누르면 바로 건물을 올려요</span>
-          <Btn className="h-[34px] px-4 text-[13px]" disabled={sending} onClick={() => void send({ t: "start", tile: -1 })}>
-            안 지을래요
-          </Btn>
-        </>,
-        "출발 포털 · 건설"
-      );
-  }
-}
-
-function slotAhead(g: GameWire, pos: number, steps: number): number {
-  const m = MAPS[g.map];
-  let s = pos;
-  for (let k = 0; k < steps; k++) s = m.id === "cross" ? m.tiles[s].next[0] : (s + 1) % m.tiles.length;
-  return s;
-}
-
-function PickDice({ onPick, uses }: { onPick(n: number): void; uses: number }) {
-  const [open, setOpen] = useState(false);
-  if (!open)
-    return (
-      <Btn tone="gold" className="h-[36px] px-3 text-[13px]" onClick={() => setOpen(true)}>
-        <CurIcon k="coin" size={12} /> 황금 주사위 ({uses})
-      </Btn>
-    );
-  return (
-    <div className="flex flex-wrap justify-center gap-1">
-      {Array.from({ length: 11 }, (_, k) => k + 2).map((n) => (
-        <Btn key={n} tone="gold" className="h-[28px] min-w-[28px] px-1 text-[13px] font-bold" onClick={() => onPick(n)}>
-          {n}
-        </Btn>
-      ))}
-    </div>
-  );
-}
-
-/* ───────────── 띠 · 카드 · 결과 ───────────── */
-
-/** 스킬 컷인: 번쩍 → 비스듬한 띠 + 속도선 → 캐릭터가 미끄러져 들어옴 (그림은 안 잘리게 띠 밖에서) */
+/** 스킬 컷인: 번쩍 → 비스듬한 띠 + 속도선 → 캐릭터가 미끄러져 들어옴 */
 function SkillCutin({ b }: { b: Banner }) {
   const g = b.grade ?? "R";
   const rays = g === "SSR" || g === "UR";
@@ -1750,10 +1946,8 @@ function SkillCutin({ b }: { b: Banner }) {
         <div className="mbx-speed absolute inset-0" />
         <div className="absolute inset-0 bg-gradient-to-r from-transparent via-transparent to-[rgba(18,13,51,0.55)]" />
       </div>
-      {b.art && (
-        <img src={b.art} alt="" className="mbx-slide absolute left-[40px] max-w-none object-contain" style={{ top: 96, height: 300, width: 320, filter: "drop-shadow(0 6px 0 rgba(35,42,77,0.5))" }} />
-      )}
-      <div className="mbx-slide-r absolute right-[70px] top-[222px] max-w-[520px] text-right">
+      {b.art && <img src={b.art} alt="" className="mbx-slide absolute left-[40px] max-w-none object-contain" style={{ top: 96, height: 300, width: 320, filter: "drop-shadow(0 6px 0 rgba(35,42,77,0.5))" }} />}
+      <div className="mbx-slide-r absolute top-[222px] right-[70px] max-w-[520px] text-right">
         {g !== "R" && <div className="mb-1 inline-block rounded bg-black/40 px-2 text-[13px] font-black tracking-[0.3em] text-white">{g} SKILL</div>}
         <div className="mb-title text-[46px] leading-[50px] text-white" style={{ WebkitTextStroke: "3px #232a4d", paintOrder: "stroke fill", textShadow: "0 4px 0 #232a4d" }}>
           {b.title}
@@ -1762,7 +1956,7 @@ function SkillCutin({ b }: { b: Banner }) {
         {(b.desc || b.target) && (
           <div className="mt-2 flex flex-col items-end gap-1.5">
             {b.target && <span className="rounded-full bg-[#ffd23a] px-3 text-[18px] leading-[30px] font-black text-[#3a2500] shadow-[0_3px_0_#232a4d]">{b.target}</span>}
-            {b.desc && <span className="max-w-[460px] rounded-lg [word-break:keep-all] [text-wrap:balance] bg-[rgba(20,14,60,0.82)] px-3 py-1 text-[14px] leading-[20px] font-bold text-white ring-1 ring-white/20">{b.desc}</span>}
+            {b.desc && <span className="max-w-[460px] rounded-lg bg-[rgba(20,14,60,0.82)] px-3 py-1 text-[14px] leading-[20px] font-bold [text-wrap:balance] text-white ring-1 ring-white/20 [word-break:keep-all]">{b.desc}</span>}
           </div>
         )}
       </div>
@@ -1773,49 +1967,189 @@ function SkillCutin({ b }: { b: Banner }) {
 function BannerView({ b }: { b: Banner }) {
   if (b.art) return <SkillCutin b={b} />;
   return (
-    <div className="mbx pointer-events-none absolute inset-x-0 top-[190px] z-[620] flex justify-center" style={{ "--d": `${b.ms}ms` } as CSSProperties}>
-      <div className="mbx-banner relative flex h-[118px] w-full items-center justify-center overflow-hidden" style={{ background: `linear-gradient(90deg, transparent, ${b.color}e6 18%, ${b.color} 50%, ${b.color}e6 82%, transparent)` }}>
+    <div className="mbx pointer-events-none absolute inset-x-0 top-[96px] z-[620] flex justify-center" style={{ "--d": `${b.ms}ms` } as CSSProperties}>
+      <div className="mbx-banner relative flex h-[104px] w-full items-center justify-center overflow-hidden" style={{ background: `linear-gradient(90deg, transparent, ${b.color}e6 18%, ${b.color} 50%, ${b.color}e6 82%, transparent)` }}>
         <div className="mbx-rays mbx-soft absolute" style={{ left: "50%", top: "50%", "--ray": "rgba(255,255,255,0.45)", opacity: 0.5 } as CSSProperties} />
         <div className="mbx-sheen absolute inset-0 opacity-60" />
         <div className="absolute inset-x-0 top-0 h-[3px]" style={{ background: "linear-gradient(90deg, transparent, #fff, transparent)" }} />
         <div className="absolute inset-x-0 bottom-0 h-[3px]" style={{ background: "linear-gradient(90deg, transparent, #fff, transparent)" }} />
         <div className="mbx-banner-text relative text-center">
-          <div className="text-[46px] leading-[50px] font-black tracking-tight text-white" style={{ textShadow: `0 3px 0 rgba(38,43,82,0.6), 0 0 22px ${b.color}` }}>
+          <div className="text-[42px] leading-[46px] font-black tracking-tight text-white" style={{ textShadow: `0 3px 0 rgba(38,43,82,0.6), 0 0 22px ${b.color}` }}>
             {b.title}
           </div>
-          {b.sub && <div className="mt-0.5 text-[15px] font-bold text-white/95" style={{ textShadow: "0 1px 3px rgba(0,0,0,0.5)" }}>{b.sub}</div>}
+          {b.sub && (
+            <div className="mt-0.5 text-[15px] font-bold text-white/95" style={{ textShadow: "0 1px 3px rgba(0,0,0,0.5)" }}>
+              {b.sub}
+            </div>
+          )}
         </div>
       </div>
     </div>
   );
 }
 
-/** 럭키 박스 카드: 상자에서 카드가 휙 뒤집혀 나옴 (좋은 카드 금빛 · 나쁜 카드 붉은빛) */
-function CardPop({ id, name }: { id: keyof typeof CARDS; name: string }) {
-  const c = CARDS[id];
-  const good = c.good >= 0;
-  const c1 = good ? "#ffd84d" : "#ff6b8a";
-  const c2 = good ? "#ff9f2e" : "#b03a6a";
+/** 족보 이름: 주사위 접시 위로 크게 튀어나옴 */
+function HandPop({ hand, x2, color }: { hand: HandId; x2?: boolean; color: string }) {
+  const h = HANDS[hand];
+  const big = hand === "four" || hand === "large" || hand === "full";
   return (
-    <div className="mbx pointer-events-none absolute inset-0 z-[610] flex items-center justify-center" style={{ background: "radial-gradient(circle, rgba(10,8,30,0.25), rgba(10,8,30,0.6))" }}>
-      <div className="mbx-up-rays mbx-soft absolute h-[620px] w-[620px]" style={{ "--ray": `${c1}cc`, opacity: 0.6 } as CSSProperties} />
-      <div className="mbx-card-in relative flex h-[320px] w-[230px] flex-col items-center overflow-hidden rounded-[18px] p-[4px]" style={{ background: `linear-gradient(160deg, #fff6c8, ${c1} 40%, ${c2})`, boxShadow: `0 0 0 2px #262b52, 0 0 36px 6px ${c1}aa, 0 14px 30px rgba(0,0,0,0.5)` }}>
-        <div className="relative flex h-full w-full flex-col items-center rounded-[14px] px-4 pt-3 pb-4 text-center" style={{ background: "linear-gradient(180deg, #2a2470, #171245)" }}>
-          <div className="absolute inset-[6px] rounded-[10px] border border-[#ffd76a]/50" />
-          <span className="text-[11px] font-black tracking-[0.3em] text-[#ffd76a]">LUCKY BOX</span>
-          <div className="mt-3 flex h-[96px] w-[96px] items-center justify-center rounded-full" style={{ background: `radial-gradient(circle, ${c1}66, transparent 70%)` }}>
-            <Icon n={good ? "box" : "x"} size={64} />
-          </div>
-          <b className="mt-2 text-[26px] leading-[30px] font-black text-white">{c.name}</b>
-          <span className="mt-2 rounded-full px-3 py-1 text-[14px] font-bold" style={{ background: `${c1}33`, color: good ? "#ffe8a0" : "#ffc2cf", boxShadow: `inset 0 0 0 1px ${c1}88` }}>
-            {c.desc}
-          </span>
-          <span className="mt-auto text-[12px] text-white/60">{name} 님이 뽑았어요</span>
+    <div className="pointer-events-none absolute z-[615] flex flex-col items-center" style={{ left: TRAY.x, top: TRAY.y - 96, transform: "translateX(-50%)" }}>
+      {big && <div className="mbx-up-rays mbx-soft absolute top-1/2 left-1/2 h-[360px] w-[360px]" style={{ "--ray": `${HAND_COLOR[hand]}cc`, opacity: 0.55 } as CSSProperties} />}
+      <div className="mbx-hand relative flex flex-col items-center">
+        <span className="text-[44px] leading-[48px] font-black whitespace-nowrap text-white" style={{ WebkitTextStroke: "4px #232a4d", paintOrder: "stroke fill", textShadow: `0 4px 0 #232a4d, 0 0 26px ${HAND_COLOR[hand]}` }}>
+          {h.name}!{x2 ? " ×2" : ""}
+        </span>
+        <span className="mt-1 rounded-full px-3 text-[15px] leading-[28px] font-black whitespace-nowrap text-[#2a1600]" style={{ background: HAND_COLOR[hand], boxShadow: `0 0 0 2.5px #fff, 0 0 0 4px ${color}, 0 3px 0 rgba(0,0,0,0.3)` }}>
+          {h.desc}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+/** 야추: 화면 가득 — 빛살 · 주사위 다섯 · 별 */
+function YachtCutin({ name, char, x2 }: { name: string; char: string; x2?: boolean }) {
+  const c = CHAR[char];
+  return (
+    <div className="mbx pointer-events-none absolute inset-0 z-[640] flex items-center justify-center overflow-hidden" style={{ background: "radial-gradient(circle, rgba(255,140,40,0.55), rgba(40,10,60,0.85))" }}>
+      <div className="mbx-flash absolute inset-0" />
+      <div className="mbx-up-rays mbx-soft absolute top-1/2 left-1/2 h-[1100px] w-[1100px]" style={{ "--ray": "rgba(255,220,110,0.9)", opacity: 0.8 } as CSSProperties} />
+      {c && <img src={artOf(c)} alt="" className="mbx-slide absolute bottom-[-20px] left-[30px] h-[360px] max-w-none object-contain opacity-90" style={{ filter: "drop-shadow(0 6px 0 rgba(35,42,77,0.5))" }} />}
+      <div className="relative flex flex-col items-center">
+        <div className="mbx-up-title text-[120px] leading-[120px] font-black tracking-tight" style={{ color: "#ffe14a", WebkitTextStroke: "6px #3a1d6e", paintOrder: "stroke fill", textShadow: "0 8px 0 #3a1d6e, 0 0 40px rgba(255,200,60,0.9)" }}>
+          YACHT!
+        </div>
+        <div className="mt-2 flex items-center gap-2">
+          {[0, 1, 2, 3, 4].map((k) => (
+            <span key={k} className="mbx-up-star" style={{ animationDelay: `${300 + k * 90}ms` }}>
+              <Glyph n="dice" size={44} color="#fff" />
+            </span>
+          ))}
+        </div>
+        <div className="mbx-up-sub mt-3 flex items-center gap-2 rounded-full bg-[#ffd23a] px-5 text-[24px] leading-[44px] font-black text-[#3a2500]" style={{ boxShadow: "0 0 0 4px #fff, 0 6px 0 rgba(0,0,0,0.3)" }}>
+          <Glyph n="star" size={28} color="#fff" /> {name} · 별 +{x2 ? 2 : 1}
         </div>
       </div>
     </div>
   );
 }
+
+/** 별이 A 에서 B 로 날아감 */
+function FlyStar({ a, b }: { a: { x: number; y: number }; b: { x: number; y: number } }) {
+  return (
+    <div className="mbx-fly-star pointer-events-none absolute z-[560]" style={{ left: a.x, top: a.y, "--dx": `${b.x - a.x}px`, "--dy": `${b.y - a.y}px` } as CSSProperties}>
+      <div style={{ filter: "drop-shadow(0 0 14px rgba(255,214,60,0.95))" }}>
+        <Glyph n="star" size={52} color="#ffd23a" />
+      </div>
+    </div>
+  );
+}
+
+/** 럭키 박스 아이템 카드 */
+function ItemPop({ id, name }: { id: CardId; name: string }) {
+  const c = CARDS[id];
+  return (
+    <div className="mbx pointer-events-none absolute inset-0 z-[610] flex items-center justify-center" style={{ background: "radial-gradient(circle, rgba(10,8,30,0.2), rgba(10,8,30,0.5))" }}>
+      <div className="mbx-up-rays mbx-soft absolute top-1/2 left-1/2 h-[520px] w-[520px]" style={{ "--ray": "#ffd84dcc", opacity: 0.55 } as CSSProperties} />
+      <div className="mbx-card-in relative flex h-[250px] w-[190px] flex-col items-center overflow-hidden rounded-[18px] p-[4px]" style={{ background: "linear-gradient(160deg, #fff6c8, #ffd84d 40%, #ff9f2e)", boxShadow: "0 0 0 2px #262b52, 0 0 36px 6px #ffd84daa, 0 14px 30px rgba(0,0,0,0.5)" }}>
+        <div className="relative flex h-full w-full flex-col items-center rounded-[14px] px-3 pt-3 pb-3 text-center" style={{ background: "linear-gradient(180deg, #2a2470, #171245)" }}>
+          <span className="text-[10px] font-black tracking-[0.3em] text-[#ffd76a]">ITEM</span>
+          <div className="mt-2">
+            <CardIcon id={id} size={72} />
+          </div>
+          <b className="mt-3 text-[20px] leading-[24px] font-black text-white">{c.name}</b>
+          <span className="mt-1.5 text-[12.5px] leading-[17px] font-bold text-[#ffe8a0] [word-break:keep-all]">{c.desc}</span>
+          <span className="mt-auto text-[11px] text-white/60">{name}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** 마을 소식 카드 */
+function EventPop({ id, alt, name }: { id: keyof typeof EVENTS; alt?: keyof typeof EVENTS; name: string }) {
+  const e = EVENTS[id];
+  const good = e.v > 0;
+  const c1 = good ? "#7fe0c8" : e.v < 0 ? "#ff6b8a" : "#9fdcff";
+  return (
+    <div className="mbx pointer-events-none absolute inset-0 z-[610] flex items-center justify-center" style={{ background: "radial-gradient(circle, rgba(10,8,30,0.25), rgba(10,8,30,0.6))" }}>
+      <div className="mbx-up-rays mbx-soft absolute top-1/2 left-1/2 h-[560px] w-[560px]" style={{ "--ray": `${c1}cc`, opacity: 0.55 } as CSSProperties} />
+      <div className="mbx-card-in relative flex h-[280px] w-[220px] flex-col items-center overflow-hidden rounded-[18px] p-[4px]" style={{ background: `linear-gradient(160deg, #ffffff, ${c1} 45%, ${dark2(c1)})`, boxShadow: `0 0 0 2px #262b52, 0 0 36px 6px ${c1}aa, 0 14px 30px rgba(0,0,0,0.5)` }}>
+        <div className="relative flex h-full w-full flex-col items-center rounded-[14px] px-4 pt-3 pb-4 text-center" style={{ background: "linear-gradient(180deg, #1f4a5a, #12283a)" }}>
+          <span className="text-[11px] font-black tracking-[0.3em]" style={{ color: c1 }}>
+            마을 소식
+          </span>
+          <div className="mt-3">
+            <Glyph n="ask" size={64} color={c1} />
+          </div>
+          <b className="mt-2 text-[22px] leading-[26px] font-black text-white">{e.name}</b>
+          <span className="mt-2 text-[13px] leading-[18px] font-bold text-white/90 [word-break:keep-all]">{e.desc}</span>
+          {alt && <span className="mt-1.5 text-[11px] text-white/55">행운 고양이: 「{EVENTS[alt].name}」 대신 골랐어요</span>}
+          <span className="mt-auto text-[12px] text-white/60">{name}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** VS 대결: 두 사람 얼굴 · 주사위 두 개씩 · 승자 */
+function VsPop({ e, g }: { e: Extract<Ev, { t: "vs" }>; g: GameWire }) {
+  const [show, setShow] = useState(false);
+  useEffect(() => {
+    const id = setTimeout(() => setShow(true), 1100);
+    return () => clearTimeout(id);
+  }, []);
+  const side = (pi: number, d: [number, number]) => {
+    const p = g.players[pi];
+    const c = CHAR[p?.lo.char.id ?? "kai"];
+    const win = show && e.win === pi;
+    const lose = show && e.win >= 0 && e.win !== pi;
+    return (
+      <div className="flex w-[200px] flex-col items-center gap-2" style={{ opacity: lose ? 0.55 : 1, transition: "opacity 300ms" }}>
+        <div className="relative">
+          {c && <img src={faceOf(c)} alt="" className="h-[96px] w-[96px] rounded-full object-cover" style={{ boxShadow: `0 0 0 4px #fff, 0 0 0 7px ${PCOLOR[pi]}` }} />}
+          {win && (
+            <span className="mb-pop absolute -top-[22px] left-1/2 -translate-x-1/2">
+              <Glyph n="crown" size={36} color="#ffd23a" />
+            </span>
+          )}
+        </div>
+        <b className="max-w-[180px] truncate text-[16px] text-white">{p?.name}</b>
+        <div className="flex gap-2">
+          {show ? (
+            d.map((v, k) => <MiniDie key={k} v={v} size={40} />)
+          ) : (
+            <>
+              <span className="mbx-shake-soft">
+                <MiniDie v={5} size={40} />
+              </span>
+              <span className="mbx-shake-soft">
+                <MiniDie v={3} size={40} />
+              </span>
+            </>
+          )}
+        </div>
+        {show && <b className="text-[28px] leading-none text-white" style={{ textShadow: "0 3px 0 #232a4d" }}>{d[0] + d[1]}</b>}
+      </div>
+    );
+  };
+  return (
+    <div className="mbx pointer-events-none absolute inset-0 z-[610] flex items-center justify-center bg-[rgba(10,8,30,0.6)]">
+      <div className="mbx-pop flex items-center gap-4 rounded-3xl bg-[#1b1650]/90 px-6 py-5 ring-2 ring-[#ff9a3d]">
+        {side(e.p, e.a)}
+        <div className="flex flex-col items-center">
+          <span className="text-[44px] font-black text-[#ff9a3d]" style={{ WebkitTextStroke: "3px #232a4d", paintOrder: "stroke fill" }}>
+            VS
+          </span>
+          {show && <span className="text-[13px] font-bold whitespace-nowrap text-white/85">{e.win < 0 ? "무승부!" : `${e.amt}코인!`}</span>}
+        </div>
+        {side(e.q, e.b)}
+      </div>
+    </div>
+  );
+}
+
+/* ───────────── 결과 ───────────── */
 
 function Result({ room, me, onLeave }: { room: RoomWire; me: string; onLeave(): void }) {
   const g = room.game!;
@@ -1827,22 +2161,15 @@ function Result({ room, me, onLeave }: { room: RoomWire; me: string; onLeave(): 
       sfx("lose");
     }
   }, [mine?.place]);
-  const HOW: Record<string, string> = { bankrupt: "모두 파산시킴", triple: "트리플 독점", line: "라인 독점", spot: "명소 독점", rounds: "바퀴 끝 · 자산 1등" };
-  const winner = g.over ? g.players[g.over.winner] : null;
   const myPi = mine ? room.order.indexOf(mine.seat) : -1;
   const st = myPi >= 0 ? g.players[myPi].stat : null;
   return (
     <div className="absolute inset-0 z-[700] flex items-center justify-center bg-[rgba(35,42,77,0.45)]">
-      <div className="mbx-modal mb-pop w-[460px] px-5 py-4">
+      <div className="mbx-modal mb-pop w-[480px] px-5 py-4">
         <div className="text-center">
           <div className="mb-title mb-out text-[34px] text-white" style={{ color: mine?.place === 1 ? "#ffc94a" : "#fff" }}>
             {mine ? (mine.place === 1 ? "승리!" : `${mine.place}등`) : "판 끝"}
           </div>
-          {g.over && winner && (
-            <div className="mt-1 inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-0.5 text-[13px] text-white ring-1 ring-white/15">
-              <b style={{ color: PCOLOR[g.over.winner] }}>{winner.name}</b> 승리 · {HOW[g.over.how]}
-            </div>
-          )}
         </div>
         <div className="mt-3 flex flex-col gap-1.5">
           {room.result!.map((r) => {
@@ -1850,14 +2177,18 @@ function Result({ room, me, onLeave }: { room: RoomWire; me: string; onLeave(): 
             const p = g.players[pi];
             return (
               <div key={r.seat} className="mb-inset flex items-center gap-2 px-2 py-1.5" style={{ "--bg": `${PCOLOR[pi]}40` } as CSSProperties}>
-                <b className="w-[34px] text-center text-[18px]">{r.place}</b>
-                <img src={faceOf(CHAR[p.lo.char.id] ?? CHAR.kai)} alt="" className="h-[34px] w-[34px] object-cover" style={{ boxShadow: "0 0 0 2px #232a4d" }} />
+                <b className="w-[30px] text-center text-[18px]">{r.place}</b>
+                <img src={faceOf(CHAR[p.lo.char.id] ?? CHAR.kai)} alt="" className="h-[34px] w-[34px] rounded-md object-cover" style={{ boxShadow: "0 0 0 2px #232a4d" }} />
                 <b className="min-w-0 flex-1 truncate text-[14px]">
                   {r.bot && <Icon n="bot" size={12} />} {r.name}
                 </b>
-                <span className="text-[12px] whitespace-nowrap">
-                  {p.alive ? `자산 ${fmt(Math.max(0, assetsOf(g as unknown as Game, pi) + p.debt))}` : "파산"}
-                  {p.alive && p.debt > 0 && <span className="text-[#ff9aa5]"> · 빚 {fmt(p.debt)}</span>}
+                <span className="flex items-center gap-1 text-[16px] font-black">
+                  <Glyph n="star" size={16} color="#ffd23a" />
+                  {p.stars}
+                </span>
+                <span className="flex w-[54px] items-center justify-end gap-1 text-[13px] font-bold text-[#ffe08a]">
+                  <Glyph n="coin" size={13} color="#ffd23a" />
+                  {p.coins}
                 </span>
                 {r.stars !== undefined && (
                   <span className="mb-chip text-[12px]" style={{ "--c": "#ffe1ef" } as CSSProperties}>
@@ -1871,16 +2202,18 @@ function Result({ room, me, onLeave }: { room: RoomWire; me: string; onLeave(): 
         </div>
         {st && (
           <div className="mt-3 grid grid-cols-5 gap-1 text-center">
-            {[
-              ["받은 돈", fmt(st.got)],
-              ["낸 돈", fmt(st.paid)],
-              ["지은 건물", st.built],
-              ["인수", st.acq],
-              ["스킬", st.skill],
-            ].map(([k, v]) => (
-              <div key={k as string} className="mb-inset rounded-lg px-1 py-1.5">
+            {(
+              [
+                ["번 코인", st.earned],
+                ["산 별", st.bought],
+                ["최고 족보", HANDS[st.best].name],
+                ["움직인 칸", st.moved],
+                ["스킬", st.skill],
+              ] as [string, ReactNode][]
+            ).map(([k, v]) => (
+              <div key={k} className="mb-inset rounded-lg px-1 py-1.5">
                 <div className="text-[10px] text-[var(--mute)]">{k}</div>
-                <b className="text-[14px]">{v}</b>
+                <b className="text-[13px] whitespace-nowrap">{v}</b>
               </div>
             ))}
           </div>
@@ -1896,105 +2229,6 @@ function Result({ room, me, onLeave }: { room: RoomWire; me: string; onLeave(): 
   );
 }
 
-/** 짓기 고르기: 살 수 있는 건 처음부터 다 골라 둠 · 눌러서 빼고 넣기 · 땅을 빼면 전부 빠짐 */
-function BuyPick({ g, pr, cash, mapId, pi, sending, send }: { g: Game; pr: Extract<Prompt, { k: "buy" }>; cash: number; mapId: string; pi: number; sending: boolean; send(a: Action): Promise<unknown> }) {
-  const owned = pr.from >= 0;
-  const costOf = (k: number) => pr.costs[pr.items.indexOf(k)];
-  const [sel, setSel] = useState<number[]>(() => {
-    const out: number[] = [];
-    let left = cash;
-    for (const k of pr.items) {
-      const c = costOf(k);
-      if (!owned && k !== 0 && !out.includes(0)) break;
-      if (c <= left) {
-        out.push(k);
-        left -= c;
-      } else if (!owned && k === 0) break;
-    }
-    return out;
-  });
-  const total = sel.reduce((a, k) => a + costOf(k), 0);
-  // 고른 대로 지으면 통행료 (독점 · 축제 · 마을 소식까지 지금 판 그대로 셈)
-  const tollNow = owned ? tollOf(g, pr.tile) : 0;
-  const tollAfter = useMemo(() => {
-    if (!sel.length) return 0;
-    const t = g.tiles[pr.tile];
-    let b = owned ? bitsOf(t) : 0;
-    for (const k of sel) if (k >= 1 && k <= 3) b |= 1 << (k - 1);
-    const lv = sel.includes(LANDMARK) ? LANDMARK : (b & 1) + ((b >> 1) & 1) + ((b >> 2) & 1);
-    const tiles = g.tiles.map((x, i) => (i === pr.tile ? { ...x, owner: pi, lv, b: lv >= LANDMARK ? 7 : b } : x));
-    return tollOf({ ...g, tiles } as Game, pr.tile);
-  }, [g, pr.tile, sel, owned, pi]);
-  const over = total > cash;
-  const toggle = (k: number) => {
-    sfx("click");
-    setSel((cur) => {
-      if (cur.includes(k)) return k === 0 ? [] : cur.filter((x) => x !== k);
-      const next = [...cur, k];
-      if (!owned && !next.includes(0)) next.push(0);
-      return next.sort((a, b) => a - b);
-    });
-  };
-  return (
-    <>
-      <div className="flex flex-wrap justify-center gap-1.5">
-        {pr.items.map((k) => {
-          const on = sel.includes(k);
-          const cost = costOf(k);
-          return (
-            <button
-              key={k}
-              type="button"
-              disabled={sending}
-              onClick={() => toggle(k)}
-              className="relative flex h-[90px] w-[74px] cursor-pointer flex-col items-center justify-end rounded-xl pb-1.5 transition hover:-translate-y-0.5"
-              style={{
-                background: on ? (k >= LANDMARK ? "linear-gradient(180deg,#ffb3d6,#ff6fae)" : "linear-gradient(180deg,#ffe48a,#ffbf35)") : "rgba(255,255,255,0.08)",
-                boxShadow: on ? "0 3px 0 #b9741a, 0 0 0 2px #fff" : "inset 0 0 0 1.5px rgba(255,255,255,0.25)",
-                color: on ? "#3a2500" : "rgba(255,255,255,0.6)",
-              }}
-            >
-              <span className={`absolute top-1 right-1 flex h-[17px] w-[17px] items-center justify-center rounded-full text-[11px] font-black ${on ? "bg-[#2fc37a] text-white" : "bg-black/30 text-transparent ring-1 ring-white/30"}`}>✓</span>
-              <span className="flex h-[40px] items-end justify-center" style={on ? undefined : { filter: "grayscale(0.85)", opacity: 0.5 }}>
-                {k <= 0 ? <Glyph n="flag" size={30} color={PCOLOR[pi]} /> : k >= LANDMARK ? <img src={`/marble/lm/${mapId}-${pr.tile}.webp`} alt="" className="h-[40px] max-w-none" /> : <Piece n={k - 1} owner={pi} h={38} />}
-              </span>
-              <b className="text-[13px] leading-[16px]">{LEVEL_NAME[k]}</b>
-              <span className="text-[12px] leading-[14px] font-bold">{cost === 0 ? "무료" : fmt(cost)}</span>
-            </button>
-          );
-        })}
-      </div>
-      <div className="flex w-full items-center justify-center gap-2">
-        <span className="flex items-baseline gap-1.5 rounded-full bg-black/30 px-3 py-1 ring-1 ring-white/15">
-          <span className="text-[11px] text-white/60">합계</span>
-          <b className={`text-[20px] leading-none ${over ? "text-[#ff7b8a]" : "text-[#ffe08a]"}`}>{fmt(total)}</b>
-          <span className="text-[11px] text-white/50">/ 가진 돈 {fmt(cash)}</span>
-        </span>
-      </div>
-      {sel.length > 0 && (
-        <div className="flex items-center justify-center gap-1.5 text-[12px] text-white/75">
-          <span>지으면 통행료</span>
-          {owned && (
-            <>
-              <span className="text-white/55 line-through decoration-white/40">{fmt(tollNow)}</span>
-              <span className="text-white/55">→</span>
-            </>
-          )}
-          <b className="text-[15px] text-[#7dffb0]">{fmt(tollAfter)}코인</b>
-        </div>
-      )}
-      <div className="flex gap-2">
-        <Btn tone="gold" className="h-[36px] min-w-[120px] px-4 text-[14px] font-black" disabled={sending || over || !sel.length} onClick={() => void send({ t: "buy", lv: Math.max(...sel), pick: sel })}>
-          {over ? "돈이 모자라요" : owned ? "짓기" : "사기"}
-        </Btn>
-        <Btn className="h-[36px] px-3 text-[13px]" disabled={sending} onClick={() => void send({ t: "buy", lv: -1 })}>
-          {owned ? "안 지어요" : "안 사요"}
-        </Btn>
-      </div>
-    </>
-  );
-}
-
 /** 판 시작: 내 순번 (사다리 결과) */
 function OrderIntro({ pi, n }: { pi: number; n: number }) {
   return (
@@ -2004,7 +2238,9 @@ function OrderIntro({ pi, n }: { pi: number; n: number }) {
           내 순서
         </div>
         <div className="flex items-baseline gap-2 text-white" style={{ WebkitTextStroke: "4px #232a4d", paintOrder: "stroke fill", textShadow: "0 5px 0 #232a4d" }}>
-          <b className="text-[88px] leading-[96px]" style={{ color: PCOLOR[pi] }}>{pi + 1}</b>
+          <b className="text-[88px] leading-[96px]" style={{ color: PCOLOR[pi] }}>
+            {pi + 1}
+          </b>
           <b className="text-[40px]">번째</b>
         </div>
         <span className="mt-1 rounded-full px-4 text-[16px] leading-[30px] font-black text-white" style={{ background: PCOLOR[pi], boxShadow: "0 0 0 2.5px #fff, 0 4px 0 rgba(0,0,0,0.3)" }}>
@@ -2015,55 +2251,35 @@ function OrderIntro({ pi, n }: { pi: number; n: number }) {
   );
 }
 
-/** 남의 차례: 그 사람 말 위에 뭘 하는 중인지 */
+/** 남의 차례: 뭘 하는 중인지 */
 function thinking(pr: Prompt): string {
   switch (pr.k) {
     case "turn":
-      return pr.warp ? "워프할 곳 고르는 중…" : pr.jail ? "수리소 탈출 고민 중…" : "주사위 굴리는 중…";
-    case "post":
-      return "어떻게 갈지 고민 중…";
-    case "fork":
-      return "갈 길 고르는 중…";
-    case "rail":
-      return "열차 탈지 고민 중…";
-    case "buy":
-      return pr.from < 0 ? "땅 구매 중…" : "건물 짓는 중…";
-    case "acq":
-      return "인수할지 고민 중…";
-    case "fest":
-      return "축제 열 곳 고르는 중…";
-    case "start":
-      return "지을 땅 고르는 중…";
-    case "loan":
-      return "대출 고민 중…";
-    default:
-      return "생각 중…";
+      return "주사위 굴리는 중…";
+    case "dice":
+      return "주사위 고르는 중…";
+    case "foe":
+      return pr.why === "steal" ? "뺏을 상대 고르는 중…" : "대결 상대 고르는 중…";
+    case "warp":
+      return "워프할 곳 고르는 중…";
+    case "more":
+      return "몇 칸 더 갈지 고르는 중…";
   }
 }
 
-/** 못 하고 넘어감: 화면 가운데 위쪽 작은 창 (흐름은 안 막고 2초 뒤 사라짐) */
-function NopeToast({ why, need, cash }: { why: string; need?: number; cash: number }) {
-  const title = why.includes("인수") ? "인수 불가" : why.includes("축제") ? "축제 불가" : "건설 불가";
+/** 못 함 · 오류: 화면 가운데 위쪽 작은 창 (흐름은 안 막고 사라짐) */
+function NopeToast({ why }: { why: string }) {
   return (
     <div className="pointer-events-none absolute top-[118px] left-1/2 z-[615] -translate-x-1/2">
-      <div className="mbx-pop mbx-modal flex min-w-[260px] flex-col items-center px-5 py-3 text-center">
-        <b className="mb-title flex items-center gap-1.5 text-[15px]">
-          <span className="flex h-[18px] w-[18px] items-center justify-center rounded-full bg-[#ff6b6b] text-[12px] font-black text-white">!</span>
-          {title}
-        </b>
-        <span className="mt-1 text-[13px] text-white">{why}</span>
-        {need !== undefined && (
-          <span className="mt-0.5 text-[12px] text-white/65">
-            필요 <b className="text-[#ff9aa5]">{fmt(need)}</b> · 가진 돈 {fmt(cash)}
-          </span>
-        )}
+      <div className="mbx-pop mbx-modal flex min-w-[240px] items-center gap-2 px-5 py-2.5 text-center">
+        <span className="flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full bg-[#ff6b6b] text-[12px] font-black text-white">!</span>
+        <span className="text-[13px] font-bold text-white">{why}</span>
       </div>
     </div>
   );
 }
 
-
-/** 한 번 터지는 이펙트 (쾅 · 고리 · 불꽃 · 금화 · 쿨쿨) */
+/** 한 번 터지는 이펙트 (쾅 · 고리 · 금화 · 쿨쿨 · 별) */
 function FxView({ f }: { f: Fx }) {
   const base = { left: f.x, top: f.y, animationDelay: `${f.delay ?? 0}ms` } as CSSProperties;
   if (f.k === "coin")
@@ -2075,108 +2291,12 @@ function FxView({ f }: { f: Fx }) {
         Zzz
       </span>
     );
-  if (f.k === "flame")
-    return (
-      <svg className="mbx-fx-flame pointer-events-none absolute z-[505]" style={base} width="44" height="56" viewBox="0 0 44 56" aria-hidden>
-        <path d="M22 2c4 10 16 16 16 30a16 16 0 01-32 0c0-8 5-12 8-17 1 5 3 8 6 9-1-9 0-16 2-22z" fill="#ff6a2b" stroke="#fff" strokeWidth="2" />
-        <path d="M22 26c3 5 8 8 8 15a8 8 0 01-16 0c0-4 3-7 4-9 1 3 2 4 3 4 0-4 0-7 1-10z" fill="#ffd23a" />
-      </svg>
-    );
-  // boom: 쾅 (별 모양 폭발)
+  if (f.k === "star")
+    return <span className="mbx-fx-ring pointer-events-none absolute z-[505] block h-[70px] w-[70px] rounded-full" style={{ ...base, boxShadow: "0 0 0 5px #ffd23a, 0 0 24px 8px rgba(255,210,60,0.9)" }} />;
   return (
     <svg className="mbx-fx-boom pointer-events-none absolute z-[505]" style={base} width="110" height="110" viewBox="-55 -55 110 110" aria-hidden>
       <path d="M0-50 L12-18 L46-24 L22 2 L44 30 L10 22 L0 52 L-10 22 L-44 30 L-22 2 L-46-24 L-12-18 Z" fill="#ffd23a" stroke="#ff4b3d" strokeWidth="4" strokeLinejoin="round" />
       <circle r="14" fill="#fff" />
     </svg>
-  );
-}
-
-/** 이 칸을 사면 독점 · 승리가 되는지 (구매창 · 남의 차례 알림) */
-function chanceOf(g: Game, pi: number, tile: number): string | null {
-  const m = MAPS[g.map];
-  const d = m.tiles[tile];
-  const mine = (t: number) => t === tile || g.tiles[t].owner === pi;
-  if (d.kind === "spot") {
-    const spots = m.tiles.map((x, i) => (x.kind === "spot" ? i : -1)).filter((i) => i >= 0);
-    return spots.length > 1 && spots.every(mine) ? "사면 명소 독점 승리!" : null;
-  }
-  if (d.kind !== "city") return null;
-  const slot = g.order.indexOf(tile);
-  for (const line of m.lines) {
-    const tiles = line.map((s) => (m.id === "orgel" ? g.order[s] : s)).filter((t) => m.tiles[t].kind === "city" || m.tiles[t].kind === "spot");
-    if (line.includes(m.id === "orgel" ? slot : tile) && tiles.length > 2 && tiles.every(mine)) return "사면 라인 독점 승리!";
-  }
-  if (d.group === undefined) return null;
-  const grp = m.tiles.map((x, i) => (x.group === d.group ? i : -1)).filter((i) => i >= 0);
-  if (!grp.every(mine)) return null;
-  const others = m.groups.filter((_, gi) => gi !== d.group && groupOwned(g, gi) === pi).length;
-  return others + 1 >= RULE.triple ? "사면 트리플 독점 승리!" : "사면 동네 독점 · 통행료 2배";
-}
-
-
-/** 통행료 모자람: 팔 땅을 직접 고르기 · 대출 · 파산 */
-function SellPick({ g, pr, cash, sending, send }: { g: Game; pr: Extract<Prompt, { k: "loan" }>; cash: number; sending: boolean; send(a: Action): Promise<unknown> }) {
-  const m = MAPS[g.map];
-  const lands = pr.lands ?? [];
-  const [sel, setSel] = useState<number[]>([]);
-  const got = lands.filter((l) => sel.includes(l.tile)).reduce((a, l) => a + l.got, 0);
-  const total = lands.reduce((a, l) => a + l.got, 0);
-  const short = Math.max(0, pr.amt - cash - got);
-  const canLoan = pr.canLoan !== false;
-  const toggle = (t: number) => {
-    sfx("click");
-    setSel((cur) => (cur.includes(t) ? cur.filter((x) => x !== t) : [...cur, t]));
-  };
-  return (
-    <>
-      <div className="text-[12px] leading-[17px]">
-        통행료 <b>{fmt(pr.amt)}</b> · 가진 돈 {fmt(cash)} · <b className="text-[#ff8a9a]">{fmt(pr.amt - cash)} 모자라요</b>
-      </div>
-      {lands.length > 0 && (
-        <>
-          <div className="text-[11px] text-white/60">팔 땅을 골라요 (넣은 돈의 절반을 받아요)</div>
-          <div className="flex max-h-[118px] w-full flex-wrap justify-center gap-1 overflow-y-auto">
-            {lands.map((l) => {
-              const d = m.tiles[l.tile];
-              const t = g.tiles[l.tile];
-              const on = sel.includes(l.tile);
-              const band = d.kind === "spot" ? "#ffb21e" : d.group !== undefined ? m.groups[d.group].color : "#8d9bb3";
-              return (
-                <button
-                  key={l.tile}
-                  type="button"
-                  onClick={() => toggle(l.tile)}
-                  className="flex cursor-pointer items-center gap-1 rounded-lg px-2 py-1 text-[11.5px] font-bold transition"
-                  style={{ background: on ? "#ffe08a" : "rgba(255,255,255,0.08)", color: on ? "#3a2500" : "#fff", boxShadow: on ? "0 0 0 2px #fff" : "inset 0 0 0 1px rgba(255,255,255,0.2)" }}
-                >
-                  <span className="h-[9px] w-[9px] rounded-sm" style={{ background: band }} />
-                  {d.name}
-                  {t.lv > 0 && <span className="opacity-70">· {LEVEL_NAME[t.lv]}</span>}
-                  <span style={{ color: on ? "#2f8a3a" : "#7dffb0" }}>+{fmt(l.got)}</span>
-                </button>
-              );
-            })}
-          </div>
-          <div className="text-[12px]">
-            고른 땅 <b className="text-[#7dffb0]">+{fmt(got)}</b> · {short > 0 ? <b className="text-[#ff8a9a]">아직 {fmt(short)} 모자라요</b> : <b className="text-[#7dffb0]">낼 수 있어요</b>}
-          </div>
-        </>
-      )}
-      <div className="flex flex-wrap justify-center gap-1.5">
-        {lands.length > 0 && (
-          <Btn tone="gold" className="h-[38px] px-3 text-[13px] font-bold" disabled={sending || !sel.length} onClick={() => void send({ t: "loan", yes: false, sell: sel })}>
-            {short > 0 ? "고른 땅 팔고 나머지는 자동" : "고른 땅 팔고 내기"}
-          </Btn>
-        )}
-        {canLoan && (
-          <Btn tone="sky" className="h-[38px] px-3 text-[13px] font-bold" disabled={sending} onClick={() => void send({ t: "loan", yes: true, sell: sel })} title={`모자란 만큼 빌리고 ${Math.round(RULE.loanRate * 100)}% 를 월급의 절반씩 갚아요 (판마다 1번)`}>
-            {sel.length ? "고른 땅 팔고 나머지 대출" : `대출 받기 (갚을 돈 ${fmt(pr.debt)})`}
-          </Btn>
-        )}
-        <Btn className="h-[38px] px-3 text-[12px]" disabled={sending} onClick={() => void send({ t: "loan", yes: false })}>
-          {total + cash >= pr.amt ? "싼 땅부터 자동으로 팔기" : "파산하기"}
-        </Btn>
-      </div>
-    </>
   );
 }

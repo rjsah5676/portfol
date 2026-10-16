@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { CHAR, GRADE_COLOR, ITEM, power, type Loadout } from "@/lib/marble/data";
-import { MAPS, MAP_IDS, type MapId } from "@/lib/marble/maps";
+import { MAPS, MAP_IDS } from "@/lib/marble/maps";
 import type { ProfileWire, RoomWire } from "@/lib/marble/wire";
 import { marble } from "@/realtime/marble";
 import { serverNow } from "@/lib/api/socket";
@@ -18,7 +18,7 @@ import { CharHero, ItemBadge, XBtn, XChip, XGrade, XPanel } from "./ui";
  * 모두 준비되면 3초 뒤 시작 (AI 는 늘 준비).
  */
 
-export const MAP_ART: Record<MapId, { bg: string; icon: string }> = {
+export const MAP_ART: Record<string, { bg: string; icon: string }> = {
   town: { bg: "#bfe8ff", icon: "house" },
   cross: { bg: "#ffe9c4", icon: "warp" },
   orgel: { bg: "#ffe1f0", icon: "note" },
@@ -159,14 +159,14 @@ export function WaitRoom({ room, me, onLeave }: { room: RoomWire; me: string; on
       <div className="absolute top-[64px] right-[14px] flex w-[350px] flex-col gap-3">
         <XPanel title="방 설정" right={!owner && <span className="text-[11px] text-white/55">방장만 바꿀 수 있어요</span>}>
           <div className="flex flex-col gap-2.5 p-3 text-[13px]">
-            <div className="relative h-[150px] overflow-hidden rounded-xl ring-1 ring-white/15">
+            <div className={`relative overflow-hidden rounded-xl ring-1 ring-white/15 ${MAP_IDS.length > 1 ? "h-[150px]" : "h-[206px]"}`}>
               <img src={`/marble/bg/map-${room.map}.webp`} alt={`${m.name} 미리보기`} className="h-full w-full object-cover" />
               <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent px-2.5 pt-6 pb-1.5">
                 <b className="text-[14px]">{m.name}</b>
                 <p className="text-[10px] leading-[13px] text-white/80">{m.desc}</p>
               </div>
             </div>
-            <div className="grid grid-cols-3 gap-1.5">
+            {MAP_IDS.length > 1 && <div className="grid grid-cols-3 gap-1.5">
               {MAP_IDS.map((id) => (
                 <button
                   key={id}
@@ -180,7 +180,7 @@ export function WaitRoom({ room, me, onLeave }: { room: RoomWire; me: string; on
                   <span className="absolute inset-x-0 bottom-0 bg-black/60 py-[1px]">{MAPS[id].name}</span>
                 </button>
               ))}
-            </div>
+            </div>}
             <div className="flex items-center gap-1.5">
               <span className="w-[44px] text-white/70">인원</span>
               {[2, 3, 4].map((n) => (

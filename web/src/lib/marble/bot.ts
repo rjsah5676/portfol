@@ -1,483 +1,360 @@
 /*
- * DICE TOWN AI — 지금 프롬프트에 대한 행동 하나를 고름. 서버의 AI 플레이어와 밸런스 시뮬이 같이 씀.
- * 사람처럼 "다음 굴림 위험(남 땅 통행료 기대값)" 만큼 돈을 남겨 두고 사고 · 짓고 · 인수함.
+ * DICE TOWN v2 AI — 잠글 주사위 · 이동 · 스킬 · 아이템을 고름.
+ *
+ * 값 = 족보 보상(코인 어림) + 고른 이동의 값(지나며 별 · 도착 칸 · 다음 차례 별 거리).
+ * 다시 굴릴지는 잠글 조합마다 몇 번 굴려 보고(몬테카를로) 기대값이 지금보다 크면 굴림.
+ * greed: 클수록 큰 족보(야추 · 포카드)를 노림.
  */
-
+import { SKILL_TIME } from "./data";
 import {
-  startBuildable,
-  LANDMARK,
-  RULE,
-  assetsOf,
-  baseToll,
-  buyoutCost,
+  CARDS,
+  HANDS,
+  STAR_VALUE,
+  bestMove,
   canSkill,
-  groupOwned,
-  mapOf,
-  skillRange,
-  skillTargets,
-  tollOf,
-  ZONE_SUM,
+  cardBlock,
+  handOf,
+  kindAt,
+  moveSums,
+  moveValue,
+  starDist,
+  starPrice,
+  standings,
+  timeoutAction,
+  warpBest,
   type Action,
+  type CardId,
   type Game,
+  type HandId,
 } from "./engine";
-import { MAPS } from "./maps";
 
-const PROB = [0, 0, 1, 2, 3, 4, 5, 6, 5, 4, 3, 2, 1].map((x) => x / 36);
-
-/** 성격: 0 = 보통 · 값이 크면 더 과감 (AI 플레이어마다 조금씩 다르게) */
 export interface BotStyle {
   greed: number;
 }
 export const DEFAULT_STYLE: BotStyle = { greed: 0 };
 
-function next1(g: Game, s: number, fork?: number): number {
-  const m = MAPS[g.map];
-  const nx = m.tiles[s]?.next;
-  if (nx && nx.length > 1) return fork !== undefined && nx.includes(fork) ? fork : nx[0];
-  return (s + 1) % m.tiles.length;
-}
-/** steps 칸 뒤 자리 (갈림길은 fork 쪽) */
-function slotAfter(g: Game, pos: number, steps: number, fork?: number): number {
-  let s = pos;
-  for (let k = 0; k < steps; k++) s = next1(g, s, s === MAPS[g.map].junction ? fork : undefined);
-  return s;
-}
-/** 갈림길에서 고를 수 있는 쪽들 (없으면 [undefined]) */
-function forks(g: Game, pos: number, steps: number): (number | undefined)[] {
-  const m = MAPS[g.map];
-  if (m.junction === undefined) return [undefined];
-  let s = pos;
-  for (let k = 0; k < steps; k++) {
-    if (s === m.junction) return [...m.tiles[m.junction].next];
-    s = next1(g, s);
-  }
-  return [undefined];
+/** 간단한 난수 (판 rng 를 건드리지 않게 — 시드는 판 상태에서) */
+function lcg(seed: number) {
+  let s = seed >>> 0 || 1;
+  return () => {
+    s = (Math.imul(s, 1664525) + 1013904223) >>> 0;
+    return s / 4294967296;
+  };
 }
 
-/** pi 가 지금 낼 통행료 (내 깎기 포함, 어림) */
-function tollFor(g: Game, pi: number, tile: number): number {
+/** 족보 보상 어림 (코인) */
+function handValue(g: Game, pi: number, dice: readonly number[], h: HandId = handOf(dice), greed = 0): number {
   const p = g.players[pi];
-  let v = tollOf(g, tile) * (1 - p.fx.tollPay);
-  if (p.shield) v *= 1 - p.shield;
-  if (p.keep.half) v *= 0.5;
+  const t = g.turn!;
+  const m = t.dbl ? 2 : 1;
+  const d = HANDS[h];
+  let v = d.coins;
+  if (h === "pair" || h === "two") v += p.fx.comboCoin;
+  if (h === "triple" || h === "full" || h === "four" || h === "yacht") v += p.fx.bigCombo;
+  if (h === "small" || h === "large") v += p.fx.straightBonus;
+  if (d.card) v += (p.cards.length >= 3 ? 3 : 5) * d.card;
+  if (d.steal) v += d.steal * 1.4;
+  if (d.star) v += STAR_VALUE * d.star + p.fx.yachtBonus + 4 * greed;
+  if (h === "four") v += 2 * greed;
+  v *= m;
+  if (d.jump) {
+    const coins = p.coins + (d.coins + p.fx.straightBonus) * m;
+    v += coins >= starPrice(g, pi) ? STAR_VALUE + (g.frenzy ? 8 : 0) : 4;
+  }
   return v;
 }
 
-/** 다음 한 번 굴림에서 남 땅에 걸릴 기대 통행료 */
-export function danger(g: Game, pi: number, from?: number): number {
-  const p = g.players[pi];
-  const pos = from ?? p.pos;
-  let e = 0;
-  for (let s = 2; s <= 12; s++) {
-    // 갈림길이면 덜 아픈 쪽으로 감
-    const vs = forks(g, pos, s).map((f) => {
-      const tile = g.order[slotAfter(g, pos, s, f)];
-      const t = g.tiles[tile];
-      return t.owner >= 0 && t.owner !== pi ? tollFor(g, pi, tile) : 0;
-    });
-    e += PROB[s] * Math.min(...vs);
+/** 이 주사위로 멈추면 얼마나 좋은지 */
+function stopValue(g: Game, pi: number, dice: readonly number[], greed = 0): number {
+  const t = g.turn!;
+  const h = handOf(dice);
+  const hv = handValue(g, pi, dice, h, greed);
+  if (h === "large") return hv;
+  const extra = HANDS[h].coins * (t.dbl ? 2 : 1);
+  const sums = h === "small" ? [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] : moveSums(dice, t.tri ? 3 : 2);
+  let best = -1e9;
+  for (const s of sums) best = Math.max(best, moveValue(g, pi, s + t.boost, extra));
+  return hv + best;
+}
+
+/** 잠글 조합 후보 (같은 눈 묶음은 하나로) */
+function holdSets(dice: readonly number[]): number[][] {
+  const n = dice.length;
+  const seen = new Set<string>();
+  const out: number[][] = [];
+  for (let mask = 0; mask < 1 << n; mask++) {
+    if (mask === (1 << n) - 1) continue;
+    const idx: number[] = [];
+    for (let i = 0; i < n; i++) if (mask & (1 << i)) idx.push(i);
+    const key = idx
+      .map((i) => dice[i])
+      .sort()
+      .join(",");
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(idx);
   }
-  return e;
+  return out;
 }
 
-/** 가장 비싼 남 땅 통행료 (앞으로 12칸 안) */
-function maxAhead(g: Game, pi: number): number {
-  const p = g.players[pi];
-  let mx = 0;
-  for (let s = 1; s <= 12; s++)
-    for (const f of forks(g, p.pos, s)) {
-      const tile = g.order[slotAfter(g, p.pos, s, f)];
-      const t = g.tiles[tile];
-      if (t.owner >= 0 && t.owner !== pi) mx = Math.max(mx, tollFor(g, pi, tile));
+/** 잠그고 나머지 굴렸을 때 기대값 */
+function expectHold(g: Game, pi: number, dice: readonly number[], hold: number[], rollsLeft: number, rand: () => number, samples: number, greed: number): number {
+  let sum = 0;
+  const keep = new Set(hold);
+  for (let s = 0; s < samples; s++) {
+    const d = dice.map((v, i) => (keep.has(i) ? v : 1 + Math.floor(rand() * 6)));
+    let v = stopValue(g, pi, d, greed);
+    // 한 번 더 굴릴 수 있으면 "같은 눈 묶음 잠그기" 정도로 약간 더 기대
+    if (rollsLeft > 1) {
+      const h = handOf(d);
+      if (h === "none" || h === "pair" || h === "two" || h === "triple") v += 1.2;
     }
-  return mx;
-}
-
-/** 남겨 둘 돈 */
-function reserve(g: Game, pi: number, style: BotStyle): number {
-  const late = g.round / g.rounds;
-  return Math.max(150, (1.4 - style.greed * 0.3) * danger(g, pi) + (0.35 - 0.1 * style.greed) * maxAhead(g, pi) + 120 * (1 - late));
-}
-
-/** 이 자리에 서면 얼마나 좋은지 (돈 어림) */
-function landValue(g: Game, pi: number, slot: number): number {
-  const p = g.players[pi];
-  const m = mapOf(g);
-  const tile = g.order[slot];
-  const d = m.tiles[tile];
-  const t = g.tiles[tile];
-  switch (d.kind) {
-    case "city":
-    case "spot": {
-      if (t.owner >= 0 && t.owner !== pi) {
-        let v = -tollFor(g, pi, tile);
-        // 인수해서 그룹을 막거나 채울 수 있으면 조금 낫다
-        if (d.kind === "city" && t.lv < LANDMARK && d.group !== undefined && groupOwned(g, d.group) === t.owner) v += 120;
-        return v;
-      }
-      if (t.owner < 0) {
-        const can = p.cash - (d.price ?? 0) > 150;
-        let v = can ? (d.price ?? 0) * 0.7 + 40 : 5;
-        if (can && d.group !== undefined) {
-          const others = m.tiles.filter((x, i) => x.group === d.group && i !== tile);
-          const mine = others.filter((x) => g.tiles[m.tiles.indexOf(x)].owner === pi).length;
-          if (mine === others.length) v += 300;
-          else v += mine * 60;
-        }
-        return v;
-      }
-      // 내 땅
-      if (t.lv >= LANDMARK || d.kind === "spot") return 10;
-      return 60 + (d.price ?? 0) * (t.lv === 3 ? 1.2 : 0.5);
-    }
-    case "start":
-      return RULE.salary * (1 + p.fx.salary) + (startBuildable(g, pi).length ? 80 : 0);
-    case "start2":
-      return RULE.salary * RULE.start2;
-    case "bonus":
-      return RULE.bonus;
-    case "box":
-      return 40;
-    case "jail":
-      return p.fx.jailFree ? 0 : g.round / g.rounds > 0.6 ? 30 : -70;
-    case "fest":
-      return g.tiles.some((x, i) => x.owner === pi && m.tiles[i].kind === "city") ? 90 : 0;
-    case "warp":
-      return 70;
-    case "tax":
-      return -Math.max(RULE.taxMin, (assetsOf(g, pi) - p.cash) * RULE.taxRate);
-    case "rail":
-      return 60;
+    sum += v;
   }
+  return sum / samples;
 }
 
-/** steps 칸 가서 설 때 가치 (갈림길이면 좋은 쪽) — 지나가며 받는 월급도 */
-function stepsValue(g: Game, pi: number, steps: number, from?: number): number {
+function decideRoll(g: Game, pi: number, greed: number): Action {
+  const t = g.turn!;
   const p = g.players[pi];
-  const pos = from ?? p.pos;
-  let best = -Infinity;
-  for (const f of forks(g, pos, steps)) {
-    let s = pos;
-    let v = 0;
-    for (let k = 0; k < steps; k++) {
-      s = next1(g, s, s === MAPS[g.map].junction ? f : undefined);
-      const kd = MAPS[g.map].tiles[g.order[s]].kind;
-      if (k < steps - 1 && kd === "start") v += RULE.salary * (1 + p.fx.salary);
-      if (k < steps - 1 && kd === "start2") v += RULE.salary * RULE.start2;
+  const rand = lcg(g.seed ^ (g.steps * 2654435761));
+  const now = stopValue(g, pi, t.dice, greed);
+  const canRe = t.rolls > 0 || p.uses.reroll > 0;
+  if (canRe) {
+    const sets = holdSets(t.dice);
+    let bestV = -1e9;
+    let bestH: number[] = [];
+    const samples = sets.length > 20 ? 10 : 14;
+    for (const h of sets) {
+      const v = expectHold(g, pi, t.dice, h, t.rolls, rand, samples, greed);
+      if (v > bestV) [bestV, bestH] = [v, h];
     }
-    v += landValue(g, pi, s);
-    best = Math.max(best, v);
+    // 판당 횟수(시간 주사위)는 아껴 씀
+    const margin = t.rolls > 0 ? 0.8 : 4;
+    if (bestV > now + margin) return { t: "reroll", pick: bestH };
   }
-  return best;
-}
-const expectedRoll = (g: Game, pi: number) => {
-  let e = 0;
-  for (let s = 2; s <= 12; s++) e += PROB[s] * stepsValue(g, pi, s);
-  return e;
-};
-
-/* ───────────── 고르기 ───────────── */
-
-export function botAction(g: Game, style: BotStyle = DEFAULT_STYLE): Action {
-  const pr = g.prompt!;
-  const pi = pr.p;
-  const p = g.players[pi];
-  const m = mapOf(g);
-  switch (pr.k) {
-    case "turn": {
-      if (pr.warp) {
-        let best = p.pos,
-          bv = -Infinity;
-        for (let s = 0; s < m.tiles.length; s++) {
-          const kd = m.tiles[g.order[s]].kind;
-          if (kd === "warp") continue;
-          const v = landValue(g, pi, s) + (m.id !== "cross" && s <= p.pos ? RULE.salary : 0);
-          if (v > bv) {
-            bv = v;
-            best = s;
-          }
-        }
-        return { t: "warp", to: best };
-      }
-      if (pr.jail) {
-        const early = g.round / g.rounds < 0.45;
-        if (early && p.cash > 700 && danger(g, pi) < p.cash * 0.15) return { t: "pay" };
-        return { t: "roll" };
-      }
-      const sk = skillChoice(g, pi);
-      if (sk) return sk;
-      if (p.uses.pick > 0) {
-        let bn = 7,
-          bv = -Infinity;
-        for (let n = 2; n <= 12; n++) {
-          const v = stepsValue(g, pi, n);
-          if (v > bv) {
-            bv = v;
-            bn = n;
-          }
-        }
-        if (bv - expectedRoll(g, pi) > 220) return { t: "pick", n: bn };
-      }
-      return { t: "roll", power: botPower(g, pi) };
-    }
-    case "post": {
-      const cur = stepsValue(g, pi, pr.steps);
-      // 스킬 (다시 굴리기 · 깡총)
-      if (canSkill(g, pi)) {
-        if (p.skill.kind === "reroll" && cur < expectedRoll(g, pi) - 120) return { t: "skill" };
-        if (p.skill.kind === "bunny") {
-          let bn = 0,
-            bv = cur;
-          for (let n = 1; n <= 3; n++) {
-            const v = stepsValue(g, pi, pr.steps + n);
-            if (v > bv + 60) {
-              bv = v;
-              bn = n;
-            }
-          }
-          if (bn > 0) return { t: "skill", n: bn };
-        }
-      }
-      if (p.uses.adjust > 0 && stepsValue(g, pi, pr.steps + 1) > cur + 150) return { t: "adjust", d: 1 };
-      if (p.uses.reroll > 0 && cur < expectedRoll(g, pi) - 200) return { t: "reroll" };
-      return { t: "keep" };
-    }
-    case "fork": {
-      let best = pr.opts[0],
-        bv = -Infinity;
-      for (const o of pr.opts) {
-        let s = p.pos;
-        for (let k = 0; k < pr.steps; k++) s = next1(g, s, s === m.junction ? o : undefined);
-        // 서는 칸 + 그 루프의 내 땅 수(길게 보면 내 땅이 많은 루프가 덜 위험)
-        const loop = m.tiles.map((_, i) => i).filter((i) => (o === 1 ? i < 16 && i > 0 : i >= 16));
-        const foeTolls = loop.reduce((a, i) => a + (g.tiles[i].owner >= 0 && g.tiles[i].owner !== pi ? tollFor(g, pi, i) : 0), 0);
-        const v = landValue(g, pi, s) - foeTolls * 0.05;
-        if (v > bv) {
-          bv = v;
-          best = o;
-        }
-      }
-      return { t: "fork", to: best };
-    }
-    case "rail": {
-      // 다음 굴림의 기대값이 가장 좋은 역 (남는 것도 후보)
-      const nextValue = (from: number) => {
-        let v = 0;
-        for (let n = 2; n <= 12; n++) v += stepsValue(g, pi, n, from) * SUM_P[n];
-        return v;
-      };
-      let best = -1,
-        bv = nextValue(p.pos) + 15;
-      for (const o of pr.opts) {
-        const v = nextValue(o);
-        if (v > bv) {
-          bv = v;
-          best = o;
-        }
-      }
-      return { t: "rail", to: best };
-    }
-    case "buy": {
-      const d = m.tiles[pr.tile];
-      const res = reserve(g, pi, style);
-      let completes = false;
-      if (d.group !== undefined) {
-        const others = m.tiles.filter((x, i) => x.group === d.group && i !== pr.tile);
-        completes = others.every((x) => g.tiles[m.tiles.indexOf(x)].owner === pi);
-      }
-      // 앞에서부터 차례로 (땅 → 오두막 → 하우스 → 타워) 여유가 되는 데까지
-      for (let n = pr.items.length; n > 0; n--) {
-        const c = pr.costs.slice(0, n).reduce((a, b) => a + b, 0);
-        const top = pr.items[n - 1];
-        const keep = top === LANDMARK ? res * 0.6 : completes ? res * 0.5 : top <= 0 ? res * 0.6 : res;
-        if (p.cash - c >= keep) return { t: "buy", lv: top, pick: pr.items.slice(0, n) };
-      }
-      return { t: "buy", lv: -1 };
-    }
-    case "acq": {
-      const d = m.tiles[pr.tile];
-      const t = g.tiles[pr.tile];
-      const res = reserve(g, pi, style);
-      if (p.cash - pr.cost < res * 0.8) return { t: "acq", yes: false };
-      let worth = baseToll(d.price ?? 0, t.lv) * 1.5;
-      if (d.group !== undefined) {
-        const go = groupOwned(g, d.group);
-        if (go >= 0 && go !== pi) worth += 400; // 남의 독점 깨기
-        const others = m.tiles.filter((x, i) => x.group === d.group && i !== pr.tile);
-        if (others.every((x) => g.tiles[m.tiles.indexOf(x)].owner === pi)) worth += 800; // 내 독점
-      }
-      return { t: "acq", yes: worth + 100 * style.greed >= pr.cost * 0.6 };
-    }
-    case "fest": {
-      let best = pr.tiles[0],
-        bv = -1;
-      for (const t of pr.tiles) {
-        const v = tollOf(g, t);
-        if (v > bv) {
-          bv = v;
-          best = t;
-        }
-      }
-      return { t: "fest", tile: best };
-    }
-    case "loan":
-      // 파산보다는 빚: 땅 다 팔아도 못 내거나, 팔면 땅을 절반 넘게 잃을 때
-      return { t: "loan", yes: pr.sell + p.cash < pr.amt || pr.need > pr.sell * 0.35 };
-    case "start": {
-      // 출발 포털: 통행료가 가장 크게 오를 땅 (돈 여유 있을 때만)
-      if (p.cash < reserve(g, pi, style) * 0.8) return { t: "start", tile: -1 };
-      let best = -1,
-        bv = -1;
-      for (const t of pr.tiles) {
-        const v = (m.tiles[t].price ?? 0) * (g.tiles[t].lv === 3 ? 1.5 : 1) + tollOf(g, t);
-        if (v > bv) {
-          bv = v;
-          best = t;
-        }
-      }
-      return { t: "start", tile: best };
+  const b = bestMove(g, pi);
+  // 미끄럼: ±1 이 더 좋으면
+  if (p.uses.slide > 0 && b.n === undefined && handOf(t.dice) !== "large") {
+    const extra = HANDS[handOf(t.dice)].coins;
+    const base = moveValue(g, pi, b.steps, extra);
+    for (const d of [1, -1]) {
+      if (b.steps + d < 1) continue;
+      if (moveValue(g, pi, b.steps + d, extra) > base + 6) return { t: "move", pick: b.pick, d };
     }
   }
+  return b.n !== undefined ? { t: "move", n: b.n } : { t: "move", pick: b.pick };
 }
 
-/** 힘 조절: 약 · 중 · 강 구간 중 평균 값이 가장 좋은 쪽 가운데로 */
-const SUM_P = [0, 0, 1, 2, 3, 4, 5, 6, 5, 4, 3, 2, 1].map((x) => x / 36);
-function botPower(g: Game, pi: number): number {
-  let best = 0.5,
-    bv = -Infinity;
-  for (const [pw, zone] of [
-    [1 / 6, "low"],
-    [0.5, "mid"],
-    [5 / 6, "high"],
-  ] as const) {
-    const [lo, hi] = ZONE_SUM[zone];
-    let v = 0,
-      w = 0;
-    for (let n = lo; n <= hi; n++) {
-      v += stepsValue(g, pi, n) * SUM_P[n];
-      w += SUM_P[n];
-    }
-    if (v / w > bv) {
-      bv = v / w;
-      best = pw;
-    }
-  }
+/** 주사위를 바꾸는 스킬 · 카드: 바꾼 뒤 멈춤 값이 가장 큰 것 */
+function bestDieEdit(g: Game, pi: number, edits: { i: number; v: number }[][], greed: number): { k: number; v: number } {
+  const t = g.turn!;
+  let best = { k: -1, v: stopValue(g, pi, t.dice, greed) };
+  edits.forEach((e, k) => {
+    const d = [...t.dice];
+    for (const { i, v } of e) d[i] = v;
+    const v = stopValue(g, pi, d, greed);
+    if (v > best.v) best = { k, v };
+  });
   return best;
 }
 
-/** 굴리기 전 스킬: 쓸 만하면 행동, 아니면 null */
-function skillChoice(g: Game, pi: number): Action | null {
+function trySkill(g: Game, pi: number, greed: number): Action | null {
   if (!canSkill(g, pi)) return null;
   const p = g.players[pi];
-  const m = mapOf(g);
-  const k = p.skill.kind;
-  const targets = skillTargets(g, pi);
-  switch (k) {
-    case "boost":
-    case "fireworks": {
-      let best = -1,
-        bv = 0;
-      for (const t of targets) {
-        if (g.tiles[t].boostLeft > 0) continue;
-        const grp = m.tiles[t].group;
-        let v = targets.filter((x) => m.tiles[x].group === grp).reduce((a, x) => a + tollOf(g, x), 0);
-        if (k === "fireworks") v *= 1.4;
-        if (v > bv) {
-          bv = v;
-          best = t;
-        }
-      }
-      return best >= 0 && bv >= 140 ? { t: "skill", target: best } : null;
-    }
+  const t = g.turn!;
+  const pr = g.prompt!;
+  const { kind, mag } = p.skill;
+  const st = standings(g);
+  const leader = st.find((q) => q !== pi) ?? (pi === 0 ? 1 : 0);
+  const dicePhase = pr.k === "dice";
+  // 굴린 뒤에 쓰는 게 나은 것들은 굴린 뒤에
+  switch (kind) {
+    case "seal":
+      return { t: "skill", target: leader };
+    case "sleep":
+      return { t: "skill" };
+    case "circus":
+      return g.players.some((q, i) => i !== pi && q.coins > 0) ? { t: "skill" } : null;
     case "shield":
-    case "hop":
-      return danger(g, pi) > 110 || maxAhead(g, pi) > 500 ? { t: "skill" } : null;
-    case "sale": {
-      // 앞에 인수할 만한 남 땅이 있으면
-      const has = g.tiles.some((t, i) => t.owner >= 0 && t.owner !== pi && m.tiles[i].kind === "city" && t.lv < LANDMARK && t.lv >= 1);
-      return has && p.cash > 500 ? { t: "skill" } : null;
-    }
-    case "pull": {
-      let best: Action | null = null,
-        bv = 120;
-      for (const f of targets) {
-        const fp = g.players[f];
-        for (let n = 1; n <= skillRange(g, pi)![1]; n++) {
-          const tile = g.order[slotAfter(g, fp.pos, n)];
-          const t = g.tiles[tile];
-          const v = t.owner === pi ? tollOf(g, tile) * (p.fx.pullPay || 1) : 0;
-          if (v > bv) {
-            bv = v;
-            best = { t: "skill", target: f, n };
-          }
-        }
-      }
-      return best;
-    }
-    case "dash":
-    case "pick": {
-      const r = skillRange(g, pi)!;
-      let bn = r[0],
-        bv = -Infinity;
-      for (let n = r[0]; n <= r[1]; n++) {
-        const v = stepsValue(g, pi, n);
-        if (v > bv) {
-          bv = v;
-          bn = n;
-        }
-      }
-      return bv - expectedRoll(g, pi) > 150 ? { t: "skill", n: bn } : null;
-    }
-    case "freeze":
-      return targets.length ? { t: "skill", target: targets.sort((a, b) => assetsOf(g, b) - assetsOf(g, a))[0] } : null;
-    case "concert": {
-      const sum = targets.length ? targets.reduce((a, f) => a + g.players[f].cash, 0) : g.players.filter((_, i) => i !== pi && g.players[i].alive).reduce((a, x) => a + x.cash, 0);
-      return sum * p.skill.mag > 60 ? { t: "skill" } : null;
-    }
-    case "debug": {
-      let best = -1,
-        bv = 0;
-      for (const t of targets) {
-        const v = tollOf(g, t);
-        if (v > bv) {
-          bv = v;
-          best = t;
-        }
-      }
-      return best >= 0 && bv > 150 ? { t: "skill", target: best } : null;
-    }
-    case "fate": {
-      let bn = 1,
-        bv = -Infinity;
-      for (let n = 1; n <= 6; n++) {
-        const v = stepsValue(g, pi, n * 2);
-        if (v > bv) {
-          bv = v;
-          bn = n;
-        }
-      }
-      // 더블이라 한 번 더 — 그만큼 덤
-      return bv + 120 - expectedRoll(g, pi) > 120 && p.doubles < 2 ? { t: "skill", n: bn } : null;
-    }
-    case "buyout": {
-      let best = -1,
-        bv = 0;
-      for (const t of targets) {
-        const cost = buyoutCost(g, pi, t);
-        if (p.cash - cost < 300) continue;
-        const grp = m.tiles[t].group;
-        const rest = m.tiles.every((d, i) => i === t || d.kind !== "city" || d.group !== grp || g.tiles[i].owner === pi);
-        const v = tollOf(g, t) * 2 + (rest ? 600 : 0) - cost * 0.3;
-        if (v > bv) {
-          bv = v;
-          best = t;
-        }
-      }
-      return best >= 0 && bv > 200 ? { t: "skill", target: best } : null;
-    }
+      return p.shield === 0 ? { t: "skill" } : null;
     case "encore":
       return { t: "skill" };
+    case "pull": {
+      // 상대를 빨강 · 함정에 세우거나 별에서 멀어지게
+      let best: { q: number; n: number; v: number } | null = null;
+      for (const q of g.players.keys()) {
+        if (q === pi) continue;
+        for (let n = -mag; n <= mag; n++) {
+          if (!n) continue;
+          const pos = (g.players[q].pos + n + 32) % 32;
+          const k = kindAt(g, pos);
+          let v = k === "red" ? 4 : k === "trap" ? 5 : 0;
+          if (g.traps[pos] >= 0 && g.traps[pos] !== q) v += 5;
+          const before = starDist(g, g.players[q].pos);
+          const after = starDist(g, pos);
+          if (before <= 12 && after > 12) v += 6;
+          v += q === leader ? 1 : 0;
+          if (!best || v > best.v) best = { q, n, v };
+        }
+      }
+      return best && best.v >= 4 ? { t: "skill", target: best.q, n: best.n } : null;
+    }
     default:
-      return null;
+      break;
   }
+  if (!dicePhase) return null;
+  const now = stopValue(g, pi, t.dice, greed);
+  switch (kind) {
+    case "reroll":
+      return t.rolls === 0 && handOf(t.dice) !== "yacht" ? { t: "skill" } : null;
+    case "double": {
+      const h = handOf(t.dice);
+      return HAND_ORDER_VAL[h] >= 3 && t.rolls === 0 ? { t: "skill" } : null;
+    }
+    case "tri": {
+      // 3개 합이 더 좋으면
+      const h = handOf(t.dice);
+      if (h === "large" || h === "small") return null;
+      let v3 = -1e9;
+      for (const s of moveSums(t.dice, 3)) v3 = Math.max(v3, moveValue(g, pi, s + t.boost, HANDS[h].coins));
+      return v3 + handValue(g, pi, t.dice, h, greed) > now + 5 && t.rolls === 0 ? { t: "skill" } : null;
+    }
+    case "bunny":
+    case "hop":
+      return t.rolls === 0 ? { t: "skill" } : null;
+    case "vip": {
+      const d = starDist(g, p.pos);
+      return t.rolls === 0 && d <= 15 && p.coins + 6 >= starPrice(g, pi) - mag ? { t: "skill" } : null;
+    }
+    case "six":
+    case "nudge":
+    case "magic":
+    case "copy": {
+      const edits: { i: number; v: number }[][] = [];
+      const n = t.dice.length;
+      if (kind === "six") for (let i = 0; i < n; i++) edits.push([{ i, v: 6 }]);
+      if (kind === "nudge")
+        for (let i = 0; i < n; i++)
+          for (let d = -mag; d <= mag; d++) {
+            const v = t.dice[i] + d;
+            if (d && v >= 1 && v <= 6) edits.push([{ i, v }]);
+          }
+      if (kind === "magic")
+        for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) for (let a = 1; a <= 6; a++) for (let b = 1; b <= 6; b++) edits.push([{ i, v: a }, { i: j, v: b }]);
+      if (kind === "copy")
+        for (let s = 0; s < n; s++) {
+          const others = [...Array(n).keys()].filter((i) => i !== s && t.dice[i] !== t.dice[s]);
+          for (let a = 0; a < others.length; a++)
+            for (let b = a + 1; b < others.length; b++)
+              edits.push([
+                { i: others[a], v: t.dice[s] },
+                { i: others[b], v: t.dice[s] },
+              ]);
+        }
+      const best = bestDieEdit(g, pi, edits, greed);
+      // 다시 굴리기가 남았으면 크게 좋아질 때만
+      const need = t.rolls > 0 ? 10 : 3;
+      if (best.k < 0 || best.v < now + need) return null;
+      const e = edits[best.k];
+      if (kind === "six") return { t: "skill", die: e[0].i };
+      if (kind === "nudge") return { t: "skill", die: e[0].i, n: e[0].v - t.dice[e[0].i] };
+      if (kind === "magic") return { t: "skill", pick: [e[0].i, e[1].i], vals: [e[0].v, e[1].v] };
+      const src = t.dice.findIndex((v, i) => v === e[0].v && !e.some((x) => x.i === i));
+      return { t: "skill", die: src, pick: e.map((x) => x.i) };
+    }
+  }
+  void SKILL_TIME;
+  return null;
+}
+const HAND_ORDER_VAL: Record<HandId, number> = { none: 0, pair: 1, two: 2, triple: 3, small: 3, full: 4, large: 5, four: 6, yacht: 8 };
+
+function tryCard(g: Game, pi: number, greed: number): Action | null {
+  const p = g.players[pi];
+  const t = g.turn!;
+  const pr = g.prompt!;
+  const st = standings(g);
+  const leader = st.find((q) => q !== pi) ?? (pi === 0 ? 1 : 0);
+  const ok = (id: CardId) => p.cards.includes(id) && !cardBlock(g, pi, id);
+  if (pr.k === "turn") {
+    if (ok("thief")) {
+      const q = [...g.players.keys()].filter((i) => i !== pi).sort((a, b) => g.players[b].coins - g.players[a].coins)[0];
+      if (g.players[q].coins >= 3) return { t: "card", id: "thief", target: q };
+    }
+    if (ok("starmove")) {
+      const d = starDist(g, p.pos);
+      if (d > 12) {
+        const to = g.stars.filter((s) => s !== g.star).sort((a, b) => Math.abs(starDistTo(g, p.pos, a) - 7) - Math.abs(starDistTo(g, p.pos, b) - 7))[0];
+        if (starDistTo(g, p.pos, to) <= 12 && p.coins + 4 >= starPrice(g, pi)) return { t: "card", id: "starmove", tile: to };
+      }
+    }
+    if (ok("swap")) {
+      const myD = starDist(g, p.pos);
+      const q = [...g.players.keys()].filter((i) => i !== pi).sort((a, b) => starDist(g, g.players[a].pos) - starDist(g, g.players[b].pos))[0];
+      const qd = starDist(g, g.players[q].pos);
+      if (myD > 12 && qd >= 2 && qd <= 9 && p.coins + 4 >= starPrice(g, pi)) return { t: "card", id: "swap", target: q };
+    }
+    if (ok("trap") && kindAt(g, p.pos) !== "red") return { t: "card", id: "trap" };
+    void leader;
+    return null;
+  }
+  // 굴린 뒤
+  if (ok("gold")) {
+    const edits: { i: number; v: number }[][] = [];
+    for (let i = 0; i < t.dice.length; i++) for (let v = 1; v <= 6; v++) if (v !== t.dice[i]) edits.push([{ i, v }]);
+    const now = stopValue(g, pi, t.dice, greed);
+    const best = bestDieEdit(g, pi, edits, greed);
+    const need = t.rolls > 0 ? 12 : 5;
+    if (best.k >= 0 && best.v >= now + need) return { t: "card", id: "gold", die: edits[best.k][0].i, n: edits[best.k][0].v };
+  }
+  if (ok("boost") && t.rolls === 0 && handOf(t.dice) !== "large") {
+    const b = bestMove(g, pi);
+    const extra = HANDS[handOf(t.dice)].coins;
+    if (moveValue(g, pi, b.steps + 3, extra) > b.v + 6) return { t: "card", id: "boost" };
+  }
+  if (ok("reroll") && t.rolls === 0 && p.uses.reroll === 0) {
+    const h = handOf(t.dice);
+    if (h === "none" || h === "pair" || h === "two") return { t: "card", id: "reroll" };
+  }
+  return null;
+}
+const starDistTo = (g: Game, from: number, to: number) => (to - from + 32) % 32;
+
+/** 황금 주사위 (장착) */
+function tryGear(g: Game, pi: number, greed: number): Action | null {
+  const p = g.players[pi];
+  const t = g.turn!;
+  if (p.uses.gold <= 0) return null;
+  const edits: { i: number; v: number }[][] = [];
+  for (let i = 0; i < t.dice.length; i++) for (let v = 1; v <= 6; v++) if (v !== t.dice[i]) edits.push([{ i, v }]);
+  const now = stopValue(g, pi, t.dice, greed);
+  const best = bestDieEdit(g, pi, edits, greed);
+  const need = t.rolls > 0 ? 14 : 7;
+  if (best.k >= 0 && best.v >= now + need) return { t: "gear", die: edits[best.k][0].i, n: edits[best.k][0].v };
+  return null;
+}
+
+export function botAction(g: Game, style: BotStyle = DEFAULT_STYLE): Action {
+  const pr = g.prompt;
+  if (!pr) throw new Error("no prompt");
+  const pi = pr.p;
+  const greed = Math.max(-0.5, Math.min(1, style.greed));
+  try {
+    switch (pr.k) {
+      case "turn":
+        return trySkill(g, pi, greed) ?? tryCard(g, pi, greed) ?? { t: "roll", power: 0.5 };
+      case "dice":
+        return trySkill(g, pi, greed) ?? tryCard(g, pi, greed) ?? tryGear(g, pi, greed) ?? decideRoll(g, pi, greed);
+      case "foe":
+        return { t: "target", target: [...pr.opts].sort((a, b) => g.players[b].stars - g.players[a].stars || g.players[b].coins - g.players[a].coins)[0] };
+      case "warp":
+        return { t: "warp", tile: warpBest(g, pi) };
+      case "more":
+        return timeoutAction(g);
+    }
+  } catch {
+    return timeoutAction(g);
+  }
+  void CARDS;
+  return timeoutAction(g);
 }

@@ -2,19 +2,18 @@
 
 import type { CSSProperties, ReactNode } from "react";
 import { CHAR } from "@/lib/marble/data";
-import { LANDMARK, RULE, builtOf, tollMult, tollOf, type Game } from "@/lib/marble/engine";
+import { RULE } from "@/lib/marble/engine";
 import { MAPS, type MapDef, type TileDef } from "@/lib/marble/maps";
 import type { GameWire } from "@/lib/marble/wire";
 import { PCOLOR } from "./pixel";
 import Token, { type TokenAnim } from "./Token";
 
 /*
- * 2.5D 보드 (모두의마블식) — 9×9 둘레 32칸을 정사각 판(S×S)에 깔고, CSS 3D 로 45° 돌려 눕힘(마름모 · 출발이 맨 아래 꼭짓점).
- *  - 판 위(눕는 것): 칸 바닥색 · 동네 띠 · 산 땅은 플레이어 색으로 꽉 · 특수칸 그림 · 가운데 맵 그림
- *  - 판 밖(서는 것, 화면 기준 똑바로): 건물(칸 뒤쪽) · 말(칸 가운데) · 이름판(칸 앞쪽, 맨 위 층 — 무엇에도 안 가림)
+ * 2.5D 보드 — 9×9 둘레 32칸을 정사각 판(S×S)에 깔고, CSS 3D 로 45° 돌려 눕힘(마름모 · 출발이 맨 아래 꼭짓점).
+ *  - 판 위(눕는 것): 칸 바닥 (종류별 색 · 큰 그림 · 값) · 가운데 맵 그림
+ *  - 판 밖(서는 것, 화면 기준 똑바로): 별 · 함정 · 말
  *  - proj() 가 CSS 변환과 같은 계산이라 서는 것들이 정확히 그 칸 위에 섬
  *  - 말(캐릭터)만 도트. 네 귀퉁이는 비워서 플레이어 카드 자리.
- * 칸 좌표 = 맵 격자 (x, y). orgel 은 자리마다 지금 놓인 칸(game.order)을 그림.
  */
 
 /** 판 한 변 · 모서리 칸 · 변 칸 */
@@ -85,40 +84,25 @@ export function dark(hex: string, k: number) {
   return `rgb(${Math.round(r * k)},${Math.round(g * k)},${Math.round(b * k)})`;
 }
 
-type GlyphName = "flag" | "coin" | "gift" | "wrench" | "note" | "portal" | "bag" | "train" | "star" | "hut" | "house" | "tower" | "crown" | "fire";
+export type GlyphName = "flag" | "coin" | "minus" | "gift" | "wrench" | "note" | "portal" | "bag" | "star" | "crown" | "fire" | "vs" | "trap" | "ask" | "lock" | "dice" | "boot" | "shield";
 
-/** 특수칸: 바탕색 · 그림 */
-const KIND: Record<string, { fill: string; ink: string; glyph: GlyphName }> = {
-  start: { fill: "#ffcf3f", ink: "#5a3a00", glyph: "flag" },
-  start2: { fill: "#ffe680", ink: "#5a3a00", glyph: "coin" },
-  box: { fill: "#ff8fbf", ink: "#fff", glyph: "gift" },
-  jail: { fill: "#8d9bb3", ink: "#fff", glyph: "wrench" },
-  fest: { fill: "#b07bff", ink: "#fff", glyph: "note" },
-  warp: { fill: "#6f7bff", ink: "#fff", glyph: "portal" },
-  tax: { fill: "#d9a35e", ink: "#fff", glyph: "bag" },
-  bonus: { fill: "#ffd23a", ink: "#5a3a00", glyph: "coin" },
-  rail: { fill: "#47b6ff", ink: "#fff", glyph: "train" },
+/** 칸 종류: 바탕색 · 그림 · 짧은 이름 */
+export const KIND: Record<TileDef["kind"], { fill: string; ink: string; glyph: GlyphName; label: string; desc: string }> = {
+  start: { fill: "#ffcf3f", ink: "#5a3a00", glyph: "flag", label: "출발", desc: `지나가면 코인 +${RULE.start}` },
+  blue: { fill: "#4b8dff", ink: "#fff", glyph: "coin", label: "코인", desc: `서면 코인 +${RULE.blue}` },
+  red: { fill: "#ff5a6e", ink: "#fff", glyph: "minus", label: "손해", desc: `서면 코인 −${RULE.red} (잭팟에 쌓여요)` },
+  item: { fill: "#ff8fd0", ink: "#fff", glyph: "gift", label: "아이템", desc: `아이템 1장 (최대 ${RULE.maxCards}장 · 꽉 차면 코인 +${RULE.fullHandCoins})` },
+  vs: { fill: "#ff9a3d", ink: "#fff", glyph: "vs", label: "VS", desc: `상대 하나를 골라 주사위 두 개 대결 — 이기면 ${RULE.vsStake}코인 뺏기` },
+  star: { fill: "#ffd23a", ink: "#5a3a00", glyph: "star", label: "별 자리", desc: `별이 뜨는 자리 — 별이 있으면 지나가기만 해도 ${RULE.starPrice}코인에 사요 (없으면 +${RULE.starEmpty})` },
+  trap: { fill: "#8d9bb3", ink: "#fff", glyph: "trap", label: "함정", desc: "서면 다음 차례 다시 굴리기 0번" },
+  warp: { fill: "#6f7bff", ink: "#fff", glyph: "portal", label: "워프", desc: "서면 원하는 칸으로 순간이동 (별 칸 빼고)" },
+  fest: { fill: "#b07bff", ink: "#fff", glyph: "note", label: "축제", desc: `주사위 하나 굴려 그 눈 × ${RULE.festPer}코인` },
+  jackpot: { fill: "#ffb21e", ink: "#5a3a00", glyph: "bag", label: "잭팟", desc: "빨강 칸 · 세금으로 쌓인 코인을 몽땅!" },
+  event: { fill: "#2fc7a6", ink: "#fff", glyph: "ask", label: "소식", desc: "마을 소식 카드 한 장 (좋을 수도, 나쁠 수도)" },
 };
 
-/** 맵마다 판 바탕 · 옆면 */
-const PLATE: Record<string, { top: string; side: string }> = {
-  town: { top: "#f6e3b4", side: "#a86f3a" },
-  cross: { top: "#f3d6a6", side: "#9a5d2e" },
-  orgel: { top: "#f8d9e8", side: "#a8577f" },
-};
-
-/** 칸 안쪽 건물 자리 (판 px) */
-const BLD_ZONE = 30;
-/** 건물이 서는 곳: 칸 가운데에서 판 안쪽으로 (칸 깊이/2 − 건물 자리/2) */
-const bldAt = (gx: number, gy: number) => {
-  const d = C / 2 - BLD_ZONE / 2 - 3;
-  const cx = axis(gx);
-  const cy = axis(gy);
-  if (gy >= 8) return { x: cx, y: cy - d };
-  if (gy <= 0) return { x: cx, y: cy + d };
-  if (gx <= 0) return { x: cx + d, y: cy };
-  return { x: cx - d, y: cy };
-};
+/** 판 바탕 · 옆면 */
+const PLATE = { top: "#f6e3b4", side: "#a86f3a" };
 
 /** 이동 경로: 지나갈 칸 (자리 번호) · 지금 어디까지 왔는지 · 도착 칸 숫자 */
 export interface Trail {
@@ -127,11 +111,10 @@ export interface Trail {
   /** 지금까지 밟은 칸 수 (0 = 아직 출발 전) */
   at: number;
   color: string;
-  /** 도착 칸 위에 크게 띄울 숫자 (굴린 눈) */
+  /** 도착 칸 위에 크게 띄울 숫자 */
   n: number;
-  dbl?: boolean;
-  /** 마지막 몇 칸은 폴짝 · 묵직한 주사위로 더 간 칸 */
-  plus?: number;
+  /** 미리 보기 (아직 안 감 — 흐리게, 숫자만) */
+  preview?: boolean;
 }
 
 export interface TokenView {
@@ -144,126 +127,116 @@ export interface TokenView {
   dim?: boolean;
   /** 머리 위 말풍선 (남의 차례: 뭘 하는 중인지) */
   say?: string;
-  /** 자장가에 걸려 자는 중 · 물방울 방패 */
+  /** 다음 차례 다시 굴리기 0번 · 방패 */
   sleep?: boolean;
   shield?: boolean;
 }
 
-const fmtToll = (v: number) => (v >= 10000 ? `${Math.round(v / 1000)}k` : v >= 1000 ? `${(v / 1000).toFixed(1)}k` : String(v));
 const INK = "#262b52";
 
 export default function Board({
   g,
   tokens,
+  star,
   pick,
   onPick,
   onInfo,
   flash,
   trail,
   reach,
+  onReach,
+  frenzy,
 }: {
   g: GameWire;
   tokens: TokenView[];
+  /** 별이 서 있는 자리 (−1 = 안 보임, 이사 중) */
+  star: number;
   pick?: number[] | null;
-  onPick?(tile: number): void;
+  onPick?(slot: number): void;
   /** 칸을 누르면 (고르기 중이 아닐 때) 칸 정보 */
-  onInfo?(tile: number): void;
+  onInfo?(slot: number): void;
   flash?: Record<number, string>;
   trail?: Trail | null;
-  /** 굴리기 전: 갈 수 있는 칸 (자리 → 몇 칸) */
-  reach?: Record<number, number> | null;
+  /** 이동 고르기: 갈 수 있는 칸 (자리 → 칸 수 · 고른 것) */
+  reach?: Record<number, { n: number; on: boolean }> | null;
+  onReach?(slot: number): void;
+  frenzy?: boolean;
 }) {
   const m = MAPS[g.map];
-  const gg = g as unknown as Game;
-  const plate = PLATE[m.id] ?? PLATE.town;
   const planeBox: CSSProperties = { left: CX - S / 2, top: CY - S / 2, width: S, height: S, transformOrigin: "50% 50%" };
   const FR = 16;
   const frameBox: CSSProperties = { left: CX - S / 2 - FR, top: CY - S / 2 - FR, width: S + 2 * FR, height: S + 2 * FR, transformOrigin: "50% 50%" };
   return (
     <div className="mbx absolute inset-0 isolate">
       {/* 판 옆면(두께) · 흰 테두리 — 칸 바깥으로 FR 만큼 큰 판을 같은 변환으로 */}
-      <div className="pointer-events-none absolute rounded-[34px]" style={{ ...frameBox, transform: `translateY(22px) ${PLANE_TF}`, background: `linear-gradient(135deg, ${plate.side}, ${dark(plate.side, 0.7)})`, boxShadow: "0 0 70px 14px rgba(10,8,30,0.55)" }} />
-      <div className="pointer-events-none absolute rounded-[34px]" style={{ ...frameBox, transform: `translateY(11px) ${PLANE_TF}`, background: dark(plate.side, 0.85) }} />
-      <div className="pointer-events-none absolute rounded-[34px]" style={{ ...frameBox, transform: PLANE_TF, background: "linear-gradient(135deg, #ffffff, #e8ecf6)", boxShadow: "inset 0 0 0 3px rgba(255,255,255,0.9), inset 0 -4px 10px rgba(38,43,82,0.15)" }} />
+      <div className="pointer-events-none absolute rounded-[34px]" style={{ ...frameBox, transform: `translateY(22px) ${PLANE_TF}`, background: `linear-gradient(135deg, ${PLATE.side}, ${dark(PLATE.side, 0.7)})`, boxShadow: "0 0 70px 14px rgba(10,8,30,0.55)" }} />
+      <div className="pointer-events-none absolute rounded-[34px]" style={{ ...frameBox, transform: `translateY(11px) ${PLANE_TF}`, background: dark(PLATE.side, 0.85) }} />
+      <div className="pointer-events-none absolute rounded-[34px]" style={{ ...frameBox, transform: PLANE_TF, background: frenzy ? "linear-gradient(135deg, #ffe08a, #ff9a3d)" : "linear-gradient(135deg, #ffffff, #e8ecf6)", boxShadow: "inset 0 0 0 3px rgba(255,255,255,0.9), inset 0 -4px 10px rgba(38,43,82,0.15)" }} />
       {/* 판 윗면 */}
-      <div className="absolute rounded-[26px]" style={{ ...planeBox, transform: PLANE_TF, background: `linear-gradient(135deg, ${mix(plate.top, 0.4)}, ${plate.top})`, boxShadow: "inset 0 0 0 4px rgba(255,255,255,0.6)" }}>
+      <div className="absolute rounded-[26px]" style={{ ...planeBox, transform: PLANE_TF, background: `linear-gradient(135deg, ${mix(PLATE.top, 0.4)}, ${PLATE.top})`, boxShadow: "inset 0 0 0 4px rgba(255,255,255,0.6)" }}>
         <Center m={m} />
-        {m.tiles.map((sd, slot) => {
-          const tile = g.order[slot];
-          const d = m.tiles[tile];
-          const t = g.tiles[tile];
-          const r = rectOf(sd.x, sd.y);
-          const can = !!pick?.includes(tile);
+        {m.tiles.map((d, slot) => {
+          const r = rectOf(d.x, d.y);
+          const can = !!pick?.includes(slot);
           const here = tokens.filter((tk) => tk.slot === slot && !tk.dim).map((tk) => tk.pi);
+          const rc = reach?.[slot];
           return (
             <button
               key={slot}
               type="button"
               aria-label={d.name}
-              onClick={() => (can ? onPick?.(tile) : onInfo?.(tile))}
+              onClick={() => (can ? onPick?.(slot) : rc && onReach ? onReach(slot) : onInfo?.(slot))}
               className="absolute cursor-pointer p-[3px]"
               style={{ left: r.x, top: r.y, width: r.w, height: r.h }}
             >
-              <TileFace m={m} d={d} owner={t.owner} sx={sd.x} sy={sd.y} toll={t.owner >= 0 ? tollOf(gg, tile) : 0} mult={t.owner >= 0 ? tollMult(gg, tile) : 1} fest={t.owner >= 0 && g.players[t.owner]?.fest === tile} boost={t.boostLeft > 0 ? t.boostLeft : 0} pot={d.kind === "bonus" ? RULE.bonus + (g.pot ?? 0) : 0} tw={r.w - 6} th={r.h - 6} />
+              <TileFace d={d} sx={d.x} sy={d.y} star={slot === star} pot={d.kind === "jackpot" ? g.pot : 0} frenzy={!!frenzy} />
               {here.length > 0 && <span className="pointer-events-none absolute inset-[2px] rounded-[10px]" style={{ boxShadow: `inset 0 0 0 4px ${PCOLOR[here[0]]}, 0 0 16px 3px ${PCOLOR[here[0]]}` }} />}
               {can && <span className="mbx-pick pointer-events-none absolute inset-[2px] rounded-[10px]" />}
               {/* 고르는 중: 못 고르는 칸은 어둡게 (고를 칸이 확 보이게) */}
               {pick && pick.length > 0 && !can && <span className="pointer-events-none absolute inset-[2px] rounded-[10px] bg-[rgba(20,16,50,0.5)]" />}
-              {reach?.[slot] !== undefined && <ReachChip n={reach[slot]} sx={sd.x} sy={sd.y} />}
-              {flash?.[tile] && <span className="pointer-events-none absolute inset-[3px] rounded-[9px]" style={{ boxShadow: `inset 0 0 0 5px ${flash[tile]}`, background: "rgba(255,255,255,0.4)" }} />}
-              {trail && trail.slots.includes(slot) && <TrailChip k={trail.slots.indexOf(slot)} trail={trail} sx={sd.x} sy={sd.y} />}
+              {rc && <ReachChip n={rc.n} on={rc.on} sx={d.x} sy={d.y} />}
+              {flash?.[slot] && <span className="pointer-events-none absolute inset-[3px] rounded-[9px]" style={{ boxShadow: `inset 0 0 0 5px ${flash[slot]}`, background: "rgba(255,255,255,0.4)" }} />}
+              {trail && trail.slots.includes(slot) && <TrailChip k={trail.slots.indexOf(slot)} trail={trail} sx={d.x} sy={d.y} />}
             </button>
           );
         })}
       </div>
 
-      {/* 서는 것들: 건물(칸 뒤쪽) */}
-      {m.tiles.map((sd, slot) => {
-        const tile = g.order[slot];
-        const d = m.tiles[tile];
-        const t = g.tiles[tile];
-        if (t.owner < 0 || (d.kind !== "city" && d.kind !== "spot")) return null;
-        const b = bldAt(sd.x, sd.y);
-        const lv = Math.min(t.lv, LANDMARK);
-        const color = PCOLOR[t.owner];
-        if (lv <= 0 || d.kind === "spot") {
-          // 땅만 산 칸: 주인 깃발 하나 꽂아 둠
-          const q = proj(b.x, b.y);
-          return (
-            <div key={`b${slot}`} className="pointer-events-none absolute" style={{ left: q.x, top: q.y + 2, zIndex: 100 + Math.round(q.y), transform: `translate(-30%, -100%) scale(${q.k})`, transformOrigin: "30% 100%" }}>
-              <span key={`${t.owner}-f`} className="mb-pop block" style={{ filter: "drop-shadow(0 2px 1.5px rgba(20,24,60,0.4))" }}>
-                <Glyph n="flag" size={30} color={color} />
-              </span>
-            </div>
-          );
-        }
-        if (lv >= LANDMARK) {
-          // 랜드마크: 칸 가운데 쪽에 하나 크게 (칸마다 다른 그림)
-          const c = proj((b.x + axis(sd.x)) / 2, (b.y + axis(sd.y)) / 2);
-          return (
-            <div key={`b${slot}`} className="pointer-events-none absolute" style={{ left: c.x, top: c.y + 6, zIndex: 100 + Math.round(c.y), transform: `translate(-50%, -100%) scale(${c.k})`, transformOrigin: "50% 100%" }}>
-              <Landmark key={`${t.owner}-lm`} src={`/marble/lm/${m.id}-${tile}.webp`} color={color} />
-            </div>
-          );
-        }
-        // 빌라 · 빌딩 · 호텔: 칸의 변 방향(대각선)을 따라 나란히 — 조각마다 따로 투영해서 판과 같은 기울기로
-        const along = sd.y <= 0 || sd.y >= 8 ? { x: 1, y: 0 } : { x: 0, y: 1 };
-        const gap = 19;
-        // 건물마다 자리 고정 (오두막 · 하우스 · 타워 = 다 찼을 때 자리 그대로)
-        return builtOf(t).map((k) => {
-          const i = k - 1;
-          const o = (i - 1) * gap;
-          const q = proj(b.x + along.x * o, b.y + along.y * o);
-          return (
-            <div key={`b${slot}-${i}`} className="pointer-events-none absolute" style={{ left: q.x, top: q.y + 3, zIndex: 100 + Math.round(q.y), transform: `translate(-50%, -100%) scale(${q.k})`, transformOrigin: "50% 100%" }}>
-              <Piece key={`${t.owner}-${i}`} n={i} owner={t.owner} />
-            </div>
-          );
-        });
+      {/* 서는 것들: 함정 (칸 뒤쪽) */}
+      {g.traps.map((owner, slot) => {
+        if (owner < 0) return null;
+        const d = m.tiles[slot];
+        const q = proj(axis(d.x), axis(d.y));
+        return (
+          <div key={`t${slot}`} className="pointer-events-none absolute" style={{ left: q.x - 22, top: q.y - 4, zIndex: 100 + Math.round(q.y), transform: `translate(-50%, -100%) scale(${q.k})`, transformOrigin: "50% 100%" }}>
+            <span className="mb-pop relative block" style={{ filter: "drop-shadow(0 2px 1.5px rgba(20,24,60,0.45))" }}>
+              <Glyph n="trap" size={30} color={PCOLOR[owner]} />
+            </span>
+          </div>
+        );
       })}
+
+      {/* 별: 빛기둥 + 둥실 떠 있는 큰 별 */}
+      {star >= 0 &&
+        (() => {
+          const d = m.tiles[star];
+          const q = proj(axis(d.x), axis(d.y));
+          return (
+            <div key={`star${star}`} className="pointer-events-none absolute" style={{ left: q.x, top: q.y, zIndex: 100 + Math.round(q.y) }}>
+              <div className="absolute bottom-[-6px] left-1/2 h-[18px] w-[70px] -translate-x-1/2 rounded-[50%]" style={{ background: "radial-gradient(closest-side, rgba(255,226,90,0.95), rgba(255,226,90,0))" }} />
+              <div className="mbx-beam absolute bottom-0 left-1/2 h-[210px] w-[46px] -translate-x-1/2" style={{ background: "linear-gradient(0deg, rgba(255,230,120,0.85), rgba(255,240,170,0.35) 55%, transparent)", filter: "blur(4px)", borderRadius: "40% 40% 12px 12px" }} />
+              <div className="mb-pop absolute bottom-[34px] left-1/2 -translate-x-1/2">
+                <div className="mbx-star-bob" style={{ filter: "drop-shadow(0 0 14px rgba(255,214,60,0.95)) drop-shadow(0 4px 0 rgba(120,70,0,0.45))" }}>
+                  <Glyph n="star" size={58} color="#ffd23a" />
+                </div>
+              </div>
+            </div>
+          );
+        })()}
 
       {/* 도착 칸 빛기둥 (말 뒤) */}
       {trail &&
+        !trail.preview &&
         (() => {
           const sd = m.tiles[trail.slots[trail.slots.length - 1]];
           if (!sd) return null;
@@ -276,29 +249,6 @@ export default function Board({
             </div>
           );
         })()}
-      {/* 도착 칸: 굴린 눈 (말보다 위) */}
-      {trail &&
-        (() => {
-          const dest = trail.slots[trail.slots.length - 1];
-          const sd = m.tiles[dest];
-          if (!sd) return null;
-          const c = proj(axis(sd.x), axis(sd.y));
-          return (
-            <div key={`dest${trail.id}`} className="pointer-events-none absolute" style={{ left: c.x, top: c.y, zIndex: 2000 }}>
-              {/* 판 위쪽 칸이면 화면 밖 · 상단 표시와 안 겹치게 칸 아래로 */}
-              <div className="absolute left-1/2 -translate-x-1/2" style={c.y < 230 ? { top: 22 } : { bottom: 120 }}>
-              <div className="mbx-num flex flex-col items-center">
-                {trail.dbl && <span className="mb-1 rotate-[-6deg] rounded-md bg-[#ff2d6f] px-2 text-[14px] leading-[20px] font-black text-white shadow-[0_2px_0_rgba(0,0,0,0.3)]">더블!</span>}
-                <span className="flex h-[52px] min-w-[52px] items-center justify-center rounded-full px-2 text-[30px] font-black" style={{ background: "radial-gradient(circle at 35% 30%, #fffbe8, #ffd23a 60%, #f0a020)", color: "#4a2600", boxShadow: `0 0 0 3px #fff, 0 0 0 6px ${trail.color}, 0 6px 0 rgba(0,0,0,0.25), 0 0 26px 6px ${trail.color}88` }}>
-                  {trail.n}
-                </span>
-                {!!trail.plus && <span className="-mt-1 rounded-full bg-[#2fc37a] px-2 text-[13px] leading-[18px] font-black text-white shadow-[0_0_0_2px_#fff]">+{trail.plus}</span>}
-              </div>
-              </div>
-            </div>
-          );
-        })()}
-
       {/* 말 */}
       {tokens.map((tk) => {
         const c = slotXY(m, tk.slot);
@@ -350,20 +300,27 @@ export default function Board({
           </div>
         );
       })}
-
     </div>
   );
 }
 
-/** 굴리기 전 갈 수 있는 칸: 약(2~5) · 중(6~8) · 강(9~12) 색 */
-function ReachChip({ n, sx, sy }: { n: number; sx: number; sy: number }) {
+/** 이동 고르기: 갈 수 있는 칸에 걸음 수 (고른 칸은 크게 · 금색) */
+function ReachChip({ n, on, sx, sy }: { n: number; on: boolean; sx: number; sy: number }) {
   const col = (sx <= 0 || sx >= 8) && !(sy <= 0 || sy >= 8);
-  const c = n < 6 ? "#4a8dff" : n <= 8 ? "#2fb36a" : "#ff8a2b";
   return (
     <span className="pointer-events-none absolute inset-0 flex items-center justify-center" style={{ zIndex: 4 }}>
       <span
-        className="flex h-[26px] w-[26px] items-center justify-center rounded-full text-[14px] font-black text-white"
-        style={{ background: c, boxShadow: "0 0 0 2.5px #fff, 0 2px 5px rgba(0,0,0,0.35)", transform: col ? "rotate(-90deg)" : undefined }}
+        className={`flex items-center justify-center rounded-full font-black ${on ? "mbx-pick-on" : ""}`}
+        style={{
+          width: on ? 34 : 26,
+          height: on ? 34 : 26,
+          fontSize: on ? 18 : 14,
+          background: on ? "radial-gradient(circle at 35% 30%, #fffbe8, #ffd23a 60%, #f0a020)" : "rgba(38,43,82,0.82)",
+          color: on ? "#4a2600" : "#fff",
+          boxShadow: on ? "0 0 0 3px #fff, 0 0 14px 4px rgba(255,210,60,0.9)" : "0 0 0 2px #fff, 0 2px 5px rgba(0,0,0,0.35)",
+          transform: col ? "rotate(-90deg)" : undefined,
+          transition: "all 150ms",
+        }}
       >
         {n}
       </span>
@@ -374,11 +331,11 @@ function ReachChip({ n, sx, sy }: { n: number; sx: number; sy: number }) {
 /** 이동 경로 숫자 (칸 바닥) — 지나간 칸은 흐려지고, 지금 칸 · 도착 칸은 크게 */
 function TrailChip({ k, trail, sx, sy }: { k: number; trail: Trail; sx: number; sy: number }) {
   const last = k === trail.slots.length - 1;
-  const bonus = !!trail.plus && k >= trail.slots.length - trail.plus;
   const passed = k < trail.at - 1;
   const now = k === trail.at - 1;
   const col = (sx <= 0 || sx >= 8) && !(sy <= 0 || sy >= 8);
   const size = last ? 34 : now ? 30 : 24;
+  if (trail.preview && last) return null;
   return (
     <span className="pointer-events-none absolute inset-0 flex items-center justify-center" style={{ zIndex: 5 }}>
       <span
@@ -393,10 +350,10 @@ function TrailChip({ k, trail, sx, sy }: { k: number; trail: Trail; sx: number; 
           fontSize: last ? 18 : 14,
           color: passed ? "rgba(255,255,255,0.85)" : now || last ? "#fff" : trail.color,
           background: passed ? `${trail.color}88` : now || last ? trail.color : "rgba(255,255,255,0.92)",
-          boxShadow: bonus ? `0 0 0 2px #2fc37a, 0 0 10px 2px #2fc37a, 0 2px 4px rgba(0,0,0,0.3)` : `0 0 0 2px ${now || last ? "#fff" : trail.color}, 0 2px 4px rgba(0,0,0,0.3)`,
-          transform: `${col ? "rotate(-90deg) " : ""}scale(${now ? 1.1 : 1})`,
+          boxShadow: `0 0 0 2px ${now || last ? "#fff" : trail.color}, 0 2px 4px rgba(0,0,0,0.3)`,
+          transform: `${col ? "rotate(-90deg) " : ""}scale(${now ? 1.1 : trail.preview ? 0.85 : 1})`,
           transition: "all 150ms",
-          opacity: passed ? 0.6 : 1,
+          opacity: passed ? 0.6 : trail.preview ? 0.85 : 1,
         }}
       >
         {k + 1}
@@ -405,104 +362,41 @@ function TrailChip({ k, trail, sx, sy }: { k: number; trail: Trail; sx: number; 
   );
 }
 
-/** 판 위에 눕는 칸 바닥 */
-function TileFace({ m, d, owner, sx, sy, toll, mult, fest, boost, pot, tw, th }: { m: MapDef; d: TileDef; owner: number; sx: number; sy: number; toll: number; mult: number; fest: boolean; /** 불꽃(스킬 부스트) 남은 바퀴 · 0 = 없음 */ boost: number; /** 황금 다리: 서면 받는 돈 */ pot: number; tw: number; th: number }) {
+/** 판 위에 눕는 칸 바닥: 종류 색 + 큰 그림 + 값 */
+function TileFace({ d, sx, sy, star, pot, frenzy }: { d: TileDef; sx: number; sy: number; star: boolean; pot: number; frenzy: boolean }) {
   const sp = KIND[d.kind];
-  if (sp) {
-    const corner = sx % 8 === 0 && sy % 8 === 0;
-    const along = (sx <= 0 || sx >= 8) && !(sy <= 0 || sy >= 8) ? th : tw;
-    const len = [...d.name].reduce((a, ch) => a + (ch === " " ? 0.45 : 1), 0);
-    // 양옆 여백 남기고 한 줄
-    const fs = Math.min(corner ? 19 : 15, Math.floor(((along - 10) / Math.max(1, len)) * 10) / 10);
-    return (
-      <div className="relative flex h-full w-full items-center justify-center overflow-hidden rounded-[10px]" style={{ background: `radial-gradient(circle at 35% 30%, ${mix(sp.fill, 0.55)}, ${sp.fill} 60%, ${dark(sp.fill, 0.85)})`, boxShadow: `inset 0 0 0 2px ${dark(sp.fill, 0.7)}, inset 0 3px 0 rgba(255,255,255,0.5)` }}>
-        <FloorText sx={sx} sy={sy}>
-          <span className="flex flex-col items-center gap-[2px]">
-            <Glyph n={sp.glyph} size={sx % 8 === 0 && sy % 8 === 0 ? 40 : 24} color={sp.ink === "#fff" ? "#fff" : mix(sp.fill, 0.55)} />
-            <b className="whitespace-nowrap leading-none font-black" style={{ fontSize: fs, color: sp.ink, textShadow: sp.ink === "#fff" ? "0 1px 2px rgba(0,0,0,0.5)" : "none" }}>
-              {d.name}
-            </b>
-            {pot > 0 && (
-              <span className={`rounded-full px-[6px] text-[12px] leading-[16px] font-black text-white ${pot > RULE.bonus ? "mbx-hot" : ""}`} style={{ background: pot > RULE.bonus ? "#ff6a2b" : "#c98a00", boxShadow: "0 0 0 1.5px #fff" }}>
-                +{pot}
-              </span>
-            )}
-          </span>
-        </FloorText>
-      </div>
-    );
-  }
-  const band = d.kind === "spot" ? "#ffb21e" : m.groups[d.group ?? 0].color;
-  const pc = owner >= 0 ? PCOLOR[owner] : null;
-  const col = sx <= 0 || sx >= 8;
-  // 가까운 변(아래 줄 · 오른쪽 줄)은 위→아래가 안→밖, 먼 변은 글씨가 뒤집히지 않게 반대로
-  const near = sy >= 8 || sx >= 8;
-  // 이름은 무조건 한 줄 — 길면 글씨를 줄임
-  const nameLen = [...d.name].reduce((a, ch) => a + (ch === " " ? 0.45 : 1), d.kind === "spot" ? 0.8 : 0);
-  const nameSize = Math.min(16, Math.floor((((col ? th : tw) - 6) / Math.max(1, nameLen)) * 10) / 10);
-  const parts = [
-    <div key="b" className="shrink-0" style={{ height: BLD_ZONE }} />,
-    <b key="n" className="block text-center leading-none font-black whitespace-nowrap" style={{ fontSize: nameSize, color: pc ? "#fff" : INK, textShadow: pc ? "0 1px 2px rgba(0,0,0,0.55)" : "0 1px 0 rgba(255,255,255,0.8)" }}>
-      {d.kind === "spot" && "★"}
-      {d.name}
-    </b>,
-    <span key="p" className="relative flex items-center justify-center gap-[2px]">
-      {pc ? (
-        <span className={`rounded-full bg-white px-[6px] text-[14px] leading-[18px] font-black ${boost ? "mbx-hot" : ""}`} style={{ color: boost ? "#d2401a" : dark(pc, 0.7), ...(boost ? {} : { boxShadow: `0 0 0 1.5px ${INK}` }) }}>
-          {fmtToll(toll)}
-        </span>
-      ) : (
-        <span className="rounded-full px-[6px] text-[13px] leading-[17px] font-black text-white" style={{ background: dark(band, 0.85), boxShadow: `0 0 0 1.2px ${INK}` }}>
-          {d.price}
-        </span>
-      )}
-      {/* 배율 · 축제 · 불꽃은 값 위 구석에 작게 (칸 너비를 넘지 않게) */}
-      {(mult > 1 || fest || boost > 0) && (
-        <span className="absolute -top-[10px] -right-[7px] flex items-center gap-[1px]">
-          {mult > 1 && (
-            <span className="rounded-full px-[3px] text-[10px] leading-[13px] font-black" style={{ background: mult >= 4 ? "#ff3d6e" : "#ffd23a", color: mult >= 4 ? "#fff" : "#3a2500", boxShadow: `0 0 0 1.2px ${INK}` }}>
-              x{mult}
-            </span>
-          )}
-          {fest && <Glyph n="note" size={12} color="#b07bff" />}
-          {boost > 0 && (
-            <span className="flex items-center rounded-full bg-[#ff6a2b] pr-[3px] text-[9px] leading-[12px] font-black text-white" title={`불꽃 ${boost}바퀴 남음`}>
-              <Glyph n="fire" size={11} color="#ffd23a" />
-              {boost}
-            </span>
-          )}
-        </span>
-      )}
-    </span>,
-    <div key="c" className="w-full shrink-0" style={{ height: 13, background: `linear-gradient(90deg, ${mix(band, 0.2)}, ${band})` }} />,
-  ];
-  const spot = d.kind === "spot";
+  const corner = sx % 8 === 0 && sy % 8 === 0;
+  const x = frenzy ? 2 : 1;
+  // 큰 숫자 (파랑 · 빨강 · 잭팟)
+  const val = d.kind === "blue" ? `+${RULE.blue * x}` : d.kind === "red" ? `−${RULE.red * x}` : d.kind === "jackpot" ? `${pot}` : null;
+  const fill = d.kind === "star" && !star ? "#ffe9a6" : sp.fill;
   return (
-    <div
-      className="relative h-full w-full overflow-hidden rounded-[10px]"
-      style={{
-        background: spot
-          ? pc
-            ? `linear-gradient(135deg, ${mix(pc, 0.25)}, ${pc} 55%, #ffd23a)`
-            : "linear-gradient(135deg, #fff8d6, #ffd96a 55%, #ffb21e)"
-          : pc
-            ? `linear-gradient(135deg, ${mix(pc, 0.35)}, ${pc})`
-            : `linear-gradient(135deg, #fffdf6, ${mix(band, 0.82)})`,
-      }}
-    >
-      {/* 명소: 금빛이 스쳐 지나감 + 칸 가운데 큰 별 */}
-      {spot && <div className="mbx-sheen pointer-events-none absolute inset-0" />}
-      {spot && (
-        <span className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-25">
-          <Glyph n="star" size={Math.round(Math.min(tw, th) * 0.75)} color="#fff" />
+    <div className="relative h-full w-full overflow-hidden rounded-[10px]" style={{ background: `radial-gradient(circle at 35% 30%, ${mix(fill, 0.55)}, ${fill} 60%, ${dark(fill, 0.85)})`, boxShadow: `inset 0 0 0 2px ${dark(fill, 0.7)}, inset 0 3px 0 rgba(255,255,255,0.5)` }}>
+      {(d.kind === "star" || d.kind === "jackpot") && <div className="mbx-sheen pointer-events-none absolute inset-0" />}
+      <FloorText sx={sx} sy={sy}>
+        <span className="flex flex-col items-center gap-[1px]">
+          {val !== null && d.kind !== "jackpot" ? (
+            <>
+              <Glyph n={sp.glyph} size={22} color={d.kind === "blue" ? "#ffe14a" : "#fff"} />
+              <b className={`leading-none font-black ${frenzy ? "mbx-hot rounded-full px-1" : ""}`} style={{ fontSize: 17, color: "#fff", textShadow: "0 1.5px 0 rgba(0,0,0,0.35)" }}>
+                {val}
+              </b>
+            </>
+          ) : (
+            <>
+              <Glyph n={sp.glyph} size={corner ? 40 : d.kind === "star" && !star ? 22 : 26} color={sp.ink === "#fff" ? "#fff" : d.kind === "star" ? (star ? "#fff6c0" : "#fff") : mix(sp.fill, 0.55)} />
+              <b className="leading-none font-black whitespace-nowrap" style={{ fontSize: corner ? 16 : 12, color: d.kind === "star" && !star ? "#a87a00" : sp.ink, textShadow: sp.ink === "#fff" ? "0 1px 2px rgba(0,0,0,0.5)" : "none" }}>
+                {corner ? d.name : sp.label}
+              </b>
+              {d.kind === "jackpot" && (
+                <span className={`rounded-full px-[6px] text-[12px] leading-[16px] font-black text-white ${pot > RULE.potSeed ? "mbx-hot" : ""}`} style={{ background: pot > RULE.potSeed ? "#ff6a2b" : "#c98a00", boxShadow: "0 0 0 1.5px #fff" }}>
+                  {val}
+                </span>
+              )}
+            </>
+          )}
         </span>
-      )}
-      {/* 안 → 밖: 건물 자리 · 이름 · 값 · 동네 색 띠 (칸 길이 방향 = 변 방향) */}
-      <div className="absolute top-1/2 left-1/2 flex flex-col items-center justify-between" style={{ width: col ? th : tw, height: col ? tw : th, transform: `translate(-50%, -50%) ${col ? "rotate(-90deg)" : ""}` }}>
-        {near ? parts : [...parts].reverse()}
-      </div>
-      {/* 테두리는 맨 위에 다시 그려서 동네 색 띠까지 감쌈 */}
-      <div className="pointer-events-none absolute inset-0 rounded-[10px]" style={{ boxShadow: spot ? `inset 0 0 0 3px #ffd23a, inset 0 0 0 4.5px ${pc ? dark(pc, 0.6) : "#b07400"}, inset 0 0 14px rgba(255,240,170,0.9)` : pc ? `inset 0 0 0 2.5px ${dark(pc, 0.6)}, inset 0 3px 0 rgba(255,255,255,0.35)` : `inset 0 0 0 1.8px ${dark(band, 0.55)}` }} />
+      </FloorText>
     </div>
   );
 }
@@ -514,27 +408,6 @@ function FloorText({ sx, sy, children }: { sx: number; sy: number; children: Rea
     <span className="pointer-events-none absolute inset-0 flex items-center justify-center">
       <span style={{ transform: col ? "rotate(-90deg)" : undefined }}>{children}</span>
     </span>
-  );
-}
-
-/** 건물 조각 하나 (빌라 · 빌딩 · 호텔) — 주인 색 지붕 · 차양이 칠해진 그림 */
-export function Piece({ n, owner, h }: { n: number; owner: number; h?: number }) {
-  return (
-    <span className="mb-pop relative block" style={{ animationDelay: `${n * 80}ms`, filter: "drop-shadow(0 2px 1.5px rgba(20,24,60,0.45))" }}>
-      <img src={`/marble/b3d/p${Math.max(0, owner) % 4}-${n + 1}.webp`} alt="" className="block max-w-none" style={{ height: h ?? [24, 30, 32][n] }} />
-    </span>
-  );
-}
-
-/** 랜드마크: 칸마다 다른 그림 + 주인 깃발 (밑 그림자 없음) */
-function Landmark({ src, color }: { src: string; color: string }) {
-  return (
-    <div className="mb-pop relative flex flex-col items-center">
-      <img src={src} alt="" className="relative block max-w-none" style={{ height: 54, filter: "drop-shadow(0 3px 3px rgba(20,24,60,0.35))" }} />
-      <span className="mb-bob absolute -top-[12px] right-[0px]">
-        <Glyph n="flag" size={17} color={color} />
-      </span>
-    </div>
   );
 }
 
@@ -552,6 +425,12 @@ export function Glyph({ n, size = 20, color = INK }: { n: GlyphName; size?: numb
       <>
         <circle cx="12" cy="12" r="8.5" fill={color} {...s} />
         <path d="M12 7.5v9M14.5 9.5h-4a1.8 1.8 0 000 3.5h3a1.8 1.8 0 010 3.5h-4" fill="none" {...s} />
+      </>
+    ),
+    minus: (
+      <>
+        <circle cx="12" cy="12" r="8.5" fill={color} {...s} />
+        <path d="M7.5 12h9" fill="none" stroke={INK} strokeWidth={2.4} strokeLinecap="round" />
       </>
     ),
     gift: (
@@ -579,40 +458,10 @@ export function Glyph({ n, size = 20, color = INK }: { n: GlyphName; size?: numb
       <>
         <path d="M8 7l-2-3h12l-2 3" fill={color} {...s} />
         <path d="M8 7h8c3 3 5 7 4 10.5-.6 2.2-2.6 3.5-5 3.5H9c-2.4 0-4.4-1.3-5-3.5C3 14 5 10 8 7z" fill={color} {...s} />
-      </>
-    ),
-    train: (
-      <>
-        <rect x="5" y="3" width="14" height="14" rx="3.5" fill={color} {...s} />
-        <rect x="7.5" y="6" width="9" height="5" rx="1" fill="#bfe6ff" {...s} />
-        <circle cx="9" cy="14" r="1.2" fill={INK} />
-        <circle cx="15" cy="14" r="1.2" fill={INK} />
-        <path d="M8 17l-2.5 4M16 17l2.5 4" {...s} />
+        <path d="M12 11v6M14 12.2h-2.8a1.2 1.2 0 000 2.4h1.6a1.2 1.2 0 010 2.4H10" fill="none" stroke={INK} strokeWidth={1.3} strokeLinecap="round" />
       </>
     ),
     star: <path d="M12 2.8l2.8 5.8 6.4.9-4.6 4.5 1.1 6.3L12 17.3l-5.7 3 1.1-6.3L2.8 9.5l6.4-.9z" fill={color} {...s} />,
-    hut: (
-      <>
-        <path d="M3 13 Q12 3 21 13 L19 13 L19 21 L5 21 L5 13 Z" fill={color} {...s} />
-        <path d="M10 21v-5a2 2 0 014 0v5" fill="#fff" {...s} />
-      </>
-    ),
-    house: (
-      <>
-        <path d="M16 6V3h2.5v5" fill="#fff" {...s} />
-        <path d="M3 11l9-8 9 8v10H3z" fill={color} {...s} />
-        <path d="M3 15h18" stroke={INK} strokeWidth={1.2} />
-        <rect x="6" y="11.5" width="3" height="2.5" fill="#fff" stroke={INK} strokeWidth={1} />
-        <rect x="15" y="11.5" width="3" height="2.5" fill="#fff" stroke={INK} strokeWidth={1} />
-        <rect x="10.5" y="16.5" width="3" height="4.5" fill="#fff" stroke={INK} strokeWidth={1} />
-      </>
-    ),
-    tower: (
-      <>
-        <rect x="6" y="4" width="12" height="17" rx="1.5" fill={color} {...s} />
-        <path d="M9 8h2M13 8h2M9 12h2M13 12h2M9 16h2M13 16h2" stroke="#fff" strokeWidth={2} />
-      </>
-    ),
     crown: (
       <>
         <path d="M3 8l4.5 4L12 4l4.5 8L21 8l-2 12H5z" fill={color} {...s} />
@@ -621,6 +470,45 @@ export function Glyph({ n, size = 20, color = INK }: { n: GlyphName; size?: numb
       </>
     ),
     fire: <path d="M12 2.5c1 4 5 5.5 5 10.5a5 5 0 01-10 0c0-2.5 1.2-3.8 2.2-5 .2 1.8 1 2.7 2 3-.8-3 0-6 .8-8.5z" fill={color} {...s} />,
+    vs: (
+      <>
+        <path d="M4 4l7 8M20 4l-7 8" stroke={INK} strokeWidth={4.2} strokeLinecap="round" />
+        <path d="M4 4l7 8M20 4l-7 8" stroke={color} strokeWidth={2.2} strokeLinecap="round" />
+        <text x="12" y="22" textAnchor="middle" fontSize="10" fontWeight="900" fill={color} stroke={INK} strokeWidth={1.2} paintOrder="stroke" fontFamily="system-ui, sans-serif">
+          VS
+        </text>
+      </>
+    ),
+    trap: (
+      <>
+        <path d="M3 18h18" stroke={INK} strokeWidth={2.4} strokeLinecap="round" />
+        <path d="M4 18l2.5-9 2.5 9 3-11 3 11 2.5-9 2.5 9z" fill={color} {...s} />
+      </>
+    ),
+    ask: (
+      <>
+        <rect x="4" y="3" width="16" height="18" rx="3" fill={color} {...s} />
+        <path d="M9.5 9.5a2.6 2.6 0 115 1c-.6 1-2.5 1.5-2.5 3" fill="none" stroke={INK} strokeWidth={2} strokeLinecap="round" />
+        <circle cx="12" cy="17" r="1.2" fill={INK} />
+      </>
+    ),
+    lock: (
+      <>
+        <path d="M8 10V7.5a4 4 0 018 0V10" fill="none" stroke={INK} strokeWidth={2.2} />
+        <rect x="5" y="10" width="14" height="11" rx="2.5" fill={color} {...s} />
+        <circle cx="12" cy="15.5" r="1.6" fill={INK} />
+      </>
+    ),
+    dice: (
+      <>
+        <rect x="3.5" y="3.5" width="17" height="17" rx="4" fill={color} {...s} />
+        <circle cx="8.5" cy="8.5" r="1.6" fill={INK} />
+        <circle cx="15.5" cy="15.5" r="1.6" fill={INK} />
+        <circle cx="12" cy="12" r="1.6" fill={INK} />
+      </>
+    ),
+    boot: <path d="M7 3h6v9l6 3c1.2.6 2 1.8 2 3.2V20H4V4a1 1 0 011-1z" fill={color} {...s} />,
+    shield: <path d="M12 2.5l8 3v6c0 5-3.5 8.6-8 10-4.5-1.4-8-5-8-10v-6z" fill={color} {...s} />,
   };
   return (
     <svg viewBox="0 0 24 24" width={size} height={size} className="block shrink-0" aria-hidden>

@@ -20,16 +20,12 @@ export const ATTEND_POINTS = 200;
 /** 짧은 설명 (툴팁 · 상점 · 업적 창 아래) */
 export const POINT_SHORT = `${POINT.name}는 출석 · 일일 미션 · 게임 업적으로 모으고, 게임 안 캐릭터 · 스킨을 사는 데 쓰는 사이트 전용 재화예요. 현금으로 사거나 바꿀 수 없어요.`;
 
-/** 베타 안내 — 재화 · GP 가 한꺼번에 초기화될 수 있음 (마이페이지 · 자주 묻는 질문) */
-export const POINT_BETA = `지금 이 사이트의 모든 게임은 베타 버전이라, 게임 재화와 ${POINT.name}가 한꺼번에 초기화될 수 있어요.`;
-
 /** 현금성 재화가 아니라는 안내 (자주 묻는 질문 · 마이페이지 · 상점) */
 export const POINT_NOTICE = [
   `${POINT.name}는 이 사이트 안에서만 쓰는 무료 재화예요. 돈을 내고 살 수 없어요.`,
   "현금 · 상품권 · 다른 서비스의 재화 등으로 바꾸거나 환불받을 수 없어요.",
   "다른 회원에게 주거나 팔 수 없어요.",
   `운영상 필요하면 얻는 양 · 상품 가격이 바뀔 수 있고, 부정한 방법으로 얻은 ${POINT.name}는 회수될 수 있어요.`,
-  POINT_BETA,
 ] as const;
 
 /* ─────────────── 환전 (포커 칩 ↔ 포인트) ─────────────── */
@@ -300,7 +296,6 @@ export const FIGHT_CHAR_NAMES = [
   "제나",
   "건모",
   "이반",
-  "포르테",
 ] as const;
 
 const EOK = 100_000_000;
@@ -532,8 +527,6 @@ export const ACHIEVEMENTS: Achievement[] = [
   a("defense", "glitch-20", "심연 탐험가", "오염 20단계 클리어", "defense.glitch", 21, 3000),
   a("defense", "glitch-25", "심연 사냥꾼", "오염 25단계 클리어", "defense.glitch", 26, 4000),
   a("defense", "glitch-30", "끝없는 오염의 끝", "오염 30단계 클리어", "defense.glitch", 31, 6000),
-  a("defense", "glitch-40", "심연 2막", "오염 40단계 클리어", "defense.glitch", 41, 8000),
-  a("defense", "glitch-50", "글리치의 심장", "오염 50단계 클리어", "defense.glitch", 51, 12000),
   a("defense", "runs-150", "단골 수호자", "랭킹 판 150번 끝내기", "defense.runs", 150, 1000),
   a("defense", "runs-400", "평생 수호자", "랭킹 판 400번 끝내기", "defense.runs", 400, 2500),
   a("defense", "win-30", "든든한 방벽", "60웨이브 30번 클리어", "defense.wins", 30, 2000),
@@ -630,12 +623,12 @@ export const ACHIEVEMENTS: Achievement[] = [
   a("marble", "games-50", "여행 중독", "50판 끝까지 하기", "marble.games", 50, 1500),
   a("marble", "games-200", "세계 일주", "200판 끝까지 하기", "marble.games", 200, 4500),
   a("marble", "wins-1", "첫 승리", "1등 하기", "marble.wins", 1, 300),
-  a("marble", "wins-20", "부동산 고수", "1등 20번", "marble.wins", 20, 1500),
-  a("marble", "wins-100", "마블 재벌", "1등 100번", "marble.wins", 100, 4500),
-  a("marble", "lm-10", "건축가", "랜드마크 10개 세우기", "marble.lm", 10, 600),
-  a("marble", "lm-50", "스카이라인", "랜드마크 50개 세우기", "marble.lm", 50, 2000),
-  a("marble", "mono-1", "독점의 맛", "독점(트리플 · 라인 · 명소)으로 이기기", "marble.mono", 1, 450),
-  a("marble", "mono-20", "독점 재벌", "독점으로 20번 이기기", "marble.mono", 20, 2500),
+  a("marble", "wins-20", "주사위 고수", "1등 20번", "marble.wins", 20, 1500),
+  a("marble", "wins-100", "다이스 타운 스타", "1등 100번", "marble.wins", 100, 4500),
+  a("marble", "lm-10", "야추!", "야추 10번 내기", "marble.lm", 10, 600),
+  a("marble", "lm-50", "주사위의 신", "야추 50번 내기", "marble.lm", 50, 2000),
+  a("marble", "mono-1", "막판 뒤집기", "막판 3바퀴 시작 때 1등이 아니었는데 이기기", "marble.mono", 1, 450),
+  a("marble", "mono-20", "역전의 명수", "막판 뒤집기로 20번 이기기", "marble.mono", 20, 2500),
   a("marble", "chars-5", "친구 모으기", "캐릭터 5종 모으기", "marble.chars", 5, 450),
   a("marble", "chars-10", "캐릭터 도감", "캐릭터 10종 모으기", "marble.chars", 10, 1500),
   a("marble", "ssr-1", "반짝이는 카드", "SSR 이상 캐릭터 얻기", "marble.ssr", 1, 600),

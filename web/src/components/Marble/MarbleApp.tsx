@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import NickForm from "@/components/Account/NickForm";
 import { useAuth } from "@/lib/AuthContext";
 import { CHAR, power } from "@/lib/marble/data";
+import { RULE } from "@/lib/marble/engine";
 import { MAPS, MAP_IDS, type MapId } from "@/lib/marble/maps";
 import type { LobbyRoom, ProfileWire, RoomWire } from "@/lib/marble/wire";
 import { marble, watchLobby, watchRoom } from "@/realtime/marble";
@@ -151,7 +152,7 @@ function Menu(p: {
   onShop(): void;
 }) {
   const pr = p.prof;
-  const [map, setMap] = useState<MapId | undefined>(undefined);
+  const map: MapId | undefined = undefined;
   const [rooms, setRooms] = useState<LobbyRoom[] | null>(null);
   useEffect(() => watchLobby(setRooms), []);
   const charId = pr?.load.char && pr.chars[pr.load.char] ? pr.load.char : pr ? (Object.keys(pr.chars)[0] ?? null) : null;
@@ -250,35 +251,28 @@ function Menu(p: {
 
       {/* 가운데: 맵 고르기 · 바로 시작 */}
       <div className="absolute top-[64px] left-[326px] flex h-[498px] w-[386px] flex-col gap-3">
-        <XPanel title="맵 고르기" right={<span className="text-[11px] text-white/60">바로 시작할 때 이 맵으로</span>}>
-          <div className="grid grid-cols-2 gap-2 p-2.5">
-            {([undefined, ...MAP_IDS] as (MapId | undefined)[]).map((id) => {
-              const on = map === id;
-              return (
-                <button
-                  key={id ?? "any"}
-                  type="button"
-                  disabled={!p.member}
-                  onClick={() => {
-                    sfx("click");
-                    setMap(id);
-                  }}
-                  className={`group relative h-[118px] overflow-hidden rounded-xl text-left transition ${on ? "ring-[3px] ring-[#ffd65a]" : "ring-1 ring-white/15 hover:ring-white/40"}`}
-                >
-                  {id ? (
-                    <img src={`/marble/bg/map-${id}.webp`} alt="" className="absolute inset-0 h-full w-full object-cover transition group-hover:scale-105" />
-                  ) : (
-                    <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-[#ff9ad5] via-[#8fb4ff] to-[#8ff0d0] text-[44px] font-black text-white/90">?</div>
-                  )}
-                  <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/75 to-transparent px-2 pt-5 pb-1.5">
-                    <b className="text-[14px]">{id ? MAPS[id].name : "아무 맵"}</b>
-                    <p className="truncate text-[10px] text-white/75">{id ? MAPS[id].desc : "세 맵 중 무작위"}</p>
-                  </div>
-                  {on && <span className="absolute top-1.5 left-1.5 rounded-full bg-[#ffd65a] px-2 text-[10px] leading-[18px] font-black text-[#3a2500]">선택</span>}
-                  {id && <GuideDot className="absolute top-1.5 right-1.5" onOpen={() => guide.show(id)} />}
-                </button>
-              );
-            })}
+        <XPanel title="해피 타운" right={<GuideDot onOpen={() => guide.show("town")} />}>
+          <div className="flex flex-col gap-2 p-2.5">
+            <div className="relative h-[150px] overflow-hidden rounded-xl ring-1 ring-white/15">
+              <img src="/marble/bg/map-town.webp" alt="" className="absolute inset-0 h-full w-full object-cover" />
+              <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/75 to-transparent px-2.5 pt-6 pb-1.5">
+                <b className="text-[15px]">{MAPS.town.name}</b>
+                <p className="truncate text-[11px] text-white/80">{MAPS.town.desc}</p>
+              </div>
+            </div>
+            <ul className="flex flex-col gap-1 text-[12px] leading-[17px] text-white/90">
+              {[
+                ["주사위 5개", "마음에 드는 주사위를 잠그고 2번까지 다시 굴려요"],
+                ["2개 골라 이동", "고른 두 주사위의 합만큼 · 5개 족보로 보상"],
+                [`별 ${RULE.starPrice}코인`, "별 칸을 지나가기만 해도 사요"],
+                [`${MAPS.town.rounds}바퀴`, "별이 가장 많은 사람이 승리 · 판 끝 보너스 별 셋"],
+              ].map(([a, b]) => (
+                <li key={a} className="flex gap-2 rounded-lg bg-white/[0.06] px-2 py-1">
+                  <b className="w-[78px] shrink-0 text-[#ffe08a]">{a}</b>
+                  <span className="min-w-0">{b}</span>
+                </li>
+              ))}
+            </ul>
           </div>
         </XPanel>
         <div className="flex gap-2">
@@ -481,8 +475,8 @@ function MakeRoom({ onClose, onMake }: { onClose(): void; onMake(o: { name: stri
   return (
     <Modal title="방 만들기" onClose={onClose} w={560}>
       <div className="flex flex-col gap-3">
-        <input value={o.name} onChange={(e) => setO({ ...o, name: e.target.value })} placeholder="방 이름 (비우면 내 별명의 마블)" maxLength={20} className="mbx-input" onKeyDown={(e) => e.stopPropagation()} />
-        <div className="grid grid-cols-3 gap-2">
+        <input value={o.name} onChange={(e) => setO({ ...o, name: e.target.value })} placeholder="방 이름 (비우면 내 별명의 다이스 타운)" maxLength={20} className="mbx-input" onKeyDown={(e) => e.stopPropagation()} />
+        {MAP_IDS.length > 1 && <div className="grid grid-cols-3 gap-2">
           {MAP_IDS.map((id) => (
             <button key={id} type="button" onClick={() => setO({ ...o, map: id })} className={`relative h-[92px] overflow-hidden rounded-xl text-left transition ${o.map === id ? "ring-[3px] ring-[#ffd23a]" : "opacity-75 ring-1 ring-white/15 hover:opacity-100"}`}>
               <img src={`/marble/bg/map-${id}.webp`} alt="" className="absolute inset-0 h-full w-full object-cover" />
@@ -491,8 +485,8 @@ function MakeRoom({ onClose, onMake }: { onClose(): void; onMake(o: { name: stri
               {o.map === id && <span className="absolute top-[6px] right-[6px] rounded-full bg-[#ffd23a] px-1.5 text-[10px] leading-[16px] font-black text-[#3a2500]">선택</span>}
             </button>
           ))}
-        </div>
-        <p className="text-[12px] leading-[17px] text-white/60">{MAPS[o.map].desc}</p>
+        </div>}
+        <p className="text-[12px] leading-[17px] text-white/60">{MAPS[o.map].name} · {MAPS[o.map].desc}</p>
         <div className="flex items-center gap-2">
           <span className="w-[44px] text-white/80">인원</span>
           {[2, 3, 4].map((n) => (

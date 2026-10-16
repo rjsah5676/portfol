@@ -7,7 +7,7 @@
  * 이 폴더는 브라우저 · 서버 둘 다에서 돌아서 브라우저 전용 API · "@/…" 경로를 쓰지 않음.
  */
 
-export const BALANCE_VER = "m1";
+export const BALANCE_VER = "v2";
 
 export type Grade = "R" | "SR" | "SSR" | "UR";
 export const GRADES: Grade[] = ["R", "SR", "SSR", "UR"];
@@ -34,135 +34,148 @@ export const TUNE = {
 /* ───────────── 효과 (판 안에서 엔진이 읽는 숫자) ───────────── */
 
 export type SkillKind =
-  | "reroll" // 굴린 뒤 다시 굴리기 (카이)
-  | "boost" // 고른 내 땅의 동네(내 땅) 통행료 n배 · 3바퀴 (이그나)
-  | "shield" // 다음 통행료 mag 만큼 깎음 (릴리)
-  | "sale" // 다음 인수 비용 mag 만큼 깎음 (이반)
-  | "pull" // 상대 말을 1~3칸 끌어옴 (소영)
-  | "dash" // 굴리지 않고 앞쪽 2~n칸 중 골라 이동 (제나)
-  | "pick" // 원하는 눈(2~12)으로 굴리기 (태권 카이)
-  | "fireworks" // 고른 땅의 동네 + 양옆 두 칸 안의 내 땅까지 통행료 n배 (불꽃놀이 이그나)
-  | "hop" // 이번 이동에 남 땅에 서면 다음 안전한 칸까지 뜀 (개구리 릴리)
-  | "freeze" // 상대 한 명 다음 차례 쉼 (겨울 이반)
-  | "bunny" // 굴린 뒤 0~3칸 더 (바니 소영)
-  | "concert" // 상대들이 가진 돈의 mag 를 팬 사인회 값으로 (아이돌 제나)
-  | "debug" // 상대 땅 건물 한 단계 지움 (학생 건모)
-  | "fate" // 원하는 더블(1~6 짝)로 굴리기 — 더블이라 한 번 더 (주사위 요정 DICE)
-  | "buyout" // 굴리기 전 상대 땅 하나를 멀리서 인수 (인수 비용 × mag) (고양이 재벌 MOA)
-  | "encore"; // 이번 차례 끝나고 한 번 더 (오르골 FORTE)
+  | "reroll" // 이번 차례 다시 굴리기 +1 (카이)
+  | "double" // 이번 차례 족보 보상 2배 (이그나)
+  | "shield" // 다음 손해 한 번 막기 (릴리)
+  | "nudge" // 주사위 하나 ±1 (이반)
+  | "pull" // 상대 말 1~3칸 앞뒤로 끌기 (소영)
+  | "tri" // 이번 이동은 주사위 3개 합 (제나)
+  | "seal" // 상대 다음 굴림 주사위 하나 봉인 (오도해병 이반)
+  | "six" // 주사위 하나를 6으로 (학생 이그나)
+  | "hop" // 이번 이동에 빨강 · 함정 칸은 폴짝 (빨간망토 릴리)
+  | "bunny" // 이동 뒤 0~3칸 더 (토토)
+  | "magic" // 주사위 두 개 원하는 눈으로 (미라쥬)
+  | "circus" // 상대마다 코인 걷기 (롤로)
+  | "sleep" // 상대 다음 차례 다시 굴리기 0번 (몽글)
+  | "copy" // 주사위 하나의 눈을 다른 두 개에 복사 (DICE)
+  | "vip" // 이번 차례 별 값 − · 별 사기 범위 + (MOA)
+  | "encore"; // 이번 차례 끝나고 한 번 더 (FORTE)
 
-/** 언제 쓰는지: pre = 굴리기 전 · post = 굴린 뒤(이동 전) */
-export const SKILL_TIME: Record<SkillKind, "pre" | "post"> = {
-  reroll: "post",
-  boost: "pre",
-  shield: "pre",
-  sale: "pre",
-  pull: "pre",
-  dash: "pre",
-  pick: "pre",
-  fireworks: "pre",
-  hop: "pre",
-  freeze: "pre",
-  bunny: "post",
-  concert: "pre",
-  debug: "pre",
-  fate: "pre",
-  buyout: "pre",
-  encore: "pre",
+/** 언제 쓰는지: any = 굴리기 전 · 굴린 뒤(이동 고르기 전) 아무 때나 · dice = 굴린 뒤에만 (주사위를 만짐) */
+export const SKILL_TIME: Record<SkillKind, "any" | "dice"> = {
+  reroll: "any",
+  double: "any",
+  shield: "any",
+  nudge: "dice",
+  pull: "any",
+  tri: "any",
+  seal: "any",
+  six: "dice",
+  hop: "any",
+  bunny: "any",
+  magic: "dice",
+  circus: "any",
+  sleep: "any",
+  copy: "dice",
+  vip: "any",
+  encore: "any",
 };
 
-/** 대상 고르기: none · ownCity(내 땅) · foeCity(남의 건물 땅) · foeLand(살 수 있는 남의 땅) · foe(상대, pull 은 칸 수 n 도) · num(숫자) */
-export const SKILL_TARGET: Record<SkillKind, "none" | "ownCity" | "foeCity" | "foeLand" | "foe" | "num"> = {
+/**
+ * 대상: none · foe(상대) · die(주사위 하나) · nudge(주사위 하나 + ±) · magic(주사위 둘 + 눈 둘)
+ * · copy(원본 주사위 + 바꿀 주사위들) · pull(상대 + 칸 수 −3~3)
+ */
+export const SKILL_TARGET: Record<SkillKind, "none" | "foe" | "die" | "nudge" | "magic" | "copy" | "pull"> = {
   reroll: "none",
-  boost: "ownCity",
+  double: "none",
   shield: "none",
-  sale: "none",
-  pull: "foe",
-  dash: "num",
-  pick: "num",
-  fireworks: "ownCity",
+  nudge: "nudge",
+  pull: "pull",
+  tri: "none",
+  seal: "foe",
+  six: "die",
   hop: "none",
-  freeze: "foe",
-  bunny: "num",
-  concert: "none",
-  debug: "foeCity",
-  fate: "num",
-  buyout: "foeLand",
+  bunny: "none",
+  magic: "magic",
+  circus: "none",
+  sleep: "none",
+  copy: "copy",
+  vip: "none",
   encore: "none",
 };
 
 export interface Fx {
-  /** 출발 월급 + (비율) */
-  salary: number;
-  /** 내 땅 통행료 받을 때 + */
-  tollRecv: number;
-  /** 남 땅 통행료 낼 때 − */
-  tollPay: number;
-  /** 건설비 − */
-  build: number;
-  /** 내가 인수할 때 − */
-  acq: number;
-  /** 남이 내 땅을 인수할 때 더 받음 + */
-  defend: number;
-  /** 남이 내 땅을 인수하려 할 때 막을 확률 */
-  defendBlock: number;
-  /** 남이 내 땅을 지나가기만 해도 통행료의 이만큼 */
-  passFee: number;
-  /** 남이 내 통행료를 낼 때 이 확률로 50% 더 (감전) */
-  shock: number;
-  /** 더블이 나오면 받는 코인 */
-  doubleBonus: number;
-  /** 수리소에 서도 바로 나감 */
-  jailFree: number;
-  /** 남 땅에 설 때 이 확률로 1칸 더 굴러감 */
-  dodge: number;
-  /** 더블이 아니면 이 확률로 두 번째 주사위를 첫째와 같게 (더블 확률 ↑) */
+  /** 시작 코인 + */
+  startCoins: number;
+  /** 출발 지날 때 코인 + */
+  startBonus: number;
+  /** 파랑 칸 + */
+  blueBonus: number;
+  /** 빨강 칸 손해 − */
+  redCut: number;
+  /** 코인 족보(페어 · 투 페어) 보상 + */
+  comboCoin: number;
+  /** 트리플 이상 족보면 코인 + */
+  bigCombo: number;
+  /** 스트레이트 보상 코인 + */
+  straightBonus: number;
+  /** 야추 보상 코인 + */
+  yachtBonus: number;
+  /** 뺏길 때 덜 뺏김 − */
+  stealGuard: number;
+  /** 뺏기 · 대결 손해를 이 확률로 막음 */
+  guard: number;
+  /** 럭키 박스에서 코인 + */
+  itemBonus: number;
+  /** 지나간 파랑 칸마다 +1 (차례당 최대) */
+  passBlue: number;
+  /** 첫 굴림: 이 확률로 주사위 하나가 다른 주사위와 짝이 맞음 */
   twin: number;
-  /** 럭키 박스에서 두 장 보고 좋은 쪽 */
-  cardLuck: number;
-  /** 인수하자마자 한 단계 무료 증축 */
-  freeUpAfterAcq: number;
-  /** 끌어당기기(소영)로 끌려온 상대가 내 땅에서 내는 통행료 비율 */
-  pullPay: number;
-  /** 판당 한 번, 큰 통행료(RULE.rewindMin 이상)를 이 비율만큼 되돌려 받음 */
-  rewind: number;
-  /** 힘 조절 굴리기: 노린 구간이 나올 확률 + */
-  control: number;
-  /** 판당 횟수: +1 조정 · 눈 고르기 · 다시 굴리기 */
-  usesAdjust: number;
-  usesPick: number;
+  /** 다시 굴린 주사위가 1이면 이 확률로 한 번 더 굴림 */
+  noOne: number;
+  /** VS 대결 이기면 코인 + */
+  vsBonus: number;
+  /** 함정 면역 (1) */
+  trapFree: number;
+  /** 마을 소식은 두 장 보고 좋은 쪽 (1) */
+  eventLuck: number;
+  /** 잭팟 + (비율) */
+  jackpotMult: number;
+  /** 축제 보상 + (비율) */
+  festMult: number;
+  /** 별 값 − */
+  starCut: number;
+  /** 판당 횟수: 다시 굴리기 + · 황금 눈 고르기 · 미끄럼 ±1 */
   usesReroll: number;
+  usesGold: number;
+  usesSlide: number;
 }
 export const ZERO_FX: Fx = {
-  salary: 0,
-  tollRecv: 0,
-  tollPay: 0,
-  build: 0,
-  acq: 0,
-  defend: 0,
-  defendBlock: 0,
-  passFee: 0,
-  shock: 0,
-  doubleBonus: 0,
-  jailFree: 0,
-  dodge: 0,
+  startCoins: 0,
+  startBonus: 0,
+  blueBonus: 0,
+  redCut: 0,
+  comboCoin: 0,
+  bigCombo: 0,
+  straightBonus: 0,
+  yachtBonus: 0,
+  stealGuard: 0,
+  guard: 0,
+  itemBonus: 0,
+  passBlue: 0,
   twin: 0,
-  cardLuck: 0,
-  freeUpAfterAcq: 0,
-  pullPay: 0,
-  rewind: 0,
-  control: 0,
-  usesAdjust: 0,
-  usesPick: 0,
+  noOne: 0,
+  vsBonus: 0,
+  trapFree: 0,
+  eventLuck: 0,
+  jackpotMult: 0,
+  festMult: 0,
+  starCut: 0,
   usesReroll: 0,
+  usesGold: 0,
+  usesSlide: 0,
 };
+/** 더하지 않고 큰 쪽 (있다 · 없다) */
+const MAX_KEYS: (keyof Fx)[] = ["trapFree", "eventLuck"];
 
 export interface SkillFx {
   kind: SkillKind;
   /** 다시 쓸 때까지 내 차례 수 */
   cd: number;
-  /** 크기 (배수 · 비율 · 최대 칸) */
+  /** 크기 (코인 · 칸 · 개수) */
   mag: number;
+  /** 덤 (소영 벌금 등) */
+  extra?: number;
 }
 
 /* ───────────── 캐릭터 ───────────── */
@@ -185,41 +198,42 @@ export interface CharDef {
   /** 가방 프로필 소개 */
   bio?: string;
   passive: { name: string; fx: (p: number) => Partial<Fx>; desc: (p: number) => string };
-  active: { name: string; kind: SkillKind; cd: (p: number) => number; mag: (p: number) => number; desc: (p: number) => string };
+  active: { name: string; kind: SkillKind; cd: (p: number) => number; mag: (p: number) => number; extra?: (p: number) => number; desc: (p: number) => string };
   /** 그림 승인 전이면 false (가챠 · 도감에 안 나옴) */
   on: boolean;
 }
 
 const pct = (v: number) => `${Math.round(v * 100)}%`;
 const lin = (ab: readonly number[], p: number) => ab[0] + ab[1] * p;
+/** a + (파워 every 마다 1) */
+const st = (ab: readonly number[], p: number) => ab[0] + (ab[1] > 0 ? Math.floor(p / ab[1]) : 0);
 /** 쿨: 기본에서 파워 every 마다 1 줄어듦 (최소 2) */
-const cdOf = (c: { cd: number; cdEvery?: number }) => (p: number) => Math.max(2, c.cd - Math.floor(p / (c.cdEvery ?? 7)));
+const cdOf = (c: { cd: number; cdEvery?: number }) => (p: number) => Math.max(2, c.cd - Math.floor(p / (c.cdEvery ?? 8)));
 
 /**
- * 캐릭터 수치표 — [a, b] 는 a + b·p (p = 파워). 밸런스는 여기만 고치면 됨.
- * 목표(효과 없는 인형 상대 1:1, 시뮬 --mode solo): 파워 0 ≈ 58% · 파워 15 ≈ 66%
+ * 캐릭터 수치표 — 계단 [a, every] 는 a + ⌊p/every⌋ · 비율 [a, b] 는 a + b·p (p = 파워 0~20).
+ * 밸런스는 여기만 고치면 됨 (시뮬 --ck kai.cd=4).
  */
 export const CK = {
-  kai: { cd: 10, sal: [0.03, 0.01] },
-  igna: { cd: 5, recv: [0.22, 0.02], boost: [1.0, 0.04] },
-  lily: { cd: 7, pay: [0.05, 0.012], shield: [0.5, 0.025] },
-  ivan: { cd: 6, build: [0.2, 0.02], sale: [0.5, 0.02] },
-  soyoung: { cd: 9, fee: [0.005, 0.0008], pull: 2, pay: [0.25, 0.015] },
-  zena: { cd: 5, shock: [0.15, 0.02], dash: 8 },
-  "ivan-marine": { cd: 6, def: [0.15, 0.02] },
-  "igna-student": { cd: 5, recv: [0.2, 0.02], boost: [0.6, 0.03] },
-  "lily-hood": { cd: 5, pay: [0.06, 0.012] },
-  toto: { cd: 7, fee: [0.005, 0.0008] },
-  mirage: { cd: 7, sal: [0.04, 0.01], dbl: [20, 3], ctl: [0.06, 0.004] },
-  lolo: { cd: 6, shock: [0.22, 0.022], fan: [0.06, 0.004] },
-  mongle: { cd: 6, pay: [0.2, 0.008] },
-  "ur-dice": { cd: 9, twin: [0.08, 0.004], dbl: [40, 3], ctl: [0.05, 0.004] },
-  "ur-moa": { cd: 10, acq: [0.12, 0.008], build: [0.08, 0.005], buy: [1.6, -0.015] },
-  "ur-forte": { cd: 7, sal: [0.4, 0.02], recv: [0.18, 0.01] },
+  kai: { cd: 2, start: [3, 7] },
+  igna: { cd: 6, blue: [1, 10] },
+  lily: { cd: 3, red: [2, 10], shield: 2, bonus: 3 },
+  ivan: { cd: 3, coins: [3, 4], nudge: [1, 12] },
+  soyoung: { cd: 3, combo: [1, 10], pull: 3, fee: [2, 7] },
+  zena: { cd: 2, str: [2, 5], start: 3 },
+  "ivan-marine": { cd: 2, guard: [2, 5] },
+  "igna-student": { cd: 6, big: [1, 6] },
+  "lily-hood": { cd: 4, item: [2, 5] },
+  toto: { cd: 6, pass: [2, 10] },
+  mirage: { cd: 6, twin: [0.15, 0.01] },
+  lolo: { cd: 5, vs: [3, 5], fee: [2, 6] },
+  mongle: { cd: 3, red: [3, 10], start: 3 },
+  "ur-dice": { cd: 10, yacht: [5, 4] },
+  "ur-moa": { cd: 3, jack: [0.5, 0.02], cut: [12, 7] },
+  "ur-forte": { cd: 13, start: [0, 10] },
 };
 const k = <T extends keyof typeof CK>(id: T) => CK[id];
 const P = (v: number) => v * TUNE.passive;
-const A = (v: number) => v * TUNE.active;
 
 export const CHARS: CharDef[] = [
   /* ── R: 픽셀파이트 기본 넷 ── */
@@ -231,10 +245,10 @@ export const CHARS: CharDef[] = [
     base: "kai",
     sprite: "kai",
     color: "#4a7dff",
-    line: "출발할 때마다 바람처럼 돈이 붙는 여행 체질",
-    bio: "바람처럼 떠도는 거리의 격투가. 출발 포털을 지날 때마다 왠지 지갑이 두둑해지는 여행 체질이에요.",
-    passive: { name: "순풍", fx: (p) => ({ salary: P(lin(k("kai").sal, p)) }), desc: (p) => `출발 월급 +${pct(P(lin(k("kai").sal, p)))}` },
-    active: { name: "질풍 다시 굴리기", kind: "reroll", cd: cdOf(k("kai")), mag: () => 1, desc: () => "굴린 뒤 한 번 다시 굴려요" },
+    line: "한 번 더! 바람처럼 다시 굴려",
+    bio: "바람처럼 떠도는 거리의 격투가. 마음에 안 드는 주사위는 질풍처럼 한 번 더 굴려 버려요.",
+    passive: { name: "순풍", fx: (p) => ({ startBonus: st(k("kai").start, p) }), desc: (p) => `출발을 지날 때 코인 +${st(k("kai").start, p)}` },
+    active: { name: "질풍 다시 굴리기", kind: "reroll", cd: cdOf(k("kai")), mag: () => 1, desc: () => "이번 차례 다시 굴리기 +1번" },
     on: true,
   },
   {
@@ -245,16 +259,10 @@ export const CHARS: CharDef[] = [
     base: "igna",
     sprite: "igna",
     color: "#ff6a3d",
-    line: "내 땅에 불을 지펴 통행료를 끓어오르게",
-    bio: "불꽃을 다루는 술사. 자기 땅에 불을 지펴 통행료를 펄펄 끓게 만드는 게 특기예요.",
-    passive: { name: "뜨끈한 장사", fx: (p) => ({ tollRecv: P(lin(k("igna").recv, p)) }), desc: (p) => `내 땅 통행료 +${pct(P(lin(k("igna").recv, p)))}` },
-    active: {
-      name: "열기 축제",
-      kind: "boost",
-      cd: cdOf(k("igna")),
-      mag: (p) => 1 + A(lin(k("igna").boost, p)),
-      desc: (p) => `고른 내 땅이 있는 동네의 내 땅 전부 통행료 ×${(1 + A(lin(k("igna").boost, p))).toFixed(2)} (3바퀴)`,
-    },
+    line: "족보에 불을 붙이면 보상도 활활",
+    bio: "불꽃을 다루는 술사. 주사위 족보에 불을 지펴 보상을 두 배로 끓어오르게 만들어요.",
+    passive: { name: "뜨끈한 장사", fx: (p) => ({ blueBonus: st(k("igna").blue, p) }), desc: (p) => `파랑 칸 코인 +${st(k("igna").blue, p)}` },
+    active: { name: "열기 축제", kind: "double", cd: cdOf(k("igna")), mag: () => 2, desc: () => "이번 차례 족보 보상 2배 (야추면 별 2개!)" },
     on: true,
   },
   {
@@ -265,15 +273,16 @@ export const CHARS: CharDef[] = [
     base: "lily",
     sprite: "lily",
     color: "#46c9ff",
-    line: "우산으로 통행료 비를 막는 꼬마",
-    bio: "우산과 오리 장화를 좋아하는 꼬마. 남의 땅에서도 우산을 쓰윽 펴서 통행료를 깎아요.",
-    passive: { name: "작은 우산", fx: (p) => ({ tollPay: P(lin(k("lily").pay, p)) }), desc: (p) => `남 땅 통행료 −${pct(P(lin(k("lily").pay, p)))}` },
+    line: "우산으로 손해 비를 막는 꼬마",
+    bio: "우산과 오리 장화를 좋아하는 꼬마. 빨강 칸 비가 와도 우산을 쓰윽 펴서 막아요.",
+    passive: { name: "작은 우산", fx: (p) => ({ redCut: st(k("lily").red, p) }), desc: (p) => `빨강 칸 손해 −${st(k("lily").red, p)}` },
     active: {
       name: "물방울 방패",
       kind: "shield",
       cd: cdOf(k("lily")),
-      mag: (p) => Math.min(1, A(lin(k("lily").shield, p))),
-      desc: (p) => `다음 통행료 −${pct(Math.min(1, A(lin(k("lily").shield, p))))}`,
+      mag: () => k("lily").shield,
+      extra: () => k("lily").bonus,
+      desc: () => `다음 손해 ${k("lily").shield}번을 막고, 막을 때마다 코인 +${k("lily").bonus} (빨강 · 뺏기 · 함정 · 대결)`,
     },
     on: true,
   },
@@ -285,15 +294,15 @@ export const CHARS: CharDef[] = [
     base: "ivan",
     sprite: "ivan",
     color: "#8a9bb0",
-    line: "튼튼하게 짓고 거침없이 사들이는 교관",
-    bio: "엄격한 교관. 기초부터 튼튼하게 짓고, 마음에 드는 땅은 정권 한 방으로 사들여요.",
-    passive: { name: "튼튼한 기초", fx: (p) => ({ build: P(lin(k("ivan").build, p)) }), desc: (p) => `건설비 −${pct(P(lin(k("ivan").build, p)))}` },
+    line: "주사위도 정신 교육부터",
+    bio: "엄격한 교관. 삐딱한 주사위는 손가락으로 툭 쳐서 한 눈씩 바로잡아요.",
+    passive: { name: "튼튼한 기초", fx: (p) => ({ startCoins: st(k("ivan").coins, p) }), desc: (p) => `시작 코인 +${st(k("ivan").coins, p)}` },
     active: {
-      name: "정권 인수",
-      kind: "sale",
+      name: "정권 교정",
+      kind: "nudge",
       cd: cdOf(k("ivan")),
-      mag: (p) => Math.min(0.9, A(lin(k("ivan").sale, p))),
-      desc: (p) => `다음 인수 비용 −${pct(Math.min(0.9, A(lin(k("ivan").sale, p))))}`,
+      mag: (p) => st(k("ivan").nudge, p),
+      desc: (p) => `주사위 하나를 ±${st(k("ivan").nudge, p)} 바꿔요`,
     },
     on: true,
   },
@@ -307,19 +316,16 @@ export const CHARS: CharDef[] = [
     base: "soyoung",
     sprite: "soyoung",
     color: "#c05bff",
-    line: "내 땅 앞을 지나가기만 해도 출석 체크",
-    bio: "규칙에 엄한 선생님. 내 땅 앞을 지나가는 학생들의 출석을 꼭 체크해요.",
-    passive: {
-      name: "출석 체크",
-      fx: (p) => ({ passFee: P(lin(k("soyoung").fee, p)), pullPay: Math.min(1, A(lin(k("soyoung").pay, p))) }),
-      desc: (p) => `남이 내 땅을 지나가면 그 통행료의 ${pct(P(lin(k("soyoung").fee, p)))}`,
-    },
+    line: "거기, 앞으로 나와!",
+    bio: "규칙에 엄한 선생님. 딴짓하는 학생은 채찍으로 쓱 끌어다가 빨강 칸에 세워요.",
+    passive: { name: "칭찬 스티커", fx: (p) => ({ comboCoin: st(k("soyoung").combo, p) }), desc: (p) => `페어 · 투 페어 보상 +${st(k("soyoung").combo, p)}코인` },
     active: {
       name: "채찍 끌어당기기",
       kind: "pull",
       cd: cdOf(k("soyoung")),
       mag: () => k("soyoung").pull,
-      desc: (p) => `상대 말을 1~${k("soyoung").pull}칸 앞으로 끌어와요 (선 칸이 내 땅이면 통행료의 ${pct(Math.min(1, A(lin(k("soyoung").pay, p))))}를 바로 내요)`,
+      extra: (p) => st(k("soyoung").fee, p),
+      desc: (p) => `상대 말을 앞뒤 1~${k("soyoung").pull}칸 끌어오고 ${st(k("soyoung").fee, p)}코인 벌금 (선 칸이 빨강 · 함정이면 그대로 당해요)`,
     },
     on: true,
   },
@@ -331,20 +337,18 @@ export const CHARS: CharDef[] = [
     base: "zena",
     sprite: "zena",
     color: "#ffd23f",
-    line: "통행료에 번개를 실어 찌릿",
-    bio: "번개 창을 든 창술사. 통행료에 정전기를 실어 찌릿하게 받아내요.",
-    passive: { name: "정전기", fx: (p) => ({ shock: P(lin(k("zena").shock, p)) }), desc: (p) => `내 통행료를 낼 때 ${pct(P(lin(k("zena").shock, p)))} 확률로 50% 더` },
-    active: {
-      name: "번개 질주",
-      kind: "dash",
-      cd: cdOf(k("zena")),
-      mag: () => k("zena").dash,
-      desc: () => `굴리지 않고 앞쪽 2~${k("zena").dash}칸 중 골라 이동`,
+    line: "번개처럼 세 걸음!",
+    bio: "번개 창을 든 창술사. 주사위 세 개를 한꺼번에 찔러 멀리까지 번쩍 달려가요.",
+    passive: {
+      name: "전광석화",
+      fx: (p) => ({ straightBonus: st(k("zena").str, p), startBonus: k("zena").start }),
+      desc: (p) => `스트레이트면 코인 +${st(k("zena").str, p)} · 출발을 지날 때 +${k("zena").start}`,
     },
+    active: { name: "번개 질주", kind: "tri", cd: cdOf(k("zena")), mag: () => 3, desc: () => "이번 이동은 주사위 3개를 골라 그 합만큼" },
     on: true,
   },
 
-  /* ── SR: 픽셀파이트 캐릭터 + 마블 오리지널 스킨 ── */
+  /* ── SR: 픽셀파이트 캐릭터 + 다이스 타운 스킨 ── */
   {
     id: "ivan-marine",
     name: "이반",
@@ -354,10 +358,10 @@ export const CHARS: CharDef[] = [
     sprite: "ivan-marine",
     art: "/marble/art/ivan-marine.webp",
     color: "#d8402f",
-    line: "필승! 남의 건물도 정신교육부터",
-    bio: "오늘부터 해병대 체험! 필승 구호와 함께 남의 건물부터 정신교육(?) 시키는 열혈 이반.",
-    passive: { name: "철통 경계", fx: (p) => ({ defend: P(lin(k("ivan-marine").def, p)) }), desc: (p) => `내 땅 인수 비용 +${pct(P(lin(k("ivan-marine").def, p)))}` },
-    active: { name: "상륙 돌격", kind: "debug", cd: cdOf(k("ivan-marine")), mag: () => 1, desc: () => "상대 땅 하나의 건물을 한 단계 부숴요 (랜드마크 제외)" },
+    line: "필승! 주사위 하나 압수",
+    bio: "오늘부터 해병대 체험! 필승 구호와 함께 상대 주사위 하나를 압수해 버리는 열혈 이반.",
+    passive: { name: "철통 경계", fx: (p) => ({ stealGuard: st(k("ivan-marine").guard, p) }), desc: (p) => `코인을 뺏길 때 ${st(k("ivan-marine").guard, p)} 덜 뺏겨요` },
+    active: { name: "주사위 압수", kind: "seal", cd: cdOf(k("ivan-marine")), mag: () => 1, desc: () => "상대 한 명의 다음 굴림 주사위 하나를 봉인해요" },
     on: true,
   },
   {
@@ -369,16 +373,10 @@ export const CHARS: CharDef[] = [
     sprite: "igna-student",
     art: "/marble/art/igna-student.webp",
     color: "#3a2f4f",
-    line: "검은 머리로 바꿔도 불꽃은 그대로",
-    bio: "검은 머리로 변신한 모범생(?) 이그나. 필기 노트에서 불꽃이 튀어 내 동네 통행료가 들썩여요.",
-    passive: { name: "열공 모드", fx: (p) => ({ tollRecv: P(lin(k("igna-student").recv, p)) }), desc: (p) => `내 땅 통행료 +${pct(P(lin(k("igna-student").recv, p)))}` },
-    active: {
-      name: "불꽃 필기",
-      kind: "fireworks",
-      cd: cdOf(k("igna-student")),
-      mag: (p) => 1 + A(lin(k("igna-student").boost, p)),
-      desc: (p) => `고른 내 땅의 동네 + 양옆 두 칸 안의 내 땅 통행료 ×${(1 + A(lin(k("igna-student").boost, p))).toFixed(2)} (3바퀴)`,
-    },
+    line: "정답은 언제나 6!",
+    bio: "검은 머리로 변신한 모범생(?) 이그나. 시험지에 6만 적어 내는데 이상하게 다 맞아요.",
+    passive: { name: "열공 모드", fx: (p) => ({ bigCombo: st(k("igna-student").big, p) }), desc: (p) => `트리플 이상 족보면 코인 +${st(k("igna-student").big, p)}` },
+    active: { name: "만점 답안", kind: "six", cd: cdOf(k("igna-student")), mag: () => 1, desc: () => "주사위 하나를 6으로 바꿔요" },
     on: true,
   },
   {
@@ -391,13 +389,13 @@ export const CHARS: CharDef[] = [
     art: "/marble/art/lily-hood.webp",
     color: "#e2394b",
     line: "늑대 소굴은 폴짝 건너뛰어요",
-    bio: "할머니 댁에 심부름 가는 빨간망토 릴리. 늑대 소굴(남의 땅)은 폴짝 건너뛰는 게 요령이에요.",
-    passive: { name: "할머니 심부름", fx: (p) => ({ tollPay: P(lin(k("lily-hood").pay, p)) }), desc: (p) => `남 땅 통행료 −${pct(P(lin(k("lily-hood").pay, p)))}` },
-    active: { name: "폴짝 지름길", kind: "hop", cd: cdOf(k("lily-hood")), mag: () => 1, desc: () => "이번 이동에 남 땅에 서면 다음 안전한 칸까지 폴짝 넘어가요" },
+    bio: "할머니 댁에 심부름 가는 빨간망토 릴리. 늑대 소굴(빨강 · 함정)은 폴짝 건너뛰는 게 요령이에요.",
+    passive: { name: "심부름 바구니", fx: (p) => ({ itemBonus: st(k("lily-hood").item, p) }), desc: (p) => `럭키 박스에서 코인 +${st(k("lily-hood").item, p)}` },
+    active: { name: "행운 바구니", kind: "hop", cd: cdOf(k("lily-hood")), mag: () => 2, desc: () => "이번 차례 도착 칸 코인 2배 · 빨강 · 함정 칸이면 다음 칸으로 폴짝" },
     on: true,
   },
 
-  /* ── SSR: 마블 오리지널 ── */
+  /* ── SSR: 다이스 타운 오리지널 ── */
   {
     id: "toto",
     name: "토토",
@@ -408,13 +406,13 @@ export const CHARS: CharDef[] = [
     art: "/marble/art/toto.webp",
     color: "#3d4f9a",
     line: "달빛 편지 배달 왔어요~ 한 칸 더!",
-    bio: "달나라 우체국의 배달부 토끼. 롤러스케이트로 한 칸 더 달려가고, 지나가는 손님에게 배달비를 받아요.",
+    bio: "달나라 우체국의 배달부 토끼. 롤러스케이트로 몇 칸 더 달려가고, 지나가는 집마다 배달비를 챙겨요.",
     passive: {
-      name: "배달 수수료",
-      fx: (p) => ({ passFee: P(lin(k("toto").fee, p)) }),
-      desc: (p) => `남이 내 땅을 지나가면 그 통행료의 ${pct(P(lin(k("toto").fee, p)))}`,
+      name: "배달비",
+      fx: (p) => ({ passBlue: st(k("toto").pass, p) }),
+      desc: (p) => `지나간 파랑 칸마다 코인 +1 (차례당 최대 ${st(k("toto").pass, p)})`,
     },
-    active: { name: "달토끼 점프", kind: "bunny", cd: cdOf(k("toto")), mag: () => 3, desc: () => "굴린 뒤 0~3칸 더 가요" },
+    active: { name: "달토끼 점프", kind: "bunny", cd: cdOf(k("toto")), mag: () => 3, desc: () => "이동한 뒤 0~3칸 더 가요" },
     on: true,
   },
   {
@@ -430,10 +428,10 @@ export const CHARS: CharDef[] = [
     bio: "주사위를 카드처럼 다루는 꼬마 마술사. 원하는 눈을 짠! 하고 꺼내 보이는 게 장기예요.",
     passive: {
       name: "카드 트릭",
-      fx: (p) => ({ salary: P(lin(k("mirage").sal, p)), doubleBonus: P(lin(k("mirage").dbl, p)), control: P(lin(k("mirage").ctl, p)) }),
-      desc: (p) => `출발 월급 +${pct(P(lin(k("mirage").sal, p)))} · 더블이면 +${Math.round(P(lin(k("mirage").dbl, p)))}코인 · 힘 조절 +${pct(P(lin(k("mirage").ctl, p)))}`,
+      fx: (p) => ({ twin: P(lin(k("mirage").twin, p)) }),
+      desc: (p) => `첫 굴림에 ${pct(P(lin(k("mirage").twin, p)))} 확률로 짝이 하나 더`,
     },
-    active: { name: "마술 굴리기", kind: "pick", cd: cdOf(k("mirage")), mag: () => 12, desc: () => "원하는 눈(2~12)으로 굴려요 (더블 아님)" },
+    active: { name: "마술 굴리기", kind: "magic", cd: cdOf(k("mirage")), mag: () => 2, desc: () => "주사위 두 개를 원하는 눈으로 바꿔요" },
     on: true,
   },
   {
@@ -447,13 +445,13 @@ export const CHARS: CharDef[] = [
     color: "#e0442f",
     line: "레이디스 앤 젠틀맨! 관람료는 선불이에요",
     bio: "서커스단의 당찬 단장. 물개 파트너와 함께 공연을 열어 모두에게 관람료를 걷어요.",
-    passive: { name: "특등석", fx: (p) => ({ shock: P(lin(k("lolo").shock, p)) }), desc: (p) => `내 통행료를 낼 때 ${pct(P(lin(k("lolo").shock, p)))} 확률로 50% 더` },
+    passive: { name: "링 마스터", fx: (p) => ({ vsBonus: st(k("lolo").vs, p) }), desc: (p) => `VS 대결에서 이기면 코인 +${st(k("lolo").vs, p)}` },
     active: {
       name: "서커스 공연",
-      kind: "concert",
+      kind: "circus",
       cd: cdOf(k("lolo")),
-      mag: (p) => A(lin(k("lolo").fan, p)),
-      desc: (p) => `상대마다 가진 돈의 ${pct(A(lin(k("lolo").fan, p)))}를 관람료로 받아요`,
+      mag: (p) => st(k("lolo").fee, p),
+      desc: (p) => `상대마다 ${st(k("lolo").fee, p)}코인씩 관람료를 받아요`,
     },
     on: true,
   },
@@ -467,13 +465,17 @@ export const CHARS: CharDef[] = [
     art: "/marble/art/mongle.webp",
     color: "#8fb4ff",
     line: "양 한 마리… 양 두 마리… 쿨쿨",
-    bio: "구름처럼 폭신한 잠꾸러기 양. 자장가 한 곡이면 누구든 한 차례 꿈나라로 보내요.",
-    passive: { name: "포근한 털", fx: (p) => ({ tollPay: P(lin(k("mongle").pay, p)) }), desc: (p) => `남 땅 통행료 −${pct(P(lin(k("mongle").pay, p)))}` },
-    active: { name: "자장가", kind: "freeze", cd: cdOf(k("mongle")), mag: () => 1, desc: () => "상대 한 명이 다음 차례를 쿨쿨 자며 쉬어요" },
+    bio: "구름처럼 폭신한 잠꾸러기 양. 자장가 한 곡이면 누구든 졸려서 주사위를 한 번밖에 못 굴려요.",
+    passive: {
+      name: "포근한 털",
+      fx: (p) => ({ trapFree: 1, redCut: st(k("mongle").red, p), startBonus: k("mongle").start }),
+      desc: (p) => `함정 면역 · 빨강 칸 손해 −${st(k("mongle").red, p)} · 출발을 지날 때 +${k("mongle").start}`,
+    },
+    active: { name: "자장가", kind: "sleep", cd: cdOf(k("mongle")), mag: () => 1, desc: () => "상대 모두 다음 차례에 다시 굴리기를 못 해요" },
     on: true,
   },
 
-  /* ── UR: 마블 오리지널 ── */
+  /* ── UR: 다이스 타운 오리지널 ── */
   {
     id: "ur-dice",
     name: "DICE",
@@ -484,13 +486,13 @@ export const CHARS: CharDef[] = [
     art: "/marble/art/ur-dice.webp",
     color: "#7fe0c8",
     line: "주사위가 굴러가는 곳엔 언제나 내가 있어!",
-    bio: "주사위의 요정. 굴러가는 모든 주사위에 깃들어 있다가, 마음에 드는 사람에게 원하는 더블을 선물해요.",
+    bio: "주사위의 요정. 굴러가는 모든 주사위에 깃들어 있다가, 마음에 드는 눈을 몇 개든 복사해 줘요.",
     passive: {
       name: "요정의 눈짓",
-      fx: (p) => ({ twin: P(lin(k("ur-dice").twin, p)), doubleBonus: P(lin(k("ur-dice").dbl, p)), control: P(lin(k("ur-dice").ctl, p)) }),
-      desc: (p) => `더블 확률 ↑ (${pct(P(lin(k("ur-dice").twin, p)))}) · 더블이면 +${Math.round(P(lin(k("ur-dice").dbl, p)))}코인 · 힘 조절 +${pct(P(lin(k("ur-dice").ctl, p)))}`,
+      fx: (p) => ({ yachtBonus: st(k("ur-dice").yacht, p), usesReroll: 1 }),
+      desc: (p) => `야추면 코인 +${st(k("ur-dice").yacht, p)} · 판당 한 번 다시 굴리기 +1`,
     },
-    active: { name: "운명의 주사위", kind: "fate", cd: cdOf(k("ur-dice")), mag: () => 6, desc: () => "원하는 더블(1·1 ~ 6·6)로 굴려요 — 더블이라 한 번 더" },
+    active: { name: "운명 복사", kind: "copy", cd: cdOf(k("ur-dice")), mag: () => 2, desc: () => "주사위 하나의 눈을 다른 주사위 두 개에 복사해요" },
     on: true,
   },
   {
@@ -502,19 +504,19 @@ export const CHARS: CharDef[] = [
     sprite: "ur-moa",
     art: "/marble/art/ur-moa.webp",
     color: "#e8c25a",
-    line: "이 동네, 통째로 사도 될까냥?",
-    bio: "마블 월드 최고의 부동산 재벌 고양이. 이 동네를 통째로 사도 되냐고 묻는 건 농담이 아니에요.",
+    line: "그 별, 내가 살게냥",
+    bio: "다이스 타운 최고의 재벌 고양이. 별이 멀리 있어도 집사를 보내 할인가에 사 와요.",
     passive: {
       name: "큰손",
-      fx: (p) => ({ acq: P(lin(k("ur-moa").acq, p)), build: P(lin(k("ur-moa").build, p)) }),
-      desc: (p) => `인수 비용 −${pct(P(lin(k("ur-moa").acq, p)))} · 건설 비용 −${pct(P(lin(k("ur-moa").build, p)))}`,
+      fx: (p) => ({ jackpotMult: P(lin(k("ur-moa").jack, p)) }),
+      desc: (p) => `잭팟 +${pct(P(lin(k("ur-moa").jack, p)))}`,
     },
     active: {
-      name: "원격 매입",
-      kind: "buyout",
+      name: "VIP 쇼핑",
+      kind: "vip",
       cd: cdOf(k("ur-moa")),
-      mag: (p) => Math.max(1, lin(k("ur-moa").buy, p)),
-      desc: (p) => `굴리기 전, 상대 땅 하나를 인수 비용의 ${pct(Math.max(1, lin(k("ur-moa").buy, p)))}로 바로 사요 (랜드마크 제외)`,
+      mag: (p) => st(k("ur-moa").cut, p),
+      desc: (p) => `이번 차례 별 값 −${st(k("ur-moa").cut, p)} · 별이 도착 칸에서 4칸 안이면 사요`,
     },
     on: true,
   },
@@ -531,8 +533,8 @@ export const CHARS: CharDef[] = [
     bio: "오르골 정원에서 태어난 태엽 소년. 태엽을 한 번 더 감으면 춤도, 차례도 한 번 더!",
     passive: {
       name: "태엽 장단",
-      fx: (p) => ({ salary: P(lin(k("ur-forte").sal, p)), tollRecv: P(lin(k("ur-forte").recv, p)) }),
-      desc: (p) => `출발 월급 +${pct(P(lin(k("ur-forte").sal, p)))} · 내 땅 통행료 +${pct(P(lin(k("ur-forte").recv, p)))}`,
+      fx: (p) => ({ startBonus: st(k("ur-forte").start, p), festMult: 1 }),
+      desc: (p) => (st(k("ur-forte").start, p) > 0 ? `출발을 지날 때 코인 +${st(k("ur-forte").start, p)} · 축제 보상 2배` : "축제 보상 2배"),
     },
     active: { name: "앙코르", kind: "encore", cd: cdOf(k("ur-forte")), mag: () => 1, desc: () => "이번 차례가 끝나면 한 번 더 해요" },
     on: true,
@@ -577,20 +579,20 @@ const I = (v: number) => v * TUNE.item;
 /** 판당 횟수: base + (파워가 at 이상이면 1) */
 const usesAt = (base: number, at: number) => (p: number) => base + (p >= at ? 1 : 0);
 
-/** 아이템 수치표 — 목표(인형 상대, 아이템 하나만): 파워 0 ≈ 52% · 파워 15 ≈ 58% */
+/** 아이템 수치표 — 계단 [a, every] · 비율 [a, b] (캐릭터와 같음) */
 export const IK = {
-  d_heavy: { dodge: [0.15, 0.015], ctl: [0.03, 0.004] },
-  d_spark: { dbl: [60, 15] },
-  d_twin: { twin: [0.15, 0.01], dbl: [40, 8] },
-  d_slide: { at: 99, dodge: [0, 0.006] },
-  d_gold: { at: 99, dbl: [40, 8] },
-  d_time: { rewind: [0.5, 0.02], min: 400 },
-  b_hamster: { pay: [0.1, 0.012] },
-  b_pigeon: { build: [0.15, 0.015] },
-  b_robot: { sal: [0.15, 0.02] },
-  b_dog: { recv: [0.1, 0.01], def: [0.15, 0.02] },
-  b_cat: { sal: [0.12, 0.015], recv: [0.06, 0.008] },
-  b_fox: { acq: [0.2, 0.02], build: [0.08, 0.01] },
+  d_heavy: { one: [0.35, 0.02] },
+  d_spark: { big: [1, 5] },
+  d_twin: { twin: [0.1, 0.008] },
+  d_slide: { at: 10 },
+  d_gold: { at: 15 },
+  d_time: { at: 15 },
+  b_hamster: { red: [1, 10] },
+  b_pigeon: { item: [2, 5] },
+  b_robot: { start: [1, 10] },
+  b_dog: { guard: [0.25, 0.02] },
+  b_cat: { start: [1, 10] },
+  b_fox: { cut: [2, 7] },
 };
 const ik = <T extends keyof typeof IK>(id: T) => IK[id];
 
@@ -601,49 +603,48 @@ export const ITEMS: ItemDef[] = [
     slot: "dice",
     name: "묵직한 주사위",
     grade: "R",
-    fx: (p) => ({ dodge: I(lin(ik("d_heavy").dodge, p)), control: I(lin(ik("d_heavy").ctl, p)) }),
-    desc: (p) => `남 땅에 서게 되면 ${pct(I(lin(ik("d_heavy").dodge, p)))} 확률로 한 칸 더 · 힘 조절 +${pct(I(lin(ik("d_heavy").ctl, p)))}`,
+    fx: (p) => ({ noOne: Math.min(0.9, I(lin(ik("d_heavy").one, p))) }),
+    desc: (p) => `다시 굴린 주사위가 1이면 ${pct(Math.min(0.9, I(lin(ik("d_heavy").one, p))))} 확률로 한 번 더 굴러가요`,
   },
   {
     id: "d_spark",
     slot: "dice",
     name: "반짝 주사위",
     grade: "R",
-    fx: (p) => ({ doubleBonus: I(lin(ik("d_spark").dbl, p)) }),
-    desc: (p) => `더블이 나오면 +${Math.round(I(lin(ik("d_spark").dbl, p)))}코인`,
+    fx: (p) => ({ bigCombo: st(ik("d_spark").big, p) }),
+    desc: (p) => `트리플 이상 족보면 코인 +${st(ik("d_spark").big, p)}`,
   },
   {
     id: "d_twin",
     slot: "dice",
     name: "쌍둥이 주사위",
     grade: "SR",
-    fx: (p) => ({ twin: I(lin(ik("d_twin").twin, p)), doubleBonus: I(lin(ik("d_twin").dbl, p)) }),
-    desc: (p) => `더블 확률 ↑ (안 나오면 ${pct(I(lin(ik("d_twin").twin, p)))} 확률로 맞춰짐) · 더블이면 +${Math.round(I(lin(ik("d_twin").dbl, p)))}코인`,
+    fx: (p) => ({ twin: I(lin(ik("d_twin").twin, p)) }),
+    desc: (p) => `첫 굴림에 ${pct(I(lin(ik("d_twin").twin, p)))} 확률로 짝이 하나 더`,
   },
   {
     id: "d_slide",
     slot: "dice",
     name: "미끄럼 주사위",
     grade: "SR",
-    fx: (p) => ({ usesAdjust: usesAt(1, ik("d_slide").at)(p), dodge: I(lin(ik("d_slide").dodge, p)) }),
-    desc: (p) =>
-      `굴린 뒤 한 칸 더 미끄러지기 (판당 ${usesAt(1, ik("d_slide").at)(p)}번)${lin(ik("d_slide").dodge, p) > 0 ? ` · 남 땅이면 ${pct(I(lin(ik("d_slide").dodge, p)))} 확률로 한 칸 더` : ""}`,
+    fx: (p) => ({ usesSlide: usesAt(1, ik("d_slide").at)(p) }),
+    desc: (p) => `이동할 때 한 칸 더 · 덜 미끄러지기 (판당 ${usesAt(1, ik("d_slide").at)(p)}번)`,
   },
   {
     id: "d_gold",
     slot: "dice",
     name: "황금 주사위",
     grade: "SSR",
-    fx: (p) => ({ usesPick: usesAt(1, ik("d_gold").at)(p), doubleBonus: I(lin(ik("d_gold").dbl, p)) }),
-    desc: (p) => `원하는 눈(2~12)으로 굴리기 (판당 ${usesAt(1, ik("d_gold").at)(p)}번) · 더블이면 +${Math.round(I(lin(ik("d_gold").dbl, p)))}코인`,
+    fx: (p) => ({ usesGold: usesAt(1, ik("d_gold").at)(p) }),
+    desc: (p) => `주사위 하나를 원하는 눈으로 (판당 ${usesAt(1, ik("d_gold").at)(p)}번)`,
   },
   {
     id: "d_time",
     slot: "dice",
     name: "시간 주사위",
     grade: "SSR",
-    fx: (p) => ({ rewind: I(lin(ik("d_time").rewind, p)) }),
-    desc: (p) => `판당 한 번, ${ik("d_time").min}코인 넘는 통행료를 낼 때 시간을 되감아 ${pct(Math.min(1, I(lin(ik("d_time").rewind, p))))} 돌려받아요`,
+    fx: (p) => ({ usesReroll: usesAt(1, ik("d_time").at)(p) }),
+    desc: (p) => `시간을 되감아 다시 굴리기 +1 (판당 ${usesAt(1, ik("d_time").at)(p)}번)`,
   },
   /* 동행 */
   {
@@ -651,49 +652,48 @@ export const ITEMS: ItemDef[] = [
     slot: "buddy",
     name: "저금통 햄스터",
     grade: "R",
-    fx: (p) => ({ tollPay: I(lin(ik("b_hamster").pay, p)) }),
-    desc: (p) => `통행료를 낼 때 ${pct(I(lin(ik("b_hamster").pay, p)))} 돌려받아요`,
+    fx: (p) => ({ redCut: st(ik("b_hamster").red, p) }),
+    desc: (p) => `빨강 칸 손해 −${st(ik("b_hamster").red, p)}`,
   },
   {
     id: "b_pigeon",
     slot: "buddy",
-    name: "건축 비둘기",
+    name: "배달 비둘기",
     grade: "R",
-    fx: (p) => ({ build: I(lin(ik("b_pigeon").build, p)) }),
-    desc: (p) => `건설비 −${pct(I(lin(ik("b_pigeon").build, p)))}`,
+    fx: (p) => ({ itemBonus: st(ik("b_pigeon").item, p) }),
+    desc: (p) => `럭키 박스에서 코인 +${st(ik("b_pigeon").item, p)}`,
   },
   {
     id: "b_robot",
     slot: "buddy",
     name: "수리공 로봇",
     grade: "SR",
-    fx: (p) => ({ jailFree: 1, salary: I(lin(ik("b_robot").sal, p)) }),
-    desc: (p) => `수리소에 서도 바로 나감 · 출발 월급 +${pct(I(lin(ik("b_robot").sal, p)))}`,
+    fx: (p) => ({ trapFree: 1, startBonus: st(ik("b_robot").start, p) }),
+    desc: (p) => `함정 면역 · 출발을 지날 때 코인 +${st(ik("b_robot").start, p)}`,
   },
   {
     id: "b_dog",
     slot: "buddy",
     name: "경비견",
     grade: "SR",
-    fx: (p) => ({ tollRecv: I(lin(ik("b_dog").recv, p)), defend: I(lin(ik("b_dog").def, p)), defendBlock: I(0.1) }),
-    desc: (p) =>
-      `내 땅 통행료 +${pct(I(lin(ik("b_dog").recv, p)))} · 인수당하면 ${pct(I(lin(ik("b_dog").def, p)))} 더 받음 · ${pct(I(0.1))} 확률로 인수를 막음`,
+    fx: (p) => ({ guard: Math.min(0.8, I(lin(ik("b_dog").guard, p))) }),
+    desc: (p) => `코인을 뺏기거나 대결에 지면 ${pct(Math.min(0.8, I(lin(ik("b_dog").guard, p))))} 확률로 막아요`,
   },
   {
     id: "b_cat",
     slot: "buddy",
     name: "행운 고양이",
     grade: "SSR",
-    fx: (p) => ({ cardLuck: 1, salary: I(lin(ik("b_cat").sal, p)), tollRecv: I(lin(ik("b_cat").recv, p)) }),
-    desc: (p) => `럭키 박스는 두 장 보고 좋은 쪽 · 출발 월급 +${pct(I(lin(ik("b_cat").sal, p)))} · 내 땅 통행료 +${pct(I(lin(ik("b_cat").recv, p)))}`,
+    fx: (p) => ({ eventLuck: 1, startBonus: st(ik("b_cat").start, p) }),
+    desc: (p) => `마을 소식은 두 장 보고 좋은 쪽 · 출발을 지날 때 코인 +${st(ik("b_cat").start, p)}`,
   },
   {
     id: "b_fox",
     slot: "buddy",
-    name: "부동산 여우",
+    name: "흥정 여우",
     grade: "SSR",
-    fx: (p) => ({ acq: I(lin(ik("b_fox").acq, p)), build: I(lin(ik("b_fox").build, p)), freeUpAfterAcq: 1 }),
-    desc: (p) => `인수 비용 −${pct(I(lin(ik("b_fox").acq, p)))} · 건설비 −${pct(I(lin(ik("b_fox").build, p)))} · 인수하자마자 한 단계 무료 증축`,
+    fx: (p) => ({ starCut: st(ik("b_fox").cut, p) }),
+    desc: (p) => `별 값 −${st(ik("b_fox").cut, p)}코인`,
   },
 ];
 export const ITEM: Record<string, ItemDef> = Object.fromEntries(ITEMS.map((i) => [i.id, i]));
@@ -713,7 +713,7 @@ export interface Loadout {
 export function fxOf(lo: Loadout): { fx: Fx; skill: SkillFx } {
   const fx: Fx = { ...ZERO_FX };
   const add = (f: Partial<Fx>) => {
-    for (const [k, v] of Object.entries(f) as [keyof Fx, number][]) fx[k] = k === "jailFree" || k === "cardLuck" || k === "freeUpAfterAcq" ? Math.max(fx[k], v) : fx[k] + v;
+    for (const [k, v] of Object.entries(f) as [keyof Fx, number][]) fx[k] = MAX_KEYS.includes(k) ? Math.max(fx[k], v) : fx[k] + v;
   };
   const c = CHAR[lo.char.id] ?? CHAR.kai;
   const pc = power(c.grade, lo.char.lv);
@@ -723,9 +723,10 @@ export function fxOf(lo: Loadout): { fx: Fx; skill: SkillFx } {
     const it = ITEM[g.id];
     if (it) add(it.fx(power(it.grade, g.lv)));
   }
-  // 깎는 값은 90% 를 넘지 않게
-  for (const k of ["tollPay", "build", "acq"] as const) fx[k] = Math.min(0.9, fx[k]);
-  return { fx, skill: { kind: c.active.kind, cd: c.active.cd(pc), mag: c.active.mag(pc) } };
+  fx.twin = Math.min(0.6, fx.twin);
+  fx.guard = Math.min(0.8, fx.guard);
+  const extra = c.active.extra?.(pc);
+  return { fx, skill: { kind: c.active.kind, cd: c.active.cd(pc), mag: c.active.mag(pc), ...(extra !== undefined && { extra }) } };
 }
 
 /* ───────────── 판 밖 재화 · 가챠 ───────────── */

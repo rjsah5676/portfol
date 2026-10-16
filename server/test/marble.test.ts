@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { CHARS, CHAR_UP_DUPES, GACHA, ITEMS, STARTER, fxOf, power } from "../../web/src/lib/marble/data";
-import { act, newGame, standings, timeoutAction, type Game } from "../../web/src/lib/marble/engine";
+import { act, handOf, newGame, standings, timeoutAction, type Game } from "../../web/src/lib/marble/engine";
 import { botAction } from "../../web/src/lib/marble/bot";
 import { MAPS, MAP_IDS } from "../../web/src/lib/marble/maps";
 import { pullChars, pullItems, type Owned } from "../../web/src/lib/marble/gacha";
@@ -14,43 +14,65 @@ function botGame(map: (typeof MAP_IDS)[number], seed: number): Game {
   return g;
 }
 
-describe("픽셀 마블 엔진", () => {
-  it("맵: 칸 · 그룹 · 라인 · 다음 칸이 맞음", () => {
+describe("다이스 타운 엔진", () => {
+  it("판: 출발 하나 · 별 자리 넷 · 좌표 안 겹침", () => {
     for (const id of MAP_IDS) {
       const m = MAPS[id];
       expect(m.tiles.filter((t) => t.kind === "start")).toHaveLength(1);
-      expect(m.tiles.filter((t) => t.kind === "jail").length).toBeGreaterThanOrEqual(1);
-      for (const t of m.tiles) for (const n of t.next) expect(m.tiles[n]).toBeTruthy();
-      for (let gi = 0; gi < m.groups.length; gi++) expect(m.tiles.filter((t) => t.group === gi).length).toBeGreaterThanOrEqual(2);
-      // 격자 좌표가 겹치지 않음
+      expect(m.tiles.filter((t) => t.kind === "star")).toHaveLength(4);
       expect(new Set(m.tiles.map((t) => `${t.x},${t.y}`)).size).toBe(m.tiles.length);
     }
   });
 
-  it("AI 끼리 세 맵 모두 끝까지 감 · 같은 시드면 같은 판", () => {
+  it("족보", () => {
+    expect(handOf([3, 3, 3, 3, 3])).toBe("yacht");
+    expect(handOf([3, 3, 3, 3, 1])).toBe("four");
+    expect(handOf([1, 2, 3, 4, 5])).toBe("large");
+    expect(handOf([2, 2, 5, 5, 5])).toBe("full");
+    expect(handOf([1, 2, 3, 4, 6])).toBe("small");
+    expect(handOf([6, 6, 6, 1, 2])).toBe("triple");
+    expect(handOf([6, 6, 1, 1, 2])).toBe("two");
+    expect(handOf([6, 6, 1, 3, 2])).toBe("pair");
+    expect(handOf([6, 5, 1, 3, 2])).toBe("none");
+  });
+
+  it("AI 끼리 끝까지 감 · 같은 시드면 같은 판 · 10바퀴 · 보너스 별", () => {
     for (const map of MAP_IDS)
-      for (const seed of [1, 2, 3]) {
+      for (const seed of [1, 2, 3, 4]) {
         const a = botGame(map, seed);
         expect(a.over).toBeTruthy();
+        expect(a.round).toBe(a.rounds);
         const b = botGame(map, seed);
         expect(b.over).toEqual(a.over);
+        expect(b.players.map((p) => p.stars)).toEqual(a.players.map((p) => p.stars));
         expect(standings(a)).toHaveLength(3);
+        expect(a.players.every((p) => p.coins >= 0)).toBe(true);
       }
   });
 
   it("시간이 다 되면 대신 하는 행동은 늘 받아들여짐", () => {
-    const g = newGame({ map: "cross", seed: 9, players: [{ id: "a", name: "A", bot: false, lo: lo() }, { id: "b", name: "B", bot: false, lo: lo("lily") }] });
-    let guard = 0;
-    while (!g.over && guard++ < 3000) act(g, g.prompt!.p, timeoutAction(g));
-    expect(g.over).toBeTruthy();
+    for (const seed of [9, 10, 11]) {
+      const g = newGame({ seed, players: [{ id: "a", name: "A", bot: false, lo: lo() }, { id: "b", name: "B", bot: false, lo: lo("toto") }, { id: "c", name: "C", bot: false, lo: lo("ur-forte") }] });
+      let guard = 0;
+      while (!g.over && guard++ < 3000) act(g, g.prompt!.p, timeoutAction(g));
+      expect(g.over).toBeTruthy();
+    }
   });
 
   it("남의 차례 · 엉뚱한 행동은 거절하고 상태를 안 바꿈", () => {
     const g = newGame({ map: "town", seed: 5, first: 0, players: [{ id: "a", name: "A", bot: false, lo: lo() }, { id: "b", name: "B", bot: false, lo: lo() }] });
     const before = JSON.stringify(g.players);
     expect(() => act(g, 1, { t: "roll" })).toThrow();
-    expect(() => act(g, 0, { t: "buy", lv: 2 })).toThrow();
+    expect(() => act(g, 0, { t: "move", pick: [0, 1] })).toThrow();
+    expect(() => act(g, 0, { t: "skill" })).toThrow(); // 첫 바퀴
     expect(JSON.stringify(g.players)).toBe(before);
+    act(g, 0, { t: "roll" });
+    expect(g.turn!.dice).toHaveLength(5);
+    expect(() => act(g, 0, { t: "move", pick: [0] })).toThrow();
+    expect(() => act(g, 0, { t: "reroll", pick: [0, 1, 2, 3, 4] })).toThrow();
+    act(g, 0, { t: "reroll", pick: [0, 1] });
+    act(g, 0, { t: "reroll", pick: [0, 1] });
+    expect(() => act(g, 0, { t: "reroll", pick: [0] })).toThrow();
   });
 
   it("파워: 아랫 등급 5강 = 윗 등급 0강", () => {
@@ -88,7 +110,7 @@ describe("픽셀 마블 엔진", () => {
   });
 });
 
-describe("픽셀 마블 서버", () => {
+describe("다이스 타운 서버", () => {
   let srv: TestServer;
   let n = 0;
   async function member(): Promise<TestClient> {

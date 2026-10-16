@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import { RULE, TOWN_EVENTS } from "@/lib/marble/engine";
+import { CARDS, HANDS, HAND_ORDER, RULE } from "@/lib/marble/engine";
 import { MAPS, type MapId } from "@/lib/marble/maps";
 import { sfx } from "./audio";
 
@@ -14,63 +14,50 @@ const B = ({ children }: { children: ReactNode }) => <b className="text-[#ffe08a
 const ONLY: Record<MapId, ReactNode[]> = {
   town: [
     <>
-      <B>3바퀴마다 마을 소식</B>이 바뀌어요:{" "}
-      {Object.values(TOWN_EVENTS)
-        .map((e) => `${e.name}(${e.desc})`)
-        .join(" · ")}
+      별 자리 네 곳 중 한 곳에 <B>별</B>이 떠 있어요. 별 칸을 <B>지나가기만 해도</B> {RULE.starPrice}코인으로 사요 — 사면 별은 다른 자리로 이사 가요.
     </>,
     <>
-      <B>워프 게이트</B>에 서면 다음 차례에 아무 칸으로나 순간이동해요.
-    </>,
-  ],
-  cross: [
-    <>
-      네 변 가운데 <B>기차역</B>에 서면 십자 철로로 다른 역까지 바로 갈 수 있어요 (그냥 남아도 돼요). 남의 땅을 건너뛰고 내 동네로 갈아타는 게 핵심!
-    </>,
-    <>
-      워프 게이트 대신 <B>황금 다리</B>(+{RULE.bonus}코인 + <B>잭팟</B>: 세금 · 벌금 · 수리비로 은행에 낸 돈이 쌓였다가 서는 사람이 몽땅)가 있어요. 럭키 박스의 워프 카드는 그 자리에서 다음 차례 워프로 바뀌어요.
-    </>,
-  ],
-  orgel: [
-    <>
-      <B>4바퀴마다 태엽이 감기며</B> 정원의 네 변이 시계 방향으로 한 변씩 돌아가요. 땅은 주인 · 건물째로 옮겨 가서, 내 땅 앞 길목이 계속 바뀌어요.
-    </>,
-    <>
-      라인 독점은 돌아간 뒤의 <B>지금 자리</B> 기준이에요 — 돌기 직전에 한 변을 모으면 역전 기회!
+      마지막 <B>{RULE.frenzyRounds}바퀴는 막판</B>: 파랑 · 빨강 칸이 두 배, 꼴찌는 코인 {RULE.catchup} + 아이템을 받아요.
     </>,
   ],
 };
 
 const COMMON: { t: string; d: ReactNode }[] = [
   {
-    t: "굴리기",
+    t: "한 차례",
     d: (
       <>
-        주사위 버튼(또는 스페이스)을 <B>꾹 눌러 힘을 모아</B> 던져요. 세게 던지면 큰 수, 약하게 던지면 작은 수가 나올 확률이 올라가요 (기본 10%, 캐릭터 · 아이템으로 더). 더블이면 한 번 더!
+        주사위 <B>5개</B>를 굴리고, 마음에 드는 주사위를 눌러 <B>잠근 뒤 나머지를 {RULE.rerolls}번까지 다시</B> 굴려요 (야추처럼). 다 됐으면 주사위 <B>2개를 골라 그 합만큼</B> 이동!
       </>
     ),
   },
   {
-    t: "땅 · 건물",
+    t: "족보 보상",
     d: (
       <>
-        빈 땅에 서면 땅과 함께 <B>오두막 · 하우스 · 타워</B>까지 한 번에 지을 수 있어요. 타워가 선 내 땅에 다시 서면 <B>랜드마크</B> (인수 불가). 출발 포털에 딱 서면 내 땅 하나를 골라 바로 지을 수 있어요.
+        이동과 따로, 5개 전체 족보로 보상을 받아요:{" "}
+        {HAND_ORDER.filter((h) => h !== "none")
+          .map((h) => `${HANDS[h].name}(${HANDS[h].desc})`)
+          .join(" · ")}
+        . 족보를 노리면 이동 숫자가 굳고, 원하는 칸에 가려면 족보를 포기해야 해요!
       </>
     ),
   },
   {
-    t: "통행료 · 인수",
+    t: "칸",
     d: (
       <>
-        남의 땅에 서면 통행료를 내고, 랜드마크가 아니면 넣은 돈만큼 주고 <B>인수</B>할 수 있어요. 같은 색 동네를 다 가지면 통행료 2배 — 칸 구석의 <B>x2</B> 같은 숫자가 지금 배율이에요.
+        <B>파랑</B> +{RULE.blue} · <B>빨강</B> −{RULE.red}(잭팟에 쌓임) · <B>럭키 박스</B> 아이템 · <B>VS</B> 상대 하나와 주사위 대결({RULE.vsStake}코인) · <B>마을 소식</B> 카드 한 장 · <B>함정</B> 다음 차례 다시 굴리기 0번 · <B>워프</B> 원하는 칸으로 · <B>축제</B> 주사위만큼 코인 · <B>황금 금고</B> 잭팟 몽땅 · <B>출발</B> 지나가면 +{RULE.start}
       </>
     ),
   },
   {
-    t: "돈이 모자라면",
+    t: "아이템 · 스킬",
     d: (
       <>
-        통행료가 가진 돈보다 많으면 <B>대출</B>(판마다 1번, 빌린 돈의 130% 를 월급 절반씩 갚음)을 받거나, 싼 땅부터 반값에 팔아요. 그래도 모자라면 파산.
+        아이템은 {RULE.maxCards}장까지 들고 굴리기 전 · 후에 써요 ({Object.values(CARDS)
+          .map((c) => c.name)
+          .join(" · ")}). 캐릭터 스킬은 <B>2바퀴부터</B>, 쓰면 몇 차례 쉬었다가 다시 쓸 수 있어요.
       </>
     ),
   },
@@ -78,15 +65,7 @@ const COMMON: { t: string; d: ReactNode }[] = [
     t: "이기는 법",
     d: (
       <>
-        상대 모두 <B>파산</B> · <B>트리플 독점</B>(색 동네 3곳) · <B>라인 독점</B>(한 변 전부) · <B>명소 독점</B> 중 하나, 아니면 {MAPS.town.rounds}바퀴가 끝났을 때 총자산 1등.
-      </>
-    ),
-  },
-  {
-    t: "특수 칸",
-    d: (
-      <>
-        <B>럭키 박스</B> 카드 한 장 · <B>수리소</B>(더블이 나오거나 2번 쉬어야 나감, {RULE.jailPay}코인 내고 바로 나가도 됨) · <B>축제 무대</B>(내 땅 하나 통행료 2배) · <B>세관</B>(땅 · 건물 값의 {Math.round(RULE.taxRate * 100)}% 세금)
+        {MAPS.town.rounds}바퀴가 끝났을 때 <B>별이 가장 많은</B> 사람 (같으면 코인). 판 끝에 <B>보너스 별 셋</B> — 코인왕(번 코인) · 족보왕(족보 점수) · 불운왕(잃은 코인)이 하나씩 더 받아요. 끝까지 몰라요!
       </>
     ),
   },
@@ -105,7 +84,7 @@ export function MapGuide({ map, onClose }: { map: MapId; onClose(): void }) {
             <b className="text-[24px]">{m.name}</b>
             <p className="mt-1 text-[12px] leading-[17px] text-white/75">{m.desc}</p>
             <p className="mt-2 text-[11px] text-white/55">
-              32칸 · {m.rounds}바퀴 · 2~4명
+              32칸 · {m.rounds}바퀴 · 2~4명 · 별 {RULE.starPrice}코인
             </p>
           </div>
         </div>
