@@ -76,7 +76,6 @@ import {
   Money,
   PotChips,
   Profile,
-  Rise,
   Suit,
   PotPile,
   TimerRing,
@@ -253,7 +252,6 @@ export default function TableView({
   const [emotes, setEmotes] = useState<Record<number, Timed<Emote> & { key: number }>>({});
   const [poses, setPoses] = useState<Record<number, Timed<Pose>>>({});
   const [faces, setFaces] = useState<Record<number, Timed<Face>>>({});
-  const [gains, setGains] = useState<Record<number, { amt: number; key: number }>>({});
   const [cutin, setCutin] = useState<{ char: Look; name: string; key: number } | null>(null);
   const [sitState, setSitState] = useState<SitState>("joining");
   const [notice, setNotice] = useState("");
@@ -595,7 +593,6 @@ export default function TableView({
         const myShowed = mySeat >= 0 && !!t.hand?.players[mySeat] && !t.hand.players[mySeat].folded;
         const total = seats.reduce((a, b) => a + b.amt, 0);
         const apply = () => {
-          setGains(won);
           setWinFly({ key: ++keyRef.current, seats });
           // 사이드 팟만 따 간 사람(족보는 2등)은 진 쪽 — 이긴 소리 · 대사는 족보가 제일 센 사람만
           const tops = topHands(t.hand);
@@ -1640,14 +1637,6 @@ export default function TableView({
                       </span>
                     </span>
                   )}
-                  {gains[i] && wonHere > 0 && (
-                    <Rise
-                      key={gains[i].key}
-                      className="absolute -top-[2.3em] left-1/2 -translate-x-1/2 text-[1.2em] text-[var(--pk-brass)]"
-                    >
-                      +{fmtShort(gains[i].amt)}
-                    </Rise>
-                  )}
                   {net !== null && net !== 0 && (
                     <span className={`pk-net pk-num ${net > 0 ? "pk-net-up" : "pk-net-down"}`}>
                       {net > 0 ? "+" : "−"}
@@ -1993,7 +1982,6 @@ export default function TableView({
             waiting={myTurn}
             totalMs={totalMs}
             deadline={deadline}
-            gain={gains[mySeat] && (res?.won[mySeat] ?? 0) > 0 ? gains[mySeat] : null}
             emote={emotes[mySeat] ?? null}
             emoteZ={emoteZ(mySeat)}
             avW={heroAvW}
@@ -2789,7 +2777,6 @@ function HeroArea(props: {
   waiting: boolean;
   totalMs: number;
   deadline: number;
-  gain: { amt: number; key: number } | null;
   emote: (Timed<Emote> & { key: number }) | null;
   /** 내 이모티콘이 떠 있는 동안 내 틀을 올릴 높이 (0 = 평소) — 위 자리 이름표에 말풍선이 깔리지 않게 */
   emoteZ: number;
@@ -2826,7 +2813,6 @@ function HeroArea(props: {
     waiting,
     totalMs,
     deadline,
-    gain,
     emote,
     avW,
     avH,
@@ -2907,14 +2893,6 @@ function HeroArea(props: {
             <span className="pk-badge" style={{ fontSize: Math.round(avH * 0.13) }}>
               {isButton ? "D" : blind}
             </span>
-          )}
-          {gain && (
-            <Rise
-              key={gain.key}
-              className="absolute -top-[0.6em] left-1/2 -translate-x-1/2 text-[1.1em] text-[var(--pk-brass)]"
-            >
-              +{fmtShort(gain.amt)}
-            </Rise>
           )}
           {/* 내 이모티콘: 머리 바로 위, 꼬리는 아래 */}
           {emote && (
