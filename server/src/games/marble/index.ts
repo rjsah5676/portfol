@@ -135,6 +135,7 @@ export function animMs(evs: Ev[]): number {
         t += 1900;
         break;
       case "mono":
+      case "threat":
       case "bankrupt":
         t += 1400;
         break;
@@ -448,6 +449,10 @@ export function registerMarble({ gateway, db, points, users }: Deps, opts: Marbl
     const L = r.ladder!;
     if (L.revealUntil || L.picks.includes(seat) || L.picks[col] !== -1) return;
     L.picks[col] = seat;
+    // 마지막 한 사람은 남은 칸 하나뿐이니 바로 정해 줌
+    const left = L.seats.filter((si) => !L.picks.includes(si));
+    const free = L.picks.map((x, c) => (x < 0 ? c : -1)).filter((c) => c >= 0);
+    if (left.length === 1 && free.length === 1) L.picks[free[0]] = left[0];
     if (L.picks.every((x) => x >= 0)) {
       L.revealUntil = Date.now() + ms(LADDER_SHOW_MS);
       L.deadline = 0;

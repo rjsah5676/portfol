@@ -216,6 +216,8 @@ export type Ev =
   | { t: "town"; ev: TownEventId; group?: number }
   | { t: "rotate"; order: number[] }
   | { t: "mono"; p: number; group: number }
+  /** 독점 코앞 (명소 하나 남음) — 다들 막으라고 크게 알림 */
+  | { t: "threat"; p: number; kind: "spot"; have: number; need: number }
   | { t: "bankrupt"; p: number }
   | { t: "loan"; p: number; amt: number; debt: number }
   | { t: "repay"; p: number; amt: number; left: number }
@@ -1253,8 +1255,11 @@ function checkWin(g: Game, pi: number, tile: number) {
     const tiles = m.lines[li].map((s) => (m.id === "orgel" ? g.order[s] : s)).filter((t) => ownable(m.tiles[t]));
     if (tiles.length && tiles.every((t) => g.tiles[t].owner === pi)) return endGame(g, pi, "line", li);
   }
+  // 명소 독점: 명소를 전부 가지면 승리 (명소는 인수 · 스킬로 뺏을 수 없음)
   const spots = m.tiles.map((x, i) => (x.kind === "spot" ? i : -1)).filter((i) => i >= 0);
-  if (spots.every((t) => g.tiles[t].owner === pi)) return endGame(g, pi, "spot");
+  const mine = spots.filter((t) => g.tiles[t].owner === pi).length;
+  if (spots.length && mine === spots.length) return endGame(g, pi, "spot");
+  if (d.kind === "spot" && spots.length > 1 && mine === spots.length - 1) emit(g, { t: "threat", p: pi, kind: "spot", have: mine, need: spots.length });
 }
 
 function finishByAssets(g: Game): void {

@@ -3,13 +3,14 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { CHAR, GRADE_COLOR, ITEM, power, type Loadout } from "@/lib/marble/data";
 import { MAPS, MAP_IDS, type MapId } from "@/lib/marble/maps";
-import type { RoomWire } from "@/lib/marble/wire";
+import type { ProfileWire, RoomWire } from "@/lib/marble/wire";
 import { marble } from "@/realtime/marble";
 import { serverNow } from "@/lib/api/socket";
 import { getPrefs, onPrefs, setPrefs, sfx } from "./audio";
 import { CURSOR_IDS, applyCursor, cursorName, cursorPointPreview, cursorPreview, getCursor, setCursor } from "./cursor";
 import { Btn, GradeTag, Icon, PCOLOR, Stars } from "./pixel";
 import { useStage } from "./Stage";
+import Bag from "./Bag";
 import { CharHero, ItemBadge, XBtn, XChip, XGrade, XPanel } from "./ui";
 
 /*
@@ -46,6 +47,18 @@ export function WaitRoom({ room, me, onLeave }: { room: RoomWire; me: string; on
   const count = room.startAt ? Math.max(0, Math.ceil((room.startAt - serverNow()) / 1000)) : 0;
   const opt = (o: Parameters<typeof marble.opts>[1]) => void marble.opts(room.id, o).catch((e) => alert((e as Error).message));
   const seats = room.seats.length <= 2 ? "grid-cols-2" : "grid-cols-2";
+  // 대기실에서 바로 캐릭터 · 장착 아이템 바꾸기 (가방을 방 위에 띄움)
+  const [bag, setBag] = useState<ProfileWire | null>(null);
+  const [bagLoading, setBagLoading] = useState(false);
+  const openBag = () => {
+    if (bagLoading) return;
+    sfx("click");
+    setBagLoading(true);
+    void marble
+      .profile()
+      .then(setBag, (e) => alert((e as Error).message))
+      .finally(() => setBagLoading(false));
+  };
   return (
     <div className="mbx absolute inset-0 overflow-hidden" style={{ background: "#120d33" }}>
       {/* 배경: 고른 맵 그림을 흐리게 */}
@@ -111,6 +124,11 @@ export function WaitRoom({ room, me, onLeave }: { room: RoomWire; me: string; on
                         <XChip color="#ffffff22" text="#ffffffcc">
                           기다리는 중
                         </XChip>
+                      )}
+                      {isMe && (
+                        <XBtn tone="sky" className="ml-auto h-[26px] px-2.5 text-[11px]" disabled={bagLoading} onClick={openBag}>
+                          장비 바꾸기
+                        </XBtn>
                       )}
                       {owner && !isMe && (
                         <XBtn tone="dark" className="ml-auto h-[24px] px-2 text-[11px] text-[#ff9aa8]" onClick={() => (s.bot || confirm(`${s.name} 님을 강퇴할까요?`)) && opt({ kick: i })}>
@@ -196,6 +214,13 @@ export function WaitRoom({ room, me, onLeave }: { room: RoomWire; me: string; on
           </XBtn>
         )}
       </div>
+
+      {/* 가방 (캐릭터 · 장착 아이템) — 닫으면 바뀐 장비가 자리에 바로 보임 */}
+      {bag && (
+        <div className="absolute inset-0 z-[80]">
+          <Bag prof={bag} onProf={setBag} onBack={() => setBag(null)} />
+        </div>
+      )}
     </div>
   );
 }

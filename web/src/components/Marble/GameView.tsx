@@ -499,6 +499,11 @@ export default function GameView({ room, me, onLeave }: { room: RoomWire; me: st
         setBanner({ id: ++fid, title: "독점!", sub: `${P(e.p)} · ${MAPS[cur.map].groups[e.group]?.name} 통행료 2배`, color: PCOLOR[e.p], ms: 1400 });
         await wait(1400);
         return;
+      case "threat":
+        sfx("mono");
+        setBanner({ id: ++fid, title: "명소 독점 위기!", sub: `${P(e.p)} · 명소 ${e.have}/${e.need} — 남은 명소 하나만 사면 승리`, color: "#ffb21e", ms: 1500 });
+        await wait(1400);
+        return;
       case "bankrupt":
         sfx("bankrupt");
         setAnim((a) => a.map((x, i) => (i === e.p ? "ko" : x)));
@@ -846,6 +851,8 @@ function PlayerCard({
   const tiles = g.tiles.filter((t) => t.owner === i).length;
   // 동네별로 가진 칸 수 (색 점)
   const m = MAPS[g.map];
+  const spotAll = m.tiles.filter((d) => d.kind === "spot").length;
+  const spotN = m.tiles.filter((d, ti) => d.kind === "spot" && g.tiles[ti].owner === i).length;
   const groups = m.groups.map((gr, gi) => ({ color: gr.color, n: m.tiles.filter((d, ti) => d.group === gi && g.tiles[ti].owner === i).length })).filter((x) => x.n > 0);
   const dice = p.lo.dice ? ITEM[p.lo.dice.id] : null;
   const buddy = p.lo.buddy ? ITEM[p.lo.buddy.id] : null;
@@ -892,6 +899,11 @@ function PlayerCard({
           </div>
           <div className="mt-[2px] flex h-[13px] items-center gap-1 text-[10px] leading-none whitespace-nowrap text-[var(--mute)]">
             {p.debt > 0 && <span>땅 {tiles}</span>}
+            {spotN > 0 && (
+              <span className="flex h-[12px] items-center rounded-[3px] px-[3px] text-[9px] leading-none font-black text-[#5a3a00]" style={{ background: spotN === spotAll - 1 ? "#ff6a2b" : "#ffb21e", color: spotN === spotAll - 1 ? "#fff" : "#5a3a00", boxShadow: "0 0 0 1px rgba(35,42,77,0.5)" }} title={`명소 ${spotN}/${spotAll} — 전부 가지면 승리`}>
+                ★{spotN}/{spotAll}
+              </span>
+            )}
             {groups.length > 0 && (
               <span className="flex items-center gap-[2px]" title="동네별 가진 칸">
                 {groups.slice(0, 6).map((x, k) => (
@@ -1306,7 +1318,7 @@ function TileInfo({ g, tile, onClose }: { g: GameWire; tile: number; onClose(): 
               ) : (
                 <div className="rounded-xl bg-white/[0.07] px-3 py-2 text-white/80">
                   빈 땅 · 땅값 <b className="text-white">{fmt(d.price ?? 0)}</b>
-                  {d.kind === "spot" && " · 가진 명소 수만큼 통행료 2배씩, 4곳이면 승리"}
+                  {d.kind === "spot" && " · 가진 명소 수만큼 통행료 2배씩, 전부 가지면 명소 독점 승리 · 인수나 스킬로 뺏기지 않아요"}
                 </div>
               )}
               {rows.length > 1 && (
