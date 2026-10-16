@@ -2,7 +2,7 @@
 
 import type { CSSProperties, ReactNode } from "react";
 import { CHAR } from "@/lib/marble/data";
-import { LANDMARK, builtOf, tollMult, tollOf, type Game } from "@/lib/marble/engine";
+import { LANDMARK, RULE, builtOf, tollMult, tollOf, type Game } from "@/lib/marble/engine";
 import { MAPS, type MapDef, type TileDef } from "@/lib/marble/maps";
 import type { GameWire } from "@/lib/marble/wire";
 import { PCOLOR } from "./pixel";
@@ -160,6 +160,7 @@ export default function Board({
   onInfo,
   flash,
   trail,
+  reach,
 }: {
   g: GameWire;
   tokens: TokenView[];
@@ -169,6 +170,8 @@ export default function Board({
   onInfo?(tile: number): void;
   flash?: Record<number, string>;
   trail?: Trail | null;
+  /** 굴리기 전: 갈 수 있는 칸 (자리 → 몇 칸) */
+  reach?: Record<number, number> | null;
 }) {
   const m = MAPS[g.map];
   const gg = g as unknown as Game;
@@ -201,9 +204,12 @@ export default function Board({
               className="absolute cursor-pointer p-[3px]"
               style={{ left: r.x, top: r.y, width: r.w, height: r.h }}
             >
-              <TileFace m={m} d={d} owner={t.owner} sx={sd.x} sy={sd.y} toll={t.owner >= 0 ? tollOf(gg, tile) : 0} mult={t.owner >= 0 ? tollMult(gg, tile) : 1} fest={t.owner >= 0 && g.players[t.owner]?.fest === tile} boost={t.boostLeft > 0 ? t.boostLeft : 0} tw={r.w - 6} th={r.h - 6} />
+              <TileFace m={m} d={d} owner={t.owner} sx={sd.x} sy={sd.y} toll={t.owner >= 0 ? tollOf(gg, tile) : 0} mult={t.owner >= 0 ? tollMult(gg, tile) : 1} fest={t.owner >= 0 && g.players[t.owner]?.fest === tile} boost={t.boostLeft > 0 ? t.boostLeft : 0} pot={d.kind === "bonus" ? RULE.bonus + (g.pot ?? 0) : 0} tw={r.w - 6} th={r.h - 6} />
               {here.length > 0 && <span className="pointer-events-none absolute inset-[2px] rounded-[10px]" style={{ boxShadow: `inset 0 0 0 4px ${PCOLOR[here[0]]}, 0 0 16px 3px ${PCOLOR[here[0]]}` }} />}
               {can && <span className="mbx-pick pointer-events-none absolute inset-[2px] rounded-[10px]" />}
+              {/* 고르는 중: 못 고르는 칸은 어둡게 (고를 칸이 확 보이게) */}
+              {pick && pick.length > 0 && !can && <span className="pointer-events-none absolute inset-[2px] rounded-[10px] bg-[rgba(20,16,50,0.5)]" />}
+              {reach?.[slot] !== undefined && <ReachChip n={reach[slot]} sx={sd.x} sy={sd.y} />}
               {flash?.[tile] && <span className="pointer-events-none absolute inset-[3px] rounded-[9px]" style={{ boxShadow: `inset 0 0 0 5px ${flash[tile]}`, background: "rgba(255,255,255,0.4)" }} />}
               {trail && trail.slots.includes(slot) && <TrailChip k={trail.slots.indexOf(slot)} trail={trail} sx={sd.x} sy={sd.y} />}
             </button>
@@ -349,6 +355,22 @@ export default function Board({
   );
 }
 
+/** 굴리기 전 갈 수 있는 칸: 약(2~5) · 중(6~8) · 강(9~12) 색 */
+function ReachChip({ n, sx, sy }: { n: number; sx: number; sy: number }) {
+  const col = (sx <= 0 || sx >= 8) && !(sy <= 0 || sy >= 8);
+  const c = n < 6 ? "#4a8dff" : n <= 8 ? "#2fb36a" : "#ff8a2b";
+  return (
+    <span className="pointer-events-none absolute inset-0 flex items-center justify-center" style={{ zIndex: 4 }}>
+      <span
+        className="flex h-[26px] w-[26px] items-center justify-center rounded-full text-[14px] font-black text-white"
+        style={{ background: c, boxShadow: "0 0 0 2.5px #fff, 0 2px 5px rgba(0,0,0,0.35)", transform: col ? "rotate(-90deg)" : undefined }}
+      >
+        {n}
+      </span>
+    </span>
+  );
+}
+
 /** 이동 경로 숫자 (칸 바닥) — 지나간 칸은 흐려지고, 지금 칸 · 도착 칸은 크게 */
 function TrailChip({ k, trail, sx, sy }: { k: number; trail: Trail; sx: number; sy: number }) {
   const last = k === trail.slots.length - 1;
@@ -384,7 +406,7 @@ function TrailChip({ k, trail, sx, sy }: { k: number; trail: Trail; sx: number; 
 }
 
 /** 판 위에 눕는 칸 바닥 */
-function TileFace({ m, d, owner, sx, sy, toll, mult, fest, boost, tw, th }: { m: MapDef; d: TileDef; owner: number; sx: number; sy: number; toll: number; mult: number; fest: boolean; /** 불꽃(스킬 부스트) 남은 바퀴 · 0 = 없음 */ boost: number; tw: number; th: number }) {
+function TileFace({ m, d, owner, sx, sy, toll, mult, fest, boost, pot, tw, th }: { m: MapDef; d: TileDef; owner: number; sx: number; sy: number; toll: number; mult: number; fest: boolean; /** 불꽃(스킬 부스트) 남은 바퀴 · 0 = 없음 */ boost: number; /** 황금 다리: 서면 받는 돈 */ pot: number; tw: number; th: number }) {
   const sp = KIND[d.kind];
   if (sp) {
     const corner = sx % 8 === 0 && sy % 8 === 0;
@@ -400,6 +422,11 @@ function TileFace({ m, d, owner, sx, sy, toll, mult, fest, boost, tw, th }: { m:
             <b className="whitespace-nowrap leading-none font-black" style={{ fontSize: fs, color: sp.ink, textShadow: sp.ink === "#fff" ? "0 1px 2px rgba(0,0,0,0.5)" : "none" }}>
               {d.name}
             </b>
+            {pot > 0 && (
+              <span className={`rounded-full px-[6px] text-[12px] leading-[16px] font-black text-white ${pot > RULE.bonus ? "mbx-hot" : ""}`} style={{ background: pot > RULE.bonus ? "#ff6a2b" : "#c98a00", boxShadow: "0 0 0 1.5px #fff" }}>
+                +{pot}
+              </span>
+            )}
           </span>
         </FloorText>
       </div>
@@ -449,14 +476,33 @@ function TileFace({ m, d, owner, sx, sy, toll, mult, fest, boost, tw, th }: { m:
     </span>,
     <div key="c" className="w-full shrink-0" style={{ height: 13, background: `linear-gradient(90deg, ${mix(band, 0.2)}, ${band})` }} />,
   ];
+  const spot = d.kind === "spot";
   return (
-    <div className="relative h-full w-full overflow-hidden rounded-[10px]" style={{ background: pc ? `linear-gradient(135deg, ${mix(pc, 0.35)}, ${pc})` : `linear-gradient(135deg, #fffdf6, ${mix(band, 0.82)})` }}>
+    <div
+      className="relative h-full w-full overflow-hidden rounded-[10px]"
+      style={{
+        background: spot
+          ? pc
+            ? `linear-gradient(135deg, ${mix(pc, 0.25)}, ${pc} 55%, #ffd23a)`
+            : "linear-gradient(135deg, #fff8d6, #ffd96a 55%, #ffb21e)"
+          : pc
+            ? `linear-gradient(135deg, ${mix(pc, 0.35)}, ${pc})`
+            : `linear-gradient(135deg, #fffdf6, ${mix(band, 0.82)})`,
+      }}
+    >
+      {/* 명소: 금빛이 스쳐 지나감 + 칸 가운데 큰 별 */}
+      {spot && <div className="mbx-sheen pointer-events-none absolute inset-0" />}
+      {spot && (
+        <span className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-25">
+          <Glyph n="star" size={Math.round(Math.min(tw, th) * 0.75)} color="#fff" />
+        </span>
+      )}
       {/* 안 → 밖: 건물 자리 · 이름 · 값 · 동네 색 띠 (칸 길이 방향 = 변 방향) */}
       <div className="absolute top-1/2 left-1/2 flex flex-col items-center justify-between" style={{ width: col ? th : tw, height: col ? tw : th, transform: `translate(-50%, -50%) ${col ? "rotate(-90deg)" : ""}` }}>
         {near ? parts : [...parts].reverse()}
       </div>
       {/* 테두리는 맨 위에 다시 그려서 동네 색 띠까지 감쌈 */}
-      <div className="pointer-events-none absolute inset-0 rounded-[10px]" style={{ boxShadow: pc ? `inset 0 0 0 2.5px ${dark(pc, 0.6)}, inset 0 3px 0 rgba(255,255,255,0.35)` : `inset 0 0 0 1.8px ${dark(band, 0.55)}` }} />
+      <div className="pointer-events-none absolute inset-0 rounded-[10px]" style={{ boxShadow: spot ? `inset 0 0 0 3px #ffd23a, inset 0 0 0 4.5px ${pc ? dark(pc, 0.6) : "#b07400"}, inset 0 0 14px rgba(255,240,170,0.9)` : pc ? `inset 0 0 0 2.5px ${dark(pc, 0.6)}, inset 0 3px 0 rgba(255,255,255,0.35)` : `inset 0 0 0 1.8px ${dark(band, 0.55)}` }} />
     </div>
   );
 }

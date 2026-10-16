@@ -135,6 +135,8 @@ export function animMs(evs: Ev[]): number {
         t += 1900;
         break;
       case "mono":
+        t += 2300;
+        break;
       case "threat":
       case "bankrupt":
         t += 1400;
@@ -865,6 +867,7 @@ export function registerMarble({ gateway, db, points, users }: Deps, opts: Marbl
             d: z.literal(1).optional(),
             lv: z.number().int().optional(),
             pick: z.array(z.number().int().min(0).max(4)).max(5).optional(),
+            sell: z.array(z.number().int().min(0).max(63)).max(40).optional(),
             yes: z.boolean().optional(),
             tile: z.number().int().optional(),
             power: z.number().min(0).max(1).optional(),

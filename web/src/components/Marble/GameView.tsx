@@ -13,6 +13,7 @@ import {
   baseToll,
   bitsOf,
   builtOf,
+  groupOwned,
   investedT,
   canSkill,
   controlChance,
@@ -281,7 +282,14 @@ export default function GameView({ room, me, onLeave }: { room: RoomWire; me: st
         setCash((c) => c.map((x, i) => (i === e.p ? x + e.amt : x)));
         const c = cardXY(e.p);
         float(c.x, c.y, e.why ? `${e.why} +${fmt(e.amt)}` : `+${fmt(e.amt)}`, "#2f8a3a");
-        sfx("coin");
+        sfx(e.pot ? "coins" : "coin");
+        if (e.pot) {
+          // 황금 다리 잭팟: 크게
+          setBanner({ id: ++fid, title: `잭팟! +${fmt(e.amt)}`, sub: `${P(e.p)} · 황금 다리에 쌓인 세금 · 벌금을 몽땅`, color: "#ffb21e", ms: 1700 });
+          const q = slotXY(posRef.current[e.p]);
+          for (let k = 0; k < 8; k++) spawn("coin", q.x, q.y, { dx: c.x - q.x + (k - 4) * 6, dy: c.y - q.y, delay: k * 60 }, 900);
+          await wait(1500);
+        }
         await wait(300);
         return;
       }
@@ -496,12 +504,23 @@ export default function GameView({ room, me, onLeave }: { room: RoomWire; me: st
         return;
       case "mono":
         sfx("mono");
-        setBanner({ id: ++fid, title: "독점!", sub: `${P(e.p)} · ${MAPS[cur.map].groups[e.group]?.name} 통행료 2배`, color: PCOLOR[e.p], ms: 1400 });
-        await wait(1400);
+        setBanner({ id: ++fid, title: "독점!", sub: `${P(e.p)} · ${MAPS[cur.map].groups[e.group]?.name} 통행료 2배`, color: PCOLOR[e.p], ms: 2300 });
+        await wait(2200);
         return;
       case "threat":
         sfx("mono");
-        setBanner({ id: ++fid, title: "명소 독점 위기!", sub: `${P(e.p)} · 명소 ${e.have}/${e.need} — 남은 명소 하나만 사면 승리`, color: "#ffb21e", ms: 1500 });
+        setBanner({
+          id: ++fid,
+          title: e.kind === "spot" ? "명소 독점 위기!" : e.kind === "triple" ? "트리플 독점 위기!" : "라인 독점 위기!",
+          sub:
+            e.kind === "spot"
+              ? `${P(e.p)} · 명소 ${e.have}/${e.need} — 남은 명소 하나만 사면 승리`
+              : e.kind === "triple"
+                ? `${P(e.p)} · 동네 ${e.have}/${e.need} 독점 — 하나만 더 하면 승리`
+                : `${P(e.p)} · 한 줄 ${e.have}/${e.need}칸 — 한 칸만 더 가지면 승리`,
+          color: "#ffb21e",
+          ms: 1700,
+        });
         await wait(1400);
         return;
       case "bankrupt":
@@ -639,6 +658,16 @@ export default function GameView({ room, me, onLeave }: { room: RoomWire; me: st
     }
   }
 
+  // 내 차례 굴리기 전: 2~12칸 앞이 어디인지 칸에 숫자로
+  let reach: Record<number, number> | null = null;
+  if (mine && pr && pr.k === "turn" && !pr.jail && !pr.warp && !mode && !trail && myPi >= 0) {
+    reach = {};
+    for (let n = 2; n <= 12; n++) {
+      const s = slotAhead(gg as unknown as GameWire, pos[myPi], n);
+      if (reach[s] === undefined) reach[s] = n;
+    }
+  }
+
   // 시간 막대
   const [, tick] = useState(0);
   useEffect(() => {
@@ -647,6 +676,19 @@ export default function GameView({ room, me, onLeave }: { room: RoomWire; me: st
   }, []);
   const left = live.deadline ? Math.max(0, live.deadline - serverNow()) : 0;
 
+  // 남이 독점 찬스 칸에서 고민 중이면 머리 위에 크게 (한 번만)
+  const chanceKey = pr && pr.k === "buy" && !mine ? `${pr.p}-${pr.tile}-${g.steps}` : "";
+  const lastChance = useRef("");
+  useEffect(() => {
+    if (!chanceKey || chanceKey === lastChance.current || !pr || pr.k !== "buy") return;
+    lastChance.current = chanceKey;
+    const c = chanceOf(gg, pr.p, pr.tile);
+    if (!c) return;
+    const q = slotXY(posRef.current[pr.p]);
+    float(q.x, q.y - 74, `독점 찬스! ${c}`, "#ff6a2b");
+    sfx("news");
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 프롬프트가 바뀔 때만
+  }, [chanceKey]);
   const tokens: TokenView[] = view.players.flatMap((p, i) => (hide[i] ? [] : [{
     pi: i,
     slot: pos[i],
@@ -670,7 +712,7 @@ export default function GameView({ room, me, onLeave }: { room: RoomWire; me: st
       {/* 바깥 배경: 맵 그림을 크게 흐리게 + 가장자리 어둡게 */}
       <img src={`/marble/bg/center-${view.map}.webp`} alt="" className="pointer-events-none absolute inset-0 h-full w-full scale-110 object-cover opacity-70 blur-[10px]" />
       <div className="pointer-events-none absolute inset-0" style={{ background: "radial-gradient(ellipse at 50% 50%, rgba(10,8,30,0.05) 35%, rgba(10,8,30,0.6) 100%)" }} />
-      <Board g={view} tokens={tokens} pick={pick} onPick={onPick} onInfo={(t) => setInfo(t)} flash={flash} trail={trail} />
+      <Board g={view} tokens={tokens} pick={pick} onPick={onPick} onInfo={(t) => setInfo(t)} flash={flash} trail={trail} reach={reach} />
       {train && <TrainRide key={train.id} pts={train.pts} sprite={spriteOf(view.players[train.pi].lo.char.id)} />}
 
       {/* 위 가운데: 맵 · 바퀴 · 마을 소식 · 최근 일 */}
@@ -1284,7 +1326,7 @@ function TileInfo({ g, tile, onClose }: { g: GameWire; tile: number; onClose(): 
     fest: "내 땅 하나를 골라 축제 (통행료 2배)",
     warp: "다음 차례에 원하는 칸으로 순간이동",
     tax: "땅 · 건물 값의 10% 를 세금으로",
-    bonus: `서면 +${RULE.bonus}코인`,
+    bonus: `서면 +${RULE.bonus}코인 + 잭팟 (세금 · 벌금 · 수리비로 은행에 낸 돈이 여기 쌓여요)`,
     rail: "다른 기차역으로 바로 갈 수 있어요 (그냥 남아도 돼요)",
   };
   const owner = t.owner >= 0 ? g.players[t.owner] : null;
@@ -1616,6 +1658,9 @@ function ActionPanel({
             {d.group !== undefined && <span className="mr-1 inline-block h-[10px] w-[10px] align-middle" style={{ background: m.groups[d.group].color, boxShadow: "0 0 0 2px #232a4d" }} />}
             {d.group !== undefined ? m.groups[d.group].name : "명소"} · 지금 {owned ? `${LEVEL_NAME[t.lv]} · 통행료 ${fmt(tollOf(gg, pr.tile))}` : `땅값 ${fmt(d.price ?? 0)}`}
           </div>
+          {chanceOf(gg, myPi, pr.tile) && (
+            <span className="mbx-hot rounded-full bg-[#ff6a2b] px-3 text-[13px] leading-[24px] font-black text-white">독점 찬스! {chanceOf(gg, myPi, pr.tile)}</span>
+          )}
           <BuyPick key={`${pr.tile}-${pr.from}`} g={gg} pr={pr} cash={me.cash} mapId={m.id} pi={myPi} sending={sending} send={send} />
         </>,
         d.name
@@ -1649,24 +1694,7 @@ function ActionPanel({
     case "fest":
       return box(<span className="text-[13px]">축제를 열 내 땅을 보드에서 눌러요 (통행료 2배)</span>, "축제 무대");
     case "loan":
-      return box(
-        <>
-          <div className="text-[12px] leading-[17px]">
-            통행료 <b>{fmt(pr.amt)}</b> · 가진 돈 {fmt(me.cash)} · <b className="text-[#d6455d]">{fmt(pr.need)} 모자라요</b>
-            <br />
-            대출하면 {fmt(pr.need)}을 빌리고 <b>{fmt(pr.debt)}</b>을 월급의 절반씩 갚아요 (판마다 1번)
-          </div>
-          <div className="flex gap-2">
-            <Btn tone="gold" className="h-[40px] px-4 text-[15px] font-bold" disabled={sending} onClick={() => void send({ t: "loan", yes: true })}>
-              대출 받기
-            </Btn>
-            <Btn className="h-[40px] px-3 text-[13px]" disabled={sending} onClick={() => void send({ t: "loan", yes: false })}>
-              {pr.sell + me.cash >= pr.amt ? "땅 팔아서 내기" : "파산하기"}
-            </Btn>
-          </div>
-        </>,
-        "파산 위기! 대출할까요?"
-      );
+      return box(<SellPick key={`${pr.tile}-${g.steps}`} g={gg} pr={pr} cash={me.cash} sending={sending} send={send} />, "통행료가 모자라요!");
     case "start":
       return box(
         <>
@@ -2060,5 +2088,95 @@ function FxView({ f }: { f: Fx }) {
       <path d="M0-50 L12-18 L46-24 L22 2 L44 30 L10 22 L0 52 L-10 22 L-44 30 L-22 2 L-46-24 L-12-18 Z" fill="#ffd23a" stroke="#ff4b3d" strokeWidth="4" strokeLinejoin="round" />
       <circle r="14" fill="#fff" />
     </svg>
+  );
+}
+
+/** 이 칸을 사면 독점 · 승리가 되는지 (구매창 · 남의 차례 알림) */
+function chanceOf(g: Game, pi: number, tile: number): string | null {
+  const m = MAPS[g.map];
+  const d = m.tiles[tile];
+  const mine = (t: number) => t === tile || g.tiles[t].owner === pi;
+  if (d.kind === "spot") {
+    const spots = m.tiles.map((x, i) => (x.kind === "spot" ? i : -1)).filter((i) => i >= 0);
+    return spots.length > 1 && spots.every(mine) ? "사면 명소 독점 승리!" : null;
+  }
+  if (d.kind !== "city") return null;
+  const slot = g.order.indexOf(tile);
+  for (const line of m.lines) {
+    const tiles = line.map((s) => (m.id === "orgel" ? g.order[s] : s)).filter((t) => m.tiles[t].kind === "city" || m.tiles[t].kind === "spot");
+    if (line.includes(m.id === "orgel" ? slot : tile) && tiles.length > 2 && tiles.every(mine)) return "사면 라인 독점 승리!";
+  }
+  if (d.group === undefined) return null;
+  const grp = m.tiles.map((x, i) => (x.group === d.group ? i : -1)).filter((i) => i >= 0);
+  if (!grp.every(mine)) return null;
+  const others = m.groups.filter((_, gi) => gi !== d.group && groupOwned(g, gi) === pi).length;
+  return others + 1 >= RULE.triple ? "사면 트리플 독점 승리!" : "사면 동네 독점 · 통행료 2배";
+}
+
+
+/** 통행료 모자람: 팔 땅을 직접 고르기 · 대출 · 파산 */
+function SellPick({ g, pr, cash, sending, send }: { g: Game; pr: Extract<Prompt, { k: "loan" }>; cash: number; sending: boolean; send(a: Action): Promise<unknown> }) {
+  const m = MAPS[g.map];
+  const lands = pr.lands ?? [];
+  const [sel, setSel] = useState<number[]>([]);
+  const got = lands.filter((l) => sel.includes(l.tile)).reduce((a, l) => a + l.got, 0);
+  const total = lands.reduce((a, l) => a + l.got, 0);
+  const short = Math.max(0, pr.amt - cash - got);
+  const canLoan = pr.canLoan !== false;
+  const toggle = (t: number) => {
+    sfx("click");
+    setSel((cur) => (cur.includes(t) ? cur.filter((x) => x !== t) : [...cur, t]));
+  };
+  return (
+    <>
+      <div className="text-[12px] leading-[17px]">
+        통행료 <b>{fmt(pr.amt)}</b> · 가진 돈 {fmt(cash)} · <b className="text-[#ff8a9a]">{fmt(pr.amt - cash)} 모자라요</b>
+      </div>
+      {lands.length > 0 && (
+        <>
+          <div className="text-[11px] text-white/60">팔 땅을 골라요 (넣은 돈의 절반을 받아요)</div>
+          <div className="flex max-h-[118px] w-full flex-wrap justify-center gap-1 overflow-y-auto">
+            {lands.map((l) => {
+              const d = m.tiles[l.tile];
+              const t = g.tiles[l.tile];
+              const on = sel.includes(l.tile);
+              const band = d.kind === "spot" ? "#ffb21e" : d.group !== undefined ? m.groups[d.group].color : "#8d9bb3";
+              return (
+                <button
+                  key={l.tile}
+                  type="button"
+                  onClick={() => toggle(l.tile)}
+                  className="flex cursor-pointer items-center gap-1 rounded-lg px-2 py-1 text-[11.5px] font-bold transition"
+                  style={{ background: on ? "#ffe08a" : "rgba(255,255,255,0.08)", color: on ? "#3a2500" : "#fff", boxShadow: on ? "0 0 0 2px #fff" : "inset 0 0 0 1px rgba(255,255,255,0.2)" }}
+                >
+                  <span className="h-[9px] w-[9px] rounded-sm" style={{ background: band }} />
+                  {d.name}
+                  {t.lv > 0 && <span className="opacity-70">· {LEVEL_NAME[t.lv]}</span>}
+                  <span style={{ color: on ? "#2f8a3a" : "#7dffb0" }}>+{fmt(l.got)}</span>
+                </button>
+              );
+            })}
+          </div>
+          <div className="text-[12px]">
+            고른 땅 <b className="text-[#7dffb0]">+{fmt(got)}</b> · {short > 0 ? <b className="text-[#ff8a9a]">아직 {fmt(short)} 모자라요</b> : <b className="text-[#7dffb0]">낼 수 있어요</b>}
+          </div>
+        </>
+      )}
+      <div className="flex flex-wrap justify-center gap-1.5">
+        {lands.length > 0 && (
+          <Btn tone="gold" className="h-[38px] px-3 text-[13px] font-bold" disabled={sending || !sel.length} onClick={() => void send({ t: "loan", yes: false, sell: sel })}>
+            {short > 0 ? "고른 땅 팔고 나머지는 자동" : "고른 땅 팔고 내기"}
+          </Btn>
+        )}
+        {canLoan && (
+          <Btn tone="sky" className="h-[38px] px-3 text-[13px] font-bold" disabled={sending} onClick={() => void send({ t: "loan", yes: true, sell: sel })} title={`모자란 만큼 빌리고 ${Math.round(RULE.loanRate * 100)}% 를 월급의 절반씩 갚아요 (판마다 1번)`}>
+            {sel.length ? "고른 땅 팔고 나머지 대출" : `대출 받기 (갚을 돈 ${fmt(pr.debt)})`}
+          </Btn>
+        )}
+        <Btn className="h-[38px] px-3 text-[12px]" disabled={sending} onClick={() => void send({ t: "loan", yes: false })}>
+          {total + cash >= pr.amt ? "싼 땅부터 자동으로 팔기" : "파산하기"}
+        </Btn>
+      </div>
+    </>
   );
 }

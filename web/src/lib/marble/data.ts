@@ -215,7 +215,7 @@ export const CK = {
   mongle: { cd: 6, pay: [0.2, 0.008] },
   "ur-dice": { cd: 9, twin: [0.08, 0.004], dbl: [40, 3], ctl: [0.05, 0.004] },
   "ur-moa": { cd: 10, acq: [0.12, 0.008], build: [0.08, 0.005], buy: [1.6, -0.015] },
-  "ur-forte": { cd: 5, sal: [0.4, 0.02], recv: [0.18, 0.01] },
+  "ur-forte": { cd: 7, sal: [0.4, 0.02], recv: [0.18, 0.01] },
 };
 const k = <T extends keyof typeof CK>(id: T) => CK[id];
 const P = (v: number) => v * TUNE.passive;
