@@ -467,7 +467,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     pattern: "bounce",
     color: "#ffffff",
     desc: ["공 진화! 무지개 공이 끝없이 튕겨요"],
-    lv: [L(26, 1.4, 7, 10, 230, 99, 6.5, 25)],
+    lv: [L(30, 2.2, 6, 10, 230, 99, 5, 25)],
   },
 };
 export const SHARED_WEAPONS: WeaponId[] = ["shuriken", "boomerang", "bolt", "thorns", "missile", "ball"];

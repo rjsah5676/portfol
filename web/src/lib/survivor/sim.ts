@@ -264,7 +264,7 @@ export type Ev =
   | { t: "pick"; k: PickupKind; v: number }
   | { t: "hurt"; v: number }
   | { t: "boom"; x: number; y: number; r: number; c: string }
-  | { t: "bolt"; x: number; y: number; r: number }
+  | { t: "bolt"; x: number; y: number; r: number; j?: boolean }
   | { t: "dice"; x: number; y: number; face: number }
   | { t: "fire"; w: WeaponId }
   | { t: "chest" }
@@ -1283,7 +1283,7 @@ function fireWeapon(r: Run, slot: number) {
         const k = rndInt(r.rng, cand.length);
         const e = cand[k];
         cand.splice(k, 1);
-        r.ev.push({ t: "bolt", x: e.x, y: e.y, r: w.size });
+        r.ev.push({ t: "bolt", x: e.x, y: e.y, r: w.size, j: ws.id === "judgment" });
         aoe(r, e.x, e.y, w.size, w.dmg, slot, 0);
       }
       break;

@@ -292,7 +292,7 @@ export default function Game({ setup, onEnd, onQuit }: { setup: GameSetup; onEnd
             if (e.r >= 16) sfx("boom");
             break;
           case "bolt":
-            fx.bolts.push({ x: e.x, y: e.y, r: e.r, t: 0, seed: Math.floor(Math.random() * 1000) });
+            fx.bolts.push({ x: e.x, y: e.y, r: e.r, t: 0, seed: Math.floor(Math.random() * 1000), j: e.j });
             sfx("bolt");
             break;
           case "fire":

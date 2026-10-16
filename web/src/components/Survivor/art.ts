@@ -275,7 +275,11 @@ export interface Art {
   deco: Record<string, Cv>;
   /** 맵 오브젝트 (성소 · 상인 …) */
   things: Record<ThingKind, Cv>;
+  /** 진화 무기 투사체 (파일 있을 때만 — public/survivor/item/p_<이름>.png) */
+  proj: Partial<Record<ProjName, Cv>>;
 }
+export type ProjName = "gale" | "cyclone" | "barrage" | "rainbow" | "rose" | "spark";
+const PROJ: ProjName[] = ["gale", "cyclone", "barrage", "rainbow", "rose", "spark"];
 
 /* ───────────── 맵 장식 (밟고 지나가는 그림, 부딪히지 않음) ───────────── */
 
@@ -364,6 +368,12 @@ export function loadFiles(): Promise<void> {
         if (name.startsWith("gem")) a.gems[Number(name.slice(3))] = c;
         else if (name in a.pick) a.pick[name as PickupKind] = c;
         else (a as unknown as Record<string, Cv>)[name] = c;
+      })
+    );
+  for (const k of PROJ)
+    jobs.push(
+      loadImg(`/survivor/item/p_${k}.png`).then((im) => {
+        if (im) a.proj[k] = cut(im, 0, im.width);
       })
     );
   for (const k of Object.keys(a.things) as ThingKind[])
@@ -519,6 +529,7 @@ export function getArt(): Art {
     tiles: makeTiles(),
     deco: {},
     things: thingArt(),
+    proj: {},
   };
   return art;
 }

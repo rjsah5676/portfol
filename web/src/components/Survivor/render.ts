@@ -39,6 +39,8 @@ export interface Bolt {
   r: number;
   t: number;
   seed: number;
+  /** 천둥 심판 (금빛) */
+  j?: boolean;
 }
 
 export interface Fx {
@@ -209,6 +211,14 @@ export function draw(ctx: CanvasRenderingContext2D, r: Run, fx: Fx, hero: HeroAr
     ctx.globalAlpha = 0.6;
     dotsRing(ctx, X(p.x), Y(p.y - 4), size, size * 0.8, def.color, time * 1.5, 18);
     ctx.globalAlpha = 1;
+    // 장미 정원: 둘레를 도는 장미꽃
+    if (w.id === "rose" && A.proj.rose) {
+      const img = A.proj.rose;
+      for (let i = 0; i < 8; i++) {
+        const a = time * 0.8 + (i / 8) * Math.PI * 2;
+        ctx.drawImage(img, Math.round(X(p.x + Math.cos(a) * size) - img.width / 2), Math.round(Y(p.y - 4 + Math.sin(a) * size * 0.8) - img.height / 2));
+      }
+    }
   }
 
   // 줍는 것
@@ -478,9 +488,16 @@ export function draw(ctx: CanvasRenderingContext2D, r: Run, fx: Fx, hero: HeroAr
         ctx.fillStyle = "#bff2ff";
         ctx.fillRect(x - Math.round(s.vx * 0.03) - 2, y - Math.round(s.vy * 0.03) - 1, 4, 3);
         ctx.globalAlpha = 1;
-        spin(ctx, A.shuriken, x, y, time * 30);
+        spin(ctx, A.proj.gale ?? A.shuriken, x, y, time * 30);
         break;
       case "cyclone": {
+        if (A.proj.cyclone) {
+          spin(ctx, A.proj.cyclone, x, y, time * 16);
+          ctx.globalAlpha = 0.45;
+          arc(ctx, x, y, s.r + 2, s.r * 0.8, time * 12, 4, "#ffb03a", 1);
+          ctx.globalAlpha = 1;
+          break;
+        }
         const q = Math.floor(time * 14) % 4;
         ctx.save();
         ctx.translate(x, y);
@@ -571,8 +588,18 @@ export function draw(ctx: CanvasRenderingContext2D, r: Run, fx: Fx, hero: HeroAr
       case "boomerang":
         spin(ctx, A.boomerang, x, y, time * 14);
         break;
-      case "missile":
       case "barrage":
+        if (A.proj.barrage) {
+          const img = A.proj.barrage;
+          ctx.save();
+          ctx.translate(x, y);
+          ctx.rotate(Math.round(Math.atan2(s.vy, s.vx) / (Math.PI / 8)) * (Math.PI / 8));
+          ctx.drawImage(img, -(img.width >> 1), -(img.height >> 1));
+          ctx.restore();
+          break;
+        }
+      // falls through
+      case "missile":
       case "blades": {
         const a = Math.atan2(s.vy, s.vx);
         ctx.save();
@@ -595,8 +622,15 @@ export function draw(ctx: CanvasRenderingContext2D, r: Run, fx: Fx, hero: HeroAr
         ctx.restore();
         break;
       }
-      case "ball":
       case "rainbow":
+        if (A.proj.rainbow) {
+          const img = A.proj.rainbow;
+          const sz = Math.round(s.r * 2 + 2);
+          ctx.drawImage(img, x - (sz >> 1), y - (sz >> 1), sz, sz);
+          break;
+        }
+      // falls through
+      case "ball":
       case "pinball": {
         const rr = Math.round(s.r);
         ctx.fillStyle = "#170f2e";
@@ -645,7 +679,7 @@ export function draw(ctx: CanvasRenderingContext2D, r: Run, fx: Fx, hero: HeroAr
   for (const b of fx.bolts) {
     const k = b.t / 0.25;
     ctx.globalAlpha = 1 - k;
-    ctx.fillStyle = "#e8dcff";
+    ctx.fillStyle = b.j ? "#fff0a0" : "#e8dcff";
     let bx = X(b.x);
     let by = Y(b.y) - 150;
     let s = b.seed;
@@ -657,7 +691,12 @@ export function draw(ctx: CanvasRenderingContext2D, r: Run, fx: Fx, hero: HeroAr
       by += 7;
     }
     ctx.fillStyle = "#c8a6ff";
-    ellipse(ctx, X(b.x), Y(b.y), b.r, b.r * 0.6, "#c8a6ff");
+    ellipse(ctx, X(b.x), Y(b.y), b.r, b.r * 0.6, b.j ? "#ffd23a" : "#c8a6ff");
+    if (b.j && A.proj.spark) {
+      const img = A.proj.spark;
+      const sz = Math.round(img.width * (1.2 + k));
+      ctx.drawImage(img, X(b.x) - (sz >> 1), Y(b.y) - (sz >> 1) - 2, sz, sz);
+    }
     ctx.globalAlpha = 1;
   }
   // 연쇄 번개
