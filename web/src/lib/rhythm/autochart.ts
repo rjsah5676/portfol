@@ -1460,8 +1460,12 @@ function nightmareNotes(
       if (full) putFine(t0, t1, sub, k);
       else for (let i = 0; i < sub; i++) put(t0 + (i * (t1 - t0)) / sub, 1);
     }
-    if (full && beatInBar === 3 && b % P.burstEvery === P.burstEvery - 1)
+    if (full && beatInBar === 3 && b % P.burstEvery === P.burstEvery - 1) {
+      // 연타 박은 연타로만: 먼저 깔린 16분·동시치기를 박 안에서 비움 — 안 비우면 16분(4등분)과 연타(6등분)가
+      //  섞여 30~35ms 간격이 생김 (148 BPM에서 101ms 16분 사이에 67ms 연타 → 34ms, 한 박만 엄청 촘촘)
+      for (const sk of [...slots.keys()]) if (sk > t0 + 0.02 && sk < t1 - 0.02) slots.delete(sk);
       for (let i = 0; i < P.burstSub; i++) put(t0 + (i * (t1 - t0)) / P.burstSub, 1, true);
+    }
   }
   // 박 위치별 두께를 목표 평균(thick)까지 — 센 마디부터 2개, 넘치면 3개
   {
