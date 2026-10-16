@@ -134,6 +134,7 @@ export default function SettingsModal({
   onResetAuto,
   owned = [],
   onShop,
+  onCalibrate,
 }: {
   settings: Settings;
   setSettings: Dispatch<SetStateAction<Settings>>;
@@ -142,6 +143,8 @@ export default function SettingsModal({
   /** 상점에서 산 물건 (테마 스킨 ref) — 안 산 스킨은 자물쇠, 누르면 상점으로 */
   owned?: string[];
   onShop?: () => void;
+  /** 싱크 맞추기 켜짐/꺼짐 — 그동안 메뉴 배경음·미리 듣기를 멈추게 */
+  onCalibrate?: (on: boolean) => void;
   /** 자동 싱크(치는 동안 쌓인 값)를 지움 */
   onResetAuto?: () => void;
 }) {
@@ -163,6 +166,15 @@ export default function SettingsModal({
   useEffect(() => {
     calRef.current = calibrate;
   }, [calibrate]);
+  const onCalRef = useRef(onCalibrate);
+  useEffect(() => {
+    onCalRef.current = onCalibrate;
+  });
+  useEffect(() => {
+    onCalRef.current?.(calibrate);
+  }, [calibrate]);
+  // 설정 창이 닫히면(싱크 맞추기 중이었어도) 배경음 다시
+  useEffect(() => () => onCalRef.current?.(false), []);
   useEffect(() => {
     sfx("ui-open", 0.7);
     const onKey = (e: KeyboardEvent) => {

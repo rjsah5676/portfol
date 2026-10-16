@@ -398,6 +398,8 @@ export default function RhythmGame() {
   }, []);
   // 메뉴 배경음(타이틀 BGM·곡 미리 듣기) 끄기 — 🔊 버튼 / B 키. 플레이 중 음악은 그대로
   const [bgmMute, setBgmMute] = useState(false);
+  // 설정 → 싱크 맞추기 중: 메트로놈만 들리게 메뉴 배경음·미리 듣기를 멈춤
+  const [calibrating, setCalibrating] = useState(false);
   useEffect(() => {
     try {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- 저장된 값 복원(마운트 1회)
@@ -416,7 +418,7 @@ export default function RhythmGame() {
   const previewVol = settings.music;
   // 미리 듣기할 곡: 내장곡, 또는 내 음악(파일을 넣은 뒤)
   const previewSong = customSel ? (track ? customSong : null) : builtinSong;
-  const previewing = screen === "select" && entered && !!previewSong && !bgmMute;
+  const previewing = screen === "select" && entered && !!previewSong && !bgmMute && !calibrating;
   useEffect(() => {
     if (!previewing) return;
     let alive = true;
@@ -463,7 +465,10 @@ export default function RhythmGame() {
 
   // 메뉴 BGM: 타이틀, 그리고 미리 듣기가 없는 화면(내 음악 고를 때)
   const bgmOn =
-    entered && !bgmMute && (screen === "title" || (screen === "select" && customSel && !track));
+    entered &&
+    !bgmMute &&
+    !calibrating &&
+    (screen === "title" || (screen === "select" && customSel && !track));
   // B 키: 타이틀·곡 선택에서 배경음 켜고 끄기 (입력칸·설정 창에선 안 받음)
   useEffect(() => {
     if (!entered || settingsOpen || (screen !== "title" && screen !== "select")) return;
@@ -1037,13 +1042,14 @@ export default function RhythmGame() {
     screen === "online" &&
     entered &&
     !bgmMute &&
+    !calibrating &&
     !!onlineSong &&
     (roomSong?.kind === "builtin" || !!roomHostBuf || !!roomGotBuf);
   useEffect(() => {
     if (screen !== "online") return;
-    if (entered && !bgmMute && !roomPreviewOn) playBgm(settings.music);
+    if (entered && !bgmMute && !calibrating && !roomPreviewOn) playBgm(settings.music);
     else stopBgm();
-  }, [screen, entered, bgmMute, roomPreviewOn, settings.music]);
+  }, [screen, entered, bgmMute, calibrating, roomPreviewOn, settings.music]);
   useEffect(() => {
     if (!roomPreviewOn || !onlineSong) return;
     let alive = true;
@@ -1360,6 +1366,7 @@ export default function RhythmGame() {
               color={song?.color ?? "#A78BFA"}
               onClose={() => setSettingsOpen(false)}
               owned={ownedItems}
+              onCalibrate={setCalibrating}
               onShop={() => {
                 setSettingsOpen(false);
                 setShopOpen(true);

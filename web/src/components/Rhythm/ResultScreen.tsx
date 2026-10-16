@@ -190,9 +190,7 @@ export default function ResultScreen({
         <div className="rounded-[0.9cqw] border border-white/10 bg-black/45 px-[1.6cqw] py-[1cqw]">
           <div className="font-mono text-[1cqw] tracking-[0.25em] text-white/45">SCORE</div>
           <div className={`${DISP} text-[4.2cqw] leading-tight text-white tabular-nums`}>
-            {String(score)
-              .padStart(7, "0")
-              .replace(/\B(?=(\d{3})+(?!\d))/g, ",")}
+            {String(score).replace(/\B(?=(\d{3})+(?!\d))/g, ",")}
           </div>
           <div className="mt-[0.3cqw] flex justify-between font-mono text-[1.3cqw] text-white/80">
             <span>

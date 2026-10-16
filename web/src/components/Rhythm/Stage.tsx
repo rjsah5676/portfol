@@ -1296,7 +1296,7 @@ export default function Stage({
           b.textAlign = "right";
           b.fillStyle = "#fff";
           b.font = `italic 900 14px ${disp}`;
-          b.fillText(String(r.score).padStart(7, "0"), x + colW - 12, y + 1);
+          b.fillText(fmtScore(r.score), x + colW - 12, y + 1);
           b.globalAlpha = 1;
         });
       }
@@ -1433,7 +1433,7 @@ export default function Stage({
         b.textAlign = "center";
         b.fillStyle = "#fff";
         b.font = `italic 900 13px ${disp}`;
-        b.fillText(String(r.score).padStart(7, "0"), mw / 2, H - 28);
+        b.fillText(fmtScore(r.score), mw / 2, H - 28);
         b.fillStyle = "rgba(255,255,255,0.12)";
         b.fillRect(6, H - 13, mw - 12, 4);
         b.fillStyle = r.hp > 60 ? "#4ADE80" : r.hp > 30 ? "#FBBF24" : "#F43F5E";
@@ -2841,10 +2841,8 @@ function drawCountdown(
 
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 const round1 = (v: number) => Math.round(v * 10) / 10;
-const fmtScore = (n: number) =>
-  String(n)
-    .padStart(7, "0")
-    .replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+// 앞자리 0은 채우지 않음 (0,711,333 처럼 보이던 것) — 711,333 / 1,000,000
+const fmtScore = (n: number) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 
 function roundRectFill(
   g: CanvasRenderingContext2D,
