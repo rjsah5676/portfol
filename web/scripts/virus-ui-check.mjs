@@ -7,7 +7,7 @@
  *   기본은 빠른 검사 4가지(작은 폰 · 폰 가로 · PC · 작은 폰 글자 크게), --full 은 7가지 크기 × 글자 2가지
  */
 import { spawn } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -213,7 +213,7 @@ const RUNS = FULL
       await sleep(500);
     const before = await ev("performance.timeOrigin");
     await ev(
-      `localStorage.setItem('virus-idle-v3', ${JSON.stringify(JSON.stringify({ ...SAVE, savedAt: Date.now() }))}); localStorage.setItem('virus-idle-settings', ${JSON.stringify(JSON.stringify({ numbers: true, effects: false, bgm: 0.7, sfx: 0, bgmMute: true, big }))}); location.reload(); true`
+      `localStorage.setItem('virus-idle-v3', ${JSON.stringify(JSON.stringify({ ...SAVE, savedAt: Date.now() }))}); localStorage.setItem('virus-idle-settings', ${JSON.stringify(JSON.stringify({ numbers: true, effects: false, bgm: 0.7, sfx: 0, bgmMute: true, big }))}); localStorage.setItem('virus-idle-tut', '{"done":[],"off":false}'); location.reload(); true`
     );
     // 새로 불러온 페이지(timeOrigin 이 바뀜)에 게임 틀이 뜰 때까지 — 개발 서버가 다시 빌드하는 중일 수도
     for (let i = 0; i < 80; i++) {
@@ -263,6 +263,17 @@ const RUNS = FULL
     await look("시작 메뉴");
     await key("Enter", "Enter", 13);
     await sleep(3200);
+    // 튜토리얼 카드 (켜 둔 상태로 시작 — 카드가 뜬 채로 아래 탭들도 봄)
+    if (!(await ev("!!document.querySelector('.vg-tut')")))
+      (report.push(`✖ ${tag} · 튜토리얼 카드가 안 보임`), total++);
+    await look("튜토리얼 카드");
+    if (process.env.SHOT_DIR) {
+      const { data } = (await send("Page.captureScreenshot", { format: "png" })).result;
+      writeFileSync(
+        join(process.env.SHOT_DIR, `tut-${w}x${h}${big ? "-big" : ""}.png`),
+        Buffer.from(data, "base64")
+      );
+    }
     for (const t of [
       "강화",
       "업그레이드",

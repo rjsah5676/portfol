@@ -47,6 +47,7 @@ import {
   Window,
   type VirusSettings,
 } from "./Panels";
+import { TutorialCard, initTutorial, resetTutorial, stopTutorial, tutorialOn } from "./Tutorial";
 import {
   APEX,
   FINAL,
@@ -591,6 +592,8 @@ export default function VirusGame() {
   const [entered, setEntered] = useState(false);
   const [overlay, setOverlay] = useState<Overlay>(null);
   const [tab, setTab] = useState<Tab>("upgrade");
+  /** 튜토리얼 카드 다시 그리기 (메뉴에서 켜고 끌 때) */
+  const [tutKey, setTutKey] = useState(0);
   const [buyMode, setBuyMode] = useState<BuyMode>(1);
   /** 루트 상점 분류: 효율 강화 · 편의성 */
   const [shopCat, setShopCat] = useState<"power" | "util" | "core">("power");
@@ -1146,6 +1149,7 @@ export default function VirusGame() {
   useEffect(() => {
     try {
       save.current = parseSave(localStorage.getItem(SAVE_KEY));
+      initTutorial(save.current);
       const raw = JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? "null");
       // eslint-disable-next-line react-hooks/set-state-in-effect -- 저장된 설정 복원(마운트 1회)
       if (raw) setSettings({ ...DEFAULT_SETTINGS, ...raw });
@@ -2529,6 +2533,8 @@ export default function VirusGame() {
             <div
               className={`vg-battle virus-screen relative min-h-0 flex-1 ${view.ddos && settings.effects ? "vg-ddos" : ""}`}
             >
+              {/* 튜토리얼 안내 카드 (연출 중엔 숨김) */}
+              {!cinema && <TutorialCard key={tutKey} ctx={{ s, e, formatReady: canFormat(s) }} />}
               {/* 왼쪽 아래: 자동 업그레이드 로그 (크론 데몬) — 맨 아래 보스 시간 줄 위, 컴파일 막대가 뜨면 그보다 위 */}
               {autoLog.length > 0 && (
                 <div
@@ -3529,6 +3535,19 @@ export default function VirusGame() {
                 onClick={openRecords}
               />
               <MenuButton label="게임 방법" onClick={() => setOverlay("guide")} />
+              <MenuButton
+                label="튜토리얼"
+                sub={tutorialOn() ? "켜짐 · 누르면 끄기" : "꺼짐 · 누르면 처음부터"}
+                onClick={() => {
+                  const on = tutorialOn();
+                  if (on) stopTutorial();
+                  else {
+                    resetTutorial();
+                    setOverlay(null);
+                  }
+                  setTutKey((k) => k + 1);
+                }}
+              />
               <MenuButton
                 label="패치노트"
                 sub={PATCH_NOTES[0].ver}
