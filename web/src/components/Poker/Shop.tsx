@@ -222,7 +222,7 @@ export default function Shop({
                     <img src={asset.full(sk.id)} alt={sk.name} draggable={false} />
                     {!lookReady(sk.id) && <span className="pk-skin-soon">새 그림 준비 중</span>}
                     {owned && <span className="pk-skin-owned">보유 중</span>}
-                    {sk.live && lookReady(sk.id) && <span className="pk-skin-live">터치 반응</span>}
+                    {sk.live && !sk.noTouch && lookReady(sk.id) && <span className="pk-skin-live">터치 반응</span>}
                   </div>
                   <div className="grid gap-[0.3em] p-[0.7em]">
                     <div className="flex items-baseline gap-[0.4em]">

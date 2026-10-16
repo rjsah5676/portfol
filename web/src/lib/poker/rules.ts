@@ -159,6 +159,8 @@ export interface Skin {
   ready: boolean;
   /** 로비에서 움직이는 그림(대기 · 터치 반응)이 들어왔는지. false 면 로비에서 전신 그림 한 장 */
   live: boolean;
+  /** 대기 움직임만 있고 터치 반응은 없음 (누르면 아무것도 안 함) */
+  noTouch?: boolean;
   /** 스킨 전용 이모티콘(emote-*.webp)이 있는지. 없으면 원래 캐릭터 이모티콘 */
   emotes?: boolean;
 }
@@ -207,7 +209,7 @@ export const SKINS: Skin[] = [
     ready: true,
     live: true,
     emotes: true,
-  },  // 일반 스킨 (그림만 — 음성 · 이모티콘 · 움직이는 그림은 원래 캐릭터 것)
+  },  // 일반 스킨 (그림 + 로비 대기 · 앉은 대기 움직임만 — 음성 · 이모티콘은 원래 캐릭터 것, 터치 반응 없음)
   {
     id: "jinwoo-ramen",
     char: "jinwoo",
@@ -216,7 +218,8 @@ export const SKINS: Skin[] = [
     blurb: "한 그릇 말아 줄까? 판돈은 국물까지 내가 먹는다!",
     line: "오늘의 메뉴는 올인이다!",
     ready: true,
-    live: false,
+    live: true,
+    noTouch: true,
   },
   {
     id: "jeongmin-detective",
@@ -226,7 +229,8 @@ export const SKINS: Skin[] = [
     blurb: "범인은… 네 패 안에 있어.",
     line: "추리 끝. 네 블러핑은 다 보여.",
     ready: true,
-    live: false,
+    live: true,
+    noTouch: true,
   },
 ];
 export const SKIN_IDS = SKINS.map((s) => s.id);

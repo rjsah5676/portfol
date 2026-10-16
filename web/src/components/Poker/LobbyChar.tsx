@@ -32,7 +32,7 @@ export default function LobbyChar({
   const skin = skinOf(look);
   // 대기 영상: 라이브 스킨 + 영상이 있는 기본 캐릭터. 누르면 반응하는 건 스킨만
   const live = liveIdle(look);
-  const touchable = live && !!skin;
+  const touchable = live && !!skin && !skin.noTouch;
   const char = lookChar(look);
   const still = asset.full(look);
   const [idleOk, setIdleOk] = useState(false);
