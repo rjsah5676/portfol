@@ -1,14 +1,18 @@
 "use client";
 
 import {
+  createContext,
   useCallback,
+  useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
   type CSSProperties,
   type ReactNode,
 } from "react";
+import { createPortal } from "react-dom";
 import type { ApiError } from "@/lib/api/errors";
 import { asset, chipColor, preloadChar, roomTint } from "@/lib/poker/assets";
 import { cardLabel, categoryOf, evaluate } from "@/lib/poker/cards";
@@ -1422,16 +1426,16 @@ export default function TableView({
           (() => {
             const size = Math.round(Math.max(40, Math.min(104, f.cell * 0.5)));
             return (
-              <div
+              <Lifted
                 key={emotes[i].key}
-                className="pk-emote pointer-events-none absolute"
+                className="pointer-events-none absolute"
                 // 캐릭터 칸 바로 위 가운데, 꼬리는 아래(머리)를 가리킴
-                style={{ [right ? "right" : "left"]: f.charW / 2 - size / 2 - 4, top: Math.max(bar + 2 - f.y, -Math.round(size * 0.7)), zIndex: 45 }}
+                style={{ [right ? "right" : "left"]: f.charW / 2 - size / 2 - 4, top: Math.max(bar + 2 - f.y, -Math.round(size * 0.7)) }}
               >
                 <EmoteBubble tail="b">
                   <EmoteImg char={look} emote={emotes[i].v} size={size} />
                 </EmoteBubble>
-              </div>
+              </Lifted>
             );
           })()}
       </div>
@@ -1680,15 +1684,11 @@ export default function TableView({
                   const ex = Math.max(size / 2 + 8, Math.min(boardW - size / 2 - 8, x));
                   const ey = Math.max(bar + 4, y + cardH / 2 - avH - size - 18);
                   return (
-                    <div
-                      key={emotes[i].key}
-                      className="pk-emote pointer-events-none absolute w-max"
-                      style={{ left: ex - size / 2 - 4, top: ey, zIndex: emoteZ(i) }}
-                    >
+                    <Lifted key={emotes[i].key} className="pointer-events-none absolute w-max" style={{ left: ex - size / 2 - 4, top: ey }}>
                       <EmoteBubble tail="b">
                         <EmoteImg char={look} emote={emotes[i].v} size={size} />
                       </EmoteBubble>
-                    </div>
+                    </Lifted>
                   );
                 })()}
               {bet > 0 && (
@@ -2540,6 +2540,7 @@ function Shell({
   turn?: boolean;
   children: ReactNode;
 }) {
+  const [lift, setLift] = useState<HTMLDivElement | null>(null);
   return (
     <div className="absolute inset-0">
       <div
@@ -2549,9 +2550,45 @@ function Shell({
           filter: `brightness(0.72) saturate(0.9) ${roomTint(tier) ?? ""}`,
         }}
       />
-      {children}
+      <LiftCtx.Provider value={lift}>{children}</LiftCtx.Provider>
+      {/* 이모티콘 말풍선 층: 자리 · 이름표 · 카드 어느 것보다 위 (창 · 결과 연출보다는 아래) */}
+      <div ref={setLift} className="pointer-events-none absolute inset-0" style={{ zIndex: 54 }} />
       {turn && <div className="pk-turn-glow pointer-events-none absolute inset-0" aria-hidden />}
     </div>
+  );
+}
+
+/** 이모티콘 말풍선 층 (Shell 이 깔아 줌) */
+const LiftCtx = createContext<HTMLDivElement | null>(null);
+
+/**
+ * 제자리엔 안 보이는 자리만 잡아 두고, 실제 말풍선은 맨 위 층에 같은 자리로 띄움
+ * — 자리마다 쌓임 순서(z-index)가 갈려서 옆 · 위 자리 이름표에 깔리던 것을 통째로 피함
+ */
+function Lifted({ className, style, children }: { className: string; style: CSSProperties; children: ReactNode }) {
+  const layer = useContext(LiftCtx);
+  const ref = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el || !layer) return;
+    const measure = () => {
+      const a = el.getBoundingClientRect();
+      const l = layer.getBoundingClientRect();
+      const k = layer.offsetWidth ? l.width / layer.offsetWidth : 1;
+      setPos({ x: (a.left - l.left) / k, y: (a.top - l.top) / k });
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, [layer]);
+  return (
+    <>
+      <div ref={ref} aria-hidden className={className} style={{ ...style, visibility: "hidden" }}>
+        {children}
+      </div>
+      {layer && pos && createPortal(<div className="pk-emote pointer-events-none absolute w-max" style={{ left: pos.x, top: pos.y }}>{children}</div>, layer)}
+    </>
   );
 }
 
@@ -2896,16 +2933,15 @@ function HeroArea(props: {
           )}
           {/* 내 이모티콘: 머리 바로 위, 꼬리는 아래 */}
           {emote && (
-            <div
+            <Lifted
               key={emote.key}
-              className="pk-emote pointer-events-none absolute left-1/2 w-max"
-              // 움직임(transform)과 겹치지 않게 가운데 맞춤은 translate 로
-              style={{ bottom: "calc(100% + 12px)", translate: "-50% 0", zIndex: 45 }}
+              className="pointer-events-none absolute left-1/2 w-max"
+              style={{ bottom: "calc(100% + 12px)", translate: "-50% 0" }}
             >
               <EmoteBubble tail="b">
                 <EmoteImg char={look} emote={emote.v} size={Math.round(Math.max(56, Math.min(96, avH * 0.55)))} />
               </EmoteBubble>
-            </div>
+            </Lifted>
           )}
         </div>
         {/* 내 정보 판: 이름 · 캐릭터 / 보유 칩 / 이번 판 베팅 · 상태 */}
