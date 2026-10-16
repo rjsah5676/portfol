@@ -281,6 +281,8 @@ export type Ev =
   | { t: "thing"; k: ThingKind; text: string }
   | { t: "nogold"; need: number }
   | { t: "trial"; ok: boolean }
+  | { t: "trialgo" }
+  | { t: "slam"; x: number; y: number }
   | { t: "rage"; name: string }
   | { t: "ot"; lv: number }
   | { t: "zap"; x0: number; y0: number; x1: number; y1: number }
@@ -1481,6 +1483,7 @@ function updateZones(r: Run) {
       z.delay -= DT;
       if (z.delay <= 0 && z.k === "slam") {
         r.ev.push({ t: "boom", x: z.x, y: z.y, r: z.r, c: "#ff3d6e" });
+        r.ev.push({ t: "slam", x: z.x, y: z.y });
         if (Math.hypot(p.x - z.x, (p.y - z.y) * 1.3) < z.r + 4) damagePlayer(r, z.dmg);
       } else if (z.delay <= 0) {
         r.ev.push({ t: "boom", x: z.x, y: z.y, r: z.r, c: z.k === "moon" ? "#fff2a8" : z.k === "grenade" || z.k === "shell" ? "#ffb03a" : "#ffe17a" });
@@ -1982,7 +1985,7 @@ function updateThings(r: Run) {
           if (d < TRIAL_R * 0.45) {
             t.on = true;
             t.t = TRIAL_SEC;
-            r.ev.push({ t: "warn", text: `원 안에서 ${TRIAL_SEC}초 버텨요!` });
+            r.ev.push({ t: "trialgo" });
           }
           break;
         }

@@ -346,10 +346,19 @@ export default function Game({ setup, onEnd, onQuit }: { setup: GameSetup; onEnd
             break;
           case "relic":
             toast(e.id);
+            sfx("relic");
             break;
           case "thing":
-            sfx(e.k === "statue" ? "coin" : e.k === "flag" ? "ult" : "pick");
+            sfx(e.k === "statue" ? "curse" : e.k === "flag" ? "flag" : e.k === "shrine" || e.k === "gshrine" ? "bless" : "pick");
             say(e.text, THING_COLOR[e.k]);
+            break;
+          case "trialgo":
+            sfx("trial");
+            say("원 안에서 25초 버텨요!", "#e0d8ff");
+            break;
+          case "slam":
+            fx.shake = Math.max(fx.shake, 5);
+            sfx("slam");
             break;
           case "nogold":
             if (performance.now() - lastNoGold.current > 1500) {
@@ -359,16 +368,16 @@ export default function Game({ setup, onEnd, onQuit }: { setup: GameSetup; onEnd
             }
             break;
           case "trial":
-            sfx(e.ok ? "jackpot" : "warn");
+            sfx(e.ok ? "jackpot" : "curse");
             say(e.ok ? "시련 성공! 보물 상자 · 큰 경험치" : "원 밖으로 나가서 시련 실패…", e.ok ? "#ffd23a" : "#ff4fa3");
             break;
           case "rage":
             fx.shake = 8;
-            sfx("boss");
+            sfx("rage");
             say(`${e.name} 격노! 서둘러요`, "#ff3d6e");
             break;
           case "ot":
-            sfx(e.lv ? "warn" : "boss");
+            sfx("ot");
             say(e.lv ? `오버타임 Lv${e.lv} — 적이 더 세져요` : "오버타임! 버틸수록 기록이 올라가요", "#ff9cc8");
             if (!e.lv) playBgm("boss");
             break;
@@ -378,7 +387,7 @@ export default function Game({ setup, onEnd, onQuit }: { setup: GameSetup; onEnd
             break;
           case "shield":
             fx.rings.push({ x: runRef.current.p.x, y: runRef.current.p.y - 8, r: 22, c: "#7ff0d8", t: 0, life: 0.35, fill: false });
-            sfx("pick");
+            sfx("shield");
             break;
           case "prop":
             for (let i = 0; i < 8; i++) fx.parts.push({ x: e.x, y: e.y - 12, vx: (Math.random() - 0.5) * 120, vy: -Math.random() * 100, c: i % 2 ? "#ffe9a0" : "#3c3f5c", t: 0, life: 0.5, s: 2 });
@@ -510,9 +519,9 @@ export default function Game({ setup, onEnd, onQuit }: { setup: GameSetup; onEnd
       const n = ["1", "2", "3", "4"].indexOf(e.key);
       if (r.pause?.k === "level" && n >= 0) pickCard(n);
       if (r.pause?.k === "chest" && (e.key === "Enter" || e.key === " ")) shutChest();
-      if (r.pause?.k === "bless" && n >= 0) act((x) => chooseBless(x, n), "lvl");
+      if (r.pause?.k === "bless" && n >= 0) act((x) => chooseBless(x, n), "card");
       if (r.pause?.k === "wish" && n >= 0) act((x) => chooseWish(x, n), "jackpot");
-      if (r.pause?.k === "shop" && n >= 0) act((x) => buyRelic(x, n), "coin");
+      if (r.pause?.k === "shop" && n >= 0) act((x) => buyRelic(x, n), "buy");
       if ((r.pause?.k === "shop" || r.pause?.k === "wish") && e.key === "Escape") act(leaveThing);
     };
     window.addEventListener("keydown", k);
@@ -691,8 +700,8 @@ export default function Game({ setup, onEnd, onQuit }: { setup: GameSetup; onEnd
 
       {pause?.k === "level" && <LevelUp pause={pause} hud={hud} onPick={pickCard} onReroll={doReroll} onBanish={(i) => act((x) => banishCard(x, i), "card")} />}
       {pause?.k === "chest" && <Chest pause={pause} onClose={shutChest} />}
-      {pause?.k === "bless" && <BlessPick pause={pause} onPick={(i) => act((x) => chooseBless(x, i), "lvl")} />}
-      {pause?.k === "shop" && <ShopPick pause={pause} gold={hud.gold} onBuy={(i) => act((x) => buyRelic(x, i), "coin")} onLeave={() => act(leaveThing)} />}
+      {pause?.k === "bless" && <BlessPick pause={pause} onPick={(i) => act((x) => chooseBless(x, i), "card")} />}
+      {pause?.k === "shop" && <ShopPick pause={pause} gold={hud.gold} onBuy={(i) => act((x) => buyRelic(x, i), "buy")} onLeave={() => act(leaveThing)} />}
       {pause?.k === "wish" && <WishPick pause={pause} onPick={(i) => act((x) => chooseWish(x, i), "jackpot")} onLeave={() => act(leaveThing)} />}
       {pause?.k === "dawn" && <Dawn hud={hud} onPick={(more) => act((x) => dawnChoice(x, more), more ? "boss" : "click")} />}
       {menu && !pause && (
@@ -995,6 +1004,7 @@ function BlessPick({ pause, onPick }: { pause: Extract<Pause, { k: "bless" }>; o
               <span className="text-[11px] font-bold" style={{ color: col }}>
                 {RELIC_RARITY_NAME[b.rar]}
               </span>
+              <BlessIcon k={b.k} />
               <b className="text-[18px]">{def.name}</b>
               <b className="pts-title text-[30px]" style={{ color: col }}>
                 {def.fmt === "pct" ? `+${Math.round(b.v * 100)}%` : `+${b.v}`}
@@ -1006,6 +1016,14 @@ function BlessPick({ pause, onPick }: { pause: Extract<Pause, { k: "bless" }>; o
       </div>
     </div>
   );
+}
+
+/** 성소 축복 그림: 같은 패시브 아이콘 · 없으면 비슷한 유물 */
+function BlessIcon({ k }: { k: keyof Stats }) {
+  if (k in PASSIVES) return <ItemIcon k="passive" id={k as PassiveId} size={44} />;
+  if (k === "regen") return <ItemIcon k="relic" id="bandage" size={44} />;
+  if (k === "armor") return <ItemIcon k="relic" id="bubble" size={44} />;
+  return <img src="/survivor/item/gem3.png" alt="" className="h-[40px] w-[40px] object-contain" style={{ imageRendering: "pixelated" }} draggable={false} />;
 }
 
 function RelicCard({ id, i, foot, dim, onClick }: { id: RelicId; i: number; foot?: React.ReactNode; dim?: boolean; onClick(): void }) {

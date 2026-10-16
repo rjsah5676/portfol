@@ -4,7 +4,7 @@
  */
 import { LEVEL, limiter } from "@/lib/soundLevel";
 
-export type Sfx = "gem" | "hit" | "kill" | "lvl" | "card" | "chest" | "reel" | "jackpot" | "boom" | "hurt" | "dash" | "ult" | "boss" | "warn" | "pick" | "fuse" | "win" | "dead" | "click" | "coin" | "bolt" | "throw";
+export type Sfx = "gem" | "hit" | "kill" | "lvl" | "card" | "chest" | "reel" | "jackpot" | "boom" | "hurt" | "dash" | "ult" | "boss" | "warn" | "pick" | "fuse" | "win" | "dead" | "click" | "coin" | "bolt" | "throw" | "relic" | "bless" | "buy" | "trial" | "rage" | "slam" | "shield" | "curse" | "flag" | "ot";
 
 let ctx: AudioContext | null = null;
 let gated = false;
@@ -62,7 +62,7 @@ function file(c: AudioContext, name: string) {
   return p;
 }
 const hasFile = new Map<string, AudioBuffer | null>();
-const FILES = new Set<Sfx>(["lvl", "chest", "jackpot", "boom", "boss", "ult", "fuse", "win", "dead", "warn", "hurt", "dash", "pick", "card"]);
+const FILES = new Set<Sfx>(["lvl", "chest", "jackpot", "boom", "boss", "ult", "fuse", "win", "dead", "warn", "hurt", "dash", "pick", "card", "relic", "bless", "buy", "trial", "rage", "slam", "shield", "curse", "flag", "ot"]);
 /** 파일 미리 받기 (처음 울릴 때 늦지 않게) */
 export function preloadSfx() {
   const c = ac();
@@ -218,6 +218,33 @@ export function sfx(name: Sfx) {
       break;
     case "click":
       tone(c, "square", 880, 880, 0.03, 0.05);
+      break;
+    // 파일이 아직 없을 때 대신
+    case "relic":
+    case "bless":
+    case "flag":
+      [659, 784, 988, 1319].forEach((f, i) => tone(c, "triangle", f, f, 0.14, 0.09, i * 0.05));
+      break;
+    case "buy":
+      tone(c, "square", 1319, 1319, 0.06, 0.07);
+      tone(c, "square", 1760, 1760, 0.14, 0.07, 0.06);
+      break;
+    case "trial":
+    case "ot":
+      [0, 0.22].forEach((d) => tone(c, "sawtooth", 220, 330, 0.18, 0.08, d));
+      break;
+    case "rage":
+      tone(c, "sawtooth", 90, 50, 0.7, 0.2);
+      break;
+    case "slam":
+      noise(c, 0.3, 0.3, 600);
+      tone(c, "sine", 120, 35, 0.3, 0.25);
+      break;
+    case "shield":
+      tone(c, "sine", 1200, 600, 0.12, 0.1);
+      break;
+    case "curse":
+      [523, 466, 392, 311].forEach((f, i) => tone(c, "triangle", f, f * 0.97, 0.16, 0.08, i * 0.07));
       break;
   }
 }

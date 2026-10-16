@@ -611,6 +611,13 @@ export function draw(ctx: CanvasRenderingContext2D, r: Run, fx: Fx, hero: HeroAr
         ctx.fillStyle = def.color;
         ctx.fillRect(x - 2, y - 2, 4, 4);
     }
+    // 각성 무기: 금빛 반짝이
+    if (s.slot >= 0 && r.weapons[s.slot]?.awake && Math.floor(time * 16 + s.x) % 3 === 0) {
+      ctx.fillStyle = "#ffd23a";
+      ctx.fillRect(x - Math.round(s.vx * 0.02) - 1, y - Math.round(s.vy * 0.02) - 3, 2, 2);
+      ctx.fillStyle = "#fff6c8";
+      ctx.fillRect(x + 3, y + 1, 1, 1);
+    }
   }
 
   // 적 탄
