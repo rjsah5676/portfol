@@ -212,14 +212,9 @@ function trySkill(g: Game, pi: number, greed: number): Action | null {
       const h = handOf(t.dice);
       return HAND_ORDER_VAL[h] >= 3 && t.rolls === 0 ? { t: "skill" } : null;
     }
-    case "tri": {
-      // 3개 합이 더 좋으면
-      const h = handOf(t.dice);
-      if (h === "large" || h === "small") return null;
-      let v3 = -1e9;
-      for (const s of moveSums(t.dice, 3)) v3 = Math.max(v3, moveValue(g, pi, s + t.boost, HANDS[h].coins));
-      return v3 + handValue(g, pi, t.dice, h, greed) > now + 5 && t.rolls === 0 ? { t: "skill" } : null;
-    }
+    case "tri":
+      // 다시 굴리기 +1 이 같이 오니 다 쓴 뒤에
+      return t.rolls === 0 && handOf(t.dice) !== "yacht" ? { t: "skill" } : null;
     case "bunny":
     case "hop":
       return t.rolls === 0 ? { t: "skill" } : null;

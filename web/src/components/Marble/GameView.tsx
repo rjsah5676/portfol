@@ -329,7 +329,8 @@ export default function GameView({ room, me, onLeave }: { room: RoomWire; me: st
       case "hand": {
         if (e.hand === "yacht") {
           setYacht({ id: ++fid, p: e.p, x2: e.x2 });
-          sfx("mono");
+          sfx("yacht");
+          setTimeout(() => sfx("mono"), 700);
           await wait(2800);
           setYacht(null);
           return;
@@ -420,7 +421,7 @@ export default function GameView({ room, me, onLeave }: { room: RoomWire; me: st
           const a = starXY(e.at);
           setStarAt(-1);
           setFlyStar({ id: ++fid, a, b: c });
-          sfx("landmark");
+          sfx("star");
           setBanner({ id: ++fid, title: "별 획득!", sub: `${P(e.p)} · ${e.price}코인${e.why === "vip" ? " · VIP 쇼핑" : ""}`, color: "#ffb21e", ms: 1700 });
           await wait(1100);
           setStars((s) => s.map((x, i) => (i === e.p ? x + 1 : x)));
@@ -434,6 +435,7 @@ export default function GameView({ room, me, onLeave }: { room: RoomWire; me: st
           await wait(550);
           setStars((s) => s.map((x, i) => (i === e.p ? x + 1 : x)));
           spawn("star", c.x - 60, c.y);
+          sfx("star");
           setFlyStar(null);
           return;
         }
@@ -501,7 +503,8 @@ export default function GameView({ room, me, onLeave }: { room: RoomWire; me: st
       }
       case "vs":
         setPop({ k: "vs", id: ++fid, e });
-        sfx("dice");
+        sfx("vs");
+        setTimeout(() => sfx("dice"), 300);
         await wait(1300);
         sfx(e.win >= 0 ? "acquire" : "deny");
         await wait(1400);
@@ -568,10 +571,11 @@ export default function GameView({ room, me, onLeave }: { room: RoomWire; me: st
         return;
       }
       case "bonus": {
-        const T: Record<string, [string, string]> = { coin: ["코인왕", "판 동안 코인을 가장 많이 번 사람"], hand: ["족보왕", "족보 점수가 가장 높은 사람"], unlucky: ["불운왕", "코인을 가장 많이 잃은 사람 (위로의 별)"] };
+        const T: Record<string, [string, string]> = { coin: ["코인왕", "판 동안 코인을 가장 많이 번 사람"], hand: ["족보왕", "족보 점수가 가장 높은 사람"], item: ["아이템왕", "아이템을 가장 많이 쓴 사람"] };
         setTray((t) => ({ ...t, dice: [], held: [], ids: [] }));
         sfx("news");
-        setBanner({ id: ++fid, title: `보너스 별 · ${T[e.kind][0]}`, sub: `${e.ps.map(P).join(" · ")} — ${T[e.kind][1]} (${e.val})`, color: "#ff9f1a", ms: 2300 });
+        const [bt, bd] = T[e.kind] ?? ["보너스", ""];
+        setBanner({ id: ++fid, title: `보너스 별 · ${bt}`, sub: `${e.ps.map(P).join(" · ")}${bd ? ` — ${bd}` : ""} (${e.val})`, color: "#ff9f1a", ms: 2300 });
         await wait(1700);
         return;
       }
@@ -621,7 +625,15 @@ export default function GameView({ room, me, onLeave }: { room: RoomWire; me: st
       const w = queue.current.shift()!;
       // 많이 밀렸으면 (탭을 내려 뒀다 옴) 연출 없이 맞춤
       const skip = queue.current.length >= 3;
-      if (!skip && w.game) for (const e of w.ev) await playEv(e, w.game);
+      if (!skip && w.game)
+        for (const e of w.ev) {
+          // 연출 하나가 잘못돼도 판이 멈추지 않게 (상태는 아래에서 서버 것으로 맞춤)
+          try {
+            await playEv(e, w.game);
+          } catch (err) {
+            console.warn("[marble] 연출 오류", e.t, err);
+          }
+        }
       if (w.game) syncTo(w.game);
       setLive(w);
     }
@@ -696,7 +708,7 @@ export default function GameView({ room, me, onLeave }: { room: RoomWire; me: st
   /** 잠그기는 기다리지 않고 바로 (보는 사람에게 알려 주기만) */
   const toggleHold = (i: number) => {
     if (!mine || !pr || pr.k !== "dice") return;
-    sfx("click");
+    sfx("hold");
     const next = (held.length ? held : g.turn!.dice.map(() => false)).map((v, k) => (k === i ? !v : v));
     setHeld(next);
     setTray((t) => ({ ...t, held: next }));
@@ -1072,6 +1084,9 @@ function PlayerCard({
       <div className={`mb-box relative overflow-visible ${turn ? "mb-turn" : ""}`} style={{ "--c": PCOLOR[i], "--bg": "#ffffff" } as CSSProperties}>
         {/* 이름 띠 */}
         <div className="flex h-[26px] items-center gap-1.5 rounded-t-[14px] pr-2 pl-[84px]" style={{ background: PCOLOR[i], boxShadow: "inset 0 -3px 0 rgba(0,0,0,0.18), inset 0 3px 0 rgba(255,255,255,0.3)" }}>
+          <span className="rounded-[4px] bg-white px-[4px] text-[10px] leading-[14px] font-black" style={{ color: PCOLOR[i] }}>
+            {i + 1}P
+          </span>
           {seat?.bot ? <Icon n="bot" size={13} /> : me ? <Icon n="crown" size={13} /> : null}
           <b className="mb-out-s min-w-0 flex-1 truncate text-[14px] text-white">{p.name}</b>
           {seat?.auto && <span className="mb-chip text-[10px]">자동</span>}
@@ -1088,8 +1103,9 @@ function PlayerCard({
           )}
           {c && <GradeTag g={c.grade} className="absolute bottom-[3px] left-[3px] scale-90" />}
         </div>
-        <span className="absolute top-[-14px] left-[-6px] flex h-[26px] w-[26px] items-center justify-center rounded-full text-[13px] font-black text-[#3a2500]" style={{ background: MEDAL[rank - 1] ?? MEDAL[3], boxShadow: "0 0 0 2px #fff, 0 0 0 3.5px #232a4d, 0 2px 4px rgba(0,0,0,0.35)" }} title={`지금 ${rank}등`}>
+        <span className="absolute top-[-14px] left-[-6px] flex h-[26px] w-[30px] items-center justify-center rounded-full text-[13px] font-black text-[#3a2500]" style={{ background: MEDAL[rank - 1] ?? MEDAL[3], boxShadow: "0 0 0 2px #fff, 0 0 0 3.5px #232a4d, 0 2px 4px rgba(0,0,0,0.35)" }} title={`지금 ${rank}등`}>
           {rank}
+          <span className="text-[8px]">등</span>
         </span>
         <div className="flex items-center gap-2.5 pt-[4px] pr-2 pl-[84px]">
           <span className="flex items-center gap-1 text-[26px] leading-[30px] font-black text-[#232a4d]" title="별">

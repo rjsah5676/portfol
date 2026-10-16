@@ -16,6 +16,10 @@ const DEFAULT: AudioPrefs = { bgm: 0.45, sfx: 0.7, mute: false };
 /** 효과음 이름 → 파일 (없으면 합성음). 일레븐랩스로 만든 것을 같은 이름으로 넣으면 바로 바뀜 */
 export const SFX: Record<string, { gain?: number; synth: Synth }> = {
   click: { synth: { f: 660, d: 0.04, type: "square", v: 0.12 } },
+  hold: { synth: { f: 880, d: 0.05, type: "square", v: 0.12, to: 1200 } },
+  star: { synth: { f: 784, d: 0.5, type: "triangle", v: 0.16, to: 1568 } },
+  yacht: { synth: { f: 523, d: 0.6, type: "square", v: 0.15, to: 2093 } },
+  vs: { synth: { f: 160, d: 0.3, type: "sawtooth", v: 0.16, to: 90 } },
   hover: { synth: { f: 990, d: 0.02, type: "square", v: 0.05 } },
   dice: { synth: { f: 220, d: 0.25, type: "noise", v: 0.25 } },
   "dice-land": { synth: { f: 330, d: 0.08, type: "square", v: 0.18, to: 180 } },
@@ -188,7 +192,7 @@ export function sfx(name: string) {
 }
 
 /** 실제 파일이 있는 효과음 (없는 건 합성음) */
-const FILES = ["dice", "step", "coin", "pay", "build", "landmark", "acquire", "skill", "jail", "news", "rotate", "mono", "bankrupt", "win", "lose", "gacha-pull", "gacha-ssr", "gacha-ur", "upgrade", "card", "warp", "fest", "turn", "gacha-sr", "click", "deny", "ready", "join", "sleep", "shield", "hop", "boom", "pull", "coins"];
+const FILES = ["dice", "step", "coin", "pay", "build", "landmark", "acquire", "skill", "jail", "news", "rotate", "mono", "bankrupt", "win", "lose", "gacha-pull", "gacha-ssr", "gacha-ur", "upgrade", "card", "warp", "fest", "turn", "gacha-sr", "click", "deny", "ready", "join", "sleep", "shield", "hop", "boom", "pull", "coins", "hold", "star", "yacht", "vs"];
 
 /* ───────── 배경음 ───────── */
 

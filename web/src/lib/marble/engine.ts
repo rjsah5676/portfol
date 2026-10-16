@@ -165,8 +165,10 @@ export interface PState {
     earned: number;
     /** 움직인 칸 */
     moved: number;
-    /** 잃은 코인 (불운왕) */
+    /** 잃은 코인 */
     lost: number;
+    /** 쓴 아이템 (아이템왕) */
+    used: number;
     /** 족보 점수 합 (족보왕) */
     hand: number;
     best: HandId;
@@ -265,7 +267,7 @@ export type Ev =
   | { t: "debuff"; p: number; kind: "sleep" | "seal" | "trap"; by?: number }
   | { t: "block"; p: number; why: "shield" | "card" | "guard" | "immune" }
   | { t: "swap"; a: number; b: number }
-  | { t: "bonus"; kind: "coin" | "hand" | "unlucky"; ps: number[]; val: number }
+  | { t: "bonus"; kind: "coin" | "hand" | "item"; ps: number[]; val: number }
   | { t: "nope"; p: number; why: string };
 
 export type WinHow = "stars";
@@ -365,6 +367,7 @@ function blocked(g: Game, pi: number, steal: boolean): boolean {
   const ci = p.cards.indexOf("shield");
   if (ci >= 0) {
     p.cards.splice(ci, 1);
+    p.stat.used++;
     emit(g, { t: "card", p: pi, id: "shield", use: true });
     emit(g, { t: "block", p: pi, why: "card" });
     return true;
@@ -474,7 +477,7 @@ export function newGame(o: { map?: MapId; seed: number; players: PlayerIn[]; rou
         sleep: false,
         seal: 0,
         uses: { reroll: fx.usesReroll, gold: fx.usesGold, slide: fx.usesSlide },
-        stat: { earned: 0, moved: 0, lost: 0, hand: 0, best: "none", yacht: 0, bought: 0, skill: 0 },
+        stat: { earned: 0, moved: 0, lost: 0, used: 0, hand: 0, best: "none", yacht: 0, bought: 0, skill: 0 },
       };
     }),
     cur: 0,
@@ -574,7 +577,7 @@ function finish(g: Game) {
   g.prompt = null;
   g.turn = null;
   if (RULE.bonusStars) {
-    const award = (kind: "coin" | "hand" | "unlucky", val: (p: PState) => number) => {
+    const award = (kind: "coin" | "hand" | "item", val: (p: PState) => number) => {
       const best = Math.max(...g.players.map(val));
       if (best <= 0) return;
       const ps = g.players.map((p, i) => (val(p) === best ? i : -1)).filter((i) => i >= 0);
@@ -586,7 +589,7 @@ function finish(g: Game) {
     };
     award("coin", (p) => p.stat.earned);
     award("hand", (p) => p.stat.hand);
-    award("unlucky", (p) => p.stat.lost);
+    award("item", (p) => p.stat.used);
   }
   g.over = { winner: standings(g)[0], how: "stars" };
 }
@@ -1005,6 +1008,7 @@ function applySkill(g: Game, pi: number, a: Extract<Action, { t: "skill" }>) {
     }
     case "tri":
       t.tri = true;
+      t.rolls++;
       break;
     case "seal":
       g.players[target!].seal = mag;
@@ -1068,6 +1072,7 @@ function applyCard(g: Game, pi: number, a: Extract<Action, { t: "card" }>) {
   }
   if (a.id === "starmove" && (a.tile === undefined || a.tile === g.star || !g.stars.includes(a.tile))) fail("옮길 별 자리를 골라 주세요");
   p.cards.splice(p.cards.indexOf(a.id), 1);
+  p.stat.used++;
   emit(g, { t: "card", p: pi, id: a.id, use: true, ...(target !== undefined && { target }) });
   switch (a.id) {
     case "gold":

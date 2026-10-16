@@ -223,13 +223,13 @@ export const CK = {
   zena: { cd: 2, str: [2, 5], start: 3 },
   "ivan-marine": { cd: 2, guard: [2, 5] },
   "igna-student": { cd: 6, big: [1, 6] },
-  "lily-hood": { cd: 4, item: [2, 5] },
+  "lily-hood": { cd: 5, item: [2, 5] },
   toto: { cd: 6, pass: [2, 10] },
   mirage: { cd: 6, twin: [0.15, 0.01] },
   lolo: { cd: 5, vs: [3, 5], fee: [2, 6] },
   mongle: { cd: 3, red: [3, 10], start: 3 },
   "ur-dice": { cd: 10, yacht: [5, 4] },
-  "ur-moa": { cd: 3, jack: [0.5, 0.02], cut: [12, 7] },
+  "ur-moa": { cd: 3, jack: [1, 0.02], cut: [12, 7] },
   "ur-forte": { cd: 13, start: [0, 10] },
 };
 const k = <T extends keyof typeof CK>(id: T) => CK[id];
@@ -344,7 +344,7 @@ export const CHARS: CharDef[] = [
       fx: (p) => ({ straightBonus: st(k("zena").str, p), startBonus: k("zena").start }),
       desc: (p) => `스트레이트면 코인 +${st(k("zena").str, p)} · 출발을 지날 때 +${k("zena").start}`,
     },
-    active: { name: "번개 질주", kind: "tri", cd: cdOf(k("zena")), mag: () => 3, desc: () => "이번 이동은 주사위 3개를 골라 그 합만큼" },
+    active: { name: "번개 질주", kind: "tri", cd: cdOf(k("zena")), mag: () => 3, desc: () => "이번 차례 다시 굴리기 +1 · 이동은 주사위 3개를 골라 그 합만큼" },
     on: true,
   },
 
@@ -533,8 +533,8 @@ export const CHARS: CharDef[] = [
     bio: "오르골 정원에서 태어난 태엽 소년. 태엽을 한 번 더 감으면 춤도, 차례도 한 번 더!",
     passive: {
       name: "태엽 장단",
-      fx: (p) => ({ startBonus: st(k("ur-forte").start, p), festMult: 1 }),
-      desc: (p) => (st(k("ur-forte").start, p) > 0 ? `출발을 지날 때 코인 +${st(k("ur-forte").start, p)} · 축제 보상 2배` : "축제 보상 2배"),
+      fx: (p) => ({ startBonus: st(k("ur-forte").start, p), festMult: 0.5 }),
+      desc: (p) => (st(k("ur-forte").start, p) > 0 ? `출발을 지날 때 코인 +${st(k("ur-forte").start, p)} · 축제 보상 1.5배` : "축제 보상 1.5배"),
     },
     active: { name: "앙코르", kind: "encore", cd: cdOf(k("ur-forte")), mag: () => 1, desc: () => "이번 차례가 끝나면 한 번 더 해요" },
     on: true,
