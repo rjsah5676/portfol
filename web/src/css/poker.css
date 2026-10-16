@@ -1924,23 +1924,38 @@
   opacity: 1;
 }
 /* 내 차례: 행동 바 금빛 강조 */
+/* (발열) 그림자 자체를 움직이면 매 프레임 다시 그림 → 그림자는 고정, 더 밝은 빛만 ::after 에 깔고 투명도로 숨 쉼 (합성만) */
 .pk-actwrap[data-turn="1"] > .pk-frame {
+  position: relative;
   border-color: #ffd84a;
-  animation: pk-actwrap 1.2s ease-in-out infinite;
+  box-shadow:
+    0 0 0 2px rgba(255, 216, 74, 0.25),
+    0 0 18px rgba(255, 216, 74, 0.3),
+    0 10px 24px rgba(0, 0, 0, 0.6);
 }
-@keyframes pk-actwrap {
+.pk-actwrap[data-turn="1"] > .pk-frame::after,
+.pk-sf-me[data-turn="1"]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+  will-change: opacity;
+  animation: pk-glow-pulse 1.2s ease-in-out infinite;
+}
+.pk-actwrap[data-turn="1"] > .pk-frame::after {
+  box-shadow:
+    0 0 0 2px rgba(255, 216, 74, 0.35),
+    0 0 30px rgba(255, 216, 74, 0.4);
+}
+@keyframes pk-glow-pulse {
   0%,
   100% {
-    box-shadow:
-      0 0 0 2px rgba(255, 216, 74, 0.25),
-      0 0 18px rgba(255, 216, 74, 0.3),
-      0 10px 24px rgba(0, 0, 0, 0.6);
+    opacity: 0;
   }
   50% {
-    box-shadow:
-      0 0 0 2px rgba(255, 216, 74, 0.5),
-      0 0 30px rgba(255, 216, 74, 0.55),
-      0 10px 24px rgba(0, 0, 0, 0.6);
+    opacity: 1;
   }
 }
 /* 내 차례!: 행동 바 위에 톡 튀어나오는 꼬리표 (폰에서 내 차례인 걸 바로 알게) */
@@ -2825,6 +2840,7 @@
     inset 0 0 0 5px rgba(255, 216, 74, 0.9),
     inset 0 0 48px 8px rgba(255, 201, 60, 0.42);
   animation: pk-turn-glow 1.3s ease-in-out infinite;
+  will-change: opacity; /* 무대 전체 크기라 따로 합성층으로 — 투명도만 바뀌게 */
 }
 @keyframes pk-turn-glow {
   0%,
@@ -3313,20 +3329,16 @@
 
 /* 7포커 내 차례: 「내 차례!」 딱지 대신 내 틀이 금빛으로 숨 쉬듯 빛나고, 버튼 줄이 한 번 번쩍 */
 .pk-sf-me[data-turn="1"] {
-  animation: pk-me-turn 1.1s ease-in-out infinite;
+  box-shadow:
+    0 0 0 2px rgba(255, 216, 74, 0.45),
+    0 0 16px rgba(255, 216, 74, 0.45);
 }
-@keyframes pk-me-turn {
-  0%,
-  100% {
-    box-shadow:
-      0 0 0 2px rgba(255, 216, 74, 0.45),
-      0 0 16px rgba(255, 216, 74, 0.45);
-  }
-  50% {
-    box-shadow:
-      0 0 0 3px rgba(255, 216, 74, 0.85),
-      0 0 34px rgba(255, 216, 74, 0.8);
-  }
+.pk-sf-me[data-turn="1"]::after {
+  inset: -2px; /* 틀 테두리(2px) 바깥에 맞춤 */
+  box-shadow:
+    0 0 0 3px rgba(255, 216, 74, 0.7),
+    0 0 34px rgba(255, 216, 74, 0.6);
+  animation-duration: 1.1s;
 }
 .pk-sevenbar[data-live="1"] {
   border-radius: 10px;
