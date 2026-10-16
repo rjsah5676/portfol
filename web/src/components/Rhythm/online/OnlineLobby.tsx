@@ -5,8 +5,8 @@ import { sfx } from "@/lib/rhythm/sfx";
 import type { OnlineLobbyRoom } from "@/realtime/rhythmOnline";
 import TopButtons from "./TopButtons";
 
-const DISP = "font-['Arial_Black','Segoe_UI_Black',Impact,sans-serif] font-black italic";
-const KR = "font-['Nanum_Gothic',sans-serif]";
+const DISP = "pru-t";
+const KR = "";
 
 const PHASE: Record<OnlineLobbyRoom["phase"], { label: string; color: string }> = {
   lobby: { label: "대기 중", color: "#4ADE80" },
@@ -97,7 +97,7 @@ export default function OnlineLobby({
   return (
     <div className="absolute inset-0 overflow-hidden bg-[#06041a]">
       <img
-        src="/rhythm/play-pink.webp"
+        src="/rhythm/px/stage-pink.webp"
         alt=""
         className="absolute inset-0 h-full w-full object-cover opacity-35"
       />
@@ -157,7 +157,7 @@ export default function OnlineLobby({
         <div className="absolute top-[7cqw] right-[2.4cqw] bottom-[2.4cqw] left-[2.4cqw] flex gap-[1.8cqw]">
           {/* 왼쪽: 방 만들기 + 하는 법 */}
           <div className="flex w-[31cqw] shrink-0 flex-col gap-[1.2cqw]">
-            <div className="relative flex flex-col gap-[1.2cqw] overflow-hidden rounded-[1.2cqw] border border-[#F472B6]/35 bg-[#0b0820]/85 px-[1.8cqw] py-[1.6cqw] shadow-[0_0_3cqw_-1cqw_rgba(236,72,153,0.45)]">
+            <div className="relative flex flex-col gap-[1.2cqw] overflow-hidden rounded-[1.2cqw] border border-[#F472B6]/35 bg-[#0b0820]/85 px-[1.8cqw] py-[1.6cqw] shadow-[0_0.35cqw_0_rgba(12,7,24,0.6)]">
               <div className="pointer-events-none absolute -top-[6cqw] -right-[6cqw] h-[14cqw] w-[14cqw] rounded-full bg-[#EC4899]/25 blur-[3cqw]" />
               <div className="relative flex items-center justify-between gap-[1cqw]">
                 <span className={`${DISP} text-[1.6cqw] tracking-[0.04em] text-white`}>
@@ -174,7 +174,7 @@ export default function OnlineLobby({
                       className="h-[1.8cqw] w-[1.8cqw] shrink-0 rounded-full bg-white/10 object-cover"
                     />
                   ) : (
-                    <span className="flex h-[1.8cqw] w-[1.8cqw] shrink-0 items-center justify-center rounded-full bg-[linear-gradient(135deg,#DB2777,#7C3AED)] text-[0.9cqw] font-black text-white">
+                    <span className="flex h-[1.8cqw] w-[1.8cqw] shrink-0 items-center justify-center rounded-full bg-[linear-gradient(135deg,#DB2777,#7C3AED)] text-[0.9cqw] font-bold text-white">
                       {[...(nick || "?")][0]}
                     </span>
                   )}
@@ -236,7 +236,7 @@ export default function OnlineLobby({
               </button>
             </div>
 
-            <div className="flex min-h-0 flex-1 flex-col gap-[1cqw] rounded-[1.2cqw] border border-white/10 bg-[#0b0820]/75 px-[1.8cqw] py-[1.4cqw]">
+            <div className="flex min-h-0 flex-1 flex-col gap-[1cqw] pru-box [--f:rgba(12,7,24,0.8)] px-[1.8cqw] py-[1.4cqw]">
               <span className={`${DISP} text-[1.15cqw] tracking-[0.06em] text-white/80`}>
                 HOW IT WORKS
               </span>
@@ -246,7 +246,7 @@ export default function OnlineLobby({
                   ["02", "방장이 난이도까지 정하면 READY", "모두 같은 곡 · 같은 난이도로 겨뤄요"],
                 ].map(([no, t, d]) => (
                   <div key={no} className="contents">
-                    <span className="mt-[0.15cqw] -skew-x-12 rounded-[0.3cqw] bg-[#22D3EE] text-center font-['Arial_Black',sans-serif] text-[0.95cqw] font-black text-[#06041a]">
+                    <span className="mt-[0.15cqw] rounded-[0.3cqw] bg-[#22D3EE] text-center pru-t text-[0.95cqw] font-bold text-[#06041a]">
                       {no}
                     </span>
                     <span className="min-w-0">
@@ -264,7 +264,7 @@ export default function OnlineLobby({
           </div>
 
           {/* 오른쪽: 방 목록 */}
-          <div className="flex min-w-0 flex-1 flex-col rounded-[1.2cqw] border border-white/12 bg-[#0b0820]/80 p-[1.6cqw]">
+          <div className="flex min-w-0 flex-1 flex-col pru-box [--f:rgba(12,7,24,0.8)] p-[1.6cqw]">
             <div className="mb-[1cqw] flex items-center gap-[0.8cqw]">
               <span className={`${DISP} text-[1.6cqw] tracking-[0.04em] text-white`}>ROOMS</span>
               <span className="rounded-full bg-white/10 px-[0.7cqw] py-[0.1cqw] font-mono text-[1cqw] text-white/70">

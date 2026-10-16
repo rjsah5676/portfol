@@ -18,6 +18,18 @@ export const ARCHIVE_TAGS: ArchiveTag[] = ["사이트", "프로젝트", "실무"
 const entries: ArchiveEntry[] = [
   // ───────────── 2026 ─────────────
   {
+    sort: "2026-10-17",
+    date: "2026.10.17",
+    tag: "사이트",
+    title: "리듬게임 BEAT DASH → PIXEL Rhythm Up (도트 개편)",
+    items: [
+      "이름을 PIXEL Rhythm Up 으로 바꾸고 화면 전체를 PIXEL FIGHT 같은 도트로 — 타이틀 · 곡 고르기 · 결과 · 설정 · 상점의 창 · 버튼 · 글꼴(갈무리)",
+      "도트 레인 틀 · 무대 배경 · 판정 글자 · 랭크 엠블럼 · 결과 배너(GPT 그림), 타격 · 카운트다운 효과와 8비트 효과음은 직접 생성 — 노트와 판정은 그대로",
+      "기록 · 랭킹 · BP · 업적 · 산 스킨은 그대로 이어짐 (주소 /games/rhythm 그대로)",
+    ],
+    href: "/games/rhythm/",
+  },
+  {
     sort: "2026-10-14",
     date: "2026.10.14",
     tag: "사이트",

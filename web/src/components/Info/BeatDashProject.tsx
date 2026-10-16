@@ -105,7 +105,7 @@ export default function BeatDashProject() {
   return (
     <div className="mx-auto w-full max-w-3xl">
       <div className="mb-3 font-mono text-sm text-[#8B84FF]">game · gunmo.my</div>
-      <h1 className="font-mono text-3xl font-bold text-white sm:text-4xl">BEAT DASH</h1>
+      <h1 className="font-mono text-3xl font-bold text-white sm:text-4xl">PIXEL Rhythm Up</h1>
       <p className="mt-3 font-['Nanum_Gothic',sans-serif] text-white/60">
         브라우저에서 하는 4키 리듬게임. 내 mp3를 넣으면 채보를 직접 만들어 줍니다.
       </p>

@@ -44,7 +44,7 @@ const BADGES = ["👑", "⭐", "🔥", "💎", "🎮", "🐛", "🍈", "🥇"];
 /** 기록 이름(랭킹 판 · 온라인 게임) → 화면 이름 */
 const GAME_LABEL: Record<string, string> = {
   ...BOARD_LABEL,
-  rhythm: "BEAT DASH",
+  rhythm: "PIXEL Rhythm Up",
   chess: "체스",
   janggi: "장기",
   omok: "오목",

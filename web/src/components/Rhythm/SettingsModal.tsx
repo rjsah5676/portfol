@@ -99,26 +99,20 @@ const TABS: { key: Tab; label: string; en: string }[] = [
 ];
 
 const chip = (on: boolean) =>
-  `cursor-pointer rounded-[0.6cqw] border px-[1.1cqw] py-[0.45cqw] font-['Nanum_Gothic',sans-serif] text-[1.15cqw] font-bold whitespace-nowrap transition-colors ${
-    on
-      ? "border-[#A78BFA] bg-[#A78BFA]/25 text-white shadow-[0_0_1cqw_rgba(167,139,250,0.35)]"
-      : "border-white/10 bg-white/[0.04] text-white/60 hover:border-white/30 hover:text-white"
+  `pru-btn cursor-pointer px-[1.1cqw] py-[0.4cqw] text-[1.1cqw] font-bold whitespace-nowrap ${
+    on ? "pru-on [--a:#7b62c4]" : "text-white/70 [--c:#221a40]"
   }`;
 const stepBtn =
-  "h-[2.4cqw] w-[2.4cqw] shrink-0 cursor-pointer rounded-full border border-white/15 font-mono text-[1.3cqw] text-white/75 hover:border-[#A78BFA] hover:text-white disabled:cursor-not-allowed disabled:opacity-30";
+  "pru-btn h-[2.4cqw] w-[2.4cqw] shrink-0 cursor-pointer text-[1.3cqw] text-white disabled:cursor-not-allowed disabled:opacity-30";
 const range = "min-w-0 flex-1 accent-[#A78BFA] disabled:opacity-40";
 
 function Row({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
   return (
     <div className="grid grid-cols-[13cqw_1fr] items-center gap-x-[1.4cqw] border-b border-white/[0.06] py-[0.9cqw] last:border-b-0">
       <div>
-        <div className="font-['Nanum_Gothic',sans-serif] text-[1.3cqw] font-bold text-white/85">
-          {label}
-        </div>
+        <div className=" text-[1.3cqw] font-bold text-white/85">{label}</div>
         {hint && (
-          <div className="mt-[0.2cqw] font-['Nanum_Gothic',sans-serif] text-[0.95cqw] leading-snug text-white/35">
-            {hint}
-          </div>
+          <div className="mt-[0.2cqw] text-[0.95cqw] leading-snug text-white/35">{hint}</div>
         )}
       </div>
       <div className="min-w-0">{children}</div>
@@ -215,11 +209,11 @@ export default function SettingsModal({
 
   return (
     <div
-      className="absolute inset-0 z-40 flex items-center justify-center bg-[#05030f]/70 backdrop-blur-[3px] [animation:modal-fade_180ms_ease-out]"
+      className="absolute inset-0 z-40 flex items-center justify-center pru-dither bg-[#0c0718]/60 [animation:modal-fade_180ms_steps(5)]"
       onPointerDown={(e) => e.target === e.currentTarget && close()}
     >
       <div
-        className={`${calibrate ? "invisible" : ""} relative flex h-[46cqw] w-[74cqw] flex-col overflow-hidden rounded-[1.4cqw] border border-white/15 bg-[linear-gradient(160deg,#171431f2,#0b0a1cf5)] shadow-[0_0_4cqw_rgba(108,99,255,0.35)] [animation:modal-pop_220ms_ease-out]`}
+        className={`${calibrate ? "invisible" : ""} relative flex h-[46cqw] w-[74cqw] flex-col overflow-hidden pru-win [--wf:#150e29f5] [animation:modal-pop_220ms_steps(5)]`}
       >
         <div
           className="absolute top-0 left-[2cqw] h-[0.3cqw] w-[8cqw]"
@@ -227,13 +221,13 @@ export default function SettingsModal({
         />
         {/* 머리: 제목 + 탭 */}
         <div className="flex items-end justify-between gap-[2cqw] px-[2.4cqw] pt-[1.8cqw]">
-          <div className="font-['Arial_Black','Segoe_UI_Black',sans-serif] text-[2.6cqw] leading-none font-black tracking-[0.08em] text-white italic">
+          <div className="pru-t text-[2.6cqw] leading-none font-bold tracking-[0.08em] text-white ">
             SETTINGS
           </div>
           <button
             type="button"
             onClick={close}
-            className="cursor-pointer rounded-[0.6cqw] border border-white/15 px-[1cqw] py-[0.35cqw] font-mono text-[1.1cqw] text-white/60 hover:border-white/40 hover:text-white"
+            className="pru-btn cursor-pointer px-[1cqw] py-[0.3cqw] text-[1.05cqw] text-white"
           >
             닫기 (Esc)
           </button>
@@ -249,14 +243,12 @@ export default function SettingsModal({
               }}
               className={`-mb-px cursor-pointer border-b-[0.25cqw] px-[1.4cqw] pb-[0.6cqw] transition-colors ${
                 tab === t.key
-                  ? "border-[#A78BFA] text-white"
+                  ? "border-[var(--gold)] text-[var(--gold)]"
                   : "border-transparent text-white/40 hover:text-white/75"
               }`}
             >
               <div className="font-mono text-[0.85cqw] tracking-[0.2em]">{t.en}</div>
-              <div className="font-['Nanum_Gothic',sans-serif] text-[1.35cqw] font-bold">
-                {t.label}
-              </div>
+              <div className=" text-[1.35cqw] font-bold">{t.label}</div>
             </button>
           ))}
         </div>
@@ -445,7 +437,7 @@ export default function SettingsModal({
                 onChange={(v) => set({ sync: v })}
               />
               <div className="flex items-center justify-between gap-[1cqw] py-[1cqw]">
-                <p className="font-['Nanum_Gothic',sans-serif] text-[1cqw] leading-relaxed text-white/40">
+                <p className=" text-[1cqw] leading-relaxed text-white/40">
                   치는 타이밍은 플레이 중에 시스템이 알아서 맞춰요(자동 싱크). 그래도 노트와 소리가
                   어긋나 보이면 여기서 직접 맞추세요 — 자동 싱크 위에 더해져요.
                 </p>
@@ -470,7 +462,7 @@ export default function SettingsModal({
               </div>
               {onResetAuto && (
                 <div className="flex items-center justify-between gap-[1cqw] border-t border-white/[0.06] py-[1cqw]">
-                  <p className="font-['Nanum_Gothic',sans-serif] text-[1cqw] leading-relaxed text-white/40">
+                  <p className=" text-[1cqw] leading-relaxed text-white/40">
                     이어폰을 바꿨거나 판정이 예전보다 어긋나는 느낌이면 자동 싱크를 처음부터 다시
                     맞추게 하세요.
                   </p>

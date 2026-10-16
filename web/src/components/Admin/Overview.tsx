@@ -21,7 +21,7 @@ export const BOARD_LABEL: Record<string, string> = {
   score: "멜론 게임",
   minesweeper_rankings: "지뢰찾기",
   reaction: "반응속도",
-  rhythm_rankings: "BEAT DASH",
+  rhythm_rankings: "PIXEL Rhythm Up",
   chess_ai_rankings: "체스 AI",
   janggi_ai_rankings: "장기 AI",
   omok_ai_rankings: "오목 AI",
@@ -245,7 +245,7 @@ export default function Overview({ onGo }: { onGo: (tab: string) => void }) {
             <Line label="포커">
               {data.live.poker?.rooms ?? 0}테이블 · {data.live.poker?.players ?? 0}명
             </Line>
-            <Line label="BEAT DASH 온라인">
+            <Line label="PIXEL Rhythm Up 온라인">
               {data.live.rhythm?.rooms ?? 0}방 · {data.live.rhythm?.players ?? 0}명
             </Line>
             <Line label="디펜스 멀티">
@@ -325,7 +325,7 @@ export default function Overview({ onGo }: { onGo: (tab: string) => void }) {
                   <span className={`min-w-0 flex-1 truncate text-sm text-white/45 ${KR}`}>
                     {a.kind === "rank"
                       ? a.text.startsWith("rhythm:")
-                        ? `BEAT DASH · ${a.text.slice(7)}`
+                        ? `PIXEL Rhythm Up · ${a.text.slice(7)}`
                         : (BOARD_LABEL[a.text] ?? a.text)
                       : a.kind === "member"
                         ? ""

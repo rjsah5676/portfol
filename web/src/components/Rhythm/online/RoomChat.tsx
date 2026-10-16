@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { roomChat, sendChat } from "@/realtime/rhythmOnline";
 
-const KR = "font-['Nanum_Gothic',sans-serif]";
+const KR = "";
 
 /** 방 대기실 채팅 (방 오른쪽 아래) */
 export default function RoomChat({
@@ -45,7 +45,7 @@ export default function RoomChat({
   };
 
   return (
-    <div className="flex h-full flex-col rounded-[1.2cqw] border border-white/12 bg-[#0b0820]/80 px-[1.2cqw] py-[0.8cqw]">
+    <div className="flex h-full flex-col pru-box [--f:rgba(12,7,24,0.8)] px-[1.2cqw] py-[0.8cqw]">
       <div
         ref={listRef}
         onScroll={(e) => {

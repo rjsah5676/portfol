@@ -60,7 +60,7 @@ function List({
             guest={!r.member}
             size={game ? "game" : "sm"}
           />
-          <span className="min-w-0 flex-1 truncate font-['Nanum_Gothic',sans-serif] text-white/85">
+          <span className="min-w-0 flex-1 truncate text-white/85">
             <Nick name={r.name} guest={!r.member} />
           </span>
           {r.ap ? (
@@ -86,7 +86,7 @@ function List({
 }
 
 const MEDAL = ["#FDE047", "#E2E8F0", "#FB923C"];
-const DISP = "font-['Arial_Black','Segoe_UI_Black',Impact,sans-serif] font-black italic";
+const DISP = "pru-t";
 
 /** 게임 화면 안 랭킹: 순위 배지 + 이름 + 점수 줄 (1~3위는 금·은·동) */
 function GameList({ list, highlight }: { list: RhythmRanking[]; highlight?: string | null }) {
@@ -98,7 +98,7 @@ function GameList({ list, highlight }: { list: RhythmRanking[]; highlight?: stri
         return (
           <li
             key={r.id}
-            className={`relative flex items-center gap-[0.8cqw] overflow-hidden rounded-[0.5cqw] border py-[0.35cqw] pr-[0.9cqw] pl-[0.4cqw] [animation:bd-slide-left_300ms_ease-out_backwards] ${
+            className={`relative flex items-center gap-[0.8cqw] overflow-hidden rounded-[0.5cqw] border py-[0.35cqw] pr-[0.9cqw] pl-[0.4cqw] [animation:bd-slide-left_300ms_steps(5)_backwards] ${
               me ? "border-[#F472B6]/70 bg-[#F472B6]/20" : "border-white/[0.07] bg-white/[0.04]"
             }`}
             style={{
@@ -109,17 +109,17 @@ function GameList({ list, highlight }: { list: RhythmRanking[]; highlight?: stri
             }}
           >
             <span
-              className={`${DISP} flex h-[2cqw] w-[2.6cqw] shrink-0 -skew-x-12 items-center justify-center rounded-[0.35cqw] text-[1.15cqw]`}
+              className={`${DISP} flex h-[2cqw] w-[2.6cqw] shrink-0 items-center justify-center rounded-[0.35cqw] text-[1.15cqw]`}
               style={
                 medal
                   ? { background: medal, color: "#1a1030", boxShadow: `0 0 0.8cqw ${medal}88` }
                   : { background: "rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.6)" }
               }
             >
-              <span className="skew-x-12">{i + 1}</span>
+              <span>{i + 1}</span>
             </span>
             <RankAvatar avatar={r.avatar} name={r.name} guest={!r.member} size="game" />
-            <span className="min-w-0 flex-1 truncate font-['Nanum_Gothic',sans-serif] text-[1.15cqw] font-bold text-white/90">
+            <span className="min-w-0 flex-1 truncate text-[1.15cqw] font-bold text-white/90">
               <Nick name={r.name} guest={!r.member} />
             </span>
             {(r.ap || r.fc) && (
@@ -255,7 +255,7 @@ export function BpBoard({ refresh = 0 }: { refresh?: number }) {
         return (
           <li
             key={r.id}
-            className="relative flex items-center gap-[0.8cqw] overflow-hidden rounded-[0.5cqw] border border-white/[0.07] bg-white/[0.04] py-[0.35cqw] pr-[0.9cqw] pl-[0.4cqw] [animation:bd-slide-left_300ms_ease-out_backwards]"
+            className="relative flex items-center gap-[0.8cqw] overflow-hidden rounded-[0.5cqw] border border-white/[0.07] bg-white/[0.04] py-[0.35cqw] pr-[0.9cqw] pl-[0.4cqw] [animation:bd-slide-left_300ms_steps(5)_backwards]"
             style={{
               animationDelay: `${i * 40}ms`,
               ...(medal
@@ -264,17 +264,17 @@ export function BpBoard({ refresh = 0 }: { refresh?: number }) {
             }}
           >
             <span
-              className={`${DISP} flex h-[2cqw] w-[2.6cqw] shrink-0 -skew-x-12 items-center justify-center rounded-[0.35cqw] text-[1.15cqw]`}
+              className={`${DISP} flex h-[2cqw] w-[2.6cqw] shrink-0 items-center justify-center rounded-[0.35cqw] text-[1.15cqw]`}
               style={
                 medal
                   ? { background: medal, color: "#1a1030", boxShadow: `0 0 0.8cqw ${medal}88` }
                   : { background: "rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.6)" }
               }
             >
-              <span className="skew-x-12">{r.rank}</span>
+              <span>{r.rank}</span>
             </span>
             <RankAvatar avatar={r.avatar} name={r.name} guest={!r.member} size="game" />
-            <span className="min-w-0 flex-1 truncate font-['Nanum_Gothic',sans-serif] text-[1.15cqw] font-bold text-white/90">
+            <span className="min-w-0 flex-1 truncate text-[1.15cqw] font-bold text-white/90">
               <Nick name={r.name} guest={!r.member} />
               <span className="ml-[0.6cqw] font-normal text-[0.9cqw] text-white/40">
                 {r.songs}곡{r.best ? ` · 최고 ${bpChartLabel(r.best.chart)} ${r.best.bp}` : ""}
@@ -351,9 +351,9 @@ export function SubmitRanking({
 
   if (game)
     return (
-      <div className="flex h-full flex-col rounded-[0.9cqw] border border-white/10 bg-black/45 px-[1.4cqw] py-[1.1cqw]">
+      <div className="flex h-full flex-col pru-box [--f:rgba(12,7,24,0.8)] px-[1.4cqw] py-[1.1cqw]">
         <div className="flex items-baseline justify-between gap-[1cqw]">
-          <span className="font-['Arial_Black','Segoe_UI_Black',sans-serif] text-[1.5cqw] font-black tracking-[0.12em] text-white italic">
+          <span className="pru-t text-[1.5cqw] font-bold tracking-[0.12em] text-white ">
             RANKING
           </span>
           <span className="truncate font-mono text-[0.95cqw] text-white/40">{label} TOP 10</span>
@@ -375,12 +375,12 @@ export function SubmitRanking({
               onChange={(e) => setName(e.target.value.slice(0, RHYTHM_NAME_MAX))}
               placeholder="이름을 넣고 기록 등록"
               maxLength={RHYTHM_NAME_MAX}
-              className="min-w-0 flex-1 rounded-[0.6cqw] border border-white/15 bg-black/40 px-[1cqw] py-[0.55cqw] font-['Nanum_Gothic',sans-serif] text-[1.2cqw] text-white placeholder:text-white/30 focus:border-[#A78BFA] focus:outline-none"
+              className="min-w-0 flex-1 rounded-[0.6cqw] border border-white/15 bg-black/40 px-[1cqw] py-[0.55cqw] text-[1.2cqw] text-white placeholder:text-white/30 focus:border-[#A78BFA] focus:outline-none"
             />
             <button
               type="submit"
               disabled={!name.trim() || status === "saving"}
-              className="shrink-0 cursor-pointer rounded-[0.6cqw] bg-[linear-gradient(90deg,#7c3aed,#db2777)] px-[1.4cqw] font-['Nanum_Gothic',sans-serif] text-[1.2cqw] font-bold text-white hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40"
+              className="shrink-0 cursor-pointer rounded-[0.6cqw] bg-[linear-gradient(90deg,#7c3aed,#db2777)] px-[1.4cqw] text-[1.2cqw] font-bold text-white hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40"
             >
               {status === "saving" ? "등록 중…" : "등록"}
             </button>
@@ -429,7 +429,7 @@ export function SubmitRanking({
             onChange={(e) => setName(e.target.value.slice(0, RHYTHM_NAME_MAX))}
             placeholder="이름"
             maxLength={RHYTHM_NAME_MAX}
-            className="min-w-0 flex-1 rounded-full border border-white/10 bg-[#15171c] px-4 py-2 font-['Nanum_Gothic',sans-serif] text-sm text-white placeholder:text-white/25 focus:border-[#6C63FF]/50 focus:outline-none"
+            className="min-w-0 flex-1 rounded-full border border-white/10 bg-[#15171c] px-4 py-2 text-sm text-white placeholder:text-white/25 focus:border-[#6C63FF]/50 focus:outline-none"
           />
           <button
             type="submit"

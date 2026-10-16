@@ -1,12 +1,12 @@
 /**
- * BEAT DASH 패치노트 — 타이틀 화면 오른쪽 위 버튼 → 모달. 맨 위가 최신. 패치마다 10줄 안으로.
+ * PIXEL Rhythm Up(구 BEAT DASH) 패치노트 — 타이틀 화면 오른쪽 위 버튼 → 모달. 맨 위가 최신. 패치마다 10줄 안으로.
  * 새 패치는 PATCHES 맨 앞에 추가.
  */
 import { useEffect } from "react";
 import { sfx } from "@/lib/rhythm/sfx";
 
-const KR = "font-['Nanum_Gothic',sans-serif]";
-const DISP = "font-['Arial_Black','Segoe_UI_Black',Impact,sans-serif] font-black italic";
+const KR = "";
+const DISP = "pru-t";
 
 export interface Patch {
   ver: string;
@@ -16,6 +16,20 @@ export interface Patch {
 }
 
 export const PATCHES: Patch[] = [
+  {
+    ver: "v2.0",
+    name: "PIXEL Rhythm Up",
+    date: "2026.10.17",
+    lines: [
+      "BEAT DASH 가 PIXEL Rhythm Up 으로 이름을 바꿨어요 — 기록 · 랭킹 · BP · 업적 · 산 스킨은 그대로",
+      "화면 전체를 PIXEL FIGHT 처럼 도트로 — 타이틀 · 곡 고르기 · 결과 · 설정 · 상점 배경과 창, 글꼴(갈무리), 버튼까지",
+      "새 레인 틀 · 무대 배경 · 판정 글자 · 랭크 엠블럼 · 결과 배너 · 타격 · 카운트다운 효과를 도트 그림으로 (노트는 스킨 그대로)",
+      "효과음을 8비트 칩튠으로 — 메뉴 이동 · 선택 · 카운트다운 · 콤보 · 결과 징글",
+      "싱크 맞추는 중엔 메뉴 배경음 · 미리 듣기를 멈춤 (메트로놈만 들리게)",
+      "점수 앞자리를 0으로 채우지 않음 (0,711,333 → 711,333)",
+      "자동 채보: NIGHTMARE · ULTIMA 연타 박에서 16분과 연타가 섞여 30~35ms로 엄청 촘촘해지던 박 고침 (나머지 채보는 그대로)",
+    ],
+  },
   {
     ver: "v1.9",
     name: "제나와 함께",
@@ -253,7 +267,7 @@ export default function PatchNotes({ onClose }: { onClose: () => void }) {
 
   return (
     <div
-      className="absolute inset-0 z-40 flex items-center justify-center bg-[#05030f]/75 backdrop-blur-[3px] [animation:modal-fade_150ms_ease-out]"
+      className="absolute inset-0 z-40 flex items-center justify-center pru-dither bg-[#0c0718]/60 [animation:modal-fade_150ms_steps(5)]"
       onPointerDown={(e) => {
         if (e.target === e.currentTarget) {
           sfx("ui-back", 0.7);
@@ -262,7 +276,7 @@ export default function PatchNotes({ onClose }: { onClose: () => void }) {
       }}
     >
       <div
-        className={`${KR} relative flex max-h-[86%] w-[64cqw] flex-col overflow-hidden rounded-[1.2cqw] border border-white/15 bg-[linear-gradient(160deg,#171431f5,#0b0a1cf8)] shadow-[0_0_4cqw_rgba(236,72,153,0.3)] [animation:modal-pop_200ms_ease-out]`}
+        className={`${KR} relative flex max-h-[86%] w-[64cqw] flex-col overflow-hidden pru-win [--wf:#150e29f5] [animation:modal-pop_200ms_steps(5)]`}
       >
         <div className="absolute top-0 left-[2cqw] h-[0.3cqw] w-[8cqw] bg-[linear-gradient(90deg,#EC4899,#7C3AED)]" />
         <div className="flex items-center justify-between border-b border-white/10 px-[2.2cqw] py-[1.3cqw]">
@@ -273,7 +287,7 @@ export default function PatchNotes({ onClose }: { onClose: () => void }) {
               sfx("ui-back", 0.7);
               onClose();
             }}
-            className="cursor-pointer rounded-[0.6cqw] border border-white/15 px-[1cqw] py-[0.35cqw] font-mono text-[1.1cqw] text-white/60 hover:border-white/40 hover:text-white"
+            className="pru-btn cursor-pointer px-[1cqw] py-[0.3cqw] text-[1.05cqw] text-white"
           >
             닫기 (Esc)
           </button>
@@ -286,13 +300,13 @@ export default function PatchNotes({ onClose }: { onClose: () => void }) {
             >
               <div className="mb-[0.8cqw] flex items-center gap-[0.9cqw]">
                 <span
-                  className={`${DISP} -skew-x-12 rounded-[0.35cqw] px-[0.8cqw] py-[0.15cqw] text-[1.3cqw] text-white`}
+                  className={`${DISP} rounded-[0.35cqw] px-[0.8cqw] py-[0.15cqw] text-[1.3cqw] text-white`}
                   style={{
                     background:
                       i === 0 ? "linear-gradient(90deg,#DB2777,#7C3AED)" : "rgba(255,255,255,0.1)",
                   }}
                 >
-                  <span className="inline-block skew-x-12">{p.ver}</span>
+                  <span className="inline-block">{p.ver}</span>
                 </span>
                 <span className="text-[1.7cqw] font-extrabold text-white">{p.name}</span>
                 {i === 0 && (

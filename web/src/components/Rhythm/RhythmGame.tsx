@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * BEAT DASH — 리듬게임 전체를 16:9 화면 하나 안에서: 타이틀 → 곡 선택(설정 창) → 플레이 → 결과.
+ * PIXEL Rhythm Up — 리듬게임 전체를 16:9 화면 하나 안에서: 타이틀 → 곡 선택(설정 창) → 플레이 → 결과.
  * 화면 크기는 프레임 폭(cqw) 기준이라 창모드·전체화면이 같은 모양으로 커지고 줄어듦.
  */
 
@@ -1106,9 +1106,9 @@ export default function RhythmGame() {
   const portraitPlay = portrait && screen === "play";
   const frameCls = portraitPlay
     ? // 세로 레인: 화면 전체 (전체화면이 안 되는 브라우저도 화면을 덮음)
-      "fixed inset-0 z-[120] isolate h-[100dvh] w-screen overflow-hidden bg-black select-none [container-type:inline-size]"
-    : `fs-screen relative isolate aspect-video w-full overflow-hidden bg-black select-none [container-type:inline-size] ${
-        fs ? "" : "rounded-xl border border-white/10 shadow-[0_0_60px_rgba(108,99,255,0.18)]"
+      "pru fixed inset-0 z-[120] isolate h-[100dvh] w-screen overflow-hidden bg-black select-none [container-type:inline-size]"
+    : `pru fs-screen relative isolate aspect-video w-full overflow-hidden bg-black select-none [container-type:inline-size] ${
+        fs ? "" : "border-2 border-[#4b3b80] shadow-[0_0.35cqw_0_rgba(12,7,24,0.6)]"
       }`;
   const rootCls = fs
     ? `${pseudoFs ? "fixed inset-0 z-[100] " : ""}flex h-full w-full items-center justify-center bg-black [&>.fs-screen]:w-[min(100vw,calc(100dvh*16/9))]`
@@ -1119,7 +1119,7 @@ export default function RhythmGame() {
       {/* 다른 게임 페이지와 같은 머리말 (창모드에서만 보임 — 전체화면은 게임 화면만) */}
       <GameHeader
         icon="🎹"
-        title="BEAT DASH"
+        title="PIXEL Rhythm Up"
         en="Rhythm Game"
         accent="#EC4899"
         desc="DFJK 4키 리듬게임"

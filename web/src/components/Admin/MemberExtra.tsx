@@ -21,7 +21,7 @@ const GAME_NAME: Record<string, string> = {
   poker: "ANIME POKER",
   fight: "PIXEL FIGHT",
   defense: "LUCKY DEFENSE",
-  rhythm: "BEAT DASH",
+  rhythm: "PIXEL Rhythm Up",
 };
 const BAN_DAYS: { days: number | null; label: string }[] = [
   { days: 1, label: "1일" },

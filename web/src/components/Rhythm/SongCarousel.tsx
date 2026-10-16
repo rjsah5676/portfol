@@ -36,7 +36,7 @@ export const COVERS: Record<string, StaticImageData> = {
 };
 
 /** 내 음악에 앨범 사진이 없을 때 쓰는 기본 재킷 */
-export const CUSTOM_COVER = "/rhythm/custom-cover.webp";
+export const CUSTOM_COVER = "/rhythm/px/custom-cover.webp";
 /** 곡 재킷 주소: 곡에 따로 있으면 그것, 내장곡은 COVERS, 없으면 기본 그림 */
 export const coverOf = (s: Song) => s.cover ?? COVERS[s.id]?.src ?? CUSTOM_COVER;
 

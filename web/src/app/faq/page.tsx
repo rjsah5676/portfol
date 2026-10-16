@@ -129,7 +129,7 @@ export default function FaqPage() {
             ))}
           </ul>
           <p className="text-white/50">
-            BEAT DASH · PIXEL FIGHT · PIXEL LUCKY DEFENSE · DOODLE PARTY에도
+            PIXEL Rhythm Up · PIXEL FIGHT · PIXEL LUCKY DEFENSE · DOODLE PARTY에도
             상점이 차례로 열릴 예정이에요.
           </p>
         </Q>

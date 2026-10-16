@@ -83,7 +83,7 @@ export const NAV_GROUPS: NavGroup[] = [
       {
         href: "/games/rhythm",
         image: imgRhythm,
-        label: "BEAT DASH",
+        label: "PIXEL Rhythm Up",
         desc: "4키 리듬게임, 곡·난이도별 랭킹",
         icon: "🎹",
         featured: true,

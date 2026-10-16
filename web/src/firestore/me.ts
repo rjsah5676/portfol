@@ -53,7 +53,7 @@ export interface MySummary {
   stats?: MyStats;
   records?: MyRecord[];
   rhythm?: MyRhythmRecord[];
-  /** 비트대시 BP 합과 회원 BP 랭킹 순위 (기록이 없으면 rank null) */
+  /** 픽셀 리듬업 BP 합과 회원 BP 랭킹 순위 (기록이 없으면 rank null) */
   bp?: { total: number; rank: number | null; of: number };
   /** 격투 온라인 레이팅 (회원끼리 경기, 한 판도 없으면 null) */
   fightRating?: { r: number; n: number; w: number; l: number; d: number; peak: number; rank: number; of: number } | null;

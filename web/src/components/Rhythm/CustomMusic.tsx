@@ -132,7 +132,7 @@ const hashOf = (s: string) =>
   ([...s].reduce((h, c) => Math.imul(h ^ c.charCodeAt(0), 16777619), 2166136261) >>> 0).toString(
     36
   );
-const KR = "font-['Nanum_Gothic',sans-serif]";
+const KR = "";
 const mini =
   "cursor-pointer rounded-[0.4cqw] border border-white/15 px-[0.6cqw] py-[0.1cqw] font-mono text-[1cqw] text-white/70 hover:border-[#22D3EE] hover:text-white disabled:cursor-not-allowed disabled:opacity-30";
 

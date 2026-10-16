@@ -2,8 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { audio } from "@/lib/rhythm/sfx";
-import { laneColors, type Skin } from "@/lib/rhythm/fx";
-import { visibleSec } from "./Stage";
+import { laneColors, SKIN_THEME, type Skin } from "@/lib/rhythm/fx";
+import { gearRatios, visibleSec } from "./Stage";
 import HoldButton from "./HoldButton";
 
 /**
@@ -16,9 +16,6 @@ import HoldButton from "./HoldButton";
  */
 /** 메트로놈 템포: 120 BPM (박 0.5초) — 박이 또렷하고 블루투스 지연(150~250ms)도 박 절반 안이라 헷갈리지 않음 */
 const BEAT = 0.5;
-/** 실제 플레이 기어 비율 (Stage GEAR): 레인 4개 폭 = 화면 높이 × 0.449, 판정선 = 높이 × 0.828 */
-const LANE_W_R = (189 * 4) / 1683;
-const JUDGE_R = 1393 / 1683;
 
 export default function SyncCalibrate({
   sync,
@@ -116,6 +113,8 @@ export default function SyncCalibrate({
           ((ctx as AudioContext & { outputLatency?: number }).outputLatency ?? 0) +
           (ctx.baseLatency ?? 0);
         const colors = laneColors(skin, "#A78BFA");
+        // 실제 플레이 레인 틀 비율 (레인 4개 폭 · 판정선 위치 ÷ 화면 높이)
+        const { laneW: LANE_W_R, judge: JUDGE_R } = gearRatios(SKIN_THEME[skin]);
         const frame = () => {
           if (!alive) return;
           schedule();
@@ -183,7 +182,7 @@ export default function SyncCalibrate({
     // 스킨이 바뀌면 다시 시작 (싱크·속도는 ref로 바로 반영)
   }, [skin]);
 
-  const KR = "font-['Nanum_Gothic',sans-serif]";
+  const KR = "";
   const btn =
     "h-[3.2cqw] w-[3.2cqw] shrink-0 cursor-pointer rounded-full border border-white/25 bg-white/[0.06] font-mono text-[1.7cqw] text-white/85 transition-colors hover:border-[#A78BFA] hover:bg-[#A78BFA]/15 hover:text-white";
   return (
@@ -199,7 +198,7 @@ export default function SyncCalibrate({
       {/* 머리말 띠 */}
       <div className="absolute inset-x-0 top-0 flex items-center justify-between border-b border-white/10 bg-[#0b0820]/85 px-[1.8cqw] py-[0.9cqw]">
         <div className="flex items-baseline gap-[1cqw]">
-          <span className="font-['Arial_Black','Segoe_UI_Black',sans-serif] text-[1.7cqw] font-black tracking-[0.06em] text-white italic">
+          <span className="pru-t text-[1.7cqw] font-bold tracking-[0.06em] text-white ">
             SYNC CHECK
           </span>
           <span className={`${KR} text-[1.1cqw] text-white/55`}>
@@ -215,7 +214,7 @@ export default function SyncCalibrate({
         </button>
       </div>
       {/* 왼쪽: 싱크 조절 카드 */}
-      <div className="absolute top-1/2 left-[3cqw] w-[23cqw] -translate-y-1/2 rounded-[1cqw] border border-white/10 bg-[#0b0820]/85 p-[1.4cqw]">
+      <div className="absolute top-1/2 left-[3cqw] w-[23cqw] -translate-y-1/2 pru-box [--f:rgba(12,7,24,0.8)] p-[1.4cqw]">
         <div className={`${KR} mb-[0.6cqw] text-[1cqw] font-bold tracking-wide text-[#A78BFA]`}>
           싱크
         </div>

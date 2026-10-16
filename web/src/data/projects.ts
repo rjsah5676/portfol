@@ -128,9 +128,9 @@ export const personalProjects: Project[] = [
 export const gameProjects: Project[] = [
   {
     idx: 12,
-    name: "BEAT DASH",
+    name: "PIXEL Rhythm Up",
     imgLink: beatdashImg,
-    title: "4키 리듬게임 [BEAT DASH]",
+    title: "4키 리듬게임 [PIXEL Rhythm Up]",
     desc: "내 mp3를 넣으면 브라우저가 채보를 만들어 주는 4키 리듬게임. 곡·난이도별 랭킹",
     tech: ["TypeScript", "Web Audio API", "Canvas", "React"],
     period: "2026.09 –",

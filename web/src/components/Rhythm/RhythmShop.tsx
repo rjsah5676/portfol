@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * BEAT DASH 상점 — 테마 스킨을 GP로 사고(서버 inv.rhythm) 바로 착용(설정의 노트 스킨).
+ * PIXEL Rhythm Up 상점 — 테마 스킨을 GP로 사고(서버 inv.rhythm) 바로 착용(설정의 노트 스킨).
  * 스킨 정의는 lib/rhythm/fx.ts (SKINS · SKIN_THEME), 가격은 lib/points SHOP (rhythm.skin.<ref>).
  * 스킨은 겉모습만 — 노트 크기 · 판정선 위치 · 판정은 기본 스킨과 같음.
  */
@@ -13,8 +13,8 @@ import { SKINS, SKIN_THEME, type Skin } from "@/lib/rhythm/fx";
 import { reloadRhythmItems, useRhythmItems } from "@/lib/rhythm/myItems";
 import { sfx } from "@/lib/rhythm/sfx";
 
-const DISP = "font-['Arial_Black','Segoe_UI_Black',sans-serif] font-black italic";
-const KR = "font-['Nanum_Gothic',sans-serif]";
+const DISP = "pru-t";
+const KR = "";
 const gp = (n: number) => n.toLocaleString("ko-KR");
 const GOODS = SKINS.filter((s) => s.shop && SKIN_THEME[s.key]);
 
@@ -93,10 +93,10 @@ export default function RhythmShop({
 
   return (
     <div
-      className="absolute inset-0 z-40 flex items-center justify-center bg-[#05030f]/70 backdrop-blur-[3px] [animation:modal-fade_180ms_ease-out]"
+      className="absolute inset-0 z-40 flex items-center justify-center pru-dither bg-[#0c0718]/60 [animation:modal-fade_180ms_steps(5)]"
       onPointerDown={(e) => e.target === e.currentTarget && onClose()}
     >
-      <div className="relative flex h-[46cqw] w-[74cqw] flex-col overflow-hidden rounded-[1.4cqw] border border-white/15 bg-[linear-gradient(160deg,#171431f2,#0b0a1cf5)] shadow-[0_0_4cqw_rgba(245,200,66,0.25)] [animation:modal-pop_220ms_ease-out]">
+      <div className="relative flex h-[46cqw] w-[74cqw] flex-col overflow-hidden pru-win [--wf:#150e29f5] [animation:modal-pop_220ms_steps(5)]">
         <div className="absolute top-0 left-[2cqw] h-[0.3cqw] w-[8cqw] bg-[#F5C842]" />
         <div className="flex items-end justify-between gap-[2cqw] px-[2.4cqw] pt-[1.8cqw]">
           <div className={`${DISP} text-[2.6cqw] leading-none tracking-[0.08em] text-white`}>
@@ -115,7 +115,7 @@ export default function RhythmShop({
             <button
               type="button"
               onClick={onClose}
-              className="cursor-pointer rounded-[0.6cqw] border border-white/15 px-[1cqw] py-[0.35cqw] font-mono text-[1.1cqw] text-white/60 hover:border-white/40 hover:text-white"
+              className="pru-btn cursor-pointer px-[1cqw] py-[0.3cqw] text-[1.05cqw] text-white"
             >
               닫기 (Esc)
             </button>
@@ -163,7 +163,7 @@ export default function RhythmShop({
 
           {/* 오른쪽: 미리보기 + 설명 + 사기/착용 */}
           <div className="flex min-w-0 flex-1 flex-col gap-[1cqw]">
-            <div className="relative min-h-0 flex-1 overflow-hidden rounded-[1cqw] border border-white/10 bg-black">
+            <div className="pru-in relative min-h-0 flex-1 overflow-hidden [--if:#000]">
               <img
                 src={theme.preview}
                 alt={`${good.label} 미리보기`}
@@ -190,10 +190,8 @@ export default function RhythmShop({
                     onWear(good.key);
                     sfx("ui-select", 0.8);
                   }}
-                  className={`shrink-0 rounded-[0.8cqw] border px-[2cqw] py-[0.9cqw] ${KR} text-[1.35cqw] font-bold ${
-                    worn
-                      ? "border-white/15 text-white/45"
-                      : "cursor-pointer border-[#F5C842] bg-[#F5C842]/15 text-[#FDE68A] hover:bg-[#F5C842]/25"
+                  className={`pru-btn shrink-0 px-[2cqw] py-[0.8cqw] ${KR} text-[1.35cqw] font-bold ${
+                    worn ? "text-white/45" : "pru-gold cursor-pointer"
                   }`}
                 >
                   {worn ? "착용 중" : "착용하기"}
@@ -203,8 +201,8 @@ export default function RhythmShop({
                   type="button"
                   disabled={busy}
                   onClick={() => void buy()}
-                  className={`shrink-0 cursor-pointer rounded-[0.8cqw] border border-[#F5C842] px-[2cqw] py-[0.9cqw] ${KR} text-[1.35cqw] font-bold text-[#1a1000] transition-colors ${
-                    confirm ? "bg-[#FDE68A]" : "bg-[#F5C842] hover:bg-[#FDE68A]"
+                  className={`pru-btn shrink-0 cursor-pointer px-[2cqw] py-[0.8cqw] ${KR} text-[1.35cqw] font-bold ${
+                    confirm ? "pru-pink" : "pru-gold"
                   }`}
                 >
                   {!profile

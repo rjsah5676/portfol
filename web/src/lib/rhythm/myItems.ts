@@ -1,5 +1,5 @@
 /**
- * BEAT DASH 에서 산 물건 (inv.rhythm — 지금은 테마 스킨 ref) — 서버에서 받아 두고 화면들이 같이 씀.
+ * PIXEL Rhythm Up 에서 산 물건 (inv.rhythm — 지금은 테마 스킨 ref) — 서버에서 받아 두고 화면들이 같이 씀.
  * 비회원 · 아직 못 받았으면 빈 목록 (무료 스킨만).
  */
 import { useEffect, useSyncExternalStore } from "react";

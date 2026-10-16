@@ -8,8 +8,8 @@ import { RankEmblem } from "../Stage";
 import RoomChat from "./RoomChat";
 import TopButtons from "./TopButtons";
 
-const DISP = "font-['Arial_Black','Segoe_UI_Black',Impact,sans-serif] font-black italic";
-const KR = "font-['Nanum_Gothic',sans-serif]";
+const DISP = "pru-t";
+const KR = "";
 const diffOf = (d: Difficulty) => DIFFICULTIES.find((x) => x.key === d) ?? DIFFICULTIES[1];
 const fmtTime = (s: number) =>
   `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}`;
@@ -205,7 +205,7 @@ export default function OnlineRoom({
         </div>
 
         {song && me && (
-          <div className="rounded-[1cqw] border border-white/10 bg-black/35 p-[1.2cqw]">
+          <div className="pru-box [--f:rgba(12,7,24,0.8)] p-[1.2cqw]">
             <div className={`${KR} mb-[0.7cqw] text-[1.05cqw] font-bold text-white/60`}>
               난이도 {host ? "(방장 — 모두 같은 난이도)" : "(방장이 골라요)"}
             </div>
@@ -230,10 +230,7 @@ export default function OnlineRoom({
                         background: on ? `${d.color}26` : "rgba(0,0,0,0.3)",
                       }}
                     >
-                      <span
-                        className="font-['Arial_Black',sans-serif] text-[0.85cqw] font-black"
-                        style={{ color: d.color }}
-                      >
+                      <span className="pru-t text-[0.85cqw] font-bold" style={{ color: d.color }}>
                         {d.label}
                       </span>
                       <span className={`${DISP} text-[1.6cqw] text-white`}>{lv ?? "·"}</span>
@@ -305,7 +302,7 @@ export default function OnlineRoom({
       </div>
 
       {/* 오른쪽: 사람들 / 점수판 / 결과 */}
-      <div className="absolute top-[7cqw] right-[2.4cqw] bottom-[17cqw] flex w-[48cqw] flex-col rounded-[1.2cqw] border border-white/12 bg-[#0b0820]/80 p-[1.4cqw]">
+      <div className="absolute top-[7cqw] right-[2.4cqw] bottom-[17cqw] flex w-[48cqw] flex-col pru-box [--f:rgba(12,7,24,0.8)] p-[1.4cqw]">
         {room.phase === "result" && results.length > 0 ? (
           <>
             <div className="mb-[0.9cqw] flex items-baseline justify-between">
@@ -432,10 +429,7 @@ export default function OnlineRoom({
                       )}
                     </span>
                     {song && (
-                      <span
-                        className="font-['Arial_Black',sans-serif] text-[0.95cqw] font-black"
-                        style={{ color: d.color }}
-                      >
+                      <span className="pru-t text-[0.95cqw] font-bold" style={{ color: d.color }}>
                         {d.label}
                         {songView?.levels[p.diff] !== undefined && (
                           <span className="ml-[0.3cqw] text-white/70">

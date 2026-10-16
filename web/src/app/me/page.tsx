@@ -47,7 +47,7 @@ const pokerLine = (s?: { hands?: number; wins?: number }) =>
   s?.hands ? `${s.hands.toLocaleString()}판 · 이긴 판 ${(s.wins ?? 0).toLocaleString()}` : "-";
 const DIFF = Object.fromEntries(DIFFICULTIES.map((d) => [d.key, d]));
 
-/** 비트대시 곡 정보 (제목 · 난이도별 레벨) */
+/** 픽셀 리듬업 곡 정보 (제목 · 난이도별 레벨) */
 type SongInfo = { title: string; levels: Record<string, number> };
 /** BP에 들어가는 곡 한 줄: 곡마다 가장 높은 BP 하나 */
 type BpSong = {
@@ -86,7 +86,7 @@ export default function MyPage() {
   const { loading, account, profile, admin, login, logout } = useAuth();
   const [data, setData] = useState<MySummary | null>(null);
   const [failed, setFailed] = useState(false);
-  /** 비트대시 곡 제목·레벨 (곡 데이터가 커서 기록이 있을 때만 불러옴) */
+  /** 픽셀 리듬업 곡 제목·레벨 (곡 데이터가 커서 기록이 있을 때만 불러옴) */
   const [songs, setSongs] = useState<Record<string, SongInfo>>({});
 
   const nick = profile?.nick;
@@ -346,7 +346,7 @@ export default function MyPage() {
 
             <section className={card}>
               <div className={label}>
-                BEAT DASH
+                PIXEL Rhythm Up
                 {plays.rhythm ? <span className="ml-2 text-white/30">{plays.rhythm}판</span> : null}
               </div>
               {rhythm.length === 0 ? (

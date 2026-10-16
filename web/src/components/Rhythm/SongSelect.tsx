@@ -12,8 +12,8 @@ import SpeakerIcon from "./SpeakerIcon";
 import { RankEmblem } from "./Stage";
 import type { Best } from "./RhythmGame";
 
-const DISP = "font-['Arial_Black','Segoe_UI_Black',Impact,sans-serif] font-black italic";
-const KR = "font-['Nanum_Gothic',sans-serif]";
+const DISP = "pru-t";
+const KR = "";
 
 type SortKey = "new" | "name" | "level";
 const SORTS: { key: SortKey; label: string }[] = [
@@ -244,31 +244,28 @@ export default function SongSelect({
           alt=""
           className="absolute inset-0 h-full w-full object-cover opacity-70"
         />
-      ) : cover ? (
-        <img
-          key={cover}
-          src={cover}
-          alt=""
-          className="absolute inset-0 h-full w-full scale-125 object-cover opacity-45 blur-[2.4cqw] [animation:modal-fade_400ms_ease-out]"
-        />
       ) : (
         <img
-          src="/rhythm/play-blue.webp"
+          src="/rhythm/px/stage-blue.webp"
           alt=""
-          className="absolute inset-0 h-full w-full object-cover opacity-50"
+          className="absolute inset-0 h-full w-full object-cover opacity-75"
         />
       )}
-      <div className="absolute inset-0 bg-[linear-gradient(100deg,rgba(6,4,26,0.55)_0%,rgba(6,4,26,0.35)_45%,rgba(6,4,26,0.85)_60%)]" />
-      <div
-        className="absolute -left-[10cqw] top-[10cqw] h-[40cqw] w-[40cqw] rounded-full opacity-30 blur-[6cqw]"
-        style={{ background: color }}
-      />
+      {/* 고른 곡 색을 무대 조명처럼 살짝 */}
+      {!theme && (
+        <div
+          key={color}
+          className="absolute inset-0 opacity-25 mix-blend-color [animation:modal-fade_300ms_steps(4)]"
+          style={{ background: color }}
+        />
+      )}
+      <div className="absolute inset-0 bg-[linear-gradient(100deg,rgba(12,7,24,0.6)_0%,rgba(12,7,24,0.3)_45%,rgba(12,7,24,0.8)_60%)]" />
 
       {/* 위 */}
-      <div className="absolute inset-x-0 top-0 z-30 flex h-[5.4cqw] items-center justify-between border-b border-white/10 bg-black/35 px-[2.4cqw] backdrop-blur-[2px]">
+      <div className="pru-head absolute inset-x-0 top-0 z-30 flex h-[5.4cqw] items-center justify-between bg-[#150e29]/85 px-[2.4cqw]">
         <div className="flex items-baseline gap-[1.2cqw]">
           <span
-            className={`${DISP} text-[2.2cqw] tracking-[0.06em] ${theme ? "bg-[linear-gradient(180deg,#FFFDF0,#F5C842_60%,#F9A8D4)] bg-clip-text text-transparent" : "text-white"}`}
+            className={`${DISP} text-[2.2cqw] tracking-[0.06em] ${theme ? "bg-[linear-gradient(180deg,#FFFDF0,#F5C842_60%,#F9A8D4)] bg-clip-text text-transparent" : "pru-sh-s text-[var(--gold)]"}`}
           >
             SELECT MUSIC
           </span>
@@ -283,10 +280,8 @@ export default function SongSelect({
                 sfx("ui-move", 0.6);
               }}
               title="관리자: 채보를 올퍼펙으로 자동 연주해서 곡과 맞는지 감상 (기록·랭킹 없음)"
-              className={`flex cursor-pointer items-center gap-[0.4cqw] rounded-[0.6cqw] border px-[1cqw] py-[0.35cqw] font-['Nanum_Gothic',sans-serif] text-[1.1cqw] font-bold transition-colors ${
-                analyze
-                  ? "border-[#F59E0B] bg-[#F59E0B]/25 text-[#FDE68A]"
-                  : "border-white/15 bg-white/5 text-white/75 hover:border-white/40 hover:text-white"
+              className={`pru-btn flex cursor-pointer items-center gap-[0.4cqw] px-[1cqw] py-[0.3cqw] text-[1.05cqw] font-bold ${
+                analyze ? "pru-gold" : ""
               }`}
             >
               🔍 분석 모드{analyze ? " ON" : ""}
@@ -312,8 +307,8 @@ export default function SongSelect({
         <div className="flex gap-[1.8cqw]">
           <div
             key={sel}
-            className={`relative h-[15cqw] w-[15cqw] shrink-0 overflow-hidden rounded-[1cqw] border-[0.2cqw] [animation:bd-slam_380ms_cubic-bezier(.2,.9,.3,1.1)] ${custom ? "cursor-pointer" : ""}`}
-            style={{ borderColor: color, boxShadow: `0 0 2.4cqw ${color}88` }}
+            className={`relative h-[15cqw] w-[15cqw] shrink-0 overflow-hidden rounded-[1cqw] border-[0.2cqw] [animation:bd-slam_380ms_steps(5)] ${custom ? "cursor-pointer" : ""}`}
+            style={{ borderColor: color, boxShadow: "0.5cqw 0.5cqw 0 rgba(12,7,24,0.75)" }}
             onClick={custom ? () => pickRef.current?.() : undefined}
             title={custom ? "눌러서 음악 파일 고르기" : undefined}
           >
@@ -325,11 +320,11 @@ export default function SongSelect({
                 <span className={`${DISP} text-[1.8cqw] text-white`}>MY MUSIC</span>
               </div>
             )}
-            <span className="pointer-events-none absolute inset-y-0 left-0 w-[5cqw] bg-white/15 [animation:bd-sweep_3s_ease-in-out_infinite]" />
+            <span className="pointer-events-none absolute inset-y-0 left-0 w-[5cqw] bg-white/15 [animation:bd-sweep_3s_steps(5)_infinite]" />
           </div>
           <div
             key={`i${sel}`}
-            className="flex min-w-0 flex-1 flex-col justify-center [animation:bd-slide-left_300ms_ease-out]"
+            className="flex min-w-0 flex-1 flex-col justify-center [animation:bd-slide-left_300ms_steps(5)]"
           >
             {custom ? (
               <div className="flex h-[15cqw] flex-col gap-[0.5cqw]">
@@ -399,7 +394,7 @@ export default function SongSelect({
                     : "border-white/10 bg-black/35 hover:border-white/30"
                 }`}
                 style={
-                  on ? { borderColor: d.color, boxShadow: `0 0 1.4cqw ${d.color}77` } : undefined
+                  on ? { borderColor: d.color, boxShadow: `0 0.35cqw 0 ${d.color}` } : undefined
                 }
               >
                 <span
@@ -428,7 +423,7 @@ export default function SongSelect({
         </div>
 
         {/* 기록 */}
-        <div className="flex h-[4.8cqw] shrink-0 items-center gap-[1.4cqw] rounded-[0.9cqw] border border-white/10 bg-black/45 px-[1.4cqw]">
+        <div className="pru-box flex h-[4.8cqw] shrink-0 items-center gap-[1.4cqw] px-[1.4cqw] [--f:rgba(12,7,24,0.72)]">
           {b ? (
             <>
               <RankEmblem rank={b.rank} className="h-[4cqw] w-[4cqw]" />
@@ -462,7 +457,7 @@ export default function SongSelect({
           )}
         </div>
         {/* 랭킹: 내 기록 바로 아래 */}
-        <div className="flex min-h-0 flex-1 flex-col rounded-[0.9cqw] border border-white/10 bg-black/45 px-[1.4cqw] py-[0.8cqw]">
+        <div className="pru-box flex min-h-0 flex-1 flex-col px-[1.4cqw] py-[0.8cqw] [--f:rgba(12,7,24,0.72)]">
           <div className="flex items-baseline justify-between gap-[1cqw]">
             <span className={`${DISP} text-[1.3cqw] tracking-[0.12em] text-white`}>
               {custom ? "HOW IT WORKS" : practice ? "PRACTICE" : "RANKING"}
@@ -496,10 +491,10 @@ export default function SongSelect({
                   className="flex shrink-0 items-center gap-[0.8cqw] rounded-[0.5cqw] border border-white/[0.07] bg-white/[0.04] py-[0.25cqw] pr-[0.9cqw] pl-[0.4cqw]"
                 >
                   <span
-                    className={`${DISP} flex h-[2cqw] w-[2.6cqw] shrink-0 -skew-x-12 items-center justify-center rounded-[0.35cqw] text-[1.05cqw] text-[#0b1020]`}
+                    className={`${DISP} flex h-[2cqw] w-[2.6cqw] shrink-0 items-center justify-center rounded-[0.35cqw] text-[1.05cqw] text-[#0b1020]`}
                     style={{ background: CUSTOM_COLOR }}
                   >
-                    <span className="skew-x-12">{String(i + 1).padStart(2, "0")}</span>
+                    <span>{String(i + 1).padStart(2, "0")}</span>
                   </span>
                   <span>{t}</span>
                 </li>
@@ -527,10 +522,10 @@ export default function SongSelect({
             ? `linear-gradient(90deg, ${CUSTOM_COLOR}e6, #6366F1d0 70%, #8B5CF6c0)`
             : `linear-gradient(90deg, ${CUSTOM_COLOR}45, #6366F135 60%, #0b0820d0)`,
           borderColor: custom ? undefined : `${CUSTOM_COLOR}99`,
-          boxShadow: `0 0 ${custom ? 2.4 : 1.3}cqw ${CUSTOM_COLOR}${custom ? "aa" : "55"}`,
+          boxShadow: `0 0.35cqw 0 ${custom ? CUSTOM_COLOR : "rgba(12,7,24,0.7)"}`,
         }}
       >
-        <span className="pointer-events-none absolute inset-y-0 left-0 w-[5cqw] bg-white/20 [animation:bd-sweep_2.6s_ease-in-out_infinite]" />
+        <span className="pointer-events-none absolute inset-y-0 left-0 w-[5cqw] bg-white/20 [animation:bd-sweep_2.6s_steps(5)_infinite]" />
         <span className="relative h-[4cqw] w-[4cqw] shrink-0 overflow-hidden rounded-[0.5cqw] border border-white/30 bg-[#0e3a4a]">
           <img src={track?.cover ?? CUSTOM_COVER} alt="" className="h-full w-full object-cover" />
         </span>
@@ -555,7 +550,7 @@ export default function SongSelect({
       </button>
 
       {/* 오른쪽: 곡 검색 + 곡 목록 */}
-      <label className="absolute top-[12.3cqw] right-[2.4cqw] z-10 flex w-[42.6cqw] cursor-text items-center gap-[0.9cqw] rounded-[0.7cqw] border border-white/10 bg-black/55 py-[0.45cqw] pr-[1cqw] pl-[0.6cqw] transition-colors focus-within:border-[#A78BFA]/70 focus-within:bg-black/70">
+      <label className="pru-in absolute top-[12.3cqw] right-[2.4cqw] z-10 flex w-[42.6cqw] cursor-text items-center gap-[0.9cqw] py-[0.45cqw] pr-[1cqw] pl-[0.6cqw] [--if:rgba(12,7,24,0.78)] focus-within:[--ib:var(--gold)]">
         <span className="flex h-[2.6cqw] w-[2.6cqw] shrink-0 items-center justify-center rounded-[0.45cqw] bg-white/10">
           <svg
             viewBox="0 0 24 24"
@@ -665,7 +660,7 @@ export default function SongSelect({
                 on
                   ? {
                       background: `linear-gradient(90deg, ${c}e0, ${c}55 70%, #0b0820cc)`,
-                      boxShadow: `0 0 2cqw ${c}66`,
+                      boxShadow: "0 0.4cqw 0 rgba(12,7,24,0.75)",
                     }
                   : undefined
               }
@@ -706,7 +701,7 @@ export default function SongSelect({
       </div>
 
       {/* 아래 */}
-      <div className="absolute inset-x-0 bottom-0 flex h-[5cqw] items-center justify-between border-t border-white/10 bg-black/55 px-[2.4cqw]">
+      <div className="absolute inset-x-0 bottom-0 flex h-[5cqw] items-center justify-between border-t border-[var(--line)] bg-[#150e29]/90 px-[2.4cqw]">
         <div className="flex items-center gap-[1.4cqw] font-mono text-[1cqw] text-white/50">
           <span>
             <K>↑</K>
@@ -737,25 +732,22 @@ export default function SongSelect({
           type="button"
           disabled={!canStart || starting}
           onClick={onStart}
-          className={`${DISP} relative -skew-x-12 cursor-pointer overflow-hidden rounded-[0.6cqw] px-[3.4cqw] py-[0.7cqw] text-[1.9cqw] tracking-[0.12em] text-white transition-transform hover:scale-105 disabled:cursor-not-allowed disabled:opacity-40`}
-          style={{
-            background: `linear-gradient(90deg, ${diffInfo.color}, ${color})`,
-            boxShadow: `0 0 1.6cqw ${color}99`,
-          }}
+          className={`${DISP} pru-btn pru-sh-s cursor-pointer overflow-hidden px-[3.4cqw] py-[0.6cqw] text-[1.8cqw] tracking-[0.12em] text-white disabled:cursor-not-allowed disabled:opacity-40`}
+          style={{ "--c": diffInfo.color } as React.CSSProperties}
         >
-          <span className="pointer-events-none absolute inset-y-0 left-0 w-[4cqw] bg-white/30 [animation:bd-sweep_1.8s_ease-in-out_infinite]" />
-          <span className="inline-block skew-x-12">{starting ? "LOADING…" : startLabel}</span>
+          <span className="pointer-events-none absolute inset-y-0 left-0 w-[3cqw] bg-white/25 [animation:bd-sweep_1.8s_steps(6)_infinite]" />
+          <span className="relative">▶ {starting ? "LOADING…" : startLabel}</span>
         </button>
       </div>
 
       {/* 시작 연출: 재킷이 들어오고 GET READY */}
       {launching && song && (
-        <div className="absolute inset-0 z-50 flex items-center overflow-hidden bg-[#05030f]/90 [animation:bd-launch_1.5s_ease-out]">
+        <div className="absolute inset-0 z-50 flex items-center overflow-hidden bg-[#05030f]/90 [animation:bd-launch_1.5s_steps(5)]">
           {theme?.art && (
             <img
               src={theme.art.intro}
               alt=""
-              className="pointer-events-none absolute right-[2cqw] -bottom-[4cqw] h-[58cqw] max-w-none drop-shadow-[0_0_2cqw_rgba(245,200,66,0.5)] [animation:bd-slide-left_500ms_ease-out_backwards]"
+              className="pointer-events-none absolute right-[2cqw] -bottom-[4cqw] h-[58cqw] max-w-none drop-shadow-[0_0.2cqw_0_rgba(12,7,24,0.85)] [animation:bd-slide-left_500ms_steps(5)_backwards]"
             />
           )}
           <div
@@ -764,8 +756,8 @@ export default function SongSelect({
           />
           <div className="relative ml-[12cqw] flex items-center gap-[3cqw]">
             <div
-              className="h-[22cqw] w-[22cqw] overflow-hidden rounded-[1cqw] border-[0.25cqw] [animation:bd-slam_500ms_cubic-bezier(.2,.9,.3,1.1)]"
-              style={{ borderColor: color, boxShadow: `0 0 4cqw ${color}` }}
+              className="h-[22cqw] w-[22cqw] overflow-hidden rounded-[1cqw] border-[0.25cqw] [animation:bd-slam_500ms_steps(5)]"
+              style={{ borderColor: color, boxShadow: `0.8cqw 0.8cqw 0 rgba(0,0,0,0.6)` }}
             >
               {cover ? (
                 <img src={cover} alt="" className="h-full w-full object-cover" />
@@ -775,7 +767,7 @@ export default function SongSelect({
                 </div>
               )}
             </div>
-            <div className="[animation:bd-slide-left_500ms_150ms_ease-out_backwards]">
+            <div className="[animation:bd-slide-left_500ms_150ms_steps(5)_backwards]">
               <div className={`${KR} text-[1.4cqw] font-bold`} style={{ color: diffInfo.color }}>
                 {diffInfo.label} · Lv.{curChart?.level ?? "-"}
               </div>
@@ -790,7 +782,7 @@ export default function SongSelect({
                 </div>
               )}
               <div
-                className={`${DISP} mt-[1.6cqw] text-[3cqw] tracking-[0.3em] text-white [animation:bd-blink_0.6s_ease-in-out_infinite]`}
+                className={`${DISP} mt-[1.6cqw] text-[3cqw] tracking-[0.3em] text-white [animation:bd-blink_0.6s_steps(5)_infinite]`}
               >
                 GET READY
               </div>
@@ -804,7 +796,7 @@ export default function SongSelect({
 
 function K({ children }: { children: React.ReactNode }) {
   return (
-    <kbd className="mx-[0.15cqw] inline-flex min-w-[1.7cqw] items-center justify-center rounded-[0.35cqw] border border-white/25 border-b-[0.2cqw] bg-white/10 px-[0.35cqw] font-mono text-[0.9cqw] leading-tight text-white/85">
+    <kbd className="pru-key mx-[0.2cqw] inline-flex min-w-[1.7cqw] items-center justify-center px-[0.35cqw] text-[0.85cqw] leading-tight font-bold">
       {children}
     </kbd>
   );
@@ -825,7 +817,7 @@ function TopBtn({
       onClick={onClick}
       title={title}
       aria-label={title}
-      className="flex cursor-pointer items-center gap-[0.4cqw] rounded-[0.6cqw] border border-white/15 bg-white/5 px-[1cqw] py-[0.35cqw] font-['Nanum_Gothic',sans-serif] text-[1.1cqw] font-bold text-white/75 transition-colors hover:border-white/40 hover:text-white"
+      className="pru-btn flex cursor-pointer items-center gap-[0.4cqw] px-[1cqw] py-[0.3cqw] text-[1.05cqw] font-bold text-white"
     >
       {children}
     </button>

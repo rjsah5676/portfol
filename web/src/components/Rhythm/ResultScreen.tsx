@@ -10,8 +10,8 @@ import { RankEmblem, type Result } from "./Stage";
 import { SubmitRanking } from "./RankingBoard";
 import type { SkinTheme } from "@/lib/rhythm/fx";
 
-const DISP = "font-['Arial_Black','Segoe_UI_Black',Impact,sans-serif] font-black italic";
-const KR = "font-['Nanum_Gothic',sans-serif]";
+const DISP = "pru-t";
+const KR = "";
 const signed = (n: number) => `${n > 0 ? "+" : ""}${n}`;
 
 /** 결과 연출 시간표(초) */
@@ -121,32 +121,36 @@ export default function ResultScreen({
     <div className="absolute inset-0 overflow-hidden bg-[#06041a]">
       <img
         src={
-          theme ? theme.stage : result.failed ? "/rhythm/play-pink.webp" : "/rhythm/play-blue.webp"
+          theme
+            ? theme.stage
+            : result.failed
+              ? "/rhythm/px/stage-pink.webp"
+              : "/rhythm/px/stage-blue.webp"
         }
         alt=""
         className="absolute inset-0 h-full w-full object-cover opacity-55"
       />
-      <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(6,4,26,0.9),rgba(6,4,26,0.55)_50%,rgba(6,4,26,0.9))]" />
+      <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(12,7,24,0.85),rgba(12,7,24,0.45)_50%,rgba(12,7,24,0.85))]" />
       {/* 테마 캐릭터: 왼쪽에 크게 (실패면 아쉬운 얼굴) + 아래 말풍선 */}
       {theme?.art && (
         <img
           src={result.failed ? theme.art.lose : theme.art.cheer}
           alt=""
-          className="pointer-events-none absolute -bottom-[16cqw] -left-[7cqw] h-[54cqw] max-w-none drop-shadow-[0_0_2cqw_rgba(245,200,66,0.35)] [animation:bd-slide-up_600ms_200ms_ease-out_backwards]"
+          className="pointer-events-none absolute -bottom-[16cqw] -left-[7cqw] h-[54cqw] max-w-none drop-shadow-[0_0.2cqw_0_rgba(12,7,24,0.85)] [animation:bd-slide-up_600ms_200ms_steps(5)_backwards]"
         />
       )}
 
       {/* 위: 배너 */}
       <img
-        src={`/rhythm/banner-${banner}.webp`}
+        src={`/rhythm/px/banner-${banner}.webp`}
         alt={banner}
-        className="absolute top-[1.4cqw] left-1/2 w-[36cqw] -translate-x-1/2 drop-shadow-[0_0_2cqw_rgba(0,0,0,0.6)] [animation:bd-slam_500ms_cubic-bezier(.2,.9,.3,1.1)_backwards]"
+        className="absolute top-[1.4cqw] left-1/2 w-[36cqw] -translate-x-1/2 drop-shadow-[0_0.2cqw_0_rgba(12,7,24,0.85)] [animation:bd-slam_500ms_steps(5)_backwards]"
         style={{ animationDelay: `${T.banner}s` }}
       />
 
       {/* 왼쪽: 곡 + 랭크 */}
       <div className="absolute top-[16cqw] left-[3cqw] flex w-[30cqw] flex-col items-center">
-        <div className="flex w-full items-center gap-[1.2cqw] rounded-[0.9cqw] border border-white/10 bg-black/45 p-[0.9cqw]">
+        <div className="pru-box flex w-full items-center gap-[1.2cqw] p-[0.9cqw] [--f:rgba(12,7,24,0.75)]">
           <div className="h-[5.4cqw] w-[5.4cqw] shrink-0 overflow-hidden rounded-[0.6cqw] border border-white/20 bg-[#0e3a4a]">
             {cover ? (
               <img src={cover} alt="" className="h-full w-full object-cover" />
@@ -168,17 +172,16 @@ export default function ResultScreen({
         >
           {el >= T.rank && (
             <>
-              <div className="absolute inset-[10%] rounded-full bg-white/20 blur-[3cqw] [animation:modal-fade_400ms_ease-out]" />
               <RankEmblem
                 rank={result.rank}
-                className="relative h-full w-full [animation:bd-slam_450ms_cubic-bezier(.2,.9,.3,1.1)]"
+                className="relative h-full w-full [animation:bd-slam_450ms_steps(5)]"
               />
             </>
           )}
         </div>
         {result.newBest && el >= T.record && (
           <div
-            className={`${DISP} -mt-[1cqw] -skew-x-6 rounded-[0.4cqw] bg-[linear-gradient(90deg,#f59e0b,#ec4899)] px-[1.4cqw] py-[0.3cqw] text-[1.5cqw] tracking-[0.15em] text-white shadow-[0_0_1.6cqw_#ec4899] [animation:bd-slam_400ms_ease-out]`}
+            className={`${DISP} pru-btn pru-gold -mt-[1cqw] px-[1.4cqw] py-[0.3cqw] text-[1.5cqw] tracking-[0.15em] [animation:bd-slam_400ms_steps(5)]`}
           >
             NEW RECORD!
           </div>
@@ -186,8 +189,8 @@ export default function ResultScreen({
       </div>
 
       {/* 가운데: 점수 */}
-      <div className="absolute top-[16cqw] left-[35cqw] flex w-[30cqw] flex-col gap-[0.9cqw] [animation:bd-slide-up_400ms_300ms_ease-out_backwards]">
-        <div className="rounded-[0.9cqw] border border-white/10 bg-black/45 px-[1.6cqw] py-[1cqw]">
+      <div className="absolute top-[16cqw] left-[35cqw] flex w-[30cqw] flex-col gap-[0.9cqw] [animation:bd-slide-up_400ms_300ms_steps(5)_backwards]">
+        <div className="pru-box px-[1.6cqw] py-[1cqw] [--f:rgba(12,7,24,0.75)]">
           <div className="font-mono text-[1cqw] tracking-[0.25em] text-white/45">SCORE</div>
           <div className={`${DISP} text-[4.2cqw] leading-tight text-white tabular-nums`}>
             {String(score).replace(/\B(?=(\d{3})+(?!\d))/g, ",")}
@@ -213,10 +216,10 @@ export default function ResultScreen({
           {rows.map(([label, n, c]) => (
             <div
               key={label}
-              className="relative overflow-hidden rounded-[0.6cqw] border border-white/10 bg-black/45 px-[1.2cqw] py-[0.5cqw]"
+              className="pru-in relative overflow-hidden px-[1.2cqw] py-[0.5cqw] [--if:rgba(12,7,24,0.72)]"
             >
               <div
-                className="absolute inset-y-0 left-0 opacity-25 transition-[width] duration-700"
+                className="absolute inset-y-0 left-0 opacity-30 transition-[width] duration-700 ease-[steps(8)]"
                 style={{ width: `${(n / total) * 100 * ease}%`, background: c }}
               />
               <div className="relative flex justify-between font-mono text-[1.25cqw] font-bold">
@@ -239,7 +242,7 @@ export default function ResultScreen({
       </div>
 
       {/* 오른쪽: 랭킹 등록 */}
-      <div className="absolute top-[16cqw] right-[3cqw] bottom-[6.4cqw] w-[30cqw] rounded-[0.9cqw] [animation:bd-slide-left_400ms_500ms_ease-out_backwards]">
+      <div className="absolute top-[16cqw] right-[3cqw] bottom-[6.4cqw] w-[30cqw] rounded-[0.9cqw] [animation:bd-slide-left_400ms_500ms_steps(5)_backwards]">
         {song.custom ? (
           <Note>
             직접 넣은 곡은 랭킹에 올라가지 않아요.
@@ -260,10 +263,10 @@ export default function ResultScreen({
       </div>
 
       {/* 아래 */}
-      <div className="absolute inset-x-0 bottom-0 flex h-[5cqw] items-center justify-end gap-[1cqw] border-t border-white/10 bg-black/55 px-[2.4cqw]">
+      <div className="absolute inset-x-0 bottom-0 flex h-[5cqw] items-center justify-end gap-[1.2cqw] border-t border-[var(--line)] bg-[#150e29]/90 px-[2.4cqw]">
         {theme?.lines && (
           <div
-            className={`${KR} mr-auto ml-[14cqw] rounded-[1cqw] border border-[#F5C842]/60 bg-[#1a1024]/90 px-[1.2cqw] py-[0.5cqw] text-[1.2cqw] text-[#FFF3C4] shadow-[0_0_1.4cqw_rgba(245,200,66,0.35)] [animation:modal-pop_300ms_900ms_ease-out_backwards]`}
+            className={`${KR} pru-box mr-auto ml-[14cqw] px-[1.2cqw] py-[0.5cqw] text-[1.2cqw] text-[#FFF3C4] [--b:#F5C842] [--f:#1a1024e6] [animation:modal-pop_300ms_900ms_steps(5)_backwards]`}
           >
             {result.failed
               ? theme.lines.fail
@@ -280,7 +283,7 @@ export default function ResultScreen({
             sfx("ui-back", 0.7);
             onSelect();
           }}
-          className="cursor-pointer rounded-[0.6cqw] border border-white/20 bg-white/5 px-[2cqw] py-[0.6cqw] font-['Nanum_Gothic',sans-serif] text-[1.3cqw] font-bold text-white/80 hover:border-white/50 hover:text-white"
+          className="pru-btn cursor-pointer px-[2cqw] py-[0.55cqw] text-[1.25cqw] font-bold"
         >
           곡 선택 (Esc)
         </button>
@@ -291,9 +294,9 @@ export default function ResultScreen({
             sfx("ui-select", 0.8);
             onRetry();
           }}
-          className={`${DISP} -skew-x-12 cursor-pointer rounded-[0.6cqw] bg-[linear-gradient(90deg,#db2777,#7c3aed)] px-[2.6cqw] py-[0.55cqw] text-[1.6cqw] tracking-[0.1em] text-white shadow-[0_0_1.4cqw_rgba(236,72,153,0.6)] transition-transform hover:scale-105 disabled:opacity-50`}
+          className={`${DISP} pru-btn pru-pink pru-sh-s cursor-pointer px-[2.6cqw] py-[0.5cqw] text-[1.55cqw] tracking-[0.1em] disabled:opacity-50`}
         >
-          <span className="inline-block skew-x-12">RETRY (R)</span>
+          ↻ RETRY (R)
         </button>
       </div>
     </div>
@@ -302,7 +305,7 @@ export default function ResultScreen({
 
 function Note({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex h-full items-center justify-center rounded-[0.9cqw] border border-white/10 bg-black/45 p-[2cqw] text-center font-['Nanum_Gothic',sans-serif] text-[1.2cqw] leading-relaxed text-white/55">
+    <div className="pru-box flex h-full items-center justify-center p-[2cqw] text-center text-[1.2cqw] leading-relaxed text-white/60 [--f:rgba(12,7,24,0.72)]">
       {children}
     </div>
   );

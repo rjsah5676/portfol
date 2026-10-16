@@ -1,5 +1,5 @@
 /**
- * BEAT DASH 효과음·메뉴 BGM (public/rhythm/sfx, menu-bgm.mp3).
+ * PIXEL Rhythm Up 효과음·메뉴 BGM (public/rhythm/px/sfx — 8비트 칩튠, research/rhythm/tools/chip-sfx.py 로 합성 · menu-bgm.mp3).
  * 오디오 컨텍스트는 게임 전체가 하나를 같이 씀 (곡 재생·타격음과 같은 시계).
  * 크기는 lib/soundLevel.ts 의 보정을 곱함 (메뉴 곡은 재서 맞춤).
  */
@@ -49,7 +49,7 @@ export function loadSfx(): Promise<void> {
   loading = audio().then((ctx) =>
     Promise.all(
       SFX.map((n) =>
-        fetch(`/rhythm/sfx/${n}.mp3`)
+        fetch(`/rhythm/px/sfx/${n}.mp3`)
           .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(String(r.status)))))
           .then((ab) => ctx.decodeAudioData(ab))
           .then((b) => void bufs.set(n, b))
