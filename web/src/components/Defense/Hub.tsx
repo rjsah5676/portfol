@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
+import { Fragment, useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { ITEM_ART, RELIC_ART } from "@/lib/defense/assets";
 import { phaseText } from "@/lib/defense/enemies";
 import {
@@ -745,7 +745,7 @@ function ResTab({ p, act, busy }: TabProps) {
                       {own && <span className="ml-1.5 text-[var(--gold)]">Lv.{lv}</span>}
                       {own && p.load.res.includes(r.id) && <span className="ml-1.5 text-[12px] font-normal text-[var(--green)]">장착 중</span>}
                     </b>
-                    <span className="block text-[12px] text-[var(--mute)]">{resDesc(r.id, own ? lv : 1)}</span>
+                    <span className="block text-[12px] text-[var(--mute)]">{own && lv < RES_MAX_LV ? <DescUp cur={resDesc(r.id, lv)} next={resDesc(r.id, lv + 1)} /> : resDesc(r.id, own ? lv : 1)}</span>
                   </span>
                   {own ? (
                     <LvBtns
@@ -771,6 +771,42 @@ function ResTab({ p, act, busy }: TabProps) {
         </div>
       ))}
     </div>
+  );
+}
+
+/**
+ * 설명 + 다음 레벨 수치를 글 안에 바로 (「피해 +10→12%」) — 폰은 마우스 올리기가 없어 「+」 말풍선을 못 봐서 늘 보이게.
+ * 숫자 개수가 다르면 줄을 하나 더
+ */
+const NUM = /\d+(?:\.\d+)?/g;
+function DescUp({ cur, next }: { cur: string; next: string }) {
+  const a = cur.match(NUM) ?? [],
+    b = next.match(NUM) ?? [];
+  if (a.length !== b.length || cur.replace(NUM, "#") !== next.replace(NUM, "#"))
+    return (
+      <>
+        {cur}
+        <span className="block text-[#9be7a8]">다음 → {next}</span>
+      </>
+    );
+  const parts = cur.split(NUM);
+  return (
+    <>
+      {parts.map((t, i) => (
+        <Fragment key={i}>
+          {t}
+          {i < a.length &&
+            (a[i] === b[i] ? (
+              a[i]
+            ) : (
+              <>
+                {a[i]}
+                <b className="text-[#9be7a8]">→{b[i]}</b>
+              </>
+            ))}
+        </Fragment>
+      ))}
+    </>
   );
 }
 
@@ -828,7 +864,7 @@ function RelicTab({ p, act, busy }: TabProps) {
                 {own && <span className="ml-1.5 text-[12px] font-bold text-[var(--gold)]">Lv.{lv}</span>}
                 {own && <span className="ml-1.5 text-[12px] text-[var(--mute)]">조각 {p.shards?.[r.id] ?? 0}</span>}
                 {own && p.load.relics.includes(r.id) && <span className="ml-1.5 text-[12px] text-[var(--green)]">장착 중</span>}
-                <span className="block text-[12px] leading-tight text-[var(--mute)]">{relicDesc(r.id, own ? lv : 1)}</span>
+                <span className="block text-[12px] leading-tight text-[var(--mute)]">{own && lv < RELIC_MAX_LV ? <DescUp cur={relicDesc(r.id, lv)} next={relicDesc(r.id, lv + 1)} /> : relicDesc(r.id, own ? lv : 1)}</span>
               </span>
               {own ? (
                 <LvBtns
