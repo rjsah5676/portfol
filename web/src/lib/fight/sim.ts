@@ -608,7 +608,7 @@ const cloneF = (f: Fighter): Fighter => ({ ...f, hist: f.hist.slice(), enc: f.en
  * 이 빌드의 게임 데이터 지문 (캐릭터 성능·맵) — 온라인에서 서로 다른 빌드끼리 붙었는지 확인.
  * 계산 방식(sim.ts)만 바꿨을 땐 SIM_REV를 올릴 것.
  */
-const SIM_REV = 31;
+const SIM_REV = 32;
 export const BUILD_ID = (() => {
   const str = SIM_REV + JSON.stringify(CHARS.map((c) => [c.hp, c.walk, c.jumpVx, c.dash, c.cd, c.glide, c.hurt, c.width, c.moves])) + JSON.stringify(MAPS.map((m) => [m.plats, m.spawn]));
   let h = 2166136261;
@@ -2468,6 +2468,8 @@ function checkKO(s: State) {
  * 포르테 공중 「되감기 낙하」: 내리찍기가 막히거나 헛쳐서 땅에 닿으면 시작한 공중 자리로 되돌아감 (빈틈 없음).
  * 맞혔으면 되감지 않고 맞힌 자리에 그대로 — 상대는 시간 정지, 공중 약 2번 다시 채워 바로 이어 침
  */
+/** 되감기 낙하로 땅의 상대를 맞혔을 때 포르테 발 높이 (상대 발 위 px) */
+const DIVE_LOW = 25;
 function rewindDive(s: State, i: number) {
   const f = s.p[i];
   const o = s.p[1 - i];
@@ -2491,6 +2493,8 @@ function rewindDive(s: State, i: number) {
   // (맞힌 상대는 시간 정지로 그 자리에 멈춰 있음 — applyHit timeStop)
   // 맞혔으면 포르테도 시간 정지 동안 그 자리에 둥실 — 바로 떨어지면 멈춘 상대에게 못 이어 침 (10.16)
   if (hit) {
+    // 땅에 선 상대를 맞혔으면 상대 키 언저리까지 내려 섬 — 너무 높이 떠 있으면 이어 칠 첫 공중 약이 머리 위로 헛침 (10.16)
+    if (standingOn(mapOf(s), o)) f.h = Math.min(f.h, o.h + DIVE_LOW * SUB);
     f.hold = charOf(f).moves.S.air?.timeStop ?? 30;
     return;
   }
