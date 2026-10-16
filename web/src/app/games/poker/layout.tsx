@@ -10,8 +10,7 @@ export const metadata = {
       "무료로 온라인 플레이하는 애니풍 포커. 마음에 드는 캐릭터를 골라 텍사스 홀덤과 7포커를 실시간으로 즐겨 보세요. PC · 모바일 지원, 실제 돈이 오가지 않는 무료 게임이에요.",
     path: "/games/poker/",
   }),
-  manifest: "/poker/manifest.webmanifest",
-  appleWebApp: { capable: true, statusBarStyle: "black-translucent" as const, title: "ANIME POKER" },
+  // 홈 화면 앱 정보(manifest · 웹앱 메타)는 아이폰에서만 PokerApp 이 붙임 — 안드로이드에서 앱 설치로 떠서 다른 게임으로 못 가던 것
   icons: { apple: "/poker/ui/apple-touch-icon.png" },
 };
 

@@ -144,6 +144,24 @@ export default function PokerApp({ rank }: { rank: RankRow[] | null }) {
     setIosWeb(isIOS() && !isStandalone());
     setIosSkip(skip);
   }, []);
+  // 홈 화면 앱(웹앱) 정보는 아이폰에만 붙임 — 안드로이드 크롬은 이게 있으면 "홈 화면에 추가"가 앱 설치로 바뀌어
+  // 포커만 따로 떨어진 앱이 돼 버림(다른 게임으로 못 감). 안드로이드는 브라우저에서 전체화면 버튼으로 침
+  useEffect(() => {
+    if (!isIOS()) return;
+    const add: HTMLElement[] = [];
+    const tag = (name: string, attrs: Record<string, string>) => {
+      const el = document.createElement(name);
+      for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
+      document.head.appendChild(el);
+      add.push(el);
+    };
+    tag("link", { rel: "manifest", href: "/poker/manifest.webmanifest" });
+    tag("meta", { name: "apple-mobile-web-app-capable", content: "yes" });
+    tag("meta", { name: "mobile-web-app-capable", content: "yes" });
+    tag("meta", { name: "apple-mobile-web-app-status-bar-style", content: "black-translucent" });
+    tag("meta", { name: "apple-mobile-web-app-title", content: "ANIME POKER" });
+    return () => add.forEach((el) => el.remove());
+  }, []);
   const skipIos = () => {
     setIosSkip(true);
     try {
