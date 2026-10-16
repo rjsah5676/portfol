@@ -302,6 +302,8 @@ export default function TableView({
   } | null>(null);
   /** 행동 외침: 자리에서 판 가운데로 날아가는 큰 대사 */
   const [shouts, setShouts] = useState<{ key: number; seat: number; a: string }[]>([]);
+  /** 금고에서 꺼낸 칩 연출 (모두에게) */
+  const [vaultFx, setVaultFx] = useState<{ name: string; amt: number; key: number } | null>(null);
   /** 미리 행동 (내 차례가 오면 자동으로): cf = 체크/폴드(7포커는 다이), call = 콜 */
   const [pre, setPre] = useState("");
   /** 7포커 히든(7번째 장)을 눌러서 열어 본 판 번호 — 안 열면 엎은 채로 두고, 족보 · 메이드도 6장으로만 셈 */
@@ -502,6 +504,17 @@ export default function TableView({
                 text: `${who} → ${whom} 강퇴 투표 (${e.votes}/${e.need})`,
                 key: Date.now(),
               });
+            break;
+          }
+          case "vault": {
+            push(
+              <>
+                <b>{nameOf(e.seat)}</b> 금고에서 +{fmtWon(e.amt)}
+              </>,
+              "win"
+            );
+            setVaultFx({ name: nameOf(e.seat), amt: e.amt, key: ++keyRef.current });
+            sfx.collect();
             break;
           }
           case "sit": {
@@ -2473,6 +2486,24 @@ export default function TableView({
           top={py(L.center.board) + sizes.boardCard * 0.7}
           onDone={() => setCutin(null)}
         />
+      )}
+      {vaultFx && (
+        <div
+          key={vaultFx.key}
+          className="pk-vault-fx pointer-events-none absolute left-1/2 flex items-center gap-[0.5em]"
+          style={{ top: py(L.center.board) - sizes.boardCard * 1.15, zIndex: 56 }}
+          onAnimationEnd={() => setVaultFx((v) => (v?.key === vaultFx.key ? null : v))}
+        >
+          <svg viewBox="0 0 24 24" className="pk-vault-fx-ic" fill="none" stroke="currentColor" strokeWidth={1.8} aria-hidden>
+            <rect x="3.5" y="4.5" width="17" height="15" rx="2" />
+            <circle cx="12" cy="12" r="3.2" />
+            <path d="M12 8.8v1.2M12 14v1.2M8.8 12H10M14 12h1.2M6.5 19.5v1.5M17.5 19.5v1.5" />
+          </svg>
+          <span className="flex flex-col leading-tight">
+            <span className="pk-vault-fx-who">{vaultFx.name} · 금고에서 꺼냄</span>
+            <b className="pk-vault-fx-amt pk-num">+{fmtWon(vaultFx.amt)}</b>
+          </span>
+        </div>
       )}
     </Shell>
   );

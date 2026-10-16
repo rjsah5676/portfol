@@ -89,6 +89,8 @@ interface Seat {
   exitAfter: "" | "leave" | "idle" | "vote";
   /** 이 방에 앉을 때의 칩 (딴 돈 = 지금 칩 − 이것) */
   joinStack: number;
+  /** 금고에서 꺼내기 예약: 다음 판을 시작할 때 이만큼 금고 → 칩 (모두에게 연출) */
+  vaultOut?: number;
   /** 이 방에서 친 판 수 · 이긴 판 수 */
   hands: number;
   wins: number;
@@ -310,7 +312,11 @@ export function registerPoker({ gateway, db, users, points }: Deps, opts: PokerO
     t.ev = [];
   }
 
-  const walletWire = (uid: string, w: Omit<Wallet, "table" | "revived">): Wallet => ({ ...w, table: seatOf.get(uid) ?? null });
+  const walletWire = (uid: string, w: Omit<Wallet, "table" | "revived">): Wallet => {
+    const t = tables.get(seatOf.get(uid) ?? "");
+    const s = t && findSeat(t, uid);
+    return { ...w, table: seatOf.get(uid) ?? null, vaultOut: s?.vaultOut ?? 0 };
+  };
   wallet.onChange((uid, w) => gateway.emit(walletKey(uid), "wallet", walletWire(uid, w)));
   /** 앉은 테이블이 바뀌었을 때 내 지갑 화면도 갱신 */
   const pushWallet = (uid: string) =>
@@ -791,6 +797,19 @@ export function registerPoker({ gateway, db, users, points }: Deps, opts: PokerO
 
         // 사람은 DB 의 금액으로 칩을 다시 맞춤 (회생 등 반영). 입장컷 밑이면 내려옴
         await settled(hs.map((s) => s.uid!));
+        // 금고 꺼내기 예약: 판 사이에 금고 → 칩으로 옮기고 모두에게 보여 줌
+        const vaultEv: PokerEvent[] = [];
+        for (const s of hs) {
+          const amt = s.vaultOut ?? 0;
+          if (!amt) continue;
+          s.vaultOut = 0;
+          try {
+            await wallet.vault(s.uid!, "out", amt);
+            vaultEv.push({ t: "vault", seat: s.seat, amt });
+          } catch {
+            pushWallet(s.uid!);
+          }
+        }
         const money = await wallet.moneyOf(hs.map((s) => s.uid!));
         if (t.closed || t.round) return;
         for (const s of hs) {
@@ -799,6 +818,7 @@ export function registerPoker({ gateway, db, users, points }: Deps, opts: PokerO
           s.stack = Math.floor(m / UNIT) * UNIT;
           if (m < t.tier.min) removeSeat(t, s, s.stack < t.def.minStack(t.tier) ? "bust" : "cut");
         }
+        if (vaultEv.length) emit(t, ...vaultEv);
       }
 
       // 금액을 읽는 사이에 앉은 사람은 이번 판에 넣지 않음 (다음 판을 시작할 때 금액을 다시 읽고 참가)
@@ -1539,8 +1559,24 @@ export function registerPoker({ gateway, db, users, points }: Deps, opts: PokerO
   /** 금고: 보유 칩 ↔ 금고 (테이블에 앉아 있으면 안 됨 — 앉은 동안의 칩은 판에 들고 있어서) */
   gateway.rpc("poker.vault", async (ctx, raw) => {
     const { uid } = member(ctx);
-    const { dir, amount } = z.object({ dir: z.enum(["in", "out"]), amount: z.number().int().min(1).max(1e15) }).parse(raw);
-    if (seatOf.has(uid)) throw new AppError("SEATED", "테이블에서 일어난 뒤에 쓸 수 있어요.", 409);
+    const { dir, amount } = z.object({ dir: z.enum(["in", "out", "cancel"]), amount: z.number().int().min(0).max(1e15) }).parse(raw);
+    // 앉아 있으면: 꺼내기만 — 바로 옮기지 않고 예약해 두었다가 다음 판을 시작할 때 꺼냄 (0 · cancel = 예약 취소)
+    const t = tables.get(seatOf.get(uid) ?? "");
+    if (t) {
+      const s = findSeat(t, uid);
+      if (!s) throw new AppError("SEATED", "잠시 뒤에 다시 해 주세요.", 409);
+      if (t.dev) throw new AppError("BAD_REQUEST", "테스트 방에서는 금고를 못 써요.", 400);
+      if (dir === "in") throw new AppError("BAD_REQUEST", "테이블에서는 꺼내기만 할 수 있어요.", 400);
+      const cur = await wallet.get(uid);
+      if (!cur) throw new AppError("NOT_MEMBER", "회원만 쓸 수 있어요.", 403);
+      const n = dir === "cancel" ? 0 : amount;
+      if (n > cur.vault) throw new AppError("NOT_ENOUGH", "금고에 그만큼 없어요.", 409);
+      s.vaultOut = n;
+      if (n) nudge(t);
+      return walletWire(uid, cur);
+    }
+    if (seatOf.has(uid)) throw new AppError("SEATED", "잠시 뒤에 다시 해 주세요.", 409);
+    if (dir === "cancel" || amount < 1) throw new AppError("BAD_REQUEST", "금액을 골라 주세요.", 400);
     await settlingOf.get(uid);
     const w = await wallet.vault(uid, dir, amount);
     return walletWire(uid, w);

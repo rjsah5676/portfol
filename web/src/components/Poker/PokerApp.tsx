@@ -292,7 +292,7 @@ export default function PokerApp({ rank }: { rank: RankRow[] | null }) {
       {admin && <TopBtn label="테스트" icon={DEV_ICON} onClick={() => setDevOpen(true)} />}
       {/* 게임방 안에서는 상점 없이 옷장(지금 캐릭터 스킨 갈아입기)만 */}
       {!tableId && <TopBtn label="상점" icon={SHOP_ICON} gold onClick={() => setShop("shop")} />}
-      {wallet && !tableId && <TopBtn label="금고" icon={VAULT_ICON} onClick={() => setVaultOpen(true)} />}
+      {wallet && <TopBtn label="금고" icon={VAULT_ICON} onClick={() => setVaultOpen(true)} />}
       <TopBtn label="옷장" icon={CLOSET_ICON} onClick={() => setShop("closet")} />
       {wallet && !tableId && (
         <button
@@ -551,7 +551,7 @@ export default function PokerApp({ rank }: { rank: RankRow[] | null }) {
             }}
           />
         )}
-        {vaultOpen && wallet && !tableId && (
+        {vaultOpen && wallet && (
           <Vault wallet={wallet} mobile={o === "v"} maxH={size.h - (o === "h" ? 24 : 8)} onClose={() => setVaultOpen(false)} onWallet={setWallet} />
         )}
         {missionOpen && wallet && !tableId && (

@@ -32,6 +32,8 @@ export interface Wallet {
   money: number;
   /** 금고에 넣어 둔 칩 (테이블에는 못 들고 감 · 랭킹에는 합쳐서) */
   vault: number;
+  /** 테이블에서 걸어 둔 금고 꺼내기 예약 (다음 판을 시작할 때 꺼내짐, 0 = 없음) */
+  vaultOut?: number;
   /** 오늘 받은 회생 횟수 */
   reviveUsed: number;
   /** 지금 앉아 있는 테이블 (없으면 null) */
@@ -105,6 +107,8 @@ export type PokerEvent =
   | { t: "say"; seat: number; text: string }
   | { t: "emote"; seat: number; emote: Emote }
   | { t: "sit"; seat: number; name: string }
+  /** 금고에서 꺼낸 칩이 이번 판부터 들어옴 (모두에게 연출) */
+  | { t: "vault"; seat: number; amt: number }
   | { t: "leave"; seat: number; name: string; why: "leave" | "bust" | "cut" | "idle" | "cashout" | "vote" }
   /** 강퇴 투표: seat 에게 by 가 한 표 (votes / need) */
   | { t: "kick"; seat: number; by: number; votes: number; need: number };
