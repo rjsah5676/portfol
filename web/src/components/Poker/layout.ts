@@ -34,17 +34,17 @@ const S5: Spot[] = [
   { x: 92, y: 19, side: "right", cards: "l" },
   { x: 92, y: 44, side: "right", cards: "l" },
 ];
-/* 홀덤 9인: 양옆 셋씩(아래 · 가운데 · 위) · 위 둘 */
+/* 홀덤 9인: 양옆 셋씩(아래 · 가운데 · 위) · 위 둘. 아래 · 가운데는 살짝 올림 — 오른쪽 아래 이름표가 내 차례 베팅 창에 닿지 않게 */
 const S9: Spot[] = [
   { x: 50, y: 100, side: "top", cards: "r" },
-  { x: 7, y: 53, side: "left", cards: "r" },
-  { x: 5, y: 34, side: "left", cards: "r" },
+  { x: 7, y: 51, side: "left", cards: "r" },
+  { x: 5, y: 32, side: "left", cards: "r" },
   { x: 12, y: 15, side: "left", cards: "r" },
   { x: 33, y: 15, side: "top", cards: "r" },
   { x: 67, y: 15, side: "top", cards: "l" },
   { x: 88, y: 15, side: "right", cards: "l" },
-  { x: 95, y: 34, side: "right", cards: "l" },
-  { x: 93, y: 53, side: "right", cards: "l" },
+  { x: 95, y: 32, side: "right", cards: "l" },
+  { x: 93, y: 51, side: "right", cards: "l" },
 ];
 
 export function layoutFor(seats: number): Layout {
