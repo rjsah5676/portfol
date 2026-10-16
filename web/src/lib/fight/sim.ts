@@ -608,7 +608,7 @@ const cloneF = (f: Fighter): Fighter => ({ ...f, hist: f.hist.slice(), enc: f.en
  * 이 빌드의 게임 데이터 지문 (캐릭터 성능·맵) — 온라인에서 서로 다른 빌드끼리 붙었는지 확인.
  * 계산 방식(sim.ts)만 바꿨을 땐 SIM_REV를 올릴 것.
  */
-const SIM_REV = 30;
+const SIM_REV = 31;
 export const BUILD_ID = (() => {
   const str = SIM_REV + JSON.stringify(CHARS.map((c) => [c.hp, c.walk, c.jumpVx, c.dash, c.cd, c.glide, c.hurt, c.width, c.moves])) + JSON.stringify(MAPS.map((m) => [m.plats, m.spawn]));
   let h = 2166136261;
@@ -2489,7 +2489,11 @@ function rewindDive(s: State, i: number) {
   // 공중 약 2번만큼 다시 채움 (공중 콤보에 끼워 이어 칠 수 있게, 끝없이는 안 되게)
   f.airUsed = Math.max(0, f.airUsed - 2);
   // (맞힌 상대는 시간 정지로 그 자리에 멈춰 있음 — applyHit timeStop)
-  if (hit) return;
+  // 맞혔으면 포르테도 시간 정지 동안 그 자리에 둥실 — 바로 떨어지면 멈춘 상대에게 못 이어 침 (10.16)
+  if (hit) {
+    f.hold = charOf(f).moves.S.air?.timeStop ?? 30;
+    return;
+  }
   // 되감긴 자리에서 0.5초 둥실 머묾 (바로 떨어지면 대비할 틈이 없음, 10.16) — 점프하면 끝 (건모 Alt+Tab 과 같은 hold)
   f.hold = 30;
   s.ev.push({ k: "rewind", p: i, x: fx, h: fh, v: -1 });
