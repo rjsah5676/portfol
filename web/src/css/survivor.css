@@ -1,0 +1,296 @@
+/*
+ * 픽셀 타운 서바이버 — "한밤의 오락실" 도트 UI (무대 .pts, 1024×576)
+ * 레트로 RPG 창: 남색 창 + 흰 2px 테두리 + 검은 바깥 테두리, 금빛 이름표, 네온 핑크 · 민트 포인트.
+ * 둥근 모서리 · 흐림 없음. 움직임은 steps() 로 뚝뚝.
+ */
+
+@font-face {
+  font-family: "Galmuri11";
+  src: url("/defense/fonts/Galmuri11.woff2") format("woff2");
+  font-display: swap;
+}
+@font-face {
+  font-family: "Galmuri11";
+  src: url("/defense/fonts/Galmuri11-Bold.woff2") format("woff2");
+  font-weight: 700;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Galmuri14";
+  src: url("/defense/fonts/Galmuri14.woff2") format("woff2");
+  font-display: swap;
+}
+
+.pts {
+  --ink: #07051a;
+  --night: #0d0a26;
+  --win: #16123d;
+  --win2: #221b58;
+  --line: #f4f0ff;
+  --mute: #a9a2d6;
+  --dim: #6b63a3;
+  --gold: #ffd23a;
+  --pink: #ff4fa3;
+  --mint: #4ff0c8;
+  --sky: #5fd0ff;
+  --red: #ff3d6e;
+  font-family: "Galmuri11", "Nanum Gothic", sans-serif;
+  color: #fff;
+  -webkit-font-smoothing: none;
+  image-rendering: pixelated;
+  background: var(--night);
+  overflow: hidden;
+}
+.pts * {
+  box-sizing: border-box;
+}
+.pts canvas {
+  image-rendering: pixelated;
+}
+.pts button {
+  font-family: inherit;
+  cursor: pointer;
+}
+.pts button:disabled {
+  cursor: default;
+}
+
+/* 창: 흰 테두리 + 검은 바깥 + 안쪽 그림자 */
+.pts-win {
+  background: var(--win);
+  box-shadow:
+    0 0 0 2px var(--line),
+    0 0 0 4px var(--ink),
+    inset 0 -3px 0 rgba(0, 0, 0, 0.35),
+    6px 6px 0 4px rgba(0, 0, 0, 0.45);
+}
+.pts-box {
+  background: var(--win);
+  box-shadow:
+    0 0 0 2px var(--line),
+    0 0 0 4px var(--ink);
+  color: #fff;
+}
+/* 금빛 이름표 */
+.pts-tag {
+  display: inline-block;
+  background: var(--gold);
+  color: var(--ink);
+  font-weight: 700;
+  padding: 2px 8px;
+  box-shadow: 0 0 0 2px var(--ink);
+}
+.pts-title {
+  font-family: "Galmuri14", "Galmuri11", sans-serif;
+  text-shadow:
+    2px 0 0 var(--ink),
+    -2px 0 0 var(--ink),
+    0 2px 0 var(--ink),
+    0 -2px 0 var(--ink),
+    2px 2px 0 var(--ink),
+    3px 3px 0 var(--pink);
+}
+.pts-sub {
+  text-shadow:
+    1px 0 0 var(--ink),
+    -1px 0 0 var(--ink),
+    0 1px 0 var(--ink),
+    0 -1px 0 var(--ink);
+}
+
+/* 버튼: 아케이드 버튼 (윗면 밝게 · 아래 두꺼운 그림자 · 누르면 내려감) */
+.pts-btn {
+  --c: var(--gold);
+  --t: var(--ink);
+  position: relative;
+  background: var(--c);
+  color: var(--t);
+  font-weight: 700;
+  border: 0;
+  box-shadow:
+    inset 0 2px 0 rgba(255, 255, 255, 0.55),
+    inset 0 -4px 0 rgba(0, 0, 0, 0.28),
+    0 0 0 2px var(--ink),
+    0 4px 0 2px var(--ink);
+  transform: translateY(0);
+  transition: transform 60ms steps(1), filter 60ms steps(1);
+}
+.pts-btn:hover:not(:disabled) {
+  filter: brightness(1.12);
+}
+.pts-btn:active:not(:disabled) {
+  transform: translateY(3px);
+  box-shadow:
+    inset 0 2px 0 rgba(255, 255, 255, 0.4),
+    inset 0 -2px 0 rgba(0, 0, 0, 0.28),
+    0 0 0 2px var(--ink),
+    0 1px 0 2px var(--ink);
+}
+.pts-btn:disabled {
+  filter: grayscale(0.8) brightness(0.6);
+}
+.pts-btn.ghost {
+  --c: var(--win2);
+  --t: #fff;
+}
+
+/* 막대 (체력 · 경험치) */
+.pts-bar {
+  position: relative;
+  background: var(--ink);
+  box-shadow: 0 0 0 2px var(--ink);
+}
+.pts-bar > i {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: var(--c, var(--sky));
+  box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.45), inset 0 -2px 0 rgba(0, 0, 0, 0.25);
+}
+
+/* 레벨업 카드 */
+.pts-card {
+  --r: #cfd6ea;
+  background: var(--win);
+  box-shadow:
+    0 0 0 3px var(--r),
+    0 0 0 5px var(--ink),
+    6px 6px 0 5px rgba(0, 0, 0, 0.5);
+  transition: transform 80ms steps(2);
+}
+.pts-card:hover {
+  transform: translateY(-6px);
+}
+.pts-card.legend {
+  animation: pts-glow 0.6s steps(3) infinite alternate;
+}
+@keyframes pts-glow {
+  from {
+    box-shadow:
+      0 0 0 3px var(--r),
+      0 0 0 5px var(--ink),
+      0 0 24px 6px rgba(255, 210, 58, 0.25),
+      6px 6px 0 5px rgba(0, 0, 0, 0.5);
+  }
+  to {
+    box-shadow:
+      0 0 0 3px #fff6c8,
+      0 0 0 5px var(--ink),
+      0 0 34px 12px rgba(255, 210, 58, 0.45),
+      6px 6px 0 5px rgba(0, 0, 0, 0.5);
+  }
+}
+
+/* 아이콘 칸 */
+.pts-slot {
+  width: 30px;
+  height: 30px;
+  background: var(--ink);
+  box-shadow: 0 0 0 2px var(--dim);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+/* 등장 (뚝 커졌다 자리) */
+.pts-pop {
+  animation: pts-pop 0.24s steps(4) both;
+}
+@keyframes pts-pop {
+  0% {
+    transform: scale(0.6);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.08);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+.pts-drop {
+  animation: pts-drop 0.35s steps(5) both;
+}
+@keyframes pts-drop {
+  from {
+    transform: translateY(-40px);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+.pts-blink {
+  animation: pts-blink 0.5s steps(2) infinite;
+}
+@keyframes pts-blink {
+  50% {
+    opacity: 0.25;
+  }
+}
+.pts-bob {
+  animation: pts-bob 1.2s steps(4) infinite;
+}
+@keyframes pts-bob {
+  50% {
+    transform: translateY(-4px);
+  }
+}
+/* 경고 띠 */
+.pts-warn {
+  animation: pts-warn 2.4s steps(12) both;
+}
+@keyframes pts-warn {
+  0% {
+    transform: scaleY(0);
+    opacity: 0;
+  }
+  8% {
+    transform: scaleY(1);
+    opacity: 1;
+  }
+  85% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+/* 슬롯 릴 */
+.pts-reel {
+  animation: pts-reel 0.18s steps(3) infinite;
+}
+@keyframes pts-reel {
+  from {
+    transform: translateY(-36px);
+  }
+  to {
+    transform: translateY(36px);
+  }
+}
+/* 반짝이 배경 (제목 · 결과) */
+.pts-stars {
+  background-image:
+    radial-gradient(2px 2px at 20px 30px, #fff, transparent),
+    radial-gradient(2px 2px at 140px 80px, #ffd23a, transparent),
+    radial-gradient(2px 2px at 260px 20px, #fff, transparent),
+    radial-gradient(2px 2px at 380px 110px, #5fd0ff, transparent),
+    radial-gradient(2px 2px at 90px 150px, #ff4fa3, transparent);
+  background-size: 420px 180px;
+  animation: pts-twinkle 2.4s steps(3) infinite;
+}
+@keyframes pts-twinkle {
+  50% {
+    opacity: 0.55;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pts-blink,
+  .pts-bob,
+  .pts-card.legend,
+  .pts-stars {
+    animation: none;
+  }
+}

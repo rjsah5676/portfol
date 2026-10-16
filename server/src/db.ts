@@ -118,6 +118,9 @@ async function ensureIndexes({ db }: Database) {
     idx(c, { whiteUid: 1 });
     idx(c, { blackUid: 1 });
   }
+  // 픽셀 타운 서바이버: 랭킹 점수 순, 판 기록은 2일 뒤 자동 삭제
+  idx("survivor_rank", { score: -1, at: 1 });
+  idx("survivor_runs", { at: 1 }, { expireAfterSeconds: 2 * 24 * 60 * 60 });
   idx("board_chat", { room: 1, createdAt: -1 });
   idx("board_presence", { room: 1 });
   // 유입 분석: 날짜별 집계 · 최근 유입 · 세션별 페이지 수, 180일 지나면 자동 삭제

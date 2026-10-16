@@ -1,0 +1,526 @@
+/*
+ * 픽셀 타운 서바이버 — 숫자 · 정의 (시뮬 · 화면 · 서버 공용, "@/" import 금지)
+ * 세계 단위 = 화면 픽셀 (보이는 범위 VIEW_W × VIEW_H). 시간 = 초.
+ */
+
+export const VIEW_W = 512;
+export const VIEW_H = 288;
+export const TPS = 60;
+export const DT = 1 / TPS;
+/** 한 판 (초) — 이때 새벽 보스 */
+export const RUN_SEC = 600;
+
+/* ───────────── 캐릭터 (다이스 타운 16명 — 뽑기 · 강화 그대로) ───────────── */
+
+export type HeroId =
+  | "kai"
+  | "igna"
+  | "lily"
+  | "ivan"
+  | "soyoung"
+  | "zena"
+  | "ivan-marine"
+  | "igna-student"
+  | "lily-hood"
+  | "toto"
+  | "mirage"
+  | "lolo"
+  | "mongle"
+  | "ur-dice"
+  | "ur-moa"
+  | "ur-forte";
+
+export type Grade = "R" | "SR" | "SSR" | "UR";
+
+export interface HeroDef {
+  id: HeroId;
+  name: string;
+  title: string;
+  grade: Grade;
+  /** 다이스 타운 캐릭터 시트 (public/fight/<sprite>.json) */
+  sprite: string;
+  color: string;
+  weapon: WeaponId;
+  ult: { name: string; desc: string };
+  passive: { name: string; desc: string; stat: Partial<Stats> };
+  hp: number;
+  speed: number;
+}
+
+const H = (id: HeroId, name: string, title: string, grade: Grade, color: string, weapon: WeaponId, ult: [string, string], passive: [string, string, Partial<Stats>], hp: number, speed: number): HeroDef => ({
+  id,
+  name,
+  title,
+  grade,
+  sprite: id,
+  color,
+  weapon,
+  ult: { name: ult[0], desc: ult[1] },
+  passive: { name: passive[0], desc: passive[1], stat: passive[2] },
+  hp,
+  speed,
+});
+
+export const HEROES: Record<HeroId, HeroDef> = {
+  kai: H("kai", "카이", "바람의 주먹", "R", "#5fd0ff", "kick", ["돌풍 돌진", "바라보는 쪽으로 돌진하며 길 위의 적을 날려요"], ["바람 걸음", "이동 속도 +10%", { speed: 0.1 }], 110, 74),
+  igna: H("igna", "이그나", "불꽃 술사", "R", "#ff7a3d", "fireball", ["불바다", "화면 전체가 4초 동안 불타요"], ["타오르는 마력", "피해 +10%", { might: 0.1 }], 90, 70),
+  lily: H("lily", "릴리", "우산 꼬마", "R", "#7ad7ff", "umbrella", ["소나기", "화면 전체 적이 느려지고 물방울에 맞아요"], ["튼튼 우산", "받는 피해 −1", { armor: 1 }], 100, 70),
+  ivan: H("ivan", "이반", "교관", "R", "#ff5a5a", "punch", ["정신 교육", "주변 적을 3초 동안 기절시키고 크게 때려요"], ["단련된 몸", "최대 체력 +30", { maxHp: 30 }], 130, 66),
+  soyoung: H("soyoung", "소영", "엄한 선생님", "SR", "#ff7fb0", "whip", ["앞으로 나와!", "화면 속 적을 전부 끌어와 내려쳐요"], ["매의 눈", "행운 +2", { luck: 2 }], 100, 70),
+  zena: H("zena", "제나", "번개 창술사", "SR", "#ffe14a", "lance", ["전광석화", "번개처럼 세 번 돌진해요"], ["번개 걸음", "쿨타임 −8%", { cooldown: 0.08 }], 95, 76),
+  "ivan-marine": H("ivan-marine", "이반", "오도해병 이반", "SR", "#7fb06b", "grenade", ["포격 지원", "화면 곳곳에 포탄이 떨어져요"], ["강철 체력", "초당 회복 +0.4", { regen: 0.4 }], 120, 66),
+  "igna-student": H("igna-student", "이그나", "학생 이그나", "SR", "#ff9a4d", "dice6", ["정답은 6!", "6초 동안 모든 공격이 치명타"], ["벼락치기", "경험치 +10%", { growth: 0.1 }], 90, 70),
+  "lily-hood": H("lily-hood", "릴리", "빨간망토 릴리", "SR", "#e2405e", "apple", ["늑대 사냥", "늑대 세 마리가 적을 물어뜯으며 달려요"], ["사냥꾼 감", "자석 +40%", { magnet: 0.4 }], 100, 72),
+  toto: H("toto", "토토", "달토끼 배달부", "SSR", "#ffd86b", "parcel", ["보름달 배송", "거대한 달빛 택배가 화면 곳곳에 떨어져요"], ["덤 서비스", "행운 +2", { luck: 2 }], 95, 74),
+  mirage: H("mirage", "미라쥬", "꼬마 마술사", "SSR", "#b48cff", "cards", ["분신 마술", "8초 동안 모든 무기가 두 배 빠르게 쏴요"], ["트릭 카드", "투사체 +1", { amount: 1 }], 90, 72),
+  lolo: H("lolo", "롤로", "서커스 단장", "SSR", "#ff5fa0", "circus", ["대공연", "서커스 공 12개가 화면을 휩쓸어요"], ["무대 체질", "범위 +15%", { area: 0.15 }], 100, 70),
+  mongle: H("mongle", "몽글", "잠꾸러기 양", "SSR", "#d8d4ff", "sleep", ["꿈나라", "화면 속 적이 4초 동안 잠들고 더 아프게 맞아요"], ["포근한 털", "받는 피해 −2", { armor: 2 }], 130, 64),
+  "ur-dice": H("ur-dice", "DICE", "주사위 요정", "UR", "#ffd23a", "roll", ["잭팟 롤", "거대 주사위! 6이 나오면 화면 전멸"], ["행운 요정", "행운 +4", { luck: 4 }], 100, 72),
+  "ur-moa": H("ur-moa", "MOA", "부자 고양이", "UR", "#ffc94a", "coins", ["돈다발 비", "화면 전체에 금화가 쏟아져 때리고 코인을 뿌려요"], ["금고 고양이", "줍는 범위 +30% · 피해 +10%", { magnet: 0.3, might: 0.1 }], 105, 72),
+  "ur-forte": H("ur-forte", "FORTE", "오르골 소년", "UR", "#7ff0d8", "notes", ["앙코르", "6초 동안 모든 무기 쿨타임이 확 줄어요"], ["리듬감", "쿨타임 −10%", { cooldown: 0.1 }], 100, 72),
+};
+export const HERO_IDS = Object.keys(HEROES) as HeroId[];
+/** 처음부터 열린 캐릭터 (나머지는 다이스 타운 뽑기) */
+export const FREE_HEROES: HeroId[] = ["kai", "igna", "lily", "ivan"];
+/** 등급 바닥 + 강화 레벨 → 능력치 보너스 (다이스 타운 power() 와 같은 눈금) */
+export const GRADE_FLOOR: Record<Grade, number> = { R: 0, SR: 5, SSR: 10, UR: 15 };
+export const powerBonus = (grade: Grade, lv: number): Partial<Stats> => {
+  const pw = GRADE_FLOOR[grade] + lv;
+  return { might: pw * 0.015, maxHp: pw * 2 };
+};
+
+/* ───────────── 능력치 (패시브 · 캐릭터 · 영구 강화가 더함) ───────────── */
+
+export interface Stats {
+  /** 피해 배율 (+0.1 = +10%) */
+  might: number;
+  /** 쿨타임 감소 (+0.08 = −8%) */
+  cooldown: number;
+  /** 범위 배율 */
+  area: number;
+  /** 투사체 개수 + */
+  amount: number;
+  /** 이동 속도 배율 */
+  speed: number;
+  /** 최대 체력 + */
+  maxHp: number;
+  /** 초당 회복 */
+  regen: number;
+  /** 받는 피해 − */
+  armor: number;
+  /** 자석 범위 배율 */
+  magnet: number;
+  /** 행운 (크리 · 카드 등급 · 상자) */
+  luck: number;
+  /** 경험치 배율 */
+  growth: number;
+  /** 투사체 속도 배율 */
+  pspeed: number;
+  /** 지속 시간 배율 */
+  duration: number;
+}
+export const BASE_STATS: Stats = { might: 0, cooldown: 0, area: 0, amount: 0, speed: 0, maxHp: 0, regen: 0, armor: 0, magnet: 0, luck: 0, growth: 0, pspeed: 0, duration: 0 };
+
+/* ───────────── 무기 ───────────── */
+
+export type WeaponId =
+  // 고유 (캐릭터 시작 무기)
+  | "kick"
+  | "fireball"
+  | "umbrella"
+  | "parcel"
+  | "punch"
+  | "whip"
+  | "lance"
+  | "grenade"
+  | "dice6"
+  | "apple"
+  | "cards"
+  | "circus"
+  | "sleep"
+  | "roll"
+  | "coins"
+  | "notes"
+  // 공용
+  | "shuriken"
+  | "boomerang"
+  | "bolt"
+  | "thorns"
+  | "missile"
+  | "ball"
+  // 합체
+  | "blades"
+  | "pinball";
+
+export type Pattern = "spin" | "nearest" | "orbit" | "drop" | "facing" | "boomerang" | "strike" | "aura" | "homing" | "bounce" | "cone" | "whip" | "spread" | "pulse";
+
+/** 레벨마다 값 (index 0 = Lv1) */
+export interface WeaponLv {
+  dmg: number;
+  /** 쿨타임 (초) */
+  cd: number;
+  /** 한 번에 몇 개 */
+  n: number;
+  /** 크기 (반지름 · 폭) */
+  size: number;
+  /** 투사체 속도 */
+  spd: number;
+  /** 관통 (0 = 하나 맞으면 사라짐, 99 = 무한) */
+  pierce: number;
+  /** 지속 (초) */
+  dur: number;
+  /** 넉백 */
+  kb: number;
+}
+
+export interface WeaponDef {
+  id: WeaponId;
+  name: string;
+  /** 고유 무기 주인 (없으면 공용) */
+  owner?: HeroId;
+  /** 합체 재료 */
+  fuse?: [WeaponId, WeaponId];
+  pattern: Pattern;
+  color: string;
+  /** 레벨업 카드 설명 (Lv1 = 새로 얻을 때) */
+  desc: string[];
+  lv: WeaponLv[];
+  /** 특수: dice = 눈(1~6)만큼 피해 배수 · six = 6분의 1로 폭발 · sleep = 닿으면 재움 · coin = 처치 시 코인 */
+  fx?: "dice" | "six" | "sleep" | "coin";
+}
+
+const L = (dmg: number, cd: number, n: number, size: number, spd: number, pierce: number, dur: number, kb = 0): WeaponLv => ({ dmg, cd, n, size, spd, pierce, dur, kb });
+
+export const WEAPONS: Record<WeaponId, WeaponDef> = {
+  kick: {
+    id: "kick",
+    name: "회오리 발차기",
+    owner: "kai",
+    pattern: "spin",
+    color: "#9fe8ff",
+    desc: ["주변을 한 바퀴 휩쓸어요", "피해 +4", "범위 +15%", "쿨타임 −0.2초", "피해 +6 · 두 번 회전"],
+    lv: [L(10, 1.3, 1, 40, 0, 99, 0.22, 60), L(14, 1.3, 1, 40, 0, 99, 0.22, 60), L(14, 1.3, 1, 46, 0, 99, 0.22, 70), L(14, 1.1, 1, 46, 0, 99, 0.22, 70), L(20, 1.1, 2, 50, 0, 99, 0.22, 80)],
+  },
+  fireball: {
+    id: "fireball",
+    name: "화염구",
+    owner: "igna",
+    pattern: "nearest",
+    color: "#ff8a3d",
+    desc: ["가까운 적에게 날아가 터져요", "+1개", "폭발 범위 +25%", "피해 +6", "+1개 · 피해 +6"],
+    lv: [L(12, 1.15, 1, 18, 170, 0, 2, 20), L(12, 1.15, 2, 18, 170, 0, 2, 20), L(12, 1.15, 2, 23, 170, 0, 2, 20), L(18, 1.05, 2, 23, 180, 0, 2, 25), L(24, 1.0, 3, 25, 190, 0, 2, 25)],
+  },
+  umbrella: {
+    id: "umbrella",
+    name: "물방울 우산",
+    owner: "lily",
+    pattern: "orbit",
+    color: "#7ad7ff",
+    desc: ["우산이 주위를 돌며 막아요", "+1개", "피해 +4 · 반지름 +", "+1개", "+1개 · 더 빨리 회전"],
+    lv: [L(8, 0, 2, 40, 3.2, 99, 0, 40), L(8, 0, 3, 40, 3.2, 99, 0, 40), L(12, 0, 3, 46, 3.4, 99, 0, 45), L(12, 0, 4, 46, 3.6, 99, 0, 45), L(14, 0, 5, 50, 4.4, 99, 0, 50)],
+  },
+  parcel: {
+    id: "parcel",
+    name: "달빛 택배",
+    owner: "toto",
+    pattern: "drop",
+    color: "#ffe17a",
+    desc: ["적 위로 택배가 떨어져 터져요", "+1개", "피해 +8", "폭발 범위 +25%", "+2개 · 더 빨리"],
+    lv: [L(18, 1.7, 2, 22, 0, 99, 0.55, 30), L(18, 1.7, 3, 22, 0, 99, 0.55, 30), L(26, 1.7, 3, 22, 0, 99, 0.55, 30), L(26, 1.6, 3, 28, 0, 99, 0.5, 35), L(30, 1.35, 5, 30, 0, 99, 0.45, 40)],
+  },
+  punch: {
+    id: "punch",
+    name: "정권 찌르기",
+    owner: "ivan",
+    pattern: "cone",
+    color: "#ff8a6b",
+    desc: ["앞쪽으로 충격파 주먹 (강한 넉백)", "피해 +6", "범위 +20%", "쿨타임 −0.2초", "피해 +10 · 두 번 연타"],
+    lv: [L(16, 1.25, 1, 46, 0, 99, 0.2, 110), L(22, 1.25, 1, 46, 0, 99, 0.2, 110), L(22, 1.25, 1, 55, 0, 99, 0.2, 120), L(22, 1.05, 1, 55, 0, 99, 0.2, 120), L(32, 1.05, 2, 58, 0, 99, 0.2, 130)],
+  },
+  whip: {
+    id: "whip",
+    name: "가죽 채찍",
+    owner: "soyoung",
+    pattern: "whip",
+    color: "#ff9cc8",
+    desc: ["좌우로 길게 후려쳐요", "양쪽 동시에", "피해 +6", "길이 +20%", "피해 +8 · 더 빨리"],
+    lv: [L(14, 1.2, 1, 78, 0, 99, 0.18, 40), L(14, 1.2, 2, 78, 0, 99, 0.18, 40), L(20, 1.2, 2, 78, 0, 99, 0.18, 45), L(20, 1.2, 2, 94, 0, 99, 0.18, 45), L(28, 0.95, 2, 98, 0, 99, 0.18, 50)],
+  },
+  lance: {
+    id: "lance",
+    name: "번개 창",
+    owner: "zena",
+    pattern: "facing",
+    color: "#ffe14a",
+    desc: ["바라보는 쪽으로 꿰뚫는 번개 창", "+1개", "피해 +8", "+1개", "피해 +10 · 더 빨리"],
+    lv: [L(20, 1.1, 1, 7, 360, 99, 0.9, 25), L(20, 1.1, 2, 7, 360, 99, 0.9, 25), L(28, 1.1, 2, 7, 360, 99, 0.9, 25), L(28, 1.1, 3, 7, 380, 99, 0.9, 30), L(38, 0.85, 3, 8, 400, 99, 0.9, 30)],
+  },
+  grenade: {
+    id: "grenade",
+    name: "수류탄",
+    owner: "ivan-marine",
+    pattern: "drop",
+    color: "#a8c060",
+    desc: ["적 무리에 수류탄을 던져요", "+1개", "폭발 범위 +25%", "피해 +10", "+2개"],
+    lv: [L(22, 1.6, 1, 26, 0, 99, 0.7, 50), L(22, 1.6, 2, 26, 0, 99, 0.7, 50), L(22, 1.6, 2, 32, 0, 99, 0.7, 55), L(32, 1.5, 2, 32, 0, 99, 0.7, 55), L(34, 1.3, 4, 34, 0, 99, 0.6, 60)],
+  },
+  dice6: {
+    id: "dice6",
+    name: "6면 주사위",
+    owner: "igna-student",
+    pattern: "bounce",
+    color: "#fff2c0",
+    fx: "six",
+    desc: ["튕겨 다니는 주사위 — 6이 나오면 펑!", "+1개", "피해 +5", "+1개 · 더 오래", "+1개 · 폭발 범위 +"],
+    lv: [L(12, 2.6, 2, 7, 190, 99, 3, 15), L(12, 2.6, 3, 7, 190, 99, 3, 15), L(17, 2.6, 3, 7, 200, 99, 3, 15), L(17, 2.4, 4, 7, 210, 99, 4, 18), L(20, 2.2, 5, 8, 220, 99, 4, 20)],
+  },
+  apple: {
+    id: "apple",
+    name: "사과 바구니",
+    owner: "lily-hood",
+    pattern: "boomerang",
+    color: "#ff5a5a",
+    desc: ["사과 바구니를 던졌다 받아요", "+1개", "피해 +6 · 크기 +", "+1개", "피해 +8 · 더 멀리"],
+    lv: [L(13, 1.5, 1, 9, 210, 99, 1.4, 25), L(13, 1.5, 2, 9, 210, 99, 1.4, 25), L(19, 1.5, 2, 11, 210, 99, 1.4, 30), L(19, 1.4, 3, 11, 220, 99, 1.4, 30), L(27, 1.3, 3, 12, 250, 99, 1.6, 35)],
+  },
+  cards: {
+    id: "cards",
+    name: "트릭 카드",
+    owner: "mirage",
+    pattern: "homing",
+    color: "#c9a6ff",
+    desc: ["적을 쫓아가는 마술 카드", "+1개", "피해 +6", "+2개", "관통 +2 · 더 빨리"],
+    lv: [L(12, 1.0, 2, 6, 210, 0, 2.4, 10), L(12, 1.0, 3, 6, 210, 0, 2.4, 10), L(18, 1.0, 3, 6, 220, 0, 2.4, 10), L(18, 1.0, 5, 6, 230, 0, 2.4, 12), L(18, 0.8, 5, 6, 260, 2, 2.4, 12)],
+  },
+  circus: {
+    id: "circus",
+    name: "서커스 공",
+    owner: "lolo",
+    pattern: "bounce",
+    color: "#ff5fa0",
+    desc: ["크고 무거운 서커스 공이 튕겨 다녀요", "+1개", "피해 +8 · 크기 +", "+1개 · 더 오래", "+1개 · 넉백 +"],
+    lv: [L(16, 3.0, 1, 11, 160, 99, 4, 50), L(16, 3.0, 2, 11, 160, 99, 4, 50), L(24, 3.0, 2, 13, 160, 99, 4, 55), L(24, 2.8, 3, 13, 170, 99, 5, 55), L(28, 2.6, 4, 14, 180, 99, 5, 70)],
+  },
+  sleep: {
+    id: "sleep",
+    name: "수면 구름",
+    owner: "mongle",
+    pattern: "aura",
+    color: "#d8d4ff",
+    fx: "sleep",
+    desc: ["주변 적을 느리게 재우며 피해", "범위 +15%", "피해 +3", "범위 +15% · 더 자주", "피해 +5 · 깊은 잠"],
+    lv: [L(6, 0.55, 1, 36, 0, 99, 0, 0), L(6, 0.55, 1, 41, 0, 99, 0, 0), L(9, 0.55, 1, 41, 0, 99, 0, 0), L(9, 0.45, 1, 47, 0, 99, 0, 0), L(14, 0.45, 1, 50, 0, 99, 0, 0)],
+  },
+  roll: {
+    id: "roll",
+    name: "주사위 굴림",
+    owner: "ur-dice",
+    pattern: "nearest",
+    color: "#ffd23a",
+    fx: "dice",
+    desc: ["주사위를 던져요 — 나온 눈만큼 피해 ×", "+1개", "피해 +4", "+1개 · 폭발 범위 +", "+1개 · 더 빨리"],
+    lv: [L(8, 1.0, 1, 14, 200, 0, 2, 20), L(8, 1.0, 2, 14, 200, 0, 2, 20), L(12, 1.0, 2, 14, 200, 0, 2, 20), L(12, 1.0, 3, 18, 210, 0, 2, 25), L(14, 0.8, 4, 18, 220, 0, 2, 25)],
+  },
+  coins: {
+    id: "coins",
+    name: "금화 샷건",
+    owner: "ur-moa",
+    pattern: "spread",
+    color: "#ffd23a",
+    fx: "coin",
+    desc: ["앞으로 금화를 흩뿌려요 (처치 시 코인)", "+2개", "피해 +5", "관통 +1", "+3개 · 더 빨리"],
+    lv: [L(10, 1.0, 4, 5, 260, 0, 0.5, 15), L(10, 1.0, 6, 5, 260, 0, 0.5, 15), L(15, 1.0, 6, 5, 270, 0, 0.5, 15), L(15, 1.0, 6, 5, 280, 1, 0.55, 18), L(17, 0.8, 9, 5, 300, 1, 0.6, 20)],
+  },
+  notes: {
+    id: "notes",
+    name: "음표 파동",
+    owner: "ur-forte",
+    pattern: "pulse",
+    color: "#7ff0d8",
+    desc: ["박자마다 퍼져 나가는 음파", "범위 +15%", "피해 +6", "한 박자 더", "피해 +8 · 범위 +"],
+    lv: [L(14, 1.4, 1, 80, 0, 99, 0.5, 40), L(14, 1.4, 1, 92, 0, 99, 0.5, 40), L(20, 1.4, 1, 92, 0, 99, 0.5, 45), L(20, 1.4, 2, 92, 0, 99, 0.5, 45), L(28, 1.2, 2, 104, 0, 99, 0.5, 50)],
+  },
+  shuriken: {
+    id: "shuriken",
+    name: "수리검",
+    pattern: "facing",
+    color: "#e6ecff",
+    desc: ["바라보는 쪽으로 연달아 던져요", "+1개", "관통 +1", "피해 +5", "+2개 · 더 빨리"],
+    lv: [L(9, 0.85, 1, 6, 260, 0, 1.2, 8), L(9, 0.85, 2, 6, 260, 0, 1.2, 8), L(9, 0.85, 2, 6, 260, 1, 1.2, 8), L(14, 0.8, 2, 6, 280, 1, 1.2, 8), L(14, 0.6, 4, 6, 300, 2, 1.2, 10)],
+  },
+  boomerang: {
+    id: "boomerang",
+    name: "부메랑",
+    pattern: "boomerang",
+    color: "#ffb84d",
+    desc: ["던지면 돌아와요 (관통)", "+1개", "피해 +6 · 크기 +", "+1개", "피해 +8 · 더 멀리"],
+    lv: [L(12, 1.6, 1, 8, 200, 99, 1.4, 25), L(12, 1.6, 2, 8, 200, 99, 1.4, 25), L(18, 1.6, 2, 10, 200, 99, 1.4, 30), L(18, 1.5, 3, 10, 210, 99, 1.4, 30), L(26, 1.4, 3, 11, 240, 99, 1.6, 35)],
+  },
+  bolt: {
+    id: "bolt",
+    name: "낙뢰",
+    pattern: "strike",
+    color: "#c8a6ff",
+    desc: ["화면 속 적에게 번개가 꽂혀요", "+1개", "피해 +10", "+1개 · 범위 +", "+2개 · 더 빨리"],
+    lv: [L(22, 2.0, 1, 14, 0, 99, 0, 0), L(22, 2.0, 2, 14, 0, 99, 0, 0), L(32, 2.0, 2, 14, 0, 99, 0, 0), L(32, 1.8, 3, 18, 0, 99, 0, 0), L(36, 1.5, 5, 20, 0, 99, 0, 0)],
+  },
+  thorns: {
+    id: "thorns",
+    name: "가시 오라",
+    pattern: "aura",
+    color: "#7dff9a",
+    desc: ["주변 적에게 계속 피해", "범위 +15%", "피해 +3", "범위 +15% · 더 자주", "피해 +4 · 적을 느리게"],
+    lv: [L(5, 0.5, 1, 30, 0, 99, 0, 0), L(5, 0.5, 1, 35, 0, 99, 0, 0), L(8, 0.5, 1, 35, 0, 99, 0, 0), L(8, 0.4, 1, 40, 0, 99, 0, 0), L(12, 0.4, 1, 42, 0, 99, 0, 0)],
+  },
+  missile: {
+    id: "missile",
+    name: "유도 미사일",
+    pattern: "homing",
+    color: "#ff6b8a",
+    desc: ["적을 따라가 터지는 미사일", "+1개", "피해 +8", "폭발 범위 +30%", "+2개"],
+    lv: [L(16, 1.4, 1, 14, 150, 0, 3, 15), L(16, 1.4, 2, 14, 150, 0, 3, 15), L(24, 1.4, 2, 14, 160, 0, 3, 15), L(24, 1.3, 2, 18, 170, 0, 3, 20), L(26, 1.2, 4, 18, 180, 0, 3, 20)],
+  },
+  ball: {
+    id: "ball",
+    name: "튕기는 공",
+    pattern: "bounce",
+    color: "#ff9cf0",
+    desc: ["화면 벽을 튕겨 다니는 공", "+1개", "피해 +5 · 더 오래", "+1개", "+1개 · 크기 +"],
+    lv: [L(10, 3.0, 1, 7, 170, 99, 3, 15), L(10, 3.0, 2, 7, 170, 99, 3, 15), L(15, 3.0, 2, 7, 180, 99, 4, 15), L(15, 2.8, 3, 7, 190, 99, 4, 18), L(18, 2.6, 4, 9, 200, 99, 4.5, 20)],
+  },
+  blades: {
+    id: "blades",
+    name: "천 개의 칼날",
+    fuse: ["shuriken", "missile"],
+    pattern: "homing",
+    color: "#ffe36b",
+    desc: ["수리검 + 미사일 합체! 칼날이 끝없이 적을 쫓아요"],
+    lv: [L(26, 0.18, 2, 9, 300, 2, 2.2, 10)],
+  },
+  pinball: {
+    id: "pinball",
+    name: "핀볼 폭풍",
+    fuse: ["boomerang", "ball"],
+    pattern: "bounce",
+    color: "#7bf6ff",
+    desc: ["부메랑 + 공 합체! 거대한 공들이 화면을 휩쓸어요"],
+    lv: [L(30, 1.6, 6, 14, 260, 99, 6, 40)],
+  },
+};
+export const SHARED_WEAPONS: WeaponId[] = ["shuriken", "boomerang", "bolt", "thorns", "missile", "ball"];
+export const FUSIONS: WeaponId[] = ["blades", "pinball"];
+export const MAX_WEAPONS = 6;
+export const MAX_PASSIVES = 6;
+
+/* ───────────── 패시브 ───────────── */
+
+export type PassiveId = "might" | "cooldown" | "area" | "amount" | "speed" | "maxHp" | "magnet" | "luck";
+
+export interface PassiveDef {
+  id: PassiveId;
+  name: string;
+  /** 레벨당 더하는 값 */
+  per: Partial<Stats>;
+  desc: string;
+  color: string;
+  max: number;
+}
+export const PASSIVES: Record<PassiveId, PassiveDef> = {
+  might: { id: "might", name: "힘의 장갑", per: { might: 0.1 }, desc: "피해 +10%", color: "#ff6b6b", max: 5 },
+  cooldown: { id: "cooldown", name: "모래시계", per: { cooldown: 0.08 }, desc: "쿨타임 −8%", color: "#7ad7ff", max: 5 },
+  area: { id: "area", name: "확성기", per: { area: 0.1 }, desc: "범위 +10%", color: "#b48cff", max: 5 },
+  amount: { id: "amount", name: "복제 주사위", per: { amount: 1 }, desc: "투사체 +1", color: "#ffd23a", max: 2 },
+  speed: { id: "speed", name: "날개 신발", per: { speed: 0.1 }, desc: "이동 속도 +10%", color: "#7dff9a", max: 5 },
+  maxHp: { id: "maxHp", name: "하트 사탕", per: { maxHp: 20, regen: 0.2 }, desc: "최대 체력 +20 · 회복 +0.2/초", color: "#ff7fb0", max: 5 },
+  magnet: { id: "magnet", name: "자석", per: { magnet: 0.3 }, desc: "줍는 범위 +30%", color: "#9fb6ff", max: 5 },
+  luck: { id: "luck", name: "네잎 클로버", per: { luck: 1 }, desc: "행운 +1 (크리 · 카드 등급 · 상자)", color: "#5fe08a", max: 5 },
+};
+export const PASSIVE_IDS = Object.keys(PASSIVES) as PassiveId[];
+
+/* ───────────── 적 ───────────── */
+
+export type EnemyKind = "bat" | "slime" | "ghost" | "skull" | "mush" | "golem" | "boss_jelly" | "boss_clock";
+
+export interface EnemyDef {
+  kind: EnemyKind;
+  name: string;
+  hp: number;
+  speed: number;
+  dmg: number;
+  /** 몸 반지름 (충돌) */
+  r: number;
+  xp: number;
+  /** 넉백 저항 0~1 */
+  heavy: number;
+  /** 다른 적을 밀지 않음 (유령) */
+  ghost?: boolean;
+  boss?: boolean;
+}
+export const ENEMIES: Record<EnemyKind, EnemyDef> = {
+  bat: { kind: "bat", name: "밤박쥐", hp: 5, speed: 46, dmg: 3, r: 5, xp: 1, heavy: 0 },
+  slime: { kind: "slime", name: "꿈 슬라임", hp: 13, speed: 26, dmg: 5, r: 7, xp: 1, heavy: 0.2 },
+  ghost: { kind: "ghost", name: "장난 유령", hp: 20, speed: 36, dmg: 7, r: 7, xp: 2, heavy: 0.3, ghost: true },
+  skull: { kind: "skull", name: "해골 병정", hp: 42, speed: 30, dmg: 9, r: 8, xp: 3, heavy: 0.4 },
+  mush: { kind: "mush", name: "독버섯", hp: 70, speed: 24, dmg: 11, r: 9, xp: 4, heavy: 0.5 },
+  golem: { kind: "golem", name: "돌골렘", hp: 160, speed: 22, dmg: 15, r: 12, xp: 7, heavy: 0.85 },
+  /** 5분: 밤마다 분수대에서 부풀어 오르는 젤리 왕 */
+  boss_jelly: { kind: "boss_jelly", name: "킹 젤리", hp: 2600, speed: 32, dmg: 20, r: 18, xp: 120, heavy: 1, boss: true },
+  /** 10분: 마을 시계탑에 깃든 자정의 문지기 — 쓰러뜨리면 새벽이 와요 */
+  boss_clock: { kind: "boss_clock", name: "자정의 시계지기", hp: 9000, speed: 36, dmg: 26, r: 18, xp: 300, heavy: 1, boss: true },
+};
+
+/** 분마다 나오는 적 (가중치) · 화면에 유지할 수 */
+export interface WaveDef {
+  at: number;
+  mix: Partial<Record<EnemyKind, number>>;
+  /** 화면에 유지할 최대 수 */
+  count: number;
+  /** 초당 새로 나오는 수 */
+  rate: number;
+}
+export const WAVES: WaveDef[] = [
+  { at: 0, mix: { bat: 6, slime: 4 }, count: 30, rate: 3.2 },
+  { at: 45, mix: { bat: 5, slime: 5 }, count: 50, rate: 4.5 },
+  { at: 90, mix: { bat: 4, slime: 4, ghost: 3 }, count: 70, rate: 5.5 },
+  { at: 150, mix: { slime: 3, ghost: 4, bat: 3 }, count: 95, rate: 6.5 },
+  { at: 210, mix: { ghost: 3, skull: 4, bat: 2 }, count: 120, rate: 7.5 },
+  { at: 270, mix: { skull: 5, ghost: 3, slime: 2 }, count: 140, rate: 8.5 },
+  { at: 330, mix: { skull: 4, mush: 3, bat: 3 }, count: 165, rate: 10 },
+  { at: 390, mix: { mush: 4, skull: 4, ghost: 2 }, count: 190, rate: 11.5 },
+  { at: 450, mix: { mush: 4, golem: 2, skull: 3 }, count: 220, rate: 13 },
+  { at: 510, mix: { golem: 3, mush: 4, bat: 4 }, count: 270, rate: 16 },
+  { at: 560, mix: { golem: 4, mush: 3, skull: 3, bat: 3 }, count: 320, rate: 20 },
+];
+
+/** 정해진 순간 이벤트 */
+export type TimedEvent = { at: number; k: "elite"; kind: EnemyKind } | { at: number; k: "ring"; kind: EnemyKind; n: number } | { at: number; k: "boss"; kind: EnemyKind; arena: boolean };
+export const EVENTS: TimedEvent[] = [
+  { at: 150, k: "elite", kind: "slime" },
+  { at: 240, k: "ring", kind: "bat", n: 40 },
+  { at: 300, k: "boss", kind: "boss_jelly", arena: false },
+  { at: 420, k: "ring", kind: "ghost", n: 36 },
+  { at: 450, k: "elite", kind: "skull" },
+  { at: 540, k: "elite", kind: "golem" },
+  { at: RUN_SEC, k: "boss", kind: "boss_clock", arena: true },
+];
+
+/* ───────────── 경험치 · 줍기 ───────────── */
+
+/** 레벨 L → L+1 에 필요한 경험치 */
+export function xpNeed(L: number): number {
+  if (L < 20) return 4 + (L - 1) * 6;
+  if (L < 40) return 118 + (L - 20) * 10;
+  return 318 + (L - 40) * 15;
+}
+
+export type PickupKind = "meat" | "magnet" | "bomb" | "coin" | "bag" | "chest";
+export const PICKUP_NAME: Record<PickupKind, string> = { meat: "고기", magnet: "자석", bomb: "폭탄", coin: "코인", bag: "코인 주머니", chest: "보물 상자" };
+
+/** 레벨업 카드 등급 — 일반 +1 · 영웅 +2 · 전설 +3 레벨 */
+export type Rarity = 0 | 1 | 2;
+export const RARITY_NAME = ["일반", "영웅", "전설"];
+export const RARITY_COLOR = ["#cfd6ea", "#c58bff", "#ffd23a"];
+
+export const FINAL_BOSS: EnemyKind = "boss_clock";
+export const ULT_NEED = 100;
+export const DASH_CD = 2.6;

@@ -11,6 +11,7 @@ import imgSketch from "@/img/menu/sketch.jpg";
 import imgPoker from "@/img/menu/poker.jpg";
 import imgDefense from "@/img/menu/defense.jpg";
 import imgMarble from "@/img/menu/marble.jpg";
+import imgSurvivor from "@/img/menu/survivor.jpg";
 import imgLadder from "@/img/menu/ladder.jpg";
 import imgRoulette from "@/img/menu/roulette.jpg";
 import imgCalorie from "@/img/menu/calorie.jpg";
@@ -117,6 +118,14 @@ export const NAV_GROUPS: NavGroup[] = [
         label: "DICE TOWN",
         desc: "주사위로 땅을 사고 짓고 인수하는 보드게임, 최대 4명 · AI 대전",
         icon: "🎲",
+        featured: true,
+      },
+      {
+        href: "/games/survivor",
+        image: imgSurvivor,
+        label: "PIXEL TOWN SURVIVOR",
+        desc: "밤의 픽셀 타운에서 새벽까지 버티는 뱀서라이크, 다이스 타운 캐릭터 16명",
+        icon: "🌙",
         featured: true,
       },
       {

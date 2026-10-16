@@ -302,6 +302,14 @@ export function createMarbleMeta(db: Database, points: Points, now: () => number
       return res;
     },
 
+    /** 다른 게임(픽셀 타운 서바이버) 보상으로 별사탕 */
+    async addStars(uid: string, n: number) {
+      if (!(n > 0)) return;
+      await edit(uid, (p) => {
+        p.stars += Math.floor(n);
+      });
+    },
+
     /** (관리자) 초기화 */
     async reset(uid?: string) {
       if (uid) await col.deleteOne({ _id: uid } as never);

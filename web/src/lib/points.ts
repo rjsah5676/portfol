@@ -47,7 +47,7 @@ export const POKER_EXCHANGE = {
 /* ─────────────── 상점 ─────────────── */
 
 /** 포인트를 쓰는 게임 (상점이 들어갈 곳). 지금 화면까지 붙은 건 포커 */
-export type PointGame = "poker" | "fight" | "defense" | "rhythm" | "sketch" | "marble";
+export type PointGame = "poker" | "fight" | "defense" | "rhythm" | "sketch" | "marble" | "survivor";
 export const POINT_GAMES: Record<PointGame, string> = {
   poker: "ANIME POKER",
   fight: "PIXEL FIGHT",
@@ -55,6 +55,7 @@ export const POINT_GAMES: Record<PointGame, string> = {
   rhythm: "BEAT DASH",
   sketch: "DOODLE PARTY",
   marble: "DICE TOWN",
+  survivor: "PIXEL TOWN SURVIVOR",
 };
 
 /**
@@ -210,7 +211,7 @@ export const shopFor = (game: PointGame, kind: ShopItem["kind"], ref: string) =>
 /* ─────────────── 업적 ─────────────── */
 
 /** 업적이 있는 게임 (게임 머리말의 [업적] 버튼) */
-export type AchGame = "poker" | "fight" | "defense" | "rhythm" | "sketch" | "marble";
+export type AchGame = "poker" | "fight" | "defense" | "rhythm" | "sketch" | "marble" | "survivor";
 
 /**
  * 업적이 보는 숫자 (서버가 기록에서 계산 — server/src/achievements.ts)
@@ -270,7 +271,13 @@ export type AchMetric =
   | "marble.chars"
   | "marble.ssr"
   | "marble.maxlv"
-  | "marble.pulls";
+  | "marble.pulls"
+  | "survivor.games"
+  | "survivor.wins"
+  | "survivor.kills"
+  | "survivor.bestSec"
+  | "survivor.bestLv"
+  | "survivor.heroWins";
 
 export interface Achievement {
   id: string;
@@ -642,6 +649,23 @@ export const ACHIEVEMENTS: Achievement[] = [
   a("marble", "ssr-5", "빛나는 파티", "SSR 이상 캐릭터 5종", "marble.ssr", 5, 3000),
   a("marble", "maxlv-1", "풀강의 맛", "캐릭터 하나 5강까지", "marble.maxlv", 1, 1500),
   a("marble", "pulls-100", "뽑기 장인", "뽑기 100번 (캐릭터 · 아이템)", "marble.pulls", 100, 900),
+
+  // PIXEL TOWN SURVIVOR
+  a("survivor", "games-1", "첫 밤", "한 판 끝내기", "survivor.games", 1, 150),
+  a("survivor", "games-30", "밤 산책 단골", "30판 끝내기", "survivor.games", 30, 900),
+  a("survivor", "games-150", "불면의 마을", "150판 끝내기", "survivor.games", 150, 3000),
+  a("survivor", "sec-180", "3분 버티기", "한 판에 3분 버티기", "survivor.bestSec", 180, 150),
+  a("survivor", "sec-300", "킹 젤리 앞까지", "한 판에 5분 버티기", "survivor.bestSec", 300, 300),
+  a("survivor", "win-1", "새벽이 왔다", "10분 버티고 자정의 시계지기 쓰러뜨리기", "survivor.wins", 1, 900),
+  a("survivor", "win-10", "새벽의 단골", "10번 클리어", "survivor.wins", 10, 2000),
+  a("survivor", "win-50", "밤을 지배하는 자", "50번 클리어", "survivor.wins", 50, 5000),
+  a("survivor", "lv-40", "성장 중독", "한 판에 레벨 40 찍기", "survivor.bestLv", 40, 450),
+  a("survivor", "lv-70", "끝없는 성장", "한 판에 레벨 70 찍기", "survivor.bestLv", 70, 1500),
+  a("survivor", "kills-10000", "몬스터 소탕", "몬스터 10,000마리 처치 (누적)", "survivor.kills", 10_000, 450),
+  a("survivor", "kills-100000", "밤의 청소부", "몬스터 100,000마리 처치 (누적)", "survivor.kills", 100_000, 1500),
+  a("survivor", "kills-500000", "백만 대군 앞에서", "몬스터 500,000마리 처치 (누적)", "survivor.kills", 500_000, 4000),
+  a("survivor", "heroes-4", "돌아가며 출근", "서로 다른 캐릭터 4명으로 클리어", "survivor.heroWins", 4, 1200),
+  a("survivor", "heroes-10", "마을 전원 생존", "서로 다른 캐릭터 10명으로 클리어", "survivor.heroWins", 10, 4000),
 ];
 /** 반복형 업적: 일회형 마지막 단계(from)를 넘은 뒤로 step 만큼 쌓일 때마다 reward */
 const r = (game: AchGame, id: string, title: string, unit: string, metric: AchMetric, from: number, step: number, reward: number): Achievement => ({
@@ -673,6 +697,8 @@ ACHIEVEMENTS.push(
   r("sketch", "points", "점수 부자 · 계속", "점", "sketch.points", 20_000, 20_000, 400),
   r("marble", "games", "세계 일주 · 계속", "판", "marble.games", 200, 100, 750),
   r("marble", "wins", "마블 재벌 · 계속", "승", "marble.wins", 100, 50, 1500),
+  r("survivor", "games", "불면의 마을 · 계속", "판", "survivor.games", 150, 50, 600),
+  r("survivor", "wins", "밤을 지배하는 자 · 계속", "번 클리어", "survivor.wins", 50, 25, 1500),
 );
 export const achievementOf = (id: unknown) =>
   ACHIEVEMENTS.find((x) => x.id === id);
@@ -747,6 +773,9 @@ export const DAILY_MISSIONS: DailyMission[] = [
   dm("marble", "game", "한 판 끝까지 하기", "marble.games", 1, 90),
   dm("marble", "games", "세 판 끝까지 하기", "marble.games", 3, 180),
   dm("marble", "win", "1등 하기", "marble.wins", 1, 120),
+  dm("survivor", "game", "한 판 끝내기", "survivor.games", 1, 90),
+  dm("survivor", "games", "세 판 끝내기", "survivor.games", 3, 180),
+  dm("survivor", "kills", "몬스터 3,000마리 처치", "survivor.kills", 3000, 120),
 ];
 /** 일일 미션이 보는 숫자 (기준값을 적어 둘 것) */
 export const DAILY_METRICS = [...new Set(DAILY_MISSIONS.map((x) => x.metric))];
@@ -821,6 +850,8 @@ export function pointReason(r: Pick<PointLogRow, "reason" | "ref">): string {
                     : "디펜스";
     case "marble":
       return r.ref?.startsWith("store:") ? "마블 · 상점" : "DICE TOWN";
+    case "survivor":
+      return "PIXEL TOWN SURVIVOR";
     case "mail":
       return `우편 · ${r.ref ?? ""}`;
     default:

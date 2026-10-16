@@ -1,0 +1,47 @@
+import { rpc } from "@/lib/api/socket";
+import type { HeroId } from "@/lib/survivor/data";
+import type { UpId, Ups } from "@/lib/survivor/progress";
+
+/*
+ * 픽셀 타운 서바이버 — 백엔드(server/src/games/survivor.ts)와 통신
+ *  프로필(코인 · 영구 강화 · 다이스 타운 보유 캐릭터) · 강화 · 판 시작/끝(보상) · 랭킹
+ */
+
+export interface SurvivorProfile {
+  gold: number;
+  ups: Ups;
+  games: number;
+  wins: number;
+  kills: number;
+  firstWinToday: boolean;
+  /** 다이스 타운 보유 캐릭터 · 강화 */
+  chars: Record<string, { lv: number; dup: number }>;
+  /** 다이스 타운 별사탕 (뽑기 재화) */
+  stars: number;
+}
+export interface SurvivorRankRow {
+  nick: string;
+  avatar: string | null;
+  hero: HeroId;
+  sec: number;
+  kills: number;
+  lv: number;
+  win: boolean;
+  at: number;
+}
+export interface FinishOut {
+  stars: number;
+  first: boolean;
+  gold: number;
+  best: boolean;
+  rank: number;
+  profile: Omit<SurvivorProfile, "chars" | "stars">;
+}
+
+export const survivor = {
+  profile: () => rpc<SurvivorProfile>("survivor.profile"),
+  upgrade: (id: UpId) => rpc<Omit<SurvivorProfile, "chars" | "stars">>("survivor.upgrade", { id }),
+  start: (hero: HeroId, sup: HeroId[]) => rpc<{ run: string }>("survivor.start", { hero, sup }),
+  finish: (run: string, r: { sec: number; kills: number; lv: number; win: boolean; coins: number }) => rpc<FinishOut>("survivor.finish", { run, ...r }),
+  rank: (limit = 50) => rpc<SurvivorRankRow[]>("survivor.rank", { limit }),
+};

@@ -117,5 +117,17 @@ export async function metricsOf(db: Database, uid: string, game: AchGame): Promi
     m["marble.pulls"] = (pf?.pulls?.char ?? 0) + (pf?.pulls?.item ?? 0);
   }
 
+  if (game === "survivor") {
+    // games/survivor.ts 의 survivor.finish 가 쌓음
+    const d = (await users.findOne({ _id: uid }, { projection: { "stats.survivor": 1 } })) as (Doc & { stats?: { survivor?: { games?: number; wins?: number; kills?: number; bestSec?: number; bestLv?: number; heroWins?: Record<string, number> } } }) | null;
+    const s = d?.stats?.survivor ?? {};
+    m["survivor.games"] = s.games ?? 0;
+    m["survivor.wins"] = s.wins ?? 0;
+    m["survivor.kills"] = s.kills ?? 0;
+    m["survivor.bestSec"] = s.bestSec ?? 0;
+    m["survivor.bestLv"] = s.bestLv ?? 0;
+    m["survivor.heroWins"] = Object.keys(s.heroWins ?? {}).length;
+  }
+
   return m;
 }
