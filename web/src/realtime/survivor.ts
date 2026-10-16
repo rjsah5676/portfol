@@ -1,6 +1,7 @@
 import { rpc } from "@/lib/api/socket";
 import type { HeroId } from "@/lib/survivor/data";
 import type { UpId, Ups } from "@/lib/survivor/progress";
+import type { QuestTotals, RunQ } from "@/lib/survivor/quests";
 
 /*
  * 픽셀 타운 서바이버 — 백엔드(server/src/games/survivor.ts)와 통신
@@ -14,6 +15,11 @@ export interface SurvivorProfile {
   wins: number;
   kills: number;
   firstWinToday: boolean;
+  /** 깬 퀘스트 */
+  quests: string[];
+  /** 클리어한 가장 깊은 밤 (-1 = 아직) */
+  depth: number;
+  tot: QuestTotals;
   /** 다이스 타운 보유 캐릭터 · 강화 */
   chars: Record<string, { lv: number; dup: number }>;
   /** 다이스 타운 별사탕 (뽑기 재화) */
@@ -27,6 +33,8 @@ export interface SurvivorRankRow {
   kills: number;
   lv: number;
   win: boolean;
+  depth: number;
+  ot: number;
   at: number;
 }
 export interface FinishOut {
@@ -35,13 +43,17 @@ export interface FinishOut {
   gold: number;
   best: boolean;
   rank: number;
+  /** 이번에 깬 퀘스트 */
+  quests: string[];
+  /** 퀘스트 별사탕 */
+  qStars: number;
   profile: Omit<SurvivorProfile, "chars" | "stars">;
 }
 
 export const survivor = {
   profile: () => rpc<SurvivorProfile>("survivor.profile"),
   upgrade: (id: UpId) => rpc<Omit<SurvivorProfile, "chars" | "stars">>("survivor.upgrade", { id }),
-  start: (hero: HeroId, sup: HeroId[]) => rpc<{ run: string }>("survivor.start", { hero, sup }),
-  finish: (run: string, r: { sec: number; kills: number; lv: number; win: boolean; coins: number }) => rpc<FinishOut>("survivor.finish", { run, ...r }),
+  start: (hero: HeroId, sup: HeroId[], depth: number) => rpc<{ run: string }>("survivor.start", { hero, sup, depth }),
+  finish: (run: string, r: { sec: number; kills: number; lv: number; win: boolean; ot: number; q: RunQ }) => rpc<FinishOut>("survivor.finish", { run, ...r }),
   rank: (limit = 50) => rpc<SurvivorRankRow[]>("survivor.rank", { limit }),
 };

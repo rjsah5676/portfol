@@ -3,7 +3,7 @@
  * 몹 · 아이템은 에셋이 오기 전까지 코드로 찍은 도트(자동 외곽선)로 그림.
  * 에셋이 생기면 ENEMY_IMG 등에 파일 경로만 채우면 그쪽을 씀.
  */
-import type { EnemyKind, PickupKind } from "@/lib/survivor/data";
+import type { EnemyKind, PickupKind, ThingKind } from "@/lib/survivor/data";
 
 export type Cv = HTMLCanvasElement;
 
@@ -273,6 +273,8 @@ export interface Art {
   tiles: Cv;
   /** 맵 장식 (파일 받으면 채워짐) */
   deco: Record<string, Cv>;
+  /** 맵 오브젝트 (성소 · 상인 …) */
+  things: Record<ThingKind, Cv>;
 }
 
 /* ───────────── 맵 장식 (밟고 지나가는 그림, 부딪히지 않음) ───────────── */
@@ -362,6 +364,12 @@ export function loadFiles(): Promise<void> {
         if (name.startsWith("gem")) a.gems[Number(name.slice(3))] = c;
         else if (name in a.pick) a.pick[name as PickupKind] = c;
         else (a as unknown as Record<string, Cv>)[name] = c;
+      })
+    );
+  for (const k of Object.keys(a.things) as ThingKind[])
+    jobs.push(
+      loadImg(`/survivor/thing/${k}.png`).then((im) => {
+        if (im) a.things[k] = cut(im, 0, im.width);
       })
     );
   for (const d of DECO)
@@ -510,8 +518,124 @@ export function getArt(): Art {
     boomerang,
     tiles: makeTiles(),
     deco: {},
+    things: thingArt(),
   };
   return art;
+}
+
+/** 맵 오브젝트 코드 도트 (파일 오기 전) */
+function thingArt(): Record<ThingKind, Cv> {
+  const pedestal = (g: Grid, top: string, glow: string) => {
+    rect(g, 2, 16, 14, 4, "#5a5f80");
+    rect(g, 4, 12, 10, 4, "#7a7fa0");
+    rect(g, 5, 13, 8, 1, "#9aa0c0");
+    for (let y = 0; y < 10; y++) {
+      const half = y < 5 ? Math.floor(y / 1.4) : Math.floor((9 - y) / 1.4);
+      rect(g, 9 - half, y + 1, half * 2 + 1, 1, top);
+    }
+    put(g, 8, 3, glow);
+    put(g, 8, 4, glow);
+  };
+  return {
+    shrine: small((g) => pedestal(g, "#4ff0c8", "#e8fff8"), 18, 20),
+    gshrine: small((g) => pedestal(g, "#ffd23a", "#fff6c8"), 18, 20),
+    statue: small(
+      (g) => {
+        rect(g, 2, 17, 14, 3, "#7a5a20");
+        ell(g, 9, 12, 5, 5, "#ffd23a");
+        ell(g, 9, 6, 4, 3.5, "#ffd23a");
+        put(g, 6, 2, "#ffd23a");
+        put(g, 12, 2, "#ffd23a");
+        rect(g, 6, 3, 1, 1, "#ffd23a");
+        rect(g, 12, 3, 1, 1, "#ffd23a");
+        put(g, 7, 6, "#7a5a20");
+        put(g, 11, 6, "#7a5a20");
+        rect(g, 13, 9, 3, 1, "#ffd23a");
+        rect(g, 15, 7, 1, 3, "#ffd23a");
+        put(g, 8, 11, "#fff6c8");
+      },
+      18,
+      20
+    ),
+    bell: small(
+      (g) => {
+        rect(g, 1, 0, 16, 2, "#6a4a30");
+        rect(g, 2, 2, 2, 18, "#6a4a30");
+        rect(g, 14, 2, 2, 18, "#6a4a30");
+        ell(g, 9, 9, 4.5, 5, "#e0a030", 7);
+        rect(g, 5, 9, 9, 4, "#e0a030");
+        rect(g, 4, 13, 11, 1, "#c08020");
+        put(g, 9, 14, "#6a4a30");
+        put(g, 7, 7, "#fff0b0");
+      },
+      18,
+      20
+    ),
+    flag: small(
+      (g) => {
+        rect(g, 3, 0, 2, 22, "#c8c0e0");
+        rect(g, 5, 1, 10, 7, "#ff5fa0");
+        rect(g, 5, 4, 10, 1, "#ffffff");
+        rect(g, 1, 21, 6, 2, "#5a5f80");
+      },
+      16,
+      23
+    ),
+    box: small(
+      (g) => {
+        rect(g, 0, 4, 16, 10, "#6a3fa0");
+        rect(g, 0, 0, 16, 5, "#8a5fc8");
+        rect(g, 0, 5, 16, 1, "#ffd23a");
+        rect(g, 6, 4, 4, 5, "#ffd23a");
+        put(g, 8, 6, "#3a1f60");
+        rect(g, 0, 13, 16, 1, "#3a1f60");
+      },
+      16,
+      14
+    ),
+    merchant: small(
+      (g) => {
+        // 망토 쓴 고양이 + 큰 짐가방
+        rect(g, 11, 6, 7, 12, "#a86d24");
+        rect(g, 12, 7, 5, 1, "#ffd23a");
+        ell(g, 7, 14, 5, 6, "#5a4a8a");
+        ell(g, 7, 7, 4.5, 4, "#f0d8b0");
+        put(g, 4, 3, "#f0d8b0");
+        put(g, 10, 3, "#f0d8b0");
+        rect(g, 3, 2, 9, 3, "#5a4a8a");
+        put(g, 5, 7, "#170f2e");
+        put(g, 9, 7, "#170f2e");
+        put(g, 7, 9, "#ff8fb8");
+        rect(g, 4, 19, 2, 2, "#3a2f60");
+        rect(g, 8, 19, 2, 2, "#3a2f60");
+      },
+      18,
+      21
+    ),
+    fountain: small(
+      (g) => {
+        ell(g, 9, 15, 9, 4, "#7a7fa0");
+        ell(g, 9, 14, 7, 2.5, "#5fc8ff");
+        rect(g, 8, 4, 2, 10, "#9aa0c0");
+        ell(g, 9, 4, 4, 1.5, "#9aa0c0");
+        put(g, 9, 1, "#bfe8ff");
+        put(g, 7, 2, "#bfe8ff");
+        put(g, 11, 2, "#bfe8ff");
+        put(g, 6, 13, "#ffffff");
+      },
+      18,
+      19
+    ),
+    trial: small(
+      (g) => {
+        rect(g, 4, 14, 10, 4, "#5a5f80");
+        ell(g, 9, 8, 5, 6, "#e0d8ff");
+        ell(g, 11, 7, 4, 5, "#5a5f80");
+      },
+      18,
+      18
+    ),
+  };
 }
 
 /* ───────────── 바닥 (밤의 광장) ───────────── */

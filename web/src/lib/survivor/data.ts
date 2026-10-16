@@ -150,7 +150,14 @@ export type WeaponId =
   | "ball"
   // 합체
   | "blades"
-  | "pinball";
+  | "pinball"
+  // 진화 (공용 무기 Lv5 + 짝 패시브)
+  | "gale"
+  | "cyclone"
+  | "judgment"
+  | "rose"
+  | "barrage"
+  | "rainbow";
 
 export type Pattern = "spin" | "nearest" | "orbit" | "drop" | "facing" | "boomerang" | "strike" | "aura" | "homing" | "bounce" | "cone" | "whip" | "spread" | "pulse";
 
@@ -180,6 +187,8 @@ export interface WeaponDef {
   owner?: HeroId;
   /** 합체 재료 */
   fuse?: [WeaponId, WeaponId];
+  /** 진화: [바탕 무기, 짝 패시브] */
+  evo?: [WeaponId, PassiveId];
   pattern: Pattern;
   color: string;
   /** 레벨업 카드 설명 (Lv1 = 새로 얻을 때) */
@@ -406,9 +415,85 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     desc: ["부메랑 + 공 합체! 거대한 공들이 화면을 휩쓸어요"],
     lv: [L(30, 1.6, 6, 14, 260, 99, 6, 40)],
   },
+  gale: {
+    id: "gale",
+    name: "질풍 수리검",
+    evo: ["shuriken", "speed"],
+    pattern: "facing",
+    color: "#bff2ff",
+    desc: ["수리검 진화! 쉴 새 없이 꿰뚫는 수리검 폭풍"],
+    lv: [L(22, 0.42, 6, 7, 340, 4, 1.3, 10)],
+  },
+  cyclone: {
+    id: "cyclone",
+    name: "회오리 부메랑",
+    evo: ["boomerang", "area"],
+    pattern: "boomerang",
+    color: "#ffd07a",
+    desc: ["부메랑 진화! 거대한 부메랑이 적을 휘감아요"],
+    lv: [L(34, 1.2, 4, 16, 250, 99, 1.8, 45)],
+  },
+  judgment: {
+    id: "judgment",
+    name: "천둥 심판",
+    evo: ["bolt", "luck"],
+    pattern: "strike",
+    color: "#e0c8ff",
+    desc: ["낙뢰 진화! 하늘이 화면을 번개로 덮어요"],
+    lv: [L(48, 1.1, 8, 26, 0, 99, 0, 20)],
+  },
+  rose: {
+    id: "rose",
+    name: "장미 정원",
+    evo: ["thorns", "maxHp"],
+    pattern: "aura",
+    color: "#ff7fb0",
+    desc: ["가시 오라 진화! 넓은 장미 덤불 · 적을 묶고 체력을 채워요"],
+    lv: [L(18, 0.32, 1, 62, 0, 99, 0, 0)],
+  },
+  barrage: {
+    id: "barrage",
+    name: "융단 폭격",
+    evo: ["missile", "might"],
+    pattern: "homing",
+    color: "#ff9a6b",
+    desc: ["미사일 진화! 미사일 떼가 쏟아져 연달아 터져요"],
+    lv: [L(34, 0.9, 6, 26, 200, 0, 3, 25)],
+  },
+  rainbow: {
+    id: "rainbow",
+    name: "무지개 공",
+    evo: ["ball", "cooldown"],
+    pattern: "bounce",
+    color: "#ffffff",
+    desc: ["공 진화! 무지개 공이 끝없이 튕겨요"],
+    lv: [L(26, 1.4, 7, 10, 230, 99, 6.5, 25)],
+  },
 };
 export const SHARED_WEAPONS: WeaponId[] = ["shuriken", "boomerang", "bolt", "thorns", "missile", "ball"];
+/** 처음부터 레벨업 카드에 나오는 공용 무기 (나머지는 퀘스트로 해금) */
+export const BASE_WEAPONS: WeaponId[] = ["shuriken", "boomerang", "bolt", "thorns"];
 export const FUSIONS: WeaponId[] = ["blades", "pinball"];
+export const EVOLUTIONS: WeaponId[] = ["gale", "cyclone", "judgment", "rose", "barrage", "rainbow"];
+/** 고유 무기 각성: Lv5 + 이 패시브 → 상자 · 카드에서 각성 (피해 ×1.6 · +1개 · 크기 ×1.2) */
+export const AWAKEN_NEED: Record<HeroId, PassiveId> = {
+  kai: "speed",
+  igna: "might",
+  lily: "maxHp",
+  ivan: "area",
+  soyoung: "luck",
+  zena: "cooldown",
+  "ivan-marine": "area",
+  "igna-student": "luck",
+  "lily-hood": "magnet",
+  toto: "amount",
+  mirage: "amount",
+  lolo: "area",
+  mongle: "maxHp",
+  "ur-dice": "luck",
+  "ur-moa": "magnet",
+  "ur-forte": "cooldown",
+};
 export const MAX_WEAPONS = 6;
 export const MAX_PASSIVES = 6;
 
@@ -524,3 +609,60 @@ export const RARITY_COLOR = ["#cfd6ea", "#c58bff", "#ffd23a"];
 export const FINAL_BOSS: EnemyKind = "boss_clock";
 export const ULT_NEED = 100;
 export const DASH_CD = 2.6;
+
+/* ───────────── 맵 오브젝트 (메가봉크 성소 · 집중포화 맵 목표) ───────────── */
+
+export type ThingKind = "shrine" | "gshrine" | "statue" | "bell" | "flag" | "box" | "merchant" | "fountain" | "trial";
+export const THING_NAME: Record<ThingKind, string> = {
+  shrine: "충전 성소",
+  gshrine: "황금 성소",
+  statue: "황금 고양이상",
+  bell: "도전의 종",
+  flag: "응원 깃발",
+  box: "보물 상자",
+  merchant: "떠돌이 상인",
+  fountain: "소원 우물",
+  trial: "달빛 시련",
+};
+export const THING_DESC: Record<ThingKind, string> = {
+  shrine: "원 안에 서 있으면 충전 — 능력치 3개 중 하나",
+  gshrine: "충전하면 영웅 · 전설 능력치 중 하나",
+  statue: "만지면 금화 — 대신 저주가 쌓여 적이 세져요 (경험치도 늘어요)",
+  bell: "치면 정예가 나타나요 — 잡으면 보물 상자",
+  flag: "깃발을 세우면 20초 동안 강해져요",
+  box: "금화를 내고 열어요 (열수록 비싸져요)",
+  merchant: "금화로 유물을 팔아요 (하나 사면 떠나요)",
+  fountain: "유물 3개 중 하나를 공짜로",
+  trial: "원 안에서 25초 버티면 큰 보상",
+};
+/** 충전 시간 (초) — 원 안에 있어야 참 */
+export const SHRINE_CHARGE = 2.4;
+export const FLAG_CHARGE = 1.4;
+export const TRIAL_SEC = 25;
+export const TRIAL_R = 110;
+export const boxCost = (opened: number) => 20 + opened * 14;
+
+/** 성소 축복 (능력치 하나) — 등급 0~3 별 값 */
+export const BLESS: { k: keyof Stats; name: string; v: [number, number, number, number]; fmt: "pct" | "num" }[] = [
+  { k: "might", name: "피해", v: [0.06, 0.1, 0.15, 0.25], fmt: "pct" },
+  { k: "cooldown", name: "쿨타임 감소", v: [0.04, 0.06, 0.09, 0.14], fmt: "pct" },
+  { k: "area", name: "범위", v: [0.06, 0.1, 0.15, 0.22], fmt: "pct" },
+  { k: "speed", name: "이동 속도", v: [0.05, 0.08, 0.12, 0.18], fmt: "pct" },
+  { k: "maxHp", name: "최대 체력", v: [10, 18, 28, 45], fmt: "num" },
+  { k: "regen", name: "초당 회복", v: [0.2, 0.35, 0.5, 0.8], fmt: "num" },
+  { k: "luck", name: "행운", v: [1, 1, 2, 3], fmt: "num" },
+  { k: "growth", name: "경험치", v: [0.06, 0.1, 0.15, 0.22], fmt: "pct" },
+  { k: "magnet", name: "줍는 범위", v: [0.15, 0.25, 0.4, 0.6], fmt: "pct" },
+  { k: "armor", name: "방어", v: [1, 1, 2, 3], fmt: "num" },
+];
+
+/** 응원 깃발 버프 */
+export type FlagBuff = "might" | "haste" | "speed" | "magnet";
+export const FLAG_NAME: Record<FlagBuff, string> = { might: "피해 +50%", haste: "공격 속도 두 배", speed: "이동 +40%", magnet: "젬 전부 끌어오기" };
+
+/* ───────────── 밤의 깊이 (난이도) ───────────── */
+
+export const MAX_DEPTH = 10;
+export const depthMul = (d: number) => ({ hp: 1 + d * 0.3, dmg: 1 + d * 0.1, spawn: 1 + d * 0.05, reward: 1 + d * 0.2 });
+/** 오버타임 (클리어 뒤 계속): 30초마다 강해짐 */
+export const OT_STEP = 30;

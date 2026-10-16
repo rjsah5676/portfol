@@ -1,24 +1,87 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
-import { DASH_CD, DT, ENEMIES, HEROES, PASSIVES, RARITY_COLOR, RARITY_NAME, RUN_SEC, ULT_NEED, VIEW_H, VIEW_W, WEAPONS, xpNeed, type HeroId, type PassiveId, type Stats, type WeaponId } from "@/lib/survivor/data";
-import { chooseCard, closeChest, maxHp, newRun, reroll, result, step, type Card, type Ev, type Input, type Pause, type Run, type RunOpts, type RunResult } from "@/lib/survivor/sim";
+import { BLESS, DASH_CD, DT, ENEMIES, FLAG_NAME, HEROES, PASSIVES, RARITY_COLOR, RARITY_NAME, RUN_SEC, ULT_NEED, VIEW_H, VIEW_W, WEAPONS, xpNeed, type FlagBuff, type HeroId, type PassiveId, type Stats, type WeaponId } from "@/lib/survivor/data";
+import { RELICS, RELIC_RARITY_COLOR, RELIC_RARITY_NAME, type RelicId } from "@/lib/survivor/relics";
+import { banishCard, bossLimit, buyRelic, chooseBless, chooseCard, chooseWish, closeChest, dawnChoice, leaveThing, maxHp, newRun, reroll, result, step, type Card, type Ev, type Input, type Pause, type Run, type RunOpts, type RunResult } from "@/lib/survivor/sim";
 import { getArt, loadFiles, loadHero, type HeroArt } from "./art";
 import { playBgm, preloadSfx, sfx, setSound, soundPref } from "./audio";
 import { draw, mobColor, newFx, tickFx, type Fx } from "./render";
 
-/* ───────────── 아이콘 (에셋 오기 전: 색 · 첫 글자) ───────────── */
+/* ───────────── 아이콘 (public/survivor/icon/<id>.png — 없으면 색 · 첫 글자) ───────────── */
 
-export function ItemIcon({ k, id, size = 26 }: { k: "weapon" | "passive"; id: WeaponId | PassiveId; size?: number }) {
-  const def = k === "weapon" ? WEAPONS[id as WeaponId] : PASSIVES[id as PassiveId];
-  // 도트 아이콘 (public/survivor/icon/<id>.png, 48px)
-  return <img src={`/survivor/icon/${id}.png`} alt={def.name} draggable={false} className="shrink-0 select-none" style={{ width: size, height: size, objectFit: "contain", imageRendering: size >= 40 ? "pixelated" : "auto" }} />;
+export type IconKind = "weapon" | "passive" | "relic";
+const iconDef = (k: IconKind, id: string) => (k === "weapon" ? WEAPONS[id as WeaponId] : k === "passive" ? PASSIVES[id as PassiveId] : RELICS[id as RelicId]);
+
+export function ItemIcon({ k, id, size = 26 }: { k: IconKind; id: WeaponId | PassiveId | RelicId; size?: number }) {
+  const [bad, setBad] = useState(false);
+  const def = iconDef(k, id);
+  if (bad || !def)
+    return (
+      <span className="flex shrink-0 items-center justify-center font-bold text-[#07051a] select-none" style={{ width: size, height: size, background: def?.color ?? "#888", fontSize: Math.round(size * 0.5), boxShadow: "inset 0 0 0 2px #07051a" }}>
+        {def?.name[0] ?? "?"}
+      </span>
+    );
+  return <img src={`/survivor/icon/${id}.png`} alt={def.name} draggable={false} onError={() => setBad(true)} className="shrink-0 select-none" style={{ width: size, height: size, objectFit: "contain", imageRendering: size >= 40 ? "pixelated" : "auto" }} />;
 }
 
-const cardText = (c: Card): { name: string; desc: string; k: "weapon" | "passive" | null; id?: WeaponId | PassiveId } => {
-  if (c.k === "fuse") {
+const pct = (v: number) => `${v >= 0 ? "+" : "−"}${Math.round(Math.abs(v) * 100)}%`;
+const STAT_LABEL: Partial<Record<keyof Stats, [string, "pct" | "num" | "neg"]>> = {
+  might: ["피해", "pct"],
+  cooldown: ["쿨타임", "neg"],
+  area: ["범위", "pct"],
+  amount: ["투사체", "num"],
+  speed: ["이동 속도", "pct"],
+  maxHp: ["최대 체력", "num"],
+  regen: ["초당 회복", "num"],
+  armor: ["방어", "num"],
+  magnet: ["줍는 범위", "pct"],
+  luck: ["행운", "num"],
+  growth: ["경험치", "pct"],
+};
+const statFmt = (k: keyof Stats, v: number) => {
+  const f = STAT_LABEL[k]?.[1] ?? "num";
+  if (f === "neg") return `−${Math.round(v * 100)}%`;
+  if (f === "pct") return pct(v);
+  return `${v >= 0 ? "+" : ""}${Math.round(v * 10) / 10}`;
+};
+
+/** 카드 숫자: 무기 레벨 수치 변화 · 패시브 합 변화 */
+function cardLines(c: Card): string[] {
+  if (c.k === "weapon") {
+    const d = WEAPONS[c.id as WeaponId];
+    const b = d.lv[Math.max(0, c.to - 1)];
+    if (c.from === 0) return [`피해 ${b.dmg} · 쿨 ${b.cd ? b.cd + "초" : "계속"}${b.n > 1 ? ` · ${b.n}개` : ""}`];
+    const a = d.lv[c.from - 1];
+    const out: string[] = [];
+    if (a.dmg !== b.dmg) out.push(`피해 ${a.dmg} → ${b.dmg}`);
+    if (a.n !== b.n) out.push(`개수 ${a.n} → ${b.n}`);
+    if (a.cd !== b.cd) out.push(`쿨타임 ${a.cd} → ${b.cd}초`);
+    if (a.size !== b.size) out.push(`크기 ${a.size} → ${b.size}`);
+    if (a.pierce !== b.pierce && b.pierce < 99) out.push(`관통 ${a.pierce} → ${b.pierce}`);
+    if (a.dur !== b.dur && a.dur > 0) out.push(`지속 ${a.dur} → ${b.dur}초`);
+    if (a.spd !== b.spd && d.pattern === "orbit") out.push("회전 더 빨리");
+    return out;
+  }
+  if (c.k === "passive") {
+    const d = PASSIVES[c.id as PassiveId];
+    return (Object.entries(d.per) as [keyof Stats, number][]).map(([k, v]) => `${STAT_LABEL[k]?.[0] ?? k} ${statFmt(k, v * c.from)} → ${statFmt(k, v * c.to)}`);
+  }
+  return [];
+}
+
+const cardText = (c: Card): { name: string; desc: string; k: IconKind | null; id?: WeaponId | PassiveId | RelicId } => {
+  if (c.k === "fuse" || c.k === "evo") {
     const d = WEAPONS[c.id as WeaponId];
     return { name: d.name, desc: d.desc[0], k: "weapon", id: c.id };
+  }
+  if (c.k === "awake") {
+    const d = WEAPONS[c.id as WeaponId];
+    return { name: `각성 ${d.name}`, desc: "피해 ×1.6 · +1개 · 크기 ×1.2 · 더 빨리", k: "weapon", id: c.id };
+  }
+  if (c.k === "relic") {
+    const d = RELICS[c.id as RelicId];
+    return { name: d.name, desc: d.desc, k: "relic", id: c.id };
   }
   if (c.k === "weapon") {
     const d = WEAPONS[c.id as WeaponId];
@@ -31,7 +94,7 @@ const cardText = (c: Card): { name: string; desc: string; k: "weapon" | "passive
     const n = c.to - c.from;
     return { name: d.name, desc: n > 1 ? `${d.desc} (×${n})` : d.desc, k: "passive", id: c.id };
   }
-  return c.k === "coin" ? { name: "코인 주머니", desc: "코인 +25", k: null } : { name: "따끈한 고기", desc: "체력 +40", k: null };
+  return c.k === "coin" ? { name: "금화 주머니", desc: "금화 +25", k: null } : { name: "따끈한 고기", desc: "체력 +40", k: null };
 };
 
 /* ───────────── 입력 ───────────── */
@@ -64,14 +127,25 @@ interface Hud {
   lv: number;
   xp: number;
   kills: number;
-  coins: number;
+  gold: number;
   ult: number;
   dash: number;
-  boss: { name: string; hp: number } | null;
-  weapons: { id: WeaponId; lv: number }[];
+  boss: { name: string; hp: number; left: number; rage: boolean } | null;
+  weapons: { id: WeaponId; lv: number; awake?: boolean }[];
   passives: { id: PassiveId; lv: number }[];
+  relics: { id: RelicId; n: number }[];
   rerolls: number;
   skips: number;
+  banish: number;
+  stats: Stats;
+  flag: { k: FlagBuff; t: number } | null;
+  curse: number;
+  depth: number;
+  ot: boolean;
+  otT: number;
+  otLv: number;
+  /** 진행 중인 시련 남은 시간 */
+  trial: number;
 }
 const hudOf = (r: Run): Hud => {
   const b = r.bossId >= 0 ? r.enemies.find((e) => e.id === r.bossId) : undefined;
@@ -82,18 +156,29 @@ const hudOf = (r: Run): Hud => {
     lv: r.p.lv,
     xp: r.p.xp / xpNeed(r.p.lv),
     kills: r.p.kills,
-    coins: r.p.coins,
+    gold: r.p.gold,
     ult: r.p.ult / ULT_NEED,
     dash: 1 - r.p.dashCd / DASH_CD,
-    boss: b ? { name: b.def.name, hp: b.hp / b.maxHp } : null,
-    weapons: r.weapons.map((w) => ({ id: w.id, lv: w.lv })),
+    boss: b ? { name: b.def.name, hp: b.hp / b.maxHp, left: Math.max(0, bossLimit(b.kind) - (b.boss?.age ?? 0)), rage: !!b.boss?.rage } : null,
+    weapons: r.weapons.map((w) => ({ id: w.id, lv: w.lv, awake: w.awake })),
     passives: r.passives.map((p) => ({ ...p })),
+    relics: r.relicOrder.map((id) => ({ id, n: r.relics[id] ?? 0 })),
     rerolls: r.rerolls,
     skips: r.skips,
+    banish: r.banish,
+    stats: { ...r.stats },
+    flag: r.flag ? { ...r.flag } : null,
+    curse: r.curse,
+    depth: r.depth,
+    ot: r.ot,
+    otT: r.otT,
+    otLv: r.otLv,
+    trial: r.things.find((t) => t.alive && t.k === "trial" && t.on)?.t ?? 0,
   };
 };
 
 const fmt = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
+const THING_COLOR: Record<string, string> = { shrine: "#7ff0d8", gshrine: "#ffd23a", statue: "#ffd23a", bell: "#ff8a6b", flag: "#ff9cc8", box: "#ffd23a", merchant: "#c58bff", fountain: "#7ad7ff", trial: "#e0d8ff" };
 
 /* ───────────── 판 ───────────── */
 
@@ -127,6 +212,10 @@ export default function Game({ setup, onEnd, onQuit }: { setup: GameSetup; onEnd
   useEffect(() => {
     menuRef.current = menu;
   }, [menu]);
+  // 개발 중에만: 콘솔 · 자동 테스트에서 판 상태 보기
+  useEffect(() => {
+    if (process.env.NODE_ENV !== "production") (window as unknown as { __pts?: { current: Run } }).__pts = runRef;
+  }, []);
 
   useEffect(() => {
     let alive = true;
@@ -144,6 +233,13 @@ export default function Game({ setup, onEnd, onQuit }: { setup: GameSetup; onEnd
   }, [hero]);
 
   const say = useCallback((text: string, c = "#ffd23a") => setBanner({ id: Date.now(), text, c }), []);
+  const lastNoGold = useRef(0);
+  const [toasts, setToasts] = useState<{ id: number; relic: RelicId }[]>([]);
+  const toast = useCallback((relic: RelicId) => {
+    const id = Date.now() + Math.random();
+    setToasts((t) => [...t.slice(-3), { id, relic }]);
+    setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 2600);
+  }, []);
 
   /** 시뮬에서 나온 일 → 화면 효과 · 소리 */
   const onEv = useCallback(
@@ -241,10 +337,48 @@ export default function Game({ setup, onEnd, onQuit }: { setup: GameSetup; onEnd
             say(`${HEROES[e.hero].name} 거들기!`, HEROES[e.hero].color);
             break;
           case "fuse":
+          case "evo":
+          case "awake":
             fx.flash = 1.4;
             fx.flashC = "#ffd23a";
             sfx("fuse");
-            say(`합체! ${WEAPONS[e.id].name}`, "#ffd23a");
+            say(`${e.t === "fuse" ? "합체" : e.t === "evo" ? "진화" : "각성"}! ${e.t === "awake" ? "각성 " : ""}${WEAPONS[e.id].name}`, "#ffd23a");
+            break;
+          case "relic":
+            toast(e.id);
+            break;
+          case "thing":
+            sfx(e.k === "statue" ? "coin" : e.k === "flag" ? "ult" : "pick");
+            say(e.text, THING_COLOR[e.k]);
+            break;
+          case "nogold":
+            if (performance.now() - lastNoGold.current > 1500) {
+              lastNoGold.current = performance.now();
+              sfx("warn");
+              say(`금화 ${e.need} 필요해요`, "#ffd23a");
+            }
+            break;
+          case "trial":
+            sfx(e.ok ? "jackpot" : "warn");
+            say(e.ok ? "시련 성공! 보물 상자 · 큰 경험치" : "원 밖으로 나가서 시련 실패…", e.ok ? "#ffd23a" : "#ff4fa3");
+            break;
+          case "rage":
+            fx.shake = 8;
+            sfx("boss");
+            say(`${e.name} 격노! 서둘러요`, "#ff3d6e");
+            break;
+          case "ot":
+            sfx(e.lv ? "warn" : "boss");
+            say(e.lv ? `오버타임 Lv${e.lv} — 적이 더 세져요` : "오버타임! 버틸수록 기록이 올라가요", "#ff9cc8");
+            if (!e.lv) playBgm("boss");
+            break;
+          case "zap":
+            fx.zaps.push({ x0: e.x0, y0: e.y0, x1: e.x1, y1: e.y1, t: 0 });
+            sfx("bolt");
+            break;
+          case "shield":
+            fx.rings.push({ x: runRef.current.p.x, y: runRef.current.p.y - 8, r: 22, c: "#7ff0d8", t: 0, life: 0.35, fill: false });
+            sfx("pick");
             break;
           case "prop":
             for (let i = 0; i < 8; i++) fx.parts.push({ x: e.x, y: e.y - 12, vx: (Math.random() - 0.5) * 120, vy: -Math.random() * 100, c: i % 2 ? "#ffe9a0" : "#3c3f5c", t: 0, life: 0.5, s: 2 });
@@ -253,6 +387,7 @@ export default function Game({ setup, onEnd, onQuit }: { setup: GameSetup; onEnd
           case "win":
             sfx("win");
             say("새벽이 밝았어요!", "#ffd23a");
+            playBgm(null);
             break;
           case "dead":
             sfx("dead");
@@ -260,7 +395,7 @@ export default function Game({ setup, onEnd, onQuit }: { setup: GameSetup; onEnd
         }
       }
     },
-    [say]
+    [say, toast]
   );
 
   /* 메인 루프 */
@@ -354,14 +489,31 @@ export default function Game({ setup, onEnd, onQuit }: { setup: GameSetup; onEnd
     setPause(r.pause);
     setHud(hudOf(r));
   };
+  /** 시뮬 함수 하나 부르고 화면 맞추기 */
+  const act = (f: (r: Run) => void, snd: Parameters<typeof sfx>[0] = "click") => {
+    const r = runRef.current;
+    f(r);
+    sfx(snd);
+    if (r.ev.length) {
+      onEv(r.ev);
+      r.ev.length = 0;
+    }
+    setPause(r.pause);
+    setHud(hudOf(r));
+  };
 
   // Esc = 일시정지 · 숫자 = 카드
   useEffect(() => {
     const k = (e: KeyboardEvent) => {
       const r = runRef.current;
       if (e.key === "Escape" && !r.pause) setMenu((m) => !m);
-      if (r.pause?.k === "level" && ["1", "2", "3", "4"].includes(e.key)) pickCard(Number(e.key) - 1);
+      const n = ["1", "2", "3", "4"].indexOf(e.key);
+      if (r.pause?.k === "level" && n >= 0) pickCard(n);
       if (r.pause?.k === "chest" && (e.key === "Enter" || e.key === " ")) shutChest();
+      if (r.pause?.k === "bless" && n >= 0) act((x) => chooseBless(x, n), "lvl");
+      if (r.pause?.k === "wish" && n >= 0) act((x) => chooseWish(x, n), "jackpot");
+      if (r.pause?.k === "shop" && n >= 0) act((x) => buyRelic(x, n), "coin");
+      if ((r.pause?.k === "shop" || r.pause?.k === "wish") && e.key === "Escape") act(leaveThing);
     };
     window.addEventListener("keydown", k);
     return () => window.removeEventListener("keydown", k);
@@ -415,9 +567,9 @@ export default function Game({ setup, onEnd, onQuit }: { setup: GameSetup; onEnd
               {Array.from({ length: 6 }, (_, i) => {
                 const w = hud.weapons[i];
                 return (
-                  <span key={i} className="pts-slot" style={{ width: 30, height: 30, boxShadow: `0 0 0 2px ${w && WEAPONS[w.id].fuse ? "#ffd23a" : "#3a3080"}` }}>
+                  <span key={i} className={`pts-slot ${w?.awake ? "pts-glow" : ""}`} style={{ width: 30, height: 30, boxShadow: `0 0 0 2px ${w && (WEAPONS[w.id].fuse || WEAPONS[w.id].evo || w.awake) ? "#ffd23a" : "#3a3080"}` }}>
                     {w && <ItemIcon k="weapon" id={w.id} size={26} />}
-                    {w && <b className="pts-sub absolute -right-[3px] -bottom-[6px] text-[10px]">{WEAPONS[w.id].fuse ? "★" : w.lv}</b>}
+                    {w && <b className="pts-sub absolute -right-[3px] -bottom-[6px] text-[10px]">{WEAPONS[w.id].fuse || WEAPONS[w.id].evo || w.awake ? "★" : w.lv}</b>}
                   </span>
                 );
               })}
@@ -433,19 +585,36 @@ export default function Game({ setup, onEnd, onQuit }: { setup: GameSetup; onEnd
                 );
               })}
             </div>
+            {hud.relics.length > 0 && (
+              <div className="flex max-w-[260px] flex-wrap gap-[3px]">
+                {hud.relics.map((x) => (
+                  <span key={x.id} className="relative" title={`${RELICS[x.id].name} — ${RELICS[x.id].desc}`}>
+                    <ItemIcon k="relic" id={x.id} size={18} />
+                    {x.n > 1 && <b className="pts-sub absolute -right-[2px] -bottom-[4px] text-[9px]">{x.n}</b>}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
           <div className="flex flex-col items-center">
-            <b className={`pts-title text-[30px] leading-none ${left < 30 && left > 0 ? "text-[#ff4fa3]" : "text-white"}`}>{left > 0 ? fmt(left) : fmt(hud.t - RUN_SEC)}</b>
-            <span className="pts-sub mt-[2px] text-[11px] text-[#a9a2d6]">{left > 0 ? "새벽까지" : "새벽 이후"}</span>
+            <b className={`pts-title text-[30px] leading-none ${hud.ot ? "text-[#ff9cc8]" : left < 30 && left > 0 ? "text-[#ff4fa3]" : "text-white"}`}>{hud.ot ? `+${fmt(hud.otT)}` : left > 0 ? fmt(left) : fmt(hud.t - RUN_SEC)}</b>
+            <span className="pts-sub mt-[2px] text-[11px] text-[#a9a2d6]">{hud.ot ? `오버타임 Lv${hud.otLv}` : left > 0 ? "새벽까지" : "새벽 이후"}</span>
+            {(hud.depth > 0 || hud.curse > 0) && (
+              <span className="pts-sub mt-[3px] flex gap-[6px] text-[11px]">
+                {hud.depth > 0 && <span className="text-[#c58bff]">깊이 {hud.depth}</span>}
+                {hud.curse > 0 && <span className="text-[#ff8a6b]">저주 +{Math.round(hud.curse * 100)}%</span>}
+              </span>
+            )}
+            {hud.trial > 0 && <b className="pts-title pts-blink mt-[4px] text-[18px] text-[#e0d8ff]">시련 {Math.ceil(hud.trial)}초</b>}
           </div>
           <div className="flex flex-col items-end gap-[4px] text-[14px] font-bold">
             <span className="pts-sub flex items-center gap-[6px]">
               <span className="inline-block h-[10px] w-[10px] bg-[#ff3d6e]" style={{ boxShadow: "0 0 0 2px #07051a" }} />
               {hud.kills.toLocaleString()}
             </span>
-            <span className="pts-sub flex items-center gap-[6px] text-[#ffd23a]">
+            <span className="pts-sub flex items-center gap-[6px] text-[#ffd23a]" title="금화 — 상자 · 상인에 써요">
               <span className="inline-block h-[10px] w-[10px] rounded-full bg-[#ffd23a]" style={{ boxShadow: "0 0 0 2px #07051a" }} />
-              {hud.coins.toLocaleString()}
+              {hud.gold.toLocaleString()}
             </span>
             <button type="button" onClick={() => setMenu(true)} className="pts-btn ghost pointer-events-auto mt-[4px] h-[28px] px-[10px] text-[12px]">
               II 일시정지
@@ -454,7 +623,10 @@ export default function Game({ setup, onEnd, onQuit }: { setup: GameSetup; onEnd
         </div>
         {hud.boss && (
           <div className="mx-auto mt-[6px] w-[420px]">
-            <div className="pts-sub mb-[4px] text-center text-[13px] font-bold text-[#ff8fb8]">{hud.boss.name}</div>
+            <div className="pts-sub mb-[4px] flex justify-center gap-[10px] text-[13px] font-bold text-[#ff8fb8]">
+              {hud.boss.name}
+              <span className={hud.boss.rage ? "pts-blink text-[#ff3d6e]" : hud.boss.left < 20 ? "text-[#ffd23a]" : "text-[#a9a2d6]"}>{hud.boss.rage ? "격노!" : `격노까지 ${Math.ceil(hud.boss.left)}초`}</span>
+            </div>
             <div className="pts-bar h-[12px]" style={{ "--c": "#ff3d6e" } as CSSProperties}>
               <i style={{ width: `${hud.boss.hp * 100}%` }} />
             </div>
@@ -464,6 +636,11 @@ export default function Game({ setup, onEnd, onQuit }: { setup: GameSetup; onEnd
 
       {/* 아래: 체력 · 대시 · 필살기 */}
       <div className="pointer-events-none absolute bottom-[12px] left-[12px] w-[220px]">
+        {hud.flag && (
+          <span className="pts-tag mb-[6px] inline-block text-[11px]" style={{ background: "#ff9cc8" }}>
+            🚩 {FLAG_NAME[hud.flag.k]} {Math.ceil(hud.flag.t)}초
+          </span>
+        )}
         <div className="pts-sub mb-[4px] flex justify-between text-[12px] font-bold">
           <span>{HEROES[hero].name}</span>
           <span>
@@ -498,8 +675,26 @@ export default function Game({ setup, onEnd, onQuit }: { setup: GameSetup; onEnd
         </div>
       )}
 
-      {pause?.k === "level" && <LevelUp pause={pause} rerolls={hud.rerolls} skips={hud.skips} onPick={pickCard} onReroll={doReroll} />}
+      {/* 유물 얻음 알림 */}
+      <div className="pointer-events-none absolute top-[130px] right-[12px] flex flex-col items-end gap-[6px]">
+        {toasts.map((t) => (
+          <div key={t.id} className="pts-pop flex items-center gap-[8px] px-[10px] py-[5px]" style={{ background: "rgba(7,5,26,0.85)", boxShadow: `0 0 0 2px ${RELIC_RARITY_COLOR[RELICS[t.relic].rarity]}` }}>
+            <ItemIcon k="relic" id={t.relic} size={24} />
+            <span className="text-[12px] leading-[15px]">
+              <b style={{ color: RELIC_RARITY_COLOR[RELICS[t.relic].rarity] }}>{RELICS[t.relic].name}</b>
+              <br />
+              <span className="text-[#a9a2d6]">{RELICS[t.relic].desc}</span>
+            </span>
+          </div>
+        ))}
+      </div>
+
+      {pause?.k === "level" && <LevelUp pause={pause} hud={hud} onPick={pickCard} onReroll={doReroll} onBanish={(i) => act((x) => banishCard(x, i), "card")} />}
       {pause?.k === "chest" && <Chest pause={pause} onClose={shutChest} />}
+      {pause?.k === "bless" && <BlessPick pause={pause} onPick={(i) => act((x) => chooseBless(x, i), "lvl")} />}
+      {pause?.k === "shop" && <ShopPick pause={pause} gold={hud.gold} onBuy={(i) => act((x) => buyRelic(x, i), "coin")} onLeave={() => act(leaveThing)} />}
+      {pause?.k === "wish" && <WishPick pause={pause} onPick={(i) => act((x) => chooseWish(x, i), "jackpot")} onLeave={() => act(leaveThing)} />}
+      {pause?.k === "dawn" && <Dawn hud={hud} onPick={(more) => act((x) => dawnChoice(x, more), more ? "boss" : "click")} />}
       {menu && !pause && (
         <PauseMenu
           hud={hud}
@@ -559,44 +754,102 @@ function RoundBtn({ label, sub, k, c, size, ready, onPress }: { label: string; s
 
 /* ───────────── 레벨업 ───────────── */
 
-function LevelUp({ pause, rerolls, skips, onPick, onReroll }: { pause: Extract<Pause, { k: "level" }>; rerolls: number; skips: number; onPick(i: number): void; onReroll(): void }) {
+/** 지금 능력치 표 (메가봉크식 — 고를 때 옆에 늘 보임) */
+function StatPanel({ hud }: { hud: Hud }) {
+  const st = hud.stats;
+  const rows: [string, string][] = [
+    ["피해", pct(st.might)],
+    ["쿨타임", `−${Math.round(Math.min(0.6, st.cooldown) * 100)}%`],
+    ["범위", pct(st.area)],
+    ["투사체", `+${st.amount}`],
+    ["이동", pct(st.speed)],
+    ["최대 체력", String(hud.max)],
+    ["회복", `${Math.round(st.regen * 10) / 10}/초`],
+    ["방어", String(st.armor)],
+    ["줍는 범위", pct(st.magnet)],
+    ["행운", String(st.luck)],
+    ["경험치", pct(st.growth)],
+    ["치명타", `${Math.round((0.05 + st.luck * 0.015) * 100)}%`],
+  ];
+  return (
+    <div className="pts-win flex w-[150px] flex-col gap-[3px] px-[10px] py-[8px] text-[11px]">
+      <b className="pts-sub mb-[2px] text-[12px] text-[#ffd23a]">능력치</b>
+      {rows.map(([k, v]) => (
+        <span key={k} className="flex justify-between">
+          <span className="text-[#a9a2d6]">{k}</span>
+          <b>{v}</b>
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function LevelUp({ pause, hud, onPick, onReroll, onBanish }: { pause: Extract<Pause, { k: "level" }>; hud: Hud; onPick(i: number): void; onReroll(): void; onBanish(i: number): void }) {
   return (
     <div className="absolute inset-0 flex flex-col items-center justify-center" style={{ background: "rgba(7,5,26,0.72)" }}>
       <b className="pts-title pts-drop text-[34px] text-[#ffd23a]">{pause.jackpot ? "★ 잭팟! 전부 받아요 ★" : "LEVEL UP!"}</b>
-      <span className="pts-sub mt-[4px] mb-[18px] text-[13px] text-[#a9a2d6]">{pause.jackpot ? "아무 카드나 누르면 셋 다 가져가요" : "하나를 골라요 · 숫자키 1 2 3"}</span>
-      <div className="flex gap-[22px]">
-        {pause.cards.map((c, i) => {
-          const t = cardText(c);
-          const fuse = c.k === "fuse";
-          const col = fuse ? "#ffd23a" : RARITY_COLOR[c.rarity];
-          return (
-            <button key={i} type="button" onClick={() => onPick(i)} className={`pts-card pts-pop flex h-[250px] w-[200px] flex-col items-center px-[14px] pt-[16px] pb-[12px] text-left ${fuse || c.rarity === 2 ? "legend" : ""}`} style={{ "--r": col, animationDelay: `${i * 70}ms` } as CSSProperties}>
-              <span className="mb-[10px] self-stretch text-center text-[11px] font-bold" style={{ color: col }}>
-                {fuse ? "★ 합체 ★" : c.rarity ? `${RARITY_NAME[c.rarity]} +${c.to - c.from}` : c.from === 0 && c.k !== "coin" && c.k !== "heal" ? "NEW" : RARITY_NAME[0]}
-              </span>
-              {t.k ? <ItemIcon k={t.k} id={t.id!} size={52} /> : <span className="h-[52px] w-[52px] bg-[#ffd23a]" />}
-              <b className="mt-[12px] text-[17px] text-white">{t.name}</b>
-              {c.k === "weapon" || c.k === "passive" ? (
-                <span className="mt-[2px] text-[12px] text-[#a9a2d6]">{c.from === 0 ? `Lv ${c.to}` : `Lv ${c.from} → ${c.to}`}</span>
-              ) : fuse ? (
-                <span className="mt-[2px] flex items-center gap-[4px] text-[11px] text-[#ffd23a]">
-                  <ItemIcon k="weapon" id={WEAPONS[c.id as WeaponId].fuse![0]} size={16} />+<ItemIcon k="weapon" id={WEAPONS[c.id as WeaponId].fuse![1]} size={16} />
-                </span>
-              ) : null}
-              <span className="mt-[10px] text-center text-[13px] leading-[19px] text-[#e8e4ff] [word-break:keep-all]">{t.desc}</span>
-              <span className="pts-sub mt-auto text-[11px] text-[#6b63a3]">{i + 1}</span>
-            </button>
-          );
-        })}
+      <span className="pts-sub mt-[4px] mb-[16px] text-[13px] text-[#a9a2d6]">{pause.jackpot ? "아무 카드나 누르면 다 가져가요" : `하나를 골라요 · 숫자키 1~${pause.cards.length}`}</span>
+      <div className="flex items-start gap-[16px]">
+        <div className="flex gap-[14px]">
+          {pause.cards.map((c, i) => {
+            const t = cardText(c);
+            const sp = c.k === "fuse" || c.k === "evo" || c.k === "awake";
+            const col = sp ? "#ffd23a" : RARITY_COLOR[c.rarity];
+            const lines = cardLines(c);
+            const w = pause.cards.length > 3 ? 168 : 188;
+            return (
+              <div key={i} className="flex flex-col items-center gap-[6px]">
+                <button type="button" onClick={() => onPick(i)} className={`pts-card pts-pop flex h-[262px] flex-col items-center px-[12px] pt-[14px] pb-[10px] text-left ${sp || c.rarity === 2 ? "legend" : ""}`} style={{ width: w, "--r": col, animationDelay: `${i * 70}ms` } as CSSProperties}>
+                  <span className="mb-[8px] self-stretch text-center text-[11px] font-bold" style={{ color: col }}>
+                    {c.k === "fuse" ? "★ 합체 ★" : c.k === "evo" ? "★ 진화 ★" : c.k === "awake" ? "★ 각성 ★" : c.rarity ? `${RARITY_NAME[c.rarity]} +${c.to - c.from}` : c.from === 0 && c.k !== "coin" && c.k !== "heal" ? "NEW" : RARITY_NAME[0]}
+                  </span>
+                  {t.k ? <ItemIcon k={t.k} id={t.id!} size={48} /> : <span className="h-[48px] w-[48px] bg-[#ffd23a]" />}
+                  <b className="mt-[10px] text-center text-[16px] leading-[19px] text-white">{t.name}</b>
+                  {c.k === "weapon" || c.k === "passive" ? (
+                    <span className="mt-[2px] text-[12px] text-[#a9a2d6]">{c.from === 0 ? `Lv ${c.to}` : `Lv ${c.from} → ${c.to}`}</span>
+                  ) : c.k === "fuse" || c.k === "evo" ? (
+                    <span className="mt-[2px] flex items-center gap-[4px] text-[11px] text-[#ffd23a]">
+                      {c.k === "fuse" ? (
+                        <>
+                          <ItemIcon k="weapon" id={WEAPONS[c.id as WeaponId].fuse![0]} size={16} />+<ItemIcon k="weapon" id={WEAPONS[c.id as WeaponId].fuse![1]} size={16} />
+                        </>
+                      ) : (
+                        <>
+                          <ItemIcon k="weapon" id={WEAPONS[c.id as WeaponId].evo![0]} size={16} />+<ItemIcon k="passive" id={WEAPONS[c.id as WeaponId].evo![1]} size={16} />
+                        </>
+                      )}
+                    </span>
+                  ) : null}
+                  <span className="mt-[8px] text-center text-[12.5px] leading-[17px] text-[#e8e4ff] [word-break:keep-all]">{t.desc}</span>
+                  {lines.length > 0 && (
+                    <span className="mt-[6px] flex flex-col items-center gap-[1px] text-[11.5px] leading-[15px] text-[#7dff9a]">
+                      {lines.map((l) => (
+                        <span key={l}>{l}</span>
+                      ))}
+                    </span>
+                  )}
+                  <span className="pts-sub mt-auto text-[11px] text-[#6b63a3]">{i + 1}</span>
+                </button>
+                {hud.banish > 0 && !pause.jackpot && !sp && (c.k === "weapon" || c.k === "passive") && (
+                  <button type="button" onClick={() => onBanish(i)} className="pts-btn ghost h-[24px] px-[8px] text-[11px]" title="이번 판에서 다시 안 나와요">
+                    ✕ 지우기
+                  </button>
+                )}
+              </div>
+            );
+          })}
+        </div>
+        <StatPanel hud={hud} />
       </div>
       {!pause.jackpot && (
-        <div className="mt-[22px] flex gap-[14px]">
-          <button type="button" disabled={rerolls <= 0} onClick={onReroll} className="pts-btn h-[34px] px-[16px] text-[13px]" style={{ "--c": "#5fd0ff" } as CSSProperties}>
-            다시 뽑기 ({rerolls})
+        <div className="mt-[16px] flex gap-[14px]">
+          <button type="button" disabled={hud.rerolls <= 0} onClick={onReroll} className="pts-btn h-[34px] px-[16px] text-[13px]" style={{ "--c": "#5fd0ff" } as CSSProperties}>
+            다시 뽑기 ({hud.rerolls})
           </button>
-          <button type="button" disabled={skips <= 0} onClick={() => onPick(-1)} className="pts-btn ghost h-[34px] px-[16px] text-[13px]">
-            건너뛰기 +10코인 ({skips})
+          <button type="button" disabled={hud.skips <= 0} onClick={() => onPick(-1)} className="pts-btn ghost h-[34px] px-[16px] text-[13px]">
+            건너뛰기 +10금화 ({hud.skips})
           </button>
+          {hud.banish > 0 && <span className="pts-sub self-center text-[12px] text-[#a9a2d6]">카드 지우기 {hud.banish}번 남음</span>}
         </div>
       )}
     </div>
@@ -637,15 +890,15 @@ function Chest({ pause, onClose }: { pause: Extract<Pause, { k: "chest" }>; onCl
           const t = it ? cardText(it) : null;
           return (
             <div key={i} className="flex w-[110px] flex-col items-center">
-              <div className="relative flex h-[90px] w-[90px] items-center justify-center overflow-hidden bg-[#07051a]" style={{ boxShadow: `0 0 0 2px ${open ? "#ffd23a" : "#6b63a3"}` }}>
+              <div className="relative flex h-[90px] w-[90px] items-center justify-center overflow-hidden bg-[#07051a]" style={{ boxShadow: `0 0 0 2px ${open ? (it!.k === "relic" ? RELIC_RARITY_COLOR[RELICS[it!.id as RelicId].rarity] : "#ffd23a") : "#6b63a3"}` }}>
                 {open && t?.k ? (
                   <span className="pts-pop">
                     <ItemIcon k={t.k} id={t.id!} size={56} />
                   </span>
                 ) : (
                   <div className="pts-reel flex flex-col gap-[10px]">
-                    {(["shuriken", "bolt", "might", "fireball"] as const).map((x, j) => (
-                      <ItemIcon key={j} k={x === "might" ? "passive" : "weapon"} id={x} size={40} />
+                    {(["gym", "firecracker", "zap", "fork"] as const).map((x, j) => (
+                      <ItemIcon key={j} k="relic" id={x} size={40} />
                     ))}
                   </div>
                 )}
@@ -653,9 +906,9 @@ function Chest({ pause, onClose }: { pause: Extract<Pause, { k: "chest" }>; onCl
               <span className="mt-[8px] h-[34px] text-center text-[12px] leading-[16px] [word-break:keep-all]">
                 {open && t ? (
                   <>
-                    <b className={it?.k === "fuse" ? "text-[#ffd23a]" : "text-white"}>{t.name}</b>
+                    <b className={it?.k === "fuse" || it?.k === "evo" || it?.k === "awake" ? "text-[#ffd23a]" : "text-white"}>{t.name}</b>
                     <br />
-                    <span className="text-[#a9a2d6]">{it?.k === "fuse" ? "합체!" : `Lv ${it!.to}`}</span>
+                    <span style={{ color: it?.k === "relic" ? RELIC_RARITY_COLOR[RELICS[it.id as RelicId].rarity] : "#a9a2d6" }}>{it?.k === "fuse" ? "합체!" : it?.k === "evo" ? "진화!" : it?.k === "awake" ? "각성!" : it?.k === "relic" ? RELIC_RARITY_NAME[RELICS[it.id as RelicId].rarity] : `Lv ${it!.to}`}</span>
                   </>
                 ) : null}
               </span>
@@ -664,7 +917,7 @@ function Chest({ pause, onClose }: { pause: Extract<Pause, { k: "chest" }>; onCl
         })}
       </div>
       <div className="mt-[14px] flex items-center gap-[16px]">
-        <span className="pts-sub text-[15px] font-bold text-[#ffd23a]">+{pause.coins} 코인</span>
+        {pause.coins > 0 && <span className="pts-sub text-[15px] font-bold text-[#ffd23a]">+{pause.coins} 금화</span>}
         <button type="button" disabled={!done} onClick={onClose} className="pts-btn h-[38px] px-[26px] text-[15px]">
           {done ? "받기" : "두근두근…"}
         </button>
@@ -717,6 +970,120 @@ function PauseMenu({ hud, onResume, onQuit }: { hud: Hud; onResume(): void; onQu
           </button>
           <button type="button" onClick={onResume} className="pts-btn h-[36px] px-[22px] text-[14px]">
             계속 (ESC)
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ───────────── 성소 · 상인 · 우물 · 새벽 ───────────── */
+
+function BlessPick({ pause, onPick }: { pause: Extract<Pause, { k: "bless" }>; onPick(i: number): void }) {
+  return (
+    <div className="absolute inset-0 flex flex-col items-center justify-center" style={{ background: "rgba(7,5,26,0.72)" }}>
+      <b className="pts-title pts-drop text-[32px]" style={{ color: pause.gold ? "#ffd23a" : "#7ff0d8" }}>
+        {pause.gold ? "황금 성소의 축복" : "성소의 축복"}
+      </b>
+      <span className="pts-sub mt-[4px] mb-[18px] text-[13px] text-[#a9a2d6]">능력치 하나를 골라요 · 판 끝까지</span>
+      <div className="flex gap-[18px]">
+        {pause.opts.map((b, i) => {
+          const def = BLESS.find((x) => x.k === b.k)!;
+          const col = RELIC_RARITY_COLOR[b.rar];
+          return (
+            <button key={i} type="button" onClick={() => onPick(i)} className={`pts-card pts-pop flex h-[200px] w-[180px] flex-col items-center justify-center gap-[10px] ${b.rar >= 2 ? "legend" : ""}`} style={{ "--r": col, animationDelay: `${i * 70}ms` } as CSSProperties}>
+              <span className="text-[11px] font-bold" style={{ color: col }}>
+                {RELIC_RARITY_NAME[b.rar]}
+              </span>
+              <b className="text-[18px]">{def.name}</b>
+              <b className="pts-title text-[30px]" style={{ color: col }}>
+                {def.fmt === "pct" ? `+${Math.round(b.v * 100)}%` : `+${b.v}`}
+              </b>
+              <span className="pts-sub text-[11px] text-[#6b63a3]">{i + 1}</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function RelicCard({ id, i, foot, dim, onClick }: { id: RelicId; i: number; foot?: React.ReactNode; dim?: boolean; onClick(): void }) {
+  const d = RELICS[id];
+  const col = RELIC_RARITY_COLOR[d.rarity];
+  return (
+    <button type="button" onClick={onClick} className={`pts-card pts-pop flex h-[236px] w-[180px] flex-col items-center px-[12px] pt-[14px] pb-[10px] ${d.rarity >= 2 ? "legend" : ""}`} style={{ "--r": col, animationDelay: `${i * 70}ms`, opacity: dim ? 0.5 : 1 } as CSSProperties}>
+      <span className="mb-[8px] text-[11px] font-bold" style={{ color: col }}>
+        {RELIC_RARITY_NAME[d.rarity]} 유물
+      </span>
+      <ItemIcon k="relic" id={id} size={52} />
+      <b className="mt-[10px] text-[16px]">{d.name}</b>
+      <span className="mt-[8px] text-center text-[12.5px] leading-[17px] text-[#e8e4ff] [word-break:keep-all]">{d.desc}</span>
+      <span className="mt-auto">{foot}</span>
+    </button>
+  );
+}
+
+function ShopPick({ pause, gold, onBuy, onLeave }: { pause: Extract<Pause, { k: "shop" }>; gold: number; onBuy(i: number): void; onLeave(): void }) {
+  return (
+    <div className="absolute inset-0 flex flex-col items-center justify-center" style={{ background: "rgba(7,5,26,0.72)" }}>
+      <b className="pts-title pts-drop text-[30px] text-[#c58bff]">떠돌이 상인</b>
+      <span className="pts-sub mt-[4px] mb-[16px] text-[13px] text-[#a9a2d6]">「하나만 골라 가라냥. 사면 난 떠난다냥」 · 금화 {gold.toLocaleString()}</span>
+      <div className="flex gap-[16px]">
+        {pause.offers.map((o, i) => (
+          <RelicCard
+            key={o.id}
+            id={o.id}
+            i={i}
+            dim={gold < o.price}
+            onClick={() => onBuy(i)}
+            foot={
+              <b className="pts-sub text-[15px]" style={{ color: gold >= o.price ? "#ffd23a" : "#ff8fb8" }}>
+                ● {o.price}
+              </b>
+            }
+          />
+        ))}
+      </div>
+      <button type="button" onClick={onLeave} className="pts-btn ghost mt-[18px] h-[34px] px-[18px] text-[13px]">
+        그냥 갈래요 (ESC)
+      </button>
+    </div>
+  );
+}
+
+function WishPick({ pause, onPick, onLeave }: { pause: Extract<Pause, { k: "wish" }>; onPick(i: number): void; onLeave(): void }) {
+  return (
+    <div className="absolute inset-0 flex flex-col items-center justify-center" style={{ background: "rgba(7,5,26,0.72)" }}>
+      <b className="pts-title pts-drop text-[30px] text-[#7ad7ff]">소원 우물</b>
+      <span className="pts-sub mt-[4px] mb-[16px] text-[13px] text-[#a9a2d6]">동전을 던지고 소원을 빌어요 — 하나를 공짜로</span>
+      <div className="flex gap-[16px]">
+        {pause.offers.map((id, i) => (
+          <RelicCard key={id} id={id} i={i} onClick={() => onPick(i)} foot={<span className="pts-sub text-[11px] text-[#6b63a3]">{i + 1}</span>} />
+        ))}
+      </div>
+      <button type="button" onClick={onLeave} className="pts-btn ghost mt-[18px] h-[34px] px-[18px] text-[13px]">
+        나중에 (ESC)
+      </button>
+    </div>
+  );
+}
+
+function Dawn({ hud, onPick }: { hud: Hud; onPick(more: boolean): void }) {
+  return (
+    <div className="absolute inset-0 flex flex-col items-center justify-center" style={{ background: "linear-gradient(180deg, rgba(255,180,107,0.55), rgba(58,42,138,0.85))" }}>
+      <b className="pts-title pts-drop text-[44px] text-[#ffd23a]">새벽이 왔다!</b>
+      <span className="pts-sub mt-[6px] text-[14px]">자정의 시계지기를 쓰러뜨렸어요 · 처치 {hud.kills.toLocaleString()}</span>
+      <div className="pts-win mt-[20px] flex w-[520px] flex-col gap-[10px] px-[22px] py-[16px] text-[13px]">
+        <p>
+          <b className="text-[#ff9cc8]">오버타임</b> — 몹이 끝없이 몰려오고 30초마다 더 세져요. 버틴 시간만큼 <b>랭킹 기록</b> · 별사탕 · 코인이 늘어요. 쓰러져도 클리어는 그대로!
+        </p>
+        <div className="mt-[4px] flex justify-end gap-[12px]">
+          <button type="button" onClick={() => onPick(false)} className="pts-btn ghost h-[40px] px-[18px] text-[14px]">
+            여기서 정산
+          </button>
+          <button type="button" onClick={() => onPick(true)} className="pts-btn h-[40px] px-[22px] text-[15px]" style={{ "--c": "#ff4fa3", "--t": "#fff" } as CSSProperties}>
+            오버타임 도전! ▶
           </button>
         </div>
       </div>

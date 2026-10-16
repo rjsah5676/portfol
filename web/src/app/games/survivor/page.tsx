@@ -20,9 +20,10 @@ export default function SurvivorPage() {
     name: r.nick,
     member: true,
     avatar: r.avatar,
-    value: r.win ? "CLEAR" : mmss(r.sec),
+    value: r.win ? (r.ot ? `CLEAR +${mmss(r.ot)}` : "CLEAR") : mmss(r.sec),
     sub: (
       <span>
+        {r.depth ? `깊이 ${r.depth} · ` : ""}
         {HEROES[r.hero]?.name ?? r.hero} · Lv{r.lv} · 처치 {r.kills.toLocaleString()}
       </span>
     ),
@@ -40,7 +41,7 @@ export default function SurvivorPage() {
           ach="survivor"
           guide={SURVIVOR_GUIDE}
           rank={{
-            sub: "클리어 → 버틴 시간 → 처치 순",
+            sub: "밤의 깊이 → 클리어 → 버틴 시간(오버타임 포함) 순",
             open,
             onOpenChange: setOpen,
             top: rows.slice(0, 3),
@@ -50,7 +51,7 @@ export default function SurvivorPage() {
                   <li key={i} className="flex items-center gap-3 rounded-lg bg-white/5 px-3 py-2">
                     <b className="w-6 text-center">{i + 1}</b>
                     <span className="flex-1 truncate">{r.name}</span>
-                    <span className={`font-bold ${r.value === "CLEAR" ? "text-[#4ff0c8]" : ""}`}>{r.value}</span>
+                    <span className={`font-bold ${r.value.startsWith("CLEAR") ? "text-[#4ff0c8]" : ""}`}>{r.value}</span>
                     <span className="text-xs text-white/50">{r.sub}</span>
                   </li>
                 ))}

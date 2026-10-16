@@ -2,8 +2,10 @@
 
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import { useAuth } from "@/lib/AuthContext";
-import { FREE_HEROES, GRADE_FLOOR, HEROES, HERO_IDS, PASSIVES, RUN_SEC, WEAPONS, powerBonus, type HeroId, type Stats } from "@/lib/survivor/data";
+import { depthMul, FREE_HEROES, GRADE_FLOOR, HEROES, HERO_IDS, MAX_DEPTH, PASSIVES, RUN_SEC, SHARED_WEAPONS, WEAPONS, powerBonus, type HeroId, type Stats } from "@/lib/survivor/data";
 import { TEAM_BONUS, TEAM_NAME, TEAM_OF, UPGRADES, supportBonus, upBonus, upCost, type UpId } from "@/lib/survivor/progress";
+import { FEAT_NAME, QUEST, QUESTS, unlocksOf, type QuestDef, type QuestReward } from "@/lib/survivor/quests";
+import { RELICS, RELIC_IDS, RELIC_RARITY_COLOR, RELIC_RARITY_NAME } from "@/lib/survivor/relics";
 import type { RunResult } from "@/lib/survivor/sim";
 import { survivor, type FinishOut, type SurvivorProfile } from "@/realtime/survivor";
 import Token from "../Marble/Token";
@@ -29,6 +31,7 @@ export default function SurvivorApp() {
   const [scene, setScene] = useState<Scene>({ k: "title" });
   const [prof, setProf] = useState<SurvivorProfile | null>(null);
   const [team, setTeam] = useState<{ main: HeroId; sup: HeroId[] }>({ main: "kai", sup: [] });
+  const [depth, setDepth] = useState(0);
   const [note, setNote] = useState("");
   useEffect(() => {
     try {
@@ -62,17 +65,19 @@ export default function SurvivorApp() {
     const lvOf = (h: HeroId) => prof?.chars[h]?.lv ?? 0;
     const ub = upBonus(prof?.ups ?? {});
     const sb = supportBonus(main, sup);
+    const un = unlocksOf(prof?.quests ?? []);
+    const d = Math.max(0, Math.min(depth, (prof?.depth ?? -1) + 1));
     const setup: GameSetup = {
       hero: main,
       sup,
       seed: Math.floor(Math.random() * 2 ** 31),
       bonus: addAll(powerBonus(HEROES[main].grade, lvOf(main)), ub.stats, sb.stats),
-      opts: { sup, revive: ub.revive, rerolls: ub.rerolls },
+      opts: { sup, revive: ub.revive, rerolls: un.rerolls + ub.rerolls, skips: un.skips, banish: un.banish, gold: un.gold, weapons: un.weapons, relics: un.relics, depth: d },
     };
     let run: string | null = null;
     if (member) {
       try {
-        run = (await survivor.start(main, sup)).run;
+        run = (await survivor.start(main, sup, d)).run;
       } catch (e) {
         setNote((e as Error).message);
         return;
@@ -85,10 +90,10 @@ export default function SurvivorApp() {
     const run = runRef.current;
     setScene({ k: "result", r, fin: null, err: "" });
     if (!run) return;
-    void survivor.finish(run, { sec: r.sec, kills: r.kills, lv: r.lv, win: r.win, coins: r.coins }).then(
+    void survivor.finish(run, { sec: r.sec, kills: r.kills, lv: r.lv, win: r.win, ot: r.ot, q: r.q }).then(
       (fin) => {
         setScene((s) => (s.k === "result" ? { ...s, fin } : s));
-        setProf((p) => (p ? { ...p, ...fin.profile, stars: p.stars + fin.stars } : p));
+        setProf((p) => (p ? { ...p, ...fin.profile, stars: p.stars + fin.stars + fin.qStars } : p));
       },
       (e) => setScene((s) => (s.k === "result" ? { ...s, err: (e as Error).message } : s))
     );
@@ -97,7 +102,7 @@ export default function SurvivorApp() {
   return (
     <Stage>
       {scene.k === "title" && <Title onStart={() => setScene({ k: "pick" })} />}
-      {scene.k === "pick" && <Pick prof={prof} member={member} team={team} owned={owned} note={note} onTeam={saveTeam} onStart={() => void start()} onBack={() => setScene({ k: "title" })} onProf={setProf} />}
+      {scene.k === "pick" && <Pick prof={prof} member={member} team={team} owned={owned} note={note} depth={depth} onDepth={setDepth} onTeam={saveTeam} onStart={() => void start()} onBack={() => setScene({ k: "title" })} onProf={setProf} />}
       {scene.k === "play" && <Game key={scene.setup.seed} setup={scene.setup} onEnd={onEnd} onQuit={onQuit} />}
       {scene.k === "result" && <Result r={scene.r} fin={scene.fin} err={scene.err} member={member} onAgain={() => void start()} onPick={() => setScene({ k: "pick" })} />}
     </Stage>
@@ -134,6 +139,8 @@ function Pick({
   team,
   owned,
   note,
+  depth,
+  onDepth,
   onTeam,
   onStart,
   onBack,
@@ -144,6 +151,8 @@ function Pick({
   team: { main: HeroId; sup: HeroId[] };
   owned(h: HeroId): boolean;
   note: string;
+  depth: number;
+  onDepth(d: number): void;
   onTeam(t: { main: HeroId; sup: HeroId[] }): void;
   onStart(): void;
   onBack(): void;
@@ -152,6 +161,8 @@ function Pick({
   const [look, setLook] = useState<HeroId>(team.main);
   const [slot, setSlot] = useState(0);
   const [shop, setShop] = useState(false);
+  const [quests, setQuests] = useState(false);
+  const maxDepth = Math.min(MAX_DEPTH, (prof?.depth ?? -1) + 1);
   const h = HEROES[look];
   const w = WEAPONS[h.weapon];
   const lv = prof?.chars[look]?.lv ?? 0;
@@ -184,6 +195,9 @@ function Pick({
             <>
               <span className="pts-sub text-[#ffd23a]">● 코인 {(prof?.gold ?? 0).toLocaleString()}</span>
               <span className="pts-sub text-[#ff9cc8]">★ 별사탕 {(prof?.stars ?? 0).toLocaleString()}</span>
+              <button type="button" onClick={() => setQuests(true)} className="pts-btn h-[30px] px-[12px] text-[12px]" style={{ "--c": "#ffd23a" } as CSSProperties}>
+                퀘스트 {prof ? `${prof.quests.length}/${QUESTS.length}` : ""}
+              </button>
               <button type="button" onClick={() => setShop(true)} className="pts-btn h-[30px] px-[12px] text-[12px]" style={{ "--c": "#4ff0c8" } as CSSProperties}>
                 영구 강화
               </button>
@@ -304,12 +318,30 @@ function Pick({
             <p className="text-[#a9a2d6]">동료는 패시브 절반 + 필살기 쓸 때 거들기</p>
             {note && <p className="text-[#ff8fb8]">{note}</p>}
           </div>
-          <button type="button" onClick={onStart} disabled={!owned(team.main)} className="pts-btn h-[50px] shrink-0 px-[22px] text-[19px]" style={{ "--c": "#ff4fa3", "--t": "#fff" } as CSSProperties}>
-            출발! ▶
-          </button>
+          <div className="flex shrink-0 flex-col items-stretch gap-[6px]">
+            {member && (
+              <div className="flex items-center justify-between gap-[4px] px-[4px]" title="클리어하면 다음 깊이가 열려요 · 깊을수록 적이 세지고 보상이 늘어요">
+                <span className="text-[11px] text-[#a9a2d6]">밤의 깊이</span>
+                <button type="button" disabled={depth <= 0} onClick={() => onDepth(Math.max(0, depth - 1))} className="pts-btn ghost h-[22px] w-[22px] text-[10px]">
+                  ◀
+                </button>
+                <b className="pts-title w-[22px] text-center text-[17px]" style={{ color: depth ? "#c58bff" : "#fff" }}>
+                  {Math.min(depth, maxDepth)}
+                </b>
+                <button type="button" disabled={depth >= maxDepth} onClick={() => onDepth(Math.min(maxDepth, depth + 1))} className="pts-btn ghost h-[22px] w-[22px] text-[10px]">
+                  ▶
+                </button>
+                <span className="w-[34px] text-right text-[10px] text-[#ffd23a]">×{depthMul(Math.min(depth, maxDepth)).reward.toFixed(1)}</span>
+              </div>
+            )}
+            <button type="button" onClick={onStart} disabled={!owned(team.main)} className="pts-btn h-[46px] px-[22px] text-[19px]" style={{ "--c": "#ff4fa3", "--t": "#fff" } as CSSProperties}>
+              출발! ▶
+            </button>
+          </div>
         </div>
       </div>
       {shop && prof && <Shop prof={prof} onProf={onProf} onClose={() => setShop(false)} />}
+      {quests && prof && <Quests prof={prof} onClose={() => setQuests(false)} />}
     </div>
   );
 }
@@ -377,6 +409,135 @@ function Shop({ prof, onProf, onClose }: { prof: SurvivorProfile; onProf(p: Surv
   );
 }
 
+/* ───────────── 퀘스트 · 도감 ───────────── */
+
+export function rewardText(rw: QuestReward): { text: string; c: string } {
+  if (rw.k === "weapon") return { text: `무기 해금 · ${WEAPONS[rw.id].name}`, c: "#5fd0ff" };
+  if (rw.k === "relic") return { text: `유물 해금 · ${RELICS[rw.id].name}`, c: RELIC_RARITY_COLOR[RELICS[rw.id].rarity] };
+  if (rw.k === "feat") return { text: FEAT_NAME[rw.id], c: "#7dff9a" };
+  return { text: `별사탕 +${rw.n}`, c: "#ff9cc8" };
+}
+
+function RewardIcon({ rw, size = 22 }: { rw: QuestReward; size?: number }) {
+  if (rw.k === "weapon") return <ItemIcon k="weapon" id={rw.id} size={size} />;
+  if (rw.k === "relic") return <ItemIcon k="relic" id={rw.id} size={size} />;
+  return (
+    <span className="flex shrink-0 items-center justify-center text-[13px] font-bold" style={{ width: size, height: size, color: rw.k === "stars" ? "#ff9cc8" : "#7dff9a" }}>
+      {rw.k === "stars" ? "★" : "＋"}
+    </span>
+  );
+}
+
+function Quests({ prof, onClose }: { prof: SurvivorProfile; onClose(): void }) {
+  const [tab, setTab] = useState<"quest" | "dex">("quest");
+  useEffect(() => {
+    const k = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", k);
+    return () => window.removeEventListener("keydown", k);
+  }, [onClose]);
+  const done = new Set(prof.quests);
+  const un = unlocksOf(prof.quests);
+  const prog = (q: QuestDef) => (q.per === "total" ? Math.min(q.goal, q.value({ hero: "kai", sec: 0, kills: 0, lv: 1, win: false, depth: 0, q: {} as never }, prof.tot)) : 0);
+  // 안 깬 것 먼저, 그다음 깬 것
+  const list = [...QUESTS].sort((a, b) => Number(done.has(a.id)) - Number(done.has(b.id)));
+  return (
+    <div className="absolute inset-0 flex items-center justify-center" style={{ background: "rgba(7,5,26,0.8)" }} onClick={onClose}>
+      <div className="pts-win pts-pop flex h-[500px] w-[800px] flex-col px-[18px] py-[14px]" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-[8px]">
+          {(
+            [
+              ["quest", `퀘스트 ${prof.quests.length}/${QUESTS.length}`],
+              ["dex", "해금 도감"],
+            ] as const
+          ).map(([k, label]) => (
+            <button key={k} type="button" onClick={() => setTab(k)} className={`pts-btn h-[30px] px-[14px] text-[13px] ${tab === k ? "" : "ghost"}`} style={tab === k ? ({ "--c": "#ffd23a" } as CSSProperties) : undefined}>
+              {label}
+            </button>
+          ))}
+          <span className="ml-[6px] text-[12px] text-[#a9a2d6]">판이 끝날 때 확인해요 — 깨면 무기 · 유물 · 기능 · 별사탕이 열려요</span>
+          <button type="button" onClick={onClose} className="pts-btn ghost ml-auto h-[28px] w-[28px] text-[14px]">
+            ✕
+          </button>
+        </div>
+        {tab === "quest" ? (
+          <div className="mt-[10px] grid min-h-0 flex-1 grid-cols-2 content-start gap-[6px] overflow-y-auto pr-[4px]">
+            {list.map((q) => {
+              const ok = done.has(q.id);
+              const rw = rewardText(q.reward);
+              const v = prog(q);
+              return (
+                <div key={q.id} className="pts-box flex items-center gap-[8px] px-[8px] py-[6px]" style={{ opacity: ok ? 0.55 : 1 }}>
+                  <span className="text-[16px]">{ok ? "✅" : "⬜"}</span>
+                  <div className="min-w-0 flex-1">
+                    <b className="text-[13px]">{q.name}</b>
+                    <p className="text-[11.5px] leading-[15px] text-[#a9a2d6]">
+                      {q.desc}
+                      {q.per === "total" && !ok && (
+                        <span className="ml-[4px] text-[#ffd23a]">
+                          ({v.toLocaleString()}/{q.goal.toLocaleString()})
+                        </span>
+                      )}
+                    </p>
+                  </div>
+                  <span className="flex shrink-0 items-center gap-[4px] text-right text-[11px] leading-[14px]" style={{ color: rw.c, maxWidth: 130 }}>
+                    <RewardIcon rw={q.reward} size={20} />
+                    {rw.text}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="mt-[10px] flex min-h-0 flex-1 flex-col gap-[10px] overflow-y-auto pr-[4px] text-[12px]">
+            <div>
+              <span className="pts-tag text-[11px]">공용 무기 {un.weapons.length}/{SHARED_WEAPONS.length}</span>
+              <div className="mt-[6px] flex flex-wrap gap-[8px]">
+                {SHARED_WEAPONS.map((id) => {
+                  const on = un.weapons.includes(id);
+                  return (
+                    <span key={id} className="pts-box flex items-center gap-[6px] px-[8px] py-[4px]" style={{ opacity: on ? 1 : 0.4 }}>
+                      <ItemIcon k="weapon" id={id} size={22} />
+                      {on ? WEAPONS[id].name : "? ? ?"}
+                    </span>
+                  );
+                })}
+              </div>
+            </div>
+            <div>
+              <span className="pts-tag text-[11px]">유물 {un.relics.length}/{RELIC_IDS.length}</span>
+              <div className="mt-[6px] grid grid-cols-4 gap-[6px]">
+                {RELIC_IDS.map((id) => {
+                  const d = RELICS[id];
+                  const on = un.relics.includes(id);
+                  const q = QUESTS.find((x) => x.reward.k === "relic" && x.reward.id === id);
+                  return (
+                    <div key={id} className="pts-box flex items-start gap-[6px] px-[6px] py-[5px]" style={{ opacity: on ? 1 : 0.55 }}>
+                      <span style={{ filter: on ? undefined : "brightness(0.2)" }}>
+                        <ItemIcon k="relic" id={id} size={26} />
+                      </span>
+                      <div className="min-w-0">
+                        <b className="text-[11.5px]" style={{ color: RELIC_RARITY_COLOR[d.rarity] }}>
+                          {on ? d.name : "? ? ?"}
+                        </b>
+                        <p className="text-[10.5px] leading-[13px] text-[#a9a2d6]">{on ? d.desc : q ? `퀘스트 「${q.name}」` : RELIC_RARITY_NAME[d.rarity]}</p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+            <div className="text-[12px] text-[#a9a2d6]">
+              기능: 다시 뽑기 {un.rerolls} · 건너뛰기 {un.skips} · 카드 지우기 {un.banish} · 시작 금화 {un.gold} <span className="text-[#6b63a3]">(영구 강화 · 해금 합)</span>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /* ───────────── 결과 ───────────── */
 
 function Result({ r, fin, err, member, onAgain, onPick }: { r: RunResult; fin: FinishOut | null; err: string; member: boolean; onAgain(): void; onPick(): void }) {
@@ -401,7 +562,7 @@ function Result({ r, fin, err, member, onAgain, onPick }: { r: RunResult; fin: F
               ["버틴 시간", r.win ? "클리어" : fmt(r.sec), r.win ? "#ffd23a" : "#fff"],
               ["레벨", String(r.lv), "#5fd0ff"],
               ["처치", r.kills.toLocaleString(), "#ff8fb8"],
-              ["코인", r.coins.toLocaleString(), "#ffd23a"],
+              [r.ot ? "오버타임" : "금화", r.ot ? `+${fmt(r.ot)}` : r.gold.toLocaleString(), r.ot ? "#ff9cc8" : "#ffd23a"],
             ].map(([k, v, c]) => (
               <div key={k} className="pts-box px-[6px] py-[8px]">
                 <span className="text-[11px] text-[#a9a2d6]">{k}</span>
@@ -424,6 +585,16 @@ function Result({ r, fin, err, member, onAgain, onPick }: { r: RunResult; fin: F
                 <span className="w-[70px] text-right">{w.dmg.toLocaleString()}</span>
               </div>
             ))}
+            {r.relics.length > 0 && (
+              <div className="mt-[2px] flex flex-wrap gap-[4px]">
+                {r.relics.map((x) => (
+                  <span key={x.id} className="relative" title={RELICS[x.id].name}>
+                    <ItemIcon k="relic" id={x.id} size={20} />
+                    {x.n > 1 && <b className="absolute -right-[2px] -bottom-[3px] text-[9px]">{x.n}</b>}
+                  </span>
+                ))}
+              </div>
+            )}
             {r.passives.length > 0 && (
               <div className="mt-[4px] flex flex-wrap gap-[6px]">
                 {r.passives.map((p) => (
@@ -440,7 +611,10 @@ function Result({ r, fin, err, member, onAgain, onPick }: { r: RunResult; fin: F
               <span className="text-[#a9a2d6]">로그인하면 별사탕(캐릭터 뽑기) · 코인(영구 강화) · 랭킹이 쌓여요</span>
             ) : fin ? (
               <>
-                <span className="pts-box px-[10px] py-[4px] text-[#ff9cc8]">★ 별사탕 +{fin.stars}{fin.first ? " (오늘 첫 클리어!)" : ""}</span>
+                <span className="pts-box px-[10px] py-[4px] text-[#ff9cc8]">
+                  ★ 별사탕 +{fin.stars + fin.qStars}
+                  {fin.first ? " (오늘 첫 클리어!)" : ""}
+                </span>
                 <span className="pts-box px-[10px] py-[4px] text-[#ffd23a]">● 코인 +{fin.gold}</span>
                 <span className="pts-box px-[10px] py-[4px] text-[#4ff0c8]">{fin.best ? "최고 기록! " : ""}랭킹 {fin.rank}위</span>
               </>
@@ -450,6 +624,25 @@ function Result({ r, fin, err, member, onAgain, onPick }: { r: RunResult; fin: F
               <span className="pts-blink text-[#a9a2d6]">보상 받는 중…</span>
             )}
           </div>
+          {fin && fin.quests.length > 0 && (
+            <div className="mt-[8px] flex flex-col gap-[4px]">
+              {fin.quests.slice(0, 4).map((id) => {
+                const q = QUEST[id];
+                const rw = rewardText(q.reward);
+                return (
+                  <div key={id} className="pts-pop flex items-center gap-[8px] text-[12.5px]">
+                    <span className="pts-tag text-[10px]" style={{ background: "#ffd23a" }}>
+                      퀘스트 완료
+                    </span>
+                    <b>{q.name}</b>
+                    <RewardIcon rw={q.reward} size={18} />
+                    <span style={{ color: rw.c }}>{rw.text}</span>
+                  </div>
+                );
+              })}
+              {fin.quests.length > 4 && <span className="text-[11px] text-[#a9a2d6]">… 외 {fin.quests.length - 4}개</span>}
+            </div>
+          )}
           <div className="mt-auto flex justify-end gap-[12px] pt-[16px]">
             <button type="button" onClick={onPick} className="pts-btn ghost h-[40px] px-[16px] text-[14px]">
               캐릭터 바꾸기
@@ -460,7 +653,10 @@ function Result({ r, fin, err, member, onAgain, onPick }: { r: RunResult; fin: F
           </div>
         </div>
       </div>
-      <span className="pts-sub absolute bottom-[12px] text-[11px] text-white/60">{r.win ? `${fmt(RUN_SEC)} 생존 · 자정의 시계지기 처치` : "레벨업 카드로 빌드를 모아 보세요"}</span>
+      <span className="pts-sub absolute bottom-[12px] text-[11px] text-white/60">
+        {r.depth > 0 ? `밤의 깊이 ${r.depth} · ` : ""}
+        {r.win ? `${fmt(RUN_SEC)} 생존 · 자정의 시계지기 처치${r.ot ? ` · 오버타임 ${fmt(r.ot)}` : ""}` : "성소 · 상자 · 상인을 들러 빌드를 키워 보세요"}
+      </span>
     </div>
   );
 }

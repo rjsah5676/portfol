@@ -4,8 +4,19 @@
  */
 import { rnd, rndInt, type Rng } from "../defense/rng";
 import {
+  AWAKEN_NEED,
   BASE_STATS,
+  BASE_WEAPONS,
+  BLESS,
+  boxCost,
   DASH_CD,
+  depthMul,
+  EVOLUTIONS,
+  FLAG_CHARGE,
+  OT_STEP,
+  SHRINE_CHARGE,
+  TRIAL_R,
+  TRIAL_SEC,
   DT,
   ENEMIES,
   EVENTS,
@@ -26,7 +37,9 @@ import {
   xpNeed,
   type EnemyDef,
   type EnemyKind,
+  type FlagBuff,
   type HeroId,
+  type ThingKind,
   type PassiveId,
   type PickupKind,
   type Rarity,
@@ -34,6 +47,8 @@ import {
   type WeaponId,
   type WeaponLv,
 } from "./data";
+import { emptyQ, type RunQ } from "./quests";
+import { BASE_RELICS, RELICS, RELIC_IDS, relicMax, relicPrice, relicRarityWeights, type RelicId, type RelicRarity } from "./relics";
 
 /* ───────────── 상태 ───────────── */
 
@@ -46,7 +61,11 @@ export interface Input {
 }
 
 export interface BossAI {
-  phase: "chase" | "warn" | "dash" | "ring" | "summon";
+  phase: "chase" | "warn" | "dash" | "ring" | "summon" | "slam";
+  /** 나온 뒤 흐른 시간 (격노 타이머) */
+  age: number;
+  /** 시간 초과 격노 */
+  rage: boolean;
   t: number;
   dx: number;
   dy: number;
@@ -77,6 +96,11 @@ export interface Enemy {
   stun: number;
   /** 더 아프게 맞음 (몽글 꿈나라) */
   vuln: number;
+  /** 얼음 (얼음 사탕 — 그림용, 못 움직이는 건 stun) */
+  ice: number;
+  /** 독: 남은 시간 · 초당 피해 */
+  poison: number;
+  poisonD: number;
   /** 무기 칸마다 마지막으로 맞은 시각 (계속 닿는 무기의 재타격 간격) */
   hitAt: number[];
   /** 걷기 애니메이션 · 흔들림 */
@@ -113,7 +137,7 @@ export interface Shot {
 /** 시간이 지나며 피해를 주는 자리 (택배 낙하 · 불바다 · 회전 차기 그림) */
 export interface Zone {
   alive: boolean;
-  k: "drop" | "fire" | "rain" | "spin" | "moon" | "grenade" | "cone" | "whip" | "pulse" | "shell";
+  k: "drop" | "fire" | "rain" | "spin" | "moon" | "grenade" | "cone" | "whip" | "pulse" | "shell" | "slam";
   /** 방향 (cone · whip) */
   dx: number;
   dy: number;
@@ -173,9 +197,34 @@ export interface Prop {
   hp: number;
 }
 
+/** 맵 오브젝트 (성소 · 상인 · 상자 · 시련 …) */
+export interface Thing {
+  id: number;
+  alive: boolean;
+  k: ThingKind;
+  x: number;
+  y: number;
+  /** 충전 진행 (초) · 시련 남은 시간 */
+  t: number;
+  /** 시련 진행 중 */
+  on: boolean;
+  /** 상자 값 */
+  cost: number;
+  /** 상인 · 우물이 내놓은 유물 (다시 와도 같은 것) */
+  offers?: RelicId[];
+}
+
+export interface Bless {
+  k: keyof Stats;
+  v: number;
+  rar: RelicRarity;
+}
+
 export interface WeaponSlot {
   id: WeaponId;
   lv: number;
+  /** 고유 무기 각성 */
+  awake?: boolean;
   t: number;
   /** 회전 각 (orbit) */
   ang: number;
@@ -186,8 +235,8 @@ export interface WeaponSlot {
 }
 
 export interface Card {
-  k: "weapon" | "passive" | "fuse" | "coin" | "heal";
-  id?: WeaponId | PassiveId;
+  k: "weapon" | "passive" | "fuse" | "evo" | "awake" | "relic" | "coin" | "heal";
+  id?: WeaponId | PassiveId | RelicId;
   /** 지금 레벨 (0 = 새로) */
   from: number;
   /** 받으면 레벨 */
@@ -197,7 +246,15 @@ export interface Card {
 
 export type Pause =
   | { k: "level"; cards: Card[]; jackpot: boolean }
-  | { k: "chest"; items: Card[]; coins: number; first: boolean; big: boolean };
+  | { k: "chest"; items: Card[]; coins: number; first: boolean; big: boolean }
+  /** 충전 성소: 능력치 셋 중 하나 */
+  | { k: "bless"; opts: Bless[]; gold: boolean }
+  /** 떠돌이 상인 */
+  | { k: "shop"; offers: { id: RelicId; price: number }[]; thing: number }
+  /** 소원 우물 */
+  | { k: "wish"; offers: RelicId[]; thing: number }
+  /** 시계지기 처치 — 정산 / 오버타임 */
+  | { k: "dawn" };
 
 export type Ev =
   | { t: "dmg"; x: number; y: number; v: number; crit: boolean }
@@ -218,6 +275,16 @@ export type Ev =
   | { t: "dash" }
   | { t: "fuse"; id: WeaponId }
   | { t: "prop"; x: number; y: number }
+  | { t: "evo"; id: WeaponId }
+  | { t: "awake"; id: WeaponId }
+  | { t: "relic"; id: RelicId }
+  | { t: "thing"; k: ThingKind; text: string }
+  | { t: "nogold"; need: number }
+  | { t: "trial"; ok: boolean }
+  | { t: "rage"; name: string }
+  | { t: "ot"; lv: number }
+  | { t: "zap"; x0: number; y0: number; x1: number; y1: number }
+  | { t: "shield" }
   | { t: "win" }
   | { t: "dead" };
 
@@ -241,7 +308,8 @@ export interface Player {
   lv: number;
   xp: number;
   kills: number;
-  coins: number;
+  /** 판 안 금화 (상자 · 상인 · 성소에 씀) */
+  gold: number;
   revive: number;
 }
 
@@ -291,6 +359,41 @@ export interface Run {
   bonus: Partial<Stats>;
   /** 동료 필살기 거들기 대기 */
   assist: { hero: HeroId; t: number }[];
+  /** 유물 (개수) */
+  relics: Partial<Record<RelicId, number>>;
+  /** 얻은 순서 (화면 · 결과) */
+  relicOrder: RelicId[];
+  /** 성소 축복 합 */
+  blessed: Partial<Stats>;
+  things: Thing[];
+  thingT: number;
+  /** 종류별로 다음에 나올 수 있는 시각 */
+  cool: Partial<Record<ThingKind, number>>;
+  /** 상자 연 수 (값이 오름) */
+  boxes: number;
+  /** 탐욕 저주 (적 체력 · 수 · 경험치 +) */
+  curse: number;
+  /** 다음 상인 · 우물 */
+  merchantT: number;
+  /** 정해진 시각에 나오는 것 (시련 · 우물) */
+  sched: { at: number; k: ThingKind }[];
+  /** 레벨업 카드에 나올 수 있는 것 (해금) */
+  pool: { weapons: WeaponId[]; relics: RelicId[] };
+  banish: number;
+  banned: string[];
+  depth: number;
+  /** 오버타임 (클리어 뒤 계속) */
+  ot: boolean;
+  otT: number;
+  otLv: number;
+  /** 마지막으로 맞은 시각 */
+  hitAt: number;
+  bubbleT: number;
+  balloonT: number;
+  /** 퀘스트용 */
+  q: RunQ;
+  /** 깃발 버프 */
+  flag: { k: FlagBuff; t: number } | null;
 }
 
 /* ───────────── 만들기 ───────────── */
@@ -303,7 +406,17 @@ export interface RunOpts {
   /** 응원 동료 (최대 2) */
   sup?: HeroId[];
   revive?: number;
+  /** 다시 뽑기 · 건너뛰기 · 카드 지우기 (해금 + 영구 강화 합) */
   rerolls?: number;
+  skips?: number;
+  banish?: number;
+  /** 시작 금화 */
+  gold?: number;
+  /** 해금된 공용 무기 · 유물 (없으면 기본) */
+  weapons?: WeaponId[];
+  relics?: RelicId[];
+  /** 밤의 깊이 */
+  depth?: number;
 }
 
 export function newRun(hero: HeroId, seed: number, bonus: Partial<Stats> = {}, opts: RunOpts = {}): Run {
@@ -317,7 +430,7 @@ export function newRun(hero: HeroId, seed: number, bonus: Partial<Stats> = {}, o
     rng: { r: seed | 0 },
     t: 0,
     tick: 0,
-    p: { x: 0, y: 0, hp: 0, fx: 1, fy: 0, face: 1, moving: false, inv: 0, dashT: 0, dashCd: 0, dx: 1, dy: 0, ult: 0, ultT: 0, lv: 1, xp: 0, kills: 0, coins: 0, revive: 0 },
+    p: { x: 0, y: 0, hp: 0, fx: 1, fy: 0, face: 1, moving: false, inv: 0, dashT: 0, dashCd: 0, dx: 1, dy: 0, ult: 0, ultT: 0, lv: 1, xp: 0, kills: 0, gold: opts.gold ?? 0, revive: 0 },
     stats,
     weapons: [],
     passives: [],
@@ -330,8 +443,8 @@ export function newRun(hero: HeroId, seed: number, bonus: Partial<Stats> = {}, o
     props: [],
     pause: null,
     pending: 0,
-    rerolls: 2 + (opts.rerolls ?? 0),
-    skips: 2,
+    rerolls: opts.rerolls ?? 1,
+    skips: opts.skips ?? 1,
     over: false,
     win: false,
     bossId: -1,
@@ -349,6 +462,34 @@ export function newRun(hero: HeroId, seed: number, bonus: Partial<Stats> = {}, o
     sup: opts.sup ?? [],
     bonus: { ...bonus },
     assist: [],
+    relics: {},
+    relicOrder: [],
+    blessed: {},
+    things: [],
+    thingT: 3,
+    cool: {},
+    boxes: 0,
+    curse: 0,
+    merchantT: 75,
+    sched: [
+      { at: 130, k: "trial" },
+      { at: 200, k: "fountain" },
+      { at: 350, k: "trial" },
+      { at: 440, k: "fountain" },
+      { at: 515, k: "trial" },
+    ],
+    pool: { weapons: opts.weapons ?? BASE_WEAPONS, relics: opts.relics ?? BASE_RELICS },
+    banish: opts.banish ?? 0,
+    banned: [],
+    depth: Math.max(0, opts.depth ?? 0),
+    ot: false,
+    otT: 0,
+    otLv: 0,
+    hitAt: 0,
+    bubbleT: 0,
+    balloonT: 0,
+    q: emptyQ(),
+    flag: null,
   };
   r.p.hp = maxHp(r);
   r.p.revive = opts.revive ?? 0;
@@ -372,7 +513,12 @@ function recomputeStats(r: Run) {
   const s: Stats = { ...BASE_STATS };
   addStats(s, HEROES[r.hero].passive.stat);
   addStats(s, r.bonus);
+  addStats(s, r.blessed);
   for (const ps of r.passives) addStats(s, PASSIVES[ps.id].per, ps.lv);
+  for (const id of RELIC_IDS) {
+    const n = r.relics[id];
+    if (n && RELICS[id].stat) addStats(s, RELICS[id].stat!, n);
+  }
   const before = maxHp(r);
   r.stats = s;
   // 최대 체력이 늘면 그만큼 채움
@@ -397,6 +543,38 @@ function givePassive(r: Run, id: PassiveId, lv: number) {
   recomputeStats(r);
 }
 
+/** 유물 얻기 */
+function giveRelic(r: Run, id: RelicId) {
+  const n = r.relics[id] ?? 0;
+  if (n >= relicMax(id)) return;
+  r.relics[id] = n + 1;
+  if (!n) r.relicOrder.push(id);
+  r.q.relics++;
+  if (RELICS[id].rarity === 3) r.q.legends++;
+  if (id === "phoenix") r.p.revive++;
+  if (RELICS[id].stat) recomputeStats(r);
+  r.ev.push({ t: "relic", id });
+}
+const rel = (r: Run, id: RelicId) => r.relics[id] ?? 0;
+
+/** 진화: 바탕 무기 자리에 진화 무기 */
+function evolve(r: Run, id: WeaponId) {
+  const [base] = WEAPONS[id].evo!;
+  const at = r.weapons.findIndex((w) => w.id === base);
+  if (at < 0) return;
+  r.weapons[at] = { id, lv: 1, t: 0.2, ang: 0, burst: 0, burstT: 0, dmgDone: r.weapons[at].dmgDone };
+  r.q.evos++;
+  r.ev.push({ t: "evo", id });
+}
+
+function awaken(r: Run, id: WeaponId) {
+  const w = r.weapons.find((x) => x.id === id);
+  if (!w || w.awake) return;
+  w.awake = true;
+  r.q.awakens++;
+  r.ev.push({ t: "awake", id });
+}
+
 function fuse(r: Run, id: WeaponId) {
   const [a, b] = WEAPONS[id].fuse!;
   const ia = r.weapons.findIndex((w) => w.id === a);
@@ -406,6 +584,7 @@ function fuse(r: Run, id: WeaponId) {
   const at = r.weapons.findIndex((w) => w.id === a);
   r.weapons[at] = { id, lv: 1, t: 0.2, ang: 0, burst: 0, burstT: 0, dmgDone: wa?.dmgDone ?? 0 };
   r.fused.push(id);
+  r.q.fuses++;
   r.ev.push({ t: "fuse", id });
 }
 
@@ -426,11 +605,13 @@ function wstat(r: Run, ws: WeaponSlot): W {
   const b: WeaponLv = def.lv[Math.min(def.lv.length, ws.lv) - 1];
   const s = r.stats;
   const multi = def.pattern !== "aura" && def.pattern !== "spin";
+  const aw = ws.awake ? 1 : 0;
+  const haste = r.buff.haste > 0 || r.flag?.k === "haste";
   return {
-    dmg: b.dmg * (1 + s.might),
-    cd: b.cd * Math.max(0.4, 1 - s.cooldown) * (r.buff.haste > 0 ? 0.45 : 1),
-    n: b.n + (multi ? s.amount : 0),
-    size: b.size * (1 + s.area),
+    dmg: b.dmg * (1 + s.might) * (aw ? 1.6 : 1),
+    cd: b.cd * Math.max(0.4, 1 - s.cooldown) * (haste ? 0.45 : 1) * (aw ? 0.85 : 1),
+    n: b.n + (multi ? s.amount : 0) + (aw && multi ? 1 : 0),
+    size: b.size * (1 + s.area) * (aw ? 1.2 : 1),
     spd: b.spd * (1 + s.pspeed),
     pierce: b.pierce,
     dur: b.dur * (1 + s.duration),
@@ -520,11 +701,27 @@ function onScreen(r: Run, e: Enemy, pad = 0) {
 
 /* ───────────── 피해 ───────────── */
 
+/** 유물 발동으로 나온 피해 (다시 발동하지 않게) */
+const PROC = -2;
+
 function hurt(r: Run, e: Enemy, dmg: number, slot: number, kb: number, fromX: number, fromY: number) {
   if (!e.alive) return;
   const s = r.stats;
-  const crit = r.buff.crit > 0 || rnd(r.rng) < 0.05 + s.luck * 0.015;
-  const v = Math.max(1, Math.round(dmg * (crit ? 2 : 1) * (e.vuln > 0 ? 1.5 : 1) * (0.9 + rnd(r.rng) * 0.2)));
+  // 조건부 피해 (유물 · 깃발)
+  let mul = 1;
+  if (rel(r, "glasses") && e.hp >= e.maxHp * 0.9) mul += 0.25 * rel(r, "glasses");
+  if (rel(r, "pillow") && !r.p.moving) mul += 0.2 * rel(r, "pillow");
+  if (rel(r, "tailwind") && r.p.moving) mul += 0.1 * rel(r, "tailwind");
+  if (r.flag?.k === "might") mul += 0.5;
+  const whet = rel(r, "whetstone");
+  const crit = r.buff.crit > 0 || rnd(r.rng) < 0.05 + s.luck * 0.015 + whet * 0.06;
+  let cm = crit ? 2 + whet * 0.3 : 1;
+  let mega = false;
+  if (crit && rel(r, "fork") && rnd(r.rng) < 0.15 * rel(r, "fork")) {
+    cm = 5 + whet * 0.3;
+    mega = true;
+  }
+  const v = Math.max(1, Math.round(dmg * mul * cm * (e.vuln > 0 ? 1.5 : 1) * (0.9 + rnd(r.rng) * 0.2)));
   e.hp -= v;
   e.flash = 0.08;
   if (slot >= 0 && r.weapons[slot]) r.weapons[slot].dmgDone += Math.min(v, e.hp + v);
@@ -536,10 +733,50 @@ function hurt(r: Run, e: Enemy, dmg: number, slot: number, kb: number, fromX: nu
     e.kx += (dx / d) * k;
     e.ky += (dy / d) * k;
   }
-  r.ev.push({ t: "dmg", x: e.x, y: e.y - e.r, v, crit });
+  r.ev.push({ t: "dmg", x: e.x, y: e.y - e.r, v, crit: crit || mega });
+  // 사신의 낫: 조금 남은 일반 적은 바로
+  const sc = rel(r, "scythe");
+  if (sc && e.hp > 0 && !e.def.boss && !e.elite && e.hp <= e.maxHp * Math.min(0.24, 0.08 * sc)) e.hp = 0;
   if (e.hp <= 0) {
     kill(r, e);
     if (slot >= 0 && r.weapons[slot] && WEAPONS[r.weapons[slot].id].fx === "coin" && rnd(r.rng) < 0.3) dropPickup(r, "coin", e.x, e.y, 1);
+  }
+  if (slot !== PROC) procs(r, e, dmg);
+}
+
+/** 맞힐 때 발동하는 유물 */
+function procs(r: Run, e: Enemy, dmg: number) {
+  const fc = rel(r, "firecracker");
+  if (fc && rnd(r.rng) < 0.07 * fc) {
+    const rad = 24 * (1 + r.stats.area);
+    r.ev.push({ t: "boom", x: e.x, y: e.y, r: rad, c: "#ff8a3d" });
+    aoe(r, e.x, e.y, rad, dmg * 0.6, PROC, 20);
+  }
+  const ic = rel(r, "icecube");
+  if (ic && e.alive && rnd(r.rng) < 0.06 * ic) {
+    if (e.def.boss) e.slow = Math.max(e.slow, 1.5);
+    else {
+      e.stun = Math.max(e.stun, 1.2);
+      e.ice = 1.2;
+    }
+  }
+  const zp = rel(r, "zap");
+  if (zp && rnd(r.rng) < 0.07 * zp) {
+    let from: Enemy = e;
+    const skip = new Set<number>([e.id]);
+    for (let i = 0; i < 3; i++) {
+      const n = nearest(r, from.x, from.y, 90, skip);
+      if (!n) break;
+      skip.add(n.id);
+      r.ev.push({ t: "zap", x0: from.x, y0: from.y - 4, x1: n.x, y1: n.y - 4 });
+      hurt(r, n, dmg * 0.8, PROC, 0, from.x, from.y);
+      from = n;
+    }
+  }
+  const po = rel(r, "poison");
+  if (po && e.alive && rnd(r.rng) < 0.1 * po) {
+    e.poison = 3;
+    e.poisonD = Math.max(e.poisonD, dmg * 0.4);
   }
 }
 
@@ -569,6 +806,14 @@ function kill(r: Run, e: Enemy) {
   e.alive = false;
   const p = r.p;
   p.kills++;
+  const fg = rel(r, "fang");
+  if (fg && rnd(r.rng) < 0.04 * fg) p.hp = Math.min(maxHp(r), p.hp + 3);
+  const bp = rel(r, "backpack");
+  if (bp && rnd(r.rng) < 0.06 * bp) {
+    const rad = 30 * (1 + r.stats.area);
+    r.ev.push({ t: "boom", x: e.x, y: e.y, r: rad, c: "#ffb03a" });
+    aoe(r, e.x, e.y, rad, 25 * (1 + r.stats.might) * (1 + r.t / 300), PROC, 30);
+  }
   p.ult = Math.min(ULT_NEED, p.ult + (e.def.boss ? 40 : e.elite ? 15 : 1));
   r.ev.push({ t: "kill", x: e.x, y: e.y, kind: e.kind, elite: e.elite, boss: !!e.def.boss });
   dropGem(r, e.x, e.y, e.xp);
@@ -576,19 +821,27 @@ function kill(r: Run, e: Enemy) {
     dropPickup(r, "chest", e.x, e.y, 1);
     dropPickup(r, "bag", e.x + 14, e.y, 50);
     if (r.bossId === e.id) r.bossId = -1;
+    const age = Math.max(1, Math.round(e.boss?.age ?? 0));
+    if (e.kind === "boss_jelly") r.q.jelly = r.q.jelly || age;
     if (e.kind === FINAL_BOSS) {
-      r.win = true;
-      r.arena = null;
-      r.ev.push({ t: "win" });
+      r.q.clock = r.q.clock || age;
+      if (!r.win) {
+        r.win = true;
+        r.arena = null;
+        r.ev.push({ t: "win" });
+        // 정산할지 오버타임으로 더 버틸지
+        r.pause = { k: "dawn" };
+      }
     } else r.arena = null;
     return;
   }
   if (e.elite) {
+    r.q.elites++;
     dropPickup(r, "chest", e.x, e.y, 0);
     return;
   }
   const x = rnd(r.rng);
-  if (x < 0.018) dropPickup(r, "coin", e.x, e.y, 1);
+  if (x < 0.035) dropPickup(r, "coin", e.x, e.y, 1 + Math.floor(r.t / 200));
   else if (x < 0.0205) dropPickup(r, "meat", e.x, e.y, 0);
   else if (x < 0.0215) dropPickup(r, "magnet", e.x, e.y, 0);
 }
@@ -612,7 +865,10 @@ function dropPickup(r: Run, k: PickupKind, x: number, y: number, v: number) {
 
 function spawnEnemy(r: Run, kind: EnemyKind, x: number, y: number, elite = false): Enemy {
   const def = ENEMIES[kind];
-  const hpMul = def.boss ? 1 : 1 + r.t / 140;
+  const dm = depthMul(r.depth);
+  // 오버타임: 30초마다 체력 · 피해가 계속 오름
+  const ot = 1 + r.otLv * 0.25;
+  const hpMul = (def.boss ? 1 : 1 + r.t / 140) * dm.hp * (1 + r.curse) * ot;
   const e: Enemy = {
     id: r.nextId++,
     alive: true,
@@ -626,17 +882,20 @@ function spawnEnemy(r: Run, kind: EnemyKind, x: number, y: number, elite = false
     maxHp: 0,
     r: def.r * (elite ? 1.7 : 1),
     speed: def.speed * (elite ? 0.9 : 1) * (0.92 + rnd(r.rng) * 0.16),
-    dmg: def.dmg * (elite ? 1.5 : 1) * (1 + r.t / 600),
-    xp: def.xp * (elite ? 10 : 1),
+    dmg: def.dmg * (elite ? 1.5 : 1) * (1 + Math.min(r.t, 900) / 600) * dm.dmg * (1 + r.curse * 0.5) * (1 + r.otLv * 0.12),
+    xp: def.xp * (elite ? 10 : 1) * (1 + r.curse * 0.5),
     elite,
     flash: 0,
     slow: 0,
     stun: 0,
     vuln: 0,
+    ice: 0,
+    poison: 0,
+    poisonD: 0,
     hitAt: [-9, -9, -9, -9, -9, -9, -9, -9, -9, -9],
     t: rnd(r.rng) * 10,
     face: 1,
-    boss: def.boss ? { phase: "chase", t: 2.5, dx: 0, dy: 0, step: 0, enraged: false } : null,
+    boss: def.boss ? { phase: "chase", t: 2.5, dx: 0, dy: 0, step: 0, enraged: false, age: 0, rage: false } : null,
   };
   e.maxHp = e.hp;
   r.enemies.push(e);
@@ -681,6 +940,17 @@ export function step(r: Run, inp: Input) {
   r.t += DT;
   r.buff.crit = Math.max(0, r.buff.crit - DT);
   r.buff.haste = Math.max(0, r.buff.haste - DT);
+  r.bubbleT = Math.max(0, r.bubbleT - DT);
+  r.balloonT = Math.max(0, r.balloonT - DT);
+  if (r.flag && (r.flag.t -= DT) <= 0) r.flag = null;
+  if (r.ot) {
+    r.otT += DT;
+    const lv = Math.floor(r.otT / OT_STEP);
+    if (lv > r.otLv) {
+      r.otLv = lv;
+      r.ev.push({ t: "ot", lv });
+    }
+  }
   for (const a of r.assist) {
     a.t -= DT;
     if (a.t <= 0) {
@@ -698,6 +968,7 @@ export function step(r: Run, inp: Input) {
   updateEnemies(r);
   updateBullets(r);
   updatePickups(r);
+  updateThings(r);
   if (inp.ult) castUlt(r);
   compact(r);
   // 레벨업
@@ -710,6 +981,7 @@ export function step(r: Run, inp: Input) {
   }
   if (r.pending > 0 && !r.pause && !r.over) openLevel(r);
   if (p.hp <= 0 && !r.over) {
+    r.q.noHit = Math.max(r.q.noHit, Math.floor(r.t - r.hitAt));
     if (p.revive > 0) {
       p.revive--;
       p.hp = maxHp(r) * 0.5;
@@ -720,8 +992,24 @@ export function step(r: Run, inp: Input) {
       r.ev.push({ t: "dead" });
     }
   }
-  if (r.win && !r.over) r.over = true;
 }
+
+/** 시계지기 처치 뒤: true = 오버타임 도전 · false = 정산 */
+export function dawnChoice(r: Run, more: boolean) {
+  if (r.pause?.k !== "dawn") return;
+  r.pause = null;
+  if (!more) {
+    r.over = true;
+    return;
+  }
+  r.ot = true;
+  r.otT = 0;
+  r.otLv = 0;
+  p_heal(r, 0.5);
+  r.ev.push({ t: "ot", lv: 0 });
+  if (r.pending > 0) openLevel(r);
+}
+const p_heal = (r: Run, k: number) => (r.p.hp = Math.min(maxHp(r), r.p.hp + maxHp(r) * k));
 
 function movePlayer(r: Run, inp: Input) {
   const p = r.p;
@@ -818,14 +1106,22 @@ function timeline(r: Run) {
       r.ev.push({ t: "boss", kind: ev.kind, arena: ev.arena });
     }
   }
+  // 오버타임: 45초마다 정예
+  if (r.ot && Math.floor(r.otT / 45) > Math.floor((r.otT - DT) / 45)) {
+    const [x, y] = ringPos(r);
+    const ks: EnemyKind[] = ["skull", "mush", "golem"];
+    spawnEnemy(r, ks[rndInt(r.rng, 3)], x, y, true);
+    r.ev.push({ t: "warn", text: "오버타임 정예!" });
+  }
   // 잡몹 유지
   const finale = r.arena !== null;
   if (!finale) {
     const w = waveAt(r.t);
     let alive = 0;
     for (const e of r.enemies) if (e.alive && !e.def.boss) alive++;
-    const target = r.bossId >= 0 ? w.count * 0.5 : w.count;
-    r.spawnAcc += w.rate * (r.bossId >= 0 ? 0.5 : 1) * DT;
+    const more = depthMul(r.depth).spawn * (1 + r.curse * 0.5) * (1 + r.otLv * 0.15);
+    const target = (r.bossId >= 0 ? w.count * 0.5 : w.count) * Math.min(1.8, more);
+    r.spawnAcc += w.rate * (r.bossId >= 0 ? 0.5 : 1) * more * DT;
     // 처음 몇 초는 금방 손맛이 오게 가까이 몰려 있음
     const need = Math.min(Math.floor(r.spawnAcc), Math.ceil(target - alive));
     r.spawnAcc -= Math.max(0, need);
@@ -926,7 +1222,15 @@ function fireWeapon(r: Run, slot: number) {
       break;
     case "aura":
       aoe(r, p.x, p.y, w.size, w.dmg, slot, 0);
-      if (ws.lv >= 5 || def.fx === "sleep")
+      if (ws.id === "rose") {
+        // 장미 정원: 묶고 · 체력 회복
+        let n = 0;
+        near(r, p.x, p.y, w.size, (e) => {
+          e.slow = Math.max(e.slow, 0.8);
+          n++;
+        });
+        if (n) p.hp = Math.min(maxHp(r), p.hp + 0.4);
+      } else if (ws.lv >= 5 || def.fx === "sleep")
         near(r, p.x, p.y, w.size, (e) => {
           e.slow = Math.max(e.slow, def.fx === "sleep" ? 1 : 0.6);
           // 몽글 5레벨: 가끔 아예 잠듦
@@ -985,8 +1289,9 @@ function fireWeapon(r: Run, slot: number) {
     case "homing": {
       for (let i = 0; i < w.n; i++) {
         const a = rnd(r.rng) * Math.PI * 2;
-        const s = mkShot(r, slot, ws.id, p.x, p.y - 6, Math.cos(a) * w.spd * 0.6, Math.sin(a) * w.spd * 0.6, w, ws.id === "missile" ? w.size : 0);
-        s.r = ws.id === "missile" ? 4 : 5;
+        const boomy = ws.id === "missile" || ws.id === "barrage";
+        const s = mkShot(r, slot, ws.id, p.x, p.y - 6, Math.cos(a) * w.spd * 0.6, Math.sin(a) * w.spd * 0.6, w, boomy ? w.size : 0);
+        s.r = boomy ? 4 : 5;
         if (ws.id === "cards") s.life = w.dur;
         r.shots.push(s);
       }
@@ -1174,7 +1479,10 @@ function updateZones(r: Run) {
     }
     if (z.delay > 0) {
       z.delay -= DT;
-      if (z.delay <= 0) {
+      if (z.delay <= 0 && z.k === "slam") {
+        r.ev.push({ t: "boom", x: z.x, y: z.y, r: z.r, c: "#ff3d6e" });
+        if (Math.hypot(p.x - z.x, (p.y - z.y) * 1.3) < z.r + 4) damagePlayer(r, z.dmg);
+      } else if (z.delay <= 0) {
         r.ev.push({ t: "boom", x: z.x, y: z.y, r: z.r, c: z.k === "moon" ? "#fff2a8" : z.k === "grenade" || z.k === "shell" ? "#ffb03a" : "#ffe17a" });
         aoe(r, z.x, z.y, z.r, z.dmg, z.slot, z.kb);
       }
@@ -1219,6 +1527,16 @@ function updateEnemies(r: Run) {
     e.flash = Math.max(0, e.flash - DT);
     e.slow = Math.max(0, e.slow - DT);
     e.vuln = Math.max(0, e.vuln - DT);
+    e.ice = Math.max(0, e.ice - DT);
+    if (e.poison > 0) {
+      e.poison -= DT;
+      // 독: 0.5초마다
+      if (Math.floor(e.poison * 2) !== Math.floor((e.poison + DT) * 2)) {
+        hurt(r, e, e.poisonD * 0.5, PROC, 0, e.x, e.y);
+        if (!e.alive) continue;
+      }
+      if (e.poison <= 0) e.poisonD = 0;
+    }
     if (e.stun > 0) {
       e.stun -= DT;
       e.x += e.kx * DT;
@@ -1295,11 +1613,26 @@ function updateEnemies(r: Run) {
 function damagePlayer(r: Run, dmg: number) {
   const p = r.p;
   if (p.inv > 0 || r.over) return;
+  r.q.noHit = Math.max(r.q.noHit, Math.floor(r.t - r.hitAt));
+  r.hitAt = r.t;
+  // 비눗방울 방패: 한 번 막음
+  if (rel(r, "bubble") && r.bubbleT <= 0) {
+    r.bubbleT = 15 * Math.pow(0.8, rel(r, "bubble") - 1);
+    p.inv = 0.5;
+    r.ev.push({ t: "shield" });
+    return;
+  }
   const v = Math.max(1, Math.round(dmg - r.stats.armor));
   p.hp -= v;
   p.inv = 0.5;
   r.taken += v;
   r.ev.push({ t: "hurt", v });
+  if (rel(r, "balloon") && r.balloonT <= 0) {
+    r.balloonT = 3;
+    const rad = 70 * (1 + r.stats.area);
+    r.ev.push({ t: "boom", x: p.x, y: p.y, r: rad, c: "#ff9cf0" });
+    aoe(r, p.x, p.y, rad, (30 + p.lv) * rel(r, "balloon") * (1 + r.stats.might), PROC, 160);
+  }
 }
 
 function bossAI(r: Run, e: Enemy, dx: number, dy: number) {
@@ -1309,7 +1642,15 @@ function bossAI(r: Run, e: Enemy, dx: number, dy: number) {
     b.enraged = true;
     r.ev.push({ t: "warn", text: `${e.def.name} 분노!` });
   }
-  const fast = b.enraged ? 0.7 : 1;
+  b.age += DT;
+  // 너무 오래 끌면 격노 (집중포화식 시간 제한)
+  if (!b.rage && b.age >= bossLimit(e.kind)) {
+    b.rage = true;
+    e.speed *= 1.35;
+    e.dmg *= 1.4;
+    r.ev.push({ t: "rage", name: e.def.name });
+  }
+  const fast = (b.enraged ? 0.7 : 1) * (b.rage ? 0.6 : 1);
   b.t -= DT;
   switch (b.phase) {
     case "chase":
@@ -1317,7 +1658,7 @@ function bossAI(r: Run, e: Enemy, dx: number, dy: number) {
       e.y += dy * e.speed * DT;
       if (Math.abs(dx) > 0.05) e.face = dx > 0 ? 1 : -1;
       if (b.t <= 0) {
-        const order: BossAI["phase"][] = final ? ["warn", "ring", "warn", "summon"] : ["warn", "ring", "summon"];
+        const order: BossAI["phase"][] = final ? ["warn", "ring", "slam", "warn", "summon", "slam"] : ["warn", "slam", "ring", "summon"];
         b.phase = order[b.step++ % order.length];
         b.t = b.phase === "warn" ? 0.9 : 0.2;
         if (b.phase === "warn") {
@@ -1356,6 +1697,19 @@ function bossAI(r: Run, e: Enemy, dx: number, dy: number) {
       b.t = 2.2 * fast;
       break;
     }
+    case "slam": {
+      // 바닥 내려찍기: 빨간 원이 차오르고 1초 뒤 터짐 (플레이어 자리 + 둘레)
+      const n = (final ? 5 : 3) + (b.rage ? 3 : 0);
+      const p = r.p;
+      for (let i = 0; i < n; i++) {
+        const a = (i / n) * Math.PI * 2 + rnd(r.rng);
+        const k = i === 0 ? 0 : 50 + rnd(r.rng) * 60;
+        r.zones.push(zone({ k: "slam", slot: -1, x: p.x + Math.cos(a) * k, y: p.y + Math.sin(a) * k * 0.7, r: final ? 40 : 34, dmg: e.dmg * 1.2, delay: 1.0 + i * 0.06, life: 0.25, t: 0, tick: 0, kb: 0, follow: false }));
+      }
+      b.phase = "chase";
+      b.t = 1.6 * fast;
+      break;
+    }
     case "summon": {
       const kind: EnemyKind = final ? "skull" : "bat";
       for (let i = 0; i < 8; i++) {
@@ -1368,6 +1722,9 @@ function bossAI(r: Run, e: Enemy, dx: number, dy: number) {
     }
   }
 }
+
+/** 격노까지 (초) */
+export const bossLimit = (k: EnemyKind) => (k === FINAL_BOSS ? 120 : 80);
 
 function updateBullets(r: Run) {
   const p = r.p;
@@ -1441,9 +1798,12 @@ function collect(r: Run, k: Pickup) {
       screenBomb(r, true);
       break;
     case "coin":
-    case "bag":
-      p.coins += k.v;
+    case "bag": {
+      const v = Math.round(k.v * (1 + 0.2 * rel(r, "piggy")));
+      p.gold += v;
+      r.q.gold += v;
       break;
+    }
     case "chest":
       openChest(r, k.v === 1);
       break;
@@ -1460,12 +1820,283 @@ function screenBomb(r: Run, loot: boolean) {
   }
 }
 
+/* ───────────── 맵 오브젝트 ───────────── */
+
+/** 종류 · 동시에 몇 개 · 처음 나오는 시각 · 쓰고 나서 다시 나오기까지 (초) */
+const THING_PLAN: { k: ThingKind; n: number; at: number; cool: number }[] = [
+  { k: "shrine", n: 2, at: 0, cool: 30 },
+  { k: "box", n: 2, at: 0, cool: 12 },
+  { k: "flag", n: 1, at: 25, cool: 40 },
+  { k: "statue", n: 1, at: 45, cool: 70 },
+  { k: "bell", n: 1, at: 80, cool: 75 },
+];
+
+function spawnThing(r: Run, k: ThingKind, d0 = 300, d1 = 470) {
+  // 다른 오브젝트와 너무 붙지 않게 몇 번 시도
+  let x = 0;
+  let y = 0;
+  for (let i = 0; i < 6; i++) {
+    const a = rnd(r.rng) * Math.PI * 2;
+    const d = d0 + rnd(r.rng) * (d1 - d0);
+    x = r.p.x + Math.cos(a) * d;
+    y = r.p.y + Math.sin(a) * d * 0.7;
+    if (!r.things.some((t) => t.alive && (t.x - x) ** 2 + (t.y - y) ** 2 < 90 ** 2)) break;
+  }
+  const t: Thing = { id: r.nextId++, alive: true, k, x, y, t: 0, on: false, cost: k === "box" ? boxCost(r.boxes) : 0 };
+  r.things.push(t);
+  return t;
+}
+
+function manageThings(r: Run) {
+  r.thingT -= DT;
+  if (r.thingT > 0) return;
+  r.thingT = 1;
+  if (r.arena) return;
+  const p = r.p;
+  for (const t of r.things) {
+    if (!t.alive || t.on) continue;
+    // 너무 멀어지면 다른 데서 다시
+    if ((t.x - p.x) ** 2 + ((t.y - p.y) / 0.7) ** 2 > 1000 ** 2) t.alive = false;
+  }
+  const count = (k: ThingKind) => r.things.filter((t) => t.alive && (t.k === k || (k === "shrine" && t.k === "gshrine"))).length;
+  for (const pl of THING_PLAN) {
+    if (r.t < pl.at || r.t < (r.cool[pl.k] ?? 0) || count(pl.k) >= pl.n) continue;
+    spawnThing(r, pl.k === "shrine" && rnd(r.rng) < 0.12 + r.stats.luck * 0.01 ? "gshrine" : pl.k);
+  }
+  if (r.t >= r.merchantT && !count("merchant")) {
+    spawnThing(r, "merchant", 260, 380);
+    r.merchantT = Infinity;
+    r.ev.push({ t: "thing", k: "merchant", text: "떠돌이 상인이 왔어요!" });
+  }
+  while (r.sched.length && r.t >= r.sched[0].at) {
+    const k = r.sched.shift()!.k;
+    if (r.ot) continue;
+    spawnThing(r, k, 220, 300);
+    r.ev.push({ t: "thing", k, text: k === "trial" ? "달빛 시련이 열렸어요!" : "소원 우물이 솟아났어요!" });
+  }
+}
+
+/** 쓴 오브젝트는 사라지고, 같은 종류는 한동안 안 나옴 */
+function used(r: Run, t: Thing) {
+  t.alive = false;
+  const k = t.k === "gshrine" ? "shrine" : t.k;
+  const pl = THING_PLAN.find((x) => x.k === k);
+  if (pl) r.cool[k] = Math.max(r.cool[k] ?? 0, r.t + pl.cool);
+}
+
+function updateThings(r: Run) {
+  manageThings(r);
+  if (r.arena) return;
+  const p = r.p;
+  for (const t of r.things) {
+    if (!t.alive) continue;
+    const dx = p.x - t.x;
+    const dy = p.y - t.y;
+    const d = Math.hypot(dx, dy * 1.25);
+    switch (t.k) {
+      case "shrine":
+      case "gshrine":
+      case "flag": {
+        const R = t.k === "flag" ? 24 : 30;
+        const need = t.k === "flag" ? FLAG_CHARGE : SHRINE_CHARGE;
+        if (d < R) t.t += DT;
+        else t.t = Math.max(0, t.t - DT * 0.5);
+        if (t.t >= need) {
+          used(r, t);
+          if (t.k === "flag") {
+            const ks: FlagBuff[] = ["might", "haste", "speed", "magnet"];
+            const k = ks[rndInt(r.rng, ks.length)];
+            r.flag = { k, t: 20 };
+            if (k === "magnet") for (const g of r.gems) g.pull = true;
+            r.q.flags++;
+            r.ev.push({ t: "thing", k: "flag", text: "응원 깃발!" });
+          } else {
+            r.q.shrines++;
+            openBless(r, t.k === "gshrine");
+          }
+        }
+        break;
+      }
+      case "statue":
+        if (d < 16) {
+          used(r, t);
+          const v = 30 + Math.floor(r.t / 8);
+          p.gold += v;
+          r.q.gold += v;
+          r.curse += 0.08;
+          r.q.statues++;
+          r.ev.push({ t: "thing", k: "statue", text: `금화 +${v} · 저주 +8%` });
+        }
+        break;
+      case "bell":
+        if (d < 16) {
+          used(r, t);
+          r.q.bells++;
+          const ks: EnemyKind[] = r.t < 200 ? ["slime", "ghost"] : r.t < 400 ? ["skull", "mush"] : ["mush", "golem"];
+          spawnEnemy(r, ks[rndInt(r.rng, ks.length)], t.x + 40, t.y - 20, true);
+          for (let i = 0; i < 8; i++) {
+            const a = (i / 8) * Math.PI * 2;
+            spawnEnemy(r, ks[0], t.x + Math.cos(a) * 60, t.y + Math.sin(a) * 40);
+          }
+          r.ev.push({ t: "warn", text: "도전자 등장! 잡으면 보물 상자" });
+        }
+        break;
+      case "box":
+        t.t = Math.max(0, t.t - DT);
+        if (d < 16 && t.t <= 0) {
+          t.cost = boxCost(r.boxes);
+          if (p.gold >= t.cost) {
+            p.gold -= t.cost;
+            r.boxes++;
+            r.q.boxes++;
+            used(r, t);
+            openChest(r, false, true);
+          } else {
+            t.t = 2;
+            r.ev.push({ t: "nogold", need: t.cost });
+          }
+        }
+        if (t.alive) t.cost = boxCost(r.boxes);
+        break;
+      case "merchant":
+      case "fountain":
+        if (d < 18) {
+          if (!t.on) {
+            t.on = true;
+            if (!t.offers) {
+              // 서로 다른 셋 (풀이 작으면 그보다 적게)
+              const o: RelicId[] = [];
+              for (let i = 0; i < 12 && o.length < 3; i++) {
+                const id = rollRelic(r, t.k === "fountain" ? 1 : 0);
+                if (!o.includes(id)) o.push(id);
+              }
+              t.offers = o;
+            }
+            if (t.k === "merchant") r.pause = { k: "shop", offers: t.offers.map((id) => ({ id, price: relicPrice(RELICS[id].rarity, r.t) })), thing: t.id };
+            else r.pause = { k: "wish", offers: t.offers, thing: t.id };
+          }
+        } else t.on = false;
+        break;
+      case "trial":
+        if (!t.on) {
+          if (d < TRIAL_R * 0.45) {
+            t.on = true;
+            t.t = TRIAL_SEC;
+            r.ev.push({ t: "warn", text: `원 안에서 ${TRIAL_SEC}초 버텨요!` });
+          }
+          break;
+        }
+        t.t -= DT;
+        // 시련: 원 둘레에서 몹이 쏟아짐
+        if (r.tick % 6 === 0) {
+          const a = rnd(r.rng) * Math.PI * 2;
+          const w = waveAt(r.t);
+          spawnEnemy(r, pickKind(r, w.mix), t.x + Math.cos(a) * (TRIAL_R + 60), t.y + Math.sin(a) * (TRIAL_R + 60) * 0.8);
+        }
+        if (d > TRIAL_R) {
+          t.alive = false;
+          r.ev.push({ t: "trial", ok: false });
+        } else if (t.t <= 0) {
+          t.alive = false;
+          r.q.trials++;
+          dropGem(r, t.x, t.y - 10, Math.round(xpNeed(p.lv) * 1.2));
+          dropPickup(r, "chest", t.x, t.y, 0);
+          p.gold += 40;
+          r.q.gold += 40;
+          r.ev.push({ t: "trial", ok: true });
+        }
+        break;
+    }
+  }
+}
+
+/** 유물 하나 굴리기 (bonus = 등급 올림) */
+function rollRelic(r: Run, bonus: number): RelicId {
+  const ws = relicRarityWeights(r.stats.luck, bonus);
+  let sum = 0;
+  for (const w of ws) sum += w;
+  let x = rnd(r.rng) * sum;
+  let rar = 0;
+  for (; rar < 3; rar++) {
+    x -= ws[rar];
+    if (x <= 0) break;
+  }
+  const ok = (id: RelicId) => r.pool.relics.includes(id) && rel(r, id) < relicMax(id);
+  for (let k = rar; k >= 0; k--) {
+    const c = r.pool.relics.filter((id) => RELICS[id].rarity === k && ok(id));
+    if (c.length) return c[rndInt(r.rng, c.length)];
+  }
+  const any = r.pool.relics.filter(ok);
+  return any.length ? any[rndInt(r.rng, any.length)] : "gym";
+}
+
+function openBless(r: Run, gold: boolean) {
+  const keys = BLESS.map((b, i) => i);
+  const opts: Bless[] = [];
+  for (let i = 0; i < 3 && keys.length; i++) {
+    const k = keys.splice(rndInt(r.rng, keys.length), 1)[0];
+    const x = rnd(r.rng);
+    const luck = r.stats.luck * 0.012;
+    let rar: RelicRarity = x < 0.04 + luck ? 3 : x < 0.16 + luck * 2 ? 2 : x < 0.45 + luck * 2 ? 1 : 0;
+    if (gold) rar = Math.max(2, rar) as RelicRarity;
+    opts.push({ k: BLESS[k].k, v: BLESS[k].v[rar], rar });
+  }
+  r.pause = { k: "bless", opts, gold };
+  r.ev.push({ t: "thing", k: gold ? "gshrine" : "shrine", text: gold ? "황금 성소!" : "성소 충전!" });
+}
+
+export function chooseBless(r: Run, i: number) {
+  if (r.pause?.k !== "bless") return;
+  const b = r.pause.opts[i];
+  if (!b) return;
+  r.blessed[b.k] = (r.blessed[b.k] ?? 0) + b.v;
+  recomputeStats(r);
+  r.pause = null;
+  if (r.pending > 0) openLevel(r);
+}
+
+export function buyRelic(r: Run, i: number) {
+  if (r.pause?.k !== "shop") return;
+  const o = r.pause.offers[i];
+  if (!o || r.p.gold < o.price) return;
+  r.p.gold -= o.price;
+  r.q.buys++;
+  giveRelic(r, o.id);
+  const id = r.pause.thing;
+  const t = r.things.find((x) => x.id === id);
+  if (t) t.alive = false;
+  r.merchantT = r.t + 110;
+  r.pause = null;
+  if (r.pending > 0) openLevel(r);
+}
+
+export function chooseWish(r: Run, i: number) {
+  if (r.pause?.k !== "wish") return;
+  const id = r.pause.offers[i];
+  if (!id) return;
+  giveRelic(r, id);
+  r.q.fountains++;
+  const tid = r.pause.thing;
+  const t = r.things.find((x) => x.id === tid);
+  if (t) t.alive = false;
+  r.pause = null;
+  if (r.pending > 0) openLevel(r);
+}
+
+/** 상점 · 우물 그냥 나가기 */
+export function leaveThing(r: Run) {
+  if (r.pause?.k !== "shop" && r.pause?.k !== "wish") return;
+  r.pause = null;
+  if (r.pending > 0) openLevel(r);
+}
+
 /* ───────────── 필살기 ───────────── */
 
 function castUlt(r: Run) {
   const p = r.p;
   if (p.ult < ULT_NEED || r.over) return;
   p.ult = 0;
+  r.q.ults++;
   r.ev.push({ t: "ult", hero: r.hero });
   doUlt(r, r.hero, 1);
   // 응원 동료도 차례로 거들어 줌 (40%)
@@ -1619,41 +2250,59 @@ function rollRarity(r: Run): Rarity {
   return 0;
 }
 
-/** 지금 고를 수 있는 카드 후보 */
-function candidates(r: Run): Card[] {
+/** 진화 · 합체 · 각성 (조건 되면 맨 앞에) */
+function specials(r: Run): Card[] {
   const out: Card[] = [];
-  // 합체 (둘 다 만렙) — 무조건 맨 앞
+  const maxed = (id: WeaponId) => {
+    const w = r.weapons.find((x) => x.id === id);
+    return !!w && w.lv >= WEAPONS[id].lv.length;
+  };
   for (const f of FUSIONS) {
     const [a, b] = WEAPONS[f].fuse!;
-    const wa = r.weapons.find((w) => w.id === a);
-    const wb = r.weapons.find((w) => w.id === b);
-    if (wa && wb && wa.lv >= WEAPONS[a].lv.length && wb.lv >= WEAPONS[b].lv.length) out.push({ k: "fuse", id: f, from: 0, to: 1, rarity: 2 });
+    if (maxed(a) && maxed(b)) out.push({ k: "fuse", id: f, from: 0, to: 1, rarity: 2 });
   }
+  for (const f of EVOLUTIONS) {
+    const [base, need] = WEAPONS[f].evo!;
+    if (maxed(base) && r.passives.some((x) => x.id === need)) out.push({ k: "evo", id: f, from: 0, to: 1, rarity: 2 });
+  }
+  for (const w of r.weapons) {
+    if (WEAPONS[w.id].owner !== r.hero || w.awake || !maxed(w.id)) continue;
+    if (r.passives.some((x) => x.id === AWAKEN_NEED[r.hero])) out.push({ k: "awake", id: w.id, from: 0, to: 1, rarity: 2 });
+  }
+  return out;
+}
+const cardKey = (c: Card) => `${c.k}:${c.id}`;
+
+/** 지금 고를 수 있는 카드 후보 */
+function candidates(r: Run): Card[] {
+  const out: Card[] = specials(r);
   for (const w of r.weapons) {
     const max = WEAPONS[w.id].lv.length;
     if (w.lv < max) out.push({ k: "weapon", id: w.id, from: w.lv, to: w.lv + 1, rarity: 0 });
   }
   if (r.weapons.length < MAX_WEAPONS)
     for (const id of SHARED_WEAPONS) {
-      if (r.weapons.some((w) => w.id === id)) continue;
+      if (!r.pool.weapons.includes(id)) continue;
+      if (r.weapons.some((w) => w.id === id || WEAPONS[w.id].evo?.[0] === id)) continue;
       // 이미 합체에 쓴 재료는 다시 안 나옴
       if (r.fused.some((f) => WEAPONS[f].fuse!.includes(id))) continue;
       out.push({ k: "weapon", id, from: 0, to: 1, rarity: 0 });
     }
   for (const ps of r.passives) if (ps.lv < PASSIVES[ps.id].max) out.push({ k: "passive", id: ps.id, from: ps.lv, to: ps.lv + 1, rarity: 0 });
   if (r.passives.length < MAX_PASSIVES) for (const id of PASSIVE_IDS) if (!r.passives.some((x) => x.id === id)) out.push({ k: "passive", id, from: 0, to: 1, rarity: 0 });
-  return out;
+  return out.filter((c) => !r.banned.includes(cardKey(c)));
 }
 
 function maxOf(c: Card) {
   return c.k === "weapon" ? WEAPONS[c.id as WeaponId].lv.length : c.k === "passive" ? PASSIVES[c.id as PassiveId].max : 1;
 }
+const special = (c: Card) => c.k === "fuse" || c.k === "evo" || c.k === "awake";
 
 function rollCards(r: Run): Card[] {
   const all = candidates(r);
-  const fuses = all.filter((c) => c.k === "fuse");
-  const rest = all.filter((c) => c.k !== "fuse");
-  const n = r.stats.luck >= 4 ? 4 : 3;
+  const fuses = all.filter(special);
+  const rest = all.filter((c) => !special(c));
+  const n = Math.min(4, (r.stats.luck >= 4 ? 4 : 3) + rel(r, "goldendice"));
   const out: Card[] = [...fuses.slice(0, n)];
   // 가진 걸 올리는 카드가 조금 더 잘 나오게 (빌드가 모이게)
   const weight = (c: Card) => (c.from > 0 ? 1.6 : c.k === "weapon" ? 1.2 : 1);
@@ -1676,7 +2325,7 @@ function rollCards(r: Run): Card[] {
 }
 
 function openLevel(r: Run) {
-  const jackpot = rnd(r.rng) < 0.03 + r.stats.luck * 0.005;
+  const jackpot = rnd(r.rng) < 0.03 + r.stats.luck * 0.005 + rel(r, "goldendice") * 0.05;
   r.pause = { k: "level", cards: rollCards(r), jackpot };
 }
 
@@ -1685,6 +2334,15 @@ function applyCard(r: Run, c: Card) {
     case "fuse":
       fuse(r, c.id as WeaponId);
       break;
+    case "evo":
+      evolve(r, c.id as WeaponId);
+      break;
+    case "awake":
+      awaken(r, c.id as WeaponId);
+      break;
+    case "relic":
+      giveRelic(r, c.id as RelicId);
+      break;
     case "weapon":
       giveWeapon(r, c.id as WeaponId, c.to - c.from);
       break;
@@ -1692,7 +2350,8 @@ function applyCard(r: Run, c: Card) {
       givePassive(r, c.id as PassiveId, c.to - c.from);
       break;
     case "coin":
-      r.p.coins += 25;
+      r.p.gold += 25;
+      r.q.gold += 25;
       break;
     case "heal":
       r.p.hp = Math.min(maxHp(r), r.p.hp + 40);
@@ -1707,7 +2366,8 @@ export function chooseCard(r: Run, i: number) {
   if (i === -1) {
     if (r.skips <= 0) return;
     r.skips--;
-    r.p.coins += 10;
+    r.p.gold += 10;
+    r.q.gold += 10;
   } else if (pz.jackpot) for (const c of pz.cards) applyCard(r, c);
   else {
     const c = pz.cards[i];
@@ -1726,29 +2386,43 @@ export function reroll(r: Run) {
   r.pause = { k: "level", cards: rollCards(r), jackpot: false };
 }
 
+/** 카드 지우기: 이번 판에서 다시 안 나옴 · 그 칸만 새로 */
+export function banishCard(r: Run, i: number) {
+  const pz = r.pause;
+  if (!pz || pz.k !== "level" || r.banish <= 0 || pz.jackpot) return;
+  const c = pz.cards[i];
+  if (!c || special(c) || c.k === "coin" || c.k === "heal") return;
+  r.banish--;
+  r.banned.push(cardKey(c));
+  const keep = pz.cards.filter((_, j) => j !== i);
+  const fresh = rollCards(r).filter((x) => !keep.some((k) => cardKey(k) === cardKey(x)));
+  r.pause = { k: "level", cards: [...keep.slice(0, i), ...(fresh[0] ? [fresh[0]] : []), ...keep.slice(i)], jackpot: false };
+}
+
 /* ───────────── 보물 상자 ───────────── */
 
-function openChest(r: Run, big: boolean) {
+function openChest(r: Run, big: boolean, box = false) {
   r.chests++;
+  r.q.chests++;
   const first = r.chests === 1;
   const luck = r.stats.luck;
   let n = 1;
   const x = rnd(r.rng);
   if (x < 0.05 + luck * 0.01) n = 5;
   else if (x < 0.28 + luck * 0.025) n = 3;
-  if (first || big) n = Math.max(n, 3);
+  if (box) n = x < 0.12 + luck * 0.01 ? 3 : 1;
+  else if (first || big) n = Math.max(n, 3);
   const items: Card[] = [];
   for (let i = 0; i < n; i++) {
-    const all = candidates(r);
-    // 합체가 되면 그것부터 (뱀서 진화처럼 상자에서 터짐)
-    const c = all.find((c) => c.k === "fuse") ?? (all.length ? all.filter((c) => c.from > 0 || c.k === "fuse").concat(all.filter((c) => c.from === 0))[rndInt(r.rng, Math.min(all.length, Math.max(1, all.filter((c) => c.from > 0).length || all.length)))] : undefined);
-    if (!c) break;
-    const card: Card = { ...c, to: c.k === "fuse" ? 1 : c.from + 1, rarity: 0 };
+    // 진화 · 합체 · 각성이 되면 그것부터 (뱀서처럼 상자에서 터짐)
+    const sp = specials(r)[0];
+    const card: Card = sp ?? { k: "relic", id: rollRelic(r, big ? 1 : 0), from: 0, to: 1, rarity: 0 };
     applyCard(r, card);
     items.push(card);
   }
-  const coins = 10 + rndInt(r.rng, 21) + (big ? 40 : 0);
-  r.p.coins += coins;
+  const coins = box ? 0 : 10 + rndInt(r.rng, 21) + (big ? 40 : 0);
+  r.p.gold += coins;
+  r.q.gold += coins;
   r.pause = { k: "chest", items, coins, first, big };
   r.ev.push({ t: "chest" });
 }
@@ -1767,25 +2441,36 @@ export interface RunResult {
   win: boolean;
   lv: number;
   kills: number;
-  coins: number;
+  /** 판 안에서 주운 금화 */
+  gold: number;
   taken: number;
-  weapons: { id: WeaponId; lv: number; dmg: number }[];
+  depth: number;
+  /** 오버타임 버틴 시간 */
+  ot: number;
+  weapons: { id: WeaponId; lv: number; dmg: number; awake?: boolean }[];
   passives: { id: PassiveId; lv: number }[];
+  relics: { id: RelicId; n: number }[];
   fused: WeaponId[];
+  q: RunQ;
 }
 
 export function result(r: Run): RunResult {
+  const q = { ...r.q, noHit: Math.max(r.q.noHit, Math.floor(r.t - r.hitAt)) };
   return {
     hero: r.hero,
     sec: Math.floor(r.t),
     win: r.win,
     lv: r.p.lv,
     kills: r.p.kills,
-    coins: r.p.coins,
+    gold: r.q.gold,
     taken: Math.round(r.taken),
-    weapons: r.weapons.map((w) => ({ id: w.id, lv: w.lv, dmg: Math.round(w.dmgDone) })).sort((a, b) => b.dmg - a.dmg),
+    depth: r.depth,
+    ot: Math.floor(r.otT),
+    weapons: r.weapons.map((w) => ({ id: w.id, lv: w.lv, dmg: Math.round(w.dmgDone), awake: w.awake })).sort((a, b) => b.dmg - a.dmg),
     passives: r.passives.map((p) => ({ ...p })),
+    relics: r.relicOrder.map((id) => ({ id, n: r.relics[id] ?? 0 })),
     fused: [...r.fused],
+    q,
   };
 }
 

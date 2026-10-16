@@ -12,8 +12,9 @@ import { newId } from "../ids";
 import { KeyedMutex } from "../mutex";
 import type { Ctx } from "../realtime/gateway";
 import { pictureOf } from "../users";
-import { FREE_HEROES, HERO_IDS, type HeroId } from "../../../web/src/lib/survivor/data";
-import { STAR_FIRST_WIN, UPGRADES, UP, plausible, runScore, runStars, upCost, type RunReport, type UpId, type Ups } from "../../../web/src/lib/survivor/progress";
+import { FREE_HEROES, HERO_IDS, MAX_DEPTH, type HeroId } from "../../../web/src/lib/survivor/data";
+import { STAR_FIRST_WIN, UPGRADES, UP, plausible, runCoins, runScore, runStars, upCost, type RunReport, type UpId, type Ups } from "../../../web/src/lib/survivor/progress";
+import { QUEST, Q_KEYS, newlyDone, type QuestTotals, type RunQ } from "../../../web/src/lib/survivor/quests";
 import type { MarbleMeta } from "./marble/meta";
 
 interface SurvivorProfile {
@@ -25,6 +26,12 @@ interface SurvivorProfile {
   kills: number;
   /** 오늘 첫 클리어 보너스 받은 날 (KST) */
   winDay: string;
+  /** 깬 퀘스트 */
+  quests: string[];
+  /** 클리어한 가장 깊은 밤 (-1 = 아직) */
+  depth: number;
+  /** 누적 (퀘스트) */
+  tot: { trials: number; shrines: number; chests: number };
   at: Date;
 }
 interface RankDoc {
@@ -37,12 +44,15 @@ interface RankDoc {
   kills: number;
   lv: number;
   win: boolean;
+  depth: number;
+  ot: number;
   at: Date;
 }
 interface RunDoc {
   _id: string;
   uid: string;
   hero: HeroId;
+  depth: number;
   startAt: number;
   done: boolean;
   at: Date;
@@ -50,14 +60,16 @@ interface RunDoc {
 
 const kstDay = (t: number) => new Date(t + 9 * 3600_000).toISOString().slice(0, 10);
 const heroArg = z.enum(HERO_IDS as [HeroId, ...HeroId[]]);
-const startArg = z.object({ hero: heroArg, sup: z.array(heroArg).max(2).default([]) });
+const startArg = z.object({ hero: heroArg, sup: z.array(heroArg).max(2).default([]), depth: z.number().int().min(0).max(MAX_DEPTH).default(0) });
+const qArg = z.object(Object.fromEntries(Q_KEYS.map((k) => [k, z.number().int().min(0).max(1_000_000).default(0)])) as Record<keyof RunQ, z.ZodDefault<z.ZodNumber>>);
 const finishArg = z.object({
   run: z.string().min(1).max(64),
   sec: z.number().int().min(0).max(36_000),
   kills: z.number().int().min(0).max(2_000_000),
   lv: z.number().int().min(1).max(500),
   win: z.boolean(),
-  coins: z.number().int().min(0).max(1_000_000),
+  ot: z.number().int().min(0).max(36_000).default(0),
+  q: qArg,
 });
 
 export function registerSurvivor({ gateway, db }: Deps, marble: MarbleMeta) {
@@ -71,10 +83,15 @@ export function registerSurvivor({ gateway, db }: Deps, marble: MarbleMeta) {
     if (!ctx.nick) throw new AppError("MEMBER_ONLY", "회원만 할 수 있어요 (별명을 정해 주세요).", 403);
     return ctx.nick;
   };
-  const fresh = (uid: string): SurvivorProfile => ({ _id: uid, gold: 0, ups: {}, games: 0, wins: 0, kills: 0, winDay: "", at: new Date() });
-  const read = async (uid: string) => ((await profiles.findOne({ _id: uid } as never)) as SurvivorProfile | null) ?? fresh(uid);
+  const fresh = (uid: string): SurvivorProfile => ({ _id: uid, gold: 0, ups: {}, games: 0, wins: 0, kills: 0, winDay: "", quests: [], depth: -1, tot: { trials: 0, shrines: 0, chests: 0 }, at: new Date() });
+  const read = async (uid: string) => {
+    const d = (await profiles.findOne({ _id: uid } as never)) as SurvivorProfile | null;
+    // 예전 문서에 없는 칸 채움
+    return d ? { ...fresh(uid), ...d, tot: { ...fresh(uid).tot, ...d.tot } } : fresh(uid);
+  };
   const save = (p: SurvivorProfile) => profiles.replaceOne({ _id: p._id } as never, { ...p, at: new Date() } as never, { upsert: true });
-  const wire = (p: SurvivorProfile) => ({ gold: p.gold, ups: p.ups, games: p.games, wins: p.wins, kills: p.kills, firstWinToday: p.winDay !== kstDay(Date.now()) });
+  const totals = (p: SurvivorProfile): QuestTotals => ({ games: p.games, wins: p.wins, kills: p.kills, trials: p.tot.trials, shrines: p.tot.shrines, chests: p.tot.chests, depth: p.depth });
+  const wire = (p: SurvivorProfile) => ({ gold: p.gold, ups: p.ups, games: p.games, wins: p.wins, kills: p.kills, firstWinToday: p.winDay !== kstDay(Date.now()), quests: p.quests, depth: p.depth, tot: totals(p) });
 
   /** 이 캐릭터를 쓸 수 있나 (기본 4명 + 다이스 타운에서 뽑은 캐릭터) */
   async function owns(uid: string, ids: HeroId[]) {
@@ -108,11 +125,12 @@ export function registerSurvivor({ gateway, db }: Deps, marble: MarbleMeta) {
 
   gateway.rpc("survivor.start", async (ctx, raw) => {
     member(ctx);
-    const { hero, sup } = startArg.parse(raw);
+    const { hero, sup, depth } = startArg.parse(raw);
     if (new Set([hero, ...sup]).size !== 1 + sup.length) throw bad("같은 캐릭터를 두 번 데려갈 수 없어요.");
     if (!(await owns(ctx.uid, [hero, ...sup]))) throw forbidden("아직 없는 캐릭터예요. 다이스 타운 뽑기에서 얻을 수 있어요.");
+    if (depth > (await read(ctx.uid)).depth + 1) throw bad("아직 열리지 않은 깊이예요.");
     const id = newId();
-    await runs.insertOne({ _id: id, uid: ctx.uid, hero, startAt: Date.now(), done: false, at: new Date() } as never);
+    await runs.insertOne({ _id: id, uid: ctx.uid, hero, depth, startAt: Date.now(), done: false, at: new Date() } as never);
     return { run: id };
   });
 
@@ -124,7 +142,8 @@ export function registerSurvivor({ gateway, db }: Deps, marble: MarbleMeta) {
       if (!run || run.uid !== ctx.uid) throw bad("없는 판이에요.");
       if (run.done) throw bad("이미 끝낸 판이에요.");
       await runs.updateOne({ _id: a.run } as never, { $set: { done: true } } as never);
-      const rep: RunReport = { hero: run.hero, sec: a.sec, kills: a.kills, lv: a.lv, win: a.win, coins: a.coins };
+      const q = a.q as RunQ;
+      const rep: RunReport = { hero: run.hero, sec: a.sec, kills: a.kills, lv: a.lv, win: a.win, depth: run.depth ?? 0, ot: a.ot, q };
       const wall = (Date.now() - run.startAt) / 1000;
       if (!plausible(rep, wall)) {
         console.warn("[survivor] 이상한 기록", ctx.uid, rep, wall);
@@ -139,19 +158,28 @@ export function registerSurvivor({ gateway, db }: Deps, marble: MarbleMeta) {
         stars += STAR_FIRST_WIN;
         first = true;
       }
-      p.gold += rep.coins;
+      const gold = runCoins(rep);
+      p.gold += gold;
       p.games++;
       if (rep.win) p.wins++;
       p.kills += rep.kills;
+      p.tot.trials += q.trials;
+      p.tot.shrines += q.shrines;
+      p.tot.chests += q.chests;
+      if (rep.win && rep.depth > p.depth) p.depth = rep.depth;
+      // 퀘스트
+      const quests = newlyDone(p.quests, { hero: rep.hero, sec: rep.sec, kills: rep.kills, lv: rep.lv, win: rep.win, depth: rep.depth, q }, totals(p));
+      p.quests.push(...quests);
+      const qStars = quests.reduce((s, id) => s + (QUEST[id].reward.k === "stars" ? (QUEST[id].reward as { n: number }).n : 0), 0);
       await save(p);
-      if (stars > 0) await marble.addStars(ctx.uid, stars);
+      if (stars + qStars > 0) await marble.addStars(ctx.uid, stars + qStars);
       // 랭킹 (최고 점수만)
       const score = runScore(rep);
       const old = (await ranks.findOne({ _id: ctx.uid } as never)) as RankDoc | null;
       let best = false;
       if (!old || score > old.score) {
         best = true;
-        await ranks.replaceOne({ _id: ctx.uid } as never, { _id: ctx.uid, uid: ctx.uid, nick, score, hero: rep.hero, sec: rep.sec, kills: rep.kills, lv: rep.lv, win: rep.win, at: new Date() } as never, { upsert: true });
+        await ranks.replaceOne({ _id: ctx.uid } as never, { _id: ctx.uid, uid: ctx.uid, nick, score, hero: rep.hero, sec: rep.sec, kills: rep.kills, lv: rep.lv, win: rep.win, depth: rep.depth, ot: rep.ot, at: new Date() } as never, { upsert: true });
       }
       // 업적 · 일일 미션 통계
       await users
@@ -164,7 +192,7 @@ export function registerSurvivor({ gateway, db }: Deps, marble: MarbleMeta) {
         )
         .catch((e) => console.warn("[survivor] 기록 저장 실패", e));
       const rank = (await ranks.countDocuments({ score: { $gt: Math.max(score, old?.score ?? 0) } } as never)) + 1;
-      return { stars, first, gold: rep.coins, profile: wire(p), best, rank };
+      return { stars, first, gold, profile: wire(p), best, rank, quests, qStars };
     });
   });
 
@@ -182,7 +210,7 @@ export function registerSurvivor({ gateway, db }: Deps, marble: MarbleMeta) {
         if (url) av.set(String(u._id), url);
       }
     }
-    return docs.map((d) => ({ nick: d.nick, avatar: av.get(d.uid) ?? null, hero: d.hero, sec: d.sec, kills: d.kills, lv: d.lv, win: d.win, at: d.at.getTime() }));
+    return docs.map((d) => ({ nick: d.nick, avatar: av.get(d.uid) ?? null, hero: d.hero, sec: d.sec, kills: d.kills, lv: d.lv, win: d.win, depth: d.depth ?? 0, ot: d.ot ?? 0, at: d.at.getTime() }));
   });
 
   return {};

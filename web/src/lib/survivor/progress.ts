@@ -1,7 +1,8 @@
 /*
  * 픽셀 타운 서바이버 — 판 밖 성장 (영구 강화 · 보상 · 동료). 서버 · 화면 공용, "@/" import 금지.
  */
-import { HEROES, RUN_SEC, type HeroId, type Stats } from "./data";
+import { depthMul, HEROES, RUN_SEC, type HeroId, type Stats } from "./data";
+import type { RunQ } from "./quests";
 
 /* ───────────── 영구 강화 (코인으로) ───────────── */
 
@@ -97,23 +98,35 @@ export interface RunReport {
   kills: number;
   lv: number;
   win: boolean;
-  coins: number;
+  depth: number;
+  /** 오버타임 (초) */
+  ot: number;
+  q: RunQ;
 }
 
 /** 다이스 타운 별사탕 (뽑기 재화) */
 export const STAR_FIRST_WIN = 60;
 export function runStars(r: RunReport): number {
   const sec = Math.min(r.sec, RUN_SEC + 600);
-  return Math.min(120, Math.floor(sec / 60) * 4 + Math.floor(r.kills / 150) + (r.win ? 30 : 0));
+  const base = Math.floor(sec / 60) * 4 + Math.floor(r.kills / 150) + (r.win ? 30 : 0);
+  return Math.min(Math.round(120 * depthMul(r.depth).reward), Math.round(base * depthMul(r.depth).reward));
 }
-/** 랭킹 점수: 클리어가 우선, 그다음 버틴 시간 · 처치 */
-export const runScore = (r: RunReport) => (r.win ? 1_000_000 : 0) + Math.min(r.sec, 9999) * 100 + Math.min(r.kills, 99_999);
+/** 영구 강화 코인: 버틴 시간 · 처치 · 클리어 (판 안 금화와 따로 — 금화는 판 안에서 다 써도 됨) */
+export function runCoins(r: RunReport): number {
+  const sec = Math.min(r.sec, RUN_SEC + 900);
+  return Math.round(((sec / 60) * 12 + Math.min(r.kills, 30_000) / 40 + (r.win ? 100 : 0)) * depthMul(r.depth).reward);
+}
+/** 랭킹 점수: 깊이 → 클리어 → 버틴 시간(오버타임 포함) → 처치 */
+export const runScore = (r: RunReport) => Math.min(r.depth, 99) * 10_000_000 + (r.win ? 1_000_000 : 0) + Math.min(r.sec, 9999) * 100 + Math.min(r.kills, 99);
 /** 말이 되는 기록인지 (조작 걸러내기) */
 export function plausible(r: RunReport, wallSec: number): boolean {
-  if (!(r.sec >= 0 && r.kills >= 0 && r.lv >= 1 && r.coins >= 0)) return false;
+  if (!(r.sec >= 0 && r.kills >= 0 && r.lv >= 1)) return false;
   if (r.sec > wallSec + 5) return false;
-  if (r.kills > r.sec * 40 + 50) return false;
-  if (r.lv > 200 || r.coins > r.sec * 20 + 500) return false;
+  if (r.kills > r.sec * 60 + 50) return false;
+  if (r.lv > 250) return false;
   if (r.win && r.sec < RUN_SEC) return false;
+  if (r.ot > Math.max(0, r.sec - RUN_SEC) + 5) return false;
+  const q = r.q;
+  if (q.chests > r.sec / 6 + 6 || q.shrines > r.sec / 10 + 4 || q.trials > 3 || q.gold > r.sec * 6 + 400) return false;
   return true;
 }

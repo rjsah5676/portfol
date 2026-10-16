@@ -1,7 +1,7 @@
 /*
  * 픽셀 타운 서바이버 — 캔버스 그리기 (512 × 288 도트 화면, 밖에서 정수배로 키움)
  */
-import { ENEMIES, VIEW_H, VIEW_W, WEAPONS, type EnemyKind } from "@/lib/survivor/data";
+import { ENEMIES, FLAG_CHARGE, SHRINE_CHARGE, TRIAL_R, VIEW_H, VIEW_W, WEAPONS, type EnemyKind, type ThingKind } from "@/lib/survivor/data";
 import type { Run } from "@/lib/survivor/sim";
 import { DECO_CELL, decoAt, digits, getArt, TILE_CHUNK, type HeroArt } from "./art";
 
@@ -48,6 +48,8 @@ export interface Fx {
   bolts: Bolt[];
   /** 주사위 눈 (주사위 무기 · 필살기) */
   dice: { x: number; y: number; face: number; t: number; big: boolean }[];
+  /** 전기 젤리 연쇄 번개 */
+  zaps: { x0: number; y0: number; x1: number; y1: number; t: number }[];
   shake: number;
   flash: number;
   flashC: string;
@@ -55,7 +57,7 @@ export interface Fx {
   /** 플레이어 걷기 프레임 시간 */
   walkT: number;
 }
-export const newFx = (): Fx => ({ nums: [], parts: [], rings: [], bolts: [], dice: [], shake: 0, flash: 0, flashC: "#ffffff", hurt: 0, walkT: 0 });
+export const newFx = (): Fx => ({ nums: [], parts: [], rings: [], bolts: [], dice: [], zaps: [], shake: 0, flash: 0, flashC: "#ffffff", hurt: 0, walkT: 0 });
 
 export function tickFx(fx: Fx, dt: number) {
   for (const n of fx.nums) n.t += dt;
@@ -72,6 +74,8 @@ export function tickFx(fx: Fx, dt: number) {
   fx.rings = fx.rings.filter((r) => r.t < r.life);
   for (const b of fx.bolts) b.t += dt;
   fx.bolts = fx.bolts.filter((b) => b.t < 0.25);
+  for (const z of fx.zaps) z.t += dt;
+  fx.zaps = fx.zaps.filter((z) => z.t < 0.18);
   for (const d of fx.dice) d.t += dt;
   fx.dice = fx.dice.filter((d) => d.t < (d.big ? 1.4 : 0.7));
   if (fx.dice.length > 30) fx.dice.splice(0, fx.dice.length - 30);
@@ -118,6 +122,43 @@ export function draw(ctx: CanvasRenderingContext2D, r: Run, fx: Fx, hero: HeroAr
 
   // 보스 철창 바닥 테두리
   if (r.arena) drawArenaFloor(ctx, r, X, Y, time);
+
+  // 맵 오브젝트 바닥 표시 (충전 원 · 시련 원)
+  for (const t of r.things) {
+    if (!t.alive || Math.abs(t.x - p.x) > VIEW_W / 2 + TRIAL_R + 20 || Math.abs(t.y - p.y) > VIEW_H / 2 + TRIAL_R) continue;
+    const tx = X(t.x);
+    const ty = Y(t.y);
+    if (t.k === "shrine" || t.k === "gshrine" || t.k === "flag") {
+      const R = t.k === "flag" ? 24 : 30;
+      const c = t.k === "gshrine" ? "#ffd23a" : t.k === "flag" ? "#ff9cc8" : "#4ff0c8";
+      ctx.globalAlpha = 0.18 + Math.sin(time * 3 + t.id) * 0.05;
+      ellipse(ctx, tx, ty, R, R * 0.8, c);
+      ctx.globalAlpha = 0.85;
+      dotsRing(ctx, tx, ty, R, R * 0.8, c, time * 0.8, 20);
+      const k = t.t / (t.k === "flag" ? FLAG_CHARGE : SHRINE_CHARGE);
+      if (k > 0) arc(ctx, tx, ty, R, R * 0.8, -Math.PI / 2, Math.PI * 2 * Math.min(1, k), "#ffffff", 3);
+      ctx.globalAlpha = 1;
+    } else if (t.k === "trial") {
+      const pulse = t.on ? 0.22 + Math.sin(time * 8) * 0.08 : 0.1;
+      ctx.globalAlpha = pulse;
+      ellipse(ctx, tx, ty, TRIAL_R, TRIAL_R * 0.8, "#e0d8ff");
+      ctx.globalAlpha = t.on ? 0.95 : 0.6;
+      dotsRing(ctx, tx, ty, TRIAL_R, TRIAL_R * 0.8, t.on ? "#ffffff" : "#e0d8ff", -time * 0.4, 48);
+      if (!t.on) dotsRing(ctx, tx, ty, TRIAL_R * 0.45, TRIAL_R * 0.36, "#e0d8ff", time, 16);
+      ctx.globalAlpha = 1;
+    }
+  }
+  // 보스 내려찍기 예고 (빨간 원이 차오름)
+  for (const z of r.zones) {
+    if (z.k !== "slam" || z.delay <= 0) continue;
+    const k = 1 - Math.min(1, z.delay / 1.0);
+    ctx.globalAlpha = 0.22;
+    ellipse(ctx, X(z.x), Y(z.y), z.r, z.r * 0.77, "#ff3d6e");
+    ctx.globalAlpha = 0.5 + k * 0.4;
+    ellipse(ctx, X(z.x), Y(z.y), z.r * k, z.r * 0.77 * k, "#ff3d6e");
+    arc(ctx, X(z.x), Y(z.y), z.r, z.r * 0.77, 0, Math.PI * 2, "#ff8fb8", 2);
+    ctx.globalAlpha = 1;
+  }
 
   // 그림자 · 장판
   for (const z of r.zones) {
@@ -223,6 +264,23 @@ export function draw(ctx: CanvasRenderingContext2D, r: Run, fx: Fx, hero: HeroAr
           ctx.fillRect(ex - 1, ey - h - 3 + hover, 3, 3);
         }
         if (e.boss) drawBossExtra(ctx, r, e, ex, ey, h);
+        if (e.ice > 0) {
+          // 얼음: 하얀 실루엣을 반투명하게 덮어 얼어붙은 느낌
+          ctx.globalAlpha = 0.5;
+          const wi = art.w[fr];
+          if (e.face < 0) {
+            ctx.save();
+            ctx.translate(ex, 0);
+            ctx.scale(-1, 1);
+            ctx.drawImage(wi, Math.round(-w / 2), ey - h + 2 + hover, w, h);
+            ctx.restore();
+          } else ctx.drawImage(wi, Math.round(ex - w / 2), ey - h + 2 + hover, w, h);
+          ctx.globalAlpha = 1;
+        }
+        if (e.poison > 0) {
+          ctx.fillStyle = "#a8e05a";
+          ctx.fillRect(ex - 2 + Math.round(Math.sin(e.t * 9) * 2), ey - h - 3, 2, 2);
+        }
         if (e.slow > 0) {
           ctx.fillStyle = "#9fdcff";
           ctx.fillRect(ex - 3, ey - h - 2, 2, 2);
@@ -263,6 +321,11 @@ export function draw(ctx: CanvasRenderingContext2D, r: Run, fx: Fx, hero: HeroAr
       ctx.globalAlpha = 0.4;
       ellipse(ctx, px, py + 1, 8, 3, "#05030f");
       ctx.globalAlpha = 1;
+      if (r.flag) {
+        ctx.globalAlpha = 0.5 + Math.sin(time * 10) * 0.2;
+        arc(ctx, px, py - 2, 16, 7, 0, Math.PI * 2, "#ff9cc8", 1);
+        ctx.globalAlpha = 1;
+      }
       if (r.buff.crit > 0 || r.buff.haste > 0) {
         ctx.globalAlpha = 0.55 + Math.sin(time * 12) * 0.25;
         arc(ctx, px, py, 14, 6, 0, Math.PI * 2, r.buff.crit > 0 ? "#ffd23a" : "#7ff0d8", 2);
@@ -287,6 +350,27 @@ export function draw(ctx: CanvasRenderingContext2D, r: Run, fx: Fx, hero: HeroAr
       }
     },
   });
+  // 맵 오브젝트
+  for (const t of r.things) {
+    if (!t.alive || Math.abs(t.x - p.x) > VIEW_W / 2 + 40 || Math.abs(t.y - p.y) > VIEW_H / 2 + 50) continue;
+    const img = A.things[t.k];
+    ds.push({
+      y: t.y,
+      f: () => {
+        const bob = t.k === "merchant" ? Math.round(Math.sin(time * 3) * 1) : t.k === "gshrine" || t.k === "shrine" ? Math.round(Math.sin(time * 2 + t.id) * 1.5) : 0;
+        ctx.globalAlpha = 0.35;
+        ellipse(ctx, X(t.x), Y(t.y) + 1, img.width * 0.4, 3, "#05030f");
+        ctx.globalAlpha = 1;
+        ctx.drawImage(img, X(t.x) - (img.width >> 1), Y(t.y) - img.height + 2 + bob);
+        if (t.k === "box") {
+          const d = digits(String(t.cost), r.p.gold >= t.cost ? "#ffd23a" : "#ff8fb8", 1);
+          ctx.drawImage(d, X(t.x) - (d.width >> 1) + 3, Y(t.y) - img.height - 8);
+          ctx.fillStyle = "#ffd23a";
+          ctx.fillRect(X(t.x) - (d.width >> 1) - 3, Y(t.y) - img.height - 7, 4, 4);
+        }
+      },
+    });
+  }
   // 맵 장식 (화면 근처 칸만)
   const c0 = Math.floor((camX - 60) / DECO_CELL);
   const c1 = Math.floor((camX + VIEW_W + 60) / DECO_CELL);
@@ -388,6 +472,26 @@ export function draw(ctx: CanvasRenderingContext2D, r: Run, fx: Fx, hero: HeroAr
       case "shuriken":
         spin(ctx, A.shuriken, x, y, time * 20);
         break;
+      case "gale":
+        // 질풍 수리검: 하늘색 꼬리
+        ctx.globalAlpha = 0.5;
+        ctx.fillStyle = "#bff2ff";
+        ctx.fillRect(x - Math.round(s.vx * 0.03) - 2, y - Math.round(s.vy * 0.03) - 1, 4, 3);
+        ctx.globalAlpha = 1;
+        spin(ctx, A.shuriken, x, y, time * 30);
+        break;
+      case "cyclone": {
+        const q = Math.floor(time * 14) % 4;
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate((q * Math.PI) / 2);
+        ctx.drawImage(A.boomerang, -A.boomerang.width, -A.boomerang.height, A.boomerang.width * 2, A.boomerang.height * 2);
+        ctx.restore();
+        ctx.globalAlpha = 0.5;
+        arc(ctx, x, y, s.r + 2, s.r * 0.8, time * 12, 4, "#ffd07a", 1);
+        ctx.globalAlpha = 1;
+        break;
+      }
       case "lance": {
         const a = Math.atan2(s.vy, s.vx);
         ctx.save();
@@ -468,12 +572,13 @@ export function draw(ctx: CanvasRenderingContext2D, r: Run, fx: Fx, hero: HeroAr
         spin(ctx, A.boomerang, x, y, time * 14);
         break;
       case "missile":
+      case "barrage":
       case "blades": {
         const a = Math.atan2(s.vy, s.vx);
         ctx.save();
         ctx.translate(x, y);
         ctx.rotate(a);
-        if (s.w === "missile") {
+        if (s.w === "missile" || s.w === "barrage") {
           ctx.fillStyle = "#ffffff";
           ctx.fillRect(-6, -1, 3, 2);
           ctx.fillStyle = def.color;
@@ -491,11 +596,12 @@ export function draw(ctx: CanvasRenderingContext2D, r: Run, fx: Fx, hero: HeroAr
         break;
       }
       case "ball":
+      case "rainbow":
       case "pinball": {
         const rr = Math.round(s.r);
         ctx.fillStyle = "#170f2e";
         circle(ctx, x, y, rr + 1);
-        ctx.fillStyle = def.color;
+        ctx.fillStyle = s.w === "rainbow" ? `hsl(${Math.floor(time * 360 + s.x) % 360} 95% 65%)` : def.color;
         circle(ctx, x, y, rr);
         ctx.fillStyle = "#ffffff";
         ctx.fillRect(x - Math.round(rr / 2), y - Math.round(rr / 2), 2, 2);
@@ -545,6 +651,20 @@ export function draw(ctx: CanvasRenderingContext2D, r: Run, fx: Fx, hero: HeroAr
     }
     ctx.fillStyle = "#c8a6ff";
     ellipse(ctx, X(b.x), Y(b.y), b.r, b.r * 0.6, "#c8a6ff");
+    ctx.globalAlpha = 1;
+  }
+  // 연쇄 번개
+  for (const z of fx.zaps) {
+    ctx.globalAlpha = 1 - z.t / 0.18;
+    ctx.strokeStyle = "#ffe14a";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(X(z.x0), Y(z.y0));
+    const mx = (z.x0 + z.x1) / 2 + Math.sin(z.t * 90) * 6;
+    const my = (z.y0 + z.y1) / 2 + Math.cos(z.t * 90) * 6;
+    ctx.lineTo(X(mx), Y(my));
+    ctx.lineTo(X(z.x1), Y(z.y1));
+    ctx.stroke();
     ctx.globalAlpha = 1;
   }
   // 조각
@@ -614,6 +734,7 @@ export function draw(ctx: CanvasRenderingContext2D, r: Run, fx: Fx, hero: HeroAr
   }
 
   if (r.arena) drawArenaBars(ctx, r, X, Y);
+  drawArrows(ctx, r, A.things, time);
 
   // 피격 · 번쩍
   if (fx.hurt > 0) {
@@ -627,6 +748,54 @@ export function draw(ctx: CanvasRenderingContext2D, r: Run, fx: Fx, hero: HeroAr
     ctx.globalAlpha = Math.min(1, fx.flash) * 0.7;
     ctx.fillStyle = fx.flashC;
     ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+    ctx.globalAlpha = 1;
+  }
+}
+
+const ARROW_C: Record<ThingKind, string> = { shrine: "#4ff0c8", gshrine: "#ffd23a", statue: "#ffd23a", bell: "#ff8a6b", flag: "#ff9cc8", box: "#c58bff", merchant: "#c58bff", fountain: "#7ad7ff", trial: "#e0d8ff" };
+/** 화면 밖 오브젝트: 가장자리 화살표 + 작은 그림 */
+function drawArrows(ctx: CanvasRenderingContext2D, r: Run, things: Record<ThingKind, HTMLCanvasElement>, time: number) {
+  const p = r.p;
+  const cx = VIEW_W / 2;
+  const cy = VIEW_H / 2 + 10;
+  const placed: [number, number][] = [];
+  for (const t of r.things) {
+    if (!t.alive) continue;
+    const dx = t.x - p.x;
+    const dy = t.y - p.y;
+    if (Math.abs(dx) < VIEW_W / 2 - 4 && Math.abs(dy) < VIEW_H / 2 - 4) continue;
+    const d = Math.hypot(dx, dy);
+    if (d > 760) continue;
+    const k = Math.min((VIEW_W / 2 - 22) / Math.abs(dx || 0.01), (VIEW_H / 2 - 30) / Math.abs(dy || 0.01));
+    let ax = Math.round(cx + dx * k);
+    let ay = Math.round(cy + dy * k);
+    // 겹치면 가장자리를 따라 비켜 놓음
+    for (let n = 0; n < 6 && placed.some(([x, y]) => Math.abs(x - ax) < 24 && Math.abs(y - ay) < 24); n++) {
+      if (Math.abs(ax - cx) > VIEW_W / 2 - 30) ay += ay < cy ? 24 : -24;
+      else ax += ax < cx ? 24 : -24;
+    }
+    placed.push([ax, ay]);
+    const a = Math.atan2(dy, dx);
+    const c = ARROW_C[t.k];
+    const pulse = t.k === "trial" || t.k === "merchant" || t.k === "fountain" ? 0.7 + Math.sin(time * 6) * 0.3 : 0.85;
+    ctx.globalAlpha = pulse;
+    ctx.fillStyle = "#07051a";
+    ctx.fillRect(ax - 11, ay - 11, 22, 22);
+    ctx.fillStyle = c;
+    ctx.fillRect(ax - 10, ay - 10, 20, 1);
+    ctx.fillRect(ax - 10, ay + 9, 20, 1);
+    const img = things[t.k];
+    const sc = Math.min(1, 16 / Math.max(img.width, img.height));
+    ctx.drawImage(img, ax - Math.round((img.width * sc) / 2), ay - Math.round((img.height * sc) / 2), Math.round(img.width * sc), Math.round(img.height * sc));
+    // 방향 삼각형
+    const tx = ax + Math.cos(a) * 15;
+    const ty = ay + Math.sin(a) * 15;
+    ctx.fillStyle = c;
+    ctx.beginPath();
+    ctx.moveTo(tx + Math.cos(a) * 4, ty + Math.sin(a) * 4);
+    ctx.lineTo(tx + Math.cos(a + 2.4) * 4, ty + Math.sin(a + 2.4) * 4);
+    ctx.lineTo(tx + Math.cos(a - 2.4) * 4, ty + Math.sin(a - 2.4) * 4);
+    ctx.fill();
     ctx.globalAlpha = 1;
   }
 }
@@ -653,6 +822,7 @@ function drawNight(ctx: CanvasRenderingContext2D, r: Run, X: (x: number) => numb
   hole(X(r.p.x), Y(r.p.y - 8), 170, 0.85);
   for (const pr of r.props) hole(X(pr.x), Y(pr.y - 24), 50 + Math.sin(time * 3 + pr.x) * 3, 0.9);
   for (const k of r.pickups) if (k.k === "chest") hole(X(k.x), Y(k.y - 6), 40, 0.9);
+  for (const t of r.things) if (t.alive && t.k !== "statue" && t.k !== "box") hole(X(t.x), Y(t.y - 10), t.k === "trial" ? TRIAL_R : 46, t.k === "trial" ? 0.5 : 0.85);
   // 빛나는 장식 (호박등 · 분수)
   const camX = -X(0);
   const camY = -Y(0);
