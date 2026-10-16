@@ -1341,11 +1341,6 @@ export default function TableView({
                 <ActWord a={tag} className={hero ? "pk-acttag-me" : ""} />
               </span>
             )}
-            {gains[i] && wonHere > 0 && (
-              <Rise key={gains[i].key} className="absolute top-[18%] left-1/2 -translate-x-1/2 text-[1.2em] text-[var(--pk-brass)]">
-                +{fmtShort(gains[i].amt)}
-              </Rise>
-            )}
           </div>
           {/* 카드 칸: 캐릭터 칸에 딱 붙게, 엎은 카드 묶음 → 편 카드 차곡차곡. 족보 · 결과 글자는 카드 아랫단 위에 */}
           <div
