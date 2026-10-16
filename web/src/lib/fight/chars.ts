@@ -1286,7 +1286,8 @@ const RAW: CharSrc[] = [
           hover: 500,
           rwDive: true,
           timeStop: 30,
-          cd: 130,
+          // 10.16 재사용 대기 0.5초 늘림 (130 → 160)
+          cd: 160,
         },
       },
       X: {
