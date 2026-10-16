@@ -21,7 +21,7 @@ import sys
 from pathlib import Path
 
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageDraw
 from scipy import ndimage
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -100,6 +100,12 @@ def shrink_front(p: np.ndarray, cut: float, k: float) -> np.ndarray:
     return out[:, : xs.max() + 1].copy()
 
 
+def _poly_mask(shape, poly) -> np.ndarray:
+    img = Image.new("1", (shape[1], shape[0]), 0)
+    ImageDraw.Draw(img).polygon([tuple(p) for p in poly], fill=1)
+    return np.asarray(img, bool)
+
+
 def grid_frames(rgba: np.ndarray, grid: list):
     """칸을 손으로 정한 시트: grid = [{"y": [y0, y1], "x": [x0, 자를 곳..., x끝]}, ...] (줄마다)
     덩어리가 절반 넘게 그 칸 안에 있으면 통째로 그 프레임 (칸 경계를 넘는 발 · 귀 · 채찍 끝도 살림),
@@ -126,6 +132,15 @@ def grid_frames(rgba: np.ndarray, grid: list):
             m = np.isin(lab, full)
             pm = np.zeros_like(m)
             pm[y0:y1, x0:x1] = np.isin(cell, part)
+            if "own" in row:
+                # 옆 칸까지 붙은 덩어리(옆 그림 마이크 끝이 몸에 닿는 등)는 곧은 칸 경계 대신 own 다각형으로 나눔:
+                # own = [[칸, [[x, y], ...]], ...] — 다각형 안은 그 칸 몫 (다른 칸에선 뺌)
+                for oc, poly in row["own"]:
+                    pg = _poly_mask(lab.shape, poly)
+                    if oc == len(frs):
+                        pm |= pg & np.isin(lab, part)
+                    else:
+                        pm &= ~pg
             m |= pm
             frs.append({"mask": m})
         out.append(frs)
