@@ -22,6 +22,8 @@ import { shopFor } from "../../../../web/src/lib/points";
 
 export interface WalletDoc {
   money: number;
+  /** 금고에 넣어 둔 칩 (테이블에는 못 들고 감 · 랭킹에는 합쳐서) */
+  vault: number;
   reviveUsed: number;
   /** 고른 캐릭터 */
   char: CharId;
@@ -50,9 +52,9 @@ type MoneyFields = Pick<UserDoc, "nick"> & {
   money?: number;
   points?: number;
   revive?: { day: string; n: number };
-  poker?: { char?: string; skins?: string[]; wear?: Record<string, string>; chars?: string[]; attend?: string; mail?: MailItem[] };
+  poker?: { char?: string; skins?: string[]; wear?: Record<string, string>; chars?: string[]; attend?: string; mail?: MailItem[]; vault?: number };
 };
-const WALLET_PROJ = { nick: 1, money: 1, points: 1, revive: 1, "poker.char": 1, "poker.skins": 1, "poker.wear": 1, "poker.chars": 1, "poker.mail": 1 } as const;
+const WALLET_PROJ = { nick: 1, money: 1, points: 1, revive: 1, "poker.char": 1, "poker.skins": 1, "poker.wear": 1, "poker.chars": 1, "poker.mail": 1, "poker.vault": 1 } as const;
 /** 우편함에 쌓아 두는 최대 수 (넘으면 오래된 것부터 사라짐) */
 const MAIL_KEEP = 30;
 
@@ -81,6 +83,7 @@ export function createWallet(db: Database, now: () => number = Date.now, points?
     const c = charOf(d.poker?.char);
     return {
       money: d.money ?? START_MONEY,
+      vault: Math.max(0, d.poker?.vault ?? 0),
       reviveUsed: d.revive && d.revive.day === kstDay(now()) ? d.revive.n : 0,
       // 고른 캐릭터가 사야 하는 캐릭터인데 안 샀으면(가격이 새로 붙었거나 문서가 꼬였을 때) 기본 캐릭터로
       char: charOwned(c, chars) ? c : "jinwoo",
@@ -139,7 +142,8 @@ export function createWallet(db: Database, now: () => number = Date.now, points?
     async revive(uid: string): Promise<WalletDoc> {
       await materialize([uid]);
       const day = kstDay(now());
-      const under = { _id: uid, money: { $lt: REVIVE.under } };
+      // 금고에 넣어 둔 칩까지 합쳐서 기준 미만일 때만 (금고에 다 넣고 회생 받는 것 막음)
+      const under = { _id: uid, $expr: { $lt: [{ $add: ["$money", { $ifNull: ["$poker.vault", 0] }] }, REVIVE.under] } };
       // 오늘 이미 받은 적이 있는 경우 → 횟수 +1
       let r = await col.updateOne(
         { ...under, "revive.day": day, "revive.n": { $lt: REVIVE.perDay } },
@@ -151,7 +155,7 @@ export function createWallet(db: Database, now: () => number = Date.now, points?
       if (!r.modifiedCount) {
         const w = await get(uid);
         if (!w) throw new AppError("NOT_MEMBER", "회원만 쓸 수 있어요.", 403);
-        if (w.money >= REVIVE.under) throw new AppError("NOT_BROKE", "칩이 500만 아래로 내려가면 받을 수 있어요.", 409);
+        if (w.money + w.vault >= REVIVE.under) throw new AppError("NOT_BROKE", "칩이 500만 아래로 내려가면 받을 수 있어요 (금고 포함).", 409);
         throw new AppError("REVIVE_LIMIT", "오늘 회생은 다 썼어요. 자정에 다시 채워져요.", 409);
       }
       return (await changed(uid))!;
@@ -227,12 +231,16 @@ export function createWallet(db: Database, now: () => number = Date.now, points?
       await Promise.all(entries.map((e) => changed(e.uid)));
     },
 
-    /** 자금 순위: 한 판이라도 친 회원만 */
+    /** 자금 순위: 한 판이라도 친 회원만 · 보유 칩 + 금고 */
     async rank(limit = 50): Promise<RankRow[]> {
       const docs = await col
-        .find({ "stats.poker.hands": { $gte: 1 } }, { projection: { nick: 1, money: 1, "stats.poker.hands": 1, "poker.char": 1, "poker.skins": 1, "poker.wear": 1, "avatar.at": 1, photo: 1 } })
-        .sort({ money: -1 })
-        .limit(limit)
+        .aggregate([
+          { $match: { "stats.poker.hands": { $gte: 1 } } },
+          { $project: { nick: 1, money: 1, "stats.poker.hands": 1, "poker.char": 1, "poker.skins": 1, "poker.wear": 1, "poker.vault": 1, "avatar.at": 1, photo: 1 } },
+          { $addFields: { total: { $add: [{ $ifNull: ["$money", START_MONEY] }, { $ifNull: ["$poker.vault", 0] }] } } },
+          { $sort: { total: -1 } },
+          { $limit: limit },
+        ])
         .toArray();
       return docs.map((d) => {
         const u = d as unknown as MoneyFields & { stats?: { poker?: { hands?: number } }; avatar?: { at?: number }; photo?: string | null };
@@ -240,7 +248,7 @@ export function createWallet(db: Database, now: () => number = Date.now, points?
           // 직접 올린 프로필 사진 → 로그인 계정 사진 → 없으면 null (화면에서 캐릭터 얼굴)
           avatar: pictureOf(String(d._id), u),
           nick: u.nick,
-          money: u.money ?? START_MONEY,
+          money: (u.money ?? START_MONEY) + Math.max(0, u.poker?.vault ?? 0),
           hands: u.stats?.poker?.hands ?? 0,
           char: charOf(u.poker?.char),
           look: lookOf(charOf(u.poker?.char), skinsOf(u.poker).wear),
@@ -302,6 +310,19 @@ export function createWallet(db: Database, now: () => number = Date.now, points?
       if (!points) throw new AppError("BAD_REQUEST", "환전을 할 수 없어요.", 400);
       if (dir === "toPoints") await points.chipsToPoints(uid, units);
       else await points.pointsToChips(uid, units);
+      return (await changed(uid))!;
+    },
+
+    /**
+     * 금고: 보유 칩 ↔ 금고. 넣을 칩(꺼낼 칩)이 충분할 때만 — 조건부 갱신 하나라 두 번 눌러도 한 번만. 테이블에 앉아 있는지는 부르는 쪽에서 막음
+     */
+    async vault(uid: string, dir: "in" | "out", amount: number) {
+      await materialize([uid]);
+      const r =
+        dir === "in"
+          ? await col.updateOne({ _id: uid, money: { $gte: amount } }, { $inc: { money: -amount, "poker.vault": amount } } as never)
+          : await col.updateOne({ _id: uid, "poker.vault": { $gte: amount } } as never, { $inc: { money: amount, "poker.vault": -amount } } as never);
+      if (!r.modifiedCount) throw new AppError("NOT_ENOUGH", dir === "in" ? "보유 칩이 모자라요." : "금고에 그만큼 없어요.", 409);
       return (await changed(uid))!;
     },
 

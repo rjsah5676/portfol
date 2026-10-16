@@ -326,7 +326,7 @@ export function registerPoker({ gateway, db, users, points }: Deps, opts: PokerO
   async function autoRevive(uid: string): Promise<Wallet | null> {
     if (opts.autoRevive === false || seatOf.has(uid)) return null;
     const cur = await wallet.get(uid);
-    if (!cur || cur.money >= REVIVE.under || cur.reviveUsed >= REVIVE.perDay) return null;
+    if (!cur || cur.money + cur.vault >= REVIVE.under || cur.reviveUsed >= REVIVE.perDay) return null;
     try {
       const w = await wallet.revive(uid);
       const out: Wallet = { ...walletWire(uid, w), revived: { amount: REVIVE.amount, left: REVIVE.perDay - w.reviveUsed } };
@@ -1533,6 +1533,16 @@ export function registerPoker({ gateway, db, users, points }: Deps, opts: PokerO
     if (seatOf.has(uid)) throw new AppError("SEATED", "테이블에서 일어난 뒤에 바꿀 수 있어요.", 409);
     await settlingOf.get(uid);
     const w = await wallet.exchange(uid, dir, units);
+    return walletWire(uid, w);
+  });
+
+  /** 금고: 보유 칩 ↔ 금고 (테이블에 앉아 있으면 안 됨 — 앉은 동안의 칩은 판에 들고 있어서) */
+  gateway.rpc("poker.vault", async (ctx, raw) => {
+    const { uid } = member(ctx);
+    const { dir, amount } = z.object({ dir: z.enum(["in", "out"]), amount: z.number().int().min(1).max(1e15) }).parse(raw);
+    if (seatOf.has(uid)) throw new AppError("SEATED", "테이블에서 일어난 뒤에 쓸 수 있어요.", 409);
+    await settlingOf.get(uid);
+    const w = await wallet.vault(uid, dir, amount);
     return walletWire(uid, w);
   });
 

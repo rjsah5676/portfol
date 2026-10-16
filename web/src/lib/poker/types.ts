@@ -30,6 +30,8 @@ export interface LobbyTable {
 
 export interface Wallet {
   money: number;
+  /** 금고에 넣어 둔 칩 (테이블에는 못 들고 감 · 랭킹에는 합쳐서) */
+  vault: number;
   /** 오늘 받은 회생 횟수 */
   reviveUsed: number;
   /** 지금 앉아 있는 테이블 (없으면 null) */

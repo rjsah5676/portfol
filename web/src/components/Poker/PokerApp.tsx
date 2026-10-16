@@ -7,6 +7,7 @@ import { useAuth } from "@/lib/AuthContext";
 import DevPanel from "./DevPanel";
 import Mailbox from "./Mailbox";
 import Missions from "./Missions";
+import Vault from "./Vault";
 import { useDailyReady } from "@/components/Points/DailyMissions";
 import { asset } from "@/lib/poker/assets";
 import {
@@ -87,6 +88,7 @@ export default function PokerApp({ rank }: { rank: RankRow[] | null }) {
   const [mailOpen, setMailOpen] = useState(false);
   // 일일 미션 (GP) — 닫을 때 받을 수 있는 수 다시 셈
   const [missionOpen, setMissionOpen] = useState(false);
+  const [vaultOpen, setVaultOpen] = useState(false);
   const missionReady = useDailyReady("poker", missionOpen);
   const [attendNote, setAttendNote] = useState<{ text: string; key: number } | null>(null);
 
@@ -290,6 +292,7 @@ export default function PokerApp({ rank }: { rank: RankRow[] | null }) {
       {admin && <TopBtn label="테스트" icon={DEV_ICON} onClick={() => setDevOpen(true)} />}
       {/* 게임방 안에서는 상점 없이 옷장(지금 캐릭터 스킨 갈아입기)만 */}
       {!tableId && <TopBtn label="상점" icon={SHOP_ICON} gold onClick={() => setShop("shop")} />}
+      {wallet && !tableId && <TopBtn label="금고" icon={VAULT_ICON} onClick={() => setVaultOpen(true)} />}
       <TopBtn label="옷장" icon={CLOSET_ICON} onClick={() => setShop("closet")} />
       {wallet && !tableId && (
         <button
@@ -548,6 +551,9 @@ export default function PokerApp({ rank }: { rank: RankRow[] | null }) {
             }}
           />
         )}
+        {vaultOpen && wallet && !tableId && (
+          <Vault wallet={wallet} mobile={o === "v"} maxH={size.h - (o === "h" ? 24 : 8)} onClose={() => setVaultOpen(false)} onWallet={setWallet} />
+        )}
         {missionOpen && wallet && !tableId && (
           <Missions mobile={o === "v"} maxH={size.h - (o === "h" ? 24 : 8)} onClose={() => setMissionOpen(false)} />
         )}
@@ -672,6 +678,13 @@ const SHOP_ICON = (
   <>
     <path d="M5 8h14l-1.2 11.2a1 1 0 0 1-1 .8H7.2a1 1 0 0 1-1-.8z" />
     <path d="M9 8V6.5a3 3 0 0 1 6 0V8" />
+  </>
+);
+const VAULT_ICON = (
+  <>
+    <rect x="3.5" y="4.5" width="17" height="15" rx="2" />
+    <circle cx="12" cy="12" r="3.2" />
+    <path d="M12 8.8v1.2M12 14v1.2M8.8 12H10M14 12h1.2M6.5 19.5v1.5M17.5 19.5v1.5" />
   </>
 );
 const CLOSET_ICON = (

@@ -11,7 +11,7 @@ import { CHAR as MARBLE_CHAR } from "../../web/src/lib/marble/data";
  */
 
 type Doc = UserDoc & {
-  poker?: { exch?: number };
+  poker?: { exch?: number; vault?: number };
   stats?: UserDoc["stats"] & { defense?: { runs?: number; wins?: number; kills?: number; wave?: number } };
 };
 
@@ -20,10 +20,10 @@ export async function metricsOf(db: Database, uid: string, game: AchGame): Promi
   const m: Record<string, number> = {};
 
   if (game === "poker") {
-    const d = (await users.findOne({ _id: uid }, { projection: { money: 1, "poker.exch": 1, "stats.poker": 1 } })) as Doc | null;
+    const d = (await users.findOne({ _id: uid }, { projection: { money: 1, "poker.exch": 1, "poker.vault": 1, "stats.poker": 1 } })) as Doc | null;
     const pk = d?.stats?.poker ?? {};
-    // 환전으로 받은 칩은 빼고 (칩을 포인트로 내준 쪽은 빼지 않음)
-    m["poker.chips"] = Math.max(0, (d?.money ?? START_MONEY) - Math.max(0, d?.poker?.exch ?? 0));
+    // 환전으로 받은 칩은 빼고 (칩을 포인트로 내준 쪽은 빼지 않음) · 금고에 넣어 둔 칩은 합침
+    m["poker.chips"] = Math.max(0, (d?.money ?? START_MONEY) + Math.max(0, d?.poker?.vault ?? 0) - Math.max(0, d?.poker?.exch ?? 0));
     m["poker.hands"] = pk.hands ?? 0;
     m["poker.wins"] = (pk.holdem?.wins ?? 0) + (pk.seven?.wins ?? 0);
     m["poker.best"] = pk.best ?? 0;

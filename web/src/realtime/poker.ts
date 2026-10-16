@@ -134,6 +134,8 @@ export const buyChar = (char: CharId) => rpc<Wallet>("poker.buyChar", { char });
 /** 환전: 칩 ↔ 포인트 (units 칸 — 1칸 = lib/points.ts 의 POKER_EXCHANGE) */
 export const exchange = (dir: "toPoints" | "toChips", units: number) => rpc<Wallet>("poker.exchange", { dir, units });
 export const wearSkin = (char: CharId, skin: SkinId | null) => rpc<Wallet>("poker.wear", { char, skin });
+/** 금고: in = 보유 칩을 넣음, out = 꺼냄 (테이블에 앉아 있으면 안 됨) */
+export const moveVault = (dir: "in" | "out", amount: number) => rpc<Wallet>("poker.vault", { dir, amount });
 
 /** 자금 순위 (한 판이라도 친 회원, 보유금액 순) */
 export const getRank = () => api<{ list: RankRow[] }>("/api/poker/rank").then((r) => r.list);
