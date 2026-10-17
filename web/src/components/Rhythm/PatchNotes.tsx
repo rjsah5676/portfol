@@ -18,12 +18,14 @@ export interface Patch {
 export const PATCHES: Patch[] = [
   {
     ver: "v2.2",
-    name: "HARD · EX 채보 되돌림",
+    name: "채보 되돌림 · 잭 정리",
     date: "2026.10.18",
     lines: [
-      "v2.0 에서 HARD · EX 에도 넣은 「곡 안 밀도 고르기」를 뺌 — 센 구간 동시치기 · 16분을 덜어낸 만큼 레벨 맞추기가 곡 전체에 16분을 더 깔아서, 같은 레벨인데 노트가 늘고 지저분해졌던 것 (Lucky Seven Rush EX 729 → 515노트, 동시치기 34 → 52%)",
-      "HARD · EX 채보가 v1.9 때 그대로 돌아옴 (NIGHTMARE · ULTIMA 는 그대로 — FREEDOM DiVE 도입 고른 것 유지)",
-      "레벨 바뀜: 휘모리 HARD 9 → 10 · EX 12 → 13",
+      "HARD · EX 채보를 v1.9 때로 되돌림 — v2.0 의 「곡 안 밀도 고르기」가 센 구간 동시치기 · 16분을 덜어낸 만큼 레벨 맞추기가 곡 전체에 16분을 더 깔아서, 같은 레벨인데 노트가 늘고 지저분해졌던 것 (Lucky Seven Rush EX 729 → 515노트, 동시치기 34 → 52%)",
+      "NIGHTMARE · ULTIMA 도 v1.9 때 레인으로 — v2.0 의 연타 박 고치기가 박 하나를 고치면서 곡 전체 레인 배치를 바꿔 놨던 것 (레인이 절반쯤 달라졌었음). 이제 연타와 30ms대로 붙은 노트만 빼서 그 자리만 바뀜. 밀도 고르기는 ULTIMA 만",
+      "FREEDOM DiVE NIGHTMARE 는 10/8~10/14 의 Lv15 채보로 고정",
+      "레벨에 비해 너무 빠른 같은 레인 연타(잭)를 옆 레인으로 — osu · Quaver 랭크 채보는 Lv15~17 에서 같은 레인 115ms 안 연타가 노트 1000개에 0~2개, Lv12~14 는 125ms 안이 거의 0개인데 우리는 OVERLOAD PROTOCOL NIGHTMARE 86개 · ANiMA EX 16개였음 (EX 125ms · Lv17 이하 NIGHTMARE · ULTIMA 115ms 기준, Lv18 이상 ULTIMA 는 그대로)",
+      "레벨 바뀜: 夏霞のあと NIGHTMARE 15 → 16, New Dimension EX 13 → 14, Monarch's Fall NIGHTMARE 15 → 14, Maximum Velocity NIGHTMARE 15 → 16, Full Combo!! NIGHTMARE 15 → 16, 휘모리 HARD 9 → 10 · EX 12 → 13, Aragami EX 13 → 14 · NIGHTMARE 16 → 15, FREEDOM DiVE NIGHTMARE 14 → 15 · ULTIMA 17 → 16, Sugar Cloud NIGHTMARE 15 → 14, OVERLOAD PROTOCOL NIGHTMARE 16 → 15, Glitch Bounce NIGHTMARE 14 → 13 · ULTIMA 17 → 15",
     ],
   },
   {

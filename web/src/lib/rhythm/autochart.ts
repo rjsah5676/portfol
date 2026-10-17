@@ -732,6 +732,7 @@ export function makeAutoChart(
   if (isNm(diff)) {
     const shift = shiftMs / 1000;
     const def = nmDefault(diff);
+    const burstT: number[] = [];
     const nm = nightmareNotes(
       an,
       picked,
@@ -749,13 +750,30 @@ export function makeAutoChart(
         patCtx,
         thick: R.thick,
         tri: R.tri,
+        burstOut: burstT,
       }
     );
     const nmRows0 = regularizeRows(nm);
     detrill(nmRows0, R.jackGap, 0.1, rnd);
     deaba(nmRows0, R.jackGap, 0.5, rnd);
-    const nmRows = evenDensity(nmRows0, { an, barOf, nBars, beatSec, minGap: R.minGap, rnd });
-    const nmHeld = addLongNotes(nmRows, {
+    // 곡 안 밀도 고르기는 ULTIMA 만 — NIGHTMARE 에 넣으면 별점이 바뀌어 레벨 맞추기가 다른 시도를 골라
+    //  채보가 통째로 바뀜 (PIXEL Fighting NIGHTMARE 레인 47%만 같음). 따로 된 난수로 — 같은 rnd 를 쓰면
+    //  뒤의 롱노트 고르기까지 곡 전체가 바뀜
+    let evSeed = (seed ^ 0x9e3779b9) >>> 0;
+    const evRnd = () => (evSeed = (evSeed * 1664525 + 1013904223) >>> 0) / 4294967296;
+    const nmRows =
+      diff === "explus"
+        ? evenDensity(nmRows0, { an, barOf, nBars, beatSec, minGap: R.minGap, rnd: evRnd })
+        : nmRows0;
+    // 연타 박: 연타 노트와 45ms 안으로 붙은 다른 노트를 뺌 — 16분(4등분)과 연타(6등분)가 섞이면 30~35ms 간격이 생김
+    //  (148 BPM에서 101ms 16분 사이에 67ms 연타 → 34ms, 한 박만 엄청 촘촘)
+    const nmClean = burstT.length
+      ? nmRows.filter((n) => {
+          const d = burstT.map((b) => Math.abs(b - n.t));
+          return d.some((x) => x < 0.002) || !d.some((x) => x < 0.045);
+        })
+      : nmRows;
+    const nmHeld = addLongNotes(nmClean, {
       ...R.ln,
       beatSec,
       beatTimes: an.beats,
@@ -1126,7 +1144,7 @@ export function makeAutoChart(
   detrill(notes, R.jackGap, 0.1, rnd);
   if (diff === "expert") deaba(notes, R.jackGap, 0.5, rnd);
 
-  // (3.8 곡 안 밀도 고르기는 NIGHTMARE · ULTIMA 만 — HARD · EX 에 넣었더니 센 구간 동시치기 · 16분을 덜어낸 만큼
+  // (3.8 곡 안 밀도 고르기는 ULTIMA 만 — HARD · EX 에 넣었더니 센 구간 동시치기 · 16분을 덜어낸 만큼
   //  레벨 맞추기가 곡 전체에 16분을 더 깔아서(Lucky Seven Rush EX 515 → 729노트, 동시치기 52 → 34%) 더 지저분해졌음)
 
   // 4) 롱노트: osu 랭크 채보처럼 노트의 일정 비율을 짧은 롱노트로 (정박·소리가 남는 자리부터)
@@ -1156,7 +1174,7 @@ export function makeAutoChart(
 }
 
 /**
- * 곡 안 밀도 높낮이 고르게 (NIGHTMARE · ULTIMA): 2마디씩 노트 수를 그 채보의 중앙값과 비교해서
+ * 곡 안 밀도 높낮이 고르게 (ULTIMA): 2마디씩 노트 수를 그 채보의 중앙값과 비교해서
  *  · 1.3배를 넘는 구간은 3개 동시치기 → 엇박 동시치기 → 앞뒤가 16분인 단노트 → 정박 동시치기 순으로 덜어내고
  *  · 0.55배에 못 미치는(완전히 조용하진 않은) 구간은 그 마디의 센 정박·8분 타격으로 채움.
  * 소리가 꽉 찬 도입부만 레벨보다 훨씬 어렵고(FREEDOM DiVE ULTIMA 도입 16 nps — osu Lv21급) 중간이 텅 비어
@@ -1501,6 +1519,8 @@ function nightmareNotes(
     patCtx: PatternCtx;
     thick: [number, number, number];
     tri: number;
+    /** 연타 노트 시각을 여기에 넣어 줌 */
+    burstOut?: number[];
   }
 ): Note[] {
   const { beatSec, barOf, intensity } = ctx;
@@ -1517,12 +1537,15 @@ function nightmareNotes(
         best = s;
     return best;
   };
+  /** 연타 노트 자리 — 레인을 다 정한 뒤 연타와 붙은 노트를 뺌 */
+  const burstKeys = new Set<number>();
   /** burst: 32분 연타처럼 일부러 촘촘한 노트 (합치지 않음) */
   const put = (t: number, count = 1, burst = false) => {
     if (t <= 0 || t > an.duration - 0.2) return;
     const k = key(t);
     // 아주 가까운 슬롯(20ms)은 같은 노트, 72ms 안은 '살짝 어긋난 동시치기'가 되니 딱 붙은 동시치기로 합침
     const same = near(k, 0.02);
+    if (burst) burstKeys.add(same ?? k);
     if (same !== null) {
       slots.set(same, Math.max(slots.get(same)!, count));
       return;
@@ -1609,7 +1632,7 @@ function nightmareNotes(
     if (full && beatInBar === 3 && b % P.burstEvery === P.burstEvery - 1) {
       // 연타 박은 연타로만: 먼저 깔린 16분·동시치기를 박 안에서 비움 — 안 비우면 16분(4등분)과 연타(6등분)가
       //  섞여 30~35ms 간격이 생김 (148 BPM에서 101ms 16분 사이에 67ms 연타 → 34ms, 한 박만 엄청 촘촘)
-      for (const sk of [...slots.keys()]) if (sk > t0 + 0.02 && sk < t1 - 0.02) slots.delete(sk);
+      //  여기서 슬롯을 지우면 패턴 고르는 순서가 밀려 곡 전체 레인이 바뀌므로, 채보를 다 만든 뒤 맨 끝에서 뺌
       for (let i = 0; i < P.burstSub; i++) put(t0 + (i * (t1 - t0)) / P.burstSub, 1, true);
     }
   }
@@ -1711,6 +1734,8 @@ function nightmareNotes(
     }
     prev = lanes;
   }
+  // 연타 노트 자리는 밖에서 마지막에 정리 (리듬 고르기 등을 다 거친 뒤에도 연타와 붙어 있는 것만 뺌)
+  ctx.burstOut?.push(...[...new Set(notes.map((n) => n.t))].filter((t) => burstKeys.has(t)));
   return notes;
 }
 
@@ -1900,8 +1925,67 @@ export function makeAutoCharts(
         else hi = t;
       }
     }
+    // EX 와 Lv17 이하 NIGHTMARE · ULTIMA: 아주 빠른 같은 레인 연타(잭)를 옆 레인으로 — osu · Quaver 랭크
+    //  Lv15~17 채보는 같은 레인 115ms 안 연타가 노트 1000개에 0~2개(p75 8~15), Lv12~14 는 125ms 안이 0개
+    //  (p75 0.5~8)인데 우리는 OVERLOAD PROTOCOL NIGHTMARE 86, ANiMA EX 16, Crimson Cadenza ULTIMA(17)는 75ms 잭까지.
+    //  채보를 다 고른 뒤 그 자리만 고쳐서 나머지는 그대로
+    const picked = best as Chart | null;
+    const floor = d === "expert" ? JACK_FLOOR_EX : isNm(d) && bestRaw <= 17 ? JACK_FLOOR_NM : 0;
+    if (picked && floor) {
+      best = finishChart(spreadFastJacks(picked.notes, floor), d);
+      bestRaw = best.level;
+    }
     out[d] = best!;
     prevLevel = bestRaw;
+  }
+  return out;
+}
+
+/** 같은 레인 연타의 최소 간격(초): NIGHTMARE · ULTIMA(Lv17 이하) / EX */
+const JACK_FLOOR_NM = 0.115;
+const JACK_FLOOR_EX = 0.125;
+
+/**
+ * 같은 레인에 floor 초 안으로 다시 오는 노트를 비어 있는 가까운 레인으로 옮김 (줄 순서대로).
+ * 옮길 데가 없으면 동시치기 줄에선 그 노트를 빼고, 단노트 줄은 그대로 둠(리듬은 지킴).
+ */
+function spreadFastJacks(src: Note[], floor: number): Note[] {
+  const notes = src.map((n) => ({ ...n })).sort((a, b) => a.t - b.t || a.lane - b.lane);
+  const last = [-Infinity, -Infinity, -Infinity, -Infinity];
+  const busy = [-Infinity, -Infinity, -Infinity, -Infinity]; // 롱노트를 누르는 중이면 끝 시각
+  const out: Note[] = [];
+  let prevRow = new Set<number>();
+  for (let i = 0; i < notes.length;) {
+    let j = i;
+    while (j < notes.length && Math.abs(notes[j].t - notes[i].t) < 1e-6) j++;
+    const row = notes.slice(i, j);
+    const used = new Set(row.map((n) => n.lane));
+    const kept: Note[] = [];
+    for (const n of row) {
+      if (n.t - last[n.lane] >= floor - 1e-6) {
+        kept.push(n);
+        continue;
+      }
+      const free = [1, -1, 2, -2, 3, -3]
+        .map((k) => n.lane + k)
+        .filter(
+          (l) => l >= 0 && l <= 3 && !used.has(l) && n.t - last[l] >= floor - 1e-6 && busy[l] < n.t
+        )
+        .sort((a, b) => Number(prevRow.has(a)) - Number(prevRow.has(b)));
+      if (free.length) {
+        used.delete(n.lane);
+        n.lane = free[0];
+        used.add(n.lane);
+        kept.push(n);
+      } else if (row.length === 1) kept.push(n);
+    }
+    for (const n of kept) {
+      last[n.lane] = n.end ?? n.t;
+      busy[n.lane] = n.end ?? -Infinity;
+      out.push(n);
+    }
+    prevRow = new Set(kept.map((n) => n.lane));
+    i = j;
   }
   return out;
 }

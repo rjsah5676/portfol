@@ -11,7 +11,7 @@ crimsoncadenza --double --boss '{}' --explus '{}'
 hwimori --boss '{}' --explus '{}'
 luckyseven --double --boss '{}' --explus '{}' --levels 3,6,9,13,16,19
 pixelfighting --boss '{}' --explus '{}' --levels 3,6,9,13,16,18
-freedomdive --boss '{}' --explus '{}' --levels 3,5,9,12,14,17
+freedomdive --boss '{}' --explus '{}' --levels 3,5,9,12,14,17 --keep nightmare
 midnight --single --bpm-label 111 --levels 3,5,8,11
 starlight --boss '{}' --explus '{}' --levels 3,6,9,12,15,17
 sugarcloud --boss '{}' --explus '{}' --levels 3,6,9,12,15,18

@@ -17,6 +17,7 @@
  *   --tweak '<json>'  난이도별 AutoTweak 덮어쓰기 (예: '{"expert":{"fill":0.6}}')
  *   --levels a,b,c…   난이도별 목표 레벨 (쉬움부터, 별점×4) — 직접 쳐 보고 정한 레벨에 맞춰 뽑음
  *   --dry             파일은 안 쓰고 난이도별 통계만 출력
+ *   --keep a,b        이 난이도들은 지금 파일에 있는 채보를 그대로 둠 (사람이 골라 고정한 채보)
  *   --stats           패턴을 얼마나 다양하게 썼는지 출력
  *
  * 예) Monarch's Fall : npm run rhythm-chart -- monarch --bpm-label 150 --boss '{}'
@@ -43,7 +44,7 @@ const argv = process.argv.slice(2);
 const id = argv.find(
   (a) =>
     !a.startsWith("--") &&
-    !argv[argv.indexOf(a) - 1]?.match(/^--(bpm-label|boss|tweak|levels|explus)$/)
+    !argv[argv.indexOf(a) - 1]?.match(/^--(bpm-label|boss|tweak|levels|explus|keep)$/)
 );
 if (!id) {
   console.error(
@@ -211,5 +212,15 @@ const out = {
 fs.rmSync(tmp, { recursive: true, force: true });
 if (dry) process.exit(0);
 const dest = path.join(ROOT, "src/data/rhythm", `${id}.json`);
+// --keep: 고정한 난이도는 지금 파일의 채보를 그대로
+const keepArg = opt("--keep");
+if (keepArg && fs.existsSync(dest)) {
+  const prev = JSON.parse(fs.readFileSync(dest, "utf8"));
+  for (const d of keepArg.split(",")) {
+    if (!prev.charts[d]) continue;
+    out.charts[d] = prev.charts[d];
+    console.log(`${d} 는 지금 채보 그대로 (Lv${prev.charts[d].level})`);
+  }
+}
 fs.writeFileSync(dest, JSON.stringify(out));
 console.log(`저장: ${path.relative(ROOT, dest)}`);
