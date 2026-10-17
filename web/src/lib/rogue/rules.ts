@@ -3,8 +3,10 @@
  * 판은 public/rogue/index.html (iframe) 이 돌리고, 끝나면 이 모양의 기록을 넘김 → server/src/games/rogue.ts
  */
 
-/** 4월드 × 2층 */
-export const ROGUE_FLOORS = 8;
+/** 5월드 × 2층 (월드 5 「휴지통」은 월드 4 를 깬 뒤에 열림) */
+export const ROGUE_FLOORS = 10;
+/** 월드 4 보스(블루스크린) = 이야기 결말 · 「완주」 업적 기준 층 */
+export const ROGUE_ENDING_FLOOR = 8;
 
 /** 고를 수 있는 캐릭터 (이그나 = 월드 3 보스 · 이반 = 결투방 5승 · 릴리 = 숨겨진 방의 우산 · DICE = 시크릿 20개) */
 export const ROGUE_CHARS = ["kai", "igna", "ivan", "lily", "dice"] as const;
@@ -12,10 +14,10 @@ export type RogueChar = (typeof ROGUE_CHARS)[number];
 export const ROGUE_CHAR_NAME: Record<RogueChar, string> = { kai: "카이", igna: "이그나", ivan: "이반", lily: "릴리", dice: "DICE" };
 
 /** 게임 안 시크릿(아이템 · 캐릭터 해금) 개수 */
-export const ROGUE_UNLOCKS = 54;
+export const ROGUE_UNLOCKS = 62;
 
 export interface RogueReport {
-  /** 도달한 층 (1~8) */
+  /** 도달한 층 (1~10) */
   floor: number;
   /** 이번 판 목표 층 (열린 월드 × 2) */
   endFloor: number;
@@ -38,7 +40,7 @@ export interface RogueReport {
   cheats: number;
   /** 도감에 열린 아이템 종류 (판 밖 누적) */
   codex: number;
-  /** 이번 판에 잡은 가장 깊은 월드 보스 (0~4) */
+  /** 이번 판에 잡은 가장 깊은 월드 보스 (0~5) */
   ch: number;
   seed: number;
   /** 고른 캐릭터 */

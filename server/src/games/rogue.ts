@@ -15,7 +15,7 @@ import type { Ctx } from "../realtime/gateway";
 import { pictureOf } from "../users";
 import { metricsOf } from "../achievements";
 import { achievementsOf } from "../../../web/src/lib/points";
-import { ROGUE_CHARS, ROGUE_FLOORS, SPEED_SEC, plausible, rogueScore, type RogueReport } from "../../../web/src/lib/rogue/rules";
+import { ROGUE_CHARS, ROGUE_ENDING_FLOOR, ROGUE_FLOORS, SPEED_SEC, plausible, rogueScore, type RogueReport } from "../../../web/src/lib/rogue/rules";
 
 interface RankDoc {
   _id: string;
@@ -54,7 +54,7 @@ const repArg = z.object({
   noHit: int(ROGUE_FLOORS),
   cheats: int(100),
   codex: int(500),
-  ch: int(4),
+  ch: int(5),
   seed: z.number().int().min(0).max(2 ** 32),
   // 예전 화면이 보내는 기록엔 없음 → 기본값
   char: z.enum(ROGUE_CHARS).default("kai"),
@@ -168,10 +168,10 @@ export function registerRogue({ gateway, db }: Deps) {
             ...(rep.char === "ivan" && { "stats.rogue.ivanRuns": 1 }),
             ...(rep.char === "lily" && { "stats.rogue.lilyRuns": 1 }),
             ...(rep.char === "dice" && { "stats.rogue.diceRuns": 1 }),
-            ...(rep.win && rep.floor === ROGUE_FLOORS && { [`stats.rogue.full_${rep.char}`]: 1 }),
+            ...(rep.bosses >= ROGUE_ENDING_FLOOR && { [`stats.rogue.full_${rep.char}`]: 1 }),
             ...(rep.secret && { "stats.rogue.secrets": 1 }),
             ...(rep.win && { "stats.rogue.wins": 1 }),
-            ...(rep.win && rep.floor === ROGUE_FLOORS && { "stats.rogue.full": 1 }),
+            ...(rep.bosses >= ROGUE_ENDING_FLOOR && { "stats.rogue.full": 1 }), // 월드 4 보스까지 잡음 (월드 5 는 그다음)
             ...(rep.win && rep.floor >= 4 && rep.sec <= SPEED_SEC && { "stats.rogue.speed": 1 }),
           },
           $max: { "stats.rogue.floor": rep.floor, "stats.rogue.ch": rep.ch, "stats.rogue.items": rep.items, "stats.rogue.codex": rep.codex, "stats.rogue.unlocks": rep.unlocks },
