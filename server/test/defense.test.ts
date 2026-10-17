@@ -2,8 +2,8 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { B, BALANCE_VER, LAST_WAVE, countOf, sec } from "../../web/src/lib/defense/balance";
 import { BOTS, botTurn } from "../../web/src/lib/defense/bot";
 import { HASH_TICKS, TICKS_PER_TURN, TURN_MS, replay, replayer, scoreOf, validLog, type LogEntry } from "../../web/src/lib/defense/replay";
-import { CELLS, CORNERS, SLOTS, apply, buildCost, cellTiles, comboMult, hashGame, isCmd, jackOf, newGame, pureT, step, tileCell, unitCount, upCost, type Game } from "../../web/src/lib/defense/sim";
-import { TOWN } from "../../web/src/lib/defense/town";
+import { CELLS, CORNERS, SLOTS, apply, capOf, expDest, hashGame, isCmd, newGame, pureT, step, unitCount, upCost, type Game } from "../../web/src/lib/defense/sim";
+import { EXP, expNodeOf } from "../../web/src/lib/defense/town";
 import { RECIPES, UNIT, UNITS } from "../../web/src/lib/defense/units";
 import { PHASE_PAIRS, bossOfWave, phaseOn } from "../../web/src/lib/defense/enemies";
 import { CHEATS, CHEAT_MULTI_SEC, cheatFxOf, cheatOdds } from "../../web/src/lib/defense/cheats";
@@ -282,57 +282,55 @@ describe("픽셀 글리치 디펜스 엔진", () => {
     expect(b.cheats).toEqual([first]);
   });
 
-  it("해피 타운 v2: 아무 칸 짓기 · 새 땅은 점점 비쌈 · 굴리기 · 잭팟 · 연속 배수 · 모서리 · UR 보스 · 결정론", () => {
+  it("해피 타운 원정: 갈림길 · 구간 전투 · 드래프트 · 캠프 멈춤 · 유물 · 상점 · UR 보스 세기 · 결정론", () => {
     const lo = { stage: "town" as const, town: 1 };
     const g = started(5, 1, [lo]);
     const b = g.boards[0];
     expect(b.stage).toBe("town");
     expect(CORNERS).toEqual([0, 8, 13, 21]);
-    expect(cellTiles(0)).toEqual([1, 25]);
-    expect(tileCell(0)).toBe(-1);
-    expect(apply(g, 0, { t: "build", p: 0 })).toBeTruthy(); // 모서리
-    b.gold = 10000;
-    // 유닛 없이도 지음 · 새 땅은 가진 건물 수만큼 비쌈 · 올리기는 고정
-    expect(apply(g, 0, { t: "build", p: 1 })).toBeNull();
-    expect(b.gold).toBe(10000 - TOWN.newBase);
-    expect(buildCost(b, 2)).toBe(TOWN.newBase + TOWN.newPer);
-    expect(buildCost(b, 1)).toBe(TOWN.up[1]);
-    // 굴리기: 웨이브마다 하나 (started 는 1웨이브) · 없으면 실패
-    expect(b.rolls).toBeGreaterThanOrEqual(1);
-    b.rolls = 1;
-    b.bld[7] = 3;
-    const before = { pos: b.pos, gold: b.gold };
-    expect(apply(g, 0, { t: "roll" })).toBeNull();
-    const steps = b.last!.d1 + b.last!.d2;
-    expect(b.pos).toBe((before.pos + steps) % 26);
-    if (b.last!.d1 !== b.last!.d2 && b.pos !== 21) expect(apply(g, 0, { t: "roll" })).toBeTruthy();
-    // 잭팟: 말이 내 건물 칸에 서면 · 연속이면 배수
-    b.pos = 0;
-    b.rolls = 5;
-    b.combo = 0;
-    b.bld.fill(0);
-    for (let t = 1; t < 26; t++) if (tileCell(t) >= 0) b.bld[t] = 1;
-    const g0 = b.gold;
-    apply(g, 0, { t: "roll" });
-    if (tileCell(b.pos) >= 0) {
-      expect(b.gold - g0).toBe(jackOf(b, b.pos) * comboMult(0));
-      expect(b.combo).toBe(1);
+    const x = b.exp!;
+    expect(x.camp?.k).toBe("route");
+    // 캠프: 시간이 멈춤 · 다음 웨이브 불가 · 소환은 됨
+    const t0 = g.tick;
+    step(g);
+    expect(b.wave).toBe(0);
+    expect(apply(g, 0, { t: "next" })).toBeTruthy();
+    expect(apply(g, 0, { t: "summon" })).toBeNull();
+    // 갈림길: 고른 눈만큼 이동 → 그 칸 일
+    const d = (x.camp as { dice: number[] }).dice[0];
+    expect(apply(g, 0, { t: "exp", a: 0 })).toBeNull();
+    expect(b.pos).toBe(expDest({ ...b, pos: 0 } as typeof b, d));
+    expect(x.node).toBe(expNodeOf(b.pos));
+    expect(g.tick).toBeGreaterThan(t0 - 1);
+    // 전투 칸: 정해진 웨이브 뒤 드래프트 (못 잡은 적은 남음)
+    if (x.node === "fight") {
+      expect(x.segEnd).toBe(EXP.fightWaves);
+      for (let i = 0; i < 100000 && x.camp?.k !== "draft" && !b.result; i++) step(g);
+      expect(x.camp?.k).toBe("draft");
+      expect(b.wave).toBe(EXP.fightWaves);
+      const g0 = b.gold;
+      expect(apply(g, 0, { t: "exp", a: -1 })).toBeNull();
+      expect(b.gold).toBe(g0 + EXP.skipGold);
+      expect(x.camp?.k).toBe("route");
+      expect(x.segs).toBe(1);
     }
-    expect(comboMult(0)).toBe(1);
-    expect(comboMult(1)).toBe(TOWN.combo[1]);
-    expect(comboMult(9)).toBe(TOWN.combo[TOWN.combo.length - 1]);
-    // MOA 에게 빼앗긴 칸은 잭팟 없음
-    b.seized = [3];
-    expect(jackOf(b, 3)).toBe(0);
-    // 메인은 짓기 불가
-    const m = started(5, 1);
-    m.boards[0].cells[0] = { def: "k_squire", units: [{ cd: 0, ult: 0, stun: 0 }] };
-    m.boards[0].gold = 1000;
-    expect(apply(m, 0, { t: "build", p: 1 })).toBeTruthy();
-    expect(isCmd({ t: "build", p: 3 })).toBe(true);
-    expect(isCmd({ t: "build", p: 26 })).toBe(false);
-    expect(isCmd({ t: "roll" })).toBe(true);
-    expect(isCmd({ t: "roll", x: 1 })).toBe(false);
+    // 원정 유물: 피의 계약 = 한도 -20 · 철벽 = +25
+    x.camp = { k: "relic", offer: ["blood", "iron"] };
+    apply(g, 0, { t: "exp", a: 0 });
+    expect(capOf(b)).toBe(100 - 20);
+    expect(x.dmg).toBeCloseTo(1.35);
+    // UR 보스는 일찍 와도 EXP.bossWave 세기
+    x.camp = { k: "route", dice: [6] };
+    b.pos = 24;
+    apply(g, 0, { t: "exp", a: 0 });
+    expect(b.pos).toBe(0);
+    expect(x.node).toBe("boss");
+    expect(b.wave).toBe(EXP.bossWave);
+    expect(b.phase).toBe("boss");
+    expect(isCmd({ t: "exp", a: 1 })).toBe(true);
+    expect(isCmd({ t: "exp", a: 9 })).toBe(false);
+    // 메인은 원정 없음
+    expect(started(5, 1).boards[0].exp).toBeNull();
     // UR 보스
     expect(bossOfWave(10, "town")?.fighter).toBe("ur-dice");
     expect(bossOfWave(20, "town")?.fighter).toBe("soyoung");
@@ -340,8 +338,8 @@ describe("픽셀 글리치 디펜스 엔진", () => {
     const { g: a, log } = botGame(9, 0, Infinity, [lo]);
     const r = replay(9, 1, log, [lo]);
     expect(r.boards[0].result).toEqual(a.boards[0].result);
-    expect(a.boards[0].toll).toBe(r.boards[0].toll);
-    expect(a.boards[0].bld.some((x) => x > 0)).toBe(true);
+    expect(a.boards[0].exp?.segs).toBe(r.boards[0].exp?.segs);
+    expect(a.boards[0].exp!.segs).toBeGreaterThan(0);
     // 타운 단계 → 적 세기 · 열림
     expect(modsOf(lo).glitch.lv).toBe(townGlitchLv(1));
     expect(townOpenOf(5)).toBe(0);

@@ -28,16 +28,10 @@ import {
   type Fx,
   RIFT_TIERS,
   type RiftTier,
-  buildBlock,
-  buildCost,
   PERIM,
-  comboMult,
-  jackOf,
-  rollBlock,
-  tileCell,
-  townOwned,
+  expDest,
 } from "@/lib/defense/sim";
-import { BUILD_NAME, CORNER_TEXT, TOWN, TOWN_NAME, TOWN_TILES } from "@/lib/defense/town";
+import { EXP, EXP_NODE_TEXT, EXP_RELIC, SHOP, TOWN_NAME, TOWN_TILES, expNodeOf } from "@/lib/defense/town";
 import {
   FACTIONS,
   FACTION_COLOR,
@@ -123,8 +117,6 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry, 
     color: string;
   } | null>(null);
   const [bossLine, setBossLine] = useState<{ id: number; boss: number } | null>(null);
-  /** 해피 타운 굴림 연출: 주사위 둘 (start 부터 굴러가다 멈춤) · 말이 다 도착하는 시각 (그때까지 굴리기 버튼 잠금) */
-  const [dice, setDice] = useState<{ id: number; d1: number; d2: number; start: number; done: number; again: boolean } | null>(null);
   const [over, setOver] = useState<{ note: ReactNode | null } | null>(null);
   const [bot, setBot] = useState<string | null>(null);
   /** 레전드 이상 판매는 두 번 눌러야 (실수로 팔지 않게) — 한 번 누른 칸 */
@@ -203,20 +195,9 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry, 
     else if (cmd.t === "sell") sfx("sell");
     else if (cmd.t === "rift") sfx("rift");
     else if (cmd.t === "swap" || cmd.t === "patch") sfx("ui-click", 1, 0.9);
-    else if (cmd.t === "roll") sfx("town-dice");
-    else if (cmd.t === "build") {
-      const lv = b.bld[cmd.p];
-      sfx(lv >= 3 ? "town-landmark" : lv === 1 ? "town-build" : "town-up");
-    }
+    else if (cmd.t === "exp") sfx("ui-click", 1, 0.9);
     force();
     return !err;
-  };
-
-  /** 해피 타운 굴리기 (굴러가는 중엔 잠금) */
-  const rolling = !!dice && performance.now() < dice.done;
-  const rollNow = () => {
-    if (dice && performance.now() < dice.done) return;
-    run({ t: "roll" });
   };
 
   // ── 알림 처리 ──
@@ -282,71 +263,33 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry, 
           });
         }
         break;
-      case "roll": {
-        // 주사위가 굴러가다 멈춤(DICE_ROLL_MS) → 말이 한 칸씩 콩콩 → 도착하면 결과
+      case "expGo": {
+        // 말이 고른 눈만큼 콩콩 → 도착하면 그 칸 일
         const now = performance.now();
         const v = viewRef.current;
-        const steps = e.d1 + e.d2;
         const path: number[] = [];
-        for (let k = 1; k <= steps; k++) path.push((e.from + k) % PERIM);
-        const t0 = now + DICE_ROLL_MS;
-        const arrive = t0 + steps * HOP_MS;
-        v.tok = { from: e.from, path, t0 };
-        setDice({ id: Math.random(), d1: e.d1, d2: e.d2, start: now, done: arrive + 650, again: e.again });
-        // 콩콩 소리 (몇 칸마다)
-        for (let k = 0; k < steps; k++) setTimeout(() => sfx("town-step", 0.5, 1 + (k % 3) * 0.06), t0 - now + k * HOP_MS);
+        for (let k = 1; k <= e.die; k++) {
+          const t = (e.from + k) % PERIM;
+          path.push(t);
+          if (t === e.to) break;
+        }
+        if (path[path.length - 1] !== e.to) path.push(e.to);
+        v.tok = { from: e.from, path, t0: now };
+        path.forEach((_, k) => setTimeout(() => sfx("town-step", 0.5, 1 + (k % 3) * 0.06), k * HOP_MS));
+        const nt = EXP_NODE_TEXT[e.node];
         setTimeout(() => {
-          const tt = TOWN_TILES[e.to];
-          v.flash = { t: e.to, until: performance.now() + 900, gold: e.land === "jack" };
-          if (e.passed) {
-            sfx("town-coin");
-            toast(<>출발 포털 통과 — 월급 <b className="text-[var(--gold)]">+{e.lapGold}G</b></>, "gold");
-          }
-          if (e.big) {
-            sfx("myth");
-            setShout({ id: Math.random(), title: "6 · 6 대박!", sub: `골라 뽑기권 (${e.gold || e.lapGold ? "+골드 · " : ""}${b.wave >= 20 ? "레전드" : "에픽"}) — 오른쪽 아래 「뽑기」`, color: "#ff5fa2" });
-          }
-          switch (e.land) {
-            case "jack":
-              sfx("town-coin");
-              sfx(e.mult > 1 ? "legend" : "reward");
-              if (!e.big)
-                setShout({
-                  id: Math.random(),
-                  title: e.mult > 1 ? `잭팟 ×${e.mult}!` : "잭팟!",
-                  sub: `${tt.name} ${BUILD_NAME[b.bld[e.to]]} +${e.gold}G${e.mult > 1 ? " · 연속!" : ""}`,
-                  color: "#ffd23f",
-                });
-              break;
-            case "seized":
-              sfx("deny");
-              toast(<>{tt.name} — MOA 에게 빼앗긴 칸이라 잭팟 없음</>, "bad");
-              break;
-            case "empty":
-              toast(<>{tt.name} · 빈 땅 — 내 건물이 있었으면 잭팟!</>);
-              break;
-            case "start":
-              sfx("town-coin");
-              toast(<>출발 포털에 딱! 월급 한 번 더 <b className="text-[var(--gold)]">+{e.gold}G</b></>, "gold");
-              break;
-            case "jail":
-              sfx("upgrade");
-              toast(<>도트 수리소 — 무료 소환 <b className="text-[var(--gold)]">+{TOWN.repairFree}</b></>, "gold");
-              break;
-            case "fest":
-              sfx("town-fest");
-              toast(<>축제 무대 — <b className="text-[var(--gold)]">+{e.gold}G</b></>, "gold");
-              break;
-            case "warp":
-              sfx("town-warp");
-              toast(<>워프 게이트 — 한 번 더 굴려요!</>, "gold");
-              break;
-          }
-          if (e.again && e.land !== "warp") toast(<>더블! 한 번 더 굴려요</>, "gold");
-          force();
-        }, arrive - now);
+          v.flash = { t: e.to, until: performance.now() + 900, gold: e.node === "elite" || e.node === "boss" };
+          sfx(e.node === "shop" ? "town-coin" : e.node === "event" ? "town-warp" : e.node === "rest" ? "town-fest" : "town-dice");
+          if (e.node === "boss") setShout({ id: Math.random(), title: "한 바퀴 — UR 보스!", sub: TOWN_TILES[e.to].name, color: nt.color });
+          else toast(<><b style={{ color: nt.color }}>{nt.name}</b> · {TOWN_TILES[e.to].name} — {nt.desc}</>, e.node === "elite" ? "bad" : "gold");
+        }, path.length * HOP_MS);
         break;
       }
+      case "expEnd":
+        sfx("clear");
+        if (e.node === "elite") toast(e.win ? <>엘리트 격파! 드래프트 뒤 <b className="text-[#9be7ff]">원정 유물</b></> : <>엘리트 보스가 도망갔어요 — 유물 없음</>, e.win ? "gold" : "bad");
+        else toast(<>전투 끝! 유닛 하나를 골라요 (남은 적은 다음 칸으로 이어져요)</>, "gold");
+        break;
       case "warp":
         sfx("town-warp");
         toast(<>DICE 주사위 <b className="text-[#7fe8d8]">{e.roll}</b> — {e.roll}칸 순간이동!</>, "bad");
@@ -358,8 +301,6 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry, 
       case "encore":
         sfx("town-encore");
         setShout({ id: Math.random(), title: "앙코르!", sub: "FORTE 가 체력을 되찾고, 다른 적들이 잠깐 빨라져요", color: "#ff9ec7" });
-        break;
-      case "build":
         break;
       case "phase": {
         const bd = BOSSES[e.boss];
@@ -619,8 +560,7 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry, 
       // 한/영 상태와 상관없이 (한글 입력이면 key 가 ㅂ · Process 로 옴) — 물리 키(code)로 읽음
       const k = keyOf(e);
       if (k === "q") run({ t: "summon" });
-      else if (k === "d" && b.stage === "town") rollNow();
-      else if (k === "w" && selTile >= 0) run({ t: "build", p: selTile });
+
       else if (k === "w" && sel >= 0) run({ t: "merge", c: sel });
       else if (k === "e" && sel >= 0) sellSel();
       else if (k === "1" || k === "2" || k === "3") run({ t: "up", k: FACTIONS[Number(k) - 1] });
@@ -835,7 +775,7 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry, 
         {b.troom && (
           <TreasurePanel b={b} />
         )}
-        {b.stage === "town" && !boss && <TownChip b={b} />}
+        {b.exp && <ExpChip b={b} />}
         {b.stage === "town" && nextCtl("h-full shrink-0", true)}
         {!b.troom && b.mods.treasure > 0 && !b.treasure && !b.result && (
           <span
@@ -979,6 +919,7 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry, 
           </div>
         )}
         {b.cheat && !b.result && <CheatPicker b={b} multi={multi} run={run} />}
+        {b.exp?.camp && !b.cheat && !b.result && <CampPanel b={b} run={run} />}
         <TutorialCard b={b} onHold={(on) => ctrl.setHold(on)} />
         {ctrl.paused && !modal && (
           <div className="absolute inset-0 flex items-center justify-center bg-[#05040c]/60">
@@ -1038,7 +979,6 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry, 
           ))}
         </div>
         {shout && <Shout key={shout.id} {...shout} onDone={() => setShout(null)} />}
-        {dice && <DiceShow key={dice.id} {...dice} onDone={() => setDice(null)} />}
         {bossLine && (
           <BossIntro
             key={bossLine.id}
@@ -1063,7 +1003,7 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry, 
         }
       >
         {b.stage === "town" && selTile >= 0 ? (
-          <TilePanel b={b} t={selTile} run={run} />
+          <NodePanel b={b} t={selTile} />
         ) : selDef && selCell ? (
           <>
             <UnitIcon id={selDef.id} size={38} />
@@ -1134,7 +1074,6 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry, 
             )}
           </div>
         )}
-        {b.stage === "town" && <RollBtn b={b} busy={rolling} big onRoll={rollNow} />}
       </div>
 
       {/* ── 오른쪽: 조작 ── */}
@@ -1151,6 +1090,12 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry, 
           <div className="px-inset flex min-w-0 flex-1 items-center gap-1 px-2 text-[12px] text-[var(--mute)]" title="보스(10 · 20 · 30 · 40 · 50)를 잡으면 치트 코드 3장 중 하나">
             <Icon n="flask" size={12} />
             {(() => {
+              if (b.exp)
+                return (
+                  <span title={b.exp.relics.map((id) => `${EXP_RELIC[id].name} — ${EXP_RELIC[id].desc}`).join("\n")}>
+                    원정 유물 <b className="text-[#9be7ff]">{b.exp.relics.length ? b.exp.relics.map((id) => EXP_RELIC[id].name).join(" · ") : "없음"}</b>
+                  </span>
+                );
               const next = [10, 20, 30, 40, 50].find((w) => w > b.wave || (w === b.wave && b.phase === "boss"));
               return next ? <>다음 치트 코드 · <b className="text-[var(--text)]">{next}W 보스</b></> : <>치트 코드 {b.cheats.length}개</>;
             })()}
@@ -1898,8 +1843,6 @@ function GhostPanel({ ctrl, ghost }: { ctrl: Controller; ghost: { data: DefenseG
   );
 }
 
-/** 굴린 뒤 말이 출발하기까지 (주사위가 굴러가는 시간, ms) */
-const DICE_ROLL_MS = 700;
 /** 주사위 눈 → 3×3 칸 중 점 자리 */
 const PIPS: Record<number, number[]> = { 1: [4], 2: [2, 6], 3: [2, 4, 6], 4: [0, 2, 6, 8], 5: [0, 2, 4, 6, 8], 6: [0, 2, 3, 5, 6, 8] };
 /** 도트 주사위 한 알 — 각진 흰 몸통 · 아래/오른쪽 그늘 · 네모 점 (1 은 빨간 점) */
@@ -1924,138 +1867,169 @@ export function PixelDie({ n, size = 44, glow }: { n: number; size?: number; glo
   );
 }
 
-/** 굴림 연출 (필드 가운데): 주사위 둘이 통통 튀며 굴러가다(눈이 막 바뀜) 멈춤 → 합 · 더블 */
-function DiceShow({ d1, d2, start, done, again, onDone }: { d1: number; d2: number; start: number; done: number; again: boolean; onDone(): void }) {
-  const [, tick] = useReducer((x: number) => x + 1, 0);
-  useEffect(() => {
-    const iv = setInterval(tick, 70);
-    const to = setTimeout(onDone, Math.max(0, done - performance.now()));
-    return () => (clearInterval(iv), clearTimeout(to));
-  }, [done, onDone]);
-  const t = performance.now() - start;
-  const rolling = t < DICE_ROLL_MS;
-  // 굴러가는 동안 눈은 화면에서만 아무거나 (결과는 이미 시뮬이 정함)
-  const face = (k: number, real: number) => (rolling ? ((Math.floor(t / 70) * (k ? 5 : 3) + k * 2 + real) % 6) + 1 : real);
-  const dbl = d1 === d2;
-  const fade = done - performance.now() < 250;
-  return (
-    <div className={`pointer-events-none absolute inset-x-0 top-[13%] z-30 flex flex-col items-center gap-2 transition-opacity duration-200 ${fade ? "opacity-0" : ""}`}>
-      <div className="flex gap-5">
-        {[d1, d2].map((n, k) => (
-          <span key={k} className={rolling ? "dfn-dice-tumble" : "dfn-dice-land"} style={{ animationDelay: `${k * 60}ms` }}>
-            <PixelDie n={face(k, n)} size={58} glow={!rolling && dbl ? "#ffd23f" : undefined} />
-          </span>
-        ))}
-      </div>
-      {!rolling && (
-        <p className={`${TITLE} px-shadow dfn-pop text-[22px] text-white`}>
-          {d1 + d2}칸!{dbl && <span className="ml-2 text-[#ffd23f]">더블</span>}
-          {again && !dbl && <span className="ml-2 text-[#9be7ff]">한 번 더</span>}
-        </p>
-      )}
-    </div>
-  );
-}
-
-/** 해피 타운 위쪽 줄: 굴리기 버튼 (모아 둔 수 · D) */
-function RollBtn({ b, busy, big, onRoll }: { b: Board; busy: boolean; big?: boolean; onRoll(): void }) {
-  const why = rollBlock(b);
-  const n = b.rolls;
-  return (
-    <Btn
-      tone={n > 0 ? "gold" : "ghost"}
-      silent
-      disabled={!!why || busy}
-      onClick={onRoll}
-      hot="D"
-      className={`relative inline-flex items-center justify-center ${big ? "h-[52px] w-[160px] pr-3 text-[15px] font-bold" : "h-full px-2 text-[13px]"} shrink-0 gap-2 ${n > 0 && !busy ? "dfn-pulse" : ""}`}
-      title={why ?? `주사위 굴리기 (D) — 내 말이 길을 돌다가 내 건물 칸에 서면 잭팟! 웨이브마다 하나 생기고 ${TOWN.rollMax}개까지 모아 둬요`}
-    >
-      <PixelDie n={busy ? 3 : 5} size={big ? 26 : 20} />
-      <span className={n > 0 ? "text-[#1a1000]" : ""}>굴리기</span>
-      <b className={n > 0 ? "text-[#1a1000]" : "text-[var(--mute)]"}>×{n}</b>
-    </Btn>
-  );
-}
-
-/** 해피 타운 위쪽 줄: 이번 판 굴리기 수입 · 연속 잭팟 */
-function TownChip({ b }: { b: Board }) {
+/** 원정 위쪽 줄: 지나온 칸 · 원정 유물 */
+function ExpChip({ b }: { b: Board }) {
+  const x = b.exp!;
+  const node = x.node ? EXP_NODE_TEXT[x.node] : null;
   return (
     <div
       className="px-inset flex h-full shrink-0 items-center gap-2 px-2 text-[12px] whitespace-nowrap"
-      title={`${TOWN_NAME} — 길 칸을 눌러 건물을 지어요. 굴려서 내 말이 내 건물 칸에 서면 잭팟!\n이번 판 굴리기 수입 ${b.toll}G · 잭팟 ${b.jacks}번 · 돈 바퀴 ${b.laps}`}
+      title={`${TOWN_NAME} 원정 — 끝낸 칸 ${x.segs}\n원정 유물: ${x.relics.length ? x.relics.map((id) => `${EXP_RELIC[id].name}(${EXP_RELIC[id].desc})`).join("\n") : "없음"}`}
     >
-      <span className="flex items-center gap-1 text-[var(--gold)]">
-        <Icon n="coin" size={12} /> <b>+{b.toll}</b>
+      {node && <b style={{ color: node.color }}>{node.name}</b>}
+      <span className="text-[var(--mute)]">
+        칸 <b className="text-white">{x.segs}</b>
       </span>
-      {b.combo > 0 && <b className="dfn-blink text-[#ff9ec7]">연속 ×{comboMult(b.combo)}</b>}
+      {x.relics.length > 0 && <b className="text-[#9be7ff]">유물 {x.relics.length}</b>}
     </div>
   );
 }
 
-/** 해피 타운: 고른 길 칸 — 이름 · 건물 · 잭팟 · 짓기 (W) */
-function TilePanel({ b, t, run }: { b: Board; t: number; run: (c: Cmd) => boolean }) {
+/** 원정: 고른 길 칸 정보 (무슨 칸인지) */
+function NodePanel({ b, t }: { b: Board; t: number }) {
   const tt = TOWN_TILES[t];
-  const ci = tileCell(t);
-  if (ci < 0)
+  const n = EXP_NODE_TEXT[expNodeOf(t)];
+  return (
+    <div className="min-w-0 flex-1 leading-tight">
+      <div className="flex items-center gap-1.5">
+        <b className="text-[14px]" style={{ color: tt.color === "#ffffff" ? n.color : tt.color }}>
+          {tt.name}
+        </b>
+        <span className="px-1 text-[11px] font-bold text-[#0a0816]" style={{ background: n.color }}>
+          {n.name}
+        </span>
+        {b.pos === t && <span className="bg-[#ff5fa2] px-1 text-[11px] font-bold text-white">내 말</span>}
+      </div>
+      <p className="mt-1 text-[12px] text-[var(--mute)]">{n.desc}</p>
+    </div>
+  );
+}
+
+/** 원정 캠프 (시간이 멈춤): 갈림길 · 드래프트 · 유물 · 상점 · 휴식. 「판 보기」로 접고 소환 · 합성 · 판매도 가능 */
+function CampPanel({ b, run }: { b: Board; run: (c: Cmd) => boolean }) {
+  const [hide, setHide] = useState(false);
+  const x = b.exp!;
+  const c = x.camp!;
+  if (hide)
     return (
-      <div className="min-w-0 flex-1 leading-tight">
-        <b className="text-[14px]">{tt.name}</b>
-        <p className="mt-1 text-[12px] text-[var(--mute)]">
-          모서리 특수 칸 — {tt.sp ? CORNER_TEXT[tt.sp].desc : ""}. 건물은 나머지 동네 칸에 지어요.
-        </p>
+      <div className="absolute top-2 left-1/2 z-20 -translate-x-1/2">
+        <Btn tone="gold" className="dfn-pulse h-9 px-4 text-[13px] font-bold" onClick={() => setHide(false)}>
+          원정 선택 창 열기
+        </Btn>
       </div>
     );
-  const lv = b.bld[t];
-  const seized = b.seized.includes(t);
-  const why = buildBlock(b, t);
-  const cost = buildCost(b, t);
-  const nextJack = lv < 3 ? Math.floor(TOWN.jack[lv + 1] * (1 + b.wave * TOWN.jackWave) * (1 + b.mods.jackAdd)) : 0;
+  const title = c.k === "route" ? "어디로 갈까?" : c.k === "draft" ? "유닛 드래프트" : c.k === "relic" ? "원정 유물" : c.k === "shop" ? "축제 무대 상점" : "도트 수리소 — 휴식";
+  const sub =
+    c.k === "route"
+      ? "주사위 중 하나를 골라 그만큼 가요 · 출발 포털에 닿으면 UR 보스"
+      : c.k === "draft"
+        ? "골라서 바로 칸에 놓아요 (자리가 없으면 판 보기로 팔거나 합성)"
+        : c.k === "relic"
+          ? "이번 원정에서만 · 규칙을 바꿔요"
+          : c.k === "shop"
+            ? `가진 골드 ${b.gold}`
+            : "하나를 골라요";
+  const card = "px-box dfn-pop flex flex-1 flex-col items-center gap-1.5 p-3 text-center transition-transform hover:-translate-y-1";
   return (
-    <>
-      <span className="flex h-[38px] w-[38px] shrink-0 items-center justify-center bg-[#0a0816] text-[12px] font-bold" style={{ boxShadow: `inset 0 0 0 2px ${tt.color}`, color: tt.color }}>
-        {lv ? `Lv${lv}` : "땅"}
-      </span>
-      <div className="min-w-0 flex-1 leading-tight">
-        <div className="flex items-center gap-1.5">
-          <b className="truncate text-[14px]" style={{ color: tt.color }}>
-            {tt.name}
-          </b>
-          <span className="text-[12px] text-[var(--text)]">{BUILD_NAME[lv]}</span>
-          {seized && <span className="text-[12px] text-[#ffd36b]">MOA 에게 빼앗김 (MOA 를 잡으면 돌아와요)</span>}
-          {b.pos === t && <span className="bg-[#ff5fa2] px-1 text-[11px] font-bold text-white">내 말</span>}
-        </div>
-        <p className="mt-1 truncate text-[12px] text-[var(--mute)]">
-          {lv > 0 ? (
-            <>
-              내 말이 서면 잭팟 <b className="text-[var(--gold)]">+{jackOf(b, t)}G</b> (연속이면 ×{TOWN.combo[1]} · ×{TOWN.combo[2]})
-            </>
-          ) : (
-            "빈 땅 — 지어 두면 내 말이 설 때마다 잭팟"
-          )}
+    <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-[#05040c]/75 px-6">
+      <div className="text-center">
+        <p className={`${TITLE} px-shadow dfn-pop text-[24px] text-white`}>{title}</p>
+        <p className="px-shadow text-[13px] text-[var(--mute)]">
+          {sub} · 고르는 동안 시간이 멈춰요 · 필드 적 {b.enemies.length}/{capOf(b)}
         </p>
-        {lv < 3 && (
-          <p className="mt-0.5 truncate text-[11px] text-[#9be7a8]">
-            {BUILD_NAME[lv + 1]}이면 잭팟 +{nextJack}G{lv === 0 ? ` · 새 땅 값은 가진 건물(${townOwned(b)}칸)이 많을수록 올라요` : " · 웨이브가 높을수록 잭팟도 커져요"}
-          </p>
+      </div>
+      <div className="flex w-full max-w-[660px] gap-3">
+        {c.k === "route" &&
+          c.dice.map((d, i) => {
+            const to = expDest(b, d);
+            const n = EXP_NODE_TEXT[expNodeOf(to)];
+            return (
+              <button key={i} type="button" className={card} style={{ "--b": n.color } as React.CSSProperties} onClick={() => run({ t: "exp", a: i })}>
+                <span className="dfn-dice-land">
+                  <PixelDie n={d} size={46} />
+                </span>
+                <b className="mt-1 text-[13px] text-[var(--mute)]">{d}칸 →</b>
+                <b className="px-shadow text-[17px] text-white">{TOWN_TILES[to].name}</b>
+                <span className="px-1.5 text-[12px] font-bold text-[#0a0816]" style={{ background: n.color }}>
+                  {n.name}
+                </span>
+                <span className="text-[12px] leading-snug text-[var(--text)]">{n.desc}</span>
+              </button>
+            );
+          })}
+        {c.k === "draft" &&
+          c.offer.map((id, i) => {
+            const d = UNIT[id];
+            return (
+              <button key={i} type="button" className={card} style={{ "--b": GRADE_COLOR[d.grade] } as React.CSSProperties} onClick={() => run({ t: "exp", a: i })}>
+                <UnitIcon id={id} size={56} />
+                <b className="px-shadow text-[16px] text-white">{d.name}</b>
+                <span className="flex gap-1">
+                  <GradeChip g={d.grade} />
+                  <FactionChip f={d.faction} />
+                </span>
+                <span className="text-[12px] leading-snug text-[var(--text)]">{d.desc}</span>
+              </button>
+            );
+          })}
+        {c.k === "relic" &&
+          c.offer.map((id, i) => {
+            const r = EXP_RELIC[id];
+            return (
+              <button key={i} type="button" className={card} style={{ "--b": "#9be7ff" } as React.CSSProperties} onClick={() => run({ t: "exp", a: i })}>
+                <Icon n="relic" size={40} />
+                <b className="px-shadow text-[16px] text-white">{r.name}</b>
+                <span className="text-[13px] leading-snug text-[var(--text)]">{r.desc}</span>
+              </button>
+            );
+          })}
+        {c.k === "shop" &&
+          c.items.map((it, i) => {
+            const S = SHOP[it.kind];
+            return (
+              <button
+                key={i}
+                type="button"
+                disabled={it.sold}
+                className={`${card} ${it.sold ? "opacity-40" : ""}`}
+                style={{ "--b": "#ffd23f" } as React.CSSProperties}
+                onClick={() => run({ t: "exp", a: i }) && sfx("town-coin")}
+              >
+                <b className="px-shadow text-[15px] text-white">{S.name}</b>
+                <span className="text-[12px] leading-snug text-[var(--text)]">{S.desc}</span>
+                <b className={`mt-auto text-[14px] ${b.gold >= it.cost ? "text-[var(--gold)]" : "text-[var(--red)]"}`}>{it.sold ? "판매 완료" : `${it.cost}G`}</b>
+              </button>
+            );
+          })}
+        {c.k === "rest" && (
+          <>
+            <button type="button" className={card} style={{ "--b": "#6dff8f" } as React.CSSProperties} onClick={() => run({ t: "exp", a: 0 })}>
+              <b className="px-shadow text-[17px] text-white">한숨 돌리기</b>
+              <span className="text-[13px] text-[var(--text)]">필드 적 {Math.round(EXP.restClear * 100)}% 를 치워요 (지금 {b.enemies.length})</span>
+            </button>
+            <button type="button" className={card} style={{ "--b": "#c79bff" } as React.CSSProperties} onClick={() => run({ t: "exp", a: 1 })}>
+              <b className="px-shadow text-[17px] text-white">단련</b>
+              <span className="text-[13px] text-[var(--text)]">가장 낮은 등급 유닛 칸이 한 등급 올라요</span>
+            </button>
+          </>
         )}
       </div>
-      {lv < 3 ? (
-        <Btn
-          tone={why ? "ghost" : "gold"}
-          disabled={!!why && why !== "골드가 모자라요"}
-          onClick={() => run({ t: "build", p: t })}
-          className="h-[36px] w-[150px] text-[12px] font-bold"
-          hot="W"
-          silent
-          title={why ?? `${BUILD_NAME[lv + 1]} — 내 말이 서면 잭팟 +${nextJack}G`}
-        >
-          {BUILD_NAME[lv + 1]} {lv ? "올리기" : "짓기"} −{cost}G
+      <div className="flex gap-2">
+        {(c.k === "draft" || c.k === "relic") && (
+          <Btn className="h-8 px-4 text-[12px]" onClick={() => run({ t: "exp", a: -1 })}>
+            건너뛰기{c.k === "draft" ? ` (+${EXP.skipGold}G)` : ""}
+          </Btn>
+        )}
+        {c.k === "shop" && (
+          <Btn tone="gold" className="h-8 px-4 text-[12px]" onClick={() => run({ t: "exp", a: -1 })}>
+            나가기
+          </Btn>
+        )}
+        <Btn className="h-8 px-4 text-[12px]" onClick={() => setHide(true)}>
+          판 보기 (소환 · 합성 · 판매)
         </Btn>
-      ) : (
-        <span className="w-[150px] text-center text-[13px] font-bold text-[var(--gold)]">최고 단계 빌딩</span>
-      )}
-    </>
+      </div>
+    </div>
   );
 }
 

@@ -18,7 +18,7 @@ import {
   img,
   type SpriteSpec,
 } from "@/lib/defense/assets";
-import { TOWN_TILES } from "@/lib/defense/town";
+import { EXP_NODE_TEXT, TOWN_TILES, expNodeOf } from "@/lib/defense/town";
 import { CAP, TPS } from "@/lib/defense/balance";
 import { THEME, type ThemeDef } from "@/lib/defense/progress";
 import {
@@ -31,6 +31,7 @@ import {
   STACK,
   cellX,
   cellY,
+  expDest,
   pathPos,
   tileCell,
   tileXY,
@@ -691,7 +692,10 @@ export function draw(ctx: CanvasRenderingContext2D, b: Board, v: View, opt: { ra
   for (const e of b.enemies) list.push({ y: e.y * CELL + 10, fn: () => drawEnemy(ctx, e, now) });
   list.sort((a, c) => a.y - c.y);
   for (const d of list) d.fn();
-  if (b.stage === "town") drawToken(ctx, b, v, now);
+  if (b.stage === "town") {
+    drawRoute(ctx, b, now);
+    drawToken(ctx, b, v, now);
+  }
   // 보관함 유닛 (작게, 공격 안 함)
   for (let j = 0; j < BENCH; j++) {
     const i = CELLS + j;
@@ -872,7 +876,20 @@ function drawTown(ctx: CanvasRenderingContext2D, b: Board, v: View, now: number,
       }
       continue;
     }
-    // 말이 막 선 칸: 번쩍 (잭팟이면 금색)
+    // 원정: 엘리트 칸 · 지나온 칸
+    if (b.exp) {
+      const n = expNodeOf(t);
+      if (n === "elite") {
+        ctx.fillStyle = "rgba(255,107,127,0.16)";
+        ctx.fillRect(x + 2, y + 2, CELL - 4, CELL - 4);
+        pxText(ctx, "엘리트", x + CELL / 2, y + 12, 11, "#ff6b7f");
+      }
+      if (b.exp.path.some((p) => p.t === t) && b.pos !== t) {
+        ctx.fillStyle = "rgba(5,4,12,0.35)";
+        ctx.fillRect(x + 2, y + 2, CELL - 4, CELL - 4);
+      }
+    }
+    // 말이 막 선 칸: 번쩍 (엘리트 · 보스면 금색)
     if (v.flash && v.flash.t === t && now < v.flash.until) {
       const k = (v.flash.until - now) / 900;
       ctx.fillStyle = v.flash.gold ? `rgba(255,210,63,${0.25 + 0.45 * k * blink})` : `rgba(255,255,255,${0.12 + 0.2 * k})`;
@@ -913,6 +930,19 @@ function drawTown(ctx: CanvasRenderingContext2D, b: Board, v: View, now: number,
         ctx.fillRect(x + 6 + k * 8, y + 6, 4, 4);
       }
     }
+  }
+}
+
+/** 원정 갈림길: 주사위 눈마다 멈출 칸 표시 (깜빡이는 괄호 + 눈) */
+function drawRoute(ctx: CanvasRenderingContext2D, b: Board, now: number) {
+  const c = b.exp?.camp;
+  if (c?.k !== "route") return;
+  for (const d of c.dice) {
+    const t = expDest(b, d);
+    const n = EXP_NODE_TEXT[expNodeOf(t)];
+    tileBrackets(ctx, t, n.color, now);
+    const [x, y] = tileOrigin(t);
+    pxText(ctx, String(d), x + CELL / 2, y + CELL / 2, 20, n.color);
   }
 }
 

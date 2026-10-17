@@ -8,7 +8,7 @@
 import { useEffect, useState } from "react";
 import { B, BOSS_EVERY } from "@/lib/defense/balance";
 import { STACK, type Board } from "@/lib/defense/sim";
-import { TOWN, TOWN_NAME } from "@/lib/defense/town";
+import { TOWN_NAME } from "@/lib/defense/town";
 import { UNIT } from "@/lib/defense/units";
 import { Btn, TITLE } from "./ui";
 
@@ -80,33 +80,33 @@ const STEPS: Step[] = [
 const TOWN_STEPS: Step[] = [
   {
     id: "t_hello",
-    title: `${TOWN_NAME}에 온 걸 환영해요`,
-    text: "소환 · 합성으로 막는 건 글리치 시티와 같아요. 다른 건 하나 — 아래쪽 금색 「굴리기」로 주사위를 굴리면 분홍 말이 길을 돌고, 내 건물 칸에 서면 잭팟이 터져요.",
+    title: `${TOWN_NAME} 원정`,
+    text: "해피 타운 판이 곧 지도예요. 분홍 말을 움직여 칸마다 전투 · 상점 · 휴식 · 유물을 거쳐, 한 바퀴 돌아 출발 포털의 UR 보스를 잡으면 원정 성공! 유닛 · 강화 · 골드는 칸에서 칸으로 그대로 이어져요.",
     when: (b) => !b.cheat,
   },
   {
-    id: "t_roll",
-    title: "주사위 굴리기 (D)",
-    text: `아래쪽 금색 「굴리기」를 눌러 보세요. 웨이브마다 하나씩 생기고 ${TOWN.rollMax}개까지 모아 둬요. 더블이 나오면 한 번 더, 출발 포털을 지나면 월급!`,
-    when: (b) => !b.cheat && b.rolls > 0,
+    id: "t_route",
+    title: "갈림길 — 주사위 고르기",
+    text: "주사위 중 하나를 골라 그만큼 가요. 큰 눈은 보스에 빨리 닿지만 덱이 약할 수 있고, 작은 눈은 전투 · 드래프트를 더 해서 세져요. 고르는 동안 시간이 멈추고, 「판 보기」로 소환 · 합성도 할 수 있어요.",
+    when: (b) => !b.cheat && b.exp?.camp?.k === "route",
   },
   {
-    id: "t_build",
-    title: "건물 짓기 (길 칸 누르기 · W)",
-    text: "아무 동네 칸이나 누르고 「짓기」. 내 말이 그 칸에 서면 잭팟 — 오두막 → 2층집 → 빌딩일수록 커요. 새 땅은 가진 땅이 많을수록 비싸요: 여러 칸에 깔지, 한 칸을 크게 키울지!",
-    when: (b) => !b.cheat && b.wave >= 2 && b.gold >= TOWN.newBase && b.bld.every((x) => !x),
+    id: "t_draft",
+    title: "드래프트",
+    text: "전투가 끝나면 유닛 3장 중 1장을 골라 바로 놓아요. 메인과 달리 「골라서」 덱을 만들 수 있어요 — 한 세력으로 밀면 강화도 몰아줄 수 있어요. 못 잡은 적은 필드에 남아 다음 전투로 이어지니 조심!",
+    when: (b) => !b.cheat && b.exp?.camp?.k === "draft",
   },
   {
-    id: "t_jack",
-    title: "잭팟!",
-    text: "연속으로 내 건물 칸에 서면 ×2 · ×3. 웨이브가 높을수록 잭팟도 커져요. 6 · 6 이 나오면 골라 뽑기권 대박!",
-    when: (b) => !b.cheat && b.jacks > 0,
+    id: "t_relic",
+    title: "원정 유물",
+    text: "엘리트 보스 · 워프 게이트 · 상점에서 얻어요. 서약(소환이 한 세력만) · 연금 합성 · 성장통처럼 규칙을 바꿔요. 이번 원정에서만!",
+    when: (b) => !b.cheat && b.exp?.camp?.k === "relic",
   },
   {
     id: "t_boss",
     title: "UR 보스",
-    text: "10 · 30 · 50웨이브는 다이스 타운의 UR 셋이 글리치에 먹혀 나와요. DICE 는 주사위만큼 순간이동, MOA 는 가장 높은 건물을 빼앗아 잭팟을 막고(잡으면 돌아와요), FORTE 는 앙코르로 체력을 되찾아요.",
-    when: (b) => b.phase === "boss" && b.wave % 20 === 10,
+    text: "출발 포털에 닿으면 다이스 타운의 UR 이 글리치에 먹혀 나와요. 일찍 와도 보스는 일정 세기 이상이에요. DICE 는 주사위만큼 순간이동, FORTE 는 앙코르로 체력을 되찾아요.",
+    when: (b) => b.phase === "boss" && b.exp?.node === "boss",
   },
 ];
 

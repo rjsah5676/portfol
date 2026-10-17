@@ -24,12 +24,12 @@
  *   고른 효과는 b.cx 로 합쳐 둠 (피해 · 공속 · 골드 · 적 속도 …), 뽑기는 b.crng (소환 운과 따로).
  */
 import { B, BOSS_EVERY, CAP, LAST_WAVE, TPS, TUNE, countOf, hpOf, sec } from "./balance";
-import { BOSSES, KIND, bossOfWave, kindOfWave, phaseOn, type BossDef, type Size, type TeleShape } from "./enemies";
+import { BOSSES, KIND, MAIN_BOSSES, TOWN_BOSSES, bossOfWave, kindOfWave, phaseOn, type BossDef, type Size, type TeleShape } from "./enemies";
 import { CHEAT, CHEATS, CHEAT_MULTI_SEC, CHEAT_OFFER, CHEAT_WAVES, cheatFx0, cheatFxOf, cheatOdds, type CheatFx } from "./cheats";
 import { MISSIONS, PATCHES } from "./meta";
 import { mixSeed, pick, rnd, rndInt, type Rng } from "./rng";
 import { BENCH_MAX, LV_BUFF, LV_DMG, modsOf, type Loadout, type Mods, type Stage } from "./progress";
-import { CORNER_AT, TOWN } from "./town";
+import { EXP, EXP_RELICS, SHOP, expNodeOf, type ExpNode, type ShopKind } from "./town";
 import {
   FACTIONS,
   RECIPE,
@@ -177,12 +177,34 @@ export type Cmd =
   /** 다음 웨이브 부르기 — 이번 웨이브 적이 다 나왔으면 남은 시간을 건너뜀 (남은 1초마다 골드 B.nextGold). 남은 적은 그대로 */
   | { t: "next" }
   /** 해피 타운: 길 칸 p 에 건물 짓기 · 한 단계 올리기 */
-  | { t: "build"; p: number }
-  /** 해피 타운: 주사위 굴리기 (모아 둔 굴리기 하나 씀) */
-  | { t: "roll" };
+  /** 해피 타운 원정: 캠프에서 고르기 (갈림길 주사위 · 드래프트 · 유물 · 상점 물건 · 휴식 — 번호, -1 = 건너뛰기 · 나가기) */
+  | { t: "exp"; a: number };
 
-/** 해피 타운: 말이 선 칸 — 내 건물(잭팟) · 빼앗긴 건물 · 빈 땅 · 모서리 */
-export type TownLand = "jack" | "seized" | "empty" | "start" | "jail" | "fest" | "warp";
+/** 해피 타운 원정 캠프 (고르는 동안 시간이 멈춤) */
+export type ExpCamp =
+  | { k: "route"; dice: number[] }
+  | { k: "draft"; offer: string[]; next: "route" | "relic" }
+  | { k: "relic"; offer: string[] }
+  | { k: "shop"; items: { kind: ShopKind; cost: number; sold: boolean }[] }
+  | { k: "rest" };
+export interface ExpState {
+  /** 필드 적 한도 더하기 (철벽 · 피의 계약) */
+  cap: number;
+  /** 끝낸 칸 수 */
+  segs: number;
+  /** 지금 칸 · 진행 (waves → boss(엘리트 · UR)) */
+  node: ExpNode | null;
+  stage: "camp" | "waves" | "boss";
+  segEnd: number;
+  /** 엘리트 보스를 잡았나 (유물 보상) */
+  eliteWon: boolean;
+  camp: ExpCamp | null;
+  relics: string[];
+  /** 지나온 칸 (화면) */
+  path: { t: number; node: ExpNode }[];
+  /** 피의 계약 등 피해 배수 */
+  dmg: number;
+}
 
 /** 화면 효과 (시뮬 결과에 영향 없음 — fx 가 null 이면 안 쌓음) */
 export type Fx =
@@ -218,8 +240,9 @@ export type Ev =
   | { t: "cheat"; id: string; auto: boolean }
   /** 해피 타운: 건물 · 웨이브 주사위 · 보스 기술 (DICE 순간이동 · MOA 빼앗기 · FORTE 앙코르) */
   | { t: "build"; tile: number; lv: number }
-  /** 해피 타운 굴리기: 주사위 둘 · 말이 from → to (passed = 지난 출발 포털 수, lapGold 월급) · 선 칸 결과 */
-  | { t: "roll"; d1: number; d2: number; from: number; to: number; passed: number; lapGold: number; land: TownLand; gold: number; mult: number; big: boolean; again: boolean }
+  /** 해피 타운 원정: 말이 from → to 로 가서 그 칸 일을 시작 · 전투 끝 (남은 적 leak 만큼 체력) */
+  | { t: "expGo"; from: number; to: number; node: ExpNode; die: number }
+  | { t: "expEnd"; node: ExpNode; win: boolean }
   | { t: "warp"; roll: number }
   | { t: "seize"; tile: number }
   | { t: "encore" }
@@ -298,17 +321,11 @@ export interface Board {
   stage: Stage;
   /** 해피 타운: 길 칸별 건물 단계 0~3 (모서리 · 글리치 시티는 늘 0) */
   bld: number[];
-  /** 해피 타운: 내 말 위치 (길 칸) · 돈 바퀴 · 남은 굴리기 · 연속 잭팟 수 · 마지막 굴림 (화면용) */
+  /** 해피 타운 원정: 내 말 위치 (길 칸) · 원정 상태 (글리치 시티는 null) */
   pos: number;
-  laps: number;
-  rolls: number;
-  combo: number;
-  last: { d1: number; d2: number } | null;
+  exp: ExpState | null;
   /** 해피 타운: MOA 에게 빼앗긴 건물 칸 (보스를 잡으면 돌아옴) */
   seized: number[];
-  /** 해피 타운: 이번 판 굴리기로 번 골드 (잭팟 · 월급 · 모서리) · 잭팟 횟수 */
-  toll: number;
-  jacks: number;
   /** 해피 타운 주사위 · 보스 기술 난수 (소환 운과 따로) */
   trng: Rng;
   fx: Fx[] | null;
@@ -326,7 +343,7 @@ export interface Game {
 
 export function newBoard(seed: number, idx: number, lo?: Loadout | null): Board {
   const mods = modsOf(lo);
-  return {
+  const b: Board = {
     idx,
     // 보드마다 같은 시드 → 멀티에서 모두 같은 운으로 시작 (나뉘는 건 각자 고른 것 때문)
     rng: { r: mixSeed(seed, 0) },
@@ -376,17 +393,14 @@ export function newBoard(seed: number, idx: number, lo?: Loadout | null): Board 
     stage: mods.stage,
     bld: new Array(PERIM).fill(0),
     pos: 0,
-    laps: 0,
-    rolls: mods.stage === "town" ? 1 : 0,
-    combo: 0,
-    last: null,
+    exp: null,
     seized: [],
-    toll: 0,
-    jacks: 0,
     trng: { r: mixSeed(seed, 131) },
     fx: null,
     ev: null,
   };
+  if (b.stage === "town") expInit(b);
+  return b;
 }
 
 /** loadouts: 보드마다 영구 성장 (없으면 기본) */
@@ -419,83 +433,205 @@ export const sellOf = (b: Board, d: UnitDef) => ({
 });
 /** 보스 제한 시간 (초) */
 export const bossSecOf = (b: Board) => Math.max(20, B.bossSec + b.mods.bossSec + b.cx.bossSec);
-/** 해피 타운: 가진 건물 수 */
-export const townOwned = (b: Board) => b.bld.reduce((n, x) => n + (x > 0 ? 1 : 0), 0);
-/** 해피 타운: 길 칸 t 건물 짓기 · 올리기 비용 (최고 단계면 Infinity). 새 땅은 가진 건물이 많을수록 비쌈 */
-export const buildCost = (b: Board, t: number) =>
-  b.bld[t] >= 3 ? Infinity : b.bld[t] === 0 ? TOWN.newBase + TOWN.newPer * townOwned(b) : TOWN.up[b.bld[t]];
-/** 해피 타운: 지금 지을 수 없는 이유 (지을 수 있으면 null) */
-export function buildBlock(b: Board, t: number): string | null {
-  if (b.stage !== "town") return "해피 타운에서만 지을 수 있어요";
-  if (tileCell(t) < 0) return "모서리 특수 칸엔 못 지어요";
-  if (b.bld[t] >= 3) return "최고 단계예요";
-  if (b.seized.includes(t)) return "MOA 에게 빼앗긴 칸이에요 — MOA 를 잡으면 돌아와요";
-  if (b.gold < buildCost(b, t)) return "골드가 모자라요";
-  return null;
+/* ───────────────────────── 해피 타운 원정 ───────────────────────── */
+
+export const expHas = (b: Board, id: string) => !!b.exp?.relics.includes(id);
+/** 원정 시작: 출발 포털에서 첫 갈림길 */
+function expInit(b: Board) {
+  b.phase = "break";
+  b.wt = 0;
+  b.gold += b.mods.deedGold;
+  b.exp = { cap: 0, segs: 0, node: null, stage: "camp", segEnd: 0, eliteWon: false, camp: null, relics: [], path: [], dmg: 1 };
+  expRoute(b);
 }
-/** 해피 타운: 말이 칸 t 에 서면 받는 잭팟 (배수 전) */
-export const jackOf = (b: Board, t: number) =>
-  b.bld[t] && !b.seized.includes(t) ? Math.floor(TOWN.jack[b.bld[t]] * (1 + b.wave * TOWN.jackWave) * (1 + b.mods.jackAdd)) : 0;
-/** 해피 타운: 다음 잭팟 배수 */
-export const comboMult = (n: number) => TOWN.combo[Math.min(n, TOWN.combo.length - 1)];
-/** 해피 타운: 지금 굴릴 수 없는 이유 */
-export function rollBlock(b: Board): string | null {
-  if (b.stage !== "town") return "해피 타운에서만 굴려요";
-  if (b.rolls <= 0) return "굴리기가 없어요 — 웨이브마다 하나씩 생겨요";
-  if (b.cheat) return "치트 코드를 먼저 골라요";
-  return null;
+function expRoute(b: Board) {
+  const x = b.exp!;
+  const n = expHas(b, "dice3") ? 3 : 2;
+  const dice: number[] = [];
+  for (let i = 0; i < n; i++) dice.push(rndInt(b.trng, 6) + 1);
+  x.stage = "camp";
+  x.node = null;
+  x.camp = { k: "route", dice };
 }
-/** 해피 타운 굴리기 (apply 의 roll) */
-function townRoll(b: Board) {
-  b.rolls--;
-  const d1 = rndInt(b.trng, 6) + 1,
-    d2 = rndInt(b.trng, 6) + 1;
-  const from = b.pos;
-  let to = from + d1 + d2,
-    passed = 0;
-  while (to >= PERIM) {
-    to -= PERIM;
-    passed++;
+/** 주사위 눈 d 로 가면 멈추는 칸 (출발 포털을 넘으면 거기서 멈춤 = UR 보스) */
+export const expDest = (b: Board, d: number) => (b.pos + d >= PERIM ? 0 : b.pos + d);
+/** 가장 낮은 등급 필드 유닛 칸을 한 등급 올림 (같은 세력 · 레전드까지) */
+function expGrow(b: Board) {
+  let best = -1;
+  for (let i = 0; i < CELLS; i++) {
+    const d = b.cells[i].def ? UNIT[b.cells[i].def!] : null;
+    if (!d || d.grade >= 3 || d.faction === "hidden") continue;
+    if (best < 0 || d.grade < UNIT[b.cells[best].def!].grade) best = i;
   }
-  let lapGold = 0;
-  for (let k = 0; k < passed; k++) lapGold += TOWN.lapBase + TOWN.lapPer * b.laps++;
-  b.pos = to;
-  b.last = { d1, d2 };
-  let land: TownLand,
-    gold = 0,
-    mult = 1;
-  const big = d1 === 6 && d2 === 6;
-  let again = d1 === d2;
-  if (to === CORNER_AT.start) {
-    land = "start";
-    gold = TOWN.lapBase + TOWN.lapPer * Math.max(0, b.laps - 1);
-  } else if (to === CORNER_AT.jail) {
-    land = "jail";
-    b.free += TOWN.repairFree;
-  } else if (to === CORNER_AT.fest) {
-    land = "fest";
-    gold = TOWN.festBase + TOWN.festPer * b.wave;
-  } else if (to === CORNER_AT.warp) {
-    land = "warp";
-    again = true;
-  } else if (b.bld[to] && b.seized.includes(to)) land = "seized";
-  else if (b.bld[to]) land = "jack";
-  else land = "empty";
-  if (land === "jack") {
-    mult = comboMult(b.combo);
-    gold = jackOf(b, to) * mult;
-    b.combo++;
-    b.jacks++;
-  } else b.combo = 0;
-  // 6-6 대박: 골라 뽑기권 (20웨이브 전엔 에픽, 그 뒤 레전드)
-  if (big) b.tickets.push(b.wave >= 20 ? 3 : 2);
-  if (again) b.rolls++;
-  b.gold += lapGold + gold;
-  b.toll += lapGold + gold;
-  b.ev?.push({ t: "roll", d1, d2, from, to, passed, lapGold, land, gold, mult, big, again });
+  if (best < 0) return;
+  const d = UNIT[b.cells[best].def!];
+  b.cells[best].def = pick(b.trng, poolOf(d.faction, (d.grade + 1) as Grade)).id;
+  b.dirty = true;
+  b.fx?.push({ k: "spawn", c: best, g: d.grade + 1 });
+}
+function relicOffer(b: Board): string[] {
+  const pool = EXP_RELICS.filter((r) => !b.exp!.relics.includes(r.id)).map((r) => r.id);
+  const out: string[] = [];
+  while (out.length < 3 && pool.length) out.push(pool.splice(rndInt(b.trng, pool.length), 1)[0]);
+  return out;
+}
+function takeRelic(b: Board, id: string) {
+  const x = b.exp!;
+  x.relics.push(id);
+  if (id === "blood") {
+    x.cap -= 20;
+    x.dmg *= 1.35;
+  }
+  if (id === "iron") x.cap += 25;
+}
+/** 칸 일 시작 */
+function expGo(b: Board, d: number) {
+  const x = b.exp!;
+  const from = b.pos;
+  b.pos = expDest(b, d);
+  const node = expNodeOf(b.pos);
+  x.node = node;
+  x.path.push({ t: b.pos, node });
+  x.camp = null;
+  b.ev?.push({ t: "expGo", from, to: b.pos, node, die: d });
+  if (node === "fight" || node === "elite") {
+    x.stage = "waves";
+    x.eliteWon = false;
+    x.segEnd = b.wave + (node === "elite" ? EXP.eliteWaves : EXP.fightWaves);
+    startWave(b, b.wave + 1);
+  } else if (node === "boss") {
+    // 한 바퀴 끝: UR 보스 (타운 단계가 높을수록 센 UR)
+    x.stage = "boss";
+    b.wave = Math.max(b.wave + 1, EXP.bossWave);
+    b.wt = 0;
+    b.phase = "boss";
+    b.bossT = sec(bossSecOf(b));
+    b.ev?.push({ t: "wave", wave: b.wave });
+    spawnBoss(b, TOWN_BOSSES[Math.min(TOWN_BOSSES.length - 1, Math.floor((Math.max(1, b.mods.town) - 1) / 3))]);
+  } else if (node === "shop") {
+    const kinds: ShopKind[] = ["heal", "free", "epic", "legend", "relic", "up"];
+    const items: { kind: ShopKind; cost: number; sold: boolean }[] = [];
+    while (items.length < 4) {
+      const k = kinds.splice(rndInt(b.trng, kinds.length), 1)[0];
+      items.push({ kind: k, cost: Math.round(SHOP[k].cost * (1 + EXP.shopUp * x.segs)), sold: false });
+    }
+    x.stage = "camp";
+    x.camp = { k: "shop", items };
+  } else if (node === "rest") {
+    x.stage = "camp";
+    x.camp = { k: "rest" };
+  } else {
+    const offer = relicOffer(b);
+    x.stage = "camp";
+    if (offer.length) x.camp = { k: "relic", offer };
+    else expRoute(b);
+  }
+}
+/** 전투 칸 마지막 웨이브가 끝남 → 엘리트면 보스, 아니면 정리 시간 */
+function expWavesDone(b: Board) {
+  const x = b.exp!;
+  if (x.node === "elite") {
+    x.stage = "boss";
+    b.phase = "boss";
+    b.bossT = sec(bossSecOf(b));
+    spawnBoss(b, MAIN_BOSSES[rndInt(b.trng, MAIN_BOSSES.length)]);
+  } else expSegEnd(b);
+}
+/** 필드 적 n 마리 치움 (앞서가는 적부터 — 보스 · 균열은 빼고) */
+function expClear(b: Board, n: number) {
+  const keep = b.enemies.filter((e) => e.boss >= 0 || e.rift);
+  const rest = b.enemies.filter((e) => !(e.boss >= 0 || e.rift)).sort((p, q) => q.trav - p.trav || p.id - q.id);
+  b.enemies = [...keep, ...rest.slice(Math.min(n, rest.length))];
+}
+/** 전투 칸 끝: 원정 유물 효과 · 드래프트 (남은 적은 필드에 그대로) */
+function expSegEnd(b: Board) {
+  const x = b.exp!;
+  const node = x.node!;
+  b.tele = null;
+  b.ev?.push({ t: "expEnd", node, win: x.eliteWon });
+  x.segs++;
+  if (expHas(b, "growth")) expGrow(b);
+  if (expHas(b, "piggy")) b.gold += Math.min(150, Math.floor(b.gold * 0.25));
+  // 드래프트: 3세력 하나씩 · 칸을 지날수록 높은 등급 (엘리트는 한 등급 위)
+  const gr = Math.min(3, 1 + Math.floor(x.segs / 2) + (node === "elite" ? 1 : 0)) as Grade;
+  const fs = [...FACTIONS];
+  const offer: string[] = [];
+  while (fs.length) offer.push(pick(b.trng, poolOf(fs.splice(rndInt(b.trng, fs.length), 1)[0], gr)).id);
+  x.stage = "camp";
+  b.phase = "break";
+  x.camp = { k: "draft", offer, next: node === "elite" && x.eliteWon ? "relic" : "route" };
+}
+/** 캠프에서 고르기 (명령 exp) */
+function expPick(b: Board, a: number): string | null {
+  const x = b.exp!;
+  const c = x.camp!;
+  switch (c.k) {
+    case "route": {
+      if (!(a >= 0 && a < c.dice.length)) return "고를 주사위가 없어요";
+      expGo(b, c.dice[a]);
+      return null;
+    }
+    case "draft": {
+      if (a >= 0) {
+        const id = c.offer[a];
+        if (!id) return "없는 카드예요";
+        if (!hasEmpty(b) && !b.cells.some((s) => s.def === id && s.units.length < STACK)) return "빈 칸이 없어요 — 팔거나 합성하고 골라요";
+        give(b, id, "pick");
+      } else b.gold += EXP.skipGold;
+      if (c.next === "relic") {
+        const offer = relicOffer(b);
+        if (offer.length) {
+          x.camp = { k: "relic", offer };
+          return null;
+        }
+      }
+      expRoute(b);
+      return null;
+    }
+    case "relic": {
+      if (a >= 0) {
+        const id = c.offer[a];
+        if (!id) return "없는 유물이에요";
+        takeRelic(b, id);
+      }
+      expRoute(b);
+      return null;
+    }
+    case "shop": {
+      if (a < 0) {
+        expRoute(b);
+        return null;
+      }
+      const it = c.items[a];
+      if (!it || it.sold) return "이미 산 물건이에요";
+      if (b.gold < it.cost) return "골드가 모자라요";
+      if ((it.kind === "epic" || it.kind === "legend") && !hasEmpty(b)) return "빈 칸이 없어요";
+      if (it.kind === "relic" && !relicOffer(b).length) return "더 받을 유물이 없어요";
+      if (it.kind === "heal" && !b.enemies.some((e) => e.boss < 0 && !e.rift)) return "치울 적이 없어요";
+      b.gold -= it.cost;
+      it.sold = true;
+      if (it.kind === "heal") expClear(b, EXP.shopClear);
+      else if (it.kind === "free") b.free += 3;
+      else if (it.kind === "epic" || it.kind === "legend") give(b, pick(b.trng, poolOf(pick(b.trng, FACTIONS), it.kind === "epic" ? 2 : 3)).id, "pick");
+      else if (it.kind === "relic") {
+        const o = relicOffer(b);
+        takeRelic(b, o[rndInt(b.trng, o.length)]);
+      } else {
+        const f = (["knight", "mech", "arcane"] as const).reduce((m, k) => (b.up[k] < b.up[m] ? k : m), "knight" as "knight" | "mech" | "arcane");
+        b.up[f] = Math.min(B.up.max, b.up[f] + 2);
+      }
+      return null;
+    }
+    case "rest": {
+      if (a === 1) expGrow(b);
+      else expClear(b, Math.ceil(b.enemies.length * EXP.restClear));
+      expRoute(b);
+      return null;
+    }
+  }
 }
 /** 패배 기준 적 수 */
-export const capOf = (b: Board) => CAP + b.cx.cap;
+export const capOf = (b: Board) => CAP + b.cx.cap + (b.exp ? b.exp.cap : 0);
 /** 보드에 있는 유닛 수 (id → 수) */
 export function counts(b: Board): Record<string, number> {
   const m: Record<string, number> = {};
@@ -579,10 +715,8 @@ export function isCmd(x: unknown): x is Cmd {
     case "quit":
     case "next":
       return keys === 1;
-    case "build":
-      return keys === 2 && Number.isInteger(c.p) && (c.p as number) >= 0 && (c.p as number) < PERIM;
-    case "roll":
-      return keys === 1;
+    case "exp":
+      return keys === 2 && Number.isInteger(c.a) && (c.a as number) >= -1 && (c.a as number) < 6;
     case "cheat":
     case "reroll":
       return keys === 2 && Number.isInteger(c.i) && (c.i as number) >= 0 && (c.i as number) < Math.max(CHEAT_OFFER, PATCHES.length);
@@ -595,6 +729,8 @@ export function apply(g: Game, p: number, cmd: Cmd): string | null {
   const b = g.boards[p];
   if (!b || b.result) return "끝난 판이에요";
   if (b.cheat && cmd.t !== "cheat" && cmd.t !== "reroll" && cmd.t !== "quit") return "치트 코드를 먼저 골라 주세요";
+  // 원정 캠프: 시간이 멈춘 채 고르기 · 소환 · 합성 · 판매 · 강화만
+  if (b.exp?.camp && (cmd.t === "next" || cmd.t === "rift")) return "갈 길을 먼저 골라요";
   switch (cmd.t) {
     case "summon": {
       if (!hasEmpty(b)) return "빈 칸이 없어요";
@@ -617,8 +753,11 @@ export function apply(g: Game, p: number, cmd: Cmd): string | null {
           break;
         }
       }
-      const def = pick(b.rng, poolOf(pick(b.rng, FACTIONS), grade as Grade));
+      // 원정 유물 「서약」: 그 세력만
+      const oath = b.exp ? FACTIONS.find((f) => expHas(b, `oath_${f}`)) : undefined;
+      const def = pick(b.rng, poolOf(oath ?? pick(b.rng, FACTIONS), grade as Grade));
       give(b, def.id, "summon");
+      if (expHas(b, "twin") && hasEmpty(b) && rnd(b.trng) < 0.2) give(b, def.id, "twin");
       return null;
     }
     case "merge": {
@@ -629,7 +768,9 @@ export function apply(g: Game, p: number, cmd: Cmd): string | null {
       c.def = null;
       c.units = [];
       b.dirty = true;
-      const next = pick(b.rng, poolOf(d.faction, (d.grade + 1) as Grade));
+      // 원정 유물 「연금 합성」: 25% 두 등급 위 (레전드까지)
+      const up2 = expHas(b, "alch") && d.grade + 2 <= 3 && rnd(b.trng) < 0.25;
+      const next = pick(b.rng, poolOf(d.faction, (d.grade + (up2 ? 2 : 1)) as Grade));
       give(b, next.id, "merge", cmd.c);
       return null;
     }
@@ -750,7 +891,7 @@ export function apply(g: Game, p: number, cmd: Cmd): string | null {
       }
       if (b.phase === "wave") b.gold += nextBonus(b);
       endWave(b);
-      startWave(b, b.wave + 1);
+      advance(b);
       return null;
     }
     case "cheat": {
@@ -770,19 +911,9 @@ export function apply(g: Game, p: number, cmd: Cmd): string | null {
       o.offer[cmd.i] = nx;
       return null;
     }
-    case "build": {
-      const why = buildBlock(b, cmd.p);
-      if (why) return why;
-      b.gold -= buildCost(b, cmd.p);
-      b.bld[cmd.p]++;
-      b.ev?.push({ t: "build", tile: cmd.p, lv: b.bld[cmd.p] });
-      return null;
-    }
-    case "roll": {
-      const why = rollBlock(b);
-      if (why) return why;
-      townRoll(b);
-      return null;
+    case "exp": {
+      if (!b.exp?.camp) return "지금은 고를 게 없어요";
+      return expPick(b, cmd.a);
     }
     case "pick": {
       if (!b.tickets.length) return "골라 뽑기권이 없어요";
@@ -910,6 +1041,8 @@ export function step(g: Game) {
       if (g.boards.length > 1 && ++b.cheat.t >= sec(CHEAT_MULTI_SEC)) takeCheat(b, b.cheat.offer[0], true);
       continue;
     }
+    // 원정 캠프: 고르는 동안 멈춤
+    if (b.exp?.camp) continue;
     stepBoard(g, b);
   }
   g.tick++;
@@ -927,6 +1060,7 @@ export function nextBlock(b: Board): string | null {
   if (b.result) return "끝난 판이에요";
   if (b.phase === "treasure") return "보물방이 끝나야 넘어가요";
   if (b.phase === "boss") return "보스를 잡아야 넘어가요";
+  if (b.exp && b.exp.stage !== "waves") return "갈 길을 먼저 골라요";
   if (b.phase === "wave" && b.spawned < countOf(b.wave)) return "이번 웨이브 적이 아직 나오는 중이에요";
   return null;
 }
@@ -979,8 +1113,7 @@ function startWave(b: Board, w: number) {
   b.wt = 0;
   b.spawned = 0;
   b.ev?.push({ t: "wave", wave: w });
-  if (b.stage === "town") townWave(b, w);
-  const boss = w % BOSS_EVERY === 0 ? bossOfWave(w, b.stage) : null;
+  const boss = !b.exp && w % BOSS_EVERY === 0 ? bossOfWave(w, b.stage) : null;
   if (boss) {
     b.phase = "boss";
     b.bossT = sec(bossSecOf(b));
@@ -988,9 +1121,10 @@ function startWave(b: Board, w: number) {
   } else b.phase = "wave";
 }
 
-/** 해피 타운 웨이브 시작: 굴리기 하나 (모아 둘 수 있는 만큼) */
-function townWave(b: Board, _w: number) {
-  if (b.rolls < TOWN.rollMax) b.rolls++;
+/** 다음 웨이브 (원정이면 그 칸 마지막 웨이브 뒤엔 보스 · 정리) */
+function advance(b: Board) {
+  if (b.exp && b.wave >= b.exp.segEnd) expWavesDone(b);
+  else startWave(b, b.wave + 1);
 }
 
 function endWave(b: Board) {
@@ -1022,13 +1156,22 @@ function stepBoard(g: Game, b: Board) {
     }
     if (++b.wt >= W) {
       endWave(b);
-      startWave(b, b.wave + 1);
+      advance(b);
     }
   } else if (b.phase === "boss") {
-    if (--b.bossT <= 0) return finish(g, b, false, "boss");
+    if (--b.bossT <= 0) {
+      // 원정 엘리트: 보스는 떠나고 체력이 깎임 (UR 보스는 실패)
+      if (b.exp?.node === "elite") {
+        // 엘리트 보스는 떠남 (유물 없음)
+        b.enemies = b.enemies.filter((e) => e.boss < 0);
+        expSegEnd(b);
+      } else return finish(g, b, false, "boss");
+    }
   } else if (b.phase === "treasure") {
     const r = b.troom!;
     if (--r.t <= 0 || r.killed) endTreasure(b);
+  } else if (b.phase === "break" && b.exp) {
+    // (원정은 캠프에서 멈춤 — 쉬는 시간 없음)
   } else if (b.phase === "break") {
     if (++b.wt >= sec(B.breakSec)) {
       endWave(b);
@@ -1222,7 +1365,7 @@ function hit(b: Board, def: UnitDef, e: Enemy, raw: number): number {
     b.fx?.push({ k: "miss", x: e.x, y: e.y });
     return 0;
   }
-  let m = upMult(b, def.faction) * b.team;
+  let m = upMult(b, def.faction) * b.team * (b.exp ? b.exp.dmg : 1);
   const M = b.mods;
   m *= (1 + LV_DMG * (M.lv[def.id] ?? 0)) * M.relicDmg * M.gritDmg * M.cityDmg;
   if (def.grade >= 4) m *= M.mythDmg;
@@ -1603,6 +1746,20 @@ function die(g: Game, b: Board, e: Enemy): boolean {
     gold = R.gold;
     b.rifts++;
     b.ev?.push({ t: "rift", tier: e.rift, ok: true });
+  } else if (e.boss >= 0 && b.exp) {
+    // 원정: UR 보스 = 원정 성공 · 엘리트 보스 = 남은 적 정리 뒤 유물
+    b.tele = null;
+    gold = Math.floor((B.bossGold.base + B.bossGold.per * b.wave) * b.mods.bossGold);
+    b.free += b.mods.bossFree;
+    b.stones += B.bossStones;
+    b.ev?.push({ t: "bossDown", boss: e.boss, gold, stones: B.bossStones, ticket: null });
+    if (b.exp.node === "boss") {
+      b.gold += gold;
+      finish(g, b, true, "clear");
+      return true;
+    }
+    b.exp.eliteWon = true;
+    expSegEnd(b);
   } else if (e.boss >= 0) {
     b.tele = null;
     b.seized = [];
@@ -1756,9 +1913,12 @@ export function hashGame(g: Game): number {
     mix(b.enemies.length);
     mix(b.rng.r);
     mix(b.cheats.length);
-    mix(b.toll);
     mix(b.pos);
-    mix(b.rolls);
+    if (b.exp) {
+      mix(b.exp.cap);
+      mix(b.exp.segs);
+      mix(b.exp.relics.length);
+    }
     for (const e of b.enemies) mix(e.hp);
   }
   return h >>> 0;

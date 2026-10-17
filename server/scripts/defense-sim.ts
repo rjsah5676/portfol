@@ -108,8 +108,8 @@ interface Run {
   dps: Record<number, number>;
   /** 보물방 깎은 비율 (열렸으면) · 처치 */
   tre: { ratio: number; killed: boolean } | null;
-  /** 해피 타운: 굴리기 수입 · 잭팟 횟수 · 건물 수 · 단계 합 · 판 전체 골드 수입(대략) */
-  town: { toll: number; jacks: number; owned: number; lvs: number; goldIn: number } | null;
+  /** 해피 타운 원정: 남은 체력 · 끝낸 칸 · 원정 유물 수 · 지나온 칸 종류 */
+  town: { hp: number; segs: number; relics: number; nodes: string[] } | null;
 }
 
 function play(cfg: BotCfg, seed: number): Run {
@@ -152,7 +152,7 @@ function play(cfg: BotCfg, seed: number): Run {
       throw new Error(`결정론 깨짐: ${cfg.name} seed ${seed} — ${JSON.stringify(r)} vs ${JSON.stringify(again)}`);
   }
   const tre = b.treasure ? { ratio: b.treasure.dmg / b.treasure.max, killed: b.treasure.killed } : null;
-  const town = b.stage === "town" ? { toll: b.toll, jacks: b.jacks, owned: b.bld.filter((x) => x > 0).length, lvs: b.bld.reduce((a, x) => a + x, 0), goldIn } : null;
+  const town = b.exp ? { hp: b.enemies.length, segs: b.exp.segs, relics: b.exp.relics.length, nodes: b.exp.path.map((p) => p.node) } : null;
   return { bot: cfg.name, seed, win: r.win, wave: r.wave, reason: r.reason, min: r.tick / TPS / 60, kills: r.kills, ms, dealt: b.dealt, snap, dps, tre, town };
 }
 
@@ -183,7 +183,7 @@ for (const cfg of bots) {
   const tr = runs.filter((r) => r.town).map((r) => r.town!);
   if (tr.length)
     console.log(
-      `\n해피 타운: 굴리기 수입 평균 ${avg(tr.map((x) => x.toll)).toFixed(0)}G (판 골드 수입의 ${((avg(tr.map((x) => x.toll)) / avg(tr.map((x) => x.goldIn))) * 100).toFixed(0)}%) · 잭팟 ${avg(tr.map((x) => x.jacks)).toFixed(1)}번 · 건물 ${avg(tr.map((x) => x.owned)).toFixed(1)}칸 · 단계 합 ${avg(tr.map((x) => x.lvs)).toFixed(1)}`
+      `\n해피 타운 원정: 끝낸 칸 평균 ${avg(tr.map((x) => x.segs)).toFixed(1)} · 끝날 때 필드 적 ${avg(tr.map((x) => x.hp)).toFixed(1)} · 원정 유물 ${avg(tr.map((x) => x.relics)).toFixed(1)} · 칸 종류 ${JSON.stringify(tr.flatMap((x) => x.nodes).reduce((m: Record<string, number>, k) => ((m[k] = (m[k] ?? 0) + 1), m), {}))}`
     );
 }
 console.log("\n죽은 웨이브 분포 (전체)");

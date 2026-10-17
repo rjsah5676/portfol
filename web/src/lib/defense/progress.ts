@@ -59,7 +59,7 @@ export type Stage = "main" | "town";
  * 픽셀 타운 (PIXEL MARBLE 맵 테마 확장 스테이지) — 메인(글리치 시티)을 밀면 단계가 열리고, 성장을 앞당겨 주는 곳.
  *  - 메인에서 오염 단계를 TOWN_EVERY 개 열 때마다 1단계씩 (메인 TOWN_FROM 단계가 열리면 1단계)
  *  - 적 세기 = 메인 오염 townGlitchLv(단계) 수준 (지금 막힌 곳보다 조금 아래) · 보상은 그 단계 × TOWN_REWARD
- *  - 고유 규칙: 주사위 굴리기 → 내 말이 내 건물 칸에 서면 잭팟 · 아무 칸 건물 (새 땅은 점점 비쌈) · UR 보스 (town.ts)
+ *  - 고유 규칙: 해피 타운 판을 한 바퀴 도는 로그라이크 원정 (갈림길 주사위 · 칸별 전투 · 드래프트 · 원정 유물 · UR 보스, town.ts)
  */
 export const TOWN_FROM = 6;
 export const TOWN_EVERY = 2;
@@ -329,7 +329,7 @@ export const RELICS: RelicDef[] = [
   relic("chrono_core", "크로노 코어", (l) => `보스 제한 시간 +${V.chrono_core(l)}초 · 보스 처치 골드 +50%`, 1, "boss", "deep"),
   relic("void_stone", "공허석", (l) => `균열 적에게 주는 피해 +${V.void_stone(l)}% · 균열을 닫으면 행운석 +1`, 1, "gamble", "deep"),
   relic("lucky_dice", "행운 주사위", (l) => `보스를 잡으면 무료 소환 ${V.lucky_dice(l)}회`, 1, "any", "town"),
-  relic("golden_deed", "황금 땅문서", (l) => `적 처치 골드 +${V.golden_deed(l)} · 해피 타운 잭팟 +${V.golden_deed(l) * 25}%`, 1, "eco", "town"),
+  relic("golden_deed", "황금 땅문서", (l) => `적 처치 골드 +${V.golden_deed(l)} · 해피 타운 원정 시작 골드 +${V.golden_deed(l) * 100}`, 1, "eco", "town"),
   relic("moa_card", "MOA 의 명함", (l) => `유닛 판매 금액 +${V.moa_card(l)}% · 레전드 이상을 팔면 행운석 +1`, 2, "eco", "town"),
   relic("forte_box", "FORTE 의 오르골", (l) => `공격할 때 ${V.forte_box(l)}% 확률로 궁극기 충전 +1`, 2, "any", "town"),
 ];
@@ -509,8 +509,8 @@ export interface Mods {
   bossGold: number;
   riftDmg: number;
   bossFree: number;
-  /** 해피 타운 잭팟 + (비율) */
-  jackAdd: number;
+  /** 해피 타운 원정 시작 골드 + */
+  deedGold: number;
   sellStone: number;
   ultCharge: number;
 }
@@ -652,7 +652,7 @@ export function modsOf(lo: Loadout | null | undefined): Mods {
     bossGold: has("chrono_core") ? 1.5 : 1,
     riftDmg: 1 + (has("void_stone") ? V.void_stone(X("void_stone")) : 0) / 100,
     bossFree: has("lucky_dice") ? V.lucky_dice(X("lucky_dice")) : 0,
-    jackAdd: has("golden_deed") ? V.golden_deed(X("golden_deed")) * 0.25 : 0,
+    deedGold: has("golden_deed") ? V.golden_deed(X("golden_deed")) * 100 : 0,
     sellStone: has("moa_card") ? 1 : 0,
     ultCharge: has("forte_box") ? V.forte_box(X("forte_box")) / 100 : 0,
   };

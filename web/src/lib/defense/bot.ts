@@ -8,10 +8,9 @@ import { CHEAT, type CheatDef } from "./cheats";
 import { PATCHES } from "./meta";
 import {
   CELLS,
-  PERIM,
   SLOTS,
-  buildBlock,
-  buildCost,
+  capOf,
+  expDest,
   STACK,
   apply,
   canRecipe,
@@ -27,7 +26,7 @@ import {
 } from "./sim";
 import { FACTIONS, RECIPES, UNIT, poolOf, type Faction, type Grade } from "./units";
 import type { Loadout } from "./progress";
-import { TOWN } from "./town";
+import { expNodeOf } from "./town";
 
 /** 조합식 재료 (팔지 않고 남겨 둠) */
 const MATERIAL = new Set(RECIPES.filter((r) => !r.hidden).flatMap((r) => r.needs));
@@ -179,10 +178,49 @@ export function botMove(b: Board, cfg: BotCfg, skip: ReadonlySet<string> = new S
       return { t: "reroll", i: low };
     return { t: "cheat", i: best };
   }
-  // 해피 타운: 굴리기는 생기면 바로
-  if (b.stage === "town" && b.rolls > 0) {
-    const c = ok({ t: "roll" });
-    if (c) return c;
+  // 해피 타운 원정 캠프
+  if (b.exp?.camp && !skip.has("exp")) {
+    const c = b.exp.camp;
+    // 필드에 적이 많이 쌓였으면 「위험」 — 휴식 · 상점(정화)으로
+    const low = b.enemies.length > capOf(b) * 0.4;
+    if (c.k === "route") {
+      let best = 0,
+        bv = -Infinity;
+      c.dice.forEach((d, i) => {
+        const n = expNodeOf(expDest(b, d));
+        const v = (low && (n === "rest" || n === "shop") ? 100 : 0) + (n === "event" ? 30 : 0) + (n === "elite" ? (low ? -50 : 15) : 0) + (n === "boss" ? -40 : 0) - d;
+        if (v > bv) (bv = v), (best = i);
+      });
+      return { t: "exp", a: best };
+    }
+    if (c.k === "draft") {
+      const dps = factionDps(b);
+      const main = cfg.focus ?? (Object.entries(dps).sort((p, q) => q[1] - p[1] || p[0].localeCompare(q[0]))[0][0] as Faction);
+      const i = c.offer.findIndex((id) => UNIT[id].faction === main);
+      if (!hasEmpty(b) && !c.offer.some((id) => b.cells.some((s) => s.def === id && s.units.length < STACK))) return { t: "exp", a: -1 };
+      return { t: "exp", a: Math.max(0, i) };
+    }
+    if (c.k === "relic") {
+      const pref = ["growth", "alch", "iron", "piggy", "twin", `oath_${cfg.focus ?? "x"}`, "dice3"];
+      for (const id of pref) {
+        const i = c.offer.indexOf(id);
+        if (i >= 0) return { t: "exp", a: i };
+      }
+      const i = c.offer.findIndex((id) => id !== "blood" && !id.startsWith("oath_"));
+      return { t: "exp", a: i };
+    }
+    if (c.k === "shop") {
+      const want = (k: string) => {
+        const i = c.items.findIndex((it) => it.kind === k && !it.sold);
+        return i >= 0 && b.gold >= c.items[i].cost ? i : -1;
+      };
+      let i = b.enemies.length > capOf(b) * 0.3 ? want("heal") : -1;
+      if (i < 0 && hasEmpty(b)) i = want("legend");
+      if (i < 0 && hasEmpty(b) && b.gold > 260) i = want("epic");
+      if (i < 0 && b.gold > 400) i = want("relic");
+      return { t: "exp", a: i };
+    }
+    return { t: "exp", a: b.enemies.length > capOf(b) * 0.25 ? 0 : 1 };
   }
   // 보스 2페이즈 예고: 표시된 칸의 유닛을 빈 칸 · 약한 칸으로 피함 (사람이 끌어서 하는 것과 같은 swap)
   // 심연 변이 「봉인」: 봉인된 칸의 유닛도 같은 식으로 빼냄
@@ -271,22 +309,6 @@ export function botMove(b: Board, cfg: BotCfg, skip: ReadonlySet<string> = new S
   // 이자 째기: 필드가 안전하면 keep 만큼은 남겨 둠
   const keep = cfg.keep && b.enemies.length < 45 && b.phase !== "boss" ? cfg.keep : 0;
   const gold = Math.max(0, b.gold - keep);
-  // 해피 타운: 잭팟이 골드 대비 가장 많이 느는 칸 (새 땅 vs 올리기) — 골드의 절반 안에서
-  if (b.stage === "town" && b.wave >= 2) {
-    let best = -1,
-      bestV = 0;
-    for (let t = 0; t < PERIM; t++) {
-      if (buildBlock(b, t)) continue;
-      const cost = buildCost(b, t);
-      if (cost > gold * 0.5) continue;
-      const v = (TOWN.jack[b.bld[t] + 1] - TOWN.jack[b.bld[t]]) / cost;
-      if (v > bestV) (best = t), (bestV = v);
-    }
-    if (best >= 0) {
-      const c = ok({ t: "build", p: best });
-      if (c) return c;
-    }
-  }
   if (b.up[main] < B.up.max && uc <= gold && uc <= sc * cfg.upBias) {
     const c = ok({ t: "up", k: main });
     if (c) return c;
