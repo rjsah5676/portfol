@@ -751,9 +751,10 @@ export function makeAutoChart(
         tri: R.tri,
       }
     );
-    const nmRows = regularizeRows(nm);
-    detrill(nmRows, R.jackGap, 0.1, rnd);
-    deaba(nmRows, R.jackGap, 0.5, rnd);
+    const nmRows0 = regularizeRows(nm);
+    detrill(nmRows0, R.jackGap, 0.1, rnd);
+    deaba(nmRows0, R.jackGap, 0.5, rnd);
+    const nmRows = evenDensity(nmRows0, { an, barOf, nBars, beatSec, minGap: R.minGap, rnd });
     const nmHeld = addLongNotes(nmRows, {
       ...R.ln,
       beatSec,
@@ -1125,6 +1126,13 @@ export function makeAutoChart(
   detrill(notes, R.jackGap, 0.1, rnd);
   if (diff === "expert") deaba(notes, R.jackGap, 0.5, rnd);
 
+  // 3.8) 곡 안 밀도 높낮이 고르게 (어려움 이상)
+  if (diff === "hard" || diff === "expert") {
+    const even = evenDensity(notes, { an, barOf, nBars, beatSec, minGap: R.minGap, rnd });
+    notes.length = 0;
+    notes.push(...even);
+  }
+
   // 4) 롱노트: osu 랭크 채보처럼 노트의 일정 비율을 짧은 롱노트로 (정박·소리가 남는 자리부터)
   {
     const held = addLongNotes(notes, {
@@ -1149,6 +1157,148 @@ export function makeAutoChart(
     notes.filter((n) => n.t > 0.3),
     diff
   );
+}
+
+/**
+ * 곡 안 밀도 높낮이 고르게 (어려움 이상): 2마디씩 노트 수를 그 채보의 중앙값과 비교해서
+ *  · 1.3배를 넘는 구간은 3개 동시치기 → 엇박 동시치기 → 앞뒤가 16분인 단노트 → 정박 동시치기 순으로 덜어내고
+ *  · 0.55배에 못 미치는(완전히 조용하진 않은) 구간은 그 마디의 센 정박·8분 타격으로 채움.
+ * 소리가 꽉 찬 도입부만 레벨보다 훨씬 어렵고(FREEDOM DiVE ULTIMA 도입 16 nps — osu Lv21급) 중간이 텅 비어
+ * 평균 레벨은 낮게 나오던 것. osu 랭크 채보는 4초 구간 밀도가 중앙값의 1.2배 안팎, 우리는 1.4배였음.
+ * 레벨은 그다음 레벨 맞추기가 다시 맞춤 (높낮이가 줄어든 만큼 다른 구간이 조금 채워짐)
+ */
+function evenDensity(
+  notes: Note[],
+  ctx: {
+    an: Analysis;
+    barOf: (t: number) => number;
+    nBars: number;
+    beatSec: number;
+    minGap: number;
+    rnd: () => number;
+  }
+) {
+  const { an, barOf, nBars, beatSec, minGap, rnd } = ctx;
+  const HI = 1.3;
+  const LO = 0.55;
+  const count = new Float32Array(nBars);
+  for (const n of notes) {
+    const b = barOf(n.t);
+    if (b >= 0 && b < nBars) count[b]++;
+  }
+  const pair = (b: number) => (count[b] + (b + 1 < nBars ? count[b + 1] : count[b])) / 2;
+  const vals = [...Array(nBars).keys()].map(pair).filter((v) => v > 0);
+  if (vals.length < 8) return notes;
+  const p90 = [...vals].sort((x, y) => x - y)[Math.floor(vals.length * 0.9)];
+  const live = vals.filter((v) => v >= p90 * 0.3).sort((x, y) => x - y);
+  const med = live[Math.floor(live.length / 2)] ?? 0;
+  if (med < 4) return notes;
+  const cap = med * HI;
+  const floor = med * LO;
+
+  // 줄(같은 시각) 단위로
+  const rowsOf = (list: Note[]) => {
+    const m = new Map<number, Note[]>();
+    for (const n of list) {
+      const k = Math.round(n.t * 1000);
+      if (!m.has(k)) m.set(k, []);
+      m.get(k)!.push(n);
+    }
+    return [...m.entries()].sort((a, b) => a[0] - b[0]).map(([, r]) => r);
+  };
+  const onBeat = (t: number) => {
+    const f = (t - (an.beats[0] ?? 0)) / beatSec;
+    return Math.abs(f - Math.round(f)) < 0.08;
+  };
+  const drop = new Set<Note>();
+  const byBar = new Map<number, Note[]>();
+  for (const n of notes) {
+    const b = barOf(n.t);
+    if (!byBar.has(b)) byBar.set(b, []);
+    byBar.get(b)!.push(n);
+  }
+  // 1) 넘치는 마디 덜기 — 두 마디 평균이 상한을 넘으면 그 두 마디를 상한까지
+  for (let b = 0; b < nBars; b++) {
+    const over = Math.round((pair(b) - cap) * 2);
+    if (over <= 0) continue;
+    const list = [...(byBar.get(b) ?? []), ...(byBar.get(b + 1) ?? [])].filter((n) => !drop.has(n));
+    const rows = rowsOf(list);
+    // 단계별 후보 (롱노트 머리는 안 건드림 — 아직 롱노트 전이라 end 없음)
+    const tiers: Note[][] = [[], [], [], []];
+    rows.forEach((r, i) => {
+      const prev = rows[i - 1]?.[0].t ?? -9;
+      const next = rows[i + 1]?.[0].t ?? 9e9;
+      const fine = r[0].t - prev < beatSec * 0.3 && next - r[0].t < beatSec * 0.3;
+      if (r.length >= 3) tiers[0].push(r[r.length - 1]);
+      else if (r.length === 2 && !onBeat(r[0].t)) tiers[1].push(r[1]);
+      else if (r.length === 1 && fine && !onBeat(r[0].t)) tiers[2].push(r[0]);
+      else if (r.length === 2) tiers[3].push(r[1]);
+    });
+    let left = over;
+    for (const tier of tiers) {
+      if (left <= 0) break;
+      // 구간에 고르게: 하나 건너 하나부터
+      const order = [...tier.filter((_, i) => i % 2 === 0), ...tier.filter((_, i) => i % 2 === 1)];
+      for (const n of order) {
+        if (left <= 0) break;
+        if (drop.has(n)) continue;
+        drop.add(n);
+        count[barOf(n.t)]--;
+        left--;
+      }
+    }
+  }
+  let out = drop.size ? notes.filter((n) => !drop.has(n)) : notes;
+
+  // 2) 빈 마디 채우기 — 그 마디의 센 정박·8분 타격으로 (앞뒤 줄과 다른 레인)
+  const add: Note[] = [];
+  const times = [...new Set(out.map((n) => n.t))].sort((x, y) => x - y);
+  const laneAt = new Map<number, number[]>();
+  for (const n of out) {
+    const k = Math.round(n.t * 1000);
+    if (!laneAt.has(k)) laneAt.set(k, []);
+    laneAt.get(k)!.push(n.lane);
+  }
+  const near = (t: number) => {
+    let lo = 0;
+    let hi = times.length;
+    while (lo < hi) {
+      const m = (lo + hi) >> 1;
+      if (times[m] < t) lo = m + 1;
+      else hi = m;
+    }
+    return { prev: times[lo - 1], next: times[lo] };
+  };
+  for (let b = 0; b < nBars; b++) {
+    const have = count[b];
+    if (have >= floor || have < med * 0.15) continue; // 넉넉하거나, 거의 조용한 마디(브레이크)는 그대로
+    let need = Math.round(floor - have);
+    const cand = an.onsets
+      .filter((o) => barOf(o.t) === b && o.grid >= 0 && o.s >= 0.15 && posKind(o, an.div) <= 1)
+      .sort((x, y) => y.s - x.s);
+    for (const o of cand) {
+      if (need <= 0) break;
+      const { prev, next } = near(o.t);
+      if (
+        (prev !== undefined && o.t - prev < minGap) ||
+        (next !== undefined && next - o.t < minGap)
+      )
+        continue;
+      const ban = new Set([
+        ...(prev !== undefined ? (laneAt.get(Math.round(prev * 1000)) ?? []) : []),
+        ...(next !== undefined ? (laneAt.get(Math.round(next * 1000)) ?? []) : []),
+      ]);
+      const free = [0, 1, 2, 3].filter((l) => !ban.has(l));
+      const lane = (free.length ? free : [0, 1, 2, 3])[Math.floor(rnd() * (free.length || 4))];
+      add.push({ t: o.t, lane });
+      laneAt.set(Math.round(o.t * 1000), [lane]);
+      const at = times.findIndex((x) => x > o.t);
+      times.splice(at < 0 ? times.length : at, 0, o.t);
+      need--;
+    }
+  }
+  if (add.length) out = [...out, ...add].sort((x, y) => x.t - y.t || x.lane - y.lane);
+  return out;
 }
 
 /** 간격 비율이 같음(≈1)·2배·반이면 고른 리듬 */

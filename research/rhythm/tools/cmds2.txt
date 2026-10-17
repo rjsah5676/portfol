@@ -7,4 +7,4 @@ monarch --bpm-label 150 --boss '{"burstEvery":2}' --tweak '{"hard":{"fill":0.35}
 velocity --bpm-label 180 --boss '{"loud":0.45,"full":0.72,"burstEvery":4,"burstSub":6}' --explus '{}' --levels 3,6,11,14,17,20
 anima --boss '{}' --explus '{}' --levels 3,6,9,13,17,20
 aragami --boss '{}' --explus '{}' --levels 3,6,9,13,17,21
-freedomdive --boss '{}' --explus '{}' --levels 3,5,9,12,15,20
+freedomdive --boss '{}' --explus '{}' --levels 3,5,9,12,14,17

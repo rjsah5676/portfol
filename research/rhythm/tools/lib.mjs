@@ -32,7 +32,7 @@ export const BUILTIN = {
   hwimori: { boss: {}, explus: {} },
   luckyseven: { double: true, boss: {}, explus: {}, levels: [3, 6, 9, 13, 16, 19] },
   pixelfighting: { boss: {}, explus: {}, levels: [3, 6, 9, 13, 16, 18] },
-  freedomdive: { boss: {}, explus: {}, levels: [3, 5, 9, 12, 15, 20] },
+  freedomdive: { boss: {}, explus: {}, levels: [3, 5, 9, 12, 14, 17] },
 };
 export function builtinArgs(c) {
   const diffs = ["easy", "normal", "hard", "expert"];
