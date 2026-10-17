@@ -97,6 +97,8 @@ describe("픽셀 리셋 스토리 서버", () => {
   it("이그나 판 · 예전 화면 기록(캐릭터 없음)", async () => {
     const c = await member();
     const { run } = await c.rpc("rogue.start");
+    // 2층까지 간 120초짜리 판 → 서버가 잰 시작 시각도 그만큼 앞으로 (안 그러면 "잰 시간보다 긴 기록"으로 거절)
+    await srv.db.col("rogue_runs").updateOne({ _id: run } as never, { $set: { startAt: Date.now() - 130_000 } });
     const out = await c.rpc("rogue.finish", { run, rep: rep({ char: "igna", elites: 3, specials: 1, arcade: 4, floor: 2, bosses: 1, sec: 120, kills: 40 }) });
     expect(out.ach).toEqual(expect.arrayContaining(["얼음을 녹인 불꽃"]));
     const rows = await c.rpc("rogue.rank", { limit: 10 });
