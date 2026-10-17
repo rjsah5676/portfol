@@ -69,8 +69,9 @@ const PROJ_ANIM: Record<string, Partial<Record<"S" | "X", [string, number, numbe
   igna: { S: ["igna-fireball", 4, 2.6, 0.8] },
   "igna-fw": { S: ["igna-fw-fireball", 4, 2.6, 0.8] },
   lily: { S: ["lily-bubble", 4, 1.3, 0.72], X: ["lily-wave", 4, 1.55, 0.5] },
-  zena: { S: ["zena-spear", 4, 3.2, 0.75] },
-  "zena-idol": { S: ["zena-idol-spear", 4, 5.5, 0.82] },
+  // 제나 창: 창끝이 판정 앞끝에 오게 (10.18 — 0.75 · 0.82 일 땐 창끝이 판정보다 30px · 10px 앞에 그려져 닿았는데 안 맞는 것처럼 보임)
+  zena: { S: ["zena-spear", 4, 3.2, 0.885] },
+  "zena-idol": { S: ["zena-idol-spear", 4, 5.5, 0.87] },
   // 포르테 태엽 팽이: 빛이 아니라 물체라 보통 합성 (PROJ_SOLID)
   forte: { S: ["forte-top", 4, 1.25, 0.5] },
 };
@@ -227,21 +228,51 @@ function litShadow(img: HTMLImageElement): HTMLCanvasElement | null {
   return c;
 }
 
-/** 빛 그림 그리기: 보통은 빛 합성(lighter). 밝은 맵에선 하얗게 날아가니 그림자 → 제 색 → 빛을 조금 */
-function drawLit(g: CanvasRenderingContext2D, img: HTMLImageElement, x: number, y: number, w: number, h: number, bright: boolean) {
+/** 그림의 앞쪽(머리)만 남긴 판: 가로 from 비율부터 보이고, 그 뒤 ramp 비율 동안 서서히 사라짐 (그림마다 · 비율마다 한 번) */
+const litHeads = new WeakMap<HTMLImageElement, Map<number, HTMLCanvasElement>>();
+function litHead(img: HTMLImageElement, from: number, ramp: number): HTMLCanvasElement | null {
+  const key = Math.round(from * 50) / 50;
+  let m = litHeads.get(img);
+  if (!m) litHeads.set(img, (m = new Map()));
+  const got = m.get(key);
+  if (got) return got;
+  const w = img.naturalWidth, h = img.naturalHeight;
+  if (!w || !h) return null;
+  const c = document.createElement("canvas");
+  c.width = w;
+  c.height = h;
+  const cg = c.getContext("2d");
+  if (!cg) return null;
+  cg.drawImage(img, 0, 0);
+  cg.globalCompositeOperation = "destination-in";
+  const x1 = Math.max(0, key) * w, x0 = Math.max(0, key - ramp) * w;
+  const gr = cg.createLinearGradient(x0, 0, Math.max(x0 + 1, x1), 0);
+  gr.addColorStop(0, "rgba(0,0,0,0)");
+  gr.addColorStop(1, "rgba(0,0,0,1)");
+  cg.fillStyle = gr;
+  cg.fillRect(0, 0, w, h);
+  m.set(key, c);
+  return c;
+}
+
+/** 빛 그림 그리기: 보통은 빛 합성(lighter). 밝은 맵에선 하얗게 날아가니 그림자 → 제 색 → 빛을 조금.
+ *  headFrom(그림 가로 비율)을 주면 그림자 · 제 색은 그 앞(판정 쪽 머리)만 — 꼬리는 빛으로만 흐리게 남겨 판정보다 길어 보이지 않게 (10.18) */
+function drawLit(g: CanvasRenderingContext2D, img: HTMLImageElement, x: number, y: number, w: number, h: number, bright: boolean, headFrom?: number) {
   if (!bright) {
     g.globalCompositeOperation = "lighter";
     g.drawImage(img, x, y, w, h);
     return;
   }
-  const sh = litShadow(img);
+  const body = headFrom !== undefined ? litHead(img, headFrom, 0.12) : img;
+  if (!body) return;
+  const sh = litShadow(body as HTMLImageElement);
   if (sh) {
     const kx = w / img.naturalWidth, ky = h / img.naturalHeight;
     g.drawImage(sh, x - LIT_PAD * kx, y - LIT_PAD * ky, sh.width * kx, sh.height * ky);
   }
-  g.drawImage(img, x, y, w, h);
+  g.drawImage(body, x, y, w, h);
   const a0 = g.globalAlpha;
-  g.globalAlpha = a0 * 0.6;
+  g.globalAlpha = a0 * (headFrom !== undefined ? 0.8 : 0.6);
   g.globalCompositeOperation = "lighter";
   g.drawImage(img, x, y, w, h);
   g.globalAlpha = a0;
@@ -1523,7 +1554,8 @@ export class FightRenderer {
         g.translate(cx, cy);
         g.scale(dir || 1, 1);
         if (PROJ_SOLID.has(anim[0])) g.drawImage(aimg, -wid * anim[3], -hgt / 2, wid, hgt);
-        else drawLit(g, aimg, -wid * anim[3], -hgt / 2, wid, hgt, !!MAPS[s.map]?.bright);
+        // 진하게 그릴 머리: 판정 뒤끝(가운데에서 판정 너비 절반 뒤)부터
+        else drawLit(g, aimg, -wid * anim[3], -hgt / 2, wid, hgt, !!MAPS[s.map]?.bright, anim[3] - w / 2 / wid);
         g.restore();
       } else if (art && img) {
         // 그림 탄: 판정 높이에 맞춰 크기, 날아가는 쪽으로 뒤집음 (물방울은 살짝 출렁)
