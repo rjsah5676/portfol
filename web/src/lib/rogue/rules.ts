@@ -6,10 +6,13 @@
 /** 4월드 × 2층 */
 export const ROGUE_FLOORS = 8;
 
-/** 고를 수 있는 캐릭터 (이그나 = 월드 3 보스 처치로 해금) */
-export const ROGUE_CHARS = ["kai", "igna"] as const;
+/** 고를 수 있는 캐릭터 (이그나 = 월드 3 보스 · 이반 = 결투방 5승 · 릴리 = 숨겨진 방의 우산 · DICE = 시크릿 20개) */
+export const ROGUE_CHARS = ["kai", "igna", "ivan", "lily", "dice"] as const;
 export type RogueChar = (typeof ROGUE_CHARS)[number];
-export const ROGUE_CHAR_NAME: Record<RogueChar, string> = { kai: "카이", igna: "이그나" };
+export const ROGUE_CHAR_NAME: Record<RogueChar, string> = { kai: "카이", igna: "이그나", ivan: "이반", lily: "릴리", dice: "DICE" };
+
+/** 게임 안 시크릿(아이템 · 캐릭터 해금) 개수 */
+export const ROGUE_UNLOCKS = 54;
 
 export interface RogueReport {
   /** 도달한 층 (1~8) */
@@ -46,6 +49,8 @@ export interface RogueReport {
   specials: number;
   /** 오락실 기계 쓴 횟수 */
   arcade: number;
+  /** 이 브라우저에서 연 시크릿 수 (판 밖 누적) */
+  unlocks: number;
 }
 
 /** 층 표시 (3층 → "2-1") */
@@ -77,5 +82,6 @@ export function plausible(r: RogueReport, wall: number): boolean {
   if (r.sec < (r.floor - 1) * 20) return false;
   if (r.kills > 40 + r.sec * 8) return false;
   if (r.elites > r.kills || r.specials > r.floor * 5 || r.arcade > 50 + r.sec) return false;
+  if (r.unlocks > ROGUE_UNLOCKS) return false;
   return true;
 }

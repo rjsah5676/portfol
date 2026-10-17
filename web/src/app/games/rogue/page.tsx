@@ -78,7 +78,7 @@ export default function RoguePage() {
                       className="min-w-0 flex-1 truncate text-xs text-white/45"
                       title={r.build.join(" · ")}
                     >
-                      <span className={r.char === "igna" ? "text-[#ff9a3c]" : "text-[#9fe8ff]"}>{charOf(r)}</span> ·{" "}
+                      <span style={{ color: ({ igna: "#ff9a3c", ivan: "#ff6a4a", lily: "#5ec8ff", dice: "#c77dff" } as Record<string, string>)[r.char] ?? "#9fe8ff" }}>{charOf(r)}</span> ·{" "}
                       {buildOf(r, 8)} · 처치 {r.kills.toLocaleString()}
                     </span>
                   </li>

@@ -88,7 +88,7 @@ export default function RogueFrame({ onFinish }: { onFinish?: (o: RogueFinishOut
         ref={frame}
         src="/rogue/index.html"
         title="PIXEL RESET STORY 게임 화면"
-        allow="fullscreen; autoplay"
+        allow="fullscreen; autoplay; clipboard-write"
         className="block h-full w-full border-0"
       />
     </div>

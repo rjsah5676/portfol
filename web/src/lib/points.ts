@@ -298,6 +298,15 @@ export type AchMetric =
   | "rogue.specials"
   | "rogue.arcade"
   | "rogue.ignaRuns"
+  | "rogue.ivanRuns"
+  | "rogue.lilyRuns"
+  | "rogue.unlocks"
+  | "rogue.full_kai"
+  | "rogue.full_igna"
+  | "rogue.full_ivan"
+  | "rogue.full_lily"
+  | "rogue.diceRuns"
+  | "rogue.full_dice"
   | "rogue.ignaWins"
   | "patrol.runs"
   | "patrol.wins"
@@ -715,7 +724,7 @@ export const ACHIEVEMENTS: Achievement[] = [
   a("rogue", "items-20", "만렙 빌드", "한 판에 패시브 아이템 20개", "rogue.items", 20, 2000),
   a("rogue", "codex-18", "수집가", "도감에 아이템 18종 열기", "rogue.codex", 18, 600),
   a("rogue", "codex-37", "도감 마니아", "도감에 아이템 37종 열기", "rogue.codex", 37, 2000),
-  a("rogue", "codex-49", "완전한 도감", "도감에 아이템 49종 전부 열기", "rogue.codex", 49, 3500),
+  a("rogue", "codex-102", "완전한 도감", "도감에 아이템 102종 전부 열기 (캐릭터 액티브 포함)", "rogue.codex", 102, 5000),
   a("rogue", "secret-1", "수상한 벽", "숨겨진 방 찾기", "rogue.secrets", 1, 150),
   a("rogue", "secret-10", "벽 두드리기", "숨겨진 방 10번 찾기 (판 수)", "rogue.secrets", 10, 900),
   a("rogue", "cheat-5", "치트키 입력", "치트 콘솔 거래 5번 (누적)", "rogue.cheats", 5, 450),
@@ -725,6 +734,18 @@ export const ACHIEVEMENTS: Achievement[] = [
   a("rogue", "elites-50", "엘리트 사냥꾼", "엘리트 몬스터 50마리 처치 (누적)", "rogue.elites", 50, 600),
   a("rogue", "specials-10", "특수방 단골", "결투방 · 업데이트 설치 · 엘리트 소대 · 미러 서버 10번 깨기 (누적)", "rogue.specials", 10, 900),
   a("rogue", "arcade-100", "오락실 죽돌이", "오락실 기계 100번 돌리기 (누적)", "rogue.arcade", 100, 450),
+  // 게임 안 시크릿(아이템 해금)은 따로 — 여기선 연 개수만 GP 로
+  a("rogue", "unlocks-10", "시크릿 헌터", "게임 안 시크릿 10개 열기 (도감 「시크릿」 탭)", "rogue.unlocks", 10, 600),
+  a("rogue", "unlocks-30", "시크릿 마스터", "게임 안 시크릿 30개 열기", "rogue.unlocks", 30, 1800),
+  a("rogue", "unlocks-54", "플래티넘 갓", "게임 안 시크릿 54개 전부 열기", "rogue.unlocks", 54, 6000),
+  a("rogue", "ivan-1", "철곰 합류", "이반으로 한 판 끝내기 (결투방 5번 이기면 해금)", "rogue.ivanRuns", 1, 300),
+  a("rogue", "lily-1", "젖은 우산", "릴리로 한 판 끝내기 (숨겨진 방에서 우산을 찾으면 해금)", "rogue.lilyRuns", 1, 300),
+  a("rogue", "full-kai", "카이 완주", "카이로 8층(월드 4)까지 클리어", "rogue.full_kai", 1, 2000),
+  a("rogue", "full-igna", "이그나 완주", "이그나로 8층(월드 4)까지 클리어", "rogue.full_igna", 1, 2500),
+  a("rogue", "full-ivan", "이반 완주", "이반으로 8층(월드 4)까지 클리어", "rogue.full_ivan", 1, 2500),
+  a("rogue", "full-lily", "릴리 완주", "릴리로 8층(월드 4)까지 클리어", "rogue.full_lily", 1, 3000),
+  a("rogue", "dice-1", "운명의 주사위", "DICE로 한 판 끝내기 (시크릿 20개를 열면 해금)", "rogue.diceRuns", 1, 500),
+  a("rogue", "full-dice", "DICE 완주", "DICE로 8층(월드 4)까지 클리어", "rogue.full_dice", 1, 3000),
   a("rogue", "kills-1000", "버그 잡이", "적 1,000마리 처치 (누적)", "rogue.kills", 1000, 300),
   a("rogue", "kills-10000", "패치 담당", "적 10,000마리 처치 (누적)", "rogue.kills", 10_000, 1200),
   a("rogue", "kills-50000", "글리치 멸균", "적 50,000마리 처치 (누적)", "rogue.kills", 50_000, 3500),

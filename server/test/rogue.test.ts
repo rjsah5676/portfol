@@ -21,6 +21,7 @@ const rep = (o: Partial<RogueReport> = {}): RogueReport => ({
   elites: 0,
   specials: 0,
   arcade: 0,
+  unlocks: 0,
   ...o,
 });
 
@@ -36,6 +37,9 @@ describe("픽셀 리셋 스토리 기록 규칙", () => {
     expect(plausible(rep({ kills: 5000, sec: 30 }), 9999)).toBe(false);
     expect(plausible(rep({ elites: 13 }), 9999)).toBe(false); // 처치보다 많은 엘리트
     expect(plausible(rep({ char: "igna", elites: 2, specials: 1, arcade: 5 }), 60)).toBe(true);
+    expect(plausible(rep({ char: "lily", unlocks: 12 }), 60)).toBe(true);
+    expect(plausible(rep({ unlocks: 999 }), 60)).toBe(false);
+    expect(plausible(rep({ char: "dice", unlocks: 54 }), 60)).toBe(true);
   });
   it("랭킹 순서: 깊이 → 클리어 → 빠른 클리어 / 처치", () => {
     const deep = rogueScore({ floor: 5, win: false, sec: 2000, kills: 10 });

@@ -60,6 +60,7 @@ const repArg = z.object({
   elites: int(100_000).default(0),
   specials: int(100).default(0),
   arcade: int(100_000).default(0),
+  unlocks: int(200).default(0),
 });
 const finishArg = z.object({ run: z.string().min(1).max(64), rep: repArg });
 
@@ -112,12 +113,16 @@ export function registerRogue({ gateway, db }: Deps) {
             "stats.rogue.arcade": rep.arcade,
             ...(rep.char === "igna" && { "stats.rogue.ignaRuns": 1 }),
             ...(rep.char === "igna" && rep.win && { "stats.rogue.ignaWins": 1 }),
+            ...(rep.char === "ivan" && { "stats.rogue.ivanRuns": 1 }),
+            ...(rep.char === "lily" && { "stats.rogue.lilyRuns": 1 }),
+            ...(rep.char === "dice" && { "stats.rogue.diceRuns": 1 }),
+            ...(rep.win && rep.floor === ROGUE_FLOORS && { [`stats.rogue.full_${rep.char}`]: 1 }),
             ...(rep.secret && { "stats.rogue.secrets": 1 }),
             ...(rep.win && { "stats.rogue.wins": 1 }),
             ...(rep.win && rep.floor === ROGUE_FLOORS && { "stats.rogue.full": 1 }),
             ...(rep.win && rep.floor >= 4 && rep.sec <= SPEED_SEC && { "stats.rogue.speed": 1 }),
           },
-          $max: { "stats.rogue.floor": rep.floor, "stats.rogue.ch": rep.ch, "stats.rogue.items": rep.items, "stats.rogue.codex": rep.codex },
+          $max: { "stats.rogue.floor": rep.floor, "stats.rogue.ch": rep.ch, "stats.rogue.items": rep.items, "stats.rogue.codex": rep.codex, "stats.rogue.unlocks": rep.unlocks },
         } as never
       );
       const after = await metricsOf(db, ctx.uid, "rogue");
