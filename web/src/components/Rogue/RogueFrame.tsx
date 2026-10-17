@@ -8,6 +8,7 @@ import { rogue, type RogueFinishOut } from "@/realtime/rogue";
  * PIXEL RESET STORY (픽셀 리셋 스토리) 게임 판 — 게임은 public/rogue/index.html 을 iframe 으로 띄우고, postMessage 로 서버와 이어 줌
  *   게임 → rogue:start {key}        판 시작 (회원이면 서버 판 번호를 받아서 rogue:run 으로 돌려줌, 아니면 guest)
  *   게임 → rogue:end {key, run, rep} 판 끝 → rogue.finish → rogue:saved {best, rank, ach} 또는 {err}
+ *   게임 → rogue:play {rec}          판 끝(죽음 · 클리어 · 새로 시작) 플레이 기록 → rogue.play (손님도, 답 안 돌려줌)
  * 같은 출처(origin) · 그 iframe 에서 온 것만 받음
  */
 export default function RogueFrame({ onFinish }: { onFinish?: (o: RogueFinishOut) => void }) {
@@ -46,7 +47,7 @@ export default function RogueFrame({ onFinish }: { onFinish?: (o: RogueFinishOut
         e.source !== frame.current.contentWindow
       )
         return;
-      const d = e.data as { type?: string; key?: string; run?: string; rep?: RogueReport } | null;
+      const d = e.data as { type?: string; key?: string; run?: string; rep?: RogueReport; rec?: unknown } | null;
       if (!d || typeof d.type !== "string") return;
       if (d.type === "rogue:start") {
         try {
@@ -60,6 +61,8 @@ export default function RogueFrame({ onFinish }: { onFinish?: (o: RogueFinishOut
             guest: (err as { code?: string }).code === "MEMBER_ONLY",
           });
         }
+      } else if (d.type === "rogue:play" && d.rec) {
+        rogue.play(d.rec).catch(() => {});
       } else if (d.type === "rogue:end" && d.run && d.rep) {
         try {
           const o = await rogue.finish(d.run, d.rep);

@@ -3,6 +3,7 @@
  *  rogue.start  → 판 번호 (시작 시각 기록, 회원만)
  *  rogue.finish → 기록 확인(plausible) → 랭킹(최고 점수만) · 업적 통계(stats.rogue) → 이번 판으로 새로 채운 업적 이름
  *  rogue.rank
+ *  rogue.play   → 플레이 기록 (밸런스 분석용 · 회원/손님 모두 · 90일) → rogue_plays, 관리자 화면 「게임 플레이 기록」에서 봄
  * 월드 해금 · 도감 · 이어하기 저장은 아직 브라우저(localStorage)에만.
  */
 import { z } from "zod";
@@ -64,11 +65,62 @@ const repArg = z.object({
 });
 const finishArg = z.object({ run: z.string().min(1).max(64), rep: repArg });
 
+/** 플레이 기록 보관 기간 (Mongo TTL) */
+export const ROGUE_PLAYS_TTL_DAYS = 90;
+const str = (n: number) => z.string().max(n);
+const num = z.number().finite();
+/** 게임(pdBuild)이 보내는 한 판 기록 — 길이 · 개수에 상한을 둬서 이상한 값은 통째로 버림 */
+export const playRec = z.object({
+  id: str(40),
+  ver: str(24),
+  at: str(40),
+  char: str(12),
+  seed: z.number().int().min(0).max(2 ** 32),
+  result: str(12),
+  floor: z.number().int().min(1).max(ROGUE_FLOORS),
+  sec: int(360_000),
+  kills: int(2_000_000),
+  elites: int(100_000).default(0),
+  dev: z.boolean().default(false),
+  resumed: int(1000).default(0),
+  touch: z.boolean().default(false),
+  items: z.array(z.object({ id: str(32), f: int(20), t: int(400_000), src: str(16).nullish() })).max(150).default([]),
+  active: str(32).nullish(),
+  stats: z.record(str(16), num).default({}),
+  rooms: z.array(z.object({ f: int(20), type: str(16), in: int(400_000), clear: num.nullable(), dmg: num })).max(300).default([]),
+  hits: z.array(z.object({ f: int(20), room: str(16), t: num, dmg: num, hp: num, by: str(48) })).max(400).default([]),
+  econ: z.record(str(3), z.record(str(10), num)).default({}),
+  res: z.record(str(10), num).default({}),
+  bossKills: z.array(z.object({ floor: int(20), ms: num })).max(20).default([]),
+  bought: z.array(str(32)).max(200).default([]),
+  patches: z.array(str(32)).max(200).default([]),
+  cards: z.array(str(32)).max(200).default([]),
+  actives: z.array(str(40)).max(500).default([]),
+  cheatDeals: int(100).default(0),
+  secretFound: z.boolean().default(false),
+  special: int(1000).default(0),
+  arcade: int(100_000).default(0),
+  unlockChar: str(12).nullish(),
+  secrets: int(500).default(0),
+});
+export type RoguePlayRec = z.infer<typeof playRec>;
+export interface RoguePlayDoc extends RoguePlayRec {
+  _id: string;
+  /** 서버가 받은 시각 */
+  recvAt: Date;
+  uid: string | null;
+  nick: string | null;
+  guest: boolean;
+}
+
 export function registerRogue({ gateway, db }: Deps) {
   const ranks = db.col<RankDoc>("rogue_rank");
   const runs = db.col<RunDoc>("rogue_runs");
   const users = db.col("users");
   const lock = new KeyedMutex();
+  const plays = db.col<RoguePlayDoc>("rogue_plays");
+  void plays.createIndex({ recvAt: 1 }, { expireAfterSeconds: ROGUE_PLAYS_TTL_DAYS * 86400 }).catch(() => {});
+  const lastPlay = new Map<string, number>();
 
   const member = (ctx: Ctx) => {
     if (!ctx.nick) throw new AppError("MEMBER_ONLY", "회원만 기록돼요 (별명을 정해 주세요).", 403);
@@ -145,6 +197,21 @@ export function registerRogue({ gateway, db }: Deps) {
       const rank = (await ranks.countDocuments({ score: { $gt: Math.max(score, old?.score ?? 0) } } as never)) + 1;
       return { best, rank, ach };
     });
+  });
+
+  // 플레이 기록: 회원 · 손님(익명 로그인) 모두 받음. 저장 실패해도 게임엔 영향 없음
+  gateway.rpc("rogue.play", async (ctx, raw) => {
+    const p = z.object({ rec: playRec }).safeParse(raw);
+    if (!p.success) return { ok: false };
+    const uid = ctx.user?.uid ?? null;
+    const key = uid ?? ctx.socket.id;
+    const now = Date.now();
+    if (now - (lastPlay.get(key) ?? 0) < 4000) return { ok: false }; // 연타 · 도배 막기
+    if (lastPlay.size > 20_000) lastPlay.clear();
+    lastPlay.set(key, now);
+    const doc: RoguePlayDoc = { ...p.data.rec, _id: newId(), recvAt: new Date(), uid, nick: uid ? ctx.nick : null, guest: !uid || !!ctx.user?.anonymous || !ctx.nick };
+    void plays.insertOne(doc as never).catch((e) => console.warn("[rogue] 플레이 기록 저장 실패", e));
+    return { ok: true };
   });
 
   gateway.rpc("rogue.rank", async (_ctx, raw) => {

@@ -30,4 +30,6 @@ export const rogue = {
   start: () => rpc<{ run: string }>("rogue.start"),
   finish: (run: string, rep: RogueReport) => rpc<RogueFinishOut>("rogue.finish", { run, rep }),
   rank: (limit = 50) => rpc<RogueRankRow[]>("rogue.rank", { limit }),
+  /** 판 하나의 플레이 기록 (밸런스 분석용 — 서버가 검사해서 받거나 버림) */
+  play: (rec: unknown) => rpc<{ ok: boolean }>("rogue.play", { rec }),
 };

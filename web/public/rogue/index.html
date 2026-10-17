@@ -129,10 +129,6 @@ button.on{background:var(--red); border-color:var(--red); color:#fff}
 #notes article header small{margin-left:auto; color:var(--muted); font-size:11px}
 #notes ul{margin:0; padding-left:18px; display:flex; flex-direction:column; gap:3px}
 #notes li{font-size:12.5px; line-height:1.55; color:#d9dcef}
-#notes .pd-sum, #notes .pd-msg{max-width:none}
-#notes .pd-sum{margin:0 0 8px; font-size:13px; color:var(--gold)}
-#notes .pd-row{justify-content:flex-start; margin:12px 0 6px; flex-wrap:wrap}
-#notes .pd-msg{margin:0; font-size:12px; color:var(--muted); line-height:1.5}
 .ts-sub .nd{display:inline-block; width:6px; height:6px; border-radius:50%; background:var(--red); margin-left:5px; vertical-align:middle}
 #chars{z-index:6; gap:14px}
 #chars .cards{display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:8px; width:min(760px,100%)}
@@ -281,7 +277,6 @@ details pre{max-height:140px; overflow:auto; font-size:10px; background:var(--bg
             <button type="button" id="tsBgm">BGM</button>
             <button type="button" id="tsFull">FULL</button>
             <button type="button" id="tsNotes">패치 노트<i class="nd" id="notesDot" hidden></i></button>
-            <button type="button" id="tsData">플레이 데이터</button>
           </div>
           <p class="ts-hint"><kbd>ENTER</kbd> <span id="enterHint">시작</span> · <kbd>H</kbd> 조작법 · <kbd>C</kbd> 도감 · <kbd>N</kbd> 패치 노트</p>
         </div>
@@ -1403,6 +1398,7 @@ function beginRun(){
 }
 function newRun(seed, cid){
   mapOpen = false;
+  if (G && running && !G.ended && !G.log.result) try { host('play', {rec:pdBuild('restart')}); } catch(e){} // 판 도중 새로 시작 = 그만둔 판
   seed = (seed >>> 0) || ((Math.random()*2**32)>>>0);
   cid = cid || (G && G.char) || prog.last; if (!charOK(cid)) cid = 'kai';
   G = freshState(seed, cid);
@@ -3684,7 +3680,7 @@ function endRun(result){
     prog.lastRun = {result, char:G.char, floor:G.floorNo, items:G.items.length, kills:G.kills, sec, at:Date.now()};
     saveProg();
   }
-  clearSave(); try { pdRecord(result); } catch(e){} refreshStart();
+  clearSave(); try { host('play', {rec:pdBuild(result)}); } catch(e){} refreshStart();
   sfx(result === 'clear' ? 'clear' : 'gameover');
   const rep = runReport(result);
   let srvMsg = '';
@@ -3712,13 +3708,13 @@ function endRun(result){
     </div>
     <p>카이 · 획득 순서대로${extras ? ' · ' + extras : ''}</p>
     <div class="build">${build}</div>
-    <div class="row"><button class="big" type="button" id="bAgain">한 판 더</button><button type="button" id="bHome">홈으로</button><button type="button" id="bPData">플레이 데이터</button></div>
+    <div class="row"><button class="big" type="button" id="bAgain">한 판 더</button><button type="button" id="bHome">홈으로</button></div>
     <details><summary>런 로그 (seed ${G.seed})</summary><pre id="logPre"></pre></details>
   </div>`;
   el.querySelector('#logPre').textContent = JSON.stringify(G.log, null, 1);
   el.hidden = false;
   el.querySelector('#bAgain').onclick = () => newRun(0);
-  el.querySelector('#bHome').onclick = goHome; el.querySelector('#bPData').onclick = openPlayData;
+  el.querySelector('#bHome').onclick = goHome;
 }
 
 /* ---------- 이야기 ---------- */
@@ -4139,7 +4135,7 @@ const PATCH_NOTES = [
     '낭떠러지 방 — 걸어서는 못 건너고 탄은 넘어가요. 금 간 바위는 아이작처럼 드물게 (방 7개 중 1개꼴), 깨면 8% 아이템 · 나머지는 픽업 2~3개',
     '사격은 상하좌우 4방향 (「아날로그 스틱」이면 8방향). 내 캐릭터 1.33배 · 피격 범위도 같이. 럭 스탯 + 스탯 다운 패치 (럭 0이면 반반, 럭 1마다 +10%p)',
     '난이도 — 월드 1 보스 피해 20→15 · 킹 슬라임 체력 ↓, 월드 2 일반 피해 15, 월드 3 보스 피해 25. 재화는 덜 — 방 보상 가끔 없음 · 비트 1개 · 열쇠 드물게',
-    '플레이 데이터 — 판마다 어디서 · 무엇에 맞았는지, 아이템 · 재화 흐름을 이 브라우저에 저장. 타이틀 「플레이 데이터」에서 JSON 저장 · 복사',
+    '밸런스 분석용 플레이 기록 — 판이 끝나면 아이템 · 방별 시간 · 맞은 원인 · 재화 흐름을 사이트로 보내요 (개인 정보 없음, 운영자만 봄)',
     '고침 — 패치 바꿔 집을 때 무한 교체 · 벽 밖으로 밀림, 금 간 바위 구석에 갇힌 몹, 치트 콘솔 템 이름 안 보임, 관통 + 픽셀 폭탄이 끝까지 날아가서야 터지던 것. 압축 파일 · 기계 · 바위에서 나온 템은 바로 안 먹어지고 살짝 밀려나요 (보고 리롤할지 고르게). 못 집는 픽업은 부딪혀요 — 상점 물건 · 아이템은 막히고, 꽉 찬 HP의 회복 같은 건 툭 밀려가요. kill all은 막 나타나는 적에게도 들고, 적이 없으면 안 쓰여요. 전체화면 ESC는 크롬 · 엣지에서 안 풀리고 일시정지',
     '독 · 화상은 몬스터 모양대로 물들고 기포 · 불씨, 엘리트는 이름표 없이 오라만. 폭탄 퓨즈 1.7초 · 아이작처럼 내 폭탄에도 맞음(날면 안 맞음). 미니맵 안 간 방이 잘 보여요, 도감 한글 검색',
     '사이트 업적 — 시크릿 10 · 30 · 54, 캐릭터별 완주(8층), 새 파이터 첫 판, 도감 102종',
@@ -4184,13 +4180,7 @@ function openNotes(){
   try { localStorage.setItem(NOTES_KEY, PATCH_NOTES[0].ver); } catch(e){}
   $('notesDot').hidden = true;
 }
-/* ---------- 플레이 데이터: 판마다 자세한 기록(아이템 · 방 · 피격 원인 · 재화 흐름)을 이 브라우저에 쌓고 JSON으로 내보내기 ---------- */
-const PD_KEY = 'pfr-playdata-v1', PD_MAX = 40;
-function pdLoad(){ try { const d = JSON.parse(localStorage.getItem(PD_KEY) || 'null'); if (d && Array.isArray(d.runs)) return d; } catch(e){} return {v:1, runs:[]}; }
-function pdSave(d){
-  try { localStorage.setItem(PD_KEY, JSON.stringify(d)); return true; }
-  catch(e){ try { d.runs = d.runs.slice(-Math.floor(PD_MAX/2)); localStorage.setItem(PD_KEY, JSON.stringify(d)); } catch(e2){} return false; }
-}
+/* ---------- 플레이 데이터: 판이 끝나면(죽음 · 클리어 · 새로 시작) 밸런스 분석용 기록을 사이트로 보냄 → 서버 rogue_plays (관리자만 봄) ---------- */
 function pdTick(){ // 층마다 비트 · 열쇠 · 폭탄 들어온 것 / 쓴 것
   const f = G.floorNo, econ = G.log.econ ||= {}, e = econ[f] ||= {bitIn:0, bitOut:0, keyIn:0, keyOut:0, bombIn:0, bombOut:0}, pv = G.pdPrev;
   if (pv && pv.f === f) for (const [k, a, b] of [['bit', 'bitIn', 'bitOut'], ['key', 'keyIn', 'keyOut'], ['bomb', 'bombIn', 'bombOut']]){ const d = G.res[k] - pv[k]; if (d > 0) e[a] += d; else if (d < 0) e[b] -= d; }
@@ -4203,59 +4193,16 @@ function pdHit(amount, byArg){ // 맞은 원인: 가까운 적탄이면 bullet, 
   const by = byArg || (nb ? 'bullet:' : ne && bd < 14 ? 'touch:' : 'other:') + (ne ? (ne.type === 'boss' ? ne.kind : ne.type) + (ne.elite ? '+' + ne.elite : '') : '-');
   const h = G.log.hits ||= []; if (h.length < 400) h.push({f:G.floorNo, room:G.room.type, t:Math.round(ms()/100)/10, dmg:amount, hp:Math.max(0, Math.round(p.hp)), by});
 }
-function pdRecord(result){
+function pdBuild(result){
   const L = G.log, P = G.prof, r1 = v => Math.round((v || 0)*100)/100;
-  const rec = {id:L.runId, ver:L.gameVersion, at:new Date(L.startedAt).toISOString(), char:L.character, seed:L.seed, result, floor:G.floorNo, sec:Math.round(L.durationMs/1000),
+  const rec = {id:L.runId, ver:L.gameVersion, at:new Date(L.startedAt).toISOString(), char:L.character, seed:L.seed, result, floor:G.floorNo, sec:Math.round((L.durationMs || ms())/1000),
     kills:G.kills, elites:L.elites || 0, dev:!!L.dev, resumed:L.resumed || 0, touch:!!touchUsed,
     items:G.items.map(i => ({id:i.id, f:i.floor, t:Math.round((i.atMs || 0)/1000), src:i.source})), active:G.active || null,
     stats:{maxHp:G.player.maxHp, dmg:r1(P.damage), fireDelay:r1(P.fireDelay), range:Math.round(P.range || 0), shotSpeed:r1(P.shotSpeed), move:r1(P.move), luck:luckOf(), shots:P.count},
     rooms:L.rooms.map(r => ({f:r.floor, type:r.type, in:Math.round(r.enteredMs/1000), clear:r.clearedMs != null ? Math.round((r.clearedMs - r.enteredMs)/100)/10 : null, dmg:r.damageTaken})),
-    hits:L.hits || [], econ:L.econ || {}, res:L.res, bossKills:L.bossKills, bought:L.bought, patches:L.patches, cards:L.cards, actives:L.actives,
+    hits:L.hits || [], econ:L.econ || {}, res:L.res || Object.assign({}, G.res), bossKills:L.bossKills, bought:L.bought, patches:L.patches, cards:L.cards, actives:L.actives,
     cheatDeals:L.cheatDeals, secretFound:!!L.secretFound, special:L.special || 0, arcade:L.arcade || 0, unlockChar:L.unlockChar || null, secrets:Object.keys(SEC.done).length};
-  const d = pdLoad(); d.runs = d.runs.filter(r => r.id !== rec.id); d.runs.push(rec); if (d.runs.length > PD_MAX) d.runs = d.runs.slice(-PD_MAX); pdSave(d);
-}
-function pdBundle(){
-  const d = pdLoad();
-  return {game:'PIXEL RESET STORY', format:'pfr-playdata', v:1, exportedAt:new Date().toISOString(), version:PATCH_NOTES[0].ver, ua:navigator.userAgent,
-    progress:{best:prog.best || null, chars:prog.chars || {}, world:prog.ch, secrets:Object.keys(SEC.done), codex:{items:Object.keys(codex.items).length, patch:Object.keys(codex.patch).length, card:Object.keys(codex.card).length}},
-    runs:d.runs};
-}
-function pdSummary(runs){
-  if (!runs.length) return '아직 끝난 판이 없어요 — 한 판 끝내면(죽거나 클리어) 여기에 쌓여요.';
-  const by = {}; for (const r of runs) for (const h of r.hits || []) by[h.by] = (by[h.by] || 0) + h.dmg;
-  const NM = {self:'내 폭탄', slime:'슬라임', bug:'벌레', turret:'터렛', spinner:'스피너', cube:'큐브', popup:'팝업 광고', mirror:'미러', '-':'?', ...BOSS_NAME};
-  const nm = k => { const [how, who] = k.split(':'), [w, el] = (who || '-').split('+'); return (NM[w] || w) + (el && ELITES[el] ? '(엘리트)' : '') + ' ' + ({bullet:'탄', touch:'몸통', other:'기타'}[how] || ''); };
-  const top = Object.entries(by).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([k, v]) => nm(k) + ' ' + v).join(', ');
-  const avgF = (runs.reduce((a, r) => a + r.floor, 0) / runs.length).toFixed(1), clears = runs.filter(r => r.result === 'clear').length;
-  return `${runs.length}판 · 클리어 ${clears} · 평균 ${avgF}층까지${top ? ' · 가장 많이 맞은 것: ' + top : ''}`;
-}
-function openPlayData(){
-  const el = $('notes'), d = pdLoad(); notesOpen = true;
-  const rows = d.runs.slice(-8).reverse().map(r => `<li>${esc(r.at.slice(5, 16).replace('T', ' '))} · ${esc((CHARS[r.char] || {}).name || r.char)} · ${r.result === 'clear' ? '클리어' : floorLabel(r.floor) + '에서 끝'} · ${Math.floor(r.sec/60)}분 ${r.sec % 60}초 · 아이템 ${r.items.length} · 맞은 횟수 ${(r.hits || []).length}${r.dev ? ' · DEV' : ''}</li>`).join('');
-  el.innerHTML = `<div class="nt"><div class="nt-h"><h2>PLAY DATA</h2><button type="button" id="ntClose">닫기 <small>ESC</small></button></div>
-    <article><header><b>기록</b><strong>이 브라우저에 최근 ${PD_MAX}판까지 저장</strong><small>${d.runs.length}판</small></header>
-      <p class="pd-sum">${esc(pdSummary(d.runs))}</p>
-      <ul>${rows || '<li>아직 없음</li>'}</ul>
-      <div class="row pd-row"><button class="big" type="button" id="pdSave">JSON 파일로 저장</button><button type="button" id="pdCopy">복사</button><button type="button" id="pdClear">기록 지우기</button></div>
-      <p class="pd-msg" id="pdMsg">저장한 파일(또는 복사한 내용)을 그대로 보내 주면 판마다 어디서 · 무엇에 맞았는지, 아이템 · 재화 흐름까지 분석할 수 있어요.</p>
-    </article></div>`;
-  const msg = s => { el.querySelector('#pdMsg').textContent = s; };
-  el.querySelector('#ntClose').onclick = closeNotes;
-  el.querySelector('#pdSave').onclick = () => {
-    try {
-      const blob = new Blob([JSON.stringify(pdBundle(), null, 1)], {type:'application/json'}), a = document.createElement('a');
-      a.href = URL.createObjectURL(blob); a.download = 'pixel-reset-story-playdata-' + new Date().toISOString().slice(0, 10) + '.json';
-      document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000); msg('저장했어요 — 다운로드 폴더를 확인하세요. 안 받아지면 「복사」를 눌러 붙여 넣어 주세요.');
-    } catch(e){ msg('이 브라우저에선 파일 저장이 막혔어요 — 「복사」를 써 주세요.'); }
-  };
-  el.querySelector('#pdCopy').onclick = async () => {
-    const s = JSON.stringify(pdBundle());
-    try { await navigator.clipboard.writeText(s); msg('복사했어요 (' + Math.round(s.length/1024) + 'KB) — 대화창에 붙여 넣으면 돼요.'); }
-    catch(e){ const ta = document.createElement('textarea'); ta.value = s; document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); msg('복사했어요.'); } catch(e2){ msg('복사가 막혔어요 — 「JSON 파일로 저장」을 써 주세요.'); } ta.remove(); }
-  };
-  let armed = false;
-  el.querySelector('#pdClear').onclick = () => { if (!armed){ armed = true; msg('한 번 더 누르면 플레이 데이터만 지워요 (진행 · 시크릿 · 도감은 그대로).'); return; } try { localStorage.removeItem(PD_KEY); } catch(e){} openPlayData(); };
-  el.hidden = false; el.scrollTop = 0;
+  return rec;
 }
 function closeNotes(){ notesOpen = false; $('notes').hidden = true; }
 const TIPS = [
@@ -4305,7 +4252,7 @@ $('bCont').onclick = () => { const sv = readSave(); if (sv){ initAudio(); loadRu
 document.querySelectorAll('[data-ts]').forEach(b => b.onclick = () => setTsTab(b.dataset.ts));
 $('tsCodex').onclick = () => toggleCodex();
 $('tsStory').onclick = () => { codexTab = 'story'; toggleCodex(); };
-$('tsNotes').onclick = openNotes; $('tsData').onclick = openPlayData; $('notesDot').hidden = notesSeen();
+$('tsNotes').onclick = openNotes; $('notesDot').hidden = notesSeen();
 $('tsSnd').onclick = () => $('bMute').click(); $('tsBgm').onclick = () => $('bBgm').click(); $('tsFull').onclick = () => $('bFull').click();
 setInterval(() => { if (!$('start').hidden){ tipI++; const el = $('tsTip'); if (el) el.innerHTML = '<b>TIP</b>' + esc(TIPS[tipI % TIPS.length]); } }, 7000);
 function goHome(){ running = false; paused = false; $('pause').hidden = true; $('result').hidden = true; refreshStart(); $('start').hidden = false; }

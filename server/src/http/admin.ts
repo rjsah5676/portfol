@@ -26,6 +26,8 @@ import { h, ms, requireAdmin } from "./util";
  *   GET    /api/admin/poker/settings          · PUT { botBoost }
  * 디펜스 플레이 기록 (밸런스 분석용, 90일)
  *   GET    /api/admin/defense/plays?from=ms&after=커서&limit=500   오래된 것부터 (next 커서로 이어 받기)
+ * 픽셀 리셋 스토리 플레이 기록 (밸런스 분석용, 90일 · 회원/손님 모두)
+ *   GET    /api/admin/rogue/plays?from=ms&after=커서&limit=500     오래된 것부터 (next 커서로 이어 받기)
  * 데이터 (범용 조회·수정·삭제) — 경로는 기존 Firestore 컬렉션 경로 표기를 그대로 받음
  *   ("score", "rhythm_rankings/{곡_난이도}/scores" …)
  *   GET    /api/admin/docs?path=…
@@ -53,6 +55,7 @@ const TOP_LEVEL = new Set<string>([
   "defense_rank",
   "defense_profile",
   "defense_plays",
+  "rogue_plays",
   "mail",
   "site_config",
   // 메뉴에서 내린 예전 스케치 퀴즈 데이터
@@ -166,6 +169,37 @@ export function adminRouter({ db, auth, web, users, points, gateway, cfg, traffi
       return {
         list: docs.map((d) => ({ ...d, at: ms(d.at), end: ms(d.end) })),
         next: docs.length === limit && last ? `${last.at.getTime()}_${last._id}` : null,
+      };
+    })
+  );
+
+  // ───────────── 픽셀 리셋 스토리 플레이 기록 ─────────────
+
+  r.get(
+    "/rogue/plays",
+    h(async (req) => {
+      const q = z
+        .object({
+          from: z.coerce.number().int().min(0).optional(),
+          after: z.string().max(120).optional(),
+          limit: z.coerce.number().int().min(1).max(FETCH_LIMIT).optional(),
+        })
+        .parse(req.query);
+      // 커서 = "받은시각ms_id"
+      let filter: Record<string, unknown> = q.from ? { recvAt: { $gte: new Date(q.from) } } : {};
+      if (q.after) {
+        const i = q.after.indexOf("_");
+        const t = new Date(Number(q.after.slice(0, i)));
+        const id = q.after.slice(i + 1);
+        if (i < 1 || isNaN(t.getTime())) throw bad("커서가 잘못됐어요.");
+        filter = { $or: [{ recvAt: { $gt: t } }, { recvAt: t, _id: { $gt: id } }] };
+      }
+      const limit = q.limit ?? FETCH_LIMIT;
+      const docs = await db.col<{ _id: string; recvAt: Date }>("rogue_plays").find(filter).sort({ recvAt: 1, _id: 1 }).limit(limit).toArray();
+      const last = docs[docs.length - 1];
+      return {
+        list: docs.map((d) => ({ ...d, recvAt: ms(d.recvAt) })),
+        next: docs.length === limit && last ? `${last.recvAt.getTime()}_${last._id}` : null,
       };
     })
   );
