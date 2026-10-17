@@ -232,7 +232,7 @@ const AUTO_RULES: Record<Difficulty, AutoRule> = {
     floor: 0.04,
     chord: { every: 2, need: 0.35 },
     holdBeats: 1.25,
-    thick: [1.31, 1.1, 1.03],
+    thick: [1.8, 1.1, 1.0],
     tri: 0.25,
     jackAllow: 0.5,
     jackRun: 4,
@@ -287,7 +287,12 @@ export interface NightmareTweak {
   /** 16분 자리 줄을 동시치기로 바꾸는 몫 (더하기) — 16분 칸을 더 열기 전에 16분 점프스트림으로 레벨을 올림.
    *  osu·Quaver 나이트메어급은 16분 자리가 줄의 18~26%인데 빠른 동시치기 연속(cc)은 6~7% — 우리는 16분만 늘려 31%·1.7%였음 */
   fineChord?: number;
+  /** 박 안 두 번째부터의 동시치기 자리(8분 뒷박 등)를 실제 동시치기로 하는 몫 — 박 머리는 늘 동시치기 */
+  halfChord?: number;
 }
+// 나이트메어: 정박 위주 — osu · Quaver 랭크 Lv15~17 은 줄의 정박 38~40% · 8분 34~35% · 16분 18~24%,
+//  동시치기의 68~70%가 정박 위인데 우리는 34 · 33 · 34% · 56%였음 (16분 단노트 스트림 · 16분 점프스트림으로 레벨을 냄).
+//  아주 센 박도 8분 + 박 머리 동시치기로 깔고(뭉치기 없음), 뒷박 동시치기는 60%만, 16분은 센 16분 소리(0.45)에만
 const NIGHTMARE_DEFAULT: Required<NightmareTweak> = {
   loud: 0.45,
   full: 0.72,
@@ -295,12 +300,13 @@ const NIGHTMARE_DEFAULT: Required<NightmareTweak> = {
   fullSub: 4,
   chordLoud: 1,
   chordFull: 2,
-  cluster: true,
+  cluster: false,
   burstEvery: 8,
   burstSub: 6,
-  fineS: 0.2,
+  fineS: 0.45,
   chordScale: 1,
   fineChord: 0,
+  halfChord: 0.6,
 };
 /** EX+ 기본: 센 마디 8분·아주 센 마디 16분 꽉은 나이트메어와 비슷한 문턱(기승전결 유지), 4마디마다 16분 셋잇단 연타 */
 const EXPLUS_DEFAULT: Required<NightmareTweak> = {
@@ -316,15 +322,17 @@ const EXPLUS_DEFAULT: Required<NightmareTweak> = {
   fineS: 0.2,
   chordScale: 1,
   fineChord: 0,
+  halfChord: 1,
 };
-/** 16분 점프스트림 몫 상한 — 나이트메어만 (ULTIMA는 이미 빠른 동시치기 연속이 osu·Quaver보다 많음) */
-const fineChordMax = (d: Difficulty, fast: boolean) =>
-  d === "nightmare" ? (fast ? 0.06 : 0.12) : 0;
-/** 동시치기 두께 배율 상한 — 빠른 곡(185 BPM↑)은 안 두껍게 (16분을 덜 여는 만큼 동시치기로 메우면 동시치기 66%·잭 37% 벽이 됨) */
-const chordMax = (_d: Difficulty, fast: boolean) => (fast ? 1 : 1.5);
+/** 16분 점프스트림 몫 상한 — 나이트메어도 0 (16분 자리 동시치기는 정박 위주와 반대), 빠른 곡만 조금 */
+const fineChordMax = (d: Difficulty, fast: boolean) => (d === "nightmare" && fast ? 0.06 : 0);
+/** 동시치기 두께 배율 상한 — 빠른 곡(185 BPM↑)은 안 두껍게 (16분을 덜 여는 만큼 동시치기로 메우면 동시치기 66%·잭 37% 벽이 됨).
+ *  나이트메어는 16분을 덜 여는 대신 정박 동시치기로 레벨을 냄 */
+const chordMax = (d: Difficulty, fast: boolean) => (fast ? 1 : d === "nightmare" ? 2.2 : 1.5);
 /** 16분 박을 여는 하한(fineS) — 빠른 곡은 이 밑으로 안 엶. 레벨이 덜 나와도 16분 자리 비중을 osu·Quaver에 맞춤
- *  (185 BPM↑ 나이트메어·ULTIMA 16분 자리 32·45% → 19·26%, osu·Quaver 13~25%) */
-const fineMin = (d: Difficulty, fast: boolean) => (!fast ? -0.1 : d === "nightmare" ? 0.2 : 0.1);
+ *  (185 BPM↑ 나이트메어·ULTIMA 16분 자리 32·45% → 19·26%, osu·Quaver 13~25%). 나이트메어는 보통 곡도 센 16분 소리만 */
+const fineMin = (d: Difficulty, fast: boolean) =>
+  !fast ? (d === "nightmare" ? 0.45 : -0.1) : d === "nightmare" ? 0.2 : 0.1;
 const nmDefault = (d: Difficulty) => (d === "explus" ? EXPLUS_DEFAULT : NIGHTMARE_DEFAULT);
 
 function nearestCen(an: Analysis, t: number) {
@@ -1625,7 +1633,8 @@ function nightmareNotes(
     } else {
       const sub = full ? P.fullSub : P.loudSub;
       const chords = full ? P.chordFull : P.chordLoud;
-      for (let c = 0; c < chords; c++) put(t0 + (c * (t1 - t0)) / chords, 2);
+      for (let c = 0; c < chords; c++)
+        put(t0 + (c * (t1 - t0)) / chords, c === 0 || spread(k, c) < P.halfChord ? 2 : 1);
       if (full) putFine(t0, t1, sub, k);
       else for (let i = 0; i < sub; i++) put(t0 + (i * (t1 - t0)) / sub, 1);
     }

@@ -6,6 +6,8 @@ const { auto } = await loadLib();
 if (process.env.FMIN) globalThis.FINE_MIN = JSON.parse(process.env.FMIN);
 if (process.env.CMAX) globalThis.CHORD_MAX = JSON.parse(process.env.CMAX);
 if (process.env.LNW) globalThis.LN_W = +process.env.LNW;
+// X_ENV: 실험용 전역
+if (process.env.X) Object.assign(globalThis, JSON.parse(process.env.X));
 const out = process.argv[2];
 const [shard, n] = (process.argv[3] ?? "0/1").split("/").map(Number);
 fs.mkdirSync(out, { recursive: true });

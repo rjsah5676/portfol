@@ -17,6 +17,17 @@ export interface Patch {
 
 export const PATCHES: Patch[] = [
   {
+    ver: "v2.3",
+    name: "NIGHTMARE 정박 위주로",
+    date: "2026.10.18",
+    lines: [
+      "NIGHTMARE 채보를 정박 위주로 다시 뽑음 — osu · Quaver 랭크 Lv15~17 은 줄의 정박 38~40% · 8분 34~35% · 16분 18~24%, 동시치기의 68~70%가 정박 위인데 우리는 16분이 34%, 동시치기 정박 위 56%였음 (16분 단노트 스트림 · 16분 동시치기로 레벨을 내서 엇박이 많게 느껴지던 것)",
+      "이제 정박 38% · 8분 37% · 16분 25%, 동시치기 정박 위 73% — 아주 센 박도 8분 + 박 머리 동시치기로, 16분은 곡에 센 16분 소리가 있는 자리만. 8분 안으로 동시치기가 연달아 붙는 자리 27 → 15% (osu 9 · Quaver 13%)",
+      "FREEDOM DiVE NIGHTMARE(10/8 채보 고정)와 다른 난이도는 그대로",
+      "레벨 바뀜: 질주주의보 15 → 14, 夏霞のあと 16 → 14, New Dimension 15 → 14, Full Combo!! 16 → 15, Crimson Cadenza 14 → 15, 휘모리 16 → 15, Lucky Seven Rush 15 → 16, Pixel Fighting 15 → 16, ANiMA 16 → 15, Aragami 15 → 17, Sugar Cloud 14 → 15, OVERLOAD PROTOCOL 15 → 14, Glitch Bounce 13 → 14, Étude of Falling Stars 16 → 15 (전부 NIGHTMARE)",
+    ],
+  },
+  {
     ver: "v2.2",
     name: "채보 되돌림 · 잭 정리",
     date: "2026.10.18",
