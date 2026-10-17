@@ -6,12 +6,13 @@ import GameHeader from "@/components/GameHeader";
 import Nick from "@/components/Nick";
 import RogueFrame from "@/components/Rogue/RogueFrame";
 import { ROGUE_GUIDE } from "@/data/gameGuides";
-import { floorLabel } from "@/lib/rogue/rules";
+import { ROGUE_CHAR_NAME, floorLabel, type RogueChar } from "@/lib/rogue/rules";
 import { rogue, type RogueRankRow } from "@/realtime/rogue";
 
 const mmss = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 const recordOf = (r: RogueRankRow) =>
   r.win ? `${floorLabel(r.floor)} CLEAR · ${mmss(r.sec)}` : `${floorLabel(r.floor)}층`;
+const charOf = (r: RogueRankRow) => ROGUE_CHAR_NAME[(r.char as RogueChar) in ROGUE_CHAR_NAME ? (r.char as RogueChar) : "kai"];
 const buildOf = (r: RogueRankRow, n: number) =>
   r.build.slice(0, n).join(" · ") + (r.build.length > n ? ` 외 ${r.build.length - n}` : "");
 
@@ -28,18 +29,22 @@ export default function RoguePage() {
     member: true,
     avatar: r.avatar,
     value: recordOf(r),
-    sub: <span>{buildOf(r, 3)}</span>,
+    sub: (
+      <span>
+        {charOf(r)} · {buildOf(r, 3)}
+      </span>
+    ),
   }));
   return (
     <Faded>
       <div className="mx-auto max-w-[1076px] px-3 pt-6 pb-24 sm:px-6">
         <GameHeader
           icon="⚔️"
-          title="PIXEL RESET"
-          en="픽셀 생존기 · PIXEL FIGHT 외전 · ALPHA"
+          title="PIXEL RESET STORY"
+          en="픽셀 리셋 스토리 · PIXEL FIGHT 외전 · ALPHA"
           accent="#FF3D5E"
           desc="초기화되기 전에, 글리치가 시작된 맨 아래까지 내려가자"
-          tags={["로그라이크", "아이템 조합", "웹게임", "랭킹"]}
+          tags={["로그라이크", "아이템 조합", "캐릭터 해금", "웹게임", "랭킹"]}
           ach="rogue"
           guide={ROGUE_GUIDE}
           rank={{
@@ -73,6 +78,7 @@ export default function RoguePage() {
                       className="min-w-0 flex-1 truncate text-xs text-white/45"
                       title={r.build.join(" · ")}
                     >
+                      <span className={r.char === "igna" ? "text-[#ff9a3c]" : "text-[#9fe8ff]"}>{charOf(r)}</span> ·{" "}
                       {buildOf(r, 8)} · 처치 {r.kills.toLocaleString()}
                     </span>
                   </li>

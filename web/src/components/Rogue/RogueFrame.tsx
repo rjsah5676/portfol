@@ -5,7 +5,7 @@ import type { RogueReport } from "@/lib/rogue/rules";
 import { rogue, type RogueFinishOut } from "@/realtime/rogue";
 
 /*
- * PIXEL RESET (픽셀 생존기) 게임 판 — 게임은 public/rogue/index.html 을 iframe 으로 띄우고, postMessage 로 서버와 이어 줌
+ * PIXEL RESET STORY (픽셀 리셋 스토리) 게임 판 — 게임은 public/rogue/index.html 을 iframe 으로 띄우고, postMessage 로 서버와 이어 줌
  *   게임 → rogue:start {key}        판 시작 (회원이면 서버 판 번호를 받아서 rogue:run 으로 돌려줌, 아니면 guest)
  *   게임 → rogue:end {key, run, rep} 판 끝 → rogue.finish → rogue:saved {best, rank, ach} 또는 {err}
  * 같은 출처(origin) · 그 iframe 에서 온 것만 받음
@@ -87,7 +87,7 @@ export default function RogueFrame({ onFinish }: { onFinish?: (o: RogueFinishOut
       <iframe
         ref={frame}
         src="/rogue/index.html"
-        title="PIXEL RESET 게임 화면"
+        title="PIXEL RESET STORY 게임 화면"
         allow="fullscreen; autoplay"
         className="block h-full w-full border-0"
       />

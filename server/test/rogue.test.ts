@@ -17,10 +17,14 @@ const rep = (o: Partial<RogueReport> = {}): RogueReport => ({
   codex: 3,
   ch: 0,
   seed: 123,
+  char: "kai",
+  elites: 0,
+  specials: 0,
+  arcade: 0,
   ...o,
 });
 
-describe("픽셀 생존기 기록 규칙", () => {
+describe("픽셀 리셋 스토리 기록 규칙", () => {
   it("말이 되는 기록만", () => {
     expect(plausible(rep(), 60)).toBe(true);
     expect(plausible(rep({ floor: 4, endFloor: 4, win: true, bosses: 4, ch: 2, sec: 600 }), 700)).toBe(true);
@@ -30,6 +34,8 @@ describe("픽셀 생존기 기록 규칙", () => {
     expect(plausible(rep({ floor: 3, bosses: 0, sec: 300 }), 9999)).toBe(false); // 보스 안 잡고 3층
     expect(plausible(rep({ floor: 2, bosses: 1, ch: 1, sec: 300 }), 9999)).toBe(false); // 챕터 보스 안 잡았는데 ch 1
     expect(plausible(rep({ kills: 5000, sec: 30 }), 9999)).toBe(false);
+    expect(plausible(rep({ elites: 13 }), 9999)).toBe(false); // 처치보다 많은 엘리트
+    expect(plausible(rep({ char: "igna", elites: 2, specials: 1, arcade: 5 }), 60)).toBe(true);
   });
   it("랭킹 순서: 깊이 → 클리어 → 빠른 클리어 / 처치", () => {
     const deep = rogueScore({ floor: 5, win: false, sec: 2000, kills: 10 });
@@ -42,7 +48,7 @@ describe("픽셀 생존기 기록 규칙", () => {
   });
 });
 
-describe("픽셀 생존기 서버", () => {
+describe("픽셀 리셋 스토리 서버", () => {
   let srv: TestServer;
   let n = 0;
   async function member(): Promise<TestClient> {
@@ -85,6 +91,21 @@ describe("픽셀 생존기 서버", () => {
     expect(out2.ach).toEqual([]);
     const u = (await srv.db.col("users").findOne({ _id: "rg1" } as never)) as { stats?: { rogue?: Record<string, number> } } | null;
     expect(u?.stats?.rogue).toMatchObject({ runs: 2, kills: 15, secrets: 1, codex: 3 });
+    c.close();
+  });
+
+  it("이그나 판 · 예전 화면 기록(캐릭터 없음)", async () => {
+    const c = await member();
+    const { run } = await c.rpc("rogue.start");
+    const out = await c.rpc("rogue.finish", { run, rep: rep({ char: "igna", elites: 3, specials: 1, arcade: 4, floor: 2, bosses: 1, sec: 120, kills: 40 }) });
+    expect(out.ach).toEqual(expect.arrayContaining(["얼음을 녹인 불꽃"]));
+    const rows = await c.rpc("rogue.rank", { limit: 10 });
+    expect(rows.find((r: { nick: string }) => r.nick === "생존2")).toMatchObject({ char: "igna", floor: 2 });
+    const r2 = await c.rpc("rogue.start");
+    const old = Object.fromEntries(Object.entries(rep({ kills: 1 })).filter(([k]) => !["char", "elites", "specials", "arcade"].includes(k)));
+    await c.rpc("rogue.finish", { run: r2.run, rep: old });
+    const u = (await srv.db.col("users").findOne({ _id: "rg2" } as never)) as { stats?: { rogue?: Record<string, number> } } | null;
+    expect(u?.stats?.rogue).toMatchObject({ ignaRuns: 1, elites: 3, specials: 1, arcade: 4 });
     c.close();
   });
 

@@ -131,10 +131,10 @@ export async function metricsOf(db: Database, uid: string, game: AchGame): Promi
 
   if (game === "rogue") {
     // games/rogue.ts 의 rogue.finish 가 쌓음
-    type RogueStats = Partial<Record<"runs" | "wins" | "full" | "kills" | "bosses" | "ch" | "floor" | "items" | "codex" | "secrets" | "noHit" | "cheats" | "speed", number>>;
+    type RogueStats = Partial<Record<"runs" | "wins" | "full" | "kills" | "bosses" | "ch" | "floor" | "items" | "codex" | "secrets" | "noHit" | "cheats" | "speed" | "elites" | "specials" | "arcade" | "ignaRuns" | "ignaWins", number>>;
     const d = (await users.findOne({ _id: uid }, { projection: { "stats.rogue": 1 } })) as (Doc & { stats?: { rogue?: RogueStats } }) | null;
     const s = d?.stats?.rogue ?? {};
-    for (const k of ["runs", "wins", "full", "kills", "bosses", "ch", "floor", "items", "codex", "secrets", "noHit", "cheats", "speed"] as const) m[`rogue.${k}`] = s[k] ?? 0;
+    for (const k of ["runs", "wins", "full", "kills", "bosses", "ch", "floor", "items", "codex", "secrets", "noHit", "cheats", "speed", "elites", "specials", "arcade", "ignaRuns", "ignaWins"] as const) m[`rogue.${k}`] = s[k] ?? 0;
   }
 
   return m;

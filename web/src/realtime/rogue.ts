@@ -2,7 +2,7 @@ import { rpc } from "@/lib/api/socket";
 import type { RogueReport } from "@/lib/rogue/rules";
 
 /*
- * PIXEL RESET (픽셀 생존기) — 백엔드(server/src/games/rogue.ts)와 통신. 판 시작 · 끝(랭킹 · 업적 통계) · 랭킹
+ * PIXEL RESET STORY (픽셀 리셋 스토리) — 백엔드(server/src/games/rogue.ts)와 통신. 판 시작 · 끝(랭킹 · 업적 통계) · 랭킹
  */
 
 export interface RogueRankRow {
@@ -15,6 +15,8 @@ export interface RogueRankRow {
   kills: number;
   /** 액티브 + 패시브 이름 (얻은 순서) */
   build: string[];
+  /** 고른 캐릭터 (kai · igna) */
+  char: string;
   at: number;
 }
 export interface RogueFinishOut {

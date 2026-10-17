@@ -1,10 +1,15 @@
 /*
- * PIXEL RESET — 픽셀 생존기 (PIXEL FIGHT 외전 로그라이크) — 서버 · 화면이 같이 쓰는 기록 규칙
+ * PIXEL RESET STORY — 픽셀 리셋 스토리 (PIXEL FIGHT 외전 로그라이크) — 서버 · 화면이 같이 쓰는 기록 규칙
  * 판은 public/rogue/index.html (iframe) 이 돌리고, 끝나면 이 모양의 기록을 넘김 → server/src/games/rogue.ts
  */
 
 /** 4챕터 × 2층 */
 export const ROGUE_FLOORS = 8;
+
+/** 고를 수 있는 캐릭터 (이그나 = 3챕터 보스 처치로 해금) */
+export const ROGUE_CHARS = ["kai", "igna"] as const;
+export type RogueChar = (typeof ROGUE_CHARS)[number];
+export const ROGUE_CHAR_NAME: Record<RogueChar, string> = { kai: "카이", igna: "이그나" };
 
 export interface RogueReport {
   /** 도달한 층 (1~8) */
@@ -33,6 +38,14 @@ export interface RogueReport {
   /** 이번 판에 잡은 가장 깊은 챕터 보스 (0~4) */
   ch: number;
   seed: number;
+  /** 고른 캐릭터 */
+  char: RogueChar;
+  /** 잡은 엘리트 수 */
+  elites: number;
+  /** 깬 특수방 (결투방 · 업데이트 설치 · 엘리트 소대 · 미러 서버) */
+  specials: number;
+  /** 오락실 기계 쓴 횟수 */
+  arcade: number;
 }
 
 /** 층 표시 (3층 → "2-1") */
@@ -63,5 +76,6 @@ export function plausible(r: RogueReport, wall: number): boolean {
   if (r.sec > wall + 15) return false;
   if (r.sec < (r.floor - 1) * 20) return false;
   if (r.kills > 40 + r.sec * 8) return false;
+  if (r.elites > r.kills || r.specials > r.floor * 5 || r.arcade > 50 + r.sec) return false;
   return true;
 }

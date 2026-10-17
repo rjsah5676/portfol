@@ -1,5 +1,5 @@
 /*
- * PIXEL RESET — 픽셀 생존기 (PIXEL FIGHT 외전 로그라이크) — 판은 브라우저(public/rogue, iframe)가 돌리고, 서버는 시작/끝 · 랭킹 · 업적 통계만.
+ * PIXEL RESET STORY — 픽셀 리셋 스토리 (PIXEL FIGHT 외전 로그라이크) — 판은 브라우저(public/rogue, iframe)가 돌리고, 서버는 시작/끝 · 랭킹 · 업적 통계만.
  *  rogue.start  → 판 번호 (시작 시각 기록, 회원만)
  *  rogue.finish → 기록 확인(plausible) → 랭킹(최고 점수만) · 업적 통계(stats.rogue) → 이번 판으로 새로 채운 업적 이름
  *  rogue.rank
@@ -14,7 +14,7 @@ import type { Ctx } from "../realtime/gateway";
 import { pictureOf } from "../users";
 import { metricsOf } from "../achievements";
 import { achievementsOf } from "../../../web/src/lib/points";
-import { ROGUE_FLOORS, SPEED_SEC, plausible, rogueScore, type RogueReport } from "../../../web/src/lib/rogue/rules";
+import { ROGUE_CHARS, ROGUE_FLOORS, SPEED_SEC, plausible, rogueScore, type RogueReport } from "../../../web/src/lib/rogue/rules";
 
 interface RankDoc {
   _id: string;
@@ -28,6 +28,7 @@ interface RankDoc {
   kills: number;
   build: string[];
   seed: number;
+  char?: string;
   at: Date;
 }
 interface RunDoc {
@@ -54,6 +55,11 @@ const repArg = z.object({
   codex: int(500),
   ch: int(4),
   seed: z.number().int().min(0).max(2 ** 32),
+  // 예전 화면이 보내는 기록엔 없음 → 기본값
+  char: z.enum(ROGUE_CHARS).default("kai"),
+  elites: int(100_000).default(0),
+  specials: int(100).default(0),
+  arcade: int(100_000).default(0),
 });
 const finishArg = z.object({ run: z.string().min(1).max(64), rep: repArg });
 
@@ -101,6 +107,11 @@ export function registerRogue({ gateway, db }: Deps) {
             "stats.rogue.bosses": rep.bosses,
             "stats.rogue.noHit": rep.noHit,
             "stats.rogue.cheats": rep.cheats,
+            "stats.rogue.elites": rep.elites,
+            "stats.rogue.specials": rep.specials,
+            "stats.rogue.arcade": rep.arcade,
+            ...(rep.char === "igna" && { "stats.rogue.ignaRuns": 1 }),
+            ...(rep.char === "igna" && rep.win && { "stats.rogue.ignaWins": 1 }),
             ...(rep.secret && { "stats.rogue.secrets": 1 }),
             ...(rep.win && { "stats.rogue.wins": 1 }),
             ...(rep.win && rep.floor === ROGUE_FLOORS && { "stats.rogue.full": 1 }),
@@ -122,7 +133,7 @@ export function registerRogue({ gateway, db }: Deps) {
         best = true;
         await ranks.replaceOne(
           { _id: ctx.uid } as never,
-          { _id: ctx.uid, uid: ctx.uid, nick, score, floor: rep.floor, endFloor: rep.endFloor, win: rep.win, sec: rep.sec, kills: rep.kills, build: rep.build, seed: rep.seed, at: new Date() } as never,
+          { _id: ctx.uid, uid: ctx.uid, nick, score, floor: rep.floor, endFloor: rep.endFloor, win: rep.win, sec: rep.sec, kills: rep.kills, build: rep.build, seed: rep.seed, char: rep.char, at: new Date() } as never,
           { upsert: true }
         );
       }
@@ -145,7 +156,7 @@ export function registerRogue({ gateway, db }: Deps) {
         if (url) av.set(String(u._id), url);
       }
     }
-    return docs.map((d) => ({ nick: d.nick, avatar: av.get(d.uid) ?? null, floor: d.floor, endFloor: d.endFloor, win: d.win, sec: d.sec, kills: d.kills, build: d.build ?? [], at: d.at.getTime() }));
+    return docs.map((d) => ({ nick: d.nick, avatar: av.get(d.uid) ?? null, floor: d.floor, endFloor: d.endFloor, win: d.win, sec: d.sec, kills: d.kills, build: d.build ?? [], char: d.char ?? "kai", at: d.at.getTime() }));
   });
 
   return {};

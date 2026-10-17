@@ -56,7 +56,7 @@ export const POINT_GAMES: Record<PointGame, string> = {
   sketch: "DOODLE PARTY",
   marble: "DICE TOWN",
   survivor: "PIXEL TOWN SURVIVOR",
-  rogue: "PIXEL RESET",
+  rogue: "PIXEL RESET STORY",
 };
 
 /**
@@ -291,7 +291,12 @@ export type AchMetric =
   | "rogue.secrets"
   | "rogue.noHit"
   | "rogue.cheats"
-  | "rogue.speed";
+  | "rogue.speed"
+  | "rogue.elites"
+  | "rogue.specials"
+  | "rogue.arcade"
+  | "rogue.ignaRuns"
+  | "rogue.ignaWins";
 
 export interface Achievement {
   id: string;
@@ -697,11 +702,17 @@ export const ACHIEVEMENTS: Achievement[] = [
   a("rogue", "items-10", "조합의 맛", "한 판에 패시브 아이템 10개", "rogue.items", 10, 450),
   a("rogue", "items-20", "만렙 빌드", "한 판에 패시브 아이템 20개", "rogue.items", 20, 2000),
   a("rogue", "codex-18", "수집가", "도감에 아이템 18종 열기", "rogue.codex", 18, 600),
-  a("rogue", "codex-37", "완전한 도감", "도감에 아이템 37종 전부 열기", "rogue.codex", 37, 3000),
+  a("rogue", "codex-37", "도감 마니아", "도감에 아이템 37종 열기", "rogue.codex", 37, 2000),
+  a("rogue", "codex-49", "완전한 도감", "도감에 아이템 49종 전부 열기", "rogue.codex", 49, 3500),
   a("rogue", "secret-1", "수상한 벽", "숨겨진 방 찾기", "rogue.secrets", 1, 150),
   a("rogue", "secret-10", "벽 두드리기", "숨겨진 방 10번 찾기 (판 수)", "rogue.secrets", 10, 900),
   a("rogue", "cheat-5", "치트키 입력", "치트 콘솔 거래 5번 (누적)", "rogue.cheats", 5, 450),
   a("rogue", "bosses-30", "보스 러시", "보스 30마리 쓰러뜨리기 (누적)", "rogue.bosses", 30, 900),
+  a("rogue", "igna-1", "얼음을 녹인 불꽃", "이그나로 한 판 끝내기 (3챕터 보스를 쓰러뜨리면 해금)", "rogue.ignaRuns", 1, 300),
+  a("rogue", "igna-win", "불꽃 디버거", "이그나로 판 목표 층까지 클리어", "rogue.ignaWins", 1, 1500),
+  a("rogue", "elites-50", "엘리트 사냥꾼", "엘리트 몬스터 50마리 처치 (누적)", "rogue.elites", 50, 600),
+  a("rogue", "specials-10", "특수방 단골", "결투방 · 업데이트 설치 · 엘리트 소대 · 미러 서버 10번 깨기 (누적)", "rogue.specials", 10, 900),
+  a("rogue", "arcade-100", "오락실 죽돌이", "오락실 기계 100번 돌리기 (누적)", "rogue.arcade", 100, 450),
   a("rogue", "kills-1000", "버그 잡이", "적 1,000마리 처치 (누적)", "rogue.kills", 1000, 300),
   a("rogue", "kills-10000", "패치 담당", "적 10,000마리 처치 (누적)", "rogue.kills", 10_000, 1200),
   a("rogue", "kills-50000", "글리치 멸균", "적 50,000마리 처치 (누적)", "rogue.kills", 50_000, 3500),
