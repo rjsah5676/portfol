@@ -349,7 +349,7 @@ const chOf = n => Math.min(CHAPTERS.length - 1, Math.ceil(n / 2) - 1);
 const bossOf = n => n % 2 ? CHAPTERS[chOf(n)].mid : CHAPTERS[chOf(n)].boss;
 const floorLabel = n => (chOf(n) + 1) + '-' + (n % 2 ? 1 : 2);
 const BOSS_NAME = {trojan:'트로이 목마', recycler:'휴지통', lag:'렉 덩어리', loading:'무한 로딩', freeze:'프리징', kingslime:'킹 노이즈 슬라임', queen:'벌레 여왕', bigturret:'거대 터렛', bsod:'블루스크린'};
-const BOSS_HP = {trojan:760, recycler:1300, kingslime:150, lag:340, queen:300, loading:460, bigturret:420, freeze:480, bsod:900};
+const BOSS_HP = {trojan:820, recycler:1500, kingslime:150, lag:340, queen:300, loading:460, bigturret:420, freeze:480, bsod:900};
 const BOSS_R = {trojan:18, recycler:22, kingslime:16, lag:19, queen:12, loading:18, bigturret:14, freeze:17, bsod:22};
 const BOSS_COL = {trojan:'#c98a4a', recycler:'#8fd18f', lag:'#ff3d5e', loading:'#3fe3ff', freeze:'#9fd8ff', kingslime:'#b45cff', queen:'#7b4dff', bigturret:'#d36bff', bsod:'#4d7bff'};
 // 챕터별 피격 피해 (일반 · 보스) — 3챕터부터 한 번에 더 깎임
@@ -884,6 +884,7 @@ const TS = new Image(); TS.src = 'a/58d0931c81.webp';
 const tsReady = () => TS.complete && TS.naturalWidth > 0;
 // 챕터별로 몹·포털처럼 보이는 장식은 뺌 (2챕터 빛나는 고리, 3챕터 얼어붙은 슬라임)
 const DECAL_OK_CH = [null, [0,1,2,3,4,5,6,8,9,10,11], [0,1,2,3,4,5,6,7,8,9,11], [0,1,2,3,4,5,6,7,8,9,10,11]];
+const FLOOR_PICK5 = [0,0,0,0,0,0,2,2,2,2,2,0,2,0,2,0,1,0,2,3,0,2,0,4,0,2,0,0,2,0,2,0,0,2,0,2,0,2,0,5]; // 월드 5: 그레이트 · 재활용 표시는 드물게
 const FLOOR_PICK2 = [0,0,0,0,0,0,0,0,3,3,5,1,2,4]; // 2~4챕터: 무늬 있는 타일은 드물게
 const FLOOR_PICK = [0,0,0,0,1,1,2,3,0,1,4,0,2,5], DECAL_OK = [0,1,2,3,4,6,7,8,9,10,11];
 function hash3(a, b, c){ let h = (a*374761393 + b*668265263 + c*2147483647) | 0; h = (h ^ (h >>> 13)) * 1274126177; return ((h ^ (h >>> 16)) >>> 0) / 4294967296; }
@@ -893,6 +894,7 @@ const TSC = [null, new Image(), new Image(), new Image()];
 TSC[1].src = 'a/5c3027b8db.webp';
 TSC[2].src = 'a/8878be9455.webp';
 TSC[3].src = 'a/5b07b9ebd8.webp';
+TSC[4] = new Image(); TSC[4].src = 'a/f23cd6e3e4.webp'; // 월드 5 「휴지통」 타일셋 (GPT)
 const chTS = () => { const im = TSC[chOf(G.floorNo)]; return im && im.complete && im.naturalWidth ? im : TS; };
 function roomBg(room){ // 방 하나당 한 번만 그려서 캐시 (바닥·벽·장식)
   const TSX = chTS(), key = G.seed + ':' + G.floorNo + ':' + room.type + ':' + (TSX === TS ? 0 : 1);
@@ -901,7 +903,7 @@ function roomBg(room){ // 방 하나당 한 번만 그려서 캐시 (바닥·벽
   const id = (room.index || 0) + G.floorNo*131, S = 64;
   g.fillStyle = '#07080f'; g.fillRect(0, 0, W, H);
   for (let r = 0; r < ROWS; r++) for (let cc = 0; cc < COLS; cc++){
-    const FP = TSX === TS ? FLOOR_PICK : FLOOR_PICK2, v = FP[Math.floor(hash3(id, cc, r) * FP.length)];
+    const FP = TSX === TS ? FLOOR_PICK : chOf(G.floorNo) === 4 ? FLOOR_PICK5 : FLOOR_PICK2, v = FP[Math.floor(hash3(id, cc, r) * FP.length)];
     g.drawImage(TSX, v*S, 0, S, S, T + cc*T, T + r*T, T, T);
   }
   if (Math.ceil(G.floorNo/2) === 2 && TSX !== TS){ // 2챕터: 보라 바닥 위 보라 몹이 묻혀서 바닥 채도를 빼고 더 어둡게
@@ -952,6 +954,25 @@ function mobSpr(fr, x, y, sz, white, flip, a){
   ctx.save(); ctx.globalAlpha *= (a ?? 1); ctx.translate(Math.round(x), Math.round(y)); if (flip) ctx.scale(-1, 1); ctx.imageSmoothingEnabled = true;
   ctx.drawImage(white && MOB_W ? MOB_W : MOB, (fr % 4)*48, Math.floor(fr/4)*48, 48, 48, -sz/2, -sz/2, sz, sz); ctx.restore();
 }
+// 월드 5 몹 시트 (GPT) 192x144 = 48x48 4열 3줄: 유령 A/B · 웜 A/B · 웜 흙더미 · 웜 솟는 중 · (예비 6칸)
+const MOB2 = new Image(); let MOB2_W = null;
+MOB2.onload = () => { const c = document.createElement('canvas'); c.width = MOB2.width; c.height = MOB2.height; const g = c.getContext('2d'); g.drawImage(MOB2, 0, 0); g.globalCompositeOperation = 'source-in'; g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height); MOB2_W = c; };
+MOB2.src = 'a/36cdd21424.webp';
+const mob2Ready = () => MOB2.complete && MOB2.naturalWidth > 0;
+function mob2Spr(fr, x, y, sz, white, flip, a){ ctx.save(); ctx.globalAlpha *= (a ?? 1); ctx.translate(Math.round(x), Math.round(y)); if (flip) ctx.scale(-1, 1); ctx.imageSmoothingEnabled = true; ctx.drawImage(white && MOB2_W ? MOB2_W : MOB2, (fr % 4)*48, Math.floor(fr/4)*48, 48, 48, -sz/2, -sz/2, sz, sz); ctx.restore(); }
+function drawMob2(e, fl){
+  const left = G.player.x < e.x;
+  if (e.type === 'phantom'){ const a = e.fade > 10 ? .22 : .92, y = e.y - 3 + Math.sin(e.t*.08)*2; ctx.globalAlpha = .25*a; ctx.fillStyle = '#000'; ctx.beginPath(); ctx.ellipse(e.x, e.y + 9, 6, 2, 0, 0, TAU); ctx.fill(); ctx.globalAlpha = 1; mob2Spr(G.frame % 16 < 8 ? 0 : 1, e.x, y, 30, fl, left, a); return; }
+  if (e.type === 'sniffer'){ ctx.globalAlpha = .35; ctx.fillStyle = '#000'; ctx.beginPath(); ctx.ellipse(e.x, e.y + 8, 8, 2.5, 0, 0, TAU); ctx.fill(); ctx.globalAlpha = 1; mob2Spr(e.cd < 20 || G.frame % 20 < 10 ? 7 : 6, e.x, e.y - 2, 28, fl, left); return; }
+  if (e.type === 'zipbomb'){ const s = e.fuse > 0 ? 27 + (45 - e.fuse)*.18 : 26; mob2Spr(e.fuse > 0 ? 9 : 8, e.x, e.y - 2, s, fl, left); return; }
+  if (e.type === 'crawler'){ mob2Spr(G.frame % 8 < 4 ? 10 : 11, e.x, e.y - 1, 26, fl, Math.cos(e.zz) < 0); return; }
+  if (e.type === 'worm'){
+    if (e.mode === 'under') { mob2Spr(4, e.x, e.y + 2, 28, false, false, .95); return; }
+    if (e.mode === 'rise'){ mob2Spr(5, e.x + (G.frame % 4 < 2 ? -1 : 1), e.y, 28, fl, left); return; }
+    ctx.globalAlpha = .35; ctx.fillStyle = '#000'; ctx.beginPath(); ctx.ellipse(e.x, e.y + 9, 8, 3, 0, 0, TAU); ctx.fill(); ctx.globalAlpha = 1;
+    mob2Spr(G.frame % 12 < 6 ? 2 : 3, e.x, e.y - 4, 32, fl, left);
+  }
+}
 function drawMob(e, fl, glitch){
   const [A, B, S] = MOB_FR[e.type], shadow = (w) => { ctx.globalAlpha = .35; ctx.fillStyle = '#000'; ctx.beginPath(); ctx.ellipse(e.x, e.y + S*.38, w, 3, 0, 0, TAU); ctx.fill(); ctx.globalAlpha = 1; };
   if (e.type === 'bug'){ shadow(4); mobSpr(G.frame % 6 < 3 ? A : B, e.x, e.y - 2, S, fl, G.player.x < e.x); }
@@ -978,11 +999,12 @@ function drawMob(e, fl, glitch){
   if (glitch){ ctx.globalAlpha = .35; mobSpr(MOB_FR[e.type][0], e.x + 2, e.y - 2, S, true); ctx.globalAlpha = 1; }
 }
 // 보스 288x192 = 96x96 3열 2줄 (열: 보스, 줄: 대기/공격 준비). 시트1: 렉·무한 로딩·프리징 / 시트2: 벌레 여왕·거대 터렛·블루스크린
-const BSH = [new Image(), new Image()], BSH_W = [null, null];
+const BSH = [new Image(), new Image(), new Image()], BSH_W = [null, null, null]; // 시트3: 트로이 목마 · 휴지통 · (예비)
 BSH.forEach((im, i) => im.onload = () => { const c = document.createElement('canvas'); c.width = im.width; c.height = im.height; const g = c.getContext('2d'); g.drawImage(im, 0, 0); g.globalCompositeOperation = 'source-in'; g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height); BSH_W[i] = c; });
 BSH[0].src = 'a/f7ace3026c.webp';
 BSH[1].src = 'a/7466333f23.webp';
-const BOSS_SPR = {lag:[0, 0, 60], loading:[0, 1, 62], freeze:[0, 2, 58], queen:[1, 0, 58], bigturret:[1, 1, 60], bsod:[1, 2, 66]};
+BSH[2].src = 'a/1d550f2f83.webp';
+const BOSS_SPR = {trojan:[2, 0, 70], recycler:[2, 1, 76], lag:[0, 0, 60], loading:[0, 1, 62], freeze:[0, 2, 58], queen:[1, 0, 58], bigturret:[1, 1, 60], bsod:[1, 2, 66]};
 const bossSprOK = e => { const b = BOSS_SPR[e.kind]; return !!b && BSH[b[0]].complete && BSH[b[0]].naturalWidth > 0; };
 function bossSpr(k, row, x, y, sz, white, a, rot){
   const [sh, col] = BOSS_SPR[k]; ctx.save(); ctx.globalAlpha *= (a ?? 1); ctx.translate(Math.round(x), Math.round(y)); if (rot) ctx.rotate(rot);
@@ -995,6 +1017,8 @@ function drawBossSpr(e, fl, glitch){
     : e.kind === 'freeze' ? (st === 'wind' || st === 'hop')
     : e.kind === 'queen' ? e.st < 18
     : e.kind === 'bigturret' ? st !== 'idle'
+    : e.kind === 'trojan' ? (st === 'wind' || st === 'charge' || st === 'belly')
+    : e.kind === 'recycler' ? st !== 'idle'
     : st === 'warn';
   if (e.kind === 'loading' && st === 'blink' && G.frame % 4 < 2) return;
   const flying = e.kind === 'loading' || e.kind === 'queen';
@@ -1100,6 +1124,7 @@ iconSheet(['firewall_sat','screensaver','autosave','dup_file','master_key','bomb
 iconSheet(['bug_report','nine_backup','spam_filter','hit_charge','core_upgrade','full_upgrade','clean_aura','data_leak','close_packet','light_packet','ignite_shot','freeze_frame','fear_packet','cross_cable','wrap_packet','cache_hit'], 'a/e3978ea43c.webp');
 iconSheet(['liquid_nitro','cloud_sync','edge_server','exp_build','homing_bomb','hot_bomb','mega_bomb','cross_bomb','loot_bag','root_access','clover','gold_member','steam_sale','ctrl_z','copy_paste','screenshot'], 'a/40031adeb6.webp');
 iconSheet(['ban_hammer','god_mode_lite','trash_hat','ghost_file','shredder','undo_history','worm_virus','trojan_gift','defrag','sandbox','recycle_mark','deleted_heart','backup_shard','zip_bomb_act','hard_reset','empty_trash'], 'a/f6cf17a641.webp');
+iconSheet(['coupon','one_plus_one','vpn','dark_web','charger','reflect_film','tamagotchi','search_engine','ad_block','multitap','usb3','rgb_light','ransomware','missing_no','clipboard','hotkey'], 'a/85f8b19399.webp');
 // 스탯 · 유틸 아이콘 3번째 장 (GPT) 384x96
 const PASS_C_ORDER = ['ram_up','cpu_upgrade','energy_drink','ssd_swap','scope','thick_cable','minor_update','turbo','ups','heatsink','antivirus','lucky_dice'];
 { const im = new Image(); im.onload = () => PASS_C_ORDER.forEach((id, j) => { if (!ICON[id]) return;
@@ -1287,13 +1312,13 @@ function pickLayout(rng){
   return Array(7).fill('.............');
 }
 // 적 구성 = 챕터별 풀에서 예산만큼. 유형(섞기 · 떼 · 포대 · 덩치)도 굴림
-const ENC_COST = {bug:1, slime:2, turret:3, spinner:2, cube:3, popup:3, phantom:2, worm:3};
+const ENC_COST = {bug:1, slime:2, turret:3, spinner:2, cube:3, popup:3, phantom:2, worm:3, sniffer:2, zipbomb:2, crawler:2};
 const ENC_POOL = [
   {bug:3, slime:3, turret:1.5},
   {bug:2, slime:2, turret:1.5, spinner:3},
   {bug:2, slime:1.5, turret:1.5, spinner:2, cube:3},
   {bug:2, slime:1, turret:1, spinner:2, cube:2, popup:3},
-  {bug:1.5, slime:1, turret:1, spinner:1.5, cube:1.5, popup:1.5, phantom:3, worm:2.5},
+  {bug:1, slime:.5, turret:1, spinner:1, cube:1, popup:1, phantom:2.5, worm:2, sniffer:2, zipbomb:1.5, crawler:2},
 ];
 const ELITES = {
   red:{name:'과부하', col:'#ff3d5e'}, yellow:{name:'가속', col:'#ffd23f'}, purple:{name:'폭주', col:'#c77dff'},
@@ -1653,6 +1678,9 @@ function makeEnemy(type, x, y, kind){
   if (type === 'spinner') return Object.assign(base, {r:6, hp:7*fs, maxHp:7*fs, spd:1.15, kbRes:.8, ang:fx()*TAU, rad:72, cd:100+Math.floor(fx()*80), wind:0, dash:0});
   if (type === 'cube') return Object.assign(base, {r:7, hp:14*fs, maxHp:14*fs, spd:2.1, kbRes:.25, dir:[[1,0],[-1,0],[0,1],[0,-1]][Math.floor(fx()*4)], pause:20, blockN:0});
   if (type === 'mirror'){ const n = G ? G.items.length : 0, hp = (34 + 7*n) * fs; return Object.assign(base, {r:7, hp, maxHp:hp, spd:1.35, kbRes:.45, cd:70, dashT:0, dashCd:140, strafe:fx() < .5 ? 1 : -1, char:G ? G.char : 'kai'}); }
+  if (type === 'sniffer') return Object.assign(base, {r:7, hp:18*fs, maxHp:18*fs, spd:1.1, kbRes:.5, cd:60 + Math.floor(fx()*60)});
+  if (type === 'zipbomb') return Object.assign(base, {r:7, hp:10*fs, maxHp:10*fs, spd:.9, kbRes:.8, fuse:0});
+  if (type === 'crawler') return Object.assign(base, {r:6, hp:9*fs, maxHp:9*fs, spd:1.7, kbRes:1, zz:fx()*TAU});
   if (type === 'phantom') return Object.assign(base, {r:7, hp:15*fs, maxHp:15*fs, spd:.6, kbRes:.6, cd:150 + Math.floor(fx()*60), fade:0});
   if (type === 'worm') return Object.assign(base, {r:8, hp:20*fs, maxHp:20*fs, spd:1.15, kbRes:.3, mode:'under', mt:60 + Math.floor(fx()*60), z:60});
   if (type === 'popup') return Object.assign(base, {r:9, hp:16*fs, maxHp:16*fs, spd:0, kbRes:0, cd:90+Math.floor(fx()*40), shots:0, hide:0, spawnIn:0});
@@ -2612,7 +2640,7 @@ function famTick(){
     if (id === 'tamagotchi' && sd && s.cd <= 0){ const lv = G.tamaLv || 0, q = makeShot(Math.atan2(sd.y, sd.x), P, {x:s.x, y:s.y + 2, vx:0, vy:0}, 'tear'); q.dmg = (2 + lv*2.2) * P.famMul; q.r = q.r0 = 2.4 + lv*.8; q.color = '#ff8af0'; q.pierce = false; q.bounces = 0; G.projs.push(q); s.cd = 30 - lv*4; }
     if (id === 'shield_bot') for (const b of G.ebul) if (b.life > 0 && Math.hypot(b.x - s.x, b.y - s.y) < b.r + 8){ b.life = 0; burst(s.x, s.y, '#c8ccdf', 4, 1.2); }
     if (id === 'pickup_drone') for (const pk of G.room.pickups){
-      if (!['bit','key','bomb','heal','shield'].includes(pk.kind) || pk.price || pk.pop > 0) continue;
+      if (!['bit','key','bomb','heal','shield'].includes(pk.kind) || pk.price || pk.pop > 0 || (pk.kind === 'heal' && p.hp >= p.maxHp) || (pk.kind === 'shield' && p.shield >= TUNE.maxShield)) continue;
       const dx = p.x - pk.x, dy = p.y - pk.y, d = Math.hypot(dx, dy); if (d < 130 && d > 8){ pk.x += dx/d*1.6; pk.y += dy/d*1.6; }
     }
     if (id === 'bomb_drone' && live && s.t % 600 === 0){ const e = nearestEnemy(s.x, s.y); if (e){ G.bombList.push({x:e.x, y:e.y, t:45, noSelf:true}); toast('폭격!', '#c77dff', s.x, s.y - 12); } }
@@ -2909,6 +2937,9 @@ function updateEnemies(){
       else if (e.type === 'cube') updateCube(e);
       else if (e.type === 'popup') updatePopup(e, dx, dy, d);
       else if (e.type === 'phantom') updatePhantom(e, dx, dy, d);
+      else if (e.type === 'sniffer') updateSniffer(e, dx, dy, d);
+      else if (e.type === 'zipbomb') updateZipbomb(e, dx, dy, d);
+      else if (e.type === 'crawler'){ e.zz += .15; const a = Math.atan2(dy, dx) + Math.sin(e.zz)*.9; e.x += Math.cos(a)*e.spd; e.y += Math.sin(a)*e.spd; }
       else if (e.type === 'worm') updateWorm(e, dx, dy, d);
       else if (e.kind === 'trojan') updateTrojan(e, dx, dy, d);
       else if (e.kind === 'recycler') updateRecycler(e, dx, dy, d);
@@ -3114,6 +3145,16 @@ function updateBsod(e, dx, dy, d){
 }
 function ring(e, n, off){ for (let i = 0; i < n; i++){ const a = off + i*TAU/n; G.ebul.push({x:e.x, y:e.y, vx:Math.cos(a)*1.6, vy:Math.sin(a)*1.6, r:4, life:320}); } sfx('shoot'); }
 /* ---------- 월드 5 「휴지통」 몹 · 보스 ---------- */
+function updateSniffer(e, dx, dy, d){ // 패킷 스니퍼: 옆걸음으로 가로/세로 줄을 맞추고, 맞으면 빠른 탄 2발
+  const ax = Math.abs(dx) < Math.abs(dy); // 세로 줄 맞추기(가로 이동) 쪽이 더 가까우면 그쪽
+  if (ax) e.x += Math.sign(dx) * Math.min(e.spd, Math.abs(dx)); else e.y += Math.sign(dy) * Math.min(e.spd, Math.abs(dy));
+  if (e.bt > 0 && --e.bt === 0) eshot(e.x, e.y, e.ba, 2.6);
+  if (--e.cd <= 0 && (Math.abs(dx) < 10 || Math.abs(dy) < 10)){ e.ba = Math.atan2(dy, dx); eshot(e.x, e.y, e.ba, 2.6); e.bt = 8; sfx('shoot'); e.cd = 110; }
+}
+function updateZipbomb(e, dx, dy, d){ // ZIP 폭탄: 다가와서 퓨즈 → 터짐 (나도 적도)
+  if (e.fuse > 0){ e.fuse--; e.flash = e.fuse % 6 < 3 ? 2 : 0; if (e.fuse === 0){ e.hp = 0; const p = G.player; explode(e.x, e.y, 40, 20, null, false); burst(e.x, e.y, '#c77dff', 20, 3); if (Math.hypot(p.x - e.x, p.y - e.y) < 40 + p.r) hurtPlayer(hitDmg(false), 'touch:zipbomb'); } return; }
+  e.x += dx/d*e.spd; e.y += dy/d*e.spd; if (d < 38){ e.fuse = 45; sfx('fuse'); }
+}
 function updatePhantom(e, dx, dy, d){ // 삭제된 파일 유령: 바위 · 낭떠러지 · 벽 장식을 통과, 가끔 사라졌다 옆에서 나타나 3갈래
   if (e.fade > 0){ e.fade--; e.z = e.fade > 10 ? 30 : 0; if (e.fade === 12){ const a = fx()*TAU, sp = {x:G.player.x + Math.cos(a)*95, y:G.player.y + Math.sin(a)*70}; clampInner(Object.assign(sp, {r:e.r})); e.x = sp.x; e.y = sp.y; } return; }
   const w = Math.sin(e.t*.05)*.6; e.x += dx/d*e.spd - dy/d*w*.5; e.y += dy/d*e.spd + dx/d*w*.5;
@@ -3202,11 +3243,12 @@ function killEnemy(e){
   secEvent('kills'); if (e.elite) secEvent('elites');
   if (G.prof.reclaim && (G.reclaimN = (G.reclaimN || 0) + 1) % 12 === 0 && G.player.hp > 0){ G.player.hp = Math.min(G.player.maxHp, G.player.hp + 5); toast('+5 HP', '#ff6f8a'); }
   if (G.prof.killBoom && e.type !== 'boss' && !e.boomed){ e.boomed = true; const ex = e.x, ey = e.y; setTimeout(() => { if (G && G.room) explode(ex, ey, 22, G.prof.damage * 1.2, {}, false); }, 0); }
+  if (e.type === 'crawler'){ for (let i = 0; i < 2; i++){ const b = makeEnemy('bug', e.x + (i ? 6 : -6), e.y); b.spawnT = 8; G.enemies.push(b); } }
   if (e.type === 'mirror'){ secFlag('mirror'); secEvent('mirrors'); }
   if (e.type === 'boss' && G.room.type === 'boss'){ if (G.floorNo % 2) secFlag('b_' + e.kind); else { secFlag('w' + G.floorNo/2); secMark(G.char, G.floorNo/2); if (G.floorNo === 8) secEvent('bsod'); } }
   if (e.type !== 'boss') (G.skulls ||= []).push({x:e.x, y:e.y, t:26}); // 처치 해골 (그리기 전용)
   addGauge(2);
-  const col = e.type === 'boss' ? BOSS_COL[e.kind] : ({slime:'#b45cff', bug:'#7b4dff', turret:'#d36bff', spinner:'#e05cff', cube:'#8a7bff', popup:'#d36bff', mirror:'#ff2e88', phantom:'#cfd6ff', worm:'#7bdc5a'})[e.type];
+  const col = e.type === 'boss' ? BOSS_COL[e.kind] : ({slime:'#b45cff', bug:'#7b4dff', turret:'#d36bff', spinner:'#e05cff', cube:'#8a7bff', popup:'#d36bff', mirror:'#ff2e88', phantom:'#cfd6ff', worm:'#7bdc5a', sniffer:'#9aa3b8', zipbomb:'#c77dff', crawler:'#ff3d5e'})[e.type];
   burst(e.x, e.y, col, e.type === 'boss' ? 40 : 9, e.type === 'boss' ? 4 : 2.4);
   if (G.room.decals.length < 40) G.room.decals.push({x:e.x, y:e.y, c:col, r:e.r});
   if (G.frame - G.lastHitstop > 10){ G.hitstop = e.type === 'boss' ? 14 : 2; G.lastHitstop = G.frame; }
@@ -3692,7 +3734,9 @@ function drawEnemy(e){
     const k = e.spawnIn > 0 ? 1 - e.spawnIn/20 : 1, w = Math.max(2, Math.round(22*k)), h = Math.max(2, Math.round(16*k));
     px(e.x - w/2 - 1, e.y - h/2 - 1, w + 2, h + 2, '#14081f'); px(e.x - w/2, e.y - h/2, w, h, fl ? '#fff' : '#2a1f3c'); px(e.x - w/2, e.y - h/2, w, 4, fl ? '#fff' : '#d36bff');
     if (k >= 1){ px(e.x + w/2 - 4, e.y - h/2 + 1, 3, 2, e.cd < 30 && G.frame % 4 < 2 ? '#fff' : '#ff2e88'); ctx.font = '8px Silkscreen, monospace'; ctx.textAlign = 'center'; ctx.fillStyle = '#ff2e88'; ctx.fillText('AD', e.x, e.y + 5); }
-  } else if ((e.type === 'phantom' || e.type === 'worm' || e.kind === 'trojan' || e.kind === 'recycler') && !(e.type === 'boss' && bossSprOK(e)) && !(MOB_FR[e.type] && mobReady())){ drawW5(e, fl);
+  } else if (['phantom','worm','sniffer','zipbomb','crawler'].includes(e.type) && mob2Ready()){ drawMob2(e, fl);
+  } else if (['sniffer','zipbomb','crawler'].includes(e.type)){ px(e.x - 6, e.y - 6, 12, 12, fl ? '#fff' : e.type === 'sniffer' ? '#9aa3b8' : e.type === 'zipbomb' ? '#c77dff' : '#2a1020'); px(e.x - 3, e.y - 3, 2, 2, '#ff3d5e'); px(e.x + 1, e.y - 3, 2, 2, '#ff3d5e');
+  } else if ((e.type === 'phantom' || e.type === 'worm' || e.kind === 'trojan' || e.kind === 'recycler') && !(e.type === 'boss' && bossSprOK(e))){ drawW5(e, fl);
   } else if (e.type === 'boss' && bossSprOK(e)){ drawBossSpr(e, fl, glitch);
   } else if (e.kind === 'kingslime' && slReady()){
     const z = e.z || 0, wind = e.state === 'wind', fr = fl && e.state !== 'wind' ? 3 : wind ? 1 : e.state === 'hop' ? 2 : 0;
@@ -4271,7 +4315,7 @@ function renderCodex(bodyOnly){
       const n = codex.items[it.id];
       if (!n && !itemUnlocked(it.id)) return q ? '' : unknownCard('🔒 시크릿 「' + SEC_BY_ITEM[it.id].name + '」 — ' + SEC_BY_ITEM[it.id].cond);
       if (!n) return q ? '' : unknownCard('아직 먹어 보지 않았다');
-      if (!codexMatch(it.name, it.desc, it.fl, AXIS_LABEL[it.axis])) return '';
+      if (!codexMatch(it.name, it.desc, it.fl, AXIS_LABEL[it.axis], SET_OF[it.id] ? '세트 ' + SETS[SET_OF[it.id]].name : '')) return '';
       return `<div class="card${own.has(it.id) ? ' own' : ''}"><div class="top"><img src="${ICON[it.id].url}" alt=""><div><b>${esc(it.name)}</b><br><small>${AXIS_LABEL[it.axis]} · Q${it.q}${SET_OF[it.id] ? ` · <span style="color:${SETS[SET_OF[it.id]].col}">세트 ${SETS[SET_OF[it.id]].name}</span>` : ''}${own.has(it.id) ? ' · 보유 중' : ''}</small></div></div>
         <p>${esc(it.desc)}</p><i>${esc(it.fl)}</i><small>${it.pools.map(s => SRC_LABEL[s]).join(' / ')} · ${n}번 획득</small></div>`;
     }).join('')}</div>`;
@@ -4559,7 +4603,7 @@ const PATCH_NOTES = [
     '폭탄 템(유도 · 발열 · 메가 · 십자), 경제 템(쿠폰 · 1+1 · 스팀 세일 · 골드 회원권 · 루트 권한 · 다크 웹 · VPN), 새 액티브 10종(Ctrl+Z · 복사 붙여넣기 · 밴 해머 · 무적 모드 · ZIP 폭탄 · 단축키 …)',
     '손해만 있던 템 손봄 — // TODO(층마다 스탯 조금) · 빈 폴더(다음 패시브 복사) · 이용약관(상점 할인) · 드라이버 오류(가끔 두 갈래) · 캡차(풀리면 5발 ×2) · 다크 모드(적 탄 느리게) · 광고 팝업(비트 +1) · 무료 체험판',
     '시크릿 54 → 62 (소환수 3마리 · 첫 변신 · 노히트 층 3번 · 보스 20마리 · 월드 5 보스들 …), 캐릭터 월드 보스 표시 1~5',
-    '도감은 열자마자 바로 검색(닫기는 ESC), 새 아이콘 64종 · 몇몇 아이콘이 안 보이던 것 고침',
+    '도감은 열자마자 바로 검색(닫기는 ESC), 새 아이콘 80종 · 몇몇 아이콘이 안 보이던 것 고침',
     '사이트 업적 — 월드 5 보스(LOG 05) · 도감 177종 · 시크릿 62개',
   ]},
   {ver:'ALPHA 0.5', name:'시크릿 · 새 파이터 셋 · 낭떠러지', date:'2026.10.18', lines:[
@@ -4729,8 +4773,11 @@ function renderStatus(){
     ${A ? `<div class="act"><img src="${ICON[A.id].url}" alt=""><div><b>${esc(A.name)}</b><br><span class="none">${esc(A.desc)} · 게이지 ${Math.floor(G.gauge)}/${actCost()}</span></div></div>` : ''}
     ${G.pocket ? `<div class="act"><img src="${G.pocket.k === 'card' ? lootURL('card', G.pocket.id) : lootURL('patch', G.pocket.c)}" alt=""><div><b>${esc(pocketName(G.pocket))}</b><br><span class="none">${esc(G.pocket.k === 'card' ? CARD[G.pocket.id].desc : G.patchKnown.has(G.pocket.c) ? PATCHES[G.patchMap[G.pocket.c]].desc : '먹어 봐야 알 수 있음')} · F 쓰기 · G 버리기</span></div></div>` : '<span class="none">주머니 비어 있음 (패치 · 치트 코드)</span>'}</div>
   <div class="bx"><h5>아이템 ${G.items.length}개</h5><div class="ic">${G.items.length ? G.items.map(i => `<img src="${ICON[i.id].url}" alt="${esc(ITEM[i.id].name)}" title="${esc(ITEM[i.id].name)} — ${esc(ITEM[i.id].desc)}">`).join('') : '<span class="none">아직 없음</span>'}</div></div>
+  <div class="bx"><h5>세트 (서로 다른 템 3개면 변신)</h5><div class="tags">${setTags() || '<span class="none">세트 아이템 없음 — 도감에 「세트」 표시</span>'}</div></div>
   <div class="bx"><h5>알아낸 패치</h5><div class="tags">${known || '<span class="none">아직 먹어 본 패치 없음</span>'}</div></div>`;
 }
+function setTags(){ const n = {}; for (const id of new Set(G.items.map(i => i.id))){ const s = SET_OF[id]; if (s) n[s] = (n[s] || 0) + 1; }
+  return Object.keys(n).map(s => `<span class="tag" style="color:${SETS[s].col}" title="${esc(SETS[s].desc)}">${(G.prof.tf || []).includes(s) ? '★ ' : ''}${esc(SETS[s].name)} ${Math.min(3, n[s])}/3</span>`).join(''); }
 function togglePause(){
   if (!G || !running || !$('codex').hidden || storyOpen) return;
   mapOpen = false;
