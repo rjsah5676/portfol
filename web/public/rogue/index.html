@@ -897,7 +897,7 @@ const MAP2_IDX = {arcade:0, challenge:1, elite:2, curse:3, vault:4, sacrifice:5,
 const DOOR2_IDX = {arcade:0, challenge:2, elite:4, curse:6, vault:8, sacrifice:10, mirror:12, update:14};
 function doorSpr(fr, x, y, w, h, a){ ctx.save(); ctx.globalAlpha *= (a ?? 1); ctx.imageSmoothingEnabled = true; ctx.drawImage(DOOR, (fr % 4)*64, Math.floor(fr/4)*64, 64, 64, Math.round(x), Math.round(y), w, h); ctx.restore(); }
 const DOOR_IN = {up:[W/2, T, 0], down:[W/2, H - T, Math.PI], left:[T, H/2, -Math.PI/2], right:[W - T, H/2, Math.PI/2]};
-function drawDoor(dir, fr, img){ const [cx, cy, rot] = DOOR_IN[dir]; ctx.save(); ctx.translate(cx, cy); ctx.rotate(rot); ctx.imageSmoothingEnabled = true; ctx.drawImage(img || DOOR, (fr % 4)*64, Math.floor(fr/4)*64, 64, 64, -30, -56, 60, 60); ctx.restore(); }
+function drawDoor(dir, fr, img){ const [cx, cy, rot] = DOOR_IN[dir]; ctx.save(); ctx.translate(cx, cy); ctx.rotate(rot); ctx.imageSmoothingEnabled = false; ctx.drawImage(img || DOOR, (fr % 4)*64, Math.floor(fr/4)*64, 64, 64, -32, -60, 64, 64); /* 64 → 64(화면 128) 정수 배율 = 또렷 */ ctx.restore(); }
 // 챕터 바위 256x128 = 64x64 4x2: 2챕 바위/금 · 3챕 바위/금 · 4챕 바위/금 · 금속 잔해 · 얼음 잔해
 const ROCK = new Image(); ROCK.src = 'a/755af1c38e.webp';
 const rockReady = () => ROCK.complete && ROCK.naturalWidth > 0;
@@ -905,8 +905,8 @@ const rockReady = () => ROCK.complete && ROCK.naturalWidth > 0;
 const KFX = new Image(); KFX.src = 'a/1f1d42002a.webp';
 const kfxReady = () => KFX.complete && KFX.naturalWidth > 0;
 function kfx(fr, x, y, sz, flip, a, rot){ ctx.save(); ctx.globalAlpha *= (a ?? 1); ctx.translate(Math.round(x), Math.round(y)); if (rot) ctx.rotate(rot); if (flip) ctx.scale(-1, 1); ctx.imageSmoothingEnabled = true; ctx.drawImage(KFX, (fr % 4)*96, Math.floor(fr/4)*96, 96, 96, -sz/2, -sz/2, sz, sz); ctx.restore(); }
-const PS = 36; // 내 캐릭터(스프라이트) 그리는 크기 — 24 → 30 → 36
-const KPOSE = 62; // 포즈 프레임을 그리는 크기 (카이 기본 스프라이트와 키 맞춤)
+const PS = 32; // 내 캐릭터(스프라이트) 그리는 크기 — 24 → 30 → 36 → 32
+const KPOSE = 55; // 포즈 프레임을 그리는 크기 (카이 기본 스프라이트와 키 맞춤)
 const kpose = (fr, x, y, flip, a) => kfx(fr, x, y + 9 - KPOSE*.30, KPOSE, flip, a); // 발이 y+9 근처
 const SHOT_TINT = {}; // 탄 색(아이템 조합)별로 물들인 탄 그림 캐시
 function shotSpr(color){
@@ -1375,7 +1375,7 @@ function freshState(seed, cid){
   const pr = mulberry32(seed ^ 0x51ed27);
   return {
     seed, floorNo:1, endFloor:prog.ch * 2, floor:null, used:new Set(['whirlwind', 'red_storm', 'monsoon', CH.active].filter(Boolean)), usedBefore:[], room:null, frame:0, t:0,
-    player:{x:W/2, y:H/2+30, vx:0, vy:0, r:CH.r || 9, hp:CH.hp, maxHp:CH.hp, shield:0, inv:0, fireCd:0, charge:0, charging:false, chargeDir:null,
+    player:{x:W/2, y:H/2+30, vx:0, vy:0, r:(CH.r || 9) * PS/36, hp:CH.hp, maxHp:CH.hp, shield:0, inv:0, fireCd:0, charge:0, charging:false, chargeDir:null,
             face:{x:0,y:1}, hold:0, holdItem:null, walk:0, dashT:0, dashCd:0, dashDir:{x:0,y:1}, dashHit:null},
     char:cid, items:[], prof:computeProfile([], cid), mods:{dmg:0, speed:1, fire:1, range:1, luck:0}, buff:{god:0, noclip:0, stop:0}, debuff:{rev:0, slow:0},
     res:{bit:0, key:1, bomb:1}, pocket:null, active:CH.active, patchMap:PATCHES.map((_, i) => i).sort(() => pr() - .5).slice(0, 8), patchKnown:new Set(),
@@ -3470,12 +3470,12 @@ function drawPlayer0(){
   if (p.hold > 0 && p.holdItem){ // 두 손으로 머리 위에 들어 올림
     const lift = p.hold > 48 ? (p.hold - 48) : 0;
     px(x - 8, y - 18, 3, 9, '#f3c9a6'); px(x + 5, y - 18, 3, 9, '#f3c9a6');
-    ctx.globalAlpha = .3 + .2*Math.sin(G.frame*.4); px(x - 11, y - 50 + lift, 22, 22, ITEM[p.holdItem].tint); ctx.globalAlpha = 1;
-    if (ICON[p.holdItem].big) ctx.imageSmoothingEnabled = true; ctx.drawImage(ICON[p.holdItem].canvas, x - 8, y - 47 + lift, 16, 16); ctx.imageSmoothingEnabled = false;
+    ctx.globalAlpha = .3 + .2*Math.sin(G.frame*.4); px(x - 11, y - 46 + lift, 22, 22, ITEM[p.holdItem].tint); ctx.globalAlpha = 1;
+    if (ICON[p.holdItem].big) ctx.imageSmoothingEnabled = true; ctx.drawImage(ICON[p.holdItem].canvas, x - 8, y - 43 + lift, 16, 16); ctx.imageSmoothingEnabled = false;
   }
   if (p.charging){
     const cmax = Math.max(14, G.prof.fireDelay * 2.2), k = Math.min(1, p.charge / cmax);
-    px(x - 9, y - 31, 18, 3, '#000'); px(x - 8, y - 30, 16 * k, 1, k >= 1 ? (G.frame % 6 < 3 ? '#fff' : '#ff3d5e') : '#ff3d5e');
+    px(x - 9, y - 28, 18, 3, '#000'); px(x - 8, y - 27, 16 * k, 1, k >= 1 ? (G.frame % 6 < 3 ? '#fff' : '#ff3d5e') : '#ff3d5e');
   }
   if (p.dashCd > 0 && p.dashT <= 0){ const k = 1 - p.dashCd / TUNE.dashCd; px(x - 6, y + 10, 12, 2, '#000'); px(x - 6, y + 10, 12*k, 2, '#9fe8ff'); }
   if (G.debuff.rev > 0 && G.frame % 20 < 12){ ctx.font = '700 8px "Noto Sans KR", sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = '#ff2e88'; ctx.fillText('⇄', x, y - 20); }
@@ -3575,20 +3575,22 @@ function drawMapGrid(known, ox, oy, cw, ch, g, big){
     const n = neighbor(r, d); if (!n || !known.includes(n)) continue;
     const x = ox + (r.gx - minX)*(cw + g) + cw/2, y = oy + (r.gy - minY)*(ch + g) + ch/2;
     const nx = ox + (n.gx - minX)*(cw + g) + cw/2, ny = oy + (n.gy - minY)*(ch + g) + ch/2;
-    px(Math.min(x, nx) - 1, Math.min(y, ny) - 1, Math.abs(nx - x) + 2, Math.abs(ny - y) + 2, '#2a3050');
+    px(Math.min(x, nx) - 1, Math.min(y, ny) - 1, Math.abs(nx - x) + 2, Math.abs(ny - y) + 2, '#4a5288');
   }
   const mi = (k, x, y, sz, a) => { if (!MAPI.complete || !MAPI.naturalWidth) return; ctx.globalAlpha = a ?? 1; ctx.imageSmoothingEnabled = true; ctx.drawImage(MAPI, (k % 4)*32, Math.floor(k/4)*32, 32, 32, Math.round(x), Math.round(y), sz, sz); ctx.imageSmoothingEnabled = false; ctx.globalAlpha = 1; };
   for (const r of known){
     const x = ox + (r.gx - minX)*(cw + g), y = oy + (r.gy - minY)*(ch + g), cur = r === G.room;
-    px(x - 1, y - 1, cw + 2, ch + 2, cur ? '#3fe3ff' : r.visited ? '#05060b' : '#9aa3dc'); // 안 간 방 = 밝은 테두리
-    if (r.visited || cur){
+    px(x - 1, y - 1, cw + 2, ch + 2, cur ? '#3fe3ff' : '#05060b');
+    if (r.visited || cur){ // 가 본 방 = 밝은 바닥 (아이작처럼 다녀온 방이 환함)
       if (tsReady()) ctx.drawImage(chTS(), 0, 0, 64, 64 * Math.min(1, ch/cw), x, y, cw, ch); // 방 칸 = 바닥 타일 미니 버전
-      ctx.globalAlpha = cur ? .15 : .45;
-      px(x, y, cw, ch, cur ? '#ece9f5' : r.type === 'secret' ? '#3a2060' : '#1c2140'); ctx.globalAlpha = 1;
-      if (!cur) px(x, y, cw, 1, 'rgba(255,255,255,.12)');
-    } else { // 아직 안 간 방: 단색 회청 + 가운데 점 (아이작처럼 '아는데 안 가 본 방')
-      px(x, y, cw, ch, '#2e3560');
-      if (ROOM_ICON(r) == null && MAP2_IDX[r.type] == null){ const s = big ? 3 : 2; px(x + cw/2 - s/2, y + ch/2 - s/2, s, s, '#9aa3dc'); }
+      ctx.globalAlpha = cur ? .25 : .32;
+      px(x, y, cw, ch, cur ? '#ece9f5' : r.type === 'secret' ? '#8a5cc8' : '#aab2e8'); ctx.globalAlpha = 1;
+      if (!cur) px(x, y, cw, 1, 'rgba(255,255,255,.25)');
+    } else { // 아직 안 간 방 = 어두운 칸 + 점선 테두리 + 가운데 점
+      px(x, y, cw, ch, '#0c0e1c');
+      for (let i = 0; i < cw; i += 3){ px(x + i, y, Math.min(2, cw - i), 1, '#7a82bc'); px(x + i, y + ch - 1, Math.min(2, cw - i), 1, '#7a82bc'); }
+      for (let i = 0; i < ch; i += 3){ px(x, y + i, 1, Math.min(2, ch - i), '#7a82bc'); px(x + cw - 1, y + i, 1, Math.min(2, ch - i), '#7a82bc'); }
+      if (ROOM_ICON(r) == null && MAP2_IDX[r.type] == null){ const s = big ? 3 : 2; px(x + cw/2 - s/2, y + ch/2 - s/2, s, s, '#7a82bc'); }
     }
     const k = ROOM_ICON(r), isz = Math.max(5, Math.min(big ? 18 : 9, Math.min(cw, ch) - (big ? 4 : 0)));
     if (cur && big && charSpr(G.char).ok){ // 현재 방 = 내 캐릭터 얼굴
@@ -4006,7 +4008,7 @@ addEventListener('keydown', e => {
   if (BLOCK_KEYS.includes(e.code)) e.preventDefault();
   if (e.code === 'Backquote'){ toggleDev(); return; }
   if (e.code === 'Tab'){ e.preventDefault(); if (mapOpen){ mapOpen = false; return; } if (G && running && !paused){ mapOpen = true; keys.clear(); mouse.down = false; } return; }
-  if (e.code === 'KeyC'){ toggleCodex(); return; }
+  if (e.code === 'KeyC' || e.code === 'KeyO'){ toggleCodex(); return; } // O 도 도감
   if (!$('codex').hidden && e.code === 'Escape'){ toggleCodex(); return; }
   if (mapOpen && (e.code === 'Escape' || e.code === 'KeyM' || e.code === 'Tab')){ mapOpen = false; return; }
   if (e.code === 'KeyM' && G && running && !paused){ mapOpen = true; keys.clear(); mouse.down = false; return; }
@@ -4119,7 +4121,7 @@ const PATCH_NOTES = [
     '아이템 49 → 102종 — 큰 HP · 단일 스탯 · 자동 저장(1번 부활) · 방화벽 위성 …, 꽝 · 양날 템도 섞였어요. 「클라우드 업로드」는 날아다니고, 「브리지 케이블」은 1칸 낭떠러지에 다리를 놓아요',
     '새 파이터 셋 — 이반(결투방 5승 · 큰 탄 · 체력 80 · 「붉은 폭풍」), 릴리(숨겨진 방의 우산 · 물방울 탄이 적을 가둠 · 「장마 파도」), DICE(시크릿 20개 · 한 발마다 피해 1~6배)',
     '낭떠러지 방 — 걸어서는 못 건너고 탄은 넘어가요. 금 간 바위는 아이작처럼 드물게 (방 7개 중 1개꼴), 깨면 8% 아이템 · 나머지는 픽업 2~3개',
-    '사격은 상하좌우 4방향 (「아날로그 스틱」이면 8방향). 내 캐릭터 1.5배 · 피격 범위도 같이. 럭 스탯 + 스탯 다운 패치 (럭 0이면 반반, 럭 1마다 +10%p)',
+    '사격은 상하좌우 4방향 (「아날로그 스틱」이면 8방향). 내 캐릭터 1.33배 · 피격 범위도 같이. 럭 스탯 + 스탯 다운 패치 (럭 0이면 반반, 럭 1마다 +10%p)',
     '난이도 — 월드 1 보스 피해 20→15 · 킹 슬라임 체력 ↓, 월드 2 일반 피해 15, 월드 3 보스 피해 25. 재화는 덜 — 방 보상 가끔 없음 · 비트 1개 · 열쇠 드물게',
     '플레이 데이터 — 판마다 어디서 · 무엇에 맞았는지, 아이템 · 재화 흐름을 이 브라우저에 저장. 타이틀 「플레이 데이터」에서 JSON 저장 · 복사',
     '고침 — 패치 바꿔 집을 때 무한 교체 · 벽 밖으로 밀림, 금 간 바위 구석에 갇힌 몹, 치트 콘솔 템 이름 안 보임, 관통 + 픽셀 폭탄이 끝까지 날아가서야 터지던 것. 전체화면 ESC는 크롬 · 엣지에서 안 풀리고 일시정지',
