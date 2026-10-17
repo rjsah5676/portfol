@@ -13,7 +13,7 @@ import { h, ms, userOf } from "./util";
  *   PUT /api/me/nick       별명 정하기(가입) · 바꾸기  { nick }
  *   PUT /api/me/avatar     프로필 사진 올리기 (본문 = 사진 파일 그대로, JPG · PNG · WebP)
  *   DELETE /api/me/avatar  올린 사진 지우기 (로그인 계정의 사진으로 돌아감)
- *   GET /api/me/summary    내 정보 페이지용: 게임별 최고 기록과 순위, 전적, 비트대시 BP 합·순위
+ *   GET /api/me/summary    내 정보 페이지용: 게임별 최고 기록과 순위, 전적, 픽셀 리듬업 BP 합·순위
  */
 export function meRouter({ db, auth, users, points }: Deps): Router {
   const r = Router();

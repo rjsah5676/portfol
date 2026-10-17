@@ -14,7 +14,7 @@ import { RESTORED, RESTORE_GRACE_MS, type LiveGame } from "../live";
 import type { Ctx } from "../realtime/gateway";
 
 /*
- * 리듬게임(BEAT DASH) 온라인 — 같은 곡을 여럿이 동시에 치고 점수를 겨룸
+ * 리듬게임(PIXEL Rhythm Up) 온라인 — 같은 곡을 여럿이 동시에 치고 점수를 겨룸
  *
  * 방장이 곡(내장곡 또는 "내 음악")을 고르고, 각자 난이도를 고른 뒤 모두 준비하면 방장이 시작.
  *  lobby ─start→ loading (각자 음원·채보 받기) ─다 받으면→ playing (startAt 에 모두 같이 시작) ─다 끝나면→ result

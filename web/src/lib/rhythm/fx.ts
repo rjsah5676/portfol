@@ -197,7 +197,7 @@ export function laneColors(skin: Skin, accent: string): string[] {
     case "pixel":
       return ["#FF6B6B", "#4ECDC4", "#FFE66D", "#A78BFA"];
     case "zena":
-      return ["#F9A8D4", "#F5C842", "#F5C842", "#F9A8D4"];
+      return ["#F472B6", "#F5C842", "#F5C842", "#F472B6"];
     default:
       return ["#E6E8EF", accent, accent, "#E6E8EF"];
   }
@@ -349,22 +349,21 @@ function paintHead(
       break;
     }
     case "zena": {
-      // 무대 조명 받은 금속 + 진한 테두리(밝은 무대에서도 노트 윤곽이 보이게) + 가운데 반짝이 별
+      // 메탈과 같은 광택(위 흰빛 → 색 → 가운데 어두운 띠 → 아래 반사)에 제나 색 — 밝은 무대에서도 또렷하게
       const grad = g.createLinearGradient(0, top, 0, top + h);
-      // 흰빛은 맨 위 얇게만 — 색이 꽉 차 보이게 (흰 쪽이 넓으면 밝은 무대에서 비쳐 보임)
-      grad.addColorStop(0, shade(color, 0.55));
-      grad.addColorStop(0.3, color);
-      grad.addColorStop(0.7, shade(color, -0.22));
-      grad.addColorStop(1, shade(color, -0.42));
+      grad.addColorStop(0, "#FFFFFF");
+      grad.addColorStop(0.35, color);
+      grad.addColorStop(0.55, shade(color, -0.4));
+      grad.addColorStop(1, shade(color, -0.1));
       g.fillStyle = grad;
-      roundRect(g, nx, top, nw, h, 5);
+      roundRect(g, nx, top, nw, h, 2);
       g.fill();
-      g.strokeStyle = "#280C24";
-      g.lineWidth = 2;
+      g.strokeStyle = "rgba(40,12,36,0.7)";
+      g.lineWidth = 1;
       g.stroke();
       // 네 갈래 별
       const cx = x + laneW / 2;
-      const r = Math.min(h * 0.55, 8);
+      const r = Math.min(h * 0.42, 6);
       g.fillStyle = "#FFFFFF";
       g.beginPath();
       g.moveTo(cx, y - r);
