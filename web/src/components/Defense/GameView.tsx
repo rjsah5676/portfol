@@ -98,6 +98,9 @@ export interface GameViewProps {
   ghost?: { data: DefenseGhost; lo: Loadout | null } | null;
 }
 
+/** 등급 한 글자 (뽑기권 버튼) */
+const GRADE_LETTER = ["N", "R", "E", "L", "M", "H", "T"];
+
 type Toast = { id: number; text: ReactNode; tone?: "bad" | "good" | "gold" };
 type ModalKind = "patch" | "pick" | "recipe" | "mission" | "codex" | "pause" | "dev" | null;
 
@@ -280,8 +283,8 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry, 
         setTimeout(() => {
           v.flash = { t: e.to, until: performance.now() + 900, gold: e.node === "elite" || e.node === "boss" };
           sfx(e.node === "shop" ? "town-coin" : e.node === "event" ? "town-warp" : e.node === "rest" ? "town-fest" : "town-dice");
-          if (e.node === "boss") setShout({ id: Math.random(), title: "한 바퀴 — UR 보스!", sub: TOWN_TILES[e.to].name, color: nt.color });
-          else toast(<><b style={{ color: nt.color }}>{nt.name}</b> · {TOWN_TILES[e.to].name} — {nt.desc}</>, e.node === "elite" ? "bad" : "gold");
+          if (e.node === "boss") setShout({ id: Math.random(), title: "한 바퀴 — UR 보스!", sub: nt.desc, color: nt.color });
+          else toast(<><b style={{ color: nt.color }}>{nt.name}</b> — {nt.desc}</>, e.node === "elite" ? "bad" : "gold");
         }, path.length * HOP_MS);
         break;
       }
@@ -699,7 +702,7 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry, 
           />
         </div>
         {(b.patch || b.cheats.length > 0 || b.mods.grit > 0) && (
-          <div className="px-inset flex h-full min-w-0 shrink items-center gap-1 overflow-hidden px-1.5">
+          <div className="px-inset flex h-full min-w-[44px] shrink items-center gap-1 overflow-hidden px-1.5">
             {patch && (
               <span
                 className={`flex h-6 items-center justify-center gap-1 bg-[#0a0816] ${patch.id === "pure" ? "px-1.5" : "w-6"}`}
@@ -751,7 +754,7 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry, 
         )}
         {(b.mods.relics.length > 0 || b.mods.glitch.lv > 0) && (
           <div
-            className="px-inset flex h-full min-w-0 shrink items-center gap-1 overflow-hidden px-1.5"
+            className="px-inset flex h-full min-w-[44px] shrink items-center gap-1 overflow-hidden px-1.5"
             title={[
               b.mods.glitch.lv ? `오염 ${b.mods.glitch.lv}단계 — 적 체력 ×${b.mods.glitch.hp} · 속도 ×${b.mods.glitch.spd}` : "",
               ...b.mods.relics.map((id) => `${RELIC[id]?.name} Lv.${b.mods.relicLv?.[id] ?? 1}: ${relicDesc(id, b.mods.relicLv?.[id] ?? 1)}`),
@@ -1082,24 +1085,27 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry, 
         style={{ left: FIELD.x + CW + 10, top: 56, width: 1012 - (FIELD.x + CW + 10), height: 510 }}
       >
         <div className="flex h-[30px] gap-1.5">
-          {b.tickets.length > 0 && (
-            <Btn tone="gold" onClick={() => setModal("pick")} className="dfn-pulse flex-1 text-[12px] font-bold" title="보스 확정 뽑기권">
-              <Icon n="ticket" size={13} /> 뽑기권 {b.tickets.length}
-            </Btn>
-          )}
-          <div className="px-inset flex min-w-0 flex-1 items-center gap-1 px-2 text-[12px] text-[var(--mute)]" title="보스(10 · 20 · 30 · 40 · 50)를 잡으면 치트 코드 3장 중 하나">
-            <Icon n="flask" size={12} />
-            {(() => {
-              if (b.exp)
-                return (
-                  <span title={b.exp.relics.map((id) => `${EXP_RELIC[id].name} — ${EXP_RELIC[id].desc}`).join("\n")}>
-                    원정 유물 <b className="text-[#9be7ff]">{b.exp.relics.length ? b.exp.relics.map((id) => EXP_RELIC[id].name).join(" · ") : "없음"}</b>
+          {/* 골라 뽑기권: 등급별 개수 (R 1 · E 1 · L 1) — 없으면 꺼진 버튼으로 자리만 */}
+          <Btn
+            tone={b.tickets.length ? "gold" : "ghost"}
+            disabled={!b.tickets.length}
+            onClick={() => setModal("pick")}
+            className={`inline-flex flex-1 items-center justify-center gap-2 text-[12px] font-bold ${b.tickets.length ? "dfn-pulse" : ""}`}
+            title="골라 뽑기권 — 등급마다 원하는 유닛을 골라 뽑아요 (보스 · 치트 · 원정에서 받음)"
+          >
+            <Icon n="ticket" size={13} /> 뽑기권
+            {b.tickets.length ? (
+              [0, 1, 2, 3, 4]
+                .filter((g) => b.tickets.includes(g))
+                .map((g) => (
+                  <span key={g} style={{ color: g >= 3 ? GRADE_COLOR[g] : "#1a1000" }} className={g >= 3 ? "px-1 bg-[#1a1000]" : ""}>
+                    {GRADE_LETTER[g]} {b.tickets.filter((x) => x === g).length}
                   </span>
-                );
-              const next = [10, 20, 30, 40, 50].find((w) => w > b.wave || (w === b.wave && b.phase === "boss"));
-              return next ? <>다음 치트 코드 · <b className="text-[var(--text)]">{next}W 보스</b></> : <>치트 코드 {b.cheats.length}개</>;
-            })()}
-          </div>
+                ))
+            ) : (
+              <span className="font-normal text-[var(--dim)]">없음</span>
+            )}
+          </Btn>
         </div>
 
         <Btn
@@ -1867,19 +1873,16 @@ export function PixelDie({ n, size = 44, glow }: { n: number; size?: number; glo
   );
 }
 
-/** 원정 위쪽 줄: 지나온 칸 · 원정 유물 */
+/** 원정 위쪽 줄: 지금 칸 종류 (끝낸 칸 · 원정 유물은 말풍선) */
 function ExpChip({ b }: { b: Board }) {
   const x = b.exp!;
   const node = x.node ? EXP_NODE_TEXT[x.node] : null;
   return (
     <div
-      className="px-inset flex h-full shrink-0 items-center gap-2 px-2 text-[12px] whitespace-nowrap"
+      className="px-inset flex h-full shrink-0 items-center gap-1.5 px-2 text-[12px] whitespace-nowrap"
       title={`${TOWN_NAME} 원정 — 끝낸 칸 ${x.segs}\n원정 유물: ${x.relics.length ? x.relics.map((id) => `${EXP_RELIC[id].name}(${EXP_RELIC[id].desc})`).join("\n") : "없음"}`}
     >
-      {node && <b style={{ color: node.color }}>{node.name}</b>}
-      <span className="text-[var(--mute)]">
-        칸 <b className="text-white">{x.segs}</b>
-      </span>
+      <b style={{ color: node?.color ?? "var(--mute)" }}>{node?.name ?? "갈림길"}</b>
       {x.relics.length > 0 && <b className="text-[#9be7ff]">유물 {x.relics.length}</b>}
     </div>
   );
@@ -1887,18 +1890,16 @@ function ExpChip({ b }: { b: Board }) {
 
 /** 원정: 고른 길 칸 정보 (무슨 칸인지) */
 function NodePanel({ b, t }: { b: Board; t: number }) {
-  const tt = TOWN_TILES[t];
   const n = EXP_NODE_TEXT[expNodeOf(t)];
+  const done = b.exp?.path.some((p) => p.t === t);
   return (
     <div className="min-w-0 flex-1 leading-tight">
       <div className="flex items-center gap-1.5">
-        <b className="text-[14px]" style={{ color: tt.color === "#ffffff" ? n.color : tt.color }}>
-          {tt.name}
-        </b>
-        <span className="px-1 text-[11px] font-bold text-[#0a0816]" style={{ background: n.color }}>
+        <b className="text-[15px]" style={{ color: n.color }}>
           {n.name}
-        </span>
+        </b>
         {b.pos === t && <span className="bg-[#ff5fa2] px-1 text-[11px] font-bold text-white">내 말</span>}
+        {done && b.pos !== t && <span className="text-[11px] text-[var(--dim)]">지나온 칸</span>}
       </div>
       <p className="mt-1 text-[12px] text-[var(--mute)]">{n.desc}</p>
     </div>
@@ -1949,10 +1950,9 @@ function CampPanel({ b, run }: { b: Board; run: (c: Cmd) => boolean }) {
                   <PixelDie n={d} size={46} />
                 </span>
                 <b className="mt-1 text-[13px] text-[var(--mute)]">{d}칸 →</b>
-                <b className="px-shadow text-[17px] text-white">{TOWN_TILES[to].name}</b>
-                <span className="px-1.5 text-[12px] font-bold text-[#0a0816]" style={{ background: n.color }}>
+                <b className="px-shadow text-[20px]" style={{ color: n.color }}>
                   {n.name}
-                </span>
+                </b>
                 <span className="text-[12px] leading-snug text-[var(--text)]">{n.desc}</span>
               </button>
             );

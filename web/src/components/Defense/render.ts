@@ -874,6 +874,10 @@ function drawTown(ctx: CanvasRenderingContext2D, b: Board, v: View, now: number,
         ctx.drawImage(im, x + (CELL - w) / 2, y + CELL - hh - 3, w, hh);
         ctx.imageSmoothingEnabled = false;
       }
+      if (b.exp) {
+        const n = EXP_NODE_TEXT[expNodeOf(t)];
+        pxText(ctx, n.name, x + CELL / 2, y + 10, 11, n.color);
+      }
       continue;
     }
     // 원정: 엘리트 칸 · 지나온 칸
@@ -882,8 +886,8 @@ function drawTown(ctx: CanvasRenderingContext2D, b: Board, v: View, now: number,
       if (n === "elite") {
         ctx.fillStyle = "rgba(255,107,127,0.16)";
         ctx.fillRect(x + 2, y + 2, CELL - 4, CELL - 4);
-        pxText(ctx, "엘리트", x + CELL / 2, y + 12, 11, "#ff6b7f");
       }
+      if (n !== "fight") pxText(ctx, EXP_NODE_TEXT[n].name, x + CELL / 2, y + 12, 11, EXP_NODE_TEXT[n].color);
       if (b.exp.path.some((p) => p.t === t) && b.pos !== t) {
         ctx.fillStyle = "rgba(5,4,12,0.35)";
         ctx.fillRect(x + 2, y + 2, CELL - 4, CELL - 4);
@@ -963,35 +967,47 @@ function tokenXY(b: Board, v: View, now: number): [number, number, number] {
   const [bx, by] = c(m.path[i]);
   return [ax + (bx - ax) * k, ay + (by - ay) * k, Math.sin(Math.PI * k) * 16];
 }
+/** 내 말 — 보드게임 말 모양 도트 (둥근 머리 · 금 칼라 · 퍼지는 몸통 · 받침), 왼쪽 빛 · 오른쪽 그늘 · 테두리 */
+const PAWN: [number, number, string][] = [
+  // [윗변 y(바닥 기준, 2px 단위 줄), 폭, 칠]
+  [-42, 6, "b"], [-40, 10, "b"], [-38, 12, "b"], [-36, 14, "b"], [-34, 14, "b"], [-32, 12, "b"], [-30, 10, "b"],
+  [-28, 16, "g"], [-26, 16, "g"], [-24, 8, "b"],
+  [-22, 10, "b"], [-20, 10, "b"], [-18, 12, "b"], [-16, 14, "b"], [-14, 16, "b"], [-12, 18, "b"], [-10, 20, "b"],
+  [-8, 26, "g"], [-6, 28, "b"], [-4, 28, "b"], [-2, 24, "d"],
+];
 function drawToken(ctx: CanvasRenderingContext2D, b: Board, v: View, now: number) {
   const [cx, cy, up] = tokenXY(b, v, now);
   const x = P(cx),
-    y = P(cy - up);
-  // 그림자
-  ctx.fillStyle = "rgba(0,0,0,0.38)";
-  const sw = up > 4 ? 12 : 16;
-  ctx.fillRect(P(cx) - sw, P(cy) + 2, sw * 2, 4);
-  // 도트 말 (분홍 · 금 테) — 받침 · 몸통 · 머리
-  const ink = "#1a0b22";
-  const body = "#ff5fa2",
-    hi = "#ffb3d6",
-    gold = "#ffd23f";
-  const R = (dx: number, dy: number, w: number, h: number, c: string) => {
-    ctx.fillStyle = c;
-    ctx.fillRect(x + dx, y + dy, w, h);
+    y = P(cy - up) + 4;
+  // 그림자 (뛸수록 작게)
+  ctx.fillStyle = "rgba(0,0,0,0.4)";
+  const sw = up > 4 ? 10 : 15;
+  ctx.fillRect(P(cx) - sw, P(cy) + 4, sw * 2, 4);
+  const C: Record<string, [string, string, string]> = {
+    b: ["#ff5fa2", "#ffc2dd", "#c2306f"],
+    g: ["#ffd23f", "#fff2a8", "#c98a00"],
+    d: ["#c2306f", "#ff7fb6", "#8a1f50"],
   };
-  R(-14, -6, 28, 8, ink);
-  R(-12, -4, 24, 4, gold);
-  R(-10, -22, 20, 18, ink);
-  R(-8, -20, 16, 16, body);
-  R(-8, -20, 4, 16, hi);
-  R(-10, -36, 20, 16, ink);
-  R(-8, -34, 16, 12, body);
-  R(-6, -34, 6, 4, hi);
-  // 머리 위 금빛 별 (깜빡)
-  if (Math.floor(now / 300) % 2) {
-    R(-2, -44, 4, 4, gold);
-    R(-4, -42, 8, 2, gold);
+  // 테두리: 한 줄씩 2px 넓게 · 위아래 2px
+  ctx.fillStyle = "#1a0b22";
+  for (const [dy, w] of PAWN) ctx.fillRect(x - w / 2 - 2, y + dy - 2, w + 4, 6);
+  for (const [dy, w, k] of PAWN) {
+    const [base, hi, sh] = C[k];
+    ctx.fillStyle = base;
+    ctx.fillRect(x - w / 2, y + dy, w, 2);
+    ctx.fillStyle = hi;
+    ctx.fillRect(x - w / 2 + 2, y + dy, Math.max(2, Math.floor(w / 6 / 2) * 2), 2);
+    ctx.fillStyle = sh;
+    ctx.fillRect(x + w / 2 - Math.max(2, Math.floor(w / 4 / 2) * 2), y + dy, Math.max(2, Math.floor(w / 4 / 2) * 2), 2);
+  }
+  // 머리 반짝
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(x - 4, y - 38, 2, 2);
+  // 머리 위 화살표 (내 말 · 깜빡)
+  if (Math.floor(now / 350) % 2) {
+    ctx.fillStyle = "#ffd23f";
+    ctx.fillRect(x - 4, y - 54, 8, 2);
+    ctx.fillRect(x - 2, y - 52, 4, 2);
   }
 }
 
