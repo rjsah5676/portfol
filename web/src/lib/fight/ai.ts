@@ -171,7 +171,8 @@ export const CHAR_ADJ: Record<string, number[]> = {
   kai: [-3, -21, 88, 96, 22, 27, 358],
   igna: [-80, -109, 18, 100, -8, -26, -168],
   soyoung: [69, -36, -156, -183, -100, 155, 192],
-  lily: [-14, 124, 222, 293, 44, -156, -440],
+  // 릴리 (10.17 비눗방울 가둔 뒤 쫓기 넣고 다시 맞춤 — 같은 레이팅 AI끼리 70판씩, 위쪽이 많이 셈: 2000 −156 → −70 · 2400 −440 → −60)
+  lily: [15, 90, 170, 293, 25, -70, -60],
   zena: [-120, -259, -401, -309, 33, 184, 508],
   gunmo: [172, 414, 466, 364, 64, -46, -46],
   ivan: [-52, -156, -222, 14, 10, -124, -402],
@@ -241,7 +242,7 @@ export function aiForRating(r: number, charId?: string): AILevel {
  * AI 지문: 랭크전 봇전은 서버가 같은 경기를 다시 돌려 확인하니, 브라우저와 서버의 AI가 똑같아야 함.
  * 단계 값·보정·콤보 길은 자동으로 들어가고, next() 같은 판단 코드를 바꿨으면 AI_REV 를 올릴 것.
  */
-const AI_REV = 14;
+const AI_REV = 15;
 export const AI_ID = (() => {
   const str = AI_REV + JSON.stringify([AI_LEVELS, RANK_TIERS, AI_RATING, ADJ_AT, CHAR_ADJ, ROUTES, ROUTE_CAP, HUMAN]);
   let h = 0x811c9dc5;
@@ -500,7 +501,8 @@ export class FightAI {
       for (const e of s.ev) {
         if (e.p !== me) continue;
         if (e.k === "throw") st = "T";
-        else if (e.k === "hit" && e.m === "S" && routes.S) st = "S";
+        // (가두는 탄(릴리 비눗방울)은 멀리서 맞으니 정해진 거리에서 찾은 콤보 길이 안 맞음 — 아래 「갇힌 상대 쫓기」로)
+        else if (e.k === "hit" && e.m === "S" && routes.S && !c.moves.S.trap) st = "S";
         else if (e.k === "hit" && e.m === "L" && f.chain <= 1) st = "L4";
         else if (e.k === "hit" && e.m === "H" && f.chain <= 1) st = "H";
       }
@@ -545,6 +547,20 @@ export class FightAI {
         return a;
         }
       }
+    }
+    // ── 비눗방울에 가둔 상대: 대시로 붙어서 발차기로 터뜨림 → 이어지는 콤보 (10.17 — 가둬 놓고 그냥 터뜨려 평균 50 피해만 넣던 것) ──
+    if (o.trapT > 0 && c.moves.S.trap && !air && (f.st === "idle" || f.st === "walk" || f.st === "dash") && this.r() < 0.5 + L.combo * 0.5) {
+      this.plan = [];
+      const hr = reachOf(c.moves.H) - 6;
+      if (dist > hr) {
+        out |= toward;
+        if (dist > hr + 50 && f.st !== "dash") {
+          this.dashSeq = [0, toward, toward, toward];
+          return finish();
+        }
+      } else if ((f.face > 0) === (o.x > f.x)) press(IN.B);
+      else out |= toward;
+      return finish();
     }
     // 미리 짜 둔 땅 수순을 따라가는 중에 상대가 이쪽으로 뛰어들어 온 걸 알아챘으면 수순을 접고 다시 판단
     // (짜 둔 대로 발차기·잡기를 내밀다 공중 L에 맞던 것, 10.13 — 상황이 바뀌면 사람도 하던 걸 멈춤)
