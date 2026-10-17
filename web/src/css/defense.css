@@ -541,3 +541,44 @@
 .dfn ::-webkit-scrollbar-button {
   display: none;
 }
+
+/* 해피 타운 도트 주사위: 굴러가는 동안 통통 튐 (계단 동작) · 멈출 때 쿵 */
+.dfn-dice-tumble {
+  display: inline-block;
+  animation: dfn-dice-tumble 0.35s steps(4) infinite;
+}
+@keyframes dfn-dice-tumble {
+  0% {
+    transform: translateY(0) rotate(0deg);
+  }
+  25% {
+    transform: translateY(-22px) rotate(90deg);
+  }
+  50% {
+    transform: translateY(-30px) rotate(180deg);
+  }
+  75% {
+    transform: translateY(-12px) rotate(270deg);
+  }
+  100% {
+    transform: translateY(0) rotate(360deg);
+  }
+}
+.dfn-dice-land {
+  display: inline-block;
+  animation: dfn-dice-land 0.3s steps(3) both;
+}
+@keyframes dfn-dice-land {
+  0% {
+    transform: translateY(-10px) scale(1.25, 0.8);
+  }
+  60% {
+    transform: translateY(0) scale(0.9, 1.12);
+  }
+  100% {
+    transform: none;
+  }
+}
+.dfn-pop {
+  animation: dfn-dice-land 0.3s steps(3) both;
+}

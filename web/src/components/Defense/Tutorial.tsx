@@ -7,8 +7,8 @@
  */
 import { useEffect, useState } from "react";
 import { B, BOSS_EVERY } from "@/lib/defense/balance";
-import { STACK, buildBlock, PERIM, type Board } from "@/lib/defense/sim";
-import { TOWN_NAME } from "@/lib/defense/town";
+import { STACK, type Board } from "@/lib/defense/sim";
+import { TOWN, TOWN_NAME } from "@/lib/defense/town";
 import { UNIT } from "@/lib/defense/units";
 import { Btn, TITLE } from "./ui";
 
@@ -81,31 +81,31 @@ const TOWN_STEPS: Step[] = [
   {
     id: "t_hello",
     title: `${TOWN_NAME}에 온 걸 환영해요`,
-    text: "바깥을 도는 길 하나하나가 동네 칸이에요. 소환 · 합성은 글리치 시티와 똑같고, 다른 점은 하나 — 길 칸에 건물을 지으면 거기서 쓰러지는 적이 골드(통행료)를 내요. 먼저 유닛부터 소환해 보세요.",
+    text: "소환 · 합성으로 막는 건 글리치 시티와 같아요. 다른 건 하나 — 아래쪽 금색 「굴리기」로 주사위를 굴리면 분홍 말이 길을 돌고, 내 건물 칸에 서면 잭팟이 터져요.",
     when: (b) => !b.cheat,
+  },
+  {
+    id: "t_roll",
+    title: "주사위 굴리기 (D)",
+    text: `아래쪽 금색 「굴리기」를 눌러 보세요. 웨이브마다 하나씩 생기고 ${TOWN.rollMax}개까지 모아 둬요. 더블이 나오면 한 번 더, 출발 포털을 지나면 월급!`,
+    when: (b) => !b.cheat && b.rolls > 0,
   },
   {
     id: "t_build",
     title: "건물 짓기 (길 칸 누르기 · W)",
-    text: "유닛이 놓인 칸의 바로 바깥 길 칸이 그 유닛의 땅이에요. 초록 점이 깜빡이는 길 칸을 누르면 아래에 칸 정보가 뜨고, 「짓기」(W)로 오두막(−30G)을 지어요. 다시 누르면 2층집 → 빌딩으로 올라가요.",
-    when: (b) => !b.cheat && b.wave >= 2 && Array.from({ length: PERIM }, (_, t) => t).some((t) => !buildBlock(b, t)),
+    text: "아무 동네 칸이나 누르고 「짓기」. 내 말이 그 칸에 서면 잭팟 — 오두막 → 2층집 → 빌딩일수록 커요. 새 땅은 가진 땅이 많을수록 비싸요: 여러 칸에 깔지, 한 칸을 크게 키울지!",
+    when: (b) => !b.cheat && b.wave >= 2 && b.gold >= TOWN.newBase && b.bld.every((x) => !x),
   },
   {
-    id: "t_toll",
-    title: "통행료",
-    text: "이 건물 칸에서 적이 쓰러질 때마다 통행료가 들어와요 (오두막 +2 · 2층집 +4 · 빌딩 +8G). 칸을 누르면 「지난 웨이브 이 칸에서 쓰러진 적」 수가 보여요 — 그 숫자가 큰 칸(센 유닛 앞)부터 올리세요. 안쪽 유닛을 팔거나 옮기면 휴업이에요.",
-    when: (b) => !b.cheat && b.bld.some((x) => x > 0),
-  },
-  {
-    id: "t_dice",
-    title: "웨이브 주사위",
-    text: "보스가 아닌 웨이브마다 주사위! 1·2 황금 칸(그 칸 통행료 ×3, 빈 땅도 처치마다 +3G) · 3·4 늪(그 칸 적이 크게 느려짐) · 5 축제(모든 처치 골드 +1) · 6 더블. 어느 칸인지는 길 위 표시와 위쪽 줄을 보세요.",
-    when: (b) => !b.cheat && !!b.dice,
+    id: "t_jack",
+    title: "잭팟!",
+    text: "연속으로 내 건물 칸에 서면 ×2 · ×3. 웨이브가 높을수록 잭팟도 커져요. 6 · 6 이 나오면 골라 뽑기권 대박!",
+    when: (b) => !b.cheat && b.jacks > 0,
   },
   {
     id: "t_boss",
     title: "UR 보스",
-    text: "10 · 30 · 50웨이브는 다이스 타운의 UR 셋이 글리치에 먹혀 나와요. DICE 는 주사위만큼 순간이동, MOA 는 건물을 빼앗고, FORTE 는 앙코르로 체력을 되찾아요.",
+    text: "10 · 30 · 50웨이브는 다이스 타운의 UR 셋이 글리치에 먹혀 나와요. DICE 는 주사위만큼 순간이동, MOA 는 가장 높은 건물을 빼앗아 잭팟을 막고(잡으면 돌아와요), FORTE 는 앙코르로 체력을 되찾아요.",
     when: (b) => b.phase === "boss" && b.wave % 20 === 10,
   },
 ];

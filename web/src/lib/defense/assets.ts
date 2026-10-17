@@ -223,6 +223,7 @@ export const SFX: Record<string, { src: string; vol?: number }> = {
   gameover: { src: "/defense/sfx/gameover.mp3" },
   // 해피 타운 — PIXEL MARBLE 효과음 그대로 (public/marble/sfx)
   "town-dice": { src: "/marble/sfx/dice.mp3", vol: 0.8 },
+  "town-step": { src: "/marble/sfx/step.mp3", vol: 0.5 },
   "town-build": { src: "/marble/sfx/build.mp3", vol: 0.8 },
   "town-up": { src: "/marble/sfx/upgrade.mp3", vol: 0.8 },
   "town-landmark": { src: "/marble/sfx/landmark.mp3", vol: 0.8 },

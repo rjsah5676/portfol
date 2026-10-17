@@ -30,11 +30,14 @@ import {
   type RiftTier,
   buildBlock,
   buildCost,
+  PERIM,
+  comboMult,
+  jackOf,
+  rollBlock,
   tileCell,
-  tileOpen,
-  tollOf,
+  townOwned,
 } from "@/lib/defense/sim";
-import { BUILD_NAME, DICE_TEXT, TOWN, TOWN_NAME, TOWN_TILES } from "@/lib/defense/town";
+import { BUILD_NAME, CORNER_TEXT, TOWN, TOWN_NAME, TOWN_TILES } from "@/lib/defense/town";
 import {
   FACTIONS,
   FACTION_COLOR,
@@ -56,7 +59,7 @@ import { useStage } from "./Stage";
 import { RELIC, RES, relicDesc, resDesc, treasureReward, type Loadout } from "@/lib/defense/progress";
 import { replayer, type Replayer } from "@/lib/defense/replay";
 import type { DefenseGhost } from "@/realtime/defense";
-import { BENCH_W, CW, FH2, cellAt, draw, newView, pushFx, tileAt } from "./render";
+import { BENCH_W, CW, FH2, HOP_MS, cellAt, draw, newView, pushFx, tileAt } from "./render";
 import {
   Bar,
   Btn,
@@ -120,6 +123,8 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry, 
     color: string;
   } | null>(null);
   const [bossLine, setBossLine] = useState<{ id: number; boss: number } | null>(null);
+  /** 해피 타운 굴림 연출: 주사위 둘 (start 부터 굴러가다 멈춤) · 말이 다 도착하는 시각 (그때까지 굴리기 버튼 잠금) */
+  const [dice, setDice] = useState<{ id: number; d1: number; d2: number; start: number; done: number; again: boolean } | null>(null);
   const [over, setOver] = useState<{ note: ReactNode | null } | null>(null);
   const [bot, setBot] = useState<string | null>(null);
   /** 레전드 이상 판매는 두 번 눌러야 (실수로 팔지 않게) — 한 번 누른 칸 */
@@ -198,12 +203,20 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry, 
     else if (cmd.t === "sell") sfx("sell");
     else if (cmd.t === "rift") sfx("rift");
     else if (cmd.t === "swap" || cmd.t === "patch") sfx("ui-click", 1, 0.9);
+    else if (cmd.t === "roll") sfx("town-dice");
     else if (cmd.t === "build") {
       const lv = b.bld[cmd.p];
       sfx(lv >= 3 ? "town-landmark" : lv === 1 ? "town-build" : "town-up");
     }
     force();
     return !err;
+  };
+
+  /** 해피 타운 굴리기 (굴러가는 중엔 잠금) */
+  const rolling = !!dice && performance.now() < dice.done;
+  const rollNow = () => {
+    if (dice && performance.now() < dice.done) return;
+    run({ t: "roll" });
   };
 
   // ── 알림 처리 ──
@@ -269,18 +282,69 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry, 
           });
         }
         break;
-      case "dice": {
-        sfx("town-dice");
-        const dt = DICE_TEXT[e.kind];
-        const where = [e.gold >= 0 && `황금 칸 ${TOWN_TILES[e.gold].name}`, e.mud >= 0 && `늪 ${TOWN_TILES[e.mud].name}`].filter(Boolean).join(" · ");
-        if (e.kind === "fest") sfx("town-fest");
-        toast(
-          <>
-            주사위 <b className="text-[#ffd23f]">{e.roll}</b> — <b className="text-[#ffd23f]">{dt.name}</b>
-            {where ? ` · ${where}` : ` · ${dt.desc}`}
-          </>,
-          "gold"
-        );
+      case "roll": {
+        // 주사위가 굴러가다 멈춤(DICE_ROLL_MS) → 말이 한 칸씩 콩콩 → 도착하면 결과
+        const now = performance.now();
+        const v = viewRef.current;
+        const steps = e.d1 + e.d2;
+        const path: number[] = [];
+        for (let k = 1; k <= steps; k++) path.push((e.from + k) % PERIM);
+        const t0 = now + DICE_ROLL_MS;
+        const arrive = t0 + steps * HOP_MS;
+        v.tok = { from: e.from, path, t0 };
+        setDice({ id: Math.random(), d1: e.d1, d2: e.d2, start: now, done: arrive + 650, again: e.again });
+        // 콩콩 소리 (몇 칸마다)
+        for (let k = 0; k < steps; k++) setTimeout(() => sfx("town-step", 0.5, 1 + (k % 3) * 0.06), t0 - now + k * HOP_MS);
+        setTimeout(() => {
+          const tt = TOWN_TILES[e.to];
+          v.flash = { t: e.to, until: performance.now() + 900, gold: e.land === "jack" };
+          if (e.passed) {
+            sfx("town-coin");
+            toast(<>출발 포털 통과 — 월급 <b className="text-[var(--gold)]">+{e.lapGold}G</b></>, "gold");
+          }
+          if (e.big) {
+            sfx("myth");
+            setShout({ id: Math.random(), title: "6 · 6 대박!", sub: `골라 뽑기권 (${e.gold || e.lapGold ? "+골드 · " : ""}${b.wave >= 20 ? "레전드" : "에픽"}) — 오른쪽 아래 「뽑기」`, color: "#ff5fa2" });
+          }
+          switch (e.land) {
+            case "jack":
+              sfx("town-coin");
+              sfx(e.mult > 1 ? "legend" : "reward");
+              if (!e.big)
+                setShout({
+                  id: Math.random(),
+                  title: e.mult > 1 ? `잭팟 ×${e.mult}!` : "잭팟!",
+                  sub: `${tt.name} ${BUILD_NAME[b.bld[e.to]]} +${e.gold}G${e.mult > 1 ? " · 연속!" : ""}`,
+                  color: "#ffd23f",
+                });
+              break;
+            case "seized":
+              sfx("deny");
+              toast(<>{tt.name} — MOA 에게 빼앗긴 칸이라 잭팟 없음</>, "bad");
+              break;
+            case "empty":
+              toast(<>{tt.name} · 빈 땅 — 내 건물이 있었으면 잭팟!</>);
+              break;
+            case "start":
+              sfx("town-coin");
+              toast(<>출발 포털에 딱! 월급 한 번 더 <b className="text-[var(--gold)]">+{e.gold}G</b></>, "gold");
+              break;
+            case "jail":
+              sfx("upgrade");
+              toast(<>도트 수리소 — 무료 소환 <b className="text-[var(--gold)]">+{TOWN.repairFree}</b></>, "gold");
+              break;
+            case "fest":
+              sfx("town-fest");
+              toast(<>축제 무대 — <b className="text-[var(--gold)]">+{e.gold}G</b></>, "gold");
+              break;
+            case "warp":
+              sfx("town-warp");
+              toast(<>워프 게이트 — 한 번 더 굴려요!</>, "gold");
+              break;
+          }
+          if (e.again && e.land !== "warp") toast(<>더블! 한 번 더 굴려요</>, "gold");
+          force();
+        }, arrive - now);
         break;
       }
       case "warp":
@@ -555,6 +619,7 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry, 
       // 한/영 상태와 상관없이 (한글 입력이면 key 가 ㅂ · Process 로 옴) — 물리 키(code)로 읽음
       const k = keyOf(e);
       if (k === "q") run({ t: "summon" });
+      else if (k === "d" && b.stage === "town") rollNow();
       else if (k === "w" && selTile >= 0) run({ t: "build", p: selTile });
       else if (k === "w" && sel >= 0) run({ t: "merge", c: sel });
       else if (k === "e" && sel >= 0) sellSel();
@@ -973,6 +1038,7 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry, 
           ))}
         </div>
         {shout && <Shout key={shout.id} {...shout} onDone={() => setShout(null)} />}
+        {dice && <DiceShow key={dice.id} {...dice} onDone={() => setDice(null)} />}
         {bossLine && (
           <BossIntro
             key={bossLine.id}
@@ -1068,6 +1134,7 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry, 
             )}
           </div>
         )}
+        {b.stage === "town" && <RollBtn b={b} busy={rolling} big onRoll={rollNow} />}
       </div>
 
       {/* ── 오른쪽: 조작 ── */}
@@ -1831,28 +1898,102 @@ function GhostPanel({ ctrl, ghost }: { ctrl: Controller; ghost: { data: DefenseG
   );
 }
 
-/** 해피 타운 위쪽 줄: 이번 웨이브 주사위 · 받은 통행료 */
-function TownChip({ b }: { b: Board }) {
-  const d = b.dice;
+/** 굴린 뒤 말이 출발하기까지 (주사위가 굴러가는 시간, ms) */
+const DICE_ROLL_MS = 700;
+/** 주사위 눈 → 3×3 칸 중 점 자리 */
+const PIPS: Record<number, number[]> = { 1: [4], 2: [2, 6], 3: [2, 4, 6], 4: [0, 2, 6, 8], 5: [0, 2, 4, 6, 8], 6: [0, 2, 3, 5, 6, 8] };
+/** 도트 주사위 한 알 — 각진 흰 몸통 · 아래/오른쪽 그늘 · 네모 점 (1 은 빨간 점) */
+export function PixelDie({ n, size = 44, glow }: { n: number; size?: number; glow?: string }) {
+  const u = Math.max(2, Math.round(size / 11));
   return (
-    <div
-      className="px-inset flex h-full shrink-0 items-center gap-2 px-2 text-[12px] whitespace-nowrap"
-      title={`${TOWN_NAME} — 길 칸을 눌러 건물을 지어요. 그 칸에서 쓰러진 적이 통행료를 내요.\n이번 웨이브 통행료 ${b.tollW} · 지난 웨이브 ${b.tollLast} · 이번 판 합계 ${b.toll}${d ? `\n주사위 ${d.roll} — ${DICE_TEXT[d.kind].name}: ${DICE_TEXT[d.kind].desc}` : ""}`}
+    <span
+      className="relative inline-grid shrink-0 grid-cols-3 grid-rows-3 bg-[#fff6e0]"
+      style={{
+        width: size,
+        height: size,
+        padding: u * 1.5,
+        boxShadow: `inset ${-u}px ${-u}px 0 #d8c08a, inset ${u}px ${u}px 0 #ffffff, 0 0 0 ${u}px #1a0b22, ${u}px ${u * 1.5}px 0 ${u}px rgba(0,0,0,0.45)${glow ? `, 0 0 ${u * 5}px ${glow}` : ""}`,
+      }}
     >
-      {d && (
-        <span className="flex items-center gap-1 font-bold text-[#ffd23f]">
-          <span className="flex h-[18px] w-[18px] items-center justify-center bg-[#fff6d8] text-[12px] text-[#1a1000] shadow-[0_0_0_2px_#0a0816]">{d.roll}</span>
-          {DICE_TEXT[d.kind].name}
+      {Array.from({ length: 9 }, (_, i) => (
+        <span key={i} className="flex items-center justify-center">
+          {PIPS[n]?.includes(i) && <i className="block" style={{ width: u * 2, height: u * 2, background: n === 1 ? "#e8264b" : "#1a0b22" }} />}
         </span>
+      ))}
+    </span>
+  );
+}
+
+/** 굴림 연출 (필드 가운데): 주사위 둘이 통통 튀며 굴러가다(눈이 막 바뀜) 멈춤 → 합 · 더블 */
+function DiceShow({ d1, d2, start, done, again, onDone }: { d1: number; d2: number; start: number; done: number; again: boolean; onDone(): void }) {
+  const [, tick] = useReducer((x: number) => x + 1, 0);
+  useEffect(() => {
+    const iv = setInterval(tick, 70);
+    const to = setTimeout(onDone, Math.max(0, done - performance.now()));
+    return () => (clearInterval(iv), clearTimeout(to));
+  }, [done, onDone]);
+  const t = performance.now() - start;
+  const rolling = t < DICE_ROLL_MS;
+  // 굴러가는 동안 눈은 화면에서만 아무거나 (결과는 이미 시뮬이 정함)
+  const face = (k: number, real: number) => (rolling ? ((Math.floor(t / 70) * (k ? 5 : 3) + k * 2 + real) % 6) + 1 : real);
+  const dbl = d1 === d2;
+  const fade = done - performance.now() < 250;
+  return (
+    <div className={`pointer-events-none absolute inset-x-0 top-[13%] z-30 flex flex-col items-center gap-2 transition-opacity duration-200 ${fade ? "opacity-0" : ""}`}>
+      <div className="flex gap-5">
+        {[d1, d2].map((n, k) => (
+          <span key={k} className={rolling ? "dfn-dice-tumble" : "dfn-dice-land"} style={{ animationDelay: `${k * 60}ms` }}>
+            <PixelDie n={face(k, n)} size={58} glow={!rolling && dbl ? "#ffd23f" : undefined} />
+          </span>
+        ))}
+      </div>
+      {!rolling && (
+        <p className={`${TITLE} px-shadow dfn-pop text-[22px] text-white`}>
+          {d1 + d2}칸!{dbl && <span className="ml-2 text-[#ffd23f]">더블</span>}
+          {again && !dbl && <span className="ml-2 text-[#9be7ff]">한 번 더</span>}
+        </p>
       )}
-      <span className="flex items-center gap-1 text-[var(--gold)]">
-        <Icon n="coin" size={12} /> 통행료 <b>+{b.tollW}</b>
-      </span>
     </div>
   );
 }
 
-/** 해피 타운: 고른 길 칸 — 이름 · 건물 · 통행료 · 짓기 (W) */
+/** 해피 타운 위쪽 줄: 굴리기 버튼 (모아 둔 수 · D) */
+function RollBtn({ b, busy, big, onRoll }: { b: Board; busy: boolean; big?: boolean; onRoll(): void }) {
+  const why = rollBlock(b);
+  const n = b.rolls;
+  return (
+    <Btn
+      tone={n > 0 ? "gold" : "ghost"}
+      silent
+      disabled={!!why || busy}
+      onClick={onRoll}
+      hot="D"
+      className={`relative inline-flex items-center justify-center ${big ? "h-[52px] w-[160px] pr-3 text-[15px] font-bold" : "h-full px-2 text-[13px]"} shrink-0 gap-2 ${n > 0 && !busy ? "dfn-pulse" : ""}`}
+      title={why ?? `주사위 굴리기 (D) — 내 말이 길을 돌다가 내 건물 칸에 서면 잭팟! 웨이브마다 하나 생기고 ${TOWN.rollMax}개까지 모아 둬요`}
+    >
+      <PixelDie n={busy ? 3 : 5} size={big ? 26 : 20} />
+      <span className={n > 0 ? "text-[#1a1000]" : ""}>굴리기</span>
+      <b className={n > 0 ? "text-[#1a1000]" : "text-[var(--mute)]"}>×{n}</b>
+    </Btn>
+  );
+}
+
+/** 해피 타운 위쪽 줄: 이번 판 굴리기 수입 · 연속 잭팟 */
+function TownChip({ b }: { b: Board }) {
+  return (
+    <div
+      className="px-inset flex h-full shrink-0 items-center gap-2 px-2 text-[12px] whitespace-nowrap"
+      title={`${TOWN_NAME} — 길 칸을 눌러 건물을 지어요. 굴려서 내 말이 내 건물 칸에 서면 잭팟!\n이번 판 굴리기 수입 ${b.toll}G · 잭팟 ${b.jacks}번 · 돈 바퀴 ${b.laps}`}
+    >
+      <span className="flex items-center gap-1 text-[var(--gold)]">
+        <Icon n="coin" size={12} /> <b>+{b.toll}</b>
+      </span>
+      {b.combo > 0 && <b className="dfn-blink text-[#ff9ec7]">연속 ×{comboMult(b.combo)}</b>}
+    </div>
+  );
+}
+
+/** 해피 타운: 고른 길 칸 — 이름 · 건물 · 잭팟 · 짓기 (W) */
 function TilePanel({ b, t, run }: { b: Board; t: number; run: (c: Cmd) => boolean }) {
   const tt = TOWN_TILES[t];
   const ci = tileCell(t);
@@ -1861,17 +2002,15 @@ function TilePanel({ b, t, run }: { b: Board; t: number; run: (c: Cmd) => boolea
       <div className="min-w-0 flex-1 leading-tight">
         <b className="text-[14px]">{tt.name}</b>
         <p className="mt-1 text-[12px] text-[var(--mute)]">
-          {t === 0 ? "적이 나오는 출발 포털이에요." : "모서리 특수 칸 — 건물은 못 지어요."} 유닛 바로 바깥 길 칸을 눌러 건물을 지어요.
+          모서리 특수 칸 — {tt.sp ? CORNER_TEXT[tt.sp].desc : ""}. 건물은 나머지 동네 칸에 지어요.
         </p>
       </div>
     );
   const lv = b.bld[t];
-  const open = tileOpen(b, t);
   const seized = b.seized.includes(t);
   const why = buildBlock(b, t);
   const cost = buildCost(b, t);
-  const nextToll = lv < 3 ? TOWN.toll[lv + 1] : 0;
-  const owner = b.cells[ci].def ? UNIT[b.cells[ci].def!] : null;
+  const nextJack = lv < 3 ? Math.floor(TOWN.jack[lv + 1] * (1 + b.wave * TOWN.jackWave) * (1 + b.mods.jackAdd)) : 0;
   return (
     <>
       <span className="flex h-[38px] w-[38px] shrink-0 items-center justify-center bg-[#0a0816] text-[12px] font-bold" style={{ boxShadow: `inset 0 0 0 2px ${tt.color}`, color: tt.color }}>
@@ -1883,22 +2022,21 @@ function TilePanel({ b, t, run }: { b: Board; t: number; run: (c: Cmd) => boolea
             {tt.name}
           </b>
           <span className="text-[12px] text-[var(--text)]">{BUILD_NAME[lv]}</span>
-          {b.dice?.gold === t && <span className="bg-[#ffd23f] px-1 text-[11px] font-bold text-[#1a1000]">황금 칸</span>}
-          {b.dice?.mud === t && <span className="bg-[#a07a4a] px-1 text-[11px] font-bold text-[#1a1000]">늪</span>}
-          {seized ? (
-            <span className="text-[12px] text-[#ffd36b]">MOA 에게 빼앗김</span>
-          ) : lv > 0 && !open ? (
-            <span className="text-[12px] text-[#ff9aa8]">휴업 — 안쪽 칸에 유닛을 놓으면 영업</span>
-          ) : null}
+          {seized && <span className="text-[12px] text-[#ffd36b]">MOA 에게 빼앗김 (MOA 를 잡으면 돌아와요)</span>}
+          {b.pos === t && <span className="bg-[#ff5fa2] px-1 text-[11px] font-bold text-white">내 말</span>}
         </div>
         <p className="mt-1 truncate text-[12px] text-[var(--mute)]">
-          {lv > 0 ? `쓰러진 적마다 통행료 +${tollOf(b, t)}G${TOWN.slow[lv] ? ` · 지나는 적 ${Math.round(TOWN.slow[lv] * 100)}% 느리게` : ""}` : "아직 빈 땅"} · 지난 웨이브 이 칸에서 쓰러진 적{" "}
-          <b className="text-[var(--text)]">{b.tkLast[t]}</b>
-          {owner ? ` · 주인 ${owner.name}` : " · 안쪽 칸이 비었어요"}
+          {lv > 0 ? (
+            <>
+              내 말이 서면 잭팟 <b className="text-[var(--gold)]">+{jackOf(b, t)}G</b> (연속이면 ×{TOWN.combo[1]} · ×{TOWN.combo[2]})
+            </>
+          ) : (
+            "빈 땅 — 지어 두면 내 말이 설 때마다 잭팟"
+          )}
         </p>
-        {lv < 3 && open && (
+        {lv < 3 && (
           <p className="mt-0.5 truncate text-[11px] text-[#9be7a8]">
-            {BUILD_NAME[lv + 1]}이면 처치마다 +{nextToll}G{b.tkLast[t] ? ` — 지난 웨이브 그대로면 웨이브당 약 +${b.tkLast[t] * nextToll}G` : " — 센 유닛 앞일수록 많이 쓰러져요"}
+            {BUILD_NAME[lv + 1]}이면 잭팟 +{nextJack}G{lv === 0 ? ` · 새 땅 값은 가진 건물(${townOwned(b)}칸)이 많을수록 올라요` : " · 웨이브가 높을수록 잭팟도 커져요"}
           </p>
         )}
       </div>
@@ -1910,7 +2048,7 @@ function TilePanel({ b, t, run }: { b: Board; t: number; run: (c: Cmd) => boolea
           className="h-[36px] w-[150px] text-[12px] font-bold"
           hot="W"
           silent
-          title={why ?? `${BUILD_NAME[lv + 1]} — 통행료 처치마다 +${nextToll}G${TOWN.slow[lv + 1] ? ` · 적 ${Math.round(TOWN.slow[lv + 1] * 100)}% 느리게` : ""}`}
+          title={why ?? `${BUILD_NAME[lv + 1]} — 내 말이 서면 잭팟 +${nextJack}G`}
         >
           {BUILD_NAME[lv + 1]} {lv ? "올리기" : "짓기"} −{cost}G
         </Btn>

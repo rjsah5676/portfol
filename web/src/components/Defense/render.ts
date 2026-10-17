@@ -29,12 +29,10 @@ import {
   FIELD_W,
   PERIM,
   STACK,
-  buildBlock,
   cellX,
   cellY,
   pathPos,
   tileCell,
-  tileOpen,
   tileXY,
   type Board,
   type Enemy,
@@ -83,6 +81,10 @@ export interface View {
   shotAt: number[];
   face: number[];
   now: number;
+  /** 해피 타운 내 말 이동 연출: from 에서 path 칸들을 t0(ms)부터 한 칸씩 콩콩 (없으면 b.pos 에 서 있음) */
+  tok: { from: number; path: number[]; t0: number } | null;
+  /** 해피 타운: 말이 선 칸 번쩍 (잭팟이면 금색) */
+  flash: { t: number; until: number; gold: boolean } | null;
 }
 export const newView = (): View => ({
   sel: -1,
@@ -94,7 +96,11 @@ export const newView = (): View => ({
   shotAt: new Array(CELLS).fill(0),
   face: new Array(CELLS).fill(1),
   now: 0,
+  tok: null,
+  flash: null,
 });
+/** 말이 한 칸 가는 시간 (ms) */
+export const HOP_MS = 150;
 
 const FX_LIFE: Record<Fx["k"], number> = {
   shot: 260,
@@ -685,6 +691,7 @@ export function draw(ctx: CanvasRenderingContext2D, b: Board, v: View, opt: { ra
   for (const e of b.enemies) list.push({ y: e.y * CELL + 10, fn: () => drawEnemy(ctx, e, now) });
   list.sort((a, c) => a.y - c.y);
   for (const d of list) d.fn();
+  if (b.stage === "town") drawToken(ctx, b, v, now);
   // 보관함 유닛 (작게, 공격 안 함)
   for (let j = 0; j < BENCH; j++) {
     const i = CELLS + j;
@@ -865,21 +872,11 @@ function drawTown(ctx: CanvasRenderingContext2D, b: Board, v: View, now: number,
       }
       continue;
     }
-    // 주사위: 황금 칸 · 늪
-    if (b.dice?.gold === t) {
-      ctx.fillStyle = blink ? "rgba(255,210,63,0.42)" : "rgba(255,210,63,0.24)";
+    // 말이 막 선 칸: 번쩍 (잭팟이면 금색)
+    if (v.flash && v.flash.t === t && now < v.flash.until) {
+      const k = (v.flash.until - now) / 900;
+      ctx.fillStyle = v.flash.gold ? `rgba(255,210,63,${0.25 + 0.45 * k * blink})` : `rgba(255,255,255,${0.12 + 0.2 * k})`;
       ctx.fillRect(x + 2, y + 2, CELL - 4, CELL - 4);
-      ctx.fillStyle = "#ffd23f";
-      ctx.fillRect(x + 2, y + 2, CELL - 4, 3);
-      ctx.fillRect(x + 2, y + CELL - 5, CELL - 4, 3);
-      ctx.fillRect(x + 2, y + 2, 3, CELL - 4);
-      ctx.fillRect(x + CELL - 5, y + 2, 3, CELL - 4);
-    }
-    if (b.dice?.mud === t) {
-      ctx.fillStyle = "rgba(92,62,30,0.6)";
-      ctx.fillRect(x + 4, y + 4, CELL - 8, CELL - 8);
-      ctx.fillStyle = "#a07a4a";
-      for (let k = 0; k < 7; k++) ctx.fillRect(P(x + 10 + ((k * 23 + Math.floor(now / 300)) % (CELL - 20))), P(y + 12 + ((k * 17) % (CELL - 24))), 4, 2);
     }
     if (v.hoverTile === t && v.selTile !== t) {
       ctx.fillStyle = "rgba(255,255,255,0.08)";
@@ -890,8 +887,8 @@ function drawTown(ctx: CanvasRenderingContext2D, b: Board, v: View, now: number,
     if (lv > 0) {
       const src = lv >= 3 ? (tt.lm ? TOWN_ART.lm(tt.lm) : TOWN_ART.bld(3)) : TOWN_ART.bld(lv);
       const im = img(src) ?? img(TOWN_ART.bld(Math.min(3, lv)));
-      const open = tileOpen(b, t);
       const seized = b.seized.includes(t);
+      const open = !seized;
       if (im) {
         const H = CELL * (lv === 1 ? 0.56 : lv === 2 ? 0.7 : 0.86);
         const k = Math.min(H / im.naturalHeight, (CELL - 6) / im.naturalWidth);
@@ -907,7 +904,7 @@ function drawTown(ctx: CanvasRenderingContext2D, b: Board, v: View, now: number,
         ctx.fillStyle = blink ? "rgba(255,211,107,0.35)" : "rgba(80,50,10,0.45)";
         ctx.fillRect(x + 2, y + 2, CELL - 4, CELL - 4);
         pxText(ctx, "MOA", x + CELL / 2, y + CELL / 2, 13, "#ffd36b");
-      } else if (!open) pxText(ctx, "휴업", x + CELL / 2, y + CELL - 10, 11, "#bfb3ff", 0.9);
+      }
       // 단계 점 (1~3)
       for (let k = 0; k < lv; k++) {
         ctx.fillStyle = "#07060f";
@@ -916,13 +913,55 @@ function drawTown(ctx: CanvasRenderingContext2D, b: Board, v: View, now: number,
         ctx.fillRect(x + 6 + k * 8, y + 6, 4, 4);
       }
     }
-    // 지금 지을 수 있는 칸: 모서리에 깜빡이는 초록 점
-    if (!buildBlock(b, t) && blink) {
-      ctx.fillStyle = "#07060f";
-      ctx.fillRect(x + CELL - 13, y + 5, 9, 9);
-      ctx.fillStyle = "#6dff8f";
-      ctx.fillRect(x + CELL - 12, y + 6, 7, 7);
-    }
+  }
+}
+
+/** 해피 타운 내 말 — 지금 칸 (이동 중이면 칸 사이 콩콩) */
+function tokenXY(b: Board, v: View, now: number): [number, number, number] {
+  const c = (t: number): [number, number] => {
+    const [x, y] = tileOrigin(t);
+    return [x + CELL / 2, y + CELL - 12];
+  };
+  const m = v.tok;
+  if (!m || !m.path.length) return [...c(b.pos), 0];
+  if (now < m.t0) return [...c(m.from), 0];
+  const f = (now - m.t0) / HOP_MS;
+  if (f >= m.path.length) return [...c(m.path[m.path.length - 1]), 0];
+  const i = Math.floor(f),
+    k = f - i;
+  const [ax, ay] = c(i === 0 ? m.from : m.path[i - 1]);
+  const [bx, by] = c(m.path[i]);
+  return [ax + (bx - ax) * k, ay + (by - ay) * k, Math.sin(Math.PI * k) * 16];
+}
+function drawToken(ctx: CanvasRenderingContext2D, b: Board, v: View, now: number) {
+  const [cx, cy, up] = tokenXY(b, v, now);
+  const x = P(cx),
+    y = P(cy - up);
+  // 그림자
+  ctx.fillStyle = "rgba(0,0,0,0.38)";
+  const sw = up > 4 ? 12 : 16;
+  ctx.fillRect(P(cx) - sw, P(cy) + 2, sw * 2, 4);
+  // 도트 말 (분홍 · 금 테) — 받침 · 몸통 · 머리
+  const ink = "#1a0b22";
+  const body = "#ff5fa2",
+    hi = "#ffb3d6",
+    gold = "#ffd23f";
+  const R = (dx: number, dy: number, w: number, h: number, c: string) => {
+    ctx.fillStyle = c;
+    ctx.fillRect(x + dx, y + dy, w, h);
+  };
+  R(-14, -6, 28, 8, ink);
+  R(-12, -4, 24, 4, gold);
+  R(-10, -22, 20, 18, ink);
+  R(-8, -20, 16, 16, body);
+  R(-8, -20, 4, 16, hi);
+  R(-10, -36, 20, 16, ink);
+  R(-8, -34, 16, 12, body);
+  R(-6, -34, 6, 4, hi);
+  // 머리 위 금빛 별 (깜빡)
+  if (Math.floor(now / 300) % 2) {
+    R(-2, -44, 4, 4, gold);
+    R(-4, -42, 8, 2, gold);
   }
 }
 

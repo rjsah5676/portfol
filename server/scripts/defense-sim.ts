@@ -108,6 +108,8 @@ interface Run {
   dps: Record<number, number>;
   /** 보물방 깎은 비율 (열렸으면) · 처치 */
   tre: { ratio: number; killed: boolean } | null;
+  /** 해피 타운: 굴리기 수입 · 잭팟 횟수 · 건물 수 · 단계 합 · 판 전체 골드 수입(대략) */
+  town: { toll: number; jacks: number; owned: number; lvs: number; goldIn: number } | null;
 }
 
 function play(cfg: BotCfg, seed: number): Run {
@@ -122,9 +124,13 @@ function play(cfg: BotCfg, seed: number): Run {
     lastDealt = 0,
     lastTick = 0;
   const t0 = performance.now();
+  let goldIn = 0,
+    pg = b.gold;
   while (!g.over && g.tick < 200_000) {
     for (const c of botTurn(g, 0, cfg)) log.push([g.tick, 0, c]);
+    pg = b.gold;
     step(g);
+    if (b.gold > pg) goldIn += b.gold - pg;
     if (b.wave !== lastWave) {
       const total = Object.values(b.dealt).reduce((a, x) => a + x, 0);
       if (lastWave > 0) dps[lastWave] = (total - lastDealt) / ((g.tick - lastTick) / TPS);
@@ -146,7 +152,8 @@ function play(cfg: BotCfg, seed: number): Run {
       throw new Error(`결정론 깨짐: ${cfg.name} seed ${seed} — ${JSON.stringify(r)} vs ${JSON.stringify(again)}`);
   }
   const tre = b.treasure ? { ratio: b.treasure.dmg / b.treasure.max, killed: b.treasure.killed } : null;
-  return { bot: cfg.name, seed, win: r.win, wave: r.wave, reason: r.reason, min: r.tick / TPS / 60, kills: r.kills, ms, dealt: b.dealt, snap, dps, tre };
+  const town = b.stage === "town" ? { toll: b.toll, jacks: b.jacks, owned: b.bld.filter((x) => x > 0).length, lvs: b.bld.reduce((a, x) => a + x, 0), goldIn } : null;
+  return { bot: cfg.name, seed, win: r.win, wave: r.wave, reason: r.reason, min: r.tick / TPS / 60, kills: r.kills, ms, dealt: b.dealt, snap, dps, tre, town };
 }
 
 const bots = only ? [botByName(only)] : BOTS;
@@ -172,6 +179,13 @@ for (const cfg of bots) {
 }
 
 // 어디서 죽나 (웨이브 구간별)
+{
+  const tr = runs.filter((r) => r.town).map((r) => r.town!);
+  if (tr.length)
+    console.log(
+      `\n해피 타운: 굴리기 수입 평균 ${avg(tr.map((x) => x.toll)).toFixed(0)}G (판 골드 수입의 ${((avg(tr.map((x) => x.toll)) / avg(tr.map((x) => x.goldIn))) * 100).toFixed(0)}%) · 잭팟 ${avg(tr.map((x) => x.jacks)).toFixed(1)}번 · 건물 ${avg(tr.map((x) => x.owned)).toFixed(1)}칸 · 단계 합 ${avg(tr.map((x) => x.lvs)).toFixed(1)}`
+    );
+}
 console.log("\n죽은 웨이브 분포 (전체)");
 const buckets: Record<string, number> = {};
 for (const r of runs.filter((x) => !x.win)) {

@@ -5,7 +5,8 @@ import NickForm from "@/components/Account/NickForm";
 import { useAuth } from "@/lib/AuthContext";
 import { BALANCE_VER, LAST_WAVE } from "@/lib/defense/balance";
 import { MAIN_BOSSES, TOWN_BOSSES, bossOfWave, phaseText } from "@/lib/defense/enemies";
-import { BUILD_NAME, DICE_TEXT, TOWN, TOWN_EN, TOWN_NAME } from "@/lib/defense/town";
+import { BUILD_NAME, CORNER_TEXT, TOWN, TOWN_EN, TOWN_NAME } from "@/lib/defense/town";
+import { PixelDie } from "./GameView";
 import { UNIT } from "@/lib/defense/units";
 import {
   beginRoom,
@@ -545,7 +546,7 @@ function Menu(p: {
             tone={town ? "gold" : "ghost"}
             className={`relative h-[26px] flex-1 px-2 text-[12px] font-bold ${!town && townReady ? "dfn-pulse" : ""}`}
             onClick={() => p.onStage("town")}
-            title={townReady ? `${TOWN_NAME} — 길에 건물을 지어 통행료를 받는 확장 스테이지` : `${TOWN_NAME} — 메인 오염 ${TOWN_FROM}단계가 열리면 정식 오픈 (지금은 연습 판으로 체험)`}
+            title={townReady ? `${TOWN_NAME} — 주사위를 굴려 내 땅에 서면 잭팟이 터지는 확장 스테이지` : `${TOWN_NAME} — 메인 오염 ${TOWN_FROM}단계가 열리면 정식 오픈 (지금은 연습 판으로 체험)`}
           >
             {TOWN_NAME}
             <span className={`absolute -top-2 -right-1 px-1 text-[10px] leading-[14px] font-bold shadow-[0_0_0_2px_#0a0816] ${townReady ? "bg-[#ff4d6d] text-white" : "bg-[#3d3468] text-[#cfc6ff]"}`}>
@@ -1418,199 +1419,145 @@ function MiniTile({ color, lv = 0, dot, mark, label }: { color: string; lv?: num
     </span>
   );
 }
-/** 소개 그림용 — 유닛 칸 (비었으면 어두운 칸) */
-function MiniCell({ unit }: { unit?: string }) {
-  return (
-    <span className="flex h-[46px] w-[52px] items-center justify-center bg-[#120f22] shadow-[inset_0_0_0_2px_#3a3260]">
-      {unit && <UnitIcon id={unit} size={36} />}
-    </span>
-  );
-}
-/** 위쪽 삼각형 (화살표 대신) */
-const UpTri = ({ c = "#5dff8a" }: { c?: string }) => (
-  <span className="inline-block h-0 w-0" style={{ borderLeft: "7px solid transparent", borderRight: "7px solid transparent", borderBottom: `9px solid ${c}` }} />
-);
-const DiceFace = ({ n, c = "#fff6d8" }: { n: number; c?: string }) => (
-  <span className="flex h-[30px] w-[30px] shrink-0 items-center justify-center text-[16px] font-bold text-[#1a1000] shadow-[0_0_0_3px_#0a0816]" style={{ background: c }}>
-    {n}
+/** 소개 그림용 — 분홍 도트 말 */
+const MiniPawn = () => (
+  <span className="relative block h-[30px] w-[20px]">
+    <i className="absolute top-0 left-[4px] block h-[11px] w-[12px] bg-[#ff5fa2] shadow-[0_0_0_2px_#1a0b22]" />
+    <i className="absolute top-[13px] left-[3px] block h-[11px] w-[14px] bg-[#ff5fa2] shadow-[0_0_0_2px_#1a0b22]" />
+    <i className="absolute bottom-0 left-0 block h-[5px] w-[20px] bg-[#ffd23f] shadow-[0_0_0_2px_#1a0b22]" />
   </span>
 );
 
 function townPages(member: boolean, open: number): { tab: string; title: string; art: ReactNode; body: ReactNode }[] {
   const W = (x: ReactNode) => <b className="text-white">{x}</b>;
   const Gd = (x: ReactNode) => <b className="text-[var(--gold)]">{x}</b>;
-  const unit = UNIT_ART.k_commander ? "k_commander" : Object.keys(UNIT_ART)[0];
   const C = ["#ff9db5", "#ff9db5", "#ff9db5", "#8ee08a", "#8ee08a"];
-  // 건물 단계별: 누적 비용 · 통행료 · 본전 처치 수
-  const rows = [1, 2, 3].map((lv) => {
-    const spent = TOWN.build.slice(0, lv).reduce((s, x) => s + x, 0);
-    return { lv, cost: TOWN.build[lv - 1], toll: TOWN.toll[lv], slow: TOWN.slow[lv], even: Math.ceil(spent / TOWN.toll[lv]) };
-  });
+  // 단계별 잭팟 (1웨이브 · 30웨이브) · 올리기 값
+  const jk = (lv: number, w: number) => Math.floor(TOWN.jack[lv] * (1 + w * TOWN.jackWave));
+  const newCost = [0, 1, 2, 3, 4].map((k) => TOWN.newBase + TOWN.newPer * k);
   const tips: Record<string, string> = {
     "ur-dice": "체력은 낮지만 몇 칸씩 건너뛰어요 — 길 곳곳에 화력을 나눠 두면 안전",
-    "ur-moa": "가장 높은 건물부터 빼앗고 그만큼 보호막 — 잡으면 빼앗긴 칸이 전부 돌아와요",
+    "ur-moa": "가장 높은 건물부터 빼앗아 그 칸 잭팟을 막고 보호막 — 잡으면 빼앗긴 칸이 전부 돌아와요",
     "ur-forte": "해골 부하를 부르고, 체력 40% 밑에서 한 번 30% 회복 + 다른 적 질주 — 마지막까지 화력 아끼지 말기",
   };
   return [
     {
       tab: "한눈에",
-      title: "글리치 시티 + 「건물 · 통행료」",
+      title: "글리치 시티 + 「주사위 · 잭팟」",
       art: (
-        <div className="flex flex-col items-center gap-3">
+        <div className="flex flex-col items-center gap-4">
           <span className="flex gap-1">
             {[0, 1, 2, 3, 4].map((i) => (
-              <MiniTile key={i} color={C[i]} lv={i === 1 ? 1 : i === 2 ? 3 : 0} mark={i === 2 ? <span className="mb-6 text-[13px] font-bold text-[var(--gold)] drop-shadow-[0_1px_0_#000]">+8G</span> : undefined} />
+              <MiniTile
+                key={i}
+                color={C[i]}
+                lv={i === 1 ? 1 : i === 3 ? 3 : 0}
+                mark={
+                  i === 3 ? (
+                    <span className="flex flex-col items-center">
+                      <b className="mb-1 text-[13px] text-[var(--gold)] drop-shadow-[0_1px_0_#000]">잭팟!</b>
+                      <MiniPawn />
+                    </span>
+                  ) : undefined
+                }
+              />
             ))}
           </span>
-          <span className="flex gap-1">
-            {[0, 1, 2, 3, 4].map((i) => (
-              <MiniCell key={i} unit={i === 1 || i === 2 ? unit : undefined} />
-            ))}
+          <span className="flex gap-3">
+            <PixelDie n={3} size={40} />
+            <PixelDie n={4} size={40} />
           </span>
-          <span className="text-[12px] text-[var(--mute)]">위: 적이 도는 길(동네 칸) · 아래: 유닛 칸</span>
+          <span className="text-[12px] text-[var(--mute)]">굴리면 분홍 말이 길을 돌아요 — 내 건물 칸에 서면 잭팟</span>
         </div>
       ),
       body: (
         <>
           <p>다이스 타운의 동네가 글리치에 먹혔어요. {W("소환 · 합성 · 60웨이브 버티기")}는 글리치 시티와 똑같아요.</p>
-          <p>다른 점은 딱 셋:</p>
-          <p>
-            {Gd("① 건물 · 통행료")} — 적이 도는 길 칸에 건물을 지으면, 그 칸에서 적이 쓰러질 때마다 골드가 들어와요.
-          </p>
-          <p>{Gd("② 웨이브 주사위")} — 웨이브마다 길 칸 하나에 좋은 일이 생겨요.</p>
-          <p>{Gd("③ UR 보스")} — 10 · 30 · 50웨이브는 마블의 DICE · MOA · FORTE 가 나와요.</p>
-          <p className="text-[var(--mute)]">한 줄 요약: {W("센 유닛 바로 앞 길에 건물을 지어 돈을 굴리고, 그 돈으로 더 세지기")}.</p>
+          <p>다른 점은 셋:</p>
+          <p>{Gd("① 주사위 굴리기")} — 아래쪽 금색 버튼(D). 웨이브마다 하나씩 생겨요.</p>
+          <p>{Gd("② 건물 = 잭팟 칸")} — 길에 건물을 지어 두면, 내 말이 그 칸에 설 때 골드가 터져요.</p>
+          <p>{Gd("③ UR 보스")} — 10 · 30 · 50웨이브는 마블의 DICE · MOA · FORTE.</p>
+          <p className="text-[var(--mute)]">한 줄 요약: {W("땅을 사 두고, 굴려서, 내 땅에 서면 잭팟 → 그 돈으로 더 세지기")}.</p>
         </>
       ),
     },
     {
-      tab: "건물 짓기",
-      title: "어디에 · 어떻게 짓나요?",
+      tab: "굴리기",
+      title: "주사위 굴리기",
       art: (
-        <div className="flex flex-col items-center gap-1.5">
-          <span className="flex gap-1">
-            <MiniTile color={C[0]} />
-            <MiniTile color={C[1]} dot />
-            <MiniTile color={C[2]} mark={<span className="text-[18px] font-bold text-[#ff6b7f]">X</span>} />
+        <div className="flex flex-col items-center gap-3">
+          <span className="flex items-center gap-3">
+            <PixelDie n={6} size={44} glow="#ffd23f" />
+            <PixelDie n={6} size={44} glow="#ffd23f" />
           </span>
-          <span className="flex gap-1">
-            <span className="w-[52px]" />
-            <span className="flex w-[52px] justify-center">
-              <UpTri />
-            </span>
-            <span className="flex w-[52px] justify-center">
-              <UpTri c="#4a4070" />
-            </span>
-          </span>
-          <span className="flex gap-1">
-            <MiniCell />
-            <MiniCell unit={unit} />
-            <MiniCell />
-          </span>
-          <span className="mt-1 text-center text-[12px] leading-snug text-[var(--mute)]">
-            유닛이 있는 칸 → 바로 바깥 길 칸에만 지어요
-            <br />
-            <span className="text-[#5dff8a]">초록 점</span> = 지금 지을 수 있음 · <span className="text-[#ff6b7f]">X</span> = 안쪽이 비어서 못 지음
-          </span>
+          <b className="text-[14px] text-[#ffd23f]">더블 → 한 번 더 · 6·6 → 대박</b>
+          <div className="mt-1 grid w-full grid-cols-2 gap-1.5 text-[11px] leading-tight">
+            {(["start", "jail", "fest", "warp"] as const).map((k) => (
+              <span key={k} className="px-inset flex items-center gap-1.5 p-1.5">
+                <img src={TOWN_ART.sp(k)} alt="" className="h-[26px] w-[26px] shrink-0 object-contain" />
+                <span className="min-w-0">
+                  <b className="block text-white">{CORNER_TEXT[k].name}</b>
+                  <span className="text-[var(--mute)]">{CORNER_TEXT[k].desc}</span>
+                </span>
+              </span>
+            ))}
+          </div>
         </div>
       ),
       body: (
         <>
           <p>
-            <b className="text-[#5dff8a]">1.</b> 유닛을 소환하면 칸에 놓여요. 그 칸 {W("바로 바깥(길 쪽) 길 칸")}이 그 유닛의 땅이에요.
+            아래쪽 금색 {Gd("「굴리기」")} (단축키 {W("D")}) — 주사위 둘의 합만큼 분홍 말이 길을 따라 콩콩 가요.
           </p>
           <p>
-            <b className="text-[#5dff8a]">2.</b> 그 {W("길 칸을 누르면")} 아래쪽에 칸 정보가 떠요 (이름 · 지난 웨이브에 거기서 쓰러진 적 수).
+            굴리기는 {W("웨이브마다 하나")} 생기고 {TOWN.rollMax}개까지 모아 둘 수 있어요. 처음엔 하나 들고 시작!
           </p>
           <p>
-            <b className="text-[#5dff8a]">3.</b> {Gd("짓기")} 버튼 (단축키 {W("W")}) — 오두막 −{TOWN.build[0]}G. 한 번 더 누르면 2층집 −{TOWN.build[1]}G → 빌딩 −{TOWN.build[2]}G.
+            {Gd("더블")}이면 한 번 더 · {Gd("6 · 6")}이면 골라 뽑기권(20웨이브부터 레전드) · 출발 포털을 {W("지날 때마다 월급")}(바퀴가 쌓일수록 커져요).
           </p>
-          <p className="text-[var(--mute)]">안쪽 칸이 비어 있는 길 · 네 모서리 특수 칸(출발 포털 · 수리소 · 축제 무대 · 워프 게이트)에는 못 지어요.</p>
-          <p className="text-[var(--mute)]">유닛을 팔거나 옮겨서 안쪽 칸이 비면 건물은 그대로 남지만 {W("휴업")}(통행료 · 둔화 없음) — 다시 유닛을 놓으면 영업해요.</p>
+          <p className="text-[var(--mute)]">네 모서리 칸에 서면 특별한 일이 생겨요 (왼쪽).</p>
         </>
       ),
     },
     {
-      tab: "통행료",
-      title: "통행료로 돈 벌기",
+      tab: "건물 · 잭팟",
+      title: "어디에, 얼마나 지을까?",
       art: (
         <div className="flex w-full flex-col gap-1.5">
-          <div className="grid grid-cols-[60px_52px_96px_40px_1fr] items-center gap-x-2 gap-y-1.5 text-[12px]">
+          <div className="grid grid-cols-[60px_1fr_1fr_1fr] items-center gap-x-2 gap-y-1.5 text-[12px]">
             <span />
-            <b className="text-[var(--mute)]">비용</b>
-            <b className="text-[var(--mute)]">통행료</b>
-            <b className="text-[var(--mute)]">둔화</b>
-            <b className="text-[var(--mute)]">본전</b>
-            {rows.map((r) => (
-              <Fragment key={r.lv}>
+            <b className="text-[var(--mute)]">값</b>
+            <b className="text-[var(--mute)]">잭팟 1W</b>
+            <b className="text-[var(--mute)]">잭팟 30W</b>
+            {[1, 2, 3].map((lv) => (
+              <Fragment key={lv}>
                 <span className="flex flex-col items-center">
-                  <img src={TOWN_ART.bld(r.lv)} alt="" className="w-[30px] object-contain object-bottom" style={{ height: 16 + r.lv * 7 }} />
-                  <span className="text-[11px] text-white">{BUILD_NAME[r.lv]}</span>
+                  <img src={TOWN_ART.bld(lv)} alt="" className="w-[30px] object-contain object-bottom" style={{ height: 16 + lv * 7 }} />
+                  <span className="text-[11px] text-white">{BUILD_NAME[lv]}</span>
                 </span>
-                <span className="text-white">−{r.cost}G</span>
-                <b className="text-[var(--gold)]">처치당 +{r.toll}G</b>
-                <span className="text-white">{r.slow ? `${Math.round(r.slow * 100)}%` : "-"}</span>
-                <span className="text-[var(--mute)]">약 {r.even}마리</span>
+                <span className="text-white">{lv === 1 ? `−${TOWN.newBase}G~` : `+${TOWN.up[lv - 1]}G`}</span>
+                <b className="text-[var(--gold)]">+{jk(lv, 1)}G</b>
+                <b className="text-[var(--gold)]">+{jk(lv, 30)}G</b>
               </Fragment>
             ))}
           </div>
-          <p className="mt-1 text-[11px] leading-snug text-[var(--mute)]">본전 = 그 단계까지 쓴 골드를 되찾는 데 필요한 처치 수</p>
+          <p className="mt-1 text-[11px] leading-snug text-[var(--mute)]">
+            새 땅 값: {newCost.join(" → ")}G … (가진 건물이 늘수록 비싸짐)
+          </p>
         </div>
       ),
       body: (
         <>
           <p>
-            적이 {W("건물이 있는 칸에서 쓰러지면")} 그 건물의 통행료가 바로 골드로 들어와요. 다른 칸에서 쓰러진 적은 통행료가 없어요.
+            {W("아무 동네 칸")}이나 누르고 「짓기」(W). 유닛 위치와 상관없어요 — 내 말이 서는 곳이 중요해요.
           </p>
           <p>
-            그래서 {Gd("가장 센 유닛 바로 앞")}(적이 제일 많이 쓰러지는 칸)에 짓는 게 핵심이에요. 칸을 누르면 {W("「지난 웨이브 이 칸에서 쓰러진 적」")} 수가 나와요 — 그 숫자가 큰 칸부터!
-          </p>
-          <p>2층집부터는 그 칸을 지나는 적이 느려져서, 유닛이 때릴 시간도 늘어나요.</p>
-          <p className="text-[var(--mute)]">위쪽 줄 동네 칩에서 이번 웨이브 주사위와 지금까지 번 통행료를 볼 수 있어요.</p>
-        </>
-      ),
-    },
-    {
-      tab: "주사위",
-      title: "웨이브 주사위",
-      art: (
-        <div className="flex w-full flex-col gap-2.5">
-          {(
-            [
-              [[1, 2], "#ffd23f", DICE_TEXT.gold],
-              [[3, 4], "#a07a4a", DICE_TEXT.mud],
-              [[5], "#ff9ec7", DICE_TEXT.fest],
-              [[6], "#c79bff", DICE_TEXT.double],
-            ] as const
-          ).map(([ns, c, d]) => (
-            <div key={d.name} className="flex items-center gap-2">
-              <span className="flex w-[66px] shrink-0 gap-1.5">
-                {ns.map((n) => (
-                  <DiceFace key={n} n={n} />
-                ))}
-              </span>
-              <span className="min-w-0 leading-tight">
-                <b className="text-[13px]" style={{ color: c }}>
-                  {d.name}
-                </b>
-                <span className="block text-[11px] text-[var(--mute)]">{d.desc}</span>
-              </span>
-            </div>
-          ))}
-        </div>
-      ),
-      body: (
-        <>
-          <p>
-            2웨이브부터, {W("보스 웨이브가 아니면")} 웨이브가 시작할 때마다 주사위를 굴려요. 결과는 화면 가운데 알림 · 위쪽 줄 · 길 위 표시로 보여요.
+            고민은 하나: {Gd("여러 칸에 넓게")} 깔면 자주 맞고, {Gd("한두 칸을 빌딩으로")} 키우면 크게 맞아요. 새 땅은 가진 땅이 많을수록 비싸요.
           </p>
           <p>
-            {Gd("황금 칸")}은 길 칸 하나가 무작위로 골라져요. 거기에 건물이 있으면 통행료 ×{TOWN.gold}, 빈 땅이어도 처치마다 +{TOWN.goldBare}G.
+            내 땅에 {W("연속으로")} 서면 ×{TOWN.combo[1]} · ×{TOWN.combo[2]}. 잭팟은 웨이브가 높을수록 커져요.
           </p>
-          <p>
-            {W("늪")}은 그 칸 적이 크게 느려지고, {W("축제")}는 이번 웨이브 모든 처치 골드가 +{TOWN.fest}.
-          </p>
-          <p className="text-[var(--mute)]">황금 칸이 센 유닛 근처에 뜨면 큰 기회 — 유닛을 그 앞으로 옮기는 것도 방법이에요.</p>
+          <p className="text-[var(--mute)]">위쪽 줄 동네 칩에 이번 판 굴리기 수입 · 연속 배수가 보여요.</p>
         </>
       ),
     },

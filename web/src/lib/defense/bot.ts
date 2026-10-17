@@ -27,6 +27,7 @@ import {
 } from "./sim";
 import { FACTIONS, RECIPES, UNIT, poolOf, type Faction, type Grade } from "./units";
 import type { Loadout } from "./progress";
+import { TOWN } from "./town";
 
 /** 조합식 재료 (팔지 않고 남겨 둠) */
 const MATERIAL = new Set(RECIPES.filter((r) => !r.hidden).flatMap((r) => r.needs));
@@ -178,6 +179,11 @@ export function botMove(b: Board, cfg: BotCfg, skip: ReadonlySet<string> = new S
       return { t: "reroll", i: low };
     return { t: "cheat", i: best };
   }
+  // 해피 타운: 굴리기는 생기면 바로
+  if (b.stage === "town" && b.rolls > 0) {
+    const c = ok({ t: "roll" });
+    if (c) return c;
+  }
   // 보스 2페이즈 예고: 표시된 칸의 유닛을 빈 칸 · 약한 칸으로 피함 (사람이 끌어서 하는 것과 같은 swap)
   // 심연 변이 「봉인」: 봉인된 칸의 유닛도 같은 식으로 빼냄
   if ((b.tele && b.tele.t > 3) || b.sealed.some((i) => b.cells[i].def)) {
@@ -265,12 +271,16 @@ export function botMove(b: Board, cfg: BotCfg, skip: ReadonlySet<string> = new S
   // 이자 째기: 필드가 안전하면 keep 만큼은 남겨 둠
   const keep = cfg.keep && b.enemies.length < 45 && b.phase !== "boss" ? cfg.keep : 0;
   const gold = Math.max(0, b.gold - keep);
-  // 해피 타운: 지난 웨이브에 적이 많이 쓰러진 영업 칸부터 건물 (골드의 절반 안에서)
-  if (b.stage === "town" && b.wave >= 3) {
-    let best = -1;
+  // 해피 타운: 잭팟이 골드 대비 가장 많이 느는 칸 (새 땅 vs 올리기) — 골드의 절반 안에서
+  if (b.stage === "town" && b.wave >= 2) {
+    let best = -1,
+      bestV = 0;
     for (let t = 0; t < PERIM; t++) {
-      if (b.tkLast[t] < 3 || buildBlock(b, t) || buildCost(b, t) > gold * 0.5) continue;
-      if (best < 0 || b.tkLast[t] / (b.bld[t] + 1) > b.tkLast[best] / (b.bld[best] + 1)) best = t;
+      if (buildBlock(b, t)) continue;
+      const cost = buildCost(b, t);
+      if (cost > gold * 0.5) continue;
+      const v = (TOWN.jack[b.bld[t] + 1] - TOWN.jack[b.bld[t]]) / cost;
+      if (v > bestV) (best = t), (bestV = v);
     }
     if (best >= 0) {
       const c = ok({ t: "build", p: best });

@@ -2,43 +2,48 @@
  * 해피 타운 (PIXEL MARBLE 「해피 타운」 맵으로 만든 확장 스테이지) — 고유 규칙 수치 · 칸 이름.
  * 시뮬(sim.ts)이 읽음 → 결정론 규칙 그대로 (수치를 바꾸면 BALANCE_VER 올리기).
  *
- * 길(한 바퀴 26칸)이 마블 판처럼 동네 칸이 됨. 네 모서리는 특수 칸(출발 포털 · 수리소 · 축제 무대 · 워프 게이트, 장식).
- *  - 건물: 길 칸 바로 안쪽(앞 칸)에 유닛이 있으면 골드로 지음 (오두막 → 2층집 → 빌딩, 명령 build)
- *          그 칸에서 쓰러진 적이 통행료(골드) · 2층집부터 그 칸을 지나는 적이 느려짐
- *          앞 칸 유닛이 없어지면 영업 정지 (건물은 남아 있음 — 다시 놓으면 영업)
- *  - 웨이브 주사위: 보스가 아닌 웨이브가 시작할 때마다 (2웨이브부터) — 황금 칸 · 늪 · 축제 · 더블
- *  - UR 보스 (enemies.ts TOWN_BOSSES): DICE 순간이동 · MOA 건물 빼앗기 · FORTE 앙코르
+ * v2 「내 말이 돌다가 내 땅에 서면 터진다」 (v1 통행료 · 자동 주사위는 「무지성으로 다 짓기」가 정답이라 버림)
+ *  - 굴리기: 웨이브마다 주사위 1번 (최대 TOWN.rollMax 개까지 모아 둠, 명령 roll) — 주사위 둘 합만큼 내 말이 길을 돎
+ *  - 건물: 아무 동네 칸에나 골드로 (오두막 → 2층집 → 빌딩, 명령 build). 새 땅은 가진 땅이 많을수록 비쌈 → 넓게 vs 크게
+ *  - 잭팟: 말이 내 건물 칸에 서면 TOWN.jack[단계] 골드 · 연속으로 맞히면 배수 TOWN.combo
+ *  - 더블: 한 번 더 · 6-6: 골라 뽑기권(대박) · 출발 포털을 지나면 월급 (바퀴마다 커짐)
+ *  - 모서리: 출발 포털(월급 한 번 더) · 수리소(무료 소환) · 축제 무대(골드) · 워프 게이트(한 번 더 굴림)
+ *  - UR 보스 (enemies.ts TOWN_BOSSES): DICE 순간이동 · MOA 건물 빼앗기(그 칸 잭팟 없음) · FORTE 앙코르
  */
 
 export const TOWN_NAME = "해피 타운";
 export const TOWN_EN = "HAPPY TOWN";
 
 export const TOWN = {
-  /** 건물 짓기 · 올리기 비용 (0→1 · 1→2 · 2→3) */
-  build: [30, 60, 120],
-  /** 그 칸에서 쓰러진 적 하나당 통행료 (단계 0~3) */
-  toll: [0, 2, 4, 8],
-  /** 그 칸을 지나는 적 둔화 (단계 0~3) */
-  slow: [0, 0, 0.1, 0.2],
-  /** 주사위 「황금 칸」: 건물이 있으면 통행료 ×gold, 없으면 처치마다 goldBare */
-  gold: 3,
-  goldBare: 3,
-  /** 주사위 「늪」: 그 칸 둔화 */
-  mud: 0.45,
-  /** 주사위 「축제」: 이번 웨이브 모든 처치 골드 + */
-  fest: 1,
+  /** 새 땅(오두막) 값 = newBase + newPer × 가진 건물 수 */
+  newBase: 40,
+  newPer: 25,
+  /** 올리기 값 (오두막→2층집 · 2층집→빌딩) */
+  up: [0, 90, 200],
+  /** 말이 서면 받는 잭팟 (단계 0~3) × (1 + 웨이브 × jackWave) */
+  jack: [0, 40, 100, 260],
+  jackWave: 1 / 22,
+  /** 연속 잭팟 배수 (1번째 · 2번째 · 3번째부터) */
+  combo: [1, 2, 3],
+  /** 출발 포털을 지날 때 월급 = lapBase + lapPer × 지금까지 돈 바퀴 */
+  lapBase: 20,
+  lapPer: 4,
+  /** 웨이브마다 주는 굴리기 · 모아 둘 수 있는 최대 (더블 · 워프로 받은 건 넘어도 됨) */
+  rollMax: 3,
+  /** 수리소: 무료 소환 · 축제 무대: festBase + festPer × 웨이브 골드 */
+  repairFree: 2,
+  festBase: 30,
+  festPer: 3,
 } as const;
 
 export const BUILD_NAME = ["빈 땅", "오두막", "2층집", "빌딩"] as const;
-
-/** 주사위 이벤트 (눈 → 종류): 1 · 2 황금 칸 · 3 · 4 늪 · 5 축제 · 6 더블(황금 칸 + 늪) */
-export type DiceKind = "gold" | "mud" | "fest" | "double";
-export const diceKindOf = (roll: number): DiceKind => (roll <= 2 ? "gold" : roll <= 4 ? "mud" : roll === 5 ? "fest" : "double");
-export const DICE_TEXT: Record<DiceKind, { name: string; desc: string }> = {
-  gold: { name: "황금 칸", desc: "이번 웨이브 그 칸에서 쓰러진 적이 통행료 ×3 (빈 땅이면 처치마다 +3골드)" },
-  mud: { name: "늪", desc: "이번 웨이브 그 칸을 지나는 적이 크게 느려져요" },
-  fest: { name: "축제", desc: "이번 웨이브 모든 처치 골드 +1" },
-  double: { name: "더블!", desc: "황금 칸 + 늪이 한꺼번에" },
+/** 모서리 칸 (길 칸 번호) */
+export const CORNER_AT = { start: 0, jail: 8, fest: 13, warp: 21 } as const;
+export const CORNER_TEXT: Record<"start" | "jail" | "fest" | "warp", { name: string; desc: string }> = {
+  start: { name: "출발 포털", desc: "지나가면 월급 · 딱 서면 월급 한 번 더" },
+  jail: { name: "도트 수리소", desc: `서면 무료 소환 ${TOWN.repairFree}회` },
+  fest: { name: "축제 무대", desc: "서면 골드 보너스" },
+  warp: { name: "워프 게이트", desc: "서면 바로 한 번 더 굴려요" },
 };
 
 /** 길 칸(0..25) 이름 · 동네 색 · 마블 랜드마크 그림 번호 (public/marble/lm/town-<n>.webp — 빌딩 단계 그림) */

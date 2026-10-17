@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { B, BALANCE_VER, LAST_WAVE, countOf, sec } from "../../web/src/lib/defense/balance";
 import { BOTS, botTurn } from "../../web/src/lib/defense/bot";
 import { HASH_TICKS, TICKS_PER_TURN, TURN_MS, replay, replayer, scoreOf, validLog, type LogEntry } from "../../web/src/lib/defense/replay";
-import { CELLS, CORNERS, SLOTS, apply, cellTiles, hashGame, isCmd, newGame, pureT, step, tileCell, tileOpen, tollOf, unitCount, upCost, type Game } from "../../web/src/lib/defense/sim";
+import { CELLS, CORNERS, SLOTS, apply, buildCost, cellTiles, comboMult, hashGame, isCmd, jackOf, newGame, pureT, step, tileCell, unitCount, upCost, type Game } from "../../web/src/lib/defense/sim";
 import { TOWN } from "../../web/src/lib/defense/town";
 import { RECIPES, UNIT, UNITS } from "../../web/src/lib/defense/units";
 import { PHASE_PAIRS, bossOfWave, phaseOn } from "../../web/src/lib/defense/enemies";
@@ -282,26 +282,48 @@ describe("픽셀 글리치 디펜스 엔진", () => {
     expect(b.cheats).toEqual([first]);
   });
 
-  it("해피 타운: 안쪽 칸 유닛이 있어야 짓기 · 통행료 · 휴업 · 모서리 불가 · 주사위 · UR 보스 · 결정론", () => {
+  it("해피 타운 v2: 아무 칸 짓기 · 새 땅은 점점 비쌈 · 굴리기 · 잭팟 · 연속 배수 · 모서리 · UR 보스 · 결정론", () => {
     const lo = { stage: "town" as const, town: 1 };
     const g = started(5, 1, [lo]);
     const b = g.boards[0];
     expect(b.stage).toBe("town");
     expect(CORNERS).toEqual([0, 8, 13, 21]);
-    // 유닛 칸 0 의 앞 길 칸은 1(위) · 25(왼쪽)
     expect(cellTiles(0)).toEqual([1, 25]);
     expect(tileCell(0)).toBe(-1);
-    expect(apply(g, 0, { t: "build", p: 1 })).toBeTruthy(); // 안쪽 칸이 빔
     expect(apply(g, 0, { t: "build", p: 0 })).toBeTruthy(); // 모서리
-    b.cells[0] = { def: "k_squire", units: [{ cd: 0, ult: 0, stun: 0 }] };
-    b.gold = 1000;
+    b.gold = 10000;
+    // 유닛 없이도 지음 · 새 땅은 가진 건물 수만큼 비쌈 · 올리기는 고정
     expect(apply(g, 0, { t: "build", p: 1 })).toBeNull();
-    expect(b.bld[1]).toBe(1);
-    expect(b.gold).toBe(1000 - TOWN.build[0]);
-    expect(tollOf(b, 1)).toBe(TOWN.toll[1]);
-    b.cells[0] = { def: null, units: [] };
-    expect(tileOpen(b, 1)).toBe(false);
-    expect(tollOf(b, 1)).toBe(0);
+    expect(b.gold).toBe(10000 - TOWN.newBase);
+    expect(buildCost(b, 2)).toBe(TOWN.newBase + TOWN.newPer);
+    expect(buildCost(b, 1)).toBe(TOWN.up[1]);
+    // 굴리기: 웨이브마다 하나 (started 는 1웨이브) · 없으면 실패
+    expect(b.rolls).toBeGreaterThanOrEqual(1);
+    b.rolls = 1;
+    b.bld[7] = 3;
+    const before = { pos: b.pos, gold: b.gold };
+    expect(apply(g, 0, { t: "roll" })).toBeNull();
+    const steps = b.last!.d1 + b.last!.d2;
+    expect(b.pos).toBe((before.pos + steps) % 26);
+    if (b.last!.d1 !== b.last!.d2 && b.pos !== 21) expect(apply(g, 0, { t: "roll" })).toBeTruthy();
+    // 잭팟: 말이 내 건물 칸에 서면 · 연속이면 배수
+    b.pos = 0;
+    b.rolls = 5;
+    b.combo = 0;
+    b.bld.fill(0);
+    for (let t = 1; t < 26; t++) if (tileCell(t) >= 0) b.bld[t] = 1;
+    const g0 = b.gold;
+    apply(g, 0, { t: "roll" });
+    if (tileCell(b.pos) >= 0) {
+      expect(b.gold - g0).toBe(jackOf(b, b.pos) * comboMult(0));
+      expect(b.combo).toBe(1);
+    }
+    expect(comboMult(0)).toBe(1);
+    expect(comboMult(1)).toBe(TOWN.combo[1]);
+    expect(comboMult(9)).toBe(TOWN.combo[TOWN.combo.length - 1]);
+    // MOA 에게 빼앗긴 칸은 잭팟 없음
+    b.seized = [3];
+    expect(jackOf(b, 3)).toBe(0);
     // 메인은 짓기 불가
     const m = started(5, 1);
     m.boards[0].cells[0] = { def: "k_squire", units: [{ cd: 0, ult: 0, stun: 0 }] };
@@ -309,7 +331,9 @@ describe("픽셀 글리치 디펜스 엔진", () => {
     expect(apply(m, 0, { t: "build", p: 1 })).toBeTruthy();
     expect(isCmd({ t: "build", p: 3 })).toBe(true);
     expect(isCmd({ t: "build", p: 26 })).toBe(false);
-    // 주사위: 2웨이브부터 보스 웨이브 빼고 · UR 보스
+    expect(isCmd({ t: "roll" })).toBe(true);
+    expect(isCmd({ t: "roll", x: 1 })).toBe(false);
+    // UR 보스
     expect(bossOfWave(10, "town")?.fighter).toBe("ur-dice");
     expect(bossOfWave(20, "town")?.fighter).toBe("soyoung");
     expect(bossOfWave(10)?.fighter).toBe("lily");
