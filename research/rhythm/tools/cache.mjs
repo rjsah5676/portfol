@@ -7,7 +7,7 @@ const { analyze } = await loadLib();
 const { analyzeAudio, SR } = analyze;
 const [shard, n] = (process.argv[2] ?? "0/1").split("/").map(Number);
 const jobs = [];
-for (const id of Object.keys(BUILTIN)) jobs.push({ id: "b_" + id, file: `/home/claude/p2/web/public/audio/${id}.mp3`, opt: { double: !!BUILTIN[id].double } });
+for (const id of Object.keys(BUILTIN)) jobs.push({ id: "b_" + id, file: `/home/claude/p2/web/public/audio/${id}.mp3`, opt: { double: !!BUILTIN[id].double, single: !!BUILTIN[id].single } });
 for (const f of fs.readdirSync("/home/claude/osz2/audio/osu_audio").filter((f) => f.endsWith(".mp3")).sort())
   jobs.push({ id: "o_" + f.replace(/\.mp3$/, ""), file: path.join("/home/claude/osz2/audio/osu_audio", f), opt: {} });
 for (const [i, j] of jobs.entries()) {

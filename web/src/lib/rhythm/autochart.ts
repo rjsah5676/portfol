@@ -1128,7 +1128,8 @@ export function makeAutoChart(
 
   // 3.8) 곡 안 밀도 높낮이 고르게 (어려움 이상)
   if (diff === "hard" || diff === "expert") {
-    const even = evenDensity(notes, { an, barOf, nBars, beatSec, minGap: R.minGap, rnd });
+    // evenDensity는 고칠 게 없으면 같은 배열을 그대로 돌려줌 — 비우기 전에 복사
+    const even = [...evenDensity(notes, { an, barOf, nBars, beatSec, minGap: R.minGap, rnd })];
     notes.length = 0;
     notes.push(...even);
   }

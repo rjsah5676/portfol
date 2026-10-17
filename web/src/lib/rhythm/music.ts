@@ -21,6 +21,12 @@ import crimsonData from "@/data/rhythm/crimsoncadenza.json";
 import hwimoriData from "@/data/rhythm/hwimori.json";
 import luckysevenData from "@/data/rhythm/luckyseven.json";
 import pixelfightingData from "@/data/rhythm/pixelfighting.json";
+import midnightData from "@/data/rhythm/midnight.json";
+import starlightData from "@/data/rhythm/starlight.json";
+import sugarcloudData from "@/data/rhythm/sugarcloud.json";
+import overloadData from "@/data/rhythm/overload.json";
+import glitchbounceData from "@/data/rhythm/glitchbounce.json";
+import etudeData from "@/data/rhythm/etude.json";
 
 export type Kind =
   | "kick"
@@ -423,6 +429,42 @@ const PIXELFIGHTING = audioSong(
   }
 );
 
+const MIDNIGHT = audioSong("midnight", "Midnight Signal", "/audio/midnight.mp3", midnightData, {
+  color: "#F472B6",
+  desc: "111 BPM · CITY POP / FUNK · AI 자작곡 (tunee.ai)",
+});
+
+const STARLIGHT = audioSong("starlight", "STARLIGHT CODE", "/audio/starlight.mp3", starlightData, {
+  color: "#E879F9",
+  desc: "129 BPM · K-POP 걸그룹 댄스팝 · AI 자작곡 (tunee.ai)",
+});
+
+const SUGARCLOUD = audioSong("sugarcloud", "Sugar Cloud", "/audio/sugarcloud.mp3", sugarcloudData, {
+  color: "#F9A8D4",
+  desc: "150 BPM · KAWAII FUTURE BASS · AI 자작곡 (tunee.ai)",
+});
+
+const OVERLOAD = audioSong("overload", "OVERLOAD PROTOCOL", "/audio/overload.mp3", overloadData, {
+  color: "#EF4444",
+  desc: "140 BPM · DRUMSTEP · AI 자작곡 (tunee.ai)",
+});
+
+const GLITCHBOUNCE = audioSong(
+  "glitchbounce",
+  "Glitch Bounce",
+  "/audio/glitchbounce.mp3",
+  glitchbounceData,
+  {
+    color: "#A3E635",
+    desc: "140 BPM · TRAP / HIP-HOP · AI 자작곡 (tunee.ai)",
+  }
+);
+
+const ETUDE = audioSong("etude", "Étude of Falling Stars", "/audio/etude.mp3", etudeData, {
+  color: "#93C5FD",
+  desc: "170 BPM · PIANO HARDCORE · AI 자작곡 (tunee.ai)",
+});
+
 // xi의 곡 — 제작자 표기 필수 (artist는 곡 선택·플레이·결과·랭킹에 함께 나옴)
 const ANIMA = audioSong("anima", "ANiMA", "/audio/anima.mp3", animaData, {
   color: "#D9A066",
@@ -462,6 +504,12 @@ const FREEDOMDIVE = audioSong(
  *   luckyseven  --double --boss '{}' --explus '{}' --levels 3,6,9,13,16,19   (NIGHTMARE는 15 — 절반 템포 88로 잡혀서 --double)
  *   pixelfighting --boss '{}' --explus '{}' --levels 3,6,9,13,16,18   (NIGHTMARE는 15)
  *   freedomdive --boss '{}' --explus '{}' --levels 3,5,9,12,14,17   (도입부만 빽빽하던 것 고르게 한 뒤 레벨 그대로 둠 — 222 BPM이라 16분 스트림이 한계)   (222 BPM 8분·16분이 꽉 차도 별점 12·15 — 그 위는 24분·잭이 필요)
+ *   midnight    --single --bpm-label 111 --levels 3,5,8,11   (2배 템포 222로 잡혀서 --single · 잔잔한 곡이라 나이트메어 없음)
+ *   starlight   --boss '{}' --explus '{}' --levels 3,6,9,12,15,17   (NIGHTMARE는 14)
+ *   sugarcloud  --boss '{}' --explus '{}' --levels 3,6,9,12,15,18
+ *   overload    --single --bpm-label 140 --boss '{}' --explus '{}' --levels 3,6,10,13,16,19   (ULTIMA는 18 — 하프타임이라 280으로 잡혀서 --single)
+ *   glitchbounce --single --bpm-label 140 --boss '{}' --explus '{}' --levels 3,6,9,12,15,17   (NIGHTMARE는 14)
+ *   etude       --bpm-label 170 --boss '{}' --explus '{}' --levels 3,6,10,13,17,20   (NIGHTMARE는 16)
  */
 // ───────────────────────── 연습곡 ─────────────────────────
 // 박자만 또렷한 신스 반주(킥·스네어·하이햇·베이스·패드) 위에 패턴 구간(practice.ts)을 차례로
@@ -510,6 +558,12 @@ const PRACTICE: Song = {
 
 /** 새 곡은 항상 맨 앞에 (연습곡은 맨 끝) */
 export const SONGS: Song[] = [
+  STARLIGHT,
+  SUGARCLOUD,
+  GLITCHBOUNCE,
+  MIDNIGHT,
+  OVERLOAD,
+  ETUDE,
   LUCKYSEVEN,
   PIXELFIGHTING,
   CRIMSON,

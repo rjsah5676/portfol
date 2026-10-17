@@ -17,6 +17,12 @@ import crimsonCover from "@/img/rhythm/crimsoncadenza.jpg";
 import hwimoriCover from "@/img/rhythm/hwimori.jpg";
 import luckysevenCover from "@/img/rhythm/luckyseven.jpg";
 import pixelfightingCover from "@/img/rhythm/pixelfighting.jpg";
+import midnightCover from "@/img/rhythm/midnight.jpg";
+import starlightCover from "@/img/rhythm/starlight.jpg";
+import sugarcloudCover from "@/img/rhythm/sugarcloud.jpg";
+import overloadCover from "@/img/rhythm/overload.jpg";
+import glitchbounceCover from "@/img/rhythm/glitchbounce.jpg";
+import etudeCover from "@/img/rhythm/etude.jpg";
 
 export const COVERS: Record<string, StaticImageData> = {
   jilju: jiljuCover,
@@ -33,6 +39,12 @@ export const COVERS: Record<string, StaticImageData> = {
   hwimori: hwimoriCover,
   luckyseven: luckysevenCover,
   pixelfighting: pixelfightingCover,
+  midnight: midnightCover,
+  starlight: starlightCover,
+  sugarcloud: sugarcloudCover,
+  overload: overloadCover,
+  glitchbounce: glitchbounceCover,
+  etude: etudeCover,
 };
 
 /** 내 음악에 앨범 사진이 없을 때 쓰는 기본 재킷 */

@@ -33,6 +33,12 @@ export const BUILTIN = {
   luckyseven: { double: true, boss: {}, explus: {}, levels: [3, 6, 9, 13, 16, 19] },
   pixelfighting: { boss: {}, explus: {}, levels: [3, 6, 9, 13, 16, 18] },
   freedomdive: { boss: {}, explus: {}, levels: [3, 5, 9, 12, 14, 17] },
+  midnight: { single: true, levels: [3, 5, 8, 11] },
+  starlight: { boss: {}, explus: {}, levels: [3, 6, 9, 12, 15, 17] },
+  sugarcloud: { boss: {}, explus: {}, levels: [3, 6, 9, 12, 15, 18] },
+  overload: { single: true, boss: {}, explus: {}, levels: [3, 6, 10, 13, 16, 19] },
+  glitchbounce: { single: true, boss: {}, explus: {}, levels: [3, 6, 9, 12, 15, 17] },
+  etude: { boss: {}, explus: {}, levels: [3, 6, 10, 13, 17, 20] },
 };
 export function builtinArgs(c) {
   const diffs = ["easy", "normal", "hard", "expert"];

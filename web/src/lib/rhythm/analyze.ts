@@ -124,8 +124,9 @@ export async function analyzeAudio(
   buffer: AudioBuffer,
   progress: Progress,
   /** straight: 셋잇단처럼 보여도 1.5배 템포 4/4로 (내장곡 채보 만들 때 직접 지정)
-   *  double: 절반 템포로 잡혀도 2배 템포로 (내장곡 채보 만들 때 직접 지정) */
-  opt: { straight?: boolean; double?: boolean } = {}
+   *  double: 절반 템포로 잡혀도 2배 템포로 (내장곡 채보 만들 때 직접 지정)
+   *  single: 2배 템포 후보를 쓰지 않음 (하프타임 덥스텝·트랩·시티팝처럼 박 사이가 센 곡) */
+  opt: { straight?: boolean; double?: boolean; single?: boolean } = {}
 ): Promise<Analysis> {
   progress(0.02, "모노로 변환 중");
   const len = Math.ceil(buffer.duration * SR);
@@ -295,7 +296,11 @@ export async function analyzeAudio(
   beats = straighten(beats);
   // 빠른 곡(170~280 BPM)은 절반 템포로 잡히기 쉬움 — 박 사이 자리가 박만큼 세면 2배 템포 후보를 만들어 둠
   // (osu 랭크 106곡 중 56곡이 절반으로 잡혔음. 어느 쪽을 쓸지는 격자 맞출 때 셋잇단 판정과 같이 정함)
-  const doubled = opt.double ? doubleBeats(beats) : octaveDoubled(beats, hp, fl, FPS);
+  const doubled = opt.double
+    ? doubleBeats(beats)
+    : opt.single
+      ? null
+      : octaveDoubled(beats, hp, fl, FPS);
 
   // ── 어택 지점 재보정용 고해상도 에너지 (1.45ms 간격) ──
   progress(0.8, "타격 시점 정밀 보정 중");

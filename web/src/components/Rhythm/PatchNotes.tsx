@@ -17,6 +17,17 @@ export interface Patch {
 
 export const PATCHES: Patch[] = [
   {
+    ver: "v2.1",
+    name: "새 곡 6곡",
+    date: "2026.10.18",
+    lines: [
+      "새 곡 6곡 — STARLIGHT CODE (K-POP 걸그룹 댄스팝) · Sugar Cloud (퓨처 베이스) · Glitch Bounce (트랩 · 힙합) · Midnight Signal (시티팝) · OVERLOAD PROTOCOL (드럼스텝) · Étude of Falling Stars (피아노 하드코어), 전부 AI 자작곡 (tunee.ai)",
+      "레벨 (EASY → ULTIMA): STARLIGHT CODE 3 · 6 · 9 · 12 · 14 · 17, Sugar Cloud 3 · 6 · 9 · 12 · 15 · 18, Glitch Bounce 3 · 6 · 9 · 12 · 14 · 17, Midnight Signal 3 · 5 · 8 · 11, OVERLOAD PROTOCOL 3 · 6 · 10 · 13 · 16 · 18, Étude of Falling Stars 3 · 6 · 10 · 13 · 16 · 20",
+      "곡마다 재킷과 16:9 플레이 배경 그림",
+      "긴 곡(Midnight Signal · STARLIGHT CODE · OVERLOAD PROTOCOL)은 2분 안팎 게임 길이로 — 같은 소절이 되풀이되는 자리에서 박자에 맞춰 이어 붙임",
+    ],
+  },
+  {
     ver: "v2.0",
     name: "PIXEL Rhythm Up",
     date: "2026.10.17",

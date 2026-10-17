@@ -12,3 +12,9 @@ hwimori --boss '{}' --explus '{}'
 luckyseven --double --boss '{}' --explus '{}' --levels 3,6,9,13,16,19
 pixelfighting --boss '{}' --explus '{}' --levels 3,6,9,13,16,18
 freedomdive --boss '{}' --explus '{}' --levels 3,5,9,12,14,17
+midnight --single --bpm-label 111 --levels 3,5,8,11
+starlight --boss '{}' --explus '{}' --levels 3,6,9,12,15,17
+sugarcloud --boss '{}' --explus '{}' --levels 3,6,9,12,15,18
+overload --single --bpm-label 140 --boss '{}' --explus '{}' --levels 3,6,10,13,16,19
+glitchbounce --single --bpm-label 140 --boss '{}' --explus '{}' --levels 3,6,9,12,15,17
+etude --bpm-label 170 --boss '{}' --explus '{}' --levels 3,6,10,13,17,20
