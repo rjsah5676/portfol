@@ -7,10 +7,10 @@
 import { useState, type CSSProperties } from "react";
 import { BASE_DECK, DECK_N, FIRST_WEAPON, NEW_WEAPONS, P_WEAPONS, STAR3, STAR5, STAR_DMG, STAR_MAX, W_ROLE, starOf, starProgress } from "@/lib/patrol/weapons";
 import { stName } from "@/lib/patrol/chapters";
-import { WEAPONS, type WeaponId } from "@/lib/survivor/data";
+import { PASSIVES, WEAPONS, type WeaponId } from "@/lib/survivor/data";
 import { patrol, type PatrolProfile } from "@/realtime/patrol";
 import { sfx } from "../Survivor/audio";
-import { ItemIcon } from "../Survivor/Game";
+import { ItemIcon, evoOf } from "../Survivor/Game";
 import { Modal, btn } from "./ui";
 
 /** 기본 무기 · 새 무기 테두리 색 */
@@ -108,7 +108,7 @@ export default function WeaponsPanel({ prof, onProf, onClose }: { prof: PatrolPr
   const swapping = own && !inDeck;
 
   return (
-    <Modal title="무기 덱" sub="덱 6칸에 넣은 무기만 판 안 레벨업 카드에 나와요 · 같은 무기를 또 얻으면 별이 올라요" onClose={onClose} w={900} h={520}>
+    <Modal title="무기 덱" sub="덱 6칸에 넣은 무기만 판 안 레벨업 카드에 나와요 · 판에서 무기 Lv5 + 짝 능력치 → 진화" onClose={onClose} w={900} h={520}>
       <div className="mt-[12px] flex min-h-0 flex-1 gap-[16px]">
         <div className="flex min-w-0 flex-1 flex-col">
           {/* 덱 */}
@@ -171,6 +171,23 @@ export default function WeaponsPanel({ prof, onProf, onClose }: { prof: PatrolPr
             <span style={{ color: star >= 3 ? "#4ff0c8" : "#6b63a3" }}>★3 {STAR3[sel]}</span>
             <span style={{ color: star >= 5 ? "#4ff0c8" : "#6b63a3" }}>★5 {STAR5}</span>
           </div>
+          {(() => {
+            const e = evoOf(sel, true);
+            if (!e) return null;
+            const need = WEAPONS[e].evo![1];
+            return (
+              <div className="mt-[12px] px-[8px] py-[6px] text-[12px]" style={{ background: "#ffd23a14", boxShadow: "inset 0 0 0 1px #ffd23a55" }}>
+                <b className="text-[#ffd23a]">✦ 진화</b>
+                <div className="mt-[4px] flex items-center gap-[4px]">
+                  <ItemIcon k="weapon" id={sel} size={22} />
+                  <span>Lv{def.lv.length}</span>+<ItemIcon k="passive" id={need} size={22} />
+                  <span>{PASSIVES[need].name}</span>→<ItemIcon k="weapon" id={e} size={26} />
+                </div>
+                <b className="mt-[2px] block text-[#ffd27a]">{WEAPONS[e].name}</b>
+                <span className="text-[11px] leading-[15px] text-[#a9a2d6]">{WEAPONS[e].desc[0]}</span>
+              </div>
+            );
+          })()}
           <div className="mt-auto">
             {own && !inDeck && (
               <span className="pts-sub block text-center text-[12px] text-[#ffd27a]">위 덱 칸을 눌러 넣어요</span>

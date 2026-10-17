@@ -12,6 +12,7 @@ import {
   DASH_CD,
   depthMul,
   EVOLUTIONS,
+  PATROL_EVOLUTIONS,
   FLAG_CHARGE,
   OT_STEP,
   SHRINE_CHARGE,
@@ -22,6 +23,7 @@ import {
   GUARD_HP,
   GUARD_R,
   type Quest,
+  type GuideK,
   SPOUT_R,
   TRIAL_R,
   TRIAL_SEC,
@@ -324,6 +326,8 @@ export type Ev =
   | { t: "dice"; x: number; y: number; face: number }
   | { t: "fire"; w: WeaponId }
   | { t: "thorns"; x: number; y: number; r: number }
+  /** 순찰대 기믹이 처음 나옴 → 안내 */
+  | { t: "guide"; k: GuideK }
   | { t: "chest" }
   | { t: "boss"; kind: EnemyKind; arena: boolean }
   | { t: "warn"; text: string }
@@ -744,7 +748,7 @@ interface W {
   kb: number;
 }
 /** 순찰대 판에서만 곱하는 무기 피해 (서바이버 캐릭터 무기를 덱 무기로 쓸 때) */
-const PATROL_WMUL: Partial<Record<WeaponId, number>> = { umbrella: 3 };
+const PATROL_WMUL: Partial<Record<WeaponId, number>> = { umbrella: 3, downpour: 2.5 };
 function wstat(r: Run, ws: WeaponSlot): W {
   const def = WEAPONS[ws.id];
   const b: WeaponLv = def.lv[Math.min(def.lv.length, ws.lv) - 1];
@@ -901,12 +905,14 @@ function hurt(r: Run, e: Enemy, dmg: number, slot: number, kb: number, fromX: nu
   if (sc && e.hp > 0 && !e.def.boss && !e.elite && e.hp <= e.maxHp * Math.min(0.24, 0.08 * sc)) e.hp = 0;
   if (e.hp <= 0) {
     kill(r, e);
-    if (slot >= 0 && r.weapons[slot] && WEAPONS[r.weapons[slot].id].fx === "coin" && rnd(r.rng) < 0.3) dropPickup(r, "coin", e.x, e.y, 1);
+    if (slot >= 0 && r.weapons[slot] && WEAPONS[r.weapons[slot].id].fx === "coin" && rnd(r.rng) < (r.weapons[slot].id === "goldrain" ? 0.5 : 0.3)) dropPickup(r, "coin", e.x, e.y, 1);
   }
   // 순찰대 무기 ★3: 물방울 우산 = 느려짐 · 음표 파동 = 멈칫
   if (slot >= 0 && e.alive && !e.def.boss) {
     const wid = r.weapons[slot]?.id;
-    if (wid && (r.wstar[wid] ?? 1) >= 3) {
+    if (wid === "downpour") e.slow = Math.max(e.slow, 1.2);
+    else if (wid === "symphony") e.stun = Math.max(e.stun, 0.35);
+    else if (wid && (r.wstar[wid] ?? 1) >= 3) {
       if (wid === "umbrella") e.slow = Math.max(e.slow, 1);
       else if (wid === "notes") e.stun = Math.max(e.stun, 0.3);
     }
@@ -1338,6 +1344,7 @@ function timeline(r: Run) {
         spawnEnemy(r, ev.kind, x, y, true);
       }
       r.ev.push({ t: "warn", text: n > 1 ? `엘리트 ${n}마리! 처치하면 보물 상자` : "엘리트 등장! 처치하면 보물 상자" });
+      if (r.quest?.q.k === "rush") r.ev.push({ t: "guide", k: "rush" });
     } else if (ev.k === "ring") {
       for (let i = 0; i < ev.n; i++) {
         const a = (i / ev.n) * Math.PI * 2;
@@ -1365,22 +1372,26 @@ function timeline(r: Run) {
         t.cost = r.t + 45;
       }
       r.ev.push({ t: "thing", k: "lamp", text: "꺼진 가로등! 옆에 서 있으면 켜져요" });
+      r.ev.push({ t: "guide", k: "lamp" });
     } else if (ev.k === "spout") {
       const t = spawnThing(r, "spout", 110, 190);
       t.t = SPOUT_FUSE;
       r.ev.push({ t: "thing", k: "spout", text: "분수가 곧 솟아요! 적을 끌고 와요" });
+      r.ev.push({ t: "guide", k: "spout" });
     } else if (ev.k === "goblin") {
       const a = rnd(r.rng) * Math.PI * 2;
       const g = spawnEnemy(r, "goblin", r.p.x + Math.cos(a) * 130, r.p.y + Math.sin(a) * 80);
       g.left = 15;
       g.drop = 0.85;
       r.ev.push({ t: "warn", text: "보물 도깨비! 도망치기 전에 잡아요" });
+      r.ev.push({ t: "guide", k: "goblin" });
     } else if (ev.k === "guard") {
       // 지킬 등불: 플레이어 옆에 · t = 체력 · cost = 끝나는 시각 · on = 지키는 중 (멀어져도 안 치움)
       const t: Thing = { id: r.nextId++, alive: true, k: "guard", x: r.p.x + 50, y: r.p.y, t: GUARD_HP, on: true, cost: ev.until };
       r.things.push(t);
       r.guard = t;
       r.ev.push({ t: "thing", k: "guard", text: `등불을 지켜요! ${Math.round(ev.until - r.t)}초 동안 꺼지지 않게` });
+      r.ev.push({ t: "guide", k: "guard" });
     }
   }
   // 오버타임: 45초마다 정예
@@ -1403,6 +1414,7 @@ function timeline(r: Run) {
       if (r.bossId < 0 && !r.arena) {
         r.toll.on = st.toll.dur;
         r.ev.push({ t: "toll", on: true });
+        if (r.ch) r.ev.push({ t: "guide", k: "toll" });
       }
     }
   }
@@ -1454,6 +1466,19 @@ function fireWeapon(r: Run, slot: number) {
         hurt(r, e, w.dmg, slot, w.kb, p.x, p.y);
       });
       hitProps(r, x, y, bodyR);
+    }
+    // 폭우 우산: 화면 근처 적에게 빗방울
+    if (ws.id === "downpour") {
+      ws.t -= DT;
+      if (ws.t <= 0) {
+        ws.t = w.cd;
+        const cand = r.enemies.filter((e) => e.alive && Math.abs(e.x - p.x) < 170 && Math.abs(e.y - p.y) < 110);
+        for (let i = 0; i < 2 && cand.length; i++) {
+          const e = cand[rndInt(r.rng, cand.length)];
+          r.ev.push({ t: "boom", x: e.x, y: e.y, r: 22, c: "#7ad7ff", w: "downpour" });
+          aoe(r, e.x, e.y, 22, w.dmg * 0.9, slot, 10);
+        }
+      }
     }
     return;
   }
@@ -1550,9 +1575,9 @@ function fireWeapon(r: Run, slot: number) {
         const e = cand.length ? cand[rndInt(r.rng, cand.length)] : null;
         const x = e ? e.x : p.x + (rnd(r.rng) - 0.5) * 300;
         const y = e ? e.y : p.y + (rnd(r.rng) - 0.5) * 160;
-        r.zones.push(zone({ k: ws.id === "grenade" ? "grenade" : "drop", slot, x, y, r: w.size, dmg: w.dmg, delay: w.dur + i * 0.08, life: 0.3, t: 0, tick: 0, kb: w.kb, follow: false, dx: p.x, dy: p.y }));
+        r.zones.push(zone({ k: ws.id === "grenade" || ws.id === "cluster" ? "grenade" : "drop", slot, x, y, r: w.size, dmg: w.dmg, delay: w.dur + i * 0.08, life: 0.3, t: 0, tick: 0, kb: w.kb, follow: false, dx: p.x, dy: p.y }));
       }
-      if (ws.id === "grenade" && w.n) r.ev.push({ t: "fire", w: ws.id });
+      if ((ws.id === "grenade" || ws.id === "cluster") && w.n) r.ev.push({ t: "fire", w: ws.id });
       break;
     }
     case "boomerang": {
@@ -1818,6 +1843,12 @@ function updateZones(r: Run) {
         const zw = z.slot >= 0 ? r.weapons[z.slot]?.id : undefined;
         r.ev.push({ t: "boom", x: z.x, y: z.y, r: z.r, c: z.k === "moon" ? "#fff2a8" : z.k === "grenade" || z.k === "shell" ? "#ffb03a" : "#ffe17a", ...(zw && { w: zw }) });
         aoe(r, z.x, z.y, z.r, z.dmg, z.slot, z.kb);
+        // 집속 수류탄: 둘레에 작은 폭탄 셋 (작은 폭탄은 tick = -1 — 또 쪼개지지 않게)
+        if (z.k === "grenade" && zw === "cluster" && z.tick !== -1)
+          for (let i = 0; i < 3; i++) {
+            const a = (i / 3) * Math.PI * 2 + rnd(r.rng);
+            r.zones.push(zone({ k: "grenade", slot: z.slot, x: z.x + Math.cos(a) * z.r * 0.9, y: z.y + Math.sin(a) * z.r * 0.7, r: z.r * 0.6, dmg: z.dmg * 0.45, delay: 0.16 + i * 0.07, life: 0.3, t: 0, tick: -1, kb: z.kb * 0.5, follow: false }));
+          }
         // 수류탄 ★3: 터진 자리에 2초 불장판
         if (z.k === "grenade" && zw === "grenade" && (r.wstar.grenade ?? 1) >= 3)
           r.zones.push(zone({ k: "ember", slot: z.slot, x: z.x, y: z.y, r: z.r * 0.7, dmg: z.dmg * 0.15, delay: 0, life: 2, t: 0, tick: 0, kb: 0, follow: false }));
@@ -2825,7 +2856,7 @@ function specials(r: Run): Card[] {
     const [a, b] = WEAPONS[f].fuse!;
     if (maxed(a) && maxed(b)) out.push({ k: "fuse", id: f, from: 0, to: 1, rarity: 2 });
   }
-  for (const f of EVOLUTIONS) {
+  for (const f of r.ch ? [...EVOLUTIONS, ...PATROL_EVOLUTIONS] : EVOLUTIONS) {
     const [base, need] = WEAPONS[f].evo!;
     if (maxed(base) && r.passives.some((x) => x.id === need)) out.push({ k: "evo", id: f, from: 0, to: 1, rarity: 2 });
   }

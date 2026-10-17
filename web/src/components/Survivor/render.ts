@@ -583,6 +583,10 @@ export function draw(ctx: CanvasRenderingContext2D, r: Run, fx: Fx, hero: HeroAr
           ctx.fillRect(X(t.x) - 2, Y(t.y) - img.height - Math.sin(k * Math.PI) * 40, 4, Math.sin(k * Math.PI) * 40 + 6);
           ctx.globalAlpha = 1;
         }
+        // 기믹 말풍선: 무엇을 하면 되는지
+        if (t.k === "lamp" && !t.on) drawLabel(ctx, t.t > 0 ? "조금만 더!" : "옆에 서기!", "#ffb03a", X(t.x), Y(t.y) - img.height - 4, time);
+        if (t.k === "spout" && !t.on) drawLabel(ctx, `${Math.max(1, Math.ceil(t.t))}초 · 원 안으로 끌고 와요`, "#7ad7ff", X(t.x), Y(t.y) - img.height - 4, time);
+        if (t.k === "guard") drawLabel(ctx, "지켜요!", "#ffd23a", X(t.x), Y(t.y) - img.height - 26, time);
         if (t.k === "guard") {
           // 등불 체력 · 남은 시간
           const k = Math.max(0, t.t) / GUARD_HP;
@@ -621,6 +625,9 @@ export function draw(ctx: CanvasRenderingContext2D, r: Run, fx: Fx, hero: HeroAr
   ds.sort((a, b) => a.y - b.y);
   for (const d of ds) d.f();
 
+  // 보물 도깨비: 남은 시간 말풍선
+  for (const e of r.enemies) if (e.alive && e.kind === "goblin" && Math.abs(e.x - p.x) < VIEW_W / 2 + 20) drawLabel(ctx, `보물 도깨비 ${Math.max(0, Math.ceil(e.left ?? 0))}초`, "#ffd23a", X(e.x), Y(e.y) - 22, time);
+
   // 회전 우산
   for (const w of r.weapons) {
     const def = WEAPONS[w.id];
@@ -628,11 +635,22 @@ export function draw(ctx: CanvasRenderingContext2D, r: Run, fx: Fx, hero: HeroAr
     const lv = def.lv[w.lv - 1];
     const n = lv.n + r.stats.amount;
     const size = lv.size * (1 + r.stats.area);
+    const big = w.id === "downpour" ? 1.4 : 1;
+    const uw = Math.round(A.umbrella.width * big);
+    const uh = Math.round(A.umbrella.height * big);
     for (let i = 0; i < n; i++) {
       const a = w.ang + (i / n) * Math.PI * 2;
       const x = X(p.x + Math.cos(a) * size);
       const y = Y(p.y + Math.sin(a) * size * 0.8);
-      ctx.drawImage(A.umbrella, x - (A.umbrella.width >> 1), y - (A.umbrella.height >> 1) - 4);
+      ctx.drawImage(A.umbrella, x - (uw >> 1), y - (uh >> 1) - 4, uw, uh);
+      // 폭우 우산: 우산 아래로 빗줄기
+      if (big > 1) {
+        ctx.fillStyle = "#9fe0ff";
+        for (let k = 0; k < 3; k++) {
+          const dy = ((time * 120 + i * 13 + k * 9) % 18) | 0;
+          ctx.fillRect(x - 5 + k * 5, y + 4 + dy, 1, 3);
+        }
+      }
     }
   }
 
@@ -665,10 +683,11 @@ export function draw(ctx: CanvasRenderingContext2D, r: Run, fx: Fx, hero: HeroAr
     } else if (z.k === "pulse") {
       const rad = k * z.r;
       ctx.globalAlpha = 1 - k * 0.8;
-      arc(ctx, X(z.x), Y(z.y), rad, rad * 0.8, 0, Math.PI * 2, "#7ff0d8", 3);
+      const pc = r.weapons[z.slot]?.id === "symphony" ? "#ffd27a" : "#7ff0d8";
+      arc(ctx, X(z.x), Y(z.y), rad, rad * 0.8, 0, Math.PI * 2, pc, 3);
       arc(ctx, X(z.x), Y(z.y), Math.max(1, rad - 4), Math.max(1, rad - 4) * 0.8, 0, Math.PI * 2, "#ffffff", 1);
       // 음표 몇 개
-      ctx.fillStyle = "#7ff0d8";
+      ctx.fillStyle = pc;
       for (let i = 0; i < 6; i++) {
         const an = i * 1.05 + z.x * 0.01;
         const nx = X(z.x + Math.cos(an) * rad);
@@ -797,7 +816,12 @@ export function draw(ctx: CanvasRenderingContext2D, r: Run, fx: Fx, hero: HeroAr
         break;
       }
       case "coins":
+      case "goldrain":
         ctx.drawImage(A.pick.coin, x - (A.pick.coin.width >> 1), y - (A.pick.coin.height >> 1));
+        if (s.w === "goldrain") {
+          ctx.fillStyle = "#fff6c8";
+          ctx.fillRect(x - 1 + (((time * 30) | 0) % 3) - 1, y - 4, 1, 1);
+        }
         break;
       case "circus": {
         const rr = Math.round(s.r);
@@ -1508,6 +1532,47 @@ function drawLanternCone(ctx: CanvasRenderingContext2D, z: Zone, x: number, y: n
     }
   }
   ctx.globalAlpha = 1;
+}
+
+/** 월드 위 한글 말풍선 (기믹 · 3배 해상도로 그려 캐시) */
+const labelCache = new Map<string, HTMLCanvasElement>();
+function labelArt(text: string, c: string): HTMLCanvasElement | null {
+  const key = text + c;
+  const hit = labelCache.get(key);
+  if (hit) return hit;
+  if (typeof document === "undefined") return null;
+  const K = 3;
+  const m = document.createElement("canvas").getContext("2d")!;
+  m.font = `bold ${9 * K}px Galmuri11, "Nanum Gothic", sans-serif`;
+  const w = Math.ceil(m.measureText(text).width) + 8 * K;
+  const h = 14 * K;
+  const cv = document.createElement("canvas");
+  cv.width = w;
+  cv.height = h + 3 * K;
+  const g = cv.getContext("2d")!;
+  g.fillStyle = "#07051a";
+  g.fillRect(0, 0, w, h);
+  g.fillStyle = c;
+  g.fillRect(K, K, w - 2 * K, h - 2 * K);
+  // 꼬리
+  g.fillRect(w / 2 - 2 * K, h - K, 4 * K, 2 * K);
+  g.fillRect(w / 2 - K, h + K, 2 * K, K);
+  g.font = m.font;
+  g.fillStyle = "#07051a";
+  g.textAlign = "center";
+  g.textBaseline = "middle";
+  g.fillText(text, w / 2, h / 2 + K * 0.5);
+  labelCache.set(key, cv);
+  return cv;
+}
+/** 말풍선을 (x, y) 위에 · 살짝 위아래로 흔들림 */
+function drawLabel(ctx: CanvasRenderingContext2D, text: string, c: string, x: number, y: number, time: number) {
+  const im = labelArt(text, c);
+  if (!im) return;
+  const w = im.width / 3;
+  const h = im.height / 3;
+  const bob = Math.round(Math.sin(time * 4) * 1.5);
+  ctx.drawImage(im, Math.round(x - w / 2), Math.round(y - h + bob), Math.round(w), Math.round(h));
 }
 
 /** 가시 고리: 바닥 덩굴(점선) + 바깥을 향한 가시 n개 — out 0~1 = 가시가 솟은 정도 */

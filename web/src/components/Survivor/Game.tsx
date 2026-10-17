@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
-import { BLESS, DASH_CD, DT, ENEMIES, FLAG_NAME, GUARD_HP, HEROES, PASSIVES, RARITY_COLOR, RARITY_NAME, STAGES, ULT_NEED, VIEW_H, VIEW_W, WEAPONS, type FlagBuff, type HeroId, type PassiveId, type StageId, type Stats, type WeaponId } from "@/lib/survivor/data";
+import { BLESS, DASH_CD, DT, ENEMIES, EVOLUTIONS, FLAG_NAME, GIMMICK_GUIDE, type GuideK, PATROL_EVOLUTIONS, GUARD_HP, HEROES, PASSIVES, RARITY_COLOR, RARITY_NAME, STAGES, ULT_NEED, VIEW_H, VIEW_W, WEAPONS, type FlagBuff, type HeroId, type PassiveId, type StageId, type Stats, type WeaponId } from "@/lib/survivor/data";
 import { RELICS, RELIC_RARITY_COLOR, RELIC_RARITY_NAME, type RelicId } from "@/lib/survivor/relics";
 import { ARMY_CAP, ARMY_GRADE_COLOR, ARMY_GRADE_NAME, FACTION_COLOR, FACTION_NAME, UNIT, buyCost, craftable, mergeKey, mergeable } from "@/lib/survivor/army";
 import { armyBuy, armyCraft, armyMerge, banishCard, bossLimit, buyRelic, chooseBless, chooseCard, chooseWish, closeChest, dawnChoice, leaveThing, maxHp, needXp, newRun, reroll, result, step, type Card, type Ev, type Input, type Pause, type Run, type RunOpts, type RunResult } from "@/lib/survivor/sim";
@@ -72,6 +72,16 @@ function cardLines(c: Card): string[] {
   }
   return [];
 }
+
+/** 이 무기의 진화 (순찰대 판이면 새 무기 진화도) */
+export const evoOf = (w: WeaponId, patrol: boolean): WeaponId | undefined => [...EVOLUTIONS, ...(patrol ? PATROL_EVOLUTIONS : [])].find((e) => WEAPONS[e].evo![0] === w);
+/** 이 능력치가 재료인 진화 (가진 무기 것만) */
+const evosNeeding = (pid: PassiveId, own: WeaponId[], patrol: boolean) => [...EVOLUTIONS, ...(patrol ? PATROL_EVOLUTIONS : [])].filter((e) => WEAPONS[e].evo![1] === pid && own.includes(WEAPONS[e].evo![0]));
+/** 진화 준비: 무기 최대 레벨 + 짝 능력치 */
+const evoReady = (w: { id: WeaponId; lv: number }, hud: Hud) => {
+  const e = evoOf(w.id, !!hud.ch);
+  return !!e && w.lv >= WEAPONS[w.id].lv.length && hud.passives.some((p) => p.id === WEAPONS[e].evo![1]);
+};
 
 const cardText = (c: Card): { name: string; desc: string; k: IconKind | null; id?: WeaponId | PassiveId | RelicId } => {
   if (c.k === "fuse" || c.k === "evo") {
@@ -239,6 +249,7 @@ const FAM: Partial<Record<WeaponId, Fam>> = {
   missile: "missile", barrage: "missile", fireball: "missile", parcel: "missile", roll: "missile",
   ball: "ball", rainbow: "ball", pinball: "ball", circus: "ball", dice6: "ball",
   umbrella: "water", grenade: "grenade", notes: "notes", coins: "coin",
+  downpour: "water", cluster: "grenade", symphony: "notes", goldrain: "coin",
 };
 const HIT: Record<Fam, Sfx> = {
   lantern: "w_lantern_hit",
@@ -313,6 +324,11 @@ export default function Game({ setup, onEnd, onQuit }: { setup: GameSetup; onEnd
   const [stickView, setStickView] = useState<{ bx: number; by: number; x: number; y: number } | null>(null);
   const ended = useRef(false);
   const noteN = useRef(0);
+  const evoSaid = useRef(new Set<WeaponId>());
+  /** 기믹 안내: 판마다 처음 한 번 · 브라우저마다 종류별 3번까지 */
+  const [guide, setGuide] = useState<{ id: number; k: GuideK } | null>(null);
+  const guided = useRef(new Set<GuideK>());
+  const closeGuide = useCallback(() => setGuide(null), []);
 
   useEffect(() => {
     menuRef.current = menu;
@@ -474,7 +490,13 @@ export default function Game({ setup, onEnd, onQuit }: { setup: GameSetup; onEnd
             sfx("hurt");
             break;
           case "boom":
-            if (e.w === "grenade") {
+            if (e.w === "downpour") {
+              // 폭우 우산 빗방울: 큰 물보라
+              fx.hits.push({ k: "water", x: e.x, y: e.y - 2, s: 34, t: 0, life: 0.34, flip: Math.random() < 0.5 });
+              sfx("w_water_hit", { vol: 0.8, rate: 0.85 + Math.random() * 0.2 });
+              break;
+            }
+            if (e.w === "grenade" || e.w === "cluster") {
               // 수류탄: 폭발 그림 (하얀 섬광 → 불덩이 → 연기) + 쿵
               fx.hits.push({ k: "grenade", x: e.x, y: e.y - 4, s: e.r * 2.6, t: 0, life: 0.45, flip: Math.random() < 0.5 });
               fx.rings.push({ x: e.x, y: e.y, r: e.r * 1.1, c: "#fff2c0", t: 0, life: 0.2, fill: false });
@@ -486,6 +508,19 @@ export default function Game({ setup, onEnd, onQuit }: { setup: GameSetup; onEnd
             fx.rings.push({ x: e.x, y: e.y, r: e.r * 1.1, c: "#ffffff", t: 0, life: 0.25, fill: false });
             if (e.r >= 16) sfx("boom");
             break;
+          case "guide": {
+            if (guided.current.has(e.k)) break;
+            guided.current.add(e.k);
+            let n = 0;
+            try {
+              n = Number(localStorage.getItem(`pt-guide-${e.k}`) ?? 0);
+              localStorage.setItem(`pt-guide-${e.k}`, String(n + 1));
+            } catch {
+              /* 저장 안 돼도 보여 줌 */
+            }
+            if (n < 3) setGuide({ id: Date.now(), k: e.k });
+            break;
+          }
           case "thorns": {
             // 가시 돋음: 고리 가시가 솟고 · 초록 파편이 튐
             fx.spikes.push({ x: e.x, y: e.y, r: e.r, t: 0, rot: Math.random() * Math.PI });
@@ -773,7 +808,16 @@ export default function Game({ setup, onEnd, onQuit }: { setup: GameSetup; onEnd
       hudT += dt;
       if (hudT > 0.1) {
         hudT = 0;
-        setHud(hudOf(r));
+        const h = hudOf(r);
+        setHud(h);
+        // 처음 진화 준비가 된 무기 → 알림 (다음 레벨업 · 상자에서 진화)
+        for (const w of h.weapons)
+          if (evoReady(w, h) && !evoSaid.current.has(w.id)) {
+            evoSaid.current.add(w.id);
+            const e = evoOf(w.id, !!h.ch)!;
+            say(`✦ 진화 준비! ${WEAPONS[w.id].name} → ${WEAPONS[e].name} — 다음 레벨업 · 상자에서`, "#ffd23a");
+            sfx("rare");
+          }
         const cb = combo.current;
         if (cb.n && performance.now() - cb.at > 2500) cb.n = 0;
         setComboN(cb.n);
@@ -785,7 +829,7 @@ export default function Game({ setup, onEnd, onQuit }: { setup: GameSetup; onEnd
     };
     raf = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(raf);
-  }, [keys, onEv, onEnd]);
+  }, [keys, onEv, onEnd, say]);
 
   const pickCard = (i: number) => {
     const r = runRef.current;
@@ -902,9 +946,23 @@ export default function Game({ setup, onEnd, onQuit }: { setup: GameSetup; onEnd
             <div className="flex gap-[6px]">
               {Array.from({ length: 6 }, (_, i) => {
                 const w = hud.weapons[i];
+                const ev = w && !WEAPONS[w.id].evo && !WEAPONS[w.id].fuse ? evoOf(w.id, !!hud.ch) : undefined;
+                const ready = !!w && evoReady(w, hud);
+                const need = ev ? WEAPONS[ev].evo![1] : undefined;
                 return (
-                  <span key={i} className={`pts-slot ${w?.awake ? "pts-glow" : ""}`} style={{ width: 30, height: 30, boxShadow: `0 0 0 2px ${w && (WEAPONS[w.id].fuse || WEAPONS[w.id].evo || w.awake) ? "#ffd23a" : "#3a3080"}` }}>
+                  <span
+                    key={i}
+                    className={`pts-slot ${w?.awake || ready ? "pts-glow" : ""}`}
+                    style={{ width: 30, height: 30, boxShadow: `0 0 0 2px ${w && (WEAPONS[w.id].fuse || WEAPONS[w.id].evo || w.awake || ready) ? "#ffd23a" : "#3a3080"}` }}
+                    title={ev ? `진화: Lv${WEAPONS[w!.id].lv.length} + ${PASSIVES[need!].name} → ${WEAPONS[ev].name}` : undefined}
+                  >
                     {w && <ItemIcon k="weapon" id={w.id} size={26} />}
+                    {/* 진화 짝 능력치 (없으면 흐리게 · 있으면 또렷 · 준비되면 반짝) */}
+                    {ev && need && (
+                      <span className={`absolute -top-[7px] -left-[7px] ${ready ? "pts-blink" : ""}`} style={{ opacity: hud.passives.some((p) => p.id === need) ? 1 : 0.45, filter: ready ? "drop-shadow(0 0 3px #ffd23a)" : undefined }}>
+                        <ItemIcon k="passive" id={need} size={14} />
+                      </span>
+                    )}
                     {w && <b className="pts-sub absolute -right-[3px] -bottom-[6px] text-[10px]">{WEAPONS[w.id].fuse || WEAPONS[w.id].evo || w.awake ? "★" : w.lv}</b>}
                   </span>
                 );
@@ -1065,6 +1123,9 @@ export default function Game({ setup, onEnd, onQuit }: { setup: GameSetup; onEnd
         </div>
       )}
 
+      {/* 기믹 안내 (왼쪽 · 6초) */}
+      {guide && <GuideCard key={guide.id} k={guide.k} onDone={closeGuide} />}
+
       {/* 유물 얻음 알림 */}
       <div className="pointer-events-none absolute top-[130px] right-[12px] flex flex-col items-end gap-[6px]">
         {toasts.map((t) => (
@@ -1174,6 +1235,63 @@ function StatPanel({ hud }: { hud: Hud }) {
   );
 }
 
+/** 순찰대 기믹 안내 카드 — 무엇을 하면 되는지 2~3줄 */
+function GuideCard({ k, onDone }: { k: GuideK; onDone(): void }) {
+  const g = GIMMICK_GUIDE[k];
+  useEffect(() => {
+    const t = window.setTimeout(onDone, 6500);
+    return () => window.clearTimeout(t);
+  }, [onDone]);
+  return (
+    <div className="pts-pop pointer-events-none absolute top-[190px] left-[12px] w-[270px] px-[12px] py-[10px]" style={{ background: "rgba(7,5,26,0.88)", boxShadow: `0 0 0 2px ${g.c}, 0 0 0 4px #07051a` }}>
+      <div className="flex items-center gap-[8px]">
+        <span className="text-[22px] leading-none">{g.icon}</span>
+        <b className="pts-title text-[18px]" style={{ color: g.c }}>
+          {g.title}
+        </b>
+        <span className="pts-tag ml-auto text-[9px]" style={{ background: g.c }}>
+          기믹
+        </span>
+      </div>
+      <ol className="mt-[6px] flex flex-col gap-[3px]">
+        {g.steps.map((t, i) => (
+          <li key={i} className="flex gap-[6px] text-[12px] leading-[16px] text-[#e8e4ff]">
+            <b style={{ color: g.c }}>{i + 1}</b>
+            <span className="break-keep">{t}</span>
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+}
+
+/** 카드 아래 진화 힌트: 무기 카드 = 진화 짝 능력치 · 능력치 카드 = 이걸로 진화하는 가진 무기 */
+function EvoHint({ c, hud }: { c: Card; hud: Hud }) {
+  const patrol = !!hud.ch;
+  if (c.k === "weapon") {
+    const e = evoOf(c.id as WeaponId, patrol);
+    if (!e) return null;
+    const need = WEAPONS[e].evo![1];
+    const have = hud.passives.some((p) => p.id === need);
+    return (
+      <span className="mt-[6px] flex items-center gap-[3px] rounded-[2px] px-[5px] py-[2px] text-[10.5px] leading-[13px]" style={{ background: "#ffd23a1f", color: "#ffd27a" }}>
+        ✦ 진화 Lv{WEAPONS[c.id as WeaponId].lv.length} + <ItemIcon k="passive" id={need} size={13} />
+        {have ? <b className="text-[#7dff9a]">✓</b> : PASSIVES[need].name}
+      </span>
+    );
+  }
+  if (c.k === "passive") {
+    const es = evosNeeding(c.id as PassiveId, hud.weapons.map((w) => w.id), patrol);
+    if (!es.length || c.from > 0) return null;
+    return (
+      <span className="mt-[6px] flex items-center gap-[3px] rounded-[2px] px-[5px] py-[2px] text-[10.5px] leading-[13px]" style={{ background: "#ffd23a1f", color: "#ffd27a" }}>
+        ✦ 진화 재료 <ItemIcon k="weapon" id={WEAPONS[es[0]].evo![0]} size={13} />→ {WEAPONS[es[0]].name}
+      </span>
+    );
+  }
+  return null;
+}
+
 function LevelUp({ pause, hud, onPick, onReroll, onBanish }: { pause: Extract<Pause, { k: "level" }>; hud: Hud; onPick(i: number): void; onReroll(): void; onBanish(i: number): void }) {
   return (
     <div className="absolute inset-0 flex flex-col items-center justify-center" style={{ background: "rgba(7,5,26,0.72)" }}>
@@ -1228,6 +1346,7 @@ function LevelUp({ pause, hud, onPick, onReroll, onBanish }: { pause: Extract<Pa
                       ))}
                     </span>
                   )}
+                  <EvoHint c={c} hud={hud} />
                   <span className="pts-sub mt-auto text-[11px] text-[#6b63a3]">{i + 1}</span>
                 </button>
                 {hud.banish > 0 && !pause.jackpot && !sp && (c.k === "weapon" || c.k === "passive") && (

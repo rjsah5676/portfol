@@ -168,7 +168,12 @@ export type WeaponId =
   | "judgment"
   | "rose"
   | "barrage"
-  | "rainbow";
+  | "rainbow"
+  // 순찰대 새 무기 진화 (순찰대 판에서만)
+  | "downpour"
+  | "cluster"
+  | "symphony"
+  | "goldrain";
 
 export type Pattern = "spin" | "nearest" | "orbit" | "drop" | "facing" | "boomerang" | "strike" | "aura" | "homing" | "bounce" | "cone" | "whip" | "spread" | "pulse";
 
@@ -418,6 +423,44 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     desc: ["화면 벽을 튕겨 다니는 공", "+1개", "피해 +5 · 더 오래", "+1개", "+1개 · 크기 +"],
     lv: [L(10, 3.0, 1, 7, 170, 99, 3, 15), L(10, 3.0, 2, 7, 170, 99, 3, 15), L(15, 3.0, 2, 7, 180, 99, 4, 15), L(15, 2.8, 3, 7, 190, 99, 4, 18), L(18, 2.6, 4, 9, 200, 99, 4.5, 20)],
   },
+  /* 순찰대 새 무기 진화 — 순찰대 판에서만 (PATROL_EVOLUTIONS) */
+  downpour: {
+    id: "downpour",
+    name: "폭우 우산",
+    evo: ["umbrella", "maxHp"],
+    pattern: "orbit",
+    color: "#5fb8ff",
+    desc: ["물방울 우산 진화! 큰 우산 6개 · 주변 적에게 빗방울이 쏟아지고 맞은 적은 느려져요"],
+    lv: [L(20, 0.5, 6, 58, 4.8, 99, 0, 55)],
+  },
+  cluster: {
+    id: "cluster",
+    name: "집속 수류탄",
+    evo: ["grenade", "area"],
+    pattern: "drop",
+    color: "#ff9c3a",
+    desc: ["수류탄 진화! 터지면 작은 폭탄 셋이 둘레에서 한 번 더 터져요"],
+    lv: [L(46, 1.2, 5, 40, 0, 99, 0.6, 60)],
+  },
+  symphony: {
+    id: "symphony",
+    name: "교향곡",
+    evo: ["notes", "cooldown"],
+    pattern: "pulse",
+    color: "#ffd27a",
+    desc: ["음표 파동 진화! 한 박자에 세 겹 파동 · 맞은 적은 잠깐 멈칫해요"],
+    lv: [L(40, 1.0, 3, 124, 0, 99, 0.5, 50)],
+  },
+  goldrain: {
+    id: "goldrain",
+    name: "황금 소나기",
+    evo: ["coins", "luck"],
+    pattern: "spread",
+    color: "#ffd23a",
+    fx: "coin",
+    desc: ["금화 샷건 진화! 금화 12개 · 관통 · 처치하면 코인이 더 잘 나와요"],
+    lv: [L(24, 0.6, 12, 6, 320, 2, 0.65, 20)],
+  },
   blades: {
     id: "blades",
     name: "천 개의 칼날",
@@ -496,6 +539,8 @@ export const SHARED_WEAPONS: WeaponId[] = ["shuriken", "boomerang", "bolt", "tho
 export const BASE_WEAPONS: WeaponId[] = ["shuriken", "boomerang", "bolt", "thorns"];
 export const FUSIONS: WeaponId[] = ["blades", "pinball"];
 export const EVOLUTIONS: WeaponId[] = ["gale", "cyclone", "judgment", "rose", "barrage", "rainbow"];
+/** 순찰대 새 무기 진화 (순찰대 판에서만 — 서바이버 캐릭터 무기는 각성이 따로 있음) */
+export const PATROL_EVOLUTIONS: WeaponId[] = ["downpour", "cluster", "symphony", "goldrain"];
 /** 고유 무기 각성: Lv5 + 이 패시브 → 상자 · 카드에서 각성 (피해 ×1.6 · +1개 · 크기 ×1.2) */
 export const AWAKEN_NEED = Object.fromEntries((Object.keys(HEROES) as HeroId[]).map((h) => [h, HEROES[h].awaken])) as Record<HeroId, PassiveId>;
 export const MAX_WEAPONS = 6;
@@ -801,6 +846,26 @@ export interface ChapterDef {
   kind?: StageKind;
   /** 특수 판 목표 (별 2 = 목표 달성) */
   quest?: Quest;
+}
+
+/** 순찰대 기믹 안내 (로비 미리보기 · 판에서 처음 나올 때) */
+export type GuideK = "lamp" | "spout" | "toll" | "goblin" | "guard" | "rush";
+export const GIMMICK_GUIDE: Record<GuideK, { icon: string; title: string; c: string; steps: string[] }> = {
+  lamp: { icon: "💡", title: "꺼진 가로등", c: "#ffb03a", steps: ["옆에 1.5초 서 있으면 켜져요", "켜지는 순간 주변 적이 불타고 치킨이 떨어져요", "켜진 15초 동안 가까이 온 적을 계속 태워요"] },
+  spout: { icon: "⛲", title: "분수 물보라", c: "#7ad7ff", steps: ["원이 차오르고 4초 뒤 물보라가 솟아요", "원 안 적은 기절 + 피해 — 적을 끌고 들어가요", "그때 내가 원 안이면 젬이 전부 몰려와요"] },
+  toll: { icon: "🔔", title: "자정의 종", c: "#ffb03a", steps: ["종이 울리는 12초 동안 적이 빨라져요", "대신 경험치가 두 배 — 버티면서 쓸어 담아요"] },
+  goblin: { icon: "💰", title: "보물 도깨비", c: "#ffd23a", steps: ["안 아파요 — 도망치니까 쫓아가요", "맞을 때마다 코인, 잡으면 보물 상자", "15초 지나면 사라져요"] },
+  guard: { icon: "🏮", title: "등불 지키기", c: "#ffd23a", steps: ["새로 나오는 적의 절반이 등불을 노려요", "등불 곁에서 막아요 — 체력이 0이 되면 꺼져요", "끝까지 지키면 보물 상자 + 섬광"] },
+  rush: { icon: "⚔", title: "정예 러시", c: "#ff8a5c", steps: ["정예가 줄줄이 나와요 — 잡을 때마다 보물 상자", "미니 보스 전에 다 잡으면 별"] },
+};
+/** 이 판에 나오는 기믹 (로비 미리보기) */
+export function guidesOf(def: ChapterDef): GuideK[] {
+  const out: GuideK[] = [];
+  if (def.events.some((e) => e.k === "lamps")) out.push("lamp");
+  if (def.events.some((e) => e.k === "spout")) out.push("spout");
+  if (def.toll) out.push("toll");
+  if (def.quest) out.push(def.quest.k);
+  return out;
 }
 
 export type StageKind = "basic" | "gimmick" | "special" | "siege" | "boss";

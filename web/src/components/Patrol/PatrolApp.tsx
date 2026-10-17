@@ -11,7 +11,7 @@ import { CH_COUNT, ST_COUNT, SUB, SUB_KIND, firstSt, stCh, stName, stSub, stage 
 import { BOOST_RUNS, PATROL_MAX_H, QUICK_FREE, QUICK_H, STAR_GEMS, WELCOME, firstReward, patrolPending, patrolRate } from "@/lib/patrol/economy";
 import { ATK_PCT, GEAR, GRADE_COLOR, GRADE_NAME, power, powerScore, type GearItem } from "@/lib/patrol/gear";
 import { BASE_DECK, FIRST_WEAPON, NEW_WEAPONS, starOf } from "@/lib/patrol/weapons";
-import { ENEMIES, HEROES, STAGE_KIND, WEAPONS, questName, type ChapterDef, type StageKind } from "@/lib/survivor/data";
+import { ENEMIES, GIMMICK_GUIDE, HEROES, STAGE_KIND, WEAPONS, guidesOf, questName, type ChapterDef, type StageKind } from "@/lib/survivor/data";
 import type { RunResult } from "@/lib/survivor/sim";
 import { patrol, type PatrolFinish, type PatrolProfile } from "@/realtime/patrol";
 import Token from "../Marble/Token";
@@ -368,7 +368,23 @@ function Lobby({ prof, member, loaded, st, open, onSt, note, skew, onProf, onSta
             <span className="text-[#a9a2d6]">
               적 체력 ×{def.hp} · 피해 ×{def.dmg}
             </span>
-            {def.tip && <span className="text-[#ffd27a]">{def.tip}</span>}
+            {/* 이 판 기믹: 아이콘 · 이름 · 할 일 한 줄 (마우스를 올리면 전부) */}
+            {guidesOf(def).length ? (
+              guidesOf(def).map((k) => {
+                const g = GIMMICK_GUIDE[k];
+                return (
+                  <span key={k} className="flex items-start gap-[6px] leading-[16px]" title={g.steps.join("\n")}>
+                    <span>{g.icon}</span>
+                    <span>
+                      <b style={{ color: g.c }}>{g.title}</b> <span className="text-[#e8e4ff]">— {g.steps[0]}</span>
+                      {g.steps[1] && <span className="block text-[11px] text-[#a9a2d6]">{g.steps[1]}</span>}
+                    </span>
+                  </span>
+                );
+              })
+            ) : (
+              def.tip && <span className="text-[#ffd27a]">{def.tip}</span>
+            )}
             <div className="flex flex-col gap-[2px]">
               {labels.map((t, i) => (
                 <span key={i} style={{ color: stars[i] ? "#ffd23a" : "#6b63a3" }}>
