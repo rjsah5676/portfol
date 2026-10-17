@@ -10,6 +10,7 @@ import imgRhythm from "@/img/menu/rhythm.jpg";
 import imgSketch from "@/img/menu/sketch.jpg";
 import imgPoker from "@/img/menu/poker.jpg";
 import imgDefense from "@/img/menu/defense.jpg";
+import imgRogue from "@/img/menu/rogue.jpg";
 import imgLadder from "@/img/menu/ladder.jpg";
 import imgRoulette from "@/img/menu/roulette.jpg";
 import imgCalorie from "@/img/menu/calorie.jpg";
@@ -30,6 +31,8 @@ export interface NavMenuItem {
   image: StaticImageData;
   /** 메인에서 크게 보여 줄 항목 */
   featured?: boolean;
+  /** 이름 옆 작은 딱지 (예: "ALPHA") */
+  badge?: string;
 }
 
 export interface NavGroup {
@@ -109,6 +112,14 @@ export const NAV_GROUPS: NavGroup[] = [
         desc: "소환 · 합성으로 막는 운빨 랜덤 디펜스, 랭킹 · 멀티",
         icon: "👾",
         featured: true,
+      },
+      {
+        href: "/games/rogue",
+        image: imgRogue,
+        label: "픽셀 생존기",
+        desc: "PIXEL FIGHT 외전 · 아이템 조합 탑뷰 로그라이크, 랭킹 · 업적",
+        icon: "⚔️",
+        badge: "ALPHA",
       },
       {
         href: "/games/sketch",

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import Faded from "@/components/Faded";
 import { getNavGroup } from "@/data/navMenu";
+import NavBadge from "@/components/Menu/NavBadge";
 
 // nav 대제목(study/games/tools/devtools)을 누르면 나오는 하위 메뉴 격자 페이지
 export default function MenuHub({ group }: { group: string }) {
@@ -47,6 +48,7 @@ export default function MenuHub({ group }: { group: string }) {
                 <div className="flex flex-1 flex-col p-4 sm:p-5">
                   <span className="font-mono text-[15px] font-medium text-white sm:text-base">
                     {item.label}
+                    <NavBadge badge={item.badge} />
                   </span>
                   <span className="mt-1.5 flex-1 font-['Nanum_Gothic',sans-serif] text-xs leading-relaxed break-keep text-white/45 sm:text-[13px]">
                     {item.desc}

@@ -2,6 +2,7 @@ import type { CSSProperties, ReactNode } from "react";
 import Link from "next/link";
 import { NAV_GROUPS, getNavGroup, type NavGroup, type NavMenuItem } from "@/data/navMenu";
 import { SECTION_META, postPath, type StudySection } from "@/firestore/studyPosts";
+import NavBadge from "@/components/Menu/NavBadge";
 
 /*
  * 메인: 상단 메뉴(study · games · tools · devtools)에 있는 것들을 한 화면에 펼쳐 보여 줌.
@@ -134,6 +135,7 @@ function FeaturedGame({ item }: { item: NavMenuItem }) {
       <div className="mt-3.5 flex flex-wrap items-baseline gap-x-4 gap-y-1">
         <span className="font-mono text-xl font-bold text-white transition-colors group-hover:text-[color:var(--accent)]">
           {item.label}
+          <NavBadge badge={item.badge} />
         </span>
         <span className={`text-[13px] break-keep text-white/50 ${KR}`}>{item.desc}</span>
       </div>
@@ -156,6 +158,7 @@ function Thumb({ item }: { item: NavMenuItem }) {
         className={`mt-2.5 text-[15px] font-bold text-white/90 transition-colors group-hover:text-[color:var(--accent)] ${KR}`}
       >
         {item.label}
+        <NavBadge badge={item.badge} />
       </div>
       <p className={`mt-0.5 line-clamp-2 text-xs leading-relaxed break-keep text-white/45 ${KR}`}>
         {item.desc}

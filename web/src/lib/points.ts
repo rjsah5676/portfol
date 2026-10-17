@@ -47,7 +47,7 @@ export const POKER_EXCHANGE = {
 /* ─────────────── 상점 ─────────────── */
 
 /** 포인트를 쓰는 게임 (상점이 들어갈 곳). 지금 화면까지 붙은 건 포커 */
-export type PointGame = "poker" | "fight" | "defense" | "rhythm" | "sketch" | "marble" | "survivor";
+export type PointGame = "poker" | "fight" | "defense" | "rhythm" | "sketch" | "marble" | "survivor" | "rogue";
 export const POINT_GAMES: Record<PointGame, string> = {
   poker: "ANIME POKER",
   fight: "PIXEL FIGHT",
@@ -56,6 +56,7 @@ export const POINT_GAMES: Record<PointGame, string> = {
   sketch: "DOODLE PARTY",
   marble: "DICE TOWN",
   survivor: "PIXEL TOWN SURVIVOR",
+  rogue: "픽셀 생존기",
 };
 
 /**
@@ -211,7 +212,7 @@ export const shopFor = (game: PointGame, kind: ShopItem["kind"], ref: string) =>
 /* ─────────────── 업적 ─────────────── */
 
 /** 업적이 있는 게임 (게임 머리말의 [업적] 버튼) */
-export type AchGame = "poker" | "fight" | "defense" | "rhythm" | "sketch" | "marble" | "survivor";
+export type AchGame = "poker" | "fight" | "defense" | "rhythm" | "sketch" | "marble" | "survivor" | "rogue";
 
 /**
  * 업적이 보는 숫자 (서버가 기록에서 계산 — server/src/achievements.ts)
@@ -277,7 +278,20 @@ export type AchMetric =
   | "survivor.kills"
   | "survivor.bestSec"
   | "survivor.bestLv"
-  | "survivor.heroWins";
+  | "survivor.heroWins"
+  | "rogue.runs"
+  | "rogue.wins"
+  | "rogue.full"
+  | "rogue.kills"
+  | "rogue.bosses"
+  | "rogue.ch"
+  | "rogue.floor"
+  | "rogue.items"
+  | "rogue.codex"
+  | "rogue.secrets"
+  | "rogue.noHit"
+  | "rogue.cheats"
+  | "rogue.speed";
 
 export interface Achievement {
   id: string;
@@ -666,6 +680,31 @@ export const ACHIEVEMENTS: Achievement[] = [
   a("survivor", "kills-500000", "백만 대군 앞에서", "몬스터 500,000마리 처치 (누적)", "survivor.kills", 500_000, 4000),
   a("survivor", "heroes-4", "돌아가며 출근", "서로 다른 캐릭터 4명으로 클리어", "survivor.heroWins", 4, 1200),
   a("survivor", "heroes-10", "마을 전원 생존", "서로 다른 캐릭터 10명으로 클리어", "survivor.heroWins", 10, 4000),
+
+  // 픽셀 생존기 (games/rogue.ts 의 rogue.finish 가 stats.rogue 에 쌓음) — 챕터 보스 업적 이름 = 그 챕터 이야기(LOG) 제목
+  a("rogue", "runs-1", "부팅 완료", "한 판 끝내기", "rogue.runs", 1, 150),
+  a("rogue", "runs-30", "재접속 중독", "30판 끝내기", "rogue.runs", 30, 900),
+  a("rogue", "runs-150", "로그아웃 불가", "150판 끝내기", "rogue.runs", 150, 3000),
+  a("rogue", "ch-1", "아래에서", "1챕터 보스 렉 덩어리 쓰러뜨리기 (LOG 01)", "rogue.ch", 1, 300),
+  a("rogue", "ch-2", "지워진 빌드", "2챕터 보스 무한 로딩 쓰러뜨리기 (LOG 02)", "rogue.ch", 2, 900),
+  a("rogue", "ch-3", "멈춘 사람들", "3챕터 보스 프리징 쓰러뜨리기 (LOG 03)", "rogue.ch", 3, 2000),
+  a("rogue", "ch-4", "또 하나의 카이", "4챕터 보스 블루스크린 쓰러뜨리기 — 진짜 결말 (LOG 04)", "rogue.ch", 4, 4000),
+  a("rogue", "wins-10", "디버거", "판 목표 층까지 10번 클리어", "rogue.wins", 10, 1500),
+  a("rogue", "full-5", "초기화 취소", "8층까지 5번 클리어", "rogue.full", 5, 5000),
+  a("rogue", "speed-1", "스피드런", "4층 이상 목표를 15분 안에 클리어", "rogue.speed", 1, 1500),
+  a("rogue", "nohit-1", "무결점 패치", "보스를 한 대도 안 맞고 쓰러뜨리기", "rogue.noHit", 1, 600),
+  a("rogue", "nohit-10", "핫픽스 장인", "노히트 보스 10번 (누적)", "rogue.noHit", 10, 2000),
+  a("rogue", "items-10", "조합의 맛", "한 판에 패시브 아이템 10개", "rogue.items", 10, 450),
+  a("rogue", "items-20", "만렙 빌드", "한 판에 패시브 아이템 20개", "rogue.items", 20, 2000),
+  a("rogue", "codex-18", "수집가", "도감에 아이템 18종 열기", "rogue.codex", 18, 600),
+  a("rogue", "codex-37", "완전한 도감", "도감에 아이템 37종 전부 열기", "rogue.codex", 37, 3000),
+  a("rogue", "secret-1", "수상한 벽", "숨겨진 방 찾기", "rogue.secrets", 1, 150),
+  a("rogue", "secret-10", "벽 두드리기", "숨겨진 방 10번 찾기 (판 수)", "rogue.secrets", 10, 900),
+  a("rogue", "cheat-5", "치트키 입력", "치트 콘솔 거래 5번 (누적)", "rogue.cheats", 5, 450),
+  a("rogue", "bosses-30", "보스 러시", "보스 30마리 쓰러뜨리기 (누적)", "rogue.bosses", 30, 900),
+  a("rogue", "kills-1000", "버그 잡이", "적 1,000마리 처치 (누적)", "rogue.kills", 1000, 300),
+  a("rogue", "kills-10000", "패치 담당", "적 10,000마리 처치 (누적)", "rogue.kills", 10_000, 1200),
+  a("rogue", "kills-50000", "글리치 멸균", "적 50,000마리 처치 (누적)", "rogue.kills", 50_000, 3500),
 ];
 /** 반복형 업적: 일회형 마지막 단계(from)를 넘은 뒤로 step 만큼 쌓일 때마다 reward */
 const r = (game: AchGame, id: string, title: string, unit: string, metric: AchMetric, from: number, step: number, reward: number): Achievement => ({
@@ -699,6 +738,8 @@ ACHIEVEMENTS.push(
   r("marble", "wins", "마블 재벌 · 계속", "승", "marble.wins", 100, 50, 1500),
   r("survivor", "games", "불면의 마을 · 계속", "판", "survivor.games", 150, 50, 600),
   r("survivor", "wins", "밤을 지배하는 자 · 계속", "번 클리어", "survivor.wins", 50, 25, 1500),
+  r("rogue", "runs", "로그아웃 불가 · 계속", "판", "rogue.runs", 150, 50, 600),
+  r("rogue", "kills", "글리치 멸균 · 계속", "마리", "rogue.kills", 50_000, 50_000, 1000),
 );
 export const achievementOf = (id: unknown) =>
   ACHIEVEMENTS.find((x) => x.id === id);
@@ -776,6 +817,9 @@ export const DAILY_MISSIONS: DailyMission[] = [
   dm("survivor", "game", "한 판 끝내기", "survivor.games", 1, 90),
   dm("survivor", "games", "세 판 끝내기", "survivor.games", 3, 180),
   dm("survivor", "kills", "몬스터 3,000마리 처치", "survivor.kills", 3000, 120),
+  dm("rogue", "run", "한 판 끝내기", "rogue.runs", 1, 90),
+  dm("rogue", "runs", "세 판 끝내기", "rogue.runs", 3, 180),
+  dm("rogue", "bosses", "보스 3마리 쓰러뜨리기", "rogue.bosses", 3, 120),
 ];
 /** 일일 미션이 보는 숫자 (기준값을 적어 둘 것) */
 export const DAILY_METRICS = [...new Set(DAILY_MISSIONS.map((x) => x.metric))];

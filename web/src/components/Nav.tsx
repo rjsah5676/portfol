@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { NAV_GROUPS, type NavGroup } from "@/data/navMenu";
 import { SearchIcon, openSiteSearch } from "@/components/SiteSearch";
+import NavBadge from "@/components/Menu/NavBadge";
 
 /**
  * 상단 메뉴. 대제목은 목록 페이지 링크, PC는 마우스를 올리면(터치 기기는 ▾를 누르면) 메뉴 바 아래로 넓은 패널이 열리고
@@ -67,6 +68,7 @@ function Panel({ group, path, onClose }: { group: NavGroup; path: string; onClos
                     className={`block truncate font-['Nanum_Gothic',sans-serif] text-[13px] sm:text-sm ${on ? "text-white" : "text-white/85"}`}
                   >
                     {it.label}
+                    <NavBadge badge={it.badge} />
                   </span>
                   <span className="hidden truncate font-['Nanum_Gothic',sans-serif] text-[11px] text-white/40 sm:block">
                     {it.desc}
