@@ -4,7 +4,7 @@
  * 오프라인 전용이라 결정론일 필요는 없지만, 같은 시드면 같은 행동을 하도록 자체 난수를 씀.
  */
 import { CHARS, SUB, type CharDef, type MoveDef } from "./chars";
-import { IN, VIEW_H, clone, isAir, mapOf, platBelow, step, type Fighter, type State } from "./sim";
+import { IN, VIEW_H, WALL_L, WALL_R, clone, isAir, mapOf, platBelow, step, type Fighter, type State } from "./sim";
 import type { Plat } from "./maps";
 import { ROUTES, type ComboRoute, type Starter } from "./combos";
 
@@ -241,7 +241,7 @@ export function aiForRating(r: number, charId?: string): AILevel {
  * AI 지문: 랭크전 봇전은 서버가 같은 경기를 다시 돌려 확인하니, 브라우저와 서버의 AI가 똑같아야 함.
  * 단계 값·보정·콤보 길은 자동으로 들어가고, next() 같은 판단 코드를 바꿨으면 AI_REV 를 올릴 것.
  */
-const AI_REV = 13;
+const AI_REV = 14;
 export const AI_ID = (() => {
   const str = AI_REV + JSON.stringify([AI_LEVELS, RANK_TIERS, AI_RATING, ADJ_AT, CHAR_ADJ, ROUTES, ROUTE_CAP, HUMAN]);
   let h = 0x811c9dc5;
@@ -669,14 +669,15 @@ export class FightAI {
     // ── 떨어지는 중: 가까운 발판으로 복귀 ──
     if (air && f.st !== "hit" && f.st !== "ko") {
       // 지금 속도로 가면 착지할 발판이 없으면
-      const under = platBelow(map, f.x + f.vx * 24, f.h);
+      // (화면 끝 벽에 막히니 예측 자리도 벽 안쪽으로 — 구석에서 띄우고 뛰면 벽 너머를 보고 「발판 없음」으로 복귀만 하다 공중 콤보를 놓치던 것, 10.17)
+      const under = platBelow(map, Math.max(WALL_L, Math.min(WALL_R, f.x + f.vx * 24)), f.h);
       // 한 번 복귀하기 시작하면 착지할 때까지 계속 (발판 끝에서 왔다 갔다 하지 않게)
       if (!under || f.h / SUB > VIEW_H || this.recover) {
         this.recover = true;
         let best = map.plats[0];
         let bd = Infinity;
         // 지금 날아가는 쪽(관성)을 감안해서 가까운 발판
-        const px = f.x + f.vx * 16;
+        const px = Math.max(WALL_L, Math.min(WALL_R, f.x + f.vx * 16));
         for (const p of map.plats) {
           const cx = ((p.x0 + p.x1) / 2) * SUB;
           const ex = Math.max(p.x0 * SUB, Math.min(p.x1 * SUB, px));
@@ -777,14 +778,15 @@ export class FightAI {
       if (f.st === "jump" || (f.st === "atk" && f.hit && (f.mv === "J" || f.mv === "K"))) {
         out |= toward;
         // 공중 연속: 약 위주로 이어 치다 마지막은 발차기 (박자: 판정이 맞은 직후에 누름)
-        if (dist < 48 && dy > -25 && dy < 70 && o.stun >= c.moves.J.startup + 2 && this.r() < 0.35 + L.combo * 0.6) {
+        // (사람: 뛰어오르는 길에 바로 침 — 상대가 조금 아래 있어도 공중 약 판정이 닿음, 10.17)
+        if (dist < 48 && dy > -25 - hu * 40 && dy < 70 && o.stun >= c.moves.J.startup + 2 && this.r() < 0.35 + L.combo * 0.6) {
           if (c.moves.S.air?.hug && f.cd === 0 && !o.hugd && (o.combo >= 3 || f.airUsed >= 3) && this.r() < 0.5 + L.combo * 0.5) {
             // 곰 포옹으로 마무리: 안고 내리꽂아 기절 → 땅에서 이어 침
             press(IN.C);
           } else if (hu > 0 && f.meter >= 100 && o.combo >= 4 && this.r() < hu && this.ultHits(s, me, 0)) {
             // 사람: 공중 콤보 끝을 필살기로 (G J J K K J K → X)
             press(IN.X);
-          } else if ((o.floatT > 90 || o.combo >= 6 || (f.airUsed >= 4 && f.airK >= 2)) && f.airS === 0) {
+          } else if ((o.floatT > 90 + hu * 80 || o.combo >= 6 + Math.round(hu * 6) || (f.airUsed >= 4 && f.airK >= 2)) && f.airS === 0) {
             // 오래 띄웠거나 다 썼으면 ↓ + K 마무리 내려찍기
             out |= IN.D;
             hitBtn(IN.B);
@@ -808,7 +810,8 @@ export class FightAI {
         // 건모: ⏸ 일시정지 → 필살기 Alt+F4 로 캔슬 (느린 시작도 확정)
         else if (f.mv === "S" && c.moves.X.bsod && o.mark === 1 && f.meter >= 100 && this.r() < 0.7 && this.ultHits(s, me, 0)) press(IN.X);
         else if (f.mv === "S" && (o.pulled || o.mark === 1)) press(this.r() < 0.5 ? IN.A | IN.B : IN.A);
-        else if (f.mv === "L") press(f.chain < 4 && this.r() < 0.6 ? IN.A : IN.B);
+        // (사람: 약 4단 끝까지 → 띄워서 공중 콤보 — 기록에서 사람 주력 [L×4 J×2 K×2])
+        else if (f.mv === "L") press(f.chain < 4 && this.r() < 0.6 + hu * 0.8 ? IN.A : IN.B);
         // 사람: 공중 약 · 발차기가 맞으면 공중에서 이어 침 (J → J · J → K · K → K)
         else if (hu > 0 && air && (f.mv === "J" || f.mv === "K") && f.airUsed < 4 && this.r() < hu * 1.5) {
           out |= toward;
@@ -1706,6 +1709,9 @@ export class FightAI {
     // 사람: 서서 기다리기보다 뛰어들거나 찔러 봄 (기록에서 사람은 가만히 32% · 봇 51%)
     const hu = L.human ?? 0;
     if (hu > 0 && this.intent === "wait" && this.r() < hu * 1.2) this.intent = dist > 55 && this.r() < 0.6 ? "jumpIn" : "poke";
+    // 사람: 멀리서 아이덴티티를 덜 쏘고 뛰어들거나 다가감 (10.17 기록 — 멀리서 봇 S 63% · 사람 S 43%, 분당 점프 사람 71 · 봇 28)
+    if (hu > 0 && this.intent === "fireball" && this.r() < hu * 1.2) this.intent = dist > 120 && this.r() < 0.6 ? "jumpIn" : "approach";
+    if (hu > 0 && this.intent === "approach" && dist > 120 && this.r() < hu * 0.6) this.intent = "jumpIn";
     void lReach;
   }
 }
