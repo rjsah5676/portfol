@@ -3,10 +3,10 @@
  * 판은 public/rogue/index.html (iframe) 이 돌리고, 끝나면 이 모양의 기록을 넘김 → server/src/games/rogue.ts
  */
 
-/** 4챕터 × 2층 */
+/** 4월드 × 2층 */
 export const ROGUE_FLOORS = 8;
 
-/** 고를 수 있는 캐릭터 (이그나 = 3챕터 보스 처치로 해금) */
+/** 고를 수 있는 캐릭터 (이그나 = 월드 3 보스 처치로 해금) */
 export const ROGUE_CHARS = ["kai", "igna"] as const;
 export type RogueChar = (typeof ROGUE_CHARS)[number];
 export const ROGUE_CHAR_NAME: Record<RogueChar, string> = { kai: "카이", igna: "이그나" };
@@ -14,14 +14,14 @@ export const ROGUE_CHAR_NAME: Record<RogueChar, string> = { kai: "카이", igna:
 export interface RogueReport {
   /** 도달한 층 (1~8) */
   floor: number;
-  /** 이번 판 목표 층 (열린 챕터 × 2) */
+  /** 이번 판 목표 층 (열린 월드 × 2) */
   endFloor: number;
   /** 목표 층 보스까지 잡음 */
   win: boolean;
   /** 판 시간 (멈춘 시간 빼고) */
   sec: number;
   kills: number;
-  /** 잡은 보스 (중간 · 챕터) */
+  /** 잡은 보스 (중간 · 월드) */
   bosses: number;
   /** 패시브 아이템 수 */
   items: number;
@@ -35,7 +35,7 @@ export interface RogueReport {
   cheats: number;
   /** 도감에 열린 아이템 종류 (판 밖 누적) */
   codex: number;
-  /** 이번 판에 잡은 가장 깊은 챕터 보스 (0~4) */
+  /** 이번 판에 잡은 가장 깊은 월드 보스 (0~4) */
   ch: number;
   seed: number;
   /** 고른 캐릭터 */

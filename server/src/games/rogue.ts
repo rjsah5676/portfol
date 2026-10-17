@@ -3,7 +3,7 @@
  *  rogue.start  → 판 번호 (시작 시각 기록, 회원만)
  *  rogue.finish → 기록 확인(plausible) → 랭킹(최고 점수만) · 업적 통계(stats.rogue) → 이번 판으로 새로 채운 업적 이름
  *  rogue.rank
- * 챕터 해금 · 도감 · 이어하기 저장은 아직 브라우저(localStorage)에만.
+ * 월드 해금 · 도감 · 이어하기 저장은 아직 브라우저(localStorage)에만.
  */
 import { z } from "zod";
 import type { Deps } from "../deps";

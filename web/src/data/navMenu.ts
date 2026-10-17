@@ -117,9 +117,9 @@ export const NAV_GROUPS: NavGroup[] = [
         href: "/games/rogue",
         image: imgRogue,
         label: "PIXEL RESET STORY",
-        desc: "PIXEL FIGHT 외전 · 아이템 조합 탑뷰 로그라이크, 랭킹 · 업적",
+        desc: "PIXEL FIGHT 외전 · 아이템 조합 탑뷰 로그라이크, 캐릭터 해금 · 랭킹",
         icon: "⚔️",
-        badge: "ALPHA",
+        featured: true,
       },
       {
         href: "/games/sketch",

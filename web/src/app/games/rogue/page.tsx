@@ -37,7 +37,7 @@ export default function RoguePage() {
   }));
   return (
     <Faded>
-      <div className="mx-auto max-w-[1076px] px-3 pt-6 pb-24 sm:px-6">
+      <div className="mx-auto max-w-[1200px] px-3 pt-6 pb-24 sm:px-6">
         <GameHeader
           icon="⚔️"
           title="PIXEL RESET STORY"

@@ -10,6 +10,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Silkscreen:wght@400;700&family=Noto+Sans+KR:wght@400;700;900&display=swap">
 <style>
 [hidden]{display:none!important}
+html.embed body{padding:4px 4px 2px; gap:4px}
 /* Layout: one-screen arcade cabinet — slim toolbar over a pixel-scaled canvas, overlays and touch buttons live inside the screen */
 :root{
   --bg:#0b0d17; --panel:#141829; --panel2:#1b2036; --line:#2b3254; --fg:#ece9f5; --muted:#8a8fb2;
@@ -73,7 +74,49 @@ button.on{background:var(--red); border-color:var(--red); color:#fff}
 .res{width:min(520px,100%); display:flex; flex-direction:column; gap:12px; align-items:center}
 .res .srv{color:var(--cyan); font-size:12.5px; min-height:1.2em}
 .res .ach{color:var(--gold); font-size:12.5px}
-#start .sub{font-family:var(--f-display); font-size:11px; letter-spacing:.14em; color:var(--cyan); margin-top:-6px}
+#start .sub{font-family:var(--f-display); font-size:11px; letter-spacing:.14em; color:var(--cyan); margin:0}
+#start{justify-content:center; padding:clamp(10px,3%,28px)}
+.ts{display:grid; grid-template-columns:minmax(0,1.05fr) minmax(0,1fr); gap:clamp(12px,3vw,32px); width:min(920px,100%); align-items:center; text-align:left}
+.ts-l{display:flex; flex-direction:column; gap:clamp(6px,1.4vh,12px); min-width:0}
+.ts-l h1{font-size:clamp(22px,4.2vw,42px)}
+.ts-desc{font-size:clamp(11.5px,1.5vw,13.5px)!important; color:#c9cde4!important}
+.ts-main{display:flex; flex-direction:column; gap:8px; margin-top:4px}
+.ts-go{display:flex; align-items:baseline; justify-content:space-between; gap:12px; text-align:left; padding:clamp(8px,1.6vh,13px) 16px; font-size:clamp(14px,1.9vw,18px)}
+.ts-go small{font-family:var(--f-body); font-size:12px; opacity:.85; letter-spacing:0; font-weight:400}
+#bStart.alt{background:var(--panel2); border-color:var(--line); color:var(--fg)}
+#bStart.alt:hover{border-color:var(--cyan)}
+.ts-sub{display:flex; flex-wrap:wrap; gap:6px}
+.ts-sub button{flex:1 1 auto; padding:7px 8px}
+.ts-sub button.on{background:var(--panel); color:var(--muted); border-color:var(--line)}
+.ts-sub kbd, .ts-hint kbd{font-family:var(--f-display); font-size:10px; color:var(--cyan)}
+.ts-hint{font-size:11.5px!important; color:var(--muted)}
+.ts-r{display:flex; flex-direction:column; gap:6px; min-width:0}
+.ts-tabs{display:flex; gap:4px}
+.ts-tabs button{flex:1; background:transparent; border-color:transparent; border-bottom:2px solid var(--line); color:var(--muted); padding:5px 6px}
+.ts-tabs button.on{color:var(--fg); border-bottom-color:var(--red)}
+.ts-card{background:rgba(13,15,28,.82); border:1px solid var(--line); padding:clamp(8px,1.6vh,14px); display:flex; flex-direction:column; gap:clamp(6px,1.2vh,10px); max-height:min(62vh,420px); overflow:auto}
+.ts-card .keys{font-size:12px}
+.ts-card h5{margin:0; font-family:var(--f-display); font-size:10px; font-weight:400; letter-spacing:.12em; color:var(--muted)}
+.ts-ch{display:grid; grid-template-columns:repeat(4,1fr); gap:4px}
+.ts-ch i{font-style:normal; font-size:10.5px; line-height:1.3; padding:5px 6px; border:1px solid var(--line); background:#0b0d17; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.ts-ch i b{display:block; font-family:var(--f-display); font-size:10px; color:var(--fg)}
+.ts-ch i.on{border-color:var(--cyan)} .ts-ch i.on b{color:var(--cyan)}
+.ts-ch i.clr{border-color:var(--gold)} .ts-ch i.clr b{color:var(--gold)}
+.ts-chars{display:flex; gap:8px}
+.ts-chars span{display:flex; align-items:center; gap:6px; font-size:12px; flex:1; min-width:0}
+.ts-chars img{width:34px; height:34px; image-rendering:pixelated; background:#07080f; border:1px solid var(--line); flex:none}
+.ts-chars .lock img{filter:brightness(0) invert(.28)}
+.ts-chars b{white-space:nowrap}
+.ts-chars small{display:block; color:var(--muted); font-size:10.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.ts-stats{display:grid; grid-template-columns:repeat(4,1fr); gap:4px; text-align:center}
+.ts-stats span{background:#0b0d17; border:1px solid var(--line); padding:5px 2px; font-size:10.5px; color:var(--muted)}
+.ts-stats b{display:block; font-family:var(--f-display); font-size:13px; color:var(--fg); font-weight:400}
+.ts-bar{height:5px; background:#1c2140} .ts-bar em{display:block; height:100%; background:var(--gold)}
+.ts-last{font-size:12px; color:#c9cde4; line-height:1.5}
+.ts-tip{position:absolute; left:0; right:0; bottom:clamp(6px,1.5vh,14px); margin:0 auto!important; font-size:11.5px!important; color:var(--muted)!important; max-width:90%!important; text-align:center}
+.ts-tip b{color:var(--gold); font-family:var(--f-display); font-size:10px; font-weight:400; margin-right:6px}
+@media (max-height:420px){ .ts-chars small, .ts-desc, .ts-hint, .ts-tip, .ts-go small, .ts-card h5:nth-of-type(n+4), .ts-last, .ts-bar{display:none} .ts-card{max-height:70vh} .ts-l h1{font-size:22px} .ts-sub button{padding:5px 6px} }
+@media (max-width:560px){ .ts{grid-template-columns:1fr} .ts-r{display:none} }
 #chars{z-index:6; gap:14px}
 #chars .cards{display:flex; gap:12px; flex-wrap:wrap; justify-content:center; width:min(720px,100%)}
 #chars .cc{flex:1 1 240px; max-width:330px; background:#0d0f1c; border:1px solid var(--line); padding:12px; display:flex; flex-direction:column; gap:8px; text-align:left; cursor:pointer; font:inherit; color:inherit}
@@ -184,7 +227,7 @@ details pre{max-height:140px; overflow:auto; font-size:10px; background:var(--bg
   <button id="bMute" type="button">SOUND</button>
   <button id="bBgm" type="button">BGM</button>
   <button id="bFull" type="button">FULL</button>
-  <button id="bCodex" type="button">도감</button>
+  <button id="bCodex" type="button">도감 (C)</button>
   <button id="bDev" type="button">DEV</button>
 </div>
 <div class="stage" id="stage">
@@ -198,23 +241,44 @@ details pre{max-height:140px; overflow:auto; font-size:10px; background:var(--bg
       <button type="button" id="tCard">ITEM</button>
     </div>
     <div class="ov" id="start">
-      <h1><span class="r">PIXEL</span> RESET <span class="st">STORY</span></h1>
-      <p class="sub">픽셀 리셋 스토리 · PIXEL FIGHT 외전 · ALPHA</p>
-      <p>업데이트가 깨진 픽셀파이트 세계. 초기화되기 전에, 글리치가 시작된 맨 아래까지 내려가자.</p>
-      <p id="startInfo"></p>
-      <div class="keys">
-        <kbd>WASD</kbd><span>이동</span>
-        <kbd>MOUSE</kbd><span>조준 · 좌클릭 꾹 사격 (방향키도 됨)</span>
-        <kbd>SPACE</kbd><span>질풍 돌진 (무적 대시 · 우클릭도 됨)</span>
-        <kbd>E</kbd><span>액티브 템 사용 — 카이는 천풍난무를 들고 시작 (게이지가 차면)</span>
-        <kbd>Q</kbd><span>글리치 폭탄 — 금 간 블록, 수상한 벽</span>
-        <kbd>F / G</kbd><span>주머니(패치 · 치트 코드 한 칸) 쓰기 / 버리기</span>
-        <kbd>TAB</kbd><span>지도 · 챕터 정보</span>
-        <kbd>C</kbd><span>도감 — 먹어 본 것만 정보가 열림 (검색 가능)</span>
-        <kbd>ESC</kbd><span>일시정지 · 내 스탯 한눈에</span>
-        <kbd>TOUCH</kbd><span>왼쪽 이동 · 오른쪽 조준 · 버튼</span>
+      <div class="ts">
+        <div class="ts-l">
+          <h1><span class="r">PIXEL</span> RESET <span class="st">STORY</span></h1>
+          <p class="sub">픽셀 리셋 스토리 · PIXEL FIGHT 외전</p>
+          <p class="ts-desc">업데이트가 깨진 픽셀파이트 세계. 초기화되기 전에, 글리치가 시작된 맨 아래까지 내려가자.</p>
+          <div class="ts-main">
+            <button class="big ts-go" id="bCont" type="button" hidden><b>이어하기</b><small id="contInfo"></small></button>
+            <button class="big ts-go" id="bStart" type="button"><b>NEW RUN</b><small id="newInfo">캐릭터를 고르고 시작</small></button>
+          </div>
+          <div class="ts-sub">
+            <button type="button" id="tsCodex">도감 <kbd>C</kbd></button>
+            <button type="button" id="tsStory">이야기</button>
+            <button type="button" id="tsSnd">SOUND</button>
+            <button type="button" id="tsBgm">BGM</button>
+            <button type="button" id="tsFull">FULL</button>
+          </div>
+          <p class="ts-hint"><kbd>ENTER</kbd> <span id="enterHint">시작</span> · <kbd>H</kbd> 조작법 · <kbd>C</kbd> 도감</p>
+        </div>
+        <div class="ts-r">
+          <div class="ts-tabs"><button type="button" data-ts="info">진행 · 기록</button><button type="button" data-ts="how">조작법</button></div>
+          <div class="ts-card" id="tsInfo"></div>
+          <div class="ts-card" id="tsHow" hidden>
+            <div class="keys">
+              <kbd>WASD</kbd><span>이동</span>
+              <kbd>MOUSE</kbd><span>조준 · 좌클릭 꾹 사격 (방향키도 됨)</span>
+              <kbd>SPACE</kbd><span>무적 대시 (우클릭도 됨)</span>
+              <kbd>E</kbd><span>액티브 아이템 (게이지가 차면)</span>
+              <kbd>Q</kbd><span>글리치 폭탄 — 금 간 블록 · 수상한 벽 · 오락실 기계</span>
+              <kbd>F / G</kbd><span>주머니(패치 · 치트 코드) 쓰기 / 버리기</span>
+              <kbd>TAB</kbd><span>지도 · 월드 정보</span>
+              <kbd>C</kbd><span>도감 (먹어 본 것만 열림 · 검색)</span>
+              <kbd>ESC</kbd><span>일시정지 · 내 스탯</span>
+              <kbd>TOUCH</kbd><span>왼쪽 이동 · 오른쪽 조준 · 버튼</span>
+            </div>
+          </div>
+        </div>
       </div>
-      <div class="row"><button class="big" id="bStart" type="button">NEW RUN</button><button id="bCont" type="button" hidden>이어하기</button></div>
+      <p class="ts-tip" id="tsTip"></p>
     </div>
     <div class="ov" id="pause" hidden>
       <h1>PAUSED</h1>
@@ -274,14 +338,15 @@ const bossTitle = e => BOSS_NAME[e.kind] + (e.v2 ? ' v2' : '');
 const PROG_KEY = 'pfr-progress-v1', SAVE_KEY = 'pfr-save-v1';
 const EMBED = (() => { try { return window.parent !== window; } catch(e){ return true; } })();
 const DEV_OK = !EMBED || /[?&]dev=1/.test(location.search);
-let prog = {ch:2, clears:0, chars:{}, last:'kai'};
-try { const ps = localStorage.getItem(PROG_KEY); if (ps){ const o = JSON.parse(ps); prog = {ch:Math.max(2, Math.min(4, o.ch|0)), clears:o.clears|0, chars:(o.chars && typeof o.chars === 'object') ? o.chars : {}, last:typeof o.last === 'string' ? o.last : 'kai'}; } } catch(e){}
+if (EMBED) document.documentElement.classList.add('embed');
+let prog = {ch:2, clears:0, chars:{}, last:'kai', best:{}, lastRun:null};
+try { const ps = localStorage.getItem(PROG_KEY); if (ps){ const o = JSON.parse(ps); prog = {ch:Math.max(2, Math.min(4, o.ch|0)), clears:o.clears|0, chars:(o.chars && typeof o.chars === 'object') ? o.chars : {}, last:typeof o.last === 'string' ? o.last : 'kai', best:(o.best && typeof o.best === 'object') ? o.best : {}, lastRun:o.lastRun || null}; } } catch(e){}
 // 캐릭터 — 스탯 차이 OK, 대신 개성(액티브 · 탄 효과)으로 균형
 const CHARS = {
   kai:{id:'kai', name:'카이', en:'KAI', hp:60, base:{damage:3.5, fireDelay:20, shotSpeed:4.2, range:200, move:1}, active:'whirlwind', color:'#9fe8ff',
        traits:['시작 액티브 「천풍난무」 — 게이지가 차면 회오리로 주변을 쓸어버림', '모든 스탯이 고른 올라운더'], lock:null},
   igna:{id:'igna', name:'이그나', en:'IGNA', hp:50, base:{damage:3.9, fireDelay:22, shotSpeed:4.4, range:185, move:1.06, burn:1}, active:null, color:'#ff9a3c',
-       traits:['화상 탄 — 맞힐 때마다 불이 붙어 계속 타들어 감 (최대 5중첩)', '공격력 · 이동이 높지만 체력이 낮다', '시작 액티브 없음 — 주운 액티브만 쓴다'], lock:'3챕터 보스 「프리징」을 쓰러뜨리면 해금'},
+       traits:['화상 탄 — 맞힐 때마다 불이 붙어 계속 타들어 감 (최대 5중첩)', '공격력 · 이동이 높지만 체력이 낮다', '시작 액티브 없음 — 주운 액티브만 쓴다'], lock:'월드 3 보스 「프리징」을 쓰러뜨리면 해금'},
 };
 const CHAR_IDS = Object.keys(CHARS);
 const charOK = id => !!CHARS[id] && (!CHARS[id].lock || !!prog.chars[id]);
@@ -467,6 +532,7 @@ KAI.onload = () => { KAI_OL = outline(KAI); };
 const IGNA = new Image(); let IGNA_OL = null; IGNA.onload = () => { IGNA_OL = outline(IGNA); };
 IGNA.src = 'a/b5a7277ad7.webp';
 const CHAR_IMG = {kai:KAI, igna:IGNA};
+[KAI, IGNA].forEach(im => im.addEventListener('load', () => { try { if (!$('start').hidden) renderStartInfo(); } catch(e){} }));
 const charSpr = id => { const im = CHAR_IMG[id] || KAI; return {im, ol:id === 'igna' ? IGNA_OL : KAI_OL, ok:im.complete && im.naturalWidth > 0}; };
 // 1챕터 시트 256x104: 윗줄 슬라임 40x40 x4 (대기/찌그러짐/점프/피격), 아랫줄 64x64 x4 (바위/금 간 바위/잔해/상자)
 const SL = new Image(); SL.src = 'a/57cac3db79.webp';
@@ -1090,7 +1156,7 @@ function startFloor(n){
   G.player.x = W/2; G.player.y = H/2 + 30; G.player.vx = G.player.vy = 0; G.player.inv = 60;
   saveRun();
 }
-function floorBanner(){ showBanner(floorLabel(G.floorNo) + ' · ' + CHAPTERS[chOf(G.floorNo)].name, (G.floorNo % 2 ? '중간 보스: ' : '챕터 보스: ') + BOSS_NAME[G.floor.bossKind] + (G.floorNo === G.endFloor ? ' — 마지막 층' : '')); }
+function floorBanner(){ showBanner(floorLabel(G.floorNo) + ' · ' + CHAPTERS[chOf(G.floorNo)].name, (G.floorNo % 2 ? '중간 보스: ' : '월드 보스: ') + BOSS_NAME[G.floor.bossKind] + (G.floorNo === G.endFloor ? ' — 마지막 층' : '')); }
 function beginRun(){
   running = true; paused = false;
   $('result').hidden = true; $('pause').hidden = true; $('start').hidden = true;
@@ -1225,7 +1291,7 @@ function spawnRoomEnemies(room){
     else if (els.length) toast('엘리트 ' + els.map(e => ELITES[e.elite].name).join(' · '), ELITES[els[0].elite].col, W/2, IY0 + 30);
   } else if (room.type === 'boss'){
     const bz = makeEnemy('boss', W/2, H/2 - 10, G.floor.bossKind); G.enemies.push(bz);
-    sfx('boss'); showBanner(bossTitle(bz), floorLabel(G.floorNo) + (G.floorNo % 2 ? ' 중간 보스' : ' 챕터 보스'));
+    sfx('boss'); showBanner(bossTitle(bz), floorLabel(G.floorNo) + (G.floorNo % 2 ? ' 중간 보스' : ' 월드 보스'));
   }
 }
 function enterRoom(room, fromDir){
@@ -3108,17 +3174,17 @@ function drawChapterPanel(){
   ctx.globalAlpha = .9; px(x, y, w, 132, '#0b0d17'); ctx.globalAlpha = 1; px(x, y, w, 1, '#ff3d5e'); px(x, y + 131, w, 1, '#3fe3ff');
   ctx.textAlign = 'left';
   const line = (t, yy, c, f) => { ctx.font = f || '700 8px "Noto Sans KR", sans-serif'; ctx.fillStyle = c; ctx.fillText(t, x + 7, yy); };
-  line('CHAPTER ' + (ci + 1), y + 13, '#ff3d5e', '8px Silkscreen, monospace');
+  line('WORLD ' + (ci + 1), y + 13, '#ff3d5e', '8px Silkscreen, monospace');
   line(C.name, y + 25, '#ece9f5', '700 10px "Noto Sans KR", sans-serif');
   for (let k = 0; k < 2; k++){ const on = (first ? 0 : 1) === k; px(x + 7 + k*30, y + 31, 26, 5, on ? '#3fe3ff' : k < (first ? 0 : 1) ? '#4a5280' : '#232842'); }
   line((first ? '1' : '2') + ' / 2층', y + 47, '#a9aecb');
-  line(first ? '중간 보스' : '챕터 보스', y + 61, '#8a8fb2');
+  line(first ? '중간 보스' : '월드 보스', y + 61, '#8a8fb2');
   line(BOSS_NAME[bossOf(G.floorNo)] + (ci === 3 && first ? ' v2' : ''), y + 72, '#ff6f8a');
   line('전투방 ' + cleared + ' / ' + fights.length, y + 88, '#a9aecb');
   const sec = list.find(r => r.type === 'secret');
   line('숨겨진 방 ' + (sec && sec.revealed ? '찾음' : '???'), y + 100, sec && sec.revealed ? '#c77dff' : '#5a5f80');
   const next = CHAPTERS[ci + 1];
-  line(next ? '다음: ' + next.name : '마지막 챕터', y + 116, '#5a5f80');
+  line(next ? '다음: ' + next.name : '마지막 월드', y + 116, '#5a5f80');
   line('처치 ' + G.kills + ' · ' + fmtTime(ms()), y + 127, '#5a5f80');
 }
 function drawBigMap(){
@@ -3148,6 +3214,14 @@ const fmtTime = m => { const s = Math.floor(m/1000); return Math.floor(s/60) + '
 function endRun(result){
   running = false;
   G.log.result = result; G.log.durationMs = ms(); G.log.kills = G.kills; G.log.res = Object.assign({}, G.res);
+  if (!G.log.dev){
+    const sec = Math.floor(G.log.durationMs / 1000), b = prog.best || (prog.best = {});
+    b.runs = (b.runs || 0) + 1; b.floor = Math.max(b.floor || 0, G.floorNo);
+    b.ch = Math.max(b.ch || 0, ...G.log.bossKills.filter(k => k.floor % 2 === 0).map(k => k.floor / 2), 0);
+    if (result === 'clear') b.fast = b.fast ? Math.min(b.fast, sec) : sec;
+    prog.lastRun = {result, char:G.char, floor:G.floorNo, items:G.items.length, kills:G.kills, sec, at:Date.now()};
+    saveProg();
+  }
   clearSave(); refreshStart();
   sfx(result === 'clear' ? 'clear' : 'gameover');
   const rep = runReport(result);
@@ -3166,7 +3240,7 @@ function endRun(result){
     <h1>${result === 'clear' ? '<span class="r">CLEAR</span>' : 'GAME OVER'}</h1>
     <p class="srv" id="resSrv">${esc(srvMsg)}</p><p class="ach" id="resAch" hidden></p>
     ${G.log.unlockChar ? `<p style="color:#ff9a3c">새 파이터 해금 — ${esc(CHARS[G.log.unlockChar].name)} · 다음 판부터 고를 수 있어</p>` : ''}
-    ${G.log.unlocked ? `<p style="color:var(--gold)">새 챕터 해금 — 이제 ${G.log.unlocked}챕터(${G.log.unlocked * 2}층)까지 갈 수 있어</p>` : ''}
+    ${G.log.unlocked ? `<p style="color:var(--gold)">새 월드 해금 — 이제 월드 ${G.log.unlocked}(${G.log.unlocked * 2}층)까지 갈 수 있어</p>` : ''}
     <div class="stats">
       <div><b>${floorLabel(G.floorNo)}</b><small>도달 (${G.floorNo}/${G.endFloor}층)</small></div>
       <div><b>${fmtTime(G.log.durationMs)}</b><small>플레이 시간</small></div>
@@ -3318,7 +3392,7 @@ function renderCodex(){
   } else if (codexTab === 'story'){
     body = `<div class="story">${STORY_IDS.map((id, i) => {
       const S = STORY[id];
-      if (!storySeen[id]) return `<div class="card"><div class="top"><div class="q">?</div><b class="unk">${esc(S.tag)}</b></div><p class="unk">${i ? i + '챕터 보스를 쓰러뜨리면 열림' : '첫 판을 시작하면 열림'}</p></div>`;
+      if (!storySeen[id]) return `<div class="card"><div class="top"><div class="q">?</div><b class="unk">${esc(S.tag)}</b></div><p class="unk">${id === 'intro' ? '첫 판을 시작하면 열림' : id === 'u_igna' ? '월드 3 보스를 쓰러뜨리면 열림' : '월드 ' + id.slice(1) + ' 보스를 쓰러뜨리면 열림'}</p></div>`;
       return `<div class="card" data-story="${id}"><div class="top"><b>${esc(S.tag)} — ${esc(S.title)}</b></div><p>${esc(S.pages[0].lines[0])}</p><small>눌러서 다시 보기</small></div>`;
     }).join('')}</div>`;
   } else {
@@ -3374,7 +3448,7 @@ function buildDebug(){
       <button type="button" data-a="patch">+패치</button><button type="button" data-a="card">+치트 코드</button><button type="button" data-a="czip">+손상된 압축</button><button type="button" data-a="map">지도 공개</button><button type="button" data-a="codexReset">도감 초기화</button>
     </div></div>
     <div><h3>ROOM</h3><div class="btns">
-      <button type="button" data-a="reset">방 리셋</button><button type="button" data-a="slime">+슬라임</button><button type="button" data-a="bug">+벌레</button><button type="button" data-a="turret">+터렛</button><button type="button" data-a="boss">보스방 가기</button><button type="button" data-a="cheat">치트 콘솔</button><button type="button" data-a="next">다음 층</button><button type="button" data-a="unlockAll">챕터 전부 열기</button><button type="button" data-a="progReset">진행 초기화</button><button type="button" data-a="heal">회복</button>
+      <button type="button" data-a="reset">방 리셋</button><button type="button" data-a="slime">+슬라임</button><button type="button" data-a="bug">+벌레</button><button type="button" data-a="turret">+터렛</button><button type="button" data-a="boss">보스방 가기</button><button type="button" data-a="cheat">치트 콘솔</button><button type="button" data-a="next">다음 층</button><button type="button" data-a="unlockAll">월드 전부 열기</button><button type="button" data-a="progReset">진행 초기화</button><button type="button" data-a="heal">회복</button>
     </div></div>
     <div><h3>TOGGLES</h3><div class="btns">
       <button type="button" data-t="god">무적</button><button type="button" data-t="dmgNums">데미지 숫자</button><button type="button" data-t="shake">화면 흔들림</button>
@@ -3451,7 +3525,10 @@ addEventListener('keydown', e => {
   if (mapOpen && (e.code === 'Escape' || e.code === 'KeyM' || e.code === 'Tab')){ mapOpen = false; return; }
   if (e.code === 'KeyM' && G && running && !paused){ mapOpen = true; keys.clear(); mouse.down = false; return; }
   if (e.code === 'Escape' || e.code === 'KeyP'){ togglePause(); return; }
-  if (e.code === 'Enter' && !$('start').hidden){ startGame(); return; }
+  if (!$('start').hidden && $('codex').hidden && !charOpen){
+    if (e.code === 'Enter'){ if (readSave()) $('bCont').click(); else startGame(); return; }
+    if (e.code === 'KeyH'){ setTsTab(tsTab === 'how' ? 'info' : 'how'); return; }
+  }
   if (!e.repeat){
     if (e.code === 'Space' || e.code === 'ShiftLeft' || e.code === 'ShiftRight') press.dash = true;
     if (e.code === 'KeyE') press.ult = true;
@@ -3548,13 +3625,55 @@ function openChars(){
   draw(); el.hidden = false;
 }
 let charCur = null;
+const TIPS = [
+  '결투방은 HP가 가득할 때만 열려 — 들어가기 전에 회복부터',
+  '포맷 제단은 밟을수록 보상이 커져. 대신 HP -10씩',
+  '오락실 기계는 폭탄으로 부수면 비트를 토해 내',
+  '손상된 섹터는 문을 지날 때 HP -10 — 대시로 지나가면 안 맞아',
+  '보안 금고는 액세스 키 2개. 키는 아껴 두자',
+  '엘리트(색 빛 + 이름표)는 잡으면 보상이 하나 더 나올 수 있어',
+  '미러 서버의 복제본은 내 탄 갈래 수를 그대로 써',
+  '업데이트 설치 중엔 단말기를 노리는 적부터 잡자',
+  '미확인 패치는 먹어 봐야 효과를 알아. 판마다 색이 섞여',
+  '월드 3 보스 「프리징」을 쓰러뜨리면 이그나가 해금돼',
+  '이그나의 화상은 최대 5중첩 — 보스한테 특히 세',
+  '층을 넘어갈 때마다 자동 저장. 나갔다 와도 이어서 할 수 있어',
+];
+let tsTab = null, tipI = Math.floor(Math.random()*TIPS.length);
+function setTsTab(t){ tsTab = t; $('tsInfo').hidden = t !== 'info'; $('tsHow').hidden = t !== 'how'; document.querySelectorAll('[data-ts]').forEach(b => b.classList.toggle('on', b.dataset.ts === t)); }
+function renderStartInfo(){
+  const b = prog.best || {}, last = prog.lastRun, chs = CHAPTERS.map((C, i) => {
+    const n = i + 1, open = n <= prog.ch, clr = (b.ch || 0) >= n;
+    return `<i class="${clr ? 'clr' : open ? 'on' : ''}" title="${esc(C.name)}"><b>${open ? 'WORLD ' + n : '🔒'}</b>${open ? esc(C.name) : '잠김'}</i>`;
+  }).join('');
+  const chars = CHAR_IDS.map(id => { const c = CHARS[id], ok = charOK(id), img = sprURL(CHAR_IMG[id], 0, 0, 48, 48);
+    return `<span class="${ok ? '' : 'lock'}">${img ? `<img src="${img}" alt="">` : ''}<span style="min-width:0"><b>${ok ? esc(c.name) : '???'}</b><small>${ok ? (c.active ? '천풍난무 · 올라운더' : '화상 탄 · 공격형') : esc(c.lock)}</small></span></span>`; }).join('');
+  const nItems = ITEMS.filter(i => codex.items[i.id]).length, nStory = STORY_IDS.filter(id => storySeen[id]).length;
+  const mmss = s => Math.floor(s/60) + ':' + String(s % 60).padStart(2, '0');
+  const lastTx = last ? `${last.result === 'clear' ? '<b style="color:var(--gold)">CLEAR</b>' : 'GAME OVER'} · ${CHARS[last.char] ? CHARS[last.char].name : '카이'} · ${floorLabel(last.floor)}층 · 아이템 ${last.items} · 처치 ${last.kills} · ${mmss(last.sec)}` : '아직 기록 없음 — 첫 판을 시작해 보자';
+  $('tsInfo').innerHTML = `
+    <h5>월드 · 이번 판 목표 ${prog.ch * 2}층</h5><div class="ts-ch">${chs}</div>
+    <h5>캐릭터</h5><div class="ts-chars">${chars}</div>
+    <h5>기록</h5><div class="ts-stats"><span><b>${b.floor ? floorLabel(b.floor) : '-'}</b>최고 층</span><span><b>${prog.clears || 0}</b>클리어</span><span><b>${b.runs || 0}</b>판</span><span><b>${b.fast ? mmss(b.fast) : '-'}</b>최단 클리어</span></div>
+    <h5>지난 판</h5><div class="ts-last">${lastTx}</div>
+    <h5>도감 ${nItems} / ${ITEMS.length} · 이야기 ${nStory} / ${STORY_IDS.length}</h5><div class="ts-bar"><em style="width:${Math.round(nItems / ITEMS.length * 100)}%"></em></div>`;
+  $('tsTip').innerHTML = '<b>TIP</b>' + esc(TIPS[tipI % TIPS.length]);
+  if (!tsTab) setTsTab(b.runs ? 'info' : 'how');
+}
 function refreshStart(){
   const sv = readSave();
-  $('startInfo').textContent = `열린 챕터 ${prog.ch} / ${CHAPTERS.length} · 이번 판 목표 ${prog.ch * 2}층` + (prog.clears ? ` · 클리어 ${prog.clears}번` : '');
+  try { renderStartInfo(); } catch(e){}
+  $('newInfo').textContent = sv ? '새 판 — 이어하던 판은 지워짐' : '캐릭터를 고르고 시작';
+  $('bStart').classList.toggle('alt', !!sv); $('enterHint').textContent = sv ? '이어하기' : '시작';
+  if (sv) $('contInfo').textContent = `${CHARS[sv.char] ? CHARS[sv.char].name : '카이'} · ${floorLabel(sv.floorNo)} · 아이템 ${sv.items.length}`;
   const b = $('bCont'); b.hidden = !sv;
-  if (sv) b.textContent = `이어하기 · ${floorLabel(sv.floorNo)} (${sv.items.length}템)`;
 }
 $('bCont').onclick = () => { const sv = readSave(); if (sv){ initAudio(); loadRun(sv); } };
+document.querySelectorAll('[data-ts]').forEach(b => b.onclick = () => setTsTab(b.dataset.ts));
+$('tsCodex').onclick = () => toggleCodex();
+$('tsStory').onclick = () => { codexTab = 'story'; toggleCodex(); };
+$('tsSnd').onclick = () => $('bMute').click(); $('tsBgm').onclick = () => $('bBgm').click(); $('tsFull').onclick = () => $('bFull').click();
+setInterval(() => { if (!$('start').hidden){ tipI++; const el = $('tsTip'); if (el) el.innerHTML = '<b>TIP</b>' + esc(TIPS[tipI % TIPS.length]); } }, 7000);
 $('bSaveQuit').onclick = () => { if (!G) return; running = false; paused = false; $('pause').hidden = true; refreshStart(); $('start').hidden = false; };
 $('bStart').onclick = startGame;
 document.addEventListener('click', e => { if (e.target.closest && e.target.closest('button') && !e.target.closest('#stNext')) sfx('click'); }, true);
@@ -3606,7 +3725,8 @@ $('bPause').onclick = togglePause;
 $('bResume').onclick = togglePause;
 $('bPCodex').onclick = () => toggleCodex();
 $('bRestart').onclick = () => newRun(0);
-const audioBtns = () => { $('bMute').classList.toggle('on', muted); $('bMute').textContent = muted ? 'MUTED' : 'SOUND'; $('bBgm').classList.toggle('on', !bgmOn); $('bBgm').textContent = bgmOn ? 'BGM' : 'BGM OFF'; };
+const audioBtns = () => { const sm = $('tsSnd'), sb = $('tsBgm'); if (sm){ sm.classList.toggle('on', muted); sm.textContent = muted ? 'SOUND OFF' : 'SOUND'; } if (sb){ sb.classList.toggle('on', !bgmOn); sb.textContent = bgmOn ? 'BGM' : 'BGM OFF'; }
+  $('bMute').classList.toggle('on', muted); $('bMute').textContent = muted ? 'MUTED' : 'SOUND'; $('bBgm').classList.toggle('on', !bgmOn); $('bBgm').textContent = bgmOn ? 'BGM' : 'BGM OFF'; };
 $('bMute').onclick = () => { muted = !muted; saveAudio(); audioBtns(); initAudio(); bgmTick(true); };
 $('bBgm').onclick = () => { bgmOn = !bgmOn; saveAudio(); audioBtns(); initAudio(); bgmTick(true); };
 audioBtns();

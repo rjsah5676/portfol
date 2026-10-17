@@ -686,14 +686,14 @@ export const ACHIEVEMENTS: Achievement[] = [
   a("survivor", "heroes-4", "돌아가며 출근", "서로 다른 캐릭터 4명으로 클리어", "survivor.heroWins", 4, 1200),
   a("survivor", "heroes-10", "마을 전원 생존", "서로 다른 캐릭터 10명으로 클리어", "survivor.heroWins", 10, 4000),
 
-  // PIXEL RESET (games/rogue.ts 의 rogue.finish 가 stats.rogue 에 쌓음) — 챕터 보스 업적 이름 = 그 챕터 이야기(LOG) 제목
+  // PIXEL RESET (games/rogue.ts 의 rogue.finish 가 stats.rogue 에 쌓음) — 월드 보스 업적 이름 = 그 월드 이야기(LOG) 제목
   a("rogue", "runs-1", "부팅 완료", "한 판 끝내기", "rogue.runs", 1, 150),
   a("rogue", "runs-30", "재접속 중독", "30판 끝내기", "rogue.runs", 30, 900),
   a("rogue", "runs-150", "로그아웃 불가", "150판 끝내기", "rogue.runs", 150, 3000),
-  a("rogue", "ch-1", "아래에서", "1챕터 보스 렉 덩어리 쓰러뜨리기 (LOG 01)", "rogue.ch", 1, 300),
-  a("rogue", "ch-2", "지워진 빌드", "2챕터 보스 무한 로딩 쓰러뜨리기 (LOG 02)", "rogue.ch", 2, 900),
-  a("rogue", "ch-3", "멈춘 사람들", "3챕터 보스 프리징 쓰러뜨리기 (LOG 03)", "rogue.ch", 3, 2000),
-  a("rogue", "ch-4", "또 하나의 카이", "4챕터 보스 블루스크린 쓰러뜨리기 — 진짜 결말 (LOG 04)", "rogue.ch", 4, 4000),
+  a("rogue", "ch-1", "아래에서", "월드 1 보스 렉 덩어리 쓰러뜨리기 (LOG 01)", "rogue.ch", 1, 300),
+  a("rogue", "ch-2", "지워진 빌드", "월드 2 보스 무한 로딩 쓰러뜨리기 (LOG 02)", "rogue.ch", 2, 900),
+  a("rogue", "ch-3", "멈춘 사람들", "월드 3 보스 프리징 쓰러뜨리기 (LOG 03)", "rogue.ch", 3, 2000),
+  a("rogue", "ch-4", "또 하나의 카이", "월드 4 보스 블루스크린 쓰러뜨리기 — 진짜 결말 (LOG 04)", "rogue.ch", 4, 4000),
   a("rogue", "wins-10", "디버거", "판 목표 층까지 10번 클리어", "rogue.wins", 10, 1500),
   a("rogue", "full-5", "초기화 취소", "8층까지 5번 클리어", "rogue.full", 5, 5000),
   a("rogue", "speed-1", "스피드런", "4층 이상 목표를 15분 안에 클리어", "rogue.speed", 1, 1500),
@@ -708,7 +708,7 @@ export const ACHIEVEMENTS: Achievement[] = [
   a("rogue", "secret-10", "벽 두드리기", "숨겨진 방 10번 찾기 (판 수)", "rogue.secrets", 10, 900),
   a("rogue", "cheat-5", "치트키 입력", "치트 콘솔 거래 5번 (누적)", "rogue.cheats", 5, 450),
   a("rogue", "bosses-30", "보스 러시", "보스 30마리 쓰러뜨리기 (누적)", "rogue.bosses", 30, 900),
-  a("rogue", "igna-1", "얼음을 녹인 불꽃", "이그나로 한 판 끝내기 (3챕터 보스를 쓰러뜨리면 해금)", "rogue.ignaRuns", 1, 300),
+  a("rogue", "igna-1", "얼음을 녹인 불꽃", "이그나로 한 판 끝내기 (월드 3 보스를 쓰러뜨리면 해금)", "rogue.ignaRuns", 1, 300),
   a("rogue", "igna-win", "불꽃 디버거", "이그나로 판 목표 층까지 클리어", "rogue.ignaWins", 1, 1500),
   a("rogue", "elites-50", "엘리트 사냥꾼", "엘리트 몬스터 50마리 처치 (누적)", "rogue.elites", 50, 600),
   a("rogue", "specials-10", "특수방 단골", "결투방 · 업데이트 설치 · 엘리트 소대 · 미러 서버 10번 깨기 (누적)", "rogue.specials", 10, 900),

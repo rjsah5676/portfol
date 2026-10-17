@@ -18,13 +18,13 @@ export default function RogueFrame({ onFinish }: { onFinish?: (o: RogueFinishOut
     cb.current = onFinish;
   }, [onFinish]);
 
-  // 게임 화면은 5:3 + 위쪽 줄 — 폭에 맞춰 높이를 잡되 화면 높이를 넘지 않게
+  // 게임 화면은 5:3 + 위쪽 줄(임베드면 여백 4px) — 폭에 맞춰 높이를 잡되 화면 높이를 넘지 않게
   useEffect(() => {
     const el = box.current;
     if (!el) return;
     const fit = () => {
       const w = el.clientWidth;
-      el.style.height = `${Math.min(Math.round((w - 32) * 0.6 + 52), Math.max(320, window.innerHeight - 96))}px`;
+      el.style.height = `${Math.min(Math.round((w - 8) * 0.6 + 42), Math.max(320, window.innerHeight - 80))}px`;
     };
     fit();
     const ro = new ResizeObserver(fit);
