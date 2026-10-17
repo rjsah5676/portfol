@@ -179,7 +179,7 @@ details pre{max-height:140px; overflow:auto; font-size:10px; background:var(--bg
       <button type="button" id="tUlt">SKILL</button>
       <button type="button" id="tDash">DASH</button>
       <button type="button" id="tBomb">BOMB</button>
-      <button type="button" id="tCard">CARD</button>
+      <button type="button" id="tCard">ITEM</button>
     </div>
     <div class="ov" id="start">
       <h1><span class="r">PIXEL</span> RESET</h1>
@@ -192,7 +192,7 @@ details pre{max-height:140px; overflow:auto; font-size:10px; background:var(--bg
         <kbd>SPACE</kbd><span>질풍 돌진 (무적 대시 · 우클릭도 됨)</span>
         <kbd>E</kbd><span>액티브 템 사용 — 카이는 천풍난무를 들고 시작 (게이지가 차면)</span>
         <kbd>Q</kbd><span>글리치 폭탄 — 금 간 블록, 수상한 벽</span>
-        <kbd>F</kbd><span>치트 코드 사용 (한 장만 들 수 있음)</span>
+        <kbd>F / G</kbd><span>주머니(패치 · 치트 코드 한 칸) 쓰기 / 버리기</span>
         <kbd>TAB</kbd><span>지도 · 챕터 정보</span>
         <kbd>C</kbd><span>도감 — 먹어 본 것만 정보가 열림 (검색 가능)</span>
         <kbd>ESC</kbd><span>일시정지 · 내 스탯 한눈에</span>
@@ -349,8 +349,8 @@ const LOOT = {
   bomb:{name:'글리치 폭탄', col:'#c77dff', desc:'Q로 설치 — 금 간 블록 · 수상한 벽을 부순다'},
   heal:{name:'백업 파일', col:'#ff2e4d', desc:'HP 25 회복 (HP가 가득이면 안 먹어짐)'},
   shield:{name:'방화벽 조각', col:'#3fe3ff', desc:'방화벽 +25 — HP보다 먼저 깎임'},
-  patch:{name:'미확인 패치', col:'#ff9a3d', desc:'먹어 봐야 효과를 앎 — 판마다 색과 효과가 섞임'},
-  card:{name:'치트 코드', col:'#8affc1', desc:'F로 사용 — 한 장만 들 수 있음'},
+  patch:{name:'미확인 패치', col:'#ff9a3d', desc:'주머니에 넣고 F로 먹음, G로 버림 — 먹어 봐야 효과를 앎, 판마다 색과 효과가 섞임'},
+  card:{name:'치트 코드', col:'#8affc1', desc:'주머니에 넣고 F로 사용, G로 버림 — 주머니는 한 칸'},
   zip:{name:'압축 파일', col:'#d7c7a0', desc:'열면 픽업이 튀어나옴'},
   lzip:{name:'잠긴 압축 파일', col:'#ffcf4a', desc:'액세스 키로 열면 더 좋은 게 나옴'},
   czip:{name:'손상된 압축 파일', col:'#ff2e88', desc:'열면 대박 아니면 습격 — 반반'},
@@ -632,7 +632,7 @@ const AUDIO_KEY = 'pfr-audio-v1';
 let bgmOn = true;
 try { const a = JSON.parse(localStorage.getItem(AUDIO_KEY) || '{}'); muted = !!a.muted; bgmOn = a.bgm !== false; } catch(e){}
 const saveAudio = () => { try { localStorage.setItem(AUDIO_KEY, JSON.stringify({muted, bgm:bgmOn})); } catch(e){} };
-const SFX_GAIN = {shoot:.22, hit:.32, kill:.42, hurt:.7, shieldhit:.5, boom:.65, fuse:.22, beam:.55, charge:.3, dash:.38, ult:.8, active:.6,
+const SFX_GAIN = {shoot:.3, hit:.32, kill:.42, hurt:.7, shieldhit:.5, boom:.65, fuse:.22, beam:.55, charge:.3, dash:.38, ult:.8, active:.6,
   coin:.45, item:.75, get:.5, key:.5, heal:.55, shield:.55, card:.55, carduse:.7, patch:.55, good:.55, bad:.55, door:.42, unlock:.55,
   secret:.7, zip:.55, buy:.6, nope:.4, portal:.6, floor:.7, boss:.85, bossdie:.9, zap:.32, reroll:.6, timestop:.65, clear:.8, gameover:.8, story:.35, click:.28};
 const SFX_PITCH = {shoot:1, hit:1, kill:1, coin:1, zap:1, get:1}; // 자주 나는 소리는 높낮이를 조금씩 흔들어 덜 질리게
@@ -858,7 +858,7 @@ function freshState(seed){
     player:{x:W/2, y:H/2+30, vx:0, vy:0, r:6, hp:TUNE.maxHp, maxHp:TUNE.maxHp, shield:0, inv:0, fireCd:0, charge:0, charging:false, chargeDir:null,
             face:{x:0,y:1}, hold:0, holdItem:null, walk:0, dashT:0, dashCd:0, dashDir:{x:0,y:1}, dashHit:null},
     items:[], prof:computeProfile([]), mods:{dmg:0, speed:1}, buff:{god:0, noclip:0, stop:0}, debuff:{rev:0, slow:0},
-    res:{bit:0, key:1, bomb:1}, card:null, active:'whirlwind', patchMap:[0,1,2,3,4,5,6,7].sort(() => pr() - .5), patchKnown:new Set(),
+    res:{bit:0, key:1, bomb:1}, pocket:null, active:'whirlwind', patchMap:[0,1,2,3,4,5,6,7].sort(() => pr() - .5), patchKnown:new Set(),
     gauge:0, ult:0, cutin:0,
     projs:[], ebul:[], enemies:[], beams:[], fxs:[], parts:[], bolts:[], nums:[], toasts:[], bombList:[],
     shake:0, hitstop:0, lastHitstop:-99, freeze:0, kills:0, ended:false, endTimer:0, lootRng:null,
@@ -898,13 +898,13 @@ function saveRun(){
   if (!G) return;
   const p = G.player;
   const data = {v:1, seed:G.seed, floorNo:G.floorNo, endFloor:G.endFloor, usedBefore:G.usedBefore, items:G.items,
-    hp:p.hp, maxHp:p.maxHp, shield:p.shield, res:G.res, card:G.card, active:G.active, gauge:G.gauge, mods:G.mods,
+    hp:p.hp, maxHp:p.maxHp, shield:p.shield, res:G.res, pocket:G.pocket, active:G.active, gauge:G.gauge, mods:G.mods,
     patchMap:G.patchMap, patchKnown:[...G.patchKnown], kills:G.kills, t:G.t, log:G.log, savedAt:Date.now()};
   try { localStorage.setItem(SAVE_KEY, JSON.stringify(data)); } catch(e){}
 }
 function loadRun(sv){
   G = freshState(sv.seed);
-  Object.assign(G, {endFloor:sv.endFloor, items:sv.items, res:sv.res, card:sv.card, active:sv.active || 'whirlwind', gauge:sv.gauge, mods:sv.mods,
+  Object.assign(G, {endFloor:sv.endFloor, items:sv.items, res:sv.res, pocket:sv.pocket || (sv.card ? {k:'card', id:sv.card} : null), active:sv.active || 'whirlwind', gauge:sv.gauge, mods:sv.mods,
     patchMap:sv.patchMap, patchKnown:new Set(sv.patchKnown), kills:sv.kills, t:sv.t, log:sv.log});
   Object.assign(G.player, {hp:sv.hp, maxHp:sv.maxHp, shield:sv.shield});
   G.log.resumed = (G.log.resumed || 0) + 1;
@@ -1138,12 +1138,10 @@ function tryCollect(pk){
     case 'shield':
       if (p.shield >= TUNE.maxShield && !pk.price){ toast('방화벽 가득', '#8a8fb2', pk.x, pk.y - 16); return false; }
       p.shield = Math.min(TUNE.maxShield, p.shield + TUNE.shieldAmt); sfx('shield'); toast('+' + TUNE.shieldAmt + ' 방화벽', '#3fe3ff'); break;
-    case 'patch': codexAdd('loot', 'patch'); usePatch(pk.c); return true;
+    case 'patch': codexAdd('loot', 'patch'); pocketTake({k:'patch', c:pk.c}); return true;
     case 'card': {
       codexAdd('loot', 'card');
-      if (G.card){ G.room.pickups.push(mkPick('card', p.x, p.y + 14, {cid:G.card, blocked:true})); }
-      G.card = pk.cid; sfx('card');
-      const c = CARD[pk.cid]; showBanner('치트 코드: ' + c.name, c.desc + ' — [F]로 사용', codexAdd('card', pk.cid));
+      pocketTake({k:'card', id:pk.cid});
       return true;
     }
     case 'zip': openZip(pk, false); break;
@@ -1176,6 +1174,27 @@ function openCursed(pk){
     ambush(pk.x, pk.y, G.floorNo >= 2 ? ['slime','bug','bug','turret'] : ['slime','bug','bug']);
   }
 }
+/* ---------- 주머니: 패치(알약) · 치트 코드 한 칸 — F 쓰기 · G 버리기 (아이작 알약/카드 칸처럼) ---------- */
+const pocketName = o => o.k === 'card' ? CARD[o.id].name : G.patchKnown.has(o.c) ? PATCHES[G.patchMap[o.c]].name : '미확인 패치';
+function pocketDrop(o, x, y){ G.room.pickups.push(mkPick(o.k === 'card' ? 'card' : 'patch', x, y, o.k === 'card' ? {cid:o.id, blocked:true} : {c:o.c, blocked:true})); }
+function pocketTake(o){
+  const p = G.player;
+  if (G.pocket) pocketDrop(G.pocket, p.x, p.y + 14);
+  G.pocket = o; sfx(o.k === 'card' ? 'card' : 'get');
+  const keys = touchUsed ? '' : ' — [F] ' + (o.k === 'card' ? '사용' : '먹기') + ' · [G] 버리기';
+  if (o.k === 'card'){ const c = CARD[o.id]; showBanner('치트 코드: ' + c.name, c.desc + keys, codexAdd('card', o.id)); }
+  else showBanner(pocketName(o), (G.patchKnown.has(o.c) ? PATCHES[G.patchMap[o.c]].desc : '먹어 봐야 무슨 패치인지 알 수 있다') + keys);
+}
+function dropPocket(){
+  if (!G.pocket){ toast('주머니가 비어 있다', '#8a8fb2'); sfx('nope'); return; }
+  const p = G.player, o = G.pocket; G.pocket = null;
+  pocketDrop(o, p.x + p.face.x*16, p.y + p.face.y*16 + 6); toast(pocketName(o) + ' 버림', '#8a8fb2', p.x, p.y - 20); sfx('click');
+}
+function usePocket(){
+  if (!G.pocket){ toast('주머니가 비어 있다', '#8a8fb2'); sfx('nope'); return; }
+  const o = G.pocket; G.pocket = null;
+  if (o.k === 'card') useCard(o.id); else usePatch(o.c);
+}
 function usePatch(c){
   const P = PATCHES[G.patchMap[c]], p = G.player;
   G.patchKnown.add(c); G.log.patches.push(P.id);
@@ -1189,14 +1208,12 @@ function usePatch(c){
     case 'spawn': ambush(p.x, p.y, ['bug','bug','bug','bug']); break;
     case 'gamble': if (G.lootRng() < .5) G.res.bit *= 2; else G.res.bit = 0; toast(G.res.bit ? '비트 2배!' : '비트 전부 날아감', G.res.bit ? '#ffcf4a' : '#ff2e88'); break;
   }
-  sfx(P.good >= 1 ? 'good' : P.good > 0 ? 'card' : 'bad');
   burst(p.x, p.y - 6, PATCH_COLS[c], 14, 2.2);
   showBanner(P.name, P.desc, codexAdd('patch', P.id));
   sfx('patch'); setTimeout(() => sfx(P.good >= 1 ? 'good' : P.good > 0 ? 'get' : 'bad'), 260);
 }
-function useCard(){
-  if (!G.card){ toast('치트 코드 없음', '#8a8fb2'); sfx('nope'); return; }
-  const id = G.card, p = G.player; G.card = null; G.log.cards.push(id);
+function useCard(id){
+  const p = G.player; G.log.cards.push(id);
   sfx('carduse'); burst(p.x, p.y - 6, '#8affc1', 16, 2.4);
   switch (id){
     case 'god': G.buff.god = 240; break;
@@ -1377,7 +1394,7 @@ function beamHits(segs, width, dmg, src){
 const keys = new Set();
 const touch = {move:null, shoot:null};
 const mouse = {x:W/2, y:H/2, down:false, used:false};
-const press = {dash:false, ult:false, bomb:false, card:false};
+const press = {dash:false, ult:false, bomb:false, card:false, drop:false};
 function inputMove(){
   let x = 0, y = 0;
   if (keys.has('KeyA')) x -= 1; if (keys.has('KeyD')) x += 1; if (keys.has('KeyW')) y -= 1; if (keys.has('KeyS')) y += 1;
@@ -1415,7 +1432,8 @@ function step(){
   if (press.dash){ press.dash = false; tryDash(mv); }
   if (press.ult){ press.ult = false; useActive(); }
   if (press.bomb){ press.bomb = false; tryBomb(); }
-  if (press.card){ press.card = false; if (p.hp > 0) useCard(); }
+  if (press.card){ press.card = false; if (p.hp > 0) usePocket(); }
+  if (press.drop){ press.drop = false; if (p.hp > 0) dropPocket(); }
   if (p.hp > 0){
     if (p.dashT > 0){
       p.dashT--; p.vx = p.dashDir.x * TUNE.dashSpd; p.vy = p.dashDir.y * TUNE.dashSpd;
@@ -1468,7 +1486,7 @@ function step(){
 
   if (G.storyT && --G.storyT.t <= 0 && p.hp > 0){ const c = G.storyT.c; G.storyT = null; openStory('c' + c); return; }
   if (G.endTimer > 0 && --G.endTimer === 0) endRun(p.hp <= 0 ? 'death' : 'clear');
-  if (G.frame % 15 === 0){ refreshDebug(false); $('tUlt').classList.toggle('ready', G.gauge >= actCost()); $('tCard').classList.toggle('ready', !!G.card); }
+  if (G.frame % 15 === 0){ refreshDebug(false); $('tUlt').classList.toggle('ready', G.gauge >= actCost()); $('tCard').classList.toggle('ready', !!G.pocket); }
 }
 function tryDash(mv){
   const p = G.player;
@@ -2037,7 +2055,7 @@ function drawRoom(){
   if (room.type === 'start' && G.floorNo === 1){
     ctx.fillStyle = '#4a527e';
     ctx.fillText(touchUsed ? 'LEFT MOVE  RIGHT AIM' : 'WASD MOVE  MOUSE AIM', W/2, H/2 - 6);
-    ctx.fillText(touchUsed ? 'DASH  SKILL  BOMB  CARD' : 'SPACE DASH  E SKILL  Q BOMB  F CARD', W/2, H/2 + 8);
+    ctx.fillText(touchUsed ? 'DASH  SKILL  BOMB  ITEM' : 'SPACE DASH  E SKILL  Q BOMB  F/G ITEM', W/2, H/2 + 8);
   }
   if (room.type === 'start' && G.floorNo > 1){ ctx.fillStyle = '#2b3254'; ctx.fillText('FLOOR ' + floorLabel(G.floorNo), W/2, H/2); }
   if (room.type === 'shop'){
@@ -2533,11 +2551,14 @@ function drawHUD(){
   st.forEach(([t, c, f], i) => { ctx.fillStyle = c; ctx.fillText(t + ' ' + Math.ceil(f/60), bx + 140 + i*44, ry + 3); });
   drawMinimap();
   ctx.imageSmoothingEnabled = true; G.items.forEach((it, i) => { const x = 8 + i*15; if (x > W - 150) return; px(x - 1, H - 23, 15, 15, '#0b0d17'); ctx.drawImage(ICON[it.id].canvas, x, H - 22, 13, 13); }); ctx.imageSmoothingEnabled = false;
-  // 치트 코드 슬롯 (오른쪽 아래)
-  const cx = W - 80, cy = H - 24;
-  px(cx, cy, 72, 18, '#05060b'); px(cx + 1, cy + 1, 70, 16, G.card ? '#0f2a1d' : '#141829');
-  ctx.font = '8px Silkscreen, monospace'; ctx.textAlign = 'center'; ctx.fillStyle = G.card ? '#8affc1' : '#3a3f5c';
-  ctx.fillText(G.card ? CARD[G.card].name + (touchUsed ? '' : ' [F]') : 'NO CARD', cx + 36, cy + 12);
+  // 주머니 칸 (오른쪽 아래): 패치 · 치트 코드 한 칸
+  const cx = W - 92, cy = H - 24, pk2 = G.pocket;
+  px(cx, cy, 84, 18, '#05060b'); px(cx + 1, cy + 1, 82, 16, pk2 ? (pk2.k === 'card' ? '#0f2a1d' : '#1d1530') : '#141829');
+  if (pk2 && PC){ const fr = pk2.k === 'card' ? 8 + Math.max(0, CARDS.findIndex(c => c.id === pk2.id)) : pk2.c; ctx.imageSmoothingEnabled = true; ctx.drawImage(PC, fr*32, 0, 32, 32, cx + 2, cy + 1, 16, 16); ctx.imageSmoothingEnabled = false; }
+  ctx.font = pk2 ? '700 8px "Noto Sans KR", sans-serif' : '8px Silkscreen, monospace'; ctx.textAlign = 'left';
+  ctx.fillStyle = pk2 ? (pk2.k === 'card' ? '#8affc1' : PATCH_COLS[pk2.c]) : '#3a3f5c';
+  ctx.fillText(pk2 ? pocketName(pk2) : 'EMPTY', cx + (pk2 ? 20 : 26), cy + 12);
+  if (pk2 && !touchUsed){ ctx.font = '7px Silkscreen, monospace'; ctx.fillStyle = '#6b7090'; ctx.textAlign = 'right'; ctx.fillText('F/G', cx + 81, cy - 2); }
   const boss = G.enemies.find(e => e.type === 'boss' && !e.dead);
   if (boss && boss.spawnT <= 0){ const w = 150; px(W/2 - w/2 - 1, H - 20, w + 2, 7, '#000'); px(W/2 - w/2, H - 19, w * Math.max(0, boss.hp/boss.maxHp), 5, BOSS_COL[boss.kind]); ctx.font = '700 8px "Noto Sans KR", sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = '#ece9f5'; ctx.fillText(bossTitle(boss), W/2, H - 23); }
 }
@@ -2898,7 +2919,7 @@ function refreshDebug(full){
 `fps ${lastFps}  탄 ${G.projs.length}  적탄 ${G.ebul.length}  적 ${G.enemies.filter(e => !e.dead).length}
 ${floorLabel(G.floorNo)} (${G.floorNo}/${G.endFloor})  room #${G.room.index} ${G.room.type}  seed ${G.seed}
 hp ${Math.ceil(p.hp)}/${p.maxHp}  방화벽 ${Math.ceil(p.shield)}  게이지 ${Math.floor(G.gauge)}
-비트 ${G.res.bit}  키 ${G.res.key}  폭탄 ${G.res.bomb}  카드 ${G.card || '-'}  액티브 ${G.active}
+비트 ${G.res.bit}  키 ${G.res.key}  폭탄 ${G.res.bomb}  주머니 ${G.pocket ? pocketName(G.pocket) : '-'}  액티브 ${G.active}
 form   ${forms}
 count  ${P.count}${P.back ? ' + back' : ''}${P.overflow ? ' + overflow' : ''}
 path   homing ${P.homing} · pierce ${P.pierce ? 'Y' : 'N'} · bounce ${P.bounces}${P.orbit ? ' · orbit' : ''}
@@ -2926,6 +2947,7 @@ addEventListener('keydown', e => {
     if (e.code === 'KeyE') press.ult = true;
     if (e.code === 'KeyQ') press.bomb = true;
     if (e.code === 'KeyF') press.card = true;
+    if (e.code === 'KeyG') press.drop = true;
   }
   if (e.code.startsWith('Arrow') && !mouse.down){ mouse.used = false; mvAcc = 0; wrap.classList.add('kb'); }
   keys.add(e.code);
@@ -2981,9 +3003,13 @@ stage.addEventListener('pointermove', e => {
 });
 const endPointer = e => { const p = pointers.get(e.pointerId); if (!p) return; pointers.delete(e.pointerId); touch[p.side] = null; (p.side === 'move' ? stL : stR).hidden = true; };
 stage.addEventListener('pointerup', endPointer); stage.addEventListener('pointercancel', endPointer);
-[['tUlt','ult'],['tDash','dash'],['tBomb','bomb'],['tCard','card']].forEach(([id, k]) => {
+[['tUlt','ult'],['tDash','dash'],['tBomb','bomb']].forEach(([id, k]) => {
   $(id).addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); touchUsed = true; press[k] = true; initAudio(); });
 });
+{ let t0 = 0, held = null; const tc = $('tCard');
+  tc.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); touchUsed = true; initAudio(); t0 = performance.now(); held = setTimeout(() => { held = null; press.drop = true; }, 500); });
+  const up = e => { e.preventDefault(); e.stopPropagation(); if (held){ clearTimeout(held); held = null; press.card = true; } };
+  tc.addEventListener('pointerup', up); tc.addEventListener('pointercancel', e => { if (held){ clearTimeout(held); held = null; } }); }
 
 /* ---------- ui buttons ---------- */
 function startGame(){ initAudio(); if (storyOpen) return; if (!storySeen.intro) openStory('intro', () => newRun(0)); else newRun(0); }
@@ -3029,9 +3055,9 @@ function renderStatus(){
     ['탄속', P.shotSpeed.toFixed(2)], ['사거리', Math.round(P.range)], ['탄 크기', '×' + P.sizeMul.toFixed(2)],
     ['이동 속도', '×' + G.mods.speed.toFixed(2)]])}
     <div class="tags">${traits.length ? traits.map(t => `<span class="tag">${t}</span>`).join('') : '<span class="none">특수 효과 없음</span>'}</div></div>
-  <div class="bx"><h5>액티브 · 치트 코드</h5>
+  <div class="bx"><h5>액티브 · 주머니</h5>
     ${A ? `<div class="act"><img src="${ICON[A.id].url}" alt=""><div><b>${esc(A.name)}</b><br><span class="none">${esc(A.desc)} · 게이지 ${Math.floor(G.gauge)}/${actCost()}</span></div></div>` : ''}
-    ${G.card ? `<div class="act"><img src="${lootURL('card', G.card)}" alt=""><div><b>${esc(CARD[G.card].name)}</b><br><span class="none">${esc(CARD[G.card].desc)}</span></div></div>` : '<span class="none">치트 코드 없음</span>'}</div>
+    ${G.pocket ? `<div class="act"><img src="${G.pocket.k === 'card' ? lootURL('card', G.pocket.id) : lootURL('patch', G.pocket.c)}" alt=""><div><b>${esc(pocketName(G.pocket))}</b><br><span class="none">${esc(G.pocket.k === 'card' ? CARD[G.pocket.id].desc : G.patchKnown.has(G.pocket.c) ? PATCHES[G.patchMap[G.pocket.c]].desc : '먹어 봐야 알 수 있음')} · F 쓰기 · G 버리기</span></div></div>` : '<span class="none">주머니 비어 있음 (패치 · 치트 코드)</span>'}</div>
   <div class="bx"><h5>아이템 ${G.items.length}개</h5><div class="ic">${G.items.length ? G.items.map(i => `<img src="${ICON[i.id].url}" alt="${esc(ITEM[i.id].name)}" title="${esc(ITEM[i.id].name)} — ${esc(ITEM[i.id].desc)}">`).join('') : '<span class="none">아직 없음</span>'}</div></div>
   <div class="bx"><h5>알아낸 패치</h5><div class="tags">${known || '<span class="none">아직 먹어 본 패치 없음</span>'}</div></div>`;
 }
