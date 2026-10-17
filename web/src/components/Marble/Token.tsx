@@ -20,7 +20,7 @@ const cache = new Map<string, Promise<Sheet>>();
 function loadSheet(id: string): Promise<Sheet> {
   let p = cache.get(id);
   if (!p) {
-    p = fetch(`/fight/${id}.json`)
+    p = fetch(id.includes("/") ? `/${id}.json` : `/fight/${id}.json`)
       .then((r) => r.json() as Promise<Omit<Sheet, "w" | "h">>)
       .then(
         (meta) =>

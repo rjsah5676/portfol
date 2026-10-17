@@ -1,7 +1,8 @@
 /*
  * 픽셀 타운 서바이버 — 판 밖 성장 (영구 강화 · 보상 · 동료). 서버 · 화면 공용, "@/" import 금지.
  */
-import { depthMul, HEROES, RUN_SEC, type HeroId, type Stats } from "./data";
+import { CAST_BY } from "../cast";
+import { depthMul, HEROES, HERO_IDS, RUN_SEC, STAGES, type HeroId, type StageId, type Stats } from "./data";
 import type { RunQ } from "./quests";
 
 /* ───────────── 영구 강화 (코인으로) ───────────── */
@@ -52,24 +53,13 @@ export function upBonus(ups: Ups): { stats: Partial<Stats>; revive: number; rero
 
 /** 같은 계열 셋이면 팀 시너지 */
 export type Team = "fight" | "skin" | "town" | "ur";
-export const TEAM_OF: Record<HeroId, Team> = {
-  kai: "fight",
-  igna: "fight",
-  lily: "fight",
-  ivan: "fight",
-  soyoung: "fight",
-  zena: "fight",
-  "ivan-marine": "skin",
-  "igna-student": "skin",
-  "lily-hood": "skin",
-  toto: "town",
-  mirage: "town",
-  lolo: "town",
-  mongle: "town",
-  "ur-dice": "ur",
-  "ur-moa": "ur",
-  "ur-forte": "ur",
+/** 계열은 명부에서 바로 정함: 격투가 본인 → 동창회 · 격투가 코스튬 → 코스튬 파티 · UR → 전설 · 나머지 → 주민 */
+export const teamOf = (h: HeroId): Team => {
+  const c = CAST_BY[h as keyof typeof CAST_BY];
+  if (!c) return "town";
+  return c.grade === "UR" ? "ur" : c.base === "orig" ? "town" : c.base === c.id ? "fight" : "skin";
 };
+export const TEAM_OF = Object.fromEntries(HERO_IDS.map((h) => [h, teamOf(h)])) as Record<HeroId, Team>;
 export const TEAM_NAME: Record<Team, string> = { fight: "픽셀파이트 동창회", skin: "코스튬 파티", town: "다이스 타운 주민", ur: "전설의 셋" };
 export const TEAM_BONUS: Record<Team, { desc: string; stat: Partial<Stats> }> = {
   fight: { desc: "피해 +15%", stat: { might: 0.15 } },
@@ -102,21 +92,25 @@ export interface RunReport {
   /** 오버타임 (초) */
   ot: number;
   q: RunQ;
+  /** 맵 (없으면 잠든 골목) */
+  stage?: StageId;
 }
+/** 깊이 × 맵 보상 배율 */
+const rewardMul = (r: RunReport) => depthMul(r.depth).reward * STAGES[r.stage ?? "town"].reward;
 
 /** 다이스 타운 별사탕 (뽑기 재화) */
 export const STAR_FIRST_WIN = 60;
 export function runStars(r: RunReport): number {
   const sec = Math.min(r.sec, RUN_SEC + 600);
   const base = Math.floor(sec / 60) * 4 + Math.floor(r.kills / 150) + (r.win ? 30 : 0);
-  return Math.min(Math.round(120 * depthMul(r.depth).reward), Math.round(base * depthMul(r.depth).reward));
+  return Math.min(Math.round(120 * rewardMul(r)), Math.round(base * rewardMul(r)));
 }
 /** 영구 강화 코인: 버틴 시간 · 처치 · 클리어 (판 안 금화와 따로 — 금화는 판 안에서 다 써도 됨) */
 export function runCoins(r: RunReport): number {
   const sec = Math.min(r.sec, RUN_SEC + 900);
-  return Math.round(((sec / 60) * 12 + Math.min(r.kills, 30_000) / 40 + (r.win ? 100 : 0)) * depthMul(r.depth).reward);
+  return Math.round(((sec / 60) * 12 + Math.min(r.kills, 30_000) / 40 + (r.win ? 100 : 0)) * rewardMul(r));
 }
-/** 랭킹 점수: 깊이 → 클리어 → 버틴 시간(오버타임 포함) → 처치 */
+/** 랭킹 점수 (맵마다 따로): 깊이 → 클리어 → 버틴 시간(오버타임 포함) → 처치 */
 export const runScore = (r: RunReport) => Math.min(r.depth, 99) * 10_000_000 + (r.win ? 1_000_000 : 0) + Math.min(r.sec, 9999) * 100 + Math.min(r.kills, 99);
 /** 말이 되는 기록인지 (조작 걸러내기) */
 export function plausible(r: RunReport, wallSec: number): boolean {
@@ -128,5 +122,11 @@ export function plausible(r: RunReport, wallSec: number): boolean {
   if (r.ot > Math.max(0, r.sec - RUN_SEC) + 5) return false;
   const q = r.q;
   if (q.chests > r.sec / 6 + 6 || q.shrines > r.sec / 10 + 4 || q.trials > 3 || q.gold > r.sec * 6 + 400) return false;
+  // 그 맵에 없는 보스 · 종
+  const st = r.stage ?? "town";
+  if (st === "town" && (q.cuckoo || q.tower || q.tolls)) return false;
+  if (st === "clock" && (q.jelly || q.clock)) return false;
+  if (q.tolls > r.sec / 90 + 1) return false;
+  if ((q.clock || q.tower) && !r.win) return false;
   return true;
 }

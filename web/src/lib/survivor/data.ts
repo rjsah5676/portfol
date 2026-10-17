@@ -2,6 +2,7 @@
  * 픽셀 타운 서바이버 — 숫자 · 정의 (시뮬 · 화면 · 서버 공용, "@/" import 금지)
  * 세계 단위 = 화면 픽셀 (보이는 범위 VIEW_W × VIEW_H). 시간 = 초.
  */
+import { CAST, kitOf, type CastId, type Grade } from "../cast";
 
 export const VIEW_W = 512;
 export const VIEW_H = 288;
@@ -12,74 +13,82 @@ export const RUN_SEC = 600;
 
 /* ───────────── 캐릭터 (다이스 타운 16명 — 뽑기 · 강화 그대로) ───────────── */
 
-export type HeroId =
-  | "kai"
-  | "igna"
-  | "lily"
-  | "ivan"
-  | "soyoung"
-  | "zena"
-  | "ivan-marine"
-  | "igna-student"
-  | "lily-hood"
-  | "toto"
-  | "mirage"
-  | "lolo"
-  | "mongle"
-  | "ur-dice"
-  | "ur-moa"
-  | "ur-forte";
-
-export type Grade = "R" | "SR" | "SSR" | "UR";
+/** 픽셀 순찰대 (서바이버 오리지널) — 다이스 타운 명부(lib/cast)에 안 들어감 */
+export type PatrolId = "bandi";
+/** 다이스 타운 · 서바이버 공용 명부 (lib/cast) 의 캐릭터 id + 픽셀 순찰대 */
+export type HeroId = CastId | PatrolId;
+export type { Grade };
 
 export interface HeroDef {
   id: HeroId;
   name: string;
   title: string;
   grade: Grade;
-  /** 다이스 타운 캐릭터 시트 (public/fight/<sprite>.json) */
+  /** 도트 시트 (public/fight/<sprite>.json — "/" 가 있으면 public/<sprite>.json) */
   sprite: string;
+  /** 서바이버 안 무기 · 이펙트 색 (명부 대표색과 따로) */
   color: string;
   weapon: WeaponId;
   ult: { name: string; desc: string };
   passive: { name: string; desc: string; stat: Partial<Stats> };
   hp: number;
   speed: number;
+  /** 고유 무기 각성에 필요한 패시브 */
+  awaken: PassiveId;
+  /** 키트 주인 (전용이면 자기 id, 빌렸으면 원래 캐릭터 id) — 필살기 · 고유 무기 판정 */
+  kit: HeroId;
+  /** 전용 키트 없이 원래 캐릭터 키트를 빌려 합류한 캐릭터 */
+  borrowed?: boolean;
 }
+type Kit = Omit<HeroDef, "id" | "name" | "title" | "grade" | "sprite" | "kit" | "borrowed">;
 
-const H = (id: HeroId, name: string, title: string, grade: Grade, color: string, weapon: WeaponId, ult: [string, string], passive: [string, string, Partial<Stats>], hp: number, speed: number): HeroDef => ({
-  id,
-  name,
-  title,
-  grade,
-  sprite: id,
+const K = (color: string, weapon: WeaponId, ult: [string, string], passive: [string, string, Partial<Stats>], hp: number, speed: number, awaken: PassiveId): Kit => ({
   color,
   weapon,
   ult: { name: ult[0], desc: ult[1] },
   passive: { name: passive[0], desc: passive[1], stat: passive[2] },
   hp,
   speed,
+  awaken,
 });
 
-export const HEROES: Record<HeroId, HeroDef> = {
-  kai: H("kai", "카이", "바람의 주먹", "R", "#5fd0ff", "kick", ["돌풍 돌진", "바라보는 쪽으로 돌진하며 길 위의 적을 날려요"], ["바람 걸음", "이동 속도 +10%", { speed: 0.1 }], 110, 74),
-  igna: H("igna", "이그나", "불꽃 술사", "R", "#ff7a3d", "fireball", ["불바다", "화면 전체가 4초 동안 불타요"], ["타오르는 마력", "피해 +10%", { might: 0.1 }], 90, 70),
-  lily: H("lily", "릴리", "우산 꼬마", "R", "#7ad7ff", "umbrella", ["소나기", "화면 전체 적이 느려지고 물방울에 맞아요"], ["튼튼 우산", "받는 피해 −1", { armor: 1 }], 100, 70),
-  ivan: H("ivan", "이반", "교관", "R", "#ff5a5a", "punch", ["정신 교육", "주변 적을 3초 동안 기절시키고 크게 때려요"], ["단련된 몸", "최대 체력 +30", { maxHp: 30 }], 130, 66),
-  soyoung: H("soyoung", "소영", "엄한 선생님", "SR", "#ff7fb0", "whip", ["앞으로 나와!", "화면 속 적을 전부 끌어와 내려쳐요"], ["매의 눈", "행운 +2", { luck: 2 }], 100, 70),
-  zena: H("zena", "제나", "번개 창술사", "SR", "#ffe14a", "lance", ["전광석화", "번개처럼 세 번 돌진해요"], ["번개 걸음", "쿨타임 −8%", { cooldown: 0.08 }], 95, 76),
-  "ivan-marine": H("ivan-marine", "이반", "오도해병 이반", "SR", "#7fb06b", "grenade", ["포격 지원", "화면 곳곳에 포탄이 떨어져요"], ["강철 체력", "초당 회복 +0.4", { regen: 0.4 }], 120, 66),
-  "igna-student": H("igna-student", "이그나", "학생 이그나", "SR", "#ff9a4d", "dice6", ["정답은 6!", "6초 동안 모든 공격이 치명타"], ["벼락치기", "경험치 +10%", { growth: 0.1 }], 90, 70),
-  "lily-hood": H("lily-hood", "릴리", "빨간망토 릴리", "SR", "#e2405e", "apple", ["늑대 사냥", "늑대 세 마리가 적을 물어뜯으며 달려요"], ["사냥꾼 감", "자석 +40%", { magnet: 0.4 }], 100, 72),
-  toto: H("toto", "토토", "달토끼 배달부", "SSR", "#ffd86b", "parcel", ["보름달 배송", "거대한 달빛 택배가 화면 곳곳에 떨어져요"], ["덤 서비스", "행운 +2", { luck: 2 }], 95, 74),
-  mirage: H("mirage", "미라쥬", "꼬마 마술사", "SSR", "#b48cff", "cards", ["분신 마술", "8초 동안 모든 무기가 두 배 빠르게 쏴요"], ["트릭 카드", "투사체 +1", { amount: 1 }], 90, 72),
-  lolo: H("lolo", "롤로", "서커스 단장", "SSR", "#ff5fa0", "circus", ["대공연", "서커스 공 12개가 화면을 휩쓸어요"], ["무대 체질", "범위 +15%", { area: 0.15 }], 100, 70),
-  mongle: H("mongle", "몽글", "잠꾸러기 양", "SSR", "#d8d4ff", "sleep", ["꿈나라", "화면 속 적이 4초 동안 잠들고 더 아프게 맞아요"], ["포근한 털", "받는 피해 −2", { armor: 2 }], 130, 64),
-  "ur-dice": H("ur-dice", "DICE", "주사위 요정", "UR", "#ffd23a", "roll", ["잭팟 롤", "거대 주사위! 6이 나오면 화면 전멸"], ["행운 요정", "행운 +4", { luck: 4 }], 100, 72),
-  "ur-moa": H("ur-moa", "MOA", "부자 고양이", "UR", "#ffc94a", "coins", ["돈다발 비", "화면 전체에 금화가 쏟아져 때리고 코인을 뿌려요"], ["금고 고양이", "줍는 범위 +30% · 피해 +10%", { magnet: 0.3, might: 0.1 }], 105, 72),
-  "ur-forte": H("ur-forte", "FORTE", "오르골 소년", "UR", "#7ff0d8", "notes", ["앙코르", "6초 동안 모든 무기 쿨타임이 확 줄어요"], ["리듬감", "쿨타임 −10%", { cooldown: 0.1 }], 100, 72),
+/** 서바이버 키트 (무기 · 필살기 · 패시브 · 체력 · 속도 · 각성 조건) — 없는 캐릭터는 원래 캐릭터 것을 빌림 */
+const KITS: Partial<Record<HeroId, Kit>> = {
+  kai: K("#5fd0ff", "kick", ["돌풍 돌진", "바라보는 쪽으로 돌진하며 길 위의 적을 날려요"], ["바람 걸음", "이동 속도 +10%", { speed: 0.1 }], 110, 74, "speed"),
+  igna: K("#ff7a3d", "fireball", ["불바다", "화면 전체가 4초 동안 불타요"], ["타오르는 마력", "피해 +10%", { might: 0.1 }], 90, 70, "might"),
+  lily: K("#7ad7ff", "umbrella", ["소나기", "화면 전체 적이 느려지고 물방울에 맞아요"], ["튼튼 우산", "받는 피해 −1", { armor: 1 }], 100, 70, "maxHp"),
+  ivan: K("#ff5a5a", "punch", ["정신 교육", "주변 적을 3초 동안 기절시키고 크게 때려요"], ["단련된 몸", "최대 체력 +30", { maxHp: 30 }], 130, 66, "area"),
+  soyoung: K("#ff7fb0", "whip", ["앞으로 나와!", "화면 속 적을 전부 끌어와 내려쳐요"], ["매의 눈", "행운 +2", { luck: 2 }], 100, 70, "luck"),
+  zena: K("#ffe14a", "lance", ["전광석화", "번개처럼 세 번 돌진해요"], ["번개 걸음", "쿨타임 −8%", { cooldown: 0.08 }], 95, 76, "cooldown"),
+  "ivan-marine": K("#7fb06b", "grenade", ["포격 지원", "화면 곳곳에 포탄이 떨어져요"], ["강철 체력", "초당 회복 +0.4", { regen: 0.4 }], 120, 66, "area"),
+  "igna-student": K("#ff9a4d", "dice6", ["정답은 6!", "6초 동안 모든 공격이 치명타"], ["벼락치기", "경험치 +10%", { growth: 0.1 }], 90, 70, "luck"),
+  "lily-hood": K("#e2405e", "apple", ["늑대 사냥", "늑대 세 마리가 적을 물어뜯으며 달려요"], ["사냥꾼 감", "자석 +40%", { magnet: 0.4 }], 100, 72, "magnet"),
+  toto: K("#ffd86b", "parcel", ["보름달 배송", "거대한 달빛 택배가 화면 곳곳에 떨어져요"], ["덤 서비스", "행운 +2", { luck: 2 }], 95, 74, "amount"),
+  mirage: K("#b48cff", "cards", ["분신 마술", "8초 동안 모든 무기가 두 배 빠르게 쏴요"], ["트릭 카드", "투사체 +1", { amount: 1 }], 90, 72, "amount"),
+  lolo: K("#ff5fa0", "circus", ["대공연", "서커스 공 12개가 화면을 휩쓸어요"], ["무대 체질", "범위 +15%", { area: 0.15 }], 100, 70, "area"),
+  mongle: K("#d8d4ff", "sleep", ["꿈나라", "화면 속 적이 4초 동안 잠들고 더 아프게 맞아요"], ["포근한 털", "받는 피해 −2", { armor: 2 }], 130, 64, "maxHp"),
+  "ur-dice": K("#ffd23a", "roll", ["잭팟 롤", "거대 주사위! 6이 나오면 화면 전멸"], ["행운 요정", "행운 +4", { luck: 4 }], 100, 72, "luck"),
+  "ur-moa": K("#ffc94a", "coins", ["돈다발 비", "화면 전체에 금화가 쏟아져 때리고 코인을 뿌려요"], ["금고 고양이", "줍는 범위 +30% · 피해 +10%", { magnet: 0.3, might: 0.1 }], 105, 72, "magnet"),
+  "ur-forte": K("#7ff0d8", "notes", ["앙코르", "6초 동안 모든 무기 쿨타임이 확 줄어요"], ["리듬감", "쿨타임 −10%", { cooldown: 0.1 }], 100, 72, "cooldown"),
+  // 픽셀 순찰대
+  bandi: K("#ffd27a", "lantern", ["등대", "8초 동안 빛줄기 두 갈래가 주변을 돌며 태워요"], ["반딧불 자석", "줍는 범위 +30%", { magnet: 0.3 }], 100, 72, "area"),
 };
-export const HERO_IDS = Object.keys(HEROES) as HeroId[];
+
+/** 픽셀 순찰대 명부 (정체성) — 키트는 위 KITS */
+const PATROL: { id: PatrolId; name: string; title: string; grade: Grade; sprite: string }[] = [
+  { id: "bandi", name: "반디", title: "랜턴 순찰대원", grade: "R", sprite: "patrol/hero/bandi" },
+];
+
+export const HEROES = Object.fromEntries([
+  ...CAST.filter((c) => c.on).flatMap((c) => {
+    const k = kitOf(KITS, c);
+    return k ? [[c.id, { ...k, id: c.id as HeroId, name: c.name, title: c.title, grade: c.grade, sprite: c.sprite, kit: (KITS[c.id as HeroId] ? c.id : c.base) as HeroId, ...(!KITS[c.id as HeroId] && { borrowed: true }) } satisfies HeroDef]] : [];
+  }),
+  ...PATROL.map((c) => [c.id, { ...KITS[c.id]!, ...c, kit: c.id } satisfies HeroDef]),
+]) as Record<HeroId, HeroDef>;
+/** 서바이버(다이스 타운 명부) 캐릭터 — 픽셀 순찰대는 PATROL_IDS */
+export const HERO_IDS = Object.keys(HEROES).filter((h) => !PATROL.some((c) => c.id === h)) as HeroId[];
+export const PATROL_IDS = PATROL.map((c) => c.id);
 /** 처음부터 열린 캐릭터 (나머지는 다이스 타운 뽑기) */
 export const FREE_HEROES: HeroId[] = ["kai", "igna", "lily", "ivan"];
 /** 등급 바닥 + 강화 레벨 → 능력치 보너스 (다이스 타운 power() 와 같은 눈금) */
@@ -141,6 +150,8 @@ export type WeaponId =
   | "roll"
   | "coins"
   | "notes"
+  // 픽셀 순찰대 고유
+  | "lantern"
   // 공용
   | "shuriken"
   | "boomerang"
@@ -349,6 +360,15 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     desc: ["박자마다 퍼져 나가는 음파", "범위 +15%", "피해 +6", "한 박자 더", "피해 +8 · 범위 +"],
     lv: [L(14, 1.4, 1, 80, 0, 99, 0.5, 40), L(14, 1.4, 1, 92, 0, 99, 0.5, 40), L(20, 1.4, 1, 92, 0, 99, 0.5, 45), L(20, 1.4, 2, 92, 0, 99, 0.5, 45), L(28, 1.2, 2, 104, 0, 99, 0.5, 50)],
   },
+  lantern: {
+    id: "lantern",
+    name: "랜턴 빛살",
+    owner: "bandi",
+    pattern: "cone",
+    color: "#ffd27a",
+    desc: ["앞쪽을 비추는 빛살 — 맞은 자리에 불씨가 남아요", "피해 +4", "사거리 +15%", "쿨타임 −0.15초", "피해 +6 · 두 번 비춤"],
+    lv: [L(11, 1.0, 1, 68, 0, 99, 0.24, 25), L(15, 1.0, 1, 68, 0, 99, 0.24, 25), L(15, 1.0, 1, 78, 0, 99, 0.24, 28), L(15, 0.85, 1, 78, 0, 99, 0.24, 28), L(21, 0.85, 2, 82, 0, 99, 0.24, 32)],
+  },
   shuriken: {
     id: "shuriken",
     name: "수리검",
@@ -476,24 +496,7 @@ export const BASE_WEAPONS: WeaponId[] = ["shuriken", "boomerang", "bolt", "thorn
 export const FUSIONS: WeaponId[] = ["blades", "pinball"];
 export const EVOLUTIONS: WeaponId[] = ["gale", "cyclone", "judgment", "rose", "barrage", "rainbow"];
 /** 고유 무기 각성: Lv5 + 이 패시브 → 상자 · 카드에서 각성 (피해 ×1.6 · +1개 · 크기 ×1.2) */
-export const AWAKEN_NEED: Record<HeroId, PassiveId> = {
-  kai: "speed",
-  igna: "might",
-  lily: "maxHp",
-  ivan: "area",
-  soyoung: "luck",
-  zena: "cooldown",
-  "ivan-marine": "area",
-  "igna-student": "luck",
-  "lily-hood": "magnet",
-  toto: "amount",
-  mirage: "amount",
-  lolo: "area",
-  mongle: "maxHp",
-  "ur-dice": "luck",
-  "ur-moa": "magnet",
-  "ur-forte": "cooldown",
-};
+export const AWAKEN_NEED = Object.fromEntries((Object.keys(HEROES) as HeroId[]).map((h) => [h, HEROES[h].awaken])) as Record<HeroId, PassiveId>;
 export const MAX_WEAPONS = 6;
 export const MAX_PASSIVES = 6;
 
@@ -524,7 +527,23 @@ export const PASSIVE_IDS = Object.keys(PASSIVES) as PassiveId[];
 
 /* ───────────── 적 ───────────── */
 
-export type EnemyKind = "bat" | "slime" | "ghost" | "skull" | "mush" | "golem" | "boss_jelly" | "boss_clock";
+export type EnemyKind =
+  | "bat"
+  | "slime"
+  | "ghost"
+  | "skull"
+  | "mush"
+  | "golem"
+  | "boss_jelly"
+  | "boss_clock"
+  // 시계탑 광장
+  | "mouse"
+  | "tin"
+  | "cuckoo"
+  | "gear"
+  | "hourglass"
+  | "boss_cuckoo"
+  | "boss_tower";
 
 export interface EnemyDef {
   kind: EnemyKind;
@@ -540,9 +559,11 @@ export interface EnemyDef {
   /** 다른 적을 밀지 않음 (유령) */
   ghost?: boolean;
   boss?: boolean;
+  /** 움직임 버릇: 흔들 (박쥐) · 곧장 질주 (태엽 쥐) · 급강하 (뻐꾸기) */
+  move?: "wobble" | "dart" | "dive";
 }
 export const ENEMIES: Record<EnemyKind, EnemyDef> = {
-  bat: { kind: "bat", name: "밤박쥐", hp: 5, speed: 46, dmg: 3, r: 5, xp: 1, heavy: 0 },
+  bat: { kind: "bat", name: "밤박쥐", hp: 5, speed: 46, dmg: 3, r: 5, xp: 1, heavy: 0, move: "wobble" },
   slime: { kind: "slime", name: "꿈 슬라임", hp: 13, speed: 26, dmg: 5, r: 7, xp: 1, heavy: 0.2 },
   ghost: { kind: "ghost", name: "장난 유령", hp: 20, speed: 36, dmg: 7, r: 7, xp: 2, heavy: 0.3, ghost: true },
   skull: { kind: "skull", name: "해골 병정", hp: 42, speed: 30, dmg: 9, r: 8, xp: 3, heavy: 0.4 },
@@ -552,6 +573,16 @@ export const ENEMIES: Record<EnemyKind, EnemyDef> = {
   boss_jelly: { kind: "boss_jelly", name: "킹 젤리", hp: 2600, speed: 32, dmg: 20, r: 18, xp: 120, heavy: 1, boss: true },
   /** 10분: 마을 시계탑에 깃든 자정의 문지기 — 쓰러뜨리면 새벽이 와요 */
   boss_clock: { kind: "boss_clock", name: "자정의 시계지기", hp: 9000, speed: 36, dmg: 26, r: 18, xp: 300, heavy: 1, boss: true },
+  /* 시계탑 광장 — 시계지기가 쓰러지자 멈춰 버린 광장의 태엽 장난감들 */
+  mouse: { kind: "mouse", name: "태엽 쥐", hp: 7, speed: 50, dmg: 3, r: 5, xp: 1, heavy: 0, move: "dart" },
+  tin: { kind: "tin", name: "양철 병정", hp: 46, speed: 29, dmg: 9, r: 8, xp: 3, heavy: 0.45 },
+  cuckoo: { kind: "cuckoo", name: "고장 난 뻐꾸기", hp: 24, speed: 36, dmg: 6, r: 6, xp: 2, heavy: 0.2, ghost: true, move: "dive" },
+  gear: { kind: "gear", name: "톱니 굴렁쇠", hp: 85, speed: 27, dmg: 12, r: 9, xp: 4, heavy: 0.55 },
+  hourglass: { kind: "hourglass", name: "모래시계 골렘", hp: 190, speed: 21, dmg: 16, r: 12, xp: 8, heavy: 0.9 },
+  /** 5분: 시계탑 뻐꾸기 창에서 튀어나온 여왕 */
+  boss_cuckoo: { kind: "boss_cuckoo", name: "뻐꾸기 여왕", hp: 3400, speed: 38, dmg: 22, r: 18, xp: 150, heavy: 1, boss: true },
+  /** 10분: 자정에 멈춘 시계탑 그 자체 — 다시 돌려 놓으면 새벽 */
+  boss_tower: { kind: "boss_tower", name: "멈춘 대시계", hp: 12000, speed: 26, dmg: 28, r: 22, xp: 400, heavy: 1, boss: true },
 };
 
 /** 분마다 나오는 적 (가중치) · 화면에 유지할 수 */
@@ -563,7 +594,7 @@ export interface WaveDef {
   /** 초당 새로 나오는 수 */
   rate: number;
 }
-export const WAVES: WaveDef[] = [
+const TOWN_WAVES: WaveDef[] = [
   { at: 0, mix: { bat: 6, slime: 4 }, count: 30, rate: 3.2 },
   { at: 45, mix: { bat: 5, slime: 5 }, count: 50, rate: 4.5 },
   { at: 90, mix: { bat: 4, slime: 4, ghost: 3 }, count: 70, rate: 5.5 },
@@ -578,8 +609,14 @@ export const WAVES: WaveDef[] = [
 ];
 
 /** 정해진 순간 이벤트 */
-export type TimedEvent = { at: number; k: "elite"; kind: EnemyKind } | { at: number; k: "ring"; kind: EnemyKind; n: number } | { at: number; k: "boss"; kind: EnemyKind; arena: boolean };
-export const EVENTS: TimedEvent[] = [
+export type TimedEvent =
+  | { at: number; k: "elite"; kind: EnemyKind; n?: number }
+  | { at: number; k: "ring"; kind: EnemyKind; n: number }
+  | { at: number; k: "boss"; kind: EnemyKind; arena: boolean }
+  /** 챕터 기믹: 꺼진 가로등 n개 · 분수 하나 */
+  | { at: number; k: "lamps"; n: number }
+  | { at: number; k: "spout" };
+const TOWN_EVENTS: TimedEvent[] = [
   { at: 150, k: "elite", kind: "slime" },
   { at: 240, k: "ring", kind: "bat", n: 40 },
   { at: 300, k: "boss", kind: "boss_jelly", arena: false },
@@ -588,6 +625,171 @@ export const EVENTS: TimedEvent[] = [
   { at: 540, k: "elite", kind: "golem" },
   { at: RUN_SEC, k: "boss", kind: "boss_clock", arena: true },
 ];
+
+const CLOCK_WAVES: WaveDef[] = [
+  { at: 0, mix: { mouse: 6, bat: 4 }, count: 30, rate: 3.3 },
+  { at: 45, mix: { mouse: 5, bat: 3, cuckoo: 2 }, count: 52, rate: 4.6 },
+  { at: 90, mix: { mouse: 4, cuckoo: 4, ghost: 2 }, count: 72, rate: 5.6 },
+  { at: 150, mix: { cuckoo: 4, mouse: 3, tin: 2 }, count: 98, rate: 6.6 },
+  { at: 210, mix: { tin: 4, cuckoo: 3, mouse: 2 }, count: 125, rate: 7.7 },
+  { at: 270, mix: { tin: 5, cuckoo: 3, mouse: 2 }, count: 145, rate: 8.8 },
+  { at: 330, mix: { tin: 4, gear: 3, mouse: 3 }, count: 170, rate: 10.3 },
+  { at: 390, mix: { gear: 4, tin: 4, cuckoo: 2 }, count: 196, rate: 11.8 },
+  { at: 450, mix: { gear: 4, hourglass: 2, tin: 3 }, count: 226, rate: 13.4 },
+  { at: 510, mix: { hourglass: 3, gear: 4, mouse: 4 }, count: 278, rate: 16.5 },
+  { at: 560, mix: { hourglass: 4, gear: 3, tin: 3, cuckoo: 3 }, count: 330, rate: 20.5 },
+]
+const CLOCK_EVENTS: TimedEvent[] = [
+  { at: 175, k: "ring", kind: "mouse", n: 40 },
+  { at: 150, k: "elite", kind: "tin" },
+  { at: 300, k: "boss", kind: "boss_cuckoo", arena: false },
+  { at: 420, k: "ring", kind: "cuckoo", n: 36 },
+  { at: 450, k: "elite", kind: "gear" },
+  { at: 540, k: "elite", kind: "hourglass" },
+  { at: RUN_SEC, k: "boss", kind: "boss_tower", arena: true },
+];
+
+/* ───────────── 스테이지 (맵) ───────────── */
+
+export type StageId = "town" | "clock";
+/** 보스 패턴 (돌아가며) */
+export type BossPhase = "warn" | "ring" | "summon" | "slam" | "fan" | "spiral" | "chime" | "blink";
+export interface StageDef {
+  id: StageId;
+  name: string;
+  en: string;
+  desc: string;
+  /** 대표색 (고르기 화면 · 표시) */
+  color: string;
+  waves: WaveDef[];
+  events: TimedEvent[];
+  /** 5분 보스 · 10분(새벽) 보스 */
+  mid: EnemyKind;
+  final: EnemyKind;
+  /** 보스 패턴 순서 · 부하 */
+  boss: Partial<Record<EnemyKind, { order: BossPhase[]; minion: EnemyKind }>>;
+  /** 시작하자마자 둘러싼 무리 · 오버타임 정예 */
+  opening: [EnemyKind, EnemyKind];
+  otElites: EnemyKind[];
+  /** 몹 체력 배율 · 보상 배율 (깊이와 곱함) */
+  hp: number;
+  reward: number;
+  /** 바닥 (public/survivor/<ground>.png) · 바닥이 없을 때 물들일 색 */
+  ground: string;
+  tint: string;
+  /** 장식 (public/survivor/deco/<k>.png) · 가중치 */
+  deco: { k: string; w: number; light?: boolean }[];
+  /** 자정의 종: from 초부터 every 초마다 dur 초 동안 적이 빨라지고 젬이 두 배 */
+  toll?: { from: number; every: number; dur: number };
+  /** 열리는 조건 (이 스테이지를 깊이 0 이상 클리어) */
+  need?: StageId;
+}
+export const STAGES: Record<StageId, StageDef> = {
+  town: {
+    id: "town",
+    name: "잠든 골목",
+    en: "SLEEPING ALLEY",
+    desc: "가로등만 깜빡이는 밤의 골목. 분수대의 킹 젤리와 시계탑의 문지기가 새벽을 막고 있어요.",
+    color: "#c58bff",
+    waves: TOWN_WAVES,
+    events: TOWN_EVENTS,
+    mid: "boss_jelly",
+    final: "boss_clock",
+    boss: {
+      boss_jelly: { order: ["warn", "slam", "ring", "summon"], minion: "bat" },
+      boss_clock: { order: ["warn", "ring", "slam", "warn", "summon", "slam"], minion: "skull" },
+    },
+    opening: ["bat", "slime"],
+    otElites: ["skull", "mush", "golem"],
+    hp: 1,
+    reward: 1,
+    ground: "ground",
+    tint: "",
+    deco: [
+      { k: "bush", w: 6 },
+      { k: "flowers", w: 5 },
+      { k: "rocks", w: 4 },
+      { k: "tree", w: 4 },
+      { k: "bench", w: 3 },
+      { k: "crates", w: 2 },
+      { k: "sign", w: 2 },
+      { k: "mailbox", w: 1.5 },
+      { k: "pumpkin", w: 2, light: true },
+      { k: "statue", w: 1 },
+      { k: "well", w: 1 },
+      { k: "fountain", w: 1, light: true },
+    ],
+  },
+  clock: {
+    id: "clock",
+    name: "시계탑 광장",
+    en: "CLOCKTOWER PLAZA",
+    desc: "문지기가 쓰러지자 광장의 대시계가 자정에 멈췄어요. 태엽 장난감들이 깨어나고, 종이 울릴 때마다 밤이 거칠어져요.",
+    color: "#ffb03a",
+    waves: CLOCK_WAVES,
+    events: CLOCK_EVENTS,
+    mid: "boss_cuckoo",
+    final: "boss_tower",
+    boss: {
+      boss_cuckoo: { order: ["fan", "warn", "summon", "fan", "slam"], minion: "cuckoo" },
+      boss_tower: { order: ["chime", "spiral", "summon", "blink", "chime", "spiral", "ring"], minion: "tin" },
+    },
+    opening: ["mouse", "mouse"],
+    otElites: ["tin", "gear", "hourglass"],
+    hp: 1.2,
+    reward: 1.35,
+    ground: "ground_clock",
+    tint: "#ffb03a",
+    deco: [
+      { k: "gears", w: 5 },
+      { k: "flowers", w: 3 },
+      { k: "bench", w: 3 },
+      { k: "clockpost", w: 3, light: true },
+      { k: "toycart", w: 2 },
+      { k: "crates", w: 2 },
+      { k: "bellfallen", w: 1.5 },
+      { k: "music", w: 1.5, light: true },
+      { k: "sign", w: 1 },
+    ],
+    toll: { from: 140, every: 100, dur: 12 },
+    need: "town",
+  },
+};
+export const STAGE_IDS = Object.keys(STAGES) as StageId[];
+export const isStage = (x: unknown): x is StageId => typeof x === "string" && x in STAGES;
+
+/* ───────────── 챕터 (픽셀 순찰대) — 내용은 lib/patrol/chapters ───────────── */
+
+export interface ChapterDef {
+  /** 1부터 */
+  id: number;
+  name: string;
+  /** 바탕 맵 (바닥 · 장식 · 보스 패턴) */
+  stage: StageId;
+  /** 판 길이 (초) — 이때 챕터 보스 */
+  len: number;
+  waves: WaveDef[];
+  events: TimedEvent[];
+  /** 적 체력 · 피해 배율 */
+  hp: number;
+  dmg: number;
+  /** 챕터 보스 (잡으면 클리어) */
+  final: EnemyKind;
+  /** 레벨업 경험치 배율 (1 = 서바이버와 같음 · 1.2 = 20% 더 필요) */
+  xp?: number;
+  /** 별 3: 보스를 이 초 안에 */
+  bossStar?: number;
+  /** 보스 패턴 (없으면 바탕 맵 것) */
+  boss?: StageDef["boss"];
+  /** 스테이지 (전체 번호 1부터 · 챕터 안 번호 1~5) — 없으면 챕터 통째 */
+  st?: number;
+  sub?: number;
+  /** 챕터 기믹 한 줄 (로비) */
+  tip?: string;
+  /** 장식 (없으면 바탕 맵 것) · 자정의 종 */
+  deco?: StageDef["deco"];
+  toll?: StageDef["toll"];
+}
 
 /* ───────────── 경험치 · 줍기 ───────────── */
 
@@ -606,13 +808,12 @@ export type Rarity = 0 | 1 | 2;
 export const RARITY_NAME = ["일반", "영웅", "전설"];
 export const RARITY_COLOR = ["#cfd6ea", "#c58bff", "#ffd23a"];
 
-export const FINAL_BOSS: EnemyKind = "boss_clock";
 export const ULT_NEED = 100;
 export const DASH_CD = 2.6;
 
 /* ───────────── 맵 오브젝트 (메가봉크 성소 · 집중포화 맵 목표) ───────────── */
 
-export type ThingKind = "shrine" | "gshrine" | "statue" | "bell" | "flag" | "box" | "merchant" | "fountain" | "trial";
+export type ThingKind = "shrine" | "gshrine" | "statue" | "bell" | "flag" | "box" | "merchant" | "fountain" | "trial" | "lamp" | "spout";
 export const THING_NAME: Record<ThingKind, string> = {
   shrine: "충전 성소",
   gshrine: "황금 성소",
@@ -623,6 +824,8 @@ export const THING_NAME: Record<ThingKind, string> = {
   merchant: "떠돌이 상인",
   fountain: "소원 우물",
   trial: "달빛 시련",
+  lamp: "꺼진 가로등",
+  spout: "분수",
 };
 export const THING_DESC: Record<ThingKind, string> = {
   shrine: "원 안에 서 있으면 충전 — 능력치 3개 중 하나",
@@ -634,12 +837,19 @@ export const THING_DESC: Record<ThingKind, string> = {
   merchant: "금화로 유물을 팔아요 (하나 사면 떠나요)",
   fountain: "유물 3개 중 하나를 공짜로",
   trial: "원 안에서 25초 버티면 큰 보상",
+  lamp: "옆에 서 있으면 켜져요 — 켜지는 순간 주변 적이 불타고 치킨이 나와요",
+  spout: "곧 물보라가 솟아요 — 원 안 적은 기절, 원 안에 있으면 젬이 몰려와요",
 };
 /** 충전 시간 (초) — 원 안에 있어야 참 */
 export const SHRINE_CHARGE = 2.4;
 export const FLAG_CHARGE = 1.4;
 export const TRIAL_SEC = 25;
 export const TRIAL_R = 110;
+/** 챕터 기믹: 가로등 켜는 시간 · 불타는 범위 / 분수 물보라까지 · 범위 */
+export const LAMP_CHARGE = 1.5;
+export const LAMP_R = 110;
+export const SPOUT_FUSE = 4;
+export const SPOUT_R = 100;
 export const boxCost = (opened: number) => 20 + opened * 14;
 
 /** 성소 축복 (능력치 하나) — 등급 0~3 별 값 */

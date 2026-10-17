@@ -14,11 +14,12 @@ export const SHOT_KEYS = new Set([
   "games/marble",
   "games/survivor",
   "games/rogue",
+  "games/patrol",
   "games/sketch",
   "games/melongame",
   "games/board",
   "games/mine",
   "games/rspeed",
 ]);
-export const SHOT_VERSION = 4;
+export const SHOT_VERSION = 5;
 export const shotFile = (key: string) => `${key.replace(/\//g, "__")}.jpg`;

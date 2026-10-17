@@ -1,17 +1,21 @@
 /*
  * 픽셀 타운 서바이버 밸런스 시뮬 — 봇이 적을 피해 다니며 카드를 고르고, 맵 오브젝트도 들름.
- *   npx tsx scripts/survivor-sim.ts [판 수] [캐릭터|-] [깊이] [full = 전부 해금] [ot = 오버타임]
+ *   npx tsx scripts/survivor-sim.ts [판 수] [캐릭터|-] [깊이] [full = 전부 해금] [ot = 오버타임] [clock = 시계탑 광장]
  */
 import { HERO_IDS, RUN_SEC, SHARED_WEAPONS, TRIAL_R, xpNeed, type HeroId } from "../../web/src/lib/survivor/data";
+import { UNIT } from "../../web/src/lib/defense/units";
 import { QUESTS, unlocksOf } from "../../web/src/lib/survivor/quests";
 import { RELIC_IDS } from "../../web/src/lib/survivor/relics";
-import { buyRelic, chooseBless, chooseCard, chooseWish, closeChest, dawnChoice, leaveThing, maxHp, newRun, result, step, type Input, type Run } from "../../web/src/lib/survivor/sim";
+import { armyBuy, armyCraft, armyMerge, buyRelic, chooseBless, chooseCard, chooseWish, closeChest, dawnChoice, leaveThing, maxHp, newRun, result, step, type Input, type Run } from "../../web/src/lib/survivor/sim";
 
 const N = Number(process.argv[2] ?? 20);
 const only = process.argv[3] && process.argv[3] !== "-" ? (process.argv[3] as HeroId) : undefined;
 const DEPTH = Number(process.argv[4] ?? 0);
 const FULL = process.argv.includes("full");
 const OT = process.argv.includes("ot");
+const STAGE = process.argv.includes("clock") ? "clock" : "town";
+/** 럭키 출격: 봇은 합성 · 조합을 바로 하고, 금화가 넉넉하면 소환 */
+const ARMY = process.argv.includes("army");
 const un = unlocksOf(FULL ? QUESTS.map((q) => q.id) : []);
 
 const seen = new Set<number>();
@@ -119,14 +123,21 @@ function botInput(r: Run): Input {
 const maxHpOf = (r: Run) => maxHp(r);
 
 const rows: ReturnType<typeof result>[] = [];
+// 레벨 정체 · 몰아서 레벨업 확인: 10초 동안 오른 레벨 최대 · 20초 넘게 안 오른 구간 수 · 젬 수 최대
+let jumpMax = 0;
+let stalls = 0;
+let gemMax = 0;
 const lvAt: Record<number, number[]> = { 60: [], 180: [], 300: [], 480: [] };
 const t0 = Date.now();
 let ticks = 0;
 let maxEn = 0;
 for (let i = 0; i < N; i++) {
   const hero = only ?? HERO_IDS[i % HERO_IDS.length];
-  const r = newRun(hero, 1000 + i, {}, { depth: DEPTH, weapons: un.weapons, relics: un.relics, rerolls: un.rerolls, skips: un.skips, banish: un.banish, gold: un.gold });
+  const r = newRun(hero, 1000 + i, {}, { depth: DEPTH, weapons: un.weapons, relics: un.relics, rerolls: un.rerolls, skips: un.skips, banish: un.banish, gold: un.gold, stage: STAGE, army: ARMY });
   let guard = 0;
+  let lv10 = 1;
+  let lastUp = 0;
+  let lastLv = 1;
   while (!r.over && guard++ < 60 * (RUN_SEC + 900)) {
     const pz = r.pause;
     if (pz) {
@@ -147,6 +158,10 @@ for (let i = 0; i < N; i++) {
       }
       continue;
     }
+    if (r.army && r.tick % 30 === 0) {
+      while (armyCraft(r) || armyMerge(r));
+      if (r.p.gold > 60 + r.army.bought * 2) armyBuy(r);
+    }
     const inp = botInput(r);
     if (process.env.TRACE === String(1000 + i) && r.tick % 300 === 0) {
       const near = r.things.filter((t) => t.alive).map((t) => `${t.k}@${Math.round(Math.hypot(t.x - r.p.x, t.y - r.p.y))}${t.on ? "*" : ""}${t.t ? ":" + t.t.toFixed(1) : ""}`).join(" ");
@@ -155,6 +170,19 @@ for (let i = 0; i < N; i++) {
     step(r, inp);
     r.ev.length = 0;
     ticks++;
+    if (r.gems.length > gemMax) gemMax = r.gems.length;
+    if (r.p.lv !== lastLv) {
+      if (r.t - lastUp > 20 && r.t < 600) {
+        stalls++;
+        if (process.env.STALL) console.log("정체", hero, Math.round(lastUp), "→", Math.round(r.t), "lv", r.p.lv, "젬", r.gems.length, "보스", r.bossId >= 0);
+      }
+      lastUp = r.t;
+      lastLv = r.p.lv;
+    }
+    if (r.tick % 600 === 0) {
+      jumpMax = Math.max(jumpMax, r.p.lv - lv10);
+      lv10 = r.p.lv;
+    }
     if (r.enemies.length > maxEn) maxEn = r.enemies.length;
     for (const s of Object.keys(lvAt)) if (r.tick === Number(s) * 60) lvAt[Number(s)].push(r.p.lv);
   }
@@ -173,6 +201,12 @@ const dead = rows.filter((r) => !r.win).map((r) => r.sec).sort((a, b) => a - b);
 console.log("죽은 시각", dead.join(","));
 console.log("합체", rows.flatMap((r) => r.fused).join(",") || "없음");
 const qa = (k: keyof (typeof rows)[number]["q"]) => avg(rows.map((r) => r.q[k])).toFixed(1);
+console.log(`맵 ${STAGE} · 종 ${qa("tolls")} · 중간 보스 처치 ${rows.filter((r) => r.q.jelly || r.q.cuckoo).length}/${N}`);
 console.log(`판당: 상자 ${qa("chests")} · 금화상자 ${qa("boxes")} · 성소 ${qa("shrines")} · 깃발 ${qa("flags")} · 고양이상 ${qa("statues")} · 종 ${qa("bells")} · 상인 ${qa("buys")} · 우물 ${qa("fountains")} · 시련 ${qa("trials")} · 진화 ${qa("evos")} · 각성 ${qa("awakens")} · 유물 ${qa("relics")} · 전설 ${qa("legends")}`);
 console.log("무기 풀", un.weapons.length, "/", SHARED_WEAPONS.length, "· 유물 풀", un.relics.length, "/", RELIC_IDS.length);
+if (ARMY) {
+  const best = rows.map((r) => Math.max(0, ...(r.army ?? []).map((u) => UNIT[u.id].grade)));
+  console.log(`부대: 평균 인원 ${avg(rows.map((r) => r.army?.length ?? 0)).toFixed(1)} · 최고 등급 평균 ${avg(best).toFixed(1)} · 신화 이상 ${best.filter((g) => g >= 4).length}/${N}판`);
+}
+console.log(`10초 최대 레벨업 ${jumpMax} · 20초+ 정체 ${stalls}회 · 젬 최대 ${gemMax}`);
 console.log("xpNeed", [1, 5, 10, 20, 30, 40].map((l) => `${l}:${xpNeed(l)}`).join(" "));

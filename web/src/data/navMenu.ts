@@ -11,6 +11,7 @@ import imgSketch from "@/img/menu/sketch.jpg";
 import imgPoker from "@/img/menu/poker.jpg";
 import imgDefense from "@/img/menu/defense.jpg";
 import imgRogue from "@/img/menu/rogue.jpg";
+import imgPatrol from "@/img/menu/patrol.jpg";
 import imgLadder from "@/img/menu/ladder.jpg";
 import imgRoulette from "@/img/menu/roulette.jpg";
 import imgCalorie from "@/img/menu/calorie.jpg";
@@ -122,12 +123,19 @@ export const NAV_GROUPS: NavGroup[] = [
         featured: true,
       },
       {
+        href: "/games/patrol",
+        image: imgPatrol,
+        label: "PIXEL PATROL",
+        desc: "스테이지를 밀고 장비를 뽑아 키우는 뱀서라이크",
+        icon: "🏮",
+        featured: true,
+      },
+      {
         href: "/games/sketch",
         image: imgSketch,
         label: "DOODLE PARTY",
         desc: "그림 맞히기 · 가짜 화가 · 그림 릴레이, 최대 8명 그림 파티게임",
         icon: "🎨",
-        featured: true,
       },
       {
         href: "/games/melongame",

@@ -3,7 +3,7 @@
  * 판이 끝나면 서버가 판 기록(RunQ) · 누적 기록으로 판정 → 무기 · 유물 · 기능 · 별사탕 해금.
  * 시뮬 · 화면 · 서버 공용, "@/" import 금지.
  */
-import { BASE_WEAPONS, HEROES, HERO_IDS, RUN_SEC, type HeroId, type WeaponId } from "./data";
+import { BASE_WEAPONS, HEROES, HERO_IDS, RUN_SEC, type HeroId, type StageId, type WeaponId } from "./data";
 import { BASE_RELICS, type RelicId } from "./relics";
 
 /** 한 판 동안 센 것 (퀘스트 판정용) */
@@ -12,6 +12,10 @@ export interface RunQ {
   jelly: number;
   /** 시계지기 */
   clock: number;
+  /** 시계탑 광장: 뻐꾸기 여왕 · 멈춘 대시계 (나와서 쓰러뜨리기까지 초) · 자정의 종 버틴 수 */
+  cuckoo: number;
+  tower: number;
+  tolls: number;
   /** 연속으로 안 맞은 최대 시간 (초) */
   noHit: number;
   chests: number;
@@ -33,7 +37,7 @@ export interface RunQ {
   elites: number;
   ults: number;
 }
-export const emptyQ = (): RunQ => ({ jelly: 0, clock: 0, noHit: 0, chests: 0, boxes: 0, shrines: 0, statues: 0, bells: 0, flags: 0, buys: 0, fountains: 0, trials: 0, evos: 0, awakens: 0, fuses: 0, relics: 0, legends: 0, gold: 0, elites: 0, ults: 0 });
+export const emptyQ = (): RunQ => ({ jelly: 0, clock: 0, cuckoo: 0, tower: 0, tolls: 0, noHit: 0, chests: 0, boxes: 0, shrines: 0, statues: 0, bells: 0, flags: 0, buys: 0, fountains: 0, trials: 0, evos: 0, awakens: 0, fuses: 0, relics: 0, legends: 0, gold: 0, elites: 0, ults: 0 });
 export const Q_KEYS = Object.keys(emptyQ()) as (keyof RunQ)[];
 
 /** 퀘스트 판정에 쓰는 한 판 보고 */
@@ -45,6 +49,7 @@ export interface QuestRun {
   win: boolean;
   depth: number;
   q: RunQ;
+  stage: StageId;
 }
 /** 누적 (프로필) */
 export interface QuestTotals {
@@ -114,6 +119,13 @@ export const QUESTS: QuestDef[] = [
   run("ult10", "필살 연타", "한 판에 필살기 10번", 10, (r) => r.q.ults, S(20)),
   // 깊이
   ...[1, 3, 5, 7, 10].map((d, i) => run(`depth${d}`, `깊은 밤 ${d}`, `밤의 깊이 ${d} 클리어`, 1, (r) => (r.win && r.depth >= d ? 1 : 0), [F("reroll"), S(60), S(80), S(100), S(200)][i])),
+  // 시계탑 광장
+  run("cuckoo", "뻐꾸기 잡기", "시계탑 광장에서 뻐꾸기 여왕 쓰러뜨리기", 1, (r) => (r.q.cuckoo > 0 ? 1 : 0), S(40)),
+  run("plaza", "시계를 다시 돌려라", "시계탑 광장 클리어 (멈춘 대시계 쓰러뜨리기)", 1, (r) => (r.win && r.stage === "clock" ? 1 : 0), F("reroll")),
+  run("toll3", "종지기", "한 판에 자정의 종 3번 버티기", 3, (r) => r.q.tolls, S(40)),
+  run("cuckoofast", "뻐꾸기 시계 고장", "뻐꾸기 여왕을 나오고 45초 안에 쓰러뜨리기", 1, (r) => (r.q.cuckoo > 0 && r.q.cuckoo <= 45 ? 1 : 0), S(50)),
+  run("towerfast", "자정 정각", "멈춘 대시계를 나오고 90초 안에 쓰러뜨리기", 1, (r) => (r.q.tower > 0 && r.q.tower <= 90 ? 1 : 0), F("skip")),
+  ...[3, 5, 10].map((d, i) => run(`plaza${d}`, `깊은 광장 ${d}`, `시계탑 광장 밤의 깊이 ${d} 클리어`, 1, (r) => (r.win && r.stage === "clock" && r.depth >= d ? 1 : 0), [S(100), S(150), S(300)][i])),
   // 누적
   tot("games10", "단골 손님", "10판 하기", 10, (t) => t.games, S(30)),
   tot("games50", "불면증", "50판 하기", 50, (t) => t.games, S(80)),

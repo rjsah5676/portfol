@@ -5,7 +5,7 @@ import Faded from "@/components/Faded";
 import GameHeader from "@/components/GameHeader";
 import SurvivorApp from "@/components/Survivor/SurvivorApp";
 import { SURVIVOR_GUIDE } from "@/data/gameGuides";
-import { HEROES } from "@/lib/survivor/data";
+import { HEROES, STAGES, STAGE_IDS, type StageId } from "@/lib/survivor/data";
 import { survivor, type SurvivorRankRow } from "@/realtime/survivor";
 
 const mmss = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
@@ -13,9 +13,10 @@ const mmss = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, 
 export default function SurvivorPage() {
   const [top, setTop] = useState<SurvivorRankRow[] | null>(null);
   const [open, setOpen] = useState(false);
+  const [stage, setStage] = useState<StageId>("town");
   useEffect(() => {
-    survivor.rank(50).then(setTop, () => setTop([]));
-  }, [open]);
+    survivor.rank(50, stage).then(setTop, () => setTop([]));
+  }, [open, stage]);
   const rows = (top ?? []).map((r) => ({
     name: r.nick,
     member: true,
@@ -41,12 +42,28 @@ export default function SurvivorPage() {
           ach="survivor"
           guide={SURVIVOR_GUIDE}
           rank={{
-            sub: "밤의 깊이 → 클리어 → 버틴 시간(오버타임 포함) 순",
+            sub: `${STAGES[stage].name} · 밤의 깊이 → 클리어 → 버틴 시간(오버타임 포함) 순`,
             open,
             onOpenChange: setOpen,
             top: rows.slice(0, 3),
             render: () => (
               <ol className="flex flex-col gap-1.5 text-sm">
+                <li className="mb-1 flex gap-2">
+                  {STAGE_IDS.map((id) => (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => {
+                        setTop(null);
+                        setStage(id);
+                      }}
+                      className={`cursor-pointer rounded-md px-3 py-1 text-xs font-bold ${stage === id ? "bg-white/20" : "bg-white/5 text-white/60 hover:bg-white/10"}`}
+                      style={stage === id ? { color: STAGES[id].color } : undefined}
+                    >
+                      {STAGES[id].name}
+                    </button>
+                  ))}
+                </li>
                 {rows.map((r, i) => (
                   <li key={i} className="flex items-center gap-3 rounded-lg bg-white/5 px-3 py-2">
                     <b className="w-6 text-center">{i + 1}</b>

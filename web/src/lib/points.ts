@@ -47,7 +47,7 @@ export const POKER_EXCHANGE = {
 /* ─────────────── 상점 ─────────────── */
 
 /** 포인트를 쓰는 게임 (상점이 들어갈 곳). 지금 화면까지 붙은 건 포커 */
-export type PointGame = "poker" | "fight" | "defense" | "rhythm" | "sketch" | "marble" | "survivor" | "rogue";
+export type PointGame = "poker" | "fight" | "defense" | "rhythm" | "sketch" | "marble" | "survivor" | "rogue" | "patrol";
 export const POINT_GAMES: Record<PointGame, string> = {
   poker: "ANIME POKER",
   fight: "PIXEL FIGHT",
@@ -57,6 +57,7 @@ export const POINT_GAMES: Record<PointGame, string> = {
   marble: "DICE TOWN",
   survivor: "PIXEL TOWN SURVIVOR",
   rogue: "PIXEL RESET STORY",
+  patrol: "PIXEL PATROL",
 };
 
 /**
@@ -212,7 +213,7 @@ export const shopFor = (game: PointGame, kind: ShopItem["kind"], ref: string) =>
 /* ─────────────── 업적 ─────────────── */
 
 /** 업적이 있는 게임 (게임 머리말의 [업적] 버튼) */
-export type AchGame = "poker" | "fight" | "defense" | "rhythm" | "sketch" | "marble" | "survivor" | "rogue";
+export type AchGame = "poker" | "fight" | "defense" | "rhythm" | "sketch" | "marble" | "survivor" | "rogue" | "patrol";
 
 /**
  * 업적이 보는 숫자 (서버가 기록에서 계산 — server/src/achievements.ts)
@@ -279,6 +280,7 @@ export type AchMetric =
   | "survivor.bestSec"
   | "survivor.bestLv"
   | "survivor.heroWins"
+  | "survivor.clockWins"
   | "rogue.runs"
   | "rogue.wins"
   | "rogue.full"
@@ -296,7 +298,15 @@ export type AchMetric =
   | "rogue.specials"
   | "rogue.arcade"
   | "rogue.ignaRuns"
-  | "rogue.ignaWins";
+  | "rogue.ignaWins"
+  | "patrol.runs"
+  | "patrol.wins"
+  | "patrol.kills"
+  | "patrol.stage"
+  | "patrol.stars"
+  | "patrol.boxes"
+  | "patrol.grade"
+  | "patrol.enh";
 
 export interface Achievement {
   id: string;
@@ -685,6 +695,8 @@ export const ACHIEVEMENTS: Achievement[] = [
   a("survivor", "kills-500000", "백만 대군 앞에서", "몬스터 500,000마리 처치 (누적)", "survivor.kills", 500_000, 4000),
   a("survivor", "heroes-4", "돌아가며 출근", "서로 다른 캐릭터 4명으로 클리어", "survivor.heroWins", 4, 1200),
   a("survivor", "heroes-10", "마을 전원 생존", "서로 다른 캐릭터 10명으로 클리어", "survivor.heroWins", 10, 4000),
+  a("survivor", "clock-1", "시계를 다시 돌려라", "시계탑 광장 클리어 (멈춘 대시계 쓰러뜨리기)", "survivor.clockWins", 1, 1500),
+  a("survivor", "clock-10", "시계탑의 주인", "시계탑 광장 10번 클리어", "survivor.clockWins", 10, 3500),
 
   // PIXEL RESET (games/rogue.ts 의 rogue.finish 가 stats.rogue 에 쌓음) — 월드 보스 업적 이름 = 그 월드 이야기(LOG) 제목
   a("rogue", "runs-1", "부팅 완료", "한 판 끝내기", "rogue.runs", 1, 150),
@@ -716,6 +728,22 @@ export const ACHIEVEMENTS: Achievement[] = [
   a("rogue", "kills-1000", "버그 잡이", "적 1,000마리 처치 (누적)", "rogue.kills", 1000, 300),
   a("rogue", "kills-10000", "패치 담당", "적 10,000마리 처치 (누적)", "rogue.kills", 10_000, 1200),
   a("rogue", "kills-50000", "글리치 멸균", "적 50,000마리 처치 (누적)", "rogue.kills", 50_000, 3500),
+
+  // PIXEL PATROL (games/patrol.ts 의 patrol.finish 가 stats.patrol 에 쌓음 · 진행 · 장비는 patrol_profile)
+  a("patrol", "runs-1", "첫 순찰", "한 판 끝내기", "patrol.runs", 1, 150),
+  a("patrol", "runs-30", "성실한 순찰대원", "30판 끝내기", "patrol.runs", 30, 900),
+  a("patrol", "runs-150", "밤을 지키는 사람", "150판 끝내기", "patrol.runs", 150, 3000),
+  a("patrol", "stage-5", "골목 정리 완료", "1-5 클리어 (킹 젤리 쓰러뜨리기)", "patrol.stage", 5, 600),
+  a("patrol", "stage-10", "광장의 평화", "2-5 클리어 (자정의 시계지기 쓰러뜨리기)", "patrol.stage", 10, 1200),
+  a("patrol", "stage-15", "시계를 다시 돌려라", "3-5 클리어 (멈춘 대시계 쓰러뜨리기)", "patrol.stage", 15, 3000),
+  a("patrol", "stars-15", "별 줍는 순찰대", "별 15개 모으기", "patrol.stars", 15, 600),
+  a("patrol", "stars-45", "만점 순찰", "모든 스테이지 별 3개 (45개)", "patrol.stars", 45, 3000),
+  a("patrol", "kills-10000", "골목 청소", "몬스터 10,000마리 처치 (누적)", "patrol.kills", 10_000, 450),
+  a("patrol", "kills-100000", "밤의 청소부", "몬스터 100,000마리 처치 (누적)", "patrol.kills", 100_000, 1500),
+  a("patrol", "boxes-10", "상자 열기 좋은 날", "고급 상자 10번 열기", "patrol.boxes", 10, 450),
+  a("patrol", "grade-3", "영웅의 장비", "영웅 등급 장비 얻기", "patrol.grade", 3, 900),
+  a("patrol", "grade-4", "전설의 순찰대", "전설 등급 장비 얻기", "patrol.grade", 4, 2500),
+  a("patrol", "enh-20", "강화 장인", "장비 하나 Lv 20까지", "patrol.enh", 20, 600),
 ];
 /** 반복형 업적: 일회형 마지막 단계(from)를 넘은 뒤로 step 만큼 쌓일 때마다 reward */
 const r = (game: AchGame, id: string, title: string, unit: string, metric: AchMetric, from: number, step: number, reward: number): Achievement => ({
@@ -751,6 +779,8 @@ ACHIEVEMENTS.push(
   r("survivor", "wins", "밤을 지배하는 자 · 계속", "번 클리어", "survivor.wins", 50, 25, 1500),
   r("rogue", "runs", "로그아웃 불가 · 계속", "판", "rogue.runs", 150, 50, 600),
   r("rogue", "kills", "글리치 멸균 · 계속", "마리", "rogue.kills", 50_000, 50_000, 1000),
+  r("patrol", "runs", "밤을 지키는 사람 · 계속", "판", "patrol.runs", 150, 50, 600),
+  r("patrol", "kills", "밤의 청소부 · 계속", "마리", "patrol.kills", 100_000, 100_000, 1000),
 );
 export const achievementOf = (id: unknown) =>
   ACHIEVEMENTS.find((x) => x.id === id);
@@ -831,6 +861,9 @@ export const DAILY_MISSIONS: DailyMission[] = [
   dm("rogue", "run", "한 판 끝내기", "rogue.runs", 1, 90),
   dm("rogue", "runs", "세 판 끝내기", "rogue.runs", 3, 180),
   dm("rogue", "bosses", "보스 3마리 쓰러뜨리기", "rogue.bosses", 3, 120),
+  dm("patrol", "run", "한 판 끝내기", "patrol.runs", 1, 90),
+  dm("patrol", "runs", "세 판 끝내기", "patrol.runs", 3, 180),
+  dm("patrol", "kills", "몬스터 3,000마리 처치", "patrol.kills", 3000, 120),
 ];
 /** 일일 미션이 보는 숫자 (기준값을 적어 둘 것) */
 export const DAILY_METRICS = [...new Set(DAILY_MISSIONS.map((x) => x.metric))];
@@ -907,6 +940,8 @@ export function pointReason(r: Pick<PointLogRow, "reason" | "ref">): string {
       return r.ref?.startsWith("store:") ? "마블 · 상점" : "DICE TOWN";
     case "survivor":
       return "PIXEL TOWN SURVIVOR";
+    case "patrol":
+      return "PIXEL PATROL";
     case "mail":
       return `우편 · ${r.ref ?? ""}`;
     default:

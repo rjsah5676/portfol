@@ -2,22 +2,33 @@
 
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import { useAuth } from "@/lib/AuthContext";
-import { depthMul, FREE_HEROES, GRADE_FLOOR, HEROES, HERO_IDS, MAX_DEPTH, PASSIVES, RUN_SEC, SHARED_WEAPONS, WEAPONS, powerBonus, type HeroId, type Stats } from "@/lib/survivor/data";
+import { depthMul, ENEMIES, FREE_HEROES, GRADE_FLOOR, HEROES, HERO_IDS, isStage, MAX_DEPTH, PASSIVES, RUN_SEC, SHARED_WEAPONS, STAGES, STAGE_IDS, WEAPONS, powerBonus, type EnemyKind, type HeroId, type StageId, type Stats } from "@/lib/survivor/data";
 import { TEAM_BONUS, TEAM_NAME, TEAM_OF, UPGRADES, supportBonus, upBonus, upCost, type UpId } from "@/lib/survivor/progress";
 import { FEAT_NAME, QUEST, QUESTS, unlocksOf, type QuestDef, type QuestReward } from "@/lib/survivor/quests";
 import { RELICS, RELIC_IDS, RELIC_RARITY_COLOR, RELIC_RARITY_NAME } from "@/lib/survivor/relics";
 import type { RunResult } from "@/lib/survivor/sim";
 import { survivor, type FinishOut, type SurvivorProfile } from "@/realtime/survivor";
+import { charUpNeed } from "@/lib/marble/gacha";
+import { MAX_LV } from "@/lib/marble/data";
+import { marble } from "@/realtime/marble";
 import Token from "../Marble/Token";
 import { playBgm, sfx } from "./audio";
 import Game, { ItemIcon, type GameSetup } from "./Game";
 import Stage from "./Stage";
+import Summon, { GRADE_COL } from "./Summon";
+import { ARMY_GRADE_COLOR, UNIT } from "@/lib/survivor/army";
 
-type Scene = { k: "title" } | { k: "pick" } | { k: "play"; setup: GameSetup; run: string | null } | { k: "result"; r: RunResult; fin: FinishOut | null; err: string };
+type Scene = { k: "title" } | { k: "pick"; summon?: boolean } | { k: "play"; setup: GameSetup; run: string | null } | { k: "result"; r: RunResult; fin: FinishOut | null; err: string };
 
 const fmt = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
-const GRADE_COL: Record<string, string> = { R: "#9fb6ff", SR: "#c58bff", SSR: "#ffb03a", UR: "#ff4fa3" };
 const TEAM_KEY = "pts-team";
+const STAGE_KEY = "pts-stage";
+/** 이 맵에서 클리어한 가장 깊은 밤 (-1 = 아직) */
+const depthOf = (prof: SurvivorProfile | null, st: StageId) => prof?.depths?.[st] ?? (st === "town" ? (prof?.depth ?? -1) : -1);
+const stageOpen = (prof: SurvivorProfile | null, st: StageId) => {
+  const need = STAGES[st].need;
+  return !need || depthOf(prof, need) >= 0;
+};
 
 function addAll(...xs: Partial<Stats>[]): Partial<Stats> {
   const o: Partial<Stats> = {};
@@ -32,12 +43,31 @@ export default function SurvivorApp() {
   const [prof, setProf] = useState<SurvivorProfile | null>(null);
   const [team, setTeam] = useState<{ main: HeroId; sup: HeroId[] }>({ main: "kai", sup: [] });
   const [depth, setDepth] = useState(0);
+  const [stage, setStageRaw] = useState<StageId>("town");
+  /** 럭키 출격 (실험) — 기록 · 보상 없이 혼자 */
+  const [army, setArmyRaw] = useState(false);
+  const setArmy = (v: boolean) => {
+    setArmyRaw(v);
+    try {
+      localStorage.setItem("pts-army", v ? "1" : "");
+    } catch {}
+  };
+  const setStage = (st: StageId) => {
+    setStageRaw(st);
+    setDepth(0);
+    try {
+      localStorage.setItem(STAGE_KEY, st);
+    } catch {}
+  };
   const [note, setNote] = useState("");
   useEffect(() => {
     try {
       const t = JSON.parse(localStorage.getItem(TEAM_KEY) ?? "null");
       // eslint-disable-next-line react-hooks/set-state-in-effect -- 지난 편성 불러오기 (브라우저에서만)
       if (t?.main && HEROES[t.main as HeroId]) setTeam({ main: t.main, sup: (t.sup ?? []).filter((h: HeroId) => HEROES[h]).slice(0, 2) });
+      const st = localStorage.getItem(STAGE_KEY);
+      if (isStage(st)) setStageRaw(st);
+      if (localStorage.getItem("pts-army")) setArmyRaw(true);
     } catch {}
   }, []);
   useEffect(() => {
@@ -47,6 +77,8 @@ export default function SurvivorApp() {
   }, [member]);
   useEffect(() => {
     if (scene.k !== "play") playBgm("night");
+    // 페이지를 떠나면 음악도 끔
+    return () => playBgm(null);
   }, [scene.k]);
   const owned = useCallback((h: HeroId) => FREE_HEROES.includes(h) || !!prof?.chars[h], [prof]);
   const saveTeam = (t: { main: HeroId; sup: HeroId[] }) => {
@@ -66,18 +98,19 @@ export default function SurvivorApp() {
     const ub = upBonus(prof?.ups ?? {});
     const sb = supportBonus(main, sup);
     const un = unlocksOf(prof?.quests ?? []);
-    const d = Math.max(0, Math.min(depth, (prof?.depth ?? -1) + 1));
+    const st = stageOpen(prof, stage) ? stage : "town";
+    const d = Math.max(0, Math.min(depth, depthOf(prof, st) + 1));
     const setup: GameSetup = {
       hero: main,
       sup,
       seed: Math.floor(Math.random() * 2 ** 31),
       bonus: addAll(powerBonus(HEROES[main].grade, lvOf(main)), ub.stats, sb.stats),
-      opts: { sup, revive: ub.revive, rerolls: un.rerolls + ub.rerolls, skips: un.skips, banish: un.banish, gold: un.gold, weapons: un.weapons, relics: un.relics, depth: d },
+      opts: { sup, revive: ub.revive, rerolls: un.rerolls + ub.rerolls, skips: un.skips, banish: un.banish, gold: un.gold, weapons: un.weapons, relics: un.relics, depth: d, stage: st, army },
     };
     let run: string | null = null;
-    if (member) {
+    if (member && !army) {
       try {
-        run = (await survivor.start(main, sup, d)).run;
+        run = (await survivor.start(main, sup, d, st)).run;
       } catch (e) {
         setNote((e as Error).message);
         return;
@@ -102,9 +135,9 @@ export default function SurvivorApp() {
   return (
     <Stage>
       {scene.k === "title" && <Title onStart={() => setScene({ k: "pick" })} />}
-      {scene.k === "pick" && <Pick prof={prof} member={member} team={team} owned={owned} note={note} depth={depth} onDepth={setDepth} onTeam={saveTeam} onStart={() => void start()} onBack={() => setScene({ k: "title" })} onProf={setProf} />}
+      {scene.k === "pick" && <Pick army={army} onArmy={setArmy} summon={!!scene.summon} stage={stageOpen(prof, stage) ? stage : "town"} onStage={setStage} prof={prof} member={member} team={team} owned={owned} note={note} depth={depth} onDepth={setDepth} onTeam={saveTeam} onStart={() => void start()} onBack={() => setScene({ k: "title" })} onProf={setProf} />}
       {scene.k === "play" && <Game key={scene.setup.seed} setup={scene.setup} onEnd={onEnd} onQuit={onQuit} />}
-      {scene.k === "result" && <Result r={scene.r} fin={scene.fin} err={scene.err} member={member} onAgain={() => void start()} onPick={() => setScene({ k: "pick" })} />}
+      {scene.k === "result" && <Result r={scene.r} fin={scene.fin} err={scene.err} member={member} stars={prof?.stars ?? 0} onAgain={() => void start()} onPick={() => setScene({ k: "pick" })} onSummon={() => setScene({ k: "pick", summon: true })} />}
     </Stage>
   );
 }
@@ -134,6 +167,11 @@ function Title({ onStart }: { onStart(): void }) {
 /* ───────────── 편성 (메인 1 + 응원 동료 2) ───────────── */
 
 function Pick({
+  army,
+  onArmy,
+  summon: summonFirst,
+  stage,
+  onStage,
   prof,
   member,
   team,
@@ -146,6 +184,11 @@ function Pick({
   onBack,
   onProf,
 }: {
+  army: boolean;
+  onArmy(v: boolean): void;
+  summon: boolean;
+  stage: StageId;
+  onStage(st: StageId): void;
   prof: SurvivorProfile | null;
   member: boolean;
   team: { main: HeroId; sup: HeroId[] };
@@ -162,11 +205,28 @@ function Pick({
   const [slot, setSlot] = useState(0);
   const [shop, setShop] = useState(false);
   const [quests, setQuests] = useState(false);
-  const maxDepth = Math.min(MAX_DEPTH, (prof?.depth ?? -1) + 1);
+  const [summon, setSummon] = useState(summonFirst);
+  const [upErr, setUpErr] = useState("");
+  const [maps, setMaps] = useState(false);
+  const maxDepth = Math.min(MAX_DEPTH, depthOf(prof, stage) + 1);
+  const st = STAGES[stage];
   const h = HEROES[look];
   const w = WEAPONS[h.weapon];
   const lv = prof?.chars[look]?.lv ?? 0;
   const can = owned(look);
+  const card = prof?.chars[look];
+  const need = card ? charUpNeed(card.lv) : 0;
+  const levelUp = async () => {
+    if (!prof || !card) return;
+    setUpErr("");
+    try {
+      const w = await marble.charUp(look);
+      onProf({ ...prof, chars: w.chars, stars: w.stars });
+      sfx("levelup");
+    } catch (e) {
+      setUpErr((e as Error).message);
+    }
+  };
   const sb = supportBonus(team.main, team.sup);
   const put = (id: HeroId) => {
     sfx("click");
@@ -184,7 +244,7 @@ function Pick({
   };
   return (
     <div className="absolute inset-0 bg-[#0d0a26]">
-      <img src="/survivor/title.webp" alt="" className="absolute inset-0 h-full w-full object-cover opacity-30" draggable={false} />
+      <img src={stage === "clock" ? "/survivor/stage/clock-full.webp" : "/survivor/title.webp"} alt="" className="absolute inset-0 h-full w-full object-cover opacity-30" draggable={false} />
       <div className="absolute top-[14px] right-[18px] left-[18px] flex items-center gap-[12px]">
         <button type="button" onClick={onBack} className="pts-btn ghost h-[30px] px-[10px] text-[12px]">
           ◀ 처음으로
@@ -201,9 +261,9 @@ function Pick({
               <button type="button" onClick={() => setShop(true)} className="pts-btn h-[30px] px-[12px] text-[12px]" style={{ "--c": "#4ff0c8" } as CSSProperties}>
                 영구 강화
               </button>
-              <a href="/games/marble/" className="pts-btn ghost flex h-[30px] items-center px-[12px] text-[12px]">
-                캐릭터 뽑기 ↗
-              </a>
+              <button type="button" onClick={() => setSummon(true)} className="pts-btn h-[30px] px-[12px] text-[12px]" style={{ "--c": "#ff9cc8" } as CSSProperties}>
+                ★ 별빛 소환
+              </button>
             </>
           ) : (
             <span className="pts-sub text-[#a9a2d6]">로그인하면 다이스 타운 캐릭터 · 보상 · 랭킹 · 영구 강화</span>
@@ -212,7 +272,7 @@ function Pick({
       </div>
 
       {/* 캐릭터 16명 */}
-      <div className="absolute top-[58px] left-[18px] grid w-[452px] grid-cols-4 gap-[8px]">
+      <div className="absolute top-[58px] bottom-[12px] left-[14px] grid w-[460px] grid-cols-4 content-start gap-[8px] overflow-y-auto p-[4px]">
         {HERO_IDS.map((id) => {
           const x = HEROES[id];
           const own = owned(id);
@@ -282,11 +342,49 @@ function Pick({
               <b>{h.passive.name}</b> <span className="text-[#e8e4ff]">{h.passive.desc}</span>
               <span className="ml-[6px] text-[11px] text-[#a9a2d6]">(동료일 땐 절반)</span>
             </div>
-            {!can && <p className="pts-sub text-[12px] text-[#ff9cc8]">다이스 타운 캐릭터 뽑기에서 얻을 수 있어요</p>}
+            {!can &&
+              (member ? (
+                <button type="button" onClick={() => setSummon(true)} className="pts-btn self-start h-[30px] px-[12px] text-[12px]" style={{ "--c": "#ff9cc8" } as CSSProperties}>
+                  ★ 별빛 소환에서 만나기
+                </button>
+              ) : (
+                <p className="pts-sub text-[12px] text-[#ff9cc8]">로그인하고 별빛 소환(다이스 타운 뽑기)에서 얻을 수 있어요</p>
+              ))}
+            {can && card && (
+              <div className="flex items-center gap-[8px] text-[11.5px]">
+                <span className="pts-tag text-[10px]" style={{ background: "#ffd23a" }}>
+                  강화 +{card.lv}
+                </span>
+                {card.lv >= MAX_LV ? (
+                  <span className="text-[#ffd23a]">최고 강화!</span>
+                ) : (
+                  <>
+                    <span className="text-[#e8e4ff]">
+                      같은 카드 {card.dup}/{need}
+                    </span>
+                    <button type="button" disabled={card.dup < need} onClick={() => void levelUp()} className="pts-btn h-[24px] px-[10px] text-[11px]" style={{ "--c": "#ffd23a" } as CSSProperties}>
+                      강화 → +{card.lv + 1}
+                    </button>
+                  </>
+                )}
+                {upErr && <span className="text-[#ff8fb8]">{upErr}</span>}
+              </div>
+            )}
           </div>
         </div>
         {/* 편성 */}
-        <div className="mt-[8px] flex items-end gap-[10px] border-t-2 border-[#2a2468] pt-[10px]">
+        <div className="mt-[6px] flex flex-wrap items-center gap-x-[10px] border-t-2 border-[#2a2468] pt-[6px] text-[11.5px] leading-[16px]">
+          {sb.team ? (
+            <span className="pts-sub text-[#ffd23a]">
+              ★ 팀 시너지 「{TEAM_NAME[sb.team]}」 {TEAM_BONUS[sb.team].desc}
+            </span>
+          ) : (
+            <span className="text-[#a9a2d6]">같은 계열 셋이면 팀 시너지! ({TEAM_NAME[TEAM_OF[team.main]]})</span>
+          )}
+          <span className="text-[#6b63a3]">동료는 패시브 절반 + 필살기 거들기</span>
+          {note && <span className="text-[#ff8fb8]">{note}</span>}
+        </div>
+        <div className="mt-[6px] flex items-end gap-[10px]">
           {[team.main, team.sup[0], team.sup[1]].map((id, i) => (
             <button
               key={i}
@@ -307,18 +405,34 @@ function Pick({
               {id ? <Token sprite={HEROES[id].sprite} anim="idle" h={i === 0 ? 54 : 44} /> : <span className="mb-[20px] text-[20px] text-[#3a3080]">＋</span>}
             </button>
           ))}
-          <div className="min-w-0 flex-1 text-[11.5px] leading-[16px]">
-            {sb.team ? (
-              <p className="pts-sub text-[#ffd23a]">
-                ★ 팀 시너지 「{TEAM_NAME[sb.team]}」 {TEAM_BONUS[sb.team].desc}
-              </p>
-            ) : (
-              <p className="text-[#a9a2d6]">같은 계열 셋이면 팀 시너지! ({TEAM_NAME[TEAM_OF[team.main]]})</p>
-            )}
-            <p className="text-[#a9a2d6]">동료는 패시브 절반 + 필살기 쓸 때 거들기</p>
-            {note && <p className="text-[#ff8fb8]">{note}</p>}
-          </div>
+          <div className="flex-1" />
           <div className="flex shrink-0 flex-col items-stretch gap-[6px]">
+            <button
+              type="button"
+              onClick={() => {
+                sfx("click");
+                onArmy(!army);
+              }}
+              className="pts-btn flex h-[26px] items-center justify-between gap-[6px] px-[8px] text-[12px]"
+              style={(army ? { "--c": "#ff5c8a", "--t": "#fff" } : { "--c": "#221b58", "--t": "#a9a2d6" }) as CSSProperties}
+              title="레벨업 · 상자 · 금화로 디펜스 유닛을 소환해 부대를 꾸려요 (실험 — 기록 · 보상 없음)"
+            >
+              <span>🧪 럭키 출격</span>
+              <b>{army ? "ON" : "OFF"}</b>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                sfx("click");
+                setMaps(true);
+              }}
+              className="pts-btn ghost flex h-[26px] items-center justify-between gap-[6px] px-[8px] text-[12px]"
+              title="맵 고르기"
+            >
+              <span className="text-[10px] text-[#a9a2d6]">맵</span>
+              <b style={{ color: st.color }}>{st.name}</b>
+              <span className="text-[10px]">▸</span>
+            </button>
             {member && (
               <div className="flex items-center justify-between gap-[4px] px-[4px]" title="클리어하면 다음 깊이가 열려요 · 깊을수록 적이 세지고 보상이 늘어요">
                 <span className="text-[11px] text-[#a9a2d6]">밤의 깊이</span>
@@ -342,6 +456,120 @@ function Pick({
       </div>
       {shop && prof && <Shop prof={prof} onProf={onProf} onClose={() => setShop(false)} />}
       {quests && prof && <Quests prof={prof} onClose={() => setQuests(false)} />}
+      {maps && (
+        <MapPick
+          prof={prof}
+          member={member}
+          stage={stage}
+          onPick={(x) => {
+            onStage(x);
+            setMaps(false);
+          }}
+          onClose={() => setMaps(false)}
+        />
+      )}
+      {summon && prof && <Summon prof={prof} focus={look} onProf={onProf} onClose={() => setSummon(false)} />}
+    </div>
+  );
+}
+
+/* ───────────── 맵 고르기 ───────────── */
+
+function MobFace({ k, h }: { k: EnemyKind; h: number }) {
+  // 걷기 2칸 띠의 첫 칸만
+  return (
+    <span className="relative inline-block overflow-hidden" style={{ height: h, width: h * 1.4 }}>
+      <img src={`/survivor/mob/${k}.png`} alt="" className="absolute bottom-0 left-0 h-full max-w-none" style={{ imageRendering: "pixelated", width: "auto" }} draggable={false} onError={(e) => (e.currentTarget.style.display = "none")} />
+    </span>
+  );
+}
+
+function MapPick({ prof, member, stage, onPick, onClose }: { prof: SurvivorProfile | null; member: boolean; stage: StageId; onPick(st: StageId): void; onClose(): void }) {
+  useEffect(() => {
+    const k = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", k);
+    return () => window.removeEventListener("keydown", k);
+  }, [onClose]);
+  return (
+    <div className="absolute inset-0 z-20 flex items-center justify-center" style={{ background: "rgba(7,5,26,0.82)" }} onClick={onClose}>
+      <div className="pts-win pts-pop flex w-[900px] flex-col px-[18px] py-[14px]" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-[10px]">
+          <span className="pts-tag text-[13px]">맵 고르기</span>
+          <span className="text-[12px] text-[#a9a2d6]">맵마다 몹 · 보스 · 장치가 달라요 — 깊이 · 랭킹도 맵마다 따로</span>
+          <button type="button" onClick={onClose} className="pts-btn ghost ml-auto h-[28px] w-[28px] text-[14px]">
+            ✕
+          </button>
+        </div>
+        <div className="mt-[12px] grid grid-cols-2 gap-[16px]">
+          {STAGE_IDS.map((id) => {
+            const x = STAGES[id];
+            const open = stageOpen(prof, id);
+            const best = depthOf(prof, id);
+            const on = id === stage;
+            return (
+              <button
+                key={id}
+                type="button"
+                disabled={!open}
+                onClick={() => {
+                  sfx("pick");
+                  onPick(id);
+                }}
+                className="pts-card relative flex flex-col overflow-hidden text-left disabled:cursor-default"
+                style={{ "--r": on ? "#fff" : x.color } as CSSProperties}
+              >
+                <div className="relative h-[170px] overflow-hidden" style={{ background: `linear-gradient(180deg, #07051a, ${x.color}55)` }}>
+                  <img src={`/survivor/stage/${id}.webp`} alt="" className="absolute inset-0 h-full w-full object-cover" style={{ imageRendering: "pixelated", filter: open ? undefined : "brightness(0.25) saturate(0.2)" }} draggable={false} onError={(e) => (e.currentTarget.style.display = "none")} />
+                  <div className="absolute inset-x-0 bottom-0 h-[60px]" style={{ background: "linear-gradient(180deg, transparent, #16123d)" }} />
+                  <div className="absolute bottom-[6px] left-[10px]">
+                    <span className="pts-sub text-[11px] tracking-[2px]" style={{ color: x.color }}>
+                      {x.en}
+                    </span>
+                    <b className="pts-title block text-[26px] leading-none">{x.name}</b>
+                  </div>
+                  {on && <span className="pts-tag absolute top-[8px] right-[8px] text-[11px]">선택됨</span>}
+                  {!open && <span className="pts-title absolute inset-0 flex items-center justify-center text-[40px]">🔒</span>}
+                </div>
+                <div className="flex flex-1 flex-col gap-[6px] px-[12px] py-[10px] text-[12px]">
+                  <p className="leading-[17px] text-[#e8e4ff]">{x.desc}</p>
+                  <div className="flex items-end gap-[14px]">
+                    {(
+                      [
+                        ["5분", x.mid],
+                        ["새벽", x.final],
+                      ] as const
+                    ).map(([t, k]) => (
+                      <span key={k} className="flex items-end gap-[4px]">
+                        <MobFace k={k} h={30} />
+                        <span className="leading-[14px]">
+                          <span className="block text-[10px] text-[#a9a2d6]">{t}</span>
+                          <b className="text-[#ff8fb8]">{ENEMIES[k].name}</b>
+                        </span>
+                      </span>
+                    ))}
+                  </div>
+                  <div className="flex flex-wrap gap-[6px] text-[11px]">
+                    {x.hp !== 1 && <span className="pts-box px-[6px] py-[1px] text-[#ff8a6b]">몹 체력 ×{x.hp}</span>}
+                    {x.reward !== 1 && <span className="pts-box px-[6px] py-[1px] text-[#ffd23a]">보상 ×{x.reward}</span>}
+                    {x.toll && <span className="pts-box px-[6px] py-[1px] text-[#ffb03a]">🔔 자정의 종: {x.toll.dur}초 동안 적 빨라짐 · 경험치 ×2</span>}
+                  </div>
+                  <span className="mt-auto text-[11.5px]" style={{ color: open ? "#4ff0c8" : "#ff9cc8" }}>
+                    {!open
+                      ? member
+                        ? `${STAGES[x.need!].name}을(를) 클리어하면 열려요`
+                        : `로그인하고 ${STAGES[x.need!].name}을(를) 클리어하면 열려요`
+                      : best >= 0
+                        ? `클리어! 가장 깊은 밤 ${best}`
+                        : "아직 클리어 전"}
+                  </span>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
     </div>
   );
 }
@@ -439,7 +667,7 @@ function Quests({ prof, onClose }: { prof: SurvivorProfile; onClose(): void }) {
   }, [onClose]);
   const done = new Set(prof.quests);
   const un = unlocksOf(prof.quests);
-  const prog = (q: QuestDef) => (q.per === "total" ? Math.min(q.goal, q.value({ hero: "kai", sec: 0, kills: 0, lv: 1, win: false, depth: 0, q: {} as never }, prof.tot)) : 0);
+  const prog = (q: QuestDef) => (q.per === "total" ? Math.min(q.goal, q.value({ hero: "kai", sec: 0, kills: 0, lv: 1, win: false, depth: 0, stage: "town", q: {} as never }, prof.tot)) : 0);
   // 안 깬 것 먼저, 그다음 깬 것
   const list = [...QUESTS].sort((a, b) => Number(done.has(a.id)) - Number(done.has(b.id)));
   return (
@@ -540,7 +768,7 @@ function Quests({ prof, onClose }: { prof: SurvivorProfile; onClose(): void }) {
 
 /* ───────────── 결과 ───────────── */
 
-function Result({ r, fin, err, member, onAgain, onPick }: { r: RunResult; fin: FinishOut | null; err: string; member: boolean; onAgain(): void; onPick(): void }) {
+function Result({ r, fin, err, member, stars, onAgain, onPick, onSummon }: { r: RunResult; fin: FinishOut | null; err: string; member: boolean; stars: number; onAgain(): void; onPick(): void; onSummon(): void }) {
   const h = HEROES[r.hero];
   const top = Math.max(1, ...r.weapons.map((w) => w.dmg));
   return (
@@ -573,8 +801,27 @@ function Result({ r, fin, err, member, onAgain, onPick }: { r: RunResult; fin: F
             ))}
           </div>
           <div className="mt-[16px] flex flex-col gap-[6px] text-[13px]">
+            {r.army && r.army.length > 0 && (
+              <>
+                <span className="pts-tag self-start text-[11px]" style={{ background: "#ff5c8a", color: "#fff" }}>
+                  부대 피해
+                </span>
+                {r.army.slice(0, 5).map((u, i) => (
+                  <div key={i} className="flex items-center gap-[8px]">
+                    <img src={`/defense/units/${u.id}.webp`} alt="" className="h-[22px] w-[22px]" draggable={false} />
+                    <span className="w-[140px] truncate" style={{ color: ARMY_GRADE_COLOR[UNIT[u.id].grade] }}>
+                      {UNIT[u.id].name}
+                    </span>
+                    <div className="pts-bar h-[8px] flex-1" style={{ "--c": ARMY_GRADE_COLOR[UNIT[u.id].grade] } as CSSProperties}>
+                      <i style={{ width: `${(u.dmg / Math.max(1, r.army![0].dmg)) * 100}%` }} />
+                    </div>
+                    <span className="w-[70px] text-right">{u.dmg.toLocaleString()}</span>
+                  </div>
+                ))}
+              </>
+            )}
             <span className="pts-tag self-start text-[11px]">무기 피해</span>
-            {r.weapons.slice(0, 6).map((w) => (
+            {r.weapons.slice(0, r.army ? 2 : 6).map((w) => (
               <div key={w.id} className="flex items-center gap-[8px]">
                 <ItemIcon k="weapon" id={w.id} size={18} />
                 <span className="w-[110px] truncate">{WEAPONS[w.id].name}</span>
@@ -607,7 +854,9 @@ function Result({ r, fin, err, member, onAgain, onPick }: { r: RunResult; fin: F
             )}
           </div>
           <div className="mt-[12px] flex flex-wrap items-center gap-[10px] text-[13px]">
-            {!member ? (
+            {r.army ? (
+              <span className="text-[#ff9cc8]">🧪 럭키 출격은 실험 모드라 기록 · 보상이 없어요 — 손맛이 어땠는지 알려 주세요!</span>
+            ) : !member ? (
               <span className="text-[#a9a2d6]">로그인하면 별사탕(캐릭터 뽑기) · 코인(영구 강화) · 랭킹이 쌓여요</span>
             ) : fin ? (
               <>
@@ -644,6 +893,11 @@ function Result({ r, fin, err, member, onAgain, onPick }: { r: RunResult; fin: F
             </div>
           )}
           <div className="mt-auto flex justify-end gap-[12px] pt-[16px]">
+            {member && fin && stars >= 150 && (
+              <button type="button" onClick={onSummon} className="pts-btn h-[40px] px-[14px] text-[14px]" style={{ "--c": "#ff9cc8" } as CSSProperties}>
+                ★ 소환하러 ({stars.toLocaleString()})
+              </button>
+            )}
             <button type="button" onClick={onPick} className="pts-btn ghost h-[40px] px-[16px] text-[14px]">
               캐릭터 바꾸기
             </button>
@@ -655,7 +909,7 @@ function Result({ r, fin, err, member, onAgain, onPick }: { r: RunResult; fin: F
       </div>
       <span className="pts-sub absolute bottom-[12px] text-[11px] text-white/60">
         {r.depth > 0 ? `밤의 깊이 ${r.depth} · ` : ""}
-        {r.win ? `${fmt(RUN_SEC)} 생존 · 자정의 시계지기 처치${r.ot ? ` · 오버타임 ${fmt(r.ot)}` : ""}` : "성소 · 상자 · 상인을 들러 빌드를 키워 보세요"}
+        {STAGES[r.stage].name} · {r.win ? `${fmt(RUN_SEC)} 생존 · ${ENEMIES[STAGES[r.stage].final].name} 처치${r.ot ? ` · 오버타임 ${fmt(r.ot)}` : ""}` : "성소 · 상자 · 상인을 들러 빌드를 키워 보세요"}
       </span>
     </div>
   );

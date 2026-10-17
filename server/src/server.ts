@@ -12,6 +12,7 @@ import { registerPoker, type PokerOptions } from "./games/poker";
 import { registerRhythmOnline } from "./games/rhythmOnline";
 import { registerSketch } from "./games/sketch";
 import { registerSurvivor } from "./games/survivor";
+import { registerPatrol } from "./games/patrol";
 import { registerRogue } from "./games/rogue";
 import { createApp } from "./http/app";
 import { restoreLive, saveLive, waitIdle, type LiveGame } from "./live";
@@ -58,6 +59,7 @@ export async function createAppServer(
   const defense = registerDefense(deps);
   const marble = registerMarble(deps, overrides.marble);
   registerSurvivor(deps, marble.meta);
+  registerPatrol(deps);
   registerRogue(deps);
   const live = { sketch, fight, poker, rhythm };
   const liveGames: Record<string, LiveGame> = { sketch: sketch.live, fight: fight.live, poker: poker.live, rhythm: rhythm.live };

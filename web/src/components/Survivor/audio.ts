@@ -4,7 +4,10 @@
  */
 import { LEVEL, limiter } from "@/lib/soundLevel";
 
-export type Sfx = "gem" | "hit" | "kill" | "lvl" | "card" | "chest" | "reel" | "jackpot" | "boom" | "hurt" | "dash" | "ult" | "boss" | "warn" | "pick" | "fuse" | "win" | "dead" | "click" | "coin" | "bolt" | "throw" | "relic" | "bless" | "buy" | "trial" | "rage" | "slam" | "shield" | "curse" | "flag" | "ot";
+export type Sfx = "gem" | "hit" | "kill" | "lvl" | "card" | "chest" | "reel" | "jackpot" | "boom" | "hurt" | "dash" | "ult" | "boss" | "warn" | "pick" | "fuse" | "win" | "dead" | "click" | "coin" | "bolt" | "throw" | "relic" | "bless" | "buy" | "trial" | "rage" | "slam" | "shield" | "curse" | "flag" | "ot" | "summon" | "reveal" | "rare" | "legend" | "levelup" | "toll"
+  // 무기별 발사 · 타격 (ElevenLabs) · 처치 · 크리 · 콤보 · 보스 처치
+  | "w_lantern_fire" | "w_lantern_hit" | "w_blade_fire" | "w_blade_hit" | "w_boom_fire" | "w_boom_hit" | "w_thunder_hit" | "w_thorn_hit" | "w_missile_fire" | "w_missile_hit" | "w_ball_fire" | "w_ball_hit"
+  | "kill2" | "crit" | "combo1" | "combo2" | "bossdown";
 
 let ctx: AudioContext | null = null;
 let gated = false;
@@ -12,19 +15,22 @@ let unlocked = false;
 const PREF = "pts-sound";
 let vol = 0.8;
 let muted = false;
+/** 음악 크기 (전체 소리에 곱함) */
+let mvol = 1;
 try {
   const v = JSON.parse(localStorage.getItem(PREF) ?? "null");
-  if (v) ({ vol, muted } = v);
+  if (v) ({ vol, muted, mvol = 1 } = v);
 } catch {}
 
-export const soundPref = () => ({ vol, muted });
-export function setSound(o: { vol?: number; muted?: boolean }) {
+export const soundPref = () => ({ vol, muted, mvol });
+export function setSound(o: { vol?: number; muted?: boolean; mvol?: number }) {
   if (o.vol !== undefined) vol = o.vol;
   if (o.muted !== undefined) muted = o.muted;
+  if (o.mvol !== undefined) mvol = o.mvol;
   try {
-    localStorage.setItem(PREF, JSON.stringify({ vol, muted }));
+    localStorage.setItem(PREF, JSON.stringify({ vol, muted, mvol }));
   } catch {}
-  if (bgmEl) bgmEl.volume = muted ? 0 : vol * 0.45;
+  if (bgmEl) bgmEl.volume = muted ? 0 : vol * mvol * 0.45;
 }
 
 function ac(): AudioContext | null {
@@ -62,7 +68,7 @@ function file(c: AudioContext, name: string) {
   return p;
 }
 const hasFile = new Map<string, AudioBuffer | null>();
-const FILES = new Set<Sfx>(["lvl", "chest", "jackpot", "boom", "boss", "ult", "fuse", "win", "dead", "warn", "hurt", "dash", "pick", "card", "relic", "bless", "buy", "trial", "rage", "slam", "shield", "curse", "flag", "ot"]);
+const FILES = new Set<Sfx>(["lvl", "chest", "jackpot", "boom", "boss", "ult", "fuse", "win", "dead", "warn", "hurt", "dash", "pick", "card", "relic", "bless", "buy", "trial", "rage", "slam", "shield", "curse", "flag", "ot", "summon", "reveal", "rare", "legend", "levelup", "toll", "w_lantern_fire", "w_lantern_hit", "w_blade_fire", "w_blade_hit", "w_boom_fire", "w_boom_hit", "w_thunder_hit", "w_thorn_hit", "w_missile_fire", "w_missile_hit", "w_ball_fire", "w_ball_hit", "kill2", "crit", "combo1", "combo2", "bossdown"]);
 /** 파일 미리 받기 (처음 울릴 때 늦지 않게) */
 export function preloadSfx() {
   const c = ac();
@@ -112,12 +118,19 @@ function noise(c: AudioContext, dur: number, peak: number, lp: number, at = 0) {
 
 /** 같은 소리가 한 프레임에 수십 번 겹치지 않게 */
 const last = new Map<string, number>();
-const GAP: Partial<Record<Sfx, number>> = { gem: 0.035, hit: 0.045, kill: 0.04, coin: 0.05, throw: 0.06, boom: 0.06, bolt: 0.05 };
+const GAP: Partial<Record<Sfx, number>> = {
+  gem: 0.035, hit: 0.045, kill: 0.04, coin: 0.05, throw: 0.06, boom: 0.06, bolt: 0.05,
+  // 타격음은 무기마다 따로 쉬어서 여러 무기가 같이 울려도 "와바박" 하게
+  w_lantern_hit: 0.07, w_blade_hit: 0.05, w_boom_hit: 0.06, w_thunder_hit: 0.07, w_thorn_hit: 0.09, w_missile_hit: 0.06, w_ball_hit: 0.06,
+  w_lantern_fire: 0.12, w_blade_fire: 0.06, w_boom_fire: 0.15, w_missile_fire: 0.08, w_ball_fire: 0.1,
+  kill2: 0.03, crit: 0.07,
+};
 
 let gemStreak = 0;
 let gemAt = 0;
 
-export function sfx(name: Sfx) {
+/** rate: 재생 속도 (음 높이) · vol: 음량 배율 */
+export function sfx(name: Sfx, opt?: { rate?: number; vol?: number }) {
   if (muted || gated || !unlocked) return;
   const c = ac();
   if (!c) return;
@@ -134,8 +147,9 @@ export function sfx(name: Sfx) {
   if (buf && name !== "gem") {
     const s = c.createBufferSource();
     s.buffer = buf;
+    if (opt?.rate) s.playbackRate.value = opt.rate;
     const g = c.createGain();
-    g.gain.value = vol * LEVEL.mine;
+    g.gain.value = vol * LEVEL.mine * (opt?.vol ?? 1);
     s.connect(g).connect(limiter(c));
     s.start();
     return;
@@ -243,6 +257,29 @@ export function sfx(name: Sfx) {
     case "shield":
       tone(c, "sine", 1200, 600, 0.12, 0.1);
       break;
+    case "summon":
+      tone(c, "triangle", 220, 1760, 1.0, 0.09);
+      noise(c, 0.9, 0.08, 6000, 0.1);
+      break;
+    case "reveal":
+      tone(c, "square", 1047, 1568, 0.07, 0.06);
+      break;
+    case "rare":
+      [784, 988, 1175, 1568].forEach((f, i) => tone(c, "square", f, f, 0.18, 0.09, i * 0.06));
+      break;
+    case "legend":
+      [523, 659, 784, 1047, 1319, 1568, 2093].forEach((f, i) => tone(c, "square", f, f, 0.22, 0.09, i * 0.07));
+      noise(c, 0.8, 0.06, 9000, 0.2);
+      break;
+    case "toll":
+      [0, 0.45, 0.9].forEach((d) => {
+        tone(c, "sine", 392, 380, 1.2, 0.16, d);
+        tone(c, "sine", 784, 770, 0.8, 0.06, d);
+      });
+      break;
+    case "levelup":
+      [392, 523, 659, 784, 1047].forEach((f, i) => tone(c, "triangle", f, f, 0.16, 0.1, i * 0.05));
+      break;
     case "curse":
       [523, 466, 392, 311].forEach((f, i) => tone(c, "triangle", f, f * 0.97, 0.16, 0.08, i * 0.07));
       break;
@@ -252,6 +289,15 @@ export function sfx(name: Sfx) {
 /* 배경 음악 (파일이 있을 때만) */
 let bgmEl: HTMLAudioElement | null = null;
 let bgmWant: string | null = null;
+/** 짧은 징글 한 번 (클리어 · 실패) — 배경 음악은 멈춤 */
+export function jingle(name: string) {
+  playBgm(null);
+  if (typeof window === "undefined" || muted || gated || !unlocked) return;
+  const el = new Audio(`/survivor/bgm/${name}.mp3`);
+  el.volume = vol * mvol * 0.5;
+  void el.play().catch(() => {});
+}
+
 export function playBgm(name: string | null) {
   bgmWant = name;
   if (typeof window === "undefined") return;
@@ -268,6 +314,6 @@ export function playBgm(name: string | null) {
     bgmEl.src = src;
     bgmEl.onerror = () => {};
   }
-  bgmEl.volume = muted ? 0 : vol * 0.45;
+  bgmEl.volume = muted ? 0 : vol * mvol * 0.45;
   if (unlocked && !gated) void bgmEl.play().catch(() => {});
 }

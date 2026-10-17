@@ -9,7 +9,8 @@
 
 export const BALANCE_VER = "v2";
 
-export type Grade = "R" | "SR" | "SSR" | "UR";
+import { CAST, cast, kitOf, type CastBase, type Grade } from "../cast";
+export type { Grade };
 export const GRADES: Grade[] = ["R", "SR", "SSR", "UR"];
 export const GRADE_FLOOR: Record<Grade, number> = { R: 0, SR: 5, SSR: 10, UR: 15 };
 export const GRADE_COLOR: Record<Grade, string> = { R: "#7fb2ff", SR: "#c48cff", SSR: "#ffc23d", UR: "#ff6fae" };
@@ -188,7 +189,7 @@ export interface CharDef {
   title: string;
   grade: Grade;
   /** 원래 캐릭터 (픽셀파이트) */
-  base: "kai" | "igna" | "lily" | "ivan" | "soyoung" | "zena" | "gunmo" | "orig";
+  base: CastBase;
   sprite: string;
   /** 카드 그림 (없으면 픽셀파이트 얼굴) */
   art?: string;
@@ -235,44 +236,24 @@ export const CK = {
 const k = <T extends keyof typeof CK>(id: T) => CK[id];
 const P = (v: number) => v * TUNE.passive;
 
-export const CHARS: CharDef[] = [
+const OWN: CharDef[] = [
   /* ── R: 픽셀파이트 기본 넷 ── */
   {
-    id: "kai",
-    name: "카이",
-    title: "바람의 주먹",
-    grade: "R",
-    base: "kai",
-    sprite: "kai",
-    color: "#4a7dff",
+    ...cast("kai"),
     line: "한 번 더! 바람처럼 다시 굴려",
     bio: "바람처럼 떠도는 거리의 격투가. 마음에 안 드는 주사위는 질풍처럼 한 번 더 굴려 버려요.",
     passive: { name: "순풍", fx: (p) => ({ startBonus: st(k("kai").start, p) }), desc: (p) => `출발을 지날 때 코인 +${st(k("kai").start, p)}` },
     active: { name: "질풍 다시 굴리기", kind: "reroll", cd: cdOf(k("kai")), mag: () => 1, desc: () => "이번 차례 다시 굴리기 +1번" },
-    on: true,
   },
   {
-    id: "igna",
-    name: "이그나",
-    title: "불꽃 술사",
-    grade: "R",
-    base: "igna",
-    sprite: "igna",
-    color: "#ff6a3d",
+    ...cast("igna"),
     line: "족보에 불을 붙이면 보상도 활활",
     bio: "불꽃을 다루는 술사. 주사위 족보에 불을 지펴 보상을 두 배로 끓어오르게 만들어요.",
     passive: { name: "뜨끈한 장사", fx: (p) => ({ blueBonus: st(k("igna").blue, p) }), desc: (p) => `파랑 칸 코인 +${st(k("igna").blue, p)}` },
     active: { name: "열기 축제", kind: "double", cd: cdOf(k("igna")), mag: () => 2, desc: () => "이번 차례 족보 보상 2배 (야추면 별 2개!)" },
-    on: true,
   },
   {
-    id: "lily",
-    name: "릴리",
-    title: "우산 꼬마",
-    grade: "R",
-    base: "lily",
-    sprite: "lily",
-    color: "#46c9ff",
+    ...cast("lily"),
     line: "우산으로 손해 비를 막는 꼬마",
     bio: "우산과 오리 장화를 좋아하는 꼬마. 빨강 칸 비가 와도 우산을 쓰윽 펴서 막아요.",
     passive: { name: "작은 우산", fx: (p) => ({ redCut: st(k("lily").red, p) }), desc: (p) => `빨강 칸 손해 −${st(k("lily").red, p)}` },
@@ -284,16 +265,9 @@ export const CHARS: CharDef[] = [
       extra: () => k("lily").bonus,
       desc: () => `다음 손해 ${k("lily").shield}번을 막고, 막을 때마다 코인 +${k("lily").bonus} (빨강 · 뺏기 · 함정 · 대결)`,
     },
-    on: true,
   },
   {
-    id: "ivan",
-    name: "이반",
-    title: "교관",
-    grade: "R",
-    base: "ivan",
-    sprite: "ivan",
-    color: "#8a9bb0",
+    ...cast("ivan"),
     line: "주사위도 정신 교육부터",
     bio: "엄격한 교관. 삐딱한 주사위는 손가락으로 툭 쳐서 한 눈씩 바로잡아요.",
     passive: { name: "튼튼한 기초", fx: (p) => ({ startCoins: st(k("ivan").coins, p) }), desc: (p) => `시작 코인 +${st(k("ivan").coins, p)}` },
@@ -304,18 +278,11 @@ export const CHARS: CharDef[] = [
       mag: (p) => st(k("ivan").nudge, p),
       desc: (p) => `주사위 하나를 ±${st(k("ivan").nudge, p)} 바꿔요`,
     },
-    on: true,
   },
 
   /* ── SR ── */
   {
-    id: "soyoung",
-    name: "소영",
-    title: "엄한 선생님",
-    grade: "SR",
-    base: "soyoung",
-    sprite: "soyoung",
-    color: "#c05bff",
+    ...cast("soyoung"),
     line: "거기, 앞으로 나와!",
     bio: "규칙에 엄한 선생님. 딴짓하는 학생은 채찍으로 쓱 끌어다가 빨강 칸에 세워요.",
     passive: { name: "칭찬 스티커", fx: (p) => ({ comboCoin: st(k("soyoung").combo, p) }), desc: (p) => `페어 · 투 페어 보상 +${st(k("soyoung").combo, p)}코인` },
@@ -327,16 +294,9 @@ export const CHARS: CharDef[] = [
       extra: (p) => st(k("soyoung").fee, p),
       desc: (p) => `상대 말을 앞뒤 1~${k("soyoung").pull}칸 끌어오고 ${st(k("soyoung").fee, p)}코인 벌금 (선 칸이 빨강 · 함정이면 그대로 당해요)`,
     },
-    on: true,
   },
   {
-    id: "zena",
-    name: "제나",
-    title: "번개 창술사",
-    grade: "SR",
-    base: "zena",
-    sprite: "zena",
-    color: "#ffd23f",
+    ...cast("zena"),
     line: "번개처럼 세 걸음!",
     bio: "번개 창을 든 창술사. 주사위 세 개를 한꺼번에 찔러 멀리까지 번쩍 달려가요.",
     passive: {
@@ -345,66 +305,34 @@ export const CHARS: CharDef[] = [
       desc: (p) => `스트레이트면 코인 +${st(k("zena").str, p)} · 출발을 지날 때 +${k("zena").start}`,
     },
     active: { name: "번개 질주", kind: "tri", cd: cdOf(k("zena")), mag: () => 3, desc: () => "이번 차례 다시 굴리기 +1 · 이동은 주사위 3개를 골라 그 합만큼" },
-    on: true,
   },
 
   /* ── SR: 픽셀파이트 캐릭터 + 다이스 타운 스킨 ── */
   {
-    id: "ivan-marine",
-    name: "이반",
-    title: "오도해병 이반",
-    grade: "SR",
-    base: "ivan",
-    sprite: "ivan-marine",
-    art: "/marble/art/ivan-marine.webp",
-    color: "#d8402f",
+    ...cast("ivan-marine"),
     line: "필승! 주사위 하나 압수",
     bio: "오늘부터 해병대 체험! 필승 구호와 함께 상대 주사위 하나를 압수해 버리는 열혈 이반.",
     passive: { name: "철통 경계", fx: (p) => ({ stealGuard: st(k("ivan-marine").guard, p) }), desc: (p) => `코인을 뺏길 때 ${st(k("ivan-marine").guard, p)} 덜 뺏겨요` },
     active: { name: "주사위 압수", kind: "seal", cd: cdOf(k("ivan-marine")), mag: () => 1, desc: () => "상대 한 명의 다음 굴림 주사위 하나를 봉인해요" },
-    on: true,
   },
   {
-    id: "igna-student",
-    name: "이그나",
-    title: "학생 이그나",
-    grade: "SR",
-    base: "igna",
-    sprite: "igna-student",
-    art: "/marble/art/igna-student.webp",
-    color: "#3a2f4f",
+    ...cast("igna-student"),
     line: "정답은 언제나 6!",
     bio: "검은 머리로 변신한 모범생(?) 이그나. 시험지에 6만 적어 내는데 이상하게 다 맞아요.",
     passive: { name: "열공 모드", fx: (p) => ({ bigCombo: st(k("igna-student").big, p) }), desc: (p) => `트리플 이상 족보면 코인 +${st(k("igna-student").big, p)}` },
     active: { name: "만점 답안", kind: "six", cd: cdOf(k("igna-student")), mag: () => 1, desc: () => "주사위 하나를 6으로 바꿔요" },
-    on: true,
   },
   {
-    id: "lily-hood",
-    name: "릴리",
-    title: "빨간망토 릴리",
-    grade: "SR",
-    base: "lily",
-    sprite: "lily-hood",
-    art: "/marble/art/lily-hood.webp",
-    color: "#e2394b",
+    ...cast("lily-hood"),
     line: "늑대 소굴은 폴짝 건너뛰어요",
     bio: "할머니 댁에 심부름 가는 빨간망토 릴리. 늑대 소굴(빨강 · 함정)은 폴짝 건너뛰는 게 요령이에요.",
     passive: { name: "심부름 바구니", fx: (p) => ({ itemBonus: st(k("lily-hood").item, p) }), desc: (p) => `럭키 박스에서 코인 +${st(k("lily-hood").item, p)}` },
     active: { name: "행운 바구니", kind: "hop", cd: cdOf(k("lily-hood")), mag: () => 2, desc: () => "이번 차례 도착 칸 코인 2배 · 빨강 · 함정 칸이면 다음 칸으로 폴짝" },
-    on: true,
   },
 
   /* ── SSR: 다이스 타운 오리지널 ── */
   {
-    id: "toto",
-    name: "토토",
-    title: "달토끼 배달부",
-    grade: "SSR",
-    base: "orig",
-    sprite: "toto",
-    art: "/marble/art/toto.webp",
-    color: "#3d4f9a",
+    ...cast("toto"),
     line: "달빛 편지 배달 왔어요~ 한 칸 더!",
     bio: "달나라 우체국의 배달부 토끼. 롤러스케이트로 몇 칸 더 달려가고, 지나가는 집마다 배달비를 챙겨요.",
     passive: {
@@ -413,17 +341,9 @@ export const CHARS: CharDef[] = [
       desc: (p) => `지나간 파랑 칸마다 코인 +1 (차례당 최대 ${st(k("toto").pass, p)})`,
     },
     active: { name: "달토끼 점프", kind: "bunny", cd: cdOf(k("toto")), mag: () => 3, desc: () => "이동한 뒤 0~3칸 더 가요" },
-    on: true,
   },
   {
-    id: "mirage",
-    name: "미라쥬",
-    title: "꼬마 마술사",
-    grade: "SSR",
-    base: "orig",
-    sprite: "mirage",
-    art: "/marble/art/mirage.webp",
-    color: "#7b4fd6",
+    ...cast("mirage"),
     line: "자, 이 주사위를 잘 보세요… 짠!",
     bio: "주사위를 카드처럼 다루는 꼬마 마술사. 원하는 눈을 짠! 하고 꺼내 보이는 게 장기예요.",
     passive: {
@@ -432,17 +352,9 @@ export const CHARS: CharDef[] = [
       desc: (p) => `첫 굴림에 ${pct(P(lin(k("mirage").twin, p)))} 확률로 짝이 하나 더`,
     },
     active: { name: "마술 굴리기", kind: "magic", cd: cdOf(k("mirage")), mag: () => 2, desc: () => "주사위 두 개를 원하는 눈으로 바꿔요" },
-    on: true,
   },
   {
-    id: "lolo",
-    name: "롤로",
-    title: "서커스 단장",
-    grade: "SSR",
-    base: "orig",
-    sprite: "lolo",
-    art: "/marble/art/lolo.webp",
-    color: "#e0442f",
+    ...cast("lolo"),
     line: "레이디스 앤 젠틀맨! 관람료는 선불이에요",
     bio: "서커스단의 당찬 단장. 물개 파트너와 함께 공연을 열어 모두에게 관람료를 걷어요.",
     passive: { name: "링 마스터", fx: (p) => ({ vsBonus: st(k("lolo").vs, p) }), desc: (p) => `VS 대결에서 이기면 코인 +${st(k("lolo").vs, p)}` },
@@ -453,17 +365,9 @@ export const CHARS: CharDef[] = [
       mag: (p) => st(k("lolo").fee, p),
       desc: (p) => `상대마다 ${st(k("lolo").fee, p)}코인씩 관람료를 받아요`,
     },
-    on: true,
   },
   {
-    id: "mongle",
-    name: "몽글",
-    title: "잠꾸러기 양",
-    grade: "SSR",
-    base: "orig",
-    sprite: "mongle",
-    art: "/marble/art/mongle.webp",
-    color: "#8fb4ff",
+    ...cast("mongle"),
     line: "양 한 마리… 양 두 마리… 쿨쿨",
     bio: "구름처럼 폭신한 잠꾸러기 양. 자장가 한 곡이면 누구든 졸려서 주사위를 한 번밖에 못 굴려요.",
     passive: {
@@ -472,19 +376,11 @@ export const CHARS: CharDef[] = [
       desc: (p) => `함정 면역 · 빨강 칸 손해 −${st(k("mongle").red, p)} · 출발을 지날 때 +${k("mongle").start}`,
     },
     active: { name: "자장가", kind: "sleep", cd: cdOf(k("mongle")), mag: () => 1, desc: () => "상대 모두 다음 차례에 다시 굴리기를 못 해요" },
-    on: true,
   },
 
   /* ── UR: 다이스 타운 오리지널 ── */
   {
-    id: "ur-dice",
-    name: "DICE",
-    title: "주사위 요정",
-    grade: "UR",
-    base: "orig",
-    sprite: "ur-dice",
-    art: "/marble/art/ur-dice.webp",
-    color: "#7fe0c8",
+    ...cast("ur-dice"),
     line: "주사위가 굴러가는 곳엔 언제나 내가 있어!",
     bio: "주사위의 요정. 굴러가는 모든 주사위에 깃들어 있다가, 마음에 드는 눈을 몇 개든 복사해 줘요.",
     passive: {
@@ -493,17 +389,9 @@ export const CHARS: CharDef[] = [
       desc: (p) => `야추면 코인 +${st(k("ur-dice").yacht, p)} · 판당 한 번 다시 굴리기 +1`,
     },
     active: { name: "운명 복사", kind: "copy", cd: cdOf(k("ur-dice")), mag: () => 2, desc: () => "주사위 하나의 눈을 다른 주사위 두 개에 복사해요" },
-    on: true,
   },
   {
-    id: "ur-moa",
-    name: "MOA",
-    title: "고양이 재벌",
-    grade: "UR",
-    base: "orig",
-    sprite: "ur-moa",
-    art: "/marble/art/ur-moa.webp",
-    color: "#e8c25a",
+    ...cast("ur-moa"),
     line: "그 별, 내가 살게냥",
     bio: "다이스 타운 최고의 재벌 고양이. 별이 멀리 있어도 집사를 보내 할인가에 사 와요.",
     passive: {
@@ -518,17 +406,9 @@ export const CHARS: CharDef[] = [
       mag: (p) => st(k("ur-moa").cut, p),
       desc: (p) => `이번 차례 별 값 −${st(k("ur-moa").cut, p)} · 별이 도착 칸에서 4칸 안이면 사요`,
     },
-    on: true,
   },
   {
-    id: "ur-forte",
-    name: "FORTE",
-    title: "오르골 소년",
-    grade: "UR",
-    base: "orig",
-    sprite: "ur-forte",
-    art: "/marble/art/ur-forte.webp",
-    color: "#ff9ec7",
+    ...cast("ur-forte"),
     line: "태엽을 한 번 더 감으면, 춤도 한 번 더",
     bio: "오르골 정원에서 태어난 태엽 소년. 태엽을 한 번 더 감으면 춤도, 차례도 한 번 더!",
     passive: {
@@ -537,8 +417,16 @@ export const CHARS: CharDef[] = [
       desc: (p) => (st(k("ur-forte").start, p) > 0 ? `출발을 지날 때 코인 +${st(k("ur-forte").start, p)} · 축제 보상 1.5배` : "축제 보상 1.5배"),
     },
     active: { name: "앙코르", kind: "encore", cd: cdOf(k("ur-forte")), mag: () => 1, desc: () => "이번 차례가 끝나면 한 번 더 해요" },
-    on: true,
   },
+];
+
+/** 명부(lib/cast) 에 있는데 다이스 타운 키트가 아직 없는 캐릭터 → 원래 캐릭터(base) 의 스킬을 빌려 합류 */
+export const CHARS: CharDef[] = [
+  ...OWN,
+  ...CAST.filter((c) => !OWN.some((o) => o.id === c.id)).flatMap((c) => {
+    const k = kitOf(Object.fromEntries(OWN.map((o) => [o.id, o])), c);
+    return k ? [{ ...k, ...c, line: k.line, bio: k.bio }] : [];
+  }),
 ];
 
 /** 카드 그림 · 얼굴 그림 경로 */

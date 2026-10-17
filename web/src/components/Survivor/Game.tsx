@@ -1,12 +1,15 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
-import { BLESS, DASH_CD, DT, ENEMIES, FLAG_NAME, HEROES, PASSIVES, RARITY_COLOR, RARITY_NAME, RUN_SEC, ULT_NEED, VIEW_H, VIEW_W, WEAPONS, xpNeed, type FlagBuff, type HeroId, type PassiveId, type Stats, type WeaponId } from "@/lib/survivor/data";
+import { BLESS, DASH_CD, DT, ENEMIES, FLAG_NAME, HEROES, PASSIVES, RARITY_COLOR, RARITY_NAME, STAGES, ULT_NEED, VIEW_H, VIEW_W, WEAPONS, type FlagBuff, type HeroId, type PassiveId, type StageId, type Stats, type WeaponId } from "@/lib/survivor/data";
 import { RELICS, RELIC_RARITY_COLOR, RELIC_RARITY_NAME, type RelicId } from "@/lib/survivor/relics";
-import { banishCard, bossLimit, buyRelic, chooseBless, chooseCard, chooseWish, closeChest, dawnChoice, leaveThing, maxHp, newRun, reroll, result, step, type Card, type Ev, type Input, type Pause, type Run, type RunOpts, type RunResult } from "@/lib/survivor/sim";
+import { ARMY_CAP, ARMY_GRADE_COLOR, ARMY_GRADE_NAME, FACTION_COLOR, FACTION_NAME, UNIT, buyCost, craftable, mergeKey, mergeable } from "@/lib/survivor/army";
+import { armyBuy, armyCraft, armyMerge, banishCard, bossLimit, buyRelic, chooseBless, chooseCard, chooseWish, closeChest, dawnChoice, leaveThing, maxHp, needXp, newRun, reroll, result, step, type Card, type Ev, type Input, type Pause, type Run, type RunOpts, type RunResult } from "@/lib/survivor/sim";
 import { getArt, loadFiles, loadHero, type HeroArt } from "./art";
-import { playBgm, preloadSfx, sfx, setSound, soundPref } from "./audio";
-import { draw, mobColor, newFx, tickFx, type Fx } from "./render";
+import { jingle, playBgm, preloadSfx, sfx, type Sfx } from "./audio";
+import SoundSliders from "./SoundSliders";
+import { useStage } from "./Stage";
+import { draw, mobColor, newFx, preloadLight, tickFx, type Fx } from "./render";
 
 /* ───────────── 아이콘 (public/survivor/icon/<id>.png — 없으면 색 · 첫 글자) ───────────── */
 
@@ -122,6 +125,9 @@ function useKeys() {
 
 interface Hud {
   t: number;
+  /** 판 길이 (이때 마지막 보스) · 챕터 이름 */
+  len: number;
+  ch: string | null;
   hp: number;
   max: number;
   lv: number;
@@ -146,15 +152,22 @@ interface Hud {
   otLv: number;
   /** 진행 중인 시련 남은 시간 */
   trial: number;
+  /** 자정의 종 남은 시간 · 다음 종까지 (시계탑 광장) */
+  toll: number;
+  tollNext: number;
+  /** 럭키 출격 부대 (묶음: 세력 · 등급) */
+  army: { groups: { key: string; id: string; n: number; grade: number; faction: string }[]; count: number; cost: number; merge: string | null; craft: { id: string; name: string } | null } | null;
 }
 const hudOf = (r: Run): Hud => {
   const b = r.bossId >= 0 ? r.enemies.find((e) => e.id === r.bossId) : undefined;
   return {
     t: r.t,
+    len: r.len,
+    ch: r.ch ? (r.ch.st ? `${r.ch.id}-${r.ch.sub} · ${r.ch.name}` : `챕터 ${r.ch.id} · ${r.ch.name}`) : null,
     hp: r.p.hp,
     max: maxHp(r),
     lv: r.p.lv,
-    xp: r.p.xp / xpNeed(r.p.lv),
+    xp: r.p.xp / needXp(r),
     kills: r.p.kills,
     gold: r.p.gold,
     ult: r.p.ult / ULT_NEED,
@@ -174,9 +187,66 @@ const hudOf = (r: Run): Hud => {
     otT: r.otT,
     otLv: r.otLv,
     trial: r.things.find((t) => t.alive && t.k === "trial" && t.on)?.t ?? 0,
+    toll: r.toll.on,
+    army: r.army ? armyHud(r) : null,
+    tollNext: r.def.toll ? r.toll.next - r.t : 0,
   };
 };
 
+function armyHud(r: Run): NonNullable<Hud["army"]> {
+  const a = r.army!;
+  const ids = a.units.map((u) => u.id);
+  const groups = new Map<string, { key: string; id: string; n: number; grade: number; faction: string }>();
+  for (const id of ids) {
+    const d = UNIT[id];
+    // 레전드 이상은 하나씩 (조합식 재료라 이름이 중요)
+    const key = d.grade >= 3 ? id : mergeKey(id);
+    const g = groups.get(key) ?? { key, id, n: 0, grade: d.grade, faction: d.faction };
+    g.n++;
+    if (UNIT[g.id].grade < d.grade) g.id = id;
+    groups.set(key, g);
+  }
+  const cr = craftable(ids)[0];
+  return {
+    groups: [...groups.values()].sort((x, y) => y.grade - x.grade || x.faction.localeCompare(y.faction)),
+    count: ids.length,
+    cost: buyCost(a.bought),
+    merge: mergeable(ids)[0] ?? null,
+    craft: cr ? { id: cr.id, name: UNIT[cr.id].name } : null,
+  };
+}
+
+/** 무기 계열 → 발사 · 타격 소리 */
+type Fam = "lantern" | "blade" | "boom" | "thunder" | "thorn" | "missile" | "ball";
+const FAM: Partial<Record<WeaponId, Fam>> = {
+  lantern: "lantern",
+  shuriken: "blade", gale: "blade", blades: "blade", cards: "blade", whip: "blade", coins: "blade",
+  boomerang: "boom", cyclone: "boom", apple: "boom", kick: "boom", punch: "boom",
+  bolt: "thunder", judgment: "thunder", lance: "thunder",
+  thorns: "thorn", rose: "thorn", notes: "thorn", sleep: "thorn",
+  missile: "missile", barrage: "missile", fireball: "missile", grenade: "missile", parcel: "missile", roll: "missile",
+  ball: "ball", rainbow: "ball", pinball: "ball", circus: "ball", dice6: "ball", umbrella: "ball",
+};
+const HIT: Record<Fam, Sfx> = { lantern: "w_lantern_hit", blade: "w_blade_hit", boom: "w_boom_hit", thunder: "w_thunder_hit", thorn: "w_thorn_hit", missile: "w_missile_hit", ball: "w_ball_hit" };
+const FIRE: Partial<Record<Fam, Sfx>> = { lantern: "w_lantern_fire", blade: "w_blade_fire", boom: "w_boom_fire", missile: "w_missile_fire", ball: "w_ball_fire" };
+/** 몹 색을 어둡게 (바닥 얼룩) */
+const dark = (hex: string) => {
+  const v = parseInt(hex.slice(1, 7), 16);
+  const f = (x: number) => Math.round(x * 0.45);
+  return `rgb(${f((v >> 16) & 255)},${f((v >> 8) & 255)},${f(v & 255)})`;
+};
+/** 판 음악: 순찰대는 챕터마다 (곡이 없으면 1장 곡) · 서바이버는 밤 */
+const CH_BGM: Record<number, string> = { 1: "pt_ch1", 2: "pt_ch2", 3: "pt_ch3" };
+const HAS_BGM = new Set(["pt_ch1", "pt_ch2"]);
+const stageBgm = (r: Run) => {
+  if (!r.ch) return "night";
+  const n = CH_BGM[r.ch.id] ?? "pt_ch1";
+  return HAS_BGM.has(n) ? n : "pt_ch1";
+};
+/** 필살기 컷인 그림 (public/patrol/cutin) */
+const CUTIN: Partial<Record<HeroId, string>> = { bandi: "/patrol/cutin/bandi.webp" };
+/** 연속 처치 외침 */
+const COMBO_SHOUT: Record<number, string> = { 25: "좋아요!", 50: "대단해요!", 100: "엄청나요!!", 200: "멈출 수 없어!!", 500: "전설의 순찰!!!" };
 const fmt = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 const THING_COLOR: Record<string, string> = { shrine: "#7ff0d8", gshrine: "#ffd23a", statue: "#ffd23a", bell: "#ff8a6b", flag: "#ff9cc8", box: "#ffd23a", merchant: "#c58bff", fountain: "#7ad7ff", trial: "#e0d8ff" };
 
@@ -219,12 +289,14 @@ export default function Game({ setup, onEnd, onQuit }: { setup: GameSetup; onEnd
 
   useEffect(() => {
     let alive = true;
-    void loadHero(HEROES[hero].sprite, 40).then((a) => alive && (heroArt.current = a));
-    sup.forEach((h, i) => void loadHero(HEROES[h].sprite, 26).then((a) => alive && (supArt.current[i] = a)));
+    // 캐릭터는 4배 해상도로 준비해서 고해상도 화면에서 또렷하게
+    void loadHero(HEROES[hero].sprite, 40, 4).then((a) => alive && (heroArt.current = a));
+    sup.forEach((h, i) => void loadHero(HEROES[h].sprite, 26, 4).then((a) => alive && (supArt.current[i] = a)));
     getArt();
     void loadFiles();
     preloadSfx();
-    playBgm("night");
+    if (hero === "bandi") preloadLight();
+    playBgm(stageBgm(runRef.current));
     return () => {
       alive = false;
       playBgm(null);
@@ -234,12 +306,22 @@ export default function Game({ setup, onEnd, onQuit }: { setup: GameSetup; onEnd
 
   const say = useCallback((text: string, c = "#ffd23a") => setBanner({ id: Date.now(), text, c }), []);
   const lastNoGold = useRef(0);
+  const lastUlt = useRef(0);
   const [toasts, setToasts] = useState<{ id: number; relic: RelicId }[]>([]);
   const toast = useCallback((relic: RelicId) => {
     const id = Date.now() + Math.random();
     setToasts((t) => [...t.slice(-3), { id, relic }]);
     setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 2600);
   }, []);
+
+  /** 연속 처치 (2.5초 안에 다음 처치가 없으면 끊김) */
+  const stg = useStage();
+  const combo = useRef({ n: 0, at: 0, best: 0 });
+  const [cut, setCut] = useState<{ id: number; hero: HeroId } | null>(null);
+  /** 한꺼번에 처치 (0.25초 창) */
+  const multi = useRef({ n: 0, at: 0, shown: 0 });
+  const [multiN, setMultiN] = useState<{ id: number; n: number } | null>(null);
+  const [comboN, setComboN] = useState(0);
 
   /** 시뮬에서 나온 일 → 화면 효과 · 소리 */
   const onEv = useCallback(
@@ -248,21 +330,89 @@ export default function Game({ setup, onEnd, onQuit }: { setup: GameSetup; onEnd
       let dmgN = 0;
       for (const e of evs) {
         switch (e.t) {
-          case "dmg":
+          case "dmg": {
             if (dmgN++ < 14) fx.nums.push({ x: e.x + (Math.random() - 0.5) * 6, y: e.y, v: e.v, crit: e.crit, t: 0 });
-            sfx("hit");
+            const f = e.w && FAM[e.w];
+            sfx(f ? HIT[f] : "hit", { vol: f ? 0.75 : 1 });
+            if (e.crit) {
+              sfx("crit", { vol: e.big ? 1 : 0.55 });
+              // 정예 · 보스에 크리티컬 → 아주 잠깐 멈춤
+              if (e.big) {
+                fx.stop = Math.max(fx.stop, 0.04);
+                fx.shake = Math.max(fx.shake, 2);
+              }
+            }
             break;
+          }
           case "kill": {
             const c = mobColor(e.kind);
-            const n = e.boss ? 40 : e.elite ? 16 : 4;
-            for (let i = 0; i < n; i++) fx.parts.push({ x: e.x, y: e.y - 5, vx: (Math.random() - 0.5) * (e.boss ? 260 : 120), vy: -Math.random() * (e.boss ? 200 : 90), c: i % 3 ? c : "#ffffff", t: 0, life: 0.4 + Math.random() * 0.3, s: e.boss ? 3 : 2 });
-            if (e.boss) {
-              fx.shake = 10;
-              fx.flash = 1;
+            // 죽는 몹: 번쩍 → 날아가며 납작 (보스는 따로 크게) · 바닥 얼룩 · 조각 · 하얀 고리
+            const big = e.boss ? 2 : e.elite ? 1.7 : 1;
+            // 보스는 깜빡이며 떨다 터짐 (렌더 tickFx), 나머진 날아감
+            fx.corpses.push({ kind: e.kind, x: e.x, y: e.y, dx: e.dx, dy: e.dy, face: e.face, big, t: 0, boss: e.boss });
+            if (fx.corpses.length > 70) {
+              const old = fx.corpses.findIndex((x) => !x.boss);
+              if (old >= 0) fx.corpses.splice(old, 1);
+            }
+            // 한꺼번에 여러 마리: 0.25초 안에 8마리 · 20마리 넘으면 쿵 + 흔들림 + 「×N 동시 처치」
+            const mk = multi.current;
+            const nowT = performance.now();
+            if (nowT - mk.at > 250) {
+              mk.n = 0;
+              mk.shown = 0;
+            }
+            mk.at = nowT;
+            mk.n++;
+            const tier = mk.n >= 20 ? 2 : mk.n >= 8 ? 1 : 0;
+            if (tier > mk.shown) {
+              mk.shown = tier;
+              fx.shake = Math.max(fx.shake, tier === 2 ? 7 : 4);
+              fx.flash = Math.max(fx.flash, tier === 2 ? 0.45 : 0.22);
               fx.flashC = "#ffffff";
-              sfx("boom");
+              if (tier === 2) sfx("bossdown", { vol: 0.55, rate: 1.35 });
+              else sfx("w_boom_hit", { rate: 0.7 });
+            }
+            if (tier && mk.n % 4 === 0) setMultiN({ id: nowT, n: mk.n });
+            fx.stains.push({ x: e.x, y: e.y, c: dark(c), seed: Math.floor(Math.random() * 1e6), s: Math.round(5 * big), t: 0 });
+            if (fx.stains.length > 160) fx.stains.shift();
+            if (fx.rings.length < 40) fx.rings.push({ x: e.x, y: e.y - 6, r: 10 * big, c: "#ffffff", t: 0, life: 0.16, fill: false });
+            const n = e.boss ? 40 : e.elite ? 16 : 7;
+            for (let i = 0; i < n; i++) {
+              // 맞은 반대쪽으로 더 많이 튐
+              const sp = e.boss ? 260 : 140;
+              fx.parts.push({ x: e.x, y: e.y - 5, vx: (Math.random() - 0.5) * sp + e.dx * sp * 0.6, vy: -Math.random() * (e.boss ? 200 : 100) + e.dy * sp * 0.3, c: i % 3 ? c : "#ffffff", t: 0, life: 0.35 + Math.random() * 0.3, s: e.boss ? 3 : 2 });
+            }
+            if (fx.parts.length > 600) fx.parts.splice(0, fx.parts.length - 600);
+            const cb = combo.current;
+            const now = performance.now();
+            cb.n = now - cb.at < 2500 ? cb.n + 1 : 1;
+            cb.at = now;
+            if (COMBO_SHOUT[cb.n]) {
+              sfx(cb.n >= 100 ? "combo2" : "combo1");
+              say(`${cb.n} 연속 처치! ${COMBO_SHOUT[cb.n]}`, cb.n >= 100 ? "#ff4fa3" : "#4ff0c8");
+            }
+            if (e.boss) {
+              fx.shake = 6;
+              fx.flash = 0.6;
+              fx.flashC = "#ffffff";
+              // 보스 처치: 느린 화면 + 깜빡이며 떨다가 0.9초 뒤 터짐
+              fx.slow = 1.1;
+              fx.stop = 0.12;
+              sfx("crit");
+              window.setTimeout(() => {
+                sfx("bossdown");
+                sfx("boom");
+              }, 900);
               say(`${ENEMIES[e.kind].name} 처치!`, "#ffd23a");
-            } else sfx("kill");
+            } else if (e.elite) {
+              fx.stop = Math.max(fx.stop, 0.07);
+              fx.shake = Math.max(fx.shake, 4);
+              sfx("crit");
+              sfx("kill2", { rate: 0.8 });
+            } else {
+              // 연속 처치가 이어질수록 음이 올라감 (4마리마다 반음 · 한 옥타브까지)
+              sfx("kill2", { rate: 2 ** (Math.min(12, Math.floor(cb.n / 4)) / 12), vol: 0.7 });
+            }
             break;
           }
           case "gem":
@@ -293,11 +443,13 @@ export default function Game({ setup, onEnd, onQuit }: { setup: GameSetup; onEnd
             break;
           case "bolt":
             fx.bolts.push({ x: e.x, y: e.y, r: e.r, t: 0, seed: Math.floor(Math.random() * 1000), j: e.j });
-            sfx("bolt");
+            sfx("w_thunder_hit", { vol: 0.8 });
             break;
-          case "fire":
-            sfx("throw");
+          case "fire": {
+            const f = FAM[e.w];
+            sfx((f && FIRE[f]) || "throw", { vol: 0.7 });
             break;
+          }
           case "dice": {
             const big = e.face >= 6 || fx.dice.length === 0;
             fx.dice.push({ x: e.x, y: e.y, face: e.face, t: 0, big: e.face === 6 && big });
@@ -313,19 +465,35 @@ export default function Game({ setup, onEnd, onQuit }: { setup: GameSetup; onEnd
           case "boss":
             fx.shake = 8;
             sfx("boss");
-            say(e.arena ? `새벽 보스 — ${ENEMIES[e.kind].name}` : `보스 등장 — ${ENEMIES[e.kind].name}`, "#ff3d6e");
-            if (e.arena) playBgm("boss");
+            say(e.arena ? `${runRef.current.ch ? (runRef.current.ch.sub && runRef.current.ch.sub < 5 ? "미니 보스" : "챕터 보스") : "새벽 보스"} — ${ENEMIES[e.kind].name}` : `보스 등장 — ${ENEMIES[e.kind].name}`, "#ff3d6e");
+            if (e.arena) playBgm(runRef.current.ch ? "pt_boss" : "boss");
             break;
           case "warn":
             sfx("warn");
             say(e.text, "#ff4fa3");
             break;
           case "ult":
+            if (CUTIN[e.hero]) {
+              // 컷인: 판을 잠깐 멈추고 일러스트가 가로 띠로 지나감
+              fx.stop = Math.max(fx.stop, 0.65);
+              setCut({ id: Date.now(), hero: e.hero });
+              sfx("ult");
+              break;
+            }
             fx.flash = 1.2;
             fx.flashC = HEROES[e.hero].color;
             fx.shake = 8;
             sfx("ult");
             say(HEROES[e.hero].ult.name + "!", HEROES[e.hero].color);
+            break;
+          case "lhflash":
+            fx.flash = 1.4;
+            fx.flashC = "#fff6d8";
+            fx.shake = 10;
+            fx.stop = Math.max(fx.stop, 0.08);
+            fx.bursts.push({ x: e.x, y: e.y, t: 0 });
+            sfx("boom");
+            sfx("crit");
             break;
           case "dash":
             sfx("dash");
@@ -341,6 +509,8 @@ export default function Game({ setup, onEnd, onQuit }: { setup: GameSetup; onEnd
           case "awake":
             fx.flash = 1.4;
             fx.flashC = "#ffd23a";
+            // 진화 · 합체 · 각성: 잠깐 느린 화면
+            fx.slow = Math.max(fx.slow, 0.6);
             sfx("fuse");
             say(`${e.t === "fuse" ? "합체" : e.t === "evo" ? "진화" : "각성"}! ${e.t === "awake" ? "각성 " : ""}${WEAPONS[e.id].name}`, "#ffd23a");
             break;
@@ -371,6 +541,15 @@ export default function Game({ setup, onEnd, onQuit }: { setup: GameSetup; onEnd
             sfx(e.ok ? "jackpot" : "curse");
             say(e.ok ? "시련 성공! 보물 상자 · 큰 경험치" : "원 밖으로 나가서 시련 실패…", e.ok ? "#ffd23a" : "#ff4fa3");
             break;
+          case "toll":
+            if (e.on) {
+              fx.shake = 6;
+              fx.flash = 0.6;
+              fx.flashC = "#ff3d6e";
+              sfx("toll");
+              say("자정의 종! 적이 빨라지고 경험치 두 배", "#ffb03a");
+            } else say("종소리가 그쳤어요", "#a9a2d6");
+            break;
           case "rage":
             fx.shake = 8;
             sfx("rage");
@@ -380,6 +559,46 @@ export default function Game({ setup, onEnd, onQuit }: { setup: GameSetup; onEnd
             sfx("ot");
             say(e.lv ? `오버타임 Lv${e.lv} — 적이 더 세져요` : "오버타임! 버틸수록 기록이 올라가요", "#ff9cc8");
             if (!e.lv) playBgm("boss");
+            break;
+          case "summon": {
+            const d = UNIT[e.id];
+            const p = runRef.current.p;
+            if (e.src === "start") break;
+            if (e.full) {
+              say(`부대가 가득 — ${d.name}는 금화 +${e.full}`, "#ffd23a");
+              sfx("coin");
+              break;
+            }
+            fx.rings.push({ x: p.x, y: p.y - 8, r: 14 + d.grade * 6, c: ARMY_GRADE_COLOR[d.grade], t: 0, life: 0.4, fill: false });
+            if (e.src === "craft") {
+              fx.flash = 1;
+              fx.flashC = ARMY_GRADE_COLOR[d.grade];
+              fx.shake = 8;
+              sfx("legend");
+              say(`신화 조합! ${d.name}`, ARMY_GRADE_COLOR[d.grade]);
+            } else if (d.grade >= 3) {
+              fx.flash = 0.8;
+              fx.flashC = ARMY_GRADE_COLOR[d.grade];
+              fx.shake = 5;
+              sfx("legend");
+              say(`${ARMY_GRADE_NAME[d.grade]} ${e.src === "merge" ? "합성" : "소환"}! ${d.name}`, ARMY_GRADE_COLOR[d.grade]);
+            } else if (d.grade === 2) {
+              sfx("rare");
+              say(`에픽 ${e.src === "merge" ? "합성" : "소환"}! ${d.name}`, ARMY_GRADE_COLOR[2]);
+            } else sfx(e.src === "merge" ? "fuse" : "reveal");
+            break;
+          }
+          case "ahit":
+            if (fx.shots.length < 80) fx.shots.push({ x0: e.x0, y0: e.y0, x1: e.x1, y1: e.y1, c: e.c, melee: e.melee, t: 0 });
+            break;
+          case "ault":
+            fx.rings.push({ x: e.x, y: e.y - 6, r: Math.max(18, e.r), c: e.c, t: 0, life: 0.45, fill: true });
+            fx.shake = Math.max(fx.shake, 3);
+            if (UNIT[e.id].grade >= 3 && performance.now() - lastUlt.current > 1200) {
+              lastUlt.current = performance.now();
+              say(`${UNIT[e.id].name} — ${e.name}!`, e.c);
+              sfx("ult");
+            } else sfx("boom");
             break;
           case "zap":
             fx.zaps.push({ x0: e.x0, y0: e.y0, x1: e.x1, y1: e.y1, t: 0 });
@@ -394,12 +613,16 @@ export default function Game({ setup, onEnd, onQuit }: { setup: GameSetup; onEnd
             sfx("hit");
             break;
           case "win":
-            sfx("win");
-            say("새벽이 밝았어요!", "#ffd23a");
-            playBgm(null);
+            say(runRef.current.ch ? (runRef.current.ch.sub && runRef.current.ch.sub < 5 ? "스테이지 클리어!" : "챕터 클리어!") : "새벽이 밝았어요!", "#ffd23a");
+            if (runRef.current.ch) jingle("pt_clear");
+            else {
+              sfx("win");
+              playBgm(null);
+            }
             break;
           case "dead":
             sfx("dead");
+            if (runRef.current.ch) jingle("pt_fail");
             break;
         }
       }
@@ -412,6 +635,18 @@ export default function Game({ setup, onEnd, onQuit }: { setup: GameSetup; onEnd
     const c = cvRef.current;
     if (!c) return;
     const ctx = c.getContext("2d")!;
+    // 캔버스를 화면 실제 픽셀 크기 그대로 (브라우저가 다시 줄이거나 늘리지 않아 도트가 번지지 않음) · 배율 S 는 소수
+    let S = 0;
+    let fitT = 0;
+    const fit = () => {
+      const w = Math.round(c.getBoundingClientRect().width * (window.devicePixelRatio || 1));
+      const cw = Math.max(VIEW_W, Math.min(VIEW_W * 4, w));
+      if (cw === c.width && S) return;
+      S = cw / VIEW_W;
+      c.width = cw;
+      c.height = Math.round(VIEW_H * S);
+    };
+    fit();
     let raf = 0;
     let lastT = performance.now();
     let acc = 0;
@@ -424,8 +659,17 @@ export default function Game({ setup, onEnd, onQuit }: { setup: GameSetup; onEnd
       const r = runRef.current;
       const fx = fxRef.current;
       const stop = menuRef.current || !!r.pause;
+      // 타격 멈춤 · 느린 화면 (실제 시간으로 줄어듦)
+      let ts = 1;
+      if (fx.stop > 0) {
+        fx.stop -= dt;
+        ts = 0.05;
+      } else if (fx.slow > 0) {
+        fx.slow -= dt;
+        ts = 0.35;
+      }
       if (!stop && !r.over) {
-        acc += dt;
+        acc += dt * ts;
         const k = keys.current;
         let mx = (k.has("d") || k.has("ArrowRight") ? 1 : 0) - (k.has("a") || k.has("ArrowLeft") ? 1 : 0);
         let my = (k.has("s") || k.has("ArrowDown") ? 1 : 0) - (k.has("w") || k.has("ArrowUp") ? 1 : 0);
@@ -450,6 +694,12 @@ export default function Game({ setup, onEnd, onQuit }: { setup: GameSetup; onEnd
         fx.walkT += dt;
       } else acc = 0;
       if (!stop) tickFx(fx, dt);
+      fitT += dt;
+      if (fitT > 0.5) {
+        fitT = 0;
+        fit();
+      }
+      ctx.setTransform(S, 0, 0, S, 0, 0);
       draw(ctx, r, fx, heroArt.current, now / 1000, supArt.current);
       // 체력 막대 (캐릭터 아래)
       drawHp(ctx, r);
@@ -462,6 +712,9 @@ export default function Game({ setup, onEnd, onQuit }: { setup: GameSetup; onEnd
       if (hudT > 0.1) {
         hudT = 0;
         setHud(hudOf(r));
+        const cb = combo.current;
+        if (cb.n && performance.now() - cb.at > 2500) cb.n = 0;
+        setComboN(cb.n);
       }
       if (r.over && !ended.current) {
         ended.current = true;
@@ -518,11 +771,23 @@ export default function Game({ setup, onEnd, onQuit }: { setup: GameSetup; onEnd
       if (e.key === "Escape" && !r.pause) setMenu((m) => !m);
       const n = ["1", "2", "3", "4"].indexOf(e.key);
       if (r.pause?.k === "level" && n >= 0) pickCard(n);
-      if (r.pause?.k === "chest" && (e.key === "Enter" || e.key === " ")) shutChest();
+      // 레벨업: R 다시 뽑기 · X 건너뛰기
+      if (r.pause?.k === "level" && !r.pause.jackpot && !e.repeat) {
+        const kk = e.key.toLowerCase();
+        if (kk === "r" && r.rerolls > 0) doReroll();
+        if (kk === "x" && r.skips > 0) pickCard(-1);
+      }
       if (r.pause?.k === "bless" && n >= 0) act((x) => chooseBless(x, n), "card");
       if (r.pause?.k === "wish" && n >= 0) act((x) => chooseWish(x, n), "jackpot");
       if (r.pause?.k === "shop" && n >= 0) act((x) => buyRelic(x, n), "buy");
       if ((r.pause?.k === "shop" || r.pause?.k === "wish") && e.key === "Escape") act(leaveThing);
+      // 럭키 출격: R 소환 · F 합성 · G 조합
+      if (r.army && !r.pause && !e.repeat) {
+        const k = e.key.toLowerCase();
+        if (k === "r") act(armyBuy, "buy");
+        if (k === "f") act((x) => void armyMerge(x), "click");
+        if (k === "g") act((x) => void armyCraft(x), "click");
+      }
     };
     window.addEventListener("keydown", k);
     return () => window.removeEventListener("keydown", k);
@@ -559,10 +824,10 @@ export default function Game({ setup, onEnd, onQuit }: { setup: GameSetup; onEnd
     setStickView(null);
   };
 
-  const left = RUN_SEC - hud.t;
+  const left = hud.len - hud.t;
   return (
     <div className="absolute inset-0" onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp} style={{ touchAction: "none" }}>
-      <canvas ref={cvRef} width={VIEW_W} height={VIEW_H} className="absolute inset-0 h-full w-full" />
+      <canvas ref={cvRef} width={VIEW_W} height={VIEW_H} className="absolute inset-0 h-full w-full" style={{ imageRendering: "auto" }} />
 
       {/* 위: 경험치 · 시간 · 처치 */}
       <div className="pointer-events-none absolute inset-x-0 top-0">
@@ -606,8 +871,8 @@ export default function Game({ setup, onEnd, onQuit }: { setup: GameSetup; onEnd
             )}
           </div>
           <div className="flex flex-col items-center">
-            <b className={`pts-title text-[30px] leading-none ${hud.ot ? "text-[#ff9cc8]" : left < 30 && left > 0 ? "text-[#ff4fa3]" : "text-white"}`}>{hud.ot ? `+${fmt(hud.otT)}` : left > 0 ? fmt(left) : fmt(hud.t - RUN_SEC)}</b>
-            <span className="pts-sub mt-[2px] text-[11px] text-[#a9a2d6]">{hud.ot ? `오버타임 Lv${hud.otLv}` : left > 0 ? "새벽까지" : "새벽 이후"}</span>
+            <b className={`pts-title text-[30px] leading-none ${hud.ot ? "text-[#ff9cc8]" : left < 30 && left > 0 ? "text-[#ff4fa3]" : "text-white"}`}>{hud.ot ? `+${fmt(hud.otT)}` : left > 0 ? fmt(left) : fmt(hud.t - hud.len)}</b>
+            <span className="pts-sub mt-[2px] text-[11px] text-[#a9a2d6]">{hud.ch ? (left > 0 ? `${hud.ch} · 보스까지` : `${hud.ch} · 보스전`) : hud.ot ? `오버타임 Lv${hud.otLv}` : left > 0 ? "새벽까지" : "새벽 이후"}</span>
             {(hud.depth > 0 || hud.curse > 0) && (
               <span className="pts-sub mt-[3px] flex gap-[6px] text-[11px]">
                 {hud.depth > 0 && <span className="text-[#c58bff]">깊이 {hud.depth}</span>}
@@ -615,19 +880,33 @@ export default function Game({ setup, onEnd, onQuit }: { setup: GameSetup; onEnd
               </span>
             )}
             {hud.trial > 0 && <b className="pts-title pts-blink mt-[4px] text-[18px] text-[#e0d8ff]">시련 {Math.ceil(hud.trial)}초</b>}
+            {hud.toll > 0 ? (
+              <b className="pts-title pts-blink mt-[4px] text-[16px] text-[#ffb03a]">🔔 자정의 종 {Math.ceil(hud.toll)}초 · 경험치 ×2</b>
+            ) : (
+              hud.tollNext > 0 &&
+              hud.tollNext < 10 &&
+              !hud.boss && <span className="pts-sub mt-[3px] text-[11px] text-[#ffb03a]">🔔 종이 곧 울려요 {Math.ceil(hud.tollNext)}</span>
+            )}
           </div>
           <div className="flex flex-col items-end gap-[4px] text-[14px] font-bold">
             <span className="pts-sub flex items-center gap-[6px]">
               <span className="inline-block h-[10px] w-[10px] bg-[#ff3d6e]" style={{ boxShadow: "0 0 0 2px #07051a" }} />
               {hud.kills.toLocaleString()}
             </span>
-            <span className="pts-sub flex items-center gap-[6px] text-[#ffd23a]" title="금화 — 상자 · 상인에 써요">
+            <span className="pts-sub flex items-center gap-[6px] text-[#ffd23a]" title={hud.ch ? "주운 코인 — 끝나면 받아요" : "금화 — 상자 · 상인에 써요"}>
               <span className="inline-block h-[10px] w-[10px] rounded-full bg-[#ffd23a]" style={{ boxShadow: "0 0 0 2px #07051a" }} />
               {hud.gold.toLocaleString()}
             </span>
-            <button type="button" onClick={() => setMenu(true)} className="pts-btn ghost pointer-events-auto mt-[4px] h-[28px] px-[10px] text-[12px]">
-              II 일시정지
-            </button>
+            <span className="mt-[4px] flex gap-[6px]">
+              {stg.canFs && (
+                <button type="button" onClick={stg.toggleFs} className="pts-btn ghost pointer-events-auto h-[28px] w-[32px] text-[13px]" title={stg.fs ? "전체화면 끄기" : "전체화면"}>
+                  {stg.fs ? "✕" : "⛶"}
+                </button>
+              )}
+              <button type="button" onClick={() => setMenu(true)} className="pts-btn ghost pointer-events-auto h-[28px] px-[10px] text-[12px]">
+                II 일시정지
+              </button>
+            </span>
           </div>
         </div>
         {hud.boss && (
@@ -665,11 +944,45 @@ export default function Game({ setup, onEnd, onQuit }: { setup: GameSetup; onEnd
         <RoundBtn label="필살" sub="E" k={hud.ult} c={HEROES[hero].color} size={78} ready={hud.ult >= 1} onPress={() => (btn.current.ult = true)} />
       </div>
 
+      {/* 럭키 출격 부대 */}
+      {hud.army && <ArmyTray a={hud.army} gold={hud.gold} onBuy={() => act(armyBuy, "buy")} onMerge={() => act((x) => void armyMerge(x), "click")} onCraft={() => act((x) => void armyCraft(x), "click")} />}
+
       {/* 조이스틱 */}
       {stickView && (
         <div className="pointer-events-none absolute" style={{ left: stickView.bx - 60, top: stickView.by - 60, width: 120, height: 120 }}>
           <div className="absolute inset-0 rounded-full bg-white/10" style={{ boxShadow: "0 0 0 2px rgba(255,255,255,0.4)" }} />
           <div className="absolute h-[44px] w-[44px] rounded-full bg-white/60" style={{ left: 38 + stickView.x, top: 38 + stickView.y, boxShadow: "0 0 0 2px #07051a" }} />
+        </div>
+      )}
+
+      {/* 필살기 컷인 */}
+      {cut && CUTIN[cut.hero] && (
+        <div key={cut.id} className="pts-cutin pointer-events-none absolute inset-x-0 top-1/2 z-20 -translate-y-1/2" onAnimationEnd={() => setCut(null)}>
+          <div className="pts-cutin-band relative h-[180px] overflow-hidden" style={{ boxShadow: `0 3px 0 0 ${HEROES[cut.hero].color}, 0 -3px 0 0 ${HEROES[cut.hero].color}` }}>
+            <img src={CUTIN[cut.hero]} alt="" draggable={false} className="pts-cutin-img absolute top-1/2 left-1/2 h-auto w-[112%] max-w-none" />
+            <b className="pts-title absolute right-[6%] bottom-[10px] text-[38px] leading-none" style={{ color: "#fff6d8", textShadow: `3px 3px 0 #07051a, 0 0 18px ${HEROES[cut.hero].color}` }}>
+              {HEROES[cut.hero].ult.name}!
+            </b>
+          </div>
+        </div>
+      )}
+
+      {/* 한꺼번에 처치 */}
+      {multiN && (
+        <div key={multiN.id} className="pts-pop pointer-events-none absolute top-[40%] left-1/2 -translate-x-1/2" onAnimationEnd={() => window.setTimeout(() => setMultiN((m) => (m && m.id === multiN.id ? null : m)), 500)}>
+          <b className="pts-title text-[30px] leading-none whitespace-nowrap" style={{ color: multiN.n >= 20 ? "#ff4fa3" : "#ffd23a", textShadow: "3px 3px 0 #07051a" }}>
+            ×{multiN.n} 동시 처치!
+          </b>
+        </div>
+      )}
+
+      {/* 연속 처치 */}
+      {comboN >= 10 && (
+        <div className="pointer-events-none absolute top-[42%] left-[14px] flex flex-col items-start">
+          <b key={Math.floor(comboN / 25)} className="pts-title pts-pop leading-none" style={{ fontSize: comboN >= 100 ? 40 : comboN >= 50 ? 34 : 28, color: comboN >= 200 ? "#ffd23a" : comboN >= 100 ? "#ff4fa3" : comboN >= 50 ? "#c58bff" : "#4ff0c8", textShadow: "2px 2px 0 #07051a" }}>
+            {comboN}
+          </b>
+          <span className="pts-sub text-[12px] text-[#e8e4ff]">연속 처치</span>
         </div>
       )}
 
@@ -703,7 +1016,7 @@ export default function Game({ setup, onEnd, onQuit }: { setup: GameSetup; onEnd
       {pause?.k === "bless" && <BlessPick pause={pause} onPick={(i) => act((x) => chooseBless(x, i), "card")} />}
       {pause?.k === "shop" && <ShopPick pause={pause} gold={hud.gold} onBuy={(i) => act((x) => buyRelic(x, i), "buy")} onLeave={() => act(leaveThing)} />}
       {pause?.k === "wish" && <WishPick pause={pause} onPick={(i) => act((x) => chooseWish(x, i), "jackpot")} onLeave={() => act(leaveThing)} />}
-      {pause?.k === "dawn" && <Dawn hud={hud} onPick={(more) => act((x) => dawnChoice(x, more), more ? "boss" : "click")} />}
+      {pause?.k === "dawn" && <Dawn hud={hud} stage={run0.stage} onPick={(more) => act((x) => dawnChoice(x, more), more ? "boss" : "click")} />}
       {menu && !pause && (
         <PauseMenu
           hud={hud}
@@ -806,14 +1119,24 @@ function LevelUp({ pause, hud, onPick, onReroll, onBanish }: { pause: Extract<Pa
             const col = sp ? "#ffd23a" : RARITY_COLOR[c.rarity];
             const lines = cardLines(c);
             const w = pause.cards.length > 3 ? 168 : 188;
+            // 무기(투사체) · 능력치를 한눈에: 위 띠 색 · 아이콘 받침 모양
+            const kind = c.k === "weapon" || sp ? "weapon" : c.k === "passive" ? "passive" : null;
+            const KC = kind === "weapon" ? "#ff8a5c" : "#4ff0c8";
             return (
               <div key={i} className="flex flex-col items-center gap-[6px]">
-                <button type="button" onClick={() => onPick(i)} className={`pts-card pts-pop flex h-[262px] flex-col items-center px-[12px] pt-[14px] pb-[10px] text-left ${sp || c.rarity === 2 ? "legend" : ""}`} style={{ width: w, "--r": col, animationDelay: `${i * 70}ms` } as CSSProperties}>
+                <button type="button" onClick={() => onPick(i)} className={`pts-card pts-pop relative flex h-[280px] flex-col items-center overflow-hidden px-[12px] pt-[26px] pb-[10px] text-left ${sp || c.rarity === 2 ? "legend" : ""}`} style={{ width: w, "--r": col, animationDelay: `${i * 70}ms` } as CSSProperties}>
+                  {kind && (
+                    <span className="absolute inset-x-0 top-0 flex h-[18px] items-center justify-center gap-[4px] text-[11px] font-bold tracking-[1px]" style={{ background: `${KC}33`, color: KC, boxShadow: `inset 0 -1px 0 ${KC}66` }}>
+                      {kind === "weapon" ? "⚔ 무기 · 공격" : "✚ 능력치"}
+                    </span>
+                  )}
                   <span className="mb-[8px] self-stretch text-center text-[11px] font-bold" style={{ color: col }}>
                     {c.k === "fuse" ? "★ 합체 ★" : c.k === "evo" ? "★ 진화 ★" : c.k === "awake" ? "★ 각성 ★" : c.rarity ? `${RARITY_NAME[c.rarity]} +${c.to - c.from}` : c.from === 0 && c.k !== "coin" && c.k !== "heal" ? "NEW" : RARITY_NAME[0]}
                   </span>
-                  {t.k ? <ItemIcon k={t.k} id={t.id!} size={48} /> : <span className="h-[48px] w-[48px] bg-[#ffd23a]" />}
-                  <b className="mt-[10px] text-center text-[16px] leading-[19px] text-white">{t.name}</b>
+                  <span className="flex h-[60px] w-[60px] items-center justify-center" style={kind === "weapon" ? { background: `${KC}22`, boxShadow: `0 0 0 2px ${KC}88`, transform: "rotate(45deg)" } : kind === "passive" ? { background: `${KC}22`, boxShadow: `0 0 0 2px ${KC}88`, borderRadius: 999 } : undefined}>
+                    <span style={kind === "weapon" ? { transform: "rotate(-45deg)" } : undefined}>{t.k ? <ItemIcon k={t.k} id={t.id!} size={44} /> : <span className="block h-[44px] w-[44px] bg-[#ffd23a]" />}</span>
+                  </span>
+                  <b className="mt-[8px] text-center text-[16px] leading-[19px] text-white">{t.name}</b>
                   {c.k === "weapon" || c.k === "passive" ? (
                     <span className="mt-[2px] text-[12px] text-[#a9a2d6]">{c.from === 0 ? `Lv ${c.to}` : `Lv ${c.from} → ${c.to}`}</span>
                   ) : c.k === "fuse" || c.k === "evo" ? (
@@ -853,10 +1176,10 @@ function LevelUp({ pause, hud, onPick, onReroll, onBanish }: { pause: Extract<Pa
       {!pause.jackpot && (
         <div className="mt-[16px] flex gap-[14px]">
           <button type="button" disabled={hud.rerolls <= 0} onClick={onReroll} className="pts-btn h-[34px] px-[16px] text-[13px]" style={{ "--c": "#5fd0ff" } as CSSProperties}>
-            다시 뽑기 ({hud.rerolls})
+            다시 뽑기 (R) · {hud.rerolls}
           </button>
           <button type="button" disabled={hud.skips <= 0} onClick={() => onPick(-1)} className="pts-btn ghost h-[34px] px-[16px] text-[13px]">
-            건너뛰기 +10금화 ({hud.skips})
+            건너뛰기 (X) +10금화 · {hud.skips}
           </button>
           {hud.banish > 0 && <span className="pts-sub self-center text-[12px] text-[#a9a2d6]">카드 지우기 {hud.banish}번 남음</span>}
         </div>
@@ -871,24 +1194,61 @@ function Chest({ pause, onClose }: { pause: Extract<Pause, { k: "chest" }>; onCl
   // 0: 릴 도는 중 → 1..n 하나씩 공개 → done
   const [shown, setShown] = useState(0);
   const n = pause.items.length;
+  const timers = useRef<{ ids: ReturnType<typeof setTimeout>[]; spin: ReturnType<typeof setInterval> | null }>({ ids: [], spin: null });
+  /** 다 보인 시각 · 열린 시각 (스페이스를 누른 채(대시) 열려도 바로 안 닫히게) */
+  const doneAt = useRef(0);
+  const openAt = useRef(0);
   useEffect(() => {
-    const ids: ReturnType<typeof setTimeout>[] = [];
-    const spin = setInterval(() => sfx("reel"), 70);
+    openAt.current = performance.now();
+    const t = timers.current;
+    t.spin = setInterval(() => sfx("reel"), 70);
     for (let i = 1; i <= n; i++)
-      ids.push(
+      t.ids.push(
         setTimeout(() => {
           setShown(i);
           sfx(i === n && n >= 3 ? "jackpot" : "card");
-          if (i === n) clearInterval(spin);
+          if (i === n) {
+            if (t.spin) clearInterval(t.spin);
+            doneAt.current = performance.now();
+          }
         }, 900 + i * 380)
       );
-    if (!n) ids.push(setTimeout(() => clearInterval(spin), 900));
+    if (!n)
+      t.ids.push(
+        setTimeout(() => {
+          if (t.spin) clearInterval(t.spin);
+          doneAt.current = performance.now();
+        }, 900)
+      );
     return () => {
-      ids.forEach(clearTimeout);
-      clearInterval(spin);
+      t.ids.forEach(clearTimeout);
+      t.ids = [];
+      if (t.spin) clearInterval(t.spin);
     };
   }, [n]);
   const done = shown >= n;
+  // 스페이스 · 엔터: 1번째 = 바로 다 보여 주기 · 2번째 = 받기 (꾹 누른 키 · 너무 빠른 연타는 무시)
+  useEffect(() => {
+    const k = (e: KeyboardEvent) => {
+      if (e.key !== " " && e.key !== "Enter") return;
+      e.preventDefault();
+      if (e.repeat || performance.now() - openAt.current < 250) return;
+      if (shown < n) {
+        const t = timers.current;
+        t.ids.forEach(clearTimeout);
+        t.ids = [];
+        if (t.spin) clearInterval(t.spin);
+        setShown(n);
+        doneAt.current = performance.now();
+        sfx(n >= 3 ? "jackpot" : "card");
+        return;
+      }
+      if (performance.now() - doneAt.current < 350) return;
+      onClose();
+    };
+    window.addEventListener("keydown", k);
+    return () => window.removeEventListener("keydown", k);
+  }, [shown, n, onClose]);
   return (
     <div className="absolute inset-0 flex flex-col items-center justify-center" style={{ background: "rgba(7,5,26,0.78)" }}>
       <b className="pts-title pts-drop text-[30px] text-[#ffd23a]">{pause.big ? "보스의 보물 상자!" : "보물 상자!"}</b>
@@ -928,7 +1288,7 @@ function Chest({ pause, onClose }: { pause: Extract<Pause, { k: "chest" }>; onCl
       <div className="mt-[14px] flex items-center gap-[16px]">
         {pause.coins > 0 && <span className="pts-sub text-[15px] font-bold text-[#ffd23a]">+{pause.coins} 금화</span>}
         <button type="button" disabled={!done} onClick={onClose} className="pts-btn h-[38px] px-[26px] text-[15px]">
-          {done ? "받기" : "두근두근…"}
+          {done ? "받기 (스페이스)" : "두근두근… (스페이스로 바로 보기)"}
         </button>
       </div>
     </div>
@@ -938,7 +1298,7 @@ function Chest({ pause, onClose }: { pause: Extract<Pause, { k: "chest" }>; onCl
 /* ───────────── 일시정지 ───────────── */
 
 function PauseMenu({ hud, onResume, onQuit }: { hud: Hud; onResume(): void; onQuit(): void }) {
-  const [snd, setSnd] = useState(soundPref());
+  const st = useStage();
   return (
     <div className="absolute inset-0 flex items-center justify-center" style={{ background: "rgba(7,5,26,0.75)" }}>
       <div className="pts-win pts-pop w-[440px] px-[22px] py-[18px]">
@@ -957,22 +1317,14 @@ function PauseMenu({ hud, onResume, onQuit }: { hud: Hud; onResume(): void; onQu
             </span>
           ))}
         </div>
-        <div className="mt-[16px] flex items-center gap-[10px] text-[13px]">
-          <span>소리</span>
-          <input
-            type="range"
-            min={0}
-            max={1}
-            step={0.05}
-            value={snd.muted ? 0 : snd.vol}
-            onChange={(e) => {
-              const v = Number(e.target.value);
-              setSound({ vol: v, muted: v === 0 });
-              setSnd(soundPref());
-            }}
-            className="flex-1 cursor-pointer accent-[#ffd23a]"
-          />
+        <div className="mt-[16px]">
+          <SoundSliders />
         </div>
+        {st.canFs && (
+          <button type="button" onClick={st.toggleFs} className="pts-btn ghost mt-[10px] h-[30px] w-full text-[12px]">
+            {st.fs ? "✕ 전체화면 끄기" : "⛶ 전체화면"}
+          </button>
+        )}
         <div className="mt-[18px] flex justify-end gap-[12px]">
           <button type="button" onClick={onQuit} className="pts-btn ghost h-[36px] px-[16px] text-[13px]">
             {hud.t < 60 ? "그만하기" : "포기하고 정산"}
@@ -1087,11 +1439,13 @@ function WishPick({ pause, onPick, onLeave }: { pause: Extract<Pause, { k: "wish
   );
 }
 
-function Dawn({ hud, onPick }: { hud: Hud; onPick(more: boolean): void }) {
+function Dawn({ hud, stage, onPick }: { hud: Hud; stage: StageId; onPick(more: boolean): void }) {
   return (
     <div className="absolute inset-0 flex flex-col items-center justify-center" style={{ background: "linear-gradient(180deg, rgba(255,180,107,0.55), rgba(58,42,138,0.85))" }}>
       <b className="pts-title pts-drop text-[44px] text-[#ffd23a]">새벽이 왔다!</b>
-      <span className="pts-sub mt-[6px] text-[14px]">자정의 시계지기를 쓰러뜨렸어요 · 처치 {hud.kills.toLocaleString()}</span>
+      <span className="pts-sub mt-[6px] text-[14px]">
+        {ENEMIES[STAGES[stage].final].name}{stage === "clock" ? "를 다시 돌려 놓았어요" : "를 쓰러뜨렸어요"} · 처치 {hud.kills.toLocaleString()}
+      </span>
       <div className="pts-win mt-[20px] flex w-[520px] flex-col gap-[10px] px-[22px] py-[16px] text-[13px]">
         <p>
           <b className="text-[#ff9cc8]">오버타임</b> — 몹이 끝없이 몰려오고 30초마다 더 세져요. 버틴 시간만큼 <b>랭킹 기록</b> · 별사탕 · 코인이 늘어요. 쓰러져도 클리어는 그대로!
@@ -1104,6 +1458,48 @@ function Dawn({ hud, onPick }: { hud: Hud; onPick(more: boolean): void }) {
             오버타임 도전! ▶
           </button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+/* ───────────── 럭키 출격: 부대 칸 ───────────── */
+
+function ArmyTray({ a, gold, onBuy, onMerge, onCraft }: { a: NonNullable<Hud["army"]>; gold: number; onBuy(): void; onMerge(): void; onCraft(): void }) {
+  return (
+    <div className="pointer-events-none absolute bottom-[10px] left-1/2 flex w-[500px] -translate-x-1/2 flex-col items-center gap-[5px]">
+      <div className="flex flex-wrap justify-center gap-[4px]">
+        {a.groups.map((g) => {
+          const ready = a.merge === g.key;
+          return (
+            <span
+              key={g.key}
+              title={g.grade >= 3 ? UNIT[g.id].name : `${FACTION_NAME[g.faction as keyof typeof FACTION_NAME]} ${ARMY_GRADE_NAME[g.grade]} ${g.n}/3`}
+              className={`relative flex h-[34px] w-[34px] items-end justify-center overflow-hidden ${ready ? "pts-blink" : ""}`}
+              style={{ background: "rgba(7,5,26,0.75)", boxShadow: `0 0 0 2px ${ARMY_GRADE_COLOR[g.grade]}, 0 0 0 4px #07051a` }}
+            >
+              <img src={`/defense/units/${g.id}.webp`} alt="" className="h-[32px] w-[32px]" draggable={false} />
+              <i className="absolute top-0 left-0 h-[4px] w-full" style={{ background: FACTION_COLOR[g.faction as keyof typeof FACTION_COLOR] }} />
+              {g.n > 1 && <b className="pts-sub absolute right-[1px] bottom-[-1px] text-[11px]">{g.n}</b>}
+            </span>
+          );
+        })}
+      </div>
+      <div className="pointer-events-auto flex items-center gap-[8px]">
+        <span className="pts-sub text-[11px] text-[#a9a2d6]">
+          부대 {a.count}/{ARMY_CAP}
+        </span>
+        <button type="button" onClick={onBuy} disabled={gold < a.cost} className="pts-btn h-[28px] px-[10px] text-[12px]" style={{ "--c": "#ffd23a" } as CSSProperties}>
+          R 소환 ● {a.cost}
+        </button>
+        <button type="button" onClick={onMerge} disabled={!a.merge} className={`pts-btn h-[28px] px-[10px] text-[12px] ${a.merge ? "pts-bob" : ""}`} style={{ "--c": "#4ff0c8" } as CSSProperties}>
+          F 합성{a.merge ? ` · ${FACTION_NAME[a.merge.split(":")[0] as keyof typeof FACTION_NAME]} ${ARMY_GRADE_NAME[Number(a.merge.split(":")[1])]}` : ""}
+        </button>
+        {a.craft && (
+          <button type="button" onClick={onCraft} className="pts-btn pts-bob h-[28px] px-[10px] text-[12px]" style={{ "--c": "#ff5c8a", "--t": "#fff" } as CSSProperties}>
+            G 신화 조합 · {a.craft.name}
+          </button>
+        )}
       </div>
     </div>
   );

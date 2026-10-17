@@ -3,7 +3,7 @@
  * 몹 · 아이템은 에셋이 오기 전까지 코드로 찍은 도트(자동 외곽선)로 그림.
  * 에셋이 생기면 ENEMY_IMG 등에 파일 경로만 채우면 그쪽을 씀.
  */
-import type { EnemyKind, PickupKind, ThingKind } from "@/lib/survivor/data";
+import { STAGES, STAGE_IDS, type EnemyKind, type PickupKind, type StageDef, type StageId, type ThingKind } from "@/lib/survivor/data";
 
 export type Cv = HTMLCanvasElement;
 
@@ -235,6 +235,118 @@ const DRAW: Record<EnemyKind, () => MobArt> = {
       40,
       46
     ),
+  // 시계탑 광장 (파일 그림이 없을 때 대신)
+  mouse: () =>
+    mob(
+      (g, k) => {
+        ell(g, 7, 6, 6, 3.5, "#a7b0c8");
+        ell(g, 12, 5, 3, 2.6, "#c8d0e4");
+        put(g, 13, 4, "#ff3d6e");
+        rect(g, 4, 1, 3, 2, "#ffd23a");
+        rect(g, 5, 0, 1, 1, "#ffd23a");
+        rect(g, k ? 3 : 4, 9, 2, 1, "#6b7390");
+        rect(g, k ? 9 : 8, 9, 2, 1, "#6b7390");
+      },
+      15,
+      10
+    ),
+  tin: () =>
+    mob(
+      (g, k) => {
+        rect(g, 5, 0, 6, 4, "#2a2a4a");
+        rect(g, 5, 4, 6, 4, "#f2d0a8");
+        put(g, 6, 5, "#2a1f40");
+        put(g, 9, 5, "#2a1f40");
+        rect(g, 4, 8, 8, 6, "#d94a4a");
+        rect(g, 4, 11, 8, 1, "#ffd23a");
+        rect(g, 12, 4, 1, 10, "#c8c8d8");
+        rect(g, k ? 4 : 5, 14, 3, 3, "#3a3a5a");
+        rect(g, k ? 9 : 8, 14, 3, 3, "#3a3a5a");
+      },
+      14,
+      17
+    ),
+  cuckoo: () =>
+    mob(
+      (g, k) => {
+        ell(g, 7, 7, 5, 4.5, "#9a6a3a");
+        ell(g, 10, 4, 3, 3, "#b98450");
+        rect(g, 13, 4, 2, 1, "#ffb03a");
+        put(g, 11, 3, "#2a1f40");
+        rect(g, 1, k ? 3 : 7, 5, 2, "#6a4628");
+        rect(g, 3, 11, 1, 3, "#c8c8d8");
+      },
+      15,
+      14
+    ),
+  gear: () =>
+    mob(
+      (g, k) => {
+        ell(g, 9, 9, 8, 8, "#b58a3a");
+        for (let i = 0; i < 8; i++) {
+          const a = (i / 8) * Math.PI * 2 + (k ? 0.39 : 0);
+          rect(g, 8 + Math.round(Math.cos(a) * 8), 8 + Math.round(Math.sin(a) * 8), 2, 2, "#8a6420");
+        }
+        ell(g, 9, 9, 3, 3, "#5a3e14");
+        rect(g, 6, 7, 2, 2, "#ff3d6e");
+        rect(g, 11, 7, 2, 2, "#ff3d6e");
+      },
+      19,
+      19
+    ),
+  hourglass: () =>
+    mob(
+      (g, k) => {
+        rect(g, 3, 0, 18, 3, "#7a5530");
+        rect(g, 3, 21, 18, 3, "#7a5530");
+        for (let y = 3; y < 21; y++) {
+          const half = Math.round(Math.abs(y - 12) * 0.7) + 1;
+          rect(g, 12 - half, y, half * 2, 1, "#cfe6ff");
+          if (y > 12 + (k ? 0 : 1)) rect(g, 12 - half + 1, y, Math.max(0, half * 2 - 2), 1, "#ffd27a");
+        }
+        rect(g, 0, 8, 3, 8, "#7a5530");
+        rect(g, 21, 8, 3, 8, "#7a5530");
+        put(g, 9, 6, "#ff3d6e");
+        put(g, 14, 6, "#ff3d6e");
+      },
+      24,
+      24
+    ),
+  boss_cuckoo: () =>
+    mob(
+      (g, k) => {
+        rect(g, 4, 10, 32, 26, "#6a4628");
+        rect(g, 2, 6, 36, 5, "#4a2e18");
+        rect(g, 10, 14, 20, 16, "#2a1a10");
+        ell(g, 20, 21 - (k ? 2 : 0), 8, 7, "#c48a50");
+        ell(g, 24, 18 - (k ? 2 : 0), 4, 4, "#e0a868");
+        rect(g, 28, 18 - (k ? 2 : 0), 5, 2, "#ffb03a");
+        put(g, 25, 17 - (k ? 2 : 0), "#ff3d6e");
+        rect(g, 14, 3, 12, 4, "#ffd23a");
+        rect(g, 8, 36, 4, 4, "#4a2e18");
+        rect(g, 28, 36, 4, 4, "#4a2e18");
+      },
+      40,
+      40
+    ),
+  boss_tower: () =>
+    mob(
+      (g, k) => {
+        ell(g, 22, 22, 20, 20, "#7a5530");
+        ell(g, 22, 22, 17, 17, "#fff6d8");
+        for (let i = 0; i < 12; i++) {
+          const a = (i / 12) * Math.PI * 2;
+          put(g, 22 + Math.round(Math.cos(a) * 15), 22 + Math.round(Math.sin(a) * 15), "#2a1f40");
+        }
+        rect(g, 22, 8, 1, 14, "#2a1f40");
+        rect(g, 22, 22, k ? 10 : 8, 1, "#2a1f40");
+        rect(g, 13, 17, 4, 2, "#ff3d6e");
+        rect(g, 27, 17, 4, 2, "#ff3d6e");
+        rect(g, 18, 0, 8, 3, "#ffd23a");
+      },
+      44,
+      44
+    ),
 };
 
 /* ───────────── 줍는 것 · 가로등 ───────────── */
@@ -271,6 +383,8 @@ export interface Art {
   shuriken: Cv;
   boomerang: Cv;
   tiles: Cv;
+  /** 맵마다 바닥 (public/survivor/<ground>.png) */
+  stageTiles: Partial<Record<StageId, Cv>>;
   /** 맵 장식 (파일 받으면 채워짐) */
   deco: Record<string, Cv>;
   /** 맵 오브젝트 (성소 · 상인 …) */
@@ -283,30 +397,24 @@ const PROJ: ProjName[] = ["gale", "cyclone", "barrage", "rainbow", "rose", "spar
 
 /* ───────────── 맵 장식 (밟고 지나가는 그림, 부딪히지 않음) ───────────── */
 
-export const DECO: { k: string; w: number; light?: boolean }[] = [
-  { k: "bush", w: 6 },
-  { k: "flowers", w: 5 },
-  { k: "rocks", w: 4 },
-  { k: "tree", w: 4 },
-  { k: "bench", w: 3 },
-  { k: "crates", w: 2 },
-  { k: "sign", w: 2 },
-  { k: "mailbox", w: 1.5 },
-  { k: "pumpkin", w: 2, light: true },
-  { k: "statue", w: 1 },
-  { k: "well", w: 1 },
-  { k: "fountain", w: 1, light: true },
-];
-const DECO_SUM = DECO.reduce((a, d) => a + d.w, 0);
+/** 모든 맵 장식 이름 (파일 받기용) */
+const DECO_KEYS = [...new Set(STAGE_IDS.flatMap((id) => STAGES[id].deco.map((d) => d.k)))];
+/** 장식 목록별 가중치 합 (챕터는 맵과 다른 장식을 씀) */
+const decoSum = new WeakMap<StageDef["deco"], number>();
+const sumOf = (list: StageDef["deco"]) => {
+  let v = decoSum.get(list);
+  if (v === undefined) decoSum.set(list, (v = list.reduce((a, d) => a + d.w, 0)));
+  return v;
+};
 export const DECO_CELL = 150;
-/** 칸 (cx, cy) 의 장식 (없으면 null) — 위치가 늘 같게 해시로 */
-export function decoAt(cx: number, cy: number): { k: string; x: number; y: number; light?: boolean } | null {
+/** 칸 (cx, cy) 의 장식 (없으면 null) — 위치가 늘 같게 해시로 · 맵마다 장식이 다름 */
+export function decoAt(list: StageDef["deco"], cx: number, cy: number): { k: string; x: number; y: number; light?: boolean } | null {
   if (Math.abs(cx) <= 1 && Math.abs(cy) <= 1) return null;
   const h = hash(cx * 7 + 3, cy * 13 + 5);
   if (h > 0.42) return null;
-  let x = hash(cx + 101, cy - 37) * DECO_SUM;
-  let d = DECO[0];
-  for (const e of DECO) {
+  let x = hash(cx + 101, cy - 37) * sumOf(list);
+  let d = list[0];
+  for (const e of list) {
     x -= e.w;
     if (x <= 0) {
       d = e;
@@ -316,10 +424,33 @@ export function decoAt(cx: number, cy: number): { k: string; x: number; y: numbe
   return { k: d.k, x: cx * DECO_CELL + 20 + hash(cx - 7, cy + 77) * (DECO_CELL - 40), y: cy * DECO_CELL + 20 + hash(cx + 55, cy + 3) * (DECO_CELL - 40), light: d.light };
 }
 
+/** 맵 바닥 — 파일이 없으면 골목 바닥을 그 맵 색으로 물들여서 */
+const tintCache = new Map<string, Cv>();
+export function tilesFor(stage: StageId): Cv {
+  const a = getArt();
+  const own = a.stageTiles[stage];
+  if (own) return own;
+  const st = STAGES[stage];
+  if (!st.tint) return a.tiles;
+  const key = `${stage}:${a.tiles.width}`;
+  let c = tintCache.get(key);
+  if (!c) {
+    c = cv(a.tiles.width, a.tiles.height);
+    const x = c.getContext("2d")!;
+    x.drawImage(a.tiles, 0, 0);
+    x.globalCompositeOperation = "color";
+    x.globalAlpha = 0.45;
+    x.fillStyle = st.tint;
+    x.fillRect(0, 0, c.width, c.height);
+    tintCache.set(key, c);
+  }
+  return c;
+}
+
 /* ───────────── 파일 에셋 (있으면 코드 도트 대신) ───────────── */
 
 /** public/survivor/mob/<kind>.png — 걷기 2칸 가로 띠 (칸 너비 = 그림 너비 / 2) */
-export const MOB_FILE: Partial<Record<EnemyKind, string>> = Object.fromEntries((["bat", "slime", "ghost", "skull", "mush", "golem", "boss_jelly", "boss_clock"] as const).map((k) => [k, `/survivor/mob/${k}.png`]));
+export const MOB_FILE: Partial<Record<EnemyKind, string>> = Object.fromEntries((["bat", "slime", "ghost", "skull", "mush", "golem", "boss_jelly", "boss_clock", "mouse", "tin", "cuckoo", "gear", "hourglass", "boss_cuckoo", "boss_tower"] as const).map((k) => [k, `/survivor/mob/${k}.png`]));
 /** public/survivor/item/<name>.png */
 export const ITEM_FILE: Record<string, string> = Object.fromEntries(["gem0", "gem1", "gem2", "gem3", "coin", "bag", "meat", "magnet", "bomb", "chest", "lamp", "parcel", "umbrella", "shuriken", "boomerang"].map((k) => [k, `/survivor/item/${k}.png`]));
 
@@ -377,25 +508,52 @@ export function loadFiles(): Promise<void> {
       })
     );
   for (const k of Object.keys(a.things) as ThingKind[])
-    jobs.push(
+    if (k !== "lamp" && k !== "spout")
+      jobs.push(
       loadImg(`/survivor/thing/${k}.png`).then((im) => {
         if (im) a.things[k] = cut(im, 0, im.width);
       })
     );
-  for (const d of DECO)
+  for (const k of DECO_KEYS)
     jobs.push(
-      loadImg(`/survivor/deco/${d.k}.png`).then((im) => {
-        if (im) a.deco[d.k] = cut(im, 0, im.width);
+      loadImg(`/survivor/deco/${k}.png`).then((im) => {
+        if (im) a.deco[k] = cut(im, 0, im.width);
       })
     );
-  jobs.push(
-    loadImg("/survivor/ground.png").then((im) => {
-      if (!im) return;
-      a.tiles = cut(im, 0, im.width);
-    })
-  );
+  for (const id of STAGE_IDS)
+    jobs.push(
+      loadImg(`/survivor/${STAGES[id].ground}.png`).then((im) => {
+        if (!im) return;
+        a.stageTiles[id] = cut(im, 0, im.width);
+        if (id === "town") a.tiles = a.stageTiles[id]!;
+      })
+    );
   fileLoad = Promise.all(jobs).then(() => {});
   return fileLoad;
+}
+
+/* ───────────── 럭키 출격: 디펜스 유닛 그림 (public/defense/units/<id>.webp, 160×160 · 발 아래 4%) ───────────── */
+
+const unitCache = new Map<string, Cv | null>();
+/** 화면 높이 h(px) 로 줄인 유닛 그림 (처음 부르면 받기 시작하고 null) */
+export function unitArt(id: string, h: number): Cv | null {
+  const key = `${id}@${h}`;
+  if (unitCache.has(key)) return unitCache.get(key)!;
+  unitCache.set(key, null);
+  void loadImg(`/defense/units/${id}.webp`).then((im) => {
+    if (!im) return;
+    // 두 번에 나눠 줄여서 덜 뭉개지게
+    const mid = cv(h * 2, h * 2);
+    const mx = mid.getContext("2d")!;
+    mx.imageSmoothingQuality = "high";
+    mx.drawImage(im, 0, 0, h * 2, h * 2);
+    const c = cv(h, h);
+    const x = c.getContext("2d")!;
+    x.imageSmoothingQuality = "high";
+    x.drawImage(mid, 0, 0, h, h);
+    unitCache.set(key, c);
+  });
+  return null;
 }
 
 let art: Art | null = null;
@@ -527,6 +685,7 @@ export function getArt(): Art {
     shuriken,
     boomerang,
     tiles: makeTiles(),
+    stageTiles: {},
     deco: {},
     things: thingArt(),
     proj: {},
@@ -550,6 +709,8 @@ function thingArt(): Record<ThingKind, Cv> {
   return {
     shrine: small((g) => pedestal(g, "#4ff0c8", "#e8fff8"), 18, 20),
     gshrine: small((g) => pedestal(g, "#ffd23a", "#fff6c8"), 18, 20),
+    lamp: small((g) => pedestal(g, "#ffb03a", "#fff2c0"), 18, 20),
+    spout: small((g) => pedestal(g, "#7ad7ff", "#e8fbff"), 18, 20),
     statue: small(
       (g) => {
         rect(g, 2, 17, 14, 3, "#7a5a20");
@@ -712,22 +873,26 @@ interface Sheet {
 export interface HeroFrame {
   r: Cv;
   l: Cv;
-  /** 발 위치 (그림 안 px) */
+  /** 발 위치 (세계 px) */
   fx: number;
   fy: number;
+  /** 그림 해상도 배율 (그림 px ÷ q = 세계 px) — 고해상도 화면에서 또렷하게 */
+  q: number;
 }
 export interface HeroArt {
   idle: HeroFrame[];
   walk: HeroFrame[];
+  /** 필살기 자세 (시트에 있으면 — 픽셀 순찰대) */
+  ult?: HeroFrame[];
 }
 
 const heroCache = new Map<string, Promise<HeroArt>>();
-/** 시트를 키 h(px) 로 미리 줄여 둠 (매 프레임 큰 그림을 줄이면 느리고 흐려짐) */
-export function loadHero(sprite: string, h = 36): Promise<HeroArt> {
-  const key = `${sprite}:${h}`;
+/** 시트를 키 h(세계 px) × q 로 미리 줄여 둠 (매 프레임 큰 그림을 줄이면 느리고 흐려짐) — 그릴 때 q 로 나눠서 */
+export function loadHero(sprite: string, h = 36, q = 1): Promise<HeroArt> {
+  const key = `${sprite}:${h}:${q}`;
   let p = heroCache.get(key);
   if (!p) {
-    p = fetch(`/fight/${sprite}.json`)
+    p = fetch(sprite.includes("/") ? `/${sprite}.json` : `/fight/${sprite}.json`)
       .then((r) => r.json() as Promise<Sheet>)
       .then(
         (sh) =>
@@ -735,7 +900,7 @@ export function loadHero(sprite: string, h = 36): Promise<HeroArt> {
             const img = new Image();
             img.onload = () => {
               const ref = sh.frames[sh.anims.idle?.list?.[0] ?? 0];
-              const s = h / ref[3];
+              const s = (h * q) / ref[3];
               const flipSrc = sh.facing === "left";
               const make = (i: number): HeroFrame => {
                 const [sx, sy, sw, shh, fx, fy] = sh.frames[i];
@@ -755,10 +920,10 @@ export function loadHero(sprite: string, h = 36): Promise<HeroArt> {
                 };
                 const right = mk(flipSrc);
                 const left = mk(!flipSrc);
-                return { r: right, l: left, fx: fx * s, fy: fy * s };
+                return { r: right, l: left, fx: (fx * s) / q, fy: (fy * s) / q, q };
               };
               const list = (k: string) => (sh.anims[k]?.list ?? sh.anims.idle?.list ?? [0]).map(make);
-              res({ idle: list("idle"), walk: list("walk") });
+              res({ idle: list("idle"), walk: list("walk"), ...(sh.anims.ult?.list && { ult: sh.anims.ult.list.map(make) }) });
             };
             img.onerror = rej;
             img.src = sh.image;
