@@ -3712,13 +3712,13 @@ function endRun(result){
     </div>
     <p>카이 · 획득 순서대로${extras ? ' · ' + extras : ''}</p>
     <div class="build">${build}</div>
-    <div class="row"><button class="big" type="button" id="bAgain">한 판 더</button><button type="button" id="bSame">같은 시드로</button><button type="button" id="bPData">플레이 데이터</button></div>
+    <div class="row"><button class="big" type="button" id="bAgain">한 판 더</button><button type="button" id="bHome">홈으로</button><button type="button" id="bPData">플레이 데이터</button></div>
     <details><summary>런 로그 (seed ${G.seed})</summary><pre id="logPre"></pre></details>
   </div>`;
   el.querySelector('#logPre').textContent = JSON.stringify(G.log, null, 1);
   el.hidden = false;
   el.querySelector('#bAgain').onclick = () => newRun(0);
-  const s = G.seed; el.querySelector('#bSame').onclick = () => newRun(s); el.querySelector('#bPData').onclick = openPlayData;
+  el.querySelector('#bHome').onclick = goHome; el.querySelector('#bPData').onclick = openPlayData;
 }
 
 /* ---------- 이야기 ---------- */
@@ -4308,6 +4308,7 @@ $('tsStory').onclick = () => { codexTab = 'story'; toggleCodex(); };
 $('tsNotes').onclick = openNotes; $('tsData').onclick = openPlayData; $('notesDot').hidden = notesSeen();
 $('tsSnd').onclick = () => $('bMute').click(); $('tsBgm').onclick = () => $('bBgm').click(); $('tsFull').onclick = () => $('bFull').click();
 setInterval(() => { if (!$('start').hidden){ tipI++; const el = $('tsTip'); if (el) el.innerHTML = '<b>TIP</b>' + esc(TIPS[tipI % TIPS.length]); } }, 7000);
+function goHome(){ running = false; paused = false; $('pause').hidden = true; $('result').hidden = true; refreshStart(); $('start').hidden = false; }
 $('bSaveQuit').onclick = () => { if (!G) return; running = false; paused = false; $('pause').hidden = true; refreshStart(); $('start').hidden = false; };
 $('bStart').onclick = startGame;
 document.addEventListener('click', e => { if (e.target.closest && e.target.closest('button') && !e.target.closest('#stNext')) sfx('click'); }, true);
