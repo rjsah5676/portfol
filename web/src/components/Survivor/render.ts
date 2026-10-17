@@ -1,7 +1,7 @@
 /*
  * 픽셀 타운 서바이버 — 캔버스 그리기 (512 × 288 도트 화면, 밖에서 정수배로 키움)
  */
-import { ENEMIES, FLAG_CHARGE, GUARD_HP, GUARD_R, LAMP_CHARGE, SHRINE_CHARGE, SPOUT_FUSE, SPOUT_R, TRIAL_R, VIEW_H, VIEW_W, WEAPONS, type EnemyKind, type ThingKind } from "@/lib/survivor/data";
+import { BEACON, ENEMIES, FLAG_CHARGE, FOG_R, GUARD_HP, GUARD_R, TIDE_H, LAMP_CHARGE, SHRINE_CHARGE, SPOUT_FUSE, SPOUT_R, TRIAL_R, VIEW_H, VIEW_W, WEAPONS, type EnemyKind, type ThingKind } from "@/lib/survivor/data";
 import { BEAM_END, BEAM_ON, type Run, type Zone } from "@/lib/survivor/sim";
 import { ARMY_GRADE_COLOR, UNIT } from "@/lib/survivor/army";
 import { DECO_CELL, decoAt, digits, getArt, tilesFor, TILE_CHUNK, unitArt, type HeroArt, type MobArt } from "./art";
@@ -166,6 +166,14 @@ const MOB_COLOR: Record<EnemyKind, string> = {
   boss_cuckoo: "#ffb03a",
   boss_tower: "#ffd23a",
   goblin: "#ffd23a",
+  crab: "#ff5a3d",
+  gull: "#e8e4ff",
+  sailor: "#e8dcc0",
+  jelly: "#b48cff",
+  barnacle: "#6b7a70",
+  boss_crab: "#ff5a3d",
+  boss_captain: "#5fd0c8",
+  boss_kraken: "#9a5fd8",
 };
 export const mobColor = (k: EnemyKind) => MOB_COLOR[k];
 
@@ -322,6 +330,42 @@ export function draw(ctx: CanvasRenderingContext2D, r: Run, fx: Fx, hero: HeroAr
         const a = time * 0.8 + (i / 8) * Math.PI * 2;
         ctx.drawImage(img, Math.round(X(p.x + Math.cos(a) * size) - img.width / 2), Math.round(Y(p.y - 4 + Math.sin(a) * size * 0.8) - img.height / 2));
       }
+    }
+  }
+
+  // 밀물: 바닷물 띠 (차오를 때 · 빠질 때 1초)
+  if (r.tide.on > 0) {
+    const dur = r.ch?.tide?.dur ?? 12;
+    const k = Math.min(1, r.tide.on, dur - r.tide.on + 0.0001);
+    const y0 = Y(r.tide.y - TIDE_H * k);
+    const y1 = Y(r.tide.y + TIDE_H * k);
+    ctx.globalAlpha = 0.42;
+    ctx.fillStyle = "#2a78c8";
+    ctx.fillRect(0, y0, VIEW_W, y1 - y0);
+    ctx.globalAlpha = 0.5;
+    ctx.fillStyle = "#7ad7ff";
+    // 물결 (픽셀 줄)
+    for (let yy = y0 + 6; yy < y1 - 4; yy += 9)
+      for (let xx = -((time * 22 + yy * 3) % 24); xx < VIEW_W; xx += 24) ctx.fillRect(Math.round(xx), Math.round(yy + Math.sin(xx * 0.08 + time * 3) * 1.5), 7, 1);
+    // 가장자리 거품
+    ctx.globalAlpha = 0.85;
+    ctx.fillStyle = "#e8fbff";
+    for (let xx = 0; xx < VIEW_W; xx += 5) {
+      const w = Math.sin(xx * 0.15 + time * 4) * 1.5;
+      ctx.fillRect(xx, Math.round(y0 + w), 3, 2);
+      ctx.fillRect(xx, Math.round(y1 - 2 - w), 3, 2);
+    }
+    ctx.globalAlpha = 1;
+    drawLabel(ctx, "적을 물로!", "#7ad7ff", Math.round(VIEW_W / 2 + Math.sin(time) * 30), y0 - 2, time);
+  }
+
+  // 등대섬: 판 가운데 등대
+  if (r.beacon) {
+    const lh = A.deco.lighthouse;
+    if (lh) {
+      const w = Math.round(lh.width * 1.6);
+      const h = Math.round(lh.height * 1.6);
+      ctx.drawImage(lh, X(BEACON.x) - (w >> 1), Y(BEACON.y) - h + 6, w, h);
     }
   }
 
@@ -1008,6 +1052,11 @@ export function draw(ctx: CanvasRenderingContext2D, r: Run, fx: Fx, hero: HeroAr
   // 밤 (플레이어 · 가로등 · 상자 주변만 밝게)
   drawNight(ctx, r, X, Y, time);
 
+  // 안개: 내 주변만 보임
+  if (r.fog.on > 0) drawFog(ctx, r, X, Y, time);
+  // 등대섬 빛줄기 (밤 위에 더해서 밝게)
+  if (r.beacon) drawBeacon(ctx, r, X, Y, time);
+
   // 빛 (밤 위에 더해 그림): 랜턴 빛살 · 불씨 · 등대
   drawLight(ctx, r, X, Y, time);
   drawSpikes(ctx, fx, X, Y);
@@ -1188,6 +1237,8 @@ function drawArrows(ctx: CanvasRenderingContext2D, r: Run, things: Record<ThingK
     const img = t.k === "lamp" || t.k === "guard" ? A.lamp : t.k === "spout" ? (A.deco.fountain ?? things.fountain) : things[t.k];
     marks.push({ x: t.x, y: t.y, c: ARROW_C[t.k], img, pulse: t.k === "trial" || t.k === "merchant" || t.k === "fountain" || t.k === "spout" || t.k === "guard" || (t.k === "lamp" && !t.on), far: t.k === "guard" ? 2000 : 760 });
   }
+  // 등대섬: 등대 위치
+  if (r.beacon && A.deco.lighthouse) marks.push({ x: BEACON.x, y: BEACON.y - 30, c: "#ffe9a0", img: A.deco.lighthouse, pulse: false, far: 3000 });
   // 정예 · 보스 (빨간 화살표, 멀어도 보임)
   for (const e of r.enemies) {
     if (!e.alive || !(e.elite || e.def.boss || e.kind === "goblin")) continue;
@@ -1277,6 +1328,79 @@ function drawNight(ctx: CanvasRenderingContext2D, r: Run, X: (x: number) => numb
   ctx.imageSmoothingEnabled = true;
   ctx.drawImage(night, 0, 0);
   ctx.imageSmoothingEnabled = false;
+}
+
+let fogCv: HTMLCanvasElement | null = null;
+function drawFog(ctx: CanvasRenderingContext2D, r: Run, X: (x: number) => number, Y: (y: number) => number, time: number) {
+  if (!fogCv) {
+    fogCv = document.createElement("canvas");
+    fogCv.width = VIEW_W;
+    fogCv.height = VIEW_H;
+  }
+  const dur = r.ch?.fog?.dur ?? 15;
+  const k = Math.min(1, r.fog.on / 1.5, (dur - r.fog.on) / 1.5 + 0.0001);
+  const f = fogCv.getContext("2d")!;
+  f.globalCompositeOperation = "source-over";
+  f.clearRect(0, 0, VIEW_W, VIEW_H);
+  f.fillStyle = `rgba(120, 142, 160, ${0.9 * k})`;
+  f.fillRect(0, 0, VIEW_W, VIEW_H);
+  // 흐르는 안개 띠
+  f.fillStyle = `rgba(190, 210, 222, ${0.25 * k})`;
+  for (let i = 0; i < 6; i++) {
+    const y = ((i * 53 + time * 9) % (VIEW_H + 40)) - 20;
+    f.fillRect(0, Math.round(y), VIEW_W, 10 + (i % 3) * 4);
+  }
+  f.globalCompositeOperation = "destination-out";
+  const x = X(r.p.x);
+  const y = Y(r.p.y - 8);
+  const R = FOG_R + (1 - k) * 200;
+  const g = f.createRadialGradient(x, y, R * 0.55, x, y, R);
+  g.addColorStop(0, "rgba(0,0,0,1)");
+  g.addColorStop(1, "rgba(0,0,0,0)");
+  f.fillStyle = g;
+  f.fillRect(x - R, y - R, R * 2, R * 2);
+  ctx.imageSmoothingEnabled = true;
+  ctx.drawImage(fogCv, 0, 0);
+  ctx.imageSmoothingEnabled = false;
+}
+
+/** 등대섬: 빛줄기 두 갈래 (부채꼴) + 빛 먼지 */
+function drawBeacon(ctx: CanvasRenderingContext2D, r: Run, X: (x: number) => number, Y: (y: number) => number, time: number) {
+  const b = r.beacon!;
+  const cx = X(BEACON.x);
+  // 빛줄기는 바닥(판정과 같은 자리)에서, 렌즈는 등대 꼭대기
+  const cy = Y(BEACON.y);
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+  for (let k = 0; k < 2; k++) {
+    const a = b.ang + k * Math.PI;
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.scale(1, 0.8);
+    const g = ctx.createRadialGradient(0, 0, 4, 0, 0, BEACON.len);
+    g.addColorStop(0, "rgba(255, 240, 180, 0.55)");
+    g.addColorStop(1, "rgba(255, 220, 140, 0)");
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.arc(0, 0, BEACON.len, a - BEACON.half, a + BEACON.half);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+    // 빛 먼지
+    ctx.fillStyle = "rgba(255, 246, 200, 0.8)";
+    for (let i = 0; i < 10; i++) {
+      const d = ((i * 37 + time * 40) % BEACON.len) | 0;
+      const off = Math.sin(i * 1.7 + time) * BEACON.half * 0.8;
+      ctx.fillRect(Math.round(cx + Math.cos(a + off) * d), Math.round(cy + Math.sin(a + off) * d * 0.8), 2, 2);
+    }
+  }
+  // 렌즈
+  ctx.fillStyle = `rgba(255, 246, 200, ${0.7 + Math.sin(time * 6) * 0.2})`;
+  ctx.beginPath();
+  ctx.arc(cx, cy - 104, 7, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
 }
 
 function drawArenaFloor(ctx: CanvasRenderingContext2D, r: Run, X: (x: number) => number, Y: (y: number) => number, time: number) {

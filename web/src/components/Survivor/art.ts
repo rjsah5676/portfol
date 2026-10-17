@@ -3,7 +3,7 @@
  * 몹 · 아이템은 에셋이 오기 전까지 코드로 찍은 도트(자동 외곽선)로 그림.
  * 에셋이 생기면 ENEMY_IMG 등에 파일 경로만 채우면 그쪽을 씀.
  */
-import { STAGES, STAGE_IDS, type EnemyKind, type PickupKind, type StageDef, type StageId, type ThingKind } from "@/lib/survivor/data";
+import { ALL_STAGE_IDS, ENEMIES, STAGES, type EnemyKind, type PickupKind, type StageDef, type StageId, type ThingKind } from "@/lib/survivor/data";
 
 export type Cv = HTMLCanvasElement;
 
@@ -74,6 +74,20 @@ export interface MobArt {
   foot: number;
 }
 
+/** 그림 없는 몹: 동글동글 덩어리 (파일이 곧 덮어씀) */
+function blobMob(r: number): MobArt {
+  const s = Math.max(8, Math.round(r * 2 + 2));
+  return mob(
+    (g, k) => {
+      ell(g, s / 2, s / 2 + (k ? 0.5 : 0), s / 2 - 1, s / 2 - 1 - (k ? 0.5 : 0), "#6b7fb8");
+      put(g, Math.round(s / 2) - 2, Math.round(s / 2) - 1, "#ffffff");
+      put(g, Math.round(s / 2) + 2, Math.round(s / 2) - 1, "#ffffff");
+    },
+    s,
+    s
+  );
+}
+
 function mob(draw: (g: Grid, k: number) => void, w: number, h: number): MobArt {
   const f: Cv[] = [];
   const wt: Cv[] = [];
@@ -92,7 +106,8 @@ const eyes = (g: Grid, x: number, y: number, gap: number, c = "#ff3d6e") => {
   put(g, x + gap, y, c);
 };
 
-const DRAW: Record<EnemyKind, () => MobArt> = {
+/** 코드 도트 (파일 오기 전 · 파일 없는 몹은 아래 blob) */
+const DRAW: Partial<Record<EnemyKind, () => MobArt>> = {
   bat: () =>
     mob(
       (g, k) => {
@@ -425,7 +440,7 @@ const PROJ: ProjName[] = ["gale", "cyclone", "barrage", "rainbow", "rose", "spar
 /* ───────────── 맵 장식 (밟고 지나가는 그림, 부딪히지 않음) ───────────── */
 
 /** 모든 맵 장식 이름 (파일 받기용) */
-const DECO_KEYS = [...new Set(STAGE_IDS.flatMap((id) => STAGES[id].deco.map((d) => d.k)))];
+const DECO_KEYS = [...new Set(ALL_STAGE_IDS.flatMap((id) => STAGES[id].deco.map((d) => d.k)))];
 /** 장식 목록별 가중치 합 (챕터는 맵과 다른 장식을 씀) */
 const decoSum = new WeakMap<StageDef["deco"], number>();
 const sumOf = (list: StageDef["deco"]) => {
@@ -477,7 +492,7 @@ export function tilesFor(stage: StageId): Cv {
 /* ───────────── 파일 에셋 (있으면 코드 도트 대신) ───────────── */
 
 /** public/survivor/mob/<kind>.png — 걷기 2칸 가로 띠 (칸 너비 = 그림 너비 / 2) */
-export const MOB_FILE: Partial<Record<EnemyKind, string>> = Object.fromEntries((["bat", "slime", "ghost", "skull", "mush", "golem", "boss_jelly", "boss_clock", "mouse", "tin", "cuckoo", "gear", "hourglass", "boss_cuckoo", "boss_tower", "goblin"] as const).map((k) => [k, `/survivor/mob/${k}.png`]));
+export const MOB_FILE: Partial<Record<EnemyKind, string>> = Object.fromEntries((["bat", "slime", "ghost", "skull", "mush", "golem", "boss_jelly", "boss_clock", "mouse", "tin", "cuckoo", "gear", "hourglass", "boss_cuckoo", "boss_tower", "goblin", "crab", "gull", "sailor", "jelly", "barnacle", "boss_crab", "boss_captain", "boss_kraken"] as const).map((k) => [k, `/survivor/mob/${k}.png`]));
 /** public/survivor/item/<name>.png */
 export const ITEM_FILE: Record<string, string> = Object.fromEntries(["gem0", "gem1", "gem2", "gem3", "coin", "bag", "meat", "magnet", "bomb", "chest", "lamp", "parcel", "umbrella", "shuriken", "boomerang"].map((k) => [k, `/survivor/item/${k}.png`]));
 
@@ -547,7 +562,7 @@ export function loadFiles(): Promise<void> {
         if (im) a.deco[k] = cut(im, 0, im.width);
       })
     );
-  for (const id of STAGE_IDS)
+  for (const id of ALL_STAGE_IDS)
     jobs.push(
       loadImg(`/survivor/${STAGES[id].ground}.png`).then((im) => {
         if (!im) return;
@@ -587,7 +602,7 @@ let art: Art | null = null;
 export function getArt(): Art {
   if (art) return art;
   const mobs = {} as Record<EnemyKind, MobArt>;
-  for (const k of Object.keys(DRAW) as EnemyKind[]) mobs[k] = DRAW[k]();
+  for (const k of Object.keys(ENEMIES) as EnemyKind[]) mobs[k] = DRAW[k]?.() ?? blobMob(ENEMIES[k].r);
   const pick: Record<PickupKind, Cv> = {
     coin: small(
       (g) => {

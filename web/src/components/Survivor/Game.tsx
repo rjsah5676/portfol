@@ -281,12 +281,13 @@ const dark = (hex: string) => {
   return `rgb(${f((v >> 16) & 255)},${f((v >> 8) & 255)},${f(v & 255)})`;
 };
 /** 판 음악: 순찰대는 챕터마다 (곡이 없으면 1장 곡) · 서바이버는 밤 */
-const CH_BGM: Record<number, string> = { 1: "pt_ch1", 2: "pt_ch2", 3: "pt_ch3" };
-const HAS_BGM = new Set(["pt_ch1", "pt_ch2"]);
+const CH_BGM: Record<number, string> = { 1: "pt_ch1", 2: "pt_ch2", 3: "pt_ch3", 4: "pt_ch4", 5: "pt_ch5", 6: "pt_ch6" };
+const HAS_BGM = new Set(["pt_ch1", "pt_ch2", "pt_ch3", "pt_ch4", "pt_ch5", "pt_ch6"]);
 const stageBgm = (r: Run) => {
   if (!r.ch) return "night";
   const n = CH_BGM[r.ch.id] ?? "pt_ch1";
-  return HAS_BGM.has(n) ? n : "pt_ch1";
+  // 곡이 아직 없으면: 구역 2 는 밤 축제(2장) 곡 · 나머지는 1장 곡
+  return HAS_BGM.has(n) ? n : r.ch.id >= 4 ? "pt_ch2" : "pt_ch1";
 };
 /** 필살기 컷인 그림 (public/patrol/cutin) */
 const CUTIN: Partial<Record<HeroId, string>> = { bandi: "/patrol/cutin/bandi.webp" };
@@ -637,6 +638,11 @@ export default function Game({ setup, onEnd, onQuit }: { setup: GameSetup; onEnd
           case "trial":
             sfx(e.ok ? "jackpot" : "curse");
             say(e.ok ? "시련 성공! 보물 상자 · 큰 경험치" : "원 밖으로 나가서 시련 실패…", e.ok ? "#ffd23a" : "#ff4fa3");
+            break;
+          case "tide":
+            say("🌊 밀물! 물 안 적은 느리고 약해져요", "#5fb8ff");
+            sfx("toll", { rate: 0.7, vol: 0.7 });
+            fx.shake = Math.max(fx.shake, 2);
             break;
           case "toll":
             if (e.on) {

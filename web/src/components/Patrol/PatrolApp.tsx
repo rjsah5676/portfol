@@ -69,6 +69,14 @@ const GUEST: PatrolProfile = {
   now: 0,
 };
 
+/** 챕터 배너: 1~2 마을 · 3 시계탑 · 4~5 항구 · 6 등대섬 */
+function chBanner(ch: number): { img: string; filter: string } {
+  if (ch <= 2) return { img: "town", filter: `hue-rotate(${(ch - 1) * 25}deg) brightness(${1 - (ch - 1) * 0.12})` };
+  if (ch === 3) return { img: "clock", filter: "none" };
+  if (ch <= 5) return { img: "harbor", filter: ch === 5 ? "hue-rotate(-18deg) saturate(1.15)" : "none" };
+  return { img: "isle", filter: "none" };
+}
+
 export default function PatrolApp() {
   const { profile: account } = useAuth();
   const member = !!account;
@@ -304,7 +312,7 @@ function Lobby({ prof, member, loaded, st, open, onSt, note, skew, onProf, onSta
       {/* 오른쪽: 챕터 */}
       <div className="pts-win absolute top-[62px] right-[18px] bottom-[96px] left-[366px] flex flex-col overflow-hidden">
         <div className="relative h-[150px] shrink-0 overflow-hidden">
-          <img src="/survivor/stage/town.webp" alt="" className="absolute inset-0 h-full w-full object-cover" style={{ imageRendering: "pixelated", filter: `hue-rotate(${(ch - 1) * 25}deg) brightness(${1 - (ch - 1) * 0.12})` }} draggable={false} />
+          <img src={`/survivor/stage/${chBanner(ch).img}.webp`} alt="" className="absolute inset-0 h-full w-full object-cover" style={{ imageRendering: "pixelated", filter: chBanner(ch).filter }} draggable={false} />
           <div className="absolute inset-0" style={{ background: "linear-gradient(180deg, rgba(22,18,61,0) 30%, #16123d)" }} />
           <div className="absolute top-[10px] left-[10px] z-10">
             <button type="button" disabled={ch <= 1} onClick={() => goCh(ch - 1)} className="pts-btn ghost h-[44px] w-[34px] text-[16px]">
@@ -374,15 +382,15 @@ function Lobby({ prof, member, loaded, st, open, onSt, note, skew, onProf, onSta
             );
           })}
         </div>
-        <div className="flex flex-1 gap-[16px] px-[16px] py-[10px] text-[12px]">
-          <div className="flex flex-1 flex-col gap-[6px]">
+        <div className="flex min-h-0 flex-1 gap-[16px] overflow-hidden px-[16px] py-[7px] text-[12px]">
+          <div className="flex flex-1 flex-col gap-[4px]">
             <span>
               <b className="text-[#ffd27a]">{stName(st)}</b> {def.kind && <b style={{ color: STAGE_KIND[def.kind].c }}>{STAGE_KIND[def.kind].name} 판</b>} <span className="text-[#a9a2d6]">{def.len / 60}분 버티고</span> <b className="text-[#ff8fb8]">{ENEMIES[def.final].name}</b> <span className="text-[#a9a2d6]">처치</span>
             </span>
             <span className="text-[#a9a2d6]">
               적 체력 ×{def.hp} · 피해 ×{def.dmg} · 추천 전투력{" "}
               <b style={{ color: !member || powerScore(gp) >= recPower(st) ? "#4ff0c8" : "#ff8fb8" }}>{recPower(st).toLocaleString()}</b>
-              {member && powerScore(gp) < recPower(st) && <span className="text-[#ff8fb8]"> (내 {powerScore(gp).toLocaleString()} — 장비를 키워요)</span>}
+              {member && powerScore(gp) < recPower(st) && <span className="text-[#ff8fb8]"> (내 {powerScore(gp).toLocaleString()})</span>}
             </span>
             {/* 이 판 기믹: 아이콘 · 이름 · 할 일 한 줄 (마우스를 올리면 전부) */}
             {guidesOf(def).length ? (
@@ -393,7 +401,7 @@ function Lobby({ prof, member, loaded, st, open, onSt, note, skew, onProf, onSta
                     <span>{g.icon}</span>
                     <span>
                       <b style={{ color: g.c }}>{g.title}</b> <span className="text-[#e8e4ff]">— {g.steps[0]}</span>
-                      {g.steps[1] && <span className="block text-[11px] text-[#a9a2d6]">{g.steps[1]}</span>}
+                      {g.steps[1] && guidesOf(def).length === 1 && <span className="block text-[11px] text-[#a9a2d6]">{g.steps[1]}</span>}
                     </span>
                   </span>
                 );
@@ -401,7 +409,7 @@ function Lobby({ prof, member, loaded, st, open, onSt, note, skew, onProf, onSta
             ) : (
               def.tip && <span className="text-[#ffd27a]">{def.tip}</span>
             )}
-            <div className="flex flex-col gap-[2px]">
+            <div className="flex flex-col gap-[1px] leading-[16px]">
               {labels.map((t, i) => (
                 <span key={i} style={{ color: stars[i] ? "#ffd23a" : "#6b63a3" }}>
                   ★ {t}
@@ -429,7 +437,7 @@ function Lobby({ prof, member, loaded, st, open, onSt, note, skew, onProf, onSta
             {note && <span className="text-[12px] text-[#ff8fb8]">{note}</span>}
           </div>
         </div>
-        <div className="flex items-center gap-[10px] px-[16px] pb-[12px]">
+        <div className="flex shrink-0 items-center gap-[10px] px-[16px] pb-[12px]">
           {ch === 3 && (prof.bestSt ?? 0) < firstSt(3) + 1 && <span className="text-[11px] leading-[14px] text-[#ff9c7a]">시계탑 아래는 세요 — 막히면 장비를 키우고 다시!</span>}
           <button type="button" disabled={st > open || !loaded} onClick={onStart} className="pts-btn ml-auto h-[52px] w-[220px] text-[22px]" style={btn("#ff4fa3", "#fff")}>
             출동! ▶

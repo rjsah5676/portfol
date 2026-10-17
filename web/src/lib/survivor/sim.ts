@@ -22,6 +22,8 @@ import {
   GUARD_AGGRO,
   GUARD_HP,
   GUARD_R,
+  BEACON,
+  TIDE_H,
   type Quest,
   type GuideK,
   SPOUT_R,
@@ -328,6 +330,7 @@ export type Ev =
   | { t: "thorns"; x: number; y: number; r: number }
   /** 순찰대 기믹이 처음 나옴 → 안내 */
   | { t: "guide"; k: GuideK }
+  | { t: "tide"; y: number }
   | { t: "chest" }
   | { t: "boss"; kind: EnemyKind; arena: boolean }
   | { t: "warn"; text: string }
@@ -409,6 +412,10 @@ export interface Run {
   /** 순찰대 특수 판 목표 진행 (없으면 목표 없음) · 지킬 등불 */
   quest: { q: Quest; got: number; need: number; done: boolean; fail: boolean } | null;
   guard: Thing | null;
+  /** 구역 2 기믹: 밀물 (남은 시간 · 다음 · 띠 가운데 y) · 안개 · 등대 각도 */
+  tide: { on: number; next: number; y: number };
+  fog: { on: number; next: number };
+  beacon: { ang: number; tick: number } | null;
   seed: number;
   rng: Rng;
   t: number;
@@ -551,6 +558,9 @@ export function newRun(hero: HeroId, seed: number, bonus: Partial<Stats> = {}, o
     toll: { on: 0, next: def.toll?.from ?? 1e9 },
     quest: ch?.quest ? { q: ch.quest, got: 0, need: ch.quest.k === "guard" ? 1 : ch.quest.n, done: false, fail: false } : null,
     guard: null,
+    tide: { on: 0, next: ch?.tide?.from ?? 1e9, y: 0 },
+    fog: { on: 0, next: ch?.fog?.from ?? 1e9 },
+    beacon: ch?.beacon ? { ang: 0, tick: 0 } : null,
     wstar: opts.wstars ?? {},
     seed,
     rng: { r: seed | 0 },
@@ -874,6 +884,7 @@ function hurt(r: Run, e: Enemy, dmg: number, slot: number, kb: number, fromX: nu
   if (rel(r, "pillow") && !r.p.moving) mul += 0.2 * rel(r, "pillow");
   if (rel(r, "tailwind") && r.p.moving) mul += 0.1 * rel(r, "tailwind");
   if (r.flag?.k === "might") mul += 0.5;
+  if (inTide(r, e.y)) mul += 0.25;
   const whet = rel(r, "whetstone");
   const crit = r.buff.crit > 0 || rnd(r.rng) < 0.05 + s.luck * 0.015 + whet * 0.06;
   let cm = crit ? 2 + whet * 0.3 : 1;
@@ -1041,10 +1052,30 @@ function kill(r: Run, e: Enemy) {
     r.ev.push({ t: "warn", text: "보물 도깨비를 잡았어요!" });
     return;
   }
+  // 안개 속 처치: 코인을 더 떨굼
+  if (r.fog.on > 0 && rnd(r.rng) < 0.15) dropPickup(r, "coin", e.x, e.y, 2 + Math.floor(r.t / 120));
   const x = rnd(r.rng);
   if (x < 0.035) dropPickup(r, "coin", e.x, e.y, 1 + Math.floor(r.t / 200));
   else if (x < 0.0205) dropPickup(r, "meat", e.x, e.y, 0);
   else if (x < 0.0215) dropPickup(r, "magnet", e.x, e.y, 0);
+}
+
+/** 밀물 띠 안인지 (y 만 봄 — 띠는 가로로 길게) */
+export const inTide = (r: Run, y: number) => r.tide.on > 0 && Math.abs(y - r.tide.y) < TIDE_H;
+/** 등대 빛줄기 안인지 */
+export function inBeacon(r: Run, x: number, y: number) {
+  if (!r.beacon) return false;
+  const dx = x - BEACON.x;
+  const dy = (y - BEACON.y) / 0.8;
+  const d = Math.hypot(dx, dy);
+  if (d > BEACON.len || d < 10) return false;
+  const a = Math.atan2(dy, dx);
+  for (let k = 0; k < 2; k++) {
+    let da = Math.abs(a - (r.beacon.ang + k * Math.PI));
+    da = Math.min(da % (Math.PI * 2), Math.PI * 2 - (da % (Math.PI * 2)));
+    if (da < BEACON.half) return true;
+  }
+  return false;
 }
 
 function questGot(r: Run) {
@@ -1288,7 +1319,7 @@ function movePlayer(r: Run, inp: Input) {
     p.inv = Math.max(p.inv, 0.3);
     r.ev.push({ t: "dash" });
   }
-  const sp = HEROES[r.hero].speed * (1 + r.stats.speed);
+  const sp = HEROES[r.hero].speed * (1 + r.stats.speed) * (inTide(r, r.p.y) ? 0.8 : 1);
   if (p.ultT <= 0 && r.dashes > 0) {
     // 제나 전광석화: 다음 돌진 (가까운 적 쪽으로)
     r.dashes--;
@@ -1400,6 +1431,57 @@ function timeline(r: Run) {
     const ks = st.otElites;
     spawnEnemy(r, ks[rndInt(r.rng, ks.length)], x, y, true);
     r.ev.push({ t: "warn", text: "오버타임 정예!" });
+  }
+  // 밀물 · 안개 (안개 항구): 보스전 중엔 쉼
+  const ch = r.ch;
+  if (ch?.tide) {
+    if (r.tide.on > 0) {
+      r.tide.on -= DT;
+      if (r.tide.on <= 0 || r.arena) {
+        r.tide.on = 0;
+        r.ev.push({ t: "warn", text: "물이 빠졌어요" });
+      }
+    } else if (r.t >= r.tide.next) {
+      r.tide.next += ch.tide.every;
+      if (r.bossId < 0 && !r.arena) {
+        r.tide.on = ch.tide.dur;
+        r.tide.y = r.p.y + (rnd(r.rng) < 0.5 ? -1 : 1) * (60 + rnd(r.rng) * 50);
+        r.ev.push({ t: "tide", y: r.tide.y });
+        r.ev.push({ t: "guide", k: "tide" });
+      }
+    }
+  }
+  if (ch?.fog) {
+    if (r.fog.on > 0) {
+      r.fog.on -= DT;
+      if (r.fog.on <= 0 || r.arena) {
+        r.fog.on = 0;
+        r.ev.push({ t: "warn", text: "안개가 걷혔어요" });
+      }
+    } else if (r.t >= r.fog.next) {
+      r.fog.next += ch.fog.every;
+      if (r.bossId < 0 && !r.arena) {
+        r.fog.on = ch.fog.dur;
+        r.ev.push({ t: "warn", text: "안개가 몰려와요! 가까운 적만 보여요" });
+        r.ev.push({ t: "guide", k: "fog" });
+      }
+    }
+  }
+  if (r.beacon && ch?.beacon) {
+    const bc = r.beacon;
+    bc.ang += ch.beacon.speed * DT;
+    if (r.tick === 180) r.ev.push({ t: "guide", k: "beacon" });
+    // 빛 안: 체력이 참 (초당 2%) · 0.5초마다 빛에 닿은 적이 탐
+    if (inBeacon(r, r.p.x, r.p.y)) r.p.hp = Math.min(maxHp(r), r.p.hp + maxHp(r) * 0.02 * DT);
+    bc.tick -= DT;
+    if (bc.tick <= 0) {
+      bc.tick = 0.5;
+      for (const e of r.enemies)
+        if (e.alive && inBeacon(r, e.x, e.y)) {
+          hurt(r, e, (10 + r.t * 0.12) * (1 + r.stats.might), PROC, 0, BEACON.x, BEACON.y);
+          if (!e.def.boss) e.slow = Math.max(e.slow, 0.6);
+        }
+    }
   }
   // 자정의 종 (시계탑 광장): 울리는 동안 적이 빨라지고 경험치 두 배 — 보스전 중엔 쉼
   if (st.toll) {
@@ -1949,7 +2031,7 @@ function updateEnemies(r: Run) {
     const d = Math.hypot(dx, dy) || 1;
     dx /= d;
     dy /= d;
-    let sp = e.speed * (e.slow > 0 ? 0.45 : 1) * (r.toll.on > 0 && !e.def.boss ? 1.25 : 1);
+    let sp = e.speed * (e.slow > 0 ? 0.45 : 1) * (r.toll.on > 0 && !e.def.boss ? 1.25 : 1) * (!e.def.boss && inTide(r, e.y) ? 0.5 : 1);
     // 등불을 노리는 적: 등불 쪽으로 · 닿으면 멈춰서 갉아먹음
     const gd = r.guard;
     if (e.tgt && gd?.alive) {
@@ -2006,6 +2088,14 @@ function updateEnemies(r: Run) {
       } else if (e.def.move === "dive" && (e.t + e.id * 0.37) % 2.6 < 0.5) {
         // 뻐꾸기: 가끔 확 급강하 (플레이어 걸음보다 조금 느리게 — 피할 수 있게)
         sp *= 1.8;
+      }
+      if (e.def.move === "side") {
+        // 집게 게: 옆걸음 — 다가오면서 좌우로 크게 비킴
+        const w = Math.sin(e.t * 1.6 + e.id) > 0 ? 1 : -1;
+        const ox = -dy * w * 0.9;
+        const oy = dx * w * 0.9;
+        dx = dx * 0.6 + ox;
+        dy = dy * 0.6 + oy;
       }
       if (e.def.move === "wobble") {
         // 박쥐는 흔들흔들

@@ -591,7 +591,16 @@ export type EnemyKind =
   | "boss_cuckoo"
   | "boss_tower"
   // 순찰대 특수 판: 맞으면 금화를 흘리며 도망치는 도깨비
-  | "goblin";
+  | "goblin"
+  // 순찰대 구역 2 「안개 항구」
+  | "crab"
+  | "gull"
+  | "sailor"
+  | "jelly"
+  | "barnacle"
+  | "boss_crab"
+  | "boss_captain"
+  | "boss_kraken";
 
 export interface EnemyDef {
   kind: EnemyKind;
@@ -608,7 +617,7 @@ export interface EnemyDef {
   ghost?: boolean;
   boss?: boolean;
   /** 움직임 버릇: 흔들 (박쥐) · 곧장 질주 (태엽 쥐) · 급강하 (뻐꾸기) */
-  move?: "wobble" | "dart" | "dive" | "flee";
+  move?: "wobble" | "dart" | "dive" | "flee" | "side";
 }
 export const ENEMIES: Record<EnemyKind, EnemyDef> = {
   bat: { kind: "bat", name: "밤박쥐", hp: 5, speed: 46, dmg: 3, r: 5, xp: 1, heavy: 0, move: "wobble" },
@@ -633,6 +642,15 @@ export const ENEMIES: Record<EnemyKind, EnemyDef> = {
   boss_tower: { kind: "boss_tower", name: "멈춘 대시계", hp: 12000, speed: 26, dmg: 28, r: 22, xp: 400, heavy: 1, boss: true },
   /** 순찰대 특수 판: 닿아도 안 아픔 · 도망침 · 맞을 때마다 금화 · 시간 지나면 사라짐 */
   goblin: { kind: "goblin", name: "보물 도깨비", hp: 380, speed: 46, dmg: 0, r: 8, xp: 20, heavy: 0.9, ghost: true, move: "flee" },
+  /* 안개 항구 — 바다에서 올라온 것들 */
+  crab: { kind: "crab", name: "집게 게", hp: 30, speed: 34, dmg: 7, r: 7, xp: 2, heavy: 0.3, move: "side" },
+  gull: { kind: "gull", name: "갈매기", hp: 18, speed: 44, dmg: 5, r: 6, xp: 1, heavy: 0.1, ghost: true, move: "dive" },
+  sailor: { kind: "sailor", name: "해골 선원", hp: 50, speed: 33, dmg: 10, r: 8, xp: 3, heavy: 0.45, move: "dart" },
+  jelly: { kind: "jelly", name: "유령 해파리", hp: 60, speed: 22, dmg: 8, r: 9, xp: 3, heavy: 0.3, ghost: true, move: "wobble" },
+  barnacle: { kind: "barnacle", name: "따개비 골렘", hp: 220, speed: 20, dmg: 18, r: 13, xp: 9, heavy: 0.95 },
+  boss_crab: { kind: "boss_crab", name: "집게 대왕", hp: 3600, speed: 40, dmg: 24, r: 20, xp: 160, heavy: 1, boss: true },
+  boss_captain: { kind: "boss_captain", name: "해골 선장", hp: 4200, speed: 36, dmg: 26, r: 18, xp: 200, heavy: 1, boss: true },
+  boss_kraken: { kind: "boss_kraken", name: "안개 크라켄", hp: 15000, speed: 18, dmg: 30, r: 26, xp: 450, heavy: 1, boss: true },
 };
 
 /** 분마다 나오는 적 (가중치) · 화면에 유지할 수 */
@@ -704,7 +722,7 @@ const CLOCK_EVENTS: TimedEvent[] = [
 
 /* ───────────── 스테이지 (맵) ───────────── */
 
-export type StageId = "town" | "clock";
+export type StageId = "town" | "clock" | "harbor" | "isle";
 /** 보스 패턴 (돌아가며) */
 export type BossPhase = "warn" | "ring" | "summon" | "slam" | "fan" | "spiral" | "chime" | "blink";
 export interface StageDef {
@@ -807,9 +825,76 @@ export const STAGES: Record<StageId, StageDef> = {
     toll: { from: 140, every: 100, dur: 12 },
     need: "town",
   },
+  /* 순찰대 구역 2 — 서바이버 고르기에는 안 나옴 (STAGE_IDS 밖) */
+  harbor: {
+    id: "harbor",
+    name: "안개 항구",
+    en: "FOGGY HARBOR",
+    desc: "등대가 꺼지자 안개가 항구를 덮었어요. 바다에서 올라온 것들이 부둣가를 걸어요.",
+    color: "#5fb8ff",
+    waves: CLOCK_WAVES,
+    events: [],
+    mid: "boss_crab",
+    final: "boss_captain",
+    boss: {
+      boss_crab: { order: ["warn", "slam", "summon", "warn", "ring"], minion: "crab" },
+      boss_captain: { order: ["fan", "warn", "summon", "fan", "spiral", "slam"], minion: "sailor" },
+    },
+    opening: ["crab", "gull"],
+    otElites: ["sailor", "jelly", "barnacle"],
+    hp: 1.4,
+    reward: 1.6,
+    ground: "ground_dock",
+    tint: "",
+    deco: [
+      { k: "barrels", w: 4 },
+      { k: "cargo", w: 4 },
+      { k: "bollard", w: 4 },
+      { k: "net", w: 3 },
+      { k: "fishbox", w: 3 },
+      { k: "trap", w: 2 },
+      { k: "anchor", w: 1.5 },
+      { k: "boat", w: 1.5 },
+      { k: "buoy", w: 1.5, light: true },
+      { k: "docklamp", w: 2, light: true },
+    ],
+  },
+  isle: {
+    id: "isle",
+    name: "등대섬",
+    en: "LIGHTHOUSE ISLE",
+    desc: "꺼진 등대가 선 바위섬. 안개 속에서 거대한 그림자가 몸을 일으켜요.",
+    color: "#7ff0d8",
+    waves: CLOCK_WAVES,
+    events: [],
+    mid: "boss_captain",
+    final: "boss_kraken",
+    boss: {
+      boss_captain: { order: ["fan", "warn", "summon", "fan", "spiral", "slam"], minion: "sailor" },
+      boss_kraken: { order: ["slam", "ring", "summon", "spiral", "slam", "chime", "blink"], minion: "jelly" },
+    },
+    opening: ["crab", "jelly"],
+    otElites: ["sailor", "barnacle"],
+    hp: 1.6,
+    reward: 1.8,
+    ground: "ground_isle",
+    tint: "",
+    deco: [
+      { k: "rocks", w: 5 },
+      { k: "anchor", w: 2 },
+      { k: "boat", w: 2 },
+      { k: "net", w: 2 },
+      { k: "barrels", w: 2 },
+      { k: "buoy", w: 1.5, light: true },
+      { k: "docklamp", w: 1.5, light: true },
+    ],
+  },
 };
-export const STAGE_IDS = Object.keys(STAGES) as StageId[];
-export const isStage = (x: unknown): x is StageId => typeof x === "string" && x in STAGES;
+/** 서바이버에서 고를 수 있는 맵 (순찰대 전용 맵은 뺌) */
+export const STAGE_IDS: StageId[] = ["town", "clock"];
+/** 그림을 받아 둘 맵 전부 */
+export const ALL_STAGE_IDS = Object.keys(STAGES) as StageId[];
+export const isStage = (x: unknown): x is StageId => typeof x === "string" && (STAGE_IDS as string[]).includes(x);
 
 /* ───────────── 챕터 (픽셀 순찰대) — 내용은 lib/patrol/chapters ───────────── */
 
@@ -846,10 +931,19 @@ export interface ChapterDef {
   kind?: StageKind;
   /** 특수 판 목표 (별 2 = 목표 달성) */
   quest?: Quest;
+  /** 구역 2 기믹: 밀물 (바닷물 띠) · 안개 (시야 좁아짐) — from 초부터 every 초마다 dur 초 */
+  tide?: { from: number; every: number; dur: number };
+  fog?: { from: number; every: number; dur: number };
+  /** 등대섬: 판 가운데 등대 빛줄기 두 갈래가 돎 (초당 라디안) */
+  beacon?: { speed: number };
 }
+/** 밀물 · 등대 수치 */
+export const TIDE_H = 60;
+export const BEACON = { x: 0, y: -40, len: 320, half: 0.2 };
+export const FOG_R = 105;
 
 /** 순찰대 기믹 안내 (로비 미리보기 · 판에서 처음 나올 때) */
-export type GuideK = "lamp" | "spout" | "toll" | "goblin" | "guard" | "rush";
+export type GuideK = "lamp" | "spout" | "toll" | "goblin" | "guard" | "rush" | "tide" | "fog" | "beacon";
 export const GIMMICK_GUIDE: Record<GuideK, { icon: string; title: string; c: string; steps: string[] }> = {
   lamp: { icon: "💡", title: "꺼진 가로등", c: "#ffb03a", steps: ["옆에 1.5초 서 있으면 켜져요", "켜지는 순간 주변 적이 불타고 치킨이 떨어져요", "켜진 15초 동안 가까이 온 적을 계속 태워요"] },
   spout: { icon: "⛲", title: "분수 물보라", c: "#7ad7ff", steps: ["원이 차오르고 4초 뒤 물보라가 솟아요", "원 안 적은 기절 + 피해 — 적을 끌고 들어가요", "그때 내가 원 안이면 젬이 전부 몰려와요"] },
@@ -857,6 +951,9 @@ export const GIMMICK_GUIDE: Record<GuideK, { icon: string; title: string; c: str
   goblin: { icon: "💰", title: "보물 도깨비", c: "#ffd23a", steps: ["안 아파요 — 도망치니까 쫓아가요", "맞을 때마다 코인, 잡으면 보물 상자", "15초 지나면 사라져요"] },
   guard: { icon: "🏮", title: "등불 지키기", c: "#ffd23a", steps: ["새로 나오는 적의 절반이 등불을 노려요", "등불 곁에서 막아요 — 체력이 0이 되면 꺼져요", "끝까지 지키면 보물 상자 + 섬광"] },
   rush: { icon: "⚔", title: "정예 러시", c: "#ff8a5c", steps: ["정예가 줄줄이 나와요 — 잡을 때마다 보물 상자", "미니 보스 전에 다 잡으면 별"] },
+  tide: { icon: "🌊", title: "밀물", c: "#5fb8ff", steps: ["바닷물이 띠처럼 차올라요 (12초)", "물 안 적은 느려지고 피해를 25% 더 받아요", "나도 물 안에선 조금 느려요 — 적을 물로 몰아요"] },
+  fog: { icon: "🌫", title: "안개", c: "#a9c8d8", steps: ["안개가 껴서 가까운 곳만 보여요 (15초)", "대신 안개 속에서 잡은 적은 코인을 더 떨궈요"] },
+  beacon: { icon: "🗼", title: "도는 등대 빛", c: "#ffe9a0", steps: ["섬 가운데 등대 빛줄기 두 갈래가 돌아요", "빛 안에 서 있으면 체력이 차고, 빛에 닿은 적은 타요", "빛을 따라 걸어요 — 멀리 가면 화살표로 등대 위치"] },
 };
 /** 이 판에 나오는 기믹 (로비 미리보기) */
 export function guidesOf(def: ChapterDef): GuideK[] {
@@ -864,6 +961,9 @@ export function guidesOf(def: ChapterDef): GuideK[] {
   if (def.events.some((e) => e.k === "lamps")) out.push("lamp");
   if (def.events.some((e) => e.k === "spout")) out.push("spout");
   if (def.toll) out.push("toll");
+  if (def.tide) out.push("tide");
+  if (def.fog) out.push("fog");
+  if (def.beacon) out.push("beacon");
   if (def.quest) out.push(def.quest.k);
   return out;
 }

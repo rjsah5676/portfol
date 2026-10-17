@@ -35,10 +35,10 @@ export const runBlueprints = (r: PatrolReport) => (r.win ? (stSub(r.st) === SUB 
 /** 하루 첫 N판은 보상 두 배 */
 export const BOOST_RUNS = 5;
 /** 첫 클리어 보석 · 장비 등급 — 챕터 보스 스테이지(X-5) */
-export const FIRST_GEMS = [300, 300, 500];
-export const FIRST_GEAR: GGrade[] = [1, 1, 2];
+export const FIRST_GEMS = [300, 300, 500, 600, 600, 800];
+export const FIRST_GEAR: GGrade[] = [1, 1, 2, 2, 2, 3];
 /** 첫 클리어 보석 — 짧은 스테이지(X-1 ~ X-4), 챕터별 */
-export const SHORT_GEMS = [60, 80, 100];
+export const SHORT_GEMS = [60, 80, 100, 120, 120, 140];
 /** 스테이지 첫 클리어 보상 */
 export const firstReward = (st: number): { gems: number; gear: GGrade | null } =>
   stSub(st) === SUB ? { gems: FIRST_GEMS[stCh(st) - 1] ?? 300, gear: FIRST_GEAR[stCh(st) - 1] ?? 1 } : { gems: SHORT_GEMS[stCh(st) - 1] ?? 60, gear: null };
@@ -133,4 +133,14 @@ export const STAR_TRACK: { n: number; give: ShopGive }[] = [
   { n: 35, give: { bp: 60, coins: 3000 } },
   { n: 40, give: { wt: 3 } },
   { n: 45, give: { gear: 3 } },
+  // 구역 2 (챕터 4~6)
+  { n: 50, give: { gems: 400 } },
+  { n: 55, give: { wt: 3 } },
+  { n: 60, give: { coins: 5000, bp: 100 } },
+  { n: 65, give: { gems: 500 } },
+  { n: 70, give: { wt: 4 } },
+  { n: 75, give: { gear: 3 } },
+  { n: 80, give: { gems: 600 } },
+  { n: 85, give: { wt: 5 } },
+  { n: 90, give: { gear: 4 } },
 ];

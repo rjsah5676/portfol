@@ -56,6 +56,49 @@ const CLOCK5: WaveDef[] = [
   { at: 280, mix: { hourglass: 4, gear: 3, tin: 3, cuckoo: 3 }, count: 300, rate: 20 },
 ];
 
+/** 구역 2 — 부둣가: 게 · 갈매기 → 해골 선원 */
+const DOCK5: WaveDef[] = [
+  { at: 0, mix: { crab: 6, gull: 4 }, count: 36, rate: 4.2 },
+  { at: 22, mix: { crab: 5, gull: 4, sailor: 1 }, count: 58, rate: 5.8 },
+  { at: 45, mix: { crab: 4, gull: 3, sailor: 3 }, count: 78, rate: 6.8 },
+  { at: 75, mix: { sailor: 4, crab: 3, gull: 3 }, count: 104, rate: 7.8 },
+  { at: 105, mix: { sailor: 5, crab: 3, gull: 2 }, count: 128, rate: 8.8 },
+  { at: 135, mix: { sailor: 5, crab: 4, gull: 2 }, count: 150, rate: 9.8 },
+  { at: 165, mix: { sailor: 4, crab: 4, gull: 3 }, count: 175, rate: 11.3 },
+  { at: 195, mix: { sailor: 5, crab: 4, gull: 2 }, count: 200, rate: 12.8 },
+  { at: 225, mix: { sailor: 5, crab: 3, gull: 3 }, count: 230, rate: 14.3 },
+  { at: 255, mix: { sailor: 5, crab: 4, gull: 4 }, count: 270, rate: 17.3 },
+  { at: 280, mix: { sailor: 6, crab: 4, gull: 4 }, count: 305, rate: 20.5 },
+];
+/** 어시장: + 유령 해파리 */
+const MARKET5: WaveDef[] = [
+  { at: 0, mix: { crab: 5, gull: 4, jelly: 1 }, count: 36, rate: 4.2 },
+  { at: 22, mix: { crab: 4, gull: 3, jelly: 3 }, count: 58, rate: 5.8 },
+  { at: 45, mix: { jelly: 4, sailor: 2, gull: 3 }, count: 78, rate: 6.8 },
+  { at: 75, mix: { jelly: 4, sailor: 3, crab: 3 }, count: 104, rate: 7.8 },
+  { at: 105, mix: { sailor: 4, jelly: 4, gull: 2 }, count: 128, rate: 8.8 },
+  { at: 135, mix: { sailor: 4, jelly: 4, crab: 2 }, count: 150, rate: 9.8 },
+  { at: 165, mix: { sailor: 4, jelly: 4, gull: 3 }, count: 175, rate: 11.3 },
+  { at: 195, mix: { sailor: 5, jelly: 4, crab: 2 }, count: 200, rate: 12.8 },
+  { at: 225, mix: { sailor: 4, jelly: 5, gull: 3 }, count: 230, rate: 14.3 },
+  { at: 255, mix: { sailor: 5, jelly: 4, crab: 4 }, count: 270, rate: 17.3 },
+  { at: 280, mix: { sailor: 5, jelly: 5, gull: 4 }, count: 305, rate: 20.5 },
+];
+/** 등대섬: + 따개비 골렘 */
+const ISLE5: WaveDef[] = [
+  { at: 0, mix: { crab: 5, jelly: 3, gull: 2 }, count: 36, rate: 4.2 },
+  { at: 22, mix: { crab: 4, jelly: 3, sailor: 2 }, count: 58, rate: 5.8 },
+  { at: 45, mix: { sailor: 4, jelly: 3, crab: 3 }, count: 78, rate: 6.8 },
+  { at: 75, mix: { sailor: 4, jelly: 3, barnacle: 1 }, count: 104, rate: 7.8 },
+  { at: 105, mix: { sailor: 4, jelly: 4, barnacle: 1 }, count: 128, rate: 8.8 },
+  { at: 135, mix: { sailor: 4, barnacle: 2, crab: 3 }, count: 150, rate: 9.8 },
+  { at: 165, mix: { sailor: 4, barnacle: 2, jelly: 3 }, count: 175, rate: 11.3 },
+  { at: 195, mix: { barnacle: 3, sailor: 4, gull: 3 }, count: 200, rate: 12.8 },
+  { at: 225, mix: { barnacle: 3, sailor: 4, jelly: 3 }, count: 230, rate: 14.3 },
+  { at: 255, mix: { barnacle: 3, sailor: 5, crab: 4 }, count: 270, rate: 17.3 },
+  { at: 280, mix: { barnacle: 4, sailor: 5, jelly: 4 }, count: 305, rate: 20.5 },
+];
+
 /** 공통 골격 + 챕터 기믹 */
 const ev = (o: { elite1: EnemyKind; ring1: [EnemyKind, number]; mid: TimedEvent; elite2: EnemyKind; ring2: [EnemyKind, number]; final: EnemyKind; extra?: TimedEvent[] }): TimedEvent[] =>
   [
@@ -132,6 +175,61 @@ export const CHAPTERS: ChapterDef[] = [
     final: "boss_tower",
   },
 ];
+// ───── 구역 2 「안개 항구」 ─────
+CHAPTERS.push(
+  {
+    ...base,
+    id: 4,
+    name: "부둣가",
+    tip: "밀물 — 물에 잠긴 곳의 적은 느리고 약해져요",
+    stage: "harbor",
+    waves: DOCK5,
+    // 기믹: 밀물 (50초마다 12초)
+    tide: { from: 50, every: 50, dur: 12 },
+    events: ev({ elite1: "sailor", ring1: ["crab", 36], mid: { at: 150, k: "boss", kind: "boss_crab", arena: false }, elite2: "sailor", ring2: ["gull", 34], final: "boss_crab" }),
+    hp: 2.75,
+    dmg: 1.45,
+    final: "boss_crab",
+    boss: { boss_crab: { order: ["warn", "slam", "summon", "warn", "ring", "slam"], minion: "crab" } },
+  },
+  {
+    ...base,
+    id: 5,
+    name: "어시장",
+    tip: "안개 — 시야가 좁아지지만 처치 코인이 늘어요",
+    stage: "harbor",
+    waves: MARKET5,
+    deco: [
+      { k: "stall", w: 5, light: true },
+      { k: "fishbox", w: 5 },
+      { k: "barrels", w: 3 },
+      { k: "cargo", w: 3 },
+      { k: "net", w: 3 },
+      { k: "trap", w: 2 },
+      { k: "docklamp", w: 2, light: true },
+    ],
+    // 기믹: 안개 (60초마다 15초)
+    fog: { from: 55, every: 60, dur: 15 },
+    events: ev({ elite1: "jelly", ring1: ["jelly", 32], mid: { at: 150, k: "boss", kind: "boss_crab", arena: false }, elite2: "sailor", ring2: ["sailor", 34], final: "boss_captain" }),
+    hp: 3.5,
+    dmg: 1.55,
+    final: "boss_captain",
+  },
+  {
+    ...base,
+    id: 6,
+    name: "등대섬",
+    tip: "도는 등대 빛 — 빛 안에 서면 회복, 빛에 닿은 적은 타요",
+    stage: "isle",
+    waves: ISLE5,
+    // 기믹: 판 가운데 등대 빛줄기 두 갈래
+    beacon: { speed: 0.32 },
+    events: ev({ elite1: "barnacle", ring1: ["crab", 40], mid: { at: 150, k: "boss", kind: "boss_captain", arena: false }, elite2: "sailor", ring2: ["jelly", 38], final: "boss_kraken" }),
+    hp: 4.6,
+    dmg: 1.75,
+    final: "boss_kraken",
+  }
+);
 export const CH_COUNT = CHAPTERS.length;
 export const chapter = (id: number): ChapterDef | undefined => CHAPTERS[id - 1];
 /** 챕터 보상 배율 */
@@ -154,6 +252,9 @@ const RAMP: Record<number, { hp: number[]; dmg: number[] }> = {
   1: { hp: [0.7, 0.75, 0.8, 0.85, 1], dmg: [0.7, 0.75, 0.8, 0.85, 0.9] },
   2: { hp: [1, 1.05, 1.1, 1.15, 1.2], dmg: [0.9, 0.92, 0.94, 0.96, 0.95] },
   3: { hp: [1.6, 1.7, 1.8, 1.95, 2.15], dmg: [1.1, 1.15, 1.2, 1.25, 1.3] },
+  4: { hp: [1.9, 2.0, 2.1, 2.2, 2.25], dmg: [1.25, 1.28, 1.3, 1.33, 1.38] },
+  5: { hp: [2.4, 2.5, 2.6, 2.75, 2.9], dmg: [1.38, 1.4, 1.43, 1.45, 1.48] },
+  6: { hp: [3.0, 3.1, 3.2, 3.3, 4.2], dmg: [1.5, 1.53, 1.56, 1.6, 1.65] },
 };
 /** 짧은 스테이지 재료: 정예 · 포위 몹 · 미니 보스 · 기믹 · 특수 판 목표 */
 type Short = {
@@ -164,7 +265,10 @@ type Short = {
   extra: TimedEvent[];
   toll?: ChapterDef["toll"];
   /** X-2 기믹 판: 기믹이 두 배 */
-  gimmick: { extra: TimedEvent[]; toll?: ChapterDef["toll"]; tip: string };
+  gimmick: { extra: TimedEvent[]; toll?: ChapterDef["toll"]; tide?: ChapterDef["tide"]; fog?: ChapterDef["fog"]; tip: string };
+  /** 짧은 판 밀물 · 안개 */
+  tide?: ChapterDef["tide"];
+  fog?: ChapterDef["fog"];
   /** X-4 포위 판: 돌아가며 에워싸는 몹 */
   siege: EnemyKind[];
   /** X-3 특수 판 */
@@ -203,6 +307,38 @@ const SHORT: Record<number, Short> = {
     siege: ["mouse", "cuckoo", "tin", "mouse", "gear"],
     special: "guard",
   },
+  4: {
+    elite: "sailor",
+    ring: ["crab", 30],
+    elite2: "crab",
+    mini: "boss_crab",
+    extra: [],
+    tide: { from: 40, every: 60, dur: 12 },
+    gimmick: { extra: [], tide: { from: 20, every: 32, dur: 12 }, tip: "밀물이 32초마다 — 적을 물로 몰아서 잡아요" },
+    siege: ["crab", "gull", "sailor", "crab", "gull"],
+    special: "goblin",
+  },
+  5: {
+    elite: "jelly",
+    ring: ["jelly", 30],
+    elite2: "sailor",
+    mini: "boss_crab",
+    extra: [],
+    fog: { from: 45, every: 70, dur: 15 },
+    gimmick: { extra: [], fog: { from: 20, every: 40, dur: 15 }, tip: "안개가 40초마다 — 코인을 쓸어 담을 기회" },
+    siege: ["jelly", "gull", "sailor", "crab", "jelly"],
+    special: "guard",
+  },
+  6: {
+    elite: "sailor",
+    ring: ["crab", 32],
+    elite2: "barnacle",
+    mini: "boss_captain",
+    extra: [],
+    gimmick: { extra: [], tip: "등대 빛이 두 배 빨리 돌아요 — 빛을 따라 달려요" },
+    siege: ["crab", "jelly", "sailor", "gull", "barnacle"],
+    special: "rush",
+  },
 };
 /** 챕터 안 번호 → 판 종류 */
 export const SUB_KIND: StageKind[] = ["basic", "gimmick", "special", "siege", "boss"];
@@ -237,11 +373,17 @@ export function stage(st: number): ChapterDef | undefined {
   const mini: TimedEvent = { at: SHORT_LEN, k: "boss", kind: o.mini, arena: true };
   let events: TimedEvent[];
   let toll = o.toll ?? ch.toll;
+  let tide = o.tide ?? ch.tide;
+  let fog = o.fog ?? ch.fog;
+  let beacon = ch.beacon;
   let tip = ch.tip;
   let quest: Quest | undefined;
   if (kind === "gimmick") {
     events = [{ at: 30, k: "elite", kind: o.elite }, { at: 100, k: "ring", kind: o.ring[0], n: o.ring[1] + 4 }, { at: 140, k: "elite", kind: o.elite2 }, ...o.gimmick.extra];
     toll = o.gimmick.toll ?? toll;
+    tide = o.gimmick.tide ?? tide;
+    fog = o.gimmick.fog ?? fog;
+    if (beacon) beacon = { speed: beacon.speed * 2 };
     tip = o.gimmick.tip;
   } else if (kind === "special") {
     const sp = SPECIAL[o.special];
@@ -251,7 +393,7 @@ export function stage(st: number): ChapterDef | undefined {
     if (o.special !== "rush") events.push({ at: 40, k: "elite", kind: o.elite });
     quest = sp.q;
     tip = sp.tip;
-    toll = undefined;
+    toll = tide = fog = undefined;
   } else if (kind === "siege") {
     // 포위 판: 30초마다 사방에서 · 갈수록 두껍게
     events = [
@@ -260,7 +402,7 @@ export function stage(st: number): ChapterDef | undefined {
       { at: 140, k: "elite", kind: o.elite2, n: 2 },
     ];
     tip = "포위 — 30초마다 사방에서 몰려와요, 대시로 뚫고 나가기";
-    toll = undefined;
+    toll = tide = fog = undefined;
   } else {
     events = [{ at: 30, k: "elite", kind: o.elite }, { at: 100, k: "ring", kind: o.ring[0], n: o.ring[1] + sub * 2 }, { at: 140, k: "elite", kind: o.elite2 }, ...o.extra];
   }
@@ -281,9 +423,12 @@ export function stage(st: number): ChapterDef | undefined {
     dmg,
     bossStar: 30,
     toll,
+    tide,
+    fog,
+    beacon,
   };
 }
 
 /** 추천 전투력 (봇 시뮬로 클리어 80% 안팎이 되는 장비 전투력) — 스테이지 번호 순 */
-const REC_POWER = [100, 100, 110, 120, 130, 150, 170, 190, 210, 260, 500, 560, 620, 700, 800];
+const REC_POWER = [100, 100, 110, 120, 130, 150, 170, 190, 210, 260, 500, 560, 620, 700, 800, 850, 900, 950, 1000, 1100, 1150, 1200, 1260, 1320, 1450, 1500, 1580, 1660, 1750, 1900];
 export const recPower = (st: number) => REC_POWER[st - 1] ?? REC_POWER[REC_POWER.length - 1];
