@@ -319,10 +319,11 @@ export type Ev =
   | { t: "lvl"; lv: number }
   | { t: "pick"; k: PickupKind; v: number }
   | { t: "hurt"; v: number }
-  | { t: "boom"; x: number; y: number; r: number; c: string }
+  | { t: "boom"; x: number; y: number; r: number; c: string; w?: WeaponId }
   | { t: "bolt"; x: number; y: number; r: number; j?: boolean }
   | { t: "dice"; x: number; y: number; face: number }
   | { t: "fire"; w: WeaponId }
+  | { t: "thorns"; x: number; y: number; r: number }
   | { t: "chest" }
   | { t: "boss"; kind: EnemyKind; arena: boolean }
   | { t: "warn"; text: string }
@@ -399,6 +400,8 @@ export interface Run {
   army: Army | null;
   /** 자정의 종 (시계탑 광장): 남은 울림 시간 · 다음 울림 시각 */
   toll: { on: number; next: number };
+  /** 순찰대 무기 별 */
+  wstar: Partial<Record<WeaponId, number>>;
   /** 순찰대 특수 판 목표 진행 (없으면 목표 없음) · 지킬 등불 */
   quest: { q: Quest; got: number; need: number; done: boolean; fail: boolean } | null;
   guard: Thing | null;
@@ -513,6 +516,8 @@ export interface RunOpts {
   chapter?: ChapterDef;
   /** 장비: 공격력 (피해 ×(1+atk/100)) · 무기 칸 시작 무기 · 판 시작 때 받는 유물 */
   gear?: { atk: number; weapon?: WeaponId; wlv?: number; relics?: RelicId[] };
+  /** 순찰대 무기 별 (1~5) — 피해 +5%씩 · ★3 고유 효과 · ★5 Lv5 +1개 */
+  wstars?: Partial<Record<WeaponId, number>>;
 }
 
 /** 판 맵 정의: 챕터면 바탕 맵에 챕터 웨이브 · 이벤트 · 보스 · 배율을 얹음 */
@@ -542,6 +547,7 @@ export function newRun(hero: HeroId, seed: number, bonus: Partial<Stats> = {}, o
     toll: { on: 0, next: def.toll?.from ?? 1e9 },
     quest: ch?.quest ? { q: ch.quest, got: 0, need: ch.quest.k === "guard" ? 1 : ch.quest.n, done: false, fail: false } : null,
     guard: null,
+    wstar: opts.wstars ?? {},
     seed,
     rng: { r: seed | 0 },
     t: 0,
@@ -600,7 +606,7 @@ export function newRun(hero: HeroId, seed: number, bonus: Partial<Stats> = {}, o
           { at: 440, k: "fountain" },
           { at: 515, k: "trial" },
         ],
-    pool: ch ? { weapons: SHARED_WEAPONS, relics: [] } : { weapons: opts.weapons ?? BASE_WEAPONS, relics: opts.relics ?? BASE_RELICS },
+    pool: ch ? { weapons: opts.weapons ?? SHARED_WEAPONS, relics: [] } : { weapons: opts.weapons ?? BASE_WEAPONS, relics: opts.relics ?? BASE_RELICS },
     banish: opts.banish ?? 0,
     banned: [],
     depth: Math.max(0, opts.depth ?? 0),
@@ -737,6 +743,8 @@ interface W {
   dur: number;
   kb: number;
 }
+/** 순찰대 판에서만 곱하는 무기 피해 (서바이버 캐릭터 무기를 덱 무기로 쓸 때) */
+const PATROL_WMUL: Partial<Record<WeaponId, number>> = { umbrella: 3 };
 function wstat(r: Run, ws: WeaponSlot): W {
   const def = WEAPONS[ws.id];
   const b: WeaponLv = def.lv[Math.min(def.lv.length, ws.lv) - 1];
@@ -744,14 +752,26 @@ function wstat(r: Run, ws: WeaponSlot): W {
   const multi = def.pattern !== "aura" && def.pattern !== "spin";
   const aw = ws.awake ? 1 : 0;
   const haste = r.buff.haste > 0 || r.flag?.k === "haste";
+  // 순찰대 무기 별: 피해 +5%씩 · ★3 고유 · ★5 Lv5 에서 +1개 (오라 · 파동 · 회전은 범위)
+  const st = r.wstar[ws.id] ?? 1;
+  // 순찰대에서만: 넉백이 커서 피해가 거의 안 쌓이는 무기 보정
+  const pm = r.ch ? (PATROL_WMUL[ws.id] ?? 1) : 1;
+  const s3 = st >= 3 ? ws.id : "";
+  const s5 = st >= 5 && ws.lv >= def.lv.length;
+  const wide = def.pattern === "aura" || def.pattern === "pulse" || def.pattern === "spin";
   return {
-    dmg: b.dmg * (1 + s.might) * (aw ? 1.6 : 1),
+    dmg: b.dmg * (1 + s.might) * (aw ? 1.6 : 1) * (1 + 0.05 * (st - 1)) * pm,
     cd: b.cd * Math.max(0.4, 1 - s.cooldown) * (haste ? 0.45 : 1) * (aw ? 0.85 : 1),
-    n: b.n + (multi ? s.amount : 0) + (aw && multi ? 1 : 0),
-    size: b.size * (1 + s.area) * (aw ? 1.2 : 1),
+    n: b.n + (multi ? s.amount : 0) + (aw && multi ? 1 : 0) + (s5 && !wide ? 1 : 0),
+    size:
+      b.size *
+      (1 + s.area) *
+      (aw ? 1.2 : 1) *
+      (s3 === "boomerang" ? 1.2 : s3 === "bolt" || s3 === "missile" ? 1.25 : s3 === "thorns" ? 1.15 : 1) *
+      (s5 && wide ? 1.15 : 1),
     spd: b.spd * (1 + s.pspeed),
-    pierce: b.pierce,
-    dur: b.dur * (1 + s.duration),
+    pierce: b.pierce + (s3 === "shuriken" || s3 === "coins" ? 1 : 0),
+    dur: b.dur * (1 + s.duration) * (s3 === "ball" ? 1.3 : 1),
     kb: b.kb,
   };
 }
@@ -882,6 +902,14 @@ function hurt(r: Run, e: Enemy, dmg: number, slot: number, kb: number, fromX: nu
   if (e.hp <= 0) {
     kill(r, e);
     if (slot >= 0 && r.weapons[slot] && WEAPONS[r.weapons[slot].id].fx === "coin" && rnd(r.rng) < 0.3) dropPickup(r, "coin", e.x, e.y, 1);
+  }
+  // 순찰대 무기 ★3: 물방울 우산 = 느려짐 · 음표 파동 = 멈칫
+  if (slot >= 0 && e.alive && !e.def.boss) {
+    const wid = r.weapons[slot]?.id;
+    if (wid && (r.wstar[wid] ?? 1) >= 3) {
+      if (wid === "umbrella") e.slow = Math.max(e.slow, 1);
+      else if (wid === "notes") e.stun = Math.max(e.stun, 0.3);
+    }
   }
   if (slot !== PROC) procs(r, e, dmg);
 }
@@ -1486,7 +1514,9 @@ function fireWeapon(r: Run, slot: number) {
       emitOne(r, slot, ws, w, w.n - 1);
       break;
     case "aura":
-      aoe(r, p.x, p.y, w.size, w.dmg, slot, 0);
+      aoe(r, p.x, p.y, w.size, w.dmg, slot, w.kb);
+      // 가시 돋음: 화면에 가시가 솟는 연출
+      if (ws.id === "thorns") r.ev.push({ t: "thorns", x: p.x, y: p.y - 4, r: w.size });
       if (ws.id === "rose") {
         // 장미 정원: 묶고 · 체력 회복
         let n = 0;
@@ -1522,6 +1552,7 @@ function fireWeapon(r: Run, slot: number) {
         const y = e ? e.y : p.y + (rnd(r.rng) - 0.5) * 160;
         r.zones.push(zone({ k: ws.id === "grenade" ? "grenade" : "drop", slot, x, y, r: w.size, dmg: w.dmg, delay: w.dur + i * 0.08, life: 0.3, t: 0, tick: 0, kb: w.kb, follow: false, dx: p.x, dy: p.y }));
       }
+      if (ws.id === "grenade" && w.n) r.ev.push({ t: "fire", w: ws.id });
       break;
     }
     case "boomerang": {
@@ -1784,8 +1815,12 @@ function updateZones(r: Run) {
         r.ev.push({ t: "slam", x: z.x, y: z.y });
         if (Math.hypot(p.x - z.x, (p.y - z.y) * 1.3) < z.r + 4) damagePlayer(r, z.dmg);
       } else if (z.delay <= 0) {
-        r.ev.push({ t: "boom", x: z.x, y: z.y, r: z.r, c: z.k === "moon" ? "#fff2a8" : z.k === "grenade" || z.k === "shell" ? "#ffb03a" : "#ffe17a" });
+        const zw = z.slot >= 0 ? r.weapons[z.slot]?.id : undefined;
+        r.ev.push({ t: "boom", x: z.x, y: z.y, r: z.r, c: z.k === "moon" ? "#fff2a8" : z.k === "grenade" || z.k === "shell" ? "#ffb03a" : "#ffe17a", ...(zw && { w: zw }) });
         aoe(r, z.x, z.y, z.r, z.dmg, z.slot, z.kb);
+        // 수류탄 ★3: 터진 자리에 2초 불장판
+        if (z.k === "grenade" && zw === "grenade" && (r.wstar.grenade ?? 1) >= 3)
+          r.zones.push(zone({ k: "ember", slot: z.slot, x: z.x, y: z.y, r: z.r * 0.7, dmg: z.dmg * 0.15, delay: 0, life: 2, t: 0, tick: 0, kb: 0, follow: false }));
       }
       continue;
     }
@@ -2810,8 +2845,8 @@ function candidates(r: Run): Card[] {
     if (w.lv < max) out.push({ k: "weapon", id: w.id, from: w.lv, to: w.lv + 1, rarity: 0 });
   }
   if (r.weapons.length < MAX_WEAPONS)
-    for (const id of SHARED_WEAPONS) {
-      if (!r.pool.weapons.includes(id)) continue;
+    // 판 무기 풀 (서바이버 = 해금한 공용 무기 · 순찰대 = 무기 덱)
+    for (const id of r.pool.weapons) {
       if (r.weapons.some((w) => w.id === id || WEAPONS[w.id].evo?.[0] === id)) continue;
       // 이미 합체에 쓴 재료는 다시 안 나옴
       if (r.fused.some((f) => WEAPONS[f].fuse!.includes(id))) continue;

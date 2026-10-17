@@ -7,6 +7,8 @@
  *  patrol.box              → 고급(보석, 천장) · 일반(코인, 하루 한 번 무료) 상자
  *  patrol.claim            → 순찰 보상 받기 · 빠른 순찰
  *  patrol.rank             → 랭킹 (깬 스테이지 → 별 합 → 먼저 도달한 순)
+ *  patrol.deck / wbox      → 무기 덱 6칸 · 무기 상자 (보석 · 티켓, 천장) — 같은 무기는 조각 → 별
+ *  patrol.shop             → GP 상점 (재화 직구 · 꾸러미 처음 한 번 / 매일 / 매주)
  * 숫자는 web/src/lib/patrol/* 에 (화면과 같이 씀).
  */
 import { randomInt } from "node:crypto";
@@ -36,6 +38,9 @@ import {
   type PatrolReport,
   type Pity,
 } from "../../../web/src/lib/patrol/economy";
+import { SHOP, shopDay, shopWeek, shopItem, type ShopGive } from "../../../web/src/lib/patrol/shop";
+import { BASE_DECK, DECK_N, FIRST_WEAPON, STAR_MAX, STAR_NEED, WBOX, isPWeapon, rollWeapon, starOf } from "../../../web/src/lib/patrol/weapons";
+import type { WeaponId } from "../../../web/src/lib/survivor/data";
 import { GEAR, GEAR_IDS, MAX_LV, MERGE_N, SLOTS, enhanceCost, isSlot, mergeOk, power, powerScore, spentOn, type GGrade, type GearItem, type Slot } from "../../../web/src/lib/patrol/gear";
 
 type Stars = [boolean, boolean, boolean];
@@ -69,6 +74,17 @@ interface PatrolProfile {
   pity: Pity;
   /** 고급 상자 연 수 */
   boxes: number;
+  /** 무기: 가진 무기 → 모은 조각 (있으면 가진 것) · 덱 6칸 · 무기 상자 천장 · 티켓 · 연 수 */
+  wown?: Partial<Record<WeaponId, number>>;
+  wdeck?: WeaponId[];
+  wpity?: { n: number };
+  wt?: number;
+  wboxes?: number;
+  /** GP 상점: 산 횟수 (처음 한 번) · 오늘 · 이번 주 · 오늘 더 받은 빠른 순찰 */
+  shopOnce?: Record<string, number>;
+  shopDay?: { d: string; n: Record<string, number> };
+  shopWeek?: { w: number; n: Record<string, number> };
+  quickBonus?: number;
   nextUid: number;
   at: Date;
 }
@@ -109,7 +125,12 @@ const finishArg = z.object({
   stars: z.tuple([z.boolean(), z.boolean(), z.boolean()]),
 });
 
-export function registerPatrol({ gateway, db }: Deps) {
+/** 별이 다 찬 무기가 또 나오면 코인으로 */
+const OVER_COIN = 300;
+const SHARD_MAX = STAR_NEED.reduce((a, b) => a + b, 0);
+const baseOwn = (): Partial<Record<WeaponId, number>> => Object.fromEntries(BASE_DECK.map((w) => [w, 0]));
+
+export function registerPatrol({ gateway, db, points }: Deps) {
   const profiles = db.col<PatrolProfile>("patrol_profile");
   const runs = db.col<RunDoc>("patrol_runs");
   const ranks = db.col<RankDoc>("patrol_rank");
@@ -155,7 +176,14 @@ export function registerPatrol({ gateway, db }: Deps) {
   };
   const read = async (uid: string) => {
     const d = (await profiles.findOne({ _id: uid } as never)) as PatrolProfile | null;
-    return d ? { ...fresh(uid), ...d, bestSt: d.bestSt ?? (d.best ?? 0) * SUB, pity: { ...d.pity }, equip: { ...d.equip }, stars: { ...d.stars } } : fresh(uid);
+    const p = d ? { ...fresh(uid), ...d, bestSt: d.bestSt ?? (d.best ?? 0) * SUB, pity: { ...d.pity }, equip: { ...d.equip }, stars: { ...d.stars } } : fresh(uid);
+    p.wown = { ...baseOwn(), ...p.wown };
+    p.wdeck = p.wdeck?.length === DECK_N ? [...p.wdeck] : [...BASE_DECK];
+    p.wpity = { n: p.wpity?.n ?? 0 };
+    p.wt = p.wt ?? 0;
+    p.wboxes = p.wboxes ?? 0;
+    p.shopOnce = { ...p.shopOnce };
+    return p;
   };
   const save = (p: PatrolProfile) => profiles.replaceOne({ _id: p._id } as never, { ...p, at: new Date() } as never, { upsert: true });
   const today = () => kstDay(Date.now());
@@ -174,12 +202,36 @@ export function registerPatrol({ gateway, db }: Deps) {
       runs: p.runs,
       wins: p.wins,
       boostLeft: Math.max(0, BOOST_RUNS - (p.day === d ? p.runsToday : 0)),
-      quickLeft: Math.max(0, QUICK_FREE - (p.quickDay === d ? p.quickUsed : 0)),
+      quickLeft: Math.max(0, QUICK_FREE + (p.quickDay === d ? (p.quickBonus ?? 0) : 0) - (p.quickDay === d ? p.quickUsed : 0)),
       freeBox: p.freeBoxDay !== d,
       patrolAt: p.patrolAt,
       pity: p.pity,
+      wown: p.wown ?? baseOwn(),
+      wdeck: p.wdeck ?? BASE_DECK,
+      wpity: p.wpity?.n ?? 0,
+      wt: p.wt ?? 0,
+      shop: {
+        once: p.shopOnce ?? {},
+        day: p.shopDay?.d === d ? p.shopDay.n : {},
+        week: p.shopWeek?.w === shopWeek(now) ? p.shopWeek.n : {},
+      },
       now,
     };
+  };
+  /** 무기 하나 얻기: 처음이면 ★1, 있으면 조각 +1 (별이 다 찼으면 코인) */
+  const giveWeapon = (p: PatrolProfile, id: WeaponId) => {
+    const own = p.wown!;
+    const had = own[id];
+    if (had === undefined) {
+      own[id] = 0;
+      return { id, isNew: true, star: 1, coin: 0 };
+    }
+    if (had >= SHARD_MAX) {
+      p.coins += OVER_COIN;
+      return { id, isNew: false, star: STAR_MAX, coin: OVER_COIN };
+    }
+    own[id] = had + 1;
+    return { id, isNew: false, star: starOf(had + 1), up: starOf(had + 1) > starOf(had), coin: 0 };
   };
   const newItem = (p: PatrolProfile, id: GearItem["id"], g: GGrade): GearItem => {
     const it = { uid: String(p.nextUid++), id, g, lv: 1 };
@@ -201,6 +253,7 @@ export function registerPatrol({ gateway, db }: Deps) {
     if (p.quickDay !== d) {
       p.quickDay = d;
       p.quickUsed = 0;
+      p.quickBonus = 0;
     }
   };
   const tx = <T>(ctx: Ctx, fn: (p: PatrolProfile) => Promise<T> | T) =>
@@ -267,6 +320,7 @@ export function registerPatrol({ gateway, db }: Deps) {
       let gems = 0;
       const gear: GearItem[] = [];
       let first = false;
+      let weapon: ReturnType<typeof giveWeapon> | null = null;
       if (rep.win && st > (p.bestSt ?? 0)) {
         // 첫 클리어: 보석 (챕터 보스 스테이지면 장비 하나도) · 다음 스테이지
         first = true;
@@ -275,6 +329,8 @@ export function registerPatrol({ gateway, db }: Deps) {
         const fr = firstReward(st);
         gems += fr.gems;
         if (fr.gear !== null) gear.push(newItem(p, GEAR_IDS[randomInt(0, GEAR_IDS.length)], fr.gear));
+        const fw = FIRST_WEAPON[st];
+        if (fw) weapon = giveWeapon(p, fw);
       } else if (rep.win && rnd() < REPEAT_GEAR) {
         gear.push(newItem(p, GEAR_IDS[randomInt(0, GEAR_IDS.length)], (rnd() < 0.3 ? 1 : 0) as GGrade));
       }
@@ -296,7 +352,7 @@ export function registerPatrol({ gateway, db }: Deps) {
         .catch((e) => console.warn("[patrol] 기록 저장 실패", e));
       // 랭킹: 깬 스테이지나 별이 늘었을 때만 (같으면 먼저 도달한 사람이 위)
       const rank = await putRank(ctx.uid, member(ctx), p);
-      return { coins, bp, gems, gear, first, newStars, boosted, rank, profile: wire(p) };
+      return { coins, bp, gems, gear, weapon, first, newStars, boosted, rank, profile: wire(p) };
     });
   });
 
@@ -461,6 +517,80 @@ export function registerPatrol({ gateway, db }: Deps) {
     });
   });
 
+  /** 무기 덱: 가진 무기 6개 (겹치지 않게) */
+  gateway.rpc("patrol.deck", async (ctx, raw) => {
+    member(ctx);
+    const { deck } = z.object({ deck: z.array(z.string()).length(DECK_N) }).parse(raw);
+    return tx(ctx, (p) => {
+      if (new Set(deck).size !== DECK_N) throw bad("같은 무기를 두 번 넣을 수 없어요.");
+      for (const w of deck) if (!isPWeapon(w) || p.wown![w] === undefined) throw bad("없는 무기예요.");
+      p.wdeck = deck as WeaponId[];
+      return wire(p);
+    });
+  });
+
+  /** 무기 상자: 보석 200 (10연 1,800) 또는 티켓 하나 */
+  gateway.rpc("patrol.wbox", async (ctx, raw) => {
+    member(ctx);
+    const { n, ticket } = z.object({ n: z.union([z.literal(1), z.literal(10)]), ticket: z.boolean().default(false) }).parse(raw);
+    return tx(ctx, (p) => {
+      if (ticket) {
+        if (n !== 1) throw bad();
+        if ((p.wt ?? 0) < 1) throw bad("무기 상자 티켓이 없어요.");
+        p.wt = (p.wt ?? 0) - 1;
+      } else {
+        const cost = n === 10 ? WBOX.cost10 : WBOX.cost;
+        if (p.gems < cost) throw bad("보석이 모자라요.");
+        p.gems -= cost;
+      }
+      const got = [];
+      for (let i = 0; i < n; i++) {
+        got.push(giveWeapon(p, rollWeapon(rnd, p.wown!, p.wpity!)));
+        p.wboxes = (p.wboxes ?? 0) + 1;
+      }
+      return { got, profile: wire(p) };
+    });
+  });
+
+  /** GP 상점 — GP 는 points.spend 로 (모자라면 거기서 에러) */
+  const applyGive = (p: PatrolProfile, g: ShopGive) => {
+    p.gems += g.gems ?? 0;
+    p.coins += g.coins ?? 0;
+    p.bp += g.bp ?? 0;
+    p.wt = (p.wt ?? 0) + (g.wt ?? 0);
+    if (g.quick) p.quickBonus = (p.quickBonus ?? 0) + g.quick;
+    const weapon = g.weapon ? giveWeapon(p, g.weapon) : null;
+    const gear = g.gear !== undefined ? newItem(p, GEAR_IDS[randomInt(0, GEAR_IDS.length)], g.gear) : null;
+    return { weapon, gear };
+  };
+  const gpOf = async (uid: string) => ((await users.findOne({ _id: uid } as never, { projection: { points: 1 } })) as { points?: number } | null)?.points ?? 0;
+  gateway.rpc("patrol.gp", async (ctx) => {
+    member(ctx);
+    return { gp: await gpOf(ctx.uid) };
+  });
+  gateway.rpc("patrol.shop", async (ctx, raw) => {
+    member(ctx);
+    const { id } = z.object({ id: z.string().max(32) }).parse(raw);
+    const it = shopItem(id);
+    if (!it || !SHOP.includes(it)) throw bad("없는 상품이에요.");
+    return tx(ctx, async (p) => {
+      const now = Date.now();
+      const d = shopDay(now);
+      const w = shopWeek(now);
+      if (p.shopDay?.d !== d) p.shopDay = { d, n: {} };
+      if (p.shopWeek?.w !== w) p.shopWeek = { w, n: {} };
+      if (it.once && (p.shopOnce![id] ?? 0) >= 1) throw bad("이미 산 꾸러미예요.");
+      if (it.perDay && (p.shopDay.n[id] ?? 0) >= it.perDay) throw bad("오늘은 이미 샀어요.");
+      if (it.perWeek && (p.shopWeek.n[id] ?? 0) >= it.perWeek) throw bad("이번 주에 이미 샀어요.");
+      const gp = await points.spend(ctx.uid, it.gp, "patrol", `shop:${id}`);
+      if (it.once) p.shopOnce![id] = (p.shopOnce![id] ?? 0) + 1;
+      if (it.perDay) p.shopDay.n[id] = (p.shopDay.n[id] ?? 0) + 1;
+      if (it.perWeek) p.shopWeek.n[id] = (p.shopWeek.n[id] ?? 0) + 1;
+      const got = applyGive(p, it.give);
+      return { id, ...got, gp, profile: wire(p) };
+    });
+  });
+
   gateway.rpc("patrol.claim", async (ctx, raw) => {
     member(ctx);
     const { quick } = z.object({ quick: z.boolean().default(false) }).parse(raw ?? {});
@@ -469,7 +599,7 @@ export function registerPatrol({ gateway, db }: Deps) {
       let coin = 0;
       let bp = 0;
       if (quick) {
-        if (p.quickUsed >= QUICK_FREE) throw bad("오늘 빠른 순찰을 다 썼어요.");
+        if (p.quickUsed >= QUICK_FREE + (p.quickBonus ?? 0)) throw bad("오늘 빠른 순찰을 다 썼어요.");
         p.quickUsed++;
         const r = patrolRate(p.bestSt ?? 0);
         coin = r.coin * QUICK_H;

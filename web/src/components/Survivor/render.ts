@@ -70,7 +70,13 @@ export interface Fx {
   corpses: Corpse[];
   /** 바닥 얼룩 (죽은 자리 · 한동안 남음) */
   stains: { x: number; y: number; c: string; seed: number; s: number; t: number }[];
+  /** 무기 타격 이펙트 (4칸 그림): 물보라 · 폭발 · 음표 · 금화 반짝 — s = 지름(월드 px) */
+  hits: { k: HitK; x: number; y: number; s: number; t: number; life: number; flip: boolean }[];
+  /** 가시 돋음: 사방으로 솟았다 들어가는 가시 (THORN_T 초) */
+  spikes: { x: number; y: number; r: number; t: number; rot: number }[];
 }
+export const THORN_T = 0.32;
+export type HitK = "water" | "grenade" | "notes" | "coins";
 export interface Corpse {
   /** 보스: 깜빡이며 떨다가 터짐 (BOSS_DIE 초) */
   boss?: boolean;
@@ -90,7 +96,7 @@ export const BOSS_BOOM = 0.9;
 const BOSS_DIE = 1.25;
 const GEM_POP = 0.3;
 const STAIN_T = 14;
-export const newFx = (): Fx => ({ nums: [], parts: [], rings: [], bolts: [], dice: [], zaps: [], shots: [], shake: 0, flash: 0, flashC: "#ffffff", hurt: 0, walkT: 0, stop: 0, slow: 0, bursts: [], corpses: [], stains: [] });
+export const newFx = (): Fx => ({ nums: [], parts: [], rings: [], bolts: [], dice: [], zaps: [], shots: [], shake: 0, flash: 0, flashC: "#ffffff", hurt: 0, walkT: 0, stop: 0, slow: 0, bursts: [], corpses: [], stains: [], hits: [], spikes: [] });
 
 export function tickFx(fx: Fx, dt: number) {
   for (const n of fx.nums) n.t += dt;
@@ -119,6 +125,10 @@ export function tickFx(fx: Fx, dt: number) {
   fx.corpses = fx.corpses.filter((c) => c.t < (c.boss ? BOSS_DIE : CORPSE_T));
   for (const st of fx.stains) st.t += dt;
   fx.stains = fx.stains.filter((st) => st.t < STAIN_T);
+  for (const h of fx.hits) h.t += dt;
+  for (const k of fx.spikes) k.t += dt;
+  fx.spikes = fx.spikes.filter((k) => k.t < THORN_T);
+  fx.hits = fx.hits.filter((h) => h.t < h.life);
   for (const b of fx.bursts) b.t += dt;
   fx.bursts = fx.bursts.filter((b) => b.t < 0.7);
   for (const r of fx.rings) r.t += dt;
@@ -295,6 +305,11 @@ export function draw(ctx: CanvasRenderingContext2D, r: Run, fx: Fx, hero: HeroAr
     if (WEAPONS[w.id].pattern !== "aura") continue;
     const def = WEAPONS[w.id];
     const size = def.lv[w.lv - 1].size * (1 + r.stats.area);
+    if (w.id === "thorns") {
+      // 평소: 발밑에 가시 덩굴 고리가 천천히 돎 (솟을 자리 미리 보여 줌)
+      drawThornRing(ctx, X(p.x), Y(p.y - 4), size, time * 0.4, 0, 0.55);
+      continue;
+    }
     ctx.globalAlpha = 0.16 + Math.sin(time * 6) * 0.04;
     ellipse(ctx, X(p.x), Y(p.y - 4), size, size * 0.8, def.color);
     ctx.globalAlpha = 0.6;
@@ -971,6 +986,8 @@ export function draw(ctx: CanvasRenderingContext2D, r: Run, fx: Fx, hero: HeroAr
 
   // 빛 (밤 위에 더해 그림): 랜턴 빛살 · 불씨 · 등대
   drawLight(ctx, r, X, Y, time);
+  drawSpikes(ctx, fx, X, Y);
+  drawHits(ctx, fx, X, Y);
   drawBursts(ctx, fx, X, Y);
 
   // 불바다 · 소나기 (화면 전체)
@@ -1353,7 +1370,7 @@ function drawDie(ctx: CanvasRenderingContext2D, x: number, y: number, face: numb
 
 /** 반디: 랜턴 빛살 · 불씨 · 등대 빛줄기 — 밤 위에 "lighter" 로 더해 그려서 실제로 밝힘 */
 /* ───────────── 반디 빛 그림 (public/patrol/fx · 검은 바탕 = 더해 그림) ───────────── */
-const FX_NAMES = ["lens", "beam", "ember", "mote", "ring"] as const;
+const FX_NAMES = ["lens", "beam", "ember", "mote", "ring", "hit_water", "hit_grenade", "hit_notes", "hit_coins"] as const;
 type FxName = (typeof FX_NAMES)[number];
 const fxCache: Partial<Record<FxName, HTMLImageElement | null>> = {};
 function fxImg(n: FxName): HTMLImageElement | null {
@@ -1491,6 +1508,66 @@ function drawLanternCone(ctx: CanvasRenderingContext2D, z: Zone, x: number, y: n
     }
   }
   ctx.globalAlpha = 1;
+}
+
+/** 가시 고리: 바닥 덩굴(점선) + 바깥을 향한 가시 n개 — out 0~1 = 가시가 솟은 정도 */
+function drawThornRing(ctx: CanvasRenderingContext2D, cx: number, cy: number, R: number, rot: number, out: number, alpha: number) {
+  const N = 22;
+  ctx.globalAlpha = alpha * 0.8;
+  // 덩굴
+  ctx.fillStyle = "#2f7a3a";
+  for (let i = 0; i < 48; i++) {
+    const a = rot + (i / 48) * Math.PI * 2;
+    ctx.fillRect(Math.round(cx + Math.cos(a) * R * 0.92) - 1, Math.round(cy + Math.sin(a) * R * 0.92 * 0.8) - 1, 2, 2);
+  }
+  // 가시: 평소엔 짧게, 솟을 땐 길게
+  for (let i = 0; i < N; i++) {
+    const a = rot + (i / N) * Math.PI * 2;
+    const ca = Math.cos(a);
+    const sa = Math.sin(a) * 0.8;
+    const r0 = R * (0.86 - out * 0.5);
+    const len = 4 + out * R * 0.62 * (i % 2 ? 0.8 : 1);
+    const tip = r0 + len;
+    // 바깥 쪽으로 뾰족한 삼각형 (몸통 3px → 끝 1px)
+    ctx.fillStyle = out > 0 ? "#b8ff7a" : "#5fd06a";
+    for (let k = 0; k <= len; k += 1.5) {
+      const w = Math.max(1, Math.round((3 + out) * (1 - k / len)));
+      ctx.fillRect(Math.round(cx + ca * (r0 + k)) - (w >> 1), Math.round(cy + sa * (r0 + k)) - (w >> 1), w, w);
+    }
+    ctx.fillStyle = "#1c3a20";
+    ctx.fillRect(Math.round(cx + ca * tip), Math.round(cy + sa * tip), 1, 1);
+  }
+  ctx.globalAlpha = 1;
+}
+
+/** 가시 돋음: 0.08초 만에 솟고 → 잠깐 → 들어감 */
+export function drawSpikes(ctx: CanvasRenderingContext2D, fx: Fx, X: (x: number) => number, Y: (y: number) => number) {
+  for (const k of fx.spikes) {
+    const u = k.t / THORN_T;
+    const out = u < 0.25 ? u / 0.25 : u < 0.5 ? 1 : 1 - (u - 0.5) / 0.5;
+    // 솟는 순간 바닥이 번쩍
+    if (u < 0.3) {
+      ctx.globalAlpha = 0.35 * (1 - u / 0.3);
+      ellipse(ctx, X(k.x), Y(k.y), k.r, k.r * 0.8, "#b8ff7a");
+    }
+    drawThornRing(ctx, X(k.x), Y(k.y), k.r, k.rot, out, 1);
+  }
+}
+
+/** 무기 타격 이펙트: 4칸 (작게 → 크게 → 흩어짐) */
+export function drawHits(ctx: CanvasRenderingContext2D, fx: Fx, X: (x: number) => number, Y: (y: number) => number) {
+  for (const h of fx.hits) {
+    const im = fxImg(`hit_${h.k}`);
+    if (!im) continue;
+    const fw = im.width / 4;
+    const f = Math.min(3, Math.floor((h.t / h.life) * 4));
+    const s = Math.round(h.s);
+    ctx.save();
+    ctx.translate(X(h.x), Y(h.y));
+    if (h.flip) ctx.scale(-1, 1);
+    ctx.drawImage(im, f * fw, 0, fw, im.height, -s / 2, -s / 2, s, s);
+    ctx.restore();
+  }
 }
 
 /** 등대 마지막 섬광 고리 (fx.bursts) */

@@ -10,20 +10,23 @@ import { useAuth } from "@/lib/AuthContext";
 import { CH_COUNT, ST_COUNT, SUB, SUB_KIND, firstSt, stCh, stName, stSub, stage } from "@/lib/patrol/chapters";
 import { BOOST_RUNS, PATROL_MAX_H, QUICK_FREE, QUICK_H, STAR_GEMS, WELCOME, firstReward, patrolPending, patrolRate } from "@/lib/patrol/economy";
 import { ATK_PCT, GEAR, GRADE_COLOR, GRADE_NAME, power, powerScore, type GearItem } from "@/lib/patrol/gear";
-import { ENEMIES, HEROES, STAGE_KIND, questName, type ChapterDef, type StageKind } from "@/lib/survivor/data";
+import { BASE_DECK, FIRST_WEAPON, NEW_WEAPONS, starOf } from "@/lib/patrol/weapons";
+import { ENEMIES, HEROES, STAGE_KIND, WEAPONS, questName, type ChapterDef, type StageKind } from "@/lib/survivor/data";
 import type { RunResult } from "@/lib/survivor/sim";
 import { patrol, type PatrolFinish, type PatrolProfile } from "@/realtime/patrol";
 import Token from "../Marble/Token";
 import { playBgm, sfx } from "../Survivor/audio";
-import Game, { type GameSetup } from "../Survivor/Game";
+import Game, { ItemIcon, type GameSetup } from "../Survivor/Game";
 import Stage from "../Survivor/Stage";
 import Boxes from "./Boxes";
 import PatchNotes, { LATEST } from "./PatchNotes";
+import Shop from "./Shop";
+import WeaponsPanel from "./Weapons";
 import GearPanel, { betterGear, equippedOf, mergeCount } from "./Gear";
 import { Bp, Coin, Gem, GearIcon, Modal, SysButtons, btn } from "./ui";
 
 type Scene = { k: "title" } | { k: "lobby" } | { k: "play"; setup: GameSetup; st: number; run: string | null } | { k: "result"; r: RunResult; st: number; fin: PatrolFinish | null; err: string };
-type Pop = "gear" | "box" | "patrol" | null;
+type Pop = "gear" | "weapon" | "box" | "patrol" | "shop" | null;
 
 const fmt = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 const ST_KEY = "ptp-st";
@@ -55,6 +58,11 @@ const GUEST: PatrolProfile = {
   freeBox: false,
   patrolAt: 0,
   pity: { hero: 0, legend: 0 },
+  wown: Object.fromEntries(BASE_DECK.map((w) => [w, 0])),
+  wdeck: BASE_DECK,
+  wpity: 0,
+  wt: 0,
+  shop: { once: {}, day: {}, week: {} },
   now: 0,
 };
 
@@ -117,7 +125,7 @@ export default function PatrolApp() {
       sup: [],
       seed: Math.floor(Math.random() * 2 ** 31),
       bonus: { maxHp: gp.hp },
-      opts: { chapter: def, gear: { atk: gp.atk * ATK_PCT, weapon: gp.weapon, wlv: gp.wlv, relics: gp.relics }, rerolls: 2, skips: 1, banish: 0 },
+      opts: { chapter: def, gear: { atk: gp.atk * ATK_PCT, weapon: gp.weapon, wlv: gp.wlv, relics: gp.relics }, rerolls: 2, skips: 1, banish: 0, weapons: p.wdeck, wstars: Object.fromEntries(Object.entries(p.wown).map(([w, n]) => [w, starOf(n ?? 0)])) },
     };
     let run: string | null = null;
     if (member) {
@@ -214,6 +222,8 @@ function Lobby({ prof, member, loaded, st, open, onSt, note, skew, onProf, onSta
   const pend = usePending(prof, skew);
   const merges = member ? mergeCount(prof) : 0;
   const better = member ? betterGear(prof).length : 0;
+  /** 덱에 안 넣은 새 무기 */
+  const newWeapons = NEW_WEAPONS.filter((w) => prof.wown[w] !== undefined && !prof.wdeck.includes(w)).length;
   const popUp = (x: Pop) => {
     sfx("click");
     setPop(x);
@@ -375,6 +385,12 @@ function Lobby({ prof, member, loaded, st, open, onSt, note, skew, onProf, onSta
               <div className="flex items-center gap-[10px]">
                 <Gem v={fr.gems} />
                 {fr.gear !== null && <span style={{ color: GRADE_COLOR[fr.gear] }}>{GRADE_NAME[fr.gear]} 장비</span>}
+                {FIRST_WEAPON[st] && (
+                  <span className="flex items-center gap-[4px] text-[#ffd23a]" title={`새 무기 ${WEAPONS[FIRST_WEAPON[st]].name}`}>
+                    <ItemIcon k="weapon" id={FIRST_WEAPON[st]} size={20} />
+                    새 무기
+                  </span>
+                )}
               </div>
             )}
             <span className="text-[11px] text-[#6b63a3]">별 하나 새로 딸 때마다 보석 {STAR_GEMS}</span>
@@ -392,11 +408,15 @@ function Lobby({ prof, member, loaded, st, open, onSt, note, skew, onProf, onSta
       {/* 아래 메뉴 */}
       <div className="absolute right-[18px] bottom-[16px] left-[18px] flex gap-[12px]">
         <NavBtn label="장비" sub={`전투력 ${powerScore(gp)}`} c="#4ff0c8" dot={better > 0 ? `장착 ${better}` : merges > 0 ? `합성 ${merges}` : ""} disabled={!member || !loaded} onClick={() => popUp("gear")} />
+        <NavBtn label="무기" sub={`덱 ${prof.wdeck.length}칸 · 무기 ${Object.keys(prof.wown).length}개`} c="#ff9c7a" dot={newWeapons > 0 ? `NEW ${newWeapons}` : ""} disabled={!member || !loaded} onClick={() => popUp("weapon")} />
         <NavBtn label="상자" sub={prof.freeBox ? "오늘 무료 상자!" : `보석 ${prof.gems.toLocaleString()}`} c="#ffd23a" dot={prof.freeBox || prof.gems >= 300 ? "!" : ""} disabled={!member || !loaded} onClick={() => popUp("box")} />
         <NavBtn label="순찰" sub={member ? `${pend.coin.toLocaleString()} 코인 · 설계도 ${pend.bp} 쌓임` : "로그인하면 쌓여요"} c="#9fb6ff" dot={pend.h >= 1 || prof.quickLeft > 0 ? "!" : ""} disabled={!member || !loaded} onClick={() => popUp("patrol")} />
+        <NavBtn label="상점" sub={!prof.shop.once.p_start ? "첫 순찰 꾸러미!" : !prof.shop.day.p_daily ? "오늘 꾸러미" : "GP 로 재화"} c="#ff9cc8" dot={!prof.shop.once.p_start || !prof.shop.day.p_daily ? "!" : ""} disabled={!member || !loaded} onClick={() => popUp("shop")} />
       </div>
       {pop === "gear" && <GearPanel prof={prof} onProf={onProf} onClose={() => setPop(null)} />}
+      {pop === "weapon" && <WeaponsPanel prof={prof} onProf={onProf} onClose={() => setPop(null)} />}
       {pop === "box" && <Boxes prof={prof} onProf={onProf} onClose={() => setPop(null)} />}
+      {pop === "shop" && <Shop prof={prof} onProf={onProf} onClose={() => setPop(null)} />}
       {pop === "patrol" && <PatrolPop prof={prof} skew={skew} onProf={onProf} onClose={() => setPop(null)} />}
       {notes && <PatchNotes onClose={() => setNotes(false)} />}
     </div>
@@ -549,6 +569,14 @@ function Result({ r, st, fin, err, member, onAgain, onNext, onLobby }: { r: RunR
               )}
               {fin.newStars > 0 && <span className="text-[#ffd23a]">새 별 {fin.newStars}개 · 보석 +{fin.newStars * STAR_GEMS}</span>}
               {fin.rank && (fin.first || fin.newStars > 0) && <span className="text-[#4ff0c8]">랭킹 {fin.rank}위!</span>}
+              {fin.weapon && (
+                <div className="flex items-center gap-[10px]">
+                  <span className="text-[#a9a2d6]">{fin.weapon.isNew ? "새 무기!" : "무기 조각"}</span>
+                  <ItemIcon k="weapon" id={fin.weapon.id} size={40} />
+                  <b className="text-[#ffd23a]">{WEAPONS[fin.weapon.id].name}</b>
+                  {fin.weapon.isNew && <span className="text-[12px] text-[#4ff0c8]">로비 「무기」에서 덱에 넣어요</span>}
+                </div>
+              )}
               {fin.gear.length > 0 && (
                 <div className="flex items-center gap-[10px]">
                   <span className="text-[#a9a2d6]">장비 획득</span>

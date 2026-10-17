@@ -1,6 +1,7 @@
 import { rpc } from "@/lib/api/socket";
 import type { Pity } from "@/lib/patrol/economy";
 import type { GearItem, Slot } from "@/lib/patrol/gear";
+import type { WeaponId } from "@/lib/survivor/data";
 
 /*
  * 픽셀 순찰대 — 백엔드(server/src/games/patrol.ts)와 통신
@@ -30,6 +31,13 @@ export interface PatrolProfile {
   /** 순찰 보상을 마지막으로 받은 시각 (서버 ms) */
   patrolAt: number;
   pity: Pity;
+  /** 무기: 가진 무기 → 조각 · 덱 6칸 · 무기 상자 천장 진행 · 티켓 */
+  wown: Partial<Record<WeaponId, number>>;
+  wdeck: WeaponId[];
+  wpity: number;
+  wt: number;
+  /** GP 상점 산 횟수: 처음 한 번 · 오늘 · 이번 주 */
+  shop: { once: Record<string, number>; day: Record<string, number>; week: Record<string, number> };
   /** 서버 시각 (ms) — 순찰 시간 계산을 서버 기준으로 */
   now: number;
 }
@@ -38,6 +46,8 @@ export interface PatrolFinish {
   bp: number;
   gems: number;
   gear: GearItem[];
+  /** 첫 클리어로 받은 무기 */
+  weapon: WeaponGot | null;
   first: boolean;
   newStars: number;
   boosted: boolean;
@@ -54,6 +64,15 @@ export interface PatrolRankRow {
   stars: number;
   power: number;
   at: number;
+}
+
+/** 무기 얻음: 처음이면 isNew · 별이 올랐으면 up · 별이 다 차서 코인으로 바뀌었으면 coin */
+export interface WeaponGot {
+  id: WeaponId;
+  isNew: boolean;
+  star: number;
+  up?: boolean;
+  coin: number;
 }
 
 export interface Refund {
@@ -75,5 +94,9 @@ export const patrol = {
   /** 강화 초기화 (Lv1 · 전액 환급) */
   reset: (uid: string) => rpc<{ back: Refund; profile: PatrolProfile }>("patrol.reset", { uid }),
   box: (kind: "premium" | "premium10" | "normal") => rpc<{ got: GearItem[]; profile: PatrolProfile }>("patrol.box", { kind }),
+  deck: (deck: WeaponId[]) => rpc<PatrolProfile>("patrol.deck", { deck }),
+  wbox: (n: 1 | 10, ticket = false) => rpc<{ got: WeaponGot[]; profile: PatrolProfile }>("patrol.wbox", { n, ticket }),
+  gp: () => rpc<{ gp: number }>("patrol.gp"),
+  shop: (id: string) => rpc<{ id: string; weapon: WeaponGot | null; gear: GearItem | null; gp: number; profile: PatrolProfile }>("patrol.shop", { id }),
   claim: (quick = false) => rpc<{ coin: number; bp: number; profile: PatrolProfile }>("patrol.claim", { quick }),
 };

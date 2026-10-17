@@ -9,7 +9,7 @@ import { getArt, loadFiles, loadHero, type HeroArt } from "./art";
 import { jingle, playBgm, preloadSfx, sfx, type Sfx } from "./audio";
 import SoundSliders from "./SoundSliders";
 import { useStage } from "./Stage";
-import { draw, mobColor, newFx, preloadLight, tickFx, type Fx } from "./render";
+import { draw, mobColor, newFx, preloadLight, tickFx, type Fx, type HitK } from "./render";
 
 /* ───────────── 아이콘 (public/survivor/icon/<id>.png — 없으면 색 · 첫 글자) ───────────── */
 
@@ -229,18 +229,40 @@ function armyHud(r: Run): NonNullable<Hud["army"]> {
 }
 
 /** 무기 계열 → 발사 · 타격 소리 */
-type Fam = "lantern" | "blade" | "boom" | "thunder" | "thorn" | "missile" | "ball";
+type Fam = "lantern" | "blade" | "boom" | "thunder" | "thorn" | "missile" | "ball" | "water" | "grenade" | "notes" | "coin";
 const FAM: Partial<Record<WeaponId, Fam>> = {
   lantern: "lantern",
-  shuriken: "blade", gale: "blade", blades: "blade", cards: "blade", whip: "blade", coins: "blade",
+  shuriken: "blade", gale: "blade", blades: "blade", cards: "blade", whip: "blade",
   boomerang: "boom", cyclone: "boom", apple: "boom", kick: "boom", punch: "boom",
   bolt: "thunder", judgment: "thunder", lance: "thunder",
-  thorns: "thorn", rose: "thorn", notes: "thorn", sleep: "thorn",
-  missile: "missile", barrage: "missile", fireball: "missile", grenade: "missile", parcel: "missile", roll: "missile",
-  ball: "ball", rainbow: "ball", pinball: "ball", circus: "ball", dice6: "ball", umbrella: "ball",
+  thorns: "thorn", rose: "thorn", sleep: "thorn",
+  missile: "missile", barrage: "missile", fireball: "missile", parcel: "missile", roll: "missile",
+  ball: "ball", rainbow: "ball", pinball: "ball", circus: "ball", dice6: "ball",
+  umbrella: "water", grenade: "grenade", notes: "notes", coins: "coin",
 };
-const HIT: Record<Fam, Sfx> = { lantern: "w_lantern_hit", blade: "w_blade_hit", boom: "w_boom_hit", thunder: "w_thunder_hit", thorn: "w_thorn_hit", missile: "w_missile_hit", ball: "w_ball_hit" };
-const FIRE: Partial<Record<Fam, Sfx>> = { lantern: "w_lantern_fire", blade: "w_blade_fire", boom: "w_boom_fire", missile: "w_missile_fire", ball: "w_ball_fire" };
+const HIT: Record<Fam, Sfx> = {
+  lantern: "w_lantern_hit",
+  blade: "w_blade_hit",
+  boom: "w_boom_hit",
+  thunder: "w_thunder_hit",
+  thorn: "w_thorn_hit",
+  missile: "w_missile_hit",
+  ball: "w_ball_hit",
+  water: "w_water_hit",
+  // 수류탄은 맞을 때 말고 터질 때 (boom) 한 번
+  grenade: "w_blade_hit",
+  notes: "w_notes_hit",
+  coin: "w_coin_hit",
+};
+const FIRE: Partial<Record<Fam, Sfx>> = { lantern: "w_lantern_fire", blade: "w_blade_fire", boom: "w_boom_fire", missile: "w_missile_fire", ball: "w_ball_fire", grenade: "w_grenade_fire", notes: "w_notes_fire", coin: "w_coin_fire" };
+/** 타격 그림: 무기 계열 → 그림 · 지름 · 길이 · 화면에 최대 몇 개 */
+const HIT_FX: Partial<Record<Fam, { k: HitK; s: number; life: number; max: number }>> = {
+  water: { k: "water", s: 24, life: 0.3, max: 12 },
+  notes: { k: "notes", s: 26, life: 0.36, max: 10 },
+  coin: { k: "coins", s: 16, life: 0.26, max: 14 },
+};
+/** 음표 파동: 박자마다 펜타토닉 음계를 따라 올라갔다 내려옴 (도 레 미 솔 라) */
+const NOTE_STEPS = [0, 2, 4, 7, 9, 12, 9, 7, 4, 2];
 /** 몹 색을 어둡게 (바닥 얼룩) */
 const dark = (hex: string) => {
   const v = parseInt(hex.slice(1, 7), 16);
@@ -290,6 +312,7 @@ export default function Game({ setup, onEnd, onQuit }: { setup: GameSetup; onEnd
   const [banner, setBanner] = useState<{ id: number; text: string; c: string } | null>(null);
   const [stickView, setStickView] = useState<{ bx: number; by: number; x: number; y: number } | null>(null);
   const ended = useRef(false);
+  const noteN = useRef(0);
 
   useEffect(() => {
     menuRef.current = menu;
@@ -345,7 +368,9 @@ export default function Game({ setup, onEnd, onQuit }: { setup: GameSetup; onEnd
           case "dmg": {
             if (dmgN++ < 14) fx.nums.push({ x: e.x + (Math.random() - 0.5) * 6, y: e.y, v: e.v, crit: e.crit, t: 0 });
             const f = e.w && FAM[e.w];
-            sfx(f ? HIT[f] : "hit", { vol: f ? 0.75 : 1 });
+            if (f !== "grenade") sfx(f ? HIT[f] : "hit", { vol: f ? 0.75 : 1 });
+            const hf = f && HIT_FX[f];
+            if (hf && fx.hits.filter((h) => h.k === hf.k).length < hf.max) fx.hits.push({ k: hf.k, x: e.x + (Math.random() - 0.5) * 6, y: e.y - 2, s: hf.s * (e.big ? 1.5 : 1), t: 0, life: hf.life, flip: Math.random() < 0.5 });
             if (e.crit) {
               sfx("crit", { vol: e.big ? 1 : 0.55 });
               // 정예 · 보스에 크리티컬 → 아주 잠깐 멈춤
@@ -449,16 +474,41 @@ export default function Game({ setup, onEnd, onQuit }: { setup: GameSetup; onEnd
             sfx("hurt");
             break;
           case "boom":
+            if (e.w === "grenade") {
+              // 수류탄: 폭발 그림 (하얀 섬광 → 불덩이 → 연기) + 쿵
+              fx.hits.push({ k: "grenade", x: e.x, y: e.y - 4, s: e.r * 2.6, t: 0, life: 0.45, flip: Math.random() < 0.5 });
+              fx.rings.push({ x: e.x, y: e.y, r: e.r * 1.1, c: "#fff2c0", t: 0, life: 0.2, fill: false });
+              fx.shake = Math.max(fx.shake, 2.5);
+              sfx("w_grenade_hit", { rate: 0.92 + Math.random() * 0.16 });
+              break;
+            }
             fx.rings.push({ x: e.x, y: e.y, r: e.r, c: e.c, t: 0, life: 0.3, fill: true });
             fx.rings.push({ x: e.x, y: e.y, r: e.r * 1.1, c: "#ffffff", t: 0, life: 0.25, fill: false });
             if (e.r >= 16) sfx("boom");
             break;
+          case "thorns": {
+            // 가시 돋음: 고리 가시가 솟고 · 초록 파편이 튐
+            fx.spikes.push({ x: e.x, y: e.y, r: e.r, t: 0, rot: Math.random() * Math.PI });
+            for (let i = 0; i < 10; i++) {
+              const a = Math.random() * Math.PI * 2;
+              const v = 90 + Math.random() * 80;
+              fx.parts.push({ x: e.x + Math.cos(a) * e.r * 0.6, y: e.y + Math.sin(a) * e.r * 0.5, vx: Math.cos(a) * v, vy: Math.sin(a) * v * 0.8 - 30, c: i % 3 ? "#7dff9a" : "#2f7a3a", t: 0, life: 0.3 + Math.random() * 0.15, s: 2 });
+            }
+            sfx("w_thorn_fire", { vol: 0.75, rate: 0.95 + Math.random() * 0.1 });
+            break;
+          }
           case "bolt":
             fx.bolts.push({ x: e.x, y: e.y, r: e.r, t: 0, seed: Math.floor(Math.random() * 1000), j: e.j });
             sfx("w_thunder_hit", { vol: 0.8 });
             break;
           case "fire": {
             const f = FAM[e.w];
+            if (f === "notes") {
+              // 박자마다 음이 바뀜
+              const k = NOTE_STEPS[noteN.current++ % NOTE_STEPS.length];
+              sfx("w_notes_fire", { vol: 0.7, rate: Math.pow(2, k / 12) });
+              break;
+            }
             sfx((f && FIRE[f]) || "throw", { vol: 0.7 });
             break;
           }
