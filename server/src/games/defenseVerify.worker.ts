@@ -50,7 +50,7 @@ export async function verifyRun(job: VerifyJob): Promise<VerifyOut> {
         .sort((a, c) => UNIT[c].grade - UNIT[a].grade || UNIT[c].dmg - UNIT[a].dmg)
         .slice(0, 3)
     ),
-    stats: g.boards.map((b) => ({ made: { ...b.made }, rifts: b.rifts, treasure: b.treasure })),
+    stats: g.boards.map((b) => ({ made: { ...b.made }, rifts: b.rifts, treasure: b.treasure, squad: b.exp?.squad ?? null })),
     ticks: g.tick,
     cpu: Math.round(cpu),
   };

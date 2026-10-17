@@ -9,8 +9,7 @@ import { PATCHES } from "./meta";
 import {
   CELLS,
   SLOTS,
-  capOf,
-  expDest,
+  expNext,
   STACK,
   apply,
   canRecipe,
@@ -26,7 +25,6 @@ import {
 } from "./sim";
 import { FACTIONS, RECIPES, UNIT, poolOf, type Faction, type Grade } from "./units";
 import type { Loadout } from "./progress";
-import { expNodeOf } from "./town";
 
 /** 조합식 재료 (팔지 않고 남겨 둠) */
 const MATERIAL = new Set(RECIPES.filter((r) => !r.hidden).flatMap((r) => r.needs));
@@ -178,49 +176,61 @@ export function botMove(b: Board, cfg: BotCfg, skip: ReadonlySet<string> = new S
       return { t: "reroll", i: low };
     return { t: "cheat", i: best };
   }
-  // 해피 타운 원정 캠프
+  // 글리치 원정 캠프
   if (b.exp?.camp && !skip.has("exp")) {
-    const c = b.exp.camp;
-    // 필드에 적이 많이 쌓였으면 「위험」 — 휴식 · 상점(정화)으로
-    const low = b.enemies.length > capOf(b) * 0.4;
-    if (c.k === "route") {
-      let best = 0,
-        bv = -Infinity;
-      c.dice.forEach((d, i) => {
-        const n = expNodeOf(expDest(b, d));
-        const v = (low && (n === "rest" || n === "shop") ? 100 : 0) + (n === "event" ? 30 : 0) + (n === "elite" ? (low ? -50 : 15) : 0) + (n === "boss" ? -40 : 0) - d;
-        if (v > bv) (bv = v), (best = i);
-      });
-      return { t: "exp", a: best };
-    }
-    if (c.k === "draft") {
-      const dps = factionDps(b);
-      const main = cfg.focus ?? (Object.entries(dps).sort((p, q) => q[1] - p[1] || p[0].localeCompare(q[0]))[0][0] as Faction);
-      const i = c.offer.findIndex((id) => UNIT[id].faction === main);
-      if (!hasEmpty(b) && !c.offer.some((id) => b.cells.some((s) => s.def === id && s.units.length < STACK))) return { t: "exp", a: -1 };
-      return { t: "exp", a: Math.max(0, i) };
-    }
-    if (c.k === "relic") {
-      const pref = ["growth", "alch", "iron", "piggy", "twin", `oath_${cfg.focus ?? "x"}`, "dice3"];
-      for (const id of pref) {
-        const i = c.offer.indexOf(id);
-        if (i >= 0) return { t: "exp", a: i };
+    const x = b.exp,
+      c = b.exp.camp;
+    const low = x.hp < x.max * 0.5;
+    switch (c.k) {
+      case "squad": {
+        const i = c.opts.indexOf(cfg.focus ?? "");
+        return { t: "exp", a: Math.max(0, i) };
       }
-      const i = c.offer.findIndex((id) => id !== "blood" && !id.startsWith("oath_"));
-      return { t: "exp", a: i };
+      case "map": {
+        let best = expNext(b)[0],
+          bv = -Infinity;
+        for (const j of expNext(b)) {
+          const n = x.map[x.f + 1][j];
+          const v =
+            n.kind === "rest" ? (low ? 60 : 5) : n.kind === "elite" ? (x.hp > x.max * 0.6 ? 25 : -40) : n.kind === "shop" ? (b.gold > 250 ? 30 : 0) : n.kind === "treasure" ? 40 : n.kind === "event" ? 12 : 10;
+          if (v > bv) (bv = v), (best = j);
+        }
+        return { t: "exp", a: best };
+      }
+      case "draft": {
+        const dps = factionDps(b);
+        const main = cfg.focus ?? (Object.entries(dps).sort((p, q) => q[1] - p[1] || p[0].localeCompare(q[0]))[0][0] as Faction);
+        if (!hasEmpty(b) && !c.offer.some((id) => b.cells.some((s) => s.def === id && s.units.length < STACK))) return { t: "exp", a: -1 };
+        return { t: "exp", a: Math.max(0, c.offer.findIndex((id) => UNIT[id].faction === main)) };
+      }
+      case "relic": {
+        const pref = ["growth", "alch", "first", "iron", "hunter", "vamp", "piggy", "twin", "bag", "kit", "goldhand", `oath_${cfg.focus ?? "x"}`];
+        for (const id of pref) {
+          const i = c.offer.indexOf(id);
+          if (i >= 0) return { t: "exp", a: i };
+        }
+        return { t: "exp", a: Math.max(0, c.offer.findIndex((id) => id !== "blood" && !id.startsWith("oath_"))) };
+      }
+      case "shop": {
+        const want = (k: string) => {
+          const i = c.items.findIndex((it) => it.kind === k && !it.sold);
+          return i >= 0 && b.gold >= c.items[i].cost ? i : -1;
+        };
+        let i = x.hp < x.max * 0.6 ? want("heal") : -1;
+        if (i < 0 && x.curses.length) i = want("uncurse");
+        if (i < 0 && hasEmpty(b)) i = want("legend");
+        if (i < 0 && hasEmpty(b) && b.gold > 260) i = want("epic");
+        if (i < 0 && b.gold > 350) i = want("relic");
+        return { t: "exp", a: i };
+      }
+      case "rest":
+        return { t: "exp", a: x.hp < x.max * 0.7 ? 0 : 1 };
+      case "event": {
+        const a =
+          c.id === "vend" ? (b.gold >= 60 && hasEmpty(b) ? 0 : 1) : c.id === "merc" ? (hasEmpty(b) ? 0 : 1) : c.id === "spring" ? (x.hp > 16 ? 0 : 1) : c.id === "trap" ? (x.hp > 12 ? 0 : 1) : 1;
+        return { t: "exp", a };
+      }
     }
-    if (c.k === "shop") {
-      const want = (k: string) => {
-        const i = c.items.findIndex((it) => it.kind === k && !it.sold);
-        return i >= 0 && b.gold >= c.items[i].cost ? i : -1;
-      };
-      let i = b.enemies.length > capOf(b) * 0.3 ? want("heal") : -1;
-      if (i < 0 && hasEmpty(b)) i = want("legend");
-      if (i < 0 && hasEmpty(b) && b.gold > 260) i = want("epic");
-      if (i < 0 && b.gold > 400) i = want("relic");
-      return { t: "exp", a: i };
-    }
-    return { t: "exp", a: b.enemies.length > capOf(b) * 0.25 ? 0 : 1 };
   }
   // 보스 2페이즈 예고: 표시된 칸의 유닛을 빈 칸 · 약한 칸으로 피함 (사람이 끌어서 하는 것과 같은 swap)
   // 심연 변이 「봉인」: 봉인된 칸의 유닛도 같은 식으로 빼냄

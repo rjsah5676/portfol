@@ -48,18 +48,18 @@ export interface Loadout {
   stage?: Stage;
   /** 픽셀 타운 단계 1..TOWN_MAX (stage 가 town 일 때만 씀) */
   town?: number;
-  /** 도시 개발 (해피 타운 땅문서로 산 영구 보너스, id → 레벨) — 모든 스테이지에 */
-  city?: Record<string, number>;
+  /** 글리치 원정: 해금한 시작 분대 (knight · mech · arcane) */
+  squads?: string[];
 }
 
 /* ───────────────────────── 스테이지 ───────────────────────── */
 
 export type Stage = "main" | "town";
 /**
- * 픽셀 타운 (PIXEL MARBLE 맵 테마 확장 스테이지) — 메인(글리치 시티)을 밀면 단계가 열리고, 성장을 앞당겨 주는 곳.
- *  - 메인에서 오염 단계를 TOWN_EVERY 개 열 때마다 1단계씩 (메인 TOWN_FROM 단계가 열리면 1단계)
- *  - 적 세기 = 메인 오염 townGlitchLv(단계) 수준 (지금 막힌 곳보다 조금 아래) · 보상은 그 단계 × TOWN_REWARD
- *  - 고유 규칙: 해피 타운 판을 한 바퀴 도는 로그라이크 원정 (갈림길 주사위 · 칸별 전투 · 드래프트 · 원정 유물 · UR 보스, town.ts)
+ * 글리치 원정 (stage "town" · 로그라이크 확장 모드) — 메인(글리치 시티)을 밀면 원정 단계 상한이 열리고, 성장을 앞당겨 주는 곳.
+ *  - 원정 단계 N 은 「메인 오염 townNeed(N) 열기」와 「원정 N-1 단계 클리어」 둘 다 (townAvail)
+ *  - 적 세기 = 메인 오염 townGlitchLv(단계) 수준 · 보상은 그 단계 × TOWN_REWARD · 단계마다 비틀기 (town.ts EXP_ASC)
+ *  - 규칙: 지도 · 분대 · 드래프트 · 원정 유물 · 기믹 엘리트 · 보스 (town.ts · sim.ts 글리치 원정)
  */
 export const TOWN_FROM = 6;
 export const TOWN_EVERY = 2;
@@ -68,42 +68,17 @@ export const TOWN_REWARD = 1.3;
 /** 메인에서 연 오염 단계 → 열린 픽셀 타운 단계 (0 = 아직) */
 export const townOpenOf = (glitchOpen: number) =>
   glitchOpen < TOWN_FROM ? 0 : Math.min(TOWN_MAX, 1 + Math.floor((glitchOpen - TOWN_FROM) / TOWN_EVERY));
+/** 지금 고를 수 있는 원정 단계 상한 — 메인 조건 · 바로 아래 단계 클리어 둘 다 (done = 클리어한 단계들) */
+export const townAvail = (glitchOpen: number, done: readonly number[] = []) =>
+  Math.min(townOpenOf(glitchOpen), (done.length ? Math.max(...done) : 0) + 1);
 /** 이 픽셀 타운 단계가 열리는 메인 오염 단계 */
 export const townNeed = (lv: number) => TOWN_FROM + (Math.max(1, lv) - 1) * TOWN_EVERY;
 /** 픽셀 타운 단계의 적 세기 (메인 오염 단계로) */
 export const townGlitchLv = (lv: number) => Math.min(GLITCH_MAX, 2 + 2 * Math.max(1, Math.min(TOWN_MAX, lv)));
 /** 픽셀 타운 단계를 처음 클리어하면 */
-export const townFirstClear = (lv: number): Goods => ({ cores: 4 + lv, relicBox: 1, cardBox: 1, deeds: 10 + 2 * lv });
-/** 해피 타운 판 하나 땅문서 (검증된 판) — 10웨이브마다 · 단계가 높을수록 · 클리어 보너스 */
-export const townDeeds = (r: { win: boolean; wave: number }, lv: number) =>
-  Math.floor(Math.min(r.wave, 60) / 10) * (1 + Math.floor(lv / 4)) + (r.win ? 5 + lv : 0);
+export const townFirstClear = (lv: number): Goods => ({ cores: 4 + lv, relicBox: 1, cardBox: 1 });
 /** 해피 타운 단계 첫 클리어로만 얻는 유물 (상자에선 안 나옴) */
 export const TOWN_RELIC: Record<number, string> = { 5: "lucky_dice", 10: "golden_deed", 15: "moa_card", 20: "forte_box" };
-
-/* ───────────────────────── 도시 개발 (땅문서) ───────────────────────── */
-
-/**
- * 해피 타운에서만 버는 땅문서로 사는 영구 보너스 — 글리치 시티 · 해피 타운 모두에 붙음 (Loadout.city).
- * 앞의 것은 싸고 빨리 체감, 「수호자 후원」은 오래 모으는 목표.
- */
-export interface CityDef {
-  id: string;
-  name: string;
-  /** 레벨별 설명 */
-  at: (lv: number) => string;
-  max: number;
-  /** lv → lv+1 땅문서 */
-  cost: (lv: number) => number;
-}
-export const CITY: CityDef[] = [
-  { id: "c_gold", name: "시작 자금", at: (l) => `시작 골드 +${25 * l}`, max: 5, cost: (l) => 10 * (l + 1) },
-  { id: "c_wave", name: "동네 상권", at: (l) => `웨이브 골드 +${6 * l}%`, max: 5, cost: (l) => 12 * (l + 1) },
-  { id: "c_clock", name: "시계탑", at: (l) => `보스 제한 시간 +${2 * l}초`, max: 5, cost: (l) => 15 * (l + 1) },
-  { id: "c_summon", name: "소환소", at: (l) => `소환 비용 -${l}G`, max: 3, cost: (l) => 20 * (l + 1) },
-  { id: "c_stone", name: "행운 가게", at: (l) => `시작 행운석 +${l}`, max: 3, cost: (l) => 20 * (l + 1) },
-  { id: "c_power", name: "수호자 후원", at: (l) => `모든 피해 +${2 * l}%`, max: 10, cost: (l) => 25 * (l + 1) },
-];
-export const CITY_OF: Record<string, CityDef> = Object.fromEntries(CITY.map((c) => [c.id, c]));
 
 /* ───────────────────────── 오늘의 도전 ───────────────────────── */
 
@@ -329,7 +304,7 @@ export const RELICS: RelicDef[] = [
   relic("chrono_core", "크로노 코어", (l) => `보스 제한 시간 +${V.chrono_core(l)}초 · 보스 처치 골드 +50%`, 1, "boss", "deep"),
   relic("void_stone", "공허석", (l) => `균열 적에게 주는 피해 +${V.void_stone(l)}% · 균열을 닫으면 행운석 +1`, 1, "gamble", "deep"),
   relic("lucky_dice", "행운 주사위", (l) => `보스를 잡으면 무료 소환 ${V.lucky_dice(l)}회`, 1, "any", "town"),
-  relic("golden_deed", "황금 땅문서", (l) => `적 처치 골드 +${V.golden_deed(l)} · 해피 타운 원정 시작 골드 +${V.golden_deed(l) * 100}`, 1, "eco", "town"),
+  relic("golden_deed", "황금 지도", (l) => `적 처치 골드 +${V.golden_deed(l)} · 글리치 원정 시작 골드 +${V.golden_deed(l) * 100}`, 1, "eco", "town"),
   relic("moa_card", "MOA 의 명함", (l) => `유닛 판매 금액 +${V.moa_card(l)}% · 레전드 이상을 팔면 행운석 +1`, 2, "eco", "town"),
   relic("forte_box", "FORTE 의 오르골", (l) => `공격할 때 ${V.forte_box(l)}% 확률로 궁극기 충전 +1`, 2, "any", "town"),
 ];
@@ -500,17 +475,17 @@ export interface Mods {
   /** 스테이지 · 픽셀 타운 단계 (main 이면 0) */
   stage: Stage;
   town: number;
-  /** 도시 개발 (화면 표시) · 모든 피해 배수 */
-  city: Record<string, number>;
-  cityDmg: number;
-  /** 심연 2막 · 해피 타운 유물 */
+  /** 글리치 원정: 해금한 시작 분대 */
+  squads: string[];
+  /** 심연 2막 · 원정 유물 */
   mythDmg: number;
   aspdAll: number;
   bossGold: number;
   riftDmg: number;
   bossFree: number;
   /** 해피 타운 원정 시작 골드 + */
-  deedGold: number;
+  /** 글리치 원정 시작 골드 + (황금 지도) */
+  expGold: number;
   sellStone: number;
   ultCharge: number;
 }
@@ -565,13 +540,7 @@ export function cleanLoadout(lo: Loadout | null | undefined, unitIds?: Set<strin
     treasure: lo?.stage === "town" ? 0 : treasureWaveOk(lo?.treasure) ? (lo!.treasure as number) : 0,
     stage: lo?.stage === "town" ? "town" : "main",
     town: lo?.stage === "town" ? clampInt(lo?.town, 1, TOWN_MAX) : 0,
-    city: Object.fromEntries(
-      Object.entries(lo?.city ?? {})
-        .filter(([k]) => !!CITY_OF[k])
-        .map(([k, v]) => [k, clampInt(v, 0, CITY_OF[k].max)] as [string, number])
-        .filter(([, v]) => v > 0)
-        .sort((a, b) => (a[0] < b[0] ? -1 : 1))
-    ),
+    squads: ["knight", "mech", "arcane"].filter((q) => q === "knight" || (lo?.squads ?? []).includes(q)),
   };
 }
 
@@ -591,21 +560,18 @@ export function modsOf(lo: Loadout | null | undefined): Mods {
   /** 장착한 유물 레벨 (안 끼면 0) */
   const X = (id: string) => (x.has(id) ? (L.relicLv[id] ?? 1) : 0);
   const has = (id: string) => x.has(id);
-  /** 도시 개발 레벨 */
-  const C = (id: string) => L.city[id] ?? 0;
   return {
     lv: L.lv,
-    startGold: R("g_gold") + 25 * C("c_gold"),
-    startStones: R("g_stone") + C("c_stone"),
+    startGold: R("g_gold"),
+    startStones: R("g_stone"),
     startLuck: has("lucky_clover") ? V.lucky_clover(X("lucky_clover")) : 0,
-    summonDisc: R("g_summon") + C("c_summon"),
-    waveGold: (1 + R("g_wave") / 100) * (1 + (has("gold_gear") ? V.gold_gear_wave(X("gold_gear")) : 0) / 100) * (1 + (6 * C("c_wave")) / 100),
+    summonDisc: R("g_summon"),
+    waveGold: (1 + R("g_wave") / 100) * (1 + (has("gold_gear") ? V.gold_gear_wave(X("gold_gear")) : 0) / 100),
     sellMult: 1 + R("g_sell") / 100 + (has("moa_card") ? V.moa_card(X("moa_card")) / 100 : 0),
     bossSec:
       R("g_boss") +
       (has("hourglass") ? V.hourglass(X("hourglass")) : 0) +
       (has("chrono_core") ? V.chrono_core(X("chrono_core")) : 0) +
-      2 * C("c_clock") +
       GLITCH[L.stage === "town" ? townGlitchLv(L.town) : L.glitch].bossSec,
     fac: {
       knight: 1 + R("k_drill") / 100,
@@ -645,14 +611,13 @@ export function modsOf(lo: Loadout | null | undefined): Mods {
     treasure: L.treasure,
     stage: L.stage,
     town: L.town,
-    city: L.city,
-    cityDmg: 1 + (2 * C("c_power")) / 100,
+    squads: L.squads,
     mythDmg: 1 + (has("myth_seal") ? V.myth_seal(X("myth_seal")) : 0) / 100,
     aspdAll: has("overdrive") ? V.overdrive(X("overdrive")) / 100 : 0,
     bossGold: has("chrono_core") ? 1.5 : 1,
     riftDmg: 1 + (has("void_stone") ? V.void_stone(X("void_stone")) : 0) / 100,
     bossFree: has("lucky_dice") ? V.lucky_dice(X("lucky_dice")) : 0,
-    deedGold: has("golden_deed") ? V.golden_deed(X("golden_deed")) * 100 : 0,
+    expGold: has("golden_deed") ? V.golden_deed(X("golden_deed")) * 100 : 0,
     sellStone: has("moa_card") ? 1 : 0,
     ultCharge: has("forte_box") ? V.forte_box(X("forte_box")) / 100 : 0,
   };
@@ -843,8 +808,6 @@ export interface Goods {
   trans?: number;
   /** 꾸미기 id (inv.defense) */
   item?: string;
-  /** 땅문서 (해피 타운 · 도시 개발) */
-  deeds?: number;
 }
 /**
  * GP 기준값 — 재화샵 값 (= 100%). 패키지 이득 % 는 이 값으로 셈.

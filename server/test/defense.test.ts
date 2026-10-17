@@ -2,10 +2,10 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { B, BALANCE_VER, LAST_WAVE, countOf, sec } from "../../web/src/lib/defense/balance";
 import { BOTS, botTurn } from "../../web/src/lib/defense/bot";
 import { HASH_TICKS, TICKS_PER_TURN, TURN_MS, replay, replayer, scoreOf, validLog, type LogEntry } from "../../web/src/lib/defense/replay";
-import { CELLS, CORNERS, SLOTS, apply, capOf, expDest, hashGame, isCmd, newGame, pureT, step, unitCount, upCost, type Game } from "../../web/src/lib/defense/sim";
-import { EXP, expNodeOf } from "../../web/src/lib/defense/town";
+import { CELLS, SLOTS, apply, expNext, hashGame, isCmd, newGame, pureT, step, unitCount, upCost, type Game } from "../../web/src/lib/defense/sim";
+import { EXP } from "../../web/src/lib/defense/town";
 import { RECIPES, UNIT, UNITS } from "../../web/src/lib/defense/units";
-import { PHASE_PAIRS, bossOfWave, phaseOn } from "../../web/src/lib/defense/enemies";
+import { BOSSES, PHASE_PAIRS, bossOfWave, phaseOn } from "../../web/src/lib/defense/enemies";
 import { CHEATS, CHEAT_MULTI_SEC, cheatFxOf, cheatOdds } from "../../web/src/lib/defense/cheats";
 import { TPS } from "../../web/src/lib/defense/balance";
 import { GLITCH, TREASURE_WAVES, treasureChance, relicShardsToMax, CHEAT_RES, BOX, BENCH_COST, FRES_COST, TRANS_IDS, GP_PACKS, GP_SELL, GP_STORE, PACK, PASS_PREMIUM_GP, RESEARCH, lvCost, modsOf, packPct, planUpAll, seasonScore, townGlitchLv, townOpenOf, transRoll } from "../../web/src/lib/defense/progress";
@@ -282,64 +282,81 @@ describe("픽셀 글리치 디펜스 엔진", () => {
     expect(b.cheats).toEqual([first]);
   });
 
-  it("해피 타운 원정: 갈림길 · 구간 전투 · 드래프트 · 캠프 멈춤 · 유물 · 상점 · UR 보스 세기 · 결정론", () => {
-    const lo = { stage: "town" as const, town: 1 };
+  it("글리치 원정: 분대 · 지도 · 구간 전투 · 정리 시간 · 드래프트 · 캠프 멈춤 · 유물 · 이벤트 · 보스 · 결정론", () => {
+    const lo = { stage: "town" as const, town: 1, squads: ["knight", "mech"] };
     const g = started(5, 1, [lo]);
     const b = g.boards[0];
-    expect(b.stage).toBe("town");
-    expect(CORNERS).toEqual([0, 8, 13, 21]);
     const x = b.exp!;
-    expect(x.camp?.k).toBe("route");
+    expect(b.stage).toBe("town");
+    // 분대: 해금한 것만
+    expect(x.camp).toEqual({ k: "squad", opts: ["knight", "mech"] });
+    expect(apply(g, 0, { t: "exp", a: 5 })).toBeTruthy();
+    expect(apply(g, 0, { t: "exp", a: 1 })).toBeNull();
+    expect(x.squad).toBe("mech");
+    expect(x.relics).toContain("sq_mech");
+    expect(b.cells.filter((c) => c.def).every((c) => UNIT[c.def!].faction === "mech")).toBe(true);
+    // 지도: 8층 + 보스 · 1층은 전투 · 4층 보물 · 8층 휴식 · 모든 칸이 위로 이어짐
+    expect(x.map.length).toBe(EXP.floors + 1);
+    expect(x.map[0].every((n) => n.kind === "fight")).toBe(true);
+    expect(x.map[3].every((n) => n.kind === "treasure")).toBe(true);
+    expect(x.map[EXP.floors - 1].every((n) => n.kind === "rest")).toBe(true);
+    expect(x.map[EXP.floors][0].kind).toBe("boss");
+    for (let f = 0; f < EXP.floors; f++) {
+      expect(x.map[f].every((n) => n.next.length > 0)).toBe(true);
+      for (let j = 0; j < x.map[f + 1].length; j++) expect(x.map[f].some((n) => n.next.includes(j))).toBe(true);
+    }
     // 캠프: 시간이 멈춤 · 다음 웨이브 불가 · 소환은 됨
-    const t0 = g.tick;
+    expect(x.camp?.k).toBe("map");
     step(g);
     expect(b.wave).toBe(0);
     expect(apply(g, 0, { t: "next" })).toBeTruthy();
     expect(apply(g, 0, { t: "summon" })).toBeNull();
-    // 갈림길: 고른 눈만큼 이동 → 그 칸 일
-    const d = (x.camp as { dice: number[] }).dice[0];
-    expect(apply(g, 0, { t: "exp", a: 0 })).toBeNull();
-    expect(b.pos).toBe(expDest({ ...b, pos: 0 } as typeof b, d));
-    expect(x.node).toBe(expNodeOf(b.pos));
-    expect(g.tick).toBeGreaterThan(t0 - 1);
-    // 전투 칸: 정해진 웨이브 뒤 드래프트 (못 잡은 적은 남음)
-    if (x.node === "fight") {
-      expect(x.segEnd).toBe(EXP.fightWaves);
-      for (let i = 0; i < 100000 && x.camp?.k !== "draft" && !b.result; i++) step(g);
-      expect(x.camp?.k).toBe("draft");
-      expect(b.wave).toBe(EXP.fightWaves);
-      const g0 = b.gold;
-      expect(apply(g, 0, { t: "exp", a: -1 })).toBeNull();
-      expect(b.gold).toBe(g0 + EXP.skipGold);
-      expect(x.camp?.k).toBe("route");
-      expect(x.segs).toBe(1);
-    }
-    // 원정 유물: 피의 계약 = 한도 -20 · 철벽 = +25
-    x.camp = { k: "relic", offer: ["blood", "iron"] };
+    expect(apply(g, 0, { t: "exp", a: 9 })).toBeTruthy();
+    // 1층 전투 → 웨이브 → 정리 → 드래프트
+    expect(apply(g, 0, { t: "exp", a: expNext(b)[0] })).toBeNull();
+    expect(x.f).toBe(0);
+    expect(x.stage).toBe("waves");
+    expect(x.segEnd).toBe(EXP.fightWaves);
+    for (let i = 0; i < 100000 && x.camp?.k !== "draft" && !b.result; i++) step(g);
+    expect(x.camp?.k).toBe("draft");
+    expect(b.wave).toBe(EXP.fightWaves);
+    expect(b.enemies.length).toBe(0);
+    const g0 = b.gold;
+    expect(apply(g, 0, { t: "exp", a: -1 })).toBeNull();
+    expect(b.gold).toBe(g0 + EXP.skipGold);
+    expect(x.camp?.k).toBe("map");
+    // 유물: 피의 계약 = 최대 체력 -10 · 피해 ×1.35
+    x.camp = { k: "relic", offer: ["blood"] };
     apply(g, 0, { t: "exp", a: 0 });
-    expect(capOf(b)).toBe(100 - 20);
+    expect(x.max).toBe(EXP.hp - 10);
     expect(x.dmg).toBeCloseTo(1.35);
-    // UR 보스는 일찍 와도 EXP.bossWave 세기
-    x.camp = { k: "route", dice: [6] };
-    b.pos = 24;
+    // 이벤트: 도박꾼 쥐 사양 · 피의 샘 (체력 모자라면 못 함)
+    x.camp = { k: "event", id: "spring" };
+    x.hp = 5;
+    expect(apply(g, 0, { t: "exp", a: 0 })).toBeTruthy();
+    expect(apply(g, 0, { t: "exp", a: 1 })).toBeNull();
+    expect(x.hp).toBe(11);
+    // 보스: 마지막 층 다음 → 보스 웨이브 · 보스 체력
+    x.f = EXP.floors - 1;
+    x.i = 0;
+    x.camp = { k: "map" };
     apply(g, 0, { t: "exp", a: 0 });
-    expect(b.pos).toBe(0);
     expect(x.node).toBe("boss");
     expect(b.wave).toBe(EXP.bossWave);
     expect(b.phase).toBe("boss");
+    expect(b.enemies.some((e) => e.boss >= 0)).toBe(true);
     expect(isCmd({ t: "exp", a: 1 })).toBe(true);
     expect(isCmd({ t: "exp", a: 9 })).toBe(false);
     // 메인은 원정 없음
     expect(started(5, 1).boards[0].exp).toBeNull();
-    // UR 보스
-    expect(bossOfWave(10, "town")?.fighter).toBe("ur-dice");
-    expect(bossOfWave(20, "town")?.fighter).toBe("soyoung");
+    // 원정 보스는 UR 셋 중 하나 · 메인 보스 웨이브와 섞이지 않음
+    expect(["ur-dice", "ur-moa", "ur-forte"]).toContain(BOSSES[x.boss].fighter);
     expect(bossOfWave(10)?.fighter).toBe("lily");
     const { g: a, log } = botGame(9, 0, Infinity, [lo]);
     const r = replay(9, 1, log, [lo]);
     expect(r.boards[0].result).toEqual(a.boards[0].result);
-    expect(a.boards[0].exp?.segs).toBe(r.boards[0].exp?.segs);
-    expect(a.boards[0].exp!.segs).toBeGreaterThan(0);
+    expect(a.boards[0].exp?.f).toBe(r.boards[0].exp?.f);
+    expect(a.boards[0].exp!.f).toBeGreaterThan(0);
     // 타운 단계 → 적 세기 · 열림
     expect(modsOf(lo).glitch.lv).toBe(townGlitchLv(1));
     expect(townOpenOf(5)).toBe(0);
@@ -368,15 +385,14 @@ describe("픽셀 글리치 디펜스 엔진", () => {
     }
     const boss = b.enemies.find((e) => e.boss >= 0);
     if (boss) expect(boss.shield).toBeGreaterThan(0);
-    // 도시 개발 · 새 유물 → mods
-    const m = modsOf({ city: { c_gold: 2, c_clock: 3, c_power: 5, x: 9 }, relics: ["myth_seal", "overdrive", "lucky_dice"] });
-    expect(m.startGold).toBe(50);
-    expect(m.cityDmg).toBeCloseTo(1.1);
+    // 새 유물 → mods
+    const m = modsOf({ relics: ["myth_seal", "overdrive", "lucky_dice"] });
     expect(m.mythDmg).toBeGreaterThan(1);
     expect(m.aspdAll).toBeGreaterThan(0);
     expect(m.bossFree).toBe(2);
-    expect(modsOf({ city: { c_clock: 3 } }).bossSec - modsOf({}).bossSec).toBe(6);
-    expect(Object.keys(modsOf({ city: { nope: 3 } }).city)).toEqual([]);
+    // 원정 분대: 기사단은 늘 · 나머지는 해금한 것만
+    expect(modsOf({}).squads).toEqual(["knight"]);
+    expect(modsOf({ squads: ["arcane", "nope"] }).squads).toEqual(["knight", "arcane"]);
   });
 
   it("결정론: 같은 시드 · 같은 기록이면 결과가 똑같음", () => {

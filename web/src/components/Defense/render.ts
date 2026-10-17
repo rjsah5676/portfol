@@ -12,13 +12,12 @@ import {
   BOSS_ART,
   ENEMY_ART,
   FIELD_ART,
-  TOWN_ART,
   UNIT_ART,
   bossFace,
   img,
   type SpriteSpec,
 } from "@/lib/defense/assets";
-import { EXP_NODE_TEXT, TOWN_TILES, expNodeOf } from "@/lib/defense/town";
+import { GIM } from "@/lib/defense/town";
 import { CAP, TPS } from "@/lib/defense/balance";
 import { THEME, type ThemeDef } from "@/lib/defense/progress";
 import {
@@ -31,9 +30,7 @@ import {
   STACK,
   cellX,
   cellY,
-  expDest,
   pathPos,
-  tileCell,
   tileXY,
   type Board,
   type Enemy,
@@ -539,7 +536,6 @@ export function draw(ctx: CanvasRenderingContext2D, b: Board, v: View, opt: { ra
   }
   const danger = Math.min(1, Math.max(0, (b.enemies.length - CAP * 0.6) / (CAP * 0.4)));
   const blink = Math.floor(now / 250) % 2;
-  if (b.stage === "town") drawTown(ctx, b, v, now, blink);
 
   // 길 위 흐르는 화살표 (적이 가는 방향)
   ctx.fillStyle = danger > 0 ? `rgba(255,77,109,${0.2 + danger * 0.3})` : "rgba(191,179,255,0.16)";
@@ -646,7 +642,6 @@ export function draw(ctx: CanvasRenderingContext2D, b: Board, v: View, opt: { ra
   };
   if (opt.range && v.sel >= 0 && v.sel < CELLS) showRange(v.sel);
   if (v.sel >= 0) brackets(ctx, v.sel, "#ffffff", now);
-  if (b.stage === "town" && v.selTile >= 0) tileBrackets(ctx, v.selTile, "#ffd23f", now);
   if (v.drag && v.hover >= 0 && v.hover !== v.drag.from) brackets(ctx, v.hover, "#5ff2ff", now);
 
   // 유닛 · 적: 발 y 순서로
@@ -692,10 +687,6 @@ export function draw(ctx: CanvasRenderingContext2D, b: Board, v: View, opt: { ra
   for (const e of b.enemies) list.push({ y: e.y * CELL + 10, fn: () => drawEnemy(ctx, e, now) });
   list.sort((a, c) => a.y - c.y);
   for (const d of list) d.fn();
-  if (b.stage === "town") {
-    drawRoute(ctx, b, now);
-    drawToken(ctx, b, v, now);
-  }
   // 보관함 유닛 (작게, 공격 안 함)
   for (let j = 0; j < BENCH; j++) {
     const i = CELLS + j;
@@ -779,252 +770,6 @@ export function draw(ctx: CanvasRenderingContext2D, b: Board, v: View, opt: { ra
     ctx.fillRect(0, FH - 6, FW, 6);
     ctx.fillRect(0, 0, 6, FH);
     ctx.fillRect(FW - 6, 0, 6, FH);
-  }
-}
-
-/* ───────── 해피 타운 ───────── */
-
-let townCache: HTMLCanvasElement | null = null;
-/** 동네 길 바닥 (한 번 그려 두고 재사용): 따뜻한 벽돌길 + 칸마다 동네 색 띠 + 칸 경계 */
-function townFloor(): HTMLCanvasElement | null {
-  if (typeof document === "undefined") return null;
-  if (townCache) return townCache;
-  const cv = document.createElement("canvas");
-  cv.width = FW;
-  cv.height = FH;
-  const ctx = cv.getContext("2d")!;
-  let h = 7654321;
-  const rnd = () => ((h = Math.imul(h ^ (h >>> 15), 2246822519) >>> 0), h / 4294967296);
-  for (let t = 0; t < PERIM; t++) {
-    const [gx, gy] = tileXY(t);
-    const x = gx * CELL,
-      y = gy * CELL;
-    const tt = TOWN_TILES[t];
-    const corner = tileCell(t) < 0;
-    // 바탕: 따뜻한 돌길 (모서리 특수 칸은 밝게)
-    ctx.fillStyle = corner ? "#5a4a7a" : "#4a3d63";
-    ctx.fillRect(x, y, CELL, CELL);
-    for (let r = 0; r < 4; r++) {
-      const off = r % 2 ? CELL / 4 : 0;
-      for (let c = -1; c < 3; c++) {
-        const bx = x + c * (CELL / 2) + off,
-          by = y + r * (CELL / 4);
-        const tone = rnd();
-        ctx.fillStyle = corner ? (tone > 0.5 ? "#6a5a8c" : "#625284") : tone > 0.66 ? "#5a4b78" : tone > 0.33 ? "#52446f" : "#4a3d66";
-        const x0 = Math.max(x, bx + 2),
-          x1 = Math.min(x + CELL, bx + CELL / 2 - 2);
-        if (x1 > x0) {
-          ctx.fillRect(x0, by + 2, x1 - x0, CELL / 4 - 4);
-          ctx.fillStyle = "rgba(255,255,255,0.06)";
-          ctx.fillRect(x0, by + 2, x1 - x0, 2);
-        }
-      }
-    }
-    // 동네 색 띠 (유닛 쪽 가장자리) — 마블 판의 이름판 색
-    if (!corner) {
-      ctx.fillStyle = tt.color;
-      ctx.globalAlpha = 0.85;
-      if (gy === 0) ctx.fillRect(x + 2, y + CELL - 7, CELL - 4, 5);
-      else if (gy === FIELD_H - 1) ctx.fillRect(x + 2, y + 2, CELL - 4, 5);
-      else if (gx === 0) ctx.fillRect(x + CELL - 7, y + 2, 5, CELL - 4);
-      else ctx.fillRect(x + 2, y + 2, 5, CELL - 4);
-      ctx.globalAlpha = 1;
-    }
-    // 칸 경계
-    ctx.fillStyle = "rgba(10,8,22,0.55)";
-    ctx.fillRect(x, y, CELL, 2);
-    ctx.fillRect(x, y, 2, CELL);
-  }
-  townCache = cv;
-  return cv;
-}
-
-/** 길 칸 왼쪽 위 (디자인 px) */
-const tileOrigin = (t: number): [number, number] => {
-  const [gx, gy] = tileXY(t);
-  return [gx * CELL, gy * CELL];
-};
-
-/** 해피 타운: 바닥 · 모서리 특수 칸 · 주사위 칸 · 건물 · 지을 수 있는 칸 표시 */
-function drawTown(ctx: CanvasRenderingContext2D, b: Board, v: View, now: number, blink: number) {
-  const f = townFloor();
-  if (f) {
-    // 길 고리만 덮음 (가운데 마당 · 블록은 그대로)
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(0, 0, FW, CELL);
-    ctx.rect(0, FH - CELL, FW, CELL);
-    ctx.rect(0, CELL, CELL, FH - 2 * CELL);
-    ctx.rect(FW - CELL, CELL, CELL, FH - 2 * CELL);
-    ctx.clip();
-    ctx.drawImage(f, 0, 0);
-    ctx.restore();
-  }
-  for (let t = 0; t < PERIM; t++) {
-    const [x, y] = tileOrigin(t);
-    const tt = TOWN_TILES[t];
-    // 모서리 특수 칸 그림 (마블)
-    if (tt.sp) {
-      const im = img(TOWN_ART.sp(tt.sp));
-      if (im) {
-        const k = Math.min((CELL - 6) / im.naturalWidth, (CELL - 6) / im.naturalHeight);
-        const w = im.naturalWidth * k,
-          hh = im.naturalHeight * k;
-        ctx.imageSmoothingEnabled = true;
-        ctx.drawImage(im, x + (CELL - w) / 2, y + CELL - hh - 3, w, hh);
-        ctx.imageSmoothingEnabled = false;
-      }
-      if (b.exp) {
-        const n = EXP_NODE_TEXT[expNodeOf(t)];
-        pxText(ctx, n.name, x + CELL / 2, y + 10, 11, n.color);
-      }
-      continue;
-    }
-    // 원정: 엘리트 칸 · 지나온 칸
-    if (b.exp) {
-      const n = expNodeOf(t);
-      if (n === "elite") {
-        ctx.fillStyle = "rgba(255,107,127,0.16)";
-        ctx.fillRect(x + 2, y + 2, CELL - 4, CELL - 4);
-      }
-      if (n !== "fight") pxText(ctx, EXP_NODE_TEXT[n].name, x + CELL / 2, y + 12, 11, EXP_NODE_TEXT[n].color);
-      if (b.exp.path.some((p) => p.t === t) && b.pos !== t) {
-        ctx.fillStyle = "rgba(5,4,12,0.35)";
-        ctx.fillRect(x + 2, y + 2, CELL - 4, CELL - 4);
-      }
-    }
-    // 말이 막 선 칸: 번쩍 (엘리트 · 보스면 금색)
-    if (v.flash && v.flash.t === t && now < v.flash.until) {
-      const k = (v.flash.until - now) / 900;
-      ctx.fillStyle = v.flash.gold ? `rgba(255,210,63,${0.25 + 0.45 * k * blink})` : `rgba(255,255,255,${0.12 + 0.2 * k})`;
-      ctx.fillRect(x + 2, y + 2, CELL - 4, CELL - 4);
-    }
-    if (v.hoverTile === t && v.selTile !== t) {
-      ctx.fillStyle = "rgba(255,255,255,0.08)";
-      ctx.fillRect(x + 2, y + 2, CELL - 4, CELL - 4);
-    }
-    // 건물
-    const lv = b.bld[t];
-    if (lv > 0) {
-      const src = lv >= 3 ? (tt.lm ? TOWN_ART.lm(tt.lm) : TOWN_ART.bld(3)) : TOWN_ART.bld(lv);
-      const im = img(src) ?? img(TOWN_ART.bld(Math.min(3, lv)));
-      const seized = b.seized.includes(t);
-      const open = !seized;
-      if (im) {
-        const H = CELL * (lv === 1 ? 0.56 : lv === 2 ? 0.7 : 0.86);
-        const k = Math.min(H / im.naturalHeight, (CELL - 6) / im.naturalWidth);
-        const w = im.naturalWidth * k,
-          hh = im.naturalHeight * k;
-        ctx.save();
-        ctx.globalAlpha = open ? 1 : 0.42;
-        ctx.imageSmoothingEnabled = true;
-        ctx.drawImage(im, x + (CELL - w) / 2, y + CELL - hh - 4, w, hh);
-        ctx.restore();
-      }
-      if (seized) {
-        ctx.fillStyle = blink ? "rgba(255,211,107,0.35)" : "rgba(80,50,10,0.45)";
-        ctx.fillRect(x + 2, y + 2, CELL - 4, CELL - 4);
-        pxText(ctx, "MOA", x + CELL / 2, y + CELL / 2, 13, "#ffd36b");
-      }
-      // 단계 점 (1~3)
-      for (let k = 0; k < lv; k++) {
-        ctx.fillStyle = "#07060f";
-        ctx.fillRect(x + 5 + k * 8, y + 5, 6, 6);
-        ctx.fillStyle = open ? "#ffd23f" : "#7a6aa8";
-        ctx.fillRect(x + 6 + k * 8, y + 6, 4, 4);
-      }
-    }
-  }
-}
-
-/** 원정 갈림길: 주사위 눈마다 멈출 칸 표시 (깜빡이는 괄호 + 눈) */
-function drawRoute(ctx: CanvasRenderingContext2D, b: Board, now: number) {
-  const c = b.exp?.camp;
-  if (c?.k !== "route") return;
-  for (const d of c.dice) {
-    const t = expDest(b, d);
-    const n = EXP_NODE_TEXT[expNodeOf(t)];
-    tileBrackets(ctx, t, n.color, now);
-    const [x, y] = tileOrigin(t);
-    pxText(ctx, String(d), x + CELL / 2, y + CELL / 2, 20, n.color);
-  }
-}
-
-/** 해피 타운 내 말 — 지금 칸 (이동 중이면 칸 사이 콩콩) */
-function tokenXY(b: Board, v: View, now: number): [number, number, number] {
-  const c = (t: number): [number, number] => {
-    const [x, y] = tileOrigin(t);
-    return [x + CELL / 2, y + CELL - 12];
-  };
-  const m = v.tok;
-  if (!m || !m.path.length) return [...c(b.pos), 0];
-  if (now < m.t0) return [...c(m.from), 0];
-  const f = (now - m.t0) / HOP_MS;
-  if (f >= m.path.length) return [...c(m.path[m.path.length - 1]), 0];
-  const i = Math.floor(f),
-    k = f - i;
-  const [ax, ay] = c(i === 0 ? m.from : m.path[i - 1]);
-  const [bx, by] = c(m.path[i]);
-  return [ax + (bx - ax) * k, ay + (by - ay) * k, Math.sin(Math.PI * k) * 16];
-}
-/** 내 말 — 보드게임 말 모양 도트 (둥근 머리 · 금 칼라 · 퍼지는 몸통 · 받침), 왼쪽 빛 · 오른쪽 그늘 · 테두리 */
-const PAWN: [number, number, string][] = [
-  // [윗변 y(바닥 기준, 2px 단위 줄), 폭, 칠]
-  [-42, 6, "b"], [-40, 10, "b"], [-38, 12, "b"], [-36, 14, "b"], [-34, 14, "b"], [-32, 12, "b"], [-30, 10, "b"],
-  [-28, 16, "g"], [-26, 16, "g"], [-24, 8, "b"],
-  [-22, 10, "b"], [-20, 10, "b"], [-18, 12, "b"], [-16, 14, "b"], [-14, 16, "b"], [-12, 18, "b"], [-10, 20, "b"],
-  [-8, 26, "g"], [-6, 28, "b"], [-4, 28, "b"], [-2, 24, "d"],
-];
-function drawToken(ctx: CanvasRenderingContext2D, b: Board, v: View, now: number) {
-  const [cx, cy, up] = tokenXY(b, v, now);
-  const x = P(cx),
-    y = P(cy - up) + 4;
-  // 그림자 (뛸수록 작게)
-  ctx.fillStyle = "rgba(0,0,0,0.4)";
-  const sw = up > 4 ? 10 : 15;
-  ctx.fillRect(P(cx) - sw, P(cy) + 4, sw * 2, 4);
-  const C: Record<string, [string, string, string]> = {
-    b: ["#ff5fa2", "#ffc2dd", "#c2306f"],
-    g: ["#ffd23f", "#fff2a8", "#c98a00"],
-    d: ["#c2306f", "#ff7fb6", "#8a1f50"],
-  };
-  // 테두리: 한 줄씩 2px 넓게 · 위아래 2px
-  ctx.fillStyle = "#1a0b22";
-  for (const [dy, w] of PAWN) ctx.fillRect(x - w / 2 - 2, y + dy - 2, w + 4, 6);
-  for (const [dy, w, k] of PAWN) {
-    const [base, hi, sh] = C[k];
-    ctx.fillStyle = base;
-    ctx.fillRect(x - w / 2, y + dy, w, 2);
-    ctx.fillStyle = hi;
-    ctx.fillRect(x - w / 2 + 2, y + dy, Math.max(2, Math.floor(w / 6 / 2) * 2), 2);
-    ctx.fillStyle = sh;
-    ctx.fillRect(x + w / 2 - Math.max(2, Math.floor(w / 4 / 2) * 2), y + dy, Math.max(2, Math.floor(w / 4 / 2) * 2), 2);
-  }
-  // 머리 반짝
-  ctx.fillStyle = "#ffffff";
-  ctx.fillRect(x - 4, y - 38, 2, 2);
-  // 머리 위 화살표 (내 말 · 깜빡)
-  if (Math.floor(now / 350) % 2) {
-    ctx.fillStyle = "#ffd23f";
-    ctx.fillRect(x - 4, y - 54, 8, 2);
-    ctx.fillRect(x - 2, y - 52, 4, 2);
-  }
-}
-
-/** 고른 길 칸 표시 (네 귀퉁이) */
-function tileBrackets(ctx: CanvasRenderingContext2D, t: number, color: string, now: number) {
-  const [x, y] = tileOrigin(t);
-  const o = Math.floor(now / 250) % 2 ? 1 : 3;
-  const L = 12;
-  ctx.fillStyle = color;
-  for (const [cx, cy, sx, sy] of [
-    [x + o, y + o, 1, 1],
-    [x + CELL - o, y + o, -1, 1],
-    [x + o, y + CELL - o, 1, -1],
-    [x + CELL - o, y + CELL - o, -1, -1],
-  ]) {
-    ctx.fillRect(sx > 0 ? cx : cx - L, sy > 0 ? cy : cy - 3, L, 3);
-    ctx.fillRect(sx > 0 ? cx : cx - 3, sy > 0 ? cy : cy - L, 3, L);
   }
 }
 
@@ -1352,7 +1097,18 @@ function drawEnemy(ctx: CanvasRenderingContext2D, e: Enemy, now: number) {
     ctx.fillRect(P(x - 6), P(foot - s - 4), 4, 4);
     ctx.fillRect(P(x + 2), P(foot - s - 8), 4, 4);
   }
-  if (e.elite || e.tre) pxText(ctx, "♛", x, foot - s * 1.25 - 6, e.tre ? 18 : 12, "#ffd23f");
+  if (e.gim) {
+    // 기믹 엘리트: 발밑 색 고리 + 머리 위 이름표
+    const g = GIM[e.gim];
+    ctx.fillStyle = g.color;
+    ctx.globalAlpha = Math.floor(now / 200) % 2 ? 0.55 : 0.3;
+    ctx.fillRect(P(x - s * 0.7), P(foot - 2), P(s * 1.4), 4);
+    ctx.globalAlpha = 1;
+    const tw = g.name.length * 11 + 10;
+    ctx.fillStyle = "#07060f";
+    ctx.fillRect(P(x - tw / 2), P(foot - s * 1.25 - 26), P(tw), 16);
+    pxText(ctx, g.name, x, foot - s * 1.25 - 18, 11, g.color);
+  } else if (e.elite || e.tre) pxText(ctx, "♛", x, foot - s * 1.25 - 6, e.tre ? 18 : 12, "#ffd23f");
   if (e.stun > 0) stars(ctx, x, foot - s - 4, now);
   // 체력
   if (e.hp < e.max) {

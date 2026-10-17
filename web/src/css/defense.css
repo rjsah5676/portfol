@@ -620,3 +620,18 @@
     box-shadow: none;
   }
 }
+
+/* 원정 지도: 갈 수 있는 길이 흐름 */
+.dfn-dash {
+  animation: dfn-dash 0.8s steps(4) infinite;
+}
+@keyframes dfn-dash {
+  to {
+    stroke-dashoffset: -16;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dfn-dash {
+    animation: none;
+  }
+}

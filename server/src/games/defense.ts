@@ -256,7 +256,7 @@ export function registerDefense({ gateway, db, points }: Deps) {
     if (mode === "town") {
       // 해피 타운: 같은 성장 + 고른 타운 단계 (보물방 없음)
       const lo = await meta.loadoutOf(uid, "town");
-      if (!lo.town) throw new AppError("NEED", "해피 타운은 메인에서 오염 단계를 더 열면 열려요.", 409);
+      if (!lo.town) throw new AppError("NEED", "글리치 원정은 메인에서 오염 단계를 더 열면 열려요.", 409);
       const board = townKey();
       const at = new Date();
       await runs.insertOne({ _id, uid, seed, ver: BALANCE_VER, at, used: false, mode, lo, board });
@@ -391,7 +391,6 @@ export function registerDefense({ gateway, db, points }: Deps) {
   gateway.rpc("defense.unit.down", (ctx, raw) => (member(ctx), meta.unitDown(ctx.uid, id.parse(raw).id)));
   gateway.rpc("defense.unit.downAll", (ctx) => (member(ctx), meta.unitDownAll(ctx.uid)));
   gateway.rpc("defense.res.buy", (ctx, raw) => (member(ctx), meta.resBuy(ctx.uid, id.parse(raw).id)));
-  gateway.rpc("defense.city.up", (ctx, raw) => (member(ctx), meta.cityUp(ctx.uid, id.parse(raw).id)));
   const lvArg = z.object({ id: z.string().max(40), dir: z.union([z.literal(1), z.literal(-1)]) });
   gateway.rpc("defense.res.level", (ctx, raw) => (member(ctx), ((a) => meta.resLevel(ctx.uid, a.id, a.dir))(lvArg.parse(raw))));
   gateway.rpc("defense.relic.level", (ctx, raw) => (member(ctx), ((a) => meta.relicLevel(ctx.uid, a.id, a.dir))(lvArg.parse(raw))));

@@ -17,7 +17,7 @@ import { BOTS, botByName, botTurn, type BotCfg } from "../../web/src/lib/defense
 import { replay, type LogEntry } from "../../web/src/lib/defense/replay";
 import { newGame, step, unitCount, type Game } from "../../web/src/lib/defense/sim";
 import { GRADE_NAME, UNIT, UNITS } from "../../web/src/lib/defense/units";
-import { CITY, GLITCH, RELICS, TRANS_IDS, deepGlitch, type Loadout } from "../../web/src/lib/defense/progress";
+import { GLITCH, RELICS, TRANS_IDS, deepGlitch, type Loadout } from "../../web/src/lib/defense/progress";
 
 const args = process.argv.slice(2);
 const opt = (k: string) => {
@@ -33,7 +33,7 @@ const metaLv = opt("--meta");
 const glitch = Number(opt("--glitch") ?? 0);
 // --town L : 해피 타운 L단계 (적 세기는 그 단계에 맞는 오염 단계 — --glitch 는 무시)
 const townLv = Number(opt("--town") ?? 0);
-const stageLo: Loadout = townLv ? { stage: "town", town: townLv } : {};
+const stageLo: Loadout = townLv ? { stage: "town", town: townLv, squads: ["knight", "mech", "arcane"] } : {};
 // --tune k=v,k=v : balance.ts TUNE 값 바꿔 보기 (두 벌 다)
 {
   const tv = opt("--tune");
@@ -90,8 +90,7 @@ function loadoutFor(cfg: BotCfg): Loadout | null {
   const resLv = Object.fromEntries(R.map((id) => [id, rl]));
   const relicLv = Object.fromEntries(relics.map((id) => [id, rl]));
   const cheat = metaLv === "max" || abyss ? "x_luck" : "";
-  const city = abyss ? Object.fromEntries(CITY.map((c) => [c.id, c.max])) : {};
-  return { lv, res: R, relics, glitch, resLv, relicLv, bench, fslots: fs, own, trans, cheat, grit: Number(opt("--grit") ?? 0), city, ...stageLo };
+  return { lv, res: R, relics, glitch, resLv, relicLv, bench, fslots: fs, own, trans, cheat, grit: Number(opt("--grit") ?? 0), ...stageLo };
 }
 
 interface Run {
@@ -108,8 +107,8 @@ interface Run {
   dps: Record<number, number>;
   /** 보물방 깎은 비율 (열렸으면) · 처치 */
   tre: { ratio: number; killed: boolean } | null;
-  /** 해피 타운 원정: 남은 체력 · 끝낸 칸 · 원정 유물 수 · 지나온 칸 종류 */
-  town: { hp: number; segs: number; relics: number; nodes: string[] } | null;
+  /** 글리치 원정: 남은 체력 · 도달한 층 · 원정 유물 수 · 저주 수 */
+  town: { hp: number; floor: number; relics: number; curses: number } | null;
 }
 
 function play(cfg: BotCfg, seed: number): Run {
@@ -152,7 +151,7 @@ function play(cfg: BotCfg, seed: number): Run {
       throw new Error(`결정론 깨짐: ${cfg.name} seed ${seed} — ${JSON.stringify(r)} vs ${JSON.stringify(again)}`);
   }
   const tre = b.treasure ? { ratio: b.treasure.dmg / b.treasure.max, killed: b.treasure.killed } : null;
-  const town = b.exp ? { hp: b.enemies.length, segs: b.exp.segs, relics: b.exp.relics.length, nodes: b.exp.path.map((p) => p.node) } : null;
+  const town = b.exp ? { hp: b.exp.hp, floor: b.exp.f + 1, relics: b.exp.relics.length, curses: b.exp.curses.length } : null;
   return { bot: cfg.name, seed, win: r.win, wave: r.wave, reason: r.reason, min: r.tick / TPS / 60, kills: r.kills, ms, dealt: b.dealt, snap, dps, tre, town };
 }
 
@@ -183,7 +182,7 @@ for (const cfg of bots) {
   const tr = runs.filter((r) => r.town).map((r) => r.town!);
   if (tr.length)
     console.log(
-      `\n해피 타운 원정: 끝낸 칸 평균 ${avg(tr.map((x) => x.segs)).toFixed(1)} · 끝날 때 필드 적 ${avg(tr.map((x) => x.hp)).toFixed(1)} · 원정 유물 ${avg(tr.map((x) => x.relics)).toFixed(1)} · 칸 종류 ${JSON.stringify(tr.flatMap((x) => x.nodes).reduce((m: Record<string, number>, k) => ((m[k] = (m[k] ?? 0) + 1), m), {}))}`
+      `\n글리치 원정: 도달 층 평균 ${avg(tr.map((x) => x.floor)).toFixed(1)} (분포 ${JSON.stringify(tr.map((x) => x.floor).reduce((m: Record<number, number>, k) => ((m[k] = (m[k] ?? 0) + 1), m), {}))}) · 남은 체력 ${avg(tr.map((x) => x.hp)).toFixed(1)} · 원정 유물 ${avg(tr.map((x) => x.relics)).toFixed(1)} · 저주 ${avg(tr.map((x) => x.curses)).toFixed(1)}`
     );
 }
 console.log("\n죽은 웨이브 분포 (전체)");

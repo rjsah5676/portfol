@@ -1,80 +1,146 @@
 /**
- * 해피 타운 원정 (v3 시제품) — 마블 판이 곧 월드맵인 로그라이크 원정. 시뮬(sim.ts)이 읽음 → 결정론 규칙 그대로.
+ * 글리치 원정 (해피 타운 자리 · 로그라이크) — 시뮬(sim.ts)이 읽는 규칙 수치 · 이름. 결정론 규칙 그대로.
  *
- * 한 판 = 판 하나(Game)가 계속 이어짐 (유닛 · 강화 · 골드가 칸에서 칸으로 넘어감)
- *  1) 갈림길: 주사위 둘을 굴려 어느 눈으로 갈지 고름 (명령 exp a=0/1) → 분홍 말이 길을 따라 이동
- *  2) 멈춘 칸 = 다음 할 일: 동네 칸 전투(EXP.fightWaves) · 노란 칸 엘리트(웨이브 + 글리치 시티 보스) ·
- *     수리소 휴식 · 축제 무대 상점 · 워프 게이트 유물 · 출발 포털(한 바퀴) = UR 보스 → 잡으면 원정 성공
- *  3) 전투가 끝나면 유닛 3장 중 1장 드래프트 (엘리트 보스를 잡으면 유물도). 못 잡은 적은 필드에 남아 다음 전투로 이어짐
- *  4) 필드 적이 한도(100)에 차거나 UR 보스 시간 초과면 실패 — 메인과 같은 규칙. UR 보스는 적어도 EXP.bossWave 세기
- * 캠프(고르는 화면)에선 시간이 멈추고 소환 · 합성 · 판매 · 강화는 할 수 있음
+ * 한 판 = Game 하나가 이어짐 (유닛 · 강화 · 골드)
+ *  0) 시작 분대 고르기 (해금된 것 중) → 분대 유닛 + 분대 유물
+ *  1) 지도: EXP.floors 층 + 꼭대기 보스. 처음부터 다 보임 · 보스도 공개. 다음 층 이어진 칸을 골라 이동 (명령 exp a=칸 번호)
+ *  2) 칸: 전투(웨이브 → 정리 시간 → 남은 적만큼 원정 체력) · 엘리트(기믹 엘리트) · ? 이벤트 · 상점 · 휴식 · 보물 · 보스
+ *  3) 전투 끝 드래프트 · 엘리트 승리 유물 · 원정 체력 0 / 필드 한도 / 보스 시간 초과면 실패, 보스를 잡으면 성공
+ *  원정 단계(= 로드아웃 town)가 오를수록 비틀기(EXP_ASC)가 쌓이고 적이 세짐
  */
 
-export const TOWN_NAME = "해피 타운";
-export const TOWN_EN = "HAPPY TOWN";
+export const TOWN_NAME = "글리치 원정";
+export const TOWN_EN = "GLITCH EXPEDITION";
 
 export const EXP = {
-  /** 전투 칸 웨이브 수 · 엘리트 칸(그 뒤 보스 하나) */
-  fightWaves: 6,
-  eliteWaves: 3,
-  /** UR 보스 최소 세기 (이 웨이브만큼) — 칸을 건너뛰어 일찍 오면 약한 덱으로 센 보스 */
-  bossWave: 36,
-  /** 휴식: 필드 적을 이 비율만큼 치움 · 상점 정화: 이만큼 */
-  restClear: 0.6,
-  shopClear: 25,
-  /** 드래프트 건너뛰면 골드 */
+  hp: 30,
+  floors: 8,
+  lanes: 4,
+  fightWaves: 5,
+  eliteWaves: 4,
+  /** 마지막 웨이브 뒤 정리 시간 (초) — 지나면 남은 적만큼 원정 체력 */
+  cleanSec: 15,
+  leak: 1,
+  leakElite: 3,
+  /** 전투 하나에서 깎이는 체력 상한 (기믹 엘리트 도망 빼고) */
+  leakMax: 12,
+  /** 기믹 엘리트를 못 잡으면 */
+  gimEscape: 8,
+  /** 층 f(0부터) 전투의 시작 웨이브 = waveBase + waveFloor × f */
+  waveBase: 1,
+  waveFloor: 3,
+  /** 보스 세기 웨이브 */
+  bossWave: 30,
+  restHeal: 0.3,
   skipGold: 40,
-  /** 상점 값 (구간마다 +shopUp 배) */
-  shopUp: 0.12,
+  /** 전투 · 엘리트 보상 골드 (+층마다) */
+  fightGold: 30,
+  eliteGold: 60,
+  floorGold: 8,
 } as const;
 
-/** 길 칸 종류 */
-export type ExpNode = "fight" | "elite" | "boss" | "shop" | "rest" | "event";
-export const EXP_ELITE = [4, 11, 18];
-export const expNodeOf = (t: number): ExpNode =>
-  t === 0 ? "boss" : t === 8 ? "rest" : t === 13 ? "shop" : t === 21 ? "event" : EXP_ELITE.includes(t) ? "elite" : "fight";
-export const EXP_NODE_TEXT: Record<ExpNode, { name: string; desc: string; color: string }> = {
-  fight: { name: "전투", desc: `${EXP.fightWaves}웨이브 · 끝나면 유닛 드래프트`, color: "#bfb3ff" },
-  elite: { name: "엘리트", desc: `${EXP.eliteWaves}웨이브 + 보스 · 잡으면 유물`, color: "#ff6b7f" },
-  boss: { name: "UR 보스", desc: "한 바퀴 끝 · 잡으면 원정 성공", color: "#ff5fa2" },
-  shop: { name: "상점", desc: "골드로 회복 · 유닛 · 유물", color: "#ffd23f" },
-  rest: { name: "휴식", desc: "필드 적 정리 또는 유닛 단련", color: "#6dff8f" },
-  event: { name: "유물", desc: "원정 유물 3개 중 하나", color: "#9be7ff" },
+export type ExpNode = "fight" | "elite" | "event" | "shop" | "rest" | "treasure" | "boss";
+export const EXP_NODE_TEXT: Record<ExpNode, { name: string; desc: string; color: string; icon: string }> = {
+  fight: { name: "전투", desc: `${EXP.fightWaves}웨이브 · 끝나면 유닛 드래프트`, color: "#bfb3ff", icon: "skull" },
+  elite: { name: "엘리트", desc: `${EXP.eliteWaves}웨이브 + 기믹 엘리트 · 잡으면 원정 유물`, color: "#ff6b7f", icon: "skull" },
+  event: { name: "?", desc: "무슨 일이 생길지 몰라요", color: "#9be7ff", icon: "dice" },
+  shop: { name: "상점", desc: "유닛 · 유물 · 회복 · 저주 풀기", color: "#ffd23f", icon: "coin" },
+  rest: { name: "휴식", desc: "체력 회복 또는 유닛 단련", color: "#6dff8f", icon: "clover" },
+  treasure: { name: "보물", desc: "원정 유물 하나 확정", color: "#ffb347", icon: "chest" },
+  boss: { name: "보스", desc: "잡으면 원정 성공", color: "#ff5fa2", icon: "skull" },
 };
 
-/** 원정 유물 (이번 원정에서만) — 수치보다 규칙을 바꾸는 것 */
-export const EXP_RELICS: { id: string; name: string; desc: string }[] = [
+/** 전투 수식어 (2층부터 절반 확률) */
+export type FightMod = "swarm" | "armor" | "rush" | "gold" | "split";
+export const FIGHT_MOD: Record<FightMod, { name: string; desc: string; count: number; hp: number; spd: number; armor: number; gold: number }> = {
+  swarm: { name: "떼거리", desc: "적이 많지만 약해요", count: 1.6, hp: 0.6, spd: 1, armor: 1, gold: 1 },
+  armor: { name: "철갑", desc: "적이 적지만 방어가 높아요 (마법이 유리)", count: 0.7, hp: 1.1, spd: 1, armor: 2.5, gold: 1.4 },
+  rush: { name: "질주", desc: "적이 빨라요", count: 1, hp: 0.9, spd: 1.35, armor: 1, gold: 1.2 },
+  gold: { name: "황금", desc: "적이 단단하지만 처치 골드 ×2", count: 1, hp: 1.25, spd: 1, armor: 1, gold: 2 },
+  split: { name: "분열", desc: "엘리트 · 큰 적이 쓰러지면 둘로", count: 1, hp: 1, spd: 1, armor: 1, gold: 1.2 },
+};
+
+/** 기믹 엘리트 (엘리트 칸에 한 마리) */
+export type Gim = "thief" | "healer" | "golem" | "mirror";
+export const GIM: Record<Gim, { name: string; desc: string; hp: number; spd: number; size: 0 | 1 | 2; color: string }> = {
+  thief: { name: "도둑 고블린", desc: "아주 빨라요. 한 바퀴 돌면 골드 25%를 훔쳐 도망 · 잡으면 +80G", hp: 9, spd: 2.1, size: 0, color: "#ffd23f" },
+  healer: { name: "치유 사제", desc: "3초마다 주변 적을 회복시켜요 — 먼저 잡기", hp: 14, spd: 0.8, size: 1, color: "#6dff8f" },
+  golem: { name: "분열 골렘", desc: "쓰러지면 둘로, 그 둘도 한 번 더 갈라져요", hp: 16, spd: 0.7, size: 2, color: "#c79bff" },
+  mirror: { name: "거울 기사", desc: "물리 피해 절반 · 6초마다 보호막 — 마법이 유리", hp: 14, spd: 0.9, size: 1, color: "#9be7ff" },
+};
+
+/** 시작 분대 (기사단 → 기계공방 → 마도회 순으로 해금: 그 분대로 보스를 잡으면 다음) */
+export const SQUADS = [
+  { id: "knight", name: "기사단 분대", relic: "sq_knight" },
+  { id: "mech", name: "기계공방 분대", relic: "sq_mech" },
+  { id: "arcane", name: "마도회 분대", relic: "sq_arcane" },
+] as const;
+export const SQUAD_NEXT: Record<string, string> = { knight: "mech", mech: "arcane" };
+
+/** 원정 유물 (이번 원정에서만) — sq_ 는 분대 시작 유물 (뽑기에 안 나옴) */
+export const EXP_RELICS: { id: string; name: string; desc: string; start?: boolean }[] = [
+  { id: "sq_knight", name: "기사단 나팔", desc: "전투가 시작될 때마다 무료 소환 2", start: true },
+  { id: "sq_mech", name: "공방 조준경", desc: "보스 · 엘리트에게 피해 +25%", start: true },
+  { id: "sq_arcane", name: "마도회 수정", desc: "전투가 시작될 때마다 가장 낮은 마도회 유닛 칸이 한 등급 올라요", start: true },
   { id: "oath_knight", name: "기사단 서약", desc: "소환이 늘 기사단으로 나와요" },
   { id: "oath_mech", name: "기계공방 서약", desc: "소환이 늘 기계공방으로 나와요" },
   { id: "oath_arcane", name: "마도회 서약", desc: "소환이 늘 마도회로 나와요" },
-  { id: "alch", name: "연금 합성", desc: "합성할 때 25% 확률로 두 등급 위가 나와요 (레전드까지)" },
+  { id: "alch", name: "연금 합성", desc: "합성할 때 25% 확률로 두 등급 위 (레전드까지)" },
   { id: "twin", name: "쌍둥이 소환", desc: "소환할 때 20% 확률로 같은 유닛이 하나 더" },
   { id: "growth", name: "성장통", desc: "전투가 끝날 때마다 가장 낮은 등급 유닛 칸이 한 등급 올라요" },
-  { id: "piggy", name: "돼지 저금통", desc: "전투가 끝날 때마다 가진 골드의 25% 이자 (최대 150)" },
-  { id: "iron", name: "철벽", desc: "필드 적 한도 +25" },
-  { id: "blood", name: "피의 계약", desc: "필드 적 한도 -20, 모든 유닛 피해 +35%" },
-  { id: "dice3", name: "세 번째 주사위", desc: "갈림길에서 주사위 3개 중 골라요" },
+  { id: "piggy", name: "돼지 저금통", desc: "전투가 끝날 때마다 가진 골드의 20% 이자 (최대 120)" },
+  { id: "iron", name: "철벽", desc: "남은 적에게 깎이는 원정 체력 절반" },
+  { id: "blood", name: "피의 계약", desc: "최대 원정 체력 -10, 모든 유닛 피해 +35%" },
+  { id: "bag", name: "전리품 가방", desc: "드래프트에서 4장 중 골라요" },
+  { id: "vamp", name: "흡혈 칼날", desc: "남은 적 없이 전투를 끝내면 원정 체력 +3" },
+  { id: "goldhand", name: "황금 손", desc: "처치 골드 +1 · 상점 20% 할인" },
+  { id: "first", name: "선제 공격", desc: "전투마다 첫 웨이브 동안 모든 피해 ×2" },
+  { id: "hunter", name: "엘리트 사냥꾼", desc: "엘리트 · 기믹 적에게 피해 +50% · 유물 고를 때 하나 더" },
+  { id: "kit", name: "응급 키트", desc: "원정 체력이 10 밑으로 떨어지면 한 번 +15" },
 ];
 export const EXP_RELIC: Record<string, (typeof EXP_RELICS)[number]> = Object.fromEntries(EXP_RELICS.map((r) => [r.id, r]));
 
-/** 상점 물건 */
-export type ShopKind = "heal" | "free" | "epic" | "legend" | "relic" | "up";
-export const SHOP: Record<ShopKind, { name: string; desc: string; cost: number }> = {
-  heal: { name: "정화 폭탄", desc: "필드 적 25 마리를 치워요", cost: 80 },
-  free: { name: "소환권 묶음", desc: "무료 소환 3회", cost: 70 },
-  epic: { name: "에픽 카드", desc: "무작위 에픽 유닛 1기", cost: 150 },
-  legend: { name: "레전드 카드", desc: "무작위 레전드 유닛 1기", cost: 450 },
-  relic: { name: "원정 유물", desc: "무작위 원정 유물 하나", cost: 220 },
-  up: { name: "세력 훈련", desc: "가장 약한 세력 강화 +2", cost: 100 },
+/** 저주 (이벤트 · 원정 단계) */
+export const CURSES: Record<string, { name: string; desc: string }> = {
+  corrode: { name: "부식", desc: "적 체력 +10%" },
+  heavy: { name: "무거운 손", desc: "소환 비용 +5" },
 };
 
-export const BUILD_NAME = ["빈 땅", "오두막", "2층집", "빌딩"] as const;
-export const CORNER_TEXT: Record<"start" | "jail" | "fest" | "warp", { name: string; desc: string }> = {
-  start: { name: "출발 포털", desc: EXP_NODE_TEXT.boss.desc },
-  jail: { name: "도트 수리소", desc: EXP_NODE_TEXT.rest.desc },
-  fest: { name: "축제 무대", desc: EXP_NODE_TEXT.shop.desc },
-  warp: { name: "워프 게이트", desc: EXP_NODE_TEXT.event.desc },
+/** 상점 물건 */
+export type ShopKind = "heal" | "free" | "epic" | "legend" | "relic" | "up" | "uncurse";
+export const SHOP: Record<ShopKind, { name: string; desc: string; cost: number }> = {
+  heal: { name: "회복약", desc: "원정 체력 +8", cost: 70 },
+  free: { name: "소환권 묶음", desc: "무료 소환 3회", cost: 70 },
+  epic: { name: "에픽 카드", desc: "무작위 에픽 유닛 1기", cost: 150 },
+  legend: { name: "레전드 카드", desc: "무작위 레전드 유닛 1기", cost: 420 },
+  relic: { name: "원정 유물", desc: "무작위 원정 유물 하나", cost: 200 },
+  up: { name: "세력 훈련", desc: "가장 약한 세력 강화 +2", cost: 100 },
+  uncurse: { name: "저주 풀기", desc: "저주 하나를 없애요", cost: 75 },
 };
+
+/** ? 칸 이벤트 — 선택지 둘 (a=0 · a=1) */
+export type EventId = "vend" | "merc" | "altar" | "spring" | "trap" | "rat";
+export const EVENTS: Record<EventId, { name: string; text: string; a: string; b: string }> = {
+  vend: { name: "글리치 자판기", text: "지지직… 동전을 넣으면 뭔가 나온대요.", a: "60G 넣기 (에픽 70% · 레전드 30%)", b: "그냥 지나가기" },
+  merc: { name: "떠돌이 용병", text: "갈 곳 없는 수호자 둘이 따라오고 싶대요.", a: "레어 유닛 2기 데려가기", b: "대신 100G 받기" },
+  altar: { name: "저주받은 제단", text: "검붉은 빛이 원정 유물을 감싸고 있어요.", a: "저주 「부식」 받고 유물 얻기", b: "건드리지 않기" },
+  spring: { name: "피의 샘", text: "샘물이 피처럼 붉어요. 마시면 강해질 것 같은데…", a: "원정 체력 -8 → 유닛 칸 둘이 한 등급 업", b: "조금만 마시기 (체력 +6)" },
+  trap: { name: "함정!", text: "글리치 무리가 둘러쌌어요!", a: "싸운다 (떼거리 전투 · 보상 두 배)", b: "체력 6 내고 도망" },
+  rat: { name: "도박꾼 쥐", text: "「골드 절반 걸고 동전 던지기 한 판?」", a: "건다 (50% 두 배 · 50% 잃음)", b: "사양하기" },
+};
+
+/** 원정 단계 비틀기 (그 단계 이상이면 쌓임) */
+export const EXP_ASC: { lv: number; name: string; desc: string }[] = [
+  { lv: 2, name: "단단한 엘리트", desc: "기믹 엘리트 체력 +30%" },
+  { lv: 3, name: "부식된 시작", desc: "저주 「부식」을 안고 시작" },
+  { lv: 4, name: "비싼 상점", desc: "상점 값 +20%" },
+  { lv: 5, name: "성난 보스", desc: "보스 체력 +25%" },
+  { lv: 6, name: "지친 몸", desc: "최대 원정 체력 -6" },
+  { lv: 7, name: "엘리트 소굴", desc: "지도에 엘리트가 더 많아요" },
+  { lv: 8, name: "새는 방벽", desc: "남은 적 피해 ×1.5" },
+  { lv: 9, name: "짧은 휴식", desc: "휴식 회복 절반" },
+];
+export const ascOn = (town: number, lv: number) => town >= lv;
 
 /** 길 칸(0..25) 이름 · 동네 색 · 마블 랜드마크 그림 번호 (public/marble/lm/town-<n>.webp — 빌딩 단계 그림) */
 export interface TownTile {

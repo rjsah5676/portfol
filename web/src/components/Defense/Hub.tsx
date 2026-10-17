@@ -47,11 +47,9 @@ import {
   TRANS_IDS,
   relicPassive,
   RELIC_PASSIVE,
-  CITY,
   DEEP_RELIC_WIN,
   TOWN_FROM,
   TOWN_RELIC,
-  townOpenOf,
 } from "@/lib/defense/progress";
 import { TOWN_NAME } from "@/lib/defense/town";
 import {
@@ -74,13 +72,12 @@ import { Bar, Btn, FactionIcon, Icon, Modal, SoundButton, FsButton, TITLE, Tip, 
  * 값은 모두 서버(defenseMeta)가 정하고 돌려준 프로필로 다시 그림 — 화면은 보여 주기 · 요청만.
  */
 
-export type HubTab = "load" | "units" | "res" | "relic" | "city" | "quest" | "pass" | "pack" | "goods" | "store" | "sell";
+export type HubTab = "load" | "units" | "res" | "relic" | "quest" | "pass" | "pack" | "goods" | "store" | "sell";
 const TABS: { k: HubTab; name: string; icon: string }[] = [
   { k: "load", name: "출전 준비", icon: "star" },
   { k: "units", name: "유닛 강화", icon: "up" },
   { k: "res", name: "연구", icon: "flask" },
   { k: "relic", name: "유물", icon: "relic" },
-  { k: "city", name: "도시 개발", icon: "dice" },
   { k: "quest", name: "미션", icon: "note" },
   { k: "pass", name: "시즌 패스", icon: "ticket" },
 ];
@@ -231,7 +228,6 @@ export default function Hub({
     quest: [...p.quests.daily, ...p.quests.weekly].filter((q) => !q.claimed && q.value >= q.goal).length,
     pass: p.passTier - p.season.free.length + (p.season.premium ? p.passTier - p.season.prem.length : 0),
     goods: p.boxes.card + p.boxes.relic + (p.boxes.trans ?? 0),
-    city: CITY.filter((c) => (p.city?.[c.id] ?? 0) < c.max && (p.deeds ?? 0) >= c.cost(p.city?.[c.id] ?? 0)).length,
   };
   const ctx: TabProps = { p, act, busy };
 
@@ -291,7 +287,6 @@ export default function Hub({
             {tab === "units" && <UnitsTab {...ctx} />}
             {tab === "res" && <ResTab {...ctx} />}
             {tab === "relic" && <RelicTab {...ctx} />}
-            {tab === "city" && <CityTab {...ctx} />}
             {tab === "quest" && <QuestTab {...ctx} />}
             {tab === "pass" && <PassTab {...ctx} />}
             {tab === "pack" && <PackTab {...ctx} />}
@@ -890,64 +885,6 @@ function RelicTab({ p, act, busy }: TabProps) {
                       ? `오염 ${DEEP_RELIC_WIN} 클리어 뒤 유물 상자에서`
                       : "유물 상자에서"}
                 </span>
-              )}
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-/* ───────── 도시 개발 (땅문서) ───────── */
-
-function CityTab({ p, act, busy }: TabProps) {
-  const deeds = p.deeds ?? 0;
-  const open = townOpenOf(p.glitchOpen) > 0;
-  return (
-    <div>
-      <H
-        sub={
-          <>
-            {TOWN_NAME}에서만 얻는 <b className="text-[#ffd36b]">땅문서</b>로 사는 영구 보너스 — 글리치 시티 · {TOWN_NAME} 모든 판에 붙어요.
-            <br />
-            땅문서: 판마다 10웨이브당 (단계가 높을수록 더) · 클리어 보너스 · 단계 첫 클리어
-            {!open && <span className="text-[#ff9aa8]"> · {TOWN_NAME}은 메인 오염 {TOWN_FROM}단계가 열리면</span>}
-          </>
-        }
-      >
-        도시 개발 <span className="ml-2 text-[16px] text-[#ffd36b]">땅문서 {fmtNum(deeds)}</span>
-      </H>
-      <div className="grid grid-cols-2 gap-1.5">
-        {CITY.map((c) => {
-          const lv = p.city?.[c.id] ?? 0;
-          const max = lv >= c.max;
-          const cost = max ? 0 : c.cost(lv);
-          return (
-            <div key={c.id} className="px-inset flex items-center gap-2.5 px-2.5 py-2" style={lv ? ({ "--b": "#ffd36b" } as CSSProperties) : undefined}>
-              <span className="min-w-0 flex-1">
-                <b className="text-[13px]">{c.name}</b>
-                <span className="ml-1.5 text-[12px] font-bold text-[var(--gold)]">
-                  Lv.{lv}/{c.max}
-                </span>
-                <span className="block text-[12px] leading-tight text-[var(--mute)]">
-                  {lv ? c.at(lv) : "아직 없음"}
-                  {!max && <span className="text-[var(--text)]"> → {c.at(lv + 1)}</span>}
-                </span>
-                <Bar value={lv / c.max} color="#ffd36b" h={4} className="mt-1" />
-              </span>
-              {max ? (
-                <span className="w-[96px] shrink-0 text-center text-[12px] text-[var(--gold)]">MAX</span>
-              ) : (
-                <Btn
-                  tone={deeds >= cost ? "gold" : "ghost"}
-                  disabled={busy || deeds < cost}
-                  silent
-                  className="h-8 w-[96px] shrink-0 px-1 text-[12px] font-bold"
-                  onClick={() => void act(() => meta.cityUp(c.id), "upgrade")}
-                >
-                  땅문서 {cost}
-                </Btn>
               )}
             </div>
           );

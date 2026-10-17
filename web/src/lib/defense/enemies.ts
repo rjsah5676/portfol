@@ -152,6 +152,10 @@ export type BossSkill =
   | { kind: "seize"; every: number; pct: number }
   /** (픽셀 타운 FORTE) 체력이 at 밑으로 처음 내려가면 한 번: 최대 체력 pct 회복 + 필드의 다른 적 2초 질주 (every 는 안 씀) */
   | { kind: "encore"; every: number; at: number; pct: number }
+  /** (원정 MOA) every 초마다 가진 골드 pct 를 빼앗음 — 잡으면 빼앗긴 만큼 ×2 돌려받음 */
+  | { kind: "steal"; every: number; pct: number }
+  /** (원정 FORTE) 체력이 at 밑으로 처음 내려가면 한 번: 같은 보스 n 기가 최대 체력 hp 비율로 갈라져 나옴 (모두 잡아야 끝) */
+  | { kind: "split"; every: number; at: number; n: number; hp: number }
   /**
    * (2페이즈) 예고 기술: 유닛이 가장 센 곳을 shape 모양으로 warn 초 동안 빨갛게 표시 → 그때 그 칸에 **남아 있는** 유닛 sec 초 기절.
    * 표시되는 동안 끌어서 옮기면 피함 (약한 유닛을 넣어 두면 미끼). snd = 맞을 때 효과음 tele-<snd>
@@ -356,57 +360,61 @@ export const BOSSES: BossDef[] = [
  */
 export const TOWN_BOSSES: BossDef[] = [
   {
-    wave: 10,
+    wave: 0,
     stage: "town",
     fighter: "ur-dice",
     name: "글리치 DICE",
-    title: "오염된 주사위 요정",
+    title: "운명을 굴리는 요정",
     size: 0,
     spd: 0.9,
-    hp: 0.45,
+    hp: 0.55,
     armor: 0.5,
     mres: 0,
     pres: 0,
     skills: [
       { kind: "warp", every: 5 },
-      { kind: "heal", every: 8, pct: 0.03 },
+      { kind: "whip", every: 7, n: 2, sec: 2.5 },
+      { kind: "heal", every: 9, pct: 0.03 },
     ],
-    line: "주사위 굴려 볼까? 몇 칸 갈지는… 운명이 정해!",
+    line: "주사위 굴려 볼까? 누가 멈출지는… 운명이 정해!",
     color: "#7fe8d8",
   },
   {
-    wave: 30,
+    wave: 0,
     stage: "town",
     fighter: "ur-moa",
     name: "글리치 MOA",
-    title: "오염된 고양이 재벌",
+    title: "탐욕의 고양이 재벌",
     size: 1,
     spd: 0.85,
-    hp: 0.95,
+    hp: 0.9,
     armor: 1.2,
     mres: 0.2,
     pres: 0,
-    skills: [{ kind: "seize", every: 7, pct: 0.04 }],
-    line: "이 동네 건물, 전부 내가 사 줄게. 원격 매입이야냥.",
+    skills: [
+      { kind: "steal", every: 6, pct: 0.1 },
+      { kind: "shield", every: 9, pct: 0.06 },
+    ],
+    line: "네 골드, 전부 내 거야냥. 되찾고 싶으면 날 쓰러뜨려 봐.",
     color: "#ffd36b",
   },
   {
-    wave: 50,
+    wave: 0,
     stage: "town",
     fighter: "ur-forte",
     name: "글리치 FORTE",
-    title: "오염된 오르골 소년",
+    title: "분열하는 오르골 소년",
     size: 1,
     spd: 0.8,
-    hp: 0.5,
+    hp: 0.6,
     armor: 1.8,
     mres: 0.35,
     pres: 0,
     skills: [
       { kind: "summon", every: 8, n: 3, hp: 1.3 },
-      { kind: "encore", every: 1, at: 0.4, pct: 0.3 },
+      { kind: "split", every: 1, at: 0.5, n: 2, hp: 0.35 },
     ],
-    line: "박수는… 아직이야. 앙코르가 남았거든.",
+    line: "박수는… 아직이야. 앙코르는 셋이서 할게.",
     color: "#ff9ec7",
   },
 ];

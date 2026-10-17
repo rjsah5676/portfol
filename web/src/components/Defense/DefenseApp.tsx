@@ -5,9 +5,7 @@ import NickForm from "@/components/Account/NickForm";
 import { useAuth } from "@/lib/AuthContext";
 import { BALANCE_VER, LAST_WAVE } from "@/lib/defense/balance";
 import { MAIN_BOSSES, TOWN_BOSSES, bossOfWave, phaseText } from "@/lib/defense/enemies";
-import { EXP_NODE_TEXT, EXP_RELICS, TOWN_EN, TOWN_NAME, type ExpNode } from "@/lib/defense/town";
-const CAP_TEXT = "100";
-import { PixelDie } from "./GameView";
+import { EXP, EXP_ASC, EXP_NODE_TEXT, EXP_RELICS, GIM, SQUADS, TOWN_EN, TOWN_NAME, type ExpNode } from "@/lib/defense/town";
 import { UNIT } from "@/lib/defense/units";
 import {
   beginRoom,
@@ -46,6 +44,7 @@ import {
   RELIC,
   TOWN_FROM,
   TOWN_MAX,
+  TOWN_RELIC,
   TOWN_REWARD,
   TREASURE,
   dailyFirstOf,
@@ -53,7 +52,7 @@ import {
   townFirstClear,
   townGlitchLv,
   townNeed,
-  townOpenOf,
+  townAvail,
   treasureChance,
   type Loadout,
   type Stage as StageId,
@@ -77,7 +76,7 @@ import {
 } from "./ui";
 import PatchNotes, { LATEST } from "./PatchNotes";
 import { api } from "@/lib/api/http";
-import { BOSS_ART, TOWN_ART, UNIT_ART } from "@/lib/defense/assets";
+import { BOSS_ART, UNIT_ART } from "@/lib/defense/assets";
 import { FACTION_COLOR, FACTION_NAME, FACTIONS } from "@/lib/defense/units";
 
 /*
@@ -106,7 +105,7 @@ export default function DefenseApp() {
   const [note, setNote] = useState("");
   const [notes, setNotes] = useState(false);
   const [dailyInfo, setDailyInfo] = useState(false);
-  /** 메뉴에서 고른 스테이지 (이 기기에 기억) · 해피 타운 소개 창 */
+  /** 메뉴에서 고른 스테이지 (이 기기에 기억) · 글리치 원정 소개 창 */
   const [stage, setStageRaw] = useState<StageId>(() => {
     try {
       return localStorage.getItem("pgd-stage") === "town" ? "town" : "main";
@@ -119,7 +118,7 @@ export default function DefenseApp() {
     setStageRaw(v);
     try {
       localStorage.setItem("pgd-stage", v);
-      // 처음 해피 타운을 고르면 소개부터
+      // 처음 글리치 원정을 고르면 소개부터
       if (v === "town" && localStorage.getItem("pgd-town-intro") !== "1") {
         localStorage.setItem("pgd-town-intro", "1");
         setTownIntro(true);
@@ -146,8 +145,8 @@ export default function DefenseApp() {
       run: string | null = null,
       lo: Loadout | null = null,
       ghost: DefenseGhost | null = null;
-    // 해피 타운이 아직 안 열렸거나 비회원이면: 1단계 연습 판으로 둘러보기 (기록 · 보상 없음)
-    const townOpen = prof ? townOpenOf(prof.glitchOpen) : 0;
+    // 글리치 원정이 아직 안 열렸거나 비회원이면: 1단계 연습 판으로 둘러보기 (기록 · 보상 없음)
+    const townOpen = prof ? townAvail(prof.glitchOpen, prof.townDone ?? []) : 0;
     if (mode === "town" && (!member || townOpen < 1)) {
       setBusy(false);
       const tlo: Loadout = { ...(prof ? {} : {}), stage: "town", town: 1 };
@@ -398,7 +397,7 @@ function Menu(p: {
   onNotes(): void;
   /** 관리자: 플레이 기록 내려받기 */
   onExport?: () => void;
-  /** 스테이지 고르기 (글리치 시티 · 해피 타운) · 타운 단계 바꾸기 · 타운 소개 */
+  /** 스테이지 고르기 (글리치 시티 · 글리치 원정) · 타운 단계 바꾸기 · 타운 소개 */
   stage: StageId;
   onStage(s: StageId): void;
   onTownLv(lv: number): void;
@@ -415,7 +414,7 @@ function Menu(p: {
   const pr = p.prof;
   const glitch = pr ? Math.min(pr.load.glitch, pr.glitchOpen) : 0;
   const town = p.stage === "town";
-  const townOpen = pr ? townOpenOf(pr.glitchOpen) : 0;
+  const townOpen = pr ? townAvail(pr.glitchOpen, pr.townDone ?? []) : 0;
   const townLv = townOpen ? Math.max(1, Math.min(pr?.load.town ?? townOpen, townOpen)) : 1;
   const townReady = p.member && townOpen > 0;
   /** 끈기 (서버 gritOf 와 같은 규칙) */
@@ -533,7 +532,7 @@ function Menu(p: {
       </div>
       {/* 이어하기 줄(BETA 표시 옆) 밑으로 — 스테이지 탭이 이어하기 버튼을 가리지 않게 */}
       <div className="absolute top-[280px] left-[64px] flex w-[372px] flex-col gap-2">
-        {/* 스테이지: 글리치 시티(메인) · 해피 타운(확장) */}
+        {/* 스테이지: 글리치 시티(메인) · 글리치 원정(확장) */}
         <div className="flex h-[26px] gap-1.5">
           <Btn
             tone={town ? "ghost" : "main"}
@@ -547,7 +546,7 @@ function Menu(p: {
             tone={town ? "gold" : "ghost"}
             className={`relative h-[26px] flex-1 px-2 text-[12px] font-bold ${!town && townReady ? "dfn-pulse" : ""}`}
             onClick={() => p.onStage("town")}
-            title={townReady ? `${TOWN_NAME} — 판을 한 바퀴 도는 로그라이크 원정 (시제품)` : `${TOWN_NAME} — 메인 오염 ${TOWN_FROM}단계가 열리면 정식 오픈 (지금은 연습 판으로 체험)`}
+            title={townReady ? `${TOWN_NAME} — 갈림길 지도를 골라 오르는 로그라이크 원정` : `${TOWN_NAME} — 메인 오염 ${TOWN_FROM}단계가 열리면 정식 오픈 (지금은 연습 판으로 체험)`}
           >
             {TOWN_NAME}
             <span className={`absolute -top-2 -right-1 px-1 text-[10px] leading-[14px] font-bold shadow-[0_0_0_2px_#0a0816] ${townReady ? "bg-[#ff4d6d] text-white" : "bg-[#3d3468] text-[#cfc6ff]"}`}>
@@ -561,7 +560,7 @@ function Menu(p: {
         {town ? (
           <div className="flex gap-1.5">
             {townReady && pr && (
-              <Btn className="h-[52px] w-[34px] shrink-0 px-0 text-[14px]" disabled={p.busy || townLv <= 1} title="타운 단계 낮추기" onClick={() => p.onTownLv(townLv - 1)}>
+              <Btn className="h-[52px] w-[34px] shrink-0 px-0 text-[14px]" disabled={p.busy || townLv <= 1} title="원정 단계 낮추기" onClick={() => p.onTownLv(townLv - 1)}>
                 ◀
               </Btn>
             )}
@@ -578,7 +577,7 @@ function Menu(p: {
               )}
               <span className="block text-[12px] font-normal text-[#3a2a00]">
                 {townReady
-                  ? `타운 ${townLv}단계 · 적 = 오염 ${townGlitchLv(townLv)}단계 · 보상 ×${(GLITCH[townGlitchLv(townLv)].reward * TOWN_REWARD).toFixed(1)}`
+                  ? `원정 ${townLv}단계 · 적 = 오염 ${townGlitchLv(townLv)}단계 · 보상 ×${(GLITCH[townGlitchLv(townLv)].reward * TOWN_REWARD).toFixed(1)}`
                   : `연습 판 (기록 · 보상 없음) · 메인 오염 ${TOWN_FROM}단계가 열리면 정식 오픈`}
               </span>
             </Btn>
@@ -586,7 +585,15 @@ function Menu(p: {
               <Btn
                 className="h-[52px] w-[34px] shrink-0 px-0 text-[14px]"
                 disabled={p.busy || townLv >= townOpen}
-                title={townLv >= townOpen ? (townLv >= TOWN_MAX ? "마지막 단계예요" : `다음 단계는 메인 오염 ${townNeed(townLv + 1)}단계가 열리면`) : "타운 단계 올리기"}
+                title={
+                  townLv >= townOpen
+                    ? townLv >= TOWN_MAX
+                      ? "마지막 단계예요"
+                      : !(pr.townDone ?? []).includes(townOpen)
+                        ? `${townOpen}단계를 이기면 다음 단계가 열려요`
+                        : `다음 단계는 메인 오염 ${townNeed(townLv + 1)}단계가 열리면`
+                    : "원정 단계 올리기"
+                }
                 onClick={() => p.onTownLv(townLv + 1)}
               >
                 ▶
@@ -807,11 +814,10 @@ function FinishNote({ r }: { r: FinishOut }) {
           {!!w.townClear.give.cores && <Cur k="core" n={`+${w.townClear.give.cores}`} className="text-[#ffb3ee]" />}
           {!!w.townClear.give.relicBox && <span>유물 상자 +{w.townClear.give.relicBox}</span>}
           {!!w.townClear.give.cardBox && <span>카드 상자 +{w.townClear.give.cardBox}</span>}
-          {!!w.townClear.give.deeds && <span>땅문서 +{w.townClear.give.deeds}</span>}
           {w.townClear.relic && <b className="text-[#ffb3ee]">유물 「{RELIC[w.townClear.relic]?.name}」</b>}
         </span>
       )}
-      {!!w?.deeds && <span className="text-[13px] text-[#ffd36b]">땅문서 +{w.deeds} (정비소 「도시 개발」)</span>}
+      {w?.squad && <b className="dfn-pop text-[14px] text-[#9be7ff]">새 원정 분대 해금 — {SQUADS.find((q) => q.id === w.squad)?.name}</b>}
       {gb && (
         <span className="text-[13px]">
           {r.mode === "town" ? `${TOWN_NAME} ${gb.glitch}단계` : `오염 ${gb.glitch}단계`} 최고{" "}
@@ -886,7 +892,7 @@ function RankTabs() {
           {board === "daily"
             ? "오늘 하루 · 모두 같은 시드 · 영구 성장 없음 · 자정(KST)에 새로"
             : board === "town"
-              ? `이번 시즌 · 타운 단계가 높을수록 위 · 밸런스 ${BALANCE_VER}`
+              ? `이번 시즌 · 원정 단계가 높을수록 위 · 밸런스 ${BALANCE_VER}`
               : `영구 성장 적용 · 오염 단계가 높을수록 위 · 밸런스 ${BALANCE_VER}`}
         </span>
       </div>
@@ -936,8 +942,8 @@ export function RankList({ limit = 50, board = "season" }: { limit?: number; boa
             </span>
           )}
           {board === "town" && (
-            <span className="w-[54px] text-[12px] text-[#ffd36b]" title="해피 타운 단계">
-              타운 {r.glitch}
+            <span className="w-[54px] text-[12px] text-[#ffd36b]" title="글리치 원정 단계">
+              원정 {r.glitch}
             </span>
           )}
           <span className={`w-[100px] ${r.win ? "text-[var(--cyan)]" : ""}`}>
@@ -1344,7 +1350,7 @@ function DailyInfo({
   );
 }
 
-/** 해피 타운 소개 — 처음 고르면 · 「?」 버튼. 쪽마다 그림 하나 + 짧은 설명 → 처음 하는 사람도 「아 이런 거구나」 하고 바로 시작 */
+/** 글리치 원정 소개 — 처음 고르면 · 「?」 버튼. 쪽마다 그림 하나 + 짧은 설명 → 처음 하는 사람도 「아 이런 거구나」 하고 바로 시작 */
 function TownIntro({
   prof,
   member,
@@ -1358,7 +1364,7 @@ function TownIntro({
   onClose(): void;
   onStart(): void;
 }) {
-  const open = prof ? townOpenOf(prof.glitchOpen) : 0;
+  const open = prof ? townAvail(prof.glitchOpen, prof.townDone ?? []) : 0;
   const [pg, setPg] = useState(0);
   const pages = townPages(member, open);
   const last = pg === pages.length - 1;
@@ -1409,65 +1415,70 @@ function TownIntro({
   );
 }
 
-/** 소개 그림용 — 분홍 도트 말 */
-const MiniPawn = () => (
-  <span className="relative block h-[30px] w-[20px]">
-    <i className="absolute top-0 left-[4px] block h-[11px] w-[12px] bg-[#ff5fa2] shadow-[0_0_0_2px_#1a0b22]" />
-    <i className="absolute top-[13px] left-[3px] block h-[11px] w-[14px] bg-[#ff5fa2] shadow-[0_0_0_2px_#1a0b22]" />
-    <i className="absolute bottom-0 left-0 block h-[5px] w-[20px] bg-[#ffd23f] shadow-[0_0_0_2px_#1a0b22]" />
-  </span>
-);
+/** 소개 그림용 — 작은 원정 지도 (출발 → 층 → 보스) */
+function MiniMap() {
+  const cols: ExpNode[][] = [["fight", "fight"], ["event", "elite", "fight"], ["shop", "treasure"], ["rest", "elite"]];
+  return (
+    <div className="flex items-center gap-3">
+      <span className="flex h-[34px] w-[34px] items-center justify-center bg-[#141026] shadow-[0_0_0_2px_#5ff2ff]">
+        <Icon n="rift" size={20} />
+      </span>
+      {cols.map((c, i) => (
+        <span key={i} className="flex flex-col gap-3">
+          {c.map((k, j) => (
+            <span key={j} className="flex flex-col items-center">
+              <span
+                className={`flex h-[34px] w-[34px] items-center justify-center bg-[#141026] ${i === 0 && j === 0 ? "dfn-pulse" : ""}`}
+                style={{ boxShadow: `0 0 0 2px ${EXP_NODE_TEXT[k].color}` }}
+              >
+                <Icon n={EXP_NODE_TEXT[k].icon} size={18} />
+              </span>
+              <b className="text-[10px]" style={{ color: EXP_NODE_TEXT[k].color }}>
+                {EXP_NODE_TEXT[k].name}
+              </b>
+            </span>
+          ))}
+        </span>
+      ))}
+      <span className="flex flex-col items-center">
+        <img src={BOSS_ART[TOWN_BOSSES[0].fighter]?.src} alt="" className="h-[56px] w-[56px] object-contain shadow-[0_0_0_2px_#ff5fa2]" />
+        <b className="text-[10px] text-[#ff5fa2]">보스</b>
+      </span>
+    </div>
+  );
+}
 
 function townPages(member: boolean, open: number): { tab: string; title: string; art: ReactNode; body: ReactNode }[] {
   const W = (x: ReactNode) => <b className="text-white">{x}</b>;
   const Gd = (x: ReactNode) => <b className="text-[var(--gold)]">{x}</b>;
-  const kinds: ExpNode[] = ["fight", "elite", "shop", "rest", "event", "boss"];
-  const demo: ExpNode[] = ["fight", "elite", "fight", "shop", "fight"];
+  const kinds: ExpNode[] = ["fight", "elite", "event", "shop", "rest", "treasure", "boss"];
   const tips: Record<string, string> = {
-    "ur-dice": "체력은 낮지만 몇 칸씩 건너뛰어요 — 길 곳곳에 화력을 나눠 두면 안전",
-    "ur-moa": "단단하고 마법에 강해요 — 드래프트로 물리 · 마법을 고루 갖추기",
-    "ur-forte": "해골 부하를 부르고, 체력 40% 밑에서 한 번 30% 회복 + 다른 적 질주 — 마지막까지 화력 아끼지 말기",
+    "ur-dice": "체력은 낮지만 주사위만큼 순간이동하고 유닛을 기절시켜요 — 길 곳곳에 화력을 나눠 두기",
+    "ur-moa": "단단하고 골드를 훔쳐요 (잡으면 두 배로 돌려받음) — 상점에서 미리 다 쓰고 가기",
+    "ur-forte": "졸개를 부르고 체력 절반에서 분신 둘로 갈라져요 — 광역 화력 챙기기",
   };
   return [
     {
       tab: "한눈에",
-      title: "해피 타운 판 = 원정 지도",
-      art: (
-        <div className="flex flex-col items-center gap-4">
-          <span className="flex gap-1">
-            {demo.map((k, i) => (
-              <span key={i} className="relative flex h-[46px] w-[52px] items-end justify-center bg-[#2a2440]" style={{ boxShadow: `inset 0 0 0 3px ${EXP_NODE_TEXT[k].color}` }}>
-                <b className="absolute top-1 text-[11px]" style={{ color: EXP_NODE_TEXT[k].color }}>
-                  {EXP_NODE_TEXT[k].name}
-                </b>
-                {i === 0 && <MiniPawn />}
-              </span>
-            ))}
-          </span>
-          <span className="flex gap-3">
-            <PixelDie n={2} size={40} />
-            <PixelDie n={5} size={40} />
-          </span>
-          <span className="text-[12px] text-[var(--mute)]">2칸 → 엘리트? 5칸 → 상점? 내가 골라요</span>
-        </div>
-      ),
+      title: "지도를 골라 오르는 로그라이크",
+      art: <MiniMap />,
       body: (
         <>
           <p>
-            {W("소환 · 합성으로 막는 건 글리치 시티와 같아요.")} 다른 건 판의 흐름이에요 — 60웨이브를 한 번에 버티는 대신, 해피 타운 판을 한 바퀴 도는 {Gd("원정")}이에요.
+            {W("소환 · 합성으로 막는 건 메인과 같아요.")} 다른 건 흐름 — 60웨이브를 한 번에 버티는 대신, {Gd("갈림길 지도")}를 골라 {EXP.floors}층을 오른 뒤 꼭대기 {Gd("보스")}를 잡아요.
           </p>
           <p>
-            칸마다 짧은 전투 · 엘리트 · 상점 · 휴식 · 유물이 있고, {W("유닛 · 강화 · 골드는 칸에서 칸으로 그대로 이어져요.")}
+            칸마다 짧은 전투 · 엘리트 · ? 사건 · 상점 · 휴식 · 보물. {W("유닛 · 강화 · 골드는 칸에서 칸으로 그대로 이어져요.")}
           </p>
           <p>
-            갈림길마다 주사위 둘 중 하나를 골라 그만큼 가요. 출발 포털로 돌아오면 {Gd("UR 보스")} — 잡으면 원정 성공!
+            버티는 힘은 {Gd(`원정 체력 ${EXP.hp}`)} — 전투가 끝날 때 남은 적만큼 깎이고, 0이 되면 원정 실패.
           </p>
           <p className="text-[var(--mute)]">고르는 동안엔 시간이 멈춰요. 한 판 10분 남짓.</p>
         </>
       ),
     },
     {
-      tab: "칸 종류",
+      tab: "지도 · 칸",
       title: "어디로 갈까?",
       art: (
         <div className="flex w-full flex-col gap-1.5">
@@ -1484,43 +1495,54 @@ function townPages(member: boolean, open: number): { tab: string; title: string;
       body: (
         <>
           <p>
-            {W("큰 눈")}을 고르면 보스에 빨리 닿지만, 전투 · 드래프트를 덜 해서 덱이 약해요. UR 보스는 일찍 와도 일정 세기 이상이에요.
+            지도 전체와 {W("꼭대기 보스가 처음부터 보여요.")} 이어진 칸만 갈 수 있으니, 보스에 맞춰 길을 짜요 — 상점을 거칠까, 엘리트로 유물을 노릴까.
           </p>
           <p>
-            {W("작은 눈")}으로 칸을 많이 밟으면 세지지만, 못 잡은 적이 필드에 쌓여요 — 필드 적이 {CAP_TEXT}에 차면 원정 실패.
+            전투는 웨이브가 끝나면 {Gd(`정리 시간 ${EXP.cleanSec}초`)}. 그때 남은 적 하나당 체력 -{EXP.leak}, 엘리트 -{EXP.leakElite}.
           </p>
-          <p>{Gd("휴식")}은 필드 적을 치우거나 유닛을 단련, {Gd("상점")}은 정화 폭탄 · 카드 · 유물, {Gd("엘리트")}는 위험하지만 원정 유물을 줘요.</p>
+          <p>
+            전투엔 {W("수식어")}가 붙기도 해요 — 떼거리 · 철갑 · 질주 · 황금 · 분열. 엘리트 칸엔 {W("기믹 엘리트")}가 나와요:{" "}
+            {Object.values(GIM)
+              .map((g) => g.name)
+              .join(" · ")}
+            . 놓치면 유물도 없고 체력 -{EXP.gimEscape}!
+          </p>
         </>
       ),
     },
     {
-      tab: "드래프트 · 유물",
+      tab: "덱 · 유물",
       title: "골라서 만드는 덱",
       art: (
         <div className="flex w-full flex-col gap-1.5">
-          {EXP_RELICS.slice(0, 7).map((r) => (
-            <span key={r.id} className="px-inset flex flex-col p-1.5 text-[11px] leading-tight">
-              <b className="text-[#9be7ff]">{r.name}</b>
-              <span className="text-[var(--mute)]">{r.desc}</span>
-            </span>
-          ))}
+          {EXP_RELICS.filter((r) => !r.start)
+            .slice(0, 7)
+            .map((r) => (
+              <span key={r.id} className="px-inset flex flex-col p-1.5 text-[11px] leading-tight">
+                <b className="text-[#9be7ff]">{r.name}</b>
+                <span className="text-[var(--mute)]">{r.desc}</span>
+              </span>
+            ))}
         </div>
       ),
       body: (
         <>
           <p>
-            전투가 끝날 때마다 {Gd("유닛 3장 중 1장")}을 골라 바로 놓아요. 메인은 소환이 전부 운이지만, 원정은 「이번엔 마도회로 간다」처럼 골라서 덱을 만들어요.
+            출발 전에 {Gd("분대")}를 골라요 — {SQUADS.map((q) => q.name).join(" · ")}. 분대마다 시작 유닛 · 시작 유물이 달라요.
           </p>
           <p>
-            {Gd("원정 유물")}은 수치보다 규칙을 바꿔요 — 서약(소환이 한 세력만) · 연금 합성(두 등급 위) · 성장통(전투마다 한 등급 업)… 겹치면 말도 안 되는 조합이 나와요.
+            전투가 끝날 때마다 {Gd("유닛 3장 중 1장")}을 골라 바로 놓아요. 메인은 소환이 전부 운이지만, 원정은 「이번엔 마도회로 간다」처럼 덱을 만들어요.
+          </p>
+          <p>
+            {Gd("원정 유물")}은 엘리트 · 보물 · 상점에서 골라 얻어요. 수치보다 규칙을 바꿔요 — 서약 · 피의 계약 · 연금 합성… {W("저주")}는 상점에서 풀 수 있어요.
           </p>
           <p className="text-[var(--mute)]">원정 유물 · 드래프트는 이번 원정에서만. 정비소 영구 성장(유닛 강화 · 연구 · 유물)은 그대로 적용돼요.</p>
         </>
       ),
     },
     {
-      tab: "UR 보스",
-      title: "UR 보스 셋",
+      tab: "보스 · 단계",
+      title: "꼭대기 보스 셋 · 단계 비틀기",
       art: (
         <div className="flex w-full flex-col gap-2">
           {TOWN_BOSSES.map((x) => (
@@ -1528,9 +1550,9 @@ function townPages(member: boolean, open: number): { tab: string; title: string;
               <img src={BOSS_ART[x.fighter]?.src} alt="" className="h-[64px] w-[64px] shrink-0 object-contain" />
               <span className="min-w-0 leading-tight">
                 <b className="text-[13px]" style={{ color: x.color }}>
-                  {x.wave}웨이브 · {x.name}
+                  {x.name}
                 </b>
-                <span className="block text-[11px] text-[var(--mute)]">{x.title}</span>
+                <span className="block text-[11px] text-[var(--mute)]">{tips[x.fighter] ?? x.title}</span>
               </span>
             </div>
           ))}
@@ -1538,47 +1560,56 @@ function townPages(member: boolean, open: number): { tab: string; title: string;
       ),
       body: (
         <>
-          <p>나머지 보스 웨이브(20 · 40 · 60)는 글리치 시티와 같아요.</p>
-          {TOWN_BOSSES.map((x) => (
-            <p key={x.fighter}>
-              <b style={{ color: x.color }}>{x.name}</b> — {tips[x.fighter]}
+          <p>원정마다 셋 중 하나가 꼭대기에 있어요. 지도에서 미리 보고 대비하세요.</p>
+          <p>
+            이기면 다음 {W("단계")}가 열려요. 단계가 오르면 적이 세지고, {Gd("비틀기")}가 하나씩 붙어요:
+          </p>
+          {EXP_ASC.map((a) => (
+            <p key={a.lv} className="text-[12px] text-[var(--mute)]">
+              {a.lv}단계 — {a.desc}
             </p>
           ))}
         </>
       ),
     },
     {
-      tab: "열림 · 보상",
-      title: "언제 열리고 뭘 받나요?",
+      tab: "보상 · 메인",
+      title: "메인과 이어져요",
       art: (
-        <div className="flex flex-col items-center gap-2">
-          <span className="flex items-end gap-2">
-            {[1, 2, 3].map((lv) => (
-              <img key={lv} src={TOWN_ART.bld(lv)} alt="" className="w-[56px] object-contain object-bottom" style={{ height: 30 + lv * 18 }} />
-            ))}
-          </span>
-          <b className="text-[14px] text-[#ffd36b]">
-            {TOWN_NAME} {TOWN_MAX}단계
-          </b>
+        <div className="flex w-full flex-col gap-1.5">
+          {Object.entries(TOWN_RELIC).map(([lv, id]) => (
+            <span key={id} className="px-inset flex items-center gap-2 p-1.5 text-[12px]">
+              <b className="w-[44px] shrink-0 text-[#ffd36b]">{lv}단계</b>
+              <span className="min-w-0 leading-tight">
+                <b className="text-white">{RELIC[id]?.name}</b>
+                <span className="block text-[11px] text-[var(--mute)]">메인 유물 · 첫 클리어</span>
+              </span>
+            </span>
+          ))}
         </div>
       ),
       body: member && open > 0 ? (
         <>
           <p>
-            지금 {W(`${open}단계`)}까지 열려 있어요. 메인(글리치 시티)에서 오염 단계를 2개 열 때마다 다음 단계가 열려요.
+            지금 {W(`${open}단계`)}까지 열려 있어요. 바로 아래 단계를 이기고, 메인에서 오염 단계를 {TOWN_FROM}부터 2개 열 때마다 다음 단계가 열려요.
           </p>
-          <p>단계마다 처음 클리어하면 코어 · 유물 상자 · 카드 상자, 몇몇 단계는 해피 타운에서만 나오는 유물과 {Gd("땅문서")}(정비소 「도시 개발」)도 줘요.</p>
           <p>
-            보상은 같은 세기 메인 판의 ×{TOWN_REWARD} — {W("메인이 막히면 여기서 성장을 앞당기세요")}.
+            {W("메인 → 원정")}: 정비소 영구 성장(유닛 강화 · 연구 · 메인 유물)이 원정 전투에 그대로 들어가요.
           </p>
+          <p>
+            {W("원정 → 메인")}: 보상은 같은 세기 메인 판의 ×{TOWN_REWARD}, 단계마다 첫 클리어 코어 · 상자, 몇몇 단계는 원정에서만 나오는 {Gd("메인 유물")}. 이기면 {Gd("새 분대")}도 열려요.
+          </p>
+          <p className="text-[var(--mute)]">메인이 막히면 여기서 성장을 앞당기세요.</p>
         </>
       ) : (
         <>
           <p>
-            메인(글리치 시티)에서 {W(`오염 ${TOWN_FROM}단계`)}가 열리면 정식으로 열려요 (보상 · 랭킹).
+            메인에서 {W(`오염 ${TOWN_FROM}단계`)}가 열리면 정식으로 열려요 (보상 · 랭킹 · 단계 {TOWN_MAX}까지).
           </p>
-          <p>열리면 단계({TOWN_MAX}단계까지)마다 첫 클리어 보상 — 코어 · 유물 상자 · 카드 상자, 해피 타운 전용 유물 · {Gd("땅문서")}(정비소 「도시 개발」)도 받아요.</p>
-          <p>그 전에도 {Gd("1단계 연습 판")}으로 바로 해 볼 수 있어요. 들어가면 처음 몇 웨이브 동안 짧은 안내가 떠요(그동안 게임은 멈춰요).</p>
+          <p>
+            {W("메인 → 원정")}: 정비소 영구 성장이 원정 전투에 그대로. {W("원정 → 메인")}: 보상은 메인 판의 ×{TOWN_REWARD}, 첫 클리어 상자 · 원정 전용 {Gd("메인 유물")}.
+          </p>
+          <p>그 전에도 {Gd("1단계 연습 판")}으로 바로 해 볼 수 있어요. 처음엔 짧은 안내가 떠요(그동안 게임은 멈춰요).</p>
         </>
       ),
     },

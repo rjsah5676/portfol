@@ -97,7 +97,7 @@ export default function Codex({ have }: { have?: Record<string, number> }) {
                 )}
                 <div className="text-[13px] leading-tight">
                   <b style={{ color: x.color }}>
-                    {x.stage === "town" ? `해피 타운 W${x.wave}` : `W${x.wave}`} {x.name}
+                    {x.stage === "town" ? "원정 보스" : `W${x.wave}`} {x.name}
                   </b>{" "}
                   <span className="text-[var(--dim)]">{x.title}</span>
                   <p className="text-[var(--mute)]">{bossDesc(x)}</p>
@@ -167,7 +167,7 @@ export default function Codex({ have }: { have?: Record<string, number> }) {
   );
 }
 
-function bossDesc(x: (typeof BOSSES)[number]) {
+export function bossDesc(x: (typeof BOSSES)[number]) {
   const s = x.skills.map((k) =>
     k.kind === "heal"
       ? `${k.every}초마다 체력 ${k.pct * 100}% 회복`
@@ -185,7 +185,11 @@ function bossDesc(x: (typeof BOSSES)[number]) {
                   ? `${k.every}초마다 주사위 눈만큼 순간이동`
                   : k.kind === "seize"
                     ? `${k.every}초마다 가장 높은 건물을 빼앗음 (잡으면 돌아옴)`
-                    : k.kind === "encore"
+                    : k.kind === "steal"
+                      ? `${k.every}초마다 가진 골드 ${k.pct * 100}% 훔침 (잡으면 두 배로 돌려받음)`
+                      : k.kind === "split"
+                        ? `체력 ${k.at * 100}%에서 분신 ${k.n}개로 갈라짐 · 모두 잡아야 끝`
+                        : k.kind === "encore"
                       ? `체력 ${k.at * 100}%에서 한 번 앙코르 (체력 ${k.pct * 100}% 회복)`
                       : "예고 기술"
   );

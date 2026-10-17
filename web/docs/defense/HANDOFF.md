@@ -419,26 +419,23 @@ cd web && POKER_E2E=1 npx next dev            # → /games/defense/?fake=admin:�
 - 요약: `npx tsx scripts/defense-plays-report.ts <json> [--ver beta5]` (server/) — 단계별 클리어율 · 죽은/나간 웨이브 · 유물/연구/패치 장착률 · 습관
 - **임시 기능 — 분석이 끝나면 제거 예정.** 지울 곳: server/src/games/defensePlays.ts · defense.ts 의 plays.* 호출과 `defense.quit` rpc · Room.startedAt · admin.ts `/defense/plays` 라우트와 TOP_LEVEL "defense_plays" · web realtime/defense.ts `quitRun` · DefenseApp 의 quitRun 호출 · onExport 버튼 · exportPlays · server/scripts/defense-plays-report.ts · (DB) defense_plays 컬렉션 drop
 
-## v2.0 해피 타운 (2026-10-16) — 확장 스테이지
-PIXEL MARBLE 「해피 타운」 맵 테마. 길 · 칸 배치는 글리치 시티와 같음 (7×4 + 둘레 26칸), 규칙만 다름.
-- 로드아웃 `stage: "town"` · `town: 단계` (progress.ts) → `modsOf` 가 적 세기를 `GLITCH[townGlitchLv(단계)]` 로 (2+2×단계). 보물방 · 끈기 없음
-- 열림: `townOpenOf(glitchOpen)` — 메인 6단계 열면 1단계, 2단계마다 +1 (TOWN_MAX 13, 메인 50단계 확장 때 늘릴 것). 안 열렸으면 1단계 연습 판 (화면만)
-- 규칙 수치 · 칸 이름: `lib/defense/town.ts` (v3 원정 시제품 — EXP · expNodeOf · EXP_RELICS · SHOP). 시뮬: `sim.ts` 의 `expInit · expRoute · expGo · expWavesDone · expSegEnd · expPick · expGrow · expClear · advance`, 명령 `{ t: "exp", a: 번호 | -1 }`
-  - 한 판 = Game 하나가 이어짐. `b.exp.camp` 가 있으면 step 이 그 보드를 멈춤 (치트 고르기와 같은 방식) · 캠프에서도 소환 · 합성 · 판매 · 강화 가능, next · rift 는 막힘
-  - 갈림길(route, 주사위 둘 · 세 번째 주사위 유물이면 셋) → 칸: fight(EXP.fightWaves) · elite(EXP.eliteWaves + MAIN_BOSSES 하나) · rest · shop · event(유물) · 출발 포털 = UR 보스(b.wave 를 EXP.bossWave 이상으로) → 잡으면 clear. 원정은 일반 10웨이브 보스 · 치트 코드 없음
-  - 전투 끝 → 드래프트(3세력 하나씩, 칸 수 따라 등급) → 엘리트 승리면 유물. 못 잡은 적은 필드에 남음 (원정 체력 없음, 필드 한도 capOf = 100 + exp.cap). v2.2(굴리기 · 잭팟)는 「번잡하고 메인과 같다」는 반응으로 걷어냄 (2026-10-17)
-  - 화면: GameView CampPanel(「판 보기」로 접기) · ExpChip · NodePanel, render drawRoute(갈 칸 괄호 + 눈) · drawToken · 엘리트 칸 표시. 봇: bot.ts 캠프 판단 (위험하면 휴식 · 상점)
-  - UR 보스 `enemies.ts TOWN_BOSSES` (BOSSES 뒤에 붙음, `bossOfWave(w, stage)`): DICE warp · MOA seize(보스 처치 시 돌려줌) · FORTE encore
-- 서버: `defense.start { mode: "town" }` · 순위표 `${ver}:t${시즌}` · 보상 `meta.onTownRun` (runReward "town" ×1.3 · 단계 첫 클리어 `townFirstClear` · `townDone` · `tbest`) · `setLoad { town }`
-- 화면: 메뉴 스테이지 탭 · `TownIntro` 소개 창 · 길 칸 누르기 → 아래 `TilePanel` (짓기 W) · 위 `TownChip` · `render.ts drawTown` (마블 건물 · 랜드마크 · 특수 칸 그림 재사용) · 안내 카드 `Tutorial.tsx TOWN_STEPS` (pgd-tut-town)
-- 보스 그림: `public/defense/bosses/ur-*.webp` — 마블 UR 그림을 참고로 GPT 이미지로 그린 글리치 보스 (192×192, 바닥 184 · 키 173 맞춤 · 다른 보스와 같은 틀)
-- 밸런스 확인: `npx tsx scripts/defense-sim.ts --meta mid --town 1` (적 세기 같은 메인 단계와 비교)
-- 다음: 땅문서 · 도시 보너스(타운 전용 재화 → 메인 영구 보너스) · 메인 31~50단계 + 새 유물 · 연구 · 변이
+## v2.2 글리치 원정 (2026-10-17) — 확장 스테이지 (구 해피 타운)
+Slay the Spire 식 갈림길 지도 로그라이크. 설계 문서: 프로젝트 `claude/2026-10-17-glitch-expedition-design.md`. 필드 · 소환 · 합성은 메인과 같고 흐름만 다름.
+- 로드아웃 `stage: "town"` · `town: 단계`(= 원정 단계, 1..TOWN_MAX 23) · `squads`(해금한 분대). `modsOf` 가 적 세기를 `GLITCH[townGlitchLv(단계)]` 로. 보물방 · 끈기 없음
+- 열림: `townAvail(glitchOpen, townDone)` = min(`townOpenOf` 메인 6단계부터 2단계마다, 바로 아래 단계 클리어 + 1). 안 열렸거나 비회원이면 1단계 연습 판
+- 데이터 `lib/defense/town.ts`: EXP(체력 30 · 8층 · 칸당 웨이브 · 정리 15초 · 새는 적 체력 · 보스 웨이브 30 · 골드) · EXP_NODE_TEXT · FIGHT_MOD(swarm armor rush gold split) · GIM(thief healer golem mirror) · SQUADS / SQUAD_NEXT · EXP_RELICS(18, sq_ 는 분대 시작 유물) · CURSES · SHOP · EVENTS(6) · EXP_ASC(단계 비틀기 2~9, `ascOn`)
+- 시뮬 `sim.ts`: `expInit`(지도 `genMap` 4줄 × 8층 + 보스층 · 보스는 TOWN_BOSSES 중 무작위) → 캠프 `ExpCamp` squad → map → 칸(`expGoto`): fight/elite `startFight`(웨이브 → `expWavesDone` 정리 시간 → `expSegEnd` 새는 적 `expLeak` 만큼 원정 체력 · 골드 · 드래프트 · 엘리트 승리면 relic) · shop · rest · event · treasure(relic) · boss `startBoss`. 고르기 `expPick`, 명령 `{ t: "exp", a: 번호 | -1 }`. `b.exp.camp` 가 있으면 그 보드는 멈춤 · `trail` = 지나온 칸
+  - 기믹 엘리트 `gimTick` · 보스 기술 steal / split (enemies.ts BossSkill) · 처치 골드 · 해시에 exp hp · f · 유물 수
+- 화면 `components/Defense/Expedition.tsx`: `ExpBar`(위쪽 줄) · `CleanBanner`(정리 시간 · 깎일 체력 미리보기) · `ExpModal`(필드 + 오른쪽 패널을 덮는 1000×510, 「판 보기」로 접기 — 분대 · 지도(왼쪽 출발 → 오른쪽 보스, 한 번 누르면 정보 · 두 번이면 출발) · 드래프트 · 유물 · 상점 · 휴식 · 사건). render.ts 는 메인과 같은 바닥 + 기믹 엘리트 이름표. 안내 카드 `Tutorial.tsx TOWN_STEPS` (pgd-tut-exp) · 메뉴 소개 `TownIntro`
+- 서버: `defense.start { mode: "town" }` · 순위표 `${ver}:t${시즌}` · `meta.onTownRun`(runReward "town" ×1.3 · 첫 클리어 `townFirstClear` · 5/10/15/20 단계 `TOWN_RELIC` 메인 유물 · 이기면 다음 분대 `SQUAD_NEXT`) · `setLoad { town }` 은 townAvail 로 검사
+- 땅문서 · 도시 개발(`CITY`)은 없어짐 (2026-10-17). golden_deed 는 「황금 지도」(원정 시작 골드 `mods.expGold`)
+- 밸런스: `npx tsx scripts/defense-sim.ts --town 1` (메타 없이 클리어 ~50%, 5~7분) · `--meta mid --town 4` 도 ~50%
+- 2단계(다음): 원정 보스 처치 → 메인 시작 치트 해금 · 원정 유물 도감 · 기믹 엘리트 · 유물 그림 · 2막
 
 ## v2.1 심연 2막 · 도시 개발 (2026-10-16)
 - GLITCH_MAX 30 → 50 (`GLITCH_ACT1` 30). 31~ 체력 기울기 `DEEP_PARAMS.hpPerLv2`(0.06), 50단계 보스 ×boss50. 2페이즈: `phaseWaves` — 31~39 셋(40·50·60) · 40~ 여섯
 - 심연 변이 추가: rush 정예(35+, 모든 웨이브 마지막 적 엘리트) · ward 방벽(40+, 보스 보호막 15%) · fog 안개(45+, 사거리 -0.5)
 - 유물 8종 추가 `RelicDef.from`: deep(오염 30 클리어 뒤 상자 — `DEEP_RELIC_WIN`) myth_seal · overdrive · chrono_core · void_stone / town(타운 5·10·15·20 첫 클리어만 — `TOWN_RELIC`) lucky_dice · golden_deed · moa_card · forte_box. 그림 없음(도트 아이콘)
-- 땅문서(deeds) · 도시 개발(`CITY`, Loadout.city): 타운 판마다 `townDeeds` · 첫 클리어 `townFirstClear.deeds`, rpc `defense.city.up`, 정비소 「도시 개발」 탭. modsOf 가 모든 스테이지에 적용
+- (v2.2 에서 없앰) 땅문서 · 도시 개발
 - TOWN_MAX 23. 업적 glitch-40 · glitch-50 (points.ts)
 - 시뮬 `--meta abyss` (max + 새 유물 + 도시 개발 전부): 봇 기준 50단계 클리어 드묾 (~2%)
