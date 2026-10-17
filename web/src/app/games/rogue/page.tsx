@@ -35,11 +35,11 @@ export default function RoguePage() {
       <div className="mx-auto max-w-[1076px] px-3 pt-6 pb-24 sm:px-6">
         <GameHeader
           icon="⚔️"
-          title="픽셀 생존기"
-          en="PIXEL FIGHT 외전 · ALPHA"
+          title="PIXEL RESET"
+          en="픽셀 생존기 · PIXEL FIGHT 외전 · ALPHA"
           accent="#FF3D5E"
-          desc="초기화되기 전에, 글리치가 시작된 맨 아래까지 — 아이템 조합 로그라이크"
-          tags={["로그라이크", "아이작류", "아이템 조합", "웹게임", "랭킹"]}
+          desc="초기화되기 전에, 글리치가 시작된 맨 아래까지 내려가자"
+          tags={["로그라이크", "아이템 조합", "웹게임", "랭킹"]}
           ach="rogue"
           guide={ROGUE_GUIDE}
           rank={{

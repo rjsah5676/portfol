@@ -1,5 +1,5 @@
 /*
- * 픽셀 생존기 (PIXEL FIGHT 외전 로그라이크) — 판은 브라우저(public/rogue, iframe)가 돌리고, 서버는 시작/끝 · 랭킹 · 업적 통계만.
+ * PIXEL RESET — 픽셀 생존기 (PIXEL FIGHT 외전 로그라이크) — 판은 브라우저(public/rogue, iframe)가 돌리고, 서버는 시작/끝 · 랭킹 · 업적 통계만.
  *  rogue.start  → 판 번호 (시작 시각 기록, 회원만)
  *  rogue.finish → 기록 확인(plausible) → 랭킹(최고 점수만) · 업적 통계(stats.rogue) → 이번 판으로 새로 채운 업적 이름
  *  rogue.rank

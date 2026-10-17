@@ -1,5 +1,5 @@
 /*
- * 픽셀 생존기 (PIXEL FIGHT 외전 로그라이크) — 서버 · 화면이 같이 쓰는 기록 규칙
+ * PIXEL RESET — 픽셀 생존기 (PIXEL FIGHT 외전 로그라이크) — 서버 · 화면이 같이 쓰는 기록 규칙
  * 판은 public/rogue/index.html (iframe) 이 돌리고, 끝나면 이 모양의 기록을 넘김 → server/src/games/rogue.ts
  */
 

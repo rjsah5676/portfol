@@ -56,7 +56,7 @@ export const POINT_GAMES: Record<PointGame, string> = {
   sketch: "DOODLE PARTY",
   marble: "DICE TOWN",
   survivor: "PIXEL TOWN SURVIVOR",
-  rogue: "픽셀 생존기",
+  rogue: "PIXEL RESET",
 };
 
 /**
@@ -681,7 +681,7 @@ export const ACHIEVEMENTS: Achievement[] = [
   a("survivor", "heroes-4", "돌아가며 출근", "서로 다른 캐릭터 4명으로 클리어", "survivor.heroWins", 4, 1200),
   a("survivor", "heroes-10", "마을 전원 생존", "서로 다른 캐릭터 10명으로 클리어", "survivor.heroWins", 10, 4000),
 
-  // 픽셀 생존기 (games/rogue.ts 의 rogue.finish 가 stats.rogue 에 쌓음) — 챕터 보스 업적 이름 = 그 챕터 이야기(LOG) 제목
+  // PIXEL RESET (games/rogue.ts 의 rogue.finish 가 stats.rogue 에 쌓음) — 챕터 보스 업적 이름 = 그 챕터 이야기(LOG) 제목
   a("rogue", "runs-1", "부팅 완료", "한 판 끝내기", "rogue.runs", 1, 150),
   a("rogue", "runs-30", "재접속 중독", "30판 끝내기", "rogue.runs", 30, 900),
   a("rogue", "runs-150", "로그아웃 불가", "150판 끝내기", "rogue.runs", 150, 3000),

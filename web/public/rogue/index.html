@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex">
-<title>픽셀 생존기 — PIXEL FIGHT 외전</title>
+<title>PIXEL RESET — 픽셀 생존기 · PIXEL FIGHT 외전</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Silkscreen:wght@400;700&family=Noto+Sans+KR:wght@400;700;900&display=swap">
@@ -75,6 +75,12 @@ button.on{background:var(--red); border-color:var(--red); color:#fff}
 #start .sub{font-family:var(--f-display); font-size:11px; letter-spacing:.14em; color:var(--cyan); margin-top:-6px}
 #story{z-index:7; background:linear-gradient(180deg,rgba(7,8,15,.9),rgba(7,8,15,.94)),var(--keyart) center/cover no-repeat,#07080f; cursor:pointer}
 #story .st{width:min(560px,100%); text-align:left; display:flex; flex-direction:column; gap:10px}
+#story .st.has-pic{width:min(640px,100%); gap:8px}
+#story .pic{width:100%; aspect-ratio:16/8; max-height:44vh; background:#000 center/cover no-repeat; border:1px solid var(--line); box-shadow:0 0 0 1px rgba(0,0,0,.6), 0 12px 40px rgba(0,0,0,.55); animation:kb 9s ease-out forwards}
+#story .pic.in{animation:picIn .6s ease, kb 9s ease-out forwards}
+@keyframes picIn{from{opacity:0; filter:brightness(2) saturate(0)} to{opacity:1; filter:none}}
+@keyframes kb{from{background-size:108%} to{background-size:100%}}
+@media (prefers-reduced-motion:reduce){#story .pic, #story .pic.in{animation:none}}
 #story .tag{font-family:var(--f-display); font-size:11px; letter-spacing:.14em; color:var(--cyan)}
 #story h2{margin:0; font-family:var(--f-display); font-size:clamp(17px,3vw,24px); color:var(--fg)}
 #story .pose{width:96px; height:96px; image-rendering:pixelated; align-self:center; filter:drop-shadow(0 0 10px rgba(63,227,255,.3))}
@@ -156,10 +162,11 @@ details pre{max-height:140px; overflow:auto; font-size:10px; background:var(--bg
 
 
 <div class="bar">
-  <div class="logo"><b>픽셀</b> 생존기 <span>ALPHA</span></div>
+  <div class="logo"><b>PIXEL</b> RESET <span>ALPHA</span></div>
   <div class="sp"></div>
   <button id="bPause" type="button">PAUSE</button>
   <button id="bMute" type="button">SOUND</button>
+  <button id="bBgm" type="button">BGM</button>
   <button id="bFull" type="button">FULL</button>
   <button id="bCodex" type="button">도감</button>
   <button id="bDev" type="button">DEV</button>
@@ -175,9 +182,9 @@ details pre{max-height:140px; overflow:auto; font-size:10px; background:var(--bg
       <button type="button" id="tCard">CARD</button>
     </div>
     <div class="ov" id="start">
-      <h1><span class="r">픽셀</span> 생존기</h1>
-      <p class="sub">PIXEL FIGHT 외전 · ALPHA</p>
-      <p>업데이트가 깨진 픽셀파이트 세계. 초기화되기 전에, 글리치가 시작된 맨 아래까지 내려가자. 4챕터 · 8층 — 처음엔 2챕터(4층)까지 열려 있고, 끝까지 깨면 다음 챕터가 열려. 층을 넘어갈 때마다 자동 저장돼.</p>
+      <h1><span class="r">PIXEL</span> RESET</h1>
+      <p class="sub">픽셀 생존기 · PIXEL FIGHT 외전 · ALPHA</p>
+      <p>업데이트가 깨진 픽셀파이트 세계. 초기화되기 전에, 글리치가 시작된 맨 아래까지 내려가자.</p>
       <p id="startInfo"></p>
       <div class="keys">
         <kbd>WASD</kbd><span>이동</span>
@@ -620,13 +627,74 @@ AIC.src = 'a/49ddb154dc.webp';
 
 /* ---------- sound ---------- */
 let AC = null, muted = false; const lastSfx = {}; let noiseBuf = null;
+// 효과음 · 배경음 (ElevenLabs). 파일은 snd/ — 못 받으면 예전 합성음으로
+const AUDIO_KEY = 'pfr-audio-v1';
+let bgmOn = true;
+try { const a = JSON.parse(localStorage.getItem(AUDIO_KEY) || '{}'); muted = !!a.muted; bgmOn = a.bgm !== false; } catch(e){}
+const saveAudio = () => { try { localStorage.setItem(AUDIO_KEY, JSON.stringify({muted, bgm:bgmOn})); } catch(e){} };
+const SFX_GAIN = {shoot:.22, hit:.32, kill:.42, hurt:.7, shieldhit:.5, boom:.65, fuse:.22, beam:.55, charge:.3, dash:.38, ult:.8, active:.6,
+  coin:.45, item:.75, get:.5, key:.5, heal:.55, shield:.55, card:.55, carduse:.7, patch:.55, good:.55, bad:.55, door:.42, unlock:.55,
+  secret:.7, zip:.55, buy:.6, nope:.4, portal:.6, floor:.7, boss:.85, bossdie:.9, zap:.32, reroll:.6, timestop:.65, clear:.8, gameover:.8, story:.35, click:.28};
+const SFX_PITCH = {shoot:1, hit:1, kill:1, coin:1, zap:1, get:1}; // 자주 나는 소리는 높낮이를 조금씩 흔들어 덜 질리게
+const SB = {}; let sfxBus = null, bgmBus = null;
+const sndURL = n => 'snd/' + n + '.mp3';
+function loadSfx(){
+  Object.keys(SFX_GAIN).forEach(n => fetch(sndURL(n)).then(r => r.ok ? r.arrayBuffer() : Promise.reject()).then(b => AC.decodeAudioData(b)).then(buf => { SB[n] = buf; }).catch(() => {}));
+}
 function initAudio(){
   if (AC) { if (AC.state === 'suspended') AC.resume(); return; }
   try {
     AC = new (window.AudioContext || window.webkitAudioContext)();
     noiseBuf = AC.createBuffer(1, AC.sampleRate * 0.4, AC.sampleRate);
     const d = noiseBuf.getChannelData(0); for (let i=0;i<d.length;i++) d[i] = Math.random()*2-1;
+    sfxBus = AC.createGain(); sfxBus.connect(AC.destination);
+    bgmBus = AC.createGain(); bgmBus.gain.value = 0.42; bgmBus.connect(AC.destination);
+    loadSfx(); bgmTick(true);
   } catch(e){ AC = null; }
+}
+// 배경음: 지금 상태에 맞는 곡 하나만 풀어 두고(압축본은 받아 둠), 바뀌면 1.2초 겹쳐 넘김
+const BGM_RAW = {}, BGM_BUF = {}; let bgmCur = null, bgmNode = null, bgmWant = null;
+function bgmFor(){
+  if (!$('result').hidden) return null;
+  if (!G || !running) return 'title';
+  if (G.room && G.room.type === 'boss' && !G.room.cleared && G.player.hp > 0) return 'boss';
+  return 'ch' + (chOf(G.floorNo) + 1);
+}
+async function bgmBuffer(n){
+  if (BGM_BUF[n]) return BGM_BUF[n];
+  if (!BGM_RAW[n]) BGM_RAW[n] = fetch(sndURL('bgm-' + n)).then(r => r.ok ? r.arrayBuffer() : Promise.reject());
+  const raw = await BGM_RAW[n];
+  const buf = await AC.decodeAudioData(raw.slice(0));
+  // mp3 앞뒤 무음(인코더 여백)을 빼고 돌림 — 곡은 이어 붙도록 미리 겹쳐 만들어 둠
+  const ch = buf.getChannelData(0); let a = 0, b = ch.length - 1;
+  while (a < ch.length && Math.abs(ch[a]) < 1e-4) a++; while (b > a && Math.abs(ch[b]) < 1e-4) b--;
+  buf._ls = a / buf.sampleRate; buf._le = (b + 1) / buf.sampleRate;
+  for (const k in BGM_BUF) if (k !== bgmCur) delete BGM_BUF[k]; // 풀어 둔 건 지금 곡 하나만
+  return BGM_BUF[n] = buf;
+}
+async function bgmPlay(n){
+  bgmWant = n;
+  if (n === bgmCur) return;
+  const old = bgmNode, t = AC.currentTime;
+  if (old){ old.g.gain.setValueAtTime(old.g.gain.value, t); old.g.gain.linearRampToValueAtTime(0, t + 1.2); old.s.stop(t + 1.3); }
+  bgmNode = null; bgmCur = n;
+  if (!n) return;
+  let buf; try { buf = await bgmBuffer(n); } catch(e){ return; }
+  if (bgmWant !== n || bgmCur !== n) return;
+  const s = AC.createBufferSource(), g = AC.createGain();
+  s.buffer = buf; s.loop = true; s.loopStart = buf._ls; s.loopEnd = buf._le;
+  g.gain.setValueAtTime(0, AC.currentTime); g.gain.linearRampToValueAtTime(1, AC.currentTime + 1.2);
+  s.connect(g).connect(bgmBus); s.start(0, buf._ls); bgmNode = {s, g};
+}
+let bgmLast = 0;
+function bgmTick(force){
+  if (!AC) return;
+  const now = performance.now(); if (!force && now - bgmLast < 250) return; bgmLast = now;
+  const want = muted || !bgmOn ? null : bgmFor();
+  if (want !== bgmCur) bgmPlay(want);
+  // 일시정지 · 지도 · 도감 · 이야기 중엔 작게
+  const duck = (paused || mapOpen || storyOpen) ? .35 : 1;
+  bgmBus.gain.setTargetAtTime(0.42 * duck, AC.currentTime, .15);
 }
 function tone(f1, f2, dur, type, vol, delay=0){
   const t = AC.currentTime + delay, o = AC.createOscillator(), g = AC.createGain();
@@ -643,6 +711,12 @@ function noise(dur, vol, freq){
 function sfx(n){
   if (!AC || muted) return;
   const now = AC.currentTime; if (lastSfx[n] && now - lastSfx[n] < 0.05) return; lastSfx[n] = now;
+  if (SB[n]){
+    const s = AC.createBufferSource(), g = AC.createGain();
+    s.buffer = SB[n]; if (SFX_PITCH[n]) s.playbackRate.value = .93 + Math.random()*.14;
+    g.gain.value = SFX_GAIN[n] || .5; s.connect(g).connect(sfxBus); s.start();
+    return;
+  }
   switch(n){
     case 'shoot': tone(880, 520, .05, 'square', .025); break;
     case 'hit': noise(.05, .06, 2400); break;
@@ -973,7 +1047,7 @@ function onRoomCleared(){
   addGauge(10);
   const rl = roomLog(); if (rl) rl.clearedMs = ms();
   if (room.type === 'boss'){
-    G.log.bossKills.push({floor:G.floorNo, ms:ms()});
+    G.log.bossKills.push({floor:G.floorNo, ms:ms()}); sfx('bossdie');
     if (G.floorNo % 2 === 0 && !storySeen['c' + G.floorNo/2]) G.storyT = {c:G.floorNo/2, t:70};
     if (G.floorNo >= G.endFloor){
       G.log.bossKillMs = ms(); G.endTimer = 110;
@@ -1023,7 +1097,7 @@ function takeItem(pk){
     if (G.active) room.pickups.push(mkPick('item', pk.x, pk.y, {id:G.active, source:'swap', blocked:true, pop:10}));
     G.active = pk.id; G.log.actives.push('pick:' + pk.id);
     G.player.hold = 60; G.player.holdItem = pk.id;
-    showBanner(def.name, def.desc + ' — 게이지 ' + def.cost + ' · [E]', codexAdd('items', pk.id)); sfx('pickup');
+    showBanner(def.name, def.desc + ' — 게이지 ' + def.cost + ' · [E]', codexAdd('items', pk.id)); sfx('item');
     burst(pk.x, pk.y, def.tint, 14, 2.2);
     return;
   }
@@ -1031,7 +1105,7 @@ function takeItem(pk){
   if (def.onPick) def.onPick(G.player);
   recalcProfile();
   G.player.hold = 60; G.player.holdItem = pk.id;
-  showBanner(def.name, def.desc, codexAdd('items', pk.id)); sfx('pickup');
+  showBanner(def.name, def.desc, codexAdd('items', pk.id)); sfx('item');
   burst(pk.x, pk.y, def.tint, 14, 2.2);
   refreshDebug(true);
 }
@@ -1051,19 +1125,19 @@ function tryCollect(pk){
     if (R.bit < pk.price){ toast('비트 부족', '#ff6f8a', pk.x, pk.y - 20); sfx('nope'); return false; }
     if (pk.kind === 'heal' && p.hp >= p.maxHp){ toast('체력 가득', '#8a8fb2', pk.x, pk.y - 20); return false; }
     if (pk.kind === 'shield' && p.shield >= TUNE.maxShield){ toast('방화벽 가득', '#8a8fb2', pk.x, pk.y - 20); return false; }
-    R.bit -= pk.price; G.log.bought.push(pk.kind === 'item' ? pk.id : pk.kind); sfx('coin');
+    R.bit -= pk.price; G.log.bought.push(pk.kind === 'item' ? pk.id : pk.kind); sfx('buy');
   }
   switch (pk.kind){
     case 'item': takeItem(pk); return 'taken';
     case 'bit': R.bit += pk.n || 1; sfx('coin'); break;
-    case 'key': R.key++; sfx('get'); toast('+액세스 키', '#ffe68a'); break;
+    case 'key': R.key++; sfx('key'); toast('+액세스 키', '#ffe68a'); break;
     case 'bomb': R.bomb++; sfx('get'); toast('+글리치 폭탄', '#c77dff'); break;
     case 'heal':
       if (p.hp >= p.maxHp && !pk.price){ toast('HP 가득 — 나중에 먹자', '#8a8fb2', pk.x, pk.y - 16); lootLearn('heal'); return false; }
-      p.hp = Math.min(p.maxHp, p.hp + TUNE.healAmt); sfx('get'); toast('+' + TUNE.healAmt + ' HP', '#ff6f8a'); break;
+      p.hp = Math.min(p.maxHp, p.hp + TUNE.healAmt); sfx('heal'); toast('+' + TUNE.healAmt + ' HP', '#ff6f8a'); break;
     case 'shield':
       if (p.shield >= TUNE.maxShield && !pk.price){ toast('방화벽 가득', '#8a8fb2', pk.x, pk.y - 16); return false; }
-      p.shield = Math.min(TUNE.maxShield, p.shield + TUNE.shieldAmt); sfx('get'); toast('+' + TUNE.shieldAmt + ' 방화벽', '#3fe3ff'); break;
+      p.shield = Math.min(TUNE.maxShield, p.shield + TUNE.shieldAmt); sfx('shield'); toast('+' + TUNE.shieldAmt + ' 방화벽', '#3fe3ff'); break;
     case 'patch': codexAdd('loot', 'patch'); usePatch(pk.c); return true;
     case 'card': {
       codexAdd('loot', 'card');
@@ -1082,7 +1156,7 @@ function tryCollect(pk){
   return true;
 }
 function openZip(pk, locked){
-  const rng = G.lootRng; sfx('unlock'); burst(pk.x, pk.y, LOOT[pk.kind].col, 12, 2);
+  const rng = G.lootRng; sfx('zip'); burst(pk.x, pk.y, LOOT[pk.kind].col, 12, 2);
   if (locked && rng() < .35){
     const id = pickItem('drop', rng, G.used);
     if (id){ const s = freeTileNear(pk.x, pk.y); G.room.pickups.push(mkPick('item', s.x, s.y, {id, source:'zip', pop:16})); return; }
@@ -1118,11 +1192,12 @@ function usePatch(c){
   sfx(P.good >= 1 ? 'good' : P.good > 0 ? 'card' : 'bad');
   burst(p.x, p.y - 6, PATCH_COLS[c], 14, 2.2);
   showBanner(P.name, P.desc, codexAdd('patch', P.id));
+  sfx('patch'); setTimeout(() => sfx(P.good >= 1 ? 'good' : P.good > 0 ? 'get' : 'bad'), 260);
 }
 function useCard(){
   if (!G.card){ toast('치트 코드 없음', '#8a8fb2'); sfx('nope'); return; }
   const id = G.card, p = G.player; G.card = null; G.log.cards.push(id);
-  sfx('card'); burst(p.x, p.y - 6, '#8affc1', 16, 2.4);
+  sfx('carduse'); burst(p.x, p.y - 6, '#8affc1', 16, 2.4);
   switch (id){
     case 'god': G.buff.god = 240; break;
     case 'noclip': G.buff.noclip = 300; break;
@@ -1420,13 +1495,14 @@ function useActive(){
     case 'whirlwind': G.ult = TUNE.ultT; G.cutin = 56; G.hitstop = 14; G.shake = 10; sfx('ult'); break;
     case 'reroll': ok = rerollRoom(); break;
     case 'reroll_all': ok = rerollBuild(); break;
-    case 'timestop': G.buff.stop = 240; sfx('card'); break;
+    case 'timestop': G.buff.stop = 240; sfx('timestop'); break;
     case 'killtask': ok = killTask(); break;
     case 'teleport': ok = teleportRandom(); break;
     case 'bullet_cash': ok = bulletCash(); break;
   }
   if (!ok){ sfx('nope'); return; }
   G.gauge -= def.cost; G.log.actives.push(id);
+  if (id === 'bullet_cash' || id === 'killtask') sfx('active');
   if (id !== 'whirlwind'){ showBanner('> ' + def.name, def.desc); burst(G.player.x, G.player.y - 6, def.tint, 16, 2.4); }
 }
 function rerollRoom(){
@@ -1437,7 +1513,7 @@ function rerollRoom(){
     const nid = pickItem(src, G.lootRng, G.used); if (!nid) continue;
     k.id = nid; k.pop = 12; burst(k.x, k.y - 6, '#ffcf4a', 12, 2);
   }
-  sfx('card'); return true;
+  sfx('reroll'); return true;
 }
 function rerollBuild(){
   if (!G.items.length){ toast('바꿀 아이템이 없다', '#8a8fb2'); return false; }
@@ -1448,7 +1524,7 @@ function rerollBuild(){
     const d = ITEM[nid]; if (d.onPick) d.onPick(G.player); codexAdd('items', nid);
     return {id:nid, atMs:ms(), floor:G.floorNo, room:G.room.index, source:'reroll'};
   });
-  recalcProfile(); G.shake = 8; sfx('secret'); refreshDebug(true); return true;
+  recalcProfile(); G.shake = 8; sfx('reroll'); refreshDebug(true); return true;
 }
 function killTask(){
   const live = G.enemies.filter(e => !e.dead && e.spawnT <= 0 && !(e.z > 8));
@@ -2338,10 +2414,24 @@ function drawPlayer(){
   px(x - 6, y + 6, 12, 3, 'rgba(0,0,0,.35)');
   if (G.buff.god > 0){ ctx.globalAlpha = .45 + .25*Math.sin(G.frame*.5); px(x - 9, y - 16, 18, 26, '#ffcf4a'); ctx.globalAlpha = 1; }
   if (G.buff.noclip > 0) ctx.globalAlpha = .5;
-  if (p.dashT > 0 && kfxReady()){ const fl2 = p.dashDir.x < 0; kpose(11, x - p.dashDir.x*16, y - p.dashDir.y*16, fl2, .3); kpose(11, x - p.dashDir.x*8, y - p.dashDir.y*8, fl2, .5); }
+  // 위아래 대시: 옆 대시 포즈 대신 앞/뒤 모습 그대로 + 잔상 · 세로 속도선 (옆 대시 그림은 옆으로만)
+  const vdash = p.dashT > 0 && Math.abs(p.dashDir.y) > Math.abs(p.dashDir.x);
+  const kaiSpr = (row, col, sx, sy, a, flipX) => { ctx.save(); ctx.globalAlpha *= a; ctx.translate(sx, sy + 9); if (flipX) ctx.scale(-1, 1); ctx.drawImage(KAI_OL || KAI, col*48, row*48, 48, 48, -12, -24, 24, 24); ctx.restore(); };
+  if (vdash && KAI.complete && KAI.naturalWidth){
+    const row = p.dashDir.y > 0 ? 0 : 1, d = p.dashDir.y > 0 ? 1 : -1;
+    ctx.globalCompositeOperation = 'lighter';
+    kaiSpr(row, 2, x, y - d*16, .22, false); kaiSpr(row, 2, x, y - d*8, .4, false);
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = .55; ctx.fillStyle = '#9fe8ff';
+    for (let i = -1; i <= 1; i++) ctx.fillRect(x + i*6 - .5, y - 6 - d*(12 + Math.abs(i)*4), 1, 14);
+    ctx.globalAlpha = G.buff.noclip > 0 ? .5 : 1;
+  }
+  else if (p.dashT > 0 && kfxReady()){ const fl2 = p.dashDir.x < 0; kpose(11, x - p.dashDir.x*16, y - p.dashDir.y*16, fl2, .3); kpose(11, x - p.dashDir.x*8, y - p.dashDir.y*8, fl2, .5); }
   else if (p.dashT > 0){ ctx.globalAlpha = .35; px(x - 5 - p.dashDir.x*8, y - 11 - p.dashDir.y*8, 10, 16, '#9fe8ff'); px(x - 5 - p.dashDir.x*15, y - 11 - p.dashDir.y*15, 10, 16, '#9fe8ff'); ctx.globalAlpha = G.buff.noclip > 0 ? .5 : 1; }
   const hurt = p.hurtAt != null && G.frame - p.hurtAt < 16 && p.dashT <= 0 && G.ult <= 0;
-  if (kfxReady() && (p.dashT > 0 || hurt)){
+  if (vdash && KAI.complete && KAI.naturalWidth){
+    kaiSpr(p.dashDir.y > 0 ? 0 : 1, 2, x, y, 1, false);
+  } else if (kfxReady() && (p.dashT > 0 || hurt)){
     kpose(p.dashT > 0 ? 0 : 1, x, y, p.dashT > 0 ? p.dashDir.x < 0 : p.face.x < 0);
   } else if (KAI.complete && KAI.naturalWidth){
     const row = view === 'front' ? 0 : view === 'back' ? 1 : 2, moving = Math.abs(p.vx) + Math.abs(p.vy) > .3;
@@ -2537,6 +2627,7 @@ function endRun(result){
   running = false;
   G.log.result = result; G.log.durationMs = ms(); G.log.kills = G.kills; G.log.res = Object.assign({}, G.res);
   clearSave(); refreshStart();
+  sfx(result === 'clear' ? 'clear' : 'gameover');
   const rep = runReport(result);
   let srvMsg = '';
   if (EMBED){
@@ -2574,29 +2665,38 @@ function endRun(result){
 // 아이작처럼: 첫 판 앞에 프롤로그, 챕터 보스를 처음 쓰러뜨릴 때마다 로그 한 편. 도감 「이야기」에서 다시 보기
 const STORY = {
   intro:{tag:'PROLOGUE', title:'업데이트 v2.0', pages:[
-    {lines:['[공지] PIXEL FIGHT 업데이트 v2.0 배포 중… 99%', '그리고 무언가 깨졌다.']},
-    {lines:['대전장 바닥에 금이 가고, 하늘에 노이즈가 번졌다.', '파이터들은 하나둘 접속이 끊겼다.']},
-    {lines:['[긴급 공지] 복구할 수 없는 오류가 발견되었습니다.', '[긴급 공지] 월드를 초기화합니다. 남은 시간 ██:██:██']},
-    {k:0, lines:['대기실에서 눈을 뜬 건 카이 혼자였다.', '「초기화되기 전에… 원인을 찾는다.」', '글리치가 시작된 맨 아래로.']},
+    {img:'s1', lines:['[공지] PIXEL FIGHT 업데이트 v2.0 배포 중… 99%', '그리고 무언가 깨졌다.']},
+    {img:'s1', lines:['대전장 바닥에 금이 가고, 하늘에 노이즈가 번졌다.', '파이터들은 하나둘 접속이 끊겼다.']},
+    {img:'s2', lines:['[긴급 공지] 복구할 수 없는 오류가 발견되었습니다.', '[긴급 공지] 월드를 초기화합니다. 남은 시간 ██:██:██']},
+    {img:'s3', k:0, lines:['대기실에서 눈을 뜬 건 카이 혼자였다.', '「초기화되기 전에… 원인을 찾는다.」', '글리치가 시작된 맨 아래로.']},
   ]},
   c1:{tag:'LOG 01 · 첫 번째 글리치', title:'아래에서', pages:[
-    {lines:['렉 덩어리가 흩어지자 바닥 틈에서 노이즈가 새어 나왔다.', '위에서 떨어진 게 아니다.', '글리치는 아래에서 올라오고 있었다.']},
-    {lines:['벽에 낙서 같은 로그가 남아 있다.', '『…나를 지우지 마』']},
+    {img:'s4', lines:['렉 덩어리가 흩어지자 바닥 틈에서 노이즈가 새어 나왔다.', '위에서 떨어진 게 아니다.', '글리치는 아래에서 올라오고 있었다.']},
+    {img:'s4', lines:['벽에 낙서 같은 로그가 남아 있다.', '『…나를 지우지 마』']},
   ]},
   c2:{tag:'LOG 02 · 무한 로딩 구역', title:'지워진 빌드', pages:[
-    {lines:['끝나지 않던 로딩 바 너머엔 지워진 옛 빌드가 쌓여 있었다.', '그중 하나, 출시 전 캐릭터 목록.']},
-    {lines:['맨 아래에 아무도 모르는 이름이 있었다.', '[roster_old.dat] KAI_beta — 상태: 삭제 예정']},
+    {img:'s5', lines:['끝나지 않던 로딩 바 너머엔 지워진 옛 빌드가 쌓여 있었다.', '그중 하나, 출시 전 캐릭터 목록.']},
+    {img:'s5', lines:['맨 아래에 아무도 모르는 이름이 있었다.', '[roster_old.dat] KAI_beta — 상태: 삭제 예정']},
   ]},
   c3:{tag:'LOG 03 · 프리징 존', title:'멈춘 사람들', pages:[
-    {lines:['얼어붙은 화면 속에 파이터들이 멈춰 있었다.', '이그나, 소영, 릴리… 아직 지워지지 않았다.']},
-    {lines:['녹이려면 원인부터 없애야 한다.', '「조금만 기다려.」']},
+    {img:'s6', lines:['얼어붙은 화면 속에 파이터들이 멈춰 있었다.', '이그나, 소영, 릴리… 아직 지워지지 않았다.']},
+    {img:'s6', lines:['녹이려면 원인부터 없애야 한다.', '「조금만 기다려.」']},
   ]},
   c4:{tag:'LOG 04 · 블루스크린 코어', title:'또 하나의 카이', pages:[
-    {lines:['코어 한가운데, 또 하나의 카이가 서 있었다.', '출시 전에 지워질 예정이던 베타 버전.', '『지워지기 싫었어. 그래서 세상을 조금씩… 먹었어.』']},
-    {k:3, lines:['블루스크린이 꺼지고, 초기화 카운트다운이 멈췄다.', '세계는 살아남았다.', '— 그런데, 지워질 뻔한 건 누구였지?']},
+    {img:'s7', lines:['코어 한가운데, 또 하나의 카이가 서 있었다.', '출시 전에 지워질 예정이던 베타 버전.', '『지워지기 싫었어. 그래서 세상을 조금씩… 먹었어.』']},
+    {img:'s7', k:3, lines:['블루스크린이 꺼지고, 초기화 카운트다운이 멈췄다.', '세계는 살아남았다.', '— 그런데, 지워질 뻔한 건 누구였지?']},
   ]},
 };
 const STORY_IDS = ['intro', 'c1', 'c2', 'c3', 'c4'];
+const STORY_IMG = {}; // 장면 그림 (GPT) — 없으면 키아트 배경만
+STORY_IMG.s1 = 'a/ed2ec8a79d.webp';
+STORY_IMG.s2 = 'a/55966d20ac.webp';
+STORY_IMG.s3 = 'a/f8627280dd.webp';
+STORY_IMG.s4 = 'a/72b9d6bd88.webp';
+STORY_IMG.s5 = 'a/9d57e89c2c.webp';
+STORY_IMG.s6 = 'a/a9d332fb0a.webp';
+STORY_IMG.s7 = 'a/19bfeb8137.webp';
+/*STORY_IMG_DATA*/
 const STORY_KEY = 'pfr-story-v1';
 let storySeen = {};
 try { storySeen = JSON.parse(localStorage.getItem(STORY_KEY) || '{}') || {}; } catch(e){}
@@ -2605,7 +2705,7 @@ function openStory(id, done){
   const S = STORY[id]; if (!S) { if (done) done(); return; }
   const wasPaused = paused, live = !!(G && running);
   storyOpen = true; if (live){ paused = true; keys.clear(); mouse.down = false; }
-  const el = $('story'); let pg = 0;
+  const el = $('story'); let pg = 0, prevImg = null;
   const close = () => {
     storyOpen = false; storyCur = null; el.hidden = true;
     storySeen[id] = 1; try { localStorage.setItem(STORY_KEY, JSON.stringify(storySeen)); } catch(e){}
@@ -2614,15 +2714,17 @@ function openStory(id, done){
   };
   const draw = () => {
     const P = S.pages[pg], last = pg === S.pages.length - 1;
-    const pose = P.k != null && kfxReady() ? `<img class="pose" src="${sprURL(KFX, P.k*96, 0, 96, 96)}" alt="">` : '';
-    el.innerHTML = `<div class="st"><div class="tag">${esc(S.tag)}</div><h2>${esc(S.title)}</h2>${pose}
+    const pic = P.img && STORY_IMG[P.img] ? `<div class="pic${prevImg === P.img ? '' : ' in'}" style="background-image:url(${STORY_IMG[P.img]})"></div>` : '';
+    const pose = !pic && P.k != null && kfxReady() ? `<img class="pose" src="${sprURL(KFX, P.k*96, 0, 96, 96)}" alt="">` : '';
+    prevImg = P.img;
+    el.innerHTML = `<div class="st${pic ? ' has-pic' : ''}">${pic}<div class="tag">${esc(S.tag)}</div><h2>${esc(S.title)}</h2>${pose}
       <div class="tx">${P.lines.map((l, i) => `<p class="${l[0] === '[' ? 'sys' : (l[0] === '「' || l[0] === '『') ? 'say' : ''}" style="animation-delay:${i*.45}s">${esc(l)}</p>`).join('')}</div>
       <div class="nav"><span class="dots">${S.pages.map((_, i) => `<i class="${i === pg ? 'on' : ''}"></i>`).join('')}</span><div class="sp"></div>
       ${last ? '' : '<button type="button" id="stSkip">건너뛰기</button>'}<button class="big" type="button" id="stNext">${last ? '계속' : '다음 ▶'}</button></div></div>`;
     const sk = el.querySelector('#stSkip'); if (sk) sk.onclick = ev => { ev.stopPropagation(); close(); };
     el.querySelector('#stNext').onclick = ev => { ev.stopPropagation(); next(); };
   };
-  const next = () => { if (pg < S.pages.length - 1){ pg++; draw(); } else close(); };
+  const next = () => { sfx('story'); if (pg < S.pages.length - 1){ pg++; draw(); } else close(); };
   storyCur = {next, close};
   el.onclick = () => next();
   draw(); el.hidden = false;
@@ -2894,6 +2996,7 @@ function refreshStart(){
 $('bCont').onclick = () => { const sv = readSave(); if (sv){ initAudio(); loadRun(sv); } };
 $('bSaveQuit').onclick = () => { if (!G) return; running = false; paused = false; $('pause').hidden = true; refreshStart(); $('start').hidden = false; };
 $('bStart').onclick = startGame;
+document.addEventListener('click', e => { if (e.target.closest && e.target.closest('button') && !e.target.closest('#stNext')) sfx('click'); }, true);
 function sprURL(img, sx, sy, sw, sh){ // 아틀라스 한 칸을 <img>용 dataURL로 (캐시)
   if (!img || !(img.width || img.naturalWidth)) return '';
   const k = sx + ',' + sy + ',' + sw + ',' + sh; img._urls = img._urls || {};
@@ -2942,7 +3045,12 @@ $('bPause').onclick = togglePause;
 $('bResume').onclick = togglePause;
 $('bPCodex').onclick = () => toggleCodex();
 $('bRestart').onclick = () => newRun(0);
-$('bMute').onclick = () => { muted = !muted; $('bMute').classList.toggle('on', muted); $('bMute').textContent = muted ? 'MUTED' : 'SOUND'; initAudio(); };
+const audioBtns = () => { $('bMute').classList.toggle('on', muted); $('bMute').textContent = muted ? 'MUTED' : 'SOUND'; $('bBgm').classList.toggle('on', !bgmOn); $('bBgm').textContent = bgmOn ? 'BGM' : 'BGM OFF'; };
+$('bMute').onclick = () => { muted = !muted; saveAudio(); audioBtns(); initAudio(); bgmTick(true); };
+$('bBgm').onclick = () => { bgmOn = !bgmOn; saveAudio(); audioBtns(); initAudio(); bgmTick(true); };
+audioBtns();
+// 첫 클릭 · 키 입력에서 소리 켜기 (브라우저 자동재생 막힘) → 타이틀 곡부터
+addEventListener('pointerdown', () => initAudio(), {once:true}); addEventListener('keydown', () => initAudio(), {once:true});
 $('bFull').onclick = () => { const el = document.documentElement; try { (document.fullscreenElement ? document.exitFullscreen() : el.requestFullscreen()).then(() => { try { screen.orientation.lock('landscape').catch(() => {}); } catch(e){} }).catch(() => {}); } catch(e){} };
 function toggleDev(){ if (!DEV_OK) return; dbg.hidden = !dbg.hidden; if (!dbg.hidden && G) G.log.dev = true; $('bDev').classList.toggle('on', !dbg.hidden); refreshDebug(true); }
 $('bDev').onclick = toggleDev; if (!DEV_OK) $('bDev').hidden = true;
@@ -2963,7 +3071,7 @@ function loop(now){
   fpsAcc += dt; fpsN++; if (fpsAcc >= 500){ lastFps = Math.round(fpsN * 1000 / fpsAcc); fpsAcc = 0; fpsN = 0; }
   if (G && running && !paused && !mapOpen){ acc += dt; while (acc >= 1000/60){ step(); acc -= 1000/60; if (!running || paused) break; } }
   else acc = 0;
-  render();
+  render(); bgmTick();
   requestAnimationFrame(loop);
 }
 buildDebug();

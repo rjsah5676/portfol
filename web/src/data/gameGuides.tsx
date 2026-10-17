@@ -1869,7 +1869,7 @@ export const SURVIVOR_GUIDE: GuideDoc = {
 export const ROGUE_GUIDE: GuideDoc = {
   lead: (
     <>
-      업데이트가 깨진 <B>PIXEL FIGHT</B> 세계. 월드가 초기화되기 전에, 카이와 함께 글리치가 시작된 <B>맨 아래</B>까지 내려가는 <B>아이작류 탑뷰 로그라이크</B>예요. 방을
+      업데이트가 깨진 <B>PIXEL FIGHT</B> 세계. 월드가 초기화되기 전에, 카이와 함께 글리치가 시작된 <B>맨 아래</B>까지 내려가는 <B>탑뷰 로그라이크</B>예요. 방을
       하나씩 비우고, 아이템을 모아 조합하고, 층마다 보스를 쓰러뜨려요.
     </>
   ),

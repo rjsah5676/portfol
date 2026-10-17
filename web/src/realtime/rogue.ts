@@ -2,7 +2,7 @@ import { rpc } from "@/lib/api/socket";
 import type { RogueReport } from "@/lib/rogue/rules";
 
 /*
- * 픽셀 생존기 — 백엔드(server/src/games/rogue.ts)와 통신. 판 시작 · 끝(랭킹 · 업적 통계) · 랭킹
+ * PIXEL RESET (픽셀 생존기) — 백엔드(server/src/games/rogue.ts)와 통신. 판 시작 · 끝(랭킹 · 업적 통계) · 랭킹
  */
 
 export interface RogueRankRow {
