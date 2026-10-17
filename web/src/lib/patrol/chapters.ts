@@ -283,3 +283,7 @@ export function stage(st: number): ChapterDef | undefined {
     toll,
   };
 }
+
+/** 추천 전투력 (봇 시뮬로 클리어 80% 안팎이 되는 장비 전투력) — 스테이지 번호 순 */
+const REC_POWER = [100, 100, 110, 120, 130, 150, 170, 190, 210, 260, 500, 560, 620, 700, 800];
+export const recPower = (st: number) => REC_POWER[st - 1] ?? REC_POWER[REC_POWER.length - 1];

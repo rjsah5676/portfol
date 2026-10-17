@@ -28,6 +28,7 @@ import {
   QUICK_H,
   REPEAT_GEAR,
   STAR_GEMS,
+  STAR_TRACK,
   WELCOME,
   patrolPending,
   patrolRate,
@@ -85,6 +86,8 @@ interface PatrolProfile {
   shopDay?: { d: string; n: Record<string, number> };
   shopWeek?: { w: number; n: Record<string, number> };
   quickBonus?: number;
+  /** 별 보상 트랙: 받은 칸 수 */
+  starTrack?: number;
   nextUid: number;
   at: Date;
 }
@@ -210,6 +213,8 @@ export function registerPatrol({ gateway, db, points }: Deps) {
       wdeck: p.wdeck ?? BASE_DECK,
       wpity: p.wpity?.n ?? 0,
       wt: p.wt ?? 0,
+      starTrack: p.starTrack ?? 0,
+      starSum: starSum(p.stars),
       shop: {
         once: p.shopOnce ?? {},
         day: p.shopDay?.d === d ? p.shopDay.n : {},
@@ -588,6 +593,24 @@ export function registerPatrol({ gateway, db, points }: Deps) {
       if (it.perWeek) p.shopWeek.n[id] = (p.shopWeek.n[id] ?? 0) + 1;
       const got = applyGive(p, it.give);
       return { id, ...got, gp, profile: wire(p) };
+    });
+  });
+
+  /** 별 보상 트랙: 모은 별로 받을 수 있는 칸 전부 */
+  gateway.rpc("patrol.starClaim", async (ctx) => {
+    member(ctx);
+    return tx(ctx, (p) => {
+      const have = starSum(p.stars);
+      const got = [];
+      let i = p.starTrack ?? 0;
+      while (i < STAR_TRACK.length && have >= STAR_TRACK[i].n) {
+        const g = STAR_TRACK[i].give;
+        got.push({ n: STAR_TRACK[i].n, give: g, ...applyGive(p, g) });
+        i++;
+      }
+      if (!got.length) throw bad("아직 받을 별 보상이 없어요.");
+      p.starTrack = i;
+      return { got, profile: wire(p) };
     });
   });
 

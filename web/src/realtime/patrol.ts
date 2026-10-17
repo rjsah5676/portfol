@@ -1,6 +1,7 @@
 import { rpc } from "@/lib/api/socket";
 import type { Pity } from "@/lib/patrol/economy";
 import type { GearItem, Slot } from "@/lib/patrol/gear";
+import type { ShopGive } from "@/lib/patrol/shop";
 import type { WeaponId } from "@/lib/survivor/data";
 
 /*
@@ -36,6 +37,9 @@ export interface PatrolProfile {
   wdeck: WeaponId[];
   wpity: number;
   wt: number;
+  /** 별 보상 트랙: 받은 칸 수 · 모은 별 합 */
+  starTrack: number;
+  starSum: number;
   /** GP 상점 산 횟수: 처음 한 번 · 오늘 · 이번 주 */
   shop: { once: Record<string, number>; day: Record<string, number>; week: Record<string, number> };
   /** 서버 시각 (ms) — 순찰 시간 계산을 서버 기준으로 */
@@ -97,6 +101,7 @@ export const patrol = {
   deck: (deck: WeaponId[]) => rpc<PatrolProfile>("patrol.deck", { deck }),
   wbox: (n: 1 | 10, ticket = false) => rpc<{ got: WeaponGot[]; profile: PatrolProfile }>("patrol.wbox", { n, ticket }),
   gp: () => rpc<{ gp: number }>("patrol.gp"),
+  starClaim: () => rpc<{ got: { n: number; give: ShopGive; weapon: WeaponGot | null; gear: GearItem | null }[]; profile: PatrolProfile }>("patrol.starClaim"),
   shop: (id: string) => rpc<{ id: string; weapon: WeaponGot | null; gear: GearItem | null; gp: number; profile: PatrolProfile }>("patrol.shop", { id }),
   claim: (quick = false) => rpc<{ coin: number; bp: number; profile: PatrolProfile }>("patrol.claim", { quick }),
 };

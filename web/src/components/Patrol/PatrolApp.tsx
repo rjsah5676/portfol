@@ -7,7 +7,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/lib/AuthContext";
-import { CH_COUNT, ST_COUNT, SUB, SUB_KIND, firstSt, stCh, stName, stSub, stage } from "@/lib/patrol/chapters";
+import { CH_COUNT, ST_COUNT, SUB, SUB_KIND, firstSt, recPower, stCh, stName, stSub, stage } from "@/lib/patrol/chapters";
 import { BOOST_RUNS, PATROL_MAX_H, QUICK_FREE, QUICK_H, STAR_GEMS, WELCOME, firstReward, patrolPending, patrolRate } from "@/lib/patrol/economy";
 import { ATK_PCT, GEAR, GRADE_COLOR, GRADE_NAME, power, powerScore, type GearItem } from "@/lib/patrol/gear";
 import { BASE_DECK, FIRST_WEAPON, NEW_WEAPONS, starOf } from "@/lib/patrol/weapons";
@@ -21,12 +21,13 @@ import Stage from "../Survivor/Stage";
 import Boxes from "./Boxes";
 import PatchNotes, { LATEST } from "./PatchNotes";
 import Shop from "./Shop";
+import StarTrack, { starNext, starReady } from "./StarTrack";
 import WeaponsPanel from "./Weapons";
 import GearPanel, { betterGear, equippedOf, mergeCount } from "./Gear";
 import { Bp, Coin, Gem, GearIcon, Modal, SysButtons, btn } from "./ui";
 
 type Scene = { k: "title" } | { k: "lobby" } | { k: "play"; setup: GameSetup; st: number; run: string | null } | { k: "result"; r: RunResult; st: number; fin: PatrolFinish | null; err: string };
-type Pop = "gear" | "weapon" | "box" | "patrol" | "shop" | null;
+type Pop = "gear" | "weapon" | "box" | "patrol" | "shop" | "stars" | null;
 
 const fmt = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 const ST_KEY = "ptp-st";
@@ -62,6 +63,8 @@ const GUEST: PatrolProfile = {
   wdeck: BASE_DECK,
   wpity: 0,
   wt: 0,
+  starTrack: 0,
+  starSum: 0,
   shop: { once: {}, day: {}, week: {} },
   now: 0,
 };
@@ -240,6 +243,17 @@ function Lobby({ prof, member, loaded, st, open, onSt, note, skew, onProf, onSta
         <button type="button" onClick={() => (sfx("click"), setNotes(true))} className="pts-btn ghost h-[24px] px-[8px] text-[11px]" title="패치노트">
           {LATEST}
         </button>
+        {member && (
+          <button type="button" onClick={() => popUp("stars")} className="pts-btn relative h-[28px] px-[10px] text-[12px]" style={btn("#ffd23a")} title="별 보상">
+            ★ {prof.starSum}
+            {starNext(prof) ? <span className="ml-[6px] text-[10px] opacity-80">다음 ★{starNext(prof)!.n}</span> : null}
+            {starReady(prof) > 0 && (
+              <span className="pts-tag pts-blink absolute -top-[8px] -right-[8px] text-[9px]" style={{ background: "#ff4fa3", color: "#fff" }}>
+                받기
+              </span>
+            )}
+          </button>
+        )}
         {member ? (
           <span className="ml-auto flex items-center gap-[16px] text-[14px] font-bold">
             {prof.boostLeft > 0 && (
@@ -366,7 +380,9 @@ function Lobby({ prof, member, loaded, st, open, onSt, note, skew, onProf, onSta
               <b className="text-[#ffd27a]">{stName(st)}</b> {def.kind && <b style={{ color: STAGE_KIND[def.kind].c }}>{STAGE_KIND[def.kind].name} 판</b>} <span className="text-[#a9a2d6]">{def.len / 60}분 버티고</span> <b className="text-[#ff8fb8]">{ENEMIES[def.final].name}</b> <span className="text-[#a9a2d6]">처치</span>
             </span>
             <span className="text-[#a9a2d6]">
-              적 체력 ×{def.hp} · 피해 ×{def.dmg}
+              적 체력 ×{def.hp} · 피해 ×{def.dmg} · 추천 전투력{" "}
+              <b style={{ color: !member || powerScore(gp) >= recPower(st) ? "#4ff0c8" : "#ff8fb8" }}>{recPower(st).toLocaleString()}</b>
+              {member && powerScore(gp) < recPower(st) && <span className="text-[#ff8fb8]"> (내 {powerScore(gp).toLocaleString()} — 장비를 키워요)</span>}
             </span>
             {/* 이 판 기믹: 아이콘 · 이름 · 할 일 한 줄 (마우스를 올리면 전부) */}
             {guidesOf(def).length ? (
@@ -433,6 +449,7 @@ function Lobby({ prof, member, loaded, st, open, onSt, note, skew, onProf, onSta
       {pop === "weapon" && <WeaponsPanel prof={prof} onProf={onProf} onClose={() => setPop(null)} />}
       {pop === "box" && <Boxes prof={prof} onProf={onProf} onClose={() => setPop(null)} />}
       {pop === "shop" && <Shop prof={prof} onProf={onProf} onClose={() => setPop(null)} />}
+      {pop === "stars" && <StarTrack prof={prof} onProf={onProf} onClose={() => setPop(null)} />}
       {pop === "patrol" && <PatrolPop prof={prof} skew={skew} onProf={onProf} onClose={() => setPop(null)} />}
       {notes && <PatchNotes onClose={() => setNotes(false)} />}
     </div>

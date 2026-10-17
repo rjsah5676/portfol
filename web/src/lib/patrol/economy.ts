@@ -5,6 +5,7 @@
  */
 import { SUB, stCh, stLen, stSub } from "./chapters";
 import { GEAR_IDS, type GGrade, type GearId } from "./gear";
+import type { ShopGive } from "./shop";
 
 /* ───────────── 판 보상 ───────────── */
 
@@ -118,3 +119,18 @@ export function patrolPending(best: number, since: number, now: number) {
   const r = patrolRate(best);
   return { h, coin: Math.floor(r.coin * h), bp: Math.floor(r.bp * h) };
 }
+
+/* ───────────── 별 보상 트랙 (모은 별 합) ───────────── */
+
+/** 별 n개를 모으면 받는 것 (차례대로) — 챕터가 늘면 뒤에 이어 붙임 */
+export const STAR_TRACK: { n: number; give: ShopGive }[] = [
+  { n: 5, give: { gems: 100 } },
+  { n: 10, give: { wt: 1 } },
+  { n: 15, give: { gems: 150 } },
+  { n: 20, give: { coins: 2000, bp: 30 } },
+  { n: 25, give: { wt: 2 } },
+  { n: 30, give: { gems: 300 } },
+  { n: 35, give: { bp: 60, coins: 3000 } },
+  { n: 40, give: { wt: 3 } },
+  { n: 45, give: { gear: 3 } },
+];
