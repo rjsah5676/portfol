@@ -1126,13 +1126,8 @@ export function makeAutoChart(
   detrill(notes, R.jackGap, 0.1, rnd);
   if (diff === "expert") deaba(notes, R.jackGap, 0.5, rnd);
 
-  // 3.8) 곡 안 밀도 높낮이 고르게 (어려움 이상)
-  if (diff === "hard" || diff === "expert") {
-    // evenDensity는 고칠 게 없으면 같은 배열을 그대로 돌려줌 — 비우기 전에 복사
-    const even = [...evenDensity(notes, { an, barOf, nBars, beatSec, minGap: R.minGap, rnd })];
-    notes.length = 0;
-    notes.push(...even);
-  }
+  // (3.8 곡 안 밀도 고르기는 NIGHTMARE · ULTIMA 만 — HARD · EX 에 넣었더니 센 구간 동시치기 · 16분을 덜어낸 만큼
+  //  레벨 맞추기가 곡 전체에 16분을 더 깔아서(Lucky Seven Rush EX 515 → 729노트, 동시치기 52 → 34%) 더 지저분해졌음)
 
   // 4) 롱노트: osu 랭크 채보처럼 노트의 일정 비율을 짧은 롱노트로 (정박·소리가 남는 자리부터)
   {
@@ -1161,7 +1156,7 @@ export function makeAutoChart(
 }
 
 /**
- * 곡 안 밀도 높낮이 고르게 (어려움 이상): 2마디씩 노트 수를 그 채보의 중앙값과 비교해서
+ * 곡 안 밀도 높낮이 고르게 (NIGHTMARE · ULTIMA): 2마디씩 노트 수를 그 채보의 중앙값과 비교해서
  *  · 1.3배를 넘는 구간은 3개 동시치기 → 엇박 동시치기 → 앞뒤가 16분인 단노트 → 정박 동시치기 순으로 덜어내고
  *  · 0.55배에 못 미치는(완전히 조용하진 않은) 구간은 그 마디의 센 정박·8분 타격으로 채움.
  * 소리가 꽉 찬 도입부만 레벨보다 훨씬 어렵고(FREEDOM DiVE ULTIMA 도입 16 nps — osu Lv21급) 중간이 텅 비어

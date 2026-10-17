@@ -17,6 +17,16 @@ export interface Patch {
 
 export const PATCHES: Patch[] = [
   {
+    ver: "v2.2",
+    name: "HARD · EX 채보 되돌림",
+    date: "2026.10.18",
+    lines: [
+      "v2.0 에서 HARD · EX 에도 넣은 「곡 안 밀도 고르기」를 뺌 — 센 구간 동시치기 · 16분을 덜어낸 만큼 레벨 맞추기가 곡 전체에 16분을 더 깔아서, 같은 레벨인데 노트가 늘고 지저분해졌던 것 (Lucky Seven Rush EX 729 → 515노트, 동시치기 34 → 52%)",
+      "HARD · EX 채보가 v1.9 때 그대로 돌아옴 (NIGHTMARE · ULTIMA 는 그대로 — FREEDOM DiVE 도입 고른 것 유지)",
+      "레벨 바뀜: 휘모리 HARD 9 → 10 · EX 12 → 13",
+    ],
+  },
+  {
     ver: "v2.1",
     name: "새 곡 6곡",
     date: "2026.10.18",
