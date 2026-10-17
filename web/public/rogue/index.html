@@ -1920,7 +1920,9 @@ function dropPocket(){
 }
 function usePocket(){
   if (!G.pocket){ toast('주머니가 비어 있다', '#8a8fb2'); sfx('nope'); return; }
-  const o = G.pocket; G.pocket = null;
+  const o = G.pocket;
+  if (o.k === 'card' && o.id === 'killall' && !G.enemies.some(e => !e.dead)){ toast('적이 없다 — 아껴 둠', '#8a8fb2', G.player.x, G.player.y - 20); sfx('nope'); return; }
+  G.pocket = null;
   if (o.k === 'card') useCard(o.id); else usePatch(o.c);
 }
 function usePatch(c){
@@ -1967,7 +1969,7 @@ function useCard(id){
     case 'reveal':
       G.floor.list.forEach(r => { r.seen = true; if (r.type === 'secret' && !r.revealed){ r.revealed = true; G.log.secretFound = true; } });
       break;
-    case 'killall': for (const e of G.enemies) if (!e.dead && e.spawnT <= 0 && !(e.z > 8)) dealHit(e, 40, null, e.x - p.x, e.y - p.y, 6, true); G.shake = 10; break;
+    case 'killall': for (const e of G.enemies) if (!e.dead){ if (e.spawnT > 0) e.spawnT = 0; dealHit(e, 40, null, e.x - p.x, e.y - p.y, 6, true); } G.shake = 10; break; // 막 나타나는 중 · 공중인 적도 (빨리 쓰면 씹히던 것)
     case 'money': G.res.bit += 12; break;
   }
   showBanner('> ' + CARD[id].name, CARD[id].desc);
@@ -4138,7 +4140,7 @@ const PATCH_NOTES = [
     '사격은 상하좌우 4방향 (「아날로그 스틱」이면 8방향). 내 캐릭터 1.33배 · 피격 범위도 같이. 럭 스탯 + 스탯 다운 패치 (럭 0이면 반반, 럭 1마다 +10%p)',
     '난이도 — 월드 1 보스 피해 20→15 · 킹 슬라임 체력 ↓, 월드 2 일반 피해 15, 월드 3 보스 피해 25. 재화는 덜 — 방 보상 가끔 없음 · 비트 1개 · 열쇠 드물게',
     '플레이 데이터 — 판마다 어디서 · 무엇에 맞았는지, 아이템 · 재화 흐름을 이 브라우저에 저장. 타이틀 「플레이 데이터」에서 JSON 저장 · 복사',
-    '고침 — 패치 바꿔 집을 때 무한 교체 · 벽 밖으로 밀림, 금 간 바위 구석에 갇힌 몹, 치트 콘솔 템 이름 안 보임, 관통 + 픽셀 폭탄이 끝까지 날아가서야 터지던 것. 압축 파일 · 기계 · 바위에서 나온 템은 바로 안 먹어지고 살짝 밀려나요 (보고 리롤할지 고르게). 못 집는 픽업은 부딪혀요 — 상점 물건 · 아이템은 막히고, 꽉 찬 HP의 회복 같은 건 툭 밀려가요. 전체화면 ESC는 크롬 · 엣지에서 안 풀리고 일시정지',
+    '고침 — 패치 바꿔 집을 때 무한 교체 · 벽 밖으로 밀림, 금 간 바위 구석에 갇힌 몹, 치트 콘솔 템 이름 안 보임, 관통 + 픽셀 폭탄이 끝까지 날아가서야 터지던 것. 압축 파일 · 기계 · 바위에서 나온 템은 바로 안 먹어지고 살짝 밀려나요 (보고 리롤할지 고르게). 못 집는 픽업은 부딪혀요 — 상점 물건 · 아이템은 막히고, 꽉 찬 HP의 회복 같은 건 툭 밀려가요. kill all은 막 나타나는 적에게도 들고, 적이 없으면 안 쓰여요. 전체화면 ESC는 크롬 · 엣지에서 안 풀리고 일시정지',
     '독 · 화상은 몬스터 모양대로 물들고 기포 · 불씨, 엘리트는 이름표 없이 오라만. 폭탄 퓨즈 1.7초 · 아이작처럼 내 폭탄에도 맞음(날면 안 맞음). 미니맵 안 간 방이 잘 보여요, 도감 한글 검색',
     '사이트 업적 — 시크릿 10 · 30 · 54, 캐릭터별 완주(8층), 새 파이터 첫 판, 도감 102종',
   ]},
