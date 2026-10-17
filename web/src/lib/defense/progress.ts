@@ -13,6 +13,8 @@
  */
 import { TUNE } from "./balance";
 import { CHEAT_REROLL } from "./cheats";
+import { PATCHES } from "./meta";
+import { EXP_RELICS } from "./town";
 import type { Faction } from "./units";
 
 /* ───────────────────────── 로드아웃 ───────────────────────── */
@@ -50,6 +52,10 @@ export interface Loadout {
   town?: number;
   /** 글리치 원정: 해금한 시작 분대 (knight · mech · arcane) */
   squads?: string[];
+  /** 원정 보스로 해금한 시작 치트 (meta.ts PATCHES 의 lock 있는 것) */
+  patches?: string[];
+  /** 원정 유물 도감 (찾은 원정 유물 id) — 수가 차면 새 유물이 원정 풀에 */
+  expSeen?: string[];
 }
 
 /* ───────────────────────── 스테이지 ───────────────────────── */
@@ -477,6 +483,8 @@ export interface Mods {
   town: number;
   /** 글리치 원정: 해금한 시작 분대 */
   squads: string[];
+  patches: string[];
+  expSeen: string[];
   /** 심연 2막 · 원정 유물 */
   mythDmg: number;
   aspdAll: number;
@@ -541,6 +549,8 @@ export function cleanLoadout(lo: Loadout | null | undefined, unitIds?: Set<strin
     stage: lo?.stage === "town" ? "town" : "main",
     town: lo?.stage === "town" ? clampInt(lo?.town, 1, TOWN_MAX) : 0,
     squads: ["knight", "mech", "arcane"].filter((q) => q === "knight" || (lo?.squads ?? []).includes(q)),
+    patches: PATCHES.filter((p) => p.lock && (lo?.patches ?? []).includes(p.id)).map((p) => p.id),
+    expSeen: EXP_RELICS.filter((r) => !r.start && (lo?.expSeen ?? []).includes(r.id)).map((r) => r.id),
   };
 }
 
@@ -612,6 +622,8 @@ export function modsOf(lo: Loadout | null | undefined): Mods {
     stage: L.stage,
     town: L.town,
     squads: L.squads,
+    patches: L.patches,
+    expSeen: L.expSeen,
     mythDmg: 1 + (has("myth_seal") ? V.myth_seal(X("myth_seal")) : 0) / 100,
     aspdAll: has("overdrive") ? V.overdrive(X("overdrive")) / 100 : 0,
     bossGold: has("chrono_core") ? 1.5 : 1,

@@ -33,7 +33,9 @@ const metaLv = opt("--meta");
 const glitch = Number(opt("--glitch") ?? 0);
 // --town L : 해피 타운 L단계 (적 세기는 그 단계에 맞는 오염 단계 — --glitch 는 무시)
 const townLv = Number(opt("--town") ?? 0);
-const stageLo: Loadout = townLv ? { stage: "town", town: townLv, squads: ["knight", "mech", "arcane"] } : {};
+// 원정 보스로 여는 시작 치트는 시뮬에선 다 열어 둠 (봇 전략 주사위 · 탐욕 · 분열)
+const EXP_FLOORS = 8;
+const stageLo: Loadout = townLv ? { stage: "town", town: townLv, squads: ["knight", "mech", "arcane"], patches: ["dice", "greed", "split"] } : { patches: ["dice", "greed", "split"] };
 // --tune k=v,k=v : balance.ts TUNE 값 바꿔 보기 (두 벌 다)
 {
   const tv = opt("--tune");
@@ -62,7 +64,7 @@ if (deepOpt) {
 
 /** 봇 길에 맞춘 영구 성장 (그 길을 꾸준히 한 사람이 들고 올 만한 것) */
 function loadoutFor(cfg: BotCfg): Loadout | null {
-  if (!metaLv) return townLv ? stageLo : null;
+  if (!metaLv) return stageLo;
   // abyss = max + 심연 2막 유물 · 도시 개발 전부 (31~50단계 확인용)
   const abyss = metaLv === "abyss";
   const lvN = metaLv === "max" || abyss ? 10 : metaLv === "late" ? 6 : 3;
@@ -108,7 +110,7 @@ interface Run {
   /** 보물방 깎은 비율 (열렸으면) · 처치 */
   tre: { ratio: number; killed: boolean } | null;
   /** 글리치 원정: 남은 체력 · 도달한 층 · 원정 유물 수 · 저주 수 */
-  town: { hp: number; floor: number; relics: number; curses: number } | null;
+  town: { hp: number; floor: number; relics: number; curses: number; act: number; act2Win: boolean; act1: boolean } | null;
 }
 
 function play(cfg: BotCfg, seed: number): Run {
@@ -151,7 +153,7 @@ function play(cfg: BotCfg, seed: number): Run {
       throw new Error(`결정론 깨짐: ${cfg.name} seed ${seed} — ${JSON.stringify(r)} vs ${JSON.stringify(again)}`);
   }
   const tre = b.treasure ? { ratio: b.treasure.dmg / b.treasure.max, killed: b.treasure.killed } : null;
-  const town = b.exp ? { hp: b.exp.hp, floor: b.exp.f + 1, relics: b.exp.relics.length, curses: b.exp.curses.length } : null;
+  const town = b.exp ? { hp: b.exp.hp, floor: b.exp.f + 1 + (b.exp.act - 1) * (EXP_FLOORS + 1), relics: b.exp.relics.length, curses: b.exp.curses.length, act: b.exp.act, act2Win: b.exp.act > 1 && b.result?.reason === "clear", act1: b.exp.kills.length > 0 } : null;
   return { bot: cfg.name, seed, win: r.win, wave: r.wave, reason: r.reason, min: r.tick / TPS / 60, kills: r.kills, ms, dealt: b.dealt, snap, dps, tre, town };
 }
 
@@ -182,7 +184,7 @@ for (const cfg of bots) {
   const tr = runs.filter((r) => r.town).map((r) => r.town!);
   if (tr.length)
     console.log(
-      `\n글리치 원정: 도달 층 평균 ${avg(tr.map((x) => x.floor)).toFixed(1)} (분포 ${JSON.stringify(tr.map((x) => x.floor).reduce((m: Record<number, number>, k) => ((m[k] = (m[k] ?? 0) + 1), m), {}))}) · 남은 체력 ${avg(tr.map((x) => x.hp)).toFixed(1)} · 원정 유물 ${avg(tr.map((x) => x.relics)).toFixed(1)} · 저주 ${avg(tr.map((x) => x.curses)).toFixed(1)}`
+      `\n글리치 원정: 도달 층 평균 ${avg(tr.map((x) => x.floor)).toFixed(1)} (분포 ${JSON.stringify(tr.map((x) => x.floor).reduce((m: Record<number, number>, k) => ((m[k] = (m[k] ?? 0) + 1), m), {}))}) · 남은 체력 ${avg(tr.map((x) => x.hp)).toFixed(1)} · 원정 유물 ${avg(tr.map((x) => x.relics)).toFixed(1)} · 저주 ${avg(tr.map((x) => x.curses)).toFixed(1)} · 1막 클리어 ${pct(tr.filter((x) => x.act1).length, tr.length)} · 2막 들어감 ${pct(tr.filter((x) => x.act > 1).length, tr.length)} · 2막 클리어 ${pct(tr.filter((x) => x.act2Win).length, tr.length)}`
     );
 }
 console.log("\n죽은 웨이브 분포 (전체)");

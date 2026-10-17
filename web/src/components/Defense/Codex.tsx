@@ -15,6 +15,10 @@ import {
 } from "@/lib/defense/units";
 import { Btn, FactionChip, FactionIcon, GradeChip, TITLE, UnitIcon, unitStats } from "./ui";
 import { BOSS_ART, ENEMY_ART } from "@/lib/defense/assets";
+import { EXP_BOSS_PATCH, EXP_RELICS, GIM, TOWN_NAME } from "@/lib/defense/town";
+import { PATCHES } from "@/lib/defense/meta";
+import { TOWN_BOSSES } from "@/lib/defense/enemies";
+import { ExpRelicIcon } from "./Expedition";
 
 /** 히든 유닛: 한 번 만들면 이 브라우저에서 도감 · 조합식에 보임 */
 const KEY = "dfn-found";
@@ -32,10 +36,10 @@ export function markFound(id: string) {
   } catch {}
 }
 
-type Tab = "knight" | "mech" | "arcane" | "hidden" | "enemy";
+type Tab = "knight" | "mech" | "arcane" | "hidden" | "enemy" | "exp";
 
 /** 도감 — 세력별 유닛 · 조합식 · 적 · 보스 */
-export default function Codex({ have }: { have?: Record<string, number> }) {
+export default function Codex({ have, expSeen = [] }: { have?: Record<string, number>; expSeen?: string[] }) {
   const [tab, setTab] = useState<Tab>("knight");
   return (
     <div>
@@ -57,8 +61,17 @@ export default function Codex({ have }: { have?: Record<string, number> }) {
         >
           글리치 · 보스
         </Btn>
+        <Btn
+          tone={tab === "exp" ? "gold" : "ghost"}
+          onClick={() => setTab("exp")}
+          className={`px-3 py-1.5 text-[13px] font-bold ${tab === "exp" ? "" : "opacity-75"}`}
+        >
+          원정
+        </Btn>
       </div>
-      {tab === "enemy" ? (
+      {tab === "exp" ? (
+        <ExpCodex seen={expSeen} />
+      ) : tab === "enemy" ? (
         <div className="grid grid-cols-2 gap-3">
           <div>
             <p className="mb-1 text-[13px] text-[var(--dim)]">글리치 몬스터</p>
@@ -163,6 +176,68 @@ export default function Codex({ have }: { have?: Record<string, number> }) {
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+/** 원정 도감: 원정 유물 (찾은 것만 보임 · 수가 차면 새 유물) · 기믹 엘리트 · 원정 보스 → 메인 시작 치트 */
+function ExpCodex({ seen }: { seen: string[] }) {
+  const all = EXP_RELICS.filter((r) => !r.start);
+  const n = all.filter((r) => seen.includes(r.id)).length;
+  return (
+    <div className="flex flex-col gap-3">
+      <p className="text-[13px] text-[var(--mute)]">
+        {TOWN_NAME}에서 얻은 원정 유물이 기록돼요 — <b className="text-[#9be7ff]">{n}</b>/{all.length}종. 수가 차면 새 원정 유물이 풀에 들어와요.
+      </p>
+      <div className="grid grid-cols-3 gap-2">
+        {all.map((r) => {
+          const got = seen.includes(r.id);
+          const lock = !!r.need && seen.length < r.need && !got;
+          return (
+            <div key={r.id} className="px-inset flex gap-2 p-2 text-[12px] leading-snug">
+              <ExpRelicIcon id={r.id} size={32} dim={!got} />
+              <div className="min-w-0">
+                <b className={got ? "text-white" : "text-[var(--dim)]"}>{got ? r.name : lock ? "잠김" : "???"}</b>
+                <p className="text-[var(--mute)]">{got ? r.desc : lock ? `도감 ${r.need}종을 모으면 원정에 나와요` : "원정에서 찾으면 기록돼요"}</p>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <p className="mb-1 text-[13px] text-[var(--dim)]">기믹 엘리트 (엘리트 칸)</p>
+          {Object.entries(GIM).map(([id, g]) => (
+            <div key={id} className="px-inset mb-2 flex items-center gap-2 px-2 py-1.5 text-[12px]">
+              {ENEMY_ART[`gim-${id}`] ? <img src={ENEMY_ART[`gim-${id}`].src} alt="" className="h-9 w-9 object-contain" /> : <span className="h-4 w-4" style={{ background: g.color }} />}
+              <div className="leading-tight">
+                <b style={{ color: g.color }}>{g.name}</b>
+                <p className="text-[var(--mute)]">{g.desc}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+        <div>
+          <p className="mb-1 text-[13px] text-[var(--dim)]">원정 보스 — 처음 잡으면 메인 시작 치트</p>
+          {TOWN_BOSSES.map((x) => {
+            const p = PATCHES.find((q) => q.id === EXP_BOSS_PATCH[x.fighter]);
+            return (
+              <div key={x.fighter} className="px-inset mb-2 flex items-center gap-2 px-2 py-1.5 text-[12px]">
+                {BOSS_ART[x.fighter] && <img src={BOSS_ART[x.fighter].src} alt="" className="h-11 w-11 object-contain" />}
+                <div className="leading-tight">
+                  <b style={{ color: x.color }}>{x.name}</b>
+                  <p className="text-[var(--mute)]">{bossDesc(x)}</p>
+                  {p && (
+                    <p className="text-[#ffd23f]">
+                      → 「{p.name}」 {p.desc}
+                    </p>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
     </div>
   );
 }

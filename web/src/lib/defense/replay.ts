@@ -5,13 +5,17 @@
 import { BALANCE_VER, B, BOSS_EVERY, LAST_WAVE, TPS } from "./balance";
 import { apply, isCmd, newGame, step, type Cmd, type Game } from "./sim";
 import type { Loadout } from "./progress";
+import { EXP } from "./town";
 
 export type LogEntry = [number, number, Cmd];
 
 /** 한 판이 아무리 길어도 이것보다 길 수 없음 (준비 + 일반 웨이브 + 보스 제한 시간 + 쉬는 시간, 넉넉히) */
 export const MAX_TICKS = Math.ceil(
-  (B.prepSec + LAST_WAVE * B.waveSec + (LAST_WAVE / BOSS_EVERY) * (B.bossSec + 20 + B.breakSec) + 60) *
-    TPS
+  Math.max(
+    B.prepSec + LAST_WAVE * B.waveSec + (LAST_WAVE / BOSS_EVERY) * (B.bossSec + 20 + B.breakSec) + 60,
+    // 글리치 원정 2막까지 (층마다 가장 긴 전투 + 정리 시간, 막마다 보스)
+    2 * (EXP.floors * (EXP.fightWaves * B.waveSec + EXP.cleanSec) + B.bossSec + 20) + 60
+  ) * TPS
 );
 /** 멀티: 서버가 명령을 모아 뿌리는 간격 · 한 턴의 tick 수 (턴 n 의 명령은 tick n×TICKS_PER_TURN 에 실행) */
 export const TURN_MS = 100;

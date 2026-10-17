@@ -95,7 +95,8 @@ describe("픽셀 글리치 디펜스 엔진", () => {
     expect(b.cx).toEqual(cheatFxOf([id]));
     expect(isCmd({ t: "cheat", i: 2 })).toBe(true);
     expect(isCmd({ t: "cheat", i: 3 })).toBe(true);
-    expect(isCmd({ t: "cheat", i: 4 })).toBe(false);
+    expect(isCmd({ t: "cheat", i: 6 })).toBe(true);
+    expect(isCmd({ t: "cheat", i: 7 })).toBe(false);
     expect(apply(g, 0, { t: "cheat", i: 3 })).toBeTruthy();
     // 리롤 회로: 카드마다 2번
     expect(modsOf({ cheat: "x_reroll" }).cheatReroll).toBe(2);
@@ -363,6 +364,73 @@ describe("픽셀 글리치 디펜스 엔진", () => {
     expect(townOpenOf(6)).toBe(1);
     expect(townOpenOf(8)).toBe(2);
     expect(modsOf({ ...lo, treasure: 15 }).treasure).toBe(0);
+  });
+
+  it("글리치 원정: 1막 보스 → 귀환 · 2막 (새 지도 · 다른 보스 · 쓰러져도 1막 인정) · 시작 치트 해금 · 도감 유물", () => {
+    const lo = { stage: "town" as const, town: 1 };
+    const boss1 = (seed: number) => {
+      const g = started(seed, 1, [lo]);
+      const b = g.boards[0];
+      const x = b.exp!;
+      apply(g, 0, { t: "exp", a: 0 });
+      x.f = EXP.floors - 1;
+      x.i = 0;
+      x.camp = { k: "map" };
+      apply(g, 0, { t: "exp", a: 0 });
+      // FORTE 는 반에서 분신으로 갈라짐 → 다 잡을 때까지
+      for (let k = 0; k < 10 && !x.camp; k++) {
+        for (const e of b.enemies) e.hp = 0;
+        step(g);
+      }
+      return { g, b, x };
+    };
+    // 보스 처치 → 고르기 (멈춤)
+    const A = boss1(21);
+    expect(A.b.result).toBeNull();
+    expect(A.x.camp).toEqual({ k: "act" });
+    expect(A.x.kills).toEqual([BOSSES[A.x.boss].fighter]);
+    // 귀환 = 성공
+    expect(apply(A.g, 0, { t: "exp", a: 0 })).toBeNull();
+    expect(A.b.result?.win).toBe(true);
+    expect(A.b.result?.reason).toBe("clear");
+    // 2막: 새 지도 · 다른 보스 · 웨이브 오프셋
+    const C = boss1(22);
+    const first = C.x.boss;
+    const hp = C.x.hp;
+    expect(apply(C.g, 0, { t: "exp", a: 1 })).toBeNull();
+    expect(C.x.act).toBe(2);
+    expect(C.x.f).toBe(-1);
+    expect(C.x.boss).not.toBe(first);
+    expect(C.x.hp).toBe(Math.min(C.x.max, hp + EXP.act2Heal));
+    expect(C.b.enemies.length).toBe(0);
+    expect(apply(C.g, 0, { t: "exp", a: expNext(C.b)[0] })).toBeNull();
+    expect(C.x.segStart).toBe(EXP.waveBase + EXP.act2Wave);
+    // 2막에서 쓰러져도 1막 클리어는 인정
+    C.x.hp = 1;
+    for (let i = 0; i < 200000 && !C.b.result; i++) {
+      C.x.hp = Math.min(C.x.hp, 1);
+      step(C.g);
+      if (C.x.camp) apply(C.g, 0, { t: "exp", a: C.x.camp.k === "map" ? expNext(C.b)[0] : -1 });
+      if (C.x.stage === "clean") for (let k = 0; k < 30; k++) C.b.enemies.push({ ...C.b.enemies[0] } as never);
+    }
+    expect(C.b.result?.win).toBe(true);
+    expect(C.b.result?.reason).toBe("act2");
+    // 시작 치트: 잠긴 건 해금해야 · 도감 유물은 수가 차야
+    expect(newGame(5, 1).boards[0].cheat?.offer).not.toContain("dice");
+    const P = newGame(5, 1, [{ patches: ["dice", "nope"] }]).boards[0];
+    expect(P.cheat?.offer).toContain("dice");
+    expect(modsOf({ patches: ["dice", "nope"] }).patches).toEqual(["dice"]);
+    expect(modsOf({ expSeen: ["alch", "sq_knight", "zz"] }).expSeen).toEqual(["alch"]);
+    const G = newGame(5, 1, [{ patches: ["dice"] }]);
+    const i = G.boards[0].cheat!.offer.indexOf("dice");
+    expect(apply(G, 0, { t: "cheat", i })).toBeNull();
+    expect(G.boards[0].patch).toBe("dice");
+    const g0 = G.boards[0].gold;
+    for (let k = 0; k < 400 && G.boards[0].wave < 1; k++) step(G);
+    expect(G.boards[0].gold).toBeGreaterThan(g0);
+    // 도감 5종 → 메아리가 유물 풀에
+    const D = started(7, 1, [{ ...lo, expSeen: ["alch", "twin", "growth", "piggy", "iron"] }]).boards[0];
+    expect(D.mods.expSeen.length).toBe(5);
   });
 
   it("심연 2막: 50단계까지 · 31+ 2페이즈 셋 · 40+ 여섯 · 정예 · 방벽 · 안개 · 도시 개발 · 새 유물", () => {

@@ -26,7 +26,7 @@
 import { B, BOSS_EVERY, CAP, LAST_WAVE, TPS, TUNE, countOf, hpOf, sec } from "./balance";
 import { BOSSES, KIND, MAIN_BOSSES, TOWN_BOSSES, bossOfWave, kindOfWave, phaseOn, type BossDef, type Size, type TeleShape } from "./enemies";
 import { CHEAT, CHEATS, CHEAT_MULTI_SEC, CHEAT_OFFER, CHEAT_WAVES, cheatFx0, cheatFxOf, cheatOdds, type CheatFx } from "./cheats";
-import { MISSIONS, PATCHES } from "./meta";
+import { MISSIONS, PATCHES, patchesFor } from "./meta";
 import { mixSeed, pick, rnd, rndInt, type Rng } from "./rng";
 import { BENCH_MAX, LV_BUFF, LV_DMG, modsOf, type Loadout, type Mods, type Stage } from "./progress";
 import { EVENTS, EXP, EXP_RELICS, FIGHT_MOD, GIM, SHOP, SQUADS, ascOn, type EventId, type ExpNode, type FightMod, type Gim, type ShopKind } from "./town";
@@ -200,7 +200,9 @@ export type ExpCamp =
   | { k: "relic"; offer: string[] }
   | { k: "shop"; items: { kind: ShopKind; cost: number; sold: boolean }[] }
   | { k: "rest" }
-  | { k: "event"; id: EventId };
+  | { k: "event"; id: EventId }
+  /** 1막 보스를 잡음 → 귀환 or 2막 */
+  | { k: "act" };
 export interface ExpState {
   hp: number;
   max: number;
@@ -231,6 +233,10 @@ export interface ExpState {
   kit: boolean;
   /** 지나온 칸 (층마다 고른 번호) */
   trail: number[];
+  /** 막 (1 · 2) · 잡은 원정 보스 (fighter id) · 한 번 쓰는 유물 (phoenix) */
+  act: number;
+  kills: string[];
+  used: string[];
 }
 
 /** 화면 효과 (시뮬 결과에 영향 없음 — fx 가 null 이면 안 쌓음) */
@@ -271,6 +277,9 @@ export type Ev =
   | { t: "expGo"; f: number; i: number; node: ExpNode }
   | { t: "expEnd"; node: ExpNode; leak: number; hp: number; won: boolean; gold: number }
   | { t: "expSteal"; gold: number }
+  | { t: "expRevive" }
+  | { t: "expAct" }
+  | { t: "dice"; n: number }
   | { t: "warp"; roll: number }
   | { t: "seize"; tile: number }
   | { t: "encore" }
@@ -284,7 +293,7 @@ export interface Result {
   wave: number;
   tick: number;
   kills: number;
-  reason: "clear" | "cap" | "boss" | "quit";
+  reason: "clear" | "cap" | "boss" | "quit" | "act2";
 }
 
 export interface Board {
@@ -410,7 +419,7 @@ export function newBoard(seed: number, idx: number, lo?: Loadout | null): Board 
     auras: [],
     mods,
     // 시작 치트: 패치 4개 중 하나 (고를 때까지 멈춤, 다시 뽑기 없음)
-    cheat: { kind: "patch", offer: PATCHES.map((p) => p.id), rr: PATCHES.map(() => 0), t: 0 },
+    cheat: { kind: "patch", offer: patchesFor(mods.patches), rr: patchesFor(mods.patches).map(() => 0), t: 0 },
     cheats: [],
     cx: cheatFx0(),
     crng: { r: mixSeed(seed, 77) },
@@ -572,6 +581,9 @@ function expInit(b: Board) {
     dmg: 1,
     kit: false,
     trail: [],
+    act: 1,
+    kills: [],
+    used: [],
   };
   b.gold += b.mods.expGold;
   b.exp.map = genMap(b);
@@ -602,7 +614,7 @@ function expGrow(b: Board, faction?: Faction) {
   b.fx?.push({ k: "spawn", c: best, g: d.grade + 1 });
 }
 function relicOffer(b: Board, n = expHas(b, "hunter") ? 4 : 3): string[] {
-  const pool = EXP_RELICS.filter((r) => !r.start && !b.exp!.relics.includes(r.id)).map((r) => r.id);
+  const pool = EXP_RELICS.filter((r) => !r.start && !b.exp!.relics.includes(r.id) && (!r.need || b.mods.expSeen.length >= r.need)).map((r) => r.id);
   const out: string[] = [];
   while (out.length < n && pool.length) out.push(pool.splice(rndInt(b.trng, pool.length), 1)[0]);
   return out;
@@ -615,6 +627,7 @@ function takeRelic(b: Board, id: string) {
     x.hp = Math.min(x.hp, x.max);
     x.dmg *= 1.35;
   }
+  if (id === "glass") x.dmg *= 1.6;
 }
 /** 원정 체력 깎임 (응급 키트) */
 function expHurt(b: Board, n: number) {
@@ -623,6 +636,11 @@ function expHurt(b: Board, n: number) {
   if (expHas(b, "kit") && !x.kit && x.hp > 0 && x.hp < 10) {
     x.kit = true;
     x.hp = Math.min(x.max, x.hp + 15);
+  }
+  if (x.hp <= 0 && expHas(b, "phoenix") && !x.used.includes("phoenix")) {
+    x.used.push("phoenix");
+    x.hp = Math.ceil(x.max / 2);
+    b.ev?.push({ t: "expRevive" });
   }
 }
 /** 무작위 세력(또는 faction) · 등급 유닛 하나 (자리 있으면) */
@@ -647,7 +665,7 @@ function startFight(b: Board, kind: "fight" | "elite", gim: Gim | null) {
   x.camp = null;
   x.gimOut = false;
   x.gimEsc = 0;
-  const base = EXP.waveBase - 1 + EXP.waveFloor * Math.max(0, x.f);
+  const base = EXP.waveBase - 1 + EXP.waveFloor * Math.max(0, x.f) + (x.act - 1) * EXP.act2Wave;
   b.wave = base;
   x.segStart = base + 1;
   x.segEnd = base + (kind === "elite" ? EXP.eliteWaves : EXP.fightWaves);
@@ -669,7 +687,7 @@ function startBoss(b: Board) {
   const x = b.exp!;
   x.stage = "boss";
   x.camp = null;
-  b.wave = EXP.bossWave;
+  b.wave = x.act > 1 ? EXP.act2Boss : EXP.bossWave;
   b.wt = 0;
   b.phase = "boss";
   b.bossT = sec(bossSecOf(b));
@@ -734,6 +752,7 @@ export function expLeak(b: Board): { leak: number; gimLeft: number } {
   }
   if (expAsc(b, 8)) leak *= 1.5;
   if (expHas(b, "iron")) leak /= 2;
+  if (expHas(b, "glass")) leak *= 2;
   return { leak: Math.min(EXP.leakMax, Math.ceil(leak)) + gimLeft * EXP.gimEscape, gimLeft };
 }
 function expSegEnd(g: Game, b: Board) {
@@ -745,7 +764,7 @@ function expSegEnd(g: Game, b: Board) {
   b.tele = null;
   if (leak > 0) expHurt(b, leak);
   else if (expHas(b, "vamp")) x.hp = Math.min(x.max, x.hp + 3);
-  const gold = Math.round(((node === "elite" ? EXP.eliteGold : EXP.fightGold) + EXP.floorGold * Math.max(0, x.f)) * x.reward);
+  const gold = Math.round(((node === "elite" ? EXP.eliteGold : EXP.fightGold) + EXP.floorGold * (Math.max(0, x.f) + (x.act - 1) * EXP.floors)) * x.reward);
   b.ev?.push({ t: "expEnd", node, leak, hp: x.hp, won, gold });
   if (x.hp <= 0) return finish(g, b, false, "cap");
   b.gold += gold;
@@ -753,7 +772,7 @@ function expSegEnd(g: Game, b: Board) {
   if (expHas(b, "growth")) expGrow(b);
   if (expHas(b, "piggy")) b.gold += Math.min(120, Math.floor(b.gold * 0.2));
   // 드래프트: 세력마다 하나 (+전리품 가방) · 층이 높을수록 높은 등급 · 엘리트는 한 등급 위
-  const gr = Math.min(3, (x.f <= 1 ? 1 : x.f <= 4 ? 2 : 3) + (node === "elite" ? 1 : 0)) as Grade;
+  const gr = Math.min(3, (x.f <= 1 ? 1 : x.f <= 4 ? 2 : 3) + (node === "elite" ? 1 : 0) + (x.act - 1)) as Grade;
   const fs = [...FACTIONS];
   const offer: string[] = [];
   while (fs.length) offer.push(pick(b.trng, poolOf(fs.splice(rndInt(b.trng, fs.length), 1)[0], gr)).id);
@@ -810,6 +829,7 @@ function expPick(g: Game, b: Board, a: number): string | null {
         if (!id) return "없는 카드예요";
         if (!hasEmpty(b) && !b.cells.some((s) => s.def === id && s.units.length < STACK)) return "빈 칸이 없어요 — 팔거나 합성하고 골라요";
         give(b, id, "pick");
+        if (expHas(b, "echo") && hasEmpty(b)) give(b, id, "pick");
       } else b.gold += EXP.skipGold;
       if (c.next === "relic") {
         const offer = relicOffer(b);
@@ -859,6 +879,27 @@ function expPick(g: Game, b: Board, a: number): string | null {
     case "rest": {
       if (a === 1) expGrow(b);
       else x.hp = Math.min(x.max, x.hp + Math.ceil(x.max * EXP.restHeal * (expAsc(b, 9) ? 0.5 : 1)));
+      toMap(b);
+      return null;
+    }
+    case "act": {
+      if (a === 0) {
+        finish(g, b, true, "clear");
+        return null;
+      }
+      if (a !== 1) return "고를 수 없는 선택지예요";
+      // 2막: 새 지도 · 다른 보스 · 체력 조금 회복 (유닛 · 유물 · 골드는 그대로)
+      x.act = 2;
+      x.f = -1;
+      x.i = 0;
+      x.trail = [];
+      x.map = genMap(b);
+      const rest = TOWN_BOSSES.filter((d) => BOSSES.indexOf(d) !== x.boss);
+      x.boss = BOSSES.indexOf(rest[rndInt(b.trng, rest.length)]);
+      x.hp = Math.min(x.max, x.hp + EXP.act2Heal);
+      b.enemies = [];
+      b.tele = null;
+      b.ev?.push({ t: "expAct" });
       toMap(b);
       return null;
     }
@@ -1069,6 +1110,8 @@ export function apply(g: Game, p: number, cmd: Cmd): string | null {
       const up2 = expHas(b, "alch") && d.grade + 2 <= 3 && rnd(b.trng) < 0.25;
       const next = pick(b.rng, poolOf(d.faction, (d.grade + (up2 ? 2 : 1)) as Grade));
       give(b, next.id, "merge", cmd.c);
+      // 시작 치트 「분열 프로토콜」: 25% 같은 유닛 하나 더
+      if (b.patch === "split" && hasEmpty(b) && rnd(b.crng) < 0.25) give(b, next.id, "merge");
       return null;
     }
     case "sell": {
@@ -1358,6 +1401,11 @@ export function step(g: Game) {
 }
 
 function finish(g: Game, b: Board, win: boolean, reason: Result["reason"]) {
+  // 원정 2막에서 쓰러져도 1막 클리어는 인정
+  if (!win && b.exp && b.exp.act >= 2) {
+    win = true;
+    reason = "act2";
+  }
   b.result = { win, wave: b.wave, tick: g.tick, kills: b.kills, reason };
   b.phase = "over";
   b.ev?.push({ t: "over", win });
@@ -1421,6 +1469,13 @@ function startWave(b: Board, w: number) {
   b.wt = 0;
   b.spawned = 0;
   b.ev?.push({ t: "wave", wave: w });
+  // 시작 치트 「주사위 프로토콜」
+  if (b.patch === "dice") {
+    const n = 1 + rndInt(b.crng, 6);
+    b.gold += n * 6;
+    if (n === 6) b.free += 2;
+    b.ev?.push({ t: "dice", n });
+  }
   const boss = !b.exp && w % BOSS_EVERY === 0 ? bossOfWave(w, b.stage) : null;
   if (boss) {
     b.phase = "boss";
@@ -1437,7 +1492,7 @@ function advance(b: Board) {
 
 function endWave(b: Board) {
   const wg = Math.floor(
-    (B.waveGold.base + B.waveGold.per * b.wave) * b.mods.waveGold * b.cx.waveGold * (b.patch === "interest" ? TUNE.interestWave : 1)
+    (B.waveGold.base + B.waveGold.per * b.wave) * b.mods.waveGold * b.cx.waveGold * (b.patch === "interest" ? TUNE.interestWave : b.patch === "greed" ? 0.5 : 1)
   );
   b.gold += b.wave <= b.mods.firstHarvest ? wg * 2 : wg;
   if (b.patch === "interest") b.gold += Math.min(TUNE.interestMax, Math.floor(b.gold * TUNE.interestPct));
@@ -2105,8 +2160,19 @@ function die(g: Game, b: Board, e: Enemy): boolean {
     b.tele = null;
     gold = Math.floor((B.bossGold.base + B.bossGold.per * b.wave) * b.mods.bossGold) + e.loot * 2;
     b.ev?.push({ t: "bossDown", boss: e.boss, gold, stones: 0, ticket: null });
-    if (!b.enemies.some((o) => o !== e && o.boss >= 0 && o.hp > 0)) {
+    // 분신 둘을 한 tick 에 잡아도 한 번만 (먼저 처리된 쪽이 stage · result 를 바꿈)
+    if (b.exp.stage === "boss" && !b.result && !b.enemies.some((o) => o !== e && o.boss >= 0 && o.hp > 0)) {
       b.gold += gold;
+      const x = b.exp;
+      x.kills.push(BOSSES[x.boss].fighter);
+      if (x.act === 1) {
+        // 1막 끝: 귀환할지 2막으로 갈지 (고르는 동안 멈춤, 남은 졸개는 2막에 들어갈 때 치움)
+        x.stage = "camp";
+        x.camp = { k: "act" };
+        b.phase = "break";
+        b.tele = null;
+        return false;
+      }
       finish(g, b, true, "clear");
       return true;
     }
@@ -2130,6 +2196,7 @@ function die(g: Game, b: Board, e: Enemy): boolean {
     offerCheat(b);
   } else {
     gold = B.killGold + Math.floor(b.wave / B.killGoldPer) + b.mods.killGold;
+    if (b.patch === "greed") gold *= 2;
     if (b.exp) {
       if (b.exp.mod) gold = Math.floor(gold * FIGHT_MOD[b.exp.mod].gold);
       if (expHas(b, "goldhand")) gold += 1;
@@ -2185,7 +2252,7 @@ function offerCheat(b: Board) {
 function takeCheat(b: Board, id: string, auto: boolean) {
   if (b.cheat?.kind === "patch") {
     // 시작 치트 = 패치 (연합 · 도박사 · 단일 코어 · 이자) — 동작은 예전 패치 그대로
-    if (!PATCHES.some((p) => p.id === id)) return;
+    if (!PATCHES.some((p) => p.id === id) || !b.cheat.offer.includes(id)) return;
     b.cheat = null;
     b.patch = id;
     // 도박사: 고르는 순간 행운석 +3 (도박이 5웨이브부터라 시작 밑천)
@@ -2273,6 +2340,7 @@ export function hashGame(g: Game): number {
       mix(b.exp.hp);
       mix(b.exp.f);
       mix(b.exp.relics.length);
+      mix(b.exp.act);
     }
     for (const e of b.enemies) mix(e.hp);
   }

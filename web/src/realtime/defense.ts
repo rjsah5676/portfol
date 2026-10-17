@@ -50,6 +50,10 @@ export type FinishOut = {
         townClear?: { town: number; give: Goods; relic?: string } | null;
         /** 글리치 원정: 새로 해금한 분대 */
         squad?: string | null;
+        /** 원정 보스로 새로 해금한 시작 치트 · 도감에 새로 오른 원정 유물 · 2막 보스까지 잡음 */
+        patches?: string[];
+        seenNew?: string[];
+        act2Win?: boolean;
       })
     | null;
   /** 오늘의 도전 그날 첫 완료 보상 (이미 받았으면 null) */
@@ -98,8 +102,10 @@ export interface DefenseProfile {
   /** 해피 타운: 클리어한 단계 · 단계별 최고 웨이브 (클리어 = LAST_WAVE + 1) */
   townDone?: number[];
   tbest?: Record<string, number>;
-  /** 글리치 원정: 해금한 시작 분대 */
+  /** 글리치 원정: 해금한 시작 분대 · 원정 보스로 해금한 시작 치트 · 원정 유물 도감 */
   squads?: string[];
+  patches?: string[];
+  expSeen?: string[];
   /** 산 치트 연구 */
   cheatRes?: string[];
   glitchOpen: number;

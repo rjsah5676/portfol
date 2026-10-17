@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type CSSProperties, type ReactNode } from "react";
-import { TPS } from "@/lib/defense/balance";
+import { B, TPS } from "@/lib/defense/balance";
 import { BOSSES } from "@/lib/defense/enemies";
 import { BOSS_ART } from "@/lib/defense/assets";
 import { capOf, expLeak, expNext, hasEmpty, type Board, type Cmd } from "@/lib/defense/sim";
@@ -42,6 +42,37 @@ export function Heart({ size = 14, color = "#ff4d6d" }: { size?: number; color?:
   );
 }
 
+/** 원정 유물 아이콘 (그림이 오기 전 — 도트 아이콘 + 색 테두리) */
+const RELIC_LOOK: Record<string, [string, string]> = {
+  alch: ["flask", "#c79bff"],
+  twin: ["star", "#9be7ff"],
+  growth: ["up", "#6dff8f"],
+  piggy: ["coin", "#ffb3d1"],
+  iron: ["gear", "#bfc6d9"],
+  blood: ["heart", "#ff4d6d"],
+  bag: ["chest", "#ffb347"],
+  vamp: ["heart", "#c2306f"],
+  goldhand: ["coin", "#ffd23f"],
+  first: ["rift", "#5ff2ff"],
+  hunter: ["skull", "#ff6b7f"],
+  kit: ["clover", "#6dff8f"],
+  echo: ["card", "#9be7ff"],
+  phoenix: ["star", "#ff9f43"],
+  glass: ["gem", "#5ff2ff"],
+};
+export function ExpRelicIcon({ id, size = 28, dim }: { id: string; size?: number; dim?: boolean }) {
+  const f = id.startsWith("sq_") ? id.slice(3) : id.startsWith("oath_") ? id.slice(5) : null;
+  const [ic, col] = f ? ["", FACTION_COLOR[f as Faction]] : (RELIC_LOOK[id] ?? ["relic", "#9be7ff"]);
+  return (
+    <span
+      className="inline-flex shrink-0 items-center justify-center bg-[#0a0816]"
+      style={{ width: size, height: size, boxShadow: `inset 0 0 0 2px ${dim ? "#3d3468" : col}`, opacity: dim ? 0.5 : 1 }}
+    >
+      {f ? <FactionIcon f={f as Faction} size={Math.round(size * 0.55)} /> : ic === "heart" ? <Heart size={Math.round(size * 0.55)} color={col} /> : <Icon n={ic} size={Math.round(size * 0.55)} />}
+    </span>
+  );
+}
+
 const hpColor = (hp: number, max: number) => (hp <= max * 0.3 ? "#ff4d6d" : hp <= max * 0.6 ? "#ffb347" : "#6dff8f");
 
 function HpBar({ hp, max, w = 120 }: { hp: number; max: number; w?: number }) {
@@ -66,26 +97,30 @@ const relicTip = (b: Board) => {
   return [`원정 유물 ${x.relics.length}`, ...r, ...c].join("\n");
 };
 
-/** 위쪽 줄 칩 */
+/** 위쪽 줄 웨이브 칸 (원정): 층 · 전투 몇 번째 웨이브 · 정리 시간 */
+export function expWave(b: Board): { text: string; sub: string; p: number; red: boolean } {
+  const x = b.exp!;
+  const act = x.act > 1 ? "2막 " : "";
+  if (x.stage === "clean") return { text: `정리 ${Math.ceil(x.cleanT / TPS)}`, sub: "초", p: x.cleanT / (EXP.cleanSec * TPS), red: true };
+  if (x.stage === "waves") {
+    const n = x.segEnd - x.segStart + 1;
+    const i = Math.max(1, Math.min(n, b.wave - x.segStart + 1));
+    return { text: `${act}${x.f + 1}F`, sub: `${x.mod ? FIGHT_MOD[x.mod].name + " " : ""}${i}/${n}`, p: Math.min(1, (i - 1 + Math.min(1, b.wt / (B.waveSec * TPS))) / n), red: false };
+  }
+  if (x.stage === "boss") return { text: `${act}BOSS`, sub: "", p: 1, red: true };
+  return { text: x.f < 0 ? `${act}출발` : `${act}${x.f + 1}F`, sub: `/${EXP.floors}F`, p: (x.f + 1) / (EXP.floors + 1), red: false };
+}
+
+/** 위쪽 줄: 원정 체력 (나머지는 「빌드」 창) */
 export function ExpBar({ b }: { b: Board }) {
   const x = b.exp!;
-  const node = x.node ? EXP_NODE_TEXT[x.node] : null;
-  const segN = x.segEnd - x.segStart + 1;
-  const segI = Math.max(0, Math.min(segN, b.wave - x.segStart + 1));
   return (
-    <div className="px-inset flex h-full shrink-0 items-center gap-2 px-2 text-[12px] whitespace-nowrap" title={relicTip(b)}>
-      <HpBar hp={x.hp} max={x.max} w={56} />
-      <b className="text-[var(--mute)]">{x.f < 0 ? "출발" : x.f >= EXP.floors ? "꼭대기" : `${x.f + 1}층`}</b>
-      {node && (
-        <b style={{ color: node.color }}>
-          {node.name}
-          {x.mod && <span className="ml-1 text-[#ffb347]">· {FIGHT_MOD[x.mod].name}</span>}
-          {x.stage === "waves" && <span className="ml-1 text-[var(--text)]">{segI}/{segN}</span>}
-        </b>
-      )}
-      {x.stage === "clean" && <b className="dfn-blink text-[var(--red)]">정리 {Math.ceil(x.cleanT / TPS)}초</b>}
-      {x.relics.length > 0 && <b className="text-[#9be7ff]">유물 {x.relics.length}</b>}
-      {x.curses.length > 0 && <b className="text-[#c79bff]">저주 {x.curses.length}</b>}
+    <div className="px-inset flex h-full shrink-0 items-center px-2" title={`원정 체력 — 전투가 끝날 때 남은 적만큼 깎여요. 0이면 실패\n${relicTip(b)}`}>
+      <Heart />
+      <b className="ml-1 text-[14px] tabular-nums" style={{ color: hpColor(x.hp, x.max) }}>
+        {x.hp}
+        <span className="text-[11px] text-[var(--dim)]">/{x.max}</span>
+      </b>
     </div>
   );
 }
@@ -182,7 +217,7 @@ export function ExpModal({ b, run }: { b: Board; run: (c: Cmd) => boolean }) {
             const r = EXP_RELIC[id];
             return (
               <button key={i} type="button" className={card} style={{ "--b": "#9be7ff" } as CSSProperties} onClick={() => (go(i), sfx("reward"))}>
-                <Icon n="relic" size={40} />
+                <ExpRelicIcon id={id} size={44} />
                 <b className="px-shadow text-[16px] text-white">{r.name}</b>
                 <span className="text-[13px] leading-snug text-[var(--text)]">{r.desc}</span>
               </button>
@@ -253,6 +288,28 @@ export function ExpModal({ b, run }: { b: Board; run: (c: Cmd) => boolean }) {
       );
       break;
     }
+    case "act":
+      title = "1막 클리어!";
+      sub = `${BOSSES[x.boss].name} 처치 — 여기서 돌아갈까, 더 깊이 갈까?`;
+      body = (
+        <div className="flex w-full max-w-[640px] gap-3">
+          <button type="button" className={card} style={{ "--b": "#6dff8f" } as CSSProperties} onClick={() => (go(0), sfx("reward"))}>
+            <Icon n="chest" size={36} />
+            <b className="px-shadow text-[18px] text-white">귀환</b>
+            <span className="text-[13px] leading-snug text-[var(--text)]">원정 성공으로 끝내고 보상을 받아요</span>
+          </button>
+          <button type="button" className={card} style={{ "--b": "#ff5fa2" } as CSSProperties} onClick={() => (go(1), sfx("boss"))}>
+            <Icon n="skull" size={36} />
+            <b className="px-shadow text-[18px] text-white">2막 도전</b>
+            <span className="text-[13px] leading-snug text-[var(--text)]">
+              새 지도 · 더 센 적 · 다른 보스. 원정 체력 <b className="text-[#6dff8f]">+{EXP.act2Heal}</b>, 드래프트 한 등급 위
+              <br />
+              <b className="text-[var(--gold)]">2막 보스까지 잡으면 보상 ×{EXP.act2Reward}</b> · 쓰러져도 1막 클리어는 그대로
+            </span>
+          </button>
+        </div>
+      );
+      break;
     case "event": {
       const ev = EVENTS[c.id];
       title = ev.name;

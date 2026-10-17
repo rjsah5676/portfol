@@ -5,7 +5,8 @@ import NickForm from "@/components/Account/NickForm";
 import { useAuth } from "@/lib/AuthContext";
 import { BALANCE_VER, LAST_WAVE } from "@/lib/defense/balance";
 import { MAIN_BOSSES, TOWN_BOSSES, bossOfWave, phaseText } from "@/lib/defense/enemies";
-import { EXP, EXP_ASC, EXP_NODE_TEXT, EXP_RELICS, GIM, SQUADS, TOWN_EN, TOWN_NAME, type ExpNode } from "@/lib/defense/town";
+import { EXP, EXP_ASC, EXP_NODE_TEXT, EXP_RELIC, EXP_RELICS, GIM, SQUADS, TOWN_EN, TOWN_NAME, type ExpNode } from "@/lib/defense/town";
+import { PATCHES } from "@/lib/defense/meta";
 import { UNIT } from "@/lib/defense/units";
 import {
   beginRoom,
@@ -339,7 +340,7 @@ export default function DefenseApp() {
       {body}
       {screen.k === "codex" && (
         <Modal title="도감" onClose={() => setScreen({ k: "menu" })} wide accent="#c08cff">
-          <Codex />
+          <Codex expSeen={prof?.expSeen ?? []} />
         </Modal>
       )}
       {screen.k === "rank" && (
@@ -817,7 +818,16 @@ function FinishNote({ r }: { r: FinishOut }) {
           {w.townClear.relic && <b className="text-[#ffb3ee]">유물 「{RELIC[w.townClear.relic]?.name}」</b>}
         </span>
       )}
+      {w?.act2Win && <b className="dfn-pop text-[14px] text-[#ff9ec7]">2막 보스까지 처치 — 보상 ×{EXP.act2Reward}</b>}
       {w?.squad && <b className="dfn-pop text-[14px] text-[#9be7ff]">새 원정 분대 해금 — {SQUADS.find((q) => q.id === w.squad)?.name}</b>}
+      {w?.patches?.map((id) => (
+        <b key={id} className="dfn-pop text-[14px] text-[#ffd23f]">
+          메인 시작 치트 해금 — 「{PATCHES.find((p) => p.id === id)?.name}」
+        </b>
+      ))}
+      {!!w?.seenNew?.length && (
+        <span className="text-[13px] text-[#9be7ff]">원정 유물 도감 +{w.seenNew.length} ({w.seenNew.map((id) => EXP_RELIC[id]?.name).join(" · ")})</span>
+      )}
       {gb && (
         <span className="text-[13px]">
           {r.mode === "town" ? `${TOWN_NAME} ${gb.glitch}단계` : `오염 ${gb.glitch}단계`} 최고{" "}
@@ -1562,6 +1572,9 @@ function townPages(member: boolean, open: number): { tab: string; title: string;
         <>
           <p>원정마다 셋 중 하나가 꼭대기에 있어요. 지도에서 미리 보고 대비하세요.</p>
           <p>
+            보스를 잡으면 {W("귀환")} 또는 {Gd("2막")} — 새 지도 · 다른 보스, 2막 보스까지 잡으면 보상 ×{EXP.act2Reward}. 2막에서 쓰러져도 1막 클리어는 그대로.
+          </p>
+          <p>
             이기면 다음 {W("단계")}가 열려요. 단계가 오르면 적이 세지고, {Gd("비틀기")}가 하나씩 붙어요:
           </p>
           {EXP_ASC.map((a) => (
@@ -1599,6 +1612,11 @@ function townPages(member: boolean, open: number): { tab: string; title: string;
           <p>
             {W("원정 → 메인")}: 보상은 같은 세기 메인 판의 ×{TOWN_REWARD}, 단계마다 첫 클리어 코어 · 상자, 몇몇 단계는 원정에서만 나오는 {Gd("메인 유물")}. 이기면 {Gd("새 분대")}도 열려요.
           </p>
+          <p>
+            원정 보스를 처음 잡으면 {Gd("메인 시작 치트")}가 열려요 — {PATCHES.filter((q) => q.lock)
+              .map((q) => q.name)
+              .join(" · ")}.
+          </p>
           <p className="text-[var(--mute)]">메인이 막히면 여기서 성장을 앞당기세요.</p>
         </>
       ) : (
@@ -1607,7 +1625,7 @@ function townPages(member: boolean, open: number): { tab: string; title: string;
             메인에서 {W(`오염 ${TOWN_FROM}단계`)}가 열리면 정식으로 열려요 (보상 · 랭킹 · 단계 {TOWN_MAX}까지).
           </p>
           <p>
-            {W("메인 → 원정")}: 정비소 영구 성장이 원정 전투에 그대로. {W("원정 → 메인")}: 보상은 메인 판의 ×{TOWN_REWARD}, 첫 클리어 상자 · 원정 전용 {Gd("메인 유물")}.
+            {W("메인 → 원정")}: 정비소 영구 성장이 원정 전투에 그대로. {W("원정 → 메인")}: 보상은 메인 판의 ×{TOWN_REWARD}, 첫 클리어 상자 · 원정 전용 {Gd("메인 유물")} · 보스를 처음 잡으면 {Gd("메인 시작 치트")}.
           </p>
           <p>그 전에도 {Gd("1단계 연습 판")}으로 바로 해 볼 수 있어요. 처음엔 짧은 안내가 떠요(그동안 게임은 멈춰요).</p>
         </>

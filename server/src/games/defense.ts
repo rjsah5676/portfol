@@ -11,6 +11,7 @@ import { BALANCE_VER, TPS } from "../../../web/src/lib/defense/balance";
 import { HASH_TICKS, MAX_LOG, MAX_SPEED, MAX_TICKS, TICKS_PER_TURN, TURN_MS, scoreOf, validLog, type LogEntry } from "../../../web/src/lib/defense/replay";
 import { isCmd, type Cmd, type Result } from "../../../web/src/lib/defense/sim";
 import { DAILY_RULE, cleanLoadout, kstDayKey, seasonOf, seasonScore, type Loadout, type RunMode } from "../../../web/src/lib/defense/progress";
+import { EXP } from "../../../web/src/lib/defense/town";
 import type { VerifyJob, VerifyOut } from "./defenseVerify.worker";
 import { createDefenseMeta } from "./defenseMeta";
 import { createDefensePlays, resOf } from "./defensePlays";
@@ -311,7 +312,8 @@ export function registerDefense({ gateway, db, points }: Deps) {
     }
     // 순위 점수 · 기록에 쓰는 단계 (해피 타운은 타운 단계)
     const glitch = mode === "town" ? (lo?.town ?? 1) : (lo?.glitch ?? 0);
-    const score = seasonScore(res, glitch);
+    // 원정 2막까지 간 판은 더 위로 (2막 웨이브만큼 · 2막 보스 처치)
+    const score = seasonScore(res, glitch) + (mode === "town" && res.win && res.wave > EXP.bossWave ? (res.wave - EXP.bossWave) * 1e5 + (res.reason === "clear" ? 5e6 : 0) : 0);
     plays.done(run, log as LogEntry[], resOf(out, 0, score), Math.round(elapsed));
     // 오늘의 도전은 판 보상 대신 그날 첫 완료 보상만 (성장 없는 판이라 미션 · 패스 · 보물방도 안 셈)
     const reward =

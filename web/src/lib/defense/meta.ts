@@ -8,6 +8,8 @@ export interface PatchDef {
   id: string;
   name: string;
   desc: string;
+  /** 원정 보스(fighter id)를 처음 잡아야 열림 (Loadout.patches) */
+  lock?: string;
 }
 
 /** 패치 = 시작 치트 코드: 판을 시작할 때 4개 중 하나 (sim.ts newBoard 가 b.cheat 로 띄움, 멀티는 시간이 지나면 연합) — 한 번 고르면 못 바꿈 */
@@ -28,7 +30,13 @@ export const PATCHES: PatchDef[] = [
     name: "이자 프로토콜",
     desc: `웨이브 골드 +${Math.round((TUNE.interestWave - 1) * 100)}% · 웨이브를 넘길 때마다 가진 골드의 ${Math.round(TUNE.interestPct * 100)}% 이자 (최대 ${TUNE.interestMax})`,
   },
+  // 글리치 원정 보스 처치로 해금
+  { id: "dice", name: "주사위 프로토콜", desc: "웨이브가 시작될 때마다 주사위 — 눈 × 6 골드, 6이 나오면 무료 소환 2", lock: "ur-dice" },
+  { id: "greed", name: "탐욕 계약", desc: "처치 골드 ×2 · 웨이브 골드 절반", lock: "ur-moa" },
+  { id: "split", name: "분열 프로토콜", desc: "합성할 때 25% 확률로 같은 결과 유닛이 하나 더 (빈 칸이 있으면)", lock: "ur-forte" },
 ];
+/** 이 판에서 고를 수 있는 시작 치트 (잠긴 건 해금한 것만) */
+export const patchesFor = (open: readonly string[]) => PATCHES.filter((p) => !p.lock || open.includes(p.id)).map((p) => p.id);
 export const PATCH_DEADLINE = 10;
 
 export interface MissionDef {

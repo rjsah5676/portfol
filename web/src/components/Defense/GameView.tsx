@@ -30,7 +30,8 @@ import {
   type RiftTier,
 } from "@/lib/defense/sim";
 import { EXP_NODE_TEXT, TOWN_NAME } from "@/lib/defense/town";
-import { CleanBanner, ExpBar, ExpModal } from "./Expedition";
+import { CleanBanner, ExpBar, ExpModal, expWave } from "./Expedition";
+import { BuildModal, buildCount } from "./Build";
 import {
   FACTIONS,
   FACTION_COLOR,
@@ -101,7 +102,7 @@ export interface GameViewProps {
 const GRADE_LETTER = ["N", "R", "E", "L", "M", "H", "T"];
 
 type Toast = { id: number; text: ReactNode; tone?: "bad" | "good" | "gold" };
-type ModalKind = "patch" | "pick" | "recipe" | "mission" | "codex" | "pause" | "dev" | null;
+type ModalKind = "patch" | "pick" | "recipe" | "mission" | "codex" | "pause" | "dev" | "build" | null;
 
 export default function GameView({ ctrl, names, admin, finish, onExit, onRetry, ghost }: GameViewProps) {
   const [, force] = useReducer((x: number) => x + 1, 0);
@@ -281,6 +282,17 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry, 
           </>,
           e.leak >= 6 || (e.node === "elite" && !e.won) ? "bad" : "gold"
         );
+        break;
+      case "expRevive":
+        sfx("reward");
+        setShout({ id: Math.random(), title: "불사조 깃털!", sub: "원정 체력이 절반으로 되살아났어요", color: "#ff9f43" });
+        break;
+      case "expAct":
+        setShout({ id: Math.random(), title: "2막", sub: "새 지도 · 더 센 적 · 다른 보스", color: "#ff5fa2" });
+        break;
+      case "dice":
+        sfx(e.n === 6 ? "reward" : "town-dice", 0.7);
+        toast(<>주사위 <b className="text-[#7fe8d8]">{e.n}</b> — +{e.n * 6}G{e.n === 6 ? " · 무료 소환 2" : ""}</>, "gold");
         break;
       case "expSteal":
         sfx("town-seize");
@@ -540,6 +552,7 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry, 
       else if (k === "4") run({ t: "up", k: "hidden" });
       else if (k === "5") run({ t: "luck" });
       else if (k === "r") setModal((m) => (m === "recipe" ? null : "recipe"));
+      else if (k === "b") setModal((m) => (m === "build" ? null : "build"));
       else if (k === "n") run({ t: "next" });
       else if (k === " " && !multi) {
         e.preventDefault();
@@ -619,34 +632,37 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry, 
           </div>
     ) : null;
 
+  const xw = b.exp && b.phase !== "prep" ? expWave(b) : null;
   return (
     <div className="px-stars absolute inset-0 overflow-hidden text-[var(--text)]">
       {/* ── 위: 상태 줄 ── */}
-      <div className="absolute top-[8px] left-[12px] flex h-[38px] w-[1000px] items-center gap-3">
+      <div className="absolute top-[8px] left-[12px] flex h-[38px] w-[1000px] items-center gap-2">
         <div
-          className="px-box flex h-full w-[178px] shrink-0 flex-col justify-center px-2.5"
-          style={{ "--b": b.phase === "boss" ? "#ff4d6d" : "#3d3468" } as React.CSSProperties}
+          className={`px-box flex h-full shrink-0 flex-col justify-center px-2.5 ${b.exp ? "w-[156px]" : "w-[178px]"}`}
+          style={{ "--b": b.phase === "boss" || xw?.red ? "#ff4d6d" : "#3d3468" } as React.CSSProperties}
         >
           <div className="flex items-baseline gap-1.5 leading-none">
             <span
-              className={`${TITLE} px-shadow text-[17px] ${b.phase === "boss" ? "dfn-pulse text-[var(--red)]" : "text-white"}`}
+              className={`${TITLE} px-shadow shrink-0 text-[17px] ${b.phase === "boss" || xw?.red ? "dfn-pulse text-[var(--red)]" : "text-white"}`}
             >
-              {b.phase === "prep"
-                ? "READY"
-                : b.phase === "boss"
-                  ? `BOSS ${b.wave}`
-                  : b.phase === "treasure"
-                    ? "TREASURE"
-                    : `WAVE ${b.wave}`}
+              {xw
+                ? xw.text
+                : b.phase === "prep"
+                  ? "READY"
+                  : b.phase === "boss"
+                    ? `BOSS ${b.wave}`
+                    : b.phase === "treasure"
+                      ? "TREASURE"
+                      : `WAVE ${b.wave}`}
             </span>
-            <span className="text-[12px] text-[var(--dim)]">/{LAST_WAVE}</span>
+            <span className="truncate text-[12px] text-[var(--dim)]">{xw ? xw.sub : `/${LAST_WAVE}`}</span>
             <span className="ml-auto text-[12px] text-[var(--mute)]">{fmtTime(time)}</span>
           </div>
           <Bar
             className="mt-1.5"
             h={5}
-            value={waveP}
-            color={b.phase === "boss" ? "#ff4d6d" : "#5ff2ff"}
+            value={xw ? xw.p : waveP}
+            color={b.phase === "boss" || xw?.red ? "#ff4d6d" : "#5ff2ff"}
           />
         </div>
         <div className="px-box flex h-full w-[170px] shrink-0 flex-col justify-center px-2.5">
@@ -668,80 +684,28 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry, 
             color={nEnemy >= capOf(b) * 0.8 ? "#ff4d6d" : nEnemy >= capOf(b) * 0.6 ? "#ffb347" : "#6dff8f"}
           />
         </div>
-        {(b.patch || b.cheats.length > 0 || b.mods.grit > 0) && (
-          <div className="px-inset flex h-full min-w-[44px] shrink items-center gap-1 overflow-hidden px-1.5">
-            {patch && (
-              <span
-                className={`flex h-6 items-center justify-center gap-1 bg-[#0a0816] ${patch.id === "pure" ? "px-1.5" : "w-6"}`}
-                style={{
-                  boxShadow: `inset 0 0 0 2px ${patch.id === "pure" && b.pure <= 0 ? "#5a5276" : "#ffd23f"}`,
-                }}
-                title={`시작 치트 · ${patch.name}\n${patch.desc}${
-                  patch.id === "pure"
-                    ? b.mono && b.pure > 0
-                      ? `\n지금 ${FACTION_NAME[b.mono]} 피해 +${Math.round((TUNE.pureDmg - 1) * b.pure * 100)}% · 강화 비용 -${Math.round((1 - TUNE.pureUp) * b.pure * 100)}%`
-                      : `\n지금 꺼짐 — 가장 많은 세력이 ${Math.round(TUNE.pureFrom * 100)}% 이상이어야 해요 (지금 ${Math.round(b.pureR * 100)}%)`
-                    : ""
-                }`}
-              >
-                {patch.id === "pure" ? (
-                  <>
-                    {b.mono && <FactionIcon f={b.mono} size={12} />}
-                    <b className={`text-[12px] ${b.pure > 0 ? "text-[var(--gold)]" : "text-[var(--dim)]"}`}>
-                      +{Math.round((TUNE.pureDmg - 1) * b.pure * 100)}%
-                    </b>
-                  </>
-                ) : (
-                  <Icon n="gear" size={13} />
-                )}
-              </span>
-            )}
-            {b.mods.grit > 0 && (
-              <b
-                className="px-1 text-[12px] text-[var(--gold)]"
-                title={`끈기 — 이 단계에서 ${b.mods.grit}판 연달아 져서 모든 피해 +${Math.round((b.mods.gritDmg - 1) * 100)}% (깨면 0)`}
-              >
-                끈기+{Math.round((b.mods.gritDmg - 1) * 100)}%
-              </b>
-            )}
-            {b.cheats.map((id) => {
-              const c = CHEAT[id];
-              return (
-                <span
-                  key={id}
-                  className="flex h-6 w-6 items-center justify-center bg-[#0a0816]"
-                  style={{ boxShadow: `inset 0 0 0 2px ${CHEAT_TIER_COLOR[c.tier]}` }}
-                  title={`치트 코드 · ${CHEAT_TIER_NAME[c.tier]} · ${c.name}\n${c.desc}`}
-                >
-                  <Icon n={CHEAT_CAT_ICON[c.cat]} size={13} />
-                </span>
-              );
-            })}
-          </div>
-        )}
-        {(b.mods.relics.length > 0 || b.mods.glitch.lv > 0) && (
-          <div
-            className="px-inset flex h-full min-w-[44px] shrink items-center gap-1 overflow-hidden px-1.5"
-            title={[
-              b.mods.glitch.lv ? `오염 ${b.mods.glitch.lv}단계 — 적 체력 ×${b.mods.glitch.hp} · 속도 ×${b.mods.glitch.spd}` : "",
-              ...b.mods.relics.map((id) => `${RELIC[id]?.name} Lv.${b.mods.relicLv?.[id] ?? 1}: ${relicDesc(id, b.mods.relicLv?.[id] ?? 1)}`),
-              ...b.mods.res.map((id) => `연구 ${RES[id]?.name} Lv.${b.mods.resLv?.[id] ?? 1}: ${resDesc(id, b.mods.resLv?.[id] ?? 1)}`),
-            ]
-              .filter(Boolean)
-              .join("\n")}
-          >
-            {b.stage === "town" ? (
-              <b className="px-1 text-[12px] text-[#ffd36b]" title={`${TOWN_NAME} ${b.mods.town}단계 — 적 세기 = 오염 ${b.mods.glitch.lv}단계`}>
-                T{b.mods.town}
-              </b>
-            ) : (
-              b.mods.glitch.lv > 0 && <b className="dfn-glitch px-1 text-[12px] text-[var(--pink)]">G{b.mods.glitch.lv}</b>
-            )}
-            {b.mods.relics.map((id) => (
-              <RelicIcon key={id} id={id} size={24} />
-            ))}
-          </div>
-        )}
+        {/* 빌드: 시작 치트 · 치트 코드 · 유물 · 연구 · 원정 유물은 창에서 (B) */}
+        <button
+          type="button"
+          onClick={() => setModal("build")}
+          className="px-btn flex h-full shrink-0 items-center gap-1.5 px-2 text-[12px] font-bold whitespace-nowrap"
+          style={{ "--c": "#2a2350" } as React.CSSProperties}
+          title="빌드 — 시작 치트 · 치트 코드 · 유물 · 연구 · 원정 유물 (B)"
+        >
+          {b.stage === "town" ? (
+            <b className="text-[#ffd36b]">T{b.mods.town}</b>
+          ) : (
+            b.mods.glitch.lv > 0 && <b className="dfn-glitch text-[var(--pink)]">G{b.mods.glitch.lv}</b>
+          )}
+          <Icon n="card" size={13} />
+          빌드
+          <b className="text-[var(--gold)]">{buildCount(b)}</b>
+          {patch?.id === "pure" && b.pure > 0 && b.mono && (
+            <span className="flex items-center gap-0.5 text-[var(--gold)]">
+              <FactionIcon f={b.mono} size={11} />+{Math.round((TUNE.pureDmg - 1) * b.pure * 100)}%
+            </span>
+          )}
+        </button>
         {b.troom && (
           <TreasurePanel b={b} />
         )}
@@ -1262,6 +1226,7 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry, 
         <PickModal b={b} run={run} onClose={() => setModal(null)} />
       )}
       {modal === "recipe" && <RecipeModal b={b} run={run} onClose={() => setModal(null)} />}
+      {modal === "build" && <BuildModal b={b} onClose={() => setModal(null)} />}
       {modal === "mission" && (
         <Modal title="미션" onClose={() => setModal(null)} accent="#ffd23f">
           <div className="flex flex-col gap-2">
@@ -1308,7 +1273,7 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry, 
       )}
       {modal === "codex" && (
         <Modal title="도감" onClose={() => setModal(null)} wide accent="#c08cff">
-          <Codex have={counts(b)} />
+          <Codex have={counts(b)} expSeen={[...b.mods.expSeen, ...(b.exp?.relics ?? [])]} />
         </Modal>
       )}
       {modal === "pause" && (
@@ -1429,8 +1394,10 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry, 
             </p>
             <p className="mt-3 text-[14px] text-[var(--mute)]">
               {b.exp
-                ? b.result?.win
-                  ? `${TOWN_NAME} 성공 — ${BOSSES[b.exp.boss].name} 처치 · ${fmtTime(time)}`
+                ? b.result?.reason === "act2"
+                  ? `1막 클리어 · 2막 ${b.exp.f + 1}층에서 멈췄어요 · ${fmtTime(time)}`
+                  : b.result?.win
+                  ? `${TOWN_NAME} ${b.exp.act > 1 ? "2막까지 " : ""}성공 — ${BOSSES[b.exp.boss].name} 처치 · ${fmtTime(time)}`
                   : b.exp.hp <= 0
                     ? `${b.exp.f + 1}층 · 원정 체력이 바닥났어요`
                     : b.result?.reason === "boss"
@@ -2032,6 +1999,9 @@ function CheatPicker({ b, multi, run }: { b: Board; multi: boolean; run: (c: Cmd
 function PatchPicker({ b, multi, run }: { b: Board; multi: boolean; run: (c: Cmd) => boolean }) {
   const o = b.cheat!;
   const left = multi ? Math.max(0, Math.ceil(CHEAT_MULTI_SEC - o.t / TPS)) : null;
+  // 원정 보스로 여는 시작 치트: 잠긴 것도 흐리게 보여 줌 (원정으로 가는 길)
+  const locked = PATCHES.filter((p) => p.lock && !o.offer.includes(p.id));
+  const many = o.offer.length + locked.length > 4;
   return (
     <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-[#05040c]/75 px-6">
       <div className="text-center">
@@ -2040,23 +2010,35 @@ function PatchPicker({ b, multi, run }: { b: Board; multi: boolean; run: (c: Cmd
           이 판의 운영 방식을 하나 골라요 (못 바꿔요) · {multi ? `${left}초 뒤 연합 프로토콜로` : "고르는 동안 게임이 멈춰요"}
         </p>
       </div>
-      <div className="grid w-full max-w-[680px] grid-cols-2 gap-3">
+      <div className={`grid w-full gap-2.5 ${many ? "max-w-[860px] grid-cols-4" : "max-w-[680px] grid-cols-2"}`}>
         {o.offer.map((id, i) => {
           const p = PATCHES.find((x) => x.id === id)!;
           return (
             <button
               key={id}
               type="button"
-              className="px-box dfn-pop flex min-h-[110px] flex-col items-center gap-1.5 p-3 text-center transition-transform hover:-translate-y-1"
-              style={{ "--b": "#ffd23f" } as React.CSSProperties}
+              className={`px-box dfn-pop flex flex-col items-center gap-1 text-center transition-transform hover:-translate-y-1 ${many ? "min-h-[96px] p-2" : "min-h-[110px] p-3"}`}
+              style={{ "--b": p.lock ? "#ff9ec7" : "#ffd23f" } as React.CSSProperties}
               onClick={() => {
                 if (run({ t: "cheat", i })) sfx("ui-click", 1, 0.9);
               }}
             >
-              <span className="text-[12px] font-bold text-[#ffd23f]">시작 · 운영</span>
-              <b className="px-shadow text-[17px] leading-tight text-white">{p.name}</b>
-              <span className="text-[12px] leading-snug text-[var(--text)]">{p.desc}</span>
+              <span className={`text-[11px] font-bold ${p.lock ? "text-[#ff9ec7]" : "text-[#ffd23f]"}`}>{p.lock ? "원정 해금" : "시작 · 운영"}</span>
+              <b className={`px-shadow leading-tight text-white ${many ? "text-[15px]" : "text-[17px]"}`}>{p.name}</b>
+              <span className={`leading-snug text-[var(--text)] ${many ? "text-[11px]" : "text-[12px]"}`}>{p.desc}</span>
             </button>
+          );
+        })}
+        {locked.map((p) => {
+          const boss = BOSSES.find((x) => x.fighter === p.lock);
+          return (
+            <div key={p.id} className="px-inset flex min-h-[96px] flex-col items-center justify-center gap-1 p-2 text-center opacity-60">
+              <Icon n="lock" size={16} />
+              <b className="text-[13px] text-[var(--dim)]">{p.name}</b>
+              <span className="text-[11px] leading-snug text-[var(--dim)]">
+                {TOWN_NAME}에서 {boss?.name ?? "보스"}를 잡으면 열려요
+              </span>
+            </div>
           );
         })}
       </div>

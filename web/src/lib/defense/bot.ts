@@ -112,6 +112,9 @@ export const BOTS: BotCfg[] = [
     rift: true,
     every: 15,
   },
+  { name: "주사위", focus: null, patch: "dice", upBias: 1.5, gamble: true, rift: true, every: 15 },
+  { name: "탐욕", focus: null, patch: "greed", upBias: 1.5, gamble: true, rift: true, every: 15 },
+  { name: "분열", focus: null, patch: "split", upBias: 1.5, gamble: true, rift: true, every: 15 },
   {
     name: "소환만",
     focus: null,
@@ -204,7 +207,7 @@ export function botMove(b: Board, cfg: BotCfg, skip: ReadonlySet<string> = new S
         return { t: "exp", a: Math.max(0, c.offer.findIndex((id) => UNIT[id].faction === main)) };
       }
       case "relic": {
-        const pref = ["growth", "alch", "first", "iron", "hunter", "vamp", "piggy", "twin", "bag", "kit", "goldhand", `oath_${cfg.focus ?? "x"}`];
+        const pref = ["growth", "echo", "phoenix", "alch", "first", "iron", "hunter", "vamp", "piggy", "twin", "bag", "kit", "goldhand", `oath_${cfg.focus ?? "x"}`];
         for (const id of pref) {
           const i = c.offer.indexOf(id);
           if (i >= 0) return { t: "exp", a: i };
@@ -225,6 +228,9 @@ export function botMove(b: Board, cfg: BotCfg, skip: ReadonlySet<string> = new S
       }
       case "rest":
         return { t: "exp", a: x.hp < x.max * 0.7 ? 0 : 1 };
+      case "act":
+        // 1막 보스를 잡음: 체력이 절반 넘게 남았으면 2막
+        return { t: "exp", a: x.hp >= x.max * 0.5 ? 1 : 0 };
       case "event": {
         const a =
           c.id === "vend" ? (b.gold >= 60 && hasEmpty(b) ? 0 : 1) : c.id === "merc" ? (hasEmpty(b) ? 0 : 1) : c.id === "spring" ? (x.hp > 16 ? 0 : 1) : c.id === "trap" ? (x.hp > 12 ? 0 : 1) : 1;

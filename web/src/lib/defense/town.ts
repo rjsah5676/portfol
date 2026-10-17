@@ -37,7 +37,14 @@ export const EXP = {
   fightGold: 30,
   eliteGold: 60,
   floorGold: 8,
+  /** 2막: 웨이브 오프셋 · 들어갈 때 회복 · 2막 보스까지 잡으면 보상 배수 */
+  act2Wave: 18,
+  act2Boss: 42,
+  act2Heal: 10,
+  act2Reward: 1.5,
 } as const;
+/** 원정 보스를 처음 잡으면 메인 시작 치트(meta.ts PATCHES) 해금 — 보스 fighter → 패치 id */
+export const EXP_BOSS_PATCH: Record<string, string> = { "ur-dice": "dice", "ur-moa": "greed", "ur-forte": "split" };
 
 export type ExpNode = "fight" | "elite" | "event" | "shop" | "rest" | "treasure" | "boss";
 export const EXP_NODE_TEXT: Record<ExpNode, { name: string; desc: string; color: string; icon: string }> = {
@@ -78,7 +85,7 @@ export const SQUADS = [
 export const SQUAD_NEXT: Record<string, string> = { knight: "mech", mech: "arcane" };
 
 /** 원정 유물 (이번 원정에서만) — sq_ 는 분대 시작 유물 (뽑기에 안 나옴) */
-export const EXP_RELICS: { id: string; name: string; desc: string; start?: boolean }[] = [
+export const EXP_RELICS: { id: string; name: string; desc: string; start?: boolean; need?: number }[] = [
   { id: "sq_knight", name: "기사단 나팔", desc: "전투가 시작될 때마다 무료 소환 2", start: true },
   { id: "sq_mech", name: "공방 조준경", desc: "보스 · 엘리트에게 피해 +25%", start: true },
   { id: "sq_arcane", name: "마도회 수정", desc: "전투가 시작될 때마다 가장 낮은 마도회 유닛 칸이 한 등급 올라요", start: true },
@@ -97,6 +104,10 @@ export const EXP_RELICS: { id: string; name: string; desc: string; start?: boole
   { id: "first", name: "선제 공격", desc: "전투마다 첫 웨이브 동안 모든 피해 ×2" },
   { id: "hunter", name: "엘리트 사냥꾼", desc: "엘리트 · 기믹 적에게 피해 +50% · 유물 고를 때 하나 더" },
   { id: "kit", name: "응급 키트", desc: "원정 체력이 10 밑으로 떨어지면 한 번 +15" },
+  // 도감 해금 (원정 유물을 need 종 찾으면 풀에 들어감)
+  { id: "echo", name: "메아리", desc: "드래프트에서 고른 유닛이 하나 더 (빈 칸이 있으면)", need: 5 },
+  { id: "phoenix", name: "불사조 깃털", desc: "원정 체력이 0이 되면 한 번 절반으로 되살아나요", need: 10 },
+  { id: "glass", name: "유리 대포", desc: "모든 유닛 피해 ×1.6 · 남은 적에게 깎이는 원정 체력 두 배", need: 14 },
 ];
 export const EXP_RELIC: Record<string, (typeof EXP_RELICS)[number]> = Object.fromEntries(EXP_RELICS.map((r) => [r.id, r]));
 

@@ -139,6 +139,11 @@ export const ENEMY_ART: Record<string, SpriteSpec> = {
   ghost: E("ghost"),
   golem: E("golem"),
   worm: E("worm"),
+  // 글리치 원정 기믹 엘리트 — 기존 적 그림을 색 바꾸고 소품을 얹은 임시 그림 (web/scripts/defense-art/gim-elites.py)
+  "gim-thief": E("gim-thief"),
+  "gim-healer": E("gim-healer"),
+  "gim-golem": E("gim-golem"),
+  "gim-mirror": E("gim-mirror"),
 };
 /** 보스 그림 (192×192 한 장) — 글리치에 오염된 PIXEL FIGHT 파이터 */
 const BS = (id: string): SpriteSpec => ({

@@ -69,7 +69,7 @@ import {
 } from "../../../web/src/lib/defense/progress";
 import { LAST_WAVE } from "../../../web/src/lib/defense/balance";
 import { RECIPE, UNIT, UNITS } from "../../../web/src/lib/defense/units";
-import { SQUAD_NEXT } from "../../../web/src/lib/defense/town";
+import { EXP, EXP_BOSS_PATCH, EXP_RELIC, SQUAD_NEXT } from "../../../web/src/lib/defense/town";
 import type { Result } from "../../../web/src/lib/defense/sim";
 
 /*
@@ -119,6 +119,9 @@ export interface Profile {
   /** 땅문서 (해피 타운에서만) · 도시 개발 레벨 (id → 레벨) */
   /** 글리치 원정: 해금한 시작 분대 (기사단은 처음부터) */
   squads?: string[];
+  /** 원정 보스로 해금한 시작 치트 · 원정 유물 도감 */
+  patches?: string[];
+  expSeen?: string[];
   /** 산 치트 연구 (CHEAT_RES id) — 한 번 사면 계속 */
   cheatRes?: string[];
   /** 고를 수 있는 가장 높은 오염 단계 */
@@ -158,6 +161,10 @@ export interface RunStats {
   made: Record<string, number>;
   /** 글리치 원정 분대 (원정 판만) */
   squad?: string | null;
+  /** 원정: 막 · 잡은 원정 보스 (fighter id) · 이번 원정에서 얻은 원정 유물 */
+  act?: number;
+  kills?: string[];
+  expRelics?: string[];
   rifts: number;
   /** 보물방 결과 (그 판에 열렸으면) */
   treasure?: { wave: number; dmg: number; max: number; killed: boolean } | null;
@@ -446,6 +453,8 @@ export function createDefenseMeta(db: Database, points: Points, now: () => numbe
           grit: stage === "town" ? 0 : gritOf(p, Math.min(p.load.glitch, p.glitchOpen)),
           ...(stage === "town" && townOpen > 0 && { stage: "town" as const, town: Math.max(1, Math.min(p.load.town ?? townOpen, townOpen)) }),
           squads: p.squads ?? ["knight"],
+          patches: p.patches ?? [],
+          expSeen: p.expSeen ?? [],
         },
         unitIds
       );
@@ -536,6 +545,12 @@ export function createDefenseMeta(db: Database, points: Points, now: () => numbe
       return edit(uid, async (p) => {
         const grades = Object.fromEntries(Object.keys(st.made).map((id) => [id, UNIT[id]?.grade ?? 0]));
         const rw = runReward("town", res, st.made, grades, townGlitchLv(lv));
+        // 2막 보스까지 잡으면 보상 ×1.5
+        const act2Win = res.win && res.reason === "clear" && (st.act ?? 1) >= 2;
+        if (act2Win) {
+          rw.pieces = Math.round(rw.pieces * EXP.act2Reward);
+          rw.cores = Math.round(rw.cores * EXP.act2Reward);
+        }
         const today = kstDayKey(now());
         const first = p.firstDay !== today;
         if (first) {
@@ -570,6 +585,22 @@ export function createDefenseMeta(db: Database, points: Points, now: () => numbe
           p.squads = [...(p.squads ?? ["knight"]), nx];
           squad = nx;
         }
+        // 원정 보스를 처음 잡으면 메인 시작 치트 해금
+        const patches: string[] = [];
+        for (const f of st.kills ?? []) {
+          const id = EXP_BOSS_PATCH[f];
+          if (id && !(p.patches ?? []).includes(id)) {
+            p.patches = [...(p.patches ?? []), id];
+            patches.push(id);
+          }
+        }
+        // 원정 유물 도감
+        const seenNew: string[] = [];
+        for (const id of st.expRelics ?? []) {
+          if (!EXP_RELIC[id] || EXP_RELIC[id].start || (p.expSeen ?? []).includes(id)) continue;
+          p.expSeen = [...(p.expSeen ?? []), id];
+          seenNew.push(id);
+        }
         p.pieces += rw.pieces;
         p.cores += rw.cores;
         for (const [id, n] of Object.entries(rw.cards)) if (unitIds.has(id)) p.cards[id] = (p.cards[id] ?? 0) + n;
@@ -596,6 +627,9 @@ export function createDefenseMeta(db: Database, points: Points, now: () => numbe
           treasure: null,
           townClear,
           squad,
+          patches,
+          seenNew,
+          act2Win,
         };
       });
     },
