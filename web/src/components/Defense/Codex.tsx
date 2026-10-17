@@ -108,7 +108,9 @@ export default function Codex({ have }: { have?: Record<string, number> }) {
         </div>
       ) : (
         <div className="grid grid-cols-2 gap-3">
-          {UNITS.filter((u) => u.faction === tab).map((u) => {
+          {UNITS.filter((u) => u.faction === tab)
+            .sort((p, q) => p.grade - q.grade)
+            .map((u) => {
             const hidden = u.faction === "hidden" && !foundHidden(u.id);
             const r = RECIPES.find((x) => x.id === u.id);
             return (
