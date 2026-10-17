@@ -29,6 +29,8 @@ COPY web/src/lib/points.ts /repo/web/src/lib/points.ts
 COPY web/src/lib/mail.ts /repo/web/src/lib/mail.ts
 # DOODLE PARTY: 모드 · 제시어 (서버가 출제 · 정답 확인)
 COPY web/src/lib/sketch /repo/web/src/lib/sketch
+# PIXEL TOWN SURVIVOR: 영웅 · 강화 · 보상 · 기록 확인 (games/survivor.ts)
+COPY web/src/lib/survivor /repo/web/src/lib/survivor
 RUN npm run build
 
 # ── 2) 실행: 운영 의존성 + dist 만 ──
