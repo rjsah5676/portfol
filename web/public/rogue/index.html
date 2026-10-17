@@ -2398,6 +2398,13 @@ function updateBombs(){
   for (const b of G.bombList){ b.t--; if (b.t % (b.t < 30 ? 6 : 12) === 0) sfx('fuse'); if (b.t <= 0) glitchBomb(b.x, b.y); }
   G.bombList = G.bombList.filter(b => b.t > 0);
 }
+// 못 집는 픽업과 부딪힘 (아이작처럼): 아이템 받침 · 상점 물건은 단단해서 내가 밀려나고, 작은 픽업은 툭 밀려감
+function bumpPickup(pk, p, dist){
+  if (pk.kind === 'hatch' || pk.kind === 'portal' || p.hp <= 0) return;
+  const dx = p.x - pk.x, dy = p.y - pk.y, d = dist || 1, nx = d > .5 ? dx/d : 0, ny = d > .5 ? dy/d : 1;
+  if (pk.kind === 'item' || pk.price){ const rr = 12.5; p.x = pk.x + nx*rr; p.y = pk.y + ny*rr; p.vx *= .5; p.vy *= .5; collideRocks(p); clampInner(p); }
+  else { const v = 1.4 + Math.hypot(p.vx, p.vy)*.6; pk.vx = -nx*v; pk.vy = -ny*v; }
+}
 function updatePickups(){
   const p = G.player, room = G.room;
   for (const pk of room.pickups.slice()){
@@ -2414,11 +2421,11 @@ function updatePickups(){
     if (p.hp <= 0) continue;
     const dist = Math.hypot(pk.x - p.x, pk.y - p.y), touching = dist < (pk.kind === 'hatch' || pk.kind === 'portal' ? 10 : 12);
     if (!touching){ if (!(pk.away > 0) || dist > pk.away){ pk.blocked = false; pk.away = 0; } continue; } // 바꿔 내려놓은 건 확실히 떨어졌다 와야 다시 집힘
-    if (pk.blocked) continue;
+    if (pk.blocked){ bumpPickup(pk, p, dist); continue; }
     const r = tryCollect(pk);
     if (r === 'taken'){ if (G.room !== room) return; continue; }
     if (r === true) room.pickups = room.pickups.filter(o => o !== pk);
-    else if (r === false) pk.blocked = true;
+    else if (r === false){ pk.blocked = true; pk.away = Math.max(pk.away || 0, 18); bumpPickup(pk, p, dist); }
   }
 }
 
@@ -4131,7 +4138,7 @@ const PATCH_NOTES = [
     '사격은 상하좌우 4방향 (「아날로그 스틱」이면 8방향). 내 캐릭터 1.33배 · 피격 범위도 같이. 럭 스탯 + 스탯 다운 패치 (럭 0이면 반반, 럭 1마다 +10%p)',
     '난이도 — 월드 1 보스 피해 20→15 · 킹 슬라임 체력 ↓, 월드 2 일반 피해 15, 월드 3 보스 피해 25. 재화는 덜 — 방 보상 가끔 없음 · 비트 1개 · 열쇠 드물게',
     '플레이 데이터 — 판마다 어디서 · 무엇에 맞았는지, 아이템 · 재화 흐름을 이 브라우저에 저장. 타이틀 「플레이 데이터」에서 JSON 저장 · 복사',
-    '고침 — 패치 바꿔 집을 때 무한 교체 · 벽 밖으로 밀림, 금 간 바위 구석에 갇힌 몹, 치트 콘솔 템 이름 안 보임, 관통 + 픽셀 폭탄이 끝까지 날아가서야 터지던 것. 압축 파일 · 기계 · 바위에서 나온 템은 바로 안 먹어지고 살짝 밀려나요 (보고 리롤할지 고르게). 전체화면 ESC는 크롬 · 엣지에서 안 풀리고 일시정지',
+    '고침 — 패치 바꿔 집을 때 무한 교체 · 벽 밖으로 밀림, 금 간 바위 구석에 갇힌 몹, 치트 콘솔 템 이름 안 보임, 관통 + 픽셀 폭탄이 끝까지 날아가서야 터지던 것. 압축 파일 · 기계 · 바위에서 나온 템은 바로 안 먹어지고 살짝 밀려나요 (보고 리롤할지 고르게). 못 집는 픽업은 부딪혀요 — 상점 물건 · 아이템은 막히고, 꽉 찬 HP의 회복 같은 건 툭 밀려가요. 전체화면 ESC는 크롬 · 엣지에서 안 풀리고 일시정지',
     '독 · 화상은 몬스터 모양대로 물들고 기포 · 불씨, 엘리트는 이름표 없이 오라만. 폭탄 퓨즈 1.7초 · 아이작처럼 내 폭탄에도 맞음(날면 안 맞음). 미니맵 안 간 방이 잘 보여요, 도감 한글 검색',
     '사이트 업적 — 시크릿 10 · 30 · 54, 캐릭터별 완주(8층), 새 파이터 첫 판, 도감 102종',
   ]},
