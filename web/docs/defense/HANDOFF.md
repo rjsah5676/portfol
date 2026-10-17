@@ -434,10 +434,9 @@ Slay the Spire 식 갈림길 지도 로그라이크. 설계 문서: 프로젝트
   - 2막: 1막 보스를 잡으면 캠프 `{ k: "act" }` — 귀환(성공) 또는 2막(새 지도 · 다른 보스 · `EXP.act2Wave` 오프셋 · 보스 `EXP.act2Boss` · 체력 +act2Heal · 드래프트 한 등급 위). 2막에서 지면 `finish` 가 win=true · reason "act2" 로 바꿈(1막 클리어 인정). 2막 보스까지 잡으면 서버 보상 ×act2Reward · 순위 점수 가산(defense.ts). `MAX_TICKS` 는 원정 2막까지 들어가게 늘림
   - 메인 시작 치트 해금: `meta.ts PATCHES` 의 `lock`(원정 보스 fighter) — dice · greed · split. `Loadout.patches` → `newBoard` 의 patch offer(`patchesFor`), 잠긴 건 PatchPicker 에 흐리게. 서버 `onTownRun` 이 `stats.kills` 로 `p.patches` 추가 (`EXP_BOSS_PATCH`)
   - 원정 유물 도감: `Loadout.expSeen`(서버 `p.expSeen`, `stats.expRelics` 로 채움) · `EXP_RELICS.need` 수만큼 모이면 echo · phoenix · glass 가 풀에. 화면 Codex 「원정」 탭
-  - 기믹 엘리트 임시 그림 `public/defense/enemies/gim-*.webp` (`scripts/defense-art/gim-elites.py`, 기존 적 그림 색 바꿈) · 원정 유물은 `Expedition.tsx ExpRelicIcon` 도트 아이콘
+  - 그림: ChatGPT 이미지 시트(초록 배경) → `scripts/defense-art/chroma.py`(유물은 `--hard`) → 적은 `cc.py`, 유물은 `icons.py`. 기믹 엘리트 `public/defense/enemies/gim-*.webp`(왼쪽을 봄, face -1) · 원정 유물 `public/defense/exp-relics/<id>.webp` (`assets.ts EXP_RELIC_ART`, 분대 시작 유물은 세력 문장). `gim-elites.py` 는 그 전 임시 그림 만들던 것
   - 게임 위쪽 줄: 치트 칩 · 유물 칸을 빼고 「빌드」 버튼(`Build.tsx`, 단축키 B) — 시작 치트 · 치트 코드 · 원정 유물 · 저주 · 단계 비틀기 · 장착 유물 · 연구. 원정은 웨이브 칸에 층 · 전투 몇 번째 · 정리 시간(`expWave`), 옆에 원정 체력만
   - 봇 전략 주사위 · 탐욕 · 분열 · 봇은 체력 절반 이상이면 2막. 시뮬 원정 줄에 1막 · 2막 클리어 비율
-- 다음: GPT 로 원정 유물 · 기믹 엘리트 정식 그림 (프로젝트 `claude/glitch-expedition-art-request.md`)
 
 ## v2.1 심연 2막 · 도시 개발 (2026-10-16)
 - GLITCH_MAX 30 → 50 (`GLITCH_ACT1` 30). 31~ 체력 기울기 `DEEP_PARAMS.hpPerLv2`(0.06), 50단계 보스 ×boss50. 2페이즈: `phaseWaves` — 31~39 셋(40·50·60) · 40~ 여섯

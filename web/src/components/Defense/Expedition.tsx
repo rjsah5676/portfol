@@ -3,7 +3,7 @@
 import { useState, type CSSProperties, type ReactNode } from "react";
 import { B, TPS } from "@/lib/defense/balance";
 import { BOSSES } from "@/lib/defense/enemies";
-import { BOSS_ART } from "@/lib/defense/assets";
+import { BOSS_ART, EXP_RELIC_ART } from "@/lib/defense/assets";
 import { capOf, expLeak, expNext, hasEmpty, type Board, type Cmd } from "@/lib/defense/sim";
 import {
   CURSES,
@@ -63,6 +63,13 @@ const RELIC_LOOK: Record<string, [string, string]> = {
 export function ExpRelicIcon({ id, size = 28, dim }: { id: string; size?: number; dim?: boolean }) {
   const f = id.startsWith("sq_") ? id.slice(3) : id.startsWith("oath_") ? id.slice(5) : null;
   const [ic, col] = f ? ["", FACTION_COLOR[f as Faction]] : (RELIC_LOOK[id] ?? ["relic", "#9be7ff"]);
+  const art = EXP_RELIC_ART[id];
+  if (art)
+    return (
+      <span className="inline-flex shrink-0 items-center justify-center bg-[#0a0816]" style={{ width: size, height: size, boxShadow: `inset 0 0 0 2px ${dim ? "#3d3468" : col}` }}>
+        <img src={art} alt="" className="object-contain" style={{ width: size - 4, height: size - 4, opacity: dim ? 0.35 : 1, filter: dim ? "grayscale(1) brightness(0.5)" : undefined }} />
+      </span>
+    );
   return (
     <span
       className="inline-flex shrink-0 items-center justify-center bg-[#0a0816]"

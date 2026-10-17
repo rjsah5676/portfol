@@ -139,11 +139,11 @@ export const ENEMY_ART: Record<string, SpriteSpec> = {
   ghost: E("ghost"),
   golem: E("golem"),
   worm: E("worm"),
-  // 글리치 원정 기믹 엘리트 — 기존 적 그림을 색 바꾸고 소품을 얹은 임시 그림 (web/scripts/defense-art/gim-elites.py)
-  "gim-thief": E("gim-thief"),
-  "gim-healer": E("gim-healer"),
-  "gim-golem": E("gim-golem"),
-  "gim-mirror": E("gim-mirror"),
+  // 글리치 원정 기믹 엘리트 — ChatGPT 이미지 시트 (scripts/defense-art/chroma.py → cc.py), 왼쪽을 봄
+  "gim-thief": E("gim-thief", -1),
+  "gim-healer": E("gim-healer", -1),
+  "gim-golem": E("gim-golem", -1),
+  "gim-mirror": E("gim-mirror", -1),
 };
 /** 보스 그림 (192×192 한 장) — 글리치에 오염된 PIXEL FIGHT 파이터 */
 const BS = (id: string): SpriteSpec => ({
@@ -173,6 +173,10 @@ export const BOSS_ART: Record<string, SpriteSpec> = {
  */
 export const RELIC_ART: Record<string, string> = Object.fromEntries(
   ["gold_gear", "first_harvest", "lucky_clover", "rift_compass", "gambler_coin", "hourglass", "alchemy", "vaccine", "pure_blood", "rainbow", "twin_star", "war_banner", "myth_seal", "overdrive", "chrono_core", "void_stone", "lucky_dice", "golden_deed", "moa_card", "forte_box"].map((id) => [id, `/defense/relics/${id}.webp`])
+);
+/** 글리치 원정 유물 그림 (public/defense/exp-relics/<id>.webp, 128px) — ChatGPT 이미지 시트 (scripts/defense-art/chroma.py --hard → icons.py). 분대 시작 유물(sq_)은 세력 문장 */
+export const EXP_RELIC_ART: Record<string, string> = Object.fromEntries(
+  ["oath_knight", "oath_mech", "oath_arcane", "alch", "twin", "growth", "piggy", "iron", "blood", "bag", "vamp", "goldhand", "first", "hunter", "kit", "echo", "phoenix", "glass"].map((id) => [id, `/defense/exp-relics/${id}.webp`])
 );
 export const ITEM_ART: Record<string, string> = Object.fromEntries(
   ["piece", "core", "card", "chest", "chest-open", "cardbox", "relicbox", "trans"].map((id) => [id, `/defense/items/${id}.webp`])
