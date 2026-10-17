@@ -1118,7 +1118,7 @@ export default function RhythmGame() {
     <>
       {/* 다른 게임 페이지와 같은 머리말 (창모드에서만 보임 — 전체화면은 게임 화면만) */}
       <GameHeader
-        icon="🎹"
+        icon="px:rhythm"
         title="PIXEL Rhythm Up"
         en="Rhythm Game"
         accent="#EC4899"

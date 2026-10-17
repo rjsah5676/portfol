@@ -9,6 +9,7 @@ import RankAvatar from "./RankAvatar";
 import { AchievementList, AchievementRank, useAchReady } from "@/components/Points/Achievements";
 import { DailyMissionList, useDailyReady } from "@/components/Points/DailyMissions";
 import type { AchGame } from "@/lib/points";
+import GameIcon from "@/components/GameIcon";
 
 export interface TopEntry {
   name: string;
@@ -118,14 +119,14 @@ export default function GameHeader({
       {/* 좁으면(폰) 버튼들은 아래 줄로 — 제목 · 설명이 버튼에 밀려 글자 단위로 깨지지 않게 */}
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2.5 @2xl:flex-nowrap">
         <div
-          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border text-2xl text-white sm:h-12 sm:w-12"
+          className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-2xl border text-2xl text-white sm:h-12 sm:w-12"
           style={{
             background: `linear-gradient(145deg, ${accent}33, ${accent}0d)`,
             borderColor: `${accent}55`,
           }}
           aria-hidden
         >
-          {icon}
+          <GameIcon icon={icon} />
         </div>
         <div className="min-w-0 flex-1 basis-[calc(100%-3.5rem)] @2xl:basis-0">
           <div className="flex items-baseline gap-2">
@@ -234,7 +235,15 @@ export default function GameHeader({
           closeButton
           title={
             <span className="flex items-center gap-2">
-              <span aria-hidden>{icon}</span> {title} 가이드
+              <span
+                aria-hidden
+                className={
+                  icon.startsWith("px:") ? "inline-block h-6 w-6 overflow-hidden rounded-md" : ""
+                }
+              >
+                <GameIcon icon={icon} />
+              </span>{" "}
+              {title} 가이드
             </span>
           }
         >

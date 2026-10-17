@@ -39,7 +39,7 @@ export default function RoguePage() {
     <Faded>
       <div className="mx-auto max-w-[1200px] px-3 pt-6 pb-24 sm:px-6">
         <GameHeader
-          icon="⚔️"
+          icon="px:rogue"
           title="PIXEL RESET STORY"
           en="픽셀 리셋 스토리 · PIXEL FIGHT 외전 · ALPHA"
           accent="#FF3D5E"

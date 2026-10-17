@@ -57,7 +57,7 @@ export default function FightPage() {
     <Faded>
       <div className="mx-auto max-w-5xl px-3 pt-6 pb-24 sm:px-6">
         <GameHeader
-          icon="🥊"
+          icon="px:fight"
           title="PIXEL FIGHT"
           en="Fighting Game"
           accent="#FF8A3D"

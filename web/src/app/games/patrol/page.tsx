@@ -29,7 +29,7 @@ export default function PatrolPage() {
     <Faded>
       <div className="mx-auto max-w-[1076px] px-3 pt-6 pb-24 sm:px-6">
         <GameHeader
-          icon="🏮"
+          icon="px:patrol"
           title="PIXEL PATROL"
           en="픽셀 순찰대 · ALPHA"
           accent="#FFB03A"

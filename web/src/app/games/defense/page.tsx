@@ -30,7 +30,7 @@ export default function DefensePage() {
     <Faded>
       <div className="mx-auto max-w-[1076px] px-3 pt-6 pb-24 sm:px-6">
         <GameHeader
-          icon="👾"
+          icon="px:defense"
           title="PIXEL LUCKY DEFENSE"
           en="PIXEL FIGHT 외전 · BETA"
           accent="#FF5CD6"

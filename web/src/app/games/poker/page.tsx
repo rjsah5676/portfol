@@ -60,7 +60,7 @@ function PokerPage() {
     <>
       <div className="mx-auto max-w-5xl px-3 pt-6 sm:px-6">
         <GameHeader
-          icon="♠"
+          icon="px:poker"
           title="ANIME POKER"
           en="Hold'em · 7 Poker"
           accent="#FFC93C"
