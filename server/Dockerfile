@@ -10,27 +10,11 @@ COPY server/package.json server/package-lock.json ./
 RUN npm ci
 COPY server/tsconfig.json server/tsup.config.ts ./
 COPY server/src ./src
-COPY web/src/lib/janggi/engine.ts /repo/web/src/lib/janggi/engine.ts
-COPY web/src/lib/omok/engine.ts /repo/web/src/lib/omok/engine.ts
-# 랭킹 기록 검증용: 점수 공식, 멜론게임 한 판 길이, 리듬게임 채보
-COPY web/src/lib/aiScore.ts /repo/web/src/lib/aiScore.ts
-COPY web/src/lib/melon/logic.ts /repo/web/src/lib/melon/logic.ts
+# 서버가 상대 경로로 가져다 쓰는 web/src 의 게임 규칙·엔진·점수 공식 (장기·오목·포커·격투·디펜스·마블·스케치·서바이버·패트롤·리셋 스토리 …)
+# 게임마다 한 줄씩 적다가 새 게임을 빠뜨려 빌드가 깨져서, lib 폴더를 통째로 넣음 (tsup 이 import 한 파일만 묶으므로 이미지 크기는 그대로)
+COPY web/src/lib /repo/web/src/lib
+# 리듬게임 채보 (랭킹 기록 검증)
 COPY web/src/data/rhythm /repo/web/src/data/rhythm
-# 포커: 카드·족보·판돈 규칙 (서버와 화면이 같이 씀)
-COPY web/src/lib/poker /repo/web/src/lib/poker
-# 랭크전 봇전 확인: 브라우저에서 한 경기를 서버가 같은 입력으로 다시 돌림 (games/fightBot.ts)
-COPY web/src/lib/fight /repo/web/src/lib/fight
-# 글리치 디펜스: 랭킹 기록 검증 · 멀티 순위 (서버가 같은 시뮬을 다시 돌림, games/defense.ts)
-COPY web/src/lib/defense /repo/web/src/lib/defense
-# 픽셀 마블: 판 엔진 · AI · 가챠 (서버가 판을 돌림, games/marble)
-COPY web/src/lib/marble /repo/web/src/lib/marble
-# 포인트 (상품 · 업적 · 환전 정의)
-COPY web/src/lib/points.ts /repo/web/src/lib/points.ts
-COPY web/src/lib/mail.ts /repo/web/src/lib/mail.ts
-# DOODLE PARTY: 모드 · 제시어 (서버가 출제 · 정답 확인)
-COPY web/src/lib/sketch /repo/web/src/lib/sketch
-# PIXEL TOWN SURVIVOR: 영웅 · 강화 · 보상 · 기록 확인 (games/survivor.ts)
-COPY web/src/lib/survivor /repo/web/src/lib/survivor
 RUN npm run build
 
 # ── 2) 실행: 운영 의존성 + dist 만 ──
