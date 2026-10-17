@@ -308,6 +308,7 @@ export type AchMetric =
   | "rogue.diceRuns"
   | "rogue.full_dice"
   | "rogue.ignaWins"
+  /** 픽셀 순찰대: 판 · 클리어 · 처치 (users.stats.patrol) / 깬 스테이지 · 별 합 · 고급 상자 · 가진 가장 높은 등급 · 가장 높은 강화 (patrol_profile) */
   | "patrol.runs"
   | "patrol.wins"
   | "patrol.kills"
