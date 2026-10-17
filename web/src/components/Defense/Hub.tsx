@@ -65,7 +65,7 @@ import {
 } from "@/lib/defense/units";
 import { meta, type DefenseProfile, type QuestRow, type TransGot } from "@/realtime/defense";
 import { sfx } from "./audio";
-import { Bar, Btn, FactionIcon, Icon, SoundButton, FsButton, TITLE, Tip, UnitIcon, fmtNum } from "./ui";
+import { Bar, Btn, FactionIcon, Icon, Modal, SoundButton, FsButton, TITLE, Tip, UnitIcon, fmtNum } from "./ui";
 
 /*
  * 정비소 — 판 밖 성장 화면 (무대 1024×576 통째로).
@@ -1148,11 +1148,13 @@ function TransRow({ t }: { t: TransGot }) {
   );
 }
 
+const gotColor = (got: Got) => (got.relic ? TIER_COLOR[RELIC[got.relic].tier] : typeof got.trans === "string" ? "#fff6d6" : "#ffb347");
+
 function GotBox({ got }: { got: Got }) {
   const one: TransGot | null = typeof got.trans === "string" || got.miss ? { trans: typeof got.trans === "string" ? got.trans : undefined, dup: got.dup, miss: got.miss, pity: got.pity ?? 0 } : null;
-  const col = got.relic ? TIER_COLOR[RELIC[got.relic].tier] : one?.trans ? "#fff6d6" : "#ffb347";
+  const col = gotColor(got);
   return (
-    <div className="px-box dfn-pop mt-2 flex flex-col gap-2 p-3 text-center" style={{ "--b": col } as CSSProperties}>
+    <div className="px-box dfn-pop flex flex-col gap-2 p-3 text-center" style={{ "--b": col } as CSSProperties}>
       {got.pack && <p className="text-[13px] text-[var(--green)]">패키지를 받았어요 — 상자는 「상자 · 소환」 탭에서 열어요</p>}
       {one && <TransRow t={one} />}
       {got.relic ? (
@@ -1183,26 +1185,68 @@ function GotBox({ got }: { got: Got }) {
   );
 }
 
-/** 결과 상자를 띄우는 요청 */
+/** 여는 상자 종류 (결과 창 그림 · 「한 번 더」) */
+type BoxKind = "card" | "relic" | "trans" | "summon" | "pack";
+const BOX_ART: Record<BoxKind, string> = { card: "cardbox", relic: "relicbox", trans: "trans", summon: "trans", pack: "chest" };
+const BOX_NAME: Record<BoxKind, string> = { card: "카드 상자", relic: "유물 상자", trans: "초월 상자", summon: "초월 소환", pack: "패키지" };
+
+/** 결과 창을 띄우는 요청 — 열기 → 상자가 들썩이다 펑 → 내용물 (창으로) */
 function useGot(act: TabProps["act"]) {
-  const [got, setGot] = useState<Got | null>(null);
-  const run = async (f: () => Promise<DefenseProfile>, s = "chest-open") => {
+  const [got, setGot] = useState<{ g: Got; kind: BoxKind; again: (() => void) | null } | null>(null);
+  const run = async (f: () => Promise<DefenseProfile>, s = "chest-open", kind: BoxKind = "pack", again = false) => {
     setGot(null);
     const np = await act(f, s);
-    if (np?.got) setGot(np.got);
+    if (np?.got) setGot({ g: np.got, kind, again: again ? () => void run(f, s, kind, again) : null });
   };
-  return { got, run };
+  return { got, run, close: () => setGot(null) };
+}
+
+/** 상자 결과 창: 0.6초 들썩 → 펑(번쩍) → 내용물 · 남았으면 「한 번 더」 */
+function GotModal({ got, kind, left, again, busy, onClose }: { got: Got; kind: BoxKind; left: number; again: (() => void) | null; busy: boolean; onClose(): void }) {
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setOpen(true), 650);
+    return () => clearTimeout(t);
+  }, []);
+  const col = gotColor(got);
+  const art = ITEM_ART[BOX_ART[kind]];
+  return (
+    <Modal title={`${BOX_NAME[kind]} 열기`} onClose={onClose} accent={col}>
+      <div className="flex min-h-[230px] flex-col items-center justify-center gap-3">
+        {!open ? (
+          <div className="flex flex-col items-center gap-2">
+            {art ? <img src={art} alt="" className="dfn-box-shake h-[110px] w-[110px] object-contain" /> : <Icon n="chest" size={90} />}
+            <p className="dfn-blink text-[13px] text-[var(--mute)]">두근두근…</p>
+          </div>
+        ) : (
+          <div className="dfn-box-burst relative w-full" style={{ "--glow": col } as CSSProperties}>
+            <GotBox got={got} />
+          </div>
+        )}
+        <div className={`flex gap-2 transition-opacity ${open ? "opacity-100" : "opacity-0"}`}>
+          {again && left > 0 && (
+            <Btn tone="gold" disabled={busy || !open} silent className="h-9 px-4 text-[13px] font-bold" onClick={again}>
+              한 번 더 열기 (남은 {left})
+            </Btn>
+          )}
+          <Btn className="h-9 px-5 text-[13px]" disabled={!open} onClick={onClose}>
+            확인
+          </Btn>
+        </div>
+      </div>
+    </Modal>
+  );
 }
 const BTN = "h-8 px-2.5 text-[12px]";
 const weekN = (p: DefenseProfile, id: string) => p.shop?.n?.[id] ?? 0;
 
 /** 패키지: GP 로만 · 재화샵보다 몇 배 이득 */
 function PackTab({ p, act, busy }: TabProps) {
-  const { got, run } = useGot(act);
+  const { got, run, close } = useGot(act);
   return (
     <div className="flex flex-col gap-2">
       <H sub="주간 패키지는 월요일 0시에 다시 열려요">패키지</H>
-      {got && <GotBox got={got} />}
+      {got && <GotModal got={got.g} kind={got.kind} left={0} again={null} busy={busy} onClose={close} />}
       <div className="grid grid-cols-2 gap-2">
         {GP_PACKS.map((pk) => {
           const dayN = p.shopDay?.n?.[pk.id] ?? 0;
@@ -1240,14 +1284,15 @@ function PackTab({ p, act, busy }: TabProps) {
 
 /** 상품: 카드 상자 · 유물 상자 · 초월 소환 (게임 재화) + 칸 해금 */
 function GoodsTab({ p, act, busy }: TabProps) {
-  const { got, run } = useGot(act);
+  const { got, run, close } = useGot(act);
+  const left = (k: BoxKind) => (k === "card" ? p.boxes.card : k === "relic" ? p.boxes.relic : k === "trans" ? (p.boxes.trans ?? 0) : p.cores >= BOX.trans.cores ? 1 : 0);
   return (
     <div className="flex flex-col gap-4">
       <div>
         <H sub="게임 재화로 사요 — 산 상자는 쌓아 두고 언제든 열어요">상자 · 소환</H>
         <div className="flex flex-col gap-1.5">
           <Product k="cardbox" title={<>카드 상자 <span className="text-[12px] font-normal text-[var(--gold)]">보유 {p.boxes.card}</span></>} sub={`무작위 유닛 카드 ${BOX.card.n}장`}>
-            <Btn tone="gold" disabled={busy || p.boxes.card < 1} silent className={BTN} onClick={() => void run(() => meta.boxOpen("card"))}>
+            <Btn tone="gold" disabled={busy || p.boxes.card < 1} silent className={BTN} onClick={() => void run(() => meta.boxOpen("card"), "chest-open", "card", true)}>
               열기
             </Btn>
             <Btn tone="cyan" disabled={busy || p.pieces < BOX.card.pieces} silent className={BTN} onClick={() => void act(() => meta.boxBuy("card"), "upgrade")}>
@@ -1259,7 +1304,7 @@ function GoodsTab({ p, act, busy }: TabProps) {
             title={<>유물 상자 <span className="text-[12px] font-normal text-[var(--gold)]">보유 {p.boxes.relic}</span></>}
             sub={`유물 하나 (일반 ${BOX.relic.tierOdds[0] * 100}% · 희귀 ${BOX.relic.tierOdds[1] * 100}% · 전설 ${BOX.relic.tierOdds[2] * 100}%) — 가진 유물이면 그 유물 조각 +1 (유물 강화 재료)`}
           >
-            <Btn tone="gold" disabled={busy || p.boxes.relic < 1} silent className={BTN} onClick={() => void run(() => meta.boxOpen("relic"))}>
+            <Btn tone="gold" disabled={busy || p.boxes.relic < 1} silent className={BTN} onClick={() => void run(() => meta.boxOpen("relic"), "chest-open", "relic", true)}>
               열기
             </Btn>
             <Btn tone="arcane" disabled={busy || p.cores < BOX.relic.cores} silent className={BTN} onClick={() => void act(() => meta.boxBuy("relic"), "upgrade")}>
@@ -1277,15 +1322,15 @@ function GoodsTab({ p, act, busy }: TabProps) {
               </>
             }
           >
-            <Btn tone="gold" disabled={busy || (p.boxes.trans ?? 0) < 1} silent className={BTN} onClick={() => void run(() => meta.boxOpen("trans"), "myth")}>
+            <Btn tone="gold" disabled={busy || (p.boxes.trans ?? 0) < 1} silent className={BTN} onClick={() => void run(() => meta.boxOpen("trans"), "myth", "trans", true)}>
               열기
             </Btn>
-            <Btn tone="arcane" disabled={busy || p.cores < BOX.trans.cores} silent className={BTN} onClick={() => void run(() => meta.transSummon(), "myth")}>
+            <Btn tone="arcane" disabled={busy || p.cores < BOX.trans.cores} silent className={BTN} onClick={() => void run(() => meta.transSummon(), "myth", "summon", true)}>
               소환 <Cur k="core" n={BOX.trans.cores} size={12} />
             </Btn>
           </Product>
         </div>
-        {got && <GotBox got={got} />}
+        {got && <GotModal got={got.g} kind={got.kind} left={left(got.kind)} again={got.again} busy={busy} onClose={close} />}
       </div>
       <div>
         <H sub="한 번 사면 계속 · 출전 준비의 치트 연구칸(1칸)에 하나만 끼워요 · 치트 코드 = 보스를 잡을 때마다 3장 중 하나">치트 연구</H>
