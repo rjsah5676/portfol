@@ -443,5 +443,11 @@ Slay the Spire 식 갈림길 지도 로그라이크. 설계 문서: 프로젝트
 - 심연 변이 추가: rush 정예(35+, 모든 웨이브 마지막 적 엘리트) · ward 방벽(40+, 보스 보호막 15%) · fog 안개(45+, 사거리 -0.5)
 - 유물 8종 추가 `RelicDef.from`: deep(오염 30 클리어 뒤 상자 — `DEEP_RELIC_WIN`) myth_seal · overdrive · chrono_core · void_stone / town(타운 5·10·15·20 첫 클리어만 — `TOWN_RELIC`) lucky_dice · golden_deed · moa_card · forte_box. 그림 없음(도트 아이콘)
 - (v2.2 에서 없앰) 땅문서 · 도시 개발
+
+## 심연 숙련 (2026-10-17)
+- 문제: 성장 경제 시뮬(`server/scripts/defense-econ.ts --town 3`)에서 유닛 · 연구 · 유물이 40단계쯤 거의 다 차서 42~50 이 운 반복 → 균형 봇 오염 50 까지 332시간(그중 42~50 이 270시간)
+- 참고: 랜덤 다이스 치명타 피해(덱이 다 커도 계정 전체로 끝없이 쌓임) · BTD6 파라곤 등급(쏟은 만큼) · 운빨존많겜 각성(후반 재화로 한 단계 더)
+- 규칙: `progress.ts MASTERY_FROM`(오염 30 클리어 뒤) 판마다 도달 웨이브만큼 경험치 (메인 · 멀티 · 원정, 져도), `masteryNeed(lv)` = 300 + 25×lv, 레벨마다 모든 피해 +`MASTERY_PER`(2%) — `Loadout.mastery` → `Mods.mastDmg` (sim hit). 서버 `gainMastery` (onRun · onTownRun), 결과 화면 · 메뉴 · 빌드 창에 표시
+- 결과(시뮬): 균형 332 → 103시간, 도박사 417 → 132시간 (41→50 이 약 30~45시간, 50 클리어 때 숙련 Lv 31~32). econ 에 `--mastery 0` · `--mbase` · `--mstep` 로 비교 · 곡선 조정
 - TOWN_MAX 23. 업적 glitch-40 · glitch-50 (points.ts)
 - 시뮬 `--meta abyss` (max + 새 유물 + 도시 개발 전부): 봇 기준 50단계 클리어 드묾 (~2%)

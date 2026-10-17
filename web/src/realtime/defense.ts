@@ -54,6 +54,8 @@ export type FinishOut = {
         patches?: string[];
         seenNew?: string[];
         act2Win?: boolean;
+        /** 심연 숙련 (오염 30 클리어 뒤) — 지금 레벨 · 경험치 · 이번 판 경험치 · 오른 레벨 */
+        mastery?: { lv: number; xp: number; gain: number; up: number } | null;
       })
     | null;
   /** 오늘의 도전 그날 첫 완료 보상 (이미 받았으면 null) */
@@ -106,6 +108,8 @@ export interface DefenseProfile {
   squads?: string[];
   patches?: string[];
   expSeen?: string[];
+  /** 심연 숙련 */
+  mastery?: { lv: number; xp: number };
   /** 산 치트 연구 */
   cheatRes?: string[];
   glitchOpen: number;

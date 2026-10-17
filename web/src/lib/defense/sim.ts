@@ -1733,7 +1733,7 @@ function hit(b: Board, def: UnitDef, e: Enemy, raw: number): number {
     if (expHas(b, "first") && b.exp.stage === "waves" && b.wave === b.exp.segStart) m *= 2;
   }
   const M = b.mods;
-  m *= (1 + LV_DMG * (M.lv[def.id] ?? 0)) * M.relicDmg * M.gritDmg;
+  m *= (1 + LV_DMG * (M.lv[def.id] ?? 0)) * M.relicDmg * M.gritDmg * M.mastDmg;
   if (def.grade >= 4) m *= M.mythDmg;
   if (e.rift) m *= M.riftDmg;
   if (def.faction !== "hidden") m *= M.fac[def.faction];

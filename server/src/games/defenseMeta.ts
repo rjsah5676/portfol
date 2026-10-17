@@ -15,6 +15,8 @@ import {
   CHEAT_RES_OF,
   GP_PACKS,
   GRIT_MAX,
+  MASTERY_FROM,
+  masteryNeed,
   GP_SELL,
   GP_STORE,
   PACK,
@@ -119,6 +121,8 @@ export interface Profile {
   /** 땅문서 (해피 타운에서만) · 도시 개발 레벨 (id → 레벨) */
   /** 글리치 원정: 해금한 시작 분대 (기사단은 처음부터) */
   squads?: string[];
+  /** 심연 숙련 (오염 MASTERY_FROM 단계를 깬 뒤 판마다 웨이브만큼 경험치) */
+  mastery?: { lv: number; xp: number };
   /** 원정 보스로 해금한 시작 치트 · 원정 유물 도감 */
   patches?: string[];
   expSeen?: string[];
@@ -212,6 +216,18 @@ export const passTier = (xp: number) => PASS.filter((t) => xp >= t.xp).length;
 export type DefenseMeta = ReturnType<typeof createDefenseMeta>;
 
 /** 이 단계로 시작하면 받을 끈기 판 수 (가장 높은 열린 단계 · 아직 못 깬 단계일 때만) */
+/** 심연 숙련 경험치 (오염 MASTERY_FROM 단계를 깬 뒤부터) — 바뀐 값을 화면에 돌려줌 */
+export function gainMastery(p: Pick<Profile, "mastery" | "glitchWin">, wave: number): { lv: number; xp: number; gain: number; up: number } | null {
+  if (p.glitchWin < MASTERY_FROM) return null;
+  const m = (p.mastery ??= { lv: 0, xp: 0 });
+  const from = m.lv;
+  m.xp += wave;
+  while (m.xp >= masteryNeed(m.lv)) {
+    m.xp -= masteryNeed(m.lv);
+    m.lv++;
+  }
+  return { lv: m.lv, xp: m.xp, gain: wave, up: m.lv - from };
+}
 export const gritOf = (p: Pick<Profile, "grit" | "glitchOpen" | "glitchWin">, glitch: number) =>
   glitch === p.glitchOpen && glitch > p.glitchWin && p.grit?.g === glitch ? p.grit.n : 0;
 
@@ -455,6 +471,7 @@ export function createDefenseMeta(db: Database, points: Points, now: () => numbe
           squads: p.squads ?? ["knight"],
           patches: p.patches ?? [],
           expSeen: p.expSeen ?? [],
+          mastery: p.mastery?.lv ?? 0,
         },
         unitIds
       );
@@ -536,7 +553,8 @@ export function createDefenseMeta(db: Database, points: Points, now: () => numbe
           p.glitchOpen = glitch + 1;
           opened = true;
         }
-        return { ...rw, opened: opened ? p.glitchOpen : null, passTier: passTier(p.season.xp), first, fresh, firstClear, gbest, treasure };
+        const mastery = gainMastery(p, res.wave);
+        return { ...rw, opened: opened ? p.glitchOpen : null, passTier: passTier(p.season.xp), first, fresh, firstClear, gbest, treasure, mastery };
       });
     },
 
@@ -630,6 +648,7 @@ export function createDefenseMeta(db: Database, points: Points, now: () => numbe
           patches,
           seenNew,
           act2Win,
+          mastery: gainMastery(p, res.wave),
         };
       });
     },

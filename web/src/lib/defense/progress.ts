@@ -52,6 +52,8 @@ export interface Loadout {
   town?: number;
   /** 글리치 원정: 해금한 시작 분대 (knight · mech · arcane) */
   squads?: string[];
+  /** 심연 숙련 레벨 (서버가 셈, MASTERY_FROM 단계를 깬 뒤 판마다 쌓임) */
+  mastery?: number;
   /** 원정 보스로 해금한 시작 치트 (meta.ts PATCHES 의 lock 있는 것) */
   patches?: string[];
   /** 원정 유물 도감 (찾은 원정 유물 id) — 수가 차면 새 유물이 원정 풀에 */
@@ -134,6 +136,14 @@ export function treasureReward(glitch: number, t: { dmg: number; max: number; ki
  */
 export const GRIT_PER = 0.06;
 export const GRIT_MAX = 15;
+
+/**
+ * 심연 숙련 — 오염 MASTERY_FROM 단계를 깬 뒤부터 판마다 도달한 웨이브만큼 경험치 (메인 · 원정 · 멀티, 져도 쌓임).
+ * 레벨마다 모든 피해 +MASTERY_PER (끝없음, 필요 경험치는 조금씩 늘어남). 다 키운 뒤 같은 단계를 운으로 반복하는 벽을 「시도한 만큼」 뚫게.
+ */
+export const MASTERY_FROM = 30;
+export const MASTERY_PER = 0.02;
+export const masteryNeed = (lv: number) => 300 + 25 * lv;
 
 /** 보관함: 처음 BENCH_BASE 칸, 정비소에서 1칸씩 BENCH_MAX 까지 (픽셀 조각) */
 export const BENCH_BASE = 3;
@@ -476,6 +486,9 @@ export interface Mods {
   /** 끈기 판 수 · 모든 피해 배수 */
   grit: number;
   gritDmg: number;
+  /** 심연 숙련 레벨 · 모든 피해 배수 */
+  mastery: number;
+  mastDmg: number;
   /** 보물방 웨이브 (0 = 없음) */
   treasure: number;
   /** 스테이지 · 픽셀 타운 단계 (main 이면 0) */
@@ -545,6 +558,7 @@ export function cleanLoadout(lo: Loadout | null | undefined, unitIds?: Set<strin
     trans: uniq(lo?.trans, (s) => (TRANS_IDS as readonly string[]).includes(s), TRANS_IDS.length).sort(),
     cheat: typeof lo?.cheat === "string" && CHEAT_RES_OF[lo.cheat] ? lo.cheat : "",
     grit: clampInt(lo?.grit, 0, GRIT_MAX),
+    mastery: clampInt(lo?.mastery, 0, 999),
     treasure: lo?.stage === "town" ? 0 : treasureWaveOk(lo?.treasure) ? (lo!.treasure as number) : 0,
     stage: lo?.stage === "town" ? "town" : "main",
     town: lo?.stage === "town" ? clampInt(lo?.town, 1, TOWN_MAX) : 0,
@@ -618,6 +632,8 @@ export function modsOf(lo: Loadout | null | undefined): Mods {
     cheat: L.cheat,
     grit: L.grit,
     gritDmg: 1 + GRIT_PER * L.grit,
+    mastery: L.mastery,
+    mastDmg: 1 + MASTERY_PER * L.mastery,
     treasure: L.treasure,
     stage: L.stage,
     town: L.town,

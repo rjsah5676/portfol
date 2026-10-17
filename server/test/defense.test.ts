@@ -428,6 +428,10 @@ describe("픽셀 글리치 디펜스 엔진", () => {
     const g0 = G.boards[0].gold;
     for (let k = 0; k < 400 && G.boards[0].wave < 1; k++) step(G);
     expect(G.boards[0].gold).toBeGreaterThan(g0);
+    // 심연 숙련: 레벨마다 모든 피해 +2% · 범위 밖은 자름
+    expect(modsOf({ mastery: 10 }).mastDmg).toBeCloseTo(1.2);
+    expect(modsOf({ mastery: -3 }).mastery).toBe(0);
+    expect(modsOf({}).mastDmg).toBe(1);
     // 도감 5종 → 메아리가 유물 풀에
     const D = started(7, 1, [{ ...lo, expSeen: ["alch", "twin", "growth", "piggy", "iron"] }]).boards[0];
     expect(D.mods.expSeen.length).toBe(5);
