@@ -9,6 +9,8 @@ import { coverOf } from "./SongCarousel";
 import { RankEmblem, type Result } from "./Stage";
 import { SubmitRanking } from "./RankingBoard";
 import type { SkinTheme } from "@/lib/rhythm/fx";
+import { downloadPlayLog } from "@/lib/rhythm/playLog";
+import { useAuth } from "@/lib/AuthContext";
 
 const DISP = "pru-t";
 const KR = "";
@@ -33,6 +35,7 @@ export default function ResultScreen({
   /** 착용한 테마 스킨 — 무대 배경 + 캐릭터가 결과에 맞춰 한마디 */
   theme?: SkinTheme;
 }) {
+  const { admin } = useAuth();
   const d = DIFFICULTIES.find((x) => x.key === result.diff)!;
   // BP: 내장곡(랭킹 있는 곡)을 끝까지 쳤을 때만 — 곡별 최고 BP 상위 20곡 합이 회원 랭킹
   const level = song.charts?.[result.diff]?.level;
@@ -276,6 +279,19 @@ export default function ResultScreen({
                   ? theme.lines.fc
                   : theme.lines.clear}
           </div>
+        )}
+        {admin && result.log && (
+          <button
+            type="button"
+            onClick={() => {
+              sfx("ui-select", 0.6);
+              downloadPlayLog(result.log!);
+            }}
+            title="노트마다 판정 · 친 시각과 누르고 뗀 기록을 JSON 으로 (관리자)"
+            className="pru-btn pru-cyan cursor-pointer px-[1.4cqw] py-[0.55cqw] text-[1.1cqw] font-bold"
+          >
+            플레이 데이터 ⤓
+          </button>
         )}
         <button
           type="button"

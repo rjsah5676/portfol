@@ -44,6 +44,9 @@ export interface LiveNote extends Note {
   holding?: boolean;
   /** 다음 롱노트 콤보 틱 시각 */
   nextTick?: number;
+  /** 머리를 친 시각 · 롱노트를 뗀 시각 (플레이 데이터 내보내기용) */
+  hitAt?: number;
+  relAt?: number;
   /** 아직 안 울린 틱 수 (점수 단위 — 누르고 있는 동안 틱마다 1점씩) */
   ticksLeft?: number;
 }
@@ -129,6 +132,7 @@ export class Engine {
             ? "good"
             : "miss";
     n.head = j;
+    n.hitAt = t;
     this.ptr[lane]++;
     this.record(j, lane, t, d);
     if (n.end) {
@@ -149,6 +153,7 @@ export class Engine {
     if (!n) return;
     this.holding[lane] = null;
     n.holding = false;
+    n.relAt = t;
     // 끝보다 얼마나 일찍 뗐는지로 판정 (끝 이후는 update에서 PERFECT 처리됨)
     const early = n.end! - t;
     const len = n.end! - n.t;

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { Song } from "@/lib/rhythm/music";
+import { buildPlayLog, type PlayLog } from "@/lib/rhythm/playLog";
 import type { Chart, Difficulty } from "@/lib/rhythm/chart";
 import { Engine, HP_MAX, rankOf, type Judge } from "@/lib/rhythm/engine";
 import {
@@ -84,6 +85,8 @@ export interface Result {
   failed: boolean;
   /** 분석 모드(자동 연주)로 친 판 — 기록·랭킹에 안 올림 */
   auto?: boolean;
+  /** 노트별 판정 · 입력 기록 (관리자 결과 화면에서 내보내기) */
+  log?: PlayLog;
 }
 
 /**
@@ -406,6 +409,10 @@ export default function Stage({
     const tracker = new AutoSyncTracker(auto.judge);
     /** 이 판에서 누른 횟수 — 아무것도 안 누르는데 초반 유예로 안 죽는 일이 없게 */
     let presses = 0;
+    /** 플레이 데이터 내보내기용 입력 기록: [판정 기준 시각ms, 레인, 1=누름 0=뗌, 타격 싱크ms] */
+    const inputLog: number[][] = [];
+    const logInput = (tj: number, lane: number, down: 0 | 1) =>
+      inputLog.push([Math.round(tj * 1000), lane, down, Math.round(judgeSec() * 1000)]);
     const offsetSec = () => (sync + autoOffset) / 1000;
     // 분석 모드(자동 연주)는 손 지연이 없으니 타격 싱크 0
     const judgeSec = () => (autoplay ? 0 : tracker.judge / 1000);
@@ -1889,6 +1896,29 @@ export default function Stage({
       const acc = engine.accuracy;
       return {
         auto: autoplay || undefined,
+        log: buildPlayLog(
+          {
+            song: { id: song.id, title: song.title, bpm: song.bpm, custom: !!song.custom },
+            diff,
+            level: chart.level ?? null,
+            sync: {
+              manual: sync,
+              auto: Math.round(autoOffset),
+              judge: Math.round(judgeSec() * 1000),
+            },
+            speed: live.speed,
+            auto: autoplay,
+            failed,
+            result: {
+              score: engine.score,
+              acc: Math.round(acc * 100) / 100,
+              maxCombo: engine.maxCombo,
+              counts: { ...engine.counts },
+            },
+          },
+          engine.notes,
+          inputLog
+        ),
         failed,
         songId: song.id,
         diff,
@@ -2245,13 +2275,16 @@ export default function Stage({
       playHit();
       const t = eventTime(stamp);
       const tj = t - judgeSec();
+      logInput(tj, lane, 1);
       engine.press(lane, tj);
       const d = nearestDiff(lane, tj);
       if (d !== null) autoSyncTap(d);
     };
     const release = (lane: number, stamp = NaN) => {
       if (!running || autoplay) return;
-      engine.release(lane, eventTime(stamp) - judgeSec());
+      const tj = eventTime(stamp) - judgeSec();
+      logInput(tj, lane, 0);
+      engine.release(lane, tj);
     };
 
     // 재개 카운트다운 (멈춘 화면 위에 3·2·1, 끝나면 음악 재개)
