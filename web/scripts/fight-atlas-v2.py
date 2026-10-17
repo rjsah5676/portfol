@@ -132,19 +132,83 @@ def grid_frames(rgba: np.ndarray, grid: list):
             m = np.isin(lab, full)
             pm = np.zeros_like(m)
             pm[y0:y1, x0:x1] = np.isin(cell, part)
+            m |= pm
             if "own" in row:
-                # 옆 칸까지 붙은 덩어리(옆 그림 마이크 끝이 몸에 닿는 등)는 곧은 칸 경계 대신 own 다각형으로 나눔:
-                # own = [[칸, [[x, y], ...]], ...] — 다각형 안은 그 칸 몫 (다른 칸에선 뺌)
+                # 옆 그림과 붙거나 겹친 곳(옆 그림 마이크 끝이 몸에 닿는 등)은 칸 경계 대신 own 다각형으로 나눔:
+                # own = [[칸, [[x, y], ...]], ...] — 다각형 안 그림은 전부 그 칸 몫 (다른 칸에선 뺌)
                 for oc, poly in row["own"]:
                     pg = _poly_mask(lab.shape, poly)
                     if oc == len(frs):
-                        pm |= pg & np.isin(lab, part)
+                        m |= pg & (lab > 0)
                     else:
-                        pm &= ~pg
-            m |= pm
+                        m &= ~pg
             frs.append({"mask": m})
         out.append(frs)
     return out, lab
+
+
+def _frame_mask(fr: dict, lab: np.ndarray, alpha: np.ndarray) -> np.ndarray:
+    if "mask" in fr:
+        return fr["mask"] & alpha
+    x0, y0, x1, y1 = fr["box"]
+    if "clip" in fr:
+        x0, x1 = fr["clip"]
+    m = np.zeros(alpha.shape, bool)
+    m[y0:y1, x0:x1] = np.isin(lab[y0:y1, x0:x1], fr["ids"])
+    return m & alpha
+
+
+def fix_orphans(rgba: np.ndarray, out: list, lab: np.ndarray):
+    """칸 경계(곧은 선)로 잘린 덩어리 정리: 한 프레임 안에서 몸과 안 이어진 조각(옆 칸 그림의 팔 · 이펙트 끝이
+    경계를 넘어 들어온 것)은, 경계 건너 옆 프레임의 몸에 닿아 있으면 그 프레임으로 옮김.
+    (내 몸에서 잘려 나간 조각은 되돌아오고, 옆 그림 조각은 빠짐) — 시트 설정 "orphans": false 로 끔"""
+    alpha = rgba[..., 3] > 30
+    st = np.ones((3, 3), bool)
+    for row in out:
+        if len(row) < 2:
+            continue
+        masks = [_frame_mask(fr, lab, alpha) for fr in row]
+        # 여러 프레임에 나뉘어 들어간 덩어리만
+        shared = {}
+        for fi, m in enumerate(masks):
+            for L in np.unique(lab[m]):
+                if L:
+                    shared.setdefault(int(L), []).append(fi)
+        shared = {L: fs for L, fs in shared.items() if len(fs) > 1}
+        if not shared:
+            continue
+        changed = False
+        for _ in range(3):
+            body = []
+            for m in masks:
+                bl, bn = ndimage.label(m, st)
+                if bn == 0:
+                    body.append(np.zeros_like(m))
+                    continue
+                sz = ndimage.sum(m, bl, range(1, bn + 1))
+                body.append(bl == int(np.argmax(sz)) + 1)
+            moved = False
+            for L, fs in shared.items():
+                bm = lab == L
+                for fi in fs:
+                    piece = masks[fi] & bm
+                    pl, pn = ndimage.label(piece, st)
+                    for j in range(1, pn + 1):
+                        comp = pl == j
+                        if (comp & body[fi]).any():
+                            continue
+                        near = ndimage.binary_dilation(comp, st, iterations=2)
+                        for fd in fs:
+                            if fd != fi and (near & body[fd]).any():
+                                masks[fi] &= ~comp
+                                masks[fd] |= comp
+                                moved = changed = True
+                                break
+            if not moved:
+                break
+        if changed:
+            for fr, m in zip(row, masks):
+                fr["mask"] = m
 
 
 class Sheets:
@@ -161,6 +225,8 @@ class Sheets:
                 out, lab = grid_frames(rgba, c["grid"])
             else:
                 out, lab = cut.segment(rgba, c["rows"], {int(k): v for k, v in c.get("splits", {}).items()})
+            if c.get("orphans", True):
+                fix_orphans(rgba, out, lab)
             self.cache[name] = (rgba, out, lab)
         return self.cache[name]
 
