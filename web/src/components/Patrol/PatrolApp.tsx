@@ -7,10 +7,10 @@
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/lib/AuthContext";
-import { CH_COUNT, ST_COUNT, SUB, firstSt, stCh, stName, stSub, stage } from "@/lib/patrol/chapters";
+import { CH_COUNT, ST_COUNT, SUB, SUB_KIND, firstSt, stCh, stName, stSub, stage } from "@/lib/patrol/chapters";
 import { BOOST_RUNS, PATROL_MAX_H, QUICK_FREE, QUICK_H, STAR_GEMS, WELCOME, firstReward, patrolPending, patrolRate } from "@/lib/patrol/economy";
 import { ATK_PCT, GEAR, GRADE_COLOR, GRADE_NAME, power, powerScore, type GearItem } from "@/lib/patrol/gear";
-import { ENEMIES, HEROES, type ChapterDef } from "@/lib/survivor/data";
+import { ENEMIES, HEROES, STAGE_KIND, questName, type ChapterDef, type StageKind } from "@/lib/survivor/data";
 import type { RunResult } from "@/lib/survivor/sim";
 import { patrol, type PatrolFinish, type PatrolProfile } from "@/realtime/patrol";
 import Token from "../Marble/Token";
@@ -28,7 +28,15 @@ type Pop = "gear" | "box" | "patrol" | null;
 const fmt = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 const ST_KEY = "ptp-st";
 /** 별 3개 조건 (보스 시간은 스테이지마다) */
-const starLabel = (def: ChapterDef) => ["클리어", "체력 50% 이상으로 클리어", `보스 ${def.bossStar ?? 45}초 안에 처치`];
+const starLabel = (def: ChapterDef) => ["클리어", def.quest ? `${questName(def.quest)} + 클리어` : "체력 50% 이상으로 클리어", `보스 ${def.bossStar ?? 45}초 안에 처치`];
+/** 판 종류 설명 (스테이지 칸 툴팁) */
+const KIND_DESC: Record<StageKind, string> = {
+  basic: "3분 + 미니 보스",
+  gimmick: "기믹이 두 배 — 3분 + 미니 보스",
+  special: "특수 목표 — 3분 + 미니 보스",
+  siege: "30초마다 포위 — 3분 + 미니 보스",
+  boss: "챕터 보스 (5분)",
+};
 
 /** 로그인 안 했을 때: 시작 선물 장비로 챕터 1만 (기록 · 보상 없음) */
 const GUEST: PatrolProfile = {
@@ -310,6 +318,8 @@ function Lobby({ prof, member, loaded, st, open, onSt, note, skew, onProf, onSta
             const on = n === st;
             const ss = prof.stars[`s${n}`] ?? [false, false, false];
             const boss = i === SUB - 1;
+            const kd = SUB_KIND[i];
+            const kc = STAGE_KIND[kd].c;
             return (
               <button
                 key={n}
@@ -318,9 +328,17 @@ function Lobby({ prof, member, loaded, st, open, onSt, note, skew, onProf, onSta
                 onClick={() => (sfx("click"), onSt(n))}
                 className="pts-btn relative flex h-[46px] flex-1 flex-col items-center justify-center leading-[16px]"
                 style={on ? btn(boss ? "#ff4fa3" : "#ffd27a", "#07051a") : btn(boss ? "#3a1838" : "#221b58", "#e8e4ff")}
-                title={boss ? "챕터 보스 (5분)" : "3분 + 미니 보스"}
+                title={KIND_DESC[kd]}
               >
-                <b className="text-[15px]">{lock ? "🔒" : `${stName(n)}${boss ? " 보스" : ""}`}</b>
+                <b className="text-[15px]">
+                  {lock ? (
+                    "🔒"
+                  ) : (
+                    <>
+                      {stName(n)} <span style={{ color: on ? "#07051a" : kc }}>{STAGE_KIND[kd].name}</span>
+                    </>
+                  )}
+                </b>
                 <span className="text-[10px] tracking-[1px]">
                   {ss.map((x, k) => (
                     <span key={k} style={{ color: x ? (on ? "#7a4a00" : "#ffd23a") : on ? "#00000033" : "#4a4290" }}>
@@ -335,7 +353,7 @@ function Lobby({ prof, member, loaded, st, open, onSt, note, skew, onProf, onSta
         <div className="flex flex-1 gap-[16px] px-[16px] py-[10px] text-[12px]">
           <div className="flex flex-1 flex-col gap-[6px]">
             <span>
-              <b className="text-[#ffd27a]">{stName(st)}</b> <span className="text-[#a9a2d6]">{def.len / 60}분 버티고</span> <b className="text-[#ff8fb8]">{ENEMIES[def.final].name}</b> <span className="text-[#a9a2d6]">처치</span>
+              <b className="text-[#ffd27a]">{stName(st)}</b> {def.kind && <b style={{ color: STAGE_KIND[def.kind].c }}>{STAGE_KIND[def.kind].name} 판</b>} <span className="text-[#a9a2d6]">{def.len / 60}분 버티고</span> <b className="text-[#ff8fb8]">{ENEMIES[def.final].name}</b> <span className="text-[#a9a2d6]">처치</span>
             </span>
             <span className="text-[#a9a2d6]">
               적 체력 ×{def.hp} · 피해 ×{def.dmg}

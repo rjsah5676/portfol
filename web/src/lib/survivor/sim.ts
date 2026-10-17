@@ -18,6 +18,10 @@ import {
   LAMP_CHARGE,
   LAMP_R,
   SPOUT_FUSE,
+  GUARD_AGGRO,
+  GUARD_HP,
+  GUARD_R,
+  type Quest,
   SPOUT_R,
   TRIAL_R,
   TRIAL_SEC,
@@ -121,6 +125,11 @@ export interface Enemy {
   /** 곧장 질주하는 몹의 지금 방향 */
   mx: number;
   my: number;
+  /** 등불을 노림 (지키기 판) */
+  tgt?: boolean;
+  /** 보물 도깨비: 사라질 때까지 남은 초 · 다음 금화를 흘릴 체력 비율 */
+  left?: number;
+  drop?: number;
 }
 
 /** 럭키 출격: 부대 유닛 */
@@ -390,6 +399,9 @@ export interface Run {
   army: Army | null;
   /** 자정의 종 (시계탑 광장): 남은 울림 시간 · 다음 울림 시각 */
   toll: { on: number; next: number };
+  /** 순찰대 특수 판 목표 진행 (없으면 목표 없음) · 지킬 등불 */
+  quest: { q: Quest; got: number; need: number; done: boolean; fail: boolean } | null;
+  guard: Thing | null;
   seed: number;
   rng: Rng;
   t: number;
@@ -528,6 +540,8 @@ export function newRun(hero: HeroId, seed: number, bonus: Partial<Stats> = {}, o
     xpk: ch?.xp ?? 1,
     army: opts.army ? { units: [], bought: 0, uid: 1, best: 0 } : null,
     toll: { on: 0, next: def.toll?.from ?? 1e9 },
+    quest: ch?.quest ? { q: ch.quest, got: 0, need: ch.quest.k === "guard" ? 1 : ch.quest.n, done: false, fail: false } : null,
+    guard: null,
     seed,
     rng: { r: seed | 0 },
     t: 0,
@@ -857,6 +871,11 @@ function hurt(r: Run, e: Enemy, dmg: number, slot: number, kb: number, fromX: nu
     e.ky += (dy / d) * k;
   }
   r.ev.push({ t: "dmg", x: e.x, y: e.y - e.r, v, crit: crit || mega, w: slot >= 0 ? r.weapons[slot]?.id : undefined, big: e.elite || e.def.boss });
+  // 보물 도깨비: 체력 15% 깎일 때마다 금화를 흘림
+  while (e.drop !== undefined && e.hp > 0 && e.hp < e.maxHp * e.drop) {
+    e.drop -= 0.15;
+    dropPickup(r, "coin", e.x + (rnd(r.rng) - 0.5) * 16, e.y + (rnd(r.rng) - 0.5) * 10, 2 + Math.floor(r.t / 60));
+  }
   // 사신의 낫: 조금 남은 일반 적은 바로
   const sc = rel(r, "scythe");
   if (sc && e.hp > 0 && !e.def.boss && !e.elite && e.hp <= e.maxHp * Math.min(0.24, 0.08 * sc)) e.hp = 0;
@@ -977,13 +996,30 @@ function kill(r: Run, e: Enemy) {
   }
   if (e.elite) {
     r.q.elites++;
+    if (r.quest?.q.k === "rush") questGot(r);
     dropPickup(r, "chest", e.x, e.y, 0);
+    return;
+  }
+  if (e.kind === "goblin") {
+    if (r.quest?.q.k === "goblin") questGot(r);
+    dropPickup(r, "chest", e.x, e.y, 0);
+    dropPickup(r, "bag", e.x + 12, e.y, 20 + Math.floor(r.t / 10));
+    r.ev.push({ t: "warn", text: "보물 도깨비를 잡았어요!" });
     return;
   }
   const x = rnd(r.rng);
   if (x < 0.035) dropPickup(r, "coin", e.x, e.y, 1 + Math.floor(r.t / 200));
   else if (x < 0.0205) dropPickup(r, "meat", e.x, e.y, 0);
   else if (x < 0.0215) dropPickup(r, "magnet", e.x, e.y, 0);
+}
+
+function questGot(r: Run) {
+  const qs = r.quest!;
+  qs.got++;
+  if (qs.got >= qs.need && !qs.done) {
+    qs.done = true;
+    r.ev.push({ t: "warn", text: "목표 달성! ★" });
+  }
 }
 
 function dropGem(r: Run, x: number, y: number, v: number) {
@@ -1073,6 +1109,7 @@ function spawnEnemy(r: Run, kind: EnemyKind, x: number, y: number, elite = false
     my: 0,
   };
   e.maxHp = e.hp;
+  if (r.guard?.alive && !def.boss && def.move !== "flee" && rnd(r.rng) < GUARD_AGGRO) e.tgt = true;
   r.enemies.push(e);
   return e;
 }
@@ -1304,6 +1341,18 @@ function timeline(r: Run) {
       const t = spawnThing(r, "spout", 110, 190);
       t.t = SPOUT_FUSE;
       r.ev.push({ t: "thing", k: "spout", text: "분수가 곧 솟아요! 적을 끌고 와요" });
+    } else if (ev.k === "goblin") {
+      const a = rnd(r.rng) * Math.PI * 2;
+      const g = spawnEnemy(r, "goblin", r.p.x + Math.cos(a) * 130, r.p.y + Math.sin(a) * 80);
+      g.left = 15;
+      g.drop = 0.85;
+      r.ev.push({ t: "warn", text: "보물 도깨비! 도망치기 전에 잡아요" });
+    } else if (ev.k === "guard") {
+      // 지킬 등불: 플레이어 옆에 · t = 체력 · cost = 끝나는 시각 · on = 지키는 중 (멀어져도 안 치움)
+      const t: Thing = { id: r.nextId++, alive: true, k: "guard", x: r.p.x + 50, y: r.p.y, t: GUARD_HP, on: true, cost: ev.until };
+      r.things.push(t);
+      r.guard = t;
+      r.ev.push({ t: "thing", k: "guard", text: `등불을 지켜요! ${Math.round(ev.until - r.t)}초 동안 꺼지지 않게` });
     }
   }
   // 오버타임: 45초마다 정예
@@ -1835,6 +1884,44 @@ function updateEnemies(r: Run) {
     dx /= d;
     dy /= d;
     let sp = e.speed * (e.slow > 0 ? 0.45 : 1) * (r.toll.on > 0 && !e.def.boss ? 1.25 : 1);
+    // 등불을 노리는 적: 등불 쪽으로 · 닿으면 멈춰서 갉아먹음
+    const gd = r.guard;
+    if (e.tgt && gd?.alive) {
+      const gx = gd.x - e.x;
+      const gy = gd.y - e.y;
+      const gl = Math.hypot(gx, gy) || 1;
+      if (gl < 260 || d > gl) {
+        dx = gx / gl;
+        dy = gy / gl;
+        if (gl < e.r + 9) {
+          gd.t -= e.dmg * 0.4 * DT;
+          sp = 0;
+        }
+      }
+    }
+    if (e.def.move === "flee") {
+      // 보물 도깨비: 반대로 달아남 · 멀어지면 느긋하게 갈지자 · 시간이 다 되면 사라짐
+      e.left = (e.left ?? 0) - DT;
+      if (e.left <= 0) {
+        e.alive = false;
+        r.ev.push({ t: "boom", x: e.x, y: e.y, r: 18, c: "#ffd23a" });
+        r.ev.push({ t: "warn", text: "보물 도깨비가 도망쳤어요…" });
+        continue;
+      }
+      const w = Math.sin(e.t * 3 + e.id) * 0.9;
+      const fx = -dx + dy * w;
+      const fy = -dy - dx * w;
+      const fl = Math.hypot(fx, fy) || 1;
+      dx = fx / fl;
+      dy = fy / fl;
+      if (d > 170) sp *= 0.35;
+      e.x += dx * sp * DT + e.kx * DT;
+      e.y += dy * sp * DT + e.ky * DT;
+      e.kx *= 0.86;
+      e.ky *= 0.86;
+      if (Math.abs(dx) > 0.05) e.face = dx > 0 ? 1 : -1;
+      continue;
+    }
     if (e.boss) {
       bossAI(r, e, dx, dy);
     } else {
@@ -1902,7 +1989,7 @@ function updateEnemies(r: Run) {
       sp = 0;
     }
     // 너무 멀어진 잡몹은 반대편 화면 밖으로 다시
-    if (!e.def.boss && d > 420) {
+    if (!e.def.boss && !e.tgt && d > 420) {
       const [x, y] = [p.x + (p.x - e.x) * 0.7, p.y + (p.y - e.y) * 0.7];
       e.x = x;
       e.y = y;
@@ -2369,6 +2456,26 @@ function updateThings(r: Run) {
           // 켜진 동안 가까이 온 적을 조금씩 태움
           if (Math.floor(r.t) > Math.floor(r.t - DT)) near(r, t.x, t.y, LAMP_R * 0.6, (e) => hurt(r, e, (8 + r.t * 0.08) * (1 + r.stats.might), PROC, 0, t.x, t.y));
           if (r.t > t.cost) t.alive = false;
+        }
+        break;
+      }
+      case "guard": {
+        // 지킬 등불: 1초마다 주변 적을 조금 태움 · 체력이 다 닳으면 꺼짐 · 끝 시각까지 버티면 보상
+        if (Math.floor(r.t) > Math.floor(r.t - DT)) near(r, t.x, t.y, GUARD_R, (e) => hurt(r, e, (6 + r.t * 0.06) * (1 + r.stats.might), PROC, 20, t.x, t.y));
+        const qs = r.quest;
+        if (t.t <= 0) {
+          t.alive = false;
+          if (qs) qs.fail = true;
+          r.ev.push({ t: "boom", x: t.x, y: t.y - 14, r: 40, c: "#6b63a3" });
+          r.ev.push({ t: "warn", text: "등불이 꺼졌어요…" });
+        } else if (r.t >= t.cost) {
+          t.alive = false;
+          if (qs?.q.k === "guard") questGot(r);
+          r.ev.push({ t: "boom", x: t.x, y: t.y - 14, r: LAMP_R * 1.3, c: "#ffd23a" });
+          r.ev.push({ t: "thing", k: "guard", text: "등불을 지켜냈어요!" });
+          near(r, t.x, t.y, LAMP_R * 1.3, (e) => hurt(r, e, (40 + r.t * 0.4) * (1 + r.stats.might), PROC, 60, t.x, t.y));
+          dropPickup(r, "chest", t.x, t.y + 8, 0);
+          dropPickup(r, "meat", t.x + 14, t.y + 6, 1);
         }
         break;
       }
@@ -3149,7 +3256,9 @@ export function result(r: Run): RunResult {
 
 function chapterOut(r: Run): NonNullable<RunResult["ch"]> {
   const hp = Math.max(0, r.p.hp) / maxHp(r);
-  return { id: r.ch!.id, st: r.ch!.st ?? r.ch!.id * 5, stars: [r.win, r.win && hp >= 0.5, r.win && r.finalAge > 0 && r.finalAge <= (r.ch!.bossStar ?? 60)], hp: Math.round(hp * 100) / 100, finalAge: r.finalAge };
+  // 별 2: 특수 판은 목표 달성, 나머지는 체력 50% 이상
+  const s2 = r.quest ? r.quest.done : hp >= 0.5;
+  return { id: r.ch!.id, st: r.ch!.st ?? r.ch!.id * 5, stars: [r.win, r.win && s2, r.win && r.finalAge > 0 && r.finalAge <= (r.ch!.bossStar ?? 60)], hp: Math.round(hp * 100) / 100, finalAge: r.finalAge };
 }
 
 export const timeLeft = (r: Run) => Math.max(0, r.len - r.t);

@@ -1,7 +1,7 @@
 /*
  * 픽셀 타운 서바이버 — 캔버스 그리기 (512 × 288 도트 화면, 밖에서 정수배로 키움)
  */
-import { ENEMIES, FLAG_CHARGE, LAMP_CHARGE, SHRINE_CHARGE, SPOUT_FUSE, SPOUT_R, TRIAL_R, VIEW_H, VIEW_W, WEAPONS, type EnemyKind, type ThingKind } from "@/lib/survivor/data";
+import { ENEMIES, FLAG_CHARGE, GUARD_HP, GUARD_R, LAMP_CHARGE, SHRINE_CHARGE, SPOUT_FUSE, SPOUT_R, TRIAL_R, VIEW_H, VIEW_W, WEAPONS, type EnemyKind, type ThingKind } from "@/lib/survivor/data";
 import { BEAM_END, BEAM_ON, type Run, type Zone } from "@/lib/survivor/sim";
 import { ARMY_GRADE_COLOR, UNIT } from "@/lib/survivor/army";
 import { DECO_CELL, decoAt, digits, getArt, tilesFor, TILE_CHUNK, unitArt, type HeroArt, type MobArt } from "./art";
@@ -155,6 +155,7 @@ const MOB_COLOR: Record<EnemyKind, string> = {
   hourglass: "#ffd27a",
   boss_cuckoo: "#ffb03a",
   boss_tower: "#ffd23a",
+  goblin: "#ffd23a",
 };
 export const mobColor = (k: EnemyKind) => MOB_COLOR[k];
 
@@ -210,6 +211,13 @@ export function draw(ctx: CanvasRenderingContext2D, r: Run, fx: Fx, hero: HeroAr
         ctx.globalAlpha = 0.12 + Math.sin(time * 5 + t.id) * 0.04;
         ellipse(ctx, tx, ty, 66, 52, "#ffb03a");
       }
+      ctx.globalAlpha = 1;
+    } else if (t.k === "guard") {
+      // 지키는 등불: 따뜻한 빛 원 + 맞으면 깜빡
+      ctx.globalAlpha = 0.14 + Math.sin(time * 4 + t.id) * 0.04;
+      ellipse(ctx, tx, ty, GUARD_R, GUARD_R * 0.8, "#ffd23a");
+      ctx.globalAlpha = 0.8;
+      dotsRing(ctx, tx, ty, GUARD_R, GUARD_R * 0.8, "#ffe9a0", time * 0.5, 28);
       ctx.globalAlpha = 1;
     } else if (t.k === "spout" && !t.on) {
       // 물보라 예고: 원이 차오름
@@ -534,7 +542,7 @@ export function draw(ctx: CanvasRenderingContext2D, r: Run, fx: Fx, hero: HeroAr
   // 맵 오브젝트
   for (const t of r.things) {
     if (!t.alive || Math.abs(t.x - p.x) > VIEW_W / 2 + 40 || Math.abs(t.y - p.y) > VIEW_H / 2 + 50) continue;
-    const img = t.k === "lamp" ? A.lamp : t.k === "spout" ? (A.deco.fountain ?? A.things.fountain) : A.things[t.k];
+    const img = t.k === "lamp" || t.k === "guard" ? A.lamp : t.k === "spout" ? (A.deco.fountain ?? A.things.fountain) : A.things[t.k];
     ds.push({
       y: t.y,
       f: () => {
@@ -559,6 +567,19 @@ export function draw(ctx: CanvasRenderingContext2D, r: Run, fx: Fx, hero: HeroAr
           ctx.fillStyle = "#e8fbff";
           ctx.fillRect(X(t.x) - 2, Y(t.y) - img.height - Math.sin(k * Math.PI) * 40, 4, Math.sin(k * Math.PI) * 40 + 6);
           ctx.globalAlpha = 1;
+        }
+        if (t.k === "guard") {
+          // 등불 체력 · 남은 시간
+          const k = Math.max(0, t.t) / GUARD_HP;
+          const bw = 30;
+          const bx = X(t.x) - bw / 2;
+          const by = Y(t.y) - img.height - 8;
+          ctx.fillStyle = "#05030f";
+          ctx.fillRect(bx - 1, by - 1, bw + 2, 5);
+          ctx.fillStyle = k > 0.5 ? "#ffd23a" : k > 0.25 ? "#ff9c3a" : "#ff3d6e";
+          ctx.fillRect(bx, by, Math.round(bw * k), 3);
+          const d = digits(String(Math.max(0, Math.ceil(t.cost - r.t))), "#fff6c8", 1);
+          ctx.drawImage(d, X(t.x) - (d.width >> 1), by - d.height - 2);
         }
         if (t.k === "box") {
           const d = digits(String(t.cost), r.p.gold >= t.cost ? "#ffd23a" : "#ff8fb8", 1);
@@ -1111,7 +1132,7 @@ function ballArt(rr: number, color: string): HTMLCanvasElement {
 
 /** 줍는 것 빛 색 */
 const PICK_C: Partial<Record<string, string>> = { meat: "#ff8f8f", magnet: "#7ad7ff", bomb: "#ff9c3a", bag: "#ffd23a", chest: "#ffe9a0" };
-const ARROW_C: Record<ThingKind, string> = { shrine: "#4ff0c8", gshrine: "#ffd23a", statue: "#ffd23a", bell: "#ff8a6b", flag: "#ff9cc8", box: "#c58bff", merchant: "#c58bff", fountain: "#7ad7ff", trial: "#e0d8ff", lamp: "#ffb03a", spout: "#7ad7ff" };
+const ARROW_C: Record<ThingKind, string> = { shrine: "#4ff0c8", gshrine: "#ffd23a", statue: "#ffd23a", bell: "#ff8a6b", flag: "#ff9cc8", box: "#c58bff", merchant: "#c58bff", fountain: "#7ad7ff", trial: "#e0d8ff", lamp: "#ffb03a", spout: "#7ad7ff", guard: "#ffd23a" };
 /** 화면 밖 오브젝트 · 정예 · 보스: 가장자리 화살표 + 작은 그림 */
 function drawArrows(ctx: CanvasRenderingContext2D, r: Run, things: Record<ThingKind, HTMLCanvasElement>, time: number) {
   const p = r.p;
@@ -1123,15 +1144,15 @@ function drawArrows(ctx: CanvasRenderingContext2D, r: Run, things: Record<ThingK
   const marks: Mark[] = [];
   for (const t of r.things) {
     if (!t.alive) continue;
-    const img = t.k === "lamp" ? A.lamp : t.k === "spout" ? (A.deco.fountain ?? things.fountain) : things[t.k];
-    marks.push({ x: t.x, y: t.y, c: ARROW_C[t.k], img, pulse: t.k === "trial" || t.k === "merchant" || t.k === "fountain" || t.k === "spout" || (t.k === "lamp" && !t.on), far: 760 });
+    const img = t.k === "lamp" || t.k === "guard" ? A.lamp : t.k === "spout" ? (A.deco.fountain ?? things.fountain) : things[t.k];
+    marks.push({ x: t.x, y: t.y, c: ARROW_C[t.k], img, pulse: t.k === "trial" || t.k === "merchant" || t.k === "fountain" || t.k === "spout" || t.k === "guard" || (t.k === "lamp" && !t.on), far: t.k === "guard" ? 2000 : 760 });
   }
   // 정예 · 보스 (빨간 화살표, 멀어도 보임)
   for (const e of r.enemies) {
-    if (!e.alive || !(e.elite || e.def.boss)) continue;
+    if (!e.alive || !(e.elite || e.def.boss || e.kind === "goblin")) continue;
     const art = A.mobs[e.kind];
     if (!art) continue;
-    marks.push({ x: e.x, y: e.y - 8, c: e.def.boss ? "#ff3d6e" : "#ff8a3d", img: art.f[0], pulse: true, far: 1400 });
+    marks.push({ x: e.x, y: e.y - 8, c: e.def.boss ? "#ff3d6e" : e.kind === "goblin" ? "#ffd23a" : "#ff8a3d", img: art.f[0], pulse: true, far: 1400 });
   }
   const B = 15; // 칸 반지름
   for (const m of marks) {
@@ -1200,6 +1221,7 @@ function drawNight(ctx: CanvasRenderingContext2D, r: Run, X: (x: number) => numb
   for (const t of r.things) {
     if (!t.alive || t.k === "statue" || t.k === "box") continue;
     if (t.k === "lamp") hole(X(t.x), Y(t.y - 24), t.on ? 96 + Math.sin(time * 3 + t.id) * 4 : 30, t.on ? 0.95 : 0.5);
+    if (t.k === "guard") hole(X(t.x), Y(t.y - 20), 90 + Math.sin(time * 3) * 4, 0.95);
     else hole(X(t.x), Y(t.y - 10), t.k === "trial" ? TRIAL_R : 46, t.k === "trial" ? 0.5 : 0.85);
   }
   // 빛나는 장식 (호박등 · 분수)

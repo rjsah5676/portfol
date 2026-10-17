@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
-import { BLESS, DASH_CD, DT, ENEMIES, FLAG_NAME, HEROES, PASSIVES, RARITY_COLOR, RARITY_NAME, STAGES, ULT_NEED, VIEW_H, VIEW_W, WEAPONS, type FlagBuff, type HeroId, type PassiveId, type StageId, type Stats, type WeaponId } from "@/lib/survivor/data";
+import { BLESS, DASH_CD, DT, ENEMIES, FLAG_NAME, GUARD_HP, HEROES, PASSIVES, RARITY_COLOR, RARITY_NAME, STAGES, ULT_NEED, VIEW_H, VIEW_W, WEAPONS, type FlagBuff, type HeroId, type PassiveId, type StageId, type Stats, type WeaponId } from "@/lib/survivor/data";
 import { RELICS, RELIC_RARITY_COLOR, RELIC_RARITY_NAME, type RelicId } from "@/lib/survivor/relics";
 import { ARMY_CAP, ARMY_GRADE_COLOR, ARMY_GRADE_NAME, FACTION_COLOR, FACTION_NAME, UNIT, buyCost, craftable, mergeKey, mergeable } from "@/lib/survivor/army";
 import { armyBuy, armyCraft, armyMerge, banishCard, bossLimit, buyRelic, chooseBless, chooseCard, chooseWish, closeChest, dawnChoice, leaveThing, maxHp, needXp, newRun, reroll, result, step, type Card, type Ev, type Input, type Pause, type Run, type RunOpts, type RunResult } from "@/lib/survivor/sim";
@@ -155,6 +155,8 @@ interface Hud {
   /** 자정의 종 남은 시간 · 다음 종까지 (시계탑 광장) */
   toll: number;
   tollNext: number;
+  /** 순찰대 특수 판 목표: 문구 · 진행 · 끝남/실패 · 등불 체력 */
+  quest: { text: string; got: number; need: number; done: boolean; fail: boolean; hp: number } | null;
   /** 럭키 출격 부대 (묶음: 세력 · 등급) */
   army: { groups: { key: string; id: string; n: number; grade: number; faction: string }[]; count: number; cost: number; merge: string | null; craft: { id: string; name: string } | null } | null;
 }
@@ -190,6 +192,16 @@ const hudOf = (r: Run): Hud => {
     toll: r.toll.on,
     army: r.army ? armyHud(r) : null,
     tollNext: r.def.toll ? r.toll.next - r.t : 0,
+    quest: r.quest
+      ? {
+          text: r.quest.q.k === "goblin" ? "보물 도깨비" : r.quest.q.k === "rush" ? "정예 처치" : "등불 지키기",
+          got: r.quest.got,
+          need: r.quest.need,
+          done: r.quest.done,
+          fail: r.quest.fail,
+          hp: r.guard?.alive ? Math.max(0, r.guard.t) / GUARD_HP : 0,
+        }
+      : null,
   };
 };
 
@@ -880,6 +892,12 @@ export default function Game({ setup, onEnd, onQuit }: { setup: GameSetup; onEnd
               </span>
             )}
             {hud.trial > 0 && <b className="pts-title pts-blink mt-[4px] text-[18px] text-[#e0d8ff]">시련 {Math.ceil(hud.trial)}초</b>}
+            {hud.quest && (
+              <span className={`pts-sub mt-[4px] text-[13px] font-bold ${hud.quest.done ? "text-[#ffd23a]" : hud.quest.fail ? "text-[#6b63a3] line-through" : "text-[#fff6c8]"}`}>
+                ★ {hud.quest.text}{" "}
+                {hud.quest.done ? "달성!" : hud.quest.fail ? "실패" : hud.quest.need > 1 ? `${hud.quest.got}/${hud.quest.need}` : hud.quest.hp > 0 ? `${Math.round(hud.quest.hp * 100)}%` : ""}
+              </span>
+            )}
             {hud.toll > 0 ? (
               <b className="pts-title pts-blink mt-[4px] text-[16px] text-[#ffb03a]">🔔 자정의 종 {Math.ceil(hud.toll)}초 · 경험치 ×2</b>
             ) : (

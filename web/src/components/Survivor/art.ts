@@ -347,6 +347,33 @@ const DRAW: Record<EnemyKind, () => MobArt> = {
       44,
       44
     ),
+  /** 보물 도깨비: 뿔 달린 꼬마 도깨비가 금화 자루를 메고 뜀 (파일 오기 전 코드 도트) */
+  goblin: () =>
+    mob(
+      (g, k) => {
+        const b = k ? 1 : 0;
+        // 금화 자루 (등 뒤)
+        ell(g, 4.5, 8 - b, 4, 4, "#c89a3a");
+        ell(g, 4.5, 7.5 - b, 3, 3, "#ffd23a");
+        put(g, 4, 3 - b, "#7a5a20");
+        put(g, 3, 6 - b, "#fff6c8");
+        // 몸
+        ell(g, 10, 10, 4, 4.5, "#4fa0e0");
+        rect(g, 8, 13, 5, 2, "#2a5a9a");
+        // 다리
+        rect(g, k ? 8 : 9, 14, 1, 2, "#2a3a6a");
+        rect(g, k ? 12 : 11, 14, 1, 2, "#2a3a6a");
+        // 얼굴 · 뿔
+        ell(g, 11, 6, 3.4, 3, "#6fc0ff");
+        put(g, 10, 2, "#fff6d8");
+        put(g, 13, 2, "#fff6d8");
+        put(g, 10, 6, "#16202a");
+        put(g, 13, 6, "#16202a");
+        rect(g, 11, 8, 2, 1, "#ffffff");
+      },
+      17,
+      17
+    ),
 };
 
 /* ───────────── 줍는 것 · 가로등 ───────────── */
@@ -450,7 +477,7 @@ export function tilesFor(stage: StageId): Cv {
 /* ───────────── 파일 에셋 (있으면 코드 도트 대신) ───────────── */
 
 /** public/survivor/mob/<kind>.png — 걷기 2칸 가로 띠 (칸 너비 = 그림 너비 / 2) */
-export const MOB_FILE: Partial<Record<EnemyKind, string>> = Object.fromEntries((["bat", "slime", "ghost", "skull", "mush", "golem", "boss_jelly", "boss_clock", "mouse", "tin", "cuckoo", "gear", "hourglass", "boss_cuckoo", "boss_tower"] as const).map((k) => [k, `/survivor/mob/${k}.png`]));
+export const MOB_FILE: Partial<Record<EnemyKind, string>> = Object.fromEntries((["bat", "slime", "ghost", "skull", "mush", "golem", "boss_jelly", "boss_clock", "mouse", "tin", "cuckoo", "gear", "hourglass", "boss_cuckoo", "boss_tower", "goblin"] as const).map((k) => [k, `/survivor/mob/${k}.png`]));
 /** public/survivor/item/<name>.png */
 export const ITEM_FILE: Record<string, string> = Object.fromEntries(["gem0", "gem1", "gem2", "gem3", "coin", "bag", "meat", "magnet", "bomb", "chest", "lamp", "parcel", "umbrella", "shuriken", "boomerang"].map((k) => [k, `/survivor/item/${k}.png`]));
 
@@ -508,7 +535,7 @@ export function loadFiles(): Promise<void> {
       })
     );
   for (const k of Object.keys(a.things) as ThingKind[])
-    if (k !== "lamp" && k !== "spout")
+    if (k !== "lamp" && k !== "spout" && k !== "guard")
       jobs.push(
       loadImg(`/survivor/thing/${k}.png`).then((im) => {
         if (im) a.things[k] = cut(im, 0, im.width);
@@ -711,6 +738,7 @@ function thingArt(): Record<ThingKind, Cv> {
     gshrine: small((g) => pedestal(g, "#ffd23a", "#fff6c8"), 18, 20),
     lamp: small((g) => pedestal(g, "#ffb03a", "#fff2c0"), 18, 20),
     spout: small((g) => pedestal(g, "#7ad7ff", "#e8fbff"), 18, 20),
+    guard: small((g) => pedestal(g, "#ffd23a", "#fff6c8"), 18, 20),
     statue: small(
       (g) => {
         rect(g, 2, 17, 14, 3, "#7a5a20");

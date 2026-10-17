@@ -543,7 +543,9 @@ export type EnemyKind =
   | "gear"
   | "hourglass"
   | "boss_cuckoo"
-  | "boss_tower";
+  | "boss_tower"
+  // 순찰대 특수 판: 맞으면 금화를 흘리며 도망치는 도깨비
+  | "goblin";
 
 export interface EnemyDef {
   kind: EnemyKind;
@@ -560,7 +562,7 @@ export interface EnemyDef {
   ghost?: boolean;
   boss?: boolean;
   /** 움직임 버릇: 흔들 (박쥐) · 곧장 질주 (태엽 쥐) · 급강하 (뻐꾸기) */
-  move?: "wobble" | "dart" | "dive";
+  move?: "wobble" | "dart" | "dive" | "flee";
 }
 export const ENEMIES: Record<EnemyKind, EnemyDef> = {
   bat: { kind: "bat", name: "밤박쥐", hp: 5, speed: 46, dmg: 3, r: 5, xp: 1, heavy: 0, move: "wobble" },
@@ -583,6 +585,8 @@ export const ENEMIES: Record<EnemyKind, EnemyDef> = {
   boss_cuckoo: { kind: "boss_cuckoo", name: "뻐꾸기 여왕", hp: 3400, speed: 38, dmg: 22, r: 18, xp: 150, heavy: 1, boss: true },
   /** 10분: 자정에 멈춘 시계탑 그 자체 — 다시 돌려 놓으면 새벽 */
   boss_tower: { kind: "boss_tower", name: "멈춘 대시계", hp: 12000, speed: 26, dmg: 28, r: 22, xp: 400, heavy: 1, boss: true },
+  /** 순찰대 특수 판: 닿아도 안 아픔 · 도망침 · 맞을 때마다 금화 · 시간 지나면 사라짐 */
+  goblin: { kind: "goblin", name: "보물 도깨비", hp: 380, speed: 46, dmg: 0, r: 8, xp: 20, heavy: 0.9, ghost: true, move: "flee" },
 };
 
 /** 분마다 나오는 적 (가중치) · 화면에 유지할 수 */
@@ -615,7 +619,10 @@ export type TimedEvent =
   | { at: number; k: "boss"; kind: EnemyKind; arena: boolean }
   /** 챕터 기믹: 꺼진 가로등 n개 · 분수 하나 */
   | { at: number; k: "lamps"; n: number }
-  | { at: number; k: "spout" };
+  | { at: number; k: "spout" }
+  /** 순찰대 특수 판: 보물 도깨비 · 지킬 등불 */
+  | { at: number; k: "goblin" }
+  | { at: number; k: "guard"; until: number };
 const TOWN_EVENTS: TimedEvent[] = [
   { at: 150, k: "elite", kind: "slime" },
   { at: 240, k: "ring", kind: "bat", n: 40 },
@@ -789,7 +796,23 @@ export interface ChapterDef {
   /** 장식 (없으면 바탕 맵 것) · 자정의 종 */
   deco?: StageDef["deco"];
   toll?: StageDef["toll"];
+  /** 스테이지 종류 (X-1 기본 · X-2 기믹 · X-3 특수 · X-4 포위 · X-5 보스) */
+  kind?: StageKind;
+  /** 특수 판 목표 (별 2 = 목표 달성) */
+  quest?: Quest;
 }
+
+export type StageKind = "basic" | "gimmick" | "special" | "siege" | "boss";
+export const STAGE_KIND: Record<StageKind, { name: string; c: string }> = {
+  basic: { name: "기본", c: "#9fb6ff" },
+  gimmick: { name: "기믹", c: "#7ad7ff" },
+  special: { name: "특수", c: "#ffd23a" },
+  siege: { name: "포위", c: "#ff8a5c" },
+  boss: { name: "보스", c: "#ff3d6e" },
+};
+/** 특수 판 목표: 보물 도깨비 n마리 잡기 · 정예 n마리 처치 · 등불 지키기 */
+export type Quest = { k: "goblin"; n: number } | { k: "rush"; n: number } | { k: "guard" };
+export const questName = (q: Quest) => (q.k === "goblin" ? `보물 도깨비 ${q.n}마리 다 잡기` : q.k === "rush" ? `정예 ${q.n}마리 다 처치` : "등불 지켜내기");
 
 /* ───────────── 경험치 · 줍기 ───────────── */
 
@@ -813,7 +836,7 @@ export const DASH_CD = 2.6;
 
 /* ───────────── 맵 오브젝트 (메가봉크 성소 · 집중포화 맵 목표) ───────────── */
 
-export type ThingKind = "shrine" | "gshrine" | "statue" | "bell" | "flag" | "box" | "merchant" | "fountain" | "trial" | "lamp" | "spout";
+export type ThingKind = "shrine" | "gshrine" | "statue" | "bell" | "flag" | "box" | "merchant" | "fountain" | "trial" | "lamp" | "spout" | "guard";
 export const THING_NAME: Record<ThingKind, string> = {
   shrine: "충전 성소",
   gshrine: "황금 성소",
@@ -826,6 +849,7 @@ export const THING_NAME: Record<ThingKind, string> = {
   trial: "달빛 시련",
   lamp: "꺼진 가로등",
   spout: "분수",
+  guard: "지킬 등불",
 };
 export const THING_DESC: Record<ThingKind, string> = {
   shrine: "원 안에 서 있으면 충전 — 능력치 3개 중 하나",
@@ -839,6 +863,7 @@ export const THING_DESC: Record<ThingKind, string> = {
   trial: "원 안에서 25초 버티면 큰 보상",
   lamp: "옆에 서 있으면 켜져요 — 켜지는 순간 주변 적이 불타고 치킨이 나와요",
   spout: "곧 물보라가 솟아요 — 원 안 적은 기절, 원 안에 있으면 젬이 몰려와요",
+  guard: "적이 등불을 노려요 — 꺼지지 않게 지키면 보물 상자",
 };
 /** 충전 시간 (초) — 원 안에 있어야 참 */
 export const SHRINE_CHARGE = 2.4;
@@ -850,6 +875,10 @@ export const LAMP_CHARGE = 1.5;
 export const LAMP_R = 110;
 export const SPOUT_FUSE = 4;
 export const SPOUT_R = 100;
+/** 지킬 등불: 체력 · 지키는 동안 주변 적을 조금씩 태우는 반지름 · 적이 노리는 비율 */
+export const GUARD_HP = 100;
+export const GUARD_R = 70;
+export const GUARD_AGGRO = 0.45;
 export const boxCost = (opened: number) => 20 + opened * 14;
 
 /** 성소 축복 (능력치 하나) — 등급 0~3 별 값 */

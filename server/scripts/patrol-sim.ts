@@ -120,6 +120,21 @@ function botInput(r: Run): Input {
       my += (gy / gl) * 0.7;
     }
   }
+  // 특수 판: 도깨비는 쫓아가고, 등불은 곁에 붙어 있음
+  const gob = r.enemies.find((e) => e.alive && e.kind === "goblin");
+  if (gob && close < 3) {
+    const l = Math.hypot(gob.x - p.x, gob.y - p.y) || 1;
+    mx += ((gob.x - p.x) / l) * 1.6;
+    my += ((gob.y - p.y) / l) * 1.6;
+  }
+  const gd2 = r.guard?.alive ? r.guard : null;
+  if (gd2) {
+    const l = Math.hypot(gd2.x - p.x, gd2.y - p.y) || 1;
+    if (l > 45) {
+      mx += ((gd2.x - p.x) / l) * Math.min(2.5, l / 40);
+      my += ((gd2.y - p.y) / l) * Math.min(2.5, l / 40);
+    }
+  }
   if (r.arena) {
     mx += (r.arena.x - p.x) / 200;
     my += (r.arena.y - p.y) / 120;
@@ -162,6 +177,7 @@ for (let i = 0; i < N; i++) {
     for (const s of Object.keys(lvAt)) if (r.tick === Number(s) * 60) lvAt[Number(s)].push(r.p.lv);
   }
   const res = result(r);
+  if (process.env.QV) console.log("quest", JSON.stringify(r.quest), "guardHp", r.guard ? Math.round(r.guard.t) : "-");
   rows.push(res);
   if (process.argv.includes("v")) console.log(r.win ? "WIN" : `dead ${Math.floor(r.t)}s`, `lv${r.p.lv} 처치${r.p.kills} hp${Math.round(r.p.hp)}/${maxHp(r)} 보스${r.finalAge}s 별${res.ch?.stars.map((x) => (x ? "★" : "☆")).join("")}`);
 }
@@ -171,5 +187,6 @@ console.log(`스테이지 ${stName(CH)} · 장비 ${KIT} (공격 ${gp.atk} · �
 console.log(`클리어 ${wins.length}/${N} (${((wins.length / N) * 100).toFixed(0)}%) · 평균 생존 ${avg(rows.map((r) => r.sec)).toFixed(0)}s · 레벨 ${avg(rows.map((r) => r.lv)).toFixed(1)} · 처치 ${avg(rows.map((r) => r.kills)).toFixed(0)} · 별 ${avg(rows.map((r) => r.ch!.stars.filter(Boolean).length)).toFixed(2)}`);
 console.log("레벨(1·4·8분)", Object.entries(lvAt).map(([k, v]) => `${k}s=${avg(v).toFixed(1)}`).join(" "));
 console.log("분마다 최저 체력%", lowAt.map((a, k) => `${k}m=${(avg(a) * 100).toFixed(0)}`).join(" "));
+if (ch.quest) console.log(`목표(${ch.quest.k}) 달성 ${rows.filter((x) => x.ch!.stars[1] || 0).length}/${N} (클리어한 판 기준 별2)`);
 const dead = rows.filter((r) => !r.win).map((r) => r.sec).sort((a, b) => a - b);
 console.log("죽은 시각", dead.join(" "));

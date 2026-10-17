@@ -3,7 +3,7 @@
  * 공통 골격: 0:40 정예(첫 상자 3개) · 2:00 포위 · 2:30 중간 보스(큰 상자) · 3:20 정예 둘 · 4:10 최종 포위 · 5:00 챕터 보스
  * 브라우저 · 서버 공용 — "@/" import 금지.
  */
-import type { ChapterDef, EnemyKind, TimedEvent, WaveDef } from "../survivor/data";
+import type { ChapterDef, EnemyKind, Quest, StageKind, TimedEvent, WaveDef } from "../survivor/data";
 
 /** 판 길이 (초) */
 export const CH_LEN = 300;
@@ -155,11 +155,72 @@ const RAMP: Record<number, { hp: number[]; dmg: number[] }> = {
   2: { hp: [1, 1.05, 1.1, 1.15, 1.2], dmg: [0.9, 0.92, 0.94, 0.96, 0.95] },
   3: { hp: [1.6, 1.7, 1.8, 1.95, 2.15], dmg: [1.1, 1.15, 1.2, 1.25, 1.3] },
 };
-/** 짧은 스테이지: 정예 · 포위 · 미니 보스 · 기믹 */
-const SHORT: Record<number, { elite: EnemyKind; ring: [EnemyKind, number]; elite2: EnemyKind; mini: EnemyKind; extra: TimedEvent[]; toll?: ChapterDef["toll"] }> = {
-  1: { elite: "slime", ring: ["bat", 22], elite2: "skull", mini: "boss_jelly", extra: [{ at: 60, k: "lamps", n: 3 }] },
-  2: { elite: "slime", ring: ["slime", 26], elite2: "skull", mini: "boss_jelly", extra: [45, 85, 125].map((at) => ({ at, k: "spout" }) as TimedEvent) },
-  3: { elite: "tin", ring: ["mouse", 30], elite2: "gear", mini: "boss_cuckoo", extra: [], toll: { from: 50, every: 70, dur: 12 } },
+/** 짧은 스테이지 재료: 정예 · 포위 몹 · 미니 보스 · 기믹 · 특수 판 목표 */
+type Short = {
+  elite: EnemyKind;
+  ring: [EnemyKind, number];
+  elite2: EnemyKind;
+  mini: EnemyKind;
+  extra: TimedEvent[];
+  toll?: ChapterDef["toll"];
+  /** X-2 기믹 판: 기믹이 두 배 */
+  gimmick: { extra: TimedEvent[]; toll?: ChapterDef["toll"]; tip: string };
+  /** X-4 포위 판: 돌아가며 에워싸는 몹 */
+  siege: EnemyKind[];
+  /** X-3 특수 판 */
+  special: Quest["k"];
+};
+const spouts = (ats: number[]) => ats.map((at) => ({ at, k: "spout" }) as TimedEvent);
+const SHORT: Record<number, Short> = {
+  1: {
+    elite: "slime",
+    ring: ["bat", 22],
+    elite2: "skull",
+    mini: "boss_jelly",
+    extra: [{ at: 60, k: "lamps", n: 3 }],
+    gimmick: { extra: [25, 75, 130].map((at) => ({ at, k: "lamps", n: 3 }) as TimedEvent), tip: "가로등이 세 번 — 켤수록 편해져요" },
+    siege: ["bat", "ghost", "slime", "skull", "bat"],
+    special: "goblin",
+  },
+  2: {
+    elite: "slime",
+    ring: ["slime", 26],
+    elite2: "skull",
+    mini: "boss_jelly",
+    extra: spouts([45, 85, 125]),
+    gimmick: { extra: spouts([25, 50, 75, 100, 125, 150]), tip: "분수가 25초마다 — 원 안으로 끌고 와서 한 방" },
+    siege: ["slime", "ghost", "skull", "slime", "mush"],
+    special: "rush",
+  },
+  3: {
+    elite: "tin",
+    ring: ["mouse", 30],
+    elite2: "gear",
+    mini: "boss_cuckoo",
+    extra: [],
+    toll: { from: 50, every: 70, dur: 12 },
+    gimmick: { extra: [], toll: { from: 30, every: 45, dur: 12 }, tip: "종이 45초마다 — 빨라진 적을 경험치 두 배로" },
+    siege: ["mouse", "cuckoo", "tin", "mouse", "gear"],
+    special: "guard",
+  },
+};
+/** 챕터 안 번호 → 판 종류 */
+export const SUB_KIND: StageKind[] = ["basic", "gimmick", "special", "siege", "boss"];
+/** 특수 판 목표 · 로비 한 줄 */
+const SPECIAL: Record<Quest["k"], { q: Quest; tip: string; ev: TimedEvent[] }> = {
+  goblin: { q: { k: "goblin", n: 3 }, tip: "보물 도깨비 셋 — 맞을 때마다 금화, 15초 뒤엔 도망", ev: [20, 75, 130].map((at) => ({ at, k: "goblin" }) as TimedEvent) },
+  rush: {
+    q: { k: "rush", n: 8 },
+    tip: "정예 러시 — 정예 8마리, 잡을 때마다 보물 상자",
+    ev: [
+      [20, 1],
+      [45, 1],
+      [70, 2],
+      [100, 2],
+      [130, 2],
+    ].map(([at, n]) => ({ at, k: "elite", kind: "skull", n }) as TimedEvent),
+  },
+  guard: { q: { k: "guard" }, tip: "등불 지키기 — 적의 절반이 등불을 노려요, 2분 버티면 상자", ev: [{ at: 15, k: "guard", until: 150 }] },
 };
 
 /** 스테이지 정의 (전체 번호 st) */
@@ -170,20 +231,48 @@ export function stage(st: number): ChapterDef | undefined {
   const r = RAMP[ch.id];
   const hp = r.hp[sub - 1];
   const dmg = r.dmg[sub - 1];
-  if (sub === SUB) return { ...ch, st, sub, hp, dmg };
+  const kind = SUB_KIND[sub - 1];
+  if (sub === SUB) return { ...ch, st, sub, hp, dmg, kind };
   const o = SHORT[ch.id];
-  const events: TimedEvent[] = [
-    { at: 30, k: "elite", kind: o.elite },
-    { at: 100, k: "ring", kind: o.ring[0], n: o.ring[1] + sub * 2 },
-    { at: 140, k: "elite", kind: o.elite2, n: sub >= 3 ? 2 : 1 },
-    ...o.extra,
-    { at: SHORT_LEN, k: "boss", kind: o.mini, arena: true },
-  ];
+  const mini: TimedEvent = { at: SHORT_LEN, k: "boss", kind: o.mini, arena: true };
+  let events: TimedEvent[];
+  let toll = o.toll ?? ch.toll;
+  let tip = ch.tip;
+  let quest: Quest | undefined;
+  if (kind === "gimmick") {
+    events = [{ at: 30, k: "elite", kind: o.elite }, { at: 100, k: "ring", kind: o.ring[0], n: o.ring[1] + 4 }, { at: 140, k: "elite", kind: o.elite2 }, ...o.gimmick.extra];
+    toll = o.gimmick.toll ?? toll;
+    tip = o.gimmick.tip;
+  } else if (kind === "special") {
+    const sp = SPECIAL[o.special];
+    // 정예 러시는 그 챕터 정예로
+    const ev = o.special === "rush" ? sp.ev.map((e) => (e.k === "elite" ? { ...e, kind: ([o.elite, o.elite2] as EnemyKind[])[Math.round(e.at / 25) % 2] } : e)) : sp.ev;
+    events = [...ev, { at: 100, k: "ring", kind: o.ring[0], n: o.ring[1] }];
+    if (o.special !== "rush") events.push({ at: 40, k: "elite", kind: o.elite });
+    quest = sp.q;
+    tip = sp.tip;
+    toll = undefined;
+  } else if (kind === "siege") {
+    // 포위 판: 30초마다 사방에서 · 갈수록 두껍게
+    events = [
+      ...o.siege.map((k, i) => ({ at: 25 + i * 30, k: "ring", kind: k, n: o.ring[1] - 6 + i * 3 }) as TimedEvent),
+      { at: 75, k: "elite", kind: o.elite },
+      { at: 140, k: "elite", kind: o.elite2, n: 2 },
+    ];
+    tip = "포위 — 30초마다 사방에서 몰려와요, 대시로 뚫고 나가기";
+    toll = undefined;
+  } else {
+    events = [{ at: 30, k: "elite", kind: o.elite }, { at: 100, k: "ring", kind: o.ring[0], n: o.ring[1] + sub * 2 }, { at: 140, k: "elite", kind: o.elite2 }, ...o.extra];
+  }
+  events.push(mini);
   events.sort((a, b) => a.at - b.at);
   return {
     ...ch,
     st,
     sub,
+    kind,
+    quest,
+    tip,
     len: SHORT_LEN,
     waves: ch.waves.filter((w) => w.at < SHORT_LEN),
     events,
@@ -191,6 +280,6 @@ export function stage(st: number): ChapterDef | undefined {
     hp,
     dmg,
     bossStar: 30,
-    toll: o.toll ?? ch.toll,
+    toll,
   };
 }
