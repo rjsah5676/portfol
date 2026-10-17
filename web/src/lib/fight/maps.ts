@@ -33,6 +33,8 @@ export interface MapDef {
   bgPlats?: boolean;
   /** 이 맵의 배경음악 (대전 중, 맵 선택에서 이 맵에 커서가 있을 때) */
   bgm?: string;
+  /** 밝은 배경 (한낮) — 빛 합성(lighter)으로 그리는 탄 · 기둥이 하얗게 날아가 안 보여서, 그림자 · 제 색을 깔고 그림 (그림만, 계산엔 안 씀) */
+  bright?: boolean;
 }
 
 export const MAPS: MapDef[] = [
@@ -75,6 +77,7 @@ export const MAPS: MapDef[] = [
     respawn: [330, 578, 825],
     bg: "/fight/bg/sky.webp",
     bgPlats: true,
+    bright: true,
     bgm: "/fight/bgm-sky.mp3",
   },
   {
@@ -124,6 +127,7 @@ export const MAPS: MapDef[] = [
     respawn: [300, 576, 850],
     bg: "/fight/bg/pier.webp",
     bgPlats: true,
+    bright: true,
     // 「Sunny Pier Showdown」 (tunee, 끝 무음 1.3초 자름, 음량 다른 맵 곡에 맞춤)
     bgm: "/fight/bgm-pier.mp3",
   },

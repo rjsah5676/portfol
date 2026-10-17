@@ -172,6 +172,81 @@ interface FxAnim {
   alpha?: number;
 }
 
+/** 빛 그림(투명 배경)의 그림자: 알파를 2px 넓히고 흐리게 한 어두운 판 (그림마다 한 번 만들어 둠) */
+const LIT_PAD = 4;
+const litShadows = new WeakMap<HTMLImageElement, HTMLCanvasElement>();
+function litShadow(img: HTMLImageElement): HTMLCanvasElement | null {
+  const got = litShadows.get(img);
+  if (got) return got;
+  const w = img.naturalWidth, h = img.naturalHeight;
+  if (!w || !h) return null;
+  const W = w + LIT_PAD * 2, H = h + LIT_PAD * 2;
+  const c = document.createElement("canvas");
+  c.width = W;
+  c.height = H;
+  const cg = c.getContext("2d");
+  if (!cg) return null;
+  cg.drawImage(img, LIT_PAD, LIT_PAD);
+  const d = cg.getImageData(0, 0, W, H);
+  const a = new Float32Array(W * H);
+  for (let i = 0; i < W * H; i++) a[i] = d.data[i * 4 + 3] / 255;
+  // 넓히기(반경 2) → 흐리기(상자 2번)
+  const pass = (src: Float32Array, r: number, max: boolean) => {
+    const t = new Float32Array(W * H), o = new Float32Array(W * H);
+    for (let y = 0; y < H; y++)
+      for (let x = 0; x < W; x++) {
+        let v = 0;
+        for (let k = -r; k <= r; k++) {
+          const xx = Math.min(W - 1, Math.max(0, x + k));
+          const s = src[y * W + xx];
+          v = max ? Math.max(v, s) : v + s / (2 * r + 1);
+        }
+        t[y * W + x] = v;
+      }
+    for (let y = 0; y < H; y++)
+      for (let x = 0; x < W; x++) {
+        let v = 0;
+        for (let k = -r; k <= r; k++) {
+          const yy = Math.min(H - 1, Math.max(0, y + k));
+          const s = t[yy * W + x];
+          v = max ? Math.max(v, s) : v + s / (2 * r + 1);
+        }
+        o[y * W + x] = v;
+      }
+    return o;
+  };
+  const sh = pass(pass(pass(a, 2, true), 2, false), 1, false);
+  for (let i = 0; i < W * H; i++) {
+    d.data[i * 4] = 20;
+    d.data[i * 4 + 1] = 12;
+    d.data[i * 4 + 2] = 30;
+    d.data[i * 4 + 3] = Math.round(Math.min(1, sh[i]) * 140);
+  }
+  cg.putImageData(d, 0, 0);
+  litShadows.set(img, c);
+  return c;
+}
+
+/** 빛 그림 그리기: 보통은 빛 합성(lighter). 밝은 맵에선 하얗게 날아가니 그림자 → 제 색 → 빛을 조금 */
+function drawLit(g: CanvasRenderingContext2D, img: HTMLImageElement, x: number, y: number, w: number, h: number, bright: boolean) {
+  if (!bright) {
+    g.globalCompositeOperation = "lighter";
+    g.drawImage(img, x, y, w, h);
+    return;
+  }
+  const sh = litShadow(img);
+  if (sh) {
+    const kx = w / img.naturalWidth, ky = h / img.naturalHeight;
+    g.drawImage(sh, x - LIT_PAD * kx, y - LIT_PAD * ky, sh.width * kx, sh.height * ky);
+  }
+  g.drawImage(img, x, y, w, h);
+  const a0 = g.globalAlpha;
+  g.globalAlpha = a0 * 0.6;
+  g.globalCompositeOperation = "lighter";
+  g.drawImage(img, x, y, w, h);
+  g.globalAlpha = a0;
+}
+
 function glowAt(g: CanvasRenderingContext2D, x: number, y: number, r: number, color: string) {
   g.save();
   g.globalCompositeOperation = "lighter";
@@ -1368,8 +1443,7 @@ export class FightRenderer {
     g.globalAlpha = fade;
     if (pim) {
       const k = (sm.h * 1.1) / pim.height;
-      g.globalCompositeOperation = "lighter";
-      g.drawImage(pim, x - (pim.width * k) / 2, y - pim.height * k + 4, pim.width * k, pim.height * k);
+      drawLit(g, pim, x - (pim.width * k) / 2, y - pim.height * k + 4, pim.width * k, pim.height * k, !!MAPS[s.map]?.bright);
     } else if (sh && a) {
       const k0 = Math.floor(((p.t - sm.delay) * a.fps) / 60) % a.frames;
       const fr = frameRect(sh, a, k0);
@@ -1448,8 +1522,8 @@ export class FightRenderer {
         g.save();
         g.translate(cx, cy);
         g.scale(dir || 1, 1);
-        if (!PROJ_SOLID.has(anim[0])) g.globalCompositeOperation = "lighter";
-        g.drawImage(aimg, -wid * anim[3], -hgt / 2, wid, hgt);
+        if (PROJ_SOLID.has(anim[0])) g.drawImage(aimg, -wid * anim[3], -hgt / 2, wid, hgt);
+        else drawLit(g, aimg, -wid * anim[3], -hgt / 2, wid, hgt, !!MAPS[s.map]?.bright);
         g.restore();
       } else if (art && img) {
         // 그림 탄: 판정 높이에 맞춰 크기, 날아가는 쪽으로 뒤집음 (물방울은 살짝 출렁)
