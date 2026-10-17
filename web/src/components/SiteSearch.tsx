@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { NAV_GROUPS } from "@/data/navMenu";
+import GameIcon from "@/components/GameIcon";
 import { chosung } from "@/lib/food";
 import { lockScroll } from "@/lib/scrollLock";
 
@@ -205,7 +206,7 @@ export default function SiteSearch() {
                 }`}
               >
                 <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/5 font-mono text-sm">
-                  {e.icon}
+                  <GameIcon icon={e.icon} />
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="block truncate font-['Nanum_Gothic',sans-serif] text-sm text-white">

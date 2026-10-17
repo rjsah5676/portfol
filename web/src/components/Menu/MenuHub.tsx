@@ -2,6 +2,7 @@ import Link from "next/link";
 import Faded from "@/components/Faded";
 import { getNavGroup } from "@/data/navMenu";
 import NavBadge from "@/components/Menu/NavBadge";
+import GameIcon from "@/components/GameIcon";
 
 // nav 대제목(study/games/tools/devtools)을 누르면 나오는 하위 메뉴 격자 페이지
 export default function MenuHub({ group }: { group: string }) {
@@ -42,7 +43,7 @@ export default function MenuHub({ group }: { group: string }) {
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-[#1C1E24] via-transparent to-transparent opacity-80" />
                   <span className="absolute top-3 left-3 flex h-8 w-8 items-center justify-center rounded-lg bg-black/50 font-mono text-sm text-white/90 backdrop-blur">
-                    {item.icon}
+                    <GameIcon icon={item.icon} />
                   </span>
                 </div>
                 <div className="flex flex-1 flex-col p-4 sm:p-5">

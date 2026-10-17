@@ -87,7 +87,7 @@ export const NAV_GROUPS: NavGroup[] = [
         image: imgRhythm,
         label: "PIXEL Rhythm Up",
         desc: "4키 리듬게임, 곡·난이도별 랭킹",
-        icon: "🎹",
+        icon: "px:rhythm",
         featured: true,
       },
       {
@@ -95,7 +95,7 @@ export const NAV_GROUPS: NavGroup[] = [
         image: imgFight,
         label: "PIXEL FIGHT",
         desc: "1:1 플랫폼 격투, AI 모드 · 2인 모드 · 온라인 모드",
-        icon: "🥊",
+        icon: "px:fight",
         featured: true,
       },
       {
@@ -103,7 +103,7 @@ export const NAV_GROUPS: NavGroup[] = [
         image: imgPoker,
         label: "ANIME POKER",
         desc: "애니풍 캐릭터와 즐기는 홀덤 · 7포커",
-        icon: "♠",
+        icon: "px:poker",
         featured: true,
       },
       {
@@ -111,7 +111,7 @@ export const NAV_GROUPS: NavGroup[] = [
         image: imgDefense,
         label: "PIXEL LUCKY DEFENSE",
         desc: "소환 · 합성으로 막는 운빨 랜덤 디펜스, 랭킹 · 멀티",
-        icon: "👾",
+        icon: "px:defense",
         featured: true,
       },
       {
@@ -119,7 +119,7 @@ export const NAV_GROUPS: NavGroup[] = [
         image: imgRogue,
         label: "PIXEL RESET STORY",
         desc: "PIXEL FIGHT 외전 · 아이템 조합 탑뷰 로그라이크, 캐릭터 해금 · 랭킹",
-        icon: "⚔️",
+        icon: "px:rogue",
         featured: true,
       },
       {
@@ -127,7 +127,7 @@ export const NAV_GROUPS: NavGroup[] = [
         image: imgPatrol,
         label: "PIXEL PATROL",
         desc: "스테이지를 밀고 장비를 뽑아 키우는 뱀서라이크",
-        icon: "🏮",
+        icon: "px:patrol",
         featured: true,
       },
       {

@@ -3,6 +3,7 @@ import Link from "next/link";
 import { NAV_GROUPS, getNavGroup, type NavGroup, type NavMenuItem } from "@/data/navMenu";
 import { SECTION_META, postPath, type StudySection } from "@/firestore/studyPosts";
 import NavBadge from "@/components/Menu/NavBadge";
+import GameIcon from "@/components/GameIcon";
 
 /*
  * 메인: 상단 메뉴(study · games · tools · devtools)에 있는 것들을 한 화면에 펼쳐 보여 줌.
@@ -184,7 +185,7 @@ function Row({ item, thumb }: { item: NavMenuItem; thumb: boolean }) {
           </span>
         ) : (
           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white/[0.05] font-mono text-sm text-white/80 transition-colors group-hover:bg-[color:var(--accent)]/15">
-            {item.icon}
+            <GameIcon icon={item.icon} />
           </span>
         )}
         <span className="min-w-0 flex-1">

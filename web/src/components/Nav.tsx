@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { NAV_GROUPS, type NavGroup } from "@/data/navMenu";
 import { SearchIcon, openSiteSearch } from "@/components/SiteSearch";
 import NavBadge from "@/components/Menu/NavBadge";
+import GameIcon from "@/components/GameIcon";
 
 /**
  * 상단 메뉴. 대제목은 목록 페이지 링크, PC는 마우스를 올리면(터치 기기는 ▾를 누르면) 메뉴 바 아래로 넓은 패널이 열리고
@@ -61,7 +62,7 @@ function Panel({ group, path, onClose }: { group: NavGroup; path: string; onClos
                 }`}
               >
                 <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/5 font-mono text-sm sm:h-9 sm:w-9 sm:text-base">
-                  {it.icon}
+                  <GameIcon icon={it.icon} />
                 </span>
                 <span className="min-w-0">
                   <span
