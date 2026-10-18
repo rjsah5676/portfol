@@ -30,7 +30,7 @@ const LIVE_BASE = new Set<string>(["amy", "yeonseo", "jinwoo", "taeyang", "jeong
 export const liveIdle = (l: Look) => (skinOf(l) ? !!skinOf(l)?.live && lookReady(l) : LIVE_BASE.has(l));
 
 /** 7포커 자리 앉은 대기 동작(움직이는 webp)이 있는 그림 폴더 */
-const SEAT_LIVE = new Set<string>(["jinwoo", "yeonseo", "taeyang", "jeongmin", "amy", "mio", "sera", "amy-summer", "yeonseo-summer", "taeyang-ts", "mio-dracula", "jinwoo-ramen", "jeongmin-detective"]);
+const SEAT_LIVE = new Set<string>(["jinwoo", "yeonseo", "taeyang", "jeongmin", "amy", "mio", "sera", "amy-summer", "yeonseo-summer", "taeyang-ts", "mio-dracula", "jinwoo-ramen", "jeongmin-detective", "sera-nurse"]);
 export const seatLive = (l: Look) => SEAT_LIVE.has(dir(l));
 
 export const asset = {
