@@ -13,6 +13,7 @@ import PostManager from "@/components/Admin/PostManager";
 import DataManager from "@/components/Admin/DataManager";
 import DefenseReset from "@/components/Admin/DefenseReset";
 import MarbleReset from "@/components/Admin/MarbleReset";
+import PatrolReset from "@/components/Admin/PatrolReset";
 import MailSender from "@/components/Admin/MailSender";
 import Economy from "@/components/Admin/Economy";
 import RoguePlays from "@/components/Admin/RoguePlays";
@@ -256,6 +257,8 @@ export default function AdminDashboard() {
             <DefenseReset />
             <SubHeading>다이스 타운</SubHeading>
             <MarbleReset />
+            <SubHeading>픽셀 순찰대</SubHeading>
+            <PatrolReset />
           </div>
         )}
         {tab === "guest" && <DataManager key="guest" groups={G_GUEST} />}

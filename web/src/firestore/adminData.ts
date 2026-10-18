@@ -402,3 +402,10 @@ export const resetMarble = () =>
     body: { confirm: "마블 초기화" },
     auth: true,
   });
+export const getPatrolStats = () => api<{ profiles: number; runs: number; ranks: number; players: number }>("/api/admin/patrol/stats", { auth: true });
+export const resetPatrol = () =>
+  api<Record<string, number>>("/api/admin/patrol/reset", {
+    method: "POST",
+    body: { confirm: "순찰대 초기화" },
+    auth: true,
+  });

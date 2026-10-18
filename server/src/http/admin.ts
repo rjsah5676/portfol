@@ -353,6 +353,28 @@ export function adminRouter({ db, auth, web, users, points, gateway, cfg, traffi
     })
   );
 
+  // ───────────── 픽셀 순찰대 초기화 (재화 설계 바꿀 때) ─────────────
+  // 순찰대 프로필(장비 · 무기 · 재화 · 별 · 상점 구매 기록) · 판 기록 · 랭킹 · 회원 순찰대 통계를 지움. GP 잔액 · 원장 · 받은 업적은 그대로.
+  r.get(
+    "/patrol/stats",
+    h(async () => {
+      const [profiles, runs, ranks] = await Promise.all(["patrol_profile", "patrol_runs", "patrol_rank"].map((c) => db.col(c).countDocuments({})));
+      const players = await db.col("users").countDocuments({ "stats.patrol": { $exists: true } } as never);
+      return { profiles, runs, ranks, players };
+    })
+  );
+  r.post(
+    "/patrol/reset",
+    h(async (req) => {
+      z.object({ confirm: z.literal("순찰대 초기화") }).parse(req.body);
+      const out: Record<string, number> = {};
+      for (const c of ["patrol_profile", "patrol_runs", "patrol_rank"]) out[c] = (await db.col(c).deleteMany({})).deletedCount ?? 0;
+      out.users = (await db.col("users").updateMany({ "stats.patrol": { $exists: true } } as never, { $unset: { "stats.patrol": "" } } as never)).modifiedCount;
+      console.warn("[admin] 순찰대 데이터 초기화", JSON.stringify(out));
+      return out;
+    })
+  );
+
   // ───────────── 유입 분석 ─────────────
 
   r.get(
