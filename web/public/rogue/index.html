@@ -335,7 +335,7 @@ const TUNE = {
   dashSpd:5.2, dashT:10, dashCd:50, ultT:64, moveSpd:1.75,
   bugSpd:1.2, slimeSpd:.5, turretCd:150, turretBullet:1.3, spawnDelay:45,
   floorHp:.32, floorHp2:.05, // 몹 체력: 층마다 +32% + 뒤로 갈수록 조금씩 더 (봇 200판: 후반 화력이 6배로 늘어 몹이 너무 빨리 녹음)
-  itemDrop:.05, killBit:.04, cheatChance:.4, healAmt:20, shieldAmt:20,
+  itemDrop:.03, killBit:.04, cheatChance:.4, healAmt:20, shieldAmt:20,
 };
 // 4챕터 × 2층. 챕터 1층 = 중간 보스, 2층 = 챕터 보스
 const CHAPTERS = [
@@ -349,12 +349,12 @@ const chOf = n => Math.min(CHAPTERS.length - 1, Math.ceil(n / 2) - 1);
 const bossOf = n => n % 2 ? CHAPTERS[chOf(n)].mid : CHAPTERS[chOf(n)].boss;
 const floorLabel = n => (chOf(n) + 1) + '-' + (n % 2 ? 1 : 2);
 const BOSS_NAME = {trojan:'트로이 목마', recycler:'휴지통', lag:'렉 덩어리', loading:'무한 로딩', freeze:'프리징', kingslime:'킹 노이즈 슬라임', queen:'벌레 여왕', bigturret:'거대 터렛', bsod:'블루스크린'};
-const BOSS_HP = {trojan:820, recycler:1500, kingslime:150, lag:340, queen:300, loading:460, bigturret:420, freeze:480, bsod:900};
+const BOSS_HP = {trojan:820, recycler:1500, kingslime:150, lag:340, queen:250, loading:460, bigturret:420, freeze:480, bsod:900};
 const BOSS_R = {trojan:18, recycler:22, kingslime:16, lag:19, queen:12, loading:18, bigturret:14, freeze:17, bsod:22};
 const BOSS_COL = {trojan:'#c98a4a', recycler:'#8fd18f', lag:'#ff3d5e', loading:'#3fe3ff', freeze:'#9fd8ff', kingslime:'#b45cff', queen:'#7b4dff', bigturret:'#d36bff', bsod:'#4d7bff'};
 // 챕터별 피격 피해 (일반 · 보스) — 3챕터부터 한 번에 더 깎임
 // 층별 보스 체력 배수 — 봇 200판에서 보스 처치 중앙값이 4층부터 9~12초로 떨어져(마지막 보스 12초) 뒤쪽을 올림. 목표: 마지막 보스 30초 안팎
-const BOSS_FLOOR_HP = [1, 1, 1, 1.25, 1.6, 1.6, 2.0, 2.8];
+const BOSS_FLOOR_HP = [1, 1, 1, 1.25, 1.6, 1.35, 2.0, 2.8];
 const HIT_DMG = [10, 15, 20, 25, 25], BOSS_DMG = [15, 20, 25, 30, 35]; // 월드별 (0.5: 월드 1 보스 20→15, 월드 2 일반 10→15, 월드 3 보스 20→25)
 const hitDmg = boss => (boss ? BOSS_DMG : HIT_DMG)[chOf(G ? G.floorNo : 1)];
 const bossTitle = e => BOSS_NAME[e.kind] + (e.v2 ? ' v2' : '');
@@ -584,13 +584,22 @@ const ITEM = Object.fromEntries(ITEMS.map(i => [i.id, i]));
 const SET_OF = {split_bug:'bug', corrupt_data:'bug', bug_swarm:'bug', bug_report:'bug', cloud_upload:'cloud', cloud_sync:'cloud', edge_server:'cloud', helper_bot:'bot', mini_kai:'bot', shield_bot:'bot', pickup_drone:'bot', bomb_drone:'bot', heal_bot:'bot', cat_gif:'bot', overclock:'oc', overheat:'oc', energy_drink:'oc', gaming_mouse:'oc', turbo:'oc', cache_hit:'oc', liquid_nitro:'oc', memory_slot:'tank', server_rack:'tank', ups:'tank', virtual_memory:'tank', spare_power:'tank', anti_dmg:'tank', debug_mode:'hack', source_leak:'hack', sitemap:'hack', master_key:'hack', kill_process:'hack', root_access:'hack', lucky_dice:'luck', lucky_packet:'luck', wallet:'luck', miner:'luck', clover:'luck', gold_member:'luck', tamagotchi:'bot', multitap:'bot', vpn:'hack', dark_web:'hack', coupon:'luck', one_plus_one:'luck', usb3:'oc'};
 const SETS = {
   bug:   {name:'버그 군단', col:'#b45cff', desc:'비행 · 맞을 때마다 아군 벌레 2마리 · 처치 시 아군 벌레'},
-  cloud: {name:'클라우드 네이티브', col:'#bfe8ff', desc:'비행 · 탄 +1 · 데미지 +0.5'},
-  bot:   {name:'봇넷', col:'#9fe8ff', desc:'소환수 피해 ×1.5 · 작은 봇 2기가 주위를 돎'},
-  oc:    {name:'오버클러커', col:'#ff5a3d', desc:'데미지 +0.5 · 연사 +15% · 이동 +10%'},
+  cloud: {name:'클라우드 네이티브', col:'#bfe8ff', desc:'비행 · 탄 +1 · 데미지 ×1.25'},
+  bot:   {name:'봇넷', col:'#9fe8ff', desc:'소환수 피해 ×2 · 작은 봇 2기가 주위를 돎'},
+  oc:    {name:'오버클러커', col:'#ff5a3d', desc:'데미지 ×1.3 · 연사 +25% · 이동 +10%'},
   tank:  {name:'데이터 센터', col:'#ffcf4a', desc:'최대 HP +30 · 몸이 커지고 닿는 적에게 피해 · 넉백 안 받음'},
-  hack:  {name:'해커', col:'#5dff6a', desc:'25% 확률로 탄 1발 더 · 숨겨진 방이 지도에 보임'},
+  hack:  {name:'해커', col:'#5dff6a', desc:'40% 확률로 탄 1발 더 · 숨겨진 방이 지도에 보임'},
   luck:  {name:'잭팟', col:'#ffe14d', desc:'럭 +3 · 비트 +15'},
 };
+// 두 템 시너지 (아이작식) — 둘 다 들면 추가 효과. need 안의 배열은 「그중 하나」
+const SYNERGY = [
+  {id:'r4k',   name:'4K 렌더링',   col:'#ffb3c7', need:['giant_pixel', 'frame_drop'],              desc:'왕탄 + 프레임 드랍 — 데미지 ×1.6', fx:p => { p.damage *= 1.6; }},
+  {id:'ddos',  name:'DDoS',        col:'#4dd2ff', need:['overclock', 'light_packet'],              desc:'오버클럭 + 경량 패킷 — 연사 한계 돌파 · 데미지 ×1.8', fx:p => { p.damage *= 1.8; p.fdMin = 3; }},
+  {id:'swarm', name:'유도 탄막',   col:'#9fe8ff', need:['homing_pixel', ['tri_shot', 'quad_core']], desc:'유도탄 + 트라이 샷/쿼드 코어 — 탄 +1 · 데미지 ×1.3', fx:p => { p.count += 1; p.damage *= 1.3; }},
+  {id:'rail',  name:'관통 대포',   col:'#ff3d5e', need:['laser_pointer', 'giant_pixel'],          desc:'레이저 포인터 + 왕탄 — 데미지 ×1.5 · 탄속 +20%', fx:p => { p.damage *= 1.5; p.shotSpeed *= 1.2; }},
+  {id:'crit',  name:'크리티컬',    col:'#ff5a7a', need:['cache_hit', 'turbo'],                    desc:'캐시 히트 + 터보 모드 — 데미지 ×1.4', fx:p => { p.damage *= 1.4; }},
+  {id:'cluster', name:'집속탄',    col:'#ff9a3d', need:['pixel_bomb', 'split_bug'],               desc:'픽셀 폭탄 + 분열탄 — 데미지 ×1.3 · 연사 +20%', fx:p => { p.damage *= 1.3; p.fireDelay *= .83; }},
+];
 const AXIS_LABEL = {form:'FORM', count:'COUNT', traj:'PATH', onhit:'ON-HIT', stat:'STAT', util:'UTIL', active:'ACTIVE'};
 // 등급(Q0~Q4)과 나오는 곳 — treasure 보물방 · shop 패치 서버 · secret 숨겨진 방 · drop 방 클리어/압축 파일
 const META = {
@@ -829,14 +838,15 @@ function computeProfile(ids, cid){
   p.tf = Object.keys(setN).filter(s => setN[s] >= 3);
   for (const s of p.tf){
     if (s === 'bug'){ p.fly = true; p.bugOnHit = true; p.allyBug += .15; }
-    if (s === 'cloud'){ p.fly = true; p.count += 1; p.damage += .5; }
-    if (s === 'bot'){ p.famMul = 1.5; p.miniBots = 2; }
-    if (s === 'oc'){ p.damage += .5; p.fireDelay *= .87; p.move *= 1.1; }
+    if (s === 'cloud'){ p.fly = true; p.count += 1; p.damage *= 1.25; }
+    if (s === 'bot'){ p.famMul = 2; p.miniBots = 2; }
+    if (s === 'oc'){ p.damage *= 1.3; p.fireDelay *= .8; p.move *= 1.1; }
     if (s === 'tank') p.tankBody = true;
-    if (s === 'hack'){ p.extraShot = .25; p.leak = true; }
+    if (s === 'hack'){ p.extraShot = .4; p.leak = true; }
     if (s === 'luck') p.luck += 3;
   }
-  p.fireDelay = Math.max(4, Math.min(60, p.fireDelay)); // 아무리 꽝을 먹어도 초당 1발은 쏨
+  { const has = new Set(ids); p.syn = SYNERGY.filter(s => s.need.every(n => Array.isArray(n) ? n.some(x => has.has(x)) : has.has(n))).map(s => s.id); for (const id of p.syn) SYNERGY.find(s => s.id === id).fx(p); }
+  p.fireDelay = Math.max(p.fdMin || 4, Math.min(60, p.fireDelay)); // 아무리 꽝을 먹어도 초당 1발은 쏨
   p.damage = Math.max(0.5, p.damage);
   p.beam = p.forms.has('beam'); p.bomb = p.forms.has('bomb'); p.boom = p.forms.has('boom');
   const pick = ax => { for (let i = defs.length-1; i >= 0; i--) if (defs[i].axis === ax) return defs[i].tint; return null; };
@@ -1416,6 +1426,8 @@ function genFloor(seed, floorNo, used){
     const dead = list.filter(r => r !== start && nCount(r.gx, r.gy) === 1).sort((a,b) => dist.get(b) - dist.get(a));
     if (dead.length < 4) continue;
     dead[0].type = 'boss'; dead[1].type = 'treasure'; dead[1].locked = true; dead[2].type = 'treasure'; dead[3].type = 'shop';
+    // 보물방은 층마다 하나 (아이작처럼). 1~2층은 그냥 열려 있고, 3층부터 잠김 — 봇 측정: 보물방 두 개에서 층당 2.1개씩 들어와 템이 너무 빨리 쌓였음
+    dead[2].type = 'combat'; if (floorNo <= 2) dead[1].locked = false;
     const spList = rollSpecials(rng, floorNo); // 남는 막다른 방 → 랜덤 특수방
     if (dead.length - 4 < spList.length && attempt < 60) continue;
     dead.slice(4).forEach((r, i) => { if (spList[i]) r.type = spList[i]; });
@@ -1454,11 +1466,10 @@ function genFloor(seed, floorNo, used){
       if (!ids.length){ r.pickups.push(mkPick('bit', W/2 - 20, H/2, {n:15})); r.pickups.push(mkPick('heal', W/2 + 20, H/2)); }
     });
     const shop = list.find(r => r.type === 'shop');
-    const fN = floorNo, shopItem = fN >= 2 || rng() < .5 ? pickItem('shop', rng, trial) : null, shopItem2 = fN >= 5 ? pickItem('shop', rng, trial) : null;
+    const fN = floorNo, shopItem = fN >= 2 || rng() < .5 ? pickItem('shop', rng, trial) : null;
     const itemPrice = 15 + 3 * Math.floor((fN - 1) / 2); // 월드마다 +3 (15 · 18 · 21 · 24 · 27)
     const stock = [shopItem ? {kind:'item', id:shopItem, price:itemPrice} : (rng() < .5 ? {kind:'patch', price:4, c:Math.floor(rng()*8)} : {kind:'zip', price:5}), {kind:'heal', price:4}, {kind:'shield', price:5},
                    {kind: rng() < .5 ? 'key' : 'bomb', price:5}, rng() < .5 ? {kind:'patch', price:4, c:Math.floor(rng()*8)} : {kind:'card', price:6, cid:CARDS[Math.floor(rng()*CARDS.length)].id}];
-    if (shopItem2) stock[4] = {kind:'item', id:shopItem2, price:itemPrice + 3};
     stock.forEach((s, i) => { if (s.kind !== 'item' || s.id) shop.pickups.push(mkPick(s.kind, W/2 - 112 + i*56, H/2 + 14, {id:s.id, price:s.price, c:s.c, cid:s.cid, source:'shop'})); });
     // 숨겨진 방 = 기본은 파밍 묶음. 아이템은 운 좋을 때만 (직접 10%, 잠긴 압축 25% × 그 안 35%)
     const cardId = () => CARDS[Math.floor(rng()*CARDS.length)].id, patchC = () => Math.floor(rng()*8);
@@ -2624,8 +2635,10 @@ function tfCheck(){ // 새로 변신했으면 배너 + 한 번만 주는 보상
     if (s === 'tank'){ p.maxHp += 30; p.hp = Math.min(p.maxHp, p.hp + 30); }
     if (s === 'luck') G.res.bit += 15;
     G.tfShow = {s, t:160}; secFlag('tf1'); sfx('good'); burst(p.x, p.y - 8, S.col, 30, 3); G.shake = 6;
-    showBanner('변신! ' + S.name, S.desc);
+    setTimeout(() => showBanner('변신! ' + S.name, S.desc, '세트 변신'), 1500); // 바로 띄우면 방금 주운 템 배너에 덮임
   }
+  const sseen = (G.synSeen ||= []);
+  for (const id of G.prof.syn || []){ if (sseen.includes(id)) continue; sseen.push(id); const S = SYNERGY.find(s => s.id === id), p = G.player; sfx('good'); burst(p.x, p.y - 8, S.col, 26, 3); G.shake = 5; setTimeout(() => showBanner('시너지! ' + S.name, S.desc, '두 템 시너지'), 1500); secFlag('syn1'); }
 }
 function quietHit(e, dmg){ if (e.dead || e.spawnT > 0) return; e.hp -= dmg; e.flash = Math.max(e.flash || 0, 2); if (opts.dmgNums) G.nums.push({x:e.x, y:e.y - e.r, v:dmg, life:24}); }
 function nearestEnemy(x, y, maxD){ let b = null, bd = maxD || 1e9; for (const e of G.enemies){ if (e.dead || e.spawnT > 0 || e.z > 8) continue; const d = Math.hypot(e.x - x, e.y - y); if (d < bd){ bd = d; b = e; } } return b; }
@@ -3122,7 +3135,7 @@ function updateQueen(e, dx, dy, d){
   if (e.st < 18) e.flash = e.st % 6 < 3 ? 1 : 0;
   if (e.st <= 0){
     e.cyc++;
-    if (e.cyc % 2){ if (G.enemies.filter(o => !o.dead && o.type === 'bug').length < 8) summonBugs(e, e.hp < e.maxHp/2 ? 4 : 3); e.st = 110; }
+    if (e.cyc % 2){ if (G.enemies.filter(o => !o.dead && o.type === 'bug').length < 6) summonBugs(e, e.hp < e.maxHp/2 ? 3 : 2); e.st = 110; } // 봇 측정: 3층 보스에서 벌레에 치여 죽는 벽 → 소환 3/4 → 2/3, 최대 8 → 6
     else { e.vol = 3; e.st = 100; }
   }
   if (e.vol > 0 && e.st % 12 === 0 && e.st <= 96){ const a = Math.atan2(dy, dx); for (let i = -1; i <= 1; i++) eshot(e.x, e.y, a + i*16*DEG, 1.7); e.vol--; sfx('shoot'); }
@@ -4669,6 +4682,7 @@ let charCur = null;
 const PATCH_NOTES = [
   {ver:'ALPHA 0.6', name:'월드 5 · 소환수 · 세트 변신', date:'2026.10.18', lines:[
     '조작 — 움직이다 쏘면 탄이 움직이던 쪽으로 살짝 휘어요 (멈춘 직후에도 잠깐 남음, 아이작처럼). Tab = 일시정지, M = 지도. 들고 있는 아이템 · 액티브 · 주머니 · 바닥 아이템에 마우스를 올리면 이름과 설명',
+    '조합 — 두 템 시너지 6개 추가 (4K 렌더링 · DDoS · 유도 탄막 · 관통 대포 · 크리티컬 · 집속탄): 둘 다 들면 「시너지!」 배너와 함께 큰 배율. 세트 변신도 강화 (오버클러커 데미지 ×1.3 · 연사 +25%, 클라우드 데미지 ×1.25, 봇넷 소환수 ×2, 해커 40%). 대신 템 들어오는 속도 ↓ — 보물방은 층마다 하나(3층부터 잠김), 상점 템 하나, 전투방 템 5% → 3%. 3층 보스 벌레 여왕 체력 300 → 250 · 소환 줄임',
     '밸런스 (봇 1,000판 넘게 돌려 맞춤) — 4층부터 보스 체력 ↑ (마지막 보스 ×2.8: 처치 중앙값 12초 → 21초), 5층부터 방마다 몹 · 엘리트 조금 더, 뒤쪽 층 몹 체력 곡선 ↑, 월드 3 일반 피해 20 · 월드 4 일반 피해 25. 상점엔 2층부터 아이템이 항상 (값은 월드마다 +3, 5층부터 2개) — 비트가 80개씩 남던 걸 20~30개로. 프리징 점프 예고 조금 길게',
     '지도에 남은 픽업 표시 (아이작처럼) — 다녀온 방에 안 주운 아이템 · 열쇠 · 폭탄 · 상자 · 패치 · 치트 코드 · 하트 · 비트가 있으면 방 칸에 작은 아이콘 (상점 매물 · 보물방 템은 방 아이콘으로)',
     '손상된 섹터(지날 때 HP -10) 문을 초록 글리치 + ♥-10 표시로 바꿔 보스 문과 헷갈리지 않게. 고장 난 슬롯머신 · 랜덤 박스 몸통 안으로 튄 비트가 밖으로 밀려 나와 주울 수 있게',
@@ -4854,7 +4868,8 @@ function renderStatus(){
   <div class="bx"><h5>알아낸 패치</h5><div class="tags">${known || '<span class="none">아직 먹어 본 패치 없음</span>'}</div></div>`;
 }
 function setTags(){ const n = {}; for (const id of new Set(G.items.map(i => i.id))){ const s = SET_OF[id]; if (s) n[s] = (n[s] || 0) + 1; }
-  return Object.keys(n).map(s => `<span class="tag" style="color:${SETS[s].col}" title="${esc(SETS[s].desc)}">${(G.prof.tf || []).includes(s) ? '★ ' : ''}${esc(SETS[s].name)} ${Math.min(3, n[s])}/3</span>`).join(''); }
+  return Object.keys(n).map(s => `<span class="tag" style="color:${SETS[s].col}" title="${esc(SETS[s].desc)}">${(G.prof.tf || []).includes(s) ? '★ ' : ''}${esc(SETS[s].name)} ${Math.min(3, n[s])}/3</span>`).join('')
+    + (G.prof.syn || []).map(id => { const S = SYNERGY.find(x => x.id === id); return `<span class="tag" style="color:${S.col}" title="${esc(S.desc)}">⚡ ${esc(S.name)}</span>`; }).join(''); }
 function togglePause(){
   if (!G || !running || !$('codex').hidden || storyOpen) return;
   mapOpen = false;
