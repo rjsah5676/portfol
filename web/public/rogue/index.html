@@ -502,7 +502,7 @@ const ITEMS = [
   {id:'mini_kai',      name:'미니 카이',     axis:'util', tint:'#ff5a7a', desc:'내 탄을 75% 피해로 똑같이 따라 쏨', fl:'포크한 저장소', add:p=>p.fams.push('mini_kai')},
   {id:'shield_bot',    name:'방패 봇',       axis:'util', tint:'#c8ccdf', desc:'내 곁에서 날아오는 적 탄 쪽으로 먼저 움직여 막아 줌 · 수호 1칸', fl:'403 Forbidden', add:p=>p.fams.push('shield_bot')},
   {id:'pickup_drone',  name:'수거 드론',     axis:'util', tint:'#ffcf4a', desc:'가까운 비트 · 열쇠 · 폭탄 · 회복을 나한테 끌어옴', fl:'자동 수집 스크립트', add:p=>p.fams.push('pickup_drone')},
-  {id:'bomb_drone',    name:'폭격 드론',     axis:'util', tint:'#c77dff', desc:'10초마다 가까운 적 위에 폭탄을 떨굼 (나는 안 맞음)', fl:'배포 자동화', add:p=>p.fams.push('bomb_drone')},
+  {id:'bomb_drone',    name:'폭격 드론',     axis:'util', tint:'#c77dff', desc:'10초마다 가까운 적 위에 폭탄을 떨굼', fl:'배포 자동화', add:p=>p.fams.push('bomb_drone')},
   {id:'heal_bot',      name:'수리 봇',       axis:'util', tint:'#7dffd9', desc:'방을 비울 때마다 HP 5 회복', fl:'자가 복구 중…', add:p=>p.fams.push('heal_bot')},
   {id:'cat_gif',       name:'냥이.gif',      axis:'util', tint:'#ffb36b', desc:'가까운 적에게 달려들어 물어뜯음', fl:'인터넷의 절반은 고양이', add:p=>p.fams.push('cat_gif')},
   // ── 궤도 · 아군 벌레 (세트 「버그 군단」) ──
@@ -906,7 +906,7 @@ function recalcProfile(){ G.prof = computeProfile(G.items.map(i => i.id), G.char
 /* ---------- item icons ---------- */
 const ICON = {};
 // 캐릭터 아틀라스 256x192 = 64x64 프레임 4x3 (화면 64px에 1:1 → 또렷하게). 칸 크기는 CEL(img)로 그림 너비에서 계산 (행: 앞/뒤/옆(오른쪽), 열: 대기·걷기 A/B/C), 발이 프레임 아래 가운데
-const KAI = new Image(); KAI.src = 'a/b7c60b3854.webp';
+const KAI = new Image(); KAI.src = 'a/96432f601f.webp';
 let KAI_OL = null; // 내 캐릭터 = 시안 외곽선 1px (어두운 바닥에서도 바로 보이게)
 const CEL = img => Math.round((img.naturalWidth || img.width) / 4);
 function outlineCells(img, color){ // 칸마다 외곽선 (64칸 = 2px 두께, 48칸 = 1px)
@@ -927,15 +927,17 @@ function outline(img){ return outlineCells(img, '#3fe3ff'); }
 KAI.onload = () => { KAI_OL = outline(KAI); };
 // 이그나 아틀라스 = 카이와 같은 형식 (GPT)
 const IGNA = new Image(); let IGNA_OL = null; IGNA.onload = () => { IGNA_OL = outline(IGNA); };
-IGNA.src = 'a/5aa178c407.webp';
+IGNA.src = 'a/edf54f84d9.webp';
 const IVAN = new Image(), LILY = new Image(), DICEI = new Image(); let IVAN_OL = null, LILY_OL = null, DICE_OL = null;
 DICEI.onload = () => { DICE_OL = outline(DICEI); };
-DICEI.src = 'a/6f9fc96e54.webp';
+DICEI.src = 'a/0cb21602e1.webp';
 IVAN.onload = () => { IVAN_OL = outline(IVAN); }; LILY.onload = () => { LILY_OL = outline(LILY); };
-IVAN.src = 'a/5ef583a692.webp';
-LILY.src = 'a/e3264be811.webp';
+IVAN.src = 'a/8e44d8cef1.webp';
+LILY.src = 'a/6faf1a2818.webp';
 const CHAR_IMG = {kai:KAI, igna:IGNA, ivan:IVAN, lily:LILY, dice:DICEI};
 [KAI, IGNA, IVAN, LILY, DICEI].forEach(im => im.addEventListener('load', () => { try { if (!$('start').hidden) renderStartInfo(); } catch(e){} }));
+const isV3 = im => !!(im && (im.naturalHeight || im.height) / CEL(im) > 4.5); // 새 시트 4x5
+const idleY = im => isV3(im) ? 4 * CEL(im) : 0;
 const charSpr = id => { const im0 = CHAR_IMG[id] || KAI, ok0 = im0.complete && im0.naturalWidth > 0, im = ok0 ? im0 : KAI; return {im, ol:!ok0 ? KAI_OL : id === 'igna' ? IGNA_OL : id === 'ivan' ? IVAN_OL : id === 'lily' ? LILY_OL : id === 'dice' ? DICE_OL : KAI_OL, ok:im.complete && im.naturalWidth > 0}; };
 // 1챕터 시트 256x104: 윗줄 슬라임 40x40 x4 (대기/찌그러짐/점프/피격), 아랫줄 64x64 x4 (바위/금 간 바위/잔해/상자)
 const SL = new Image(); SL.src = 'a/24a969fe41.webp';
@@ -1114,6 +1116,10 @@ function propSpr(fr, x, y, sz){ ctx.imageSmoothingEnabled = true; ctx.drawImage(
 const MAPI2 = new Image(); MAPI2.src = 'a/540a9e0b89.webp';
 const MAP2_IDX = {arcade:0, challenge:1, elite:2, curse:3, vault:4, sacrifice:5, mirror:6, update:7};
 const DOOR2_IDX = {arcade:0, challenge:2, elite:4, curse:6, vault:8, sacrifice:10, mirror:12, update:14};
+// 새 문 시트 256x384 = 64칸 4x6 (닫힘 · 열림 짝): 보스 입 · 상점 가게 · 오락실 슬롯머신 · 결투 칼+하트 · 엘리트 왕관 괴물 · 손상된 섹터 가시 · 금고 · 제단 · 거울 · 업데이트 단말기 · 일반 / 비밀 구멍 · 잠김
+const DOOR3 = new Image(); /*DOOR3*/DOOR3.src = 'a/cb21b833c6.webp';
+const D3 = {boss:0, shop:2, arcade:4, challenge:6, elite:8, curse:10, vault:12, sacrifice:14, mirror:16, update:18, normal:20};
+const door3Ready = () => DOOR3.complete && DOOR3.naturalWidth > 0;
 function doorSpr(fr, x, y, w, h, a){ ctx.save(); ctx.globalAlpha *= (a ?? 1); ctx.imageSmoothingEnabled = true; ctx.drawImage(DOOR, (fr % 4)*64, Math.floor(fr/4)*64, 64, 64, Math.round(x), Math.round(y), w, h); ctx.restore(); }
 // 손상된 섹터는 보스 문(빨강)과 헷갈리지 않게 빨강↔초록을 바꾼 사본을 씀 (문 6·7번 칸, 지도 아이콘 3번 칸)
 function swapRG(img, rx, ry, rw, rh){
@@ -1450,11 +1456,11 @@ const WORLD_LAYOUTS = [
     ['.............','.g.........x.','.............','....ooooo....','.............','.x.........p.','.............'],
     ['.....p.p.....','.....p.p.....','pp.........pp','.............','pp.........pp','.....p.p.....','.....p.p.....'] ],
   [ ['.............','.^^.......^^.','.^^.......^^.','.............','.^^.......^^.','.^^.......^^.','.............'],
-    ['.............','.............','..^^^^.^^^^..','.............','..^^^^.^^^^..','.............','.............'],
+    ['.............','.............','..~~~~.~~~~..','.............','..~~~~.~~~~..','.............','.............'],
     ['.............','...#.....#...','...^.....^...','...^.....^...','...^.....^...','...#.....#...','.............'],
-    ['.............','.^.^.^.^.^.^.','.............','.^.^.....^.^.','.............','.^.^.^.^.^.^.','.............'],
+    ['.............','.~.~.~.~.~.~.','.............','.~.~.....~.~.','.............','.~.~.~.~.~.~.','.............'],
     ['.............','.....^^^.....','..x..^.^..x..','.....^.^.....','..x.......x..','.....^^^.....','.............'],
-    ['.............','.##.......##.','.#^^.....^^#.','...^.....^...','.#^^.....^^#.','.##.......##.','.............'] ],
+    ['.............','.##.......##.','.#~~.....~~#.','...~.....~...','.#~~.....~~#.','.##.......##.','.............'] ],
   [ ['.............','..M.......M..','.............','.....MMM.....','.............','..M.......M..','.............'],
     ['.............','.MM.......MM.','.M.........M.','.............','.M.........M.','.MM.......MM.','.............'],
     ['.............','...M..M..M...','.............','..M..M.M..M..','.............','...M..M..M...','.............'],
@@ -1495,7 +1501,7 @@ function layoutAccess(L, tx, ty){
   const walk = c => L_WALK.includes(c);
   const out = [];
   if (reach(walk)) out.push('walk');
-  if (reach(c => walk(c) || c === '^')) out.push('panel');
+  if (reach(c => walk(c) || c === '^' || c === '~')) out.push('panel');
   if (reach(c => walk(c) || c === 'p' || c === 'g')) out.push('shoot');
   if (reach(c => walk(c) || '#xXpgT'.includes(c))) out.push('bomb');
   { const f = c => walk(c); f.jump = 1; if (reach(f)) out.push('fill'); } // 1칸 해자: 바위 잔해 · 브리지
@@ -1512,7 +1518,7 @@ function applyLayout(r, L, rng){
     else if (ch === 'x'){ r.rocks.add(k); xs.push(k); }
     else if (ch === 'X'){ r.rocks.add(k); r.cracked.add(k); (r.hard ||= new Set()).add(k); (r.wasHard ||= new Set()).add(k); }
     else if (ch === 'o') r.pits.add(k);
-    else if ('MKWpgT^'.includes(ch)) r.tiles.set(k, {t:ch, hp:ch === 'p' ? 4 : ch === 'g' ? 5 : ch === 'T' ? 2 : 0});
+    else if ('MKWpgT^~'.includes(ch)) r.tiles.set(k, {t:ch, hp:ch === 'p' ? 4 : ch === 'g' ? 5 : ch === 'T' ? 2 : 0});
     else if (ch === 'R') (r.slots ||= []).push([x, y]);
   }));
   if (xs.length && rng() < .35) r.cracked.add(xs[Math.floor(rng()*xs.length)]); else tintRock(r, rng);
@@ -1583,7 +1589,7 @@ function makeEncounter(rng, floorNo, L){
     free.push([x, y]);
   }
   { // 문에서 걸어서 갈 수 있는 칸만 (금 간 바위로 막힌 구석에 갇혀 못 잡는 몹 방지)
-    const ok = (x, y) => x >= 0 && y >= 0 && x < 13 && y < 7 && '.R^'.includes(L[y][x]), seen = new Set(), q = [];
+    const ok = (x, y) => x >= 0 && y >= 0 && x < 13 && y < 7 && '.R^~'.includes(L[y][x]), seen = new Set(), q = [];
     for (const [x, y] of DOOR_TILES) if (ok(x, y)){ seen.add(x+','+y); q.push([x, y]); }
     while (q.length){ const [x, y] = q.shift(); for (const [dx, dy] of [[1,0],[-1,0],[0,1],[0,-1]]){ const k = (x+dx)+','+(y+dy); if (ok(x+dx, y+dy) && !seen.has(k)){ seen.add(k); q.push([x+dx, y+dy]); } } }
     for (let i = free.length - 1; i >= 0; i--) if (!seen.has(free[i][0]+','+free[i][1])) free.splice(i, 1);
@@ -1789,7 +1795,7 @@ function freshState(seed, cid){
     gauge:0, ult:0, cutin:0,
     projs:[], ebul:[], enemies:[], beams:[], fxs:[], parts:[], bolts:[], nums:[], toasts:[], bombList:[],
     shake:0, hitstop:0, lastHitstop:-99, freeze:0, kills:0, ended:false, endTimer:0, lootRng:null,
-    log:{runId:Math.random().toString(36).slice(2,10), gameVersion:'alpha-0.8', // 플레이데이터 구분용 — 밸런스 크게 바꿀 때마다 올림 (0.6.5: 봇 측정 밸런스 · 시너지 · 방 클리어 충전) character:cid, seed, result:null, startedAt:Date.now(), durationMs:0,
+    log:{runId:Math.random().toString(36).slice(2,10), gameVersion:'alpha-0.8.1', // 플레이데이터 구분용 — 밸런스 크게 바꿀 때마다 올림 (0.6.5: 봇 측정 밸런스 · 시너지 · 방 클리어 충전) character:cid, seed, result:null, startedAt:Date.now(), durationMs:0,
          floor:1, endFloor:prog.ch * 2, items:[], rooms:[], bossKills:[], bossKillMs:null, kills:0, secretFound:false, bought:[], cheatDeals:0, patches:[], cards:[], actives:[], resumed:0},
   };
 }
@@ -1930,7 +1936,7 @@ function walkReach(){ // 문에서 걸어서 닿는 칸 (패널은 지나갈 수
 function freeTileNear(cx, cy){
   let best = null, bd = 1e9; const reach = walkReach(), any = reach.size < 3;
   for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++){
-    if (solidT(c+','+r) || (!any && (!reach.has(c+','+r) || tileT(c+','+r) === '^'))) continue;
+    if (solidT(c+','+r) || (!any && (!reach.has(c+','+r) || (tileT(c+','+r) === '^' || tileT(c+','+r) === '~')))) continue;
     const x = T + c*T + T/2, y = T + r*T + T/2, d = Math.hypot(x-cx, y-cy);
     if (d < bd){ bd = d; best = {x, y}; }
   }
@@ -2177,7 +2183,7 @@ function drawMirror(e){
   const A = darkAtlas(e.char), x = Math.round(e.x), y = Math.round(e.y);
   px(x - 6, y + 6, 12, 3, 'rgba(0,0,0,.35)');
   if (!A){ px(x - 6, y - 12, 12, 20, '#2a1440'); return; }
-  const row = e.face === 'd' ? 0 : e.face === 'u' ? 1 : 2, col = e.dashT > 0 ? 2 : 1 + Math.floor(e.t * .18) % 3;
+  const row = e.face === 'd' ? 0 : e.face === 'u' ? 1 : 2, v3 = A.height / CEL(A) > 4.5, col = e.dashT > 0 ? 2 : v3 ? Math.floor(e.t * .14) % 4 : 1 + Math.floor(e.t * .18) % 3;
   ctx.save(); ctx.translate(x, y + 9); if (e.face === 'l') ctx.scale(-1, 1);
   if (e.flash > 0) ctx.globalAlpha = .6;
   { const cs = CEL(A); ctx.drawImage(A, col*cs, row*cs, cs, cs, -PS/2, -PS, PS, PS); } ctx.restore(); ctx.globalAlpha = 1;
@@ -2452,7 +2458,7 @@ function useCard(id){
     case 'rmrf': {
       const R = G.room;
       for (const k of [...R.rocks]){ const [c, r] = k.split(',').map(Number), cx = T + c*T + T/2, cy = T + r*T + T/2; R.rocks.delete(k); (R.rubble ||= []).push({c, r}); burst(cx, cy, '#555b80', 8, 2); if (R.cracked.has(k)){ R.cracked.delete(k); crackLoot(cx, cy); } }
-      if (R.tiles) for (const [k, t] of [...R.tiles]){ if (t.t === '^' || t.t === 'W') continue; const [c, r] = k.split(',').map(Number), cx = T + c*T + T/2, cy = T + r*T + T/2; if (t.t === 'p' || t.t === 'g'){ breakTile(k, t, cx, cy); } else { R.tiles.delete(k); burst(cx, cy, '#8a8fb2', 8, 2); } }
+      if (R.tiles) for (const [k, t] of [...R.tiles]){ if (t.t === '^' || t.t === '~' || t.t === 'W') continue; const [c, r] = k.split(',').map(Number), cx = T + c*T + T/2, cy = T + r*T + T/2; if (t.t === 'p' || t.t === 'g'){ breakTile(k, t, cx, cy); } else { R.tiles.delete(k); burst(cx, cy, '#8a8fb2', 8, 2); } }
       G.flow = null; G.shake = 10; break; }
   }
   showBanner('> ' + CARD[id].name, CARD[id].desc);
@@ -2626,6 +2632,7 @@ function makeShot(a, P, p, type){
 function fire(dir){
   const P = G.prof, p = G.player;
   if (P.captcha && G.t % 720 < 60){ if (G.t % 720 === 1) toast('☑ 로봇이 아닙니다', '#8fd18f'); G.capBoost = 5; return false; }
+  p.shotAt = G.frame;
   const angs = shotAngles(dir), type = P.boom ? 'boom' : P.bomb ? 'bomb' : 'tear';
   if (P.boom){
     const alive = G.projs.filter(q => q.type === 'boom').length;
@@ -2754,6 +2761,7 @@ function step(){
   if (G.ult > 0) updateUlt();
 
   const sd = p.hp > 0 && G.ult <= 0 ? snapDir(inputShoot()) : null;
+  p.aimHeld = !!sd;
   if (sd) p.face = sd; else if (Math.hypot(mv.x, mv.y) > .3) p.face = {x:mv.x, y:mv.y};
   if (P.beam && !P.boom){
     const cmax = Math.max(14, P.fireDelay * 2.2);
@@ -3060,10 +3068,12 @@ function crackLoot(cx, cy){ // 금 간 바위 보상: 8% 아이템, 나머지는
   const kinds = ['bit', 'bit', 'bit', 'bomb', 'bomb', 'key', 'key', 'heal', 'patch', 'card'];
   for (let i = 0, n = 2 + (rng() < .4 ? 1 : 0); i < n; i++) scatter(kinds[Math.floor(rng()*kinds.length)], 1, cx, cy);
 }
+// 점멸 패널(~): 2.5초 주기 — 꺼짐 1.25초 → 깜빡 예고 0.33초 → 켜짐 0.92초. 켜졌을 때만 아픔. 과전류 패널(^)은 늘 켜져 있음
+const panelPh = () => G.frame % 150, panelOn = () => panelPh() >= 95, panelWarn = () => panelPh() >= 75 && panelPh() < 95;
 function tileTouch(p){
   const R = G.room; if (!R.tiles || !R.tiles.size || p.hp <= 0) return;
   const k0 = tileKey(p.x, p.y + 4);
-  if (k0 && tileT(k0) === '^' && !G.prof.fly && p.inv <= 0 && !(G.buff.god > 0)){ hurtPlayer(10, 'panel'); burst(p.x, p.y + 4, '#ffe14d', 8, 2); sfx('zap'); }
+  if (k0 && (tileT(k0) === '^' || (tileT(k0) === '~' && panelOn())) && !G.prof.fly && p.inv <= 0 && !(G.buff.god > 0)){ hurtPlayer(10, 'panel'); burst(p.x, p.y + 4, '#ffe14d', 8, 2); sfx('zap'); }
   const c0 = Math.floor((p.x-T)/T), r0 = Math.floor((p.y-T)/T);
   for (let r = r0-1; r <= r0+1; r++) for (let c = c0-1; c <= c0+1; c++){
     const k = c+','+r; if (tileT(k) !== 'K') continue;
@@ -3776,13 +3786,23 @@ function drawPits(room){ // 낭떠러지: 새까만 구멍 + 안쪽 벽면 + 가
     }
   }
 }
-const TILES = new Image(), TILE_SPR = {p:0, g:2, M:4, K:5, T:6, '^':7}; const tileReady = () => TILES.complete && TILES.naturalWidth > 0;
+const TILES = new Image(), TILE_SPR = {p:0, g:2, M:4, K:5, T:6, '^':7, '~':7}; const tileReady = () => TILES.complete && TILES.naturalWidth > 0;
 /*TILES64*/TILES.src = 'a/48c5f82072.webp';
 function drawTiles(room){ // 맵 1단계 타일 (그림 시트 나오기 전 임시 도트)
   const FI = CHAPTERS[chOf(G.floorNo)];
   for (const [k, t] of room.tiles){
     const [c, r] = k.split(',').map(Number), x = T + c*T, y = T + r*T, f = G.frame;
-    if (TILE_SPR[t.t] != null && tileReady()){ const fr = TILE_SPR[t.t] + (t.t === '^' && f % 90 < 45 ? 1 : 0) + (t.t === 'p' || t.t === 'g' ? (t.hp <= 2 ? 1 : 0) : 0);
+    if ((t.t === '^' || t.t === '~') && tileReady()){ // 패널: 판은 그대로, 켜졌을 때 전기만 (움직이는 그림 바꿈 없음)
+      ctx.imageSmoothingEnabled = true; ctx.drawImage(TILES, 3*64, 64, 64, 64, x, y, T, T); ctx.imageSmoothingEnabled = false;
+      const on = t.t === '^' || panelOn(), warn = t.t === '~' && panelWarn();
+      if (on){ ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = .28; px(x + 5, y + 8, T - 10, T - 14, '#ffd23f'); ctx.restore();
+        ctx.globalAlpha = .55 + .45*((f + c*7 + r*3) % 8 < 4 ? 1 : .4); ctx.strokeStyle = '#fff6b0'; ctx.lineWidth = 1; ctx.beginPath();
+        for (const [ax, ay] of [[8, 12], [17, 20], [11, 23]]){ ctx.moveTo(x + ax, y + ay); ctx.lineTo(x + ax + 3, y + ay - 3); ctx.lineTo(x + ax + 5, y + ay); ctx.lineTo(x + ax + 8, y + ay - 3); }
+        ctx.stroke(); ctx.globalAlpha = 1; }
+      else if (warn && f % 8 < 4){ px(x + 9, y + 14, 2, 2, '#ffe14d'); px(x + 20, y + 19, 2, 2, '#ffe14d'); }
+      if (t.t === '~'){ ctx.globalAlpha = .9; px(x + T/2 - 3, y + T - 6, 6, 2, on ? '#ff3d5e' : warn ? '#ffd23f' : '#5dff6a'); ctx.globalAlpha = 1; } // 점멸 패널은 아래 작은 등 (초록 안전 · 노랑 곧 · 빨강 켜짐)
+      continue; }
+    if (TILE_SPR[t.t] != null && tileReady()){ const fr = TILE_SPR[t.t] + (t.t === 'p' || t.t === 'g' ? (t.hp <= 2 ? 1 : 0) : 0);
       if (t.hit > 0){ t.hit--; ctx.globalAlpha = .7; }
       ctx.imageSmoothingEnabled = true; ctx.drawImage(TILES, (fr % 4)*64, Math.floor(fr/4)*64, 64, 64, x, y, T, T); ctx.imageSmoothingEnabled = false; ctx.globalAlpha = 1; continue; }
     if (t.t === 'W'){ px(x, y, T, T, FI.w); for (let i = 0; i < T; i += 8) px(x + ((i/8) % 2)*8, y + i, 15, 7, FI.w2); px(x, y + T - 2, T, 2, 'rgba(0,0,0,.45)'); continue; }
@@ -3853,13 +3873,18 @@ function drawRoom(){
     const locked = n.locked && !n.unlocked, open = room.cleared && !locked && !hpGate(n);
     const frame = ROOM_COL[n.type] ? ROOM_COL[n.type] : n.type === 'boss' ? '#ff3d5e' : n.type === 'treasure' ? '#ffcf4a' : n.type === 'shop' ? '#7dffd9' : n.type === 'secret' || room.type === 'secret' ? '#c77dff' : '#4a5280';
     const [x, y, w, h] = doorRect(dir);
+    if (door3Ready() && !(n.type === 'treasure' && doorReady())){
+      const sec = n.type === 'secret' || room.type === 'secret', t = sec ? 'secret' : D3[n.type] != null ? n.type : D3[room.type] != null && room.type !== 'shop' ? room.type : 'normal';
+      const fr = t === 'secret' ? 22 : locked && t !== 'vault' ? 23 : D3[t] + (open ? 1 : 0);
+      drawDoor(dir, fr, DOOR3); continue;
+    }
     if (doorReady()){
       const sec = n.type === 'secret' || room.type === 'secret', boss = n.type === 'boss' || room.type === 'boss';
       const fr = sec ? 8 : locked ? 6 : boss ? (open ? 3 : 2) : n.type === 'treasure' ? (open ? 5 : 4) : n.type === 'shop' ? (open ? 7 : 0) : (open ? 1 : 0);
       const sp = DOOR2_IDX[n.type] ?? DOOR2_IDX[room.type];
       const cz = n.type === 'curse' || room.type === 'curse';
-      if (sp != null && DOOR2.complete && DOOR2.naturalWidth && !sec){ drawDoor(dir, sp + (open ? 1 : 0), cz ? curseDoorImg() : DOOR2); if (locked && n.type !== 'vault') drawDoor(dir, 6); doorSign(dir, n); continue; }
-      drawDoor(dir, fr); doorSign(dir, n);
+      if (sp != null && DOOR2.complete && DOOR2.naturalWidth && !sec){ drawDoor(dir, sp + (open ? 1 : 0), cz ? curseDoorImg() : DOOR2); if (locked && n.type !== 'vault') drawDoor(dir, 6); continue; }
+      drawDoor(dir, fr);
       continue;
     }
     px(x - 3, y - 3, w + 6, h + 6, frame);
@@ -4352,8 +4377,20 @@ function drawPlayer0(){
   if (sdash){ kaiSpr(2, 2, x, y, 1, p.dashDir.x < 0); }
   else if (vdash && CS.ok){
     kaiSpr(p.dashDir.y > 0 ? 0 : 1, 2, x, y, 1, false);
-  } else if (isKai && kfxReady() && (p.dashT > 0 || hurt)){
+  } else if (isKai && kfxReady() && (p.dashT > 0 || (hurt && !isV3(SIMG)))){
     kpose(p.dashT > 0 ? 0 : 1, x, y, p.dashT > 0 ? p.dashDir.x < 0 : p.face.x < 0);
+  } else if (CS.ok && isV3(SIMG)){ // 새 시트: 걷기 4프레임 (디딤 → 지나감 → 반대발 → 지나감) · 4방향 공격 포즈 · 서기 · 맞음
+    const r0 = view === 'front' ? 0 : view === 'back' ? 1 : 2, moving = Math.abs(p.vx) + Math.abs(p.vy) > .3, since = G.frame - (p.shotAt ?? -99), shooting = p.aimHeld || since < 9 || p.charging;
+    let row, col;
+    if (hurt){ row = 4; col = 3; }
+    else if (shooting && (!moving || since < 5)){ row = 3; col = r0 === 0 ? 0 : r0 === 1 ? 1 : (since < 5 ? 3 : 2); }
+    else if (moving){ row = r0; col = Math.floor(p.walk * .55) % 4; }
+    else { row = 4; col = r0; }
+    const flipX = view === 'side' && flip < 0, hx = hurt ? (G.frame % 4 < 2 ? -1 : 1) : 0;
+    ctx.save(); ctx.translate(x + hx, y + 9); if (flipX) ctx.scale(-1, 1);
+    if (hurt) ctx.globalAlpha *= G.frame % 4 < 2 ? .6 : 1;
+    { const cs = CEL(SIMG); ctx.drawImage(SIMG, col*cs, row*cs, cs, cs, -PS/2, -PS, PS, PS); }
+    ctx.restore();
   } else if (CS.ok){
     const row = view === 'front' ? 0 : view === 'back' ? 1 : 2, moving = Math.abs(p.vx) + Math.abs(p.vy) > .3;
     const WALK4 = G.char === 'kai' || G.char === 'lily' || (view === 'side' && G.char === 'dice'); // 옆걷기 (GPT 새 프레임): 디딤 → 지나감 → 반대발 디딤 → 지나감
@@ -4574,7 +4611,7 @@ function drawMapGrid(known, ox, oy, cw, ch, g, big, org){
     }
     const k = ROOM_ICON(r), isz = Math.max(5, Math.min(big ? 18 : 9, Math.min(cw, ch) - (big ? 4 : 0)));
     if (cur && big && charSpr(G.char).ok){ // 현재 방 = 내 캐릭터 얼굴
-      const hs = Math.min(cw, ch) - 2; ctx.imageSmoothingEnabled = true; ctx.drawImage(charSpr(G.char).im, ...[10, 2, 28, 28].map(v => v*CEL(charSpr(G.char).im)/48), x + (cw - hs)/2, y + (ch - hs)/2, hs, hs); ctx.imageSmoothingEnabled = false;
+      const hs = Math.min(cw, ch) - 2; ctx.imageSmoothingEnabled = true; ctx.drawImage(charSpr(G.char).im, ...[10, 2, 28, 28].map((v, i) => v*CEL(charSpr(G.char).im)/48 + (i === 1 ? idleY(charSpr(G.char).im) : 0)), x + (cw - hs)/2, y + (ch - hs)/2, hs, hs); ctx.imageSmoothingEnabled = false;
     } else if (k == null && MAP2_IDX[r.type] != null && (big || ch >= 4) && MAPI2.complete && MAPI2.naturalWidth){ const j = MAP2_IDX[r.type]; ctx.imageSmoothingEnabled = true; ctx.drawImage(r.type === 'curse' ? curseMapImg() : MAPI2, (j % 4)*32, Math.floor(j/4)*32, 32, 32, Math.round(x + (cw - isz)/2), Math.round(y + (ch - isz)/2), isz, isz); ctx.imageSmoothingEnabled = false; }
     else if (k != null && (big || ch >= 4)) mi(k, x + (cw - isz)/2, y + (ch - isz)/2, isz, k === 1 && !r.pickups.some(p => p.kind === 'item') ? .35 : 1);
     if (big && r.visited && r.cleared === false && r.type !== 'start' && !cur) mi(6, x + cw - 9, y + 1, 8);
@@ -4681,7 +4718,7 @@ function endRun(result){
   const el = $('result');
   const build = (ITEM[G.active] ? `<span style="border-color:var(--red)"><img src="${ICON[G.active].url}" alt="">${esc(ITEM[G.active].name)}</span>` : '') + (G.items.map(i => `<span><img src="${ICON[i.id].url}" alt="">${esc(ITEM[i.id].name)}</span>`).join('') || '<span>패시브 없음</span>');
   const extras = [G.log.secretFound ? '숨겨진 방 발견' : '', G.log.cheatDeals ? '치트 거래 ' + G.log.cheatDeals + '번' : ''].filter(Boolean).join(' · ');
-  const poseURL = G.char !== 'kai' ? sprURL(charSpr(G.char).im, 0, 0, CEL(charSpr(G.char).im), CEL(charSpr(G.char).im)) : kfxReady() ? sprURL(KFX, (result === 'clear' ? 3 : 2)*96, 0, 96, 96) : '';
+  const poseURL = G.char !== 'kai' ? sprURL(charSpr(G.char).im, 0, idleY(charSpr(G.char).im), CEL(charSpr(G.char).im), CEL(charSpr(G.char).im)) : kfxReady() ? sprURL(KFX, (result === 'clear' ? 3 : 2)*96, 0, 96, 96) : '';
   el.innerHTML = `<div class="res">
     ${poseURL ? `<img class="pose${result === 'clear' ? ' win' : ''}" src="${poseURL}" alt="">` : ''}
     <h1>${result === 'clear' ? '<span class="r">CLEAR</span>' : 'GAME OVER'}</h1>
@@ -4863,7 +4900,7 @@ function renderCodex(bodyOnly){
     body = `<h4>시크릿 ${nd} / ${SECRETS.length} — 하나 열 때마다 새 아이템 · 캐릭터가 풀에 들어와요</h4><div class="grid">${SECRETS.map(x => {
       const d = !!SEC.done[x.id], pr = secProg(x), rw = x.item ? ITEM[x.item] : null;
       if (q && !codexMatch(x.name, x.cond, rw ? rw.name : '')) return '';
-      const cu = !rw ? sprURL(CHAR_IMG[x.char], 0, 0, CEL(CHAR_IMG[x.char]), CEL(CHAR_IMG[x.char])) : '', ic = d ? (rw ? `<img src="${ICON[x.item].url}" alt="">` : cu ? `<img src="${cu}" alt="">` : '<div class="q">★</div>') : '<div class="q">🔒</div>';
+      const cu = !rw ? sprURL(CHAR_IMG[x.char], 0, idleY(CHAR_IMG[x.char]), CEL(CHAR_IMG[x.char]), CEL(CHAR_IMG[x.char])) : '', ic = d ? (rw ? `<img src="${ICON[x.item].url}" alt="">` : cu ? `<img src="${cu}" alt="">` : '<div class="q">★</div>') : '<div class="q">🔒</div>';
       const bar = x.c && !d ? `<div class="ts-bar"><em style="width:${Math.round(pr*100)}%"></em></div><small>${Math.min(x.goal, secN(x.c))} / ${x.goal}</small>` : '';
       return `<div class="card${d ? ' own' : ''}"><div class="top">${ic}<div><b>${esc(x.name)}</b><br><small>${d ? '해금됨' : '잠김'}</small></div></div>
         <p>${esc(x.cond)}</p><i>보상: ${d ? esc((x.char ? '파이터 ' + CHARS[x.char].name : '') + (x.char && rw ? ' + ' : '') + (rw ? rw.name : '')) : '???'}</i>${bar}</div>`;
@@ -5109,7 +5146,7 @@ function openChars(){
   const el = $('chars');
   const draw = () => {
     const c = CHARS[charSel], ok = charOK(charSel);
-    el.innerHTML = `<h1>캐릭터 선택</h1><div class="cards">${CHAR_IDS.map(id => { const k = CHARS[id], o = charOK(id), img = sprURL(CHAR_IMG[id], 0, 0, CEL(CHAR_IMG[id]), CEL(CHAR_IMG[id]));
+    el.innerHTML = `<h1>캐릭터 선택</h1><div class="cards">${CHAR_IDS.map(id => { const k = CHARS[id], o = charOK(id), img = sprURL(CHAR_IMG[id], 0, idleY(CHAR_IMG[id]), CEL(CHAR_IMG[id]), CEL(CHAR_IMG[id]));
       return `<button type="button" class="cc${id === charSel ? ' on' : ''}${o ? '' : ' lock'}" data-id="${id}">${img ? `<img src="${img}" alt="">` : ''}
         <b>${o ? esc(k.name) : '???'}</b>${o ? `<div class="mk" title="월드 보스 처치 표시">${[1,2,3,4,5].map(w => `<i class="${(SEC.marks[id] || []).includes(w) ? 'on' : ''}">${w}</i>`).join('')}</div>` : '<small>🔒 LOCKED</small>'}</button>`; }).join('')}</div>
       <div class="cd">${ok ? `<div class="cd-h"><b>${esc(c.name)}</b><small>${c.en}</small></div><ul>${c.traits.map(t => `<li>${esc(t)}</li>`).join('')}</ul>
@@ -5129,6 +5166,13 @@ function openChars(){
 let charCur = null;
 /* ---------- 패치 노트 — 맨 위가 최신. 패치마다 10줄 안으로 ---------- */
 const PATCH_NOTES = [
+  {ver:'ALPHA 0.8.1', name:'걷기 · 사격 모션 · 문', date:'2026.10.19', lines:[
+    '캐릭터 5명 그림을 새로 — 걷기 4프레임 (디딤 → 지나감 → 반대발 → 지나감)으로 앞 · 뒤 · 옆 모두 자연스럽게, 서 있을 때 그림 따로',
+    '쏠 때 모션 — 쏘는 방향(위 · 아래 · 옆)으로 몸을 돌려 손을 뻗음: 카이 장풍 · 릴리 물방울 · 이그나 불꽃 · 이반 주먹 · DICE 주사위 던지기. 맞을 때 움찔하는 그림도',
+    '문만 보고 무슨 방인지 알게 — 보스 = 괴물 입, 상점 = 가게 차양, 오락실 = 슬롯머신, 결투방 = 칼 + 하트, 엘리트 = 왕관 괴물, 손상된 섹터 = 가시, 금고 = 금고 문, 제단 = 촛불과 가시, 미러 = 거울, 업데이트 = 단말기, 숨겨진 방 = 부서진 구멍 (황금방은 그대로). 문 옆 작은 아이콘은 뺌',
+    '과전류 패널 두 종류: 늘 켜진 패널(^) · 점멸 패널 — 꺼졌을 때는 밟아도 안 아픔, 아래 작은 등이 초록(안전) → 노랑(곧 켜짐) → 빨강(켜짐). 켜질 때 판 그림이 흔들리지 않고 전기만 생김 (예전엔 꺼진 그림인데도 아팠음)',
+    '폭격 드론 설명에서 「나는 안 맞음」 뺌',
+  ]},
   {ver:'ALPHA 0.8', name:'맵이 재밌게', date:'2026.10.19', lines:[
     '섬 보상 — 낭떠러지 · 바위 · 방화벽 블록 · 잠금 블록 너머에 보상이 놓인 방 15종 (전투방의 약 20%). 닿는 방법이 어려울수록 보상이 큼: 열쇠로만 → 잠긴 압축 파일이나 아이템, 비행으로만 → 비트, 폭탄 · 쏘기 · 패널로 → 픽업 둘이나 압축 파일',
     '이제 비행 · 브리지 케이블 · 폭탄 · 열쇠가 방마다 쓸모 있음. 브리지 케이블은 2칸 낭떠러지까지 다리를 놓음. 낭떠러지 옆 바위를 폭파하면 잔해가 낭떠러지 1칸을 메움 (아이작처럼)',
@@ -5298,7 +5342,7 @@ function renderStartInfo(){
     const n = i + 1, open = n <= prog.ch, clr = (b.ch || 0) >= n;
     return `<i class="${clr ? 'clr' : open ? 'on' : ''}" title="${esc(C.name)}"><b>${open ? 'WORLD ' + n : '🔒'}</b>${open ? esc(C.name) : '잠김'}</i>`;
   }).join('');
-  const chars = CHAR_IDS.map(id => { const c = CHARS[id], ok = charOK(id), img = sprURL(CHAR_IMG[id], 0, 0, CEL(CHAR_IMG[id]), CEL(CHAR_IMG[id]));
+  const chars = CHAR_IDS.map(id => { const c = CHARS[id], ok = charOK(id), img = sprURL(CHAR_IMG[id], 0, idleY(CHAR_IMG[id]), CEL(CHAR_IMG[id]), CEL(CHAR_IMG[id]));
     return `<span class="${ok ? '' : 'lock'}">${img ? `<img src="${img}" alt="">` : ''}<span style="min-width:0"><b>${ok ? esc(c.name) : '???'}</b><small>${ok ? ({kai:'천풍난무 · 올라운더', igna:'화상 탄 · 공격형', ivan:'붉은 폭풍 · 탱커', lily:'장마 파도 · 기동형', dice:'리롤 주사위 · 운빨'})[id] : esc(c.lock)}</small></span></span>`; }).join('');
   const nItems = ITEMS.filter(i => codex.items[i.id]).length, nStory = STORY_IDS.filter(id => storySeen[id]).length;
   const mmss = s => Math.floor(s/60) + ':' + String(s % 60).padStart(2, '0');
