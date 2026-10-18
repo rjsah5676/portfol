@@ -203,8 +203,11 @@ export function botMove(b: Board, cfg: BotCfg, skip: ReadonlySet<string> = new S
       case "draft": {
         const dps = factionDps(b);
         const main = cfg.focus ?? (Object.entries(dps).sort((p, q) => q[1] - p[1] || p[0].localeCompare(q[0]))[0][0] as Faction);
-        if (!hasEmpty(b) && !c.offer.some((id) => b.cells.some((s) => s.def === id && s.units.length < STACK))) return { t: "exp", a: -1 };
-        return { t: "exp", a: Math.max(0, c.offer.findIndex((id) => UNIT[id].faction === main)) };
+        // 빈 칸이 없으면 같은 유닛 칸에 얹을 수 있는 카드만 (없으면 건너뛰기)
+        const fits = (id: string) => hasEmpty(b) || b.cells.some((s) => s.def === id && s.units.length < STACK);
+        if (!c.offer.some(fits)) return { t: "exp", a: -1 };
+        const mi = c.offer.findIndex((id) => UNIT[id].faction === main && fits(id));
+        return { t: "exp", a: mi >= 0 ? mi : c.offer.findIndex(fits) };
       }
       case "relic": {
         const pref = ["growth", "echo", "phoenix", "alch", "first", "iron", "hunter", "vamp", "piggy", "twin", "bag", "kit", "goldhand", `oath_${cfg.focus ?? "x"}`];

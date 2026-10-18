@@ -265,7 +265,14 @@ function play(seed: number, town = 0) {
     }
     step(g);
   }
-  if (town) return { r: b.result!, made: b.made, exp: b.exp };
+  if (town) {
+    if (!b.result) {
+      // 안 끝난 원정 판 (봇이 캠프에서 막힘 등) — 진 판으로 셈
+      console.error("원정 판이 안 끝남", seed, town, JSON.stringify({ camp: b.exp?.camp, stage: b.exp?.stage, f: b.exp?.f, act: b.exp?.act, hp: b.exp?.hp, phase: b.phase, wave: b.wave, gold: b.gold, tick: g.tick, empty: b.cells.filter((c) => !c.def).length }));
+      return { r: { win: false, wave: b.wave, tick: g.tick, kills: b.kills, reason: "quit" as const }, made: b.made, exp: b.exp };
+    }
+    return { r: b.result, made: b.made, exp: b.exp };
+  }
   if ((lo.glitch ?? 0) >= TREASURE.minGlitch) twaves = Math.min(TREASURE.cap, twaves + b.result!.wave);
   if (b.treasure) {
     const t = treasureReward(lo.glitch ?? 0, b.treasure);
