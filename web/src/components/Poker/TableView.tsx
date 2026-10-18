@@ -706,6 +706,9 @@ export default function TableView({
   /** 이모티콘이 떠 있는 자리는 그 자리 전체(이름표 포함)를 다른 자리 · 내 틀보다 위로 — 나중에 던진 쪽이 더 위 (0 = 이모티콘 없음) */
   const emoteZ = (i: number) => (emotes[i] ? 46 + Object.values(emotes).filter((e) => e.key < emotes[i].key).length : 0);
 
+  // 판 위 건 돈: 최근에 건 사람이 위 (겹칠 때 앞사람 칩 밑에 묻히지 않게)
+  const betSeen = useRef<{ hand: number; sig: Record<number, string>; at: Record<number, number>; n: number }>({ hand: -1, sig: {}, at: {}, n: 0 });
+
   // 시간이 지난 말풍선 · 포즈 · 표정은 지움
   const transient =
     Object.keys(poses).length +
@@ -835,6 +838,31 @@ export default function TableView({
   );
   const mySeat = me?.seat ?? -1;
   const hand = table?.hand ?? null;
+  {
+    const bs = betSeen.current;
+    if (bs.hand !== (table?.handNo ?? -1)) {
+      bs.hand = table?.handNo ?? -1;
+      bs.sig = {};
+      bs.at = {};
+    }
+    Object.entries(hand?.players ?? {}).forEach(([k, pl]) => {
+      const i = Number(k);
+      if (!pl) return;
+      const sig = `${pl.bet}:${pl.last?.a ?? ""}`;
+      if (bs.sig[i] !== sig) {
+        bs.sig[i] = sig;
+        if (pl.bet > 0) bs.at[i] = ++bs.n;
+      }
+    });
+  }
+  /** 건 돈 칩의 z: 기본 8, 최근 3명은 9~11 (날아가는 칩 12~13 보다는 아래) */
+  const betZ = (i: number) => {
+    const at = betSeen.current.at;
+    const mine = at[i];
+    if (!mine) return 8;
+    const newer = Object.values(at).filter((v) => v > mine).length;
+    return newer < 3 ? 11 - newer : 8;
+  };
   const deadline = hand && !hand.result ? hand.deadline : 0;
   const now = useSecNow(deadline);
 
@@ -1707,7 +1735,7 @@ export default function TableView({
               {bet > 0 && (
                 <div
                   className="absolute w-max -translate-x-1/2 -translate-y-1/2 whitespace-nowrap"
-                  style={{ left: betAt.x, top: betAt.y, zIndex: 8 }}
+                  style={{ left: betAt.x, top: betAt.y, zIndex: betZ(i) }}
                 >
                   <Bet
                     won={bet}
