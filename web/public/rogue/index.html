@@ -293,7 +293,7 @@ details pre{max-height:140px; overflow:auto; font-size:10px; background:var(--bg
               <kbd>WASD</kbd><span>이동</span>
               <kbd>MOUSE</kbd><span>조준(상하좌우) · 좌클릭 꾹 사격 (방향키도 됨)</span>
               <kbd>SPACE</kbd><span>무적 대시 (우클릭도 됨)</span>
-              <kbd>E</kbd><span>액티브 아이템 (게이지가 차면)</span>
+              <kbd>E</kbd><span>액티브 아이템 (몹 나오는 방을 깰 때마다 한 칸씩 참)</span>
               <kbd>Q</kbd><span>글리치 폭탄 — 금 간 블록 · 수상한 벽 · 오락실 기계</span>
               <kbd>F / G</kbd><span>주머니(패치 · 치트 코드) 쓰기 / 버리기</span>
               <kbd>M</kbd><span>지도 · 월드 정보</span>
@@ -375,7 +375,7 @@ try { const ps = localStorage.getItem(PROG_KEY); if (ps){ const o = JSON.parse(p
 // 캐릭터 — 스탯 차이 OK, 대신 개성(액티브 · 탄 효과)으로 균형
 const CHARS = {
   kai:{id:'kai', name:'카이', en:'KAI', hp:60, base:{damage:3.5, fireDelay:20, shotSpeed:4.2, range:200, move:1}, active:'whirlwind', color:'#9fe8ff',
-       traits:['시작 액티브 「천풍난무」 — 게이지가 차면 회오리로 주변을 쓸어버림', '모든 스탯이 고른 올라운더'], lock:null},
+       traits:['시작 액티브 「천풍난무」 — 방 4개를 깨면 회오리로 주변을 쓸어버림', '모든 스탯이 고른 올라운더'], lock:null},
   igna:{id:'igna', name:'이그나', en:'IGNA', hp:50, base:{damage:3.7, fireDelay:22, shotSpeed:4.4, range:185, move:1.06, burn:1}, active:null, color:'#ff9a3c',
        traits:['화상 탄 — 맞힐 때마다 불이 붙어 계속 타들어 감 (최대 5중첩)', '공격력 · 이동이 높지만 체력이 낮다', '시작 액티브 없음 — 주운 액티브만 쓴다'], lock:'월드 3 보스 「프리징」을 쓰러뜨리면 해금 (이야기)'},
   ivan:{id:'ivan', name:'이반', en:'IVAN', hp:80, r:10, base:{damage:5.2, fireDelay:34, shotSpeed:3.6, range:190, move:.88, size:6, stun:1}, active:'red_storm', color:'#ff6a4a',
@@ -508,7 +508,7 @@ const ITEMS = [
   {id:'safe_mode',     name:'안전 모드',     axis:'util', tint:'#ffe68a', desc:'방마다 첫 피격 1번 무효', fl:'F8 연타', add:p=>p.mantle=true},
   {id:'nine_backup',   name:'백업 9개',      axis:'util', tint:'#9aa3dc', desc:'9번 다시 일어남 · 대신 최대 HP 20으로 고정', fl:'backup_final_진짜최종(9).zip', onPick:pl=>{G.lives = (G.lives || 0) + 9; pl.maxHp = 20; pl.hp = Math.min(pl.hp, 20);}},
   {id:'spam_filter',   name:'스팸 필터',     axis:'stat', tint:'#ff8a5c', desc:'25% 확률로 적 탄이 닿아도 그냥 사라짐', fl:'정크 메일함으로 이동됨', add:p=>p.spam+=.25},
-  {id:'hit_charge',    name:'피격 충전',     axis:'util', tint:'#ffcf4a', desc:'맞을 때마다 액티브 게이지 +35%', fl:'아프면서 크는 거야', add:p=>p.hitCharge=true},
+  {id:'hit_charge',    name:'피격 충전',     axis:'util', tint:'#ffcf4a', desc:'맞을 때마다 액티브 한 칸 충전', fl:'아프면서 크는 거야', add:p=>p.hitCharge=true},
   // ── 공격 (아이작 참고) ──
   {id:'core_upgrade',  name:'코어 업그레이드', axis:'stat', tint:'#ff3d5e', desc:'데미지 ×1.8 +1 · 유도 · 연사 -10%', fl:'새 아키텍처', add:p=>p.homing+=1, mul:p=>{p.damage=p.damage*1.8+1; p.fireDelay*=1.1;}},
   {id:'full_upgrade',  name:'풀 업그레이드', axis:'stat', tint:'#ffcf4a', desc:'모든 스탯 업 · 최대 HP +20', fl:'최신 버전입니다', add:p=>p.damage+=.6, mul:p=>{p.fireDelay*=.9; p.move*=1.1; p.range*=1.2; p.shotSpeed*=1.1; p.size*=1.15;}, onPick:pl=>{pl.maxHp+=20; pl.hp=Math.min(pl.maxHp, pl.hp+20);}},
@@ -557,7 +557,7 @@ const ITEMS = [
   {id:'one_plus_one',  name:'1+1 이벤트',    axis:'util', tint:'#ffcf4a', desc:'비트 · 열쇠 · 폭탄 · 회복이 20% 확률로 하나 더', fl:'오늘만 이 가격', add:p=>p.onePlus+=.2},
   {id:'vpn',           name:'VPN',          axis:'util', tint:'#5dff6a', desc:'치트 콘솔이 더 자주 열리고 치트 거래 HP 비용 반값', fl:'접속 위치: 알 수 없음', add:p=>p.vpn=true},
   {id:'dark_web',      name:'다크 웹',      axis:'util', tint:'#8a5cc8', desc:'보스를 잡으면 치트 콘솔이 꼭 열림', fl:'.onion', add:p=>p.darkWeb=true},
-  {id:'charger',       name:'고속 충전기',   axis:'util', tint:'#ffe14d', desc:'액티브를 쓰고 나도 게이지 30%가 남음', fl:'65W PD', add:p=>p.charger=true},
+  {id:'charger',       name:'고속 충전기',   axis:'util', tint:'#ffe14d', desc:'액티브에 필요한 칸 -1 (최소 1칸)', fl:'65W PD', add:p=>p.charger=true},
   {id:'reflect_film',  name:'반사 필름',     axis:'util', tint:'#bfe8ff', desc:'대시 중 닿은 적 탄을 되받아 쏨 (피해 ×1.5)', fl:'눈부심 방지', add:p=>p.reflect=true},
   {id:'tamagotchi',    name:'다마고치',      axis:'util', tint:'#ff8af0', desc:'방을 비울수록 자라는 소환수 — 클수록 세게 쏨', fl:'밥 줄 시간이에요!', add:p=>p.fams.push('tamagotchi')},
   {id:'search_engine', name:'검색 엔진',     axis:'util', tint:'#3fe3ff', desc:'보물방 · 상점 · 보스방이 지도에 보임', fl:'I\'m Feeling Lucky', add:p=>p.compass=true},
@@ -585,6 +585,10 @@ const ITEMS = [
   {id:'teleport',    name:'순간이동',   axis:'active', cost:50,  tint:'#c77dff', desc:'이 층의 무작위 방으로 이동 (보스방 제외)', fl:'404가 아니라 302'},
   {id:'bullet_cash', name:'탄막 환전',  axis:'active', cost:50,  tint:'#ffe14d', desc:'적 탄을 전부 지우고 일부를 비트로 바꿈', fl:'버그도 팔면 돈이 된다'},
 ];
+// 액티브 = 칸 수 (아이작처럼 몹이 나와 문이 잠긴 방을 깰 때마다 한 칸). 예전 게이지 값(30~100)을 칸으로 바꿈
+const ACT_CH = {hotkey:1, screenshot:2, ban_hammer:2, teleport:2, bullet_cash:2, empty_trash:3, clipboard:3, ctrl_z:3, timestop:3,
+  zip_bomb_act:4, god_mode_lite:4, red_storm:4, monsoon:4, whirlwind:4, killtask:4, copy_paste:6, hard_reset:6, reroll:6, reroll_all:6};
+ITEMS.forEach(i => { if (i.axis === 'active') i.cost = ACT_CH[i.id] ?? Math.max(1, Math.round(i.cost / 25)); });
 const ITEM = Object.fromEntries(ITEMS.map(i => [i.id, i]));
 // 세트(아이작 변신): 같은 세트 템 3개(서로 다른 것)를 모으면 변신 — 효과는 computeProfile 에서
 const SET_OF = {split_bug:'bug', corrupt_data:'bug', bug_swarm:'bug', bug_report:'bug', cloud_upload:'cloud', cloud_sync:'cloud', edge_server:'cloud', helper_bot:'bot', mini_kai:'bot', shield_bot:'bot', pickup_drone:'bot', bomb_drone:'bot', heal_bot:'bot', cat_gif:'bot', overclock:'oc', overheat:'oc', energy_drink:'oc', gaming_mouse:'oc', turbo:'oc', cache_hit:'oc', liquid_nitro:'oc', memory_slot:'tank', server_rack:'tank', ups:'tank', virtual_memory:'tank', spare_power:'tank', anti_dmg:'tank', debug_mode:'hack', source_leak:'hack', sitemap:'hack', master_key:'hack', kill_process:'hack', root_access:'hack', lucky_dice:'luck', lucky_packet:'luck', wallet:'luck', miner:'luck', clover:'luck', gold_member:'luck', tamagotchi:'bot', multitap:'bot', vpn:'hack', dark_web:'hack', coupon:'luck', one_plus_one:'luck', usb3:'oc'};
@@ -1629,7 +1633,7 @@ function saveRun(){
 }
 function loadRun(sv){
   G = freshState(sv.seed, sv.char || 'kai');
-  Object.assign(G, {endFloor:sv.endFloor, items:sv.items, res:sv.res, pocket:sv.pocket || (sv.card ? {k:'card', id:sv.card} : null), active:sv.active !== undefined ? sv.active : 'whirlwind', gauge:sv.gauge, mods:sv.mods,
+  Object.assign(G, {endFloor:sv.endFloor, items:sv.items, res:sv.res, pocket:sv.pocket || (sv.card ? {k:'card', id:sv.card} : null), active:sv.active !== undefined ? sv.active : 'whirlwind', gauge:Math.min(sv.gauge || 0, 6), mods:sv.mods,
     patchMap:sv.patchMap, patchKnown:new Set(sv.patchKnown), kills:sv.kills, t:sv.t, log:sv.log});
   Object.assign(G.player, {hp:sv.hp, maxHp:sv.maxHp, shield:sv.shield});
   G.log.resumed = (G.log.resumed || 0) + 1;
@@ -1835,7 +1839,7 @@ function onRoomCleared(){
   sfx('door');
   if (room.rewarded) return;
   room.rewarded = true;
-  addGauge(10);
+  addGauge(1); // 몹이 나와 잠긴 방을 깨면 한 칸 (보스방 포함)
   const rl = roomLog(); if (rl) rl.clearedMs = ms();
   if (room.type === 'boss'){
     G.log.bossKills.push({floor:G.floorNo, ms:ms()}); sfx('bossdie'); secEvent('bosses');
@@ -1966,7 +1970,8 @@ function takeItem(pk){
     if (G.active) room.pickups.push(mkPick('item', pk.x, pk.y, {id:G.active, source:'swap', blocked:true, away:22, pop:10}));
     G.active = pk.id; G.log.actives.push('pick:' + pk.id);
     G.player.hold = 60; G.player.holdItem = pk.id;
-    showBanner(def.name, def.desc + ' — 게이지 ' + def.cost + ' · [E]', codexAdd('items', pk.id)); sfx('item');
+    G.gauge = Math.min(G.gauge, actCost());
+    showBanner(def.name, def.desc + ' — ' + def.cost + '칸 · [E]', codexAdd('items', pk.id)); sfx('item');
     burst(pk.x, pk.y, def.tint, 14, 2.2);
     return;
   }
@@ -2210,7 +2215,7 @@ function hurtPlayer(amount, by){
   if (p.inv > 0 || p.dashT > 0 || G.ult > 0 || G.buff.god > 0 || opts.god || G.ended || p.hp <= 0) return;
   if (G.mantle){ G.mantle = false; p.inv = TUNE.inv; sfx('shieldhit'); burst(p.x, p.y - 6, '#ffe68a', 18, 2.6); toast('안전 모드가 막았다', '#ffe68a', p.x, p.y - 24); return; }
   if (G.prof.armor && amount > 5) amount = Math.max(5, amount - G.prof.armor);
-  if (G.prof.hitCharge) addGauge(35);
+  if (G.prof.hitCharge) addGauge(1);
   if (G.prof.bugOnHit) spawnAlly(p.x, p.y, 2);
   if (G.prof.hurtPuddle) addCreep(p.x, p.y + 4, 26, 150, G.prof.damage * .5, false);
   let a = amount;
@@ -2240,7 +2245,6 @@ function dealHit(e, dmg, src, nx, ny, gate, noGauge){
   if (G.hitfx && G.hitfx.length < 24) { const nl = Math.hypot(nx || 0, ny || 0) || 1; G.hitfx.push({x:e.x - (nx || 0)/nl*e.r*.6, y:e.y - (ny || 0)/nl*e.r*.6, t:9}); } else if (!G.hitfx) G.hitfx = [];
   const kb = Math.min(5, 1.4 + dmg * .25) * e.kbRes;
   const n = Math.hypot(nx, ny) || 1; e.kx += nx/n*kb; e.ky += ny/n*kb;
-  if (!noGauge) addGauge(dmg * .32);
   if (opts.dmgNums) G.nums.push({x:e.x, y:e.y - e.r, v:dmg, life:30});
   sfx('hit');
   if (src && G.prof.burn > 0 && G.frame - (e.burnAdd ?? -99) >= 8){ e.burnAdd = G.frame; e.burn = Math.min(5, (e.burn || 0) + 1); e.burnT = 150; }
@@ -2526,17 +2530,17 @@ function tryDash(mv){
   sfx('dash');
 }
 const ultR = () => 46 * (1 + .12*(G.prof.count-1)) * Math.sqrt(G.prof.sizeMul);
-const actCost = () => ITEM[G.active] ? ITEM[G.active].cost : 999;
+const actCost = () => ITEM[G.active] ? Math.max(1, ITEM[G.active].cost - (G.prof && G.prof.charger ? 1 : 0)) : 999;
 function addGauge(v){
   if (G.ult > 0) return;
   const c = actCost(), was = G.gauge >= c;
-  G.gauge = Math.min(100, G.gauge + v);
+  G.gauge = Math.min(c < 999 ? c : 6, G.gauge + v);
   if (!was && G.gauge >= c){ sfx('charge'); toast(ITEM[G.active].name + ' 준비!', '#ff3d5e'); }
 }
 function useActive(){
   const p = G.player, id = G.active, def = ITEM[id];
   if (!def || p.hp <= 0 || G.ult > 0) return;
-  if (G.gauge < def.cost){ toast('게이지 부족', '#8a8fb2'); sfx('nope'); return; }
+  if (G.gauge < actCost()){ toast('충전 ' + Math.floor(G.gauge) + '/' + actCost() + '칸 — 방을 깨면 한 칸씩', '#8a8fb2'); sfx('nope'); return; }
   let ok = true;
   switch (id){
     case 'red_storm': { const d = aimDir(); p.dashDir = d; p.dashT = 22; p.dashCd = 0; p.dashHit = new Set(); p.inv = Math.max(p.inv, 30); G.storm = 22; G.hitstop = 8; G.shake = 10; sfx('ult'); break; }
@@ -2560,7 +2564,7 @@ function useActive(){
     case 'hotkey': ok = hotkeyBlink(); break;
   }
   if (!ok){ sfx('nope'); return; }
-  G.gauge -= def.cost; if (G.prof.charger) G.gauge = Math.max(G.gauge, 30); G.log.actives.push(id);
+  G.gauge = Math.max(0, G.gauge - actCost()); G.log.actives.push(id);
   if (id === 'bullet_cash' || id === 'killtask') sfx('active');
   if (id !== 'whirlwind'){ showBanner('> ' + def.name, def.desc); burst(G.player.x, G.player.y - 6, def.tint, 16, 2.4); }
 }
@@ -3296,7 +3300,6 @@ function killEnemy(e){
   if (e.type === 'mirror'){ secFlag('mirror'); secEvent('mirrors'); }
   if (e.type === 'boss' && G.room.type === 'boss'){ if (G.floorNo % 2) secFlag('b_' + e.kind); else { secFlag('w' + G.floorNo/2); secMark(G.char, G.floorNo/2); if (G.floorNo === 8) secEvent('bsod'); } }
   if (e.type !== 'boss') (G.skulls ||= []).push({x:e.x, y:e.y, t:26}); // 처치 해골 (그리기 전용)
-  addGauge(2);
   const col = e.type === 'boss' ? BOSS_COL[e.kind] : ({slime:'#b45cff', bug:'#7b4dff', turret:'#d36bff', spinner:'#e05cff', cube:'#8a7bff', popup:'#d36bff', mirror:'#ff2e88', phantom:'#cfd6ff', worm:'#7bdc5a', sniffer:'#9aa3b8', zipbomb:'#c77dff', crawler:'#ff3d5e'})[e.type];
   burst(e.x, e.y, col, e.type === 'boss' ? 40 : 9, e.type === 'boss' ? 4 : 2.4);
   if (G.room.decals.length < 40) G.room.decals.push({x:e.x, y:e.y, c:col, r:e.r});
@@ -4071,11 +4074,10 @@ function drawHUD(){
   if (fl > 0){ ctx.globalAlpha = fl*.7; px(sx, sy, SZ, SZ, '#ffffff'); ctx.globalAlpha = 1; }
   if (A && mouseIn(sx, sy, SZ, SZ)) hovItem(A.id, true);
   if (!touchUsed){ px(sx + SZ - 8, sy + SZ - 8, 9, 9, '#05060b'); ctx.font = '8px Silkscreen, monospace'; ctx.textAlign = 'center'; ctx.fillStyle = ready ? '#ff3d5e' : '#5a5f80'; ctx.fillText('E', sx + SZ - 3, sy + SZ); }
-  const gx = sx + SZ + 3, gh = SZ, fillH = Math.round(gh * Math.min(100, G.gauge) / 100);
+  const gx = sx + SZ + 3, gh = SZ, fillH = Math.round(gh * Math.min(1, G.gauge / Math.max(1, cost < 999 ? cost : 1)));
   px(gx - 1, sy - 1, 7, gh + 2, '#05060b'); px(gx, sy, 5, gh, '#2a1d2c');
   px(gx, sy + gh - fillH, 5, fillH, ready ? '#ff5c78' : '#a8233e');
-  for (let k = 1; k < 4; k++) px(gx, sy + Math.round(gh*k/4), 5, 1, '#05060b');
-  if (cost < 100) px(gx - 2, sy + gh - Math.round(gh*cost/100), 9, 1, '#ece9f5');
+  if (cost < 999) for (let k = 1; k < cost; k++) px(gx, sy + Math.round(gh*k/cost), 5, 1, '#05060b');
   const bx = gx + 12, by = 6, hpW = p.maxHp, shW = p.shield;
   px(bx - 1, by - 1, hpW + shW + 2, 9, '#05060b');
   px(bx, by, hpW, 7, '#3a1420');
@@ -4510,7 +4512,7 @@ function buildDebug(){
   const pre = $('dPre');
   PRESETS.forEach(([n, ids]) => { const b = document.createElement('button'); b.type = 'button'; b.textContent = n; b.onclick = () => G && setItems(ids); pre.appendChild(b); });
   const act = $('dAct');
-  ITEMS.filter(it => it.axis === 'active').forEach(it => { const b = document.createElement('button'); b.type = 'button'; b.textContent = it.name; b.onclick = () => { if (G){ G.active = it.id; G.gauge = 100; } }; act.appendChild(b); });
+  ITEMS.filter(it => it.axis === 'active').forEach(it => { const b = document.createElement('button'); b.type = 'button'; b.textContent = it.name; b.onclick = () => { if (G){ G.active = it.id; G.gauge = actCost(); } }; act.appendChild(b); });
   const box = $('dItems');
   ITEMS.filter(it => it.axis !== 'active').forEach(it => {
     const l = document.createElement('label');
@@ -4538,7 +4540,7 @@ function debugAction(a){
   if (a === 'bits') G.res.bit += 10;
   if (a === 'key') G.res.key++;
   if (a === 'bomb') G.res.bomb++;
-  if (a === 'gauge') G.gauge = 100;
+  if (a === 'gauge') G.gauge = actCost();
   if (a === 'shield') p.shield = Math.min(TUNE.maxShield, p.shield + 50);
   if (a === 'patch') room.pickups.push(mkPick('patch', p.x + 24, p.y, {c:Math.floor(fx()*8)}));
   if (a === 'card') room.pickups.push(mkPick('card', p.x + 24, p.y, {cid:CARDS[Math.floor(fx()*CARDS.length)].id}));
@@ -4554,7 +4556,7 @@ function refreshDebug(full){
   $('dStat').textContent =
 `fps ${lastFps}  탄 ${G.projs.length}  적탄 ${G.ebul.length}  적 ${G.enemies.filter(e => !e.dead).length}
 ${floorLabel(G.floorNo)} (${G.floorNo}/${G.endFloor})  room #${G.room.index} ${G.room.type}  seed ${G.seed}
-hp ${Math.ceil(p.hp)}/${p.maxHp}  방화벽 ${Math.ceil(p.shield)}  게이지 ${Math.floor(G.gauge)}
+hp ${Math.ceil(p.hp)}/${p.maxHp}  방화벽 ${Math.ceil(p.shield)}  충전 ${Math.floor(G.gauge)}칸
 비트 ${G.res.bit}  키 ${G.res.key}  폭탄 ${G.res.bomb}  주머니 ${G.pocket ? pocketName(G.pocket) : '-'}  액티브 ${G.active}
 form   ${forms}
 count  ${P.count}${P.back ? ' + back' : ''}${P.overflow ? ' + overflow' : ''}
@@ -4694,6 +4696,7 @@ const PATCH_NOTES = [
   {ver:'ALPHA 0.6', name:'월드 5 · 소환수 · 세트 변신', date:'2026.10.18', lines:[
     '조작 — 움직이다 쏘면 탄이 움직이던 쪽으로 살짝 휘어요 (멈춘 직후에도 잠깐 남음, 아이작처럼). Tab = 일시정지, M = 지도. 들고 있는 아이템 · 액티브 · 주머니 · 바닥 아이템에 마우스를 올리면 이름과 설명',
     '유도탄 약하게 (아이작 「휘는 숟가락」 정도) — 앞쪽 ±70° 안의 적만 따라가고 덜 휨 (감지 170 → 130, 꺾는 힘 약 60%). 겹쳐 먹어도 예전만큼 안 셈',
+    '액티브 충전이 아이작처럼 바뀜 — 몹을 때리거나 잡아서 차던 게이지 대신, 몹이 나와 문이 잠긴 방(보스방 포함)을 깰 때마다 한 칸. 액티브마다 1~6칸 (천풍난무 · 붉은 폭풍 · 장마 파도 4칸, 리롤 주사위 6칸, 단축키 1칸). 피격 충전은 맞을 때 한 칸, 고속 충전기는 필요한 칸 -1',
     '사거리: 기본(6칸 남짓)은 아이작이랑 비슷해서 그대로. 대신 사거리 업이 곱으로 쌓여 후반엔 방 끝까지 날아가던 것 → 280 넘으면 덜 늘고 400에서 멈춤',
     '베타 카이의 조각: 모든 탄이 붉게 바뀌던 것 → 평소 탄 색은 그대로, 4번째 글리치 탄만 붉게 (세진 탄이 눈에 띄게)',
     '효과음 · 배경음 음량을 따로 조절 (타이틀 · 일시정지 화면). 바닥에 놓은 폭탄이 더 크게 보여요',
@@ -4876,7 +4879,7 @@ function renderStatus(){
     ['이동 속도', '×' + (G.mods.speed * (P.move || 1)).toFixed(2)], ['럭', (P.luck > 0 ? '+' : '') + (P.luck || 0) + ' (스탯 패치 UP ' + Math.round(upChance()*100) + '%)']])}
     <div class="tags">${traits.length ? traits.map(t => `<span class="tag">${t}</span>`).join('') : '<span class="none">특수 효과 없음</span>'}</div></div>
   <div class="bx"><h5>액티브 · 주머니</h5>
-    ${A ? `<div class="act"><img src="${ICON[A.id].url}" alt=""><div><b>${esc(A.name)}</b><br><span class="none">${esc(A.desc)} · 게이지 ${Math.floor(G.gauge)}/${actCost()}</span></div></div>` : ''}
+    ${A ? `<div class="act"><img src="${ICON[A.id].url}" alt=""><div><b>${esc(A.name)}</b><br><span class="none">${esc(A.desc)} · 충전 ${Math.floor(G.gauge)}/${actCost()}칸</span></div></div>` : ''}
     ${G.pocket ? `<div class="act"><img src="${G.pocket.k === 'card' ? lootURL('card', G.pocket.id) : lootURL('patch', G.pocket.c)}" alt=""><div><b>${esc(pocketName(G.pocket))}</b><br><span class="none">${esc(G.pocket.k === 'card' ? CARD[G.pocket.id].desc : G.patchKnown.has(G.pocket.c) ? PATCHES[G.patchMap[G.pocket.c]].desc : '먹어 봐야 알 수 있음')} · F 쓰기 · G 버리기</span></div></div>` : '<span class="none">주머니 비어 있음 (패치 · 치트 코드)</span>'}</div>
   <div class="bx"><h5>아이템 ${G.items.length}개</h5><div class="ic">${G.items.length ? G.items.map(i => `<img src="${ICON[i.id].url}" alt="${esc(ITEM[i.id].name)}" title="${esc(ITEM[i.id].name)} — ${esc(ITEM[i.id].desc)}">`).join('') : '<span class="none">아직 없음</span>'}</div></div>
   <div class="bx"><h5>세트 (서로 다른 템 3개면 변신)</h5><div class="tags">${setTags() || '<span class="none">세트 아이템 없음 — 도감에 「세트」 표시</span>'}</div></div>
