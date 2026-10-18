@@ -875,7 +875,7 @@ function recalcProfile(){ G.prof = computeProfile(G.items.map(i => i.id), G.char
 /* ---------- item icons ---------- */
 const ICON = {};
 // 카이 아틀라스 192x144 = 48x48 프레임 4x3 (행: 앞/뒤/옆(오른쪽), 열: 대기·걷기 A/B/C), 발이 프레임 아래 가운데
-const KAI = new Image(); KAI.src = 'a/106e3ea463.webp';
+const KAI = new Image(); KAI.src = 'a/0a8225b36c.webp';
 let KAI_OL = null; // 내 캐릭터 = 시안 외곽선 1px (어두운 바닥에서도 바로 보이게)
 function outline(img){
   const c = document.createElement('canvas'); c.width = img.width; c.height = img.height; const g = c.getContext('2d');
@@ -892,7 +892,7 @@ DICEI.onload = () => { DICE_OL = outline(DICEI); };
 DICEI.src = 'a/87a098c3df.webp';
 IVAN.onload = () => { IVAN_OL = outline(IVAN); }; LILY.onload = () => { LILY_OL = outline(LILY); };
 IVAN.src = 'a/71af99ad2e.webp';
-LILY.src = 'a/0977d1a452.webp';
+LILY.src = 'a/0f9f46bedb.webp';
 const CHAR_IMG = {kai:KAI, igna:IGNA, ivan:IVAN, lily:LILY, dice:DICEI};
 [KAI, IGNA, IVAN, LILY, DICEI].forEach(im => im.addEventListener('load', () => { try { if (!$('start').hidden) renderStartInfo(); } catch(e){} }));
 const charSpr = id => { const im0 = CHAR_IMG[id] || KAI, ok0 = im0.complete && im0.naturalWidth > 0, im = ok0 ? im0 : KAI; return {im, ol:!ok0 ? KAI_OL : id === 'igna' ? IGNA_OL : id === 'ivan' ? IVAN_OL : id === 'lily' ? LILY_OL : id === 'dice' ? DICE_OL : KAI_OL, ok:im.complete && im.naturalWidth > 0}; };
@@ -3981,8 +3981,8 @@ function drawPlayer0(){
     kpose(p.dashT > 0 ? 0 : 1, x, y, p.dashT > 0 ? p.dashDir.x < 0 : p.face.x < 0);
   } else if (CS.ok){
     const row = view === 'front' ? 0 : view === 'back' ? 1 : 2, moving = Math.abs(p.vx) + Math.abs(p.vy) > .3;
-    const WALK4 = view === 'side' && (G.char === 'kai' || G.char === 'lily'); // 옆걷기: 디딤 → 지나감 → 디딤 → 반대발 지나감
-    const col = moving ? (WALK4 ? [1, 2, 1, 3][Math.floor(p.walk * .7) % 4] : 1 + Math.floor(p.walk * .7) % 3) : 0, bob = 0;
+    const WALK4 = view === 'side' && (G.char === 'kai' || G.char === 'lily'); // 옆걷기 (GPT 새 프레임): 디딤 → 지나감 → 반대발 디딤 → 지나감
+    const col = moving ? (WALK4 ? [1, 2, 3, 2][Math.floor(p.walk * .7) % 4] : 1 + Math.floor(p.walk * .7) % 3) : 0, bob = 0;
     const flipX = view === 'side' && flip < 0, hx = hurt && !isKai ? (G.frame % 4 < 2 ? -1 : 1) : 0;
     ctx.save(); ctx.translate(x + hx, y + 9 + bob); if (flipX) ctx.scale(-1, 1);
     if (hurt && !isKai) ctx.globalAlpha *= G.frame % 4 < 2 ? .55 : 1;
@@ -4708,7 +4708,7 @@ const PATCH_NOTES = [
     '조작 — 움직이다 쏘면 탄이 움직이던 쪽으로 살짝 휘어요 (멈춘 직후에도 잠깐 남음, 아이작처럼). Tab = 일시정지, M = 지도. 들고 있는 아이템 · 액티브 · 주머니 · 바닥 아이템에 마우스를 올리면 이름과 설명',
     '유도탄 약하게 (아이작 「휘는 숟가락」 정도) — 앞쪽 ±70° 안의 적만 따라가고 덜 휨 (감지 170 → 130, 꺾는 힘 약 60%). 겹쳐 먹어도 예전만큼 안 셈',
     '대시가 기본으로는 이동만 (무적 · 적 탄 무시 · 몸통 피해 없음, 대기 0.83 → 1초). 대신 대시 아이템 3종 추가 — 회피 패치(대시 중 무적) · 방화벽 돌파(대시로 적 탄 지우기) · 돌진 패킷(대시로 부딪힌 적에게 큰 피해). 대시 드라이버도 돌진 피해를 줌. 아이템 177 → 180종',
-    '카이 · 릴리 옆걷기 모션 — 다리가 엇갈리며 걷도록 새 프레임',
+    '카이 · 릴리 옆걷기 모션 새로 그림 — 옆으로 걸을 때 다리가 제대로 엇갈림',
     '벌레 장벽 약하게 — 적 탄을 80% 넘게 막던 것 → 절반쯤. 벌레가 느리게 돌고, 탄을 하나 막은 벌레는 0.8초 동안 흐려져서 못 막음 (궤도 봇 · 핑 위성도 막은 뒤 잠깐 쉼)',
     '액티브 충전이 아이작처럼 바뀜 — 몹을 때리거나 잡아서 차던 게이지 대신, 몹이 나와 문이 잠긴 방(보스방 포함)을 깰 때마다 한 칸. 액티브마다 1~6칸 (천풍난무 · 붉은 폭풍 · 장마 파도 4칸, 리롤 주사위 6칸, 단축키 1칸). 피격 충전은 맞을 때 한 칸, 고속 충전기는 필요한 칸 -1',
     '사거리: 기본(6칸 남짓)은 아이작이랑 비슷해서 그대로. 대신 사거리 업이 곱으로 쌓여 후반엔 방 끝까지 날아가던 것 → 280 넘으면 덜 늘고 400에서 멈춤',
