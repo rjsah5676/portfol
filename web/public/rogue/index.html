@@ -2799,7 +2799,7 @@ function updateBombs(){
   const p = G.player;
   for (const b of G.bombList){ b.t--; if (!b.mini && b.t % (b.t < 30 ? 6 : 12) === 0) sfx('fuse');
     if (!b.mini){ // 놓은 폭탄은 아이작처럼 몸으로 밀림 (놓은 직후 내 발밑에선 안 밀리고, 한 번 벗어나면 그때부터)
-      const dx = p.x - b.x, dy = p.y - b.y, d = Math.hypot(dx, dy), rr = p.r + 6;
+      const dx = p.x - b.x, dy = p.y - b.y, d = Math.hypot(dx, dy), rr = p.r + 8;
       if (!b.free){ if (d > rr + 1) b.free = true; }
       else if (d < rr && p.hp > 0){ const nx = d > .5 ? dx/d : 0, ny = d > .5 ? dy/d : 1, v = 1.2 + Math.hypot(p.vx, p.vy)*.7; b.vx = -nx*v; b.vy = -ny*v; }
       if (b.vx || b.vy){ b.x += b.vx; b.y += b.vy; b.vx *= .88; b.vy *= .88; if (Math.abs(b.vx) + Math.abs(b.vy) < .05) b.vx = b.vy = 0;
@@ -2954,6 +2954,11 @@ function updateProjectiles(){
   if (G.prof.shred) for (const q of G.projs){ if (q.dead) continue; for (const b of G.ebul) if (b.life > 0 && Math.hypot(b.x - q.x, b.y - q.y) < b.r + q.r + 1){ b.life = 0; burst(b.x, b.y, '#e8e2c8', 3, 1); } }
   if (G.prof.puddle) for (const q of G.projs) if (q.dead && !q.pud && q.type !== 'boom'){ q.pud = 1; addCreep(q.x, q.y, 9, 110, G.prof.damage * .3, false); }
   if (G.prof.aura && G.frame % 6 === 0) for (const q of G.projs){ if (q.dead) continue; for (const e of G.enemies){ if (e.dead || e.spawnT > 0 || e.z > 8) continue; if (Math.hypot(e.x - q.x, e.y - q.y) < e.r + q.r + 12) quietHit(e, G.prof.damage * .18); } }
+  // 내 탄이 놓은 폭탄을 밀어냄 (아이작처럼). 관통탄 · 부메랑은 지나가고, 나머지는 맞고 사라짐
+  if (G.bombList.length) for (const q of G.projs){ if (q.dead || q.type === 'bomb') continue;
+    for (const b of G.bombList){ if (b.mini || (q.bmHit && q.bmHit.has(b))) continue; if (Math.hypot(b.x - q.x, b.y - q.y) > 8 + (q.r || 2)) continue;
+      const sp = Math.hypot(q.vx, q.vy) || 1; b.vx = (b.vx || 0)*.3 + q.vx/sp*1.8; b.vy = (b.vy || 0)*.3 + q.vy/sp*1.8; b.free = true;
+      (q.bmHit ||= new Set()).add(b); if (!q.pierce && q.type !== 'boom'){ q.dead = true; burst(q.x, q.y, q.color || '#fff', 4, 1.2); } break; } }
   G.projs = G.projs.filter(q => !q.dead);
 }
 function turnBoom(q){
@@ -3699,8 +3704,8 @@ function drawPickup(pk){
 }
 function drawPlacedBomb(b){
   const blink = b.t < 30 ? b.t % 4 < 2 : b.t < 60 ? b.t % 8 < 4 : b.t % 16 < 8;
-  if (doorReady()){ doorSpr(blink ? 11 : 10, b.x - 15, b.y - 20, 30, 30); return; }
-  drawLootIcon('bomb', b.x, b.y, 1, 0, 22);
+  if (doorReady()){ doorSpr(blink ? 11 : 10, b.x - 23, b.y - 30, 46, 46); return; }
+  drawLootIcon('bomb', b.x, b.y, 1, 0, 32);
   if (blink){ ctx.globalAlpha = .5; ctx.fillStyle = '#ff3d5e'; ctx.beginPath(); ctx.arc(b.x, b.y + 1, 8, 0, TAU); ctx.fill(); ctx.globalAlpha = 1; }
 }
 /* 상태이상(화상 · 독)은 네모 덮개 대신 몬스터 모양 그대로 물들이고, 위로 기포 · 불씨를 띄움 */
@@ -4722,7 +4727,7 @@ const PATCH_NOTES = [
     '조작 — 움직이다 쏘면 탄이 움직이던 쪽으로 살짝 휘어요 (멈춘 직후에도 잠깐 남음, 아이작처럼). Tab = 일시정지, M = 지도. 들고 있는 아이템 · 액티브 · 주머니 · 바닥 아이템에 마우스를 올리면 이름과 설명',
     '유도탄 약하게 (아이작 「휘는 숟가락」 정도) — 앞쪽 ±70° 안의 적만 따라가고 덜 휨 (감지 170 → 130, 꺾는 힘 약 60%). 겹쳐 먹어도 예전만큼 안 셈',
     '대시가 기본으로는 이동만 (무적 · 적 탄 무시 · 몸통 피해 없음, 대기 0.83 → 1초). 대신 대시 아이템 3종 추가 — 회피 패치(대시 중 무적) · 방화벽 돌파(대시로 적 탄 지우기) · 돌진 패킷(대시로 부딪힌 적에게 큰 피해). 대시 드라이버도 돌진 피해를 줌. 아이템 177 → 180종',
-    '놓은 폭탄을 몸으로 밀 수 있음 (아이작처럼) — 놓은 직후 발밑에선 안 밀리고, 한 번 벗어난 뒤 부딪히면 툭 밀려감. 벽 · 바위에 튕김. 폭발 범위 원은 안 그림',
+    '놓은 폭탄을 몸으로 밀 수 있음 (아이작처럼) — 놓은 직후 발밑에선 안 밀리고, 한 번 벗어난 뒤 부딪히면 툭 밀려감. 내 탄에 맞아도 밀림. 벽 · 바위에 튕김. 폭탄 그림 더 크게, 폭발 범위 원은 안 그림',
     '캐릭터 5명 그림을 64px로 다시 뽑아서 또렷하게 (예전엔 48px 그림을 늘려 그려서 흐릿했음). 카이 · 릴리는 앞 · 뒤 · 옆 걷기, DICE는 옆걷기 새로 그림 — 다리가 제대로 엇갈림',
     '벌레 장벽 약하게 — 적 탄을 80% 넘게 막던 것 → 절반쯤. 벌레가 느리게 돌고, 탄을 하나 막은 벌레는 0.8초 동안 흐려져서 못 막음 (궤도 봇 · 핑 위성도 막은 뒤 잠깐 쉼)',
     '액티브 충전이 아이작처럼 바뀜 — 몹을 때리거나 잡아서 차던 게이지 대신, 몹이 나와 문이 잠긴 방(보스방 포함)을 깰 때마다 한 칸. 액티브마다 1~6칸 (천풍난무 · 붉은 폭풍 · 장마 파도 4칸, 리롤 주사위 6칸, 단축키 1칸). 피격 충전은 맞을 때 한 칸, 고속 충전기는 필요한 칸 -1',
