@@ -219,7 +219,7 @@ export const SKINS: Skin[] = [
     blurb: "주사 한 대면 돼요. …안 아프게 해 줄게. 도망만 안 가면.",
     line: "어디 아파? …내가 계속 옆에 있어 줄게.",
     ready: true,
-    live: false,
+    live: true,
     emotes: true,
   },  // 일반 스킨 (그림 + 로비 대기 · 앉은 대기 움직임만 — 음성 · 이모티콘은 원래 캐릭터 것, 터치 반응 없음)
   {
