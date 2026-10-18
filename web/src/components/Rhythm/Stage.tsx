@@ -998,7 +998,7 @@ export default function Stage({
       if (sp && sp.key === key) return sp;
       const size = 72;
       const w = Math.max(180, txt.length * size * 0.8 + 50);
-      const h = size + 60;
+      const h = size + 76;
       if (!sp) {
         const c = document.createElement("canvas");
         sp = { c, b: c.getContext("2d")!, w, h, key };
@@ -1018,18 +1018,18 @@ export default function Stage({
       sp.h = h;
       sp.key = key;
       b.setTransform(k, 0, 0, k, 0, 0);
-      b.translate(w / 2, h / 2 + 10);
+      b.translate(w / 2, h / 2 + 16);
       b.textAlign = "center";
       b.textBaseline = "middle";
-      // COMBO 글자도 숫자와 같은 글꼴·은색
+      // COMBO 글자도 숫자와 같은 글꼴·은색 — 숫자 테두리에 아랫부분이 덮이지 않게 숫자 위로 띄움
       b.font = `700 20px ${comboFont}`;
       (b as CanvasRenderingContext2D & { letterSpacing?: string }).letterSpacing = "6px";
-      pxOutline(b, "COMBO", 3, -size / 2 - 8, 3);
-      const lg = b.createLinearGradient(0, -size / 2 - 18, 0, -size / 2 + 2);
+      pxOutline(b, "COMBO", 3, -size / 2 - 18, 3);
+      const lg = b.createLinearGradient(0, -size / 2 - 28, 0, -size / 2 - 8);
       lg.addColorStop(0, "#FFFFFF");
       lg.addColorStop(1, "#94A3B8");
       b.fillStyle = lg;
-      b.fillText("COMBO", 3, -size / 2 - 8);
+      b.fillText("COMBO", 3, -size / 2 - 18);
       (b as CanvasRenderingContext2D & { letterSpacing?: string }).letterSpacing = "0px";
       b.font = `700 ${size}px ${comboFont}`;
       pxOutline(b, txt, 0, 4, 5);
