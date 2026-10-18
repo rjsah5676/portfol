@@ -11,7 +11,6 @@ import imgSketch from "@/img/menu/sketch.jpg";
 import imgPoker from "@/img/menu/poker.jpg";
 import imgDefense from "@/img/menu/defense.jpg";
 import imgRogue from "@/img/menu/rogue.jpg";
-import imgPatrol from "@/img/menu/patrol.jpg";
 import imgLadder from "@/img/menu/ladder.jpg";
 import imgRoulette from "@/img/menu/roulette.jpg";
 import imgCalorie from "@/img/menu/calorie.jpg";
@@ -120,14 +119,6 @@ export const NAV_GROUPS: NavGroup[] = [
         label: "PIXEL RESET STORY",
         desc: "PIXEL FIGHT 외전 · 아이템 조합 탑뷰 로그라이크, 캐릭터 해금 · 랭킹",
         icon: "px:rogue",
-        featured: true,
-      },
-      {
-        href: "/games/patrol",
-        image: imgPatrol,
-        label: "PIXEL PATROL",
-        desc: "스테이지를 밀고 장비를 뽑아 키우는 뱀서라이크",
-        icon: "px:patrol",
         featured: true,
       },
       {

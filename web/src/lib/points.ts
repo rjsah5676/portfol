@@ -752,25 +752,25 @@ export const ACHIEVEMENTS: Achievement[] = [
   a("rogue", "kills-10000", "패치 담당", "적 10,000마리 처치 (누적)", "rogue.kills", 10_000, 1200),
   a("rogue", "kills-50000", "글리치 멸균", "적 50,000마리 처치 (누적)", "rogue.kills", 50_000, 3500),
 
-  // PIXEL PATROL (games/patrol.ts 의 patrol.finish 가 stats.patrol 에 쌓음 · 진행 · 장비는 patrol_profile)
-  a("patrol", "runs-1", "첫 순찰", "한 판 끝내기", "patrol.runs", 1, 150),
-  a("patrol", "runs-30", "성실한 순찰대원", "30판 끝내기", "patrol.runs", 30, 900),
-  a("patrol", "runs-150", "밤을 지키는 사람", "150판 끝내기", "patrol.runs", 150, 3000),
-  a("patrol", "stage-5", "골목 정리 완료", "1-5 클리어 (킹 젤리 쓰러뜨리기)", "patrol.stage", 5, 600),
-  a("patrol", "stage-10", "광장의 평화", "2-5 클리어 (자정의 시계지기 쓰러뜨리기)", "patrol.stage", 10, 1200),
-  a("patrol", "stage-15", "시계를 다시 돌려라", "3-5 클리어 (멈춘 대시계 쓰러뜨리기)", "patrol.stage", 15, 3000),
-  a("patrol", "stage-20", "부둣가 청소", "4-5 클리어 (집게 대왕 쓰러뜨리기)", "patrol.stage", 20, 1500),
-  a("patrol", "stage-25", "어시장 개장", "5-5 클리어 (해골 선장 쓰러뜨리기)", "patrol.stage", 25, 2000),
-  a("patrol", "stage-30", "등대에 불을 켜라", "6-5 클리어 (안개 크라켄 쓰러뜨리기)", "patrol.stage", 30, 5000),
-  a("patrol", "stars-15", "별 줍는 순찰대", "별 15개 모으기", "patrol.stars", 15, 600),
-  a("patrol", "stars-45", "별 바구니", "별 45개 모으기", "patrol.stars", 45, 3000),
-  a("patrol", "stars-90", "만점 순찰", "모든 스테이지 별 3개 (90개)", "patrol.stars", 90, 5000),
-  a("patrol", "kills-10000", "골목 청소", "몬스터 10,000마리 처치 (누적)", "patrol.kills", 10_000, 450),
-  a("patrol", "kills-100000", "밤의 청소부", "몬스터 100,000마리 처치 (누적)", "patrol.kills", 100_000, 1500),
-  a("patrol", "boxes-10", "상자 열기 좋은 날", "고급 상자 10번 열기", "patrol.boxes", 10, 450),
-  a("patrol", "grade-3", "영웅의 장비", "영웅 등급 장비 얻기", "patrol.grade", 3, 900),
-  a("patrol", "grade-4", "전설의 순찰대", "전설 등급 장비 얻기", "patrol.grade", 4, 2500),
-  a("patrol", "enh-20", "강화 장인", "장비 하나 Lv 20까지", "patrol.enh", 20, 600),
+  // PIXEL PATROL — 게임 목록에서 내림 (2026-10-18). 다시 열 때 아래 patrol 줄들 주석 풀기 (games/patrol.ts 의 patrol.finish 가 stats.patrol 에 쌓음 · 진행 · 장비는 patrol_profile)
+  // a("patrol", "runs-1", "첫 순찰", "한 판 끝내기", "patrol.runs", 1, 150),
+  // a("patrol", "runs-30", "성실한 순찰대원", "30판 끝내기", "patrol.runs", 30, 900),
+  // a("patrol", "runs-150", "밤을 지키는 사람", "150판 끝내기", "patrol.runs", 150, 3000),
+  // a("patrol", "stage-5", "골목 정리 완료", "1-5 클리어 (킹 젤리 쓰러뜨리기)", "patrol.stage", 5, 600),
+  // a("patrol", "stage-10", "광장의 평화", "2-5 클리어 (자정의 시계지기 쓰러뜨리기)", "patrol.stage", 10, 1200),
+  // a("patrol", "stage-15", "시계를 다시 돌려라", "3-5 클리어 (멈춘 대시계 쓰러뜨리기)", "patrol.stage", 15, 3000),
+  // a("patrol", "stage-20", "부둣가 청소", "4-5 클리어 (집게 대왕 쓰러뜨리기)", "patrol.stage", 20, 1500),
+  // a("patrol", "stage-25", "어시장 개장", "5-5 클리어 (해골 선장 쓰러뜨리기)", "patrol.stage", 25, 2000),
+  // a("patrol", "stage-30", "등대에 불을 켜라", "6-5 클리어 (안개 크라켄 쓰러뜨리기)", "patrol.stage", 30, 5000),
+  // a("patrol", "stars-15", "별 줍는 순찰대", "별 15개 모으기", "patrol.stars", 15, 600),
+  // a("patrol", "stars-45", "별 바구니", "별 45개 모으기", "patrol.stars", 45, 3000),
+  // a("patrol", "stars-90", "만점 순찰", "모든 스테이지 별 3개 (90개)", "patrol.stars", 90, 5000),
+  // a("patrol", "kills-10000", "골목 청소", "몬스터 10,000마리 처치 (누적)", "patrol.kills", 10_000, 450),
+  // a("patrol", "kills-100000", "밤의 청소부", "몬스터 100,000마리 처치 (누적)", "patrol.kills", 100_000, 1500),
+  // a("patrol", "boxes-10", "상자 열기 좋은 날", "고급 상자 10번 열기", "patrol.boxes", 10, 450),
+  // a("patrol", "grade-3", "영웅의 장비", "영웅 등급 장비 얻기", "patrol.grade", 3, 900),
+  // a("patrol", "grade-4", "전설의 순찰대", "전설 등급 장비 얻기", "patrol.grade", 4, 2500),
+  // a("patrol", "enh-20", "강화 장인", "장비 하나 Lv 20까지", "patrol.enh", 20, 600),
 ];
 /** 반복형 업적: 일회형 마지막 단계(from)를 넘은 뒤로 step 만큼 쌓일 때마다 reward */
 const r = (game: AchGame, id: string, title: string, unit: string, metric: AchMetric, from: number, step: number, reward: number): Achievement => ({
@@ -806,8 +806,9 @@ ACHIEVEMENTS.push(
   r("survivor", "wins", "밤을 지배하는 자 · 계속", "번 클리어", "survivor.wins", 50, 25, 1500),
   r("rogue", "runs", "로그아웃 불가 · 계속", "판", "rogue.runs", 150, 50, 600),
   r("rogue", "kills", "글리치 멸균 · 계속", "마리", "rogue.kills", 50_000, 50_000, 1000),
-  r("patrol", "runs", "밤을 지키는 사람 · 계속", "판", "patrol.runs", 150, 50, 600),
-  r("patrol", "kills", "밤의 청소부 · 계속", "마리", "patrol.kills", 100_000, 100_000, 1000),
+  // PIXEL PATROL (내림 — 다시 열 때 주석 풀기)
+  // r("patrol", "runs", "밤을 지키는 사람 · 계속", "판", "patrol.runs", 150, 50, 600),
+  // r("patrol", "kills", "밤의 청소부 · 계속", "마리", "patrol.kills", 100_000, 100_000, 1000),
 );
 export const achievementOf = (id: unknown) =>
   ACHIEVEMENTS.find((x) => x.id === id);
@@ -888,9 +889,10 @@ export const DAILY_MISSIONS: DailyMission[] = [
   dm("rogue", "run", "한 판 끝내기", "rogue.runs", 1, 90),
   dm("rogue", "runs", "세 판 끝내기", "rogue.runs", 3, 180),
   dm("rogue", "bosses", "보스 3마리 쓰러뜨리기", "rogue.bosses", 3, 120),
-  dm("patrol", "run", "한 판 끝내기", "patrol.runs", 1, 90),
-  dm("patrol", "runs", "세 판 끝내기", "patrol.runs", 3, 180),
-  dm("patrol", "kills", "몬스터 3,000마리 처치", "patrol.kills", 3000, 120),
+  // PIXEL PATROL (내림 — 다시 열 때 주석 풀기)
+  // dm("patrol", "run", "한 판 끝내기", "patrol.runs", 1, 90),
+  // dm("patrol", "runs", "세 판 끝내기", "patrol.runs", 3, 180),
+  // dm("patrol", "kills", "몬스터 3,000마리 처치", "patrol.kills", 3000, 120),
 ];
 /** 일일 미션이 보는 숫자 (기준값을 적어 둘 것) */
 export const DAILY_METRICS = [...new Set(DAILY_MISSIONS.map((x) => x.metric))];
