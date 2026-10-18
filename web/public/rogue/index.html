@@ -356,6 +356,9 @@ const CHAPTERS = [
 ];
 const chOf = n => Math.min(CHAPTERS.length - 1, Math.ceil(n / 2) - 1);
 const bossOf = n => n % 2 ? CHAPTERS[chOf(n)].mid : CHAPTERS[chOf(n)].boss;
+// 아이작처럼 층마다 보스 후보 여럿 — 중간 보스 층(홀수)은 이 월드 중간 보스 55% + 앞 월드 보스들 중 하나
+const MID_POOL = [['kingslime'], ['queen', 'kingslime', 'lag'], ['bigturret', 'queen', 'loading', 'kingslime'], ['lag', 'bigturret', 'freeze', 'queen'], ['trojan', 'bsod', 'bigturret', 'loading']];
+function bossPick(n, rng){ if (n % 2 === 0) return bossOf(n); const pool = MID_POOL[chOf(n)]; return rng() < .55 ? pool[0] : pool[Math.floor(rng()*pool.length)]; }
 const floorLabel = n => (chOf(n) + 1) + '-' + (n % 2 ? 1 : 2);
 const BOSS_NAME = {trojan:'트로이 목마', recycler:'휴지통', lag:'렉 덩어리', loading:'무한 로딩', freeze:'프리징', kingslime:'킹 노이즈 슬라임', queen:'벌레 여왕', bigturret:'거대 터렛', bsod:'블루스크린'};
 const BOSS_HP = {trojan:820, recycler:1500, kingslime:150, lag:340, queen:250, loading:460, bigturret:420, freeze:480, bsod:900};
@@ -841,6 +844,16 @@ const CARDS = [
   {id:'reveal',  name:'reveal',   desc:'이 층 지도와 숨겨진 방을 전부 공개'},
   {id:'killall', name:'kill all', desc:'방 안 모든 적에게 40 피해'},
   {id:'money',   name:'money',    desc:'비트 +12'},
+  {id:'ping',    name:'ping',     desc:'이 층 보물방 · 상점 · 보스방이 지도에 뜸'},
+  {id:'alttab',  name:'alt+tab',  desc:'이 층의 무작위 방으로 순간이동'},
+  {id:'ctrls',   name:'ctrl+s',   desc:'방화벽 +30'},
+  {id:'format',  name:'format c:', desc:'적 탄을 전부 지우고 3초간 적이 멈춤'},
+  {id:'restore', name:'restore',  desc:'HP +30'},
+  {id:'keygen',  name:'keygen',   desc:'액세스 키 +2'},
+  {id:'wget',    name:'wget bomb', desc:'글리치 폭탄 +3'},
+  {id:'shuffle', name:'shuffle',  desc:'이 방에 놓인 아이템을 다른 아이템으로'},
+  {id:'charge',  name:'overcharge', desc:'액티브 게이지 가득'},
+  {id:'rmrf',    name:'rm -rf',   desc:'이 방의 바위 · 더미 · 블록을 전부 지움 (금 간 바위 보상도)'},
 ];
 const CARD = Object.fromEntries(CARDS.map(c => [c.id, c]));
 
@@ -982,7 +995,7 @@ function roomBg(room){ // 방 하나당 한 번만 그려서 캐시 (바닥·벽
     g.globalAlpha = .6; g.drawImage(TSX, (d % 6)*48, 128 + Math.floor(d/6)*48, 48, 48, T + cc*T + 4, T + r*T + 4, 24, 24); g.globalAlpha = 1;
   }
   const ch = chOf(G.floorNo), FI = CHAPTERS[ch];
-  const tint = room.type === 'cheat' ? ['#ff2e88', .16] : room.type === 'secret' ? ['#7b4dff', .2] : room.type === 'shop' ? ['#2ad1a8', .12] : ch > 0 && TSX === TS ? [FI.w2, .45] : null;
+  const tint = room.white ? ['#cfe8ff', .2] : room.type === 'cheat' ? ['#ff2e88', .16] : room.type === 'secret' ? ['#7b4dff', .2] : room.type === 'shop' ? ['#2ad1a8', .12] : ch > 0 && TSX === TS ? [FI.w2, .45] : null;
   if (tint){ g.globalAlpha = tint[1]; g.fillStyle = tint[0]; g.fillRect(0, 0, W, H); g.globalAlpha = 1; }
   if (chOf(G.floorNo) === 4 && TSX === TS){ g.globalCompositeOperation = 'color'; g.fillStyle = 'rgba(70,96,52,.55)'; g.fillRect(0, 0, W, H); g.globalCompositeOperation = 'source-over'; g.fillStyle = 'rgba(6,9,4,.25)'; g.fillRect(0, 0, W, H); } // 월드 5: 시트가 없으면 1챕터 타일을 녹슨 녹색으로
   BG_CACHE = {room, key, c}; return c;
@@ -1404,15 +1417,134 @@ const LAYOUTS = TEMPLATES.map(t => t.map(r => r.replace(/[sbt]/g, '.'))).concat(
   ['.............','.............','..x#x...x#x..','.............','..x#x...x#x..','.............','.............'],
 ]);
 const DOOR_TILES = [[6,0],[6,6],[0,3],[12,3]];
+/* 레이아웃 문자 (맵 1단계)
+   .  바닥        #  바위        x  바위 (방에 x가 있으면 그중 하나가 35%로 금 간 바위 — 폭탄 보상)   X  단단한 금 간 바위 (폭탄 두 번 · 보상 두 배)
+   o  낭떠러지 (걸어서 못 건넘 · 탄은 넘어감 · 비행 OK · 바위를 폭파하면 잔해가 옆 1칸을 메움)
+   M  방화벽 블록 (안 부서짐 · 탄 막음 · 비행이면 위로)        K  암호 잠금 블록 (액세스 키 1개로 엶 · 비행도 못 넘음)
+   W  블랙아웃 벽 (아무것도 못 넘음 — 복도 · L자 방 모양)       p  임시 파일 더미 (탄 4발 · 가끔 픽업)   g  캐시 더미 (탄 5발 · 비트)
+   T  ZIP 폭탄 상자 (탄 2발이면 펑 — 주변 바위 · 더미까지 깸)   ^  과전류 패널 (밟으면 HP -10 · 비행이면 무시)
+   R  섬 보상 자리 (생성기가 닿는 방법을 보고 보상 크기를 정함) */
+const ISLAND_LAYOUTS = [
+  ['.............','.............','.....ooo.....','....#oRo#....','.....ooo.....','.............','.............'], // 1칸 해자 — 옆 바위를 폭파하면 잔해가 메움 · 브리지 · 비행
+  ['R#...........','x#...........','.............','.............','.............','..........#..','.............'], // 바위 금고
+  ['.............','.....MMM.....','.....MRM.....','.....MMM.....','.............','..#.......#..','.............'], // 방화벽 우리 — 비행만
+  ['.............','.WWW.....#...','.WRK.........','.WWW.....#...','.............','.............','.............'], // 잠금 우리 — 열쇠만
+  ['.............','.............','.............','.............','oooo.........','oooo.........','.Roo.........'], // 2칸 해자 — 비행 · 브리지
+  ['.............','.............','.............','.............','.............','#T###........','..R.#........'], // ZIP 상자 벽 — 쏘면 길이 열림
+  ['.............','.............','..######.....','..#R^^^^.....','..######.....','.............','.............'], // 패널 길 — HP 내고 걷거나 비행
+  ['.............','.............','....ppppp....','....pgRgp....','....ppppp....','.............','.............'], // 파일 더미 금고 — 쏴서 뚫음
+  ['.............','.###.........','.#RX.........','.###.........','.............','.........#...','.............'], // 단단한 금 간 바위 문
+  ['.............','.ooo.........','.oRo#........','.ooo.........','.............','.......x.....','.............'], // 구석 1칸 해자
+  ['...........#R','...........MM','..#..........','.............','..x..........','.............','.............'], // 구석 금고 — 바위 폭파 · 비행
+  ['WWWW.........','WR.o.........','WWW#.........','.............','.............','.............','.............'], // 벽 속 방 — 바위를 폭파하면 잔해가 해자를 메움
+  ['.............','..T#.........','..#R#........','...#.........','.............','.........T#..','.............'], // ZIP 상자 옆 바위 금고
+  ['.............','.............','.ppp...ooo...','.pRp...oRo#..','.ppp...ooo...','.............','.............'], // 두 섬: 더미 / 해자
+  ['.............','.^^^^^.......','.^RRR^.......','.^^^^^.......','.............','.......#.#...','.............'], // 패널 고리 — 보상 셋 (HP 지불)
+];
+// 월드별 지형 (1 기본기 · 2 패널 · 3 방화벽 블록 · 4 ZIP 상자 · 5 더미 · 해자 · 잠금)
+const WORLD_LAYOUTS = [
+  [ ['.............','..p.......p..','.............','....#...#....','.............','..p.......p..','.............'],
+    ['.............','.pp.......pp.','.p.........p.','.....xox.....','.p.........p.','.pp.......pp.','.............'],
+    ['.............','...#p...p#...','...p.....p...','.............','...p.....p...','...#p...p#...','.............'],
+    ['.............','.oo..ppp..oo.','.oo.......oo.','.............','.oo.......oo.','.oo..ppp..oo.','.............'],
+    ['.............','.g.........x.','.............','....ooooo....','.............','.x.........p.','.............'],
+    ['.....p.p.....','.....p.p.....','pp.........pp','.............','pp.........pp','.....p.p.....','.....p.p.....'] ],
+  [ ['.............','.^^.......^^.','.^^.......^^.','.............','.^^.......^^.','.^^.......^^.','.............'],
+    ['.............','.............','..^^^^.^^^^..','.............','..^^^^.^^^^..','.............','.............'],
+    ['.............','...#.....#...','...^.....^...','...^.....^...','...^.....^...','...#.....#...','.............'],
+    ['.............','.^.^.^.^.^.^.','.............','.^.^.....^.^.','.............','.^.^.^.^.^.^.','.............'],
+    ['.............','.....^^^.....','..x..^.^..x..','.....^.^.....','..x.......x..','.....^^^.....','.............'],
+    ['.............','.##.......##.','.#^^.....^^#.','...^.....^...','.#^^.....^^#.','.##.......##.','.............'] ],
+  [ ['.............','..M.......M..','.............','.....MMM.....','.............','..M.......M..','.............'],
+    ['.............','.MM.......MM.','.M.........M.','.............','.M.........M.','.MM.......MM.','.............'],
+    ['.............','...M..M..M...','.............','..M..M.M..M..','.............','...M..M..M...','.............'],
+    ['.............','.....MoM.....','.....ooo.....','.............','.....ooo.....','.....MoM.....','.............'],
+    ['.............','.MMM.....MMM.','.............','.............','.............','.MMM.....MMM.','.............'],
+    ['....M...M....','....M...M....','....M...M....','.............','....M...M....','....M...M....','....M...M....'] ],
+  [ ['.............','..#T#...#T#..','.............','.............','.............','..#T#...#T#..','.............'],
+    ['.............','.....###.....','....#T.T#....','.............','....#T.T#....','.....###.....','.............'],
+    ['.............','.T.........T.','.............','.....#T#.....','.............','.T.........T.','.............'],
+    ['.............','.##.....##...','.#T.....T#...','.............','...#T.....T#.','...##.....##.','.............'],
+    ['.............','...x.T.x.....','.............','.T.......T...','.............','.....x.T.x...','.............'],
+    ['.............','.TT.......TT.','.T.........T.','.............','.T.........T.','.TT.......TT.','.............'] ],
+  [ ['.............','.ppp.....ppp.','.............','....oo.oo....','.............','.ppp.....ppp.','.............'],
+    ['.............','..oooo.oooo..','..o.......o..','.....pgp.....','..o.......o..','..oooo.oooo..','.............'],
+    ['.............','.p.p.p.p.p.p.','.............','.ooo.....ooo.','.............','.p.p.p.p.p.p.','.............'],
+    ['.............','.oo..K.K..oo.','.oo.......oo.','.............','.oo.......oo.','.oo..p.p..oo.','.............'],
+    ['.............','..pp.....pp..','..pooo.ooop..','.............','..pooo.ooop..','..pp.....pp..','.............'],
+    ['.............','.g.ooooooo.g.','.............','.............','.............','.p.ooooooo.p.','.............'] ],
+];
+// 공용: 블랙아웃 벽으로 복도 · L자 · 작은 방 모양
+const SHAPE_LAYOUTS = [
+  ['WWWWW...WWWWW','WWWWW...WWWWW','.............','.............','.............','WWWWW...WWWWW','WWWWW...WWWWW'], // 십자 복도
+  ['WWWWWW.......','WWWWWW.......','WWWWWW.......','.............','.............','.............','.............'], // L자
+  ['.............','.............','.............','.............','.......WWWWWW','.......WWWWWW','.......WWWWWW'], // 반대 L자
+  ['WWW.......WWW','W...........W','.............','.............','.............','W...........W','WWW.......WWW'], // 둥근 방
+  ['WWWWW...WWWWW','.....#.#.....','.............','.....#.#.....','.............','.....#.#.....','WWWWW...WWWWW'], // 가로 복도
+];
+const L_WALK = '.R'; // 걸어서 다니는 칸 (^ 패널은 밟을 수 있지만 길 계산에선 뺌)
+// 섬 보상 자리(R)에 닿는 방법 — 레이아웃 글자만 보고 BFS
+function layoutAccess(L, tx, ty){
+  const at = (x, y) => (x < 0 || y < 0 || x >= 13 || y >= 7) ? null : L[y][x];
+  const reach = pass => { const seen = new Set(), q = [];
+    for (const [x, y] of DOOR_TILES) if (pass(at(x, y), x, y)){ seen.add(x+','+y); q.push([x, y]); }
+    while (q.length){ const [x, y] = q.shift(); for (const [dx, dy] of [[1,0],[-1,0],[0,1],[0,-1]]){ const nx = x+dx, ny = y+dy, k = nx+','+ny; if (seen.has(k)) continue; const c = at(nx, ny); if (c === null) continue;
+      if (pass(c, nx, ny)){ seen.add(k); q.push([nx, ny]); continue; }
+      if (c === 'o' && pass.jump){ for (let n = 1; n <= pass.jump; n++){ const jx = x + dx*(n+1), jy = y + dy*(n+1), jc = at(jx, jy); if (jc === null) break; if (jc === 'o') continue; if (pass(jc, jx, jy) && !seen.has(jx+','+jy)){ seen.add(jx+','+jy); q.push([jx, jy]); } break; } } } }
+    return seen.has(tx+','+ty); };
+  const walk = c => L_WALK.includes(c);
+  const out = [];
+  if (reach(walk)) out.push('walk');
+  if (reach(c => walk(c) || c === '^')) out.push('panel');
+  if (reach(c => walk(c) || c === 'p' || c === 'g')) out.push('shoot');
+  if (reach(c => walk(c) || '#xXpgT'.includes(c))) out.push('bomb');
+  { const f = c => walk(c); f.jump = 1; if (reach(f)) out.push('fill'); } // 1칸 해자: 바위 잔해 · 브리지
+  { const f = c => walk(c); f.jump = 2; if (reach(f)) out.push('bridge'); }
+  if (reach(c => c !== 'K' && c !== 'W')) out.push('fly');
+  if (reach(c => walk(c) || c === 'K')) out.push('key');
+  return out;
+}
 // 금 간 바위(아이작의 색 바위처럼) — 방 7개 중 1개꼴로 하나만. 폭탄으로 깨면 보상 (낮은 확률로 아이템)
+function applyLayout(r, L, rng){
+  r.tiles = r.tiles || new Map(); const xs = [];
+  L.forEach((row, y) => [...row].forEach((ch, x) => { const k = x+','+y;
+    if (ch === '#') r.rocks.add(k);
+    else if (ch === 'x'){ r.rocks.add(k); xs.push(k); }
+    else if (ch === 'X'){ r.rocks.add(k); r.cracked.add(k); (r.hard ||= new Set()).add(k); (r.wasHard ||= new Set()).add(k); }
+    else if (ch === 'o') r.pits.add(k);
+    else if ('MKWpgT^'.includes(ch)) r.tiles.set(k, {t:ch, hp:ch === 'p' ? 4 : ch === 'g' ? 5 : ch === 'T' ? 2 : 0});
+    else if (ch === 'R') (r.slots ||= []).push([x, y]);
+  }));
+  if (xs.length && rng() < .35) r.cracked.add(xs[Math.floor(rng()*xs.length)]); else tintRock(r, rng);
+  if (r.slots) islandLoot(r, L, rng);
+}
+// 섬 보상: 닿는 방법이 어려울수록 크게. 방 클리어 보상과 따로 (보너스)
+function islandLoot(r, L, rng){
+  const n = r.slots.length;
+  r.slots.forEach(([x, y], i) => {
+    const acc = layoutAccess(L, x, y), cx = T + x*T + T/2, cy = T + y*T + T/2, put = (k, o) => r.pickups.push(mkPick(k, cx, cy, o || {}));
+    r.island = acc;
+    const small = () => { const k = rng(); return k < .35 ? ['bit', {n:2 + Math.floor(rng()*3)}] : k < .5 ? ['bomb', {}] : k < .62 ? ['key', {}] : k < .74 ? ['heal', {}] : k < .86 ? ['patch', {c:Math.floor(rng()*8)}] : ['card', {cid:CARDS[Math.floor(rng()*CARDS.length)].id}]; };
+    if (acc.includes('walk')){ put(...small()); return; }
+    if (n > 1){ put(...small()); return; } // 보상 여러 칸이면 칸마다 작게
+    if (!acc.includes('fly') || (acc.includes('key') && !acc.includes('bomb') && !acc.includes('fill'))){ // 열쇠만
+      if (rng() < .25) put('item_drop', {}); else put('lzip', {}); return; }
+    if (!acc.includes('bomb') && !acc.includes('fill') && !acc.includes('shoot') && !acc.includes('panel')){ // 비행 · 브리지만
+      if (rng() < .5) put('bit', {n:4 + Math.floor(rng()*4)}); else put(...small()); return; }
+    const k = rng();
+    if (k < .3) put('zip', {}); else if (k < .4) put('czip', {}); else { const a = small(), b = small(); r.pickups.push(mkPick(a[0], cx - 7, cy, a[1])); r.pickups.push(mkPick(b[0], cx + 7, cy, b[1])); }
+  });
+}
 function tintRock(r, rng){ if (!r.rocks.size || rng() >= .14) return; const xs = [...r.rocks]; r.cracked.add(xs[Math.floor(rng()*xs.length)]); }
-function pickLayout(rng){
+function pickLayout(rng, floorNo){
   for (let tries = 0; tries < 12; tries++){
-    let L = LAYOUTS[Math.floor(rng()*LAYOUTS.length)].slice();
+    const wl = WORLD_LAYOUTS[Math.min(WORLD_LAYOUTS.length - 1, Math.ceil((floorNo || 1) / 2) - 1)], k = rng();
+    const pool = floorNo && k < .2 ? ISLAND_LAYOUTS : floorNo && k < .45 ? wl : floorNo && k < .52 ? SHAPE_LAYOUTS : LAYOUTS;
+    let L = pool[Math.floor(rng()*pool.length)].slice();
     if (rng() < .5) L = L.map(r => [...r].reverse().join(''));
     if (rng() < .5) L = L.slice().reverse();
-    const open = (x, y) => x >= 0 && y >= 0 && x < 13 && y < 7 && L[y][x] === '.';
-    if (!DOOR_TILES.every(([x, y]) => open(x, y))) continue;
+    const open = (x, y) => x >= 0 && y >= 0 && x < 13 && y < 7 && L_WALK.includes(L[y][x]);
+    if (!DOOR_TILES.every(([x, y]) => L[y][x] === '.')) continue;
     const seen = new Set(['6,0']), q = [[6,0]]; // 문 네 곳이 다 이어져야 함
     while (q.length){ const [x, y] = q.shift(); for (const [dx, dy] of [[1,0],[-1,0],[0,1],[0,-1]]){ const k = (x+dx)+','+(y+dy); if (open(x+dx, y+dy) && !seen.has(k)){ seen.add(k); q.push([x+dx, y+dy]); } } }
     if (DOOR_TILES.every(([x, y]) => seen.has(x+','+y))) return L;
@@ -1433,6 +1565,7 @@ const ELITES = {
   green:{name:'복제', col:'#5dff6a'}, ghost:{name:'은신', col:'#cfd6ff'}, gold:{name:'보상', col:'#ffcf4a'},
 };
 const ELITE_IDS = Object.keys(ELITES);
+const ELITE_DROP = {red:'heal', yellow:'key', purple:'bomb', green:'card', ghost:'shield'};
 function makeEncounter(rng, floorNo, L){
   const ch = Math.min(ENC_POOL.length - 1, Math.ceil(floorNo / 2) - 1), pool = ENC_POOL[ch], arch = rng();
   let budget = 4 + floorNo + Math.floor(floorNo / 3) + Math.max(0, floorNo - 4) + Math.floor(rng()*3); // 5층부터 층마다 +1 더 (봇: 후반 전투방에서 거의 안 죽음)
@@ -1450,7 +1583,7 @@ function makeEncounter(rng, floorNo, L){
     free.push([x, y]);
   }
   { // 문에서 걸어서 갈 수 있는 칸만 (금 간 바위로 막힌 구석에 갇혀 못 잡는 몹 방지)
-    const ok = (x, y) => x >= 0 && y >= 0 && x < 13 && y < 7 && L[y][x] === '.', seen = new Set(), q = [];
+    const ok = (x, y) => x >= 0 && y >= 0 && x < 13 && y < 7 && '.R^'.includes(L[y][x]), seen = new Set(), q = [];
     for (const [x, y] of DOOR_TILES) if (ok(x, y)){ seen.add(x+','+y); q.push([x, y]); }
     while (q.length){ const [x, y] = q.shift(); for (const [dx, dy] of [[1,0],[-1,0],[0,1],[0,-1]]){ const k = (x+dx)+','+(y+dy); if (ok(x+dx, y+dy) && !seen.has(k)){ seen.add(k); q.push([x+dx, y+dy]); } } }
     for (let i = free.length - 1; i >= 0; i--) if (!seen.has(free[i][0]+','+free[i][1])) free.splice(i, 1);
@@ -1477,8 +1610,15 @@ const DIRS = {up:[0,-1], down:[0,1], left:[-1,0], right:[1,0]};
 const OPP = {up:'down', down:'up', left:'right', right:'left'};
 
 /* ---------- floor generation (seed only) ---------- */
-function genFloor(seed, floorNo, used){
-  const rng = mulberry32(seed), N = 11 + Math.min(4, Math.ceil(floorNo / 2)) + Math.floor(rng()*3);
+const CURSES = {
+  dark:{name:'정전', desc:'시야가 좁아진다', col:'#8a8fb2'},
+  lost:{name:'캐시 삭제', desc:'지도가 안 보인다', col:'#ff9a3d'},
+  blind:{name:'난독화', desc:'아이템이 전부 ?로 보인다', col:'#c77dff'},
+  leak:{name:'메모리 누수', desc:'층이 커진다 · 보스가 아이템을 하나 더', col:'#5dff6a'},
+};
+function curseOf(seed, n, endFloor){ const r = mulberry32((seed ^ 0x5bd1e995) >>> 0); if (n < 2 || n >= endFloor || r() >= .22) return null; const ks = Object.keys(CURSES); return ks[Math.floor(r()*ks.length)]; }
+function genFloor(seed, floorNo, used, curse){
+  const rng = mulberry32(seed), N = 11 + Math.min(4, Math.ceil(floorNo / 2)) + Math.floor(rng()*3) + (curse === 'leak' ? 5 : 0);
   for (let attempt = 0; attempt < 1000; attempt++){
     const grid = new Map(), list = [];
     const add = (x,y,type='combat') => { const r = {gx:x, gy:y, type}; grid.set(x+','+y, r); list.push(r); return r; };
@@ -1530,15 +1670,11 @@ function genFloor(seed, floorNo, used){
     const trial = new Set(used); // 이 시도에서만 쓰고, 성공하면 반영
     list.forEach((r, i) => {
       r.index = i; r.visited = false; r.seen = false; r.cleared = !FIGHT_ROOMS.has(r.type); r.rewarded = false;
-      r.rocks = new Set(); r.cracked = new Set(); r.pits = new Set(); r.bridges = new Set(); r.decals = []; r.pickups = [];
+      r.rocks = new Set(); r.cracked = new Set(); r.pits = new Set(); r.bridges = new Set(); r.tiles = new Map(); r.decals = []; r.pickups = [];
       r.dropRoll = rng(); r.lootSeed = Math.floor(rng()*2**31);
       if (r.type === 'combat'){
-        const L = pickLayout(rng);
-        L.forEach((row, y) => [...row].forEach((ch, x) => {
-          if (ch === '#' || ch === 'x') r.rocks.add(x+','+y);
-          else if (ch === 'o') r.pits.add(x+','+y);
-        }));
-        tintRock(r, rng);
+        const L = pickLayout(rng, floorNo);
+        applyLayout(r, L, rng);
         r.enc = makeEncounter(rng, floorNo, L);
       }
     });
@@ -1568,8 +1704,9 @@ function genFloor(seed, floorNo, used){
     if (rng() < .25) secret.pickups.push(mkPick('lzip', W/2, H/2 + 34));
     if (floorNo >= 3 && !(prog.chars && prog.chars.lily) && rng() < .4) secret.pickups.push(mkPick('umbrella', W/2 + 46, H/2 - 20));
     list.forEach(r => { r.floorNo = floorNo; const fill = SPECIAL_FILL[r.type]; if (fill) fill(r, rng, trial); });
+    list.forEach(r => r.pickups.forEach(pk => { if (pk.kind !== 'item_drop') return; const id = pickItem('drop', rng, trial); if (id){ pk.kind = 'item'; pk.id = id; pk.source = 'island'; } else pk.kind = 'lzip'; }));
     trial.forEach(id => used.add(id));
-    return {grid, list, start, bossKind:bossOf(floorNo)};
+    return {grid, list, start, bossKind:bossPick(floorNo, rng), curse};
   }
   throw new Error('floor gen failed');
 }
@@ -1608,7 +1745,7 @@ Object.assign(SPECIAL_FILL, {
     r.chal = {state:'idle', wave:0, waves:3, seed:Math.floor(rng()*2**31)};
   },
   elite(r, rng){ // 엘리트 소대 = 큰 엘리트 하나 + 엘리트 둘
-    const L = pickLayout(rng); L.forEach((row, y) => [...row].forEach((ch, x) => { if (ch === '#' || ch === 'x') r.rocks.add(x+','+y); else if (ch === 'o') (r.pits ||= new Set()).add(x+','+y); })); tintRock(r, rng);
+    const L = pickLayout(rng, r.floorNo); r.pits ||= new Set(); applyLayout(r, L, rng);
     const enc = makeEncounter(rng, r.floorNo + 1, L).slice(0, 3);
     const heavy = r.floorNo >= 5 ? 'cube' : 'slime';
     enc.forEach((o, i) => { o.el = ELITE_IDS[Math.floor(rng()*ELITE_IDS.length)]; if (!i){ o.t = heavy; o.el = 'red'; o.boss = true; } });
@@ -1632,7 +1769,7 @@ Object.assign(SPECIAL_FILL, {
 const ROOM_NAME = {arcade:'오락실', challenge:'결투방', elite:'엘리트 소대', curse:'손상된 섹터', vault:'보안 금고', sacrifice:'포맷 제단', mirror:'미러 서버', update:'업데이트 설치'};
 const ROOM_COL = {arcade:'#ff7ad9', challenge:'#ff5a3d', elite:'#b46bff', curse:'#7dff4a', vault:'#ffd23f', sacrifice:'#cfe8ff', mirror:'#a9c8ff', update:'#5dffcf'};
 const ROOM_DESC = {challenge:'HP가 가득할 때만 열림 · 템을 집으면 웨이브', curse:'문을 지날 때 HP -10', vault:'액세스 키 2개', sacrifice:'가시를 밟을수록 보상이 커짐', mirror:'내 빌드를 그대로 쓰는 복제본', update:'단말기를 끝까지 지켜라', elite:'엘리트만 모인 방', arcade:'비트로 한 판'};
-function mkPick(kind, x, y, o={}){ return Object.assign({kind, x, y, vx:0, vy:0, r:5, pop:0}, o); }
+function mkPick(kind, x, y, o={}){ const pk = Object.assign({kind, x, y, vx:0, vy:0, r:5, pop:0}, o); if (kind === 'zip' && !o.price && G && G.floorNo >= 3 && Math.random() < .06) pk.mimic = true; return pk; } // 3층부터 압축 파일 6%는 트로이 (가끔 혼자 움찔함)
 
 /* ---------- state ---------- */
 let G = null, paused = false, running = false, rHold = 0;
@@ -1652,20 +1789,20 @@ function freshState(seed, cid){
     gauge:0, ult:0, cutin:0,
     projs:[], ebul:[], enemies:[], beams:[], fxs:[], parts:[], bolts:[], nums:[], toasts:[], bombList:[],
     shake:0, hitstop:0, lastHitstop:-99, freeze:0, kills:0, ended:false, endTimer:0, lootRng:null,
-    log:{runId:Math.random().toString(36).slice(2,10), gameVersion:'alpha-0.7.1', // 플레이데이터 구분용 — 밸런스 크게 바꿀 때마다 올림 (0.6.5: 봇 측정 밸런스 · 시너지 · 방 클리어 충전) character:cid, seed, result:null, startedAt:Date.now(), durationMs:0,
+    log:{runId:Math.random().toString(36).slice(2,10), gameVersion:'alpha-0.8', // 플레이데이터 구분용 — 밸런스 크게 바꿀 때마다 올림 (0.6.5: 봇 측정 밸런스 · 시너지 · 방 클리어 충전) character:cid, seed, result:null, startedAt:Date.now(), durationMs:0,
          floor:1, endFloor:prog.ch * 2, items:[], rooms:[], bossKills:[], bossKillMs:null, kills:0, secretFound:false, bought:[], cheatDeals:0, patches:[], cards:[], actives:[], resumed:0},
   };
 }
 function startFloor(n){
   G.floorNo = n; G.log.floor = n;
   G.usedBefore = [...G.used];
-  G.floor = genFloor(floorSeed(G.seed, n), n, G.used);
+  G.floor = genFloor(floorSeed(G.seed, n), n, G.used, curseOf(floorSeed(G.seed, n), n, G.endFloor || 10));
   G.lootRng = mulberry32(lootSeed(G.seed, n));
   enterRoom(G.floor.start, null);
   G.player.x = W/2; G.player.y = H/2 + 30; G.player.vx = G.player.vy = 0; G.player.inv = 60;
   saveRun();
 }
-function floorBanner(){ showBanner(floorLabel(G.floorNo) + ' · ' + CHAPTERS[chOf(G.floorNo)].name, (G.floorNo % 2 ? '중간 보스: ' : '월드 보스: ') + BOSS_NAME[G.floor.bossKind] + (G.floorNo === G.endFloor ? ' — 마지막 층' : '')); }
+function floorBanner(){ const cu = G.floor.curse && CURSES[G.floor.curse]; showBanner(floorLabel(G.floorNo) + ' · ' + CHAPTERS[chOf(G.floorNo)].name, (G.floorNo % 2 ? '중간 보스: ' : '월드 보스: ') + BOSS_NAME[G.floor.bossKind] + (G.floorNo === G.endFloor ? ' — 마지막 층' : '') + (cu ? ' · 저주 「' + cu.name + '」 ' + cu.desc : '')); if (cu) sfx('bad'); }
 function beginRun(){
   running = true; paused = false;
   $('result').hidden = true; $('pause').hidden = true; $('start').hidden = true;
@@ -1691,6 +1828,7 @@ function nextFloor(){
     const ups = [['데미지 +0.3', m => m.dmg += .3], ['연사 +5%', m => m.fire = (m.fire || 1) * .95], ['이동 +4%', m => m.speed *= 1.04], ['사거리 +8%', m => m.range = (m.range || 1) * 1.08], ['럭 +1', m => m.luck = (m.luck || 0) + 1]];
     const u = ups[Math.floor(G.lootRng()*ups.length)]; u[1](G.mods); recalcProfile(); toast('// TODO 구현됨: ' + u[0], '#9aa3dc');
   }
+  G.whiteNext = !!(G.floor.cheatPortal && !G.floor.cheat) || (G.whiteNext && !G.floor.cheatPortal);
   startFloor(G.floorNo + 1);
   sfx('floor'); floorBanner();
 }
@@ -1726,20 +1864,35 @@ function enterCheat(){
   enterRoom(f.cheat, null); G.player.x = W/2; G.player.y = IY1 - 56;
   sfx('portal'); showBanner('치트 콘솔', '하나만 골라. 대가는 최대 HP');
 }
+function enterWhite(){ // 화이트햇 서버: 치트를 참은 보답 — 둘 중 하나 공짜 + 방화벽
+  const f = G.floor;
+  if (!f.white){
+    const c = {type:'cheat', white:true, index:120 + G.floorNo, gx:-99, gy:-99, rocks:new Set(), cracked:new Set(), decals:[], pickups:[], cleared:true, rewarded:true, visited:false};
+    const ids = [pickItem('treasure', G.lootRng, G.used, true), pickItem('treasure', G.lootRng, G.used, true)].filter(Boolean);
+    ids.forEach((id, i) => c.pickups.push(mkPick('item', W/2 + (i ? 52 : -52), H/2 + 4, {id, source:'white', group:'white' + G.floorNo})));
+    c.pickups.push(mkPick('shield', W/2, H/2 + 40)); c.pickups.push(mkPick('portal', W/2, IY1 - 24, {back:true, blocked:true}));
+    f.white = c; G.log.white = (G.log.white || 0) + 1;
+  }
+  enterRoom(f.white, null); G.player.x = W/2; G.player.y = IY1 - 56;
+  sfx('portal'); showBanner('화이트햇 서버', '치트를 참은 보답 — 하나 골라, 공짜');
+}
 const ms = () => Math.round(G.t * 1000 / 60);
 
 /* ---------- geometry helpers ---------- */
 const tileKey = (x,y) => { const c = Math.floor((x-T)/T), r = Math.floor((y-T)/T); return (c<0||r<0||c>=COLS||r>=ROWS) ? null : c+','+r; };
-const isRock = (x,y) => { const k = tileKey(x,y); return k !== null && G.room.rocks.has(k); };
+const SOLID_TILE = {M:1, K:1, W:1, p:1, g:1, T:1}, HARD_TILE = {K:1, W:1}; // HARD = 비행으로도 못 넘음
+const tileT = k => { const m = G.room.tiles; const t = m && m.get(k); return t ? t.t : null; };
+const isRock = (x,y) => { const k = tileKey(x,y); return k !== null && (G.room.rocks.has(k) || !!SOLID_TILE[tileT(k)]); }; // 탄을 막는 칸
 // 낭떠러지(구덩이): 걸어서 못 건넘 · 탄은 넘어감 · 폭탄에도 안 없어짐. 「클라우드 비행」(비행)면 위로, 「브리지 케이블」이면 1칸짜리에 다리를 놓음
 const isPitT = k => !!(G.room.pits && G.room.pits.has(k) && !(G.room.bridges && G.room.bridges.has(k)));
 const isPit = (x,y) => { const k = tileKey(x,y); return k !== null && isPitT(k); };
 const isSolid = (x,y) => isRock(x,y) || isPit(x,y);
-const solidT = k => G.room.rocks.has(k) || isPitT(k);
-function collideRocks(o){
+const solidT = k => G.room.rocks.has(k) || isPitT(k) || !!SOLID_TILE[tileT(k)];
+function collideRocks(o, hardOnly){
   const c0 = Math.floor((o.x-T)/T), r0 = Math.floor((o.y-T)/T);
   for (let r = r0-1; r <= r0+1; r++) for (let c = c0-1; c <= c0+1; c++){
-    if (!G.room.rocks.has(c+','+r) && (o.fly || !isPitT(c+','+r))) continue;
+    const k = c+','+r, tt = tileT(k);
+    if (hardOnly ? !HARD_TILE[tt] : (!G.room.rocks.has(k) && !SOLID_TILE[tt] && (o.fly || !isPitT(k)))) continue;
     const bx = T + c*T, by = T + r*T;
     const nx = Math.max(bx, Math.min(o.x, bx+T)), ny = Math.max(by, Math.min(o.y, by+T));
     let dx = o.x - nx, dy = o.y - ny; const d = Math.hypot(dx, dy);
@@ -1768,10 +1921,16 @@ function nearestEnemy(x, y, maxD, exclude){
   for (const e of G.enemies){ if (e.dead || e === exclude || e.spawnT > 0 || e.z > 8) continue; const d = Math.hypot(e.x-x, e.y-y); if (d < bd){ bd = d; best = e; } }
   return best;
 }
+function walkReach(){ // 문에서 걸어서 닿는 칸 (패널은 지나갈 수 있음)
+  const seen = new Set(), q = [];
+  for (const [x, y] of DOOR_TILES){ const k = x+','+y; if (!solidT(k)){ seen.add(k); q.push([x, y]); } }
+  while (q.length){ const [x, y] = q.shift(); for (const [dx, dy] of [[1,0],[-1,0],[0,1],[0,-1]]){ const nx = x+dx, ny = y+dy, k = nx+','+ny; if (nx < 0 || ny < 0 || nx >= COLS || ny >= ROWS || seen.has(k) || solidT(k)) continue; seen.add(k); q.push([nx, ny]); } }
+  return seen;
+}
 function freeTileNear(cx, cy){
-  let best = null, bd = 1e9;
+  let best = null, bd = 1e9; const reach = walkReach(), any = reach.size < 3;
   for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++){
-    if (solidT(c+','+r)) continue;
+    if (solidT(c+','+r) || (!any && (!reach.has(c+','+r) || tileT(c+','+r) === '^'))) continue;
     const x = T + c*T + T/2, y = T + r*T + T/2, d = Math.hypot(x-cx, y-cy);
     if (d < bd){ bd = d; best = {x, y}; }
   }
@@ -1929,9 +2088,11 @@ function onRoomCleared(){
     }
     const bid = pickItem('boss', G.lootRng, G.used), portal = G.lootRng() < TUNE.cheatChance + (G.prof.vpn ? .25 : 0) || G.prof.darkWeb;
     G.bossDrop = {t:80, room, fn:() => { // 보스가 쓰러지고 1.3초 뒤에 보상 · 다음 층 (바로 나오면 너무 급함)
-      if (bid) room.pickups.push(mkPick('item', W/2, H/2 - 26, {id:bid, source:'boss', pop:20}));
+      if (bid) room.pickups.push(mkPick('item', W/2 - (G.floor.curse === 'leak' ? 30 : 0), H/2 - 26, {id:bid, source:'boss', pop:20}));
+      if (G.floor.curse === 'leak'){ const b2 = pickItem('boss', G.lootRng, G.used); if (b2) room.pickups.push(mkPick('item', W/2 + 30, H/2 - 26, {id:b2, source:'boss', pop:20})); }
       room.pickups.push(mkPick('hatch', W/2, H/2 + 18, {blocked:true})); sfx('item'); burst(W/2, H/2, '#3fe3ff', 16, 2.4);
-      if (portal){ room.pickups.push(mkPick('portal', W/2, IY0 + 28, {blocked:true})); toast('치트 콘솔이 열렸다', '#ff2e88', W/2, IY0 + 50); } }};
+      if (portal){ G.floor.cheatPortal = true; room.pickups.push(mkPick('portal', W/2, IY0 + 28, {blocked:true})); toast('치트 콘솔이 열렸다', '#ff2e88', W/2, IY0 + 50); }
+      else if (G.whiteNext){ G.whiteNext = false; room.pickups.push(mkPick('portal', W/2, IY0 + 28, {blocked:true, white:true})); toast('화이트햇 서버가 열렸다', '#cfe8ff', W/2, IY0 + 50); sfx('secret'); } }};
     return;
   }
   if (G.prof.fams.includes('tamagotchi')){ G.tamaXP = (G.tamaXP || 0) + 1; const lv = Math.min(3, Math.floor(G.tamaXP / 4)); if (lv > (G.tamaLv || 0)){ G.tamaLv = lv; toast('다마고치가 자랐다! (Lv ' + (lv + 1) + ')', '#ff8af0'); } }
@@ -2129,6 +2290,7 @@ function tryCollect(pk){
   if (pk.kind === 'hatch'){ nextFloor(); return 'taken'; }
   if (pk.kind === 'portal'){
     if (pk.back){ const b = G.floor.list.find(r => r.type === 'boss'); enterRoom(b, null); G.player.x = W/2; G.player.y = IY0 + 62; sfx('portal'); }
+    else if (pk.white) enterWhite();
     else enterCheat();
     return 'taken';
   }
@@ -2173,6 +2335,7 @@ function tryCollect(pk){
 }
 function openZip(pk, locked){
   const rng = G.lootRng; sfx('zip'); burst(pk.x, pk.y, LOOT[pk.kind].col, 12, 2);
+  if (pk.mimic && !locked){ sfx('bad'); G.shake = 8; toast('트로이 압축 파일이었다!', '#ff2e88', pk.x, pk.y - 20); G.log.mimic = (G.log.mimic || 0) + 1; ambush(pk.x, pk.y, ['zipbomb', 'bug', 'bug']); for (let i = 0; i < 2; i++) scatter(rollSmall(rng), 1, pk.x, pk.y, rng); return; }
   if (locked && rng() < Math.max(.1, .35 + luckOf() * .05)){
     const id = pickItem('drop', rng, G.used);
     if (id){ boxItem(id, pk.x, pk.y, 'zip'); return; }
@@ -2277,6 +2440,20 @@ function useCard(id){
       break;
     case 'killall': for (const e of G.enemies) if (!e.dead){ if (e.spawnT > 0) e.spawnT = 0; dealHit(e, 40, null, e.x - p.x, e.y - p.y, 6, true); } G.shake = 10; break; // 막 나타나는 중 · 공중인 적도 (빨리 쓰면 씹히던 것)
     case 'money': G.res.bit += 12; break;
+    case 'ping': G.floor.list.forEach(r => { if (['treasure', 'shop', 'boss'].includes(r.type)) r.seen = true; }); break;
+    case 'alttab': teleportRandom(); break;
+    case 'ctrls': p.shield = Math.min(TUNE.maxShield, p.shield + 30); break;
+    case 'format': G.ebul = []; G.buff.stop = Math.max(G.buff.stop || 0, 180); break;
+    case 'restore': p.hp = Math.min(p.maxHp, p.hp + 30); break;
+    case 'keygen': G.res.key += 2; break;
+    case 'wget': G.res.bomb += 3; break;
+    case 'shuffle': rerollRoom(); break;
+    case 'charge': addGauge(6); break;
+    case 'rmrf': {
+      const R = G.room;
+      for (const k of [...R.rocks]){ const [c, r] = k.split(',').map(Number), cx = T + c*T + T/2, cy = T + r*T + T/2; R.rocks.delete(k); (R.rubble ||= []).push({c, r}); burst(cx, cy, '#555b80', 8, 2); if (R.cracked.has(k)){ R.cracked.delete(k); crackLoot(cx, cy); } }
+      if (R.tiles) for (const [k, t] of [...R.tiles]){ if (t.t === '^' || t.t === 'W') continue; const [c, r] = k.split(',').map(Number), cx = T + c*T + T/2, cy = T + r*T + T/2; if (t.t === 'p' || t.t === 'g'){ breakTile(k, t, cx, cy); } else { R.tiles.delete(k); burst(cx, cy, '#8a8fb2', 8, 2); } }
+      G.flow = null; G.shake = 10; break; }
   }
   showBanner('> ' + CARD[id].name, CARD[id].desc);
 }
@@ -2385,10 +2562,11 @@ function explode(x, y, rad, dmg, src, withSplit){
   burst(x, y, '#ff9a3d', 8, 2.6);
 }
 function glitchBomb(x, y, b){
-  const P = G.prof, mini = !!(b && b.mini), rad = 44 * (P.megaBomb ? 1.5 : 1) * (mini ? .7 : 1), bdmg = 25 * (P.megaBomb ? 1.7 : 1) * (mini ? .6 : 1), room = G.room;
+  const P = G.prof, box = !!(b && b.box), mini = !!(b && b.mini) && !box, rad = box ? 46 : 44 * (P.megaBomb ? 1.5 : 1) * (mini ? .7 : 1), bdmg = box ? 30 : 25 * (P.megaBomb ? 1.7 : 1) * (mini ? .6 : 1), room = G.room;
   explode(x, y, rad, 0, null, false);
-  if (P.hotBomb) addCreep(x, y, rad * .55, 180, 1.5, true);
-  if (P.crossBomb && !mini) for (const [dx, dy] of [[1,0],[-1,0],[0,1],[0,-1]]) G.bombList.push({x:x + dx*54, y:y + dy*54, t:10, mini:true, noSelf:true});
+  if (P.hotBomb && !box) addCreep(x, y, rad * .55, 180, 1.5, true);
+  if (box){ sfx('boom'); burst(x, y, '#ff5a3d', 18, 3); }
+  if (P.crossBomb && !mini && !box) for (const [dx, dy] of [[1,0],[-1,0],[0,1],[0,-1]]) G.bombList.push({x:x + dx*54, y:y + dy*54, t:10, mini:true, noSelf:true});
   for (const pk of room.pickups.slice()){
     if (!MACHINES.has(pk.kind) || pk.broken || Math.hypot(pk.x - x, pk.y - y) > rad + 14) continue;
     if (pk.kind === 'slot'){ pk.broken = true; pk.spin = 0; pk.pay = null; scatter('bit', 2 + Math.floor(fx()*3), pk.x, pk.y + 14); if (fx() < .3) scatter(rollSmall(G.lootRng), 1, pk.x, pk.y + 14); toast('기계 박살', '#ffcf4a', pk.x, pk.y - 24); }
@@ -2401,10 +2579,23 @@ function glitchBomb(x, y, b){
   for (const k of [...room.rocks]){
     const [c, r] = k.split(',').map(Number), cx = T + c*T + T/2, cy = T + r*T + T/2;
     if (Math.hypot(cx - x, cy - y) < rad + 12){
+      if (room.hard && room.hard.has(k)){ room.hard.delete(k); burst(cx, cy, '#3fe3ff', 10, 2); toast('금이 더 갔다 — 한 번 더', '#3fe3ff', cx, cy - 18); continue; } // 단단한 금 간 바위: 폭탄 두 번
       room.rocks.delete(k); burst(cx, cy, '#555b80', 10, 2); (room.rubble ||= []).push({c, r}); // 잔해 (그리기 전용)
-      if (room.cracked.has(k)){ room.cracked.delete(k); burst(cx, cy, '#3fe3ff', 14, 2.6); crackLoot(cx, cy); }
+      if (room.cracked.has(k)){ const two = room.wasHard && room.wasHard.has(k); room.cracked.delete(k); burst(cx, cy, '#3fe3ff', 14, 2.6); crackLoot(cx, cy); if (two) crackLoot(cx, cy); }
+      // 아이작처럼: 부서진 바위 잔해가 옆 1칸 낭떠러지를 메움 (폭발 반대쪽 먼저)
+      if (room.pits && room.pits.size){
+        const ax = Math.abs(cx - x) >= Math.abs(cy - y), sx = Math.sign(cx - x) || 1, sy = Math.sign(cy - y) || 1;
+        const order = ax ? [[sx,0],[0,1],[0,-1],[-sx,0]] : [[0,sy],[1,0],[-1,0],[0,-sy]];
+        for (const [dx, dy] of order){ const pk = (c+dx)+','+(r+dy); if (room.pits.has(pk) && !(room.bridges && room.bridges.has(pk))){ room.pits.delete(pk); (room.filled ||= []).push({c:c+dx, r:r+dy}); room.rubble.push({c:c+dx, r:r+dy, fill:true}); burst(T + (c+dx)*T + T/2, T + (r+dy)*T + T/2, '#8a8fb2', 10, 1.8); break; } }
+      }
     }
   }
+  if (room.tiles) for (const [k, t] of [...room.tiles]){
+    if (t.t !== 'p' && t.t !== 'g' && t.t !== 'T') continue;
+    const [c, r] = k.split(',').map(Number), cx = T + c*T + T/2, cy = T + r*T + T/2;
+    if (Math.hypot(cx - x, cy - y) < rad + 12) breakTile(k, t, cx, cy);
+  }
+  G.flow = null;
   const sc = room.secretChild;
   if (sc && !sc.revealed){
     const d = doorCenter(sc.pdir);
@@ -2555,7 +2746,8 @@ function step(){
   }
   if (Math.abs(p.vx) + Math.abs(p.vy) > .3) p.walk += .25;
   if (G.prof.ladder && p.hp > 0 && G.room.pits && G.room.pits.size) layBridge(p, mv);
-  if (G.buff.noclip <= 0 && !G.prof.fly) collideRocks(p);
+  if (G.buff.noclip <= 0 && !G.prof.fly) collideRocks(p); else collideRocks(p, true);
+  tileTouch(p);
   handleBounds(p);
   if (p.inv > 0) p.inv--;
   if (p.hold > 0) p.hold--;
@@ -2868,13 +3060,44 @@ function crackLoot(cx, cy){ // 금 간 바위 보상: 8% 아이템, 나머지는
   const kinds = ['bit', 'bit', 'bit', 'bomb', 'bomb', 'key', 'key', 'heal', 'patch', 'card'];
   for (let i = 0, n = 2 + (rng() < .4 ? 1 : 0); i < n; i++) scatter(kinds[Math.floor(rng()*kinds.length)], 1, cx, cy);
 }
+function tileTouch(p){
+  const R = G.room; if (!R.tiles || !R.tiles.size || p.hp <= 0) return;
+  const k0 = tileKey(p.x, p.y + 4);
+  if (k0 && tileT(k0) === '^' && !G.prof.fly && p.inv <= 0 && !(G.buff.god > 0)){ hurtPlayer(10, 'panel'); burst(p.x, p.y + 4, '#ffe14d', 8, 2); sfx('zap'); }
+  const c0 = Math.floor((p.x-T)/T), r0 = Math.floor((p.y-T)/T);
+  for (let r = r0-1; r <= r0+1; r++) for (let c = c0-1; c <= c0+1; c++){
+    const k = c+','+r; if (tileT(k) !== 'K') continue;
+    const bx = T + c*T, by = T + r*T, nx = Math.max(bx, Math.min(p.x, bx+T)), ny = Math.max(by, Math.min(p.y, by+T));
+    if (Math.hypot(p.x - nx, p.y - ny) > p.r + 2) continue;
+    if (G.prof.root || G.res.key > 0){ if (!G.prof.root) G.res.key--; R.tiles.delete(k); G.flow = null; sfx('unlock'); burst(bx + T/2, by + T/2, '#ffe68a', 14, 2.2); toast(G.prof.root ? '루트 권한 — 잠금 해제' : '잠금 해제 (키 -1)', '#ffe68a', bx + T/2, by - 4); }
+    else if (!G.lockHint || G.frame - G.lockHint > 120){ G.lockHint = G.frame; toast('액세스 키가 필요하다', '#8a8fb2', bx + T/2, by - 4); }
+  }
+}
+// 탄이 더미 · ZIP 상자에 맞음
+function hitTile(x, y){
+  const k = tileKey(x, y); if (k === null) return; const R = G.room, t = R.tiles && R.tiles.get(k); if (!t) return;
+  if (t.t !== 'p' && t.t !== 'g' && t.t !== 'T') return;
+  const [c, r] = k.split(',').map(Number), cx = T + c*T + T/2, cy = T + r*T + T/2;
+  t.hit = 6; if (--t.hp > 0){ burst(cx, cy, t.t === 'g' ? '#ffcf4a' : t.t === 'T' ? '#ff5a3d' : '#d7c7a0', 3, 1.2); return; }
+  breakTile(k, t, cx, cy);
+}
+function breakTile(k, t, cx, cy){
+  const R = G.room; R.tiles.delete(k); G.flow = null;
+  if (t.t === 'T'){ G.bombList.push({x:cx, y:cy, t:4, box:true, mini:true}); burst(cx, cy, '#ff5a3d', 10, 2.4); return; }
+  burst(cx, cy, t.t === 'g' ? '#ffcf4a' : '#d7c7a0', 12, 2.2); sfx('hit');
+  (R.rubble ||= []).push({c:+k.split(',')[0], r:+k.split(',')[1], pile:t.t});
+  if (t.t === 'g') scatter('bit', 1 + Math.floor(fx()*3), cx, cy);
+  else if (fx() < .12) scatter(rollSmall(G.lootRng), 1, cx, cy);
+}
 function layBridge(p, mv){ // 브리지 케이블: 앞이 1칸짜리 구덩이고 그 너머가 땅이면 다리를 놓음
   const m = Math.hypot(mv.x, mv.y); if (m < .3) return;
   const ax = Math.abs(mv.x) >= Math.abs(mv.y), dx = ax ? Math.sign(mv.x) : 0, dy = ax ? 0 : Math.sign(mv.y);
   const k = tileKey(p.x + dx*(p.r + 4), p.y + dy*(p.r + 4)); if (k === null || !isPitT(k)) return;
-  const [c, r] = k.split(',').map(Number), bk = (c + dx) + ',' + (r + dy);
-  if (c + dx < 0 || r + dy < 0 || c + dx >= COLS || r + dy >= ROWS || solidT(bk)) return;
-  (G.room.bridges ||= new Set()).add(k); sfx('click'); burst(T + c*T + T/2, T + r*T + T/2, '#ffcf4a', 8, 1.6); G.flow = null;
+  const [c, r] = k.split(',').map(Number), inb = (cc, rr) => cc >= 0 && rr >= 0 && cc < COLS && rr < ROWS;
+  let span = [k], bc = c + dx, br = r + dy; // 2칸 해자까지
+  if (inb(bc, br) && isPitT(bc + ',' + br)){ span.push(bc + ',' + br); bc += dx; br += dy; }
+  if (!inb(bc, br) || solidT(bc + ',' + br)) return;
+  for (const sk of span) (G.room.bridges ||= new Set()).add(sk); sfx('click'); burst(T + c*T + T/2, T + r*T + T/2, '#ffcf4a', 8, 1.6); G.flow = null;
 }
 function tryBomb(){
   const p = G.player;
@@ -2907,6 +3130,7 @@ function updatePickups(){
   const p = G.player, room = G.room;
   for (const pk of room.pickups.slice()){
     if (!room.pickups.includes(pk)) continue;
+    if (pk.mimic && !pk.vx && !pk.vy && (G.frame + (pk.x | 0)) % 170 === 0){ pk.vx = (fx() < .5 ? -1 : 1) * .8; pk.vy = -.3; }
     if (pk.vx || pk.vy){ pk.x += pk.vx; pk.y += pk.vy; pk.vx *= .86; pk.vy *= .86; if (Math.abs(pk.vx) + Math.abs(pk.vy) < .05){ pk.vx = pk.vy = 0; } collideRocks(pk); clampInner(pk); }
     if (pk.pop > 0){ pk.pop--; continue; }
     if (MACHINES.has(pk.kind)){ // 단단한 기계: 밀어내고, 닿으면 작동
@@ -2998,6 +3222,7 @@ function updateProjectiles(){
       const outX = q.x < IX0 || q.x > IX1, outY = q.y < IY0 || q.y > IY1, rock = !outX && !outY && isRock(q.x, q.y);
       if ((outX || outY) && !rock && P.wrap && (q.wraps || 0) < 2){ q.wraps = (q.wraps || 0) + 1; if (q.x < IX0) q.x = IX1 - 2; else if (q.x > IX1) q.x = IX0 + 2; if (q.y < IY0) q.y = IY1 - 2; else if (q.y > IY1) q.y = IY0 + 2; }
       else if (outX || outY || rock){
+        if (rock) hitTile(q.x, q.y);
         if (q.bounces > 0){
           q.bounces--;
           if (rock){ const cx = Math.floor((px-T)/T) !== Math.floor((q.x-T)/T); if (cx) q.vx = -q.vx; else q.vy = -q.vy; }
@@ -3121,7 +3346,7 @@ function updateEnemies(){
       else if (e.kind === 'loading') updateLoading(e, dx, dy, d);
       else if (e.kind === 'freeze') updateFreeze(e, dx, dy, d);
     }
-    if (e.type !== 'boss' && e.type !== 'popup' && e.type !== 'phantom' && e.type !== 'bug' && !(e.type === 'worm' && e.mode === 'under')) collideRocks(e); // 벌레(파리)는 날아서 바위 위로 지나감
+    if (e.type !== 'boss' && e.type !== 'popup' && e.type !== 'phantom' && e.type !== 'bug' && !(e.type === 'worm' && e.mode === 'under')) collideRocks(e); else if (e.type !== 'boss') collideRocks(e, true); // 벌레(파리)는 날아서 바위 위로 지나감 (블랙아웃 벽 · 잠금 블록은 못 넘음)
     clampInner(e);
     if (e.type === 'bug'){ for (const o of G.enemies){ if (o === e || o.dead || o.type !== 'bug') continue; const ox = e.x-o.x, oy = e.y-o.y, od = Math.hypot(ox,oy); if (od > 0 && od < 9){ e.x += ox/od*.5; e.y += oy/od*.5; } } }
     if (e.iceT > 0) e.iceT--;
@@ -3441,7 +3666,7 @@ function killEnemy(e){
       m.hp *= .4; m.maxHp *= .4; m.r *= .75; m.spawnT = 8; clampInner(m); G.enemies.push(m);
     }
     if (e.elite === 'gold'){ scatter('bit', 3, e.x, e.y); scatter(rollSmall(G.lootRng), 1, e.x, e.y); }
-    else if (G.lootRng() < .4) scatter(rollSmall(G.lootRng), 1, e.x, e.y);
+    else if (G.lootRng() < .55) scatter(ELITE_DROP[e.elite] || rollSmall(G.lootRng), 1, e.x, e.y); // 빨강=회복 · 노랑=키 · 보라=폭탄 · 초록=치트 코드 · 은신=방화벽
   }
   sfx('kill');
 }
@@ -3506,6 +3731,7 @@ function render(){
   for (const b of G.bolts) drawBolt(b);
   for (const q of G.parts){ ctx.globalAlpha = Math.min(1, q.life/8); px(q.x, q.y, q.s, q.s, q.c); }
   ctx.globalAlpha = 1;
+  if (G.floor.curse === 'dark'){ const p = G.player, g = ctx.createRadialGradient(p.x, p.y - 4, 34, p.x, p.y - 4, 140); g.addColorStop(0, 'rgba(2,3,9,0)'); g.addColorStop(1, 'rgba(2,3,9,.9)'); ctx.fillStyle = g; ctx.fillRect(-20, -20, W + 40, H + 40); for (const b of G.ebul){ ctx.globalAlpha = .7; px(b.x - 1, b.y - 1, 3, 3, '#ff2e88'); } ctx.globalAlpha = 1; }
   ctx.font = '8px Silkscreen, monospace'; ctx.textAlign = 'center';
   for (const n of G.nums){ ctx.fillStyle = '#000'; ctx.fillText(n.v.toFixed(1), n.x+1, n.y+1); ctx.fillStyle = '#fff'; ctx.fillText(n.v.toFixed(1), n.x, n.y); }
   ctx.font = '700 9px "Noto Sans KR", sans-serif';
@@ -3550,6 +3776,25 @@ function drawPits(room){ // 낭떠러지: 새까만 구멍 + 안쪽 벽면 + 가
     }
   }
 }
+const TILES = new Image(), TILE_SPR = {p:0, g:2, M:4, K:5, T:6, '^':7}; const tileReady = () => TILES.complete && TILES.naturalWidth > 0;
+/*TILES64*/TILES.src = 'a/48c5f82072.webp';
+function drawTiles(room){ // 맵 1단계 타일 (그림 시트 나오기 전 임시 도트)
+  const FI = CHAPTERS[chOf(G.floorNo)];
+  for (const [k, t] of room.tiles){
+    const [c, r] = k.split(',').map(Number), x = T + c*T, y = T + r*T, f = G.frame;
+    if (TILE_SPR[t.t] != null && tileReady()){ const fr = TILE_SPR[t.t] + (t.t === '^' && f % 90 < 45 ? 1 : 0) + (t.t === 'p' || t.t === 'g' ? (t.hp <= 2 ? 1 : 0) : 0);
+      if (t.hit > 0){ t.hit--; ctx.globalAlpha = .7; }
+      ctx.imageSmoothingEnabled = true; ctx.drawImage(TILES, (fr % 4)*64, Math.floor(fr/4)*64, 64, 64, x, y, T, T); ctx.imageSmoothingEnabled = false; ctx.globalAlpha = 1; continue; }
+    if (t.t === 'W'){ px(x, y, T, T, FI.w); for (let i = 0; i < T; i += 8) px(x + ((i/8) % 2)*8, y + i, 15, 7, FI.w2); px(x, y + T - 2, T, 2, 'rgba(0,0,0,.45)'); continue; }
+    if (t.t === '^'){ const on = f % 90 < 45; px(x + 2, y + 2, T - 4, T - 4, '#1b1a10'); for (let i = 0; i < 4; i++) px(x + 4 + i*7, y + 4, 4, T - 8, i % 2 ? '#3a3410' : '#6b5c12'); if (on){ px(x + 6, y + 10, 3, 3, '#ffe14d'); px(x + 18, y + 20, 3, 3, '#ffe14d'); px(x + 12, y + 15, 8, 1, '#fff6b0'); } continue; }
+    const hit = t.hit > 0 ? (t.hit--, 1) : 0;
+    if (t.t === 'M'){ px(x + 1, y + 3, T - 2, T - 4, hit ? '#9fb0d8' : '#5a6488'); px(x + 1, y + 3, T - 2, 4, '#8a96c0'); px(x + 1, y + T - 3, T - 2, 2, '#1c2034'); px(x + 4, y + 14, T - 8, 3, '#3fe3ff'); for (const [a, b] of [[5,9],[T-8,9],[5,T-7],[T-8,T-7]]) px(x + a, y + b, 3, 3, '#c9d2f0'); continue; }
+    if (t.t === 'K'){ px(x + 1, y + 3, T - 2, T - 4, '#5a4a24'); px(x + 1, y + 3, T - 2, 4, '#8a7340'); px(x + 1, y + T - 3, T - 2, 2, '#1c1408'); px(x + 11, y + 13, 10, 9, '#ffcf4a'); px(x + 13, y + 8, 6, 6, '#ffcf4a'); px(x + 15, y + 10, 2, 4, '#5a4a24'); px(x + 15, y + 16, 2, 3, '#5a4510'); continue; }
+    if (t.t === 'p' || t.t === 'g'){ const g = t.t === 'g', sz = .55 + .45 * t.hp / (g ? 5 : 4), w = (T - 6) * sz, h = (T - 8) * sz, ox = x + (T - w)/2, oy = y + T - 3 - h;
+      px(ox, oy + h*.3, w, h*.7, hit ? '#fff' : g ? '#c99a2a' : '#b9ab83'); px(ox + w*.15, oy, w*.7, h*.5, hit ? '#fff' : g ? '#ffd23f' : '#e3d6ad'); px(ox + w*.25, oy + h*.15, w*.25, 2, g ? '#fff3b0' : '#fff'); px(ox, oy + h - 2, w, 2, 'rgba(0,0,0,.4)'); continue; }
+    if (t.t === 'T'){ px(x + 3, y + 5, T - 6, T - 8, hit ? '#fff' : '#8a3a1c'); px(x + 3, y + 5, T - 6, 3, '#c25a2a'); px(x + 3, y + T - 5, T - 6, 2, '#2a0e06'); px(x + 7, y + 12, T - 14, 9, '#1a0a06'); ctx.font = '7px Silkscreen, monospace'; ctx.textAlign = 'center'; ctx.fillStyle = f % 40 < 20 ? '#ffcf4a' : '#ff5a3d'; ctx.fillText('ZIP', x + T/2, y + 19); continue; }
+  }
+}
 function drawRoom(){
   const room = G.room, sec = room.type === 'secret', cheat = room.type === 'cheat', FI = CHAPTERS[chOf(G.floorNo)];
   const wa = cheat ? '#24101a' : sec ? '#1c1430' : FI.w, wb = cheat ? '#2e1420' : sec ? '#241a3c' : FI.w2;
@@ -3577,8 +3822,9 @@ function drawRoom(){
     ctx.fillStyle = G.frame % 60 < 50 ? '#7dffd9' : '#06231f'; ctx.fillText('PATCH', W/2, IY0 + 24); ctx.fillText('SERVER', W/2, IY0 + 32);
   }
   if (cheat){
-    px(W/2 - 44, IY0 + 8, 88, 30, '#12060c'); px(W/2 - 44, IY0 + 8, 88, 2, '#ff2e88');
-    ctx.fillStyle = '#ff2e88'; ctx.fillText('CHEAT CONSOLE', W/2, IY0 + 21); ctx.fillStyle = G.frame % 40 < 20 ? '#ff2e88' : '#12060c'; ctx.fillText('> _', W/2, IY0 + 31);
+    const wc = room.white ? '#cfe8ff' : '#ff2e88', wb2 = room.white ? '#0c1624' : '#12060c';
+    px(W/2 - 44, IY0 + 8, 88, 30, wb2); px(W/2 - 44, IY0 + 8, 88, 2, wc);
+    ctx.fillStyle = wc; ctx.fillText(room.white ? 'WHITEHAT SERVER' : 'CHEAT CONSOLE', W/2, IY0 + 21); ctx.fillStyle = G.frame % 40 < 20 ? wc : wb2; ctx.fillText('> _', W/2, IY0 + 31);
   }
   if (sec){ ctx.fillStyle = '#3a2a5c'; ctx.fillText('.hidden', W/2, IY0 + 20); }
   for (const d of room.decals){ ctx.globalAlpha = .18; px(d.x - d.r, d.y + d.r*.2, d.r*2, d.r*.8, d.c); }
@@ -3587,18 +3833,21 @@ function drawRoom(){
   if (room.pits && room.pits.size) drawPits(room);
   if (room.rubble){ const chR = chOf(G.floorNo); ctx.globalAlpha = .85; ctx.imageSmoothingEnabled = true;
     for (const rb of room.rubble){ const x = T + rb.c*T, y = T + rb.r*T;
+      if (rb.pile){ const cc = rb.pile === 'g' ? '#b8902a' : '#8f8466'; px(x + 6, y + 18, 5, 3, cc); px(x + 15, y + 21, 6, 3, cc); px(x + 22, y + 15, 4, 3, cc); continue; }
       if (chR > 0 && rockReady()){ const fr = chR === 2 ? 7 : 6; ctx.drawImage(ROCK, (fr % 4)*64, Math.floor(fr/4)*64, 64, 64, x + 2, y + 4, T - 4, T - 4); }
       else if (slReady()) ctx.drawImage(SL, 128, 40, 64, 64, x + 2, y + 4, T - 4, T - 4); }
     ctx.globalAlpha = 1; ctx.imageSmoothingEnabled = false; }
   for (const k of room.rocks){
     const [c, r] = k.split(',').map(Number), x = T + c*T, y = T + r*T, cr = room.cracked.has(k);
     const chR = chOf(G.floorNo);
+    if (room.hard && room.hard.has(k) && tileReady()){ ctx.imageSmoothingEnabled = true; ctx.drawImage(TILES, 2*64, 2*64, 64, 64, x, y, T, T); ctx.imageSmoothingEnabled = false; continue; }
     if (chR > 0 && rockReady()){ const fr = (chR - 1)*2 + (cr ? 1 : 0); ctx.imageSmoothingEnabled = true; ctx.drawImage(ROCK, (fr % 4)*64, Math.floor(fr/4)*64, 64, 64, x, y, T, T); ctx.imageSmoothingEnabled = false; continue; }
     if (slReady()){ ctx.drawImage(SL, cr ? 64 : 0, 40, 64, 64, x, y, T, T); continue; }
     px(x+2, y+4, T-4, T-6, '#3a3f5c'); px(x+2, y+4, T-4, 4, '#555b80'); px(x+2, y+T-4, T-4, 2, '#0a0c16');
     if (cr){ const col = G.frame % 90 < 6 ? '#ece9f5' : '#3fe3ff'; px(x+8, y+9, 2, 6, col); px(x+10, y+14, 6, 2, col); px(x+16, y+15, 2, 7, col); px(x+18, y+21, 5, 2, '#ff3d5e'); }
     else { px(x+5, y+12, 6, 4, '#2c3048'); px(x+18, y+18, 8, 5, '#2c3048'); }
   }
+  if (room.tiles && room.tiles.size) drawTiles(room);
   for (const dir of Object.keys(DIRS)){
     const n = neighbor(room, dir); if (!n) continue;
     const locked = n.locked && !n.unlocked, open = room.cleared && !locked && !hpGate(n);
@@ -3773,10 +4022,12 @@ function drawPickup(pk){
     if (PC){ ctx.drawImage(PC, 128, 32, 64, 64, pk.x - 12, pk.y - 1, 24, 24); if (pk.hpCost){ ctx.globalAlpha = .35; px(pk.x - 10, pk.y + 3, 20, 3, '#ff2e88'); ctx.globalAlpha = 1; } }
     else { px(pk.x - 9, pk.y + 4, 18, 8, pk.hpCost ? '#4a1828' : '#3a3f5c'); px(pk.x - 9, pk.y + 4, 18, 2, pk.hpCost ? '#ff2e88' : '#555b80'); }
     if (!ICON[pk.id].big){ ctx.globalAlpha = .25 + .15*Math.sin(G.frame*.1); px(pk.x - 8, pk.y - 14 + bob, 16, 16, it.tint); ctx.globalAlpha = 1; }
-    const ic = ICON[pk.id], sz = Math.round((ic.big ? 20 : 12) * s); if (sz > 0){ if (ic.big) ctx.imageSmoothingEnabled = true; ctx.drawImage(ic.canvas, Math.round(pk.x - sz/2), Math.round(pk.y - 12 - (ic.big ? 4 : 0) + bob), sz, sz); ctx.imageSmoothingEnabled = false; }
+    const ic = ICON[pk.id], sz = Math.round((ic.big ? 20 : 12) * s);
+    if (G.floor.curse === 'blind' && sz > 0){ ctx.font = '12px Silkscreen, monospace'; ctx.textAlign = 'center'; ctx.fillStyle = '#c77dff'; ctx.fillText('?', pk.x, pk.y - 2 + bob); }
+    else if (sz > 0){ if (ic.big) ctx.imageSmoothingEnabled = true; ctx.drawImage(ic.canvas, Math.round(pk.x - sz/2), Math.round(pk.y - 12 - (ic.big ? 4 : 0) + bob), sz, sz); ctx.imageSmoothingEnabled = false; }
     const pd = Math.hypot(G.player.x - pk.x, G.player.y - pk.y);
     if (pd < 46){ // 가까이 가면 이름 (도감에 없으면 ???) — 치트 콘솔 템도
-      const nm = codex.items[pk.id] ? it.name : '???', a = Math.min(1, (46 - pd) / 14);
+      const nm = codex.items[pk.id] && G.floor.curse !== 'blind' ? it.name : '???', a = Math.min(1, (46 - pd) / 14);
       ctx.globalAlpha = a; ctx.font = '700 8px "Noto Sans KR", sans-serif'; ctx.textAlign = 'center';
       const kn = !!codex.items[pk.id], tw = ctx.measureText(nm).width + 8 + (kn ? 9 : 0); px(pk.x - tw/2, pk.y - 33 + bob, tw, 11, 'rgba(5,6,11,.85)');
       px(pk.x - 2, pk.y - 22 + bob, 4, 2, 'rgba(5,6,11,.85)');
@@ -3802,6 +4053,7 @@ function drawPickup(pk){
   }
 }
 function drawPlacedBomb(b){
+  if (b.box) return;
   const blink = b.t < 30 ? b.t % 4 < 2 : b.t < 60 ? b.t % 8 < 4 : b.t % 16 < 8;
   if (doorReady()){ doorSpr(10, b.x - 23, b.y - 30, 46, 46); if (blink){ ctx.globalCompositeOperation = 'lighter'; doorSpr(10, b.x - 23, b.y - 30, 46, 46, .55); ctx.globalCompositeOperation = 'source-over'; } return; } // 깜빡일 때 크기 안 바뀌게 같은 그림을 밝게만
   drawLootIcon('bomb', b.x, b.y, 1, 0, 32);
@@ -4173,7 +4425,7 @@ function drawHoverTip(){
 }
 function pickupHover(pk){
   if (!mouseIn(pk.x - 11, pk.y - 24, 22, 32)) return;
-  if (pk.kind === 'item') return hovItem(pk.id);
+  if (pk.kind === 'item') return G.floor.curse === 'blind' ? (HOV = {name:'???', desc:'저주 「난독화」 — 먹어 봐야 안다', col:'#c77dff'}) : hovItem(pk.id);
   if (pk.kind === 'patch') return HOV = G.patchKnown.has(pk.c) ? {name:PATCHES[G.patchMap[pk.c]].name, desc:PATCHES[G.patchMap[pk.c]].desc, col:PATCH_COLS[pk.c]} : {name:'미확인 패치', desc:'먹어 봐야 무슨 패치인지 알 수 있다', col:PATCH_COLS[pk.c]};
   if (pk.kind === 'card' && CARD[pk.cid]) return HOV = {name:CARD[pk.cid].name, desc:CARD[pk.cid].desc, col:'#8affc1'};
   const L = LOOT[pk.kind]; if (L) HOV = {name:L.name, desc:L.desc};
@@ -4296,7 +4548,7 @@ function drawItemBar(){ // 아래 줄 = 최근 8개만 (맵 덜 가리게). 더 
   ctx.imageSmoothingEnabled = false;
 }
 const ROOM_MARK = r => r.type === 'boss' ? '#ff3d5e' : r.type === 'treasure' ? (r.locked && !r.unlocked ? '#ffe68a' : r.pickups.some(k => k.kind === 'item') ? '#ffcf4a' : '#6b5a20') : r.type === 'shop' ? '#7dffd9' : r.type === 'secret' ? '#c77dff' : ROOM_COL[r.type] || null;
-function knownRooms(){ return G.floor.list.filter(r => (r.type !== 'secret' || r.revealed) && (r.visited || r.seen || Object.keys(DIRS).some(d => { const n = neighbor(r, d); return n && n.visited; }))); }
+function knownRooms(){ if (G.floor.curse === 'lost') return [G.room].filter(r => r.gx > -50); return G.floor.list.filter(r => (r.type !== 'secret' || r.revealed) && (r.visited || r.seen || Object.keys(DIRS).some(d => { const n = neighbor(r, d); return n && n.visited; }))); }
 function drawMapGrid(known, ox, oy, cw, ch, g, big, org){
   const minX = org ? org.minX : Math.min(...known.map(r => r.gx)), minY = org ? org.minY : Math.min(...known.map(r => r.gy));
   if (big) for (const r of known) for (const d of Object.keys(DIRS)){ // 문 연결선
@@ -4359,6 +4611,7 @@ function drawMinimap(){
   drawMapGrid(known, ox, oy, cw, ch, g, false, {minX:cx - R, minY:cy - R}); ctx.globalAlpha = 1;
   if (!touchUsed){ ctx.font = '8px Silkscreen, monospace'; ctx.textAlign = 'right'; ctx.fillStyle = '#5a5f80'; ctx.fillText('M', ox - 5, oy + 7); }
   MINI_RECT = {x:ox - 12, y:oy - 4, w:w + 16, h:h + 8};
+  const cu = G.floor.curse && CURSES[G.floor.curse]; if (cu){ ctx.font = '700 7px "Noto Sans KR", sans-serif'; ctx.textAlign = 'right'; ctx.fillStyle = cu.col; ctx.fillText('저주 · ' + cu.name, W - 6, oy + h + 10); }
 }
 function drawChapterPanel(){
   const ci = chOf(G.floorNo), C = CHAPTERS[ci], first = G.floorNo % 2 === 1, list = G.floor.list;
@@ -4876,6 +5129,19 @@ function openChars(){
 let charCur = null;
 /* ---------- 패치 노트 — 맨 위가 최신. 패치마다 10줄 안으로 ---------- */
 const PATCH_NOTES = [
+  {ver:'ALPHA 0.8', name:'맵이 재밌게', date:'2026.10.19', lines:[
+    '섬 보상 — 낭떠러지 · 바위 · 방화벽 블록 · 잠금 블록 너머에 보상이 놓인 방 15종 (전투방의 약 20%). 닿는 방법이 어려울수록 보상이 큼: 열쇠로만 → 잠긴 압축 파일이나 아이템, 비행으로만 → 비트, 폭탄 · 쏘기 · 패널로 → 픽업 둘이나 압축 파일',
+    '이제 비행 · 브리지 케이블 · 폭탄 · 열쇠가 방마다 쓸모 있음. 브리지 케이블은 2칸 낭떠러지까지 다리를 놓음. 낭떠러지 옆 바위를 폭파하면 잔해가 낭떠러지 1칸을 메움 (아이작처럼)',
+    '새 지형: 임시 파일 더미 (탄 4발이면 부서짐 · 가끔 픽업) · 캐시 더미 (금색 · 비트) · 방화벽 블록 (안 부서짐 · 비행이면 위로) · 잠금 블록 (키 1개) · ZIP 폭탄 상자 (탄 2발이면 펑 — 주변 바위 · 더미까지 깸, 나도 맞음) · 과전류 패널 (밟으면 HP -10 · 비행이면 무시) · 단단한 금 간 바위 (폭탄 두 번 · 보상 두 배) · 블랙아웃 벽 (복도 · L자 방 모양)',
+    '월드마다 지형 성격이 다름 — 1 파일 더미 · 2 과전류 패널 · 3 방화벽 블록 · 4 ZIP 상자 · 5 더미 · 낭떠러지 · 잠금 블록. 바위 x 표시가 있는 방은 그중 하나가 35%로 금 간 바위',
+    '몹은 문에서 걸어서 닿는 칸에만 나오고, 방을 비운 보상도 걸어서 닿는 칸에만 떨어짐 (예전엔 막힌 구석에 떨어질 수 있었음)',
+    '중간 보스(홀수 층)가 판마다 바뀜 — 이 월드 중간 보스 55% + 앞 월드 보스 중 하나. 월드 보스는 그대로',
+    '층 저주 (2층부터 22%): 정전 (시야 좁아짐) · 캐시 삭제 (지도 안 보임) · 난독화 (아이템이 ?) · 메모리 누수 (층이 커지고 보스 템 +1). 미니맵 아래에 표시',
+    '화이트햇 서버 — 치트 콘솔이 열렸는데 안 들어가고 넘어가면 다음 보스 뒤에 하얀 포털: 아이템 둘 중 하나 공짜 + 방화벽',
+    '트로이 압축 파일 — 3층부터 압축 파일 6%는 열면 몹이 튀어나옴 (대신 픽업 2개). 혼자 가끔 움찔하는 압축 파일을 조심',
+    '엘리트 색 = 드롭: 빨강 → 백업 파일 · 노랑 → 액세스 키 · 보라 → 폭탄 · 초록 → 치트 코드 · 은신 → 방화벽 조각 (55%)',
+    '치트 코드 5 → 15종: ping · alt+tab · ctrl+s · format c: · restore · keygen · wget bomb · shuffle · overcharge · rm -rf (방의 바위 · 더미 · 블록을 전부 지움)',
+  ]},
   {ver:'ALPHA 0.7.1', name:'아이템 티어', date:'2026.10.19', lines:[
     '아이템 183개를 티어로 나눔 — 아이작 티어표(716개)와 같은 비율: S 9 · A+ 2 · A 29 · A- 19 · B+ 19 · B 60 · B- 19 · C 21 · D 4 · F 1',
     '아이템이 나오는 비율도 티어표 비율대로 — 한 판에서 S는 20개 중 1개쯤, 절반 가까이는 무난한 B, 가끔 손해 보는 C · D · F도 섞여 나옴 (예전엔 탄 모양 · 개수 템이 따로 드물게 나왔는데 이제 티어로만 정함)',
