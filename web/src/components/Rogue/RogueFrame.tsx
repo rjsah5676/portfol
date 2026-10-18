@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { useAuth } from "@/lib/AuthContext";
 import type { RogueReport } from "@/lib/rogue/rules";
 import { rogue, type RogueFinishOut } from "@/realtime/rogue";
 
@@ -9,12 +10,19 @@ import { rogue, type RogueFinishOut } from "@/realtime/rogue";
  *   게임 → rogue:start {key}        판 시작 (회원이면 서버 판 번호를 받아서 rogue:run 으로 돌려줌, 아니면 guest)
  *   게임 → rogue:end {key, run, rep} 판 끝 → rogue.finish → rogue:saved {best, rank, ach} 또는 {err}
  *   게임 → rogue:play {rec}          판 끝(죽음 · 클리어 · 새로 시작) 플레이 기록 → rogue.play (손님도, 답 안 돌려줌)
+ *   사이트 → rogue:admin {on}        관리자면 게임의 DEV 도구(BOSS LAB 보스전 연습 포함)를 켬 — DEV 판은 랭킹 · 기록에 안 남음
  * 같은 출처(origin) · 그 iframe 에서 온 것만 받음
  */
 export default function RogueFrame({ onFinish }: { onFinish?: (o: RogueFinishOut) => void }) {
   const box = useRef<HTMLDivElement>(null);
   const frame = useRef<HTMLIFrameElement>(null);
   const cb = useRef(onFinish);
+  const { admin } = useAuth();
+  const adminRef = useRef(admin);
+  useEffect(() => {
+    adminRef.current = admin;
+    frame.current?.contentWindow?.postMessage({ type: "rogue:admin", on: !!admin }, window.location.origin);
+  }, [admin]);
   useEffect(() => {
     cb.current = onFinish;
   }, [onFinish]);
@@ -90,6 +98,12 @@ export default function RogueFrame({ onFinish }: { onFinish?: (o: RogueFinishOut
       <iframe
         ref={frame}
         src="/rogue/index.html"
+        onLoad={() =>
+          frame.current?.contentWindow?.postMessage(
+            { type: "rogue:admin", on: !!adminRef.current },
+            window.location.origin,
+          )
+        }
         title="PIXEL RESET STORY 게임 화면"
         allow="fullscreen; autoplay; clipboard-write"
         className="block h-full w-full border-0"
