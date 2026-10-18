@@ -147,7 +147,7 @@ export const charOf = (id: unknown): CharId => (CHAR_IDS.includes(id as CharId) 
  * + (live) 로비 대기 영상 idle.webp · 터치 반응 touch-1~3.webp.
  * ready = 그림이 들어왔는지. false 면 원래 캐릭터 그림으로 보임 (사고 입는 것은 됨).
  */
-export type SkinId = "amy-summer" | "yeonseo-summer" | "taeyang-ts" | "mio-dracula" | "jinwoo-ramen" | "jeongmin-detective";
+export type SkinId = "amy-summer" | "yeonseo-summer" | "taeyang-ts" | "mio-dracula" | "jinwoo-ramen" | "jeongmin-detective" | "sera-nurse";
 export interface Skin {
   id: SkinId;
   char: CharId;
@@ -209,6 +209,17 @@ export const SKINS: Skin[] = [
     line: "…할로윈이니까. 무서워요?",
     ready: true,
     live: true,
+    emotes: true,
+  },
+  {
+    id: "sera-nurse",
+    char: "sera",
+    name: "간호사 세라",
+    price: skinPrice("sera-nurse"),
+    blurb: "주사 한 대면 돼요. …안 아프게 해 줄게. 도망만 안 가면.",
+    line: "어디 아파? …내가 계속 옆에 있어 줄게.",
+    ready: true,
+    live: false,
     emotes: true,
   },  // 일반 스킨 (그림 + 로비 대기 · 앉은 대기 움직임만 — 음성 · 이모티콘은 원래 캐릭터 것, 터치 반응 없음)
   {

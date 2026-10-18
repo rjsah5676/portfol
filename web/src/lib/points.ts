@@ -131,6 +131,14 @@ export const SHOP: ShopItem[] = [
     was: 30_000,
   },
   {
+    id: "poker.skin.sera-nurse",
+    game: "poker",
+    kind: "skin",
+    ref: "sera-nurse",
+    name: "간호사 세라",
+    price: 30_000,
+  },
+  {
     id: "poker.skin.jinwoo-ramen",
     game: "poker",
     kind: "skin",
