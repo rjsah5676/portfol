@@ -969,7 +969,7 @@ function recalcProfile(){ G.prof = computeProfile(G.items.map(i => i.id), G.char
 /* ---------- item icons ---------- */
 const ICON = {};
 // 캐릭터 아틀라스 256x192 = 64x64 프레임 4x3 (화면 64px에 1:1 → 또렷하게). 칸 크기는 CEL(img)로 그림 너비에서 계산 (행: 앞/뒤/옆(오른쪽), 열: 대기·걷기 A/B/C), 발이 프레임 아래 가운데
-const KAI = new Image(); KAI.src = 'a/96432f601f.webp';
+const KAI = new Image(); KAI.src = 'a/799afb97a0.webp';
 let KAI_OL = null; // 내 캐릭터 = 시안 외곽선 1px (어두운 바닥에서도 바로 보이게)
 const CEL = img => Math.round((img.naturalWidth || img.width) / 4);
 function outlineCells(img, color){ // 칸마다 외곽선 (64칸 = 2px 두께, 48칸 = 1px)
@@ -990,13 +990,13 @@ function outline(img){ return outlineCells(img, '#3fe3ff'); }
 KAI.onload = () => { KAI_OL = outline(KAI); };
 // 이그나 아틀라스 = 카이와 같은 형식 (GPT)
 const IGNA = new Image(); let IGNA_OL = null; IGNA.onload = () => { IGNA_OL = outline(IGNA); };
-IGNA.src = 'a/edf54f84d9.webp';
+IGNA.src = 'a/32bf4d51f0.webp';
 const IVAN = new Image(), LILY = new Image(), DICEI = new Image(); let IVAN_OL = null, LILY_OL = null, DICE_OL = null;
 DICEI.onload = () => { DICE_OL = outline(DICEI); };
-DICEI.src = 'a/0cb21602e1.webp';
+DICEI.src = 'a/eedd0ec8b3.webp';
 IVAN.onload = () => { IVAN_OL = outline(IVAN); }; LILY.onload = () => { LILY_OL = outline(LILY); };
-IVAN.src = 'a/8e44d8cef1.webp';
-LILY.src = 'a/6faf1a2818.webp';
+IVAN.src = 'a/03adbd5375.webp';
+LILY.src = 'a/9018ef494b.webp';
 const CHAR_IMG = {kai:KAI, igna:IGNA, ivan:IVAN, lily:LILY, dice:DICEI};
 [KAI, IGNA, IVAN, LILY, DICEI].forEach(im => im.addEventListener('load', () => { try { if (!$('start').hidden) renderStartInfo(); } catch(e){} }));
 // 코스튬 (아이작처럼 템을 먹으면 모습이 바뀜): 머리 · 얼굴 · 등 칸마다 마지막에 먹은 것 하나씩. 그림 = GPT 시트 4x3
@@ -4887,7 +4887,7 @@ function drawPlayer0(){
     const r0 = view === 'front' ? 0 : view === 'back' ? 1 : 2, moving = Math.abs(p.vx) + Math.abs(p.vy) > .3, since = G.frame - (p.shotAt ?? -99), shooting = p.aimHeld || since < 9 || p.charging;
     let row, col;
     if (hurt){ row = 4; col = 3; }
-    else if (shooting && (!moving || since < 5)){ row = 3; col = r0 === 0 ? 0 : r0 === 1 ? 1 : (since < 5 ? 3 : 2); }
+    else if (shooting && !moving){ if (r0 === 2){ row = 3; col = since < 5 ? 3 : 2; } else if (since < 5){ row = 3; col = r0; } else { row = 4; col = r0; } } // 서서 쏠 때만: 쏘는 순간 손만 까딱 (걸으면서 쏠 땐 걷기 그림 그대로 — 몸이 바뀌어 번잡하지 않게)
     else if (moving){ row = r0; col = Math.floor(p.walk * .55) % 4; }
     else { row = 4; col = r0; }
     const flipX = view === 'side' && flip < 0, hx = hurt ? (G.frame % 4 < 2 ? -1 : 1) : 0;
@@ -5776,6 +5776,11 @@ function openChars(){
 let charCur = null;
 /* ---------- 패치 노트 — 맨 위가 최신. 패치마다 10줄 안으로 ---------- */
 const PATCH_NOTES = [
+  {ver:'ALPHA 0.10.1', name:'공격 · 피격 모션', date:'2026.10.19', lines:[
+    '5명 공격 모션 새로 그림 — 쏘는 순간 손만 살짝 까딱 (불꽃 · 물 · 구슬 같은 손 이펙트 없음, 탄은 따로 나감)',
+    '걸으면서 쏠 땐 걷기 그림 그대로 — 쏠 때마다 몸이 바뀌어 거슬리던 것 줄임',
+    '카이 · 이그나 · 다이스 맞는 모션 새로 그림 — 머리카락 · 머리띠가 칸 밖으로 잘리던 것 고침, 이반 맞을 때 충격선 지움',
+  ]},
   {ver:'ALPHA 0.10', name:'보스 다양화', date:'2026.10.19', lines:[
     '층마다 보스 후보가 여럿 (아이작 · 건전처럼) — 티어: 기본 · 표준 · 특수 · 최종. 그 월드 대표 보스는 40%, 한 판에 같은 보스는 안 겹침. 마지막 보스(8층 블루스크린)만 고정',
     '새 보스 4: 검문 큐브(가로 · 세로 줄이 맞으면 빨간 조준선 뒤 돌진) · 데이터 웜(땅속에선 못 맞힘, 튀어나올 자리에 주황 원) · 쌍둥이 프로세스(하나만 쓰러뜨리면 7초 뒤 다시 실행 — 둘을 비슷하게 깎기) · 섀도 클론(방 가운데 기준 내 반대편에서 따라 움직이고 내가 쏘면 거꾸로 따라 쏨, 6초마다 렉)',
