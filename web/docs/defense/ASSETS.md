@@ -24,6 +24,8 @@
 
 **소리 규칙** — ElevenLabs 효과음, 2개 뽑아 골라 끝 무음 자르기 · 크기 맞춤 (UI -27~-30dB · 타격 -25 · 큰 연출 -17~-19). 넣은 뒤 무음인지 확인 (`legend.mp3` 무음 사고). 전투에서 자주 나면 `audio.ts COMBAT` · `GAP`
 
+**참고 그림 크기**: base64 를 대화로 옮기는 거라 작게 — 160px 두 장을 JPEG(품질 70)로 붙이면 1.5만 자 (조각 2개, sessionStorage 에 넣어 두면 새 대화로 옮겨도 남음). 2026-10-19 키메라가 이 방법
+
 **참고 그림을 ChatGPT 에 올리는 법 (앱 안 브라우저)** — 클립보드 쓰기 · 새 창이 막혀 있어서: 그림을 base64 로 7,000자씩 잘라 페이지의 `window.__b` 에 붙이고 (조각마다 해시 확인) → `File` 로 만들어 `.ProseMirror` 에 `ClipboardEvent('paste')` (DataTransfer) 를 보냄. 받은 그림은 blob URL 을 fetch → `<a download>` 로 내려받기
 
 ## 지금 들어간 파일 (만든 방법)

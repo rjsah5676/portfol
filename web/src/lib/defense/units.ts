@@ -68,6 +68,8 @@ export interface UnitDef {
   /** 보스 보호막 무시 */
   pierce?: boolean;
   ult?: Ult;
+  /** 중첩: 필드에 같은 유닛이 n 기면 모두 피해 × (1 + pct × (min(n, max) − 1)) — pct 는 히든 강화(hiddenFx)를 받음 */
+  stack?: { pct: number; max: number };
   /** 처치할 때: 골드 · 행운석 확률 */
   onKill?: { gold?: number; goldChance?: number; stone?: number };
   /** 판매 값 (없으면 등급 기본값 balance.ts B.sell · B.sellStones) */
@@ -810,6 +812,22 @@ export const UNITS: UnitDef[] = [
     ult: { every: 6, kind: "delete", pct: 0.08, name: "백신 주입" },
     desc: "글리치를 쫓아온 안드로이드. 필드 전체 · 보스 ×2.5 · 보호막 무시 · 방어 깎기 40 · 6타마다 정화 (보스는 최대 체력 8%)",
   }),
+  // 짬처리 히든: 세 세력 레전드 하나씩 → 여러 기 모일수록 셈 (후반에 남는 레전드 정리용)
+  U({
+    id: "h_chimera",
+    name: "오버플로 키메라",
+    faction: "hidden",
+    grade: 5,
+    dtype: "magic",
+    dmg: 1300,
+    aps: 1.25,
+    range: 3.4,
+    glyph: "키메",
+    splash: { r: 1, pct: 0.5 },
+    stack: { pct: 0.25, max: 9 },
+    ult: { every: 10, kind: "nova", r: 1.6, mult: 3, name: "오버플로" },
+    desc: "남은 레전드가 뭉쳐 넘친 버그 덩어리. 범위 공격 · 필드의 키메라 하나마다 모든 키메라 피해 +25% (최대 9기) · 10타마다 오버플로 (범위 ×3)",
+  }),
 ];
 
 export const UNIT: Record<string, UnitDef> = Object.fromEntries(UNITS.map((u) => [u.id, u]));
@@ -848,10 +866,22 @@ export const RECIPES: Recipe[] = [
   // 히든 — 끝까지 데려갈 무거운 조합 (@6 = 아무 초월 · @4 = 아무 신화)
   { id: "h_debugger", needs: ["k_aegis", "m_inferno", "a_plague"], hidden: true },
   { id: "h_noa", needs: ["@6", "@4", "@4"], hidden: true },
+  // @3:세력 = 그 세력 아무 레전드
+  { id: "h_chimera", needs: ["@3:knight", "@3:mech", "@3:arcane"], hidden: true },
 ];
-/** 재료 이름 (@4 아무 신화 · @6 아무 초월) */
-export const needName = (n: string) => (n === "@4" ? "아무 신화" : n === "@6" ? "아무 초월" : (UNIT[n]?.name ?? n));
+/** @ 재료의 등급 (@4 → 4 · @3:knight → 3) */
+export const needGrade = (n: string) => Number(n.slice(1).split(":")[0]);
+/** 재료 이름 (@4 아무 신화 · @6 아무 초월 · @3:세력 그 세력 아무 레전드) */
+export const needName = (n: string) => {
+  if (n[0] !== "@") return UNIT[n]?.name ?? n;
+  const f = n.split(":")[1] as Faction | undefined;
+  return `아무 ${f ? FACTION_NAME[f] + " " : ""}${GRADE_NAME[needGrade(n)]}`;
+};
 /** 재료 칸에 이 유닛이 맞는지 */
-export const needMatch = (n: string, id: string) =>
-  n[0] === "@" ? UNIT[id].grade === Number(n.slice(1)) && UNIT[id].faction !== "hidden" : n === id;
+export const needMatch = (n: string, id: string) => {
+  if (n[0] !== "@") return n === id;
+  const d = UNIT[id];
+  const f = n.split(":")[1];
+  return d.grade === needGrade(n) && d.faction !== "hidden" && (!f || d.faction === f);
+};
 export const RECIPE: Record<string, Recipe> = Object.fromEntries(RECIPES.map((r) => [r.id, r]));

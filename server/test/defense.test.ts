@@ -3,7 +3,7 @@ import { ENGR_PITY, engrOutcome, rollEngr } from "../../web/src/lib/defense/engr
 import { B, BALANCE_VER, LAST_WAVE, countOf, sec } from "../../web/src/lib/defense/balance";
 import { BOTS, botTurn } from "../../web/src/lib/defense/bot";
 import { HASH_TICKS, TICKS_PER_TURN, TURN_MS, replay, replayer, scoreOf, validLog, type LogEntry } from "../../web/src/lib/defense/replay";
-import { CELLS, SLOTS, apply, expNext, hashGame, isCmd, newGame, pureT, step, unitCount, upCost, type Game } from "../../web/src/lib/defense/sim";
+import { CELLS, SLOTS, apply, expNext, hashGame, isCmd, newGame, pureT, stackMult, step, unitCount, upCost, type Game } from "../../web/src/lib/defense/sim";
 import { EXP } from "../../web/src/lib/defense/town";
 import { RECIPES, UNIT, UNITS } from "../../web/src/lib/defense/units";
 import { BOSSES, PHASE_PAIRS, bossOfWave, phaseOn } from "../../web/src/lib/defense/enemies";
@@ -52,7 +52,7 @@ describe("픽셀 글리치 디펜스 엔진", () => {
   it("데이터: 조합식 재료 · 결과가 다 있는 유닛", () => {
     for (const r of RECIPES) {
       expect(UNIT[r.id]).toBeTruthy();
-      for (const n of r.needs) expect(UNIT[n] || /^@[46]$/.test(n), n).toBeTruthy();
+      for (const n of r.needs) expect(UNIT[n] || /^@[46]$/.test(n) || /^@3:(knight|mech|arcane)$/.test(n), n).toBeTruthy();
     }
     expect(new Set(UNITS.map((u) => u.id)).size).toBe(UNITS.length);
   });
@@ -951,5 +951,37 @@ describe("픽셀 글리치 디펜스 서버", () => {
     expect(apply(g2, 0, { t: "recipe", id: "k_astra" })).toBeNull();
     expect(apply(g2, 0, { t: "recipe", id: "h_noa" })).toBeNull();
     expect(b2.cells.filter((c) => c.def).map((c) => c.def)).toEqual(["h_noa"]);
+  });
+
+});
+
+describe("키메라 (엔진)", () => {
+  it("키메라: 세 세력 레전드 하나씩 (많이 쌓인 칸부터) · 필드에 모일수록 피해 배수 · 보관함은 안 셈", () => {
+    const g = started(9, 1);
+    const b = g.boards[0];
+    const put = (id: string, n: number, at = b.cells.findIndex((c) => !c.def)) => {
+      b.cells[at] = { def: id, units: Array.from({ length: n }, () => ({ cd: 0, ult: 0, stun: 0, n: 0 })) };
+      b.dirty = true;
+      return at;
+    };
+    const one = put("k_black", 1);
+    const many = put("k_commander", 3);
+    put("m_titan", 1);
+    expect(apply(g, 0, { t: "recipe", id: "h_chimera" })).toBeTruthy(); // 마도회 레전드 없음 → 거절
+    put("a_moon", 2);
+    expect(apply(g, 0, { t: "recipe", id: "h_chimera" })).toBeNull();
+    expect(b.cells[one].units.length).toBe(1); // 낱개는 그대로
+    expect(b.cells[many].units.length).toBe(2); // 쌓인 칸에서 뺌
+    expect(b.cells.some((c) => c.def === "a_moon" && c.units.length === 1)).toBe(true);
+    const at = b.cells.findIndex((c) => c.def === "h_chimera");
+    expect(at).toBeGreaterThanOrEqual(0);
+    step(g);
+    expect(stackMult(b, UNIT.h_chimera)).toBe(1);
+    b.cells[at].units.push({ cd: 0, ult: 0, stun: 0, n: 0 }, { cd: 0, ult: 0, stun: 0, n: 0 });
+    put("h_chimera", 3, CELLS); // 보관함
+    b.dirty = true;
+    step(g);
+    expect(b.stackN.h_chimera).toBe(3);
+    expect(stackMult(b, UNIT.h_chimera)).toBeCloseTo(1 + UNIT.h_chimera.stack!.pct * 2);
   });
 });

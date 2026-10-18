@@ -27,6 +27,11 @@ import { FACTIONS, RECIPES, UNIT, poolOf, type Faction, type Grade } from "./uni
 import type { Loadout } from "./progress";
 
 /** 조합식 재료 (팔지 않고 남겨 둠) */
+/** 봇 실험 스위치 (econ · sim 스크립트에서 끄고 켬) */
+export const BOT_OPTS: { chimera: false | "spare" | "late" } = { chimera: "spare" };
+/** 키메라 짬처리: 세 세력 모두 레전드가 2기 이상 쌓인 칸이 있을 때 (낱개는 신화 재료로 남김) */
+const spareLegends = (b: Board) =>
+  FACTIONS.every((f) => b.cells.some((c) => c.def && UNIT[c.def].grade === 3 && UNIT[c.def].faction === f && c.units.length >= 2));
 const MATERIAL = new Set(RECIPES.filter((r) => !r.hidden).flatMap((r) => r.needs));
 
 export interface BotCfg {
@@ -266,11 +271,14 @@ export function botMove(b: Board, cfg: BotCfg, skip: ReadonlySet<string> = new S
     }
   }
   // 조합식 (신화 · 히든) — 단일 코어면 길들인 글리치(약한 히든)로 한 종류를 정하지 않음
-  for (const r of RECIPES)
+  for (const r of RECIPES) {
+    // 짬처리 히든(키메라)은 남는 레전드가 있을 때만
+    if (r.id === "h_chimera" && (!BOT_OPTS.chimera || (BOT_OPTS.chimera === "spare" ? !spareLegends(b) : b.wave < 25))) continue;
     if (canRecipe(b, r.id)) {
       const c = ok({ t: "recipe", id: r.id });
       if (c) return c;
     }
+  }
   // 순혈 프로토콜: 비율(70%)을 맞추려고 필드의 다른 세력은 보관함으로, 자리가 없으면 팖
   //  에픽 이하는 늘 · 레전드는 프로토콜이 꺼져 있을 때만 (신화 이상은 그대로). 다른 세력 조합식 재료도 안 남김
   if (cfg.patch === "pure" && cfg.focus) {

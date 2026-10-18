@@ -14,6 +14,8 @@ import { writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { BALANCE_VER, LAST_WAVE, TPS, TUNE, hpOf } from "../../web/src/lib/defense/balance";
 import { BOTS, botByName, botTurn, type BotCfg } from "../../web/src/lib/defense/bot";
+import { BOT_OPTS } from "../../web/src/lib/defense/bot";
+if (process.env.CHIMERA) BOT_OPTS.chimera = process.env.CHIMERA === "off" ? false : (process.env.CHIMERA as "spare" | "late");
 import { replay, type LogEntry } from "../../web/src/lib/defense/replay";
 import { newGame, step, unitCount, type Game } from "../../web/src/lib/defense/sim";
 import { GRADE_NAME, UNIT, UNITS } from "../../web/src/lib/defense/units";

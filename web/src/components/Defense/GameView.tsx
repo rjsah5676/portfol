@@ -11,6 +11,7 @@ import {
   CELLS,
   STACK,
   canRecipe,
+  stackMult,
   recipeOpen,
   counts,
   hasEmpty,
@@ -41,6 +42,7 @@ import {
   GRADE_COLOR,
   GRADE_NAME,
   RECIPES,
+  needGrade,
   needMatch,
   needName,
   SIZE_MULT,
@@ -104,6 +106,7 @@ export interface GameViewProps {
 const GRADE_LETTER = ["N", "R", "E", "L", "M", "H", "T"];
 
 type Toast = { id: number; text: ReactNode; tone?: "bad" | "good" | "gold" };
+const MUTE_HIDDEN_KEY = "pgd-mute-hidden-recipe";
 type ModalKind = "patch" | "pick" | "recipe" | "mission" | "codex" | "pause" | "dev" | "build" | null;
 
 export default function GameView({ ctrl, names, admin, finish, onExit, onRetry, ghost }: GameViewProps) {
@@ -113,6 +116,20 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry, 
   const [sel, setSel] = useState(-1);
   /** 해피 타운: 고른 길 칸 (건물 정보 · 짓기) */
   const [modal, setModal] = useState<ModalKind>(null);
+  // 조합창 「히든 조합 알림 끄기」 — 히든 조합식은 조합 버튼을 안 깜빡이게 (이 브라우저에만 기억)
+  const [muteHidden, setMuteHidden] = useState(() => {
+    try {
+      return localStorage.getItem(MUTE_HIDDEN_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
+  const toggleMuteHidden = (v: boolean) => {
+    setMuteHidden(v);
+    try {
+      localStorage.setItem(MUTE_HIDDEN_KEY, v ? "1" : "0");
+    } catch {}
+  };
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [shout, setShout] = useState<{
     id: number;
@@ -591,7 +608,7 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry, 
         : 1 - b.wt / waveLen;
   const boss = b.enemies.find((e) => e.boss >= 0);
   const nEnemy = b.enemies.length;
-  const recipesReady = RECIPES.filter((r) => canRecipe(b, r.id)).length;
+  const recipesReady = RECIPES.filter((r) => !(muteHidden && r.hidden) && canRecipe(b, r.id)).length;
   const patch = PATCHES.find((p) => p.id === b.patch);
   const sCost = summonCost(b);
   const odds = B.odds[b.luck];
@@ -956,6 +973,14 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry, 
                   ×{selCell.units.length}
                   {sel >= CELLS && " · 보관함"}
                 </span>
+                {selDef.stack && (
+                  <span
+                    className="text-[12px] font-bold text-[#4cffb0]"
+                    title={`필드에 ${selDef.name} 이(가) 많을수록 모두 세져요 (최대 ${selDef.stack.max}기, 보관함은 안 셈)`}
+                  >
+                    중첩 {Math.min(selDef.stack.max, b.stackN[selDef.id] ?? 0)}기 · 피해 ×{stackMult(b, selDef).toFixed(2)}
+                  </span>
+                )}
               </div>
               <p className="mt-1 truncate text-[12px] text-[var(--mute)]" title={selDef.desc}>
                 {unitStats(selDef)} · {selDef.desc}
@@ -1232,7 +1257,7 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry, 
       {modal === "pick" && b.tickets.length > 0 && (
         <PickModal b={b} run={run} onClose={() => setModal(null)} />
       )}
-      {modal === "recipe" && <RecipeModal b={b} run={run} onClose={() => setModal(null)} />}
+      {modal === "recipe" && <RecipeModal b={b} run={run} muteHidden={muteHidden} setMuteHidden={toggleMuteHidden} onClose={() => setModal(null)} />}
       {modal === "build" && <BuildModal b={b} onClose={() => setModal(null)} />}
       {modal === "mission" && (
         <Modal title="미션" onClose={() => setModal(null)} accent="#ffd23f">
@@ -1532,7 +1557,19 @@ function DpsMeter({ b }: { b: Board }) {
   );
 }
 
-function RecipeModal({ b, run, onClose }: { b: Board; run: (c: Cmd) => boolean; onClose(): void }) {
+function RecipeModal({
+  b,
+  run,
+  muteHidden,
+  setMuteHidden,
+  onClose,
+}: {
+  b: Board;
+  run: (c: Cmd) => boolean;
+  muteHidden: boolean;
+  setMuteHidden(v: boolean): void;
+  onClose(): void;
+}) {
   const have = counts(b);
   // 세력별로 모아 보기 (탭) — 만들 수 있는 것이 있는 세력은 탭에 점
   const [tab, setTab] = useState<"all" | Faction>(() => {
@@ -1570,10 +1607,10 @@ function RecipeModal({ b, run, onClose }: { b: Board; run: (c: Cmd) => boolean; 
           (tab === "all" ? ORDER.indexOf(UNIT[x.id].faction) - ORDER.indexOf(UNIT[y.id].faction) : 0) || progress(y) - progress(x)
       ),
   ];
-  const ready = (f: Faction) => RECIPES.some((r) => UNIT[r.id].faction === f && canRecipe(b, r.id));
+  const ready = (f: Faction) => RECIPES.some((r) => UNIT[r.id].faction === f && !(muteHidden && r.hidden) && canRecipe(b, r.id));
   return (
     <Modal title="조합식 — 신화 · 초월 · 히든" onClose={onClose} wide accent="#ffd23f">
-      <div className="mb-2.5 flex gap-1.5">
+      <div className="mb-2.5 flex items-center gap-1.5">
         {(["all", ...ORDER] as const).map((t) => (
           <Btn
             key={t}
@@ -1586,6 +1623,18 @@ function RecipeModal({ b, run, onClose }: { b: Board; run: (c: Cmd) => boolean; 
             {t !== "all" && ready(t) && <i className="dfn-blink absolute top-0.5 right-0.5 block h-2 w-2 bg-[var(--gold)]" />}
           </Btn>
         ))}
+        <label
+          className="ml-auto flex cursor-pointer items-center gap-1.5 text-[12px] text-[var(--mute)] select-none"
+          title="켜 두면 히든 조합식을 만들 수 있어도 조합 버튼이 깜빡이지 않아요 (목록에는 그대로 보여요)"
+        >
+          <input
+            type="checkbox"
+            className="h-3.5 w-3.5 accent-[#4cffb0]"
+            checked={muteHidden}
+            onChange={(e) => (setMuteHidden(e.target.checked), sfx("ui-click", 0.6))}
+          />
+          히든 조합 알림 끄기
+        </label>
       </div>
       <div className="flex flex-col gap-2.5">
         {list.map((r, i) => {
@@ -1667,7 +1716,7 @@ function RecipeModal({ b, run, onClose }: { b: Board; run: (c: Cmd) => boolean; 
                       key={id}
                       className="bg-[#0a0816]/60 px-2 py-1 text-[12px] text-[var(--dim)]"
                     >
-                      {id[0] === "@" ? GRADE_NAME[Number(id.slice(1))] : GRADE_NAME[UNIT[id].grade]} ?
+                      {id[0] === "@" ? GRADE_NAME[needGrade(id)] : GRADE_NAME[UNIT[id].grade]} ?
                     </span>
                   )
                 )}

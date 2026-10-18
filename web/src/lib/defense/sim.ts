@@ -346,6 +346,8 @@ export interface Board {
   dirty: boolean;
   /** 범위 효과(둔화 · 방어 깎기)를 가진 유닛 종류 → 그 칸들 */
   auras: { def: UnitDef; cells: number[] }[];
+  /** 중첩 유닛(UnitDef.stack) 종류별 필드 수 (배치가 바뀌면 다시 셈) */
+  stackN: Record<string, number>;
   /** 영구 성장 효과 (판 시작 때 고정) */
   mods: Mods;
   /** 치트 코드: 지금 고르는 중인 카드 (없으면 null — 있으면 보드가 멈춤) · 고른 것 · 합친 효과 · 뽑기 난수 */
@@ -422,6 +424,7 @@ export function newBoard(seed: number, idx: number, lo?: Loadout | null): Board 
     aspd: new Array(CELLS).fill(0),
     dirty: true,
     auras: [],
+    stackN: {},
     mods,
     // 시작 치트: 패치 4개 중 하나 (고를 때까지 멈춤, 다시 뽑기 없음)
     cheat: { kind: "patch", offer: patchesFor(mods.patches), rr: patchesFor(mods.patches).map(() => 0), t: 0 },
@@ -988,6 +991,7 @@ export const recipeOpen = (b: Board, id: string) => UNIT[id].grade !== TRANS || 
 /**
  * 조합식 재료로 뺄 칸들 (재료 하나당 칸 하나, 같은 칸이 여러 번 나올 수 있음). 못 만들면 null.
  * 정해진 유닛 먼저 고르고, @ 재료(아무 신화 · 아무 초월)는 남은 것 중 앞 칸부터 — 적게 쌓인 칸부터 뺌.
+ * @3:세력(아무 그 세력 레전드)은 반대로 많이 쌓인 칸부터 (남는 레전드 정리).
  */
 export function recipePlan(b: Board, id: string): number[] | null {
   const r = RECIPE[id];
@@ -1000,7 +1004,9 @@ export function recipePlan(b: Board, id: string): number[] | null {
     for (let i = 0; i < SLOTS; i++) {
       const d = b.cells[i].def;
       if (!d || left[i] <= 0 || !needMatch(n, d) || d === id) continue;
-      if (best < 0 || left[i] < left[best]) best = i;
+      // @3:세력(키메라 짬처리)은 가장 많이 쌓인 칸부터 — 낱개는 신화 재료로 남겨 둠
+      const spare = n.includes(":");
+      if (best < 0 || (spare ? left[i] > left[best] : left[i] < left[best])) best = i;
     }
     if (best < 0) return null;
     left[best]--;
@@ -1023,6 +1029,12 @@ export const mythCount = (b: Board) =>
 export function upMult(b: Board, f: Faction): number {
   if (f === "hidden") return 1;
   return 1 + B.up.perLv * b.up[f];
+}
+/** 중첩 유닛 피해 배수 (필드에 같은 유닛 n 기 → 1 + pct × hiddenFx × (min(n, max) − 1)) */
+export function stackMult(b: Board, def: UnitDef): number {
+  if (!def.stack) return 1;
+  const n = Math.min(def.stack.max, b.stackN[def.id] ?? 0);
+  return n > 1 ? 1 + def.stack.pct * (def.faction === "hidden" ? hiddenFx(b) : 1) * (n - 1) : 1;
 }
 /** 히든 강화: 히든 유닛 고유 효과 배수 (삭제 · 정화 비율, 방어 깎기, 보스 배수) */
 export function hiddenFx(b: Board): number {
@@ -1684,6 +1696,13 @@ function rebuild(b: Board) {
     }
   }
   b.auras = [...by.entries()].map(([id, cells]) => ({ def: UNIT[id], cells }));
+  // 중첩 유닛: 필드 수 (보관함은 안 셈)
+  const sn: Record<string, number> = {};
+  for (let i = 0; i < CELLS; i++) {
+    const c = b.cells[i];
+    if (c.def && UNIT[c.def].stack) sn[c.def] = (sn[c.def] ?? 0) + c.units.length;
+  }
+  b.stackN = sn;
   // 무지개 연합 (필드만, 히든은 안 셈)
   let fk = 0,
     fm = 0,
@@ -1763,6 +1782,7 @@ function hit(b: Board, def: UnitDef, e: Enemy, raw: number): number {
   // 순혈 프로토콜: 가장 많은 세력 비율만큼 그 세력 피해 × (최대 pureDmg)
   if (b.patch === "pure" && b.mono === def.faction) m *= 1 + (TUNE.pureDmg - 1) * b.pure;
   if (e.boss >= 0 && def.boss) m *= def.faction === "hidden" ? 1 + (def.boss - 1) * hiddenFx(b) : def.boss;
+  if (def.stack) m *= stackMult(b, def);
   // 각인: 거인 사냥 · 성장형 · 관통
   if (M.engr[def.id]) {
     const eh = egv(b, def.id, "hunter");

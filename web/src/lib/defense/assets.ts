@@ -51,6 +51,8 @@ const ATK = new Set<string>([
   "a_seal", "a_archmage", "a_sage", "a_void", "a_lord", "a_plague", "h_debugger",
   // 베타: 새 레전드 · 신화 · 초월 · 히든
   "k_black", "k_lion", "k_astra", "m_chief", "m_grav", "m_deus", "a_moon", "a_dream", "a_origin", "h_noa",
+  // 2026-10-19 짬처리 히든
+  "h_chimera",
 ]);
 
 /** 한 장짜리 유닛 그림 (160×160, 발은 아래 4%) — ChatGPT 이미지로 만든 도트풍 SD (2026-10-13) */
@@ -110,6 +112,7 @@ export const UNIT_ART: Record<string, SpriteSpec> = {
   m_turret: U("m_turret"),
   h_debugger: U("h_debugger"),
   h_noa: U("h_noa"),
+  h_chimera: U("h_chimera"),
   k_black: U("k_black"),
   k_lion: U("k_lion"),
   k_astra: U("k_astra"),
