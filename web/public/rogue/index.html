@@ -359,7 +359,7 @@ const floorLabel = n => (chOf(n) + 1) + '-' + (n % 2 ? 1 : 2);
 const BOSS_NAME = {trojan:'트로이 목마', recycler:'휴지통', lag:'렉 덩어리', loading:'무한 로딩', freeze:'프리징', kingslime:'킹 노이즈 슬라임', queen:'벌레 여왕', bigturret:'거대 터렛', bsod:'블루스크린'};
 const BOSS_HP = {trojan:820, recycler:1500, kingslime:150, lag:340, queen:250, loading:460, bigturret:420, freeze:480, bsod:900};
 const BOSS_R = {trojan:18, recycler:22, kingslime:16, lag:19, queen:12, loading:18, bigturret:14, freeze:17, bsod:22};
-const BOSS_COL = {trojan:'#c98a4a', recycler:'#8fd18f', lag:'#ff3d5e', loading:'#3fe3ff', freeze:'#9fd8ff', kingslime:'#b45cff', queen:'#7b4dff', bigturret:'#d36bff', bsod:'#4d7bff'};
+const BOSS_COL = {trojan:'#c98a4a', recycler:'#8fd18f', lag:'#ff3d5e', loading:'#3fe3ff', freeze:'#9fd8ff', kingslime:'#8fe04a', queen:'#7b4dff', bigturret:'#d36bff', bsod:'#4d7bff'};
 // 챕터별 피격 피해 (일반 · 보스) — 3챕터부터 한 번에 더 깎임
 // 층별 보스 체력 배수 — 봇 200판에서 보스 처치 중앙값이 4층부터 9~12초로 떨어져(마지막 보스 12초) 뒤쪽을 올림. 목표: 마지막 보스 30초 안팎
 const BOSS_FLOOR_HP = [1, 1, 1, 1.25, 1.6, 1.35, 2.0, 2.8];
@@ -399,99 +399,99 @@ const fx = Math.random; // 연출·전투 AI용 (시드와 분리)
 
 /* ---------- items: 이름은 게이머 말, fl(도감 한 줄)은 아는 사람만 피식 ---------- */
 const ITEMS = [
-  {id:'red_noise',     name:'붉은 노이즈', axis:'form',  tint:'#ff3d5e', desc:'차지 빔 — 꾹 눌렀다 떼면 관통 빔', fl:'화면이 빨갛게 깨지면 보통 큰일이다', add:p=>p.forms.add('beam')},
-  {id:'pixel_bomb',    name:'픽셀 폭탄',   axis:'form',  tint:'#ff9a3d', desc:'착탄 시 폭발 · 데미지 ×1.3 · 연사 느려짐', fl:'터지면 주변 픽셀도 같이 사라진다', add:p=>p.forms.add('bomb'), mul:p=>{p.damage*=1.3; p.fireDelay*=1.6;}},
+  {id:'red_noise',     name:'차지 빔', axis:'form',  tint:'#ff3d5e', desc:'차지 빔 — 꾹 눌렀다 떼면 관통 빔', fl:'화면이 빨갛게 깨지면 보통 큰일이다', add:p=>p.forms.add('beam')},
+  {id:'pixel_bomb',    name:'폭발탄',   axis:'form',  tint:'#ff9a3d', desc:'착탄 시 폭발 · 데미지 ×1.3 · 연사 느려짐', fl:'터지면 주변 픽셀도 같이 사라진다', add:p=>p.forms.add('bomb'), mul:p=>{p.damage*=1.3; p.fireDelay*=1.6;}},
   {id:'return_cursor', name:'부메랑 커서', axis:'form',  tint:'#f4f0ff', desc:'부메랑 — 맞히거나 끝까지 가면 돌아옴', fl:'return cursor;', add:p=>{p.forms.add('boom'); p.damage+=0.5;}},
   {id:'dual_core',     name:'더블 샷',     axis:'count', tint:'#9fe8ff', desc:'+1발 · 데미지 ×0.85', fl:'코어가 두 개면 탄도 두 개', add:p=>p.count+=1, mul:p=>p.damage*=0.85},
   {id:'tri_shot',      name:'트라이 샷',   axis:'count', tint:'#7fc8ff', desc:'+2발 · 연사 느려짐', fl:'3way는 슈팅 게임의 기본 소양', add:p=>p.count+=2, mul:p=>p.fireDelay*=1.3},
-  {id:'back_door',     name:'뒤통수 사격', axis:'count', tint:'#b8c4ff', desc:'반대 방향으로도 같은 개수 발사', fl:'보안 팀은 이걸 백도어라고 부른다', add:p=>p.back=true},
+  {id:'back_door',     name:'후방 사격', axis:'count', tint:'#b8c4ff', desc:'반대 방향으로도 같은 개수 발사', fl:'보안 팀은 이걸 백도어라고 부른다', add:p=>p.back=true},
   {id:'homing_pixel',  name:'유도탄',      axis:'traj',  tint:'#c77dff', desc:'가까운 적 쪽으로 휜다', fl:'target = nearest(enemies)', add:p=>p.homing+=1},
   {id:'pierce_bit',    name:'관통탄',      axis:'traj',  tint:'#e9e9f2', desc:'적을 뚫고 지나감', fl:'충돌 판정을 깜빡한 탄', add:p=>p.pierce=true},
-  {id:'reflect_frame', name:'도탄',        axis:'traj',  tint:'#7dffd9', desc:'벽에 1번 더 튕김', fl:'벽 판정만은 정확하다', add:p=>p.bounces+=1},
+  {id:'reflect_frame', name:'튕김탄',        axis:'traj',  tint:'#7dffd9', desc:'벽에 1번 더 튕김', fl:'벽 판정만은 정확하다', add:p=>p.bounces+=1},
   {id:'split_bug',     name:'분열탄',      axis:'onhit', tint:'#8affc1', desc:'적중 시 작은 탄으로 갈라짐', fl:'복붙하다 생긴 버그', add:p=>p.split+=1},
   {id:'corrupt_data',  name:'독 데이터',   axis:'onhit', tint:'#5dff6a', desc:'독 — 3초간 지속 피해', fl:'열면 안 되는 파일이었다', add:p=>p.poison+=1},
-  {id:'overload',      name:'과부하',      axis:'onhit', tint:'#ffe14d', desc:'연쇄 전기 — 근처 2마리로 튐', fl:'서버실에 불이 났다', add:p=>p.chain+=1},
+  {id:'overload',      name:'연쇄 감전',      axis:'onhit', tint:'#ffe14d', desc:'연쇄 전기 — 근처 2마리로 튐', fl:'서버실에 불이 났다', add:p=>p.chain+=1},
   {id:'giant_pixel',   name:'왕탄',        axis:'stat',  tint:'#ffb3c7', desc:'데미지 ×1.8 · 크기 ×1.6 · 연사 느려짐', fl:'해상도 설정을 잘못 건드렸다', mul:p=>{p.damage*=1.8; p.size*=1.6; p.fireDelay*=1.4;}},
   {id:'overclock',     name:'오버클럭',    axis:'stat',  tint:'#4dd2ff', desc:'연사 ×2 · 데미지 ×0.6', fl:'쿨러 소리가 커졌다', mul:p=>{p.fireDelay*=0.5; p.damage*=0.6;}},
   {id:'fast_render',   name:'광속탄',      axis:'stat',  tint:'#a0ffef', desc:'탄속 +40% · 사거리 +30%', fl:'60fps → 144fps', mul:p=>{p.shotSpeed*=1.4; p.range*=1.3;}},
   {id:'slow_render',   name:'둥둥탄',      axis:'stat',  tint:'#8fa3c7', desc:'탄속 ×0.4 · 사거리 ×2.2 · 데미지 ×1.2', fl:'로딩 중... 로딩 중...', mul:p=>{p.shotSpeed*=.4; p.range*=2.2; p.damage*=1.2;}},
   {id:'random_seed',   name:'엉망 조준',   axis:'traj',  tint:'#d9a7ff', desc:'탄이 ±25° 무작위로 흩어짐 · 데미지 ×1.1', fl:'Math.random()의 뜻에 맡긴다', add:p=>p.jitter+=25*DEG, mul:p=>p.damage*=1.1},
   {id:'grow_buffer',   name:'눈덩이탄',    axis:'traj',  tint:'#ffa3d1', desc:'멀리 날아갈수록 커지고 세짐 · 가까우면 약함', fl:'버퍼가 넘칠 때까지 쌓는다', add:p=>p.grow+=1},
-  {id:'todo',          name:'// TODO',     axis:'util',  tint:'#6b708f', desc:'층을 넘어갈 때마다 무작위 스탯 하나가 조금 오름', fl:'// TODO: 나중에 구현 (진짜로 함)', add:p=>p.todo=true},
+  {id:'todo',          name:'자동 성장',     axis:'util',  tint:'#6b708f', desc:'층을 넘어갈 때마다 무작위 스탯 하나가 조금 오름', fl:'// TODO: 나중에 구현 (진짜로 함)', add:p=>p.todo=true},
   {id:'force_restart', name:'넉백 펀치',   axis:'onhit', tint:'#ffb86b', desc:'적중 시 크게 밀쳐내고 잠깐 멈춤', fl:'Ctrl+Alt+Del로 적을 날린다', add:p=>p.stun+=1},
   {id:'cache_miss',    name:'불발탄',      axis:'stat',  tint:'#9aa0b8', desc:'데미지 ×1.5 · 25% 확률로 탄이 불발', fl:'cache miss — 가끔 데이터가 안 온다', add:p=>p.miss+=.25, mul:p=>p.damage*=1.5},
-  {id:'refactor',      name:'밸런스 패치', axis:'stat',  tint:'#ffffff', desc:'공격 스탯이 전부 조금씩 오름', fl:'기능은 그대로, 코드는 깔끔하게', mul:p=>{p.damage*=1.15; p.fireDelay*=.88; p.shotSpeed*=1.1; p.range*=1.1;}},
-  {id:'hotfix',        name:'핫픽스',      axis:'util',  tint:'#ff6f8a', desc:'최대 HP +20 · HP 20 회복', fl:'금요일 밤 배포', onPick:pl=>{pl.maxHp+=20; pl.hp=Math.min(pl.maxHp, pl.hp+20);}},
+  {id:'refactor',      name:'공격 최적화', axis:'stat',  tint:'#ffffff', desc:'공격 스탯이 전부 조금씩 오름', fl:'기능은 그대로, 코드는 깔끔하게', mul:p=>{p.damage*=1.15; p.fireDelay*=.88; p.shotSpeed*=1.1; p.range*=1.1;}},
+  {id:'hotfix',        name:'체력 핫픽스',      axis:'util',  tint:'#ff6f8a', desc:'최대 HP +20 · HP 20 회복', fl:'금요일 밤 배포', onPick:pl=>{pl.maxHp+=20; pl.hp=Math.min(pl.maxHp, pl.hp+20);}},
   {id:'firewall_v2',   name:'방화벽 2.0',  axis:'util',  tint:'#3fe3ff', desc:'방화벽 +40', fl:'이번엔 진짜 막는다', onPick:pl=>{pl.shield=Math.min(TUNE.maxShield, pl.shield+40);}},
-  {id:'while_true',    name:'무한 회전',   axis:'traj',  tint:'#7dd3ff', desc:'탄이 날아가지 않고 내 주위를 빙글빙글 돈다', fl:'while (true) { spin(); }', add:p=>p.orbit=true},
-  {id:'stack_overflow',name:'콤보 폭주',   axis:'count', tint:'#ff8a5c', desc:'5발마다 사방으로 8발이 터져 나옴', fl:'Stack Overflow — 질문은 거기 가서', add:p=>p.overflow+=1},
+  {id:'while_true',    name:'회전 궤도탄',   axis:'traj',  tint:'#7dd3ff', desc:'탄이 날아가지 않고 내 주위를 빙글빙글 돈다', fl:'while (true) { spin(); }', add:p=>p.orbit=true},
+  {id:'stack_overflow',name:'사방 난사',   axis:'count', tint:'#ff8a5c', desc:'5발마다 사방으로 8발이 터져 나옴', fl:'Stack Overflow — 질문은 거기 가서', add:p=>p.overflow+=1},
   {id:'debugger',      name:'약점 표시',   axis:'onhit', tint:'#ff3d5e', desc:'맞은 적이 3초간 받는 피해 +30%', fl:'breakpoint 걸린 적은 약하다', add:p=>p.mark+=1},
-  {id:'frame_drop',    name:'프레임 드랍', axis:'stat',  tint:'#b0b6d0', desc:'연사 ×0.5 · 데미지 ×2.7 — 한 발이 아주 셈 (초당 피해 +35%)', fl:'대신 한 프레임이 아주 무겁다', mul:p=>{p.fireDelay*=2; p.damage*=2.7;}},
+  {id:'frame_drop',    name:'한방 프레임', axis:'stat',  tint:'#b0b6d0', desc:'연사 ×0.5 · 데미지 ×2.7 — 한 발이 아주 셈 (초당 피해 +35%)', fl:'대신 한 프레임이 아주 무겁다', mul:p=>{p.fireDelay*=2; p.damage*=2.7;}},
   {id:'latency',       name:'렉 걸린 탄',  axis:'traj',  tint:'#a5b8ff', desc:'탄이 잠깐 멈췄다가 빠르게 다시 날아감', fl:'핑 300', add:p=>p.latency=true},
-  {id:'ram_up',        name:'RAM 증설',    axis:'stat', tint:'#ff8a5c', desc:'데미지 +0.7', fl:'8GB로는 부족했다', add:p=>p.damage+=0.7},
-  {id:'cpu_upgrade',   name:'CPU 업그레이드', axis:'stat', tint:'#ffb03a', desc:'데미지 +0.5 · 연사 +10%', fl:'코어 수보다 클럭', add:p=>p.damage+=0.5, mul:p=>p.fireDelay*=0.9},
-  {id:'energy_drink',  name:'에너지 드링크', axis:'stat', tint:'#7dff9a', desc:'연사 +20% · 이동 +5%', fl:'새벽 세 시의 친구', mul:p=>{p.fireDelay*=0.83; p.move*=1.05;}},
-  {id:'ssd_swap',      name:'SSD 교체',    axis:'stat', tint:'#9fc8ff', desc:'이동 +15% · 탄속 +10%', fl:'부팅이 3초', mul:p=>{p.move*=1.15; p.shotSpeed*=1.1;}},
+  {id:'ram_up',        name:'화력 증설',    axis:'stat', tint:'#ff8a5c', desc:'데미지 +0.7', fl:'8GB로는 부족했다', add:p=>p.damage+=0.7},
+  {id:'cpu_upgrade',   name:'강화 CPU', axis:'stat', tint:'#ffb03a', desc:'데미지 +0.5 · 연사 +10%', fl:'코어 수보다 클럭', add:p=>p.damage+=0.5, mul:p=>p.fireDelay*=0.9},
+  {id:'energy_drink',  name:'연사 드링크', axis:'stat', tint:'#7dff9a', desc:'연사 +20% · 이동 +5%', fl:'새벽 세 시의 친구', mul:p=>{p.fireDelay*=0.83; p.move*=1.05;}},
+  {id:'ssd_swap',      name:'가속 SSD',    axis:'stat', tint:'#9fc8ff', desc:'이동 +15% · 탄속 +10%', fl:'부팅이 3초', mul:p=>{p.move*=1.15; p.shotSpeed*=1.1;}},
   {id:'scope',         name:'조준경',      axis:'stat', tint:'#d0f0ff', desc:'사거리 +40% · 탄속 +15%', fl:'zoom: 4x', mul:p=>{p.range*=1.4; p.shotSpeed*=1.15;}},
   {id:'thick_cable',   name:'굵은 케이블', axis:'stat', tint:'#c8a2ff', desc:'탄 크기 +30% · 데미지 +0.3', fl:'대역폭은 굵기에서 나온다', add:p=>p.damage+=0.3, mul:p=>p.size*=1.3},
   {id:'minor_update',  name:'마이너 업데이트', axis:'stat', tint:'#e8e8ff', desc:'데미지 +0.4 · 연사 +8% · 이동 +5%', fl:'v1.0.1 — 자잘한 개선', add:p=>p.damage+=0.4, mul:p=>{p.fireDelay*=0.92; p.move*=1.05;}},
-  {id:'turbo',         name:'터보 모드',   axis:'stat', tint:'#ff3d5e', desc:'데미지 ×1.25', fl:'본체 앞 버튼을 눌렀다', mul:p=>p.damage*=1.25},
+  {id:'turbo',         name:'과부하 모드',   axis:'stat', tint:'#ff3d5e', desc:'데미지 ×1.25', fl:'본체 앞 버튼을 눌렀다', mul:p=>p.damage*=1.25},
   {id:'ups',           name:'무정전 전원', axis:'util', tint:'#ffe14d', desc:'최대 HP +20 · 방화벽 +20', fl:'정전이 와도 판은 이어진다', onPick:pl=>{pl.maxHp+=20; pl.hp=Math.min(pl.maxHp, pl.hp+20); pl.shield=Math.min(TUNE.maxShield, pl.shield+20);}},
-  {id:'heatsink',      name:'방열판',      axis:'util', tint:'#8fd1ff', desc:'맞은 뒤 무적 +0.5초 · 연사 +10%', fl:'열 받으면 진다', add:p=>p.invBonus+=30, mul:p=>p.fireDelay*=0.9},
+  {id:'heatsink',      name:'무적 방열판',      axis:'util', tint:'#8fd1ff', desc:'맞은 뒤 무적 +0.5초 · 연사 +10%', fl:'열 받으면 진다', add:p=>p.invBonus+=30, mul:p=>p.fireDelay*=0.9},
   {id:'antivirus',     name:'백신',        axis:'util', tint:'#5dff6a', desc:'나쁜 패치 효과를 막음 · 최대 HP +10', fl:'실시간 감시 켜짐', add:p=>p.antivirus=true, onPick:pl=>{pl.maxHp+=10; pl.hp=Math.min(pl.maxHp, pl.hp+10);}},
   {id:'lucky_dice',    name:'행운 주사위', axis:'util', tint:'#ffcf4a', desc:'럭 +2 — 도박 · 패치 · 확률 효과가 잘 풀림', fl:'이번엔 될 것 같다', add:p=>p.luck+=2},
   {id:'memory_slot',   name:'메모리 확장 슬롯', axis:'util', tint:'#ff6fb0', desc:'최대 HP +40 · 이동 -8%', fl:'슬롯이 하나 남아 있었다', mul:p=>p.move*=0.92, onPick:pl=>{pl.maxHp+=40; pl.hp=Math.min(pl.maxHp, pl.hp+40);}},
   {id:'server_rack',   name:'서버 랙',      axis:'util', tint:'#6fb0ff', desc:'최대 HP +30 · 방화벽 +30 · 연사 -10%', fl:'24시간 가동', mul:p=>p.fireDelay*=1.1, onPick:pl=>{pl.maxHp+=30; pl.hp=Math.min(pl.maxHp, pl.hp+30); pl.shield=Math.min(TUNE.maxShield, pl.shield+30);}},
-  {id:'spare_power',   name:'예비 전원',    axis:'util', tint:'#ff5a5a', desc:'최대 HP +10 · HP 전부 회복', fl:'콘센트를 찾았다', onPick:pl=>{pl.maxHp+=10; pl.hp=pl.maxHp;}},
-  {id:'dual_monitor',  name:'듀얼 모니터',  axis:'stat', tint:'#7fe3ff', desc:'사거리 +25%', fl:'화면이 두 배', mul:p=>p.range*=1.25},
-  {id:'hd_texture',    name:'고해상도 텍스처', axis:'stat', tint:'#c99bff', desc:'탄 크기 +20%', fl:'4K 리마스터', mul:p=>p.size*=1.2},
-  {id:'fiber',         name:'광케이블',     axis:'stat', tint:'#ffd6a0', desc:'탄속 +25%', fl:'빛의 속도로', mul:p=>p.shotSpeed*=1.25},
-  {id:'gaming_mouse',  name:'게이밍 마우스', axis:'stat', tint:'#ff7ad9', desc:'연사 +12%', fl:'RGB는 성능을 올려 준다', mul:p=>p.fireDelay*=0.89},
-  {id:'mech_keyboard', name:'기계식 키보드', axis:'stat', tint:'#ff4d6a', desc:'데미지 +0.4', fl:'청축이라 시끄럽다', add:p=>p.damage+=0.4},
-  {id:'cooling_fan',   name:'쿨링 팬',      axis:'stat', tint:'#8fd8ff', desc:'이동 +10%', fl:'윙—', mul:p=>p.move*=1.1},
-  {id:'clean_install', name:'클린 설치',    axis:'stat', tint:'#ffffff', desc:'데미지 +0.2 · 연사 · 이동 · 탄속 +5% · 사거리 +10%', fl:'포맷하고 처음부터', add:p=>p.damage+=0.2, mul:p=>{p.fireDelay*=0.95; p.move*=1.05; p.shotSpeed*=1.05; p.range*=1.1;}},
+  {id:'spare_power',   name:'완충 전원',    axis:'util', tint:'#ff5a5a', desc:'최대 HP +10 · HP 전부 회복', fl:'콘센트를 찾았다', onPick:pl=>{pl.maxHp+=10; pl.hp=pl.maxHp;}},
+  {id:'dual_monitor',  name:'원거리 모니터',  axis:'stat', tint:'#7fe3ff', desc:'사거리 +25%', fl:'화면이 두 배', mul:p=>p.range*=1.25},
+  {id:'hd_texture',    name:'큰탄 텍스처', axis:'stat', tint:'#c99bff', desc:'탄 크기 +20%', fl:'4K 리마스터', mul:p=>p.size*=1.2},
+  {id:'fiber',         name:'탄속 광케이블',     axis:'stat', tint:'#ffd6a0', desc:'탄속 +25%', fl:'빛의 속도로', mul:p=>p.shotSpeed*=1.25},
+  {id:'gaming_mouse',  name:'연사 마우스', axis:'stat', tint:'#ff7ad9', desc:'연사 +12%', fl:'RGB는 성능을 올려 준다', mul:p=>p.fireDelay*=0.89},
+  {id:'mech_keyboard', name:'강타 키보드', axis:'stat', tint:'#ff4d6a', desc:'데미지 +0.4', fl:'청축이라 시끄럽다', add:p=>p.damage+=0.4},
+  {id:'cooling_fan',   name:'질주 팬',      axis:'stat', tint:'#8fd8ff', desc:'이동 +10%', fl:'윙—', mul:p=>p.move*=1.1},
+  {id:'clean_install', name:'올스탯 설치',    axis:'stat', tint:'#ffffff', desc:'데미지 +0.2 · 연사 · 이동 · 탄속 +5% · 사거리 +10%', fl:'포맷하고 처음부터', add:p=>p.damage+=0.2, mul:p=>{p.fireDelay*=0.95; p.move*=1.05; p.shotSpeed*=1.05; p.range*=1.1;}},
   {id:'ad_popup',      name:'광고 팝업',    axis:'util', tint:'#ffe14d', desc:'가끔 광고가 화면을 가림 · 광고 뜰 때마다 비트 +1', fl:'축하합니다! 1,000,000번째 방문자', add:p=>p.ads=true},
   {id:'loading_icon',  name:'무한 로딩 아이콘', axis:'stat', tint:'#9aa0b8', desc:'이동 -10% · 데미지 +0.3', fl:'빙글빙글', add:p=>p.damage+=0.3, mul:p=>p.move*=0.9},
-  {id:'update_alert',  name:'업데이트 알림', axis:'util', tint:'#ff8a5c', desc:'방에 들어갈 때 가끔 HP 10 회복', fl:'나중에 알림 받기', add:p=>p.alert=true},
+  {id:'update_alert',  name:'회복 알림', axis:'util', tint:'#ff8a5c', desc:'방에 들어갈 때 가끔 HP 10 회복', fl:'나중에 알림 받기', add:p=>p.alert=true},
   {id:'mouse_accel',   name:'마우스 가속',  axis:'stat', tint:'#b0f0ff', desc:'이동 +20% · 미끄러움', fl:'설정에서 끄는 걸 잊었다', add:p=>p.slide=true, mul:p=>p.move*=1.2},
   {id:'legacy_code',   name:'레거시 코드',  axis:'stat', tint:'#b08850', desc:'데미지 +1.0 · 연사 -25%', fl:'건드리지 마시오', add:p=>p.damage+=1.0, mul:p=>p.fireDelay*=1.25},
-  {id:'empty_folder',  name:'빈 폴더',      axis:'util', tint:'#d9c38a', desc:'다음에 줍는 패시브 아이템이 이 폴더에 하나 더 복사됨', fl:'새 폴더 (2)', onPick:()=>{G.emptyFolder = true;}},
-  {id:'cloud_upload',  name:'클라우드 업로드', axis:'stat', tint:'#bfe8ff', desc:'날아다님 — 낭떠러지 · 바위 위로 지나감', fl:'몸은 서버에', add:p=>p.fly=true},
+  {id:'empty_folder',  name:'복사 폴더',      axis:'util', tint:'#d9c38a', desc:'다음에 줍는 패시브 아이템이 이 폴더에 하나 더 복사됨', fl:'새 폴더 (2)', onPick:()=>{G.emptyFolder = true;}},
+  {id:'cloud_upload',  name:'클라우드 비행', axis:'stat', tint:'#bfe8ff', desc:'날아다님 — 낭떠러지 · 바위 위로 지나감', fl:'몸은 서버에', add:p=>p.fly=true},
   {id:'bridge_cable',  name:'브리지 케이블', axis:'stat', tint:'#ffcf4a', desc:'1칸짜리 낭떠러지에 다리를 놓고 건넘', fl:'랜선 한 가닥이면 충분', add:p=>p.ladder=true},
-  {id:'analog_stick',  name:'아날로그 스틱', axis:'traj', tint:'#9fe8ff', desc:'대각선으로도 쏠 수 있음 (8방향)', fl:'십자키는 이제 그만', add:p=>p.aim8=true},
+  {id:'analog_stick',  name:'8방향 스틱', axis:'traj', tint:'#9fe8ff', desc:'대각선으로도 쏠 수 있음 (8방향)', fl:'십자키는 이제 그만', add:p=>p.aim8=true},
   {id:'virtual_memory', name:'가상 메모리', axis:'util', tint:'#ff8fb8', desc:'최대 HP +20', fl:'디스크를 빌려 쓴다', onPick:pl=>{pl.maxHp+=20; pl.hp=Math.min(pl.maxHp, pl.hp+20);}},
-  {id:'quad_core',     name:'쿼드 코어',    axis:'count', tint:'#ffb03a', desc:'+3발 · 데미지 ×0.7', fl:'코어가 넷', add:p=>p.count+=3, mul:p=>p.damage*=0.7},
-  {id:'debug_mode',    name:'디버그 모드',  axis:'stat', tint:'#ff5a3d', desc:'데미지 ×1.4 · 최대 HP -20', fl:'안전장치 해제', mul:p=>p.damage*=1.4, onPick:pl=>{pl.maxHp=Math.max(20, pl.maxHp-20); pl.hp=Math.min(pl.hp, pl.maxHp);}},
-  {id:'ping999',       name:'핑 999',       axis:'stat', tint:'#ff9a3c', desc:'탄속 ×0.6 · 데미지 ×1.3', fl:'서버가 멀다', mul:p=>{p.shotSpeed*=0.6; p.damage*=1.3;}},
+  {id:'quad_core',     name:'쿼드 샷',    axis:'count', tint:'#ffb03a', desc:'+3발 · 데미지 ×0.7', fl:'코어가 넷', add:p=>p.count+=3, mul:p=>p.damage*=0.7},
+  {id:'debug_mode',    name:'유리대포 모드',  axis:'stat', tint:'#ff5a3d', desc:'데미지 ×1.4 · 최대 HP -20', fl:'안전장치 해제', mul:p=>p.damage*=1.4, onPick:pl=>{pl.maxHp=Math.max(20, pl.maxHp-20); pl.hp=Math.min(pl.hp, pl.maxHp);}},
+  {id:'ping999',       name:'중량 패킷',       axis:'stat', tint:'#ff9a3c', desc:'탄속 ×0.6 · 데미지 ×1.3', fl:'서버가 멀다', mul:p=>{p.shotSpeed*=0.6; p.damage*=1.3;}},
   {id:'driver_error',  name:'드라이버 오류', axis:'stat', tint:'#8a8fb2', desc:'연사 -15% · 30% 확률로 탄이 두 갈래로 나감', fl:'장치를 찾을 수 없습니다', add:p=>p.glitchShot+=.3, mul:p=>p.fireDelay*=1.15},
-  {id:'overheat',      name:'과열',         axis:'stat', tint:'#ff6a3d', desc:'연사 +30% · 이동 -10%', fl:'팬 소리가 비행기 같다', mul:p=>{p.fireDelay*=0.77; p.move*=0.9;}},
+  {id:'overheat',      name:'과열 연사',         axis:'stat', tint:'#ff6a3d', desc:'연사 +30% · 이동 -10%', fl:'팬 소리가 비행기 같다', mul:p=>{p.fireDelay*=0.77; p.move*=0.9;}},
   {id:'laser_pointer', name:'레이저 포인터', axis:'traj', tint:'#ff3d5e', desc:'관통 · 탄속 +20%', fl:'고양이가 좋아한다', add:p=>p.pierce=true, mul:p=>p.shotSpeed*=1.2},
   {id:'gps',           name:'GPS',          axis:'traj', tint:'#5dffcf', desc:'유도 · 사거리 +20%', fl:'경로를 재탐색합니다', add:p=>p.homing+=1, mul:p=>p.range*=1.2},
   {id:'lighter',       name:'라이터',       axis:'onhit', tint:'#ff9a3c', desc:'화상 탄 — 맞힐수록 불이 쌓임 (이그나는 화상 2배)', fl:'불조심', add:p=>p.burn+=1},
-  {id:'lucky_packet',  name:'럭키 패킷',    axis:'onhit', tint:'#ffcf4a', desc:'10% 확률로 데미지 ×2', fl:'패킷 하나가 두 배로 도착했다', add:p=>p.crit+=0.1},
+  {id:'lucky_packet',  name:'치명타 패킷',    axis:'onhit', tint:'#ffcf4a', desc:'10% 확률로 데미지 ×2', fl:'패킷 하나가 두 배로 도착했다', add:p=>p.crit+=0.1},
   {id:'memory_reclaim', name:'메모리 회수', axis:'util', tint:'#ff6f8a', desc:'적 12마리 처치마다 HP 5 회복', fl:'해제된 메모리는 내 것', add:p=>p.reclaim=true},
-  {id:'auto_backup',   name:'자동 백업',    axis:'util', tint:'#3fe3ff', desc:'방을 비울 때마다 방화벽 +5', fl:'매 시간 정각에 백업', add:p=>p.backup+=5},
-  {id:'miner',         name:'채굴기',       axis:'stat', tint:'#ffcf4a', desc:'들고 있는 비트 1개당 데미지 +0.03 (최대 +1.5)', fl:'전기세가 무섭다', add:p=>p.miner=true},
-  {id:'panic_mode',    name:'패닉 모드',    axis:'stat', tint:'#ff2e4d', desc:'HP가 30% 아래면 데미지 ×1.6', fl:'Ctrl+Alt+Del 연타', add:p=>p.panic=true},
+  {id:'auto_backup',   name:'자동 방화벽',    axis:'util', tint:'#3fe3ff', desc:'방을 비울 때마다 방화벽 +5', fl:'매 시간 정각에 백업', add:p=>p.backup+=5},
+  {id:'miner',         name:'비트 화력',       axis:'stat', tint:'#ffcf4a', desc:'들고 있는 비트 1개당 데미지 +0.03 (최대 +1.5)', fl:'전기세가 무섭다', add:p=>p.miner=true},
+  {id:'panic_mode',    name:'위기 강화',    axis:'stat', tint:'#ff2e4d', desc:'HP가 30% 아래면 데미지 ×1.6', fl:'Ctrl+Alt+Del 연타', add:p=>p.panic=true},
   {id:'dash_driver',   name:'대시 드라이버', axis:'util', tint:'#9fe8ff', desc:'대시 대기 -40% · 대시로 부딪힌 적에게 피해', fl:'최신 드라이버로 업데이트됨', add:p=>{p.dashMul*=0.6; p.dashDmg+=1;}},
-  {id:'kill_process',  name:'프로세스 킬',  axis:'onhit', tint:'#ff5a3d', desc:'처치한 적이 작게 폭발', fl:'kill -9', add:p=>p.killBoom=true},
+  {id:'kill_process',  name:'처치 폭발',  axis:'onhit', tint:'#ff5a3d', desc:'처치한 적이 작게 폭발', fl:'kill -9', add:p=>p.killBoom=true},
   {id:'firewall_sat',  name:'방화벽 위성',  axis:'util', tint:'#3fe3ff', desc:'내 주위를 도는 위성이 적 탄을 막음 (막으면 0.6초 쉼) · 수호 1칸', fl:'궤도 방어 시스템', add:p=>p.sat+=1},
-  {id:'screensaver',   name:'화면 보호기',  axis:'stat', tint:'#9a8cff', desc:'2초 동안 안 움직이면 데미지 +50%', fl:'움직이면 꺼진다', add:p=>p.idleDmg=true},
+  {id:'screensaver',   name:'정지 강화',  axis:'stat', tint:'#9a8cff', desc:'2초 동안 안 움직이면 데미지 +50%', fl:'움직이면 꺼진다', add:p=>p.idleDmg=true},
   {id:'autosave',      name:'자동 저장',    axis:'util', tint:'#7dffd9', desc:'한 번 쓰러져도 HP 30으로 다시 일어남 (쓰면 사라짐)', fl:'마지막 저장 지점에서 불러오는 중…', add:p=>p.revive=true},
   {id:'dup_file',      name:'중복 파일',    axis:'util', tint:'#d0d8ff', desc:'가진 패시브 하나가 하나 더 생김', fl:'사본 (1)', onPick:()=>dupItem()},
   {id:'master_key',    name:'만능 키',      axis:'util', tint:'#ffe68a', desc:'액세스 키 +3', fl:'관리자 권한', onPick:()=>{G.res.key+=3;}},
   {id:'bomb_pack',     name:'폭탄 꾸러미',  axis:'util', tint:'#c77dff', desc:'글리치 폭탄 +5', fl:'택배 왔어요', onPick:()=>{G.res.bomb+=5;}},
   {id:'wallet',        name:'비트 지갑',    axis:'util', tint:'#ffcf4a', desc:'비트 +15', fl:'지갑을 주웠다', onPick:()=>{G.res.bit+=15;}},
   {id:'sitemap',       name:'사이트맵',     axis:'util', tint:'#a9c8ff', desc:'층마다 지도가 전부 보임', fl:'sitemap.xml', add:p=>p.sitemap=true},
-  {id:'source_leak',   name:'소스 유출',    axis:'util', tint:'#c77dff', desc:'숨겨진 방이 지도에 보임 · 액세스 키 +1', fl:'깃허브에 올라가 있었다', add:p=>p.leak=true, onPick:()=>{G.res.key+=1;}},
-  {id:'recycle_bin',   name:'휴지통',       axis:'util', tint:'#9aa0b8', desc:'방에 들어가면 나쁜 패치 효과가 풀림', fl:'비우시겠습니까?', add:p=>p.recycle=true},
+  {id:'source_leak',   name:'숨은 방 유출',    axis:'util', tint:'#c77dff', desc:'숨겨진 방이 지도에 보임 · 액세스 키 +1', fl:'깃허브에 올라가 있었다', add:p=>p.leak=true, onPick:()=>{G.res.key+=1;}},
+  {id:'recycle_bin',   name:'정화 휴지통',       axis:'util', tint:'#9aa0b8', desc:'방에 들어가면 나쁜 패치 효과가 풀림', fl:'비우시겠습니까?', add:p=>p.recycle=true},
   {id:'captcha',       name:'캡차',         axis:'stat', tint:'#8fd18f', desc:'가끔 1초 동안 못 쏨 · 풀리면 다음 5발 데미지 ×2', fl:'로봇이 아닙니다 ☑', add:p=>p.captcha=true},
-  {id:'dark_mode',     name:'다크 모드',    axis:'util', tint:'#3a3f5c', desc:'화면이 조금 어두워짐 · 적 탄이 20% 느려짐', fl:'눈이 편안해졌다 (아님)', add:p=>p.dark=true},
-  {id:'trial_ver',     name:'무료 체험판',  axis:'util', tint:'#7dffd9', desc:'최대 HP +30 · 층을 넘어갈 때마다 10씩 줄어듦 (받은 만큼만)', fl:'체험 기간이 7일 남았습니다', onPick:pl=>{G.trialLeft = (G.trialLeft || 0) + 30; pl.maxHp+=30; pl.hp=Math.min(pl.maxHp, pl.hp+30);}},
+  {id:'dark_mode',     name:'슬로 모드',    axis:'util', tint:'#3a3f5c', desc:'화면이 조금 어두워짐 · 적 탄이 20% 느려짐', fl:'눈이 편안해졌다 (아님)', add:p=>p.dark=true},
+  {id:'trial_ver',     name:'체력 체험판',  axis:'util', tint:'#7dffd9', desc:'최대 HP +30 · 층을 넘어갈 때마다 10씩 줄어듦 (받은 만큼만)', fl:'체험 기간이 7일 남았습니다', onPick:pl=>{G.trialLeft = (G.trialLeft || 0) + 30; pl.maxHp+=30; pl.hp=Math.min(pl.maxHp, pl.hp+30);}},
   {id:'cookie',        name:'쿠키',         axis:'util', tint:'#d9a066', desc:'HP 10 회복', fl:'이 사이트는 쿠키를 사용합니다', onPick:pl=>{pl.hp=Math.min(pl.maxHp, pl.hp+10);}},
-  {id:'terms',         name:'이용약관 동의', axis:'util', tint:'#c8ccdf', desc:'상점 물건 25% 할인 · 대신 최대 HP -10', fl:'아무도 안 읽는다 (제7조: 체력 일부를 회사에 위임)', add:p=>p.terms=true, onPick:pl=>{pl.maxHp=Math.max(20, pl.maxHp-10); pl.hp=Math.min(pl.hp, pl.maxHp);}},
+  {id:'terms',         name:'할인 약관', axis:'util', tint:'#c8ccdf', desc:'상점 물건 25% 할인 · 대신 최대 HP -10', fl:'아무도 안 읽는다 (제7조: 체력 일부를 회사에 위임)', add:p=>p.terms=true, onPick:pl=>{pl.maxHp=Math.max(20, pl.maxHp-10); pl.hp=Math.min(pl.hp, pl.maxHp);}},
   {id:'beta_badge',    name:'베타 테스터 배지', axis:'stat', tint:'#ffcf4a', desc:'데미지 +0.1', fl:'초창기 멤버', add:p=>p.damage+=0.1},
-  {id:'garbage_collector', name:'비트 자석', axis:'util', tint:'#ffcf4a', desc:'적 처치 시 비트가 더 자주 떨어짐', fl:'쓰레기 수집기가 동전도 줍는다', add:p=>p.gc+=1},
+  {id:'garbage_collector', name:'드롭률 패치', axis:'util', tint:'#ffcf4a', desc:'적 처치 시 비트가 더 자주 떨어짐', fl:'쓰레기 수집기가 동전도 줍는다', add:p=>p.gc+=1},
   // ---- 액티브: 한 칸만 들 수 있음, 게이지(cost)가 차면 E. 새로 주우면 들던 건 바닥에 ----
   // ── 2차: 소환수 (따라다님 — 세트 「봇넷」) ──
   {id:'helper_bot',    name:'도우미 봇',     axis:'util', tint:'#9fe8ff', desc:'따라다니며 내가 쏠 때 같이 쏨 (피해 3.5)', fl:'Hello, World!', add:p=>p.fams.push('helper_bot')},
@@ -503,11 +503,11 @@ const ITEMS = [
   {id:'cat_gif',       name:'냥이.gif',      axis:'util', tint:'#ffb36b', desc:'가까운 적에게 달려들어 물어뜯음', fl:'인터넷의 절반은 고양이', add:p=>p.fams.push('cat_gif')},
   // ── 궤도 · 아군 벌레 (세트 「버그 군단」) ──
   {id:'bug_swarm',     name:'벌레 장벽',     axis:'util', tint:'#b45cff', desc:'작은 벌레 2마리가 바짝 돌며 적 탄을 막고 닿는 적을 물음 · 수호 2칸', fl:'버그는 기능이다', add:p=>p.swarm+=2},
-  {id:'ping_sat',      name:'핑 위성',       axis:'util', tint:'#3fe3ff', desc:'크게 도는 위성이 닿는 적에게 큰 피해 · 수호 1칸', fl:'ping 1ms', add:p=>p.pingSat+=1},
+  {id:'ping_sat',      name:'타격 위성',       axis:'util', tint:'#3fe3ff', desc:'크게 도는 위성이 닿는 적에게 큰 피해 · 수호 1칸', fl:'ping 1ms', add:p=>p.pingSat+=1},
   {id:'blade_cursor',  name:'칼날 커서',     axis:'util', tint:'#ff5a7a', desc:'바짝 빠르게 도는 칼날 — 닿는 적에게 큰 피해 (탄은 못 막음) · 수호 1칸', fl:'잘라내기 (Ctrl+X)', add:p=>p.blade+=1},
   {id:'mirror_orb',    name:'반사 거울',     axis:'util', tint:'#bfe8ff', desc:'도는 거울이 적 탄을 막으면 내 탄으로 되쏨 · 수호 1칸', fl:'거울 서버', add:p=>p.mirror+=1},
   {id:'cool_orb',      name:'냉각 위성',     axis:'util', tint:'#9fe8ff', desc:'내 둘레(위성 안쪽)로 들어온 적 탄이 절반 속도로 느려짐 · 수호 1칸', fl:'쿨러 최대 RPM', add:p=>p.coolOrb+=1},
-  {id:'bug_report',    name:'버그 리포트',   axis:'onhit', tint:'#b45cff', desc:'처치 시 25% 확률로 아군 벌레 — 적에게 날아가 터짐', fl:'재현 경로: 모름', add:p=>p.allyBug+=.25},
+  {id:'bug_report',    name:'자폭 버그',   axis:'onhit', tint:'#b45cff', desc:'처치 시 25% 확률로 아군 벌레 — 적에게 날아가 터짐', fl:'재현 경로: 모름', add:p=>p.allyBug+=.25},
   // ── 방어 ──
   {id:'anti_dmg',      name:'방어 패치',     axis:'stat', tint:'#e9e9f2', desc:'받는 피해 -5 (최소 5)', fl:'보안 업데이트 KB5034441', add:p=>p.armor+=5},
   {id:'safe_mode',     name:'안전 모드',     axis:'util', tint:'#ffe68a', desc:'방마다 첫 피격 1번 무효', fl:'F8 연타', add:p=>p.mantle=true},
@@ -515,25 +515,25 @@ const ITEMS = [
   {id:'spam_filter',   name:'스팸 필터',     axis:'stat', tint:'#ff8a5c', desc:'25% 확률로 적 탄이 닿아도 그냥 사라짐', fl:'정크 메일함으로 이동됨', add:p=>p.spam+=.25},
   {id:'hit_charge',    name:'피격 충전',     axis:'util', tint:'#ffcf4a', desc:'맞을 때마다 액티브 한 칸 충전', fl:'아프면서 크는 거야', add:p=>p.hitCharge=true},
   // ── 공격 (아이작 참고) ──
-  {id:'core_upgrade',  name:'코어 업그레이드', axis:'stat', tint:'#ff3d5e', desc:'데미지 ×1.8 +1 · 유도 · 연사 -10%', fl:'새 아키텍처', add:p=>p.homing+=1, mul:p=>{p.damage=p.damage*1.8+1; p.fireDelay*=1.1;}},
+  {id:'core_upgrade',  name:'초강화 코어', axis:'stat', tint:'#ff3d5e', desc:'데미지 ×1.8 +1 · 유도 · 연사 -10%', fl:'새 아키텍처', add:p=>p.homing+=1, mul:p=>{p.damage=p.damage*1.8+1; p.fireDelay*=1.1;}},
   {id:'full_upgrade',  name:'풀 업그레이드', axis:'stat', tint:'#ffcf4a', desc:'모든 스탯 업 · 최대 HP +20', fl:'최신 버전입니다', add:p=>p.damage+=.6, mul:p=>{p.fireDelay*=.9; p.move*=1.1; p.range*=1.2; p.shotSpeed*=1.1; p.size*=1.15;}, onPick:pl=>{pl.maxHp+=20; pl.hp=Math.min(pl.maxHp, pl.hp+20);}},
-  {id:'clean_aura',    name:'클린 룸 오라',  axis:'onhit', tint:'#fff6c8', desc:'탄을 감싼 오라가 스치는 적에게도 지속 피해', fl:'먼지 0.1㎛ 이하', add:p=>p.aura=true},
-  {id:'data_leak',     name:'데이터 누수',   axis:'onhit', tint:'#5dff6a', desc:'탄이 떨어진 자리에 2초간 피해 웅덩이', fl:'메모리 누수 감지', add:p=>p.puddle=true},
+  {id:'clean_aura',    name:'오라탄',  axis:'onhit', tint:'#fff6c8', desc:'탄을 감싼 오라가 스치는 적에게도 지속 피해', fl:'먼지 0.1㎛ 이하', add:p=>p.aura=true},
+  {id:'data_leak',     name:'누수 웅덩이',   axis:'onhit', tint:'#5dff6a', desc:'탄이 떨어진 자리에 2초간 피해 웅덩이', fl:'메모리 누수 감지', add:p=>p.puddle=true},
   {id:'close_packet',  name:'근접 패킷',     axis:'stat', tint:'#ff9a3d', desc:'데미지 ×1.6, 멀리 갈수록 약해짐 · 사거리 ×0.7', fl:'LAN 파티 전용', add:p=>p.close=true, mul:p=>{p.damage*=1.6; p.range*=.7;}},
-  {id:'light_packet',  name:'경량 패킷',     axis:'stat', tint:'#e9f6ff', desc:'연사 ×3 · 데미지 ×0.3 · 탄 작게', fl:'압축률 99%', mul:p=>{p.fireDelay/=3; p.damage*=.3; p.size*=.7;}},
+  {id:'light_packet',  name:'초연사 패킷',     axis:'stat', tint:'#e9f6ff', desc:'연사 ×3 · 데미지 ×0.3 · 탄 작게', fl:'압축률 99%', mul:p=>{p.fireDelay/=3; p.damage*=.3; p.size*=.7;}},
   {id:'ignite_shot',   name:'발화 탄',       axis:'onhit', tint:'#ff7a2c', desc:'12% 확률로 맞은 자리에서 불꽃 폭발 (화상)', fl:'CPU 온도 98℃', add:p=>p.ignite+=.12},
   {id:'freeze_frame',  name:'프리즈 프레임', axis:'onhit', tint:'#9fd8ff', desc:'15% 확률로 맞은 적이 1초 멈춤', fl:'응답 없음', add:p=>p.freezeHit+=.15},
   {id:'fear_packet',   name:'공포 패킷',     axis:'onhit', tint:'#8a5cc8', desc:'12% 확률로 맞은 적이 2초 도망감', fl:'이 사이트는 안전하지 않습니다', add:p=>p.fear+=.12},
-  {id:'cross_cable',   name:'크로스 케이블', axis:'count', tint:'#7dffd9', desc:'정면 대신 V자로 두 발 (양옆 35°)', fl:'꼬아서 연결', add:p=>p.vshot=true},
-  {id:'wrap_packet',   name:'래핑 패킷',     axis:'traj', tint:'#c77dff', desc:'탄이 벽을 넘어 반대편에서 나옴 · 사거리 +50%', fl:'overflow: wrap', add:p=>p.wrap=true, mul:p=>p.range*=1.5},
+  {id:'cross_cable',   name:'V자 케이블', axis:'count', tint:'#7dffd9', desc:'정면 대신 V자로 두 발 (양옆 35°)', fl:'꼬아서 연결', add:p=>p.vshot=true},
+  {id:'wrap_packet',   name:'벽 워프탄',     axis:'traj', tint:'#c77dff', desc:'탄이 벽을 넘어 반대편에서 나옴 · 사거리 +50%', fl:'overflow: wrap', add:p=>p.wrap=true, mul:p=>p.range*=1.5},
   {id:'cache_hit',     name:'캐시 히트',     axis:'stat', tint:'#ff5a7a', desc:'데미지 +0.5 · ×1.3', fl:'적중률 100%', add:p=>p.damage+=.5, mul:p=>p.damage*=1.3},
-  {id:'liquid_nitro',  name:'액체 질소',     axis:'stat', tint:'#bfe8ff', desc:'연사 +25% · 맞은 뒤 무적이 조금 짧아짐', fl:'-196℃ 오버클럭', add:p=>p.invBonus-=20, mul:p=>p.fireDelay*=.8},
-  {id:'cloud_sync',    name:'클라우드 동기화', axis:'util', tint:'#bfe8ff', desc:'몹이 있는 새 방에 들어갈 때마다 방화벽 +5', fl:'동기화 중 (1/∞)', add:p=>p.syncShield+=5},
-  {id:'edge_server',   name:'엣지 서버',     axis:'stat', tint:'#9fe8ff', desc:'사거리 +30% · 탄속 +15%', fl:'가장 가까운 서버로 연결', mul:p=>{p.range*=1.3; p.shotSpeed*=1.15;}},
+  {id:'liquid_nitro',  name:'질소 연사',     axis:'stat', tint:'#bfe8ff', desc:'연사 +25% · 맞은 뒤 무적이 조금 짧아짐', fl:'-196℃ 오버클럭', add:p=>p.invBonus-=20, mul:p=>p.fireDelay*=.8},
+  {id:'cloud_sync',    name:'방화벽 동기화', axis:'util', tint:'#bfe8ff', desc:'몹이 있는 새 방에 들어갈 때마다 방화벽 +5', fl:'동기화 중 (1/∞)', add:p=>p.syncShield+=5},
+  {id:'edge_server',   name:'장거리 서버',     axis:'stat', tint:'#9fe8ff', desc:'사거리 +30% · 탄속 +15%', fl:'가장 가까운 서버로 연결', mul:p=>{p.range*=1.3; p.shotSpeed*=1.15;}},
   {id:'exp_build',     name:'실험 빌드',     axis:'stat', tint:'#ff8af0', desc:'무작위 스탯 4개 업 · 2개 다운', fl:'nightly-20261018', onPick:()=>expBuild()},
   // ── 폭탄 ──
   {id:'homing_bomb',   name:'유도 폭탄',     axis:'util', tint:'#c77dff', desc:'놓은 폭탄이 가까운 적에게 미끄러져 감 · 폭탄 +5', fl:'추적 쿠키', add:p=>p.homingBomb=true, onPick:()=>{G.res.bomb+=5;}},
-  {id:'hot_bomb',      name:'발열 폭탄',     axis:'util', tint:'#ff7a2c', desc:'폭발 자리에 불이 남아 적을 태움 · 폭탄 +5', fl:'보조배터리 부풀었음', add:p=>p.hotBomb=true, onPick:()=>{G.res.bomb+=5;}},
+  {id:'hot_bomb',      name:'화염 폭탄',     axis:'util', tint:'#ff7a2c', desc:'폭발 자리에 불이 남아 적을 태움 · 폭탄 +5', fl:'보조배터리 부풀었음', add:p=>p.hotBomb=true, onPick:()=>{G.res.bomb+=5;}},
   {id:'mega_bomb',     name:'메가 폭탄',     axis:'util', tint:'#ff3d5e', desc:'폭탄 범위 ×1.5 · 피해 ×1.7 · 폭탄 +5', fl:'용량: 1TB', add:p=>p.megaBomb=true, onPick:()=>{G.res.bomb+=5;}},
   {id:'cross_bomb',    name:'십자 폭탄',     axis:'util', tint:'#ffcf4a', desc:'폭탄이 십자로 한 번 더 터짐', fl:'+ 연산자 오버로딩', add:p=>p.crossBomb=true},
   // ── 경제 · 유틸 ──
@@ -543,45 +543,45 @@ const ITEMS = [
   {id:'gold_member',   name:'골드 회원권',   axis:'util', tint:'#ffcf4a', desc:'상점에 물건이 하나 더 · 럭 +1', fl:'멤버십 혜택', add:p=>{p.luck+=1; p.goldMember=true;}},
   {id:'steam_sale',    name:'스팀 세일',     axis:'util', tint:'#7dffd9', desc:'상점 물건 반값', fl:'지갑이 울고 있다', add:p=>p.sale=true},
   // ── 3차: 월드 5 「휴지통」 ──
-  {id:'trash_hat',     name:'휴지통 모자',   axis:'util', tint:'#8fb184', desc:'맞을 때마다 발밑에 독 웅덩이', fl:'머리에 쓰는 거 아님', add:p=>p.hurtPuddle=true},
-  {id:'ghost_file',    name:'유령 파일',     axis:'onhit', tint:'#cfd6ff', desc:'처치한 적이 20% 확률로 아군 유령이 되어 다른 적을 덮침', fl:'삭제했는데 왜 있지', add:p=>p.ghostAlly+=.2},
-  {id:'shredder',      name:'문서 파쇄기',   axis:'traj', tint:'#e8e2c8', desc:'내 탄이 적 탄을 지움', fl:'기밀 문서 전용', add:p=>p.shred=true},
-  {id:'undo_history',  name:'작업 기록',     axis:'util', tint:'#9fe8ff', desc:'층마다 처음 비운 방에서 HP 15 회복', fl:'Ctrl+Shift+Z', add:p=>p.undoHeal=true},
+  {id:'trash_hat',     name:'독 장판 모자',   axis:'util', tint:'#8fb184', desc:'맞을 때마다 발밑에 독 웅덩이', fl:'머리에 쓰는 거 아님', add:p=>p.hurtPuddle=true},
+  {id:'ghost_file',    name:'아군 유령 파일',     axis:'onhit', tint:'#cfd6ff', desc:'처치한 적이 20% 확률로 아군 유령이 되어 다른 적을 덮침', fl:'삭제했는데 왜 있지', add:p=>p.ghostAlly+=.2},
+  {id:'shredder',      name:'탄 파쇄기',   axis:'traj', tint:'#e8e2c8', desc:'내 탄이 적 탄을 지움', fl:'기밀 문서 전용', add:p=>p.shred=true},
+  {id:'undo_history',  name:'회복 기록',     axis:'util', tint:'#9fe8ff', desc:'층마다 처음 비운 방에서 HP 15 회복', fl:'Ctrl+Shift+Z', add:p=>p.undoHeal=true},
   {id:'worm_virus',    name:'웜 바이러스',   axis:'onhit', tint:'#7bdc5a', desc:'독 탄 · 독 걸린 적이 죽으면 주변 적에게 독이 옮음', fl:'자기 복제 중', add:p=>{p.poison+=1; p.wormSpread=true;}},
   {id:'trojan_gift',   name:'트로이 선물',   axis:'util', tint:'#c98a4a', desc:'열어 보면 70% 좋은 아이템 하나, 30% 벌레 떼', fl:'무료 선물을 받으세요!', onPick:()=>trojanGift()},
   {id:'defrag',        name:'조각 모음',     axis:'onhit', tint:'#5ec8ff', desc:'같은 적을 연달아 맞히면 피해 +10%씩 (최대 +60%)', fl:'최적화 중… 3%', add:p=>p.defrag=true},
-  {id:'sandbox',       name:'샌드박스',      axis:'stat', tint:'#e0c27a', desc:'적 탄 -15% 느리게 · 이동 +5%', fl:'격리된 환경에서 실행', add:p=>p.sandbox=true, mul:p=>p.move*=1.05},
+  {id:'sandbox',       name:'감속 샌드박스',      axis:'stat', tint:'#e0c27a', desc:'적 탄 -15% 느리게 · 이동 +5%', fl:'격리된 환경에서 실행', add:p=>p.sandbox=true, mul:p=>p.move*=1.05},
   {id:'recycle_mark',  name:'재활용 마크',   axis:'util', tint:'#8fd18f', desc:'상점에서 살 때마다 비트 3 돌려받음 · 압축 파일에서 픽업 +1', fl:'♻ 분리배출', add:p=>p.recycleMark=true},
   {id:'deleted_heart', name:'삭제된 심장',   axis:'stat', tint:'#ff3d5e', desc:'최대 HP를 20만 남기고 나머지를 방화벽으로 · 데미지 +1.5 · 이동 +10%', fl:'영구 삭제하시겠습니까? (Y)', add:p=>p.damage+=1.5, mul:p=>p.move*=1.1, onPick:pl=>{const x = Math.max(0, pl.maxHp - 20); pl.maxHp = 20; pl.hp = Math.min(pl.hp, 20); pl.shield = Math.min(TUNE.maxShield, pl.shield + x);}},
   {id:'backup_shard',  name:'베타 카이의 조각', axis:'onhit', tint:'#ff2e88', desc:'4번째 탄마다 붉은 글리치 탄 (피해 ×2.5 · 관통)', fl:'『나도 같이 갈래』', noTint:true, add:p=>p.shard=true}, // 평소 탄 색은 그대로 두고 4번째 탄만 붉게
   {id:'zip_bomb_act',  name:'ZIP 폭탄',      axis:'active', cost:100, tint:'#c77dff', desc:'방 전체가 터짐 — 모든 적에게 큰 피해', fl:'42.zip (4.5 PB)'},
-  {id:'hard_reset',    name:'하드 리셋',     axis:'active', cost:100, tint:'#ff8a5c', desc:'HP 전부 회복 · 대신 최대 HP -10', fl:'전원 버튼 5초'},
-  {id:'empty_trash',   name:'휴지통 비우기', axis:'active', cost:60,  tint:'#8fd18f', desc:'적 탄을 전부 지우고, 지운 탄 하나당 5초간 데미지 +3% (최대 +60%)', fl:'정말 비우시겠습니까?'},
+  {id:'hard_reset',    name:'풀회복 리셋',     axis:'active', cost:100, tint:'#ff8a5c', desc:'HP 전부 회복 · 대신 최대 HP -10', fl:'전원 버튼 5초'},
+  {id:'empty_trash',   name:'탄막 비우기', axis:'active', cost:60,  tint:'#8fd18f', desc:'적 탄을 전부 지우고, 지운 탄 하나당 5초간 데미지 +3% (최대 +60%)', fl:'정말 비우시겠습니까?'},
   // ── 4차 ──
   {id:'coupon',        name:'할인 쿠폰',     axis:'util', tint:'#ff8a5c', desc:'층마다 상점 아이템 하나가 공짜', fl:'1인 1매 한정', add:p=>p.coupon=true},
   {id:'one_plus_one',  name:'1+1 이벤트',    axis:'util', tint:'#ffcf4a', desc:'비트 · 열쇠 · 폭탄 · 회복이 20% 확률로 하나 더', fl:'오늘만 이 가격', add:p=>p.onePlus+=.2},
   {id:'vpn',           name:'VPN',          axis:'util', tint:'#5dff6a', desc:'치트 콘솔이 더 자주 열리고 치트 거래 HP 비용 반값', fl:'접속 위치: 알 수 없음', add:p=>p.vpn=true},
   {id:'dark_web',      name:'다크 웹',      axis:'util', tint:'#8a5cc8', desc:'보스를 잡으면 치트 콘솔이 꼭 열림', fl:'.onion', add:p=>p.darkWeb=true},
   {id:'charger',       name:'고속 충전기',   axis:'util', tint:'#ffe14d', desc:'액티브에 필요한 칸 -1 (최소 1칸)', fl:'65W PD', add:p=>p.charger=true},
-  {id:'reflect_film',  name:'반사 필름',     axis:'util', tint:'#bfe8ff', desc:'대시 중 닿은 적 탄을 되받아 쏨 (피해 ×1.5)', fl:'눈부심 방지', add:p=>p.reflect=true},
+  {id:'reflect_film',  name:'대시 반사 필름',     axis:'util', tint:'#bfe8ff', desc:'대시 중 닿은 적 탄을 되받아 쏨 (피해 ×1.5)', fl:'눈부심 방지', add:p=>p.reflect=true},
   {id:'tamagotchi',    name:'다마고치',      axis:'util', tint:'#ff8af0', desc:'방을 비울수록 자라는 소환수 — 클수록 세게 쏨', fl:'밥 줄 시간이에요!', add:p=>p.fams.push('tamagotchi')},
   {id:'search_engine', name:'검색 엔진',     axis:'util', tint:'#3fe3ff', desc:'보물방 · 상점 · 보스방이 지도에 보임', fl:'I\'m Feeling Lucky', add:p=>p.compass=true},
   {id:'ad_block',      name:'광고 차단기',   axis:'onhit', tint:'#ff3d5e', desc:'팝업 광고 몹에게 피해 ×3 · 광고 팝업 아이템 무효', fl:'이 사이트에서 일시 중지', add:p=>p.adBlock=true},
-  {id:'multitap',      name:'멀티탭',        axis:'util', tint:'#c8ccdf', desc:'가진 첫 소환수가 하나 더 (없으면 도우미 봇)', fl:'문어발 주의', add:p=>p.multitap=true},
-  {id:'usb3',          name:'USB 3.0',      axis:'stat', tint:'#3f7bff', desc:'이동 +15% · 탄속 +10%', fl:'파란 단자', mul:p=>{p.move*=1.15; p.shotSpeed*=1.1;}},
-  {id:'rgb_light',     name:'RGB 조명',      axis:'onhit', tint:'#ff8af0', desc:'3초마다 탄 효과가 바뀜 (독 · 화상 · 얼음 · 공포)', fl:'성능 +10%(체감)', add:p=>p.rgb=true},
+  {id:'multitap',      name:'소환수 멀티탭',        axis:'util', tint:'#c8ccdf', desc:'가진 첫 소환수가 하나 더 (없으면 도우미 봇)', fl:'문어발 주의', add:p=>p.multitap=true},
+  {id:'usb3',          name:'가속 USB',      axis:'stat', tint:'#3f7bff', desc:'이동 +15% · 탄속 +10%', fl:'파란 단자', mul:p=>{p.move*=1.15; p.shotSpeed*=1.1;}},
+  {id:'rgb_light',     name:'RGB 속성탄',      axis:'onhit', tint:'#ff8af0', desc:'3초마다 탄 효과가 바뀜 (독 · 화상 · 얼음 · 공포)', fl:'성능 +10%(체감)', add:p=>p.rgb=true},
   {id:'ransomware',    name:'랜섬웨어',      axis:'stat', tint:'#ff3d5e', desc:'데미지 ×1.5 · 대신 층을 넘어갈 때마다 비트 절반을 뺏김', fl:'비트코인으로 지불하세요', add:p=>p.ransom=true, mul:p=>p.damage*=1.5},
   {id:'missing_no',    name:'문자 깨짐',     axis:'util', tint:'#9aa3dc', desc:'층을 넘어갈 때마다 내 아이템이 전부 무작위로 바뀜 (이 템은 남음)', fl:'占쏙옙占쏙옙', add:p=>p.missingNo=true},
   {id:'clipboard',     name:'클립보드',      axis:'active', cost:60,  tint:'#e8e2c8', desc:'주머니의 패치 · 치트 코드를 하나 복사해 바닥에 둠', fl:'Ctrl+C'},
-  {id:'hotkey',        name:'단축키',        axis:'active', cost:30,  tint:'#7dffd9', desc:'보는 쪽으로 순간이동 (짧게 무적)', fl:'Alt+Tab'},
+  {id:'hotkey',        name:'점멸 키',        axis:'active', cost:30,  tint:'#7dffd9', desc:'보는 쪽으로 순간이동 (짧게 무적)', fl:'Alt+Tab'},
   // ── 대시 (기본 대시는 이동만 — 무적 · 탄 지우기 · 돌진 피해는 여기서) ──
   {id:'dodge_patch',   name:'회피 패치',     axis:'util', tint:'#9fe8ff', desc:'대시하는 동안 무적 (탄 · 몸통 모두)', fl:'i-frame 추가됨', add:p=>p.dashGuard=true},
-  {id:'firewall_dash', name:'방화벽 돌파',   axis:'util', tint:'#ff8a5c', desc:'대시하며 닿은 적 탄을 지움 · 대시 대기 -15%', fl:'허용 목록에 추가', add:p=>{p.dashErase=true; p.dashMul*=.85;}},
+  {id:'firewall_dash', name:'대시 방화벽',   axis:'util', tint:'#ff8a5c', desc:'대시하며 닿은 적 탄을 지움 · 대시 대기 -15%', fl:'허용 목록에 추가', add:p=>{p.dashErase=true; p.dashMul*=.85;}},
   {id:'ram_packet',    name:'돌진 패킷',     axis:'util', tint:'#ff5a3d', desc:'대시로 부딪힌 적에게 큰 피해 (데미지 ×3) · 밀쳐냄', fl:'TCP 핸드셰이크 생략', add:p=>p.dashDmg+=2},
   // ── 액티브 ──
   {id:'ctrl_z',        name:'Ctrl+Z',       axis:'active', cost:60,  tint:'#9fe8ff', desc:'이 방에 들어왔을 때의 HP · 방화벽으로 되돌림', fl:'실행 취소'},
   {id:'copy_paste',    name:'복사 붙여넣기', axis:'active', cost:100, tint:'#ffcf4a', desc:'방에 놓인 픽업(아이템 빼고)을 하나씩 복제', fl:'Ctrl+C, Ctrl+V'},
-  {id:'screenshot',    name:'스크린샷',      axis:'active', cost:50,  tint:'#c8ccdf', desc:'방에 놓인 픽업을 다른 픽업으로 바꿈', fl:'Win+Shift+S'},
+  {id:'screenshot',    name:'픽업 리롤',      axis:'active', cost:50,  tint:'#c8ccdf', desc:'방에 놓인 픽업을 다른 픽업으로 바꿈', fl:'Win+Shift+S'},
   {id:'ban_hammer',    name:'밴 해머',       axis:'active', cost:50,  tint:'#ff3d5e', desc:'보는 쪽 앞의 적들에게 큰 피해 · 기절', fl:'영구 정지되었습니다'},
   {id:'god_mode_lite', name:'무적 모드',     axis:'active', cost:100, tint:'#ffe14d', desc:'5초 무적 · 이동 ×1.3 · 닿는 적에게 피해', fl:'iddqd'},
   {id:'red_storm',   name:'붉은 폭풍',  axis:'active', cost:100, tint:'#ff5a3d', desc:'숨을 들이쉬고 앞으로 돌진 — 닿는 적에게 아주 큰 피해', fl:'이반의 필살기'},
@@ -612,12 +612,12 @@ const SETS = {
 };
 // 두 템 시너지 (아이작식) — 둘 다 들면 추가 효과. need 안의 배열은 「그중 하나」
 const SYNERGY = [
-  {id:'r4k',   name:'4K 렌더링',   col:'#ffb3c7', need:['giant_pixel', 'frame_drop'],              desc:'왕탄 + 프레임 드랍 — 데미지 ×1.6', fx:p => { p.damage *= 1.6; }},
-  {id:'ddos',  name:'DDoS',        col:'#4dd2ff', need:['overclock', 'light_packet'],              desc:'오버클럭 + 경량 패킷 — 연사 한계 돌파 · 데미지 ×1.8', fx:p => { p.damage *= 1.8; p.fdMin = 3; }},
-  {id:'swarm', name:'유도 탄막',   col:'#9fe8ff', need:['homing_pixel', ['tri_shot', 'quad_core']], desc:'유도탄 + 트라이 샷/쿼드 코어 — 탄 +1 · 데미지 ×1.3', fx:p => { p.count += 1; p.damage *= 1.3; }},
+  {id:'r4k',   name:'4K 렌더링',   col:'#ffb3c7', need:['giant_pixel', 'frame_drop'],              desc:'왕탄 + 한방 프레임 — 데미지 ×1.6', fx:p => { p.damage *= 1.6; }},
+  {id:'ddos',  name:'DDoS',        col:'#4dd2ff', need:['overclock', 'light_packet'],              desc:'오버클럭 + 초연사 패킷 — 연사 한계 돌파 · 데미지 ×1.8', fx:p => { p.damage *= 1.8; p.fdMin = 3; }},
+  {id:'swarm', name:'유도 탄막',   col:'#9fe8ff', need:['homing_pixel', ['tri_shot', 'quad_core']], desc:'유도탄 + 트라이 샷/쿼드 샷 — 탄 +1 · 데미지 ×1.3', fx:p => { p.count += 1; p.damage *= 1.3; }},
   {id:'rail',  name:'관통 대포',   col:'#ff3d5e', need:['laser_pointer', 'giant_pixel'],          desc:'레이저 포인터 + 왕탄 — 데미지 ×1.5 · 탄속 +20%', fx:p => { p.damage *= 1.5; p.shotSpeed *= 1.2; }},
-  {id:'crit',  name:'크리티컬',    col:'#ff5a7a', need:['cache_hit', 'turbo'],                    desc:'캐시 히트 + 터보 모드 — 데미지 ×1.4', fx:p => { p.damage *= 1.4; }},
-  {id:'cluster', name:'집속탄',    col:'#ff9a3d', need:['pixel_bomb', 'split_bug'],               desc:'픽셀 폭탄 + 분열탄 — 데미지 ×1.3 · 연사 +20%', fx:p => { p.damage *= 1.3; p.fireDelay *= .83; }},
+  {id:'crit',  name:'크리티컬',    col:'#ff5a7a', need:['cache_hit', 'turbo'],                    desc:'캐시 히트 + 과부하 모드 — 데미지 ×1.4', fx:p => { p.damage *= 1.4; }},
+  {id:'cluster', name:'집속탄',    col:'#ff9a3d', need:['pixel_bomb', 'split_bug'],               desc:'폭발탄 + 분열탄 — 데미지 ×1.3 · 연사 +20%', fx:p => { p.damage *= 1.3; p.fireDelay *= .83; }},
 ];
 const AXIS_LABEL = {form:'FORM', count:'COUNT', traj:'PATH', onhit:'ON-HIT', stat:'STAT', util:'UTIL', active:'ACTIVE'};
 // 등급(Q0~Q4)과 나오는 곳 — treasure 보물방 · shop 패치 서버 · secret 숨겨진 방 · drop 방 클리어/압축 파일
@@ -785,7 +785,7 @@ const PRESETS = [
   ['폭탄 분열', ['pixel_bomb','split_bug']],
   ['부메랑 빔', ['return_cursor','red_noise']],
   ['전기 그물', ['overclock','overload','dual_core']],
-  ['왕탄 관통 도탄', ['giant_pixel','pierce_bit','reflect_frame']],
+  ['왕탄 관통 튕김', ['giant_pixel','pierce_bit','reflect_frame']],
   ['둥둥 유도 분열', ['slow_render','homing_pixel','split_bug']],
   ['엉망 조준 + 유도', ['random_seed','homing_pixel','tri_shot']],
   ['전부', ITEMS.filter(i => i.axis !== 'active').map(i=>i.id)],
@@ -912,8 +912,8 @@ const CHAR_IMG = {kai:KAI, igna:IGNA, ivan:IVAN, lily:LILY, dice:DICEI};
 [KAI, IGNA, IVAN, LILY, DICEI].forEach(im => im.addEventListener('load', () => { try { if (!$('start').hidden) renderStartInfo(); } catch(e){} }));
 const charSpr = id => { const im0 = CHAR_IMG[id] || KAI, ok0 = im0.complete && im0.naturalWidth > 0, im = ok0 ? im0 : KAI; return {im, ol:!ok0 ? KAI_OL : id === 'igna' ? IGNA_OL : id === 'ivan' ? IVAN_OL : id === 'lily' ? LILY_OL : id === 'dice' ? DICE_OL : KAI_OL, ok:im.complete && im.naturalWidth > 0}; };
 // 1챕터 시트 256x104: 윗줄 슬라임 40x40 x4 (대기/찌그러짐/점프/피격), 아랫줄 64x64 x4 (바위/금 간 바위/잔해/상자)
-const SL = new Image(); SL.src = 'a/57cac3db79.webp';
-let SL_W = null; const SL_TOP = [8, 16, 1, 13];
+const SL = new Image(); SL.src = 'a/24a969fe41.webp';
+let SL_W = null; const SL_TOP = [14, 23, 1, 15];
 SL.onload = () => { // 피격 순간 흰색 실루엣
   const c = document.createElement('canvas'); c.width = SL.width; c.height = SL.height; const g = c.getContext('2d');
   g.drawImage(SL, 0, 0); g.globalCompositeOperation = 'source-in'; g.fillStyle = '#ffffff'; g.fillRect(0, 0, c.width, c.height); SL_W = c;
@@ -984,31 +984,31 @@ PCI.onload = () => { // 민트 패치는 초록 키잉에 망가져서 빨간 �
   g.drawImage(PCI, 0, 0); g.clearRect(96, 0, 32, 32);
   g.filter = 'hue-rotate(150deg) saturate(.75) brightness(1.3)'; g.drawImage(PCI, 0, 0, 32, 32, 96, 0, 32, 32); g.filter = 'none'; PC = c;
 };
-PCI.src = 'a/b3e52383ed.webp';
+PCI.src = 'a/1b58952238.webp';
 // 지도 아이콘 128x64 = 32x32 4열 2줄: 보스·보물·잠긴 보물·상점·숨겨진 방·치트 콘솔·안 깬 방·시작
 const MAPI = new Image(); MAPI.src = 'a/f777f5d64b.webp';
 // 몹 192x144 = 48x48 4열 3줄: 벌레 A/B · 터렛 대기/충전 · 스피너 A/B · 큐브 대기/미끄러짐 · 팝업 닫힘/열림 · 소환 포털 · 해골
 const MOB = new Image(); let MOB_W = null;
 MOB.onload = () => { const c = document.createElement('canvas'); c.width = MOB.width; c.height = MOB.height; const g = c.getContext('2d'); g.drawImage(MOB, 0, 0); g.globalCompositeOperation = 'source-in'; g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height); MOB_W = c; };
-MOB.src = 'a/63476a562b.webp';
+MOB.src = 'a/c803a5976f.webp';
 const mobReady = () => MOB.complete && MOB.naturalWidth > 0;
-const MOB_FR = {bug:[0, 1, 15], turret:[2, 3, 26], spinner:[4, 5, 19], cube:[6, 7, 21], popup:[8, 9, 28]}; // [프레임A, 프레임B, 크기]
+const MOB_FR = {bug:[0, 1, 17], turret:[2, 3, 28], spinner:[4, 5, 21], cube:[6, 7, 24], popup:[8, 9, 26]}; // [프레임A, 프레임B, 크기]
 function mobSpr(fr, x, y, sz, white, flip, a){
   ctx.save(); ctx.globalAlpha *= (a ?? 1); ctx.translate(Math.round(x), Math.round(y)); if (flip) ctx.scale(-1, 1); ctx.imageSmoothingEnabled = true;
-  ctx.drawImage(white && MOB_W ? MOB_W : MOB, (fr % 4)*48, Math.floor(fr/4)*48, 48, 48, -sz/2, -sz/2, sz, sz); ctx.restore();
+  { const cs = CEL(MOB); ctx.drawImage(white && MOB_W ? MOB_W : MOB, (fr % 4)*cs, Math.floor(fr/4)*cs, cs, cs, -sz/2, -sz/2, sz, sz); } ctx.restore();
 }
 // 월드 5 몹 시트 (GPT) 192x144 = 48x48 4열 3줄: 유령 A/B · 웜 A/B · 웜 흙더미 · 웜 솟는 중 · (예비 6칸)
 const MOB2 = new Image(); let MOB2_W = null;
 MOB2.onload = () => { const c = document.createElement('canvas'); c.width = MOB2.width; c.height = MOB2.height; const g = c.getContext('2d'); g.drawImage(MOB2, 0, 0); g.globalCompositeOperation = 'source-in'; g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height); MOB2_W = c; };
-MOB2.src = 'a/36cdd21424.webp';
+MOB2.src = 'a/9167b24be1.webp';
 const mob2Ready = () => MOB2.complete && MOB2.naturalWidth > 0;
-function mob2Spr(fr, x, y, sz, white, flip, a){ ctx.save(); ctx.globalAlpha *= (a ?? 1); ctx.translate(Math.round(x), Math.round(y)); if (flip) ctx.scale(-1, 1); ctx.imageSmoothingEnabled = true; ctx.drawImage(white && MOB2_W ? MOB2_W : MOB2, (fr % 4)*48, Math.floor(fr/4)*48, 48, 48, -sz/2, -sz/2, sz, sz); ctx.restore(); }
+function mob2Spr(fr, x, y, sz, white, flip, a){ ctx.save(); ctx.globalAlpha *= (a ?? 1); ctx.translate(Math.round(x), Math.round(y)); if (flip) ctx.scale(-1, 1); ctx.imageSmoothingEnabled = true; { const cs = CEL(MOB2); ctx.drawImage(white && MOB2_W ? MOB2_W : MOB2, (fr % 4)*cs, Math.floor(fr/4)*cs, cs, cs, -sz/2, -sz/2, sz, sz); } ctx.restore(); }
 function drawMob2(e, fl){
   const left = G.player.x < e.x;
   if (e.type === 'phantom'){ const a = e.fade > 10 ? .22 : .92, y = e.y - 3 + Math.sin(e.t*.08)*2; ctx.globalAlpha = .25*a; ctx.fillStyle = '#000'; ctx.beginPath(); ctx.ellipse(e.x, e.y + 9, 6, 2, 0, 0, TAU); ctx.fill(); ctx.globalAlpha = 1; mob2Spr(G.frame % 16 < 8 ? 0 : 1, e.x, y, 30, fl, left, a); return; }
-  if (e.type === 'sniffer'){ ctx.globalAlpha = .35; ctx.fillStyle = '#000'; ctx.beginPath(); ctx.ellipse(e.x, e.y + 8, 8, 2.5, 0, 0, TAU); ctx.fill(); ctx.globalAlpha = 1; mob2Spr(e.cd < 20 || G.frame % 20 < 10 ? 7 : 6, e.x, e.y - 2, 28, fl, left); return; }
-  if (e.type === 'zipbomb'){ const s = e.fuse > 0 ? 27 + (45 - e.fuse)*.18 : 26; mob2Spr(e.fuse > 0 ? 9 : 8, e.x, e.y - 2, s, fl, left); return; }
-  if (e.type === 'crawler'){ mob2Spr(G.frame % 8 < 4 ? 10 : 11, e.x, e.y - 1, 26, fl, Math.cos(e.zz) < 0); return; }
+  if (e.type === 'sniffer'){ ctx.globalAlpha = .35; ctx.fillStyle = '#000'; ctx.beginPath(); ctx.ellipse(e.x, e.y + 8, 8, 2.5, 0, 0, TAU); ctx.fill(); ctx.globalAlpha = 1; mob2Spr(e.cd < 20 || G.frame % 20 < 10 ? 7 : 6, e.x, e.y - 2, 31, fl, left); return; }
+  if (e.type === 'zipbomb'){ const s = e.fuse > 0 ? 30 + (45 - e.fuse)*.18 : 29; mob2Spr(e.fuse > 0 ? 9 : 8, e.x, e.y - 2, s, fl, left); return; }
+  if (e.type === 'crawler'){ mob2Spr(G.frame % 8 < 4 ? 10 : 11, e.x, e.y - 1, 28, fl, Math.cos(e.zz) < 0); return; }
   if (e.type === 'worm'){
     if (e.mode === 'under') { mob2Spr(4, e.x, e.y + 2, 28, false, false, .95); return; }
     if (e.mode === 'rise'){ mob2Spr(5, e.x + (G.frame % 4 < 2 ? -1 : 1), e.y, 28, fl, left); return; }
@@ -1044,14 +1044,14 @@ function drawMob(e, fl, glitch){
 // 보스 288x192 = 96x96 3열 2줄 (열: 보스, 줄: 대기/공격 준비). 시트1: 렉·무한 로딩·프리징 / 시트2: 벌레 여왕·거대 터렛·블루스크린
 const BSH = [new Image(), new Image(), new Image()], BSH_W = [null, null, null]; // 시트3: 트로이 목마 · 휴지통 · (예비)
 BSH.forEach((im, i) => im.onload = () => { const c = document.createElement('canvas'); c.width = im.width; c.height = im.height; const g = c.getContext('2d'); g.drawImage(im, 0, 0); g.globalCompositeOperation = 'source-in'; g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height); BSH_W[i] = c; });
-BSH[0].src = 'a/f7ace3026c.webp';
-BSH[1].src = 'a/7466333f23.webp';
-BSH[2].src = 'a/1d550f2f83.webp';
+BSH[0].src = 'a/23c80b0cd9.webp';
+BSH[1].src = 'a/7f84727577.webp';
+BSH[2].src = 'a/015929d486.webp';
 const BOSS_SPR = {trojan:[2, 0, 70], recycler:[2, 1, 76], lag:[0, 0, 60], loading:[0, 1, 62], freeze:[0, 2, 58], queen:[1, 0, 58], bigturret:[1, 1, 60], bsod:[1, 2, 66]};
 const bossSprOK = e => { const b = BOSS_SPR[e.kind]; return !!b && BSH[b[0]].complete && BSH[b[0]].naturalWidth > 0; };
 function bossSpr(k, row, x, y, sz, white, a, rot){
   const [sh, col] = BOSS_SPR[k]; ctx.save(); ctx.globalAlpha *= (a ?? 1); ctx.translate(Math.round(x), Math.round(y)); if (rot) ctx.rotate(rot);
-  ctx.imageSmoothingEnabled = true; ctx.drawImage(white && BSH_W[sh] ? BSH_W[sh] : BSH[sh], col*96, row*96, 96, 96, -sz/2, -sz/2, sz, sz); ctx.restore();
+  ctx.imageSmoothingEnabled = true; { const cs = Math.round((BSH[sh].naturalWidth || BSH[sh].width) / 3); ctx.drawImage(white && BSH_W[sh] ? BSH_W[sh] : BSH[sh], col*cs, row*cs, cs, cs, -sz/2, -sz/2, sz, sz); } ctx.restore();
 }
 function drawBossSpr(e, fl, glitch){
   const S = BOSS_SPR[e.kind][2], z = e.z || 0, st = e.state;
@@ -1107,6 +1107,19 @@ function drawCurseMark(dir){ // 문 앞 ♥-10
   ctx.font = '8px Silkscreen, monospace'; ctx.textAlign = 'left'; ctx.fillStyle = h; ctx.fillText('-10', x + 9, y + 6);
 }
 const DOOR_IN = {up:[W/2, T, 0], down:[W/2, H - T, Math.PI], left:[T, H/2, -Math.PI/2], right:[W - T, H/2, Math.PI/2]};
+// 특수방 문 위 표지판: 지도와 같은 아이콘을 문 안쪽에 작게 (문만 보고도 무슨 방인지)
+function doorSign(dir, n){
+  if (!n || n.type === 'combat' || n.type === 'start' || (n.type === 'secret' && !n.revealed)) return;
+  const k = n.type === 'boss' ? 0 : n.type === 'treasure' ? (n.locked && !n.unlocked ? 2 : 1) : n.type === 'shop' ? 3 : n.type === 'secret' ? 4 : n.type === 'cheat' ? 5 : null;
+  const k2 = k == null ? MAP2_IDX[n.type] : null; if (k == null && k2 == null) return;
+  const [cx, cy] = DOOR_IN[dir], ix = dir === 'left' ? 1 : dir === 'right' ? -1 : 0, iy = dir === 'up' ? 1 : dir === 'down' ? -1 : 0;
+  const x = cx + ix*13 + (iy ? 17 : 0), y = cy + iy*13 + (ix ? -17 : 0), sz = 13;
+  ctx.globalAlpha = .85; ctx.fillStyle = '#05060b'; ctx.beginPath(); ctx.arc(x, y, 8, 0, TAU); ctx.fill(); ctx.globalAlpha = 1;
+  ctx.imageSmoothingEnabled = true;
+  if (k != null && MAPI.complete && MAPI.naturalWidth) ctx.drawImage(MAPI, (k % 4)*32, Math.floor(k/4)*32, 32, 32, x - sz/2, y - sz/2, sz, sz);
+  else if (k2 != null && MAPI2.complete && MAPI2.naturalWidth) ctx.drawImage(n.type === 'curse' ? curseMapImg() : MAPI2, (k2 % 4)*32, Math.floor(k2/4)*32, 32, 32, x - sz/2, y - sz/2, sz, sz);
+  ctx.imageSmoothingEnabled = false;
+}
 function drawDoor(dir, fr, img){ const [cx, cy, rot] = DOOR_IN[dir]; ctx.save(); ctx.translate(cx, cy); ctx.rotate(rot); ctx.imageSmoothingEnabled = false; ctx.drawImage(img || DOOR, (fr % 4)*64, Math.floor(fr/4)*64, 64, 64, -32, -60, 64, 64); /* 64 → 64(화면 128) 정수 배율 = 또렷 */ ctx.restore(); }
 // 챕터 바위 256x128 = 64x64 4x2: 2챕 바위/금 · 3챕 바위/금 · 4챕 바위/금 · 금속 잔해 · 얼음 잔해
 const ROCK = new Image(); ROCK.src = 'a/755af1c38e.webp';
@@ -1119,6 +1132,8 @@ const PS = 32; // 내 캐릭터(스프라이트) 그리는 크기 — 24 → 30 
 const KPOSE = 55; // 포즈 프레임을 그리는 크기 (카이 기본 스프라이트와 키 맞춤)
 const kpose = (fr, x, y, flip, a) => kfx(fr, x, y + 9 - KPOSE*.30, KPOSE, flip, a); // 발이 y+9 근처
 const SHOT_TINT = {}; // 탄 색(아이템 조합)별로 물들인 탄 그림 캐시
+const SHADE = {};
+function shadeCol(c, k){ const key = c + k; if (SHADE[key]) return SHADE[key]; const m = /^#([0-9a-f]{6})$/i.exec(c); if (!m) return c; const n = parseInt(m[1], 16); const f = v => Math.round(v * k).toString(16).padStart(2, '0'); return SHADE[key] = '#' + f(n >> 16 & 255) + f(n >> 8 & 255) + f(n & 255); }
 function shotSpr(color){
   if (SHOT_TINT[color]) return SHOT_TINT[color];
   const c = document.createElement('canvas'); c.width = c.height = 96; const g = c.getContext('2d'); g.drawImage(KFX, 0, 192, 96, 96, 0, 0, 96, 96);
@@ -1607,7 +1622,7 @@ function freshState(seed, cid){
     gauge:0, ult:0, cutin:0,
     projs:[], ebul:[], enemies:[], beams:[], fxs:[], parts:[], bolts:[], nums:[], toasts:[], bombList:[],
     shake:0, hitstop:0, lastHitstop:-99, freeze:0, kills:0, ended:false, endTimer:0, lootRng:null,
-    log:{runId:Math.random().toString(36).slice(2,10), gameVersion:'alpha-0.6.6', // 플레이데이터 구분용 — 밸런스 크게 바꿀 때마다 올림 (0.6.5: 봇 측정 밸런스 · 시너지 · 방 클리어 충전) character:cid, seed, result:null, startedAt:Date.now(), durationMs:0,
+    log:{runId:Math.random().toString(36).slice(2,10), gameVersion:'alpha-0.7', // 플레이데이터 구분용 — 밸런스 크게 바꿀 때마다 올림 (0.6.5: 봇 측정 밸런스 · 시너지 · 방 클리어 충전) character:cid, seed, result:null, startedAt:Date.now(), durationMs:0,
          floor:1, endFloor:prog.ch * 2, items:[], rooms:[], bossKills:[], bossKillMs:null, kills:0, secretFound:false, bought:[], cheatDeals:0, patches:[], cards:[], actives:[], resumed:0},
   };
 }
@@ -1639,7 +1654,7 @@ function newRun(seed, cid){
 }
 function nextFloor(){
   if (!G.floorHit){ secFlag('floornh'); secEvent('floornhN'); } G.floorHit = false;
-  if (G.trialLeft > 0){ const p = G.player, d = Math.min(10, G.trialLeft); G.trialLeft -= d; p.maxHp = Math.max(20, p.maxHp - d); p.hp = Math.min(p.hp, p.maxHp); toast('무료 체험판 — 최대 HP -' + d, '#7dffd9'); }
+  if (G.trialLeft > 0){ const p = G.player, d = Math.min(10, G.trialLeft); G.trialLeft -= d; p.maxHp = Math.max(20, p.maxHp - d); p.hp = Math.min(p.hp, p.maxHp); toast('체력 체험판 — 최대 HP -' + d, '#7dffd9'); }
   if (G.prof.ransom && G.res.bit > 0){ const lost = Math.ceil(G.res.bit / 2); G.res.bit -= lost; toast('랜섬웨어 — 비트 ' + lost + '개를 뺏겼다', '#ff3d5e'); }
   if (G.prof.missingNo) rerollBuild(true);
   if (G.prof.todo){ // // TODO: 층마다 무작위 스탯 조금
@@ -1686,7 +1701,7 @@ const ms = () => Math.round(G.t * 1000 / 60);
 /* ---------- geometry helpers ---------- */
 const tileKey = (x,y) => { const c = Math.floor((x-T)/T), r = Math.floor((y-T)/T); return (c<0||r<0||c>=COLS||r>=ROWS) ? null : c+','+r; };
 const isRock = (x,y) => { const k = tileKey(x,y); return k !== null && G.room.rocks.has(k); };
-// 낭떠러지(구덩이): 걸어서 못 건넘 · 탄은 넘어감 · 폭탄에도 안 없어짐. 「클라우드 업로드」(비행)면 위로, 「브리지 케이블」이면 1칸짜리에 다리를 놓음
+// 낭떠러지(구덩이): 걸어서 못 건넘 · 탄은 넘어감 · 폭탄에도 안 없어짐. 「클라우드 비행」(비행)면 위로, 「브리지 케이블」이면 1칸짜리에 다리를 놓음
 const isPitT = k => !!(G.room.pits && G.room.pits.has(k) && !(G.room.bridges && G.room.bridges.has(k)));
 const isPit = (x,y) => { const k = tileKey(x,y); return k !== null && isPitT(k); };
 const isSolid = (x,y) => isRock(x,y) || isPit(x,y);
@@ -1794,7 +1809,7 @@ function enterRoom(room, fromDir){
     if (G.prof.syncShield && (room.type === 'combat' || room.type === 'boss')) p.shield = Math.min(TUNE.maxShield, p.shield + G.prof.syncShield); // 예전: 아무 새 방이나 +10 (층마다 100 넘게 = 사기)
     if (G.prof.goldMember && room.type === 'shop'){ const id = pickItem('shop', G.lootRng, G.used); if (id){ room.pickups.push(mkPick('item', W/2 + 96, IY0 + 64, {id, source:'shop', price:15})); toast('골드 회원 전용 물건', '#ffcf4a', W/2 + 96, IY0 + 44); } }
     if (G.prof.recycle && (G.debuff.rev > 0 || G.debuff.slow > 0)){ G.debuff.rev = 0; G.debuff.slow = 0; toast('휴지통 비움 — 나쁜 효과 해제', '#9aa0b8'); }
-    if (G.prof.alert && G.player.hp < G.player.maxHp && fx() < .08){ G.player.hp = Math.min(G.player.maxHp, G.player.hp + 10); toast('업데이트 알림 — HP +10', '#ff8a5c'); sfx('heal'); }
+    if (G.prof.alert && G.player.hp < G.player.maxHp && fx() < .08){ G.player.hp = Math.min(G.player.maxHp, G.player.hp + 10); toast('회복 알림 — HP +10', '#ff8a5c'); sfx('heal'); }
     G.log.rooms.push({floor:G.floorNo, index:room.index, type:room.type, enteredMs:ms(), clearedMs:null, damageTaken:0});
     if (!room.cleared){ spawnRoomEnemies(room); G.freeze = 24; }
     if (room.type === 'shop') toast('PATCH SERVER', '#7dffd9', W/2, IY0 + 30);
@@ -1888,7 +1903,7 @@ function onRoomCleared(){
     return;
   }
   if (G.prof.fams.includes('tamagotchi')){ G.tamaXP = (G.tamaXP || 0) + 1; const lv = Math.min(3, Math.floor(G.tamaXP / 4)); if (lv > (G.tamaLv || 0)){ G.tamaLv = lv; toast('다마고치가 자랐다! (Lv ' + (lv + 1) + ')', '#ff8af0'); } }
-  if (G.prof.undoHeal && G.undoFloor !== G.floorNo && G.player.hp > 0){ G.undoFloor = G.floorNo; G.player.hp = Math.min(G.player.maxHp, G.player.hp + 15); toast('작업 기록 복원 +15', '#9fe8ff'); }
+  if (G.prof.undoHeal && G.undoFloor !== G.floorNo && G.player.hp > 0){ G.undoFloor = G.floorNo; G.player.hp = Math.min(G.player.maxHp, G.player.hp + 15); toast('회복 기록 — HP +15', '#9fe8ff'); }
   { const hb = G.prof.fams.filter(f => f === 'heal_bot').length; if (hb && G.player.hp > 0 && G.player.hp < G.player.maxHp){ G.player.hp = Math.min(G.player.maxHp, G.player.hp + 5*hb); toast('수리 봇 +' + 5*hb, '#7dffd9'); } }
   if (G.prof.backup && G.player.hp > 0){ G.player.shield = Math.min(TUNE.maxShield, G.player.shield + G.prof.backup); }
   if (room.type === 'elite' || room.type === 'mirror'){
@@ -2012,7 +2027,7 @@ function takeItem(pk){
   }
   G.items.push({id:pk.id, atMs:ms(), floor:G.floorNo, room:room.index, source:pk.source});
   if (GUARD_SLOTS[pk.id]) guardMake(G.items[G.items.length - 1], pk.x, pk.y);
-  if (G.emptyFolder && pk.id !== 'empty_folder' && !def.onPick){ G.emptyFolder = false; G.items.push({id:pk.id, atMs:ms(), floor:G.floorNo, room:room.index, source:'folder'}); toast('빈 폴더에 복사됨 — ' + def.name + ' ×2', '#d9c38a'); }
+  if (G.emptyFolder && pk.id !== 'empty_folder' && !def.onPick){ G.emptyFolder = false; G.items.push({id:pk.id, atMs:ms(), floor:G.floorNo, room:room.index, source:'folder'}); toast('복사 폴더 — ' + def.name + ' ×2', '#d9c38a'); }
   if (def.onPick) def.onPick(G.player);
   recalcProfile();
   G.player.hold = 60; G.player.holdItem = pk.id;
@@ -2443,7 +2458,7 @@ const keys = new Set();
 const touch = {move:null, shoot:null};
 const mouse = {x:W/2, y:H/2, down:false, used:false};
 const press = {dash:false, ult:false, bomb:false, card:false, drop:false};
-// 사격은 상하좌우만 (아이작처럼). 「아날로그 스틱」이 있으면 대각선까지 8방향 — 마우스 · 터치도 가장 가까운 방향으로 맞춤
+// 사격은 상하좌우만 (아이작처럼). 「8방향 스틱」이 있으면 대각선까지 8방향 — 마우스 · 터치도 가장 가까운 방향으로 맞춤
 function snapDir(d){
   if (!d) return d;
   const n = G && G.prof.aim8 ? 8 : 4, a = Math.round(Math.atan2(d.y, d.x) / (TAU / n)) * (TAU / n);
@@ -2749,7 +2764,7 @@ function famTick(){
   if (G.allies) for (const a of G.allies){
     a.t--; const e = nearestEnemy(a.x, a.y, 220);
     if (e){ const dx = e.x - a.x, dy = e.y - a.y, d = Math.hypot(dx, dy) || 1; a.vx += (dx/d*2.8 - a.vx)*.15; a.vy += (dy/d*2.8 - a.vy)*.15;
-      if (d < e.r + 4){ a.t = 0; quietHit(e, 5 + G.floorNo); burst(a.x, a.y, '#b45cff', 6, 1.6); } }
+      if (d < e.r + 4){ a.t = 0; quietHit(e, 5 + G.floorNo); burst(a.x, a.y, '#7dffb0', 6, 1.6); } }
     else { a.vx += (p.x + Math.cos(a.t*.1)*18 - a.x)*.02 - a.vx*.1; a.vy += (p.y - 10 + Math.sin(a.t*.1)*12 - a.y)*.02 - a.vy*.1; }
     a.x += a.vx; a.y += a.vy;
   }
@@ -2767,11 +2782,11 @@ function famDraw(){
   if (P.coolOrb){ const p = G.player; ctx.globalAlpha = .07; ctx.fillStyle = '#9fe8ff'; ctx.beginPath(); ctx.ellipse(p.x, p.y - 4, 50, 44, 0, 0, TAU); ctx.fill(); ctx.globalAlpha = 1; }
   P.fams.forEach((id, i) => { const s = G.famSt && G.famSt[i]; if (!s || !ICON[id]) return;
     const fsz = id === 'tamagotchi' ? 12 + (G.tamaLv || 0)*3 : 16;
-    const bob = Math.sin((G.frame + i*20)*.12)*1.5; ctx.globalAlpha = .35; px(s.x - 5, s.y + 6, 10, 2, '#000'); ctx.globalAlpha = 1;
+    const bob = Math.sin((G.frame + i*20)*.12)*1.5; ctx.globalAlpha = .35; px(s.x - 5, s.y + 6, 10, 2, '#000'); ctx.globalAlpha = .8; ctx.strokeStyle = '#5dff9a'; ctx.lineWidth = 1; ctx.beginPath(); ctx.ellipse(s.x, s.y + 7, 7, 2.5, 0, 0, TAU); ctx.stroke(); ctx.globalAlpha = 1; // 내 편 = 발밑 초록 고리 (몹과 구분)
     ctx.save(); if (id === 'shield_bot' && s.cd > 0) ctx.globalAlpha = .55; ctx.translate(Math.round(s.x), Math.round(s.y - 6 + bob)); if (s.face) ctx.scale(-1, 1); ctx.imageSmoothingEnabled = !!ICON[id].big; ctx.drawImage(ICON[id].canvas, -fsz/2, -fsz/2, fsz, fsz); ctx.imageSmoothingEnabled = false; ctx.restore(); });
   for (const o of orbitList()){
     if (o.tired) ctx.globalAlpha = .35;
-    if (o.k === 'bug'){ px(o.x - 2, o.y - 1, 4, 3, '#14081f'); px(o.x - 1.5, o.y - 1, 3, 2, '#b45cff'); px(o.x - 2.5, o.y - 3, 2, 1, G.frame % 4 < 2 ? 'rgba(236,233,245,.8)' : 'rgba(236,233,245,.3)'); }
+    if (o.k === 'bug'){ px(o.x - 2, o.y - 1, 4, 3, '#14081f'); px(o.x - 1.5, o.y - 1, 3, 2, '#5dff9a'); px(o.x - 2.5, o.y - 3, 2, 1, G.frame % 4 < 2 ? 'rgba(236,233,245,.8)' : 'rgba(236,233,245,.3)'); }
     else if (ORB_ICON[o.k] && ICON[ORB_ICON[o.k]]){ const ic = ICON[ORB_ICON[o.k]], z = o.k === 'ping' || o.k === 'mirror' ? 13 : 11; ctx.save(); ctx.translate(Math.round(o.x), Math.round(o.y)); if (o.k === 'blade') ctx.rotate(o.ang + Math.PI/2); ctx.imageSmoothingEnabled = !!ic.big; ctx.drawImage(ic.canvas, -z/2, -z/2, z, z); ctx.imageSmoothingEnabled = false; ctx.restore(); }
     else { px(o.x - 3, o.y - 3, 6, 6, '#14243a'); px(o.x - 2, o.y - 2, 4, 4, '#9fe8ff'); }
     ctx.globalAlpha = 1;
@@ -3210,14 +3225,14 @@ function updatePopup(e, dx, dy, d){
 function updateKingSlime(e, dx, dy, d){
   e.pulse += .1; e.st--;
   if (e.splits < 2 && e.hp < e.maxHp * [.66, .33][e.splits]){
-    e.splits++; burst(e.x, e.y, '#b45cff', 16, 2.5);
+    e.splits++; burst(e.x, e.y, '#8fe04a', 16, 2.5);
     for (let i = 0; i < 3; i++){ const sl = makeEnemy('slime', e.x + Math.cos(i*TAU/3)*22, e.y + Math.sin(i*TAU/3)*22); sl.spawnT = 16; clampInner(sl); G.enemies.push(sl); }
   }
   if (e.state === 'idle'){ e.x += dx/d*.45; e.y += dy/d*.45; if (e.st <= 0){ e.state = 'wind'; e.st = 26; } }
   else if (e.state === 'wind'){ if (e.st <= 0){ e.state = 'hop'; e.st = 26; e.hx = e.x; e.hy = e.y; const dd = Math.min(110, d); e.tx = e.x + dx/d*dd; e.ty = e.y + dy/d*dd; } }
   else if (e.state === 'hop'){
     const k = 1 - e.st/26; e.x = e.hx + (e.tx - e.hx)*k; e.y = e.hy + (e.ty - e.hy)*k; e.z = Math.sin(k*Math.PI)*24;
-    if (e.st <= 0){ e.z = 0; ring(e, 8, fx()*TAU); G.shake = Math.max(G.shake, 6); sfx('boom'); burst(e.x, e.y + 10, '#b45cff', 10, 2); e.state = 'idle'; e.st = 70; }
+    if (e.st <= 0){ e.z = 0; ring(e, 8, fx()*TAU); G.shake = Math.max(G.shake, 6); sfx('boom'); burst(e.x, e.y + 10, '#8fe04a', 10, 2); e.state = 'idle'; e.st = 70; }
   }
 }
 // 2-1 중간 보스 · 벌레 여왕: 방을 8자로 날며 벌레 소환 ↔ 3연 조준 사격 (날개를 빠르게 떨면 곧 행동)
@@ -3378,7 +3393,7 @@ function killEnemy(e){
   if (e.type === 'mirror'){ secFlag('mirror'); secEvent('mirrors'); }
   if (e.type === 'boss' && G.room.type === 'boss'){ if (G.floorNo % 2) secFlag('b_' + e.kind); else { secFlag('w' + G.floorNo/2); secMark(G.char, G.floorNo/2); if (G.floorNo === 8) secEvent('bsod'); } }
   if (e.type !== 'boss') (G.skulls ||= []).push({x:e.x, y:e.y, t:26}); // 처치 해골 (그리기 전용)
-  const col = e.type === 'boss' ? BOSS_COL[e.kind] : ({slime:'#b45cff', bug:'#7b4dff', turret:'#d36bff', spinner:'#e05cff', cube:'#8a7bff', popup:'#d36bff', mirror:'#ff2e88', phantom:'#cfd6ff', worm:'#7bdc5a', sniffer:'#9aa3b8', zipbomb:'#c77dff', crawler:'#ff3d5e'})[e.type];
+  const col = e.type === 'boss' ? BOSS_COL[e.kind] : ({slime:'#8fe04a', bug:'#ff4fa8', turret:'#ff9a3d', spinner:'#ffd23f', cube:'#9fe8ff', popup:'#ff3d5e', mirror:'#ff2e88', phantom:'#e8ecff', worm:'#ffe14d', sniffer:'#3fd2c8', zipbomb:'#ff8a2c', crawler:'#d0283c'})[e.type];
   burst(e.x, e.y, col, e.type === 'boss' ? 40 : 9, e.type === 'boss' ? 4 : 2.4);
   if (G.room.decals.length < 40) G.room.decals.push({x:e.x, y:e.y, c:col, r:e.r});
   if (G.frame - G.lastHitstop > 10){ G.hitstop = e.type === 'boss' ? 14 : 2; G.lastHitstop = G.frame; }
@@ -3414,7 +3429,7 @@ function updateEnemyBullets(){
   }
   G.ebul = G.ebul.filter(b => b.life > 0);
 }
-function burst(x, y, c, n, s){ for (let i = 0; i < n; i++){ const a = fx()*TAU, v = fx()*s + .4; G.parts.push({x, y, vx:Math.cos(a)*v, vy:Math.sin(a)*v, life:14 + Math.floor(fx()*14), c, s: fx() < .3 ? 3 : 2}); } }
+function burst(x, y, c, n, s){ n = Math.ceil(n * .5); /* 파편 절반 (번잡함 줄이기) */ for (let i = 0; i < n; i++){ const a = fx()*TAU, v = fx()*s + .4; G.parts.push({x, y, vx:Math.cos(a)*v, vy:Math.sin(a)*v, life:14 + Math.floor(fx()*14), c, s: fx() < .3 ? 3 : 2}); } }
 
 /* ---------- render ---------- */
 function px(x, y, w, h, c){ ctx.fillStyle = c; ctx.fillRect(Math.round(x), Math.round(y), w, h); }
@@ -3422,7 +3437,7 @@ function render(){
   ctx.setTransform(RS, 0, 0, RS, 0, 0); ctx.imageSmoothingEnabled = false;
   if (!G){ drawAttract(); return; }
   ctx.save();
-  if (G.shake && opts.shake) ctx.translate(Math.round((fx()-.5)*G.shake), Math.round((fx()-.5)*G.shake));
+  if (G.shake && opts.shake) ctx.translate(Math.round((fx()-.5)*G.shake*.55), Math.round((fx()-.5)*G.shake*.55));
   drawRoom();
   for (const pk of G.room.pickups) drawPickup(pk);
   for (const b of G.bombList) drawPlacedBomb(b);
@@ -3433,10 +3448,10 @@ function render(){
     ctx.save();
     if (e.elite === 'ghost') ctx.globalAlpha = .28 + .22*Math.sin(G.frame*.09 + e.t);
     ctx.globalAlpha *= .6; ctx.strokeStyle = E.col; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.ellipse(e.x, e.y + e.r*.75, e.r + 4, (e.r + 4)*.42, 0, 0, TAU); ctx.stroke(); ctx.globalAlpha /= .6;
-    ctx.shadowColor = E.col; ctx.shadowBlur = 9 + 3*Math.sin(G.frame*.2);
+    ctx.shadowColor = E.col; ctx.shadowBlur = 8;
     drawEnemyFx(e); ctx.restore(); ctx.globalAlpha = 1;
   }
-  if (G.hitfx && kfxReady()){ ctx.globalCompositeOperation = 'lighter'; for (const h of G.hitfx){ kfx(10, h.x, h.y, 10 + (9 - h.t)*1.4, false, h.t/9); if (!paused && !mapOpen) h.t--; } G.hitfx = G.hitfx.filter(h => h.t > 0); ctx.globalCompositeOperation = 'source-over'; }
+  if (G.hitfx && kfxReady()){ ctx.globalCompositeOperation = 'lighter'; for (const h of G.hitfx){ kfx(10, h.x, h.y, 9 + (9 - h.t)*1.1, false, h.t/9*.55); if (!paused && !mapOpen) h.t--; } G.hitfx = G.hitfx.filter(h => h.t > 0); ctx.globalCompositeOperation = 'source-over'; }
   if (G.skulls && mobReady()){ for (const k of G.skulls){ const a = k.t/26; mobSpr(11, k.x, k.y - 6 - (1 - a)*8, 14 + (1 - a)*6, false, false, a*.9); if (!paused && !mapOpen) k.t--; } G.skulls = G.skulls.filter(k => k.t > 0); }
   for (const q of G.projs) drawProj(q);
   drawTethers();
@@ -3448,7 +3463,7 @@ function render(){
   // 적 탄: 동그란 핫핑크 + 흰 심 + 짙은 테두리 — 다른 어떤 것도 이 모양·색을 안 씀, 항상 맨 위
   for (const b of G.ebul){
     const rg = b.boss ? 290 : 210, fade = b.dist > rg - 40 ? Math.max(.35, (rg - b.dist)/40) : 1; // 사거리 끝에 가까우면 작아짐
-    const pr = (b.r + (G.frame % 10 < 5 ? .6 : 0)) * fade;
+    const pr = b.r * fade;
     ctx.fillStyle = '#2a0016'; ctx.beginPath(); ctx.arc(b.x, b.y, pr + 1.5, 0, TAU); ctx.fill();
     ctx.fillStyle = '#ff2e88'; ctx.beginPath(); ctx.arc(b.x, b.y, pr, 0, TAU); ctx.fill();
     ctx.fillStyle = '#ffe0ef'; ctx.beginPath(); ctx.arc(b.x - .5, b.y - .5, pr*.45, 0, TAU); ctx.fill();
@@ -3546,7 +3561,7 @@ function drawRoom(){
     const [c, r] = k.split(',').map(Number), x = T + c*T, y = T + r*T, cr = room.cracked.has(k);
     const chR = chOf(G.floorNo);
     if (chR > 0 && rockReady()){ const fr = (chR - 1)*2 + (cr ? 1 : 0); ctx.imageSmoothingEnabled = true; ctx.drawImage(ROCK, (fr % 4)*64, Math.floor(fr/4)*64, 64, 64, x, y, T, T); ctx.imageSmoothingEnabled = false; continue; }
-    if (slReady()){ ctx.drawImage(SL, cr ? 64 : 0, 40, 64, 64, x, y, T, T); if (cr && G.frame % 90 < 6){ ctx.globalAlpha = .5; ctx.drawImage(SL_W || SL, 64, 40, 64, 64, x, y, T, T); ctx.globalAlpha = 1; } continue; }
+    if (slReady()){ ctx.drawImage(SL, cr ? 64 : 0, 40, 64, 64, x, y, T, T); continue; }
     px(x+2, y+4, T-4, T-6, '#3a3f5c'); px(x+2, y+4, T-4, 4, '#555b80'); px(x+2, y+T-4, T-4, 2, '#0a0c16');
     if (cr){ const col = G.frame % 90 < 6 ? '#ece9f5' : '#3fe3ff'; px(x+8, y+9, 2, 6, col); px(x+10, y+14, 6, 2, col); px(x+16, y+15, 2, 7, col); px(x+18, y+21, 5, 2, '#ff3d5e'); }
     else { px(x+5, y+12, 6, 4, '#2c3048'); px(x+18, y+18, 8, 5, '#2c3048'); }
@@ -3561,8 +3576,8 @@ function drawRoom(){
       const fr = sec ? 8 : locked ? 6 : boss ? (open ? 3 : 2) : n.type === 'treasure' ? (open ? 5 : 4) : n.type === 'shop' ? (open ? 7 : 0) : (open ? 1 : 0);
       const sp = DOOR2_IDX[n.type] ?? DOOR2_IDX[room.type];
       const cz = n.type === 'curse' || room.type === 'curse';
-      if (sp != null && DOOR2.complete && DOOR2.naturalWidth && !sec){ drawDoor(dir, sp + (open ? 1 : 0), cz ? curseDoorImg() : DOOR2); if (locked && n.type !== 'vault') drawDoor(dir, 6); continue; }
-      drawDoor(dir, fr);
+      if (sp != null && DOOR2.complete && DOOR2.naturalWidth && !sec){ drawDoor(dir, sp + (open ? 1 : 0), cz ? curseDoorImg() : DOOR2); if (locked && n.type !== 'vault') drawDoor(dir, 6); doorSign(dir, n); continue; }
+      drawDoor(dir, fr); doorSign(dir, n);
       continue;
     }
     px(x - 3, y - 3, w + 6, h + 6, frame);
@@ -3726,14 +3741,14 @@ function drawPickup(pk){
     else { px(pk.x - 9, pk.y + 4, 18, 8, pk.hpCost ? '#4a1828' : '#3a3f5c'); px(pk.x - 9, pk.y + 4, 18, 2, pk.hpCost ? '#ff2e88' : '#555b80'); }
     if (!ICON[pk.id].big){ ctx.globalAlpha = .25 + .15*Math.sin(G.frame*.1); px(pk.x - 8, pk.y - 14 + bob, 16, 16, it.tint); ctx.globalAlpha = 1; }
     const ic = ICON[pk.id], sz = Math.round((ic.big ? 20 : 12) * s); if (sz > 0){ if (ic.big) ctx.imageSmoothingEnabled = true; ctx.drawImage(ic.canvas, Math.round(pk.x - sz/2), Math.round(pk.y - 12 - (ic.big ? 4 : 0) + bob), sz, sz); ctx.imageSmoothingEnabled = false; }
-    if (it.axis === 'form' && G.frame % 20 < 10) px(pk.x + 7, pk.y - 15 + bob, 2, 2, '#fff');
     const pd = Math.hypot(G.player.x - pk.x, G.player.y - pk.y);
     if (pd < 46){ // 가까이 가면 이름 (도감에 없으면 ???) — 치트 콘솔 템도
       const nm = codex.items[pk.id] ? it.name : '???', a = Math.min(1, (46 - pd) / 14);
       ctx.globalAlpha = a; ctx.font = '700 8px "Noto Sans KR", sans-serif'; ctx.textAlign = 'center';
-      const tw = ctx.measureText(nm).width + 8; px(pk.x - tw/2, pk.y - 33 + bob, tw, 11, 'rgba(5,6,11,.85)');
+      const kn = !!codex.items[pk.id], tw = ctx.measureText(nm).width + 8 + (kn ? 9 : 0); px(pk.x - tw/2, pk.y - 33 + bob, tw, 11, 'rgba(5,6,11,.85)');
       px(pk.x - 2, pk.y - 22 + bob, 4, 2, 'rgba(5,6,11,.85)');
-      ctx.fillStyle = codex.items[pk.id] ? '#ece9f5' : '#a9aecb'; ctx.fillText(nm, pk.x, pk.y - 25 + bob); ctx.globalAlpha = 1;
+      if (kn){ px(pk.x - tw/2, pk.y - 33 + bob, tw, 1, roleOf(pk.id).col); drawRoleGlyph(pk.id, pk.x - tw/2 + 2, pk.y - 31 + bob); } // 아는 템이면 역할 표식
+      ctx.fillStyle = kn ? '#ece9f5' : '#a9aecb'; ctx.fillText(nm, pk.x + (kn ? 4.5 : 0), pk.y - 25 + bob); ctx.globalAlpha = 1;
     }
   } else if (pk.kind === 'hatch' || pk.kind === 'portal'){
     drawLootIcon(pk.kind, pk.x, pk.y);
@@ -3741,7 +3756,6 @@ function drawPickup(pk){
   } else {
     px(pk.x - 5, pk.y + 6, 10, 2, 'rgba(0,0,0,.35)');
     drawLootIcon(pk.kind, pk.x, pk.y + (pk.vx || pk.vy || pk.price ? 0 : bob * .5), pk.n, pk.kind === 'card' ? pk.cid : pk.c);
-    const sp = (G.frame + Math.floor(pk.x*7)) % 90; if (sp < 6) px(pk.x + 4, pk.y - 7 + bob*.5, sp % 3 === 0 ? 3 : 1, sp % 3 === 0 ? 1 : 3, '#ffffff');
     if (pk.kind === 'patch' && G.patchKnown.has(pk.c)){ const nm = PATCHES[G.patchMap[pk.c]].name; ctx.fillStyle = '#000'; ctx.fillText(nm, pk.x + 1, pk.y - 9); ctx.fillStyle = PATCH_COLS[pk.c]; ctx.fillText(nm, pk.x, pk.y - 10); }
   }
   if (pk.price){
@@ -3777,7 +3791,7 @@ function tintEnemy(e, col, a){
   ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.shadowBlur = 0; ctx.drawImage(tcv, bx, by, bw, bh, bx, by, bw, bh); ctx.restore();
 }
 function drawEnemyFx(e){
-  drawEnemy(e);
+  drawEnemy(e); if (e.spawnT > 0) ctx.globalAlpha = 1;
   if (e.dead || e.spawnT > 0 || (!e.burn && !e.poison && !(e.iceT > 0) && !(e.fearT > 0))) return;
   if (e.poison) tintEnemy(e, '#46ff5a', .42 + .1*Math.sin(G.frame*.25));
   if (e.iceT > 0) tintEnemy(e, '#9fd8ff', .5);
@@ -3796,9 +3810,9 @@ function drawEnemyFx(e){
 function drawEnemy(e){
   const fl = e.flash > 0, sp = e.spawnT > 0;
   if (e.type === 'mirror' && !sp) return drawMirror(e);
-  if (sp && mobReady()){ const k = Math.min(1, e.spawnT/16); mobSpr(10, e.x, e.y + 4, 22 + 6*(1 - k), false, false, .9); if (G.frame % 4 < 2) return; }
-  else if (sp && G.frame % 4 < 2) return;
-  const glitch = (G.frame + e.t) % 50 < 3;
+  if (sp && mobReady()){ const k = Math.min(1, e.spawnT/16); mobSpr(10, e.x, e.y + 4, 22 + 6*(1 - k), false, false, .9); ctx.globalAlpha = .35; }
+  else if (sp) ctx.globalAlpha = .35;
+  const glitch = false; // 차분하게: 몹이 50프레임마다 번쩍 겹쳐 보이던 글리치 잔상 끔 (번잡하다는 피드백)
   if (mobReady() && MOB_FR[e.type]){ drawMob(e, fl, glitch); }
   else if (e.type === 'slime' && slReady()){
     const sq = Math.sin(e.t*.15), fr = fl ? 3 : sq > .55 ? 1 : sq < -.55 ? 2 : 0;
@@ -3925,9 +3939,13 @@ function drawProj(q){
     ctx.fillStyle = '#000'; ctx.fillRect(-r - 1, -r*.35 - 1, r*2 + 2, r*.7 + 2);
     ctx.fillStyle = q.color; ctx.fillRect(-r, -r*.35, r*2, r*.7); ctx.fillRect(-r*.35, -r, r*.7, r*.8);
     ctx.restore();
-  } else if (kfxReady() && !q.fizz){
-    const r = Math.max(1.5, q.r), a = Math.atan2(q.vy || 0, q.vx || 1);
-    ctx.save(); ctx.translate(q.x, q.y); ctx.rotate(a); ctx.imageSmoothingEnabled = true; ctx.drawImage(shotSpr(q.color), -r*4.2, -r*2.1, r*5, r*4.2); ctx.restore();
+  } else if (!q.fizz){ // 내 탄 = 둥근 방울 (어두운 테두리 · 아래쪽 그늘 · 흰 반짝) — 색 = 탄 속성
+    const r = Math.max(2, q.r*1.05), c = q.color || '#9fe8ff', sp = Math.hypot(q.vx || 0, q.vy || 0) || 1;
+    ctx.globalAlpha = .22; ctx.fillStyle = c; ctx.beginPath(); ctx.arc(q.x - q.vx/sp*r*1.3, q.y - q.vy/sp*r*1.3, r*.75, 0, TAU); ctx.fill(); ctx.globalAlpha = 1;
+    ctx.fillStyle = '#0b0d17'; ctx.beginPath(); ctx.arc(q.x, q.y, r + 1, 0, TAU); ctx.fill();
+    ctx.fillStyle = shadeCol(c, .55); ctx.beginPath(); ctx.arc(q.x, q.y, r, 0, TAU); ctx.fill();
+    ctx.fillStyle = c; ctx.beginPath(); ctx.arc(q.x - r*.14, q.y - r*.14, r*.8, 0, TAU); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,.85)'; ctx.beginPath(); ctx.arc(q.x - r*.38, q.y - r*.38, Math.max(.8, r*.28), 0, TAU); ctx.fill();
   } else {
     const r = Math.max(1.5, q.r);
     if (q.fizz) ctx.globalAlpha = .55;
@@ -4106,15 +4124,17 @@ function drawCutin(){
 }
 let HOV = null;
 const mouseIn = (x, y, w, h) => mouse.used && !touchUsed && running && !paused && !mapOpen && mouse.x >= x && mouse.x < x + w && mouse.y >= y && mouse.y < y + h;
-const hovItem = (id, own) => own || codex.items[id] ? HOV = {name:ITEM[id].name, desc:ITEM[id].desc} : HOV = {name:'???', desc:'아직 도감에 없음'};
+const hovItem = (id, own) => own || codex.items[id] ? HOV = {name:ITEM[id].name, desc:ITEM[id].desc, role:id} : HOV = {name:'???', desc:'아직 도감에 없음', role:id};
 function drawHoverTip(){
   const h = HOV; HOV = null; if (!h) return;
   ctx.textAlign = 'left'; ctx.font = '700 8px "Noto Sans KR", sans-serif'; const w1 = ctx.measureText(h.name).width;
   ctx.font = '7px "Noto Sans KR", sans-serif'; const w2 = h.desc ? ctx.measureText(h.desc).width : 0;
-  const w = Math.ceil(Math.max(w1, w2)) + 8, hh = h.desc ? 22 : 12;
+  let rw = 0; if (h.role && ITEM_ROLE[h.role]){ ctx.font = '700 7px "Noto Sans KR", sans-serif'; rw = ctx.measureText(roleOf(h.role).name).width + 16; }
+  const w = Math.ceil(Math.max(w1 + rw, w2)) + 8, hh = h.desc ? 22 : 12;
   let x = Math.round(mouse.x + 8), y = Math.round(mouse.y + 10); if (x + w > W - 2) x = Math.round(mouse.x - 8 - w); if (y + hh > H - 2) y = Math.round(mouse.y - 6 - hh);
   px(x - 1, y - 1, w + 2, hh + 2, '#3fe3ff'); px(x, y, w, hh, 'rgba(5,6,11,.94)');
   ctx.font = '700 8px "Noto Sans KR", sans-serif'; ctx.fillStyle = h.col || '#ece9f5'; ctx.fillText(h.name, x + 4, y + 9);
+  if (h.role && ITEM_ROLE[h.role]){ const R = roleOf(h.role); drawRoleGlyph(h.role, x + w - 9, y + 2); ctx.font = '700 7px "Noto Sans KR", sans-serif'; ctx.textAlign = 'right'; ctx.fillStyle = R.col; ctx.fillText(R.name, x + w - 11, y + 8); ctx.textAlign = 'left'; }
   if (h.desc){ ctx.font = '7px "Noto Sans KR", sans-serif'; ctx.fillStyle = '#a9aecb'; ctx.fillText(h.desc, x + 4, y + 19); }
 }
 function pickupHover(pk){
@@ -4195,23 +4215,50 @@ function drawHUD(){
   const boss = G.enemies.find(e => e.type === 'boss' && !e.dead);
   if (boss && boss.spawnT <= 0){ const w = 150; px(W/2 - w/2 - 1, H - 20, w + 2, 7, '#000'); px(W/2 - w/2, H - 19, w * Math.max(0, boss.hp/boss.maxHp), 5, BOSS_COL[boss.kind]); ctx.font = '700 8px "Noto Sans KR", sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = '#ece9f5'; ctx.fillText(bossTitle(boss), W/2, H - 23); }
 }
+const ITEM_ROLE = {red_noise:'shot',pixel_bomb:'onhit',return_cursor:'shot',dual_core:'shot',tri_shot:'shot',back_door:'shot',homing_pixel:'shot',pierce_bit:'shot',reflect_frame:'shot',split_bug:'onhit',corrupt_data:'onhit',overload:'onhit',giant_pixel:'dmg',overclock:'rate',fast_render:'range',slow_render:'range',random_seed:'shot',grow_buffer:'shot',todo:'special',force_restart:'onhit',cache_miss:'dmg',refactor:'dmg',hotfix:'hp',firewall_v2:'shield',while_true:'shot',stack_overflow:'shot',debugger:'onhit',frame_drop:'dmg',latency:'shot',ram_up:'dmg',cpu_upgrade:'dmg',energy_drink:'rate',ssd_swap:'speed',scope:'range',thick_cable:'shot',minor_update:'dmg',turbo:'dmg',ups:'hp',heatsink:'shield',antivirus:'special',lucky_dice:'money',memory_slot:'hp',server_rack:'hp',spare_power:'hp',dual_monitor:'range',hd_texture:'shot',fiber:'range',gaming_mouse:'rate',mech_keyboard:'dmg',cooling_fan:'speed',clean_install:'dmg',ad_popup:'money',loading_icon:'dmg',update_alert:'hp',mouse_accel:'speed',legacy_code:'dmg',empty_folder:'special',cloud_upload:'special',bridge_cable:'special',analog_stick:'shot',virtual_memory:'hp',quad_core:'shot',debug_mode:'dmg',ping999:'dmg',driver_error:'shot',overheat:'rate',laser_pointer:'shot',gps:'shot',lighter:'onhit',lucky_packet:'dmg',memory_reclaim:'hp',auto_backup:'shield',miner:'dmg',panic_mode:'dmg',dash_driver:'speed',kill_process:'onhit',firewall_sat:'pet',screensaver:'dmg',autosave:'hp',dup_file:'special',master_key:'money',bomb_pack:'money',wallet:'money',sitemap:'special',source_leak:'special',recycle_bin:'special',captcha:'dmg',dark_mode:'shield',trial_ver:'hp',cookie:'hp',terms:'money',beta_badge:'dmg',garbage_collector:'money',helper_bot:'pet',mini_kai:'pet',shield_bot:'pet',pickup_drone:'money',bomb_drone:'pet',heal_bot:'hp',cat_gif:'pet',bug_swarm:'pet',ping_sat:'pet',blade_cursor:'pet',mirror_orb:'pet',cool_orb:'pet',bug_report:'onhit',anti_dmg:'shield',safe_mode:'shield',nine_backup:'hp',spam_filter:'shield',hit_charge:'special',core_upgrade:'dmg',full_upgrade:'dmg',clean_aura:'onhit',data_leak:'onhit',close_packet:'dmg',light_packet:'rate',ignite_shot:'onhit',freeze_frame:'onhit',fear_packet:'onhit',cross_cable:'shot',wrap_packet:'shot',cache_hit:'dmg',liquid_nitro:'rate',cloud_sync:'shield',edge_server:'range',exp_build:'special',homing_bomb:'money',hot_bomb:'money',mega_bomb:'money',cross_bomb:'money',loot_bag:'money',root_access:'money',clover:'money',gold_member:'money',steam_sale:'money',trash_hat:'special',ghost_file:'onhit',shredder:'shield',undo_history:'hp',worm_virus:'onhit',trojan_gift:'special',defrag:'onhit',sandbox:'shield',recycle_mark:'money',deleted_heart:'curse',backup_shard:'dmg',zip_bomb_act:'active',hard_reset:'active',empty_trash:'active',coupon:'money',one_plus_one:'money',vpn:'special',dark_web:'special',charger:'special',reflect_film:'shield',tamagotchi:'pet',search_engine:'special',ad_block:'special',multitap:'pet',usb3:'speed',rgb_light:'onhit',ransomware:'curse',missing_no:'curse',clipboard:'active',hotkey:'active',dodge_patch:'shield',firewall_dash:'shield',ram_packet:'dmg',ctrl_z:'active',copy_paste:'active',screenshot:'active',ban_hammer:'active',god_mode_lite:'active',red_storm:'active',monsoon:'active',whirlwind:'active',reroll:'active',reroll_all:'active',timestop:'active',killtask:'active',teleport:'active',bullet_cash:'active'};
+// 역할 표식 (아이템창 · 받침대 · 툴팁): 색 테두리 + 5x5 그림 — 아이콘만 봐도 무슨 역할인지 대충 알게
+const ROLE = {
+  dmg:   {name:'공격력', col:'#ff4d5e', g:['....#','...#.','#.#..','.#...','#.#..']},
+  rate:  {name:'연사',   col:'#ffd23f', g:['..##.','.##..','####.','..##.','.##..']},
+  range: {name:'사거리 · 탄속', col:'#4da6ff', g:['..#..','...#.','#####','...#.','..#..']},
+  speed: {name:'이동',   col:'#3fe3c0', g:['#.#..','.#.#.','..#.#','.#.#.','#.#..']},
+  hp:    {name:'체력 · 회복', col:'#ff8ab0', g:['.#.#.','#####','#####','.###.','..#..']},
+  shield:{name:'방어',   col:'#9fe8ff', g:['#####','#####','#####','.###.','..#..']},
+  shot:  {name:'탄 모양 · 개수', col:'#ff9a3d', g:['.#.#.','.....','#.#.#','.....','.#.#.']},
+  onhit: {name:'맞히면 효과', col:'#c77dff', g:['#.#.#','.###.','#####','.###.','#.#.#']},
+  pet:   {name:'소환수 · 수호', col:'#5dff9a', g:['#.#.#','.....','.###.','#####','.###.']},
+  money: {name:'비트 · 열쇠 · 폭탄', col:'#e8c26a', g:['.###.','#.#..','.###.','..#.#','.###.']},
+  curse: {name:'위험한 거래', col:'#b0304f', g:['#...#','.#.#.','..#..','.#.#.','#...#']},
+  special:{name:'특수',  col:'#c9cde8', g:['..#..','..#..','#####','..#..','..#..']},
+  active:{name:'액티브', col:'#ff3d5e', g:['.###.','#...#','#.#.#','#...#','.###.']},
+};
+const roleOf = id => ROLE[ITEM_ROLE[id]] || ROLE.special;
+function drawRoleGlyph(id, x, y, sc){ // x, y = 배지 왼쪽 위 (7x7 · sc 배)
+  const R = roleOf(id), k = sc || 1; px(x, y, 7*k, 7*k, '#05060b');
+  for (let r = 0; r < 5; r++) for (let c = 0; c < 5; c++) if (R.g[r][c] === '#') px(x + (1 + c)*k, y + (1 + r)*k, k, k, R.col);
+}
+function drawItemSlot(id, x, y, sz){ // 역할 색 테두리 + 아이콘 + 오른쪽 아래 배지
+  const R = roleOf(id); px(x - 1, y - 1, sz + 2, sz + 2, R.col); px(x, y, sz, sz, '#0b0d17');
+  ctx.imageSmoothingEnabled = true; ctx.drawImage(ICON[id].canvas, x + 1, y + 1, sz - 2, sz - 2); ctx.imageSmoothingEnabled = false;
+  drawRoleGlyph(id, x + sz - 6, y + sz - 6);
+}
 let mapOpen = false, MINI_RECT = null, itemBarOpen = false, ITEMBAR_BTN = null;
 const ITEMBAR_MAX = 8;
 function drawItemBar(){ // 아래 줄 = 최근 8개만 (맵 덜 가리게). 더 있으면 「+N ▸」 칸 → 누르면(또는 I) 전부 펼침
   const its = G.items, n = its.length, more = n > ITEMBAR_MAX; ITEMBAR_BTN = null;
   ctx.imageSmoothingEnabled = true;
   const shown = more ? its.slice(n - ITEMBAR_MAX) : its;
-  shown.forEach((it, i) => { const x = 8 + i*15; px(x - 1, H - 23, 15, 15, '#0b0d17'); ctx.drawImage(ICON[it.id].canvas, x, H - 22, 13, 13); if (!itemBarOpen && mouseIn(x - 1, H - 23, 15, 15)) hovItem(it.id, true); });
+  shown.forEach((it, i) => { const x = 8 + i*20; drawItemSlot(it.id, x, H - 24, 17); if (!itemBarOpen && mouseIn(x - 1, H - 25, 19, 19)) hovItem(it.id, true); });
   ctx.imageSmoothingEnabled = false;
-  if (more){ const x = 8 + ITEMBAR_MAX*15, w = 24; ITEMBAR_BTN = {x:x - 1, y:H - 23, w, h:15};
-    px(x - 1, H - 23, w, 15, itemBarOpen ? '#3fe3ff' : '#05060b'); px(x, H - 22, w - 2, 13, itemBarOpen ? '#123844' : '#1b2036');
+  if (more){ const x = 8 + ITEMBAR_MAX*20, w = 24; ITEMBAR_BTN = {x:x - 1, y:H - 25, w, h:19};
+    px(x - 1, H - 25, w, 19, itemBarOpen ? '#3fe3ff' : '#05060b'); px(x, H - 24, w - 2, 17, itemBarOpen ? '#123844' : '#1b2036');
     ctx.font = '700 8px "Noto Sans KR", sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = '#ece9f5'; ctx.fillText(itemBarOpen ? '닫기' : '+' + (n - ITEMBAR_MAX), x - 1 + w/2, H - 12); }
   if (!itemBarOpen || !more) return;
-  const per = 16, rows = Math.ceil(n / per), pw = per*17 + 10, ph = rows*17 + 22, ox = 6, oy = H - 28 - ph;
+  const per = 14, rows = Math.ceil(n / per), pw = per*20 + 10, ph = rows*20 + 22, ox = 6, oy = H - 30 - ph;
   ctx.globalAlpha = .92; px(ox, oy, pw, ph, '#0b0d17'); ctx.globalAlpha = 1; px(ox, oy, pw, 1, '#3fe3ff');
   ctx.font = '700 8px "Noto Sans KR", sans-serif'; ctx.textAlign = 'left'; ctx.fillStyle = '#a9aecb'; ctx.fillText('가진 아이템 ' + n + '개 — 올리면 이름', ox + 5, oy + 12);
   ctx.imageSmoothingEnabled = true;
-  its.forEach((it, i) => { const x = ox + 5 + (i % per)*17, y = oy + 17 + Math.floor(i / per)*17; px(x - 1, y - 1, 16, 16, '#1b2036'); ctx.drawImage(ICON[it.id].canvas, x, y, 14, 14); if (mouseIn(x - 1, y - 1, 16, 16)) hovItem(it.id, true); });
+  its.forEach((it, i) => { const x = ox + 6 + (i % per)*20, y = oy + 17 + Math.floor(i / per)*20; drawItemSlot(it.id, x, y, 17); if (mouseIn(x - 1, y - 1, 19, 19)) hovItem(it.id, true); });
   ctx.imageSmoothingEnabled = false;
 }
 const ROOM_MARK = r => r.type === 'boss' ? '#ff3d5e' : r.type === 'treasure' ? (r.locked && !r.unlocked ? '#ffe68a' : r.pickups.some(k => k.kind === 'item') ? '#ffcf4a' : '#6b5a20') : r.type === 'shop' ? '#7dffd9' : r.type === 'secret' ? '#c77dff' : ROOM_COL[r.type] || null;
@@ -4512,8 +4559,8 @@ function renderCodex(bodyOnly){
       const n = codex.items[it.id];
       if (!n && !itemUnlocked(it.id)) return q ? '' : unknownCard('🔒 시크릿 「' + SEC_BY_ITEM[it.id].name + '」 — ' + SEC_BY_ITEM[it.id].cond);
       if (!n) return q ? '' : unknownCard('아직 먹어 보지 않았다');
-      if (!codexMatch(it.name, it.desc, it.fl, AXIS_LABEL[it.axis], SET_OF[it.id] ? '세트 ' + SETS[SET_OF[it.id]].name : '')) return '';
-      return `<div class="card${own.has(it.id) ? ' own' : ''}"><div class="top"><img src="${ICON[it.id].url}" alt=""><div><b>${esc(it.name)}</b><br><small>${AXIS_LABEL[it.axis]} · Q${it.q}${SET_OF[it.id] ? ` · <span style="color:${SETS[SET_OF[it.id]].col}">세트 ${SETS[SET_OF[it.id]].name}</span>` : ''}${own.has(it.id) ? ' · 보유 중' : ''}</small></div></div>
+      if (!codexMatch(it.name, it.desc, it.fl, AXIS_LABEL[it.axis], roleOf(it.id).name, SET_OF[it.id] ? '세트 ' + SETS[SET_OF[it.id]].name : '')) return '';
+      return `<div class="card${own.has(it.id) ? ' own' : ''}"><div class="top"><img src="${ICON[it.id].url}" alt=""><div><b>${esc(it.name)}</b><br><small><span style="color:${roleOf(it.id).col}">${roleOf(it.id).name}</span> · Q${it.q}${SET_OF[it.id] ? ` · <span style="color:${SETS[SET_OF[it.id]].col}">세트 ${SETS[SET_OF[it.id]].name}</span>` : ''}${own.has(it.id) ? ' · 보유 중' : ''}</small></div></div>
         <p>${esc(it.desc)}</p><i>${esc(it.fl)}</i><small>${it.pools.map(s => SRC_LABEL[s]).join(' / ')} · ${n}번 획득</small></div>`;
     }).join('')}</div>`;
   } else if (codexTab === 'loot'){
@@ -4795,6 +4842,16 @@ function openChars(){
 let charCur = null;
 /* ---------- 패치 노트 — 맨 위가 최신. 패치마다 10줄 안으로 ---------- */
 const PATCH_NOTES = [
+  {ver:'ALPHA 0.7', name:'한눈에 보이게', date:'2026.10.18', lines:[
+    '몹 · 슬라임 · 보스 그림을 전부 새로 그림 — 몸 주변에 떠다니던 반짝이 · 글리치 조각을 없애고, 몹마다 색을 다르게 (예전엔 다 보라색이라 바닥 · 벽에 묻혔음). 64px로 또렷하게',
+    '내 탄 = 둥근 방울 (아이작 눈물처럼). 색은 탄 속성 (불 · 얼음 · 독 …). 장풍 그림은 뺌',
+    '아이템마다 역할 표식 — 아이템 칸 테두리 색 + 오른쪽 아래 작은 그림으로 공격력 · 연사 · 사거리 · 이동 · 체력 · 방어 · 탄 모양 · 맞히면 효과 · 소환수 · 비트 · 위험한 거래 · 특수를 구분. 마우스를 올리면 역할 이름도 나옴 (도감에도)',
+    '이름만 보고 효과를 알 수 있게 아이템 이름 70개 정리 — 예: 듀얼 모니터 → 원거리 모니터(사거리), RAM 증설 → 화력 증설, 터보 모드 → 과부하 모드, 과부하 → 연쇄 감전, 럭키 패킷 → 치명타 패킷, 아날로그 스틱 → 8방향 스틱, 픽셀 폭탄 → 폭발탄 …',
+    '번잡함 줄이기 — 몹이 주기적으로 번쩍 겹치던 글리치 잔상 · 바닥 아이템 반짝임 · 금 간 바위 번쩍임 · 적 탄 크기 맥동 · 소환 중 깜빡임 끔. 파편 절반 · 화면 흔들림 약하게 · 맞힐 때 번쩍임 약하게',
+    '내 편은 발밑 초록 고리 (소환수), 아군 벌레 · 수호 벌레는 초록 — 몹과 바로 구분',
+    '특수방 문 안쪽에 지도와 같은 작은 표지판 (보스 · 황금방 · 상점 · 오락실 · 저주 · 업데이트 …) — 문만 보고도 무슨 방인지',
+    '치트 코드 · 패치 그림 아래에 다른 그림 조각이 끼어 보이던 것 고침',
+  ]},
   {ver:'ALPHA 0.6', name:'월드 5 · 소환수 · 세트 변신', date:'2026.10.18', lines:[
     '조작 — 움직이다 쏘면 탄이 움직이던 쪽으로 살짝 휘어요 (멈춘 직후에도 잠깐 남음, 아이작처럼). Tab = 일시정지, M = 지도. 들고 있는 아이템 · 액티브 · 주머니 · 바닥 아이템에 마우스를 올리면 이름과 설명',
     '유도탄 약하게 (아이작 「휘는 숟가락」 정도) — 앞쪽 ±70° 안의 적만 따라가고 덜 휨 (감지 170 → 130, 꺾는 힘 약 60%). 겹쳐 먹어도 예전만큼 안 셈',
@@ -4833,10 +4890,10 @@ const PATCH_NOTES = [
   ]},
   {ver:'ALPHA 0.5', name:'시크릿 · 새 파이터 셋 · 낭떠러지', date:'2026.10.18', lines:[
     '시크릿 54개 — 아이작처럼 하나 열 때마다 새 아이템 · 파이터가 풀에 들어와요 (도감 「시크릿」 탭에 조건 · 진행도). 캐릭터 선택창엔 월드 보스 처치 표시(1~4)',
-    '아이템 49 → 102종 — 큰 HP · 단일 스탯 · 자동 저장(1번 부활) · 방화벽 위성 …, 꽝 · 양날 템도 섞였어요. 「클라우드 업로드」는 날아다니고, 「브리지 케이블」은 1칸 낭떠러지에 다리를 놓아요',
+    '아이템 49 → 102종 — 큰 HP · 단일 스탯 · 자동 저장(1번 부활) · 방화벽 위성 …, 꽝 · 양날 템도 섞였어요. 「클라우드 비행」는 날아다니고, 「브리지 케이블」은 1칸 낭떠러지에 다리를 놓아요',
     '새 파이터 셋 — 이반(결투방 5승 · 큰 탄 · 체력 80 · 「붉은 폭풍」), 릴리(숨겨진 방의 우산 · 물방울 탄이 적을 가둠 · 「장마 파도」), DICE(시크릿 20개 · 한 발마다 피해 1~6배)',
     '낭떠러지 방 — 걸어서는 못 건너고 탄은 넘어가요. 금 간 바위는 아이작처럼 드물게 (방 7개 중 1개꼴), 깨면 8% 아이템 · 나머지는 픽업 2~3개',
-    '사격은 상하좌우 4방향 (「아날로그 스틱」이면 8방향). 내 캐릭터 1.33배 · 피격 범위도 같이. 럭 스탯 + 스탯 다운 패치 (럭 0이면 반반, 럭 1마다 +10%p)',
+    '사격은 상하좌우 4방향 (「8방향 스틱」이면 8방향). 내 캐릭터 1.33배 · 피격 범위도 같이. 럭 스탯 + 스탯 다운 패치 (럭 0이면 반반, 럭 1마다 +10%p)',
     '난이도 — 월드 1 보스 피해 20→15 · 킹 슬라임 체력 ↓, 월드 2 일반 피해 15, 월드 3 보스 피해 25. 재화는 덜 — 방 보상 가끔 없음 · 비트 1개 · 열쇠 드물게',
     '밸런스 분석용 플레이 기록 — 판이 끝나면 아이템 · 방별 시간 · 맞은 원인 · 재화 흐름을 사이트로 보내요 (개인 정보 없음, 운영자만 봄)',
     '고침 — 패치 바꿔 집을 때 무한 교체 · 벽 밖으로 밀림, 금 간 바위 구석에 갇힌 몹, 치트 콘솔 템 이름 안 보임, 관통 + 픽셀 폭탄이 끝까지 날아가서야 터지던 것. 압축 파일 · 기계 · 바위에서 나온 템은 바로 안 먹어지고 살짝 밀려나요 (보고 리롤할지 고르게). 못 집는 픽업은 부딪혀요 — 상점 물건 · 아이템은 막히고, 꽉 찬 HP의 회복 같은 건 툭 밀려가요. kill all은 막 나타나는 적에게도 들고, 적이 없으면 안 쓰여요. 전체화면 ESC는 크롬 · 엣지에서 안 풀리고 일시정지',
@@ -4982,7 +5039,7 @@ function renderStatus(){
   if (P.beam) traits.push('차지 빔'); if (P.bomb) traits.push('폭발탄'); if (P.boom) traits.push('부메랑');
   if (P.homing) traits.push('유도'); if (P.pierce) traits.push('관통'); if (P.bounces) traits.push('도탄 ×' + P.bounces);
   if (P.split) traits.push('분열'); if (P.poison) traits.push('독'); if (P.chain) traits.push('연쇄 전기'); if (P.orbit) traits.push('회전');
-  if (P.mark) traits.push('약점 표시'); if (P.stun) traits.push('넉백'); if (P.overflow) traits.push('콤보 폭주'); if (P.latency) traits.push('렉 탄');
+  if (P.mark) traits.push('약점 표시'); if (P.stun) traits.push('넉백'); if (P.overflow) traits.push('사방 난사'); if (P.latency) traits.push('렉 탄');
   if (P.miss) traits.push('불발 ' + Math.round(P.miss*100) + '%'); if (P.jitter) traits.push('흩어짐'); if (P.grow) traits.push('눈덩이');
   const known = [...G.patchKnown].map(c => `<span class="tag" style="color:${PATCH_COLS[c]}"><img src="${lootURL('patch', c)}" alt="">${esc(PATCHES[G.patchMap[c]].name)}</span>`).join('');
   $('pStat').innerHTML = `
