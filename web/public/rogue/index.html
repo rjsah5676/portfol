@@ -85,7 +85,11 @@ button.on{background:var(--red); border-color:var(--red); color:#fff}
 .ts-go small{font-family:var(--f-body); font-size:12px; opacity:.85; letter-spacing:0; font-weight:400}
 #bStart.alt{background:var(--panel2); border-color:var(--line); color:var(--fg)}
 #bStart.alt:hover{border-color:var(--cyan)}
-.ts-sub{display:flex; flex-wrap:wrap; gap:6px}
+.ts-sub{display:flex; flex-wrap:wrap; gap:6px; align-items:center}
+.vol{display:flex; flex-wrap:wrap; gap:6px 14px; align-items:center; font-size:12px; color:var(--muted)}
+.vol label{display:flex; align-items:center; gap:6px; white-space:nowrap}
+.vol input{width:96px; accent-color:var(--cyan)}
+.vol output{font-family:var(--f-display); font-size:10px; min-width:3ch; color:var(--fg)}
 .ts-sub button{flex:1 1 auto; padding:7px 8px}
 .ts-sub button.on{background:var(--panel); color:var(--muted); border-color:var(--line)}
 .ts-sub kbd, .ts-hint kbd{font-family:var(--f-display); font-size:10px; color:var(--cyan)}
@@ -276,6 +280,7 @@ details pre{max-height:140px; overflow:auto; font-size:10px; background:var(--bg
             <button type="button" id="tsSnd">SOUND</button>
             <button type="button" id="tsBgm">BGM</button>
             <button type="button" id="tsFull">FULL</button>
+            <div class="vol"><label>효과음 <input type="range" min="0" max="100" step="5" data-vol="s" aria-label="효과음 음량"><output></output></label><label>배경음 <input type="range" min="0" max="100" step="5" data-vol="b" aria-label="배경음 음량"><output></output></label></div>
             <button type="button" id="tsNotes">패치 노트<i class="nd" id="notesDot" hidden></i></button>
           </div>
           <p class="ts-hint"><kbd>ENTER</kbd> <span id="enterHint">시작</span> · <kbd>H</kbd> 조작법 · <kbd>C</kbd> 도감 · <kbd>N</kbd> 패치 노트</p>
@@ -305,6 +310,7 @@ details pre{max-height:140px; overflow:auto; font-size:10px; background:var(--bg
       <h1>PAUSED</h1>
       <div id="pStat"></div>
       <div class="row"><button class="big" id="bResume" type="button">RESUME</button><button class="big" id="bPCodex" type="button">도감 <small>C</small></button><button id="bSaveQuit" type="button">저장하고 나가기</button><button id="bRestart" type="button">NEW RUN</button></div>
+      <div class="vol"><label>효과음 <input type="range" min="0" max="100" step="5" data-vol="s" aria-label="효과음 음량"><output></output></label><label>배경음 <input type="range" min="0" max="100" step="5" data-vol="b" aria-label="배경음 음량"><output></output></label></div>
       <p>저장은 층을 넘어갈 때 돼. 나갔다 오면 이 층 처음부터 이어져.</p>
     </div>
     <div class="ov" id="result" hidden></div>
@@ -1166,9 +1172,9 @@ AIC.src = 'a/49ddb154dc.webp';
 let AC = null, muted = false; const lastSfx = {}; let noiseBuf = null;
 // 효과음 · 배경음 (ElevenLabs). 파일은 snd/ — 못 받으면 예전 합성음으로
 const AUDIO_KEY = 'pfr-audio-v1';
-let bgmOn = true;
-try { const a = JSON.parse(localStorage.getItem(AUDIO_KEY) || '{}'); muted = !!a.muted; bgmOn = a.bgm !== false; } catch(e){}
-const saveAudio = () => { try { localStorage.setItem(AUDIO_KEY, JSON.stringify({muted, bgm:bgmOn})); } catch(e){} };
+let bgmOn = true, volSfx = 1, volBgm = 1; // 음량 0~1
+try { const a = JSON.parse(localStorage.getItem(AUDIO_KEY) || '{}'); muted = !!a.muted; bgmOn = a.bgm !== false; if (a.vs != null) volSfx = +a.vs; if (a.vb != null) volBgm = +a.vb; } catch(e){}
+const saveAudio = () => { try { localStorage.setItem(AUDIO_KEY, JSON.stringify({muted, bgm:bgmOn, vs:volSfx, vb:volBgm})); } catch(e){} };
 const SFX_GAIN = {shoot:.3, hit:.32, kill:.42, hurt:.7, shieldhit:.5, boom:.65, fuse:.22, beam:.55, charge:.3, dash:.38, ult:.8, active:.6,
   coin:.45, item:.75, get:.5, key:.5, heal:.55, shield:.55, card:.55, carduse:.7, patch:.55, good:.55, bad:.55, door:.42, unlock:.55,
   secret:.7, zip:.55, buy:.6, nope:.4, portal:.6, floor:.7, boss:.85, bossdie:.9, zap:.32, reroll:.6, timestop:.65, clear:.8, gameover:.8, story:.35, click:.28};
@@ -1184,8 +1190,8 @@ function initAudio(){
     AC = new (window.AudioContext || window.webkitAudioContext)();
     noiseBuf = AC.createBuffer(1, AC.sampleRate * 0.4, AC.sampleRate);
     const d = noiseBuf.getChannelData(0); for (let i=0;i<d.length;i++) d[i] = Math.random()*2-1;
-    sfxBus = AC.createGain(); sfxBus.connect(AC.destination);
-    bgmBus = AC.createGain(); bgmBus.gain.value = 0.42; bgmBus.connect(AC.destination);
+    sfxBus = AC.createGain(); sfxBus.gain.value = volSfx; sfxBus.connect(AC.destination);
+    bgmBus = AC.createGain(); bgmBus.gain.value = 0.42 * volBgm; bgmBus.connect(AC.destination);
     loadSfx(); bgmTick(true);
   } catch(e){ AC = null; }
 }
@@ -1231,7 +1237,7 @@ function bgmTick(force){
   if (want !== bgmCur) bgmPlay(want);
   // 일시정지 · 지도 · 도감 · 이야기 중엔 작게
   const duck = (paused || mapOpen || storyOpen) ? .35 : 1;
-  bgmBus.gain.setTargetAtTime(0.42 * duck, AC.currentTime, .15);
+  bgmBus.gain.setTargetAtTime(0.42 * duck * volBgm, AC.currentTime, .15);
 }
 function tone(f1, f2, dur, type, vol, delay=0){
   const t = AC.currentTime + delay, o = AC.createOscillator(), g = AC.createGain();
@@ -3661,9 +3667,9 @@ function drawPickup(pk){
 }
 function drawPlacedBomb(b){
   const blink = b.t < 30 ? b.t % 4 < 2 : b.t < 60 ? b.t % 8 < 4 : b.t % 16 < 8;
-  if (doorReady()){ doorSpr(blink ? 11 : 10, b.x - 11, b.y - 15, 22, 22); ctx.globalAlpha = .12; ctx.strokeStyle = '#c77dff'; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(b.x, b.y, 44, 0, TAU); ctx.stroke(); ctx.globalAlpha = 1; return; }
-  drawLootIcon('bomb', b.x, b.y);
-  if (blink){ ctx.globalAlpha = .5; ctx.fillStyle = '#ff3d5e'; ctx.beginPath(); ctx.arc(b.x, b.y + 1, 6, 0, TAU); ctx.fill(); ctx.globalAlpha = 1; }
+  if (doorReady()){ doorSpr(blink ? 11 : 10, b.x - 15, b.y - 20, 30, 30); ctx.globalAlpha = .12; ctx.strokeStyle = '#c77dff'; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(b.x, b.y, 44, 0, TAU); ctx.stroke(); ctx.globalAlpha = 1; return; }
+  drawLootIcon('bomb', b.x, b.y, 1, 0, 22);
+  if (blink){ ctx.globalAlpha = .5; ctx.fillStyle = '#ff3d5e'; ctx.beginPath(); ctx.arc(b.x, b.y + 1, 8, 0, TAU); ctx.fill(); ctx.globalAlpha = 1; }
   ctx.globalAlpha = .12; ctx.strokeStyle = '#c77dff'; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(b.x, b.y, 44, 0, TAU); ctx.stroke(); ctx.globalAlpha = 1;
 }
 /* 상태이상(화상 · 독)은 네모 덮개 대신 몬스터 모양 그대로 물들이고, 위로 기포 · 불씨를 띄움 */
@@ -4565,7 +4571,8 @@ function fixCode(e){
 }
 addEventListener('keydown', e => {
   fixCode(e);
-  if (e.target && e.target.tagName === 'INPUT'){ if (e.code === 'Escape' && !e.isComposing && !$('codex').hidden){ e.preventDefault(); toggleCodex(); } return; }
+  if (e.target && e.target.tagName === 'INPUT' && e.target.type === 'range'){ if (/^Arrow/.test(e.code)) return; e.target.blur(); } // 음량 막대는 방향키만 먹고 나머진 게임으로
+  else if (e.target && e.target.tagName === 'INPUT'){ if (e.code === 'Escape' && !e.isComposing && !$('codex').hidden){ e.preventDefault(); toggleCodex(); } return; }
   if (notesOpen){ if (e.code === 'Escape' || e.code === 'Enter'){ e.preventDefault(); closeNotes(); } return; }
   if (charOpen && charCur){ e.preventDefault(); if (!e.repeat){ if (e.code === 'Escape') charCur.close(); else if (e.code === 'Enter' || e.code === 'Space') charCur.go(); else if (e.code === 'ArrowLeft' || e.code === 'KeyA') charCur.move(-1); else if (e.code === 'ArrowRight' || e.code === 'KeyD') charCur.move(1); } return; }
   if (storyOpen){ e.preventDefault(); if (storyCur && !e.repeat){ if (e.code === 'Escape') storyCur.close(); else if (e.code === 'Enter' || e.code === 'Space' || e.code === 'KeyE') storyCur.next(); } return; }
@@ -4682,6 +4689,7 @@ let charCur = null;
 const PATCH_NOTES = [
   {ver:'ALPHA 0.6', name:'월드 5 · 소환수 · 세트 변신', date:'2026.10.18', lines:[
     '조작 — 움직이다 쏘면 탄이 움직이던 쪽으로 살짝 휘어요 (멈춘 직후에도 잠깐 남음, 아이작처럼). Tab = 일시정지, M = 지도. 들고 있는 아이템 · 액티브 · 주머니 · 바닥 아이템에 마우스를 올리면 이름과 설명',
+    '효과음 · 배경음 음량을 따로 조절 (타이틀 · 일시정지 화면). 바닥에 놓은 폭탄이 더 크게 보여요',
     '조합 — 두 템 시너지 6개 추가 (4K 렌더링 · DDoS · 유도 탄막 · 관통 대포 · 크리티컬 · 집속탄): 둘 다 들면 「시너지!」 배너와 함께 큰 배율. 세트 변신도 강화 (오버클러커 데미지 ×1.3 · 연사 +25%, 클라우드 데미지 ×1.25, 봇넷 소환수 ×2, 해커 40%). 대신 템 들어오는 속도 ↓ — 보물방은 층마다 하나(3층부터 잠김), 상점 템 하나, 전투방 템 5% → 3%. 3층 보스 벌레 여왕 체력 300 → 250 · 소환 줄임',
     '밸런스 (봇 1,000판 넘게 돌려 맞춤) — 4층부터 보스 체력 ↑ (마지막 보스 ×2.8: 처치 중앙값 12초 → 21초), 5층부터 방마다 몹 · 엘리트 조금 더, 뒤쪽 층 몹 체력 곡선 ↑, 월드 3 일반 피해 20 · 월드 4 일반 피해 25. 상점엔 2층부터 아이템이 항상 (값은 월드마다 +3, 5층부터 2개) — 비트가 80개씩 남던 걸 20~30개로. 프리징 점프 예고 조금 길게',
     '지도에 남은 픽업 표시 (아이작처럼) — 다녀온 방에 안 주운 아이템 · 열쇠 · 폭탄 · 상자 · 패치 · 치트 코드 · 하트 · 비트가 있으면 방 칸에 작은 아이콘 (상점 매물 · 보물방 템은 방 아이콘으로)',
@@ -4885,6 +4893,16 @@ const audioBtns = () => { const sm = $('tsSnd'), sb = $('tsBgm'); if (sm){ sm.cl
 $('bMute').onclick = () => { muted = !muted; saveAudio(); audioBtns(); initAudio(); bgmTick(true); };
 $('bBgm').onclick = () => { bgmOn = !bgmOn; saveAudio(); audioBtns(); initAudio(); bgmTick(true); };
 audioBtns();
+function volSync(){ document.querySelectorAll('[data-vol]').forEach(inp => { const v = inp.dataset.vol === 's' ? volSfx : volBgm; inp.value = Math.round(v * 100); inp.nextElementSibling.textContent = Math.round(v * 100); }); }
+document.querySelectorAll('[data-vol]').forEach(inp => {
+  inp.addEventListener('input', () => {
+    const v = (+inp.value) / 100; if (inp.dataset.vol === 's') volSfx = v; else volBgm = v;
+    if (AC){ if (sfxBus) sfxBus.gain.value = volSfx; bgmTick(true); } saveAudio(); volSync();
+    if (inp.dataset.vol === 's'){ initAudio(); sfx('click'); }
+  });
+  inp.addEventListener('change', () => inp.blur()); // 놓으면 방향키가 다시 게임으로
+});
+volSync();
 // 첫 클릭 · 키 입력에서 소리 켜기 (브라우저 자동재생 막힘) → 타이틀 곡부터
 addEventListener('pointerdown', () => initAudio(), {once:true}); addEventListener('keydown', () => initAudio(), {once:true});
 // 전체화면: ESC 는 브라우저가 가로채서 전체화면이 풀림 → 크롬 계열은 키보드 잠금으로 ESC 를 게임이 받게 (꾹 누르면 나감), 안 되면 풀릴 때 일시정지로
