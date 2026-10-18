@@ -3,7 +3,9 @@ name: CI
 on:
   push:
     branches: [main]
+    paths-ignore: ["**/*.md", "docs/**"]
   pull_request:
+    paths-ignore: ["**/*.md", "docs/**"]
 
 # 같은 브랜치·PR 에 새 커밋이 오면 앞선 실행은 취소 (main 은 끝까지 돌림)
 concurrency:
@@ -44,8 +46,8 @@ jobs:
       - run: npm run typecheck
       - run: npm test
 
-  # ── 프론트: 린트 + 타입 검사 + 빌드 ──
-  # 글·랭킹·방명록은 요청이 올 때 서버에서 읽어 그리므로(SSR) 빌드에는 API 서버가 필요 없다.
+  # ── 프론트: 린트 + 타입 검사 ──
+  # next build 는 docker 잡(web 이미지)에서 한 번만 함 — 여기서 또 하면 Actions 시간이 두 배로 듦
   web:
     runs-on: ubuntu-latest
     defaults:
@@ -61,10 +63,6 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npx tsc --noEmit
-      - run: npm run build
-        env:
-          NEXT_PUBLIC_API_URL: /
-          NEXT_PUBLIC_SITE_URL: ${{ vars.SITE_URL || 'https://gunmo.my' }}
 
   # ── Docker 이미지 (server · web): PR 에서는 빌드만, main push 에서는 GHCR 에 올림 ──
   docker:
