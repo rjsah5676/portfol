@@ -597,14 +597,60 @@ const ITEMS = [
   {id:'killtask',    name:'강제 종료',  axis:'active', cost:100, tint:'#ff3d5e', desc:'방에서 체력이 가장 많은 적을 끝냄 (보스면 최대 체력 20% 피해)', fl:'작업 관리자 → 작업 끝내기'},
   {id:'teleport',    name:'순간이동',   axis:'active', cost:50,  tint:'#c77dff', desc:'이 층의 무작위 방으로 이동 (보스방 제외)', fl:'404가 아니라 302'},
   {id:'bullet_cash', name:'탄막 환전',  axis:'active', cost:50,  tint:'#ffe14d', desc:'적 탄을 전부 지우고 일부를 비트로 바꿈', fl:'버그도 팔면 돈이 된다'},
+  // ── 5차 (티어표 비율 맞추기): 소환수 20 · 액티브 12 · 체력/음식 8 · 위험 거래 5 ──
+  {id:'piggy_bank',    name:'비트 저금통',   axis:'util', tint:'#ff9ac0', desc:'방 2개를 깰 때마다 비트 1개를 떨굼', fl:'꿀꿀 — 잔돈은 여기로', add:p=>p.fams.push('piggy_bank')},
+  {id:'keyring_bot',   name:'열쇠고리 봇',   axis:'util', tint:'#ffe68a', desc:'방 4개를 깰 때마다 액세스 키 1개', fl:'짤랑짤랑', add:p=>p.fams.push('keyring_bot')},
+  {id:'bomb_factory',  name:'폭탄 공장',     axis:'util', tint:'#c77dff', desc:'방 4개를 깰 때마다 글리치 폭탄 1개', fl:'굴뚝에서 폭탄이 나온다', add:p=>p.fams.push('bomb_factory')},
+  {id:'patch_vendor',  name:'패치 자판기',   axis:'util', tint:'#ff9a3d', desc:'방 5개를 깰 때마다 미확인 패치 1개', fl:'뭐가 나올지는 자판기도 모름', add:p=>p.fams.push('patch_vendor')},
+  {id:'backup_pet',    name:'백업 배낭',     axis:'util', tint:'#ff8ab0', desc:'방 5개를 깰 때마다 백업 파일(회복) 1개', fl:'비상식량 챙겼어?', add:p=>p.fams.push('backup_pet')},
+  {id:'firewall_pet',  name:'방화벽 강아지', axis:'util', tint:'#9fe8ff', desc:'방 4개를 깰 때마다 방화벽 조각 1개', fl:'멍! (차단됨)', add:p=>p.fams.push('firewall_pet')},
+  {id:'laser_mouse',   name:'레이저 마우스', axis:'util', tint:'#ff3d5e', desc:'1초마다 가까운 적에게 빠른 관통 레이저 (내 데미지 ×1.1)', fl:'빨간 점을 쫓던 게 이제 쏜다', add:p=>p.fams.push('laser_mouse')},
+  {id:'thunder_cloud', name:'번개 구름',     axis:'util', tint:'#ffe14d', desc:'1.2초마다 가까운 적에게 번개 — 근처 2마리로 튐', fl:'클라우드에 번개 칠 확률 100%', add:p=>p.fams.push('thunder_cloud')},
+  {id:'sniper_bot',    name:'저격 봇',       axis:'util', tint:'#7dffb0', desc:'내가 쏠 때 2.5초마다 큰 관통탄 (내 데미지 ×3)', fl:'원 샷 원 킬', add:p=>p.fams.push('sniper_bot')},
+  {id:'fire_bot',      name:'화염 봇',       axis:'util', tint:'#ff7a2c', desc:'내가 쏠 때 같이 쏨 — 맞으면 불이 붙음', fl:'과열은 기본 사양', add:p=>p.fams.push('fire_bot')},
+  {id:'ice_bot',       name:'냉각 봇',       axis:'util', tint:'#9fd8ff', desc:'내가 쏠 때 같이 쏨 — 30%로 맞은 적이 잠깐 얼어붙음', fl:'쿨러가 몸이 된 봇', add:p=>p.fams.push('ice_bot')},
+  {id:'cursor_pet',    name:'사냥 커서',     axis:'util', tint:'#f4f0ff', desc:'가까운 적을 쫓아가 콕콕 찌름', fl:'클릭! 클릭! 클릭!', add:p=>p.fams.push('cursor_pet')},
+  {id:'scout_drone',   name:'정찰 드론',     axis:'util', tint:'#c8ccdf', desc:'층마다 보물방 · 상점 · 보스방을 지도에 표시 · 약하게 따라 쏨', fl:'위성 사진 보내 드림', add:p=>p.fams.push('scout_drone')},
+  {id:'decoy_doll',    name:'미끼 인형',     axis:'util', tint:'#ff6f8a', desc:'뒤따라오며 닿는 적 탄을 막아 줌 (막으면 잠깐 쉼) · 수호 1칸', fl:'대신 맞아 주는 게 일', add:p=>p.fams.push('decoy_doll')},
+  {id:'disc_orb',      name:'궤도 디스크',   axis:'util', tint:'#bfe8ff', desc:'도는 CD가 적 탄을 막고 닿는 적에게 피해 · 수호 1칸', fl:'빛나는 건 데이터일까 흠집일까', add:p=>p.disc=(p.disc||0)+1},
+  {id:'charge_sat',    name:'충전 위성',     axis:'util', tint:'#ffe14d', desc:'도는 위성이 적 탄을 4번 막을 때마다 액티브 한 칸 충전 · 수호 1칸', fl:'맞으면서 충전하는 타입', add:p=>p.chargeSat=(p.chargeSat||0)+1},
+  {id:'clone_bug',     name:'복제 버그',     axis:'util', tint:'#7dffb0', desc:'몹이 있는 방에 들어갈 때마다 아군 벌레 2마리', fl:'Ctrl+C 한 번에 두 마리', add:p=>p.fams.push('clone_bug')},
+  {id:'turret_pet',    name:'미니 포탑',     axis:'util', tint:'#c8ccdf', desc:'몹이 있는 방에 들어가면 가운데에 8초짜리 포탑을 세움', fl:'조립 3초, 사격 8초', add:p=>p.fams.push('turret_pet')},
+  {id:'spyware',       name:'스파이웨어',    axis:'util', tint:'#5a5f80', desc:'방을 깰 때마다 비트 1개를 몰래 가져감 · 가끔 치트 코드를 떨굼', fl:'무료라고 깔았더니', add:p=>p.fams.push('spyware')},
+  {id:'trail_bot',     name:'독 장판 봇',    axis:'util', tint:'#5dff6a', desc:'따라오며 지나간 자리에 독 웅덩이 (적만 피해)', fl:'청소 로봇인데 더 더러워짐', add:p=>p.fams.push('trail_bot')},
+  {id:'ctrl_alt_del',  name:'Ctrl+Alt+Del', axis:'active', cost:150, tint:'#ff3d5e', desc:'보스 빼고 방 안의 적을 전부 끝냄 · 대신 HP -10', fl:'작업 관리자를 여는 중…'},
+  {id:'overdrive',     name:'오버드라이브', axis:'active', cost:75, tint:'#ff7a2c', desc:'8초간 연사 ×2 · 데미지 +20%', fl:'레드존까지 밟아'},
+  {id:'beam_cutter',   name:'빔 커터',      axis:'active', cost:50, tint:'#ff3d5e', desc:'보는 쪽으로 굵은 관통 빔 (데미지 ×4)', fl:'자르는 건 데이터만'},
+  {id:'hourglass',     name:'모래시계',     axis:'active', cost:75, tint:'#9fd8ff', desc:'6초간 적과 적 탄이 절반 속도', fl:'로딩 중… 적만'},
+  {id:'firewall_gen',  name:'방화벽 생성기', axis:'active', cost:100, tint:'#3fe3ff', desc:'방화벽 +40', fl:'방패 하나 출력'},
+  {id:'backup_restore', name:'백업 복원',   axis:'active', cost:100, tint:'#ff8ab0', desc:'HP 30 회복', fl:'어제 저장한 나'},
+  {id:'bomb_rain',     name:'폭탄 비',      axis:'active', cost:50, tint:'#c77dff', desc:'내 둘레에 폭탄 3개를 깔아 둠 (나는 안 맞음)', fl:'오늘의 날씨: 폭탄'},
+  {id:'keygen_exe',    name:'keygen.exe',   axis:'active', cost:50, tint:'#ffe68a', desc:'액세스 키 +1', fl:'이걸 쓰면 안 되는데'},
+  {id:'raid_call',     name:'레이드 소환',  axis:'active', cost:50, tint:'#7dffb0', desc:'아군 벌레 4마리 소환', fl:'@everyone'},
+  {id:'dice_gamble',   name:'도박 다이스',  axis:'active', cost:50, tint:'#c77dff', desc:'굴려서 6가지 중 하나: 비트 · 폭탄 · 키 · HP · 방화벽 · 몹 습격', fl:'운도 실력'},
+  {id:'f5_refresh',    name:'F5 새로고침',  axis:'active', cost:75, tint:'#9fe8ff', desc:'방 안의 적(보스 빼고)을 다른 적으로 바꿈', fl:'새로고침하면 나아질지도'},
+  {id:'disk_cleanup',  name:'디스크 정리',  axis:'active', cost:50, tint:'#c8ccdf', desc:'방의 바위 · 더미 · 블록을 전부 지움 (금 간 바위 보상도)', fl:'공간 확보 완료'},
+  {id:'cup_ramen',     name:'컵라면',       axis:'util', tint:'#ff8ab0', desc:'최대 HP +10 · HP 전부 회복', fl:'3분이면 충분', onPick:pl=>{pl.maxHp+=10; pl.hp=pl.maxHp;}},
+  {id:'energy_bar',    name:'에너지바',     axis:'util', tint:'#ff8ab0', desc:'최대 HP +10 · 이동 +5%', fl:'씹는 맛이 있다', mul:p=>p.move*=1.05, onPick:pl=>{pl.maxHp+=10; pl.hp=Math.min(pl.maxHp, pl.hp+10);}},
+  {id:'pizza',         name:'피자 한 판',   axis:'util', tint:'#ff8ab0', desc:'최대 HP +20 · 이동 -5%', fl:'한 조각은 누가 먹었다', mul:p=>p.move*=.95, onPick:pl=>{pl.maxHp+=20; pl.hp=Math.min(pl.maxHp, pl.hp+20);}},
+  {id:'coffee',        name:'커피',         axis:'util', tint:'#ff8ab0', desc:'HP 20 회복 · 연사 +8%', fl:'야근의 동반자', mul:p=>p.fireDelay*=.926, onPick:pl=>{pl.hp=Math.min(pl.maxHp, pl.hp+20);}},
+  {id:'candy_bag',     name:'사탕 봉지',    axis:'util', tint:'#ff8ab0', desc:'HP 10 회복 · 픽업 3개가 쏟아짐', fl:'하나만 먹으려 했는데', onPick:pl=>{pl.hp=Math.min(pl.maxHp, pl.hp+10); for (let i = 0; i < 3; i++) scatter(rollSmall(G.lootRng), 1, pl.x, pl.y);}},
+  {id:'lunchbox',      name:'도시락',       axis:'util', tint:'#ff8ab0', desc:'최대 HP +20 · 방화벽 +10', fl:'엄마표', onPick:pl=>{pl.maxHp+=20; pl.hp=Math.min(pl.maxHp, pl.hp+20); pl.shield=Math.min(TUNE.maxShield, pl.shield+10);}},
+  {id:'protein',       name:'프로틴',       axis:'util', tint:'#ff8ab0', desc:'최대 HP +10 · 데미지 +0.6 · 연사 +5%', fl:'단백질은 배신하지 않는다', add:p=>p.damage+=.6, mul:p=>p.fireDelay*=.95, onPick:pl=>{pl.maxHp+=10; pl.hp=Math.min(pl.maxHp, pl.hp+10);}},
+  {id:'fried_chicken', name:'치킨',         axis:'util', tint:'#ff8ab0', desc:'최대 HP +30 · 연사 -5%', fl:'1인 1닭', mul:p=>p.fireDelay*=1.05, onPick:pl=>{pl.maxHp+=30; pl.hp=Math.min(pl.maxHp, pl.hp+30);}},
+  {id:'rootkit',       name:'루트킷',       axis:'stat', tint:'#b0304f', desc:'데미지 ×1.3 · 연사 +15% · 이동 +10% · 대신 최대 HP -20', fl:'시스템 깊숙이 뿌리를 내림', mul:p=>{p.damage*=1.3; p.fireDelay*=.87; p.move*=1.1;}, onPick:pl=>{pl.maxHp=Math.max(20, pl.maxHp-20); pl.hp=Math.min(pl.hp, pl.maxHp);}},
+  {id:'black_contract', name:'블랙 해커 계약', axis:'stat', tint:'#b0304f', desc:'데미지 +1 · 연사 +20% · 대신 최대 HP -20', fl:'서명은 피로', add:p=>p.damage+=1, mul:p=>p.fireDelay*=.83, onPick:pl=>{pl.maxHp=Math.max(20, pl.maxHp-20); pl.hp=Math.min(pl.hp, pl.maxHp);}},
+  {id:'pirate_soft',   name:'해적판 소프트', axis:'stat', tint:'#b0304f', desc:'데미지 ×1.35 · 대신 상점 가격 +40%', fl:'정품 인증 실패', add:p=>p.pirate=true, mul:p=>p.damage*=1.35},
+  {id:'cursed_file',   name:'저주받은 파일', axis:'util', tint:'#b0304f', desc:'적이 비트를 2배로 떨굼 · 대신 적 탄이 15% 빨라짐', fl:'열지 말라고 했잖아', add:p=>p.cursedFile=true},
+  {id:'god_patch',     name:'갓 모드 패치', axis:'util', tint:'#ffcf4a', desc:'몹이 있는 방에 들어가면 2초 무적 · 대신 백업 파일 회복이 절반', fl:'iddqd 체험판', add:p=>p.godPatch=true},
 ];
 // 액티브 = 칸 수 (아이작처럼 몹이 나와 문이 잠긴 방을 깰 때마다 한 칸). 예전 게이지 값(30~100)을 칸으로 바꿈
-const ACT_CH = {hotkey:1, screenshot:2, ban_hammer:2, teleport:2, bullet_cash:2, empty_trash:3, clipboard:3, ctrl_z:3, timestop:3,
+const ACT_CH = {ctrl_alt_del:6, overdrive:3, beam_cutter:2, hourglass:3, firewall_gen:4, backup_restore:4, bomb_rain:2, keygen_exe:2, raid_call:2, dice_gamble:2, f5_refresh:3, disk_cleanup:2, hotkey:1, screenshot:2, ban_hammer:2, teleport:2, bullet_cash:2, empty_trash:3, clipboard:3, ctrl_z:3, timestop:3,
   zip_bomb_act:4, god_mode_lite:4, red_storm:4, monsoon:4, whirlwind:4, killtask:4, copy_paste:6, hard_reset:6, reroll:6, reroll_all:6};
 ITEMS.forEach(i => { if (i.axis === 'active') i.cost = ACT_CH[i.id] ?? Math.max(1, Math.round(i.cost / 25)); });
 const ITEM = Object.fromEntries(ITEMS.map(i => [i.id, i]));
 // 세트(아이작 변신): 같은 세트 템 3개(서로 다른 것)를 모으면 변신 — 효과는 computeProfile 에서
-const SET_OF = {split_bug:'bug', corrupt_data:'bug', bug_swarm:'bug', bug_report:'bug', cloud_upload:'cloud', cloud_sync:'cloud', edge_server:'cloud', helper_bot:'bot', mini_kai:'bot', shield_bot:'bot', pickup_drone:'bot', bomb_drone:'bot', heal_bot:'bot', cat_gif:'bot', overclock:'oc', overheat:'oc', energy_drink:'oc', gaming_mouse:'oc', turbo:'oc', cache_hit:'oc', liquid_nitro:'oc', memory_slot:'tank', server_rack:'tank', ups:'tank', virtual_memory:'tank', spare_power:'tank', anti_dmg:'tank', debug_mode:'hack', source_leak:'hack', sitemap:'hack', master_key:'hack', kill_process:'hack', root_access:'hack', lucky_dice:'luck', lucky_packet:'luck', wallet:'luck', miner:'luck', clover:'luck', gold_member:'luck', tamagotchi:'bot', multitap:'bot', vpn:'hack', dark_web:'hack', coupon:'luck', one_plus_one:'luck', usb3:'oc'};
+const SET_OF = {laser_mouse:'bot', sniper_bot:'bot', fire_bot:'bot', ice_bot:'bot', turret_pet:'bot', clone_bug:'bug', raid_call:'bug', piggy_bank:'luck', dice_gamble:'luck', lunchbox:'tank', fried_chicken:'tank', rootkit:'hack', black_contract:'hack', split_bug:'bug', corrupt_data:'bug', bug_swarm:'bug', bug_report:'bug', cloud_upload:'cloud', cloud_sync:'cloud', edge_server:'cloud', helper_bot:'bot', mini_kai:'bot', shield_bot:'bot', pickup_drone:'bot', bomb_drone:'bot', heal_bot:'bot', cat_gif:'bot', overclock:'oc', overheat:'oc', energy_drink:'oc', gaming_mouse:'oc', turbo:'oc', cache_hit:'oc', liquid_nitro:'oc', memory_slot:'tank', server_rack:'tank', ups:'tank', virtual_memory:'tank', spare_power:'tank', anti_dmg:'tank', debug_mode:'hack', source_leak:'hack', sitemap:'hack', master_key:'hack', kill_process:'hack', root_access:'hack', lucky_dice:'luck', lucky_packet:'luck', wallet:'luck', miner:'luck', clover:'luck', gold_member:'luck', tamagotchi:'bot', multitap:'bot', vpn:'hack', dark_web:'hack', coupon:'luck', one_plus_one:'luck', usb3:'oc'};
 const SETS = {
   bug:   {name:'버그 군단', col:'#b45cff', desc:'비행 · 맞을 때마다 아군 벌레 2마리 · 처치 시 아군 벌레'},
   cloud: {name:'클라우드 네이티브', col:'#bfe8ff', desc:'비행 · 탄 +1 · 데미지 ×1.25'},
@@ -659,19 +705,20 @@ const META = {
   recycle_bin:[0,'drop','shop'], captcha:[0,'drop','treasure'], dark_mode:[0,'drop','secret'], trial_ver:[1,'shop','treasure'], cookie:[0,'drop','shop'], terms:[0,'drop','secret','shop'], beta_badge:[0,'drop','treasure'],
   ad_popup:[0,'drop','secret','shop'], loading_icon:[0,'drop','treasure'], update_alert:[0,'drop','shop','secret'], mouse_accel:[1,'drop','treasure','secret'], legacy_code:[1,'treasure','secret','drop'], empty_folder:[0,'drop','secret','treasure'],
   whirlwind:[3], red_storm:[3], monsoon:[3], reroll:[3,'treasure','shop'], reroll_all:[2,'treasure','secret'], timestop:[2,'treasure','shop'], killtask:[3,'treasure','secret'], teleport:[1,'shop','secret','drop'], bullet_cash:[1,'shop','drop'],
+  piggy_bank:[2,'treasure','shop'], keyring_bot:[1,'shop','treasure'], bomb_factory:[1,'shop','treasure'], patch_vendor:[1,'shop','drop'], backup_pet:[2,'treasure','shop'], firewall_pet:[2,'treasure','shop'], laser_mouse:[4,'treasure','secret'], thunder_cloud:[3,'treasure','secret'], sniper_bot:[3,'treasure','shop'], fire_bot:[2,'treasure','drop'], ice_bot:[2,'treasure','drop'], cursor_pet:[2,'treasure','drop'], scout_drone:[1,'shop','treasure'], decoy_doll:[1,'shop','drop'], disc_orb:[2,'treasure','shop'], charge_sat:[1,'shop','treasure'], clone_bug:[2,'treasure','drop'], turret_pet:[3,'treasure','shop'], spyware:[0,'drop','secret'], trail_bot:[2,'treasure','drop'], ctrl_alt_del:[4,'secret','treasure'], overdrive:[3,'treasure','shop'], beam_cutter:[3,'treasure','drop'], hourglass:[3,'treasure','shop'], firewall_gen:[2,'shop','treasure'], backup_restore:[3,'shop','treasure'], bomb_rain:[1,'drop','shop'], keygen_exe:[1,'shop','drop'], raid_call:[2,'treasure','drop'], dice_gamble:[2,'shop','drop'], f5_refresh:[1,'drop','secret'], disk_cleanup:[1,'drop','shop'], cup_ramen:[3,'boss','shop'], energy_bar:[2,'boss','drop','shop'], pizza:[2,'boss','drop'], coffee:[2,'boss','shop','drop'], candy_bag:[2,'drop','shop'], lunchbox:[2,'boss','shop'], protein:[3,'boss','treasure'], fried_chicken:[2,'boss','drop'], rootkit:[4,'secret','treasure'], black_contract:[3,'secret','treasure'], pirate_soft:[3,'secret','shop'], cursed_file:[2,'secret','drop'], god_patch:[3,'secret','treasure'],
 };
-const TIER = {'core_upgrade':'S','safe_mode':'S','reroll':'S','quad_core':'S','red_noise':'S','clean_aura':'S','full_upgrade':'S','mini_kai':'S','dark_web':'S','dual_core':'A+','homing_pixel':'A+','shredder':'A','dodge_patch':'A','tri_shot':'A','giant_pixel':'A','refactor':'A','cloud_upload':'A','gps':'A','anti_dmg':'A','cache_hit':'A','backup_shard':'A','zip_bomb_act':'A','turbo':'A','ram_up':'A','pixel_bomb':'A','lighter':'A','autosave':'A','god_mode_lite':'A','killtask':'A','liquid_nitro':'A','timestop':'A','spam_filter':'A','overload':'A','pierce_bit':'A','laser_pointer':'A','firewall_sat':'A','mirror_orb':'A','empty_folder':'A','dup_file':'A','root_access':'A','frame_drop':'A-','deleted_heart':'A-','ransomware':'A-','debug_mode':'A-','nine_backup':'A-','multitap':'A-','close_packet':'A-','steam_sale':'A-','cat_gif':'A-','auto_backup':'A-','trojan_gift':'A-','mega_bomb':'A-','empty_trash':'A-','ban_hammer':'A-','ctrl_z':'A-','worm_virus':'A-','rgb_light':'A-','memory_slot':'A-','server_rack':'A-','ping_sat':'B+','shield_bot':'B+','return_cursor':'B+','split_bug':'B+','stack_overflow':'B+','energy_drink':'B+','overheat':'B+','analog_stick':'B+','miner':'B+','freeze_frame':'B+','firewall_dash':'B+','red_storm':'B+','monsoon':'B+','whirlwind':'B+','homing_bomb':'B+','hot_bomb':'B+','charger':'B+','garbage_collector':'B+','hit_charge':'B+','tamagotchi':'B','debugger':'B','cpu_upgrade':'B','minor_update':'B','kill_process':'B','defrag':'B','back_door':'B','reflect_frame':'B','corrupt_data':'B','fast_render':'B','todo':'B','force_restart':'B','overclock':'B','hotfix':'B','firewall_v2':'B','ssd_swap':'B','scope':'B','thick_cable':'B','ups':'B','heatsink':'B','spare_power':'B','gaming_mouse':'B','mech_keyboard':'B','clean_install':'B','virtual_memory':'B','ping999':'B','lucky_packet':'B','dash_driver':'B','bomb_pack':'B','dark_mode':'B','helper_bot':'B','bomb_drone':'B','heal_bot':'B','bug_swarm':'B','data_leak':'B','ignite_shot':'B','fear_packet':'B','wrap_packet':'B','cloud_sync':'B','exp_build':'B','loot_bag':'B','clover':'B','gold_member':'B','ghost_file':'B','sandbox':'B','coupon':'B','one_plus_one':'B','usb3':'B','hotkey':'B','ram_packet':'B','copy_paste':'B','reroll_all':'B','bullet_cash':'B','lucky_dice':'B','master_key':'B','memory_reclaim':'B','edge_server':'B','pickup_drone':'B','cross_bomb':'B','vpn':'B','blade_cursor':'B-','cool_orb':'B-','slow_render':'B-','grow_buffer':'B-','antivirus':'B-','dual_monitor':'B-','hd_texture':'B-','fiber':'B-','cooling_fan':'B-','wallet':'B-','sitemap':'B-','source_leak':'B-','bug_report':'B-','trash_hat':'B-','undo_history':'B-','recycle_mark':'B-','search_engine':'B-','reflect_film':'B-','screenshot':'B-','hard_reset':'C','clipboard':'C','while_true':'C','latency':'C','loading_icon':'C','mouse_accel':'C','bridge_cable':'C','panic_mode':'C','screensaver':'C','recycle_bin':'C','trial_ver':'C','cookie':'C','terms':'C','beta_badge':'C','light_packet':'C','ad_block':'C','teleport':'C','driver_error':'C','update_alert':'C','cache_miss':'C','legacy_code':'C','missing_no':'D','random_seed':'D','captcha':'D','cross_cable':'D','ad_popup':'F'};
+const TIER = {'core_upgrade':'S','safe_mode':'S','reroll':'S','quad_core':'S','red_noise':'S','clean_aura':'S','full_upgrade':'S','mini_kai':'S','dark_web':'S','ctrl_alt_del':'S','rootkit':'S','dual_core':'A+','homing_pixel':'A+','laser_mouse':'A+','shredder':'A','dodge_patch':'A','tri_shot':'A','giant_pixel':'A','refactor':'A','cloud_upload':'A','gps':'A','anti_dmg':'A','cache_hit':'A','backup_shard':'A','zip_bomb_act':'A','turbo':'A','ram_up':'A','pixel_bomb':'A','lighter':'A','autosave':'A','god_mode_lite':'A','killtask':'A','liquid_nitro':'A','timestop':'A','spam_filter':'A','overload':'A','pierce_bit':'A','laser_pointer':'A','firewall_sat':'A','mirror_orb':'A','empty_folder':'A','dup_file':'A','root_access':'A','thunder_cloud':'A','sniper_bot':'A','overdrive':'A','beam_cutter':'A','black_contract':'A','protein':'A','hourglass':'A','frame_drop':'A-','deleted_heart':'A-','ransomware':'A-','debug_mode':'A-','nine_backup':'A-','multitap':'A-','close_packet':'A-','steam_sale':'A-','cat_gif':'A-','auto_backup':'A-','trojan_gift':'A-','mega_bomb':'A-','empty_trash':'A-','ban_hammer':'A-','ctrl_z':'A-','worm_virus':'A-','rgb_light':'A-','memory_slot':'A-','server_rack':'A-','backup_restore':'A-','pirate_soft':'A-','cup_ramen':'A-','turret_pet':'A-','god_patch':'A-','ping_sat':'B+','shield_bot':'B+','return_cursor':'B+','split_bug':'B+','stack_overflow':'B+','energy_drink':'B+','overheat':'B+','analog_stick':'B+','miner':'B+','freeze_frame':'B+','firewall_dash':'B+','red_storm':'B+','monsoon':'B+','whirlwind':'B+','homing_bomb':'B+','hot_bomb':'B+','charger':'B+','garbage_collector':'B+','hit_charge':'B+','fire_bot':'B+','ice_bot':'B+','raid_call':'B+','cursed_file':'B+','cursor_pet':'B+','tamagotchi':'B','debugger':'B','cpu_upgrade':'B','minor_update':'B','kill_process':'B','defrag':'B','back_door':'B','reflect_frame':'B','corrupt_data':'B','fast_render':'B','todo':'B','force_restart':'B','overclock':'B','hotfix':'B','firewall_v2':'B','ssd_swap':'B','scope':'B','thick_cable':'B','ups':'B','heatsink':'B','spare_power':'B','gaming_mouse':'B','mech_keyboard':'B','clean_install':'B','virtual_memory':'B','ping999':'B','lucky_packet':'B','dash_driver':'B','bomb_pack':'B','dark_mode':'B','helper_bot':'B','bomb_drone':'B','heal_bot':'B','bug_swarm':'B','data_leak':'B','ignite_shot':'B','fear_packet':'B','wrap_packet':'B','cloud_sync':'B','exp_build':'B','loot_bag':'B','clover':'B','gold_member':'B','ghost_file':'B','sandbox':'B','coupon':'B','one_plus_one':'B','usb3':'B','hotkey':'B','ram_packet':'B','copy_paste':'B','reroll_all':'B','bullet_cash':'B','lucky_dice':'B','master_key':'B','memory_reclaim':'B','edge_server':'B','pickup_drone':'B','cross_bomb':'B','vpn':'B','piggy_bank':'B','backup_pet':'B','firewall_pet':'B','disc_orb':'B','clone_bug':'B','trail_bot':'B','firewall_gen':'B','dice_gamble':'B','energy_bar':'B','pizza':'B','coffee':'B','candy_bag':'B','lunchbox':'B','fried_chicken':'B','blade_cursor':'B-','cool_orb':'B-','slow_render':'B-','grow_buffer':'B-','antivirus':'B-','dual_monitor':'B-','hd_texture':'B-','fiber':'B-','cooling_fan':'B-','wallet':'B-','sitemap':'B-','source_leak':'B-','bug_report':'B-','trash_hat':'B-','undo_history':'B-','recycle_mark':'B-','search_engine':'B-','reflect_film':'B-','screenshot':'B-','keyring_bot':'B-','bomb_factory':'B-','scout_drone':'B-','decoy_doll':'B-','charge_sat':'B-','hard_reset':'C','clipboard':'C','while_true':'C','latency':'C','loading_icon':'C','mouse_accel':'C','bridge_cable':'C','panic_mode':'C','screensaver':'C','recycle_bin':'C','trial_ver':'C','cookie':'C','terms':'C','beta_badge':'C','light_packet':'C','ad_block':'C','teleport':'C','driver_error':'C','update_alert':'C','cache_miss':'C','legacy_code':'C','patch_vendor':'C','bomb_rain':'C','keygen_exe':'C','f5_refresh':'C','disk_cleanup':'C','missing_no':'D','random_seed':'D','captcha':'D','cross_cable':'D','spyware':'D','ad_popup':'F'};
 // 티어 (아이작 티어표 비율 — S 4.7 · A+ 1.3 · A 16 · A- 10.6 · B+ 10.5 · B 32 · B- 10.5 · C 11.5 · D 2.3 · F 0.6 %)
 // q = 예전 품질(Q0~Q4) 자리 — 황금방 · 치트 콘솔 비용 등에서 씀. w = 뽑힐 가중치 (등장 비율이 위 비율에 맞게 시뮬로 맞춤)
 const TIER_INFO = {
-  'S':{q:4, w:1,    col:'#ff7f7f', d:'판도를 바꿈 — 이것 하나로 런이 달라짐'},
+  'S':{q:4, w:1.15,    col:'#ff7f7f', d:'판도를 바꿈 — 이것 하나로 런이 달라짐'},
   'A+':{q:4, w:1.8, col:'#ffbf7f', d:'혼자서도 매우 강하고 조합하면 더 강해짐'},
   'A':{q:3, w:1,    col:'#ffdf7f', d:'큰 위험 없이 확실히 좋음'},
-  'A-':{q:3, w:1.1, col:'#ffff7f', d:'좋지만 조건이나 위험이 따름'},
+  'A-':{q:3, w:1, col:'#ffff7f', d:'좋지만 조건이나 위험이 따름'},
   'B+':{q:2, w:1.1, col:'#bfff7f', d:'조합 · 상황이 맞으면 좋음'},
   'B':{q:2, w:.8,   col:'#7fff7f', d:'무난하게 들고 감'},
   'B-':{q:1, w:1,   col:'#7fffff', d:'들긴 하는데 아쉬움'},
-  'C':{q:1, w:1.05, col:'#7fbfff', d:'상황 따라 안 먹는 게 나을 수도'},
+  'C':{q:1, w:1.12, col:'#7fbfff', d:'상황 따라 안 먹는 게 나을 수도'},
   'D':{q:0, w:1.9,  col:'#7f7fff', d:'먹으면 대개 손해'},
   'F':{q:0, w:.85,  col:'#ff7fff', d:'먹으면 판이 꼬임'},
 };
@@ -943,7 +990,7 @@ const COSTUME = {safe_mode:0, autosave:0, god_mode_lite:0, nine_backup:0, debug_
   gps:2, sitemap:2, search_engine:2, source_leak:2, ping_sat:2, vpn:2, gold_member:3, full_upgrade:3, core_upgrade:3, cat_gif:4,
   mouse_accel:5, cooling_fan:5, energy_drink:5, overclock:6, gaming_mouse:6, mech_keyboard:6, liquid_nitro:6, lucky_packet:7, clover:7, one_plus_one:7, lucky_dice:7,
   scope:8, laser_pointer:8, edge_server:8, dual_monitor:8, debugger:9, refactor:9, clean_install:9,
-  dash_driver:10, firewall_dash:10, ram_packet:10, dodge_patch:10, shredder:11, reflect_film:11, anti_dmg:11};
+  rootkit:1, black_contract:1, pirate_soft:1, cursed_file:1, god_patch:0, scout_drone:2, dash_driver:10, firewall_dash:10, ram_packet:10, dodge_patch:10, shredder:11, reflect_film:11, anti_dmg:11};
 function costumes(){ // [머리, 얼굴, 등]
   const out = [null, null, null]; if (!G) return out;
   for (const it of G.items){ const f = COSTUME[it.id]; if (f == null) continue; out[f < 8 ? 0 : f < 10 ? 1 : 2] = f; }
@@ -1280,6 +1327,9 @@ function iconSheetV2(order, b64){ const im = new Image(); im.onload = () => orde
   const c = document.createElement('canvas'); c.width = c.height = 48; c.getContext('2d').drawImage(im, (j % 8)*48, Math.floor(j/8)*48, 48, 48, 0, 0, 48, 48);
   ICON[id] = {canvas:c, url:c.toDataURL(), big:true, v2:true}; }); im.src = /^(data:|a\/|https?:)/.test(b64) ? b64 : 'data:image/webp;base64,' + b64; }
 /*ICON_V2*/
+/*V2S15*/iconSheetV2(['cup_ramen','energy_bar','pizza','coffee','candy_bag','lunchbox','protein','fried_chicken','rootkit','black_contract','pirate_soft','cursed_file','god_patch'], 'a/bd3471c652.webp');
+/*V2S14*/iconSheetV2(['clone_bug','turret_pet','spyware','trail_bot','ctrl_alt_del','overdrive','beam_cutter','hourglass','firewall_gen','backup_restore','bomb_rain','keygen_exe','raid_call','dice_gamble','f5_refresh','disk_cleanup'], 'a/4c7438d2f2.webp');
+/*V2S13*/iconSheetV2(['piggy_bank','keyring_bot','bomb_factory','patch_vendor','backup_pet','firewall_pet','laser_mouse','thunder_cloud','sniper_bot','fire_bot','ice_bot','cursor_pet','scout_drone','decoy_doll','disc_orb','charge_sat'], 'a/e96c99e2f9.webp');
 /*V2S12*/iconSheetV2(['whirlwind','reroll','reroll_all','timestop','killtask','teleport','bullet_cash'], 'a/e4f7c739c9.webp');
 /*V2S11*/iconSheetV2(['usb3','rgb_light','ransomware','missing_no','clipboard','hotkey','dodge_patch','firewall_dash','ram_packet','ctrl_z','copy_paste','screenshot','ban_hammer','god_mode_lite','red_storm','monsoon'], 'a/40bcc06215.webp');
 /*V2S10*/iconSheetV2(['recycle_mark','deleted_heart','backup_shard','zip_bomb_act','hard_reset','empty_trash','coupon','one_plus_one','vpn','dark_web','charger','reflect_film','tamagotchi','search_engine','ad_block','multitap'], 'a/4220f3c657.webp');
@@ -1842,7 +1892,7 @@ function freshState(seed, cid){
     gauge:0, ult:0, cutin:0,
     projs:[], ebul:[], enemies:[], beams:[], fxs:[], parts:[], bolts:[], nums:[], toasts:[], bombList:[],
     shake:0, hitstop:0, lastHitstop:-99, freeze:0, kills:0, ended:false, endTimer:0, lootRng:null,
-    log:{runId:Math.random().toString(36).slice(2,10), gameVersion:'alpha-0.8.1', // 플레이데이터 구분용 — 밸런스 크게 바꿀 때마다 올림 (0.6.5: 봇 측정 밸런스 · 시너지 · 방 클리어 충전) character:cid, seed, result:null, startedAt:Date.now(), durationMs:0,
+    log:{runId:Math.random().toString(36).slice(2,10), gameVersion:'alpha-0.9', // 플레이데이터 구분용 — 밸런스 크게 바꿀 때마다 올림 (0.6.5: 봇 측정 밸런스 · 시너지 · 방 클리어 충전) character:cid, seed, result:null, startedAt:Date.now(), durationMs:0,
          floor:1, endFloor:prog.ch * 2, items:[], rooms:[], bossKills:[], bossKillMs:null, kills:0, secretFound:false, bought:[], cheatDeals:0, patches:[], cards:[], actives:[], resumed:0},
   };
 }
@@ -2035,7 +2085,7 @@ function spawnRoomEnemies(room){
 }
 function enterRoom(room, fromDir){
   const p = G.player;
-  G.room = room; G.enemies = [];
+  G.room = room; G.enemies = []; G.allyTur = null;
   G.projs = []; G.ebul = []; G.beams = []; G.fxs = []; G.parts = []; G.bolts = []; G.nums = []; G.toasts = []; G.bombList = [];
   p.charge = 0; p.charging = false;
   if (fromDir){
@@ -2054,7 +2104,10 @@ function enterRoom(room, fromDir){
     if (G.prof.recycle && (G.debuff.rev > 0 || G.debuff.slow > 0)){ G.debuff.rev = 0; G.debuff.slow = 0; toast('휴지통 비움 — 나쁜 효과 해제', '#9aa0b8'); }
     if (G.prof.alert && G.player.hp < G.player.maxHp && fx() < .08){ G.player.hp = Math.min(G.player.maxHp, G.player.hp + 10); toast('회복 알림 — HP +10', '#ff8a5c'); sfx('heal'); }
     G.log.rooms.push({floor:G.floorNo, index:room.index, type:room.type, enteredMs:ms(), clearedMs:null, damageTaken:0});
-    if (!room.cleared){ spawnRoomEnemies(room); G.freeze = 24; }
+    if (!room.cleared){ spawnRoomEnemies(room); G.freeze = 24;
+      if (G.enemies.length){ const fm = G.prof.fams; if (fm.includes('clone_bug')) spawnAlly(p.x, p.y, 2 * fm.filter(f => f === 'clone_bug').length);
+        if (fm.includes('turret_pet')){ const s0 = freeTileNear(W/2, H/2); G.allyTur = {x:s0.x, y:s0.y, t:480, cd:30}; }
+        if (G.prof.godPatch){ p.inv = Math.max(p.inv, 120); toast('갓 모드 패치 — 2초 무적', '#ffcf4a', p.x, p.y - 24); } } }
     if (room.type === 'shop') toast('PATCH SERVER', '#7dffd9', W/2, IY0 + 30);
     if (room.type === 'secret') toast('숨겨진 방', '#c77dff', W/2, IY0 + 30);
     if (ROOM_NAME[room.type] && !FIGHT_ROOMS.has(room.type)) toast(ROOM_NAME[room.type] + (ROOM_DESC[room.type] ? ' — ' + ROOM_DESC[room.type] : ''), ROOM_COL[room.type], W/2, IY0 + 30);
@@ -2124,6 +2177,9 @@ function onRoomCleared(){
   if (room.rewarded) return;
   room.rewarded = true;
   addGauge(1); // 몹이 나와 잠긴 방을 깨면 한 칸 (보스방 포함)
+  { const GEN = {piggy_bank:[2, 'bit'], keyring_bot:[4, 'key'], bomb_factory:[4, 'bomb'], patch_vendor:[5, 'patch'], backup_pet:[5, 'heal'], firewall_pet:[4, 'shield']}, gn = (G.genN ||= {}), pp = G.player;
+    G.prof.fams.forEach((f, i) => { const g = GEN[f]; if (!g) return; gn[f + i] = (gn[f + i] || 0) + 1; if (gn[f + i] % g[0] === 0){ const st = G.famSt && G.famSt[i]; scatter(g[1], 1, st ? st.x : pp.x, st ? st.y : pp.y); } });
+    if (G.prof.fams.includes('spyware')){ if (G.res.bit > 0){ G.res.bit--; toast('스파이웨어가 비트 1개를 가져감', '#8a8fb2', pp.x, pp.y - 24); } if (G.lootRng() < .15) scatter('card', 1, pp.x, pp.y); } }
   const rl = roomLog(); if (rl) rl.clearedMs = ms();
   if (room.type === 'boss'){
     G.log.bossKills.push({floor:G.floorNo, ms:ms()}); sfx('bossdie'); secEvent('bosses');
@@ -2245,7 +2301,7 @@ function ambush(x, y, kinds){
 
 /* ---------- pickups ---------- */
 // 수호 펫 (아이작 궤도 펫처럼): 내 둘레를 돌거나 곁을 지키며 탄을 막거나 특수 효과. 모두 합쳐 3칸 — 꽉 찬 채로 새로 먹으면 가장 먼저 먹은 수호 펫을 내려놓음
-const GUARD_SLOTS = {bug_swarm:2, firewall_sat:1, ping_sat:1, shield_bot:1, blade_cursor:1, mirror_orb:1, cool_orb:1}, GUARD_CAP = 3;
+const GUARD_SLOTS = {disc_orb:1, charge_sat:1, decoy_doll:1, bug_swarm:2, firewall_sat:1, ping_sat:1, shield_bot:1, blade_cursor:1, mirror_orb:1, cool_orb:1}, GUARD_CAP = 3;
 const guardUsed = () => G.items.reduce((t, it) => t + (GUARD_SLOTS[it.id] || 0), 0);
 function guardMake(newIt, x, y){
   let used = guardUsed(), k = 0;
@@ -2367,7 +2423,7 @@ function tryCollect(pk){
     case 'bomb': R.bomb++; sfx('get'); toast('+글리치 폭탄', '#c77dff'); break;
     case 'heal':
       if (p.hp >= p.maxHp && !pk.price){ toast('HP 가득 — 나중에 먹자', '#8a8fb2', pk.x, pk.y - 16); lootLearn('heal'); return false; }
-      p.hp = Math.min(p.maxHp, p.hp + TUNE.healAmt); sfx('heal'); toast('+' + TUNE.healAmt + ' HP', '#ff6f8a'); break;
+      { const ha = TUNE.healAmt * (G.prof.godPatch ? .5 : 1); p.hp = Math.min(p.maxHp, p.hp + ha); sfx('heal'); toast('+' + ha + ' HP', '#ff6f8a'); } break;
     case 'shield':
       if (p.shield >= TUNE.maxShield && !pk.price){ toast('방화벽 가득', '#8a8fb2', pk.x, pk.y - 16); return false; }
       p.shield = Math.min(TUNE.maxShield, p.shield + TUNE.shieldAmt); sfx('shield'); toast('+' + TUNE.shieldAmt + ' 방화벽', '#3fe3ff'); break;
@@ -2482,6 +2538,12 @@ function usePatch(c){
   showBanner(P.name, P.desc, codexAdd('patch', P.id));
   sfx('patch'); setTimeout(() => sfx(P.good >= 1 ? 'good' : P.good > 0 ? 'get' : 'bad'), 260);
 }
+function rmTerrain(){ // 방의 바위 · 더미 · 블록 전부 지움 (낭떠러지 · 패널 · 블랙아웃 벽은 그대로)
+  const R = G.room;
+  for (const k of [...R.rocks]){ const [c, r] = k.split(',').map(Number), cx = T + c*T + T/2, cy = T + r*T + T/2; R.rocks.delete(k); (R.rubble ||= []).push({c, r}); burst(cx, cy, '#555b80', 8, 2); if (R.cracked.has(k)){ R.cracked.delete(k); crackLoot(cx, cy); } }
+  if (R.tiles) for (const [k, t] of [...R.tiles]){ if (t.t === '^' || t.t === '~' || t.t === 'W') continue; const [c, r] = k.split(',').map(Number), cx = T + c*T + T/2, cy = T + r*T + T/2; if (t.t === 'p' || t.t === 'g') breakTile(k, t, cx, cy); else { R.tiles.delete(k); burst(cx, cy, '#8a8fb2', 8, 2); } }
+  G.flow = null; G.shake = 10;
+}
 function useCard(id){
   const p = G.player; G.log.cards.push(id); secEvent('cards');
   sfx('carduse'); burst(p.x, p.y - 6, '#8affc1', 16, 2.4);
@@ -2502,7 +2564,8 @@ function useCard(id){
     case 'wget': G.res.bomb += 3; break;
     case 'shuffle': rerollRoom(); break;
     case 'charge': addGauge(6); break;
-    case 'rmrf': {
+    case 'rmrf': rmTerrain(); break;
+    case 'rmrf_old': {
       const R = G.room;
       for (const k of [...R.rocks]){ const [c, r] = k.split(',').map(Number), cx = T + c*T + T/2, cy = T + r*T + T/2; R.rocks.delete(k); (R.rubble ||= []).push({c, r}); burst(cx, cy, '#555b80', 8, 2); if (R.cracked.has(k)){ R.cracked.delete(k); crackLoot(cx, cy); } }
       if (R.tiles) for (const [k, t] of [...R.tiles]){ if (t.t === '^' || t.t === '~' || t.t === 'W') continue; const [c, r] = k.split(',').map(Number), cx = T + c*T + T/2, cy = T + r*T + T/2; if (t.t === 'p' || t.t === 'g'){ breakTile(k, t, cx, cy); } else { R.tiles.delete(k); burst(cx, cy, '#8a8fb2', 8, 2); } }
@@ -2552,6 +2615,7 @@ function dealHit(e, dmg, src, nx, ny, gate, noGauge){
   }
   if (src && G.prof.defrag){ G.defragN = G.lastHitE === e ? Math.min(6, (G.defragN || 0) + 1) : 0; G.lastHitE = e; dmg *= 1 + .1 * G.defragN; }
   if (src && G.buff.trash > 0) dmg *= 1 + (G.trashBonus || 0);
+  if (src && G.buff.od > 0) dmg *= 1.2;
   if (G.prof.adBlock && e.type === 'popup') dmg *= 3;
   if (e.kind === 'freeze' && e.state === 'frozen'){ dmg *= .5; if (G.frame % 20 === 0) toast('얼어 있어서 잘 안 들어감', '#9fd8ff', e.x, e.y - e.r - 8); }
   e.hp -= dmg; e.flash = 3;
@@ -2560,6 +2624,8 @@ function dealHit(e, dmg, src, nx, ny, gate, noGauge){
   const n = Math.hypot(nx, ny) || 1; e.kx += nx/n*kb; e.ky += ny/n*kb;
   if (opts.dmgNums) G.nums.push({x:e.x, y:e.y - e.r, v:dmg, life:30});
   sfx('hit');
+  if (src && src.petFx === 'burn'){ e.burn = Math.min(5, (e.burn || 0) + 1); e.burnT = 150; }
+  if (src && src.petFx === 'ice' && e.type !== 'boss' && fx() < .3){ e.stun = Math.max(e.stun || 0, 40); e.iceT = 40; }
   if (src && G.prof.burn > 0 && G.frame - (e.burnAdd ?? -99) >= 8){ e.burnAdd = G.frame; e.burn = Math.min(5, (e.burn || 0) + 1); e.burnT = 150; }
   if (src && !src.noProc){ const P2 = G.prof;
     if (P2.ignite && fx() < P2.ignite){ explode(e.x, e.y, 22, dmg * .6, {noProc:true}, false); e.burn = Math.min(5, (e.burn || 0) + 2); e.burnT = 150; }
@@ -2817,7 +2883,7 @@ function step(){
   } else {
     p.charging = false;
     if (p.fireCd > 0) p.fireCd--;
-    if (sd && p.fireCd <= 0){ if (fire(sd)) p.fireCd = P.fireDelay * (P.boom ? 1.5 : 1); }
+    if (sd && p.fireCd <= 0){ if (fire(sd)) p.fireCd = P.fireDelay * (P.boom ? 1.5 : 1) * (G.buff.od > 0 ? .5 : 1); }
   }
 
   updateProjectiles();
@@ -2893,6 +2959,23 @@ function useActive(){
     case 'empty_trash': ok = emptyTrash(); break;
     case 'clipboard': ok = clipCopy(); break;
     case 'hotkey': ok = hotkeyBlink(); break;
+    case 'ctrl_alt_del': { const live = G.enemies.filter(e => !e.dead && e.type !== 'boss'); if (!live.length){ toast('끝낼 작업이 없다', '#8a8fb2'); ok = false; break; } for (const e of live){ if (e.spawnT > 0) e.spawnT = 0; dealHit(e, e.hp + 999, null, e.x - p.x, e.y - p.y, 6, true); } p.hp = Math.max(1, p.hp - 10); G.shake = 14; sfx('ult'); break; }
+    case 'overdrive': G.buff.od = 480; sfx('ult'); break;
+    case 'beam_cutter': { const d = aimDir(), a = Math.atan2(d.y, d.x); G.beams.push({a, cur:a, life:40, max:40, tick:0, boomT:0, mul:4}); G.shake = 8; sfx('beam'); break; }
+    case 'hourglass': G.buff.slowmo = 360; sfx('timestop'); break;
+    case 'firewall_gen': if (p.shield >= TUNE.maxShield){ toast('방화벽 가득', '#8a8fb2'); ok = false; } else { p.shield = Math.min(TUNE.maxShield, p.shield + 40); sfx('shieldhit'); } break;
+    case 'backup_restore': if (p.hp >= p.maxHp){ toast('HP 가득', '#8a8fb2'); ok = false; } else { p.hp = Math.min(p.maxHp, p.hp + 30); sfx('heal'); } break;
+    case 'bomb_rain': for (let i = 0; i < 3; i++){ const a = i*TAU/3 + G.frame*.01; const o = {x:p.x + Math.cos(a)*38, y:p.y + Math.sin(a)*32, r:5}; clampInner(o); G.bombList.push({x:o.x, y:o.y, t:70, noSelf:true, free:true}); } break;
+    case 'keygen_exe': G.res.key++; sfx('key'); break;
+    case 'raid_call': spawnAlly(p.x, p.y, 4); break;
+    case 'dice_gamble': { const k = Math.floor(G.lootRng()*6); const R = G.res;
+      if (k === 0){ R.bit += 10; toast('⚀ 비트 +10', '#ffcf4a'); } else if (k === 1){ R.bomb += 2; toast('⚁ 폭탄 +2', '#c77dff'); } else if (k === 2){ R.key += 2; toast('⚂ 키 +2', '#ffe68a'); }
+      else if (k === 3){ p.hp = Math.min(p.maxHp, p.hp + 20); toast('⚃ HP +20', '#ff6f8a'); } else if (k === 4){ p.shield = Math.min(TUNE.maxShield, p.shield + 20); toast('⚄ 방화벽 +20', '#3fe3ff'); }
+      else { toast('⚅ …습격!', '#ff3d5e'); ambush(p.x, p.y, G.floorNo >= 3 ? ['slime', 'bug', 'bug', 'spinner'] : ['slime', 'bug', 'bug']); } break; }
+    case 'f5_refresh': { const live = G.enemies.filter(e => !e.dead && e.type !== 'boss' && e.type !== 'mirror'); if (!live.length){ toast('바꿀 적이 없다', '#8a8fb2'); ok = false; break; }
+      const pool = Object.keys(ENC_POOL[Math.min(ENC_POOL.length - 1, chOf(G.floorNo))]);
+      G.enemies = G.enemies.filter(e => !live.includes(e)); for (const e of live){ const n = makeEnemy(pool[Math.floor(G.lootRng()*pool.length)], e.x, e.y); n.spawnT = 20; G.enemies.push(n); burst(e.x, e.y, '#9fe8ff', 8, 2); } break; }
+    case 'disk_cleanup': rmTerrain(); break;
   }
   if (!ok){ sfx('nope'); return; }
   G.gauge = Math.max(0, G.gauge - actCost()); G.log.actives.push(id);
@@ -2966,7 +3049,7 @@ function boxItem(id, x, y, src){
   if (d < 30 && p.hp > 0){ const k = (30 - d) / 30 * 4 + 1.5; p.vx += (d > 1 ? dx/d : 0)*k; p.vy += (d > 1 ? dy/d : 1)*k; }
 }
 const couponOK = pk => G.prof.coupon && pk.kind === 'item' && pk.source === 'shop' && G.couponFloor !== G.floorNo;
-const priceOf = pk => !pk.price ? 0 : couponOK(pk) ? 0 : Math.max(1, Math.ceil(pk.price * (G.prof.terms ? .75 : 1) * (G.prof.sale ? .5 : 1))); // 이용약관 동의 = 25% 할인
+const priceOf = pk => !pk.price ? 0 : couponOK(pk) ? 0 : Math.max(1, Math.ceil(pk.price * (G.prof.terms ? .75 : 1) * (G.prof.sale ? .5 : 1) * (G.prof.pirate ? 1.4 : 1))); // 이용약관 동의 = 25% 할인
 /* ---------- 2차: 소환수 · 궤도 · 아군 벌레 · 웅덩이 · 변신 ---------- */
 function tfCheck(){ // 새로 변신했으면 배너 + 한 번만 주는 보상
   if (G.prof.fams.length >= 3) secFlag('fam3');
@@ -2994,6 +3077,8 @@ function orbitList(){
   for (let i = 0; i < P.blade; i++){ const a = G.frame*.13 + i*TAU/P.blade + 1; out.push({x:p.x + Math.cos(a)*20, y:p.y - 4 + Math.sin(a)*17, r:4.5, dmg:Math.max(3, P.damage*1.3), k:'blade', id:'blade' + i, noBlock:true, ang:a}); }
   for (let i = 0; i < P.mirror; i++){ const a = -G.frame*.05 + i*TAU/P.mirror + 2; out.push({x:p.x + Math.cos(a)*31, y:p.y - 4 + Math.sin(a)*26, r:5.5, dmg:0, k:'mirror', id:'mirror' + i, cd:40}); }
   for (let i = 0; i < P.coolOrb; i++){ const a = G.frame*.035 + i*TAU/P.coolOrb + 3; out.push({x:p.x + Math.cos(a)*44, y:p.y - 4 + Math.sin(a)*37, r:4.5, dmg:0, k:'cool', id:'cool' + i, noBlock:true}); }
+  for (let i = 0; i < (P.disc || 0); i++){ const a = -G.frame*.055 + i*TAU/P.disc + 4; out.push({x:p.x + Math.cos(a)*34, y:p.y - 4 + Math.sin(a)*29, r:5, dmg:2.5, k:'disc', id:'disc' + i, cd:34}); }
+  for (let i = 0; i < (P.chargeSat || 0); i++){ const a = G.frame*.065 + i*TAU/P.chargeSat + 5; out.push({x:p.x + Math.cos(a)*27, y:p.y - 4 + Math.sin(a)*23, r:4.5, dmg:0, k:'csat', id:'csat' + i, cd:30}); }
   for (let i = 0; i < P.miniBots; i++){ const a = G.frame*.07 + i*Math.PI; out.push({x:p.x + Math.cos(a)*27, y:p.y - 4 + Math.sin(a)*23, r:3.5, dmg:1.6, k:'mbot', id:'mbot' + i}); }
   const cd = G.orbCd || {}; for (const o of out) o.tired = (cd[o.id] || 0) > G.frame;
   return out;
@@ -3009,6 +3094,7 @@ function famTick(){
     const s = st[i] ||= {x:p.x, y:p.y, cd:0, t:0};
     s.t++; if (s.cd > 0) s.cd--;
     const tr = G.trail[Math.max(0, G.trail.length - 1 - (i + 1)*11)] || p;
+    if (id === 'cursor_pet' && live){ const e = nearestEnemy(s.x, s.y, 170); if (e){ const dx = e.x - s.x, dy = e.y - s.y, d = Math.hypot(dx, dy) || 1; s.x += dx/d*2.8; s.y += dy/d*2.8; s.face = dx < 0; if (d < e.r + 6 && s.cd <= 0){ s.cd = 12; quietHit(e, 1.1 * P.famMul * (1 + (G.floorNo - 1)*.1)); burst(e.x, e.y - 4, '#f4f0ff', 3, 1.2); } return; } }
     if (id === 'cat_gif' && live){
       const e = nearestEnemy(s.x, s.y, 170);
       if (e){ const dx = e.x - s.x, dy = e.y - s.y, d = Math.hypot(dx, dy) || 1; s.x += dx/d*2.4; s.y += dy/d*2.4; s.face = dx < 0;
@@ -3030,11 +3116,20 @@ function famTick(){
       if (!['bit','key','bomb','heal','shield'].includes(pk.kind) || pk.price || pk.pop > 0 || (pk.kind === 'heal' && p.hp >= p.maxHp) || (pk.kind === 'shield' && p.shield >= TUNE.maxShield)) continue;
       const dx = p.x - pk.x, dy = p.y - pk.y, d = Math.hypot(dx, dy); if (d < 130 && d > 8){ pk.x += dx/d*1.6; pk.y += dy/d*1.6; }
     }
+    if (id === 'laser_mouse' && live && s.cd <= 0){ const e = nearestEnemy(s.x, s.y, 220); if (e){ const q = makeShot(Math.atan2(e.y - s.y, e.x - s.x), P, {x:s.x, y:s.y, vx:0, vy:0}, 'tear'); q.vx *= 1.7; q.vy *= 1.7; q.dmg = Math.max(3, P.damage*1.1) * P.famMul; q.r = q.r0 = 2.4; q.color = '#ff3d5e'; q.pierce = true; q.bounces = 0; G.projs.push(q); s.cd = 60; } }
+    if (id === 'thunder_cloud' && live && s.cd <= 0){ const e = nearestEnemy(s.x, s.y, 200); if (e){ G.bolts.push({x1:s.x, y1:s.y - 6, x2:e.x, y2:e.y, life:9}); dealHit(e, Math.max(3, P.damage*.9) * P.famMul, {chain:1, ang:0, noProc:true}, e.x - s.x, e.y - s.y, 6, true); s.cd = 72; } }
+    if (id === 'sniper_bot' && sd && s.cd <= 0){ const q = makeShot(Math.atan2(sd.y, sd.x), P, {x:s.x, y:s.y + 2, vx:0, vy:0}, 'tear'); q.vx *= 1.5; q.vy *= 1.5; q.dmg = Math.max(6, P.damage*3) * P.famMul; q.r = q.r0 = 4; q.color = '#7dffb0'; q.pierce = true; q.bounces = 0; G.projs.push(q); s.cd = 150; }
+    if ((id === 'fire_bot' || id === 'ice_bot' || id === 'scout_drone') && sd && s.cd <= 0){ const q = makeShot(Math.atan2(sd.y, sd.x), P, {x:s.x, y:s.y + 2, vx:0, vy:0}, 'tear'); q.dmg = (id === 'scout_drone' ? 2 : 3) * P.famMul; q.r = q.r0 = 2.6; q.color = id === 'fire_bot' ? '#ff7a2c' : id === 'ice_bot' ? '#9fd8ff' : '#c8ccdf'; q.pierce = false; q.bounces = 0; q.petFx = id === 'fire_bot' ? 'burn' : id === 'ice_bot' ? 'ice' : null; G.projs.push(q); s.cd = id === 'scout_drone' ? 34 : 26; }
+    if (id === 'scout_drone' && G.floor && !G.floor.scouted){ G.floor.scouted = true; G.floor.list.forEach(r => { if (['treasure', 'shop', 'boss'].includes(r.type)) r.seen = true; }); }
+    if (id === 'trail_bot' && live && s.t % 12 === 0) addCreep(s.x, s.y + 4, 10, 110, Math.max(.6, P.damage*.25), false);
+    if (id === 'decoy_doll' && !(s.cd > 0)) for (const b of G.ebul) if (b.life > 0 && Math.hypot(b.x - s.x, b.y - (s.y - 2)) < b.r + 8){ b.life = 0; burst(s.x, s.y - 2, '#ff6f8a', 5, 1.4); s.cd = 24; break; }
     if (id === 'bomb_drone' && live && s.t % 600 === 0){ const e = nearestEnemy(s.x, s.y); if (e){ G.bombList.push({x:e.x, y:e.y, t:45, noSelf:true}); toast('폭격!', '#c77dff', s.x, s.y - 12); } }
   });
+  if (G.allyTur){ const t = G.allyTur; if (--t.t <= 0) G.allyTur = null; else if (live && --t.cd <= 0){ const e = nearestEnemy(t.x, t.y, 260); if (e){ const q = makeShot(Math.atan2(e.y - t.y, e.x - t.x), P, {x:t.x, y:t.y - 4, vx:0, vy:0}, 'tear'); q.dmg = 2.6 * P.famMul * (1 + (G.floorNo - 1)*.1); q.r = q.r0 = 2.6; q.color = '#c8ccdf'; q.pierce = false; q.bounces = 0; G.projs.push(q); t.cd = 26; } } }
   // 궤도: 적 탄 막기 + 닿는 적 피해
   for (const o of orbitList()){
     if (!o.tired && !o.noBlock) for (const b of G.ebul) if (b.life > 0 && Math.hypot(b.x - o.x, b.y - o.y) < b.r + o.r){ b.life = 0; burst(o.x, o.y, '#c8ccdf', 3, 1); (G.orbCd ||= {})[o.id] = G.frame + (o.cd || (o.k === 'bug' ? 50 : 30)); o.tired = true;
+      if (o.k === 'csat'){ G.csatN = (G.csatN || 0) + 1; if (G.csatN % 4 === 0){ addGauge(1); toast('충전 +1', '#ffe14d', p.x, p.y - 22); } }
       if (o.k === 'mirror'){ const e = nearestEnemy(o.x, o.y), a = e ? Math.atan2(e.y - o.y, e.x - o.x) : Math.atan2(-b.vy, -b.vx), q = makeShot(a, P, {x:o.x, y:o.y, vx:0, vy:0}, 'tear'); q.dmg = Math.max(3, P.damage); q.color = '#bfe8ff'; q.pierce = false; q.bounces = 0; G.projs.push(q); burst(o.x, o.y, '#bfe8ff', 6, 1.6); }
       break; } // 하나 막으면 잠깐(벌레 0.8초) 못 막음
     if (o.dmg > 0) for (const e of G.enemies){ if (e.dead || e.spawnT > 0 || e.z > 8) continue;
@@ -3055,7 +3150,7 @@ function famTick(){
   // 데이터 센터: 닿는 적에게 피해 · 무적 모드: 닿는 적 피해
   if ((P.tankBody || G.buff.fast > 0) && G.frame % 8 === 0) for (const e of G.enemies){ if (e.dead || e.spawnT > 0 || e.z > 8) continue; if (Math.hypot(e.x - p.x, e.y - p.y) < e.r + p.r + 3) quietHit(e, G.buff.fast > 0 ? 4 : 2); }
 }
-const ORB_ICON = {ping:'ping_sat', sat:'firewall_sat', blade:'blade_cursor', mirror:'mirror_orb', cool:'cool_orb'};
+const ORB_ICON = {disc:'disc_orb', csat:'charge_sat', ping:'ping_sat', sat:'firewall_sat', blade:'blade_cursor', mirror:'mirror_orb', cool:'cool_orb'};
 function famDraw(){
   const P = G.prof;
   if (G.creep) for (const c of G.creep){ ctx.globalAlpha = .28 * Math.min(1, c.life / 30); ctx.fillStyle = c.fire ? '#ff7a2c' : '#5dff6a'; ctx.beginPath(); ctx.ellipse(c.x, c.y, c.r, c.r*.6, 0, 0, TAU); ctx.fill(); ctx.globalAlpha = 1; }
@@ -3064,6 +3159,7 @@ function famDraw(){
     const fsz = id === 'tamagotchi' ? 12 + (G.tamaLv || 0)*3 : 16;
     const bob = Math.sin((G.frame + i*20)*.12)*1.5; ctx.globalAlpha = .35; px(s.x - 5, s.y + 6, 10, 2, '#000'); ctx.globalAlpha = .8; ctx.strokeStyle = '#5dff9a'; ctx.lineWidth = 1; ctx.beginPath(); ctx.ellipse(s.x, s.y + 7, 7, 2.5, 0, 0, TAU); ctx.stroke(); ctx.globalAlpha = 1; // 내 편 = 발밑 초록 고리 (몹과 구분)
     ctx.save(); if (id === 'shield_bot' && s.cd > 0) ctx.globalAlpha = .55; ctx.translate(Math.round(s.x), Math.round(s.y - 6 + bob)); if (s.face) ctx.scale(-1, 1); ctx.imageSmoothingEnabled = !!ICON[id].big; ctx.drawImage(ICON[id].canvas, -fsz/2, -fsz/2, fsz, fsz); ctx.imageSmoothingEnabled = false; ctx.restore(); });
+  if (G.allyTur && ICON.turret_pet){ const t = G.allyTur; ctx.globalAlpha = t.t < 60 && G.frame % 6 < 3 ? .4 : 1; ctx.strokeStyle = '#5dff9a'; ctx.beginPath(); ctx.ellipse(t.x, t.y + 7, 8, 3, 0, 0, TAU); ctx.stroke(); ctx.imageSmoothingEnabled = !!ICON.turret_pet.big; ctx.drawImage(ICON.turret_pet.canvas, t.x - 9, t.y - 14, 18, 18); ctx.imageSmoothingEnabled = false; ctx.globalAlpha = 1; }
   for (const o of orbitList()){
     if (o.tired) ctx.globalAlpha = .35;
     if (o.k === 'bug'){ px(o.x - 2, o.y - 1, 4, 3, '#14081f'); px(o.x - 1.5, o.y - 1, 3, 2, '#5dff9a'); px(o.x - 2.5, o.y - 3, 2, 1, G.frame % 4 < 2 ? 'rgba(236,233,245,.8)' : 'rgba(236,233,245,.3)'); }
@@ -3346,10 +3442,10 @@ function updateBeams(){
     }
     b.cur += (target - b.cur) * .25;
     b.segs = beamSegments(p.x, p.y - 2, b.cur, P.range * 1.6, P.bounces);
-    b.w = 9 * P.sizeMul * (P.pierce ? 1.5 : 1);
+    b.w = 9 * P.sizeMul * (P.pierce ? 1.5 : 1) * (b.mul ? 1.7 : 1);
     if (b.tick++ % 4 === 0){
       const src = {split:P.split, poison:P.poison, chain:P.chain, mark:P.mark, stun:P.stun, ang:b.cur};
-      const hits = beamHits(b.segs, b.w, P.damage * .45, src);
+      const hits = beamHits(b.segs, b.w, P.damage * .45 * (b.mul || 1), src);
       if (P.bomb && b.boomT++ % 4 === 0){
         const last = b.segs[b.segs.length-1];
         if (hits.length) for (const [e] of hits.slice(0, 3)) explode(e.x, e.y, 18*P.sizeMul, P.damage*.6, src, false);
@@ -3376,7 +3472,7 @@ function updateEnemies(){
     if (e.t % 60 === 30 && e.type !== 'boss' && e.type !== 'mirror' && e.type !== 'phantom' && e.type !== 'bug') unstick(e); // 벌레(파리)는 바위 위를 날아다니니 순간이동시키지 않음
     if (e.elite === 'yellow' && e.cd > 0 && G.frame % 2) e.cd--;
     const stunned = e.stun > 0; if (stunned) e.stun--;
-    const frozen = G.freeze > 0 || p.hp <= 0 || stunned || G.buff.stop > 0;
+    const frozen = G.freeze > 0 || p.hp <= 0 || stunned || G.buff.stop > 0 || (G.buff.slowmo > 0 && G.frame % 2 === 1);
     let tg = e.tgt && G.room.pickups.includes(e.tgt) ? e.tgt : p;
     if ((e.type === 'slime' || e.type === 'bug') && (G.room.rocks.size || (G.room.pits && G.room.pits.size)) && !lineClear(e.x, e.y, tg.x, tg.y)) tg = flowStep(e) || tg; // 바위 뒤면 길 찾기
     const dx = tg.x - e.x, dy = tg.y - e.y, d = Math.hypot(dx, dy) || 1;
@@ -3713,7 +3809,7 @@ function killEnemy(e){
   if (G.room.decals.length < 40) G.room.decals.push({x:e.x, y:e.y, c:col, r:e.r});
   if (G.frame - G.lastHitstop > 10){ G.hitstop = e.type === 'boss' ? 14 : 2; G.lastHitstop = G.frame; }
   if (e.type === 'boss'){ G.shake = 14; G.ebul = []; }
-  else if (fx() < TUNE.killBit + G.prof.gc * .25) scatter('bit', 1, e.x, e.y);
+  else if (fx() < TUNE.killBit + G.prof.gc * .25) scatter('bit', G.prof.cursedFile ? 2 : 1, e.x, e.y);
   if (e.elite){
     G.log.elites = (G.log.elites || 0) + 1;
     burst(e.x, e.y, ELITES[e.elite].col, 18, 3);
@@ -3736,7 +3832,7 @@ function updateEnemyBullets(){
     if (G.prof.dashErase && !G.prof.reflect && p.dashT > 0 && b.life > 0 && Math.hypot(b.x - p.x, b.y - p.y) < b.r + p.r + 6){ b.life = 0; burst(b.x, b.y, '#ff8a5c', 5, 1.4); continue; }
     if (G.prof.reflect && p.dashT > 0 && b.life > 0 && Math.hypot(b.x - p.x, b.y - p.y) < b.r + p.r + 6){ const q = makeShot(Math.atan2(-b.vy, -b.vx), G.prof, {x:b.x, y:b.y, vx:0, vy:0}, 'tear'); q.dmg *= 1.5; q.color = '#bfe8ff'; G.projs.push(q); b.life = 0; continue; }
     if (b.re > 0 && --b.re === 0){ const a = Math.atan2(p.y - b.y, p.x - b.x); b.vx = Math.cos(a)*(b.rv || 2.2); b.vy = Math.sin(a)*(b.rv || 2.2); }
-    const bs = (G.prof.dark ? .8 : 1) * (G.prof.sandbox ? .85 : 1); b.x += b.vx*bs; b.y += b.vy*bs; b.life--;
+    const bs = (G.prof.dark ? .8 : 1) * (G.prof.sandbox ? .85 : 1) * (G.buff.slowmo > 0 ? .5 : 1) * (G.prof.cursedFile ? 1.15 : 1); b.x += b.vx*bs; b.y += b.vy*bs; b.life--;
     b.dist = (b.dist || 0) + Math.hypot(b.vx, b.vy)*bs; // 사거리 (아이작처럼 날아가다 떨어짐): 일반 210 · 보스 290
     if (b.dist > (b.boss ? 290 : 210)){ b.life = 0; burst(b.x, b.y, '#ff2e88', 2, .7); continue; }
     if (b.x < IX0 || b.x > IX1 || b.y < IY0 || b.y > IY1 || isRock(b.x, b.y)) b.life = 0;
@@ -4588,7 +4684,7 @@ function drawHUD(){
   const boss = G.enemies.find(e => e.type === 'boss' && !e.dead);
   if (boss && boss.spawnT <= 0){ const w = 150; px(W/2 - w/2 - 1, H - 20, w + 2, 7, '#000'); px(W/2 - w/2, H - 19, w * Math.max(0, boss.hp/boss.maxHp), 5, BOSS_COL[boss.kind]); ctx.font = '700 8px "Noto Sans KR", sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = '#ece9f5'; ctx.fillText(bossTitle(boss), W/2, H - 23); }
 }
-const ITEM_ROLE = {red_noise:'shot',pixel_bomb:'onhit',return_cursor:'shot',dual_core:'shot',tri_shot:'shot',back_door:'shot',homing_pixel:'shot',pierce_bit:'shot',reflect_frame:'shot',split_bug:'onhit',corrupt_data:'onhit',overload:'onhit',giant_pixel:'dmg',overclock:'rate',fast_render:'range',slow_render:'range',random_seed:'shot',grow_buffer:'shot',todo:'special',force_restart:'onhit',cache_miss:'dmg',refactor:'dmg',hotfix:'hp',firewall_v2:'shield',while_true:'shot',stack_overflow:'shot',debugger:'onhit',frame_drop:'dmg',latency:'shot',ram_up:'dmg',cpu_upgrade:'dmg',energy_drink:'rate',ssd_swap:'speed',scope:'range',thick_cable:'shot',minor_update:'dmg',turbo:'dmg',ups:'hp',heatsink:'shield',antivirus:'special',lucky_dice:'money',memory_slot:'hp',server_rack:'hp',spare_power:'hp',dual_monitor:'range',hd_texture:'shot',fiber:'range',gaming_mouse:'rate',mech_keyboard:'dmg',cooling_fan:'speed',clean_install:'dmg',ad_popup:'money',loading_icon:'dmg',update_alert:'hp',mouse_accel:'speed',legacy_code:'dmg',empty_folder:'special',cloud_upload:'special',bridge_cable:'special',analog_stick:'shot',virtual_memory:'hp',quad_core:'shot',debug_mode:'dmg',ping999:'dmg',driver_error:'shot',overheat:'rate',laser_pointer:'shot',gps:'shot',lighter:'onhit',lucky_packet:'dmg',memory_reclaim:'hp',auto_backup:'shield',miner:'dmg',panic_mode:'dmg',dash_driver:'speed',kill_process:'onhit',firewall_sat:'pet',screensaver:'dmg',autosave:'hp',dup_file:'special',master_key:'money',bomb_pack:'money',wallet:'money',sitemap:'special',source_leak:'special',recycle_bin:'special',captcha:'dmg',dark_mode:'shield',trial_ver:'hp',cookie:'hp',terms:'money',beta_badge:'dmg',garbage_collector:'money',helper_bot:'pet',mini_kai:'pet',shield_bot:'pet',pickup_drone:'money',bomb_drone:'pet',heal_bot:'hp',cat_gif:'pet',bug_swarm:'pet',ping_sat:'pet',blade_cursor:'pet',mirror_orb:'pet',cool_orb:'pet',bug_report:'onhit',anti_dmg:'shield',safe_mode:'shield',nine_backup:'hp',spam_filter:'shield',hit_charge:'special',core_upgrade:'dmg',full_upgrade:'dmg',clean_aura:'onhit',data_leak:'onhit',close_packet:'dmg',light_packet:'rate',ignite_shot:'onhit',freeze_frame:'onhit',fear_packet:'onhit',cross_cable:'shot',wrap_packet:'shot',cache_hit:'dmg',liquid_nitro:'rate',cloud_sync:'shield',edge_server:'range',exp_build:'special',homing_bomb:'money',hot_bomb:'money',mega_bomb:'money',cross_bomb:'money',loot_bag:'money',root_access:'money',clover:'money',gold_member:'money',steam_sale:'money',trash_hat:'special',ghost_file:'onhit',shredder:'shield',undo_history:'hp',worm_virus:'onhit',trojan_gift:'special',defrag:'onhit',sandbox:'shield',recycle_mark:'money',deleted_heart:'curse',backup_shard:'dmg',zip_bomb_act:'active',hard_reset:'active',empty_trash:'active',coupon:'money',one_plus_one:'money',vpn:'special',dark_web:'special',charger:'special',reflect_film:'shield',tamagotchi:'pet',search_engine:'special',ad_block:'special',multitap:'pet',usb3:'speed',rgb_light:'onhit',ransomware:'curse',missing_no:'curse',clipboard:'active',hotkey:'active',dodge_patch:'shield',firewall_dash:'shield',ram_packet:'dmg',ctrl_z:'active',copy_paste:'active',screenshot:'active',ban_hammer:'active',god_mode_lite:'active',red_storm:'active',monsoon:'active',whirlwind:'active',reroll:'active',reroll_all:'active',timestop:'active',killtask:'active',teleport:'active',bullet_cash:'active'};
+const ITEM_ROLE = {piggy_bank:'pet',keyring_bot:'pet',bomb_factory:'pet',patch_vendor:'pet',backup_pet:'pet',firewall_pet:'pet',laser_mouse:'pet',thunder_cloud:'pet',sniper_bot:'pet',fire_bot:'pet',ice_bot:'pet',cursor_pet:'pet',scout_drone:'pet',decoy_doll:'pet',disc_orb:'pet',charge_sat:'pet',clone_bug:'pet',turret_pet:'pet',spyware:'pet',trail_bot:'pet',ctrl_alt_del:'active',overdrive:'active',beam_cutter:'active',hourglass:'active',firewall_gen:'active',backup_restore:'active',bomb_rain:'active',keygen_exe:'active',raid_call:'active',dice_gamble:'active',f5_refresh:'active',disk_cleanup:'active',cup_ramen:'hp',energy_bar:'hp',pizza:'hp',coffee:'hp',candy_bag:'hp',lunchbox:'hp',protein:'hp',fried_chicken:'hp',rootkit:'curse',black_contract:'curse',pirate_soft:'curse',cursed_file:'curse',god_patch:'curse',red_noise:'shot',pixel_bomb:'onhit',return_cursor:'shot',dual_core:'shot',tri_shot:'shot',back_door:'shot',homing_pixel:'shot',pierce_bit:'shot',reflect_frame:'shot',split_bug:'onhit',corrupt_data:'onhit',overload:'onhit',giant_pixel:'dmg',overclock:'rate',fast_render:'range',slow_render:'range',random_seed:'shot',grow_buffer:'shot',todo:'special',force_restart:'onhit',cache_miss:'dmg',refactor:'dmg',hotfix:'hp',firewall_v2:'shield',while_true:'shot',stack_overflow:'shot',debugger:'onhit',frame_drop:'dmg',latency:'shot',ram_up:'dmg',cpu_upgrade:'dmg',energy_drink:'rate',ssd_swap:'speed',scope:'range',thick_cable:'shot',minor_update:'dmg',turbo:'dmg',ups:'hp',heatsink:'shield',antivirus:'special',lucky_dice:'money',memory_slot:'hp',server_rack:'hp',spare_power:'hp',dual_monitor:'range',hd_texture:'shot',fiber:'range',gaming_mouse:'rate',mech_keyboard:'dmg',cooling_fan:'speed',clean_install:'dmg',ad_popup:'money',loading_icon:'dmg',update_alert:'hp',mouse_accel:'speed',legacy_code:'dmg',empty_folder:'special',cloud_upload:'special',bridge_cable:'special',analog_stick:'shot',virtual_memory:'hp',quad_core:'shot',debug_mode:'dmg',ping999:'dmg',driver_error:'shot',overheat:'rate',laser_pointer:'shot',gps:'shot',lighter:'onhit',lucky_packet:'dmg',memory_reclaim:'hp',auto_backup:'shield',miner:'dmg',panic_mode:'dmg',dash_driver:'speed',kill_process:'onhit',firewall_sat:'pet',screensaver:'dmg',autosave:'hp',dup_file:'special',master_key:'money',bomb_pack:'money',wallet:'money',sitemap:'special',source_leak:'special',recycle_bin:'special',captcha:'dmg',dark_mode:'shield',trial_ver:'hp',cookie:'hp',terms:'money',beta_badge:'dmg',garbage_collector:'money',helper_bot:'pet',mini_kai:'pet',shield_bot:'pet',pickup_drone:'money',bomb_drone:'pet',heal_bot:'hp',cat_gif:'pet',bug_swarm:'pet',ping_sat:'pet',blade_cursor:'pet',mirror_orb:'pet',cool_orb:'pet',bug_report:'onhit',anti_dmg:'shield',safe_mode:'shield',nine_backup:'hp',spam_filter:'shield',hit_charge:'special',core_upgrade:'dmg',full_upgrade:'dmg',clean_aura:'onhit',data_leak:'onhit',close_packet:'dmg',light_packet:'rate',ignite_shot:'onhit',freeze_frame:'onhit',fear_packet:'onhit',cross_cable:'shot',wrap_packet:'shot',cache_hit:'dmg',liquid_nitro:'rate',cloud_sync:'shield',edge_server:'range',exp_build:'special',homing_bomb:'money',hot_bomb:'money',mega_bomb:'money',cross_bomb:'money',loot_bag:'money',root_access:'money',clover:'money',gold_member:'money',steam_sale:'money',trash_hat:'special',ghost_file:'onhit',shredder:'shield',undo_history:'hp',worm_virus:'onhit',trojan_gift:'special',defrag:'onhit',sandbox:'shield',recycle_mark:'money',deleted_heart:'curse',backup_shard:'dmg',zip_bomb_act:'active',hard_reset:'active',empty_trash:'active',coupon:'money',one_plus_one:'money',vpn:'special',dark_web:'special',charger:'special',reflect_film:'shield',tamagotchi:'pet',search_engine:'special',ad_block:'special',multitap:'pet',usb3:'speed',rgb_light:'onhit',ransomware:'curse',missing_no:'curse',clipboard:'active',hotkey:'active',dodge_patch:'shield',firewall_dash:'shield',ram_packet:'dmg',ctrl_z:'active',copy_paste:'active',screenshot:'active',ban_hammer:'active',god_mode_lite:'active',red_storm:'active',monsoon:'active',whirlwind:'active',reroll:'active',reroll_all:'active',timestop:'active',killtask:'active',teleport:'active',bullet_cash:'active'};
 // 역할 표식 (아이템창 · 받침대 · 툴팁): 색 테두리 + 5x5 그림 — 아이콘만 봐도 무슨 역할인지 대충 알게
 const ROLE = {
   dmg:   {name:'공격력', col:'#ff4d5e', g:['....#','...#.','#.#..','.#...','#.#..']},
@@ -5216,6 +5312,13 @@ function openChars(){
 let charCur = null;
 /* ---------- 패치 노트 — 맨 위가 최신. 패치마다 10줄 안으로 ---------- */
 const PATCH_NOTES = [
+  {ver:'ALPHA 0.9', name:'아이템 228', date:'2026.10.19', lines:[
+    '아이템 45개 추가 (183 → 228) — 아이작 티어표의 역할 비율에 맞춰 모자라던 쪽을 채움: 소환수 20 · 액티브 12 · 체력 · 음식 8 · 위험 거래 5. 탄 · 스탯 템은 안 늘림',
+    '소환수: 비트 저금통 · 열쇠고리 봇 · 폭탄 공장 · 패치 자판기 · 백업 배낭 · 방화벽 강아지 (방을 깰 때마다 픽업을 만듦) · 레이저 마우스 · 번개 구름 · 저격 봇 · 화염 봇 · 냉각 봇 · 사냥 커서 · 정찰 드론 · 미니 포탑 · 독 장판 봇 · 복제 버그 · 스파이웨어(손해) · 수호: 미끼 인형 · 궤도 디스크 · 충전 위성',
+    '액티브: Ctrl+Alt+Del(보스 빼고 전부 끝냄, HP -10) · 오버드라이브 · 빔 커터 · 모래시계 · 방화벽 생성기 · 백업 복원 · 폭탄 비 · keygen.exe · 레이드 소환 · 도박 다이스 · F5 새로고침 · 디스크 정리',
+    '음식: 컵라면 · 에너지바 · 피자 한 판 · 커피 · 사탕 봉지 · 도시락 · 프로틴 · 치킨 / 위험 거래: 루트킷 · 블랙 해커 계약 · 해적판 소프트 · 저주받은 파일 · 갓 모드 패치',
+    '티어 비율 그대로 유지 (S 11 · A+ 3 · A 36 · A- 24 · B+ 24 · B 74 · B- 24 · C 26 · D 5 · F 1) · 새 템도 세트(봇넷 · 버그 군단 · 잭팟 · 데이터 센터 · 해커)와 코스튬에 연결',
+  ]},
   {ver:'ALPHA 0.8.1', name:'걷기 · 사격 모션 · 문', date:'2026.10.19', lines:[
     '캐릭터 5명 그림을 새로 — 걷기 4프레임 (디딤 → 지나감 → 반대발 → 지나감)으로 앞 · 뒤 · 옆 모두 자연스럽게, 서 있을 때 그림 따로',
     '쏠 때 모션 — 쏘는 방향(위 · 아래 · 옆)으로 몸을 돌려 손을 뻗음: 카이 장풍 · 릴리 물방울 · 이그나 불꽃 · 이반 주먹 · DICE 주사위 던지기. 맞을 때 움찔하는 그림도',
