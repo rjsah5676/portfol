@@ -548,7 +548,7 @@ const ITEMS = [
   {id:'sandbox',       name:'샌드박스',      axis:'stat', tint:'#e0c27a', desc:'적 탄 -15% 느리게 · 이동 +5%', fl:'격리된 환경에서 실행', add:p=>p.sandbox=true, mul:p=>p.move*=1.05},
   {id:'recycle_mark',  name:'재활용 마크',   axis:'util', tint:'#8fd18f', desc:'상점에서 살 때마다 비트 3 돌려받음 · 압축 파일에서 픽업 +1', fl:'♻ 분리배출', add:p=>p.recycleMark=true},
   {id:'deleted_heart', name:'삭제된 심장',   axis:'stat', tint:'#ff3d5e', desc:'최대 HP를 20만 남기고 나머지를 방화벽으로 · 데미지 +1.5 · 이동 +10%', fl:'영구 삭제하시겠습니까? (Y)', add:p=>p.damage+=1.5, mul:p=>p.move*=1.1, onPick:pl=>{const x = Math.max(0, pl.maxHp - 20); pl.maxHp = 20; pl.hp = Math.min(pl.hp, 20); pl.shield = Math.min(TUNE.maxShield, pl.shield + x);}},
-  {id:'backup_shard',  name:'베타 카이의 조각', axis:'onhit', tint:'#ff2e88', desc:'4번째 탄마다 붉은 글리치 탄 (피해 ×2.5 · 관통)', fl:'『나도 같이 갈래』', add:p=>p.shard=true},
+  {id:'backup_shard',  name:'베타 카이의 조각', axis:'onhit', tint:'#ff2e88', desc:'4번째 탄마다 붉은 글리치 탄 (피해 ×2.5 · 관통)', fl:'『나도 같이 갈래』', noTint:true, add:p=>p.shard=true}, // 평소 탄 색은 그대로 두고 4번째 탄만 붉게
   {id:'zip_bomb_act',  name:'ZIP 폭탄',      axis:'active', cost:100, tint:'#c77dff', desc:'방 전체가 터짐 — 모든 적에게 큰 피해', fl:'42.zip (4.5 PB)'},
   {id:'hard_reset',    name:'하드 리셋',     axis:'active', cost:100, tint:'#ff8a5c', desc:'HP 전부 회복 · 대신 최대 HP -10', fl:'전원 버튼 5초'},
   {id:'empty_trash',   name:'휴지통 비우기', axis:'active', cost:60,  tint:'#8fd18f', desc:'적 탄을 전부 지우고, 지운 탄 하나당 5초간 데미지 +3% (최대 +60%)', fl:'정말 비우시겠습니까?'},
@@ -855,7 +855,7 @@ function computeProfile(ids, cid){
   p.fireDelay = Math.max(p.fdMin || 4, Math.min(60, p.fireDelay)); // 아무리 꽝을 먹어도 초당 1발은 쏨
   p.damage = Math.max(0.5, p.damage);
   p.beam = p.forms.has('beam'); p.bomb = p.forms.has('bomb'); p.boom = p.forms.has('boom');
-  const pick = ax => { for (let i = defs.length-1; i >= 0; i--) if (defs[i].axis === ax) return defs[i].tint; return null; };
+  const pick = ax => { for (let i = defs.length-1; i >= 0; i--) if (defs[i].axis === ax && !defs[i].noTint) return defs[i].tint; return null; };
   p.color = pick('onhit') || pick('traj') || (p.boom ? '#f4f0ff' : null) || CH.color;
   p.sizeMul = p.size / 4;
   return p;
@@ -2847,12 +2847,15 @@ function updateProjectiles(){
   for (const q of G.projs){
     if (q.dead) continue;
     if (q.homing > 0 && !q.orbit && !(q.type === 'boom' && q.state === 'back')){
-      const t = nearestEnemy(q.x, q.y, 170);
+      // 아이작 「휘는 숟가락」 정도로: 앞쪽(±70°)에 있는 적만 보고 천천히 휨 — 뒤로 돌아가거나 빙빙 돌며 쫓지 않음
+      const t = nearestEnemy(q.x, q.y, 130);
       if (t){
         const cur = Math.atan2(q.vy, q.vx), want = Math.atan2(t.y - q.y, t.x - q.x);
         let d = want - cur; while (d > Math.PI) d -= TAU; while (d < -Math.PI) d += TAU;
-        const turn = Math.min(.22, .06 * q.homing), na = cur + Math.max(-turn, Math.min(turn, d)), s = Math.hypot(q.vx, q.vy);
-        q.vx = Math.cos(na)*s; q.vy = Math.sin(na)*s;
+        if (Math.abs(d) < 70*DEG){
+          const turn = Math.min(.1, .035 * (1 + (q.homing - 1)*.5)), na = cur + Math.max(-turn, Math.min(turn, d)), s = Math.hypot(q.vx, q.vy);
+          q.vx = Math.cos(na)*s; q.vy = Math.sin(na)*s;
+        }
       }
     }
     if (q.type === 'boom'){
@@ -4689,6 +4692,8 @@ let charCur = null;
 const PATCH_NOTES = [
   {ver:'ALPHA 0.6', name:'월드 5 · 소환수 · 세트 변신', date:'2026.10.18', lines:[
     '조작 — 움직이다 쏘면 탄이 움직이던 쪽으로 살짝 휘어요 (멈춘 직후에도 잠깐 남음, 아이작처럼). Tab = 일시정지, M = 지도. 들고 있는 아이템 · 액티브 · 주머니 · 바닥 아이템에 마우스를 올리면 이름과 설명',
+    '유도탄 약하게 (아이작 「휘는 숟가락」 정도) — 앞쪽 ±70° 안의 적만 따라가고 덜 휨 (감지 170 → 130, 꺾는 힘 약 60%). 겹쳐 먹어도 예전만큼 안 셈',
+    '베타 카이의 조각: 모든 탄이 붉게 바뀌던 것 → 평소 탄 색은 그대로, 4번째 글리치 탄만 붉게 (세진 탄이 눈에 띄게)',
     '효과음 · 배경음 음량을 따로 조절 (타이틀 · 일시정지 화면). 바닥에 놓은 폭탄이 더 크게 보여요',
     '조합 — 두 템 시너지 6개 추가 (4K 렌더링 · DDoS · 유도 탄막 · 관통 대포 · 크리티컬 · 집속탄): 둘 다 들면 「시너지!」 배너와 함께 큰 배율. 세트 변신도 강화 (오버클러커 데미지 ×1.3 · 연사 +25%, 클라우드 데미지 ×1.25, 봇넷 소환수 ×2, 해커 40%). 대신 템 들어오는 속도 ↓ — 보물방은 층마다 하나(3층부터 잠김), 상점 템 하나, 전투방 템 5% → 3%. 3층 보스 벌레 여왕 체력 300 → 250 · 소환 줄임',
     '밸런스 (봇 1,000판 넘게 돌려 맞춤) — 4층부터 보스 체력 ↑ (마지막 보스 ×2.8: 처치 중앙값 12초 → 21초), 5층부터 방마다 몹 · 엘리트 조금 더, 뒤쪽 층 몹 체력 곡선 ↑, 월드 3 일반 피해 20 · 월드 4 일반 피해 25. 상점엔 2층부터 아이템이 항상 (값은 월드마다 +3, 5층부터 2개) — 비트가 80개씩 남던 걸 20~30개로. 프리징 점프 예고 조금 길게',
