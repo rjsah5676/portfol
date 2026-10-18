@@ -16,7 +16,6 @@ import midnight from "../../../web/src/data/rhythm/midnight.json";
 import starlight from "../../../web/src/data/rhythm/starlight.json";
 import sugarcloud from "../../../web/src/data/rhythm/sugarcloud.json";
 import overload from "../../../web/src/data/rhythm/overload.json";
-import glitchbounce from "../../../web/src/data/rhythm/glitchbounce.json";
 import etude from "../../../web/src/data/rhythm/etude.json";
 
 /*
@@ -51,7 +50,6 @@ const SONGS: Record<string, SongData> = {
   starlight,
   sugarcloud,
   overload,
-  glitchbounce,
   etude,
 };
 export const RHYTHM_SONG_IDS = Object.keys(SONGS);

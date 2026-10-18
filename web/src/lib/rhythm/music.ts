@@ -25,7 +25,6 @@ import midnightData from "@/data/rhythm/midnight.json";
 import starlightData from "@/data/rhythm/starlight.json";
 import sugarcloudData from "@/data/rhythm/sugarcloud.json";
 import overloadData from "@/data/rhythm/overload.json";
-import glitchbounceData from "@/data/rhythm/glitchbounce.json";
 import etudeData from "@/data/rhythm/etude.json";
 
 export type Kind =
@@ -449,17 +448,6 @@ const OVERLOAD = audioSong("overload", "OVERLOAD PROTOCOL", "/audio/overload.mp3
   desc: "140 BPM · DRUMSTEP · AI 자작곡 (tunee.ai)",
 });
 
-const GLITCHBOUNCE = audioSong(
-  "glitchbounce",
-  "Glitch Bounce",
-  "/audio/glitchbounce.mp3",
-  glitchbounceData,
-  {
-    color: "#A3E635",
-    desc: "140 BPM · TRAP / HIP-HOP · AI 자작곡 (tunee.ai)",
-  }
-);
-
 const ETUDE = audioSong("etude", "Étude of Falling Stars", "/audio/etude.mp3", etudeData, {
   color: "#93C5FD",
   desc: "170 BPM · PIANO HARDCORE · AI 자작곡 (tunee.ai)",
@@ -508,7 +496,6 @@ const FREEDOMDIVE = audioSong(
  *   starlight   --boss '{}' --explus '{}' --levels 3,6,9,12,15,17   (NIGHTMARE는 14)
  *   sugarcloud  --boss '{}' --explus '{}' --levels 3,6,9,12,15,18
  *   overload    --single --bpm-label 140 --boss '{}' --explus '{}' --levels 3,6,10,13,16,19   (ULTIMA는 18 — 하프타임이라 280으로 잡혀서 --single)
- *   glitchbounce --single --bpm-label 140 --boss '{}' --explus '{}' --levels 3,6,9,12,15,17   (NIGHTMARE는 14)
  *   etude       --bpm-label 170 --boss '{}' --explus '{}' --levels 3,6,10,13,17,20   (NIGHTMARE는 16)
  */
 // ───────────────────────── 연습곡 ─────────────────────────
@@ -560,7 +547,6 @@ const PRACTICE: Song = {
 export const SONGS: Song[] = [
   STARLIGHT,
   SUGARCLOUD,
-  GLITCHBOUNCE,
   MIDNIGHT,
   OVERLOAD,
   ETUDE,

@@ -21,7 +21,6 @@ import midnightCover from "@/img/rhythm/midnight.jpg";
 import starlightCover from "@/img/rhythm/starlight.jpg";
 import sugarcloudCover from "@/img/rhythm/sugarcloud.jpg";
 import overloadCover from "@/img/rhythm/overload.jpg";
-import glitchbounceCover from "@/img/rhythm/glitchbounce.jpg";
 import etudeCover from "@/img/rhythm/etude.jpg";
 
 export const COVERS: Record<string, StaticImageData> = {
@@ -43,7 +42,6 @@ export const COVERS: Record<string, StaticImageData> = {
   starlight: starlightCover,
   sugarcloud: sugarcloudCover,
   overload: overloadCover,
-  glitchbounce: glitchbounceCover,
   etude: etudeCover,
 };
 

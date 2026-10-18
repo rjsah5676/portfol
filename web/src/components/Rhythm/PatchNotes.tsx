@@ -17,6 +17,18 @@ export interface Patch {
 
 export const PATCHES: Patch[] = [
   {
+    ver: "v2.6",
+    name: "ULTIMA 잭 정리 · Full Combo!! 다시 뽑음",
+    date: "2026.10.18",
+    lines: [
+      "ULTIMA 같은 레인 115ms 안 연타(잭)를 옆 레인으로 — Lv18 이상도. osu · Quaver Lv18~21 은 노트 1000개에 8 · 17개인데 우리는 91개였음 → 0~2개. 200ms 안 연타도 노트의 45%까지만",
+      "Full Combo!! NIGHTMARE: v2.5 에서 레벨 맞추기가 소리 없는 16분까지 열어 16분이 32%(83ms 잭 36개)였던 것 — 이제 레벨이 모자라면 뒷박 · 박 머리 동시치기 조건부터 풀고 16분은 마지막에. 16분 6%, 115ms 안 잭 0개",
+      "NIGHTMARE 115ms 안 잭은 이제 전곡 0개 (옆 레인이 다 차 있으면 그 노트를 뺌)",
+      "레벨 바뀜(NIGHTMARE): 夏霞のあと 14 → 15, 名前のない輪郭 14 → 15, New Dimension 15 → 14, Monarch's Fall 14 → 15, Full Combo!! 16 → 15, Crimson Cadenza 14 → 15, Lucky Seven Rush 17 → 16, Pixel Fighting 16 → 15",
+      "레벨 바뀜(ULTIMA): Maximum Velocity 20 → 19, 휘모리 20 → 18, Lucky Seven Rush 19 → 18, ANiMA 20 → 19, Aragami 19 → 18, Sugar Cloud 18 → 16, OVERLOAD PROTOCOL 18 → 16, Étude of Falling Stars 20 → 18 · Aragami EX 14 → 13",
+    ],
+  },
+  {
     ver: "v2.5",
     name: "NIGHTMARE 리듬 모양 섞기",
     date: "2026.10.18",
@@ -25,7 +37,7 @@ export const PATCHES: Patch[] = [
       "NIGHTMARE 200ms 안 같은 레인 연타(8분 잭)는 노트의 35%까지만 — 보내 준 플레이 기록에서 미스가 이 자리에 3~5배 몰렸음 (Lucky Seven Rush 50 → 35%, Full Combo!! 42 → 35%)",
       "NIGHTMARE 엔 60ms 보다 촘촘한 연타 박을 안 넣음 (200 BPM 곡 6등분 연타 50ms)",
       "FREEDOM DiVE NIGHTMARE(고정 채보)와 다른 난이도는 그대로",
-      "레벨 바뀜(NIGHTMARE): Full Combo!! 15 → 16, New Dimension 14 → 15, Crimson Cadenza 15 → 14, Lucky Seven Rush 16 → 17, Sugar Cloud 15 → 14, OVERLOAD PROTOCOL 14 → 15, Glitch Bounce 14 → 15",
+      "레벨 바뀜(NIGHTMARE): Full Combo!! 15 → 16, New Dimension 14 → 15, Crimson Cadenza 15 → 14, Lucky Seven Rush 16 → 17, Sugar Cloud 15 → 14, OVERLOAD PROTOCOL 14 → 15",
     ],
   },
   {
@@ -46,7 +58,7 @@ export const PATCHES: Patch[] = [
       "NIGHTMARE 채보를 정박 위주로 다시 뽑음 — osu · Quaver 랭크 Lv15~17 은 줄의 정박 38~40% · 8분 34~35% · 16분 18~24%, 동시치기의 68~70%가 정박 위인데 우리는 16분이 34%, 동시치기 정박 위 56%였음 (16분 단노트 스트림 · 16분 동시치기로 레벨을 내서 엇박이 많게 느껴지던 것)",
       "이제 정박 38% · 8분 37% · 16분 25%, 동시치기 정박 위 73% — 아주 센 박도 8분 + 박 머리 동시치기로, 16분은 곡에 센 16분 소리가 있는 자리만. 8분 안으로 동시치기가 연달아 붙는 자리 27 → 15% (osu 9 · Quaver 13%)",
       "FREEDOM DiVE NIGHTMARE(10/8 채보 고정)와 다른 난이도는 그대로",
-      "레벨 바뀜: 질주주의보 15 → 14, 夏霞のあと 16 → 14, New Dimension 15 → 14, Full Combo!! 16 → 15, Crimson Cadenza 14 → 15, 휘모리 16 → 15, Lucky Seven Rush 15 → 16, Pixel Fighting 15 → 16, ANiMA 16 → 15, Aragami 15 → 17, Sugar Cloud 14 → 15, OVERLOAD PROTOCOL 15 → 14, Glitch Bounce 13 → 14, Étude of Falling Stars 16 → 15 (전부 NIGHTMARE)",
+      "레벨 바뀜: 질주주의보 15 → 14, 夏霞のあと 16 → 14, New Dimension 15 → 14, Full Combo!! 16 → 15, Crimson Cadenza 14 → 15, 휘모리 16 → 15, Lucky Seven Rush 15 → 16, Pixel Fighting 15 → 16, ANiMA 16 → 15, Aragami 15 → 17, Sugar Cloud 14 → 15, OVERLOAD PROTOCOL 15 → 14, Étude of Falling Stars 16 → 15 (전부 NIGHTMARE)",
     ],
   },
   {
@@ -58,16 +70,16 @@ export const PATCHES: Patch[] = [
       "NIGHTMARE · ULTIMA 도 v1.9 때 레인으로 — v2.0 의 연타 박 고치기가 박 하나를 고치면서 곡 전체 레인 배치를 바꿔 놨던 것 (레인이 절반쯤 달라졌었음). 이제 연타와 30ms대로 붙은 노트만 빼서 그 자리만 바뀜. 밀도 고르기는 ULTIMA 만",
       "FREEDOM DiVE NIGHTMARE 는 10/8~10/14 의 Lv15 채보로 고정",
       "레벨에 비해 너무 빠른 같은 레인 연타(잭)를 옆 레인으로 — osu · Quaver 랭크 채보는 Lv15~17 에서 같은 레인 115ms 안 연타가 노트 1000개에 0~2개, Lv12~14 는 125ms 안이 거의 0개인데 우리는 OVERLOAD PROTOCOL NIGHTMARE 86개 · ANiMA EX 16개였음 (EX 125ms · Lv17 이하 NIGHTMARE · ULTIMA 115ms 기준, Lv18 이상 ULTIMA 는 그대로)",
-      "레벨 바뀜: 夏霞のあと NIGHTMARE 15 → 16, New Dimension EX 13 → 14, Monarch's Fall NIGHTMARE 15 → 14, Maximum Velocity NIGHTMARE 15 → 16, Full Combo!! NIGHTMARE 15 → 16, 휘모리 HARD 9 → 10 · EX 12 → 13, Aragami EX 13 → 14 · NIGHTMARE 16 → 15, FREEDOM DiVE NIGHTMARE 14 → 15 · ULTIMA 17 → 16, Sugar Cloud NIGHTMARE 15 → 14, OVERLOAD PROTOCOL NIGHTMARE 16 → 15, Glitch Bounce NIGHTMARE 14 → 13 · ULTIMA 17 → 15",
+      "레벨 바뀜: 夏霞のあと NIGHTMARE 15 → 16, New Dimension EX 13 → 14, Monarch's Fall NIGHTMARE 15 → 14, Maximum Velocity NIGHTMARE 15 → 16, Full Combo!! NIGHTMARE 15 → 16, 휘모리 HARD 9 → 10 · EX 12 → 13, Aragami EX 13 → 14 · NIGHTMARE 16 → 15, FREEDOM DiVE NIGHTMARE 14 → 15 · ULTIMA 17 → 16, Sugar Cloud NIGHTMARE 15 → 14, OVERLOAD PROTOCOL NIGHTMARE 16 → 15",
     ],
   },
   {
     ver: "v2.1",
-    name: "새 곡 6곡",
+    name: "새 곡 5곡",
     date: "2026.10.18",
     lines: [
-      "새 곡 6곡 — STARLIGHT CODE (K-POP 걸그룹 댄스팝) · Sugar Cloud (퓨처 베이스) · Glitch Bounce (트랩 · 힙합) · Midnight Signal (시티팝) · OVERLOAD PROTOCOL (드럼스텝) · Étude of Falling Stars (피아노 하드코어), 전부 AI 자작곡 (tunee.ai)",
-      "레벨 (EASY → ULTIMA): STARLIGHT CODE 3 · 6 · 9 · 12 · 14 · 17, Sugar Cloud 3 · 6 · 9 · 12 · 15 · 18, Glitch Bounce 3 · 6 · 9 · 12 · 14 · 17, Midnight Signal 3 · 5 · 8 · 11, OVERLOAD PROTOCOL 3 · 6 · 10 · 13 · 16 · 18, Étude of Falling Stars 3 · 6 · 10 · 13 · 16 · 20",
+      "새 곡 5곡 — STARLIGHT CODE (K-POP 걸그룹 댄스팝) · Sugar Cloud (퓨처 베이스) · Midnight Signal (시티팝) · OVERLOAD PROTOCOL (드럼스텝) · Étude of Falling Stars (피아노 하드코어), 전부 AI 자작곡 (tunee.ai)",
+      "레벨 (EASY → ULTIMA): STARLIGHT CODE 3 · 6 · 9 · 12 · 14 · 17, Sugar Cloud 3 · 6 · 9 · 12 · 15 · 18, Midnight Signal 3 · 5 · 8 · 11, OVERLOAD PROTOCOL 3 · 6 · 10 · 13 · 16 · 18, Étude of Falling Stars 3 · 6 · 10 · 13 · 16 · 20",
       "곡마다 재킷과 16:9 플레이 배경 그림",
       "긴 곡(Midnight Signal · STARLIGHT CODE · OVERLOAD PROTOCOL)은 2분 안팎 게임 길이로 — 같은 소절이 되풀이되는 자리에서 박자에 맞춰 이어 붙임",
     ],

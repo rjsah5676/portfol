@@ -1935,6 +1935,11 @@ export function makeAutoCharts(
         const k = (Math.sign(miss) * Math.min(3, Math.abs(miss))) / (1 + attempt * 0.25);
         // 동시치기·16분 박은 앞의 문턱을 다 쓴 뒤에 움직이므로 줄이지 않은 걸음으로
         const k2 = Math.sign(miss) * Math.min(2, Math.abs(miss));
+        const def = nmDefault(d);
+        const chordsMaxed =
+          nm.full <= 0.22 &&
+          nm.chordScale >= chordMax(d, fastSong) - 0.05 &&
+          nm.fineChord >= fineChordMax(d, fastSong) - 0.01;
         nm = {
           ...nm,
           full: Math.max(0.1, Math.min(1.05, nm.full + 0.1 * k)),
@@ -1957,11 +1962,23 @@ export function makeAutoCharts(
               : nm.full <= 0.22 && nm.chordScale >= chordMax(d, fastSong) - 0.05
                 ? Math.min(fineChordMax(d, fastSong), nm.fineChord - 0.05 * k2)
                 : nm.fineChord,
+          // 그래도 모자라면 박 안 리듬 모양 문턱을 풂: 뒷박부터(소리 없어도 8분), 다음은 박 머리 동시치기
+          //  — 16분 빈칸을 채우는 것보다 먼저 (안 그러면 스윙 곡 등은 소리 없는 16분으로 레벨을 냄:
+          //  Full Combo!! NIGHTMARE 16분 9 → 32%, 83ms 잭 36개)
+          offNeed:
+            k > 0
+              ? Math.min(def.offNeed, nm.offNeed + 0.05 * k)
+              : chordsMaxed
+                ? Math.max(0, nm.offNeed + 0.1 * k2)
+                : nm.offNeed,
+          headChord:
+            k > 0
+              ? Math.min(def.headChord, nm.headChord + 0.05 * k)
+              : chordsMaxed && nm.offNeed <= 0
+                ? Math.max(0, nm.headChord + 0.15 * k2)
+                : nm.headChord,
           fineS:
-            k > 0 ||
-            (nm.full <= 0.22 &&
-              nm.chordScale >= chordMax(d, fastSong) - 0.05 &&
-              nm.fineChord >= fineChordMax(d, fastSong) - 0.01)
+            k > 0 || (chordsMaxed && nm.offNeed <= 0 && nm.headChord <= 0)
               ? Math.max(
                   // 아래 난이도보다 2레벨 넘게 높아질 때까지는 16분을 끝까지 열 수 있음 (난이도 사다리 유지)
                   raw < prevLevel + (fastSong ? 1 : 2) ? -0.1 : fineMin(d, fastSong),
@@ -1995,15 +2012,26 @@ export function makeAutoCharts(
     //  (p75 0.5~8)인데 우리는 OVERLOAD PROTOCOL NIGHTMARE 86, ANiMA EX 16, Crimson Cadenza ULTIMA(17)는 75ms 잭까지.
     //  채보를 다 고른 뒤 그 자리만 고쳐서 나머지는 그대로
     const picked = best as Chart | null;
-    const floor = d === "expert" ? JACK_FLOOR_EX : isNm(d) && bestRaw <= 17 ? JACK_FLOOR_NM : 0;
+    const floor =
+      d === "expert"
+        ? JACK_FLOOR_EX
+        : isNm(d) && bestRaw <= 17
+          ? JACK_FLOOR_NM
+          : d === "explus"
+            ? JACK_FLOOR_ULT
+            : 0;
     if (picked && floor) {
       best = finishChart(spreadFastJacks(picked.notes, floor), d);
       bestRaw = best.level;
     }
     // 나이트메어: 200ms 안 같은 레인 연타(8분 잭)가 노트의 35%를 넘으면 넘는 만큼 옆 레인으로 — 실제 플레이 기록에서
     //  미스가 이 자리에 3~5배 몰렸고(미스율 3.7~5.1% vs 0.6~1.2%), osu · Quaver 160~190 BPM Lv14~17 은 중앙값 32~38%
-    if (d === "nightmare" && best) {
-      best = finishChart(capJacks((best as Chart).notes, 0.2, 0.35), d);
+    //  ULTIMA 는 45%까지 (osu · Quaver Lv18~21 중앙값 37~45%)
+    //  (옮긴 노트가 그 레인의 다음 노트와 새 빠른 잭을 만들 수 있어서 빠른 잭 정리를 한 번 더)
+    if (isNm(d) && best) {
+      let notes = capJacks((best as Chart).notes, 0.2, d === "explus" ? 0.45 : 0.35);
+      if (floor) notes = spreadFastJacks(notes, floor);
+      best = finishChart(notes, d);
       bestRaw = best.level;
     }
     out[d] = best!;
@@ -2054,11 +2082,14 @@ function capJacks(src: Note[], win: number, maxRate: number): Note[] {
 
 /** 같은 레인 연타의 최소 간격(초): NIGHTMARE · ULTIMA(Lv17 이하) / EX */
 const JACK_FLOOR_NM = 0.115;
+/** Lv18 이상 ULTIMA 도 같은 기준: osu · Quaver Lv18~21 은 같은 레인 115ms 안 연타가 노트 1000개에 8~17개인데
+ *  우리는 osu 곡에 돌려 91개 · 내장곡 100~300개 (16분 잭이 곡 내내) */
+const JACK_FLOOR_ULT = 0.115;
 const JACK_FLOOR_EX = 0.125;
 
 /**
  * 같은 레인에 floor 초 안으로 다시 오는 노트를 비어 있는 가까운 레인으로 옮김 (줄 순서대로).
- * 옮길 데가 없으면 동시치기 줄에선 그 노트를 빼고, 단노트 줄은 그대로 둠(리듬은 지킴).
+ * 옮길 데가 없으면 그 노트를 뺌.
  */
 function spreadFastJacks(src: Note[], floor: number): Note[] {
   const notes = src.map((n) => ({ ...n })).sort((a, b) => a.t - b.t || a.lane - b.lane);
@@ -2082,13 +2113,19 @@ function spreadFastJacks(src: Note[], floor: number): Note[] {
         .filter(
           (l) => l >= 0 && l <= 3 && !used.has(l) && n.t - last[l] >= floor - 1e-6 && busy[l] < n.t
         )
-        .sort((a, b) => Number(prevRow.has(a)) - Number(prevRow.has(b)));
+        // 8분(200ms) 안 잭도 새로 안 만드는 레인 먼저, 다음은 앞 줄에 없는 레인
+        .sort(
+          (a, b) =>
+            Number(n.t - last[a] < 0.2) - Number(n.t - last[b] < 0.2) ||
+            Number(prevRow.has(a)) - Number(prevRow.has(b))
+        );
       if (free.length) {
         used.delete(n.lane);
         n.lane = free[0];
         used.add(n.lane);
         kept.push(n);
-      } else if (row.length === 1) kept.push(n);
+      }
+      // 옮길 데가 없으면 뺌 — 단노트 줄이라도 (남겨 두면 레벨에 안 맞는 83ms 잭이 그대로 남았음)
     }
     for (const n of kept) {
       last[n.lane] = n.end ?? n.t;
