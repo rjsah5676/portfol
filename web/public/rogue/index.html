@@ -223,6 +223,7 @@ details pre{max-height:140px; overflow:auto; font-size:10px; background:var(--bg
 #codex .card .top{display:flex; gap:6px; align-items:center}
 #codex .card img, #codex .card .q, #codex .card .sw{width:24px; height:24px; image-rendering:pixelated; flex:none}
 #codex .card .q{display:grid; place-items:center; background:var(--bg); border:1px dashed var(--line); font-family:var(--f-display); color:var(--muted)}
+#codex .card .tier{display:inline-block; min-width:16px; padding:0 3px; color:#111; font-weight:700; text-align:center; letter-spacing:0}
 #codex .card b{font-size:12px; overflow-wrap:anywhere}
 #codex .card small{font-family:var(--f-display); font-size:9px; color:var(--muted); letter-spacing:.04em}
 #codex .card p{margin:0; font-size:11px; color:var(--fg); line-height:1.4; max-width:none}
@@ -406,7 +407,7 @@ const ITEMS = [
   {id:'tri_shot',      name:'트라이 샷',   axis:'count', tint:'#7fc8ff', desc:'+2발 · 연사 느려짐', fl:'3way는 슈팅 게임의 기본 소양', add:p=>p.count+=2, mul:p=>p.fireDelay*=1.3},
   {id:'back_door',     name:'후방 사격', axis:'count', tint:'#b8c4ff', desc:'반대 방향으로도 같은 개수 발사', fl:'보안 팀은 이걸 백도어라고 부른다', add:p=>p.back=true},
   {id:'homing_pixel',  name:'유도탄',      axis:'traj',  tint:'#c77dff', desc:'가까운 적 쪽으로 휜다', fl:'target = nearest(enemies)', add:p=>p.homing+=1},
-  {id:'pierce_bit',    name:'관통탄',      axis:'traj',  tint:'#e9e9f2', desc:'적을 뚫고 지나감', fl:'충돌 판정을 깜빡한 탄', add:p=>p.pierce=true},
+  {id:'pierce_bit',    name:'관통탄',      axis:'traj',  tint:'#e9e9f2', desc:'적을 뚫고 지나감 · 데미지 +0.3', fl:'충돌 판정을 깜빡한 탄', add:p=>{p.pierce=true; p.damage+=.3;}},
   {id:'reflect_frame', name:'튕김탄',        axis:'traj',  tint:'#7dffd9', desc:'벽에 1번 더 튕김', fl:'벽 판정만은 정확하다', add:p=>p.bounces+=1},
   {id:'split_bug',     name:'분열탄',      axis:'onhit', tint:'#8affc1', desc:'적중 시 작은 탄으로 갈라짐', fl:'복붙하다 생긴 버그', add:p=>p.split+=1},
   {id:'corrupt_data',  name:'독 데이터',   axis:'onhit', tint:'#5dff6a', desc:'독 — 3초간 지속 피해', fl:'열면 안 되는 파일이었다', add:p=>p.poison+=1},
@@ -516,7 +517,7 @@ const ITEMS = [
   {id:'hit_charge',    name:'피격 충전',     axis:'util', tint:'#ffcf4a', desc:'맞을 때마다 액티브 한 칸 충전', fl:'아프면서 크는 거야', add:p=>p.hitCharge=true},
   // ── 공격 (아이작 참고) ──
   {id:'core_upgrade',  name:'초강화 코어', axis:'stat', tint:'#ff3d5e', desc:'데미지 ×1.8 +1 · 유도 · 연사 -10%', fl:'새 아키텍처', add:p=>p.homing+=1, mul:p=>{p.damage=p.damage*1.8+1; p.fireDelay*=1.1;}},
-  {id:'full_upgrade',  name:'풀 업그레이드', axis:'stat', tint:'#ffcf4a', desc:'모든 스탯 업 · 최대 HP +20', fl:'최신 버전입니다', add:p=>p.damage+=.6, mul:p=>{p.fireDelay*=.9; p.move*=1.1; p.range*=1.2; p.shotSpeed*=1.1; p.size*=1.15;}, onPick:pl=>{pl.maxHp+=20; pl.hp=Math.min(pl.maxHp, pl.hp+20);}},
+  {id:'full_upgrade',  name:'풀 업그레이드', axis:'stat', tint:'#ffcf4a', desc:'모든 스탯 업 · 최대 HP +20', fl:'최신 버전입니다', add:p=>p.damage+=1, mul:p=>{p.fireDelay*=.85; p.move*=1.1; p.range*=1.2; p.shotSpeed*=1.1; p.size*=1.15;}, onPick:pl=>{pl.maxHp+=20; pl.hp=Math.min(pl.maxHp, pl.hp+20);}},
   {id:'clean_aura',    name:'오라탄',  axis:'onhit', tint:'#fff6c8', desc:'탄을 감싼 오라가 스치는 적에게도 지속 피해', fl:'먼지 0.1㎛ 이하', add:p=>p.aura=true},
   {id:'data_leak',     name:'누수 웅덩이',   axis:'onhit', tint:'#5dff6a', desc:'탄이 떨어진 자리에 2초간 피해 웅덩이', fl:'메모리 누수 감지', add:p=>p.puddle=true},
   {id:'close_packet',  name:'근접 패킷',     axis:'stat', tint:'#ff9a3d', desc:'데미지 ×1.6, 멀리 갈수록 약해짐 · 사거리 ×0.7', fl:'LAN 파티 전용', add:p=>p.close=true, mul:p=>{p.damage*=1.6; p.range*=.7;}},
@@ -656,10 +657,22 @@ const META = {
   ad_popup:[0,'drop','secret','shop'], loading_icon:[0,'drop','treasure'], update_alert:[0,'drop','shop','secret'], mouse_accel:[1,'drop','treasure','secret'], legacy_code:[1,'treasure','secret','drop'], empty_folder:[0,'drop','secret','treasure'],
   whirlwind:[3], red_storm:[3], monsoon:[3], reroll:[3,'treasure','shop'], reroll_all:[2,'treasure','secret'], timestop:[2,'treasure','shop'], killtask:[3,'treasure','secret'], teleport:[1,'shop','secret','drop'], bullet_cash:[1,'shop','drop'],
 };
-ITEMS.forEach(i => { const m = META[i.id]; i.q = m[0]; i.pools = m.slice(1); });
-const QW = [.7, 1, .85, .5, .22]; // 품질별 가중치 — 꽝(Q0)은 조금 덜, Q3·Q4는 드물게
-// 탄 모양 · 개수 · 궤적 · 적중 효과 아이템은 드물게 — 한 판에 두세 개 겹치면 충분히 세다
-const AXW = {form:.45, count:.45, traj:.6, onhit:.6, stat:1.35, util:1.1, active:.9};
+const TIER = {'core_upgrade':'S','safe_mode':'S','reroll':'S','quad_core':'S','red_noise':'S','clean_aura':'S','full_upgrade':'S','shredder':'S','dodge_patch':'S','dual_core':'A+','homing_pixel':'A+','tri_shot':'A','giant_pixel':'A','refactor':'A','cloud_upload':'A','gps':'A','anti_dmg':'A','cache_hit':'A','backup_shard':'A','zip_bomb_act':'A','mini_kai':'A','turbo':'A','ram_up':'A','pixel_bomb':'A','lighter':'A','frame_drop':'A','autosave':'A','god_mode_lite':'A','killtask':'A','liquid_nitro':'A','timestop':'A','spam_filter':'A','deleted_heart':'A','ransomware':'A','debug_mode':'A','overload':'A','pierce_bit':'A','laser_pointer':'A','firewall_sat':'A','mirror_orb':'A','nine_backup':'A-','empty_folder':'A-','dup_file':'A-','root_access':'A-','multitap':'A-','close_packet':'A-','steam_sale':'A-','tamagotchi':'A-','cat_gif':'A-','ping_sat':'A-','blade_cursor':'A-','shield_bot':'A-','auto_backup':'A-','trojan_gift':'A-','dark_web':'A-','mega_bomb':'A-','empty_trash':'A-','ban_hammer':'A-','ctrl_z':'A-','return_cursor':'B+','split_bug':'B+','stack_overflow':'B+','debugger':'B+','cpu_upgrade':'B+','energy_drink':'B+','minor_update':'B+','overheat':'B+','analog_stick':'B+','kill_process':'B+','miner':'B+','worm_virus':'B+','defrag':'B+','rgb_light':'B+','freeze_frame':'B+','firewall_dash':'B+','red_storm':'B+','monsoon':'B+','whirlwind':'B+','back_door':'B','reflect_frame':'B','corrupt_data':'B','fast_render':'B','todo':'B','force_restart':'B','overclock':'B','hotfix':'B','firewall_v2':'B','ssd_swap':'B','scope':'B','thick_cable':'B','ups':'B','heatsink':'B','memory_slot':'B','server_rack':'B','spare_power':'B','gaming_mouse':'B','mech_keyboard':'B','clean_install':'B','virtual_memory':'B','ping999':'B','lucky_packet':'B','dash_driver':'B','bomb_pack':'B','dark_mode':'B','helper_bot':'B','bomb_drone':'B','heal_bot':'B','bug_swarm':'B','cool_orb':'B','data_leak':'B','ignite_shot':'B','fear_packet':'B','wrap_packet':'B','cloud_sync':'B','exp_build':'B','homing_bomb':'B','hot_bomb':'B','loot_bag':'B','clover':'B','gold_member':'B','ghost_file':'B','sandbox':'B','coupon':'B','one_plus_one':'B','charger':'B','usb3':'B','hotkey':'B','ram_packet':'B','copy_paste':'B','reroll_all':'B','bullet_cash':'B','lucky_dice':'B','master_key':'B','memory_reclaim':'B','edge_server':'B','pickup_drone':'B','cross_bomb':'B','hard_reset':'B','slow_render':'B-','grow_buffer':'B-','antivirus':'B-','dual_monitor':'B-','hd_texture':'B-','fiber':'B-','cooling_fan':'B-','wallet':'B-','sitemap':'B-','source_leak':'B-','garbage_collector':'B-','bug_report':'B-','trash_hat':'B-','undo_history':'B-','recycle_mark':'B-','search_engine':'B-','reflect_film':'B-','clipboard':'B-','screenshot':'B-','while_true':'C','latency':'C','loading_icon':'C','mouse_accel':'C','bridge_cable':'C','panic_mode':'C','screensaver':'C','recycle_bin':'C','trial_ver':'C','cookie':'C','terms':'C','beta_badge':'C','hit_charge':'C','light_packet':'C','ad_block':'C','teleport':'C','driver_error':'C','update_alert':'C','cache_miss':'C','legacy_code':'C','vpn':'C','missing_no':'D','random_seed':'D','captcha':'D','cross_cable':'D','ad_popup':'F'};
+// 티어 (아이작 티어표 비율 — S 4.7 · A+ 1.3 · A 16 · A- 10.6 · B+ 10.5 · B 32 · B- 10.5 · C 11.5 · D 2.3 · F 0.6 %)
+// q = 예전 품질(Q0~Q4) 자리 — 황금방 · 치트 콘솔 비용 등에서 씀. w = 뽑힐 가중치 (등장 비율이 위 비율에 맞게 시뮬로 맞춤)
+const TIER_INFO = {
+  'S':{q:4, w:1,    col:'#ff7f7f', d:'판도를 바꿈 — 이것 하나로 런이 달라짐'},
+  'A+':{q:4, w:1.8, col:'#ffbf7f', d:'혼자서도 매우 강하고 조합하면 더 강해짐'},
+  'A':{q:3, w:1,    col:'#ffdf7f', d:'큰 위험 없이 확실히 좋음'},
+  'A-':{q:3, w:1.1, col:'#ffff7f', d:'좋지만 조건이나 위험이 따름'},
+  'B+':{q:2, w:1.1, col:'#bfff7f', d:'조합 · 상황이 맞으면 좋음'},
+  'B':{q:2, w:.8,   col:'#7fff7f', d:'무난하게 들고 감'},
+  'B-':{q:1, w:1,   col:'#7fffff', d:'들긴 하는데 아쉬움'},
+  'C':{q:1, w:1.05, col:'#7fbfff', d:'상황 따라 안 먹는 게 나을 수도'},
+  'D':{q:0, w:1.9,  col:'#7f7fff', d:'먹으면 대개 손해'},
+  'F':{q:0, w:.85,  col:'#ff7fff', d:'먹으면 판이 꼬임'},
+};
+ITEMS.forEach(i => { const m = META[i.id]; i.tier = TIER[i.id] || 'B'; i.q = TIER_INFO[i.tier].q; i.pools = m.slice(1); });
 /* ---------- 시크릿 (게임 안 해금 업적 — 아이작처럼 하나 열면 보상 하나, 이 브라우저에만) ---------- */
 // 처음부터 풀에 있는 것 = BASE_ITEMS. 나머지는 시크릿 보상으로만 풀에 들어감 (도감에 이미 있는 건 열린 걸로 침)
 const BASE_ITEMS = new Set(['blade_cursor','mirror_orb','cool_orb','dodge_patch','firewall_dash','ram_packet','coupon','one_plus_one','vpn','dark_web','charger','reflect_film','tamagotchi','search_engine','ad_block','multitap','usb3','rgb_light','ransomware','missing_no','clipboard','hotkey','trash_hat','ghost_file','shredder','undo_history','worm_virus','defrag','sandbox','recycle_mark','backup_shard','zip_bomb_act','hard_reset','empty_trash','helper_bot','shield_bot','pickup_drone','bomb_drone','heal_bot','cat_gif','bug_swarm','ping_sat','bug_report','anti_dmg','spam_filter','hit_charge','full_upgrade','data_leak','close_packet','light_packet','ignite_shot','freeze_frame','fear_packet','cross_cable','wrap_packet','cache_hit','liquid_nitro','cloud_sync','edge_server','exp_build','homing_bomb','hot_bomb','mega_bomb','cross_bomb','loot_bag','clover','gold_member','steam_sale','ctrl_z','copy_paste','screenshot','ban_hammer','god_mode_lite',
@@ -775,7 +788,7 @@ function pickItem(source, rng, used, boost, passive){
   if (!c.length) c = ITEMS.filter(i => !used.has(i.id) && okP(i) && i.pools.length);
   if (!c.length) c = ITEMS.filter(i => !used.has(i.id) && (!passive || i.axis !== 'active') && BASE_ITEMS.has(i.id) && i.pools.length);
   if (!c.length) return null;
-  const w = c.map(i => QW[i.q] * (boost && i.q >= 3 ? 1.4 : 1) * (AXW[i.axis] ?? 1));
+  const w = c.map(i => TIER_INFO[i.tier].w * (boost && i.q >= 3 ? 1.4 : 1));
   let r = rng() * w.reduce((a, b) => a + b, 0);
   for (let k = 0; k < c.length; k++){ r -= w[k]; if (r <= 0){ used.add(c[k].id); return c[k].id; } }
   used.add(c[c.length-1].id); return c[c.length-1].id;
@@ -1639,7 +1652,7 @@ function freshState(seed, cid){
     gauge:0, ult:0, cutin:0,
     projs:[], ebul:[], enemies:[], beams:[], fxs:[], parts:[], bolts:[], nums:[], toasts:[], bombList:[],
     shake:0, hitstop:0, lastHitstop:-99, freeze:0, kills:0, ended:false, endTimer:0, lootRng:null,
-    log:{runId:Math.random().toString(36).slice(2,10), gameVersion:'alpha-0.7', // 플레이데이터 구분용 — 밸런스 크게 바꿀 때마다 올림 (0.6.5: 봇 측정 밸런스 · 시너지 · 방 클리어 충전) character:cid, seed, result:null, startedAt:Date.now(), durationMs:0,
+    log:{runId:Math.random().toString(36).slice(2,10), gameVersion:'alpha-0.7.1', // 플레이데이터 구분용 — 밸런스 크게 바꿀 때마다 올림 (0.6.5: 봇 측정 밸런스 · 시너지 · 방 클리어 충전) character:cid, seed, result:null, startedAt:Date.now(), durationMs:0,
          floor:1, endFloor:prog.ch * 2, items:[], rooms:[], bossKills:[], bossKillMs:null, kills:0, secretFound:false, bought:[], cheatDeals:0, patches:[], cards:[], actives:[], resumed:0},
   };
 }
@@ -3027,7 +3040,7 @@ function updateProjectiles(){
   }
   if (G.prof.shred) for (const q of G.projs){ if (q.dead) continue; for (const b of G.ebul) if (b.life > 0 && Math.hypot(b.x - q.x, b.y - q.y) < b.r + q.r + 1){ b.life = 0; burst(b.x, b.y, '#e8e2c8', 3, 1); } }
   if (G.prof.puddle) for (const q of G.projs) if (q.dead && !q.pud && q.type !== 'boom'){ q.pud = 1; addCreep(q.x, q.y, 9, 110, G.prof.damage * .3, false); }
-  if (G.prof.aura && G.frame % 6 === 0) for (const q of G.projs){ if (q.dead) continue; for (const e of G.enemies){ if (e.dead || e.spawnT > 0 || e.z > 8) continue; if (Math.hypot(e.x - q.x, e.y - q.y) < e.r + q.r + 12) quietHit(e, G.prof.damage * .18); } }
+  if (G.prof.aura && G.frame % 6 === 0) for (const q of G.projs){ if (q.dead) continue; for (const e of G.enemies){ if (e.dead || e.spawnT > 0 || e.z > 8) continue; if (Math.hypot(e.x - q.x, e.y - q.y) < e.r + q.r + 12) quietHit(e, G.prof.damage * .22); } }
   // 내 탄이 놓은 폭탄을 밀어냄 (아이작처럼). 관통탄 · 부메랑은 지나가고, 나머지는 맞고 사라짐
   if (G.bombList.length) for (const q of G.projs){ if (q.dead || q.type === 'bomb') continue;
     for (const b of G.bombList){ if (b.mini || (q.bmHit && q.bmHit.has(b))) continue; if (Math.hypot(b.x - q.x, b.y - q.y) > 8 + (q.r || 2)) continue;
@@ -4581,7 +4594,7 @@ function renderCodex(bodyOnly){
       if (!n && !itemUnlocked(it.id)) return q ? '' : unknownCard('🔒 시크릿 「' + SEC_BY_ITEM[it.id].name + '」 — ' + SEC_BY_ITEM[it.id].cond);
       if (!n) return q ? '' : unknownCard('아직 먹어 보지 않았다');
       if (!codexMatch(it.name, it.desc, it.fl, AXIS_LABEL[it.axis], roleOf(it.id).name, SET_OF[it.id] ? '세트 ' + SETS[SET_OF[it.id]].name : '')) return '';
-      return `<div class="card${own.has(it.id) ? ' own' : ''}"><div class="top"><img src="${ICON[it.id].url}" alt=""><div><b>${esc(it.name)}</b><br><small><span style="color:${roleOf(it.id).col}">${roleOf(it.id).name}</span> · Q${it.q}${SET_OF[it.id] ? ` · <span style="color:${SETS[SET_OF[it.id]].col}">세트 ${SETS[SET_OF[it.id]].name}</span>` : ''}${own.has(it.id) ? ' · 보유 중' : ''}</small></div></div>
+      return `<div class="card${own.has(it.id) ? ' own' : ''}"><div class="top"><img src="${ICON[it.id].url}" alt=""><div><b>${esc(it.name)}</b><br><small><span style="color:${roleOf(it.id).col}">${roleOf(it.id).name}</span> · <span class="tier" style="background:${TIER_INFO[it.tier].col}" title="${TIER_INFO[it.tier].d}">${it.tier}</span>${SET_OF[it.id] ? ` · <span style="color:${SETS[SET_OF[it.id]].col}">세트 ${SETS[SET_OF[it.id]].name}</span>` : ''}${own.has(it.id) ? ' · 보유 중' : ''}</small></div></div>
         <p>${esc(it.desc)}</p><i>${esc(it.fl)}</i><small>${it.pools.map(s => SRC_LABEL[s]).join(' / ')} · ${n}번 획득</small></div>`;
     }).join('')}</div>`;
   } else if (codexTab === 'loot'){
@@ -4683,7 +4696,7 @@ function buildDebug(){
   const box = $('dItems');
   ITEMS.filter(it => it.axis !== 'active').forEach(it => {
     const l = document.createElement('label');
-    l.innerHTML = `<input type="checkbox" id="di_${it.id}"><i style="background:${it.tint}"></i>${esc(it.name)}<small>${AXIS_LABEL[it.axis]} Q${it.q}</small>`;
+    l.innerHTML = `<input type="checkbox" id="di_${it.id}"><i style="background:${it.tint}"></i>${esc(it.name)}<small>${AXIS_LABEL[it.axis]} ${it.tier}</small>`;
     l.querySelector('input').onchange = () => { if (!G) return; const ids = ITEMS.filter(x => x.axis !== 'active' && $('di_' + x.id).checked).map(x => x.id); setItems(ids); };
     box.appendChild(l);
   });
@@ -4863,6 +4876,12 @@ function openChars(){
 let charCur = null;
 /* ---------- 패치 노트 — 맨 위가 최신. 패치마다 10줄 안으로 ---------- */
 const PATCH_NOTES = [
+  {ver:'ALPHA 0.7.1', name:'아이템 티어', date:'2026.10.19', lines:[
+    '아이템 183개를 티어로 나눔 — 아이작 티어표(716개)와 같은 비율: S 9 · A+ 2 · A 29 · A- 19 · B+ 19 · B 60 · B- 19 · C 21 · D 4 · F 1',
+    '아이템이 나오는 비율도 티어표 비율대로 — 한 판에서 S는 20개 중 1개쯤, 절반 가까이는 무난한 B, 가끔 손해 보는 C · D · F도 섞여 나옴 (예전엔 탄 모양 · 개수 템이 따로 드물게 나왔는데 이제 티어로만 정함)',
+    '도감에 티어 표시 — 이름 아래 색 배지 (S 빨강 → F 분홍). 배지에 마우스를 올리면 그 티어 뜻이 나옴',
+    'S 티어에 맞게 보정: 풀 업그레이드 데미지 +0.6 → +1 · 연사 +10% → +15%, 오라탄 오라 피해 ×0.18 → ×0.22. 관통탄 데미지 +0.3 추가 (A 티어)',
+  ]},
   {ver:'ALPHA 0.7', name:'한눈에 보이게', date:'2026.10.18', lines:[
     '몹 · 슬라임 · 보스 그림을 전부 새로 그림 — 몸 주변에 떠다니던 반짝이 · 글리치 조각을 없애고, 몹마다 색을 다르게 (예전엔 다 보라색이라 바닥 · 벽에 묻혔음). 64px로 또렷하게',
     '내 탄 = 픽셀 조각 (모서리 깎은 네모 + 작은 픽셀 꼬리). 색은 탄 속성 (불 · 얼음 · 독 …). 장풍 그림은 뺌',
