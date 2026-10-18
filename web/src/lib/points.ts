@@ -734,7 +734,7 @@ export const ACHIEVEMENTS: Achievement[] = [
   a("rogue", "items-20", "만렙 빌드", "한 판에 패시브 아이템 20개", "rogue.items", 20, 2000),
   a("rogue", "codex-18", "수집가", "도감에 아이템 18종 열기", "rogue.codex", 18, 600),
   a("rogue", "codex-37", "도감 마니아", "도감에 아이템 37종 열기", "rogue.codex", 37, 2000),
-  a("rogue", "codex-177", "완전한 도감", "도감에 아이템 177종 전부 열기 (캐릭터 액티브 포함)", "rogue.codex", 177, 7000),
+  a("rogue", "codex-180", "완전한 도감", "도감에 아이템 180종 전부 열기 (캐릭터 액티브 포함)", "rogue.codex", 180, 7000),
   a("rogue", "secret-1", "수상한 벽", "숨겨진 방 찾기", "rogue.secrets", 1, 150),
   a("rogue", "secret-10", "벽 두드리기", "숨겨진 방 10번 찾기 (판 수)", "rogue.secrets", 10, 900),
   a("rogue", "cheat-5", "치트키 입력", "치트 콘솔 거래 5번 (누적)", "rogue.cheats", 5, 450),
