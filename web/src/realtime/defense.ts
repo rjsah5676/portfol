@@ -100,7 +100,7 @@ export interface DefenseProfile {
   /** 연구 · 유물 레벨 (없으면 1) */
   resLv?: Record<string, number>;
   relicLv?: Record<string, number>;
-  load: { res: string[]; relics: string[]; glitch: number; cheat?: string; town?: number };
+  load: { res: string[]; relics: string[]; glitch: number; cheat?: string; town?: number; trelic?: string };
   /** 해피 타운: 클리어한 단계 · 단계별 최고 웨이브 (클리어 = LAST_WAVE + 1) */
   townDone?: number[];
   tbest?: Record<string, number>;
@@ -179,7 +179,7 @@ export const meta = {
   storeBuy: (id: string) => P("defense.store.buy", { id }),
   storeSell: (id: string) => P("defense.store.sell", { id }),
   packBuy: (id: string) => P("defense.pack.buy", { id }),
-  setLoad: (load: { res: string[]; relics: string[]; glitch: number; cheat?: string; town?: number }) => P("defense.load", load),
+  setLoad: (load: { res: string[]; relics: string[]; glitch: number; cheat?: string; town?: number; trelic?: string }) => P("defense.load", load),
   cheatResBuy: (id: string) => P("defense.cheatres.buy", { id }),
   setTheme: (id: string) => P("defense.theme", { id }),
   questClaim: (id: string) => P("defense.quest.claim", { id }),

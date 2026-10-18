@@ -1611,7 +1611,7 @@ function townPages(member: boolean, open: number): { tab: string; title: string;
               <b className="w-[44px] shrink-0 text-[#ffd36b]">{lv}단계</b>
               <span className="min-w-0 leading-tight">
                 <b className="text-white">{RELIC[id]?.name}</b>
-                <span className="block text-[11px] text-[var(--mute)]">메인 유물 · 첫 클리어</span>
+                <span className="block text-[11px] text-[var(--mute)]">메인 「원정 칸」 유물 · 첫 클리어</span>
               </span>
             </span>
           ))}
@@ -1626,7 +1626,7 @@ function townPages(member: boolean, open: number): { tab: string; title: string;
             {W("메인 → 원정")}: 정비소 영구 성장(유닛 강화 · 연구 · 메인 유물)이 원정 전투에 그대로 들어가요.
           </p>
           <p>
-            {W("원정 → 메인")}: 보상은 같은 세기 메인 판의 ×{TOWN_REWARD}, 단계마다 첫 클리어 코어 · 상자, 몇몇 단계는 원정에서만 나오는 {Gd("메인 유물")}. 이기면 {Gd("새 분대")}도 열려요.
+            {W("원정 → 메인")}: 보상은 같은 세기 메인 판의 ×{TOWN_REWARD}, 단계마다 첫 클리어 코어 · 상자, 5 · 10 · 15 · 20단계는 원정에서만 나오는 {Gd("메인 유물")} — 일반 3칸과 따로 {W("원정 칸")} 1칸에 껴요. 이기면 {Gd("새 분대")}도 열려요.
           </p>
           <p>
             원정 보스를 처음 잡으면 {Gd("메인 시작 치트")}가 열려요 — {PATCHES.filter((q) => q.lock)

@@ -444,6 +444,11 @@ Slay the Spire 식 갈림길 지도 로그라이크. 설계 문서: 프로젝트
 - 유물 8종 추가 `RelicDef.from`: deep(오염 30 클리어 뒤 상자 — `DEEP_RELIC_WIN`) myth_seal · overdrive · chrono_core · void_stone / town(타운 5·10·15·20 첫 클리어만 — `TOWN_RELIC`) lucky_dice · golden_deed · moa_card · forte_box. 그림 없음(도트 아이콘)
 - (v2.2 에서 없앰) 땅문서 · 도시 개발
 
+## 원정 칸 (2026-10-19)
+- 원정 유물(`RELIC.from === "town"`, `TOWN_RELIC` 5·10·15·20 첫 클리어)은 일반 3칸(`RELIC_SLOTS`)에 못 끼고 원정 칸 1칸 — `Loadout.trelic` · `profile.load.trelic` · `isTownRelic`
+- `cleanLoadout` 이 일반 칸에 있던 원정 유물을 원정 칸으로 옮김(예전 기록 · 옛 화면), 서버 `setLoad` 도 같은 식으로 옮김. `giveRelic` 은 원정 칸이 비면 바로 낌
+- 화면: 정비소 출전 준비 「원정 칸」(원정 5단계 첫 클리어 전엔 잠김 안내)
+
 ## 심연 숙련 (2026-10-17)
 - 문제: 성장 경제 시뮬(`server/scripts/defense-econ.ts --town 3`)에서 유닛 · 연구 · 유물이 40단계쯤 거의 다 차서 42~50 이 운 반복 → 균형 봇 오염 50 까지 332시간(그중 42~50 이 270시간)
 - 참고: 랜덤 다이스 치명타 피해(덱이 다 커도 계정 전체로 끝없이 쌓임) · BTD6 파라곤 등급(쏟은 만큼) · 운빨존많겜 각성(후반 재화로 한 단계 더)

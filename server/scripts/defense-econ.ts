@@ -235,6 +235,8 @@ function loadout(): Loadout {
     cheat: p.cheatRes.includes("x_luck") ? "x_luck" : (p.cheatRes[0] ?? ""),
     grit: NO_GRIT || p.glitchOpen <= p.glitchWin || p.grit.g !== p.glitchOpen ? 0 : p.grit.n,
     mastery: p.mlv,
+    // 원정 칸: 가진 원정 유물 중 하나 (행운 주사위 → 오르골 → 명함 → 황금 지도 순)
+    trelic: ["lucky_dice", "forte_box", "moa_card", "golden_deed"].find((r) => p.relics.includes(r)) ?? "",
   };
 }
 

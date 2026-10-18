@@ -46,6 +46,7 @@ import {
   FRES_MAX,
   TRANS_IDS,
   relicPassive,
+  isTownRelic,
   RELIC_PASSIVE,
   DEEP_RELIC_WIN,
   TOWN_FROM,
@@ -330,6 +331,18 @@ function LoadTab({ p, act, busy }: TabProps) {
     }
     void save({ ...L, [k]: next });
   };
+  // 원정 유물은 원정 칸 1칸에만 (옛 장착은 일반 칸에 있을 수 있어 여기서 보정)
+  const townOwned = p.relics.filter((x) => isTownRelic(x));
+  const trelic = L.trelic || L.relics.find((x) => isTownRelic(x)) || "";
+  const toggleRelic = (id: string) => {
+    const cur = L.relics.filter((x) => !isTownRelic(x));
+    const next = cur.includes(id) ? cur.filter((x) => x !== id) : cur.length < RELIC_SLOTS ? [...cur, id] : null;
+    if (!next) {
+      sfx("deny");
+      return;
+    }
+    void save({ ...L, relics: next, trelic });
+  };
   const g = GLITCH[L.glitch];
   return (
     <div className="flex flex-col gap-4">
@@ -457,16 +470,48 @@ function LoadTab({ p, act, busy }: TabProps) {
         )}
       </div>
       <div>
-        <H sub={`장착 ${L.relics.length}/${RELIC_SLOTS} · 가진 유물 보유 효과: 모든 피해 +${relicPassive(Object.fromEntries(p.relics.map((id) => [id, p.relicLv?.[id] ?? 1])))}% (장착 안 해도)`}>유물 장착</H>
-        {p.relics.length === 0 ? (
+        <H sub={`장착 ${L.relics.filter((x) => !isTownRelic(x)).length}/${RELIC_SLOTS} · 가진 유물 보유 효과: 모든 피해 +${relicPassive(Object.fromEntries(p.relics.map((id) => [id, p.relicLv?.[id] ?? 1])))}% (장착 안 해도)`}>유물 장착</H>
+        {p.relics.filter((x) => !isTownRelic(x)).length === 0 ? (
           <p className="text-[12px] text-[var(--dim)]">아직 유물이 없어요 — 상점에서 유물 상자를 열어 얻어요</p>
         ) : (
           <div className="grid grid-cols-2 gap-1.5">
-            {p.relics.map((id) => {
+            {p.relics.filter((x) => !isTownRelic(x)).map((id) => {
               const on = L.relics.includes(id);
               const r = RELIC[id];
               return (
-                <Btn key={id} tone={on ? "gold" : "ghost"} disabled={busy} className="flex items-center gap-2 px-2 py-1.5 text-left" onClick={() => toggle("relics", id, RELIC_SLOTS)}>
+                <Btn key={id} tone={on ? "gold" : "ghost"} disabled={busy} className="flex items-center gap-2 px-2 py-1.5 text-left" onClick={() => toggleRelic(id)}>
+                  <RelicIcon id={id} size={34} />
+                  <span className="min-w-0">
+                    <b className="block text-[13px]">
+                      {r.name} <span className="text-[var(--gold)]">Lv.{p.relicLv?.[id] ?? 1}</span>
+                    </b>
+                    <span className="block text-[12px] leading-tight opacity-80">{relicDesc(id, p.relicLv?.[id] ?? 1)}</span>
+                  </span>
+                </Btn>
+              );
+            })}
+          </div>
+        )}
+      </div>
+      <div>
+        <H sub={`글리치 원정 첫 클리어(5 · 10 · 15 · 20단계)로 얻는 원정 유물 전용 — 일반 3칸과 따로 1칸`}>원정 칸</H>
+        {townOwned.length === 0 ? (
+          <p className="text-[12px] text-[var(--dim)]">
+            <Icon n="lock" size={12} /> 글리치 원정 5단계를 처음 클리어하면 열려요
+          </p>
+        ) : (
+          <div className="grid grid-cols-2 gap-1.5">
+            {townOwned.map((id) => {
+              const on = trelic === id;
+              const r = RELIC[id];
+              return (
+                <Btn
+                  key={id}
+                  tone={on ? "gold" : "ghost"}
+                  disabled={busy}
+                  className="flex items-center gap-2 px-2 py-1.5 text-left"
+                  onClick={() => void save({ ...L, relics: L.relics.filter((x) => !isTownRelic(x)), trelic: on ? "" : id })}
+                >
                   <RelicIcon id={id} size={34} />
                   <span className="min-w-0">
                     <b className="block text-[13px]">
@@ -858,7 +903,7 @@ function RelicTab({ p, act, busy }: TabProps) {
                 </span>
                 {own && <span className="ml-1.5 text-[12px] font-bold text-[var(--gold)]">Lv.{lv}</span>}
                 {own && <span className="ml-1.5 text-[12px] text-[var(--mute)]">조각 {p.shards?.[r.id] ?? 0}</span>}
-                {own && p.load.relics.includes(r.id) && <span className="ml-1.5 text-[12px] text-[var(--green)]">장착 중</span>}
+                {own && (p.load.relics.includes(r.id) || p.load.trelic === r.id) && <span className="ml-1.5 text-[12px] text-[var(--green)]">{isTownRelic(r.id) ? "원정 칸" : "장착 중"}</span>}
                 <span className="block text-[12px] leading-tight text-[var(--mute)]">{own && lv < RELIC_MAX_LV ? <DescUp cur={relicDesc(r.id, lv)} next={relicDesc(r.id, lv + 1)} /> : relicDesc(r.id, own ? lv : 1)}</span>
               </span>
               {own ? (

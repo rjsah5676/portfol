@@ -8,7 +8,7 @@ import { RECIPES, UNIT, UNITS } from "../../web/src/lib/defense/units";
 import { BOSSES, PHASE_PAIRS, bossOfWave, phaseOn } from "../../web/src/lib/defense/enemies";
 import { CHEATS, CHEAT_MULTI_SEC, cheatFxOf, cheatOdds } from "../../web/src/lib/defense/cheats";
 import { TPS } from "../../web/src/lib/defense/balance";
-import { GLITCH, TREASURE_WAVES, treasureChance, relicShardsToMax, CHEAT_RES, BOX, BENCH_COST, FRES_COST, TRANS_IDS, GP_PACKS, GP_SELL, GP_STORE, PACK, PASS_PREMIUM_GP, RESEARCH, lvCost, modsOf, packPct, planUpAll, seasonScore, townGlitchLv, townOpenOf, transRoll } from "../../web/src/lib/defense/progress";
+import { GLITCH, TREASURE_WAVES, treasureChance, relicShardsToMax, CHEAT_RES, BOX, BENCH_COST, FRES_COST, TRANS_IDS, GP_PACKS, GP_SELL, GP_STORE, PACK, PASS_PREMIUM_GP, RESEARCH, cleanLoadout, lvCost, modsOf, packPct, planUpAll, seasonScore, townGlitchLv, townOpenOf, transRoll } from "../../web/src/lib/defense/progress";
 import { startTestServer, type TestClient, type TestServer } from "./helpers";
 
 /** 봇 한 판 (기록 포함) */
@@ -432,6 +432,13 @@ describe("픽셀 글리치 디펜스 엔진", () => {
     expect(modsOf({ mastery: 10 }).mastDmg).toBeCloseTo(1.2);
     expect(modsOf({ mastery: -3 }).mastery).toBe(0);
     expect(modsOf({}).mastDmg).toBe(1);
+    // 원정 칸: 원정 유물은 일반 칸에서 빠지고 원정 칸으로 (일반 3칸 + 원정 1칸)
+    const RL = cleanLoadout({ relics: ["lucky_dice", "vaccine", "rainbow", "alchemy"] });
+    expect(RL.relics).toEqual(["vaccine", "rainbow", "alchemy"]);
+    expect(RL.trelic).toBe("lucky_dice");
+    expect(cleanLoadout({ trelic: "vaccine" }).trelic).toBe("");
+    expect(modsOf({ relics: ["vaccine"], trelic: "lucky_dice" }).bossFree).toBeGreaterThan(0);
+    expect(modsOf({ relics: ["vaccine"], trelic: "lucky_dice" }).relics).toEqual(["vaccine", "lucky_dice"]);
     // 도감 5종 → 메아리가 유물 풀에
     const D = started(7, 1, [{ ...lo, expSeen: ["alch", "twin", "growth", "piggy", "iron"] }]).boards[0];
     expect(D.mods.expSeen.length).toBe(5);

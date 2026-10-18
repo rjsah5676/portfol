@@ -39,6 +39,7 @@ import {
   RES,
   RES_SLOTS,
   RELIC_SLOTS,
+  isTownRelic,
   THEME,
   UNIT_MAX_LV,
   cleanLoadout,
@@ -114,7 +115,7 @@ export interface Profile {
   /** 유물 레벨 (없으면 1) */
   relicLv?: Record<string, number>;
   /** 장착 (시즌 판 · 멀티에 들고 감) */
-  load: { res: string[]; relics: string[]; glitch: number; cheat?: string; town?: number };
+  load: { res: string[]; relics: string[]; glitch: number; cheat?: string; town?: number; trelic?: string };
   /** 해피 타운: 클리어한 단계들 (첫 클리어 보상) · 단계별 최고 웨이브 (클리어 = LAST_WAVE + 1) */
   townDone?: number[];
   tbest?: Record<string, number>;
@@ -389,7 +390,10 @@ export function createDefenseMeta(db: Database, points: Points, now: () => numbe
       return { relic: id, shard: 1 };
     }
     p.relics.push(id);
-    if (p.load.relics.length < RELIC_SLOTS) p.load.relics.push(id);
+    // 원정 유물은 원정 칸 (비어 있으면 바로 낌) · 나머지는 일반 칸
+    if (isTownRelic(id)) {
+      if (!p.load.trelic) p.load.trelic = id;
+    } else if (p.load.relics.length < RELIC_SLOTS) p.load.relics.push(id);
     return { relic: id };
   };
 
@@ -458,6 +462,7 @@ export function createDefenseMeta(db: Database, points: Points, now: () => numbe
           lv,
           res: p.load.res.filter((r) => p.res.includes(r)),
           relics: p.load.relics.filter((r) => p.relics.includes(r)),
+          trelic: p.load.trelic && p.relics.includes(p.load.trelic) ? p.load.trelic : "",
           glitch: Math.min(p.load.glitch, p.glitchOpen),
           resLv: p.resLv,
           relicLv: p.relicLv,
@@ -915,6 +920,7 @@ export function createDefenseMeta(db: Database, points: Points, now: () => numbe
           glitch: z.number().int().min(0).max(GLITCH_MAX),
           cheat: z.string().max(20).optional(),
           town: z.number().int().min(1).max(TOWN_MAX).optional(),
+          trelic: z.string().max(20).optional(),
         })
         .parse(raw);
       return edit(uid, async (p) => {
@@ -923,12 +929,17 @@ export function createDefenseMeta(db: Database, points: Points, now: () => numbe
         need(gen <= RES_SLOTS, `공용 연구는 ${RES_SLOTS}칸까지예요.`);
         need(v.res.length - gen <= p.fslots, "세력 연구칸이 모자라요 (정비소에서 살 수 있어요).");
         need(v.relics.every((r) => p.relics.includes(r)), "없는 유물이 있어요.");
+        // 원정 유물은 일반 칸에서 빼서 원정 칸으로 (예전 장착 · 옛 화면)
+        const moved = v.relics.find((r) => isTownRelic(r));
+        v.relics = v.relics.filter((r) => !isTownRelic(r));
+        const trelic = v.trelic ?? (p.load.trelic || moved || "");
+        need(!trelic || (isTownRelic(trelic) && p.relics.includes(trelic)), "원정 칸엔 가진 원정 유물만 껴요.");
         need(v.glitch <= p.glitchOpen, "아직 열리지 않은 오염 단계예요.");
         const cheat = v.cheat ?? p.load.cheat ?? "";
         need(!cheat || (p.cheatRes ?? []).includes(cheat), "사지 않은 치트 연구예요.");
         const town = v.town ?? p.load.town;
         need(!v.town || v.town <= townAvail(p.glitchOpen, p.townDone ?? []), "아직 열리지 않은 원정 단계예요 (메인 오염 · 아래 단계 클리어).");
-        p.load = { res: [...new Set(v.res)], relics: [...new Set(v.relics)], glitch: v.glitch, cheat, ...(town && { town }) };
+        p.load = { res: [...new Set(v.res)], relics: [...new Set(v.relics)], glitch: v.glitch, cheat, ...(town && { town }), ...(trelic && { trelic }) };
         return wire(uid, p);
       });
     },

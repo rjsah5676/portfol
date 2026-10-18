@@ -52,6 +52,8 @@ export interface Loadout {
   town?: number;
   /** 글리치 원정: 해금한 시작 분대 (knight · mech · arcane) */
   squads?: string[];
+  /** 원정 칸에 낀 원정 유물 (RELIC from "town" — 글리치 원정 첫 클리어로 얻음, 일반 칸과 따로) */
+  trelic?: string;
   /** 심연 숙련 레벨 (서버가 셈, MASTERY_FROM 단계를 깬 뒤 판마다 쌓임) */
   mastery?: number;
   /** 원정 보스로 해금한 시작 치트 (meta.ts PATCHES 의 lock 있는 것) */
@@ -181,6 +183,8 @@ export const LV_DMG = 0.03;
 export const LV_BUFF = 0.03;
 export const RES_SLOTS = 4;
 export const RELIC_SLOTS = 3;
+/** 원정 유물 (글리치 원정 첫 클리어로만) — 일반 3칸과 따로 원정 칸 1칸 */
+export const isTownRelic = (id: string) => RELIC[id]?.from === "town";
 export const GLITCH_MAX = 50;
 /** 심연 1막 끝 (예전 마지막 단계 — 업적 · 문구 기준) */
 export const GLITCH_ACT1 = 30;
@@ -530,7 +534,12 @@ export function cleanLoadout(lo: Loadout | null | undefined, unitIds?: Set<strin
     ...uniq(lo?.res, (s) => RES[s]?.group === "general", RES_SLOTS),
     ...uniq(lo?.res, (s) => !!RES[s] && RES[s].group !== "general", fslots),
   ];
-  const relics = uniq(lo?.relics, (s) => !!RELIC[s], RELIC_SLOTS);
+  // 원정 유물(from town)은 일반 칸에 못 끼고 원정 칸(trelic) 하나에만 — 예전 기록에서 일반 칸에 낀 건 원정 칸으로 옮김
+  const relics = uniq(lo?.relics, (s) => !!RELIC[s] && !isTownRelic(s), RELIC_SLOTS);
+  const trelic =
+    typeof lo?.trelic === "string" && isTownRelic(lo.trelic)
+      ? lo.trelic
+      : (uniq(lo?.relics, (s) => isTownRelic(s), 1)[0] ?? "");
   // 레벨은 장착한 것만, 2 이상만 (1 은 기본이라 안 적음 — 예전 기록과 모양이 같게)
   const lvs = (src: Record<string, number> | undefined, ids: string[], max: number) => {
     const o: Record<string, number> = {};
@@ -546,7 +555,8 @@ export function cleanLoadout(lo: Loadout | null | undefined, unitIds?: Set<strin
     relics,
     glitch: clampInt(lo?.glitch, 0, GLITCH_MAX),
     resLv: lvs(lo?.resLv, res, RES_MAX_LV),
-    relicLv: lvs(lo?.relicLv, relics, RELIC_MAX_LV),
+    relicLv: lvs(lo?.relicLv, trelic ? [...relics, trelic] : relics, RELIC_MAX_LV),
+    trelic,
     bench: Number.isInteger(lo?.bench) ? clampInt(lo?.bench, BENCH_BASE, BENCH_MAX) : BENCH_BASE,
     fslots,
     own: Object.fromEntries(
@@ -578,7 +588,7 @@ export function relicPassive(own: Record<string, number> | undefined): number {
 export function modsOf(lo: Loadout | null | undefined): Mods {
   const L = cleanLoadout(lo);
   const r = new Set(L.res);
-  const x = new Set(L.relics);
+  const x = new Set(L.trelic ? [...L.relics, L.trelic] : L.relics);
   /** 장착한 연구 수치 (안 끼면 0) */
   const R = (id: string) => (r.has(id) ? RES[id].val(L.resLv[id] ?? 1) : 0);
   /** 장착한 유물 레벨 (안 끼면 0) */
@@ -621,7 +631,7 @@ export function modsOf(lo: Loadout | null | undefined): Mods {
     // 픽셀 타운은 단계에 맞는 메인 오염 단계 세기 (오염 단계 규칙 · 2페이즈 · 심연 변이도 그 단계 것)
     glitch: L.stage === "town" ? GLITCH[townGlitchLv(L.town)] : GLITCH[L.glitch],
     res: L.res,
-    relics: L.relics,
+    relics: L.trelic ? [...L.relics, L.trelic] : L.relics,
     resLv: L.resLv,
     relicLv: L.relicLv,
     bench: L.bench,
