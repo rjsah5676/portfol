@@ -77,6 +77,8 @@ const PROJ_ANIM: Record<string, Partial<Record<"S" | "X", [string, number, numbe
 };
 /** 더하기 합성(빛)이 아니라 보통으로 그리는 탄 그림 */
 const PROJ_SOLID = new Set(["forte-top"]);
+/** 밝은 맵에서도 그림자 · 진한 색 없이 반투명으로만 그리는 탄 (비눗방울 · 물결은 비쳐 보여야 해서, 10.18) */
+const PROJ_SOFT = new Set(["lily-bubble", "lily-wave"]);
 /** v2 에셋의 소환(불기둥 등) 그림: 캐릭터 → [이름, 장 수] — 바닥 기준, 판정 높이에 맞춤 */
 const PILLAR_ANIM: Record<string, [string, number]> = { igna: ["igna-pillar", 4], "igna-fw": ["igna-fw-pillar", 4], zena: ["zena-bolt", 4] };
 /** 캐릭터·기술별 탄 그림: [그림, 판정 크기 대비 그림 높이 배율, 판정 중심이 그림 가로 어디쯤(0~1)] */
@@ -257,10 +259,21 @@ function litHead(img: HTMLImageElement, from: number, ramp: number): HTMLCanvasE
 
 /** 빛 그림 그리기: 보통은 빛 합성(lighter). 밝은 맵에선 하얗게 날아가니 그림자 → 제 색 → 빛을 조금.
  *  headFrom(그림 가로 비율)을 주면 그림자 · 제 색은 그 앞(판정 쪽 머리)만 — 꼬리는 빛으로만 흐리게 남겨 판정보다 길어 보이지 않게 (10.18) */
-function drawLit(g: CanvasRenderingContext2D, img: HTMLImageElement, x: number, y: number, w: number, h: number, bright: boolean, headFrom?: number) {
+function drawLit(g: CanvasRenderingContext2D, img: HTMLImageElement, x: number, y: number, w: number, h: number, bright: boolean, headFrom?: number, soft = false) {
   if (!bright) {
     g.globalCompositeOperation = "lighter";
     g.drawImage(img, x, y, w, h);
+    return;
+  }
+  if (soft) {
+    // 반투명: 제 색을 반쯤 깔고 빛을 조금 (그림자 없음)
+    const a0 = g.globalAlpha;
+    g.globalAlpha = a0 * 0.55;
+    g.drawImage(img, x, y, w, h);
+    g.globalAlpha = a0 * 0.45;
+    g.globalCompositeOperation = "lighter";
+    g.drawImage(img, x, y, w, h);
+    g.globalAlpha = a0;
     return;
   }
   const body = headFrom !== undefined ? litHead(img, headFrom, 0.12) : img;
@@ -1555,7 +1568,7 @@ export class FightRenderer {
         g.scale(dir || 1, 1);
         if (PROJ_SOLID.has(anim[0])) g.drawImage(aimg, -wid * anim[3], -hgt / 2, wid, hgt);
         // 진하게 그릴 머리: 판정 뒤끝(가운데에서 판정 너비 절반 뒤)부터
-        else drawLit(g, aimg, -wid * anim[3], -hgt / 2, wid, hgt, !!MAPS[s.map]?.bright, anim[3] - w / 2 / wid);
+        else drawLit(g, aimg, -wid * anim[3], -hgt / 2, wid, hgt, !!MAPS[s.map]?.bright, anim[3] - w / 2 / wid, PROJ_SOFT.has(anim[0]));
         g.restore();
       } else if (art && img) {
         // 그림 탄: 판정 높이에 맞춰 크기, 날아가는 쪽으로 뒤집음 (물방울은 살짝 출렁)
