@@ -39,6 +39,7 @@ const canFullscreen = () =>
 const isStandalone = () =>
   typeof window !== "undefined" &&
   (window.matchMedia("(display-mode: standalone)").matches ||
+    window.matchMedia("(display-mode: fullscreen)").matches ||
     (navigator as Navigator & { standalone?: boolean }).standalone === true);
 
 const isIOS = () =>
@@ -145,8 +146,23 @@ export default function Stage({ children }: { children: ReactNode }) {
     };
     document.addEventListener("fullscreenchange", fsOn);
     document.body.classList.add("game-full");
+    // 설치한 앱(안드로이드)은 첫 터치에 진짜 전체화면으로 — 상태바 · 내비게이션 바까지 숨김 (manifest 가 fullscreen 이어도 안 되는 기기 대비)
+    let appFs = isStandalone() && !isIOS() && matchMedia("(pointer: coarse)").matches;
     // 브라우저는 사용자가 한 번 누르기 전엔 소리를 막음 → 첫 누르기 · 키에서 소리 잠금 풀기
-    const un = () => unlock();
+    const un = () => {
+      unlock();
+      if (!appFs) return;
+      appFs = false;
+      const el = rootRef.current;
+      if (el && !document.fullscreenElement && typeof el.requestFullscreen === "function")
+        el
+          .requestFullscreen({ navigationUI: "hide" })
+          .then(() => {
+            const o = window.screen.orientation as ScreenOrientation & { lock?: (o: string) => Promise<void> };
+            void o?.lock?.("landscape").catch(() => {});
+          })
+          .catch(() => {});
+    };
     window.addEventListener("pointerdown", un);
     window.addEventListener("keydown", un);
     return () => {
