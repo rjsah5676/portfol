@@ -1581,7 +1581,7 @@ function freshState(seed, cid){
     gauge:0, ult:0, cutin:0,
     projs:[], ebul:[], enemies:[], beams:[], fxs:[], parts:[], bolts:[], nums:[], toasts:[], bombList:[],
     shake:0, hitstop:0, lastHitstop:-99, freeze:0, kills:0, ended:false, endTimer:0, lootRng:null,
-    log:{runId:Math.random().toString(36).slice(2,10), gameVersion:'alpha-0.6', character:cid, seed, result:null, startedAt:Date.now(), durationMs:0,
+    log:{runId:Math.random().toString(36).slice(2,10), gameVersion:'alpha-0.6.5', // 플레이데이터 구분용 — 밸런스 크게 바꿀 때마다 올림 (0.6.5: 봇 측정 밸런스 · 시너지 · 방 클리어 충전) character:cid, seed, result:null, startedAt:Date.now(), durationMs:0,
          floor:1, endFloor:prog.ch * 2, items:[], rooms:[], bossKills:[], bossKillMs:null, kills:0, secretFound:false, bought:[], cheatDeals:0, patches:[], cards:[], actives:[], resumed:0},
   };
 }
@@ -2657,9 +2657,10 @@ function addCreep(x, y, r, life, dmg, fire){ const c = (G.creep ||= []); c.push(
 function spawnAlly(x, y, n){ const a = (G.allies ||= []); for (let i = 0; i < n && a.length < 16; i++) a.push({x:x + (fx()-.5)*10, y:y + (fx()-.5)*10, t:420, vx:0, vy:0}); }
 function orbitList(){
   const P = G.prof, p = G.player, out = [];
-  for (let i = 0; i < P.swarm; i++){ const a = G.frame*.12 + i*TAU/P.swarm; out.push({x:p.x + Math.cos(a)*16, y:p.y - 4 + Math.sin(a)*14, r:3, dmg:1.2, k:'bug'}); }
-  for (let i = 0; i < P.pingSat; i++){ const a = -G.frame*.045 + i*TAU/P.pingSat; out.push({x:p.x + Math.cos(a)*40, y:p.y - 4 + Math.sin(a)*34, r:5, dmg:4, k:'ping'}); }
-  for (let i = 0; i < P.miniBots; i++){ const a = G.frame*.07 + i*Math.PI; out.push({x:p.x + Math.cos(a)*27, y:p.y - 4 + Math.sin(a)*23, r:3.5, dmg:1.6, k:'mbot'}); }
+  for (let i = 0; i < P.swarm; i++){ const a = G.frame*.075 + i*TAU/P.swarm; out.push({x:p.x + Math.cos(a)*16, y:p.y - 4 + Math.sin(a)*14, r:2.5, dmg:1.2, k:'bug', id:'bug' + i}); } // 봇 측정: 탄 83%를 막던 것 → 느리게 돌고, 막으면 잠깐 지침
+  for (let i = 0; i < P.pingSat; i++){ const a = -G.frame*.045 + i*TAU/P.pingSat; out.push({x:p.x + Math.cos(a)*40, y:p.y - 4 + Math.sin(a)*34, r:5, dmg:4, k:'ping', id:'ping' + i}); }
+  for (let i = 0; i < P.miniBots; i++){ const a = G.frame*.07 + i*Math.PI; out.push({x:p.x + Math.cos(a)*27, y:p.y - 4 + Math.sin(a)*23, r:3.5, dmg:1.6, k:'mbot', id:'mbot' + i}); }
+  const cd = G.orbCd || {}; for (const o of out) o.tired = (cd[o.id] || 0) > G.frame;
   return out;
 }
 function famPos(i){ const tr = G.trail || [], s = G.famSt && G.famSt[i]; return s || tr[tr.length - 1] || G.player; }
@@ -2693,7 +2694,7 @@ function famTick(){
   });
   // 궤도: 적 탄 막기 + 닿는 적 피해
   for (const o of orbitList()){
-    for (const b of G.ebul) if (b.life > 0 && Math.hypot(b.x - o.x, b.y - o.y) < b.r + o.r + 1){ b.life = 0; burst(o.x, o.y, '#c8ccdf', 3, 1); }
+    if (!o.tired) for (const b of G.ebul) if (b.life > 0 && Math.hypot(b.x - o.x, b.y - o.y) < b.r + o.r){ b.life = 0; burst(o.x, o.y, '#c8ccdf', 3, 1); (G.orbCd ||= {})[o.id] = G.frame + (o.k === 'bug' ? 50 : 30); o.tired = true; break; } // 하나 막으면 잠깐(벌레 0.8초) 못 막음
     for (const e of G.enemies){ if (e.dead || e.spawnT > 0 || e.z > 8) continue;
       const key = 'oh_' + o.k; if (Math.hypot(e.x - o.x, e.y - o.y) < e.r + o.r && G.frame - (e[key] ?? -99) >= 8){ e[key] = G.frame; quietHit(e, o.dmg * P.famMul * (1 + (G.floorNo - 1)*.1)); } }
   }
@@ -2720,9 +2721,11 @@ function famDraw(){
     const bob = Math.sin((G.frame + i*20)*.12)*1.5; ctx.globalAlpha = .35; px(s.x - 5, s.y + 6, 10, 2, '#000'); ctx.globalAlpha = 1;
     ctx.save(); ctx.translate(Math.round(s.x), Math.round(s.y - 6 + bob)); if (s.face) ctx.scale(-1, 1); ctx.imageSmoothingEnabled = !!ICON[id].big; ctx.drawImage(ICON[id].canvas, -fsz/2, -fsz/2, fsz, fsz); ctx.imageSmoothingEnabled = false; ctx.restore(); });
   for (const o of orbitList()){
+    if (o.tired) ctx.globalAlpha = .35;
     if (o.k === 'bug'){ px(o.x - 2, o.y - 1, 4, 3, '#14081f'); px(o.x - 1.5, o.y - 1, 3, 2, '#b45cff'); px(o.x - 2.5, o.y - 3, 2, 1, G.frame % 4 < 2 ? 'rgba(236,233,245,.8)' : 'rgba(236,233,245,.3)'); }
     else if (o.k === 'ping' && ICON.ping_sat){ ctx.imageSmoothingEnabled = !!ICON.ping_sat.big; ctx.drawImage(ICON.ping_sat.canvas, o.x - 6, o.y - 6, 12, 12); ctx.imageSmoothingEnabled = false; }
     else { px(o.x - 3, o.y - 3, 6, 6, '#14243a'); px(o.x - 2, o.y - 2, 4, 4, '#9fe8ff'); }
+    ctx.globalAlpha = 1;
   }
   if (G.allies) for (const a of G.allies){ if (a.ghost){ ctx.globalAlpha = .75; px(a.x - 3, a.y - 4, 6, 7, '#e8ecff'); px(a.x - 2, a.y - 2, 1, 2, '#14081f'); px(a.x + 1, a.y - 2, 1, 2, '#14081f'); ctx.globalAlpha = 1; continue; } px(a.x - 2, a.y - 2, 4, 4, '#14081f'); px(a.x - 1.5, a.y - 1.5, 3, 3, '#c77dff'); px(a.x - 3, a.y - 3, 2, 1, 'rgba(236,233,245,.7)'); px(a.x + 1, a.y - 3, 2, 1, 'rgba(236,233,245,.7)'); }
   if (G.tfShow && G.tfShow.t > 0){ const S = SETS[G.tfShow.s], p = G.player; G.tfShow.t--; ctx.globalAlpha = Math.min(1, G.tfShow.t / 40) * .5; ctx.strokeStyle = S.col; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(p.x, p.y - 4, 18 + (160 - G.tfShow.t)*.15, 0, TAU); ctx.stroke(); ctx.globalAlpha = 1; }
@@ -2845,7 +2848,7 @@ function handleBounds(p){
   }
 }
 const hpGate = n => n.type === 'challenge' && !n.visited && G.player.hp < G.player.maxHp;
-function transition(dir){ const n = neighbor(G.room, dir); if (!n) return; const cur = G.room.type === 'curse' || n.type === 'curse'; enterRoom(n, dir); if (cur){ secEvent('curse'); const p = G.player; p.inv = 0; hurtPlayer(10); if (p.hurtAt === G.frame){ toast('손상된 섹터 -10', '#ff2e4d'); burst(p.x, p.y, '#ff2e4d', 14, 2.4); } } }
+function transition(dir){ const n = neighbor(G.room, dir); if (!n) return; const cur = G.room.type === 'curse' || n.type === 'curse'; enterRoom(n, dir); if (cur){ secEvent('curse'); const p = G.player; p.inv = 0; hurtPlayer(10, 'curse:door'); if (p.hurtAt === G.frame){ toast('손상된 섹터 -10', '#ff2e4d'); burst(p.x, p.y, '#ff2e4d', 14, 2.4); } } }
 
 function updateProjectiles(){
   const P = G.prof, p = G.player;
@@ -4696,6 +4699,7 @@ const PATCH_NOTES = [
   {ver:'ALPHA 0.6', name:'월드 5 · 소환수 · 세트 변신', date:'2026.10.18', lines:[
     '조작 — 움직이다 쏘면 탄이 움직이던 쪽으로 살짝 휘어요 (멈춘 직후에도 잠깐 남음, 아이작처럼). Tab = 일시정지, M = 지도. 들고 있는 아이템 · 액티브 · 주머니 · 바닥 아이템에 마우스를 올리면 이름과 설명',
     '유도탄 약하게 (아이작 「휘는 숟가락」 정도) — 앞쪽 ±70° 안의 적만 따라가고 덜 휨 (감지 170 → 130, 꺾는 힘 약 60%). 겹쳐 먹어도 예전만큼 안 셈',
+    '벌레 장벽 약하게 — 적 탄을 80% 넘게 막던 것 → 절반쯤. 벌레가 느리게 돌고, 탄을 하나 막은 벌레는 0.8초 동안 흐려져서 못 막음 (궤도 봇 · 핑 위성도 막은 뒤 잠깐 쉼)',
     '액티브 충전이 아이작처럼 바뀜 — 몹을 때리거나 잡아서 차던 게이지 대신, 몹이 나와 문이 잠긴 방(보스방 포함)을 깰 때마다 한 칸. 액티브마다 1~6칸 (천풍난무 · 붉은 폭풍 · 장마 파도 4칸, 리롤 주사위 6칸, 단축키 1칸). 피격 충전은 맞을 때 한 칸, 고속 충전기는 필요한 칸 -1',
     '사거리: 기본(6칸 남짓)은 아이작이랑 비슷해서 그대로. 대신 사거리 업이 곱으로 쌓여 후반엔 방 끝까지 날아가던 것 → 280 넘으면 덜 늘고 400에서 멈춤',
     '베타 카이의 조각: 모든 탄이 붉게 바뀌던 것 → 평소 탄 색은 그대로, 4번째 글리치 탄만 붉게 (세진 탄이 눈에 띄게)',
