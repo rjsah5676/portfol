@@ -1180,12 +1180,13 @@ function drawMob(e, fl, glitch){
   if (glitch){ ctx.globalAlpha = .35; mobSpr(MOB_FR[e.type][0], e.x + 2, e.y - 2, S, true); ctx.globalAlpha = 1; }
 }
 // 보스 288x192 = 96x96 3열 2줄 (열: 보스, 줄: 대기/공격 준비). 시트1: 렉·무한 로딩·프리징 / 시트2: 벌레 여왕·거대 터렛·블루스크린
-const BSH = [new Image(), new Image(), new Image()], BSH_W = [null, null, null]; // 시트3: 트로이 목마 · 휴지통 · (예비)
+const BSH = [new Image(), new Image(), new Image(), new Image()], BSH_W = [null, null, null, null]; // 시트3: 트로이 목마 · 휴지통 · (예비) / 시트4: 검문 큐브 · 데이터 웜 · 쌍둥이 프로세스 (GPT, 160px 칸, 바닥 맞춤)
 BSH.forEach((im, i) => im.onload = () => { const c = document.createElement('canvas'); c.width = im.width; c.height = im.height; const g = c.getContext('2d'); g.drawImage(im, 0, 0); g.globalCompositeOperation = 'source-in'; g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height); BSH_W[i] = c; });
 BSH[0].src = 'a/23c80b0cd9.webp';
 BSH[1].src = 'a/7f84727577.webp';
 BSH[2].src = 'a/015929d486.webp';
-const BOSS_SPR = {trojan:[2, 0, 70], recycler:[2, 1, 76], lag:[0, 0, 60], loading:[0, 1, 62], freeze:[0, 2, 58], queen:[1, 0, 58], bigturret:[1, 1, 60], bsod:[1, 2, 66]};
+/*BSH3*/BSH[3].src = 'a/9de07dd186.webp';
+const BOSS_SPR = {gcube:[3, 0, 58], gworm:[3, 1, 66], twins:[3, 2, 54], trojan:[2, 0, 70], recycler:[2, 1, 76], lag:[0, 0, 60], loading:[0, 1, 62], freeze:[0, 2, 58], queen:[1, 0, 58], bigturret:[1, 1, 60], bsod:[1, 2, 66]};
 const bossSprOK = e => { const b = BOSS_SPR[e.kind]; return !!b && BSH[b[0]].complete && BSH[b[0]].naturalWidth > 0; };
 function bossSpr(k, row, x, y, sz, white, a, rot){
   const [sh, col] = BOSS_SPR[k]; ctx.save(); ctx.globalAlpha *= (a ?? 1); ctx.translate(Math.round(x), Math.round(y)); if (rot) ctx.rotate(rot);
@@ -1346,6 +1347,7 @@ function iconSheetV2(order, b64){ const im = new Image(); im.onload = () => orde
   ICON[id] = {canvas:c, url:c.toDataURL(), big:true, v2:true}; }); im.src = /^(data:|a\/|https?:)/.test(b64) ? b64 : 'data:image/webp;base64,' + b64; }
 /*ICON_V2*/
 /*V2S15*/iconSheetV2(['cup_ramen','energy_bar','pizza','coffee','candy_bag','lunchbox','protein','fried_chicken','rootkit','black_contract','pirate_soft','cursed_file','god_patch'], 'a/bd3471c652.webp');
+/*V2GHOST*/iconSheetV2(['ghost_shot'], 'a/46853de9b9.webp');
 /*V2S14*/iconSheetV2(['clone_bug','turret_pet','spyware','trail_bot','ctrl_alt_del','overdrive','beam_cutter','hourglass','firewall_gen','backup_restore','bomb_rain','keygen_exe','raid_call','dice_gamble','f5_refresh','disk_cleanup'], 'a/4c7438d2f2.webp');
 /*V2S13*/iconSheetV2(['piggy_bank','keyring_bot','bomb_factory','patch_vendor','backup_pet','firewall_pet','laser_mouse','thunder_cloud','sniper_bot','fire_bot','ice_bot','cursor_pet','scout_drone','decoy_doll','disc_orb','charge_sat'], 'a/e96c99e2f9.webp');
 /*V2S12*/iconSheetV2(['whirlwind','reroll','reroll_all','timestop','killtask','teleport','bullet_cash'], 'a/e4f7c739c9.webp');
@@ -3998,16 +4000,19 @@ function updateShadow(e, dx, dy, d){
 const BOSS_DRAW = {
   gcube(e, fl){ const S = 50, sl = e.state === 'slide'; ctx.globalAlpha = .4; ctx.fillStyle = '#000'; ctx.beginPath(); ctx.ellipse(e.x, e.y + S*.36, S*.32, 5, 0, 0, TAU); ctx.fill(); ctx.globalAlpha = 1;
     if (e.state === 'lock'){ ctx.save(); ctx.globalAlpha = .55 + .3*Math.sin(G.frame*.8); ctx.strokeStyle = '#ff3d5e'; ctx.lineWidth = 2; ctx.setLineDash([6, 4]); ctx.beginPath(); ctx.moveTo(e.x, e.y); ctx.lineTo(e.x + e.dir.x*500, e.y + e.dir.y*500); ctx.stroke(); ctx.restore(); }
-    if (mobReady()) mobSpr(sl || e.state === 'lock' ? 7 : 6, e.x, e.y - 3, S, fl, e.dir && e.dir.x < 0); else { px(e.x - 18, e.y - 20, 36, 36, fl ? '#fff' : '#9fe8ff'); }
+    if (bossSprOK(e)){ const atk = sl || e.state === 'lock' || (e.state === 'burst' && e.st > 20); bossSpr('gcube', atk ? 1 : 0, e.x, e.y - 6, 58, fl); if (e.state === 'lock' && G.frame % 4 < 2) bossSpr('gcube', 1, e.x, e.y - 6, 58, true, .4); }
+    else if (mobReady()) mobSpr(sl || e.state === 'lock' ? 7 : 6, e.x, e.y - 3, S, fl, e.dir && e.dir.x < 0); else { px(e.x - 18, e.y - 20, 36, 36, fl ? '#fff' : '#9fe8ff'); }
     if (e.state === 'stun') for (let i = 0; i < 3; i++){ const a = G.frame*.1 + i*TAU/3; px(e.x + Math.cos(a)*16, e.y - 26 + Math.sin(a)*3, 3, 3, '#ffe14d'); } },
   gworm(e, fl){
     if (e.state === 'under' || e.state === 'rise'){ const sh = e.state === 'rise' ? (G.frame % 4 < 2 ? -2 : 2) : 0; if (mob2Ready()) mob2Spr(e.state === 'rise' ? 5 : 4, e.x + sh, e.y + 2, 46, false, false, .95); else px(e.x - 14, e.y - 4, 28, 10, '#7a5a3a'); return; }
     const S = 60, left = G.player.x < e.x; ctx.globalAlpha = .35; ctx.fillStyle = '#000'; ctx.beginPath(); ctx.ellipse(e.x, e.y + 16, 14, 4, 0, 0, TAU); ctx.fill(); ctx.globalAlpha = 1;
-    if (mob2Ready()) mob2Spr(G.frame % 12 < 6 ? 2 : 3, e.x, e.y - 8 + (e.z || 0)*.2, S, fl, left); else px(e.x - 12, e.y - 26, 24, 34, fl ? '#fff' : '#ffe14d'); },
+    if (bossSprOK(e)){ const atk = e.state === 'dive' || (e.state === 'up' && (e.st > (e.hp < e.maxHp/2 ? 96 : 126) || (e.st % 42 > 21 && e.st % 42 < 34))); ctx.save(); ctx.translate(e.x, 0); if (left) ctx.scale(-1, 1); bossSpr('gworm', atk ? 1 : 0, 0, e.y - 12 + (e.z || 0)*.3, 66, fl); ctx.restore(); }
+    else if (mob2Ready()) mob2Spr(G.frame % 12 < 6 ? 2 : 3, e.x, e.y - 8 + (e.z || 0)*.2, S, fl, left); else px(e.x - 12, e.y - 26, 24, 34, fl ? '#fff' : '#ffe14d'); },
   twins(e, fl){ const S = 46, o = e.twin; ctx.globalAlpha = .35; ctx.fillStyle = '#000'; ctx.beginPath(); ctx.ellipse(e.x, e.y + 18, 14, 4, 0, 0, TAU); ctx.fill(); ctx.globalAlpha = 1;
-    if (mobReady()){ mobSpr(9, e.x, e.y - 2, S, fl, e.side > 0); if (e.st < 18 && G.frame % 4 < 2) mobSpr(9, e.x, e.y - 2, S, true, e.side > 0, .45); } else px(e.x - 18, e.y - 18, 36, 32, fl ? '#fff' : '#ff3d5e');
-    ctx.font = '8px Silkscreen, monospace'; ctx.textAlign = 'center'; ctx.fillStyle = '#000'; ctx.fillText('PID ' + (e.side > 0 ? 2 : 1), e.x + 1, e.y - 25); ctx.fillStyle = '#ffd6de'; ctx.fillText('PID ' + (e.side > 0 ? 2 : 1), e.x, e.y - 26);
-    if (o && o.dead && o.revT > 0){ const s = (o.revT/60).toFixed(1); ctx.globalAlpha = .45 + .25*Math.sin(G.frame*.3); if (mobReady()) mobSpr(9, o.x, o.y - 2, S, true, o.side > 0, .35); ctx.globalAlpha = 1;
+    if (bossSprOK(e)){ const atk = e.st < 18 || (o && o.dead); ctx.save(); ctx.translate(e.x, 0); if (e.side > 0) ctx.scale(-1, 1); bossSpr('twins', atk ? 1 : 0, 0, e.y - 6, 54, fl); if (e.st < 18 && G.frame % 4 < 2) bossSpr('twins', 1, 0, e.y - 6, 54, true, .4); ctx.restore(); }
+    else if (mobReady()){ mobSpr(9, e.x, e.y - 2, S, fl, e.side > 0); if (e.st < 18 && G.frame % 4 < 2) mobSpr(9, e.x, e.y - 2, S, true, e.side > 0, .45); } else px(e.x - 18, e.y - 18, 36, 32, fl ? '#fff' : '#ff3d5e');
+    ctx.font = '8px Silkscreen, monospace'; ctx.textAlign = 'center'; ctx.fillStyle = '#000'; ctx.fillText('PID ' + (e.side > 0 ? 2 : 1), e.x + 1, e.y - 37); ctx.fillStyle = '#ffd6de'; ctx.fillText('PID ' + (e.side > 0 ? 2 : 1), e.x, e.y - 38);
+    if (o && o.dead && o.revT > 0){ const s = (o.revT/60).toFixed(1); ctx.globalAlpha = .45 + .25*Math.sin(G.frame*.3); if (bossSprOK(o)){ ctx.save(); ctx.translate(o.x, 0); if (o.side > 0) ctx.scale(-1, 1); bossSpr('twins', 0, 0, o.y - 6, 54, true, .3); ctx.restore(); } else if (mobReady()) mobSpr(9, o.x, o.y - 2, S, true, o.side > 0, .35); ctx.globalAlpha = 1;
       ctx.font = '700 9px "Noto Sans KR", sans-serif'; ctx.fillStyle = '#000'; ctx.fillText('다시 실행까지 ' + s, o.x + 1, o.y - 25); ctx.fillStyle = '#ff6f8a'; ctx.fillText('다시 실행까지 ' + s, o.x, o.y - 26); }
     ctx.textAlign = 'left'; },
   shadow(e, fl){ e.char = e.char || G.char; if (e.lagging && G.frame % 6 < 3){ ctx.save(); ctx.globalAlpha = .55; drawMirror(e); ctx.restore(); } else drawMirror(e);
@@ -5778,6 +5783,7 @@ const PATCH_NOTES = [
     '보스 2마리 (4~7층 10%) — 각각 체력 62%, 잡으면 회복 + 비트 더',
     '블루스크린 3페이즈: 「STOP CODE」 화면 2×2 칸의 초록 칸 = 안전 사분면, 나머지는 1.25초 뒤 터짐 → 66%에 「응답 없음」 방어막(오류 창 3개를 닫으면 풀리고 2.5초 동안 피해 1.5배) → 33%에 「커널 패닉」 파란 벽이 방을 쓸고 지나감(초록 틈으로). 한 방이 아무리 세도 페이즈를 건너뛰지 않음',
     '기존 보스 기믹: 렉 덩어리 렉 잔상(0.8초 전 내 자리 사격) · 무한 로딩 버퍼링(노드 3개를 부수면 멈춤, 못 부수면 큰 탄막) · 프리징 고드름(가로 · 세로 줄) · 트로이 목마 벽에서 튕기는 돌진 · 킹 슬라임 큰 점프(그림자가 따라옴) · 벌레 여왕 알 · 거대 터렛 레이저 조준',
+    '새 보스 그림 3종 (검문 큐브 · 데이터 웜 · 쌍둥이 프로세스, 대기 / 공격 준비) · 유령탄 아이콘',
     '바닥 경고는 모두 같은 규칙: 빗금이 점점 빨리 깜빡이다 터짐 (1~1.25초). 업적 · 해금 조건은 보스 이름 대신 층으로 (월드 1 보스 = 2층 등)',
   ]},
   {ver:'ALPHA 0.9.1', name:'문 · 알약 한도 · 빔', date:'2026.10.19', lines:[
