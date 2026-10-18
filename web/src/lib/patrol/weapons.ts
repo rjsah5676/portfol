@@ -77,8 +77,8 @@ export const FIRST_WEAPON: Record<number, WeaponId> = { 3: "umbrella", 8: "grena
 /* ───────────── 무기 상자 (보석) ───────────── */
 
 export const WBOX = { cost: 200, cost10: 1800 } as const;
-/** 한 번 뽑을 때 무기별 확률 (%) — 기본 6종 각 11 · 새 4종 각 8.5 */
-export const WBOX_ODDS: Record<string, number> = { shuriken: 11, boomerang: 11, bolt: 11, thorns: 11, missile: 11, ball: 11, umbrella: 8.5, grenade: 8.5, notes: 8.5, coins: 8.5 };
+/** 한 번 뽑을 때 무기별 확률 (%) — 기본 6종 각 14 · 새 4종 각 4 (새 무기 합 16%, 안 가진 새 무기는 천장으로 보장) */
+export const WBOX_ODDS: Record<string, number> = { shuriken: 14, boomerang: 14, bolt: 14, thorns: 14, missile: 14, ball: 14, umbrella: 4, grenade: 4, notes: 4, coins: 4 };
 /** 천장: N번 안에 안 가진 새 무기 하나 */
 export const WBOX_PITY = 15;
 

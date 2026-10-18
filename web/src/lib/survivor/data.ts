@@ -14,7 +14,7 @@ export const RUN_SEC = 600;
 /* ───────────── 캐릭터 (다이스 타운 16명 — 뽑기 · 강화 그대로) ───────────── */
 
 /** 픽셀 순찰대 (서바이버 오리지널) — 다이스 타운 명부(lib/cast)에 안 들어감 */
-export type PatrolId = "bandi";
+export type PatrolId = "bandi" | "seolhee";
 /** 다이스 타운 · 서바이버 공용 명부 (lib/cast) 의 캐릭터 id + 픽셀 순찰대 */
 export type HeroId = CastId | PatrolId;
 export type { Grade };
@@ -72,11 +72,13 @@ const KITS: Partial<Record<HeroId, Kit>> = {
   "ur-forte": K("#7ff0d8", "notes", ["앙코르", "6초 동안 모든 무기 쿨타임이 확 줄어요"], ["리듬감", "쿨타임 −10%", { cooldown: 0.1 }], 100, 72, "cooldown"),
   // 픽셀 순찰대
   bandi: K("#ffd27a", "lantern", ["등대", "8초 동안 빛줄기 두 갈래가 주변을 돌며 태워요"], ["반딧불 자석", "줍는 범위 +30%", { magnet: 0.3 }], 100, 72, "area"),
+  seolhee: K("#9fe4ff", "frost", ["눈보라", "5초 동안 화면에 눈보라 — 적이 얼어붙듯 느려지고, 끝에 얼음이 깨지며 크게 터져요"], ["서리 손끝", "쿨타임 −8%", { cooldown: 0.08 }], 90, 74, "cooldown"),
 };
 
 /** 픽셀 순찰대 명부 (정체성) — 키트는 위 KITS */
 const PATROL: { id: PatrolId; name: string; title: string; grade: Grade; sprite: string }[] = [
   { id: "bandi", name: "반디", title: "랜턴 순찰대원", grade: "R", sprite: "patrol/hero/bandi" },
+  { id: "seolhee", name: "설희", title: "서리 순찰대원", grade: "R", sprite: "patrol/hero/seolhee" },
 ];
 
 export const HEROES = Object.fromEntries([
@@ -152,6 +154,7 @@ export type WeaponId =
   | "notes"
   // 픽셀 순찰대 고유
   | "lantern"
+  | "frost"
   // 공용
   | "shuriken"
   | "boomerang"
@@ -175,7 +178,7 @@ export type WeaponId =
   | "symphony"
   | "goldrain";
 
-export type Pattern = "spin" | "nearest" | "orbit" | "drop" | "facing" | "boomerang" | "strike" | "aura" | "homing" | "bounce" | "cone" | "whip" | "spread" | "pulse";
+export type Pattern = "spin" | "nearest" | "orbit" | "drop" | "facing" | "boomerang" | "strike" | "aura" | "homing" | "bounce" | "cone" | "whip" | "spread" | "pulse" | "thrust";
 
 /** 레벨마다 값 (index 0 = Lv1) */
 export interface WeaponLv {
@@ -373,6 +376,15 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     color: "#ffd27a",
     desc: ["앞쪽을 비추는 빛살 — 맞은 자리에 불씨가 남아요", "피해 +4", "사거리 +15%", "쿨타임 −0.15초", "피해 +6 · 두 번 비춤"],
     lv: [L(11, 1.0, 1, 68, 0, 99, 0.24, 25), L(15, 1.0, 1, 68, 0, 99, 0.24, 25), L(15, 1.0, 1, 78, 0, 99, 0.24, 28), L(15, 0.85, 1, 78, 0, 99, 0.24, 28), L(21, 0.85, 2, 82, 0, 99, 0.24, 32)],
+  },
+  frost: {
+    id: "frost",
+    name: "서리 세검",
+    owner: "seolhee",
+    pattern: "thrust",
+    color: "#9fe4ff",
+    desc: ["바라보는 쪽을 빠르게 찔러요 — 끝에서 얼음이 터지고 맞은 적은 느려져요", "피해 +4", "한 번 더 찌름 (부채꼴)", "쿨타임 −0.15초 · 길이 +", "피해 +6 · 세 갈래 찌르기"],
+    lv: [L(13, 0.9, 1, 74, 0, 99, 0.16, 22), L(17, 0.9, 1, 74, 0, 99, 0.16, 22), L(17, 0.9, 2, 74, 0, 99, 0.16, 24), L(17, 0.75, 2, 84, 0, 99, 0.16, 26), L(23, 0.75, 3, 88, 0, 99, 0.16, 30)],
   },
   shuriken: {
     id: "shuriken",

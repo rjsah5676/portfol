@@ -76,7 +76,7 @@ export interface Fx {
   spikes: { x: number; y: number; r: number; t: number; rot: number }[];
 }
 export const THORN_T = 0.32;
-export type HitK = "water" | "grenade" | "notes" | "coins";
+export type HitK = "water" | "grenade" | "notes" | "coins" | "ice";
 export interface Corpse {
   /** 보스: 깜빡이며 떨다가 터짐 (BOSS_DIE 초) */
   boss?: boolean;
@@ -724,6 +724,29 @@ export function draw(ctx: CanvasRenderingContext2D, r: Run, fx: Fx, hero: HeroAr
       ctx.fillStyle = "#ffffff";
       ctx.fillRect(xs, Y(z.y) - 1, w, 1);
       ctx.globalAlpha = 1;
+    } else if (z.k === "thrust") {
+      // 서리 세검: 가늘고 긴 얼음 찌르기 (빠르게 뻗고 사라짐)
+      const a = Math.atan2(z.dy, z.dx);
+      const len = Math.round(z.r * Math.min(1, k * 4 + 0.25));
+      ctx.save();
+      ctx.translate(X(z.x), Y(z.y - 6));
+      ctx.rotate(a);
+      ctx.globalAlpha = k < 0.6 ? 1 : (1 - k) / 0.4;
+      ctx.fillStyle = "#3f8fd8";
+      ctx.fillRect(6, -3, len - 6, 6);
+      ctx.fillStyle = "#9fe4ff";
+      ctx.fillRect(6, -2, len - 4, 4);
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(8, -1, len - 6, 2);
+      // 끝 뾰족 + 반짝
+      ctx.fillStyle = "#e8fbff";
+      ctx.fillRect(len, -1, 4, 2);
+      if (k < 0.5) {
+        ctx.fillRect(len - 1, -5, 2, 10);
+        ctx.fillRect(len - 5, -1, 10, 2);
+      }
+      ctx.restore();
+      ctx.globalAlpha = 1;
     } else if (z.k === "pulse") {
       const rad = k * z.r;
       ctx.globalAlpha = 1 - k * 0.8;
@@ -1075,6 +1098,24 @@ export function draw(ctx: CanvasRenderingContext2D, r: Run, fx: Fx, hero: HeroAr
         const fy2 = VIEW_H - ((i * 37 + Math.floor(time * 90)) % VIEW_H);
         ctx.fillStyle = i % 2 ? "#ffb03a" : "#ff5a1f";
         ctx.fillRect(fx2, fy2, 3, 5);
+      }
+      ctx.globalAlpha = 1;
+    } else if (z.k === "snow") {
+      // 눈보라: 푸른 하얀 기운 + 비스듬히 날리는 눈송이 (끝으로 갈수록 짙게)
+      const k = Math.min(1, z.t / Math.max(0.1, z.life));
+      ctx.globalAlpha = 0.14 + k * 0.12;
+      ctx.fillStyle = "#cfefff";
+      ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+      for (let i = 0; i < 90; i++) {
+        const big = i % 5 === 0;
+        const sx = (i * 97 + Math.floor(time * (big ? 140 : 90)) * 2) % (VIEW_W + 40) - 20;
+        const sy = (i * 53 + Math.floor(time * (big ? 120 : 70))) % VIEW_H;
+        ctx.globalAlpha = big ? 0.95 : 0.7;
+        ctx.fillStyle = i % 3 ? "#ffffff" : "#bfeeff";
+        if (big) {
+          ctx.fillRect(sx - 2, sy, 5, 1);
+          ctx.fillRect(sx, sy - 2, 1, 5);
+        } else ctx.fillRect(sx, sy, 2, 2);
       }
       ctx.globalAlpha = 1;
     } else if (z.k === "rain") {
@@ -1518,7 +1559,7 @@ function drawDie(ctx: CanvasRenderingContext2D, x: number, y: number, face: numb
 
 /** 반디: 랜턴 빛살 · 불씨 · 등대 빛줄기 — 밤 위에 "lighter" 로 더해 그려서 실제로 밝힘 */
 /* ───────────── 반디 빛 그림 (public/patrol/fx · 검은 바탕 = 더해 그림) ───────────── */
-const FX_NAMES = ["lens", "beam", "ember", "mote", "ring", "hit_water", "hit_grenade", "hit_notes", "hit_coins"] as const;
+const FX_NAMES = ["lens", "beam", "ember", "mote", "ring", "hit_water", "hit_grenade", "hit_notes", "hit_coins", "hit_ice"] as const;
 type FxName = (typeof FX_NAMES)[number];
 const fxCache: Partial<Record<FxName, HTMLImageElement | null>> = {};
 function fxImg(n: FxName): HTMLImageElement | null {

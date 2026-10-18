@@ -150,7 +150,7 @@ const lvAt: Record<number, number[]> = { 60: [], 150: [], 295: [] };
 /** 체력 최저 비율 (분마다) — 판 중간에 얼마나 위태로웠나 */
 const lowAt: number[][] = Array.from({ length: 9 }, () => []);
 for (let i = 0; i < N; i++) {
-  const r = newRun("bandi", 5000 + i, { maxHp: gp.hp }, { chapter: ch, gear: { atk: gp.atk * ATK_PCT, weapon: gp.weapon, wlv: gp.wlv, relics: gp.relics }, ...(process.env.DECK && { weapons: process.env.DECK.split(",") as never }), ...(process.env.WSTAR && { wstars: Object.fromEntries(process.env.DECK!.split(",").map((w) => [w, Number(process.env.WSTAR)])) }) });
+  const r = newRun((process.env.HERO ?? "bandi") as "bandi", 5000 + i, { maxHp: gp.hp }, { chapter: ch, gear: { atk: gp.atk * ATK_PCT, weapon: gp.weapon, wlv: gp.wlv, relics: gp.relics }, ...(process.env.DECK && { weapons: process.env.DECK.split(",") as never }), ...(process.env.WSTAR && { wstars: Object.fromEntries(process.env.DECK!.split(",").map((w) => [w, Number(process.env.WSTAR)])) }) });
   let guard = 0;
   while (!r.over && guard++ < 60 * (ch.len + 400)) {
     const pz = r.pause;

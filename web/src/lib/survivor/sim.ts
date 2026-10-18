@@ -191,7 +191,7 @@ export interface Shot {
 /** 시간이 지나며 피해를 주는 자리 (택배 낙하 · 불바다 · 회전 차기 그림) */
 export interface Zone {
   alive: boolean;
-  k: "drop" | "fire" | "rain" | "spin" | "moon" | "grenade" | "cone" | "whip" | "pulse" | "shell" | "slam" | "ember" | "beam";
+  k: "drop" | "fire" | "rain" | "spin" | "moon" | "grenade" | "cone" | "whip" | "pulse" | "shell" | "slam" | "ember" | "beam" | "thrust" | "snow";
   /** 방향 (cone · whip) */
   dx: number;
   dy: number;
@@ -354,6 +354,9 @@ export type Ev =
   | { t: "toll"; on: boolean }
   /** 등대 마지막 섬광 */
   | { t: "lhflash"; x: number; y: number }
+  | { t: "frostflash"; x: number; y: number }
+  | { t: "fog"; on: boolean }
+  | { t: "beamin" }
   /** 럭키 출격: 소환 · 합성 · 조합 (full = 부대가 가득 차 금화로) */
   | { t: "summon"; id: string; grade: number; src: "lv" | "chest" | "buy" | "merge" | "craft" | "start"; full?: number }
   /** 유닛 공격 (선 · 근접이면 베기) */
@@ -415,7 +418,7 @@ export interface Run {
   /** 구역 2 기믹: 밀물 (남은 시간 · 다음 · 띠 가운데 y) · 안개 · 등대 각도 */
   tide: { on: number; next: number; y: number };
   fog: { on: number; next: number };
-  beacon: { ang: number; tick: number } | null;
+  beacon: { ang: number; tick: number; lit: boolean } | null;
   seed: number;
   rng: Rng;
   t: number;
@@ -560,7 +563,7 @@ export function newRun(hero: HeroId, seed: number, bonus: Partial<Stats> = {}, o
     guard: null,
     tide: { on: 0, next: ch?.tide?.from ?? 1e9, y: 0 },
     fog: { on: 0, next: ch?.fog?.from ?? 1e9 },
-    beacon: ch?.beacon ? { ang: 0, tick: 0 } : null,
+    beacon: ch?.beacon ? { ang: 0, tick: 0, lit: false } : null,
     wstar: opts.wstars ?? {},
     seed,
     rng: { r: seed | 0 },
@@ -1456,13 +1459,13 @@ function timeline(r: Run) {
       r.fog.on -= DT;
       if (r.fog.on <= 0 || r.arena) {
         r.fog.on = 0;
-        r.ev.push({ t: "warn", text: "안개가 걷혔어요" });
+        r.ev.push({ t: "fog", on: false });
       }
     } else if (r.t >= r.fog.next) {
       r.fog.next += ch.fog.every;
       if (r.bossId < 0 && !r.arena) {
         r.fog.on = ch.fog.dur;
-        r.ev.push({ t: "warn", text: "안개가 몰려와요! 가까운 적만 보여요" });
+        r.ev.push({ t: "fog", on: true });
         r.ev.push({ t: "guide", k: "fog" });
       }
     }
@@ -1472,7 +1475,12 @@ function timeline(r: Run) {
     bc.ang += ch.beacon.speed * DT;
     if (r.tick === 180) r.ev.push({ t: "guide", k: "beacon" });
     // 빛 안: 체력이 참 (초당 2%) · 0.5초마다 빛에 닿은 적이 탐
-    if (inBeacon(r, r.p.x, r.p.y)) r.p.hp = Math.min(maxHp(r), r.p.hp + maxHp(r) * 0.02 * DT);
+    const lit = inBeacon(r, r.p.x, r.p.y);
+    if (lit) r.p.hp = Math.min(maxHp(r), r.p.hp + maxHp(r) * 0.02 * DT);
+    if (lit !== bc.lit) {
+      bc.lit = lit;
+      if (lit) r.ev.push({ t: "beamin" });
+    }
     bc.tick -= DT;
     if (bc.tick <= 0) {
       bc.tick = 0.5;
@@ -1580,8 +1588,9 @@ function fireWeapon(r: Run, slot: number) {
     case "spin":
     case "facing":
     case "cone":
+    case "thrust":
       ws.burst = w.n - 1;
-      ws.burstT = def.pattern === "spin" ? 0.26 : def.pattern === "cone" ? 0.18 : 0.07;
+      ws.burstT = def.pattern === "spin" ? 0.26 : def.pattern === "cone" ? 0.18 : def.pattern === "thrust" ? 0.12 : 0.07;
       emitOne(r, slot, ws, w, w.n - 1);
       break;
     case "whip": {
@@ -1734,6 +1743,38 @@ function emitOne(r: Run, slot: number, ws: WeaponSlot, w: W, left: number) {
       for (const [x, y] of spots) r.zones.push(zone({ k: "ember", slot, x, y, r: 14 * (1 + r.stats.area) * (ws.awake ? 1.3 : 1), dmg: w.dmg * 0.3, delay: 0, life: 1.2 * (1 + r.stats.duration), t: 0, tick: 0.15, kb: 0, follow: false }));
     }
     hitProps(r, p.x + p.fx * w.size * 0.6, p.y + p.fy * w.size * 0.6, w.size * 0.5);
+    r.ev.push({ t: "fire", w: ws.id });
+    return;
+  }
+  if (pat === "thrust") {
+    // 서리 세검: 바라보는 쪽으로 찌르기 (두 번째부터 ±18° 부채꼴) — 찌른 끝에서 얼음이 터짐, 맞은 적은 느려짐
+    const k = w.n - 1 - left;
+    const off = k === 0 ? 0 : k % 2 ? 0.32 : -0.32;
+    const ca = Math.cos(off);
+    const sa = Math.sin(off);
+    const dx = p.fx * ca - p.fy * sa;
+    const dy = p.fx * sa + p.fy * ca;
+    const ox = p.x;
+    const oy = p.y - 6;
+    const len = w.size;
+    r.zones.push(zone({ k: "thrust", slot, x: ox, y: oy, r: len, dmg: 0, delay: 0, life: w.dur, t: 0, tick: 0, kb: 0, follow: true, dx, dy }));
+    near(r, ox, oy, len, (e) => {
+      const ex = e.x - ox;
+      const ey = e.y - oy;
+      if (ex * dx + ey * dy < -e.r) return;
+      if (Math.abs(ex * dy - ey * dx) > 7 + e.r) return;
+      hurt(r, e, w.dmg, slot, w.kb, ox, oy);
+      if (e.alive && !e.def.boss) e.slow = Math.max(e.slow, 1);
+    });
+    const tx = ox + dx * len;
+    const ty = oy + dy * len;
+    const br = 18 * (1 + r.stats.area) * (ws.awake ? 1.3 : 1);
+    near(r, tx, ty, br, (e) => {
+      hurt(r, e, w.dmg * 0.5, slot, 10, tx, ty);
+      if (e.alive && !e.def.boss) e.slow = Math.max(e.slow, 1.5);
+    });
+    hitProps(r, tx, ty, br);
+    r.ev.push({ t: "boom", x: tx, y: ty, r: br, c: "#bfeeff", w: "frost" });
     r.ev.push({ t: "fire", w: ws.id });
     return;
   }
@@ -1979,6 +2020,24 @@ function updateZones(r: Run) {
           if (off > 0.32 && Math.hypot(e.x - z.x, e.y - z.y) > 22) return;
           hurt(r, e, z.dmg, -1, 18, z.x, z.y);
         });
+      }
+    }
+    if (z.k === "snow") {
+      // 눈보라: 0.3초마다 화면 속 적 느려짐 + 피해 → 끝에 얼음이 깨지며 큰 피해 (보스도)
+      if (z.t >= z.life - 0.05 && !z.hits.length) {
+        z.hits.push(1);
+        r.ev.push({ t: "frostflash", x: z.x, y: z.y });
+        for (const e of r.enemies) if (e.alive && onScreen(r, e, 10)) hurt(r, e, z.dmg * 12, -1, 50, z.x, z.y);
+      }
+      z.tick -= DT;
+      if (z.tick <= 0) {
+        z.tick = 0.3;
+        for (const e of r.enemies) {
+          if (!e.alive || !onScreen(r, e, 20)) continue;
+          e.slow = Math.max(e.slow, 1.2);
+          if (!e.def.boss) e.vuln = Math.max(e.vuln, 1.2);
+          hurt(r, e, z.dmg, -1, 0, e.x, e.y);
+        }
       }
     }
     if (z.k === "fire" || z.k === "rain") {
@@ -2897,6 +2956,10 @@ function doUlt(r: Run, who: HeroId, m: number) {
       break;
     case "bandi":
       r.zones.push(zone({ k: "beam", slot: -1, x: p.x, y: p.y, r: 180 * (1 + s.area), dmg: 30 * (1 + s.might) * m, delay: 0, life: BEAM_ON + 5 * Math.max(0.5, m) * (1 + s.duration) + BEAM_END, t: 0, tick: 0, kb: 0, follow: true, dx: Math.atan2(p.fy, p.fx), dy: 0 }));
+      break;
+    case "seolhee":
+      r.zones.push(zone({ k: "snow", slot: -1, x: p.x, y: p.y, r: 999, dmg: 7 * (1 + s.might) * m, delay: 0, life: 5 * Math.max(0.5, m) * (1 + s.duration), t: 0, tick: 0.2, kb: 0, follow: true }));
+      p.inv = Math.max(p.inv, 1);
       break;
     case "toto":
       for (let i = 0; i < Math.round(10 * Math.max(0.5, m)); i++) {

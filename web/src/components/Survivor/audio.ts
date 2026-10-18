@@ -9,6 +9,8 @@ export type Sfx = "gem" | "hit" | "kill" | "lvl" | "card" | "chest" | "reel" | "
   | "w_lantern_fire" | "w_lantern_hit" | "w_blade_fire" | "w_blade_hit" | "w_boom_fire" | "w_boom_hit" | "w_thunder_hit" | "w_thorn_hit" | "w_missile_fire" | "w_missile_hit" | "w_ball_fire" | "w_ball_hit"
   // 순찰대 새 무기: 물방울 우산 · 수류탄 · 음표 파동 · 금화 샷건
   | "w_thorn_fire" | "w_water_hit" | "w_grenade_fire" | "w_grenade_hit" | "w_notes_fire" | "w_notes_hit" | "w_coin_fire" | "w_coin_hit"
+  // 설희 서리 세검 · 눈보라 · 구역 2 기믹 · 보스 등장
+  | "w_frost_fire" | "w_frost_hit" | "frost_shatter" | "frost_ult" | "g_tide" | "g_fog" | "g_beam" | "bs_crab" | "bs_captain" | "bs_kraken"
   | "kill2" | "crit" | "combo1" | "combo2" | "bossdown";
 
 let ctx: AudioContext | null = null;
@@ -70,7 +72,7 @@ function file(c: AudioContext, name: string) {
   return p;
 }
 const hasFile = new Map<string, AudioBuffer | null>();
-const FILES = new Set<Sfx>(["lvl", "chest", "jackpot", "boom", "boss", "ult", "fuse", "win", "dead", "warn", "hurt", "dash", "pick", "card", "relic", "bless", "buy", "trial", "rage", "slam", "shield", "curse", "flag", "ot", "summon", "reveal", "rare", "legend", "levelup", "toll", "w_lantern_fire", "w_lantern_hit", "w_blade_fire", "w_blade_hit", "w_boom_fire", "w_boom_hit", "w_thunder_hit", "w_thorn_hit", "w_missile_fire", "w_missile_hit", "w_ball_fire", "w_ball_hit", "w_thorn_fire", "w_water_hit", "w_grenade_fire", "w_grenade_hit", "w_notes_fire", "w_notes_hit", "w_coin_fire", "w_coin_hit", "kill2", "crit", "combo1", "combo2", "bossdown"]);
+const FILES = new Set<Sfx>(["lvl", "chest", "jackpot", "boom", "boss", "ult", "fuse", "win", "dead", "warn", "hurt", "dash", "pick", "card", "relic", "bless", "buy", "trial", "rage", "slam", "shield", "curse", "flag", "ot", "summon", "reveal", "rare", "legend", "levelup", "toll", "w_lantern_fire", "w_lantern_hit", "w_blade_fire", "w_blade_hit", "w_boom_fire", "w_boom_hit", "w_thunder_hit", "w_thorn_hit", "w_missile_fire", "w_missile_hit", "w_ball_fire", "w_ball_hit", "w_thorn_fire", "w_water_hit", "w_grenade_fire", "w_grenade_hit", "w_notes_fire", "w_notes_hit", "w_coin_fire", "w_coin_hit", "w_frost_fire", "w_frost_hit", "frost_shatter", "frost_ult", "g_tide", "g_fog", "g_beam", "bs_crab", "bs_captain", "bs_kraken", "kill2", "crit", "combo1", "combo2", "bossdown"]);
 /** 파일 미리 받기 (처음 울릴 때 늦지 않게) */
 export function preloadSfx() {
   const c = ac();
@@ -125,7 +127,7 @@ const GAP: Partial<Record<Sfx, number>> = {
   // 타격음은 무기마다 따로 쉬어서 여러 무기가 같이 울려도 "와바박" 하게
   w_lantern_hit: 0.07, w_blade_hit: 0.05, w_boom_hit: 0.06, w_thunder_hit: 0.07, w_thorn_hit: 0.09, w_missile_hit: 0.06, w_ball_hit: 0.06,
   w_lantern_fire: 0.12, w_blade_fire: 0.06, w_boom_fire: 0.15, w_missile_fire: 0.08, w_ball_fire: 0.1,
-  w_thorn_fire: 0.2, w_water_hit: 0.08, w_grenade_fire: 0.12, w_grenade_hit: 0.07, w_notes_fire: 0.1, w_notes_hit: 0.08, w_coin_fire: 0.1, w_coin_hit: 0.05,
+  w_thorn_fire: 0.2, w_water_hit: 0.08, w_grenade_fire: 0.12, w_grenade_hit: 0.07, w_notes_fire: 0.1, w_notes_hit: 0.08, w_coin_fire: 0.1, w_coin_hit: 0.05, w_frost_fire: 0.1, w_frost_hit: 0.07, g_beam: 1.5,
   kill2: 0.03, crit: 0.07,
 };
 

@@ -44,7 +44,7 @@ export function mergeCount(p: PatrolProfile) {
   return n;
 }
 
-export default function GearPanel({ prof, onProf, onClose }: { prof: PatrolProfile; onProf(p: PatrolProfile): void; onClose(): void }) {
+export default function GearPanel({ prof, onProf, onClose, sprite = "patrol/hero/bandi" }: { prof: PatrolProfile; onProf(p: PatrolProfile): void; onClose(): void; sprite?: string }) {
   const [sel, setSel] = useState<string | null>(prof.equip.weapon ?? null);
   const [tab, setTab] = useState<Slot | "all">("all");
   const [busy, setBusy] = useState(false);
@@ -85,7 +85,7 @@ export default function GearPanel({ prof, onProf, onClose }: { prof: PatrolProfi
               ))}
             </div>
             <div className="absolute bottom-[26px] left-1/2 -translate-x-1/2">
-              <Token sprite="patrol/hero/bandi" anim="idle" h={150} />
+              <Token sprite={sprite} anim="idle" h={150} />
             </div>
             <div className="flex flex-col gap-[14px]">
               {SLOTS.slice(3).map((s) => (

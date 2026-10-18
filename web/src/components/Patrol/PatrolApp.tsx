@@ -7,7 +7,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/lib/AuthContext";
-import { CH_COUNT, ST_COUNT, SUB, SUB_KIND, firstSt, recPower, stCh, stName, stSub, stage } from "@/lib/patrol/chapters";
+import { CH_COUNT, HERO_UNLOCK, PATROL_HEROES, ST_COUNT, SUB, SUB_KIND, firstSt, heroOpen, recPower, stCh, stName, stSub, stage, type PatrolHero } from "@/lib/patrol/chapters";
 import { BOOST_RUNS, PATROL_MAX_H, QUICK_FREE, QUICK_H, STAR_GEMS, WELCOME, firstReward, patrolPending, patrolRate } from "@/lib/patrol/economy";
 import { ATK_PCT, GEAR, GRADE_COLOR, GRADE_NAME, power, powerScore, type GearItem } from "@/lib/patrol/gear";
 import { BASE_DECK, FIRST_WEAPON, NEW_WEAPONS, starOf } from "@/lib/patrol/weapons";
@@ -31,6 +31,7 @@ type Pop = "gear" | "weapon" | "box" | "patrol" | "shop" | "stars" | null;
 
 const fmt = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 const ST_KEY = "ptp-st";
+const HERO_KEY = "ptp-hero";
 /** 별 3개 조건 (보스 시간은 스테이지마다) */
 const starLabel = (def: ChapterDef) => ["클리어", def.quest ? `${questName(def.quest)} + 클리어` : "체력 50% 이상으로 클리어", `보스 ${def.bossStar ?? 45}초 안에 처치`];
 /** 판 종류 설명 (스테이지 칸 툴팁) */
@@ -96,6 +97,21 @@ export default function PatrolApp() {
     } catch {}
   };
   const [note, setNote] = useState("");
+  /** 고른 순찰대원 (브라우저에 기억 · 아직 안 열렸으면 반디) */
+  const [heroPick, setHeroPick] = useState<PatrolHero>("bandi");
+  const pickHero = (h: PatrolHero) => {
+    setHeroPick(h);
+    try {
+      localStorage.setItem(HERO_KEY, h);
+    } catch {}
+  };
+  useEffect(() => {
+    try {
+      const h = localStorage.getItem(HERO_KEY);
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- 지난번 고른 대원 (브라우저에서만)
+      if (h && (PATROL_HEROES as string[]).includes(h)) setHeroPick(h as PatrolHero);
+    } catch {}
+  }, []);
   useEffect(() => {
     try {
       const n = Number(localStorage.getItem(ST_KEY));
@@ -119,6 +135,7 @@ export default function PatrolApp() {
   }, [scene.k]);
 
   const p = prof ?? GUEST;
+  const hero: PatrolHero = heroOpen(heroPick, p.bestSt ?? 0) ? heroPick : "bandi";
   /** 열린 가장 높은 스테이지 (손님은 1-1만) */
   const open = member ? Math.min(ST_COUNT, (p.bestSt ?? 0) + 1) : 1;
   // 고른 스테이지가 아직 잠겼으면(진행 정보가 오기 전 · 다른 계정) 그 챕터에서 열린 곳까지
@@ -132,7 +149,7 @@ export default function PatrolApp() {
     if (!def) return;
     const gp = power(equippedOf(p));
     const setup: GameSetup = {
-      hero: "bandi",
+      hero,
       sup: [],
       seed: Math.floor(Math.random() * 2 ** 31),
       bonus: { maxHp: gp.hp },
@@ -172,7 +189,7 @@ export default function PatrolApp() {
   return (
     <Stage>
       {scene.k === "title" && <Title onStart={() => setScene({ k: "lobby" })} />}
-      {scene.k === "lobby" && <Lobby prof={p} member={member} loaded={!member || !!prof} st={cur} open={open} onSt={setSt} note={note} skew={skew} onProf={setProf} onStart={() => void start()} onBack={() => setScene({ k: "title" })} />}
+      {scene.k === "lobby" && <Lobby prof={p} member={member} loaded={!member || !!prof} st={cur} open={open} onSt={setSt} note={note} skew={skew} onProf={setProf} onStart={() => void start()} onBack={() => setScene({ k: "title" })} hero={hero} onHero={pickHero} />}
       {scene.k === "play" && <Game key={scene.setup.seed} setup={scene.setup} onEnd={onEnd} onQuit={onQuit} />}
       {scene.k === "result" && <Result r={scene.r} st={scene.st} fin={scene.fin} err={scene.err} member={member} onAgain={() => void start(scene.st)} onNext={() => void start(Math.min(ST_COUNT, scene.st + 1))} onLobby={() => setScene({ k: "lobby" })} />}
     </Stage>
@@ -212,7 +229,7 @@ function Title({ onStart }: { onStart(): void }) {
 
 /* ───────────── 로비 ───────────── */
 
-function Lobby({ prof, member, loaded, st, open, onSt, note, skew, onProf, onStart, onBack }: { prof: PatrolProfile; member: boolean; loaded: boolean; st: number; open: number; onSt(n: number): void; note: string; skew: number; onProf(p: PatrolProfile): void; onStart(): void; onBack(): void }) {
+function Lobby({ prof, member, loaded, st, open, onSt, note, skew, onProf, onStart, onBack, hero, onHero }: { prof: PatrolProfile; member: boolean; loaded: boolean; st: number; open: number; onSt(n: number): void; note: string; skew: number; onProf(p: PatrolProfile): void; onStart(): void; onBack(): void; hero: PatrolHero; onHero(h: PatrolHero): void }) {
   const [pop, setPop] = useState<Pop>(null);
   const [notes, setNotes] = useState(false);
   const eq = equippedOf(prof);
@@ -229,7 +246,8 @@ function Lobby({ prof, member, loaded, st, open, onSt, note, skew, onProf, onSta
     const f = firstSt(c);
     onSt(f > open ? f : Math.min(open, f + SUB - 1));
   };
-  const h = HEROES.bandi;
+  const h = HEROES[hero];
+  const [heroMsg, setHeroMsg] = useState("");
   const pend = usePending(prof, skew);
   const merges = member ? mergeCount(prof) : 0;
   const better = member ? betterGear(prof).length : 0;
@@ -289,11 +307,44 @@ function Lobby({ prof, member, loaded, st, open, onSt, note, skew, onProf, onSta
               {h.name}
             </b>
           </div>
+          {/* 순찰대원 고르기 (구역 끝 보스를 깨면 합류) */}
+          <div className="absolute top-[58px] right-[12px] left-[12px] flex flex-col gap-[4px]">
+            <div className="flex gap-[6px]">
+              {PATROL_HEROES.map((id) => {
+                const ok = heroOpen(id, prof.bestSt ?? 0);
+                const on = id === hero;
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => {
+                      sfx("click");
+                      if (ok) {
+                        onHero(id);
+                        setHeroMsg("");
+                      } else setHeroMsg(`${stName(HERO_UNLOCK[id])}를 깨면 ${HEROES[id].name}가 합류해요`);
+                    }}
+                    className="pts-btn h-[26px] px-[10px] text-[12px]"
+                    style={on ? btn(HEROES[id].color, "#07051a") : btn("#2a2468", ok ? "#e8e4ff" : "#6b63a3")}
+                  >
+                    {ok ? HEROES[id].name : `🔒 ${HEROES[id].name}`}
+                  </button>
+                );
+              })}
+            </div>
+            <span className="text-[11px] leading-[15px] text-[#a9a2d6]">
+              {heroMsg || (
+                <>
+                  필살기 <b style={{ color: h.color }}>{h.ult.name}</b> · {h.passive.name} ({h.passive.desc})
+                </>
+              )}
+            </span>
+          </div>
           <div className="absolute top-[10px] right-[12px] text-right">
             <span className="text-[11px] text-[#a9a2d6]">전투력</span>
             <b className="pts-title block text-[26px] leading-none text-[#ffd23a]">{powerScore(gp).toLocaleString()}</b>
           </div>
-          <Token sprite="patrol/hero/bandi" anim="walk" h={200} />
+          <Token sprite={h.sprite} anim="walk" h={200} />
           <div className="mt-[8px] flex gap-[6px]">
             {eq.map((it) => (
               <GearIcon key={it.uid} id={it.id} g={it.g} lv={it.lv} size={40} />
@@ -453,12 +504,12 @@ function Lobby({ prof, member, loaded, st, open, onSt, note, skew, onProf, onSta
         <NavBtn label="순찰" sub={member ? `${pend.coin.toLocaleString()} 코인 · 설계도 ${pend.bp} 쌓임` : "로그인하면 쌓여요"} c="#9fb6ff" dot={pend.h >= 1 || prof.quickLeft > 0 ? "!" : ""} disabled={!member || !loaded} onClick={() => popUp("patrol")} />
         <NavBtn label="상점" sub={!prof.shop.once.p_start ? "첫 순찰 꾸러미!" : !prof.shop.day.p_daily ? "오늘 꾸러미" : "GP 로 재화"} c="#ff9cc8" dot={!prof.shop.once.p_start || !prof.shop.day.p_daily ? "!" : ""} disabled={!member || !loaded} onClick={() => popUp("shop")} />
       </div>
-      {pop === "gear" && <GearPanel prof={prof} onProf={onProf} onClose={() => setPop(null)} />}
+      {pop === "gear" && <GearPanel prof={prof} onProf={onProf} onClose={() => setPop(null)} sprite={h.sprite} />}
       {pop === "weapon" && <WeaponsPanel prof={prof} onProf={onProf} onClose={() => setPop(null)} />}
       {pop === "box" && <Boxes prof={prof} onProf={onProf} onClose={() => setPop(null)} />}
       {pop === "shop" && <Shop prof={prof} onProf={onProf} onClose={() => setPop(null)} />}
       {pop === "stars" && <StarTrack prof={prof} onProf={onProf} onClose={() => setPop(null)} />}
-      {pop === "patrol" && <PatrolPop prof={prof} skew={skew} onProf={onProf} onClose={() => setPop(null)} />}
+      {pop === "patrol" && <PatrolPop prof={prof} skew={skew} onProf={onProf} onClose={() => setPop(null)} sprite={h.sprite} />}
       {notes && <PatchNotes onClose={() => setNotes(false)} />}
     </div>
   );
@@ -491,7 +542,7 @@ function usePending(prof: PatrolProfile, skew: number) {
 
 /* ───────────── 순찰 ───────────── */
 
-function PatrolPop({ prof, skew, onProf, onClose }: { prof: PatrolProfile; skew: number; onProf(p: PatrolProfile): void; onClose(): void }) {
+function PatrolPop({ prof, skew, onProf, onClose, sprite }: { prof: PatrolProfile; skew: number; onProf(p: PatrolProfile): void; onClose(): void; sprite: string }) {
   const pend = usePending(prof, skew);
   const rate = patrolRate(prof.bestSt ?? 0);
   const [busy, setBusy] = useState(false);
@@ -514,11 +565,11 @@ function PatrolPop({ prof, skew, onProf, onClose }: { prof: PatrolProfile; skew:
   };
   const full = pend.h >= PATROL_MAX_H;
   return (
-    <Modal title="순찰" sub="게임을 꺼 두어도 반디가 골목을 돌며 코인 · 설계도를 모아요" onClose={onClose} w={620}>
+    <Modal title="순찰" sub="게임을 꺼 두어도 순찰대가 골목을 돌며 코인 · 설계도를 모아요" onClose={onClose} w={620}>
       <div className="relative mt-[12px] h-[150px] overflow-hidden" style={{ background: "linear-gradient(180deg,#0d0a26,#221b58)", boxShadow: "inset 0 0 0 2px #2a2468" }}>
         <img src="/survivor/title.webp" alt="" className="absolute inset-0 h-full w-full object-cover opacity-40" draggable={false} />
         <div className="ptp-walk absolute bottom-[10px]">
-          <Token sprite="patrol/hero/bandi" anim="walk" h={90} />
+          <Token sprite={sprite} anim="walk" h={90} />
         </div>
         <div className="absolute top-[10px] right-[12px] text-right">
           <span className="text-[11px] text-[#a9a2d6]">순찰한 시간</span>
@@ -608,6 +659,18 @@ function Result({ r, st, fin, err, member, onAgain, onNext, onLobby }: { r: RunR
                   첫 클리어! {st >= ST_COUNT ? "맛보기 챕터를 전부 깼어요!" : stSub(st) === SUB ? `챕터 ${ch + 1}이 열렸어요` : `${stName(st + 1)}이 열렸어요`}
                 </span>
               )}
+              {fin.first &&
+                PATROL_HEROES.filter((id) => HERO_UNLOCK[id] === st).map((id) => (
+                  <div key={id} className="flex items-center gap-[10px]">
+                    <Token sprite={HEROES[id].sprite} anim="idle" h={56} />
+                    <span>
+                      <b className="pts-title text-[20px]" style={{ color: HEROES[id].color }}>
+                        {HEROES[id].name} 합류!
+                      </b>
+                      <span className="block text-[12px] text-[#a9a2d6]">로비 왼쪽 위에서 순찰대원을 바꿀 수 있어요 · 필살기 {HEROES[id].ult.name}</span>
+                    </span>
+                  </div>
+                ))}
               {fin.newStars > 0 && <span className="text-[#ffd23a]">새 별 {fin.newStars}개 · 보석 +{fin.newStars * STAR_GEMS}</span>}
               {fin.rank && (fin.first || fin.newStars > 0) && <span className="text-[#4ff0c8]">랭킹 {fin.rank}위!</span>}
               {fin.weapon && (

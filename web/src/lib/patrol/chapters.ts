@@ -239,6 +239,11 @@ export const chMul = (id: number) => 1 + (id - 1) * 0.25;
 
 export const SUB = 5;
 export const ST_COUNT = CH_COUNT * SUB;
+/** 순찰대원 합류: 이 스테이지(번호)를 깨면 (반디는 처음부터) — 구역 끝 보스마다 한 명 */
+export const HERO_UNLOCK = { bandi: 0, seolhee: 30 } as const;
+export type PatrolHero = keyof typeof HERO_UNLOCK;
+export const PATROL_HEROES = Object.keys(HERO_UNLOCK) as PatrolHero[];
+export const heroOpen = (h: PatrolHero, bestSt: number) => bestSt >= HERO_UNLOCK[h];
 /** 짧은 스테이지 길이 (초) */
 export const SHORT_LEN = 180;
 export const stCh = (st: number) => Math.ceil(st / SUB);

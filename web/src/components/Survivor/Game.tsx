@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
-import { BLESS, DASH_CD, DT, ENEMIES, EVOLUTIONS, FLAG_NAME, GIMMICK_GUIDE, type GuideK, PATROL_EVOLUTIONS, GUARD_HP, HEROES, PASSIVES, RARITY_COLOR, RARITY_NAME, STAGES, ULT_NEED, VIEW_H, VIEW_W, WEAPONS, type FlagBuff, type HeroId, type PassiveId, type StageId, type Stats, type WeaponId } from "@/lib/survivor/data";
+import { BLESS, DASH_CD, DT, ENEMIES, EVOLUTIONS, FLAG_NAME, GIMMICK_GUIDE, type GuideK, PATROL_EVOLUTIONS, GUARD_HP, HEROES, PASSIVES, RARITY_COLOR, RARITY_NAME, STAGES, ULT_NEED, VIEW_H, VIEW_W, WEAPONS, type EnemyKind, type FlagBuff, type HeroId, type PassiveId, type StageId, type Stats, type WeaponId } from "@/lib/survivor/data";
 import { RELICS, RELIC_RARITY_COLOR, RELIC_RARITY_NAME, type RelicId } from "@/lib/survivor/relics";
 import { ARMY_CAP, ARMY_GRADE_COLOR, ARMY_GRADE_NAME, FACTION_COLOR, FACTION_NAME, UNIT, buyCost, craftable, mergeKey, mergeable } from "@/lib/survivor/army";
 import { armyBuy, armyCraft, armyMerge, banishCard, bossLimit, buyRelic, chooseBless, chooseCard, chooseWish, closeChest, dawnChoice, leaveThing, maxHp, needXp, newRun, reroll, result, step, type Card, type Ev, type Input, type Pause, type Run, type RunOpts, type RunResult } from "@/lib/survivor/sim";
@@ -239,9 +239,10 @@ function armyHud(r: Run): NonNullable<Hud["army"]> {
 }
 
 /** 무기 계열 → 발사 · 타격 소리 */
-type Fam = "lantern" | "blade" | "boom" | "thunder" | "thorn" | "missile" | "ball" | "water" | "grenade" | "notes" | "coin";
+type Fam = "lantern" | "blade" | "boom" | "thunder" | "thorn" | "missile" | "ball" | "water" | "grenade" | "notes" | "coin" | "ice";
 const FAM: Partial<Record<WeaponId, Fam>> = {
   lantern: "lantern",
+  frost: "ice",
   shuriken: "blade", gale: "blade", blades: "blade", cards: "blade", whip: "blade",
   boomerang: "boom", cyclone: "boom", apple: "boom", kick: "boom", punch: "boom",
   bolt: "thunder", judgment: "thunder", lance: "thunder",
@@ -264,13 +265,15 @@ const HIT: Record<Fam, Sfx> = {
   grenade: "w_blade_hit",
   notes: "w_notes_hit",
   coin: "w_coin_hit",
+  ice: "w_frost_hit",
 };
-const FIRE: Partial<Record<Fam, Sfx>> = { lantern: "w_lantern_fire", blade: "w_blade_fire", boom: "w_boom_fire", missile: "w_missile_fire", ball: "w_ball_fire", grenade: "w_grenade_fire", notes: "w_notes_fire", coin: "w_coin_fire" };
+const FIRE: Partial<Record<Fam, Sfx>> = { lantern: "w_lantern_fire", blade: "w_blade_fire", boom: "w_boom_fire", missile: "w_missile_fire", ball: "w_ball_fire", grenade: "w_grenade_fire", notes: "w_notes_fire", coin: "w_coin_fire", ice: "w_frost_fire" };
 /** 타격 그림: 무기 계열 → 그림 · 지름 · 길이 · 화면에 최대 몇 개 */
 const HIT_FX: Partial<Record<Fam, { k: HitK; s: number; life: number; max: number }>> = {
   water: { k: "water", s: 24, life: 0.3, max: 12 },
   notes: { k: "notes", s: 26, life: 0.36, max: 10 },
   coin: { k: "coins", s: 16, life: 0.26, max: 14 },
+  ice: { k: "ice", s: 20, life: 0.26, max: 12 },
 };
 /** 음표 파동: 박자마다 펜타토닉 음계를 따라 올라갔다 내려옴 (도 레 미 솔 라) */
 const NOTE_STEPS = [0, 2, 4, 7, 9, 12, 9, 7, 4, 2];
@@ -290,7 +293,9 @@ const stageBgm = (r: Run) => {
   return HAS_BGM.has(n) ? n : r.ch.id >= 4 ? "pt_ch2" : "pt_ch1";
 };
 /** 필살기 컷인 그림 (public/patrol/cutin) */
-const CUTIN: Partial<Record<HeroId, string>> = { bandi: "/patrol/cutin/bandi.webp" };
+const CUTIN: Partial<Record<HeroId, string>> = { bandi: "/patrol/cutin/bandi.webp", seolhee: "/patrol/cutin/seolhee.webp" };
+/** 보스 등장 울음 (구역 2) */
+const BOSS_SFX: Partial<Record<EnemyKind, Sfx>> = { boss_crab: "bs_crab", boss_captain: "bs_captain", boss_kraken: "bs_kraken" };
 /** 연속 처치 외침 */
 const COMBO_SHOUT: Record<number, string> = { 25: "좋아요!", 50: "대단해요!", 100: "엄청나요!!", 200: "멈출 수 없어!!", 500: "전설의 순찰!!!" };
 const fmt = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
@@ -497,6 +502,12 @@ export default function Game({ setup, onEnd, onQuit }: { setup: GameSetup; onEnd
               sfx("w_water_hit", { vol: 0.8, rate: 0.85 + Math.random() * 0.2 });
               break;
             }
+            if (e.w === "frost") {
+              // 서리 세검 끝: 얼음 파편이 터짐 (소리는 맞은 적마다 타격음)
+              fx.hits.push({ k: "ice", x: e.x, y: e.y - 2, s: e.r * 2.2, t: 0, life: 0.3, flip: Math.random() < 0.5 });
+              fx.rings.push({ x: e.x, y: e.y, r: e.r, c: "#e8fbff", t: 0, life: 0.18, fill: false });
+              break;
+            }
             if (e.w === "grenade" || e.w === "cluster") {
               // 수류탄: 폭발 그림 (하얀 섬광 → 불덩이 → 연기) + 쿵
               fx.hits.push({ k: "grenade", x: e.x, y: e.y - 4, s: e.r * 2.6, t: 0, life: 0.45, flip: Math.random() < 0.5 });
@@ -563,6 +574,7 @@ export default function Game({ setup, onEnd, onQuit }: { setup: GameSetup; onEnd
           case "boss":
             fx.shake = 8;
             sfx("boss");
+            if (BOSS_SFX[e.kind]) sfx(BOSS_SFX[e.kind]!, { vol: 0.9 });
             say(e.arena ? `${runRef.current.ch ? (runRef.current.ch.sub && runRef.current.ch.sub < 5 ? "미니 보스" : "챕터 보스") : "새벽 보스"} — ${ENEMIES[e.kind].name}` : `보스 등장 — ${ENEMIES[e.kind].name}`, "#ff3d6e");
             if (e.arena) playBgm(runRef.current.ch ? "pt_boss" : "boss");
             break;
@@ -576,6 +588,7 @@ export default function Game({ setup, onEnd, onQuit }: { setup: GameSetup; onEnd
               fx.stop = Math.max(fx.stop, 0.65);
               setCut({ id: Date.now(), hero: e.hero });
               sfx("ult");
+              if (e.hero === "seolhee") sfx("frost_ult", { vol: 0.9 });
               break;
             }
             fx.flash = 1.2;
@@ -583,6 +596,29 @@ export default function Game({ setup, onEnd, onQuit }: { setup: GameSetup; onEnd
             fx.shake = 8;
             sfx("ult");
             say(HEROES[e.hero].ult.name + "!", HEROES[e.hero].color);
+            break;
+          case "frostflash":
+            // 눈보라 끝: 화면 속 얼음이 한꺼번에 깨짐
+            fx.flash = 1.4;
+            fx.flashC = "#e8fbff";
+            fx.shake = 10;
+            fx.stop = Math.max(fx.stop, 0.08);
+            for (let i = 0; i < 24; i++) {
+              const a = Math.random() * Math.PI * 2;
+              const v = 120 + Math.random() * 160;
+              fx.parts.push({ x: e.x + Math.cos(a) * 40, y: e.y + Math.sin(a) * 30, vx: Math.cos(a) * v, vy: Math.sin(a) * v * 0.8 - 40, c: i % 3 ? "#e8fbff" : "#7fd4ff", t: 0, life: 0.45 + Math.random() * 0.25, s: 3 });
+            }
+            sfx("frost_shatter");
+            sfx("crit");
+            break;
+          case "fog":
+            if (e.on) {
+              say("🌫 안개가 몰려와요! 가까운 적만 보여요", "#a9c8d8");
+              sfx("g_fog", { vol: 0.8 });
+            } else say("안개가 걷혔어요", "#a9c8d8");
+            break;
+          case "beamin":
+            sfx("g_beam", { vol: 0.55 });
             break;
           case "lhflash":
             fx.flash = 1.4;
@@ -641,7 +677,7 @@ export default function Game({ setup, onEnd, onQuit }: { setup: GameSetup; onEnd
             break;
           case "tide":
             say("🌊 밀물! 물 안 적은 느리고 약해져요", "#5fb8ff");
-            sfx("toll", { rate: 0.7, vol: 0.7 });
+            sfx("g_tide", { vol: 0.85 });
             fx.shake = Math.max(fx.shake, 2);
             break;
           case "toll":
