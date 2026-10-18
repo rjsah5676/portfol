@@ -10,6 +10,7 @@ import Missions from "./Missions";
 import Vault from "./Vault";
 import { useDailyReady } from "@/components/Points/DailyMissions";
 import { asset } from "@/lib/poker/assets";
+import { installImgFallback } from "@/lib/poker/imgFallback";
 import {
   getSound,
   onSoundChange,
@@ -73,6 +74,8 @@ const isStandalone = () =>
     (navigator as Navigator & { standalone?: boolean }).standalone === true);
 
 export default function PokerApp({ rank }: { rank: RankRow[] | null }) {
+  // 그림을 못 받아왔을 때 깨진 그림 대신 다시 받기 · 대신할 그림 · 숨김
+  useEffect(() => installImgFallback(), []);
   const router = useRouter();
   const params = useSearchParams();
   const tableId = params.get("t");
