@@ -343,6 +343,14 @@ const LINES: Record<CharId, Partial<Record<Cue, string[]>>> = {
     lose: ["…졌어요."],
     leave: ["…갈게요."],
   },
+  // 세라도 사야 쓰는 캐릭터라 봇으로는 안 앉음
+  sera: {
+    sit: ["에헤헤, 왔다.", "옆자리… 비어 있지?"],
+    allin: ["올인. 도망 못 가."],
+    win: ["에헤헤, 내 거."],
+    lose: ["…괜찮아. 다음엔 안 놓쳐."],
+    leave: ["금방 다시 올게."],
+  },
 };
 
 /** 상황에 맞는 한마디 (없거나 말수가 적으면 undefined). force 는 꼭 말해야 하는 상황 */

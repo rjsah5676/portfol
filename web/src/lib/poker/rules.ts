@@ -117,8 +117,8 @@ export const SITOUT_KICK_MS = 3 * 60_000;
  * 캐릭터들. 회원은 하나를 골라 쓰고(겹쳐도 됨), 봇은 무료 캐릭터 중 하나로 앉음.
  * 그림은 web/public/poker/char/{id}/ 에 (동작 8 · 표정 8 · 이모티콘 8 · 프로필 · 전신 · 컷인).
  */
-export type CharId = "jinwoo" | "yeonseo" | "taeyang" | "jeongmin" | "amy" | "mio";
-export const CHAR_IDS: CharId[] = ["jinwoo", "yeonseo", "taeyang", "jeongmin", "amy", "mio"];
+export type CharId = "jinwoo" | "yeonseo" | "taeyang" | "jeongmin" | "amy" | "mio" | "sera";
+export const CHAR_IDS: CharId[] = ["jinwoo", "yeonseo", "taeyang", "jeongmin", "amy", "mio", "sera"];
 export const CHARS: Record<CharId, { name: string; color: string; blurb: string; age: number; birthday: string; sign: string }> = {
   jinwoo: { name: "진우", color: "#e5322d", blurb: "직진. 큰 베팅을 좋아하는 승부사", age: 24, birthday: "4월 2일", sign: "양자리" },
   yeonseo: { name: "연서", color: "#4a6fd6", blurb: "표정이 없다. 침착하게 한 방을 노림", age: 29, birthday: "11월 8일", sign: "전갈자리" },
@@ -126,6 +126,7 @@ export const CHARS: Record<CharId, { name: string; color: string; blurb: string;
   jeongmin: { name: "정민", color: "#8b5cf6", blurb: "확률대로 친다. 근거 없는 콜은 안 함", age: 28, birthday: "9월 12일", sign: "처녀자리" },
   amy: { name: "에이미", color: "#38bdf8", blurb: "딱히 이기고 싶은 건 아니거든. 딱봐도 츤데레", age: 22, birthday: "6월 5일", sign: "쌍둥이자리" },
   mio: { name: "미오", color: "#7c9cff", blurb: "말수가 적다. 토끼 인형을 안고 조용히 칩을 쓸어 감", age: 26, birthday: "3월 3일", sign: "물고기자리" },
+  sera: { name: "세라", color: "#ff5fa2", blurb: "웃으면서 끝까지 따라온다. 한 번 찍은 판은 절대 안 놓침", age: 23, birthday: "2월 14일", sign: "물병자리" },
 };
 /**
  * 사야 쓰는 캐릭터의 가격 — 포인트 (기본 다섯 명은 무료라 없음). 값은 lib/points.ts 의 SHOP 에서. 산 캐릭터는 users.poker.chars 에 쌓임.
