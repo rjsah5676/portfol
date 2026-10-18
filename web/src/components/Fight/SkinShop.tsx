@@ -31,6 +31,8 @@ export default function SkinShop({ initial = "shop", onClose }: { initial?: Shop
   const mine = useMySkins(profile?.nick ?? "");
   const [tab, setTab] = useState<ShopTab>(initial);
   const [pick, setPick] = useState(FIGHT_SKINS[0]?.id ?? "");
+  /** 상점 목록 캐릭터 거르기 ("" = 전체) */
+  const [chF, setChF] = useState("");
   /** 구매 확인 중인 스킨 (한 번 더 누르면 삼) */
   const [confirm, setConfirm] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -147,9 +149,35 @@ export default function SkinShop({ initial = "shop", onClose }: { initial?: Shop
 
         {tab === "shop" && skin && (
           <div className="flex min-h-0 flex-1 gap-[1.6cqw] p-[1.6cqw]">
-            {/* 왼쪽: 스킨 목록 */}
-            <div className="gold-scroll flex w-[17cqw] flex-col gap-[0.8cqw] overflow-y-auto pr-[0.4cqw]">
-              {FIGHT_SKINS.map((s) => {
+            {/* 왼쪽: 캐릭터 고르기 + 스킨 목록 */}
+            <div className="flex w-[17cqw] min-h-0 flex-col gap-[0.8cqw]">
+            <div className="flex flex-wrap gap-[0.4cqw]">
+              {[{ id: "", i: -1 }, ...CHARS.map((c, i) => ({ id: c.id, i })).filter((c) => FIGHT_SKINS.some((s) => s.ch === c.id))].map((c) => {
+                const on = chF === c.id;
+                return (
+                  <button
+                    key={c.id || "all"}
+                    type="button"
+                    title={c.i < 0 ? "전체" : CHARS[c.i].name}
+                    onClick={() => {
+                      sfxUi("move");
+                      setChF(c.id);
+                      const first = FIGHT_SKINS.find((s) => !c.id || s.ch === c.id);
+                      if (first) setPick(first.id);
+                      setConfirm(null);
+                      setMsg(null);
+                    }}
+                    className={`flex h-[2.8cqw] cursor-pointer items-center justify-center overflow-hidden rounded-[0.45cqw] border-[0.18cqw] ${
+                      c.i < 0 ? "min-w-[3.6cqw] px-[0.5cqw] text-[1cqw] font-bold" : "w-[2.8cqw]"
+                    } ${on ? "border-[#F2C35B] bg-white/15 text-[#F2C35B]" : "border-transparent bg-white/[0.06] text-white/70 opacity-70 hover:opacity-100"}`}
+                  >
+                    {c.i < 0 ? "전체" : <img src={faceUrl(c.i)} alt="" className={`h-full w-full object-cover ${PX}`} />}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="gold-scroll flex min-h-0 flex-1 flex-col gap-[0.8cqw] overflow-y-auto pr-[0.4cqw]">
+              {FIGHT_SKINS.filter((s) => !chF || s.ch === chF).map((s) => {
                 const on = s.id === skin.id;
                 const it = shopItem(skinItem(s.id));
                 return (
@@ -177,6 +205,7 @@ export default function SkinShop({ initial = "shop", onClose }: { initial?: Shop
                   </button>
                 );
               })}
+            </div>
             </div>
 
             {/* 가운데: 전신 그림 + 게임 속 도트 */}
