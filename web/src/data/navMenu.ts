@@ -127,6 +127,7 @@ export const NAV_GROUPS: NavGroup[] = [
         label: "DOODLE PARTY",
         desc: "그림 맞히기 · 가짜 화가 · 그림 릴레이, 최대 8명 그림 파티게임",
         icon: "🎨",
+        featured: true,
       },
       {
         href: "/games/melongame",
