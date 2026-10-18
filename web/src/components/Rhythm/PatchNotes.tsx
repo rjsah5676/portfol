@@ -17,11 +17,26 @@ export interface Patch {
 
 export const PATCHES: Patch[] = [
   {
+    ver: "v2.8",
+    name: "센 구간 몰아치기 · ULTIMA 정리",
+    date: "2026.10.18",
+    lines: [
+      "NIGHTMARE 동시치기를 osu 만큼 — 줄 중 단노트 · 2개 · 3개 동시가 42 · 51 · 6% → 61 · 34 · 6% (osu 랭크 Lv13~16 64 · 31 · 2%, Quaver 57 · 33 · 7%). 박 머리 동시치기는 센 소리에만, 뒷박 동시치기 60 → 30%",
+      "대신 센 구간을 몰아치게 — 곡에서 가장 센 40% 마디는 16분까지 채우고(소리 없는 칸도), 나머지는 8분. 2초 구간 중 가장 촘촘한 10%가 초당 9.5 → 10.5~12줄 (osu 11~11.5, Quaver 10~11.8). 전엔 레벨이 모자라면 곡 전체를 「아주 센 마디」로 넓혀 평평했음",
+      "16분 상한(150 BPM 이하 42%, 170 이상 30%)은 그대로. EX 보다 레벨이 안 높으면 그때만 동시치기 제한을 풂",
+      "ULTIMA 도 같은 결로 — 16분 45 → 27% (osu · Quaver Lv17~21 중앙값 150 BPM 이하 35~45%, 185 이상 16~25% → 150 이하 40%, 185 이상 27% 상한), 3개 동시 정박 줄의 30%까지, 박 머리 동시치기는 센 소리에만, 200ms 안 같은 레인 연타 55 → 36% (osu 28~37%)",
+      "ULTIMA 는 16분을 덜 써서 레벨이 1~2 내려감 — 레벨 맞추기가 16분을 곡 전체에 깔아 19~20을 내던 것",
+      "EX(Lv10~13)는 osu · Quaver 와 노트 수 · 동시치기 · 정박 비율이 거의 같아 그대로",
+      "레벨 바뀜(NIGHTMARE): ANiMA 15 → 16, Full Combo!! 15 → 16, 질주주의보 14 → 15, 夏霞のあと 15 → 16, New Dimension 14 → 15, Pixel Fighting 14 → 16, Maximum Velocity 15 → 16, Monarch's Fall 15 → 14, STARLIGHT CODE 14 → 13",
+      "레벨 바뀜(ULTIMA): ANiMA 19 → 17, Étude of Falling Stars 18 → 16, FREEDOM DiVE 16 → 17, 휘모리 18 → 17, Lucky Seven Rush 18 → 17, OVERLOAD PROTOCOL 16 → 15, Pixel Fighting 18 → 17, STARLIGHT CODE 17 → 15, Maximum Velocity 19 → 17",
+    ],
+  },
+  {
     ver: "v2.7",
     name: "NIGHTMARE 3개 동시치기 줄임",
     date: "2026.10.18",
     lines: [
-      "NIGHTMARE 3개 동시치기를 줄의 21% → 6%로 — osu · Quaver 랭크 Lv13~16 은 2% · 7% (FREEDOM DiVE 고정 채보 0.1%). 레벨 맞추기가 정박 동시치기를 3개까지 두껍게 해서 레벨을 채우던 것. 이제 정박 줄의 12%까지만, 센 소리부터",
+      "NIGHTMARE 3개 동시치기를 줄의 21% → 6%로 — osu · Quaver 랭크 Lv13~16 은 2% · 7% (FREEDOM DiVE 고정 채보 0.1%). 레벨 맞추기가 정박 동시치기를 3개까지 두껍게 해서 레벨을 채우던 것. 이제 정박 줄의 20%까지만, 센 소리부터",
       "빠진 만큼은 2개 동시치기 · 16분으로 채우되 16분은 곡 빠르기만큼만 — 150 BPM 이하 줄의 42%, 170 BPM 이상 30%까지 (osu · Quaver 같은 구간 중앙값 32~42% · 8~20%). 넘는 채보는 안 고름",
       "약한 16분 소리 · 소리 없는 16분 칸은 한 번에 다 안 열고 약한 것부터 차츰 (한 번에 열면 16분이 8 → 35%로 튐)",
       "FREEDOM DiVE NIGHTMARE(고정 채보)와 다른 난이도는 그대로",

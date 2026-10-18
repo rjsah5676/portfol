@@ -493,7 +493,7 @@ const FREEDOMDIVE = audioSong(
  *   pixelfighting --boss '{}' --explus '{}' --levels 3,6,9,13,16,18   (NIGHTMARE는 15)
  *   freedomdive --boss '{}' --explus '{}' --levels 3,5,9,12,14,17 --keep nightmare   (NIGHTMARE는 10/8~10/14 의 Lv15 채보 고정 — 직접 쳐 보고 제일 재밌던 것)   (도입부만 빽빽하던 것 고르게 한 뒤 레벨 그대로 둠 — 222 BPM이라 16분 스트림이 한계)   (222 BPM 8분·16분이 꽉 차도 별점 12·15 — 그 위는 24분·잭이 필요)
  *   midnight    --single --bpm-label 111 --levels 3,5,8,11   (2배 템포 222로 잡혀서 --single · 잔잔한 곡이라 나이트메어 없음)
- *   starlight   --boss '{}' --explus '{}' --levels 3,6,9,12,15,17   (NIGHTMARE는 14)
+ *   starlight   --boss '{}' --explus '{}' --levels 3,6,9,12,15,17   (NIGHTMARE는 13)
  *   sugarcloud  --boss '{}' --explus '{}' --levels 3,6,9,12,15,18
  *   overload    --single --bpm-label 140 --boss '{}' --explus '{}' --levels 3,6,10,13,16,19   (ULTIMA는 18 — 하프타임이라 280으로 잡혀서 --single)
  *   etude       --bpm-label 170 --boss '{}' --explus '{}' --levels 3,6,10,13,17,20   (NIGHTMARE는 16)
