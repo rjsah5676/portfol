@@ -11,7 +11,6 @@ import {
   CELLS,
   STACK,
   canRecipe,
-  stackMult,
   recipeOpen,
   counts,
   hasEmpty,
@@ -973,12 +972,12 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry, 
                   ×{selCell.units.length}
                   {sel >= CELLS && " · 보관함"}
                 </span>
-                {selDef.stack && (
+                {sel < CELLS && b.dbuf[sel] > 0 && (
                   <span
                     className="text-[12px] font-bold text-[#4cffb0]"
-                    title={`필드에 ${selDef.name} 이(가) 많을수록 모두 세져요 (최대 ${selDef.stack.max}기, 보관함은 안 셈)`}
+                    title="주변 키메라의 피해 버프 (여러 기면 겹쳐요, 보관함은 안 받음)"
                   >
-                    중첩 {Math.min(selDef.stack.max, b.stackN[selDef.id] ?? 0)}기 · 피해 ×{stackMult(b, selDef).toFixed(2)}
+                    버프 피해 +{Math.round(b.dbuf[sel] * 100)}%
                   </span>
                 )}
               </div>

@@ -3,7 +3,7 @@ import { ENGR_PITY, engrOutcome, rollEngr } from "../../web/src/lib/defense/engr
 import { B, BALANCE_VER, LAST_WAVE, countOf, sec } from "../../web/src/lib/defense/balance";
 import { BOTS, botTurn } from "../../web/src/lib/defense/bot";
 import { HASH_TICKS, TICKS_PER_TURN, TURN_MS, replay, replayer, scoreOf, validLog, type LogEntry } from "../../web/src/lib/defense/replay";
-import { CELLS, SLOTS, apply, expNext, hashGame, isCmd, newGame, pureT, stackMult, step, unitCount, upCost, type Game } from "../../web/src/lib/defense/sim";
+import { CELLS, SLOTS, apply, expNext, hashGame, isCmd, newGame, pureT, step, cellX, cellY, unitCount, upCost, type Game } from "../../web/src/lib/defense/sim";
 import { EXP } from "../../web/src/lib/defense/town";
 import { RECIPES, UNIT, UNITS } from "../../web/src/lib/defense/units";
 import { BOSSES, PHASE_PAIRS, bossOfWave, phaseOn } from "../../web/src/lib/defense/enemies";
@@ -956,7 +956,7 @@ describe("픽셀 글리치 디펜스 서버", () => {
 });
 
 describe("키메라 (엔진)", () => {
-  it("키메라: 세 세력 레전드 하나씩 (많이 쌓인 칸부터) · 필드에 모일수록 피해 배수 · 보관함은 안 셈", () => {
+  it("키메라: 세 세력 레전드 하나씩 (많이 쌓인 칸부터) · 주변 피해 버프가 여러 기면 겹침 (최대 cap) · 보관함은 안 줌", () => {
     const g = started(9, 1);
     const b = g.boards[0];
     const put = (id: string, n: number, at = b.cells.findIndex((c) => !c.def)) => {
@@ -976,12 +976,17 @@ describe("키메라 (엔진)", () => {
     const at = b.cells.findIndex((c) => c.def === "h_chimera");
     expect(at).toBeGreaterThanOrEqual(0);
     step(g);
-    expect(stackMult(b, UNIT.h_chimera)).toBe(1);
+    const P = UNIT.h_chimera.buff!.pct;
+    expect(b.dbuf[at]).toBeCloseTo(P); // 자기 칸도 받음
     b.cells[at].units.push({ cd: 0, ult: 0, stun: 0, n: 0 }, { cd: 0, ult: 0, stun: 0, n: 0 });
-    put("h_chimera", 3, CELLS); // 보관함
-    b.dirty = true;
+    put("h_chimera", 3, CELLS); // 보관함은 버프를 안 줌
+    const near = b.cells.findIndex((c, k) => k < CELLS && !c.def && Math.hypot(cellX(k) - cellX(at), cellY(k) - cellY(at)) <= 1.01);
+    put("h_chimera", 3, near); // 옆 칸 키메라 3기 → 겹침
     step(g);
-    expect(b.stackN.h_chimera).toBe(3);
-    expect(stackMult(b, UNIT.h_chimera)).toBeCloseTo(1 + UNIT.h_chimera.stack!.pct * 2);
+    expect(b.dbuf[at]).toBeCloseTo(P * 6);
+    put("h_chimera", 3, b.cells.findIndex((c, k) => k < CELLS && !c.def && k !== near && Math.hypot(cellX(k) - cellX(at), cellY(k) - cellY(at)) <= 1.5));
+    put("h_chimera", 3, b.cells.findIndex((c, k) => k < CELLS && !c.def && Math.hypot(cellX(k) - cellX(at), cellY(k) - cellY(at)) <= 2.2));
+    step(g);
+    expect(b.dbuf[at]).toBeCloseTo(UNIT.h_chimera.buff!.cap); // 최대
   });
 });

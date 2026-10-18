@@ -604,9 +604,9 @@ function UnitsTab({ p, act, busy }: TabProps) {
   return (
     <div className="flex h-full gap-3">
       <div className="flex min-w-0 flex-1 flex-col">
-        <div className="mb-2 flex items-center gap-1.5">
+        <div className="mb-2 flex flex-wrap items-center gap-1.5 [&_button]:whitespace-nowrap">
           {(["knight", "mech", "arcane", "hidden"] as Faction[]).map((f) => (
-            <Btn key={f} tone={fac === f ? (f === "hidden" ? "cyan" : f) : "ghost"} className="h-8 px-3 text-[12px] font-bold" onClick={() => setFac(f)}>
+            <Btn key={f} tone={fac === f ? (f === "hidden" ? "cyan" : f) : "ghost"} className="h-8 px-2.5 text-[12px] font-bold" onClick={() => setFac(f)}>
               <FactionIcon f={f} size={12} className="mr-1" />
               {FACTION_NAME[f]}
             </Btn>
@@ -615,7 +615,7 @@ function UnitsTab({ p, act, busy }: TabProps) {
             tone={fac === "hidden" ? "cyan" : fac}
             disabled={busy || !tabAll.n}
             silent
-            className="ml-auto h-8 px-3 text-[12px] font-bold"
+            className="ml-auto h-8 px-2.5 text-[12px] font-bold"
             title={tabAll.n ? `${FACTION_NAME[fac]} 유닛만 낮은 레벨부터 고르게 ${tabAll.n}번 강화 — 조각 ${fmtNum(tabAll.pieces)} 사용` : `지금 올릴 수 있는 ${FACTION_NAME[fac]} 유닛이 없어요`}
             onClick={() => void act(() => meta.unitUpAll(undefined, fac), "upgrade")}
           >
@@ -625,7 +625,7 @@ function UnitsTab({ p, act, busy }: TabProps) {
             tone="main"
             disabled={busy || !all.n}
             silent
-            className="h-8 px-3 text-[12px] font-bold"
+            className="h-8 px-2.5 text-[12px] font-bold"
             title={all.n ? `모든 세력 유닛을 낮은 레벨부터 고르게 ${all.n}번 강화 — 조각 ${fmtNum(all.pieces)} 사용 (「−」로 하나씩 되돌릴 수 있어요)` : "지금 올릴 수 있는 유닛이 없어요"}
             onClick={() => void act(() => meta.unitUpAll(), "upgrade")}
           >
@@ -635,7 +635,7 @@ function UnitsTab({ p, act, busy }: TabProps) {
             tone={downArm ? "danger" : "ghost"}
             disabled={busy || !refund.n}
             silent
-            className={`h-8 px-3 text-[12px] ${downArm ? "dfn-pulse" : ""}`}
+            className={`h-8 px-2.5 text-[12px] ${downArm ? "dfn-pulse" : ""}`}
             title={refund.n ? `모든 유닛을 0레벨로 — 카드 ${fmtNum(refund.cards)} · 조각 ${fmtNum(refund.pieces)} 전부 돌려받아요` : "올린 유닛이 없어요"}
             onClick={() => {
               if (!downArm) return setDownArm(true);

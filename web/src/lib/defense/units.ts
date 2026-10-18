@@ -68,8 +68,8 @@ export interface UnitDef {
   /** 보스 보호막 무시 */
   pierce?: boolean;
   ult?: Ult;
-  /** 중첩: 필드에 같은 유닛이 n 기면 모두 피해 × (1 + pct × (min(n, max) − 1)) — pct 는 히든 강화(hiddenFx)를 받음 */
-  stack?: { pct: number; max: number };
+  /** 피해 버프: 주변 r 칸 아군 피해 +pct — 다른 버프와 달리 여러 기가 겹침 (칸마다 합, 최대 cap) · 히든 강화(hiddenFx)를 받음 */
+  buff?: { r: number; pct: number; cap: number };
   /** 처치할 때: 골드 · 행운석 확률 */
   onKill?: { gold?: number; goldChance?: number; stone?: number };
   /** 판매 값 (없으면 등급 기본값 balance.ts B.sell · B.sellStones) */
@@ -812,21 +812,21 @@ export const UNITS: UnitDef[] = [
     ult: { every: 6, kind: "delete", pct: 0.08, name: "백신 주입" },
     desc: "글리치를 쫓아온 안드로이드. 필드 전체 · 보스 ×2.5 · 보호막 무시 · 방어 깎기 40 · 6타마다 정화 (보스는 최대 체력 8%)",
   }),
-  // 짬처리 히든: 세 세력 레전드 하나씩 → 여러 기 모일수록 셈 (후반에 남는 레전드 정리용)
+  // 짬처리 히든: 세 세력 레전드 하나씩 → 주변 아군 피해 버프 (여러 기면 버프가 겹침)
   U({
     id: "h_chimera",
     name: "오버플로 키메라",
     faction: "hidden",
     grade: 5,
     dtype: "magic",
-    dmg: 1300,
-    aps: 1.25,
-    range: 3.4,
+    dmg: 700,
+    aps: 1.2,
+    range: 3.2,
     glyph: "키메",
     splash: { r: 1, pct: 0.5 },
-    stack: { pct: 0.25, max: 9 },
+    buff: { r: 2.2, pct: 0.12, cap: 1.2 },
     ult: { every: 10, kind: "nova", r: 1.6, mult: 3, name: "오버플로" },
-    desc: "남은 레전드가 뭉쳐 넘친 버그 덩어리. 범위 공격 · 필드의 키메라 하나마다 모든 키메라 피해 +25% (최대 9기) · 10타마다 오버플로 (범위 ×3)",
+    desc: "남은 레전드가 뭉친 버그 덩어리. 주변 아군 피해 +12% — 다른 버프와 달리 여러 기면 겹쳐요 (칸마다 최대 +120%) · 범위 공격 · 10타마다 오버플로 (범위 ×3)",
   }),
 ];
 

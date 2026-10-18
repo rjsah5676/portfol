@@ -131,7 +131,7 @@ export function EngraveTab({ p, act, busy }: Props) {
               각인하기 (각인석 1)
             </Btn>
             <p className="text-[11px] leading-snug text-[var(--mute)]">
-              같은 특성이 나오면 <b className="text-[#ff9ef0]">공명</b> — 등급 +1. 다른 특성이면 둘 중 골라요 (버린 쪽이 희귀 이상이면 각인석을 돌려받아요).
+              같은 특성이 나오면 <b className="text-[#ff9ef0]">공명</b> — 등급 +1. 다른 특성이면 둘 중 골라요 (버린 쪽이 전설 이상이면 각인석을 돌려받아요).
             </p>
           </div>
         )}
