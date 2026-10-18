@@ -173,7 +173,7 @@ export default function PatrolApp() {
       const n = r.ch?.st ?? 1;
       setScene({ k: "result", r, st: n, fin: null, err: "" });
       if (!run) return;
-      void patrol.finish(run, { sec: r.sec, kills: r.kills, lv: r.lv, win: r.win, gold: r.gold, stars: r.ch?.stars ?? [false, false, false] }).then(
+      void patrol.finish(run, { sec: r.sec, kills: r.kills, lv: r.lv, win: r.win, gold: r.gold, skip: r.skip, stars: r.ch?.stars ?? [false, false, false] }).then(
         (fin) => {
           setScene((s) => (s.k === "result" ? { ...s, fin } : s));
           setProf(fin.profile);

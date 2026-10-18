@@ -125,6 +125,7 @@ const finishArg = z.object({
   lv: z.number().int().min(1).max(500),
   win: z.boolean(),
   gold: z.number().int().min(0).max(1_000_000).default(0),
+  skip: z.number().int().min(0).max(36_000).default(0),
   stars: z.tuple([z.boolean(), z.boolean(), z.boolean()]),
 });
 
@@ -311,7 +312,7 @@ export function registerPatrol({ gateway, db, points }: Deps) {
       await runs.updateOne({ _id: a.run } as never, { $set: { done: true } } as never);
       // 예전(챕터 단위) 판은 그 챕터 보스 스테이지로
       const st = run.st ?? run.ch * SUB;
-      const rep: PatrolReport = { st, sec: a.sec, kills: a.kills, lv: a.lv, win: a.win, gold: a.gold, stars: a.stars };
+      const rep: PatrolReport = { st, sec: a.sec, kills: a.kills, lv: a.lv, win: a.win, gold: a.gold, skip: a.skip, stars: a.stars };
       const wall = (Date.now() - run.startAt) / 1000;
       if (!plausible(rep, wall)) {
         console.warn("[patrol] 이상한 기록", ctx.uid, rep, wall);

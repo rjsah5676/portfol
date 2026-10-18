@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState, type CSSProperties } from "re
 import { BLESS, DASH_CD, DT, ENEMIES, EVOLUTIONS, FLAG_NAME, GIMMICK_GUIDE, type GuideK, PATROL_EVOLUTIONS, GUARD_HP, HEROES, PASSIVES, RARITY_COLOR, RARITY_NAME, STAGES, ULT_NEED, VIEW_H, VIEW_W, WEAPONS, type EnemyKind, type FlagBuff, type HeroId, type PassiveId, type StageId, type Stats, type WeaponId } from "@/lib/survivor/data";
 import { RELICS, RELIC_RARITY_COLOR, RELIC_RARITY_NAME, type RelicId } from "@/lib/survivor/relics";
 import { ARMY_CAP, ARMY_GRADE_COLOR, ARMY_GRADE_NAME, FACTION_COLOR, FACTION_NAME, UNIT, buyCost, craftable, mergeKey, mergeable } from "@/lib/survivor/army";
-import { armyBuy, armyCraft, armyMerge, banishCard, bossLimit, buyRelic, chooseBless, chooseCard, chooseWish, closeChest, dawnChoice, leaveThing, maxHp, needXp, newRun, reroll, result, step, type Card, type Ev, type Input, type Pause, type Run, type RunOpts, type RunResult } from "@/lib/survivor/sim";
+import { armyBuy, armyCraft, armyMerge, banishCard, bossLimit, buyRelic, chooseBless, chooseCard, chooseWish, closeChest, dawnChoice, leaveThing, canSkipBoss, skipToBoss, maxHp, needXp, newRun, reroll, result, step, type Card, type Ev, type Input, type Pause, type Run, type RunOpts, type RunResult } from "@/lib/survivor/sim";
 import { getArt, loadFiles, loadHero, type HeroArt } from "./art";
 import { jingle, playBgm, preloadSfx, sfx, type Sfx } from "./audio";
 import SoundSliders from "./SoundSliders";
@@ -167,6 +167,8 @@ interface Hud {
   tollNext: number;
   /** 순찰대 특수 판 목표: 문구 · 진행 · 끝남/실패 · 등불 체력 */
   quest: { text: string; got: number; need: number; done: boolean; fail: boolean; hp: number } | null;
+  /** 순찰대: 지금 보스로 건너뛸 수 있나 (2분 뒤) */
+  skipBoss: boolean;
   /** 럭키 출격 부대 (묶음: 세력 · 등급) */
   army: { groups: { key: string; id: string; n: number; grade: number; faction: string }[]; count: number; cost: number; merge: string | null; craft: { id: string; name: string } | null } | null;
 }
@@ -202,6 +204,7 @@ const hudOf = (r: Run): Hud => {
     toll: r.toll.on,
     army: r.army ? armyHud(r) : null,
     tollNext: r.def.toll ? r.toll.next - r.t : 0,
+    skipBoss: canSkipBoss(r),
     quest: r.quest
       ? {
           text: r.quest.q.k === "goblin" ? "보물 도깨비" : r.quest.q.k === "rush" ? "정예 처치" : "등불 지키기",
@@ -621,6 +624,12 @@ export default function Game({ setup, onEnd, onQuit }: { setup: GameSetup; onEnd
           case "beamin":
             sfx("g_beam", { vol: 0.55 });
             break;
+          case "skip":
+            fx.flash = 0.8;
+            fx.flashC = "#ff4fa3";
+            fx.shake = Math.max(fx.shake, 4);
+            say("보스전으로!", "#ff4fa3");
+            break;
           case "lhflash":
             fx.flash = 1.4;
             fx.flashC = "#fff6d8";
@@ -935,6 +944,8 @@ export default function Game({ setup, onEnd, onQuit }: { setup: GameSetup; onEnd
       if (r.pause?.k === "wish" && n >= 0) act((x) => chooseWish(x, n), "jackpot");
       if (r.pause?.k === "shop" && n >= 0) act((x) => buyRelic(x, n), "buy");
       if ((r.pause?.k === "shop" || r.pause?.k === "wish") && e.key === "Escape") act(leaveThing);
+      // 순찰대: B = 보스로 건너뛰기
+      if (!r.pause && !e.repeat && e.key.toLowerCase() === "b" && canSkipBoss(r)) act(skipToBoss, "warn");
       // 럭키 출격: R 소환 · F 합성 · G 조합
       if (r.army && !r.pause && !e.repeat) {
         const k = e.key.toLowerCase();
@@ -1048,6 +1059,11 @@ export default function Game({ setup, onEnd, onQuit }: { setup: GameSetup; onEnd
               </span>
             )}
             {hud.trial > 0 && <b className="pts-title pts-blink mt-[4px] text-[18px] text-[#e0d8ff]">시련 {Math.ceil(hud.trial)}초</b>}
+            {hud.skipBoss && (
+              <button type="button" onClick={() => act(skipToBoss, "warn")} className="pts-btn pointer-events-auto mt-[6px] h-[26px] px-[10px] text-[12px]" style={{ "--c": "#ff4fa3" } as CSSProperties} title="남은 정예 · 포위 · 목표 이벤트는 건너뛰고 바로 보스전 (레벨은 지금 그대로)">
+                보스로 ▶ <span className="opacity-70">B</span>
+              </button>
+            )}
             {hud.quest && (
               <span className={`pts-sub mt-[4px] text-[13px] font-bold ${hud.quest.done ? "text-[#ffd23a]" : hud.quest.fail ? "text-[#6b63a3] line-through" : "text-[#fff6c8]"}`}>
                 ★ {hud.quest.text}{" "}

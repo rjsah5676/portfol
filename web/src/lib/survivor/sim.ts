@@ -357,6 +357,7 @@ export type Ev =
   | { t: "frostflash"; x: number; y: number }
   | { t: "fog"; on: boolean }
   | { t: "beamin" }
+  | { t: "skip" }
   /** 럭키 출격: 소환 · 합성 · 조합 (full = 부대가 가득 차 금화로) */
   | { t: "summon"; id: string; grade: number; src: "lv" | "chest" | "buy" | "merge" | "craft" | "start"; full?: number }
   /** 유닛 공격 (선 · 근접이면 베기) */
@@ -445,6 +446,8 @@ export interface Run {
   bossId: number;
   arena: { x: number; y: number; hw: number; hh: number } | null;
   nextEvent: number;
+  /** 순찰대: 보스로 건너뛴 시간 (초) */
+  skip: number;
   propT: number;
   spawnAcc: number;
   chests: number;
@@ -589,6 +592,7 @@ export function newRun(hero: HeroId, seed: number, bonus: Partial<Stats> = {}, o
     bossId: -1,
     arena: null,
     nextEvent: 0,
+    skip: 0,
     propT: 8,
     spawnAcc: 0,
     chests: 0,
@@ -3424,12 +3428,36 @@ function unitUlt(r: Run, u: ArmyUnit, t: Enemy) {
   }
 }
 
+/* ───────────── 순찰대: 보스로 건너뛰기 ───────────── */
+
+/** 이 시간(초)이 지나면 남은 이벤트를 건너뛰고 바로 보스전 */
+export const SKIP_AFTER = 120;
+const bossEventIdx = (r: Run) => r.def.events.findIndex((e, i) => i >= r.nextEvent && e.k === "boss" && e.arena);
+/** 지금 건너뛸 수 있나 (보스 · 등불 지키기 중엔 안 됨) */
+export function canSkipBoss(r: Run): boolean {
+  if (!r.ch || r.over || r.arena || r.pause || r.t < SKIP_AFTER) return false;
+  if (r.guard?.alive || r.enemies.some((e) => e.alive && e.def.boss)) return false;
+  return bossEventIdx(r) >= 0;
+}
+/** 바로 보스전으로: 그 사이 이벤트(정예 · 포위 · 도깨비 …)는 건너뜀 */
+export function skipToBoss(r: Run) {
+  if (!canSkipBoss(r)) return;
+  const i = bossEventIdx(r);
+  const at = r.def.events[i].at;
+  r.skip += Math.max(0, at - r.t);
+  r.t = at;
+  r.nextEvent = i;
+  r.ev.push({ t: "skip" });
+}
+
 /* ───────────── 결과 ───────────── */
 
 export interface RunResult {
   hero: HeroId;
   stage: StageId;
   sec: number;
+  /** 순찰대: 보스로 건너뛴 시간 (sec 안에 들어 있음) */
+  skip: number;
   win: boolean;
   lv: number;
   kills: number;
@@ -3456,6 +3484,7 @@ export function result(r: Run): RunResult {
     hero: r.hero,
     stage: r.stage,
     sec: Math.floor(r.t),
+    skip: Math.floor(r.skip),
     win: r.win,
     lv: r.p.lv,
     kills: r.p.kills,

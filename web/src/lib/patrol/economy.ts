@@ -18,6 +18,8 @@ export interface PatrolReport {
   win: boolean;
   /** 판에서 주운 코인 */
   gold: number;
+  /** 보스로 건너뛴 초 (sec 안에 들어 있음 — 시간 보상 · 기록 확인에서 뺌) */
+  skip?: number;
   /** 별 3개 */
   stars: [boolean, boolean, boolean];
 }
@@ -29,7 +31,7 @@ export const stMul = (st: number) => 1 + (st - 1) * 0.05;
 export function runCoins(r: PatrolReport): number {
   const m = stMul(r.st);
   const boss = stSub(r.st) === SUB;
-  return Math.round((r.kills * 0.12 + r.sec * 0.64) * m + (r.win ? (boss ? 150 : 60) * m : 0)) + Math.min(r.gold, goldCap(r.sec));
+  return Math.round((r.kills * 0.12 + (r.sec - (r.skip ?? 0)) * 0.64) * m + (r.win ? (boss ? 150 : 60) * m : 0)) + Math.min(r.gold, goldCap(r.sec));
 }
 export const runBlueprints = (r: PatrolReport) => (r.win ? (stSub(r.st) === SUB ? 3 + 2 * stCh(r.st) : 1 + stCh(r.st)) : Math.floor(r.sec / 75));
 /** 하루 첫 N판은 보상 두 배 */
@@ -52,7 +54,8 @@ export const WELCOME = { gems: 900, coins: 200, gear: [{ id: "w_shuriken" as Gea
 
 /** 기록이 말이 되나 (wall = 서버가 잰 판 시간, 초) */
 export function plausible(r: PatrolReport, wall: number): boolean {
-  if (r.sec > wall + 8) return false;
+  if ((r.skip ?? 0) > r.sec) return false;
+  if (r.sec - (r.skip ?? 0) > wall + 8) return false;
   if (r.win && r.sec < stLen(r.st)) return false;
   if (r.sec > stLen(r.st) + 200) return false;
   if (r.kills > r.sec * 14 + 60) return false;

@@ -88,7 +88,7 @@ export const patrol = {
   profile: () => rpc<PatrolProfile>("patrol.profile"),
   rank: (limit = 50) => rpc<PatrolRankRow[]>("patrol.rank", { limit }),
   start: (st: number) => rpc<{ run: string }>("patrol.start", { st }),
-  finish: (run: string, r: { sec: number; kills: number; lv: number; win: boolean; gold: number; stars: [boolean, boolean, boolean] }) => rpc<PatrolFinish>("patrol.finish", { run, ...r }),
+  finish: (run: string, r: { sec: number; kills: number; lv: number; win: boolean; gold: number; skip?: number; stars: [boolean, boolean, boolean] }) => rpc<PatrolFinish>("patrol.finish", { run, ...r }),
   equip: (uid: string) => rpc<PatrolProfile>("patrol.equip", { uid }),
   unequip: (slot: Slot) => rpc<PatrolProfile>("patrol.unequip", { slot }),
   enhance: (uid: string, n = 1) => rpc<{ done: number; profile: PatrolProfile }>("patrol.enhance", { uid, n }),
