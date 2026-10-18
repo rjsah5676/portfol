@@ -17,6 +17,18 @@ export interface Patch {
 
 export const PATCHES: Patch[] = [
   {
+    ver: "v2.5",
+    name: "NIGHTMARE 리듬 모양 섞기",
+    date: "2026.10.18",
+    lines: [
+      "NIGHTMARE 박 안 리듬 모양을 곡 소리대로 섞음 — 박 머리 동시치기는 센 소리에만, 뒷박은 소리가 있을 때만. 전엔 박의 38%가 「정박 동시치기 + 뒷박」 한 모양이었음 (osu 는 가장 흔한 모양도 17%). 이제 19% 이고 「정박만」 · 「정박 + 뒷박 동시치기」 · 「갤럽」 · 「16분 넷」 · 「단노트 8분」이 고르게 — osu 랭크 Lv15~17 과 같은 곡으로 비교해 리듬 다양성 1.20 → 1.33~1.41 (osu 1.43), 동시치기 줄 51 → 42% (osu 39%)",
+      "NIGHTMARE 200ms 안 같은 레인 연타(8분 잭)는 노트의 35%까지만 — 보내 준 플레이 기록에서 미스가 이 자리에 3~5배 몰렸음 (Lucky Seven Rush 50 → 35%, Full Combo!! 42 → 35%)",
+      "NIGHTMARE 엔 60ms 보다 촘촘한 연타 박을 안 넣음 (200 BPM 곡 6등분 연타 50ms)",
+      "FREEDOM DiVE NIGHTMARE(고정 채보)와 다른 난이도는 그대로",
+      "레벨 바뀜(NIGHTMARE): Full Combo!! 15 → 16, New Dimension 14 → 15, Crimson Cadenza 15 → 14, Lucky Seven Rush 16 → 17, Sugar Cloud 15 → 14, OVERLOAD PROTOCOL 14 → 15, Glitch Bounce 14 → 15",
+    ],
+  },
+  {
     ver: "v2.4",
     name: "빠른 곡 16분 점프스트림 정리",
     date: "2026.10.18",

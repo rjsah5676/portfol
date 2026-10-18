@@ -232,7 +232,7 @@ const AUTO_RULES: Record<Difficulty, AutoRule> = {
     floor: 0.04,
     chord: { every: 2, need: 0.35 },
     holdBeats: 1.25,
-    thick: [1.8, 1.1, 1.0],
+    thick: [1.5, 1.25, 1.0],
     tri: 0.25,
     jackAllow: 0.5,
     jackRun: 4,
@@ -291,7 +291,16 @@ export interface NightmareTweak {
   halfChord?: number;
   /** 16분으로 채우는 박에도 뒷박 동시치기를 넣을지 (빠른 곡은 안 넣음 — 16분 점프스트림이 됨) */
   streamChord?: boolean;
+  /** 박 머리 동시치기는 그 자리 타격 세기가 이 이상일 때만 (0 = 늘) */
+  headChord?: number;
+  /** 뒷박(8분) 노트는 그 자리 타격 세기가 이 이상일 때만 (0 = 늘) — 박마다 같은 「정박 동시치기 + 뒷박」이 되지 않게 */
+  offNeed?: number;
+  /** 연타 노트 간격이 이보다 짧으면(초) 연타 박을 안 넣음 — 빠른 곡 나이트메어에 50ms 연타가 생기지 않게 */
+  burstMinGap?: number;
 }
+// 나이트메어 박 안 리듬 모양(4칸)도 곡 소리대로 섞음 — 박 머리 동시치기는 센 소리(0.45)에만, 뒷박은 소리 있을 때만(0.25).
+//  전엔 박의 38%가 「정박 동시치기 + 뒷박 단노트」 한 모양(osu 최다 모양 17%)이라 단조로웠음 — osu 와 같은 곡에 돌려
+//  모양 분포 거리 0.41 → 0.24, 간격 엔트로피 1.20 → 1.41 (osu 1.43), 동시치기 줄 51 → 43% (osu 39%)
 // 나이트메어: 정박 위주 — osu · Quaver 랭크 Lv15~17 은 줄의 정박 38~40% · 8분 34~35% · 16분 18~24%,
 //  동시치기의 68~70%가 정박 위인데 우리는 34 · 33 · 34% · 56%였음 (16분 단노트 스트림 · 16분 점프스트림으로 레벨을 냄).
 //  아주 센 박도 8분 + 박 머리 동시치기로 깔고(뭉치기 없음), 뒷박 동시치기는 60%만, 16분은 센 16분 소리(0.45)에만
@@ -310,6 +319,9 @@ const NIGHTMARE_DEFAULT: Required<NightmareTweak> = {
   fineChord: 0,
   halfChord: 0.6,
   streamChord: true,
+  headChord: 0.45,
+  offNeed: 0.25,
+  burstMinGap: 0.06,
 };
 /** EX+ 기본: 센 마디 8분·아주 센 마디 16분 꽉은 나이트메어와 비슷한 문턱(기승전결 유지), 4마디마다 16분 셋잇단 연타 */
 const EXPLUS_DEFAULT: Required<NightmareTweak> = {
@@ -327,6 +339,9 @@ const EXPLUS_DEFAULT: Required<NightmareTweak> = {
   fineChord: 0,
   halfChord: 1,
   streamChord: true,
+  headChord: 0,
+  offNeed: 0,
+  burstMinGap: 0,
 };
 /** 16분 점프스트림 몫 상한 — 0 (16분 자리 동시치기는 정박 위주와 반대 · 빠른 곡은 실제 플레이에서 무너지는 자리였음) */
 const fineChordMax = (_d: Difficulty, _fast: boolean) => 0;
@@ -1600,12 +1615,30 @@ function nightmareNotes(
   const spread = (k: number, i: number) => ((k * 7 + i * 3) % 10) / 10;
   const fineAt = (t: number, k: number, i: number) =>
     tooClose(fineHits, t, 0.03) || spread(k, i) < extraFine;
+  // 그 자리(±30ms) 타격 세기 (없으면 0)
+  const onT = an.onsets.map((o) => o.t);
+  const sAt = (t: number) => {
+    let lo = 0;
+    let hi = onT.length;
+    while (lo < hi) {
+      const m = (lo + hi) >> 1;
+      if (onT[m] < t - 0.03) lo = m + 1;
+      else hi = m;
+    }
+    let v = 0;
+    for (let i = lo; i < onT.length && onT[i] <= t + 0.03; i++) v = Math.max(v, an.onsets[i].s);
+    return v;
+  };
+  /** 박 머리: 소리가 세면 동시치기 */
+  const headN = (t: number) => (P.headChord <= 0 || sAt(t) >= P.headChord ? 2 : 1);
+  /** 뒷박(8분): 소리가 있을 때만 */
+  const offOk = (t: number) => P.offNeed <= 0 || sAt(t) >= P.offNeed;
   /** 아주 센 박 채우기: 8분 칸은 늘, 그 사이(16분) 칸은 소리가 있을 때만 */
   const putFine = (t0: number, t1: number, sub: number, k: number) => {
     const step = Math.max(1, Math.round(sub / P.loudSub));
     for (let i = 0; i < sub; i++) {
       const t = t0 + (i * (t1 - t0)) / sub;
-      if (i % step === 0 || fineAt(t, k, i)) put(t, 1);
+      if ((i % step === 0 && (i === 0 || offOk(t))) || fineAt(t, k, i)) put(t, 1);
     }
   };
   for (let k = 0; k < nBeats; k++) {
@@ -1625,7 +1658,11 @@ function nightmareNotes(
     const beatInBar = Math.round((t0 - (beats[0] ?? 0)) / beatSec) % 4;
     if (full && !fineBeat.has(k) && spread(k, 0) >= extraFine) {
       // 16분 소리가 없는 박: 8분 + 박마다 동시치기
-      for (let i = 0; i < P.loudSub; i++) put(t0 + (i * (t1 - t0)) / P.loudSub, i === 0 ? 2 : 1);
+      for (let i = 0; i < P.loudSub; i++) {
+        const t = t0 + (i * (t1 - t0)) / P.loudSub;
+        if (i === 0) put(t, headN(t));
+        else if (offOk(t)) put(t, 1);
+      }
     } else if (full && P.cluster && beatInBar < 2) {
       // 점프스트림: 8분마다 동시치기, 사이 안 채움
       for (let c = 0; c < P.chordFull; c++) put(t0 + (c * (t1 - t0)) / P.chordFull, 2);
@@ -1637,15 +1674,24 @@ function nightmareNotes(
     } else {
       const sub = full ? P.fullSub : P.loudSub;
       const chords = full ? P.chordFull : P.chordLoud;
-      for (let c = 0; c < chords; c++)
-        put(
-          t0 + (c * (t1 - t0)) / chords,
-          c === 0 || ((!full || P.streamChord) && spread(k, c) < P.halfChord) ? 2 : 1
-        );
+      for (let c = 0; c < chords; c++) {
+        const t = t0 + (c * (t1 - t0)) / chords;
+        if (c === 0) put(t, headN(t));
+        else if (offOk(t)) put(t, (!full || P.streamChord) && spread(k, c) < P.halfChord ? 2 : 1);
+      }
       if (full) putFine(t0, t1, sub, k);
-      else for (let i = 0; i < sub; i++) put(t0 + (i * (t1 - t0)) / sub, 1);
+      else
+        for (let i = 0; i < sub; i++) {
+          const t = t0 + (i * (t1 - t0)) / sub;
+          if (i === 0 || offOk(t)) put(t, 1);
+        }
     }
-    if (full && beatInBar === 3 && b % P.burstEvery === P.burstEvery - 1) {
+    if (
+      full &&
+      beatInBar === 3 &&
+      b % P.burstEvery === P.burstEvery - 1 &&
+      (t1 - t0) / P.burstSub >= P.burstMinGap
+    ) {
       // 연타 박은 연타로만: 먼저 깔린 16분·동시치기를 박 안에서 비움 — 안 비우면 16분(4등분)과 연타(6등분)가
       //  섞여 30~35ms 간격이 생김 (148 BPM에서 101ms 16분 사이에 67ms 연타 → 34ms, 한 박만 엄청 촘촘)
       //  여기서 슬롯을 지우면 패턴 고르는 순서가 밀려 곡 전체 레인이 바뀌므로, 채보를 다 만든 뒤 맨 끝에서 뺌
@@ -1954,10 +2000,56 @@ export function makeAutoCharts(
       best = finishChart(spreadFastJacks(picked.notes, floor), d);
       bestRaw = best.level;
     }
+    // 나이트메어: 200ms 안 같은 레인 연타(8분 잭)가 노트의 35%를 넘으면 넘는 만큼 옆 레인으로 — 실제 플레이 기록에서
+    //  미스가 이 자리에 3~5배 몰렸고(미스율 3.7~5.1% vs 0.6~1.2%), osu · Quaver 160~190 BPM Lv14~17 은 중앙값 32~38%
+    if (d === "nightmare" && best) {
+      best = finishChart(capJacks((best as Chart).notes, 0.2, 0.35), d);
+      bestRaw = best.level;
+    }
     out[d] = best!;
     prevLevel = bestRaw;
   }
   return out;
+}
+
+/**
+ * win 초 안 같은 레인 연타(잭)가 노트의 maxRate 를 넘지 않게: 줄 순서대로 세다가 넘는 잭 노트는 비어 있는
+ * 가까운 레인(그 줄에 없고, 그 레인에도 win 안 연타가 안 생기는 곳)으로 옮김. 옮길 데가 없으면 그대로.
+ */
+function capJacks(src: Note[], win: number, maxRate: number): Note[] {
+  const notes = src.map((n) => ({ ...n })).sort((a, b) => a.t - b.t || a.lane - b.lane);
+  const last = [-Infinity, -Infinity, -Infinity, -Infinity];
+  const busy = [-Infinity, -Infinity, -Infinity, -Infinity];
+  let jacks = 0;
+  let seen = 0;
+  for (let i = 0; i < notes.length;) {
+    let j = i;
+    while (j < notes.length && Math.abs(notes[j].t - notes[i].t) < 1e-6) j++;
+    const row = notes.slice(i, j);
+    const used = new Set(row.map((n) => n.lane));
+    for (const n of row) {
+      seen++;
+      if (n.t - last[n.lane] >= win) continue;
+      if (jacks + 1 <= maxRate * seen) {
+        jacks++;
+        continue;
+      }
+      const free = [1, -1, 2, -2, 3, -3]
+        .map((k) => n.lane + k)
+        .filter((l) => l >= 0 && l <= 3 && !used.has(l) && n.t - last[l] >= win && busy[l] < n.t);
+      if (free.length) {
+        used.delete(n.lane);
+        n.lane = free[0];
+        used.add(n.lane);
+      } else jacks++;
+    }
+    for (const n of row) {
+      last[n.lane] = n.end ?? n.t;
+      busy[n.lane] = n.end ?? -Infinity;
+    }
+    i = j;
+  }
+  return notes;
 }
 
 /** 같은 레인 연타의 최소 간격(초): NIGHTMARE · ULTIMA(Lv17 이하) / EX */
