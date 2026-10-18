@@ -32,9 +32,6 @@ export const liveIdle = (l: Look) => (skinOf(l) ? !!skinOf(l)?.live && lookReady
 /** 7포커 자리 앉은 대기 동작(움직이는 webp)이 있는 그림 폴더 */
 const SEAT_LIVE = new Set<string>(["jinwoo", "yeonseo", "taeyang", "jeongmin", "amy", "mio", "sera", "amy-summer", "yeonseo-summer", "taeyang-ts", "mio-dracula", "jinwoo-ramen", "jeongmin-detective"]);
 export const seatLive = (l: Look) => SEAT_LIVE.has(dir(l));
-/** 앉은 그림이 오른쪽을 보고 있는 캐릭터 — 오른쪽 자리에 앉으면 좌우를 뒤집어 판 가운데를 보게 */
-const SEAT_FACE_R = new Set<string>(["sera"]);
-export const seatFacesRight = (l: Look) => SEAT_FACE_R.has(dir(l));
 
 export const asset = {
   /** 캐릭터 고르기 화면 상반신 (대기 1장만 남김) */
