@@ -1046,6 +1046,23 @@ const MAPI2 = new Image(); MAPI2.src = 'a/540a9e0b89.webp';
 const MAP2_IDX = {arcade:0, challenge:1, elite:2, curse:3, vault:4, sacrifice:5, mirror:6, update:7};
 const DOOR2_IDX = {arcade:0, challenge:2, elite:4, curse:6, vault:8, sacrifice:10, mirror:12, update:14};
 function doorSpr(fr, x, y, w, h, a){ ctx.save(); ctx.globalAlpha *= (a ?? 1); ctx.imageSmoothingEnabled = true; ctx.drawImage(DOOR, (fr % 4)*64, Math.floor(fr/4)*64, 64, 64, Math.round(x), Math.round(y), w, h); ctx.restore(); }
+// 손상된 섹터는 보스 문(빨강)과 헷갈리지 않게 빨강↔초록을 바꾼 사본을 씀 (문 6·7번 칸, 지도 아이콘 3번 칸)
+function swapRG(img, rx, ry, rw, rh){
+  const c = document.createElement('canvas'); c.width = img.naturalWidth; c.height = img.naturalHeight; const g = c.getContext('2d'); g.drawImage(img, 0, 0);
+  try { const d = g.getImageData(rx, ry, rw, rh), a = d.data; for (let i = 0; i < a.length; i += 4){ const r = a[i]; a[i] = a[i+1]; a[i+1] = r; } g.putImageData(d, rx, ry); } catch(e){ return img; }
+  return c;
+}
+let DOOR2C = null, MAPI2C = null;
+const curseDoorImg = () => DOOR2C || (DOOR2.complete && DOOR2.naturalWidth ? (DOOR2C = swapRG(DOOR2, 128, 64, 128, 64)) : DOOR2);
+const curseMapImg = () => MAPI2C || (MAPI2.complete && MAPI2.naturalWidth ? (MAPI2C = swapRG(MAPI2, 96, 0, 32, 32)) : MAPI2);
+function drawCurseMark(dir){ // 문 앞 ♥-10
+  const [cx, cy] = DOOR_IN[dir], b = Math.round(Math.sin(G.frame*.12)*1.5);
+  const ix = dir === 'left' ? 16 : dir === 'right' ? -16 : 0, iy = dir === 'up' ? 14 : dir === 'down' ? -14 : 0;
+  const x = Math.round(cx + ix) - 11, y = Math.round(cy + iy) + b - 4;
+  px(x - 2, y - 2, 26, 11, 'rgba(5,6,11,.8)');
+  const h = '#ff3d5e'; px(x + 1, y, 2, 1, h); px(x + 4, y, 2, 1, h); px(x, y + 1, 7, 2, h); px(x + 1, y + 3, 5, 1, h); px(x + 2, y + 4, 3, 1, h); px(x + 3, y + 5, 1, 1, h);
+  ctx.font = '8px Silkscreen, monospace'; ctx.textAlign = 'left'; ctx.fillStyle = h; ctx.fillText('-10', x + 9, y + 6);
+}
 const DOOR_IN = {up:[W/2, T, 0], down:[W/2, H - T, Math.PI], left:[T, H/2, -Math.PI/2], right:[W - T, H/2, Math.PI/2]};
 function drawDoor(dir, fr, img){ const [cx, cy, rot] = DOOR_IN[dir]; ctx.save(); ctx.translate(cx, cy); ctx.rotate(rot); ctx.imageSmoothingEnabled = false; ctx.drawImage(img || DOOR, (fr % 4)*64, Math.floor(fr/4)*64, 64, 64, -32, -60, 64, 64); /* 64 → 64(화면 128) 정수 배율 = 또렷 */ ctx.restore(); }
 // 챕터 바위 256x128 = 64x64 4x2: 2챕 바위/금 · 3챕 바위/금 · 4챕 바위/금 · 금속 잔해 · 얼음 잔해
@@ -1516,7 +1533,7 @@ Object.assign(SPECIAL_FILL, {
   update(r){ r.pickups.push(mkPick('term', W/2, H/2 - 4, {cd:0})); r.up = {state:'idle', prog:0, hp:100, t:0}; },
 });
 const ROOM_NAME = {arcade:'오락실', challenge:'결투방', elite:'엘리트 소대', curse:'손상된 섹터', vault:'보안 금고', sacrifice:'포맷 제단', mirror:'미러 서버', update:'업데이트 설치'};
-const ROOM_COL = {arcade:'#ff7ad9', challenge:'#ff5a3d', elite:'#b46bff', curse:'#ff2e4d', vault:'#ffd23f', sacrifice:'#cfe8ff', mirror:'#a9c8ff', update:'#5dffcf'};
+const ROOM_COL = {arcade:'#ff7ad9', challenge:'#ff5a3d', elite:'#b46bff', curse:'#7dff4a', vault:'#ffd23f', sacrifice:'#cfe8ff', mirror:'#a9c8ff', update:'#5dffcf'};
 const ROOM_DESC = {challenge:'HP가 가득할 때만 열림 · 템을 집으면 웨이브', curse:'문을 지날 때 HP -10', vault:'액세스 키 2개', sacrifice:'가시를 밟을수록 보상이 커짐', mirror:'내 빌드를 그대로 쓰는 복제본', update:'단말기를 끝까지 지켜라', elite:'엘리트만 모인 방', arcade:'비트로 한 판'};
 function mkPick(kind, x, y, o={}){ return Object.assign({kind, x, y, vx:0, vy:0, r:5, pop:0}, o); }
 
@@ -2760,6 +2777,10 @@ function updatePickups(){
       if (d < rr && p.hp > 0){ p.x = pk.x + dx/d*rr; p.y = pk.y + 4 + dy/d*rr; if (!pk.broken && !(pk.cd > 0) && !(pk.spin > 0)) useMachine(pk); }
       continue;
     }
+    if (pk.kind !== 'hatch' && pk.kind !== 'portal') for (const m of room.pickups){ // 기계(슬롯 · 랜덤 박스 · 창구) 몸통 안에 떨어진 건 밖으로
+      if (!MACHINES.has(m.kind)) continue; const mx = pk.x - m.x, my = pk.y - (m.y + 4), md = Math.hypot(mx, my), mr = 19;
+      if (md < mr){ const ux = md > .5 ? mx/md : 0, uy = md > .5 ? my/md : 1; pk.x = m.x + ux*mr; pk.y = m.y + 4 + uy*mr; collideRocks(pk); clampInner(pk); }
+    }
     if (p.hp <= 0) continue;
     const dist = Math.hypot(pk.x - p.x, pk.y - p.y), touching = dist < (pk.kind === 'hatch' || pk.kind === 'portal' ? 10 : 12);
     if (!touching){ if (!(pk.away > 0) || dist > pk.away){ pk.blocked = false; pk.away = 0; } continue; } // 바꿔 내려놓은 건 확실히 떨어졌다 와야 다시 집힘
@@ -3427,7 +3448,8 @@ function drawRoom(){
       const sec = n.type === 'secret' || room.type === 'secret', boss = n.type === 'boss' || room.type === 'boss';
       const fr = sec ? 8 : locked ? 6 : boss ? (open ? 3 : 2) : n.type === 'treasure' ? (open ? 5 : 4) : n.type === 'shop' ? (open ? 7 : 0) : (open ? 1 : 0);
       const sp = DOOR2_IDX[n.type] ?? DOOR2_IDX[room.type];
-      if (sp != null && DOOR2.complete && DOOR2.naturalWidth && !sec){ drawDoor(dir, sp + (open ? 1 : 0), DOOR2); if (locked && n.type !== 'vault') drawDoor(dir, 6); continue; }
+      const cz = n.type === 'curse' || room.type === 'curse';
+      if (sp != null && DOOR2.complete && DOOR2.naturalWidth && !sec){ drawDoor(dir, sp + (open ? 1 : 0), cz ? curseDoorImg() : DOOR2); if (locked && n.type !== 'vault') drawDoor(dir, 6); if (cz && !boss) drawCurseMark(dir); continue; }
       drawDoor(dir, fr);
       continue;
     }
@@ -4091,7 +4113,7 @@ function drawMapGrid(known, ox, oy, cw, ch, g, big){
     const k = ROOM_ICON(r), isz = Math.max(5, Math.min(big ? 18 : 9, Math.min(cw, ch) - (big ? 4 : 0)));
     if (cur && big && charSpr(G.char).ok){ // 현재 방 = 내 캐릭터 얼굴
       const hs = Math.min(cw, ch) - 2; ctx.imageSmoothingEnabled = true; ctx.drawImage(charSpr(G.char).im, 10, 2, 28, 28, x + (cw - hs)/2, y + (ch - hs)/2, hs, hs); ctx.imageSmoothingEnabled = false;
-    } else if (k == null && MAP2_IDX[r.type] != null && (big || ch >= 4) && MAPI2.complete && MAPI2.naturalWidth){ const j = MAP2_IDX[r.type]; ctx.imageSmoothingEnabled = true; ctx.drawImage(MAPI2, (j % 4)*32, Math.floor(j/4)*32, 32, 32, Math.round(x + (cw - isz)/2), Math.round(y + (ch - isz)/2), isz, isz); ctx.imageSmoothingEnabled = false; }
+    } else if (k == null && MAP2_IDX[r.type] != null && (big || ch >= 4) && MAPI2.complete && MAPI2.naturalWidth){ const j = MAP2_IDX[r.type]; ctx.imageSmoothingEnabled = true; ctx.drawImage(r.type === 'curse' ? curseMapImg() : MAPI2, (j % 4)*32, Math.floor(j/4)*32, 32, 32, Math.round(x + (cw - isz)/2), Math.round(y + (ch - isz)/2), isz, isz); ctx.imageSmoothingEnabled = false; }
     else if (k != null && (big || ch >= 4)) mi(k, x + (cw - isz)/2, y + (ch - isz)/2, isz, k === 1 && !r.pickups.some(p => p.kind === 'item') ? .35 : 1);
     if (big && r.visited && r.cleared === false && r.type !== 'start' && !cur) mi(6, x + cw - 9, y + 1, 8);
   }
@@ -4622,6 +4644,7 @@ let charCur = null;
 const PATCH_NOTES = [
   {ver:'ALPHA 0.6', name:'월드 5 · 소환수 · 세트 변신', date:'2026.10.18', lines:[
     '조작 — 움직이다 쏘면 탄이 움직이던 쪽으로 살짝 휘어요 (멈춘 직후에도 잠깐 남음, 아이작처럼). Tab = 일시정지, M = 지도. 들고 있는 아이템 · 액티브 · 주머니 · 바닥 아이템에 마우스를 올리면 이름과 설명',
+    '손상된 섹터(지날 때 HP -10) 문을 초록 글리치 + ♥-10 표시로 바꿔 보스 문과 헷갈리지 않게. 고장 난 슬롯머신 · 랜덤 박스 몸통 안으로 튄 비트가 밖으로 밀려 나와 주울 수 있게',
     '월드 5 「휴지통」 — 월드 4 결말 뒤에 열리는 숨은 월드 (이미 월드 4를 깼다면 바로 열려요). 중간 보스 트로이 목마(돌진 · 배 속 졸개), 월드 보스 휴지통(빨아들이기 · 되돌아오는 종이 뭉치 · 비우기 탄막)',
     '월드 5 몹 — 유령 파일(바위 · 낭떠러지 통과, 사라졌다 옆에서 나타남) · 웜(땅속에서 다가와 튀어나오며 8방향) · 패킷 스니퍼(줄이 맞으면 빠른 탄) · ZIP 폭탄(다가와 터짐) · 크롤러(죽으면 벌레 둘)',
     '아이템 102 → 177종 — 아이작처럼 따라다니는 소환수(도우미 봇 · 미니 카이 · 방패 봇 · 수거 드론 · 폭격 드론 · 수리 봇 · 냥이.gif · 다마고치), 주위를 도는 벌레 장벽 · 핑 위성, 아군 벌레 · 유령',
