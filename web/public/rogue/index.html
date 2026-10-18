@@ -936,6 +936,53 @@ IVAN.src = 'a/8e44d8cef1.webp';
 LILY.src = 'a/6faf1a2818.webp';
 const CHAR_IMG = {kai:KAI, igna:IGNA, ivan:IVAN, lily:LILY, dice:DICEI};
 [KAI, IGNA, IVAN, LILY, DICEI].forEach(im => im.addEventListener('load', () => { try { if (!$('start').hidden) renderStartInfo(); } catch(e){} }));
+// 코스튬 (아이작처럼 템을 먹으면 모습이 바뀜): 머리 · 얼굴 · 등 칸마다 마지막에 먹은 것 하나씩. 그림 = GPT 시트 4x3
+const COSTUME_IMG = new Image(); /*COSTUME64*/COSTUME_IMG.src = 'a/3702b4a6d4.webp';
+// 0 후광 · 1 뿔 · 2 와이파이 안테나 · 3 왕관 · 4 고양이 귀 · 5 프로펠러 모자 · 6 헤드폰 · 7 고깔 / 8 바이저 · 9 동그란 안경 / 10 제트팩 · 11 망토
+const COSTUME = {safe_mode:0, autosave:0, god_mode_lite:0, nine_backup:0, debug_mode:1, ransomware:1, deleted_heart:1, dark_web:1, terms:1,
+  gps:2, sitemap:2, search_engine:2, source_leak:2, ping_sat:2, vpn:2, gold_member:3, full_upgrade:3, core_upgrade:3, cat_gif:4,
+  mouse_accel:5, cooling_fan:5, energy_drink:5, overclock:6, gaming_mouse:6, mech_keyboard:6, liquid_nitro:6, lucky_packet:7, clover:7, one_plus_one:7, lucky_dice:7,
+  scope:8, laser_pointer:8, edge_server:8, dual_monitor:8, debugger:9, refactor:9, clean_install:9,
+  dash_driver:10, firewall_dash:10, ram_packet:10, dodge_patch:10, shredder:11, reflect_film:11, anti_dmg:11};
+function costumes(){ // [머리, 얼굴, 등]
+  const out = [null, null, null]; if (!G) return out;
+  for (const it of G.items){ const f = COSTUME[it.id]; if (f == null) continue; out[f < 8 ? 0 : f < 10 ? 1 : 2] = f; }
+  return out;
+}
+function charAnch(im){ // 칸마다 머리 자리 (코스튬 붙일 곳) — 시트를 한 번 훑어서 캐시
+  if (im.__anch) return im.__anch;
+  const cs = CEL(im), w = im.naturalWidth || im.width, h = im.naturalHeight || im.height, out = [];
+  let d; try { const c = document.createElement('canvas'); c.width = w; c.height = h; const g = c.getContext('2d'); g.drawImage(im, 0, 0); d = g.getImageData(0, 0, w, h).data; } catch(e){ return im.__anch = []; }
+  const A = (x, y) => d[(y*w + x)*4 + 3] > 100;
+  for (let r = 0; r < Math.round(h / cs); r++) for (let c = 0; c < 4; c++){
+    const x0 = c*cs, y0 = r*cs; let top = -1, bot = -1;
+    for (let y = 0; y < cs && top < 0; y++){ let n = 0; for (let x = 0; x < cs; x++) if (A(x0 + x, y0 + y)) n++; if (n >= 3) top = y; }
+    for (let y = cs - 1; y >= 0 && bot < 0; y--){ let n = 0; for (let x = 0; x < cs; x++) if (A(x0 + x, y0 + y)) n++; if (n >= 3) bot = y; }
+    if (top < 0){ out.push(null); continue; }
+    const hh = (bot - top) * .42; let sx = 0, n = 0, mn = cs, mx = 0;
+    for (let y = Math.round(top + hh*.35); y < top + hh*.8; y++) for (let x = 0; x < cs; x++) if (A(x0 + x, y0 + y)){ sx += x; n++; mn = Math.min(mn, x); mx = Math.max(mx, x); }
+    out.push({top, bot, cx:n ? sx / n : cs/2, hh, hw:Math.min(mx - mn, hh * 1.05)});
+  }
+  return im.__anch = out;
+}
+function drawCostume(an, k, view, phase, cos){ // 그리는 좌표계 = 캐릭터 칸 (-PS/2, -PS) 기준, 옆모습은 이미 좌우 뒤집힘
+  if (!an || !COSTUME_IMG.complete || !COSTUME_IMG.naturalWidth) return;
+  const X = -PS/2 + an.cx*k, Y = -PS + an.top*k, HH = an.hh*k, HW = Math.max(9, an.hw*k);
+  const put = (f, w, cx, cy) => { ctx.drawImage(COSTUME_IMG, (f % 4)*64, Math.floor(f/4)*64, 64, 64, Math.round(cx - w/2), Math.round(cy - w/2), Math.round(w), Math.round(w)); };
+  ctx.imageSmoothingEnabled = true;
+  const [hd, fc, bk] = cos;
+  if (phase === 'before'){
+    if (bk != null && view === 'side') put(bk, HW*(bk === 10 ? .85 : 1), X - HW*.42, Y + HH*1.35);
+  } else {
+    if (bk != null && view === 'back') put(bk, HW*(bk === 10 ? .95 : 1.15), X, Y + HH*(bk === 10 ? 1.35 : 1.5));
+    if (fc != null && view !== 'back') put(fc, view === 'side' ? HW*.5 : HW*.8, X + (view === 'side' ? HW*.22 : 0), Y + HH*.66);
+    if (hd != null){
+      const L = {0:[.9, -3.5], 1:[1.05, HH*.2], 2:[1.1, HH*.12], 3:[.62, HH*.02], 4:[1.05, HH*.12], 5:[.95, HH*.12], 6:[1.2, HH*.5], 7:[.55, -HH*.08]}[hd];
+      put(hd, HW*L[0], X, Y + L[1]);
+    }
+  }
+  ctx.imageSmoothingEnabled = false;
+}
 const isV3 = im => !!(im && (im.naturalHeight || im.height) / CEL(im) > 4.5); // 새 시트 4x5
 const idleY = im => isV3(im) ? 4 * CEL(im) : 0;
 const charSpr = id => { const im0 = CHAR_IMG[id] || KAI, ok0 = im0.complete && im0.naturalWidth > 0, im = ok0 ? im0 : KAI; return {im, ol:!ok0 ? KAI_OL : id === 'igna' ? IGNA_OL : id === 'ivan' ? IVAN_OL : id === 'lily' ? LILY_OL : id === 'dice' ? DICE_OL : KAI_OL, ok:im.complete && im.naturalWidth > 0}; };
@@ -4389,7 +4436,10 @@ function drawPlayer0(){
     const flipX = view === 'side' && flip < 0, hx = hurt ? (G.frame % 4 < 2 ? -1 : 1) : 0;
     ctx.save(); ctx.translate(x + hx, y + 9); if (flipX) ctx.scale(-1, 1);
     if (hurt) ctx.globalAlpha *= G.frame % 4 < 2 ? .6 : 1;
-    { const cs = CEL(SIMG); ctx.drawImage(SIMG, col*cs, row*cs, cs, cs, -PS/2, -PS, PS, PS); }
+    { const cs = CEL(SIMG), cos = costumes(), an = (cos[0] != null || cos[1] != null || cos[2] != null) ? charAnch(CS.im)[row*4 + col] : null, vw = row === 4 && col === 3 ? 'front' : view;
+      if (an) drawCostume(an, PS / CEL(CS.im), vw, 'before', cos);
+      ctx.drawImage(SIMG, col*cs, row*cs, cs, cs, -PS/2, -PS, PS, PS);
+      if (an) drawCostume(an, PS / CEL(CS.im), vw, 'after', cos); }
     ctx.restore();
   } else if (CS.ok){
     const row = view === 'front' ? 0 : view === 'back' ? 1 : 2, moving = Math.abs(p.vx) + Math.abs(p.vy) > .3;
@@ -5172,6 +5222,7 @@ const PATCH_NOTES = [
     '문만 보고 무슨 방인지 알게 — 보스 = 괴물 입, 상점 = 가게 차양, 오락실 = 슬롯머신, 결투방 = 칼 + 하트, 엘리트 = 왕관 괴물, 손상된 섹터 = 가시, 금고 = 금고 문, 제단 = 촛불과 가시, 미러 = 거울, 업데이트 = 단말기, 숨겨진 방 = 부서진 구멍 (황금방은 그대로). 문 옆 작은 아이콘은 뺌',
     '과전류 패널 두 종류: 늘 켜진 패널(^) · 점멸 패널 — 꺼졌을 때는 밟아도 안 아픔, 아래 작은 등이 초록(안전) → 노랑(곧 켜짐) → 빨강(켜짐). 켜질 때 판 그림이 흔들리지 않고 전기만 생김 (예전엔 꺼진 그림인데도 아팠음)',
     '폭격 드론 설명에서 「나는 안 맞음」 뺌',
+    '코스튬 — 아이템을 먹으면 모습이 바뀜 (아이작처럼). 머리(후광 · 뿔 · 안테나 · 왕관 · 고양이 귀 · 프로펠러 모자 · 헤드폰 · 고깔) · 얼굴(바이저 · 안경) · 등(제트팩 · 망토) 칸마다 마지막에 먹은 것 하나씩 — 아이템 44개에 붙음',
   ]},
   {ver:'ALPHA 0.8', name:'맵이 재밌게', date:'2026.10.19', lines:[
     '섬 보상 — 낭떠러지 · 바위 · 방화벽 블록 · 잠금 블록 너머에 보상이 놓인 방 15종 (전투방의 약 20%). 닿는 방법이 어려울수록 보상이 큼: 열쇠로만 → 잠긴 압축 파일이나 아이템, 비행으로만 → 비트, 폭탄 · 쏘기 · 패널로 → 픽업 둘이나 압축 파일',
