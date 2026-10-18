@@ -21,6 +21,7 @@ function nextSrc(src: string): string | null {
   if (/^(idle|touch-\d)\.webp$/.test(file)) return `${base}${dir}/full.webp`;
   if (/^face-(?!idle\.webp)/.test(file)) return `${base}${dir}/face-idle.webp`;
   if (/^(hero-win|pose-idle|cutin)\.webp$/.test(file)) return `${base}${dir}/full.webp`;
+  if (file === "profile.webp") return `${base}${dir}/face-idle.webp`;
   return null;
 }
 
