@@ -17,6 +17,18 @@ export interface Patch {
 
 export const PATCHES: Patch[] = [
   {
+    ver: "v2.7",
+    name: "NIGHTMARE 3개 동시치기 줄임",
+    date: "2026.10.18",
+    lines: [
+      "NIGHTMARE 3개 동시치기를 줄의 21% → 6%로 — osu · Quaver 랭크 Lv13~16 은 2% · 7% (FREEDOM DiVE 고정 채보 0.1%). 레벨 맞추기가 정박 동시치기를 3개까지 두껍게 해서 레벨을 채우던 것. 이제 정박 줄의 12%까지만, 센 소리부터",
+      "빠진 만큼은 2개 동시치기 · 16분으로 채우되 16분은 곡 빠르기만큼만 — 150 BPM 이하 줄의 42%, 170 BPM 이상 30%까지 (osu · Quaver 같은 구간 중앙값 32~42% · 8~20%). 넘는 채보는 안 고름",
+      "약한 16분 소리 · 소리 없는 16분 칸은 한 번에 다 안 열고 약한 것부터 차츰 (한 번에 열면 16분이 8 → 35%로 튐)",
+      "FREEDOM DiVE NIGHTMARE(고정 채보)와 다른 난이도는 그대로",
+      "레벨 바뀜(NIGHTMARE): Lucky Seven Rush 16 → 15, Maximum Velocity 16 → 15, OVERLOAD PROTOCOL 15 → 14, Pixel Fighting 15 → 14, 名前のない輪郭 15 → 14",
+    ],
+  },
+  {
     ver: "v2.6",
     name: "ULTIMA 잭 정리 · Full Combo!! 다시 뽑음",
     date: "2026.10.18",
