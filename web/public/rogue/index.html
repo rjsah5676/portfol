@@ -874,25 +874,35 @@ function recalcProfile(){ G.prof = computeProfile(G.items.map(i => i.id), G.char
 
 /* ---------- item icons ---------- */
 const ICON = {};
-// 카이 아틀라스 192x144 = 48x48 프레임 4x3 (행: 앞/뒤/옆(오른쪽), 열: 대기·걷기 A/B/C), 발이 프레임 아래 가운데
-const KAI = new Image(); KAI.src = 'a/0a8225b36c.webp';
+// 캐릭터 아틀라스 256x192 = 64x64 프레임 4x3 (화면 64px에 1:1 → 또렷하게). 칸 크기는 CEL(img)로 그림 너비에서 계산 (행: 앞/뒤/옆(오른쪽), 열: 대기·걷기 A/B/C), 발이 프레임 아래 가운데
+const KAI = new Image(); KAI.src = 'a/c34351bcec.webp';
 let KAI_OL = null; // 내 캐릭터 = 시안 외곽선 1px (어두운 바닥에서도 바로 보이게)
-function outline(img){
-  const c = document.createElement('canvas'); c.width = img.width; c.height = img.height; const g = c.getContext('2d');
-  for (const [dx, dy] of [[1,0],[-1,0],[0,1],[0,-1]]) g.drawImage(img, dx, dy);
-  g.globalCompositeOperation = 'source-in'; g.fillStyle = '#3fe3ff'; g.fillRect(0, 0, c.width, c.height);
-  g.globalCompositeOperation = 'source-over'; g.drawImage(img, 0, 0); return c;
+const CEL = img => Math.round((img.naturalWidth || img.width) / 4);
+function outlineCells(img, color){ // 칸마다 외곽선 (64칸 = 2px 두께, 48칸 = 1px)
+  const cs = CEL(img), rows = Math.round((img.naturalHeight || img.height) / cs), w = cs >= 64 ? 2 : 1;
+  const offs = w === 2 ? [[1,0],[-1,0],[0,1],[0,-1],[2,0],[-2,0],[0,2],[0,-2],[1,1],[-1,1],[1,-1],[-1,-1]] : [[1,0],[-1,0],[0,1],[0,-1]];
+  const c = document.createElement('canvas'); c.width = cs*4; c.height = cs*rows; const g = c.getContext('2d');
+  const t = document.createElement('canvas'); t.width = t.height = cs; const tg = t.getContext('2d');
+  for (let r = 0; r < rows; r++) for (let k = 0; k < 4; k++){
+    tg.globalCompositeOperation = 'source-over'; tg.clearRect(0, 0, cs, cs);
+    for (const [dx, dy] of offs) tg.drawImage(img, k*cs, r*cs, cs, cs, dx, dy, cs, cs);
+    tg.globalCompositeOperation = 'source-in'; tg.fillStyle = color; tg.fillRect(0, 0, cs, cs);
+    tg.globalCompositeOperation = 'source-over'; tg.drawImage(img, k*cs, r*cs, cs, cs, 0, 0, cs, cs);
+    g.drawImage(t, k*cs, r*cs);
+  }
+  return c;
 }
+function outline(img){ return outlineCells(img, '#3fe3ff'); }
 KAI.onload = () => { KAI_OL = outline(KAI); };
 // 이그나 아틀라스 = 카이와 같은 형식 (GPT)
 const IGNA = new Image(); let IGNA_OL = null; IGNA.onload = () => { IGNA_OL = outline(IGNA); };
-IGNA.src = 'a/b5a7277ad7.webp';
+IGNA.src = 'a/5aa178c407.webp';
 const IVAN = new Image(), LILY = new Image(), DICEI = new Image(); let IVAN_OL = null, LILY_OL = null, DICE_OL = null;
 DICEI.onload = () => { DICE_OL = outline(DICEI); };
-DICEI.src = 'a/87a098c3df.webp';
+DICEI.src = 'a/6f9fc96e54.webp';
 IVAN.onload = () => { IVAN_OL = outline(IVAN); }; LILY.onload = () => { LILY_OL = outline(LILY); };
-IVAN.src = 'a/71af99ad2e.webp';
-LILY.src = 'a/0f9f46bedb.webp';
+IVAN.src = 'a/5ef583a692.webp';
+LILY.src = 'a/e3264be811.webp';
 const CHAR_IMG = {kai:KAI, igna:IGNA, ivan:IVAN, lily:LILY, dice:DICEI};
 [KAI, IGNA, IVAN, LILY, DICEI].forEach(im => im.addEventListener('load', () => { try { if (!$('start').hidden) renderStartInfo(); } catch(e){} }));
 const charSpr = id => { const im0 = CHAR_IMG[id] || KAI, ok0 = im0.complete && im0.naturalWidth > 0, im = ok0 ? im0 : KAI; return {im, ol:!ok0 ? KAI_OL : id === 'igna' ? IGNA_OL : id === 'ivan' ? IVAN_OL : id === 'lily' ? LILY_OL : id === 'dice' ? DICE_OL : KAI_OL, ok:im.complete && im.naturalWidth > 0}; };
@@ -1939,10 +1949,7 @@ const DARK = {};
 function darkAtlas(id){ // 어둡게 칠한 복제본 + 분홍 외곽선
   if (DARK[id]) return DARK[id];
   const im = CHAR_IMG[id] || KAI; if (!im.complete || !im.naturalWidth) return null;
-  const c = document.createElement('canvas'); c.width = im.width; c.height = im.height; const g = c.getContext('2d');
-  for (const [ox, oy] of [[1,0],[-1,0],[0,1],[0,-1]]) g.drawImage(im, ox, oy);
-  g.globalCompositeOperation = 'source-in'; g.fillStyle = '#ff2e88'; g.fillRect(0, 0, c.width, c.height);
-  g.globalCompositeOperation = 'source-over'; g.drawImage(im, 0, 0);
+  const c = outlineCells(im, '#ff2e88'), g = c.getContext('2d');
   const d = document.createElement('canvas'); d.width = im.width; d.height = im.height; const h = d.getContext('2d');
   h.drawImage(im, 0, 0); h.globalCompositeOperation = 'source-atop'; h.fillStyle = 'rgba(28,10,48,.72)'; h.fillRect(0, 0, d.width, d.height);
   g.drawImage(d, 0, 0);
@@ -1955,7 +1962,7 @@ function drawMirror(e){
   const row = e.face === 'd' ? 0 : e.face === 'u' ? 1 : 2, col = e.dashT > 0 ? 2 : 1 + Math.floor(e.t * .18) % 3;
   ctx.save(); ctx.translate(x, y + 9); if (e.face === 'l') ctx.scale(-1, 1);
   if (e.flash > 0) ctx.globalAlpha = .6;
-  ctx.drawImage(A, col*48, row*48, 48, 48, -PS/2, -PS, PS, PS); ctx.restore(); ctx.globalAlpha = 1;
+  { const cs = CEL(A); ctx.drawImage(A, col*cs, row*cs, cs, cs, -PS/2, -PS, PS, PS); } ctx.restore(); ctx.globalAlpha = 1;
   if (G.frame % 40 < 3){ px(x - 8, y - 10 + (G.frame % 7), 16, 1, 'rgba(255,46,136,.7)'); }
   ctx.font = '700 7px "Noto Sans KR", sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = '#000'; const nm = '다크 ' + CHARS[e.char].name;
   ctx.fillText(nm, x + 1, y - 17); ctx.fillStyle = '#ff2e88'; ctx.fillText(nm, x, y - 18);
@@ -3934,7 +3941,7 @@ function drawPlayer(){ // 비행(클라우드 업로드) = 그림자 남기고 �
 function drawPlayer0(){
   if (G.prof.sat && G.player.hp > 0) drawSats();
   const p = G.player, CS = charSpr(G.char), isKai = G.char === 'kai', SIMG = CS.ol || CS.im;
-  if (p.hp <= 0 && !isKai && CS.ok){ ctx.save(); ctx.translate(p.x, p.y + 4); ctx.rotate(Math.PI/2 * (p.face.x < 0 ? -1 : 1)); ctx.globalAlpha = .85; ctx.drawImage(CS.im, 0, 0, 48, 48, -PS/2, -PS/2, PS, PS); ctx.restore(); ctx.globalAlpha = 1; return; }
+  if (p.hp <= 0 && !isKai && CS.ok){ ctx.save(); ctx.translate(p.x, p.y + 4); ctx.rotate(Math.PI/2 * (p.face.x < 0 ? -1 : 1)); ctx.globalAlpha = .85; ctx.drawImage(CS.im, 0, 0, CEL(CS.im), CEL(CS.im), -PS/2, -PS/2, PS, PS); ctx.restore(); ctx.globalAlpha = 1; return; }
   if (p.hp <= 0){ if (kfxReady()) kpose(2, p.x, p.y + 2, p.face.x < 0); else { px(p.x - 7, p.y + 2, 14, 4, '#2b2f45'); px(p.x - 4, p.y - 1, 8, 4, '#f3c9a6'); } return; }
   if (G.ult > 0 && kfxReady()){ // 회오리 그림 + 판정 원(옅게) + 남은 시간 호
     const R = ultR(), k = G.ult / TUNE.ultT, cx = p.x, cy = p.y - 4, t = 1 - k;
@@ -3958,7 +3965,7 @@ function drawPlayer0(){
   if (G.buff.noclip > 0) ctx.globalAlpha = .5;
   // 위아래 대시: 옆 대시 포즈 대신 앞/뒤 모습 그대로 + 잔상 · 세로 속도선 (옆 대시 그림은 옆으로만)
   const vdash = p.dashT > 0 && Math.abs(p.dashDir.y) > Math.abs(p.dashDir.x);
-  const kaiSpr = (row, col, sx, sy, a, flipX) => { ctx.save(); ctx.globalAlpha *= a; ctx.translate(sx, sy + 9); if (flipX) ctx.scale(-1, 1); ctx.drawImage(SIMG, col*48, row*48, 48, 48, -PS/2, -PS, PS, PS); ctx.restore(); };
+  const kaiSpr = (row, col, sx, sy, a, flipX) => { ctx.save(); ctx.globalAlpha *= a; ctx.translate(sx, sy + 9); if (flipX) ctx.scale(-1, 1); ctx.drawImage(SIMG, col*CEL(SIMG), row*CEL(SIMG), CEL(SIMG), CEL(SIMG), -PS/2, -PS, PS, PS); ctx.restore(); };
   const sdash = !isKai && CS.ok && p.dashT > 0 && !vdash; // 이그나 옆 대시 = 옆모습 + 불꽃 잔상
   if (sdash){ const fl2 = p.dashDir.x < 0; ctx.globalCompositeOperation = 'lighter'; kaiSpr(2, 2, x - p.dashDir.x*16, y - p.dashDir.y*16, .25, fl2); kaiSpr(2, 2, x - p.dashDir.x*8, y - p.dashDir.y*8, .45, fl2); ctx.globalCompositeOperation = 'source-over';
     ctx.globalAlpha = .7; for (let i = 0; i < 3; i++) px(x - p.dashDir.x*(10 + i*6) + (fx()-.5)*4, y - 4 + (fx()-.5)*10, 2, 2, i ? '#ffd23f' : '#ff7a2c'); ctx.globalAlpha = G.buff.noclip > 0 ? .5 : 1; }
@@ -3981,12 +3988,12 @@ function drawPlayer0(){
     kpose(p.dashT > 0 ? 0 : 1, x, y, p.dashT > 0 ? p.dashDir.x < 0 : p.face.x < 0);
   } else if (CS.ok){
     const row = view === 'front' ? 0 : view === 'back' ? 1 : 2, moving = Math.abs(p.vx) + Math.abs(p.vy) > .3;
-    const WALK4 = view === 'side' && (G.char === 'kai' || G.char === 'lily'); // 옆걷기 (GPT 새 프레임): 디딤 → 지나감 → 반대발 디딤 → 지나감
+    const WALK4 = G.char === 'kai' || G.char === 'lily' || (view === 'side' && G.char === 'dice'); // 옆걷기 (GPT 새 프레임): 디딤 → 지나감 → 반대발 디딤 → 지나감
     const col = moving ? (WALK4 ? [1, 2, 3, 2][Math.floor(p.walk * .7) % 4] : 1 + Math.floor(p.walk * .7) % 3) : 0, bob = 0;
     const flipX = view === 'side' && flip < 0, hx = hurt && !isKai ? (G.frame % 4 < 2 ? -1 : 1) : 0;
     ctx.save(); ctx.translate(x + hx, y + 9 + bob); if (flipX) ctx.scale(-1, 1);
     if (hurt && !isKai) ctx.globalAlpha *= G.frame % 4 < 2 ? .55 : 1;
-    ctx.drawImage(SIMG, col*48, row*48, 48, 48, -PS/2, -PS, PS, PS);
+    { const cs = CEL(SIMG); ctx.drawImage(SIMG, col*cs, row*cs, cs, cs, -PS/2, -PS, PS, PS); }
     ctx.restore();
   } else {
   px(x - 4, y + 4, 3, 4 - step, '#1b1f33'); px(x + 1, y + 4, 3, 3 + step, '#1b1f33');
@@ -4152,7 +4159,7 @@ function drawMapGrid(known, ox, oy, cw, ch, g, big){
     }
     const k = ROOM_ICON(r), isz = Math.max(5, Math.min(big ? 18 : 9, Math.min(cw, ch) - (big ? 4 : 0)));
     if (cur && big && charSpr(G.char).ok){ // 현재 방 = 내 캐릭터 얼굴
-      const hs = Math.min(cw, ch) - 2; ctx.imageSmoothingEnabled = true; ctx.drawImage(charSpr(G.char).im, 10, 2, 28, 28, x + (cw - hs)/2, y + (ch - hs)/2, hs, hs); ctx.imageSmoothingEnabled = false;
+      const hs = Math.min(cw, ch) - 2; ctx.imageSmoothingEnabled = true; ctx.drawImage(charSpr(G.char).im, ...[10, 2, 28, 28].map(v => v*CEL(charSpr(G.char).im)/48), x + (cw - hs)/2, y + (ch - hs)/2, hs, hs); ctx.imageSmoothingEnabled = false;
     } else if (k == null && MAP2_IDX[r.type] != null && (big || ch >= 4) && MAPI2.complete && MAPI2.naturalWidth){ const j = MAP2_IDX[r.type]; ctx.imageSmoothingEnabled = true; ctx.drawImage(r.type === 'curse' ? curseMapImg() : MAPI2, (j % 4)*32, Math.floor(j/4)*32, 32, 32, Math.round(x + (cw - isz)/2), Math.round(y + (ch - isz)/2), isz, isz); ctx.imageSmoothingEnabled = false; }
     else if (k != null && (big || ch >= 4)) mi(k, x + (cw - isz)/2, y + (ch - isz)/2, isz, k === 1 && !r.pickups.some(p => p.kind === 'item') ? .35 : 1);
     if (big && r.visited && r.cleared === false && r.type !== 'start' && !cur) mi(6, x + cw - 9, y + 1, 8);
@@ -4225,7 +4232,7 @@ function drawBigMap(){
   const tot = lg.reduce((t, [, s]) => t + 12 + ctx.measureText(s).width + 12, -12); let lx = Math.round(W/2 - tot/2); const ly = H - 20;
   ctx.imageSmoothingEnabled = true;
   for (const [k, t] of lg){
-    if (k < 0){ if (KAI.complete) ctx.drawImage(KAI, 10, 2, 28, 28, lx - 1, ly - 9, 11, 11); }
+    if (k < 0){ if (KAI.complete){ const q = CEL(KAI)/48; ctx.drawImage(KAI, 10*q, 2*q, 28*q, 28*q, lx - 1, ly - 9, 11, 11); }; }
     else if (MAPI.complete) ctx.drawImage(MAPI, (k % 4)*32, Math.floor(k/4)*32, 32, 32, lx - 1, ly - 9, 11, 11);
     ctx.fillStyle = '#a9aecb'; ctx.fillText(t, lx + 12, ly); lx += 12 + ctx.measureText(t).width + 12;
   }
@@ -4259,7 +4266,7 @@ function endRun(result){
   const el = $('result');
   const build = (ITEM[G.active] ? `<span style="border-color:var(--red)"><img src="${ICON[G.active].url}" alt="">${esc(ITEM[G.active].name)}</span>` : '') + (G.items.map(i => `<span><img src="${ICON[i.id].url}" alt="">${esc(ITEM[i.id].name)}</span>`).join('') || '<span>패시브 없음</span>');
   const extras = [G.log.secretFound ? '숨겨진 방 발견' : '', G.log.cheatDeals ? '치트 거래 ' + G.log.cheatDeals + '번' : ''].filter(Boolean).join(' · ');
-  const poseURL = G.char !== 'kai' ? sprURL(charSpr(G.char).im, 0, 0, 48, 48) : kfxReady() ? sprURL(KFX, (result === 'clear' ? 3 : 2)*96, 0, 96, 96) : '';
+  const poseURL = G.char !== 'kai' ? sprURL(charSpr(G.char).im, 0, 0, CEL(charSpr(G.char).im), CEL(charSpr(G.char).im)) : kfxReady() ? sprURL(KFX, (result === 'clear' ? 3 : 2)*96, 0, 96, 96) : '';
   el.innerHTML = `<div class="res">
     ${poseURL ? `<img class="pose${result === 'clear' ? ' win' : ''}" src="${poseURL}" alt="">` : ''}
     <h1>${result === 'clear' ? '<span class="r">CLEAR</span>' : 'GAME OVER'}</h1>
@@ -4441,7 +4448,7 @@ function renderCodex(bodyOnly){
     body = `<h4>시크릿 ${nd} / ${SECRETS.length} — 하나 열 때마다 새 아이템 · 캐릭터가 풀에 들어와요</h4><div class="grid">${SECRETS.map(x => {
       const d = !!SEC.done[x.id], pr = secProg(x), rw = x.item ? ITEM[x.item] : null;
       if (q && !codexMatch(x.name, x.cond, rw ? rw.name : '')) return '';
-      const cu = !rw ? sprURL(CHAR_IMG[x.char], 0, 0, 48, 48) : '', ic = d ? (rw ? `<img src="${ICON[x.item].url}" alt="">` : cu ? `<img src="${cu}" alt="">` : '<div class="q">★</div>') : '<div class="q">🔒</div>';
+      const cu = !rw ? sprURL(CHAR_IMG[x.char], 0, 0, CEL(CHAR_IMG[x.char]), CEL(CHAR_IMG[x.char])) : '', ic = d ? (rw ? `<img src="${ICON[x.item].url}" alt="">` : cu ? `<img src="${cu}" alt="">` : '<div class="q">★</div>') : '<div class="q">🔒</div>';
       const bar = x.c && !d ? `<div class="ts-bar"><em style="width:${Math.round(pr*100)}%"></em></div><small>${Math.min(x.goal, secN(x.c))} / ${x.goal}</small>` : '';
       return `<div class="card${d ? ' own' : ''}"><div class="top">${ic}<div><b>${esc(x.name)}</b><br><small>${d ? '해금됨' : '잠김'}</small></div></div>
         <p>${esc(x.cond)}</p><i>보상: ${d ? esc((x.char ? '파이터 ' + CHARS[x.char].name : '') + (x.char && rw ? ' + ' : '') + (rw ? rw.name : '')) : '???'}</i>${bar}</div>`;
@@ -4684,7 +4691,7 @@ function openChars(){
   const el = $('chars');
   const draw = () => {
     const c = CHARS[charSel], ok = charOK(charSel);
-    el.innerHTML = `<h1>캐릭터 선택</h1><div class="cards">${CHAR_IDS.map(id => { const k = CHARS[id], o = charOK(id), img = sprURL(CHAR_IMG[id], 0, 0, 48, 48);
+    el.innerHTML = `<h1>캐릭터 선택</h1><div class="cards">${CHAR_IDS.map(id => { const k = CHARS[id], o = charOK(id), img = sprURL(CHAR_IMG[id], 0, 0, CEL(CHAR_IMG[id]), CEL(CHAR_IMG[id]));
       return `<button type="button" class="cc${id === charSel ? ' on' : ''}${o ? '' : ' lock'}" data-id="${id}">${img ? `<img src="${img}" alt="">` : ''}
         <b>${o ? esc(k.name) : '???'}</b>${o ? `<div class="mk" title="월드 보스 처치 표시">${[1,2,3,4,5].map(w => `<i class="${(SEC.marks[id] || []).includes(w) ? 'on' : ''}">${w}</i>`).join('')}</div>` : '<small>🔒 LOCKED</small>'}</button>`; }).join('')}</div>
       <div class="cd">${ok ? `<div class="cd-h"><b>${esc(c.name)}</b><small>${c.en}</small></div><ul>${c.traits.map(t => `<li>${esc(t)}</li>`).join('')}</ul>
@@ -4708,7 +4715,7 @@ const PATCH_NOTES = [
     '조작 — 움직이다 쏘면 탄이 움직이던 쪽으로 살짝 휘어요 (멈춘 직후에도 잠깐 남음, 아이작처럼). Tab = 일시정지, M = 지도. 들고 있는 아이템 · 액티브 · 주머니 · 바닥 아이템에 마우스를 올리면 이름과 설명',
     '유도탄 약하게 (아이작 「휘는 숟가락」 정도) — 앞쪽 ±70° 안의 적만 따라가고 덜 휨 (감지 170 → 130, 꺾는 힘 약 60%). 겹쳐 먹어도 예전만큼 안 셈',
     '대시가 기본으로는 이동만 (무적 · 적 탄 무시 · 몸통 피해 없음, 대기 0.83 → 1초). 대신 대시 아이템 3종 추가 — 회피 패치(대시 중 무적) · 방화벽 돌파(대시로 적 탄 지우기) · 돌진 패킷(대시로 부딪힌 적에게 큰 피해). 대시 드라이버도 돌진 피해를 줌. 아이템 177 → 180종',
-    '카이 · 릴리 옆걷기 모션 새로 그림 — 옆으로 걸을 때 다리가 제대로 엇갈림',
+    '캐릭터 5명 그림을 64px로 다시 뽑아서 또렷하게 (예전엔 48px 그림을 늘려 그려서 흐릿했음). 카이 · 릴리는 앞 · 뒤 · 옆 걷기, DICE는 옆걷기 새로 그림 — 다리가 제대로 엇갈림',
     '벌레 장벽 약하게 — 적 탄을 80% 넘게 막던 것 → 절반쯤. 벌레가 느리게 돌고, 탄을 하나 막은 벌레는 0.8초 동안 흐려져서 못 막음 (궤도 봇 · 핑 위성도 막은 뒤 잠깐 쉼)',
     '액티브 충전이 아이작처럼 바뀜 — 몹을 때리거나 잡아서 차던 게이지 대신, 몹이 나와 문이 잠긴 방(보스방 포함)을 깰 때마다 한 칸. 액티브마다 1~6칸 (천풍난무 · 붉은 폭풍 · 장마 파도 4칸, 리롤 주사위 6칸, 단축키 1칸). 피격 충전은 맞을 때 한 칸, 고속 충전기는 필요한 칸 -1',
     '사거리: 기본(6칸 남짓)은 아이작이랑 비슷해서 그대로. 대신 사거리 업이 곱으로 쌓여 후반엔 방 끝까지 날아가던 것 → 280 넘으면 덜 늘고 400에서 멈춤',
@@ -4827,7 +4834,7 @@ function renderStartInfo(){
     const n = i + 1, open = n <= prog.ch, clr = (b.ch || 0) >= n;
     return `<i class="${clr ? 'clr' : open ? 'on' : ''}" title="${esc(C.name)}"><b>${open ? 'WORLD ' + n : '🔒'}</b>${open ? esc(C.name) : '잠김'}</i>`;
   }).join('');
-  const chars = CHAR_IDS.map(id => { const c = CHARS[id], ok = charOK(id), img = sprURL(CHAR_IMG[id], 0, 0, 48, 48);
+  const chars = CHAR_IDS.map(id => { const c = CHARS[id], ok = charOK(id), img = sprURL(CHAR_IMG[id], 0, 0, CEL(CHAR_IMG[id]), CEL(CHAR_IMG[id]));
     return `<span class="${ok ? '' : 'lock'}">${img ? `<img src="${img}" alt="">` : ''}<span style="min-width:0"><b>${ok ? esc(c.name) : '???'}</b><small>${ok ? ({kai:'천풍난무 · 올라운더', igna:'화상 탄 · 공격형', ivan:'붉은 폭풍 · 탱커', lily:'장마 파도 · 기동형', dice:'리롤 주사위 · 운빨'})[id] : esc(c.lock)}</small></span></span>`; }).join('');
   const nItems = ITEMS.filter(i => codex.items[i.id]).length, nStory = STORY_IDS.filter(id => storySeen[id]).length;
   const mmss = s => Math.floor(s/60) + ':' + String(s % 60).padStart(2, '0');
