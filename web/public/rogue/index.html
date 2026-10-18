@@ -894,6 +894,9 @@ const PATCHES = [
   {id:'spawn',  name:'버그 소환',      desc:'벌레 4마리가 튀어나옴',        good:0},
   {id:'gamble', name:'비트 도박',      desc:'비트가 2배가 되거나 0이 됨',   good:.5},
 ];
+// 알약(스탯 패치) 한도: 오른 횟수 - 내린 횟수가 [최저, 최고]를 넘으면 효과 없음
+const PATCH_CAP = {dmg:[-4, 5], rate:[-4, 5], speed:[-3, 3], range:[-3, 4], luck:[-3, 5], hp:[-4, 6]};
+PATCHES.forEach(P => { const c = PATCH_CAP[P.id]; if (c) P.desc += ' · 한도 +' + c[1] + '번 / ' + c[0] + '번'; });
 const PATCH_COLS = ['#ff5d73','#5dd2ff','#ffd84d','#8affc1','#c77dff','#ff9a3d','#f4f0ff','#9aa0b8'];
 const luckOf = () => Math.max(-3, Math.min(5, G ? (G.prof.luck || 0) : 0));
 const upChance = () => Math.max(.1, Math.min(.9, .5 + luckOf() * .1));
@@ -1258,6 +1261,8 @@ function doorSign(dir, n){
   else if (k2 != null && MAPI2.complete && MAPI2.naturalWidth) ctx.drawImage(n.type === 'curse' ? curseMapImg() : MAPI2, (k2 % 4)*32, Math.floor(k2/4)*32, 32, 32, x - sz/2, y - sz/2, sz, sz);
   ctx.imageSmoothingEnabled = false;
 }
+// 테마 문 시트(DOOR3)는 그림이 프레임 위 17px부터 꽉 차서, 옛 문처럼 -60에 그리면 바깥쪽 11px가 화면 밖으로 잘림 → 7/8 크기로 그림 꼭대기를 벽 바깥 끝(-32)에 맞춤 (방 안으로 8px 튀어나옴)
+function drawDoor3(dir, fr){ const [cx, cy, rot] = DOOR_IN[dir]; ctx.save(); ctx.translate(cx, cy); ctx.rotate(rot); ctx.imageSmoothingEnabled = true; ctx.drawImage(DOOR3, (fr % 4)*64, Math.floor(fr/4)*64, 64, 64, -28, -47, 56, 56); ctx.imageSmoothingEnabled = false; ctx.restore(); }
 function drawDoor(dir, fr, img){ const [cx, cy, rot] = DOOR_IN[dir]; ctx.save(); ctx.translate(cx, cy); ctx.rotate(rot); ctx.imageSmoothingEnabled = false; ctx.drawImage(img || DOOR, (fr % 4)*64, Math.floor(fr/4)*64, 64, 64, -32, -60, 64, 64); /* 64 → 64(화면 128) 정수 배율 = 또렷 */ ctx.restore(); }
 // 챕터 바위 256x128 = 64x64 4x2: 2챕 바위/금 · 3챕 바위/금 · 4챕 바위/금 · 금속 잔해 · 얼음 잔해
 const ROCK = new Image(); ROCK.src = 'a/755af1c38e.webp';
@@ -1904,7 +1909,7 @@ function freshState(seed, cid){
     gauge:0, ult:0, cutin:0,
     projs:[], ebul:[], enemies:[], beams:[], fxs:[], parts:[], bolts:[], nums:[], toasts:[], bombList:[],
     shake:0, hitstop:0, lastHitstop:-99, freeze:0, kills:0, ended:false, endTimer:0, lootRng:null,
-    log:{runId:Math.random().toString(36).slice(2,10), gameVersion:'alpha-0.9', // 플레이데이터 구분용 — 밸런스 크게 바꿀 때마다 올림 (0.6.5: 봇 측정 밸런스 · 시너지 · 방 클리어 충전) character:cid, seed, result:null, startedAt:Date.now(), durationMs:0,
+    log:{runId:Math.random().toString(36).slice(2,10), gameVersion:'alpha-0.9.1', // 플레이데이터 구분용 — 밸런스 크게 바꿀 때마다 올림 (0.6.5: 봇 측정 밸런스 · 시너지 · 방 클리어 충전) character:cid, seed, result:null, startedAt:Date.now(), durationMs:0,
          floor:1, endFloor:prog.ch * 2, items:[], rooms:[], bossKills:[], bossKillMs:null, kills:0, secretFound:false, bought:[], cheatDeals:0, patches:[], cards:[], actives:[], resumed:0},
   };
 }
@@ -2522,6 +2527,9 @@ function usePatch(c){
   const up = P.stat ? G.lootRng() < upChance() : true;
   if (((P.stat && !up) || (!P.stat && P.good < 1)) && G.prof.antivirus){ showBanner(P.name, '백신이 막았다 — 효과 없음', codexAdd('patch', P.id)); sfx('shieldhit'); burst(p.x, p.y - 6, '#5dff6a', 12, 2); return; }
   if (P.stat){
+    const cn = (G.mods.n ||= {}), cap = PATCH_CAP[P.id], c0 = cn[P.id] || 0;
+    if (cap && (up ? c0 >= cap[1] : c0 <= cap[0])){ showBanner(up ? P.up : P.down, P.name + ' — ' + (up ? '이미 한도까지 올라서' : '이미 한도까지 내려가서') + ' 효과 없음 (' + (up ? '+' + cap[1] : cap[0]) + '번)', codexAdd('patch', P.id)); sfx('patch'); return; }
+    cn[P.id] = c0 + (up ? 1 : -1);
     const d = up ? 1 : -1, m = G.mods;
     switch (P.id){
       case 'speed': m.speed *= up ? 1.1 : .9; break;
@@ -4035,7 +4043,7 @@ function drawRoom(){
     if (door3Ready() && !(n.type === 'treasure' && doorReady())){
       const sec = n.type === 'secret' || room.type === 'secret', t = sec ? 'secret' : D3[n.type] != null ? n.type : D3[room.type] != null && room.type !== 'shop' ? room.type : 'normal';
       const fr = t === 'secret' ? 22 : locked && t !== 'vault' ? 23 : D3[t] + (open ? 1 : 0);
-      drawDoor(dir, fr, DOOR3); continue;
+      drawDoor3(dir, fr); continue;
     }
     if (doorReady()){
       const sec = n.type === 'secret' || room.type === 'secret', boss = n.type === 'boss' || room.type === 'boss';
@@ -5130,7 +5138,7 @@ const LAB_PILLS = [['dmg', '공격력', n => (n >= 0 ? '+' : '') + (n * .5).toFi
 let LAB = {char:'kai', floor:8, boss:'auto', pills:{dmg:0, rate:0, speed:0, range:0, luck:0, hp:0}, active:null, gauge:true, log:[]};
 try { const sv = JSON.parse(localStorage.getItem('pfr-lab-v1') || 'null'); if (sv) LAB = Object.assign(LAB, sv, {pills:Object.assign({}, LAB.pills, sv.pills || {}), log:sv.log || []}); } catch(e){}
 function labSave(){ try { localStorage.setItem('pfr-lab-v1', JSON.stringify(LAB)); } catch(e){} }
-function labMods(){ const q = LAB.pills, pw = (n, up, dn) => Math.pow(n >= 0 ? up : dn, Math.abs(n));
+function labMods(){ for (const k in PATCH_CAP) LAB.pills[k] = Math.max(PATCH_CAP[k][0], Math.min(PATCH_CAP[k][1], LAB.pills[k] || 0)); const q = LAB.pills, pw = (n, up, dn) => Math.pow(n >= 0 ? up : dn, Math.abs(n));
   return {dmg:.5 * q.dmg, fire:pw(q.rate, .92, 1.08), speed:pw(q.speed, 1.1, .9), range:pw(q.range, 1.15, .87), luck:q.luck}; }
 function labApply(){ if (!G || !G.lab) return; const p = G.player; G.mods = labMods(); p.maxHp = Math.max(20, G.labBaseHp + 10 * LAB.pills.hp); p.hp = Math.min(p.hp, p.maxHp); recalcProfile(); refreshDebug(true); }
 function labIds(){ return ITEMS.filter(x => x.axis !== 'active' && $('di_' + x.id) && $('di_' + x.id).checked).map(x => x.id); }
@@ -5178,7 +5186,7 @@ function labBuild(){
     const v = document.createElement('b'); v.id = 'lp_' + k;
     const u = document.createElement('button'); u.type = 'button'; u.textContent = '+';
     const e = document.createElement('small'); e.id = 'lpe_' + k;
-    const step = d => { LAB.pills[k] = Math.max(-10, Math.min(20, LAB.pills[k] + d)); labSave(); labApply(); labRender(); };
+    const step = d => { const c = PATCH_CAP[k]; LAB.pills[k] = Math.max(c[0], Math.min(c[1], LAB.pills[k] + d)); labSave(); labApply(); labRender(); };
     m.onclick = () => step(-1); u.onclick = () => step(1);
     pl.append(n, m, v, u, e);
   });
@@ -5418,6 +5426,10 @@ function openChars(){
 let charCur = null;
 /* ---------- 패치 노트 — 맨 위가 최신. 패치마다 10줄 안으로 ---------- */
 const PATCH_NOTES = [
+  {ver:'ALPHA 0.9.1', name:'문 · 알약 한도', date:'2026.10.19', lines:[
+    '테마 문이 화면 끝에서 잘리던 것 — 문 전체가 벽 안에 보이게 크기 · 위치 조정',
+    '알약(스탯 패치) 한도: 공격력 · 연사 +5번 / -4번, 이동 ±3번, 사거리 +4번 / -3번, 럭 +5번 / -3번, 최대 HP +6번 / -4번 — 넘으면 효과 없음 (도감 설명에도 표시)',
+  ]},
   {ver:'ALPHA 0.9', name:'아이템 228', date:'2026.10.19', lines:[
     '아이템 45개 추가 (183 → 228) — 아이작 티어표의 역할 비율에 맞춰 모자라던 쪽을 채움: 소환수 20 · 액티브 12 · 체력 · 음식 8 · 위험 거래 5. 탄 · 스탯 템은 안 늘림',
     '소환수: 비트 저금통 · 열쇠고리 봇 · 폭탄 공장 · 패치 자판기 · 백업 배낭 · 방화벽 강아지 (방을 깰 때마다 픽업을 만듦) · 레이저 마우스 · 번개 구름 · 저격 봇 · 화염 봇 · 냉각 봇 · 사냥 커서 · 정찰 드론 · 미니 포탑 · 독 장판 봇 · 복제 버그 · 스파이웨어(손해) · 수호: 미끼 인형 · 궤도 디스크 · 충전 위성',
