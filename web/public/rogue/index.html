@@ -334,7 +334,7 @@ const TUNE = {
   maxHp:60, maxShield:60, inv:75, hitDmg:10, bossHitDmg:20,
   dashSpd:5.2, dashT:10, dashCd:50, ultT:64, moveSpd:1.75,
   bugSpd:1.2, slimeSpd:.5, turretCd:150, turretBullet:1.3, spawnDelay:45,
-  floorHp:.32,
+  floorHp:.32, floorHp2:.05, // 몹 체력: 층마다 +32% + 뒤로 갈수록 조금씩 더 (봇 200판: 후반 화력이 6배로 늘어 몹이 너무 빨리 녹음)
   itemDrop:.05, killBit:.04, cheatChance:.4, healAmt:20, shieldAmt:20,
 };
 // 4챕터 × 2층. 챕터 1층 = 중간 보스, 2층 = 챕터 보스
@@ -353,7 +353,9 @@ const BOSS_HP = {trojan:820, recycler:1500, kingslime:150, lag:340, queen:300, l
 const BOSS_R = {trojan:18, recycler:22, kingslime:16, lag:19, queen:12, loading:18, bigturret:14, freeze:17, bsod:22};
 const BOSS_COL = {trojan:'#c98a4a', recycler:'#8fd18f', lag:'#ff3d5e', loading:'#3fe3ff', freeze:'#9fd8ff', kingslime:'#b45cff', queen:'#7b4dff', bigturret:'#d36bff', bsod:'#4d7bff'};
 // 챕터별 피격 피해 (일반 · 보스) — 3챕터부터 한 번에 더 깎임
-const HIT_DMG = [10, 15, 15, 20, 20], BOSS_DMG = [15, 20, 25, 25, 30]; // 월드별 (0.5: 월드 1 보스 20→15, 월드 2 일반 10→15, 월드 3 보스 20→25)
+// 층별 보스 체력 배수 — 봇 200판에서 보스 처치 중앙값이 4층부터 9~12초로 떨어져(마지막 보스 12초) 뒤쪽을 올림. 목표: 마지막 보스 30초 안팎
+const BOSS_FLOOR_HP = [1, 1, 1, 1.25, 1.6, 1.6, 2.0, 2.8];
+const HIT_DMG = [10, 15, 20, 25, 25], BOSS_DMG = [15, 20, 25, 30, 35]; // 월드별 (0.5: 월드 1 보스 20→15, 월드 2 일반 10→15, 월드 3 보스 20→25)
 const hitDmg = boss => (boss ? BOSS_DMG : HIT_DMG)[chOf(G ? G.floorNo : 1)];
 const bossTitle = e => BOSS_NAME[e.kind] + (e.v2 ? ' v2' : '');
 
@@ -1344,14 +1346,14 @@ const ELITES = {
 const ELITE_IDS = Object.keys(ELITES);
 function makeEncounter(rng, floorNo, L){
   const ch = Math.min(ENC_POOL.length - 1, Math.ceil(floorNo / 2) - 1), pool = ENC_POOL[ch], arch = rng();
-  let budget = 4 + floorNo + Math.floor(floorNo / 3) + Math.floor(rng()*3);
+  let budget = 4 + floorNo + Math.floor(floorNo / 3) + Math.max(0, floorNo - 4) + Math.floor(rng()*3); // 5층부터 층마다 +1 더 (봇: 후반 전투방에서 거의 안 죽음)
   const pickW = w => { const ks = Object.keys(w), tot = ks.reduce((a, k) => a + w[k], 0); let r = rng()*tot; for (const k of ks){ if ((r -= w[k]) < 0) return k; } return ks[0]; };
   let w = pool;
   if (arch < .2) w = {bug:5, ...(pool.spinner ? {spinner:2} : {})};                                 // 떼
   else if (arch < .35) w = {turret:3, ...(pool.popup ? {popup:3} : {}), bug:1.5};                    // 포대
   else if (arch < .5) w = {slime:3, ...(pool.cube ? {cube:3} : {}), ...(pool.spinner ? {spinner:1} : {})}; // 덩치
   const types = [];
-  while (budget > 0 && types.length < 9){ const t = pickW(w); if (ENC_COST[t] > budget + 1) { if (budget <= 1){ types.push('bug'); break; } continue; } types.push(t); budget -= ENC_COST[t]; }
+  while (budget > 0 && types.length < (floorNo >= 5 ? 11 : 9)){ const t = pickW(w); if (ENC_COST[t] > budget + 1) { if (budget <= 1){ types.push('bug'); break; } continue; } types.push(t); budget -= ENC_COST[t]; }
   const free = [];
   for (let y = 0; y < 7; y++) for (let x = 0; x < 13; x++){
     if (L[y][x] !== '.') continue;
@@ -1364,7 +1366,7 @@ function makeEncounter(rng, floorNo, L){
     while (q.length){ const [x, y] = q.shift(); for (const [dx, dy] of [[1,0],[-1,0],[0,1],[0,-1]]){ const k = (x+dx)+','+(y+dy); if (ok(x+dx, y+dy) && !seen.has(k)){ seen.add(k); q.push([x+dx, y+dy]); } } }
     for (let i = free.length - 1; i >= 0; i--) if (!seen.has(free[i][0]+','+free[i][1])) free.splice(i, 1);
   }
-  const eliteP = floorNo >= 2 ? .06 + .015*floorNo : 0;
+  const eliteP = floorNo >= 2 ? .06 + .015*floorNo + (floorNo >= 5 ? .02*(floorNo - 4) : 0) : 0;
   return types.map(t => {
     let best = null;
     if (t === 'turret' || t === 'popup'){ // 포대는 가장자리 쪽
@@ -1452,9 +1454,11 @@ function genFloor(seed, floorNo, used){
       if (!ids.length){ r.pickups.push(mkPick('bit', W/2 - 20, H/2, {n:15})); r.pickups.push(mkPick('heal', W/2 + 20, H/2)); }
     });
     const shop = list.find(r => r.type === 'shop');
-    const shopItem = rng() < .4 ? pickItem('shop', rng, trial) : null;
-    const stock = [shopItem ? {kind:'item', id:shopItem, price:15} : (rng() < .5 ? {kind:'patch', price:4, c:Math.floor(rng()*8)} : {kind:'zip', price:5}), {kind:'heal', price:4}, {kind:'shield', price:5},
+    const fN = floorNo, shopItem = fN >= 2 || rng() < .5 ? pickItem('shop', rng, trial) : null, shopItem2 = fN >= 5 ? pickItem('shop', rng, trial) : null;
+    const itemPrice = 15 + 3 * Math.floor((fN - 1) / 2); // 월드마다 +3 (15 · 18 · 21 · 24 · 27)
+    const stock = [shopItem ? {kind:'item', id:shopItem, price:itemPrice} : (rng() < .5 ? {kind:'patch', price:4, c:Math.floor(rng()*8)} : {kind:'zip', price:5}), {kind:'heal', price:4}, {kind:'shield', price:5},
                    {kind: rng() < .5 ? 'key' : 'bomb', price:5}, rng() < .5 ? {kind:'patch', price:4, c:Math.floor(rng()*8)} : {kind:'card', price:6, cid:CARDS[Math.floor(rng()*CARDS.length)].id}];
+    if (shopItem2) stock[4] = {kind:'item', id:shopItem2, price:itemPrice + 3};
     stock.forEach((s, i) => { if (s.kind !== 'item' || s.id) shop.pickups.push(mkPick(s.kind, W/2 - 112 + i*56, H/2 + 14, {id:s.id, price:s.price, c:s.c, cid:s.cid, source:'shop'})); });
     // 숨겨진 방 = 기본은 파밍 묶음. 아이템은 운 좋을 때만 (직접 10%, 잠긴 압축 25% × 그 안 35%)
     const cardId = () => CARDS[Math.floor(rng()*CARDS.length)].id, patchC = () => Math.floor(rng()*8);
@@ -1687,7 +1691,7 @@ function toast(text, col, x, y){
 
 /* ---------- rooms ---------- */
 function makeEnemy(type, x, y, kind){
-  const fs = 1 + TUNE.floorHp * ((G ? G.floorNo : 1) - 1), fl = Math.min(4, (G ? G.floorNo : 1) - 1);
+  const fs = 1 + TUNE.floorHp * ((G ? G.floorNo : 1) - 1) + TUNE.floorHp2 * ((G ? G.floorNo : 1) - 1) ** 2, fl = Math.min(4, (G ? G.floorNo : 1) - 1);
   const base = {type, x, y, kx:0, ky:0, flash:0, dead:false, poison:null, lastProc:-99, procBeam:-99, spawnT:TUNE.spawnDelay, t:Math.floor(fx()*60), ultCd:0, mark:0, stun:0, z:0};
   if (type === 'slime') return Object.assign(base, {r:8, hp:10.5*fs, maxHp:10.5*fs, spd:TUNE.slimeSpd + fl*.06, kbRes:1});
   if (type === 'bug') return Object.assign(base, {r:4.5, hp:3.5*fs, maxHp:3.5*fs, spd:TUNE.bugSpd + fl*.1, kbRes:1, wob:fx()*TAU});
@@ -1703,7 +1707,7 @@ function makeEnemy(type, x, y, kind){
   if (type === 'popup') return Object.assign(base, {r:9, hp:16*fs, maxHp:16*fs, spd:0, kbRes:0, cd:90+Math.floor(fx()*40), shots:0, hide:0, spawnIn:0});
   if (type === 'boss'){
     const v2 = kind === 'lag' && (G ? G.floorNo : 1) >= 7;
-    const hp = BOSS_HP[kind] * (v2 ? 2.2 : 1);
+    const hp = BOSS_HP[kind] * (v2 ? 2.2 : 1) * (BOSS_FLOOR_HP[(G ? G.floorNo : 1) - 1] || 1);
     return Object.assign(base, {kind, v2, r:BOSS_R[kind], hp, maxHp:hp, spd:0, kbRes:kind === 'kingslime' || kind === 'queen' ? .2 : .06, state:kind === 'freeze' ? 'frozen' : 'idle', st:80, dir:{x:0,y:0}, summoned:false, pulse:0, cyc:0, spin:0, arms:1, splits:0});
   }
 }
@@ -3041,7 +3045,7 @@ function updateLoading(e, dx, dy, d){
 function updateFreeze(e, dx, dy, d){
   e.pulse += .1; e.st--;
   const half = e.hp < e.maxHp/2;
-  if (e.state === 'frozen'){ if (e.st <= 0){ e.state = 'wind'; e.st = 18; e.hops = half ? 4 : 3; } }
+  if (e.state === 'frozen'){ if (e.st <= 0){ e.state = 'wind'; e.st = 24; e.hops = half ? 4 : 3; } }
   else if (e.state === 'wind'){
     if (e.st <= 0){
       e.state = 'hop'; e.st = 16;
@@ -3054,7 +3058,7 @@ function updateFreeze(e, dx, dy, d){
     if (e.st <= 0){
       e.z = 0; ring(e, half ? 12 : 8, fx()*TAU); G.shake = Math.max(G.shake, 6); sfx('boom'); burst(e.x, e.y + e.r, '#9fd8ff', 10, 2);
       e.hops--;
-      if (e.hops > 0){ e.state = 'wind'; e.st = 14; } else { e.state = 'frozen'; e.st = 65; if (half) summonBugs(e, 2); }
+      if (e.hops > 0){ e.state = 'wind'; e.st = 20; } else { e.state = 'frozen'; e.st = 65; if (half) summonBugs(e, 2); }
     }
   }
 }
@@ -4665,6 +4669,7 @@ let charCur = null;
 const PATCH_NOTES = [
   {ver:'ALPHA 0.6', name:'월드 5 · 소환수 · 세트 변신', date:'2026.10.18', lines:[
     '조작 — 움직이다 쏘면 탄이 움직이던 쪽으로 살짝 휘어요 (멈춘 직후에도 잠깐 남음, 아이작처럼). Tab = 일시정지, M = 지도. 들고 있는 아이템 · 액티브 · 주머니 · 바닥 아이템에 마우스를 올리면 이름과 설명',
+    '밸런스 (봇 1,000판 넘게 돌려 맞춤) — 4층부터 보스 체력 ↑ (마지막 보스 ×2.8: 처치 중앙값 12초 → 21초), 5층부터 방마다 몹 · 엘리트 조금 더, 뒤쪽 층 몹 체력 곡선 ↑, 월드 3 일반 피해 20 · 월드 4 일반 피해 25. 상점엔 2층부터 아이템이 항상 (값은 월드마다 +3, 5층부터 2개) — 비트가 80개씩 남던 걸 20~30개로. 프리징 점프 예고 조금 길게',
     '지도에 남은 픽업 표시 (아이작처럼) — 다녀온 방에 안 주운 아이템 · 열쇠 · 폭탄 · 상자 · 패치 · 치트 코드 · 하트 · 비트가 있으면 방 칸에 작은 아이콘 (상점 매물 · 보물방 템은 방 아이콘으로)',
     '손상된 섹터(지날 때 HP -10) 문을 초록 글리치 + ♥-10 표시로 바꿔 보스 문과 헷갈리지 않게. 고장 난 슬롯머신 · 랜덤 박스 몸통 안으로 튄 비트가 밖으로 밀려 나와 주울 수 있게',
     '월드 5 「휴지통」 — 월드 4 결말 뒤에 열리는 숨은 월드 (이미 월드 4를 깼다면 바로 열려요). 중간 보스 트로이 목마(돌진 · 배 속 졸개), 월드 보스 휴지통(빨아들이기 · 되돌아오는 종이 뭉치 · 비우기 탄막)',
