@@ -146,8 +146,13 @@ jobs:
       - name: 설정 파일·스크립트 복사
         run: scp -i ~/.ssh/deploy_key -r docker-compose.yml Caddyfile scripts "$TARGET:$APP_DIR/"
       # 이번 실행의 토큰으로만 이미지를 받음 (표준 입력으로 넘겨서 서버에 남기지 않음)
+      # 이미지 이름은 docker job 이 올린 이름(ghcr.io/<레포>-server · -web, 소문자)을 그대로 넘김 — 서버 .env 의 SERVER_IMAGE · WEB_IMAGE 보다 앞섬.
+      #   (레포 이름이 gunmo.my → portfol 로 바뀐 뒤 서버가 옛 이미지 gunmo.my-*:latest 만 받아서 배포가 멈췄던 일 — 2026-10-19)
       - name: 이미지 받아 다시 띄우기
         env:
           GHCR_USER: ${{ github.actor }}
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: ssh -i ~/.ssh/deploy_key "$TARGET" "GHCR_USER='$GHCR_USER' bash '$APP_DIR/scripts/deploy.sh'" <<< "$GHCR_TOKEN"
+          IMG: ghcr.io/${{ github.repository }}
+        run: |
+          IMG="${IMG,,}"
+          ssh -i ~/.ssh/deploy_key "$TARGET" "GHCR_USER='$GHCR_USER' SERVER_IMAGE='$IMG-server:latest' WEB_IMAGE='$IMG-web:latest' bash '$APP_DIR/scripts/deploy.sh'" <<< "$GHCR_TOKEN"
