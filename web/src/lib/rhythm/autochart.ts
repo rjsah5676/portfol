@@ -289,6 +289,8 @@ export interface NightmareTweak {
   fineChord?: number;
   /** 박 안 두 번째부터의 동시치기 자리(8분 뒷박 등)를 실제 동시치기로 하는 몫 — 박 머리는 늘 동시치기 */
   halfChord?: number;
+  /** 16분으로 채우는 박에도 뒷박 동시치기를 넣을지 (빠른 곡은 안 넣음 — 16분 점프스트림이 됨) */
+  streamChord?: boolean;
 }
 // 나이트메어: 정박 위주 — osu · Quaver 랭크 Lv15~17 은 줄의 정박 38~40% · 8분 34~35% · 16분 18~24%,
 //  동시치기의 68~70%가 정박 위인데 우리는 34 · 33 · 34% · 56%였음 (16분 단노트 스트림 · 16분 점프스트림으로 레벨을 냄).
@@ -307,6 +309,7 @@ const NIGHTMARE_DEFAULT: Required<NightmareTweak> = {
   chordScale: 1,
   fineChord: 0,
   halfChord: 0.6,
+  streamChord: true,
 };
 /** EX+ 기본: 센 마디 8분·아주 센 마디 16분 꽉은 나이트메어와 비슷한 문턱(기승전결 유지), 4마디마다 16분 셋잇단 연타 */
 const EXPLUS_DEFAULT: Required<NightmareTweak> = {
@@ -323,9 +326,10 @@ const EXPLUS_DEFAULT: Required<NightmareTweak> = {
   chordScale: 1,
   fineChord: 0,
   halfChord: 1,
+  streamChord: true,
 };
-/** 16분 점프스트림 몫 상한 — 나이트메어도 0 (16분 자리 동시치기는 정박 위주와 반대), 빠른 곡만 조금 */
-const fineChordMax = (d: Difficulty, fast: boolean) => (d === "nightmare" && fast ? 0.06 : 0);
+/** 16분 점프스트림 몫 상한 — 0 (16분 자리 동시치기는 정박 위주와 반대 · 빠른 곡은 실제 플레이에서 무너지는 자리였음) */
+const fineChordMax = (_d: Difficulty, _fast: boolean) => 0;
 /** 동시치기 두께 배율 상한 — 빠른 곡(185 BPM↑)은 안 두껍게 (16분을 덜 여는 만큼 동시치기로 메우면 동시치기 66%·잭 37% 벽이 됨).
  *  나이트메어는 16분을 덜 여는 대신 정박 동시치기로 레벨을 냄 */
 const chordMax = (d: Difficulty, fast: boolean) => (fast ? 1 : d === "nightmare" ? 2.2 : 1.5);
@@ -1634,7 +1638,10 @@ function nightmareNotes(
       const sub = full ? P.fullSub : P.loudSub;
       const chords = full ? P.chordFull : P.chordLoud;
       for (let c = 0; c < chords; c++)
-        put(t0 + (c * (t1 - t0)) / chords, c === 0 || spread(k, c) < P.halfChord ? 2 : 1);
+        put(
+          t0 + (c * (t1 - t0)) / chords,
+          c === 0 || ((!full || P.streamChord) && spread(k, c) < P.halfChord) ? 2 : 1
+        );
       if (full) putFine(t0, t1, sub, k);
       else for (let i = 0; i < sub; i++) put(t0 + (i * (t1 - t0)) / sub, 1);
     }
@@ -1813,6 +1820,9 @@ export function makeAutoCharts(
       ...nmDefault(d),
       // 210 BPM 이상은 8분마다 동시치기면 동시치기 벽(줄의 70%) — 박마다 하나로 (osu·Quaver 37~45%)
       ...(foldBpm >= 210 ? { chordFull: 1 } : {}),
+      // 185 BPM 이상 나이트메어: 16분(81ms 안쪽)으로 채우는 박엔 뒷박 동시치기를 안 넣음 — 넣으면 16분 점프스트림
+      //  (Crimson Cadenza NIGHTMARE 174~176초: 75ms 간격에 8분마다 동시치기 → 실제 플레이에서 4초에 미스 10)
+      ...(fastSong && d === "nightmare" ? { streamChord: false } : {}),
       ...(base.nightmare ?? {}),
     };
     let best: Chart | null = null;

@@ -17,6 +17,16 @@ export interface Patch {
 
 export const PATCHES: Patch[] = [
   {
+    ver: "v2.4",
+    name: "빠른 곡 16분 점프스트림 정리",
+    date: "2026.10.18",
+    lines: [
+      "185 BPM 이상 곡 NIGHTMARE: 16분(81ms 안쪽)으로 채우는 박엔 뒷박 · 16분 동시치기를 안 넣음 — 실제 플레이 기록에서 Crimson Cadenza 174~176초(75ms 간격에 8분마다 동시치기)에서 4초에 미스 10개가 몰렸던 자리. 이제 박 머리 동시치기 + 16분 단노트",
+      "Crimson Cadenza · Aragami NIGHTMARE 만 바뀜 (Aragami 17 → 16)",
+      "콤보 숫자 위 「COMBO」 글자 아랫부분이 숫자 테두리에 덮여 잘리던 것",
+    ],
+  },
+  {
     ver: "v2.3",
     name: "NIGHTMARE 정박 위주로",
     date: "2026.10.18",
