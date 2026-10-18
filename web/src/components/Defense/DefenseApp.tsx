@@ -47,8 +47,6 @@ import {
   TOWN_MAX,
   TOWN_RELIC,
   TOWN_REWARD,
-  MASTERY_PER,
-  masteryNeed,
   TREASURE,
   dailyFirstOf,
   kstDayKey,
@@ -635,7 +633,7 @@ function Menu(p: {
               {!p.member
                 ? "연습 판 (회원은 랭킹 · 성장 · 보상)"
                 : pr
-                  ? `오염 ${glitch}단계 (보상 ×${GLITCH[glitch].reward}) · 연구 ${pr.load.res.length} · 유물 ${pr.load.relics.length}${grit ? ` · 끈기 +${Math.round(grit * GRIT_PER * 100)}%` : ""}${pr.mastery?.lv ? ` · 숙련 +${Math.round(pr.mastery.lv * MASTERY_PER * 100)}%` : ""}`
+                  ? `오염 ${glitch}단계 (보상 ×${GLITCH[glitch].reward}) · 연구 ${pr.load.res.length} · 유물 ${pr.load.relics.length}${grit ? ` · 끈기 +${Math.round(grit * GRIT_PER * 100)}%` : ""}`
                   : "시즌 랭킹 판"}
             </span>
           </Btn>
@@ -820,20 +818,13 @@ function FinishNote({ r }: { r: FinishOut }) {
           {w.townClear.relic && <b className="text-[#ffb3ee]">유물 「{RELIC[w.townClear.relic]?.name}」</b>}
         </span>
       )}
-      {w?.mastery && (
-        <span className="text-[13px] text-[#c79bff]">
-          심연 숙련 +{w.mastery.gain} 경험치
-          {w.mastery.up > 0 ? (
-            <b className="dfn-pop ml-1 text-[#ff9ef0]">
-              Lv.{w.mastery.lv} 달성! 모든 피해 +{Math.round(w.mastery.lv * MASTERY_PER * 100)}%
-            </b>
-          ) : (
-            <span className="ml-1 text-[var(--mute)]">
-              (Lv.{w.mastery.lv} · {w.mastery.xp}/{masteryNeed(w.mastery.lv)})
-            </span>
-          )}
+      {!!w?.estone && <span className="text-[13px] text-[#ff9ef0]">각인석 +{w.estone} (정비소 「각인」)</span>}
+      {w?.cardsPicked && Object.keys(w.cardsPicked).length > 0 && (
+        <span className="text-[13px] text-[var(--text)]">
+          원정에서 고른 유닛 카드 +{Object.values(w.cardsPicked).reduce((a, n) => a + n, 0)}장
         </span>
       )}
+      {w?.tshard && <span className="text-[13px] text-[#ffd36b]">원정 유물 조각 +{w.tshard.n} ({RELIC[w.tshard.id]?.name})</span>}
       {w?.act2Win && <b className="dfn-pop text-[14px] text-[#ff9ec7]">2막 보스까지 처치 — 보상 ×{EXP.act2Reward}</b>}
       {w?.squad && <b className="dfn-pop text-[14px] text-[#9be7ff]">새 원정 분대 해금 — {SQUADS.find((q) => q.id === w.squad)?.name}</b>}
       {w?.patches?.map((id) => (

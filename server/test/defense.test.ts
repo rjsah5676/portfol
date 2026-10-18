@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { ENGR_PITY, engrOutcome, rollEngr } from "../../web/src/lib/defense/engrave";
 import { B, BALANCE_VER, LAST_WAVE, countOf, sec } from "../../web/src/lib/defense/balance";
 import { BOTS, botTurn } from "../../web/src/lib/defense/bot";
 import { HASH_TICKS, TICKS_PER_TURN, TURN_MS, replay, replayer, scoreOf, validLog, type LogEntry } from "../../web/src/lib/defense/replay";
@@ -8,7 +9,7 @@ import { RECIPES, UNIT, UNITS } from "../../web/src/lib/defense/units";
 import { BOSSES, PHASE_PAIRS, bossOfWave, phaseOn } from "../../web/src/lib/defense/enemies";
 import { CHEATS, CHEAT_MULTI_SEC, cheatFxOf, cheatOdds } from "../../web/src/lib/defense/cheats";
 import { TPS } from "../../web/src/lib/defense/balance";
-import { GLITCH, TREASURE_WAVES, treasureChance, relicShardsToMax, CHEAT_RES, BOX, BENCH_COST, FRES_COST, TRANS_IDS, GP_PACKS, GP_SELL, GP_STORE, PACK, PASS_PREMIUM_GP, RESEARCH, cleanLoadout, lvCost, modsOf, packPct, planUpAll, seasonScore, townGlitchLv, townOpenOf, transRoll } from "../../web/src/lib/defense/progress";
+import { GLITCH, TREASURE_WAVES, treasureChance, relicShardsToMax, CHEAT_RES, BOX, BENCH_COST, FRES_COST, TRANS_IDS, GP_PACKS, GP_SELL, GP_STORE, PACK, PASS_PREMIUM_GP, RESEARCH, cleanLoadout, lvCost, modsOf, relicSlotsOf, packPct, planUpAll, seasonScore, townGlitchLv, townOpenOf, transRoll } from "../../web/src/lib/defense/progress";
 import { startTestServer, type TestClient, type TestServer } from "./helpers";
 
 /** 봇 한 판 (기록 포함) */
@@ -428,10 +429,6 @@ describe("픽셀 글리치 디펜스 엔진", () => {
     const g0 = G.boards[0].gold;
     for (let k = 0; k < 400 && G.boards[0].wave < 1; k++) step(G);
     expect(G.boards[0].gold).toBeGreaterThan(g0);
-    // 심연 숙련: 레벨마다 모든 피해 +2% · 범위 밖은 자름
-    expect(modsOf({ mastery: 10 }).mastDmg).toBeCloseTo(1.2);
-    expect(modsOf({ mastery: -3 }).mastery).toBe(0);
-    expect(modsOf({}).mastDmg).toBe(1);
     // 원정 칸: 원정 유물은 일반 칸에서 빠지고 원정 칸으로 (일반 3칸 + 원정 1칸)
     const RL = cleanLoadout({ relics: ["lucky_dice", "vaccine", "rainbow", "alchemy"] });
     expect(RL.relics).toEqual(["vaccine", "rainbow", "alchemy"]);
@@ -439,6 +436,25 @@ describe("픽셀 글리치 디펜스 엔진", () => {
     expect(cleanLoadout({ trelic: "vaccine" }).trelic).toBe("");
     expect(modsOf({ relics: ["vaccine"], trelic: "lucky_dice" }).bossFree).toBeGreaterThan(0);
     expect(modsOf({ relics: ["vaccine"], trelic: "lucky_dice" }).relics).toEqual(["vaccine", "lucky_dice"]);
+    // 각인: 중복 처리 (없음 → 바로 · 같은 특성 → 공명 · 글리치 같은 특성 → 돌려받음 · 다른 특성 → 고르기)
+    expect(engrOutcome(undefined, { e: "blast", t: 1 })).toEqual({ kind: "new", next: { e: "blast", t: 1 } });
+    expect(engrOutcome({ e: "blast", t: 0 }, { e: "blast", t: 0 })).toEqual({ kind: "resonate", next: { e: "blast", t: 1 } });
+    expect(engrOutcome({ e: "blast", t: 1 }, { e: "blast", t: 2 })).toEqual({ kind: "resonate", next: { e: "blast", t: 3 } });
+    expect(engrOutcome({ e: "blast", t: 3 }, { e: "blast", t: 0 }).kind).toBe("maxed");
+    expect(engrOutcome({ e: "blast", t: 2 }, { e: "crit", t: 0 }).kind).toBe("choose");
+    // 천장: ENGR_PITY - 1 번 전설 없이 왔으면 다음은 전설 이상
+    expect(rollEngr(() => 0.01, ENGR_PITY - 1).g.t).toBeGreaterThanOrEqual(2);
+    expect(rollEngr(() => 0.01, 0).pity).toBe(1);
+    // 각인 효과: 판 결정론 · 연사 각인이면 같은 판에서 더 셈
+    expect(modsOf({ engr: { k_squire: { e: "rapid", t: 3 }, zz: { e: "nope" as never, t: 9 } } }).engr).toEqual({ k_squire: { e: "rapid", t: 3 } });
+    const elo = [{ engr: { k_squire: { e: "blast" as const, t: 3 }, k_shield: { e: "crit" as const, t: 2 }, m_bolt: { e: "frost" as const, t: 1 } } }];
+    const E1 = botGame(4, 0, Infinity, elo);
+    const E2 = replay(4, 1, E1.log, elo);
+    expect(E2.boards[0].result).toEqual(E1.g.boards[0].result);
+    // 유물 칸: 오염 30 클리어 뒤 4칸
+    expect(relicSlotsOf(29)).toBe(3);
+    expect(relicSlotsOf(30)).toBe(4);
+    expect(cleanLoadout({ relics: ["vaccine", "rainbow", "alchemy", "war_banner"] }).relics.length).toBe(4);
     // 도감 5종 → 메아리가 유물 풀에
     const D = started(7, 1, [{ ...lo, expSeen: ["alch", "twin", "growth", "piggy", "iron"] }]).boards[0];
     expect(D.mods.expSeen.length).toBe(5);

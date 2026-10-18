@@ -444,15 +444,19 @@ Slay the Spire 식 갈림길 지도 로그라이크. 설계 문서: 프로젝트
 - 유물 8종 추가 `RelicDef.from`: deep(오염 30 클리어 뒤 상자 — `DEEP_RELIC_WIN`) myth_seal · overdrive · chrono_core · void_stone / town(타운 5·10·15·20 첫 클리어만 — `TOWN_RELIC`) lucky_dice · golden_deed · moa_card · forte_box. 그림 없음(도트 아이콘)
 - (v2.2 에서 없앰) 땅문서 · 도시 개발
 
+## 유닛 각인 · 유물 4칸 · 원정 선물 (2026-10-19)
+- 각인 `lib/defense/engrave.ts`: 특성 12 (ENGRAVES, 등급 4 · ENGR_ODDS · ENGR_PITY 30) · `rollEngr`(서버 무작위) · `engrOutcome`(중복: new · resonate 등급+1 · maxed 각인석 돌려받음 · choose 둘 중 고르기, 버린 쪽 ENGR_REFUND)
+  - `Loadout.engr` → `Mods.engr` → sim: `egv(b, id, kind)` — rapid(공속) · reach(사거리) · crit(Unit.n 4타마다) · frost · reap(attack) · hunter · growth · pierce(hit) · coin · blast(die) · fuse(merge) · twin(give)
+  - 서버 profile `engr` · `estone` · `epity` · `epend`(고르는 중), rpc `defense.engr.roll {unit}` · `defense.engr.pick {take}` — 응답 `engrRoll` · `engrPicked`. 각인석: onRun(오염 31+ 클리어 1 `engrStonesMain` + 첫 클리어 ENGR_FIRST_CLEAR 2) · onTownRun(보스 하나당 1)
+  - 화면 `components/Defense/Engrave.tsx` (정비소 「각인」 탭 · 결과/고르기 창 · `EngrBadge` 게임 화면 유닛 정보)
+- 유물 칸: `relicSlotsOf(glitchWin)` — 오염 `RELIC_SLOT4_WIN`(30) 클리어로 4칸 (`RELIC_SLOTS_MAX`)
+- 원정 선물: 드래프트로 고른 유닛(`exp.picked` → stats.picked) 메인 카드 +1 · 이기면 가진 원정 유물 중 가장 낮은 레벨 조각 +1 (2막 +2)
+- econ: `--engr 0` · `--slot4 0` · `--towngift 0` 로 비교
+
 ## 원정 칸 (2026-10-19)
 - 원정 유물(`RELIC.from === "town"`, `TOWN_RELIC` 5·10·15·20 첫 클리어)은 일반 3칸(`RELIC_SLOTS`)에 못 끼고 원정 칸 1칸 — `Loadout.trelic` · `profile.load.trelic` · `isTownRelic`
 - `cleanLoadout` 이 일반 칸에 있던 원정 유물을 원정 칸으로 옮김(예전 기록 · 옛 화면), 서버 `setLoad` 도 같은 식으로 옮김. `giveRelic` 은 원정 칸이 비면 바로 낌
 - 화면: 정비소 출전 준비 「원정 칸」(원정 5단계 첫 클리어 전엔 잠김 안내)
 
-## 심연 숙련 (2026-10-17)
-- 문제: 성장 경제 시뮬(`server/scripts/defense-econ.ts --town 3`)에서 유닛 · 연구 · 유물이 40단계쯤 거의 다 차서 42~50 이 운 반복 → 균형 봇 오염 50 까지 332시간(그중 42~50 이 270시간)
-- 참고: 랜덤 다이스 치명타 피해(덱이 다 커도 계정 전체로 끝없이 쌓임) · BTD6 파라곤 등급(쏟은 만큼) · 운빨존많겜 각성(후반 재화로 한 단계 더)
-- 규칙: `progress.ts MASTERY_FROM`(오염 30 클리어 뒤) 판마다 도달 웨이브만큼 경험치 (메인 · 멀티 · 원정, 져도), `masteryNeed(lv)` = 300 + 25×lv, 레벨마다 모든 피해 +`MASTERY_PER`(2%) — `Loadout.mastery` → `Mods.mastDmg` (sim hit). 서버 `gainMastery` (onRun · onTownRun), 결과 화면 · 메뉴 · 빌드 창에 표시
-- 결과(시뮬): 균형 332 → 103시간, 도박사 417 → 132시간 (41→50 이 약 30~45시간, 50 클리어 때 숙련 Lv 31~32). econ 에 `--mastery 0` · `--mbase` · `--mstep` 로 비교 · 곡선 조정
-- TOWN_MAX 23. 업적 glitch-40 · glitch-50 (points.ts)
-- 시뮬 `--meta abyss` (max + 새 유물 + 도시 개발 전부): 봇 기준 50단계 클리어 드묾 (~2%)
+## 심연 숙련 (2026-10-17 넣었다가 2026-10-19 뺌)
+- 판마다 웨이브만큼 경험치 → 모든 피해 +2%/레벨 (끝없음) 이었는데 「반복 숙제」 느낌이라 뺌. 40+ 벽은 각인 · 유물 4칸 · 원정 선물로 뚫음

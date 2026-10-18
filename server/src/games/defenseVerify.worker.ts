@@ -24,7 +24,7 @@ export interface VerifyOut {
   /** 보드마다 가장 높은 등급 유닛 3개 (순위표에 보여 줌) */
   tops: string[][];
   /** 보드마다 미션 숫자 재료 (얻은 유닛 · 닫은 균열) */
-  stats: { made: Record<string, number>; rifts: number; treasure?: { wave: number; dmg: number; max: number; killed: boolean } | null; squad?: string | null; act?: number; kills?: string[]; expRelics?: string[] }[];
+  stats: { made: Record<string, number>; rifts: number; treasure?: { wave: number; dmg: number; max: number; killed: boolean } | null; squad?: string | null; act?: number; kills?: string[]; expRelics?: string[]; picked?: string[] }[];
   ticks: number;
   cpu: number;
 }
@@ -50,7 +50,7 @@ export async function verifyRun(job: VerifyJob): Promise<VerifyOut> {
         .sort((a, c) => UNIT[c].grade - UNIT[a].grade || UNIT[c].dmg - UNIT[a].dmg)
         .slice(0, 3)
     ),
-    stats: g.boards.map((b) => ({ made: { ...b.made }, rifts: b.rifts, treasure: b.treasure, squad: b.exp?.squad ?? null, act: b.exp?.act ?? 0, kills: b.exp ? [...b.exp.kills] : [], expRelics: b.exp ? [...b.exp.relics] : [] })),
+    stats: g.boards.map((b) => ({ made: { ...b.made }, rifts: b.rifts, treasure: b.treasure, squad: b.exp?.squad ?? null, act: b.exp?.act ?? 0, kills: b.exp ? [...b.exp.kills] : [], expRelics: b.exp ? [...b.exp.relics] : [], picked: b.exp ? [...b.exp.picked] : [] })),
     ticks: g.tick,
     cpu: Math.round(cpu),
   };

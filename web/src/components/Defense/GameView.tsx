@@ -32,6 +32,8 @@ import {
 import { EXP_NODE_TEXT, TOWN_NAME } from "@/lib/defense/town";
 import { CleanBanner, ExpBar, ExpModal, expWave } from "./Expedition";
 import { BuildModal, buildCount } from "./Build";
+import { EngrBadge } from "./Engrave";
+import { engrText } from "@/lib/defense/engrave";
 import {
   FACTIONS,
   FACTION_COLOR,
@@ -945,6 +947,11 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry, 
                 <b className="truncate text-[14px]">{selDef.name}</b>
                 <GradeChip g={selDef.grade} />
                 <FactionChip f={selDef.faction} />
+                {b.mods.engr[selDef.id] && (
+                  <span title={engrText(b.mods.engr[selDef.id])}>
+                    <EngrBadge g={b.mods.engr[selDef.id]} />
+                  </span>
+                )}
                 <span className="text-[12px] text-[var(--mute)]">
                   ×{selCell.units.length}
                   {sel >= CELLS && " · 보관함"}

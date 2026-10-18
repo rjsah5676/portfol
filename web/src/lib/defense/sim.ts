@@ -27,6 +27,7 @@ import { B, BOSS_EVERY, CAP, LAST_WAVE, TPS, TUNE, countOf, hpOf, sec } from "./
 import { BOSSES, KIND, MAIN_BOSSES, TOWN_BOSSES, bossOfWave, kindOfWave, phaseOn, type BossDef, type Size, type TeleShape } from "./enemies";
 import { CHEAT, CHEATS, CHEAT_MULTI_SEC, CHEAT_OFFER, CHEAT_WAVES, cheatFx0, cheatFxOf, cheatOdds, type CheatFx } from "./cheats";
 import { MISSIONS, PATCHES, patchesFor } from "./meta";
+import { ENGRAVES, type EngrId } from "./engrave";
 import { mixSeed, pick, rnd, rndInt, type Rng } from "./rng";
 import { BENCH_MAX, LV_BUFF, LV_DMG, modsOf, type Loadout, type Mods, type Stage } from "./progress";
 import { EVENTS, EXP, EXP_RELICS, FIGHT_MOD, GIM, SHOP, SQUADS, ascOn, type EventId, type ExpNode, type FightMod, type Gim, type ShopKind } from "./town";
@@ -101,6 +102,8 @@ export interface Unit {
   ult: number;
   /** 기절 (tick) */
   stun: number;
+  /** 공격 수 (각인 「치명 리듬」) */
+  n?: number;
 }
 export interface Cell {
   def: string | null;
@@ -237,6 +240,8 @@ export interface ExpState {
   act: number;
   kills: string[];
   used: string[];
+  /** 드래프트로 고른 유닛 (판이 끝나면 메인 카드로) */
+  picked: string[];
 }
 
 /** 화면 효과 (시뮬 결과에 영향 없음 — fx 가 null 이면 안 쌓음) */
@@ -584,6 +589,7 @@ function expInit(b: Board) {
     act: 1,
     kills: [],
     used: [],
+    picked: [],
   };
   b.gold += b.mods.expGold;
   b.exp.map = genMap(b);
@@ -829,6 +835,7 @@ function expPick(g: Game, b: Board, a: number): string | null {
         if (!id) return "없는 카드예요";
         if (!hasEmpty(b) && !b.cells.some((s) => s.def === id && s.units.length < STACK)) return "빈 칸이 없어요 — 팔거나 합성하고 골라요";
         give(b, id, "pick");
+        x.picked.push(id);
         if (expHas(b, "echo") && hasEmpty(b)) give(b, id, "pick");
       } else b.gold += EXP.skipGold;
       if (c.next === "relic") {
@@ -1107,7 +1114,7 @@ export function apply(g: Game, p: number, cmd: Cmd): string | null {
       c.units = [];
       b.dirty = true;
       // 원정 유물 「연금 합성」: 25% 두 등급 위 (레전드까지)
-      const up2 = expHas(b, "alch") && d.grade + 2 <= 3 && rnd(b.trng) < 0.25;
+      const up2 = (expHas(b, "alch") && d.grade + 2 <= 3 && rnd(b.trng) < 0.25) || (egv(b, d.id, "fuse") > 0 && d.grade + 2 <= 3 && rnd(b.rng) < egv(b, d.id, "fuse") / 100);
       const next = pick(b.rng, poolOf(d.faction, (d.grade + (up2 ? 2 : 1)) as Grade));
       give(b, next.id, "merge", cmd.c);
       // 시작 치트 「분열 프로토콜」: 25% 같은 유닛 하나 더
@@ -1290,7 +1297,7 @@ function give(
   if (at < 0) return; // (부르는 쪽이 자리를 확인함)
   const c = b.cells[at];
   c.def = id;
-  c.units.push({ cd: 0, ult: 0, stun: 0 });
+  c.units.push({ cd: 0, ult: 0, stun: 0, n: 0 });
   b.dirty = true;
   b.made[id] = (b.made[id] ?? 0) + 1;
   const d = UNIT[id];
@@ -1302,6 +1309,15 @@ function give(
   if (twin && d.grade >= 3 && d.faction !== "hidden" && how !== "twin" && hasEmpty(b)) {
     if (rnd(b.rng) < twin) give(b, pick(b.rng, poolOf(d.faction, d.grade)).id, "twin");
   }
+  // 각인 「분신」: 같은 유닛 하나 더
+  const et = egv(b, id, "twin");
+  if (et && how !== "twin" && hasEmpty(b) && rnd(b.rng) < et / 100) give(b, id, "twin");
+}
+
+/** 이 유닛 종류의 각인이 kind 면 그 수치 (아니면 0) */
+function egv(b: Board, id: string, kind: EngrId): number {
+  const g = b.mods.engr[id];
+  return g && g.e === kind ? ENGRAVES[kind].val[g.t] : 0;
 }
 
 /* ───────────────────────── 적 ───────────────────────── */
@@ -1606,7 +1622,8 @@ function stepBoard(g: Game, b: Board) {
     if (!c.def) continue;
     const def = UNIT[c.def];
     if (b.sealed.length && b.sealed.includes(i)) continue; // 봉인된 칸
-    const sp = 1 + b.aspd[i] + b.cx.aspd + b.mods.aspdAll + (def.faction === "hidden" ? 0 : b.mods.facAspd[def.faction]);
+    const sp = 1 + b.aspd[i] + b.cx.aspd + b.mods.aspdAll + (def.faction === "hidden" ? 0 : b.mods.facAspd[def.faction]) + egv(b, def.id, "rapid") / 100;
+    const range = def.range + egv(b, def.id, "reach");
     const period = TPS / def.aps;
     for (const u of c.units) {
       if (u.stun > 0) {
@@ -1615,7 +1632,7 @@ function stepBoard(g: Game, b: Board) {
       }
       u.cd -= sp;
       if (u.cd > 0) continue;
-      const t = target(b, i, def.range);
+      const t = target(b, i, range);
       if (!t) {
         u.cd = 0;
         continue;
@@ -1733,7 +1750,7 @@ function hit(b: Board, def: UnitDef, e: Enemy, raw: number): number {
     if (expHas(b, "first") && b.exp.stage === "waves" && b.wave === b.exp.segStart) m *= 2;
   }
   const M = b.mods;
-  m *= (1 + LV_DMG * (M.lv[def.id] ?? 0)) * M.relicDmg * M.gritDmg * M.mastDmg;
+  m *= (1 + LV_DMG * (M.lv[def.id] ?? 0)) * M.relicDmg * M.gritDmg;
   if (def.grade >= 4) m *= M.mythDmg;
   if (e.rift) m *= M.riftDmg;
   if (def.faction !== "hidden") m *= M.fac[def.faction];
@@ -1746,12 +1763,20 @@ function hit(b: Board, def: UnitDef, e: Enemy, raw: number): number {
   // 순혈 프로토콜: 가장 많은 세력 비율만큼 그 세력 피해 × (최대 pureDmg)
   if (b.patch === "pure" && b.mono === def.faction) m *= 1 + (TUNE.pureDmg - 1) * b.pure;
   if (e.boss >= 0 && def.boss) m *= def.faction === "hidden" ? 1 + (def.boss - 1) * hiddenFx(b) : def.boss;
+  // 각인: 거인 사냥 · 성장형 · 관통
+  if (M.engr[def.id]) {
+    const eh = egv(b, def.id, "hunter");
+    if (eh && (e.boss >= 0 || e.elite || e.rift)) m *= 1 + eh / 100;
+    const eg = egv(b, def.id, "growth");
+    if (eg) m *= 1 + (eg / 100) * b.wave;
+  }
+  const pierce = 1 - egv(b, def.id, "pierce") / 100;
   if (def.dtype === "phys") {
     let sz = SIZE_MULT[def.faction][e.size];
     if (def.faction === "knight" && e.size > 0) sz = Math.min(1, sz + M.knightBig);
     m *=
-      (e.boss >= 0 ? Math.max(B.bossSizeFloor, sz) : sz) * armorF(e.armor - e.shred) * (1 - e.pres);
-  } else m *= 1 - e.mres;
+      (e.boss >= 0 ? Math.max(B.bossSizeFloor, sz) : sz) * armorF(e.armor * pierce - e.shred) * (1 - e.pres);
+  } else m *= 1 - e.mres * pierce;
   let dmg = raw * m;
   if (e.shield > 0 && !def.pierce) {
     const s = Math.min(e.shield, dmg);
@@ -1798,6 +1823,13 @@ function attack(b: Board, ci: number, def: UnitDef, u: Unit, t: Enemy) {
   }
   if (b.cx.crit && rnd(b.crng) < b.cx.crit) {
     dmg *= 2;
+    crit = true;
+  }
+  // 각인 「치명 리듬」: 4번째 공격마다
+  u.n = (u.n ?? 0) + 1;
+  const ec = egv(b, def.id, "crit");
+  if (ec && u.n % 4 === 0) {
+    dmg *= ec;
     crit = true;
   }
   const tx = t.x,
@@ -1849,6 +1881,21 @@ function attack(b: Board, ci: number, def: UnitDef, u: Unit, t: Enemy) {
     }
   // 처형: 맞은 적 체력이 pct 이하면 바로 쓰러뜨림 (보스 제외)
   if (def.execute && t.hp > 0 && t.boss < 0 && t.hp <= t.max * def.execute * lvBuff(b, def.id)) {
+    b.dealt[def.id] = (b.dealt[def.id] ?? 0) + t.hp;
+    t.hp = 0;
+    t.last = def.id;
+  }
+  // 각인 「서리」 · 「처형」
+  const ef = egv(b, def.id, "frost");
+  if (ef && t.hp > 0) {
+    const pct = Math.min(B.slowCap, ef / 100);
+    if (pct >= t.slowP || t.slowT <= 0) {
+      t.slowP = pct;
+      t.slowT = sec(1.5);
+    }
+  }
+  const er = egv(b, def.id, "reap");
+  if (er && t.hp > 0 && t.boss < 0 && t.hp <= t.max * (er / 100)) {
     b.dealt[def.id] = (b.dealt[def.id] ?? 0) + t.hp;
     t.hp = 0;
     t.last = def.id;
@@ -2197,6 +2244,16 @@ function die(g: Game, b: Board, e: Enemy): boolean {
   } else {
     gold = B.killGold + Math.floor(b.wave / B.killGoldPer) + b.mods.killGold;
     if (b.patch === "greed") gold *= 2;
+    // 각인 「황금 손」 · 「폭발」 (쓰러뜨린 유닛)
+    const kd = UNIT[e.last];
+    if (kd && b.mods.engr[kd.id]) {
+      gold += egv(b, kd.id, "coin");
+      const eb = egv(b, kd.id, "blast");
+      if (eb) {
+        around(b, e.x, e.y, 1.2, e, (o) => hit(b, kd, o, kd.dmg * (eb / 100)));
+        b.fx?.push({ k: "aoe", x: e.x, y: e.y, r: 1.2, def: kd.id });
+      }
+    }
     if (b.exp) {
       if (b.exp.mod) gold = Math.floor(gold * FIGHT_MOD[b.exp.mod].gold);
       if (expHas(b, "goldhand")) gold += 1;

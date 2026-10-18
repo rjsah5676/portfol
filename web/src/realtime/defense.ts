@@ -2,6 +2,7 @@ import { rpc, subscribe } from "@/lib/api/socket";
 import type { Goods, Loadout, QuestDef, RunReward } from "@/lib/defense/progress";
 import type { LogEntry } from "@/lib/defense/replay";
 import type { Cmd, Result } from "@/lib/defense/sim";
+import type { Engr } from "@/lib/defense/engrave";
 
 /*
  * 픽셀 글리치 디펜스 — 백엔드(server/src/games/defense.ts)와 통신
@@ -54,8 +55,10 @@ export type FinishOut = {
         patches?: string[];
         seenNew?: string[];
         act2Win?: boolean;
-        /** 심연 숙련 (오염 30 클리어 뒤) — 지금 레벨 · 경험치 · 이번 판 경험치 · 오른 레벨 */
-        mastery?: { lv: number; xp: number; gain: number; up: number } | null;
+        /** 각인석 · 원정 드래프트 유닛 카드 · 원정 유물 조각 */
+        estone?: number;
+        cardsPicked?: Record<string, number>;
+        tshard?: { id: string; n: number } | null;
       })
     | null;
   /** 오늘의 도전 그날 첫 완료 보상 (이미 받았으면 null) */
@@ -108,8 +111,14 @@ export interface DefenseProfile {
   squads?: string[];
   patches?: string[];
   expSeen?: string[];
-  /** 심연 숙련 */
-  mastery?: { lv: number; xp: number };
+  /** 유닛 각인 · 각인석 · 천장 · 고르는 중 */
+  engr?: Record<string, Engr>;
+  estone?: number;
+  epity?: number;
+  epend?: { u: string; g: Engr } | null;
+  /** 각인 굴린 결과 (engrRoll 응답만) · 고른 결과 (engrPick 응답만) */
+  engrRoll?: { unit: string; got: Engr; kind: "new" | "resonate" | "maxed" | "choose"; prev: Engr | null; refund: number };
+  engrPicked?: { unit: string; take: boolean; refund: number };
   /** 산 치트 연구 */
   cheatRes?: string[];
   glitchOpen: number;
@@ -171,6 +180,8 @@ export const meta = {
   /** dir 1 올리기 · -1 내리기 (전부 돌려받기) */
   resLevel: (id: string, dir: 1 | -1) => P("defense.res.level", { id, dir }),
   relicLevel: (id: string, dir: 1 | -1) => P("defense.relic.level", { id, dir }),
+  engrRoll: (unit: string) => P("defense.engr.roll", { unit }),
+  engrPick: (take: boolean) => P("defense.engr.pick", { take }),
   boxBuy: (kind: "card" | "relic") => P("defense.box.buy", { kind }),
   boxOpen: (kind: "card" | "relic" | "trans") => P("defense.box.open", { kind }),
   benchBuy: () => P("defense.bench.buy"),

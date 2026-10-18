@@ -47,6 +47,9 @@ import {
   TRANS_IDS,
   relicPassive,
   isTownRelic,
+  relicSlotsOf,
+  RELIC_SLOTS_MAX,
+  RELIC_SLOT4_WIN,
   RELIC_PASSIVE,
   DEEP_RELIC_WIN,
   TOWN_FROM,
@@ -65,6 +68,7 @@ import {
 import { meta, type DefenseProfile, type QuestRow, type TransGot } from "@/realtime/defense";
 import { sfx } from "./audio";
 import { Bar, Btn, FactionIcon, Icon, Modal, SoundButton, FsButton, TITLE, Tip, UnitIcon, fmtNum } from "./ui";
+import { EngraveTab } from "./Engrave";
 
 /*
  * 정비소 — 판 밖 성장 화면 (무대 1024×576 통째로).
@@ -73,12 +77,13 @@ import { Bar, Btn, FactionIcon, Icon, Modal, SoundButton, FsButton, TITLE, Tip, 
  * 값은 모두 서버(defenseMeta)가 정하고 돌려준 프로필로 다시 그림 — 화면은 보여 주기 · 요청만.
  */
 
-export type HubTab = "load" | "units" | "res" | "relic" | "quest" | "pass" | "pack" | "goods" | "store" | "sell";
+export type HubTab = "load" | "units" | "res" | "relic" | "engr" | "quest" | "pass" | "pack" | "goods" | "store" | "sell";
 const TABS: { k: HubTab; name: string; icon: string }[] = [
   { k: "load", name: "출전 준비", icon: "star" },
   { k: "units", name: "유닛 강화", icon: "up" },
   { k: "res", name: "연구", icon: "flask" },
   { k: "relic", name: "유물", icon: "relic" },
+  { k: "engr", name: "각인", icon: "gem" },
   { k: "quest", name: "미션", icon: "note" },
   { k: "pass", name: "시즌 패스", icon: "ticket" },
 ];
@@ -229,6 +234,7 @@ export default function Hub({
     quest: [...p.quests.daily, ...p.quests.weekly].filter((q) => !q.claimed && q.value >= q.goal).length,
     pass: p.passTier - p.season.free.length + (p.season.premium ? p.passTier - p.season.prem.length : 0),
     goods: p.boxes.card + p.boxes.relic + (p.boxes.trans ?? 0),
+    engr: p.epend ? 1 : 0,
   };
   const ctx: TabProps = { p, act, busy };
 
@@ -288,6 +294,7 @@ export default function Hub({
             {tab === "units" && <UnitsTab {...ctx} />}
             {tab === "res" && <ResTab {...ctx} />}
             {tab === "relic" && <RelicTab {...ctx} />}
+            {tab === "engr" && <EngraveTab {...ctx} />}
             {tab === "quest" && <QuestTab {...ctx} />}
             {tab === "pass" && <PassTab {...ctx} />}
             {tab === "pack" && <PackTab {...ctx} />}
@@ -333,10 +340,11 @@ function LoadTab({ p, act, busy }: TabProps) {
   };
   // 원정 유물은 원정 칸 1칸에만 (옛 장착은 일반 칸에 있을 수 있어 여기서 보정)
   const townOwned = p.relics.filter((x) => isTownRelic(x));
+  const slots = relicSlotsOf(p.glitchWin);
   const trelic = L.trelic || L.relics.find((x) => isTownRelic(x)) || "";
   const toggleRelic = (id: string) => {
     const cur = L.relics.filter((x) => !isTownRelic(x));
-    const next = cur.includes(id) ? cur.filter((x) => x !== id) : cur.length < RELIC_SLOTS ? [...cur, id] : null;
+    const next = cur.includes(id) ? cur.filter((x) => x !== id) : cur.length < slots ? [...cur, id] : null;
     if (!next) {
       sfx("deny");
       return;
@@ -470,7 +478,7 @@ function LoadTab({ p, act, busy }: TabProps) {
         )}
       </div>
       <div>
-        <H sub={`장착 ${L.relics.filter((x) => !isTownRelic(x)).length}/${RELIC_SLOTS} · 가진 유물 보유 효과: 모든 피해 +${relicPassive(Object.fromEntries(p.relics.map((id) => [id, p.relicLv?.[id] ?? 1])))}% (장착 안 해도)`}>유물 장착</H>
+        <H sub={`장착 ${L.relics.filter((x) => !isTownRelic(x)).length}/${slots}${slots < RELIC_SLOTS_MAX ? ` (오염 ${RELIC_SLOT4_WIN} 클리어로 ${RELIC_SLOTS_MAX}칸)` : ""} · 가진 유물 보유 효과: 모든 피해 +${relicPassive(Object.fromEntries(p.relics.map((id) => [id, p.relicLv?.[id] ?? 1])))}% (장착 안 해도)`}>유물 장착</H>
         {p.relics.filter((x) => !isTownRelic(x)).length === 0 ? (
           <p className="text-[12px] text-[var(--dim)]">아직 유물이 없어요 — 상점에서 유물 상자를 열어 얻어요</p>
         ) : (

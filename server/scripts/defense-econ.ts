@@ -14,6 +14,7 @@ import { B, TPS, TUNE } from "../../web/src/lib/defense/balance";
 import { botByName, botTurn, type BotCfg } from "../../web/src/lib/defense/bot";
 import { newGame, step, type Board } from "../../web/src/lib/defense/sim";
 import { EXP, EXP_BOSS_PATCH, SQUAD_NEXT } from "../../web/src/lib/defense/town";
+import { ENGR_FIRST_CLEAR, ENGR_FROM, ENGR_REFUND, engrOutcome, engrStonesMain, engrStonesTown, rollEngr, type Engr } from "../../web/src/lib/defense/engrave";
 import { UNIT, UNITS, RECIPES } from "../../web/src/lib/defense/units";
 import { ACHIEVEMENTS } from "../../web/src/lib/points";
 import {
@@ -60,8 +61,7 @@ import {
   type Loadout,
   TOWN_MAX,
   TOWN_RELIC,
-  MASTERY_FROM,
-  masteryNeed,
+  relicSlotsOf,
   townAvail,
   townFirstClear,
   townGlitchLv,
@@ -86,11 +86,10 @@ const SEED = Number(opt("--seed", "7"));
 const TOWN_EVERY_RUNS = Number(opt("--town", "0"));
 /** 원정 판 사이 고르는 시간 (분, 시간은 멈추지만 사람은 고민함) */
 const TOWN_CAMP_MIN = Number(opt("--campmin", "2"));
-/** --mastery 0 이면 심연 숙련 끔 (비교용) · --mbase/--mstep 로 필요 경험치 곡선 바꿔 보기 */
-const USE_MAST = opt("--mastery", "1") === "1";
-const MBASE = opt("--mbase");
-const MSTEP = opt("--mstep");
-const mNeed = (lv: number) => (MBASE || MSTEP ? Number(MBASE ?? 300) + Number(MSTEP ?? 25) * lv : masteryNeed(lv));
+/** --engr 0 각인 끔 · --slot4 0 유물 4번째 칸 끔 · --towngift 0 원정 카드/조각 끔 (비교용) */
+const USE_ENGR = opt("--engr", "1") === "1";
+const USE_SLOT4 = opt("--slot4", "1") === "1";
+const USE_TOWNGIFT = opt("--towngift", "1") === "1";
 
 /* 결정론 난수 (상자 · 초월 소환 어림용 — 판 시드와 별개) */
 let rs = SEED * 2654435761;
@@ -161,8 +160,9 @@ interface P {
   dayBuys: Record<string, number>;
   stats: { runs: number; wins: number; kills: number; wave: number };
   townDone: number[];
-  mlv: number;
-  mxp: number;
+  engr: Record<string, Engr>;
+  estone: number;
+  epity: number;
   squads: string[];
   patches: string[];
   expSeen: string[];
@@ -197,8 +197,9 @@ const p: P = {
   dayBuys: {},
   stats: { runs: 0, wins: 0, kills: 0, wave: 0 },
   townDone: [],
-  mlv: 0,
-  mxp: 0,
+  engr: {},
+  estone: 0,
+  epity: 0,
   squads: ["knight"],
   patches: [],
   expSeen: [],
@@ -220,7 +221,7 @@ const RELIC_PREF = focus
 function loadout(): Loadout {
   const gen = GEN_RES.filter((r) => p.res.includes(r)).slice(0, 4);
   const fr = facRes.filter((r) => p.res.includes(r)).slice(0, p.fslots);
-  const relics = RELIC_PREF.filter((r) => p.relics.includes(r)).slice(0, 3);
+  const relics = RELIC_PREF.filter((r) => p.relics.includes(r)).slice(0, USE_SLOT4 ? relicSlotsOf(p.glitchWin) : 3);
   return {
     lv: { ...p.lv },
     res: [...gen, ...fr],
@@ -234,7 +235,7 @@ function loadout(): Loadout {
     trans: [...p.trans],
     cheat: p.cheatRes.includes("x_luck") ? "x_luck" : (p.cheatRes[0] ?? ""),
     grit: NO_GRIT || p.glitchOpen <= p.glitchWin || p.grit.g !== p.glitchOpen ? 0 : p.grit.n,
-    mastery: p.mlv,
+    engr: USE_ENGR ? { ...p.engr } : {},
     // 원정 칸: 가진 원정 유물 중 하나 (행운 주사위 → 오르골 → 명함 → 황금 지도 순)
     trelic: ["lucky_dice", "forte_box", "moa_card", "golden_deed"].find((r) => p.relics.includes(r)) ?? "",
   };
@@ -313,22 +314,19 @@ function townReward(r: { win: boolean; wave: number; kills: number; reason: stri
   if (nx && !p.squads.includes(nx)) p.squads.push(nx);
   for (const f of x.kills) if (EXP_BOSS_PATCH[f] && !p.patches.includes(EXP_BOSS_PATCH[f])) p.patches.push(EXP_BOSS_PATCH[f]);
   for (const id of x.relics) if (!id.startsWith("sq_") && !p.expSeen.includes(id)) p.expSeen.push(id);
+  // 드래프트 유닛 카드 · 원정 유물 조각 · 각인석 (서버 onTownRun 과 같은 규칙)
+  if (USE_TOWNGIFT) {
+    for (const id of x.picked) p.cards[id] = (p.cards[id] ?? 0) + 1;
+    const owned = p.relics.filter((r) => ["lucky_dice", "golden_deed", "moa_card", "forte_box"].includes(r)).sort((a, b) => (p.relicLv[a] ?? 1) - (p.relicLv[b] ?? 1));
+    if (r.win && owned.length) p.shards[owned[0]] = (p.shards[owned[0]] ?? 0) + (r.reason === "clear" && x.act >= 2 ? 2 : 1);
+  }
+  if (p.glitchWin >= ENGR_FROM) p.estone += engrStonesTown(x.kills.length);
   p.pieces += Math.round(rw.pieces);
   p.cores += Math.round(rw.cores);
   for (const [id, n] of Object.entries(rw.cards)) p.cards[id] = (p.cards[id] ?? 0) + n;
   p.xp += rw.xp;
-  gainMastery(r.wave);
   p.stats.runs++;
   p.stats.kills += r.kills;
-}
-/** 심연 숙련 (서버 defenseMeta 와 같은 규칙) */
-function gainMastery(wave: number) {
-  if (!USE_MAST || p.glitchWin < MASTERY_FROM) return;
-  p.mxp += wave;
-  while (p.mxp >= mNeed(p.mlv)) {
-    p.mxp -= mNeed(p.mlv);
-    p.mlv++;
-  }
 }
 
 /* ── 보상 ── */
@@ -372,12 +370,15 @@ function reward(r: { win: boolean; wave: number; kills: number; tick: number }, 
       rw.cores += cr.cores ?? 0;
     }
   }
+  const fcNow = r.win && glitch > p.glitchWin;
   if (r.win && glitch > p.glitchWin) {
     const fc = glitchFirstClear(glitch);
     rw.cores += fc.cores;
     p.boxes.relic += fc.relicBox;
     p.glitchWin = glitch;
   }
+  // 각인석 (서버 onRun 과 같은 규칙)
+  if (p.glitchWin >= ENGR_FROM && glitch > ENGR_FROM) p.estone += engrStonesMain(r.wave, r.win) + (fcNow ? ENGR_FIRST_CLEAR : 0);
   p.pieces += Math.round(rw.pieces);
   p.cores += Math.round(rw.cores);
   for (const [id, n] of Object.entries(rw.cards)) p.cards[id] = (p.cards[id] ?? 0) + n;
@@ -398,7 +399,6 @@ function reward(r: { win: boolean; wave: number; kills: number; tick: number }, 
   }
   if (glitchUnlocks(glitch, r) && glitch >= p.glitchOpen && p.glitchOpen < GLITCH_MAX) p.glitchOpen = glitch + 1;
   if (r.win) p.stats.wins++;
-  gainMastery(r.wave);
   p.stats.runs++;
   p.stats.kills += r.kills;
   p.stats.wave = Math.max(p.stats.wave, r.wave);
@@ -454,6 +454,26 @@ function openBoxes() {
 
 function spend() {
   openBoxes();
+  // 각인: 내 길의 높은 등급 유닛 (얻어 본 것) 중 각인 등급이 가장 낮은 것부터 굴림 — 다른 특성이면 등급 높은 쪽
+  while (USE_ENGR && p.estone >= 1 && p.glitchWin >= ENGR_FROM) {
+    const cand = mine.filter((u) => p.seen.has(u.id) && u.grade >= 4).sort((a, b) => b.grade - a.grade || b.dmg * b.aps - a.dmg * a.aps).slice(0, 8);
+    if (!cand.length) break;
+    const u = cand.sort((a, b) => (p.engr[a.id]?.t ?? -1) - (p.engr[b.id]?.t ?? -1))[0];
+    if ((p.engr[u.id]?.t ?? -1) >= 3) break;
+    p.estone--;
+    const rr = rollEngr(R, p.epity);
+    p.epity = rr.pity;
+    const out = engrOutcome(p.engr[u.id], rr.g);
+    if (out.kind === "new" || out.kind === "resonate") p.engr[u.id] = out.next!;
+    else if (out.kind === "maxed") p.estone += out.refund!;
+    else {
+      const cur = p.engr[u.id]!;
+      if (rr.g.t > cur.t) {
+        p.estone += ENGR_REFUND[cur.t];
+        p.engr[u.id] = rr.g;
+      } else p.estone += ENGR_REFUND[rr.g.t];
+    }
+  }
   // GP: 남는 재화를 GP 로 (주 한도) → 패키지 (재화샵은 효율이 낮아 안 씀)
   if (USE_GP) {
     const wk = Math.floor(p.stats.runs / RUNS_PER_WEEK);
@@ -614,7 +634,7 @@ for (let i = 0; i < MAXRUNS; i++) {
   if (r.win && firstAt[glitch] === undefined) firstAt[glitch] = hours;
   if (i % LOG === 0 || (r.win && glitch === GLITCH_MAX))
     log.push(
-      `${String(i).padStart(4)}판 ${hours.toFixed(1).padStart(5)}h 오염${String(glitch).padStart(2)} ${r.win ? "클리어" : `${r.wave}W`.padStart(4)} · 조각 ${p.pieces} 코어 ${p.cores} GP ${p.gp}/${gpTotal}+${gpSold} · 유닛평균Lv ${(mine.reduce((a, u) => a + (p.lv[u.id] ?? 0), 0) / mine.length).toFixed(1)} · 연구 ${Object.values(p.resLv).join("")} · 유물 ${p.relics.length}개 Lv합 ${p.relics.reduce((a, x) => a + (p.relicLv[x] ?? 1), 0)} · 보관 ${p.bench} 세력칸 ${p.fslots} · 초월 ${p.trans.length} · 치트연구 ${p.cheatRes.join("")} · 숙련 ${p.mlv}`
+      `${String(i).padStart(4)}판 ${hours.toFixed(1).padStart(5)}h 오염${String(glitch).padStart(2)} ${r.win ? "클리어" : `${r.wave}W`.padStart(4)} · 조각 ${p.pieces} 코어 ${p.cores} GP ${p.gp}/${gpTotal}+${gpSold} · 유닛평균Lv ${(mine.reduce((a, u) => a + (p.lv[u.id] ?? 0), 0) / mine.length).toFixed(1)} · 연구 ${Object.values(p.resLv).join("")} · 유물 ${p.relics.length}개 Lv합 ${p.relics.reduce((a, x) => a + (p.relicLv[x] ?? 1), 0)} · 보관 ${p.bench} 세력칸 ${p.fslots} · 초월 ${p.trans.length} · 치트연구 ${p.cheatRes.join("")} · 각인 ${Object.values(p.engr).map((g) => g.t).join("")}`
     );
   }
   if (!skipMain && r.win && glitch === GLITCH_MAX && (!TOWN_EVERY_RUNS || p.townDone.includes(TOWN_MAX))) break;

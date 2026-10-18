@@ -15,8 +15,6 @@ import {
   CHEAT_RES_OF,
   GP_PACKS,
   GRIT_MAX,
-  MASTERY_FROM,
-  masteryNeed,
   GP_SELL,
   GP_STORE,
   PACK,
@@ -39,6 +37,9 @@ import {
   RES,
   RES_SLOTS,
   RELIC_SLOTS,
+  RELIC_SLOTS_MAX,
+  RELIC_SLOT4_WIN,
+  relicSlotsOf,
   isTownRelic,
   THEME,
   UNIT_MAX_LV,
@@ -73,6 +74,7 @@ import {
 import { LAST_WAVE } from "../../../web/src/lib/defense/balance";
 import { RECIPE, UNIT, UNITS } from "../../../web/src/lib/defense/units";
 import { EXP, EXP_BOSS_PATCH, EXP_RELIC, SQUAD_NEXT } from "../../../web/src/lib/defense/town";
+import { ENGR_FIRST_CLEAR, ENGR_FROM, ENGR_REFUND, engrOutcome, engrStonesMain, engrStonesTown, rollEngr, type Engr } from "../../../web/src/lib/defense/engrave";
 import type { Result } from "../../../web/src/lib/defense/sim";
 
 /*
@@ -122,8 +124,11 @@ export interface Profile {
   /** 땅문서 (해피 타운에서만) · 도시 개발 레벨 (id → 레벨) */
   /** 글리치 원정: 해금한 시작 분대 (기사단은 처음부터) */
   squads?: string[];
-  /** 심연 숙련 (오염 MASTERY_FROM 단계를 깬 뒤 판마다 웨이브만큼 경험치) */
-  mastery?: { lv: number; xp: number };
+  /** 유닛 각인 · 각인석 · 천장 카운트 · 고르는 중인 각인 (다른 특성이 나와 둘 중 하나를 골라야 할 때) */
+  engr?: Record<string, Engr>;
+  estone?: number;
+  epity?: number;
+  epend?: { u: string; g: Engr } | null;
   /** 원정 보스로 해금한 시작 치트 · 원정 유물 도감 */
   patches?: string[];
   expSeen?: string[];
@@ -166,7 +171,8 @@ export interface RunStats {
   made: Record<string, number>;
   /** 글리치 원정 분대 (원정 판만) */
   squad?: string | null;
-  /** 원정: 막 · 잡은 원정 보스 (fighter id) · 이번 원정에서 얻은 원정 유물 */
+  /** 원정: 막 · 잡은 원정 보스 (fighter id) · 이번 원정에서 얻은 원정 유물 · 드래프트로 고른 유닛 */
+  picked?: string[];
   act?: number;
   kills?: string[];
   expRelics?: string[];
@@ -217,18 +223,6 @@ export const passTier = (xp: number) => PASS.filter((t) => xp >= t.xp).length;
 export type DefenseMeta = ReturnType<typeof createDefenseMeta>;
 
 /** 이 단계로 시작하면 받을 끈기 판 수 (가장 높은 열린 단계 · 아직 못 깬 단계일 때만) */
-/** 심연 숙련 경험치 (오염 MASTERY_FROM 단계를 깬 뒤부터) — 바뀐 값을 화면에 돌려줌 */
-export function gainMastery(p: Pick<Profile, "mastery" | "glitchWin">, wave: number): { lv: number; xp: number; gain: number; up: number } | null {
-  if (p.glitchWin < MASTERY_FROM) return null;
-  const m = (p.mastery ??= { lv: 0, xp: 0 });
-  const from = m.lv;
-  m.xp += wave;
-  while (m.xp >= masteryNeed(m.lv)) {
-    m.xp -= masteryNeed(m.lv);
-    m.lv++;
-  }
-  return { lv: m.lv, xp: m.xp, gain: wave, up: m.lv - from };
-}
 export const gritOf = (p: Pick<Profile, "grit" | "glitchOpen" | "glitchWin">, glitch: number) =>
   glitch === p.glitchOpen && glitch > p.glitchWin && p.grit?.g === glitch ? p.grit.n : 0;
 
@@ -378,7 +372,7 @@ export function createDefenseMeta(db: Database, points: Points, now: () => numbe
       return { relic: pick.id, shard: 1 };
     }
     p.relics.push(pick.id);
-    if (p.load.relics.length < RELIC_SLOTS) p.load.relics.push(pick.id);
+    if (p.load.relics.length < relicSlotsOf(p.glitchWin)) p.load.relics.push(pick.id);
     return { relic: pick.id };
   };
 
@@ -393,7 +387,7 @@ export function createDefenseMeta(db: Database, points: Points, now: () => numbe
     // 원정 유물은 원정 칸 (비어 있으면 바로 낌) · 나머지는 일반 칸
     if (isTownRelic(id)) {
       if (!p.load.trelic) p.load.trelic = id;
-    } else if (p.load.relics.length < RELIC_SLOTS) p.load.relics.push(id);
+    } else if (p.load.relics.length < relicSlotsOf(p.glitchWin)) p.load.relics.push(id);
     return { relic: id };
   };
 
@@ -476,7 +470,7 @@ export function createDefenseMeta(db: Database, points: Points, now: () => numbe
           squads: p.squads ?? ["knight"],
           patches: p.patches ?? [],
           expSeen: p.expSeen ?? [],
-          mastery: p.mastery?.lv ?? 0,
+          engr: p.engr ?? {},
         },
         unitIds
       );
@@ -558,8 +552,13 @@ export function createDefenseMeta(db: Database, points: Points, now: () => numbe
           p.glitchOpen = glitch + 1;
           opened = true;
         }
-        const mastery = gainMastery(p, res.wave);
-        return { ...rw, opened: opened ? p.glitchOpen : null, passTier: passTier(p.season.xp), first, fresh, firstClear, gbest, treasure, mastery };
+        // 각인석: 오염 ENGR_FROM 클리어 뒤, 그보다 높은 단계 판에서 도달 웨이브 20마다 1 · 31~50 첫 클리어 보너스
+        let estone = 0;
+        if (p.glitchWin >= ENGR_FROM && glitch > ENGR_FROM) {
+          estone = engrStonesMain(res.wave, res.win) + (firstClear ? ENGR_FIRST_CLEAR : 0);
+          p.estone = (p.estone ?? 0) + estone;
+        }
+        return { ...rw, opened: opened ? p.glitchOpen : null, passTier: passTier(p.season.xp), first, fresh, firstClear, gbest, treasure, estone };
       });
     },
 
@@ -617,6 +616,26 @@ export function createDefenseMeta(db: Database, points: Points, now: () => numbe
             patches.push(id);
           }
         }
+        // 원정 드래프트로 고른 유닛 → 메인 카드 1장씩
+        const cards: Record<string, number> = {};
+        for (const id of st.picked ?? []) {
+          if (!unitIds.has(id)) continue;
+          p.cards[id] = (p.cards[id] ?? 0) + 1;
+          cards[id] = (cards[id] ?? 0) + 1;
+        }
+        // 원정 유물 조각: 이기면 가진 원정 유물 중 레벨이 가장 낮은 것 +1 (2막까지 잡으면 +2)
+        let tshard: string | null = null;
+        const owned = p.relics.filter((r) => isTownRelic(r)).sort((a, b) => (p.relicLv?.[a] ?? 1) - (p.relicLv?.[b] ?? 1) || (a < b ? -1 : 1));
+        if (res.win && owned.length) {
+          tshard = owned[0];
+          p.shards[tshard] = (p.shards[tshard] ?? 0) + (act2Win ? 2 : 1);
+        }
+        // 각인석: 원정 보스 하나당 2 (오염 ENGR_FROM 클리어 뒤)
+        let estone = 0;
+        if (p.glitchWin >= ENGR_FROM) {
+          estone = engrStonesTown((st.kills ?? []).length);
+          p.estone = (p.estone ?? 0) + estone;
+        }
         // 원정 유물 도감
         const seenNew: string[] = [];
         for (const id of st.expRelics ?? []) {
@@ -653,7 +672,9 @@ export function createDefenseMeta(db: Database, points: Points, now: () => numbe
           patches,
           seenNew,
           act2Win,
-          mastery: gainMastery(p, res.wave),
+          cardsPicked: cards,
+          tshard: tshard ? { id: tshard, n: act2Win ? 2 : 1 } : null,
+          estone,
         };
       });
     },
@@ -764,6 +785,42 @@ export function createDefenseMeta(db: Database, points: Points, now: () => numbe
     },
 
     /** 유물 레벨 올리기 (유물 조각 + 글리치 코어) · 내리기 (쓴 것 전부 돌려받기) */
+    /** 유닛 각인 굴리기 (각인석 1) — 중복 처리는 engrave.ts engrOutcome */
+    engrRoll(uid: string, unit: string) {
+      return edit(uid, async (p) => {
+        need(p.glitchWin >= ENGR_FROM, `각인은 오염 ${ENGR_FROM}단계를 클리어하면 열려요.`);
+        need(!p.epend, "먼저 지난 각인 중 하나를 골라 주세요.");
+        need(unitIds.has(unit) && p.seen.includes(unit), "얻어 본 유닛만 각인할 수 있어요.");
+        need((p.estone ?? 0) >= 1, "각인석이 모자라요 (오염 31단계 이상 · 원정 보스에서 얻어요).");
+        p.estone = (p.estone ?? 0) - 1;
+        const r = rollEngr(() => randomInt(0, 1_000_000) / 1_000_000, p.epity ?? 0);
+        p.epity = r.pity;
+        p.engr ??= {};
+        const cur = p.engr[unit];
+        const out = engrOutcome(cur, r.g);
+        if (out.kind === "new" || out.kind === "resonate") p.engr[unit] = out.next!;
+        else if (out.kind === "maxed") p.estone += out.refund!;
+        else p.epend = { u: unit, g: r.g };
+        return wire(uid, p, { engrRoll: { unit, got: r.g, kind: out.kind, prev: cur ?? null, refund: out.refund ?? 0 } });
+      });
+    },
+
+    /** 고르는 중인 각인: take 면 새 각인으로 바꾸고 옛 것을, 아니면 새 것을 버림 (버린 쪽 등급만큼 각인석) */
+    engrPick(uid: string, take: boolean) {
+      return edit(uid, async (p) => {
+        need(!!p.epend, "고를 각인이 없어요.");
+        const { u, g } = p.epend!;
+        p.engr ??= {};
+        const old = p.engr[u];
+        const drop = take ? old : g;
+        if (take) p.engr[u] = g;
+        const refund = drop ? ENGR_REFUND[drop.t] : 0;
+        p.estone = (p.estone ?? 0) + refund;
+        p.epend = null;
+        return wire(uid, p, { engrPicked: { unit: u, take, refund } });
+      });
+    },
+
     relicLevel(uid: string, id: string, dir: 1 | -1) {
       return edit(uid, async (p) => {
         need(!!RELIC[id] && p.relics.includes(id), "가진 유물만 올릴 수 있어요.");
@@ -916,7 +973,7 @@ export function createDefenseMeta(db: Database, points: Points, now: () => numbe
       const v = z
         .object({
           res: z.array(z.string()).max(RES_SLOTS + FRES_MAX),
-          relics: z.array(z.string()).max(RELIC_SLOTS),
+          relics: z.array(z.string()).max(RELIC_SLOTS_MAX),
           glitch: z.number().int().min(0).max(GLITCH_MAX),
           cheat: z.string().max(20).optional(),
           town: z.number().int().min(1).max(TOWN_MAX).optional(),
@@ -929,6 +986,7 @@ export function createDefenseMeta(db: Database, points: Points, now: () => numbe
         need(gen <= RES_SLOTS, `공용 연구는 ${RES_SLOTS}칸까지예요.`);
         need(v.res.length - gen <= p.fslots, "세력 연구칸이 모자라요 (정비소에서 살 수 있어요).");
         need(v.relics.every((r) => p.relics.includes(r)), "없는 유물이 있어요.");
+        need(v.relics.filter((r) => !isTownRelic(r)).length <= relicSlotsOf(p.glitchWin), `유물 칸은 ${relicSlotsOf(p.glitchWin)}칸이에요 (오염 ${RELIC_SLOT4_WIN} 클리어로 4칸).`);
         // 원정 유물은 일반 칸에서 빼서 원정 칸으로 (예전 장착 · 옛 화면)
         const moved = v.relics.find((r) => isTownRelic(r));
         v.relics = v.relics.filter((r) => !isTownRelic(r));

@@ -70,11 +70,6 @@ export function BuildModal({ b, onClose }: { b: Board; onClose(): void }) {
             </b>
           )}
           {b.mods.grit > 0 && <b className="text-[var(--gold)]">끈기 {b.mods.grit}판 · 모든 피해 +{Math.round((b.mods.gritDmg - 1) * 100)}%</b>}
-          {b.mods.mastery > 0 && (
-            <b className="text-[#c79bff]" title="오염 30 클리어 뒤 판마다 도달한 웨이브만큼 경험치 — 레벨마다 모든 피해 +2% (끝없음)">
-              심연 숙련 Lv.{b.mods.mastery} · 모든 피해 +{Math.round((b.mods.mastDmg - 1) * 100)}%
-            </b>
-          )}
           {x && (
             <span className="flex items-center gap-1.5">
               <Heart /> 원정 체력 <b className="text-white">{x.hp}</b>/{x.max}
