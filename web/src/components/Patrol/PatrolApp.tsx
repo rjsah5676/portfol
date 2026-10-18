@@ -8,7 +8,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/lib/AuthContext";
 import { CH_COUNT, HERO_UNLOCK, PATROL_HEROES, ST_COUNT, SUB, SUB_KIND, firstSt, heroOpen, recPower, stCh, stName, stSub, stage, type PatrolHero } from "@/lib/patrol/chapters";
-import { BOOST_RUNS, PATROL_MAX_H, QUICK_FREE, QUICK_H, STAR_GEMS, WELCOME, firstReward, patrolPending, patrolRate } from "@/lib/patrol/economy";
+import { BOOST_RUNS, PATROL_MAX_H, QUICK_FREE, QUICK_H, STAR_GEMS, WELCOME, firstReward, goldCap, patrolPending, patrolRate } from "@/lib/patrol/economy";
 import { ATK_PCT, GEAR, GRADE_COLOR, GRADE_NAME, power, powerScore, type GearItem } from "@/lib/patrol/gear";
 import { BASE_DECK, FIRST_WEAPON, NEW_WEAPONS, starOf } from "@/lib/patrol/weapons";
 import { ENEMIES, GIMMICK_GUIDE, HEROES, STAGE_KIND, WEAPONS, guidesOf, questName, type ChapterDef, type StageKind } from "@/lib/survivor/data";
@@ -287,9 +287,15 @@ function Lobby({ prof, member, loaded, st, open, onSt, note, skew, onProf, onSta
                 보상 ×2 · {prof.boostLeft}판 남음
               </span>
             )}
-            <Coin v={prof.coins} size={14} />
-            <Gem v={prof.gems} size={14} />
-            <Bp v={prof.bp} size={14} />
+            <span title="코인 — 판 · 순찰로 모여요 · 장비 강화 · 일반 상자에 써요">
+              <Coin v={prof.coins} size={14} />
+            </span>
+            <span title="보석 — 첫 클리어 · 별로 모여요 · 고급 상자 · 무기 상자에 써요">
+              <Gem v={prof.gems} size={14} />
+            </span>
+            <span title="설계도 — 판 · 순찰로 모여요 · 장비 강화 재료">
+              <Bp v={prof.bp} size={14} />
+            </span>
           </span>
         ) : (
           <span className="pts-sub ml-auto text-[12px] text-[#a9a2d6]">로그인하면 장비 · 상자 · 스테이지 진행이 저장돼요 (지금은 1-1 체험)</span>
@@ -646,6 +652,7 @@ function Result({ r, st, fin, err, member, onAgain, onNext, onLobby }: { r: RunR
             <>
               <div className="flex items-center gap-[18px] text-[17px] font-bold">
                 <Coin v={`+${fin.coins.toLocaleString()}`} size={16} />
+                {r.gold > 0 && <span className="text-[11px] font-normal text-[#a9a2d6]">(판에서 주운 코인 {Math.min(r.gold, goldCap(r.sec)).toLocaleString()} 포함)</span>}
                 <Bp v={`+${fin.bp}`} size={16} />
                 {fin.gems > 0 && <Gem v={`+${fin.gems}`} size={16} />}
                 {fin.boosted && (

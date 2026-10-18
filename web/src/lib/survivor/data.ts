@@ -955,7 +955,7 @@ export const BEACON = { x: 0, y: -40, len: 320, half: 0.2 };
 export const FOG_R = 105;
 
 /** 순찰대 기믹 안내 (로비 미리보기 · 판에서 처음 나올 때) */
-export type GuideK = "lamp" | "spout" | "toll" | "goblin" | "guard" | "rush" | "tide" | "fog" | "beacon";
+export type GuideK = "lamp" | "spout" | "toll" | "goblin" | "guard" | "rush" | "tide" | "fog" | "beacon" | "coin";
 export const GIMMICK_GUIDE: Record<GuideK, { icon: string; title: string; c: string; steps: string[] }> = {
   lamp: { icon: "💡", title: "꺼진 가로등", c: "#ffb03a", steps: ["옆에 1.5초 서 있으면 켜져요", "켜지는 순간 주변 적이 불타고 치킨이 떨어져요", "켜진 15초 동안 가까이 온 적을 계속 태워요"] },
   spout: { icon: "⛲", title: "분수 물보라", c: "#7ad7ff", steps: ["원이 차오르고 4초 뒤 물보라가 솟아요", "원 안 적은 기절 + 피해 — 적을 끌고 들어가요", "그때 내가 원 안이면 젬이 전부 몰려와요"] },
@@ -965,6 +965,7 @@ export const GIMMICK_GUIDE: Record<GuideK, { icon: string; title: string; c: str
   rush: { icon: "⚔", title: "정예 러시", c: "#ff8a5c", steps: ["정예가 줄줄이 나와요 — 잡을 때마다 보물 상자", "미니 보스 전에 다 잡으면 별"] },
   tide: { icon: "🌊", title: "밀물", c: "#5fb8ff", steps: ["바닷물이 띠처럼 차올라요 (12초)", "물 안 적은 느려지고 피해를 25% 더 받아요", "나도 물 안에선 조금 느려요 — 적을 물로 몰아요"] },
   fog: { icon: "🌫", title: "안개", c: "#a9c8d8", steps: ["안개가 껴서 가까운 곳만 보여요 (15초)", "대신 안개 속에서 잡은 적은 코인을 더 떨궈요"] },
+  coin: { icon: "🪙", title: "코인", c: "#ffd23a", steps: ["판에서 주운 코인은 끝나면 로비 코인으로 들어와요 (져도 받아요)", "로비에서 장비 강화 · 일반 상자에 써요", "도깨비 · 금화 샷건 · 레벨업 건너뛰기로 더 모여요"] },
   beacon: { icon: "🗼", title: "도는 등대 빛", c: "#ffe9a0", steps: ["섬 가운데 등대 빛줄기 두 갈래가 돌아요", "빛 안에 서 있으면 체력이 차고, 빛에 닿은 적은 타요", "빛을 따라 걸어요 — 멀리 가면 화살표로 등대 위치"] },
 };
 /** 이 판에 나오는 기믹 (로비 미리보기) */

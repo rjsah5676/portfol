@@ -276,7 +276,7 @@ const HIT_FX: Partial<Record<Fam, { k: HitK; s: number; life: number; max: numbe
   ice: { k: "ice", s: 20, life: 0.26, max: 12 },
 };
 /** 음표 파동: 박자마다 펜타토닉 음계를 따라 올라갔다 내려옴 (도 레 미 솔 라) */
-const NOTE_STEPS = [0, 2, 4, 7, 9, 12, 9, 7, 4, 2];
+const NOTE_STEPS = [0, 2, 4, 2, 0, -3];
 /** 몹 색을 어둡게 (바닥 얼룩) */
 const dark = (hex: string) => {
   const v = parseInt(hex.slice(1, 7), 16);
@@ -334,6 +334,7 @@ export default function Game({ setup, onEnd, onQuit }: { setup: GameSetup; onEnd
   /** 기믹 안내: 판마다 처음 한 번 · 브라우저마다 종류별 3번까지 */
   const [guide, setGuide] = useState<{ id: number; k: GuideK } | null>(null);
   const guided = useRef(new Set<GuideK>());
+  const coinTold = useRef(false);
   const closeGuide = useCallback(() => setGuide(null), []);
 
   useEffect(() => {
@@ -390,7 +391,7 @@ export default function Game({ setup, onEnd, onQuit }: { setup: GameSetup; onEnd
           case "dmg": {
             if (dmgN++ < 14) fx.nums.push({ x: e.x + (Math.random() - 0.5) * 6, y: e.y, v: e.v, crit: e.crit, t: 0 });
             const f = e.w && FAM[e.w];
-            if (f !== "grenade") sfx(f ? HIT[f] : "hit", { vol: f ? 0.75 : 1 });
+            if (f !== "grenade") sfx(f ? HIT[f] : "hit", { vol: f === "notes" ? 0.5 : f ? 0.75 : 1 });
             const hf = f && HIT_FX[f];
             if (hf && fx.hits.filter((h) => h.k === hf.k).length < hf.max) fx.hits.push({ k: hf.k, x: e.x + (Math.random() - 0.5) * 6, y: e.y - 2, s: hf.s * (e.big ? 1.5 : 1), t: 0, life: hf.life, flip: Math.random() < 0.5 });
             if (e.crit) {
@@ -553,7 +554,7 @@ export default function Game({ setup, onEnd, onQuit }: { setup: GameSetup; onEnd
             if (f === "notes") {
               // 박자마다 음이 바뀜
               const k = NOTE_STEPS[noteN.current++ % NOTE_STEPS.length];
-              sfx("w_notes_fire", { vol: 0.7, rate: Math.pow(2, k / 12) });
+              sfx("w_notes_fire", { vol: 0.55, rate: Math.pow(2, k / 12) });
               break;
             }
             sfx((f && FIRE[f]) || "throw", { vol: 0.7 });
@@ -852,6 +853,11 @@ export default function Game({ setup, onEnd, onQuit }: { setup: GameSetup; onEnd
         hudT = 0;
         const h = hudOf(r);
         setHud(h);
+        // 순찰대: 처음 코인을 주우면 어디 쓰는지 안내 (브라우저마다 3번)
+        if (h.ch && h.gold > 0 && !coinTold.current) {
+          coinTold.current = true;
+          r.ev.push({ t: "guide", k: "coin" });
+        }
         // 처음 진화 준비가 된 무기 → 알림 (다음 레벨업 · 상자에서 진화)
         for (const w of h.weapons)
           if (evoReady(w, h) && !evoSaid.current.has(w.id)) {
@@ -1061,8 +1067,9 @@ export default function Game({ setup, onEnd, onQuit }: { setup: GameSetup; onEnd
               <span className="inline-block h-[10px] w-[10px] bg-[#ff3d6e]" style={{ boxShadow: "0 0 0 2px #07051a" }} />
               {hud.kills.toLocaleString()}
             </span>
-            <span className="pts-sub flex items-center gap-[6px] text-[#ffd23a]" title={hud.ch ? "주운 코인 — 끝나면 받아요" : "금화 — 상자 · 상인에 써요"}>
+            <span className="pts-sub flex items-center gap-[6px] text-[#ffd23a]" title={hud.ch ? "주운 코인 — 판이 끝나면 (져도) 로비 코인으로 들어와요 · 장비 강화 · 일반 상자" : "금화 — 상자 · 상인에 써요"}>
               <span className="inline-block h-[10px] w-[10px] rounded-full bg-[#ffd23a]" style={{ boxShadow: "0 0 0 2px #07051a" }} />
+              {hud.ch && <span className="text-[11px] opacity-80">코인</span>}
               {hud.gold.toLocaleString()}
             </span>
             <span className="mt-[4px] flex gap-[6px]">
@@ -1125,7 +1132,7 @@ export default function Game({ setup, onEnd, onQuit }: { setup: GameSetup; onEnd
 
       {/* 필살기 컷인 */}
       {cut && CUTIN[cut.hero] && (
-        <div key={cut.id} className="pts-cutin pointer-events-none absolute inset-x-0 top-1/2 z-20 -translate-y-1/2" onAnimationEnd={() => setCut(null)}>
+        <div key={`cut${cut.id}`} className="pts-cutin pointer-events-none absolute inset-x-0 top-1/2 z-20 -translate-y-1/2" onAnimationEnd={() => setCut(null)}>
           <div className="pts-cutin-band relative h-[180px] overflow-hidden" style={{ boxShadow: `0 3px 0 0 ${HEROES[cut.hero].color}, 0 -3px 0 0 ${HEROES[cut.hero].color}` }}>
             <img src={CUTIN[cut.hero]} alt="" draggable={false} className="pts-cutin-img absolute top-1/2 left-1/2 h-auto w-[112%] max-w-none" />
             <b className="pts-title absolute right-[6%] bottom-[10px] text-[38px] leading-none" style={{ color: "#fff6d8", textShadow: `3px 3px 0 #07051a, 0 0 18px ${HEROES[cut.hero].color}` }}>
@@ -1137,7 +1144,7 @@ export default function Game({ setup, onEnd, onQuit }: { setup: GameSetup; onEnd
 
       {/* 한꺼번에 처치 */}
       {multiN && (
-        <div key={multiN.id} className="pts-pop pointer-events-none absolute top-[40%] left-1/2 -translate-x-1/2" onAnimationEnd={() => window.setTimeout(() => setMultiN((m) => (m && m.id === multiN.id ? null : m)), 500)}>
+        <div key={`multi${multiN.id}`} className="pts-pop pointer-events-none absolute top-[40%] left-1/2 -translate-x-1/2" onAnimationEnd={() => window.setTimeout(() => setMultiN((m) => (m && m.id === multiN.id ? null : m)), 500)}>
           <b className="pts-title text-[30px] leading-none whitespace-nowrap" style={{ color: multiN.n >= 20 ? "#ff4fa3" : "#ffd23a", textShadow: "3px 3px 0 #07051a" }}>
             ×{multiN.n} 동시 처치!
           </b>
@@ -1156,7 +1163,7 @@ export default function Game({ setup, onEnd, onQuit }: { setup: GameSetup; onEnd
 
       {/* 알림 띠 */}
       {banner && (
-        <div key={banner.id} className="pts-warn pointer-events-none absolute inset-x-0 top-[150px] flex justify-center" onAnimationEnd={() => setBanner(null)}>
+        <div key={`banner${banner.id}`} className="pts-warn pointer-events-none absolute inset-x-0 top-[150px] flex justify-center" onAnimationEnd={() => setBanner(null)}>
           <div className="px-[30px] py-[8px]" style={{ background: "rgba(7,5,26,0.82)", boxShadow: `0 2px 0 0 ${banner.c}, 0 -2px 0 0 ${banner.c}` }}>
             <b className="pts-title text-[26px]" style={{ color: banner.c }}>
               {banner.text}
@@ -1166,7 +1173,7 @@ export default function Game({ setup, onEnd, onQuit }: { setup: GameSetup; onEnd
       )}
 
       {/* 기믹 안내 (왼쪽 · 6초) */}
-      {guide && <GuideCard key={guide.id} k={guide.k} onDone={closeGuide} />}
+      {guide && <GuideCard key={`guide${guide.id}`} k={guide.k} onDone={closeGuide} />}
 
       {/* 유물 얻음 알림 */}
       <div className="pointer-events-none absolute top-[130px] right-[12px] flex flex-col items-end gap-[6px]">
@@ -1408,7 +1415,7 @@ function LevelUp({ pause, hud, onPick, onReroll, onBanish }: { pause: Extract<Pa
             다시 뽑기 (R) · {hud.rerolls}
           </button>
           <button type="button" disabled={hud.skips <= 0} onClick={() => onPick(-1)} className="pts-btn ghost h-[34px] px-[16px] text-[13px]">
-            건너뛰기 (X) +10금화 · {hud.skips}
+            건너뛰기 (X) +10{hud.ch ? "코인" : "금화"} · {hud.skips}
           </button>
           {hud.banish > 0 && <span className="pts-sub self-center text-[12px] text-[#a9a2d6]">카드 지우기 {hud.banish}번 남음</span>}
         </div>

@@ -127,7 +127,7 @@ const GAP: Partial<Record<Sfx, number>> = {
   // 타격음은 무기마다 따로 쉬어서 여러 무기가 같이 울려도 "와바박" 하게
   w_lantern_hit: 0.07, w_blade_hit: 0.05, w_boom_hit: 0.06, w_thunder_hit: 0.07, w_thorn_hit: 0.09, w_missile_hit: 0.06, w_ball_hit: 0.06,
   w_lantern_fire: 0.12, w_blade_fire: 0.06, w_boom_fire: 0.15, w_missile_fire: 0.08, w_ball_fire: 0.1,
-  w_thorn_fire: 0.2, w_water_hit: 0.08, w_grenade_fire: 0.12, w_grenade_hit: 0.07, w_notes_fire: 0.1, w_notes_hit: 0.08, w_coin_fire: 0.1, w_coin_hit: 0.05, w_frost_fire: 0.1, w_frost_hit: 0.07, g_beam: 1.5,
+  w_thorn_fire: 0.2, w_water_hit: 0.08, w_grenade_fire: 0.12, w_grenade_hit: 0.07, w_notes_fire: 0.1, w_notes_hit: 0.12, w_coin_fire: 0.1, w_coin_hit: 0.05, w_frost_fire: 0.1, w_frost_hit: 0.07, g_beam: 1.5,
   kill2: 0.03, crit: 0.07,
 };
 
