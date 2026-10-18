@@ -291,9 +291,9 @@ details pre{max-height:140px; overflow:auto; font-size:10px; background:var(--bg
               <kbd>E</kbd><span>액티브 아이템 (게이지가 차면)</span>
               <kbd>Q</kbd><span>글리치 폭탄 — 금 간 블록 · 수상한 벽 · 오락실 기계</span>
               <kbd>F / G</kbd><span>주머니(패치 · 치트 코드) 쓰기 / 버리기</span>
-              <kbd>TAB</kbd><span>지도 · 월드 정보</span>
+              <kbd>M</kbd><span>지도 · 월드 정보</span>
               <kbd>C</kbd><span>도감 (먹어 본 것만 열림 · 검색)</span>
-              <kbd>ESC</kbd><span>일시정지 · 내 스탯</span>
+              <kbd>TAB / ESC</kbd><span>일시정지 · 내 스탯</span>
               <kbd>TOUCH</kbd><span>왼쪽 이동 · 오른쪽 조준 · 버튼</span>
             </div>
           </div>
@@ -2300,7 +2300,7 @@ function shotAngles(dir){
 function makeShot(a, P, p, type){
   const sp = type === 'boom' ? P.shotSpeed * 1.05 : type === 'bomb' ? P.shotSpeed * .8 : P.shotSpeed;
   const r = (type === 'bomb' ? 4.5 : type === 'boom' ? 5 : 3.2) * P.sizeMul;
-  return {type, x:p.x + Math.cos(a)*6, y:p.y - 2 + Math.sin(a)*6, vx:Math.cos(a)*sp + p.vx*.3, vy:Math.sin(a)*sp + p.vy*.3, sp,
+  return {type, x:p.x + Math.cos(a)*6, y:p.y - 2 + Math.sin(a)*6, vx:Math.cos(a)*sp + (p.mvx ?? p.vx*.5)*.6, vy:Math.sin(a)*sp + (p.mvy ?? p.vy*.5)*.6, sp,
     r, r0:r, dmg:P.damage * (P.dice ? (1 + Math.floor(fx()*6)) / 3.5 : 1), dist:0, range:P.range, pierce:P.pierce, bounces:P.bounces, homing:P.homing,
     split:P.split, poison:P.poison, chain:P.chain, stun:P.stun, mark:P.mark, grow:P.grow,
     fizz: P.miss > 0 && fx() < P.miss, orbit: P.orbit && type !== 'boom', oa:a, or:10, lat: P.latency ? 'wait' : null,
@@ -2424,6 +2424,7 @@ function step(){
       const acc = G.prof.slide ? .1 : .28; p.vx += (mv.x*spd - p.vx) * acc; p.vy += (mv.y*spd - p.vy) * acc;
     }
     p.x += p.vx; p.y += p.vy;
+    if (p.dashT <= 0){ const mk = Math.hypot(mv.x, mv.y) > .2 ? .3 : .06; p.mvx = (p.mvx || 0) + (p.vx - (p.mvx || 0))*mk; p.mvy = (p.mvy || 0) + (p.vy - (p.mvy || 0))*mk; }
     p.idle = Math.hypot(mv.x, mv.y) > .2 || p.dashT > 0 ? 0 : (p.idle || 0) + 1;
   }
   if (Math.abs(p.vx) + Math.abs(p.vy) > .3) p.walk += .25;
@@ -3333,6 +3334,7 @@ function render(){
   if (G.wave > 0){ const k = 1 - G.wave / 60, x0 = -60 + k * (W + 120); ctx.globalAlpha = .35; ctx.fillStyle = '#5ec8ff'; ctx.fillRect(x0 - 50, IY0, 70, IY1 - IY0); ctx.globalAlpha = .6; ctx.fillStyle = '#e0f6ff'; ctx.fillRect(x0 + 14, IY0, 6, IY1 - IY0); ctx.globalAlpha = 1; }
   if (G.cutin > 0) drawCutin();
   drawHUD();
+  if (!mapOpen) drawHoverTip(); else HOV = null;
   if (mapOpen && G) drawBigMap();
   else if (mouse.used && !touchUsed && running && !paused) drawCrosshair();
 }
@@ -3581,6 +3583,7 @@ function drawPickup(pk){
   if (pk.kind === 'umbrella'){ const x = Math.round(pk.x), y = Math.round(pk.y + Math.sin(G.frame*.08)*2); px(x - 6, y + 8, 12, 2, 'rgba(0,0,0,.35)'); px(x - 8, y - 6, 16, 3, '#ffd23f'); px(x - 6, y - 8, 12, 2, '#ffd23f'); px(x - 3, y - 9, 6, 1, '#ffe98a'); px(x, y - 3, 1, 10, '#8a6a3a'); px(x - 2, y + 6, 3, 1, '#8a6a3a'); if (G.frame % 40 < 4) px(x + 6, y - 10, 2, 2, '#fff');
     const pd = Math.hypot(G.player.x - pk.x, G.player.y - pk.y); if (pd < 50){ ctx.font = '700 8px "Noto Sans KR", sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = '#000'; ctx.fillText('누군가의 우산', x + 1, y - 13); ctx.fillStyle = '#bfefff'; ctx.fillText('누군가의 우산', x, y - 14); } return; }
   if (MACHINES.has(pk.kind)) return drawMachine(pk);
+  if (pk.kind !== 'hatch' && pk.kind !== 'portal') pickupHover(pk);
   const bob = Math.sin(G.frame*.08 + pk.x) * 2;
   ctx.font = '700 8px "Noto Sans KR", sans-serif'; ctx.textAlign = 'center';
   if (pk.kind === 'item'){
@@ -3967,6 +3970,26 @@ function drawCutin(){
   ctx.font = '8px Silkscreen, monospace'; ctx.fillStyle = '#0b0d17'; ctx.fillText('KAI  //  ULTIMATE', W/2, H/2 - 22);
   ctx.restore();
 }
+let HOV = null;
+const mouseIn = (x, y, w, h) => mouse.used && !touchUsed && running && !paused && !mapOpen && mouse.x >= x && mouse.x < x + w && mouse.y >= y && mouse.y < y + h;
+const hovItem = (id, own) => own || codex.items[id] ? HOV = {name:ITEM[id].name, desc:ITEM[id].desc} : HOV = {name:'???', desc:'아직 도감에 없음'};
+function drawHoverTip(){
+  const h = HOV; HOV = null; if (!h) return;
+  ctx.textAlign = 'left'; ctx.font = '700 8px "Noto Sans KR", sans-serif'; const w1 = ctx.measureText(h.name).width;
+  ctx.font = '7px "Noto Sans KR", sans-serif'; const w2 = h.desc ? ctx.measureText(h.desc).width : 0;
+  const w = Math.ceil(Math.max(w1, w2)) + 8, hh = h.desc ? 22 : 12;
+  let x = Math.round(mouse.x + 8), y = Math.round(mouse.y + 10); if (x + w > W - 2) x = Math.round(mouse.x - 8 - w); if (y + hh > H - 2) y = Math.round(mouse.y - 6 - hh);
+  px(x - 1, y - 1, w + 2, hh + 2, '#3fe3ff'); px(x, y, w, hh, 'rgba(5,6,11,.94)');
+  ctx.font = '700 8px "Noto Sans KR", sans-serif'; ctx.fillStyle = h.col || '#ece9f5'; ctx.fillText(h.name, x + 4, y + 9);
+  if (h.desc){ ctx.font = '7px "Noto Sans KR", sans-serif'; ctx.fillStyle = '#a9aecb'; ctx.fillText(h.desc, x + 4, y + 19); }
+}
+function pickupHover(pk){
+  if (!mouseIn(pk.x - 11, pk.y - 24, 22, 32)) return;
+  if (pk.kind === 'item') return hovItem(pk.id);
+  if (pk.kind === 'patch') return HOV = G.patchKnown.has(pk.c) ? {name:PATCHES[G.patchMap[pk.c]].name, desc:PATCHES[G.patchMap[pk.c]].desc, col:PATCH_COLS[pk.c]} : {name:'미확인 패치', desc:'먹어 봐야 무슨 패치인지 알 수 있다', col:PATCH_COLS[pk.c]};
+  if (pk.kind === 'card' && CARD[pk.cid]) return HOV = {name:CARD[pk.cid].name, desc:CARD[pk.cid].desc, col:'#8affc1'};
+  const L = LOOT[pk.kind]; if (L) HOV = {name:L.name, desc:L.desc};
+}
 function drawCrosshair(){
   const x = Math.round(mouse.x), y = Math.round(mouse.y), c = G.player.charging && G.player.charge >= Math.max(14, G.prof.fireDelay*2.2) ? '#ff3d5e' : '#ece9f5';
   px(x - 6, y, 4, 1, c); px(x + 3, y, 4, 1, c); px(x, y - 6, 1, 4, c); px(x, y + 3, 1, 4, c); px(x, y, 1, 1, c);
@@ -3997,6 +4020,7 @@ function drawHUD(){
     ctx.drawImage(ICON[A.id].canvas, sx + 3, sy + 3, 24, 24); ctx.globalAlpha = 1;
   }
   if (fl > 0){ ctx.globalAlpha = fl*.7; px(sx, sy, SZ, SZ, '#ffffff'); ctx.globalAlpha = 1; }
+  if (A && mouseIn(sx, sy, SZ, SZ)) hovItem(A.id, true);
   if (!touchUsed){ px(sx + SZ - 8, sy + SZ - 8, 9, 9, '#05060b'); ctx.font = '8px Silkscreen, monospace'; ctx.textAlign = 'center'; ctx.fillStyle = ready ? '#ff3d5e' : '#5a5f80'; ctx.fillText('E', sx + SZ - 3, sy + SZ); }
   const gx = sx + SZ + 3, gh = SZ, fillH = Math.round(gh * Math.min(100, G.gauge) / 100);
   px(gx - 1, sy - 1, 7, gh + 2, '#05060b'); px(gx, sy, 5, gh, '#2a1d2c');
@@ -4025,7 +4049,7 @@ function drawHUD(){
   ctx.font = '700 8px "Noto Sans KR", sans-serif';
   st.forEach(([t, c, f], i) => { ctx.fillStyle = c; ctx.fillText(t + ' ' + Math.ceil(f/60), bx + 140 + i*44, ry + 3); });
   drawMinimap();
-  ctx.imageSmoothingEnabled = true; G.items.forEach((it, i) => { const x = 8 + i*15; if (x > W - 150) return; px(x - 1, H - 23, 15, 15, '#0b0d17'); ctx.drawImage(ICON[it.id].canvas, x, H - 22, 13, 13); }); ctx.imageSmoothingEnabled = false;
+  ctx.imageSmoothingEnabled = true; G.items.forEach((it, i) => { const x = 8 + i*15; if (x > W - 150) return; px(x - 1, H - 23, 15, 15, '#0b0d17'); ctx.drawImage(ICON[it.id].canvas, x, H - 22, 13, 13); if (mouseIn(x - 1, H - 23, 15, 15)) hovItem(it.id, true); }); ctx.imageSmoothingEnabled = false;
   // 주머니 칸 (오른쪽 아래): 패치 · 치트 코드 한 칸
   const cx = W - 92, cy = H - 24, pk2 = G.pocket;
   px(cx, cy, 84, 18, '#05060b'); px(cx + 1, cy + 1, 82, 16, pk2 ? (pk2.k === 'card' ? '#0f2a1d' : '#1d1530') : '#141829');
@@ -4033,6 +4057,7 @@ function drawHUD(){
   ctx.font = pk2 ? '700 8px "Noto Sans KR", sans-serif' : '8px Silkscreen, monospace'; ctx.textAlign = 'left';
   ctx.fillStyle = pk2 ? (pk2.k === 'card' ? '#8affc1' : PATCH_COLS[pk2.c]) : '#3a3f5c';
   ctx.fillText(pk2 ? pocketName(pk2) : 'EMPTY', cx + (pk2 ? 20 : 26), cy + 12);
+  if (pk2 && mouseIn(cx, cy, 84, 18)) HOV = {name:pocketName(pk2), desc:pk2.k === 'card' ? CARD[pk2.id].desc : G.patchKnown.has(pk2.c) ? PATCHES[G.patchMap[pk2.c]].desc : '먹어 봐야 무슨 패치인지 알 수 있다'};
   if (pk2 && !touchUsed){ ctx.font = '7px Silkscreen, monospace'; ctx.fillStyle = '#6b7090'; ctx.textAlign = 'right'; ctx.fillText('F/G', cx + 81, cy - 2); }
   const boss = G.enemies.find(e => e.type === 'boss' && !e.dead);
   if (boss && boss.spawnT <= 0){ const w = 150; px(W/2 - w/2 - 1, H - 20, w + 2, 7, '#000'); px(W/2 - w/2, H - 19, w * Math.max(0, boss.hp/boss.maxHp), 5, BOSS_COL[boss.kind]); ctx.font = '700 8px "Noto Sans KR", sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = '#ece9f5'; ctx.fillText(bossTitle(boss), W/2, H - 23); }
@@ -4080,7 +4105,7 @@ function drawMinimap(){
   const w = cols*(cw + g) - g, h = rows*(ch + g) - g, ox = W - 8 - w, oy = 6;
   ctx.globalAlpha = .55; px(ox - 3, oy - 3, w + 6, h + 6, '#05060b'); ctx.globalAlpha = 1;
   drawMapGrid(known, ox, oy, cw, ch, g, false);
-  if (!touchUsed){ ctx.font = '8px Silkscreen, monospace'; ctx.textAlign = 'right'; ctx.fillStyle = '#5a5f80'; ctx.fillText('TAB', ox - 5, oy + 7); }
+  if (!touchUsed){ ctx.font = '8px Silkscreen, monospace'; ctx.textAlign = 'right'; ctx.fillStyle = '#5a5f80'; ctx.fillText('M', ox - 5, oy + 7); }
   MINI_RECT = {x:ox - 12, y:oy - 4, w:w + 16, h:h + 8};
 }
 function drawChapterPanel(){
@@ -4122,7 +4147,7 @@ function drawBigMap(){
     ctx.fillStyle = '#a9aecb'; ctx.fillText(t, lx + 12, ly); lx += 12 + ctx.measureText(t).width + 12;
   }
   ctx.imageSmoothingEnabled = false;
-  ctx.textAlign = 'center'; ctx.fillStyle = '#5a5f80'; ctx.fillText(touchUsed ? '탭해서 닫기' : 'TAB · 클릭으로 닫기', W/2, H - 6);
+  ctx.textAlign = 'center'; ctx.fillStyle = '#5a5f80'; ctx.fillText(touchUsed ? '탭해서 닫기' : 'M · 클릭으로 닫기', W/2, H - 6);
 }
 const fmtTime = m => { const s = Math.floor(m/1000); return Math.floor(s/60) + ':' + String(s % 60).padStart(2, '0'); };
 
@@ -4486,10 +4511,10 @@ addEventListener('keydown', e => {
   if (storyOpen){ e.preventDefault(); if (storyCur && !e.repeat){ if (e.code === 'Escape') storyCur.close(); else if (e.code === 'Enter' || e.code === 'Space' || e.code === 'KeyE') storyCur.next(); } return; }
   if (BLOCK_KEYS.includes(e.code)) e.preventDefault();
   if (e.code === 'Backquote'){ toggleDev(); return; }
-  if (e.code === 'Tab'){ e.preventDefault(); if (mapOpen){ mapOpen = false; return; } if (G && running && !paused){ mapOpen = true; keys.clear(); mouse.down = false; } return; }
+  if (e.code === 'Tab'){ e.preventDefault(); if (mapOpen){ mapOpen = false; return; } togglePause(); return; }
   if (e.code === 'KeyC' || e.code === 'KeyO'){ e.preventDefault(); toggleCodex(); return; } // O 도 도감 (preventDefault: 여는 키가 검색 칸에 안 들어가게)
   if (!$('codex').hidden && e.code === 'Escape'){ toggleCodex(); return; }
-  if (mapOpen && (e.code === 'Escape' || e.code === 'KeyM' || e.code === 'Tab')){ mapOpen = false; return; }
+  if (mapOpen && (e.code === 'Escape' || e.code === 'KeyM')){ mapOpen = false; return; }
   if (e.code === 'KeyM' && G && running && !paused){ mapOpen = true; keys.clear(); mouse.down = false; return; }
   if (e.code === 'Escape' || e.code === 'KeyP'){ togglePause(); return; }
   if (!$('start').hidden && $('codex').hidden && !charOpen){
@@ -4596,6 +4621,7 @@ let charCur = null;
 /* ---------- 패치 노트 — 맨 위가 최신. 패치마다 10줄 안으로 ---------- */
 const PATCH_NOTES = [
   {ver:'ALPHA 0.6', name:'월드 5 · 소환수 · 세트 변신', date:'2026.10.18', lines:[
+    '조작 — 움직이다 쏘면 탄이 움직이던 쪽으로 살짝 휘어요 (멈춘 직후에도 잠깐 남음, 아이작처럼). Tab = 일시정지, M = 지도. 들고 있는 아이템 · 액티브 · 주머니 · 바닥 아이템에 마우스를 올리면 이름과 설명',
     '월드 5 「휴지통」 — 월드 4 결말 뒤에 열리는 숨은 월드 (이미 월드 4를 깼다면 바로 열려요). 중간 보스 트로이 목마(돌진 · 배 속 졸개), 월드 보스 휴지통(빨아들이기 · 되돌아오는 종이 뭉치 · 비우기 탄막)',
     '월드 5 몹 — 유령 파일(바위 · 낭떠러지 통과, 사라졌다 옆에서 나타남) · 웜(땅속에서 다가와 튀어나오며 8방향) · 패킷 스니퍼(줄이 맞으면 빠른 탄) · ZIP 폭탄(다가와 터짐) · 크롤러(죽으면 벌레 둘)',
     '아이템 102 → 177종 — 아이작처럼 따라다니는 소환수(도우미 봇 · 미니 카이 · 방패 봇 · 수거 드론 · 폭격 드론 · 수리 봇 · 냥이.gif · 다마고치), 주위를 도는 벌레 장벽 · 핑 위성, 아군 벌레 · 유령',
