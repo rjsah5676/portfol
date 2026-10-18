@@ -540,7 +540,8 @@ export function CharSprite({
       style={{
         width: w,
         height: Math.round((w * 4) / 3),
-        transform: flip ? "scaleX(-1)" : undefined,
+        // transform 은 숨쉬기 애니메이션이 쓰니 따로 (scale 은 transform 과 겹쳐 적용됨)
+        scale: flip ? "-1 1" : undefined,
         ...style,
       }}
       aria-hidden

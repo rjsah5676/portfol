@@ -14,7 +14,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import type { ApiError } from "@/lib/api/errors";
-import { asset, chipColor, preloadChar, roomTint } from "@/lib/poker/assets";
+import { asset, chipColor, preloadChar, roomTint, seatFacesRight } from "@/lib/poker/assets";
 import { cardLabel, categoryOf, evaluate } from "@/lib/poker/cards";
 import {
   ACT_MS,
@@ -1336,7 +1336,7 @@ export default function TableView({
             style={{ width: f.charW, height: f.cell }}
           >
             <span className="absolute inset-0 overflow-hidden" style={{ opacity: dim ? 0.5 : 1 }}>
-              <CharSprite char={look} pose={poseOf(i)} seat="front" w={f.charW} dim={dim} />
+              <CharSprite char={look} pose={poseOf(i)} seat="front" w={f.charW} dim={dim} flip={right && seatFacesRight(look)} />
             </span>
             {waiting && deadline > 0 && <LiveTimer deadline={deadline} totalMs={totalMs} />}
             {bet > 0 && (
@@ -1605,7 +1605,7 @@ export default function TableView({
                     style={{ width: avW, height: avH, opacity: dim ? 0.55 : 1 }}
                   >
                     {seven ? (
-                      <CharSprite char={look} pose={poseOf(i)} seat="front" w={avW} dim={dim} />
+                      <CharSprite char={look} pose={poseOf(i)} seat="front" w={avW} dim={dim} flip={dir < 0 && seatFacesRight(look)} />
                     ) : (
                       <FaceIcon char={look} face={faceOf(i)} size={avW} />
                     )}
