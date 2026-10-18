@@ -40,7 +40,7 @@ export const PATCHES: Patch[] = [
       "빠진 만큼은 2개 동시치기 · 16분으로 채우되 16분은 곡 빠르기만큼만 — 150 BPM 이하 줄의 42%, 170 BPM 이상 30%까지 (osu · Quaver 같은 구간 중앙값 32~42% · 8~20%). 넘는 채보는 안 고름",
       "약한 16분 소리 · 소리 없는 16분 칸은 한 번에 다 안 열고 약한 것부터 차츰 (한 번에 열면 16분이 8 → 35%로 튐)",
       "FREEDOM DiVE NIGHTMARE(고정 채보)와 다른 난이도는 그대로",
-      "레벨 바뀜(NIGHTMARE): Lucky Seven Rush 16 → 15, Maximum Velocity 16 → 15, OVERLOAD PROTOCOL 15 → 14, Pixel Fighting 15 → 14, 名前のない輪郭 15 → 14",
+      "레벨 바뀜(NIGHTMARE): Lucky Seven Rush 16 → 15, Maximum Velocity 16 → 15, OVERLOAD PROTOCOL 15 → 14, Pixel Fighting 15 → 14",
     ],
   },
   {
@@ -51,7 +51,7 @@ export const PATCHES: Patch[] = [
       "ULTIMA 같은 레인 115ms 안 연타(잭)를 옆 레인으로 — Lv18 이상도. osu · Quaver Lv18~21 은 노트 1000개에 8 · 17개인데 우리는 91개였음 → 0~2개. 200ms 안 연타도 노트의 45%까지만",
       "Full Combo!! NIGHTMARE: v2.5 에서 레벨 맞추기가 소리 없는 16분까지 열어 16분이 32%(83ms 잭 36개)였던 것 — 이제 레벨이 모자라면 뒷박 · 박 머리 동시치기 조건부터 풀고 16분은 마지막에. 16분 6%, 115ms 안 잭 0개",
       "NIGHTMARE 115ms 안 잭은 이제 전곡 0개 (옆 레인이 다 차 있으면 그 노트를 뺌)",
-      "레벨 바뀜(NIGHTMARE): 夏霞のあと 14 → 15, 名前のない輪郭 14 → 15, New Dimension 15 → 14, Monarch's Fall 14 → 15, Full Combo!! 16 → 15, Crimson Cadenza 14 → 15, Lucky Seven Rush 17 → 16, Pixel Fighting 16 → 15",
+      "레벨 바뀜(NIGHTMARE): 夏霞のあと 14 → 15, New Dimension 15 → 14, Monarch's Fall 14 → 15, Full Combo!! 16 → 15, Crimson Cadenza 14 → 15, Lucky Seven Rush 17 → 16, Pixel Fighting 16 → 15",
       "레벨 바뀜(ULTIMA): Maximum Velocity 20 → 19, 휘모리 20 → 18, Lucky Seven Rush 19 → 18, ANiMA 20 → 19, Aragami 19 → 18, Sugar Cloud 18 → 16, OVERLOAD PROTOCOL 18 → 16, Étude of Falling Stars 20 → 18 · Aragami EX 14 → 13",
     ],
   },

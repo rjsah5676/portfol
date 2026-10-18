@@ -5,7 +5,6 @@ import type { StaticImageData } from "next/image";
 import type { Song } from "@/lib/rhythm/music";
 import jiljuCover from "@/img/rhythm/jilju.jpg";
 import natsuCover from "@/img/rhythm/natsukasumi.jpg";
-import rinkakuCover from "@/img/rhythm/rinkaku.jpg";
 import newdimCover from "@/img/rhythm/newdim.jpg";
 import monarchCover from "@/img/rhythm/monarch.jpg";
 import velocityCover from "@/img/rhythm/velocity.jpg";
@@ -26,7 +25,6 @@ import etudeCover from "@/img/rhythm/etude.jpg";
 export const COVERS: Record<string, StaticImageData> = {
   jilju: jiljuCover,
   natsukasumi: natsuCover,
-  rinkaku: rinkakuCover,
   newdim: newdimCover,
   monarch: monarchCover,
   velocity: velocityCover,

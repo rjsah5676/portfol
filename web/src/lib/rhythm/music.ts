@@ -9,7 +9,6 @@ import type { Chart, Difficulty } from "./chart";
 import { PRACTICE_SECTIONS, practiceCharts } from "./practice";
 import jiljuData from "@/data/rhythm/jilju.json";
 import natsuData from "@/data/rhythm/natsukasumi.json";
-import rinkakuData from "@/data/rhythm/rinkaku.json";
 import newdimData from "@/data/rhythm/newdim.json";
 import monarchData from "@/data/rhythm/monarch.json";
 import velocityData from "@/data/rhythm/velocity.json";
@@ -365,11 +364,6 @@ const NATSU = audioSong("natsukasumi", "夏霞のあと", "/audio/natsukasumi.mp
   desc: "119 BPM · J-ROCK / INDIE POP · AI 자작곡 (tunee.ai)",
 });
 
-const RINKAKU = audioSong("rinkaku", "名前のない輪郭", "/audio/rinkaku.mp3", rinkakuData, {
-  color: "#FBBF24",
-  desc: "163 BPM · J-ROCK (12/8) · AI 자작곡 (tunee.ai)",
-});
-
 const NEWDIM = audioSong("newdim", "New Dimension", "/audio/newdim.mp3", newdimData, {
   color: "#C084FC",
   desc: "155 BPM · 사이버펑크 록 (12/8) · AI 자작곡 (tunee.ai)",
@@ -481,7 +475,6 @@ const FREEDOMDIVE = audioSong(
  *   fullcombo   --bpm-label 180 --boss '{"loud":0.48,"full":0.78}' --levels 3,6,9,13,16   (NIGHTMARE는 15)
  *   jilju       --boss '{}' --tweak '{"hard":{"fill":0.3},"expert":{"fill":0.15}}' --levels 3,5,8,12,16   (나이트메어 자동 15)
  *   natsukasumi --boss '{}' --tweak '{"hard":{"fill":0.9},"expert":{"fill":1.3}}' --levels 2,4,7,12   (나이트메어 자동 15)
- *   rinkaku     --boss '{}' --tweak '{"expert":{"fill":0.4}}' --levels 2,4,8,12   (나이트메어 자동 14)
  *   newdim      --boss '{"loud":0.55,"full":0.85,"burstEvery":8}' --tweak '{"expert":{"fill":0.4}}' --levels 3,6,10,13,15
  *   monarch     --bpm-label 150 --boss '{"burstEvery":2}' --tweak '{"hard":{"fill":0.35},"expert":{"fill":0.3},"nightmare":{"fill":0.4}}' --levels 3,6,11,13,16   (NIGHTMARE는 15)
  *   velocity    --bpm-label 180 --boss '{"loud":0.45,"full":0.72,"burstEvery":4,"burstSub":6}' --explus '{}' --levels 3,6,11,14,17,20   (NIGHTMARE는 15)
@@ -557,7 +550,6 @@ export const SONGS: Song[] = [
   FULLCOMBO,
   JILJU,
   NATSU,
-  RINKAKU,
   NEWDIM,
   MONARCH,
   VELOCITY,

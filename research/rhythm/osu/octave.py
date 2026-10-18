@@ -3,7 +3,7 @@ import numpy as np
 P=[]
 for f in sorted(glob.glob('probe3_?.json')): P+=json.load(open(f))
 C=json.load(open('cmp2.json'))['bpm']; truth={b[0]:b[2] for b in C}
-truth.update({'builtin:fullcombo':180,'builtin:jilju':170,'builtin:monarch':150,'builtin:natsukasumi':118.5,'builtin:newdim':155,'builtin:rinkaku':163,'builtin:velocity':180,'builtin:malguem':147.7})
+truth.update({'builtin:fullcombo':180,'builtin:jilju':170,'builtin:monarch':150,'builtin:natsukasumi':118.5,'builtin:newdim':155,'builtin:velocity':180,'builtin:malguem':147.7})
 def norm(b):
     while b>300: b/=2
     return b

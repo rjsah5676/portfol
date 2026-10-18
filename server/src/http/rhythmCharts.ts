@@ -10,7 +10,6 @@ import monarch from "../../../web/src/data/rhythm/monarch.json";
 import pixelfighting from "../../../web/src/data/rhythm/pixelfighting.json";
 import natsukasumi from "../../../web/src/data/rhythm/natsukasumi.json";
 import newdim from "../../../web/src/data/rhythm/newdim.json";
-import rinkaku from "../../../web/src/data/rhythm/rinkaku.json";
 import velocity from "../../../web/src/data/rhythm/velocity.json";
 import midnight from "../../../web/src/data/rhythm/midnight.json";
 import starlight from "../../../web/src/data/rhythm/starlight.json";
@@ -44,7 +43,6 @@ const SONGS: Record<string, SongData> = {
   monarch,
   natsukasumi,
   newdim,
-  rinkaku,
   velocity,
   midnight,
   starlight,
