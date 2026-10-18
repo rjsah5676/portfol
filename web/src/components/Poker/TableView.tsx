@@ -224,6 +224,27 @@ interface LogLine {
 }
 type SitState = "joining" | "seated" | "watching" | "password";
 
+/** 판 위 건 돈 칩 쌓는 순서용: 자리별 마지막 (건 돈 · 행동) 과 건 차례 번호 */
+type BetSeen = { hand: number; sig: Record<number, string>; at: Record<number, number>; n: number };
+/** 바뀐 게 없으면 prev 를 그대로 돌려줌 (state 갱신 여부 판단용) */
+function nextBetSeen(
+  prev: BetSeen,
+  handNo: number,
+  players: Record<number, { bet: number; last: { a: string } | null } | undefined> | undefined
+): BetSeen {
+  let bs = prev.hand === handNo ? prev : { hand: handNo, sig: {}, at: {}, n: prev.n };
+  for (const [k, pl] of Object.entries(players ?? {})) {
+    if (!pl) continue;
+    const i = Number(k);
+    const sig = `${pl.bet}:${pl.last?.a ?? ""}`;
+    if (bs.sig[i] === sig) continue;
+    if (bs === prev) bs = { ...prev, sig: { ...prev.sig }, at: { ...prev.at } };
+    bs.sig[i] = sig;
+    if (pl.bet > 0) bs.at[i] = ++bs.n;
+  }
+  return bs;
+}
+
 export default function TableView({
   id,
   uid,
@@ -707,7 +728,7 @@ export default function TableView({
   const emoteZ = (i: number) => (emotes[i] ? 46 + Object.values(emotes).filter((e) => e.key < emotes[i].key).length : 0);
 
   // 판 위 건 돈: 최근에 건 사람이 위 (겹칠 때 앞사람 칩 밑에 묻히지 않게)
-  const betSeen = useRef<{ hand: number; sig: Record<number, string>; at: Record<number, number>; n: number }>({ hand: -1, sig: {}, at: {}, n: 0 });
+  const [betSeen, setBetSeen] = useState<BetSeen>({ hand: -1, sig: {}, at: {}, n: 0 });
 
   // 시간이 지난 말풍선 · 포즈 · 표정은 지움
   const transient =
@@ -838,26 +859,12 @@ export default function TableView({
   );
   const mySeat = me?.seat ?? -1;
   const hand = table?.hand ?? null;
-  {
-    const bs = betSeen.current;
-    if (bs.hand !== (table?.handNo ?? -1)) {
-      bs.hand = table?.handNo ?? -1;
-      bs.sig = {};
-      bs.at = {};
-    }
-    Object.entries(hand?.players ?? {}).forEach(([k, pl]) => {
-      const i = Number(k);
-      if (!pl) return;
-      const sig = `${pl.bet}:${pl.last?.a ?? ""}`;
-      if (bs.sig[i] !== sig) {
-        bs.sig[i] = sig;
-        if (pl.bet > 0) bs.at[i] = ++bs.n;
-      }
-    });
-  }
+  // 누가 언제 걸었는지: 렌더 중에 판 상태로 다시 계산하고, 바뀌었을 때만 state 에 넣음 (렌더 중 ref 쓰기 금지)
+  const betNow = nextBetSeen(betSeen, table?.handNo ?? -1, hand?.players);
+  if (betNow !== betSeen) setBetSeen(betNow);
   /** 건 돈 칩의 z: 기본 8, 최근 3명은 9~11 (날아가는 칩 12~13 보다는 아래) */
   const betZ = (i: number) => {
-    const at = betSeen.current.at;
+    const at = betNow.at;
     const mine = at[i];
     if (!mine) return 8;
     const newer = Object.values(at).filter((v) => v > mine).length;
