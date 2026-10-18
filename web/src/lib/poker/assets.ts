@@ -26,7 +26,7 @@ const dir = (l: Look) => {
 /** 스킨 그림이 들어와 있나 (로비 동작 · 터치 반응 그림이 있는지) */
 export const lookReady = (l: Look) => !!skinOf(l)?.ready;
 /** 로비에서 대기 영상(idle.webp)이 도는 기본 캐릭터 (스킨은 rules.ts 의 live). 파일이 아직 없으면 전신 그림 한 장 */
-const LIVE_BASE = new Set<string>(["amy", "yeonseo", "jinwoo", "taeyang", "jeongmin", "mio"]);
+const LIVE_BASE = new Set<string>(["amy", "yeonseo", "jinwoo", "taeyang", "jeongmin", "mio", "sera"]);
 export const liveIdle = (l: Look) => (skinOf(l) ? !!skinOf(l)?.live && lookReady(l) : LIVE_BASE.has(l));
 
 /** 7포커 자리 앉은 대기 동작(움직이는 webp)이 있는 그림 폴더 */
