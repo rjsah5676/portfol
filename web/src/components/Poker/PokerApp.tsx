@@ -71,6 +71,7 @@ const canFullscreen = () =>
 const isStandalone = () =>
   typeof window !== "undefined" &&
   (window.matchMedia("(display-mode: standalone)").matches ||
+    window.matchMedia("(display-mode: fullscreen)").matches ||
     (navigator as Navigator & { standalone?: boolean }).standalone === true);
 
 export default function PokerApp({ rank }: { rank: RankRow[] | null }) {
