@@ -149,10 +149,8 @@ export default function PokerApp({ rank }: { rank: RankRow[] | null }) {
     setIosWeb(isIOS() && !isStandalone());
     setIosSkip(skip);
   }, []);
-  // 홈 화면 앱(웹앱) 정보는 아이폰에만 붙임 — 안드로이드 크롬은 이게 있으면 "홈 화면에 추가"가 앱 설치로 바뀌어
-  // 포커만 따로 떨어진 앱이 돼 버림(다른 게임으로 못 감). 안드로이드는 브라우저에서 전체화면 버튼으로 침
+  // 홈 화면 앱(웹앱) 정보 — 아이폰은 홈 화면에 추가, 안드로이드 크롬은 「앱으로 설치」(포커 전용 앱, 전체화면 · 가로)
   useEffect(() => {
-    if (!isIOS()) return;
     const add: HTMLElement[] = [];
     const tag = (name: string, attrs: Record<string, string>) => {
       const el = document.createElement(name);
@@ -167,6 +165,27 @@ export default function PokerApp({ rank }: { rank: RankRow[] | null }) {
     tag("meta", { name: "apple-mobile-web-app-title", content: "ANIME POKER" });
     return () => add.forEach((el) => el.remove());
   }, []);
+  // 안드로이드 크롬: 「앱 설치」 창 — 브라우저가 beforeinstallprompt 를 줄 때만 (이미 설치했거나 아이폰이면 안 옴)
+  const [installEv, setInstallEv] = useState<(Event & { prompt(): Promise<void>; userChoice: Promise<{ outcome: string }> }) | null>(null);
+  useEffect(() => {
+    const on = (e: Event) => {
+      e.preventDefault(); // 크롬 기본 미니 배너 대신 우리 버튼으로
+      setInstallEv(e as typeof installEv);
+    };
+    const done = () => setInstallEv(null);
+    window.addEventListener("beforeinstallprompt", on);
+    window.addEventListener("appinstalled", done);
+    return () => {
+      window.removeEventListener("beforeinstallprompt", on);
+      window.removeEventListener("appinstalled", done);
+    };
+  }, []);
+  const installApp = () => {
+    const ev = installEv;
+    if (!ev) return;
+    void ev.prompt().catch(() => {});
+    void ev.userChoice.then((c) => c.outcome === "accepted" && setInstallEv(null)).catch(() => {});
+  };
   const skipIos = () => {
     setIosSkip(true);
     try {
@@ -492,6 +511,16 @@ export default function PokerApp({ rank }: { rank: RankRow[] | null }) {
               </svg>
               전체화면으로 시작
             </button>
+            {installEv && (
+              <>
+                <button type="button" onClick={installApp} className="pk-btn relative px-[1.6em] py-[0.6em] text-[1em]">
+                  앱으로 설치
+                </button>
+                <p className="relative text-[0.8em] text-white/60 drop-shadow-[0_1px_4px_rgba(0,0,0,0.9)]">
+                  설치하면 홈 화면에서 바로 전체화면으로 열려요
+                </p>
+              </>
+            )}
           </div>
         )}
         {/* 아이폰 사파리: 전체화면 대신 앱(홈 화면에 추가)으로 — 사파리 안에선 위를 누르면 주소창이 내려와 막을 수 없음 */}

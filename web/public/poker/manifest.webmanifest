@@ -4,8 +4,9 @@
   "description": "홀덤 · 7포커 — gunmo.my",
   "start_url": "/games/poker/",
   "scope": "/games/poker/",
-  "display": "standalone",
-  "orientation": "any",
+  "display": "fullscreen",
+  "display_override": ["fullscreen", "standalone"],
+  "orientation": "landscape",
   "background_color": "#0b0c12",
   "theme_color": "#0b0c12",
   "icons": [
