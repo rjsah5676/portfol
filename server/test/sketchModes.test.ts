@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { sleep, startTestServer, type TestClient, type TestServer } from "./helpers";
+import { FAKE_LAPS } from "../../web/src/lib/sketch/modes";
 
 let s: TestServer;
 beforeAll(async () => {
@@ -90,8 +91,8 @@ describe("가짜 화가", () => {
     expect(secrets.every((x) => x.v.topic === m.topic)).toBe(true);
     const faker = fakers[0].c;
 
-    // 두 바퀴 = 6획. 지금 차례가 아닌 사람은 못 그림, 한 획에 다른 묶음은 거절
-    for (let k = 0; k < 6; k++) {
+    // FAKE_LAPS 바퀴 × 3명. 지금 차례가 아닌 사람은 못 그림, 한 획에 다른 묶음은 거절
+    for (let k = 0; k < 3 * FAKE_LAPS; k++) {
       room = await peek(id);
       const drawer = byUid(all, room.state.drawer);
       const other = all.find((c) => c !== drawer)!;
@@ -195,5 +196,17 @@ describe("그림 릴레이", () => {
     // 리더가 넘김: 3장 × 3줄
     for (let i = 0; i < 9; i++) await host.rpc("sketch.tick", { id, step: (await peek(id)).state.step, force: true });
     expect((await peek(id)).state.phase).toBe("ended");
+  });
+  it("못 낸 사람이 나가거나 강퇴되면 기다리지 않고 바로 다음 단계", async () => {
+    const { id, host, all } = await roomOf(5, { mode: "relay" });
+    await host.rpc("sketch.startGame", { id });
+    let room = await peek(id);
+    for (const c of all.slice(0, 3)) await c.rpc("sketch.submitText", { id, step: room.state.step, text: "문장" });
+    expect((await peek(id)).state.phase).toBe("r-write");
+    await all[3].rpc("sketch.leave", { id, nick: "x" });
+    expect((await peek(id)).state.phase).toBe("r-write");
+    await host.rpc("sketch.kick", { id, target: all[4].uid });
+    room = await peek(id);
+    expect(room.state.phase).toBe("r-draw");
   });
 });

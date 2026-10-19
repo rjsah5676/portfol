@@ -431,6 +431,20 @@
       opacity: 0;
     }
   }
+  /* 릴레이 앨범: 새 장이 아래에서 올라옴 */
+  .sk-feed-in {
+    animation: sk-feed-in 0.45s cubic-bezier(0.25, 1.4, 0.5, 1) both;
+  }
+  @keyframes sk-feed-in {
+    from {
+      transform: translateY(26px) scale(0.92);
+      opacity: 0;
+    }
+    to {
+      transform: none;
+      opacity: 1;
+    }
+  }
   /* 도화지 위로 떠오르는 따봉 (그림 맞히기) */
   .sk-like-rise {
     animation: sk-like-rise 1.8s ease-out both;

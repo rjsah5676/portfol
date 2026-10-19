@@ -41,7 +41,7 @@ export const MODES: Record<GameMode, ModeInfo> = {
     short: "한 명만 제시어를 몰라요. 한 획씩 그리고 가짜를 찾아요",
     how: [
       "모두 같은 제시어를 받는데, 가짜 화가 한 명은 주제만 알아요",
-      "한 도화지에 돌아가며 딱 한 획씩, 두 바퀴 그려요",
+      "한 도화지에 돌아가며 딱 한 획씩, 정한 바퀴만큼 그려요 (기본 4바퀴 · 순서는 판마다 섞여요)",
       "투표로 가짜를 찾아요! 들켜도 가짜가 제시어를 맞히면 가짜 승리",
     ],
     min: 3,
@@ -113,9 +113,11 @@ export const MODE_MS = {
   relayDesc: 45_000,
   /** 앨범 한 장 */
   relayPage: 6_000,
+  /** 앨범 한 줄의 마지막 장 (처음 ↔ 끝 비교까지 보고 넘어가게) */
+  relayLast: 12_000,
 } as const;
 /** 가짜 화가: 몇 바퀴 그리는지 */
-export const FAKE_LAPS = 2;
+export const FAKE_LAPS = 4;
 /** 그림 릴레이: 최대 단계 (인원이 많아도 이만큼만) */
 export const RELAY_MAX_STEPS = 8;
 

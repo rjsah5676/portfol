@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { plainName } from "@/components/Nick";
 import { DailyMissionList, useDailyReady } from "@/components/Points/DailyMissions";
 import { avatarOf } from "@/lib/sketch/assets";
-import { MODE_LIST, MODES, type GameMode } from "@/lib/sketch/modes";
+import { FAKE_LAPS, MODE_LIST, MODES, type GameMode } from "@/lib/sketch/modes";
 import { CUSTOM_MAX, parseCustomWords, TOPICS } from "@/lib/sketch/words";
 import { playBgm, playSfx } from "@/lib/sketch/sfx";
 import {
@@ -535,6 +535,7 @@ function CreateDialog({
         topics,
         custom: customWords,
         customOnly: customOnly && customWords.length > 0,
+        laps,
       });
       playSfx("jingle-start");
       onCreated(id);
@@ -547,6 +548,7 @@ function CreateDialog({
   };
 
   const [fakeGames, setFakeGames] = useState(3);
+  const [laps, setLaps] = useState(FAKE_LAPS);
   const [modeTime, setModeTime] = useState(90);
   const label = (t: string) => <div className="sk-hand mb-1.5 text-[18px] leading-none">{t}</div>;
   const wordsBox = (
@@ -656,6 +658,23 @@ function CreateDialog({
             </div>
             <p className="mt-1 text-[11.5px] text-[var(--ink3)]">
               판마다 제시어와 가짜 화가가 새로 정해져요 · 한 획 {25}초
+            </p>
+            <div className="mt-3">{label("몇 바퀴 그릴까요?")}</div>
+            <div className="flex flex-wrap gap-1.5">
+              {[2, 3, 4, 5, 6].map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  data-on={laps === n}
+                  onClick={tap(() => setLaps(n))}
+                  className="sk-chip min-w-[3em] text-[15px]"
+                >
+                  {n}바퀴
+                </button>
+              ))}
+            </div>
+            <p className="mt-1 text-[11.5px] text-[var(--ink3)]">
+              한 바퀴 = 모두 한 획씩 · 많을수록 그림이 자세해져요
             </p>
           </div>
         )}

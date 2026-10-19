@@ -91,6 +91,8 @@ interface Meta {
   /** 우리끼리 제시어 */
   custom: string[];
   customOnly: boolean;
+  /** 가짜 화가: 몇 바퀴 그리는지 */
+  laps: number;
 }
 interface Player {
   nick: string;
@@ -482,6 +484,12 @@ export function registerSketch({ gateway, users }: Deps, opts: SketchOptions = {
     if (leader && leader !== room.meta.hostUid) room.meta.hostUid = leader;
     if (!Object.keys(room.players).length) room.emptySince = Date.now();
     changed(room);
+    // 다른 모드: 빠진 사람을 기다리느라 멈추지 않게 (나머지가 다 냈으면 바로 다음 · 그리던 사람이면 다음 획)
+    if (room.state.m && Object.keys(room.players).length) {
+      if (room.state.phase === "f-draw" && room.state.drawer === uid) fakeNextStroke(room);
+      else if (room.state.phase === "f-guess" && room.mx.faker === uid) fakeFinish(room, { caught: true, guessed: false, gone: true });
+      else maybeAdvance(room);
+    }
   }
 
   // ───────────── 권한 ─────────────
@@ -644,6 +652,7 @@ export function registerSketch({ gateway, users }: Deps, opts: SketchOptions = {
     topics: z.array(z.string().max(20)).max(20).default([]),
     custom: z.array(z.string().max(40)).max(200).default([]),
     customOnly: z.boolean().default(false),
+    laps: z.number().int().min(1).max(8).default(FAKE_LAPS),
   });
   gateway.rpc("sketch.createRoom", (ctx, raw) => {
     const uid = ctx.uid;
@@ -670,6 +679,7 @@ export function registerSketch({ gateway, users }: Deps, opts: SketchOptions = {
         topics: o.topics.filter((t) => TOPICS.includes(t)),
         custom: [...new Set(o.custom.map((w) => w.replace(/\s+/g, " ").trim().slice(0, CUSTOM_LEN)).filter(Boolean))].slice(0, CUSTOM_MAX),
         customOnly: o.customOnly && o.custom.length > 0,
+        laps: o.laps,
       },
       players: {},
       scores: {},
@@ -1333,9 +1343,8 @@ export function registerSketch({ gateway, users }: Deps, opts: SketchOptions = {
       custom: room.meta.custom,
       customOnly: room.meta.customOnly,
     });
-    // 그리는 순서는 판마다 한 칸씩 밀어서 (매번 같은 사람이 먼저 그리지 않게)
-    const shift = (game - 1) % players.length;
-    const turnOrder = [...players.slice(shift), ...players.slice(0, shift)];
+    // 그리는 순서는 판마다 무작위로 섞음
+    const turnOrder = shuffle(players);
     const colors = Object.fromEntries(players.map((u, i) => [u, FAKE_COLORS[i % FAKE_COLORS.length]]));
     room.mx = { faker: players[Math.floor(Math.random() * players.length)], word, fakeVotes: {} };
     const turnId = orderedId();
@@ -1352,7 +1361,7 @@ export function registerSketch({ gateway, users }: Deps, opts: SketchOptions = {
     room.mx.strokeG = undefined;
     // 지금 방에 있는 사람 차례로 (나간 사람은 건너뜀)
     let at = m.at + 1;
-    const total = m.order.length * FAKE_LAPS;
+    const total = m.order.length * (room.meta.laps || FAKE_LAPS);
     while (at < total && !room.players[m.order[at % m.order.length]]) at++;
     if (at >= total || inGame(room, m.order).length < 2) {
       setPhase(room, "f-vote", MODE_MS.fakeVote, { drawer: "", drawerNick: "", m: { ...m, at } });
@@ -1551,7 +1560,7 @@ export function registerSketch({ gateway, users }: Deps, opts: SketchOptions = {
       page = 0;
     }
     if (chain >= m.order.length) return endGame(room);
-    setPhase(room, "r-album", MODE_MS.relayPage, { m: { ...m, album: { chain, page } } });
+    setPhase(room, "r-album", page >= m.steps - 1 ? MODE_MS.relayLast : MODE_MS.relayPage, { m: { ...m, album: { chain, page } } });
     changed(room);
   }
 
@@ -1781,7 +1790,7 @@ export function registerSketch({ gateway, users }: Deps, opts: SketchOptions = {
           sheets: r.sheets ?? {},
           oneG: r.oneG ?? "",
           best: r.best ?? null,
-          meta: Object.assign({ mode: "classic" as GameMode, challenge: true, topics: [], custom: [], customOnly: false }, r.meta),
+          meta: Object.assign({ mode: "classic" as GameMode, challenge: true, topics: [], custom: [], customOnly: false, laps: FAKE_LAPS }, r.meta),
         });
       }
       // 시간 안에 안 돌아온 사람은 나간 것으로

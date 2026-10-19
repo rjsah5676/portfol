@@ -292,14 +292,20 @@ export default function SketchRoom({
   const tickedRef = useRef("");
   useEffect(() => {
     if (!isLeader || !modePhase || !state.endsAt) return;
-    const late = serverNow() - state.endsAt;
-    // 같은 단계엔 2초에 한 번까지 (서버가 시간 확인)
-    const k = `${state.step}:${Math.floor(late / 2000)}`;
-    if (late >= 200 && tickedRef.current !== k) {
-      tickedRef.current = k;
-      tick(roomId, state.step);
-    }
-  }, [isLeader, modePhase, state.endsAt, state.step, remaining, roomId]);
+    // 남은 시간이 0 에 멈추면 화면이 다시 안 그려져서 알림이 안 가던 것(가짜 화가 다음 판으로 안 넘어감)
+    // — 타이머로 계속 확인. 같은 단계엔 2초에 한 번까지 (서버가 시간 확인)
+    const check = () => {
+      const late = serverNow() - state.endsAt;
+      const k = `${state.step}:${Math.floor(late / 2000)}`;
+      if (late >= 200 && tickedRef.current !== k) {
+        tickedRef.current = k;
+        tick(roomId, state.step);
+      }
+    };
+    check();
+    const t = setInterval(check, 500);
+    return () => clearInterval(t);
+  }, [isLeader, modePhase, state.endsAt, state.step, roomId]);
 
   // 나만 아는 것 (다른 모드)
   const secret: AnySecret = useSecret(roomId, meta.mode !== "classic" && modePhase);
@@ -889,7 +895,7 @@ export default function SketchRoom({
                 {meta.hints ? " · 힌트" : ""}
               </>
             ) : (
-              `${MODES[meta.mode].emoji} ${MODES[meta.mode].name} · ${MODES[meta.mode].short}`
+              `${MODES[meta.mode].emoji} ${MODES[meta.mode].name} · ${meta.mode === "fake" ? `${meta.rounds}판 · 한 획씩 ${meta.laps}바퀴` : MODES[meta.mode].short}`
             )}
           </span>
         </>
@@ -940,7 +946,7 @@ export default function SketchRoom({
             {players.length}/{meta.max}명 ·{" "}
             {meta.mode === "classic"
               ? `${meta.drawTime}초 · 한 사람당 ${meta.rounds}번`
-              : `${MODES[meta.mode].emoji} ${MODES[meta.mode].name}`}
+              : `${MODES[meta.mode].emoji} ${MODES[meta.mode].name}${meta.mode === "fake" ? ` · ${meta.rounds}판 · ${meta.laps}바퀴` : ""}`}
           </p>
         ) : (
           <div className="flex flex-wrap justify-center gap-1.5">

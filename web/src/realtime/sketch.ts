@@ -7,7 +7,7 @@ import {
 } from "@/lib/api/socket";
 import { WrongPasswordError } from "@/lib/roomLock";
 import { normalizeAnswer } from "@/lib/sketch/words";
-import type { Challenge, GameMode } from "@/lib/sketch/modes";
+import { FAKE_LAPS, type Challenge, type GameMode } from "@/lib/sketch/modes";
 
 export { WrongPasswordError };
 
@@ -62,6 +62,8 @@ export interface SketchMeta {
   topics: string[];
   custom: string[];
   customOnly: boolean;
+  /** 가짜 화가: 몇 바퀴 그리는지 */
+  laps: number;
 }
 
 export interface SketchPlayer {
@@ -273,6 +275,7 @@ const DEFAULT_META = {
   topics: [],
   custom: [],
   customOnly: false,
+  laps: FAKE_LAPS,
 };
 
 function normalizeRoom(id: string, v: Record<string, unknown> | null): SketchRoom | null {
@@ -335,6 +338,7 @@ export interface CreateOptions {
   topics?: string[];
   custom?: string[];
   customOnly?: boolean;
+  laps?: number;
 }
 
 /** 방 만들기 → 방 id. 비밀번호는 서버가 방 id와 섞어 해시로만 보관 */
@@ -353,6 +357,7 @@ export async function createRoom(_uid: string, nick: string, o: CreateOptions): 
     topics: o.topics ?? [],
     custom: o.custom ?? [],
     customOnly: o.customOnly ?? false,
+    laps: o.laps ?? FAKE_LAPS,
   });
 }
 

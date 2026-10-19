@@ -66,7 +66,11 @@ export function phaseTotal(room: Room): number {
         "r-write": MODE_MS.relayWrite,
         "r-draw": draw,
         "r-desc": MODE_MS.relayDesc,
-        "r-album": MODE_MS.relayPage,
+        "r-album":
+          room.state.m?.kind === "relay" &&
+          (room.state.m.album?.page ?? 0) >= room.state.m.steps - 1
+            ? MODE_MS.relayLast
+            : MODE_MS.relayPage,
       } as Record<string, number>
     )[p] ?? 1
   );
@@ -557,7 +561,7 @@ function FakeCenter({
   const source = useMemo(() => serverSource(room.id, st.turnId), [room.id, st.turnId]);
   const myColor = m.colors[uid];
   const myTurn = st.phase === "f-draw" && st.drawer === uid;
-  const total = m.order.length * FAKE_LAPS;
+  const total = m.order.length * (room.meta.laps || FAKE_LAPS);
   const voting = st.phase === "f-vote";
   const iVoted = m.voted.includes(uid);
   const inGame = m.order.includes(uid);
@@ -1073,7 +1077,95 @@ function RelayCenter({
   );
 }
 
-/** 앨범: 한 줄씩, 한 장씩 같이 넘김 (리더가 넘기거나 시간이 지나면) */
+/** 두 문장이 얼마나 달라졌는지 (글자 두 개씩 묶어 겹치는 비율) → 0~100 */
+function changeRate(a: string, b: string): number {
+  const grams = (s: string) => {
+    const t = s.replace(/\s+/g, "");
+    const out = new Set<string>();
+    for (let i = 0; i < t.length - 1; i++) out.add(t.slice(i, i + 2));
+    if (t.length === 1) out.add(t);
+    return out;
+  };
+  const x = grams(a);
+  const y = grams(b);
+  if (!x.size || !y.size) return 100;
+  let both = 0;
+  for (const g of x) if (y.has(g)) both++;
+  return Math.round((1 - (2 * both) / (x.size + y.size)) * 100);
+}
+const changeLabel = (r: number) =>
+  r >= 90
+    ? "완전히 딴 얘기 🤯"
+    : r >= 70
+      ? "많이 바뀌었어요 🤣"
+      : r >= 40
+        ? "조금씩 바뀌었어요 😆"
+        : "거의 그대로! 👏";
+
+/** 앨범 한 칸 (글은 말풍선, 그림은 액자) */
+function FeedItem({
+  room,
+  uid,
+  e,
+  i,
+  step,
+  v,
+  fresh,
+}: {
+  room: Room;
+  uid: string;
+  e: RelayEntry;
+  i: number;
+  step: number;
+  v: boolean;
+  fresh: boolean;
+}) {
+  const strokes = useSheet(room.id, e.sheet, step);
+  const right = i % 2 === 1;
+  const who = (
+    <span className="flex items-center gap-1 text-[11.5px] font-bold text-[var(--ink2)]">
+      <Avatar idx={avatarOf(e.by)} size={20} /> {nameOf(room, e.by)}
+      <span className="font-normal text-[var(--ink3)]">
+        {i === 0 ? "· 처음 문장" : e.sheet ? "· 그렸어요" : "· 그림을 보고"}
+      </span>
+    </span>
+  );
+  return (
+    <div
+      className={`flex flex-col gap-1 ${right ? "items-end" : "items-start"} ${fresh ? "sk-feed-in" : ""}`}
+    >
+      {who}
+      {e.sheet ? (
+        <div className={`flex items-end gap-1.5 ${right ? "flex-row-reverse" : ""}`}>
+          <div
+            className={v ? "w-[82vw] max-w-[360px]" : "w-[400px]"}
+            style={{ rotate: right ? "0.8deg" : "-0.8deg" }}
+          >
+            <SheetView id={`feed:${e.sheet}`} strokes={strokes} />
+          </div>
+          <LikeButton room={room} uid={uid} likeKey={e.sheet} author={e.by} />
+        </div>
+      ) : (
+        <div
+          className={`sk-note max-w-[92%] px-4 py-2.5 ${i === 0 ? "!bg-[#FFF4C2]" : ""}`}
+          style={{
+            rotate: right ? "1deg" : "-1deg",
+            borderRadius: right ? "18px 18px 4px 18px" : "18px 18px 18px 4px",
+          }}
+        >
+          <div className={`sk-hand leading-tight break-keep ${v ? "text-[21px]" : "text-[26px]"}`}>
+            「{e.text}」
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * 앨범: 한 사람의 줄을 대화창처럼 한 장씩 쌓아 가며 같이 봄 (리더가 넘기거나 시간이 지나면).
+ * 줄 끝에선 처음 문장 ↔ 마지막 문장을 나란히 놓고 「변신율」로 얼마나 바뀌었는지 보여 줌.
+ */
 function Album({
   room,
   uid,
@@ -1093,59 +1185,125 @@ function Album({
   const chain = m.album?.chain ?? 0;
   const page = m.album?.page ?? 0;
   const entries = album?.[chain] ?? [];
-  const cur = entries[page];
-  const prevEntry = page > 0 ? entries[page - 1] : null;
-  const curSheet = useSheet(room.id, cur?.sheet, st.step);
-  const prevSheet = useSheet(room.id, prevEntry?.sheet, st.step);
-  const pageRef = useRef(`${chain}:${page}`);
-  useEffect(() => {
-    if (pageRef.current !== `${chain}:${page}`) playSfx("sfx-page");
-    pageRef.current = `${chain}:${page}`;
-  }, [chain, page]);
+  const shown = entries.slice(0, page + 1).filter(Boolean);
+  const last = page >= m.steps - 1;
   const starter = entries[0]?.by ?? m.order[chain];
 
-  const entryCard = (
-    e: RelayEntry | undefined,
-    strokes: Stroke[] | null,
-    small: boolean,
-    key: string
-  ) =>
-    !e ? null : e.sheet ? (
-      <div className={small ? "mx-auto w-[44%] opacity-80" : v ? "w-full" : "mx-auto w-[540px]"}>
-        <SheetView id={`${key}:${e.sheet}`} strokes={strokes}>
-          <span className="absolute top-2 left-2 z-[5] flex items-center gap-1 rounded-full border-2 border-[var(--ink)] bg-white/90 py-0.5 pr-2 pl-0.5 text-[11.5px] font-bold">
-            <Avatar idx={avatarOf(e.by)} size={20} /> {nameOf(room, e.by)}
-          </span>
-        </SheetView>
-      </div>
-    ) : (
-      <div
-        className={`sk-note sk-pop flex items-center gap-2 ${small ? "px-3 py-1.5 opacity-80" : "px-4 py-4"}`}
-        style={{ rotate: small ? "0deg" : "-1deg" }}
-      >
-        <Avatar idx={avatarOf(e.by)} size={small ? 24 : 36} />
-        <div className="min-w-0">
-          <div className="text-[11.5px] font-bold text-[var(--ink2)]">{nameOf(room, e.by)}</div>
-          <div
-            className={`sk-hand leading-tight break-keep ${small ? "text-[17px]" : v ? "text-[24px]" : "text-[30px]"}`}
-          >
-            「{e.text}」
-          </div>
-        </div>
-      </div>
-    );
+  // 넘길 때 소리 + 맨 아래로 스크롤
+  const feedRef = useRef<HTMLDivElement>(null);
+  const pageRef = useRef(`${chain}:${page}`);
+  useEffect(() => {
+    if (pageRef.current !== `${chain}:${page}`)
+      playSfx(page === 0 ? "sfx-stroke-turn" : "sfx-page");
+    pageRef.current = `${chain}:${page}`;
+    const el = feedRef.current;
+    if (!el) return;
+    const t = setTimeout(() => el.scrollTo({ top: el.scrollHeight, behavior: "smooth" }), 80);
+    return () => clearTimeout(t);
+  }, [chain, page, album]);
+
+  // 줄 끝: 잠깐 뒤 처음 ↔ 마지막 비교
+  const [cmpAt, setCmpAt] = useState("");
+  const cmpKey = `${chain}`;
+  useEffect(() => {
+    if (!last) return;
+    const t = setTimeout(() => {
+      setCmpAt(cmpKey);
+      playSfx("jingle-reveal");
+    }, 1600);
+    return () => clearTimeout(t);
+  }, [last, cmpKey]);
+  useEffect(() => {
+    if (!last || cmpAt !== cmpKey) return;
+    const el = feedRef.current;
+    if (el) setTimeout(() => el.scrollTo({ top: el.scrollHeight, behavior: "smooth" }), 60);
+  }, [last, cmpAt, cmpKey]);
+  const first = entries[0];
+  const lastText = [...shown].reverse().find((e) => e.text && e !== first);
+  const showCmp = last && cmpAt === cmpKey && first?.text && lastText?.text;
+  const rate = showCmp ? changeRate(first.text!, lastText.text!) : 0;
 
   return (
     <div className="flex w-full flex-col gap-2">
+      {/* 누구의 줄인지 (줄마다 동그라미 하나) */}
       <div className="flex items-center gap-2">
-        <Avatar idx={avatarOf(starter)} size={30} />
-        <span className="sk-hand text-[20px] leading-none">
-          {nameOf(room, starter)}의 줄{" "}
-          <span className="text-[14px] text-[var(--ink3)]">
-            ({page + 1}/{m.steps}장)
-          </span>
+        <span className="sk-hand text-[20px] leading-none whitespace-nowrap">
+          🎞️ {nameOf(room, starter)}의 이야기
         </span>
-        <span className="ml-auto flex gap-1">
+        <span className="ml-auto flex items-center gap-1">
+          {m.order.map((u, i) => (
+            <span
+              key={u}
+              title={nameOf(room, u)}
+              className={`relative rounded-full transition-all ${i === chain ? "scale-110 ring-[3px] ring-[var(--coral)]" : i < chain ? "opacity-45" : "opacity-80"}`}
+            >
+              <Avatar idx={avatarOf(u)} size={i === chain ? 30 : 22} />
+              {i < chain && (
+                <span className="absolute -right-1 -bottom-1 text-[11px] leading-none">✅</span>
+              )}
+            </span>
+          ))}
+        </span>
+      </div>
+
+      {/* 대화창처럼 쌓이는 앨범 */}
+      <div
+        ref={feedRef}
+        className="sk-card flex flex-col gap-3 overflow-y-auto p-3 sm:p-4"
+        style={{ height: v ? "58vh" : 498, background: "var(--paper, #fffdf6)" }}
+      >
+        {shown.length ? (
+          shown.map((e, i) => (
+            <div key={`${chain}:${i}`} className="flex flex-col gap-3">
+              {i > 0 && (
+                <div className="text-center text-[12px] font-bold text-[var(--ink3)]">
+                  {e.sheet ? "⬇️ 이 문장을 그리면…" : "⬇️ 이 그림을 보고…"}
+                </div>
+              )}
+              <FeedItem room={room} uid={uid} e={e} i={i} step={st.step} v={v} fresh={i === page} />
+            </div>
+          ))
+        ) : (
+          <div className="flex flex-1 items-center justify-center">
+            <p className="sk-hand text-[18px] text-[var(--ink3)]">앨범 불러오는 중…</p>
+          </div>
+        )}
+        {showCmp && (
+          <div className="sk-feed-in mt-2 flex flex-col items-center gap-2 rounded-2xl border-[3px] border-dashed border-[var(--ink)] bg-white px-3 py-4 text-center">
+            <div className="sk-hand text-[22px] leading-none">🔁 처음과 끝</div>
+            <div className={`flex w-full items-stretch gap-2 ${v ? "flex-col" : ""}`}>
+              <div className="sk-note flex-1 px-3 py-2">
+                <div className="text-[11px] font-bold text-[var(--ink3)]">
+                  처음 · {nameOf(room, first.by)}
+                </div>
+                <div className="sk-hand text-[20px] leading-tight break-keep">「{first.text}」</div>
+              </div>
+              <div className="self-center text-[22px]">{v ? "⬇️" : "➡️"}</div>
+              <div className="sk-note flex-1 px-3 py-2 !bg-[#FFE3DA]">
+                <div className="text-[11px] font-bold text-[var(--ink3)]">
+                  마지막 · {nameOf(room, lastText.by)}
+                </div>
+                <div className="sk-hand text-[20px] leading-tight break-keep">
+                  「{lastText.text}」
+                </div>
+              </div>
+            </div>
+            <div className="sk-pop flex items-baseline gap-2" style={{ animationDelay: "0.35s" }}>
+              <span className="text-[13px] font-bold text-[var(--ink2)]">변신율</span>
+              <span
+                className="sk-hand leading-none text-[var(--coral)]"
+                style={{ fontSize: v ? 34 : 44 }}
+              >
+                {rate}%
+              </span>
+              <span className="sk-hand text-[18px]">{changeLabel(rate)}</span>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="flex items-center justify-center gap-2">
+        <span className="flex gap-1">
           {Array.from({ length: m.steps }, (_, i) => (
             <span
               key={i}
@@ -1153,23 +1311,13 @@ function Album({
             />
           ))}
         </span>
-      </div>
-      {prevEntry && entryCard(prevEntry, prevSheet, true, "prev")}
-      {prevEntry && <div className="text-center text-[18px] leading-none">⬇️</div>}
-      {entryCard(cur, curSheet, false, "cur") ?? (
-        <div className="sk-card flex h-[200px] items-center justify-center">
-          <p className="sk-hand text-[18px] text-[var(--ink3)]">앨범 불러오는 중…</p>
-        </div>
-      )}
-      <div className="flex items-center justify-center gap-2">
-        {cur?.sheet && <LikeButton room={room} uid={uid} likeKey={cur.sheet} author={cur.by} />}
         {isLeader ? (
           <button
             type="button"
             onClick={tap(() => tick(room.id, st.step, true), "sfx-page")}
             className="sk-btn sk-btn-coral text-[18px]"
           >
-            다음 장 ▶
+            {last ? (chain + 1 >= m.order.length ? "앨범 끝내기 ▶" : "다음 이야기 ▶") : "다음 장 ▶"}
           </button>
         ) : (
           <span className="text-[12.5px] font-bold text-[var(--ink3)]">

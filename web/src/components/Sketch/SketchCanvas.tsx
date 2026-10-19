@@ -533,23 +533,36 @@ export default function SketchCanvas({
     }
     const d = drawing.current;
     if (!d || e.pointerId !== activeId.current) return;
+    // 마우스 버튼을 이미 뗐는데 up 이 안 온 경우(창 밖에서 뗌 등) — 여기서 끝냄
+    if (e.pointerType === "mouse" && e.buttons === 0) {
+      endStroke();
+      return;
+    }
     const grp = groupsRef.current.get(d.g);
     // 빠르게 그을 때 브라우저가 합쳐버린 중간 좌표까지 써서 촘촘하게
     const evs = e.nativeEvent.getCoalescedEvents?.() ?? [e.nativeEvent];
     let added = false;
+    let out = false;
     for (const ev of evs.length ? evs : [e.nativeEvent]) {
-      const pt = toCanvas(ev.clientX, ev.clientY);
+      const raw = toCanvas(ev.clientX, ev.clientY);
+      // 도화지 밖으로 나가면 가장자리까지만 긋고 그 획은 끝 (밖에서 계속 이어 그려지던 것)
+      out = raw[0] < 0 || raw[1] < 0 || raw[0] > CANVAS_W || raw[1] > CANVAS_H;
+      const pt: Pt = out
+        ? [Math.max(0, Math.min(CANVAS_W, raw[0])), Math.max(0, Math.min(CANVAS_H, raw[1]))]
+        : raw;
       const last = d.pts[d.pts.length - 1];
       if (Math.hypot(pt[0] - last[0], pt[1] - last[1]) < 1.5) continue;
       d.pts.push(pt);
       grp?.pts.push(pt);
       added = true;
+      if (out) break;
     }
     const c = ctx();
     if (added && c && grp) {
       drawIncremental(c, grp);
       tails();
     }
+    if (out) endStroke();
   };
 
   const onUp = (e: React.PointerEvent<HTMLCanvasElement>) => {
@@ -650,6 +663,7 @@ export default function SketchCanvas({
         onPointerMove={onMove}
         onPointerUp={onUp}
         onPointerCancel={onUp}
+        onLostPointerCapture={onUp}
         onPointerLeave={() => setCursor(null)}
         className={`absolute inset-0 h-full w-full touch-none select-none ${cur} ${hideInk ? "opacity-0" : ""}`}
       />
