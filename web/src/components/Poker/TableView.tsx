@@ -862,13 +862,13 @@ export default function TableView({
   // 누가 언제 걸었는지: 렌더 중에 판 상태로 다시 계산하고, 바뀌었을 때만 state 에 넣음 (렌더 중 ref 쓰기 금지)
   const betNow = nextBetSeen(betSeen, table?.handNo ?? -1, hand?.players);
   if (betNow !== betSeen) setBetSeen(betNow);
-  /** 건 돈 칩의 z: 기본 8, 최근 3명은 9~11 (날아가는 칩 12~13 보다는 아래) */
+  /** 건 돈 칩의 z: 기본 8, 최근 3명은 자리 틀(34~43)보다도 위 43~45 — 크게 쌓인 올인 칩이 옆 자리 밑에 묻히지 않게 (이모티콘 46~ 보다는 아래) */
   const betZ = (i: number) => {
     const at = betNow.at;
     const mine = at[i];
     if (!mine) return 8;
     const newer = Object.values(at).filter((v) => v > mine).length;
-    return newer < 3 ? 11 - newer : 8;
+    return newer < 3 ? 45 - newer : 8;
   };
   // 방금 행동한 자리: 행동 글자(체크 · 콜 …)가 튀어나오는 동안 그 자리를 맨 위로 — 윗자리 프로필 뒤에 가려지지 않게
   const [actHot, setActHot] = useState<Record<number, number>>({});
