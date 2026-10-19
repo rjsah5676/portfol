@@ -870,6 +870,28 @@ export default function TableView({
     const newer = Object.values(at).filter((v) => v > mine).length;
     return newer < 3 ? 11 - newer : 8;
   };
+  // 방금 행동한 자리: 행동 글자(체크 · 콜 …)가 튀어나오는 동안 그 자리를 맨 위로 — 윗자리 프로필 뒤에 가려지지 않게
+  const [actHot, setActHot] = useState<Record<number, number>>({});
+  const actSeen = useRef<Record<number, string>>({});
+  const actSig = Object.entries(hand?.players ?? {})
+    .map(([k, pl]) => `${k}:${pl?.last?.a ?? ""}:${pl?.bet ?? 0}`)
+    .join("|");
+  useEffect(() => {
+    const hot: number[] = [];
+    for (const [k, pl] of Object.entries(hand?.players ?? {})) {
+      const sig = `${table?.handNo}:${pl?.last?.a ?? ""}:${pl?.bet ?? 0}`;
+      if (actSeen.current[+k] !== sig) {
+        actSeen.current[+k] = sig;
+        if (pl?.last) hot.push(+k);
+      }
+    }
+    if (!hot.length) return;
+    const stamp = Date.now();
+    setActHot((cur) => ({ ...cur, ...Object.fromEntries(hot.map((i) => [i, stamp])) }));
+    // 다음 행동이 바로 와도 이 타이머는 지우지 않음 (지우면 그 자리가 맨 위에 남음)
+    setTimeout(() => setActHot((cur) => Object.fromEntries(Object.entries(cur).filter(([, v]) => v !== stamp))), 900);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [actSig, table?.handNo]);
   const deadline = hand && !hand.result ? hand.deadline : 0;
   const now = useSecNow(deadline);
 
@@ -1631,7 +1653,7 @@ export default function TableView({
                   ...edge,
                   top: y - cardH / 2,
                   width: frameW,
-                  zIndex: emoteZ(i) || 34 + table.seats.filter((_, j) => j !== i && j !== mySeat && cardsAt(j).y > y).length,
+                  zIndex: emoteZ(i) || (actHot[i] ? 43 : 34 + table.seats.filter((_, j) => j !== i && j !== mySeat && cardsAt(j).y > y).length),
                 }}
               >
                 {/* 윗줄: 아바타 + 카드 칸 (아래 끝 맞춤) */}
