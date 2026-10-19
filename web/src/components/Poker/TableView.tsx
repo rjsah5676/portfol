@@ -1626,7 +1626,13 @@ export default function TableView({
             <div key={i}>
               <div
                 className={`pk-seat absolute flex flex-col ${dir > 0 ? "items-start" : "items-end"}`}
-                style={{ ...edge, top: y - cardH / 2, width: frameW, zIndex: emoteZ(i) || 34 }}
+                // 위쪽 자리일수록 위 — 아래 자리 카드가 윗자리 이름표를 가리지 않게 (34~42, 이모티콘 46~ 보다는 아래)
+                style={{
+                  ...edge,
+                  top: y - cardH / 2,
+                  width: frameW,
+                  zIndex: emoteZ(i) || 34 + table.seats.filter((_, j) => j !== i && j !== mySeat && cardsAt(j).y > y).length,
+                }}
               >
                 {/* 윗줄: 아바타 + 카드 칸 (아래 끝 맞춤) */}
                 <div className={`flex items-end gap-[6px] ${dir > 0 ? "" : "flex-row-reverse"}`}>
