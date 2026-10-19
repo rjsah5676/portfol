@@ -212,6 +212,27 @@ export default function Stage({ children }: { children: ReactNode }) {
       sessionStorage.setItem("pgd-ios-web", "1");
     } catch {}
   };
+  // 안드로이드 크롬: 「앱 설치」 창 — 브라우저가 beforeinstallprompt 를 줄 때만 (이미 설치했거나 아이폰이면 안 옴)
+  const [installEv, setInstallEv] = useState<(Event & { prompt(): Promise<void>; userChoice: Promise<{ outcome: string }> }) | null>(null);
+  useEffect(() => {
+    const on = (e: Event) => {
+      e.preventDefault(); // 크롬 기본 미니 배너 대신 우리 버튼으로
+      setInstallEv(e as typeof installEv);
+    };
+    const done = () => setInstallEv(null);
+    window.addEventListener("beforeinstallprompt", on);
+    window.addEventListener("appinstalled", done);
+    return () => {
+      window.removeEventListener("beforeinstallprompt", on);
+      window.removeEventListener("appinstalled", done);
+    };
+  }, []);
+  const installApp = () => {
+    const ev = installEv;
+    if (!ev) return;
+    void ev.prompt().catch(() => {});
+    void ev.userChoice.then((c) => c.outcome === "accepted" && setInstallEv(null)).catch(() => {});
+  };
   const fsGate = phone && !fs && canFs && !isStandalone();
   const iosGate = phone && !fsGate && iosWeb && !iosSkip;
   const rotateGate = phone && !land && !fsGate && !iosGate;
@@ -320,6 +341,19 @@ export default function Stage({ children }: { children: ReactNode }) {
                 >
                   ⛶ 전체화면으로 시작
                 </button>
+              )}
+              {fsGate && installEv && (
+                <>
+                  <button
+                    type="button"
+                    onClick={installApp}
+                    className="px-btn px-6 py-2 text-sm font-bold"
+                    style={{ "--c": "#3d3468", "--t": "#fff" } as React.CSSProperties}
+                  >
+                    앱으로 설치
+                  </button>
+                  <p className="text-xs text-[#a69cc9]">설치하면 홈 화면에서 바로 전체화면으로 열려요</p>
+                </>
               )}
             </div>
           )}
