@@ -805,14 +805,15 @@ export const glitchUnlocks = (glitch: number, r: { win: boolean; wave: number })
 /**
  * 카드 상자: 무작위 유닛 카드 (낮은 등급이 잘 나옴) — 픽셀 조각
  * 유물 상자: 유물 하나 (희귀도 확률) — 가진 유물이면 그 유물 조각 +1 (유물 강화 재료) — 글리치 코어
- * 초월 소환: 15% 로 초월 셋 중 하나 (처음이면 해금 · 이미 있으면 그 유닛 카드) — 아니면 게임 재화.
+ * 초월 소환: 15% 로 초월 셋 중 하나 (처음이면 해금 · 이미 있으면 그 유닛 카드 dupCards + 코어 dupCores) — 아니면 게임 재화.
  *   천장: 초월 없이 9번 넘기면 10번째는 반드시 초월 (pity = 마지막 초월 뒤로 돌린 수) — 글리치 코어
  * GP 로는 상점의 재화샵 · 패키지에서만 (GP_STORE · GP_PACKS)
  */
 export const BOX = {
   card: { pieces: 300, n: 12 },
   relic: { cores: 12, tierOdds: [0.6, 0.3, 0.1] },
-  trans: { cores: 40, rate: 0.15, pity: 10, dupCards: 15 },
+  // 중복: 카드 50(Lv.10까지 468장의 약 1/9) + 코어 40(한 번 더 돌릴 만큼) — 예전 카드 15장은 꽝(코어 8 · 조각 600)보다 못하다는 말이 있어 올림 (2026-10-19)
+  trans: { cores: 40, rate: 0.15, pity: 10, dupCards: 50, dupCores: 40 },
 } as const;
 /** 초월 소환에서 초월이 안 나오면 (85%) — 가중치대로 하나 */
 export const TRANS_MISS: { w: number; give: Goods }[] = [

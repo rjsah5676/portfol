@@ -156,6 +156,7 @@ export interface DefenseProfile {
     /** 초월 소환 한 번 (trans 가 없으면 miss 의 재화) */
     trans?: string | TransGot[];
     dup?: number;
+    dupCores?: number;
     miss?: Goods;
     pity?: number;
     pack?: string;
@@ -164,6 +165,7 @@ export interface DefenseProfile {
 export interface TransGot {
   trans?: string;
   dup?: number;
+  dupCores?: number;
   miss?: Goods;
   pity: number;
 }

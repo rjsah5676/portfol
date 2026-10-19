@@ -1124,7 +1124,7 @@ function TransRow({ t }: { t: TransGot }) {
       <div className="text-left">
         <p className="text-[12px] text-[#fff6d6]">초월!</p>
         <b className="text-[17px]">{UNIT[t.trans].name}</b>
-        <p className="text-[12px] text-[var(--mute)]">{t.dup ? `이미 해금 → 카드 +${t.dup}` : "해금! 판에서 신화 3기로 조합할 수 있어요"}</p>
+        <p className="text-[12px] text-[var(--mute)]">{t.dup ? `이미 해금 → 카드 +${t.dup}${t.dupCores ? ` · 코어 +${t.dupCores}` : ""}` : "해금! 판에서 신화 3기로 조합할 수 있어요"}</p>
       </div>
     </div>
   ) : (
@@ -1141,7 +1141,7 @@ function TransRow({ t }: { t: TransGot }) {
 const gotColor = (got: Got) => (got.relic ? TIER_COLOR[RELIC[got.relic].tier] : typeof got.trans === "string" ? "#fff6d6" : "#ffb347");
 
 function GotBox({ got }: { got: Got }) {
-  const one: TransGot | null = typeof got.trans === "string" || got.miss ? { trans: typeof got.trans === "string" ? got.trans : undefined, dup: got.dup, miss: got.miss, pity: got.pity ?? 0 } : null;
+  const one: TransGot | null = typeof got.trans === "string" || got.miss ? { trans: typeof got.trans === "string" ? got.trans : undefined, dup: got.dup, dupCores: got.dupCores, miss: got.miss, pity: got.pity ?? 0 } : null;
   const col = gotColor(got);
   return (
     <div className="px-box dfn-pop flex flex-col gap-2 p-3 text-center" style={{ "--b": col } as CSSProperties}>

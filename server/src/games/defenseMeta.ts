@@ -411,7 +411,8 @@ export function createDefenseMeta(db: Database, points: Points, now: () => numbe
         return { trans: out.trans, pity: p.pity };
       }
       p.cards[out.trans] = (p.cards[out.trans] ?? 0) + BOX.trans.dupCards;
-      return { trans: out.trans, dup: BOX.trans.dupCards, pity: p.pity };
+      p.cores += BOX.trans.dupCores;
+      return { trans: out.trans, dup: BOX.trans.dupCards, dupCores: BOX.trans.dupCores, pity: p.pity };
     }
     const g = out.give ?? {};
     p.pieces += g.pieces ?? 0;
