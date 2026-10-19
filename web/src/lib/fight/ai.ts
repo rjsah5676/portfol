@@ -170,7 +170,7 @@ export const ADJ_AT = [200, 500, 850, 1200, 1600, 2000, 2400];
 export const CHAR_ADJ: Record<string, number[]> = {
   kai: [-3, -21, 88, 96, 22, 27, 358],
   igna: [-80, -109, 18, 100, -8, -26, -168],
-  soyoung: [69, -36, -156, -183, -100, 155, 192],
+  soyoung: [155, 62, -215, -460, -360, 340, 192], // 10.19 발차기 상향 뒤 다시 맞춤
   // 릴리 (10.17 비눗방울 가둔 뒤 쫓기 넣고 다시 맞춤 — 같은 레이팅 AI끼리 70판씩, 위쪽이 많이 셈: 2000 −156 → −70 · 2400 −440 → −60)
   lily: [15, 90, 170, 293, 25, -70, -60],
   zena: [-120, -259, -401, -309, 33, 184, 508],
@@ -242,7 +242,7 @@ export function aiForRating(r: number, charId?: string): AILevel {
  * AI 지문: 랭크전 봇전은 서버가 같은 경기를 다시 돌려 확인하니, 브라우저와 서버의 AI가 똑같아야 함.
  * 단계 값·보정·콤보 길은 자동으로 들어가고, next() 같은 판단 코드를 바꿨으면 AI_REV 를 올릴 것.
  */
-const AI_REV = 15;
+const AI_REV = 16;
 export const AI_ID = (() => {
   const str = AI_REV + JSON.stringify([AI_LEVELS, RANK_TIERS, AI_RATING, ADJ_AT, CHAR_ADJ, ROUTES, ROUTE_CAP, HUMAN]);
   let h = 0x811c9dc5;

@@ -521,9 +521,9 @@ const RAW: CharSrc[] = [
         cancel: ["H", "S", "X"],
       },
       H: {
-        startup: 12,
+        startup: 10, // 12→10 (10.19 상위 티어에서 다 읽혀 막힘)
         active: 4,
-        recovery: 20,
+        recovery: 16, // 20→16 (10.19)
         dmg: 84, // 80→90 → 84 (10.12)
         chip: 0,
         hitstun: 19,

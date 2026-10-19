@@ -608,7 +608,7 @@ const cloneF = (f: Fighter): Fighter => ({ ...f, hist: f.hist.slice(), enc: f.en
  * 이 빌드의 게임 데이터 지문 (캐릭터 성능·맵) — 온라인에서 서로 다른 빌드끼리 붙었는지 확인.
  * 계산 방식(sim.ts)만 바꿨을 땐 SIM_REV를 올릴 것.
  */
-const SIM_REV = 32;
+const SIM_REV = 33;
 export const BUILD_ID = (() => {
   const str = SIM_REV + JSON.stringify(CHARS.map((c) => [c.hp, c.walk, c.jumpVx, c.dash, c.cd, c.glide, c.hurt, c.width, c.moves])) + JSON.stringify(MAPS.map((m) => [m.plats, m.spawn]));
   let h = 2166136261;
