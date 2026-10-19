@@ -993,8 +993,8 @@ export default function TableView({
       if (hd.game === "holdem") {
         const lg = (hd as HoldemView).legal;
         if (lg) {
-          if (pre === "fold") void doAct({ a: "fold" });
-          else if (pre === "cf") void doAct(lg.canCheck ? { a: "check" } : { a: "fold" });
+          // 미리 폴드: 체크가 되면 체크 (공짜로 볼 수 있는데 버릴 이유가 없음), 아니면 폴드
+          if (pre === "cf") void doAct(lg.canCheck ? { a: "check" } : { a: "fold" });
           else if (pre === "call") {
             // 받을 돈이 생기면 얼마든 콜, 없으면 체크
             if (lg.toCall === 0) void doAct({ a: "check" });
@@ -3376,8 +3376,7 @@ function ActionBar(props: {
         <div className="pk-frame flex w-full gap-[0.3em] p-[0.45em]">
           {(hv
             ? ([
-                ["fold", "폴드", "pk-btn-fold"],
-                ["cf", "체크/폴드", "pk-btn-call"],
+                ["cf", "체크/폴드", "pk-btn-fold"],
                 ["call", "콜", "pk-btn-bbing"],
               ] as const)
             : ([
