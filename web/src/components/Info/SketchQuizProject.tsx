@@ -19,13 +19,12 @@ import drawImg from "@/img/Page/info/sketch/draw.webp";
 import revealImg from "@/img/Page/info/sketch/reveal.webp";
 import mobileImg from "@/img/Page/info/sketch/mobile.webp";
 import fakeImg from "@/img/Page/info/sketch/fake.webp";
-import lieImg from "@/img/Page/info/sketch/lie.webp";
 import relayImg from "@/img/Page/info/sketch/relay.webp";
 
 // ───────────────────────── 데이터 ─────────────────────────
 
 const STATS = [
-  { value: "4가지", label: "모드 (맞히기 · 가짜 화가 · 거짓말 · 릴레이)" },
+  { value: "3가지", label: "모드 (맞히기 · 가짜 화가 · 릴레이)" },
   { value: "8명", label: "한 방 최대 인원" },
   { value: `${WORD_COUNT.toLocaleString()}개`, label: "제시어 (쉬움 · 보통 · 어려움)" },
   { value: "PC · 폰", label: "가로 · 세로 전용 배치" },
@@ -80,7 +79,6 @@ const FEATURES: { title: string; items: string[] }[] = [
     title: "모드",
     items: [
       "🕵️ 가짜 화가 — 한 명만 제시어 대신 주제를 받고, 모두 한 도화지에 내 색으로 한 획씩 정한 바퀴만큼(기본 4). 투표로 가짜를 찾고, 들킨 가짜는 제시어를 맞히면 역전",
-      "🤥 그림 속 거짓말 — 각자 엉뚱한 제시어(꾸밈말 + 대상 조합)를 동시에 그리고, 남의 그림에 가짜 제목. 진짜를 고르면 점수, 내 거짓말에 속여도 점수",
       "📞 그림 릴레이 — 문장 → 그림 → 문장으로 옆 사람에게 넘기고, 끝나면 앨범을 같이 넘겨 봄",
       "그림 맞히기엔 깜짝 챌린지(한붓그리기 · 눈 가리고 · 검정 한 색, ×1.5) · 따봉 · 건너뛰기 투표 · 정답 아는 사람끼리 비밀 채팅 · 주제 고르기 · 우리끼리 제시어",
     ],
@@ -109,7 +107,7 @@ const TROUBLES: Trouble[] = [
   {
     title: "서버에 타이머 없이 여러 단계 모드 돌리기",
     problem:
-      "가짜 화가 · 거짓말 · 릴레이는 다 같이 동시에 내고 시간이 지나면 넘어가는 단계가 많다. 서버에 setTimeout 을 두면 배포로 서버가 다시 켜질 때 이어받기가 깨진다.",
+      "가짜 화가 · 릴레이는 다 같이 동시에 내고 시간이 지나면 넘어가는 단계가 많다. 서버에 setTimeout 을 두면 배포로 서버가 다시 켜질 때 이어받기가 깨진다.",
     cause:
       "기존 그림 맞히기는 그리는 사람 · 방장 화면이 진행을 요청하는 구조라 서버가 시간을 모른다.",
     solution:
@@ -117,11 +115,10 @@ const TROUBLES: Trouble[] = [
   },
   {
     title: "나만 알아야 하는 것",
-    problem:
-      "가짜 화가의 제시어, 거짓말의 진짜 제목, 릴레이에서 이어받은 문장 · 그림은 사람마다 보이는 게 다르다.",
+    problem: "가짜 화가의 제시어, 릴레이에서 이어받은 문장 · 그림은 사람마다 보이는 게 다르다.",
     cause: "방 상태 구독은 모두에게 같은 값을 보낸다.",
     solution:
-      "사람마다 키가 다른 sketch.secret 채널을 두고 서버가 그 사람 몫만 계산해 보냈다. 그림 한 장(sketch.sheet)은 구독할 때 볼 수 있는 단계인지 서버가 확인하고, 거짓말 보기는 순서까지 섞어 id 로 진짜를 알 수 없게 했다.",
+      "사람마다 키가 다른 sketch.secret 채널을 두고 서버가 그 사람 몫만 계산해 보냈다. 그림 한 장(sketch.sheet)은 구독할 때 볼 수 있는 단계인지 서버가 확인했다.",
   },
   {
     title: "정답이 채팅에 새지 않게",
@@ -162,8 +159,8 @@ export default function SketchQuizProject() {
       <div className="mb-3 font-mono text-sm text-[#8B84FF]">game · gunmo.my</div>
       <h1 className="font-mono text-3xl font-bold text-white sm:text-4xl">DOODLE PARTY</h1>
       <p className="mt-3 font-['Nanum_Gothic',sans-serif] text-white/60">
-        최대 8명이 함께하는 실시간 그림 파티게임. 그림 맞히기 · 가짜 화가 · 그림 속 거짓말 · 그림
-        릴레이 4가지 모드를 브라우저에서 바로 즐겨요. (예전 이름 스케치 퀴즈)
+        최대 8명이 함께하는 실시간 그림 파티게임. 그림 맞히기 · 가짜 화가 · 그림 릴레이 3가지 모드를
+        브라우저에서 바로 즐겨요. (예전 이름 스케치 퀴즈)
       </p>
 
       <div className="mt-5 flex flex-wrap items-center gap-2 font-mono text-xs">
@@ -230,9 +227,6 @@ export default function SketchQuizProject() {
           <Shot img={drawImg} alt="그리는 사람 화면 — 16색 · 굵기 · 채우기 · 지우개" />
           <Shot img={revealImg} alt="정답 공개" />
           <Shot img={fakeImg} alt="가짜 화가 — 한 획씩 그리고 투표" />
-          <Shot img={lieImg} alt="그림 속 거짓말 — 진짜 제목 고르기" />
-        </div>
-        <div className="mt-4">
           <Shot img={relayImg} alt="그림 릴레이 앨범" />
         </div>
         <div className="mx-auto mt-4 max-w-[260px]">

@@ -237,7 +237,9 @@ export default function SketchLobby({
                         ? r.turnMode === "winner"
                           ? "맞힌 사람이 다음"
                           : "입장 순서대로"
-                        : `${MODES[r.mode].emoji} ${MODES[r.mode].name}`}
+                        : MODES[r.mode]
+                          ? `${MODES[r.mode].emoji} ${MODES[r.mode].name}`
+                          : ""}
                     </span>
                   </span>
                 </span>
@@ -340,8 +342,8 @@ export default function SketchLobby({
             >
               <div className="flex-1 text-[13px] leading-relaxed">
                 <b className="sk-hand block text-[19px]">이렇게 놀아요</b>
-                <b>방 만들기</b>에서 모드를 골라요 — 🎨 그림 맞히기 · 🕵️ 가짜 화가 · 🤥 그림 속
-                거짓말 · 📞 그림 릴레이. <b>초대 링크</b>로 온 친구는 비밀번호 없이 바로 입장!
+                <b>방 만들기</b>에서 모드를 골라요 — 🎨 그림 맞히기 · 🕵️ 가짜 화가 · 📞 그림 릴레이.{" "}
+                <b>초대 링크</b>로 온 친구는 비밀번호 없이 바로 입장!
               </div>
               <Mascot pose="idle" size={92} />
             </div>
@@ -620,7 +622,7 @@ function CreateDialog({
         />
         <div>
           {label("게임 모드")}
-          <div className={`grid gap-2 ${o === "v" ? "grid-cols-2" : "grid-cols-4"}`}>
+          <div className="grid grid-cols-3 gap-2">
             {MODE_LIST.map((m) => (
               <button
                 key={m}
@@ -678,7 +680,7 @@ function CreateDialog({
             </p>
           </div>
         )}
-        {(mode === "lie" || mode === "relay") && (
+        {mode === "relay" && (
           <div>
             {label("그리는 시간")}
             <div className="flex flex-wrap gap-1.5">
@@ -695,9 +697,7 @@ function CreateDialog({
               ))}
             </div>
             <p className="mt-1 text-[11.5px] text-[var(--ink3)]">
-              {mode === "lie"
-                ? "다 같이 동시에 그려요 · 다 그리면 바로 다음으로"
-                : `인원수만큼 이어 가요 (최대 8단계) · 글은 50초`}
+              인원수만큼 이어 가요 (최대 8단계) · 글은 50초
             </p>
           </div>
         )}

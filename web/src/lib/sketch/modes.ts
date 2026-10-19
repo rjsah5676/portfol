@@ -3,11 +3,10 @@
  *
  * classic  그림 맞히기   한 명이 그리고 나머지가 채팅으로 맞힘
  * fake     가짜 화가     한 도화지에 돌아가며 한 획씩. 한 명만 제시어를 모름 → 투표로 가짜 찾기
- * lie      그림 속 거짓말 각자 엉뚱한 제시어를 그리고, 남의 그림에 그럴듯한 가짜 제목 → 진짜 고르기
  * relay    그림 릴레이   문장 → 그림 → 문장 … 옆 사람에게 넘기며 이어 가고, 끝나면 앨범으로 같이 보기
  */
 
-export type GameMode = "classic" | "fake" | "lie" | "relay";
+export type GameMode = "classic" | "fake" | "relay";
 
 export interface ModeInfo {
   id: GameMode;
@@ -46,18 +45,6 @@ export const MODES: Record<GameMode, ModeInfo> = {
     ],
     min: 3,
   },
-  lie: {
-    id: "lie",
-    name: "그림 속 거짓말",
-    emoji: "🤥",
-    short: "엉뚱한 제시어를 그리고, 가짜 제목으로 속여요",
-    how: [
-      "각자 엉뚱한 제시어(예: 다이어트 중인 펭귄)를 받아 동시에 그려요",
-      "남의 그림엔 그럴듯한 가짜 제목을 써요",
-      "진짜 제목을 고르면 점수, 내 가짜에 남이 속아도 점수!",
-    ],
-    min: 3,
-  },
   relay: {
     id: "relay",
     name: "그림 릴레이",
@@ -71,7 +58,7 @@ export const MODES: Record<GameMode, ModeInfo> = {
     min: 3,
   },
 };
-export const MODE_LIST: GameMode[] = ["classic", "fake", "lie", "relay"];
+export const MODE_LIST: GameMode[] = ["classic", "fake", "relay"];
 
 // ───────────── 깜짝 챌린지 (그림 맞히기) ─────────────
 
@@ -104,10 +91,6 @@ export const MODE_MS = {
   fakeVote: 40_000,
   fakeGuess: 30_000,
   fakeResult: 9_000,
-  /** 그림 속 거짓말: 그리기는 방 설정 시간 */
-  lieWrite: 45_000,
-  liePick: 30_000,
-  lieShow: 11_000,
   /** 그림 릴레이: 그리기는 방 설정 시간 */
   relayWrite: 50_000,
   relayDesc: 45_000,
@@ -139,8 +122,4 @@ export const MODE_POINTS = {
   fakeWin: 200,
   artistWin: 100,
   fakeVoteRight: 30,
-  /** 그림 속 거짓말 */
-  lieTruth: 100,
-  lieArtistPer: 50,
-  lieFooledPer: 50,
 } as const;

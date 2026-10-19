@@ -21,11 +21,10 @@ import {
   type GameMode,
 } from "../../../web/src/lib/sketch/modes";
 import { CUSTOM_LEN, CUSTOM_MAX, TOPICS, pickWord } from "../../../web/src/lib/sketch/words";
-import { pickPrompts } from "../../../web/src/lib/sketch/prompts";
 
 /*
  * DOODLE PARTY (실시간 그림 파티게임 — 예전 이름 스케치 퀴즈)
- * 모드: 그림 맞히기(classic) · 가짜 화가(fake) · 그림 속 거짓말(lie) · 그림 릴레이(relay) — web/src/lib/sketch/modes.ts
+ * 모드: 그림 맞히기(classic) · 가짜 화가(fake) · 그림 릴레이(relay) — web/src/lib/sketch/modes.ts
  *
  * 기존에는 Firebase Realtime Database에 방 상태를 두고 브라우저끼리 진행을 나눠 맡았음.
  * 지금은 서버가 방 상태를 메모리에 들고 권한 검사와 상태 변경을 맡음.
@@ -43,7 +42,7 @@ import { pickPrompts } from "../../../web/src/lib/sketch/prompts";
  *   sketch.guesses { id }        정답 시도 — 그리는 사람만 (답이 채팅에 노출되지 않게)
  *   sketch.words   { id }        제시어 후보·정답 — 그리는 사람만
  *   sketch.secret  { id }        나만 아는 것 (가짜 화가 제시어 · 내 엉뚱한 제시어 · 릴레이에서 이어받은 것)
- *   sketch.sheet   { id, key }   따로 그린 그림 한 장 (거짓말 · 릴레이) — 볼 수 있을 때만
+ *   sketch.sheet   { id, key }   따로 그린 그림 한 장 (릴레이) — 볼 수 있을 때만
  *   sketch.album   { id }        릴레이 앨범 (앨범을 넘길 때부터)
  *
  * 그림 맞히기 진행은 그리는 사람 · 리더 화면이 요청하고, 다른 모드는 서버가 단계를 넘김
@@ -62,11 +61,6 @@ export type Phase =
   | "f-vote"
   | "f-guess"
   | "f-result"
-  // 그림 속 거짓말: 다 같이 그리기 · 가짜 제목 쓰기 · 고르기 · 공개
-  | "l-draw"
-  | "l-write"
-  | "l-pick"
-  | "l-show"
   // 그림 릴레이: 첫 문장 · 그리기 · 문장으로 · 앨범
   | "r-write"
   | "r-draw"
@@ -151,20 +145,6 @@ interface FakeState {
   guess?: string;
   win?: "fake" | "artists" | "gone";
 }
-/** 그림 속 거짓말 공개 상태 */
-interface LieState {
-  kind: "lie";
-  /** 이번 판에 끼어 있는 사람 */
-  players: string[];
-  /** 그린 사람들 (그림 보여 주는 순서) */
-  order: string[];
-  idx: number;
-  artist: string;
-  done: string[];
-  options?: { id: string; text: string }[];
-  show?: { id: string; text: string; truth: boolean; authors: string[]; pickers: string[] }[];
-  prompt?: string;
-}
 /** 그림 릴레이 공개 상태 */
 interface RelayState {
   kind: "relay";
@@ -174,7 +154,7 @@ interface RelayState {
   done: string[];
   album?: { chain: number; page: number };
 }
-type ModeState = FakeState | LieState | RelayState;
+type ModeState = FakeState | RelayState;
 
 /** 릴레이 한 칸 */
 interface RelayEntry {
@@ -191,11 +171,6 @@ interface ModeSecret {
   /** 이번 획의 그림 묶음 (한 획만) */
   strokeG?: string;
   fakeVotes?: Record<string, string>;
-  /** 그림 속 거짓말: 사람 → 제시어, 지금 그림의 가짜 제목 · 고른 것 · 보기 작성자 */
-  prompts?: Record<string, string>;
-  lies?: Record<string, string>;
-  picks?: Record<string, string>;
-  authors?: Record<string, string[] | "truth">;
   /** 그림 릴레이 */
   chains?: RelayEntry[][];
 }
@@ -647,7 +622,7 @@ export function registerSketch({ gateway, users }: Deps, opts: SketchOptions = {
     rounds: z.number().int().min(1).max(10),
     hints: z.boolean(),
     password: z.string().max(100),
-    mode: z.enum(["classic", "fake", "lie", "relay"]).default("classic"),
+    mode: z.enum(["classic", "fake", "relay"]).default("classic"),
     challenge: z.boolean().default(true),
     topics: z.array(z.string().max(20)).max(20).default([]),
     custom: z.array(z.string().max(40)).max(200).default([]),
@@ -1177,11 +1152,6 @@ export function registerSketch({ gateway, users }: Deps, opts: SketchOptions = {
       if (key !== st.turnId || (st.phase !== "drawing" && st.phase !== "reveal")) return null;
       return { author: st.drawer, label: st.phase === "reveal" ? st.reveal : "" };
     }
-    if (m?.kind === "lie" && key.startsWith("l:") && (st.phase === "l-write" || st.phase === "l-pick" || st.phase === "l-show")) {
-      const author = key.slice(2);
-      if (!m.order.slice(0, m.idx + 1).includes(author)) return null;
-      return { author, label: st.phase === "l-show" ? (m.prompt ?? "") : "" };
-    }
     if (m?.kind === "relay" && (st.phase === "r-album" || st.phase === "ended") && key.startsWith("r:")) {
       const [, c, k] = key.split(":").map(Number);
       const e = room.mx.chains?.[c]?.[k];
@@ -1254,16 +1224,6 @@ export function registerSketch({ gateway, users }: Deps, opts: SketchOptions = {
       const faker = room.mx.faker === uid;
       return { topic: m.topic, faker, word: faker ? null : (room.mx.word ?? null) };
     }
-    if (m.kind === "lie") {
-      return {
-        prompt: room.mx.prompts?.[uid] ?? null,
-        lie: room.mx.lies?.[uid] ?? null,
-        pick: room.mx.picks?.[uid] ?? null,
-        mine: Object.entries(room.mx.authors ?? {})
-          .filter(([, a]) => a !== "truth" && a.includes(uid))
-          .map(([oid]) => oid),
-      };
-    }
     if (m.kind === "relay") {
       const i = m.order.indexOf(uid);
       if (i < 0 || st.phase === "r-album" || st.phase === "ended") return null;
@@ -1289,11 +1249,6 @@ export function registerSketch({ gateway, users }: Deps, opts: SketchOptions = {
   function canSeeSheet(room: Room, uid: string, key: string): boolean {
     const st = room.state;
     const m = st.m;
-    if (m?.kind === "lie" && key.startsWith("l:")) {
-      const who = key.slice(2);
-      if (who === uid || st.phase === "ended") return true;
-      return st.phase !== "l-draw" && m.order.slice(0, m.idx + 1).includes(who);
-    }
     if (m?.kind === "relay" && key.startsWith("r:")) {
       if (albumOpen(room)) return true;
       const [, c, k] = key.split(":").map(Number);
@@ -1329,7 +1284,6 @@ export function registerSketch({ gateway, users }: Deps, opts: SketchOptions = {
     room.strokes = new Map();
     room.strokesTurn = "";
     if (mode === "fake") startFake(room, order, 1);
-    else if (mode === "lie") startLie(room, order);
     else if (mode === "relay") startRelay(room, order);
     systemChat(room, `${MODES[mode].emoji} ${MODES[mode].name} 시작!`);
   }
@@ -1427,88 +1381,6 @@ export function registerSketch({ gateway, users }: Deps, opts: SketchOptions = {
     );
   }
 
-  // ── 그림 속 거짓말 ──
-
-  function startLie(room: Room, order: string[]) {
-    const prompts = pickPrompts(order.length);
-    room.mx = { prompts: Object.fromEntries(order.map((u, i) => [u, prompts[i]])) };
-    room.sheets = {};
-    const m: LieState = { kind: "lie", players: order, order, idx: -1, artist: "", done: [] };
-    setPhase(room, "l-draw", Math.max(60, room.meta.drawTime) * 1000, { m, drawer: "", turnId: orderedId() });
-    changed(room);
-    pushSecrets(room);
-  }
-  function lieNext(room: Room) {
-    const m = room.state.m as LieState;
-    // 그림을 낸 사람만, 처음 넘어갈 때 순서를 섞음
-    const order = m.idx < 0 ? shuffle(m.order.filter((u) => room.sheets[`l:${u}`]?.length)) : m.order;
-    const idx = m.idx + 1;
-    if (idx >= order.length) return endGame(room);
-    const artist = order[idx];
-    room.mx = { ...room.mx, lies: {}, picks: {}, authors: {} };
-    setPhase(room, "l-write", MODE_MS.lieWrite, { m: { kind: "lie", players: m.players, order, idx, artist, done: [] }, turnId: orderedId() });
-    changed(room);
-    pushSecrets(room);
-  }
-  function liePick(room: Room) {
-    const m = room.state.m as LieState;
-    const truth = room.mx.prompts?.[m.artist] ?? "";
-    const authors: Record<string, string[] | "truth"> = {};
-    const byText = new Map<string, string>();
-    const options: { id: string; text: string }[] = [];
-    const add = (text: string, author: string | null) => {
-      const k = normalizeAnswer(text);
-      const have = byText.get(k);
-      if (have) {
-        const a = authors[have];
-        if (author && a !== "truth") a.push(author);
-        return;
-      }
-      const oid = `o${options.length}`;
-      byText.set(k, oid);
-      authors[oid] = author === null ? "truth" : author ? [author] : [];
-      options.push({ id: oid, text });
-    };
-    add(truth, null);
-    for (const [u, t] of Object.entries(room.mx.lies ?? {})) add(t, u);
-    // 보기가 너무 적으면 서버가 만든 가짜를 섞음 (아무도 안 썼을 때)
-    for (const t of pickPrompts(6)) if (options.length < 3) add(t, "");
-    // 보기 id 를 섞어서 순서로 진짜를 알 수 없게
-    const mixed = shuffle(options);
-    const ids = new Map(mixed.map((o, i) => [o.id, `p${i}`]));
-    room.mx.authors = Object.fromEntries(Object.entries(authors).map(([k, v]) => [ids.get(k)!, v]));
-    room.mx.picks = {};
-    setPhase(room, "l-pick", MODE_MS.liePick, { m: { ...m, done: [], options: mixed.map((o) => ({ id: ids.get(o.id)!, text: o.text })) } });
-    changed(room);
-    pushSecrets(room);
-  }
-  function lieShow(room: Room) {
-    const m = room.state.m as LieState;
-    const authors = room.mx.authors ?? {};
-    const picks = room.mx.picks ?? {};
-    const show = (m.options ?? []).map((o) => {
-      const a = authors[o.id];
-      const pickers = Object.keys(picks).filter((u) => picks[u] === o.id);
-      return { id: o.id, text: o.text, truth: a === "truth", authors: a === "truth" ? [] : a, pickers };
-    });
-    for (const o of show)
-      for (const u of o.pickers) {
-        if (o.truth) {
-          addScore(room, u, MODE_POINTS.lieTruth);
-          addScore(room, m.artist, MODE_POINTS.lieArtistPer);
-        } else
-          for (const a of o.authors) {
-            addScore(room, a, MODE_POINTS.lieFooledPer);
-            users.bump(a, { "stats.sketch.fooled": 1 });
-          }
-      }
-    room.scored = true;
-    const prompt = room.mx.prompts?.[m.artist] ?? "";
-    setPhase(room, "l-show", MODE_MS.lieShow, { m: { ...m, show, prompt } });
-    changed(room);
-    pushSecrets(room);
-  }
-
   // ── 그림 릴레이 ──
 
   function startRelay(room: Room, order: string[]) {
@@ -1570,13 +1442,7 @@ export function registerSketch({ gateway, users }: Deps, opts: SketchOptions = {
     const m = st.m;
     if (!m) return;
     const present = (list: string[]) => list.filter((u) => room.players[u]);
-    if (m.kind === "lie") {
-      const need = st.phase === "l-draw" ? present(m.players) : present(m.players).filter((u) => u !== m.artist);
-      if (!need.every((u) => m.done.includes(u))) return;
-      if (st.phase === "l-draw") lieNext(room);
-      else if (st.phase === "l-write") liePick(room);
-      else if (st.phase === "l-pick") lieShow(room);
-    } else if (m.kind === "relay") {
+    if (m.kind === "relay") {
       if (st.phase === "r-album") return;
       if (present(m.order).every((u) => m.done.includes(u))) relayAdvance(room);
     } else if (m.kind === "fake" && st.phase === "f-vote") {
@@ -1609,18 +1475,6 @@ export function registerSketch({ gateway, users }: Deps, opts: SketchOptions = {
         else startFake(room, Object.keys(room.scores).filter((u) => room.players[u]).sort((a, b) => (room.seen[a] ?? 0) - (room.seen[b] ?? 0)), m.game + 1);
         break;
       }
-      case "l-draw":
-        lieNext(room);
-        break;
-      case "l-write":
-        liePick(room);
-        break;
-      case "l-pick":
-        lieShow(room);
-        break;
-      case "l-show":
-        lieNext(room);
-        break;
       case "r-write":
       case "r-draw":
       case "r-desc":
@@ -1634,7 +1488,7 @@ export function registerSketch({ gateway, users }: Deps, opts: SketchOptions = {
   });
 
   const sheetSchema = z.array(strokeSchema).max(4000);
-  /** 따로 그린 그림 내기 (거짓말 · 릴레이) */
+  /** 따로 그린 그림 내기 (릴레이) */
   gateway.rpc("sketch.submitSheet", (ctx, raw) => {
     const { id, step, strokes } = z.object({ id: roomId, step: z.number().int(), strokes: sheetSchema }).parse(raw);
     const { room, uid } = asPlayer(ctx, id);
@@ -1642,11 +1496,7 @@ export function registerSketch({ gateway, users }: Deps, opts: SketchOptions = {
     const m = st.m;
     if (st.step !== step || !m) return null;
     if (JSON.stringify(strokes).length > 600_000) throw bad("그림이 너무 커요.");
-    if (st.phase === "l-draw" && m.kind === "lie") {
-      if (!m.players.includes(uid) || m.done.includes(uid)) return null;
-      room.sheets[`l:${uid}`] = strokes;
-      room.state = { ...st, m: { ...m, done: [...m.done, uid] } };
-    } else if (st.phase === "r-draw" && m.kind === "relay") {
+    if (st.phase === "r-draw" && m.kind === "relay") {
       const i = m.order.indexOf(uid);
       if (i < 0 || m.done.includes(uid)) return null;
       const n = m.order.length;
@@ -1662,7 +1512,7 @@ export function registerSketch({ gateway, users }: Deps, opts: SketchOptions = {
     return null;
   });
 
-  /** 글 내기: 거짓말 가짜 제목 · 가짜 화가의 마지막 기회 · 릴레이 문장 */
+  /** 글 내기: 가짜 화가의 마지막 기회 · 릴레이 문장 */
   gateway.rpc("sketch.submitText", (ctx, raw) => {
     const { id, step, text: rawText } = z.object({ id: roomId, step: z.number().int(), text: z.string().min(1).max(80) }).parse(raw);
     const { room, uid } = asPlayer(ctx, id);
@@ -1670,14 +1520,7 @@ export function registerSketch({ gateway, users }: Deps, opts: SketchOptions = {
     const m = st.m;
     const text = rawText.replace(/\s+/g, " ").trim();
     if (st.step !== step || !m || !text) return null;
-    if (st.phase === "l-write" && m.kind === "lie") {
-      if (uid === m.artist || !m.players.includes(uid) || m.done.includes(uid)) return null;
-      const truth = room.mx.prompts?.[m.artist] ?? "";
-      if (normalizeAnswer(text) === normalizeAnswer(truth))
-        throw new AppError("TOO_CLOSE", "앗, 그게 진짜 제목이에요! 들키지 않게 다른 걸로 써 보세요 🤫", 409);
-      room.mx.lies = { ...room.mx.lies, [uid]: text.slice(0, 30) };
-      room.state = { ...st, m: { ...m, done: [...m.done, uid] } };
-    } else if (st.phase === "f-guess" && m.kind === "fake") {
+    if (st.phase === "f-guess" && m.kind === "fake") {
       if (uid !== room.mx.faker) return null;
       const ok = normalizeAnswer(text) === normalizeAnswer(room.mx.word ?? "");
       fakeFinish(room, { caught: true, guessed: ok, guess: text.slice(0, 20) });
@@ -1690,25 +1533,6 @@ export function registerSketch({ gateway, users }: Deps, opts: SketchOptions = {
       room.mx.chains![c][m.step] = { by: uid, text: text.slice(0, 60) };
       room.state = { ...st, m: { ...m, done: [...m.done, uid] } };
     } else return null;
-    changed(room);
-    pushSecrets(room);
-    maybeAdvance(room);
-    return null;
-  });
-
-  /** 거짓말: 진짜라고 생각하는 제목 고르기 */
-  gateway.rpc("sketch.pick", (ctx, raw) => {
-    const { id, step, option } = z.object({ id: roomId, step: z.number().int(), option: z.string().max(8) }).parse(raw);
-    const { room, uid } = asPlayer(ctx, id);
-    const st = room.state;
-    const m = st.m;
-    if (st.step !== step || st.phase !== "l-pick" || m?.kind !== "lie") return null;
-    if (uid === m.artist || !m.players.includes(uid) || m.done.includes(uid)) return null;
-    const a = room.mx.authors?.[option];
-    if (!a) return null;
-    if (a !== "truth" && a.includes(uid)) throw bad("내가 쓴 건 고를 수 없어요.");
-    room.mx.picks = { ...room.mx.picks, [uid]: option };
-    room.state = { ...st, m: { ...m, done: [...m.done, uid] } };
     changed(room);
     pushSecrets(room);
     maybeAdvance(room);
@@ -1774,6 +1598,11 @@ export function registerSketch({ gateway, users }: Deps, opts: SketchOptions = {
     restore(data, downMs) {
       for (const r of data as (Omit<Room, "strokes" | "access" | "owners"> & { strokes: [string, unknown][]; access: string[] })[]) {
         // 차례 시간은 내려가 있던 만큼 미룸 (그 사이 아무도 그리거나 맞힐 수 없었으니)
+        // 없어진 모드(그림 속 거짓말)로 저장된 방은 그림 맞히기 대기실로
+        if ((r.meta.mode as string) === "lie") {
+          r.meta = { ...r.meta, mode: "classic" };
+          r.state = emptyState();
+        }
         const st0: State = { ...emptyState(), ...r.state };
         const state = st0.endsAt ? { ...st0, endsAt: st0.endsAt + downMs } : st0;
         rooms.set(r.id, {

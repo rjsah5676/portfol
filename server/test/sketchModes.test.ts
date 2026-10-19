@@ -121,46 +121,6 @@ describe("가짜 화가", () => {
   });
 });
 
-describe("그림 속 거짓말", () => {
-  it("각자 그림 → 가짜 제목(진짜와 같으면 거절) → 고르기(내 것 못 고름) → 공개 · 점수", async () => {
-    const { id, host, all } = await roomOf(3, { mode: "lie" });
-    await host.rpc("sketch.startGame", { id });
-    let room = await peek(id);
-    expect(room.state.phase).toBe("l-draw");
-    const prompts = new Map<string, string>();
-    for (const c of all) prompts.set(c.uid!, (await c.sub("sketch.secret", { id })).data.prompt);
-    expect(new Set(prompts.values()).size).toBe(3);
-    // 그린 사람만 자기 그림을 봄
-    await expect(all[1].sub("sketch.sheet", { id, key: `l:${all[0].uid}` })).rejects.toMatchObject({ code: "FORBIDDEN" });
-    for (const c of all) await c.rpc("sketch.submitSheet", { id, step: room.state.step, strokes: [stroke("a", true)] });
-    room = await peek(id);
-    expect(room.state.phase).toBe("l-write");
-    const artist = byUid(all, room.state.m.artist);
-    const others = all.filter((c) => c !== artist);
-    // 이제 다들 그 그림을 볼 수 있음
-    expect((await others[0].sub("sketch.sheet", { id, key: `l:${artist.uid}` })).data).toHaveLength(1);
-    await expect(others[0].rpc("sketch.submitText", { id, step: room.state.step, text: prompts.get(artist.uid!)! })).rejects.toMatchObject({ code: "TOO_CLOSE" });
-    await others[0].rpc("sketch.submitText", { id, step: room.state.step, text: "춤추는 감자" });
-    await others[1].rpc("sketch.submitText", { id, step: room.state.step, text: "졸린 햄버거" });
-    room = await peek(id);
-    expect(room.state.phase).toBe("l-pick");
-    const opts = room.state.m.options as { id: string; text: string }[];
-    expect(opts.map((o) => o.text).sort()).toEqual(["졸린 햄버거", "춤추는 감자", prompts.get(artist.uid!)!].sort());
-    const potato = opts.find((o) => o.text === "춤추는 감자")!;
-    const truth = opts.find((o) => o.text === prompts.get(artist.uid!))!;
-    await expect(others[0].rpc("sketch.pick", { id, step: room.state.step, option: potato.id })).rejects.toMatchObject({ code: "BAD_REQUEST" });
-    await others[0].rpc("sketch.pick", { id, step: room.state.step, option: truth.id });
-    await others[1].rpc("sketch.pick", { id, step: room.state.step, option: potato.id });
-    room = await peek(id);
-    expect(room.state.phase).toBe("l-show");
-    expect(room.state.m.prompt).toBe(prompts.get(artist.uid!));
-    // 진짜 고름 +100, 그린 사람 +50, 내 가짜에 속은 사람 1명 → +50
-    expect(room.scores[others[0].uid!].score).toBe(150);
-    expect(room.scores[others[1].uid!].score).toBe(0);
-    expect(room.scores[artist.uid!].score).toBe(50);
-  });
-});
-
 describe("그림 릴레이", () => {
   it("문장 → 그림 → 문장, 이어받은 것만 보이고, 끝나면 앨범을 같이 넘김", async () => {
     const { id, host, all } = await roomOf(3, { mode: "relay" });

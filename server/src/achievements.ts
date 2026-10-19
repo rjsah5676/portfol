@@ -97,7 +97,6 @@ export async function metricsOf(db: Database, uid: string, game: AchGame): Promi
     m["sketch.likes"] = k.likes ?? 0;
     m["sketch.fakeWin"] = k.fakeWin ?? 0;
     m["sketch.fakeFound"] = k.fakeFound ?? 0;
-    m["sketch.fooled"] = k.fooled ?? 0;
     m["sketch.relay"] = k.relay ?? 0;
   }
 

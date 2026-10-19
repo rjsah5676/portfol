@@ -18,7 +18,7 @@ function SketchPage() {
           title="DOODLE PARTY"
           en="Drawing Party Game"
           accent="#FF6B6B"
-          desc="그림 맞히기 · 가짜 화가 · 그림 속 거짓말 · 그림 릴레이, 최대 8명 그림 파티게임"
+          desc="그림 맞히기 · 가짜 화가 · 그림 릴레이, 최대 8명 그림 파티게임"
           tags={["최대 8명", "초대 링크", "캐치마인드류", "온라인 그림 게임"]}
           guide={SKETCH_GUIDE}
           ach="sketch"

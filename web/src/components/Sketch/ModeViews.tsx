@@ -2,7 +2,7 @@
 
 /*
  * DOODLE PARTY — 그림 맞히기 말고 다른 모드의 가운데 화면 (도화지 자리)
- *   가짜 화가(f-*) · 그림 속 거짓말(l-*) · 그림 릴레이(r-*)
+ *   가짜 화가(f-*) · 그림 릴레이(r-*)
  * 대기실 · 최종 결과는 SketchRoom 이 같이 그림.
  */
 
@@ -14,7 +14,6 @@ import { randomStarter } from "@/lib/sketch/prompts";
 import { playSfx } from "@/lib/sketch/sfx";
 import {
   likeDrawing,
-  pickOption,
   submitSheet,
   submitText,
   subscribeAlbum,
@@ -24,8 +23,6 @@ import {
   voteFake,
   type FakeSecret,
   type FakeState,
-  type LieSecret,
-  type LieState,
   type RelayEntry,
   type RelaySecret,
   type RelayState,
@@ -43,7 +40,7 @@ import SketchCanvas, {
 import Toolbar, { useTools } from "./Toolbar";
 import { tap } from "./stage";
 
-export type AnySecret = FakeSecret | LieSecret | RelaySecret | null;
+export type AnySecret = FakeSecret | RelaySecret | null;
 
 /** 지금 단계가 다른 모드의 진행 중 단계인지 */
 export const isModePhase = (phase: string) => /^[flr]-/.test(phase);
@@ -59,10 +56,6 @@ export function phaseTotal(room: Room): number {
         "f-vote": MODE_MS.fakeVote,
         "f-guess": MODE_MS.fakeGuess,
         "f-result": MODE_MS.fakeResult,
-        "l-draw": Math.max(60_000, draw),
-        "l-write": MODE_MS.lieWrite,
-        "l-pick": MODE_MS.liePick,
-        "l-show": MODE_MS.lieShow,
         "r-write": MODE_MS.relayWrite,
         "r-draw": draw,
         "r-desc": MODE_MS.relayDesc,
@@ -436,40 +429,6 @@ export function modeStatus(room: Room, uid: string, secret: AnySecret, big: bool
       </span>
     );
   }
-  if (m.kind === "lie") {
-    const s = secret as LieSecret | null;
-    if (st.phase === "l-draw")
-      return s?.prompt ? (
-        <span className="flex min-w-0 items-center gap-2">
-          <span className="shrink-0 rounded-full border-2 border-[var(--ink)] bg-[var(--sun)] px-2 py-0.5 text-[12px] font-extrabold">
-            그릴 것
-          </span>
-          <span className="sk-hand truncate" style={{ fontSize: fs }}>
-            {s.prompt}
-          </span>
-        </span>
-      ) : (
-        <span className="sk-hand" style={{ fontSize: fs }}>
-          다들 그리는 중…
-        </span>
-      );
-    const label =
-      st.phase === "l-write"
-        ? "가짜 제목 짓기"
-        : st.phase === "l-pick"
-          ? "진짜 제목은?"
-          : "정답 공개!";
-    return (
-      <span className="flex items-center gap-2">
-        <span className="sk-hand" style={{ fontSize: fs }}>
-          {label}
-        </span>
-        <span className="text-[12px] font-bold text-[var(--ink3)]">
-          {m.idx + 1}/{m.order.length}번째 그림
-        </span>
-      </span>
-    );
-  }
   const s = secret as RelaySecret | null;
   if (st.phase === "r-album")
     return (
@@ -516,17 +475,6 @@ export default function ModeCenter({
   if (!m) return null;
   if (m.kind === "fake")
     return <FakeCenter room={room} uid={uid} v={v} m={m} secret={secret as FakeSecret | null} />;
-  if (m.kind === "lie")
-    return (
-      <LieCenter
-        room={room}
-        uid={uid}
-        v={v}
-        m={m}
-        secret={secret as LieSecret | null}
-        remaining={remaining}
-      />
-    );
   return (
     <RelayCenter
       room={room}
@@ -781,196 +729,6 @@ function FakeCenter({
           <LikeButton room={room} uid={uid} likeKey={st.turnId} author="" />
         </div>
       )}
-    </div>
-  );
-}
-
-// ── 그림 속 거짓말 ──
-
-function LieCenter({
-  room,
-  uid,
-  v,
-  m,
-  secret,
-  remaining,
-}: {
-  room: Room;
-  uid: string;
-  v: boolean;
-  m: LieState;
-  secret: LieSecret | null;
-  remaining: number;
-}) {
-  const st = room.state;
-  const inGame = m.players.includes(uid);
-  const here = m.players.filter((u) => room.players[u]);
-  const sheet = useSheet(room.id, st.phase === "l-draw" ? null : `l:${m.artist}`, st.step);
-
-  if (st.phase === "l-draw") {
-    if (inGame && !m.done.includes(uid) && secret?.prompt)
-      return (
-        <DrawPad
-          key={st.step}
-          roomId={room.id}
-          step={st.step}
-          v={v}
-          remaining={remaining}
-          head={
-            <Note tone="sun">
-              🤥 「<b>{secret.prompt}</b>」을(를) 그려요 — 제목은 비밀! 다른 사람들이 가짜 제목을
-              지어요
-            </Note>
-          }
-        />
-      );
-    return (
-      <div className="sk-card flex min-h-[260px] w-full items-center justify-center p-4">
-        <Waiting
-          room={room}
-          need={here}
-          done={m.done}
-          text={inGame ? "다 그렸어요! 다른 사람을 기다리는 중" : "다들 그리는 중…"}
-        />
-      </div>
-    );
-  }
-
-  const artist = m.artist;
-  const mineArt = artist === uid;
-  const sheetBox = (
-    <div className={st.phase === "l-write" ? "w-full" : v ? "w-full" : "mx-auto w-[470px]"}>
-      <SheetView id={`l:${artist}:${st.step}`} strokes={sheet}>
-        <span className="absolute top-2 left-2 z-[5] flex items-center gap-1 rounded-full border-2 border-[var(--ink)] bg-white/90 py-0.5 pr-2 pl-0.5 text-[12px] font-bold">
-          <Avatar idx={avatarOf(artist)} size={22} /> {nameOf(room, artist)}의 그림
-        </span>
-      </SheetView>
-    </div>
-  );
-
-  let below: ReactNode = null;
-  if (st.phase === "l-write") {
-    const writers = here.filter((u) => u !== artist);
-    below = mineArt ? (
-      <Note tone="grape">
-        🎨 내 그림이에요! 다들 그럴듯한 가짜 제목을 짓는 중 ({m.done.length}/{writers.length})
-      </Note>
-    ) : !inGame ? (
-      <Note tone="mint">
-        다들 가짜 제목을 짓는 중… ({m.done.length}/{writers.length})
-      </Note>
-    ) : secret?.lie ? (
-      <Note tone="mint">
-        내 가짜 제목: 「<b>{secret.lie}</b>」 · 다른 사람 기다리는 중 ({m.done.length}/
-        {writers.length})
-      </Note>
-    ) : (
-      <div className="sk-card-soft flex flex-col gap-1.5 px-3 py-2.5">
-        <p className="text-[13px] font-bold text-[var(--ink2)]">
-          이 그림의 <b className="text-[var(--coral)]">그럴듯한 가짜 제목</b>을 써요. 남이 속아서
-          고르면 +{50}점!
-        </p>
-        <TextBox
-          placeholder="예: 다이어트 중인 펭귄"
-          max={30}
-          remaining={remaining}
-          onSubmit={(x) => submitText(room.id, st.step, x)}
-        />
-      </div>
-    );
-  } else if (st.phase === "l-pick") {
-    const opts = m.options ?? [];
-    const myPick = secret?.pick;
-    const canPick = inGame && !mineArt && !myPick;
-    below = (
-      <div className="sk-card-soft flex flex-col gap-2 px-3 py-2.5">
-        <p className="sk-hand text-center text-[19px] leading-none">
-          {mineArt
-            ? "다들 진짜 제목을 고르는 중…"
-            : myPick
-              ? "골랐어요! 결과를 기다려요"
-              : "진짜 제목은 무엇일까요?"}
-        </p>
-        <div className={`grid gap-1.5 ${v ? "grid-cols-1" : "grid-cols-2"}`}>
-          {opts.map((o) => {
-            const mine = secret?.mine?.includes(o.id);
-            const picked = myPick === o.id;
-            return (
-              <button
-                key={o.id}
-                type="button"
-                disabled={!canPick || mine}
-                onClick={() => {
-                  playSfx("sfx-pick");
-                  pickOption(room.id, st.step, o.id).catch(() => {});
-                }}
-                className={`sk-btn justify-start px-3 py-2 text-left text-[15px] whitespace-normal ${picked ? "sk-btn-sun" : ""}`}
-              >
-                <span className="min-w-0 flex-1 break-keep">{o.text}</span>
-                {mine && (
-                  <span className="shrink-0 text-[11px] text-[var(--ink3)]">내가 쓴 것</span>
-                )}
-              </button>
-            );
-          })}
-        </div>
-        <p className="text-center text-[12px] font-bold text-[var(--ink3)]">
-          {m.done.length}/{here.filter((u) => u !== artist).length}명 골랐어요
-        </p>
-      </div>
-    );
-  } else if (st.phase === "l-show") {
-    const show = [...(m.show ?? [])].sort((a, b) => Number(a.truth) - Number(b.truth));
-    below = (
-      <div className="sk-card-soft flex flex-col gap-1.5 px-3 py-2.5">
-        <ul className="flex flex-col gap-1">
-          {show.map((o, i) => (
-            <li
-              key={o.id}
-              className="sk-pop flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border-2 px-2.5 py-1.5"
-              style={{
-                animationDelay: `${i * 0.35}s`,
-                borderColor: o.truth ? "#2EC4B6" : "var(--line)",
-                background: o.truth ? "rgba(46,196,182,0.15)" : "#fff",
-              }}
-            >
-              <span className="text-[16px]">{o.truth ? "✅" : "🤥"}</span>
-              <b className="min-w-0 text-[15px] break-keep">{o.text}</b>
-              <span className="text-[11.5px] font-bold text-[var(--ink2)]">
-                {o.truth
-                  ? `진짜! (${nameOf(room, artist)})`
-                  : o.authors.length
-                    ? `${o.authors.map((u) => nameOf(room, u)).join(", ")}의 거짓말`
-                    : "DOODLE의 함정"}
-              </span>
-              <span className="ml-auto flex items-center gap-0.5">
-                {o.pickers.map((u) => (
-                  <Avatar key={u} idx={avatarOf(u)} size={20} />
-                ))}
-                {o.pickers.length > 0 && (
-                  <span className="text-[11px] font-extrabold text-[var(--coral)]">
-                    {o.truth
-                      ? `+${100}`
-                      : o.authors.length
-                        ? `속음! (+${50 * o.pickers.length})`
-                        : "속음!"}
-                  </span>
-                )}
-              </span>
-            </li>
-          ))}
-        </ul>
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex w-full flex-col gap-2">
-      {sheetBox}
-      {below}
-      <div className="flex justify-center">
-        <LikeButton room={room} uid={uid} likeKey={`l:${artist}`} author={artist} />
-      </div>
     </div>
   );
 }

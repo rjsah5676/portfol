@@ -22,7 +22,6 @@ import skDraw from "@/img/guide/sk-draw.webp";
 import skGuess from "@/img/guide/sk-guess.webp";
 import skReveal from "@/img/guide/sk-reveal.webp";
 import skFake from "@/img/guide/sk-fake.webp";
-import skLie from "@/img/guide/sk-lie.webp";
 import skRelay from "@/img/guide/sk-relay.webp";
 import fightSelect from "@/img/guide/fight-select.webp";
 import fightStage from "@/img/guide/fight-stage.webp";
@@ -384,7 +383,7 @@ export const SKETCH_GUIDE: GuideDoc = {
       image: skModes,
       body: (
         <>
-          <B>빠른 시작</B>은 자리 있는 방에 바로 들어가요. <B>방 만들기</B>에서 4가지 모드 중 하나를
+          <B>빠른 시작</B>은 자리 있는 방에 바로 들어가요. <B>방 만들기</B>에서 3가지 모드 중 하나를
           고르고 시간 · 인원 · 비밀번호를 정해요. <B>초대 링크</B>로 온 친구는 비밀번호 없이 입장!
         </>
       ),
@@ -441,16 +440,6 @@ export const SKETCH_GUIDE: GuideDoc = {
       ),
     },
     {
-      title: "🤥 그림 속 거짓말",
-      image: skLie,
-      body: (
-        <>
-          각자 엉뚱한 제시어를 그리고, 남의 그림엔 <B>그럴듯한 가짜 제목</B>을 지어요. 진짜를 고르면
-          +100, 내 거짓말에 남이 속으면 +50!
-        </>
-      ),
-    },
-    {
       title: "📞 그림 릴레이",
       image: skRelay,
       body: (
@@ -464,10 +453,10 @@ export const SKETCH_GUIDE: GuideDoc = {
   lead: (
     <>
       친구들과 브라우저에서 바로 하는 그림 파티게임이에요. 캐치마인드처럼 그림 맞히기는 물론, 가짜
-      화가 · 그림 속 거짓말 · 그림 릴레이까지 4가지 모드를 스케치북 같은 전용 화면에서 즐겨요.
+      화가 · 그림 릴레이까지 3가지 모드를 스케치북 같은 전용 화면에서 즐겨요.
     </>
   ),
-  facts: ["👥 최대 8명", "🎮 모드 4가지", "👍 따봉 · 업적", "⛶ 전체화면"],
+  facts: ["👥 최대 8명", "🎮 모드 3가지", "👍 따봉 · 업적", "⛶ 전체화면"],
   sections: [
     {
       icon: "🚪",
@@ -514,15 +503,6 @@ export const SKETCH_GUIDE: GuideDoc = {
         <>가짜 화가 한 명은 제시어 대신 주제만 알아요. 모두 내 색으로 딱 한 획씩, 기본 네 바퀴(방에서 정해요).</>,
         <>투표로 가짜를 찾으면 화가들 +100, 못 찾으면 가짜 +200. 가짜를 맞게 고르면 +30.</>,
         <>들킨 가짜가 마지막에 제시어를 맞히면 역전 승리!</>,
-      ],
-    },
-    {
-      icon: "🤥",
-      title: "그림 속 거짓말",
-      items: [
-        <>각자 엉뚱한 제시어를 동시에 그려요. 제목은 나만 알아요.</>,
-        <>그림이 하나씩 나오면 나머지는 가짜 제목을 쓰고, 진짜라고 생각하는 걸 골라요.</>,
-        <>진짜를 고르면 +100 (그린 사람 +50), 내 가짜에 속은 사람 한 명당 +50.</>,
       ],
     },
     {

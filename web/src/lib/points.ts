@@ -281,7 +281,6 @@ export type AchMetric =
   | "sketch.likes"
   | "sketch.fakeWin"
   | "sketch.fakeFound"
-  | "sketch.fooled"
   | "sketch.relay"
   | "marble.games"
   | "marble.wins"
@@ -684,7 +683,6 @@ export const ACHIEVEMENTS: Achievement[] = [
   a("sketch", "fake-win-1", "완벽한 위장", "가짜 화가로 이기기", "sketch.fakeWin", 1, 450),
   a("sketch", "fake-win-10", "변장의 달인", "가짜 화가로 10번 이기기", "sketch.fakeWin", 10, 2250),
   a("sketch", "fake-found-10", "가짜 사냥꾼", "가짜 화가를 맞게 지목 10번", "sketch.fakeFound", 10, 750),
-  a("sketch", "fooled-10", "타고난 거짓말쟁이", "그림 속 거짓말에서 내 가짜 제목으로 10번 속이기", "sketch.fooled", 10, 750),
   a("sketch", "relay-5", "릴레이 완주", "그림 릴레이 5판 끝까지", "sketch.relay", 5, 450),
 
   // DICE TOWN

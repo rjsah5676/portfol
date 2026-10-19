@@ -493,11 +493,10 @@ export default function SketchRoom({
         const iAmFake = fm?.faker === uid;
         playSfx(fakeWon === iAmFake ? "jingle-allcorrect" : "jingle-fake-win");
         if (fakeWon === iAmFake) setConfetti(nextKey());
-      } else if (ph === "l-draw" || ph === "r-write") {
+      } else if (ph === "r-write") {
         playSfx("jingle-start");
         setBanner({ s: "ready", k: nextKey() });
-      } else if (ph === "l-show") playSfx("jingle-truth");
-      else if (ph === "r-album") {
+      } else if (ph === "r-album") {
         if (p.phase !== "r-album") playSfx("jingle-reveal");
       } else playSfx("sfx-turn");
     } else if (turnChanged) {

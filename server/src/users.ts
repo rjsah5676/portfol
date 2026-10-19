@@ -40,7 +40,6 @@ export interface UserStats {
     likes?: number;
     fakeWin?: number;
     fakeFound?: number;
-    fooled?: number;
     relay?: number;
   };
   /** 격투 온라인 경기 수 */

@@ -7,7 +7,7 @@ import {
 } from "@/lib/api/socket";
 import { WrongPasswordError } from "@/lib/roomLock";
 import { normalizeAnswer } from "@/lib/sketch/words";
-import { FAKE_LAPS, type Challenge, type GameMode } from "@/lib/sketch/modes";
+import { FAKE_LAPS, MODES, type Challenge, type GameMode } from "@/lib/sketch/modes";
 
 export { WrongPasswordError };
 
@@ -38,10 +38,6 @@ export type Phase =
   | "f-vote"
   | "f-guess"
   | "f-result"
-  | "l-draw"
-  | "l-write"
-  | "l-pick"
-  | "l-show"
   | "r-write"
   | "r-draw"
   | "r-desc"
@@ -123,26 +119,6 @@ export interface FakeState {
   guess?: string;
   win?: "fake" | "artists" | "gone";
 }
-export interface LieOption {
-  id: string;
-  text: string;
-}
-export interface LieShow extends LieOption {
-  truth: boolean;
-  authors: string[];
-  pickers: string[];
-}
-export interface LieState {
-  kind: "lie";
-  players: string[];
-  order: string[];
-  idx: number;
-  artist: string;
-  done: string[];
-  options?: LieOption[];
-  show?: LieShow[];
-  prompt?: string;
-}
 export interface RelayState {
   kind: "relay";
   order: string[];
@@ -151,7 +127,7 @@ export interface RelayState {
   done: string[];
   album?: { chain: number; page: number };
 }
-export type ModeState = FakeState | LieState | RelayState;
+export type ModeState = FakeState | RelayState;
 
 /** 나만 아는 것 (모드마다) */
 export interface FakeSecret {
@@ -159,13 +135,6 @@ export interface FakeSecret {
   faker?: boolean;
   word?: string | null;
   watching?: boolean;
-}
-export interface LieSecret {
-  prompt: string | null;
-  lie: string | null;
-  pick: string | null;
-  /** 내가 쓴 보기 id */
-  mine: string[];
 }
 export interface RelaySecret {
   task: "write" | "draw" | "desc";
@@ -278,11 +247,14 @@ const DEFAULT_META = {
   laps: FAKE_LAPS,
 };
 
+/** 없어진 모드(그림 속 거짓말)로 온 방은 그림 맞히기로 (배포 사이에 잠깐) */
+const fixMode = (m: SketchMeta): SketchMeta => (m.mode in MODES ? m : { ...m, mode: "classic" });
+
 function normalizeRoom(id: string, v: Record<string, unknown> | null): SketchRoom | null {
   if (!v || !v.meta) return null;
   return {
     id,
-    meta: { ...DEFAULT_META, ...(v.meta as SketchMeta) },
+    meta: fixMode({ ...DEFAULT_META, ...(v.meta as SketchMeta) }),
     players: (v.players as Record<string, SketchPlayer>) ?? {},
     scores: (v.scores as Record<string, SketchScore>) ?? {},
     state: { ...EMPTY_STATE, ...((v.state as Partial<SketchState>) ?? {}) },
@@ -663,7 +635,7 @@ export async function relayGuess(roomId: string, g: Guess, close = false) {
 
 // ───────────── 따봉 · 건너뛰기 ─────────────
 
-/** 따봉 (한 그림에 한 번) — 키: 그림 맞히기는 turnId, 거짓말은 "l:<그린 사람>", 릴레이는 "r:<줄>:<칸>" */
+/** 따봉 (한 그림에 한 번) — 키: 그림 맞히기는 turnId, 릴레이는 "r:<줄>:<칸>" */
 export async function likeDrawing(roomId: string, key: string) {
   await rpc("sketch.like", { id: roomId, key }).catch(() => {});
 }
@@ -680,12 +652,9 @@ export async function tick(roomId: string, step: number, force = false) {
 export async function submitSheet(roomId: string, step: number, strokes: Stroke[]) {
   await rpc("sketch.submitSheet", { id: roomId, step, strokes });
 }
-/** 글 내기 — 거짓말에서 진짜 제목과 같으면 에러(TOO_CLOSE) */
+/** 글 내기 — 가짜 화가의 마지막 기회 · 릴레이 문장 */
 export async function submitText(roomId: string, step: number, text: string) {
   await rpc("sketch.submitText", { id: roomId, step, text });
-}
-export async function pickOption(roomId: string, step: number, option: string) {
-  await rpc("sketch.pick", { id: roomId, step, option });
 }
 export async function voteFake(roomId: string, step: number, target: string) {
   await rpc("sketch.vote", { id: roomId, step, target });
