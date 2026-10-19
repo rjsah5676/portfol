@@ -1205,6 +1205,7 @@ export default function SketchRoom({
       apiRef={apiRef}
       hideInk={blind}
       onStrokeEnd={challenge === "oneline" ? () => setOneDone(state.turnId) : undefined}
+      keepOnExit={challenge === "oneline"}
     >
       {blind && (
         <div className="pointer-events-none absolute inset-0 z-[3] flex flex-col items-center justify-center gap-1 rounded-[3px] bg-[repeating-linear-gradient(45deg,#fdf6e3_0_14px,#f6ead0_14px_28px)]">

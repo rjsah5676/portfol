@@ -275,6 +275,7 @@ export default function SketchCanvas({
   apiRef,
   onStrokeEnd,
   hideInk,
+  keepOnExit,
   children,
 }: {
   /** 그림 조각이 오가는 곳 (없으면 빈 도화지) */
@@ -289,6 +290,11 @@ export default function SketchCanvas({
   onStrokeEnd?: () => void;
   /** 그리는 사람 화면에서 그림을 가림 (눈 가리고 그리기) */
   hideInk?: boolean;
+  /**
+   * 도화지 밖으로 나가도 그 획을 끝내지 않음 (한 획만 그을 수 있을 때 — 한붓그리기 · 가짜 화가).
+   * 밖에 있는 동안은 가장자리에서 멈췄다가 다시 들어오면 같은 획으로 이어 그림
+   */
+  keepOnExit?: boolean;
   /** 도화지 위에 덮을 것 (안내 · 도장) */
   children?: React.ReactNode;
 }) {
@@ -445,6 +451,8 @@ export default function SketchCanvas({
     sent: number;
     color: string;
     width: number;
+    /** 지금 도화지 밖 (keepOnExit 일 때) */
+    outside?: boolean;
   } | null>(null);
   const flushTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -483,8 +491,11 @@ export default function SketchCanvas({
     else if (e.pointerType === "touch" && penSeen.current) return;
     if (drawing.current) {
       // 손바닥으로 시작된 획 중에 펜이 닿으면 손 획은 끝내고 펜으로
+      // (도화지 밖에서 펜을 떼서 뗀 게 안 온 채 남은 획도 여기서 끝남)
       if (e.pointerType !== "pen") return;
       endStroke();
+      // 한 획만 그을 수 있을 땐 새 획을 시작하지 않음 (한붓그리기 잠금이 풀리던 것)
+      if (keepOnExit) return;
     }
     const pt = toCanvas(e.clientX, e.clientY);
     const g = groupId();
@@ -509,6 +520,9 @@ export default function SketchCanvas({
     e.currentTarget.setPointerCapture(e.pointerId);
     activeId.current = e.pointerId;
     document.addEventListener("touchmove", holdPage, { passive: false });
+    // 도화지 밖에서 손 · 펜을 떼도 그 획이 끝나게 (캡처가 풀려 도화지에 up 이 안 오는 경우)
+    window.addEventListener("pointerup", upAnywhere);
+    window.addEventListener("pointercancel", upAnywhere);
     const col = tool === "eraser" ? BG : color;
     const w = tool === "eraser" ? Math.max(width, 16) : width;
     drawing.current = { g, pts: [pt], sent: 0, color: col, width: w };
@@ -550,27 +564,40 @@ export default function SketchCanvas({
       const pt: Pt = out
         ? [Math.max(0, Math.min(CANVAS_W, raw[0])), Math.max(0, Math.min(CANVAS_H, raw[1]))]
         : raw;
+      // 한 획만 그을 수 있을 땐 끝내지 않고: 나가는 순간 가장자리 점 하나만 찍고, 밖에서는 안 그림
+      if (keepOnExit && out) {
+        if (d.outside) continue;
+        d.outside = true;
+      } else if (!out) d.outside = false;
       const last = d.pts[d.pts.length - 1];
       if (Math.hypot(pt[0] - last[0], pt[1] - last[1]) < 1.5) continue;
       d.pts.push(pt);
       grp?.pts.push(pt);
       added = true;
-      if (out) break;
+      if (out && !keepOnExit) break;
     }
     const c = ctx();
     if (added && c && grp) {
       drawIncremental(c, grp);
       tails();
     }
-    if (out) endStroke();
+    if (out && !keepOnExit) endStroke();
   };
 
+  // 창 어디서든 그 포인터를 떼면 끝 (최신 endStroke 를 부르도록 ref 로)
+  const endRef = useRef<() => void>(() => {});
+  const upAnywhereRef = useRef((ev: PointerEvent) => {
+    if (ev.pointerId === activeId.current) endRef.current();
+  });
+  const upAnywhere = upAnywhereRef.current;
   const onUp = (e: React.PointerEvent<HTMLCanvasElement>) => {
     if (e.pointerId === activeId.current) endStroke();
   };
   const endStroke = () => {
     activeId.current = null;
     document.removeEventListener("touchmove", holdPage);
+    window.removeEventListener("pointerup", upAnywhere);
+    window.removeEventListener("pointercancel", upAnywhere);
     const d = drawing.current;
     if (!d) return;
     if (flushTimer.current) clearInterval(flushTimer.current);
@@ -587,6 +614,9 @@ export default function SketchCanvas({
     drawing.current = null;
     onStrokeEnd?.();
   };
+  useEffect(() => {
+    endRef.current = endStroke;
+  });
 
   // iPad · 애플펜슬: 사파리가 펜 입력을 길게 누르기(돋보기 · 글자 선택) · 손글씨 입력(Scribble) ·
   // 두 번 탭 확대로 먼저 가져가서 꾹 눌러야 그려지던 것 — 도화지 위 터치 기본 동작을 막는다.
@@ -612,15 +642,17 @@ export default function SketchCanvas({
     };
   }, []);
 
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    const up = upAnywhereRef.current;
+    return () => {
       document.removeEventListener("touchmove", holdPage);
+      window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointercancel", up);
       if (flushTimer.current) clearInterval(flushTimer.current);
       cancelAnimationFrame(animRaf.current);
       cancelAnimationFrame(redrawRaf.current);
-    },
-    []
-  );
+    };
+  }, []);
 
   const undo = () => {
     const keys = [...strokesRef.current.keys()].sort();

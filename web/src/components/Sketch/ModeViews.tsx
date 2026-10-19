@@ -750,17 +750,21 @@ function FakeCenter({
     );
   }
 
+  // 한 획 긋고 나면 서버가 다음 차례로 넘길 때까지 더 못 그음
+  const [drewAt, setDrewAt] = useState(-1);
   const small = !v && (st.phase === "f-vote" || st.phase === "f-guess");
   return (
     <div className="flex w-full flex-col gap-2">
       <div className={small ? "mx-auto w-[520px]" : "w-full"}>
         <SketchCanvas
           source={source}
-          canDraw={myTurn}
+          canDraw={myTurn && drewAt !== st.step}
           tool="pen"
           color={myColor ?? "#1F1F2A"}
           width={t.width}
           apiRef={apiRef}
+          keepOnExit
+          onStrokeEnd={() => setDrewAt(st.step)}
         >
           {!v && st.phase === "f-draw" && (
             <div className="pointer-events-none absolute inset-x-0 top-2 z-[5] opacity-90">
