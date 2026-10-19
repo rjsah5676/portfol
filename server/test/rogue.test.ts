@@ -82,7 +82,8 @@ describe("픽셀 리셋 스토리 서버", () => {
     const out = await c.rpc("rogue.finish", { run, rep: rep({ secret: true }) });
     expect(out.best).toBe(true);
     expect(out.rank).toBe(1);
-    expect(out.ach).toEqual(expect.arrayContaining(["부팅 완료", "수상한 벽"]));
+    // 게임 목록에서 내린 동안은 업적이 주석 처리돼 있어 안 나옴 (다시 올리면 ["부팅 완료", "수상한 벽"] 기대로 되돌리기)
+    expect(out.ach).toEqual([]);
     await expect(c.rpc("rogue.finish", { run, rep: rep() })).rejects.toMatchObject({ code: "BAD_REQUEST" });
 
     const rows = await c.rpc("rogue.rank", { limit: 10 });
@@ -104,7 +105,8 @@ describe("픽셀 리셋 스토리 서버", () => {
     // 2층까지 간 120초짜리 판 → 서버가 잰 시작 시각도 그만큼 앞으로 (안 그러면 "잰 시간보다 긴 기록"으로 거절)
     await srv.db.col("rogue_runs").updateOne({ _id: run } as never, { $set: { startAt: Date.now() - 130_000 } });
     const out = await c.rpc("rogue.finish", { run, rep: rep({ char: "igna", elites: 3, specials: 1, arcade: 4, floor: 2, bosses: 1, sec: 120, kills: 40 }) });
-    expect(out.ach).toEqual(expect.arrayContaining(["얼음을 녹인 불꽃"]));
+    // 업적 주석 처리 중 (다시 올리면 ["얼음을 녹인 불꽃"] 기대로 되돌리기)
+    expect(out.ach).toEqual([]);
     const rows = await c.rpc("rogue.rank", { limit: 10 });
     expect(rows.find((r: { nick: string }) => r.nick === "생존2")).toMatchObject({ char: "igna", floor: 2 });
     const r2 = await c.rpc("rogue.start");
