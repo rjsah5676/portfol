@@ -10,7 +10,6 @@ import imgRhythm from "@/img/menu/rhythm.jpg";
 import imgSketch from "@/img/menu/sketch.jpg";
 import imgPoker from "@/img/menu/poker.jpg";
 import imgDefense from "@/img/menu/defense.jpg";
-import imgRogue from "@/img/menu/rogue.jpg";
 import imgLadder from "@/img/menu/ladder.jpg";
 import imgRoulette from "@/img/menu/roulette.jpg";
 import imgCalorie from "@/img/menu/calorie.jpg";
@@ -114,14 +113,6 @@ export const NAV_GROUPS: NavGroup[] = [
         featured: true,
       },
       {
-        href: "/games/rogue",
-        image: imgRogue,
-        label: "PIXEL RESET STORY",
-        desc: "PIXEL FIGHT 외전 · 아이템 조합 탑뷰 로그라이크, 캐릭터 해금 · 랭킹",
-        icon: "px:rogue",
-        featured: true,
-      },
-      {
         href: "/games/sketch",
         image: imgSketch,
         label: "DOODLE PARTY",
@@ -135,6 +126,7 @@ export const NAV_GROUPS: NavGroup[] = [
         label: "멜론 게임",
         desc: "합이 10·20이 되게 묶어 지우는 2분 타임어택",
         icon: "🍈",
+        featured: true, // PIXEL RESET STORY 내린 자리 (메인 큰 칸 6개 맞춤)
       },
       {
         href: "/games/board",
