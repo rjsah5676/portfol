@@ -18,6 +18,8 @@ const faces = (c: string) => Object.fromEntries(FACES.map((f) => [f, `${B}/face/
 
 export const ART: {
   logo: string | null;
+  /** 버튼 · 판 껍데기 (GPT UI 키트, 양끝 장식은 그대로 두고 가운데만 늘림) */
+  btn: Record<string, string>;
   sky: string | null;
   /** 거리 바닥 (가로 반복) · 앞쪽 난간 · 운하 띠 (캐릭터보다 앞에 그림) */
   ground: string | null;
@@ -63,6 +65,7 @@ export const ART: {
   };
 } = {
   logo: `${B}/ui/logo.webp`,
+  btn: Object.fromEntries((["gold", "pink", "blue", "cream", "panel", "circle"] as const).map((k) => [k, `${B}/ui/btn/${k}.webp`])),
   sky: `${B}/bg/sky.webp`,
   ground: `${B}/bg/ground.webp`,
   front: `${B}/bg/front.webp`,
@@ -117,15 +120,16 @@ export const ART: {
 };
 
 /** 건물 그림 속 빈 간판 자리 (그림 크기 대비 비율) — 여기에 게임 이름을 글자로 얹음 */
-export const SIGN: Partial<Record<GameId, { x: number; y: number; w: number }>> = {
-  joker: { x: 0.53, y: 0.482, w: 0.25 },
-  onecard: { x: 0.52, y: 0.562, w: 0.3 },
-  yut: { x: 0.5, y: 0.465, w: 0.3 },
-  chess: { x: 0.505, y: 0.465, w: 0.3 },
-  janggi: { x: 0.5, y: 0.42, w: 0.3 },
-  omok: { x: 0.485, y: 0.44, w: 0.28 },
-  mahjong: { x: 0.5, y: 0.435, w: 0.3 },
-  soon: { x: 0.53, y: 0.47, w: 0.28 },
+export const SIGN: Partial<Record<GameId, { x: number; y: number; w: number; h: number }>> = {
+  // 그림에서 간판 안쪽(크림색) 영역을 재서 넣은 값: 가운데 x · y, 폭 w · 높이 h (그림 크기 대비)
+  joker: { x: 0.531, y: 0.496, w: 0.26, h: 0.088 },
+  onecard: { x: 0.496, y: 0.578, w: 0.289, h: 0.091 },
+  yut: { x: 0.513, y: 0.479, w: 0.285, h: 0.081 },
+  chess: { x: 0.509, y: 0.464, w: 0.284, h: 0.1 },
+  janggi: { x: 0.515, y: 0.434, w: 0.33, h: 0.107 },
+  omok: { x: 0.512, y: 0.445, w: 0.305, h: 0.107 },
+  mahjong: { x: 0.508, y: 0.43, w: 0.35, h: 0.114 },
+  soon: { x: 0.503, y: 0.486, w: 0.296, h: 0.089 },
 };
 
 /** 건물 그림의 두 번째 빈 간판 (장기 지붕의 팔각 간판 등) — 상징 글자 하나 */
@@ -162,6 +166,7 @@ export function allArt(): string[] {
   const out: string[] = [];
   const push = (u: string | null | undefined) => u && out.push(u);
   push(ART.logo);
+  Object.values(ART.btn).forEach(push);
   push(ART.sky);
   push(ART.ground);
   push(ART.front);

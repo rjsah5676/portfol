@@ -133,6 +133,20 @@ export default function TownApp() {
             <div ref={gameRef} className="tt" />
           </div>
         )}
+        {fs && (
+          // 전체화면 풀기: 오른쪽 위 모서리 작은 탭 (게임 UI 위쪽 여백에만 걸치게)
+          <button
+            type="button"
+            onClick={toggleFs}
+            aria-label="전체화면 끄기"
+            title="전체화면 끄기"
+            className="absolute top-0 right-0 z-[70] flex h-[22px] w-[34px] cursor-pointer items-center justify-center rounded-bl-[10px] bg-black/45 text-white/80 transition-colors hover:bg-black/70 hover:text-white"
+          >
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5" />
+            </svg>
+          </button>
+        )}
         {(fsGate || rotateGate) && (
           <div style={GATE_BG} className="absolute inset-0 z-[60] flex flex-col items-center justify-center gap-4 px-6 text-center">
             <p className="font-['Jua'] text-2xl text-white">{fsGate ? "전체화면으로 플레이해 주세요" : "폰을 가로로 돌려 주세요"}</p>

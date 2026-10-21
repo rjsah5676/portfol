@@ -50,7 +50,6 @@
   font-family: inherit;
   font-size: inherit;
   letter-spacing: inherit;
-  cursor: pointer;
   border: none;
   color: inherit;
   background: none;
@@ -194,7 +193,8 @@
   height: 92px;
   background-size: auto 92px;
   background-repeat: repeat-x;
-  z-index: 2000;
+  /* 캐릭터 · 이름표가 난간에 가리지 않게 (캐릭터 z = 발 y 548~626) */
+  z-index: 1;
   pointer-events: none;
 }
 .tt-ground::after {
@@ -3989,4 +3989,509 @@
   80% {
     transform: rotate(2deg);
   }
+}
+/* 간판 글씨: 간판 안쪽 상자 정가운데 (가로 · 세로) */
+.tt-bsign:not(.han) {
+  display: grid;
+  place-items: center;
+  padding: 0;
+}
+.tt-bsign:not(.han) span {
+  line-height: 1;
+  padding-top: 0.08em;
+  font-size: min(23px, calc(70cqw / var(--n)));
+}
+.tt :where(button) {
+  cursor: pointer;
+}
+.tt :where(input, textarea) {
+  cursor: text;
+}
+.tt :where(button:disabled) {
+  cursor: default;
+}
+
+/* ---------- 말풍선 (마을 · 대기실 공통): 캐릭터 색 테두리 + 이름 칩 + 꼬리 ---------- */
+.tt-say,
+.tt-rbub {
+  --bc: #b9a6ef;
+  --bc2: #7b62d6;
+  background: linear-gradient(180deg, #ffffff, #fbf8ff) !important;
+  color: #3a2f5c !important;
+  border: 3px solid var(--bc);
+  border-radius: 20px !important;
+  padding: 9px 16px 9px !important;
+  font-size: 16px !important;
+  font-weight: 400 !important;
+  line-height: 1.25;
+  box-shadow: 0 4px 0 color-mix(in srgb, var(--bc) 55%, #4a3a7a), 0 8px 18px rgba(30, 20, 60, 0.22) !important;
+}
+.tt-say[data-c="ruru"],
+.tt-rbub[data-c="ruru"] {
+  --bc: #ff9cc3;
+  --bc2: #e3487f;
+}
+.tt-say {
+  bottom: 158px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: 12px !important;
+}
+.tt-say .nm {
+  position: absolute;
+  left: 12px;
+  top: -13px;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1;
+  color: #fff;
+  background: var(--bc2);
+  border: 2px solid #fff;
+  border-radius: 999px;
+  padding: 3px 9px 2px;
+}
+.tt-say::after,
+.tt-rbub::after {
+  border: 0 !important;
+  width: 14px;
+  height: 14px;
+  margin-left: -7px !important;
+  bottom: -9px !important;
+  top: auto !important;
+  background: #fdfbff;
+  border-right: 3px solid var(--bc) !important;
+  border-bottom: 3px solid var(--bc) !important;
+  transform: rotate(45deg);
+  border-radius: 0 0 4px 0;
+}
+.tt-say button {
+  margin-left: 2px;
+  font-size: 13px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: linear-gradient(#ffe08a, #ffbe3a) !important;
+  box-shadow: 0 2px 0 #c98f12;
+}
+.tt-say.pop,
+.tt-rbub {
+  animation: tt-bubpop 0.28s cubic-bezier(0.3, 1.6, 0.5, 1) both;
+}
+@keyframes tt-bubpop {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(8px) scale(0.7);
+  }
+}
+.tt-rbub {
+  font-size: 15px !important;
+}
+
+/* ---------- 뽑기 화면 가독성 · 버튼 ---------- */
+.tt-gtitle-big {
+  top: 18px;
+  left: 172px;
+  font-size: 30px;
+  padding: 8px 22px 7px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(58, 34, 110, 0.88), rgba(34, 20, 70, 0.9));
+  border: 2px solid rgba(255, 215, 106, 0.75);
+  box-shadow: 0 4px 0 rgba(20, 8, 50, 0.5);
+  text-shadow: 0 2px 0 rgba(20, 8, 50, 0.7);
+  line-height: 1.1;
+}
+.tt-gfeat-name {
+  font-size: 24px;
+  padding: 6px 22px 5px;
+  border-radius: 999px;
+  text-shadow: 0 2px 0 rgba(30, 10, 80, 0.7);
+}
+.tt-gpull em {
+  top: 7px;
+  right: 8px;
+  padding: 3px 8px 2px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 400;
+  box-shadow: 0 2px 0 rgba(140, 20, 60, 0.4);
+}
+.tt-gpull b {
+  font-size: 27px;
+}
+.tt-g1 b {
+  text-shadow: 0 2px 0 #23439a, 0 0 6px rgba(20, 40, 120, 0.5);
+}
+.tt-gpull span {
+  font-family: var(--tt-display);
+  font-weight: 400;
+  font-size: 17px;
+  padding: 4px 14px 3px 5px;
+}
+.tt-g1 span {
+  background: rgba(16, 36, 110, 0.4);
+}
+.tt-g10 span {
+  background: rgba(120, 70, 0, 0.22);
+  color: #5a3300;
+}
+.tt-g10 {
+  padding-top: 10px !important;
+}
+.tt-gdone {
+  display: none;
+  text-align: center;
+  font-size: 15px;
+  color: #ffe08a;
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 12px;
+  padding: 8px;
+}
+.tt-gpanel.done .tt-gdone {
+  display: block;
+}
+/* 10회 뽑기 캡슐: 화면 가운데 · 기계 위로 */
+.tt-gstage.multi .tt-gdrop {
+  width: 690px;
+  gap: 14px;
+  row-gap: 18px;
+}
+.tt-gstage.multi.drop .tt-gdrop {
+  animation-name: tt-drop10;
+}
+@keyframes tt-drop10 {
+  to {
+    top: 206px;
+  }
+}
+.tt-gstage.multi.crack .tt-gdrop,
+.tt-gstage.multi.crack-gold .tt-gdrop {
+  top: 206px;
+}
+.tt-gstage.multi .tt-gtap {
+  top: 520px;
+}
+.tt-gstage.multi .tt-gdark,
+.tt-gstage.drop .tt-gdark {
+  background: radial-gradient(ellipse at 50% 50%, rgba(50, 26, 96, 0.82), rgba(8, 4, 20, 0.95) 75%);
+}
+.tt-gskip {
+  top: auto;
+  bottom: 24px;
+  right: 24px;
+  font-size: 16px;
+  padding: 10px 18px !important;
+  display: flex !important;
+  align-items: center;
+  gap: 4px;
+}
+/* 공개 화면 버튼: 같은 폭으로 가운데 */
+.tt-gstage .tt-grev-btns,
+.tt-gstage .tt-gres-btns {
+  justify-content: center;
+  width: max-content;
+}
+.tt-gstage .tt-grev-btns button,
+.tt-gstage .tt-gres-btns button {
+  width: 210px;
+  min-width: 0;
+  padding: 0 !important;
+}
+/* 이름 판: 글씨를 보라색 안쪽 정가운데로 */
+.tt-gplaque[style] {
+  padding: 22px 130px 0;
+  gap: 0;
+}
+.tt-gplaque[style] small {
+  margin: 0 0 2px;
+  font-size: 14px;
+  line-height: 1;
+}
+.tt-gplaque[style] b {
+  font-size: 36px;
+  line-height: 1.05;
+  white-space: nowrap;
+}
+
+/* ======================================================================
+   버튼 껍데기 (GPT UI 키트): 양끝 장식(별 · 하트 · 보석)은 그대로, 가운데만 늘림
+   --bh = 버튼 높이 (끝 장식 크기를 높이에 맞춤)
+   ====================================================================== */
+.tt {
+  --sk-gold: url(/town/ui/btn/gold.webp);
+  --sk-pink: url(/town/ui/btn/pink.webp);
+  --sk-blue: url(/town/ui/btn/blue.webp);
+  --sk-cream: url(/town/ui/btn/cream.webp);
+  --sk-panel: url(/town/ui/btn/panel.webp);
+}
+.tt-quick,
+.tt-start,
+.tt-gstage .tt-gwear,
+.tt-gstage button.pri,
+.tt-g10,
+.tt-row button.pri,
+.tt-gagain,
+.tt-gamelist,
+.tt-g1,
+.tt-sbtn,
+.tt-rinvite,
+.tt-gstage .tt-gok,
+.tt-row button:not(.pri),
+.tt-backbtn,
+.tt-gtitle-big,
+.tt-roomtitle {
+  --bh: 64px;
+  /* border 줄임말은 border-image 를 지워 버려서 따로따로 씀 */
+  border-width: 0 !important;
+  border-style: solid !important;
+  border-color: transparent !important;
+  border-image-source: var(--sk-gold) !important;
+  border-image-slice: 0 100 fill !important;
+  border-image-width: 0 calc(var(--bh) * 0.625) !important;
+  border-image-repeat: stretch !important;
+  background: none !important;
+  box-shadow: none !important;
+  filter: drop-shadow(0 4px 0 rgba(60, 30, 80, 0.28)) drop-shadow(0 8px 12px rgba(30, 10, 60, 0.22));
+  border-radius: 0 !important;
+}
+.tt-gagain {
+  border-image-source: var(--sk-pink) !important;
+}
+.tt-gamelist,
+.tt-g1,
+.tt-sbtn,
+.tt-rinvite {
+  border-image-source: var(--sk-blue) !important;
+}
+.tt-gstage .tt-gok,
+.tt-row button:not(.pri) {
+  border-image-source: var(--sk-cream) !important;
+}
+.tt-backbtn,
+.tt-gtitle-big,
+.tt-roomtitle {
+  border-image-source: var(--sk-panel) !important;
+}
+/* 높이별 끝 장식 크기 */
+.tt-quick {
+  --bh: 84px;
+}
+.tt-start {
+  --bh: 86px;
+}
+.tt-g1,
+.tt-g10 {
+  --bh: 96px;
+}
+.tt-gamelist,
+.tt-gstage .tt-gwear,
+.tt-gstage .tt-gok,
+.tt-gstage .tt-gagain,
+.tt-gstage button.pri {
+  --bh: 66px;
+}
+.tt-row button {
+  --bh: 56px;
+}
+.tt-backbtn {
+  --bh: 56px;
+}
+.tt-sbtn,
+.tt-rinvite {
+  --bh: 40px;
+}
+.tt-gtitle-big {
+  --bh: 54px;
+}
+.tt-roomtitle {
+  --bh: 66px;
+}
+/* 글씨: 바탕색마다 잘 읽히는 색 + 테두리 그림자 */
+.tt-quick,
+.tt-start,
+.tt-gwear,
+.tt-g10,
+.tt-row button.pri,
+.tt-gstage button.pri {
+  color: #6a3a00 !important;
+  text-shadow: 0 1px 0 rgba(255, 250, 220, 0.9) !important;
+}
+.tt-gamelist,
+.tt-g1,
+.tt-sbtn,
+.tt-rinvite {
+  color: #fff !important;
+  text-shadow: -1px -1px 0 #2a4ea0, 1px -1px 0 #2a4ea0, -1px 1px 0 #2a4ea0, 1px 2px 0 #2a4ea0 !important;
+}
+.tt-gagain {
+  color: #fff !important;
+  text-shadow: -1px -1px 0 #b8325f, 1px -1px 0 #b8325f, -1px 1px 0 #b8325f, 1px 2px 0 #b8325f !important;
+}
+.tt-gstage .tt-gok,
+.tt-row button:not(.pri) {
+  color: #4a3a8a !important;
+  text-shadow: 0 1px 0 #fff !important;
+}
+.tt-backbtn,
+.tt-gtitle-big,
+.tt-roomtitle {
+  color: #fff;
+  text-shadow: 0 2px 0 rgba(20, 8, 50, 0.7);
+}
+/* 껍데기 위에 원래 붙어 있던 반사광 · 테두리 장식은 뺌 (그림에 이미 있음) */
+.tt-gpull .shine {
+  display: none;
+}
+.tt-backbtn {
+  padding: 0 30px 0 26px !important;
+  height: 56px;
+}
+.tt-gtitle-big {
+  padding: 10px 40px 9px;
+  height: 54px;
+  display: flex;
+  align-items: center;
+}
+.tt-roomtitle {
+  padding: 8px 44px 8px 40px;
+}
+.tt-gamelist {
+  padding: 0 34px 0 30px !important;
+}
+.tt-quick {
+  padding: 0 44px 0 40px !important;
+}
+.tt-gamelist i,
+.tt-quick i,
+.tt-start i,
+.tt-glist button > i {
+  background: rgba(255, 255, 255, 0.45);
+}
+.tt-gamelist i {
+  background: rgba(20, 50, 140, 0.3);
+}
+.tt-sbtn,
+.tt-rinvite {
+  height: 40px;
+  padding: 0 22px !important;
+  font-size: 14px;
+}
+.tt-row button {
+  font-size: 22px;
+}
+.tt-gpull span {
+  text-shadow: none;
+}
+.tt-g1 span {
+  color: #fff;
+  text-shadow: 0 1px 0 #2a4ea0;
+}
+.tt-gpull button:disabled,
+.tt-row button:disabled,
+.tt-start:disabled {
+  filter: grayscale(0.7) brightness(0.85) drop-shadow(0 4px 0 rgba(60, 30, 80, 0.2));
+  opacity: 0.85;
+}
+/* 뽑기 버튼 (.tt-gpull button 규칙보다 세게) */
+.tt .tt-gpull button {
+  --bh: 92px;
+  height: 92px;
+  border-width: 0 !important;
+  border-style: solid !important;
+  border-image-slice: 0 100 fill !important;
+  border-image-width: 0 calc(var(--bh) * 0.56) !important;
+  border-image-repeat: stretch !important;
+  border-image-source: var(--sk-blue) !important;
+  background: none !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+  overflow: visible;
+  filter: drop-shadow(0 4px 0 rgba(30, 20, 80, 0.35)) drop-shadow(0 8px 12px rgba(20, 10, 60, 0.3));
+  gap: 4px;
+}
+.tt .tt-gpull button.tt-g10 {
+  border-image-source: var(--sk-gold) !important;
+}
+.tt .tt-gpull em {
+  top: -10px;
+  right: 6px;
+  z-index: 2;
+}
+.tt .tt-gpull button:disabled {
+  filter: grayscale(0.7) brightness(0.8);
+}
+/* 뽑기 버튼: 위아래 두 줄, 글씨와 가격을 한 줄에 (양끝 별 장식과 안 겹치게) */
+.tt .tt-gpull {
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
+.tt .tt-gpull button {
+  --bh: 68px;
+  height: 68px;
+  flex-direction: row;
+  gap: 14px;
+}
+.tt .tt-gpull b {
+  font-size: 26px;
+}
+.tt .tt-gpull em {
+  top: -8px;
+  right: 56px;
+}
+.tt .tt-gfeat-name,
+.tt .tt-ginfo,
+.tt .tt-rcount {
+  border-width: 0 !important;
+  border-style: solid !important;
+  border-image-source: var(--sk-panel) !important;
+  border-image-slice: 0 100 fill !important;
+  border-image-width: 0 calc(var(--bh, 48px) * 0.625) !important;
+  background: none !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+  filter: drop-shadow(0 3px 0 rgba(20, 8, 50, 0.35));
+}
+.tt .tt-gfeat-name {
+  --bh: 50px;
+  height: 50px;
+  padding: 0 40px !important;
+  display: flex;
+  align-items: center;
+}
+.tt .tt-ginfo {
+  --bh: 44px;
+  height: 44px;
+  padding: 0 30px !important;
+  color: #fff;
+}
+.tt .tt-rcount {
+  --bh: 44px;
+  height: 44px;
+  padding: 0 28px;
+}
+/* 공개 · 결과 화면 버튼 껍데기 (앞 규칙보다 세게) */
+.tt .tt-gstage .tt-grev-btns button,
+.tt .tt-gstage .tt-gres-btns button {
+  --bh: 66px;
+  border-width: 0 !important;
+  border-style: solid !important;
+  border-image-slice: 0 100 fill !important;
+  border-image-width: 0 calc(var(--bh) * 0.625) !important;
+  border-image-repeat: stretch !important;
+  border-image-source: var(--sk-cream) !important;
+  background: none !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+  filter: drop-shadow(0 4px 0 rgba(60, 30, 80, 0.3)) drop-shadow(0 8px 12px rgba(30, 10, 60, 0.25));
+}
+.tt .tt-gstage .tt-grev-btns .tt-gwear,
+.tt .tt-gstage .tt-gres-btns .tt-gwear {
+  border-image-source: var(--sk-gold) !important;
+}
+.tt .tt-gstage .tt-grev-btns .tt-gagain,
+.tt .tt-gstage .tt-gres-btns .tt-gagain {
+  border-image-source: var(--sk-pink) !important;
+}
+.tt .tt-gstage .tt-gres-btns .tt-gok {
+  border-image-source: var(--sk-gold) !important;
+  color: #6a3a00 !important;
 }

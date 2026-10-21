@@ -175,7 +175,7 @@ const TEMPLATE = `
     <div class="tt-gbanner">☾ ${GACHA.banner}</div>
     <div class="tt-gsub">특별한 코스튬을 만나 보세요!</div>
     <div class="tt-gcards"></div>
-    <div class="tt-gpity"><div class="tt-gpity-row"><span>천장</span><b class="tt-gpity-n"></b><span>/ ${GACHA.pity}</span><i>🎁</i></div><div class="tt-gpity-bar"><i></i></div><small>${GACHA.pity}회 안에 코스튬 확정</small></div>
+    <div class="tt-gpity"><div class="tt-gpity-row"><span>천장</span><b class="tt-gpity-n"></b><span>/ ${GACHA.pity}</span><i>🎁</i></div><div class="tt-gpity-bar"><i></i></div><small>${GACHA.pity}회 안에 코스튬 확정 · 가진 코스튬은 안 나와요</small></div><div class="tt-gdone">🎉 이 배너 코스튬을 전부 모았어요</div>
     <div class="tt-gpull">
       <button class="tt-g1" type="button"><i class="shine"></i><b>1회 뽑기</b><span>${icon("coin", "tt-coin")}${GACHA.cost1}</span></button>
       <button class="tt-g10" type="button"><i class="shine"></i><em>10% 할인</em><b>10회 뽑기</b><span>${icon("coin", "tt-coin")}${GACHA.cost10.toLocaleString()}</span></button>
@@ -345,7 +345,7 @@ export function mountTown(root: HTMLElement, opts: TownOpts = {}): () => void {
       if (art) {
         const sg = SIGN[g.id];
         w += `<div class="tt-bld-art ${g.open ? "open" : "closed"}" style="left:${doorX(i)}px"><img src="${art}" alt="${g.name}" draggable="false">${
-          sg ? `<div class="tt-bsign" style="left:${sg.x * 100}%;top:${sg.y * 100}%;width:${sg.w * 100}%;--n:${g.name.replace(/ /g, "").length}"><span>${g.name}</span></div>` : ""
+          sg ? `<div class="tt-bsign" style="left:${sg.x * 100}%;top:${sg.y * 100}%;width:${sg.w * 100}%;height:${sg.h * 100}%;--n:${g.name.replace(/ /g, "").length}"><span>${g.name}</span></div>` : ""
         }${SIGN2[g.id] ? `<div class="tt-bsign han" style="left:${SIGN2[g.id]!.x * 100}%;top:${SIGN2[g.id]!.y * 100}%;width:${SIGN2[g.id]!.w * 100}%;--n:1"><span>${SIGN2[g.id]!.text}</span></div>` : ""}</div>`;
       }
       else
@@ -404,7 +404,11 @@ export function mountTown(root: HTMLElement, opts: TownOpts = {}): () => void {
     n.sayT = click ? 5 : 3;
     el.hidden = false;
     const line = pick(CHARS[n.char].lines.town);
-    el.innerHTML = click ? `${line}<button type="button">같이 하기</button>` : line;
+    el.dataset.c = n.char;
+    el.innerHTML = `<b class="nm">${n.nick}</b><span class="tx">${line}</span>${click ? '<button type="button">같이 하기</button>' : ""}`;
+    el.classList.remove("pop");
+    void el.offsetWidth;
+    el.classList.add("pop");
     const b = el.querySelector("button");
     if (b)
       b.onpointerdown = (e) => {
@@ -612,6 +616,7 @@ export function mountTown(root: HTMLElement, opts: TownOpts = {}): () => void {
   $(".tt-open-shop").onclick = () => openGacha();
 
   // 원근(아래로 올수록 크게) + 몸 움직임: 서 있으면 숨쉬기, 걸으면 통통 튀며 좌우로 뒤뚱 (그림자는 바닥에 그대로)
+  const walkState = new WeakMap<HTMLElement, { x: number; y: number; d: number }>();
   const IDLE_SEQ: [number, number][] = [
     [0, 1500],
     [1, 800],
@@ -636,10 +641,22 @@ export function mountTown(root: HTMLElement, opts: TownOpts = {}): () => void {
       if (!an) return;
       const i = body.firstElementChild as HTMLElement;
       let src: string, fr: number;
+      // 걸은 거리만큼 프레임을 넘김 → 발이 바닥에 붙어 있는 느낌 (미끄러지지 않게)
+      const ruru = body.dataset.c === "ruru";
+      const st = walkState.get(el) ?? { x, y, d: 0 };
+      st.d += Math.hypot(x - st.x, (y - st.y) * 1.6);
+      st.x = x;
+      st.y = y;
+      walkState.set(el, st);
+      let lift = 0;
       if (moving) {
         src = flip ? an.walkL : an.walkR;
-        // 성격대로 걸음 빠르기: 루루는 통통 빠르게, 하루는 사뿐사뿐
-        fr = Math.floor(t / (body.dataset.c === "ruru" ? 112 : 138)) % 4;
+        const stride = ruru ? 19 : 23;
+        fr = Math.floor(st.d / stride) % 4;
+        // 1 · 3번(발 모으는 순간)에 몸이 살짝 떠오름: 루루는 깡충, 하루는 사뿐
+        const ph = (st.d / stride) % 1;
+        const up = fr % 2 === 1 ? Math.sin(ph * Math.PI) : 0;
+        lift = up * (ruru ? 7 : 4);
       } else {
         src = an.idle;
         let k = t % IDLE_LOOP;
@@ -657,7 +674,9 @@ export function mountTown(root: HTMLElement, opts: TownOpts = {}): () => void {
         i.style.backgroundImage = `url(${src})`;
       }
       i.style.backgroundPositionX = `${fr * 33.3333}%`;
-      if (sh) sh.style.transform = `translateX(-50%) scale(${moving && fr % 2 === 0 ? 0.9 : 1})`;
+      const sq = moving && fr % 2 === 0 ? 0.97 : 1;
+      body.style.transform = `translateY(${-lift}px) scale(${2 - sq},${sq})`;
+      if (sh) sh.style.transform = `translateX(-50%) scale(${1 - lift * 0.03})`;
       return;
     }
     if (body) {
@@ -919,6 +938,7 @@ export function mountTown(root: HTMLElement, opts: TownOpts = {}): () => void {
     tag.querySelector(".tt-rbub")?.remove();
     const bub = document.createElement("div");
     bub.className = "tt-rbub";
+    bub.dataset.c = ME.char;
     bub.textContent = msg;
     tag.appendChild(bub);
     setTimeout(() => bub.remove(), 3500);
@@ -933,6 +953,7 @@ export function mountTown(root: HTMLElement, opts: TownOpts = {}): () => void {
         t.querySelector(".tt-rbub")?.remove();
         const r = document.createElement("div");
         r.className = "tt-rbub";
+        r.dataset.c = b.char;
         r.textContent = pick(CHARS[b.char].lines.town);
         t.appendChild(r);
         setTimeout(() => r.remove(), 3000);
@@ -1531,8 +1552,10 @@ export function mountTown(root: HTMLElement, opts: TownOpts = {}): () => void {
     );
     $(".tt-gpity-n").textContent = String(ME.pity);
     root.querySelector<HTMLElement>(".tt-gpity-bar i")!.style.width = `${(ME.pity / GACHA.pity) * 100}%`;
-    $<HTMLButtonElement>(".tt-g1").disabled = ME.coins < GACHA.cost1;
-    $<HTMLButtonElement>(".tt-g10").disabled = ME.coins < GACHA.cost10;
+    const done = !unownedPool().length;
+    $<HTMLButtonElement>(".tt-g1").disabled = done || ME.coins < GACHA.cost1;
+    $<HTMLButtonElement>(".tt-g10").disabled = done || ME.coins < GACHA.cost10;
+    $(".tt-gpanel").classList.toggle("done", done);
   }
   function refreshMoneyAll() {
     refreshMoney();
@@ -1547,36 +1570,36 @@ export function mountTown(root: HTMLElement, opts: TownOpts = {}): () => void {
   $(".tt-ginfo").onclick = () => {
     const per = ((GACHA.rate / GACHA.pool.length) * 100).toFixed(1);
     const ov = overlay(
-      `<h2>확률 정보</h2><p>· 코스튬 ${GACHA.pool.map((p) => `「${cosName(p.char, p.look)}」 ${per}%`).join(" · ")}<br>· 꽝 (코인 +${GACHA.lucky}) ${(100 - GACHA.rate * 100).toFixed(1)}%<br>· 코스튬 없이 ${GACHA.pity}회째 뽑으면 아직 없는 코스튬 확정 (천장)<br>· 이미 가진 코스튬은 코인 ${GACHA.dupRefund.toLocaleString()} 으로 바꿔 줘요</p><div class="tt-row"><button type="button" class="pri">확인</button></div>`,
+      `<h2>확률 정보</h2><p>· 코스튬 ${GACHA.pool.map((p) => `「${cosName(p.char, p.look)}」 ${per}%`).join(" · ")}<br>· 꽝 (코인 +${GACHA.lucky}) ${(100 - GACHA.rate * 100).toFixed(1)}%<br>· 코스튬 없이 ${GACHA.pity}회째 뽑으면 아직 없는 코스튬 확정 (천장)<br>· 이미 가진 코스튬은 다시 나오지 않아요 (가진 만큼 남은 코스튬 확률이 그대로)</p><div class="tt-row"><button type="button" class="pri">확인</button></div>`,
       $(".tt-gacha"),
     );
     ov.querySelector<HTMLElement>("button")!.onclick = () => ov.remove();
   };
   type Pull = { kind: "cos"; char: CharId; look: LookId; dup: boolean } | { kind: "lucky" };
+  // 이미 가진 코스튬은 안 나옴: 뽑기 풀은 아직 없는 코스튬만
+  const unownedPool = () => GACHA.pool.filter((p) => !ME.owned.includes(ownKey(p.char, p.look)));
   function roll(): Pull {
-    ME.pity++;
-    const unowned = GACHA.pool.filter((p) => !ME.owned.includes(ownKey(p.char, p.look)));
-    let hit = Math.random() < GACHA.rate;
-    let pick1 = pick(GACHA.pool);
-    if (ME.pity >= GACHA.pity) {
-      hit = true;
-      if (unowned.length) pick1 = pick(unowned);
+    const pool = unownedPool();
+    if (!pool.length) {
+      ME.coins += GACHA.lucky;
+      return { kind: "lucky" };
     }
+    ME.pity++;
+    const hit = ME.pity >= GACHA.pity || Math.random() < GACHA.rate;
     if (!hit) {
       ME.coins += GACHA.lucky;
       return { kind: "lucky" };
     }
     ME.pity = 0;
-    const k = ownKey(pick1.char, pick1.look);
-    const dup = ME.owned.includes(k);
-    if (dup) ME.coins += GACHA.dupRefund;
-    else ME.owned.push(k);
-    return { kind: "cos", char: pick1.char, look: pick1.look, dup };
+    const p = pick(pool);
+    ME.owned.push(ownKey(p.char, p.look));
+    return { kind: "cos", char: p.char, look: p.look, dup: false };
   }
   let gBusy = false;
   async function pull(n: 1 | 10) {
     const cost = n === 1 ? GACHA.cost1 : GACHA.cost10;
     if (gBusy) return;
+    if (!unownedPool().length) return toast("코스튬을 전부 모았어요! 다음 배너를 기다려 주세요");
     if (ME.coins < cost) return toast("코인이 부족해요 · 게임하고 모아 와요!");
     gBusy = true;
     ME.coins -= cost;
@@ -1607,12 +1630,13 @@ export function mountTown(root: HTMLElement, opts: TownOpts = {}): () => void {
         st.addEventListener("pointerdown", go);
       });
     // ① 떨어짐
-    st.innerHTML = `<div class="tt-gdark"></div>${res.length === 1 && ART.gacha.pedestal ? `<img class="tt-gpedimg" src="${ART.gacha.pedestal}" alt="">` : ""}<div class="tt-gdrop">${res.length === 1 ? capHTML(res[0].kind === "cos", "big") : res.map((r) => capHTML(r.kind === "cos", "small")).join("")}</div><div class="tt-gtap">TAP!</div><button class="tt-gskip" type="button">건너뛰기 ›</button>`;
+    st.innerHTML = `<div class="tt-gdark"></div>${res.length === 1 && ART.gacha.pedestal ? `<img class="tt-gpedimg" src="${ART.gacha.pedestal}" alt="">` : ""}<div class="tt-gdrop">${res.length === 1 ? capHTML(res[0].kind === "cos", "big") : res.map((r) => capHTML(r.kind === "cos", "small")).join("")}</div><div class="tt-gtap">TAP!</div><button class="tt-gskip" type="button"><span>건너뛰기</span>${CHEV}</button>`;
     st.querySelector<HTMLElement>(".tt-gskip")!.onpointerdown = (e) => {
       e.stopPropagation();
       skip = true;
       st.dispatchEvent(new Event("pointerdown"));
     };
+    st.classList.toggle("multi", res.length > 1);
     $(".tt-gmachine").classList.add("shake");
     later(() => $(".tt-gmachine").classList.remove("shake"), 700);
     await sleep(80);
