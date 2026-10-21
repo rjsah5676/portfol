@@ -7602,3 +7602,410 @@
   padding: 3px 30px 0;
   border-image-width: 0 30px;
 }
+
+/* ======================================================================
+   판 화면 v2 — 시안 mock-game-v1 배치 그대로 (1672×941 → 1280×720)
+   ====================================================================== */
+/* 왼쪽 위: 메뉴(어두운 네모) · 규칙(파랑 보석) */
+.tt .tt-game .tt-pause {
+  width: 58px;
+  height: 58px;
+  border-radius: 16px !important;
+  background: linear-gradient(180deg, #3a2c62, #1d1438) !important;
+  border: 2px solid rgba(255, 220, 150, 0.65) !important;
+}
+.tt .tt-game .tt-pause svg {
+  width: 30px;
+  height: 30px;
+}
+.tt .tt-game .tt-rulesbtn {
+  height: 58px;
+  padding: 3px 34px 0 30px !important;
+  border: 0 solid transparent !important;
+  border-image: var(--sk-blue) 0 100 fill / 0 36px stretch !important;
+  border-radius: 0 !important;
+  background: none !important;
+  font-size: 22px;
+  text-shadow: -1px -1px 0 #22489c, 1px -1px 0 #22489c, -1px 1px 0 #22489c, 1px 2px 0 #22489c;
+  box-shadow: none !important;
+  filter: drop-shadow(0 3px 0 rgba(20, 30, 80, 0.35));
+}
+.tt .tt-game .tt-rulesbtn.on {
+  filter: drop-shadow(0 0 10px rgba(140, 190, 255, 0.95));
+  box-shadow: none !important;
+}
+.tt .tt-game .tt-rulesbtn svg {
+  width: 26px;
+  height: 26px;
+}
+.tt .tt-gtr .tt-gbtn {
+  height: 52px;
+  font-size: 19px;
+  background: linear-gradient(180deg, #3a2c62, #1d1438) !important;
+  border: 2px solid rgba(255, 220, 150, 0.55) !important;
+  padding: 2px 20px 0 16px !important;
+}
+.tt-gtl {
+  top: 12px;
+}
+.tt-gtr {
+  top: 12px;
+  right: 46px;
+}
+/* 차례 띠: 넓게 · 얼굴 크게 */
+.tt-gturn {
+  top: 6px;
+  height: 64px;
+  min-width: 440px;
+  --bh: 64px;
+  border-image-width: 0 40px;
+}
+.tt-gturn .tt-av {
+  width: 50px;
+  height: 50px;
+}
+.tt-gturn-tx {
+  font-size: 30px;
+}
+.tt-gclock {
+  font-size: 30px;
+}
+/* 상대: 큰 얼굴 + 금테 + 이름 · 장 수 알약 + 카드 부채 */
+.tt-game .tt-opp {
+  width: 280px;
+  height: 200px;
+}
+.tt-game .tt-oring {
+  width: 116px;
+  height: 116px;
+  z-index: 3;
+}
+.tt-oring .frame,
+.tt-gme-ring .frame {
+  position: absolute;
+  inset: -4%;
+  width: 108%;
+  height: 108%;
+  pointer-events: none;
+  z-index: 3;
+  filter: drop-shadow(0 3px 4px rgba(0, 0, 0, 0.4));
+}
+.tt-gme-ring .frame {
+  inset: -9%;
+  width: 118%;
+  height: 118%;
+}
+.tt-game .tt-oring .tt-av {
+  inset: 9px;
+  border: 0;
+  box-shadow: none;
+}
+.tt-game .tt-opp.turn .tt-oring .tt-av {
+  border: 0;
+  box-shadow: 0 0 24px 6px rgba(255, 205, 70, 0.85);
+}
+.tt-game .tt-oring svg {
+  inset: -6px;
+  width: calc(100% + 12px);
+  height: calc(100% + 12px);
+  z-index: 4;
+}
+.tt-game .tt-oinfo {
+  left: 108px;
+  top: 10px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+}
+.tt-game .tt-onm {
+  height: 30px;
+  padding: 2px 14px 0 18px;
+  border-radius: 0 15px 15px 0;
+  background: rgba(20, 12, 40, 0.8);
+  font-size: 17px;
+}
+.tt-game .tt-ocnt {
+  margin-top: 6px;
+  height: 46px;
+  display: flex;
+  align-items: baseline;
+  gap: 2px;
+  padding: 0 18px 0 22px;
+  border-radius: 0 23px 23px 0;
+  background: rgba(20, 12, 40, 0.88);
+  border: 1.5px solid rgba(255, 255, 255, 0.25);
+  border-left: 0;
+  font-size: 20px;
+  line-height: 46px;
+}
+.tt-game .tt-ocnt b {
+  font-size: 34px;
+}
+.tt-game .tt-ofan {
+  left: 30px;
+  top: 104px;
+  width: 230px;
+  height: 100px;
+  z-index: 1;
+}
+.tt-game .tt-ofan > div {
+  left: calc(var(--i) * 20px);
+  transform: rotate(calc((var(--i) - var(--k) / 2) * 5deg));
+}
+.tt-game .tt-ofan .tt-back.tt-sm {
+  width: 58px;
+  height: 82px;
+  border-radius: 7px;
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.35);
+}
+.tt-game .tt-opp.p2 .tt-ofan {
+  left: 46px;
+  top: 100px;
+}
+/* 1장! 배지 */
+.tt-game .tt-one1 {
+  left: 78px;
+  top: 70px;
+  width: 92px;
+  height: 52px;
+  padding: 0 0 8px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 0;
+  background: url(/town/game/one-badge.webp) center / 100% 100% no-repeat;
+  box-shadow: none;
+  font-size: 22px;
+  text-shadow: 0 2px 0 rgba(120, 10, 20, 0.7);
+  z-index: 5;
+}
+/* 오른쪽 상대: 거울처럼 */
+.tt-game .tt-opp.p3 .tt-oring {
+  left: auto;
+  right: 0;
+}
+.tt-game .tt-opp.p3 .tt-oinfo {
+  left: auto;
+  right: 108px;
+  text-align: right;
+}
+.tt-game .tt-opp.p3 .tt-onm {
+  padding: 2px 18px 0 14px;
+  border-radius: 15px 0 0 15px;
+}
+.tt-game .tt-opp.p3 .tt-ocnt {
+  justify-content: flex-end;
+  padding: 0 22px 0 18px;
+  border-radius: 23px 0 0 23px;
+  border-left: 1.5px solid rgba(255, 255, 255, 0.25);
+  border-right: 0;
+}
+.tt-game .tt-opp.p3 .tt-ofan {
+  left: auto;
+  right: 30px;
+}
+.tt-game .tt-opp.p3 .tt-one1 {
+  left: auto;
+  right: 78px;
+}
+/* 가운데: 더미 · 바닥 카드(크게, 금빛) · 지금 무늬 */
+.tt-game .tt-center {
+  left: 350px;
+  top: 300px;
+  width: 520px;
+  height: 200px;
+  gap: 38px;
+}
+.tt-game .tt-stack,
+.tt-game .tt-back.tt-big {
+  width: 112px;
+  height: 158px;
+}
+.tt-game .tt-topwrap .tt-stack,
+.tt-game .tt-c.big {
+  width: 124px;
+  height: 174px;
+}
+.tt-game .tt-drawcnt {
+  font-size: 22px;
+  padding: 3px 18px 0;
+}
+.tt-atkb {
+  top: -62px;
+  width: 150px;
+  height: 66px;
+  padding: 18px 0 0;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 0;
+  background: url(/town/game/flame.webp) center / 100% 100% no-repeat;
+  box-shadow: none;
+  font-size: 25px;
+  text-shadow: 0 2px 0 rgba(120, 20, 0, 0.8), 0 0 6px rgba(120, 20, 0, 0.6);
+}
+.tt-game .tt-suitc {
+  width: 140px;
+  height: 140px;
+  border: 4px solid rgba(255, 255, 255, 0.85);
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.4);
+}
+.tt-game .tt-suitc b {
+  width: 70px;
+  height: 70px;
+  margin: 2px 0;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: #2f6fe4;
+  border: 3px solid #fff;
+  font-size: 46px;
+  color: #fff;
+}
+.tt-game .tt-suitc b.red {
+  background: #e23a55;
+  color: #fff;
+}
+.tt-game .tt-suitc b.free {
+  background: #f4ac1e;
+  color: #fff;
+}
+.tt-game .tt-suitc span {
+  font-size: 17px;
+}
+/* 방향 화살표 (그림) */
+.tt-game .tt-dir {
+  left: 0;
+  top: 0;
+  width: 1280px;
+  height: 720px;
+  opacity: 1;
+  pointer-events: none;
+  z-index: 2;
+}
+.tt-game .tt-dir img {
+  position: absolute;
+  opacity: 0.85;
+}
+.tt-game .tt-dir .a1 {
+  left: 268px;
+  top: 300px;
+  width: 150px;
+  transform: rotate(-30deg);
+}
+.tt-game .tt-dir .a2 {
+  left: 846px;
+  top: 384px;
+  width: 150px;
+  transform: rotate(-24deg);
+}
+.tt-game .tt-dir.rev {
+  transform: scaleX(-1);
+}
+/* 카드: 크고 또렷하게 */
+.tt-game .tt-c {
+  width: 112px;
+  height: 158px;
+  border-radius: 13px;
+}
+.tt-game .tt-c .r {
+  font-size: 42px;
+  left: 10px;
+  top: 6px;
+}
+.tt-game .tt-c .s1 {
+  font-size: 26px;
+  top: 48px;
+  left: 12px;
+}
+.tt-game .tt-c .s2 {
+  font-size: 68px;
+}
+.tt-game .tt-c.big .r {
+  font-size: 46px;
+}
+.tt-game .tt-c.big .s2 {
+  font-size: 78px;
+}
+.tt-game .tt-hand {
+  left: 262px;
+  top: 488px;
+  width: 720px;
+}
+/* 나: 큰 얼굴 + 화려한 금테 + 이름판 */
+.tt-gme {
+  left: 22px;
+  bottom: 22px;
+  width: 240px;
+  height: 230px;
+}
+.tt-gme-ring {
+  left: 22px;
+  top: 0;
+  width: 178px;
+  height: 178px;
+}
+.tt-gme-ring .tt-av {
+  inset: 10px;
+  border: 0;
+  box-shadow: none;
+}
+.tt-gme.turn .tt-gme-ring .tt-av {
+  border: 0;
+  box-shadow: 0 0 28px 8px rgba(255, 205, 70, 0.85);
+}
+.tt-gme-ring svg {
+  inset: -4px;
+  width: calc(100% + 8px);
+  height: calc(100% + 8px);
+}
+.tt-gme-plate {
+  left: 4px;
+  bottom: 4px;
+  z-index: 5;
+  height: 50px;
+  min-width: 222px;
+  border-radius: 25px;
+  font-size: 21px;
+}
+.tt-gme-cnt {
+  font-size: 27px;
+}
+/* 오른쪽 아래 버튼 */
+.tt-game .tt-gbtns {
+  right: 10px;
+  bottom: 22px;
+  width: 290px;
+  gap: 10px;
+}
+.tt .tt-game .tt-one {
+  height: 76px;
+  font-size: 32px;
+}
+.tt .tt-game .tt-draw {
+  height: 94px;
+  font-size: 34px;
+  border-image-width: 0 58px !important;
+}
+.tt .tt-sortbtn {
+  left: 1000px;
+  top: 452px;
+}
+.tt-game .tt-dir .a1 {
+  left: 236px;
+  top: 412px;
+  width: 132px;
+  transform: none;
+}
+.tt-game .tt-dir .a2 {
+  left: 856px;
+  top: 392px;
+  width: 140px;
+  transform: none;
+}
+.tt .tt-sortbtn {
+  left: auto;
+  right: 12px;
+  top: 452px;
+}

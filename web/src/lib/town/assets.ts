@@ -20,6 +20,8 @@ export const ART: {
   logo: string | null;
   /** 버튼 · 판 껍데기 (GPT UI 키트, 양끝 장식은 그대로 두고 가운데만 늘림) */
   btn: Record<string, string>;
+  /** 판 화면 장식 (시안 mock-game-v1 부품): 얼굴 테두리 · 공격 불꽃 · 방향 화살표 · 1장 배지 */
+  game: Record<"frameBig" | "frameSm" | "flame" | "arrowW" | "arrowR" | "oneBadge", string>;
   sky: string | null;
   /** 거리 바닥 (가로 반복) · 앞쪽 난간 · 운하 띠 (캐릭터보다 앞에 그림) */
   ground: string | null;
@@ -66,6 +68,14 @@ export const ART: {
 } = {
   logo: `${B}/ui/logo.webp`,
   btn: Object.fromEntries((["gold", "pink", "blue", "cream", "panel", "circle"] as const).map((k) => [k, `${B}/ui/btn/${k}.webp`])),
+  game: {
+    frameBig: `${B}/game/frame-big.webp`,
+    frameSm: `${B}/game/frame-sm.webp`,
+    flame: `${B}/game/flame.webp`,
+    arrowW: `${B}/game/arrow-w.webp`,
+    arrowR: `${B}/game/arrow-r.webp`,
+    oneBadge: `${B}/game/one-badge.webp`,
+  },
   sky: `${B}/bg/sky.webp`,
   ground: `${B}/bg/ground.webp`,
   front: `${B}/bg/front.webp`,
@@ -167,6 +177,7 @@ export function allArt(): string[] {
   const push = (u: string | null | undefined) => u && out.push(u);
   push(ART.logo);
   Object.values(ART.btn).forEach(push);
+  Object.values(ART.game).forEach(push);
   push(ART.sky);
   push(ART.ground);
   push(ART.front);

@@ -141,9 +141,7 @@ const TEMPLATE = `
 <div class="tt-screen tt-game" data-s="game" hidden>
   <div class="tt-game-bg"></div>
   <div class="tt-felt"></div>
-  <svg class="tt-dir" viewBox="0 0 760 330" aria-hidden="true"><defs><linearGradient id="tt-dg" x1="0" x2="1"><stop offset="0" stop-color="#fff" stop-opacity=".1"/><stop offset="1" stop-color="#fff" stop-opacity=".75"/></linearGradient><marker id="tt-ah" viewBox="0 0 10 10" markerWidth="2.6" markerHeight="2.6" refX="5" refY="5" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#fff" fill-opacity=".8"/></marker></defs>
-    <path d="M70,250 C40,140 150,40 330,26" fill="none" stroke="url(#tt-dg)" stroke-width="13" stroke-linecap="round" marker-end="url(#tt-ah)"/>
-    <path d="M690,80 C720,190 610,290 430,304" fill="none" stroke="url(#tt-dg)" stroke-width="13" stroke-linecap="round" marker-end="url(#tt-ah)"/></svg>
+  <div class="tt-dir"><img class="a1" src="${ART.game.arrowW}" alt="" draggable="false"><img class="a2" src="${ART.game.arrowR}" alt="" draggable="false"></div>
   <div class="tt-gtl"><button class="tt-gbtn tt-sqb tt-pause" type="button" aria-label="메뉴"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14M5 12h14M5 17h14"/></svg></button><button class="tt-gbtn tt-rulesbtn" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 5.5c2.8-1 5.6-.8 8.5 1 2.9-1.8 5.7-2 8.5-1V19c-2.8-1-5.6-.8-8.5 1-2.9-1.8-5.7-2-8.5-1z"/><path d="M12 6.5V20"/></svg>규칙</button></div>
   <div class="tt-gturn"><span class="tt-gturn-av tt-av"></span><b class="tt-gturn-tx"></b><span class="tt-gclock"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 1.5M9.5 2.8h5"/></svg><b></b></span></div>
   <div class="tt-gtr"><button class="tt-gbtn tt-gchatbtn" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z"/></svg>채팅</button><button class="tt-gbtn tt-emobtn" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8.5 14.5c1.8 2 5.2 2 7 0M9 9.5h.01M15 9.5h.01"/></svg>이모티콘</button></div>
@@ -154,7 +152,7 @@ const TEMPLATE = `
     <div class="tt-suitc"><small>지금 무늬</small><b></b><span></span></div>
   </div>
   <div class="tt-hand"></div>
-  <div class="tt-gme"><div class="tt-gme-ring"><svg viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="50" r="46"/></svg><div class="tt-av tt-gme-av"></div></div><div class="tt-gme-plate"><b class="tt-gme-nm"></b><i class="star"></i><span class="tt-gme-cnt"></span></div></div>
+  <div class="tt-gme"><div class="tt-gme-ring"><svg viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="50" r="46"/></svg><div class="tt-av tt-gme-av"></div><img class="frame" src="${ART.game.frameBig}" alt="" draggable="false"></div><div class="tt-gme-plate"><b class="tt-gme-nm"></b><i class="star"></i><span class="tt-gme-cnt"></span></div></div>
   <button class="tt-gbtn tt-sortbtn" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4v16M3.5 16.5 7 20l3.5-3.5M17 20V4M13.5 7.5 17 4l3.5 3.5"/></svg><span>무늬순</span></button>
   <div class="tt-gbtns">
     <button class="tt-one" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10v4h3l6 4V6L6 10zM16 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12"/></svg><span>원카드!</span></button>
@@ -1497,7 +1495,7 @@ export function mountTown(root: HTMLElement, opts: TownOpts = {}): () => void {
     if (v.n === 3) return d === 1 ? 1 : 3;
     return d;
   };
-  const OPP_XY: Record<number, { x: number; y: number }> = { 1: { x: 40, y: 168 }, 2: { x: 500, y: 74 }, 3: { x: 1000, y: 168 } };
+  const OPP_XY: Record<number, { x: number; y: number }> = { 1: { x: 52, y: 196 }, 2: { x: 478, y: 72 }, 3: { x: 968, y: 196 } };
   function cardHTML(c: Card, cls = "", style = "") {
     if (c.jk)
       return ART.joker
@@ -1526,7 +1524,7 @@ export function mountTown(root: HTMLElement, opts: TownOpts = {}): () => void {
       if (rp === 0) continue;
       const s = seatInfo(pi);
       const { x, y } = OPP_XY[rp];
-      h += `<div class="tt-opp p${rp}" data-p="${pi}" style="left:${x}px;top:${y}px"><div class="tt-oring"><svg viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="50" r="46"/></svg><div class="tt-av" style="${s ? avBg(s.char, s.look) : ""}"></div></div><div class="tt-oinfo"><div class="tt-onm">${s ? nm(s.nick) : "?"}${s?.bot ? '<span class="tt-botb">BOT</span>' : ""}${s && s.uid === RM.room?.hostUid ? `<span class="tt-hostcrown sm">${CROWN}</span>` : ""}</div><div class="tt-ocnt"><b></b>장</div></div><div class="tt-ofan"></div><span class="tt-one1" hidden>1장!</span></div>`;
+      h += `<div class="tt-opp p${rp}" data-p="${pi}" style="left:${x}px;top:${y}px"><div class="tt-oring"><svg viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="50" r="46"/></svg><div class="tt-av" style="${s ? avBg(s.char, s.look) : ""}"></div><img class="frame" src="${ART.game.frameSm}" alt="" draggable="false"></div><div class="tt-oinfo"><div class="tt-onm">${s ? nm(s.nick) : "?"}${s?.bot ? '<span class="tt-botb">BOT</span>' : ""}${s && s.uid === RM.room?.hostUid ? `<span class="tt-hostcrown sm">${CROWN}</span>` : ""}</div><div class="tt-ocnt"><b></b>장</div></div><div class="tt-ofan"></div><span class="tt-one1" hidden>1장!</span></div>`;
     }
     $(".tt-opps").innerHTML = h;
     const s0 = v.me >= 0 ? seatInfo(v.me) : null;
@@ -1742,7 +1740,7 @@ export function mountTown(root: HTMLElement, opts: TownOpts = {}): () => void {
   };
 
   // 말풍선 · 연출 위치 (보는 사람 기준)
-  const relAnchor = (rp: number) => (rp === 0 ? { x: 200, y: 470 } : rp === 1 ? { x: 70, y: 120 } : rp === 2 ? { x: 690, y: 40 } : { x: 1010, y: 120 });
+  const relAnchor = (rp: number) => (rp === 0 ? { x: 210, y: 440 } : rp === 1 ? { x: 70, y: 150 } : rp === 2 ? { x: 700, y: 170 } : { x: 1010, y: 150 });
   const relCard = (rp: number) => (rp === 0 ? { x: 560, y: 560 } : rp === 1 ? { x: 230, y: 250 } : rp === 2 ? { x: 600, y: 120 } : { x: 960, y: 250 });
   function bubbleSeat(seat: number, text: string, ms = 1600) {
     if (!GV || !RM.game) return;
