@@ -1496,12 +1496,55 @@ export function mountTown(root: HTMLElement, opts: TownOpts = {}): () => void {
     return d;
   };
   const OPP_XY: Record<number, { x: number; y: number }> = { 1: { x: 52, y: 196 }, 2: { x: 478, y: 72 }, 3: { x: 968, y: 196 } };
+  // 카드 앞면: 포커(ANIME POKER) 카드와 같은 방식 — 왼쪽 세로줄에 큰 숫자 + 무늬, 오른쪽 넓은 칸에 정식 무늬 배치 (SVG 100×140)
+  const FACE_PATH = [
+    "M50 3C40 22 8 38 8 60c0 14 10 23 22 23 7 0 13-3 17-9-1 12-5 20-13 24h32c-8-4-12-12-13-24 4 6 10 9 17 9 12 0 22-9 22-23C92 38 60 22 50 3z",
+    "M50 93C21 71 5 55 5 34 5 18 17 7 31 7c9 0 15 8 19 17 4-9 10-17 19-17 14 0 26 11 26 27 0 21-16 37-45 59z",
+    "M50 2 88 50 50 98 12 50z",
+    "M50 6a19 19 0 1 1 0 38 19 19 0 0 1 0-38zM27 39a19 19 0 1 1 0 38 19 19 0 0 1 0-38zM73 39a19 19 0 1 1 0 38 19 19 0 0 1 0-38zM50 44a12 12 0 1 1 0 24 12 12 0 0 1 0-24zM46 60c0 15-4 26-12 35h32c-8-9-12-20-12-35z",
+  ];
+  const SUIT_NORM = [96 / 95, 96 / 86, 1, 96 / 89];
+  const SUIT_SX = [1, 0.87, 1.15, 1];
+  const pipSVG = (st: number, x: number, y: number, size: number, flip = false) => {
+    const k = (size / 100) * SUIT_NORM[st];
+    return `<path d="${FACE_PATH[st]}" transform="translate(${x} ${y})${flip ? " rotate(180)" : ""} scale(${k * SUIT_SX[st]} ${k}) translate(-50 -50)"/>`;
+  };
+  const COL_L = 47,
+    COL_R = 81,
+    COL_C = 64;
+  const yAt = (k: number) => 17 + ((123 - 17) * k) / 6;
+  const PIPS: Record<number, [number, number][]> = {
+    2: [[COL_C, 0], [COL_C, 6]],
+    3: [[COL_C, 0], [COL_C, 3], [COL_C, 6]],
+    4: [[COL_L, 0], [COL_R, 0], [COL_L, 6], [COL_R, 6]],
+    5: [[COL_L, 0], [COL_R, 0], [COL_C, 3], [COL_L, 6], [COL_R, 6]],
+    6: [[COL_L, 0], [COL_R, 0], [COL_L, 3], [COL_R, 3], [COL_L, 6], [COL_R, 6]],
+    7: [[COL_L, 0], [COL_R, 0], [COL_C, 1.5], [COL_L, 3], [COL_R, 3], [COL_L, 6], [COL_R, 6]],
+    8: [[COL_L, 0], [COL_R, 0], [COL_C, 1.5], [COL_L, 3], [COL_R, 3], [COL_C, 4.5], [COL_L, 6], [COL_R, 6]],
+    9: [[COL_L, 0], [COL_R, 0], [COL_L, 2], [COL_R, 2], [COL_C, 3], [COL_L, 4], [COL_R, 4], [COL_L, 6], [COL_R, 6]],
+    10: [[COL_L, 0], [COL_R, 0], [COL_C, 1], [COL_L, 2], [COL_R, 2], [COL_L, 4], [COL_R, 4], [COL_C, 5], [COL_L, 6], [COL_R, 6]],
+  };
+  /** 기능 카드 표시 (원카드 규칙을 몰라도 한눈에) */
+  const FX_TAG: Record<number, string> = { 2: "+2", 14: "+3", 7: "무늬", 11: "건너뜀", 12: "반대", 13: "한 번 더" };
+  function faceSVG(c: Card) {
+    const st = c.s;
+    let mid = "";
+    if (c.r === 14) mid = pipSVG(st, 62, 84, st === 1 ? 52 : 58);
+    else if (c.r >= 11) {
+      // J · Q · K: 가운데 틀 안에 큰 글자 + 무늬
+      mid = `<rect x="31" y="8" width="62" height="124" rx="6" fill="currentColor" fill-opacity=".08" stroke="currentColor" stroke-opacity=".45" stroke-width="1.4"/><text x="62" y="80" text-anchor="middle" class="crt">${rl(c.r)}</text>${pipSVG(st, 62, 108, 26)}`;
+    } else mid = PIPS[c.r].map(([x, k]) => pipSVG(st, x, yAt(k), 24, k > 3)).join("");
+    const r = rl(c.r);
+    const idx = r === "10" ? `<g transform="translate(15 0) scale(.86 1) translate(-15 0)"><text x="15" y="37" text-anchor="middle" class="idx">10</text></g>` : `<text x="15" y="37" text-anchor="middle" class="idx">${r}</text>`;
+    return `<svg viewBox="0 0 100 140" class="tt-face" fill="currentColor" aria-hidden="true">${mid}${idx}${pipSVG(st, 15, 54, 24)}</svg>`;
+  }
   function cardHTML(c: Card, cls = "", style = "") {
     if (c.jk)
       return ART.joker
         ? `<div class="tt-c jk art ${cls}" style="${style}" data-id="${c.id}"><img class="tt-jkfull" src="${ART.joker}" alt="" draggable="false"><span class="r">JOKER</span></div>`
         : `<div class="tt-c jk ${cls}" style="${style}" data-id="${c.id}"><span class="r">JOKER</span><span class="s2">🤡</span></div>`;
-    return `<div class="tt-c ${isRed(c) ? "red" : ""} ${cls}" style="${style}" data-id="${c.id}"><span class="r">${rl(c.r)}</span><span class="s1">${SU[c.s]}</span><span class="s2">${SU[c.s]}</span></div>`;
+    const tag = FX_TAG[c.r];
+    return `<div class="tt-c pk ${isRed(c) ? "red" : ""} ${cls}" style="${style}" data-id="${c.id}">${faceSVG(c)}${tag ? `<em class="fx ${c.r === 2 || c.r === 14 ? "atk" : ""}">${tag}</em>` : ""}</div>`;
   }
   const backHTML = (cls = "") =>
     ART.cardBack ? `<div class="tt-back tt-back-art ${cls}"><img src="${ART.cardBack}" alt="" draggable="false"></div>` : `<div class="tt-back ${cls}"></div>`;
