@@ -88,7 +88,7 @@ export const REWARD = [300, 150, 80, 40] as const;
 /*
  * 코스튬 뽑기 — 재화(코인)를 쓰는 곳은 여기 하나뿐.
  *  1회 300 · 10회 2,700. 코스튬 확률 3% (한 벌당 1.5%), 나머지는 「꽝 · 코인 +50」.
- *  천장: 코스튬 없이 60회 → 61회째가 아니라 60회째에 아직 없는 코스튬 확정. 코스튬이 나오면 천장 0 으로.
+ *  천장: 코스튬 없이 100회째에 아직 없는 코스튬 확정. 코스튬이 나오면 천장 0 으로. 코스튬은 등급 없음.
  *  이미 가진 코스튬이 또 나오면 코인 1,500 으로 바꿔 줌. (모든 코스튬을 가졌으면 천장 대신 1,500)
  */
 export const GACHA = {
@@ -96,7 +96,7 @@ export const GACHA = {
   cost1: 300,
   cost10: 2700,
   rate: 0.03,
-  pity: 60,
+  pity: 100,
   lucky: 50,
   dupRefund: 1500,
   pool: [
@@ -113,6 +113,8 @@ export interface Profile {
   coins: number;
   owned: string[]; // "haru:cos1"
   pity: number;
+  /** 끝까지 한 판 수 (레벨) */
+  games?: number;
 }
 const KEY = "tabletown-profile-v1";
 export function loadProfile(): Profile {

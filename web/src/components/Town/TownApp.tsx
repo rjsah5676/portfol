@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useAuth } from "@/lib/AuthContext";
 import { DH, DW, mountTown } from "@/lib/town/engine";
 
 /*
@@ -35,6 +36,7 @@ function useSize<T extends HTMLElement>(): [(el: T | null) => void, { w: number;
 const GATE_BG: React.CSSProperties = { background: "linear-gradient(rgba(24,30,56,0.9), rgba(16,20,40,0.96)), #141a2a" };
 
 export default function TownApp() {
+  const { admin } = useAuth();
   const rootRef = useRef<HTMLDivElement>(null);
   const gameRef = useRef<HTMLDivElement>(null);
   const [boxRef, box] = useSize<HTMLDivElement>();
@@ -64,8 +66,8 @@ export default function TownApp() {
   const ready = k > 0;
   useEffect(() => {
     if (!ready || !gameRef.current) return;
-    return mountTown(gameRef.current);
-  }, [ready]);
+    return mountTown(gameRef.current, { admin });
+  }, [ready, admin]);
 
   const fs = fsReal || pseudoFs;
   const phone = scr.touch && Math.min(scr.w, scr.h) < 600;

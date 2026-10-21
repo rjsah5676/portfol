@@ -11,6 +11,8 @@ export type GameId = "joker" | "onecard" | "yut" | "chess" | "janggi" | "omok" |
 
 const B = "/town";
 const FACES: Face[] = ["idle", "happy", "sad", "smug", "panic", "win"];
+/** 테이블 자리별 앉은 그림 (0 앞왼 · 1 뒤왼 · 2 뒤오 · 3 앞오) — 자리마다 따로 그린 자세, 좌우반전 안 씀 */
+const seats = (k: string) => [0, 1, 2, 3].map((i) => `${B}/seat/${k}-${i}.webp`);
 const faces = (c: string) => Object.fromEntries(FACES.map((f) => [f, `${B}/face/${c}-${f}.webp`])) as Record<Face, string>;
 
 export const ART: {
@@ -20,6 +22,9 @@ export const ART: {
   ground: string | null;
   front: string | null;
   room: string | null;
+  /** 대기실: 테이블 없는 방 + 테이블만 따로 (앉은 캐릭터를 테이블 뒤 · 앞에 겹쳐 그림) */
+  roomEmpty: string | null;
+  roomTable: string | null;
   cardBack: string | null;
   joker: string | null;
   bld: Partial<Record<GameId, string>>;
@@ -42,6 +47,8 @@ export const ART: {
   ground: `${B}/bg/ground.webp`,
   front: `${B}/bg/front.webp`,
   room: `${B}/bg/room-onecard.webp`,
+  roomEmpty: `${B}/room/room.webp`,
+  roomTable: `${B}/room/table.webp`,
   cardBack: `${B}/ui/card-back.webp`,
   joker: `${B}/ui/joker.webp`,
   bld: {
@@ -70,12 +77,12 @@ export const ART: {
   fullBg: `${B}/bg/full-base.webp`,
   char: {
     haru: {
-      base: { full: `${B}/char/haru-full.webp`, sd: `${B}/char/haru-sd.webp`, face: `${B}/face/haru-idle.webp`, bust: faces("haru") },
-      cos1: { full: `${B}/char/haru-cos1-full.webp`, sd: `${B}/char/haru-cos1-sd.webp`, face: `${B}/face/haru-cos1-idle.webp`, bust: faces("haru-cos1") },
+      base: { full: `${B}/char/haru-full.webp`, sd: `${B}/char/haru-sd.webp`, seat: seats("haru-base"), face: `${B}/face/haru-idle.webp`, bust: faces("haru") },
+      cos1: { bg: `${B}/bg/haru-cos1.webp`, full: `${B}/char/haru-cos1-full.webp`, sd: `${B}/char/haru-cos1-sd.webp`, seat: seats("haru-cos1"), face: `${B}/face/haru-cos1-idle.webp`, bust: faces("haru-cos1") },
     },
     ruru: {
-      base: { full: `${B}/char/ruru-full.webp`, sd: `${B}/char/ruru-sd.webp`, face: `${B}/face/ruru-idle.webp`, bust: faces("ruru") },
-      cos1: { full: `${B}/char/ruru-cos1-full.webp`, sd: `${B}/char/ruru-cos1-sd.webp`, face: `${B}/face/ruru-cos1-idle.webp`, bust: faces("ruru-cos1") },
+      base: { full: `${B}/char/ruru-full.webp`, sd: `${B}/char/ruru-sd.webp`, seat: seats("ruru-base"), face: `${B}/face/ruru-idle.webp`, bust: faces("ruru") },
+      cos1: { bg: `${B}/bg/ruru-cos1.webp`, full: `${B}/char/ruru-cos1-full.webp`, sd: `${B}/char/ruru-cos1-sd.webp`, seat: seats("ruru-cos1"), face: `${B}/face/ruru-cos1-idle.webp`, bust: faces("ruru-cos1") },
     },
   },
 };
@@ -93,6 +100,8 @@ export const SIGN: Partial<Record<GameId, { x: number; y: number; w: number }>> 
 };
 
 export interface CharArt {
+  /** 테이블 자리별 앉은 SD (0 앞왼 · 1 뒤왼 · 2 뒤오 · 3 앞오) */
+  seat?: string[];
   full?: string;
   bg?: string;
   sd?: string;
@@ -121,6 +130,8 @@ export function allArt(): string[] {
   push(ART.ground);
   push(ART.front);
   push(ART.room);
+  push(ART.roomEmpty);
+  push(ART.roomTable);
   push(ART.cardBack);
   push(ART.joker);
   Object.values(ART.bld).forEach(push);
@@ -134,6 +145,7 @@ export function allArt(): string[] {
       push(l?.full);
       push(l?.bg);
       push(l?.sd);
+      l?.seat?.forEach(push);
       push(l?.face);
       Object.values(l?.bust ?? {}).forEach(push);
     }

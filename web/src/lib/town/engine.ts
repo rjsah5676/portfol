@@ -85,24 +85,25 @@ const TEMPLATE = `
   <div class="tt-sky"></div>
   <div class="tt-hills"></div>
   <div class="tt-world"></div>
-  <div class="tt-ui tt-panel tt-prof" role="button" tabindex="0"><div class="tt-av tt-prof-av"></div><div><div class="tt-nm tt-prof-nm"></div><div class="tt-lv">캐릭터 바꾸기 ›</div></div></div>
+  <div class="tt-ui tt-prof" role="button" tabindex="0"><div class="tt-prof-avw"><div class="tt-av tt-prof-av"></div><span class="tt-lvb"></span></div><div class="tt-prof-info"><div class="tt-prof-nm"></div><div class="tt-xp"><i></i></div></div></div>
   <div class="tt-ui tt-money tt-money-town"></div>
   <div class="tt-ui tt-panel tt-minimap"></div>
   <button class="tt-ui tt-panel tt-sq tt-mail" type="button" aria-label="우편함" data-soon="우편함">${icon("mail")}</button>
-  <button class="tt-ui tt-panel tt-sq tt-set" type="button" aria-label="설정" data-soon="설정">${icon("settings")}</button>
-  <div class="tt-ui tt-rightcol">
+  <button class="tt-ui tt-panel tt-sq tt-set" type="button" aria-label="설정">${icon("settings")}</button>
+  <div class="tt-ui tt-leftcol">
     <button class="tt-colbtn tt-panel tt-open-shop" type="button">${icon("shop")}뽑기<i class="tt-badge"></i></button>
     <button class="tt-colbtn tt-panel tt-open-char" type="button">${icon("char")}캐릭터</button>
     <button class="tt-colbtn tt-panel" type="button" data-soon="미션">${icon("mission")}미션</button>
   </div>
-  <button class="tt-ui tt-panel tt-sq tt-chat" type="button" aria-label="채팅" data-soon="채팅">${icon("chat")}</button>
-  <div class="tt-ui tt-panel tt-arrows">
+  <button class="tt-ui tt-panel tt-sq tt-chat" type="button" aria-label="채팅" data-soon="채팅">${icon("chat")}<i class="tt-badge"></i></button>
+  <div class="tt-ui tt-pad" aria-label="이동">
+    <button class="tt-arr tt-au" type="button" aria-label="위">▲</button>
     <button class="tt-arr tt-al" type="button" aria-label="왼쪽">◀</button>
     <button class="tt-arr tt-ar" type="button" aria-label="오른쪽">▶</button>
+    <button class="tt-arr tt-ad" type="button" aria-label="아래">▼</button>
   </div>
-  <button class="tt-ui tt-gamelist" type="button">${icon("list")} 게임 목록</button>
-  <button class="tt-ui tt-quick" type="button">빠른 게임 ›</button>
-  <div class="tt-hint">PC: ← → ↑ ↓ / WASD 이동 · Enter 입장 · 바닥을 눌러도 이동</div>
+  <button class="tt-ui tt-gamelist" type="button">${icon("list")}<b>게임 목록</b><i>›</i></button>
+  <button class="tt-ui tt-quick" type="button">${icon("sort")}<b>빠른 게임</b><i>›</i></button>
 </div>
 
 <div class="tt-screen tt-room" data-s="room" hidden>
@@ -110,19 +111,30 @@ const TEMPLATE = `
   <button class="tt-backbtn tt-panel" type="button">← 마을로</button>
   <div class="tt-panel tt-roomtitle"><div class="tt-t">원카드 대기실</div><div class="tt-n"><span class="tt-roomno"></span><button type="button" class="tt-roomlist">방 목록</button></div></div>
   <div class="tt-ui tt-money tt-money-room"></div>
+  <div class="tt-rcount" aria-label="인원">👥 <b>1/4</b></div>
   <div class="tt-rtable"></div>
   <div class="tt-rseats"></div>
   <div class="tt-panel tt-rinfo">
-    <h3>원카드</h3>
-    <ol>
-      <li>바닥 카드와 <b>무늬나 숫자</b>가 같은 카드를 내. 먼저 다 털면 1등.</li>
-      <li>공격: 2는 +2, A는 +3, 조커는 +5. 같은 숫자나 더 센 공격으로 받아칠 수 있어.</li>
-      <li>7 무늬 바꾸기 · J 건너뛰기 · Q 방향 반대 · K 한 장 더.</li>
-      <li>1장 남으면 「원카드」를 눌러. 남이 안 누르면 내가 눌러서 잡을 수 있어.</li>
-    </ol>
-    <div class="tt-rowx">순위 보상<div class="tt-rewards">${REWARD.map((v, i) => `<span><b>${i + 1}등</b> ${v}</span>`).join("")}</div></div>
-    <div class="tt-rowx">모드<div class="tt-modes"><button class="on" type="button">일반 판</button><button type="button" disabled>빠른 판</button></div></div>
+    <div class="tt-rtabs" role="tablist"><button type="button" class="on" data-rt="info">게임 정보</button><button type="button" data-rt="set">방 설정</button></div>
+    <div class="tt-rpage" data-rp="info">
+      <h3>원카드 <small>2~4명 · 약 5분</small></h3>
+      <ol>
+        <li>바닥 카드와 <b>무늬나 숫자</b>가 같은 카드를 내요. 먼저 다 털면 1등!</li>
+        <li>공격 카드: <b>2</b>는 +2장, <b>A</b>는 +3장, <b>조커</b>는 +5장. 같은 숫자나 더 센 공격으로 받아칠 수 있어요.</li>
+        <li><b>7</b> 무늬 바꾸기 · <b>J</b> 건너뛰기 · <b>Q</b> 방향 반대 · <b>K</b> 한 장 더</li>
+        <li>1장 남으면 「원카드!」를 눌러요. 남이 안 누르면 내가 잡을 수 있어요.</li>
+      </ol>
+      <div class="tt-rowx"><span>순위 보상</span><div class="tt-rewards">${REWARD.map((v, i) => `<span><b>${i + 1}등</b>${icon("coin")}${v}</span>`).join("")}</div></div>
+    </div>
+    <div class="tt-rpage" data-rp="set" hidden>
+      <div class="tt-rowx"><span>모드</span><div class="tt-modes"><button class="on" type="button">일반 판</button><button type="button" disabled>빠른 판</button></div></div>
+      <div class="tt-rowx"><span>인원</span><b class="tt-rval">4명</b></div>
+      <div class="tt-rowx"><span>방 공개</span><div class="tt-modes"><button class="on" type="button" data-pub="1">공개</button><button type="button" data-pub="0">비공개</button></div></div>
+      <div class="tt-rowx"><span>초대하기</span><button type="button" class="tt-rinvite">🔗 초대 링크 복사</button></div>
+      <p class="tt-rnote">빈자리가 있으면 게임 시작 때 봇이 자동으로 앉아요.</p>
+    </div>
   </div>
+  <form class="tt-rchat"><input type="text" maxlength="40" placeholder="대기실에 한마디…" aria-label="채팅 입력"><button type="submit">${icon("chat")}</button></form>
   <button class="tt-start" type="button">게임 시작 ›</button>
 </div>
 
@@ -150,7 +162,7 @@ const TEMPLATE = `
 </div>
 <div class="tt-screen tt-gacha" data-s="gacha" hidden>
   <div class="tt-gbg"></div>
-  <div class="tt-gfeat"><div class="tt-gped"></div><div class="tt-gfeat-art"></div><div class="tt-pick">PICK UP</div></div>
+  <div class="tt-gfeat"><div class="tt-gped"></div><div class="tt-gfeat-art"></div><div class="tt-pick">PICK UP</div><div class="tt-gfeat-name"></div></div>
   <div class="tt-gmachine"></div>
   <button class="tt-backbtn tt-panel tt-gback" type="button">← 마을로</button>
   <div class="tt-gtitle-big">코스튬 뽑기</div>
@@ -161,8 +173,8 @@ const TEMPLATE = `
     <div class="tt-gcards"></div>
     <div class="tt-gpity"><div class="tt-gpity-row"><span>천장</span><b class="tt-gpity-n"></b><span>/ ${GACHA.pity}</span><i>🎁</i></div><div class="tt-gpity-bar"><i></i></div><small>${GACHA.pity}회 안에 코스튬 확정</small></div>
     <div class="tt-gpull">
-      <button class="tt-g1" type="button"><b>1회 뽑기</b><span>${icon("coin", "tt-coin")}${GACHA.cost1}</span></button>
-      <button class="tt-g10" type="button"><b>10회 뽑기</b><span>${icon("coin", "tt-coin")}${GACHA.cost10.toLocaleString()}</span></button>
+      <button class="tt-g1" type="button"><i class="shine"></i><b>1회 뽑기</b><span>${icon("coin", "tt-coin")}${GACHA.cost1}</span></button>
+      <button class="tt-g10" type="button"><i class="shine"></i><em>10% 할인</em><b>10회 뽑기</b><span>${icon("coin", "tt-coin")}${GACHA.cost10.toLocaleString()}</span></button>
     </div>
   </div>
   <button class="tt-panel tt-ginfo" type="button">ⓘ 확률 정보</button>
@@ -171,7 +183,12 @@ const TEMPLATE = `
 <div class="tt-toast"></div>
 `;
 
-export function mountTown(root: HTMLElement): () => void {
+export interface TownOpts {
+  /** 사이트 관리자면 설정에서 코인 · 천장 · 보유 코스튬 등을 바꿀 수 있음 */
+  admin?: boolean;
+}
+
+export function mountTown(root: HTMLElement, opts: TownOpts = {}): () => void {
   root.innerHTML = TEMPLATE;
   const $ = <T extends HTMLElement = HTMLElement>(s: string) => root.querySelector(s) as T;
   const $$ = (s: string, el: ParentNode = root) => Array.from(el.querySelectorAll<HTMLElement>(s));
@@ -232,10 +249,15 @@ export function mountTown(root: HTMLElement): () => void {
 
   // ---------- 돈 ----------
   function refreshMoney() {
-    const html = `<div class="tt-m tt-panel">${icon("coin", "tt-coin")}<b>${ME.coins.toLocaleString()}</b></div>`;
-    $(".tt-money-town").innerHTML = html;
-    $(".tt-money-room").innerHTML = html;
+    const html = `<div class="tt-m">${icon("coin", "tt-coin")}<b>${ME.coins.toLocaleString()}</b><button type="button" class="tt-mplus" aria-label="코인 얻는 법">+</button></div>`;
+    for (const sel of [".tt-money-town", ".tt-money-room"]) {
+      $(sel).innerHTML = html;
+      $(sel).querySelector<HTMLElement>(".tt-mplus")!.onclick = () => toast("코인은 게임에서 이기면 모여요!");
+    }
     $(".tt-prof-nm").textContent = ME.nick === "나" ? CHARS[ME.char].name : ME.nick;
+    const games = ME.games ?? 0;
+    $(".tt-lvb").textContent = `Lv. ${1 + Math.floor(games / 5)}`;
+    root.querySelector<HTMLElement>(".tt-xp i")!.style.width = `${((games % 5) / 5) * 100}%`;
     const av = $(".tt-prof-av");
     av.setAttribute("style", avBg(ME.char, ME.look));
     av.innerHTML = faceHTML(ME.char, ME.look);
@@ -276,7 +298,9 @@ export function mountTown(root: HTMLElement): () => void {
     ty: 0,
     cam: 0,
     keys: {} as Record<string, boolean>,
-    hold: 0,
+    hold: { x: 0, y: 0 },
+    drag: -1,
+    dust: 0,
     face: 1,
     near: -1,
     raf: 0,
@@ -311,7 +335,7 @@ export function mountTown(root: HTMLElement): () => void {
       if (art) {
         const sg = SIGN[g.id];
         w += `<div class="tt-bld-art ${g.open ? "open" : "closed"}" style="left:${doorX(i)}px"><img src="${art}" alt="${g.name}" draggable="false">${
-          sg ? `<div class="tt-bsign" style="left:${sg.x * 100}%;top:${sg.y * 100}%;width:${sg.w * 100}%">${g.name}</div>` : ""
+          sg ? `<div class="tt-bsign" style="left:${sg.x * 100}%;top:${sg.y * 100}%;width:${sg.w * 100}%;--n:${g.name.replace(/ /g, "").length}"><span>${g.name}</span></div>` : ""
         }</div>`;
       }
       else
@@ -348,7 +372,8 @@ export function mountTown(root: HTMLElement): () => void {
     };
     $(".tt-minimap").innerHTML =
       GAMES.map(
-        (g, i) => `<button class="tt-mic ${g.open ? "" : "off"}" type="button" data-i="${i}"><span>${g.ic}</span><span>${g.name}</span></button>`,
+        (g, i) =>
+          `<button class="tt-mic ${g.open ? "" : "off"}" type="button" data-i="${i}">${ART.bld[g.id] ? `<img src="/town/bld/thumb/${g.id}.webp" alt="" draggable="false">` : `<span class="e">${g.ic}</span>`}<span class="n">${g.name}</span></button>`,
       ).join("") + '<i class="tt-mdot"></i>';
     $$(".tt-mic").forEach((b) => (b.onclick = () => teleport(+b.dataset.i!)));
     refreshPlayerSd();
@@ -383,19 +408,34 @@ export function mountTown(root: HTMLElement): () => void {
     if (!g.open) return toast(`${g.name}은(는) 아직 공사 중이에요`);
     enterRoom();
   }
-  const onStageDown = (e: PointerEvent) => {
-    if (CUR !== "town") return;
-    const t = e.target as HTMLElement;
-    if (t.closest(".tt-ui,button,.tt-ent,.tt-ov")) return;
+  // 바닥을 누르면 그쪽으로, 누른 채로 끌면 계속 따라감 (마우스 · 손가락 둘 다)
+  const aimAt = (e: PointerEvent) => {
     const r = root.getBoundingClientRect(),
       k = scale();
     const sx = (e.clientX - r.left) / k,
       sy = (e.clientY - r.top) / k;
-    if (sy < 440) return;
-    T.tx = sx + T.cam;
+    T.tx = Math.max(60, Math.min(WORLD - 60, sx + T.cam));
     T.ty = Math.max(Y_MIN, Math.min(Y_MAX, sy));
   };
+  const onStageDown = (e: PointerEvent) => {
+    if (CUR !== "town") return;
+    const t = e.target as HTMLElement;
+    if (t.closest(".tt-ui,button,.tt-ent,.tt-ov")) return;
+    const r = root.getBoundingClientRect();
+    if ((e.clientY - r.top) / scale() < 300) return;
+    T.drag = e.pointerId;
+    aimAt(e);
+  };
+  const onStageMove = (e: PointerEvent) => {
+    if (T.drag === e.pointerId && CUR === "town") aimAt(e);
+  };
+  const onStageUp = (e: PointerEvent) => {
+    if (T.drag === e.pointerId) T.drag = -1;
+  };
   root.addEventListener("pointerdown", onStageDown);
+  window.addEventListener("pointermove", onStageMove);
+  window.addEventListener("pointerup", onStageUp);
+  window.addEventListener("pointercancel", onStageUp);
   const onKeyDown = (e: KeyboardEvent) => {
     if (!alive) return;
     const tag = (e.target as HTMLElement)?.tagName;
@@ -413,28 +453,33 @@ export function mountTown(root: HTMLElement): () => void {
   };
   window.addEventListener("keydown", onKeyDown);
   window.addEventListener("keyup", onKeyUp);
-  function holdBtn(el: HTMLElement, d: number) {
+  // 폰 이동 패드 (상하좌우, 누르고 있는 동안 이동)
+  function holdBtn(el: HTMLElement, dx: number, dy: number) {
     const on = (e: Event) => {
       e.preventDefault();
-      T.hold = d;
+      if (dx) T.hold.x = dx;
+      if (dy) T.hold.y = dy;
       T.tx = null;
     };
     const off = () => {
-      if (T.hold === d) T.hold = 0;
+      if (dx && T.hold.x === dx) T.hold.x = 0;
+      if (dy && T.hold.y === dy) T.hold.y = 0;
     };
     el.addEventListener("pointerdown", on);
     el.addEventListener("pointerup", off);
     el.addEventListener("pointerleave", off);
     el.addEventListener("pointercancel", off);
   }
-  holdBtn($(".tt-al"), -1);
-  holdBtn($(".tt-ar"), 1);
+  holdBtn($(".tt-al"), -1, 0);
+  holdBtn($(".tt-ar"), 1, 0);
+  holdBtn($(".tt-au"), 0, -1);
+  holdBtn($(".tt-ad"), 0, 1);
   $(".tt-quick").onclick = () => enterRoom();
   $(".tt-gamelist").onclick = () => {
     const ov = overlay(
       `<h2>게임 목록</h2><p>걸어가도 되고, 여기서 바로 들어가도 돼.</p><div class="tt-glist">${GAMES.map(
         (g, i) =>
-          `<button type="button" data-i="${i}" ${g.open ? "" : "disabled"}><span>${g.ic}</span><div><b>${g.name}</b><small>${g.open ? "바로 입장" : "공사 중"}</small></div></button>`,
+          `<button type="button" data-i="${i}" class="${g.open ? "open" : ""}" ${g.open ? "" : "disabled"}>${ART.bld[g.id] ? `<img src="/town/bld/thumb/${g.id}.webp" alt="" draggable="false">` : `<span>${g.ic}</span>`}<div><b>${g.name}</b><small>${g.open ? "지금 바로 입장" : "준비 중"}</small></div>${g.open ? "<i>›</i>" : ""}</button>`,
       ).join("")}</div><div class="tt-row"><button type="button" class="tt-x">닫기</button></div>`,
     );
     ov.querySelector<HTMLElement>(".tt-x")!.onclick = () => ov.remove();
@@ -467,13 +512,14 @@ export function mountTown(root: HTMLElement): () => void {
       ov.querySelector(".tt-charsub")!.textContent = `${CHARS[selC].looks[selL].name}${own ? "" : " · 뽑기에서 얻을 수 있어요"}`;
       const use = ov.querySelector<HTMLButtonElement>(".tt-use")!;
       use.disabled = !own || (selC === ME.char && selL === ME.look);
-      use.textContent = selC === ME.char && selL === ME.look ? "사용 중" : own ? "이 모습 쓰기" : "미보유";
+      use.textContent = selC === ME.char && selL === ME.look ? "사용 중" : own ? "이 모습 쓰기" : "뽑기 하러 가기";
+      use.disabled = selC === ME.char && selL === ME.look;
       const opts: string[] = [];
       for (const c of Object.values(CHARS))
         for (const l of Object.keys(c.looks) as LookId[]) {
           const has = l === "base" || ME.owned.includes(`${c.id}:${l}`);
           opts.push(
-            `<button type="button" class="tt-cpick ${selC === c.id && selL === l ? "on" : ""} ${has ? "" : "locked"}" data-c="${c.id}" data-l="${l}"><div class="tt-av" style="${avBg(c.id, l)}">${faceHTML(c.id, l)}</div><b>${c.name}</b><small>${has ? c.looks[l].name : "🔒 " + c.looks[l].name}</small></button>`,
+            `<button type="button" class="tt-cpick ${selC === c.id && selL === l ? "on" : ""} ${has ? "" : "locked"} ${ME.char === c.id && ME.look === l ? "using" : ""}" data-c="${c.id}" data-l="${l}"><span class="tt-cpimg" style="${(artOf(c.id, l).bg ?? ART.fullBg) ? `background-image:url(${artOf(c.id, l).bg ?? ART.fullBg})` : ""}">${artOf(c.id, l).sd ? `<img src="${artOf(c.id, l).sd}" alt="" draggable="false">` : faceHTML(c.id, l)}${has ? "" : "<i>🔒</i>"}</span><b>${l === "base" ? c.name : c.looks[l].name}</b><small>${l === "base" ? "기본" : has ? "코스튬" : "뽑기에서 획득"}</small></button>`,
           );
         }
       ov.querySelector(".tt-cgrid")!.innerHTML = opts.join("");
@@ -489,6 +535,10 @@ export function mountTown(root: HTMLElement): () => void {
     draw();
     ov.querySelector<HTMLElement>(".tt-x")!.onclick = () => ov.remove();
     ov.querySelector<HTMLElement>(".tt-use")!.onclick = () => {
+      if (!(selL === "base" || ME.owned.includes(`${selC}:${selL}`))) {
+        ov.remove();
+        return ($(".tt-open-shop") as HTMLElement).click();
+      }
       ME.char = selC;
       ME.look = selL;
       save();
@@ -497,19 +547,94 @@ export function mountTown(root: HTMLElement): () => void {
       draw();
     };
   };
+  // 설정: 관리자면 코인 · 천장 · 보유 코스튬을 바로 바꿀 수 있음
+  $(".tt-set").onclick = () => {
+    if (!opts.admin) return toast("설정은 곧 열려요 (소리 · 화면)");
+    const looks = Object.values(CHARS).flatMap((c) =>
+      (Object.keys(c.looks) as LookId[]).filter((l) => l !== "base").map((l) => ({ c: c.id, l, name: c.looks[l].name })),
+    );
+    const ov = overlay(
+      `<h2>관리자 설정</h2><p class="tt-adm-sub">이 기기의 TABLE TOWN 정보만 바뀌어요.</p>
+      <div class="tt-adm">
+        <label>코인<input id="tt-adm-coins" type="number" min="0" step="100" value="${ME.coins}"></label>
+        <div class="tt-adm-quick">${[1000, 10000, 100000].map((v) => `<button type="button" data-add="${v}">+${v.toLocaleString()}</button>`).join("")}</div>
+        <label>천장<input id="tt-adm-pity" type="number" min="0" max="${GACHA.pity}" value="${ME.pity}"></label>
+        <div class="tt-adm-own">${looks
+          .map((x) => `<label class="chk"><input type="checkbox" data-k="${x.c}:${x.l}" ${ME.owned.includes(`${x.c}:${x.l}`) ? "checked" : ""}>${x.name} 보유</label>`)
+          .join("")}</div>
+      </div>
+      <div class="tt-row"><button type="button" class="tt-adm-reset">처음 상태로</button><button type="button" class="tt-x">닫기</button><button type="button" class="pri tt-adm-save">저장</button></div>`,
+      root.querySelector<HTMLElement>(".tt-screen:not([hidden])") ?? root,
+    );
+    ov.classList.add("adm");
+    const coins = ov.querySelector<HTMLInputElement>("#tt-adm-coins")!;
+    $$("[data-add]", ov).forEach((b) => (b.onclick = () => (coins.value = String((+coins.value || 0) + +b.dataset.add!))));
+    ov.querySelector<HTMLElement>(".tt-x")!.onclick = () => ov.remove();
+    ov.querySelector<HTMLElement>(".tt-adm-save")!.onclick = () => {
+      ME.coins = Math.max(0, Math.floor(+coins.value || 0));
+      ME.pity = Math.max(0, Math.min(GACHA.pity, Math.floor(+ov.querySelector<HTMLInputElement>("#tt-adm-pity")!.value || 0)));
+      ME.owned = $$("input[data-k]", ov)
+        .filter((i) => (i as HTMLInputElement).checked)
+        .map((i) => i.dataset.k!);
+      if (ME.look !== "base" && !ME.owned.includes(`${ME.char}:${ME.look}`)) ME.look = "base";
+      save();
+      refreshMoneyAll();
+      refreshPlayerSd();
+      if (CUR === "gacha") renderGacha();
+      ov.remove();
+      toast("저장했어요");
+    };
+    ov.querySelector<HTMLElement>(".tt-adm-reset")!.onclick = () => {
+      ME.coins = 1000;
+      ME.pity = 0;
+      ME.owned = [];
+      ME.look = "base";
+      save();
+      refreshMoneyAll();
+      refreshPlayerSd();
+      if (CUR === "gacha") renderGacha();
+      ov.remove();
+      toast("처음 상태로 돌렸어요");
+    };
+  };
   $(".tt-open-char").onclick = openChar;
   $(".tt-prof").onclick = openChar;
   $(".tt-open-shop").onclick = () => openGacha();
 
+  // 원근(아래로 올수록 크게) + 몸 움직임: 서 있으면 숨쉬기, 걸으면 통통 튀며 좌우로 뒤뚱 (그림자는 바닥에 그대로)
   function placeEnt(el: HTMLElement, x: number, y: number, moving: boolean, t: number, flip: boolean) {
     const s = 0.86 + ((y - Y_MIN) / (Y_MAX - Y_MIN)) * 0.26;
-    const bob = moving ? Math.abs(Math.sin(t / 110)) * 8 : Math.sin(t / 500) * 1.5;
-    const sq = moving ? 1 + Math.sin(t / 55) * 0.04 : 1;
     el.style.left = x - 40 + "px";
-    el.style.top = y - 110 - bob + "px";
+    el.style.top = y - 110 + "px";
     el.style.zIndex = String(Math.round(y));
-    el.style.transform = `scale(${s * sq},${s / sq})`;
-    el.querySelector(".tt-sd")?.classList.toggle("flip", flip);
+    el.style.transform = `scale(${s})`;
+    const body = el.querySelector<HTMLElement>(".tt-sd");
+    const sh = el.querySelector<HTMLElement>(".tt-shadow");
+    const fx = flip ? -1 : 1;
+    if (body) {
+      if (moving) {
+        const ph = t / 95;
+        const up = Math.abs(Math.sin(ph));
+        const lift = up * 9;
+        const tilt = Math.sin(ph) * 5 + 3 * fx;
+        const sq = 1 - (1 - up) * 0.06;
+        body.style.transform = `translateY(${-lift}px) rotate(${tilt}deg) scale(${fx * (2 - sq)},${sq})`;
+        if (sh) sh.style.transform = `translateX(-50%) scale(${1 - up * 0.25})`;
+      } else {
+        const br = Math.sin(t / 650);
+        body.style.transform = `rotate(${Math.sin(t / 1700) * 0.8}deg) scale(${fx * (1 - br * 0.006)},${1 + br * 0.014})`;
+        if (sh) sh.style.transform = "translateX(-50%)";
+      }
+    }
+  }
+  function puff(x: number, y: number) {
+    const d = document.createElement("i");
+    d.className = "tt-dust";
+    d.style.left = x - 8 + Math.random() * 16 + "px";
+    d.style.top = y - 10 + "px";
+    d.style.zIndex = String(Math.round(y) - 1);
+    $(".tt-world").appendChild(d);
+    later(() => d.remove(), 520);
   }
   function townLoop(t: number) {
     if (!alive || CUR !== "town") {
@@ -525,7 +650,8 @@ export function mountTown(root: HTMLElement): () => void {
     if (k.arrowright || k.d) vx = 1;
     if (k.arrowup || k.w) vy = -1;
     if (k.arrowdown || k.s) vy = 1;
-    if (T.hold) vx = T.hold;
+    if (T.hold.x) vx = T.hold.x;
+    if (T.hold.y) vy = T.hold.y;
     if (vx || vy) T.tx = null;
     if (T.tx !== null) {
       const dx = T.tx - T.x,
@@ -544,7 +670,12 @@ export function mountTown(root: HTMLElement): () => void {
     $(".tt-world").style.transform = `translateX(${-T.cam}px)`;
     $(".tt-hills").style.transform = `translateX(${-T.cam * 0.35}px)`;
     if (ART.sky) $(".tt-sky").style.backgroundPositionX = `${-T.cam * 0.25}px`;
-    placeEnt($(".tt-pl"), T.x, T.y, !!(vx || vy), t, T.face < 0);
+    const moving = !!(vx || vy);
+    placeEnt($(".tt-pl"), T.x, T.y, moving, t, T.face < 0);
+    if (moving && t - T.dust > 210) {
+      T.dust = t;
+      puff(T.x, T.y);
+    }
     T.npcs.forEach((n, i) => {
       let m = false;
       if (n.wait > 0) n.wait -= dt;
@@ -620,8 +751,48 @@ export function mountTown(root: HTMLElement): () => void {
     refreshMoney();
     renderRoom();
   }
+  // 앉은 그림이 다 있으면: 테이블 없는 방 → 뒷자리(정면) → 테이블 → 앞자리(뒷모습) 순서로 겹쳐서 진짜 테이블에 둘러앉은 느낌
+  // 자리마다 위치 · 크기를 따로 (한 폭의 그림처럼): 앞 두 자리는 테이블 가장자리에 걸쳐 앉음
+  const SEATS = [
+    { cx: 200, bottom: 676, h: 334, back: true, tag: { x: 20, y: 300 } }, // 0 나: 앞 왼쪽 (뒷모습, 테이블로 손 뻗음)
+    { cx: 292, bottom: 418, h: 248, back: false, tag: { x: 160, y: 142 } }, // 1 뒤 왼쪽 (턱 괴기)
+    { cx: 566, bottom: 410, h: 248, back: false, tag: { x: 470, y: 136 } }, // 2 뒤 오른쪽 (손 흔들기)
+    { cx: 704, bottom: 662, h: 322, back: true, tag: { x: 596, y: 654 } }, // 3 앞 오른쪽 (옆으로 앉아 테이블 봄)
+  ];
+  const seatArt = (c: CharId, l: LookId, i: number) => artOf(c, l).seat?.[i];
+  function renderRoomSeated(): boolean {
+    const ok = ART.roomEmpty && ART.roomTable && [0, 1, 2, 3].every((i) => {
+      const c = i === 0 ? ME.char : R.seats[i]?.char;
+      const l = i === 0 ? ME.look : R.seats[i]?.look;
+      return !c || !!seatArt(c, l!, i);
+    });
+    if (!ok) return false;
+    $(".tt-room-bg").style.backgroundImage = `url(${ART.roomEmpty})`;
+    let h = `<img class="tt-rtab" src="${ART.roomTable}" alt="" draggable="false">`;
+    if (ART.cardBack) h += `<div class="tt-rdeck">${[0, 1, 2, 3].map((k) => `<img src="${ART.cardBack}" alt="" style="--k:${k}">`).join("")}</div>`;
+    SEATS.forEach((S, i) => {
+      const b = R.seats[i];
+      const c = i === 0 ? ME.char : b?.char;
+      const l = i === 0 ? ME.look : b?.look;
+      const z = S.back ? 30 : 10;
+      if (c && l) {
+        const src = seatArt(c, l, i)!;
+        h += `<img class="tt-rseatimg" src="${src}" alt="" draggable="false" style="left:${S.cx}px;top:${S.bottom - S.h}px;height:${S.h}px;z-index:${z}">`;
+        const nm = i === 0 ? CHARS[ME.char].name : b!.nick;
+        h += `<div class="tt-rtag" style="left:${S.tag.x}px;top:${S.tag.y}px"><div class="tt-av" style="${avBg(c, l)}">${faceHTML(c, l)}</div><div><div class="tt-nm">${nm}${i ? '<span class="tt-botb">BOT</span>' : ' <span class="tt-meb">나</span>'}</div><div class="tt-ready">✔ 준비 완료</div></div></div>`;
+      } else {
+        h += `<div class="tt-rempty" style="left:${S.cx - 100}px;top:${S.back ? 600 : 250}px;z-index:45"><div class="tt-empty">빈 자리</div><div class="tt-rbtns"><button class="tt-sbtn" type="button" data-inv>+ 초대</button><button class="tt-sbtn dark" type="button" data-bot="${i}">봇 채우기</button></div></div>`;
+      }
+    });
+    $(".tt-rseats").innerHTML = h;
+    $(".tt-rcount b").textContent = `${1 + R.seats.slice(1).filter(Boolean).length}/4`;
+    return true;
+  }
   function renderRoom() {
     $(".tt-roomno").textContent = `방 번호 ${R.no}`;
+    $(".tt-rtable").hidden = !!ART.room;
+    if (renderRoomSeated()) return bindRoomBtns();
+    $(".tt-room-bg").style.backgroundImage = ART.room ? `url(${ART.room})` : "";
     const pos = ART.room
       ? [
           [70, 440],
@@ -647,6 +818,9 @@ export function mountTown(root: HTMLElement): () => void {
         return `<div class="tt-rseat" style="left:${x}px;top:${y}px"><div class="tt-rcard tt-panel"><div class="tt-av" style="${avBg(c, l)}">${faceHTML(c, l)}</div><div><div class="tt-nm">${nm}${i ? '<span class="tt-botb">BOT</span>' : ' <span class="tt-meb">나</span>'}</div><div class="tt-ready">✔ 준비 완료</div></div></div><div class="tt-rsd">${sdHTML(c, l, i === 2 || i === 3)}</div></div>`;
       })
       .join("");
+    bindRoomBtns();
+  }
+  function bindRoomBtns() {
     $$("[data-inv]", $(".tt-rseats")).forEach((b) => (b.onclick = () => toast("초대 링크는 곧 열려요")));
     $$("[data-bot]", $(".tt-rseats")).forEach(
       (b) =>
@@ -662,6 +836,59 @@ export function mountTown(root: HTMLElement): () => void {
   $(".tt-roomlist").onclick = () => {
     const ov = overlay(`<h2>방 목록</h2><p>지금 열린 다른 방이 없어요.<br>여기서 바로 시작하면 빈자리는 봇이 채워줘요.</p><div class="tt-row"><button class="pri" type="button">여기서 시작</button></div>`);
     ov.querySelector<HTMLElement>("button")!.onclick = () => ov.remove();
+  };
+  $(".tt-rinvite").onclick = () => {
+    const url = `${location.origin}/games/town/?room=${R.no}`;
+    navigator.clipboard?.writeText(url).then(
+      () => toast("초대 링크를 복사했어요"),
+      () => toast(url),
+    );
+  };
+  $$("[data-rt]").forEach(
+    (b) =>
+      (b.onclick = () => {
+        $$("[data-rt]").forEach((x) => x.classList.toggle("on", x === b));
+        $$("[data-rp]").forEach((x) => (x.hidden = x.dataset.rp !== b.dataset.rt));
+      }),
+  );
+  $$("[data-pub]").forEach(
+    (b) =>
+      (b.onclick = () => {
+        $$("[data-pub]").forEach((x) => x.classList.toggle("on", x === b));
+        toast(b.dataset.pub === "1" ? "누구나 들어올 수 있어요" : "초대한 사람만 들어올 수 있어요");
+      }),
+  );
+  ($(".tt-rchat") as HTMLFormElement).onsubmit = (e) => {
+    e.preventDefault();
+    const inp = $(".tt-rchat input") as HTMLInputElement;
+    const msg = inp.value.trim();
+    inp.value = "";
+    inp.blur();
+    if (!msg) return;
+    const tag = $(".tt-rtag");
+    if (!tag) return;
+    tag.querySelector(".tt-rbub")?.remove();
+    const bub = document.createElement("div");
+    bub.className = "tt-rbub";
+    bub.textContent = msg;
+    tag.appendChild(bub);
+    setTimeout(() => bub.remove(), 3500);
+    // 봇 하나가 가끔 대꾸
+    const bi = [1, 2, 3].filter((i) => R.seats[i]);
+    if (bi.length && Math.random() < 0.7) {
+      const i = bi[(Math.random() * bi.length) | 0];
+      const b = R.seats[i]!;
+      setTimeout(() => {
+        const t = $$(".tt-rtag")[bi.indexOf(i) + 1] ?? null;
+        if (!t || !$(".tt-room").offsetParent) return;
+        t.querySelector(".tt-rbub")?.remove();
+        const r = document.createElement("div");
+        r.className = "tt-rbub";
+        r.textContent = pick(CHARS[b.char].lines.town);
+        t.appendChild(r);
+        setTimeout(() => r.remove(), 3000);
+      }, 900);
+    }
   };
   $(".tt-start").onclick = () => {
     if (R.seats.slice(1).includes(null)) {
@@ -1166,6 +1393,7 @@ export function mountTown(root: HTMLElement): () => void {
     const myRank = order.indexOf(0) + 1;
     const gain = g.P[0].out ? 0 : REWARD[myRank - 1];
     ME.coins += gain;
+    ME.games = (ME.games ?? 0) + 1;
     save();
     if (wi > 0) {
       setFace(wi, "win", 5000);
@@ -1222,21 +1450,36 @@ export function mountTown(root: HTMLElement): () => void {
   };
   const cosName = (c: CharId, l: LookId) => CHARS[c].looks[l].name;
   const ownKey = (c: CharId, l: LookId) => `${c}:${l}`;
+  let gFeat = 0;
+  const bgOf = (c: CharId, l: LookId) => ART.char[c]?.[l]?.bg ?? ART.fullBg;
   function renderGacha() {
     refreshMoneyAll();
-    const feat = GACHA.pool[0];
+    const feat = GACHA.pool[gFeat];
     const fa = ART.char[feat.char]?.[feat.look]?.full;
-    $(".tt-gfeat-art").innerHTML = fa ? `<img src="${fa}" alt="" draggable="false">` : sdHTML(feat.char, feat.look);
+    const fe = $(".tt-gfeat-art");
+    fe.classList.remove("swap");
+    void fe.offsetWidth;
+    fe.classList.add("swap");
+    fe.innerHTML = fa ? `<img src="${fa}" alt="" draggable="false">` : sdHTML(feat.char, feat.look);
+    $(".tt-gfeat-name").textContent = cosName(feat.char, feat.look);
     $(".tt-gmachine").innerHTML = ART.gacha.machine
       ? `<img src="${ART.gacha.machine}" alt="" draggable="false">`
       : `<div class="tt-mach-css"><div class="globe">${Array.from({ length: 9 }, (_, i) => capHTML(i % 3 === 0)).join("")}</div><div class="body"><i></i></div></div>`;
     $(".tt-gcards").innerHTML = GACHA.pool
-      .map((p) => {
+      .map((p, i) => {
         const full = ART.char[p.char]?.[p.look]?.full;
+        const bg = bgOf(p.char, p.look);
         const own = ME.owned.includes(ownKey(p.char, p.look));
-        return `<div class="tt-gcard ${own ? "own" : ""}"><div class="pic">${full ? `<img src="${full}" alt="" draggable="false">` : ""}</div><span class="pk">PICK UP</span><b>${cosName(p.char, p.look)}</b><span class="st">★★★</span>${own ? '<span class="ownb">보유</span>' : ""}</div>`;
+        return `<button type="button" class="tt-gcard ${own ? "own" : ""} ${i === gFeat ? "on" : ""}" data-i="${i}" style="${bg ? `background-image:url(${bg})` : ""}"><div class="pic">${full ? `<img src="${full}" alt="" draggable="false">` : ""}</div><span class="pk">PICK UP</span>${own ? '<span class="ownb">보유</span>' : ""}<b>${cosName(p.char, p.look)}</b></button>`;
       })
       .join("");
+    $$(".tt-gcard").forEach(
+      (b) =>
+        (b.onclick = () => {
+          gFeat = +b.dataset.i!;
+          renderGacha();
+        }),
+    );
     $(".tt-gpity-n").textContent = String(ME.pity);
     root.querySelector<HTMLElement>(".tt-gpity-bar i")!.style.width = `${(ME.pity / GACHA.pity) * 100}%`;
     $<HTMLButtonElement>(".tt-g1").disabled = ME.coins < GACHA.cost1;
@@ -1367,7 +1610,8 @@ export function mountTown(root: HTMLElement): () => void {
     const st = $(".tt-gstage");
     const full = ART.char[c]?.[l]?.full;
     st.className = "tt-gstage reveal";
-    st.innerHTML = `<div class="tt-gdark"></div><div class="tt-grays"></div><div class="tt-gped big"></div><div class="tt-grev">${full ? `<img src="${full}" alt="" draggable="false">` : sdHTML(c, l)}</div>${dup ? '<div class="tt-gnew dup">중복</div>' : '<div class="tt-gnew">NEW!</div>'}<div class="tt-gname"><b>${cosName(c, l)}</b><span>★★★</span>${dup ? `<small>이미 가진 코스튬 · 코인 +${GACHA.dupRefund.toLocaleString()}</small>` : ""}</div><div class="tt-grev-btns"><button class="tt-gwear" type="button">바로 입기</button><button class="pri tt-gok" type="button">확인</button></div>`;
+    const rb = bgOf(c, l);
+    st.innerHTML = `${rb ? `<div class="tt-grbg" style="background-image:url(${rb})"></div>` : ""}<div class="tt-gdark"></div><div class="tt-grays"></div><div class="tt-gflash"></div><div class="tt-gped big"></div><div class="tt-grev">${full ? `<img src="${full}" alt="" draggable="false">` : sdHTML(c, l)}</div>${dup ? '<div class="tt-gnew dup">중복</div>' : '<div class="tt-gnew">NEW!</div>'}<div class="tt-gname"><small class="k">코스튬 획득</small><b>${cosName(c, l)}</b>${dup ? `<small>이미 가진 코스튬 · 코인 +${GACHA.dupRefund.toLocaleString()}</small>` : ""}</div><div class="tt-grev-btns"><button class="tt-gwear" type="button">바로 입기</button><button class="pri tt-gok" type="button">확인</button></div>`;
     await new Promise<void>((ok) => {
       st.querySelector<HTMLElement>(".tt-gwear")!.onclick = () => {
         ME.char = c;
