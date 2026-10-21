@@ -18,7 +18,7 @@ import { BOT_OPTS } from "../../web/src/lib/defense/bot";
 if (process.env.CHIMERA) BOT_OPTS.chimera = process.env.CHIMERA === "off" ? false : (process.env.CHIMERA as "spare" | "late");
 import { replay, type LogEntry } from "../../web/src/lib/defense/replay";
 import { newGame, step, unitCount, type Game } from "../../web/src/lib/defense/sim";
-import { GRADE_NAME, UNIT, UNITS } from "../../web/src/lib/defense/units";
+import { GRADE_NAME, RECIPES as UNITS_RECIPES, UNIT, UNITS } from "../../web/src/lib/defense/units";
 import { GLITCH, RELICS, TRANS_IDS, deepGlitch, type Loadout } from "../../web/src/lib/defense/progress";
 
 const args = process.argv.slice(2);
@@ -94,6 +94,12 @@ function loadoutFor(cfg: BotCfg): Loadout | null {
   const resLv = Object.fromEntries(R.map((id) => [id, rl]));
   const relicLv = Object.fromEntries(relics.map((id) => [id, rl]));
   const cheat = metaLv === "max" || abyss ? "x_luck" : "";
+  // --relics a,b,c : 장착 유물 바꿔 보기 (유물 비교)
+  const ro = opt("--relics");
+  if (ro) {
+    const ids = ro.split(",");
+    return { lv, res: R, relics: ids, glitch, resLv, relicLv: Object.fromEntries(ids.map((id) => [id, rl])), bench, fslots: fs, own, trans, cheat, grit: Number(opt("--grit") ?? 0), ...stageLo };
+  }
   return { lv, res: R, relics, glitch, resLv, relicLv, bench, fslots: fs, own, trans, cheat, grit: Number(opt("--grit") ?? 0), ...stageLo };
 }
 
@@ -160,6 +166,20 @@ function play(cfg: BotCfg, seed: number): Run {
 }
 
 const bots = only ? [botByName(only)] : BOTS;
+// MONO=1 -b 기사단|기계공방|마도회 : 한 세력만으로 (순혈 프로토콜 · 다른 세력 · 히든 조합식 없음) — 세력별 단독 클리어 비교
+if (process.env.MONO) {
+  const req = createRequire(import.meta.url);
+  for (const cfg of bots) {
+    if (!cfg.focus) continue;
+    cfg.patch = "pure";
+    for (const M of new Set([{ RECIPES: UNITS_RECIPES }, req("../../web/src/lib/defense/units.ts")])) {
+      const R = (M as { RECIPES: { id: string }[] }).RECIPES;
+      for (let i = R.length - 1; i >= 0; i--) if (UNIT[R[i].id].faction !== cfg.focus) R.splice(i, 1);
+      const m = (M as { RECIPE?: Record<string, unknown> }).RECIPE;
+      if (m) for (const k of Object.keys(m)) if (UNIT[k].faction !== cfg.focus) delete m[k];
+    }
+  }
+}
 const runs: Run[] = [];
 for (const cfg of bots) for (let i = 0; i < N; i++) runs.push(play(cfg, seed0 + i));
 

@@ -31,9 +31,9 @@ export const PATCHES: PatchDef[] = [
     desc: `웨이브 골드 +${Math.round((TUNE.interestWave - 1) * 100)}% · 웨이브를 넘길 때마다 가진 골드의 ${Math.round(TUNE.interestPct * 100)}% 이자 (최대 ${TUNE.interestMax})`,
   },
   // 글리치 원정 보스 처치로 해금
-  { id: "dice", name: "주사위 프로토콜", desc: "웨이브가 시작될 때마다 주사위 — 눈 × 6 골드, 6이 나오면 무료 소환 2", lock: "ur-dice" },
-  { id: "greed", name: "탐욕 계약", desc: "처치 골드 ×2 · 웨이브 골드 절반", lock: "ur-moa" },
-  { id: "split", name: "분열 프로토콜", desc: "합성할 때 25% 확률로 같은 결과 유닛이 하나 더 (빈 칸이 있으면)", lock: "ur-forte" },
+  { id: "dice", name: "주사위 프로토콜", desc: "웨이브가 시작될 때마다 주사위 — 눈 × 15 골드, 6이 나오면 무료 소환 4 + 행운석 1", lock: "ur-dice" },
+  { id: "greed", name: "탐욕 계약", desc: "처치 골드 ×2.5 · 웨이브 골드 ×0.8", lock: "ur-moa" },
+  { id: "split", name: "분열 프로토콜", desc: "합성할 때 35% 확률로 같은 결과 유닛이 하나 더 (빈 칸이 있으면)", lock: "ur-forte" },
 ];
 /** 이 판에서 고를 수 있는 시작 치트 (잠긴 건 해금한 것만) */
 export const patchesFor = (open: readonly string[]) => PATCHES.filter((p) => !p.lock || open.includes(p.id)).map((p) => p.id);

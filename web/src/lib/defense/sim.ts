@@ -1124,7 +1124,7 @@ export function apply(g: Game, p: number, cmd: Cmd): string | null {
       const next = pick(b.rng, poolOf(d.faction, (d.grade + (up2 ? 2 : 1)) as Grade));
       give(b, next.id, "merge", cmd.c);
       // 시작 치트 「분열 프로토콜」: 25% 같은 유닛 하나 더
-      if (b.patch === "split" && hasEmpty(b) && rnd(b.crng) < 0.25) give(b, next.id, "merge");
+      if (b.patch === "split" && hasEmpty(b) && rnd(b.crng) < 0.35) give(b, next.id, "merge");
       return null;
     }
     case "sell": {
@@ -1495,8 +1495,12 @@ function startWave(b: Board, w: number) {
   // 시작 치트 「주사위 프로토콜」
   if (b.patch === "dice") {
     const n = 1 + rndInt(b.crng, 6);
-    b.gold += n * 6;
-    if (n === 6) b.free += 2;
+    // 2026-10-21 체감이 약하다는 말 → 눈 × 15 골드 · 6이면 무료 소환 4 + 행운석 1
+    b.gold += n * 15;
+    if (n === 6) {
+      b.free += 4;
+      b.stones += 1;
+    }
     b.ev?.push({ t: "dice", n });
   }
   const boss = !b.exp && w % BOSS_EVERY === 0 ? bossOfWave(w, b.stage) : null;
@@ -1515,7 +1519,7 @@ function advance(b: Board) {
 
 function endWave(b: Board) {
   const wg = Math.floor(
-    (B.waveGold.base + B.waveGold.per * b.wave) * b.mods.waveGold * b.cx.waveGold * (b.patch === "interest" ? TUNE.interestWave : b.patch === "greed" ? 0.5 : 1)
+    (B.waveGold.base + B.waveGold.per * b.wave) * b.mods.waveGold * b.cx.waveGold * (b.patch === "interest" ? TUNE.interestWave : b.patch === "greed" ? 0.8 : 1)
   );
   b.gold += b.wave <= b.mods.firstHarvest ? wg * 2 : wg;
   if (b.patch === "interest") b.gold += Math.min(TUNE.interestMax, Math.floor(b.gold * TUNE.interestPct));
@@ -2265,7 +2269,7 @@ function die(g: Game, b: Board, e: Enemy): boolean {
     offerCheat(b);
   } else {
     gold = B.killGold + Math.floor(b.wave / B.killGoldPer) + b.mods.killGold;
-    if (b.patch === "greed") gold *= 2;
+    if (b.patch === "greed") gold = Math.round(gold * 2.5);
     // 각인 「황금 손」 · 「폭발」 (쓰러뜨린 유닛)
     const kd = UNIT[e.last];
     if (kd && b.mods.engr[kd.id]) {

@@ -261,6 +261,7 @@ export interface RelicDef {
 }
 
 /**
+ * 2026-10-21: 전설이 희귀 · 골드 유물보다 약하다는 말 + 시뮬(오염 22, 전설 조합 클리어 0~20% vs 희귀 80% · 골드 50%) → 전설 수치 1.2~1.9배 (더 올리면 오염 50까지 봇 시간이 40h 밑으로 떨어짐)
  * 유물 레벨별 수치 — 희귀도가 높을수록 레벨당 덜 오름 (일반 +25% · 희귀 +20% · 전설 +15%, 5레벨이면 일반 2배)
  * 시뮬은 modsOf 가 이 값을 읽음.
  */
@@ -276,19 +277,19 @@ export const RELIC_VAL = {
   alchemy_gold: (l: number) => rd(80 * sc(l, 0.2)),
   alchemy_stone: (l: number) => 2 + Math.floor((Math.max(1, l) - 1) / 2),
   vaccine: (l: number) => rd(25 * sc(l, 0.2)),
-  pure_blood: (l: number) => rd(25 * sc(l, 0.15)),
-  rainbow: (l: number) => rd(9 * sc(l, 0.15)),
-  twin_star: (l: number) => rd(15 * sc(l, 0.15)),
-  war_banner: (l: number) => rd(40 * sc(l, 0.15)) / 10,
+  pure_blood: (l: number) => rd(30 * sc(l, 0.15)),
+  rainbow: (l: number) => rd(15 * sc(l, 0.15)),
+  twin_star: (l: number) => rd(20 * sc(l, 0.15)),
+  war_banner: (l: number) => rd(55 * sc(l, 0.15)) / 10,
   // 심연 2막 (오염 30 클리어 뒤 상자) · 해피 타운 첫 클리어
-  myth_seal: (l: number) => rd(15 * sc(l, 0.15)),
-  overdrive: (l: number) => rd(8 * sc(l, 0.15)),
+  myth_seal: (l: number) => rd(25 * sc(l, 0.15)),
+  overdrive: (l: number) => rd(15 * sc(l, 0.15)),
   chrono_core: (l: number) => rd(6 * sc(l, 0.2)),
   void_stone: (l: number) => rd(30 * sc(l, 0.2)),
   lucky_dice: (l: number) => (l >= 5 ? 4 : l >= 3 ? 3 : 2),
   golden_deed: (l: number) => (l >= 4 ? 2 : 1),
   moa_card: (l: number) => rd(30 * sc(l, 0.2)),
-  forte_box: (l: number) => rd(15 * sc(l, 0.15)),
+  forte_box: (l: number) => rd(20 * sc(l, 0.15)),
 };
 const V = RELIC_VAL;
 
@@ -380,7 +381,8 @@ const BASE_GLITCH: GlitchDef[] = [
   { lv: 10, hp: 2.6, spd: 1.1, bossSec: -15, reward: 4, armor: 1, boss: 1, rule: "끝판 — 보스 제한 시간 -15초" },
 ];
 /**
- * 11~30단계 (심연): 10단계 위에 한 단계마다 적 체력 +8.5%(10단계 기준) · 보상 +0.1, 5단계마다 새 규칙 (DEEP_PARAMS)
+ * 11~30단계 (심연): 10단계 위에 한 단계마다 적 체력 +8.5%(10단계 기준, 26~30은 +4%) · 보상 +0.1, 5단계마다 새 규칙 (DEEP_PARAMS)
+ * 31~50단계 (심연 2막): 한 단계마다 +9% — 30 클리어로 여는 유물 4칸 · 각인이 받쳐 줌
  *  11~ 방어력 · 15~ 보스 체력 · 20~ 속도 · 방어력 더 · 25~ 보스 체력 더 · 보스 시간 -18 · 30 끝
  *  (다 키운 봇이 30단계를 다섯 판에 한 번쯤 깨는 정도 — 사람은 배치 · 초월이 더 나아서 이보다 쉬움)
  */
@@ -407,18 +409,27 @@ export interface DeepParams {
   spd20: number;
   /** 단계마다 보상 배수 + (10단계 4 에서) */
   rewardPerLv?: number;
+  /** 26~30단계 기울기 (없으면 hpPerLv) — 30 클리어(유물 4칸 · 각인)를 열기 전 벽을 낮춤 */
+  hpPerLv26?: number;
   /** 31단계부터 단계마다 적 체력 + (10단계 기준, 없으면 hpPerLv) · 50단계 보스 체력 */
   hpPerLv2?: number;
   boss50?: number;
 }
-export const DEEP_PARAMS: DeepParams = { hpPerLv: 0.085, armor11: 1.15, armor20: 1.28, boss15: 1.08, boss25: 1.15, spd20: 1.1, rewardPerLv: 0.1, hpPerLv2: 0.06, boss50: 1.1 };
+// 2026-10-21: 30단계가 너무 세서 못 연다는 말 → 26~30 기울기 0.085 → 0.04, 대신 31~ 0.06 → 0.09 (30 클리어로 여는 유물 4칸 · 각인이 받쳐 줌)
+export const DEEP_PARAMS: DeepParams = { hpPerLv: 0.085, armor11: 1.15, armor20: 1.28, boss15: 1.08, boss25: 1.15, spd20: 1.1, rewardPerLv: 0.1, hpPerLv26: 0.04, hpPerLv2: 0.09, boss50: 1.1 };
 export function deepGlitch(P: DeepParams): GlitchDef[] {
   const top = BASE_GLITCH[10];
   const rules = deepRule(P);
   return Array.from({ length: GLITCH_MAX - 10 }, (_, i): GlitchDef => {
     const lv = 11 + i;
     // 31단계부터는 기울기 hpPerLv2 (새 유물 · 도시 개발 · 다 키운 성장이 받쳐 주는 만큼)
-    const k = lv <= 30 ? P.hpPerLv * (lv - 10) : P.hpPerLv * 20 + (P.hpPerLv2 ?? P.hpPerLv) * (lv - 30);
+    const s26 = P.hpPerLv26 ?? P.hpPerLv;
+    const k =
+      lv <= 25
+        ? P.hpPerLv * (lv - 10)
+        : lv <= 30
+          ? P.hpPerLv * 15 + s26 * (lv - 25)
+          : P.hpPerLv * 15 + s26 * 5 + (P.hpPerLv2 ?? P.hpPerLv) * (lv - 30);
     const hp = Math.round(top.hp * (1 + k) * 100) / 100;
     return {
       lv,
