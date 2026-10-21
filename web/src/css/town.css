@@ -21,7 +21,8 @@
   --tt-card-red: #e0344a;
   --tt-card-black: #1d2233;
   --tt-display: "Jua", "Nanum Gothic", system-ui, sans-serif;
-  --tt-body: "Nanum Gothic", system-ui, -apple-system, sans-serif;
+  /* 글꼴은 한 가지(주아)로 통일 — 둥글고 굵어서 작은 글씨도 잘 읽힘. 주아는 굵기가 하나라 가짜 굵게는 끔 */
+  --tt-body: "Jua", "Nanum Gothic", system-ui, -apple-system, sans-serif;
   position: absolute;
   inset: 0;
   overflow: hidden;
@@ -31,6 +32,8 @@
   /* 한글은 단어 중간에서 줄이 안 끊기게 */
   word-break: keep-all;
   overflow-wrap: anywhere;
+  font-synthesis: none;
+  letter-spacing: 0.01em;
   user-select: none;
   -webkit-user-select: none;
   touch-action: none;
@@ -43,8 +46,10 @@
 .tt [hidden] {
   display: none !important;
 }
-.tt :where(button) {
+.tt :where(button, input, select, textarea) {
   font-family: inherit;
+  font-size: inherit;
+  letter-spacing: inherit;
   cursor: pointer;
   border: none;
   color: inherit;
@@ -852,7 +857,7 @@
 .tt-botb,
 .tt-meb {
   font-family: var(--tt-body);
-  font-size: 11px;
+  font-size: 12.5px;
   font-weight: 800;
   background: rgba(255, 255, 255, 0.18);
   border-radius: 6px;
@@ -1240,7 +1245,7 @@
 .tt-c.jk.art .r {
   left: 5px;
   top: 5px;
-  font-size: 11px;
+  font-size: 12.5px;
   background: rgba(255, 255, 255, 0.92);
   border-radius: 6px;
   padding: 2px 5px;
@@ -2343,7 +2348,7 @@
   left: 6px;
   top: 6px;
   background: linear-gradient(#ff8fb1, #f0577f);
-  font-size: 11px;
+  font-size: 12.5px;
   font-weight: 900;
   padding: 2px 7px;
   border-radius: 6px;
@@ -2355,7 +2360,7 @@
   top: 6px;
   background: var(--tt-good);
   color: #10301e;
-  font-size: 11px;
+  font-size: 12.5px;
   font-weight: 900;
   padding: 2px 7px;
   border-radius: 6px;
@@ -2438,7 +2443,7 @@
   right: 10px;
   font-style: normal;
   font-family: var(--tt-body);
-  font-size: 11px;
+  font-size: 12.5px;
   font-weight: 900;
   background: #f0577f;
   color: #fff;
@@ -2701,7 +2706,7 @@
   place-items: center;
 }
 .tt-mic .n {
-  font-size: 11.5px;
+  font-size: 13px;
   font-weight: 800;
   white-space: nowrap;
 }
@@ -3075,7 +3080,7 @@
 /* 간판 글씨: 간판 폭에 맞춰 자동 크기 (글자 수 --n) */
 .tt-bsign span {
   display: block;
-  font-size: min(23px, calc(80cqw / var(--n)));
+  font-size: min(23px, calc(72cqw / var(--n)));
 }
 /* 게임 목록: 건물 그림 썸네일 */
 .tt-glist button img {
@@ -3155,11 +3160,11 @@
   filter: grayscale(0.85) brightness(0.75);
 }
 .tt-cpick.using::after {
-  content: "사용 중";
+  content: "장착 중";
   position: absolute;
   top: 14px;
   left: 14px;
-  font-size: 11px;
+  font-size: 12.5px;
   font-weight: 800;
   background: var(--tt-blue);
   border-radius: 8px;
@@ -3189,4 +3194,799 @@
   font-weight: 800;
   font-size: 14px;
   background: linear-gradient(180deg, #6aa8ff, #3f7be6) !important;
+}
+
+/* ---------- 글꼴 통일 (주아 하나) ---------- */
+.tt :where(b, strong, h1, h2, h3, small) {
+  font-weight: 400;
+}
+.tt :where(input)::placeholder {
+  font-family: inherit;
+}
+
+/* ---------- SVG 화살표 ---------- */
+.tt-chev {
+  width: 1em;
+  height: 1em;
+  flex: none;
+  display: block;
+}
+.tt-chev path {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 3.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.tt-gamelist i,
+.tt-quick i {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.25);
+  opacity: 1;
+  font-size: 20px;
+}
+.tt-quick i {
+  width: 40px;
+  height: 40px;
+  font-size: 24px;
+  background: rgba(255, 255, 255, 0.55);
+  color: #8a5200;
+}
+.tt-backbtn {
+  gap: 8px;
+}
+.tt-backbtn .tt-chev {
+  width: 26px;
+  height: 26px;
+}
+.tt-start {
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+}
+.tt-start i {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.5);
+  font-size: 26px;
+}
+.tt-glist button > i {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.25);
+  font-size: 18px;
+}
+/* 원카드 가운데: 더미 · 바닥 카드 이름표가 카드 두께에 가리지 않게 */
+.tt-pilewrap > span {
+  margin-top: 10px;
+  padding: 3px 12px;
+  border-radius: 10px;
+  background: rgba(10, 20, 30, 0.55);
+  color: #e8eefc;
+  font-size: 14px;
+}
+.tt-turn .tt-sub:empty {
+  display: none;
+}
+/* 마을 SD 프레임 애니메이션 (가로 띠 4장, 프레임 300×250 → 180×150) */
+.tt-sd-anim {
+  left: -50px;
+  bottom: -3px;
+  width: 180px;
+  height: 150px;
+}
+.tt-sd-anim i {
+  position: absolute;
+  inset: 0;
+  background-repeat: no-repeat;
+  background-size: 400% 100%;
+  background-position: 0 0;
+}
+.tt-bsign.han span {
+  font-family: "Batang", "Noto Serif KR", "Noto Serif CJK KR", serif;
+  font-weight: 700;
+  font-size: min(44px, 62cqw);
+  color: #b3262b;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+
+/* ======================================================================
+   코스튬 공개 연출 v2 (GPT 스토리보드 ④~⑥ 따라감)
+   ph1 빛기둥 · 마법진 · 빛 입자 → ph2 빛 속 실루엣 → ph3 섬광 + 공개 + 배경 → ph4 이름 판 · 도장 · 버튼
+   ====================================================================== */
+.tt-gstage.reveal .tt-gdark {
+  background: radial-gradient(ellipse at 50% 70%, #3a1f6e 0%, #1a0f38 55%, #090514 100%);
+  transition: opacity 0.6s;
+}
+.tt-gstage.reveal.ph3 .tt-gdark {
+  opacity: 0.35;
+}
+.tt-gstage.reveal .tt-grbg {
+  animation: none;
+  opacity: 0;
+  transform: scale(1.12);
+  filter: brightness(1.8) saturate(1.1);
+  transition: opacity 0.7s ease-out, transform 1.4s ease-out, filter 1s;
+}
+.tt-gstage.reveal.ph3 .tt-grbg {
+  opacity: 1;
+  transform: none;
+  filter: none;
+}
+.tt-gfx {
+  position: absolute;
+  pointer-events: none;
+  mix-blend-mode: screen;
+  opacity: 0;
+}
+.tt-gfx.pillar {
+  left: 50%;
+  top: -60px;
+  width: 620px;
+  height: 800px;
+  object-fit: cover;
+  object-position: 50% 100%;
+  transform: translateX(-50%) scaleY(0);
+  transform-origin: 50% 0;
+  transition: transform 0.7s cubic-bezier(0.2, 0.8, 0.3, 1), opacity 0.5s, width 0.6s;
+}
+.tt-gstage.ph1 .tt-gfx.pillar {
+  opacity: 1;
+  transform: translateX(-50%) scaleY(1);
+}
+.tt-gstage.ph3 .tt-gfx.pillar {
+  opacity: 0.35;
+  width: 900px;
+}
+.tt-gfx.circle {
+  left: 50%;
+  bottom: 30px;
+  width: 760px;
+  transform: translateX(-50%) scale(0.6);
+  transition: opacity 0.6s, transform 0.9s cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+.tt-gstage.ph1 .tt-gfx.circle {
+  opacity: 0.95;
+  transform: translateX(-50%) scale(1);
+  animation: tt-circ 2.4s ease-in-out infinite alternate;
+}
+@keyframes tt-circ {
+  to {
+    filter: brightness(1.35) hue-rotate(-12deg);
+  }
+}
+.tt-gfx.rays,
+.tt-grays {
+  left: 50%;
+  top: 46%;
+  width: 1500px;
+  height: 1500px;
+  margin: -750px 0 0 -750px;
+  transform: scale(0.4);
+  transition: opacity 0.5s, transform 0.8s cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+.tt-gstage.reveal .tt-grays {
+  opacity: 0;
+}
+.tt-gstage.ph3 .tt-gfx.rays,
+.tt-gstage.ph3 .tt-grays {
+  opacity: 0.85;
+  transform: scale(1);
+  animation: tt-spin 40s linear infinite;
+}
+.tt-gfx.ribbon {
+  left: 50%;
+  top: 60px;
+  width: 900px;
+  transform: translateX(-50%) rotate(-8deg) scale(0.8);
+  transition: opacity 0.8s, transform 1.4s ease-out;
+}
+.tt-gstage.ph2 .tt-gfx.ribbon {
+  opacity: 0.75;
+  transform: translateX(-50%) rotate(4deg) scale(1.05);
+}
+.tt-gfx.flare {
+  left: 50%;
+  top: 40%;
+  width: 700px;
+  margin-left: -350px;
+  margin-top: -350px;
+  transform: scale(0.2);
+}
+.tt-gstage.ph3 .tt-gfx.flare {
+  animation: tt-flare 0.9s ease-out forwards;
+}
+@keyframes tt-flare {
+  30% {
+    opacity: 1;
+    transform: scale(1.3);
+  }
+  to {
+    opacity: 0;
+    transform: scale(2);
+  }
+}
+/* 아래에서 위로 떠오르는 빛 입자 */
+.tt-gsparks {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.6s;
+}
+.tt-gstage.ph1 .tt-gsparks {
+  opacity: 1;
+}
+.tt-gsparks i {
+  position: absolute;
+  left: calc(25% + var(--x) * 0.5);
+  bottom: -20px;
+  width: 18px;
+  height: 18px;
+  transform: scale(var(--s));
+  background: #fff6cf;
+  clip-path: polygon(50% 0, 61% 39%, 100% 50%, 61% 61%, 50% 100%, 39% 61%, 0 50%, 39% 39%);
+  filter: drop-shadow(0 0 6px #ffd76a);
+  animation: tt-rise 2.6s linear var(--d) infinite;
+}
+.tt-gsparks i:nth-child(3n) {
+  background: #ffc2e2;
+}
+.tt-gsparks i:nth-child(4n) {
+  background: #c9e6ff;
+  border-radius: 50%;
+  clip-path: none;
+  width: 10px;
+  height: 10px;
+}
+@keyframes tt-rise {
+  0% {
+    transform: translateY(0) scale(var(--s));
+    opacity: 0;
+  }
+  15% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-640px) scale(calc(var(--s) * 0.4)) rotate(160deg);
+    opacity: 0;
+  }
+}
+/* 캐릭터: 실루엣 → 색 */
+.tt-gstage.reveal .tt-grev {
+  animation: none;
+  left: 50%;
+  top: 30px;
+  height: 560px;
+  width: 560px;
+  transform: translateX(-50%) scale(0.9);
+  transition: transform 1.2s cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+.tt-gstage.reveal .tt-grev img {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  height: 100%;
+  width: auto;
+  transform: translateX(-50%);
+  filter: none;
+}
+.tt-grev .sil {
+  opacity: 0;
+  filter: brightness(0) drop-shadow(0 0 18px #ffe9a8) drop-shadow(0 0 40px #ff9fd4) !important;
+  transition: opacity 0.8s;
+}
+.tt-grev .col {
+  opacity: 0;
+  transition: opacity 0.35s;
+}
+.tt-gstage.ph2 .tt-grev {
+  transform: translateX(-50%) scale(1);
+}
+.tt-gstage.ph2 .tt-grev .sil {
+  opacity: 0.92;
+}
+.tt-gstage.ph3 .tt-grev .sil {
+  opacity: 0;
+}
+.tt-gstage.ph3 .tt-grev .col {
+  opacity: 1;
+  filter: drop-shadow(0 0 24px rgba(255, 236, 180, 0.7)) !important;
+}
+.tt-gstage.ph3 .tt-grev {
+  transform: translateX(-50%) scale(1.04);
+}
+.tt-gstage.reveal .tt-gflash {
+  animation: none;
+  opacity: 0;
+}
+.tt-gstage.ph3:not(.skipped) .tt-gflash {
+  animation: tt-flash2 0.75s ease-out forwards;
+}
+@keyframes tt-flash2 {
+  0% {
+    opacity: 0;
+  }
+  12% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+/* NEW 도장 */
+.tt-gstamp {
+  position: absolute;
+  left: 300px;
+  top: 52px;
+  width: 150px;
+  height: 150px;
+  display: grid;
+  place-items: center;
+  opacity: 0;
+  transform: scale(2.4) rotate(-30deg);
+  transition: opacity 0.2s, transform 0.35s cubic-bezier(0.3, 1.6, 0.5, 1);
+  z-index: 3;
+}
+.tt-gstamp img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.tt-gstamp b {
+  position: relative;
+  font-family: var(--tt-display);
+  font-size: 30px;
+  color: #fff;
+  text-shadow: 0 2px 0 rgba(140, 20, 60, 0.6);
+}
+.tt-gstamp:not(:has(img)) {
+  border-radius: 50%;
+  background: radial-gradient(circle, #ff6f9c 58%, #e0446a 60%, #ff6f9c 66%);
+  box-shadow: 0 6px 0 rgba(120, 20, 60, 0.35);
+}
+.tt-gstamp.dup b {
+  font-size: 26px;
+}
+.tt-gstamp.dup {
+  filter: saturate(0.2) brightness(1.1);
+}
+.tt-gstage.ph4 .tt-gstamp {
+  opacity: 1;
+  transform: scale(1) rotate(-12deg);
+}
+/* 이름 판 */
+.tt-gplaque {
+  position: absolute;
+  left: 50%;
+  bottom: 118px;
+  width: 560px;
+  min-height: 118px;
+  transform: translateX(-50%) translateY(30px);
+  opacity: 0;
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 2px;
+  padding: 16px 60px 18px;
+  text-align: center;
+  background: linear-gradient(180deg, #4b3aa8, #2c2072) center / 100% 100% no-repeat;
+  border-radius: 22px;
+  transition: opacity 0.35s 0.1s, transform 0.45s 0.1s cubic-bezier(0.2, 1.2, 0.4, 1);
+  z-index: 3;
+}
+.tt-gplaque:not([style]) {
+  border: 3px solid #ffd76a;
+  box-shadow: 0 0 0 4px rgba(255, 215, 106, 0.25), 0 10px 24px rgba(0, 0, 0, 0.35);
+}
+.tt-gplaque small {
+  font-size: 15px;
+  color: #ffe08a;
+  letter-spacing: 0.12em;
+}
+.tt-gplaque b {
+  font-family: var(--tt-display);
+  font-size: 40px;
+  color: #fff;
+  line-height: 1.1;
+  text-shadow: 0 2px 0 rgba(30, 10, 80, 0.6);
+}
+.tt-gplaque em {
+  font-style: normal;
+  font-size: 14px;
+  color: #e6ebfa;
+}
+.tt-gstage.ph4 .tt-gplaque {
+  opacity: 1;
+  transform: translateX(-50%);
+}
+/* 버튼: 바로 장착(금) · 한 번 더(분홍) · 확인(흰) */
+.tt-gstage.reveal .tt-grev-btns {
+  bottom: 30px;
+  opacity: 0;
+  transform: translateX(-50%) translateY(16px);
+  transition: opacity 0.3s 0.35s, transform 0.4s 0.35s;
+  z-index: 3;
+}
+.tt-gstage.ph4 .tt-grev-btns {
+  opacity: 1;
+  transform: translateX(-50%);
+}
+.tt-gstage .tt-grev-btns button,
+.tt-gstage .tt-gres-btns button {
+  min-width: 190px;
+  height: 66px;
+  padding: 0 26px !important;
+  border-radius: 33px;
+  font-family: var(--tt-display);
+  font-size: 25px;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  border: 3px solid rgba(255, 255, 255, 0.85) !important;
+}
+.tt-gstage .tt-gwear {
+  background: linear-gradient(#fff3b8, #ffd25a 55%, #f4ad22) !important;
+  color: #6a3f00 !important;
+  box-shadow: 0 5px 0 #b97a0c, 0 10px 18px rgba(200, 140, 20, 0.35) !important;
+}
+.tt-gstage .tt-gagain {
+  background: linear-gradient(#ffc3dd, #ff7fb2 55%, #f0578f) !important;
+  color: #fff !important;
+  box-shadow: 0 5px 0 #b8325f, 0 10px 18px rgba(200, 50, 110, 0.35) !important;
+}
+.tt-gagain .tt-ico {
+  width: 30px;
+  height: 30px;
+}
+.tt-gagain span {
+  display: grid;
+  line-height: 1.05;
+  text-align: left;
+}
+.tt-gagain small {
+  font-size: 14px;
+  opacity: 0.92;
+}
+.tt-gstage .tt-gok {
+  background: linear-gradient(#ffffff, #e9e6ff) !important;
+  color: #3b2f78 !important;
+  box-shadow: 0 5px 0 #a9a2d6, 0 10px 18px rgba(80, 60, 160, 0.3) !important;
+}
+.tt-gstage.skipped * {
+  transition-duration: 0.15s !important;
+  transition-delay: 0s !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  .tt-gsparks i,
+  .tt-gstage.ph3 .tt-gfx.rays {
+    animation: none;
+  }
+}
+
+/* ---------- 10회 결과판: 카드 높이 · 줄 맞춤 통일 ---------- */
+.tt-gres-title {
+  position: absolute;
+  left: 50%;
+  top: 30px;
+  transform: translateX(-50%);
+  display: grid;
+  justify-items: center;
+  font-family: var(--tt-display);
+  font-size: 40px;
+  color: #fff;
+  text-shadow: 0 3px 0 rgba(40, 20, 80, 0.6);
+}
+.tt-gres-title small {
+  font-size: 16px;
+  color: #e6defc;
+  text-shadow: none;
+}
+.tt-gstage .tt-gres10 {
+  top: 128px;
+  width: 980px;
+  grid-template-columns: repeat(5, 176px);
+  grid-auto-rows: 214px;
+  justify-content: center;
+  gap: 16px;
+}
+.tt-gstage .tt-gres10 .it {
+  height: auto;
+  display: grid;
+  grid-template-rows: 140px auto auto;
+  align-content: start;
+  justify-items: center;
+  gap: 4px;
+  padding: 8px 8px 10px;
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(120, 140, 220, 0.28), rgba(40, 40, 100, 0.5));
+  border: 2px solid rgba(170, 200, 255, 0.45);
+}
+.tt-gres10 .pic {
+  width: 100%;
+  height: 140px;
+  border-radius: 12px;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  background: rgba(0, 0, 0, 0.18) center / cover;
+}
+.tt-gres10 .it.gold .pic {
+  place-items: end center;
+}
+.tt-gres10 .pic img {
+  height: 132px;
+  width: auto;
+  filter: drop-shadow(0 3px 4px rgba(0, 0, 0, 0.35));
+}
+.tt-gres10 .pic .tt-cap.mini {
+  width: 84px;
+  height: 84px;
+}
+.tt-gstage .tt-gres10 .it.gold {
+  background: linear-gradient(180deg, rgba(255, 224, 138, 0.55), rgba(255, 143, 177, 0.4));
+  border-color: #ffd76a;
+  box-shadow: 0 0 22px rgba(255, 215, 106, 0.6);
+}
+.tt-gstage .tt-gres10 b {
+  font-size: 18px;
+  line-height: 1.15;
+  white-space: nowrap;
+}
+.tt-gstage .tt-gres10 small {
+  font-size: 13px;
+}
+.tt-gstage .tt-gres-btns {
+  bottom: 34px;
+}
+.tt-gres-btns.in {
+  position: static;
+  transform: none;
+  margin-top: 10px;
+}
+/* 마을 이름표: 발밑에 붙는 알약 모양 */
+.tt-ent .tt-tag {
+  top: auto;
+  bottom: -34px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 14px;
+  line-height: 1;
+  padding: 5px 12px 5px 10px;
+  border-radius: 999px;
+  color: #fff;
+  background: linear-gradient(180deg, rgba(120, 96, 200, 0.95), rgba(78, 58, 160, 0.95));
+  border: 2px solid rgba(255, 255, 255, 0.9);
+  box-shadow: 0 3px 0 rgba(40, 24, 100, 0.35), 0 4px 10px rgba(0, 0, 0, 0.18);
+  text-shadow: 0 1px 0 rgba(30, 10, 70, 0.4);
+}
+.tt-ent .tt-tag::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: -6px;
+  margin-left: -5px;
+  border: 5px solid transparent;
+  border-top: 0;
+  border-bottom: 5px solid rgba(255, 255, 255, 0.9);
+}
+.tt-ent .tt-tag.me {
+  background: linear-gradient(180deg, #ffd96a, #f4a922);
+  color: #5a3300;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.5);
+  box-shadow: 0 3px 0 #b77a0c, 0 4px 10px rgba(0, 0, 0, 0.18);
+}
+.tt-ent .tt-tag.me i {
+  width: 12px;
+  height: 12px;
+  background: #fff;
+  clip-path: polygon(50% 0, 61% 35%, 98% 38%, 69% 59%, 79% 95%, 50% 74%, 21% 95%, 31% 59%, 2% 38%, 39% 35%);
+}
+.tt-ent .tt-shadow {
+  bottom: -4px;
+}
+.tt-gfx.sparkle {
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: opacity 0.8s;
+}
+.tt-gstage.ph3 .tt-gfx.sparkle {
+  opacity: 0.55;
+  animation: tt-twinkle 2.2s ease-in-out infinite alternate;
+}
+@keyframes tt-twinkle {
+  to {
+    opacity: 0.85;
+    transform: scale(1.04);
+  }
+}
+/* 캡슐 갈라질 때 빛기둥 */
+.tt-gcrackfx .tt-gfx {
+  opacity: 0;
+}
+.tt-gcrackfx .tt-gfx.pillar {
+  animation: tt-crackpil 1.3s ease-out forwards;
+  transform: translateX(-50%);
+}
+.tt-gcrackfx .tt-gfx.rays {
+  animation: tt-crackray 1.3s ease-out forwards;
+}
+@keyframes tt-crackpil {
+  0% {
+    opacity: 0;
+    transform: translateX(-50%) scaleX(0.2);
+  }
+  30% {
+    opacity: 1;
+    transform: translateX(-50%) scaleX(1);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(-50%) scaleX(1.6);
+  }
+}
+@keyframes tt-crackray {
+  0% {
+    opacity: 0;
+    transform: scale(0.2);
+  }
+  40% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0.9;
+    transform: scale(1.1) rotate(25deg);
+  }
+}
+/* 이펙트 그림 네모 가장자리 안 보이게 */
+.tt-gfx {
+  -webkit-mask-image: radial-gradient(closest-side, #000 55%, transparent 100%);
+  mask-image: radial-gradient(closest-side, #000 55%, transparent 100%);
+}
+.tt-gfx.pillar {
+  -webkit-mask-image: linear-gradient(90deg, transparent 4%, #000 30%, #000 70%, transparent 96%);
+  mask-image: linear-gradient(90deg, transparent 4%, #000 30%, #000 70%, transparent 96%);
+}
+.tt-gfx.sparkle {
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+/* 공개 뒤에는 캐릭터 · 배경이 또렷하게: 빛은 은은하게만 남김 */
+.tt-gstage.ph3 .tt-gfx.pillar {
+  opacity: 0;
+}
+.tt-gstage.ph3 .tt-gfx.rays {
+  opacity: 0.4;
+}
+.tt-gstage.ph3 .tt-gfx.sparkle {
+  opacity: 0.3;
+}
+@keyframes tt-twinkle {
+  to {
+    opacity: 0.5;
+    transform: scale(1.04);
+  }
+}
+.tt-gstage.ph3 .tt-gfx.circle {
+  opacity: 0.55;
+}
+.tt-gstage.ph3 .tt-gfx.ribbon {
+  opacity: 0.35;
+}
+.tt-gstage.reveal .tt-grev {
+  top: 16px;
+  height: 540px;
+}
+/* 금 캡슐 갈라질 때: 옛 반짝이 대신 빛기둥 */
+.tt-gstage:has(.tt-gcrackfx) .tt-gsplit .s {
+  display: none;
+}
+.tt-gstage.result .tt-gdark {
+  background: radial-gradient(ellipse at 50% 45%, rgba(60, 34, 120, 0.94), rgba(10, 6, 26, 0.97));
+}
+/* 캡슐 받침대 (1회 뽑기) */
+.tt-gpedimg {
+  position: absolute;
+  left: 50%;
+  top: 430px;
+  width: 360px;
+  transform: translateX(-50%);
+  filter: drop-shadow(0 12px 18px rgba(0, 0, 0, 0.45));
+  animation: tt-in 0.4s ease-out both;
+}
+.tt-gstage.crack .tt-gpedimg,
+.tt-gstage.crack-gold .tt-gpedimg {
+  filter: drop-shadow(0 0 30px rgba(255, 220, 140, 0.9)) brightness(1.15);
+}
+/* 이름 판 · 도장 그림 */
+.tt-gplaque[style] {
+  width: 640px;
+  height: 240px;
+  min-height: 0;
+  padding: 0 120px 6px;
+  background-color: transparent;
+  background-size: 100% 100%;
+  border-radius: 0;
+  filter: drop-shadow(0 10px 18px rgba(0, 0, 0, 0.35));
+  bottom: 84px;
+}
+.tt-gplaque[style] small {
+  margin-top: 6px;
+}
+.tt-gplaque[style] b {
+  font-size: 38px;
+}
+.tt-gstamp b {
+  margin-top: 6px;
+  font-size: 34px;
+  transform: translateY(-10px);
+}
+.tt-gstamp {
+  width: 160px;
+  height: 170px;
+}
+.tt-gpedimg {
+  top: 448px;
+  width: 340px;
+  margin-left: -170px;
+  transform: none;
+  animation: tt-fadein 0.4s ease-out both;
+}
+@keyframes tt-fadein {
+  from {
+    opacity: 0;
+  }
+}
+.tt-gdrop {
+  z-index: 2;
+}
+.tt-gtap {
+  top: 652px;
+  z-index: 3;
+}
+.tt-gskip {
+  top: 86px;
+}
+.tt-gstage.drop .tt-gdark {
+  background: radial-gradient(ellipse at 50% 55%, rgba(60, 30, 110, 0.55), rgba(8, 4, 20, 0.92) 70%);
+}
+/* 스토리보드 ②: 떨어진 캡슐이 빛나며 흔들림 */
+.tt-gstage.drop .tt-cap.big {
+  animation: tt-capwob 1.1s ease-in-out 1s infinite;
+  filter: drop-shadow(0 0 18px rgba(255, 220, 150, 0.85)) drop-shadow(0 0 40px rgba(255, 150, 220, 0.6));
+}
+@keyframes tt-capwob {
+  0%,
+  100% {
+    transform: rotate(0);
+  }
+  20% {
+    transform: rotate(-7deg);
+  }
+  40% {
+    transform: rotate(6deg);
+  }
+  60% {
+    transform: rotate(-3deg);
+  }
+  80% {
+    transform: rotate(2deg);
+  }
 }

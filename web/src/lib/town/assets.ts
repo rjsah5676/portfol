@@ -13,6 +13,7 @@ const B = "/town";
 const FACES: Face[] = ["idle", "happy", "sad", "smug", "panic", "win"];
 /** 테이블 자리별 앉은 그림 (0 앞왼 · 1 뒤왼 · 2 뒤오 · 3 앞오) — 자리마다 따로 그린 자세, 좌우반전 안 씀 */
 const seats = (k: string) => [0, 1, 2, 3].map((i) => `${B}/seat/${k}-${i}.webp`);
+const anim = (k: string) => ({ walkR: `${B}/anim/${k}-walkR.webp`, walkL: `${B}/anim/${k}-walkL.webp`, idle: `${B}/anim/${k}-idle.webp` });
 const faces = (c: string) => Object.fromEntries(FACES.map((f) => [f, `${B}/face/${c}-${f}.webp`])) as Record<Face, string>;
 
 export const ART: {
@@ -40,7 +41,26 @@ export const ART: {
    */
   char: Partial<Record<CharId, Partial<Record<LookId, CharArt>>>>;
   /** 코스튬 뽑기: 배경 · 기계 · 캡슐(금 = 코스튬, 파랑 = 꽝) · 열린 금 캡슐 위/아래 · 반짝이 */
-  gacha: { bg: string | null; machine: string | null; capGold: string | null; capBlue: string | null; capTop: string | null; capBottom: string | null; spark: string | null };
+  gacha: {
+    bg: string | null;
+    machine: string | null;
+    capGold: string | null;
+    capBlue: string | null;
+    capTop: string | null;
+    capBottom: string | null;
+    spark: string | null;
+    /** 공개 연출 이펙트 (검정 배경 → 스크린 합성): 빛기둥 · 빛줄기 · 마법진 · 섬광 · 빛의 띠 */
+    pillar?: string | null;
+    rays?: string | null;
+    circle?: string | null;
+    flare?: string | null;
+    ribbon?: string | null;
+    sparkle?: string | null;
+    /** NEW 도장 · 이름 판 · 캡슐 받침대 */
+    stamp?: string | null;
+    plaque?: string | null;
+    pedestal?: string | null;
+  };
 } = {
   logo: `${B}/ui/logo.webp`,
   sky: `${B}/bg/sky.webp`,
@@ -73,24 +93,33 @@ export const ART: {
     capTop: `${B}/gacha/cap-top.webp`,
     capBottom: `${B}/gacha/cap-bottom.webp`,
     spark: `${B}/gacha/spark.webp`,
+    pillar: `${B}/gacha/fx-pillar.webp`,
+    rays: `${B}/gacha/fx-rays.webp`,
+    circle: `${B}/gacha/fx-circle.webp`,
+    flare: `${B}/gacha/fx-flare.webp`,
+    ribbon: `${B}/gacha/fx-ribbon.webp`,
+    sparkle: `${B}/gacha/fx-sparkle.webp`,
+    stamp: `${B}/gacha/stamp.webp`,
+    plaque: `${B}/gacha/plaque.webp`,
+    pedestal: `${B}/gacha/pedestal.webp`,
   },
   fullBg: `${B}/bg/full-base.webp`,
   char: {
     haru: {
-      base: { full: `${B}/char/haru-full.webp`, sd: `${B}/char/haru-sd.webp`, seat: seats("haru-base"), face: `${B}/face/haru-idle.webp`, bust: faces("haru") },
-      cos1: { bg: `${B}/bg/haru-cos1.webp`, full: `${B}/char/haru-cos1-full.webp`, sd: `${B}/char/haru-cos1-sd.webp`, seat: seats("haru-cos1"), face: `${B}/face/haru-cos1-idle.webp`, bust: faces("haru-cos1") },
+      base: { full: `${B}/char/haru-full.webp`, sd: `${B}/char/haru-sd.webp`, seat: seats("haru-base"), anim: anim("haru-base"), face: `${B}/face/haru-idle.webp`, bust: faces("haru") },
+      cos1: { bg: `${B}/bg/haru-cos1.webp`, full: `${B}/char/haru-cos1-full.webp`, sd: `${B}/char/haru-cos1-sd.webp`, seat: seats("haru-cos1"), anim: anim("haru-cos1"), face: `${B}/face/haru-cos1-idle.webp`, bust: faces("haru-cos1") },
     },
     ruru: {
-      base: { full: `${B}/char/ruru-full.webp`, sd: `${B}/char/ruru-sd.webp`, seat: seats("ruru-base"), face: `${B}/face/ruru-idle.webp`, bust: faces("ruru") },
-      cos1: { bg: `${B}/bg/ruru-cos1.webp`, full: `${B}/char/ruru-cos1-full.webp`, sd: `${B}/char/ruru-cos1-sd.webp`, seat: seats("ruru-cos1"), face: `${B}/face/ruru-cos1-idle.webp`, bust: faces("ruru-cos1") },
+      base: { full: `${B}/char/ruru-full.webp`, sd: `${B}/char/ruru-sd.webp`, seat: seats("ruru-base"), anim: anim("ruru-base"), face: `${B}/face/ruru-idle.webp`, bust: faces("ruru") },
+      cos1: { bg: `${B}/bg/ruru-cos1.webp`, full: `${B}/char/ruru-cos1-full.webp`, sd: `${B}/char/ruru-cos1-sd.webp`, seat: seats("ruru-cos1"), anim: anim("ruru-cos1"), face: `${B}/face/ruru-cos1-idle.webp`, bust: faces("ruru-cos1") },
     },
   },
 };
 
 /** 건물 그림 속 빈 간판 자리 (그림 크기 대비 비율) — 여기에 게임 이름을 글자로 얹음 */
 export const SIGN: Partial<Record<GameId, { x: number; y: number; w: number }>> = {
-  joker: { x: 0.53, y: 0.475, w: 0.3 },
-  onecard: { x: 0.52, y: 0.55, w: 0.32 },
+  joker: { x: 0.53, y: 0.482, w: 0.25 },
+  onecard: { x: 0.52, y: 0.562, w: 0.3 },
   yut: { x: 0.5, y: 0.465, w: 0.3 },
   chess: { x: 0.505, y: 0.465, w: 0.3 },
   janggi: { x: 0.5, y: 0.42, w: 0.3 },
@@ -99,9 +128,16 @@ export const SIGN: Partial<Record<GameId, { x: number; y: number; w: number }>> 
   soon: { x: 0.53, y: 0.47, w: 0.28 },
 };
 
+/** 건물 그림의 두 번째 빈 간판 (장기 지붕의 팔각 간판 등) — 상징 글자 하나 */
+export const SIGN2: Partial<Record<GameId, { x: number; y: number; w: number; text: string }>> = {
+  janggi: { x: 0.515, y: 0.243, w: 0.2, text: "將" },
+};
+
 export interface CharArt {
   /** 테이블 자리별 앉은 SD (0 앞왼 · 1 뒤왼 · 2 뒤오 · 3 앞오) */
   seat?: string[];
+  /** 마을 SD 프레임 애니메이션: 4프레임 가로 띠 (오른쪽 걷기 · 왼쪽 걷기 · 대기), 따로 그린 것 (반전 안 씀) */
+  anim?: { walkR: string; walkL: string; idle: string };
   full?: string;
   bg?: string;
   sd?: string;
@@ -146,6 +182,7 @@ export function allArt(): string[] {
       push(l?.bg);
       push(l?.sd);
       l?.seat?.forEach(push);
+      if (l?.anim) Object.values(l.anim).forEach(push);
       push(l?.face);
       Object.values(l?.bust ?? {}).forEach(push);
     }
