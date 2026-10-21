@@ -30,7 +30,50 @@ import {
 import { sfx, sfxBuffer } from "@/lib/rhythm/sfx";
 import { fitGain, LEVEL } from "@/lib/soundLevel";
 
+/** 레인 키 기본값 (e.code) — 설정에서 사용자가 바꿀 수 있음 */
 export const KEY_CODES = ["KeyD", "KeyF", "KeyJ", "KeyK"];
+/** 레인 키로 못 쓰는 키 (Esc 는 일시정지 · 설정 닫기, Tab 은 설정 탭 넘기기) */
+export const KEY_RESERVED = new Set(["Escape", "Tab", "MetaLeft", "MetaRight", "ContextMenu"]);
+const KEY_NAMES: Record<string, string> = {
+  Space: "SPC",
+  Semicolon: ";",
+  Quote: "'",
+  Comma: ",",
+  Period: ".",
+  Slash: "/",
+  Backslash: "\\",
+  BracketLeft: "[",
+  BracketRight: "]",
+  Minus: "-",
+  Equal: "=",
+  Backquote: "`",
+  ArrowLeft: "←",
+  ArrowRight: "→",
+  ArrowUp: "↑",
+  ArrowDown: "↓",
+  ShiftLeft: "LSH",
+  ShiftRight: "RSH",
+  ControlLeft: "LCT",
+  ControlRight: "RCT",
+  AltLeft: "LAL",
+  AltRight: "RAL",
+  Enter: "ENT",
+  Backspace: "BS",
+  CapsLock: "CAP",
+};
+/** e.code → 패드 · 설정에 보이는 글자 (한글 자판이어도 물리 키 기준) */
+export function keyLabel(code: string): string {
+  if (/^Key[A-Z]$/.test(code)) return code.slice(3);
+  if (/^Digit[0-9]$/.test(code)) return code.slice(5);
+  if (/^Numpad[0-9]$/.test(code)) return `N${code.slice(6)}`;
+  return KEY_NAMES[code] ?? code.slice(0, 3).toUpperCase();
+}
+/** 저장된 키 설정이 쓸 만하면 그대로(서로 다른 4개, 막힌 키 없음), 아니면 null */
+export function validKeys(v: unknown): string[] | null {
+  if (!Array.isArray(v) || v.length !== 4) return null;
+  if (!v.every((k) => typeof k === "string" && k && !KEY_RESERVED.has(k))) return null;
+  return new Set(v).size === 4 ? (v as string[]) : null;
+}
 
 export type Cover = "none" | "fade" | "sudden";
 export const COVERS_OPT: { key: Cover; label: string; desc: string }[] = [
@@ -38,7 +81,6 @@ export const COVERS_OPT: { key: Cover; label: string; desc: string }[] = [
   { key: "fade", label: "페이드", desc: "판정선 가까이에서 노트가 사라져요 — 박자감으로 치기" },
   { key: "sudden", label: "서든", desc: "위쪽 30%가 가려져 노트를 미리 읽을 수 없어요" },
 ];
-export const KEY_LABELS = ["D", "F", "J", "K"];
 /** 플레이 배경: 커버(재킷을 흐리게 깔고, 뮤비가 있으면 영상) / 무대(기본 무대 사진) */
 export type BgMode = "cover" | "stage";
 export const BG_MODES: { key: BgMode; label: string; desc: string }[] = [
@@ -300,6 +342,8 @@ interface Props {
   fps?: FpsMode;
   /** 온라인 판 — 일시정지·다시 시작 없음, 시작 시각은 서버가 정함 */
   online?: OnlineStage;
+  /** 레인 키 4개 (e.code, 설정에서 바꿈) */
+  keys?: string[];
 }
 
 export default function Stage({
@@ -329,6 +373,7 @@ export default function Stage({
   bg = "cover",
   fps = "60",
   online,
+  keys = KEY_CODES,
 }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -1628,11 +1673,12 @@ export default function Stage({
         g.save();
         g.translate(gpx(GEAR.padCx[l]), gy(GEAR.padCy));
         g.transform(1, 0, slant, 1, 0, 0);
+        const kl = keyLabel(keys[l]);
         g.fillStyle = on ? "#fff" : "rgba(255,255,255,0.5)";
-        g.font = `700 22px ${disp}`;
+        g.font = `700 ${kl.length > 1 ? 16 : 22}px ${disp}`;
         g.textAlign = "center";
         g.textBaseline = "middle";
-        g.fillText(KEY_LABELS[l], 0, 0);
+        g.fillText(kl, 0, 0);
         g.restore();
       }
 
@@ -2380,6 +2426,13 @@ export default function Stage({
     ctrl.current = { pause, resume, apply };
 
     const onKeyDown = (e: KeyboardEvent) => {
+      // 레인 키가 먼저 — 사용자가 스페이스 · R · 화살표 등을 레인 키로 정했으면 그 키는 치기로만 씀
+      const lane = keys.indexOf(e.code);
+      if (lane >= 0) {
+        e.preventDefault();
+        if (!e.repeat) press(lane, e.timeStamp);
+        return;
+      }
       // 플레이 중엔 스페이스·PageDown 등으로 페이지가 스크롤되지 않게 (일시정지 중엔 버튼·슬라이더 조작용으로 둠)
       if ((running || resuming) && SCROLL_KEYS.has(e.code)) {
         e.preventDefault();
@@ -2419,14 +2472,10 @@ export default function Stage({
         speedToastAt = performance.now() / 1000;
         return;
       }
-      const lane = KEY_CODES.indexOf(e.code);
-      if (lane < 0) return;
-      e.preventDefault();
-      if (!e.repeat) press(lane, e.timeStamp);
     };
     const onKeyUp = (e: KeyboardEvent) => {
       if (e.code === "KeyR" || (online && e.code === "Escape")) rHoldAt = null;
-      const lane = KEY_CODES.indexOf(e.code);
+      const lane = keys.indexOf(e.code);
       if (lane >= 0) release(lane, e.timeStamp);
     };
     const laneAt = (clientX: number) => {

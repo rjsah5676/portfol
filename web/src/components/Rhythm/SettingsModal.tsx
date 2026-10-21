@@ -30,6 +30,9 @@ import {
   COVERS_OPT,
   FIELD_POS,
   FPS_MODES,
+  KEY_CODES,
+  KEY_RESERVED,
+  keyLabel,
   type BgMode,
   type Cover,
   type FieldPos,
@@ -70,6 +73,8 @@ export interface Settings {
   bg: BgMode;
   /** 프레임: 60 / 최대 */
   fps: FpsMode;
+  /** 레인 키 4개 (e.code — 한글 자판이어도 물리 키 기준), 기본 D F J K */
+  keys: string[];
 }
 
 const signed = (n: number) => `${n > 0 ? "+" : ""}${n}`;
@@ -169,9 +174,39 @@ export default function SettingsModal({
   }, [calibrate]);
   // 설정 창이 닫히면(싱크 맞추기 중이었어도) 배경음 다시
   useEffect(() => () => onCalRef.current?.(false), []);
+  // 키 바꾸기: 레인 칸을 누르면 다음에 누른 키가 그 레인 키 (Esc 취소, 이미 쓰는 키면 두 레인을 맞바꿈)
+  const [bind, setBind] = useState<number | null>(null);
+  const bindRef = useRef(bind);
+  useEffect(() => {
+    bindRef.current = tab === "play" ? bind : null;
+  }, [bind, tab]);
   useEffect(() => {
     sfx("ui-open", 0.7);
     const onKey = (e: KeyboardEvent) => {
+      const b = bindRef.current;
+      if (b !== null) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        if (e.repeat) return;
+        if (e.code === "Escape") {
+          setBind(null);
+          sfx("ui-back", 0.6);
+          return;
+        }
+        if (!e.code || KEY_RESERVED.has(e.code)) return;
+        setSettings((st) => {
+          const keys = [...st.keys];
+          const other = keys.indexOf(e.code);
+          if (other >= 0) keys[other] = keys[b];
+          keys[b] = e.code;
+          return { ...st, keys };
+        });
+        setBind(null);
+        // 스페이스 · 엔터로 정했을 때 눌린 버튼이 다시 눌리지 않게
+        (document.activeElement as HTMLElement | null)?.blur?.();
+        sfx("ui-move", 0.6);
+        return;
+      }
       if ((e.target as HTMLElement)?.closest?.("input[type=text], textarea")) return;
       if (calRef.current) {
         if (e.code === "Escape" || e.code === "KeyS") {
@@ -288,6 +323,41 @@ export default function SettingsModal({
                   <span className="w-[5cqw] text-right font-mono text-[1.5cqw] font-bold text-white">
                     x{settings.speed.toFixed(1)}
                   </span>
+                </div>
+              </Row>
+              <Row
+                label="키"
+                hint={
+                  bind !== null
+                    ? "바꿀 키를 누르세요 — Esc 는 취소"
+                    : "칸을 누르고 원하는 키 입력 · 겹치면 서로 바뀌어요"
+                }
+              >
+                <div className="flex flex-wrap items-center gap-[0.6cqw]">
+                  {settings.keys.map((k, i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => {
+                        setBind(bind === i ? null : i);
+                        sfx("ui-move", 0.5);
+                      }}
+                      className={`${chip(bind === i)} min-w-[4.6cqw] text-center font-mono`}
+                    >
+                      {bind === i ? "…" : keyLabel(k)}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    className={chip(false)}
+                    disabled={settings.keys.join() === KEY_CODES.join()}
+                    onClick={() => {
+                      setBind(null);
+                      set({ keys: [...KEY_CODES] });
+                    }}
+                  >
+                    기본 (D F J K)
+                  </button>
                 </div>
               </Row>
               <Row label="레인 위치" hint="치는 화면을 어디에 둘지">
