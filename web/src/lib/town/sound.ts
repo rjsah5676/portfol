@@ -123,6 +123,7 @@ export function createSound() {
   let bgmWant: BgmId | null = null;
   let front = 0;
   let unlocked = false;
+  let dead = false; // 화면이 다시 붙을 때 옛 소리 엔진이 살아나 BGM 이 겹치지 않게
   const fades = new Map<HTMLAudioElement, number>();
 
   const ensureCtx = () => {
@@ -161,7 +162,7 @@ export function createSound() {
 
   function sfx(id: SfxId, opt: { rate?: number; vol?: number } = {}) {
     const url = SFX[id];
-    if (!url || missing.has(url) || pref.mute || !unlocked) return;
+    if (dead || !url || missing.has(url) || pref.mute || !unlocked) return;
     const c = ensureCtx();
     if (!c || !sfxGain) return;
     const play = (b: AudioBuffer) => {
@@ -194,7 +195,7 @@ export function createSound() {
   /** 화면이 바뀔 때: 같은 곡이면 그대로, 다른 곡이면 1초 동안 교차 페이드 */
   function bgm(id: BgmId | null) {
     bgmWant = id;
-    if (!unlocked || id === bgmCur) return;
+    if (dead || !unlocked || id === bgmCur) return;
     const url = id ? BGM[id] : null;
     const old = bgmEl[front];
     if (old) fade(old, 0, 900, () => old.pause());
@@ -212,14 +213,14 @@ export function createSound() {
     el.currentTime = 0;
     el.volume = 0;
     void el.play().then(
-      () => fade(el, pref.mute ? 0 : pref.bgm, 1100),
+      () => (dead || bgmEl[front] !== el ? el.pause() : fade(el, pref.mute ? 0 : pref.bgm, 1100)),
       () => {},
     );
   }
 
   /** 브라우저는 사용자가 한 번 누르기 전엔 소리를 막음 → 첫 터치에 풀기 */
   function unlock() {
-    if (unlocked) return;
+    if (dead || unlocked) return;
     unlocked = true;
     const c = ensureCtx();
     void c?.resume();
@@ -245,7 +246,13 @@ export function createSound() {
   }
 
   function stop() {
-    bgmEl.forEach((e) => e.pause());
+    dead = true;
+    bgmEl.forEach((e) => {
+      cancelAnimationFrame(fades.get(e) ?? 0);
+      e.pause();
+      e.removeAttribute("src");
+      e.load();
+    });
     void ctx?.close();
   }
 

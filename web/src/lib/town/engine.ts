@@ -4,56 +4,20 @@
  * 그림은 assets.ts 의 ART 에 주소가 있으면 그 그림, 없으면 코드로 그린 임시 모양.
  */
 import { BGM, SFX, SFX_B, allSound, createSound, type BgmId, type SfxId } from "./sound";
-import { ART, SIGN, SIGN2, allArt, type CharId, type Face, type LookId, type UiIcon } from "./assets";
-import { BOT_POOL, CHARS, GACHA, GAMES, REWARD, loadProfile, saveProfile, type BotSeat, type BotStyle, type Profile } from "./data";
+import { ART, SIGN, SIGN2, allArt, type CharId, type Face, type GameId, type LookId, type UiIcon } from "./assets";
+import { CHARS, GACHA, GAMES, REWARD, loadProfile, ownKey, rollGacha, saveProfile, type Profile, type Pull } from "./data";
+import { MODES, playable as ocPlayable, type Card, type GameMode, type OCEvent, type OCState, type OCView } from "./onecard";
+import { errCode, errText, type TownHost, type TownNet } from "./net";
+import { GLYPHS } from "./glyphs";
 
 export const DW = 1280;
 export const DH = 720;
 
-type Screen = "loading" | "town" | "room" | "game" | "gacha";
-
-interface Card {
-  id: number;
-  r: number;
-  s: number;
-  jk?: boolean;
-}
-
-interface Player {
-  char: CharId;
-  look: LookId;
-  nick: string;
-  bot: boolean;
-  style: BotStyle;
-  miss: number;
-  hand: Card[];
-  out: boolean;
-  face: Face;
-  faceT: ReturnType<typeof setTimeout> | undefined;
-}
-
-interface GameState {
-  P: Player[];
-  turn: number;
-  dir: 1 | -1;
-  pile: Card[];
-  draw: Card[];
-  suit: number;
-  free: boolean;
-  pending: number;
-  atk: number;
-  one: { pi: number; called: boolean; id: number } | null;
-  over: boolean;
-  sort: "suit" | "rank";
-  busy: boolean;
-  tid: number;
-  timer: ReturnType<typeof setTimeout> | null;
-}
+type Screen = "loading" | "title" | "lobby" | "town" | "room" | "game" | "gacha";
 
 const SU = ["♠", "♥", "♦", "♣"];
 const rl = (r: number) => ({ 11: "J", 12: "Q", 13: "K", 14: "A" })[r as 11] ?? String(r);
 const isRed = (c: Card) => c.s === 1 || c.s === 2;
-const strength = (c: Card) => (c.jk ? 3 : c.r === 14 ? 2 : c.r === 2 ? 1 : 0);
 const rnd = (a: number, b: number) => a + Math.random() * (b - a);
 const pick = <T,>(a: readonly T[]) => a[(Math.random() * a.length) | 0];
 const FACE_EMOJI: Record<Face, string> = { idle: "🙂", happy: "😄", sad: "😭", smug: "😈", panic: "😳", win: "🥳" };
@@ -108,8 +72,35 @@ const TEMPLATE = `
     <button class="tt-arr tt-ar" type="button" aria-label="오른쪽">▶</button>
     <button class="tt-arr tt-ad" type="button" aria-label="아래">▼</button>
   </div>
-  <button class="tt-ui tt-gamelist" type="button">${icon("list")}<b>게임 목록</b><i>${CHEV}</i></button>
-  <button class="tt-ui tt-quick" type="button">${icon("sort")}<b>빠른 게임</b><i>${CHEV}</i></button>
+  <button class="tt-ui tt-quick tt-tolobby" type="button">${icon("list")}<b>게임 로비</b></button>
+</div>
+
+<div class="tt-screen tt-title" data-s="title" hidden>
+  <div class="tt-title-in">
+    <h1 class="tt-tlogo">${ART.logo ? `<img src="${ART.logo}" alt="TABLE TOWN">` : "TABLE TOWN"}</h1>
+    <p class="tt-tsub">캐릭터와 함께하는 온라인 원카드</p>
+    <div class="tt-tbtns">
+      <button type="button" class="tt-cs-go pink tt-tlogin">로그인하고 시작<i>›</i></button>
+      <button type="button" class="tt-cs-go blue tt-tguest">게스트로 플레이<i>›</i></button>
+      <small class="tt-tnote">게스트는 코인 · 코스튬이 이 기기에만 저장돼요</small>
+    </div>
+  </div>
+</div>
+
+<div class="tt-screen tt-lobby" data-s="lobby" hidden>
+  <div class="tt-lobby-bg"></div>
+  <button class="tt-backbtn tt-lback" type="button">${BACK}<span>마을로</span></button>
+  <div class="tt-lplate"><span class="tt-lgame">원카드</span></div>
+  <div class="tt-ui tt-money tt-money-lobby"></div>
+  <nav class="tt-ltabs"></nav>
+  <section class="tt-lpanel">
+    <header><b class="tt-lh">방 목록</b><div class="tt-lfil"><button type="button" class="on" data-f="all">전체</button><button type="button" data-f="wait"><i class="dot g"></i>대기 중</button><button type="button" data-f="free"><i class="dot b"></i>빈 자리 있음</button></div><label class="tt-lsearch"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 5 5"/></svg><input type="text" inputmode="numeric" maxlength="4" placeholder="방 번호로 검색" aria-label="방 번호로 검색"></label><button type="button" class="tt-lrefresh" aria-label="새로고침"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg></button></header>
+    <div class="tt-lrooms"></div>
+  </section>
+  <div class="tt-lacts">
+    <button type="button" class="tt-cs-go pink tt-lmake"><b>＋</b>방 만들기</button>
+    <button type="button" class="tt-lquick"><span>⚡ 빠른 입장</span><small>빈 자리 있는 방으로 바로</small></button>
+  </div>
 </div>
 
 <div class="tt-screen tt-room" data-s="room" hidden>
@@ -132,12 +123,14 @@ const TEMPLATE = `
       </ol>
       <div class="tt-rowx"><span>순위 보상</span><div class="tt-rewards">${REWARD.map((v, i) => `<span class="r${i + 1}"><b>${i === 0 ? "🏆" : `${i + 1}등`}</b>${icon("coin")}${v}</span>`).join("")}</div></div>
     </div>
-    <div class="tt-rpage" data-rp="set" hidden>
-      <div class="tt-rowx"><span>모드</span><div class="tt-modes"><button class="on" type="button">일반 판</button><button type="button" disabled>빠른 판</button></div></div>
-      <div class="tt-rowx"><span>인원</span><b class="tt-rval">4명</b></div>
-      <div class="tt-rowx"><span>방 공개</span><div class="tt-modes"><button class="on" type="button" data-pub="1">공개</button><button type="button" data-pub="0">비공개</button></div></div>
-      <div class="tt-rowx"><span>초대하기</span><button type="button" class="tt-rinvite">🔗 초대 링크 복사</button></div>
-      <p class="tt-rnote">빈자리가 있으면 게임 시작 때 봇이 자동으로 앉아요.</p>
+    <div class="tt-rpage tt-rset" data-rp="set" hidden>
+      <div class="tt-rowx"><span>모드</span><div class="tt-modes" data-k="mode"><button type="button" data-v="normal">일반 판</button><button type="button" data-v="fast">빠른 판</button></div></div>
+      <div class="tt-rowx"><span>인원</span><div class="tt-modes" data-k="max"><button type="button" data-v="2">2명</button><button type="button" data-v="3">3명</button><button type="button" data-v="4">4명</button></div></div>
+      <div class="tt-rowx"><span>봇 난이도</span><div class="tt-modes" data-k="level"><button type="button" data-v="0">초급</button><button type="button" data-v="1">중급</button><button type="button" data-v="2">고급</button></div></div>
+      <div class="tt-rowx"><span>방 공개</span><div class="tt-modes" data-k="pub"><button type="button" data-v="1">공개</button><button type="button" data-v="0">비공개</button></div></div>
+      <div class="tt-rowx"><span>바로 입장 허용</span><button type="button" class="tt-tog" data-k="autoJoin" aria-label="바로 입장 허용"><i></i></button><small>끄면 방장이 수락해야 들어와요</small></div>
+      <div class="tt-rowx"><span>빈자리 봇 채우기</span><button type="button" class="tt-tog" data-k="botFill" aria-label="빈자리 봇 채우기"><i></i></button><small>시작할 때 빈자리에 봇이 앉아요</small></div>
+      <p class="tt-rnote"></p>
     </div>
   </div>
   <form class="tt-rchat"><input type="text" maxlength="40" placeholder="메시지를 입력하세요…" aria-label="채팅 입력"><button type="submit" aria-label="보내기">😊</button></form>
@@ -148,24 +141,43 @@ const TEMPLATE = `
 <div class="tt-screen tt-game" data-s="game" hidden>
   <div class="tt-game-bg"></div>
   <div class="tt-felt"></div>
-  <div class="tt-gtop"><button class="tt-panel tt-sq tt-pause" type="button" aria-label="메뉴">❚❚</button><div class="tt-panel tt-gtitle"><div class="tt-t">원카드</div><div class="tt-s">4인전 · 일반 판</div></div></div>
-  <button class="tt-panel tt-sq tt-gchat" type="button" data-soon="채팅" aria-label="채팅">${icon("chat")}</button>
-  <svg class="tt-dir" viewBox="0 0 600 240" aria-hidden="true"><defs><marker id="tt-ah" viewBox="0 0 10 10" markerWidth="3" markerHeight="3" refX="5" refY="5" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#fff"/></marker></defs>
-    <path d="M90,170 A220,95 0 0 1 300,30" fill="none" stroke="#fff" stroke-width="10" stroke-linecap="round" marker-end="url(#tt-ah)"/>
-    <path d="M510,70 A220,95 0 0 1 300,210" fill="none" stroke="#fff" stroke-width="10" stroke-linecap="round" marker-end="url(#tt-ah)"/></svg>
-  <div class="tt-seats"></div>
-  <div class="tt-panel tt-turn"><div class="tt-tx"></div><div class="tt-sub"></div><div class="tt-tbar"><i></i></div></div>
+  <svg class="tt-dir" viewBox="0 0 760 330" aria-hidden="true"><defs><linearGradient id="tt-dg" x1="0" x2="1"><stop offset="0" stop-color="#fff" stop-opacity=".1"/><stop offset="1" stop-color="#fff" stop-opacity=".75"/></linearGradient><marker id="tt-ah" viewBox="0 0 10 10" markerWidth="2.6" markerHeight="2.6" refX="5" refY="5" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#fff" fill-opacity=".8"/></marker></defs>
+    <path d="M70,250 C40,140 150,40 330,26" fill="none" stroke="url(#tt-dg)" stroke-width="13" stroke-linecap="round" marker-end="url(#tt-ah)"/>
+    <path d="M690,80 C720,190 610,290 430,304" fill="none" stroke="url(#tt-dg)" stroke-width="13" stroke-linecap="round" marker-end="url(#tt-ah)"/></svg>
+  <div class="tt-gtl"><button class="tt-gbtn tt-sqb tt-pause" type="button" aria-label="메뉴"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14M5 12h14M5 17h14"/></svg></button><button class="tt-gbtn tt-rulesbtn" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 5.5c2.8-1 5.6-.8 8.5 1 2.9-1.8 5.7-2 8.5-1V19c-2.8-1-5.6-.8-8.5 1-2.9-1.8-5.7-2-8.5-1z"/><path d="M12 6.5V20"/></svg>규칙</button></div>
+  <div class="tt-gturn"><span class="tt-gturn-av tt-av"></span><b class="tt-gturn-tx"></b><span class="tt-gclock"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 1.5M9.5 2.8h5"/></svg><b></b></span></div>
+  <div class="tt-gtr"><button class="tt-gbtn tt-gchatbtn" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z"/></svg>채팅</button><button class="tt-gbtn tt-emobtn" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8.5 14.5c1.8 2 5.2 2 7 0M9 9.5h.01M15 9.5h.01"/></svg>이모티콘</button></div>
+  <div class="tt-opps"></div>
   <div class="tt-center">
-    <div class="tt-pilewrap"><div class="tt-stack tt-drawstack"><div class="tt-back tt-big"></div></div><span class="tt-drawcnt"></span></div>
-    <div class="tt-pilewrap"><div class="tt-stack tt-top"></div><span>바닥 카드</span></div>
-    <div class="tt-suitc"><div><small>지금 무늬</small><b></b></div></div>
+    <div class="tt-pilewrap tt-drawwrap"><div class="tt-stack tt-drawstack"></div><span class="tt-drawcnt"></span></div>
+    <div class="tt-pilewrap tt-topwrap"><div class="tt-atkb" hidden></div><div class="tt-stack tt-top"></div></div>
+    <div class="tt-suitc"><small>지금 무늬</small><b></b><span></span></div>
   </div>
   <div class="tt-hand"></div>
+  <div class="tt-gme"><div class="tt-gme-ring"><svg viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="50" r="46"/></svg><div class="tt-av tt-gme-av"></div></div><div class="tt-gme-plate"><b class="tt-gme-nm"></b><i class="star"></i><span class="tt-gme-cnt"></span></div></div>
+  <button class="tt-gbtn tt-sortbtn" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4v16M3.5 16.5 7 20l3.5-3.5M17 20V4M13.5 7.5 17 4l3.5 3.5"/></svg><span>무늬순</span></button>
   <div class="tt-gbtns">
-    <button class="tt-draw" type="button">카드 받기</button>
-    <button class="tt-one" type="button">원카드!</button>
-    <div class="tt-gsmall"><button class="tt-panel tt-sortbtn" type="button">${icon("sort")}카드 정렬</button><button class="tt-panel tt-emobtn" type="button">${icon("emote")}감정표현</button></div>
+    <button class="tt-one" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10v4h3l6 4V6L6 10zM16 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12"/></svg><span>원카드!</span></button>
+    <button class="tt-draw" type="button"><span>카드 받기</span></button>
   </div>
+  <aside class="tt-rules" hidden>
+    <header><b>📖 원카드 규칙</b><button type="button" class="tt-rules-x" aria-label="닫기">✕</button></header>
+    <p class="lead">바닥 카드와 <b>무늬나 숫자</b>가 같은 카드를 내요.<br><em>먼저 패를 다 털면 1등!</em></p>
+    <ul>
+      <li><i class="c red">2</i><b>공격 +2</b><small>다음 사람이 2장 받기</small></li>
+      <li><i class="c red">A</i><b>공격 +3</b><small>다음 사람이 3장 받기</small></li>
+      <li><i class="c jk">🃏</i><b>공격 +5</b><small>조커 · 아무 때나 낼 수 있음</small></li>
+      <li><i class="c">7</i><b>무늬 바꾸기</b><small>원하는 무늬로</small></li>
+      <li><i class="c">J</i><b>건너뛰기</b><small>다음 사람 차례를 건너뜀</small></li>
+      <li><i class="c">Q</i><b>방향 반대</b><small>도는 방향이 바뀜</small></li>
+      <li><i class="c">K</i><b>한 장 더</b><small>내 차례가 한 번 더</small></li>
+    </ul>
+    <p class="tip">공격은 <b>같은 숫자</b>나 같은 무늬의 <b>더 센 공격</b>(2 &lt; A &lt; 조커)으로 받아칠 수 있어요. 못 막으면 쌓인 만큼 받아요.</p>
+    <p class="tip one"><span>원카드!</span>1장 남으면 바로 눌러요. 남이 먼저 누르면 1장 더 받아요.</p>
+    <p class="tip">카드가 <b>20장</b>이 되면 파산이에요.</p>
+  </aside>
+  <form class="tt-gchat" hidden><input type="text" maxlength="60" placeholder="메시지를 입력하세요…" aria-label="채팅 입력"><button type="submit">보내기</button></form>
+  <div class="tt-gemo" hidden></div>
 </div>
 <div class="tt-screen tt-gacha" data-s="gacha" hidden>
   <div class="tt-gbg"></div>
@@ -191,8 +203,8 @@ const TEMPLATE = `
 `;
 
 export interface TownOpts {
-  /** 사이트 관리자면 설정에서 코인 · 천장 · 보유 코스튬 등을 바꿀 수 있음 */
-  admin?: boolean;
+  /** 사이트 로그인 상태 · 서버 연결 (없으면 연습용으로 서버 없이) */
+  host?: TownHost;
 }
 
 export function mountTown(root: HTMLElement, opts: TownOpts = {}): () => void {
@@ -211,7 +223,14 @@ export function mountTown(root: HTMLElement, opts: TownOpts = {}): () => void {
   };
   const sleep = (ms: number) => new Promise<void>((r) => later(r, ms));
 
-  const ME: Profile = loadProfile();
+  const H = opts.host;
+  const NET: TownNet | null = H?.net ?? null;
+  /** 별명을 정한 회원이면 별명 (코인 · 코스튬은 서버에) — 아니면 게스트 (이 기기에) */
+  let member: string | null = H?.member ?? null;
+  const isAdmin = () => !!H?.admin;
+  const guestProfile = () => loadProfile();
+  const memberProfile = (nick: string): Profile => ({ nick, char: "haru", look: "base", coins: 0, owned: [], pity: 0, games: 0 });
+  let ME: Profile = member ? memberProfile(member) : guestProfile();
   // 소리: 첫 터치에 풀림 · 화면마다 BGM · 버튼은 기본 딸깍
   const S = createSound();
   const sfx = (id: SfxId, o?: { rate?: number; vol?: number }) => S.sfx(id, o);
@@ -228,14 +247,18 @@ export function mountTown(root: HTMLElement, opts: TownOpts = {}): () => void {
     else sfx("click");
   };
   root.addEventListener("click", onBtnClick, { capture: true });
-  const save = () => saveProfile(ME);
+  const save = () => {
+    if (!member) saveProfile(ME);
+  };
   let CUR: Screen = "loading";
   const scale = () => root.getBoundingClientRect().width / DW || 1;
 
   function show(s: Screen) {
-    for (const el of $$(".tt-screen")) el.hidden = el.dataset.s !== s;
+    // 시작 화면은 마을 풍경 위에 띄움 (마을은 흐리게 · 캐릭터 없이)
+    for (const el of $$(".tt-screen")) el.hidden = !(el.dataset.s === s || (s === "title" && el.dataset.s === "town"));
+    root.classList.toggle("titling", s === "title");
     CUR = s;
-    S.bgm(BGM_OF[s] ?? null);
+    S.bgm(BGM_OF[s] ?? (s === "title" ? "town" : s === "lobby" ? "room" : null));
   }
   let toastT: ReturnType<typeof setTimeout> | undefined;
   function toast(t: string, ms = 1700) {
@@ -280,7 +303,7 @@ export function mountTown(root: HTMLElement, opts: TownOpts = {}): () => void {
   // ---------- 돈 ----------
   function refreshMoney() {
     const html = `<div class="tt-m">${icon("coin", "tt-coin")}<b>${ME.coins.toLocaleString()}</b><button type="button" class="tt-mplus" aria-label="코인 얻는 법">+</button></div>`;
-    for (const sel of [".tt-money-town", ".tt-money-room"]) {
+    for (const sel of [".tt-money-town", ".tt-money-room", ".tt-money-lobby"]) {
       $(sel).innerHTML = html;
       $(sel).querySelector<HTMLElement>(".tt-mplus")!.onclick = () => toast("코인은 게임에서 이기면 모여요!");
     }
@@ -380,7 +403,7 @@ export function mountTown(root: HTMLElement, opts: TownOpts = {}): () => void {
         ? `<img class="tt-lamp-art" src="${ART.props.lamp}" style="left:${lx - 30}px" alt="" draggable="false">`
         : `<div class="tt-lamp" style="left:${lx - 5}px"></div>`;
     });
-    w += `<div class="tt-ent tt-pl"><div class="tt-shadow"></div><div class="tt-sdwrap"></div><div class="tt-tag me"><i></i>나</div></div>`;
+    w += `<div class="tt-ent tt-pl"><div class="tt-shadow"></div><div class="tt-sdwrap"></div><div class="tt-tag me"><i></i><span class="tt-mynick"></span></div></div>`;
     T.npcs = [
       { char: "ruru", look: "base", nick: "루루", x: doorX(1) - 220, y: 575, tx: 0, wait: rnd(1, 3), flip: false, sayT: 0 },
       { char: "haru", look: "cos1", nick: "마법하루", x: doorX(3) + 60, y: 610, tx: 0, wait: rnd(1, 3), flip: false, sayT: 0 },
@@ -401,6 +424,15 @@ export function mountTown(root: HTMLElement, opts: TownOpts = {}): () => void {
       e.stopPropagation();
       tryEnter();
     };
+    // 건물을 눌러도 들어감 (열린 건물은 바로 로비, 공사 중이면 안내)
+    $$(".tt-bld-art img, .tt-bld").forEach((el, i) => {
+      el.onpointerdown = (e) => {
+        e.stopPropagation();
+        const g = GAMES[i];
+        if (!g.open) return toast(`${g.name}은(는) 아직 공사 중이에요`);
+        openLobby(g.id);
+      };
+    });
     $(".tt-minimap").innerHTML =
       GAMES.map(
         (g, i) =>
@@ -411,6 +443,7 @@ export function mountTown(root: HTMLElement, opts: TownOpts = {}): () => void {
   }
   function refreshPlayerSd() {
     $(".tt-pl .tt-sdwrap").innerHTML = sdTownHTML(ME.char, ME.look);
+    $(".tt-mynick").textContent = ME.nick === "나" ? CHARS[ME.char].name : ME.nick;
   }
   function teleport(i: number) {
     T.x = doorX(i);
@@ -434,14 +467,15 @@ export function mountTown(root: HTMLElement, opts: TownOpts = {}): () => void {
     if (b)
       b.onpointerdown = (e) => {
         e.stopPropagation();
-        enterRoom();
+        LB.game = "onecard";
+        void quickJoin();
       };
   }
   function tryEnter() {
     if (T.near < 0) return;
     const g = GAMES[T.near];
     if (!g.open) return toast(`${g.name}은(는) 아직 공사 중이에요`);
-    enterRoom();
+    openLobby(g.id);
   }
   // 바닥을 누르면 그쪽으로, 누른 채로 끌면 계속 따라감 (마우스 · 손가락 둘 다)
   const aimAt = (e: PointerEvent) => {
@@ -509,22 +543,9 @@ export function mountTown(root: HTMLElement, opts: TownOpts = {}): () => void {
   holdBtn($(".tt-ar"), 1, 0);
   holdBtn($(".tt-au"), 0, -1);
   holdBtn($(".tt-ad"), 0, 1);
-  $(".tt-quick").onclick = () => enterRoom();
-  $(".tt-gamelist").onclick = () => {
-    const ov = overlay(
-      `<h2>게임 목록</h2><div class="tt-glist">${GAMES.map(
-        (g, i) =>
-          `<button type="button" data-i="${i}" class="${g.open ? "open" : ""}" ${g.open ? "" : "disabled"}>${ART.bld[g.id] ? `<img src="/town/bld/thumb/${g.id}.webp" alt="" draggable="false">` : `<span>${g.ic}</span>`}<div><b>${g.name}</b><small>${g.open ? "지금 바로 입장" : "준비 중"}</small></div>${g.open ? `<i>${CHEV}</i>` : ""}</button>`,
-      ).join("")}</div><div class="tt-row"><button type="button" class="tt-x">닫기</button></div>`,
-    );
-    ov.querySelector<HTMLElement>(".tt-x")!.onclick = () => ov.remove();
-    $$(".tt-glist button", ov).forEach(
-      (b) =>
-        (b.onclick = () => {
-          ov.remove();
-          enterRoom();
-        }),
-    );
+  $(".tt-tolobby").onclick = () => {
+    const g = GAMES[Math.max(0, T.near)];
+    openLobby(g?.open ? g.id : "onecard");
   };
   // 캐릭터 화면: 풀버전 일러(배경 붙여서) 크게 + 가진 모습 고르기
   // 캐릭터 선택 · 스킨 화면 (GPT 시안 mock-char-skin-v1 그대로): 왼쪽 큰 일러 + 소개, 오른쪽 카드 목록 + 큰 버튼
@@ -568,11 +589,14 @@ export function mountTown(root: HTMLElement, opts: TownOpts = {}): () => void {
       ov.querySelector(".tt-cs-btns")!.innerHTML = `<button type="button" class="tt-cs-go pink" ${mine ? "disabled" : ""}>${mine ? "선택 중인 캐릭터" : "이 캐릭터로 하기<i>›</i>"}</button><button type="button" class="tt-cs-go blue tt-cs-toskin">👕 스킨 보기</button>`;
       $$(".tt-cs-card[data-c]", ov).forEach((b) => (b.onclick = () => ((sel = b.dataset.c as CharId), draw())));
       const go = ov.querySelector<HTMLButtonElement>(".tt-cs-go.pink")!;
-      go.onclick = () => {
-        ME.char = sel;
+      go.onclick = async () => {
         // 고른 캐릭터의 장착 스킨: 가진 코스튬이 없으면 기본
-        if (ME.look !== "base" && !ME.owned.includes(`${sel}:${ME.look}`)) ME.look = "base";
-        save();
+        const l: LookId = ME.look !== "base" && ME.owned.includes(`${sel}:${ME.look}`) ? ME.look : "base";
+        try {
+          await setLook(sel, l);
+        } catch (e) {
+          return toast(errText(e));
+        }
         refreshMoney();
         refreshPlayerSd();
         toast(`${d.name}(으)로 바꿨어요`);
@@ -610,10 +634,12 @@ export function mountTown(root: HTMLElement, opts: TownOpts = {}): () => void {
       $$(".tt-cs-card[data-l]", ov).forEach((b) => (b.onclick = () => ((selL = b.dataset.l as LookId), draw())));
       const go = ov.querySelector<HTMLButtonElement>(".tt-cs-go.pink")!;
       if (own)
-        go.onclick = () => {
-          ME.char = forChar;
-          ME.look = selL;
-          save();
+        go.onclick = async () => {
+          try {
+            await setLook(forChar, selL);
+          } catch (e) {
+            return toast(errText(e));
+          }
           refreshMoney();
           refreshPlayerSd();
           toast(`${L.name === "기본 의상" ? d.name : L.name} 장착!`);
@@ -662,7 +688,7 @@ export function mountTown(root: HTMLElement, opts: TownOpts = {}): () => void {
         }),
     );
   $(".tt-set").onclick = () => {
-    if (!opts.admin) {
+    if (!isAdmin()) {
       const ov = overlay(`<h2>설정</h2>${soundHTML()}<div class="tt-row"><button type="button" class="pri tt-x">닫기</button></div>`);
       bindSound(ov);
       ov.querySelector<HTMLElement>(".tt-x")!.onclick = () => ov.remove();
@@ -672,7 +698,7 @@ export function mountTown(root: HTMLElement, opts: TownOpts = {}): () => void {
       (Object.keys(c.looks) as LookId[]).filter((l) => l !== "base").map((l) => ({ c: c.id, l, name: c.looks[l].name })),
     );
     const ov = overlay(
-      `<h2>관리자 설정</h2><p class="tt-adm-sub">이 기기의 TABLE TOWN 정보만 바뀌어요.</p>
+      `<h2>관리자 설정</h2><p class="tt-adm-sub">${member ? "내 계정의 TABLE TOWN 정보가 바뀌어요." : "이 기기의 TABLE TOWN 정보만 바뀌어요."}</p>
       ${soundHTML()}
       <div class="tt-adm">
         <label>코인<input id="tt-adm-coins" type="number" min="0" step="100" value="${ME.coins}"></label>
@@ -700,6 +726,7 @@ export function mountTown(root: HTMLElement, opts: TownOpts = {}): () => void {
         .map((i) => i.dataset.k!);
       if (ME.look !== "base" && !ME.owned.includes(`${ME.char}:${ME.look}`)) ME.look = "base";
       save();
+      if (member && NET) void NET.rpc("town.adminSet", { coins: ME.coins, pity: ME.pity, owned: ME.owned }).then(syncMe, (e) => toast(errText(e)));
       refreshMoneyAll();
       refreshPlayerSd();
       if (CUR === "gacha") renderGacha();
@@ -712,6 +739,7 @@ export function mountTown(root: HTMLElement, opts: TownOpts = {}): () => void {
       ME.owned = [];
       ME.look = "base";
       save();
+      if (member && NET) void NET.rpc("town.adminSet", { coins: 1000, pity: 0, owned: [] }).then(syncMe, (e) => toast(errText(e)));
       refreshMoneyAll();
       refreshPlayerSd();
       if (CUR === "gacha") renderGacha();
@@ -880,7 +908,12 @@ export function mountTown(root: HTMLElement, opts: TownOpts = {}): () => void {
     if (near >= 0) {
       eb.hidden = false;
       eb.style.left = doorX(near) + "px";
-      eb.textContent = GAMES[near].open ? "입장" : "공사 중";
+      const label = GAMES[near].open ? `${GAMES[near].name} 입장` : "공사 중";
+      if (eb.dataset.l !== label) {
+        eb.dataset.l = label;
+        eb.innerHTML = `<span>${label}</span>`;
+        eb.classList.toggle("closed", !GAMES[near].open);
+      }
     } else eb.hidden = true;
     const ics = $$(".tt-mic");
     let cl = 0,
@@ -907,27 +940,384 @@ export function mountTown(root: HTMLElement, opts: TownOpts = {}): () => void {
     }
   }
 
-  // =================== 대기실 ===================
-  const R = { seats: [] as (BotSeat | null)[], no: 0 };
-  function pickBots(n: number): BotSeat[] {
-    // 내 모습과 똑같은 봇은 빼고 고름
-    const pool = BOT_POOL.filter((b) => !(b.char === ME.char && b.look === ME.look));
-    return pool.sort(() => Math.random() - 0.5).slice(0, n);
+  // =================== 온라인: 내 정보 · 방 · 판 ===================
+  type SeatW = { uid: string | null; bot: boolean; nick: string; char: CharId; look: LookId; member: boolean; away: boolean };
+  type ResultW = { order: number[]; out: number[]; left: number[]; gain: number[]; at: number };
+  interface RoomW {
+    id: string;
+    game: string;
+    title: string;
+    hostUid: string;
+    max: number;
+    mode: GameMode;
+    pub: boolean;
+    locked: boolean;
+    autoJoin: boolean;
+    botFill: boolean;
+    level: number;
+    phase: "wait" | "play";
+    seats: (SeatW | null)[];
+    knock: { uid: string; nick: string; char: CharId; look: LookId }[];
+    result: ResultW | null;
+    chat: { seat: number; nick: string; text: string; ts: number; sys?: boolean }[];
   }
-  function enterRoom() {
+  interface GameMsg {
+    v: OCView;
+    map: number[];
+    ev: OCEvent[];
+  }
+  interface LobbyRoom {
+    id: string;
+    title: string;
+    host: { nick: string; char: CharId; look: LookId } | null;
+    count: number;
+    humans: number;
+    max: number;
+    mode: GameMode;
+    locked: boolean;
+    autoJoin: boolean;
+    level: number;
+    phase: "wait" | "play";
+    createdAt: number;
+  }
+  const plainNick = (n: string) => n.replace(/^◦/, "");
+  const esc = (t: string) => t.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
+  const nm = (n: string) => esc(plainNick(n));
+  const myUid = () => NET?.uid() ?? null;
+  const me = () => ({ nick: ME.nick === "나" ? "" : ME.nick, char: ME.char, look: ME.look });
+  const CROWN = `<svg class="tt-crown" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 8l4.5 3.5L12 5l4.5 6.5L21 8l-2 10H5z"/></svg>`;
+
+  /** 회원: 서버의 내 정보로 맞춤 */
+  async function syncMe() {
+    if (!member || !NET) return;
+    try {
+      const p = await NET.rpc<{ coins: number; owned: string[]; pity: number; char: CharId; look: LookId; games: number } | null>("town.me");
+      if (!p) return;
+      Object.assign(ME, p, { nick: member });
+      refreshMoneyAll();
+      refreshPlayerSd();
+      if (CUR === "gacha") renderGacha();
+    } catch {}
+  }
+  /** 내 모습 바꾸기: 회원은 서버에, 게스트는 기기에 · 앉아 있는 방에도 알림 */
+  async function setLook(c: CharId, l: LookId) {
+    if (member && NET) {
+      const p = await NET.rpc<{ char: CharId; look: LookId }>("town.setLook", { char: c, look: l });
+      ME.char = p.char;
+      ME.look = p.look;
+    } else {
+      ME.char = c;
+      ME.look = l;
+      save();
+    }
+    if (RM.id && RM.room?.phase === "wait") void NET?.rpc("town.look", { id: RM.id, ...me() }).catch(() => {});
+  }
+
+  // ---------- 로비 ----------
+  const LB = { game: "onecard" as GameId, unsub: null as null | (() => void), rooms: [] as LobbyRoom[], filter: "all", q: "" };
+  function openLobby(game: GameId = LB.game) {
+    const g = GAMES.find((x) => x.id === game);
+    if (!g?.open) return toast(`${g?.name ?? "그 게임"}은(는) 아직 준비 중이에요`);
+    LB.game = game;
+    leaveRoomQuiet();
+    show("lobby");
+    refreshMoneyAll();
+    $(".tt-lobby-bg").style.backgroundImage = ART.room ? `url(${ART.room})` : "";
+    $(".tt-lgame").textContent = g.name;
+    $(".tt-ltabs").innerHTML = GAMES.map(
+      (x) =>
+        `<button type="button" data-g="${x.id}" class="${x.id === game ? "on" : ""} ${x.open ? "" : "off"}">${ART.bld[x.id] ? `<img src="/town/bld/thumb/${x.id}.webp" alt="" draggable="false">` : `<span>${x.ic}</span>`}<b>${x.name}</b>${x.open ? "" : "<small>준비 중</small>"}</button>`,
+    ).join("");
+    $$(".tt-ltabs button").forEach((b) => (b.onclick = () => openLobby(b.dataset.g as GameId)));
+    LB.unsub?.();
+    LB.rooms = [];
+    renderLobby(true);
+    if (!NET) return;
+    let got = false;
+    later(() => {
+      if (!got && CUR === "lobby" && LB.game === game)
+        $(".tt-lrooms").innerHTML = `<div class="tt-lempty">서버에 연결하는 중이에요…<br><small>잠시 뒤에도 안 되면 새로고침 버튼을 눌러 주세요</small></div>`;
+    }, 6000);
+    LB.unsub = NET.subscribe<LobbyRoom[]>("town.lobby", { game }, {
+      onSnapshot: (d) => ((got = true), (LB.rooms = d ?? []), renderLobby()),
+      onEvent: (t, d) => t === "list" && ((LB.rooms = (d as LobbyRoom[]) ?? []), renderLobby()),
+      onError: () => renderLobby(),
+    });
+  }
+  function closeLobby() {
+    LB.unsub?.();
+    LB.unsub = null;
+  }
+  function renderLobby(loading = false) {
+    const list = LB.rooms.filter(
+      (r) => (LB.filter === "wait" ? r.phase === "wait" : LB.filter === "free" ? r.phase === "wait" && r.humans < r.max : true) && (!LB.q || r.id.includes(LB.q)),
+    );
+    const box = $(".tt-lrooms");
+    if (!list.length) {
+      box.innerHTML = `<div class="tt-lempty">${loading ? "방 목록을 불러오는 중…" : LB.rooms.length ? "조건에 맞는 방이 없어요" : "아직 열린 방이 없어요<br><small>방을 만들거나 빠른 입장으로 바로 시작해요!</small>"}</div>`;
+      return;
+    }
+    box.innerHTML = list
+      .map((r) => {
+        const h = r.host;
+        return `<button type="button" class="tt-lroom ${r.phase}" data-id="${r.id}"><span class="r1"><span class="no">#${r.id}</span><b class="ttl">${esc(r.title)}</b>${r.locked ? '<i class="lock" title="비공개 방">🔒</i>' : ""}</span>
+          <span class="r2"><span class="host"><span class="tt-av" style="${h ? avBg(h.char, h.look) : ""}">${h ? faceHTML(h.char, h.look) : ""}</span>${CROWN}<em>${h ? nm(h.nick) : "-"}</em></span><span class="st ${r.phase}">${r.phase === "wait" ? "대기 중" : "게임 중"}</span><span class="cnt"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c.8-4.4 4-7 8-7s7.2 2.6 8 7z"/></svg>${r.humans}/${r.max}</span><span class="md ${r.mode}">${MODES[r.mode].name}</span></span></button>`;
+      })
+      .join("");
+    $$(".tt-lroom", box).forEach((b) => (b.onclick = () => void joinRoom(b.dataset.id!, LB.rooms.find((x) => x.id === b.dataset.id)?.locked)));
+  }
+  $$(".tt-lfil button").forEach(
+    (b) =>
+      (b.onclick = () => {
+        LB.filter = b.dataset.f!;
+        $$(".tt-lfil button").forEach((x) => x.classList.toggle("on", x === b));
+        renderLobby();
+      }),
+  );
+  ($(".tt-lsearch input") as HTMLInputElement).oninput = (e) => {
+    LB.q = (e.target as HTMLInputElement).value.replace(/\D/g, "");
+    renderLobby();
+  };
+  $(".tt-lrefresh").onclick = () => {
+    $(".tt-lrefresh").classList.remove("spin");
+    void $(".tt-lrefresh").offsetWidth;
+    $(".tt-lrefresh").classList.add("spin");
+    openLobby(LB.game);
+  };
+  $(".tt-lback").onclick = () => {
+    closeLobby();
+    goTown();
+  };
+  $(".tt-lquick").onclick = () => void quickJoin();
+  $(".tt-lmake").onclick = () => openMake();
+
+  /** 비밀번호 묻기 (숫자 4자리) */
+  function askPw(): Promise<string | null> {
+    return new Promise((res) => {
+      const ov = overlay(
+        `<h2>비밀번호</h2><p>비공개 방이에요. 숫자 4자리를 입력해 주세요.</p><input class="tt-pwin" type="password" inputmode="numeric" maxlength="4" autocomplete="off"><div class="tt-row"><button type="button" class="tt-x">취소</button><button type="button" class="pri tt-ok">들어가기</button></div>`,
+      );
+      const inp = ov.querySelector<HTMLInputElement>(".tt-pwin")!;
+      inp.focus();
+      const done = (v: string | null) => (ov.remove(), res(v));
+      ov.querySelector<HTMLElement>(".tt-x")!.onclick = () => done(null);
+      ov.querySelector<HTMLElement>(".tt-ok")!.onclick = () => done(inp.value);
+      inp.onkeydown = (e) => e.key === "Enter" && done(inp.value);
+    });
+  }
+  async function needNet(): Promise<boolean> {
+    if (!NET) {
+      toast("서버에 연결할 수 없어요");
+      return false;
+    }
+    try {
+      if (!member) await NET.ensureGuest();
+      return true;
+    } catch {
+      toast("접속에 실패했어요. 잠시 후 다시 시도해 주세요.");
+      return false;
+    }
+  }
+  async function joinRoom(id: string, locked = false, pw?: string) {
+    if (!(await needNet())) return;
+    try {
+      if (locked && pw === undefined) {
+        const v = await askPw();
+        if (v === null) return;
+        pw = v;
+      }
+      const r = await NET!.rpc<{ id: string; seat: number; knock?: boolean }>("town.join", { id, ...me(), ...(pw ? { password: pw } : {}) });
+      enterRoomOnline(r.id, !!r.knock);
+    } catch (e) {
+      if (errCode(e) === "NEED_PASSWORD") return void joinRoom(id, true);
+      toast(errText(e));
+    }
+  }
+  async function quickJoin() {
+    if (!(await needNet())) return;
+    try {
+      const r = await NET!.rpc<{ id: string; seat: number; made: boolean }>("town.quick", { ...me(), game: LB.game });
+      if (r.made) toast("빈 자리 있는 방이 없어서 새 방을 만들었어요");
+      enterRoomOnline(r.id);
+    } catch (e) {
+      toast(errText(e));
+    }
+  }
+
+  /** 방 만들기 창 (시안 mock-lobby-v1 아래 칸) */
+  function openMake() {
+    const o = { title: "", mode: "normal" as GameMode, max: 4, pub: true, password: "", autoJoin: true, botFill: true, level: 1 };
+    const ov = overlay(
+      `<div class="tt-make"><div class="tt-mk-plate">방 만들기</div><button type="button" class="tt-mk-x tt-x" aria-label="닫기">✕</button>
+      <div class="tt-mk-row"><span>방 제목</span><label class="tt-mk-in"><input class="mk-title" maxlength="20" placeholder="방 제목을 입력하세요 (최대 20자)"><small class="mk-len">0/20</small></label></div>
+      <div class="tt-mk-row"><span>게임 모드</span><div class="tt-mk-seg" data-k="mode"><button type="button" data-v="normal">일반 판</button><button type="button" data-v="fast">⚡ 빠른 판</button></div><small class="tt-mk-help">일반 7장 · 15초 / 빠른 5장 · 9초</small></div>
+      <div class="tt-mk-row"><span>최대 인원</span><div class="tt-mk-seg" data-k="max"><button type="button" data-v="2">2명</button><button type="button" data-v="3">3명</button><button type="button" data-v="4">4명</button></div></div>
+      <div class="tt-mk-row"><span>봇 난이도</span><div class="tt-mk-seg" data-k="level"><button type="button" data-v="0">초급</button><button type="button" data-v="1">중급</button><button type="button" data-v="2">고급</button></div></div>
+      <div class="tt-mk-row"><span>방 공개 설정</span><div class="tt-mk-seg" data-k="pub"><button type="button" data-v="1">🌐 공개 방</button><button type="button" data-v="0">🔒 비공개 방</button></div><label class="tt-mk-in pw"><input class="mk-pw" inputmode="numeric" maxlength="4" placeholder="비밀번호 4자리"></label></div>
+      <div class="tt-mk-row"><span>바로 입장 허용</span><button type="button" class="tt-tog" data-k="autoJoin"><i></i></button><small>끄면 방장이 수락해야 들어올 수 있어요</small></div>
+      <div class="tt-mk-row"><span>빈 자리 봇 채우기</span><button type="button" class="tt-tog" data-k="botFill"><i></i></button><small>인원이 모자라면 봇이 채워요</small></div>
+      <div class="tt-mk-btns"><button type="button" class="tt-mk-cancel tt-x">취소</button><button type="button" class="tt-cs-go pink tt-mk-go">방 만들기</button></div></div>`,
+      $(".tt-lobby"),
+    );
+    ov.classList.add("mk");
+    const paint = () => {
+      $$(".tt-mk-seg", ov).forEach((g) => {
+        const k = g.dataset.k as "mode" | "max" | "pub" | "level";
+        const cur = k === "pub" ? (o.pub ? "1" : "0") : String(o[k]);
+        $$("button", g).forEach((b) => b.classList.toggle("on", b.dataset.v === cur));
+      });
+      $$(".tt-tog", ov).forEach((t) => t.classList.toggle("on", !!o[t.dataset.k as "autoJoin" | "botFill"]));
+      ov.querySelector<HTMLElement>(".tt-mk-in.pw")!.classList.toggle("off", o.pub);
+    };
+    $$(".tt-mk-seg button", ov).forEach(
+      (b) =>
+        (b.onclick = () => {
+          const k = b.parentElement!.dataset.k!;
+          if (k === "mode") o.mode = b.dataset.v as GameMode;
+          else if (k === "pub") o.pub = b.dataset.v === "1";
+          else (o as Record<string, unknown>)[k] = +b.dataset.v!;
+          paint();
+        }),
+    );
+    $$(".tt-tog", ov).forEach((t) => (t.onclick = () => ((o[t.dataset.k as "autoJoin" | "botFill"] = !o[t.dataset.k as "autoJoin" | "botFill"]), paint())));
+    const ti = ov.querySelector<HTMLInputElement>(".mk-title")!;
+    ti.oninput = () => (ov.querySelector(".mk-len")!.textContent = `${ti.value.length}/20`);
+    $$(".tt-x", ov).forEach((b) => (b.onclick = () => ov.remove()));
+    ov.querySelector<HTMLElement>(".tt-mk-go")!.onclick = async () => {
+      o.title = ti.value;
+      o.password = o.pub ? "" : ov.querySelector<HTMLInputElement>(".mk-pw")!.value.trim();
+      if (!o.pub && !/^\d{4}$/.test(o.password)) return toast("비공개 방은 숫자 4자리 비밀번호가 필요해요");
+      if (!(await needNet())) return;
+      try {
+        const r = await NET!.rpc<{ id: string }>("town.create", { ...me(), game: LB.game, ...o });
+        ov.remove();
+        enterRoomOnline(r.id);
+      } catch (e) {
+        toast(errText(e));
+      }
+    };
+    paint();
+  }
+
+  // ---------- 대기실 ----------
+  const RM = {
+    id: "",
+    room: null as RoomW | null,
+    unsub: null as null | (() => void),
+    knock: false,
+    game: null as GameMsg | null,
+    shownResult: 0,
+    /** 결과 창을 띄우는 중 (대기실로 바로 넘어가지 않게) */
+    resPending: false,
+  };
+  const mySeat = () => (RM.room ? RM.room.seats.findIndex((s) => !!s && s.uid === myUid()) : -1);
+  const amHost = () => !!RM.room && RM.room.hostUid === myUid();
+  /** 자리 번호 → 대기실 그림 위치 (나는 항상 앞 왼쪽) */
+  const ART_POS: Record<number, number[]> = { 2: [0, 2], 3: [0, 1, 2], 4: [0, 1, 2, 3] };
+  const posOf = (seat: number) => {
+    const r = RM.room!;
+    const base = Math.max(0, mySeat());
+    return ART_POS[r.max][(seat - base + r.max) % r.max];
+  };
+  function leaveRoomQuiet() {
+    RM.unsub?.();
+    RM.unsub = null;
+    if (RM.id && NET) void NET.rpc("town.leave", { id: RM.id }).catch(() => {});
+    RM.id = "";
+    RM.room = null;
+    RM.game = null;
+    GV = null;
+    root.querySelector(".tt-knockov")?.remove();
+  }
+  function enterRoomOnline(id: string, knock = false) {
+    closeLobby();
+    RM.unsub?.();
+    RM.id = id;
+    RM.room = null;
+    RM.game = null;
+    RM.knock = knock;
+    RM.shownResult = Date.now();
+    GV = null;
     sfx("enter");
-    const bots = pickBots(3);
-    R.seats = [null, bots[0], bots[1], null];
-    R.no = 1000 + ((Math.random() * 9000) | 0);
     $(".tt-room-bg").style.backgroundImage = ART.room ? `url(${ART.room})` : "";
-    $(".tt-rtable").hidden = !!ART.room;
     root.querySelector(".tt-ov")?.remove();
     show("room");
-    refreshMoney();
-    renderRoom();
+    refreshMoneyAll();
+    if (knock) showKnockWait();
+    RM.unsub = NET!.subscribe<{ room: RoomW | null; game: GameMsg | null }>("town.room", { id }, {
+      onSnapshot: (d) => {
+        if (!d?.room) return roomGone("없어진 방이에요");
+        onRoom(d.room);
+        if (d.game) onGame(d.game);
+      },
+      onEvent: (t, d) => {
+        if (t === "room") return d ? onRoom(d as RoomW) : roomGone("방이 닫혔어요");
+        if (t === "game") return onGame(d as GameMsg);
+        if (t === "chat") return onChat(d as RoomW["chat"][number]);
+        if (t === "emote") return onEmote(d as { seat: number; text: string });
+        if (t === "kicked" && (d as { uid: string }).uid === myUid()) return roomGone("방장이 방에서 내보냈어요", false);
+        if (t === "denied" && (d as { uid: string }).uid === myUid()) return roomGone("방장이 입장을 거절했어요", false);
+      },
+      onError: () => roomGone("방에 들어갈 수 없어요"),
+    });
   }
-  // 앉은 그림이 다 있으면: 테이블 없는 방 → 뒷자리(정면) → 테이블 → 앞자리(뒷모습) 순서로 겹쳐서 진짜 테이블에 둘러앉은 느낌
-  // 자리마다 위치 · 크기를 따로 (한 폭의 그림처럼): 앞 두 자리는 테이블 가장자리에 걸쳐 앉음
+  function roomGone(msg: string, leave = true) {
+    if (!RM.id) return;
+    if (!leave) RM.id = "";
+    toast(msg, 2200);
+    leaveRoomQuiet();
+    root.querySelector(".tt-ov")?.remove();
+    openLobby(LB.game);
+  }
+  function showKnockWait() {
+    root.querySelector(".tt-knockov")?.remove();
+    const ov = overlay(`<h2>입장 요청</h2><p>방장이 수락하면 들어가요…</p><div class="tt-row"><button type="button" class="tt-x">취소</button></div>`, $(".tt-room"));
+    ov.classList.add("tt-knockov");
+    ov.querySelector<HTMLElement>(".tt-x")!.onclick = () => roomGone("입장 요청을 취소했어요");
+  }
+
+  function onRoom(r: RoomW) {
+    const prev = RM.room;
+    RM.room = r;
+    const seat = mySeat();
+    if (RM.knock && seat >= 0) {
+      RM.knock = false;
+      root.querySelector(".tt-knockov")?.remove();
+      toast("방장이 수락했어요!");
+    }
+    if (prev && prev.hostUid !== r.hostUid && r.hostUid === myUid()) toast("이제 내가 방장이에요 👑");
+    // 판이 끝남 → 결과
+    if (r.result && r.result.at > RM.shownResult) {
+      RM.shownResult = r.result.at;
+      showResult(r);
+    }
+    if (r.phase === "play" && seat >= 0 && CUR !== "game" && RM.game) {
+      GV = RM.game.v;
+      showGame();
+    }
+    if (r.phase === "wait" && CUR === "game" && !RM.resPending) show("room");
+    if (CUR === "room") renderRoomOnline();
+    renderKnocks();
+  }
+
+  function renderKnocks() {
+    const r = RM.room;
+    root.querySelector(".tt-knocks")?.remove();
+    if (!r || !amHost() || !r.knock.length) return;
+    const el = document.createElement("div");
+    el.className = "tt-knocks";
+    el.innerHTML = r.knock
+      .map(
+        (k) =>
+          `<div class="tt-knock"><span class="tt-av" style="${avBg(k.char, k.look)}">${faceHTML(k.char, k.look)}</span><b>${nm(k.nick)}</b><span>님이 들어오고 싶어해요</span><button type="button" class="no" data-u="${esc(k.uid)}">거절</button><button type="button" class="ok" data-u="${esc(k.uid)}">수락</button></div>`,
+      )
+      .join("");
+    $(".tt-room").appendChild(el);
+    $$("button", el).forEach(
+      (b) => (b.onclick = () => void NET!.rpc("town.approve", { id: r.id, uid: b.dataset.u, ok: b.classList.contains("ok") }).catch((e) => toast(errText(e)))),
+    );
+  }
+
   const SEATS = [
     { cx: 200, bottom: 676, h: 334, back: true, tag: { x: 20, y: 300 } }, // 0 나: 앞 왼쪽 (뒷모습, 테이블로 손 뻗음)
     { cx: 292, bottom: 392, h: 248, back: false, tag: { x: 160, y: 118 } }, // 1 뒤 왼쪽 (턱 괴기)
@@ -935,105 +1325,123 @@ export function mountTown(root: HTMLElement, opts: TownOpts = {}): () => void {
     { cx: 704, bottom: 662, h: 322, back: true, tag: { x: 606, y: 300 } }, // 3 앞 오른쪽 (옆으로 앉아 테이블 봄)
   ];
   const seatArt = (c: CharId, l: LookId, i: number) => artOf(c, l).seat?.[i];
-  function renderRoomSeated(): boolean {
-    const ok = ART.roomEmpty && ART.roomTable && [0, 1, 2, 3].every((i) => {
-      const c = i === 0 ? ME.char : R.seats[i]?.char;
-      const l = i === 0 ? ME.look : R.seats[i]?.look;
-      return !c || !!seatArt(c, l!, i);
-    });
-    if (!ok) return false;
-    $(".tt-room-bg").style.backgroundImage = `url(${ART.roomEmpty})`;
-    let h = `<img class="tt-rtab" src="${ART.roomTable}" alt="" draggable="false">`;
+  const LV_NAME = ["초급", "중급", "고급"];
+  function renderRoomOnline() {
+    const r = RM.room;
+    if (!r) return;
+    const host = amHost();
+    const mine = mySeat();
+    $(".tt-roomtitle .tt-t").textContent = r.title;
+    $(".tt-roomno").textContent = `방 번호 ${r.id}`;
+    $(".tt-room-bg").style.backgroundImage = `url(${ART.roomEmpty ?? ART.room})`;
+    let h = ART.roomTable ? `<img class="tt-rtab" src="${ART.roomTable}" alt="" draggable="false">` : "";
     if (ART.cardBack) h += `<div class="tt-rdeck">${[0, 1, 2, 3].map((k) => `<img src="${ART.cardBack}" alt="" style="--k:${k}">`).join("")}</div>`;
-    SEATS.forEach((S, i) => {
-      const b = R.seats[i];
-      const c = i === 0 ? ME.char : b?.char;
-      const l = i === 0 ? ME.look : b?.look;
-      const z = S.back ? 30 : 10;
-      if (c && l) {
-        const src = seatArt(c, l, i)!;
-        h += `<img class="tt-rseatimg" src="${src}" alt="" draggable="false" style="left:${S.cx}px;top:${S.bottom - S.h}px;height:${S.h}px;z-index:${z}">`;
-        const nm = i === 0 ? CHARS[ME.char].name : b!.nick;
-        h += `<div class="tt-rtag" style="left:${S.tag.x}px;top:${S.tag.y}px"><div class="tt-av" style="${avBg(c, l)}">${faceHTML(c, l)}</div><div><div class="tt-nm">${nm}${i ? '<span class="tt-botb">BOT</span>' : ' <span class="tt-meb">나</span>'}</div><div class="tt-ready">✔ 준비 완료</div></div></div>`;
+    r.seats.forEach((s, i) => {
+      const p = posOf(i);
+      const S0 = SEATS[p];
+      const z = S0.back ? 30 : 10;
+      if (s) {
+        const src = seatArt(s.char, s.look, p);
+        if (src) h += `<img class="tt-rseatimg" src="${src}" alt="" draggable="false" style="left:${S0.cx}px;top:${S0.bottom - S0.h}px;height:${S0.h}px;z-index:${z}">`;
+        const isHost = s.uid === r.hostUid,
+          isMe = i === mine;
+        const badge = s.bot ? `<span class="tt-botb">BOT</span>` : isMe ? `<span class="tt-meb"><i></i></span>` : "";
+        const sub = s.bot ? `봇 · ${LV_NAME[r.level]}` : s.away ? "자리 비움" : isHost ? "방장" : "준비 완료";
+        h += `<div class="tt-rtag ${isHost ? "host" : ""} ${isMe ? "me" : ""}" data-seat="${i}" style="left:${SEATS[p].tag.x}px;top:${SEATS[p].tag.y}px">${isHost ? `<span class="tt-hostcrown">${CROWN}</span>` : ""}<div class="tt-av" style="${avBg(s.char, s.look)}">${faceHTML(s.char, s.look)}</div><div><div class="tt-nm">${nm(s.nick)}${badge}</div><div class="tt-ready ${s.away ? "away" : ""}">${s.bot || s.away ? "" : "✔ "}${sub}</div></div>${host && !isMe && r.phase === "wait" ? `<button type="button" class="tt-kick" data-seat="${i}" aria-label="내보내기" title="내보내기">✕</button>` : ""}</div>`;
       } else {
-        h += `<div class="tt-rghost" style="left:${S.cx - 70}px;top:${S.bottom - 150}px;z-index:${z}">빈 자리</div>`;
+        h += `<div class="tt-rghost" style="left:${S0.cx - 70}px;top:${S0.bottom - 150}px;z-index:${z}">빈 자리${host ? `<button type="button" class="tt-ghostbot" data-seat="${i}">+ 봇</button>` : ""}</div>`;
       }
     });
     $(".tt-rseats").innerHTML = h;
-    $(".tt-rcount b").textContent = `${1 + R.seats.slice(1).filter(Boolean).length}/4`;
-    return true;
-  }
-  function renderRoom() {
-    $(".tt-roomno").textContent = `방 번호 ${R.no}`;
-    ($(".tt-rb-bot") as HTMLButtonElement).disabled = !R.seats.slice(1).includes(null);
-    $(".tt-rtable").hidden = !!ART.room;
-    if (renderRoomSeated()) return bindRoomBtns();
-    $(".tt-room-bg").style.backgroundImage = ART.room ? `url(${ART.room})` : "";
-    const pos = ART.room
-      ? [
-          [70, 440],
-          [120, 150],
-          [470, 150],
-          [560, 440],
-        ]
-      : [
-          [110, 452],
-          [150, 140],
-          [470, 140],
-          [520, 452],
-        ];
-    $(".tt-rseats").innerHTML = [0, 1, 2, 3]
-      .map((i) => {
-        const [x, y] = pos[i];
-        const b = R.seats[i];
-        if (i > 0 && !b)
-          return `<div class="tt-rseat" style="left:${x}px;top:${y}px"><div class="tt-empty">빈 자리</div><div class="tt-rbtns"><button class="tt-sbtn" type="button" data-inv>+ 초대</button><button class="tt-sbtn dark" type="button" data-bot="${i}">🤖 봇 채우기</button></div></div>`;
-        const c = i === 0 ? ME.char : b!.char,
-          l = i === 0 ? ME.look : b!.look;
-        const nm = i === 0 ? CHARS[ME.char].name : b!.nick;
-        return `<div class="tt-rseat" style="left:${x}px;top:${y}px"><div class="tt-rcard tt-panel"><div class="tt-av" style="${avBg(c, l)}">${faceHTML(c, l)}</div><div><div class="tt-nm">${nm}${i ? '<span class="tt-botb">BOT</span>' : ' <span class="tt-meb">나</span>'}</div><div class="tt-ready">✔ 준비 완료</div></div></div><div class="tt-rsd">${sdHTML(c, l, i === 2 || i === 3)}</div></div>`;
-      })
-      .join("");
-    bindRoomBtns();
-  }
-  function bindRoomBtns() {
-    $$("[data-inv]", $(".tt-rseats")).forEach((b) => (b.onclick = () => toast("초대 링크는 곧 열려요")));
-    $$("[data-bot]", $(".tt-rseats")).forEach(
+    $(".tt-rcount b").textContent = `${r.seats.filter(Boolean).length}/${r.max}`;
+    $$(".tt-kick").forEach(
       (b) =>
         (b.onclick = () => {
-          const used = R.seats.filter(Boolean) as BotSeat[];
-          const free = BOT_POOL.filter((x) => !used.includes(x) && !(x.char === ME.char && x.look === ME.look));
-          R.seats[+b.dataset.bot!] = free[0] ?? BOT_POOL[0];
-          sfx("botJoin");
-          renderRoom();
+          const s = r.seats[+b.dataset.seat!];
+          if (!s) return;
+          const ov = overlay(
+            `<h2>내보내기</h2><p><b>${nm(s.nick)}</b>${s.bot ? " 봇을 자리에서 뺄까요?" : "님을 방에서 내보낼까요?<br><small>내보낸 사람은 이 방에 다시 못 들어와요.</small>"}</p><div class="tt-row"><button type="button" class="tt-x">취소</button><button type="button" class="pri tt-ok">내보내기</button></div>`,
+          );
+          ov.querySelector<HTMLElement>(".tt-x")!.onclick = () => ov.remove();
+          ov.querySelector<HTMLElement>(".tt-ok")!.onclick = () => {
+            ov.remove();
+            void NET!.rpc("town.kick", { id: r.id, seat: +b.dataset.seat! }).catch((e) => toast(errText(e)));
+          };
         }),
     );
+    $$(".tt-ghostbot").forEach((b) => (b.onclick = () => void NET!.rpc("town.addBot", { id: r.id }).then(() => sfx("botJoin"), (e) => toast(errText(e)))));
+    // 정보 · 설정
+    $(".tt-rpage[data-rp=info] h3").innerHTML = `원카드 <small>${MODES[r.mode].name}</small><small>${MODES[r.mode].hand}장 · ${MODES[r.mode].turnMs / 1000}초</small><small>봇 ${LV_NAME[r.level]}</small>`;
+    const set = $(".tt-rset");
+    set.classList.toggle("ro", !host);
+    $$(".tt-modes", set).forEach((g) => {
+      const k = g.dataset.k!;
+      const cur = k === "pub" ? (r.pub ? "1" : "0") : String((r as unknown as Record<string, unknown>)[k]);
+      $$("button", g).forEach((b) => {
+        b.classList.toggle("on", b.dataset.v === cur);
+        (b as HTMLButtonElement).disabled = !host;
+      });
+    });
+    $$(".tt-tog", set).forEach((t) => {
+      t.classList.toggle("on", !!(r as unknown as Record<string, unknown>)[t.dataset.k!]);
+      (t as HTMLButtonElement).disabled = !host;
+    });
+    set.querySelector<HTMLElement>(".tt-rnote")!.textContent = host ? "" : "방장만 바꿀 수 있어요";
+    ($(".tt-rb-bot") as HTMLButtonElement).disabled = !host || !r.seats.includes(null);
+    ($(".tt-rb-seat") as HTMLButtonElement).disabled = !host || r.max >= 4;
+    const st = $<HTMLButtonElement>(".tt-start");
+    st.disabled = !host;
+    st.classList.toggle("wait", !host);
+    st.querySelector("span")!.textContent = host ? "게임 시작" : "방장이 시작해요";
   }
-  const fillOne = () => {
-    const i = R.seats.findIndex((x, k) => k > 0 && !x);
-    if (i < 0) return toast("자리가 다 찼어요");
-    const used = R.seats.filter(Boolean) as BotSeat[];
-    const free = BOT_POOL.filter((x) => !used.includes(x) && !(x.char === ME.char && x.look === ME.look));
-    R.seats[i] = free[0] ?? BOT_POOL[0];
-    sfx("botJoin");
-    renderRoom();
+  const sendSet = (patch: Record<string, unknown>) => {
+    if (!RM.room || !amHost()) return;
+    void NET!.rpc("town.settings", { id: RM.room.id, ...patch }).catch((e) => toast(errText(e)));
   };
-  $(".tt-rb-bot").onclick = fillOne;
-  $(".tt-rb-seat").onclick = () => toast("원카드는 최대 4명까지예요");
-  $(".tt-rb-inv").onclick = () => ($(".tt-rinvite") as HTMLElement).click();
-  $(".tt-roomcopy").onclick = () => {
-    navigator.clipboard?.writeText(String(R.no)).then(
-      () => toast(`방 번호 ${R.no} 복사했어요`),
-      () => toast(`방 번호 ${R.no}`),
-    );
-  };
-  $(".tt-backbtn").onclick = goTown;
-  $(".tt-rinvite").onclick = () => {
-    const url = `${location.origin}/games/town/?room=${R.no}`;
+  $$(".tt-rset .tt-modes button").forEach(
+    (b) =>
+      (b.onclick = async () => {
+        const k = b.parentElement!.dataset.k!;
+        if (k === "pub") {
+          if (b.dataset.v === "1") return sendSet({ pub: true, password: "" });
+          const ov = overlay(
+            `<h2>비공개 방</h2><p>비밀번호 숫자 4자리를 정해 주세요.</p><input class="tt-pwin" inputmode="numeric" maxlength="4" autocomplete="off"><div class="tt-row"><button type="button" class="tt-x">취소</button><button type="button" class="pri tt-ok">확인</button></div>`,
+          );
+          const inp = ov.querySelector<HTMLInputElement>(".tt-pwin")!;
+          inp.focus();
+          ov.querySelector<HTMLElement>(".tt-x")!.onclick = () => ov.remove();
+          ov.querySelector<HTMLElement>(".tt-ok")!.onclick = () => {
+            if (!/^\d{4}$/.test(inp.value)) return toast("숫자 4자리로 정해 주세요");
+            ov.remove();
+            sendSet({ pub: false, password: inp.value });
+          };
+          return;
+        }
+        sendSet({ [k]: k === "mode" ? b.dataset.v : +b.dataset.v! });
+      }),
+  );
+  $$(".tt-rset .tt-tog").forEach((t) => (t.onclick = () => sendSet({ [t.dataset.k!]: !t.classList.contains("on") })));
+  $(".tt-rb-bot").onclick = () => RM.room && void NET!.rpc("town.addBot", { id: RM.room.id }).then(() => sfx("botJoin"), (e) => toast(errText(e)));
+  $(".tt-rb-seat").onclick = () => RM.room && sendSet({ max: Math.min(4, RM.room.max + 1) });
+  $(".tt-rb-inv").onclick = () => {
+    if (!RM.room) return;
+    const url = `${location.origin}/games/town/?room=${RM.room.id}`;
     navigator.clipboard?.writeText(url).then(
       () => toast("초대 링크를 복사했어요"),
       () => toast(url),
     );
+  };
+  $(".tt-roomcopy").onclick = () => {
+    if (!RM.room) return;
+    const no = RM.room.id;
+    navigator.clipboard?.writeText(no).then(
+      () => toast(`방 번호 ${no} 복사했어요`),
+      () => toast(`방 번호 ${no}`),
+    );
+  };
+  root.querySelector<HTMLElement>(".tt-room .tt-backbtn")!.onclick = () => {
+    leaveRoomQuiet();
+    openLobby(LB.game);
   };
   $$("[data-rt]").forEach(
     (b) =>
@@ -1042,72 +1450,54 @@ export function mountTown(root: HTMLElement, opts: TownOpts = {}): () => void {
         $$("[data-rp]").forEach((x) => (x.hidden = x.dataset.rp !== b.dataset.rt));
       }),
   );
-  $$("[data-pub]").forEach(
-    (b) =>
-      (b.onclick = () => {
-        $$("[data-pub]").forEach((x) => x.classList.toggle("on", x === b));
-        toast(b.dataset.pub === "1" ? "누구나 들어올 수 있어요" : "초대한 사람만 들어올 수 있어요");
-      }),
-  );
   ($(".tt-rchat") as HTMLFormElement).onsubmit = (e) => {
     e.preventDefault();
     const inp = $(".tt-rchat input") as HTMLInputElement;
     const msg = inp.value.trim();
     inp.value = "";
     inp.blur();
-    if (!msg) return;
-    const tag = $(".tt-rtag");
+    if (msg && RM.room) void NET!.rpc("town.chat", { id: RM.room.id, text: msg }).catch((er) => toast(errText(er)));
+  };
+  function onChat(m: RoomW["chat"][number]) {
+    if (m.sys) return void (CUR === "room" && toast(m.text, 1500));
+    sfx("chat", { rate: m.seat === mySeat() ? 1 : 1.12 });
+    if (CUR === "game") return bubbleSeat(m.seat, m.text, 2600);
+    const tag = root.querySelector<HTMLElement>(`.tt-rtag[data-seat="${m.seat}"]`);
     if (!tag) return;
     tag.querySelector(".tt-rbub")?.remove();
     const bub = document.createElement("div");
     bub.className = "tt-rbub";
-    bub.dataset.c = ME.char;
-    sfx("chat");
-    bub.textContent = msg;
+    bub.dataset.c = RM.room?.seats[m.seat]?.char ?? "haru";
+    bub.textContent = m.text;
     tag.appendChild(bub);
-    setTimeout(() => bub.remove(), 3500);
-    // 봇 하나가 가끔 대꾸
-    const bi = [1, 2, 3].filter((i) => R.seats[i]);
-    if (bi.length && Math.random() < 0.7) {
-      const i = bi[(Math.random() * bi.length) | 0];
-      const b = R.seats[i]!;
-      setTimeout(() => {
-        const t = $$(".tt-rtag")[bi.indexOf(i) + 1] ?? null;
-        if (!t || !$(".tt-room").offsetParent) return;
-        t.querySelector(".tt-rbub")?.remove();
-        const r = document.createElement("div");
-        r.className = "tt-rbub";
-        r.dataset.c = b.char;
-        sfx("chat", { rate: 1.12 });
-        r.textContent = pick(CHARS[b.char].lines.town);
-        t.appendChild(r);
-        setTimeout(() => r.remove(), 3000);
-      }, 900);
-    }
-  };
+    later(() => bub.remove(), 3500);
+  }
+  function onEmote(d: { seat: number; text: string }) {
+    if (CUR === "game") bubbleSeat(d.seat, d.text, 1500);
+    else onChat({ seat: d.seat, nick: "", text: d.text, ts: 0 });
+  }
   $(".tt-start").onclick = () => {
-    if (R.seats.slice(1).includes(null)) {
-      const used = R.seats.filter(Boolean) as BotSeat[];
-      const free = BOT_POOL.filter((x) => !used.includes(x) && !(x.char === ME.char && x.look === ME.look));
-      R.seats = R.seats.map((s, i) => (i === 0 ? null : s ?? free.shift() ?? BOT_POOL[0]));
-      startGame();
-      return toast("빈자리는 봇으로 채웠어요");
-    }
-    startGame();
+    if (!RM.room || !amHost()) return;
+    void NET!.rpc("town.start", { id: RM.room.id }).catch((e) => toast(errText(e)));
   };
 
-  // =================== 원카드 ===================
-  let CID = 0;
-  function buildDeck(): Card[] {
-    const d: Card[] = [];
-    for (let s = 0; s < 4; s++) for (let r = 2; r <= 14; r++) d.push({ id: ++CID, r, s });
-    d.push({ id: ++CID, jk: true, r: 99, s: -1 }, { id: ++CID, jk: true, r: 99, s: -1 });
-    for (let i = d.length - 1; i > 0; i--) {
-      const j = (Math.random() * (i + 1)) | 0;
-      [d[i], d[j]] = [d[j], d[i]];
-    }
+  // =================== 원카드 (서버가 진행 · 화면은 그리기만) ===================
+  let GV: OCView | null = null;
+  let sortMode: "suit" | "rank" = "suit";
+  /** 판 자리(pi) → 방 자리 */
+  const seatOfPi = (pi: number) => RM.game?.map[pi] ?? pi;
+  const seatInfo = (pi: number) => RM.room?.seats[seatOfPi(pi)] ?? null;
+  /** 보는 사람 기준 상대 위치: 0 나 · 1 왼쪽 · 2 위 · 3 오른쪽 */
+  const relPos = (pi: number) => {
+    const v = GV!;
+    const base = v.me >= 0 ? v.me : 0;
+    const d = (pi - base + v.n) % v.n;
+    if (d === 0) return 0;
+    if (v.n === 2) return 2;
+    if (v.n === 3) return d === 1 ? 1 : 3;
     return d;
-  }
+  };
+  const OPP_XY: Record<number, { x: number; y: number }> = { 1: { x: 40, y: 168 }, 2: { x: 500, y: 74 }, 3: { x: 1000, y: 168 } };
   function cardHTML(c: Card, cls = "", style = "") {
     if (c.jk)
       return ART.joker
@@ -1118,181 +1508,257 @@ export function mountTown(root: HTMLElement, opts: TownOpts = {}): () => void {
   const backHTML = (cls = "") =>
     ART.cardBack ? `<div class="tt-back tt-back-art ${cls}"><img src="${ART.cardBack}" alt="" draggable="false"></div>` : `<div class="tt-back ${cls}"></div>`;
 
-  let G: GameState | null = null;
-  const SEATPOS = [null, { x: 30, y: 120 }, { x: 522, y: 16 }, { x: 1014, y: 120 }];
-  function startGame() {
-    const deck = buildDeck();
-    const mk = (b: BotSeat | null): Player =>
-      b
-        ? { char: b.char, look: b.look, nick: b.nick, bot: true, style: b.style, miss: b.miss, hand: [], out: false, face: "idle", faceT: undefined }
-        : { char: ME.char, look: ME.look, nick: "나", bot: false, style: "normal", miss: 0, hand: [], out: false, face: "idle", faceT: undefined };
-    G = {
-      P: R.seats.map(mk),
-      turn: 0,
-      dir: 1,
-      pile: [],
-      draw: deck,
-      suit: 0,
-      free: false,
-      pending: 0,
-      atk: 0,
-      one: null,
-      over: false,
-      sort: "suit",
-      busy: false,
-      tid: 0,
-      timer: null,
-    };
-    for (let n = 0; n < 7; n++) for (const p of G.P) p.hand.push(G.draw.pop()!);
-    let top: Card | null = null;
-    while (!top) {
-      top = G.draw.pop()!;
-      if (top.jk || [2, 7, 11, 12, 13, 14].includes(top.r)) {
-        G.draw.unshift(top);
-        top = null;
-      }
-    }
-    G.pile.push(top);
-    G.suit = top.s;
+  function showGame() {
     $(".tt-game-bg").style.backgroundImage = ART.room ? `url(${ART.room})` : "";
-    $(".tt-drawstack").innerHTML = backHTML("tt-big");
+    $(".tt-drawstack").innerHTML = backHTML("tt-big") + backHTML("tt-big") + backHTML("tt-big");
+    root.querySelector(".tt-game .tt-ov.result")?.remove();
     show("game");
-    buildSeats();
-    render();
-    for (let k = 0; k < 6; k++) later(() => sfx("deal", { rate: 0.95 + Math.random() * 0.1 }), k * 90);
-    beginTurn();
+    buildOpps();
+    renderGame();
+    startClock();
   }
-  function buildSeats() {
-    const g = G!;
+  function buildOpps() {
+    const v = GV;
+    if (!v) return;
     let h = "";
-    g.P.forEach((p, i) => {
-      const st = i === 0 ? "left:16px;top:560px" : `left:${SEATPOS[i]!.x}px;top:${SEATPOS[i]!.y}px`;
-      h += `<div class="tt-seat tt-panel" data-p="${i}" style="${st}"><div class="tt-av" style="${avBg(p.char, p.look)}"></div><div><div class="tt-nm">${i ? p.nick : "나"}${i ? '<span class="tt-botb">BOT</span>' : ""}</div><div class="tt-cnt"><i></i><span></span>장</div></div></div>`;
-      if (i) h += `<div class="tt-mini" data-p="${i}" style="left:${SEATPOS[i]!.x + 44}px;top:${SEATPOS[i]!.y + 94}px"></div>`;
-    });
-    $(".tt-seats").innerHTML = h;
-  }
-  function playable(c: Card) {
-    const g = G!;
-    const top = g.pile[g.pile.length - 1];
-    if (g.pending > 0) {
-      const t = strength(c);
-      if (!t) return false;
-      if (c.jk) return true;
-      if (t === g.atk) return top.jk ? false : c.r === top.r;
-      return t > g.atk && c.s === g.suit;
+    for (let pi = 0; pi < v.n; pi++) {
+      const rp = relPos(pi);
+      if (rp === 0) continue;
+      const s = seatInfo(pi);
+      const { x, y } = OPP_XY[rp];
+      h += `<div class="tt-opp p${rp}" data-p="${pi}" style="left:${x}px;top:${y}px"><div class="tt-oring"><svg viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="50" r="46"/></svg><div class="tt-av" style="${s ? avBg(s.char, s.look) : ""}"></div></div><div class="tt-oinfo"><div class="tt-onm">${s ? nm(s.nick) : "?"}${s?.bot ? '<span class="tt-botb">BOT</span>' : ""}${s && s.uid === RM.room?.hostUid ? `<span class="tt-hostcrown sm">${CROWN}</span>` : ""}</div><div class="tt-ocnt"><b></b>장</div></div><div class="tt-ofan"></div><span class="tt-one1" hidden>1장!</span></div>`;
     }
-    if (c.jk || g.free) return true;
-    return c.s === g.suit || (!top.jk && c.r === top.r);
-  }
-  function nextIdx(from: number, steps: number) {
-    const g = G!;
-    let t = from;
-    for (let k = 0; k < steps; k++) {
-      do t = (t + g.dir + 4) % 4;
-      while (g.P[t].out);
+    $(".tt-opps").innerHTML = h;
+    const s0 = v.me >= 0 ? seatInfo(v.me) : null;
+    $(".tt-gme-nm").textContent = s0 ? plainNick(s0.nick) || "나" : "관전 중";
+    const av = $(".tt-gme-av");
+    if (s0) {
+      av.setAttribute("style", avBg(s0.char, s0.look));
+      av.innerHTML = faceHTML(s0.char, s0.look);
     }
-    return t;
   }
-  const active = () => G!.P.filter((p) => !p.out);
   function sortHand(h: Card[]) {
-    return G!.sort === "suit"
+    return sortMode === "suit"
       ? h.sort((a, b) => (a.jk ? 9 : a.s) - (b.jk ? 9 : b.s) || a.r - b.r)
-      : h.sort((a, b) => a.r - b.r || a.s - b.s);
+      : h.sort((a, b) => a.r - b.r || (a.jk ? 9 : a.s) - (b.jk ? 9 : b.s));
   }
-
-  function render() {
-    const g = G;
-    if (!g) return;
-    const me = g.P[0],
-      myTurn = g.turn === 0 && !g.over;
-    g.P.forEach((p, i) => {
-      const s = $(`.tt-seat[data-p="${i}"]`);
-      s.classList.toggle("turn", g.turn === i && !g.over);
-      s.classList.toggle("one", p.hand.length === 1 && !p.out);
-      s.classList.toggle("out", p.out);
-      s.querySelector(".tt-cnt span")!.textContent = p.out ? "파산 " : String(p.hand.length);
-      const av = s.querySelector(".tt-av")!;
-      const fk = `${p.char}${p.look}${p.face}`;
-      if (av.getAttribute("data-f") !== fk) {
-        av.setAttribute("data-f", fk);
-        av.innerHTML = faceHTML(p.char, p.look, p.face);
+  /** 낼 수 있는 카드 (서버와 같은 규칙) */
+  const canPlay = (c: Card) => {
+    const v = GV!;
+    const st = { pending: v.pending, atk: v.atk, free: v.free, suit: v.suit, pile: [v.top] } as unknown as OCState;
+    return ocPlayable(st, c);
+  };
+  const myTurn = () => !!GV && GV.me >= 0 && GV.turn === GV.me && !GV.over;
+  let animBusy = false;
+  function renderGame() {
+    const v = GV;
+    if (!v || CUR !== "game") return;
+    for (let pi = 0; pi < v.n; pi++) {
+      const el = root.querySelector<HTMLElement>(`.tt-opp[data-p="${pi}"]`);
+      if (!el) continue;
+      const n = v.counts[pi];
+      el.classList.toggle("turn", v.turn === pi && !v.over);
+      el.classList.toggle("out", v.out[pi]);
+      el.querySelector(".tt-ocnt b")!.textContent = v.out[pi] ? "파산 " : String(n);
+      el.querySelector<HTMLElement>(".tt-one1")!.hidden = n !== 1 || v.out[pi];
+      const s = seatInfo(pi);
+      const av = el.querySelector(".tt-av")!;
+      if (s && av.getAttribute("data-f") !== `${s.char}${s.look}`) {
+        av.setAttribute("data-f", `${s.char}${s.look}`);
+        av.innerHTML = faceHTML(s.char, s.look);
       }
-      if (i) {
-        const n = Math.min(p.hand.length, 10);
-        $(`.tt-mini[data-p="${i}"]`).innerHTML = Array.from({ length: n }, (_, k) => `<div style="left:${k * 12}px">${backHTML("tt-sm")}</div>`).join("");
-      }
-    });
-    const top = g.pile[g.pile.length - 1];
-    $(".tt-top").innerHTML = cardHTML(top, "static");
+      const k = Math.min(n, 9);
+      el.querySelector(".tt-ofan")!.innerHTML = Array.from({ length: k }, (_, i) => `<div style="--i:${i};--k:${k}">${backHTML("tt-sm")}</div>`).join("");
+    }
+    const top = v.top;
+    $(".tt-top").innerHTML = cardHTML(top, "static big");
+    const atk = $(".tt-atkb");
+    atk.hidden = v.pending <= 0;
+    atk.textContent = `공격 +${v.pending}`;
     const sb = root.querySelector<HTMLElement>(".tt-suitc b")!;
-    sb.textContent = g.free ? "★" : SU[g.suit];
-    sb.style.color = g.free ? "var(--tt-gold)" : g.suit === 1 || g.suit === 2 ? "#ff7d8f" : "#fff";
-    root.querySelector(".tt-suitc small")!.textContent = g.free ? "아무 카드나" : "지금 무늬";
-    $(".tt-drawcnt").textContent = `뽑는 더미 ${g.draw.length}`;
-    root.querySelector(".tt-dir")!.classList.toggle("rev", g.dir < 0);
-    const tp = g.P[g.turn];
-    $(".tt-turn").classList.toggle("atk", g.pending > 0);
-    $(".tt-turn .tt-tx").textContent = g.over
-      ? "게임 끝"
-      : myTurn
-        ? g.pending > 0
-          ? `공격 +${g.pending} 받을 차례!`
-          : "내 차례 · 카드를 내세요"
-        : `${tp.nick} 차례`;
-    $(".tt-turn .tt-sub").textContent =
-      g.pending > 0 ? (myTurn ? "더 센 공격이나 같은 숫자로 받아칠 수 있어" : `공격 +${g.pending} 누적 중`) : "";
-    sortHand(me.hand);
-    const n = me.hand.length,
-      Wd = 780,
-      cw = 88,
-      sp = n > 1 ? Math.min(64, (Wd - cw) / (n - 1)) : 0,
-      start = (Wd - (cw + sp * (n - 1))) / 2;
-    $(".tt-hand").innerHTML = me.hand
+    sb.textContent = v.free ? "★" : SU[v.suit];
+    sb.className = v.free ? "free" : v.suit === 1 || v.suit === 2 ? "red" : "";
+    root.querySelector(".tt-suitc span")!.textContent = v.free ? "아무 무늬" : SUIT_NAME[v.suit];
+    $(".tt-drawcnt").textContent = String(v.drawLeft);
+    root.querySelector(".tt-dir")!.classList.toggle("rev", v.dir < 0);
+    // 차례 띠
+    const tp = seatInfo(v.turn);
+    const mine = myTurn();
+    const band = $(".tt-gturn");
+    band.classList.toggle("mine", mine);
+    band.classList.toggle("atk", v.pending > 0);
+    $(".tt-gturn-tx").textContent = v.over ? "게임 끝" : mine ? (v.pending > 0 ? `공격 +${v.pending}! 막거나 받기` : "내 차례!") : `${tp ? plainNick(tp.nick) : "?"} 차례`;
+    const tav = $(".tt-gturn-av");
+    if (tp) {
+      tav.setAttribute("style", avBg(tp.char, tp.look));
+      if (tav.getAttribute("data-f") !== `${tp.char}${tp.look}`) {
+        tav.setAttribute("data-f", `${tp.char}${tp.look}`);
+        tav.innerHTML = faceHTML(tp.char, tp.look);
+      }
+    }
+    // 나
+    $(".tt-gme").classList.toggle("turn", mine);
+    $(".tt-gme").classList.toggle("one", v.me >= 0 && v.counts[v.me] === 1);
+    $(".tt-gme-cnt").textContent = v.me >= 0 ? (v.out[v.me] ? "파산" : `${v.counts[v.me]}장`) : "";
+    // 손패
+    const hand = sortHand([...(v.hand ?? [])]);
+    const n = hand.length,
+      W = 720,
+      cw = 104,
+      sp = n > 1 ? Math.min(72, (W - cw) / (n - 1)) : 0,
+      start = (W - (cw + sp * (n - 1))) / 2;
+    $(".tt-hand").innerHTML = hand
       .map((c, i) => {
-        const can = myTurn && !g.busy && playable(c),
-          dim = myTurn && !can;
+        const can = mine && !animBusy && canPlay(c),
+          dim = mine && !can;
         const mid = (n - 1) / 2,
-          ang = (i - mid) * Math.min(3.2, 30 / Math.max(n, 1)),
-          dy = Math.abs(i - mid) ** 2 * Math.min(1.6, 14 / Math.max(n, 1));
-        return cardHTML(
-          c,
-          (can ? "can" : "") + (dim ? " dim" : ""),
-          `left:${start + i * sp}px;top:${40 + dy}px;transform:rotate(${ang}deg) translateY(${can ? -28 : 0}px);z-index:${i}`,
-        );
+          ang = (i - mid) * Math.min(3, 26 / Math.max(n, 1)),
+          dy = Math.abs(i - mid) ** 2 * Math.min(1.4, 12 / Math.max(n, 1));
+        return cardHTML(c, (can ? "can" : "") + (dim ? " dim" : ""), `left:${start + i * sp}px;top:${34 + dy}px;transform:rotate(${ang}deg) translateY(${can ? -26 : 0}px);z-index:${i}`);
       })
       .join("");
     $$(".tt-hand .tt-c.can").forEach((el) => (el.onclick = () => meClick(+el.dataset.id!)));
     const db = $<HTMLButtonElement>(".tt-draw");
-    db.disabled = !myTurn || g.busy;
-    db.classList.toggle("atk", g.pending > 0);
-    db.textContent = g.pending > 0 ? `${g.pending}장 받기` : "카드 받기";
-    const ob = $(".tt-one");
-    const live = !!(g.one && !g.one.called);
+    db.disabled = !mine || animBusy;
+    db.classList.toggle("atk", v.pending > 0);
+    db.querySelector("span")!.textContent = v.pending > 0 ? `${v.pending}장 받기` : "카드 받기";
+    const ob = $<HTMLButtonElement>(".tt-one");
+    const live = !!(v.one && !v.one.called && !v.out[v.me]);
     ob.classList.toggle("live", live);
-    ob.textContent = live && g.one!.pi !== 0 ? `${g.P[g.one!.pi].nick} 잡기!` : "원카드!";
+    ob.disabled = !live;
+    ob.querySelector("span")!.textContent = live && v.one!.pi !== v.me ? `${plainNick(seatInfo(v.one!.pi)?.nick ?? "")} 잡기!` : "원카드!";
+    root.querySelector(".tt-sortbtn span")!.textContent = sortMode === "suit" ? "무늬순" : "숫자순";
   }
-  function bubble(i: number, text: string, ms = 1600) {
-    const anchor = i === 0 ? { x: 110, y: 530 } : i === 2 ? { x: 790, y: 40 } : i === 1 ? { x: 70, y: 84 } : { x: 1060, y: 84 };
+  const SUIT_NAME = ["스페이드", "하트", "다이아", "클로버"];
+
+  // 차례 시계: 누구 차례든 띠의 초 + 얼굴 둘레 링이 줄어듦 (차례가 바뀌면 다시 꽉 참)
+  let clockRaf = 0;
+  function startClock() {
+    cancelAnimationFrame(clockRaf);
+    const tick = () => {
+      if (!alive || CUR !== "game" || !GV) return void (clockRaf = 0);
+      const v = GV;
+      const total = (RM.room ? MODES[RM.room.mode].turnMs : 15000) || 15000;
+      const left = Math.max(0, v.deadline - (NET?.now() ?? Date.now()));
+      const k = v.over ? 0 : Math.min(1, left / total);
+      root.querySelector(".tt-gclock b")!.textContent = v.over ? "-" : String(Math.ceil(left / 1000));
+      $(".tt-gclock").classList.toggle("hurry", !v.over && left < 4000);
+      const off = String(289 * (1 - k));
+      for (const c of $$(".tt-oring circle, .tt-gme-ring circle")) c.style.strokeDashoffset = off;
+      clockRaf = requestAnimationFrame(tick);
+    };
+    clockRaf = requestAnimationFrame(tick);
+  }
+
+  function meClick(id: number) {
+    const v = GV;
+    if (!v || !myTurn() || animBusy) return;
+    const c = v.hand?.find((x) => x.id === id);
+    if (!c || !canPlay(c)) return;
+    if (c.r === 7 && !c.jk && v.pending === 0) {
+      const ov = document.createElement("div");
+      ov.className = "tt-suitpick";
+      ov.innerHTML = `<div class="tt-panel"><h3>무늬를 골라 주세요</h3><div class="opts">${SU.map((s, i) => `<button type="button" class="${i === 1 || i === 2 ? "red" : ""}" data-s="${i}">${s}<small>${SUIT_NAME[i]}</small></button>`).join("")}</div></div>`;
+      $(".tt-game").appendChild(ov);
+      $$("button", ov).forEach(
+        (b) =>
+          (b.onclick = () => {
+            ov.remove();
+            sendPlay(c, +b.dataset.s!);
+          }),
+      );
+      return;
+    }
+    sendPlay(c);
+  }
+  function sendPlay(c: Card, suit?: number) {
+    const v = GV!;
+    // 바로 손에서 뺀 것처럼 보이게 (서버 응답을 기다리지 않음)
+    root.querySelector(`.tt-hand .tt-c[data-id="${c.id}"]`)?.classList.add("going");
+    void NET!.rpc<{ ok: boolean }>("town.play", { id: RM.id, seq: v.seq, card: c.id, suit }).then(
+      (r) => !r.ok && renderGame(),
+      (e) => (toast(errText(e)), renderGame()),
+    );
+  }
+  $(".tt-draw").onclick = () => {
+    const v = GV;
+    if (!v || !myTurn() || animBusy) return;
+    $<HTMLButtonElement>(".tt-draw").disabled = true;
+    void NET!.rpc("town.draw", { id: RM.id, seq: v.seq }).catch((e) => (toast(errText(e)), renderGame()));
+  };
+  $(".tt-one").onclick = () => void NET!.rpc("town.one", { id: RM.id }).catch(() => {});
+  $(".tt-sortbtn").onclick = () => {
+    sortMode = sortMode === "suit" ? "rank" : "suit";
+    renderGame();
+  };
+  // 규칙 패널 (열고 닫기)
+  $(".tt-rulesbtn").onclick = () => {
+    const r = $(".tt-rules");
+    r.hidden = !r.hidden;
+    $(".tt-rulesbtn").classList.toggle("on", !r.hidden);
+  };
+  $(".tt-rules-x").onclick = () => {
+    $(".tt-rules").hidden = true;
+    $(".tt-rulesbtn").classList.remove("on");
+  };
+  // 채팅 · 이모티콘
+  $(".tt-gchatbtn").onclick = () => {
+    const f = $(".tt-gchat");
+    f.hidden = !f.hidden;
+    if (!f.hidden) f.querySelector("input")!.focus();
+  };
+  ($(".tt-gchat") as HTMLFormElement).onsubmit = (e) => {
+    e.preventDefault();
+    const inp = $(".tt-gchat input") as HTMLInputElement;
+    const msg = inp.value.trim();
+    inp.value = "";
+    $(".tt-gchat").hidden = true;
+    if (msg && RM.id) void NET!.rpc("town.chat", { id: RM.id, text: msg }).catch((er) => toast(errText(er)));
+  };
+  const EMOTES = ["좋아요!", "헉…!", "ㅋㅋㅋ", "화이팅!", "미안~", "고마워!"];
+  $(".tt-emobtn").onclick = () => {
+    const box = $(".tt-gemo");
+    box.hidden = !box.hidden;
+    box.innerHTML = EMOTES.map((t, i) => `<button type="button" data-e="${i}">${t}</button>`).join("");
+    $$("button", box).forEach(
+      (b) =>
+        (b.onclick = () => {
+          box.hidden = true;
+          if (RM.id) void NET!.rpc("town.emote", { id: RM.id, e: +b.dataset.e! }).catch(() => {});
+        }),
+    );
+  };
+  $(".tt-pause").onclick = () => {
+    const ov = overlay(
+      `<h2>메뉴</h2><p>지금 나가면 이번 판 보상은 없어요.<br><small>남은 판은 자동으로 진행돼요.</small></p><div class="tt-row"><button type="button" class="tt-pquit">나가기</button><button class="pri tt-pgo" type="button">계속하기</button></div>`,
+      $(".tt-game"),
+    );
+    ov.querySelector<HTMLElement>(".tt-pgo")!.onclick = () => ov.remove();
+    ov.querySelector<HTMLElement>(".tt-pquit")!.onclick = () => {
+      ov.remove();
+      leaveRoomQuiet();
+      openLobby(LB.game);
+    };
+  };
+
+  // 말풍선 · 연출 위치 (보는 사람 기준)
+  const relAnchor = (rp: number) => (rp === 0 ? { x: 200, y: 470 } : rp === 1 ? { x: 70, y: 120 } : rp === 2 ? { x: 690, y: 40 } : { x: 1010, y: 120 });
+  const relCard = (rp: number) => (rp === 0 ? { x: 560, y: 560 } : rp === 1 ? { x: 230, y: 250 } : rp === 2 ? { x: 600, y: 120 } : { x: 960, y: 250 });
+  function bubbleSeat(seat: number, text: string, ms = 1600) {
+    if (!GV || !RM.game) return;
+    const pi = RM.game.map.indexOf(seat);
+    if (pi < 0) return;
+    bubblePi(pi, text, ms);
+  }
+  function bubblePi(pi: number, text: string, ms = 1600) {
+    const a = relAnchor(relPos(pi));
     const el = document.createElement("div");
     el.className = "tt-bub";
     el.textContent = text;
-    el.style.left = anchor.x + "px";
-    el.style.top = anchor.y + "px";
+    el.style.left = a.x + "px";
+    el.style.top = a.y + "px";
     $(".tt-game").appendChild(el);
     later(() => el.remove(), ms);
-  }
-  function setFace(i: number, f: Face, ms = 1800) {
-    const g = G!;
-    const p = g.P[i];
-    p.face = f;
-    if (p.faceT) clearTimeout(p.faceT);
-    p.faceT = later(() => {
-      if (!G) return;
-      p.face = p.hand.length === 1 ? "smug" : "idle";
-      render();
-    }, ms);
-    render();
   }
   const stagePt = (el: Element) => {
     const r = el.getBoundingClientRect(),
@@ -1300,10 +1766,10 @@ export function mountTown(root: HTMLElement, opts: TownOpts = {}): () => void {
       k = scale();
     return { x: (r.left - s.left) / k, y: (r.top - s.top) / k };
   };
-  const seatPt = (i: number) => (i === 0 ? { x: 420, y: 560 } : i === 2 ? { x: 600, y: 60 } : i === 1 ? { x: 120, y: 200 } : { x: 1080, y: 200 });
-  async function fly(from: { x: number; y: number }, to: { x: number; y: number }, html: string) {
+  async function fly(from: { x: number; y: number }, to: { x: number; y: number }, html: string, ms = 300) {
     const el = document.createElement("div");
     el.className = "tt-fly";
+    el.style.transitionDuration = `${ms}ms`;
     el.innerHTML = html;
     el.style.left = from.x + "px";
     el.style.top = from.y + "px";
@@ -1311,343 +1777,183 @@ export function mountTown(root: HTMLElement, opts: TownOpts = {}): () => void {
     el.getBoundingClientRect();
     el.style.left = to.x + "px";
     el.style.top = to.y + "px";
-    await sleep(330);
+    await sleep(ms);
     el.remove();
   }
-  const topPt = () => stagePt($(".tt-top"));
-  const drawPt = () => stagePt($(".tt-drawstack"));
-  const clearTimer = () => {
-    if (G?.timer) clearTimeout(G.timer);
-    if (G) G.timer = null;
-  };
 
-  function beginTurn() {
-    const g = G;
-    if (!g || g.over) return;
-    g.tid++;
-    render();
-    const p = g.P[g.turn];
-    if (p.bot) return void botTurn(g.tid);
-    sfx("myTurn");
-    const bar = root.querySelector<HTMLElement>(".tt-tbar i")!;
-    bar.style.transition = "none";
-    bar.style.width = "100%";
-    bar.getBoundingClientRect();
-    bar.style.transition = "width 15s linear";
-    bar.style.width = "0%";
-    clearTimer();
-    const id = g.tid;
-    g.timer = later(() => {
-      if (G && G.tid === id && G.turn === 0 && !G.busy) {
-        toast("시간 초과!");
-        void takeOrDraw(0);
-      }
-    }, 15000);
+  /** 서버가 보낸 판 소식: 사건마다 연출하고 마지막 상태로 그림 (순서대로 하나씩) */
+  let gameQ: Promise<void> = Promise.resolve();
+  function onGame(m: GameMsg) {
+    RM.game = m;
+    gameQ = gameQ.then(() => playGameMsg(m)).catch(() => {});
   }
-  function meClick(id: number) {
-    const g = G;
-    if (!g || g.turn !== 0 || g.busy || g.over) return;
-    const c = g.P[0].hand.find((x) => x.id === id);
-    if (!c || !playable(c)) return;
-    if (c.r === 7 && !c.jk && g.pending === 0) {
-      const ov = document.createElement("div");
-      ov.className = "tt-suitpick";
-      ov.innerHTML = `<div class="tt-panel"><h3>무늬를 골라</h3><div class="opts">${SU.map((s, i) => `<button type="button" class="${i === 1 || i === 2 ? "red" : ""}" data-s="${i}">${s}</button>`).join("")}</div></div>`;
-      $(".tt-game").appendChild(ov);
-      $$("button", ov).forEach(
-        (b) =>
-          (b.onclick = () => {
-            ov.remove();
-            void doPlay(0, c, +b.dataset.s!);
-          }),
-      );
+  async function playGameMsg(m: GameMsg) {
+    if (!alive || !RM.id) return;
+    const first = !GV || GV.seq > m.v.seq + 5 || m.ev.length === 0;
+    const prev = GV;
+    if (CUR !== "game" && RM.room?.phase === "play" && m.v.me >= 0) {
+      GV = m.v;
+      showGame();
+      if (!prev) for (let k = 0; k < 6; k++) later(() => sfx("deal", { rate: 0.95 + Math.random() * 0.1 }), k * 90);
       return;
     }
-    void doPlay(0, c);
+    if (CUR !== "game") {
+      GV = m.v;
+      return;
+    }
+    if (first) {
+      GV = m.v;
+      buildOpps();
+      renderGame();
+      return;
+    }
+    animBusy = true;
+    for (const e of m.ev) await playEvent(e, m);
+    animBusy = false;
+    const turnChanged = GV?.turn !== m.v.turn || GV?.seq !== m.v.seq;
+    GV = m.v;
+    renderGame();
+    if (turnChanged && myTurn()) sfx("myTurn");
   }
-  async function doPlay(pi: number, c: Card, suit?: number) {
-    const g = G;
-    if (!g || g.over) return;
-    clearTimer();
-    g.busy = true;
-    const p = g.P[pi];
-    let from;
-    if (pi === 0) {
-      const el = root.querySelector(`.tt-hand .tt-c[data-id="${c.id}"]`);
-      from = el ? stagePt(el) : seatPt(0);
-    } else from = seatPt(pi);
-    p.hand = p.hand.filter((x) => x !== c);
-    render();
-    sfx("play", { rate: 0.94 + Math.random() * 0.12 });
-    await fly(from, topPt(), cardHTML(c, "static"));
-    if (G !== g) return;
-    g.pile.push(c);
-    if (c.jk || c.r === 2 || c.r === 14) sfx("attack");
-    else if ([7, 11, 12, 13].includes(c.r)) sfx("special");
-    if (c.jk) {
-      g.pending += 5;
-      g.atk = 3;
-      g.free = true;
-    } else {
-      g.free = false;
-      g.suit = c.s;
-      if (c.r === 2) {
-        g.pending += 2;
-        g.atk = 1;
-      } else if (c.r === 14) {
-        g.pending += 3;
-        g.atk = 2;
+  async function playEvent(e: OCEvent, m: GameMsg) {
+    const v = GV!;
+    const rp = (pi: number) => relPos(pi);
+    const s = (pi: number) => seatInfo(pi);
+    switch (e.t) {
+      case "play": {
+        const from = e.pi === v.me ? (() => {
+          const el = root.querySelector(`.tt-hand .tt-c[data-id="${e.card.id}"]`);
+          return el ? stagePt(el) : relCard(0);
+        })() : relCard(rp(e.pi));
+        if (e.pi === v.me && v.hand) v.hand = v.hand.filter((c) => c.id !== e.card.id);
+        v.counts[e.pi] = Math.max(0, v.counts[e.pi] - 1);
+        renderGame();
+        sfx("play", { rate: 0.94 + Math.random() * 0.12 });
+        await fly(from, stagePt($(".tt-top")), cardHTML(e.card, "static big"), 300);
+        v.top = e.card;
+        if (e.card.jk || e.card.r === 2 || e.card.r === 14) {
+          sfx("attack");
+          const ln = s(e.pi) && !s(e.pi)!.uid ? CHARS[s(e.pi)!.char].lines.atk : null;
+          if (ln && e.pi !== v.me) bubblePi(e.pi, pick(ln));
+        } else if ([7, 11, 12, 13].includes(e.card.r)) sfx("special");
+        if (e.suit !== undefined) bubblePi(e.pi, `${SU[e.suit]} ${SUIT_NAME[e.suit]}로!`, 1300);
+        renderGame();
+        return;
       }
-      if (c.r === 7 && g.pending === 0 && suit !== undefined) g.suit = suit;
-    }
-    if (strength(c) && pi > 0) {
-      setFace(pi, "smug");
-      bubble(pi, pick(CHARS[p.char].lines.atk));
-    }
-    g.busy = false;
-    if (p.hand.length === 0) return endGame(pi);
-    if (p.hand.length === 1) openOne(pi);
-    if (c.r === 11 && !c.jk) {
-      bubble(nextIdx(pi, 1), "건너뜀!", 1100);
-      g.turn = nextIdx(pi, 2);
-    } else if (c.r === 12 && !c.jk) {
-      g.dir = g.dir === 1 ? -1 : 1;
-      toast("방향 반대!", 900);
-      g.turn = nextIdx(pi, 1);
-    } else if (c.r === 13 && !c.jk) {
-      if (pi) bubble(pi, "한 장 더!", 1000);
-      g.turn = pi;
-    } else g.turn = nextIdx(pi, 1);
-    beginTurn();
-  }
-  async function giveCards(pi: number, n: number) {
-    const g = G!;
-    for (let k = 0; k < n; k++) {
-      if (!g.draw.length) {
-        const top = g.pile.pop()!;
-        g.draw = g.pile.sort(() => Math.random() - 0.5);
-        g.pile = [top];
-        toast("더미를 다시 섞었어요", 900);
-      }
-      if (!g.draw.length) break;
-      const c = g.draw.pop()!;
-      if (n <= 6 || k < 3) {
-        sfx("draw", { rate: 0.95 + Math.random() * 0.1 });
-        await fly(drawPt(), seatPt(pi), backHTML("tt-big"));
-      }
-      if (G !== g) return;
-      g.P[pi].hand.push(c);
-      render();
-    }
-  }
-  async function takeOrDraw(pi: number) {
-    const g = G;
-    if (!g || g.over) return;
-    clearTimer();
-    g.busy = true;
-    const n = g.pending > 0 ? g.pending : 1,
-      wasAtk = g.pending > 0;
-    g.pending = 0;
-    g.atk = 0;
-    if (g.one && g.one.pi === pi) g.one = null;
-    await giveCards(pi, n);
-    if (G !== g) return;
-    g.busy = false;
-    const p = g.P[pi];
-    if (wasAtk && n >= 3) {
-      setFace(pi, "sad", 2200);
-      if (pi) bubble(pi, pick(CHARS[p.char].lines.hit));
-      else toast(`${n}장 받았다…`);
-    }
-    if (p.hand.length >= 20) {
-      p.out = true;
-      toast(`${pi ? p.nick : "내가"} 파산! (20장)`, 1800);
-      g.draw.unshift(...p.hand);
-      p.hand = [];
-      if (pi === 0) return endGame(-1);
-      if (active().length === 1) return endGame(g.P.indexOf(active()[0]));
-    }
-    g.turn = nextIdx(pi, 1);
-    beginTurn();
-  }
-  $(".tt-draw").onclick = () => {
-    if (G && G.turn === 0 && !G.busy && !G.over) void takeOrDraw(0);
-  };
-  root.querySelector<HTMLElement>(".tt-sortbtn")!.onclick = () => {
-    if (!G) return;
-    G.sort = G.sort === "suit" ? "rank" : "suit";
-    toast(G.sort === "suit" ? "무늬별 정렬" : "숫자별 정렬", 800);
-    render();
-  };
-  root.querySelector<HTMLElement>(".tt-emobtn")!.onclick = () => {
-    if (G) bubble(0, pick(["좋아요!", "헉…!", "ㅋㅋㅋ", "화이팅!"]), 1400);
-  };
-
-  let ONEID = 0;
-  function openOne(pi: number) {
-    const g = G!;
-    const id = ++ONEID;
-    g.one = { pi, called: false, id };
-    render();
-    if (pi > 0 && Math.random() > g.P[pi].miss)
-      later(() => {
-        if (G === g && g.one && g.one.id === id && !g.one.called) {
-          g.one.called = true;
-          setFace(pi, "smug");
-          sfx("oneCall");
-          bubble(pi, "원카드!");
-          render();
+      case "draw": {
+        const to = e.pi === v.me ? { x: 560, y: 600 } : relCard(rp(e.pi));
+        const n = Math.min(e.n, 5);
+        for (let k = 0; k < n; k++) {
+          sfx("draw", { rate: 0.95 + Math.random() * 0.1 });
+          await fly(stagePt($(".tt-drawstack")), to, backHTML("tt-big"), 220);
         }
-      }, rnd(500, 1900));
-    later(async () => {
-      if (G !== g || g.over || !g.one || g.one.id !== id) return;
-      const o = g.one;
-      g.one = null;
-      render();
-      if (o.called) return;
-      if (o.pi === 0) {
-        toast("원카드를 안 외쳤어요! +1장");
-        await giveCards(0, 1);
-      } else if (Math.random() < 0.6) {
-        bubble(o.pi, pick(CHARS[g.P[o.pi].char].lines.caught));
-        setFace(o.pi, "panic");
-        await giveCards(o.pi, 1);
+        if (e.atk && e.n >= 3) {
+          const si = s(e.pi);
+          if (e.pi === v.me) toast(`${e.n}장 받았다…`);
+          else if (si && !si.uid) bubblePi(e.pi, pick(CHARS[si.char].lines.hit));
+        }
+        return;
       }
-    }, 2700);
-  }
-  $(".tt-one").onclick = async () => {
-    const g = G;
-    if (!g || !g.one || g.one.called) return;
-    const o = g.one;
-    if (o.pi === 0) {
-      o.called = true;
-      sfx("oneCall");
-      bubble(0, "원카드!");
-      render();
-      return;
-    }
-    g.one = null;
-    sfx("caught");
-    toast(`${g.P[o.pi].nick}을(를) 잡았다! +1장`);
-    bubble(o.pi, pick(CHARS[g.P[o.pi].char].lines.caught));
-    setFace(o.pi, "panic");
-    await giveCards(o.pi, 1);
-  };
-
-  async function botTurn(id: number) {
-    await sleep(rnd(850, 1400));
-    const g = G;
-    if (!g || g.over || g.tid !== id) return;
-    const pi = g.turn,
-      p = g.P[pi],
-      style = p.style;
-    const cards = p.hand.filter(playable);
-    if (!cards.length) return takeOrDraw(pi);
-    if (g.pending > 0) {
-      cards.sort((a, b) => strength(a) - strength(b));
-      return doPlay(pi, cards[0]);
-    }
-    const nxt = g.P[nextIdx(pi, 1)],
-      danger = nxt.hand.length <= 2 || p.hand.length <= 3;
-    const cnt = [0, 0, 0, 0];
-    p.hand.forEach((c) => {
-      if (!c.jk) cnt[c.s]++;
-    });
-    let best = cards[0],
-      bs = -1e9;
-    for (const c of cards) {
-      let s = c.jk ? 0 : cnt[c.s] + rnd(0, 1.5);
-      const atk = strength(c);
-      if (atk) {
-        if (style === "aggro") s += 5;
-        else if (style === "saver") s += danger ? 6 : -6;
-        else s += danger ? 3 : 0;
+      case "shuffle":
+        toast("더미를 다시 섞었어요", 900);
+        return;
+      case "skip":
+        bubblePi(e.pi, "건너뜀!", 1100);
+        await sleep(200);
+        return;
+      case "reverse":
+        toast("방향 반대!", 900);
+        await sleep(200);
+        return;
+      case "again":
+        bubblePi(e.pi, "한 장 더!", 1000);
+        return;
+      case "one":
+        if (e.pi === v.me) toast("1장 남았어요! 「원카드!」를 눌러요", 1600);
+        return;
+      case "oneCall":
+        sfx("oneCall");
+        bubblePi(e.pi, "원카드!");
+        return;
+      case "caught": {
+        sfx("caught");
+        const si = s(e.pi);
+        toast(e.pi === v.me ? `${plainNick(s(e.by)?.nick ?? "")}에게 잡혔어요! +1장` : `${plainNick(s(e.by)?.nick ?? "")}이(가) ${plainNick(si?.nick ?? "")}을(를) 잡았다! +1장`);
+        if (si && !si.uid) bubblePi(e.pi, pick(CHARS[si.char].lines.caught));
+        await sleep(250);
+        return;
       }
-      if (c.jk && style !== "aggro" && !danger) s -= 6;
-      if ((c.r === 11 || c.r === 12) && !c.jk) s += nxt.hand.length <= 3 ? 3 : 0;
-      if (c.r === 13 && !c.jk) s += p.hand.some((x) => x !== c && !x.jk && (x.s === c.s || x.r === 13)) ? 2 : -2;
-      if (c.r === 7 && !c.jk) s += cards.length === 1 ? 2 : -1;
-      if (s > bs) {
-        bs = s;
-        best = c;
+      case "oneMiss":
+        toast(e.pi === v.me ? "원카드를 안 외쳤어요! +1장" : `${plainNick(s(e.pi)?.nick ?? "")} 원카드 못 외침! +1장`);
+        return;
+      case "bust":
+        toast(`${e.pi === v.me ? "내가" : plainNick(s(e.pi)?.nick ?? "")} 파산! (20장)`, 1800);
+        await sleep(400);
+        return;
+      case "timeout":
+        if (e.pi === v.me) toast("시간 초과! 카드를 받았어요");
+        return;
+      case "end": {
+        const wi = e.order[0];
+        const si = s(wi);
+        S.duck(3200);
+        sfx(wi === v.me ? "win" : "lose");
+        if (si && !si.uid && wi !== v.me) bubblePi(wi, pick(CHARS[si.char].lines.win), 2000);
+        void m;
+        return;
       }
     }
-    let suit: number | undefined;
-    if (best.r === 7 && !best.jk) {
-      const cc = [0, 0, 0, 0];
-      p.hand.filter((x) => x !== best && !x.jk).forEach((x) => cc[x.s]++);
-      suit = cc.indexOf(Math.max(...cc));
-    }
-    return doPlay(pi, best, suit);
   }
 
-  function endGame(wi: number) {
-    const g = G;
-    if (!g || g.over) return;
-    g.over = true;
-    clearTimer();
-    g.one = null;
-    render();
-    const order = [...g.P.keys()].sort((a, b) => {
-      const pa = g.P[a],
-        pb = g.P[b];
-      if (a === wi) return -1;
-      if (b === wi) return 1;
-      if (pa.out !== pb.out) return pa.out ? 1 : -1;
-      return pa.hand.length - pb.hand.length;
-    });
-    const myRank = order.indexOf(0) + 1;
-    const gain = g.P[0].out ? 0 : REWARD[myRank - 1];
-    ME.coins += gain;
-    ME.games = (ME.games ?? 0) + 1;
-    save();
-    S.duck(3200);
-    sfx(myRank === 1 ? "win" : "lose");
-    if (gain) later(() => sfx("coin"), 1300);
-    if (wi > 0) {
-      setFace(wi, "win", 5000);
-      bubble(wi, pick(CHARS[g.P[wi].char].lines.win), 2000);
-    } else if (wi === 0) setFace(0, "win", 5000);
+  function showResult(r: RoomW) {
+    const res = r.result!;
+    RM.resPending = true;
+    const ms = mySeat();
+    const rank = res.order.indexOf(ms) + 1;
+    const gain = ms >= 0 ? (res.gain[ms] ?? 0) : 0;
+    // 코인: 회원은 서버가 넣어 줌(다시 받아옴), 게스트는 이 기기에
+    if (ms >= 0) {
+      if (member) void syncMe();
+      else {
+        ME.coins += gain;
+        ME.games = (ME.games ?? 0) + 1;
+        save();
+        refreshMoneyAll();
+      }
+      if (gain) later(() => sfx("coin"), 1300);
+    }
     later(() => {
+      if (!RM.room) return void (RM.resPending = false);
+      const host = r.hostUid;
       const ov = overlay(
-        `<h2>${myRank === 1 ? "1등! 🎉" : `${myRank}등`}</h2><p class="tt-gain">${icon("coin", "tt-coin")} +${gain.toLocaleString()}</p>
-      <div class="tt-rank">${order
-        .map((i, k) => {
-          const p = g.P[i];
-          return `<div class="${i === 0 ? "me" : ""}"><span class="pos">${k + 1}</span><div class="tt-av" style="${avBg(p.char, p.look)}">${faceHTML(p.char, p.look, k === 0 ? "win" : p.out ? "sad" : "idle")}</div><b>${i ? p.nick : "나"}</b><span class="left">${p.out ? "파산" : k === 0 ? "완주" : `${p.hand.length}장 남음`}</span></div>`;
+        `<h2>${rank === 1 ? "1등! 🎉" : rank > 0 ? `${rank}등` : "게임 끝"}</h2>${ms >= 0 ? `<p class="tt-gain">${icon("coin", "tt-coin")} +${gain.toLocaleString()}</p>` : ""}
+      <div class="tt-rank">${res.order
+        .map((seat, k) => {
+          const p = r.seats[seat] ?? RM.room?.seats[seat];
+          const out = res.out.includes(seat);
+          return `<div class="${seat === ms ? "me" : ""}"><span class="pos">${k + 1}</span><div class="tt-av" style="${p ? avBg(p.char, p.look) : ""}">${p ? faceHTML(p.char, p.look, k === 0 ? "win" : out ? "sad" : "idle") : ""}</div><b>${p ? nm(p.nick) : "나간 사람"}${p?.uid === host ? CROWN : ""}</b><span class="left">${out ? "파산" : k === 0 ? "완주" : `${res.left[seat]}장 남음`}</span><span class="gn">+${(res.gain[seat] ?? 0).toLocaleString()}</span></div>`;
         })
         .join("")}</div>
-      <div class="tt-row"><button type="button" class="tt-rtown">마을로</button><button class="pri tt-ragain" type="button">한 판 더</button></div>`,
-        $(".tt-game"),
+      <div class="tt-row"><button type="button" class="tt-rlobby">나가기</button><button class="pri tt-rroom" type="button">대기실로</button></div>`,
+        CUR === "game" ? $(".tt-game") : $(".tt-room"),
       );
-      ov.querySelector<HTMLElement>(".tt-rtown")!.onclick = () => {
+      ov.classList.add("result");
+      ov.querySelector<HTMLElement>(".tt-rlobby")!.onclick = () => {
         ov.remove();
-        G = null;
-        goTown();
+        RM.resPending = false;
+        leaveRoomQuiet();
+        openLobby(LB.game);
       };
-      ov.querySelector<HTMLElement>(".tt-ragain")!.onclick = () => {
+      ov.querySelector<HTMLElement>(".tt-rroom")!.onclick = () => {
         ov.remove();
-        G = null;
-        enterRoom();
+        RM.resPending = false;
+        GV = null;
+        show("room");
+        renderRoomOnline();
+        renderKnocks();
       };
-    }, 1400);
+    }, CUR === "game" ? 1300 : 0);
   }
-  $(".tt-pause").onclick = () => {
-    const ov = overlay(
-      `<h2>메뉴</h2><p>지금 나가면 이번 판 보상은 없어요.</p><div class="tt-row"><button type="button" class="tt-pquit">나가기</button><button class="pri tt-pgo" type="button">계속하기</button></div>`,
-      $(".tt-game"),
-    );
-    ov.querySelector<HTMLElement>(".tt-pgo")!.onclick = () => ov.remove();
-    ov.querySelector<HTMLElement>(".tt-pquit")!.onclick = () => {
-      ov.remove();
-      if (G && !G.over) {
-        G.over = true;
-        clearTimer();
-      }
-      G = null;
-      goTown();
-    };
-  };
 
   // =================== 코스튬 뽑기 ===================
   // 그림이 아직 없을 때 대신 그리는 캡슐 (금 = 코스튬, 파랑 = 꽝)
@@ -1658,7 +1964,6 @@ export function mountTown(root: HTMLElement, opts: TownOpts = {}): () => void {
       : `<div class="tt-cap tt-cap-css ${gold ? "gold" : "blue"} ${cls}"><b>★</b></div>`;
   };
   const cosName = (c: CharId, l: LookId) => CHARS[c].looks[l].name;
-  const ownKey = (c: CharId, l: LookId) => `${c}:${l}`;
   let gFeat = 0;
   let gShown = -1;
   const bgOf = (c: CharId, l: LookId) => ART.char[c]?.[l]?.bg ?? ART.fullBg;
@@ -1721,27 +2026,8 @@ export function mountTown(root: HTMLElement, opts: TownOpts = {}): () => void {
     );
     ov.querySelector<HTMLElement>("button")!.onclick = () => ov.remove();
   };
-  type Pull = { kind: "cos"; char: CharId; look: LookId; dup: boolean } | { kind: "lucky" };
-  // 이미 가진 코스튬은 안 나옴: 뽑기 풀은 아직 없는 코스튬만
-  // 고른 픽업 코스튬 하나만 나옴. 이미 가졌으면 그 픽업은 뽑기 불가
+  // 이미 가진 코스튬은 안 나옴: 고른 픽업 코스튬 하나만 나오고, 이미 가졌으면 그 픽업은 뽑기 불가
   const unownedPool = () => [GACHA.pool[gFeat]].filter((p) => !ME.owned.includes(ownKey(p.char, p.look)));
-  function roll(): Pull {
-    const pool = unownedPool();
-    if (!pool.length) {
-      ME.coins += GACHA.lucky;
-      return { kind: "lucky" };
-    }
-    ME.pity++;
-    const hit = ME.pity >= GACHA.pity || Math.random() < GACHA.rate;
-    if (!hit) {
-      ME.coins += GACHA.lucky;
-      return { kind: "lucky" };
-    }
-    ME.pity = 0;
-    const p = pick(pool);
-    ME.owned.push(ownKey(p.char, p.look));
-    return { kind: "cos", char: p.char, look: p.look, dup: false };
-  }
   let gBusy = false;
   async function pull(n: 1 | 10) {
     const cost = n === 1 ? GACHA.cost1 : GACHA.cost10;
@@ -1749,9 +2035,26 @@ export function mountTown(root: HTMLElement, opts: TownOpts = {}): () => void {
     if (!unownedPool().length) return toast("이미 가진 코스튬이에요 · 다른 픽업을 골라 주세요");
     if (ME.coins < cost) return toast("코인이 부족해요 · 게임하고 모아 와요!");
     gBusy = true;
-    ME.coins -= cost;
-    const res: Pull[] = Array.from({ length: n }, roll);
-    save();
+    let res: Pull[];
+    if (member && NET) {
+      // 회원: 서버가 뽑음 (코인 · 천장 · 코스튬이 서버에)
+      try {
+        const r = await NET.rpc<{ pulls: Pull[]; me: Partial<Profile> }>("town.gacha", { feat: gFeat, n });
+        res = r.pulls;
+        Object.assign(ME, r.me);
+      } catch (e) {
+        gBusy = false;
+        return toast(errText(e));
+      }
+    } else {
+      const r = rollGacha(ME, gFeat, n);
+      if (typeof r === "string") {
+        gBusy = false;
+        return toast(r);
+      }
+      res = r;
+      save();
+    }
     refreshMoneyAll();
     const next = await playDraw(res);
     gBusy = false;
@@ -1826,7 +2129,7 @@ export function mountTown(root: HTMLElement, opts: TownOpts = {}): () => void {
     let next: "again" | "ok" = "ok";
     for (let i = 0; i < cos.length; i++) {
       const last = res.length === 1;
-      const r = await reveal(cos[i].char, cos[i].look, cos[i].dup, last ? 1 : 0);
+      const r = await reveal(cos[i].char, cos[i].look, false, last ? 1 : 0);
       if (last) next = r;
     }
     const againBtn = (k: 1 | 10) =>
@@ -1843,7 +2146,7 @@ export function mountTown(root: HTMLElement, opts: TownOpts = {}): () => void {
           r.kind === "cos"
             ? `<div class="it gold" style="--i:${i}"><div class="pic" style="background-image:url(${bgOf(r.char, r.look) ?? ""})">${
                 artOf(r.char, r.look).sd ? `<img src="${artOf(r.char, r.look).sd}" alt="">` : faceHTML(r.char, r.look, "happy")
-              }</div><b>${cosName(r.char, r.look)}</b><small>${r.dup ? `중복 · +${GACHA.dupRefund.toLocaleString()}` : "NEW!"}</small></div>`
+              }</div><b>${cosName(r.char, r.look)}</b><small>NEW!</small></div>`
             : `<div class="it" style="--i:${i}"><div class="pic">${capHTML(false, "mini")}</div><b>꽝</b><small>코인 +${GACHA.lucky}</small></div>`,
         )
         .join("")}</div><div class="tt-gres-btns">${againBtn(10)}<button class="pri tt-gok" type="button">확인</button></div>`;
@@ -1921,6 +2224,110 @@ export function mountTown(root: HTMLElement, opts: TownOpts = {}): () => void {
     });
   }
 
+  // =================== 시작 화면 (로그인 안 했을 때) · 게스트 닉네임 ===================
+  let INVITE: string | null = null;
+  try {
+    INVITE = new URLSearchParams(location.search).get("room")?.match(/^\d{4}$/)?.[0] ?? null;
+  } catch {}
+  function openTitle() {
+    show("title");
+    // 마을 풍경: 원카드 건물 쪽으로 카메라
+    const cam = Math.max(0, Math.min(WORLD - DW, doorX(1) - DW / 2));
+    $(".tt-world").style.transform = `translateX(${-cam}px)`;
+    $(".tt-hills").style.transform = `translateX(${-cam * 0.35}px)`;
+    if (ART.sky) $(".tt-sky").style.backgroundPositionX = `${-cam * 0.25}px`;
+    updateTitle();
+  }
+  function updateTitle() {
+    const wait = !!H?.loading;
+    $<HTMLButtonElement>(".tt-tlogin").disabled = wait || !H;
+    $(".tt-tlogin").firstChild!.textContent = wait ? "로그인 확인 중…" : "로그인하고 시작";
+  }
+  $(".tt-tlogin").onclick = () => H?.login();
+  $(".tt-tguest").onclick = () => openNick();
+  const NICK_A = ["반짝", "말랑", "새콤", "포근", "용감한", "졸린", "행운의", "몽글", "씩씩한", "달콤"];
+  const NICK_B = ["토끼", "고양이", "별사탕", "마카롱", "펭귄", "다람쥐", "카드왕", "젤리", "판다", "푸딩"];
+  const randNick = () => pick(NICK_A) + pick(NICK_B);
+  const NICK_RE = /^[가-힣a-zA-Z0-9_]{2,10}$/;
+  function openNick() {
+    let sel: CharId = ME.char;
+    const ov = overlay(
+      `<div class="tt-nick"><div class="tt-mk-plate">닉네임 정하기</div><button type="button" class="tt-mk-x tt-x" aria-label="닫기">✕</button>
+      <div class="tt-nick-l"><p>함께할 캐릭터를 골라 주세요!</p><div class="tt-nick-chars">${Object.values(CHARS)
+        .map((c) => `<button type="button" class="tt-cs-card" data-c="${c.id}"><span class="pic" style="${avBg(c.id, "base")}">${faceHTML(c.id, "base", "happy")}</span><b>${c.name}</b></button>`)
+        .join("")}</div></div>
+      <div class="tt-nick-r"><p>닉네임을 입력해 주세요</p><div class="tt-nick-in"><input maxlength="10" placeholder="2~10자까지 입력하세요" value="${ME.nick === "나" ? "" : esc(ME.nick)}"><button type="button" class="tt-dice" aria-label="랜덤 닉네임" title="랜덤 닉네임">🎲</button></div><div class="tt-nick-help"><span>욕설 · 운영자 사칭 닉네임은 안 돼요</span><b class="len">0/10</b></div>
+      <button type="button" class="tt-cs-go pink tt-nick-go">마을로 출발!<i>›</i></button></div></div>`,
+    );
+    ov.classList.add("nick");
+    const inp = ov.querySelector<HTMLInputElement>("input")!;
+    const len = () => (ov.querySelector(".len")!.textContent = `${inp.value.length}/10`);
+    const paint = () => $$(".tt-nick-chars .tt-cs-card", ov).forEach((b) => b.classList.toggle("on", b.dataset.c === sel));
+    $$(".tt-nick-chars .tt-cs-card", ov).forEach((b) => (b.onclick = () => ((sel = b.dataset.c as CharId), paint())));
+    inp.oninput = len;
+    ov.querySelector<HTMLElement>(".tt-dice")!.onclick = () => {
+      inp.value = randNick();
+      len();
+    };
+    ov.querySelector<HTMLElement>(".tt-x")!.onclick = () => ov.remove();
+    const go = async () => {
+      const v = inp.value.trim();
+      if (!NICK_RE.test(v)) return toast("닉네임은 한글 · 영문 · 숫자 2~10자예요");
+      const btn = ov.querySelector<HTMLButtonElement>(".tt-nick-go")!;
+      btn.disabled = true;
+      try {
+        await NET?.ensureGuest();
+      } catch {
+        btn.disabled = false;
+        return toast("접속에 실패했어요. 잠시 후 다시 시도해 주세요.");
+      }
+      ME.nick = v;
+      if (ME.char !== sel) {
+        ME.char = sel;
+        if (ME.look !== "base" && !ME.owned.includes(ownKey(sel, ME.look))) ME.look = "base";
+      }
+      save();
+      ov.remove();
+      enterTown();
+    };
+    ov.querySelector<HTMLElement>(".tt-nick-go")!.onclick = () => void go();
+    inp.onkeydown = (e) => e.key === "Enter" && void go();
+    paint();
+    len();
+    if (!inp.value) inp.focus();
+  }
+  function enterTown() {
+    refreshPlayerSd();
+    goTown();
+    if (INVITE) {
+      const id = INVITE;
+      INVITE = null;
+      void joinRoom(id);
+    }
+  }
+  // 사이트 로그인 상태가 바뀜 (TownApp)
+  if (H)
+    H.changed = () => {
+      const was = member;
+      member = H.member;
+      if (member && member !== was) {
+        ME = memberProfile(member);
+        void syncMe();
+        if (CUR === "title") {
+          toast(`${member}님 환영해요!`);
+          enterTown();
+        }
+      } else if (!member && was) {
+        leaveRoomQuiet();
+        closeLobby();
+        ME = guestProfile();
+        refreshMoneyAll();
+        refreshPlayerSd();
+        if (CUR !== "loading") openTitle();
+      }
+      if (CUR === "title") updateTitle();
+    };
+
   // =================== 로딩: 그림을 다 받고 열기 ===================
   void (async () => {
     buildTown();
@@ -1950,13 +2357,23 @@ export function mountTown(root: HTMLElement, opts: TownOpts = {}): () => void {
           }),
       ),
       ...snds.map((u) => S.preload(u).then(step)),
-      Promise.race([document.fonts?.ready ?? Promise.resolve(), sleep(4000)]).then(step),
+      // 한글 글꼴은 글자 묶음별로 늦게 받아져서(구글 폰트) 처음 보일 때 다른 글꼴로 깨져 보임 → 화면에 쓰는 글자를 미리 다 받음
+      Promise.race([Promise.all([document.fonts?.ready, document.fonts?.load?.("20px Jua", GLYPHS)]).catch(() => {}), sleep(5000)]).then(step),
     ]);
     if (!alive) return;
     bar.style.width = "100%";
     tx.textContent = "마을 준비 완료 100%";
     await sleep(250);
-    goTown();
+    // 로그인 확인이 끝날 때까지 잠깐 기다림 (회원이면 바로 마을, 아니면 시작 화면)
+    for (let k = 0; k < 40 && H?.loading; k++) await sleep(100);
+    if (!alive) return;
+    member = H?.member ?? null;
+    if (member) {
+      ME = memberProfile(member);
+      await syncMe();
+      enterTown();
+    } else if (!H) enterTown();
+    else openTitle();
   })();
 
   return () => {
@@ -1964,14 +2381,22 @@ export function mountTown(root: HTMLElement, opts: TownOpts = {}): () => void {
     if (T.raf) cancelAnimationFrame(T.raf);
     for (const t of timers) clearTimeout(t);
     timers.clear();
-    if (G?.timer) clearTimeout(G.timer);
-    G = null;
+    cancelAnimationFrame(clockRaf);
+    LB.unsub?.();
+    RM.unsub?.();
+    if (RM.id && NET) void NET.rpc("town.leave", { id: RM.id }).catch(() => {});
+    if (H) H.changed = undefined;
     window.removeEventListener("keydown", onKeyDown);
     window.removeEventListener("keydown", onFirst);
+    root.removeEventListener("pointerdown", onFirst, { capture: true });
     previewA?.pause();
     S.stop();
     window.removeEventListener("keyup", onKeyUp);
     root.removeEventListener("pointerdown", onStageDown);
+    root.removeEventListener("click", onBtnClick, { capture: true });
+    window.removeEventListener("pointermove", onStageMove);
+    window.removeEventListener("pointerup", onStageUp);
+    window.removeEventListener("pointercancel", onStageUp);
     root.innerHTML = "";
   };
 }

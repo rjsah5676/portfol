@@ -140,3 +140,42 @@ export function saveProfile(p: Profile) {
     localStorage.setItem(KEY, JSON.stringify(p));
   } catch {}
 }
+
+// ---- 뽑기 한 번 (서버 · 게스트 화면이 같이 씀) ----
+export type Pull = { kind: "cos"; char: CharId; look: LookId } | { kind: "lucky" };
+export interface Wallet {
+  coins: number;
+  owned: string[];
+  pity: number;
+}
+export const ownKey = (c: CharId, l: LookId) => `${c}:${l}`;
+/**
+ * 픽업 feat 를 n 번 뽑음 (코인을 빼고 결과를 지갑에 반영). 못 뽑으면 이유 문구.
+ * 고른 픽업 코스튬 하나만 나오고, 이미 가졌으면 뽑을 수 없음.
+ */
+export function rollGacha(w: Wallet, feat: number, n: 1 | 10, rng: () => number = Math.random): Pull[] | string {
+  const p = GACHA.pool[feat];
+  if (!p) return "없는 픽업이에요";
+  const cost = n === 1 ? GACHA.cost1 : GACHA.cost10;
+  if (w.owned.includes(ownKey(p.char, p.look))) return "이미 가진 코스튬이에요 · 다른 픽업을 골라 주세요";
+  if (w.coins < cost) return "코인이 부족해요 · 게임하고 모아 와요!";
+  w.coins -= cost;
+  const out: Pull[] = [];
+  for (let k = 0; k < n; k++) {
+    if (w.owned.includes(ownKey(p.char, p.look))) {
+      w.coins += GACHA.lucky;
+      out.push({ kind: "lucky" });
+      continue;
+    }
+    w.pity++;
+    if (w.pity >= GACHA.pity || rng() < GACHA.rate) {
+      w.pity = 0;
+      w.owned.push(ownKey(p.char, p.look));
+      out.push({ kind: "cos", char: p.char, look: p.look });
+    } else {
+      w.coins += GACHA.lucky;
+      out.push({ kind: "lucky" });
+    }
+  }
+  return out;
+}

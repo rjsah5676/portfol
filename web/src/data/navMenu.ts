@@ -122,20 +122,20 @@ export const NAV_GROUPS: NavGroup[] = [
         featured: true,
       },
       {
+        href: "/games/town",
+        image: imgTown,
+        label: "TABLE TOWN",
+        desc: "친구 · 캐릭터 봇과 함께하는 온라인 원카드",
+        icon: "px:town",
+        badge: "ALPHA",
+        featured: true, // 멜론 게임과 자리 바꿈 (메인 큰 칸 6개 맞춤)
+      },
+      {
         href: "/games/melongame",
         image: imgMelongame,
         label: "멜론 게임",
         desc: "합이 10·20이 되게 묶어 지우는 2분 타임어택",
         icon: "🍈",
-        featured: true, // PIXEL RESET STORY 내린 자리 (메인 큰 칸 6개 맞춤)
-      },
-      {
-        href: "/games/town",
-        image: imgTown,
-        label: "TABLE TOWN",
-        desc: "마을을 돌아다니다 게임방에 들어가는 캐릭터 보드게임, 빈자리는 봇이",
-        icon: "px:town",
-        badge: "ALPHA",
       },
       {
         href: "/games/board",

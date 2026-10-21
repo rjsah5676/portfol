@@ -13,8 +13,8 @@ export default function Page() {
           title="TABLE TOWN"
           en="Board Game Town"
           accent="#FFC94A"
-          desc="마을을 돌아다니다 게임방에 들어가는 캐릭터 보드게임 · 빈자리는 봇이 채워 줘요"
-          tags={["원카드", "보드게임 마을", "봇 대전", "무료 카드게임"]}
+          desc="친구 · 캐릭터 봇과 함께하는 온라인 원카드 · 빈자리는 봇이 채워 줘요"
+          tags={["원카드", "온라인 원카드", "봇 대전", "무료 카드게임"]}
         />
       </div>
       <Faded>

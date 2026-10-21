@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/lib/AuthContext";
 import { DH, DW, mountTown } from "@/lib/town/engine";
+import type { TownHost } from "@/lib/town/net";
+import { townNet } from "./townNet";
 
 /*
  * TABLE TOWN 무대 — 픽셀 타운 서바이버 · 포커와 같은 방식.
@@ -36,7 +38,9 @@ function useSize<T extends HTMLElement>(): [(el: T | null) => void, { w: number;
 const GATE_BG: React.CSSProperties = { background: "linear-gradient(rgba(24,30,56,0.9), rgba(16,20,40,0.96)), #141a2a" };
 
 export default function TownApp() {
-  const { admin } = useAuth();
+  const { admin, profile, loading, login } = useAuth();
+  // 엔진은 한 번만 붙이고, 로그인 상태는 이 객체로 알려 줌 (바뀔 때마다 다시 붙이면 하던 게임이 날아감)
+  const hostRef = useRef<TownHost>({ admin, member: profile?.nick ?? null, loading, login: () => void login(), net: townNet });
   const rootRef = useRef<HTMLDivElement>(null);
   const gameRef = useRef<HTMLDivElement>(null);
   const [boxRef, box] = useSize<HTMLDivElement>();
@@ -65,9 +69,17 @@ export default function TownApp() {
   const k = box.w && box.h ? Math.min(box.w / DW, box.h / DH) : 0;
   const ready = k > 0;
   useEffect(() => {
+    const h = hostRef.current;
+    h.admin = admin;
+    h.member = profile?.nick ?? null;
+    h.loading = loading;
+    h.login = () => void login();
+    h.changed?.();
+  }, [admin, profile, loading, login]);
+  useEffect(() => {
     if (!ready || !gameRef.current) return;
-    return mountTown(gameRef.current, { admin });
-  }, [ready, admin]);
+    return mountTown(gameRef.current, { host: hostRef.current });
+  }, [ready]);
 
   const fs = fsReal || pseudoFs;
   const phone = scr.touch && Math.min(scr.w, scr.h) < 600;
@@ -133,17 +145,17 @@ export default function TownApp() {
             <div ref={gameRef} className="tt" />
           </div>
         )}
-        {fs && (
-          // 전체화면 풀기: 오른쪽 위 모서리 작은 탭 (게임 UI 위쪽 여백에만 걸치게)
+        {ready && (canFs || fs) && (
+          // 전체화면 켜기 · 끄기: 오른쪽 위 모서리 작은 탭 — 어느 화면에서든 (게임 UI 위쪽 여백에만 걸치게)
           <button
             type="button"
             onClick={toggleFs}
-            aria-label="전체화면 끄기"
-            title="전체화면 끄기"
-            className="absolute top-0 right-0 z-[70] flex h-[22px] w-[34px] cursor-pointer items-center justify-center rounded-bl-[10px] bg-black/45 text-white/80 transition-colors hover:bg-black/70 hover:text-white"
+            aria-label={fs ? "전체화면 끄기" : "전체화면"}
+            title={fs ? "전체화면 끄기" : "전체화면"}
+            className="absolute top-0 right-0 z-[70] flex h-[24px] w-[38px] cursor-pointer items-center justify-center rounded-bl-[10px] bg-black/45 text-white/85 transition-colors hover:bg-black/70 hover:text-white"
           >
             <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5" />
+              <path d={fs ? "M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5" : "M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"} />
             </svg>
           </button>
         )}
