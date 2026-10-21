@@ -8349,3 +8349,14 @@
   stroke-linejoin: round;
   filter: drop-shadow(0 0 5px rgba(255, 200, 60, 0.9));
 }
+/* 차분하게: 얇은 띠 + 제자리 화살표 6개 */
+.tt-game .tt-dir .rail {
+  stroke: rgba(255, 230, 160, 0.22);
+  stroke-width: 10;
+}
+.tt-game .tt-dir .chev path {
+  fill: rgba(255, 236, 170, 0.9);
+  stroke: rgba(120, 80, 10, 0.7);
+  stroke-width: 2;
+  filter: none;
+}
