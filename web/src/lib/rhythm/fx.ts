@@ -10,7 +10,7 @@ export type HitSound = "thump" | "drop" | "punch" | "tick" | "hat";
 type SampleHit = Exclude<HitSound, "thump">;
 
 /**
- * 타격음: 친 순간이 또렷하게. 화면엔 번호로만 보여줌 (1이 기본).
+ * 타격음: 친 순간이 또렷하게. 화면엔 번호로만 보여줌 (3 펀치가 기본).
  * 샘플은 ElevenLabs로 만든 것 중 고른 4개 — 어택 시작에 맞춰 0.2초로 자르고, 음악에 묻히지 않게 소프트 리미터로 키움
  */
 export const HIT_SOUNDS: { key: HitSound; label: string }[] = [

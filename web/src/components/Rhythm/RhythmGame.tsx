@@ -193,7 +193,7 @@ export default function RhythmGame() {
     hit: 0.3,
     music: 1,
     sfx: 0.7,
-    hitSound: "thump",
+    hitSound: "punch",
     skin: "metal",
     noteSize: "normal",
     lanes: "none",
@@ -501,7 +501,7 @@ export default function RhythmGame() {
           hit: typeof s.hit === "number" ? clamp(s.hit, 0, 1) : 0.3,
           music: typeof s.music === "number" ? clamp(s.music, 0, 1) : 1,
           sfx: typeof s.sfx === "number" ? clamp(s.sfx, 0, 1) : 0.7,
-          hitSound: HIT_SOUNDS.some((h) => h.key === s.hitSound) ? s.hitSound : "thump",
+          hitSound: HIT_SOUNDS.some((h) => h.key === s.hitSound) ? s.hitSound : "punch",
           skin:
             (Number(s.v) || 1) >= SETTINGS_VER && SKINS.some((k) => k.key === s.skin)
               ? s.skin
