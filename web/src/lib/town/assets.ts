@@ -12,8 +12,8 @@ export type GameId = "joker" | "onecard" | "yut" | "chess" | "janggi" | "omok" |
 const B = "/town";
 const FACES: Face[] = ["idle", "happy", "sad", "smug", "panic", "win"];
 /** 테이블 자리별 앉은 그림 (0 앞왼 · 1 뒤왼 · 2 뒤오 · 3 앞오) — 자리마다 따로 그린 자세, 좌우반전 안 씀 */
-const seats = (k: string) => [0, 1, 2, 3].map((i) => `${B}/seat/${k}-${i}.webp`);
-const anim = (k: string) => ({ walkR: `${B}/anim/${k}-walkR.webp`, walkL: `${B}/anim/${k}-walkL.webp`, idle: `${B}/anim/${k}-idle.webp` });
+const seats = (k: string) => [0, 1, 2, 3].map((i) => `${B}/seat2/${k}-${i}.webp`);
+const anim = (k: string) => ({ walkR: `${B}/anim2/${k}-walkR.webp`, walkL: `${B}/anim2/${k}-walkL.webp`, idle: `${B}/anim2/${k}-idle.webp` });
 const faces = (c: string) => Object.fromEntries(FACES.map((f) => [f, `${B}/face/${c}-${f}.webp`])) as Record<Face, string>;
 
 export const ART: {
@@ -109,12 +109,12 @@ export const ART: {
   fullBg: `${B}/bg/full-base.webp`,
   char: {
     haru: {
-      base: { full: `${B}/char/haru-full.webp`, sd: `${B}/char/haru-sd.webp`, seat: seats("haru-base"), anim: anim("haru-base"), face: `${B}/face/haru-idle.webp`, bust: faces("haru") },
-      cos1: { bg: `${B}/bg/haru-cos1.webp`, full: `${B}/char/haru-cos1-full.webp`, sd: `${B}/char/haru-cos1-sd.webp`, seat: seats("haru-cos1"), anim: anim("haru-cos1"), face: `${B}/face/haru-cos1-idle.webp`, bust: faces("haru-cos1") },
+      base: { full: `${B}/char/haru-full.webp`, sd: `${B}/char2/haru-base-sd.webp`, seat: seats("haru-base"), anim: anim("haru-base"), face: `${B}/face/haru-idle.webp`, bust: faces("haru") },
+      cos1: { bg: `${B}/bg/haru-cos1.webp`, full: `${B}/char/haru-cos1-full.webp`, sd: `${B}/char2/haru-cos1-sd.webp`, seat: seats("haru-cos1"), anim: anim("haru-cos1"), face: `${B}/face/haru-cos1-idle.webp`, bust: faces("haru-cos1") },
     },
     ruru: {
-      base: { full: `${B}/char/ruru-full.webp`, sd: `${B}/char/ruru-sd.webp`, seat: seats("ruru-base"), anim: anim("ruru-base"), face: `${B}/face/ruru-idle.webp`, bust: faces("ruru") },
-      cos1: { bg: `${B}/bg/ruru-cos1.webp`, full: `${B}/char/ruru-cos1-full.webp`, sd: `${B}/char/ruru-cos1-sd.webp`, seat: seats("ruru-cos1"), anim: anim("ruru-cos1"), face: `${B}/face/ruru-cos1-idle.webp`, bust: faces("ruru-cos1") },
+      base: { full: `${B}/char/ruru-full.webp`, sd: `${B}/char2/ruru-base-sd.webp`, seat: seats("ruru-base"), anim: anim("ruru-base"), face: `${B}/face/ruru-idle.webp`, bust: faces("ruru") },
+      cos1: { bg: `${B}/bg/ruru-cos1.webp`, full: `${B}/char/ruru-cos1-full.webp`, sd: `${B}/char2/ruru-cos1-sd.webp`, seat: seats("ruru-cos1"), anim: anim("ruru-cos1"), face: `${B}/face/ruru-cos1-idle.webp`, bust: faces("ruru-cos1") },
     },
   },
 };

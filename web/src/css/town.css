@@ -5104,3 +5104,32 @@
 .tt .tt-gmachine {
   left: 470px;
 }
+.tt .tt-sbtn.dark {
+  background: none !important;
+  border-image-source: var(--sk-cream) !important;
+  color: #4a3a8a !important;
+  text-shadow: 0 1px 0 #fff !important;
+}
+.tt .tt-sbtn {
+  border-width: 0 !important;
+  border-style: solid !important;
+  border-image-slice: 0 100 fill !important;
+  border-image-width: 0 25px !important;
+  background: none !important;
+}
+.tt .tt-roomtitle {
+  left: 146px;
+}
+/* SD 프레임 v2 (340×250 칸, 4.5~5등신) */
+.tt-sd-anim {
+  left: -62px;
+  bottom: -3px;
+  width: 204px;
+  height: 150px;
+}
+.tt-sd-anim {
+  left: -76px;
+  bottom: -4px;
+  width: 232px;
+  height: 170px;
+}
