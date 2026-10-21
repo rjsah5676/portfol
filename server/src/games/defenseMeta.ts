@@ -904,10 +904,17 @@ export function createDefenseMeta(db: Database, points: Points, now: () => numbe
       });
     },
 
-    /** 상자 열기 (가진 것 하나) — trans 는 초월 상자 (패키지에서 받은 초월 소환 1번) */
-    boxOpen(uid: string, kind: "card" | "relic" | "trans") {
+    /** 상자 열기 (가진 것 하나) — trans 는 초월 상자 (패키지에서 받은 초월 소환 1번) · all: 카드 상자 한 번에 (최대 100) */
+    boxOpen(uid: string, kind: "card" | "relic" | "trans", all = false) {
       return edit(uid, async (p) => {
         need((p.boxes[kind] ?? 0) >= 1, "상자가 없어요.");
+        if (all && kind === "card") {
+          const n = Math.min(100, p.boxes.card);
+          p.boxes.card -= n;
+          const cards: Record<string, number> = {};
+          for (let i = 0; i < n; i++) for (const [id, k] of Object.entries(openCards(p).cards)) cards[id] = (cards[id] ?? 0) + k;
+          return wire(uid, p, { got: { cards, opened: n } });
+        }
         p.boxes[kind] = (p.boxes[kind] ?? 0) - 1;
         const got = kind === "card" ? openCards(p) : kind === "relic" ? openRelic(p, BOX.relic.tierOdds) : pullTrans(p);
         return wire(uid, p, { got });

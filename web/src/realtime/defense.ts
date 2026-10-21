@@ -153,6 +153,8 @@ export interface DefenseProfile {
     /** 최고 레벨 유물이 겹쳐서 받은 코어 */
     cores?: number;
     cards?: Record<string, number>;
+    /** 카드 상자 한 번에 열기: 연 상자 수 */
+    opened?: number;
     /** 초월 소환 한 번 (trans 가 없으면 miss 의 재화) */
     trans?: string | TransGot[];
     dup?: number;
@@ -185,7 +187,7 @@ export const meta = {
   engrRoll: (unit: string) => P("defense.engr.roll", { unit }),
   engrPick: (take: boolean) => P("defense.engr.pick", { take }),
   boxBuy: (kind: "card" | "relic") => P("defense.box.buy", { kind }),
-  boxOpen: (kind: "card" | "relic" | "trans") => P("defense.box.open", { kind }),
+  boxOpen: (kind: "card" | "relic" | "trans", all?: boolean) => P("defense.box.open", all ? { kind, all } : { kind }),
   benchBuy: () => P("defense.bench.buy"),
   fslotBuy: () => P("defense.fslot.buy"),
   transSummon: () => P("defense.trans"),

@@ -1160,9 +1160,13 @@ function GotBox({ got }: { got: Got }) {
         </div>
       ) : got.cards ? (
         <>
-          <p className="text-[13px]">유닛 카드 {BOX.card.n}장</p>
-          <div className="flex flex-wrap justify-center gap-1.5">
-            {Object.entries(got.cards).map(([id, n]) => (
+          <p className="text-[13px]">
+            유닛 카드 {BOX.card.n * (got.opened ?? 1)}장{got.opened ? ` (상자 ${got.opened}개)` : ""}
+          </p>
+          <div className="flex max-h-[260px] flex-wrap justify-center gap-1.5 overflow-y-auto">
+            {Object.entries(got.cards)
+              .sort(([a, x], [b, y]) => (UNIT[b]?.grade ?? 0) - (UNIT[a]?.grade ?? 0) || y - x)
+              .map(([id, n]) => (
               <span key={id} className="relative">
                 <UnitIcon id={id} size={40} />
                 <b className="absolute right-0 bottom-0 bg-[#0a0816] px-1 text-[12px] text-[#ffb347]">×{n}</b>
@@ -1285,6 +1289,11 @@ function GoodsTab({ p, act, busy }: TabProps) {
             <Btn tone="gold" disabled={busy || p.boxes.card < 1} silent className={BTN} onClick={() => void run(() => meta.boxOpen("card"), "chest-open", "card", true)}>
               열기
             </Btn>
+            {p.boxes.card >= 2 && (
+              <Btn tone="gold" disabled={busy} silent className={BTN} onClick={() => void run(() => meta.boxOpen("card", true), "chest-open", "card")}>
+                모두 열기 ×{Math.min(100, p.boxes.card)}
+              </Btn>
+            )}
             <Btn tone="cyan" disabled={busy || p.pieces < BOX.card.pieces} silent className={BTN} onClick={() => void act(() => meta.boxBuy("card"), "upgrade")}>
               사기 <Cur k="piece" n={BOX.card.pieces} size={12} />
             </Btn>

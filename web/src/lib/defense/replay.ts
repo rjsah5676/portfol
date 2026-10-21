@@ -13,8 +13,9 @@ export type LogEntry = [number, number, Cmd];
 export const MAX_TICKS = Math.ceil(
   Math.max(
     B.prepSec + LAST_WAVE * B.waveSec + (LAST_WAVE / BOSS_EVERY) * (B.bossSec + 20 + B.breakSec) + 60,
-    // 글리치 원정 2막까지 (층마다 가장 긴 전투 + 정리 시간, 막마다 보스)
-    2 * (EXP.floors * (EXP.fightWaves * B.waveSec + EXP.cleanSec) + B.bossSec + 20) + 60
+    // 글리치 원정 2막까지 (층마다 가장 긴 전투 + 정리 시간, 막마다 보스) + 캠프에서 고르던 시간 60분
+    //  (2026-10-21: 예전 화면은 캠프(지도 · 드래프트 · 상점)에서도 시계가 돌아서 2막 클리어가 이 상한을 넘어 「기록 모양이 잘못됐어요」로 거절됐음 — 이제 화면은 캠프에서 시계를 멈춤)
+    2 * (EXP.floors * (EXP.fightWaves * B.waveSec + EXP.cleanSec) + B.bossSec + 20) + 60 + 3600
   ) * TPS
 );
 /** 멀티: 서버가 명령을 모아 뿌리는 간격 · 한 턴의 tick 수 (턴 n 의 명령은 tick n×TICKS_PER_TURN 에 실행) */
@@ -25,7 +26,7 @@ export const MAX_SPEED = 3;
 /** 멀티 어긋남 감시: 이 tick 마다 각자 hashGame 을 서버로 보내 비교 (5초) */
 export const HASH_TICKS = 150;
 /** 기록 줄 수 상한 (서버가 받는 크기) */
-export const MAX_LOG = 6000;
+export const MAX_LOG = 12000;
 
 /** 기록 모양 확인 (tick 이 줄지 않고, 명령이 맞는 모양) */
 export function validLog(log: unknown, players: number): log is LogEntry[] {
