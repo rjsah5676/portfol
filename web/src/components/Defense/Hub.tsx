@@ -66,6 +66,7 @@ import {
   type Faction,
 } from "@/lib/defense/units";
 import { meta, type DefenseProfile, type QuestRow, type TransGot } from "@/realtime/defense";
+import { ENGR_FROM } from "@/lib/defense/engrave";
 import { sfx } from "./audio";
 import { Bar, Btn, FactionIcon, Icon, Modal, SoundButton, FsButton, TITLE, Tip, UnitIcon, fmtNum } from "./ui";
 import { EngraveTab } from "./Engrave";
@@ -230,11 +231,15 @@ export default function Hub({
       setBusy(false);
     }
   };
+  const grow = growthDots(p);
   const dots: Partial<Record<HubTab, number>> = {
+    units: grow.units,
+    res: grow.res,
+    relic: grow.relic,
     quest: [...p.quests.daily, ...p.quests.weekly].filter((q) => !q.claimed && q.value >= q.goal).length,
     pass: p.passTier - p.season.free.length + (p.season.premium ? p.passTier - p.season.prem.length : 0),
     goods: p.boxes.card + p.boxes.relic + (p.boxes.trans ?? 0),
-    engr: p.epend ? 1 : 0,
+    engr: p.epend ? 1 : grow.engr,
   };
   const ctx: TabProps = { p, act, busy };
 
@@ -323,6 +328,27 @@ const H = ({ children, sub }: { children: ReactNode; sub?: ReactNode }) => (
 
 /* ───────── 출전 준비 ───────── */
 
+/**
+ * 지금 올릴 수 있는 것 (정비소 탭 · 메뉴 정비소 버튼 알림) — 2026-10-21 실제 기록에서 「일괄 강화 ×21」이 쌓인 채 판만 돌던 것
+ *  units: 일괄 강화로 오를 레벨 수 · res: 올릴 수 있는 연구 수 · relic: 올릴 수 있는 유물 수 · engr: 각인석 (각인이 열렸으면)
+ */
+export function growthDots(p: DefenseProfile) {
+  const units = planUpAll(UNITS, p.lv, p.cards, p.pieces).n;
+  const res = RESEARCH.filter((r) => {
+    if (!p.res.includes(r.id)) return false;
+    const lv = p.resLv?.[r.id] ?? 1;
+    return lv < RES_MAX_LV && p.pieces >= resUpCost(r.id, lv);
+  }).length;
+  const relic = RELICS.filter((r) => {
+    if (!p.relics.includes(r.id)) return false;
+    const lv = p.relicLv?.[r.id] ?? 1;
+    const c = relicUpCost(r.id, lv);
+    return lv < RELIC_MAX_LV && (p.shards?.[r.id] ?? 0) >= c.shards && p.cores >= c.cores;
+  }).length;
+  const engr = p.glitchWin >= ENGR_FROM ? (p.estone ?? 0) : 0;
+  return { units, res, relic, engr, total: units + res + relic + engr };
+}
+
 function LoadTab({ p, act, busy }: TabProps) {
   const L = p.load;
   const save = (load: DefenseProfile["load"]) => act(() => meta.setLoad(load));
@@ -352,12 +378,13 @@ function LoadTab({ p, act, busy }: TabProps) {
     void save({ ...L, relics: next, trelic });
   };
   const g = GLITCH[L.glitch];
+  const [showAll, setShowAll] = useState(false);
   return (
     <div className="flex flex-col gap-4">
       <div>
         <H sub={`열린 단계 ${p.glitchOpen} · 0~9단계는 ${GLITCH_UNLOCK_WAVE}웨이브를 넘기면, 10단계부터는 클리어해야 다음 단계가 열려요`}>오염 단계</H>
         <div className="grid grid-cols-[repeat(17,minmax(0,1fr))] gap-1">
-          {GLITCH.map((x) => {
+          {GLITCH.filter((x) => x.lv <= p.glitchOpen + 3 || showAll).map((x) => {
             const open = x.lv <= p.glitchOpen;
             const on = x.lv === L.glitch;
             const won = x.lv <= p.glitchWin;
@@ -377,6 +404,11 @@ function LoadTab({ p, act, busy }: TabProps) {
             );
           })}
         </div>
+        {p.glitchOpen + 3 < GLITCH.length - 1 && (
+          <button type="button" className="mt-1 text-[12px] text-[var(--dim)] underline" onClick={() => setShowAll((v) => !v)}>
+            {showAll ? "잠긴 단계 접기" : `잠긴 단계 더 보기 (~${GLITCH.length - 1}단계)`}
+          </button>
+        )}
         <p className="mt-1.5 text-[12px] text-[var(--mute)]">
           적 체력 <b className="text-[var(--text)]">×{g.hp}</b> · 속도 <b className="text-[var(--text)]">×{g.spd}</b>
           {g.bossSec ? (
@@ -424,59 +456,7 @@ function LoadTab({ p, act, busy }: TabProps) {
           )}
         </p>
       </div>
-      {(
-        [
-          ["공용 연구", true, RES_SLOTS, "공동 연구만 · 4칸"],
-          ["세력 연구", false, p.fslots, p.fslots ? `기사단 · 기계공방 · 마도회 연구만 · ${p.fslots}칸` : "상점에서 세력 연구칸을 사면 기사단 · 기계공방 · 마도회 연구를 끼울 수 있어요"],
-        ] as const
-      ).map(([title, gen, max, sub]) => {
-        const mine = p.res.filter((id) => isGen(id) === gen);
-        const on = L.res.filter((id) => isGen(id) === gen).length;
-        return (
-          <div key={title}>
-            <H sub={`장착 ${on}/${max} · ${sub}`}>{title}</H>
-            {mine.length === 0 ? (
-              <p className="text-[12px] text-[var(--dim)]">아직 연 {gen ? "공동" : "세력"} 연구가 없어요 — 연구 탭에서 픽셀 조각으로 열어요</p>
-            ) : (
-              <div className="grid grid-cols-3 gap-1.5">
-                {mine.map((id) => {
-                  const eq = L.res.includes(id);
-                  return (
-                    <Btn key={id} tone={eq ? "cyan" : "ghost"} disabled={busy || (!eq && max === 0)} className="px-2 py-1 text-left" onClick={() => toggle("res", id, max)}>
-                      <b className="block text-[12px]">
-                        {eq ? "■ " : "□ "}
-                        {RES[id].name} <span className="text-[var(--gold)]">Lv.{p.resLv?.[id] ?? 1}</span>
-                      </b>
-                      <span className="block truncate text-[12px] opacity-75">{resDesc(id, p.resLv?.[id] ?? 1)}</span>
-                    </Btn>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        );
-      })}
-      <div>
-        <H sub="치트 코드(보스를 잡을 때마다 3장 중 하나)를 바꾸는 연구 · 1칸 · 상점에서 사요">치트 연구</H>
-        {(p.cheatRes ?? []).length === 0 ? (
-          <p className="text-[12px] text-[var(--dim)]">아직 산 치트 연구가 없어요 — 메뉴 「상점 → 상자 · 소환」 에서 살 수 있어요</p>
-        ) : (
-          <div className="grid grid-cols-2 gap-1.5">
-            {CHEAT_RES.filter((x) => p.cheatRes!.includes(x.id)).map((x) => {
-              const eq = (L.cheat ?? "") === x.id;
-              return (
-                <Btn key={x.id} tone={eq ? "arcane" : "ghost"} disabled={busy} className="px-2 py-1 text-left" onClick={() => void save({ ...L, cheat: eq ? "" : x.id })}>
-                  <b className="block text-[12px]">
-                    {eq ? "■ " : "□ "}
-                    {x.name}
-                  </b>
-                  <span className="block truncate text-[12px] opacity-75">{x.desc}</span>
-                </Btn>
-              );
-            })}
-          </div>
-        )}
-      </div>
+      {/* 2026-10-21: 유물 장착이 연구 · 치트 연구 밑에 묻혀 있던 것 → 오염 단계 바로 밑으로 */}
       <div>
         <H sub={`장착 ${L.relics.filter((x) => !isTownRelic(x)).length}/${slots}${slots < RELIC_SLOTS_MAX ? ` (오염 ${RELIC_SLOT4_WIN} 클리어로 ${RELIC_SLOTS_MAX}칸)` : ""} · 가진 유물 보유 효과: 모든 피해 +${relicPassive(Object.fromEntries(p.relics.map((id) => [id, p.relicLv?.[id] ?? 1])))}% (장착 안 해도)`}>유물 장착</H>
         {p.relics.filter((x) => !isTownRelic(x)).length === 0 ? (
@@ -527,6 +507,59 @@ function LoadTab({ p, act, busy }: TabProps) {
                     </b>
                     <span className="block text-[12px] leading-tight opacity-80">{relicDesc(id, p.relicLv?.[id] ?? 1)}</span>
                   </span>
+                </Btn>
+              );
+            })}
+          </div>
+        )}
+      </div>
+      {(
+        [
+          ["공용 연구", true, RES_SLOTS, "공동 연구만 · 4칸"],
+          ["세력 연구", false, p.fslots, p.fslots ? `기사단 · 기계공방 · 마도회 연구만 · ${p.fslots}칸` : "상점에서 세력 연구칸을 사면 기사단 · 기계공방 · 마도회 연구를 끼울 수 있어요"],
+        ] as const
+      ).map(([title, gen, max, sub]) => {
+        const mine = p.res.filter((id) => isGen(id) === gen);
+        const on = L.res.filter((id) => isGen(id) === gen).length;
+        return (
+          <div key={title}>
+            <H sub={`장착 ${on}/${max} · ${sub}`}>{title}</H>
+            {mine.length === 0 ? (
+              <p className="text-[12px] text-[var(--dim)]">아직 연 {gen ? "공동" : "세력"} 연구가 없어요 — 연구 탭에서 픽셀 조각으로 열어요</p>
+            ) : (
+              <div className="grid grid-cols-3 gap-1.5">
+                {mine.map((id) => {
+                  const eq = L.res.includes(id);
+                  return (
+                    <Btn key={id} tone={eq ? "cyan" : "ghost"} disabled={busy || (!eq && max === 0)} className="px-2 py-1 text-left" onClick={() => toggle("res", id, max)}>
+                      <b className="block text-[12px]">
+                        {eq ? "■ " : "□ "}
+                        {RES[id].name} <span className="text-[var(--gold)]">Lv.{p.resLv?.[id] ?? 1}</span>
+                      </b>
+                      <span className="block truncate text-[12px] opacity-75">{resDesc(id, p.resLv?.[id] ?? 1)}</span>
+                    </Btn>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        );
+      })}
+      <div>
+        <H sub="치트 코드(보스를 잡을 때마다 3장 중 하나)를 바꾸는 연구 · 1칸 · 상점에서 사요">치트 연구</H>
+        {(p.cheatRes ?? []).length === 0 ? (
+          <p className="text-[12px] text-[var(--dim)]">아직 산 치트 연구가 없어요 — 메뉴 「상점 → 상자 · 소환」 에서 살 수 있어요</p>
+        ) : (
+          <div className="grid grid-cols-2 gap-1.5">
+            {CHEAT_RES.filter((x) => p.cheatRes!.includes(x.id)).map((x) => {
+              const eq = (L.cheat ?? "") === x.id;
+              return (
+                <Btn key={x.id} tone={eq ? "arcane" : "ghost"} disabled={busy} className="px-2 py-1 text-left" onClick={() => void save({ ...L, cheat: eq ? "" : x.id })}>
+                  <b className="block text-[12px]">
+                    {eq ? "■ " : "□ "}
+                    {x.name}
+                  </b>
+                  <span className="block truncate text-[12px] opacity-75">{x.desc}</span>
                 </Btn>
               );
             })}

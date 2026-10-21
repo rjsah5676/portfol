@@ -97,6 +97,8 @@ export interface GameViewProps {
   finish?: () => Promise<ReactNode>;
   onExit(): void;
   onRetry?(): void;
+  /** 진 시즌 판: 오염 한 단계 낮춰서 바로 다시 (없으면 버튼 안 보임) */
+  onEasier?(): void;
   /** 오늘의 도전 고스트 (같은 시드 · 같은 규칙 — 기록을 내 판과 같은 tick 까지 따라 돌림) */
   ghost?: { data: DefenseGhost; lo: Loadout | null } | null;
 }
@@ -108,7 +110,7 @@ type Toast = { id: number; text: ReactNode; tone?: "bad" | "good" | "gold" };
 const MUTE_HIDDEN_KEY = "pgd-mute-hidden-recipe";
 type ModalKind = "patch" | "pick" | "recipe" | "mission" | "codex" | "pause" | "dev" | "build" | null;
 
-export default function GameView({ ctrl, names, admin, finish, onExit, onRetry, ghost }: GameViewProps) {
+export default function GameView({ ctrl, names, admin, finish, onExit, onRetry, onEasier, ghost }: GameViewProps) {
   const [, force] = useReducer((x: number) => x + 1, 0);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const viewRef = useRef(newView());
@@ -1461,6 +1463,15 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry, 
                   onClick={onRetry}
                 >
                   다시 하기
+                </Btn>
+              )}
+              {onEasier && !b.result?.win && !b.exp && b.mods.glitch.lv > 0 && (
+                <Btn
+                  className="px-4 py-2.5 text-[14px]"
+                  title="오염 단계를 하나 낮춰서 바로 시작해요 — 보상은 조금 줄지만 강화 재료를 모으기 좋아요"
+                  onClick={onEasier}
+                >
+                  ◀ 오염 {b.mods.glitch.lv - 1}단계로 다시
                 </Btn>
               )}
               <Btn arrow className="px-6 py-2.5 text-[15px]" onClick={onExit}>
