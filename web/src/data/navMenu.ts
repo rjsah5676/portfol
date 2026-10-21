@@ -79,7 +79,7 @@ export const NAV_GROUPS: NavGroup[] = [
     href: "/games",
     title: "Games",
     desc: "어디서든 즐길 수 있는 웹 게임 공간. 지루함을 달래보세요.",
-    tags: ["월루용 게임", "랭킹게임", "웹 게임", "무료 게임", "설치 없이", "실시간 대전"],
+    tags: ["월루용 게임", "랭킹게임", "웹 게임", "무료 게임", "설치 없이", "실시간 대전", "리듬게임", "K-POP", "J-POP"],
     items: [
       {
         href: "/games/rhythm",

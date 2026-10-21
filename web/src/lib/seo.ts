@@ -38,6 +38,7 @@ interface PageMetaOptions {
   description?: string;
   // trailingSlash: true라서 "/about/" 형태로 넘김
   path: string;
+  keywords?: string[];
   noindex?: boolean;
 }
 
@@ -47,12 +48,14 @@ export function pageMeta({
   title,
   description = SITE_DESCRIPTION,
   path,
+  keywords,
   noindex,
 }: PageMetaOptions): Metadata {
   const image = ogImageFor(path, title);
   return {
     title,
     description,
+    ...(keywords && { keywords }),
     alternates: { canonical: path },
     openGraph: {
       type: "website",

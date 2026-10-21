@@ -36,10 +36,16 @@ const EXTRA: Entry[] = [
   { href: "/guest", label: "방명록", desc: "한마디 남기기", icon: "📮", group: "site" },
 ];
 
+// 메뉴 정의에 없는 연관 검색어 (장르·별칭). 띄어쓰기·대소문자는 norm이 무시하므로 "k-pop"/"kpop" 둘 다 적어 둠.
+const EXTRA_KEYWORDS: Record<string, string> = {
+  "/games/rhythm":
+    "리듬게임 rhythm 음악게임 k-pop kpop 케이팝 j-pop jpop 제이팝 j-rock jrock 시티팝 citypop 애니송 anime 보컬로이드 vocaloid 4키 dfjk osu 오스 quaver 퀘이버 mp3 자동채보 beatdash 비트대시",
+};
+
 const ENTRIES: Entry[] = [
   ...NAV_GROUPS.flatMap((g) => [
     { href: g.href, label: `${g.title} 전체`, desc: g.desc, icon: "▦", group: g.label },
-    ...g.items.map((i) => ({ ...i, group: g.label })),
+    ...g.items.map((i) => ({ ...i, group: g.label, keywords: EXTRA_KEYWORDS[i.href] })),
   ]),
   ...EXTRA,
 ];
