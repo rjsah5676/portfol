@@ -18,6 +18,7 @@ import imgDdlToJava from "@/img/menu/ddl-to-java.jpg";
 import imgJsonToJava from "@/img/menu/json-to-java.jpg";
 import imgMybatisLog from "@/img/menu/mybatis-log.jpg";
 import imgRegex from "@/img/menu/regex.jpg";
+import imgTown from "@/img/menu/town.jpg";
 
 // 상단 nav 메뉴 정의 — Nav 드롭다운과 대제목 클릭 시 나오는 목록(허브) 페이지가 같이 씀
 
@@ -127,6 +128,14 @@ export const NAV_GROUPS: NavGroup[] = [
         desc: "합이 10·20이 되게 묶어 지우는 2분 타임어택",
         icon: "🍈",
         featured: true, // PIXEL RESET STORY 내린 자리 (메인 큰 칸 6개 맞춤)
+      },
+      {
+        href: "/games/town",
+        image: imgTown,
+        label: "TABLE TOWN",
+        desc: "마을을 돌아다니다 게임방에 들어가는 캐릭터 보드게임, 빈자리는 봇이",
+        icon: "🏘️",
+        badge: "ALPHA",
       },
       {
         href: "/games/board",
