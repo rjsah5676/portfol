@@ -233,29 +233,29 @@ export const SFX: Record<string, { src: string; vol?: number }> = {
   // v0.3: 레어 · 에픽이 소환될 때 (노말은 summon)
   spawn: { src: "/defense/sfx/spawn.mp3" },
   gameover: { src: "/defense/sfx/gameover.mp3" },
-  // 해피 타운 — PIXEL MARBLE 효과음 그대로 (public/marble/sfx)
-  "town-dice": { src: "/marble/sfx/dice.mp3", vol: 0.8 },
-  "town-step": { src: "/marble/sfx/step.mp3", vol: 0.5 },
-  "town-build": { src: "/marble/sfx/build.mp3", vol: 0.8 },
-  "town-up": { src: "/marble/sfx/upgrade.mp3", vol: 0.8 },
-  "town-landmark": { src: "/marble/sfx/landmark.mp3", vol: 0.8 },
-  "town-coin": { src: "/marble/sfx/coin.mp3", vol: 0.6 },
-  "town-warp": { src: "/marble/sfx/warp.mp3", vol: 0.8 },
-  "town-fest": { src: "/marble/sfx/fest.mp3", vol: 0.8 },
-  "town-seize": { src: "/marble/sfx/acquire.mp3", vol: 0.8 },
-  "town-mud": { src: "/marble/sfx/jail.mp3", vol: 0.7 },
-  "town-encore": { src: "/marble/sfx/skill.mp3", vol: 0.8 },
+  // 해피 타운 — 예전 PIXEL MARBLE 효과음 (public/defense/town/sfx 로 옮김)
+  "town-dice": { src: "/defense/town/sfx/dice.mp3", vol: 0.8 },
+  "town-step": { src: "/defense/town/sfx/step.mp3", vol: 0.5 },
+  "town-build": { src: "/defense/town/sfx/build.mp3", vol: 0.8 },
+  "town-up": { src: "/defense/town/sfx/upgrade.mp3", vol: 0.8 },
+  "town-landmark": { src: "/defense/town/sfx/landmark.mp3", vol: 0.8 },
+  "town-coin": { src: "/defense/town/sfx/coin.mp3", vol: 0.6 },
+  "town-warp": { src: "/defense/town/sfx/warp.mp3", vol: 0.8 },
+  "town-fest": { src: "/defense/town/sfx/fest.mp3", vol: 0.8 },
+  "town-seize": { src: "/defense/town/sfx/acquire.mp3", vol: 0.8 },
+  "town-mud": { src: "/defense/town/sfx/jail.mp3", vol: 0.7 },
+  "town-encore": { src: "/defense/town/sfx/skill.mp3", vol: 0.8 },
 };
 
 /**
  * 해피 타운 그림 (PIXEL MARBLE 「해피 타운」 에셋 재사용)
- *  건물: 오두막 · 2층집 = marble/bld/b0-1 · b0-2, 빌딩 = 그 칸 랜드마크(marble/lm/town-<칸>) — 없으면 b0-3
- *  모서리 특수 칸: marble/deco/sp-*.webp
+ *  건물: 오두막 · 2층집 = defense/town/bld/b0-1 · b0-2, 빌딩 = 그 칸 랜드마크(defense/town/lm/town-<칸>) — 없으면 b0-3
+ *  모서리 특수 칸: defense/town/deco/sp-*.webp
  */
 export const TOWN_ART = {
-  bld: (lv: number) => `/marble/bld/b0-${lv}.webp`,
-  lm: (n: number) => `/marble/lm/town-${n}.webp`,
-  sp: (k: string) => `/marble/deco/sp-${k}.webp`,
+  bld: (lv: number) => `/defense/town/bld/b0-${lv}.webp`,
+  lm: (n: number) => `/defense/town/lm/town-${n}.webp`,
+  sp: (k: string) => `/defense/town/deco/sp-${k}.webp`,
 };
 
 /**

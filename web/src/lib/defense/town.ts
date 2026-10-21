@@ -153,13 +153,13 @@ export const EXP_ASC: { lv: number; name: string; desc: string }[] = [
 ];
 export const ascOn = (town: number, lv: number) => town >= lv;
 
-/** 길 칸(0..25) 이름 · 동네 색 · 마블 랜드마크 그림 번호 (public/marble/lm/town-<n>.webp — 빌딩 단계 그림) */
+/** 길 칸(0..25) 이름 · 동네 색 · 마블 랜드마크 그림 번호 (public/defense/town/lm/town-<n>.webp — 빌딩 단계 그림) */
 export interface TownTile {
   name: string;
   color: string;
   /** 마블 칸 번호 (랜드마크 그림이 있으면) */
   lm?: number;
-  /** 모서리 특수 칸 그림 (public/marble/deco/sp-*.webp) */
+  /** 모서리 특수 칸 그림 (public/defense/town/deco/sp-*.webp) */
   sp?: "start" | "jail" | "fest" | "warp";
 }
 const G = ["#ff9db5", "#8ee08a", "#c79bff", "#9fb3c8", "#ffd84d", "#ff7a45", "#5fd0ff", "#4a6dff"];

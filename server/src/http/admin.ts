@@ -26,8 +26,6 @@ import { h, ms, requireAdmin } from "./util";
  *   GET    /api/admin/poker/settings          · PUT { botBoost }
  * 디펜스 플레이 기록 (밸런스 분석용, 90일)
  *   GET    /api/admin/defense/plays?from=ms&after=커서&limit=500   오래된 것부터 (next 커서로 이어 받기)
- * 픽셀 리셋 스토리 플레이 기록 (밸런스 분석용, 90일 · 회원/손님 모두)
- *   GET    /api/admin/rogue/plays?from=ms&after=커서&limit=500     오래된 것부터 (next 커서로 이어 받기)
  * 데이터 (범용 조회·수정·삭제) — 경로는 기존 Firestore 컬렉션 경로 표기를 그대로 받음
  *   ("score", "rhythm_rankings/{곡_난이도}/scores" …)
  *   GET    /api/admin/docs?path=…
@@ -55,7 +53,6 @@ const TOP_LEVEL = new Set<string>([
   "defense_rank",
   "defense_profile",
   "defense_plays",
-  "rogue_plays",
   "mail",
   "site_config",
   // 메뉴에서 내린 예전 스케치 퀴즈 데이터
@@ -111,7 +108,7 @@ export interface LiveRoom {
   players: string[];
   createdAt: number;
 }
-export type LiveGame = "sketch" | "fight" | "poker" | "rhythm" | "defense" | "marble";
+export type LiveGame = "sketch" | "fight" | "poker" | "rhythm" | "defense";
 
 export interface AdminHooks {
   /** 방명록이 바뀜 → 구독자에게 다시 보냄 */
@@ -169,37 +166,6 @@ export function adminRouter({ db, auth, web, users, points, gateway, cfg, traffi
       return {
         list: docs.map((d) => ({ ...d, at: ms(d.at), end: ms(d.end) })),
         next: docs.length === limit && last ? `${last.at.getTime()}_${last._id}` : null,
-      };
-    })
-  );
-
-  // ───────────── 픽셀 리셋 스토리 플레이 기록 ─────────────
-
-  r.get(
-    "/rogue/plays",
-    h(async (req) => {
-      const q = z
-        .object({
-          from: z.coerce.number().int().min(0).optional(),
-          after: z.string().max(120).optional(),
-          limit: z.coerce.number().int().min(1).max(FETCH_LIMIT).optional(),
-        })
-        .parse(req.query);
-      // 커서 = "받은시각ms_id"
-      let filter: Record<string, unknown> = q.from ? { recvAt: { $gte: new Date(q.from) } } : {};
-      if (q.after) {
-        const i = q.after.indexOf("_");
-        const t = new Date(Number(q.after.slice(0, i)));
-        const id = q.after.slice(i + 1);
-        if (i < 1 || isNaN(t.getTime())) throw bad("커서가 잘못됐어요.");
-        filter = { $or: [{ recvAt: { $gt: t } }, { recvAt: t, _id: { $gt: id } }] };
-      }
-      const limit = q.limit ?? FETCH_LIMIT;
-      const docs = await db.col<{ _id: string; recvAt: Date }>("rogue_plays").find(filter).sort({ recvAt: 1, _id: 1 }).limit(limit).toArray();
-      const last = docs[docs.length - 1];
-      return {
-        list: docs.map((d) => ({ ...d, recvAt: ms(d.recvAt) })),
-        next: docs.length === limit && last ? `${last.recvAt.getTime()}_${last._id}` : null,
       };
     })
   );
@@ -331,50 +297,6 @@ export function adminRouter({ db, auth, web, users, points, gateway, cfg, traffi
     })
   );
 
-  // ───────────── 다이스 타운 초기화 (베타 승급 등) ─────────────
-  // 마블 프로필(별사탕 · 부품 · 캐릭터 · 아이템 · 패스) · 회원 마블 통계를 지움. GP 잔액 · 원장은 그대로.
-  r.get(
-    "/marble/stats",
-    h(async () => {
-      const profiles = await db.col("marble_profile").countDocuments({});
-      const players = await db.col("users").countDocuments({ "stats.marble": { $exists: true } } as never);
-      return { profiles, players };
-    })
-  );
-  r.post(
-    "/marble/reset",
-    h(async (req) => {
-      z.object({ confirm: z.literal("마블 초기화") }).parse(req.body);
-      const out: Record<string, number> = {};
-      out.marble_profile = (await db.col("marble_profile").deleteMany({})).deletedCount ?? 0;
-      out.users = (await db.col("users").updateMany({ "stats.marble": { $exists: true } } as never, { $unset: { "stats.marble": "" } } as never)).modifiedCount;
-      console.warn("[admin] 마블 데이터 초기화", JSON.stringify(out));
-      return out;
-    })
-  );
-
-  // ───────────── 픽셀 순찰대 초기화 (재화 설계 바꿀 때) ─────────────
-  // 순찰대 프로필(장비 · 무기 · 재화 · 별 · 상점 구매 기록) · 판 기록 · 랭킹 · 회원 순찰대 통계를 지움. GP 잔액 · 원장 · 받은 업적은 그대로.
-  r.get(
-    "/patrol/stats",
-    h(async () => {
-      const [profiles, runs, ranks] = await Promise.all(["patrol_profile", "patrol_runs", "patrol_rank"].map((c) => db.col(c).countDocuments({})));
-      const players = await db.col("users").countDocuments({ "stats.patrol": { $exists: true } } as never);
-      return { profiles, runs, ranks, players };
-    })
-  );
-  r.post(
-    "/patrol/reset",
-    h(async (req) => {
-      z.object({ confirm: z.literal("순찰대 초기화") }).parse(req.body);
-      const out: Record<string, number> = {};
-      for (const c of ["patrol_profile", "patrol_runs", "patrol_rank"]) out[c] = (await db.col(c).deleteMany({})).deletedCount ?? 0;
-      out.users = (await db.col("users").updateMany({ "stats.patrol": { $exists: true } } as never, { $unset: { "stats.patrol": "" } } as never)).modifiedCount;
-      console.warn("[admin] 순찰대 데이터 초기화", JSON.stringify(out));
-      return out;
-    })
-  );
-
   // ───────────── 유입 분석 ─────────────
 
   r.get(
@@ -453,7 +375,7 @@ export function adminRouter({ db, auth, web, users, points, gateway, cfg, traffi
   r.post(
     "/live/close",
     h(async (req) => {
-      const body = z.strictObject({ game: z.enum(["sketch", "fight", "poker", "rhythm", "defense", "marble"]), id: z.string().min(1).max(80) }).parse(req.body);
+      const body = z.strictObject({ game: z.enum(["sketch", "fight", "poker", "rhythm", "defense"]), id: z.string().min(1).max(80) }).parse(req.body);
       return { closed: hooks.closeLiveRoom(body.game, body.id) };
     })
   );

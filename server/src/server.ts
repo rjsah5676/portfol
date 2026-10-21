@@ -6,14 +6,10 @@ import { connectDatabase, type Database } from "./db";
 import type { Deps } from "./deps";
 import { registerBoardGames } from "./games/board";
 import { registerDefense } from "./games/defense";
-import { registerMarble, type MarbleOptions } from "./games/marble";
 import { registerFight } from "./games/fight";
 import { registerPoker, type PokerOptions } from "./games/poker";
 import { registerRhythmOnline } from "./games/rhythmOnline";
 import { registerSketch } from "./games/sketch";
-import { registerSurvivor } from "./games/survivor";
-import { registerPatrol } from "./games/patrol";
-import { registerRogue } from "./games/rogue";
 import { createApp } from "./http/app";
 import { restoreLive, saveLive, waitIdle, type LiveGame } from "./live";
 import { Gateway } from "./realtime/gateway";
@@ -38,7 +34,7 @@ export interface AppServer {
 /** HTTP API + 실시간 게이트웨이를 한 포트에 올림. 테스트에서는 auth·db를 바꿔 끼울 수 있음 */
 export async function createAppServer(
   cfg: Config,
-  overrides: { auth?: Auth; db?: Database; web?: WebNotifier; poker?: PokerOptions; marble?: MarbleOptions } = {}
+  overrides: { auth?: Auth; db?: Database; web?: WebNotifier; poker?: PokerOptions } = {}
 ): Promise<AppServer> {
   const db = overrides.db ?? (await connectDatabase(cfg));
   const auth = overrides.auth ?? createAuth(cfg);
@@ -57,10 +53,6 @@ export async function createAppServer(
   const poker = registerPoker(deps, overrides.poker);
   const rhythm = registerRhythmOnline(deps);
   const defense = registerDefense(deps);
-  const marble = registerMarble(deps, overrides.marble);
-  registerSurvivor(deps, marble.meta);
-  registerPatrol(deps);
-  registerRogue(deps);
   const live = { sketch, fight, poker, rhythm };
   const liveGames: Record<string, LiveGame> = { sketch: sketch.live, fight: fight.live, poker: poker.live, rhythm: rhythm.live };
   // 배포 직전에 저장해 둔 방이 있으면 이어받음
@@ -85,12 +77,11 @@ export async function createAppServer(
           players: r.players,
           createdAt: r.createdAt,
         })),
-        marble: marble.adminList(),
       }),
       rhythmFiles: rhythm.router,
       pokerRank: () => poker.wallet.rank(),
       pokerBuyRank: () => poker.wallet.buyRank(),
-      closeLiveRoom: (game, id) => (game === "defense" ? defense : game === "marble" ? marble : live[game]).adminClose(id),
+      closeLiveRoom: (game, id) => (game === "defense" ? defense : live[game]).adminClose(id),
       pokerSettings: () => poker.adminSettings(),
       setPokerSettings: (p) => poker.adminSetSettings(p),
     })
@@ -108,7 +99,6 @@ export async function createAppServer(
     poker.close();
     rhythm.close();
     defense.close();
-    marble.close();
     await gateway.close();
     await new Promise<void>((res) => http.close(() => res()));
     if (!overrides.db) await db.close();

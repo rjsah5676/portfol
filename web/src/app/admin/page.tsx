@@ -12,11 +12,8 @@ import InquiryInbox from "@/components/Admin/InquiryInbox";
 import PostManager from "@/components/Admin/PostManager";
 import DataManager from "@/components/Admin/DataManager";
 import DefenseReset from "@/components/Admin/DefenseReset";
-import MarbleReset from "@/components/Admin/MarbleReset";
-import PatrolReset from "@/components/Admin/PatrolReset";
 import MailSender from "@/components/Admin/MailSender";
 import Economy from "@/components/Admin/Economy";
-import RoguePlays from "@/components/Admin/RoguePlays";
 import NoticeEditor from "@/components/Admin/NoticeEditor";
 import { subscribeInquiries, type Inquiry } from "@/firestore/inquiries";
 import { fetchStudyPostsLive, type StudyPost } from "@/firestore/studyPosts";
@@ -37,7 +34,6 @@ const SECTIONS = [
   { key: "inbox", label: "문의함", desc: "소개 페이지에서 들어온 문의" },
   { key: "posts", label: "글", desc: "개인 공부 · 프로젝트 회고" },
   { key: "rankings", label: "랭킹", desc: "게임별 기록 고치기 · 지우기 · 초기화" },
-  { key: "plays", label: "게임 플레이 기록", desc: "밸런스 분석용 판 기록 (픽셀 리셋 스토리) — 캐릭터 · 끝난 층 · 맞은 원인 · 재화 흐름 · 아이템" },
   { key: "guest", label: "방명록", desc: "방명록 메모 고치기 · 지우기" },
   { key: "rooms", label: "방", desc: "지금 열려 있는 방과 남아 있는 대국 방" },
   { key: "visitors", label: "방문자", desc: "누적 · 날짜별 방문자 수" },
@@ -246,7 +242,6 @@ export default function AdminDashboard() {
         {tab === "members" && <Members />}
         {tab === "mail" && <MailSender />}
         {tab === "economy" && <Economy />}
-        {tab === "plays" && <RoguePlays />}
         {tab === "notice" && <NoticeEditor />}
         {tab === "inbox" && <InquiryInbox items={inquiries} loaded={inqLoaded} />}
         {tab === "posts" && <PostManager posts={posts} loaded={postsLoaded} onChanged={loadPosts} />}
@@ -255,10 +250,6 @@ export default function AdminDashboard() {
             <DataManager key="rankings" groups={G_RANK} />
             <SubHeading>픽셀 운빨 디펜스</SubHeading>
             <DefenseReset />
-            <SubHeading>다이스 타운</SubHeading>
-            <MarbleReset />
-            <SubHeading>픽셀 순찰대</SubHeading>
-            <PatrolReset />
           </div>
         )}
         {tab === "guest" && <DataManager key="guest" groups={G_GUEST} />}

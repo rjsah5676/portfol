@@ -3,7 +3,6 @@ import type { UserDoc } from "./users";
 import { START_MONEY } from "../../web/src/lib/poker/rules";
 import { RHYTHM_CHARTS } from "./http/rhythmCharts";
 import { FIGHT_CHAR_NAMES, type AchGame } from "../../web/src/lib/points";
-import { CHAR as MARBLE_CHAR } from "../../web/src/lib/marble/data";
 
 /*
  * 업적이 보는 숫자를 기존 기록에서 계산 (업적 정의는 web/src/lib/points.ts 의 ACHIEVEMENTS).
@@ -98,67 +97,6 @@ export async function metricsOf(db: Database, uid: string, game: AchGame): Promi
     m["sketch.fakeWin"] = k.fakeWin ?? 0;
     m["sketch.fakeFound"] = k.fakeFound ?? 0;
     m["sketch.relay"] = k.relay ?? 0;
-  }
-
-  if (game === "marble") {
-    const d = (await users.findOne({ _id: uid }, { projection: { "stats.marble": 1 } })) as (Doc & { stats?: { marble?: { games?: number; wins?: number; lm?: number; mono?: number } } }) | null;
-    const s = d?.stats?.marble ?? {};
-    m["marble.games"] = s.games ?? 0;
-    m["marble.wins"] = s.wins ?? 0;
-    m["marble.lm"] = s.lm ?? 0;
-    m["marble.mono"] = s.mono ?? 0;
-    // 판 밖 성장 (games/marble/meta.ts 의 marble_profile)
-    const pf = (await db.col("marble_profile").findOne({ _id: uid } as never, { projection: { chars: 1, pulls: 1 } })) as { chars?: Record<string, { lv: number }>; pulls?: { char?: number; item?: number } } | null;
-    const chars = Object.entries(pf?.chars ?? {}).filter(([id]) => MARBLE_CHAR[id]);
-    m["marble.chars"] = chars.length;
-    m["marble.ssr"] = chars.filter(([id]) => MARBLE_CHAR[id].grade === "SSR" || MARBLE_CHAR[id].grade === "UR").length;
-    m["marble.maxlv"] = chars.filter(([, c]) => c.lv >= 5).length;
-    m["marble.pulls"] = (pf?.pulls?.char ?? 0) + (pf?.pulls?.item ?? 0);
-  }
-
-  if (game === "survivor") {
-    // games/survivor.ts 의 survivor.finish 가 쌓음
-    const d = (await users.findOne({ _id: uid }, { projection: { "stats.survivor": 1 } })) as (Doc & { stats?: { survivor?: { games?: number; wins?: number; kills?: number; bestSec?: number; bestLv?: number; heroWins?: Record<string, number>; stageWins?: Record<string, number> } } }) | null;
-    const s = d?.stats?.survivor ?? {};
-    m["survivor.games"] = s.games ?? 0;
-    m["survivor.wins"] = s.wins ?? 0;
-    m["survivor.kills"] = s.kills ?? 0;
-    m["survivor.bestSec"] = s.bestSec ?? 0;
-    m["survivor.bestLv"] = s.bestLv ?? 0;
-    m["survivor.heroWins"] = Object.keys(s.heroWins ?? {}).length;
-    m["survivor.clockWins"] = s.stageWins?.clock ?? 0;
-  }
-
-  if (game === "rogue") {
-    // games/rogue.ts 의 rogue.finish 가 쌓음
-    type RogueStats = Partial<Record<"runs" | "wins" | "full" | "kills" | "bosses" | "ch" | "floor" | "items" | "codex" | "secrets" | "noHit" | "cheats" | "speed" | "elites" | "specials" | "arcade" | "ignaRuns" | "ignaWins" | "ivanRuns" | "lilyRuns" | "unlocks" | "full_kai" | "full_igna" | "full_ivan" | "full_lily" | "diceRuns" | "full_dice", number>>;
-    const d = (await users.findOne({ _id: uid }, { projection: { "stats.rogue": 1 } })) as (Doc & { stats?: { rogue?: RogueStats } }) | null;
-    const s = d?.stats?.rogue ?? {};
-    for (const k of ["runs", "wins", "full", "kills", "bosses", "ch", "floor", "items", "codex", "secrets", "noHit", "cheats", "speed", "elites", "specials", "arcade", "ignaRuns", "ignaWins", "ivanRuns", "lilyRuns", "unlocks", "full_kai", "full_igna", "full_ivan", "full_lily", "diceRuns", "full_dice"] as const) m[`rogue.${k}`] = s[k] ?? 0;
-  }
-
-  if (game === "patrol") {
-    // games/patrol.ts 의 patrol.finish 가 stats.patrol 을 쌓음 · 진행 · 장비는 patrol_profile
-    const d = (await users.findOne({ _id: uid }, { projection: { "stats.patrol": 1 } })) as (Doc & { stats?: { patrol?: { runs?: number; wins?: number; kills?: number } } }) | null;
-    const s = d?.stats?.patrol ?? {};
-    m["patrol.runs"] = s.runs ?? 0;
-    m["patrol.wins"] = s.wins ?? 0;
-    m["patrol.kills"] = s.kills ?? 0;
-    const pf = (await db.col("patrol_profile").findOne({ _id: uid } as never, { projection: { best: 1, bestSt: 1, stars: 1, boxes: 1, items: 1 } })) as {
-      best?: number;
-      bestSt?: number;
-      stars?: Record<string, boolean[]>;
-      boxes?: number;
-      items?: { g: number; lv: number }[];
-    } | null;
-    m["patrol.stage"] = pf?.bestSt ?? (pf?.best ?? 0) * 5;
-    // 스테이지 별만 셈 (예전 챕터 별 "1" · "2" · "3" 은 빼고)
-    m["patrol.stars"] = Object.entries(pf?.stars ?? {})
-      .filter(([k]) => k.startsWith("s"))
-      .reduce((n, [, v]) => n + v.filter(Boolean).length, 0);
-    m["patrol.boxes"] = pf?.boxes ?? 0;
-    m["patrol.grade"] = Math.max(0, ...(pf?.items ?? []).map((x) => x.g));
-    m["patrol.enh"] = Math.max(0, ...(pf?.items ?? []).map((x) => x.lv));
   }
 
   return m;

@@ -128,7 +128,7 @@ export interface AdminOverview {
   activity: AdminActivity[];
 }
 
-export type LiveGame = "sketch" | "fight" | "poker" | "rhythm" | "defense" | "marble";
+export type LiveGame = "sketch" | "fight" | "poker" | "rhythm" | "defense";
 export interface LiveRoom {
   id: string;
   name: string;
@@ -395,17 +395,3 @@ export const resetDefense = () =>
     auth: true,
   });
 
-export const getMarbleStats = () => api<{ profiles: number; players: number }>("/api/admin/marble/stats", { auth: true });
-export const resetMarble = () =>
-  api<Record<string, number>>("/api/admin/marble/reset", {
-    method: "POST",
-    body: { confirm: "마블 초기화" },
-    auth: true,
-  });
-export const getPatrolStats = () => api<{ profiles: number; runs: number; ranks: number; players: number }>("/api/admin/patrol/stats", { auth: true });
-export const resetPatrol = () =>
-  api<Record<string, number>>("/api/admin/patrol/reset", {
-    method: "POST",
-    body: { confirm: "순찰대 초기화" },
-    auth: true,
-  });

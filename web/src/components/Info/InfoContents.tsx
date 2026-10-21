@@ -5,7 +5,6 @@ import ArtpartProject from "./ArtpartProject";
 import BeatDashProject from "./BeatDashProject";
 import BojProject from "./BojProject";
 import DevLifeProject from "./DevLifeProject";
-import DiceTownProject from "./DiceTownProject";
 import KickeatProject from "./KickeatProject";
 import LuckyDefenseProject from "./LuckyDefenseProject";
 import MimyoProject from "./MimyoProject";
@@ -29,7 +28,6 @@ const PROJECT_PAGES: Record<number, ComponentType> = {
   14: AnimePokerProject,
   15: SketchQuizProject,
   16: LuckyDefenseProject,
-  17: DiceTownProject,
 };
 
 function InfoContents({ idx }: { idx: number }) {
