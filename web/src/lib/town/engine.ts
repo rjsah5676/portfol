@@ -668,7 +668,8 @@ export function mountTown(root: HTMLElement): () => void {
       const used = R.seats.filter(Boolean) as BotSeat[];
       const free = BOT_POOL.filter((x) => !used.includes(x) && !(x.char === ME.char && x.look === ME.look));
       R.seats = R.seats.map((s, i) => (i === 0 ? null : s ?? free.shift() ?? BOT_POOL[0]));
-      toast("빈자리는 봇으로 채웠어요");
+      startGame();
+      return toast("빈자리는 봇으로 채웠어요");
     }
     startGame();
   };
