@@ -20,7 +20,7 @@ export const CHARS: Record<CharId, CharDef> = {
     name: "하루",
     hair: "#c9d3f2",
     body: "#3b4a8c",
-    looks: { base: { name: "기본" }, cos1: { name: "코스튬", hair: "#e9edf8", body: "#7a5fd0" } },
+    looks: { base: { name: "기본" }, cos1: { name: "마법소녀 하루", hair: "#e9edf8", body: "#5b6fd0" } },
     lines: {
       atk: ["간다!", "받아~", "미안, 이건 써야겠어"],
       hit: ["으앗…", "너무해!"],
@@ -34,7 +34,7 @@ export const CHARS: Record<CharId, CharDef> = {
     name: "루루",
     hair: "#f6a3c2",
     body: "#c2416b",
-    looks: { base: { name: "기본" }, cos1: { name: "코스튬", hair: "#ffd0e1", body: "#2f3b7a" } },
+    looks: { base: { name: "기본" }, cos1: { name: "할로윈 파티 루루", hair: "#ffd0e1", body: "#3a1530" } },
     lines: {
       atk: ["받아라~!", "공격이다!", "헤헤 미안~"],
       hit: ["힝… 또야?!", "이건 반칙이야!"],
@@ -78,12 +78,32 @@ export interface BotSeat {
 export const BOT_POOL: BotSeat[] = [
   { char: "ruru", look: "base", nick: "루루", style: "aggro", miss: 0.12 },
   { char: "haru", look: "base", nick: "하루", style: "saver", miss: 0.26 },
-  { char: "ruru", look: "cos1", nick: "밤루루", style: "normal", miss: 0.18 },
-  { char: "haru", look: "cos1", nick: "별하루", style: "aggro", miss: 0.2 },
+  { char: "ruru", look: "cos1", nick: "파티루루", style: "normal", miss: 0.18 },
+  { char: "haru", look: "cos1", nick: "마법하루", style: "aggro", miss: 0.2 },
 ];
 
 /** 순위별 보상 코인 (재화는 코스튬 뽑기에만 씀) */
 export const REWARD = [300, 150, 80, 40] as const;
+
+/*
+ * 코스튬 뽑기 — 재화(코인)를 쓰는 곳은 여기 하나뿐.
+ *  1회 300 · 10회 2,700. 코스튬 확률 3% (한 벌당 1.5%), 나머지는 「꽝 · 코인 +50」.
+ *  천장: 코스튬 없이 60회 → 61회째가 아니라 60회째에 아직 없는 코스튬 확정. 코스튬이 나오면 천장 0 으로.
+ *  이미 가진 코스튬이 또 나오면 코인 1,500 으로 바꿔 줌. (모든 코스튬을 가졌으면 천장 대신 1,500)
+ */
+export const GACHA = {
+  banner: "별빛에 물든 밤",
+  cost1: 300,
+  cost10: 2700,
+  rate: 0.03,
+  pity: 60,
+  lucky: 50,
+  dupRefund: 1500,
+  pool: [
+    { char: "haru" as CharId, look: "cos1" as LookId },
+    { char: "ruru" as CharId, look: "cos1" as LookId },
+  ],
+};
 
 // ---- 내 정보 (지금은 이 기기에만 저장) ----
 export interface Profile {
