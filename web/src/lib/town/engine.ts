@@ -152,7 +152,7 @@ const TEMPLATE = `
     <div class="tt-suitc"><small>지금 무늬</small><b></b><span></span></div>
   </div>
   <div class="tt-hand"></div>
-  <div class="tt-gme"><div class="tt-gme-ring"><svg viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="50" r="46"/></svg><div class="tt-av tt-gme-av"></div><img class="frame" src="${ART.game.frameBig}" alt="" draggable="false"></div><div class="tt-gme-plate"><b class="tt-gme-nm"></b><i class="star"></i><span class="tt-gme-cnt"></span></div></div>
+  <div class="tt-gme"><span class="tt-nexttag">다음</span><div class="tt-gme-ring"><svg viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="50" r="46"/></svg><div class="tt-av tt-gme-av"></div><img class="frame" src="${ART.game.frameBig}" alt="" draggable="false"></div><div class="tt-gme-plate"><b class="tt-gme-nm"></b><i class="star"></i><span class="tt-gme-cnt"></span></div></div>
   <button class="tt-gbtn tt-sortbtn" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4v16M3.5 16.5 7 20l3.5-3.5M17 20V4M13.5 7.5 17 4l3.5 3.5"/></svg><span>무늬순</span></button>
   <div class="tt-gbtns">
     <button class="tt-one" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10v4h3l6 4V6L6 10zM16 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12"/></svg><span>원카드!</span></button>
@@ -1509,8 +1509,6 @@ export function mountTown(root: HTMLElement, opts: TownOpts = {}): () => void {
     const k = (size / 100) * SUIT_NORM[st];
     return `<path d="${FACE_PATH[st]}" transform="translate(${x} ${y}) scale(${k * SUIT_SX[st]} ${k}) translate(-50 -50)"/>`;
   };
-  /** 기능 카드 표시 (원카드 규칙을 몰라도 한눈에) */
-  const FX_TAG: Record<number, string> = { 2: "+2", 14: "+3", 7: "무늬", 11: "건너뜀", 12: "반대", 13: "한 번 더" };
   function faceSVG(c: Card) {
     const st = c.s;
     // 그림은 예전처럼 큰 무늬 하나 (오른쪽 아래) — 숫자 · 작은 무늬는 왼쪽 세로줄
@@ -1524,8 +1522,7 @@ export function mountTown(root: HTMLElement, opts: TownOpts = {}): () => void {
       return ART.joker
         ? `<div class="tt-c jk art ${cls}" style="${style}" data-id="${c.id}"><img class="tt-jkfull" src="${ART.joker}" alt="" draggable="false"><span class="r">JOKER</span></div>`
         : `<div class="tt-c jk ${cls}" style="${style}" data-id="${c.id}"><span class="r">JOKER</span><span class="s2">🤡</span></div>`;
-    const tag = FX_TAG[c.r];
-    return `<div class="tt-c pk ${isRed(c) ? "red" : ""} ${cls}" style="${style}" data-id="${c.id}">${faceSVG(c)}${tag ? `<em class="fx ${c.r === 2 || c.r === 14 ? "atk" : ""}">${tag}</em>` : ""}</div>`;
+    return `<div class="tt-c pk ${isRed(c) ? "red" : ""} ${cls}" style="${style}" data-id="${c.id}">${faceSVG(c)}</div>`;
   }
   const backHTML = (cls = "") =>
     ART.cardBack ? `<div class="tt-back tt-back-art ${cls}"><img src="${ART.cardBack}" alt="" draggable="false"></div>` : `<div class="tt-back ${cls}"></div>`;
@@ -1538,6 +1535,7 @@ export function mountTown(root: HTMLElement, opts: TownOpts = {}): () => void {
     buildOpps();
     renderGame();
     startClock();
+    if (myTurn()) later(() => banner("내 차례!", "mine"), 700);
   }
   function buildOpps() {
     const v = GV;
@@ -1548,7 +1546,7 @@ export function mountTown(root: HTMLElement, opts: TownOpts = {}): () => void {
       if (rp === 0) continue;
       const s = seatInfo(pi);
       const { x, y } = OPP_XY[rp];
-      h += `<div class="tt-opp p${rp}" data-p="${pi}" style="left:${x}px;top:${y}px"><div class="tt-oring"><svg viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="50" r="46"/></svg><div class="tt-av" style="${s ? avBg(s.char, s.look) : ""}"></div><img class="frame" src="${ART.game.frameSm}" alt="" draggable="false"></div><div class="tt-oinfo"><div class="tt-onm">${s ? nm(s.nick) : "?"}${s?.bot ? '<span class="tt-botb">BOT</span>' : ""}${s && s.uid === RM.room?.hostUid ? `<span class="tt-hostcrown sm">${CROWN}</span>` : ""}</div><div class="tt-ocnt"><b></b>장</div></div><div class="tt-ofan"></div><span class="tt-one1" hidden>1장!</span></div>`;
+      h += `<div class="tt-opp p${rp}" data-p="${pi}" style="left:${x}px;top:${y}px"><div class="tt-oring"><svg viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="50" r="46"/></svg><div class="tt-av" style="${s ? avBg(s.char, s.look) : ""}"></div><img class="frame" src="${ART.game.frameSm}" alt="" draggable="false"></div><div class="tt-oinfo"><div class="tt-onm">${s ? nm(s.nick) : "?"}${s?.bot ? '<span class="tt-botb">BOT</span>' : ""}${s && s.uid === RM.room?.hostUid ? `<span class="tt-hostcrown sm">${CROWN}</span>` : ""}</div><div class="tt-ocnt"><b></b>장</div></div><div class="tt-ofan"></div><span class="tt-one1" hidden>1장!</span><span class="tt-nexttag">다음</span></div>`;
     }
     $(".tt-opps").innerHTML = h;
     const s0 = v.me >= 0 ? seatInfo(v.me) : null;
@@ -1571,6 +1569,15 @@ export function mountTown(root: HTMLElement, opts: TownOpts = {}): () => void {
     return ocPlayable(st, c);
   };
   const myTurn = () => !!GV && GV.me >= 0 && GV.turn === GV.me && !GV.over;
+  /** 지금 차례 다음 사람 (진행 방향을 한눈에) */
+  const nextPi = (v: OCView) => {
+    let t = v.turn;
+    for (let k = 0; k < v.n; k++) {
+      t = (t + v.dir + v.n) % v.n;
+      if (!v.out[t]) return t;
+    }
+    return -1;
+  };
   let animBusy = false;
   function renderGame() {
     const v = GV;
@@ -1580,6 +1587,7 @@ export function mountTown(root: HTMLElement, opts: TownOpts = {}): () => void {
       if (!el) continue;
       const n = v.counts[pi];
       el.classList.toggle("turn", v.turn === pi && !v.over);
+      el.classList.toggle("next", !v.over && nextPi(v) === pi && v.turn !== pi);
       el.classList.toggle("out", v.out[pi]);
       el.querySelector(".tt-ocnt b")!.textContent = v.out[pi] ? "파산 " : String(n);
       el.querySelector<HTMLElement>(".tt-one1")!.hidden = n !== 1 || v.out[pi];
@@ -1620,6 +1628,8 @@ export function mountTown(root: HTMLElement, opts: TownOpts = {}): () => void {
     }
     // 나
     $(".tt-gme").classList.toggle("turn", mine);
+    $(".tt-gme").classList.toggle("next", !v.over && v.me >= 0 && nextPi(v) === v.me && !mine);
+    $(".tt-game").classList.toggle("myturn", mine);
     $(".tt-gme").classList.toggle("one", v.me >= 0 && v.counts[v.me] === 1);
     $(".tt-gme-cnt").textContent = v.me >= 0 ? (v.out[v.me] ? "파산" : `${v.counts[v.me]}장`) : "";
     // 손패
@@ -1803,6 +1813,15 @@ export function mountTown(root: HTMLElement, opts: TownOpts = {}): () => void {
     el.remove();
   }
 
+  /** 화면 가운데 큰 글씨 (내 차례 · 방향 반대) */
+  function banner(text: string, kind: string) {
+    root.querySelector(".tt-gbanner")?.remove();
+    const el = document.createElement("div");
+    el.className = `tt-gbanner ${kind}`;
+    el.innerHTML = `<b>${text}</b>`;
+    $(".tt-game").appendChild(el);
+    later(() => el.remove(), 1300);
+  }
   /** 서버가 보낸 판 소식: 사건마다 연출하고 마지막 상태로 그림 (순서대로 하나씩) */
   let gameQ: Promise<void> = Promise.resolve();
   function onGame(m: GameMsg) {
@@ -1835,7 +1854,10 @@ export function mountTown(root: HTMLElement, opts: TownOpts = {}): () => void {
     const turnChanged = GV?.turn !== m.v.turn || GV?.seq !== m.v.seq;
     GV = m.v;
     renderGame();
-    if (turnChanged && myTurn()) sfx("myTurn");
+    if (turnChanged && myTurn()) {
+      sfx("myTurn");
+      banner("내 차례!", "mine");
+    }
   }
   async function playEvent(e: OCEvent, m: GameMsg) {
     const v = GV!;
@@ -1883,10 +1905,15 @@ export function mountTown(root: HTMLElement, opts: TownOpts = {}): () => void {
         bubblePi(e.pi, "건너뜀!", 1100);
         await sleep(200);
         return;
-      case "reverse":
-        toast("방향 반대!", 900);
+      case "reverse": {
+        banner("방향 반대!", "rev");
+        const d = $(".tt-dir");
+        d.classList.remove("spin");
+        void d.offsetWidth;
+        d.classList.add("spin");
         await sleep(200);
         return;
+      }
       case "again":
         bubblePi(e.pi, "한 장 더!", 1000);
         return;

@@ -8132,3 +8132,173 @@
 .tt-rules li small {
   line-height: 1.2;
 }
+/* ---------- 내 차례 · 진행 방향이 한눈에 ---------- */
+.tt-gbanner {
+  position: absolute;
+  left: 50%;
+  top: 214px;
+  transform: translateX(-50%);
+  z-index: 40;
+  pointer-events: none;
+  animation: tt-banner 1.3s ease-out both;
+}
+.tt-gbanner b {
+  display: block;
+  padding: 10px 56px 4px;
+  border-radius: 999px;
+  font-weight: 400;
+  font-size: 58px;
+  white-space: nowrap;
+  color: #5a3300;
+  background: linear-gradient(180deg, #fff3b0, #ffcf3a 55%, #f4a922);
+  border: 4px solid #fff;
+  box-shadow: 0 6px 0 #b9780c, 0 0 40px rgba(255, 200, 60, 0.9);
+  text-shadow: 0 2px 0 rgba(255, 255, 255, 0.7);
+}
+.tt-gbanner.rev b {
+  color: #fff;
+  background: linear-gradient(180deg, #8fc0ff, #3a6fe0);
+  box-shadow: 0 6px 0 #2a4ea0, 0 0 40px rgba(100, 160, 255, 0.9);
+  text-shadow: 0 2px 0 rgba(20, 40, 120, 0.7);
+}
+@keyframes tt-banner {
+  0% {
+    opacity: 0;
+    transform: translateX(-50%) scale(0.5);
+  }
+  18% {
+    opacity: 1;
+    transform: translateX(-50%) scale(1.08);
+  }
+  28% {
+    transform: translateX(-50%) scale(1);
+  }
+  78% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-24px);
+  }
+}
+/* 내 차례: 이름판 · 손패 쪽이 금빛으로 */
+.tt-game.myturn .tt-gme-plate {
+  border-color: #ffcf3a;
+  background: linear-gradient(180deg, #ffe680, #f4ac1e);
+  color: #5a3300;
+  box-shadow: 0 0 18px rgba(255, 200, 60, 0.9);
+  animation: tt-myplate 0.9s ease-in-out infinite alternate;
+}
+.tt-game.myturn .tt-gme-plate .star {
+  background: #fff;
+}
+@keyframes tt-myplate {
+  to {
+    box-shadow: 0 0 30px rgba(255, 210, 80, 1);
+  }
+}
+.tt-game .tt-hand::before {
+  content: "";
+  position: absolute;
+  left: -60px;
+  right: -60px;
+  top: 10px;
+  bottom: -40px;
+  border-radius: 50%;
+  background: radial-gradient(ellipse at 50% 60%, rgba(255, 215, 90, 0.42), rgba(255, 215, 90, 0) 70%);
+  opacity: 0;
+  transition: opacity 0.3s;
+  pointer-events: none;
+}
+.tt-game.myturn .tt-hand::before {
+  opacity: 1;
+}
+/* 다음 차례 표시 */
+.tt-nexttag {
+  position: absolute;
+  display: none;
+  z-index: 6;
+  padding: 3px 12px 1px 10px;
+  border-radius: 999px;
+  background: #3a6fe0;
+  border: 2px solid #fff;
+  color: #fff;
+  font-size: 15px;
+  box-shadow: 0 2px 0 rgba(20, 40, 120, 0.6);
+  white-space: nowrap;
+}
+.tt-nexttag::before {
+  content: "▶ ";
+  font-size: 11px;
+}
+.tt-opp.next .tt-nexttag,
+.tt-gme.next .tt-nexttag {
+  display: block;
+}
+.tt-opp .tt-nexttag {
+  left: 26px;
+  top: -12px;
+}
+.tt-opp.p3 .tt-nexttag {
+  left: auto;
+  right: 26px;
+}
+.tt-gme .tt-nexttag {
+  left: 74px;
+  top: -14px;
+}
+/* 진행 방향 화살표: 또렷하게 · 흐르듯 깜빡 · 반대가 되면 한 바퀴 */
+.tt-game .tt-dir img {
+  opacity: 1;
+  filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.35));
+  animation: tt-dirflow 1.6s ease-in-out infinite;
+}
+.tt-game .tt-dir .a2 {
+  animation-delay: 0.8s;
+}
+@keyframes tt-dirflow {
+  50% {
+    opacity: 0.55;
+    translate: 0 -4px;
+  }
+}
+.tt-game .tt-dir {
+  transition: transform 0.5s ease;
+}
+.tt-game .tt-dir.spin img {
+  animation: tt-dirspin 0.7s ease-out, tt-dirflow 1.6s ease-in-out 0.7s infinite;
+}
+@keyframes tt-dirspin {
+  from {
+    transform: rotate(-200deg) scale(0.6);
+    opacity: 0;
+  }
+}
+/* 오른쪽 화살표는 아래로(오른쪽 사람 → 나): 시계 방향 = 나 → 왼쪽 → 위 → 오른쪽 → 나 */
+.tt-game .tt-dir .a2 {
+  transform: rotate(180deg);
+  left: 862px;
+  top: 404px;
+}
+.tt-game .tt-dir.spin .a2 {
+  animation: tt-dirspin2 0.7s ease-out, tt-dirflow 1.6s ease-in-out 0.7s infinite;
+}
+@keyframes tt-dirspin2 {
+  from {
+    transform: rotate(-20deg) scale(0.6);
+    opacity: 0;
+  }
+}
+/* 조커 글씨는 작게 (큰 숫자 크기를 따라가지 않게) */
+.tt-game .tt-c.jk .r,
+.tt-game .tt-c.jk.big .r {
+  left: 6px;
+  top: 6px;
+  font-size: 13px;
+  font-family: var(--tt-display);
+  font-weight: 400;
+}
+.tt-game .tt-dir .a2 {
+  left: 884px;
+  width: 132px;
+}
