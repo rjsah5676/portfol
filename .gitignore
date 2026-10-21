@@ -26,3 +26,9 @@ Thumbs.db
 desktop.ini
 .idea/
 .vscode/
+
+*.bundle
+
+# TABLE TOWN 작업용 원본 · 옮기기 파일 (게임이 쓰는 건 web/public/town 에 있음)
+web/assets/town-snd/
+web/assets/town-src/
