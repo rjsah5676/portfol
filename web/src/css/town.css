@@ -7589,3 +7589,16 @@
 .tt-lroom .no {
   flex: none;
 }
+/* 입장 버튼: 캐릭터 머리 위로 (문 위쪽) — 가장 안쪽에 서도 얼굴을 안 가리게 */
+.tt .tt-enter {
+  top: 392px;
+}
+.tt .tt-enter {
+  top: 404px;
+}
+.tt .tt-enter span {
+  height: 48px;
+  font-size: 22px;
+  padding: 3px 30px 0;
+  border-image-width: 0 30px;
+}
