@@ -8302,3 +8302,50 @@
   left: 884px;
   width: 132px;
 }
+/* 진행 방향: 테이블 가운데를 도는 금빛 화살표 고리 (시계 방향 = 나 → 왼쪽 → 위 → 오른쪽) */
+.tt-game .tt-dir {
+  left: 0;
+  top: 0;
+  width: 1280px;
+  height: 720px;
+  z-index: 2;
+  opacity: 1;
+  pointer-events: none;
+  transform-origin: 607px 395px;
+}
+.tt-game .tt-dir .rail {
+  fill: none;
+  stroke: rgba(255, 215, 106, 0.28);
+  stroke-width: 22;
+}
+.tt-game .tt-dir .chev path {
+  fill: #ffd76a;
+  stroke: #8a5a00;
+  stroke-width: 2;
+  filter: drop-shadow(0 0 4px rgba(255, 200, 60, 0.8));
+}
+.tt-game .tt-dir.rev {
+  transform: scaleX(-1);
+}
+.tt-game .tt-dir.spin {
+  animation: tt-ringflash 0.8s ease-out;
+}
+@keyframes tt-ringflash {
+  0% {
+    filter: brightness(2.2) drop-shadow(0 0 20px #fff);
+  }
+}
+.tt-game .tt-dir.rev {
+  transform: none;
+}
+.tt-game .tt-dir .rail {
+  stroke: rgba(255, 215, 106, 0.32);
+  stroke-width: 16;
+}
+.tt-game .tt-dir .chev path {
+  fill: #ffe07a;
+  stroke: #7a4a00;
+  stroke-width: 2.5;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 0 5px rgba(255, 200, 60, 0.9));
+}

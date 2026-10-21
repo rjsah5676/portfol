@@ -141,7 +141,10 @@ const TEMPLATE = `
 <div class="tt-screen tt-game" data-s="game" hidden>
   <div class="tt-game-bg"></div>
   <div class="tt-felt"></div>
-  <div class="tt-dir"><img class="a1" src="${ART.game.arrowW}" alt="" draggable="false"><img class="a2" src="${ART.game.arrowR}" alt="" draggable="false"></div>
+  <svg class="tt-dir" viewBox="0 0 1280 720" aria-hidden="true">
+    <ellipse class="rail" cx="607" cy="395" rx="300" ry="142"/>
+    <g class="chev">${Array.from({ length: 14 }, () => `<path d="M-17 -15 L15 0 L-17 15 L-9 0 Z"/>`).join("")}</g>
+  </svg>
   <div class="tt-gtl"><button class="tt-gbtn tt-sqb tt-pause" type="button" aria-label="메뉴"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14M5 12h14M5 17h14"/></svg></button><button class="tt-gbtn tt-rulesbtn" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 5.5c2.8-1 5.6-.8 8.5 1 2.9-1.8 5.7-2 8.5-1V19c-2.8-1-5.6-.8-8.5 1-2.9-1.8-5.7-2-8.5-1z"/><path d="M12 6.5V20"/></svg>규칙</button></div>
   <div class="tt-gturn"><span class="tt-gturn-av tt-av"></span><b class="tt-gturn-tx"></b><span class="tt-gclock"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 1.5M9.5 2.8h5"/></svg><b></b></span></div>
   <div class="tt-gtr"><button class="tt-gbtn tt-gchatbtn" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z"/></svg>채팅</button><button class="tt-gbtn tt-emobtn" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8.5 14.5c1.8 2 5.2 2 7 0M9 9.5h.01M15 9.5h.01"/></svg>이모티콘</button></div>
@@ -1665,6 +1668,7 @@ export function mountTown(root: HTMLElement, opts: TownOpts = {}): () => void {
 
   // 차례 시계: 누구 차례든 띠의 초 + 얼굴 둘레 링이 줄어듦 (차례가 바뀌면 다시 꽉 참)
   let clockRaf = 0;
+  let ringPhase = 0;
   function startClock() {
     cancelAnimationFrame(clockRaf);
     const tick = () => {
@@ -1677,6 +1681,16 @@ export function mountTown(root: HTMLElement, opts: TownOpts = {}): () => void {
       $(".tt-gclock").classList.toggle("hurry", !v.over && left < 4000);
       const off = String(289 * (1 - k));
       for (const c of $$(".tt-oring circle, .tt-gme-ring circle")) c.style.strokeDashoffset = off;
+      // 진행 방향 고리: 화살표가 타원을 따라 지금 방향으로 흐름 (시계 방향 = 나 → 왼쪽 → 위 → 오른쪽)
+      ringPhase += (v.dir > 0 ? 1 : -1) * 0.0016;
+      $$(".tt-dir .chev path").forEach((p, i, all) => {
+        const t = (i / all.length + ringPhase) * Math.PI * 2;
+        const x = 607 + 300 * Math.cos(t),
+          y = 395 + 142 * Math.sin(t);
+        let ang = (Math.atan2(142 * Math.cos(t), -300 * Math.sin(t)) * 180) / Math.PI;
+        if (v.dir < 0) ang += 180;
+        p.setAttribute("transform", `translate(${x.toFixed(1)} ${y.toFixed(1)}) rotate(${ang.toFixed(1)})`);
+      });
       clockRaf = requestAnimationFrame(tick);
     };
     clockRaf = requestAnimationFrame(tick);
