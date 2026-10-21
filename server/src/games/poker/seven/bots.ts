@@ -1,6 +1,7 @@
 import { evaluate, type Card } from "../../../../../web/src/lib/poker/cards";
 import { autoChoice, bestK, kCategory, openRank } from "../../../../../web/src/lib/poker/seven";
 import { moodOf, type Brain, type Cue } from "../personas";
+import { humanThink, mixCue } from "../human";
 import type { SevenAct, SevenBet, SevenHistory, SevenLegal } from "./engine";
 
 /*
@@ -216,6 +217,19 @@ export function chooseSeven(dealt: Card[], brain: Brain): { discard: number; ope
 }
 
 export function decideSeven(v: SevenBotView, brain: Brain): SevenDecision {
+  const d = decideSevenRaw(v, brain);
+  // 생각 시간 · 대사는 패 세기 · 고른 행동이 아니라 상황(받을 돈 · 판 크기)으로만 — 시간과 말로 패가 읽히지 않게
+  const me = v.players.find((x) => x.seat === v.seat)!;
+  const facing = v.legal.toCall > 0;
+  const huge = facing ? v.legal.toCall >= me.stack * 0.8 : v.pot >= me.stack * 1.5;
+  const big = huge || (facing && (v.legal.toCall >= v.pot * 0.4 || v.legal.toCall >= me.stack * 0.35)) || v.pot >= me.stack * 0.6;
+  d.thinkMs = humanThink(brain, { facing, big, huge, early: v.round <= 4 });
+  const kind = d.type === "call" ? "call" : d.type === "die" ? "fold" : "raise";
+  d.cue = mixCue(brain, d.cue, kind, big);
+  return d;
+}
+
+function decideSevenRaw(v: SevenBotView, brain: Brain): SevenDecision {
   const p = moodOf(brain);
   const r = brain.rand;
   const me = v.players.find((x) => x.seat === v.seat)!;
@@ -229,9 +243,15 @@ export function decideSeven(v: SevenBotView, brain: Brain): SevenDecision {
   /** 세기(0~1)에 맞는 베팅을 고름: 작은 것부터 삥/따당 · 쿼터 · 하프 (풀은 게임에서 뺐음) */
   const order: SevenBet[] = ["bbing", "ddadang", "quarter", "half"];
   const avail = order.filter((b) => bets[b] !== undefined);
+  // 세기와 크기는 느슨하게만 묶음: 셀수록 큰 쪽이 조금 더 잦을 뿐 어떤 크기든 다 나옴 — "하프 = 센 패, 삥 = 약한 패"로 안 읽히게
   const pickBet = (s: number): SevenBet | undefined => {
     if (!avail.length) return undefined;
-    const i = clamp(Math.round(s * p.sizing * (avail.length - 1) + (r() - 0.5) * 0.8), 0, avail.length - 1);
+    const k = avail.length;
+    const target = clamp(s * p.sizing, 0, 1);
+    const w = avail.map((_, i) => 0.3 + Math.max(0, 1 - Math.abs((k === 1 ? 0 : i / (k - 1)) - target) * 1.7));
+    let x = r() * w.reduce((a, c) => a + c, 0);
+    let i = 0;
+    while (i < k - 1 && (x -= w[i]) > 0) i++;
     let b = avail[i];
     // 스택의 절반 넘게 들어가는 베팅은 확실할 때만
     while ((bets[b] ?? 0) > me.stack * 0.5 && eq < 0.8 && avail.indexOf(b) > 0) b = avail[avail.indexOf(b) - 1];
@@ -278,7 +298,7 @@ export function decideSeven(v: SevenBotView, brain: Brain): SevenDecision {
       return { type: b, thinkMs: think(1700, 3600), cue: allIn(b) ? "allin" : "raise" };
     }
     if (avail.length && !calledNow && raisesNow <= 1 && n === 1 && eq < 0.3 && !big && looksScary(me.up) && r() < 0.05 * p.bluff) {
-      const b = pickBet(0.5)!;
+      const b = pickBet(r() < 0.5 ? 0.9 : 0.6)!;
       return { type: b, thinkMs: think(2000, 4200), cue: "bigRaise" };
     }
     // 괜찮은 패(기준 조금 아래)는 가끔 되받아 올림 — 너무 콜만 하지 않게 (같은 구에 아직 안 따라갔고, 올림이 하나뿐일 때)
@@ -323,7 +343,8 @@ export function decideSeven(v: SevenBotView, brain: Brain): SevenDecision {
     return { type: b, thinkMs: think(1300, 3000), cue: allIn(b) ? "allin" : "raise" };
   }
   if (eq < 0.4 && r() < 0.1 * p.bluff * (n === 1 ? 1 : 0.4) * (looksScary(me.up) ? 1.7 : 0.8)) {
-    const b = pickBet(0.55)!;
+    // 블러프도 센 패와 같은 크기로
+    const b = pickBet(r() < 0.5 ? (last ? 1 : 0.8) : 0.55)!;
     return { type: b, thinkMs: think(1500, 3400), cue: "bigRaise" };
   }
   // 삥 한 번 값으로 다음 장을 볼 만한지

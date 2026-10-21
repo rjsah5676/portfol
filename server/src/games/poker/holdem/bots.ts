@@ -1,5 +1,6 @@
 import { evaluate, type Card } from "../../../../../web/src/lib/poker/cards";
 import { moodOf, type Brain, type Cue, type Persona } from "../personas";
+import { betFrac, humanThink, mixCue } from "../human";
 import type { ActType, HistoryItem, Legal } from "./engine";
 
 /*
@@ -556,6 +557,9 @@ function preflop(v: BotView, brain: Brain, models: Models): Decision {
       if (pct < push) return raiseTo(v.legal.maxTo);
       return fold();
     }
+    // 덫: 아주 센 패로 가끔 그냥 따라 들어감 (뒤에서 누가 올리면 그때 크게 되받음) — "따라만 들어오면 약한 패"로 안 읽히게
+    if (pct < 0.03 && behind >= 2 && r() < p.slowplay * 0.5)
+      return toCall > 0 ? { type: "call", thinkMs: fast(900, 1900) } : { type: "check", thinkMs: fast(700, 1400) };
     if (pct < open) {
       if (pct < open * 0.25 || r() < p.raiseShare) {
         const fromBlind = v.seat === v.sbSeat || v.seat === v.bbSeat;
@@ -598,6 +602,10 @@ function preflop(v: BotView, brain: Brain, models: Models): Decision {
     }
     // 가끔 가볍게 다시 올림 (콜하기엔 애매한 패로)
     if (pct > R * 0.85 && pct < R * 1.5 && r() < 0.07 * p.reraise * (behind === 0 ? 1.3 : 1)) return raiseTo(v.currentBet * (inBlind ? 3.7 : 3.1) * p.sizing, "bigRaise");
+    // 3벳 블러프: 막는 카드가 있는 패(같은 무늬 A2~A5) · 같은 무늬 연결 패로 가끔 — "다시 올리면 무조건 센 패"로 안 읽히게 (잘 치는 봇일수록)
+    const wheelAce = suited && Math.max(r1, r2) === 12 && Math.min(r1, r2) <= 3;
+    const suitedConn = suited && Math.abs(r1 - r2) === 1 && Math.min(r1, r2) >= 3;
+    if ((wheelAce || suitedConn) && raiseBB <= 4 && r() < 0.1 * p.reraise * (0.5 + 0.5 * brain.skill.adapt)) return raiseTo(v.currentBet * (inBlind ? 3.7 : 3.1) * p.sizing, "bigRaise");
     const callThr = R * 0.85 * sizeAdj * oddsFactor * (0.75 + 0.25 * p.loose) * deepBonus - p.callMargin * 1.5;
     if (pct < callThr) return { type: "call", thinkMs: fast(1000, 2200), cue: "call" };
     return fold();
@@ -683,18 +691,21 @@ function postflop(v: BotView, brain: Brain, models: Models): Decision {
     }
     // 드로우로 되받아침
     if (canRaise && !calledNow && hist.length <= 1 && !river && outs >= 8 && spr > 1.5 && r() < p.semiBluff * 0.7) {
-      const amount = sizeTo(v, v.currentBet + (pot + toCall) * pick(r, 0.6, 0.85));
+      const amount = sizeTo(v, v.currentBet + (pot + toCall) * pick(r, 0.6, 0.95) * p.sizing);
       return { type: "raise", amount, thinkMs: think(1800, 3800), cue: amount === maxTo ? "allin" : "raise" };
     }
     // 순수 블러프 레이즈: 한 명 상대로 아주 가끔, 잘 죽는 사람에게
     if (canRaise && !calledNow && hist.length <= 1 && n === 1 && eq < 0.3 && !big && r() < 0.035 * p.bluff * (models.foldy(live[0].key) / 0.45)) {
-      const amount = sizeTo(v, v.currentBet + (pot + toCall) * pick(r, 0.7, 1));
+      const amount = sizeTo(v, v.currentBet + (pot + toCall) * pick(r, 0.6, 0.95) * p.sizing);
       return { type: "raise", amount, thinkMs: think(2200, 4500), cue: "bigRaise" };
     }
     if (!junk && eq + implied >= need + margin && eq >= floorEq) {
       const hero = big && eq < 0.55;
       return { type: "call", thinkMs: think(big ? 2200 : 1100, big ? 5200 : 2600), cue: toCall >= me.stack ? "allin" : hero ? "heroCall" : "call" };
     }
+    // 띄우기: 자리가 좋을 때 한 명 상대 플랍 벳을 약한 패로 받아 두고, 다음 장에 상대가 체크하면 빼앗음 (아래 floated)
+    if (!river && v.street === 1 && n === 1 && inPosition && !big && eq >= 0.18 && toCall <= pot * 0.6 && r() < 0.2 * p.bluff * clamp(models.bluffy(live[0].key), 0.6, 1.6))
+      return { type: "call", thinkMs: think(1100, 2600), cue: "call" };
     return { type: "fold", thinkMs: think(big ? 1800 : 900, big ? 4200 : 2200), cue: big && eq > 0.3 ? "bigFold" : "fold" };
   }
 
@@ -704,44 +715,74 @@ function postflop(v: BotView, brain: Brain, models: Models): Decision {
     const amount = sizeTo(v, pot * frac * p.sizing);
     return { type: "raise", amount, thinkMs: think(1300, 3200), cue: amount === maxTo ? "allin" : cue };
   };
-  const valueThr = 0.62 + 0.05 * (n - 1) + p.valueShift;
+  // 한 명 상대가 잘 안 죽는 사람(콜만 하는 사람)이면: 얇게도 밸류로 걸고 블러프는 줄임 — 잘 치는 봇일수록
+  const station = n === 1 ? clamp((0.42 - models.foldy(live[0].key)) / 0.22, 0, 1) * brain.skill.adapt : 0;
+  const valueThr = 0.62 + 0.05 * (n - 1) + p.valueShift - 0.05 * station;
   if (eq >= valueThr) {
     // 덫: 아주 센 패, 마른 보드, 뒤에 걸어 줄 사람이 있을 때
     if (!river && eq > 0.85 && wet < 0.5 && !inPosition && r() < p.slowplay) return { type: "check", thinkMs: think(1200, 2600), cue: "check" };
+    // 덫 (자리 · 보드 상관없이 가끔): 센 패로도 넘겨서 "체크하면 약한 패"로 안 읽히게 — 뒤에서 걸면 되받음
+    if (!river && eq > 0.8 && r() < 0.1 + p.slowplay * 0.5) return { type: "check", thinkMs: think(900, 2200) };
+    // 판 조절: 자리가 좋고 애매하게 센 패면 가끔 그냥 넘김
+    if (!river && inPosition && eq < 0.72 && r() < 0.25) return { type: "check", thinkMs: think(900, 2200) };
     if (spr < 1.3) return bet(spr + 0.5, "raise");
     if (river) {
-      if (eq > 0.86) return bet(r() < 0.18 * p.sizing ? pick(r, 1.1, 1.5) : pick(r, 0.7, 1), "bigRaise");
-      return bet(eq > 0.74 ? pick(r, 0.5, 0.7) : pick(r, 0.3, 0.45));
+      // 너츠급: 블러프와 같은 큰 크기 (가끔 올인도 — 리버 올인이 늘 블러프로 읽히지 않게)
+      if (eq > 0.86) {
+        if (n === 1 && spr <= 4 && r() < 0.12 * (0.6 + 0.4 * p.bluff)) return { type: "raise", amount: maxTo, thinkMs: think(2600, 5200), cue: "allin" };
+        return bet(betFrac(brain, 3, wet, true), "bigRaise");
+      }
+      return bet(betFrac(brain, 3, wet, false));
     }
-    return bet(wet > 0.45 ? pick(r, 0.62, 0.8) : pick(r, 0.33, 0.55), "raise");
+    return bet(betFrac(brain, v.street, wet, false), "raise");
   }
   // 드로우로 먼저 침
-  if (!river && outs >= 8 && r() < p.semiBluff * (initiative ? 1.4 : 1) * (n === 1 ? 1 : 0.6)) return bet(pick(r, 0.5, 0.7), "raise");
+  if (!river && outs >= 8 && r() < p.semiBluff * (initiative ? 1.4 : 1) * (n === 1 ? 1 : 0.6)) return bet(betFrac(brain, v.street, wet, false), "raise");
   // 블러프: 주도권·자리·상대 수·상대가 얼마나 잘 죽는지
   // 리버에 다 놓친 패로 한 명 상대 올인 블러프 (드물게, 공격적 · 흥분한 봇일수록) — 판이 확 뜨거워지는 순간
   if (river && n === 1 && eq < 0.22 && spr <= 4 && r() < 0.045 * p.bluff * (1 + brain.heat) * (inPosition ? 1.3 : 0.8))
     return { type: "raise", amount: maxTo, thinkMs: think(2600, 5200), cue: "allin" };
   if (eq < 0.42) {
     const foldy = live.reduce((a, x) => a * clamp(models.foldy(x.key) / 0.45, 0.5, 1.6), 1);
-    const base = initiative ? (v.street === 1 ? 0.55 * p.cbet : 0.38 * p.cbet) : 0.16;
-    const crowd = n === 1 ? 1 : n === 2 ? 0.35 : 0.1;
-    const freq = base * p.bluff * crowd * (inPosition ? 1.2 : 0.85) * (river ? 0.6 : 1) * (1 + (foldy - 1) * brain.skill.adapt);
+    // 앞 구간에 상대 벳을 받아 두었고(띄우기) 이번엔 상대가 체크로 넘김 → 빼앗을 자리
+    const floated =
+      n === 1 &&
+      v.history.some((h) => h.street === v.street - 1 && h.seat === v.seat && h.type === "call") &&
+      v.history.some((h) => h.street === v.street && h.seat !== v.seat && h.type === "check");
+    // 무서운 카드: 턴 · 리버에 보드 위로 높은 카드(K · A)가 떨어졌거나 같은 무늬 3장이 막 깔림 → 먼저 걸던 사람이 이어 걸기 좋은 자리
+    const nc = v.board[v.board.length - 1];
+    const prevBoard = v.board.slice(0, -1);
+    const scare =
+      v.street >= 2 &&
+      (((nc >> 2) >= 11 && (nc >> 2) > Math.max(...prevBoard.map((c) => c >> 2))) ||
+        (v.board.filter((c) => (c & 3) === (nc & 3)).length === 3 && prevBoard.filter((c) => (c & 3) === (nc & 3)).length === 2));
+    // (거는 판의 4분의 1쯤은 약한 패가 섞이게 — 걸면 무조건 센 패로 안 읽히게)
+    const base = initiative ? (v.street === 1 ? 0.68 * p.cbet : 0.48 * p.cbet) * (scare ? 1.35 : 1) : floated ? 0.55 : 0.24;
+    const crowd = n === 1 ? 1 : n === 2 ? 0.5 : 0.18;
+    const freq = base * p.bluff * crowd * (inPosition ? 1.2 : 0.85) * (river ? 0.6 : 1) * (1 + (foldy - 1) * brain.skill.adapt) * (1 - 0.6 * station);
     if (r() < freq) {
-      if (river) return bet(pick(r, 0.66, 1), "bigRaise");
-      return bet(v.street === 1 ? (wet > 0.45 ? pick(r, 0.5, 0.66) : pick(r, 0.3, 0.45)) : pick(r, 0.6, 0.75), "raise");
+      // 크기는 밸류와 같은 메뉴 (리버는 너츠와 같은 큰 크기)
+      if (river) return bet(betFrac(brain, 3, wet, true), "bigRaise");
+      return bet(betFrac(brain, v.street, wet, false), "raise");
     }
   }
   // 애매한 패로 먼저 작게 찔러 봄 (자리가 나쁠 때, 상대가 적을 때) — 늘 체크만 하지 않게
-  if (!inPosition && n <= 2 && eq >= 0.45 && r() < 0.12 * (0.6 + 0.4 * p.loose)) return bet(pick(r, 0.25, 0.4));
+  // 중간 패도 얇게 · 막으려고 걸기도 함 (상대가 적을 때) — "거는 건 센 패나 뻥뿐"으로 안 읽히게
+  if (n <= 2 && eq >= 0.45 && r() < (inPosition ? 0.26 : 0.18) * (0.6 + 0.4 * p.loose)) return bet(betFrac(brain, v.street, wet, false));
   return { type: "check", thinkMs: think(800, 2000) };
 }
 
 export function decideHoldem(v: BotView, brain: Brain, models: Models): Decision {
   const d = v.street === 0 ? preflop(v, brain, models) : postflop(v, brain, models);
-  // 큰 결정은 가끔 오래 고민 (사람처럼 뜸 들이기 · 시간 제한 안에서 잘림)
-  if ((d.cue === "allin" || d.cue === "heroCall" || d.cue === "bigFold") && brain.rand() < 0.3) d.thinkMs = Math.round(d.thinkMs * 1.6);
-  // 규칙 밖의 결정이 나오지 않게 한 번 더 맞춤
   const lg = v.legal;
+  // 생각 시간 · 대사는 패 세기 · 고른 행동이 아니라 상황(받을 돈 · 판 크기)으로만 — 시간과 말로 패가 읽히지 않게
+  const me = v.players.find((x) => x.seat === v.seat)!;
+  const facing = lg.toCall > 0;
+  const huge = facing ? lg.toCall >= me.stack * 0.8 : v.pot >= me.stack * 1.5 && v.street > 0;
+  const big = huge || (facing && (lg.toCall >= v.pot * 0.45 || lg.toCall >= me.stack * 0.35)) || (v.street > 0 && v.pot >= me.stack * 0.6);
+  d.thinkMs = humanThink(brain, { facing, big, huge, early: v.street === 0 });
+  if (d.type === "call" || d.type === "raise" || d.type === "fold") d.cue = mixCue(brain, d.cue, d.type, big);
+  // 규칙 밖의 결정이 나오지 않게 한 번 더 맞춤
   if (d.type === "check" && !lg.canCheck) return { ...d, type: lg.toCall > 0 ? "fold" : "check" };
   if (d.type === "fold" && lg.canCheck) return { ...d, type: "check", cue: undefined };
   if (d.type === "call" && lg.canCheck) return { ...d, type: "check", cue: undefined };
