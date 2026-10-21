@@ -8074,3 +8074,61 @@
   font-size: 11.5px;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
 }
+/* 규칙 창: 아래 버튼을 덮지 않게 한 화면에 다 들어가게 */
+.tt-rules {
+  top: 74px;
+  max-height: 446px;
+  padding: 12px 16px 14px;
+  background: #1c1240;
+}
+.tt-rules header {
+  margin-bottom: 6px;
+}
+.tt-rules header b {
+  font-size: 21px;
+}
+.tt-rules .lead {
+  font-size: 15px;
+  margin-bottom: 6px;
+}
+.tt-rules li {
+  padding: 3px 0;
+  font-size: 15px;
+}
+.tt-rules .c {
+  width: 26px;
+  height: 32px;
+  font-size: 16px;
+}
+.tt-rules .tip {
+  margin-top: 6px;
+  font-size: 13.5px;
+  line-height: 1.45;
+}
+.tt-rules {
+  width: 560px;
+  max-height: 430px;
+  overflow: hidden;
+}
+.tt-rules ul {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  column-gap: 14px;
+}
+.tt-rules li {
+  grid-template-columns: 30px 1fr;
+  grid-template-rows: auto auto;
+  column-gap: 8px;
+  row-gap: 0;
+  border-bottom: 0;
+  padding: 4px 0;
+}
+.tt-rules li .c {
+  grid-row: 1 / 3;
+}
+.tt-rules li b {
+  line-height: 1.15;
+}
+.tt-rules li small {
+  line-height: 1.2;
+}
