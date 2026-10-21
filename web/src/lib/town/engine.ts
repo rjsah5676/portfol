@@ -527,14 +527,6 @@ export function mountTown(root: HTMLElement, opts: TownOpts = {}): () => void {
     );
   };
   // 캐릭터 화면: 풀버전 일러(배경 붙여서) 크게 + 가진 모습 고르기
-  const fullHTML = (c: CharId, l: LookId) => {
-    const a = ART.char[c]?.[l];
-    const bg = a?.bg ?? ART.fullBg;
-    const k = lookOf(c, l);
-    return `<div class="tt-full" style="${bg ? `background-image:url(${bg})` : `background:linear-gradient(160deg,${k.hair}55,#26304f)`}">${
-      a?.full ? `<img src="${a.full}" alt="" draggable="false">` : `<div class="tt-full-ph">${sdHTML(c, l)}<small>풀버전 일러 자리</small></div>`
-    }</div>`;
-  };
   // 캐릭터 선택 · 스킨 화면 (GPT 시안 mock-char-skin-v1 그대로): 왼쪽 큰 일러 + 소개, 오른쪽 카드 목록 + 큰 버튼
   const csBase = (title: string, kind: "char" | "skin") => {
     const ov = document.createElement("div");
