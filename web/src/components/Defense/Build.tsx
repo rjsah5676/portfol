@@ -6,15 +6,15 @@ import { BOSSES } from "@/lib/defense/enemies";
 import { PATCHES } from "@/lib/defense/meta";
 import { CHEAT, CHEAT_TIER_COLOR, CHEAT_TIER_NAME } from "@/lib/defense/cheats";
 import { RELIC, RES, relicDesc, resDesc } from "@/lib/defense/progress";
-import type { Board } from "@/lib/defense/sim";
+import { CELLS, usable, type Board } from "@/lib/defense/sim";
 import { CURSES, EXP_ASC, EXP_RELIC, SQUADS, TOWN_NAME, ascOn } from "@/lib/defense/town";
-import { FACTION_NAME } from "@/lib/defense/units";
+import { FACTION_COLOR, FACTION_NAME, GRADE_COLOR, GRADE_NAME, UNIT, type Faction } from "@/lib/defense/units";
 import { FactionIcon, Icon, Modal } from "./ui";
 import { RelicIcon } from "./Hub";
 import { ExpRelicIcon, Heart } from "./Expedition";
 
 /*
- * 빌드 창 — 위쪽 줄에 늘 둘 필요 없는 정보 (시작 치트 · 치트 코드 · 장착 유물 · 연구 · 원정 유물 · 저주 · 단계 비틀기)
+ * 빌드 창 — 위쪽 줄에 늘 둘 필요 없는 정보 (내 유닛 구성 · 시작 치트 · 치트 코드 · 장착 유물 · 연구 · 원정 유물 · 저주 · 단계 비틀기)
  * 위쪽 줄 「빌드」 버튼 · 단축키 B
  */
 
@@ -51,6 +51,65 @@ const box = (c: string, child: ReactNode) => (
   </span>
 );
 
+/** 내 유닛 구성 — 세력 비율(필드 · 보관함 따로, 순혈은 필드만 셈) · 등급별 수 */
+function Roster({ b }: { b: Board }) {
+  const FS: Faction[] = ["knight", "mech", "arcane", "hidden"];
+  const field: Record<string, number> = {},
+    bench: Record<string, number> = {},
+    grade: number[] = [0, 0, 0, 0, 0, 0, 0];
+  let nf = 0,
+    nb = 0;
+  b.cells.forEach((c, i) => {
+    if (!c.def || !usable(b, i)) return;
+    const d = UNIT[c.def];
+    const k = c.units.length;
+    if (i < CELLS) {
+      field[d.faction] = (field[d.faction] ?? 0) + k;
+      nf += k;
+    } else {
+      bench[d.faction] = (bench[d.faction] ?? 0) + k;
+      nb += k;
+    }
+    grade[d.grade] += k;
+  });
+  const pct = (n: number) => (nf ? Math.round((n / nf) * 100) : 0);
+  return (
+    <div>
+      <p className="mb-1.5 text-[13px] font-bold text-[var(--dim)]">
+        내 유닛 구성 <span className="font-normal">· 필드 {nf}기{nb ? ` · 보관함 ${nb}기` : ""} (비율은 필드 기준 — 순혈도 필드만 셈)</span>
+      </p>
+      {/* 필드 비율 막대 */}
+      <div className="px-inset flex h-4 w-full overflow-hidden">
+        {FS.map((f) => (field[f] ? <span key={f} style={{ width: `${(field[f] / nf) * 100}%`, background: FACTION_COLOR[f] }} title={`${FACTION_NAME[f]} ${pct(field[f])}%`} /> : null))}
+      </div>
+      <div className="mt-1.5 grid grid-cols-4 gap-2">
+        {FS.map((f) => (
+          <div key={f} className="px-inset flex items-center gap-1.5 px-2 py-1.5 text-[12px]" style={{ opacity: field[f] || bench[f] ? 1 : 0.45 }}>
+            <FactionIcon f={f} size={12} />
+            <span className="min-w-0">
+              <b style={{ color: FACTION_COLOR[f] }}>{FACTION_NAME[f]}</b>{" "}
+              <b className="text-white">{pct(field[f] ?? 0)}%</b>
+              <span className="block text-[var(--mute)]">
+                필드 {field[f] ?? 0}
+                {bench[f] ? ` · 보관함 ${bench[f]}` : ""}
+              </span>
+            </span>
+          </div>
+        ))}
+      </div>
+      <p className="mt-1.5 flex flex-wrap gap-x-3 text-[12px] text-[var(--mute)]">
+        {grade.map((n, g) =>
+          n ? (
+            <span key={g}>
+              <b style={{ color: GRADE_COLOR[g] }}>{GRADE_NAME[g]}</b> {n}
+            </span>
+          ) : null
+        )}
+      </p>
+    </div>
+  );
+}
+
 export function BuildModal({ b, onClose }: { b: Board; onClose(): void }) {
   const patch = PATCHES.find((p) => p.id === b.patch);
   const x = b.exp;
@@ -79,6 +138,8 @@ export function BuildModal({ b, onClose }: { b: Board; onClose(): void }) {
             </span>
           )}
         </div>
+
+        <Roster b={b} />
 
         <Section title="시작 치트 · 치트 코드" empty="아직 없어요">
           {[

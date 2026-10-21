@@ -708,7 +708,7 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry, 
           onClick={() => setModal("build")}
           className="px-btn flex h-full shrink-0 items-center gap-1.5 px-2 text-[12px] font-bold whitespace-nowrap"
           style={{ "--c": "#2a2350" } as React.CSSProperties}
-          title="빌드 — 시작 치트 · 치트 코드 · 유물 · 연구 · 원정 유물 (B)"
+          title="빌드 — 내 유닛 구성(세력 비율) · 시작 치트 · 치트 코드 · 유물 · 연구 · 원정 유물 (B)"
         >
           {b.stage === "town" ? (
             <b className="text-[#ffd36b]">T{b.mods.town}</b>
