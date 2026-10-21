@@ -98,6 +98,7 @@ const TEMPLATE = `
   <div class="tt-ui tt-leftcol">
     <button class="tt-colbtn tt-panel tt-open-shop" type="button">${icon("shop")}뽑기<i class="tt-badge"></i></button>
     <button class="tt-colbtn tt-panel tt-open-char" type="button">${icon("char")}캐릭터</button>
+    <button class="tt-colbtn tt-panel tt-open-skin" type="button"><span class="tt-ico tt-ico-skin">👗</span>스킨</button>
     <button class="tt-colbtn tt-panel" type="button" data-soon="미션">${icon("mission")}미션</button>
   </div>
   <button class="tt-ui tt-panel tt-sq tt-chat" type="button" aria-label="채팅" data-soon="채팅">${icon("chat")}<i class="tt-badge"></i></button>
@@ -114,22 +115,22 @@ const TEMPLATE = `
 <div class="tt-screen tt-room" data-s="room" hidden>
   <div class="tt-room-bg"></div>
   <button class="tt-backbtn tt-panel" type="button">${BACK}<span>마을로</span></button>
-  <div class="tt-panel tt-roomtitle"><div class="tt-t">원카드 대기실</div><div class="tt-n"><span class="tt-roomno"></span><button type="button" class="tt-roomlist">방 목록</button></div></div>
+  <div class="tt-roomtitle"><div class="tt-t">원카드 대기실</div><button type="button" class="tt-n tt-roomcopy" data-nosfx aria-label="방 번호 복사"><span class="tt-roomno"></span><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="11" height="12" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h8"/></svg></button></div>
   <div class="tt-ui tt-money tt-money-room"></div>
-  <div class="tt-rcount" aria-label="인원">👥 <b>1/4</b></div>
+  <div class="tt-rcount" aria-label="인원"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.6-3.8 3.2-6 6.5-6s5.9 2.2 6.5 6z"/><circle cx="17" cy="9" r="2.8"/><path d="M15.5 14.3c2.9-.4 5.3 1.4 6 4.7h-4.4"/></svg><b>1/4</b></div>
   <div class="tt-rtable"></div>
   <div class="tt-rseats"></div>
   <div class="tt-panel tt-rinfo">
     <div class="tt-rtabs" role="tablist"><button type="button" class="on" data-rt="info">게임 정보</button><button type="button" data-rt="set">방 설정</button></div>
     <div class="tt-rpage" data-rp="info">
-      <h3>원카드 <small>2~4명 · 약 5분</small></h3>
+      <h3>원카드 <small><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c.8-4.4 4-7 8-7s7.2 2.6 8 7z"/></svg>2~4명</small><small><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2" fill="none" stroke="#2a1d48" stroke-width="2.2" stroke-linecap="round"/></svg>5분</small></h3>
       <ol>
         <li>바닥 카드와 <b>무늬나 숫자</b>가 같은 카드를 내요. 먼저 다 털면 1등!</li>
         <li>공격 카드: <b>2</b>는 +2장, <b>A</b>는 +3장, <b>조커</b>는 +5장. 같은 숫자나 더 센 공격으로 받아칠 수 있어요.</li>
         <li><b>7</b> 무늬 바꾸기 · <b>J</b> 건너뛰기 · <b>Q</b> 방향 반대 · <b>K</b> 한 장 더</li>
         <li>1장 남으면 「원카드!」를 눌러요. 남이 안 누르면 내가 잡을 수 있어요.</li>
       </ol>
-      <div class="tt-rowx"><span>순위 보상</span><div class="tt-rewards">${REWARD.map((v, i) => `<span><b>${i + 1}등</b>${icon("coin")}${v}</span>`).join("")}</div></div>
+      <div class="tt-rowx"><span>순위 보상</span><div class="tt-rewards">${REWARD.map((v, i) => `<span class="r${i + 1}"><b>${i === 0 ? "🏆" : `${i + 1}등`}</b>${icon("coin")}${v}</span>`).join("")}</div></div>
     </div>
     <div class="tt-rpage" data-rp="set" hidden>
       <div class="tt-rowx"><span>모드</span><div class="tt-modes"><button class="on" type="button">일반 판</button><button type="button" disabled>빠른 판</button></div></div>
@@ -139,8 +140,9 @@ const TEMPLATE = `
       <p class="tt-rnote">빈자리가 있으면 게임 시작 때 봇이 자동으로 앉아요.</p>
     </div>
   </div>
-  <form class="tt-rchat"><input type="text" maxlength="40" placeholder="대기실에 한마디…" aria-label="채팅 입력"><button type="submit">${icon("chat")}</button></form>
-  <button class="tt-start" type="button"><span>게임 시작</span><i>${CHEV}</i></button>
+  <form class="tt-rchat"><input type="text" maxlength="40" placeholder="메시지를 입력하세요…" aria-label="채팅 입력"><button type="submit" aria-label="보내기">😊</button></form>
+  <div class="tt-rbar"><button type="button" class="tt-rb-inv"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 14a4.5 4.5 0 0 0 6.4 0l3-3a4.5 4.5 0 0 0-6.4-6.4l-1 1"/><path d="M14 10a4.5 4.5 0 0 0-6.4 0l-3 3a4.5 4.5 0 0 0 6.4 6.4l1-1"/></svg>초대하기</button><button type="button" class="tt-rb-bot"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.6-3.8 3.2-6 6.5-6s5.9 2.2 6.5 6z"/><circle cx="17" cy="9" r="2.8"/><path d="M15.5 14.3c2.9-.4 5.3 1.4 6 4.7h-4.4"/></svg>봇 채우기</button><button type="button" class="tt-rb-seat"><b>+</b>자리 추가</button></div>
+  <button class="tt-start" type="button"><span>게임 시작</span><i>▶</i></button>
 </div>
 
 <div class="tt-screen tt-game" data-s="game" hidden>
@@ -176,7 +178,7 @@ const TEMPLATE = `
     <div class="tt-gbanner"><span>☾ ${GACHA.banner}</span></div>
     <div class="tt-gsub">특별한 코스튬을 만나 보세요!</div>
     <div class="tt-gcards"></div>
-    <div class="tt-gpity"><div class="tt-gpity-row"><span>천장</span><b class="tt-gpity-n"></b><span>/ ${GACHA.pity}</span><i>🎁</i></div><div class="tt-gpity-bar"><i></i></div><small>${GACHA.pity}회 안에 코스튬 확정! · 가진 코스튬은 안 나와요</small></div><div class="tt-gdone">🎉 이 배너 코스튬을 전부 모았어요</div>
+    <div class="tt-gpity" title="${GACHA.pity}회 안에 픽업 코스튬 확정"><span>천장</span><div class="tt-gpity-bar"><i></i></div><span><b class="tt-gpity-n"></b>/${GACHA.pity}</span></div><div class="tt-gdone">✓ 이미 가진 코스튬이에요 · 다른 픽업을 골라 보세요</div>
   </div>
   <div class="tt-gpull">
       <button class="tt-g1" type="button"><i class="shine"></i><b>1회 뽑기</b><span>${icon("coin", "tt-coin")}${GACHA.cost1}</span></button>
@@ -221,7 +223,7 @@ export function mountTown(root: HTMLElement, opts: TownOpts = {}): () => void {
     const b = (e.target as HTMLElement).closest("button");
     if (!b || b.disabled || b.dataset.nosfx !== undefined) return;
     if (b.closest(".tt-hand, .tt-gpull, .tt-gstage")) return; // 카드 · 뽑기는 따로 소리
-    if (b.matches(".tt-x, .tt-backbtn")) sfx("close");
+    if (b.matches(".tt-x, .tt-backbtn")) sfx("tab", { rate: 0.85 });
     else if (b.matches("[data-rt], .tt-cpick, .tt-gcard")) sfx("tab");
     else sfx("click");
   };
@@ -533,52 +535,106 @@ export function mountTown(root: HTMLElement, opts: TownOpts = {}): () => void {
       a?.full ? `<img src="${a.full}" alt="" draggable="false">` : `<div class="tt-full-ph">${sdHTML(c, l)}<small>풀버전 일러 자리</small></div>`
     }</div>`;
   };
+  // 캐릭터 선택 · 스킨 화면 (GPT 시안 mock-char-skin-v1 그대로): 왼쪽 큰 일러 + 소개, 오른쪽 카드 목록 + 큰 버튼
+  const csBase = (title: string, kind: "char" | "skin") => {
+    const ov = document.createElement("div");
+    ov.className = `tt-cs tt-cs-${kind}`;
+    ov.innerHTML = `<div class="tt-cs-bg"></div><div class="tt-cs-art"></div><button type="button" class="tt-backbtn tt-cs-back">${BACK}<span>뒤로</span></button><div class="tt-cs-title">${title}</div><div class="tt-cs-intro"></div><div class="tt-cs-panel"><div class="tt-cs-cards"></div><div class="tt-cs-info"></div><div class="tt-cs-btns"></div></div>`;
+    root.appendChild(ov);
+    sfx("open");
+    ov.querySelector<HTMLElement>(".tt-cs-back")!.onclick = () => ov.remove();
+    return ov;
+  };
+  const tagsHTML = (t: string[] = []) => t.map((x) => `<span>${x}</span>`).join("");
+  const csArt = (ov: HTMLElement, c: CharId, l: LookId) => {
+    const a = artOf(c, l);
+    const bg = ART.char[c]?.[l]?.bg ?? ART.fullBg;
+    const bgEl = ov.querySelector<HTMLElement>(".tt-cs-bg")!;
+    bgEl.style.backgroundImage = bg ? `url(${bg})` : "";
+    const art = ov.querySelector<HTMLElement>(".tt-cs-art")!;
+    if (art.dataset.k !== `${c}:${l}`) {
+      art.dataset.k = `${c}:${l}`;
+      art.innerHTML = a.full ? `<img src="${a.full}" alt="" draggable="false">` : sdHTML(c, l);
+      art.classList.remove("in");
+      void art.offsetWidth;
+      art.classList.add("in");
+    }
+  };
   const openChar = () => {
-    let selC: CharId = ME.char,
-      selL: LookId = ME.look;
-    const ov = overlay(`<div class="tt-charscr"><div class="tt-charview"></div><div class="tt-charside"><h2></h2><p class="tt-charsub"></p><div class="tt-cgrid"></div><div class="tt-row"><button type="button" class="tt-x">닫기</button><button type="button" class="pri tt-use">장착</button></div></div></div>`);
-    ov.classList.add("wide");
+    let sel: CharId = ME.char;
+    const ov = csBase("캐릭터 선택", "char");
     const draw = () => {
-      ov.querySelector(".tt-charview")!.innerHTML = fullHTML(selC, selL);
-      ov.querySelector("h2")!.textContent = CHARS[selC].name;
-      const own = selL === "base" || ME.owned.includes(`${selC}:${selL}`);
-      ov.querySelector(".tt-charsub")!.textContent = `${CHARS[selC].looks[selL].name}${own ? "" : " · 뽑기에서 얻을 수 있어요"}`;
-      const use = ov.querySelector<HTMLButtonElement>(".tt-use")!;
-      use.disabled = !own || (selC === ME.char && selL === ME.look);
-      use.textContent = selC === ME.char && selL === ME.look ? "장착 중" : own ? "장착" : "뽑기 하러 가기";
-      use.disabled = selC === ME.char && selL === ME.look;
-      const opts: string[] = [];
-      for (const c of Object.values(CHARS))
-        for (const l of Object.keys(c.looks) as LookId[]) {
-          const has = l === "base" || ME.owned.includes(`${c.id}:${l}`);
-          opts.push(
-            `<button type="button" class="tt-cpick ${selC === c.id && selL === l ? "on" : ""} ${has ? "" : "locked"} ${ME.char === c.id && ME.look === l ? "using" : ""}" data-c="${c.id}" data-l="${l}"><span class="tt-cpimg" style="${(artOf(c.id, l).bg ?? ART.fullBg) ? `background-image:url(${artOf(c.id, l).bg ?? ART.fullBg})` : ""}">${artOf(c.id, l).sd ? `<img src="${artOf(c.id, l).sd}" alt="" draggable="false">` : faceHTML(c.id, l)}${has ? "" : "<i>🔒</i>"}</span><b>${l === "base" ? c.name : c.looks[l].name}</b><small>${l === "base" ? "기본" : has ? "코스튬" : "뽑기에서 획득"}</small></button>`,
-          );
-        }
-      ov.querySelector(".tt-cgrid")!.innerHTML = opts.join("");
-      $$(".tt-cpick", ov).forEach(
-        (b) =>
-          (b.onclick = () => {
-            selC = b.dataset.c as CharId;
-            selL = b.dataset.l as LookId;
-            draw();
-          }),
-      );
+      const d = CHARS[sel];
+      csArt(ov, sel, "base");
+      ov.querySelector(".tt-cs-intro")!.innerHTML = `<h2>${d.name}<i>★</i></h2><q>${d.quote}</q><div class="tt-tags">${tagsHTML(d.tags)}</div><p>${d.desc}</p>`;
+      ov.querySelector(".tt-cs-cards")!.innerHTML =
+        Object.values(CHARS)
+          .map((c) => `<button type="button" class="tt-cs-card ${c.id === sel ? "on" : ""}" data-c="${c.id}"><span class="pic" style="${avBg(c.id, "base")}">${faceHTML(c.id, "base", "happy")}</span><b>${c.name}</b>${c.id === ME.char ? '<em>선택 중</em>' : ""}</button>`)
+          .join("") + [0, 1].map(() => `<div class="tt-cs-card lock"><span class="pic">🔒</span><b>준비 중</b><small>???</small></div>`).join("");
+      ov.querySelector(".tt-cs-info")!.innerHTML = `<h3>${d.name}<span class="tt-tags">${tagsHTML(d.tags)}</span></h3><p>${d.desc}</p>`;
+      const mine = sel === ME.char;
+      ov.querySelector(".tt-cs-btns")!.innerHTML = `<button type="button" class="tt-cs-go pink" ${mine ? "disabled" : ""}>${mine ? "선택 중인 캐릭터" : "이 캐릭터로 하기<i>›</i>"}</button><button type="button" class="tt-cs-go blue tt-cs-toskin">👕 스킨 보기</button>`;
+      $$(".tt-cs-card[data-c]", ov).forEach((b) => (b.onclick = () => ((sel = b.dataset.c as CharId), draw())));
+      const go = ov.querySelector<HTMLButtonElement>(".tt-cs-go.pink")!;
+      go.onclick = () => {
+        ME.char = sel;
+        // 고른 캐릭터의 장착 스킨: 가진 코스튬이 없으면 기본
+        if (ME.look !== "base" && !ME.owned.includes(`${sel}:${ME.look}`)) ME.look = "base";
+        save();
+        refreshMoney();
+        refreshPlayerSd();
+        toast(`${d.name}(으)로 바꿨어요`);
+        draw();
+      };
+      ov.querySelector<HTMLElement>(".tt-cs-toskin")!.onclick = () => {
+        ov.remove();
+        openSkins(sel);
+      };
     };
     draw();
-    ov.querySelector<HTMLElement>(".tt-x")!.onclick = () => ov.remove();
-    ov.querySelector<HTMLElement>(".tt-use")!.onclick = () => {
-      if (!(selL === "base" || ME.owned.includes(`${selC}:${selL}`))) {
+  };
+  const openSkins = (forChar: CharId = ME.char) => {
+    let selL: LookId = forChar === ME.char ? ME.look : "base";
+    const ov = csBase(`<span class="ic">👕</span>스킨 (코스튬)`, "skin");
+    const draw = () => {
+      const d = CHARS[forChar];
+      const L = d.looks[selL];
+      csArt(ov, forChar, selL);
+      const own = selL === "base" || ME.owned.includes(`${forChar}:${selL}`);
+      ov.querySelector(".tt-cs-intro")!.innerHTML = `<h2>${selL === "base" ? `${d.name}` : L.name}</h2><q>${L.quote ?? d.quote}</q><div class="tt-tags">${tagsHTML(L.tags ?? d.tags)}</div><p>${L.desc ?? d.desc}</p>`;
+      ov.querySelector(".tt-cs-cards")!.innerHTML =
+        (Object.keys(d.looks) as LookId[])
+          .map((l) => {
+            const has = l === "base" || ME.owned.includes(`${forChar}:${l}`);
+            const wearing = forChar === ME.char && ME.look === l;
+            return `<button type="button" class="tt-cs-card skin ${l === selL ? "on" : ""} ${has ? "" : "locked"}" data-l="${l}" style="${bgOf(forChar, l) ? `--bg:url(${bgOf(forChar, l)})` : ""}"><span class="pic" style="${avBg(forChar, l)}">${faceHTML(forChar, l, "happy")}${has ? "" : "<i>🔒</i>"}</span><b>${l === "base" ? "기본 의상" : d.looks[l].name.replace(d.name, "").trim() || d.looks[l].name}</b>${wearing ? "<em>착용 중</em>" : has ? "" : "<small>🔒 뽑기에서 획득</small>"}</button>`;
+          })
+          .join("") + `<div class="tt-cs-card skin lock"><span class="pic">🔒</span><b>???</b><small>곧 추가</small></div>`;
+      ov.querySelector(".tt-cs-info")!.innerHTML = `<h3>${L.name}<span class="tt-tags">${tagsHTML(L.tags ?? d.tags)}</span></h3><p>${L.desc ?? d.desc}</p>`;
+      const wearing = forChar === ME.char && ME.look === selL;
+      ov.querySelector(".tt-cs-btns")!.innerHTML = own
+        ? `<button type="button" class="tt-cs-go pink" ${wearing ? "disabled" : ""}>${wearing ? "착용 중" : "장착 하기"}</button><button type="button" class="tt-cs-go blue tt-cs-gacha">🎁 뽑기 하러 가기</button>`
+        : `<button type="button" class="tt-cs-go pink" disabled>🔒 미보유</button><button type="button" class="tt-cs-go blue tt-cs-gacha">🎁 뽑기 하러 가기</button>`;
+      $$(".tt-cs-card[data-l]", ov).forEach((b) => (b.onclick = () => ((selL = b.dataset.l as LookId), draw())));
+      const go = ov.querySelector<HTMLButtonElement>(".tt-cs-go.pink")!;
+      if (own)
+        go.onclick = () => {
+          ME.char = forChar;
+          ME.look = selL;
+          save();
+          refreshMoney();
+          refreshPlayerSd();
+          toast(`${L.name === "기본 의상" ? d.name : L.name} 장착!`);
+          draw();
+        };
+      ov.querySelector<HTMLElement>(".tt-cs-gacha")!.onclick = () => {
         ov.remove();
-        return ($(".tt-open-shop") as HTMLElement).click();
-      }
-      ME.char = selC;
-      ME.look = selL;
-      save();
-      refreshMoney();
-      refreshPlayerSd();
-      draw();
+        const i = GACHA.pool.findIndex((p) => p.char === forChar && p.look === selL);
+        if (i >= 0) gFeat = i;
+        ($(".tt-open-shop") as HTMLElement).click();
+      };
     };
+    draw();
   };
   // 설정: 관리자면 코인 · 천장 · 보유 코스튬을 바로 바꿀 수 있음
   const soundHTML = () =>
@@ -635,7 +691,7 @@ export function mountTown(root: HTMLElement, opts: TownOpts = {}): () => void {
           .join("")}</div>
       </div>
       <details class="tt-adm-snd"><summary>소리 전부 들어보기</summary>${soundListHTML()}</details>
-      <div class="tt-row"><button type="button" class="tt-adm-reset">처음 상태로</button><button type="button" class="tt-x">닫기</button><button type="button" class="pri tt-adm-save">저장</button></div>`,
+      <div class="tt-row"><button type="button" class="tt-adm-reset">초기화</button><button type="button" class="tt-x">닫기</button><button type="button" class="pri tt-adm-save">저장</button></div>`,
       root.querySelector<HTMLElement>(".tt-screen:not([hidden])") ?? root,
     );
     ov.classList.add("adm");
@@ -668,10 +724,11 @@ export function mountTown(root: HTMLElement, opts: TownOpts = {}): () => void {
       refreshPlayerSd();
       if (CUR === "gacha") renderGacha();
       ov.remove();
-      toast("처음 상태로 돌렸어요");
+      toast("초기화했어요");
     };
   };
   $(".tt-open-char").onclick = openChar;
+  $(".tt-open-skin").onclick = () => openSkins();
   $(".tt-prof").onclick = openChar;
   $(".tt-open-shop").onclick = () => openGacha();
 
@@ -907,7 +964,7 @@ export function mountTown(root: HTMLElement, opts: TownOpts = {}): () => void {
         const nm = i === 0 ? CHARS[ME.char].name : b!.nick;
         h += `<div class="tt-rtag" style="left:${S.tag.x}px;top:${S.tag.y}px"><div class="tt-av" style="${avBg(c, l)}">${faceHTML(c, l)}</div><div><div class="tt-nm">${nm}${i ? '<span class="tt-botb">BOT</span>' : ' <span class="tt-meb">나</span>'}</div><div class="tt-ready">✔ 준비 완료</div></div></div>`;
       } else {
-        h += `<div class="tt-rempty" style="left:${S.cx - 100}px;top:${S.back ? 600 : 250}px;z-index:45"><div class="tt-empty">빈 자리</div><div class="tt-rbtns"><button class="tt-sbtn" type="button" data-inv>+ 초대</button><button class="tt-sbtn dark" type="button" data-bot="${i}">봇 채우기</button></div></div>`;
+        h += `<div class="tt-rghost" style="left:${S.cx - 70}px;top:${S.bottom - 150}px;z-index:${z}">빈 자리</div>`;
       }
     });
     $(".tt-rseats").innerHTML = h;
@@ -916,6 +973,7 @@ export function mountTown(root: HTMLElement, opts: TownOpts = {}): () => void {
   }
   function renderRoom() {
     $(".tt-roomno").textContent = `방 번호 ${R.no}`;
+    ($(".tt-rb-bot") as HTMLButtonElement).disabled = !R.seats.slice(1).includes(null);
     $(".tt-rtable").hidden = !!ART.room;
     if (renderRoomSeated()) return bindRoomBtns();
     $(".tt-room-bg").style.backgroundImage = ART.room ? `url(${ART.room})` : "";
@@ -959,11 +1017,25 @@ export function mountTown(root: HTMLElement, opts: TownOpts = {}): () => void {
         }),
     );
   }
-  $(".tt-backbtn").onclick = goTown;
-  $(".tt-roomlist").onclick = () => {
-    const ov = overlay(`<h2>방 목록</h2><p>지금 열린 다른 방이 없어요.<br>여기서 바로 시작하면 빈자리는 봇이 채워줘요.</p><div class="tt-row"><button class="pri" type="button">여기서 시작</button></div>`);
-    ov.querySelector<HTMLElement>("button")!.onclick = () => ov.remove();
+  const fillOne = () => {
+    const i = R.seats.findIndex((x, k) => k > 0 && !x);
+    if (i < 0) return toast("자리가 다 찼어요");
+    const used = R.seats.filter(Boolean) as BotSeat[];
+    const free = BOT_POOL.filter((x) => !used.includes(x) && !(x.char === ME.char && x.look === ME.look));
+    R.seats[i] = free[0] ?? BOT_POOL[0];
+    sfx("botJoin");
+    renderRoom();
   };
+  $(".tt-rb-bot").onclick = fillOne;
+  $(".tt-rb-seat").onclick = () => toast("원카드는 최대 4명까지예요");
+  $(".tt-rb-inv").onclick = () => ($(".tt-rinvite") as HTMLElement).click();
+  $(".tt-roomcopy").onclick = () => {
+    navigator.clipboard?.writeText(String(R.no)).then(
+      () => toast(`방 번호 ${R.no} 복사했어요`),
+      () => toast(`방 번호 ${R.no}`),
+    );
+  };
+  $(".tt-backbtn").onclick = goTown;
   $(".tt-rinvite").onclick = () => {
     const url = `${location.origin}/games/town/?room=${R.no}`;
     navigator.clipboard?.writeText(url).then(
@@ -1596,16 +1668,21 @@ export function mountTown(root: HTMLElement, opts: TownOpts = {}): () => void {
   const cosName = (c: CharId, l: LookId) => CHARS[c].looks[l].name;
   const ownKey = (c: CharId, l: LookId) => `${c}:${l}`;
   let gFeat = 0;
+  let gShown = -1;
   const bgOf = (c: CharId, l: LookId) => ART.char[c]?.[l]?.bg ?? ART.fullBg;
   function renderGacha() {
     refreshMoneyAll();
     const feat = GACHA.pool[gFeat];
     const fa = ART.char[feat.char]?.[feat.look]?.full;
     const fe = $(".tt-gfeat-art");
-    fe.classList.remove("swap");
-    void fe.offsetWidth;
-    fe.classList.add("swap");
-    fe.innerHTML = fa ? `<img src="${fa}" alt="" draggable="false">` : sdHTML(feat.char, feat.look);
+    // 픽업을 바꿨을 때만 등장 연출 (같은 걸 다시 누르거나 화면 갱신 때는 그대로)
+    if (gShown !== gFeat) {
+      gShown = gFeat;
+      fe.classList.remove("swap");
+      void fe.offsetWidth;
+      fe.classList.add("swap");
+      fe.innerHTML = fa ? `<img src="${fa}" alt="" draggable="false">` : sdHTML(feat.char, feat.look);
+    }
     $(".tt-gfeat-name b").textContent = cosName(feat.char, feat.look);
     $(".tt-gfeat-name small").textContent = CHARS[feat.char].looks[feat.look].tag ?? "";
     $(".tt-gmachine").innerHTML = ART.gacha.machine
@@ -1622,6 +1699,7 @@ export function mountTown(root: HTMLElement, opts: TownOpts = {}): () => void {
     $$(".tt-gcard").forEach(
       (b) =>
         (b.onclick = () => {
+          if (gFeat === +b.dataset.i!) return;
           gFeat = +b.dataset.i!;
           renderGacha();
         }),
@@ -1644,16 +1722,17 @@ export function mountTown(root: HTMLElement, opts: TownOpts = {}): () => void {
   }
   $(".tt-gback").onclick = goTown;
   $(".tt-ginfo").onclick = () => {
-    const per = ((GACHA.rate / GACHA.pool.length) * 100).toFixed(1);
+    const feat = GACHA.pool[gFeat];
     const ov = overlay(
-      `<h2>확률 정보</h2><p>· 코스튬 ${GACHA.pool.map((p) => `「${cosName(p.char, p.look)}」 ${per}%`).join(" · ")}<br>· 꽝 (코인 +${GACHA.lucky}) ${(100 - GACHA.rate * 100).toFixed(1)}%<br>· 코스튬 없이 ${GACHA.pity}회째 뽑으면 아직 없는 코스튬 확정 (천장)<br>· 이미 가진 코스튬은 다시 나오지 않아요 (가진 만큼 남은 코스튬 확률이 그대로)</p><div class="tt-row"><button type="button" class="pri">확인</button></div>`,
+      `<h2>확률 정보</h2><p>· 지금 고른 픽업: 「${cosName(feat.char, feat.look)}」 ${(GACHA.rate * 100).toFixed(1)}%<br>· 꽝 (코인 +${GACHA.lucky}) ${(100 - GACHA.rate * 100).toFixed(1)}%<br>· 코스튬 없이 ${GACHA.pity}회째 뽑으면 고른 픽업 코스튬 확정 (천장)<br>· 이미 가진 픽업은 뽑을 수 없어요 · 천장은 픽업끼리 같이 쌓여요</p><div class="tt-row"><button type="button" class="pri">확인</button></div>`,
       $(".tt-gacha"),
     );
     ov.querySelector<HTMLElement>("button")!.onclick = () => ov.remove();
   };
   type Pull = { kind: "cos"; char: CharId; look: LookId; dup: boolean } | { kind: "lucky" };
   // 이미 가진 코스튬은 안 나옴: 뽑기 풀은 아직 없는 코스튬만
-  const unownedPool = () => GACHA.pool.filter((p) => !ME.owned.includes(ownKey(p.char, p.look)));
+  // 고른 픽업 코스튬 하나만 나옴. 이미 가졌으면 그 픽업은 뽑기 불가
+  const unownedPool = () => [GACHA.pool[gFeat]].filter((p) => !ME.owned.includes(ownKey(p.char, p.look)));
   function roll(): Pull {
     const pool = unownedPool();
     if (!pool.length) {
@@ -1675,7 +1754,7 @@ export function mountTown(root: HTMLElement, opts: TownOpts = {}): () => void {
   async function pull(n: 1 | 10) {
     const cost = n === 1 ? GACHA.cost1 : GACHA.cost10;
     if (gBusy) return;
-    if (!unownedPool().length) return toast("코스튬을 전부 모았어요! 다음 배너를 기다려 주세요");
+    if (!unownedPool().length) return toast("이미 가진 코스튬이에요 · 다른 픽업을 골라 주세요");
     if (ME.coins < cost) return toast("코인이 부족해요 · 게임하고 모아 와요!");
     gBusy = true;
     ME.coins -= cost;

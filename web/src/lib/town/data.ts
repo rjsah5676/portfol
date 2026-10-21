@@ -9,7 +9,11 @@ export interface CharDef {
   /** 임시 그림 색 (그림 들어오기 전) */
   hair: string;
   body: string;
-  looks: Record<LookId, { name: string; hair?: string; body?: string; /** 뽑기 화면 이름표 아래 한 줄 */ tag?: string }>;
+  looks: Record<LookId, { name: string; hair?: string; body?: string; /** 뽑기 화면 이름표 아래 한 줄 */ tag?: string; quote?: string; tags?: string[]; desc?: string }>;
+  /** 캐릭터 선택 화면 소개 */
+  quote: string;
+  tags: string[];
+  desc: string;
   lines: { atk: string[]; hit: string[]; caught: string[]; win: string[]; town: string[] };
 }
 
@@ -20,7 +24,10 @@ export const CHARS: Record<CharId, CharDef> = {
     name: "하루",
     hair: "#c9d3f2",
     body: "#3b4a8c",
-    looks: { base: { name: "기본" }, cos1: { name: "마법소녀 하루", tag: "별빛이 비추는, 모두의 마음에", hair: "#e9edf8", body: "#5b6fd0" } },
+    quote: "「언제나, 당신과 함께하고 싶어요…♡」",
+    tags: ["다정함", "밝음", "조금 수줍음"],
+    desc: "모두와 함께하는 시간이 무엇보다 소중한, 따뜻하고 다정한 소녀예요.",
+    looks: { base: { name: "기본 의상" }, cos1: { name: "마법소녀 하루", quote: "「조금 더… 특별한 나, 보러 와 주세요…♡」", tags: ["사랑스러움", "몽환적", "수줍음"], desc: "두근거리는 마음을 담아, 작은 마법으로 행복을 전하고 싶어요.", tag: "별빛이 비추는, 모두의 마음에", hair: "#e9edf8", body: "#5b6fd0" } },
     lines: {
       atk: ["간다!", "받아~", "미안, 이건 써야겠어"],
       hit: ["으앗…", "너무해!"],
@@ -34,7 +41,10 @@ export const CHARS: Record<CharId, CharDef> = {
     name: "루루",
     hair: "#f6a3c2",
     body: "#c2416b",
-    looks: { base: { name: "기본" }, cos1: { name: "할로윈 파티 루루", tag: "오늘 밤의 주인공은 루루야~", hair: "#ffd0e1", body: "#3a1530" } },
+    quote: "「이번 판도 루루가 이길 거야~!」",
+    tags: ["장난꾸러기", "자신만만", "에너지"],
+    desc: "지는 건 질색! 장난스럽지만 누구보다 게임에 진심인 소녀예요.",
+    looks: { base: { name: "기본 의상" }, cos1: { name: "할로윈 파티 루루", quote: "「오늘 밤의 주인공은 루루야~♡」", tags: ["소악마", "요염함", "장난기"], desc: "트릭 오어 트릿? 과자 대신 승리를 가져갈게!", tag: "오늘 밤의 주인공은 루루야~", hair: "#ffd0e1", body: "#3a1530" } },
     lines: {
       atk: ["받아라~!", "공격이다!", "헤헤 미안~"],
       hit: ["힝… 또야?!", "이건 반칙이야!"],
@@ -88,7 +98,7 @@ export const REWARD = [300, 150, 80, 40] as const;
 /*
  * 코스튬 뽑기 — 재화(코인)를 쓰는 곳은 여기 하나뿐.
  *  1회 300 · 10회 2,700. 코스튬 확률 3% (한 벌당 1.5%), 나머지는 「꽝 · 코인 +50」.
- *  천장: 코스튬 없이 100회째에 아직 없는 코스튬 확정. 코스튬이 나오면 천장 0 으로. 코스튬은 등급 없음.
+ *  천장: 코스튬 없이 100회째에 고른 픽업 코스튬 확정. 코스튬이 나오면 천장 0 으로. 코스튬은 등급 없음.
  *  이미 가진 코스튬은 다시 안 나옴 (풀에서 빠짐). 전부 모으면 이 배너는 닫힘.
  */
 export const GACHA = {

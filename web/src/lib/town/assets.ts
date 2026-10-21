@@ -127,8 +127,8 @@ export const SIGN: Partial<Record<GameId, { x: number; y: number; w: number; h: 
   yut: { x: 0.513, y: 0.479, w: 0.285, h: 0.081 },
   chess: { x: 0.509, y: 0.464, w: 0.284, h: 0.1 },
   janggi: { x: 0.515, y: 0.434, w: 0.33, h: 0.107 },
-  omok: { x: 0.512, y: 0.445, w: 0.305, h: 0.107 },
-  mahjong: { x: 0.508, y: 0.43, w: 0.35, h: 0.114 },
+  omok: { x: 0.512, y: 0.45, w: 0.305, h: 0.107 },
+  mahjong: { x: 0.508, y: 0.434, w: 0.35, h: 0.114 },
   soon: { x: 0.503, y: 0.486, w: 0.296, h: 0.089 },
 };
 
