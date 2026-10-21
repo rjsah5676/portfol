@@ -9,6 +9,7 @@ import Mailbox from "./Mailbox";
 import Missions from "./Missions";
 import Vault from "./Vault";
 import { useDailyReady } from "@/components/Points/DailyMissions";
+import { useAchReady } from "@/components/Points/Achievements";
 import { asset } from "@/lib/poker/assets";
 import { installImgFallback } from "@/lib/poker/imgFallback";
 import {
@@ -93,7 +94,8 @@ export default function PokerApp({ rank }: { rank: RankRow[] | null }) {
   // 일일 미션 (GP) — 닫을 때 받을 수 있는 수 다시 셈
   const [missionOpen, setMissionOpen] = useState(false);
   const [vaultOpen, setVaultOpen] = useState(false);
-  const missionReady = useDailyReady("poker", missionOpen);
+  // 버튼 숫자 = 받을 수 있는 일일 미션 + 업적 (업적도 같은 창 「업적」 탭)
+  const missionReady = useDailyReady("poker", missionOpen) + useAchReady("poker", missionOpen);
   const [attendNote, setAttendNote] = useState<{ text: string; key: number } | null>(null);
 
   useEffect(() => {
@@ -321,7 +323,7 @@ export default function PokerApp({ rank }: { rank: RankRow[] | null }) {
         <button
           type="button"
           onClick={() => setMissionOpen(true)}
-          title="오늘의 미션"
+          title="오늘의 미션 · 업적"
           className={`pk-btn pk-btn-ghost relative flex h-[30px] items-center gap-[0.3em] px-[0.6em] text-[0.78em] ${missionReady ? "pk-mail-new" : ""}`}
         >
           <svg viewBox="0 0 24 24" className="h-[15px] w-[15px]" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>

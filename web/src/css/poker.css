@@ -3867,3 +3867,137 @@
   border: 1.5px solid rgba(255, 216, 74, 0.7);
   font-weight: 700;
 }
+
+/* ───────── 순위 창 (로비 「순위」 · 머리말 랭킹 창 같이 씀 — 무대 밖에서도 같게 색은 값으로) ───────── */
+.pk-podium {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: end;
+  gap: 0.5em;
+  padding: 0.5em 0.2em 0;
+}
+.pk-podium-col {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+.pk-podium-face {
+  position: relative;
+  padding: 3px;
+  border-radius: 9999px;
+  background: conic-gradient(from 210deg, var(--m), rgba(255, 255, 255, 0.75), var(--m), rgba(0, 0, 0, 0.5), var(--m));
+  box-shadow: 0 0 16px color-mix(in srgb, var(--m) 40%, transparent);
+}
+.pk-podium-1 .pk-podium-face {
+  animation: pk-podium-glow 2.6s ease-in-out infinite;
+}
+@keyframes pk-podium-glow {
+  50% {
+    box-shadow: 0 0 30px color-mix(in srgb, var(--m) 75%, transparent);
+  }
+}
+.pk-podium-no {
+  position: absolute;
+  bottom: -0.4em;
+  left: 50%;
+  display: flex;
+  min-width: 1.7em;
+  height: 1.7em;
+  transform: translateX(-50%);
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  background: var(--m);
+  color: #1b1306;
+  font-size: 0.78em;
+  font-weight: 900;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.65);
+}
+.pk-podium-nick {
+  max-width: 100%;
+  margin-top: 0.6em;
+  overflow: hidden;
+  font-size: 0.92em;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #fff;
+}
+.pk-podium-me {
+  color: #ffc93c;
+}
+.pk-podium-val {
+  color: var(--m);
+  font-size: 1.05em;
+  font-weight: 800;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+.pk-podium-sub {
+  max-width: 100%;
+  overflow: hidden;
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 0.72em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pk-podium-step {
+  width: 100%;
+  margin-top: 0.35em;
+  border: 1px solid color-mix(in srgb, var(--m) 45%, transparent);
+  border-bottom: 0;
+  border-radius: 8px 8px 0 0;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--m) 30%, transparent), transparent);
+}
+.pk-rank-row {
+  display: flex;
+  align-items: center;
+  gap: 0.65em;
+  padding: 0.4em 0.75em 0.4em 0.4em;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.035);
+  color: #fff;
+  font-size: 0.9em;
+}
+.pk-rank-me {
+  border-color: rgba(255, 201, 60, 0.55);
+  background: rgba(255, 201, 60, 0.09);
+}
+.pk-rank-no {
+  width: 2em;
+  flex: none;
+  color: rgba(255, 255, 255, 0.45);
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+.pk-rank-val {
+  flex: none;
+  font-size: 1.08em;
+  font-weight: 800;
+  white-space: nowrap;
+}
+/* 내 순위: 창 아래에 늘 붙어 있음 */
+.pk-rank-mine {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 0.6em;
+  margin-top: 0.3em;
+  padding: 0.5em 0.8em 0.5em 0.4em;
+  border: 1px solid rgba(255, 201, 60, 0.5);
+  border-radius: 10px;
+  background: linear-gradient(180deg, #2a2110, #17130a);
+  box-shadow: 0 -6px 16px rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: 0.9em;
+}
+.pk-rank-mine .pk-rank-no,
+.pk-rank-mine .pk-rank-val {
+  color: #ffc93c;
+}

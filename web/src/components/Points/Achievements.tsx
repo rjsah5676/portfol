@@ -65,9 +65,12 @@ export function useAchReady(game: AchGame | undefined, key: unknown) {
 export function AchievementList({
   game,
   accent = "#8B84FF",
+  dailyAt = "게임 위 「일일 미션」 버튼",
 }: {
   game: AchGame;
   accent?: string;
+  /** 아래 안내의 일일 미션 위치 (게임 안에 미션 창이 따로 있는 게임) */
+  dailyAt?: string;
 }) {
   const { profile, login, setPoints, points } = useAuth();
   const [list, setList] = useState<AchState[] | null>(null);
@@ -287,7 +290,7 @@ export function AchievementList({
         })}
       </ul>
       <p className="mt-3 text-[11px] leading-relaxed break-keep text-white/35">
-        업적 보상은 직접 「받기」를 눌러야 들어와요. 매일 새로 생기는 보상은 게임 위 「일일 미션」 버튼에 있어요. {POINT.name}는 현금으로
+        업적 보상은 직접 「받기」를 눌러야 들어와요. 매일 새로 생기는 보상은 {dailyAt}에 있어요. {POINT.name}는 현금으로
         사거나 바꿀 수 없는 사이트 전용 재화예요.{" "}
         <Link
           href="/faq/#points"

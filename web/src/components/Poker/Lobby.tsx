@@ -16,11 +16,13 @@ import {
   lookOf,
   type CharId,
   type GameKind,
+  type Look,
   type Tier,
   type TierId,
   lookName,
 } from "@/lib/poker/rules";
 import { fmtPoint } from "@/lib/points";
+import { AchievementRank } from "@/components/Points/Achievements";
 import type { BuyRankRow, LobbyTable, RankRow, Wallet } from "@/lib/poker/types";
 import { createTable, getBuyRank, quickJoin, setChar, subscribeLobby } from "@/realtime/poker";
 import MyPage from "./MyPage";
@@ -708,7 +710,7 @@ export default function Lobby({
           {sheet === "rank" && (
             <div
               data-sheet-scroll
-              className="pk-scroll min-h-0 flex-1 overflow-y-auto px-[0.9em] pb-[0.9em]"
+              className="pk-scroll min-h-0 flex-1 overflow-y-auto px-[0.9em]"
             >
               <PokerRanks rank={rank} myNick={myNick} />
             </div>
@@ -860,29 +862,39 @@ function CharSelect({
   );
 }
 
-/** 자금 순위 표 (로비 · 게임 머리말의 랭킹 모달에서 같이 씀) */
-/** 순위 창: 자금 순위 / 구매 순위 탭 */
+export type PokerRankTab = "money" | "buy" | "ach";
+
+/** 순위 한 줄 (자금 · 구매 순위가 같은 모양을 씀) */
+interface RankItem {
+  nick: string;
+  look: Look;
+  value: ReactNode;
+  sub: ReactNode;
+}
+
+/**
+ * 순위 창: 자금 · 구매 · 업적 순위 탭 — 로비 「순위」와 게임 머리말의 랭킹 창에서 같이 씀.
+ * 1~3위는 시상대(캐릭터 얼굴 크게), 4위부터 줄, 맨 아래에 내 순위가 늘 붙어 있음.
+ * (무대 밖 머리말 창에서도 같은 색이 나오게 색은 변수 대신 값으로)
+ */
 export function PokerRanks({
   rank,
   myNick,
   tab: tabP,
   onTab,
-  buy: buyP,
 }: {
   rank: RankRow[] | null;
   myNick?: string;
-  /** 바깥에서 탭을 쥘 때 (사이트 위 순위 창: 제목 · 시상대도 탭 따라 바뀜) */
-  tab?: "money" | "buy";
-  onTab?: (t: "money" | "buy") => void;
-  buy?: BuyRankRow[] | null;
+  /** 바깥에서 탭을 쥘 때 (머리말 창 제목이 탭 따라 바뀜) */
+  tab?: PokerRankTab;
+  onTab?: (t: PokerRankTab) => void;
 }) {
-  const [tabS, setTabS] = useState<"money" | "buy">("money");
-  const [buyS, setBuy] = useState<BuyRankRow[] | null>(null);
+  const [tabS, setTabS] = useState<PokerRankTab>("money");
+  const [buy, setBuy] = useState<BuyRankRow[] | null>(null);
   const tab = tabP ?? tabS;
   const setTab = onTab ?? setTabS;
-  const buy = buyP !== undefined ? buyP : buyS;
   useEffect(() => {
-    if (tab !== "buy" || buyP !== undefined) return;
+    if (tab !== "buy") return;
     let alive = true;
     getBuyRank()
       .then((r) => alive && setBuy(r))
@@ -890,18 +902,31 @@ export function PokerRanks({
     return () => {
       alive = false;
     };
-  }, [tab, buyP]);
+  }, [tab]);
+  const items: RankItem[] | null =
+    tab === "money"
+      ? (rank?.map((r) => ({
+          nick: r.nick,
+          look: r.look ?? r.char,
+          value: <Money won={r.money} />,
+          sub: `${r.hands.toLocaleString()}판`,
+        })) ?? null)
+      : tab === "buy"
+        ? (buy?.map((r) => ({
+            nick: r.nick,
+            look: r.look ?? r.char,
+            value: <span className="pk-num">{fmtPoint(r.spent)}</span>,
+            sub: `스킨 ${r.skins} · 캐릭터 ${r.chars}`,
+          })) ?? null)
+        : null;
   return (
-    <div>
-      {/* 사이트 위 순위 창(포커 무대 밖)에서도 같은 색이 나오게 색은 값으로 */}
-      <div
-        className="mb-2 grid grid-cols-2 gap-1 rounded-full border border-white/10 bg-black/40 p-1"
-        role="tablist"
-      >
+    <div className="flex flex-col gap-[0.7em] pb-[0.9em]">
+      <div className="pk-seg" role="tablist">
         {(
           [
             ["money", "자금 순위"],
             ["buy", "구매 순위"],
+            ["ach", "업적 순위"],
           ] as const
         ).map(([k, label]) => (
           <button
@@ -910,109 +935,96 @@ export function PokerRanks({
             role="tab"
             aria-selected={tab === k}
             onClick={() => setTab(k)}
-            className={`cursor-pointer rounded-full px-3 py-1.5 text-sm font-bold transition ${
-              tab === k
-                ? "bg-[#ffc93c] text-[#241700] shadow-[0_2px_8px_rgba(255,201,60,0.35)]"
-                : "text-white/55 hover:bg-white/10 hover:text-white/80"
-            }`}
           >
             {label}
           </button>
         ))}
       </div>
-      {tab === "money" ? (
-        <RankTable rank={rank} myNick={myNick} />
+      {tab === "ach" ? (
+        <AchievementRank game="poker" />
       ) : (
-        <BuyRankTable rank={buy} myNick={myNick} />
+        <RankBoard
+          items={items}
+          myNick={myNick}
+          empty={
+            tab === "money"
+              ? "아직 한 판도 안 쳤어요. 첫 기록의 주인공이 되어 보세요."
+              : "아직 아무도 안 샀어요. 상점에서 첫 손님이 되어 보세요."
+          }
+        />
       )}
     </div>
   );
 }
 
-/** 구매 순위: 스킨 · 캐릭터 값(지금 포인트 가격) 합계, 산 개수 */
-function BuyRankTable({ rank, myNick }: { rank: BuyRankRow[] | null; myNick?: string }) {
-  if (rank === null) return <p className="py-6 text-center text-sm text-white/40">불러오는 중…</p>;
-  if (!rank.length)
-    return (
-      <p className="py-6 text-center text-sm text-white/40">
-        아직 아무도 안 샀어요. 상점에서 첫 손님이 되어 보세요.
-      </p>
-    );
-  return (
-    <ol className="divide-y divide-white/[0.07]">
-      {rank.map((r, i) => {
-        const me = myNick && r.nick === myNick;
-        return (
-          <li
-            key={`${r.nick}-${i}`}
-            className={`flex items-center gap-3 px-2 py-2 text-sm ${me ? "bg-[#ffc93c]/10" : ""}`}
-          >
-            <span
-              className={`w-6 text-center font-bold ${i < 3 ? "text-[#ffc93c]" : "text-white/40"}`}
-            >
-              {i + 1}
-            </span>
-            <Profile char={r.look ?? r.char} size={30} />
-            <span
-              className={`min-w-0 flex-1 truncate ${me ? "font-bold text-[#ffc93c]" : "text-white/85"}`}
-            >
-              {r.nick}
-            </span>
-            <span className="text-right text-xs leading-tight whitespace-nowrap text-white/45">
-              스킨 {r.skins}
-              <br />
-              캐릭터 {r.chars}
-            </span>
-            <span className="pk-num text-base whitespace-nowrap text-[#b9a8ff]">{fmtPoint(r.spent)}</span>
-          </li>
-        );
-      })}
-    </ol>
-  );
-}
+/** 시상대 색: 금 · 은 · 동 */
+const PODIUM = ["#ffd84a", "#d9dde6", "#e0954a"];
 
-export function RankTable({
-  rank,
-  myNick,
-  limit,
-}: {
-  rank: RankRow[] | null;
-  myNick?: string;
-  limit?: number;
-}) {
-  if (rank === null) return <p className="py-6 text-center text-sm text-white/40">불러오는 중…</p>;
-  const rows = limit ? rank.slice(0, limit) : rank;
-  if (!rows.length)
-    return (
-      <p className="py-6 text-center text-sm text-white/40">
-        아직 한 판도 안 쳤어요. 첫 기록의 주인공이 되어 보세요.
-      </p>
-    );
+function RankBoard({ items, myNick, empty }: { items: RankItem[] | null; myNick?: string; empty: string }) {
+  if (items === null) return <p className="py-[2em] text-center text-[0.88em] text-white/40">불러오는 중…</p>;
+  if (!items.length) return <p className="py-[2em] text-center text-[0.88em] text-white/40">{empty}</p>;
+  const meIdx = myNick ? items.findIndex((r) => r.nick === myNick) : -1;
+  const top = items.slice(0, 3);
   return (
-    <ol className="divide-y divide-white/[0.07]">
-      {rows.map((r, i) => {
-        const me = myNick && r.nick === myNick;
-        return (
-          <li
-            key={`${r.nick}-${i}`}
-            className={`flex items-center gap-3 px-2 py-2 text-sm ${me ? "bg-[#ffc93c]/10" : ""}`}
-          >
-            <span
-              className={`w-6 text-center font-bold ${i < 3 ? "text-[#ffc93c]" : "text-white/40"}`}
+    <div className="flex flex-col gap-[0.35em]">
+      {/* 시상대: 2위 · 1위 · 3위 */}
+      <div className="pk-podium">
+        {[1, 0, 2].map((i) =>
+          top[i] ? (
+            <div
+              key={i}
+              className={`pk-podium-col ${i === 0 ? "pk-podium-1" : ""}`}
+              style={{ "--m": PODIUM[i] } as CSSProperties}
             >
-              {i + 1}
-            </span>
-            <Profile char={r.look ?? r.char} size={30} />
-            <span
-              className={`min-w-0 flex-1 truncate ${me ? "font-bold text-[#ffc93c]" : "text-white/85"}`}
-            >
-              {r.nick}
-            </span>
-            <span className="text-xs text-white/40">{r.hands.toLocaleString()}판</span>
-            <Money won={r.money} className="text-base text-white" />
-          </li>
-        );
-      })}
-    </ol>
+              <div className="pk-podium-face">
+                <Profile char={top[i].look} size={i === 0 ? 70 : 54} />
+                <span className="pk-podium-no">{i + 1}</span>
+              </div>
+              <div className={`pk-podium-nick ${i === meIdx ? "pk-podium-me" : ""}`}>{top[i].nick}</div>
+              <div className="pk-podium-val">{top[i].value}</div>
+              <div className="pk-podium-sub">{top[i].sub}</div>
+              <div className="pk-podium-step" style={{ height: [44, 30, 20][i] }} />
+            </div>
+          ) : (
+            <div key={i} />
+          )
+        )}
+      </div>
+      {items.length > 3 && (
+        <ol className="grid gap-[0.3em]">
+          {items.slice(3).map((r, j) => {
+            const i = j + 3;
+            return (
+              <li key={`${r.nick}-${i}`} className={`pk-rank-row ${i === meIdx ? "pk-rank-me" : ""}`}>
+                <span className="pk-rank-no">{i + 1}</span>
+                <Profile char={r.look} size={34} />
+                <span className="min-w-0 flex-1 leading-tight">
+                  <span className="block truncate font-bold">{r.nick}</span>
+                  <span className="block truncate text-[0.78em] text-white/45">{r.sub}</span>
+                </span>
+                <span className="pk-rank-val">{r.value}</span>
+              </li>
+            );
+          })}
+        </ol>
+      )}
+      {/* 내 순위: 아래에 늘 붙어 있음 */}
+      {myNick && (
+        <div className="pk-rank-mine">
+          {meIdx >= 0 ? (
+            <>
+              <span className="pk-rank-no">{meIdx + 1}</span>
+              <Profile char={items[meIdx].look} size={30} />
+              <span className="min-w-0 flex-1 truncate font-bold">
+                내 순위 <span className="font-normal text-white/50">· {items[meIdx].sub}</span>
+              </span>
+              <span className="pk-rank-val">{items[meIdx].value}</span>
+            </>
+          ) : (
+            <span className="flex-1 text-center text-white/55">내 순위 · 아직 순위에 없어요</span>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
