@@ -9,7 +9,7 @@ export default function Page() {
     <>
       <div className="mx-auto max-w-5xl px-3 pt-6 sm:px-6">
         <GameHeader
-          icon="🏘️"
+          icon="px:town"
           title="TABLE TOWN"
           en="Board Game Town"
           accent="#FFC94A"

@@ -73,7 +73,10 @@ export const ART: {
       base: { full: `${B}/char/haru-full.webp`, sd: `${B}/char/haru-sd.webp`, face: `${B}/face/haru-idle.webp`, bust: faces("haru") },
       cos1: { full: `${B}/char/haru-cos1-full.webp` },
     },
-    ruru: { base: { full: `${B}/char/ruru-full.webp`, sd: `${B}/char/ruru-sd.webp`, face: `${B}/face/ruru-idle.webp`, bust: faces("ruru") } },
+    ruru: {
+      base: { full: `${B}/char/ruru-full.webp`, sd: `${B}/char/ruru-sd.webp`, face: `${B}/face/ruru-idle.webp`, bust: faces("ruru") },
+      cos1: { full: `${B}/char/ruru-cos1-full.webp` },
+    },
   },
 };
 

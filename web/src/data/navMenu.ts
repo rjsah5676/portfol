@@ -134,7 +134,7 @@ export const NAV_GROUPS: NavGroup[] = [
         image: imgTown,
         label: "TABLE TOWN",
         desc: "마을을 돌아다니다 게임방에 들어가는 캐릭터 보드게임, 빈자리는 봇이",
-        icon: "🏘️",
+        icon: "px:town",
         badge: "ALPHA",
       },
       {
