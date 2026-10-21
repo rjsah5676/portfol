@@ -4495,3 +4495,612 @@
   border-image-source: var(--sk-gold) !important;
   color: #6a3a00 !important;
 }
+/* 설정: 소리 */
+.tt-snd {
+  display: grid;
+  gap: 12px;
+  margin: 10px 0 6px;
+}
+.tt-snd label {
+  display: grid;
+  grid-template-columns: 90px 1fr;
+  align-items: center;
+  gap: 12px;
+  font-size: 17px;
+}
+.tt-snd label.chk {
+  display: flex;
+  gap: 8px;
+}
+.tt-snd input[type="range"] {
+  accent-color: #ffc94a;
+  height: 22px;
+  cursor: pointer;
+}
+.tt-adm-snd {
+  margin-top: 10px;
+}
+.tt-adm-snd summary {
+  cursor: pointer;
+  font-size: 15px;
+  color: #ffe08a;
+}
+.tt-sndlist {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  max-height: 180px;
+  overflow: auto;
+  margin-top: 8px;
+}
+.tt-sndlist button {
+  text-align: left;
+  font-size: 13px;
+  padding: 6px 8px !important;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.1) !important;
+}
+.tt-sndlist button:disabled {
+  opacity: 0.4;
+}
+/* 뒤로(마을로): 제목 판과 다르게 — 크림 원형 버튼 + 옆 작은 글씨, 과하지 않게 */
+.tt .tt-backbtn {
+  border-image-source: none !important;
+  border-width: 0 !important;
+  filter: none;
+  height: 54px;
+  padding: 0 !important;
+  gap: 8px;
+  background: none !important;
+  font-size: 18px;
+  color: #fff;
+  text-shadow: -1px -1px 0 #3a2466, 1px -1px 0 #3a2466, -1px 1px 0 #3a2466, 1px 2px 0 #3a2466;
+}
+.tt .tt-backbtn .tt-chev {
+  box-sizing: content-box;
+  width: 22px;
+  height: 22px;
+  padding: 14px;
+  color: #5a3f9a;
+  background: url(/town/ui/btn/circle.webp) center / 100% 100% no-repeat;
+  filter: drop-shadow(0 3px 0 rgba(40, 20, 80, 0.3)) drop-shadow(0 5px 8px rgba(20, 10, 50, 0.25));
+  text-shadow: none;
+}
+.tt .tt-backbtn .tt-chev path {
+  stroke-width: 3.8;
+}
+.tt .tt-backbtn:hover .tt-chev {
+  transform: translateX(-2px);
+}
+.tt-roomtitle,
+.tt-gtitle-big {
+  left: 150px;
+}
+
+/* ======================================================================
+   뽑기 화면 v3 — GPT 시안(mock-gacha-v3) 그대로: 위계 = 뽑기 버튼 > 배너 패널 > 나머지(담백하게)
+   ====================================================================== */
+/* 뒤로 가기: 어두운 반투명 알약 + 집 아이콘 (장식 없음) */
+.tt .tt-backbtn {
+  border-image-source: none !important;
+  filter: none;
+  left: 20px;
+  top: 18px;
+  height: 46px;
+  padding: 0 18px 0 12px !important;
+  gap: 8px;
+  border-radius: 23px !important;
+  background: rgba(24, 14, 46, 0.62) !important;
+  border: 1.5px solid rgba(255, 255, 255, 0.4) !important;
+  border-width: 1.5px !important;
+  color: #fff;
+  font-size: 18px;
+  text-shadow: none;
+  backdrop-filter: blur(4px);
+}
+.tt .tt-backbtn .tt-home {
+  width: 24px;
+  height: 24px;
+  fill: #fff;
+}
+.tt .tt-backbtn:hover {
+  background: rgba(40, 24, 76, 0.75) !important;
+}
+/* 화면 제목: 판 없이 글자만 */
+.tt .tt-gtitle-big {
+  border-image-source: none !important;
+  filter: none;
+  left: 190px;
+  top: 12px;
+  height: auto;
+  padding: 0;
+  display: grid;
+  font-size: 40px;
+  line-height: 1.1;
+  color: #fff6e6;
+  text-shadow: 0 2px 0 #6a3fa0, 0 0 14px rgba(255, 220, 160, 0.55);
+}
+.tt .tt-gtitle-big small {
+  font-size: 15px;
+  color: #f4ecff;
+  text-shadow: 0 1px 2px rgba(30, 10, 60, 0.8);
+}
+/* 코인: 오른쪽 위 작은 알약 */
+.tt-money-gacha {
+  top: 18px;
+}
+/* 배너 패널 */
+.tt .tt-gpanel {
+  right: 22px;
+  top: 74px;
+  bottom: auto;
+  width: 448px;
+  height: 456px;
+  padding: 20px 22px 18px;
+  gap: 10px;
+  border-radius: 26px;
+  background:
+    radial-gradient(circle at 20% 0%, rgba(255, 210, 150, 0.22), transparent 40%),
+    linear-gradient(170deg, rgba(58, 36, 112, 0.95), rgba(30, 18, 64, 0.97));
+  border: 3px solid #e8c27a;
+  box-shadow: 0 0 0 2px rgba(120, 80, 30, 0.6), 0 0 0 7px rgba(255, 215, 140, 0.22), 0 14px 30px rgba(0, 0, 0, 0.45);
+}
+.tt .tt-gpanel::before {
+  inset: 8px;
+  border: 1.5px solid rgba(255, 215, 140, 0.35);
+  border-radius: 18px;
+}
+.tt .tt-gbanner {
+  margin-top: -4px;
+  font-size: 46px;
+  line-height: 1.05;
+}
+.tt .tt-gbanner span {
+  background: linear-gradient(180deg, #fffaf0 10%, #ffe2a0 55%, #f3b860 90%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 2px 0 #5a2f8a) drop-shadow(0 0 10px rgba(255, 210, 140, 0.6));
+}
+.tt .tt-gsub {
+  margin-top: -2px;
+  font-size: 15px;
+  color: #f1e8ff;
+}
+.tt .tt-gcards {
+  gap: 12px;
+}
+.tt .tt-gcard {
+  height: 250px;
+  border-radius: 16px;
+  border: 3px solid #e8c27a !important;
+  box-shadow: 0 0 0 2px rgba(90, 50, 20, 0.5);
+}
+.tt .tt-gcard.on {
+  border-color: #fff3c4 !important;
+  box-shadow: 0 0 0 2px #e8c27a, 0 0 18px rgba(255, 220, 140, 0.7);
+}
+.tt .tt-gcard .pk {
+  top: 10px;
+  left: 8px;
+  padding: 3px 12px 3px 10px;
+  border-radius: 6px 14px 14px 6px;
+  background: linear-gradient(#ff7fa8, #e8457a);
+  font-size: 15px;
+  font-weight: 400;
+  box-shadow: 0 2px 0 rgba(120, 20, 60, 0.4);
+}
+.tt .tt-gcard .ft {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 26px 6px 8px;
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  background: linear-gradient(transparent, rgba(30, 14, 60, 0.92) 45%);
+}
+.tt .tt-gcard .ft b {
+  position: static;
+  font-size: 18px;
+  color: #fff;
+  text-shadow: 0 1px 2px #000;
+}
+.tt .tt-gcard .ownb {
+  position: static;
+  background: none;
+  color: #8ff0a8;
+  font-size: 14px;
+  font-weight: 400;
+  padding: 0;
+}
+.tt .tt-gcard > b {
+  display: none;
+}
+.tt .tt-gpity {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0;
+  background: none;
+}
+.tt .tt-gpity-bar {
+  position: relative;
+  flex: 1;
+  height: 30px;
+  margin: 0;
+  border-radius: 15px;
+  background: rgba(10, 4, 30, 0.6);
+  border: 1.5px solid rgba(255, 215, 140, 0.45);
+}
+.tt .tt-gpity-bar i {
+  border-radius: 15px;
+  background: linear-gradient(90deg, #ffd88a, #fff1c4);
+}
+.tt .tt-gpity-bar span {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 16px;
+  color: #fff;
+  text-shadow: 0 1px 2px #000;
+}
+.tt .tt-gpity-bar span b {
+  color: #ffd76a;
+  font-size: 19px;
+}
+.tt .tt-gpity > em {
+  font-style: normal;
+  font-size: 30px;
+  filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.4));
+}
+.tt .tt-gdone {
+  margin-top: -4px;
+}
+/* 뽑기 버튼: 패널 아래 나란히, 제일 크고 화려하게 */
+.tt .tt-gpull {
+  position: absolute;
+  right: 22px;
+  bottom: 26px;
+  width: 448px;
+  margin: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+.tt .tt-gpull button {
+  --bh: 118px;
+  height: 118px;
+  flex-direction: column;
+  gap: 6px;
+  border-image-width: 0 calc(var(--bh) * 0.4) !important;
+}
+.tt .tt-gpull button.tt-g10 {
+  border-image-source: var(--sk-pink) !important;
+  color: #fff !important;
+}
+.tt .tt-gpull b {
+  font-size: 30px;
+  color: #fff;
+  text-shadow: -1.5px -1.5px 0 var(--tc), 1.5px -1.5px 0 var(--tc), -1.5px 1.5px 0 var(--tc), 1.5px 2.5px 0 var(--tc) !important;
+}
+.tt .tt-g1 {
+  --tc: #22489c;
+}
+.tt .tt-g10 {
+  --tc: #a8285a;
+}
+.tt .tt-gpull span {
+  font-size: 22px;
+  padding: 3px 18px 2px 6px;
+  color: #fff !important;
+  background: rgba(20, 10, 60, 0.32) !important;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.5);
+}
+.tt .tt-gpull .tt-ico {
+  width: 26px;
+  height: 26px;
+}
+.tt .tt-gpull em {
+  top: -14px;
+  left: 50%;
+  right: auto;
+  transform: translateX(-50%);
+  font-size: 15px;
+  padding: 4px 14px 3px;
+  background: linear-gradient(#ff5d8f, #d6336b);
+  border: 2px solid #ffe2a0;
+  white-space: nowrap;
+}
+/* 픽업 캐릭터 이름표: 버튼처럼 안 보이는 리본 라벨 */
+.tt .tt-gfeat-name {
+  border-image-source: none !important;
+  filter: drop-shadow(0 4px 8px rgba(30, 10, 60, 0.45));
+  height: auto;
+  bottom: 6px;
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  padding: 8px 36px 9px !important;
+  border-radius: 10px !important;
+  background: linear-gradient(180deg, #fffaf2, #f4e8ff) !important;
+  border: 2px solid #e8c27a !important;
+  border-width: 2px !important;
+  color: #4a2f8a;
+  text-shadow: none;
+}
+.tt .tt-gfeat-name b {
+  font-size: 26px;
+  line-height: 1.1;
+}
+.tt .tt-gfeat-name small {
+  font-size: 13px;
+  color: #7a6aa0;
+}
+.tt .tt-gfeat-name::before,
+.tt .tt-gfeat-name::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  width: 26px;
+  height: 34px;
+  margin-top: -17px;
+  background: #2c3f8f;
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%, 35% 50%);
+  z-index: -1;
+}
+.tt .tt-gfeat-name::before {
+  left: -16px;
+}
+.tt .tt-gfeat-name::after {
+  right: -16px;
+  transform: scaleX(-1);
+}
+.tt-pick {
+  display: none;
+}
+/* 확률 정보: 작은 어두운 알약 */
+.tt .tt-ginfo {
+  border-image-source: none !important;
+  filter: none;
+  height: 40px;
+  left: 20px;
+  bottom: 18px;
+  padding: 0 16px 0 8px !important;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 20px !important;
+  background: rgba(24, 14, 46, 0.62) !important;
+  border: 1.5px solid rgba(255, 255, 255, 0.35) !important;
+  color: #fff;
+  font-size: 15px;
+}
+.tt .tt-ginfo i {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 1.5px solid #fff;
+  display: grid;
+  place-items: center;
+  font-style: normal;
+  font-size: 14px;
+}
+.tt .tt-gmachine {
+  left: 450px;
+  top: 70px;
+  height: 620px;
+}
+.tt .tt-gfeat {
+  left: 20px;
+  top: 76px;
+  width: 440px;
+  height: 600px;
+}
+.tt .tt-gpity-bar span {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+.tt .tt-gcard {
+  height: 270px;
+}
+.tt .tt-gpanel {
+  height: 470px;
+}
+
+/* ======================================================================
+   뽑기 화면 v4 — 사용자가 고른 시안 배치 그대로
+   (제목 판 · 이름 판 = 보라 장식 판 / 마을로 · 확률 정보 = 어두운 알약, 서로 다르게)
+   ====================================================================== */
+.tt .tt-gtitle-big {
+  --bh: 56px;
+  left: 168px;
+  top: 16px;
+  height: 56px;
+  padding: 0 46px !important;
+  display: flex;
+  align-items: center;
+  font-size: 32px;
+  color: #fff;
+  text-shadow: 0 2px 0 rgba(20, 8, 50, 0.7);
+  border-width: 0 !important;
+  border-style: solid !important;
+  border-image-source: var(--sk-panel) !important;
+  border-image-slice: 0 100 fill !important;
+  border-image-width: 0 calc(var(--bh) * 0.625) !important;
+  filter: drop-shadow(0 3px 0 rgba(20, 8, 50, 0.35));
+}
+.tt .tt-backbtn {
+  top: 21px;
+}
+.tt .tt-gfeat-name {
+  --bh: 54px;
+  left: 50%;
+  bottom: 4px;
+  height: 54px;
+  padding: 0 44px !important;
+  display: flex;
+  align-items: center;
+  background: none !important;
+  border-width: 0 !important;
+  border-style: solid !important;
+  border-image-source: var(--sk-panel) !important;
+  border-image-slice: 0 100 fill !important;
+  border-image-width: 0 calc(var(--bh) * 0.625) !important;
+  border-radius: 0 !important;
+  color: #fff;
+  text-shadow: 0 2px 0 rgba(20, 8, 50, 0.7);
+}
+.tt .tt-gfeat-name::before,
+.tt .tt-gfeat-name::after,
+.tt .tt-gfeat-name small {
+  display: none;
+}
+.tt .tt-gfeat-name b {
+  font-size: 26px;
+}
+.tt .tt-gfeat {
+  left: 40px;
+  width: 420px;
+}
+.tt-pick {
+  display: block !important;
+  left: 20px;
+  top: 340px;
+  font-size: 26px;
+  padding: 4px 20px;
+  border-radius: 12px;
+  z-index: 2;
+}
+.tt .tt-ginfo {
+  left: 16px;
+  bottom: 18px;
+  height: 44px;
+  font-size: 16px;
+  padding: 0 16px 0 12px !important;
+}
+.tt .tt-ginfo svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: #fff;
+  stroke-width: 2.6;
+  stroke-linecap: round;
+}
+/* 패널: 오른쪽 위에서 아래까지, 뽑기 버튼도 패널 안 아래쪽 */
+.tt .tt-gpanel {
+  top: 78px;
+  right: 18px;
+  width: 452px;
+  height: 624px;
+  padding: 16px 22px 0;
+  gap: 10px;
+}
+.tt .tt-gbanner {
+  font-size: 40px;
+  margin-top: 0;
+}
+.tt .tt-gcards {
+  gap: 12px;
+  padding: 0 10px;
+}
+.tt .tt-gcard {
+  height: 238px;
+}
+.tt .tt-gcard .pk {
+  top: 8px;
+  left: 6px;
+  border-radius: 8px;
+  font-size: 14px;
+  padding: 3px 9px;
+}
+.tt .tt-gcard .ownb {
+  position: absolute;
+  top: 8px;
+  right: 6px;
+  padding: 3px 9px;
+  border-radius: 8px;
+  background: linear-gradient(#5fd98a, #2fb366);
+  color: #fff;
+  font-size: 14px;
+  text-shadow: 0 1px 0 rgba(0, 60, 20, 0.5);
+}
+.tt .tt-gcard .ft {
+  padding: 30px 6px 10px;
+}
+.tt .tt-gpity {
+  display: block;
+  padding: 12px 16px 10px;
+  border-radius: 18px;
+  background: rgba(10, 4, 30, 0.45);
+  border: 1.5px solid rgba(255, 215, 140, 0.3);
+}
+.tt .tt-gpity-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 20px;
+}
+.tt .tt-gpity-row b {
+  font-size: 30px;
+}
+.tt .tt-gpity-row i {
+  font-size: 26px;
+}
+.tt .tt-gpity-bar {
+  height: 14px;
+  border: 0;
+  margin: 6px 0 6px;
+  background: rgba(255, 255, 255, 0.15);
+}
+.tt .tt-gpity-bar i {
+  background: linear-gradient(90deg, #ff8fb1, #ffd76a);
+}
+.tt .tt-gpity small {
+  display: block;
+  text-align: center;
+  font-size: 13px;
+  color: #ddd2f4;
+}
+.tt .tt-gpull {
+  right: 38px;
+  bottom: 34px;
+  width: 410px;
+  gap: 12px;
+}
+.tt .tt-gpull button {
+  --bh: 104px;
+  height: 104px;
+}
+.tt .tt-gpull button.tt-g10 {
+  border-image-source: var(--sk-gold) !important;
+  --tc: #a0620a;
+}
+.tt .tt-g10 b {
+  color: #6a3a00 !important;
+  text-shadow: 0 2px 0 rgba(255, 250, 220, 0.9) !important;
+}
+.tt .tt-g10 span {
+  background: rgba(110, 60, 0, 0.55) !important;
+}
+.tt .tt-gpull em {
+  top: -12px;
+  left: auto;
+  right: 12px;
+  transform: none;
+  font-size: 14px;
+}
+.tt .tt-gpull b {
+  font-size: 28px;
+}
+.tt .tt-gpull span {
+  font-size: 20px;
+}
+.tt .tt-gmachine {
+  left: 470px;
+}

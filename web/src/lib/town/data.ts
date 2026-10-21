@@ -9,7 +9,7 @@ export interface CharDef {
   /** 임시 그림 색 (그림 들어오기 전) */
   hair: string;
   body: string;
-  looks: Record<LookId, { name: string; hair?: string; body?: string }>;
+  looks: Record<LookId, { name: string; hair?: string; body?: string; /** 뽑기 화면 이름표 아래 한 줄 */ tag?: string }>;
   lines: { atk: string[]; hit: string[]; caught: string[]; win: string[]; town: string[] };
 }
 
@@ -20,7 +20,7 @@ export const CHARS: Record<CharId, CharDef> = {
     name: "하루",
     hair: "#c9d3f2",
     body: "#3b4a8c",
-    looks: { base: { name: "기본" }, cos1: { name: "마법소녀 하루", hair: "#e9edf8", body: "#5b6fd0" } },
+    looks: { base: { name: "기본" }, cos1: { name: "마법소녀 하루", tag: "별빛이 비추는, 모두의 마음에", hair: "#e9edf8", body: "#5b6fd0" } },
     lines: {
       atk: ["간다!", "받아~", "미안, 이건 써야겠어"],
       hit: ["으앗…", "너무해!"],
@@ -34,7 +34,7 @@ export const CHARS: Record<CharId, CharDef> = {
     name: "루루",
     hair: "#f6a3c2",
     body: "#c2416b",
-    looks: { base: { name: "기본" }, cos1: { name: "할로윈 파티 루루", hair: "#ffd0e1", body: "#3a1530" } },
+    looks: { base: { name: "기본" }, cos1: { name: "할로윈 파티 루루", tag: "오늘 밤의 주인공은 루루야~", hair: "#ffd0e1", body: "#3a1530" } },
     lines: {
       atk: ["받아라~!", "공격이다!", "헤헤 미안~"],
       hit: ["힝… 또야?!", "이건 반칙이야!"],
