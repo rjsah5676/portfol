@@ -124,6 +124,9 @@ export function createSound() {
   let front = 0;
   let unlocked = false;
   let dead = false; // 화면이 다시 붙을 때 옛 소리 엔진이 살아나 BGM 이 겹치지 않게
+  /** 탭이 가려졌거나(홈 화면 등) 폰에서 전체화면 안내가 떠 있음 → 소리 안 냄 */
+  let quiet = false;
+  let hiddenPaused = false;
   const fades = new Map<HTMLAudioElement, number>();
 
   const ensureCtx = () => {
@@ -162,7 +165,7 @@ export function createSound() {
 
   function sfx(id: SfxId, opt: { rate?: number; vol?: number } = {}) {
     const url = SFX[id];
-    if (dead || !url || missing.has(url) || pref.mute || !unlocked) return;
+    if (dead || quiet || !url || missing.has(url) || pref.mute || !unlocked) return;
     const c = ensureCtx();
     if (!c || !sfxGain) return;
     const play = (b: AudioBuffer) => {
@@ -212,6 +215,10 @@ export function createSound() {
     if (!el.src.endsWith(url)) el.src = url;
     el.currentTime = 0;
     el.volume = 0;
+    if (quiet) {
+      hiddenPaused = true;
+      return;
+    }
     void el.play().then(
       () => (dead || bgmEl[front] !== el ? el.pause() : fade(el, pref.mute ? 0 : pref.bgm, 1100)),
       () => {},
@@ -245,6 +252,24 @@ export function createSound() {
     fade(el, pref.bgm * to, 250, () => setTimeout(() => fade(el, pref.mute ? 0 : pref.bgm, 700), ms));
   }
 
+  /** 탭을 내리거나 홈 화면으로 나가면(또는 전체화면 안내 중이면) 소리를 멈춤 · 돌아오면 이어서 */
+  function setHidden(hidden: boolean) {
+    if (dead || quiet === hidden) return;
+    quiet = hidden;
+    const el = bgmEl[front];
+    if (hidden) {
+      void ctx?.suspend();
+      if (el && !el.paused) {
+        el.pause();
+        hiddenPaused = true;
+      }
+    } else {
+      void ctx?.resume();
+      if (el && hiddenPaused && bgmCur) void el.play().then(() => fade(el, pref.mute ? 0 : pref.bgm, 600), () => {});
+      hiddenPaused = false;
+    }
+  }
+
   function stop() {
     dead = true;
     bgmEl.forEach((e) => {
@@ -265,6 +290,6 @@ export function createSound() {
     return a;
   }
 
-  return { pref, preload, sfx, bgm, unlock, setPref, duck, stop, preview, missing };
+  return { pref, preload, sfx, bgm, unlock, setPref, duck, stop, preview, missing, setHidden };
 }
 export type Sound = ReturnType<typeof createSound>;

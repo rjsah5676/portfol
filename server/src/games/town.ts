@@ -168,7 +168,9 @@ export function registerTown({ db, gateway, users }: Deps, opts: TownOptions = {
     const d = (await profiles.findOne({ _id: uid })) as ProfileDoc | null;
     if (d) return d;
     const fresh: ProfileDoc = { _id: uid, coins: START_COINS, owned: [], pity: 0, char: "haru", look: "base", games: 0, updatedAt: new Date() };
-    await profiles.updateOne({ _id: uid }, { $setOnInsert: { ...fresh, _id: undefined } as never }, { upsert: true });
+    // _id 는 거르기 조건에 이미 있어서 $setOnInsert 에 넣으면 안 됨 (null 로 바뀌어 "불변 필드 변경" 오류)
+    const { _id, ...init } = fresh;
+    await profiles.updateOne({ _id }, { $setOnInsert: init }, { upsert: true });
     return fresh;
   }
   const profileWire = (p: ProfileDoc) => ({ coins: p.coins, owned: p.owned, pity: p.pity, char: p.char, look: p.look, games: p.games });

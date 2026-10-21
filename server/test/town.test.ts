@@ -144,4 +144,28 @@ describe("TABLE TOWN 방", () => {
     const end = await ws.wait((e) => e.t === "room" && !!e.d?.result, 80_000);
     expect(end.d.seats[2]).toBeNull();
   }, 90_000);
+
+  it("회원: 내 정보 · 방 만들기 · 뽑기 · 장착 (코인 · 코스튬이 서버에)", async () => {
+    const uid = `mem-${++seq}`;
+    const token = await s.token(uid, { email: `${uid}@example.com` });
+    expect((await s.http("/api/me/nick", { method: "PUT", token, body: { nick: "회원님" } })).status).toBe(200);
+    const m = await s.client(uid, { email: `${uid}@example.com` });
+    const me = await m.rpc("town.me");
+    expect(me).toMatchObject({ coins: 1000, owned: [], pity: 0, char: "haru", look: "base" });
+    // 방: 이름은 별명 (게스트 표시 없음)
+    const { id } = await m.rpc("town.create", { nick: "", char: "ruru", look: "base" });
+    const sub = await m.sub("town.room", { id });
+    expect(sub.data.room.seats[0]).toMatchObject({ nick: "회원님", member: true, char: "haru" });
+    // 뽑기: 300 쓰고 꽝이면 50 돌려받음
+    const g = await m.rpc("town.gacha", { feat: 0, n: 1 });
+    expect(g.pulls).toHaveLength(1);
+    expect(g.me.coins).toBe(g.pulls[0].kind === "lucky" ? 750 : 700);
+    // 없는 코스튬은 장착 못 함
+    if (g.pulls[0].kind === "lucky") await expect(m.rpc("town.setLook", { char: "haru", look: "cos1" })).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(await m.rpc("town.setLook", { char: "ruru", look: "base" })).toMatchObject({ char: "ruru", look: "base" });
+    // 게스트는 회원 기능을 못 씀
+    const guest = await user("gg");
+    expect(await guest.rpc("town.me")).toBeNull();
+    await expect(guest.rpc("town.gacha", { feat: 0, n: 1 })).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
 });

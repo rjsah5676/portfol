@@ -100,6 +100,14 @@ export default function TownApp() {
   };
   const fsGate = phone && !fs && canFs && !isStandalone();
   const rotateGate = phone && !land && !fsGate;
+  // 안내 화면이 떠 있는 동안은 게임 소리를 멈춤 (전체화면이 아닌데 음악이 나오던 것)
+  const blocked = fsGate || rotateGate;
+  useEffect(() => {
+    const h = hostRef.current;
+    if (h.blocked === blocked) return;
+    h.blocked = blocked;
+    h.changed?.();
+  }, [blocked]);
 
   return (
     <div

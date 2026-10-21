@@ -8360,3 +8360,22 @@
   stroke-width: 2;
   filter: none;
 }
+/* 사이트(Tailwind)는 box-sizing: border-box — 창 크기를 안쪽 기준으로 맞춤 (폰에서 입력칸이 창 밖으로 나가던 것) */
+.tt-make,
+.tt-nick {
+  box-sizing: content-box;
+}
+.tt-make *,
+.tt-nick * {
+  min-width: 0;
+}
+.tt-mk-in input,
+.tt-nick-in input,
+.tt-lsearch input,
+.tt-gchat input {
+  width: 100%;
+  min-width: 0;
+}
+.tt .tt-dice {
+  flex: none;
+}

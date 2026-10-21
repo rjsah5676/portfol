@@ -237,6 +237,9 @@ export function mountTown(root: HTMLElement, opts: TownOpts = {}): () => void {
   const sfx = (id: SfxId, o?: { rate?: number; vol?: number }) => S.sfx(id, o);
   const BGM_OF: Partial<Record<Screen, BgmId>> = { town: "town", room: "room", game: "game", gacha: "gacha" };
   const onFirst = () => S.unlock();
+  const onVis = () => S.setHidden(document.hidden || !!H?.blocked);
+  document.addEventListener("visibilitychange", onVis);
+  window.addEventListener("pagehide", onVis);
   root.addEventListener("pointerdown", onFirst, { capture: true });
   window.addEventListener("keydown", onFirst);
   const onBtnClick = (e: Event) => {
@@ -2390,6 +2393,7 @@ export function mountTown(root: HTMLElement, opts: TownOpts = {}): () => void {
         if (CUR !== "loading") openTitle();
       }
       if (CUR === "title") updateTitle();
+      onVis();
     };
 
   // =================== 로딩: 그림을 다 받고 열기 ===================
@@ -2453,6 +2457,8 @@ export function mountTown(root: HTMLElement, opts: TownOpts = {}): () => void {
     window.removeEventListener("keydown", onKeyDown);
     window.removeEventListener("keydown", onFirst);
     root.removeEventListener("pointerdown", onFirst, { capture: true });
+    document.removeEventListener("visibilitychange", onVis);
+    window.removeEventListener("pagehide", onVis);
     previewA?.pause();
     S.stop();
     window.removeEventListener("keyup", onKeyUp);
