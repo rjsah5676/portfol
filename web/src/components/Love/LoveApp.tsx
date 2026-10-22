@@ -64,8 +64,9 @@ function useSound(muted: boolean) {
     cur.current = id;
     bgmEl.current?.pause();
     bgmEl.current = null;
-    if (!id) return;
-    const a = new Audio(BGM[id]);
+    const url = id ? BGM[id] : null;
+    if (!id || !url) return;
+    const a = new Audio(url);
     a.loop = !BGM_ONCE.includes(id);
     a.volume = mute.current ? 0 : 0.3;
     bgmEl.current = a;

@@ -77,7 +77,7 @@ export const SFX: Record<SfxId, string> = {
   stamp: `${P}/sound/sfx-stamp.mp3`,
 };
 /** 포커 BGM 그대로(펍 감성) + 미연시 전용 BGM(Gemini 제작) */
-export const BGM: Record<BgmId, string> = {
+export const BGM: Record<BgmId, string | null> = {
   pub: `${P}/sound/bgm-lobby1.mp3`,
   vip: `${P}/sound/bgm-vip.mp3`,
   night: `${P}/sound/bgm-lobby2.mp3`,
@@ -90,9 +90,9 @@ export const BGM: Record<BgmId, string> = {
   threat: `${B}/sound/bgm-threat.aac`,
   spoker: `${B}/sound/bgm-spoker.aac`,
   confide: `${B}/sound/bgm-confide.aac`,
-  daily: `${B}/sound/bgm-daily.aac`,
-  comic: `${B}/sound/bgm-comic.aac`,
-  badend: `${B}/sound/bgm-badend.aac`,
+  daily: `${P}/sound/bgm-lobby2.mp3`, // 임시: 제미나이 생성 실패 → 포커 곡
+  comic: `${P}/sound/bgm-lobby1.mp3`, // 임시
+  badend: null, // 임시: 무음 (결정적 순간 무음 연출과 같음)
 };
 /** 한 번만 재생하고 멈추는 곡 */
 export const BGM_ONCE: BgmId[] = ["badend"];
@@ -111,7 +111,7 @@ export function preloadList(): { img: string[]; audio: string[] } {
   img.add(CARD_BACK);
   img.add(TITLE.bg);
   img.add(TITLE.logo);
-  return { img: [...img], audio: [...new Set([...Object.values(SFX), ...Object.values(BGM)])] };
+  return { img: [...img], audio: [...new Set([...Object.values(SFX), ...Object.values(BGM).filter((u): u is string => !!u)])] };
 }
 
 /** 엔딩 18개 (M1 에서 실제로 볼 수 있는 건 fired · ghost · plain) */
