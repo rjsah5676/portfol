@@ -6,8 +6,9 @@ import { MINE_RANKINGS_PATH, type MineRankingRow } from "@/firestore/minesweeper
 
 // page.tsx가 "use client"라 metadata를 export할 수 없어서 layout에서 지정
 export const metadata = pageMeta({
-  title: "지뢰찾기",
-  description: "지뢰 99개 고급 난이도 지뢰찾기. 모바일 꾹 누르기 지원, 클리어 기록 랭킹 등록.",
+  title: "지뢰찾기 - 무료 온라인 지뢰찾기 (고급 · 랭킹)",
+  description:
+    "설치 없이 브라우저에서 바로 하는 지뢰찾기. 지뢰 99개 고급 난이도, 찍기 없이 풀리는 판, 모바일 꾹 눌러 깃발 꽂기, 클리어 시간 랭킹.",
   path: "/games/mine/",
 });
 

@@ -6,9 +6,9 @@ import { MELON_SCORES_PATH, type MelonScoreRow } from "@/firestore/melonGame";
 
 // page.tsx가 "use client"라 metadata를 export할 수 없어서 layout에서 지정
 export const metadata = pageMeta({
-  title: "멜론 게임",
+  title: "멜론 게임 - 합이 10 되게 묶어 없애는 숫자 퍼즐",
   description:
-    "드래그해서 합이 10 또는 20이 되도록 멜론을 없애는 2분 타임어택 퍼즐 게임. 랭킹 등록 지원.",
+    "사과 게임처럼 드래그로 숫자를 묶어 합이 10 또는 20이 되면 사라지는 2분 타임어택 퍼즐. 설치 없이 브라우저 · 모바일에서 바로, 점수 랭킹 등록.",
   path: "/games/melongame/",
 });
 

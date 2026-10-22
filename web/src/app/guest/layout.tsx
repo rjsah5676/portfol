@@ -7,7 +7,8 @@ import type { GuestEntry } from "@/firestore/guestbook";
 // page.tsx가 "use client"라 metadata를 export할 수 없어서 layout에서 지정
 export const metadata = pageMeta({
   title: "방명록",
-  description: "Gunmo's Dev Life 방명록. 자유롭게 한마디 남겨주세요.",
+  description:
+    "Gunmo's Dev Life 방명록. 로그인 없이 메모지 한 장에 한마디 남길 수 있어요. 사이트 후기, 게임 피드백, 응원 모두 환영합니다.",
   path: "/guest/",
 });
 

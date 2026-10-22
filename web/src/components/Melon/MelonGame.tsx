@@ -757,7 +757,7 @@ export default function MelonGame() {
                   draggable={false}
                   className="melon-float h-[22%] w-auto drop-shadow-[0_8px_0_rgba(124,196,90,0.35)]"
                 />
-                <h1 className="melon-title text-3xl text-[#5BB53C] sm:text-7xl">멜론 게임</h1>
+                <p className="melon-title text-3xl text-[#5BB53C] sm:text-7xl">멜론 게임</p>
                 <p className="hidden text-[#8AA374] sm:block">
                   숫자 합이 <b className="text-[#FF8FA3]">10</b> 또는{" "}
                   <b className="text-[#FF8FA3]">20</b>이 되게 드래그!

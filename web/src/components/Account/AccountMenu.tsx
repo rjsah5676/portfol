@@ -10,10 +10,12 @@ import Avatar from "./Avatar";
 import NickForm from "./NickForm";
 import PointInfo from "@/components/Points/PointInfo";
 import { POINT, fmtPoint } from "@/lib/points";
+import { openChat, useSocial } from "@/lib/socialStore";
 
 /*
  * 상단 오른쪽: login 글자 → (로그인 후) 관리자 링크 · 내 별명.
- * 사진·별명을 누르면 내 정보(/me). 마우스를 올리면(터치 기기는 옆의 ▾ 를 누르면) 아래로 작은 메뉴: 로그아웃 · 방문·게임 수.
+ * 사진·별명을 누르면 내 정보(/me). 마우스를 올리면(터치 기기는 옆의 ▾ 를 누르면) 아래로 작은 메뉴: 로그아웃 · GP · 친구 · 메시지 · 방문·게임 수.
+ * 안 읽은 메시지나 받은 친구 요청이 있으면 사진에 점.
  * Google 로 처음 로그인하면 별명을 정하는 창이 뜸 (닫아도 "별명 정하기"로 다시 열 수 있음).
  */
 
@@ -25,6 +27,9 @@ const daysSince = (ms: number) => Math.max(1, Math.floor((Date.now() - ms) / 86_
 
 export default function AccountMenu() {
   const { loading, account, profile, admin, login, logout, refresh, points } = useAuth();
+  const social = useSocial();
+  const friendCount = social.friends.filter((f) => f.status === "friends").length;
+  const onlineCount = social.friends.filter((f) => f.status === "friends" && f.online).length;
   const modal = useModal();
   const pathname = usePathname();
   const path = pathname.replace(/\/+$/, "") || "/";
@@ -142,7 +147,15 @@ export default function AccountMenu() {
                     open || path === "/me" ? "text-white" : "text-white/75 hover:text-white"
                   }`}
                 >
-                  <Avatar profile={profile} photo={account.photoURL} size="sm" />
+                  <span className="relative">
+                    <Avatar profile={profile} photo={account.photoURL} size="sm" />
+                    {social.badge > 0 && (
+                      <span
+                        aria-label={`새 소식 ${social.badge}개`}
+                        className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-[#F43F5E] ring-2 ring-[#121212]"
+                      />
+                    )}
+                  </span>
                   <span className={`max-w-[6.5rem] truncate ${KR}`}>
                     {profile.badge && <span className="mr-1">{profile.badge}</span>}
                     {profile.nick}
@@ -226,6 +239,49 @@ export default function AccountMenu() {
                       >
                         {fmtPoint(points ?? 0)}
                       </Link>
+                    </div>
+
+                    {/* 친구 · 메시지 (친구 탭 / 메신저 창) */}
+                    <div className="flex items-center gap-2 border-t border-white/[0.07] px-4 py-2.5">
+                      <Link
+                        href="/me/?tab=friends"
+                        role="menuitem"
+                        onClick={() => setOpen(false)}
+                        className={`flex min-w-0 flex-1 items-center gap-1.5 text-xs text-white/70 transition-colors hover:text-white ${KR}`}
+                      >
+                        <span>친구</span>
+                        {friendCount > 0 ? (
+                          <span className="truncate text-white/40">
+                            {friendCount}명
+                            {onlineCount > 0 && (
+                              <span className="text-[#6EE7B7]"> · {onlineCount}명 접속 중</span>
+                            )}
+                          </span>
+                        ) : (
+                          !social.incoming && <span className="text-white/40">추가하기</span>
+                        )}
+                        {social.incoming > 0 && (
+                          <span className="shrink-0 rounded-full bg-[#F43F5E]/20 px-1.5 py-0.5 text-[10px] font-bold text-[#FDA4AF]">
+                            요청 {social.incoming}
+                          </span>
+                        )}
+                      </Link>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => {
+                          setOpen(false);
+                          openChat();
+                        }}
+                        className={`flex shrink-0 cursor-pointer items-center gap-1 rounded-full border border-white/10 px-2.5 py-1 text-[11px] text-white/70 transition-colors hover:border-white/30 hover:text-white ${KR}`}
+                      >
+                        메시지
+                        {social.unread > 0 && (
+                          <span className="rounded-full bg-[#F43F5E] px-1.5 font-mono text-[10px] leading-4 font-bold text-white">
+                            {social.unread > 99 ? "99+" : social.unread}
+                          </span>
+                        )}
+                      </button>
                     </div>
 
                     <dl className="grid grid-cols-3 border-t border-white/[0.07] py-3 text-center">

@@ -42,8 +42,14 @@ export interface SocialState {
     /** 신고 창 (별명) */
     report: string | null;
   };
-  /** 새 메시지 알림 (창이 닫혀 있을 때) */
-  toast: { uid: string; nick: string; text: string; at: number } | null;
+  /** 새 메시지 알림 (창이 닫혀 있을 때) · 친구 요청이 오거나 내 요청이 수락됐을 때 (kind) */
+  toast: {
+    uid: string;
+    nick: string;
+    text: string;
+    at: number;
+    kind?: "dm" | "req" | "ok";
+  } | null;
 }
 
 const EMPTY: SocialState = {
@@ -152,8 +158,17 @@ export const social = {
         if (state.ui.chat.open && w) void social.openConvo(w);
       },
       onEvent(t, d) {
-        if (t === "friend") set((s) => ({ friends: upsert(s.friends, d as FriendEntry) }));
-        else if (t === "unfriend") {
+        if (t === "friend") {
+          const e = d as FriendEntry;
+          const prev = state.friends.find((f) => f.uid === e.uid)?.status;
+          set((s) => ({ friends: upsert(s.friends, e) }));
+          // 받은 요청 · 내 요청 수락은 알림으로 (내가 수락한 건 prev === "in" 이라 안 뜸)
+          const at = Date.now();
+          if (e.status === "in" && prev !== "in")
+            set({ toast: { uid: e.uid, nick: e.nick, text: "친구 요청을 보냈어요", at, kind: "req" } });
+          else if (e.status === "friends" && prev === "out")
+            set({ toast: { uid: e.uid, nick: e.nick, text: "친구 요청을 수락했어요", at, kind: "ok" } });
+        } else if (t === "unfriend") {
           const uid = (d as { uid: string }).uid;
           set((s) => ({
             friends: s.friends.filter((f) => f.uid !== uid),

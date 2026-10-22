@@ -24,9 +24,21 @@ import { pageMeta, SITE_URL } from "@/lib/seo";
 
 type Params = { params: Promise<{ id: string }> };
 
+/** 목록 페이지 검색 결과 설명 (화면의 짧은 설명 meta.desc 보다 길게) */
+const LIST_DESC: Record<StudySection, string> = {
+  study:
+    "이건모의 개인 공부 노트. Java · Spring, 네트워크, 데이터베이스, 프론트엔드 · 백엔드, 알고리즘처럼 면접과 실무에서 자주 나오는 개발 개념을 예제와 함께 정리합니다.",
+  retro:
+    "직접 만든 웹 게임과 사이트를 개발하며 겪은 버그와 설계 문제를 문제 → 원인 → 해결 → 배운 점 순서로 기록한 프로젝트 회고. 리듬게임 싱크, Canvas, Next.js, 실시간 서버 등.",
+};
+
 export function makeListPage(section: StudySection) {
   const meta = SECTION_META[section];
-  const metadata = pageMeta({ title: meta.label, description: meta.desc, path: `${meta.path}/` });
+  const metadata = pageMeta({
+    title: meta.label,
+    description: LIST_DESC[section],
+    path: `${meta.path}/`,
+  });
   async function Page() {
     const posts = (await getSectionPosts(section)).map(toListItem);
     return section === "retro" ? (

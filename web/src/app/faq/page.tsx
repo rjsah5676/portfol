@@ -14,7 +14,7 @@ import {
 
 export const metadata = pageMeta({
   title: "자주 묻는 질문",
-  description: `${POINT.name} · 업적 · 회원 · 게임 랭킹 등 자주 묻는 질문을 모았습니다.`,
+  description: `Gunmo's Dev Life 이용 안내. ${POINT.name} 모으고 쓰는 법, 업적 · 게임 랭킹 기준, 회원 가입과 별명, 친구 · 메시지 · 신고 등 자주 묻는 질문을 모았습니다.`,
   path: "/faq/",
 });
 
@@ -194,6 +194,33 @@ export default function FaqPage() {
               개인정보 처리방침
             </Link>
             에 지우는 방법이 있어요.
+          </p>
+        </Q>
+      </Group>
+
+      <Group id="friends" title="친구 · 메시지">
+        <Q q="친구는 어떻게 추가하나요?">
+          <p>
+            랭킹 · 방명록에서 회원 별명을 누르면 「친구 추가」가 있어요. 별명을 알면{" "}
+            <Link
+              href="/me/?tab=friends"
+              className="text-[#8B84FF] underline underline-offset-2"
+            >
+              마이페이지 → 친구
+            </Link>
+            에서 바로 요청할 수도 있어요. 상대가 수락하면 친구가 돼요.
+          </p>
+        </Q>
+        <Q q="메시지는 어디서 보나요?">
+          <p>
+            오른쪽 아래 메뉴 버튼의 「채팅」이나 위쪽 내 별명 메뉴의 「친구 · 메시지」에서 열 수
+            있어요. 친구끼리만 주고받을 수 있고, 친구가 지금 접속 중인지도 보여요.
+          </p>
+        </Q>
+        <Q q="불쾌한 회원을 신고하고 싶어요">
+          <p>
+            그 회원의 별명을 누르고 「신고하기」를 골라 주세요. 관리자가 확인한 뒤 조치해요. 두
+            사람이 주고받은 메시지가 있으면 최근 것이 신고에 같이 붙어요.
           </p>
         </Q>
       </Group>

@@ -506,11 +506,11 @@ function Menu(p: {
         <p className="text-[13px] font-bold tracking-[0.4em] text-[var(--pink)]">
           PIXEL FIGHT 외전
         </p>
-        <h1 className={`${TITLE} dfn-title mt-2 text-[56px] leading-[1.02]`}>
+        <div className={`${TITLE} dfn-title mt-2 text-[56px] leading-[1.02]`}>
           PIXEL LUCKY
           <br />
           DEFENSE
-        </h1>
+        </div>
         <p className="mt-3 max-w-[500px] text-[13px] leading-relaxed text-[var(--mute)]">
           픽셀 세계가 버그에 먹히고 있어요.{" "}
           {FACTIONS.map((f, i) => (

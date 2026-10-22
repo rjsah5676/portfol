@@ -204,7 +204,7 @@ export default function StudyBrowser({
           isMenuOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
-        <div className="mb-1 font-mono text-sm text-[#8B84FF]">{meta.label}</div>
+        <h1 className="mb-1 font-mono text-sm text-[#8B84FF]">{meta.label}</h1>
         <p className="mb-4 font-['Nanum_Gothic',sans-serif] text-xs leading-relaxed text-white/35">
           {meta.desc}
         </p>
@@ -256,9 +256,9 @@ export default function StudyBrowser({
 
         {searching && (
           <div>
-            <h1 className="mb-6 font-mono text-xl font-bold text-white sm:text-2xl">
+            <h2 className="mb-6 font-mono text-xl font-bold text-white sm:text-2xl">
               검색 결과 <span className="text-base text-white/40">{results.length}</span>
-            </h1>
+            </h2>
             {results.length === 0 ? (
               <p className="font-['Nanum_Gothic',sans-serif] text-white/50">
                 &apos;{q.trim()}&apos;에 해당하는 글이 없습니다.
@@ -284,7 +284,7 @@ export default function StudyBrowser({
           const categoryPosts = posts.filter((p) => p.category === cat);
           return (
             <div key={cat} hidden={searching || cat !== selectedCategory}>
-              <h1 className="mb-6 font-mono text-xl font-bold text-white sm:text-2xl">{cat}</h1>
+              <h2 className="mb-6 font-mono text-xl font-bold text-white sm:text-2xl">{cat}</h2>
               {categoryPosts.length === 0 ? (
                 <p className="font-['Nanum_Gothic',sans-serif] text-white/50">
                   아직 {cat} 글이 없습니다.
