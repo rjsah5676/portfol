@@ -74,7 +74,7 @@ const TEMPLATE = `
 <div class="tt-screen tt-title" data-s="title" hidden>
   <div class="tt-title-in">
     <h1 class="tt-tlogo">${ART.logo ? `<img src="${ART.logo}" alt="TABLE TOWN">` : "TABLE TOWN"}</h1>
-    <p class="tt-tsub">캐릭터와 함께하는 온라인 원카드</p>
+    <p class="tt-tsub">캐릭터와 함께하는 온라인 보드게임</p>
     <div class="tt-tbtns">
       <button type="button" class="tt-cs-go pink tt-tlogin">로그인하고 시작<i>›</i></button>
       <button type="button" class="tt-cs-go blue tt-tguest">게스트로 플레이<i>›</i></button>
@@ -305,7 +305,7 @@ export function mountTown(root: HTMLElement, opts: TownOpts = {}): () => void {
 
   // ---------- 돈 ----------
   function refreshMoney() {
-    const html = `<div class="tt-m">${icon("coin", "tt-coin")}<b>${ME.coins.toLocaleString()}</b><button type="button" class="tt-mplus" aria-label="코인 상점">+</button></div>`;
+    const html = `<div class="tt-m">${icon("coin", "tt-coin")}<b>${ME.coins.toLocaleString()}</b><button type="button" class="tt-mplus" aria-label="코인 상점"></button></div>`;
     for (const sel of [".tt-money-town", ".tt-money-room", ".tt-money-lobby"]) {
       $(sel).innerHTML = html;
     }
@@ -610,7 +610,7 @@ export function mountTown(root: HTMLElement, opts: TownOpts = {}): () => void {
           .join("") + [0, 1].map(() => `<div class="tt-cs-card lock"><span class="pic">🔒</span><b>준비 중</b><small>???</small></div>`).join("");
       ov.querySelector(".tt-cs-info")!.innerHTML = `<h3>${d.name}<span class="tt-tags">${tagsHTML(d.tags)}</span></h3><p>${d.desc}</p>`;
       const mine = sel === ME.char;
-      ov.querySelector(".tt-cs-btns")!.innerHTML = `<button type="button" class="tt-cs-go pink" ${mine ? "disabled" : ""}>${mine ? "선택 중인 캐릭터" : "이 캐릭터로 하기<i>›</i>"}</button><button type="button" class="tt-cs-go blue tt-cs-toskin">👕 스킨 보기</button>`;
+      ov.querySelector(".tt-cs-btns")!.innerHTML = `<button type="button" class="tt-cs-go pink" ${mine ? "disabled" : ""}>${mine ? "선택 중인 캐릭터" : "이 캐릭터로 하기"}</button><button type="button" class="tt-cs-go blue tt-cs-toskin">👕 스킨 보기</button>`;
       $$(".tt-cs-card[data-c]", ov).forEach((b) => (b.onclick = () => ((sel = b.dataset.c as CharId), draw())));
       const go = ov.querySelector<HTMLButtonElement>(".tt-cs-go.pink")!;
       go.onclick = async () => {
@@ -624,7 +624,7 @@ export function mountTown(root: HTMLElement, opts: TownOpts = {}): () => void {
         refreshMoney();
         refreshPlayerSd();
         toast(`${d.name}(으)로 바꿨어요`);
-        draw();
+        ov.remove();
       };
       ov.querySelector<HTMLElement>(".tt-cs-toskin")!.onclick = () => {
         ov.remove();
@@ -667,7 +667,7 @@ export function mountTown(root: HTMLElement, opts: TownOpts = {}): () => void {
           refreshMoney();
           refreshPlayerSd();
           toast(`${L.name === "기본 의상" ? d.name : L.name} 장착!`);
-          draw();
+          ov.remove();
         };
       ov.querySelector<HTMLElement>(".tt-cs-gacha")!.onclick = () => {
         ov.remove();
@@ -1970,9 +1970,9 @@ export function mountTown(root: HTMLElement, opts: TownOpts = {}): () => void {
 
   /** 화면 가운데 큰 글씨 (내 차례 · 방향 반대) */
   function banner(text: string, kind: string) {
-    root.querySelector(".tt-gbanner")?.remove();
+    root.querySelector(".tt-turnban")?.remove();
     const el = document.createElement("div");
-    el.className = `tt-gbanner ${kind}`;
+    el.className = `tt-turnban ${kind}`;
     el.innerHTML = `<b>${text}</b>`;
     $(".tt-game").appendChild(el);
     later(() => el.remove(), 1300);

@@ -125,7 +125,7 @@ export const NAV_GROUPS: NavGroup[] = [
         href: "/games/town",
         image: imgTown,
         label: "TABLE TOWN",
-        desc: "친구 · 캐릭터 봇과 함께하는 온라인 원카드",
+        desc: "친구 · 캐릭터 봇과 함께하는 온라인 보드게임",
         icon: "px:town",
         badge: "ALPHA",
         featured: true, // 멜론 게임과 자리 바꿈 (메인 큰 칸 6개 맞춤)
