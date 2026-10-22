@@ -8,22 +8,19 @@ const B = "/love";
 const P = "/poker";
 
 /**
- * 스탠딩 (배경 없는 누끼). 표정 차분은 기본 그림에 얼굴만 합성한 같은 크기 그림이라 겹쳐서 갈아 끼움
- * blink = 눈 감은 얼굴 (눈 깜빡임용). 없는 표정은 base 로 대신함
+ * 스탠딩 (배경 없는 누끼). 표정 차분은 GPT 원본 그대로(기본 그림과 같은 크기 · 위치로만 맞춤) — 겹쳐서 갈아 끼움
+ * 없는 표정은 base 로 대신함. 움직임은 나중에 중요한 장면만 라이브 영상으로
  */
 export interface StandSet {
   base: string | null;
   faces: Partial<Record<Face, string>>;
-  blink?: string;
 }
 const faces = (who: string, list: Face[]) => Object.fromEntries(list.map((f) => [f, `${B}/char/${who}-${f}.webp`])) as Partial<Record<Face, string>>;
 export const STAND: Record<CharKey, StandSet> = {
-  yeonseo: { base: `${B}/char/yeonseo-base.webp`, faces: faces("yeonseo", ["away", "smile", "cold", "surprise", "sad", "blush"]), blink: `${B}/char/yeonseo-blink.webp` },
-  amy: { base: `${B}/char/amy-base.webp`, faces: faces("amy", ["smile", "pout", "surprise", "sad", "blush", "smug"]), blink: `${B}/char/amy-blink.webp` },
+  yeonseo: { base: `${B}/char/yeonseo-base.webp`, faces: faces("yeonseo", ["away", "smile", "cold", "surprise", "sad", "blush"]) },
+  amy: { base: `${B}/char/amy-base.webp`, faces: faces("amy", ["smile", "pout", "surprise", "sad", "blush", "smug"]) },
   boss: { base: null, faces: {} },
 };
-/** 눈 깜빡임을 얹어도 어색하지 않은 표정 (눈 모양이 크게 다른 표정은 깜빡임 생략) */
-export const BLINK_OK: Face[] = ["base", "away", "smile", "cold"];
 
 /** 배경 — 없으면 단색 그라데이션 */
 export const BG: Record<BgId, string | null> = {
@@ -120,7 +117,7 @@ export const TITLE = { bg: `${B}/ui/title-bg.webp`, logo: `${B}/ui/title-logo.we
 /** 로딩 화면에서 전부 받는 목록 */
 export function preloadList(): { img: string[]; audio: string[] } {
   const img = new Set<string>();
-  for (const c of Object.values(STAND)) for (const u of [c.base, c.blink, ...Object.values(c.faces)]) if (u) img.add(u);
+  for (const c of Object.values(STAND)) for (const u of [c.base, ...Object.values(c.faces)]) if (u) img.add(u);
   for (const u of Object.values(BG)) if (u) img.add(u);
   for (const u of Object.values(FACE_ICON)) if (u) img.add(u);
   img.add(CARD_BACK);

@@ -6,7 +6,7 @@
  * 저장: localStorage (못 쓰는 환경이어도 게임은 그대로 돌아감)
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { BG, BG_FALLBACK, BGM, BGM_ONCE, BLINK_OK, ENDINGS, FACE_ICON, NAME, NAME_COLOR, SFX, STAND, TITLE, preloadList } from "@/lib/love/assets";
+import { BG, BG_FALLBACK, BGM, BGM_ONCE, ENDINGS, FACE_ICON, NAME, NAME_COLOR, SFX, STAND, TITLE, preloadList } from "@/lib/love/assets";
 import { type GState, goScene, ignorePhone, initState, lineKey, miniDone, next, pick, run } from "@/lib/love/engine";
 import { type ReactLine, idleLine, touchLine } from "@/lib/love/reactions";
 import type { BgmId, CharKey, EndingId, Face, Opt, SfxId, Who } from "@/lib/love/types";
@@ -816,30 +816,6 @@ function Sprite({
 }) {
   const set = STAND[who];
   const body = useRef<HTMLDivElement>(null);
-  const [blink, setBlink] = useState(false);
-  const canBlink = !!set.blink && BLINK_OK.includes(face);
-
-  // 눈 깜빡임: 2.6~6초마다, 가끔 두 번
-  useEffect(() => {
-    if (!canBlink) return;
-    let t = 0;
-    const loop = () => {
-      t = window.setTimeout(
-        () => {
-          setBlink(true);
-          window.setTimeout(() => setBlink(false), 110);
-          if (Math.random() < 0.22) {
-            window.setTimeout(() => setBlink(true), 260);
-            window.setTimeout(() => setBlink(false), 370);
-          }
-          loop();
-        },
-        2600 + Math.random() * 3400,
-      );
-    };
-    loop();
-    return () => window.clearTimeout(t);
-  }, [canBlink]);
 
   // 폴짝 · 흔들림 (다시 그리지 않고 애니메이션만)
   useEffect(() => {
@@ -871,14 +847,13 @@ function Sprite({
       <div ref={body} className="h-full">
         {set.base ? (
           <div className="lv-breathe relative h-full" data-who={who}>
+            {/* 표정 그림이 원본이라 윤곽이 조금씩 달라서, 표정이 떠 있는 동안 기본 그림은 숨김 (크기 기준으로만 남김) */}
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={set.base} alt={NAME[who]} draggable={false} className="h-full w-auto max-w-none" />
+            <img src={set.base} alt={NAME[who]} draggable={false} className="h-full w-auto max-w-none transition-opacity duration-200" style={{ opacity: set.faces[face] ? 0 : 1 }} />
             {(Object.entries(set.faces) as [Face, string][]).map(([f, u]) => (
               // eslint-disable-next-line @next/next/no-img-element
               <img key={f} src={u} alt="" draggable={false} className="lv-face" style={{ opacity: face === f ? 1 : 0 }} />
             ))}
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            {set.blink && <img src={set.blink} alt="" draggable={false} className="lv-face lv-face-blink" style={{ opacity: canBlink && blink ? 1 : 0 }} />}
           </div>
         ) : (
           <div className="lv-breathe flex h-full w-[22cqw] items-start justify-center rounded-t-full bg-gradient-to-b from-[#3a2c1e] to-transparent pt-[6cqw] text-[2cqw] text-[#e0b46a]/80">
