@@ -85,7 +85,18 @@ export const townAvail = (glitchOpen: number, done: readonly number[] = []) =>
 /** 이 픽셀 타운 단계가 열리는 메인 오염 단계 */
 export const townNeed = (lv: number) => TOWN_FROM + (Math.max(1, lv) - 1) * TOWN_EVERY;
 /** 픽셀 타운 단계의 적 세기 (메인 오염 단계로) */
-export const townGlitchLv = (lv: number) => Math.min(GLITCH_MAX, 2 + 2 * Math.max(1, Math.min(TOWN_MAX, lv)));
+export const townGlitchLv = (lv: number) => Math.min(GLITCH_MAX, TOWN_TUNE.off + 2 * Math.max(1, Math.min(TOWN_MAX, lv)));
+/**
+ * 원정 단계 → 오염 단계 = off + 2 × 단계 · hpTo 단계까지는 적 체력 × hp (시뮬이 바꿔 볼 수 있게 객체)
+ * 2026-10-22: 원정 11~15 를 사람이 거의 첫 판에 깸 → 14단계(오염 30)까지 적 체력 ×1.3.
+ *  15단계(오염 32)부터는 31단계 체력 점프가 그대로 들어와서 따로 안 올림
+ */
+export const TOWN_TUNE = { off: 2, hp: 1.3, hpTo: 14 };
+/** 원정 단계의 오염 단계 규칙 (적 체력 배수까지) */
+export const townGlitch = (lv: number): GlitchDef => {
+  const g = GLITCH[townGlitchLv(lv)];
+  return lv <= TOWN_TUNE.hpTo ? { ...g, hp: Math.round(g.hp * TOWN_TUNE.hp * 100) / 100 } : g;
+};
 /** 픽셀 타운 단계를 처음 클리어하면 */
 export const townFirstClear = (lv: number): Goods => ({ cores: 4 + lv, relicBox: 1, cardBox: 1 });
 /** 해피 타운 단계 첫 클리어로만 얻는 유물 (상자에선 안 나옴) */
@@ -400,7 +411,7 @@ const deepRule = (P: DeepParams): Record<number, string> => ({
   20: `적 속도 ${x100(P.spd20)} · 방어력 ${x100(P.armor20)}`,
   25: `보스 체력 ${x100(P.boss25)} · 보스 시간 -18초`,
   30: "끝없는 오염 — 심연 1막 끝",
-  31: "심연 2막 — 보스 2페이즈 셋 (40 · 50 · 60웨이브)",
+  31: "심연 2막 — 적 체력이 크게 올라요 (유물 4칸 · 각인 몫) · 보스 2페이즈 셋 (40 · 50 · 60웨이브)",
   35: "심연 변이 「정예」",
   40: "보스 6명 모두 2페이즈 · 심연 변이 「방벽」",
   45: "심연 변이 「안개」",
@@ -421,10 +432,14 @@ export interface DeepParams {
   /** 31단계부터 단계마다 적 체력 + (10단계 기준, 없으면 hpPerLv) · 50단계 보스 체력 */
   hpPerLv2?: number;
   boss50?: number;
+  /** 31단계에서 한 번에 더하는 적 체력 (10단계 기준) — 30 클리어로 여는 유물 4칸 · 각인만큼 */
+  jump31?: number;
 }
 // 2026-10-21: 30단계가 너무 세서 못 연다는 말 → 26~30 기울기 0.085 → 0.04, 대신 31~ 0.06 → 0.09 (30 클리어로 여는 유물 4칸 · 각인이 받쳐 줌)
-// 2026-10-22: 「전반적으로 쉬워졌다」 + 다 키운 봇(유물 3칸 · 각인 없음)이 30 · 35 · 40을 50~90% 깨던 것 → 11~25 0.085 → 0.095 · 26~30 0.04 → 0.08 · 31~ 0.09 → 0.12
-export const DEEP_PARAMS: DeepParams = { hpPerLv: 0.095, armor11: 1.15, armor20: 1.28, boss15: 1.08, boss25: 1.15, spd20: 1.1, rewardPerLv: 0.1, hpPerLv26: 0.08, hpPerLv2: 0.12, boss50: 1.1 };
+// 2026-10-22: 「전반적으로 쉬워졌다」 + 다 키운 봇(유물 3칸 · 각인 없음)이 30 · 35 · 40을 50~90% 깨던 것 → 11~25 0.085 → 0.095 · 26~30 0.04 → 0.08
+// 2026-10-22 (2): 「30 깨니까 그 뒤가 너무 쉬움」 — 사람 기록에서 31 · 32 · 33 을 한두 판에 깸 (예전 30은 7판). 31 체력이 옛 30보다 낮았고 유물 4칸 · 각인이 더해짐
+//   → 31에서 한 번에 +1.2 (유물 4칸 · 각인 몫) · 31~ 0.12 → 0.13. 성장 시뮬(defense-econ)에서 31~50 단계마다 봇 3~20판 (26~30 과 비슷한 결)
+export const DEEP_PARAMS: DeepParams = { hpPerLv: 0.095, armor11: 1.15, armor20: 1.28, boss15: 1.08, boss25: 1.15, spd20: 1.1, rewardPerLv: 0.1, hpPerLv26: 0.08, hpPerLv2: 0.13, boss50: 1.1, jump31: 1.2 };
 export function deepGlitch(P: DeepParams): GlitchDef[] {
   const top = BASE_GLITCH[10];
   const rules = deepRule(P);
@@ -437,7 +452,7 @@ export function deepGlitch(P: DeepParams): GlitchDef[] {
         ? P.hpPerLv * (lv - 10)
         : lv <= 30
           ? P.hpPerLv * 15 + s26 * (lv - 25)
-          : P.hpPerLv * 15 + s26 * 5 + (P.hpPerLv2 ?? P.hpPerLv) * (lv - 30);
+          : P.hpPerLv * 15 + s26 * 5 + (P.jump31 ?? 0) + (P.hpPerLv2 ?? P.hpPerLv) * (lv - 30);
     const hp = Math.round(top.hp * (1 + k) * 100) / 100;
     return {
       lv,
@@ -658,7 +673,7 @@ export function modsOf(lo: Loadout | null | undefined): Mods {
     twinStar: has("twin_star") ? V.twin_star(X("twin_star")) / 100 : 0,
     warBanner: has("war_banner") ? V.war_banner(X("war_banner")) / 100 : 0,
     // 픽셀 타운은 단계에 맞는 메인 오염 단계 세기 (오염 단계 규칙 · 2페이즈 · 심연 변이도 그 단계 것)
-    glitch: L.stage === "town" ? GLITCH[townGlitchLv(L.town)] : GLITCH[L.glitch],
+    glitch: L.stage === "town" ? townGlitch(L.town) : GLITCH[L.glitch],
     res: L.res,
     relics: L.trelic ? [...L.relics, L.trelic] : L.relics,
     resLv: L.resLv,

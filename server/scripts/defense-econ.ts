@@ -45,6 +45,8 @@ import {
   collectReward,
   LV_COST,
   deepGlitch,
+  DEEP_PARAMS,
+  TOWN_TUNE,
   glitchFirstClear,
   glitchUnlocks,
   lvCost,
@@ -109,6 +111,19 @@ const R = () => {
     for (const arr of both("GLITCH", GLITCH))
       d.forEach((x, i) => Object.assign(arr[11 + i], x, rslope ? { reward: Math.round((4 + Number(rslope) * (i + 1)) * 100) / 100 } : {}));
   }
+  // --deep2 hpPerLv,hpPerLv26,hpPerLv2,jump31 : 심연 체력 기울기만 바꿔 보기 (나머지는 DEEP_PARAMS)
+  const deep2 = opt("--deep2");
+  if (deep2) {
+    const [hpPerLv, hpPerLv26, hpPerLv2, jump31] = deep2.split(",").map(Number);
+    const d = deepGlitch({ ...DEEP_PARAMS, hpPerLv, hpPerLv26, hpPerLv2, jump31 });
+    for (const arr of both("GLITCH", GLITCH)) d.forEach((x, i) => Object.assign(arr[11 + i], x));
+  }
+  // --townoff N : 원정 단계 L 의 적 세기 = 오염 N + 2L
+  const toff = opt("--townoff");
+  if (toff) for (const T of both("TOWN_TUNE", TOWN_TUNE)) T.off = Number(toff);
+  // --townhp 1.3,14 : 원정 hpTo 단계까지 적 체력 배수
+  const thp = opt("--townhp");
+  if (thp) for (const T of both("TOWN_TUNE", TOWN_TUNE)) [T.hp, T.hpTo] = thp.split(",").map(Number);
 // --tune k=v,k=v : balance.ts TUNE 값 바꿔 보기 (두 벌 다)
 {
   const tv = opt("--tune");
@@ -619,6 +634,9 @@ function transPull() {
 const t0 = Date.now();
 let firstAt: Record<number, number> = {};
 const townAt: Record<number, number> = {};
+/** 단계마다 깰 때까지 판 수 (쫀쫀함: 2~4판이면 「뚫는 맛」, 1판이면 너무 쉬움) */
+const tries: Record<number, number> = {};
+const townTries: Record<number, number> = {};
 let townRuns = 0;
 for (let i = 0; i < MAXRUNS; i++) {
   const glitch = p.glitchOpen;
@@ -631,6 +649,7 @@ for (let i = 0; i < MAXRUNS; i++) {
   reward(r, made, glitch);
   achievements();
   spend();
+  if (firstAt[glitch] === undefined) tries[glitch] = (tries[glitch] ?? 0) + 1;
   if (r.win && firstAt[glitch] === undefined) firstAt[glitch] = hours;
   if (i % LOG === 0 || (r.win && glitch === GLITCH_MAX))
     log.push(
@@ -648,6 +667,7 @@ for (let i = 0; i < MAXRUNS; i++) {
     townReward(t.r, t.made, tl, t.exp!);
     achievements();
     spend();
+    if (townAt[tl] === undefined) townTries[tl] = (townTries[tl] ?? 0) + 1;
     if (t.r.win && townAt[tl] === undefined) townAt[tl] = hours;
     if (LOG && townRuns % 10 === 0) log.push(`  원정 ${townRuns}판 ${hours.toFixed(1)}h · ${tl}단계 ${t.r.win ? (t.r.reason === "act2" ? "1막 클리어" : "클리어") : "실패"} · 분대 ${p.squads.length} · 시작 치트 ${p.patches.length}`);
   }
@@ -656,6 +676,8 @@ for (let i = 0; i < MAXRUNS; i++) {
 console.log(`성장 경제 시뮬 — 봇 ${BOT} · 배속 ${SPEED} · 하루 ${RUNS_PER_DAY}판 · GP ${USE_GP ? "씀" : "안 씀"} · ${args.join(" ")}`);
 console.log(log.join("\n"));
 console.log("\n오염 단계 첫 클리어 시간: " + Object.entries(firstAt).map(([g, h]) => `${g}:${h.toFixed(0)}h`).join(" "));
+console.log("오염 단계별 깰 때까지 판 수: " + Object.entries(tries).map(([g, n]) => `${g}:${n}`).join(" "));
+if (TOWN_EVERY_RUNS) console.log("원정 단계별 깰 때까지 판 수: " + Object.entries(townTries).map(([g, n]) => `${g}:${n}`).join(" "));
 console.log(`보물방 ${treasures}번`);
 if (TOWN_EVERY_RUNS) console.log(`원정 ${townRuns}판 · 단계 첫 클리어 시간: ` + Object.entries(townAt).map(([g, h]) => `${g}:${h.toFixed(0)}h`).join(" ") + ` · 분대 ${p.squads.join(",")} · 시작 치트 ${p.patches.join(",")} · 도감 ${p.expSeen.length}`);
 console.log(`총 ${p.stats.runs}판 · ${hours.toFixed(1)}시간 · 업적 GP ${gpTotal} · 판매 GP ${gpSold} · 패키지 ${JSON.stringify(p.bought)} · 계산 ${((Date.now() - t0) / 1000).toFixed(0)}s`);

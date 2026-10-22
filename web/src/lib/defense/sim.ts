@@ -1406,7 +1406,7 @@ function spawn(b: Board, kindId: string, hp: number): Enemy {
 
 function spawnBoss(b: Board, def: BossDef) {
   const w = b.wave;
-  const e = spawn(b, "slime", hpOf(w) * B.bossHp * def.hp * b.mods.glitch.boss);
+  const e = spawn(b, "slime", hpOf(w) * B.bossHp * def.hp * b.mods.glitch.boss * (!b.exp && w >= LAST_WAVE ? B.finalBossHp : 1));
   e.kind = "boss";
   e.boss = BOSSES.indexOf(def);
   e.armor = Math.round(B.armorPerWave * w * def.armor * b.mods.glitch.armor);

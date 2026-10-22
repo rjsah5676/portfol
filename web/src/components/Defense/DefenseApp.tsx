@@ -52,6 +52,7 @@ import {
   kstDayKey,
   townFirstClear,
   townGlitchLv,
+  TOWN_TUNE,
   townNeed,
   townAvail,
   treasureChance,
@@ -584,9 +585,9 @@ function Menu(p: {
                   첫 클리어 보상
                 </span>
               )}
-              <span className="block text-[12px] font-normal text-[#3a2a00]">
+              <span className="block truncate text-[12px] font-normal text-[#3a2a00]">
                 {townReady
-                  ? `원정 ${townLv}단계 · 적 = 오염 ${townGlitchLv(townLv)}단계 · 보상 ×${(GLITCH[townGlitchLv(townLv)].reward * TOWN_REWARD).toFixed(1)}`
+                  ? `원정 ${townLv}단계 · 적 = 오염 ${townGlitchLv(townLv)}단계${townLv <= TOWN_TUNE.hpTo ? ` 체력 ×${TOWN_TUNE.hp}` : ""} · 보상 ×${(GLITCH[townGlitchLv(townLv)].reward * TOWN_REWARD).toFixed(1)}`
                   : `연습 판 (기록 · 보상 없음) · 메인 오염 ${TOWN_FROM}단계가 열리면 정식 오픈`}
               </span>
             </Btn>
