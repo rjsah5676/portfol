@@ -21,9 +21,7 @@ import {
   CHARS,
   CHOICE_MS,
   EMOTES,
-  FACES,
   GAMES,
-  POSES,
   TIERS,
   fmtShort,
   fmtWon,
@@ -35,6 +33,7 @@ import {
   type TierId,
   lookChar,
   lookName,
+  lookOf,
 } from "@/lib/poker/rules";
 import { bestK, kCategory } from "@/lib/poker/seven";
 import { topHands } from "@/lib/poker/showdown";
@@ -86,6 +85,8 @@ import {
 } from "./parts";
 import { SevenBar, SevenChoice, SevenStage, sevenHint, sevenSeatCards } from "./SevenParts";
 import { DevBar } from "./DevPanel";
+import { LoadingPanel, usePreload } from "@/components/GameLoader";
+import { tableTasks } from "@/lib/poker/preloadList";
 
 /*
  * 테이블 화면 (홀덤 · 7포커 공용). 무대(stage) 안에서 그려지고, 무대의 가로·세로에 따라 세로판(폰) / 가로판(PC)으로 배치가 바뀜.
@@ -707,7 +708,7 @@ export default function TableView({
             exitAskRef.current = false;
           }
           exitMineRef.current = mine ? ex : null;
-          for (const s of t.seats) if (s) preloadChar(s.look ?? s.char, POSES, FACES);
+          for (const s of t.seats) if (s) preloadChar(s.look ?? s.char, t.game);
         }
         setTable(t);
       },
@@ -1094,6 +1095,12 @@ export default function TableView({
     }
   };
 
+  // 들어갈 때 이 방 그림 · 앉은 캐릭터 그림을 다 받은 뒤에 테이블을 보임 (받는 동안 테이블 위를 덮음 — 판 · 시간은 그대로 돎).
+  // 나중에 앉는 캐릭터는 다시 막지 않음 — 그 자리 그림만 받아지면 나타남 (CharSprite · FaceIcon)
+  const load = usePreload(
+    table ? () => tableTasks(table, o, lookOf(wallet.char, wallet.wear)) : null,
+    table ? `${id}:${table.tier}:${o}` : null
+  );
   const u = Math.min(w, h) / 100;
   if (table === undefined)
     return (
@@ -1150,6 +1157,8 @@ export default function TableView({
         !sv.players[seat].chosen &&
         !sv.players[seat].folded));
   const myTurn = mySeat >= 0 && isWaiting(mySeat);
+  // 내 차례(시간이 가는 중)면 다 못 받았어도 테이블을 염 — 로딩 화면에 가려 시간 초과로 나가기 예약되던 것
+  if (myTurn && !load.ready) load.skip();
   const actor = hand && !hand.result && hand.toAct >= 0 ? table.seats[hand.toAct] : null;
   /** 자리 번호 → 배치 (내 자리가 0번) */
   const spotOf = (seat: number) => L.spots[(seat - Math.max(0, mySeat) + n) % n];
@@ -2568,6 +2577,13 @@ export default function TableView({
           </span>
         </div>
       )}
+      {/* 로딩: 테이블 위를 통째로 덮음 (폰 전체화면 안내 z-60 보다는 아래 — DOM 순서로) */}
+      {!load.ready &&
+        (load.show ? (
+          <LoadingPanel state={load} title={tierLabel(table.tier)} accent="#FFC93C" sub="테이블 그림 받는 중" className="absolute inset-0 z-[60]" />
+        ) : (
+          <div aria-hidden className="absolute inset-0 z-[60] bg-[#0d0e12]" />
+        ))}
     </Shell>
   );
 }

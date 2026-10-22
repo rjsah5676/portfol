@@ -8,6 +8,7 @@
  * 최종 음량에 게임별 보정(lib/soundLevel.ts, 측정해서 맞춤)을 곱함.
  * 능력별(불·바람·채찍·물)로 맞는 소리·탄 소리를 조금씩 다르게.
  */
+import { keyed } from "@/lib/preload";
 import { LEVEL } from "@/lib/soundLevel";
 
 export type Element = "fire" | "wind" | "whip" | "water" | "bolt" | "ice" | "key" | "fist";
@@ -128,14 +129,27 @@ const SAMPLES: Record<string, number> = {
   "ui-ready": 0.35,
 };
 const buffers = new Map<string, AudioBuffer>();
+/** 받은 효과음 파일 (로딩 화면에서 먼저 받아 둠 — AudioContext 는 사용자 입력 뒤에야 만들어서 디코드는 그때) */
+const raw = new Map<string, Promise<ArrayBuffer | null>>();
+function fetchSample(name: string) {
+  let p = raw.get(name);
+  if (!p) {
+    p = fetch(`/fight/sfx/${name}.mp3`)
+      .then((r) => (r.ok ? r.arrayBuffer() : null))
+      .catch(() => null);
+    raw.set(name, p);
+  }
+  return p;
+}
+/** 로딩 화면(GameLoader)용: 효과음 파일 하나씩 (이름 붙여서 다시 들어오면 바로 끝남) */
+export const fightSfxTasks = () => Object.keys(SAMPLES).map((n) => keyed(`fight:sfx:${n}`, () => fetchSample(n)));
 let samplesLoading = false;
 function loadSamples(c: AudioContext) {
   if (samplesLoading) return;
   samplesLoading = true;
   for (const name of Object.keys(SAMPLES)) {
-    fetch(`/fight/sfx/${name}.mp3`)
-      .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject()))
-      .then((b) => c.decodeAudioData(b))
+    fetchSample(name)
+      .then((b) => (b ? c.decodeAudioData(b) : Promise.reject()))
       .then((buf) => buffers.set(name, buf))
       .catch(() => {});
   }

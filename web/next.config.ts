@@ -17,6 +17,18 @@ const nextConfig: NextConfig = {
   images: {
     unoptimized: true,
   },
+  // 게임 그림 · 소리 (public/ 기본은 max-age=0 → 들어올 때마다 파일마다 서버에 다시 물어봄, 느린 인터넷에서 로딩 화면이 길어짐).
+  // 1시간은 그대로 쓰고, 그 뒤 7일까지는 갖고 있던 걸 바로 쓰면서 뒤에서 새로 받음 → 그림을 바꾸면 다음 방문부터 보임.
+  // 배포(next start)에서만 — 로컬 개발 중엔 그림을 바꾸면 바로 보여야 하므로 기본값 그대로
+  async headers() {
+    if (process.env.NODE_ENV !== "production") return [];
+    return [
+      {
+        source: "/:dir(fight|poker|defense|rhythm|sketch)/:path*",
+        headers: [{ key: "Cache-Control", value: "public, max-age=3600, stale-while-revalidate=604800" }],
+      },
+    ];
+  },
   // 옮기거나 없앤 주소 → 지금 주소 (검색엔진에 남은 예전 링크용)
   async redirects() {
     return [

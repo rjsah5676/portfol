@@ -66,6 +66,9 @@ import RankList from "@/components/RankList";
 import { bpChartLabel } from "./RankingBoard";
 import RhythmShop from "./RhythmShop";
 import { canWear, useRhythmItems } from "@/lib/rhythm/myItems";
+import { LoadingPanel, usePreload } from "@/components/GameLoader";
+import { allSettled, preloadAll } from "@/lib/preload";
+import { bootTasks, playArt } from "./assets";
 
 const SETTINGS_KEY = "rhythm_settings";
 const BGM_MUTE_KEY = "rhythm_bgm_mute";
@@ -98,24 +101,68 @@ export interface Best {
 
 // 곡 렌더링은 한 번만 (페이지 안에서 재사용)
 const buffers = new Map<string, Promise<AudioBuffer>>();
-const loadSong = (s: Song) => {
-  if (!buffers.has(s.id))
+/** 곡 파일 받는 진행 (받은 바이트, 전체 바이트 — 모르면 0) */
+type SongProg = (got: number, len: number) => void;
+/** 받는 중에 붙은 쪽(시작 로딩 화면 · 온라인 판 준비) — 미리 받던 곡이면 그 진행을 이어서 봄 */
+const progSubs = new Map<string, Set<SongProg>>();
+const progLast = new Map<string, [number, number]>();
+/** 음원 받기 — 조각마다 진행 알림 (content-length 가 없으면 끝날 때 한 번) */
+async function fetchAudio(id: string, url: string): Promise<ArrayBuffer> {
+  const r = await fetch(url);
+  if (!r.ok) throw new Error(`audio ${r.status}`);
+  const len = Number(r.headers.get("content-length")) || 0;
+  const tell = (got: number, total: number) => {
+    progLast.set(id, [got, total]);
+    progSubs.get(id)?.forEach((f) => f(got, total));
+  };
+  if (!len || !r.body) {
+    const ab = await r.arrayBuffer();
+    tell(ab.byteLength, ab.byteLength);
+    return ab;
+  }
+  const reader = r.body.getReader();
+  const parts: Uint8Array[] = [];
+  let got = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    parts.push(value);
+    got += value.byteLength;
+    tell(got, Math.max(len, got));
+  }
+  const out = new Uint8Array(got);
+  let o = 0;
+  for (const part of parts) {
+    out.set(part, o);
+    o += part.byteLength;
+  }
+  return out.buffer;
+}
+const loadSong = (s: Song, onProg?: SongProg) => {
+  if (!buffers.has(s.id)) {
+    progLast.delete(s.id);
     buffers.set(
       s.id,
       s.audio
         ? // 음원 곡: 파일을 받아서 디코딩 (신스 곡은 직접 렌더)
-          fetch(s.audio)
-            .then((r) => {
-              if (!r.ok) throw new Error(`audio ${r.status}`);
-              return r.arrayBuffer();
-            })
-            .then((ab) => audio().then((ctx) => ctx.decodeAudioData(ab)))
+          fetchAudio(s.id, s.audio).then((ab) => audio().then((ctx) => ctx.decodeAudioData(ab)))
         : renderSong(s)
     );
+  }
   const p = buffers.get(s.id)!;
   p.catch(() => buffers.delete(s.id)); // 실패하면 다음에 다시 시도
+  if (onProg) {
+    let subs = progSubs.get(s.id);
+    if (!subs) progSubs.set(s.id, (subs = new Set()));
+    subs.add(onProg);
+    const last = progLast.get(s.id);
+    if (last) onProg(...last);
+    const off = () => void subs.delete(onProg);
+    p.then(off, off);
+  }
   return p;
 };
+const mb = (b: number) => (b / 1048576).toFixed(1);
 
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 /** 내 음악 곡 색 후보 (노트·연출 색) */
@@ -249,6 +296,15 @@ export default function RhythmGame() {
     seed: number;
   } | null>(null);
   const [result, setResult] = useState<(Result & { newBest: boolean }) | null>(null);
+  // 첫 로딩: 타이틀 · 메뉴 · 곡 선택 그림 · 글꼴 · 효과음 (다 받기 전엔 게임 화면 대신 진행률)
+  const boot = usePreload(bootTasks);
+  /** 곡 시작 로딩: 음원 · 플레이 화면 그림 진행 (show: 시작 연출이 끝나도 아직 받는 중) */
+  const [prep, setPrep] = useState<{
+    loaded: number;
+    total: number;
+    sub: string;
+    show: boolean;
+  } | null>(null);
 
   // ── 전체화면: 게임 화면 전체(프레임)를 — 화면이 바뀌어도 그대로 유지 ──
   const rootRef = useRef<HTMLDivElement>(null);
@@ -591,10 +647,38 @@ export default function RhythmGame() {
       setLaunching(true);
     }
     stopPreview(0.3);
+    // 진행: 음원(받은 양 10칸 + 디코딩 1칸, 내 음악은 이미 있음) + 플레이 화면 그림 — 시작 연출(1.5초) 뒤에도 아직이면 진행률 화면
+    // 이미 받은 그림(첫 로딩의 도트 그림 등)은 빼고 셈 — 진행률이 처음부터 차 있지 않게
+    const art = playArt(song, wornSkin, settings.bg, !coarse).filter((u) => !allSettled([u]));
+    const AUD = isCustom ? 0 : 11;
+    let aud = 0;
+    let img = 0;
+    let sub = "곡 준비 중";
+    const tell = () =>
+      setPrep((p) => ({ loaded: aud + img, total: AUD + art.length, sub, show: !!p?.show }));
+    tell();
+    const showT = setTimeout(
+      () => setPrep((p) => p && { ...p, show: true }),
+      fromResult ? 150 : 1500
+    );
     try {
       const ctx = await audio();
       const [buffer] = await Promise.all([
-        isCustom ? Promise.resolve(track!.buffer) : loadSong(song),
+        isCustom
+          ? Promise.resolve(track!.buffer)
+          : loadSong(song, (got, len) => {
+              aud = len ? Math.floor(Math.min(1, got / len) * 10) : 0;
+              sub = got < len ? `곡 받는 중 · ${mb(got)} / ${mb(len)}MB` : "곡 여는 중";
+              tell();
+            }).then((b) => {
+              aud = AUD;
+              tell();
+              return b;
+            }),
+        preloadAll(art, (n) => {
+          img = n;
+          tell();
+        }),
         wait(fromResult ? 0 : 1500),
       ]);
       // 자동 싱크 프로필: 키보드/터치 × 출력 지연(스피커↔블루투스가 바뀌면 다른 프로필)
@@ -614,10 +698,24 @@ export default function RhythmGame() {
       console.error(e);
       setErr("이 브라우저에서 오디오를 재생할 수 없습니다.");
     } finally {
+      clearTimeout(showT);
+      setPrep(null);
       setLoading(false);
       setLaunching(false);
     }
-  }, [loading, customSel, isCustom, enterFs, screen, stopPreview, track, song, diff]);
+  }, [
+    loading,
+    customSel,
+    isCustom,
+    enterFs,
+    screen,
+    stopPreview,
+    track,
+    song,
+    diff,
+    wornSkin,
+    settings.bg,
+  ]);
 
   const finish = useCallback(
     (r: Result) => {
@@ -826,7 +924,13 @@ export default function RhythmGame() {
         let song: Song;
         if (s.kind === "builtin") {
           song = SONGS.find((x) => x.id === s.id)!;
-          buffer = await loadSong(song);
+          buffer = await loadSong(song, (got, len) =>
+            setOLoad({
+              ratio: len ? Math.min(1, got / len) * 0.95 : 0,
+              label: got < len ? "곡 받는 중" : "곡 여는 중",
+              error: "",
+            })
+          );
           chart = charts[s.id]?.[diff];
         } else if (hosted?.ver === s.id) {
           song = trackSong(hosted.track);
@@ -848,6 +952,10 @@ export default function RhythmGame() {
           chart = g.charts[diff];
         }
         if (!chart) throw new Error("이 난이도 채보가 없어요.");
+        // 플레이 화면 그림 (곡 배경 · 스킨 무대)
+        await preloadAll(
+          playArt(song, wornSkin, settings.bg, !window.matchMedia("(pointer: coarse)").matches)
+        );
         setOPrep({ key, round: no, ctx, buffer, song, chart, diff });
         setOLoad({ ratio: 1, label: "준비 완료", error: "" });
         await markLoaded(id, no);
@@ -862,7 +970,7 @@ export default function RhythmGame() {
         if (preparing.current === key) preparing.current = "";
       }
     })();
-  }, [oRoom, oRound, net.uid, oPrep?.key, hosted, got, charts, fetchGot]);
+  }, [oRoom, oRound, net.uid, oPrep?.key, hosted, got, charts, fetchGot, wornSkin, settings.bg]);
 
   // playing: 준비가 끝난 판이면 플레이 화면으로 (시작 시각은 서버가 정함 — Stage 가 맞춰 기다림)
   useEffect(() => {
@@ -1114,6 +1222,8 @@ export default function RhythmGame() {
     : `pru fs-screen relative isolate aspect-video w-full overflow-hidden bg-black select-none [container-type:inline-size] ${
         fs ? "" : "border-2 border-[#4b3b80] shadow-[0_0.35cqw_0_rgba(12,7,24,0.6)]"
       }`;
+  /** 그릴 화면 — 첫 로딩이 끝나기 전엔 없음 */
+  const view: Screen | null = boot.ready ? screen : null;
   const rootCls = fs
     ? `${pseudoFs ? "fixed inset-0 z-[100] " : ""}flex h-full w-full items-center justify-center bg-black [&>.fs-screen]:w-[min(100vw,calc(100dvh*16/9))]`
     : "mx-auto w-full max-w-[min(1120px,calc((100dvh-190px)*16/9))]";
@@ -1205,7 +1315,15 @@ export default function RhythmGame() {
       )}
       <div ref={rootRef} className={rootCls}>
         <div className={frameCls}>
-          {screen === "title" && (
+          {!boot.ready && boot.show && (
+            <LoadingPanel
+              state={boot}
+              title="PIXEL Rhythm Up"
+              accent="#EC4899"
+              className="absolute inset-0"
+            />
+          )}
+          {view === "title" && (
             <TitleScreen
               entered={entered}
               onEnter={enter}
@@ -1221,7 +1339,7 @@ export default function RhythmGame() {
               blocked={settingsOpen || shopOpen}
             />
           )}
-          {screen === "select" && (
+          {view === "select" && (
             <SongSelect
               songs={SONGS}
               sel={sel}
@@ -1259,7 +1377,7 @@ export default function RhythmGame() {
               onAnalyze={setAnalyze}
             />
           )}
-          {screen === "play" && play && (playingOnline ? !!oPrep : !!chart) && (
+          {view === "play" && play && (playingOnline ? !!oPrep : !!chart) && (
             <Stage
               key={play.round}
               song={playingOnline ? oPrep!.song : song}
@@ -1293,7 +1411,7 @@ export default function RhythmGame() {
               }
             />
           )}
-          {screen === "online" &&
+          {view === "online" &&
             (oRoom && net.uid ? (
               <OnlineRoom
                 room={oRoom}
@@ -1345,7 +1463,7 @@ export default function RhythmGame() {
                 blocked={settingsOpen}
               />
             ))}
-          {screen === "result" && result && (
+          {view === "result" && result && (
             <ResultScreen
               result={result}
               song={song}
@@ -1363,6 +1481,15 @@ export default function RhythmGame() {
                 setShopOpen(false);
                 sfx("ui-back", 0.7);
               }}
+            />
+          )}
+          {prep?.show && (
+            <LoadingPanel
+              state={{ ...prep, slow: false, skip: () => {} }}
+              title={song.title}
+              accent={SKIN_THEME[wornSkin]?.accent ?? song.color}
+              sub={prep.sub}
+              className="absolute inset-0 z-[60]"
             />
           )}
           {settingsOpen && (

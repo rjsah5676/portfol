@@ -68,6 +68,9 @@ import Online, { type BotCfg, type MatchCfg } from "./Online";
 import { OnlineMatch } from "./onlineMatch";
 import { InputLog, WatchFeed, aiClear, aiRecord, rankBotForfeit, rankBotReport, tutorialDone, type RoomSession, type WatchSession } from "@/realtime/fight";
 import { LEVEL } from "@/lib/soundLevel";
+import GameLoader, { LoadingPanel, usePreload } from "@/components/GameLoader";
+import { preloadAll, type LoadTask } from "@/lib/preload";
+import { matchTasks, menuTasks, warmTasks } from "./assets";
 
 
 const SAVE_KEY = "fight:setup";
@@ -127,6 +130,19 @@ function hudOf(s: State): Hud {
 
 const KR = "font-['Nanum_Gothic',sans-serif]";
 
+/** 메뉴가 뜬 뒤(첫 로딩 화면 다음) 뒤에서 조용히 받아 둠 — 맵 선택 · 도트 미리 보기 · 첫 판이 바로 뜨게 (2개씩만: 판 시작 로딩이 밀리지 않게) */
+function Warm({ c1, c2 }: { c1: number; c2: number }) {
+  useEffect(() => {
+    // 판이 시작되면(메뉴가 내려가면) 남은 것은 안 받음 — 온라인 대전 중에 회선을 쓰지 않게
+    let alive = true;
+    void preloadAll(warmTasks(c1, c2, () => !alive), undefined, { concurrency: 2 });
+    return () => {
+      alive = false;
+    };
+  }, [c1, c2]);
+  return null;
+}
+
 export default function FightGame() {
   const [setup, setSetup] = useState<Setup>({ mode: "ai", c1: 0, c2: 1, level: 2, map: -1 });
   const [playing, setPlaying] = useState(false);
@@ -175,6 +191,13 @@ export default function FightGame() {
   const pausedRef = useRef(false);
   const rendererRef = useRef<FightRenderer | null>(null);
   const restartRef = useRef<() => void>(() => {});
+  // ── 판 시작 로딩: 두 선수 그림 · 맵 · 효과 그림 (다 받을 때까지 게임 루프가 판을 멈춰 둠) ──
+  const [need, setNeed] = useState<{ key: string; tasks: LoadTask[] } | null>(null);
+  const pre = usePreload(need?.tasks ?? null, need?.key);
+  const preRef = useRef(true);
+  useEffect(() => {
+    preRef.current = pre.ready;
+  }, [pre.ready, need]);
   // ── 온라인: 방 연결은 경기 화면을 오가도 유지 ──
   const [onlineOn, setOnlineOn] = useState(false);
   const [sess, setSessState] = useState<RoomSession | null>(null);
@@ -397,6 +420,11 @@ export default function FightGame() {
     const looks: [string, string] = [look(s.p[0].ch, skinNow[0]), look(s.p[1].ch, skinNow[1])];
     r.looks = looks;
     setSkins(skinNow);
+    const needFor = (st: State) => {
+      preRef.current = false;
+      setNeed({ key: `${st.p[0].ch}:${st.p[1].ch}:${st.map}:${skinNow.join()}`, tasks: matchTasks([st.p[0].ch, st.p[1].ch], st.map, skinNow) });
+    };
+    needFor(s);
     const net = ol && !watching ? sessRef.current?.net : null;
     // 관전용: 내 확정 입력을 서버에 조금씩 올림 (관전자는 두 선수 입력으로 같은 경기를 다시 돌림)
     const log = ol && net && sessRef.current ? new InputLog(sessRef.current.id, ol.match, ol.seat, ol.delay) : null;
@@ -478,6 +506,7 @@ export default function FightGame() {
     restartRef.current = () => {
       if (ol || bot) return;
       s = newMatch([setup.c1, setup.c2], pickMap());
+      needFor(s);
       playBgm(MAPS[s.map].bgm ?? MENU_BGM, true);
       aiSeed = (Date.now() & 0xffff) + 1;
       ai = new FightAI(aiLevelFor(setup.level, CHARS[setup.c2]?.id), aiSeed);
@@ -520,8 +549,9 @@ export default function FightGame() {
         r.draw(s);
         return;
       }
-      // 그림이 다 불러와질 때까지는 판을 멈춰 두고 검은 화면 (임시 그림이 잠깐 보이는 것 방지, 보통 한두 프레임)
-      if (!r.ready(s)) {
+      // 그림이 다 불러와질 때까지는 판을 멈춰 두고 검은 화면 (임시 그림이 잠깐 보이는 것 방지) — 그 위에 로딩 화면 (pre)
+      // 온라인 대전은 예전처럼 판 그림(시트 · 배경 · 효과)만 기다림 — 더 늦게 시작하면 상대 쪽이 끊긴 걸로 봄 (onlineMatch lostPeer 15초)
+      if (!r.ready(s) || (!preRef.current && !om)) {
         r.drawLoading();
         return;
       }
@@ -942,6 +972,9 @@ export default function FightGame() {
           <span className="hidden whitespace-nowrap text-white/55 [@media(pointer:coarse)]:inline">— 눌러서 크게</span>
         </button>
         <div className="fs-screen relative isolate [container-type:inline-size]">
+          {/* 처음 들어올 때 로딩 화면 (메뉴 · 캐릭터 선택 그림 · 효과음 · 글꼴) — 선택 화면과 같은 칸 */}
+          <GameLoader tasks={menuTasks} title="PIXEL FIGHT" accent="#FF8A3D" className="aspect-video w-full rounded-xl border border-white/10">
+          <Warm c1={setup.c1} c2={setup.c2} />
           {onlineOn ? (
             <Online
               session={sess}
@@ -973,6 +1006,7 @@ export default function FightGame() {
               }}
             />
           )}
+          </GameLoader>
           {fsBtn()}
         </div>
         <HowTo mode={setup.mode} />
@@ -1023,6 +1057,12 @@ export default function FightGame() {
     <div ref={rootRef} className={rootCls}>
       <div className="fs-screen relative isolate w-full overflow-hidden rounded-xl border border-white/10 bg-black [container-type:inline-size]">
         <canvas ref={canvasRef} className="block aspect-video w-full [image-rendering:pixelated]" />
+        {/* 판 시작 로딩 (체력바 · 버튼 위, 일시정지 · 컷인 아래) */}
+        {!pre.ready && !netEnd && !(ol && !watching && hud) && (
+          <div className="absolute inset-0 z-[15] bg-[#07080C]">
+            {pre.show && <LoadingPanel state={pre} title="PIXEL FIGHT" accent="#FF8A3D" sub="대전 준비 중" className="h-full w-full" />}
+          </div>
+        )}
         {fsBtn(true)}
         {cutin && <CutIn key={cutin.key} cfg={cutin} />}
         {winCh && hud && hud.pt >= 80 && <WinQuote ch={hud.ch[hud.winner]} right={hud.winner === 1} skin={skins[hud.winner]} />}

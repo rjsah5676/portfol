@@ -22,6 +22,10 @@ export const HIT_SOUNDS: { key: HitSound; label: string }[] = [
 ];
 
 const isSample = (k: HitSound): k is SampleHit => k !== "thump";
+/** 샘플 타격음 파일 주소 (로딩 화면이 미리 받음) */
+export const hitSoundUrl = (k: SampleHit) => `/rhythm/hit/${k}.wav`;
+/** 샘플 타격음 전부 (합성 1번 빼고) */
+export const SAMPLE_HITS = HIT_SOUNDS.map((h) => h.key).filter(isSample);
 /** 샘플 타격음 캐시 (한 번 받아서 디코딩) */
 const samples = new Map<string, Promise<AudioBuffer | null>>();
 const loaded = new Map<string, AudioBuffer>();
@@ -30,7 +34,7 @@ export function loadHitSound(ctx: BaseAudioContext, kind: HitSound): Promise<Aud
   if (!isSample(kind)) return Promise.resolve(null);
   let p = samples.get(kind);
   if (!p) {
-    p = fetch(`/rhythm/hit/${kind}.wav`)
+    p = fetch(hitSoundUrl(kind))
       .then((r) => r.arrayBuffer())
       .then((a) => ctx.decodeAudioData(a))
       .catch(() => null);

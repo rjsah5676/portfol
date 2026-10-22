@@ -10,6 +10,7 @@ import {
 } from "react";
 import { RANKS, rankOf, suitOf, type Card } from "@/lib/poker/cards";
 import { asset, chipColor, seatLive } from "@/lib/poker/assets";
+import { usePreload } from "@/components/GameLoader";
 import {
   CHARS,
   FACES,
@@ -523,6 +524,8 @@ export function CharSprite({
 }) {
   // 앉은 대기 동작: 받아지면 한 장짜리 대기 그림 대신 (다른 포즈는 그대로 한 장)
   const live = seatLive(char) ? asset.seatLive(char) : null;
+  // 포즈 8장을 다 받기 전엔 자리를 비워 둠 (나중에 앉은 캐릭터 · 바뀐 캐릭터 — 테이블 로딩에서 받은 건 바로)
+  const art = usePreload(() => POSES.map((p) => asset.seat(char, "front", p)), char).ready;
   const [liveOk, setLiveOk] = useState<string | null>(null);
   // 자리마다 0~6초 늦게 틀기 시작 — 다 같이 같은 박자로 숨 쉬지 않게
   const [liveGo, setLiveGo] = useState(false);
@@ -542,6 +545,7 @@ export function CharSprite({
         height: Math.round((w * 4) / 3),
         // transform 은 숨쉬기 애니메이션이 쓰니 따로 (scale 은 transform 과 겹쳐 적용됨)
         scale: flip ? "-1 1" : undefined,
+        visibility: art ? undefined : "hidden",
         ...style,
       }}
       aria-hidden
@@ -555,7 +559,7 @@ export function CharSprite({
           data-on={p === pose && !(liveOn && p === "idle") ? "1" : undefined}
         />
       ))}
-      {live && liveGo && (
+      {live && liveGo && art && (
         <img
           src={live}
           alt=""
@@ -583,6 +587,8 @@ export function FaceIcon({
   className?: string;
   ring?: string;
 }) {
+  // 표정 8장을 다 받기 전엔 얼굴 칸만 (나중에 앉은 캐릭터)
+  const art = usePreload(() => FACES.map((f) => asset.face(char, f)), char).ready;
   return (
     <span
       className={`pk-face relative inline-flex shrink-0 overflow-hidden rounded-full ${className}`}
@@ -601,6 +607,7 @@ export function FaceIcon({
           alt=""
           draggable={false}
           data-on={f === face ? "1" : undefined}
+          style={art ? undefined : { visibility: "hidden" }}
         />
       ))}
     </span>

@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { asset, roomTint } from "@/lib/poker/assets";
 import { playVoice } from "@/lib/poker/sfx";
+import { preloadAll } from "@/lib/preload";
+import { lobbyWarm } from "@/lib/poker/preloadList";
 import {
   CHARS,
   CHAR_IDS,
@@ -131,6 +133,10 @@ export default function Lobby({
   const info = CHARS[wallet.char];
   /** 그림 열쇠 (스킨을 입었으면 스킨) */
   const look = lookOf(wallet.char, wallet.wear);
+  // 로비에 있는 동안 테이블 공통 그림 · 내 캐릭터의 테이블 그림을 미리 (안 기다림 — 테이블 들어갈 때 로딩이 짧아짐)
+  useEffect(() => {
+    void preloadAll(lobbyWarm(look, game));
+  }, [look, game]);
 
   // ── 조각들 ──
   const top = (

@@ -18,6 +18,7 @@ import {
 } from "@/lib/fight/sim";
 import { frameRect, pickFrame, type FrameRect, type LoadedSheet } from "@/lib/fight/sprites";
 import { Motion, type Pose } from "./motion";
+import { keyed, type LoadTask } from "@/lib/preload";
 
 interface Particle {
   x: number;
@@ -51,18 +52,53 @@ const BSOD_T = 40;
 const fxCache = new Map<string, HTMLImageElement | null>();
 /** 불러오기가 끝난 그림 (실패 포함) — 시작 전에 다 받아 두려고 */
 const fxDone = new Set<string>();
+/** 받는 중인 그림 (끝나면 풀림, 실패 포함) — 로딩 화면이 기다림 */
+const fxWait = new Map<string, Promise<void>>();
 function fxImg(name: string): HTMLImageElement | null {
   if (!fxCache.has(name)) {
     fxCache.set(name, null);
     const im = new Image();
-    im.onload = () => {
-      fxCache.set(name, im);
-      fxDone.add(name);
-    };
-    im.onerror = () => fxDone.add(name);
+    fxWait.set(
+      name,
+      new Promise<void>((res) => {
+        im.onload = () => {
+          fxCache.set(name, im);
+          fxDone.add(name);
+          res();
+        };
+        im.onerror = () => {
+          fxDone.add(name);
+          res();
+        };
+      })
+    );
     im.src = `/fight/fx/${name}.webp`;
   }
   return fxCache.get(name) ?? null;
+}
+/** 로딩 화면(GameLoader)용: 그 캐릭터 · 스킨들이 쓰는 그림 효과를 한 장씩 (게임과 같은 캐시를 채움) */
+export const fxTasks = (ids: string[]): LoadTask[] =>
+  [...new Set(ids.flatMap(fxNames))].map((n) => keyed(`fight:fx:${n}`, () => (fxImg(n), fxWait.get(n) ?? Promise.resolve())));
+
+/** 맵 배경 그림 (판 · 렌더러가 바뀌어도 그대로 — 로딩 화면에서 미리 채움) */
+const bgCache = new Map<string, HTMLImageElement | null>();
+const bgWait = new Map<string, Promise<void>>();
+export function loadBg(id: string, src: string): Promise<void> {
+  let p = bgWait.get(id);
+  if (!p) {
+    bgCache.set(id, null);
+    p = new Promise<void>((res) => {
+      const im = new Image();
+      im.onload = () => {
+        bgCache.set(id, im);
+        res();
+      };
+      im.onerror = () => res();
+      im.src = src;
+    });
+    bgWait.set(id, p);
+  }
+  return p;
 }
 /** v2 에셋의 움직이는 탄 그림 (fx/<캐릭터>-<이름>-0..n): 캐릭터·기술 → [이름, 장 수, 판정 높이 대비 배율, 판정 중심 가로 위치] */
 const PROJ_ANIM: Record<string, Partial<Record<"S" | "X", [string, number, number, number]>>> = {
@@ -422,19 +458,11 @@ export class FightRenderer {
   }
 
   /** 맵 배경 그림 (MapDef.bg) — 없으면 코드로 그린 배경 */
-  private bgImg = new Map<string, HTMLImageElement | null>();
   private bgImage(id: string, src?: string) {
     if (!src) return null;
-    if (!this.bgImg.has(id)) {
-      this.bgImg.set(id, null);
-      const im = new Image();
-      im.onload = () => {
-        this.bgImg.set(id, im);
-        this.bgKey = "";
-      };
-      im.src = src;
-    }
-    return this.bgImg.get(id) ?? null;
+    // 다 받으면 stage() 의 key(그림 있음)가 바뀌어 다시 그림
+    if (!bgCache.has(id)) void loadBg(id, src);
+    return bgCache.get(id) ?? null;
   }
 
   private stage(s: State, k: number) {

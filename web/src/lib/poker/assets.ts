@@ -1,4 +1,5 @@
-import { skinOf, tierOf, type Emote, type Face, type Look, type Pose, type TierId } from "./rules";
+import { preloadAll } from "@/lib/preload";
+import { EMOTES, FACES, POSES, skinOf, tierOf, type Emote, type Face, type GameKind, type Look, type Pose, type TierId } from "./rules";
 
 /*
  * 포커 그림 파일 주소 (web/public/poker/ — anime-poker-src/build.py 가 만듦).
@@ -82,12 +83,22 @@ export function chipColor(ratio: number): "white" | "red" | "blue" | "green" | "
   return "white";
 }
 
-/** 캐릭터 그림을 미리 받아 둠 (자리에 앉은 캐릭터만) */
-const loaded = new Set<string>();
-export function preloadChar(c: Look, poses: readonly Pose[], faces: readonly Face[]) {
-  if (typeof window === "undefined" || loaded.has(c)) return;
-  loaded.add(c);
-  for (const p of poses) new Image().src = asset.seat(c, "front", p);
-  for (const f of faces) new Image().src = asset.face(c, f);
-  new Image().src = asset.cutin(c);
+/**
+ * 테이블에서 쓰는 캐릭터 그림: 7포커 = 앉은 포즈 8장, 홀덤 = 표정 8장 (각자 그 게임에서만 보임)
+ * + 이모티콘 · 올인 컷인 · 승리 전신 · 프로필. 앉은 대기 동작(seatLive)은 CharSprite 가 받아지면 바꿔 끼우므로 뺌
+ */
+export const charUrls = (c: Look, game: GameKind): string[] => [
+  ...(game === "seven" ? POSES.map((p) => asset.seat(c, "front", p)) : FACES.map((f) => asset.face(c, f))),
+  ...EMOTES.map((e) => asset.emote(c, e)),
+  asset.cutin(c),
+  asset.hero(c, "win"),
+  asset.profile(c),
+];
+
+/** 캐릭터 그림을 미리 받아 둠 (자리에 앉은 캐릭터만). 로딩 화면과 같은 저장소라 두 번 안 받고, 다 받으면 다시 들어올 때 로딩 화면 없이 */
+const warmed = new Set<string>();
+export function preloadChar(c: Look, game: GameKind) {
+  if (typeof window === "undefined" || warmed.has(`${game}:${c}`)) return;
+  warmed.add(`${game}:${c}`);
+  void preloadAll(charUrls(c, game));
 }

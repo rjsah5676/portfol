@@ -301,3 +301,28 @@ export function preloadArt() {
   }
   if (FIELD_ART) img(FIELD_ART);
 }
+
+/** 그림 하나를 img() 캐시에 불러 decode 까지 기다림 (로딩 화면용 — 실패해도 끝남) */
+export function loadImg(src: string): Promise<void> {
+  img(src);
+  const el = cache.get(src);
+  if (!el) return Promise.resolve();
+  const dec = () => (el.decode ? el.decode().catch(() => {}) : Promise.resolve());
+  if (el.complete) return el.naturalWidth ? dec() : Promise.resolve();
+  return new Promise<void>((res) => {
+    el.addEventListener("load", () => void dec().then(res), { once: true });
+    el.addEventListener("error", () => res(), { once: true });
+  });
+}
+
+/** 게임이 쓰는 그림 주소 전부 (유닛 · 공격 · 적 · 보스 · 유물 · 원정 유물 · 재화) — 로딩 화면이 미리 받음 */
+export function artUrls(): string[] {
+  const sp = [...Object.values(UNIT_ART), ...Object.values(ENEMY_ART), ...Object.values(BOSS_ART)];
+  return [
+    ...sp.flatMap((s) => (s.atk ? [s.src, s.atk] : [s.src])),
+    ...Object.values(RELIC_ART),
+    ...Object.values(EXP_RELIC_ART),
+    ...Object.values(ITEM_ART),
+    ...(FIELD_ART ? [FIELD_ART] : []),
+  ];
+}

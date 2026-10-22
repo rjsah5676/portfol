@@ -9,7 +9,6 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { CHARS, type CharDef } from "@/lib/fight/chars";
 import { MAPS } from "@/lib/fight/maps";
 import { AI_LEVELS } from "@/lib/fight/ai";
-import { loadSheet } from "@/lib/fight/sprites";
 import { sfxUi } from "@/lib/fight/sfx";
 import { KeyCap, keyText } from "./KeyCap";
 import PatchNotes, { LATEST } from "./PatchNotes";
@@ -19,6 +18,8 @@ import PixelPreview from "./PixelPreview";
 import { TUT_CHAR, TUT_FOE, TUT_MAP } from "@/lib/fight/tutorial";
 import { AURA_MASK, artUrl, auraUrl, look } from "@/lib/fight/skins";
 import { useMySkins, wornSkin } from "@/lib/fight/mySkins";
+import { preloadAll } from "@/lib/preload";
+import { matchTasks } from "./assets";
 import { useNick } from "@/lib/AuthContext";
 import SkinShop, { type ShopTab } from "./SkinShop";
 
@@ -271,10 +272,8 @@ export default function Select({
   useEffect(() => {
     if (stage !== "vs") return;
     const { setup: st } = stRef.current;
-    loadSheet(CHARS[st.c1].id).catch(() => {});
-    loadSheet(CHARS[st.c2].id).catch(() => {});
-    const mi = st.map >= 0 ? st.map : st.rolled;
-    if (mi !== undefined && MAPS[mi]?.bg) new Image().src = MAPS[mi].bg!;
+    // 판 시작 로딩(FightGame)과 같은 목록 — 여기서 먼저 받기 시작하면 로딩 화면이 짧아짐
+    void preloadAll(matchTasks([st.c1, st.c2], st.map >= 0 ? st.map : st.rolled, [wornSkin(st.c1), null]));
     const t = setTimeout(onStart, 1500);
     return () => clearTimeout(t);
   }, [stage, onStart]);

@@ -39,6 +39,8 @@ export const SFX = [
   "new-record",
 ] as const;
 export type SfxName = (typeof SFX)[number];
+/** 효과음 파일 주소 (로딩 화면이 미리 받음) */
+export const sfxUrl = (n: SfxName) => `/rhythm/px/sfx/${n}.mp3`;
 
 const bufs = new Map<SfxName, AudioBuffer>();
 let loading: Promise<void> | null = null;
@@ -49,7 +51,7 @@ export function loadSfx(): Promise<void> {
   loading = audio().then((ctx) =>
     Promise.all(
       SFX.map((n) =>
-        fetch(`/rhythm/px/sfx/${n}.mp3`)
+        fetch(sfxUrl(n))
           .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(String(r.status)))))
           .then((ab) => ctx.decodeAudioData(ab))
           .then((b) => void bufs.set(n, b))
@@ -101,7 +103,7 @@ export function tick(gain = 0.25) {
 }
 
 // ───────── 메뉴 BGM: 처음엔 0초부터, 그다음은 20.78~50.78초(128BPM 16마디)를 끊김 없이 반복 ─────────
-const BGM_URL = "/rhythm/menu-bgm.mp3";
+export const BGM_URL = "/rhythm/menu-bgm.mp3";
 const LOOP = [20.782, 50.7815] as const;
 let bgmBuf: Promise<AudioBuffer> | null = null;
 let bgm: { src: AudioBufferSourceNode; gain: GainNode } | null = null;

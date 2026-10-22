@@ -5,6 +5,7 @@
  *  음량은 세 줄(배경음악 · 효과음 · 음성) + 전체 음소거, localStorage 에 저장.
  */
 
+import { preloadUrl } from "@/lib/preload";
 import { lookChar } from "./rules";
 
 const KEY = "poker_sound";
@@ -77,6 +78,16 @@ function fileOf(name: string): string | null {
   const alts: string[] = [];
   for (let i = 1; manifest[`${name}-${i}`]; i++) alts.push(manifest[`${name}-${i}`]);
   return alts.length ? `${BASE}/${alts[Math.floor(Math.random() * alts.length)]}` : null;
+}
+
+/** 로딩 화면: 효과음 · 짧은 음악(징글) 파일을 미리 받아 둠. 배경음악 · 음성은 쓸 때 받음 (크고 많아서) */
+export async function preloadSfx(): Promise<void> {
+  loadManifest();
+  await manifestLoading;
+  const files = Object.entries(manifest ?? {})
+    .filter(([k]) => /^(sfx|jingle)-/.test(k))
+    .map(([, f]) => `${BASE}/${f}`);
+  await Promise.all(files.map((u) => preloadUrl(u)));
 }
 
 // ───────────── 재생 ─────────────

@@ -20,6 +20,7 @@ import { buyChar, buySkin, exchange, setChar, wearSkin } from "@/realtime/poker"
 import { POINT, POKER_EXCHANGE, SHOP, fmtPoint } from "@/lib/points";
 import PointInfo from "@/components/Points/PointInfo";
 import { Money } from "./parts";
+import { LoadingPanel, usePreload } from "@/components/GameLoader";
 import Sheet from "./Sheet";
 
 /*
@@ -73,6 +74,20 @@ export default function Shop({
   /** 옷장에 보이는 것 = 지금 캐릭터의 스킨만 */
   const mine = SKINS.filter((sk) => sk.char === wallet.char && skins.includes(sk.id)).length;
   const wear = wallet.wear ?? {};
+  // 탭마다 보이는 전신 그림을 다 받은 뒤에 목록을 보임 (상점 스킨 탭은 7장 · 약 0.6MB)
+  const view = inGame ? "closet" : tab;
+  const art = usePreload(
+    () =>
+      (view === "shop"
+        ? SKINS.map((sk) => sk.id)
+        : view === "chars"
+          ? CHAR_IDS.filter((c) => (CHAR_PRICE[c] ?? 0) > 0)
+          : view === "closet"
+            ? [wallet.char, ...SKINS.filter((sk) => sk.char === wallet.char && skins.includes(sk.id)).map((sk) => sk.id)]
+            : []
+      ).map((l) => asset.full(l)),
+    `${view}:${wallet.char}`
+  );
 
   const run = async (key: string, fn: () => Promise<void>) => {
     if (busy) return;
@@ -165,7 +180,11 @@ export default function Shop({
         data-sheet-scroll
         className="pk-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain p-[0.9em]"
       >
-        {tab === "exchange" && !inGame ? (
+        {!art.ready ? (
+          art.show && (
+            <LoadingPanel state={art} accent="#FFC93C" sub="그림 받는 중" className="h-full min-h-[12em] rounded-[10px]" style={{ background: "transparent" }} />
+          )
+        ) : tab === "exchange" && !inGame ? (
           <Exchange wallet={wallet} seated={seated} busy={busy} run={run} setMsg={setMsg} />
         ) : tab === "chars" && !inGame ? (
           <CharShop

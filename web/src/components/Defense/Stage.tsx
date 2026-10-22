@@ -9,7 +9,9 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import GameLoader from "@/components/GameLoader";
 import { getPrefs, onPrefs, unlock } from "./audio";
+import { defenseTasks } from "./loadTasks";
 
 /*
  * PIXEL GLITCH DEFENSE 무대 — 1024 × 576 디자인을 화면에 맞춰 통째로 키우고 줄임 (PC = 폰, 배치가 늘 같음).
@@ -290,7 +292,10 @@ export default function Stage({ children }: { children: ReactNode }) {
                 transformOrigin: "0 0",
               }}
             >
-              {children}
+              {/* 그림 · 글꼴 · 효과음을 다 받은 뒤에 게임 (무대 칸 그대로 진행률 화면) */}
+              <GameLoader tasks={defenseTasks} title="PIXEL LUCKY DEFENSE" accent="#FF5CD6" className="absolute inset-0">
+                {children}
+              </GameLoader>
             </div>
           )}
           {iosGate && (

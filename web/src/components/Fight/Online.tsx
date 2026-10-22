@@ -19,6 +19,8 @@ import { loadSheet } from "@/lib/fight/sprites";
 import { artUrl, look } from "@/lib/fight/skins";
 import { wornSkin } from "@/lib/fight/mySkins";
 import { sfxUi } from "@/lib/fight/sfx";
+import { preloadAll } from "@/lib/preload";
+import { matchTasks } from "./assets";
 import { keyText } from "./KeyCap";
 import { useChessUser } from "@/components/Chess/useChessUser";
 import Nick from "@/components/Nick";
@@ -383,9 +385,8 @@ function BotRoom({ st, nick, onMatch }: { st: Extract<RankStatus, { s: "bot" }>;
     rankBotStart(st.id, mine)
       .then((r) => {
         const cfg: BotCfg = { id: st.id, chars: [mine, r.botCh], map: r.map, seed: r.seed, botR: r.botR, names: [nick, st.opp.nick] };
-        loadSheet(look(mine, wornSkin(mine))).catch(() => {});
-        loadSheet(CHARS[r.botCh].id).catch(() => {});
-        if (MAPS[r.map]?.bg) new Image().src = MAPS[r.map].bg!;
+        // 판 시작 로딩(FightGame)과 같은 목록을 VS 화면 동안 먼저
+        void preloadAll(matchTasks([mine, r.botCh], r.map, [wornSkin(mine), null]));
         setVs(cfg);
       })
       .catch((e) => {
@@ -1113,9 +1114,7 @@ function Room({
     const names: [string, string] = s.seat === 0 ? [me.nick, foe.nick] : [foe.nick, me.nick];
     // eslint-disable-next-line react-hooks/set-state-in-effect -- 방 상태 변화에 따라 VS 화면
     setVs({ match: st.match, seat: s.seat, chars: st.chars, map: st.map, delay: st.delay, maxRb: st.maxRb, names, skins: st.skins });
-    loadSheet(look(st.chars[0], st.skins?.[0])).catch(() => {});
-    loadSheet(look(st.chars[1], st.skins?.[1])).catch(() => {});
-    if (MAPS[st.map]?.bg) new Image().src = MAPS[st.map].bg!;
+    void preloadAll(matchTasks(st.chars, st.map, [st.skins?.[0] || null, st.skins?.[1] || null]));
     s.setReady(false);
   }, [st, played, vs, foe, me, s]);
   useEffect(() => {

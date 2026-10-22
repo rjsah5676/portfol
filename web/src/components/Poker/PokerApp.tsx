@@ -22,7 +22,9 @@ import {
   setSound,
   type SoundSettings,
 } from "@/lib/poker/sfx";
-import { fmtShort, lookOf } from "@/lib/poker/rules";
+import { fmtShort, lookOf, type Look } from "@/lib/poker/rules";
+import GameLoader from "@/components/GameLoader";
+import { introTasks, lobbyTasks } from "@/lib/poker/preloadList";
 import type { RankRow, Wallet } from "@/lib/poker/types";
 import { getRank, roomOpts, subscribeWallet, watchClock } from "@/realtime/poker";
 import type { Orient } from "./layout";
@@ -426,6 +428,13 @@ export default function PokerApp({ rank }: { rank: RankRow[] | null }) {
       />
     );
 
+  // 로딩 화면: 타이틀 · 로비 그림을 다 받은 뒤에 염 (로비는 처음 들어올 때의 내 캐릭터 기준 — 로비에서 바꾼 캐릭터는 LobbyChar 가 전신 그림부터)
+  // 테이블은 TableView 가 따로 (주소로 바로 들어온 테이블도)
+  const [look0, setLook0] = useState<Look | null>(null);
+  if (wallet && !look0) setLook0(lookOf(wallet.char, wallet.wear));
+  const gate = loading || tableId ? "" : onIntro ? "intro" : wallet && look0 ? `lobby:${look0}` : "";
+  const gateTasks = gate === "intro" ? introTasks : look0 && gate ? () => lobbyTasks(look0) : [];
+
   // 무대 크기: 전체화면이면 화면 전부, 아니면 PC 는 16:9 상자, 폰은 화면 높이에 맞춘 세로 상자
   const outer =
     pseudoFs || shortLand
@@ -488,7 +497,11 @@ export default function PokerApp({ rank }: { rank: RankRow[] | null }) {
         }
         data-o={o}
       >
-        {size.w > 0 && screen}
+        {size.w > 0 && (
+          <GameLoader key={gate} tasks={gateTasks} title="ANIME POKER" accent="#FFC93C" className="absolute inset-0">
+            {screen}
+          </GameLoader>
+        )}
         {fsGate && (
           <div className="pk-fsgate absolute inset-0 z-[60] flex flex-col items-center justify-center gap-[1.1em] overflow-hidden bg-black px-6 pt-[18%] text-center">
             <GateBg />

@@ -100,6 +100,23 @@ function ensureCtx(): AudioContext | null {
   return ctx;
 }
 
+/** 효과음 파일만 받아 둠 — 소리 엔진 없이 (사용자가 누르기 전, 로딩 화면에서). 못 받으면 null */
+const raw = new Map<string, Promise<ArrayBuffer | null>>();
+export function fetchSfx(name: string): Promise<ArrayBuffer | null> {
+  let p = raw.get(name);
+  if (!p) {
+    const def = SFX[name];
+    p = def
+      ? fetch(def.src).then(
+          (r) => (r.ok ? r.arrayBuffer() : null),
+          () => null
+        )
+      : Promise.resolve(null);
+    raw.set(name, p);
+  }
+  return p;
+}
+
 function load(name: string): Promise<void> {
   const have = loading.get(name);
   if (have) return have;
@@ -107,9 +124,8 @@ function load(name: string): Promise<void> {
   const c = ensureCtx();
   const p =
     def && c
-      ? fetch(def.src)
-          .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(String(r.status)))))
-          .then((ab) => c.decodeAudioData(ab))
+      ? fetchSfx(name)
+          .then((ab) => (ab ? c.decodeAudioData(ab) : Promise.reject(new Error("no sfx"))))
           .then(
             (buf) => void buffers.set(name, buf),
             () => void buffers.set(name, null)
