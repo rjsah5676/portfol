@@ -608,7 +608,7 @@ const cloneF = (f: Fighter): Fighter => ({ ...f, hist: f.hist.slice(), enc: f.en
  * 이 빌드의 게임 데이터 지문 (캐릭터 성능·맵) — 온라인에서 서로 다른 빌드끼리 붙었는지 확인.
  * 계산 방식(sim.ts)만 바꿨을 땐 SIM_REV를 올릴 것.
  */
-const SIM_REV = 33;
+const SIM_REV = 34;
 export const BUILD_ID = (() => {
   const str = SIM_REV + JSON.stringify(CHARS.map((c) => [c.hp, c.walk, c.jumpVx, c.dash, c.cd, c.glide, c.hurt, c.width, c.moves])) + JSON.stringify(MAPS.map((m) => [m.plats, m.spawn]));
   let h = 2166136261;
@@ -2470,6 +2470,8 @@ function checkKO(s: State) {
  */
 /** 되감기 낙하로 땅의 상대를 맞혔을 때 포르테 발 높이 (상대 발 위 px) */
 const DIVE_LOW = 25;
+/** 되감기 낙하를 맞혔을 때 상대가 포르테 앞으로 최소 이만큼 (px) */
+const DIVE_GAP = 20;
 function rewindDive(s: State, i: number) {
   const f = s.p[i];
   const o = s.p[1 - i];
@@ -2495,6 +2497,12 @@ function rewindDive(s: State, i: number) {
   if (hit) {
     // 땅에 선 상대를 맞혔으면 상대 키 언저리까지 내려 섬 — 너무 높이 떠 있으면 이어 칠 첫 공중 약이 머리 위로 헛침 (10.16)
     if (standingOn(mapOf(s), o)) f.h = Math.min(f.h, o.h + DIVE_LOW * SUB);
+    // 앞으로 미끄러지며 내리찍어 상대 머리 위 · 뒤로 넘어가 맞히면 이어 칠 공중 약이 앞으로만 나가 헛침 → 상대 바로 앞으로 (10.22)
+    if (((o.x - f.x) * f.face) / SUB < DIVE_GAP) {
+      let nx = o.x - f.face * DIVE_GAP * SUB;
+      if (nx < WALL_L || nx > WALL_R) ((f.face = -f.face as 1 | -1), (nx = o.x - f.face * DIVE_GAP * SUB));
+      f.x = Math.max(WALL_L, Math.min(WALL_R, nx));
+    }
     f.hold = charOf(f).moves.S.air?.timeStop ?? 30;
     return;
   }
