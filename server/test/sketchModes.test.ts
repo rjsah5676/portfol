@@ -170,3 +170,90 @@ describe("그림 릴레이", () => {
     expect(room.state.phase).toBe("r-draw");
   });
 });
+
+describe("가짜 화가 바퀴 수", () => {
+  it("방에서 정한 바퀴만큼 그리면 투표", async () => {
+    const { id, all } = await roomOf(3, { mode: "fake", laps: 1 });
+    await all[0].rpc("sketch.startGame", { id });
+    for (let k = 0; k < 3; k++) {
+      const room = await peek(id);
+      expect(room.state.phase).toBe("f-draw");
+      await byUid(all, room.state.drawer).rpc("sketch.addStroke", { id, turn: room.state.turnId, s: stroke(`l${k}`, true) });
+    }
+    expect((await peek(id)).state.phase).toBe("f-vote");
+    expect((await peek(id)).meta.laps).toBe(1);
+  });
+});
+
+describe("벤치마크 개선 (2026-10-23)", () => {
+  it("릴레이: 인원이 짝수여도 항상 문장으로 끝남 (4명 → 3단계) · 문장에도 따봉", async () => {
+    const { id, host, all } = await roomOf(4, { mode: "relay" });
+    await host.rpc("sketch.startGame", { id });
+    let room = await peek(id);
+    expect(room.state.m.steps).toBe(3);
+    for (const c of all) await c.rpc("sketch.submitText", { id, step: room.state.step, text: "처음" });
+    room = await peek(id);
+    for (const c of all) await c.rpc("sketch.submitSheet", { id, step: room.state.step, strokes: [stroke("a", true)] });
+    room = await peek(id);
+    for (const c of all) await c.rpc("sketch.submitText", { id, step: room.state.step, text: "끝" });
+    room = await peek(id);
+    expect(room.state.phase).toBe("r-album");
+    const album = (await all[1].sub("sketch.album", { id })).data;
+    expect(album[0].map((e: { text?: string }) => (e.text ? "t" : "s"))).toEqual(["t", "s", "t"]);
+    // 마지막 문장에 따봉 (처음 문장은 안 됨, 내 문장도 안 됨)
+    const author = album[0][2].by;
+    const liker = all.find((c) => c.uid !== author)!;
+    await liker.rpc("sketch.like", { id, key: "r:0:2" });
+    await liker.rpc("sketch.like", { id, key: "r:0:0" });
+    await byUid(all, author).rpc("sketch.like", { id, key: "r:0:2" });
+    const likes = (await peek(id)).state.likes;
+    expect(likes["r:0:2"]).toEqual([liker.uid]);
+    expect(likes["r:0:0"]).toBeUndefined();
+  });
+
+  it("그림 맞히기: 판이 끝나면 그린 그림 모아보기 (그림 · 제시어 · 따봉), 끝나기 전엔 못 봄", async () => {
+    const { id, host, all } = await roomOf(2, { mode: "classic", challenge: false, rounds: 1 });
+    await host.rpc("sketch.startGame", { id });
+    const turns: string[] = [];
+    for (let t = 0; t < 2; t++) {
+      const st = (await peek(id)).state;
+      const drawer = byUid(all, st.drawer);
+      const word = ["사과", "배"][t];
+      await drawer.rpc("sketch.setChoices", { id, turnId: st.turnId, choices: [{ word, level: 0 }] });
+      await drawer.rpc("sketch.chooseWord", { id, turnId: st.turnId, word, hint: "○", level: 0 });
+      await drawer.rpc("sketch.addStroke", { id, turn: st.turnId, s: stroke(`g${t}`, true) });
+      await drawer.rpc("sketch.endTurn", { id, turnId: st.turnId, reveal: word });
+      turns.push(st.turnId);
+      if (t === 0) await expect(all[1].sub("sketch.sheet", { id, key: `c:${st.turnId}` })).rejects.toMatchObject({ code: "FORBIDDEN" });
+      await host.rpc("sketch.nextTurn", { id, turnId: st.turnId });
+    }
+    const room = await peek(id);
+    expect(room.state.phase).toBe("ended");
+    expect(room.state.gallery.map((g: { word: string }) => g.word)).toEqual(["사과", "배"]);
+    expect((await all[1].sub("sketch.sheet", { id, key: `c:${turns[0]}` })).data).toHaveLength(1);
+    // 판이 끝난 뒤에도 모아보기에서 따봉
+    const g0 = room.state.gallery[0];
+    const liker = all.find((c) => c.uid !== g0.by)!;
+    await liker.rpc("sketch.like", { id, key: g0.key });
+    expect((await peek(id)).state.likes[g0.key]).toEqual([liker.uid]);
+  });
+
+  it("투표 강퇴: 3명부터, 대상 빼고 과반이면 내보냄 · 다시 누르면 취소", async () => {
+    const { id, all } = await roomOf(4, { mode: "classic" });
+    const [, b, c, d] = all;
+    await b.rpc("sketch.voteKick", { id, target: d.uid });
+    expect((await peek(id)).state.kick[d.uid!]).toEqual([b.uid]);
+    await b.rpc("sketch.voteKick", { id, target: d.uid });
+    expect((await peek(id)).state.kick[d.uid!]).toBeUndefined();
+    await b.rpc("sketch.voteKick", { id, target: d.uid });
+    await c.rpc("sketch.voteKick", { id, target: d.uid });
+    const room = await peek(id);
+    expect(room.players[d.uid!]).toBeUndefined();
+    expect(room.kicked[d.uid!]).toBeTruthy();
+    expect(room.state.kick[d.uid!]).toBeUndefined();
+    // 2명이면 투표 강퇴 안 됨
+    const two = await roomOf(2, { mode: "classic" });
+    await two.all[1].rpc("sketch.voteKick", { id: two.id, target: two.all[0].uid });
+    expect((await peek(two.id)).players[two.all[0].uid!]).toBeTruthy();
+  });
+});

@@ -13,6 +13,7 @@ import { FAKE_LAPS, LIKE_EMOJI, MODE_MS, MODES } from "@/lib/sketch/modes";
 import { randomStarter } from "@/lib/sketch/prompts";
 import { playSfx } from "@/lib/sketch/sfx";
 import {
+  getSheet,
   likeDrawing,
   submitSheet,
   submitText,
@@ -23,6 +24,7 @@ import {
   voteFake,
   type FakeSecret,
   type FakeState,
+  type GalleryItem,
   type RelayEntry,
   type RelaySecret,
   type RelayState,
@@ -32,11 +34,13 @@ import {
 import { Avatar, Icon, Mascot, Who } from "./Art";
 import SketchCanvas, {
   localSource,
+  renderStrokes,
   serverSource,
   staticSource,
   type CanvasApi,
   type LocalSource,
 } from "./SketchCanvas";
+import { albumImage, downloadCanvas, galleryImage, safeName, type AlbumPage } from "./saveImage";
 import Toolbar, { useTools } from "./Toolbar";
 import { tap } from "./stage";
 
@@ -870,6 +874,7 @@ function FeedItem({
   uid,
   e,
   i,
+  chain,
   step,
   v,
   fresh,
@@ -878,6 +883,7 @@ function FeedItem({
   uid: string;
   e: RelayEntry;
   i: number;
+  chain: number;
   step: number;
   v: boolean;
   fresh: boolean;
@@ -908,16 +914,22 @@ function FeedItem({
           <LikeButton room={room} uid={uid} likeKey={e.sheet} author={e.by} />
         </div>
       ) : (
-        <div
-          className={`sk-note max-w-[92%] px-4 py-2.5 ${i === 0 ? "!bg-[#FFF4C2]" : ""}`}
-          style={{
-            rotate: right ? "1deg" : "-1deg",
-            borderRadius: right ? "18px 18px 4px 18px" : "18px 18px 18px 4px",
-          }}
-        >
-          <div className={`sk-hand leading-tight break-keep ${v ? "text-[21px]" : "text-[26px]"}`}>
-            「{e.text}」
+        <div className={`flex max-w-[96%] items-end gap-1.5 ${right ? "flex-row-reverse" : ""}`}>
+          <div
+            className={`sk-note min-w-0 px-4 py-2.5 ${i === 0 ? "!bg-[#FFF4C2]" : ""}`}
+            style={{
+              rotate: right ? "1deg" : "-1deg",
+              borderRadius: right ? "18px 18px 4px 18px" : "18px 18px 18px 4px",
+            }}
+          >
+            <div
+              className={`sk-hand leading-tight break-keep ${v ? "text-[21px]" : "text-[26px]"}`}
+            >
+              「{e.text}」
+            </div>
           </div>
+          {/* 문장에도 따봉 → 판 끝 「베스트 드립」 (처음 문장은 빼고) */}
+          {i > 0 && <LikeButton room={room} uid={uid} likeKey={`r:${chain}:${i}`} author={e.by} />}
         </div>
       )}
     </div>
@@ -1022,7 +1034,16 @@ function Album({
                   {e.sheet ? "⬇️ 이 문장을 그리면…" : "⬇️ 이 그림을 보고…"}
                 </div>
               )}
-              <FeedItem room={room} uid={uid} e={e} i={i} step={st.step} v={v} fresh={i === page} />
+              <FeedItem
+                room={room}
+                uid={uid}
+                e={e}
+                i={i}
+                chain={chain}
+                step={st.step}
+                v={v}
+                fresh={i === page}
+              />
             </div>
           ))
         ) : (
@@ -1073,6 +1094,8 @@ function Album({
             />
           ))}
         </span>
+        {/* 다 본 이야기는 이미지 한 장으로 저장 (갈틱폰처럼 공유용) */}
+        {last && entries.length > 0 && <SaveStoryButton room={room} entries={entries} />}
         {isLeader ? (
           <button
             type="button"
@@ -1088,6 +1111,370 @@ function Album({
         )}
       </div>
     </div>
+  );
+}
+
+// ───────────── 저장 · 시상 · 모아보기 ─────────────
+
+/** 다 그린 그림 작은 미리보기 (도화지 컴포넌트 대신 이미지 한 장 — 여러 장 띄워도 가볍게) */
+function Thumb({
+  roomId,
+  sheetKey,
+  step,
+  className = "",
+}: {
+  roomId: string;
+  sheetKey: string;
+  step: number;
+  className?: string;
+}) {
+  const strokes = useSheet(roomId, sheetKey, step);
+  const src = useMemo(
+    () => (strokes ? renderStrokes(strokes, 0.4).toDataURL("image/png") : ""),
+    [strokes]
+  );
+  return (
+    <div
+      className={`overflow-hidden rounded-[6px] border-[2.5px] border-[var(--ink)] bg-white ${className}`}
+      style={{ aspectRatio: "4 / 3" }}
+    >
+      {src ? (
+        <img src={src} alt="" className="h-full w-full object-cover" draggable={false} />
+      ) : (
+        <div className="flex h-full w-full items-center justify-center text-[11px] text-[var(--ink3)]">
+          …
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** 다 그린 그림 크게 */
+function BigSheet({ roomId, sheetKey, step }: { roomId: string; sheetKey: string; step: number }) {
+  const strokes = useSheet(roomId, sheetKey, step);
+  return <SheetView id={`big:${sheetKey}`} strokes={strokes} />;
+}
+
+/** 릴레이 한 줄을 이미지로 */
+async function saveStory(room: Room, entries: RelayEntry[]) {
+  const pages: AlbumPage[] = await Promise.all(
+    entries.filter(Boolean).map(async (e, i) => ({
+      name: nameOf(room, e.by),
+      role: i === 0 ? "처음 문장" : e.sheet ? "그렸어요" : "그림을 보고",
+      ...(e.sheet ? { strokes: await getSheet(room.id, e.sheet) } : { text: e.text ?? "" }),
+    }))
+  );
+  const first = entries[0];
+  const lastText = [...entries].reverse().find((e) => e?.text && e !== first);
+  const rate = first?.text && lastText?.text ? changeRate(first.text, lastText.text) : null;
+  const starter = nameOf(room, first?.by ?? "");
+  const cv = await albumImage({
+    title: `${starter}의 이야기`,
+    pages,
+    compare:
+      rate !== null
+        ? { first: first.text!, last: lastText!.text!, rate, label: changeLabel(rate) }
+        : null,
+  });
+  downloadCanvas(cv, `doodle-party_${safeName(starter)}의_이야기.png`);
+}
+
+function SaveStoryButton({
+  room,
+  entries,
+  label = "💾 저장",
+  className = "",
+}: {
+  room: Room;
+  entries: RelayEntry[];
+  label?: string;
+  className?: string;
+}) {
+  const [busy, setBusy] = useState(false);
+  return (
+    <button
+      type="button"
+      disabled={busy}
+      title="이 이야기를 이미지 한 장으로 저장"
+      onClick={() => {
+        playSfx("sfx-click");
+        setBusy(true);
+        saveStory(room, entries)
+          .catch(() => playSfx("sfx-error"))
+          .finally(() => setBusy(false));
+      }}
+      className={`sk-btn shrink-0 px-3 text-[15px] ${className}`}
+    >
+      {busy ? "만드는 중…" : label}
+    </button>
+  );
+}
+
+interface Awards {
+  pic: { key: string; by: string; n: number } | null;
+  line: { text: string; by: string; n: number } | null;
+  morph: { chain: number; rate: number; first: string; last: string } | null;
+}
+
+/**
+ * 릴레이 판 끝: 텔레스트레이션 「가장 좋았던 그림 · 가장 웃긴 추측」처럼 시상 + 이야기 저장.
+ *  🖼️ 베스트 그림 (따봉 1위) · 💬 베스트 드립 (문장 따봉 1위) · 🌀 최고의 변신 (변신율 1위)
+ */
+export function RelayEnd({ room, v }: { room: Room; v: boolean }) {
+  const st = room.state;
+  const [album, setAlbum] = useState<RelayEntry[][] | null>(null);
+  useEffect(() => subscribeAlbum(room.id, setAlbum), [room.id]);
+  const likes = st.likes;
+  const awards = useMemo((): Awards | null => {
+    if (!album) return null;
+    const out: Awards = { pic: null, line: null, morph: null };
+    album.forEach((chain, c) => {
+      chain.forEach((e, k) => {
+        if (!e) return;
+        const n = likes?.[`r:${c}:${k}`]?.length ?? 0;
+        if (e.sheet && n > 0 && (!out.pic || n > out.pic.n))
+          out.pic = { key: e.sheet, by: e.by, n };
+        if (!e.sheet && k > 0 && e.text && n > 0 && (!out.line || n > out.line.n))
+          out.line = { text: e.text, by: e.by, n };
+      });
+      // 마지막 문장 (처음 문장 말고)
+      const first = chain[0]?.text;
+      const last = [...chain].reverse().find((e, i) => e?.text && i < chain.length - 1)?.text;
+      if (first && last) {
+        const rate = changeRate(first, last);
+        if (!out.morph || rate > out.morph.rate) out.morph = { chain: c, rate, first, last };
+      }
+    });
+    return out;
+  }, [album, likes]);
+  const card = (emoji: string, title: string, body: ReactNode, i: number) => (
+    <div
+      className="sk-card-soft sk-pop flex min-w-0 flex-col items-center gap-1 px-2.5 py-2"
+      style={{ animationDelay: `${0.15 + i * 0.2}s` }}
+    >
+      <div className="sk-hand text-[18px] leading-none whitespace-nowrap">
+        {emoji} {title}
+      </div>
+      {body}
+    </div>
+  );
+  const who = (by: string, n?: number) => (
+    <span className="flex items-center gap-1 text-[11.5px] font-bold">
+      <Avatar idx={avatarOf(by)} size={18} />
+      <span className="max-w-[90px] truncate">{nameOf(room, by)}</span>
+      {n ? <span className="text-[var(--coral)]">👍{n}</span> : null}
+    </span>
+  );
+  const none = <span className="text-[11.5px] text-[var(--ink3)]">따봉이 없었어요</span>;
+  const a = awards;
+  return (
+    <div className="flex w-full flex-col items-center gap-2">
+      <div className={`grid w-full gap-2 ${v ? "grid-cols-1" : "grid-cols-3"}`}>
+        {card(
+          "🖼️",
+          "베스트 그림",
+          a?.pic ? (
+            <>
+              <Thumb roomId={room.id} sheetKey={a.pic.key} step={st.step} className="w-[120px]" />
+              {who(a.pic.by, a.pic.n)}
+            </>
+          ) : (
+            none
+          ),
+          0
+        )}
+        {card(
+          "💬",
+          "베스트 드립",
+          a?.line ? (
+            <>
+              <span className="sk-hand line-clamp-3 text-center text-[17px] leading-tight break-keep">
+                「{a.line.text}」
+              </span>
+              {who(a.line.by, a.line.n)}
+            </>
+          ) : (
+            none
+          ),
+          1
+        )}
+        {card(
+          "🌀",
+          "최고의 변신",
+          a?.morph ? (
+            <>
+              <span className="line-clamp-2 text-center text-[11.5px] leading-snug break-keep text-[var(--ink2)]">
+                「{a.morph.first}」 → 「{a.morph.last}」
+              </span>
+              <span className="sk-hand text-[22px] leading-none text-[var(--coral)]">
+                {a.morph.rate}%
+              </span>
+              {who(album?.[a.morph.chain]?.[0]?.by ?? "")}
+            </>
+          ) : (
+            none
+          ),
+          2
+        )}
+      </div>
+      {album && album.length > 0 && (
+        <div className="flex flex-wrap items-center justify-center gap-1.5">
+          <span className="text-[12px] font-bold text-[var(--ink2)]">💾 이야기 저장</span>
+          {album.map((chain, c) =>
+            chain.length ? (
+              <SaveStoryButton
+                key={c}
+                room={room}
+                entries={chain}
+                label={nameOf(room, chain[0]?.by ?? "")}
+                className="!px-2 !py-1 text-[12.5px]"
+              />
+            ) : null
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * 그림 맞히기 판 끝: 「오늘의 그림」 모아보기 (드로풀 · 갈틱폰처럼 판이 끝나도 그림이 남게).
+ * 그림마다 따봉(게임 중 누른 것과 합쳐짐) · 크게 보기 · 한 장으로 저장. 따봉 1위 그린 사람 = 인기상.
+ */
+export function ClassicGallery({ room, uid, v }: { room: Room; uid: string; v: boolean }) {
+  const st = room.state;
+  const gallery = st.gallery;
+  const items = useMemo(() => gallery ?? [], [gallery]);
+  const [open, setOpen] = useState(false);
+  const [big, setBig] = useState<GalleryItem | null>(null);
+  const [busy, setBusy] = useState(false);
+  const likesOf = (key: string) => st.likes?.[key]?.length ?? 0;
+  // 인기상: 받은 따봉 합이 가장 많은 사람 (2개 이상)
+  const popular = useMemo(() => {
+    const sum = new Map<string, number>();
+    for (const g of items) sum.set(g.by, (sum.get(g.by) ?? 0) + (st.likes?.[g.key]?.length ?? 0));
+    const top = [...sum.entries()].sort((a, b) => b[1] - a[1])[0];
+    return top && top[1] >= 2 ? { by: top[0], n: top[1] } : null;
+  }, [items, st.likes]);
+  if (!items.length) return null;
+  const save = async () => {
+    setBusy(true);
+    try {
+      const cells = await Promise.all(
+        items.map(async (g) => ({
+          word: g.word,
+          name: nameOf(room, g.by),
+          likes: likesOf(g.key),
+          strokes: await getSheet(room.id, `c:${g.key}`),
+        }))
+      );
+      const cv = await galleryImage(`오늘의 그림 ${items.length}장`, cells);
+      downloadCanvas(cv, `doodle-party_오늘의_그림.png`);
+    } catch {
+      playSfx("sfx-error");
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <>
+      <div className="flex flex-wrap items-center justify-center gap-2">
+        {popular && (
+          <span className="sk-pop flex items-center gap-1 rounded-full border-2 border-[var(--ink)] bg-[var(--sun)] py-0.5 pr-2.5 pl-1 text-[12.5px] font-extrabold">
+            <Avatar idx={avatarOf(popular.by)} size={22} /> 인기상 {nameOf(room, popular.by)} 👍
+            {popular.n}
+          </span>
+        )}
+        <button
+          type="button"
+          onClick={tap(() => setOpen(true), "sfx-open")}
+          className="sk-btn text-[16px]"
+        >
+          🖼️ 오늘의 그림 {items.length}장
+        </button>
+      </div>
+      {open && (
+        <div
+          className="sk-dim"
+          onPointerDown={(e) => e.target === e.currentTarget && setOpen(false)}
+        >
+          <div
+            className={`sk-card sk-pop relative flex flex-col gap-3 p-4 ${v ? "max-h-[88%] w-[94%]" : "max-h-[90%] w-[860px] max-w-[94%]"}`}
+          >
+            <div className="flex items-center gap-2">
+              <h2 className="sk-hand text-[26px] leading-none">🖼️ 오늘의 그림</h2>
+              <span className="text-[12px] font-bold text-[var(--ink3)]">
+                마음에 드는 그림에 따봉!
+              </span>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void save()}
+                className="sk-btn ml-auto px-3 text-[14px]"
+              >
+                {busy ? "만드는 중…" : "💾 한 장으로 저장"}
+              </button>
+              <button
+                type="button"
+                aria-label="닫기"
+                onClick={tap(() => setOpen(false), "sfx-close")}
+                className="sk-btn sk-btn-ghost sk-btn-icon text-[13px]"
+              >
+                <Icon name="close" size={16} />
+              </button>
+            </div>
+            <ul
+              className={`grid min-h-0 gap-3 overflow-y-auto pr-1 ${v ? "grid-cols-2" : "grid-cols-4"}`}
+            >
+              {items.map((g) => (
+                <li key={g.key} className="flex min-w-0 flex-col gap-1">
+                  <button type="button" onClick={tap(() => setBig(g), "sfx-click")}>
+                    <Thumb roomId={room.id} sheetKey={`c:${g.key}`} step={st.step} />
+                  </button>
+                  <div className="flex items-center gap-1">
+                    <span className="min-w-0 flex-1">
+                      <span className="sk-hand block truncate text-[17px] leading-tight">
+                        {g.word || "(건너뜀)"}
+                      </span>
+                      <span className="block truncate text-[11px] font-bold text-[var(--ink2)]">
+                        {nameOf(room, g.by)}
+                      </span>
+                    </span>
+                    <LikeButton room={room} uid={uid} likeKey={g.key} author={g.by} />
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+          {big && (
+            <div
+              className="sk-dim"
+              onPointerDown={(e) => e.target === e.currentTarget && setBig(null)}
+            >
+              <div className="sk-card sk-pop flex w-[640px] max-w-[94%] flex-col gap-2 p-3">
+                <BigSheet roomId={room.id} sheetKey={`c:${big.key}`} step={st.step} />
+                <div className="flex items-center gap-2">
+                  <span className="sk-hand text-[24px] leading-none">{big.word || "(건너뜀)"}</span>
+                  <span className="text-[12px] font-bold text-[var(--ink2)]">
+                    {nameOf(room, big.by)}
+                  </span>
+                  <span className="ml-auto">
+                    <LikeButton room={room} uid={uid} likeKey={big.key} author={big.by} />
+                  </span>
+                  <button
+                    type="button"
+                    onClick={tap(() => setBig(null), "sfx-close")}
+                    className="sk-btn px-3 text-[14px]"
+                  >
+                    닫기
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </>
   );
 }
 

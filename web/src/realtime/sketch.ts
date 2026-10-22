@@ -99,8 +99,17 @@ export interface SketchState {
   likes: Record<string, string[]>;
   /** 건너뛰기 투표한 사람 */
   skip: string[];
+  /** 투표 강퇴: 대상 → 찬성한 사람 */
+  kick: Record<string, string[]>;
+  /** 그림 맞히기: 판이 끝나면 이번 판 그림 모아보기 (그림은 sheet `c:<key>`, 따봉 키는 key) */
+  gallery?: GalleryItem[];
   /** 다른 모드 진행 상태 */
   m: ModeState | null;
+}
+export interface GalleryItem {
+  key: string;
+  by: string;
+  word: string;
 }
 
 export interface FakeState {
@@ -236,6 +245,7 @@ const EMPTY_STATE: SketchState = {
   challenge: "",
   likes: {},
   skip: [],
+  kick: {},
   m: null,
 };
 const DEFAULT_META = {
@@ -283,6 +293,12 @@ export async function claimHost(roomId: string, _uid: string) {
 export async function kickPlayer(room: SketchRoom, target: string) {
   await rpc("sketch.kick", { id: room.id, target });
 }
+/** 투표 강퇴 (3명부터, 대상 빼고 과반이면 내보냄) — 다시 누르면 취소 */
+export async function voteKick(roomId: string, target: string) {
+  await rpc("sketch.voteKick", { id: roomId, target }).catch(() => {});
+}
+/** 투표 강퇴를 쓸 수 있는 인원 — 서버 VOTE_KICK_MIN 과 같은 값 */
+export const VOTE_KICK_MIN = 3;
 
 // ───────────── 로비 ─────────────
 
@@ -681,6 +697,22 @@ export function subscribeSheet(roomId: string, key: string, cb: (v: Stroke[] | n
     { id: roomId, key },
     { onSnapshot: (v) => cb(v ?? null), onError: () => cb(null) }
   );
+}
+/** 그림 한 장 한 번만 받기 (이미지 저장용) */
+export function getSheet(roomId: string, key: string): Promise<Stroke[] | null> {
+  return new Promise((resolve) => {
+    let done = false;
+    let off: (() => void) | null = null;
+    const finish = (v: Stroke[] | null) => {
+      if (done) return;
+      done = true;
+      resolve(v);
+      // 구독 함수가 값을 바로 부르는 경우도 있어서 다음 틱에 끊음
+      setTimeout(() => off?.(), 0);
+    };
+    off = subscribeSheet(roomId, key, finish);
+    setTimeout(() => finish(null), 8000);
+  });
 }
 /** 릴레이 앨범 */
 export function subscribeAlbum(roomId: string, cb: (v: RelayEntry[][] | null) => void) {

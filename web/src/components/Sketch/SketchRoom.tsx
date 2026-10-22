@@ -9,11 +9,13 @@ import SketchCanvas, {
 } from "@/components/Sketch/SketchCanvas";
 import Toolbar, { useTools } from "@/components/Sketch/Toolbar";
 import ModeCenter, {
+  ClassicGallery,
   isModePhase,
   LikeButton,
   ModeHow,
   modeStatus,
   phaseTotal,
+  RelayEnd,
   useSecret,
   type AnySecret,
 } from "@/components/Sketch/ModeViews";
@@ -37,6 +39,8 @@ import {
   chooseWord,
   claimHost,
   kickPlayer,
+  voteKick,
+  VOTE_KICK_MIN,
   remainingTurns,
   endTurn,
   getInvite,
@@ -322,15 +326,44 @@ export default function SketchRoom({
     const t = setTimeout(() => setKickTarget(""), 3000);
     return () => clearTimeout(t);
   }, [kickTarget]);
+  // 방장이 아니면 투표 강퇴 (3명부터, 대상 빼고 과반) — 이미 찬성했으면 한 번 눌러 취소
+  const voteMode = !isLeader;
+  const canKick = (target: string) =>
+    target !== uid && (isLeader || Object.keys(room.players).length >= VOTE_KICK_MIN);
+  const kickVotes = (target: string) => state.kick?.[target] ?? [];
+  const kickNeed = Math.floor((Object.keys(room.players).length - 1) / 2) + 1;
   const kick = (target: string) => {
+    if (!canKick(target)) return;
+    if (voteMode && kickVotes(target).includes(uid)) {
+      playSfx("sfx-click");
+      setKickTarget("");
+      voteKick(roomId, target);
+      return;
+    }
     if (kickTarget === target) {
       setKickTarget("");
       playSfx("sfx-kick");
-      kickPlayer(room, target).catch(() => {});
+      if (voteMode) voteKick(roomId, target);
+      else kickPlayer(room, target).catch(() => {});
     } else {
       playSfx("sfx-click");
       setKickTarget(target);
     }
+  };
+  const kickAsk = voteMode ? "투표?" : "강퇴?";
+  /** 투표 강퇴 진행 중 표시 (n/필요) */
+  const kickBadge = (target: string) => {
+    const n = kickVotes(target).length;
+    if (!n) return null;
+    const mine = kickVotes(target).includes(uid);
+    return (
+      <span
+        title={mine ? "내보내기에 찬성함 (다시 누르면 취소)" : "내보내기 투표 중"}
+        className={`rounded-full border-2 border-[var(--ink)] px-1 text-[9.5px] leading-[14px] font-extrabold whitespace-nowrap ${mine ? "bg-[var(--coral)] text-white" : "bg-white text-[var(--coral)]"}`}
+      >
+        🚫 {n}/{kickNeed}
+      </span>
+    );
   };
 
   // 리더: 로비 요약 갱신
@@ -731,7 +764,7 @@ export default function SketchRoom({
         >
           <button
             type="button"
-            disabled={!isLeader || p.uid === uid}
+            disabled={!canKick(p.uid)}
             onClick={() => kick(p.uid)}
             className="relative"
           >
@@ -749,8 +782,11 @@ export default function SketchRoom({
             )}
             {kickTarget === p.uid && (
               <span className="absolute inset-0 flex items-center justify-center rounded-full bg-[var(--coral)] text-[11px] font-extrabold text-white">
-                강퇴?
+                {kickAsk}
               </span>
+            )}
+            {kickVotes(p.uid).length > 0 && (
+              <span className="absolute -top-2 -right-2">{kickBadge(p.uid)}</span>
             )}
           </button>
           <span
@@ -806,10 +842,13 @@ export default function SketchRoom({
           </span>
         </span>
         <span className="sk-hand shrink-0 text-[19px] leading-none">{sc}</span>
-        {isLeader && p.uid !== uid && (
+        {kickVotes(p.uid).length > 0 && (
+          <span className="absolute -top-2 right-5">{kickBadge(p.uid)}</span>
+        )}
+        {canKick(p.uid) && (
           <button
             type="button"
-            title="강퇴"
+            title={voteMode ? "내보내기 투표 (과반이면 내보냄)" : "강퇴"}
             onClick={() => kick(p.uid)}
             className={`absolute top-0.5 right-0.5 rounded-md px-0.5 text-[10.5px] leading-none font-extrabold transition-colors ${
               kickTarget === p.uid
@@ -817,7 +856,7 @@ export default function SketchRoom({
                 : "text-[var(--ink3)] hover:bg-[#FF6B6B]/15 hover:text-[var(--coral)]"
             }`}
           >
-            {kickTarget === p.uid ? "강퇴?" : <Icon name="kick" size={10} />}
+            {kickTarget === p.uid ? kickAsk : <Icon name="kick" size={10} />}
           </button>
         )}
       </li>
@@ -1128,12 +1167,14 @@ export default function SketchRoom({
     );
   } else if (state.phase === "ended" && meta.mode === "relay") {
     overlay = (
-      <div className="flex w-full max-w-[520px] flex-col items-center gap-3 text-center">
-        <Mascot pose="cheer" size={v ? 80 : 110} />
-        <h3 className="sk-hand leading-none" style={{ fontSize: v ? 26 : 38 }}>
-          📖 앨범 끝! 재밌었나요?
-        </h3>
-        <BestLine room={room} />
+      <div className="flex w-full max-w-[600px] flex-col items-center gap-2.5 text-center">
+        <div className="flex items-center gap-2">
+          <Mascot pose="cheer" size={v ? 52 : 70} />
+          <h3 className="sk-hand leading-none" style={{ fontSize: v ? 26 : 36 }}>
+            📖 앨범 끝! 오늘의 시상
+          </h3>
+        </div>
+        <RelayEnd room={room} v={v} />
         {endButtons}
       </div>
     );
@@ -1188,6 +1229,7 @@ export default function SketchRoom({
           </ol>
         )}
         <BestLine room={room} />
+        {meta.mode === "classic" && <ClassicGallery room={room} uid={uid} v={v} />}
         {endButtons}
       </div>
     );

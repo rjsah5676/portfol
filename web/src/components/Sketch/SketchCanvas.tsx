@@ -230,9 +230,17 @@ const hexToRgb = (hex: string) => {
 };
 
 /** 페인트통: 비슷한 색(허용 오차) 영역을 채움 — 경계의 안티앨리어싱 픽셀까지 먹도록 */
-function floodFill(ctx: CanvasRenderingContext2D, sx: number, sy: number, color: string) {
-  const x0 = Math.floor(sx * SCALE);
-  const y0 = Math.floor(sy * SCALE);
+function floodFill(
+  ctx: CanvasRenderingContext2D,
+  sx: number,
+  sy: number,
+  color: string,
+  scale = SCALE
+) {
+  const PW = Math.round(CANVAS_W * scale);
+  const PH = Math.round(CANVAS_H * scale);
+  const x0 = Math.floor(sx * scale);
+  const y0 = Math.floor(sy * scale);
   if (x0 < 0 || y0 < 0 || x0 >= PW || y0 >= PH) return;
   const img = ctx.getImageData(0, 0, PW, PH);
   const d = img.data;
@@ -262,6 +270,49 @@ function floodFill(ctx: CanvasRenderingContext2D, sx: number, sy: number, color:
     if (p < PW * (PH - 1)) stack.push(p + PW);
   }
   ctx.putImageData(img, 0, 0);
+}
+
+/**
+ * 다 그린 그림을 화면 밖 도화지 한 장으로 (이미지 저장 · 모아보기 썸네일).
+ * scale 1 = 800×600. 도화지 화면과 같은 방식(곡선 · 채우기)으로 그림.
+ */
+export function renderStrokes(strokes: Stroke[], scale = 1): HTMLCanvasElement {
+  const cv = document.createElement("canvas");
+  cv.width = Math.round(CANVAS_W * scale);
+  cv.height = Math.round(CANVAS_H * scale);
+  const c = cv.getContext("2d", { willReadFrequently: true });
+  if (!c) return cv;
+  c.setTransform(scale, 0, 0, scale, 0, 0);
+  c.fillStyle = BG;
+  c.fillRect(0, 0, CANVAS_W, CANVAS_H);
+  const groups = new Map<string, Group>();
+  const close = () => {
+    for (const g of groups.values())
+      if (!g.ended) {
+        g.ended = true;
+        drawIncremental(c, g);
+      }
+  };
+  for (const s of strokes) {
+    if (s.t === "f") {
+      close();
+      floodFill(c, s.x ?? 0, s.y ?? 0, s.c, scale);
+      continue;
+    }
+    let g = groups.get(s.g);
+    if (!g) {
+      g = newGroup(s.c, s.w ?? 4);
+      groups.set(s.g, g);
+    }
+    let pts = decode(s.p ?? "");
+    const last = g.pts[g.pts.length - 1];
+    if (last && pts[0] && pts[0][0] === last[0] && pts[0][1] === last[1]) pts = pts.slice(1);
+    g.pts.push(...pts);
+    if (s.e) g.ended = true;
+    drawIncremental(c, g);
+  }
+  close();
+  return cv;
 }
 
 // ───────────── 컴포넌트 ─────────────

@@ -122,8 +122,17 @@ interface State {
   likes: Record<string, string[]>;
   /** 건너뛰기 투표한 사람 (그림 맞히기) */
   skip: string[];
+  /** 투표 강퇴: 대상 → 찬성한 사람들 */
+  kick: Record<string, string[]>;
+  /** 그림 맞히기: 판이 끝나면 이번 판 그림 모아보기 (키 = 그 차례 turnId, 그림은 sheet `c:<키>`) */
+  gallery?: GalleryItem[];
   /** 다른 모드의 공개 진행 상태 */
   m: ModeState | null;
+}
+interface GalleryItem {
+  key: string;
+  by: string;
+  word: string;
 }
 
 /** 가짜 화가 공개 상태 */
@@ -173,6 +182,8 @@ interface ModeSecret {
   fakeVotes?: Record<string, string>;
   /** 그림 릴레이 */
   chains?: RelayEntry[][];
+  /** 그림 맞히기: 지금까지 그린 차례들 (판이 끝나면 state.gallery 로 공개) */
+  gallery?: GalleryItem[];
 }
 interface ChatMsg {
   id: string;
@@ -278,8 +289,13 @@ const emptyState = (): State => ({
   challenge: "",
   likes: {},
   skip: [],
+  kick: {},
   m: null,
 });
+/** 판 끝 모아보기에 남기는 그림 수 (오래된 것부터 버림) */
+const GALLERY_MAX = 30;
+/** 투표 강퇴는 이 인원부터 (둘이면 한 표로 내보내게 되니까) */
+const VOTE_KICK_MIN = 3;
 /** 섞기 */
 function shuffle<T>(a: T[]): T[] {
   const b = [...a];
@@ -458,6 +474,16 @@ export function registerSketch({ gateway, users }: Deps, opts: SketchOptions = {
     const leader = leaderOf(room);
     if (leader && leader !== room.meta.hostUid) room.meta.hostUid = leader;
     if (!Object.keys(room.players).length) room.emptySince = Date.now();
+    // 투표 강퇴: 나간 사람에 대한 투표 · 나간 사람이 던진 표는 버림
+    const kick = room.state.kick ?? {};
+    if (Object.keys(kick).length) {
+      const next: Record<string, string[]> = {};
+      for (const [t, vs] of Object.entries(kick)) {
+        const left = vs.filter((v) => v !== uid);
+        if (t !== uid && left.length) next[t] = left;
+      }
+      room.state = { ...room.state, kick: next };
+    }
     changed(room);
     // 다른 모드: 빠진 사람을 기다리느라 멈추지 않게 (나머지가 다 냈으면 바로 다음 · 그리던 사람이면 다음 획)
     if (room.state.m && Object.keys(room.players).length) {
@@ -783,15 +809,49 @@ export function registerSketch({ gateway, users }: Deps, opts: SketchOptions = {
     const { id, target } = z.object({ id: roomId, target: z.string().min(1).max(128) }).parse(raw);
     const { room, uid } = asPlayer(ctx, id);
     if (room.meta.hostUid !== uid || target === uid) throw forbidden();
+    kickOut(room, target, "내보냈어요");
+    return null;
+  });
+
+  /** 내보내기 (방장 강퇴 · 투표 강퇴 공통) — 자리·점수를 지우고 다시 못 들어오게 표시 */
+  function kickOut(room: Room, target: string, how: string) {
     const nick = (room.players[target]?.nick ?? room.scores[target]?.nick ?? "?").slice(0, 10);
     room.kicked[target] = nick;
     delete room.scores[target];
     if (room.players[target]) removePlayer(room, target);
     else changed(room);
     const kickedUser = (c: Ctx) => c.user?.uid === target;
-    gateway.revoke(chatKey(id), kickedUser);
-    gateway.revoke(strokesKey(id, room.strokesTurn), kickedUser);
-    systemChat(room, `${plain(nick)}님을 내보냈어요.`);
+    gateway.revoke(chatKey(room.id), kickedUser);
+    gateway.revoke(strokesKey(room.id, room.strokesTurn), kickedUser);
+    systemChat(room, `${plain(nick)}님을 ${how}.`);
+  }
+
+  /**
+   * 투표 강퇴 (공개방 장난 대응, skribbl 처럼): 3명 이상일 때, 대상 빼고 과반이 찬성하면 내보냄.
+   * 다시 누르면 취소. 나간 사람 표 · 나간 사람에 대한 표는 removePlayer 가 정리.
+   */
+  gateway.rpc("sketch.voteKick", (ctx, raw) => {
+    const { id, target } = z.object({ id: roomId, target: z.string().min(1).max(128) }).parse(raw);
+    const { room, uid } = asPlayer(ctx, id);
+    const here = Object.keys(room.players);
+    if (target === uid || !room.players[target] || here.length < VOTE_KICK_MIN) return null;
+    const kick = room.state.kick ?? {};
+    const cur = kick[target] ?? [];
+    const votes = cur.includes(uid) ? cur.filter((v) => v !== uid) : [...cur, uid];
+    if (votes.length * 2 > here.length - 1) {
+      const { [target]: _, ...rest } = kick;
+      void _;
+      room.state = { ...room.state, kick: rest };
+      kickOut(room, target, `투표로 내보냈어요 (${votes.length}/${here.length - 1})`);
+      return null;
+    }
+    const next = { ...kick };
+    if (votes.length) next[target] = votes;
+    else delete next[target];
+    room.state = { ...room.state, kick: next };
+    changed(room);
+    if (!cur.includes(uid) && votes.length === 1)
+      systemChat(room, `🚫 ${nickOf(room, target)}님 내보내기 투표가 시작됐어요 (과반이면 내보냄)`);
     return null;
   });
 
@@ -831,6 +891,22 @@ export function registerSketch({ gateway, users }: Deps, opts: SketchOptions = {
       const win = many && top > 0 && (Number(room.scores[u].score) || 0) === top;
       users.bump(u, { "stats.sketch.done": 1, ...(win && { "stats.sketch.wins": 1 }) });
     }
+  }
+
+  /**
+   * 그림 맞히기: 정답 공개 때 이번 차례 그림을 모아보기에 남김 (판이 끝나면 state.gallery 로 공개).
+   * 제시어는 그때 서버가 아는 것 — 건너뛴 차례도 판이 끝난 뒤엔 보여 줘도 됨.
+   */
+  function archiveTurn(room: Room) {
+    const st = room.state;
+    if (room.meta.mode !== "classic" || !st.drawer || !room.strokes.size || room.strokesTurn !== st.turnId) return;
+    const key = st.turnId;
+    const strokes = [...room.strokes.entries()].sort(([a], [b]) => (a < b ? -1 : 1)).map(([, s]) => s as Stroke);
+    const word = (room.words?.turnId === key ? room.words.word : "") || st.reveal || "";
+    const list = [...(room.mx.gallery ?? []).filter((g) => g.key !== key), { key, by: st.drawer, word }];
+    while (list.length > GALLERY_MAX) delete room.sheets[`c:${list.shift()!.key}`];
+    room.sheets[`c:${key}`] = strokes;
+    room.mx = { ...room.mx, gallery: list };
   }
 
   function beginTurn(room: Room, patch: Partial<State>) {
@@ -978,6 +1054,7 @@ export function registerSketch({ gateway, users }: Deps, opts: SketchOptions = {
     const chosen = room.words?.turnId === turnId ? room.words.word : undefined;
     const shown = isDrawer && reveal ? (chosen ?? reveal) : "";
     room.state = { ...cur, phase: "reveal", reveal: shown, endsAt: Date.now() + REVEAL_MS };
+    archiveTurn(room);
     // 이 방에서 다시 안 나오게 기록 (공개된 뒤에 기록해야 미리 답이 새지 않음)
     if (shown) room.used[normalizeAnswer(shown).replace(/[.#$[\]/]/g, "_")] = true;
     changed(room);
@@ -1145,17 +1222,24 @@ export function registerSketch({ gateway, users }: Deps, opts: SketchOptions = {
   // ───────────── 따봉 · 건너뛰기 투표 (그림 맞히기) ─────────────
 
   /** 따봉 받은 그림의 주인 · 이름표 (없으면 누를 수 없음) */
-  function likeTarget(room: Room, key: string): { author: string; label: string } | null {
+  function likeTarget(room: Room, key: string): { author: string; label: string; text?: boolean } | null {
     const st = room.state;
     const m = st.m;
     if (room.meta.mode === "classic") {
+      // 판이 끝난 뒤 모아보기에서도 누를 수 있음 (같은 키라 게임 중에 누른 것과 합쳐짐)
+      if (st.phase === "ended") {
+        const g = st.gallery?.find((x) => x.key === key);
+        return g ? { author: g.by, label: g.word } : null;
+      }
       if (key !== st.turnId || (st.phase !== "drawing" && st.phase !== "reveal")) return null;
       return { author: st.drawer, label: st.phase === "reveal" ? st.reveal : "" };
     }
     if (m?.kind === "relay" && (st.phase === "r-album" || st.phase === "ended") && key.startsWith("r:")) {
       const [, c, k] = key.split(":").map(Number);
       const e = room.mx.chains?.[c]?.[k];
-      if (!e?.sheet) return null;
+      if (!e) return null;
+      // 문장에도 따봉 (베스트 드립) — 「내 그림 따봉」 기록엔 안 셈
+      if (!e.sheet) return e.text && k > 0 ? { author: e.by, label: e.text, text: true } : null;
       return { author: e.by, label: room.mx.chains?.[c]?.[k - 1]?.text ?? "" };
     }
     if (m?.kind === "fake" && st.phase === "f-result" && key === st.turnId) return { author: "", label: m.word ?? "" };
@@ -1171,6 +1255,10 @@ export function registerSketch({ gateway, users }: Deps, opts: SketchOptions = {
     if (list.includes(uid)) return null;
     room.state = { ...room.state, likes: { ...room.state.likes, [key]: [...list, uid] } };
     const n = list.length + 1;
+    if (t.text) {
+      changed(room);
+      return null;
+    }
     if (t.author) users.bump(t.author, { "stats.sketch.likes": 1 });
     if (!room.best || n > room.best.n) room.best = { key, n, author: t.author, label: t.label };
     changed(room);
@@ -1188,6 +1276,7 @@ export function registerSketch({ gateway, users }: Deps, opts: SketchOptions = {
     if (skip.length * 2 > voters.length) {
       const word = room.words?.turnId === turnId ? (room.words.word ?? "") : "";
       room.state = { ...st, skip, phase: "reveal", reveal: word, endsAt: Date.now() + REVEAL_MS };
+      archiveTurn(room);
       if (word) room.used[normalizeAnswer(word).replace(/[.#$[\]/]/g, "_")] = true;
       changed(room);
       systemChat(room, `투표로 건너뛰었어요.${word ? ` 정답은 「${word}」` : ""}`);
@@ -1249,6 +1338,8 @@ export function registerSketch({ gateway, users }: Deps, opts: SketchOptions = {
   function canSeeSheet(room: Room, uid: string, key: string): boolean {
     const st = room.state;
     const m = st.m;
+    // 그림 맞히기 모아보기: 판이 끝난 뒤 누구나
+    if (key.startsWith("c:")) return st.phase === "ended" && !!st.gallery?.some((g) => `c:${g.key}` === key);
     if (m?.kind === "relay" && key.startsWith("r:")) {
       if (albumOpen(room)) return true;
       const [, c, k] = key.split(":").map(Number);
@@ -1266,7 +1357,13 @@ export function registerSketch({ gateway, users }: Deps, opts: SketchOptions = {
   /** 판 끝 (모든 모드 공통) */
   function endGame(room: Room) {
     setPhase(room, "ended", 0);
-    room.state = { ...room.state, drawer: "", m: room.state.m };
+    room.state = {
+      ...room.state,
+      drawer: "",
+      m: room.state.m,
+      // 그림 맞히기: 이번 판 그림 모아보기 공개
+      ...(room.meta.mode === "classic" && room.mx.gallery?.length ? { gallery: room.mx.gallery } : {}),
+    };
     recordGame(room);
     clearGuesses(room);
     setWords(room, null);
@@ -1385,7 +1482,9 @@ export function registerSketch({ gateway, users }: Deps, opts: SketchOptions = {
 
   function startRelay(room: Room, order: string[]) {
     const n = order.length;
-    const steps = Math.min(n, RELAY_MAX_STEPS);
+    // 항상 문장으로 끝나게 단계 수는 홀수 (문장 → 그림 → … → 문장) — 텔레스트레이션처럼 마지막이 반전 포인트
+    const odd = (k: number) => (k % 2 ? k : k - 1);
+    const steps = Math.max(3, Math.min(odd(n), odd(RELAY_MAX_STEPS)));
     room.mx = { chains: Array.from({ length: n }, () => []) };
     room.sheets = {};
     const m: RelayState = { kind: "relay", order, steps, step: 0, done: [] };

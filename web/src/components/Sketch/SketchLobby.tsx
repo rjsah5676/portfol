@@ -697,7 +697,7 @@ function CreateDialog({
               ))}
             </div>
             <p className="mt-1 text-[11.5px] text-[var(--ink3)]">
-              인원수만큼 이어 가요 (최대 8단계) · 글은 50초
+              인원수만큼 이어 가요 (최대 7단계 · 항상 문장으로 끝나요) · 글은 50초
             </p>
           </div>
         )}
