@@ -13,10 +13,10 @@ export interface ReactLine {
 }
 type Tiered = [low: ReactLine[], mid: ReactLine[], high: ReactLine[]];
 
-const AFF: Record<CharKey, string> = { yeonseo: "affY", amy: "affA", boss: "" };
+const AFF: Partial<Record<CharKey, string>> = { yeonseo: "affY", amy: "affA" };
 /** 호감 단계: 0 낮음 · 1 보통(3 이상) · 2 높음(7 이상) */
 const tier = (who: CharKey, v: Vars) => {
-  const n = v[AFF[who]] ?? 0;
+  const n = v[AFF[who] ?? ""] ?? 0;
   return n >= 7 ? 2 : n >= 3 ? 1 : 0;
 };
 const pickOne = <T,>(a: T[]): T => a[Math.floor(Math.random() * a.length)];

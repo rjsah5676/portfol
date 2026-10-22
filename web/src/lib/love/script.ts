@@ -9,6 +9,9 @@
  */
 import { A, BOSS, CH, JM, ME, N, TH, TY, Y, poker } from "./dsl";
 import { W2 } from "./script-w2";
+import { W3A } from "./script-w3a";
+import { W3N } from "./script-w3n";
+import { W3Y } from "./script-w3y";
 import type { PokerSpec, Scenes } from "./types";
 
 export const START = "open";
@@ -983,9 +986,11 @@ const W1: Scenes = {
         { text: "(카메라를 보고 웃는다)", eff: { trustA: 1 } },
       ],
     },
+    { t: "cg", id: "a_booth" },
     N("찰칵. 화면에 뜬 마지막 사진 속에서, 에이미는 카메라가 아니라 나를 보고 있었다."),
     A("…이, 이건 실수야. 다시 찍을 거야. 아니, 돈 아까우니까 그냥 둬.", "shake", "blush"),
     N("그녀가 사진 두 장 중 한 장을 내 손에 쑤셔 넣었다. 남은 한 장은 아주 조심스럽게, 지갑 안쪽에 넣었다."),
+    { t: "cg", id: null },
     { t: "set", eff: { amyPhoto: 1 } },
     { t: "dist", who: "amy", dist: 0 },
     { t: "bgm", id: "confide" },
@@ -1339,6 +1344,7 @@ const W1: Scenes = {
     { t: "bg", id: "black" },
     { t: "bgm", id: "heart" },
     { t: "dist", who: "yeonseo", dist: 2 },
+    { t: "cg", id: "y_closet" },
     N("어둠. 사람 둘이 겨우 서는 공간. 등 뒤는 선반, 앞은 그녀."),
     N("그녀의 이마가 내 턱 바로 아래에 있다. 젖은 비 냄새와, 아주 옅은 머스크 향."),
     Y("…숨 쉬지 마요.", "whisper", "blush"),
@@ -1984,9 +1990,12 @@ const W1: Scenes = {
     A("…그리고 아까 그 사장님. 나한테 자꾸 '아버님은 잘 계시냐'고 물어. 우리 아빠를 아는 것처럼.", "sad"),
     TH("심장이 내려앉는다. 사장의 손가락 세 개. '그 아가씨 아버지도 예전에 우리 단골이었거든요.'"),
     { t: "dist", who: "amy", dist: 2 },
+    { t: "cg", id: "a_door" },
+    N("대답 대신, 그녀가 한 발 다가와 젖은 이마를 내 가슴에 툭 기댔다. 내 재킷을 입은 채로."),
     A("…너 왜 이렇게 따뜻해.", "heart", "blush"),
     N("문이 닫히기 직전, 그녀가 아주 작게 말했다. 영어였다. \"Thanks… for being on my side.\""),
     TH("…on my side. 그 말이, 빗소리보다 오래 귀에 남았다."),
+    { t: "cg", id: null },
     { t: "set", eff: { routeA: 1 } },
     { t: "goto", to: "a2_d8" },
   ],
@@ -2012,12 +2021,14 @@ const W1: Scenes = {
     TH("거짓 보고. 사장 손에 빚 장부가 잡혀 있는 사람이."),
     Y("3년 전에 지하에서 크게 진 사람이 있었대요. 그날 맞은편에 앉은 사람은… 사장님 쪽 사람이었고.", "base"),
     Y("저는 그 판에 없었어요. 그건 진짜예요. 하지만 그런 판이 매일 있어요. 저도 매일, 그 테이블에 앉아요.", "sad"),
+    { t: "cg", id: "y_umbrella" },
     N("오피스텔 앞. 그녀가 우산을 내 손에 쥐여 주고, 빗속으로 한 발 물러섰다."),
     Y("우산은 가져가요. 저는 바로 앞이니까.", "smile"),
     { t: "dist", who: "yeonseo", dist: 2 },
     Y("근데 지금은… 그냥 비 오니까요.", "bare", "smile"),
     N("젖은 머리카락이 뺨에 붙은 채로, 그녀가 아주 잠깐 웃은 것 같았다. 착각일지도 모른다."),
     N("우산 손잡이에, 장갑의 온기가 아직 남아 있었다."),
+    { t: "cg", id: null },
     { t: "set", eff: { routeY: 1 } },
     { t: "goto", to: "y2_d8" },
   ],
@@ -2086,4 +2097,4 @@ const W1: Scenes = {
   ],
 };
 
-export const SCENES: Scenes = { ...W1, ...W2 };
+export const SCENES: Scenes = { ...W1, ...W2, ...W3A, ...W3Y, ...W3N };

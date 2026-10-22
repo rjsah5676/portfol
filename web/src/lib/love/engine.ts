@@ -3,7 +3,26 @@
  * 상태 전체가 JSON 이라 세이브 = 상태 저장
  */
 import { SCENES, START } from "./script";
-import type { BgId, BgmId, CharKey, Cond, Dist, Eff, EndingId, Face, Mood, Opt, Pos, SfxId, Step, Vars, Who } from "./types";
+import {
+  type BgId,
+  type BgmId,
+  type CgId,
+  type CharKey,
+  type Cond,
+  type Dist,
+  type Eff,
+  type EndingId,
+  type Face,
+  type Mood,
+  type Opt,
+  type Outfit,
+  type Pos,
+  type SfxId,
+  type Step,
+  SUBS,
+  type Vars,
+  type Who,
+} from "./types";
 
 export interface CharState {
   pos: Pos;
@@ -11,17 +30,31 @@ export interface CharState {
   face: Face;
   /** 표정 지정 없는 대사에서 돌아가는 얼굴 (없으면 캐릭터 기본) */
   rest?: Face;
+  /** 자동으로 나온 서브 캐릭터 — 말 안 한 대사 수 (4줄 넘으면 들어감) */
+  auto?: number;
 }
 /**
  * 캐릭터 기본 얼굴 — 시선 연출: 연서는 평소 시선을 피하고(away) 핵심 대사만 정면(base),
  * 에이미는 늘 정면으로 들이댐
  */
-export const REST: Record<CharKey, Face> = { yeonseo: "away", amy: "base", boss: "base" };
+export const REST: Record<CharKey, Face> = {
+  yeonseo: "away",
+  amy: "base",
+  boss: "base",
+  taeyang: "base",
+  jeongmin: "base",
+  chunhee: "base",
+};
+const AUTO_LEAVE = 4;
 export interface Display {
   bg: BgId;
   chars: Partial<Record<CharKey, CharState>>;
   day: { d: number; slot: string } | null;
   bgm: BgmId | null;
+  /** 이벤트 CG — 켜져 있으면 배경 · 스탠딩 대신 그림 한 장 */
+  cg?: CgId | null;
+  /** 지금 입고 있는 옷 (없으면 기본) — 캐릭터가 들어갔다 나와도 유지 */
+  outfit?: Partial<Record<CharKey, Outfit>>;
 }
 export type Block =
   | { k: "say"; who: Who; text: string; mood: Mood }
@@ -62,11 +95,16 @@ export function check(c: Cond, v: Vars): boolean {
   if ("any" in c) return c.any.some((x) => check(x, v));
   const a = v[c.v] ?? 0;
   switch (c.op) {
-    case ">=": return a >= c.n;
-    case "<=": return a <= c.n;
-    case ">": return a > c.n;
-    case "<": return a < c.n;
-    case "==": return a === c.n;
+    case ">=":
+      return a >= c.n;
+    case "<=":
+      return a <= c.n;
+    case ">":
+      return a > c.n;
+    case "<":
+      return a < c.n;
+    case "==":
+      return a === c.n;
   }
 }
 
@@ -79,7 +117,12 @@ const addEff = (v: Vars, eff?: Eff): Vars => {
 
 /** 현재 위치부터 막히는 줄(대사 · 선택지 등)이 나올 때까지 실행 */
 export function run(s0: GState): GState {
-  const s: GState = { ...s0, disp: { ...s0.disp, chars: { ...s0.disp.chars } }, fx: [], seq: s0.seq + 1 };
+  const s: GState = {
+    ...s0,
+    disp: { ...s0.disp, chars: { ...s0.disp.chars } },
+    fx: [],
+    seq: s0.seq + 1,
+  };
   for (let guard = 0; guard < 2000; guard++) {
     if (s.scene === "__title") {
       s.block = { k: "goTitle" };
@@ -99,9 +142,23 @@ export function run(s0: GState): GState {
         break;
       case "show": {
         const f = st.face ?? REST[st.who];
-        s.disp.chars[st.who] = { pos: st.pos ?? s.disp.chars[st.who]?.pos ?? "c", dist: st.dist ?? 0, face: f, rest: f };
+        const pos = st.pos ?? s.disp.chars[st.who]?.pos ?? "c";
+        // 자동으로 나와 있던 서브 캐릭터가 그 자리에 있으면 옆으로 비켜 줌
+        for (const k of Object.keys(s.disp.chars) as CharKey[]) {
+          const ch = s.disp.chars[k];
+          if (k !== st.who && ch?.auto !== undefined && ch.pos === pos)
+            s.disp.chars[k] = { ...ch, pos: pos === "r" ? "l" : "r" };
+        }
+        s.disp.chars[st.who] = { pos, dist: st.dist ?? 0, face: f, rest: f };
         break;
       }
+      case "outfit":
+        s.disp.outfit = { ...s.disp.outfit, [st.who]: st.id };
+        break;
+      case "cg":
+        s.disp.cg = st.id;
+        if (st.id) s.fx = [...s.fx, "heart"];
+        break;
       case "face": {
         const c = s.disp.chars[st.who];
         if (c) s.disp.chars[st.who] = { ...c, face: st.face };
@@ -114,7 +171,10 @@ export function run(s0: GState): GState {
       }
       case "hide":
         if (st.who) delete s.disp.chars[st.who];
-        else s.disp.chars = {};
+        else {
+          s.disp.chars = {};
+          s.disp.cg = null;
+        }
         break;
       case "set":
         s.vars = addEff(s.vars, st.eff);
@@ -139,21 +199,54 @@ export function run(s0: GState): GState {
         s.disp.bgm = st.id;
         break;
       case "day":
+        s.disp.cg = null;
         s.disp.day = { d: st.day, slot: st.slot };
         s.block = { k: "day", d: st.day, slot: st.slot };
         return s;
       case "say": {
+        // 서브 캐릭터: 말하면 자동 등장(혼자면 가운데, 아니면 옆자리), 자동으로 나온 서브는 몇 줄 안 말하면 퇴장
+        for (const k of Object.keys(s.disp.chars) as CharKey[]) {
+          const ch = s.disp.chars[k];
+          if (!ch || ch.auto === undefined || k === st.who) continue;
+          if (ch.auto + 1 >= AUTO_LEAVE) delete s.disp.chars[k];
+          else s.disp.chars[k] = { ...ch, auto: ch.auto + 1 };
+        }
+        if ((SUBS as readonly string[]).includes(st.who)) {
+          const k = st.who as CharKey;
+          const cur = s.disp.chars[k];
+          if (!cur) {
+            const others = Object.keys(s.disp.chars) as CharKey[];
+            const used = new Set(others.map((o) => s.disp.chars[o]!.pos));
+            const pos: Pos =
+              others.length === 0 ? "c" : !used.has("r") ? "r" : !used.has("l") ? "l" : "r";
+            s.disp.chars[k] = { pos, dist: 0, face: REST[k], rest: REST[k], auto: 0 };
+          } else if (cur.auto !== undefined) s.disp.chars[k] = { ...cur, auto: 0 };
+        }
         // 말하는 캐릭터: 지정한 표정, 없으면 기본 얼굴로 (듣는 쪽은 직전 표정 유지 = 리액션)
         const c = s.disp.chars[st.who as CharKey];
-        if (c) s.disp.chars[st.who as CharKey] = { ...c, face: st.face ?? c.rest ?? REST[st.who as CharKey] };
+        if (c)
+          s.disp.chars[st.who as CharKey] = {
+            ...c,
+            face: st.face ?? c.rest ?? REST[st.who as CharKey],
+          };
         s.block = { k: "say", who: st.who, text: st.text, mood: st.mood ?? "normal" };
         return s;
       }
       case "choice":
-        s.block = { k: "choice", prompt: st.prompt, big: st.big, opts: st.opts.filter((o) => !o.cond || check(o.cond, s.vars)) };
+        s.block = {
+          k: "choice",
+          prompt: st.prompt,
+          big: st.big,
+          opts: st.opts.filter((o) => !o.cond || check(o.cond, s.vars)),
+        };
         return s;
       case "free":
-        s.block = { k: "free", prompt: st.prompt, big: st.big, opts: st.opts.filter((o) => !o.cond || check(o.cond, s.vars)) };
+        s.block = {
+          k: "free",
+          prompt: st.prompt,
+          big: st.big,
+          opts: st.opts.filter((o) => !o.cond || check(o.cond, s.vars)),
+        };
         return s;
       case "mini":
         s.block = { k: "mini", step: st };
@@ -198,6 +291,52 @@ export function miniDone(s: GState, key: string, score: number, eff?: Eff): GSta
 
 /** 반성회 장면으로 */
 export const goScene = (s: GState, scene: string): GState => run({ ...s, scene, i: 0 });
+
+/** 대본에서 대사 위치 찾기 (음성 검수용) */
+export function findLine(text: string): { scene: string; i: number } | null {
+  for (const [scene, steps] of Object.entries(SCENES)) {
+    const i = steps.findIndex((st) => st.t === "say" && st.text === text);
+    if (i >= 0) return { scene, i };
+  }
+  return null;
+}
+
+/** 그 장면 처음부터 화면(배경 · 인물 · 곡)만 쌓으며 그 대사 줄까지 바로 이동 — 선택지 · 미니게임은 건너뜀 */
+export function jumpTo(scene: string, i: number, vars: Vars = {}): GState {
+  // 배경 · 곡을 앞 장면에서 물려받는 장면이면, 이 장면으로 넘어오는 장면을 거슬러 올라가 찾아 둠
+  const base = initState();
+  let bg: BgId | null = null;
+  let bgm: BgmId | null = null;
+  const seen = new Set<string>();
+  let cur = scene;
+  for (let d = 0; d < 6 && (!bg || !bgm) && !seen.has(cur); d++) {
+    seen.add(cur);
+    const target = cur;
+    const from = Object.entries(SCENES).find(([, steps]) =>
+      steps.some(
+        (st) =>
+          (st.t === "goto" && st.to === target) ||
+          (st.t === "when" && (st.to === target || st.else === target)) ||
+          ((st.t === "choice" || st.t === "free") && st.opts.some((o) => o.to === target))
+      )
+    );
+    if (!from) break;
+    // 가장 가까운 앞 장면의 마지막 값이 맞음
+    const lastBg = [...from[1]].reverse().find((st) => st.t === "bg");
+    const lastBgm = [...from[1]].reverse().find((st) => st.t === "bgm");
+    if (!bg && lastBg?.t === "bg") bg = lastBg.id;
+    if (!bgm && lastBgm?.t === "bgm") bgm = lastBgm.id;
+    cur = from[0];
+  }
+  base.disp = { ...base.disp, bg: bg ?? base.disp.bg, bgm };
+  let s = run({ ...base, scene, i: 0, vars });
+  for (let g = 0; g < 400 && !(s.scene === scene && s.i === i); g++) {
+    if (s.scene !== scene || s.i > i || s.block?.k === "goTitle") break;
+    s = run({ ...s, i: s.i + 1 });
+  }
+  if (s.scene !== scene || s.i !== i) s = run({ ...s, scene, i });
+  return s;
+}
 
 /** 읽은 대사 표시용 키 */
 export const lineKey = (s: GState) => `${s.scene}:${s.i}`;

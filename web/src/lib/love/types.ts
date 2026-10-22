@@ -3,22 +3,73 @@
  * 대본은 전부 직렬화 가능한 데이터 (함수 없음) → 세이브에 그대로 저장 가능
  */
 
-export type CharKey = "yeonseo" | "amy" | "boss";
-/** 말하는 사람: 스탠딩 있는 캐릭터 + 주인공(me) + 나레이션(narr) + 카메오 */
-export type Who = CharKey | "me" | "narr" | "taeyang" | "jeongmin" | "chunhee";
+export type CharKey = "yeonseo" | "amy" | "boss" | "taeyang" | "jeongmin" | "chunhee";
+/** 서브 캐릭터: 말할 때 자동으로 옆자리에 작게 나왔다가, 몇 줄 안 말하면 들어감 */
+export const SUBS: readonly CharKey[] = ["taeyang", "jeongmin", "chunhee", "boss"];
+/** 말하는 사람: 스탠딩 있는 캐릭터 + 주인공(me) + 나레이션(narr) */
+export type Who = CharKey | "me" | "narr";
 /** 감정별 대사창: 귓속말 · 흔들림 · 외침 · 대사창 없이(고백 직전 등) · 속마음 · 두근(분홍 맥박) */
 export type Mood = "normal" | "whisper" | "shake" | "shout" | "bare" | "think" | "heart";
-export const MOODS: readonly Mood[] = ["normal", "whisper", "shake", "shout", "bare", "think", "heart"];
+export const MOODS: readonly Mood[] = [
+  "normal",
+  "whisper",
+  "shake",
+  "shout",
+  "bare",
+  "think",
+  "heart",
+];
 /**
  * 표정 (얼굴만 바뀐 스탠딩). base = 정면 무표정, away = 시선 피함(연서 평소)
  * 연서: away smile cold surprise sad blush / 에이미: smile pout surprise sad blush smug
  */
-export type Face = "base" | "away" | "smile" | "cold" | "surprise" | "sad" | "blush" | "pout" | "smug";
+export type Face =
+  "base" | "away" | "smile" | "cold" | "surprise" | "sad" | "blush" | "pout" | "smug";
 export type Pos = "l" | "c" | "r";
+/** 스탠딩 의상: 에이미 tshirt(내 티셔츠) · 연서 knit(오피스텔 안경 니트) · bare(장갑 벗은 근무복) */
+export type Outfit = "default" | "tshirt" | "knit" | "bare";
 /** 거리 3단계: 0 평소(허벅지까지) · 1 상반신 · 2 얼굴 클로즈업 */
 export type Dist = 0 | 1 | 2;
-export type BgId = "pub" | "alley" | "vip" | "store" | "arcade" | "room" | "officetel" | "karaoke" | "black";
-export type SfxId = "chip" | "deal" | "shuffle" | "click" | "win" | "lose" | "phone" | "heart" | "stamp";
+export type BgId =
+  | "pub"
+  | "alley"
+  | "vip"
+  | "store"
+  | "arcade"
+  | "room"
+  | "officetel"
+  | "karaoke"
+  | "pocha"
+  | "hangang"
+  | "amyroom"
+  | "sea"
+  | "waterpark"
+  | "black";
+/** 이벤트 CG (핵심 장면 한 장 그림 — 스탠딩 대신 화면 전체) */
+export type CgId =
+  // 1~2주차
+  | "y_closet"
+  | "y_umbrella"
+  | "y_name"
+  | "a_booth"
+  | "a_door"
+  | "a_shoulder"
+  // 3~4주차 · 여름 서브 이벤트
+  | "a_summer"
+  | "a_tshirt"
+  | "a_morning"
+  | "y_summer"
+  | "y_glove"
+  | "y_wall"
+  | "y_dawn"
+  // 엔딩
+  | "end_amy_true"
+  | "end_amy_good"
+  | "end_yeon_true"
+  | "end_yeon_good"
+  | "end_grand";
+export type SfxId =
+  "chip" | "deal" | "shuffle" | "click" | "win" | "lose" | "phone" | "heart" | "stamp";
 export type BgmId =
   | "pub"
   | "vip"
@@ -41,9 +92,7 @@ export type Vars = Record<string, number>;
 export type Eff = Record<string, number>;
 
 export type Cond =
-  | { v: string; op: ">=" | "<=" | ">" | "<" | "=="; n: number }
-  | { all: Cond[] }
-  | { any: Cond[] };
+  { v: string; op: ">=" | "<=" | ">" | "<" | "=="; n: number } | { all: Cond[] } | { any: Cond[] };
 
 export interface Opt {
   text: string;
@@ -110,6 +159,10 @@ export type Step =
   | { t: "dist"; who: CharKey; dist: Dist }
   /** 말하지 않는 캐릭터의 표정만 바꿈 (주인공 말에 연서가 붉어지는 등) */
   | { t: "face"; who: CharKey; face: Face }
+  /** 이벤트 CG 켜기 (null = 끄고 스탠딩으로) */
+  | { t: "cg"; id: CgId | null }
+  /** 옷 갈아입기 (다음에 바꿀 때까지 유지, "default" = 기본) */
+  | { t: "outfit"; who: CharKey; id: Outfit }
   | { t: "hide"; who?: CharKey }
   | { t: "say"; who: Who; text: string; mood?: Mood; face?: Face }
   | { t: "choice"; prompt?: string; opts: Opt[]; big?: boolean }
@@ -131,9 +184,23 @@ export type Step =
 export type Scenes = Record<string, Step[]>;
 
 export type EndingId =
-  | "amy_true" | "amy_good" | "amy_friend" | "amy_fall" | "amy_ruin"
-  | "yeon_true" | "yeon_good" | "yeon_sad" | "yeon_vanish" | "yeon_obsess"
-  | "grand" | "plain" | "dealer" | "me_fall" | "clash" | "fired" | "ghost"
+  | "amy_true"
+  | "amy_good"
+  | "amy_friend"
+  | "amy_fall"
+  | "amy_ruin"
+  | "yeon_true"
+  | "yeon_good"
+  | "yeon_sad"
+  | "yeon_vanish"
+  | "yeon_obsess"
+  | "grand"
+  | "plain"
+  | "dealer"
+  | "me_fall"
+  | "clash"
+  | "fired"
+  | "ghost"
   | "data0";
 
 export interface EndingInfo {
