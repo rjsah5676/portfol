@@ -6,10 +6,10 @@
  * 저장: localStorage (못 쓰는 환경이어도 게임은 그대로 돌아감)
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { BG, BG_FALLBACK, BGM, ENDINGS, FACE_ICON, NAME, NAME_COLOR, SFX, STAND, preloadList } from "@/lib/love/assets";
+import { BG, BG_FALLBACK, BGM, ENDINGS, FACE_ICON, NAME, NAME_COLOR, SFX, STAND, TITLE, preloadList } from "@/lib/love/assets";
 import { type GState, goScene, ignorePhone, initState, lineKey, miniDone, next, pick, run } from "@/lib/love/engine";
 import type { BgmId, CharKey, EndingId, Opt, SfxId, Who } from "@/lib/love/types";
-import { DealMini, TellMini } from "./Minis";
+import { DealMini, StoryPoker, TellMini } from "./Minis";
 
 // ---------- 저장소 (실패해도 조용히) ----------
 const LS = {
@@ -261,7 +261,9 @@ export default function LoveApp() {
     setLog([]);
     setAuto(false);
     setSkip(false);
-    setS(run(initState()));
+    // 개발 중에만: ?scene=d4 로 원하는 장면부터 테스트
+    const dev = process.env.NODE_ENV !== "production" ? new URLSearchParams(window.location.search).get("scene") : null;
+    setS(run(dev ? { ...initState(), scene: dev, i: 0 } : initState()));
     setPhase("game");
   };
   const choose = (o: Opt) => {
@@ -339,30 +341,31 @@ export default function LoveApp() {
         {/* ===== 타이틀 ===== */}
         {(phase === "title" || phase === "name" || phase === "gallery") && (
           <div className="absolute inset-0">
-            <Bg id="pub" blur={phase !== "title" ? 2 : 0} />
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            {STAND.yeonseo.base && <img src={STAND.yeonseo.base} alt="연서" className="lv-title-char left-[4%]" />}
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            {STAND.amy.base && <img src={STAND.amy.base} alt="에이미" className="lv-title-char right-[4%]" />}
-            <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/30 to-black/40" />
+            {/* 타이틀 키아트 (GPT 시안 그대로 — 캐릭터 둘 + 펍) */}
+            <div
+              className="absolute inset-0 bg-cover bg-center transition-[filter] duration-500"
+              style={{ backgroundImage: `url("${TITLE.bg}")`, filter: phase !== "title" ? "blur(4px) brightness(.55)" : undefined }}
+            />
+            <div className="lv-title-sparks" />
             {phase === "title" && (
-              <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <div className="lv-logo text-[7cqw]">올인 러브</div>
-                <div className="mt-[0.4cqw] text-[1.4cqw] tracking-[0.3em] text-[#e9d9b0]/80">ANIME POKER 외전 · M1 프로토</div>
-                <div className="mt-[3cqw] flex flex-col gap-[0.9cqw]">
-                  <button className="lv-menu-btn" onClick={() => setPhase("name")}>
-                    처음부터
+              <div className="absolute inset-0">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={TITLE.logo} alt="올인 러브" className="lv-title-logo" />
+                <div className="absolute left-1/2 top-[47%] flex w-[21%] -translate-x-1/2 flex-col gap-[1.05cqw]">
+                  <button className="lv-title-btn" onClick={() => setPhase("name")}>
+                    <span className="lv-suit">♠</span>처음부터
                   </button>
-                  <button className="lv-menu-btn" disabled={!latestSave} onClick={() => latestSave && load(latestSave)}>
-                    이어하기
+                  <button className="lv-title-btn" disabled={!latestSave} onClick={() => latestSave && load(latestSave)}>
+                    <span className="lv-suit text-[#e0505e]">♥</span>이어하기
                   </button>
-                  <button className="lv-menu-btn" onClick={() => setPanel("load")}>
-                    불러오기
+                  <button className="lv-title-btn" onClick={() => setPanel("load")}>
+                    <span className="lv-suit text-[#e0505e]">♦</span>불러오기
                   </button>
-                  <button className="lv-menu-btn" onClick={() => setPhase("gallery")}>
-                    엔딩 수집 {endings.length} / {ENDINGS.length}
+                  <button className="lv-title-btn" onClick={() => setPhase("gallery")}>
+                    <span className="lv-suit">♣</span>엔딩 수집 <small className="ml-[0.4cqw] text-[1cqw] text-[#e9d9b0]/70">{endings.length}/{ENDINGS.length}</small>
                   </button>
                 </div>
+                <div className="absolute bottom-[2.2%] right-[2%] text-[1cqw] text-[#e9d9b0]/70">◇ M1 프로토 · Ver. 0.1</div>
               </div>
             )}
             {phase === "name" && (
@@ -506,6 +509,8 @@ export default function LoveApp() {
               <div onClick={(e) => e.stopPropagation()}>
                 {block.step.kind === "deal" ? (
                   <DealMini play={play} onDone={(n) => setS(miniDone(s, block.step.key, n))} />
+                ) : block.step.kind === "poker" ? (
+                  <StoryPoker spec={block.step.poker} play={play} onDone={(n, eff) => setS(miniDone(s, block.step.key, n, eff))} />
                 ) : (
                   <TellMini tell={block.step.tell} onDone={(n) => setS(miniDone(s, block.step.key, n))} />
                 )}

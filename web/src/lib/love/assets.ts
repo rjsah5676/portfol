@@ -82,6 +82,9 @@ export const BGM: Record<BgmId, string> = {
 
 export const CARD_BACK = `${P}/card/back-mid.webp`;
 
+/** 타이틀 화면: 키아트(캐릭터 + 펍, UI 없음) · 로고(누끼) */
+export const TITLE = { bg: `${B}/ui/title-bg.webp`, logo: `${B}/ui/title-logo.webp` };
+
 /** 로딩 화면에서 전부 받는 목록 */
 export function preloadList(): { img: string[]; audio: string[] } {
   const img = new Set<string>();
@@ -89,6 +92,8 @@ export function preloadList(): { img: string[]; audio: string[] } {
   for (const u of Object.values(BG)) if (u) img.add(u);
   for (const u of Object.values(FACE_ICON)) if (u) img.add(u);
   img.add(CARD_BACK);
+  img.add(TITLE.bg);
+  img.add(TITLE.logo);
   return { img: [...img], audio: [...new Set([...Object.values(SFX), ...Object.values(BGM)])] };
 }
 

@@ -179,8 +179,8 @@ export function ignorePhone(s: GState, eff: Eff): GState {
 }
 
 /** 미니게임 결과 기록 후 다음으로 (mini_<key> = 점수) */
-export function miniDone(s: GState, key: string, score: number): GState {
-  return run({ ...s, vars: { ...s.vars, [`mini_${key}`]: score }, i: s.i + 1 });
+export function miniDone(s: GState, key: string, score: number, eff?: Eff): GState {
+  return run({ ...s, vars: addEff({ ...s.vars, [`mini_${key}`]: score }, eff), i: s.i + 1 });
 }
 
 /** 반성회 장면으로 */

@@ -43,6 +43,46 @@ export interface TellSpec {
   truth: "true" | "bluff";
 }
 
+/*
+ * 스토리 포커: 카드는 각본대로 정해져 있고, 갈리는 건 선택 (콜 · 폴드 · 레이즈 · 텔 읽기)
+ * 카드 표기: "As" "Td" "7h" (랭크 + 무늬 s♠ h♥ d♦ c♣)
+ */
+export interface PokerAct {
+  label: string;
+  /** 다음 거리(스트리트) 번호. 없으면 결과로 끝 */
+  to?: number;
+  /** 끝날 때 결과 */
+  result?: "win" | "lose" | "fold" | "split";
+  /** 결과 점수 (mini_<key> 에 저장). 없으면 win 2 · split/fold 1 · lose 0 */
+  score?: number;
+  eff?: Eff;
+  /** 고른 직후 상대 한마디 */
+  say?: string;
+  /** 고른 직후 주인공 속마음 */
+  think?: string;
+}
+export interface PokerStreet {
+  /** 이 거리에서 보이는 보드 카드 수 (0 · 3 · 4 · 5) */
+  board: 0 | 3 | 4 | 5;
+  /** 상대 말 */
+  opp?: string;
+  /** 읽을 수 있는 버릇 묘사 (텔) */
+  tell?: string;
+  acts: PokerAct[];
+}
+export interface PokerSpec {
+  title: string;
+  opp: CharKey;
+  mine: [string, string];
+  theirs: [string, string];
+  board: [string, string, string, string, string];
+  /** 시작 팟 (칩 수, 연출용) */
+  pot: number;
+  streets: PokerStreet[];
+  /** 결과별 마무리 한 줄 */
+  ending?: Partial<Record<"win" | "lose" | "fold" | "split", string>>;
+}
+
 export type Step =
   | { t: "bg"; id: BgId }
   | { t: "show"; who: CharKey; pos?: Pos; dist?: Dist; face?: string }
@@ -57,6 +97,7 @@ export type Step =
   | { t: "title"; text: string; sub?: string }
   | { t: "mini"; kind: "deal"; key: string }
   | { t: "mini"; kind: "tell"; key: string; tell: TellSpec }
+  | { t: "mini"; kind: "poker"; key: string; poker: PokerSpec }
   | { t: "phone"; from: CharKey; msgs: string[]; replies: Opt[]; ignore: Eff }
   | { t: "free"; prompt: string; opts: Opt[] }
   | { t: "sfx"; id: SfxId }
