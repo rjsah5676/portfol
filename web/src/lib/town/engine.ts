@@ -898,8 +898,13 @@ export function mountTown(root: HTMLElement, opts: TownOpts = {}): () => void {
     if (ART.sky) $(".tt-sky").style.backgroundPositionX = `${-T.cam * 0.25}px`;
     const moving = !!(vx || vy);
     placeEnt($(".tt-pl"), T.x, T.y, moving, t, T.face < 0);
-    // 내 말풍선: 화면 오른쪽 끝이면 캐릭터 왼쪽으로
-    $(".tt-pl").querySelector(".tt-say.mine")?.classList.toggle("lf", T.x - T.cam > DW - 340);
+    // 내 말풍선: 캐릭터를 따라다니되 건물 「입장」 버튼보다 위 층에
+    if (myBub?.isConnected) {
+      const pl = $(".tt-pl");
+      myBub.style.left = pl.style.left;
+      myBub.style.top = pl.style.top;
+      myBub.style.transform = pl.style.transform;
+    }
     if (moving && t - T.dust > 260) {
       T.dust = t;
       puff(T.x, T.y);
@@ -1033,16 +1038,22 @@ export function mountTown(root: HTMLElement, opts: TownOpts = {}): () => void {
     const log = $(".tt-tchat-log");
     log.scrollTop = log.scrollHeight;
   };
-  /** 내가 한 말은 내 캐릭터 머리 위에도 잠깐 */
+  /** 내가 한 말은 내 캐릭터 머리 위에도 잠깐 (캐릭터와 같은 자리 · 같은 크기의 껍데기에 담아 맨 위 층에) */
+  let myBub: HTMLElement | null = null;
   function sayBubble(text: string) {
     const pl = $(".tt-pl");
-    pl.querySelector(".tt-say.mine")?.remove();
+    myBub?.remove();
+    const wrap = document.createElement("div");
+    wrap.className = "tt-mysay";
+    wrap.style.cssText = `width:${pl.offsetWidth}px;height:${pl.offsetHeight}px;left:${pl.style.left};top:${pl.style.top};transform:${pl.style.transform}`;
     const el = document.createElement("div");
     el.className = "tt-say mine pop";
     el.dataset.c = ME.char;
     el.innerHTML = `<span class="tx">${esc(text)}</span>`;
-    pl.appendChild(el);
-    later(() => el.remove(), 3500);
+    wrap.appendChild(el);
+    pl.parentElement!.appendChild(wrap);
+    myBub = wrap;
+    later(() => wrap.remove(), 3500);
   }
   ($(".tt-tchat-in") as HTMLFormElement).onsubmit = (e) => {
     e.preventDefault();

@@ -8640,38 +8640,18 @@
   height: 60px;
   font-size: 22px;
 }
-/* 내 채팅 말풍선: 머리 위 대신 오른쪽 옆 (건물 「입장」 버튼과 안 겹치게) */
-.tt .tt-pl .tt-say.mine {
-  left: 74px;
-  right: auto;
-  bottom: 86px;
-  transform: none;
+/* 내 채팅 말풍선: 머리 위 그대로, 건물 「입장」 버튼(z 2000)보다 위 층 */
+.tt .tt-mysay {
+  position: absolute;
+  z-index: 2100;
+  pointer-events: none;
+  transform-origin: 50% 100%;
+}
+.tt .tt-mysay .tt-say.mine {
   width: max-content;
-  max-width: 250px;
+  max-width: 360px;
   white-space: normal;
   word-break: keep-all;
   overflow-wrap: anywhere;
-  z-index: 3;
-}
-.tt .tt-pl .tt-say.mine::after {
-  left: -9px !important;
-  bottom: 12px !important;
-  margin-left: 0 !important;
-  border-right: 0 !important;
-  border-bottom: 3px solid var(--bc) !important;
-  border-left: 3px solid var(--bc) !important;
-  border-radius: 0 0 0 4px;
-}
-.tt .tt-pl .tt-say.mine.lf {
-  left: auto;
-  right: 74px;
-}
-.tt .tt-pl .tt-say.mine.lf::after {
-  left: auto !important;
-  right: -9px;
-  border-left: 0 !important;
-  border-bottom: 0 !important;
-  border-top: 3px solid var(--bc) !important;
-  border-right: 3px solid var(--bc) !important;
-  border-radius: 0 4px 0 0;
+  text-align: center;
 }
