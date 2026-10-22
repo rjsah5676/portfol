@@ -3,13 +3,20 @@
  * 상태 전체가 JSON 이라 세이브 = 상태 저장
  */
 import { SCENES, START } from "./script";
-import type { BgId, BgmId, CharKey, Cond, Dist, Eff, EndingId, Mood, Opt, Pos, SfxId, Step, Vars, Who } from "./types";
+import type { BgId, BgmId, CharKey, Cond, Dist, Eff, EndingId, Face, Mood, Opt, Pos, SfxId, Step, Vars, Who } from "./types";
 
 export interface CharState {
   pos: Pos;
   dist: Dist;
-  face: string;
+  face: Face;
+  /** 표정 지정 없는 대사에서 돌아가는 얼굴 (없으면 캐릭터 기본) */
+  rest?: Face;
 }
+/**
+ * 캐릭터 기본 얼굴 — 시선 연출: 연서는 평소 시선을 피하고(away) 핵심 대사만 정면(base),
+ * 에이미는 늘 정면으로 들이댐
+ */
+export const REST: Record<CharKey, Face> = { yeonseo: "away", amy: "base", boss: "base" };
 export interface Display {
   bg: BgId;
   chars: Partial<Record<CharKey, CharState>>;
@@ -90,9 +97,16 @@ export function run(s0: GState): GState {
       case "bg":
         s.disp.bg = st.id;
         break;
-      case "show":
-        s.disp.chars[st.who] = { pos: st.pos ?? s.disp.chars[st.who]?.pos ?? "c", dist: st.dist ?? 0, face: st.face ?? "base" };
+      case "show": {
+        const f = st.face ?? REST[st.who];
+        s.disp.chars[st.who] = { pos: st.pos ?? s.disp.chars[st.who]?.pos ?? "c", dist: st.dist ?? 0, face: f, rest: f };
         break;
+      }
+      case "face": {
+        const c = s.disp.chars[st.who];
+        if (c) s.disp.chars[st.who] = { ...c, face: st.face };
+        break;
+      }
       case "dist": {
         const c = s.disp.chars[st.who];
         if (c) s.disp.chars[st.who] = { ...c, dist: st.dist };
@@ -129,10 +143,9 @@ export function run(s0: GState): GState {
         s.block = { k: "day", d: st.day, slot: st.slot };
         return s;
       case "say": {
-        if (st.face && st.who in s.disp.chars) {
-          const c = s.disp.chars[st.who as CharKey];
-          if (c) s.disp.chars[st.who as CharKey] = { ...c, face: st.face };
-        }
+        // 말하는 캐릭터: 지정한 표정, 없으면 기본 얼굴로 (듣는 쪽은 직전 표정 유지 = 리액션)
+        const c = s.disp.chars[st.who as CharKey];
+        if (c) s.disp.chars[st.who as CharKey] = { ...c, face: st.face ?? c.rest ?? REST[st.who as CharKey] };
         s.block = { k: "say", who: st.who, text: st.text, mood: st.mood ?? "normal" };
         return s;
       }

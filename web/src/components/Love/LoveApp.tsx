@@ -6,9 +6,10 @@
  * 저장: localStorage (못 쓰는 환경이어도 게임은 그대로 돌아감)
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { BG, BG_FALLBACK, BGM, BGM_ONCE, ENDINGS, FACE_ICON, NAME, NAME_COLOR, SFX, STAND, TITLE, preloadList } from "@/lib/love/assets";
+import { BG, BG_FALLBACK, BGM, BGM_ONCE, BLINK_OK, ENDINGS, FACE_ICON, NAME, NAME_COLOR, SFX, STAND, TITLE, preloadList } from "@/lib/love/assets";
 import { type GState, goScene, ignorePhone, initState, lineKey, miniDone, next, pick, run } from "@/lib/love/engine";
-import type { BgmId, CharKey, EndingId, Opt, SfxId, Who } from "@/lib/love/types";
+import { type ReactLine, idleLine, touchLine } from "@/lib/love/reactions";
+import type { BgmId, CharKey, EndingId, Face, Opt, SfxId, Who } from "@/lib/love/types";
 import { DealMini, StoryPoker, TellMini } from "./Minis";
 
 // ---------- 저장소 (실패해도 조용히) ----------
@@ -100,6 +101,9 @@ export default function LoveApp() {
   const [hideUi, setHideUi] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [phoneShown, setPhoneShown] = useState(0);
+  /** 방치 · 터치 반응 (말풍선 + 잠깐 표정) */
+  const [react, setReact] = useState<(ReactLine & { who: CharKey; n: number; seq: number }) | null>(null);
+  const [touchHint, setTouchHint] = useState(false);
   const seen = useRef<Set<string>>(new Set());
   const wrap = useRef<HTMLDivElement>(null);
   const { play, bgm } = useSound(muted);
@@ -136,6 +140,16 @@ export default function LoveApp() {
     audio.forEach((u) => {
       fetch(u).then(tick, tick);
     });
+  }, []);
+
+  // 사이트 퀵메뉴(≡) 버튼이 게임 오른쪽 아래 버튼(블러프다 · 레이즈 등)을 가려서 이 페이지에선 숨김
+  useEffect(() => {
+    const qm = document.querySelector<HTMLElement>("[data-quickmenu]");
+    if (!qm) return;
+    qm.style.display = "none";
+    return () => {
+      qm.style.display = "";
+    };
   }, []);
 
   // ---------- 타이틀 · 이름 · 엔딩 수집 화면은 메인 테마 ----------
@@ -259,6 +273,48 @@ export default function LoveApp() {
     const id = window.setTimeout(() => setPhoneShown((n) => n + 1), 650);
     return () => window.clearTimeout(id);
   }, [block, phoneShown]);
+
+  // ---------- 살아 있는 스탠딩: 반응 ----------
+  const showReact = useCallback(
+    (who: CharKey, r: ReactLine, seq: number) => {
+      setReact({ ...r, who, n: Date.now(), seq });
+      if (r.heart) play("heart");
+    },
+    [play],
+  );
+  // 반응 말풍선은 잠깐만 (대사가 넘어가면 seq 가 달라져서 바로 안 보임)
+  useEffect(() => {
+    if (!react) return;
+    const id = window.setTimeout(() => setReact(null), 2600);
+    return () => window.clearTimeout(id);
+  }, [react]);
+  const liveReact = react && s && react.seq === s.seq ? react : null;
+  // 방치: 대사를 다 띄워 둔 채 18초 그대로면 히로인이 먼저 말을 검 (한 대사에 한 번)
+  useEffect(() => {
+    if (phase !== "game" || !s || block?.k !== "say" || typing || panel || auto || skip || hideUi) return;
+    const on: CharKey[] = (Object.keys(s.disp.chars) as CharKey[]).filter((k) => k !== "boss");
+    if (!on.length) return;
+    const who = on.includes(block.who as CharKey) ? (block.who as CharKey) : on[0];
+    const id = window.setTimeout(() => showReact(who, idleLine(who, s.vars), s.seq), 18000);
+    return () => window.clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [s?.seq, typing, panel, auto, skip, hideUi, phase]);
+  /** 화면 숨김(HIDE) 중 캐릭터를 누르면 반응 — 머리는 쓰다듬기, 나머지는 콕 */
+  const touchAt = (x: number, y: number): boolean => {
+    if (!s) return false;
+    for (const el of document.elementsFromPoint(x, y)) {
+      const w = (el as HTMLElement).closest?.("[data-who]") as HTMLElement | null;
+      if (!w) continue;
+      const who = w.dataset.who as CharKey;
+      const r = w.getBoundingClientRect();
+      // 그림 가장자리 투명한 곳은 빼고 가운데 몸통 쪽만
+      if (Math.abs(x - (r.left + r.width / 2)) > r.width * 0.32) continue;
+      const head = (y - r.top) / r.height < HEAD_Y + 0.03;
+      showReact(who, touchLine(who, head ? "head" : "body", s.vars), s.seq);
+      return true;
+    }
+    return false;
+  };
 
   // 키보드: 스페이스 · 엔터 = 다음, Ctrl 누르는 동안 스킵, Esc = 창 닫기
   useEffect(() => {
@@ -433,9 +489,23 @@ export default function LoveApp() {
         {phase === "game" && s && disp && (
           <>
             <Bg id={disp.bg} blur={maxDist} />
-            {chars.map(([k, c]) => (
-              <Sprite key={k} who={k} pos={chars.length === 1 && c.dist > 0 ? "c" : c.pos} dist={c.dist} dim={!!speaker && speaker !== k && chars.length > 1} />
-            ))}
+            {chars.map(([k, c]) => {
+              const pos = chars.length === 1 && c.dist > 0 ? "c" : c.pos;
+              const face: Face = liveReact?.who === k ? liveReact.face : ((c.face as Face) ?? "base");
+              // 말 꺼내는 순간: 동요 대사면 흔들림, 놀람 표정이면 폴짝 / 반응 때도 폴짝
+              const fx =
+                liveReact?.who === k
+                  ? { kind: "hop" as const, n: liveReact.n }
+                  : speaker === k && block?.k === "say" && (block.mood === "shake" || block.mood === "shout")
+                    ? { kind: "shake" as const, n: s.seq }
+                    : speaker === k && face === "surprise"
+                      ? { kind: "hop" as const, n: s.seq }
+                      : null;
+              return <Sprite key={k} who={k} pos={pos} dist={c.dist} face={face} fxKind={fx?.kind} fxN={fx?.n ?? 0} dim={!!speaker && speaker !== k && chars.length > 1} />;
+            })}
+            {liveReact && disp.chars[liveReact.who] && (
+              <ReactBubble x={POS_X[chars.length === 1 && disp.chars[liveReact.who]!.dist > 0 ? "c" : disp.chars[liveReact.who]!.pos]} dist={disp.chars[liveReact.who]!.dist} text={sub(liveReact.text)} />
+            )}
             {disp.day && !hideUi && (
               <div className="lv-day">
                 <span className="text-[#ffd27a]">♠</span> DAY {disp.day.d} · {disp.day.slot}
@@ -444,7 +514,7 @@ export default function LoveApp() {
 
             {/* 대사 */}
             {block?.k === "say" && !hideUi && (
-              <Dialogue who={block.who} mood={block.mood} name={sub(NAME[block.who])} text={fullText.slice(0, typed)} done={!typing} />
+              <Dialogue key={block.mood === "shake" || block.mood === "shout" ? s.seq : "box"} who={block.who} mood={block.mood} name={sub(NAME[block.who])} text={fullText.slice(0, typed)} done={!typing} />
             )}
 
             {/* 하단 버튼 */}
@@ -458,7 +528,15 @@ export default function LoveApp() {
                 <Chip onClick={() => setPanel("load")}>LOAD</Chip>
                 <Chip onClick={() => save("q")}>Q.SAVE</Chip>
                 <Chip onClick={() => load("q")}>Q.LOAD</Chip>
-                <Chip onClick={() => setHideUi(true)}>HIDE</Chip>
+                <Chip
+                  title="대사창을 숨기고 그림 보기 (캐릭터를 누르면 반응해요)"
+                  onClick={() => {
+                    setHideUi(true);
+                    setTouchHint(true);
+                  }}
+                >
+                  HIDE
+                </Chip>
               </div>
             )}
             <div className="lv-top-right" onClick={(e) => e.stopPropagation()}>
@@ -478,9 +556,13 @@ export default function LoveApp() {
                 className="absolute inset-0 z-50"
                 onClick={(e) => {
                   e.stopPropagation();
+                  // 화면 숨김 중엔 그림 감상 + 터치 반응: 캐릭터를 누르면 반응, 빈 곳을 누르면 대사창 복귀
+                  if (touchAt(e.clientX, e.clientY)) return setTouchHint(false);
                   setHideUi(false);
                 }}
-              />
+              >
+                {touchHint && chars.some(([k]) => k !== "boss") && <div className="lv-touch-hint">캐릭터를 눌러 보세요 · 빈 곳을 누르면 돌아가요</div>}
+              </div>
             )}
 
             {/* 선택지 */}
@@ -707,8 +789,73 @@ function Bg({ id, blur }: { id: keyof typeof BG; blur: number }) {
 const DIST_H = [168, 235, 360];
 const DIST_TOP = [3, -1, -9];
 const POS_X = { l: 28, c: 50, r: 72 };
-function Sprite({ who, pos, dist, dim }: { who: CharKey; pos: "l" | "c" | "r"; dist: 0 | 1 | 2; dim: boolean }) {
-  const u = STAND[who].base;
+/** 머리 위치 (스탠딩 높이 대비 비율) — 반응 말풍선 · 쓰다듬기 판정 */
+const HEAD_Y = 0.17;
+
+/**
+ * 살아 있는 스탠딩: 숨쉬기 · 표정 갈아 끼우기(얼굴만 다른 같은 크기 그림을 겹쳐서 페이드) · 눈 깜빡임 ·
+ * 놀람 폴짝 · 동요 흔들림. 거리 3단계는 위치 · 크기 전환
+ */
+function Sprite({
+  who,
+  pos,
+  dist,
+  dim,
+  face,
+  fxKind,
+  fxN,
+}: {
+  who: CharKey;
+  pos: "l" | "c" | "r";
+  dist: 0 | 1 | 2;
+  dim: boolean;
+  face: Face;
+  fxKind?: "hop" | "shake";
+  /** 바뀔 때마다 fxKind 애니메이션 한 번 */
+  fxN: number;
+}) {
+  const set = STAND[who];
+  const body = useRef<HTMLDivElement>(null);
+  const [blink, setBlink] = useState(false);
+  const canBlink = !!set.blink && BLINK_OK.includes(face);
+
+  // 눈 깜빡임: 2.6~6초마다, 가끔 두 번
+  useEffect(() => {
+    if (!canBlink) return;
+    let t = 0;
+    const loop = () => {
+      t = window.setTimeout(
+        () => {
+          setBlink(true);
+          window.setTimeout(() => setBlink(false), 110);
+          if (Math.random() < 0.22) {
+            window.setTimeout(() => setBlink(true), 260);
+            window.setTimeout(() => setBlink(false), 370);
+          }
+          loop();
+        },
+        2600 + Math.random() * 3400,
+      );
+    };
+    loop();
+    return () => window.clearTimeout(t);
+  }, [canBlink]);
+
+  // 폴짝 · 흔들림 (다시 그리지 않고 애니메이션만)
+  useEffect(() => {
+    const el = body.current;
+    if (!fxKind || !el?.animate) return;
+    if (fxKind === "hop")
+      el.animate([{ transform: "translateY(0)" }, { transform: "translateY(-1.6%)" }, { transform: "translateY(0)" }, { transform: "translateY(-0.5%)" }, { transform: "translateY(0)" }], { duration: 420, easing: "ease-out" });
+    else
+      el.animate(
+        [{ transform: "translateX(0)" }, { transform: "translateX(-0.9%)" }, { transform: "translateX(0.9%)" }, { transform: "translateX(-0.6%)" }, { transform: "translateX(0.4%)" }, { transform: "translateX(0)" }],
+        { duration: 380, easing: "linear" },
+      );
+    // fxN 이 바뀔 때만 (같은 대사에서 다시 그려질 땐 안 움직임)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fxN]);
+
   return (
     <div
       className="absolute"
@@ -721,14 +868,41 @@ function Sprite({ who, pos, dist, dim }: { who: CharKey; pos: "l" | "c" | "r"; d
         filter: dim ? "brightness(.62)" : undefined,
       }}
     >
-      {u ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={u} alt={NAME[who]} draggable={false} className="lv-breathe h-full w-auto max-w-none" />
-      ) : (
-        <div className="lv-breathe flex h-full w-[22cqw] items-start justify-center rounded-t-full bg-gradient-to-b from-[#3a2c1e] to-transparent pt-[6cqw] text-[2cqw] text-[#e0b46a]/80">
-          {NAME[who]}
-        </div>
-      )}
+      <div ref={body} className="h-full">
+        {set.base ? (
+          <div className="lv-breathe relative h-full" data-who={who}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={set.base} alt={NAME[who]} draggable={false} className="h-full w-auto max-w-none" />
+            {(Object.entries(set.faces) as [Face, string][]).map(([f, u]) => (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img key={f} src={u} alt="" draggable={false} className="lv-face" style={{ opacity: face === f ? 1 : 0 }} />
+            ))}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            {set.blink && <img src={set.blink} alt="" draggable={false} className="lv-face lv-face-blink" style={{ opacity: canBlink && blink ? 1 : 0 }} />}
+          </div>
+        ) : (
+          <div className="lv-breathe flex h-full w-[22cqw] items-start justify-center rounded-t-full bg-gradient-to-b from-[#3a2c1e] to-transparent pt-[6cqw] text-[2cqw] text-[#e0b46a]/80">
+            {NAME[who]}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** 반응 말풍선 (방치 · 터치) — 캐릭터 머리 옆 */
+function ReactBubble({ x, dist, text }: { x: number; dist: 0 | 1 | 2; text: string }) {
+  const right = x <= 50;
+  return (
+    <div
+      className="lv-react"
+      style={{
+        left: right ? `${x + [9, 12, 17][dist]}%` : undefined,
+        right: right ? undefined : `${100 - x + [9, 12, 17][dist]}%`,
+        top: `${[DIST_TOP[0] + DIST_H[0] * HEAD_Y * 0.55, 10, 14][dist]}%`,
+      }}
+    >
+      {text}
     </div>
   );
 }
@@ -743,7 +917,7 @@ function Dialogue({ who, mood, name, text, done }: { who: Who; mood: string; nam
   }
   const narr = who === "narr";
   return (
-    <div className={`lv-box ${mood === "whisper" ? "lv-box-whisper" : ""}`}>
+    <div className={`lv-box ${mood === "whisper" ? "lv-box-whisper" : ""} ${mood === "heart" ? "lv-box-heart" : ""} ${mood === "shake" || mood === "shout" ? "lv-box-jolt" : ""}`}>
       {!narr && (
         <div className="lv-name" style={{ color: NAME_COLOR[who] }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -752,7 +926,7 @@ function Dialogue({ who, mood, name, text, done }: { who: Who; mood: string; nam
         </div>
       )}
       <div
-        className={`lv-text ${narr ? "italic text-white/85" : ""} ${mood === "whisper" ? "lv-t-whisper" : ""} ${mood === "shake" ? "lv-t-shake" : ""} ${mood === "shout" ? "lv-t-shout" : ""} ${mood === "think" ? "text-[#cfc6b0]" : ""}`}
+        className={`lv-text ${narr ? "italic text-white/85" : ""} ${mood === "whisper" ? "lv-t-whisper" : ""} ${mood === "shake" ? "lv-t-shake" : ""} ${mood === "shout" ? "lv-t-shout" : ""} ${mood === "think" ? "text-[#cfc6b0]" : ""} ${mood === "heart" ? "lv-t-heart" : ""}`}
       >
         {mood === "think" ? `(${text}${done ? ")" : ""}` : text}
         {done && <span className="lv-next">◆</span>}

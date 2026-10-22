@@ -58,6 +58,50 @@
   transform-origin: 50% 100%;
   animation: lv-breathe 4.2s ease-in-out infinite;
 }
+/* 표정 차분: 기본 그림 위에 같은 크기로 겹쳐서 페이드 */
+.lv-face {
+  position: absolute;
+  inset: 0;
+  height: 100%;
+  width: auto;
+  max-width: none;
+  pointer-events: none;
+  transition: opacity 0.18s ease;
+}
+.lv-face-blink { transition: opacity 0.04s linear; }
+
+/* 방치 · 터치 반응 말풍선 */
+@keyframes lv-react-in { from { opacity: 0; transform: translateY(0.6cqw) scale(0.92); } }
+.lv-react {
+  position: absolute;
+  z-index: 18;
+  max-width: 24cqw;
+  padding: 0.7cqw 1.2cqw;
+  border: 0.12cqw solid #c9a25a;
+  border-radius: 1.2cqw;
+  background: #fffaf0f2;
+  color: #2a1d14;
+  font-size: 1.45cqw;
+  font-weight: 700;
+  line-height: 1.45;
+  word-break: keep-all;
+  box-shadow: 0 0.4cqw 1.2cqw #0007;
+  pointer-events: none;
+  animation: lv-react-in 0.22s cubic-bezier(.2,.8,.2,1);
+}
+.lv-touch-hint {
+  position: absolute;
+  left: 50%;
+  bottom: 3%;
+  transform: translateX(-50%);
+  padding: 0.5cqw 1.4cqw;
+  border-radius: 999px;
+  background: #000a;
+  color: #ffe9b8;
+  font-size: 1.2cqw;
+  pointer-events: none;
+  animation: lv-fadein 0.5s ease;
+}
 
 .lv-day {
   position: absolute;
@@ -143,6 +187,28 @@
   80% { transform: translate(0.1cqw, 0.05cqw); }
 }
 .lv-t-shake { display: inline-block; animation: lv-shake 0.35s linear 3; }
+/* 동요 · 외침: 대사창째로 한 번 덜컹 */
+@keyframes lv-jolt {
+  0%, 100% { transform: translate(0, 0); }
+  15% { transform: translate(-0.4cqw, 0.15cqw); }
+  35% { transform: translate(0.35cqw, -0.1cqw); }
+  55% { transform: translate(-0.2cqw, 0); }
+  75% { transform: translate(0.12cqw, 0.05cqw); }
+}
+.lv-box-jolt { animation: lv-jolt 0.32s linear; }
+/* 두근: 분홍 테두리가 심장 박동처럼 */
+@keyframes lv-heartbeat {
+  0%, 40%, 100% { box-shadow: 0 0 0 0.3cqw #0a0f2299, 0 0.6cqw 2cqw #000a; }
+  12% { box-shadow: 0 0 0 0.3cqw #0a0f2299, 0 0 2.2cqw #ff7aa8aa; }
+  24% { box-shadow: 0 0 0 0.3cqw #0a0f2299, 0 0 1.2cqw #ff7aa866; }
+  32% { box-shadow: 0 0 0 0.3cqw #0a0f2299, 0 0 2.4cqw #ff7aa8bb; }
+}
+.lv-box-heart {
+  border-color: #ff8fb4;
+  background: linear-gradient(180deg, #2a1430eb, #160a1cf2);
+  animation: lv-heartbeat 1.1s ease-in-out infinite;
+}
+.lv-t-heart { color: #ffe3ee; }
 @keyframes lv-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.2; } }
 .lv-next { margin-left: 0.6cqw; color: #ffd27a; font-size: 1.2cqw; animation: lv-blink 1s infinite; }
 

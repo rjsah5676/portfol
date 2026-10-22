@@ -6,12 +6,18 @@
 export type CharKey = "yeonseo" | "amy" | "boss";
 /** 말하는 사람: 스탠딩 있는 캐릭터 + 주인공(me) + 나레이션(narr) + 카메오 */
 export type Who = CharKey | "me" | "narr" | "taeyang" | "jeongmin" | "chunhee";
-/** 감정별 대사창: 귓속말 · 흔들림 · 외침 · 대사창 없이(고백 직전 등) · 속마음 */
-export type Mood = "normal" | "whisper" | "shake" | "shout" | "bare" | "think";
+/** 감정별 대사창: 귓속말 · 흔들림 · 외침 · 대사창 없이(고백 직전 등) · 속마음 · 두근(분홍 맥박) */
+export type Mood = "normal" | "whisper" | "shake" | "shout" | "bare" | "think" | "heart";
+export const MOODS: readonly Mood[] = ["normal", "whisper", "shake", "shout", "bare", "think", "heart"];
+/**
+ * 표정 (얼굴만 바뀐 스탠딩). base = 정면 무표정, away = 시선 피함(연서 평소)
+ * 연서: away smile cold surprise sad blush / 에이미: smile pout surprise sad blush smug
+ */
+export type Face = "base" | "away" | "smile" | "cold" | "surprise" | "sad" | "blush" | "pout" | "smug";
 export type Pos = "l" | "c" | "r";
 /** 거리 3단계: 0 평소(허벅지까지) · 1 상반신 · 2 얼굴 클로즈업 */
 export type Dist = 0 | 1 | 2;
-export type BgId = "pub" | "alley" | "vip" | "store" | "arcade" | "room" | "black";
+export type BgId = "pub" | "alley" | "vip" | "store" | "arcade" | "room" | "officetel" | "karaoke" | "black";
 export type SfxId = "chip" | "deal" | "shuffle" | "click" | "win" | "lose" | "phone" | "heart" | "stamp";
 export type BgmId =
   | "pub"
@@ -100,10 +106,12 @@ export interface PokerSpec {
 
 export type Step =
   | { t: "bg"; id: BgId }
-  | { t: "show"; who: CharKey; pos?: Pos; dist?: Dist; face?: string }
+  | { t: "show"; who: CharKey; pos?: Pos; dist?: Dist; face?: Face }
   | { t: "dist"; who: CharKey; dist: Dist }
+  /** 말하지 않는 캐릭터의 표정만 바꿈 (주인공 말에 연서가 붉어지는 등) */
+  | { t: "face"; who: CharKey; face: Face }
   | { t: "hide"; who?: CharKey }
-  | { t: "say"; who: Who; text: string; mood?: Mood; face?: string }
+  | { t: "say"; who: Who; text: string; mood?: Mood; face?: Face }
   | { t: "choice"; prompt?: string; opts: Opt[]; big?: boolean }
   | { t: "set"; eff: Eff }
   | { t: "goto"; to: string }

@@ -2,17 +2,28 @@
  * 올인 러브 — 그림 · 소리 목록. 주소만 채우면 화면에 바로 입혀짐 (null = 임시 모양)
  * 게임은 로딩 화면에서 전부 받은 뒤 시작 (진행률 막대)
  */
-import type { BgId, BgmId, CharKey, EndingInfo, SfxId, Who } from "./types";
+import type { BgId, BgmId, CharKey, EndingInfo, Face, SfxId, Who } from "./types";
 
 const B = "/love";
 const P = "/poker";
 
-/** 스탠딩 (배경 없는 누끼). 표정 차분은 들어오면 face 키로 추가 — 없으면 base */
-export const STAND: Record<CharKey, Record<string, string | null>> = {
-  yeonseo: { base: `${B}/char/yeonseo-base.webp` },
-  amy: { base: `${B}/char/amy-base.webp` },
-  boss: { base: null },
+/**
+ * 스탠딩 (배경 없는 누끼). 표정 차분은 기본 그림에 얼굴만 합성한 같은 크기 그림이라 겹쳐서 갈아 끼움
+ * blink = 눈 감은 얼굴 (눈 깜빡임용). 없는 표정은 base 로 대신함
+ */
+export interface StandSet {
+  base: string | null;
+  faces: Partial<Record<Face, string>>;
+  blink?: string;
+}
+const faces = (who: string, list: Face[]) => Object.fromEntries(list.map((f) => [f, `${B}/char/${who}-${f}.webp`])) as Partial<Record<Face, string>>;
+export const STAND: Record<CharKey, StandSet> = {
+  yeonseo: { base: `${B}/char/yeonseo-base.webp`, faces: faces("yeonseo", ["away", "smile", "cold", "surprise", "sad", "blush"]), blink: `${B}/char/yeonseo-blink.webp` },
+  amy: { base: `${B}/char/amy-base.webp`, faces: faces("amy", ["smile", "pout", "surprise", "sad", "blush", "smug"]), blink: `${B}/char/amy-blink.webp` },
+  boss: { base: null, faces: {} },
 };
+/** 눈 깜빡임을 얹어도 어색하지 않은 표정 (눈 모양이 크게 다른 표정은 깜빡임 생략) */
+export const BLINK_OK: Face[] = ["base", "away", "smile", "cold"];
 
 /** 배경 — 없으면 단색 그라데이션 */
 export const BG: Record<BgId, string | null> = {
@@ -22,6 +33,8 @@ export const BG: Record<BgId, string | null> = {
   store: `${B}/bg/store.webp`,
   arcade: `${B}/bg/arcade.webp`,
   room: `${B}/bg/room.webp`,
+  officetel: `${B}/bg/officetel.webp`,
+  karaoke: `${B}/bg/karaoke.webp`,
   black: null,
 };
 export const BG_FALLBACK: Record<BgId, string> = {
@@ -31,6 +44,8 @@ export const BG_FALLBACK: Record<BgId, string> = {
   store: "linear-gradient(180deg,#e9eef2,#b9c4cc)",
   arcade: "linear-gradient(180deg,#3a1f4a,#120a1c)",
   room: "linear-gradient(180deg,#3a3140,#18141c)",
+  officetel: "linear-gradient(180deg,#2c3038,#121418)",
+  karaoke: "linear-gradient(180deg,#3a1450,#12061c)",
   black: "#000",
 };
 
@@ -105,7 +120,7 @@ export const TITLE = { bg: `${B}/ui/title-bg.webp`, logo: `${B}/ui/title-logo.we
 /** 로딩 화면에서 전부 받는 목록 */
 export function preloadList(): { img: string[]; audio: string[] } {
   const img = new Set<string>();
-  for (const c of Object.values(STAND)) for (const u of Object.values(c)) if (u) img.add(u);
+  for (const c of Object.values(STAND)) for (const u of [c.base, c.blink, ...Object.values(c.faces)]) if (u) img.add(u);
   for (const u of Object.values(BG)) if (u) img.add(u);
   for (const u of Object.values(FACE_ICON)) if (u) img.add(u);
   img.add(CARD_BACK);
