@@ -37,7 +37,7 @@ import {
 } from "@/realtime/defense";
 import Codex from "./Codex";
 import { Controller } from "./controller";
-import Hub, { Cur, curTip, growthDots, type HubTab } from "./Hub";
+import Hub, { Cur, curTip, type HubTab } from "./Hub";
 import { setTheme } from "./render";
 import {
   GLITCH,
@@ -637,13 +637,13 @@ function Menu(p: {
                 보물방 {fmtChance(treasureChance(pr.twaves ?? 0, glitch))}
               </span>
             )}
-            <span className="block text-[12px] font-normal opacity-85">
+            <span className="block truncate text-[12px] font-normal opacity-85">
               {!p.member
                 ? "연습 판 (회원은 랭킹 · 성장 · 보상)"
                 : pr
                   ? glitch > Math.max(0, pr.glitchWin + 1)
-                    ? `오염 ${glitch}단계 · 아직 못 깬 단계예요 — 추천 ${Math.max(0, pr.glitchWin + 1)}단계 (◀로 낮추기)`
-                    : `오염 ${glitch}단계 (보상 ×${GLITCH[glitch].reward}) · 연구 ${pr.load.res.length} · 유물 ${pr.load.relics.length}${grit ? ` · 끈기 +${Math.round(grit * GRIT_PER * 100)}%` : ""}`
+                    ? `오염 ${glitch} · 못 깬 단계 — 추천 ${Math.max(0, pr.glitchWin + 1)}단계`
+                    : `오염 ${glitch} ×${GLITCH[glitch].reward} · 연구 ${pr.load.res.length} · 유물 ${pr.load.relics.length}${grit ? ` · 끈기 +${Math.round(grit * GRIT_PER * 100)}%` : ""}`
                   : "시즌 랭킹 판"}
             </span>
           </Btn>
@@ -687,11 +687,7 @@ function Menu(p: {
             title={p.member ? "" : "회원만"}
           >
             <b className="block text-[14px]">정비소</b>
-            {pr && growthDots(pr).total > 0 ? (
-              <span className="block text-[12px] font-bold text-[#ffe36b]">▲ 지금 올릴 수 있는 게 있어요</span>
-            ) : (
-              <span className="block text-[12px] opacity-85">강화 · 연구 · 유물 · 미션</span>
-            )}
+            <span className="block text-[12px] opacity-85">강화 · 연구 · 유물 · 미션</span>
             {hubDot > 0 && (
               <span className="dfn-pulse absolute top-1 right-1 min-w-[18px] bg-[#ff4d6d] px-1 text-center text-[12px] leading-[18px] text-white shadow-[0_0_0_2px_#0a0816]">
                 {hubDot}
