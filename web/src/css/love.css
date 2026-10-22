@@ -209,6 +209,20 @@
   animation: lv-heartbeat 1.1s ease-in-out infinite;
 }
 .lv-t-heart { color: #ffe3ee; }
+/* 음성 다시 듣기 (이름표 옆) */
+.lv-voice {
+  margin-left: 0.4cqw;
+  width: 1.9cqw;
+  height: 1.9cqw;
+  border-radius: 999px;
+  border: 0.1cqw solid #c9a25a;
+  background: #0e1430;
+  color: #ffd27a;
+  font-size: 1.1cqw;
+  line-height: 1;
+  cursor: pointer;
+}
+.lv-voice:hover { background: #c9a25a; color: #0e1430; }
 @keyframes lv-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.2; } }
 .lv-next { margin-left: 0.6cqw; color: #ffd27a; font-size: 1.2cqw; animation: lv-blink 1s infinite; }
 

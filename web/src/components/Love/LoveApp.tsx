@@ -9,6 +9,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BG, BG_FALLBACK, BGM, BGM_ONCE, ENDINGS, FACE_ICON, NAME, NAME_COLOR, SFX, STAND, TITLE, preloadList } from "@/lib/love/assets";
 import { type GState, goScene, ignorePhone, initState, lineKey, miniDone, next, pick, run } from "@/lib/love/engine";
 import { type ReactLine, idleLine, touchLine } from "@/lib/love/reactions";
+import { VOICE_BY_TEXT } from "@/lib/love/voices";
 import type { BgmId, CharKey, EndingId, Face, Opt, SfxId, Who } from "@/lib/love/types";
 import { DealMini, StoryPoker, TellMini } from "./Minis";
 
@@ -54,6 +55,27 @@ function useSound(muted: boolean) {
     mute.current = muted;
     if (bgmEl.current) bgmEl.current.volume = muted ? 0 : 0.3;
   }, [muted]);
+  // 핵심 대사 음성: 하나만 재생, 재생 중엔 BGM 살짝 줄임
+  const voiceEl = useRef<HTMLAudioElement | null>(null);
+  const voiceEnd = useRef(0);
+  const voice = useCallback((url: string | null) => {
+    voiceEl.current?.pause();
+    voiceEl.current = null;
+    voiceEnd.current = 0;
+    if (bgmEl.current) bgmEl.current.volume = mute.current ? 0 : 0.3;
+    if (!url || mute.current) return;
+    const a = new Audio(url);
+    a.volume = 0.95;
+    voiceEl.current = a;
+    a.onloadedmetadata = () => {
+      voiceEnd.current = Date.now() + a.duration * 1000;
+    };
+    a.onended = () => {
+      if (voiceEl.current === a && bgmEl.current) bgmEl.current.volume = mute.current ? 0 : 0.3;
+    };
+    if (bgmEl.current) bgmEl.current.volume = 0.12;
+    a.play().catch(() => {});
+  }, []);
   const play = useCallback((id: SfxId) => {
     if (mute.current) return;
     const a = new Audio(SFX[id]);
@@ -80,7 +102,7 @@ function useSound(muted: boolean) {
       window.addEventListener("keydown", retry, { once: true });
     });
   }, []);
-  return { play, bgm };
+  return { play, bgm, voice, voiceEnd };
 }
 
 type Phase = "loading" | "title" | "name" | "game" | "gallery";
@@ -106,7 +128,7 @@ export default function LoveApp() {
   const [touchHint, setTouchHint] = useState(false);
   const seen = useRef<Set<string>>(new Set());
   const wrap = useRef<HTMLDivElement>(null);
-  const { play, bgm } = useSound(muted);
+  const { play, bgm, voice, voiceEnd } = useSound(muted);
 
   const sub = useCallback((t: string) => t.replaceAll("{name}", name), [name]);
   const flash = (t: string) => {
@@ -168,12 +190,14 @@ export default function LoveApp() {
     if (b?.k === "say") {
       setTyped(0);
       setLog((l) => [...l.slice(-199), { who: b.who, text: b.text }]);
+      voice(skip ? null : (VOICE_BY_TEXT[b.text] ?? null));
     }
     if (b?.k === "phone") {
       setPhoneShown(0);
       play("phone");
     }
     if (b?.k === "goTitle") {
+      voice(null);
       bgm(null);
       setPhase("title");
     }
@@ -261,10 +285,11 @@ export default function LoveApp() {
       return () => window.clearTimeout(id);
     }
     if (auto && !typing) {
-      const id = window.setTimeout(advance, 1100 + fullText.length * 38);
+      // 음성이 있는 줄은 음성이 끝날 때까지 기다림
+      const id = window.setTimeout(advance, Math.max(1100 + fullText.length * 38, voiceEnd.current - Date.now() + 700));
       return () => window.clearTimeout(id);
     }
-  }, [block, skip, auto, typing, advance, panel, fullText.length, s]);
+  }, [block, skip, auto, typing, advance, panel, fullText.length, s, voiceEnd]);
 
   // 메시지 말풍선 하나씩
   useEffect(() => {
@@ -514,7 +539,15 @@ export default function LoveApp() {
 
             {/* 대사 */}
             {block?.k === "say" && !hideUi && (
-              <Dialogue key={block.mood === "shake" || block.mood === "shout" ? s.seq : "box"} who={block.who} mood={block.mood} name={sub(NAME[block.who])} text={fullText.slice(0, typed)} done={!typing} />
+              <Dialogue
+                key={block.mood === "shake" || block.mood === "shout" ? s.seq : "box"}
+                who={block.who}
+                mood={block.mood}
+                name={sub(NAME[block.who])}
+                text={fullText.slice(0, typed)}
+                done={!typing}
+                onReplay={VOICE_BY_TEXT[block.text] ? () => voice(VOICE_BY_TEXT[block.text]) : undefined}
+              />
             )}
 
             {/* 하단 버튼 */}
@@ -882,7 +915,7 @@ function ReactBubble({ x, dist, text }: { x: number; dist: 0 | 1 | 2; text: stri
   );
 }
 
-function Dialogue({ who, mood, name, text, done }: { who: Who; mood: string; name: string; text: string; done: boolean }) {
+function Dialogue({ who, mood, name, text, done, onReplay }: { who: Who; mood: string; name: string; text: string; done: boolean; onReplay?: () => void }) {
   if (mood === "bare") {
     return (
       <div className="pointer-events-none absolute inset-x-[10%] bottom-[10%] z-20 text-center text-[2.4cqw] font-semibold leading-relaxed text-white [text-shadow:0_2px_10px_#000,0_0_24px_#000]">
@@ -898,6 +931,18 @@ function Dialogue({ who, mood, name, text, done }: { who: Who; mood: string; nam
           {/* eslint-disable-next-line @next/next/no-img-element */}
           {FACE_ICON[who] && <img src={FACE_ICON[who]} alt="" className="h-[2.4cqw] w-[2.4cqw] rounded-full" />}
           <span className="text-[#ffd27a]">♠</span> {name}
+          {onReplay && (
+            <button
+              className="lv-voice"
+              title="음성 다시 듣기"
+              onClick={(e) => {
+                e.stopPropagation();
+                onReplay();
+              }}
+            >
+              ♪
+            </button>
+          )}
         </div>
       )}
       <div

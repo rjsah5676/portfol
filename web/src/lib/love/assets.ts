@@ -3,6 +3,7 @@
  * 게임은 로딩 화면에서 전부 받은 뒤 시작 (진행률 막대)
  */
 import type { BgId, BgmId, CharKey, EndingInfo, Face, SfxId, Who } from "./types";
+import { VOICE_BY_TEXT } from "./voices";
 
 const B = "/love";
 const P = "/poker";
@@ -123,7 +124,7 @@ export function preloadList(): { img: string[]; audio: string[] } {
   img.add(CARD_BACK);
   img.add(TITLE.bg);
   img.add(TITLE.logo);
-  return { img: [...img], audio: [...new Set([...Object.values(SFX), ...Object.values(BGM).filter((u): u is string => !!u)])] };
+  return { img: [...img], audio: [...new Set([...Object.values(SFX), ...Object.values(BGM).filter((u): u is string => !!u), ...Object.values(VOICE_BY_TEXT)])] };
 }
 
 /** 엔딩 18개 (M1 에서 실제로 볼 수 있는 건 fired · ghost · plain) */
