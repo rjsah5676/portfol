@@ -84,14 +84,16 @@ export const SQUADS = [
 ] as const;
 export const SQUAD_NEXT: Record<string, string> = { knight: "mech", mech: "arcane" };
 
+/** 원정 유물 「서약」: 소환이 이 확률로 그 세력 (나머지는 평소처럼 세 세력 중 무작위 — 그 세력이 또 나올 수도) */
+export const OATH_P = 0.5;
 /** 원정 유물 (이번 원정에서만) — sq_ 는 분대 시작 유물 (뽑기에 안 나옴) */
 export const EXP_RELICS: { id: string; name: string; desc: string; start?: boolean; need?: number }[] = [
   { id: "sq_knight", name: "기사단 나팔", desc: "전투가 시작될 때마다 무료 소환 2", start: true },
   { id: "sq_mech", name: "공방 조준경", desc: "보스 · 엘리트에게 피해 +25%", start: true },
   { id: "sq_arcane", name: "마도회 수정", desc: "전투가 시작될 때마다 가장 낮은 마도회 유닛 칸이 한 등급 올라요", start: true },
-  { id: "oath_knight", name: "기사단 서약", desc: "소환이 늘 기사단으로 나와요" },
-  { id: "oath_mech", name: "기계공방 서약", desc: "소환이 늘 기계공방으로 나와요" },
-  { id: "oath_arcane", name: "마도회 서약", desc: "소환이 늘 마도회로 나와요" },
+  { id: "oath_knight", name: "기사단 서약", desc: `소환이 ${OATH_P * 100}% 확률로 기사단으로 나와요` },
+  { id: "oath_mech", name: "기계공방 서약", desc: `소환이 ${OATH_P * 100}% 확률로 기계공방으로 나와요` },
+  { id: "oath_arcane", name: "마도회 서약", desc: `소환이 ${OATH_P * 100}% 확률로 마도회로 나와요` },
   { id: "alch", name: "연금 합성", desc: "합성할 때 25% 확률로 두 등급 위 (레전드까지)" },
   { id: "twin", name: "쌍둥이 소환", desc: "소환할 때 20% 확률로 같은 유닛이 하나 더" },
   { id: "growth", name: "성장통", desc: "전투가 끝날 때마다 가장 낮은 등급 유닛 칸이 한 등급 올라요" },

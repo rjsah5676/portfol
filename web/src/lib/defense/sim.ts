@@ -30,7 +30,7 @@ import { MISSIONS, PATCHES, patchesFor } from "./meta";
 import { ENGRAVES, type EngrId } from "./engrave";
 import { mixSeed, pick, rnd, rndInt, type Rng } from "./rng";
 import { BENCH_MAX, LV_BUFF, LV_DMG, modsOf, type Loadout, type Mods, type Stage } from "./progress";
-import { EVENTS, EXP, EXP_RELICS, FIGHT_MOD, GIM, SHOP, SQUADS, ascOn, type EventId, type ExpNode, type FightMod, type Gim, type ShopKind } from "./town";
+import { EVENTS, EXP, EXP_RELICS, FIGHT_MOD, GIM, OATH_P, SHOP, SQUADS, ascOn, type EventId, type ExpNode, type FightMod, type Gim, type ShopKind } from "./town";
 import {
   FACTIONS,
   RECIPE,
@@ -259,8 +259,10 @@ export type Fx =
 
 /** 화면 알림 (토스트 · 획득 연출) */
 export type Ev =
-  | { t: "unit"; def: string; how: "summon" | "merge" | "gamble" | "recipe" | "pick" | "twin" }
+  | { t: "unit"; def: string; how: "summon" | "merge" | "gamble" | "recipe" | "pick" | "twin" | "relic" }
   | { t: "gambleFail"; g: "E" | "L"; refund: boolean }
+  /** 유물 규칙이 터짐 (전쟁 깃발 공짜 강화 · 신화의 인장 재료 돌려받기) */
+  | { t: "relicProc"; id: string }
   | { t: "boss"; boss: number }
   /** 보스 2페이즈 시작 · 예고 시작(warn) / 맞음(hit: 기절한 칸 수) */
   | { t: "phase"; boss: number }
@@ -1104,9 +1106,12 @@ export function apply(g: Game, p: number, cmd: Cmd): string | null {
           break;
         }
       }
-      // 원정 유물 「서약」: 그 세력만
+      // 원정 유물 「서약」: OATH_P 확률로 그 세력 (2026-10-22: 늘 → 확률, 한 세력만 나와 신화 20기씩 쌓이던 것)
+      // 유물 「순수 혈통」: 확률로 필드에서 가장 많은 세력 (낀 판만 난수를 씀)
       const oath = b.exp ? FACTIONS.find((f) => expHas(b, `oath_${f}`)) : undefined;
-      const def = pick(b.rng, poolOf(oath ?? pick(b.rng, FACTIONS), grade as Grade));
+      let fac: Faction | undefined = oath && rnd(b.rng) < OATH_P ? oath : undefined;
+      if (!fac && b.mods.pureSteer && b.mono && rnd(b.rng) < b.mods.pureSteer) fac = b.mono;
+      const def = pick(b.rng, poolOf(fac ?? pick(b.rng, FACTIONS), grade as Grade));
       give(b, def.id, "summon");
       if (expHas(b, "twin") && hasEmpty(b) && rnd(b.trng) < 0.2) give(b, def.id, "twin");
       return null;
@@ -1138,6 +1143,9 @@ export function apply(g: Game, p: number, cmd: Cmd): string | null {
       b.stones += sp.stones + (d.grade >= 3 ? b.mods.sellStone : 0);
       b.sold++;
       b.dirty = true;
+      // MOA 의 명함: 에픽 이하를 팔면 확률로 같은 등급 무작위 유닛
+      if (b.mods.moaReroll && d.grade <= 2 && d.faction !== "hidden" && hasEmpty(b) && rnd(b.rng) < b.mods.moaReroll)
+        give(b, pick(b.rng, poolOf(pick(b.rng, FACTIONS), d.grade as Grade)).id, "relic");
       return null;
     }
     case "swap": {
@@ -1198,13 +1206,20 @@ export function apply(g: Game, p: number, cmd: Cmd): string | null {
       if (!recipeOpen(b, cmd.id)) return "정비소에서 초월을 해금해야 해요";
       const plan = recipePlan(b, cmd.id);
       if (!plan) return "재료가 모자라요";
+      // 신화의 인장: 재료 중 가장 높은 등급 하나를 확률로 돌려받음
+      let top: string | null = null;
       for (const i of plan) {
         const c = b.cells[i];
+        if (c.def && (!top || UNIT[c.def].grade > UNIT[top].grade)) top = c.def;
         c.units.pop();
         if (!c.units.length) c.def = null;
       }
       b.dirty = true;
       give(b, r.id, "recipe");
+      if (top && b.mods.sealRefund && hasEmpty(b) && rnd(b.rng) < b.mods.sealRefund) {
+        give(b, top, "relic");
+        b.ev?.push({ t: "relicProc", id: "myth_seal" });
+      }
       b.gold += b.mods.alchemyGold;
       b.stones += b.mods.alchemyStones;
       return null;
@@ -1289,7 +1304,7 @@ export function apply(g: Game, p: number, cmd: Cmd): string | null {
 function give(
   b: Board,
   id: string,
-  how: "summon" | "merge" | "gamble" | "recipe" | "pick" | "twin",
+  how: "summon" | "merge" | "gamble" | "recipe" | "pick" | "twin" | "relic",
   prefer = -1
 ) {
   let at = -1;
@@ -1628,12 +1643,19 @@ function stepBoard(g: Game, b: Board) {
   }
 
   // ── 유닛 공격 ──
+  // 과부하 회로: 필드 적이 많을수록 공속 더 (1마리당 +0.5%, 최대 overBoss) · 보스가 있으면 최대
+  let over = 0;
+  if (b.mods.overBoss) {
+    let n = 0;
+    for (const e of es) if (e.hp > 0) n += e.boss >= 0 ? 999 : 1;
+    over = Math.min(b.mods.overBoss, n * 0.005);
+  }
   for (let i = 0; i < CELLS; i++) {
     const c = b.cells[i];
     if (!c.def) continue;
     const def = UNIT[c.def];
     if (b.sealed.length && b.sealed.includes(i)) continue; // 봉인된 칸
-    const sp = 1 + b.aspd[i] + b.cx.aspd + b.mods.aspdAll + (def.faction === "hidden" ? 0 : b.mods.facAspd[def.faction]) + egv(b, def.id, "rapid") / 100;
+    const sp = 1 + b.aspd[i] + b.cx.aspd + b.mods.aspdAll + over + (def.faction === "hidden" ? 0 : b.mods.facAspd[def.faction]) + egv(b, def.id, "rapid") / 100;
     const range = def.range + egv(b, def.id, "reach");
     const period = TPS / def.aps;
     for (const u of c.units) {
@@ -1931,6 +1953,9 @@ function attack(b: Board, ci: number, def: UnitDef, u: Unit, t: Enemy) {
   if (def.ult && ++u.ult >= def.ult.every) {
     u.ult = 0;
     ult(b, ci, def, t, tx, ty);
+    // FORTE 의 오르골: 궁극기를 쓰면 필드의 다른 궁극기 유닛 모두 충전 +1 — 바로 터뜨리진 않고 다음 공격에서 (연쇄)
+    if (b.mods.forteChain)
+      for (let j = 0; j < CELLS; j++) if (j !== ci && b.cells[j].def && UNIT[b.cells[j].def!].ult) for (const v of b.cells[j].units) v.ult++;
   }
 }
 
@@ -2254,6 +2279,22 @@ function die(g: Game, b: Board, e: Enemy): boolean {
     b.seized = [];
     gold = Math.floor((B.bossGold.base + B.bossGold.per * b.wave) * b.mods.bossGold);
     b.free += b.mods.bossFree;
+    // 전쟁 깃발: 세 세력 강화 + (공짜)
+    if (b.mods.warFree) {
+      for (const f of FACTIONS) b.up[f as "knight"] = Math.min(B.up.max, b.up[f as "knight"] + b.mods.warFree);
+      b.ev?.push({ t: "relicProc", id: "war_banner" });
+    }
+    // 무지개 연합: 필드에 가장 적은 세력(없는 세력 먼저)의 에픽 · 레전드 1기
+    if (b.mods.rainbowGift && hasEmpty(b)) {
+      const cnt = { knight: 0, mech: 0, arcane: 0 };
+      for (let i = 0; i < CELLS; i++) {
+        const d = b.cells[i].def ? UNIT[b.cells[i].def!] : null;
+        if (d && d.faction !== "hidden") cnt[d.faction] += b.cells[i].units.length;
+      }
+      let low: Faction = "knight";
+      for (const f of FACTIONS) if (cnt[f as "knight"] < cnt[low as "knight"]) low = f;
+      give(b, pick(b.rng, poolOf(low, b.mods.rainbowGift as Grade)).id, "relic");
+    }
     const stones = B.bossStones + Math.floor(b.wave / 20) + (b.patch === "gambler" ? 1 : 0) + b.cx.bossStones;
     b.stones += stones;
     const tk = B.bossTicket[b.wave];

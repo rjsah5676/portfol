@@ -266,29 +266,36 @@ export interface RelicDef {
  * 시뮬은 modsOf 가 이 값을 읽음.
  */
 export const RELIC_VAL = {
-  gold_gear: (l: number) => (l >= 5 ? 3 : l >= 3 ? 2 : 1),
-  gold_gear_wave: (l: number) => (Math.max(1, l) - 1) * 5,
-  first_harvest: (l: number) => 15 + 3 * (Math.max(1, l) - 1),
+  gold_gear: (l: number) => (l >= 5 ? 2 : 1),
+  gold_gear_wave: (l: number) => (Math.max(1, l) - 1) * 3,
+  first_harvest: (l: number) => 10 + 2 * (Math.max(1, l) - 1),
   lucky_clover: (l: number) => (l >= 4 ? 2 : 1),
   rift_cd: (l: number) => 30 + 5 * (Math.max(1, l) - 1),
   rift_stone: (l: number) => (l >= 5 ? 2 : 1),
   gambler_coin: (l: number) => rd(6 * sc(l, 0.2)),
   hourglass: (l: number) => rd(10 * sc(l, 0.2)),
-  alchemy_gold: (l: number) => rd(80 * sc(l, 0.2)),
-  alchemy_stone: (l: number) => 2 + Math.floor((Math.max(1, l) - 1) / 2),
+  alchemy_gold: (l: number) => rd(20 * sc(l, 0.2)),
+  alchemy_stone: (l: number) => (l >= 5 ? 2 : 1),
   vaccine: (l: number) => rd(25 * sc(l, 0.2)),
   pure_blood: (l: number) => rd(30 * sc(l, 0.15)),
   rainbow: (l: number) => rd(15 * sc(l, 0.15)),
   twin_star: (l: number) => rd(20 * sc(l, 0.15)),
   war_banner: (l: number) => rd(55 * sc(l, 0.15)) / 10,
+  // 2026-10-22 전설 유물 규칙 (수치보다 플레이가 바뀌게)
+  pure_steer: (l: number) => rd(20 * sc(l, 0.15)),
+  rainbow_gift: (l: number) => (l >= 4 ? 3 : 2),
+  war_free: (l: number) => (l >= 5 ? 2 : 1),
   // 심연 2막 (오염 30 클리어 뒤 상자) · 해피 타운 첫 클리어
   myth_seal: (l: number) => rd(25 * sc(l, 0.15)),
   overdrive: (l: number) => rd(15 * sc(l, 0.15)),
+  seal_refund: (l: number) => rd(20 * sc(l, 0.15)),
+  over_boss: (l: number) => rd(40 * sc(l, 0.15)),
   chrono_core: (l: number) => rd(6 * sc(l, 0.2)),
   void_stone: (l: number) => rd(30 * sc(l, 0.2)),
   lucky_dice: (l: number) => (l >= 5 ? 4 : l >= 3 ? 3 : 2),
   golden_deed: (l: number) => (l >= 4 ? 2 : 1),
   moa_card: (l: number) => rd(30 * sc(l, 0.2)),
+  moa_reroll: (l: number) => rd(20 * sc(l, 0.15)),
   forte_box: (l: number) => rd(20 * sc(l, 0.15)),
 };
 const V = RELIC_VAL;
@@ -314,18 +321,18 @@ export const RELICS: RelicDef[] = [
   relic("hourglass", "시간의 모래", (l) => `보스 제한 시간 +${V.hourglass(l)}초`, 1, "boss"),
   relic("alchemy", "연금술 노트", (l) => `조합식으로 신화 · 히든을 만들면 골드 +${V.alchemy_gold(l)} · 행운석 +${V.alchemy_stone(l)}`, 1, "any"),
   relic("vaccine", "글리치 백신", (l) => `보스 · 엘리트 · 균열 적에게 주는 피해 +${V.vaccine(l)}%`, 1, "boss"),
-  relic("pure_blood", "순수 혈통", (l) => `필드에서 한 세력이 ${Math.round(TUNE.pureFrom * 100)}% 이상이면 (보관함 제외) 모든 피해 +${V.pure_blood(l)}%`, 2, "mono"),
-  relic("rainbow", "무지개 연합", (l) => `필드에 세 세력이 모두 있으면 모든 피해 +${V.rainbow(l)}%`, 2, "mix"),
+  relic("pure_blood", "순수 혈통", (l) => `소환이 ${V.pure_steer(l)}% 확률로 필드에서 가장 많은 세력으로 나와요 · 한 세력이 ${Math.round(TUNE.pureFrom * 100)}% 이상이면 (보관함 제외) 모든 피해 +${V.pure_blood(l)}%`, 2, "mono"),
+  relic("rainbow", "무지개 연합", (l) => `보스를 잡을 때마다 필드에 가장 적은 세력의 ${V.rainbow_gift(l) === 3 ? "레전드" : "에픽"} 1기 · 세 세력이 모두 있으면 모든 피해 +${V.rainbow(l)}%`, 2, "mix"),
   relic("twin_star", "쌍둥이 별", (l) => `레전드 이상을 얻을 때 ${V.twin_star(l)}% 확률로 같은 등급 같은 세력 1기 더 (빈 칸이 있으면)`, 2, "any"),
-  relic("war_banner", "전쟁 깃발", (l) => `세력 강화 레벨 합 10마다 모든 피해 +${V.war_banner(l)}%`, 2, "mix"),
-  relic("myth_seal", "신화의 인장", (l) => `신화 · 히든 · 초월이 주는 피해 +${V.myth_seal(l)}%`, 2, "any", "deep"),
-  relic("overdrive", "과부하 회로", (l) => `모든 유닛 공격 속도 +${V.overdrive(l)}%`, 2, "any", "deep"),
+  relic("war_banner", "전쟁 깃발", (l) => `보스를 잡을 때마다 세 세력 강화 +${V.war_free(l)} (공짜) · 강화 레벨 합 10마다 모든 피해 +${V.war_banner(l)}%`, 2, "mix"),
+  relic("myth_seal", "신화의 인장", (l) => `조합식으로 신화 · 히든 · 초월을 만들면 ${V.seal_refund(l)}% 확률로 재료 중 가장 높은 유닛 1기가 돌아와요 · 신화 이상 피해 +${V.myth_seal(l)}%`, 2, "any", "deep"),
+  relic("overdrive", "과부하 회로", (l) => `모든 유닛 공격 속도 +${V.overdrive(l)}% · 필드에 적이 많을수록 더 (1마리당 +0.5%, 최대 +${V.over_boss(l)}% · 보스가 있으면 최대)`, 2, "any", "deep"),
   relic("chrono_core", "크로노 코어", (l) => `보스 제한 시간 +${V.chrono_core(l)}초 · 보스 처치 골드 +50%`, 1, "boss", "deep"),
   relic("void_stone", "공허석", (l) => `균열 적에게 주는 피해 +${V.void_stone(l)}% · 균열을 닫으면 행운석 +1`, 1, "gamble", "deep"),
   relic("lucky_dice", "행운 주사위", (l) => `보스를 잡으면 무료 소환 ${V.lucky_dice(l)}회`, 1, "any", "town"),
   relic("golden_deed", "황금 지도", (l) => `적 처치 골드 +${V.golden_deed(l)} · 글리치 원정 시작 골드 +${V.golden_deed(l) * 100}`, 1, "eco", "town"),
-  relic("moa_card", "MOA 의 명함", (l) => `유닛 판매 금액 +${V.moa_card(l)}% · 레전드 이상을 팔면 행운석 +1`, 2, "eco", "town"),
-  relic("forte_box", "FORTE 의 오르골", (l) => `공격할 때 ${V.forte_box(l)}% 확률로 궁극기 충전 +1`, 2, "any", "town"),
+  relic("moa_card", "MOA 의 명함", (l) => `에픽 이하를 팔면 ${V.moa_reroll(l)}% 확률로 같은 등급 무작위 유닛이 나와요 · 판매 금액 +${V.moa_card(l)}% · 레전드 이상을 팔면 행운석 +1`, 2, "eco", "town"),
+  relic("forte_box", "FORTE 의 오르골", (l) => `궁극기를 쓰면 필드의 다른 궁극기 유닛 모두 충전 +1 (연쇄) · 공격할 때 ${V.forte_box(l)}% 확률로 궁극기 충전 +1`, 2, "any", "town"),
 ];
 export const RELIC: Record<string, RelicDef> = Object.fromEntries(RELICS.map((r) => [r.id, r]));
 export const relicDesc = (id: string, lv = 1) => RELIC[id]?.at(lv) ?? "";
@@ -381,8 +388,8 @@ const BASE_GLITCH: GlitchDef[] = [
   { lv: 10, hp: 2.6, spd: 1.1, bossSec: -15, reward: 4, armor: 1, boss: 1, rule: "끝판 — 보스 제한 시간 -15초" },
 ];
 /**
- * 11~30단계 (심연): 10단계 위에 한 단계마다 적 체력 +8.5%(10단계 기준, 26~30은 +4%) · 보상 +0.1, 5단계마다 새 규칙 (DEEP_PARAMS)
- * 31~50단계 (심연 2막): 한 단계마다 +9% — 30 클리어로 여는 유물 4칸 · 각인이 받쳐 줌
+ * 11~30단계 (심연): 10단계 위에 한 단계마다 적 체력 +9.5%(10단계 기준, 26~30은 +8%) · 보상 +0.1, 5단계마다 새 규칙 (DEEP_PARAMS)
+ * 31~50단계 (심연 2막): 한 단계마다 +12% — 30 클리어로 여는 유물 4칸 · 각인이 받쳐 줌
  *  11~ 방어력 · 15~ 보스 체력 · 20~ 속도 · 방어력 더 · 25~ 보스 체력 더 · 보스 시간 -18 · 30 끝
  *  (다 키운 봇이 30단계를 다섯 판에 한 번쯤 깨는 정도 — 사람은 배치 · 초월이 더 나아서 이보다 쉬움)
  */
@@ -416,7 +423,8 @@ export interface DeepParams {
   boss50?: number;
 }
 // 2026-10-21: 30단계가 너무 세서 못 연다는 말 → 26~30 기울기 0.085 → 0.04, 대신 31~ 0.06 → 0.09 (30 클리어로 여는 유물 4칸 · 각인이 받쳐 줌)
-export const DEEP_PARAMS: DeepParams = { hpPerLv: 0.085, armor11: 1.15, armor20: 1.28, boss15: 1.08, boss25: 1.15, spd20: 1.1, rewardPerLv: 0.1, hpPerLv26: 0.04, hpPerLv2: 0.09, boss50: 1.1 };
+// 2026-10-22: 「전반적으로 쉬워졌다」 + 다 키운 봇(유물 3칸 · 각인 없음)이 30 · 35 · 40을 50~90% 깨던 것 → 11~25 0.085 → 0.095 · 26~30 0.04 → 0.08 · 31~ 0.09 → 0.12
+export const DEEP_PARAMS: DeepParams = { hpPerLv: 0.095, armor11: 1.15, armor20: 1.28, boss15: 1.08, boss25: 1.15, spd20: 1.1, rewardPerLv: 0.1, hpPerLv26: 0.08, hpPerLv2: 0.12, boss50: 1.1 };
 export function deepGlitch(P: DeepParams): GlitchDef[] {
   const top = BASE_GLITCH[10];
   const rules = deepRule(P);
@@ -521,6 +529,14 @@ export interface Mods {
   expGold: number;
   sellStone: number;
   ultCharge: number;
+  /** 2026-10-22 전설 유물 규칙: 순수 혈통 소환 쏠림 · 무지개 보스 선물 등급(0 없음) · 전쟁 깃발 보스마다 공짜 강화 레벨 · 인장 재료 돌려받기 · 과부하 적 수 비례 공속 상한 · MOA 다시 굴리기 · 오르골 연쇄 (확률은 0~1) */
+  pureSteer: number;
+  rainbowGift: number;
+  warFree: number;
+  sealRefund: number;
+  overBoss: number;
+  moaReroll: number;
+  forteChain: boolean;
 }
 
 const clampInt = (v: unknown, lo: number, hi: number) =>
@@ -670,6 +686,13 @@ export function modsOf(lo: Loadout | null | undefined): Mods {
     expGold: has("golden_deed") ? V.golden_deed(X("golden_deed")) * 100 : 0,
     sellStone: has("moa_card") ? 1 : 0,
     ultCharge: has("forte_box") ? V.forte_box(X("forte_box")) / 100 : 0,
+    pureSteer: has("pure_blood") ? V.pure_steer(X("pure_blood")) / 100 : 0,
+    rainbowGift: has("rainbow") ? V.rainbow_gift(X("rainbow")) : 0,
+    warFree: has("war_banner") ? V.war_free(X("war_banner")) : 0,
+    sealRefund: has("myth_seal") ? V.seal_refund(X("myth_seal")) / 100 : 0,
+    overBoss: has("overdrive") ? V.over_boss(X("overdrive")) / 100 : 0,
+    moaReroll: has("moa_card") ? V.moa_reroll(X("moa_card")) / 100 : 0,
+    forteChain: has("forte_box"),
   };
 }
 

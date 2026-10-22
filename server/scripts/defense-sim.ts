@@ -119,6 +119,8 @@ interface Run {
   tre: { ratio: number; killed: boolean } | null;
   /** 글리치 원정: 남은 체력 · 도달한 층 · 원정 유물 수 · 저주 수 */
   town: { hp: number; floor: number; relics: number; curses: number; act: number; act2Win: boolean; act1: boolean } | null;
+  /** 끝났을 때 필드 · 보관함의 신화 이상 수 */
+  myth: number;
 }
 
 function play(cfg: BotCfg, seed: number): Run {
@@ -135,7 +137,10 @@ function play(cfg: BotCfg, seed: number): Run {
   const t0 = performance.now();
   let goldIn = 0,
     pg = b.gold;
+  // EXP_RELIC=id,id : 원정 유물을 처음부터 들고 (원정 유물 세기 비교 — 기록에 없는 변경이라 --no-verify 와 같이)
+  const expGive = process.env.EXP_RELIC?.split(",") ?? [];
   while (!g.over && g.tick < 200_000) {
+    if (b.exp) for (const id of expGive) if (!b.exp.relics.includes(id)) b.exp.relics.push(id);
     for (const c of botTurn(g, 0, cfg)) log.push([g.tick, 0, c]);
     pg = b.gold;
     step(g);
@@ -162,7 +167,9 @@ function play(cfg: BotCfg, seed: number): Run {
   }
   const tre = b.treasure ? { ratio: b.treasure.dmg / b.treasure.max, killed: b.treasure.killed } : null;
   const town = b.exp ? { hp: b.exp.hp, floor: b.exp.f + 1 + (b.exp.act - 1) * (EXP_FLOORS + 1), relics: b.exp.relics.length, curses: b.exp.curses.length, act: b.exp.act, act2Win: b.exp.act > 1 && b.result?.reason === "clear", act1: b.exp.kills.length > 0 } : null;
-  return { bot: cfg.name, seed, win: r.win, wave: r.wave, reason: r.reason, min: r.tick / TPS / 60, kills: r.kills, ms, dealt: b.dealt, snap, dps, tre, town };
+  let myth = 0;
+  for (const c of b.cells) if (c.def && UNIT[c.def].grade >= 4) myth += c.units.length;
+  return { bot: cfg.name, seed, win: r.win, wave: r.wave, reason: r.reason, min: r.tick / TPS / 60, kills: r.kills, ms, dealt: b.dealt, snap, dps, tre, town, myth };
 }
 
 const bots = only ? [botByName(only)] : BOTS;
@@ -206,7 +213,7 @@ for (const cfg of bots) {
   const tr = runs.filter((r) => r.town).map((r) => r.town!);
   if (tr.length)
     console.log(
-      `\n글리치 원정: 도달 층 평균 ${avg(tr.map((x) => x.floor)).toFixed(1)} (분포 ${JSON.stringify(tr.map((x) => x.floor).reduce((m: Record<number, number>, k) => ((m[k] = (m[k] ?? 0) + 1), m), {}))}) · 남은 체력 ${avg(tr.map((x) => x.hp)).toFixed(1)} · 원정 유물 ${avg(tr.map((x) => x.relics)).toFixed(1)} · 저주 ${avg(tr.map((x) => x.curses)).toFixed(1)} · 1막 클리어 ${pct(tr.filter((x) => x.act1).length, tr.length)} · 2막 들어감 ${pct(tr.filter((x) => x.act > 1).length, tr.length)} · 2막 클리어 ${pct(tr.filter((x) => x.act2Win).length, tr.length)}`
+      `\n글리치 원정: 도달 층 평균 ${avg(tr.map((x) => x.floor)).toFixed(1)} (분포 ${JSON.stringify(tr.map((x) => x.floor).reduce((m: Record<number, number>, k) => ((m[k] = (m[k] ?? 0) + 1), m), {}))}) · 남은 체력 ${avg(tr.map((x) => x.hp)).toFixed(1)} · 원정 유물 ${avg(tr.map((x) => x.relics)).toFixed(1)} · 저주 ${avg(tr.map((x) => x.curses)).toFixed(1)} · 1막 클리어 ${pct(tr.filter((x) => x.act1).length, tr.length)} · 2막 들어감 ${pct(tr.filter((x) => x.act > 1).length, tr.length)} · 2막 클리어 ${pct(tr.filter((x) => x.act2Win).length, tr.length)} · 끝날 때 신화 이상 ${avg(runs.filter((r) => r.town).map((r) => r.myth)).toFixed(1)}기`
     );
 }
 console.log("\n죽은 웨이브 분포 (전체)");

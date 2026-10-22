@@ -243,6 +243,9 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry, 
           });
         break;
       }
+      case "relicProc":
+        toast(e.id === "war_banner" ? "전쟁 깃발 — 세 세력 강화 레벨 업!" : "신화의 인장 — 재료가 돌아왔어요!", "gold");
+        break;
       case "gambleFail":
         sfx("gamble-fail");
         toast(`도박 실패…${e.refund ? " (행운석 1개 돌려받음)" : ""}`, "bad");
