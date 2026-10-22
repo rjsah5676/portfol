@@ -17,6 +17,18 @@ export interface Patch {
 
 export const PATCHES: Patch[] = [
   {
+    ver: "v2.11",
+    name: "손 균형 · ULTIMA 손가락 흐름",
+    date: "2026.10.23",
+    lines: [
+      "왼손(D F) · 오른손(J K) 노트 수를 맞춤 — 마디째 좌우를 뒤집어서(뒤집은 경계에 잭이 새로 생기면 안 뒤집음). 좌우 차 HARD 3.0 · EX 2.6 · NIGHTMARE 1.2% → 0.3 · 1.1 · 0.5% (osu · Quaver 0.6~0.9%)",
+      "ULTIMA: 16분이 꽉 찬 박의 35%는 동시치기 없이 단노트로만 (마디 첫 박은 그대로) — 계단 · 롤 같은 손가락 흐름이 생김. 단노트 4줄 이상 흐름 0.2 → 3.9%, 계단 0 → 3.6% (osu · Quaver 6.7 · 5.8%), 2개 동시 줄 46 → 44%",
+      "ULTIMA 레벨은 그대로 — NIGHTMARE 보다 레벨이 안 높게 나오면 그때만 단노트 박을 줄임",
+      "레벨 바뀐 채보: Crimson Cadenza HARD 9 → 10",
+      "같이 해 봤지만 뺀 것: NIGHTMARE 긴 16분 연타 끊기(센 구간 밀도가 osu 보다 낮아지고 레벨이 1씩 내려감), NIGHTMARE 동시치기 이어 붙이기(효과 없음)",
+    ],
+  },
+  {
     ver: "v2.10",
     name: "같은 음악엔 같은 리듬",
     date: "2026.10.23",

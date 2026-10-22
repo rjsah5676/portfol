@@ -303,6 +303,9 @@ export interface NightmareTweak {
   /** 아주 센 마디(full)의 소리 없는 16분 칸을 채우는 몫 (0~1) — 센 구간만 몰아치게 (osu 는 2초 창 상위 10% 가 초당 11줄,
    *  우리는 곡 전체가 평평해 9.5줄이었음) */
   fullFill?: number;
+  /** 16분이 꽉 찬 박 중 이 몫은 동시치기 없이 단노트로만 (계단 · 롤 같은 손가락 흐름) — ULTIMA 가 박마다 동시치기라
+   *  단노트 4줄 이상 흐름 0.2% (osu · Quaver Lv15~18 6.7%), 2개 동시 줄 46% (33%)였음 */
+  singleBeat?: number;
 }
 // 나이트메어 박 안 리듬 모양(4칸)도 곡 소리대로 섞음 — 박 머리 동시치기는 센 소리(0.45)에만, 뒷박은 소리 있을 때만(0.25).
 //  전엔 박의 38%가 「정박 동시치기 + 뒷박 단노트」 한 모양(osu 최다 모양 17%)이라 단조로웠음 — osu 와 같은 곡에 돌려
@@ -330,6 +333,7 @@ const NIGHTMARE_DEFAULT: Required<NightmareTweak> = {
   burstMinGap: 0.06,
   triMax: 0.2,
   fullFill: 0,
+  singleBeat: 0,
 };
 /** EX+ 기본: 센 마디 8분·아주 센 마디 16분 꽉은 나이트메어와 비슷한 문턱(기승전결 유지), 4마디마다 16분 셋잇단 연타 */
 const EXPLUS_DEFAULT: Required<NightmareTweak> = {
@@ -354,6 +358,7 @@ const EXPLUS_DEFAULT: Required<NightmareTweak> = {
   // ULTIMA 3개 동시: osu Lv17~21 4~8% · Quaver 10~12% — 정박 줄의 30%까지 (전엔 0.9라 16분을 줄이자 18%로 늘었음)
   triMax: 0.3,
   fullFill: 0,
+  singleBeat: 0.35,
 };
 /** 16분 점프스트림 몫 상한 — 0 (16분 자리 동시치기는 정박 위주와 반대 · 빠른 곡은 실제 플레이에서 무너지는 자리였음) */
 const fineChordMax = (_d: Difficulty, _fast: boolean) => 0;
@@ -926,6 +931,7 @@ export function makeAutoChart(
           return d.some((x) => x < 0.002) || !d.some((x) => x < 0.045);
         })
       : nmRows;
+    balanceHands(nmClean, alignOpts.barOf, R.jackGap);
     const nmHeld = addLongNotes(nmClean, {
       ...R.ln,
       beatSec,
@@ -1296,6 +1302,7 @@ export function makeAutoChart(
   dejack(notes, beatSec, R, rnd);
   detrill(notes, R.jackGap, 0.1, rnd);
   if (diff === "expert") deaba(notes, R.jackGap, 0.5, rnd);
+  if (diff !== "easy") balanceHands(notes, alignOpts.barOf, R.jackGap);
 
   // (3.8 곡 안 밀도 고르기는 ULTIMA 만 — HARD · EX 에 넣었더니 센 구간 동시치기 · 16분을 덜어낸 만큼
   //  레벨 맞추기가 곡 전체에 16분을 더 깔아서(Lucky Seven Rush EX 515 → 729노트, 동시치기 52 → 34%) 더 지저분해졌음)
@@ -1652,6 +1659,72 @@ function alignNmRows(
     out.set(a.t, [{ t: a.t, lane }]);
   }
   return [...out.keys()].sort((x, y) => x - y).flatMap((t) => out.get(t)!);
+}
+
+/**
+ * 좌우 손 균형: 마디 단위로 좌우를 뒤집어(레인 l → 3−l) 왼손(0·1)과 오른손(2·3) 노트 수, 레인별 노트 수를 고르게.
+ * 음높이 순위로 레인을 정해서 곡에 따라 한 손으로 쏠림 — HARD~EX 좌우 차 1.7~3% (osu·Quaver 0.6~0.9%).
+ * 뒤집은 마디 경계에서 앞뒤 줄과 같은 레인이 새로 붙으면(잭) 그 마디는 안 뒤집음.
+ */
+function balanceHands(notes: Note[], barOf: (t: number) => number, jackGap: number): void {
+  if (notes.length < 50) return;
+  const byBar = new Map<number, Note[]>();
+  for (const n of notes) {
+    const b = barOf(n.t);
+    if (!byBar.has(b)) byBar.set(b, []);
+    byBar.get(b)!.push(n);
+  }
+  const cnt = [0, 0, 0, 0];
+  for (const n of notes) cnt[n.lane]++;
+  const N = notes.length;
+  const cost = (c: number[]) =>
+    (c[0] + c[1] - c[2] - c[3]) ** 2 + c.reduce((a, x) => a + (x - N / 4) ** 2, 0) * 0.5;
+  const sorted = [...notes].sort((a, b) => a.t - b.t);
+  const idx = new Map(sorted.map((n, i) => [n, i] as [Note, number]));
+  /** 이 마디를 뒤집으면 경계(앞 마디 끝 줄 · 뒤 마디 첫 줄)에서 잭이 새로 생기는지 */
+  const boundaryOk = (list: Note[]) => {
+    const ts = list.map((n) => n.t);
+    const t0 = Math.min(...ts);
+    const t1 = Math.max(...ts);
+    const first = list.filter((n) => n.t === t0);
+    const last = list.filter((n) => n.t === t1);
+    const before = sorted.slice(0, idx.get(first[0])!).filter((n) => n.t < t0);
+    const after = sorted.slice(idx.get(last[0])! + 1).filter((n) => n.t > t1);
+    const pt = before.length ? before[before.length - 1].t : -Infinity;
+    const nt = after.length ? after[0].t : Infinity;
+    const prevRow = before.filter((n) => n.t === pt);
+    const nextRow = after.filter((n) => n.t === nt);
+    const clash = (row: Note[], edge: Note[], gap: number) =>
+      gap < jackGap * 2 && edge.some((e) => row.some((r) => r.lane === 3 - e.lane));
+    return !clash(prevRow, first, t0 - pt) && !clash(nextRow, last, nt - t1);
+  };
+  for (let pass = 0; pass < 3; pass++) {
+    let changed = false;
+    const cands = [...byBar.values()]
+      .map((list) => {
+        const c = [...cnt];
+        for (const n of list) {
+          c[n.lane]--;
+          c[3 - n.lane]++;
+        }
+        return { list, gain: cost(cnt) - cost(c), c };
+      })
+      .filter((x) => x.gain > 0)
+      .sort((a, b) => b.gain - a.gain);
+    for (const { list } of cands) {
+      const c = [...cnt];
+      for (const n of list) {
+        c[n.lane]--;
+        c[3 - n.lane]++;
+      }
+      if (cost(c) >= cost(cnt) || !boundaryOk(list)) continue;
+      for (const n of list) n.lane = 3 - n.lane;
+      cnt.splice(0, 4, ...c);
+      changed = true;
+      if (Math.abs(cnt[0] + cnt[1] - cnt[2] - cnt[3]) <= N * 0.004) break;
+    }
+    if (!changed || Math.abs(cnt[0] + cnt[1] - cnt[2] - cnt[3]) <= N * 0.004) break;
+  }
 }
 
 /** 나이트메어 마무리: 채우기 마디 경계 등에서 생긴 고르지 않은 리듬을 줄 단위로 빼서 정리 (넣지는 않음) */
@@ -2022,6 +2095,20 @@ function nightmareNotes(
       if (crowded) slots.set(t, 2);
     });
   }
+  // 단노트 흐름 박: 16분 4칸이 다 찬 박 중 일부는 동시치기를 다 풀어 단노트로 (singleBeat)
+  if (P.singleBeat > 0) {
+    const byBeat = new Map<number, number[]>();
+    for (const t of slots.keys()) {
+      const k = beatOf(t + 0.01);
+      if (!byBeat.has(k)) byBeat.set(k, []);
+      byBeat.get(k)!.push(t);
+    }
+    // 마디 첫 박은 빼고 (osu · Quaver ULTIMA급도 마디 첫 박 동시치기 87%)
+    const downbeat = (k: number) => barOf(beatT(k) + 0.01) !== barOf(beatT(k - 1) + 0.01);
+    for (const [k, ts] of byBeat)
+      if (ts.length >= 4 && !downbeat(k) && ((k * 5 + 3) % 20) / 20 < P.singleBeat)
+        for (const t of ts) slots.set(t, 1);
+  }
   const times = [...slots.keys()].sort((a, b) => a - b);
   // 패턴용 음색: 가장 가까운 타격의 음색
   const cen = times.map((t) => nearestCen(an, t));
@@ -2228,6 +2315,11 @@ export function makeAutoCharts(
           ...nm,
           // ULTIMA 가 NIGHTMARE 보다 2레벨 위가 안 나오면 3개 동시 상한도 풂
           triMax: d === "explus" ? (ladderLow ? 0.6 : def.triMax) : nm.triMax,
+          // 단노트 흐름 박: 다른 손잡이를 다 써도 NIGHTMARE 보다 레벨이 안 높으면 그때 덜
+          singleBeat:
+            d === "explus" && ladderLow && chordsMaxed
+              ? Math.max(0, nm.singleBeat - 0.1)
+              : nm.singleBeat,
           full: Math.max(fullFloor, Math.min(1.05, nm.full + 0.1 * k)),
           loud: Math.max(filled ? 0.15 : 0.3, Math.min(1, nm.loud + 0.08 * k)),
           fullFill: !pk
