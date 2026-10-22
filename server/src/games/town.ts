@@ -6,7 +6,7 @@ import type { LiveRoom } from "../http/admin";
 import { RESTORED, RESTORE_GRACE_MS, type LiveGame } from "../live";
 import type { Ctx } from "../realtime/gateway";
 import { GUEST_MARK } from "../users";
-import { BOT_POOL, CHARS, GACHA, REWARD, ownKey, rollGacha, type Pull, type Wallet } from "../../../web/src/lib/town/data";
+import { BOT_POOL, CHARS, COIN_PACKS, GACHA, REWARD, ownKey, rollGacha, type Pull, type Wallet } from "../../../web/src/lib/town/data";
 import type { CharId, LookId } from "../../../web/src/lib/town/assets";
 import {
   BOT_LEVELS,
@@ -156,7 +156,7 @@ export interface TownOptions {
   sweepMs?: number;
 }
 
-export function registerTown({ db, gateway, users }: Deps, opts: TownOptions = {}) {
+export function registerTown({ db, gateway, users, points }: Deps, opts: TownOptions = {}) {
   const botDelay = opts.botDelay ?? BOT_DELAY;
   const awayMs = opts.awayMs ?? AWAY_MS;
   const evScale = opts.evScale ?? 1;
@@ -227,6 +227,43 @@ export function registerTown({ db, gateway, users }: Deps, opts: TownOptions = {
       if (typeof res === "string") throw new AppError("GACHA", res, 409);
       return { pulls: res as Pull[], me: profileWire(p) };
     });
+  });
+
+  /** 코인 상점: GP(사이트 포인트)로 코인 사기 — 회원만. GP 를 먼저 빼고, 코인 넣기가 실패하면 GP 를 돌려줌 */
+  gateway.rpc("town.buyCoins", async (ctx, raw) => {
+    const uid = asMember(ctx);
+    const { pack } = z.object({ pack: z.enum(COIN_PACKS.map((p) => p.id) as [string, ...string[]]) }).parse(raw);
+    const p = COIN_PACKS.find((x) => x.id === pack)!;
+    const left = await points.spend(uid, p.gp, "town-coins", p.id);
+    try {
+      const me = await withProfile(uid, (pr) => {
+        pr.coins += p.coins;
+        return profileWire(pr);
+      });
+      return { points: left, me };
+    } catch (e) {
+      await points.grant(uid, p.gp, "town-coins-refund", p.id).catch(() => {});
+      throw e;
+    }
+  });
+
+  // ───────────── 마을 채팅 (마을에 있는 모두) ─────────────
+  const SQUARE = "town:square";
+  const square: { nick: string; char: CharId; look: LookId; text: string; ts: number; uid: string }[] = [];
+  gateway.channel("town.square", { key: () => SQUARE, snapshot: () => square.slice(-30) });
+  gateway.rpc("town.say", async (ctx, raw) => {
+    const o = joinBody.extend({ text: z.string().min(1).max(60) }).parse(raw);
+    const now = Date.now();
+    if (now - (chatRate.get(`sq:${ctx.uid}`) ?? 0) < 1200) throw new AppError("RATE_LIMITED", "조금 천천히 보내 주세요.", 429);
+    chatRate.set(`sq:${ctx.uid}`, now);
+    const text = o.text.replace(/[\p{Cc}\p{Cf}]/gu, "").replace(/\s+/g, " ").trim();
+    if (!text) return null;
+    const me = await whoAmI(ctx, o);
+    const m = { nick: me.nick, char: me.char, look: me.look, text, ts: now, uid: ctx.uid };
+    square.push(m);
+    if (square.length > 60) square.splice(0, square.length - 60);
+    gateway.emit(SQUARE, "say", m);
+    return null;
   });
 
   /** 관리자: 내 코인 · 천장 · 보유 코스튬 바꾸기 (시험용) */

@@ -168,4 +168,25 @@ describe("TABLE TOWN 방", () => {
     expect(await guest.rpc("town.me")).toBeNull();
     await expect(guest.rpc("town.gacha", { feat: 0, n: 1 })).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
+
+  it("코인 상점: GP 로 코인 사기 (모자라면 거절) · 마을 채팅", async () => {
+    const uid = `buy-${++seq}`;
+    const token = await s.token(uid, { email: `${uid}@example.com` });
+    expect((await s.http("/api/me/nick", { method: "PUT", token, body: { nick: "사는사람" } })).status).toBe(200);
+    await s.db.col("users").updateOne({ _id: uid }, { $set: { points: 1800 } });
+    const m = await s.client(uid, { email: `${uid}@example.com` });
+    await m.rpc("town.me");
+    const r = await m.rpc("town.buyCoins", { pack: "m" });
+    expect(r.points).toBe(300);
+    expect(r.me.coins).toBe(1000 + 3300);
+    await expect(m.rpc("town.buyCoins", { pack: "s" })).rejects.toBeTruthy();
+    expect((await m.rpc("town.me")).coins).toBe(4300);
+    // 마을 채팅
+    const g = await user("sq");
+    const sub = await g.sub("town.square");
+    await m.rpc("town.say", { nick: "", char: "haru", look: "base", text: "  안녕하세요  " });
+    const ev = await sub.wait((e) => e.t === "say");
+    expect(ev.d).toMatchObject({ nick: "사는사람", text: "안녕하세요" });
+    await expect(m.rpc("town.say", { nick: "", char: "haru", look: "base", text: "도배" })).rejects.toMatchObject({ code: "RATE_LIMITED" });
+  });
 });

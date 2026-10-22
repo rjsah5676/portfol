@@ -5,7 +5,7 @@
  */
 import { BGM, SFX, SFX_B, allSound, createSound, type BgmId, type SfxId } from "./sound";
 import { ART, SIGN, SIGN2, allArt, type CharId, type Face, type GameId, type LookId, type UiIcon } from "./assets";
-import { CHARS, GACHA, GAMES, REWARD, loadProfile, ownKey, rollGacha, saveProfile, type Profile, type Pull } from "./data";
+import { CHARS, COIN_PACKS, GACHA, GAMES, REWARD, loadProfile, ownKey, rollGacha, saveProfile, type Profile, type Pull } from "./data";
 import { MODES, playable as ocPlayable, type Card, type GameMode, type OCEvent, type OCState, type OCView } from "./onecard";
 import { errCode, errText, type TownHost, type TownNet } from "./net";
 import { GLYPHS } from "./glyphs";
@@ -65,7 +65,8 @@ const TEMPLATE = `
     <button class="tt-colbtn tt-panel tt-open-skin" type="button"><span class="tt-ico tt-ico-skin">👗</span>스킨</button>
     <button class="tt-colbtn tt-panel" type="button" data-soon="미션">${icon("mission")}미션</button>
   </div>
-  <button class="tt-ui tt-panel tt-sq tt-chat" type="button" aria-label="채팅" data-soon="채팅">${icon("chat")}<i class="tt-badge"></i></button>
+  <button class="tt-ui tt-panel tt-sq tt-chat" type="button" aria-label="마을 채팅 열고 닫기">${icon("chat")}<i class="tt-badge" hidden></i></button>
+  <div class="tt-ui tt-tchat"><div class="tt-tchat-log" aria-live="polite"></div><form class="tt-tchat-in"><input type="text" maxlength="60" placeholder="마을 사람들에게 말하기…" aria-label="마을 채팅"><button type="submit">보내기</button></form></div>
   <div class="tt-ui tt-stick" aria-label="이동 (끌어서 움직이기)"><div class="base"><i class="knob"></i></div></div>
   <button class="tt-ui tt-quick tt-tolobby" type="button">${icon("list")}<b>게임 로비</b></button>
 </div>
@@ -304,10 +305,9 @@ export function mountTown(root: HTMLElement, opts: TownOpts = {}): () => void {
 
   // ---------- 돈 ----------
   function refreshMoney() {
-    const html = `<div class="tt-m">${icon("coin", "tt-coin")}<b>${ME.coins.toLocaleString()}</b><button type="button" class="tt-mplus" aria-label="코인 얻는 법">+</button></div>`;
+    const html = `<div class="tt-m">${icon("coin", "tt-coin")}<b>${ME.coins.toLocaleString()}</b><button type="button" class="tt-mplus" aria-label="코인 상점">+</button></div>`;
     for (const sel of [".tt-money-town", ".tt-money-room", ".tt-money-lobby"]) {
       $(sel).innerHTML = html;
-      $(sel).querySelector<HTMLElement>(".tt-mplus")!.onclick = () => toast("코인은 게임에서 이기면 모여요!");
     }
     $(".tt-prof-nm").textContent = ME.nick === "나" ? CHARS[ME.char].name : ME.nick;
     const games = ME.games ?? 0;
@@ -955,9 +955,113 @@ export function mountTown(root: HTMLElement, opts: TownOpts = {}): () => void {
     $(".tt-mdot").style.left = a + (b - a) * ((T.x - doorX(0)) / (doorX(GAMES.length - 1) - doorX(0))) + "px";
     T.raf = requestAnimationFrame(townLoop);
   }
+  // =================== 코인 상점 (GP → 코인, 회원만) ===================
+  root.addEventListener("click", (e) => {
+    if ((e.target as HTMLElement).closest(".tt-mplus")) openShop();
+  });
+  function openShop() {
+    const gp = member ? (H?.points ?? 0) : null;
+    const ov = overlay(
+      `<div class="tt-shop"><div class="tt-mk-plate">코인 상점</div><button type="button" class="tt-mk-x tt-x" aria-label="닫기">✕</button>
+      <div class="tt-shop-top"><span>내 코인 <b>${icon("coin", "tt-coin")}${ME.coins.toLocaleString()}</b></span>${gp !== null ? `<span>내 GP <b class="gp">${gp.toLocaleString()} GP</b></span>` : ""}</div>
+      <div class="tt-shop-packs">${COIN_PACKS.map(
+        (p, i) =>
+          `<div class="tt-pack p${i}">${p.bonus ? `<em>${p.bonus}</em>` : ""}<div class="pic"><img src="/town/shop/pack-${p.id}.webp" alt="" draggable="false"></div><b>${p.name}</b><span class="amt">${icon("coin", "tt-coin")}${p.coins.toLocaleString()}</span><button type="button" class="tt-pack-buy" data-p="${p.id}" ${gp === null || gp < p.gp ? "disabled" : ""}>${p.gp.toLocaleString()} GP</button></div>`,
+      ).join("")}</div>
+      <p class="tt-shop-note">${member ? "GP는 출석 · 일일 미션 · 게임 업적으로 모으는 사이트 포인트예요. 코인은 코스튬 뽑기에 써요." : "GP로 사는 건 회원만 할 수 있어요. 게스트는 게임에서 이겨서 코인을 모아요."}</p>
+      ${member ? "" : `<div class="tt-shop-login"><button type="button" class="tt-cs-go pink tt-shop-loginbtn">로그인하기</button></div>`}</div>`,
+    );
+    ov.classList.add("mk");
+    ov.querySelector<HTMLElement>(".tt-x")!.onclick = () => ov.remove();
+    ov.querySelector<HTMLElement>(".tt-shop-loginbtn")?.addEventListener("click", () => H?.login());
+    $$(".tt-pack-buy", ov).forEach(
+      (b) =>
+        (b.onclick = () => {
+          const p = COIN_PACKS.find((x) => x.id === b.dataset.p)!;
+          const ok = overlay(
+            `<h2>${p.name}</h2><p><b>${p.gp.toLocaleString()} GP</b>로 코인 <b>${p.coins.toLocaleString()}</b>개를 살까요?</p><div class="tt-row"><button type="button" class="tt-x">취소</button><button type="button" class="pri tt-ok">사기</button></div>`,
+          );
+          ok.querySelector<HTMLElement>(".tt-x")!.onclick = () => ok.remove();
+          ok.querySelector<HTMLElement>(".tt-ok")!.onclick = async () => {
+            ok.remove();
+            try {
+              const r = await NET!.rpc<{ points: number; me: Partial<Profile> }>("town.buyCoins", { pack: p.id });
+              Object.assign(ME, r.me);
+              H?.setPoints?.(r.points);
+              if (H) H.points = r.points;
+              refreshMoneyAll();
+              sfx("coin");
+              toast(`코인 +${p.coins.toLocaleString()}!`);
+              ov.remove();
+              openShop();
+            } catch (e) {
+              toast(errText(e));
+            }
+          };
+        }),
+    );
+  }
+
+  // =================== 마을 채팅 (마을에 있는 모두) ===================
+  type SayMsg = { nick: string; char: CharId; look: LookId; text: string; ts: number; uid: string };
+  let sqUnsub: null | (() => void) = null;
+  const sayHTML = (m: SayMsg) => `<p class="${m.uid === myUid() ? "me" : ""}"><b>${nm(m.nick)}</b>${esc(m.text)}</p>`;
+  function openSquare() {
+    if (sqUnsub || !NET) return;
+    sqUnsub = NET.subscribe<SayMsg[]>("town.square", {}, {
+      onSnapshot: (d) => {
+        $(".tt-tchat-log").innerHTML = (d ?? []).slice(-30).map(sayHTML).join("") || `<p class="sys">마을 채팅이에요. 인사해 보세요!</p>`;
+        scrollChat();
+      },
+      onEvent: (t, d) => {
+        if (t !== "say") return;
+        const m = d as SayMsg;
+        const log = $(".tt-tchat-log");
+        log.querySelector(".sys")?.remove();
+        log.insertAdjacentHTML("beforeend", sayHTML(m));
+        while (log.children.length > 40) log.firstElementChild!.remove();
+        scrollChat();
+        if (CUR === "town" && m.uid !== myUid()) sfx("chat", { vol: 0.6 });
+        if (root.classList.contains("chat-off")) root.querySelector<HTMLElement>(".tt-chat .tt-badge")!.hidden = false;
+        if (m.uid === myUid()) sayBubble(m.text);
+      },
+    });
+  }
+  const scrollChat = () => {
+    const log = $(".tt-tchat-log");
+    log.scrollTop = log.scrollHeight;
+  };
+  /** 내가 한 말은 내 캐릭터 머리 위에도 잠깐 */
+  function sayBubble(text: string) {
+    const pl = $(".tt-pl");
+    pl.querySelector(".tt-say.mine")?.remove();
+    const el = document.createElement("div");
+    el.className = "tt-say mine pop";
+    el.dataset.c = ME.char;
+    el.innerHTML = `<span class="tx">${esc(text)}</span>`;
+    pl.appendChild(el);
+    later(() => el.remove(), 3500);
+  }
+  ($(".tt-tchat-in") as HTMLFormElement).onsubmit = (e) => {
+    e.preventDefault();
+    const inp = $(".tt-tchat-in input") as HTMLInputElement;
+    const text = inp.value.trim();
+    if (!text || !NET) return;
+    inp.value = "";
+    void NET.rpc("town.say", { ...me(), text }).catch((er) => toast(errText(er)));
+  };
+  $(".tt-chat").onclick = () => {
+    const off = root.classList.toggle("chat-off");
+    if (!off) {
+      root.querySelector<HTMLElement>(".tt-chat .tt-badge")!.hidden = true;
+      scrollChat();
+    }
+  };
+
   function goTown() {
     show("town");
     refreshMoney();
+    openSquare();
     if (!T.raf) {
       T.last = 0;
       T.raf = requestAnimationFrame(townLoop);
@@ -2472,6 +2576,7 @@ export function mountTown(root: HTMLElement, opts: TownOpts = {}): () => void {
     cancelAnimationFrame(clockRaf);
     LB.unsub?.();
     RM.unsub?.();
+    sqUnsub?.();
     if (RM.id && NET) void NET.rpc("town.leave", { id: RM.id }).catch(() => {});
     if (H) H.changed = undefined;
     window.removeEventListener("keydown", onKeyDown);

@@ -31,6 +31,9 @@ export interface TownHost {
   loading: boolean;
   login(): void;
   net: TownNet | null;
+  /** 사이트 포인트(GP) 잔액 (회원만, 아니면 null) · 바뀐 잔액 알리기 */
+  points?: number | null;
+  setPoints?: (n: number) => void;
   /** 폰에서 전체화면 · 가로 안내가 떠 있어 게임이 안 보임 (소리를 멈춤) */
   blocked?: boolean;
   /** 엔진이 채움: 로그인 상태가 바뀌면 TownApp 이 부름 */

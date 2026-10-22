@@ -45,7 +45,7 @@ function useSize<T extends HTMLElement>(): [(el: T | null) => void, { w: number;
 const GATE_BG: React.CSSProperties = { background: "linear-gradient(rgba(24,30,56,0.9), rgba(16,20,40,0.96)), #141a2a" };
 
 export default function TownApp() {
-  const { admin, profile, loading, login } = useAuth();
+  const { admin, profile, loading, login, points, setPoints } = useAuth();
   // 엔진은 한 번만 붙이고, 로그인 상태는 이 객체로 알려 줌 (바뀔 때마다 다시 붙이면 하던 게임이 날아감)
   const hostRef = useRef<TownHost>({ admin, member: profile?.nick ?? null, loading, login: () => void login(), net: townNet });
   const rootRef = useRef<HTMLDivElement>(null);
@@ -81,8 +81,10 @@ export default function TownApp() {
     h.member = profile?.nick ?? null;
     h.loading = loading;
     h.login = () => void login();
+    h.points = points;
+    h.setPoints = setPoints;
     h.changed?.();
-  }, [admin, profile, loading, login]);
+  }, [admin, profile, loading, login, points, setPoints]);
   useEffect(() => {
     if (!ready || !gameRef.current) return;
     return mountTown(gameRef.current, { host: hostRef.current });

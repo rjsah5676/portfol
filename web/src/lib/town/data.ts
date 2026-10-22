@@ -179,3 +179,11 @@ export function rollGacha(w: Wallet, feat: number, n: 1 | 10, rng: () => number 
   }
   return out;
 }
+
+// ---- 코인 상점 (사이트 포인트 GP → 코인, 회원만) ----
+export const COIN_PACKS = [
+  { id: "s", name: "코인 주머니", coins: 1000, gp: 500, bonus: "" },
+  { id: "m", name: "코인 상자", coins: 3300, gp: 1500, bonus: "+10%" },
+  { id: "l", name: "코인 금고", coins: 12000, gp: 5000, bonus: "+20%" },
+] as const;
+export type CoinPackId = (typeof COIN_PACKS)[number]["id"];
