@@ -9,6 +9,13 @@
 | PIXEL TOWN SURVIVOR | `survivor` | `web/src/{lib,components}/Survivor`, `web/public/survivor`, `server/src/games/survivor.ts` |
 | PIXEL RESET STORY | `rogue` | `web/src/{lib,components}/Rogue`, `web/public/rogue`, `server/src/games/rogue.ts` |
 | PIXEL PATROL | `patrol` | `web/src/{lib,components}/Patrol`, `web/public/patrol`, `server/src/games/patrol.ts` |
+| TABLE TOWN (2026-10-22) | `town` | `web/src/app/games/town`, `web/src/{lib/town,components/Town}`, `web/src/css/town.css`, `web/public/town`, `server/src/games/town.ts`, `server/test/town.test.ts` |
+
+### TABLE TOWN 따로 메모 (2026-10-22 에 뺌)
+- 원카드 1종 · 실시간 방(서버) · 게스트/회원 · 코스튬 뽑기 · 코인 상점(GP → 코인) · 마을 채팅까지 완성된 상태로 보관. 원카드 규칙은 `web/src/lib/town/onecard.ts` (서버 · 화면 공용 순수 함수).
+- 메뉴 아이콘 `web/public/icons/games/town.webp`, 메뉴 사진 `web/src/img/menu/town.jpg`, 공유 이미지 `web/assets/og/shots/games__town.jpg` 도 같이 옮김. GPT 원본 그림은 `web/assets/town-src/`(git 에서 무시, 로컬에만).
+- 살릴 때: 위 경로 `git mv` 로 되돌리기 → `server.ts` 에 `registerTown(deps, overrides.town)` · `liveGames.town` · `town.close()`, `server/test/helpers.ts` 의 `TownOptions`(봇 지연 등) → `navMenu.ts` 메뉴(`px:town`) · `sitemap.ts` · `og/shots.ts` 의 `games/town` 다시 넣기 (이 커밋 diff 참고).
+- DB 컬렉션 `town_profiles` 는 지우지 않았습니다.
 
 공용으로 쓰던 `web/src/lib/cast.ts`(다이스 타운 · 서바이버 캐릭터 명단)와 시뮬 스크립트(`server/scripts/*-sim.ts`, `cast-check.ts`), 테스트(`server/test/marble.test.ts`, `rogue.test.ts`)도 같이 옮겼습니다.
 
