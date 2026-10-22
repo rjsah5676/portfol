@@ -90,9 +90,9 @@ export const BGM: Record<BgmId, string | null> = {
   threat: `${B}/sound/bgm-threat.aac`,
   spoker: `${B}/sound/bgm-spoker.aac`,
   confide: `${B}/sound/bgm-confide.aac`,
-  daily: `${P}/sound/bgm-lobby2.mp3`, // 임시: 제미나이 생성 실패 → 포커 곡
-  comic: `${P}/sound/bgm-lobby1.mp3`, // 임시
-  badend: null, // 임시: 무음 (결정적 순간 무음 연출과 같음)
+  daily: `${B}/sound/bgm-daily.aac`,
+  comic: `${B}/sound/bgm-comic.aac`,
+  badend: `${B}/sound/bgm-badend.aac`,
 };
 /** 한 번만 재생하고 멈추는 곡 */
 export const BGM_ONCE: BgmId[] = ["badend"];
