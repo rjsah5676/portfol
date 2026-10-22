@@ -17,6 +17,19 @@ export interface Patch {
 
 export const PATCHES: Patch[] = [
   {
+    ver: "v2.10",
+    name: "같은 음악엔 같은 리듬",
+    date: "2026.10.23",
+    lines: [
+      "osu · Quaver 랭크 4K 채보 1.36만 개(osu 6,780 · Quaver 6,820)와 내장곡을 다시 비교 — 밀도 · 동시치기 · 센 구간과 약한 구간 차이는 거의 같았고, 가장 크게 다른 게 「마디 리듬 반복」",
+      "앞 8마디 안에 리듬이 똑같은 마디: 우리 EX 23 · NIGHTMARE 44 · ULTIMA 21% vs osu · Quaver 53~56%. 대신 「딱 한 칸만 다른」 마디가 많았음 (소리 검출이 한 칸 놓치거나 더 잡은 자리)",
+      "한 칸만 다르면 앞 마디 리듬에 맞춤 — 남는 칸은 빼고(박 머리 · 센 소리 · 동시치기는 안 뺌) 빠진 칸은 넣음. ULTIMA 는 두 칸까지. 같은 음악이 돌아오면 같은 리듬으로 쳐짐",
+      "리듬이 똑같은 마디: NORMAL 49 → 59 · HARD 34 → 47 · EX 23 → 40 · NIGHTMARE 44 → 48 · ULTIMA 21 → 41%",
+      "레벨 바뀐 채보: Aragami EX 13 → 14 · ULTIMA 18 → 17, ANiMA ULTIMA 17 → 18, Crimson Cadenza HARD 10 → 9, Full Combo!! NIGHTMARE 16 → 15, 휘모리 EX 13 → 12, Lucky Seven Rush ULTIMA 17 → 16, New Dimension EX 14 → 13, OVERLOAD PROTOCOL EX 13 → 12",
+      "내 음악(mp3) 자동 채보도 같은 규칙",
+    ],
+  },
+  {
     ver: "v2.9",
     name: "키 바꾸기",
     date: "2026.10.21",

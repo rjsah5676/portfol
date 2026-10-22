@@ -766,6 +766,79 @@ export function makeAutoChart(
     picked.push(...fixed);
   }
 
+  // 1.9) 마디 리듬 맞추기 (planBarAlign) — 보통~EX 는 여기서 타격 단위로, 나이트메어·ULTIMA는 줄을 다 깐 뒤에
+  const beatIdx = (t: number) => {
+    let lo = 0;
+    let hi = beats.length - 1;
+    while (lo < hi) {
+      const m = (lo + hi + 1) >> 1;
+      if (beats[m] <= t) lo = m;
+      else hi = m - 1;
+    }
+    return lo;
+  };
+  // 마디·칸은 곡의 실제 박(an.beats) 기준 — 일정한 템포 격자(bar0 + b·barSec)로 재면 템포가 조금만 흔들려도
+  //  칸이 어긋나 마디 절반 넘게 '격자 밖'으로 빠졌음. 마디 첫 박은 위의 phase(저음이 가장 센 자리)
+  const beatAt = (k: number) =>
+    k < 0
+      ? beats[0] + k * beatSec
+      : k < beats.length
+        ? beats[k]
+        : beats[beats.length - 1] + (k - beats.length + 1) * beatSec;
+  const gslot = (t: number) => {
+    const k = beatIdx(t + 1e-3);
+    const x = ((t - beatAt(k)) / (beatAt(k + 1) - beatAt(k))) * an.div;
+    const r = Math.round(x);
+    return Math.abs(x - r) < 0.3 ? (k - phase) * an.div + r : null;
+  };
+  const perBarSlots = 4 * an.div;
+  const alignBarOf = (t: number) => {
+    const g = gslot(t);
+    return g === null ? barOf(t) : Math.floor(g / perBarSlots);
+  };
+  const alignOpts = {
+    barOf: alignBarOf,
+    slotOf: (t: number, b: number) => {
+      const g = gslot(t);
+      return g === null ? null : g - b * perBarSlots;
+    },
+    slotT: (b: number, s: number) => {
+      const g = b * perBarSlots + s;
+      const k = phase + Math.floor(g / an.div);
+      return (
+        beatAt(k) + ((g - Math.floor(g / an.div) * an.div) / an.div) * (beatAt(k + 1) - beatAt(k))
+      );
+    },
+    step16: an.div / 4,
+    minGap: R.minGap,
+  };
+  const onHead = (t: number) => {
+    const g = gslot(t);
+    return g !== null && g % an.div === 0;
+  };
+  if (diff === "normal" || diff === "hard" || diff === "expert") {
+    const plan = planBarAlign(
+      picked.map((o) => ({ t: o.t, keep: o.s >= 0.7 || onHead(o.t) })),
+      alignOpts
+    );
+    if (plan.drop.size || plan.add.length) {
+      const kept = picked.filter((_, i) => !plan.drop.has(i));
+      for (const a of plan.add)
+        kept.push({
+          t: a.t,
+          s: 0.3,
+          low: 0.3,
+          mid: 0.3,
+          high: 0.3,
+          cen: nearestCen(an, a.t),
+          grid: -1,
+        });
+      kept.sort((a, b) => a.t - b.t);
+      picked.length = 0;
+      picked.push(...kept);
+    }
+  }
+
   // 2) 레인: 주변 4초 안에서 음색 높이 순위 → 0~3
   //    + 계단: 가까운(8분 이내) 타격 3개 이상이 음색 높이가 한 방향으로 흐르면 레인도 한 칸씩
   const stairs = new Map<number, 1 | -1>();
@@ -832,10 +905,19 @@ export function makeAutoChart(
     //  뒤의 롱노트 고르기까지 곡 전체가 바뀜
     let evSeed = (seed ^ 0x9e3779b9) >>> 0;
     const evRnd = () => (evSeed = (evSeed * 1664525 + 1013904223) >>> 0) / 4294967296;
-    const nmRows =
+    // 마디 리듬 맞추기는 밀도 고르기 뒤에 (고르기가 마디마다 노트를 넣고 빼서 맞춘 리듬이 다시 흐트러짐)
+    const nmRows = alignNmRows(
       diff === "explus"
         ? evenDensity(nmRows0, { an, barOf, nBars, beatSec, minGap: R.minGap, rnd: evRnd })
-        : nmRows0;
+        : nmRows0,
+      {
+        ...alignOpts,
+        onHead,
+        jackGap: R.jackGap,
+        skipBar: (b) => burstT.some((t) => alignBarOf(t) === b),
+        maxDiff: diff === "explus" ? 2 : 1,
+      }
+    );
     // 연타 박: 연타 노트와 45ms 안으로 붙은 다른 노트를 뺌 — 16분(4등분)과 연타(6등분)가 섞이면 30~35ms 간격이 생김
     //  (148 BPM에서 101ms 16분 사이에 67ms 연타 → 34ms, 한 박만 엄청 촘촘)
     const nmClean = burstT.length
@@ -1435,6 +1517,141 @@ function regularizeRhythm(src: Onset[], minGap: number, cenAt: (t: number) => nu
     if (!changed) break;
   }
   return a;
+}
+
+/**
+ * 마디 리듬 맞추기: 앞 8마디 안에 리듬(마디 안 격자 칸 집합)이 '딱 1칸만 다른'(ULTIMA는 2칸까지) 마디가 있으면 그 마디에 맞춤
+ *  — 한 칸 더 있으면 빼고(박 머리·센 타격·동시치기는 안 뺌), 한 칸 모자라면 그 칸에 넣고,
+ *    한 칸이 16분 하나만큼 옮겨져 있으면 옮김. 똑같은 마디가 이미 있으면 그대로.
+ * osu·Quaver 랭크 4K 1.36만 채보 (2026-10-23): 앞 8마디 안에 똑같은 리듬 마디가 HARD~ULTIMA급 51~63%,
+ *  우리 EX 23 · NM 44 · ULT 21%. 대신 우리는 '1칸만 다른' 마디가 21~27% (osu 15~19 · Quaver 11~14) —
+ *  타격 검출이 한 칸 놓치거나 더 잡은 흔적. 사람 매퍼는 같은 음악엔 같은 리듬을 줘서 패턴이 읽힘.
+ */
+interface AlignRow {
+  t: number;
+  /** 빼면 안 되는 줄 (박 머리·센 타격·동시치기) */
+  keep: boolean;
+}
+function planBarAlign(
+  rows: AlignRow[],
+  o: {
+    barOf: (t: number) => number;
+    /** 마디 안 칸 번호 (격자 밖이면 null) */
+    slotOf: (t: number, b: number) => number | null;
+    slotT: (b: number, s: number) => number;
+    /** 16분 하나 = 칸 몇 개 */
+    step16: number;
+    minGap: number;
+    /** 이 마디는 손대지 않음 (연타 등) */
+    skipBar?: (b: number) => boolean;
+    look?: number;
+    /** 이만큼 칸이 달라도 맞춤 (기본 1) */
+    maxDiff?: number;
+  }
+): { drop: Set<number>; add: { t: number; refT: number }[] } {
+  const look = o.look ?? 8;
+  const byBar = new Map<number, Map<number, number>>();
+  const offGrid = new Set<number>();
+  rows.forEach((r, i) => {
+    const b = o.barOf(r.t);
+    const s = o.slotOf(r.t, b);
+    if (s === null) {
+      offGrid.add(b);
+      return;
+    }
+    if (!byBar.has(b)) byBar.set(b, new Map());
+    byBar.get(b)!.set(s, i);
+  });
+  const drop = new Set<number>();
+  const add: { t: number; refT: number }[] = [];
+  /** 마디 → 맞춘 뒤 칸 → 그 칸 줄 시각 (레인 복사용) */
+  const done = new Map<number, Map<number, number>>();
+  const times = rows.map((r) => r.t).sort((x, y) => x - y);
+  const gapOk = (t: number, ignore: number[]) => {
+    let lo = 0;
+    let hi = times.length;
+    while (lo < hi) {
+      const m = (lo + hi) >> 1;
+      if (times[m] < t) lo = m + 1;
+      else hi = m;
+    }
+    for (const k of [lo - 1, lo]) {
+      const x = times[k];
+      if (x === undefined || ignore.some((y) => Math.abs(y - x) < 1e-6)) continue;
+      if (Math.abs(x - t) < o.minGap) return false;
+    }
+    return !add.some((a) => Math.abs(a.t - t) < o.minGap);
+  };
+  for (const b of [...byBar.keys()].sort((x, y) => x - y)) {
+    const cur = byBar.get(b)!;
+    const final = new Map([...cur].map(([s, i]) => [s, rows[i].t] as [number, number]));
+    done.set(b, final);
+    if (cur.size < 3 || offGrid.has(b) || o.skipBar?.(b)) continue;
+    let best: { ref: Map<number, number>; extra: number[]; miss: number[] } | null = null;
+    let exact = false;
+    for (let r = b - 1; r >= b - look && !exact; r--) {
+      const ref = done.get(r);
+      if (!ref || ref.size < 3 || offGrid.has(r)) continue;
+      const extra = [...cur.keys()].filter((s) => !ref.has(s));
+      const miss = [...ref.keys()].filter((s) => !cur.has(s));
+      if (!extra.length && !miss.length) exact = true;
+      else if (
+        !best &&
+        (extra.length + miss.length <= (o.maxDiff ?? 1) ||
+          (extra.length === 1 && miss.length === 1 && Math.abs(extra[0] - miss[0]) <= o.step16))
+      )
+        best = { ref, extra, miss };
+    }
+    if (exact || !best) continue;
+    const { ref, extra, miss } = best;
+    if (extra.some((s) => rows[cur.get(s)!].keep)) continue;
+    const dropT = extra.map((s) => rows[cur.get(s)!].t);
+    const newT = miss.map((s) => o.slotT(b, s));
+    if (!newT.every((t) => gapOk(t, dropT))) continue;
+    for (const s of extra) {
+      drop.add(cur.get(s)!);
+      final.delete(s);
+    }
+    miss.forEach((s, k) => {
+      add.push({ t: newT[k], refT: ref.get(s)! });
+      final.set(s, newT[k]);
+    });
+  }
+  return { drop, add };
+}
+
+/** 나이트메어·ULTIMA: 레인까지 깐 줄에 마디 리듬 맞추기. 넣는 줄은 맞춘 마디의 같은 칸 레인(첫 노트)을 쓰되
+ *  앞뒤 줄과 같은 레인이면(잭) 가까운 다른 레인으로 */
+function alignNmRows(
+  notes: Note[],
+  o: Parameters<typeof planBarAlign>[1] & { onHead: (t: number) => boolean; jackGap: number }
+): Note[] {
+  const rowMap = new Map<number, Note[]>();
+  for (const n of notes) rowMap.set(n.t, [...(rowMap.get(n.t) ?? []), n]);
+  const ts = [...rowMap.keys()].sort((x, y) => x - y);
+  const plan = planBarAlign(
+    ts.map((t) => ({ t, keep: rowMap.get(t)!.length >= 2 || o.onHead(t) })),
+    o
+  );
+  if (!plan.drop.size && !plan.add.length) return notes;
+  const keptT = ts.filter((_, i) => !plan.drop.has(i));
+  const out = new Map(keptT.map((t) => [t, rowMap.get(t)!] as [number, Note[]]));
+  for (const a of [...plan.add].sort((x, y) => x.t - y.t)) {
+    const all = [...out.keys()].sort((x, y) => x - y);
+    const prevT = all.filter((t) => t < a.t).pop();
+    const nextT = all.find((t) => t > a.t);
+    const near = new Set<number>();
+    for (const t of [prevT, nextT])
+      if (t !== undefined && Math.abs(t - a.t) < o.jackGap * 2.5)
+        for (const n of out.get(t)!) near.add(n.lane);
+    const want = (out.get(a.refT) ?? rowMap.get(a.refT))?.[0]?.lane ?? 1;
+    const lane = [0, 1, -1, 2, -2, 3, -3]
+      .map((d) => want + d)
+      .find((l) => l >= 0 && l <= 3 && !near.has(l));
+    if (lane === undefined) continue;
+    out.set(a.t, [{ t: a.t, lane }]);
+  }
+  return [...out.keys()].sort((x, y) => x - y).flatMap((t) => out.get(t)!);
 }
 
 /** 나이트메어 마무리: 채우기 마디 경계 등에서 생긴 고르지 않은 리듬을 줄 단위로 빼서 정리 (넣지는 않음) */
