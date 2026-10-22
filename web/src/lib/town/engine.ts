@@ -66,12 +66,7 @@ const TEMPLATE = `
     <button class="tt-colbtn tt-panel" type="button" data-soon="미션">${icon("mission")}미션</button>
   </div>
   <button class="tt-ui tt-panel tt-sq tt-chat" type="button" aria-label="채팅" data-soon="채팅">${icon("chat")}<i class="tt-badge"></i></button>
-  <div class="tt-ui tt-pad" aria-label="이동">
-    <button class="tt-arr tt-au" type="button" aria-label="위">▲</button>
-    <button class="tt-arr tt-al" type="button" aria-label="왼쪽">◀</button>
-    <button class="tt-arr tt-ar" type="button" aria-label="오른쪽">▶</button>
-    <button class="tt-arr tt-ad" type="button" aria-label="아래">▼</button>
-  </div>
+  <div class="tt-ui tt-stick" aria-label="이동 (끌어서 움직이기)"><div class="base"><i class="knob"></i></div></div>
   <button class="tt-ui tt-quick tt-tolobby" type="button">${icon("list")}<b>게임 로비</b></button>
 </div>
 
@@ -241,6 +236,9 @@ export function mountTown(root: HTMLElement, opts: TownOpts = {}): () => void {
   document.addEventListener("visibilitychange", onVis);
   window.addEventListener("pagehide", onVis);
   root.addEventListener("pointerdown", onFirst, { capture: true });
+  // 아이폰: 소리는 손을 뗄 때(touchend · click) 풀리는 경우가 많아 같이 들음
+  root.addEventListener("touchend", onFirst, { capture: true });
+  root.addEventListener("click", onFirst, { capture: true });
   window.addEventListener("keydown", onFirst);
   const onBtnClick = (e: Event) => {
     const b = (e.target as HTMLElement).closest("button");
@@ -526,27 +524,49 @@ export function mountTown(root: HTMLElement, opts: TownOpts = {}): () => void {
   };
   window.addEventListener("keydown", onKeyDown);
   window.addEventListener("keyup", onKeyUp);
-  // 폰 이동 패드 (상하좌우, 누르고 있는 동안 이동)
-  function holdBtn(el: HTMLElement, dx: number, dy: number) {
-    const on = (e: Event) => {
-      e.preventDefault();
-      if (dx) T.hold.x = dx;
-      if (dy) T.hold.y = dy;
+  // 폰 이동 스틱: 누른 채로 끄는 쪽으로 (기울인 만큼 빠르게), 손을 떼면 멈춤
+  {
+    const base = root.querySelector<HTMLElement>(".tt-stick .base")!;
+    const knob = base.querySelector<HTMLElement>(".knob")!;
+    const R = 62;
+    let pid = -1;
+    const move = (e: PointerEvent) => {
+      const r = base.getBoundingClientRect();
+      const k = scale();
+      let dx = (e.clientX - (r.left + r.width / 2)) / k,
+        dy = (e.clientY - (r.top + r.height / 2)) / k;
+      const d = Math.hypot(dx, dy);
+      if (d > R) {
+        dx = (dx / d) * R;
+        dy = (dy / d) * R;
+      }
+      knob.style.transform = `translate(${dx}px, ${dy}px)`;
+      const m = Math.min(1, d / R);
+      const dead = m < 0.18;
+      T.hold.x = dead ? 0 : (dx / R) * 1.05;
+      T.hold.y = dead ? 0 : (dy / R) * 1.05;
       T.tx = null;
     };
-    const off = () => {
-      if (dx && T.hold.x === dx) T.hold.x = 0;
-      if (dy && T.hold.y === dy) T.hold.y = 0;
+    const end = (e: PointerEvent) => {
+      if (e.pointerId !== pid) return;
+      pid = -1;
+      T.hold.x = T.hold.y = 0;
+      knob.style.transform = "";
+      base.classList.remove("on");
     };
-    el.addEventListener("pointerdown", on);
-    el.addEventListener("pointerup", off);
-    el.addEventListener("pointerleave", off);
-    el.addEventListener("pointercancel", off);
+    base.addEventListener("pointerdown", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      pid = e.pointerId;
+      base.setPointerCapture?.(e.pointerId);
+      base.classList.add("on");
+      move(e);
+    });
+    base.addEventListener("pointermove", (e) => e.pointerId === pid && move(e));
+    base.addEventListener("pointerup", end);
+    base.addEventListener("pointercancel", end);
+    base.addEventListener("lostpointercapture", end);
   }
-  holdBtn($(".tt-al"), -1, 0);
-  holdBtn($(".tt-ar"), 1, 0);
-  holdBtn($(".tt-au"), 0, -1);
-  holdBtn($(".tt-ad"), 0, 1);
   $(".tt-tolobby").onclick = () => {
     const g = GAMES[Math.max(0, T.near)];
     openLobby(g?.open ? g.id : "onecard");
@@ -2457,6 +2477,8 @@ export function mountTown(root: HTMLElement, opts: TownOpts = {}): () => void {
     window.removeEventListener("keydown", onKeyDown);
     window.removeEventListener("keydown", onFirst);
     root.removeEventListener("pointerdown", onFirst, { capture: true });
+    root.removeEventListener("touchend", onFirst, { capture: true });
+    root.removeEventListener("click", onFirst, { capture: true });
     document.removeEventListener("visibilitychange", onVis);
     window.removeEventListener("pagehide", onVis);
     previewA?.pause();

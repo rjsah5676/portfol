@@ -227,7 +227,14 @@ export function createSound() {
 
   /** 브라우저는 사용자가 한 번 누르기 전엔 소리를 막음 → 첫 터치에 풀기 */
   function unlock() {
-    if (dead || unlocked) return;
+    if (dead) return;
+    if (unlocked) {
+      // 아이폰 사파리: 첫 터치(pointerdown)로는 안 풀리고 손을 뗄 때 풀리는 경우가 있어 한 번 더 깨움
+      if (ctx?.state === "suspended" && !quiet) void ctx.resume();
+      const el = bgmEl[front];
+      if (el && bgmCur && el.paused && !quiet) void el.play().then(() => fade(el, pref.mute ? 0 : pref.bgm, 600), () => {});
+      return;
+    }
     unlocked = true;
     const c = ensureCtx();
     void c?.resume();

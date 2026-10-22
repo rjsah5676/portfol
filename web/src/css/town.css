@@ -8379,3 +8379,44 @@
 .tt .tt-dice {
   flex: none;
 }
+/* 폰 이동 스틱 (마우스에서는 숨김) */
+.tt-stick {
+  left: 26px;
+  bottom: 22px;
+  width: 176px;
+  height: 176px;
+  touch-action: none;
+}
+.tt-stick .base {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(30, 20, 70, 0.25) 0 45%, rgba(30, 20, 70, 0.45) 70%);
+  border: 3px solid rgba(255, 255, 255, 0.55);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25), inset 0 0 18px rgba(255, 255, 255, 0.15);
+  touch-action: none;
+}
+.tt-stick .base.on {
+  border-color: rgba(255, 215, 106, 0.9);
+}
+.tt-stick .knob {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 76px;
+  height: 76px;
+  margin: -38px 0 0 -38px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 40% 35%, #fff, #e9ddff 55%, #b9a3f2);
+  border: 3px solid #fff;
+  box-shadow: 0 5px 10px rgba(30, 10, 70, 0.4);
+  pointer-events: none;
+}
+.tt-stick .base:not(.on) .knob {
+  transition: transform 0.15s ease-out;
+}
+@media (pointer: fine) {
+  .tt-stick {
+    display: none !important;
+  }
+}
