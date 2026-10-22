@@ -244,7 +244,8 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry, 
         break;
       }
       case "relicProc":
-        toast(e.id === "war_banner" ? "전쟁 깃발 — 세 세력 강화 레벨 업!" : "신화의 인장 — 재료가 돌아왔어요!", "gold");
+        if (e.id === "rainbow") sfx("gamble-ok");
+        toast(e.id === "rainbow" ? "무지개 소환 — 에픽 이상 확정!" : e.id === "war_banner" ? "전쟁 깃발 — 레전드 합류!" : "신화의 인장 — 재료가 돌아왔어요!", "gold");
         break;
       case "gambleFail":
         sfx("gamble-fail");
@@ -1096,6 +1097,11 @@ export default function GameView({ ctrl, names, admin, finish, onExit, onRetry, 
             {!hasEmpty(b) && <span className="text-[12px] text-[#ffd6f4]">꽉 참</span>}
           </span>
           <span className="mt-1 flex items-center justify-center gap-1.5 text-[12px]">
+            {b.mods.rainbowEvery > 0 && (
+              <span className="font-bold text-[#ffd6f4] drop-shadow-[1px_1px_0_#000]" title="무지개 프리즘 — 이 수만큼 소환하면 다음 소환은 에픽 이상 확정">
+                무지개 {b.rbow}/{b.mods.rainbowEvery}
+              </span>
+            )}
             {odds.map((p, i) =>
               p > 0 ? (
                 <span key={i} style={{ color: i >= 1 ? GRADE_COLOR[i] : undefined }} className={i >= 1 ? "font-bold drop-shadow-[1px_1px_0_#000]" : "opacity-90"}>

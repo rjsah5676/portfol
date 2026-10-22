@@ -19,7 +19,7 @@ if (process.env.CHIMERA) BOT_OPTS.chimera = process.env.CHIMERA === "off" ? fals
 import { replay, type LogEntry } from "../../web/src/lib/defense/replay";
 import { newGame, step, unitCount, type Game } from "../../web/src/lib/defense/sim";
 import { GRADE_NAME, RECIPES as UNITS_RECIPES, UNIT, UNITS } from "../../web/src/lib/defense/units";
-import { GLITCH, RELICS, TRANS_IDS, deepGlitch, type Loadout } from "../../web/src/lib/defense/progress";
+import { DEEP_PARAMS, GLITCH, RELICS, TRANS_IDS, deepGlitch, type Loadout } from "../../web/src/lib/defense/progress";
 
 const args = process.argv.slice(2);
 const opt = (k: string) => {
@@ -62,6 +62,17 @@ if (deepOpt) {
   // sim.ts 는 progress.ts 를 CJS 로 따로 불러올 수 있어서 (모듈 두 벌) 둘 다 고침
   const other = createRequire(import.meta.url)("../../web/src/lib/defense/progress.ts").GLITCH as typeof GLITCH;
   for (const arr of new Set([GLITCH, other])) d.forEach((x, i) => Object.assign(arr[11 + i], x));
+}
+
+// --deep2 hpPerLv,hpPerLv26,hpPerLv2,jump31 : 심연 체력 기울기만 바꿔 보기 (나머지는 DEEP_PARAMS)
+{
+  const d2 = opt("--deep2");
+  if (d2) {
+    const [hpPerLv, hpPerLv26, hpPerLv2, jump31] = d2.split(",").map(Number);
+    const d = deepGlitch({ ...DEEP_PARAMS, hpPerLv, hpPerLv26, hpPerLv2, jump31 });
+    const other = createRequire(import.meta.url)("../../web/src/lib/defense/progress.ts").GLITCH as typeof GLITCH;
+    for (const arr of new Set([GLITCH, other])) d.forEach((x, i) => Object.assign(arr[11 + i], x));
+  }
 }
 
 /** 봇 길에 맞춘 영구 성장 (그 길을 꾸준히 한 사람이 들고 올 만한 것) */

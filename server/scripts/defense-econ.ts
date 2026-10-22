@@ -229,7 +229,8 @@ const FAC_RES: Record<string, string[]> = {
 };
 const facRes = focus ? FAC_RES[focus] : ["k_drill", "m_drill", "a_drill"];
 // 순수 혈통은 한 세력 70% 이상일 때만 켜짐 → 순혈 운영(보관함 · 판매로 비율을 맞춤)만 끼고, 섞어 쓰는 주력 세력 봇은 안 낌
-const RELIC_PREF = focus
+// --relicpref a,b,c : 봇이 끼는 유물 순서 바꾸기 (사람이 많이 끼는 조합으로 보기)
+const RELIC_PREF = opt("--relicpref") ? opt("--relicpref")!.split(",") : focus
   ? [...(cfg.patch === "pure" ? ["pure_blood"] : []), "vaccine", "hourglass", "war_banner", "twin_star", "alchemy", "gold_gear", "lucky_clover", "first_harvest"]
   : ["rainbow", "vaccine", "war_banner", "twin_star", "hourglass", "alchemy", "gold_gear", "lucky_clover", "first_harvest"];
 

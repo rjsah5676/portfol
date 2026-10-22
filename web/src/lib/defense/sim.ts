@@ -327,6 +327,8 @@ export interface Board {
   gold: number;
   stones: number;
   summons: number;
+  /** 무지개 프리즘: 다음 무지개 소환까지 센 소환 수 */
+  rbow: number;
   free: number;
   up: { knight: number; mech: number; arcane: number; hidden: number };
   luck: number;
@@ -409,6 +411,7 @@ export function newBoard(seed: number, idx: number, lo?: Loadout | null): Board 
     gold: B.startGold + mods.startGold,
     stones: mods.startStones,
     summons: 0,
+    rbow: 0,
     free: 0,
     up: { knight: 0, mech: 0, arcane: 0, hidden: 0 },
     luck: Math.min(B.luckCost.length, mods.startLuck),
@@ -609,6 +612,23 @@ function toMap(b: Board) {
   x.mod = null;
   x.camp = { k: "map" };
   b.phase = "break";
+}
+/** 전쟁 깃발: 강화 합이 before → 지금 사이에 N 의 배수를 넘은 만큼 그 세력 레전드 */
+function warTick(b: Board, before: number, faction: Faction) {
+  const N = b.mods.warEvery;
+  if (!N) return;
+  const now = b.up.knight + b.up.mech + b.up.arcane;
+  for (let k = Math.floor(before / N); k < Math.floor(now / N); k++) {
+    relicLegend(b, faction);
+    b.ev?.push({ t: "relicProc", id: "war_banner" });
+  }
+}
+/** 유물이 주는 레전드 1기 — 필드 빈 칸이 있으면 거기로 (보관함에 들어가면 안 싸워서), 없으면 그 세력 가장 낮은 필드 칸 한 등급 업 */
+function relicLegend(b: Board, faction: Faction) {
+  let free = false;
+  for (let i = 0; i < CELLS && !free; i++) if (!b.cells[i].def) free = true;
+  if (free) give(b, pick(b.rng, poolOf(faction, 3)).id, "relic");
+  else expGrow(b, faction);
 }
 /** 가장 낮은 등급 필드 유닛 칸 (faction 이면 그 세력만) 을 한 등급 올림 — 레전드까지 */
 function expGrow(b: Board, faction?: Faction) {
@@ -1106,6 +1126,13 @@ export function apply(g: Game, p: number, cmd: Cmd): string | null {
           break;
         }
       }
+      // 무지개 프리즘: N번째 소환은 에픽 이상 확정 (확률로 레전드)
+      if (b.mods.rainbowEvery && ++b.rbow >= b.mods.rainbowEvery) {
+        b.rbow = 0;
+        const rg = rnd(b.rng) < b.mods.rainbowLeg ? 3 : 2;
+        if (rg > grade) grade = rg;
+        b.ev?.push({ t: "relicProc", id: "rainbow" });
+      }
       // 원정 유물 「서약」: OATH_P 확률로 그 세력 (2026-10-22: 늘 → 확률, 한 세력만 나와 신화 20기씩 쌓이던 것)
       // 유물 「순수 혈통」: 확률로 필드에서 가장 많은 세력 (낀 판만 난수를 씀)
       const oath = b.exp ? FACTIONS.find((f) => expHas(b, `oath_${f}`)) : undefined;
@@ -1169,7 +1196,9 @@ export function apply(g: Game, p: number, cmd: Cmd): string | null {
       const cost = upCost(b, cmd.k);
       if (b.gold < cost) return "골드가 모자라요";
       b.gold -= cost;
+      const upSum = b.up.knight + b.up.mech + b.up.arcane;
       b.up[cmd.k]++;
+      if (cmd.k !== "hidden") warTick(b, upSum, cmd.k);
       if (cmd.k === "hidden") b.dirty = true; // 키메라 버프가 히든 강화를 받음
       return null;
     }
@@ -1761,7 +1790,7 @@ function rebuild(b: Board) {
   b.team =
     (b.pure > 0 ? b.mods.pureBlood : 1) *
     (1 + (b.cx.mono - 1) * b.pure) *
-    (kinds === 3 ? b.mods.rainbow * b.cx.tri : 1) *
+    (kinds === 3 ? b.cx.tri : 1) *
     b.cx.dmg;
 }
 
@@ -2279,25 +2308,11 @@ function die(g: Game, b: Board, e: Enemy): boolean {
     b.seized = [];
     gold = Math.floor((B.bossGold.base + B.bossGold.per * b.wave) * b.mods.bossGold);
     b.free += b.mods.bossFree;
-    // 전쟁 깃발: 세 세력 강화 + (공짜)
+    // 전쟁 깃발: 보스를 잡으면 세 세력 강화 + (공짜) — 강화 합이 N 의 배수를 넘으면 필드에 가장 많은 세력 레전드
     if (b.mods.warFree) {
+      const upSum = b.up.knight + b.up.mech + b.up.arcane;
       for (const f of FACTIONS) b.up[f as "knight"] = Math.min(B.up.max, b.up[f as "knight"] + b.mods.warFree);
-      b.ev?.push({ t: "relicProc", id: "war_banner" });
-    }
-    // 무지개 연합: 필드에 가장 적은 세력(없는 세력 먼저)의 에픽 · 레전드 1기 — 필드 빈 칸이 없으면 그 세력 가장 낮은 칸 한 등급 업
-    if (b.mods.rainbowGift) {
-      const cnt = { knight: 0, mech: 0, arcane: 0 };
-      for (let i = 0; i < CELLS; i++) {
-        const d = b.cells[i].def ? UNIT[b.cells[i].def!] : null;
-        if (d && d.faction !== "hidden") cnt[d.faction] += b.cells[i].units.length;
-      }
-      let low: Faction = "knight";
-      for (const f of FACTIONS) if (cnt[f as "knight"] < cnt[low as "knight"]) low = f;
-      // 필드 빈 칸이 있으면 거기로 (보관함에 들어가면 안 싸워서), 없으면 그 세력 가장 낮은 필드 칸 한 등급 업
-      let fieldFree = false;
-      for (let i = 0; i < CELLS && !fieldFree; i++) if (!b.cells[i].def) fieldFree = true;
-      if (fieldFree) give(b, pick(b.rng, poolOf(low, b.mods.rainbowGift as Grade)).id, "relic");
-      else expGrow(b, low);
+      warTick(b, upSum, b.mono ?? pick(b.rng, FACTIONS));
     }
     const stones = B.bossStones + Math.floor(b.wave / 20) + (b.patch === "gambler" ? 1 : 0) + b.cx.bossStones;
     b.stones += stones;

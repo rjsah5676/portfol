@@ -289,13 +289,15 @@ export const RELIC_VAL = {
   alchemy_stone: (l: number) => 2 + Math.floor((Math.max(1, l) - 1) / 2),
   vaccine: (l: number) => rd(25 * sc(l, 0.2)),
   pure_blood: (l: number) => rd(35 * sc(l, 0.15)),
-  rainbow: (l: number) => rd(20 * sc(l, 0.15)),
-  twin_star: (l: number) => rd(25 * sc(l, 0.15)),
+  twin_star: (l: number) => rd(15 * sc(l, 0.15)),
   war_banner: (l: number) => rd(70 * sc(l, 0.15)) / 10,
   // 2026-10-22 전설 유물 규칙 (수치보다 플레이가 바뀌게)
   pure_steer: (l: number) => rd(25 * sc(l, 0.15)),
-  rainbow_gift: (l: number) => (l >= 4 ? 3 : 2),
-  war_free: (l: number) => (l >= 5 ? 2 : 1),
+  // 2026-10-22 (3): 수치를 올려도 골드 · 희귀에서 넘어갈 이유(도파민)가 없다는 말 → 무지개 · 전쟁 깃발을 「터지는 순간」이 있는 규칙으로 바꿈
+  rainbow_every: (l: number) => (l >= 5 ? 20 : l >= 3 ? 25 : 30),
+  rainbow_leg: (l: number) => rd(10 * sc(l, 0.2)),
+  war_every: (l: number) => (l >= 5 ? 6 : l >= 3 ? 8 : 10),
+  war_free: (_l: number) => 1,
   // 심연 2막 (오염 30 클리어 뒤 상자) · 해피 타운 첫 클리어
   myth_seal: (l: number) => rd(30 * sc(l, 0.15)),
   overdrive: (l: number) => rd(20 * sc(l, 0.15)),
@@ -333,9 +335,9 @@ export const RELICS: RelicDef[] = [
   relic("alchemy", "연금술 노트", (l) => `조합식으로 신화 · 히든을 만들면 골드 +${V.alchemy_gold(l)} · 행운석 +${V.alchemy_stone(l)}`, 1, "any"),
   relic("vaccine", "글리치 백신", (l) => `보스 · 엘리트 · 균열 적에게 주는 피해 +${V.vaccine(l)}%`, 1, "boss"),
   relic("pure_blood", "순수 혈통", (l) => `소환이 ${V.pure_steer(l)}% 확률로 필드에서 가장 많은 세력으로 나와요 · 한 세력이 ${Math.round(TUNE.pureFrom * 100)}% 이상이면 (보관함 제외) 모든 피해 +${V.pure_blood(l)}%`, 2, "mono"),
-  relic("rainbow", "무지개 연합", (l) => `보스를 잡을 때마다 필드에 가장 적은 세력의 ${V.rainbow_gift(l) === 3 ? "레전드" : "에픽"} 1기 (필드에 빈 칸이 없으면 그 세력 가장 낮은 칸 한 등급 업) · 세 세력이 모두 있으면 모든 피해 +${V.rainbow(l)}%`, 2, "mix"),
+  relic("rainbow", "무지개 프리즘", (l) => `소환 ${V.rainbow_every(l)}번마다 무지개 소환 — 에픽 이상 확정, ${V.rainbow_leg(l)}% 확률로 레전드 (세력 상관없이 어떤 길에도)`, 2, "any"),
   relic("twin_star", "쌍둥이 별", (l) => `레전드 이상을 얻을 때 ${V.twin_star(l)}% 확률로 같은 등급 같은 세력 1기 더 (빈 칸이 있으면)`, 2, "any"),
-  relic("war_banner", "전쟁 깃발", (l) => `보스를 잡을 때마다 세 세력 강화 +${V.war_free(l)} (공짜) · 강화 레벨 합 10마다 모든 피해 +${V.war_banner(l)}%`, 2, "mix"),
+  relic("war_banner", "전쟁 깃발", (l) => `세력 강화 레벨 합이 ${V.war_every(l)}의 배수를 넘을 때마다 그 세력 레전드 1기 (필드가 꽉 차면 그 세력 가장 낮은 칸 한 등급 업) · 보스를 잡으면 세 세력 강화 +${V.war_free(l)} (공짜) · 강화 합 10마다 모든 피해 +${V.war_banner(l)}%`, 2, "mix"),
   relic("myth_seal", "신화의 인장", (l) => `조합식으로 신화 · 히든 · 초월을 만들면 ${V.seal_refund(l)}% 확률로 재료 중 가장 높은 유닛 1기가 돌아와요 · 신화 이상 피해 +${V.myth_seal(l)}%`, 2, "any", "deep"),
   relic("overdrive", "과부하 회로", (l) => `모든 유닛 공격 속도 +${V.overdrive(l)}% · 필드에 적이 많을수록 더 (1마리당 +0.5%, 최대 +${V.over_boss(l)}% · 보스가 있으면 최대)`, 2, "any", "deep"),
   relic("chrono_core", "크로노 코어", (l) => `보스 제한 시간 +${V.chrono_core(l)}초 · 보스 처치 골드 +50%`, 1, "boss", "deep"),
@@ -499,7 +501,6 @@ export interface Mods {
   alchemyStones: number;
   vaccine: number;
   pureBlood: number;
-  rainbow: number;
   twinStar: number;
   warBanner: number;
   glitch: GlitchDef;
@@ -544,9 +545,11 @@ export interface Mods {
   expGold: number;
   sellStone: number;
   ultCharge: number;
-  /** 2026-10-22 전설 유물 규칙: 순수 혈통 소환 쏠림 · 무지개 보스 선물 등급(0 없음) · 전쟁 깃발 보스마다 공짜 강화 레벨 · 인장 재료 돌려받기 · 과부하 적 수 비례 공속 상한 · MOA 다시 굴리기 · 오르골 연쇄 (확률은 0~1) */
+  /** 2026-10-22 전설 유물 규칙: 순수 혈통 소환 쏠림 · 무지개 소환 주기(0 없음) · 그 레전드 확률 · 전쟁 깃발 레전드 주기(강화 합, 0 없음) · 인장 재료 돌려받기 · 과부하 적 수 비례 공속 상한 · MOA 다시 굴리기 · 오르골 연쇄 (확률은 0~1) */
   pureSteer: number;
-  rainbowGift: number;
+  rainbowEvery: number;
+  rainbowLeg: number;
+  warEvery: number;
   warFree: number;
   sealRefund: number;
   overBoss: number;
@@ -669,7 +672,6 @@ export function modsOf(lo: Loadout | null | undefined): Mods {
     alchemyStones: has("alchemy") ? V.alchemy_stone(X("alchemy")) : 0,
     vaccine: 1 + (has("vaccine") ? V.vaccine(X("vaccine")) : 0) / 100,
     pureBlood: 1 + (has("pure_blood") ? V.pure_blood(X("pure_blood")) : 0) / 100,
-    rainbow: 1 + (has("rainbow") ? V.rainbow(X("rainbow")) : 0) / 100,
     twinStar: has("twin_star") ? V.twin_star(X("twin_star")) / 100 : 0,
     warBanner: has("war_banner") ? V.war_banner(X("war_banner")) / 100 : 0,
     // 픽셀 타운은 단계에 맞는 메인 오염 단계 세기 (오염 단계 규칙 · 2페이즈 · 심연 변이도 그 단계 것)
@@ -702,7 +704,9 @@ export function modsOf(lo: Loadout | null | undefined): Mods {
     sellStone: has("moa_card") ? 1 : 0,
     ultCharge: has("forte_box") ? V.forte_box(X("forte_box")) / 100 : 0,
     pureSteer: has("pure_blood") ? V.pure_steer(X("pure_blood")) / 100 : 0,
-    rainbowGift: has("rainbow") ? V.rainbow_gift(X("rainbow")) : 0,
+    rainbowEvery: has("rainbow") ? V.rainbow_every(X("rainbow")) : 0,
+    rainbowLeg: has("rainbow") ? V.rainbow_leg(X("rainbow")) / 100 : 0,
+    warEvery: has("war_banner") ? V.war_every(X("war_banner")) : 0,
     warFree: has("war_banner") ? V.war_free(X("war_banner")) : 0,
     sealRefund: has("myth_seal") ? V.seal_refund(X("myth_seal")) / 100 : 0,
     overBoss: has("overdrive") ? V.over_boss(X("overdrive")) / 100 : 0,
