@@ -4,7 +4,18 @@ import { useEffect, useRef, useState } from "react";
 import { plainName } from "@/components/Nick";
 import { DailyMissionList, useDailyReady } from "@/components/Points/DailyMissions";
 import { avatarOf } from "@/lib/sketch/assets";
-import { FAKE_LAPS, MODE_LIST, MODES, type GameMode } from "@/lib/sketch/modes";
+import {
+  FAKE_LAPS,
+  FAKE_QM_MIN,
+  MODE_LIST,
+  MODE_POINTS,
+  MODES,
+  RELAY_VARIANT_LIST,
+  RELAY_VARIANTS,
+  SPEED_MS,
+  type GameMode,
+  type RelayVariant,
+} from "@/lib/sketch/modes";
 import { CUSTOM_MAX, parseCustomWords, TOPICS } from "@/lib/sketch/words";
 import { playBgm, playSfx } from "@/lib/sketch/sfx";
 import {
@@ -538,6 +549,8 @@ function CreateDialog({
         custom: customWords,
         customOnly: customOnly && customWords.length > 0,
         laps,
+        qm: mode === "fake" && qm,
+        variant: mode === "relay" ? variant : "normal",
       });
       playSfx("jingle-start");
       onCreated(id);
@@ -551,6 +564,8 @@ function CreateDialog({
 
   const [fakeGames, setFakeGames] = useState(3);
   const [laps, setLaps] = useState(FAKE_LAPS);
+  const [qm, setQm] = useState(false);
+  const [variant, setVariant] = useState<RelayVariant>("normal");
   const [modeTime, setModeTime] = useState(90);
   const label = (t: string) => <div className="sk-hand mb-1.5 text-[18px] leading-none">{t}</div>;
   const wordsBox = (
@@ -678,26 +693,68 @@ function CreateDialog({
             <p className="mt-1 text-[11.5px] text-[var(--ink3)]">
               한 바퀴 = 모두 한 획씩 · 많을수록 그림이 자세해져요
             </p>
+            <label className="mt-3 flex cursor-pointer items-center gap-2 text-[14px] font-bold">
+              <input
+                type="checkbox"
+                checked={qm}
+                onChange={(e) => {
+                  playSfx("sfx-click");
+                  setQm(e.target.checked);
+                }}
+                className="h-4 w-4 accent-[#FF6B6B]"
+              />
+              🎩 출제자 두기 ({FAKE_QM_MIN}명부터)
+            </label>
+            <p className="mt-0.5 text-[11.5px] text-[var(--ink3)]">
+              판마다 돌아가며 한 명이 제시어를 직접 골라요. 출제자는 안 그리고, 가짜가 이기면 같이 +
+              {MODE_POINTS.qmWin} (원작 보드게임 규칙)
+            </p>
           </div>
         )}
         {mode === "relay" && (
           <div>
-            {label("그리는 시간")}
-            <div className="flex flex-wrap gap-1.5">
-              {[60, 90, 120, 150].map((n) => (
+            {label("어떻게 이어 갈까요?")}
+            <div className="mb-3 grid grid-cols-3 gap-1.5">
+              {RELAY_VARIANT_LIST.map((k) => (
                 <button
-                  key={n}
+                  key={k}
                   type="button"
-                  data-on={modeTime === n}
-                  onClick={tap(() => setModeTime(n))}
-                  className="sk-chip min-w-[3.4em] text-[15px]"
+                  data-on={variant === k}
+                  onClick={tap(() => setVariant(k), "sfx-pick")}
+                  className={`sk-btn flex-col gap-0.5 px-1.5 py-2 text-[16px] whitespace-normal ${variant === k ? "sk-btn-sun" : ""}`}
                 >
-                  {n}초
+                  <span>
+                    {RELAY_VARIANTS[k].emoji} {RELAY_VARIANTS[k].name}
+                  </span>
+                  <span className="font-['Nanum_Gothic',sans-serif] text-[10.5px] leading-snug font-bold break-keep text-[var(--ink2)]">
+                    {RELAY_VARIANTS[k].desc}
+                  </span>
                 </button>
               ))}
             </div>
+            {variant !== "speed" && (
+              <>
+                {label("그리는 시간")}
+                <div className="flex flex-wrap gap-1.5">
+                  {[60, 90, 120, 150].map((n) => (
+                    <button
+                      key={n}
+                      type="button"
+                      data-on={modeTime === n}
+                      onClick={tap(() => setModeTime(n))}
+                      className="sk-chip min-w-[3.4em] text-[15px]"
+                    >
+                      {n}초
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
             <p className="mt-1 text-[11.5px] text-[var(--ink3)]">
-              인원수만큼 이어 가요 (최대 7단계 · 항상 문장으로 끝나요) · 글은 50초
+              인원수만큼 이어 가요 (최대 7단계 · 항상 문장으로 끝나요) ·{" "}
+              {variant === "speed"
+                ? `글 ${SPEED_MS.write / 1000}초 · 그림 ${SPEED_MS.draw / 1000}초`
+                : "글은 50초"}
             </p>
           </div>
         )}

@@ -7,7 +7,13 @@ import {
 } from "@/lib/api/socket";
 import { WrongPasswordError } from "@/lib/roomLock";
 import { normalizeAnswer } from "@/lib/sketch/words";
-import { FAKE_LAPS, MODES, type Challenge, type GameMode } from "@/lib/sketch/modes";
+import {
+  FAKE_LAPS,
+  MODES,
+  type Challenge,
+  type GameMode,
+  type RelayVariant,
+} from "@/lib/sketch/modes";
 
 export { WrongPasswordError };
 
@@ -34,6 +40,7 @@ export type Phase =
   | "drawing"
   | "reveal"
   | "ended"
+  | "f-pick"
   | "f-draw"
   | "f-vote"
   | "f-guess"
@@ -60,6 +67,10 @@ export interface SketchMeta {
   customOnly: boolean;
   /** 가짜 화가: 몇 바퀴 그리는지 */
   laps: number;
+  /** 가짜 화가: 출제자 (4명부터) */
+  qm: boolean;
+  /** 그림 릴레이 변형 */
+  variant: RelayVariant;
 }
 
 export interface SketchPlayer {
@@ -101,6 +112,8 @@ export interface SketchState {
   skip: string[];
   /** 투표 강퇴: 대상 → 찬성한 사람 */
   kick: Record<string, string[]>;
+  /** 그림 맞히기: 연속으로 맞힌 차례 수 */
+  streak: Record<string, number>;
   /** 그림 맞히기: 판이 끝나면 이번 판 그림 모아보기 (그림은 sheet `c:<key>`, 따봉 키는 key) */
   gallery?: GalleryItem[];
   /** 다른 모드 진행 상태 */
@@ -127,6 +140,8 @@ export interface FakeState {
   caught?: boolean;
   guess?: string;
   win?: "fake" | "artists" | "gone";
+  /** 출제자 (안 그림 · 투표 안 함) */
+  qm?: string;
 }
 export interface RelayState {
   kind: "relay";
@@ -144,6 +159,9 @@ export interface FakeSecret {
   faker?: boolean;
   word?: string | null;
   watching?: boolean;
+  /** 내가 출제자 (고르는 중엔 후보까지) */
+  qm?: boolean;
+  choices?: { topic: string; word: string }[];
 }
 export interface RelaySecret {
   task: "write" | "draw" | "desc";
@@ -246,6 +264,7 @@ const EMPTY_STATE: SketchState = {
   likes: {},
   skip: [],
   kick: {},
+  streak: {},
   m: null,
 };
 const DEFAULT_META = {
@@ -255,6 +274,8 @@ const DEFAULT_META = {
   custom: [],
   customOnly: false,
   laps: FAKE_LAPS,
+  qm: false,
+  variant: "normal" as RelayVariant,
 };
 
 /** 없어진 모드(그림 속 거짓말)로 온 방은 그림 맞히기로 (배포 사이에 잠깐) */
@@ -327,6 +348,8 @@ export interface CreateOptions {
   custom?: string[];
   customOnly?: boolean;
   laps?: number;
+  qm?: boolean;
+  variant?: RelayVariant;
 }
 
 /** 방 만들기 → 방 id. 비밀번호는 서버가 방 id와 섞어 해시로만 보관 */
@@ -346,6 +369,8 @@ export async function createRoom(_uid: string, nick: string, o: CreateOptions): 
     custom: o.custom ?? [],
     customOnly: o.customOnly ?? false,
     laps: o.laps ?? FAKE_LAPS,
+    qm: o.qm ?? false,
+    variant: o.variant ?? "normal",
   });
 }
 
@@ -674,6 +699,14 @@ export async function submitText(roomId: string, step: number, text: string) {
 }
 export async function voteFake(roomId: string, step: number, target: string) {
   await rpc("sketch.vote", { id: roomId, step, target });
+}
+/** 출제자: 후보 고르기(index) 또는 직접 쓰기(word + topic) */
+export async function qmPick(
+  roomId: string,
+  step: number,
+  pick: { index: number } | { word: string; topic: string }
+) {
+  await rpc("sketch.qmPick", { id: roomId, step, ...pick });
 }
 
 /** 나만 아는 것 (모드마다 모양이 다름) */

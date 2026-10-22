@@ -12,13 +12,19 @@ import {
   CHALLENGE_CHANCE,
   FAKE_COLORS,
   FAKE_LAPS,
+  FAKE_QM_MIN,
+  FAKE_QM_PICK_MS,
   MODE_MS,
   MODE_POINTS,
   MODES,
   MONO_COLOR,
   RELAY_MAX_STEPS,
+  RELAY_VARIANT_LIST,
+  SPEED_MS,
+  streakBonus,
   type Challenge,
   type GameMode,
+  type RelayVariant,
 } from "../../../web/src/lib/sketch/modes";
 import { CUSTOM_LEN, CUSTOM_MAX, TOPICS, pickWord } from "../../../web/src/lib/sketch/words";
 
@@ -57,6 +63,7 @@ export type Phase =
   | "reveal"
   | "ended"
   // 가짜 화가: 한 획씩 · 투표 · 가짜의 마지막 기회 · 결과
+  | "f-pick"
   | "f-draw"
   | "f-vote"
   | "f-guess"
@@ -87,6 +94,10 @@ interface Meta {
   customOnly: boolean;
   /** 가짜 화가: 몇 바퀴 그리는지 */
   laps: number;
+  /** 가짜 화가: 출제자 (판마다 돌아가며 한 명이 제시어를 고르고 안 그림, 4명부터) */
+  qm: boolean;
+  /** 그림 릴레이 변형: 기본 · 기억해서 · 스피드 */
+  variant: RelayVariant;
 }
 interface Player {
   nick: string;
@@ -124,6 +135,8 @@ interface State {
   skip: string[];
   /** 투표 강퇴: 대상 → 찬성한 사람들 */
   kick: Record<string, string[]>;
+  /** 그림 맞히기: 연속으로 맞힌 차례 수 (그린 차례는 안 끊김, 못 맞힌 차례에서 0) */
+  streak: Record<string, number>;
   /** 그림 맞히기: 판이 끝나면 이번 판 그림 모아보기 (키 = 그 차례 turnId, 그림은 sheet `c:<키>`) */
   gallery?: GalleryItem[];
   /** 다른 모드의 공개 진행 상태 */
@@ -153,6 +166,8 @@ interface FakeState {
   caught?: boolean;
   guess?: string;
   win?: "fake" | "artists" | "gone";
+  /** 출제자 (안 그림 · 투표 안 함, 가짜가 이기면 같이 점수) */
+  qm?: string;
 }
 /** 그림 릴레이 공개 상태 */
 interface RelayState {
@@ -180,6 +195,8 @@ interface ModeSecret {
   /** 이번 획의 그림 묶음 (한 획만) */
   strokeG?: string;
   fakeVotes?: Record<string, string>;
+  /** 출제자에게 보여 줄 제시어 후보 */
+  qmChoices?: { topic: string; word: string }[];
   /** 그림 릴레이 */
   chains?: RelayEntry[][];
   /** 그림 맞히기: 지금까지 그린 차례들 (판이 끝나면 state.gallery 로 공개) */
@@ -290,6 +307,7 @@ const emptyState = (): State => ({
   likes: {},
   skip: [],
   kick: {},
+  streak: {},
   m: null,
 });
 /** 판 끝 모아보기에 남기는 그림 수 (오래된 것부터 버림) */
@@ -489,6 +507,7 @@ export function registerSketch({ gateway, users }: Deps, opts: SketchOptions = {
     if (room.state.m && Object.keys(room.players).length) {
       if (room.state.phase === "f-draw" && room.state.drawer === uid) fakeNextStroke(room);
       else if (room.state.phase === "f-guess" && room.mx.faker === uid) fakeFinish(room, { caught: true, guessed: false, gone: true });
+      else if (room.state.phase === "f-pick" && (room.state.m as FakeState).qm === uid) fakeAutoPick(room);
       else maybeAdvance(room);
     }
   }
@@ -654,6 +673,8 @@ export function registerSketch({ gateway, users }: Deps, opts: SketchOptions = {
     custom: z.array(z.string().max(40)).max(200).default([]),
     customOnly: z.boolean().default(false),
     laps: z.number().int().min(1).max(8).default(FAKE_LAPS),
+    qm: z.boolean().default(false),
+    variant: z.enum(RELAY_VARIANT_LIST as [RelayVariant, ...RelayVariant[]]).default("normal"),
   });
   gateway.rpc("sketch.createRoom", (ctx, raw) => {
     const uid = ctx.uid;
@@ -681,6 +702,8 @@ export function registerSketch({ gateway, users }: Deps, opts: SketchOptions = {
         custom: [...new Set(o.custom.map((w) => w.replace(/\s+/g, " ").trim().slice(0, CUSTOM_LEN)).filter(Boolean))].slice(0, CUSTOM_MAX),
         customOnly: o.customOnly && o.custom.length > 0,
         laps: o.laps,
+        qm: o.qm,
+        variant: o.variant,
       },
       players: {},
       scores: {},
@@ -894,10 +917,24 @@ export function registerSketch({ gateway, users }: Deps, opts: SketchOptions = {
   }
 
   /**
+   * 연속 정답: 이번 차례를 못 맞힌 사람(그린 사람 빼고)은 0으로.
+   * 그리는 사람이 자리를 비워 그냥 넘어간 차례(아무도 못 맞히고 공개도 없음)는 안 끊음.
+   */
+  function settleStreak(room: Room) {
+    const st = room.state;
+    if (room.meta.mode !== "classic") return;
+    if (!st.reveal && !Object.keys(st.correct).length) return;
+    const streak = { ...st.streak };
+    for (const u of Object.keys(room.players)) if (u !== st.drawer && st.correct[u] === undefined && streak[u]) streak[u] = 0;
+    room.state = { ...st, streak };
+  }
+
+  /**
    * 그림 맞히기: 정답 공개 때 이번 차례 그림을 모아보기에 남김 (판이 끝나면 state.gallery 로 공개).
    * 제시어는 그때 서버가 아는 것 — 건너뛴 차례도 판이 끝난 뒤엔 보여 줘도 됨.
    */
   function archiveTurn(room: Room) {
+    settleStreak(room);
     const st = room.state;
     if (room.meta.mode !== "classic" || !st.drawer || !room.strokes.size || room.strokesTurn !== st.turnId) return;
     const key = st.turnId;
@@ -1019,8 +1056,16 @@ export function registerSketch({ gateway, users }: Deps, opts: SketchOptions = {
     const base = Math.round((20 + (80 * left) / (room.meta.drawTime * 1000)) * bonus);
     const drawerPts = Math.round(base / 2);
     const first = !cur.firstCorrect;
-    const pts = base + (first ? FIRST_BONUS : 0);
-    room.state = { ...cur, correct: { ...cur.correct, [guess.uid]: pts }, firstCorrect: cur.firstCorrect || guess.uid };
+    // 연속 정답 보너스 (드로풀의 스트릭처럼) — 2연속 +10 · 3연속 +20 · 4연속부터 +30
+    const streak = (cur.streak?.[guess.uid] ?? 0) + 1;
+    const combo = streakBonus(streak);
+    const pts = base + (first ? FIRST_BONUS : 0) + combo;
+    room.state = {
+      ...cur,
+      correct: { ...cur.correct, [guess.uid]: pts },
+      firstCorrect: cur.firstCorrect || guess.uid,
+      streak: { ...cur.streak, [guess.uid]: streak },
+    };
     const add = (uid: string, nick: string, n: number) => {
       const s = room.scores[uid];
       room.scores[uid] = { nick: s?.nick ?? nick, score: (Number(s?.score) || 0) + n };
@@ -1036,7 +1081,7 @@ export function registerSketch({ gateway, users }: Deps, opts: SketchOptions = {
     pushChat(room, {
       uid: guess.uid,
       nick: guess.nick,
-      text: `${plain(guess.nick)}님이 ${first ? "제일 먼저 " : ""}정답을 맞혔어요! (+${pts}${first ? " 🥇" : ""}) · 그린 사람 +${drawerPts}`,
+      text: `${plain(guess.nick)}님이 ${first ? "제일 먼저 " : ""}정답을 맞혔어요! (+${pts}${first ? " 🥇" : ""}${combo ? ` · 🔥${streak}연속 +${combo}` : ""}) · 그린 사람 +${drawerPts}`,
       kind: "correct",
     });
     return null;
@@ -1309,6 +1354,9 @@ export function registerSketch({ gateway, users }: Deps, opts: SketchOptions = {
     const m = st.m;
     if (!m) return null;
     if (m.kind === "fake") {
+      // 출제자: 제시어를 알고(고르는 중엔 후보까지), 가짜가 누군지는 모름
+      if (m.qm && m.qm === uid)
+        return { topic: m.topic, qm: true, word: room.mx.word ?? null, ...(st.phase === "f-pick" ? { choices: room.mx.qmChoices ?? [] } : {}) };
       if (!m.order.includes(uid)) return { topic: m.topic, watching: true };
       const faker = room.mx.faker === uid;
       return { topic: m.topic, faker, word: faker ? null : (room.mx.word ?? null) };
@@ -1387,26 +1435,91 @@ export function registerSketch({ gateway, users }: Deps, opts: SketchOptions = {
 
   // ── 가짜 화가 ──
 
-  function startFake(room: Room, order: string[], game: number) {
-    const players = order.filter((u) => room.players[u]);
-    const { topic, word } = pickWord(new Set(Object.keys(room.used)), {
+  const pickFakeWord = (room: Room, avoid: Set<string> = new Set()) =>
+    pickWord(new Set([...Object.keys(room.used), ...avoid]), {
       topics: room.meta.topics,
       custom: room.meta.custom,
       customOnly: room.meta.customOnly,
     });
+
+  /**
+   * 판 시작. 출제자를 쓰면(4명부터) 판마다 돌아가며 한 명이 출제자 — 그 사람은 안 그리고 f-pick 에서 제시어를 고름
+   * (원작 「Fake Artist Goes to New York」의 Question Master). 아니면 서버가 바로 뽑아 f-draw.
+   */
+  function startFake(room: Room, order: string[], game: number) {
+    const players = order.filter((u) => room.players[u]);
+    const qm = room.meta.qm && players.length >= FAKE_QM_MIN ? players[(game - 1) % players.length] : "";
+    const artists = players.filter((u) => u !== qm);
     // 그리는 순서는 판마다 무작위로 섞음
-    const turnOrder = shuffle(players);
+    const turnOrder = shuffle(artists);
     const colors = Object.fromEntries(players.map((u, i) => [u, FAKE_COLORS[i % FAKE_COLORS.length]]));
-    room.mx = { faker: players[Math.floor(Math.random() * players.length)], word, fakeVotes: {} };
+    room.mx = { faker: artists[Math.floor(Math.random() * artists.length)], fakeVotes: {} };
+    room.strokes = new Map();
+    room.strokesTurn = "";
+    const m: FakeState = { kind: "fake", game, games: room.meta.rounds, topic: "", order: turnOrder, at: 0, colors, voted: [], ...(qm ? { qm } : {}) };
+    if (!qm) {
+      const { topic, word } = pickFakeWord(room);
+      room.state = { ...room.state, m };
+      return fakeBeginDraw(room, topic, word);
+    }
+    // 출제자에게 후보 3개 (서로 다른 주제에서) — 직접 써도 됨
+    const choices: { topic: string; word: string }[] = [];
+    for (let i = 0; i < 12 && choices.length < 3; i++) {
+      const c = pickFakeWord(room, new Set(choices.map((x) => normalizeAnswer(x.word))));
+      // 되도록 주제가 다른 것끼리 (우리끼리 제시어만 쓰는 방처럼 주제가 하나뿐이면 단어만 다르게)
+      if ((i >= 6 || !choices.some((x) => x.topic === c.topic)) && !choices.some((x) => x.word === c.word)) choices.push(c);
+    }
+    room.mx.qmChoices = choices;
+    setPhase(room, "f-pick", FAKE_QM_PICK_MS, { turnId: orderedId(), turnNo: game, drawer: "", drawerNick: "", m, reveal: "" });
+    drawerChanged(room);
+    changed(room);
+    pushSecrets(room);
+    systemChat(room, `🎩 이번 판 출제자는 ${nickOf(room, qm)}님! 제시어를 고르는 중…`);
+  }
+  /** 제시어가 정해지면 그리기 시작 */
+  function fakeBeginDraw(room: Room, topic: string, word: string) {
+    const m = { ...(room.state.m as FakeState), topic };
+    room.mx = { ...room.mx, word, qmChoices: undefined };
     const turnId = orderedId();
     room.strokes = new Map();
     room.strokesTurn = turnId;
-    const m: FakeState = { kind: "fake", game, games: room.meta.rounds, topic, order: turnOrder, at: 0, colors, voted: [] };
-    setPhase(room, "f-draw", MODE_MS.fakeStroke, { turnId, turnNo: game, drawer: turnOrder[0], drawerNick: nameIn(room, turnOrder[0], ""), m, reveal: "" });
+    setPhase(room, "f-draw", MODE_MS.fakeStroke, { turnId, turnNo: m.game, drawer: m.order[0], drawerNick: nameIn(room, m.order[0], ""), m, reveal: "" });
     drawerChanged(room);
     changed(room);
     pushSecrets(room);
   }
+
+  /** 출제자가 시간 안에 못 고르거나 나가면 첫 후보로 */
+  function fakeAutoPick(room: Room) {
+    const c = room.mx.qmChoices?.[0] ?? pickFakeWord(room);
+    fakeBeginDraw(room, c.topic, c.word);
+    systemChat(room, `🎩 출제자 대신 제시어를 정했어요. 주제는 「${c.topic}」 — 한 획씩 시작`);
+  }
+
+  /** 출제자: 후보 중 하나 고르기 (index) 또는 직접 쓰기 (word + topic) */
+  gateway.rpc("sketch.qmPick", (ctx, raw) => {
+    const o = z
+      .object({ id: roomId, step: z.number().int(), index: z.number().int().min(0).max(2).optional(), word: z.string().max(40).optional(), topic: z.string().max(40).optional() })
+      .parse(raw);
+    const { room, uid } = asPlayer(ctx, o.id);
+    const st = room.state;
+    const m = st.m;
+    if (st.step !== o.step || st.phase !== "f-pick" || m?.kind !== "fake" || m.qm !== uid) return null;
+    const choices = room.mx.qmChoices ?? [];
+    if (o.word !== undefined) {
+      const word = o.word.replace(/\s+/g, " ").trim().slice(0, CUSTOM_LEN);
+      const topic = (o.topic ?? "").replace(/\s+/g, " ").trim().slice(0, 12);
+      if (!word || !topic) throw bad("제시어와 주제 힌트를 둘 다 써 주세요.");
+      if (normalizeAnswer(word) === normalizeAnswer(topic)) throw bad("주제 힌트에 제시어를 그대로 쓰면 가짜가 알아버려요!");
+      fakeBeginDraw(room, topic, word);
+    } else {
+      const c = choices[o.index ?? 0] ?? choices[0];
+      if (!c) return null;
+      fakeBeginDraw(room, c.topic, c.word);
+    }
+    systemChat(room, `🎩 제시어가 정해졌어요! 주제는 「${(room.state.m as FakeState).topic}」 — 한 획씩 시작`);
+    return null;
+  });
   function fakeNextStroke(room: Room) {
     const m = room.state.m as FakeState;
     room.mx.strokeG = undefined;
@@ -1453,6 +1566,8 @@ export function registerSketch({ gateway, users }: Deps, opts: SketchOptions = {
       if (fakeWins) {
         addScore(room, faker, MODE_POINTS.fakeWin);
         users.bump(faker, { "stats.sketch.fakeWin": 1 });
+        // 출제자는 가짜 편 (가짜가 들키지 않게 애매한 제시어를 고르는 재미)
+        if (m.qm && room.scores[m.qm]) addScore(room, m.qm, MODE_POINTS.qmWin);
       } else for (const u of m.order) if (u !== faker && room.scores[u]) addScore(room, u, MODE_POINTS.artistWin);
       for (const [u, t] of Object.entries(votes))
         if (t === faker && u !== faker) {
@@ -1473,12 +1588,19 @@ export function registerSketch({ gateway, users }: Deps, opts: SketchOptions = {
       r.gone
         ? `가짜 화가가 나가 버렸어요… 제시어는 「${word}」`
         : fakeWins
-          ? `🕵️ 가짜 화가 ${nickOf(room, faker)}님 승리! 제시어는 「${word}」`
+          ? `🕵️ 가짜 화가 ${nickOf(room, faker)}님 승리!${m.qm ? ` 출제자 ${nickOf(room, m.qm)}님도 +${MODE_POINTS.qmWin}` : ""} 제시어는 「${word}」`
           : `🎨 화가들 승리! 가짜는 ${nickOf(room, faker)}님, 제시어는 「${word}」`
     );
   }
 
   // ── 그림 릴레이 ──
+
+  /** 단계 시간 — 스피드 변형이면 짧게 (화면 web ModeViews phaseTotal 과 같은 식) */
+  function relayMs(room: Room, kind: "write" | "draw" | "desc") {
+    if (room.meta.variant === "speed") return SPEED_MS[kind];
+    if (kind === "draw") return room.meta.drawTime * 1000;
+    return kind === "write" ? MODE_MS.relayWrite : MODE_MS.relayDesc;
+  }
 
   function startRelay(room: Room, order: string[]) {
     const n = order.length;
@@ -1488,7 +1610,7 @@ export function registerSketch({ gateway, users }: Deps, opts: SketchOptions = {
     room.mx = { chains: Array.from({ length: n }, () => []) };
     room.sheets = {};
     const m: RelayState = { kind: "relay", order, steps, step: 0, done: [] };
-    setPhase(room, "r-write", MODE_MS.relayWrite, { m, drawer: "", turnId: orderedId() });
+    setPhase(room, "r-write", relayMs(room, "write"), { m, drawer: "", turnId: orderedId() });
     changed(room);
     pushSecrets(room);
   }
@@ -1517,7 +1639,7 @@ export function registerSketch({ gateway, users }: Deps, opts: SketchOptions = {
       return;
     }
     const phase: Phase = step % 2 ? "r-draw" : "r-desc";
-    setPhase(room, phase, step % 2 ? room.meta.drawTime * 1000 : MODE_MS.relayDesc, { m: { ...m, step, done: [] }, turnId: orderedId() });
+    setPhase(room, phase, relayMs(room, step % 2 ? "draw" : "desc"), { m: { ...m, step, done: [] }, turnId: orderedId() });
     changed(room);
     pushSecrets(room);
   }
@@ -1568,9 +1690,13 @@ export function registerSketch({ gateway, users }: Deps, opts: SketchOptions = {
       case "f-guess":
         fakeFinish(room, { caught: true, guessed: false });
         break;
+      case "f-pick":
+        fakeAutoPick(room);
+        break;
       case "f-result": {
         const m = st.m as FakeState;
-        if (m.game >= m.games || inGame(room, m.order).length < MODES.fake.min) endGame(room);
+        const here = inGame(room, m.qm ? [...m.order, m.qm] : m.order).length;
+        if (m.game >= m.games || here < MODES.fake.min) endGame(room);
         else startFake(room, Object.keys(room.scores).filter((u) => room.players[u]).sort((a, b) => (room.seen[a] ?? 0) - (room.seen[b] ?? 0)), m.game + 1);
         break;
       }
@@ -1718,7 +1844,7 @@ export function registerSketch({ gateway, users }: Deps, opts: SketchOptions = {
           sheets: r.sheets ?? {},
           oneG: r.oneG ?? "",
           best: r.best ?? null,
-          meta: Object.assign({ mode: "classic" as GameMode, challenge: true, topics: [], custom: [], customOnly: false, laps: FAKE_LAPS }, r.meta),
+          meta: Object.assign({ mode: "classic" as GameMode, challenge: true, topics: [], custom: [], customOnly: false, laps: FAKE_LAPS, qm: false, variant: "normal" as RelayVariant }, r.meta),
         });
       }
       // 시간 안에 안 돌아온 사람은 나간 것으로

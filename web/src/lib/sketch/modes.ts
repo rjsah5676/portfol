@@ -122,4 +122,36 @@ export const MODE_POINTS = {
   fakeWin: 200,
   artistWin: 100,
   fakeVoteRight: 30,
+  /** 출제자: 가짜가 이기면 같이 (원작 「Fake Artist Goes to New York」 규칙) */
+  qmWin: 150,
 } as const;
+
+// ───────────── 가짜 화가: 출제자 ─────────────
+
+/** 출제자를 쓰려면 이만큼 (출제자 + 그리는 사람 3명) */
+export const FAKE_QM_MIN = 4;
+/** 출제자가 제시어를 고르는 시간 */
+export const FAKE_QM_PICK_MS = 25_000;
+
+// ───────────── 그림 릴레이 변형 (갈틱폰 모드에서) ─────────────
+
+export type RelayVariant = "normal" | "memory" | "speed";
+export const RELAY_VARIANTS: Record<RelayVariant, { name: string; emoji: string; desc: string }> = {
+  normal: { name: "기본", emoji: "📞", desc: "앞 사람 것을 보면서 이어 가요" },
+  memory: {
+    name: "기억해서",
+    emoji: "🧠",
+    desc: "앞 사람 그림 · 문장은 몇 초만 보여요. 기억나는 대로!",
+  },
+  speed: { name: "스피드", emoji: "⚡", desc: "모든 단계 시간이 짧아요. 손이 빨라야 해요" },
+};
+export const RELAY_VARIANT_LIST: RelayVariant[] = ["normal", "memory", "speed"];
+/** 기억해서: 앞 사람 것을 보여 주는 시간 */
+export const MEMORY_PEEK_MS = { text: 4_000, sheet: 6_000 } as const;
+/** 스피드: 단계별 시간 */
+export const SPEED_MS = { write: 25_000, draw: 35_000, desc: 25_000 } as const;
+
+// ───────────── 그림 맞히기: 연속 정답 ─────────────
+
+/** 연속으로 맞힌 차례 수 → 추가 점수 (2연속 +10, 3연속 +20, 4연속부터 +30) */
+export const streakBonus = (streak: number) => Math.min(3, Math.max(0, streak - 1)) * 10;

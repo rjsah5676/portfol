@@ -632,6 +632,11 @@ export default function SketchRoom({
         if (k === "b" || k === "p") tools.setTool("pen");
         else if ((k === "f" || k === "g") && challenge !== "oneline") tools.setTool("fill");
         else if (k === "e" && challenge !== "oneline") tools.setTool("eraser");
+        else if (k === "l" && challenge !== "oneline") tools.setTool("line");
+        else if (k === "r" && challenge !== "oneline") tools.setTool("rect");
+        else if (k === "o" && challenge !== "oneline") tools.setTool("ellipse");
+        else if (k === "i" && challenge !== "oneline" && challenge !== "mono")
+          tools.setTool("picker");
         else if (k === "[" || k === "]") {
           const i = WIDTHS.indexOf(width);
           const n =
@@ -794,7 +799,14 @@ export default function SketchRoom({
           >
             {plainName(p.nick)}
           </span>
-          <span className="sk-hand text-[14px] leading-none">{sc}</span>
+          <span className="sk-hand text-[14px] leading-none">
+            {sc}
+            {(state.streak?.[p.uid] ?? 0) >= 2 && meta.mode === "classic" && (
+              <span className="ml-0.5 font-sans text-[10px] font-extrabold text-[#E8590C]">
+                🔥{state.streak[p.uid]}
+              </span>
+            )}
+          </span>
         </li>
       );
     return (
@@ -841,6 +853,14 @@ export default function SketchRoom({
             ) : null}
           </span>
         </span>
+        {(state.streak?.[p.uid] ?? 0) >= 2 && meta.mode === "classic" && (
+          <span
+            title={`${state.streak[p.uid]}번 연속 정답 — 맞힐 때마다 보너스`}
+            className="sk-pop shrink-0 text-[12px] font-extrabold text-[#E8590C]"
+          >
+            🔥{state.streak[p.uid]}
+          </span>
+        )}
         <span className="sk-hand shrink-0 text-[19px] leading-none">{sc}</span>
         {kickVotes(p.uid).length > 0 && (
           <span className="absolute -top-2 right-5">{kickBadge(p.uid)}</span>
@@ -872,6 +892,7 @@ export default function SketchRoom({
       colors={challenge === "mono" ? [MONO_COLOR] : undefined}
       noFill={challenge === "oneline"}
       noEraser={challenge === "oneline"}
+      noShapes={challenge === "oneline"}
       extra={
         challenge ? (
           <span className={`shrink-0 ${compact ? "" : "ml-auto"}`}>
@@ -1247,6 +1268,7 @@ export default function SketchRoom({
       hideInk={blind}
       onStrokeEnd={challenge === "oneline" ? () => setOneDone(state.turnId) : undefined}
       keepOnExit={challenge === "oneline"}
+      onPick={tools.pickColor}
     >
       {blind && (
         <div className="pointer-events-none absolute inset-0 z-[3] flex flex-col items-center justify-center gap-1 rounded-[3px] bg-[repeating-linear-gradient(45deg,#fdf6e3_0_14px,#f6ead0_14px_28px)]">

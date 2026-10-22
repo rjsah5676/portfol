@@ -615,6 +615,12 @@ const ICONS = {
   refresh:
     "M20 11 C19 7 16 4 12 4 C7.5 4 4 7.5 4 12 C4 16.5 7.5 20 12 20 C15 20 17.5 18.5 19 16 M20 4 V11 H13",
   kick: "M6 6 L18 18 M18 6 L6 18",
+  line: "M5 19 L19 5 M5 19 L5 19.01 M19 5 L19 5.01",
+  rect: "M4 6 H20 V18 H4 Z",
+  ellipse: "M12 5 C17 5 21 8 21 12 C21 16 17 19 12 19 C7 19 3 16 3 12 C3 8 7 5 12 5 Z",
+  shapes: "M3 21 L8.5 11 L14 21 Z M13 4 H21 V12 H13 Z",
+  picker:
+    "M14.5 4.5 C16 3 18 3 19.5 4.5 C21 6 21 8 19.5 9.5 L17.5 11.5 L12.5 6.5 Z M15 9 L6 18 L4 20 M13 7 L17 11 M6 18 L4.5 16.5",
 } as const;
 export type IconName = keyof typeof ICONS;
 

@@ -17,16 +17,30 @@ export function useTools() {
   const setColor = (c: string) => {
     playSfx("sfx-color");
     setColorRaw(c);
-    if (tool === "eraser") setToolRaw("pen");
+    if (tool === "eraser" || tool === "picker") setToolRaw("pen");
+  };
+  /** 스포이트로 집은 색 — 집고 나면 바로 펜으로 */
+  const pickColor = (c: string) => {
+    playSfx("sfx-color");
+    setColorRaw(c);
+    setToolRaw("pen");
   };
   const setWidth = (w: number) => {
     playSfx("sfx-tool");
     setWidthRaw(w);
-    if (tool === "fill") setToolRaw("pen");
+    if (tool === "fill" || tool === "picker") setToolRaw("pen");
   };
   const resetTool = useCallback(() => setToolRaw("pen"), []);
-  return { tool, color, width, setTool, setColor, setWidth, resetTool };
+  return { tool, color, width, setTool, setColor, setWidth, pickColor, resetTool };
 }
+
+/** 도형 · 스포이트 (팝업 하나로 묶어 도구 모음이 넘치지 않게) */
+const MORE_TOOLS = [
+  ["line", "직선", "line", "L"],
+  ["rect", "네모", "rect", "R"],
+  ["ellipse", "동그라미", "ellipse", "O"],
+  ["picker", "스포이트", "picker", "I"],
+] as const;
 export type Tools = ReturnType<typeof useTools>;
 
 /**
@@ -43,6 +57,7 @@ export default function Toolbar({
   noFill,
   noEraser,
   noUndo,
+  noShapes,
   extra,
 }: {
   compact: boolean;
@@ -52,9 +67,14 @@ export default function Toolbar({
   noFill?: boolean;
   noEraser?: boolean;
   noUndo?: boolean;
+  /** 도형 · 스포이트 숨김 */
+  noShapes?: boolean;
   extra?: ReactNode;
 }) {
   const { tool, color, width } = t;
+  const more = noShapes ? [] : MORE_TOOLS.filter(([k]) => !(k === "picker" && colors.length <= 1));
+  const moreOn = more.find(([k]) => k === tool);
+  const [open, setOpen] = useState(false);
   const tools = (
     [
       ["pen", "펜", "pen", "B"],
@@ -111,7 +131,7 @@ export default function Toolbar({
             </button>
           ))}
         </div>
-        {tools.length > 1 && (
+        {(tools.length > 1 || more.length > 0) && (
           <div className="flex items-center gap-1">
             {tools.map(([k, label, icon, key]) => (
               <button
@@ -126,6 +146,52 @@ export default function Toolbar({
                 {label}
               </button>
             ))}
+            {more.length > 0 && (
+              <div className="relative">
+                <button
+                  type="button"
+                  data-on={!!moreOn}
+                  aria-expanded={open}
+                  onClick={() => {
+                    playSfx("sfx-click");
+                    setOpen((o) => !o);
+                  }}
+                  title="도형 · 스포이트 (L · R · O · I)"
+                  className={`sk-tool ${compact ? "h-10 w-10 text-[10.5px]" : "h-12 w-12 text-[13px]"}`}
+                >
+                  <Icon name={moreOn ? moreOn[2] : "shapes"} size={compact ? 18 : 20} />
+                  {moreOn ? moreOn[1] : "도형"}
+                </button>
+                {open && (
+                  <>
+                    <button
+                      type="button"
+                      aria-label="닫기"
+                      className="fixed inset-0 z-[30] cursor-default"
+                      onClick={() => setOpen(false)}
+                    />
+                    <div className="sk-card absolute right-0 bottom-full z-[31] mb-2 flex gap-1 p-1.5">
+                      {more.map(([k, label, icon, key]) => (
+                        <button
+                          key={k}
+                          type="button"
+                          data-on={tool === k}
+                          onClick={() => {
+                            t.setTool(k);
+                            setOpen(false);
+                          }}
+                          title={`${label} (${key})`}
+                          className="sk-tool h-12 w-14 text-[12px]"
+                        >
+                          <Icon name={icon} size={20} />
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
           </div>
         )}
         {!noUndo && (

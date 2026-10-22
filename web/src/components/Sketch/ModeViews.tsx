@@ -9,12 +9,23 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { plainName } from "@/components/Nick";
 import { avatarOf } from "@/lib/sketch/assets";
-import { FAKE_LAPS, LIKE_EMOJI, MODE_MS, MODES } from "@/lib/sketch/modes";
+import {
+  FAKE_LAPS,
+  FAKE_QM_PICK_MS,
+  LIKE_EMOJI,
+  MEMORY_PEEK_MS,
+  MODE_MS,
+  MODE_POINTS,
+  MODES,
+  RELAY_VARIANTS,
+  SPEED_MS,
+} from "@/lib/sketch/modes";
 import { randomStarter } from "@/lib/sketch/prompts";
 import { playSfx } from "@/lib/sketch/sfx";
 import {
   getSheet,
   likeDrawing,
+  qmPick,
   submitSheet,
   submitText,
   subscribeAlbum,
@@ -40,7 +51,15 @@ import SketchCanvas, {
   type CanvasApi,
   type LocalSource,
 } from "./SketchCanvas";
-import { albumImage, downloadCanvas, galleryImage, safeName, type AlbumPage } from "./saveImage";
+import {
+  albumGif,
+  albumImage,
+  downloadBlob,
+  downloadCanvas,
+  galleryImage,
+  safeName,
+  type AlbumPage,
+} from "./saveImage";
 import Toolbar, { useTools } from "./Toolbar";
 import { tap } from "./stage";
 
@@ -53,6 +72,7 @@ export const isModePhase = (phase: string) => /^[flr]-/.test(phase);
 export function phaseTotal(room: Room): number {
   const p = room.state.phase;
   const draw = room.meta.drawTime * 1000;
+  const speed = room.meta.variant === "speed";
   return (
     (
       {
@@ -60,9 +80,10 @@ export function phaseTotal(room: Room): number {
         "f-vote": MODE_MS.fakeVote,
         "f-guess": MODE_MS.fakeGuess,
         "f-result": MODE_MS.fakeResult,
-        "r-write": MODE_MS.relayWrite,
-        "r-draw": draw,
-        "r-desc": MODE_MS.relayDesc,
+        "f-pick": FAKE_QM_PICK_MS,
+        "r-write": speed ? SPEED_MS.write : MODE_MS.relayWrite,
+        "r-draw": speed ? SPEED_MS.draw : draw,
+        "r-desc": speed ? SPEED_MS.desc : MODE_MS.relayDesc,
         "r-album":
           room.state.m?.kind === "relay" &&
           (room.state.m.album?.page ?? 0) >= room.state.m.steps - 1
@@ -364,6 +385,7 @@ function DrawPad({
           color={t.color}
           width={t.width}
           apiRef={apiRef}
+          onPick={t.pickColor}
         />
       </div>
       <Toolbar compact={v} t={t} apiRef={apiRef} />
@@ -405,6 +427,15 @@ export function modeStatus(room: Room, uid: string, secret: AnySecret, big: bool
         주제 · {m.topic}
       </span>
     );
+    if (st.phase === "f-pick")
+      return (
+        <span className="sk-hand truncate" style={{ fontSize: fs }}>
+          🎩{" "}
+          {s?.qm
+            ? "출제자! 제시어를 골라 주세요"
+            : `${nameOf(room, m.qm ?? "")}님이 제시어 고르는 중…`}
+        </span>
+      );
     if (st.phase === "f-result")
       return (
         <span className="flex items-center gap-2">
@@ -417,7 +448,11 @@ export function modeStatus(room: Room, uid: string, secret: AnySecret, big: bool
     return (
       <span className="flex min-w-0 items-center gap-2">
         {topic}
-        {s?.faker ? (
+        {s?.qm ? (
+          <span className="sk-hand truncate" style={{ fontSize: fs }}>
+            🎩 출제자 · 「{s.word}」
+          </span>
+        ) : s?.faker ? (
           <span className="sk-hand truncate text-[var(--coral)]" style={{ fontSize: fs }}>
             🕵️ 내가 가짜 화가! 들키지 마요
           </span>
@@ -519,9 +554,15 @@ function FakeCenter({
   const inGame = m.order.includes(uid);
   const isFaker = !!secret?.faker;
 
-  // 순서 · 색 줄
+  // 순서 · 색 줄 (출제자가 있으면 맨 앞에 🎩)
   const orderRow = (
     <div className="flex flex-wrap items-center justify-center gap-1.5">
+      {m.qm && (
+        <span className="flex items-center gap-1 rounded-full border-2 border-dashed border-[var(--ink)] bg-white/80 py-0.5 pr-2 pl-0.5 text-[12px] font-bold">
+          <Avatar idx={avatarOf(m.qm)} size={22} />
+          🎩 <span className="max-w-[5.5em] truncate">{nameOf(room, m.qm)}</span>
+        </span>
+      )}
       {m.order.map((u) => {
         const now = st.phase === "f-draw" && m.order[m.at % m.order.length] === u;
         return (
@@ -542,7 +583,16 @@ function FakeCenter({
   );
 
   let below: ReactNode = null;
-  if (st.phase === "f-draw")
+  if (st.phase === "f-draw" && secret?.qm)
+    below = (
+      <Note tone="sun">
+        🎩 나는 출제자 — 그리진 않고 지켜봐요. 가짜가 이기면 나도 +{MODE_POINTS.qmWin}
+        <span className="ml-auto shrink-0 text-[12px] text-[var(--ink2)]">
+          {m.at + 1}/{total}획
+        </span>
+      </Note>
+    );
+  else if (st.phase === "f-draw")
     below = myTurn ? (
       <Toolbar
         compact={v}
@@ -552,6 +602,7 @@ function FakeCenter({
         noFill
         noEraser
         noUndo
+        noShapes
         extra={
           <span className="flex min-w-0 flex-1 items-center gap-2 text-[14px] font-bold">
             <span
@@ -651,7 +702,27 @@ function FakeCenter({
 
   // 결과 덮개
   let overlay: ReactNode = null;
-  if (st.phase === "f-result") {
+  if (st.phase === "f-pick")
+    overlay = (
+      <div className="sk-overlay sk-scroll overflow-y-auto">
+        {secret?.qm ? (
+          <QmPicker room={room} choices={secret.choices ?? []} v={v} />
+        ) : (
+          <div className="flex flex-col items-center gap-2 text-center">
+            <Avatar idx={avatarOf(m.qm ?? "")} size={v ? 48 : 64} />
+            <p className="sk-hand text-[26px] leading-tight">
+              🎩 출제자 {nameOf(room, m.qm ?? "")}님이
+              <br />
+              제시어를 고르는 중…
+            </p>
+            <p className="text-[12.5px] font-bold text-[var(--ink2)]">
+              출제자는 안 그리고, 가짜가 이기면 같이 점수를 받아요
+            </p>
+          </div>
+        )}
+      </div>
+    );
+  else if (st.phase === "f-result") {
     const votes = m.votes ?? {};
     const count = (u: string) => Object.values(votes).filter((x) => x === u).length;
     const won = m.win === "fake";
@@ -675,6 +746,12 @@ function FakeCenter({
               <div className="sk-hand text-[24px] leading-none">{nameOf(room, m.faker ?? "")}</div>
             </div>
           </div>
+          {m.qm && (
+            <p className="text-[12.5px] font-bold text-[var(--ink2)]">
+              🎩 출제자 {nameOf(room, m.qm)}
+              {won && <span className="text-[var(--coral)]"> · 가짜 편 +{MODE_POINTS.qmWin}</span>}
+            </p>
+          )}
           <p className="text-[14px] font-bold">
             제시어는 <span className="sk-hand text-[24px] text-[var(--grape)]">「{m.word}」</span>
             {m.guess !== undefined && (
@@ -733,6 +810,110 @@ function FakeCenter({
           <LikeButton room={room} uid={uid} likeKey={st.turnId} author="" />
         </div>
       )}
+    </div>
+  );
+}
+
+/** 출제자: 후보 3개 중 고르기 또는 직접 쓰기 (가짜가 눈치 못 채게 애매한 걸 고르면 유리) */
+function QmPicker({
+  room,
+  choices,
+  v,
+}: {
+  room: Room;
+  choices: { topic: string; word: string }[];
+  v: boolean;
+}) {
+  const st = room.state;
+  const [own, setOwn] = useState(false);
+  const [word, setWord] = useState("");
+  const [topic, setTopic] = useState("");
+  const [err, setErr] = useState("");
+  const send = (pick: { index: number } | { word: string; topic: string }) => {
+    playSfx("sfx-pick");
+    setErr("");
+    qmPick(room.id, st.step, pick).catch((e: unknown) => {
+      playSfx("sfx-error");
+      setErr(e instanceof Error ? e.message : "다시 해 주세요");
+    });
+  };
+  return (
+    <div className="flex w-full max-w-[520px] flex-col items-center gap-2.5 text-center">
+      <p className="sk-hand text-[26px] leading-none">🎩 제시어를 골라 주세요</p>
+      <p className="text-[12.5px] font-bold text-[var(--ink2)]">
+        모두에게 주제만 보이고, 가짜 화가만 제시어를 몰라요. 가짜가 이기면 나도 +{MODE_POINTS.qmWin}
+        !
+      </p>
+      {!own ? (
+        <>
+          <div className={`grid w-full gap-2 ${v ? "grid-cols-1" : "grid-cols-3"}`}>
+            {choices.map((c, i) => (
+              <button
+                key={c.word}
+                type="button"
+                onClick={() => send({ index: i })}
+                className="sk-btn flex-col gap-1 px-2 py-3"
+              >
+                <span className="rounded-full border-2 border-[var(--ink)] bg-[var(--sky)] px-2 py-0.5 text-[11.5px] font-extrabold text-white">
+                  주제 · {c.topic}
+                </span>
+                <span className="sk-hand text-[26px] leading-none">{c.word}</span>
+              </button>
+            ))}
+          </div>
+          <button
+            type="button"
+            onClick={tap(() => setOwn(true), "sfx-click")}
+            className="text-[13px] font-bold text-[var(--coral)] underline underline-offset-2"
+          >
+            ✍️ 직접 쓸래요
+          </button>
+        </>
+      ) : (
+        <div className="sk-card-soft flex w-full flex-col gap-2 px-3 py-3 text-left">
+          <label className="text-[12.5px] font-bold">
+            주제 힌트 (모두에게 보여요)
+            <input
+              value={topic}
+              maxLength={12}
+              onChange={(e) => setTopic(e.target.value)}
+              placeholder="예: 동물원"
+              className="sk-input mt-1 w-full text-[15px]"
+            />
+          </label>
+          <label className="text-[12.5px] font-bold">
+            제시어 (가짜는 몰라요)
+            <input
+              value={word}
+              maxLength={20}
+              onChange={(e) => setWord(e.target.value)}
+              placeholder="예: 기린"
+              className="sk-input mt-1 w-full text-[15px]"
+            />
+          </label>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={tap(() => setOwn(false), "sfx-click")}
+              className="sk-btn px-3 text-[14px]"
+            >
+              ← 후보 보기
+            </button>
+            <button
+              type="button"
+              disabled={!word.trim() || !topic.trim()}
+              onClick={() => send({ word: word.trim(), topic: topic.trim() })}
+              className="sk-btn sk-btn-coral ml-auto px-4 text-[16px]"
+            >
+              이걸로!
+            </button>
+          </div>
+        </div>
+      )}
+      {err && <p className="text-[12.5px] font-bold text-[var(--coral)]">{err}</p>}
+      <p className="text-[11.5px] text-[var(--ink3)]">
+        시간 안에 안 고르면 첫 번째 후보로 정해져요
+      </p>
     </div>
   );
 }
@@ -809,6 +990,8 @@ function RelayCenter({
       </div>
     );
 
+  // 🧠 기억해서: 앞 사람 것은 몇 초만 보여 주고 가림 (갈틱폰 「카피」처럼)
+  const memory = room.meta.variant === "memory";
   if (secret.task === "draw")
     return (
       <DrawPad
@@ -818,16 +1001,20 @@ function RelayCenter({
         v={v}
         remaining={remaining}
         head={
-          <Note tone="sun">
-            ✏️ 이 문장을 그려요: 「<b className="break-keep">{secret.prev?.text ?? "?"}</b>」
-          </Note>
+          <Peek key={st.step} on={memory} ms={MEMORY_PEEK_MS.text}>
+            <Note tone="sun">
+              ✏️ 이 문장을 그려요: 「<b className="break-keep">{secret.prev?.text ?? "?"}</b>」
+            </Note>
+          </Peek>
         }
       />
     );
 
   return (
     <div className="flex w-full flex-col gap-2">
-      <SheetView id={`desc:${st.step}`} strokes={prevSheet} />
+      <Peek key={st.step} on={memory} ms={MEMORY_PEEK_MS.sheet} big>
+        <SheetView id={`desc:${st.step}`} strokes={prevSheet} />
+      </Peek>
       <div className="sk-card-soft flex flex-col gap-1.5 px-3 py-2.5">
         <p className="text-[13px] font-bold text-[var(--ink2)]">
           이 그림을 보고 어떤 장면인지 한 문장으로 써요
@@ -839,6 +1026,58 @@ function RelayCenter({
           onSubmit={(x) => submitText(room.id, st.step, x)}
         />
       </div>
+    </div>
+  );
+}
+
+/**
+ * 🧠 기억해서 그리기: ms 동안만 보여 주고 덮음 (남은 초를 띄움). on 이 아니면 그대로.
+ * 단계마다 key 를 바꿔 달아서 새로 셈.
+ */
+function Peek({
+  on,
+  ms,
+  big = false,
+  children,
+}: {
+  on: boolean;
+  ms: number;
+  big?: boolean;
+  children: ReactNode;
+}) {
+  const [left, setLeft] = useState(ms);
+  useEffect(() => {
+    if (!on) return;
+    const t0 = Date.now();
+    const t = setInterval(() => {
+      const l = Math.max(0, ms - (Date.now() - t0));
+      setLeft(l);
+      if (!l) {
+        clearInterval(t);
+        playSfx("sfx-page");
+      }
+    }, 200);
+    return () => clearInterval(t);
+  }, [on, ms]);
+  if (!on) return <>{children}</>;
+  const hidden = left <= 0;
+  return (
+    <div className="relative">
+      <div className={hidden ? "invisible" : ""}>{children}</div>
+      {hidden ? (
+        <div
+          className={`absolute inset-0 z-[6] flex items-center justify-center rounded-[10px] border-[3px] border-dashed border-[var(--ink)] bg-[#FFF4C2] ${big ? "flex-col gap-1" : "gap-2"}`}
+        >
+          <span className={big ? "text-[44px] leading-none" : "text-[20px]"}>🧠</span>
+          <span className={`sk-hand leading-none ${big ? "text-[26px]" : "text-[18px]"}`}>
+            기억나는 대로!
+          </span>
+        </div>
+      ) : (
+        <span className="absolute top-1.5 right-1.5 z-[6] rounded-full border-2 border-[var(--ink)] bg-white px-2 py-0.5 text-[12px] font-extrabold">
+          👀 {Math.ceil(left / 1000)}초
+        </span>
+      )}
     </div>
   );
 }
@@ -1095,7 +1334,12 @@ function Album({
           ))}
         </span>
         {/* 다 본 이야기는 이미지 한 장으로 저장 (갈틱폰처럼 공유용) */}
-        {last && entries.length > 0 && <SaveStoryButton room={room} entries={entries} />}
+        {last && entries.length > 0 && (
+          <>
+            <SaveStoryButton room={room} entries={entries} />
+            <SaveStoryButton room={room} entries={entries} kind="gif" />
+          </>
+        )}
         {isLeader ? (
           <button
             type="button"
@@ -1155,8 +1399,8 @@ function BigSheet({ roomId, sheetKey, step }: { roomId: string; sheetKey: string
   return <SheetView id={`big:${sheetKey}`} strokes={strokes} />;
 }
 
-/** 릴레이 한 줄을 이미지로 */
-async function saveStory(room: Room, entries: RelayEntry[]) {
+/** 릴레이 한 줄을 이미지(png) 또는 움직이는 GIF 로 */
+async function saveStory(room: Room, entries: RelayEntry[], kind: "png" | "gif" = "png") {
   const pages: AlbumPage[] = await Promise.all(
     entries.filter(Boolean).map(async (e, i) => ({
       name: nameOf(room, e.by),
@@ -1168,26 +1412,30 @@ async function saveStory(room: Room, entries: RelayEntry[]) {
   const lastText = [...entries].reverse().find((e) => e?.text && e !== first);
   const rate = first?.text && lastText?.text ? changeRate(first.text, lastText.text) : null;
   const starter = nameOf(room, first?.by ?? "");
-  const cv = await albumImage({
+  const opts = {
     title: `${starter}의 이야기`,
     pages,
     compare:
       rate !== null
         ? { first: first.text!, last: lastText!.text!, rate, label: changeLabel(rate) }
         : null,
-  });
-  downloadCanvas(cv, `doodle-party_${safeName(starter)}의_이야기.png`);
+  };
+  const file = `doodle-party_${safeName(starter)}의_이야기`;
+  if (kind === "gif") downloadBlob(await albumGif(opts), `${file}.gif`);
+  else downloadCanvas(await albumImage(opts), `${file}.png`);
 }
 
 function SaveStoryButton({
   room,
   entries,
-  label = "💾 저장",
+  label,
+  kind = "png",
   className = "",
 }: {
   room: Room;
   entries: RelayEntry[];
   label?: string;
+  kind?: "png" | "gif";
   className?: string;
 }) {
   const [busy, setBusy] = useState(false);
@@ -1195,17 +1443,21 @@ function SaveStoryButton({
     <button
       type="button"
       disabled={busy}
-      title="이 이야기를 이미지 한 장으로 저장"
+      title={
+        kind === "gif"
+          ? "이 이야기를 한 장씩 넘어가는 GIF 로 저장"
+          : "이 이야기를 이미지 한 장으로 저장"
+      }
       onClick={() => {
         playSfx("sfx-click");
         setBusy(true);
-        saveStory(room, entries)
+        saveStory(room, entries, kind)
           .catch(() => playSfx("sfx-error"))
           .finally(() => setBusy(false));
       }}
       className={`sk-btn shrink-0 px-3 text-[15px] ${className}`}
     >
-      {busy ? "만드는 중…" : label}
+      {busy ? "만드는 중…" : (label ?? (kind === "gif" ? "🎞️ GIF" : "💾 저장"))}
     </button>
   );
 }
@@ -1319,16 +1571,26 @@ export function RelayEnd({ room, v }: { room: Room; v: boolean }) {
       </div>
       {album && album.length > 0 && (
         <div className="flex flex-wrap items-center justify-center gap-1.5">
-          <span className="text-[12px] font-bold text-[var(--ink2)]">💾 이야기 저장</span>
+          <span className="text-[12px] font-bold text-[var(--ink2)]">
+            💾 이야기 저장 (사진 · GIF)
+          </span>
           {album.map((chain, c) =>
             chain.length ? (
-              <SaveStoryButton
-                key={c}
-                room={room}
-                entries={chain}
-                label={nameOf(room, chain[0]?.by ?? "")}
-                className="!px-2 !py-1 text-[12.5px]"
-              />
+              <span key={c} className="flex items-center">
+                <SaveStoryButton
+                  room={room}
+                  entries={chain}
+                  label={nameOf(room, chain[0]?.by ?? "")}
+                  className="!rounded-r-none !px-2 !py-1 text-[12.5px]"
+                />
+                <SaveStoryButton
+                  room={room}
+                  entries={chain}
+                  kind="gif"
+                  label="GIF"
+                  className="!rounded-l-none !border-l-0 !px-1.5 !py-1 text-[11.5px]"
+                />
+              </span>
             ) : null
           )}
         </div>
@@ -1488,6 +1750,14 @@ export function ModeHow({ room, v }: { room: Room; v: boolean }) {
     >
       <b className="sk-hand text-[20px] leading-none">
         {info.emoji} {info.name}
+        {room.meta.mode === "relay" && room.meta.variant !== "normal" && (
+          <span className="ml-1.5 text-[16px] text-[var(--coral)]">
+            · {RELAY_VARIANTS[room.meta.variant].emoji} {RELAY_VARIANTS[room.meta.variant].name}
+          </span>
+        )}
+        {room.meta.mode === "fake" && room.meta.qm && (
+          <span className="ml-1.5 text-[16px] text-[var(--coral)]">· 🎩 출제자</span>
+        )}
       </b>
       {!v &&
         info.how.map((h) => (
@@ -1495,6 +1765,17 @@ export function ModeHow({ room, v }: { room: Room; v: boolean }) {
             · {h}
           </p>
         ))}
+      {room.meta.mode === "relay" && room.meta.variant !== "normal" && (
+        <p className="text-[12.5px] leading-snug font-bold">
+          · {RELAY_VARIANTS[room.meta.variant].desc}
+        </p>
+      )}
+      {room.meta.mode === "fake" && room.meta.qm && (
+        <p className="text-[12.5px] leading-snug font-bold">
+          · 판마다 돌아가며 한 명이 출제자 — 제시어를 직접 고르고 안 그려요. 가짜가 이기면 출제자도
+          점수!
+        </p>
+      )}
       {v && <p className="text-[12.5px]">{info.short}</p>}
     </div>
   );

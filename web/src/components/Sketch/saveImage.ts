@@ -6,6 +6,7 @@
  */
 import type { Stroke } from "@/realtime/sketch";
 import { renderStrokes } from "./SketchCanvas";
+import { encodeGif, type GifFrame } from "./gif";
 
 const INK = "#2B2D42";
 const PAPER = "#FFFBEF";
@@ -238,6 +239,129 @@ export async function albumImage(opts: {
   }
   footer(c, W, H - 24);
   return cv;
+}
+
+/** 아무 파일이나 내려받기 */
+export function downloadBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+}
+
+/**
+ * 릴레이 한 줄 → 움직이는 GIF (갈틱폰 GIF 처럼 한 장씩 넘어감).
+ * 그림은 그려지는 순서대로 몇 장에 나눠 차오르고, 마지막엔 처음 ↔ 끝 비교.
+ */
+export async function albumGif(opts: {
+  title: string;
+  pages: AlbumPage[];
+  compare?: { first: string; last: string; rate: number; label: string } | null;
+}): Promise<Blob> {
+  await fontsReady();
+  const W = 560;
+  const H = 520;
+  const DW = 480;
+  const DH = 360;
+  const total = opts.pages.length;
+  const frames: GifFrame[] = [];
+  const base = (head: string, sub?: string) => {
+    const cv = document.createElement("canvas");
+    cv.width = W;
+    cv.height = H;
+    const c = cv.getContext("2d", { willReadFrequently: true })!;
+    c.fillStyle = PAPER;
+    c.fillRect(0, 0, W, H);
+    c.fillStyle = CORAL;
+    c.font = `700 14px ${BODY}`;
+    c.fillText(`📞 ${opts.title}`, 28, 32);
+    c.fillStyle = INK;
+    c.font = `800 18px ${BODY}`;
+    c.fillText(head, 28, 62);
+    if (sub) {
+      const hw = c.measureText(head).width;
+      c.fillStyle = "#9A9DB3";
+      c.font = `700 15px ${BODY}`;
+      c.fillText(` · ${sub}`, 28 + hw, 62);
+    }
+    footer(c, W, H - 16);
+    return { cv, c };
+  };
+  const bubble = (c: CanvasRenderingContext2D, text: string, yellow: boolean) => {
+    let fs = 34;
+    let lines: string[] = [];
+    for (; fs >= 20; fs -= 2) {
+      c.font = `700 ${fs}px ${HAND}`;
+      lines = wrap(c, `「${text}」`, W - 120);
+      if (lines.length * fs * 1.3 <= 300) break;
+    }
+    const lh = fs * 1.3;
+    const bh = lines.length * lh + 44;
+    const y = 90 + (DH - bh) / 2;
+    roundRect(c, 40, y, W - 80, bh, 22, yellow ? "#FFF4C2" : "#FFFFFF");
+    c.fillStyle = INK;
+    c.font = `700 ${fs}px ${HAND}`;
+    c.textAlign = "center";
+    lines.forEach((l, k) => c.fillText(l, W / 2, y + 22 + fs + k * lh));
+    c.textAlign = "left";
+  };
+  opts.pages.forEach((p, i) => {
+    const head = `${i + 1}/${total}  ${p.name}`;
+    if (p.strokes !== undefined) {
+      const strokes = p.strokes ?? [];
+      // 그려지는 모습: 1/4 → 2/4 → 3/4 → 다 그림
+      const cuts = strokes.length > 8 ? [0.25, 0.5, 0.75, 1] : [1];
+      cuts.forEach((f, k) => {
+        const { cv, c } = base(head, p.role);
+        const x = (W - DW) / 2;
+        roundRect(c, x - 3, 85, DW + 6, DH + 6, 6, "#fff");
+        const part = strokes.slice(0, Math.ceil(strokes.length * f));
+        if (part.length) c.drawImage(renderStrokes(part, 0.6), x, 88, DW, DH);
+        frames.push({ canvas: cv, delay: k === cuts.length - 1 ? 2600 : 220 });
+      });
+    } else {
+      const { cv, c } = base(head, p.role);
+      bubble(c, p.text ?? "", i === 0);
+      frames.push({ canvas: cv, delay: 2200 });
+    }
+  });
+  const cmp = opts.compare;
+  if (cmp) {
+    const { cv, c } = base("🔁 처음과 끝");
+    c.font = `700 24px ${HAND}`;
+    const a = wrap(c, `「${cmp.first}」`, W - 100).slice(0, 3);
+    const b = wrap(c, `「${cmp.last}」`, W - 100).slice(0, 3);
+    roundRect(c, 40, 90, W - 80, 340, 22, "#FFFFFF");
+    c.fillStyle = INK;
+    c.textAlign = "center";
+    let y = 140;
+    for (const l of a) {
+      c.fillText(l, W / 2, y);
+      y += 32;
+    }
+    c.fillStyle = "#9A9DB3";
+    c.font = `700 22px ${BODY}`;
+    c.fillText("⬇", W / 2, y + 6);
+    y += 46;
+    c.fillStyle = INK;
+    c.font = `700 24px ${HAND}`;
+    for (const l of b) {
+      c.fillText(l, W / 2, y);
+      y += 32;
+    }
+    c.fillStyle = CORAL;
+    c.font = `700 40px ${HAND}`;
+    c.fillText(`변신율 ${cmp.rate}%`, W / 2, Math.max(y + 40, 360));
+    c.font = `700 24px ${HAND}`;
+    c.fillText(cmp.label, W / 2, Math.max(y + 74, 396));
+    c.textAlign = "left";
+    frames.push({ canvas: cv, delay: 4000 });
+  }
+  return encodeGif(frames);
 }
 
 export interface GalleryCell {

@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { sleep, startTestServer, type TestClient, type TestServer } from "./helpers";
-import { FAKE_LAPS } from "../../web/src/lib/sketch/modes";
+import { FAKE_LAPS, MODE_POINTS, SPEED_MS, streakBonus } from "../../web/src/lib/sketch/modes";
 
 let s: TestServer;
 beforeAll(async () => {
@@ -255,5 +255,126 @@ describe("벤치마크 개선 (2026-10-23)", () => {
     const two = await roomOf(2, { mode: "classic" });
     await two.all[1].rpc("sketch.voteKick", { id: two.id, target: two.all[0].uid });
     expect((await peek(two.id)).players[two.all[0].uid!]).toBeTruthy();
+  });
+});
+
+describe("벤치마크 개선 2차 (2026-10-23)", () => {
+  it("릴레이 스피드: 쓰기 · 그리기 시간이 짧아짐", async () => {
+    const { id, host, all } = await roomOf(3, { mode: "relay", variant: "speed" });
+    await host.rpc("sketch.startGame", { id });
+    let room = await peek(id);
+    expect(room.meta.variant).toBe("speed");
+    expect(room.state.phase).toBe("r-write");
+    expect(room.state.endsAt - Date.now()).toBeLessThanOrEqual(SPEED_MS.write + 50);
+    expect(room.state.endsAt - Date.now()).toBeGreaterThan(SPEED_MS.write - 3000);
+    for (const c of all) await c.rpc("sketch.submitText", { id, step: room.state.step, text: "문장" });
+    room = await peek(id);
+    expect(room.state.phase).toBe("r-draw");
+    expect(room.state.endsAt - Date.now()).toBeLessThanOrEqual(SPEED_MS.draw + 50);
+  });
+
+  it("가짜 화가 출제자: 출제자가 제시어를 고르고, 그리지도 투표하지도 않고, 가짜가 이기면 같이 점수", async () => {
+    const { id, host, all } = await roomOf(4, { mode: "fake", qm: true, laps: 1 });
+    await host.rpc("sketch.startGame", { id });
+    let room = await peek(id);
+    expect(room.state.phase).toBe("f-pick");
+    const qmUid = room.state.m.qm as string;
+    expect(qmUid).toBeTruthy();
+    const qm = byUid(all, qmUid);
+    const sec = (await qm.sub("sketch.secret", { id })).data;
+    expect(sec).toMatchObject({ qm: true });
+    expect(sec.choices).toHaveLength(3);
+    // 출제자가 아니면 못 고름
+    const other = all.find((c) => c !== qm)!;
+    await other.rpc("sketch.qmPick", { id, step: room.state.step, index: 0 });
+    expect((await peek(id)).state.phase).toBe("f-pick");
+    // 직접 쓰기: 주제에 제시어를 그대로 쓰면 거절
+    await expect(qm.rpc("sketch.qmPick", { id, step: room.state.step, word: "고양이", topic: "고양이" })).rejects.toBeTruthy();
+    await qm.rpc("sketch.qmPick", { id, step: room.state.step, index: 1 });
+    room = await peek(id);
+    expect(room.state.phase).toBe("f-draw");
+    expect(room.state.m.topic).toBe(sec.choices[1].topic);
+    expect(room.state.m.order).toHaveLength(3);
+    expect(room.state.m.order).not.toContain(qmUid);
+    const artists = all.filter((c) => c !== qm);
+    const secs = await Promise.all(artists.map(async (c) => ({ c, v: (await c.sub("sketch.secret", { id })).data })));
+    const faker = secs.find((x) => x.v.faker)!.c;
+    expect(secs.filter((x) => !x.v.faker).every((x) => x.v.word === sec.choices[1].word)).toBe(true);
+    // 출제자는 그릴 수 없음
+    await expect(qm.rpc("sketch.addStroke", { id, turn: room.state.turnId, s: stroke("q", true) })).rejects.toMatchObject({ code: "FORBIDDEN" });
+    for (let k = 0; k < 3; k++) {
+      room = await peek(id);
+      await byUid(all, room.state.drawer).rpc("sketch.addStroke", { id, turn: room.state.turnId, s: stroke(`q${k}`, true) });
+    }
+    room = await peek(id);
+    expect(room.state.phase).toBe("f-vote");
+    // 가짜가 아닌 사람에게 표가 몰림 → 가짜 승리 (출제자 표는 안 셈)
+    const [y, z] = artists.filter((c) => c !== faker);
+    await qm.rpc("sketch.vote", { id, step: room.state.step, target: y.uid });
+    await faker.rpc("sketch.vote", { id, step: room.state.step, target: y.uid });
+    await y.rpc("sketch.vote", { id, step: room.state.step, target: z.uid });
+    await z.rpc("sketch.vote", { id, step: room.state.step, target: y.uid });
+    room = await peek(id);
+    expect(room.state.phase).toBe("f-result");
+    expect(room.state.m.win).toBe("fake");
+    expect(room.scores[qmUid].score).toBe(MODE_POINTS.qmWin);
+  });
+
+  it("가짜 화가 출제자: 출제자가 나가면 첫 번째 후보로 자동 시작 · 3명이면 출제자 없이", async () => {
+    const { id, host, all } = await roomOf(4, { mode: "fake", qm: true });
+    await host.rpc("sketch.startGame", { id });
+    let room = await peek(id);
+    const qm = byUid(all, room.state.m.qm);
+    const choices = (await qm.sub("sketch.secret", { id })).data.choices;
+    await qm.rpc("sketch.leave", { id, nick: "x" });
+    room = await peek(id);
+    expect(room.state.phase).toBe("f-draw");
+    expect(room.state.m.topic).toBe(choices[0].topic);
+    const small = await roomOf(3, { mode: "fake", qm: true });
+    await small.host.rpc("sketch.startGame", { id: small.id });
+    const r2 = await peek(small.id);
+    expect(r2.state.phase).toBe("f-draw");
+    expect(r2.state.m.qm).toBeUndefined();
+  });
+
+  it("연속 정답: 두 번 연속 맞히면 보너스, 못 맞힌 차례가 지나면 끊김", async () => {
+    const { id, host, all } = await roomOf(3, { mode: "classic", challenge: false, rounds: 2 });
+    await host.rpc("sketch.startGame", { id });
+    const play = async (word: string, guessers: (drawer: string) => TestClient[]) => {
+      const st = (await peek(id)).state;
+      const drawer = byUid(all, st.drawer);
+      await drawer.rpc("sketch.setChoices", { id, turnId: st.turnId, choices: [{ word, level: 0 }] });
+      await drawer.rpc("sketch.chooseWord", { id, turnId: st.turnId, word, hint: "○", level: 0 });
+      for (const g of guessers(st.drawer)) await drawer.rpc("sketch.markCorrect", { id, guess: { uid: g.uid, nick: "x", turnId: st.turnId } });
+      if ((await peek(id)).state.phase === "drawing") await drawer.rpc("sketch.endTurn", { id, turnId: st.turnId, reveal: word });
+      await host.rpc("sketch.nextTurn", { id, turnId: st.turnId });
+      return st.drawer;
+    };
+    const turns: string[] = [];
+    let ace: TestClient | null = null;
+    // 첫 차례에 그리지 않는 아무나 맞힘 → 다음 차례에도 그 사람이 그리지 않으면 2연속
+    turns.push(
+      await play("사과", (d) => {
+        ace = all.find((c) => c.uid !== d)!;
+        return [ace];
+      })
+    );
+    const a = ace as unknown as TestClient;
+    expect((await peek(id)).state.streak[a.uid!]).toBe(1);
+    let st = (await peek(id)).state;
+    if (st.drawer === a.uid) {
+      // 이번에 ace 가 그리는 차례면 연속은 그대로 유지
+      await play("귤", () => []);
+      expect((await peek(id)).state.streak[a.uid!]).toBe(1);
+      st = (await peek(id)).state;
+    }
+    await play("배", () => [a]);
+    expect((await peek(id)).state.streak[a.uid!]).toBe(2);
+    expect(streakBonus(2)).toBe(10);
+    // ace 가 그리지 않는 차례에 못 맞히면 0
+    st = (await peek(id)).state;
+    if (st.drawer === a.uid) await play("감", () => []);
+    await play("밤", () => []);
+    expect((await peek(id)).state.streak[a.uid!] ?? 0).toBe(0);
   });
 });

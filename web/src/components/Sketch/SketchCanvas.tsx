@@ -118,7 +118,10 @@ export const WIDTHS = [3, 7, 14, 26, 42];
 const BG = "#ffffff";
 const FLUSH_MS = 50;
 
-export type Tool = "pen" | "eraser" | "fill";
+export const SHAPE_TOOLS = ["line", "rect", "ellipse"] as const;
+export type ShapeKind = (typeof SHAPE_TOOLS)[number];
+export type Tool = "pen" | "eraser" | "fill" | "picker" | ShapeKind;
+export const isShape = (t: Tool): t is ShapeKind => (SHAPE_TOOLS as readonly string[]).includes(t);
 
 export interface CanvasApi {
   undo: () => void;
@@ -214,6 +217,61 @@ function drawTails(ctx: CanvasRenderingContext2D, groups: Iterable<Group>) {
   }
 }
 
+const r1 = (v: number) => Math.round(v * 10) / 10;
+
+/**
+ * 도형(선 · 네모 · 동그라미)을 촘촘한 점들로 — 보통 획과 똑같이 보내고 그려도 모양이 그대로 나오게.
+ * 점 간격 ~6px (네모 꼭짓점이 살짝만 둥글어짐)
+ */
+export function shapePoints(kind: ShapeKind, a: Pt, b: Pt): Pt[] {
+  const seg = (p: Pt, q: Pt, out: Pt[]) => {
+    const n = Math.max(1, Math.ceil(Math.hypot(q[0] - p[0], q[1] - p[1]) / 6));
+    for (let i = 1; i <= n; i++)
+      out.push([r1(p[0] + ((q[0] - p[0]) * i) / n), r1(p[1] + ((q[1] - p[1]) * i) / n)]);
+  };
+  if (kind === "line") {
+    const out: Pt[] = [a];
+    seg(a, b, out);
+    return out;
+  }
+  if (kind === "rect") {
+    const c: Pt[] = [a, [b[0], a[1]], b, [a[0], b[1]], a];
+    const out: Pt[] = [a];
+    for (let i = 0; i < 4; i++) seg(c[i], c[i + 1], out);
+    return out;
+  }
+  const cx = (a[0] + b[0]) / 2;
+  const cy = (a[1] + b[1]) / 2;
+  const rx = Math.abs(b[0] - a[0]) / 2;
+  const ry = Math.abs(b[1] - a[1]) / 2;
+  const per = Math.PI * (3 * (rx + ry) - Math.sqrt((3 * rx + ry) * (rx + 3 * ry)));
+  const n = Math.max(16, Math.min(420, Math.ceil(per / 5)));
+  const out: Pt[] = [];
+  for (let i = 0; i <= n; i++) {
+    const t = (i / n) * Math.PI * 2 - Math.PI / 2;
+    out.push([r1(cx + rx * Math.cos(t)), r1(cy + ry * Math.sin(t))]);
+  }
+  return out;
+}
+
+/** Shift: 선은 45° 단위로, 네모 · 동그라미는 정사각 · 정원으로 */
+function constrain(kind: ShapeKind, a: Pt, b: Pt): Pt {
+  const dx = b[0] - a[0];
+  const dy = b[1] - a[1];
+  if (kind === "line") {
+    const ang = Math.round(Math.atan2(dy, dx) / (Math.PI / 4)) * (Math.PI / 4);
+    const len = Math.hypot(dx, dy);
+    return [a[0] + Math.cos(ang) * len, a[1] + Math.sin(ang) * len];
+  }
+  const s = Math.max(Math.abs(dx), Math.abs(dy));
+  return [a[0] + Math.sign(dx || 1) * s, a[1] + Math.sign(dy || 1) * s];
+}
+
+const clampPt = (p: Pt): Pt => [
+  r1(Math.max(0, Math.min(CANVAS_W, p[0]))),
+  r1(Math.max(0, Math.min(CANVAS_H, p[1]))),
+];
+
 const newGroup = (color: string, width: number, pts: Pt[] = []): Group => ({
   pts,
   done: -1,
@@ -228,6 +286,22 @@ const hexToRgb = (hex: string) => {
   const n = parseInt(hex.slice(1), 16);
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 };
+
+/** 스포이트: 크레용 색과 거의 같으면 그 크레용으로 (선 가장자리의 섞인 픽셀 때문에 애매한 색이 잡히지 않게) */
+function nearestColor(r: number, g: number, b: number): string {
+  let best = "";
+  let bd = Infinity;
+  for (const c of COLORS) {
+    const [cr, cg, cb] = hexToRgb(c);
+    const d = Math.abs(cr - r) + Math.abs(cg - g) + Math.abs(cb - b);
+    if (d < bd) {
+      bd = d;
+      best = c;
+    }
+  }
+  if (bd <= 36) return best;
+  return `#${[r, g, b].map((v) => v.toString(16).padStart(2, "0")).join("")}`.toUpperCase();
+}
 
 /** 페인트통: 비슷한 색(허용 오차) 영역을 채움 — 경계의 안티앨리어싱 픽셀까지 먹도록 */
 function floodFill(
@@ -327,6 +401,7 @@ export default function SketchCanvas({
   onStrokeEnd,
   hideInk,
   keepOnExit,
+  onPick,
   children,
 }: {
   /** 그림 조각이 오가는 곳 (없으면 빈 도화지) */
@@ -346,6 +421,8 @@ export default function SketchCanvas({
    * 밖에 있는 동안은 가장자리에서 멈췄다가 다시 들어오면 같은 획으로 이어 그림
    */
   keepOnExit?: boolean;
+  /** 스포이트로 도화지에서 색을 집었을 때 */
+  onPick?: (color: string) => void;
   /** 도화지 위에 덮을 것 (안내 · 도장) */
   children?: React.ReactNode;
 }) {
@@ -368,11 +445,32 @@ export default function SketchCanvas({
     return c;
   }, []);
 
+  /** 그리는 중인 도형 (손을 떼기 전까지는 위 레이어에 미리보기만) */
+  const shapeRef = useRef<{
+    g: string;
+    kind: ShapeKind;
+    a: Pt;
+    b: Pt;
+    color: string;
+    width: number;
+  } | null>(null);
+
   const tails = useCallback(() => {
     const c = tailRef.current?.getContext("2d") ?? null;
     if (!c) return;
     c.setTransform(SCALE, 0, 0, SCALE, 0, 0);
     drawTails(c, groupsRef.current.values());
+    const s = shapeRef.current;
+    if (s) {
+      const pts = shapePoints(s.kind, s.a, s.b);
+      c.strokeStyle = s.color;
+      c.fillStyle = s.color;
+      c.lineWidth = s.width;
+      c.beginPath();
+      c.moveTo(pts[0][0], pts[0][1]);
+      for (const p of pts.slice(1)) c.lineTo(p[0], p[1]);
+      c.stroke();
+    }
   }, []);
 
   const clearCanvas = useCallback(() => {
@@ -469,6 +567,7 @@ export default function SketchCanvas({
     groupsRef.current = new Map();
     localRef.current = new Set();
     lastKeyRef.current = "";
+    shapeRef.current = null;
     clearCanvas();
     tails();
     const src = sourceRef.current;
@@ -548,9 +647,30 @@ export default function SketchCanvas({
       // 한 획만 그을 수 있을 땐 새 획을 시작하지 않음 (한붓그리기 잠금이 풀리던 것)
       if (keepOnExit) return;
     }
+    if (shapeRef.current) return;
     const pt = toCanvas(e.clientX, e.clientY);
+    if (tool === "picker") {
+      const c = canvasRef.current?.getContext("2d", { willReadFrequently: true });
+      if (!c) return;
+      const x = Math.max(0, Math.min(PW - 1, Math.floor(pt[0] * SCALE)));
+      const y = Math.max(0, Math.min(PH - 1, Math.floor(pt[1] * SCALE)));
+      const [r, gg, b] = c.getImageData(x, y, 1, 1).data;
+      onPick?.(nearestColor(r, gg, b));
+      return;
+    }
     const g = groupId();
     localRef.current.add(g);
+    if (isShape(tool)) {
+      e.currentTarget.setPointerCapture(e.pointerId);
+      activeId.current = e.pointerId;
+      document.addEventListener("touchmove", holdPage, { passive: false });
+      window.addEventListener("pointerup", upAnywhere);
+      window.addEventListener("pointercancel", upAnywhere);
+      const a = clampPt(pt);
+      shapeRef.current = { g, kind: tool, a, b: a, color, width };
+      tails();
+      return;
+    }
     if (tool === "fill") {
       playSfx("sfx-fill");
       const c = ctx();
@@ -585,7 +705,7 @@ export default function SketchCanvas({
   };
 
   const onMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    if (canDraw && tool !== "fill" && e.pointerType === "mouse") {
+    if (canDraw && tool !== "fill" && tool !== "picker" && e.pointerType === "mouse") {
       const rect = e.currentTarget.getBoundingClientRect();
       const w = tool === "eraser" ? Math.max(width, 16) : width;
       // 무대가 transform 으로 줄어 있어도 맞게: 화면 크기 비율로 계산 후 부모 기준 좌표(offset)로
@@ -595,6 +715,17 @@ export default function SketchCanvas({
         y: (e.clientY - rect.top) * k,
         d: (w * e.currentTarget.offsetWidth) / CANVAS_W,
       });
+    }
+    const s = shapeRef.current;
+    if (s && e.pointerId === activeId.current) {
+      if (e.pointerType === "mouse" && e.buttons === 0) {
+        endStroke();
+        return;
+      }
+      const raw = toCanvas(e.clientX, e.clientY);
+      s.b = clampPt(e.shiftKey ? constrain(s.kind, s.a, raw) : raw);
+      tails();
+      return;
     }
     const d = drawing.current;
     if (!d || e.pointerId !== activeId.current) return;
@@ -649,6 +780,22 @@ export default function SketchCanvas({
     document.removeEventListener("touchmove", holdPage);
     window.removeEventListener("pointerup", upAnywhere);
     window.removeEventListener("pointercancel", upAnywhere);
+    const s = shapeRef.current;
+    if (s) {
+      // 도형 확정: 촘촘한 점들로 된 한 획으로 보냄
+      shapeRef.current = null;
+      const pts = shapePoints(s.kind, s.a, s.b);
+      const grp = newGroup(s.color, s.width, pts);
+      grp.ended = true;
+      groupsRef.current.set(s.g, grp);
+      const c = ctx();
+      if (c) drawIncremental(c, grp);
+      tails();
+      playSfx("sfx-tool");
+      sourceRef.current?.add({ g: s.g, c: s.color, w: s.width, p: encode(pts), e: 1 });
+      onStrokeEnd?.();
+      return;
+    }
     const d = drawing.current;
     if (!d) return;
     if (flushTimer.current) clearInterval(flushTimer.current);
@@ -725,9 +872,11 @@ export default function SketchCanvas({
   const cur = canDraw
     ? tool === "fill"
       ? "cursor-cell"
-      : cursor
-        ? "cursor-none"
-        : "cursor-crosshair"
+      : tool === "picker"
+        ? "cursor-copy"
+        : cursor && !isShape(tool)
+          ? "cursor-none"
+          : "cursor-crosshair"
     : "cursor-default";
   return (
     <div className="sk-canvas-wrap aspect-[4/3] w-full" data-draw={canDraw}>
@@ -750,7 +899,7 @@ export default function SketchCanvas({
         onPointerLeave={() => setCursor(null)}
         className={`absolute inset-0 h-full w-full touch-none select-none ${cur} ${hideInk ? "opacity-0" : ""}`}
       />
-      {canDraw && cursor && tool !== "fill" && (
+      {canDraw && cursor && tool !== "fill" && tool !== "picker" && (
         <span
           className="pointer-events-none absolute z-[4] rounded-full border-2 border-[#2B2D42]/70"
           style={{
