@@ -1489,8 +1489,6 @@ export function mountTown(root: HTMLElement, opts: TownOpts = {}): () => void {
         const badge = s.bot ? `<span class="tt-botb">BOT</span>` : isMe ? `<span class="tt-meb"><i></i></span>` : "";
         const sub = s.bot ? `봇 · ${LV_NAME[r.level]}` : s.away ? "자리 비움" : isHost ? "방장" : "준비 완료";
         h += `<div class="tt-rtag ${isHost ? "host" : ""} ${isMe ? "me" : ""}" data-seat="${i}" style="left:${SEATS[p].tag.x}px;top:${SEATS[p].tag.y}px">${isHost ? `<span class="tt-hostcrown">${CROWN}</span>` : ""}<div class="tt-av" style="${avBg(s.char, s.look)}">${faceHTML(s.char, s.look)}</div><div><div class="tt-nm">${nm(s.nick)}${badge}</div><div class="tt-ready ${s.away ? "away" : ""}">${s.bot || s.away ? "" : "✔ "}${sub}</div></div>${host && !isMe && r.phase === "wait" ? `<button type="button" class="tt-kick" data-seat="${i}" aria-label="내보내기" title="내보내기">✕</button>` : ""}</div>`;
-      } else {
-        h += `<div class="tt-rghost" style="left:${S0.cx - 70}px;top:${S0.bottom - 150}px;z-index:${z}">빈 자리${host ? `<button type="button" class="tt-ghostbot" data-seat="${i}">+ 봇</button>` : ""}</div>`;
       }
     });
     $(".tt-rseats").innerHTML = h;
@@ -1510,7 +1508,6 @@ export function mountTown(root: HTMLElement, opts: TownOpts = {}): () => void {
           };
         }),
     );
-    $$(".tt-ghostbot").forEach((b) => (b.onclick = () => void NET!.rpc("town.addBot", { id: r.id }).then(() => sfx("botJoin"), (e) => toast(errText(e)))));
     // 정보 · 설정
     $(".tt-rpage[data-rp=info] h3").innerHTML = `원카드 <small>${MODES[r.mode].name}</small><small>${MODES[r.mode].hand}장 · ${MODES[r.mode].turnMs / 1000}초</small><small>봇 ${LV_NAME[r.level]}</small>`;
     const set = $(".tt-rset");
@@ -1732,7 +1729,7 @@ export function mountTown(root: HTMLElement, opts: TownOpts = {}): () => void {
       el.classList.toggle("turn", v.turn === pi && !v.over);
       el.classList.toggle("next", !v.over && nextPi(v) === pi && v.turn !== pi);
       el.classList.toggle("out", v.out[pi]);
-      el.querySelector(".tt-ocnt b")!.textContent = v.out[pi] ? "파산 " : String(n);
+      el.querySelector(".tt-ocnt")!.innerHTML = v.out[pi] ? "<b>파산</b>" : `<b>${n}</b>장`;
       el.querySelector<HTMLElement>(".tt-one1")!.hidden = n !== 1 || v.out[pi];
       const s = seatInfo(pi);
       const av = el.querySelector(".tt-av")!;
@@ -1752,6 +1749,8 @@ export function mountTown(root: HTMLElement, opts: TownOpts = {}): () => void {
     sb.textContent = v.free ? "★" : SU[v.suit];
     sb.className = v.free ? "free" : v.suit === 1 || v.suit === 2 ? "red" : "";
     root.querySelector(".tt-suitc span")!.textContent = v.free ? "아무 무늬" : SUIT_NAME[v.suit];
+    // 무늬 표시는 7 로 무늬를 바꿨을 때(바닥 카드와 다를 때) · 아무 무늬나 될 때만 — 평소엔 바닥 카드만 보면 됨
+    root.querySelector<HTMLElement>(".tt-suitc")!.hidden = !(v.free || (top && top.s !== v.suit));
     $(".tt-drawcnt").textContent = String(v.drawLeft);
     root.querySelector(".tt-dir")!.classList.toggle("rev", v.dir < 0);
     // 차례 띠
