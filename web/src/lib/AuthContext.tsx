@@ -52,6 +52,8 @@ interface AuthState {
   /** 회원 프로필 (별명을 정한 뒤) */
   profile: Profile | null;
   admin: boolean;
+  /** 테스터 계정 (서버 TESTER_EMAILS): /admin 에서 「내린 게임」만 들어감 */
+  tester: boolean;
   /** Google 로그인 창을 띄움. 창을 그냥 닫으면 아무 일도 없음 */
   login(): Promise<void>;
   logout(): Promise<void>;
@@ -73,6 +75,7 @@ const AuthContext = createContext<AuthState>({
   account: null,
   profile: null,
   admin: false,
+  tester: false,
   login: noop,
   logout: noop,
   setNick: noop,
@@ -84,6 +87,7 @@ const AuthContext = createContext<AuthState>({
 
 interface Me {
   admin: boolean;
+  tester?: boolean;
   profile: Profile | null;
   points?: number | null;
   /** 오늘 첫 접속이라 출석 포인트가 막 들어왔으면 그 양 */
@@ -198,7 +202,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       auth: true,
       body: { nick },
     });
-    setMe((m) => ({ admin: m?.admin ?? false, profile: res.profile, points: m?.points }));
+    setMe((m) => ({ ...m, admin: m?.admin ?? false, profile: res.profile, points: m?.points }));
     // 가입한 날도 출석 포인트 (가입 전엔 회원이 아니라 못 받았음)
     api<Me>("/api/me", { auth: true })
       .then((r) => {
@@ -214,7 +218,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       auth: true,
       ...(photo && { blob: photo }),
     });
-    setMe((m) => ({ admin: m?.admin ?? false, profile: res.profile, points: m?.points }));
+    setMe((m) => ({ ...m, admin: m?.admin ?? false, profile: res.profile, points: m?.points }));
   }, []);
 
   const setPoints = useCallback((points: number) => setMe((m) => (m ? { ...m, points } : m)), []);
@@ -237,6 +241,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       account,
       profile: account ? (me?.profile ?? null) : null,
       admin,
+      tester: !!account && !!me?.tester,
       login,
       logout,
       setNick,

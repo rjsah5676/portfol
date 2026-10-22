@@ -38,6 +38,7 @@ export function meRouter({ db, auth, users, points }: Deps): Router {
         uid: user.uid,
         anonymous: user.anonymous,
         admin: user.admin,
+        tester: !!user.tester,
         profile,
         points: pts?.points ?? null,
         ...(attended && { attended }),

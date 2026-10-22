@@ -36,7 +36,7 @@ export default function RetiredGames() {
         ))}
       </ul>
       <p className="mt-4 text-[11px] leading-relaxed break-keep text-white/35">
-        메뉴 · 사이트맵 · 검색엔진에는 안 보이고, 관리자 계정으로만 들어가져요. 업적 · 일일 미션은 꺼져 있고, 게임 안의 GP 상점은 그대로라
+        메뉴 · 사이트맵 · 검색엔진에는 안 보이고, 관리자 · 테스터 계정(서버 TESTER_EMAILS)으로만 들어가져요. 업적 · 일일 미션은 꺼져 있고, 게임 안의 GP 상점은 그대로라
         사면 진짜 GP가 빠져요.
       </p>
     </div>

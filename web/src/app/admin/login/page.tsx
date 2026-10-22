@@ -27,7 +27,7 @@ function Card({ children }: { children: React.ReactNode }) {
 
 export default function AdminLoginPage() {
   const router = useRouter();
-  const { user, loading, account, login, logout } = useAuth();
+  const { user, tester, loading, account, login, logout } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -35,8 +35,8 @@ export default function AdminLoginPage() {
 
   // 이미 로그인돼 있으면 대시보드로
   useEffect(() => {
-    if (!loading && user) router.replace("/admin/");
-  }, [loading, user, router]);
+    if (!loading && (user || tester)) router.replace("/admin/");
+  }, [loading, user, tester, router]);
 
   const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -44,7 +44,9 @@ export default function AdminLoginPage() {
     setError("");
     setSubmitting(true);
     try {
-      await signInWithEmailAndPassword(auth, email, password);
+      // 아이디만 적으면 테스터 계정 주소로 (예: njontest → njontest@gunmo.my)
+      const id = email.trim();
+      await signInWithEmailAndPassword(auth, id.includes("@") ? id : `${id}@gunmo.my`, password);
       // 관리자인지는 서버가 확인함 → 확인되면 위의 effect 가 대시보드로 보냄
     } catch (err) {
       console.error(err);
@@ -57,7 +59,7 @@ export default function AdminLoginPage() {
     return <p className="pt-24 text-center font-mono text-sm text-white/40">확인 중…</p>;
   }
 
-  if (user) {
+  if (user || tester) {
     return <p className="pt-24 text-center font-mono text-sm text-white/40">대시보드로 이동 중…</p>;
   }
 
@@ -92,9 +94,10 @@ export default function AdminLoginPage() {
       </button>
       <form onSubmit={handleLogin} className="flex flex-col gap-3">
         <input
-          type="email"
+          type="text"
           autoComplete="username"
-          placeholder="이메일"
+          autoCapitalize="none"
+          placeholder="이메일 또는 아이디"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           className={input}

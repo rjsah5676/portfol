@@ -127,6 +127,12 @@ export class Gateway {
     return this.adminPrefixes.some((p) => name.startsWith(p));
   }
 
+  /** 관리자 또는 테스터(TESTER_EMAILS)만 */
+  private requireAdminOrTester(user: AuthUser | null) {
+    if (!user) throw unauthenticated();
+    if (!user.admin && !user.tester) throw forbidden();
+  }
+
   /** 소켓이 끊겼을 때 (자리 정리 등) */
   onDisconnect(fn: (ctx: Ctx) => MaybePromise<void>) {
     this.disconnectHooks.push(fn);
@@ -293,7 +299,7 @@ export class Gateway {
         const { m, a } = (msg ?? {}) as { m?: unknown; a?: unknown };
         const handler = typeof m === "string" ? this.rpcs.get(m) : undefined;
         if (!handler) throw bad("알 수 없는 요청입니다.");
-        if (this.needsAdmin(m as string)) ctx.requireAdmin();
+        if (this.needsAdmin(m as string)) this.requireAdminOrTester(data.user);
         const why = data.user ? this.blocked(data.user.uid) : null;
         if (why) throw new AppError("BANNED", why, 403);
         return handler(ctx, a);
@@ -305,7 +311,7 @@ export class Gateway {
         const { ch, p } = (msg ?? {}) as { ch?: unknown; p?: unknown };
         const def = typeof ch === "string" ? this.channels.get(ch) : undefined;
         if (!def || typeof ch !== "string") throw bad("알 수 없는 구독입니다.");
-        if (this.needsAdmin(ch)) ctx.requireAdmin();
+        if (this.needsAdmin(ch)) this.requireAdminOrTester(data.user);
         const key = await def.key(ctx, p);
         const cur = data.subs.get(key);
         if (cur) cur.n++;

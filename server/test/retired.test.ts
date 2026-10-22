@@ -26,6 +26,13 @@ describe("내린 게임", () => {
     expect(await code(user.sub("town.lobby"))).toBe("FORBIDDEN");
     expect(await code(user.sub("marble.lobby"))).toBe("FORBIDDEN");
     expect(await code(admin.sub("marble.lobby"))).toBe("OK");
+    // 테스터(TESTER_EMAILS 기본값): 내린 게임은 되지만 관리자 API 는 안 됨
+    const tester = await srv.client("tester-uid", { email: "njontest@gunmo.my" });
+    expect(await code(tester.rpc("rogue.rank", {}))).not.toMatch(/FORBIDDEN|UNAUTHENTICATED/);
+    expect(await code(tester.sub("marble.lobby"))).toBe("OK");
+    const tk = await srv.token("tester-uid", { email: "njontest@gunmo.my" });
+    expect((await srv.http("/api/admin/overview", { token: tk })).status).toBe(403);
+    expect((await srv.http("/api/me", { token: tk })).body).toMatchObject({ admin: false, tester: true });
     // 다른 게임은 그대로
     expect(await code(user.rpc("defense.nope", {}))).toBe("BAD_REQUEST");
   });

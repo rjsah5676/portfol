@@ -7,6 +7,8 @@ export interface AuthUser {
   /** 익명 로그인(게임용)인지 */
   anonymous: boolean;
   admin: boolean;
+  /** 테스터 (TESTER_EMAILS): 내린 게임만 들어갈 수 있음 — 관리자 API 는 안 됨 */
+  tester?: boolean;
   /** 로그인 계정(구글 등)의 프로필 사진 주소 (토큰의 picture, 없으면 null) */
   photo?: string | null;
 }
@@ -21,10 +23,11 @@ export interface Auth {
  * 서비스 계정 키 없이 공개키(JWKS)만으로 서명·발급자·대상 프로젝트를 확인함.
  */
 export function createAuth(
-  cfg: Pick<Config, "firebaseProjectId" | "authJwksUrl" | "adminEmails">,
+  cfg: Pick<Config, "firebaseProjectId" | "authJwksUrl" | "adminEmails"> & Partial<Pick<Config, "testerEmails">>,
   keys: JWTVerifyGetKey = createRemoteJWKSet(new URL(cfg.authJwksUrl))
 ): Auth {
   const admins = new Set(cfg.adminEmails.map((e) => e.toLowerCase()));
+  const testers = new Set((cfg.testerEmails ?? []).map((e) => e.toLowerCase()));
   return {
     async verify(token) {
       const { payload } = await jwtVerify(token, keys, {
@@ -44,6 +47,7 @@ export function createAuth(
         anonymous: provider === "anonymous",
         // 기존 Firestore 규칙(isAdmin)과 같은 기준: 토큰의 이메일이 관리자 이메일인지
         admin: !!email && admins.has(email.toLowerCase()),
+        tester: !!email && provider === "password" && testers.has(email.toLowerCase()),
       };
     },
   };

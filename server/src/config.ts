@@ -16,6 +16,8 @@ export interface Config {
   /** Firebase ID 토큰 서명 검증용 공개키(JWKS) 주소 */
   authJwksUrl: string;
   adminEmails: string[];
+  /** 테스터: /admin 에서 「내린 게임」만 들어가 해 볼 수 있는 계정 (관리자 기능은 없음) */
+  testerEmails: string[];
   /** 관리자 계정이 처음 로그인할 때 자동으로 붙는 별명 (다른 사람은 못 씀) */
   adminNick: string;
   /** 프록시(Caddy·nginx 등) 뒤에 둘 때 X-Forwarded-For를 믿을 단계 수 */
@@ -65,6 +67,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       env.AUTH_JWKS_URL?.trim() ||
       "https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com",
     adminEmails: list(env.ADMIN_EMAILS).length ? list(env.ADMIN_EMAILS) : ["rjsah5676@gmail.com", "cksqls9706@gmail.com"],
+    testerEmails: list(env.TESTER_EMAILS).length ? list(env.TESTER_EMAILS) : ["njontest@gunmo.my"],
     adminNick: env.ADMIN_NICK?.trim() || "이건모",
     trustProxy: Number(env.TRUST_PROXY) || 0,
     webRevalidateUrl: env.WEB_REVALIDATE_URL?.trim() ?? "",

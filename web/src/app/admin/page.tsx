@@ -69,7 +69,7 @@ function SubHeading({ children }: { children: ReactNode }) {
 
 export default function AdminDashboard() {
   const router = useRouter();
-  const { user, loading, logout } = useAuth();
+  const { user, tester, loading, logout } = useAuth();
   const [tab, setTab] = useState<Tab>("overview");
 
   const [inquiries, setInquiries] = useState<Inquiry[]>([]);
@@ -78,8 +78,8 @@ export default function AdminDashboard() {
   const [postsLoaded, setPostsLoaded] = useState(false);
 
   useEffect(() => {
-    if (!loading && !user) router.replace("/admin/login/");
-  }, [loading, user, router]);
+    if (!loading && !user && !tester) router.replace("/admin/login/");
+  }, [loading, user, tester, router]);
 
   // 마운트 후 주소에서 구역 읽기
   useEffect(() => {
@@ -141,6 +141,25 @@ export default function AdminDashboard() {
       {"#site-header,#site-nav,#site-footer,[data-quickmenu]{display:none}#site-top{max-width:80rem}"}
     </style>
   );
+
+  // 테스터 계정 (서버 TESTER_EMAILS): 「내린 게임」만 — 관리자 API 는 서버가 막음
+  if (!loading && !user && tester) {
+    return (
+      <div className="mx-auto max-w-3xl px-4 pt-14 pb-24 sm:px-6">
+        {chrome}
+        <div className="mb-6 flex items-end justify-between gap-3">
+          <div>
+            <div className="font-mono text-sm text-[#8B84FF]">admin · tester</div>
+            <h1 className={`${KR} mt-1 text-2xl font-bold text-white`}>내린 게임</h1>
+          </div>
+          <button type="button" onClick={logout} className={action}>
+            로그아웃
+          </button>
+        </div>
+        <RetiredGames />
+      </div>
+    );
+  }
 
   if (loading || !user) {
     return (
