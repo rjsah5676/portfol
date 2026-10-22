@@ -5,7 +5,7 @@
 
 export type CharKey = "yeonseo" | "amy" | "boss";
 /** 말하는 사람: 스탠딩 있는 캐릭터 + 주인공(me) + 나레이션(narr) + 카메오 */
-export type Who = CharKey | "me" | "narr" | "taeyang" | "jeongmin";
+export type Who = CharKey | "me" | "narr" | "taeyang" | "jeongmin" | "chunhee";
 /** 감정별 대사창: 귓속말 · 흔들림 · 외침 · 대사창 없이(고백 직전 등) · 속마음 */
 export type Mood = "normal" | "whisper" | "shake" | "shout" | "bare" | "think";
 export type Pos = "l" | "c" | "r";
@@ -13,7 +13,22 @@ export type Pos = "l" | "c" | "r";
 export type Dist = 0 | 1 | 2;
 export type BgId = "pub" | "alley" | "vip" | "store" | "arcade" | "room" | "black";
 export type SfxId = "chip" | "deal" | "shuffle" | "click" | "win" | "lose" | "phone" | "heart" | "stamp";
-export type BgmId = "pub" | "vip" | "night";
+export type BgmId =
+  | "pub"
+  | "vip"
+  | "night"
+  | "allin"
+  | "title"
+  | "amy"
+  | "yeonseo"
+  | "rain"
+  | "heart"
+  | "threat"
+  | "spoker"
+  | "confide"
+  | "daily"
+  | "comic"
+  | "badend";
 
 export type Vars = Record<string, number>;
 /** 더하기 효과 (affA: +1 같은 것) */
@@ -89,7 +104,7 @@ export type Step =
   | { t: "dist"; who: CharKey; dist: Dist }
   | { t: "hide"; who?: CharKey }
   | { t: "say"; who: Who; text: string; mood?: Mood; face?: string }
-  | { t: "choice"; prompt?: string; opts: Opt[] }
+  | { t: "choice"; prompt?: string; opts: Opt[]; big?: boolean }
   | { t: "set"; eff: Eff }
   | { t: "goto"; to: string }
   | { t: "when"; cond: Cond; to: string; else?: string }
@@ -99,7 +114,7 @@ export type Step =
   | { t: "mini"; kind: "tell"; key: string; tell: TellSpec }
   | { t: "mini"; kind: "poker"; key: string; poker: PokerSpec }
   | { t: "phone"; from: CharKey; msgs: string[]; replies: Opt[]; ignore: Eff }
-  | { t: "free"; prompt: string; opts: Opt[] }
+  | { t: "free"; prompt: string; opts: Opt[]; big?: boolean }
   | { t: "sfx"; id: SfxId }
   | { t: "bgm"; id: BgmId | null }
   | { t: "ending"; id: EndingId }

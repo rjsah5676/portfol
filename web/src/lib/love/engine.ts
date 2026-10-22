@@ -18,10 +18,10 @@ export interface Display {
 }
 export type Block =
   | { k: "say"; who: Who; text: string; mood: Mood }
-  | { k: "choice"; prompt?: string; opts: Opt[] }
+  | { k: "choice"; prompt?: string; opts: Opt[]; big?: boolean }
   | { k: "mini"; step: Extract<Step, { t: "mini" }> }
   | { k: "phone"; step: Extract<Step, { t: "phone" }> }
-  | { k: "free"; prompt: string; opts: Opt[] }
+  | { k: "free"; prompt: string; opts: Opt[]; big?: boolean }
   | { k: "title"; text: string; sub?: string }
   | { k: "day"; d: number; slot: string }
   | { k: "ending"; id: EndingId }
@@ -137,10 +137,10 @@ export function run(s0: GState): GState {
         return s;
       }
       case "choice":
-        s.block = { k: "choice", prompt: st.prompt, opts: st.opts.filter((o) => !o.cond || check(o.cond, s.vars)) };
+        s.block = { k: "choice", prompt: st.prompt, big: st.big, opts: st.opts.filter((o) => !o.cond || check(o.cond, s.vars)) };
         return s;
       case "free":
-        s.block = { k: "free", prompt: st.prompt, opts: st.opts.filter((o) => !o.cond || check(o.cond, s.vars)) };
+        s.block = { k: "free", prompt: st.prompt, big: st.big, opts: st.opts.filter((o) => !o.cond || check(o.cond, s.vars)) };
         return s;
       case "mini":
         s.block = { k: "mini", step: st };

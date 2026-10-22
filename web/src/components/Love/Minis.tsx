@@ -5,9 +5,9 @@
  *  DealMini — 딜링 근무: 돌아가는 불빛이 금색 자리에 올 때 「딜」
  *  TellMini — 텔 읽기: 히로인 말이 진심인지 블러프인지
  */
-import { useCallback, useEffect, useRef, useState } from "react";
+import { type CSSProperties, useCallback, useEffect, useRef, useState } from "react";
 import type { TellSpec } from "@/lib/love/types";
-import { CARD_BACK, FACE_ICON, NAME } from "@/lib/love/assets";
+import { BG, CARD_BACK, NAME, STAND } from "@/lib/love/assets";
 
 const SEATS = [
   { x: 50, y: 84 },
@@ -139,59 +139,84 @@ export function TellMini({ tell, onDone }: { tell: TellSpec; onDone: (correct: n
 
   const answer = (a: "true" | "bluff") => setRes(a === tell.truth);
 
+  const img = STAND[tell.who as keyof typeof STAND]?.base;
+  const ready = shown >= tell.cues.length;
+
   return (
-    <div className="lv-mini absolute inset-x-0 bottom-0 z-40 flex h-[46%] flex-col items-center justify-start bg-gradient-to-t from-black/90 via-black/80 to-transparent px-[6%] pt-[2%]">
-      <div className="lv-mini-title">텔 읽기</div>
-      <div className="mt-1 text-[clamp(13px,1.7vw,22px)] font-semibold text-white">
-        {NAME[tell.who]} : 「{tell.claim}」
+    <div className="lv-mini lv-sp absolute inset-0 z-40 overflow-hidden" style={{ backgroundImage: BG.pub ? `url("${BG.pub}")` : undefined }}>
+      <div className="absolute inset-0 bg-gradient-to-b from-black/45 via-black/20 to-black/60" />
+      {/* 얼굴 가까이 (거리 2단계와 같은 느낌) */}
+      {img && <img src={img} alt="" className="lv-sp-opp lv-breathe" style={{ height: "235%", top: "-4%" }} />}
+      <div className="absolute left-[2%] top-[3%] flex flex-col items-start gap-[0.5cqw]">
+        <div className="lv-sp-badge text-[1.5cqw]">
+          <span className="mr-[0.6cqw] text-[#ffd27a]">◈</span>텔 읽기
+        </div>
+        <div className="lv-sp-badge px-[1.4cqw] text-[0.95cqw] tracking-[0.3em] text-[#e9d9b0]">{ready ? (res === null ? `◆ ${left}초 ◆` : "◆ 판정 ◆") : "◆ 관찰 중 ◆"}</div>
       </div>
-      <ul className="mt-2 space-y-1 text-[clamp(11px,1.3vw,16px)] text-[#d8cfa8]">
-        {tell.cues.slice(0, shown).map((c) => (
-          <li key={c} className="lv-cue">
-            · {c}
-          </li>
-        ))}
-      </ul>
-      {res === null ? (
-        <div className="mt-3 flex items-center gap-3">
-          <button className="lv-btn-gold" disabled={shown < tell.cues.length} onClick={() => answer("true")}>
-            진심이다
+      {/* 읽기 노트: 단서가 하나씩 쌓임 */}
+      <div className="lv-sp-note absolute right-[2%] top-[3%] w-[30%]">
+        <div className="mb-[0.5cqw] text-[1cqw] font-bold tracking-[0.15em] text-[#ffd27a]">✎ 읽기 노트</div>
+        <ul className="space-y-[0.5cqw] text-[1.15cqw] leading-[1.5] text-white/90">
+          {tell.cues.slice(0, shown).map((c) => (
+            <li key={c} className="lv-cue">
+              · {c}
+            </li>
+          ))}
+          {!ready && <li className="text-white/40">…</li>}
+        </ul>
+      </div>
+      {res !== null && <div className={`lv-sp-result absolute left-1/2 top-[45%] -translate-x-1/2 text-[4cqw] font-black ${res ? "text-[#ffd27a]" : "text-white/80"}`}>{res ? "읽었다" : "모르겠다"}</div>}
+      <div className="lv-sp-box absolute bottom-[3%] left-[2%] w-[44%]">
+        <div className="lv-sp-name">{NAME[tell.who]}</div>
+        <div className="text-[1.4cqw] leading-[1.55] text-white">{tell.claim}</div>
+      </div>
+      <div className="absolute bottom-[4%] right-[2%] flex gap-[0.7cqw]">
+        {res === null ? (
+          <>
+            <button className="lv-sp-btn disabled:opacity-40" disabled={!ready} onClick={() => answer("true")}>
+              <span className="text-[#ff6b7f]">♥</span> 진심이다
+            </button>
+            <button className="lv-sp-btn disabled:opacity-40" disabled={!ready} onClick={() => answer("bluff")}>
+              <span className="text-[#e9d9b0]">♠</span> 블러프다
+            </button>
+          </>
+        ) : (
+          <button className="lv-sp-btn" onClick={() => onDone(res ? 1 : 0)}>
+            <span className="text-[#ffd27a]">▶</span> 계속
           </button>
-          <button className="lv-btn-gold" disabled={shown < tell.cues.length} onClick={() => answer("bluff")}>
-            블러프다
-          </button>
-          {shown >= tell.cues.length && <span className="text-[clamp(11px,1.2vw,14px)] text-white/60">{left}초</span>}
-        </div>
-      ) : (
-        <div className="mt-3 flex flex-col items-center gap-2">
-          <div className={`text-[clamp(14px,2vw,26px)] font-black ${res ? "text-[#ffd27a]" : "text-white/70"}`}>{res ? "읽었다." : "…모르겠다."}</div>
-          <button className="lv-btn-gold" onClick={() => onDone(res ? 1 : 0)}>
-            계속
-          </button>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }
 
 // ================= 스토리 포커 =================
 const SUIT: Record<string, { s: string; red: boolean }> = { s: { s: "♠", red: false }, h: { s: "♥", red: true }, d: { s: "♦", red: true }, c: { s: "♣", red: false } };
-function Card({ c, back, big, dim }: { c?: string; back?: boolean; big?: boolean; dim?: boolean }) {
-  const w = big ? "w-[5.6cqw]" : "w-[4.4cqw]";
+/** 카드 한 장. w = 폭(cqw). 글자 크기도 폭에 맞춰 줄어듦 */
+function Card({ c, back, w = 5.6, dim, style }: { c?: string; back?: boolean; w?: number; dim?: boolean; style?: CSSProperties }) {
+  const box: CSSProperties = { width: `${w}cqw`, ...style };
   if (back || !c)
-    return (
-      <img src={CARD_BACK} alt="" className={`${w} aspect-[5/7] rounded-[0.4cqw] shadow-[0_0.3cqw_0.8cqw_#0009] transition-opacity ${dim ? "opacity-25" : ""}`} />
-    );
+    return <img src={CARD_BACK} alt="" style={box} className={`aspect-[5/7] rounded-[0.4cqw] shadow-[0_0.3cqw_0.8cqw_#0009] transition-opacity ${dim ? "opacity-30" : ""}`} />;
   const r = c[0] === "T" ? "10" : c[0];
   const su = SUIT[c[1]];
   return (
-    <div className={`lv-card ${w} aspect-[5/7] ${su.red ? "text-[#d0263b]" : "text-[#16181f]"}`}>
-      <span className="absolute left-[8%] top-[4%] text-[1.5cqw] font-black leading-none">{r}</span>
-      <span className="text-[2.6cqw] leading-none">{su.s}</span>
-      <span className="absolute bottom-[4%] right-[8%] rotate-180 text-[1.5cqw] font-black leading-none">{r}</span>
+    <div style={box} className={`lv-card aspect-[5/7] ${su.red ? "text-[#d0263b]" : "text-[#16181f]"}`}>
+      <span className="absolute left-[9%] top-[5%] flex flex-col items-center font-black leading-none" style={{ fontSize: `${w * 0.27}cqw` }}>
+        {r}
+        <span style={{ fontSize: `${w * 0.2}cqw` }}>{su.s}</span>
+      </span>
+      <span className="leading-none" style={{ fontSize: `${w * 0.46}cqw` }}>
+        {su.s}
+      </span>
+      <span className="absolute bottom-[5%] right-[9%] flex rotate-180 flex-col items-center font-black leading-none" style={{ fontSize: `${w * 0.27}cqw` }}>
+        {r}
+        <span style={{ fontSize: `${w * 0.2}cqw` }}>{su.s}</span>
+      </span>
     </div>
   );
 }
+const PHASE: Record<number, string> = { 0: "PREFLOP", 3: "FLOP", 4: "TURN", 5: "RIVER" };
+const ACT_SUIT = ["♠", "♥", "♦", "♣"];
 
 export function StoryPoker({
   spec,
@@ -233,65 +258,79 @@ export function StoryPoker({
 
   const RES_TXT = { win: "이겼다", lose: "졌다", fold: "접었다", split: "비겼다" } as const;
 
+  // 대사창: 상대 반응 > 결과 문장 > 거리별 상대 대사. 읽기 노트: 텔(손버릇) 또는 내 속마음
+  const line = react?.say ?? (res ? spec.ending?.[res.r] : street.opp) ?? "";
+  const speaker = react?.say || (!res && street.opp) ? NAME[spec.opp] : "";
+  const note = react?.think ? { k: "속마음", t: react.think } : !res && street.tell ? { k: "읽기 노트", t: street.tell } : null;
+  const phase = res ? "SHOWDOWN" : PHASE[street.board] ?? "";
+  const oppImg = STAND[spec.opp]?.base;
+  const theirsOpen = !!res && res.r !== "fold";
+
   return (
-    <div className="lv-mini absolute inset-x-0 bottom-0 z-40 flex h-[84%] flex-col items-center bg-gradient-to-t from-black/95 via-black/80 to-transparent pt-[1.5%]">
-      <div className="absolute left-[2.5%] top-[2%] rounded-full border border-[#c9a25a]/50 bg-black/60 px-[1.2cqw] py-[0.4cqw] text-[1.15cqw] font-black tracking-[0.12em] text-[#ffd27a]">♠ {spec.title}</div>
-      <div className="relative mt-[2.2cqw] flex w-[70%] flex-1 flex-col items-center justify-between rounded-[50%/40%] border-[0.35cqw] border-[#5a3a1c] bg-[radial-gradient(ellipse_at_center,#1f6b46,#0d3a25)] px-[4%] py-[1.2cqw] shadow-[0_0_0_0.2cqw_#c9a25a_inset,0_1cqw_3cqw_#000a]">
-        {/* 상대 */}
-        <div className="flex items-center gap-[0.5cqw]">
-          <img src={FACE_ICON[spec.opp]} alt="" className="h-[3.4cqw] w-[3.4cqw] rounded-full border-[0.2cqw] border-[#c9a25a] object-cover object-top" />
-          <span className="mr-[0.6cqw] text-[1.2cqw] font-bold text-white/80">{NAME[spec.opp]}</span>
-          <Card c={spec.theirs[0]} back={!res || res.r === "fold"} />
-          <Card c={spec.theirs[1]} back={!res || res.r === "fold"} />
-        </div>
-        {/* 보드 */}
-        <div className="flex items-center gap-[0.5cqw]">
-          {spec.board.map((c, i) => (
-            <Card key={i} c={c} back={i >= shown} dim={i >= shown} big />
-          ))}
-          {spec.pot > 0 && <span className="ml-[1cqw] rounded-full bg-black/40 px-[0.9cqw] py-[0.3cqw] text-[1.1cqw] text-[#ffd27a]">POT {spec.pot.toLocaleString()}</span>}
-        </div>
-        {/* 나 */}
-        <div className="flex items-center gap-[0.5cqw]">
-          <Card c={spec.mine[0]} big />
-          <Card c={spec.mine[1]} big />
-        </div>
+    <div className="lv-mini lv-sp absolute inset-0 z-40 overflow-hidden" style={{ backgroundImage: BG.pub ? `url("${BG.pub}")` : undefined }}>
+      <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-black/10 to-black/50" />
+      {/* 상대: 테이블 너머 허리 위 */}
+      {oppImg && <img src={oppImg} alt="" className="lv-sp-opp lv-breathe" />}
+      {/* 테이블 */}
+      <div className="lv-sp-table" />
+      {/* 칩 더미 */}
+      <img src="/poker/card/chip-red-stack.webp" alt="" className="lv-sp-chip left-[13%] top-[60%] w-[5.5cqw]" />
+      <img src="/poker/card/chip-black-stack.webp" alt="" className="lv-sp-chip left-[19%] top-[64%] w-[4.6cqw]" />
+      <img src="/poker/card/chip-blue-stack.webp" alt="" className="lv-sp-chip right-[13%] top-[62%] w-[5.5cqw]" />
+      <img src="/poker/card/chip-gold-stack.webp" alt="" className="lv-sp-chip right-[20%] top-[66%] w-[4.4cqw]" />
+      {/* 상대 카드 (그녀 손 앞) */}
+      <div className="absolute left-1/2 top-[57.5%] flex -translate-x-1/2 gap-[0.4cqw]">
+        <Card c={spec.theirs[0]} back={!theirsOpen} w={theirsOpen ? 4.6 : 3.6} />
+        <Card c={spec.theirs[1]} back={!theirsOpen} w={theirsOpen ? 4.6 : 3.6} />
       </div>
-      <div className="mt-[0.6cqw] min-h-[4.2cqw] w-[70%] text-center">
-        {react ? (
-          <>
-            {react.say && (
-              <div className="text-[1.45cqw] text-white">
-                {NAME[spec.opp]} : 「{react.say}」
-              </div>
-            )}
-            {react.think && <div className="text-[1.3cqw] text-[#cfc6b0]">({react.think})</div>}
-          </>
-        ) : res ? (
-          <div className="text-[1.45cqw] text-white/90">{spec.ending?.[res.r] ?? ""}</div>
-        ) : (
-          <>
-            {street.opp && (
-              <div className="text-[1.45cqw] text-white">
-                {NAME[spec.opp]} : 「{street.opp}」
-              </div>
-            )}
-            {street.tell && <div className="lv-cue text-[1.25cqw] italic text-[#ffd27a]">◈ {street.tell}</div>}
-          </>
-        )}
+      {/* 보드 */}
+      <div className="absolute left-1/2 top-[66%] flex -translate-x-1/2 items-center gap-[0.6cqw]">
+        {spec.board.map((c, i) => (
+          <Card key={i} c={c} back={i >= shown} dim={i >= shown} w={6.2} />
+        ))}
+        {spec.pot > 0 && <span className="ml-[0.8cqw] rounded-full border border-[#c9a25a]/60 bg-black/50 px-[0.9cqw] py-[0.3cqw] text-[1.1cqw] font-bold text-[#ffd27a]">POT {spec.pot.toLocaleString()}</span>}
       </div>
-      <div className="mb-[1.4cqw] mt-[0.4cqw] flex gap-[0.8cqw]">
+      {/* 내 손패 */}
+      <div className="absolute bottom-[-3%] left-1/2 flex -translate-x-1/2 items-end">
+        <Card c={spec.mine[0]} w={10} style={{ transform: "rotate(-7deg) translateX(1.6cqw)", transformOrigin: "bottom center" }} />
+        <Card c={spec.mine[1]} w={10} style={{ transform: "rotate(6deg) translateX(-1.6cqw)", transformOrigin: "bottom center" }} />
+      </div>
+      {/* 왼쪽 위: 판 제목 · 단계 */}
+      <div className="absolute left-[2%] top-[3%] flex flex-col items-start gap-[0.5cqw]">
+        <div className="lv-sp-badge text-[1.5cqw]">
+          <span className="mr-[0.6cqw] text-[#ffd27a]">♠</span>
+          {spec.title}
+        </div>
+        <div className="lv-sp-badge px-[1.4cqw] text-[0.95cqw] tracking-[0.4em] text-[#e9d9b0]">◆ {phase} ◆</div>
+      </div>
+      {/* 오른쪽 위: 읽기 노트 */}
+      {note && (
+        <div key={note.t} className="lv-sp-note absolute right-[2%] top-[3%] w-[27%]">
+          <div className="mb-[0.4cqw] text-[1cqw] font-bold tracking-[0.15em] text-[#ffd27a]">{note.k === "속마음" ? "◇ 속마음" : "✎ 읽기 노트"}</div>
+          <div className="text-[1.15cqw] leading-[1.5] text-white/90">{note.t}</div>
+        </div>
+      )}
+      {/* 결과 */}
+      {res && (
+        <div className={`lv-sp-result absolute left-1/2 top-[45%] -translate-x-1/2 text-[4.2cqw] font-black ${res.r === "win" ? "text-[#ffd27a]" : res.r === "lose" ? "text-[#ff8a8a]" : "text-white/85"}`}>{RES_TXT[res.r]}</div>
+      )}
+      {/* 왼쪽 아래: 대사창 */}
+      {line && (
+        <div className="lv-sp-box absolute bottom-[3%] left-[2%] w-[38%]">
+          {speaker && <div className="lv-sp-name">{speaker}</div>}
+          <div className="text-[1.35cqw] leading-[1.55] text-white">{line}</div>
+        </div>
+      )}
+      {/* 오른쪽 아래: 행동 버튼 */}
+      <div className="absolute bottom-[4%] right-[2%] flex gap-[0.7cqw]">
         {res ? (
-          <>
-            <span className={`mr-[1cqw] self-center text-[2cqw] font-black ${res.r === "win" ? "text-[#ffd27a]" : res.r === "lose" ? "text-[#ff7b7b]" : "text-white/80"}`}>{RES_TXT[res.r]}</span>
-            <button className="lv-btn-gold" onClick={() => onDone(res.score, eff.current)}>
-              계속
-            </button>
-          </>
+          <button className="lv-sp-btn" onClick={() => onDone(res.score, eff.current)}>
+            <span className="text-[#ffd27a]">▶</span> 계속
+          </button>
         ) : (
-          street.acts.map((a) => (
-            <button key={a.label} className="lv-btn-gold disabled:opacity-40" disabled={!!react} onClick={() => choose(a)}>
-              {a.label}
+          street.acts.map((a, i) => (
+            <button key={a.label} className="lv-sp-btn disabled:opacity-40" disabled={!!react} onClick={() => choose(a)}>
+              <span className={i % 2 ? "text-[#ff6b7f]" : "text-[#e9d9b0]"}>{ACT_SUIT[i % 4]}</span> {a.label}
             </button>
           ))
         )}

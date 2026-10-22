@@ -50,6 +50,7 @@ export const NAME: Record<Who, string> = {
   narr: "",
   taeyang: "태양",
   jeongmin: "정민",
+  chunhee: "춘희 이모",
 };
 /** 이름표 색 */
 export const NAME_COLOR: Record<Who, string> = {
@@ -60,6 +61,7 @@ export const NAME_COLOR: Record<Who, string> = {
   narr: "#e8e2d4",
   taeyang: "#ffb36b",
   jeongmin: "#c7a8ff",
+  chunhee: "#f0a8a0",
 };
 
 /** 임시 소리 — 포커 소리 재사용 (나중에 전용 소리로 교체) */
@@ -74,11 +76,26 @@ export const SFX: Record<SfxId, string> = {
   heart: `${P}/sound/sfx-tick.mp3`,
   stamp: `${P}/sound/sfx-stamp.mp3`,
 };
+/** 포커 BGM 그대로(펍 감성) + 미연시 전용 BGM(Gemini 제작) */
 export const BGM: Record<BgmId, string> = {
   pub: `${P}/sound/bgm-lobby1.mp3`,
   vip: `${P}/sound/bgm-vip.mp3`,
   night: `${P}/sound/bgm-lobby2.mp3`,
+  allin: `${P}/sound/bgm-allin.mp3`,
+  title: `${B}/sound/bgm-title.aac`,
+  amy: `${B}/sound/bgm-amy.aac`,
+  yeonseo: `${B}/sound/bgm-yeonseo.aac`,
+  rain: `${B}/sound/bgm-rain.aac`,
+  heart: `${B}/sound/bgm-heart.aac`,
+  threat: `${B}/sound/bgm-threat.aac`,
+  spoker: `${B}/sound/bgm-spoker.aac`,
+  confide: `${B}/sound/bgm-confide.aac`,
+  daily: `${B}/sound/bgm-daily.aac`,
+  comic: `${B}/sound/bgm-comic.aac`,
+  badend: `${B}/sound/bgm-badend.aac`,
 };
+/** 한 번만 재생하고 멈추는 곡 */
+export const BGM_ONCE: BgmId[] = ["badend"];
 
 export const CARD_BACK = `${P}/card/back-mid.webp`;
 
@@ -114,7 +131,7 @@ export const ENDINGS: EndingInfo[] = [
   { id: "dealer", no: 13, kind: "bad", title: "하우스 딜러", copy: "돈은 많아졌다. 단골은 사라졌다.", hint: "사장의 제안", review: "rev_dealer" },
   { id: "me_fall", no: 14, kind: "bad", title: "손", copy: "3년 만에 앉은 자리는 너무 편했다.", hint: "틸트", review: "rev_me_fall" },
   { id: "clash", no: 15, kind: "bad", title: "수라장", copy: "둘 다 놓지 않으려다, 둘 다 놓쳤다.", hint: "둘 다", review: "rev_clash" },
-  { id: "fired", no: 16, kind: "bad", title: "손이 굳었다", copy: "전설의 손, 수습 딱지도 못 떼다.", hint: "딜링", review: "rev_fired" },
-  { id: "ghost", no: 17, kind: "bad", title: "읽씹", copy: "답장은 끝내 오지 않았다. 내가 안 했으니까.", hint: "메시지", review: "rev_ghost" },
+  { id: "fired", no: 16, kind: "bad", title: "손이 굳었다", copy: "전설의 손, 수습 딱지도 못 떼다.", hint: "근무 중에 두 번 앉기", review: "rev_fired" },
+  { id: "ghost", no: 17, kind: "bad", title: "읽씹", copy: "답장은 끝내 오지 않았다. 내가 안 했으니까.", hint: "메시지 세 번 무시", review: "rev_ghost" },
   { id: "data0", no: 18, kind: "hidden", title: "Data 0", copy: "너 없이도 이길 수 있어.", hint: "???" },
 ];

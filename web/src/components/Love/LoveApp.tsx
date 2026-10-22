@@ -6,7 +6,7 @@
  * 저장: localStorage (못 쓰는 환경이어도 게임은 그대로 돌아감)
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { BG, BG_FALLBACK, BGM, ENDINGS, FACE_ICON, NAME, NAME_COLOR, SFX, STAND, TITLE, preloadList } from "@/lib/love/assets";
+import { BG, BG_FALLBACK, BGM, BGM_ONCE, ENDINGS, FACE_ICON, NAME, NAME_COLOR, SFX, STAND, TITLE, preloadList } from "@/lib/love/assets";
 import { type GState, goScene, ignorePhone, initState, lineKey, miniDone, next, pick, run } from "@/lib/love/engine";
 import type { BgmId, CharKey, EndingId, Opt, SfxId, Who } from "@/lib/love/types";
 import { DealMini, StoryPoker, TellMini } from "./Minis";
@@ -66,10 +66,17 @@ function useSound(muted: boolean) {
     bgmEl.current = null;
     if (!id) return;
     const a = new Audio(BGM[id]);
-    a.loop = true;
+    a.loop = !BGM_ONCE.includes(id);
     a.volume = mute.current ? 0 : 0.3;
-    a.play().catch(() => {});
     bgmEl.current = a;
+    // 자동 재생이 막히면(첫 화면) 첫 클릭 때 다시 시도
+    a.play().catch(() => {
+      const retry = () => {
+        if (bgmEl.current === a) a.play().catch(() => {});
+      };
+      window.addEventListener("pointerdown", retry, { once: true });
+      window.addEventListener("keydown", retry, { once: true });
+    });
   }, []);
   return { play, bgm };
 }
@@ -130,12 +137,19 @@ export default function LoveApp() {
     });
   }, []);
 
+  // ---------- 타이틀 · 이름 · 엔딩 수집 화면은 메인 테마 ----------
+  useEffect(() => {
+    if (phase === "title" || phase === "name" || phase === "gallery") bgm("title");
+  }, [phase, bgm]);
+
   // ---------- 상태가 바뀔 때: 소리 · 백로그 · 타자 효과 초기화 ----------
   useEffect(() => {
     if (!s) return;
     s.fx.forEach(play);
-    bgm(s.disp.bgm);
     const b = s.block;
+    // 스토리 포커 중엔 전용 곡, 배드 엔딩 카드엔 짧은 코다
+    const endKind = b?.k === "ending" ? ENDINGS.find((e) => e.id === b.id)?.kind : null;
+    bgm(b?.k === "mini" && b.step.kind === "poker" ? "spoker" : endKind === "bad" ? "badend" : s.disp.bgm);
     if (b?.k === "say") {
       setTyped(0);
       setLog((l) => [...l.slice(-199), { who: b.who, text: b.text }]);
@@ -149,7 +163,7 @@ export default function LoveApp() {
       setPhase("title");
     }
     if (b?.k === "ending") {
-      play("stamp");
+      window.setTimeout(() => play("stamp"), 4400);
       setEndings((e) => {
         if (e.includes(b.id)) return e;
         const n = [...e, b.id];
@@ -158,6 +172,18 @@ export default function LoveApp() {
       });
     }
     if (b && b.k !== "say") setSkip(false);
+    // 선택지 직전 자동 저장 (최근 3개 돌려 씀) — 분기점이면 알림음
+    if (b?.k === "choice" || b?.k === "free") {
+      const a1 = readSave("a1");
+      if (!a1 || a1.s.scene !== s.scene || a1.s.i !== s.i) {
+        const a2 = LS.get(KEY.save("a2"));
+        if (a2) LS.set(KEY.save("a3"), a2);
+        if (a1) LS.set(KEY.save("a2"), JSON.stringify(a1));
+        const data: SaveData = { s, name, ts: Date.now(), label: `${s.disp.day ? `DAY ${s.disp.day.d} · ${s.disp.day.slot}` : "프롤로그"}  ${b.k === "free" ? "자유 행동" : (b.prompt ?? "선택지").slice(0, 22)}` };
+        LS.set(KEY.save("a1"), JSON.stringify(data));
+      }
+      if (b.big) play("heart");
+    }
     // s.seq 로만 반응 (같은 상태 다시 그릴 때 소리 중복 X)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [s?.seq]);
@@ -293,6 +319,16 @@ export default function LoveApp() {
     setPhase("game");
     setPanel(null);
   };
+  /** 직전 선택지로: 지금 선택지 앞이면 그 전 것, 아니면 가장 최근 자동 저장 */
+  const backToChoice = () => {
+    if (!s) return;
+    const a1 = readSave("a1");
+    const atChoice = (block?.k === "choice" || block?.k === "free") && a1 && a1.s.scene === s.scene && a1.s.i === s.i;
+    const n = atChoice ? "a2" : "a1";
+    if (!readSave(n)) return flash("돌아갈 선택지가 없어요");
+    load(n);
+    flash("직전 선택지로 돌아왔어요");
+  };
   const latestSave = useMemo(() => {
     if (phase !== "title") return null;
     let best: { n: string; ts: number } | null = null;
@@ -414,7 +450,8 @@ export default function LoveApp() {
             {!hideUi && (block?.k === "say" || block?.k === "choice") && (
               <div className="lv-ctrl" onClick={(e) => e.stopPropagation()}>
                 <Chip on={auto} onClick={() => setAuto((a) => !a)}>AUTO</Chip>
-                <Chip on={skip} onClick={() => setSkip((v) => !v)}>SKIP</Chip>
+                <Chip on={skip} title="읽은 대사를 다음 선택지까지 넘겨요" onClick={() => setSkip((v) => !v)}>SKIP</Chip>
+                <Chip title="직전 선택지로 돌아가기" onClick={backToChoice}>◀ 선택지</Chip>
                 <Chip onClick={() => setPanel("log")}>LOG</Chip>
                 <Chip onClick={() => setPanel("save")}>SAVE</Chip>
                 <Chip onClick={() => setPanel("load")}>LOAD</Chip>
@@ -447,7 +484,8 @@ export default function LoveApp() {
 
             {/* 선택지 */}
             {block?.k === "choice" && (
-              <div className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-[1cqw] bg-black/35" onClick={(e) => e.stopPropagation()}>
+              <div className={`absolute inset-0 z-30 flex flex-col items-center justify-center gap-[1cqw] ${block.big ? "bg-black/55" : "bg-black/35"}`} onClick={(e) => e.stopPropagation()}>
+                {block.big && <BranchBanner onSave={() => setPanel("save")} />}
                 {block.prompt && <div className="mb-[0.5cqw] text-[1.6cqw] text-white/85 [text-shadow:0_2px_6px_#000]">{block.prompt}</div>}
                 {block.opts.map((o) => (
                   <button key={o.text} className={`lv-choice ${o.secret ? "lv-choice-secret" : ""}`} onClick={() => choose(o)}>
@@ -461,6 +499,7 @@ export default function LoveApp() {
             {/* 자유 슬롯 */}
             {block?.k === "free" && (
               <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-black/55" onClick={(e) => e.stopPropagation()}>
+                {block.big && <BranchBanner onSave={() => setPanel("save")} />}
                 <div className="mb-[1.5cqw] text-[2cqw] font-bold text-[#ffd27a]">{block.prompt}</div>
                 <div className="flex gap-[1.5cqw]">
                   {block.opts.map((o) => (
@@ -535,13 +574,27 @@ export default function LoveApp() {
 
             {/* 엔딩 */}
             {ending && (
-              <div className="absolute inset-0 z-40 grid place-items-center bg-black/80" onClick={(e) => e.stopPropagation()}>
-                <div className={`lv-ending lv-k-${ending.kind}`}>
-                  <div className="text-[1.3cqw] tracking-[0.4em] text-white/60">ENDING {ending.no} / {ENDINGS.length}</div>
-                  <div className="mt-[0.6cqw] text-[4cqw] font-black">{ending.title}</div>
-                  <div className="mt-[0.8cqw] text-[1.6cqw] text-white/80">{ending.copy}</div>
-                  <div className="mt-[0.6cqw] text-[1.2cqw] text-white/50">수집 {endings.length} / {ENDINGS.length}</div>
-                  <div className="mt-[2cqw] flex justify-center gap-[1cqw]">
+              <div className="lv-end-wrap absolute inset-0 z-40 grid place-items-center" onClick={(e) => e.stopPropagation()}>
+                <div className={`lv-end lv-k-${ending.kind}`}>
+                  <div className="lv-end-a text-[1.2cqw] tracking-[0.6em] text-white/55" style={{ animationDelay: "0.9s" }}>
+                    ENDING {String(ending.no).padStart(2, "0")} / {ENDINGS.length}
+                  </div>
+                  <div className="lv-end-a lv-end-title mt-[0.8cqw] text-[4.6cqw] font-black" style={{ animationDelay: "1.7s" }}>
+                    {ending.title}
+                  </div>
+                  <div className="lv-end-line" style={{ animationDelay: "2.8s" }} />
+                  <div className="lv-end-a mt-[1cqw] text-[1.7cqw] text-white/85" style={{ animationDelay: "3.3s" }}>
+                    {ending.copy}
+                  </div>
+                  {ending.kind === "bad" && (
+                    <div className="lv-end-a mt-[1.2cqw] text-[1.15cqw] text-white/45" style={{ animationDelay: "4.1s" }}>
+                      다음엔 — {ending.hint}
+                    </div>
+                  )}
+                  <div className="lv-end-stamp" style={{ animationDelay: "4.4s" }}>
+                    수집 {endings.length} / {ENDINGS.length}
+                  </div>
+                  <div className="lv-end-a mt-[2.4cqw] flex justify-center gap-[1cqw]" style={{ animationDelay: "5.2s" }}>
                     {ending.review && (
                       <button className="lv-btn-gold" onClick={() => setS(goScene(s, ending.review!))}>
                         마감 후 반성회
@@ -561,11 +614,21 @@ export default function LoveApp() {
               </div>
             )}
             {block?.k === "end" && (
-              <div className="absolute inset-0 z-40 grid place-items-center bg-black/75" onClick={(e) => e.stopPropagation()}>
-                <div className="lv-ending lv-k-good">
-                  <div className="text-[3.6cqw] font-black">{block.text}</div>
-                  {block.sub && <div className="mt-[0.8cqw] text-[1.5cqw] text-white/75">{block.sub}</div>}
-                  <div className="mt-[2cqw] flex justify-center gap-[1cqw]">
+              <div className="lv-end-wrap absolute inset-0 z-40 grid place-items-center" onClick={(e) => e.stopPropagation()}>
+                <div className="lv-end lv-k-good">
+                  <div className="lv-end-a text-[1.2cqw] tracking-[0.6em] text-white/55" style={{ animationDelay: "0.9s" }}>
+                    TO BE CONTINUED
+                  </div>
+                  <div className="lv-end-a lv-end-title mt-[0.8cqw] text-[4cqw] font-black" style={{ animationDelay: "1.7s" }}>
+                    {block.text}
+                  </div>
+                  <div className="lv-end-line" style={{ animationDelay: "2.8s" }} />
+                  {block.sub && (
+                    <div className="lv-end-a mt-[1cqw] text-[1.5cqw] text-white/75" style={{ animationDelay: "3.3s" }}>
+                      {block.sub}
+                    </div>
+                  )}
+                  <div className="lv-end-a mt-[2.4cqw] flex justify-center gap-[1cqw]" style={{ animationDelay: "4.4s" }}>
                     <button
                       className="lv-btn-gold"
                       onClick={() => {
@@ -601,13 +664,13 @@ export default function LoveApp() {
                 ))}
               </div>
             ) : (
-              <div className="grid flex-1 grid-cols-3 gap-[1cqw]">
-                {[...SLOTS, "q"].map((n) => {
+              <div className="grid flex-1 grid-cols-3 gap-[1cqw] overflow-y-auto">
+                {[...SLOTS, "q", ...(panel === "load" ? ["a1", "a2", "a3"] : [])].map((n) => {
                   const d = readSave(n);
                   const can = panel === "save" ? n !== "q" && phase === "game" : !!d;
                   return (
-                    <button key={n} disabled={!can} className="lv-slot" onClick={() => (panel === "save" ? save(n) : load(n))}>
-                      <div className="text-[1.2cqw] text-[#ffd27a]">{n === "q" ? "QUICK" : `SLOT ${n}`}</div>
+                    <button key={n} disabled={!can} className={`lv-slot ${n.startsWith("a") ? "lv-slot-auto" : ""}`} onClick={() => (panel === "save" ? save(n) : load(n))}>
+                      <div className="text-[1.2cqw] text-[#ffd27a]">{n === "q" ? "QUICK" : n.startsWith("a") ? `자동 · 선택지 ${n.slice(1)}` : `SLOT ${n}`}</div>
                       <div className="mt-[0.4cqw] text-[1.25cqw] text-white/85">{d ? d.label : "비어 있음"}</div>
                       {d && <div className="mt-[0.3cqw] text-[1cqw] text-white/45">{new Date(d.ts).toLocaleString("ko-KR")}</div>}
                     </button>
@@ -697,11 +760,24 @@ function Dialogue({ who, mood, name, text, done }: { who: Who; mood: string; nam
   );
 }
 
-function Chip({ children, onClick, on }: { children: React.ReactNode; onClick: () => void; on?: boolean }) {
+function Chip({ children, onClick, on, title }: { children: React.ReactNode; onClick: () => void; on?: boolean; title?: string }) {
   return (
-    <button className={`lv-chip ${on ? "lv-chip-on" : ""}`} onClick={onClick}>
+    <button className={`lv-chip ${on ? "lv-chip-on" : ""}`} onClick={onClick} title={title}>
       {children}
     </button>
+  );
+}
+
+/** 큰 분기점 알림 — 잘 나가는 미연시들처럼 "여기서 저장해 두라"는 신호를 눈에 띄게 */
+function BranchBanner({ onSave }: { onSave: () => void }) {
+  return (
+    <div className="lv-branch">
+      <div className="text-[1.05cqw] tracking-[0.5em] text-[#ffd27a]">◆ 분기점 ◆</div>
+      <div className="mt-[0.3cqw] text-[1.25cqw] text-white/85">이 선택에 따라 이야기가 갈려요. 선택 직전은 자동 저장됐어요.</div>
+      <button className="lv-branch-save" onClick={onSave}>
+        ♠ 지금 슬롯에 저장
+      </button>
+    </div>
   );
 }
 

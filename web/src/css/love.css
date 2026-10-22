@@ -284,11 +284,34 @@
   text-align: center;
   animation: lv-fadein 0.6s ease;
 }
-.lv-k-true { border-color: #ffd27a; box-shadow: 0 0 2cqw #ffd27a44; }
-.lv-k-good { border-color: #8fd7a8; }
-.lv-k-normal { border-color: #9aa6c8; }
-.lv-k-bad { border-color: #d0586a; }
-.lv-k-hidden { border-color: #b58cff; }
+.lv-k-true { border-color: #ffd27a; box-shadow: 0 0 2cqw #ffd27a44; --k: #ffd27a; }
+.lv-k-good { border-color: #8fd7a8; --k: #9fe0b5; }
+.lv-k-normal { border-color: #9aa6c8; --k: #c3cbe6; }
+.lv-k-bad { border-color: #d0586a; --k: #ff7d8c; }
+.lv-k-hidden { border-color: #b58cff; --k: #c9a8ff; }
+
+/* 엔딩 연출: 암전 → 번호 → 제목 → 금줄 → 카피 → 힌트 → 도장 → 버튼 (시간차) */
+.lv-end-wrap { background: radial-gradient(ellipse at 50% 45%, #10131f 0%, #000 70%); animation: lv-fadein 1.2s ease; }
+.lv-end { display: flex; flex-direction: column; align-items: center; text-align: center; max-width: 78%; }
+.lv-end-a { opacity: 0; animation: lv-endin 1.1s ease forwards; }
+.lv-end-title { color: var(--k, #ffd27a); letter-spacing: 0.08em; text-shadow: 0 0 2cqw color-mix(in srgb, var(--k, #ffd27a) 45%, transparent); }
+.lv-end-line { width: 0; height: 0.12cqw; margin-top: 1.2cqw; background: linear-gradient(90deg, transparent, var(--k, #c9a25a), transparent); animation: lv-endline 1.2s ease forwards; }
+.lv-end-stamp {
+  margin-top: 1.4cqw;
+  border: 0.18cqw solid var(--k, #c9a25a);
+  border-radius: 0.4cqw;
+  padding: 0.3cqw 1.2cqw;
+  font-size: 1.1cqw;
+  font-weight: 900;
+  letter-spacing: 0.2em;
+  color: var(--k, #c9a25a);
+  opacity: 0;
+  transform: rotate(-6deg) scale(2.2);
+  animation: lv-stamp 0.35s cubic-bezier(0.3, 1.6, 0.5, 1) forwards;
+}
+@keyframes lv-endin { from { opacity: 0; transform: translateY(0.8cqw); filter: blur(6px); } to { opacity: 1; transform: none; filter: none; } }
+@keyframes lv-endline { to { width: 60%; } }
+@keyframes lv-stamp { to { opacity: 0.9; transform: rotate(-6deg) scale(1); } }
 .lv-cell {
   padding: 0.8cqw;
   border: 0.12cqw solid;
@@ -347,6 +370,108 @@
   box-shadow: 0 0.3cqw 0.8cqw #0009;
   animation: lv-up 0.25s ease-out;
 }
+
+/* 분기점 배너 + 자동 저장 슬롯 */
+.lv-branch {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 1cqw;
+  border: 0.14cqw solid #c9a25a;
+  border-radius: 0.8cqw;
+  background: linear-gradient(180deg, #2a1220ee, #12081aee);
+  padding: 0.9cqw 2.4cqw 1cqw;
+  box-shadow: 0 0 2cqw #ffb34d33, 0 0.5cqw 1.5cqw #000b;
+  animation: lv-pop 0.5s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.lv-branch-save {
+  margin-top: 0.7cqw;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #ffe39a, #c9a25a);
+  padding: 0.4cqw 1.8cqw;
+  font-size: 1.2cqw;
+  font-weight: 900;
+  color: #1a1206;
+  animation: lv-glow 1.6s ease-in-out infinite;
+}
+@keyframes lv-glow { 0%, 100% { box-shadow: 0 0 0.4cqw #ffd27a66; } 50% { box-shadow: 0 0 1.6cqw #ffd27acc; } }
+.lv-slot-auto { border-style: dashed; opacity: 0.92; }
+
+/* 스토리 포커 화면 (GPT 시안 poker-mock1 기준) */
+.lv-sp { background-size: cover; background-position: center; cursor: default; }
+.lv-sp-opp {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 1%;
+  height: 152%;
+  margin: 0 auto;
+  pointer-events: none;
+  filter: drop-shadow(0 1cqw 2cqw #0009);
+}
+.lv-sp-table {
+  position: absolute;
+  left: -12%;
+  right: -12%;
+  top: 56%;
+  bottom: -30%;
+  border-radius: 50% 50% 0 0 / 22% 22% 0 0;
+  background: radial-gradient(ellipse 60% 70% at 50% 20%, #23774d, #134b31 55%, #0a2a1b);
+  box-shadow: 0 -0.25cqw 0 0.45cqw #6b4a24, 0 -0.5cqw 0 0.65cqw #d9b46a, 0 -2cqw 3cqw #000c, inset 0 2cqw 4cqw #0006;
+}
+.lv-sp-chip { position: absolute; filter: drop-shadow(0 0.4cqw 0.5cqw #000b); }
+.lv-sp-badge {
+  border: 0.12cqw solid #c9a25a99;
+  border-radius: 0.6cqw;
+  background: linear-gradient(180deg, #1b2547e6, #0d1430e6);
+  padding: 0.45cqw 1.1cqw;
+  font-weight: 900;
+  color: #fff3d6;
+  box-shadow: 0 0.3cqw 0.9cqw #0009, inset 0 0 0 0.08cqw #ffe39a33;
+}
+.lv-sp-note {
+  border: 0.12cqw solid #c9a25a88;
+  border-radius: 0.6cqw;
+  background: #0b1026cc;
+  padding: 0.8cqw 1.1cqw;
+  backdrop-filter: blur(4px);
+  animation: lv-fadein 0.35s ease;
+}
+.lv-sp-box {
+  border: 0.14cqw solid #c9a25a;
+  border-radius: 0.8cqw;
+  background: linear-gradient(180deg, #121a3cee, #090d22f2);
+  padding: 1.6cqw 1.6cqw 1.2cqw;
+  min-height: 7cqw;
+  box-shadow: 0 0.5cqw 1.5cqw #000b, inset 0 0 0 0.1cqw #ffe39a22;
+}
+.lv-sp-name {
+  position: absolute;
+  top: -1.3cqw;
+  left: 1.2cqw;
+  border: 0.12cqw solid #c9a25a;
+  border-radius: 0.5cqw;
+  background: linear-gradient(180deg, #24306a, #121a3c);
+  padding: 0.15cqw 1.6cqw;
+  font-size: 1.25cqw;
+  font-weight: 900;
+  color: #fff3d6;
+}
+.lv-sp-btn {
+  min-width: 9.5cqw;
+  border: 0.14cqw solid #c9a25a;
+  border-radius: 0.7cqw;
+  background: linear-gradient(180deg, #1d2a5c, #0e1533);
+  padding: 0.9cqw 1.4cqw;
+  font-size: 1.45cqw;
+  font-weight: 900;
+  color: #fff3d6;
+  box-shadow: 0 0.4cqw 1cqw #000b, inset 0 0 0 0.1cqw #ffe39a33;
+  transition: transform 0.12s, box-shadow 0.12s;
+}
+.lv-sp-btn:hover:not(:disabled) { transform: translateY(-0.2cqw); box-shadow: 0 0.6cqw 1.4cqw #000c, 0 0 1.2cqw #ffd27a55, inset 0 0 0 0.1cqw #ffe39a66; }
+.lv-sp-result { text-shadow: 0 0 1.5cqw #000, 0 0.3cqw 0.6cqw #000; letter-spacing: 0.3em; animation: lv-pop 0.6s cubic-bezier(0.2, 0.8, 0.2, 1); }
+@keyframes lv-pop { from { opacity: 0; transform: scale(1.35); filter: blur(4px); } }
 
 /* 타이틀 (GPT 시안 title-mock1 기준) */
 .lv-title-logo {
