@@ -76,6 +76,8 @@ export class Gateway {
   nickOf: (user: AuthUser) => Promise<string | null> = async () => null;
   /** 이용 정지된 uid 면 안내 문구 (rpc 를 막음 — 구독해서 보기는 됨) */
   blocked: (uid: string) => string | null = () => null;
+  /** 관리자만 쓸 수 있는 요청 · 구독 이름 앞머리 ("marble" → "marble.*") */
+  private adminPrefixes: string[] = [];
 
   constructor(http: HttpServer, cfg: Config, private auth: Auth) {
     this.io = new Server(http, {
@@ -114,6 +116,15 @@ export class Gateway {
   channel(name: string, def: Channel) {
     if (this.channels.has(name)) throw new Error(`channel 중복: ${name}`);
     this.channels.set(name, def);
+  }
+
+  /** 이 이름들로 시작하는 rpc · 구독은 관리자만 (메뉴에서 내린 게임을 관리자만 해 볼 수 있게) */
+  adminOnly(prefixes: string[]) {
+    this.adminPrefixes.push(...prefixes.map((p) => `${p}.`));
+  }
+
+  private needsAdmin(name: string) {
+    return this.adminPrefixes.some((p) => name.startsWith(p));
   }
 
   /** 소켓이 끊겼을 때 (자리 정리 등) */
@@ -282,6 +293,7 @@ export class Gateway {
         const { m, a } = (msg ?? {}) as { m?: unknown; a?: unknown };
         const handler = typeof m === "string" ? this.rpcs.get(m) : undefined;
         if (!handler) throw bad("알 수 없는 요청입니다.");
+        if (this.needsAdmin(m as string)) ctx.requireAdmin();
         const why = data.user ? this.blocked(data.user.uid) : null;
         if (why) throw new AppError("BANNED", why, 403);
         return handler(ctx, a);
@@ -293,6 +305,7 @@ export class Gateway {
         const { ch, p } = (msg ?? {}) as { ch?: unknown; p?: unknown };
         const def = typeof ch === "string" ? this.channels.get(ch) : undefined;
         if (!def || typeof ch !== "string") throw bad("알 수 없는 구독입니다.");
+        if (this.needsAdmin(ch)) ctx.requireAdmin();
         const key = await def.key(ctx, p);
         const cur = data.subs.get(key);
         if (cur) cur.n++;

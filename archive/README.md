@@ -33,3 +33,10 @@
 2. `server/src/server.ts` 에 `register…` 다시 넣기 (다이스 타운은 `registerMarble` 결과의 `meta` 를 서바이버가 씀), 관리자 라이브 방 · 초기화 API 되살리기 (`git log -- archive` 의 이 커밋 diff 참고)
 3. `points.ts` 의 주석 처리한 업적 · 일일 미션 줄 풀기, 위 조각 두 개 붙이기
 4. `navMenu.ts` 에 메뉴 추가
+
+## 2026-10-22 관리자 전용으로 되돌림
+다섯 게임의 코드 · 에셋(페이지 · 컴포넌트 · lib · realtime · css · public · 서버 게임)은 원래 자리로 다시 옮겨 빌드에 들어감. 대신
+- 메뉴 · 사이트맵 · 공유 이미지 · 포트폴리오에는 없음, 페이지는 noindex + `AdminGate`(관리자만), 관리자 「내린 게임」 탭에서 들어감
+- 서버는 `gateway.adminOnly(["marble", "survivor", "rogue", "patrol", "town"])` 로 그 게임 요청 · 구독을 관리자에게만 받음, 마블 로비 AI 방은 끔
+- 업적 · 일일 미션 · 관리자 초기화 · 테스트 · 시뮬 스크립트 · 메뉴 그림 · 공유 이미지는 여기(archive) 그대로
+- 디펜스가 쓰던 마블 효과음 · 건물 그림은 `public/defense/town` 과 `public/marble` 양쪽에 있음

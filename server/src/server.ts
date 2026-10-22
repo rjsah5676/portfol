@@ -10,6 +10,11 @@ import { registerFight } from "./games/fight";
 import { registerPoker, type PokerOptions } from "./games/poker";
 import { registerRhythmOnline } from "./games/rhythmOnline";
 import { registerSketch } from "./games/sketch";
+import { registerMarble } from "./games/marble";
+import { registerSurvivor } from "./games/survivor";
+import { registerPatrol } from "./games/patrol";
+import { registerRogue } from "./games/rogue";
+import { registerTown } from "./games/town";
 import { createApp } from "./http/app";
 import { restoreLive, saveLive, waitIdle, type LiveGame } from "./live";
 import { Gateway } from "./realtime/gateway";
@@ -55,6 +60,13 @@ export async function createAppServer(
   const poker = registerPoker(deps, overrides.poker);
   const rhythm = registerRhythmOnline(deps);
   const defense = registerDefense(deps);
+  // 내린 게임 5개 (메뉴에 없음 — 관리자 「내린 게임」 탭에서 들어가 해 보기만): 요청 · 구독을 관리자에게만 열어 둠
+  gateway.adminOnly(["marble", "survivor", "rogue", "patrol", "town"]);
+  const marble = registerMarble(deps, { lobbyBots: false });
+  registerSurvivor(deps, marble.meta);
+  registerPatrol(deps);
+  registerRogue(deps);
+  const town = registerTown(deps);
   const live = { sketch, fight, poker, rhythm };
   const liveGames: Record<string, LiveGame> = { sketch: sketch.live, fight: fight.live, poker: poker.live, rhythm: rhythm.live };
   // 배포 직전에 저장해 둔 방이 있으면 이어받음
@@ -101,6 +113,8 @@ export async function createAppServer(
     poker.close();
     rhythm.close();
     defense.close();
+    marble.close();
+    town.close();
     social.close();
     await gateway.close();
     await new Promise<void>((res) => http.close(() => res()));
