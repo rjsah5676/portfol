@@ -898,6 +898,8 @@ export function mountTown(root: HTMLElement, opts: TownOpts = {}): () => void {
     if (ART.sky) $(".tt-sky").style.backgroundPositionX = `${-T.cam * 0.25}px`;
     const moving = !!(vx || vy);
     placeEnt($(".tt-pl"), T.x, T.y, moving, t, T.face < 0);
+    // 내 말풍선: 화면 오른쪽 끝이면 캐릭터 왼쪽으로
+    $(".tt-pl").querySelector(".tt-say.mine")?.classList.toggle("lf", T.x - T.cam > DW - 340);
     if (moving && t - T.dust > 260) {
       T.dust = t;
       puff(T.x, T.y);
