@@ -1,0 +1,338 @@
+/* 올인 러브 (가제) — 미연시 화면. 글자 크기는 화면 폭 기준(cqw)이라 PC · 모바일 가로 · 전체화면 모두 같은 비율 */
+
+.lv-root {
+  position: relative;
+  width: 100%;
+  max-width: 1280px;
+  margin: 0 auto;
+  background: #000;
+  user-select: none;
+  -webkit-user-select: none;
+  font-family: "Pretendard", "Noto Sans KR", system-ui, sans-serif;
+}
+.lv-root:fullscreen {
+  max-width: none;
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.lv-stage {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  container-type: inline-size;
+  color: #fff;
+  cursor: pointer;
+}
+.lv-root:fullscreen .lv-stage {
+  width: min(100vw, 177.78vh);
+}
+
+.lv-logo {
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  background: linear-gradient(180deg, #fff3cf, #e0b46a 55%, #a87a30);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 0.3cqw 0.6cqw #000c);
+}
+.lv-title-char {
+  position: absolute;
+  bottom: -30%;
+  height: 128%;
+  width: auto;
+  max-width: none;
+  filter: drop-shadow(0 0 1.5cqw #0008);
+}
+
+/* 숨쉬기 (살아 있는 스탠딩 1단계 — 나중에 라이브 루프로 교체) */
+@keyframes lv-breathe {
+  0%, 100% { transform: scaleY(1); }
+  50% { transform: scaleY(1.006) translateY(-0.12%); }
+}
+.lv-breathe {
+  transform-origin: 50% 100%;
+  animation: lv-breathe 4.2s ease-in-out infinite;
+}
+
+.lv-day {
+  position: absolute;
+  left: 1.6cqw;
+  top: 1.4cqw;
+  z-index: 15;
+  padding: 0.55cqw 1.3cqw;
+  border: 0.12cqw solid #c9a25a;
+  border-radius: 0.6cqw;
+  background: linear-gradient(180deg, #1a2140e6, #0d1226e6);
+  font-size: 1.45cqw;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  box-shadow: 0 0.3cqw 1cqw #0008;
+}
+.lv-daycard {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  background: radial-gradient(ellipse at center, #0d1226cc, #000e);
+  animation: lv-fadein 0.4s ease;
+}
+
+/* 대사창 */
+.lv-box {
+  position: absolute;
+  left: 2.5%;
+  right: 2.5%;
+  bottom: 2.5%;
+  height: 25%;
+  z-index: 20;
+  border: 0.12cqw solid #c9a25a;
+  border-radius: 0.9cqw;
+  background: linear-gradient(180deg, #121a36eb, #0a0f22f2);
+  box-shadow: 0 0 0 0.3cqw #0a0f2299, 0 0.6cqw 2cqw #000a;
+  padding: 2.4cqw 3cqw 1.6cqw;
+  transition: background 0.3s, opacity 0.3s;
+}
+.lv-box::before,
+.lv-box::after {
+  position: absolute;
+  font-size: 1.3cqw;
+  color: #c9a25a;
+  opacity: 0.8;
+}
+.lv-box::before { content: "♠ ♥"; left: 1cqw; bottom: 0.6cqw; }
+.lv-box::after { content: "♦ ♣"; right: 1cqw; top: 0.6cqw; }
+.lv-box-whisper {
+  background: linear-gradient(180deg, #070a16f5, #04060ef8);
+  border-color: #6d7bb0;
+}
+.lv-name {
+  position: absolute;
+  left: 2cqw;
+  top: -1.9cqw;
+  display: flex;
+  align-items: center;
+  gap: 0.6cqw;
+  padding: 0.35cqw 1.6cqw 0.35cqw 0.6cqw;
+  border: 0.12cqw solid #c9a25a;
+  border-radius: 0.5cqw;
+  background: linear-gradient(180deg, #1b2448, #0e1430);
+  font-size: 1.55cqw;
+  font-weight: 800;
+}
+.lv-text {
+  font-size: 1.85cqw;
+  line-height: 1.65;
+  letter-spacing: 0.01em;
+  word-break: keep-all;
+  text-shadow: 0 0.1cqw 0.3cqw #000;
+}
+.lv-t-whisper { font-size: 1.55cqw; font-style: italic; color: #cdd5ff; letter-spacing: 0.04em; }
+.lv-t-shout { font-size: 2.2cqw; font-weight: 800; }
+@keyframes lv-shake {
+  0%, 100% { transform: translate(0, 0); }
+  20% { transform: translate(-0.15cqw, 0.05cqw); }
+  40% { transform: translate(0.15cqw, -0.05cqw); }
+  60% { transform: translate(-0.1cqw, 0); }
+  80% { transform: translate(0.1cqw, 0.05cqw); }
+}
+.lv-t-shake { display: inline-block; animation: lv-shake 0.35s linear 3; }
+@keyframes lv-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.2; } }
+.lv-next { margin-left: 0.6cqw; color: #ffd27a; font-size: 1.2cqw; animation: lv-blink 1s infinite; }
+
+/* 버튼 */
+.lv-ctrl {
+  position: absolute;
+  right: 3.5%;
+  bottom: 3.6%;
+  z-index: 25;
+  display: flex;
+  gap: 0.5cqw;
+}
+.lv-top-right {
+  position: absolute;
+  right: 1.4cqw;
+  top: 1.2cqw;
+  z-index: 26;
+  display: flex;
+  gap: 0.5cqw;
+}
+.lv-chip {
+  min-width: 3.4cqw;
+  height: 2.6cqw;
+  padding: 0 0.8cqw;
+  border: 0.12cqw dashed #c9a25a;
+  border-radius: 99px;
+  background: radial-gradient(circle at 50% 35%, #26305a, #0d1328);
+  color: #e9d9b0;
+  font-size: 0.95cqw;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  box-shadow: 0 0 0 0.18cqw #0d1328;
+  transition: transform 0.12s, background 0.2s;
+}
+.lv-chip:hover { transform: translateY(-0.1cqw); background: radial-gradient(circle at 50% 35%, #34407a, #141c3a); }
+.lv-chip-on { background: radial-gradient(circle at 50% 35%, #c9a25a, #7a5a22); color: #1a1206; }
+.lv-choice {
+  min-width: 46cqw;
+  padding: 1.1cqw 2.4cqw;
+  border: 0.12cqw solid #c9a25a;
+  border-radius: 0.7cqw;
+  background: linear-gradient(180deg, #172044f0, #0b1028f0);
+  font-size: 1.7cqw;
+  font-weight: 600;
+  color: #fff;
+  box-shadow: 0 0.4cqw 1.2cqw #0009;
+  transition: transform 0.15s, box-shadow 0.15s, background 0.15s;
+}
+.lv-choice:hover { transform: scale(1.02); background: linear-gradient(180deg, #24306a, #121a3e); box-shadow: 0 0 1.4cqw #ffd27a55; }
+.lv-choice-secret { border-color: #ffd27a; box-shadow: 0 0 1.2cqw #ffd27a66; }
+.lv-free {
+  width: 20cqw;
+  padding: 3cqw 1.5cqw;
+  border: 0.15cqw solid #c9a25a;
+  border-radius: 1cqw;
+  background: linear-gradient(180deg, #1b2448, #0b1028);
+  font-size: 1.6cqw;
+  font-weight: 700;
+  transition: transform 0.15s;
+}
+.lv-free:hover { transform: translateY(-0.4cqw); }
+.lv-menu-btn {
+  width: 22cqw;
+  padding: 0.8cqw 0;
+  border: 0.12cqw solid #c9a25a;
+  border-radius: 99px;
+  background: linear-gradient(180deg, #161e40e8, #0a0f24e8);
+  font-size: 1.6cqw;
+  font-weight: 700;
+  color: #f3e6c4;
+  transition: transform 0.15s, background 0.15s;
+}
+.lv-menu-btn:hover:not(:disabled) { transform: scale(1.04); background: linear-gradient(180deg, #2a3570, #141c40); }
+.lv-menu-btn:disabled { opacity: 0.4; cursor: default; }
+.lv-btn-gold,
+.lv-btn-ghost {
+  padding: 0.6cqw 2.2cqw;
+  border-radius: 99px;
+  font-size: 1.4cqw;
+  font-weight: 800;
+  transition: transform 0.15s, opacity 0.15s;
+}
+.lv-btn-gold { background: linear-gradient(180deg, #ffe39a, #c9a25a); color: #1a1206; box-shadow: 0 0.3cqw 0.9cqw #0008; }
+.lv-btn-ghost { border: 0.12cqw solid #ffffff55; background: #0006; color: #fff; }
+.lv-btn-gold:hover:not(:disabled), .lv-btn-ghost:hover { transform: scale(1.05); }
+.lv-btn-gold:disabled { opacity: 0.4; cursor: default; }
+
+/* 메시지 */
+.lv-phone {
+  position: absolute;
+  right: 8%;
+  top: 8%;
+  bottom: 8%;
+  width: 28%;
+  display: flex;
+  flex-direction: column;
+  padding: 1.3cqw;
+  border: 0.3cqw solid #222;
+  border-radius: 2cqw;
+  background: linear-gradient(180deg, #1c2236, #12151f);
+  box-shadow: 0 1cqw 3cqw #000b;
+  animation: lv-up 0.35s ease;
+}
+@keyframes lv-up { from { transform: translateY(6%); opacity: 0; } }
+.lv-bubble {
+  align-self: flex-start;
+  max-width: 85%;
+  padding: 0.6cqw 1cqw;
+  border-radius: 1cqw 1cqw 1cqw 0.2cqw;
+  background: #fff;
+  color: #222;
+  font-size: 1.25cqw;
+  animation: lv-up 0.25s ease;
+}
+.lv-reply {
+  padding: 0.6cqw 0.8cqw;
+  border-radius: 0.8cqw;
+  background: #ffd27a;
+  color: #1a1206;
+  font-size: 1.2cqw;
+  font-weight: 700;
+  text-align: left;
+}
+
+/* 미니게임 */
+.lv-mini { cursor: default; animation: lv-fadein 0.3s ease; }
+.lv-mini-title { font-size: 2.2cqw; font-weight: 900; color: #ffd27a; letter-spacing: 0.2em; text-shadow: 0 0.2cqw 0.6cqw #000; }
+@keyframes lv-fly { from { transform: translate(-50%, -50%) scale(0.4); opacity: 0; } to { transform: translate(-50%, -50%) scale(1); opacity: 1; } }
+.lv-fly { animation: lv-fly 0.3s ease-out; }
+.lv-cue { animation: lv-fadein 0.4s ease; }
+
+/* 엔딩 · 수집 */
+.lv-ending {
+  min-width: 50%;
+  padding: 3cqw 4cqw;
+  border: 0.15cqw solid #c9a25a;
+  border-radius: 1.2cqw;
+  background: linear-gradient(180deg, #141a36, #080b18);
+  text-align: center;
+  animation: lv-fadein 0.6s ease;
+}
+.lv-k-true { border-color: #ffd27a; box-shadow: 0 0 2cqw #ffd27a44; }
+.lv-k-good { border-color: #8fd7a8; }
+.lv-k-normal { border-color: #9aa6c8; }
+.lv-k-bad { border-color: #d0586a; }
+.lv-k-hidden { border-color: #b58cff; }
+.lv-cell {
+  padding: 0.8cqw;
+  border: 0.12cqw solid;
+  border-radius: 0.6cqw;
+  background: #0b1028d9;
+}
+.lv-cell-locked { opacity: 0.55; filter: saturate(0.3); }
+.lv-slot {
+  padding: 1cqw;
+  border: 0.12cqw solid #c9a25a77;
+  border-radius: 0.7cqw;
+  background: #0b1028;
+  text-align: left;
+}
+.lv-slot:disabled { opacity: 0.4; cursor: default; }
+.lv-slot:hover:not(:disabled) { border-color: #ffd27a; }
+
+.lv-toast {
+  position: absolute;
+  left: 50%;
+  top: 6%;
+  z-index: 80;
+  transform: translateX(-50%);
+  padding: 0.5cqw 1.6cqw;
+  border-radius: 99px;
+  background: #000c;
+  font-size: 1.3cqw;
+  animation: lv-fadein 0.2s ease;
+}
+@keyframes lv-fadein { from { opacity: 0; } }
+.lv-fadein { animation: lv-fadein 1s ease; }
+
+/* 세로 화면 안내 (폰은 가로 전용) */
+.lv-rotate { display: none; }
+@media (orientation: portrait) and (max-width: 900px) and (pointer: coarse) {
+  .lv-rotate {
+    display: grid;
+    place-items: center;
+    position: fixed;
+    inset: 0;
+    z-index: 999;
+    background: #000;
+    color: #ffd27a;
+    font-size: 18px;
+    font-weight: 800;
+  }
+}
