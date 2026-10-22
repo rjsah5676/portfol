@@ -1146,6 +1146,7 @@ export default function RhythmGame() {
               <p className="py-3 font-mono text-xs text-white/30">불러오는 중…</p>
             ) : (
               <RankList
+                menu={false}
                 rows={bpTop.map((r) => ({
                   name: r.name,
                   member: r.member,

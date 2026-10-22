@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
 import Faded from "@/components/Faded";
 import AvatarForm from "@/components/Account/AvatarForm";
 import NickForm from "@/components/Account/NickForm";
@@ -15,6 +16,9 @@ import { getMySummary, type MyRecord, type MySummary } from "@/firestore/me";
 import FightProfile from "@/components/Fight/FightProfile";
 import MyPoints from "@/components/Points/MyPoints";
 import TierBadge from "@/components/Fight/TierBadge";
+import FriendsPanel from "@/components/Social/FriendsPanel";
+import { Badge } from "@/components/Social/parts";
+import { useSocial } from "@/lib/socialStore";
 
 /*
  * 내 정보: 별명 바꾸기 · 게임별 내 최고 기록과 순위 · 온라인 전적 · 로그아웃.
@@ -82,8 +86,26 @@ function Stat({ name, value }: { name: string; value: string | number }) {
   );
 }
 
-export default function MyPage() {
+// 탭(?tab=friends)을 주소로 읽어서 — 정적으로 그릴 때 searchParams 를 기다리게 Suspense 로 감쌈
+export default function Page() {
+  return (
+    <Suspense fallback={<p className="pt-24 pb-40 text-center font-mono text-sm text-white/40">확인 중…</p>}>
+      <MyPage />
+    </Suspense>
+  );
+}
+
+const TABS = [
+  { key: "info", label: "내 정보" },
+  { key: "friends", label: "친구" },
+] as const;
+
+function MyPage() {
   const { loading, account, profile, admin, login, logout } = useAuth();
+  const params = useSearchParams();
+  const router = useRouter();
+  const tab = params.get("tab") === "friends" ? "friends" : "info";
+  const social = useSocial();
   const [data, setData] = useState<MySummary | null>(null);
   const [failed, setFailed] = useState(false);
   /** 픽셀 리듬업 곡 제목·레벨 (곡 데이터가 커서 기록이 있을 때만 불러옴) */
@@ -209,6 +231,34 @@ export default function MyPage() {
           </div>
         </div>
 
+        {profile && (
+          <div
+            role="tablist"
+            aria-label="마이페이지"
+            className="flex gap-1 rounded-full border border-white/10 bg-white/[0.03] p-1 font-['Nanum_Gothic',sans-serif]"
+          >
+            {TABS.map((t) => (
+              <button
+                key={t.key}
+                type="button"
+                role="tab"
+                aria-selected={tab === t.key}
+                onClick={() => router.replace(t.key === "info" ? "/me/" : `/me/?tab=${t.key}`, { scroll: false })}
+                className={`flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-full px-4 py-2 text-sm transition-colors ${
+                  tab === t.key ? "bg-[#6C63FF] font-bold text-white" : "text-white/60 hover:text-white"
+                }`}
+              >
+                {t.label}
+                {t.key === "friends" && <Badge n={social.incoming} />}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {profile && tab === "friends" && <FriendsPanel card={card} label={label} />}
+
+        {(!profile || tab === "info") && (
+          <>
         {profile && <MyPoints card={card} label={label} />}
 
         {profile && (
@@ -477,6 +527,8 @@ export default function MyPage() {
                 </>
               )}
             </section>
+          </>
+        )}
           </>
         )}
       </div>

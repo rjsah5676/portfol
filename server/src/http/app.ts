@@ -15,6 +15,7 @@ import { meRouter } from "./me";
 import { pointsRouter } from "./points";
 import { rankingsRouter } from "./rankings";
 import { siteRouter } from "./site";
+import { socialAdminRouter, socialRouter } from "./social";
 import { studyPostsRouter } from "./studyPosts";
 import { trackRouter } from "./track";
 
@@ -123,12 +124,14 @@ export function createApp(deps: Deps, { pokerRank, pokerBuyRank, rhythmFiles, ..
   app.use("/api/mail", mailRouter(deps, mail));
   app.use("/api/admin/mail", mailAdminRouter(deps, mail));
   app.use("/api/study-posts", studyPostsRouter(deps));
+  app.use("/api", socialRouter(deps));
   if (rhythmFiles) app.use("/api/rhythm-online", rhythmFiles);
   const notice = noticeRouters(deps);
   app.use("/api/notice", notice.pub);
   app.use("/api/admin/notice", notice.admin);
   app.use("/api/admin/economy", adminEconomyRouter(deps));
   app.use("/api/admin/members", adminMembersRouter(deps, mod));
+  app.use("/api/admin/reports", socialAdminRouter(deps));
   app.use("/api/admin", adminRouter(deps, { guestChanged: site.publishGuest, ...hooks }));
   app.use("/api", site.router);
 

@@ -15,6 +15,7 @@ import DefenseReset from "@/components/Admin/DefenseReset";
 import MailSender from "@/components/Admin/MailSender";
 import Economy from "@/components/Admin/Economy";
 import NoticeEditor from "@/components/Admin/NoticeEditor";
+import Reports from "@/components/Admin/Reports";
 import { subscribeInquiries, type Inquiry } from "@/firestore/inquiries";
 import { fetchStudyPostsLive, type StudyPost } from "@/firestore/studyPosts";
 
@@ -32,6 +33,7 @@ const SECTIONS = [
   { key: "mail", label: "우편", desc: "회원에게 우편 보내기 (GP 첨부) · 보낸 우편 회수" },
   { key: "notice", label: "공지", desc: "모든 페이지 메뉴 아래에 뜨는 한 줄 공지 (점검 · 이벤트)" },
   { key: "inbox", label: "문의함", desc: "소개 페이지에서 들어온 문의" },
+  { key: "reports", label: "신고", desc: "회원 이름 메뉴의 「신고하기」로 들어온 것 · 처리 표시와 메모 (제재는 회원 탭에서)" },
   { key: "posts", label: "글", desc: "개인 공부 · 프로젝트 회고" },
   { key: "rankings", label: "랭킹", desc: "게임별 기록 고치기 · 지우기 · 초기화" },
   { key: "guest", label: "방명록", desc: "방명록 메모 고치기 · 지우기" },
@@ -243,6 +245,7 @@ export default function AdminDashboard() {
         {tab === "mail" && <MailSender />}
         {tab === "economy" && <Economy />}
         {tab === "notice" && <NoticeEditor />}
+        {tab === "reports" && <Reports />}
         {tab === "inbox" && <InquiryInbox items={inquiries} loaded={inqLoaded} />}
         {tab === "posts" && <PostManager posts={posts} loaded={postsLoaded} onChanged={loadPosts} />}
         {tab === "rankings" && (

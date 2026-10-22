@@ -1,5 +1,6 @@
 "use client";
 
+import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { watchServerNotice } from "@/lib/api/socket";
 
@@ -47,7 +48,9 @@ export default function ServerNotice() {
     };
   }, []);
 
-  if (!view) return null;
+  // 회원은 어느 페이지에서든 연결이 있지만(친구 접속 표시), 안내는 지금처럼 게임 화면에서만
+  const path = usePathname() ?? "";
+  if (!view || !path.startsWith("/games")) return null;
   const { title, body } = TEXT[view];
   const busy = view !== "back";
   return (

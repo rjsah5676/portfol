@@ -7,6 +7,7 @@ import Mailbox from "@/components/Mail/Mailbox";
 import { useAuth } from "@/lib/AuthContext";
 import { getMailUnread } from "@/lib/api/mail";
 import { MAIL_EVENT } from "@/lib/mail";
+import { openChat, useSocial } from "@/lib/socialStore";
 
 // 플로팅 버튼 아이콘 (색은 CSS의 color를 따라감)
 const svg = (body: string, extra = "") =>
@@ -22,6 +23,7 @@ const ICONS = {
   up: svg('<path d="M12 19V5"/><path d="m5.5 11.5 6.5-6.5 6.5 6.5"/>'),
   search: svg('<circle cx="10.5" cy="10.5" r="6"/><path d="m15 15 5 5"/>'),
   mail: svg('<rect x="3.5" y="5.5" width="17" height="13" rx="2"/><path d="m4 7 8 6 8-6"/>'),
+  chat: svg('<path d="M20 11.5a7.5 7.5 0 0 1-11.2 6.5L4 19.5l1.5-4.3A7.5 7.5 0 1 1 20 11.5z"/>'),
 };
 
 export default function QuickMenu() {
@@ -51,18 +53,21 @@ export default function QuickMenu() {
       const menu = new Menu("#myMenu");
       menu.add(new Item("list", "", ""));
       menu.add(new Item("search", "", "", "검색"));
+      menu.add(new Item("chat", "", "", "채팅"));
       menu.add(new Item("mail", "", "", "우편함"));
       menu.add(new Item("up", "", "", "맨 위로"));
 
       const upButton = document.getElementById("up")!;
       const searchButton = document.getElementById("search")!;
       const mailButton = document.getElementById("mail")!;
+      const chatButton = document.getElementById("chat")!;
 
       const labels: Record<keyof typeof ICONS, string> = {
         list: "메뉴",
         up: "맨 위로",
         search: "사이트 검색",
         mail: "우편함",
+        chat: "채팅",
       };
       (Object.keys(ICONS) as (keyof typeof ICONS)[]).forEach((id) => {
         const el = document.getElementById(id)!;
@@ -73,16 +78,19 @@ export default function QuickMenu() {
       const onUp = () => window.scrollTo({ top: 0, left: 0, behavior: "smooth" });
       const onSearch = () => openSiteSearch();
       const onMail = () => setMailOpen(true);
+      const onChat = () => openChat(null);
 
       upButton.addEventListener("click", onUp);
       searchButton.addEventListener("click", onSearch);
       mailButton.addEventListener("click", onMail);
+      chatButton.addEventListener("click", onChat);
 
       setReady(true);
       cleanupFns.push(() => {
         upButton.removeEventListener("click", onUp);
         searchButton.removeEventListener("click", onSearch);
         mailButton.removeEventListener("click", onMail);
+        chatButton.removeEventListener("click", onChat);
       });
     })();
 
@@ -109,11 +117,14 @@ export default function QuickMenu() {
     };
   }, [member]);
 
-  // 숫자 표시 (버튼은 jQuery 로 만든 것이라 DOM 에 직접)
+  // 숫자 표시 (버튼은 jQuery 로 만든 것이라 DOM 에 직접). 메뉴 버튼 = 우편 + 채팅(안 읽은 메시지 · 받은 친구 요청)
   const count = member ? unread : 0;
+  const social = useSocial();
+  const chat = member ? social.badge : 0;
   useEffect(() => {
     if (!ready) return;
-    for (const id of ["list", "mail"]) {
+    const nums: Record<string, number> = { list: count + chat, mail: count, chat };
+    for (const id of Object.keys(nums)) {
       const el = document.getElementById(id);
       if (!el) continue;
       let b = el.querySelector<HTMLElement>(".qm-badge");
@@ -122,11 +133,13 @@ export default function QuickMenu() {
         b.className = "qm-badge";
         el.appendChild(b);
       }
-      b.textContent = count > 99 ? "99+" : String(count);
-      b.hidden = count === 0;
+      const n = nums[id];
+      b.textContent = n > 99 ? "99+" : String(n);
+      b.hidden = n === 0;
     }
     document.getElementById("mail")?.setAttribute("aria-label", count ? `우편함 (안 받은 우편 ${count}통)` : "우편함");
-  }, [ready, count]);
+    document.getElementById("chat")?.setAttribute("aria-label", chat ? `채팅 (새 소식 ${chat}개)` : "채팅");
+  }, [ready, count, chat]);
 
   return (
     <div

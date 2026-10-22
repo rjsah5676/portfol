@@ -15,6 +15,7 @@ import { restoreLive, saveLive, waitIdle, type LiveGame } from "./live";
 import { Gateway } from "./realtime/gateway";
 import { createTraffic } from "./traffic";
 import { createPoints } from "./points";
+import { createSocial } from "./social";
 import { createUsers } from "./users";
 import { createWebNotifier, type WebNotifier } from "./webNotify";
 
@@ -45,7 +46,8 @@ export async function createAppServer(
   users.onRename((uid, nick) => gateway.setNick(uid, nick));
   const traffic = createTraffic(db, { geo: cfg.trafficGeo, cloud: cfg.trafficCloud });
   const points = createPoints(db);
-  const deps: Deps = { cfg, db, auth, gateway, users, points, traffic, web: overrides.web ?? createWebNotifier(cfg) };
+  const social = createSocial(db, gateway, users);
+  const deps: Deps = { cfg, db, auth, gateway, users, points, traffic, social, web: overrides.web ?? createWebNotifier(cfg) };
 
   const board = registerBoardGames(deps);
   const sketch = registerSketch(deps);
@@ -99,6 +101,7 @@ export async function createAppServer(
     poker.close();
     rhythm.close();
     defense.close();
+    social.close();
     await gateway.close();
     await new Promise<void>((res) => http.close(() => res()));
     if (!overrides.db) await db.close();

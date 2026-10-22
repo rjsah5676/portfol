@@ -388,7 +388,7 @@ function Podium({ top }: { top: TopEntry[] }) {
                 <RankAvatar avatar={e.avatar} name={e.name} guest={!e.member} size="lg" />
               </div>
               <div className="mt-0.5 max-w-full truncate px-1 text-sm font-bold text-white">
-                <Nick name={e.name} guest={!e.member} />
+                <Nick name={e.name} guest={!e.member} menu />
               </div>
               <div className="max-w-full truncate px-1 font-mono text-xs tabular-nums" style={{ color: st.ring }}>
                 {e.value}

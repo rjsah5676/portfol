@@ -630,6 +630,7 @@ export default function MelonGame() {
                 <p className="text-sm text-white/35">불러오는 중…</p>
               ) : (
                 <RankList
+                  menu={false}
                   skip={3}
                   rows={ranks.map((r) => ({
                     name: r.name,

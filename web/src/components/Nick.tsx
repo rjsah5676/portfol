@@ -7,6 +7,7 @@
  */
 
 import NickBadge from "./NickBadge";
+import UserName from "./Social/UserName";
 
 /** 서버가 비회원 이름 앞에 붙이는 표시 (server/src/users.ts 의 GUEST_MARK) */
 export const GUEST_MARK = "◦";
@@ -39,14 +40,26 @@ export default function Nick({
   guest,
   tone,
   className,
+  menu,
 }: {
   name: string;
   /** 비회원 여부를 따로 알 때 (안 주면 이름 앞의 표시로 판단) */
   guest?: boolean;
   tone?: Tone;
   className?: string;
+  /** 회원 이름을 누르면 정보 보기 · 친구 추가 · 신고 메뉴 (게임 밖 화면: 랭킹 · 방명록 등) */
+  menu?: boolean;
 }) {
   const g = guest ?? isGuestName(name);
+  if (menu && !g)
+    return (
+      <span className={className}>
+        <UserName nick={plainName(name)}>
+          <NickBadge nick={name} />
+          {plainName(name)}
+        </UserName>
+      </span>
+    );
   return (
     <span className={className}>
       {g ? <GuestTag tone={tone} /> : <NickBadge nick={name} />}

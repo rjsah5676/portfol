@@ -9,6 +9,7 @@ import SiteSearch from "@/components/SiteSearch";
 import Footer from "@/components/Footer";
 import Contact from "@/components/Contact";
 import QuickMenu from "@/components/QuickMenu";
+import SocialRoot from "@/components/Social/SocialRoot";
 import ServerNotice from "@/components/ServerNotice";
 import SiteNoticeBar from "@/components/SiteNoticeBar";
 import PointToast from "@/components/Points/PointToast";
@@ -90,6 +91,7 @@ export default function RootLayout({
             <Footer />
             <Contact />
             <QuickMenu />
+            <SocialRoot />
             <TrafficBeacon />
             <ServerNotice />
             <PointToast />

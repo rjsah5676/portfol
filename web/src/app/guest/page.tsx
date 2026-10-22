@@ -110,7 +110,7 @@ function Note({
         </p>
         <div className="mt-3 flex items-end justify-between gap-3">
           <span className={`${hand} truncate text-lg font-bold text-black/60`}>
-            — <Nick name={entry.name} guest={!entry.member} tone="paper" />
+            — <Nick name={entry.name} guest={!entry.member} tone="paper" menu />
           </span>
           <span className="shrink-0 font-mono text-[10px] text-black/35">
             {dateLabel(entry, localDate)}

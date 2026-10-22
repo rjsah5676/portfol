@@ -445,7 +445,7 @@ describe("오래 비어 있는 방", () => {
     const http = createServer();
     const cfg = loadConfig({ NODE_ENV: "test", PORT: "0" });
     const gateway = new Gateway(http, cfg, { verify: async (t) => ({ uid: t, email: null, anonymous: true, admin: false }) });
-    const sk = registerSketch({ cfg, gateway, auth: null as never, db: null as never, web: null as never, traffic: null as never, points: null as never, users: { bump() {} } as never }, { emptyRoomTtlMs: 30, sweepIntervalMs: 20 });
+    const sk = registerSketch({ cfg, gateway, auth: null as never, db: null as never, web: null as never, traffic: null as never, points: null as never, social: null as never, users: { bump() {} } as never }, { emptyRoomTtlMs: 30, sweepIntervalMs: 20 });
     await new Promise<void>((r) => http.listen(0, r));
     const { io } = await import("socket.io-client");
     const port = (http.address() as { port: number }).port;

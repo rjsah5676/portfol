@@ -25,12 +25,15 @@ export default function RankList({
   highlight,
   empty = "아직 기록이 없어요",
   skip = 0,
+  menu = true,
 }: {
   rows: RankRow[];
   highlight?: number;
   empty?: string;
   /** 위쪽 몇 등은 빼고 (시상대로 따로 보여 줄 때). 순위 번호는 그대로 */
   skip?: number;
+  /** 이름을 누르면 정보 보기 · 친구 추가 메뉴 (게임 화면 안에서는 false) */
+  menu?: boolean;
 }) {
   if (!rows.length)
     return (
@@ -59,7 +62,7 @@ export default function RankList({
             </span>
             <RankAvatar avatar={r.avatar} name={r.name} guest={!r.member} size="sm" />
             <span className="min-w-0 text-left font-['Nanum_Gothic',sans-serif]">
-              <Nick name={r.name} guest={!r.member} className="block truncate text-white/85" />
+              <Nick name={r.name} guest={!r.member} menu={menu} className="block truncate text-white/85" />
               {r.sub && <span className="block truncate text-[10px] text-white/35">{r.sub}</span>}
             </span>
             <span className="text-right text-white tabular-nums">{r.value}</span>

@@ -3,6 +3,7 @@ import type { Config } from "./config";
 import type { Database } from "./db";
 import type { Points } from "./points";
 import type { Gateway } from "./realtime/gateway";
+import type { Social } from "./social";
 import type { Traffic } from "./traffic";
 import type { Users } from "./users";
 import type { WebNotifier } from "./webNotify";
@@ -19,6 +20,8 @@ export interface Deps {
   points: Points;
   /** 유입 분석 기록·집계 */
   traffic: Traffic;
+  /** 친구 · 접속 표시 · 메신저 · 신고 (다른 게임에서 친구 연동할 때 여기로) */
+  social: Social;
   /** 프론트(Next 서버)에 알릴 것 */
   web: WebNotifier;
 }
