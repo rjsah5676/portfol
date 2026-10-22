@@ -67,7 +67,15 @@ export default function VoiceReview({
   onJump: (r: VoiceRow) => void;
   onBack: () => void;
 }) {
-  const rows = useMemo(() => voiceRows(), []);
+  const all = useMemo(() => voiceRows(), []);
+  // 줄이 많아지면(풀보이스) 찾기 · 캐릭터 거르기
+  const [q, setQ] = useState("");
+  const [who, setWho] = useState<"all" | "yeonseo" | "amy">("all");
+  const rows = all.filter(
+    (r) =>
+      (who === "all" || r.who === who) &&
+      (!q || r.text.includes(q) || (r.scene ?? "").includes(q) || String(r.n) === q)
+  );
   const [playing, setPlaying] = useState<string | null>(null);
   const el = useRef<HTMLAudioElement | null>(null);
   const box = useRef<HTMLDivElement>(null);
@@ -109,6 +117,21 @@ export default function VoiceReview({
           테이크로) / <b className="text-[#ffd27a]">“12 다시: 더 낮고 떨리게”</b> (새로 생성) /{" "}
           <b className="text-[#ffd27a]">“20 빼”</b> (음성 없이)
         </div>
+        <input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="대사 · 장면 · 번호 찾기"
+          className="w-[16cqw] rounded-[0.4cqw] border border-white/20 bg-black/40 px-[0.8cqw] py-[0.4cqw] text-[1.1cqw] text-white outline-none"
+        />
+        {(["all", "yeonseo", "amy"] as const).map((w) => (
+          <button
+            key={w}
+            className={`lv-cfg-step ${who === w ? "lv-cfg-on" : ""}`}
+            onClick={() => setWho(w)}
+          >
+            {w === "all" ? "전부" : NAME[w]}
+          </button>
+        ))}
         <button className="lv-btn-ghost" onClick={onBack}>
           타이틀
         </button>

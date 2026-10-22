@@ -200,6 +200,11 @@ export function run(s0: GState): GState {
         break;
       case "day":
         s.disp.cg = null;
+        // 시간대가 바뀌면 옷도 기본으로 (단, 장갑 벗은 "bare"는 한 번 벗으면 계속)
+        if (s.disp.outfit)
+          s.disp.outfit = Object.fromEntries(
+            Object.entries(s.disp.outfit).filter(([, o]) => o === "bare")
+          );
         s.disp.day = { d: st.day, slot: st.slot };
         s.block = { k: "day", d: st.day, slot: st.slot };
         return s;

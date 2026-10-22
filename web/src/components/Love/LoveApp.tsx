@@ -236,6 +236,8 @@ export default function LoveApp() {
   const [touchHint, setTouchHint] = useState(false);
   /** 스태프 롤을 본 엔딩 (상태 번호) */
   const [rolled, setRolled] = useState(-1);
+  /** 지금 대사가 이미 읽은 줄인지 (대사창 "읽음" 표시) */
+  const [readNow, setReadNow] = useState(false);
   const seen = useRef<Set<string>>(new Set());
   const wrap = useRef<HTMLDivElement>(null);
   const { play, bgm, voice, voiceEnd } = useSound(muted, cfg);
@@ -307,6 +309,7 @@ export default function LoveApp() {
           : s.disp.bgm
     );
     if (b?.k === "say") {
+      setReadNow(seen.current.has(lineKey(s)));
       setTyped(0);
       setLog((l) => [...l.slice(-199), { who: b.who, text: b.text }]);
       voice(skip ? null : (VOICE_BY_TEXT[b.text] ?? null));
@@ -842,7 +845,7 @@ export default function LoveApp() {
                 onReplay={
                   VOICE_BY_TEXT[block.text] ? () => voice(VOICE_BY_TEXT[block.text]) : undefined
                 }
-                read={seen.current.has(lineKey(s))}
+                read={readNow}
               />
             )}
 
@@ -1017,6 +1020,7 @@ export default function LoveApp() {
                   <StoryPoker
                     spec={block.step.poker}
                     play={play}
+                    bg={disp.bg === "black" ? "pub" : disp.bg}
                     onDone={(n, eff) => setS(miniDone(s, block.step.key, n, eff))}
                   />
                 ) : (
@@ -1276,7 +1280,16 @@ function CgView({ id }: { id: CgId }) {
     <div className="lv-cg">
       <div className="lv-cg-img" style={{ backgroundImage: `url("${c.src}")` }}>
         {/* 살아 있는 CG (그록 루프 mp4) — 있으면 정지 그림 위에서 재생 */}
-        {c.video && <video src={c.video} autoPlay loop muted playsInline className="h-full w-full object-cover" />}
+        {c.video && (
+          <video
+            src={c.video}
+            autoPlay
+            loop
+            muted
+            playsInline
+            className="h-full w-full object-cover"
+          />
+        )}
       </div>
       <div className="lv-cg-vignette" />
       {RAIN_CG.includes(id) && <div className="lv-rain" />}

@@ -79,7 +79,10 @@ export const BG_FALLBACK: Record<BgId, string> = {
 };
 
 /** 이벤트 CG — 핵심 장면 한 장 그림 (회상 갤러리에도 모임) */
-export const CG: Record<CgId, { src: string; title: string; who: "yeonseo" | "amy"; video?: string }> = {
+export const CG: Record<
+  CgId,
+  { src: string; title: string; who: "yeonseo" | "amy"; video?: string }
+> = {
   y_closet: { src: `${B}/cg/y-closet.webp`, title: "비품 창고, 숨 쉬지 마요", who: "yeonseo" },
   y_umbrella: { src: `${B}/cg/y-umbrella.webp`, title: "그냥 비 오니까요", who: "yeonseo" },
   y_name: { src: `${B}/cg/y-name.webp`, title: "이름 하나, 올인보다", who: "yeonseo" },
@@ -201,7 +204,10 @@ export const TITLE = { bg: `${B}/ui/title-bg.webp`, logo: `${B}/ui/title-logo.we
 /** 로딩 화면에서 전부 받는 목록 */
 export function preloadList(): { img: string[]; audio: string[] } {
   const img = new Set<string>();
-  for (const c of [...Object.values(STAND), ...Object.values(OUTFITS).flatMap((o) => Object.values(o ?? {}))])
+  for (const c of [
+    ...Object.values(STAND),
+    ...Object.values(OUTFITS).flatMap((o) => Object.values(o ?? {})),
+  ])
     for (const u of [c.base, ...Object.values(c.faces)]) if (u) img.add(u);
   for (const u of Object.values(BG)) if (u) img.add(u);
   for (const u of Object.values(FACE_ICON)) if (u) img.add(u);
