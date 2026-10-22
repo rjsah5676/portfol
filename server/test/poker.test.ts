@@ -382,10 +382,14 @@ describe("홀덤 테이블", () => {
     await a.c.rpc("poker.sit", { id });
     await until(() => left, "나가기", 30_000);
     await until(async () => (await a.c.rpc<Wallet>("poker.wallet")).table === null, "정산 뒤 자리 비움");
-    await sleep(150);
-    const hands = (await srv.db.col("poker_hands").find({ table: id }).toArray()) as unknown as { who: { uid: string | null; delta: number }[] }[];
-    const sum = hands.reduce((s, h) => s + (h.who.find((w) => w.uid === a.uid)?.delta ?? 0), 0);
-    expect(await moneyOf(a.uid)).toBe(START_MONEY + sum);
+    // 다이하면 자리는 바로 비지만, 그 판은 남은 사람들이 끝내야 정산됨 (판 기록 저장 · 지갑 반영이 따로 끝남)
+    // → 판 기록의 내 손익 합과 지갑이 맞을 때까지 기다림 (끝내 안 맞으면 실패)
+    const handSum = async () => {
+      const hands = (await srv.db.col("poker_hands").find({ table: id }).toArray()) as unknown as { who: { uid: string | null; delta: number }[] }[];
+      return hands.reduce((s, h) => s + (h.who.find((w) => w.uid === a.uid)?.delta ?? 0), 0);
+    };
+    await until(async () => (await moneyOf(a.uid)) === START_MONEY + (await handSum()), "지갑 = 시작 칩 + 판 기록 손익", 20_000);
+    expect(await moneyOf(a.uid)).toBe(START_MONEY + (await handSum()));
     pa.stop();
   }, 40_000);
 
