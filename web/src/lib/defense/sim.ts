@@ -2284,8 +2284,8 @@ function die(g: Game, b: Board, e: Enemy): boolean {
       for (const f of FACTIONS) b.up[f as "knight"] = Math.min(B.up.max, b.up[f as "knight"] + b.mods.warFree);
       b.ev?.push({ t: "relicProc", id: "war_banner" });
     }
-    // 무지개 연합: 필드에 가장 적은 세력(없는 세력 먼저)의 에픽 · 레전드 1기
-    if (b.mods.rainbowGift && hasEmpty(b)) {
+    // 무지개 연합: 필드에 가장 적은 세력(없는 세력 먼저)의 에픽 · 레전드 1기 — 필드 빈 칸이 없으면 그 세력 가장 낮은 칸 한 등급 업
+    if (b.mods.rainbowGift) {
       const cnt = { knight: 0, mech: 0, arcane: 0 };
       for (let i = 0; i < CELLS; i++) {
         const d = b.cells[i].def ? UNIT[b.cells[i].def!] : null;
@@ -2293,7 +2293,11 @@ function die(g: Game, b: Board, e: Enemy): boolean {
       }
       let low: Faction = "knight";
       for (const f of FACTIONS) if (cnt[f as "knight"] < cnt[low as "knight"]) low = f;
-      give(b, pick(b.rng, poolOf(low, b.mods.rainbowGift as Grade)).id, "relic");
+      // 필드 빈 칸이 있으면 거기로 (보관함에 들어가면 안 싸워서), 없으면 그 세력 가장 낮은 필드 칸 한 등급 업
+      let fieldFree = false;
+      for (let i = 0; i < CELLS && !fieldFree; i++) if (!b.cells[i].def) fieldFree = true;
+      if (fieldFree) give(b, pick(b.rng, poolOf(low, b.mods.rainbowGift as Grade)).id, "relic");
+      else expGrow(b, low);
     }
     const stones = B.bossStones + Math.floor(b.wave / 20) + (b.patch === "gambler" ? 1 : 0) + b.cx.bossStones;
     b.stones += stones;
