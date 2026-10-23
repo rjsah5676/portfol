@@ -175,6 +175,31 @@ export const NAME: Record<Who, string> = {
   chunhee: "춘희 이모",
 };
 /** 이름표 색 */
+/** 대사창 초상 카드: 스탠딩 그림에서 얼굴만 잘라 보여 줌 — [가로/세로 비, 얼굴 중심 x, 얼굴 중심 y, 자를 정사각형 한 변] (그림 높이 대비).
+ *  표정 그림은 같은 캔버스라 같은 값. 의상은 캔버스가 달라 따로 (없으면 기본 옷 값) */
+export const PORTRAIT: Record<string, [number, number, number, number]> = {
+  "amy": [0.4688, 0.4722, 0.1129, 0.1511],
+  "amy-tshirt": [0.3677, 0.4754, 0.1062, 0.1535],
+  "boss": [0.3442, 0.421, 0.1035, 0.1535],
+  "chunhee": [0.4078, 0.4114, 0.1436, 0.146],
+  "jeongmin": [0.3309, 0.4068, 0.1041, 0.1534],
+  "taeyang": [0.3687, 0.4299, 0.1035, 0.1545],
+  "yeonseo-bare": [0.3727, 0.4822, 0.1055, 0.1536],
+  "yeonseo": [0.4462, 0.4693, 0.1061, 0.1535],
+  "yeonseo-knit": [0.3695, 0.4848, 0.1056, 0.1537],
+};
+/** 이름표 무늬 (트럼프 문양) */
+export const SUIT: Record<Who, string> = {
+  amy: "♥",
+  yeonseo: "♠",
+  me: "♣",
+  narr: "",
+  boss: "♦",
+  taeyang: "♦",
+  jeongmin: "♣",
+  chunhee: "♥",
+};
+
 export const NAME_COLOR: Record<Who, string> = {
   yeonseo: "#8fa8ff",
   amy: "#7fd3ff",
@@ -223,7 +248,7 @@ export const SFX: Record<SfxId, string> = {
   potwin: `${B}/sfx/potwin.mp3`,
   fold: `${B}/sfx/fold.mp3`,
   knock: `${B}/sfx/knock.mp3`,
-  pop: `${B}/sfx/pop.mp3`,
+  buzz: `${B}/sfx/buzz.mp3`,
   send: `${B}/sfx/send.mp3`,
   pencil: `${B}/sfx/pencil.mp3`,
 };

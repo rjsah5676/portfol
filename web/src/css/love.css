@@ -1,3 +1,5 @@
+@import url("https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&display=swap");
+@import url("https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css");
 /* 올인 러브 (가제) — 미연시 화면. 글자 크기는 화면 폭 기준(cqw)이라 PC · 모바일 가로 · 전체화면 모두 같은 비율 */
 
 .lv-root {
@@ -8,7 +10,10 @@
   background: #000;
   user-select: none;
   -webkit-user-select: none;
-  font-family: "Pretendard", "Noto Sans KR", system-ui, sans-serif;
+  /* 대사 · UI = 프리텐다드, 서술 · 이름표 = 고운바탕 (서술과 말소리를 글꼴로 구분) */
+  --lv-sans: "Pretendard Variable", Pretendard, "Noto Sans KR", "Malgun Gothic", system-ui, sans-serif;
+  --lv-serif: "Gowun Batang", "Nanum Myeongjo", "Noto Serif KR", serif;
+  font-family: var(--lv-sans);
 }
 .lv-root:fullscreen {
   max-width: none;
@@ -156,6 +161,7 @@
     rgb(10 15 34 / calc(var(--lv-box, 0.92) + 0.03))
   );
   box-shadow:
+    inset 0 0.24cqw 0 0 color-mix(in srgb, var(--nc, #c9a25a) 65%, transparent),
     0 0 0 0.3cqw #0a0f2299,
     0 0.6cqw 2cqw #000a;
   padding: 2.4cqw 3cqw 1.6cqw;
@@ -171,9 +177,7 @@
   opacity: 0.8;
 }
 .lv-box::before {
-  content: "♠ ♥";
-  left: 1cqw;
-  bottom: 0.6cqw;
+  content: none;
 }
 .lv-box::after {
   content: "♦ ♣";
@@ -184,26 +188,90 @@
   background: linear-gradient(180deg, #070a16f5, #04060ef8);
   border-color: #6d7bb0;
 }
+/* 이름표: 왼쪽에 그 사람 색 띠 + 트럼프 문양, 이름은 고운바탕 */
 .lv-name {
   position: absolute;
   left: 2cqw;
-  top: -1.9cqw;
+  top: -1.8cqw;
   display: flex;
   align-items: center;
   gap: 0.6cqw;
-  padding: 0.35cqw 1.6cqw 0.35cqw 0.6cqw;
+  height: 3.4cqw;
+  padding: 0 1.9cqw 0 1cqw;
   border: 0.12cqw solid #c9a25a;
-  border-radius: 0.5cqw;
-  background: linear-gradient(180deg, #1b2448, #0e1430);
-  font-size: 1.55cqw;
-  font-weight: 800;
+  border-left: 0.5cqw solid var(--nc, #c9a25a);
+  border-radius: 0.3cqw 1cqw 1cqw 0.3cqw;
+  background: linear-gradient(90deg, #0a1030, #1a2350);
+  box-shadow: 0 0.4cqw 1.1cqw #000a;
+  font-family: var(--lv-serif);
+  font-size: 1.75cqw;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+.lv-name-p {
+  left: 9.6cqw;
+}
+.lv-name-suit {
+  font-family: var(--lv-sans);
+  font-size: 1.35cqw;
+  color: var(--nc, #ffd27a);
+}
+.lv-name-t {
+  color: #fff6e2;
+  text-shadow: 0 0 0.9cqw color-mix(in srgb, var(--nc, #c9a25a) 50%, transparent);
+}
+/* 초상 카드: 대사창 위로 비스듬히 튀어나온 트럼프 카드 */
+@keyframes lv-portrait-in {
+  from {
+    opacity: 0;
+    translate: 0 0.8cqw;
+  }
+}
+.lv-portrait {
+  position: absolute;
+  left: 1.7cqw;
+  bottom: calc(100% - 1.5cqw);
+  width: 6.6cqw;
+  height: 6.6cqw;
+  border-radius: 0.8cqw;
+  background-color: #151b38;
+  background-repeat: no-repeat;
+  border: 0.16cqw solid #e2c47e;
+  box-shadow:
+    0 0 0 0.28cqw #0a0f22,
+    0 0 0 0.42cqw var(--nc, #c9a25a),
+    0 0.8cqw 1.6cqw #000b;
+  rotate: -3deg;
+  animation: lv-portrait-in 0.22s ease-out;
+}
+.lv-portrait-suit {
+  position: absolute;
+  left: 0.4cqw;
+  top: 0.1cqw;
+  font-size: 1.15cqw;
+  color: var(--nc, #ffd27a);
+  text-shadow:
+    0 0 0.3cqw #000,
+    0 0 0.6cqw #000;
 }
 .lv-text {
+  font-weight: 500;
   font-size: 1.85cqw;
   line-height: 1.65;
   letter-spacing: 0.01em;
   word-break: keep-all;
   text-shadow: 0 0.1cqw 0.3cqw #000;
+}
+/* 서술: 기울임 대신 바탕체 (한글 가짜 기울임은 지저분해 보임) */
+.lv-t-narr {
+  font-family: var(--lv-serif);
+  font-weight: 400;
+  font-size: 1.8cqw;
+  color: #ece4d0;
+  letter-spacing: 0.02em;
+}
+.lv-t-think {
+  color: #cfc6b0;
 }
 .lv-t-whisper {
   font-size: 1.55cqw;
@@ -474,6 +542,38 @@
     0 1.5cqw 4cqw #000c,
     inset 0 0 0 0.12cqw #ffffff14;
   animation: lv-phone-in 0.45s cubic-bezier(0.2, 0.9, 0.25, 1.05);
+}
+/* 문자 도착: 부르르 (translate · rotate 만 써서 등장 애니메이션과 안 겹침) */
+.lv-phone-buzz {
+  animation:
+    lv-phone-in 0.45s cubic-bezier(0.2, 0.9, 0.25, 1.05),
+    lv-buzz 0.45s linear;
+}
+@keyframes lv-buzz {
+  0%,
+  100% {
+    translate: 0 0;
+    rotate: 0deg;
+  }
+  10%,
+  50% {
+    translate: -0.35cqw 0;
+    rotate: -0.8deg;
+  }
+  30%,
+  70% {
+    translate: 0.35cqw 0;
+    rotate: 0.8deg;
+  }
+  85% {
+    translate: -0.15cqw 0;
+    rotate: -0.3deg;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lv-phone-buzz {
+    animation: lv-phone-in 0.45s cubic-bezier(0.2, 0.9, 0.25, 1.05);
+  }
 }
 .lv-phone-a {
   --acc: #8fd3ff;
@@ -1773,4 +1873,137 @@
   pointer-events: none;
   box-shadow: 0 0 1.4cqw #ffd27a55;
   animation: lv-stageup 3.6s ease both;
+}
+
+/* ===== 하단 빠른 메뉴: 테두리 없는 작은 글자 — 왼쪽 저장 · 불러오기, 오른쪽 읽기 ===== */
+.lv-qm {
+  position: absolute;
+  bottom: 3.4%;
+  z-index: 25;
+  display: flex;
+  align-items: center;
+  gap: 0.15cqw;
+}
+.lv-qm-l {
+  left: 3.6%;
+}
+.lv-qm-r {
+  right: 3.6%;
+}
+.lv-qm-sep {
+  width: 0.1cqw;
+  height: 1cqw;
+  margin: 0 0.45cqw;
+  background: #c9a25a55;
+}
+.lv-qb {
+  position: relative;
+  padding: 0.45cqw 0.7cqw;
+  border-radius: 0.4cqw;
+  font-family: var(--lv-sans);
+  font-size: 0.95cqw;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: #e9d9b0;
+  opacity: 0.5;
+  transition:
+    opacity 0.15s,
+    background 0.15s,
+    color 0.15s;
+}
+.lv-qb:hover {
+  opacity: 1;
+  background: #ffffff10;
+}
+.lv-qb:focus-visible {
+  opacity: 1;
+  outline: 0.12cqw solid #ffd27a;
+}
+/* 켜진 AUTO · SKIP: 금색 + 아래 점 깜빡 */
+.lv-qb-on {
+  opacity: 1;
+  color: #ffd27a;
+}
+.lv-qb-on::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  width: 0.35cqw;
+  height: 0.35cqw;
+  margin-left: -0.175cqw;
+  border-radius: 99px;
+  background: #ffd27a;
+  animation: lv-blink 1s infinite;
+}
+
+/* ===== 오른쪽 위 아이콘 버튼 ===== */
+.lv-ib {
+  display: grid;
+  place-items: center;
+  width: 2.8cqw;
+  height: 2.8cqw;
+  border-radius: 99px;
+  border: 0.1cqw solid #c9a25a99;
+  background: #0d1328cc;
+  color: #e9d9b0;
+  transition:
+    background 0.15s,
+    color 0.15s,
+    transform 0.15s;
+}
+.lv-ib svg {
+  width: 1.45cqw;
+  height: 1.45cqw;
+}
+.lv-ib:hover {
+  background: #c9a25a;
+  color: #10152c;
+  transform: translateY(-0.1cqw);
+}
+.lv-ib:focus-visible {
+  outline: 0.12cqw solid #ffd27a;
+  outline-offset: 0.15cqw;
+}
+
+/* ===== 나가기 확인 창 ===== */
+.lv-confirm {
+  position: absolute;
+  inset: 0;
+  z-index: 70;
+  display: grid;
+  place-items: center;
+  background: #05081acc;
+  animation: lv-fadein 0.18s ease;
+  cursor: default;
+}
+.lv-confirm-card {
+  display: grid;
+  justify-items: center;
+  gap: 1.1cqw;
+  min-width: 40cqw;
+  padding: 2.6cqw 3.4cqw 2.4cqw;
+  border: 0.12cqw solid #c9a25a;
+  border-radius: 1cqw;
+  background: linear-gradient(180deg, #18214a, #0b1030);
+  box-shadow: 0 1cqw 3cqw #000c;
+  text-align: center;
+}
+.lv-confirm-title {
+  font-family: var(--lv-serif);
+  font-size: 2.1cqw;
+  font-weight: 700;
+  color: #fff6e2;
+}
+.lv-confirm-sub {
+  font-size: 1.15cqw;
+  color: #c9c1d8;
+}
+.lv-confirm-btns {
+  display: flex;
+  gap: 0.8cqw;
+  margin-top: 0.6cqw;
+}
+.lv-bare {
+  font-weight: 600;
 }

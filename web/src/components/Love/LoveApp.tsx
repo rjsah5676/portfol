@@ -19,6 +19,8 @@ import {
   NAME_COLOR,
   OUTFITS,
   FACE_NEAR,
+  PORTRAIT,
+  SUIT,
   RAIN_LOOP,
   SFX,
   STAND,
@@ -251,6 +253,8 @@ export default function LoveApp() {
   const [skip, setSkip] = useState(false);
   const [log, setLog] = useState<{ who: Who; text: string }[]>([]);
   const [panel, setPanel] = useState<Panel>(null);
+  /** 오른쪽 위 나가기 → 확인 창 */
+  const [askExit, setAskExit] = useState(false);
   const [endings, setEndings] = useState<EndingId[]>([]);
   /** 본 이벤트 CG (회상 갤러리) */
   const [cgs, setCgs] = useState<CgId[]>([]);
@@ -569,7 +573,14 @@ export default function LoveApp() {
   useEffect(() => {
     if (phase !== "game") return;
     const down = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setPanel(null);
+      // Esc: 열린 창 닫기 → 아무 창도 없으면 나가기 확인
+      if (e.key === "Escape") {
+        if (askExit) setAskExit(false);
+        else if (panel) setPanel(null);
+        else setAskExit(true);
+        return;
+      }
+      if (askExit) return;
       if (e.key === "Control") setSkip(true);
       if ((e.key === "h" || e.key === "H") && !panel) setHideUi((v) => !v);
       if ((e.key === "a" || e.key === "A") && !panel) setAuto((v) => !v);
@@ -588,7 +599,7 @@ export default function LoveApp() {
       window.removeEventListener("keydown", down);
       window.removeEventListener("keyup", up);
     };
-  }, [phase, advance, panel]);
+  }, [phase, advance, panel, askExit]);
 
   // ---------- 동작 ----------
   const newGame = () => {
@@ -947,6 +958,7 @@ export default function LoveApp() {
                 who={block.who}
                 mood={block.mood}
                 name={sub(NAME[block.who])}
+                portrait={portraitStyle(block.who, disp)}
                 text={fullText.slice(0, typed)}
                 done={!typing}
                 onReplay={
@@ -956,37 +968,45 @@ export default function LoveApp() {
               />
             )}
 
-            {/* 하단 버튼 */}
+            {/* 하단 빠른 메뉴 — 왼쪽은 저장 · 불러오기, 오른쪽은 읽기 (테두리 없는 글자 버튼) */}
             {!hideUi && (block?.k === "say" || block?.k === "choice") && (
-              <div className="lv-ctrl" onClick={(e) => e.stopPropagation()}>
-                <Chip on={auto} onClick={() => setAuto((a) => !a)}>
-                  AUTO
-                </Chip>
-                <Chip
-                  on={skip}
-                  title="읽은 대사를 다음 선택지까지 넘겨요"
-                  onClick={() => setSkip((v) => !v)}
-                >
-                  SKIP
-                </Chip>
-                <Chip title="직전 선택지로 돌아가기" onClick={backToChoice}>
-                  ◀ 선택지
-                </Chip>
-                <Chip onClick={() => setPanel("log")}>LOG</Chip>
-                <Chip onClick={() => setPanel("save")}>SAVE</Chip>
-                <Chip onClick={() => setPanel("load")}>LOAD</Chip>
-                <Chip onClick={() => save("q")}>Q.SAVE</Chip>
-                <Chip onClick={() => load("q")}>Q.LOAD</Chip>
-                <Chip
-                  title="대사창을 숨기고 그림 보기 (캐릭터를 누르면 반응해요)"
-                  onClick={() => {
-                    setHideUi(true);
-                    setTouchHint(true);
-                  }}
-                >
-                  HIDE
-                </Chip>
-              </div>
+              <>
+                <div className="lv-qm lv-qm-l" onClick={(e) => e.stopPropagation()}>
+                  <QBtn onClick={() => setPanel("save")}>SAVE</QBtn>
+                  <QBtn onClick={() => setPanel("load")}>LOAD</QBtn>
+                  <i className="lv-qm-sep" />
+                  <QBtn title="빠른 저장 (슬롯 하나)" onClick={() => save("q")}>
+                    Q.SAVE
+                  </QBtn>
+                  <QBtn title="빠른 저장한 곳 불러오기" onClick={() => load("q")}>
+                    Q.LOAD
+                  </QBtn>
+                </div>
+                <div className="lv-qm lv-qm-r" onClick={(e) => e.stopPropagation()}>
+                  <QBtn title="직전 선택지로 돌아가기" onClick={backToChoice}>
+                    ◀ 선택지
+                  </QBtn>
+                  <QBtn title="지난 대사 (L · 휠 위로)" onClick={() => setPanel("log")}>
+                    LOG
+                  </QBtn>
+                  <i className="lv-qm-sep" />
+                  <QBtn title="자동 넘김 (A)" on={auto} onClick={() => setAuto((a) => !a)}>
+                    AUTO
+                  </QBtn>
+                  <QBtn title="읽은 대사를 다음 선택지까지 넘겨요 (Ctrl 누르는 동안)" on={skip} onClick={() => setSkip((v) => !v)}>
+                    SKIP
+                  </QBtn>
+                  <QBtn
+                    title="대사창을 숨기고 그림 보기 (H · 캐릭터를 누르면 반응해요)"
+                    onClick={() => {
+                      setHideUi(true);
+                      setTouchHint(true);
+                    }}
+                  >
+                    HIDE
+                  </QBtn>
+                </div>
+              </>
             )}
             {heartPop && (
               <div
@@ -997,20 +1017,66 @@ export default function LoveApp() {
               </div>
             )}
             <div className="lv-top-right" onClick={(e) => e.stopPropagation()}>
-              <Chip title="환경 설정" onClick={() => setPanel("config")}>
-                ⚙
-              </Chip>
-              <Chip onClick={toggleMute}>{muted ? "🔇" : "♪"}</Chip>
-              <Chip onClick={toggleFull}>⛶</Chip>
-              <Chip
-                onClick={() => {
-                  bgm(null);
-                  setPhase("title");
+              <IconBtn title="환경 설정" onClick={() => setPanel("config")}>
+                <path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z" />
+                <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z" />
+              </IconBtn>
+              <IconBtn title={muted ? "소리 켜기" : "소리 끄기"} onClick={toggleMute}>
+                <path d="M11 5 6 9H2v6h4l5 4V5Z" />
+                {muted ? (
+                  <path d="m23 9-6 6M17 9l6 6" />
+                ) : (
+                  <path d="M15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14" />
+                )}
+              </IconBtn>
+              <IconBtn title="전체화면" onClick={toggleFull}>
+                <path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3" />
+              </IconBtn>
+              <IconBtn title="메뉴로 나가기 (Esc)" onClick={() => setAskExit(true)}>
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                <path d="m16 17 5-5-5-5M21 12H9" />
+              </IconBtn>
+            </div>
+            {askExit && (
+              <div
+                className="lv-confirm"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setAskExit(false);
                 }}
               >
-                ≡
-              </Chip>
-            </div>
+                <div className="lv-confirm-card" onClick={(e) => e.stopPropagation()}>
+                  <b className="lv-confirm-title">정말 메뉴로 나가시겠습니까?</b>
+                  <p className="lv-confirm-sub">저장하지 않은 진행은 사라져요. 선택지 바로 앞은 자동 저장돼 있어요.</p>
+                  <div className="lv-confirm-btns">
+                    <button className="lv-btn-ghost" onClick={() => setAskExit(false)}>
+                      계속하기
+                    </button>
+                    <button
+                      className="lv-btn-ghost"
+                      onClick={() => {
+                        save("q");
+                        setAskExit(false);
+                        bgm(null);
+                        setPhase("title");
+                      }}
+                    >
+                      빠른 저장하고 나가기
+                    </button>
+                    <button
+                      className="lv-btn-gold"
+                      onClick={() => {
+                        setAskExit(false);
+                        bgm(null);
+                        setPhase("title");
+                      }}
+                    >
+                      나가기
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
             {hideUi && (
               <div
                 className="absolute inset-0 z-50"
@@ -1590,10 +1656,33 @@ function ReactBubble({ x, dist, text }: { x: number; dist: 0 | 1 | 2; text: stri
   );
 }
 
+/** 대사창 초상 카드: 지금 화면의 그 사람 그림(표정 · 옷 그대로)에서 얼굴만 확대 — 화면에 없으면 기본 그림 */
+const PORTRAIT_W = 6.6; // cqw
+function portraitStyle(who: Who, disp: GState["disp"] | undefined): React.CSSProperties | undefined {
+  if (who === "me" || who === "narr" || !STAND[who]?.base) return undefined;
+  const c = disp?.chars[who];
+  const outfit = disp?.outfit?.[who];
+  const dressed = outfit ? OUTFITS[who]?.[outfit] : undefined;
+  const set = dressed || STAND[who];
+  const want = (c?.face as Face) ?? "base";
+  const face = [want, ...(FACE_NEAR[want] ?? [])].find((f) => f === "base" || set.faces[f]) ?? "base";
+  const url = face === "base" ? set.base : set.faces[face];
+  const p = (dressed && PORTRAIT[`${who}-${outfit}`]) || PORTRAIT[who];
+  if (!url || !p) return undefined;
+  const [ar, cx, cy, side] = p;
+  const k = PORTRAIT_W / side; // 그림 높이 → cqw
+  return {
+    backgroundImage: `url(${url})`,
+    backgroundSize: `${ar * k}cqw ${k}cqw`,
+    backgroundPosition: `${-(cx * ar * k - PORTRAIT_W / 2)}cqw ${-(cy * k - PORTRAIT_W / 2)}cqw`,
+  };
+}
+
 function Dialogue({
   who,
   mood,
   name,
+  portrait,
   text,
   done,
   onReplay,
@@ -1602,6 +1691,7 @@ function Dialogue({
   who: Who;
   mood: string;
   name: string;
+  portrait?: React.CSSProperties;
   text: string;
   done: boolean;
   onReplay?: () => void;
@@ -1609,7 +1699,7 @@ function Dialogue({
 }) {
   if (mood === "bare") {
     return (
-      <div className="pointer-events-none absolute inset-x-[10%] bottom-[10%] z-20 text-center text-[2.4cqw] font-semibold leading-relaxed text-white [text-shadow:0_2px_10px_#000,0_0_24px_#000]">
+      <div className="lv-bare pointer-events-none absolute inset-x-[10%] bottom-[10%] z-20 text-center text-[2.4cqw] leading-relaxed text-white [text-shadow:0_2px_10px_#000,0_0_24px_#000]">
         {text}
       </div>
     );
@@ -1617,15 +1707,18 @@ function Dialogue({
   const narr = who === "narr";
   return (
     <div
-      className={`lv-box ${read ? "lv-read" : ""} ${mood === "whisper" ? "lv-box-whisper" : ""} ${mood === "heart" ? "lv-box-heart" : ""} ${mood === "shake" || mood === "shout" ? "lv-box-jolt" : ""}`}
+      className={`lv-box ${read ? "lv-read" : ""} ${narr ? "lv-box-narr" : ""} ${mood === "whisper" ? "lv-box-whisper" : ""} ${mood === "heart" ? "lv-box-heart" : ""} ${mood === "shake" || mood === "shout" ? "lv-box-jolt" : ""}`}
+      style={{ "--nc": NAME_COLOR[who] } as React.CSSProperties}
     >
+      {!narr && portrait && (
+        <div className="lv-portrait" style={portrait}>
+          <span className="lv-portrait-suit">{SUIT[who]}</span>
+        </div>
+      )}
       {!narr && (
-        <div className="lv-name" style={{ color: NAME_COLOR[who] }}>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          {FACE_ICON[who] && (
-            <img src={FACE_ICON[who]} alt="" className="h-[2.4cqw] w-[2.4cqw] rounded-full" />
-          )}
-          <span className="text-[#ffd27a]">♠</span> {name}
+        <div className={`lv-name ${portrait ? "lv-name-p" : ""}`}>
+          <span className="lv-name-suit">{SUIT[who]}</span>
+          <span className="lv-name-t">{name}</span>
           {onReplay && (
             <button
               className="lv-voice"
@@ -1641,12 +1734,42 @@ function Dialogue({
         </div>
       )}
       <div
-        className={`lv-text ${narr ? "italic text-white/85" : ""} ${mood === "whisper" ? "lv-t-whisper" : ""} ${mood === "shake" ? "lv-t-shake" : ""} ${mood === "shout" ? "lv-t-shout" : ""} ${mood === "think" ? "text-[#cfc6b0]" : ""} ${mood === "heart" ? "lv-t-heart" : ""}`}
+        className={`lv-text ${narr ? "lv-t-narr" : ""} ${mood === "whisper" ? "lv-t-whisper" : ""} ${mood === "shake" ? "lv-t-shake" : ""} ${mood === "shout" ? "lv-t-shout" : ""} ${mood === "think" ? "lv-t-think" : ""} ${mood === "heart" ? "lv-t-heart" : ""}`}
       >
         {mood === "think" ? `(${text}${done ? ")" : ""}` : text}
         {done && <span className="lv-next">◆</span>}
       </div>
     </div>
+  );
+}
+
+/** 하단 빠른 메뉴 글자 버튼 */
+function QBtn({
+  children,
+  onClick,
+  on,
+  title,
+}: {
+  children: React.ReactNode;
+  onClick: () => void;
+  on?: boolean;
+  title?: string;
+}) {
+  return (
+    <button className={`lv-qb ${on ? "lv-qb-on" : ""}`} onClick={onClick} title={title} aria-pressed={on}>
+      {children}
+    </button>
+  );
+}
+
+/** 오른쪽 위 아이콘 버튼 (선 아이콘) */
+function IconBtn({ children, onClick, title }: { children: React.ReactNode; onClick: () => void; title: string }) {
+  return (
+    <button className="lv-ib" onClick={onClick} title={title} aria-label={title}>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        {children}
+      </svg>
+    </button>
   );
 }
 
@@ -1734,9 +1857,14 @@ function Phone({
   play: (id: SfxId) => void;
 }) {
   const [sent, setSent] = useState<string | null>(null);
-  // 말풍선 하나 뜰 때마다 톡 (첫 줄은 벨소리와 겹치니 생략)
+  // 문자가 올 때마다 폰이 부르르 — 진동 소리 + 흔들림 (첫 줄은 벨소리와 겹치니 소리만 생략)
+  const [buzz, setBuzz] = useState(false);
   useEffect(() => {
-    if (shown > 1) play("pop");
+    if (shown < 1) return;
+    if (shown > 1) play("buzz");
+    setBuzz(true);
+    const id = window.setTimeout(() => setBuzz(false), 450);
+    return () => window.clearTimeout(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [shown]);
   const done = shown >= msgs.length;
@@ -1752,7 +1880,9 @@ function Phone({
     window.setTimeout(() => onReply(o), 750);
   };
   return (
-    <div className={`lv-phone ${from === "amy" ? "lv-phone-a" : from === "yeonseo" ? "lv-phone-y" : ""}`}>
+    <div
+      className={`lv-phone ${from === "amy" ? "lv-phone-a" : from === "yeonseo" ? "lv-phone-y" : ""} ${buzz ? "lv-phone-buzz" : ""}`}
+    >
       <div className="lv-phone-island" />
       <div className="lv-phone-status">
         <span>{time}</span>
@@ -1869,23 +1999,6 @@ function TellNotes({ vars }: { vars: Record<string, number> }) {
   );
 }
 
-function Chip({
-  children,
-  onClick,
-  on,
-  title,
-}: {
-  children: React.ReactNode;
-  onClick: () => void;
-  on?: boolean;
-  title?: string;
-}) {
-  return (
-    <button className={`lv-chip ${on ? "lv-chip-on" : ""}`} onClick={onClick} title={title}>
-      {children}
-    </button>
-  );
-}
 
 /** 큰 분기점 알림 — 잘 나가는 미연시들처럼 "여기서 저장해 두라"는 신호를 눈에 띄게 */
 function BranchBanner({ onSave }: { onSave: () => void }) {

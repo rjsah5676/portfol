@@ -120,7 +120,7 @@ export type SfxId =
   | "potwin"
   | "fold"
   | "knock"
-  | "pop"
+  | "buzz"
   | "send"
   | "pencil";
 export type BgmId =
