@@ -303,9 +303,9 @@ export const RELIC_VAL = {
   // 2026-10-22 전설 유물 규칙 (수치보다 플레이가 바뀌게)
   pure_steer: (l: number) => rd(25 * sc(l, 0.15)),
   // 2026-10-22 (3): 수치를 올려도 골드 · 희귀에서 넘어갈 이유(도파민)가 없다는 말 → 무지개 · 전쟁 깃발을 「터지는 순간」이 있는 규칙으로 바꿈
-  rainbow_every: (l: number) => (l >= 5 ? 20 : l >= 3 ? 25 : 30),
+  rainbow_every: (l: number) => (l >= 5 ? 27 : l >= 3 ? 33 : 40),
   rainbow_leg: (l: number) => rd(10 * sc(l, 0.2)),
-  war_every: (l: number) => (l >= 5 ? 6 : l >= 3 ? 8 : 10),
+  war_every: (l: number) => (l >= 5 ? 10 : l >= 3 ? 12 : 14),
   war_free: (_l: number) => 1,
   // 심연 2막 (오염 30 클리어 뒤 상자) · 해피 타운 첫 클리어
   myth_seal: (l: number) => rd(30 * sc(l, 0.15)),
@@ -423,9 +423,9 @@ const deepRule = (P: DeepParams): Record<number, string> => ({
   25: `보스 체력 ${x100(P.boss25)} · 보스 시간 -18초`,
   30: "끝없는 오염 — 심연 1막 끝",
   31: "심연 2막 — 적 체력이 크게 올라요 (유물 4칸 · 각인 몫) · 보스 시간 -21초 · 보스 2페이즈 셋 (40 · 50 · 60웨이브)",
-  35: "심연 변이 「정예」 · 보스 시간 -24초",
+  35: `심연 변이 「정예」 · 보스 시간 -24초 · 보스 체력 ${x100(P.boss35 ?? 1)}`,
   40: "보스 6명 모두 2페이즈 · 심연 변이 「방벽」 · 보스 시간 -27초",
-  45: "심연 변이 「안개」 · 보스 시간 -30초",
+  45: `심연 변이 「안개」 · 보스 시간 -30초 · 보스 체력 ${x100(P.boss45 ?? 1)}`,
   50: `글리치의 심장 — 보스 체력 ${x100(P.boss50 ?? 1.1)} · 마지막 단계`,
 });
 /** 심연 곡선 값 (밸런스 시뮬이 --deep 으로 바꿔 볼 수 있음) */
@@ -443,6 +443,9 @@ export interface DeepParams {
   /** 31단계부터 단계마다 적 체력 + (10단계 기준, 없으면 hpPerLv) · 50단계 보스 체력 */
   hpPerLv2?: number;
   boss50?: number;
+  /** 35 · 45단계부터 보스 체력 배수 더 (2026-10-23: 보스 시간만 줄여선 31~ 보스 벽이 돌아오지 않아서) */
+  boss35?: number;
+  boss45?: number;
   /** 31단계에서 한 번에 더하는 적 체력 (10단계 기준) — 30 클리어로 여는 유물 4칸 · 각인만큼 */
   jump31?: number;
 }
@@ -450,7 +453,7 @@ export interface DeepParams {
 // 2026-10-22: 「전반적으로 쉬워졌다」 + 다 키운 봇(유물 3칸 · 각인 없음)이 30 · 35 · 40을 50~90% 깨던 것 → 11~25 0.085 → 0.095 · 26~30 0.04 → 0.08
 // 2026-10-22 (2): 「30 깨니까 그 뒤가 너무 쉬움」 — 사람 기록에서 31 · 32 · 33 을 한두 판에 깸 (예전 30은 7판). 31 체력이 옛 30보다 낮았고 유물 4칸 · 각인이 더해짐
 //   → 31에서 한 번에 +1.2 (유물 4칸 · 각인 몫) · 31~ 0.12 → 0.13. 성장 시뮬(defense-econ)에서 31~50 단계마다 봇 3~20판 (26~30 과 비슷한 결)
-export const DEEP_PARAMS: DeepParams = { hpPerLv: 0.095, armor11: 1.15, armor20: 1.28, boss15: 1.08, boss25: 1.15, spd20: 1.1, rewardPerLv: 0.1, hpPerLv26: 0.08, hpPerLv2: 0.13, boss50: 1.1, jump31: 1.2 };
+export const DEEP_PARAMS: DeepParams = { hpPerLv: 0.095, armor11: 1.15, armor20: 1.28, boss15: 1.08, boss25: 1.15, spd20: 1.1, rewardPerLv: 0.1, hpPerLv26: 0.08, hpPerLv2: 0.13, boss50: 1.1, jump31: 1.2, boss35: 1.2, boss45: 1.2 };
 /**
  * 심연 보스 제한 시간 (더함). 25~30 -18 · 2026-10-23: 31~ -21 · 35~ -24 · 40~ -27 · 45~ -30
  *  예전 30 언저리의 재미는 40 · 50 · 60 보스 시간초과(제한 42초)로 지는 판이 섞이는 것이었는데,
@@ -478,7 +481,7 @@ export function deepGlitch(P: DeepParams): GlitchDef[] {
       bossSec: deepBossSec(lv) ?? top.bossSec,
       reward: Math.round((top.reward + (P.rewardPerLv ?? 0.1) * (lv - 10)) * 100) / 100,
       armor: lv >= 20 ? P.armor20 : P.armor11,
-      boss: lv >= 50 ? P.boss25 * (P.boss50 ?? 1.1) : lv >= 25 ? P.boss25 : lv >= 15 ? P.boss15 : 1,
+      boss: Math.round((lv >= 25 ? P.boss25 : lv >= 15 ? P.boss15 : 1) * (lv >= 35 ? (P.boss35 ?? 1) : 1) * (lv >= 45 ? (P.boss45 ?? 1) : 1) * (lv >= 50 ? (P.boss50 ?? 1.1) : 1) * 100) / 100,
       mut: mutatorsOf(lv),
       rule: rules[lv] ?? `적 체력 +${Math.round((hp - 1) * 100)}%`,
     };
