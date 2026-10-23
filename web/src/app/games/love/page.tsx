@@ -11,7 +11,7 @@ export default function Page() {
         <LoveApp />
       </Stage>
       <p className="mt-3 px-3 text-center text-xs text-neutral-500">
-        클릭/스페이스 = 다음 · Ctrl 누르는 동안 스킵 · 휠 위 = 지난 대사 · 우클릭 = 대사창 숨기기 · 저장은 이 브라우저에만 남아요
+        클릭/스페이스 = 다음 · Ctrl 누르는 동안 스킵 · L = 지난 대사 · 우클릭 = 대사창 숨기기 · 저장은 이 브라우저에만 남아요
       </p>
     </div>
   );

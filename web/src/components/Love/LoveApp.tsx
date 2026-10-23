@@ -782,10 +782,7 @@ export default function LoveApp() {
       <div
         className="lv-stage"
         onClick={() => phase === "game" && !hideUi && advance()}
-        // 미연시 국룰: 휠 위로 = 지난 대사, 우클릭 = 대사창 숨기기
-        onWheel={(e) => {
-          if (phase === "game" && !panel && e.deltaY < 0 && block?.k === "say") setPanel("log");
-        }}
+        // 우클릭 = 대사창 숨기기 (휠은 페이지 스크롤과 겹쳐서 지난 대사에 안 씀 — L 키 · LOG 버튼)
         onContextMenu={(e) => {
           if (phase !== "game") return;
           e.preventDefault();
@@ -1013,7 +1010,7 @@ export default function LoveApp() {
                   <QBtn title="직전 선택지로 돌아가기" onClick={backToChoice}>
                     ◀ 선택지
                   </QBtn>
-                  <QBtn title="지난 대사 (L · 휠 위로)" onClick={() => setPanel("log")}>
+                  <QBtn title="지난 대사 (L)" onClick={() => setPanel("log")}>
                     LOG
                   </QBtn>
                   <i className="lv-qm-sep" />
@@ -1074,7 +1071,6 @@ export default function LoveApp() {
               >
                 <div className="lv-confirm-card" onClick={(e) => e.stopPropagation()}>
                   <b className="lv-confirm-title">정말 메뉴로 나가시겠습니까?</b>
-                  <p className="lv-confirm-sub">저장하지 않은 진행은 사라져요. 선택지 바로 앞은 자동 저장돼 있어요.</p>
                   <div className="lv-confirm-btns">
                     <button className="lv-btn-ghost" onClick={() => setAskExit(false)}>
                       계속하기
@@ -2281,7 +2277,7 @@ function ConfigPanel({
       )}
       <div className="mt-[1.2cqw] text-[1.05cqw] leading-relaxed text-white/45">
         단축키 — 스페이스 · 엔터 · 클릭: 다음 / Ctrl: 누르는 동안 스킵 / H · 우클릭: 대사창 숨기기 /
-        A: 오토 / L · ↑ · 휠 위로: 지난 대사 / Esc: 창 닫기
+        A: 오토 / L · ↑: 지난 대사 / Esc: 창 닫기
       </div>
     </div>
   );
