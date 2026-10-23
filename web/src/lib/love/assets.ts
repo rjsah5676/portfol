@@ -108,7 +108,14 @@ export const BG_FALLBACK: Record<BgId, string> = {
 /** 이벤트 CG — 핵심 장면 한 장 그림 (회상 갤러리에도 모임) */
 export const CG: Record<
   CgId,
-  { src: string; title: string; who: "yeonseo" | "amy"; video?: string }
+  {
+    src: string;
+    title: string;
+    who: "yeonseo" | "amy";
+    video?: string;
+    /** 차분 — { 이름: 그림 } (같은 구도에서 표정 · 상태만 다른 그림). 대본: { t: "cgv", v: 이름 } */
+    vars?: Record<string, string>;
+  }
 > = {
   y_closet: { src: `${B}/cg/y-closet.webp`, title: "비품 창고, 숨 쉬지 마요", who: "yeonseo" },
   y_umbrella: { src: `${B}/cg/y-umbrella.webp`, title: "그냥 비 오니까요", who: "yeonseo" },
@@ -137,6 +144,11 @@ export const CG: Record<
   },
   end_grand: { src: `${B}/cg/end-grand.webp`, title: "ENDING · All In", who: "amy" },
 };
+/** CG 차분 그림 주소 (없는 이름이면 원본) */
+export const cgSrc = (id: CgId, v?: string | null) => (v && CG[id].vars?.[v]) || CG[id].src;
+/** 갤러리 · 본 장면 기록용 키 ("a_kiss" / "a_kiss~close") */
+export const cgKey = (id: CgId, v?: string | null) => (v ? `${id}~${v}` : id);
+
 export const CG_ORDER: CgId[] = [
   "a_booth",
   "a_door",
@@ -302,7 +314,10 @@ export function preloadList(): { img: string[]; audio: string[]; voice: string[]
     for (const u of [c.base, ...Object.values(c.faces)]) if (u) img.add(u);
   for (const u of Object.values(BG)) if (u) img.add(u);
   for (const u of Object.values(FACE_ICON)) if (u) img.add(u);
-  for (const c of Object.values(CG)) img.add(c.src);
+  for (const c of Object.values(CG)) {
+    img.add(c.src);
+    for (const v of Object.values(c.vars ?? {})) img.add(v);
+  }
   img.add(CARD_BACK);
   // 스토리 포커 J · Q · K 그림 (ANIME POKER 카드 그대로)
   for (const s of "shdc") for (const r of "jqk") img.add(`${P}/card/court-${s}-${r}.webp`);

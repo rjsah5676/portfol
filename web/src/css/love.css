@@ -2047,3 +2047,118 @@
 .lv-title-btn:has(.lv-title-count) {
   padding-right: 3.2cqw;
 }
+
+/* ===== CG 차분 · 카메라 ===== */
+.lv-cg-cam {
+  position: absolute;
+  inset: 0;
+  transform-origin: 50% 50%;
+  transition: transform 1.6s cubic-bezier(0.45, 0, 0.2, 1);
+}
+.lv-cg-var {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
+  opacity: 0;
+  transition: opacity 0.55s ease;
+}
+.lv-cg-var-on {
+  opacity: 1;
+}
+
+/* ===== 회상 필터 (종이 · 세피아 · 손글씨 캡션) ===== */
+.lv-memory {
+  position: absolute;
+  inset: 0;
+  z-index: 13;
+  pointer-events: none;
+  backdrop-filter: sepia(0.6) saturate(0.65) contrast(0.92) brightness(1.04);
+  -webkit-backdrop-filter: sepia(0.6) saturate(0.65) contrast(0.92) brightness(1.04);
+  animation: lv-memory-in 0.9s ease both;
+}
+.lv-memory-paper {
+  position: absolute;
+  inset: 0;
+  /* 종이 결: 잔무늬 두 겹 + 누렇게 바랜 가장자리 */
+  background:
+    repeating-linear-gradient(0deg, rgb(120 90 50 / 0.035) 0 1px, transparent 1px 3px),
+    repeating-linear-gradient(90deg, rgb(120 90 50 / 0.03) 0 1px, transparent 1px 4px),
+    radial-gradient(ellipse at center, transparent 62%, rgb(232 212 170 / 0.35) 88%, rgb(214 190 140 / 0.6) 100%);
+  mix-blend-mode: multiply;
+}
+.lv-memory::after {
+  /* 가장자리 하얗게 번짐 */
+  content: "";
+  position: absolute;
+  inset: 0;
+  box-shadow: inset 0 0 5cqw 1cqw rgb(250 240 220 / 0.4);
+}
+/* 스탠딩은 backdrop 이 안 먹는 경우가 있어 직접 같은 색으로 */
+.lv-mem-on .lv-char-in {
+  filter: sepia(0.6) saturate(0.65) contrast(0.92) brightness(1.04);
+  transition: filter 0.9s ease;
+}
+.lv-memory-cap {
+  position: absolute;
+  right: 6%;
+  top: 9%;
+  text-align: right;
+  max-width: 60%;
+  font-family: "Nanum Pen Script", "Gaegu", cursive;
+  font-size: 3.2cqw;
+  line-height: 1.15;
+  color: #5a4128;
+  text-shadow: 0 0 0.6cqw rgb(255 248 230 / 0.9);
+  transform: rotate(2deg);
+  animation: lv-memory-cap 1.4s ease 0.4s both;
+}
+@keyframes lv-memory-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes lv-memory-cap {
+  from {
+    opacity: 0;
+    clip-path: inset(0 100% 0 0);
+  }
+  to {
+    opacity: 1;
+    clip-path: inset(0 0 0 0);
+  }
+}
+
+/* 갤러리: 차분 개수 · 크게 보기 쪽수 */
+.lv-gal-cg-n {
+  position: absolute;
+  right: 0.6cqw;
+  top: 0.6cqw;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2cqw;
+  padding: 0.2cqw 0.55cqw;
+  border-radius: 99px;
+  background: #070b1ccc;
+  border: 0.08cqw solid #c9a25a99;
+  font-size: 0.9cqw;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: #ffd27a;
+}
+.lv-gal-cg-n i {
+  font-style: normal;
+  color: #c9a25a;
+}
+.lv-gal-view-n {
+  position: absolute;
+  right: 2cqw;
+  bottom: 2cqw;
+  padding: 0.3cqw 0.8cqw;
+  border-radius: 99px;
+  background: #000a;
+  font-size: 1.1cqw;
+  font-variant-numeric: tabular-nums;
+  color: #f3e6c4;
+}

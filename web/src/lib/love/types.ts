@@ -258,6 +258,13 @@ export interface Shot {
   text?: string;
 }
 
+/** CG 카메라 — 그림의 x, y(0~1) 지점을 화면 가운데로, z 배 확대 */
+export interface CgCam {
+  x: number;
+  y: number;
+  z: number;
+}
+
 export type Step =
   /** 데이트 · 하루 요약 같은 '사진 몽타주' (새 CG 없이 이벤트 느낌) — 2~4컷, 클릭하면 다음 */
   | { t: "montage"; shots: Shot[]; caption?: string }
@@ -266,8 +273,14 @@ export type Step =
   | { t: "dist"; who: CharKey; dist: Dist }
   /** 말하지 않는 캐릭터의 표정만 바꿈 (주인공 말에 연서가 붉어지는 등) */
   | { t: "face"; who: CharKey; face: Face }
-  /** 이벤트 CG 켜기 (null = 끄고 스탠딩으로) */
-  | { t: "cg"; id: CgId | null }
+  /** 이벤트 CG 켜기 (null = 끄고 스탠딩으로). v = 처음부터 보여 줄 차분, cam = 처음 카메라 */
+  | { t: "cg"; id: CgId | null; v?: string; cam?: CgCam }
+  /** 켜져 있는 CG 의 차분만 바꿈 (번쩍임 없이 크로스페이드 · null = 원본) — 대사 흐름 따라 표정 바꾸기 */
+  | { t: "cgv"; v: string | null }
+  /** CG 카메라: 그림의 한 점(x, y = 0~1)을 z 배로 확대해 천천히 이동 (null = 전체 보기) */
+  | { t: "cgcam"; cam: CgCam | null }
+  /** 회상 필터: 종이 질감 · 세피아 · 손글씨 캡션 (text 없이 켜도 됨, off = 끄기). 날이 바뀌면 자동으로 꺼짐 */
+  | { t: "memory"; text?: string; off?: boolean }
   /** 옷 갈아입기 (다음에 바꿀 때까지 유지, "default" = 기본) */
   | { t: "outfit"; who: CharKey; id: Outfit }
   | { t: "hide"; who?: CharKey }

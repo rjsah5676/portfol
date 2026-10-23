@@ -25,6 +25,8 @@ import {
   SFX,
   STAND,
   TITLE,
+  cgKey,
+  cgSrc,
   preloadList,
 } from "@/lib/love/assets";
 import {
@@ -45,6 +47,7 @@ import { type Heroine, SKILL_NAME, STAGE_LINE, STAGE_NAME, heroStage, skillOf, t
 import { VOICE_BY_TEXT } from "@/lib/love/voices";
 import {
   type BgmId,
+  type CgCam,
   type CgId,
   type CharKey,
   type EndingId,
@@ -92,6 +95,8 @@ const KEY = {
   save: (n: string) => `love:save:${n}`,
   endings: "love:endings",
   cg: "love:cg",
+  /** 본 CG 차분 ("id~차분") — 갤러리에서 넘겨 보기 */
+  cgv: "love:cgv",
   meta: "love:meta",
   cfg: "love:cfg",
   seen: "love:seen",
@@ -258,6 +263,7 @@ export default function LoveApp() {
   const [endings, setEndings] = useState<EndingId[]>([]);
   /** 본 이벤트 CG (회상 갤러리) */
   const [cgs, setCgs] = useState<CgId[]>([]);
+  const [cgvs, setCgvs] = useState<string[]>([]);
   const [muted, setMuted] = useState(false);
   const [cfg, setCfgState] = useState<Cfg>(CFG0);
   const setCfg = (p: Partial<Cfg>) =>
@@ -302,6 +308,7 @@ export default function LoveApp() {
     try {
       setEndings(JSON.parse(LS.get(KEY.endings) ?? "[]"));
       setCgs(JSON.parse(LS.get(KEY.cg) ?? "[]"));
+      setCgvs(JSON.parse(LS.get(KEY.cgv) ?? "[]"));
       seen.current = new Set(JSON.parse(LS.get(KEY.seen) ?? "[]"));
     } catch {}
     const n = LS.get(KEY.name);
@@ -380,6 +387,15 @@ export default function LoveApp() {
         if (l.includes(cg)) return l;
         const n = [...l, cg];
         LS.set(KEY.cg, JSON.stringify(n));
+        return n;
+      });
+    const cv = s.disp.cgv;
+    if (cg && cv)
+      setCgvs((l) => {
+        const k = cgKey(cg, cv);
+        if (l.includes(k)) return l;
+        const n = [...l, k];
+        LS.set(KEY.cgv, JSON.stringify(n));
         return n;
       });
     if (b?.k === "phone") {
@@ -780,7 +796,7 @@ export default function LoveApp() {
   return (
     <div ref={wrap} className="lv-root" style={{ "--lv-box": cfg.box } as React.CSSProperties}>
       <div
-        className="lv-stage"
+        className={`lv-stage ${phase === "game" && disp?.memory != null ? "lv-mem-on" : ""}`}
         onClick={() => phase === "game" && !hideUi && advance()}
         // 우클릭 = 대사창 숨기기 (휠은 페이지 스크롤과 겹쳐서 지난 대사에 안 씀 — L 키 · LOG 버튼)
         onContextMenu={(e) => {
@@ -861,6 +877,7 @@ export default function LoveApp() {
               <Gallery
                 got={endings}
                 cgs={cgs}
+                cgvs={cgvs}
                 onBack={() => setPhase("title")}
                 onPlay={(id) => bgm(id)}
               />
@@ -931,7 +948,8 @@ export default function LoveApp() {
                 />
               );
             })}
-            {disp.cg && <CgView key={disp.cg} id={disp.cg} />}
+            {disp.cg && <CgView key={disp.cg} id={disp.cg} v={disp.cgv} cam={disp.cgcam} />}
+            {disp.memory != null && <MemoryFx text={disp.memory} />}
             {liveReact && !disp.cg && disp.chars[liveReact.who] && (
               <ReactBubble
                 x={
@@ -1484,11 +1502,24 @@ const RAIN_CG: CgId[] = ["y_umbrella", "a_door"];
  * 이벤트 CG: 하얗게 번쩍 → 흐릿하게 확대된 그림이 천천히 초점 잡히며 줌 아웃 · 위아래 시네마 띠 ·
  * 떠다니는 빛 입자 · 오른쪽 위에 잠깐 장면 제목
  */
-function CgView({ id }: { id: CgId }) {
+function CgView({ id, v, cam }: { id: CgId; v?: string | null; cam?: CgCam | null }) {
   const c = CG[id];
+  // 카메라: 그림의 (x, y) 를 화면 가운데로 옮긴 뒤 z 배 — 바뀔 때마다 천천히 이동
+  const camStyle = cam
+    ? { transform: `scale(${cam.z}) translate(${(0.5 - cam.x) * 100}%, ${(0.5 - cam.y) * 100}%)` }
+    : undefined;
   return (
     <div className="lv-cg">
+      <div className="lv-cg-cam" style={camStyle}>
       <div className="lv-cg-img" style={{ backgroundImage: `url("${c.src}")` }}>
+        {/* 차분: 모두 겹쳐 두고 지금 것만 보이게 — 바뀌면 크로스페이드 */}
+        {Object.entries(c.vars ?? {}).map(([k, src]) => (
+          <span
+            key={k}
+            className={`lv-cg-var ${k === v ? "lv-cg-var-on" : ""}`}
+            style={{ backgroundImage: `url("${src}")` }}
+          />
+        ))}
         {/* 살아 있는 CG (그록 루프 mp4) — 있으면 정지 그림 위에서 재생 */}
         {c.video && (
           <video
@@ -1500,6 +1531,7 @@ function CgView({ id }: { id: CgId }) {
             className="h-full w-full object-cover"
           />
         )}
+      </div>
       </div>
       <div className="lv-cg-vignette" />
       {RAIN_CG.includes(id) && <div className="lv-rain" />}
@@ -1522,6 +1554,23 @@ function CgView({ id }: { id: CgId }) {
         {c.title}
       </div>
       <div className="lv-cg-flash" />
+    </div>
+  );
+}
+
+/**
+ * 회상 필터: 종이 질감 · 세피아 · 가장자리 번짐 위에 손글씨 캡션 (지금 장면 그대로 '기억 속'으로).
+ * 스탠딩 · 배경 · CG 모두 위에 덮고, 대사창은 그대로 보임
+ */
+function MemoryFx({ text }: { text: string }) {
+  return (
+    <div className="lv-memory">
+      <div className="lv-memory-paper" />
+      {text && (
+        <div key={text} className="lv-memory-cap">
+          {text}
+        </div>
+      )}
     </div>
   );
 }
@@ -2066,17 +2115,24 @@ const MUSIC: [BgmId, string][] = [
 function Gallery({
   got,
   cgs,
+  cgvs,
   onBack,
   onPlay,
 }: {
   got: EndingId[];
   cgs: CgId[];
+  cgvs: string[];
   onBack: () => void;
   onPlay: (id: BgmId) => void;
 }) {
   const [tab, setTab] = useState<"end" | "cg" | "music">("end");
   const [track, setTrack] = useState<BgmId>("title");
   const [view, setView] = useState<CgId | null>(null);
+  const [page, setPage] = useState(0);
+  // 크게 보기: 원본 + 본 차분 순서대로 (클릭 = 다음, 마지막에서 닫힘)
+  const pages = view
+    ? [null, ...Object.keys(CG[view].vars ?? {}).filter((k) => cgvs.includes(cgKey(view, k)))]
+    : [];
   return (
     <div className="absolute inset-0 flex flex-col p-[2.5cqw]">
       <div className="mb-[1.2cqw] flex items-center gap-[1.2cqw]">
@@ -2112,7 +2168,10 @@ function Gallery({
                 key={id}
                 className={`lv-gal-cg ${ok ? "" : "lv-gal-cg-locked"}`}
                 disabled={!ok}
-                onClick={() => setView(id)}
+                onClick={() => {
+                  setView(id);
+                  setPage(0);
+                }}
               >
                 {ok ? (
                   <span
@@ -2121,6 +2180,13 @@ function Gallery({
                   />
                 ) : (
                   <span className="lv-gal-cg-q">?</span>
+                )}
+                {ok && Object.keys(CG[id].vars ?? {}).length > 0 && (
+                  <span className="lv-gal-cg-n">
+                    {1 + Object.keys(CG[id].vars ?? {}).filter((k) => cgvs.includes(cgKey(id, k))).length}
+                    <i>/</i>
+                    {1 + Object.keys(CG[id].vars ?? {}).length}
+                  </span>
                 )}
                 <span className="lv-gal-cg-cap">
                   <span className={CG[id].who === "amy" ? "text-[#7fd3ff]" : "text-[#8fa8ff]"}>
@@ -2153,10 +2219,16 @@ function Gallery({
       {view && (
         <button
           className="absolute inset-0 z-50 bg-black bg-contain bg-center bg-no-repeat"
-          style={{ backgroundImage: `url("${CG[view].src}")` }}
-          onClick={() => setView(null)}
-          aria-label="닫기"
-        />
+          style={{ backgroundImage: `url("${cgSrc(view, pages[page])}")` }}
+          onClick={() => (page + 1 < pages.length ? setPage(page + 1) : setView(null))}
+          aria-label={page + 1 < pages.length ? "다음 차분" : "닫기"}
+        >
+          {pages.length > 1 && (
+            <span className="lv-gal-view-n">
+              {page + 1} / {pages.length}
+            </span>
+          )}
+        </button>
       )}
       <div className={`grid flex-1 grid-cols-6 gap-[0.8cqw] ${tab === "end" ? "" : "hidden"}`}>
         {ENDINGS.map((e) => {
@@ -2335,7 +2407,7 @@ function LogList({
 
 /** 저장 칸 미리보기: 그때 배경(또는 CG) + 서 있던 캐릭터 */
 function SlotThumb({ s }: { s: GState }) {
-  const cg = s.disp.cg ? CG[s.disp.cg].src : null;
+  const cg = s.disp.cg ? cgSrc(s.disp.cg, s.disp.cgv) : null;
   const bg = BG[s.disp.bg];
   const ks = (Object.keys(s.disp.chars) as CharKey[]).filter((k) => STAND[k].base);
   return (

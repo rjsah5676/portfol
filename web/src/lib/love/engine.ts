@@ -6,6 +6,7 @@ import { SCENES, START } from "./script";
 import {
   type BgId,
   type BgmId,
+  type CgCam,
   type CgId,
   type CharKey,
   type Cond,
@@ -56,6 +57,12 @@ export interface Display {
   cg?: CgId | null;
   /** 지금 입고 있는 옷 (없으면 기본) — 캐릭터가 들어갔다 나와도 유지 */
   outfit?: Partial<Record<CharKey, Outfit>>;
+  /** 켜진 CG 의 차분 이름 (없으면 원본) */
+  cgv?: string | null;
+  /** CG 카메라 (없으면 전체 보기) */
+  cgcam?: CgCam | null;
+  /** 회상 필터 — 켜져 있으면 캡션 글 (빈 글 = 캡션 없이 필터만) */
+  memory?: string | null;
 }
 export type Block =
   | { k: "say"; who: Who; text: string; mood: Mood }
@@ -168,7 +175,18 @@ export function run(s0: GState): GState {
         break;
       case "cg":
         s.disp.cg = st.id;
+        s.disp.cgv = st.id ? (st.v ?? null) : null;
+        s.disp.cgcam = st.id ? (st.cam ?? null) : null;
         if (st.id) s.fx = [...s.fx, "heart"];
+        break;
+      case "cgv":
+        if (s.disp.cg) s.disp.cgv = st.v;
+        break;
+      case "cgcam":
+        if (s.disp.cg) s.disp.cgcam = st.cam;
+        break;
+      case "memory":
+        s.disp.memory = st.off ? null : (st.text ?? "");
         break;
       case "face": {
         const c = s.disp.chars[st.who];
@@ -185,6 +203,8 @@ export function run(s0: GState): GState {
         else {
           s.disp.chars = {};
           s.disp.cg = null;
+          s.disp.cgv = null;
+          s.disp.cgcam = null;
         }
         break;
       case "set":
@@ -211,6 +231,9 @@ export function run(s0: GState): GState {
         break;
       case "day":
         s.disp.cg = null;
+        s.disp.cgv = null;
+        s.disp.cgcam = null;
+        s.disp.memory = null;
         // 오늘 날짜 (대본에서 dayNo 로 읽음: 낮 일정이 끝나면 그날 저녁으로 돌아가기)
         s.vars = { ...s.vars, dayNo: st.day };
         // 시간대가 바뀌면 옷도 기본으로 (단, 장갑 벗은 "bare"는 한 번 벗으면 계속)
