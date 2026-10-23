@@ -59,11 +59,11 @@ export const FACE_NEAR: Partial<Record<Face, Face[]>> = {
  */
 export const OUTFITS: Partial<Record<CharKey, Partial<Record<Outfit, StandSet>>>> = {
   amy: {
-    tshirt: { base: `${B}/char/amy-tshirt-base.webp`, faces: faces("amy-tshirt", ["blush", "smile"]) },
+    tshirt: { base: `${B}/char/amy-tshirt-base.webp`, faces: faces("amy-tshirt", ["blush", "smile", "pout"]) },
   },
   yeonseo: {
     knit: { base: `${B}/char/yeonseo-knit-base.webp`, faces: faces("yeonseo-knit", ["away", "blush", "smile"]) },
-    bare: { base: `${B}/char/yeonseo-bare-base.webp`, faces: faces("yeonseo-bare", ["away", "smile"]) },
+    bare: { base: `${B}/char/yeonseo-bare-base.webp`, faces: faces("yeonseo-bare", ["away", "smile", "blush", "sad"]) },
   },
 };
 

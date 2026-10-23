@@ -136,6 +136,7 @@ export function whereOf(path: string): string | null {
     ["/games/defense", "PIXEL LUCKY DEFENSE"],
     ["/games/rhythm", "PIXEL Rhythm Up"],
     ["/games/sketch", "DOODLE PARTY"],
+    ["/games/love", "올인 러브"],
     ["/games/town", "TABLE TOWN"],
     ["/games/board", "보드게임"],
     ["/games/melongame", "멜론 게임"],

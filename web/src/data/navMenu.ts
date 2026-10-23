@@ -10,6 +10,7 @@ import imgRhythm from "@/img/menu/rhythm.jpg";
 import imgSketch from "@/img/menu/sketch.jpg";
 import imgPoker from "@/img/menu/poker.jpg";
 import imgDefense from "@/img/menu/defense.jpg";
+import imgLove from "@/img/menu/love.jpg";
 import imgLadder from "@/img/menu/ladder.jpg";
 import imgRoulette from "@/img/menu/roulette.jpg";
 import imgCalorie from "@/img/menu/calorie.jpg";
@@ -121,12 +122,19 @@ export const NAV_GROUPS: NavGroup[] = [
         featured: true,
       },
       {
+        href: "/games/love",
+        image: imgLove,
+        label: "올인 러브",
+        desc: "홀덤펍 딜러의 4주, ANIME POKER 외전 미연시 · 풀 CG · 엔딩 18종",
+        icon: "💘",
+        featured: true, // 메인 큰 칸 6개 맞춤 — 멜론 게임 자리 (TABLE TOWN 은 빌드에서 뺌 — archive/)
+      },
+      {
         href: "/games/melongame",
         image: imgMelongame,
         label: "멜론 게임",
         desc: "합이 10·20이 되게 묶어 지우는 2분 타임어택",
         icon: "🍈",
-        featured: true, // 메인 큰 칸 6개 맞춤 (TABLE TOWN 은 빌드에서 뺌 — archive/)
       },
       {
         href: "/games/board",
