@@ -190,7 +190,7 @@ export const PORTRAIT: Record<string, [number, number, number, number]> = {
   "chunhee": [0.4078, 0.4114, 0.1436, 0.146],
   "jeongmin": [0.3309, 0.4068, 0.1041, 0.1534],
   "taeyang": [0.3687, 0.4299, 0.1035, 0.1545],
-  "yeonseo-bare": [0.3727, 0.4822, 0.1055, 0.1536],
+  "yeonseo-bare": [0.2539, 0.4382, 0.0905, 0.118],
   "yeonseo": [0.2539, 0.4382, 0.0905, 0.118],
   "yeonseo-knit": [0.2227, 0.5276, 0.0998, 0.118],
 };
