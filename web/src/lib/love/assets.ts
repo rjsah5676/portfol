@@ -49,6 +49,7 @@ export const FACE_NEAR: Partial<Record<Face, Face[]>> = {
   away: ["sad", "cold"],
   cold: ["sad", "pout"],
   blush: ["smile"],
+  sad: ["away"],
   surprise: [],
 };
 
@@ -56,7 +57,15 @@ export const FACE_NEAR: Partial<Record<Face, Face[]>> = {
  * 의상 차분 — 그림이 있는 것만 등록 (없으면 기본 옷으로 보임). 표정은 그 옷 그림에 있는 것만, 없는 표정은 그 옷의 base
  * 파일: char/<who>-<outfit>-base.webp · char/<who>-<outfit>-<face>.webp
  */
-export const OUTFITS: Partial<Record<CharKey, Partial<Record<Outfit, StandSet>>>> = {};
+export const OUTFITS: Partial<Record<CharKey, Partial<Record<Outfit, StandSet>>>> = {
+  amy: {
+    tshirt: { base: `${B}/char/amy-tshirt-base.webp`, faces: faces("amy-tshirt", ["blush", "smile"]) },
+  },
+  yeonseo: {
+    knit: { base: `${B}/char/yeonseo-knit-base.webp`, faces: faces("yeonseo-knit", ["away", "blush", "smile"]) },
+    bare: { base: `${B}/char/yeonseo-bare-base.webp`, faces: faces("yeonseo-bare", ["away", "smile"]) },
+  },
+};
 
 /** 배경 — 없으면 단색 그라데이션 */
 export const BG: Record<BgId, string | null> = {
