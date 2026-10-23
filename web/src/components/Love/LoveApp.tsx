@@ -432,9 +432,18 @@ export default function LoveApp() {
       setTyped(fullText.length);
       return;
     }
-    const id = window.setInterval(() => setTyped((n) => Math.min(fullText.length, n + 1)), ms);
-    return () => window.clearInterval(id);
-  }, [typing, skip, fullText.length, cfg.text]);
+    // 숨 고르기: 말줄임표 · 문장 끝 · 쉼표 뒤에서 잠깐 멈춤 ("…진짜?" 의 '…' 다음, "알아. 근데" 의 '.' 다음)
+    const ch = fullText[typed - 1];
+    const nx = fullText[typed];
+    let d = ms;
+    if (typed > 0) {
+      if (ch === "…" && nx !== "…") d = ms * 11;
+      else if ((ch === "." || ch === "?" || ch === "!") && nx === " ") d = ms * 8;
+      else if (ch === "," && nx === " ") d = ms * 4;
+    }
+    const id = window.setTimeout(() => setTyped((n) => Math.min(fullText.length, n + 1)), d);
+    return () => window.clearTimeout(id);
+  }, [typing, typed, skip, fullText, cfg.text]);
 
   const markSeen = useCallback(() => {
     if (!s) return;
@@ -1998,7 +2007,6 @@ function TellNotes({ vars }: { vars: Record<string, number> }) {
     </div>
   );
 }
-
 
 /** 큰 분기점 알림 — 잘 나가는 미연시들처럼 "여기서 저장해 두라"는 신호를 눈에 띄게 */
 function BranchBanner({ onSave }: { onSave: () => void }) {
