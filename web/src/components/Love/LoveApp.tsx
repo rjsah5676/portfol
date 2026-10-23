@@ -269,6 +269,8 @@ export default function LoveApp() {
   /** 호감이 오르면 구석에 작은 하트 */
   const [heartPop, setHeartPop] = useState<{ who: "amy" | "yeonseo"; n: number } | null>(null);
   const [hideUi, setHideUi] = useState(false);
+  /** 선택지가 떠도 직전 대사를 대사창에 남겨 둠 (무슨 말에 대한 선택인지 보이게) */
+  const lastSay = useRef<{ who: Who; mood: string; text: string } | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [phoneShown, setPhoneShown] = useState(0);
   /** 방치 · 터치 반응 (말풍선 + 잠깐 표정) */
@@ -358,6 +360,8 @@ export default function LoveApp() {
             ? "ending"
             : s.disp.bgm
     );
+    if (b?.k === "say") lastSay.current = { who: b.who, mood: b.mood, text: b.text };
+    else if (b && b.k !== "choice") lastSay.current = null;
     if (b?.k === "say") {
       setReadNow(seen.current.has(lineKey(s)));
       setTyped(0);
@@ -487,7 +491,7 @@ export default function LoveApp() {
 
   // 오토 · 스킵
   useEffect(() => {
-    if (block?.k !== "say" || panel) return;
+    if (block?.k !== "say" || panel || askExit) return;
     if (skip) {
       if (!cfg.skipAll && !seen.current.has(lineKey(s!))) {
         setSkip(false);
@@ -518,6 +522,7 @@ export default function LoveApp() {
     voiceEnd,
     cfg.auto,
     cfg.skipAll,
+    askExit,
   ]);
 
   // 메시지 말풍선 하나씩
@@ -547,7 +552,7 @@ export default function LoveApp() {
   const liveReact = react && s && react.seq === s.seq ? react : null;
   // 방치: 대사를 다 띄워 둔 채 18초 그대로면 히로인이 먼저 말을 검 (한 대사에 한 번)
   useEffect(() => {
-    if (phase !== "game" || !s || block?.k !== "say" || typing || panel || auto || skip || hideUi)
+    if (phase !== "game" || !s || block?.k !== "say" || typing || panel || auto || skip || hideUi || askExit)
       return;
     if (!lightMood(s)) return;
     const on: CharKey[] = (Object.keys(s.disp.chars) as CharKey[]).filter(
@@ -558,7 +563,7 @@ export default function LoveApp() {
     const id = window.setTimeout(() => showReact(who, idleLine(who, s.vars), s.seq), 18000);
     return () => window.clearTimeout(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [s?.seq, typing, panel, auto, skip, hideUi, phase]);
+  }, [s?.seq, typing, panel, auto, skip, hideUi, phase, askExit]);
   /** 화면 숨김(HIDE) 중 캐릭터를 누르면 반응 — 머리는 쓰다듬기, 나머지는 콕 */
   const touchAt = (x: number, y: number): boolean => {
     if (!s) return false;
@@ -977,6 +982,19 @@ export default function LoveApp() {
               />
             )}
 
+            {/* 선택지 아래 직전 대사 (흐리게 · 넘김 표시 없이) */}
+            {block?.k === "choice" && !hideUi && lastSay.current && (
+              <Dialogue
+                key="box-under-choice"
+                who={lastSay.current.who}
+                mood={lastSay.current.mood === "whisper" || lastSay.current.mood === "think" ? lastSay.current.mood : "normal"}
+                name={sub(NAME[lastSay.current.who])}
+                portrait={portraitStyle(lastSay.current.who, disp)}
+                text={sub(lastSay.current.text)}
+                done={false}
+              />
+            )}
+
             {/* 하단 빠른 메뉴 — 왼쪽은 저장 · 불러오기, 오른쪽은 읽기 (테두리 없는 글자 버튼) */}
             {!hideUi && (block?.k === "say" || block?.k === "choice") && (
               <>
@@ -1107,7 +1125,7 @@ export default function LoveApp() {
             {/* 선택지 */}
             {block?.k === "choice" && (
               <div
-                className={`absolute inset-0 z-30 flex flex-col items-center justify-center gap-[1cqw] ${block.big ? "bg-black/55" : "bg-black/35"}`}
+                className={`absolute inset-0 z-30 flex flex-col items-center justify-center gap-[1cqw] ${lastSay.current ? "pb-[13cqw]" : ""} ${block.big ? "bg-black/55" : "bg-black/35"}`}
                 onClick={(e) => e.stopPropagation()}
               >
                 {block.big && <BranchBanner onSave={() => setPanel("save")} />}

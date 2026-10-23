@@ -156,10 +156,11 @@ export const CG_ORDER: CgId[] = [
 
 /** 이름표 옆 동그란 얼굴 (카메오는 포커 프로필 재사용) */
 export const FACE_ICON: Partial<Record<Who, string>> = {
-  yeonseo: `${P}/char/yeonseo/profile.webp`,
-  amy: `${P}/char/amy/profile.webp`,
-  taeyang: `${P}/char/taeyang/profile.webp`,
-  jeongmin: `${P}/char/jeongmin/profile.webp`,
+  // 새 스탠딩에서 얼굴만 잘라 만든 아이콘 (폰 · 일정 카드 · 관계 화면). 대사창 초상은 PORTRAIT 로 표정까지 따라감
+  yeonseo: `${B}/char/yeonseo-icon.webp`,
+  amy: `${B}/char/amy-icon.webp`,
+  taeyang: `${B}/char/taeyang-icon.webp`,
+  jeongmin: `${B}/char/jeongmin-icon.webp`,
   chunhee: `${B}/char/chunhee-icon.webp`,
   boss: `${B}/char/boss-icon.webp`,
 };

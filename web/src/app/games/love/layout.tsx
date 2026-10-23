@@ -16,6 +16,21 @@ export const metadata = {
   },
 };
 
+// 올인 러브 글꼴: 대사 · UI 프리텐다드, 서술 · 이름표 고운바탕 (CSS @import 대신 링크로 — React 가 head 로 올려 줌)
 export default function Layout({ children }: { children: ReactNode }) {
-  return children;
+  return (
+    <>
+      <link
+        rel="stylesheet"
+        href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css"
+        precedence="default"
+      />
+      <link
+        rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&display=swap"
+        precedence="default"
+      />
+      {children}
+    </>
+  );
 }
