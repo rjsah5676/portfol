@@ -4,12 +4,15 @@
  * tag = v4 연기 태그 (생성할 때만 씀)
  */
 import type { CharKey } from "./types";
+import { GEN_LINES } from "./voices-gen";
 
 export interface VoiceLine {
   id: string;
   who: CharKey;
   text: string;
   tag?: string;
+  /** 풀보이스 자동 생성 줄 (테이크 하나) */
+  gen?: boolean;
 }
 
 export const VOICE_LINES: VoiceLine[] = [
@@ -56,5 +59,14 @@ export const VOICE_LINES: VoiceLine[] = [
 /** 고른 테이크 (사용자가 b가 낫다고 하면 여기만 바꿈) */
 export const VOICE_TAKE: Record<string, "a" | "b"> = {};
 
+/** 음성 붙은 줄 전부 — 핵심 대사(A/B 두 테이크) + 풀보이스 줄(한 테이크, 다시 뽑으면 <id>b) */
+export const VOICE_ALL: VoiceLine[] = [...VOICE_LINES, ...GEN_LINES.map((g) => ({ ...g, gen: true }))];
+
+/** 줄 → 파일 이름 (확장자 없이) */
+export const voiceFile = (v: { id: string; gen?: boolean }, take: "a" | "b" = VOICE_TAKE[v.id] ?? "a") =>
+  v.gen ? `${v.id}${take === "b" ? "b" : ""}` : `${v.id}${take}`;
+
 /** 대사 텍스트 → 음성 파일 */
-export const VOICE_BY_TEXT: Record<string, string> = Object.fromEntries(VOICE_LINES.map((v) => [v.text, `/love/voice/${v.id}${VOICE_TAKE[v.id] ?? "a"}.mp3`]));
+export const VOICE_BY_TEXT: Record<string, string> = Object.fromEntries(
+  VOICE_ALL.map((v) => [v.text, `/love/voice/${voiceFile(v)}.mp3`])
+);

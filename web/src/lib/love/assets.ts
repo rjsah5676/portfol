@@ -202,7 +202,7 @@ export const CARD_BACK = `${P}/card/back-mid.webp`;
 export const TITLE = { bg: `${B}/ui/title-bg.webp`, logo: `${B}/ui/title-logo.webp` };
 
 /** 로딩 화면에서 전부 받는 목록 */
-export function preloadList(): { img: string[]; audio: string[] } {
+export function preloadList(): { img: string[]; audio: string[]; voice: string[] } {
   const img = new Set<string>();
   for (const c of [
     ...Object.values(STAND),
@@ -217,13 +217,9 @@ export function preloadList(): { img: string[]; audio: string[] } {
   img.add(TITLE.logo);
   return {
     img: [...img],
-    audio: [
-      ...new Set([
-        ...Object.values(SFX),
-        ...Object.values(BGM).filter((u): u is string => !!u),
-        ...Object.values(VOICE_BY_TEXT),
-      ]),
-    ],
+    audio: [...new Set([...Object.values(SFX), ...Object.values(BGM).filter((u): u is string => !!u)])],
+    // 음성(600줄+ · 수십 MB)은 로딩 막대에 안 넣고 타이틀부터 뒤에서 차례로 받아 둠 — 아직 못 받은 줄은 그 자리에서 받아 재생
+    voice: [...new Set(Object.values(VOICE_BY_TEXT))],
   };
 }
 

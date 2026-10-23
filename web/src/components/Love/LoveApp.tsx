@@ -259,14 +259,25 @@ export default function LoveApp() {
     if (n) setName(n);
     setMuted(LS.get(KEY.mute) === "1");
     setCfgState(readCfg());
-    const { img, audio } = preloadList();
+    const { img, audio, voice } = preloadList();
     const total = img.length + audio.length;
     let done = 0;
+    // 음성은 화면이 다 뜬 뒤 6개씩 뒤에서 받아 둠 (브라우저 캐시에 들어가서 대사 넘길 때 바로 재생)
+    const warmVoices = () => {
+      let i = 0;
+      const next = (): void => {
+        const u = voice[i++];
+        if (u) fetch(u).then(next, next);
+      };
+      for (let k = 0; k < 6; k++) next();
+    };
     const tick = () => {
       done++;
       setProg(Math.round((done / total) * 100));
-      if (done >= total)
+      if (done >= total) {
         window.setTimeout(() => setPhase(devParam("review") ? "review" : "title"), 250);
+        window.setTimeout(warmVoices, 400);
+      }
     };
     img.forEach((u) => {
       const im = new Image();

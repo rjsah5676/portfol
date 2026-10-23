@@ -9,7 +9,7 @@ import { NAME, NAME_COLOR } from "@/lib/love/assets";
 import { findLine } from "@/lib/love/engine";
 import { SCENES } from "@/lib/love/script";
 import type { Who } from "@/lib/love/types";
-import { VOICE_LINES, VOICE_TAKE } from "@/lib/love/voices";
+import { VOICE_ALL, VOICE_TAKE, voiceFile } from "@/lib/love/voices";
 
 export interface VoiceRow {
   n: number;
@@ -17,6 +17,7 @@ export interface VoiceRow {
   who: Who;
   text: string;
   tag?: string;
+  gen?: boolean;
   scene: string | null;
   i: number;
   ctx: { who: Who; text: string }[];
@@ -24,7 +25,7 @@ export interface VoiceRow {
 }
 
 export const voiceRows = (): VoiceRow[] =>
-  VOICE_LINES.map((v, k) => {
+  VOICE_ALL.map((v, k) => {
     const loc = findLine(v.text);
     const ctx: VoiceRow["ctx"] = [];
     let after: VoiceRow["after"] = null;
@@ -49,6 +50,7 @@ export const voiceRows = (): VoiceRow[] =>
       who: v.who,
       text: v.text,
       tag: v.tag,
+      gen: v.gen,
       scene: loc?.scene ?? null,
       i: loc?.i ?? 0,
       ctx,
@@ -150,7 +152,7 @@ export default function VoiceReview({
                 <span style={{ color: NAME_COLOR[r.who] }}>{NAME[r.who]}</span>
                 <span>{r.id}</span>
                 <span>· 장면 {r.scene ?? "⚠ 대본에 없음"}</span>
-                {r.tag && <span>· 연기 {r.tag}</span>}
+                {r.tag && <span>· 연기 {(r.tag.match(/\[[^\]]+\]/g) ?? []).join(" ")}</span>}
                 <span>· 쓰는 테이크 {take.toUpperCase()}</span>
               </div>
               {r.ctx.map((c, j) => (
@@ -175,16 +177,19 @@ export default function VoiceReview({
                 </div>
               )}
               <div className="mt-[0.6cqw] flex gap-[0.6cqw]">
-                {(["a", "b"] as const).map((t) => (
-                  <button
-                    key={t}
-                    className={`lv-btn-ghost ${take === t ? "!border-[#ffd27a]" : ""}`}
-                    onClick={() => play(`${r.id}${t}`)}
-                  >
-                    {playing === `${r.id}${t}` ? "■" : "▶"} {t.toUpperCase()}
-                    {take === t ? " (사용 중)" : ""}
-                  </button>
-                ))}
+                {(r.gen && take === "a" ? (["a"] as const) : (["a", "b"] as const)).map((t) => {
+                  const f = voiceFile(r, t);
+                  return (
+                    <button
+                      key={t}
+                      className={`lv-btn-ghost ${take === t ? "!border-[#ffd27a]" : ""}`}
+                      onClick={() => play(f)}
+                    >
+                      {playing === f ? "■" : "▶"} {r.gen && take === "a" ? "듣기" : t.toUpperCase()}
+                      {take === t && !(r.gen && take === "a") ? " (사용 중)" : ""}
+                    </button>
+                  );
+                })}
                 <button
                   className="lv-btn-gold"
                   disabled={!r.scene}

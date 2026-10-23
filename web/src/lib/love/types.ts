@@ -21,10 +21,23 @@ export const MOODS: readonly Mood[] = [
 ];
 /**
  * 표정 (얼굴만 바뀐 스탠딩). base = 정면 무표정, away = 시선 피함(연서 평소)
- * 연서: away smile cold surprise sad blush / 에이미: smile pout surprise sad blush smug
+ * 연서: away smile cold surprise sad blush cry laugh angry / 에이미: smile pout surprise sad blush smug cry angry wink
+ * (cry = 눈물 · laugh = 소리 내 웃음 · angry = 정말 화남 · wink = 장난)
  */
 export type Face =
-  "base" | "away" | "smile" | "cold" | "surprise" | "sad" | "blush" | "pout" | "smug";
+  | "base"
+  | "away"
+  | "smile"
+  | "cold"
+  | "surprise"
+  | "sad"
+  | "blush"
+  | "pout"
+  | "smug"
+  | "cry"
+  | "laugh"
+  | "angry"
+  | "wink";
 export type Pos = "l" | "c" | "r";
 /** 스탠딩 의상: 에이미 tshirt(내 티셔츠) · 연서 knit(오피스텔 안경 니트) · bare(장갑 벗은 근무복) */
 export type Outfit = "default" | "tshirt" | "knit" | "bare";
