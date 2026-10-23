@@ -25,8 +25,19 @@
  *                 gambleA≥6 → end_amy_fall · ★(meta_rigKnow & amyLedger & a4Stay & !a4Both) → end_amy_true
  *                 포커 패배 또는 a4Both → end_amy_ruin · 접고 살아남음 + a4Kiss + trustA≥10 → end_amy_good · 그 외 → end_amy_friend
  */
-import { A, BOSS, CH, JM, ME, N, TH, TY, Y, poker } from "./dsl";
-import type { PokerSpec, Scenes, TellSpec } from "./types";
+import { A, BOSS, CH, JM, ME, N, TH, TY, Y, match, poker } from "./dsl";
+import type { MatchSpec, PokerSpec, Scenes, TellSpec } from "./types";
+
+/** 진짜 헤즈업 — 마감 후 화해 사탕 판 (16일차) */
+const MATCH_A3: MatchSpec = {
+  title: "마감 후 화해 사탕 판 — 에이미",
+  opp: "amy",
+  hands: 4,
+  stack: 30,
+  unit: "사탕",
+  eff: { win: { trustA: 1 }, lose: { affA: 1 }, even: { affA: 1 } },
+  lines: { start: "포도맛은 걸지 마. 그건 내 거야. 나머지는 다 걸어.", win: "…졌다. 근데 이상하게 웃겨.", lose: "오늘은 딜러가 손님이야!", even: "반반. 화해 사탕답네." },
+};
 
 // ---------------- 스토리 포커 각본 ----------------
 /**
@@ -148,6 +159,7 @@ const POKER_BOSS_A: PokerSpec = {
       board: 5,
       opp: "올인할게요.",
       tell: "웃는 얼굴. 늘 그렇듯이. 그런데 펠트 위 왼손, 손가락 세 개가 테이블을 두 번 두드린다.",
+      tellId: "bossGlass",
       acts: [
         {
           label: "콜 (킹 풀하우스다)",
@@ -634,7 +646,29 @@ export const W3A: Scenes = {
     N("카드가 그녀 손에서 폭죽처럼 터졌다. 세 장은 조명 갓 위에 올라갔다."),
     A("……태양이한테 말하면 죽어.", "blush"),
     ME("이미 CCTV에 찍혔을걸. 정민 씨가 내일 아침에 돌려 볼 거야."),
-    A("지금 지우러 가자. 같이.", "shout", "pout"),
+    A("…지우러 가기 전에. 사탕 걸고 한 판. 칩은 안 돼. 사탕은 돼.", "base"),
+    ME("마감했는데."),
+    A("그러니까. 손님 아니고, 테이블 아니고, 의자 두 개야.", "smug"),
+    match("a3Candy", MATCH_A3),
+    { t: "when", cond: { v: "mini_a3Candy", op: "==", n: 2 }, to: "a3_d16_mt_w" },
+    { t: "when", cond: { v: "mini_a3Candy", op: "==", n: 0 }, to: "a3_d16_mt_l", else: "a3_d16_mt_e" },
+  ],
+  a3_d16_mt_w: [
+    A("…졌다. 이상하다. 칩으로 지면 숨이 막히는데, 사탕으로 지니까 웃겨.", "smile"),
+    A("이게 맞는 거겠지. 지는 게 웃긴 거.", "base"),
+    { t: "goto", to: "a3_d16_mt_x" },
+  ],
+  a3_d16_mt_l: [
+    A("이겼다! 오늘은 딜러가 손님이야.", "smug"),
+    A("…근데 이기니까 또 하고 싶어. 이건 좀 무섭다. 사탕인데도.", "sad"),
+    { t: "goto", to: "a3_d16_mt_x" },
+  ],
+  a3_d16_mt_e: [
+    A("비겼어. 화해 사탕답네. 반반.", "smile"),
+    { t: "goto", to: "a3_d16_mt_x" },
+  ],
+  a3_d16_mt_x: [
+    A("이제 CCTV 지우러 가자. 같이.", "shout", "pout"),
     { t: "hide" },
     { t: "bgm", id: "night" },
     { t: "bg", id: "room" },
@@ -1501,6 +1535,7 @@ export const W3A: Scenes = {
     A("…아하하. 다 잃었다. 어제 거.", "smile"),
     A("괜찮아. 괜찮아. 원래 없던 돈이잖아. 본전이야. 그치?", "smile"),
     TH("'괜찮아'가 두 번. 물이 발목까지 찼던 날도 그랬다. 그 애는 안 괜찮을 때 그 말을 두 번 한다."),
+    { t: "set", eff: { tAmyOk: 1 } },
     BOSS("본전이죠. 아쉽네요. 아버님 마지막 말씀은 아직인데."),
     N("어둠 속에서 양복 하나가 서류와 펜을 들고 나왔다. '차용증'. 회사 이름 칸이 비어 있다."),
     BOSS("300이에요. 이자는 없어요. 한 판만 더 하시고, 이야기 마저 들으시죠."),
@@ -1876,6 +1911,7 @@ export const W3A: Scenes = {
     A("'세 번째 판은 늘 하우스가 이긴다.' '딜러 손은 깨끗하다. 카드가 처음부터 그렇게 온다.'", "base"),
     A("'백 — always smiling. 이길 때만 손가락 세 개로 테이블을 두드린다.'", "base"),
     TH("손가락 세 개. 5년 전에, 이 사람도 그걸 봤다."),
+    { t: "set", eff: { tBoss: 1 } },
     A("아빠, 숫자 안 적는 사람이라며. 다 적었잖아. 전부.", "shake", "sad"),
     A("알면서 앉은 거야? 지는 판인 거 알면서? 왜?", "shake", "sad"),
     A("…여기 하나 더 있어. 'House Y — 24살. 한쪽 손에만 검은 장갑. 손바닥을 다쳤다.'", "whisper", "base"),
@@ -2159,6 +2195,7 @@ export const W3A: Scenes = {
     A("어젯밤? 괜찮아. 괜찮아. 나 원래 혼자 잘 있어. 1년 동안 그랬거든.", "smile"),
     A("서운한 거 아니야.", "sad"),
     TH("'괜찮아'를 두 번 했다."),
+    { t: "set", eff: { tAmyOk: 1 } },
     { t: "goto", to: "a4_d25_brink" },
   ],
   a4_d25_cold_c: [

@@ -13,8 +13,28 @@
  * 새 수치: amyJob aTeachP aIg8~13(그날 밤 읽씹) a2Sing amyPhoto2 a2Calm a2ImoT amyImo a2Bet a2Bear amyPromise a2Prom a2D14
  *          yeonHome yPh bonusKeep y2Like y2First y2ChipQ yeonName yeonEnvelope yeonBelieve yIg8~12 · n2Join(1 에이미 · 2 연서)
  */
-import { A, BOSS, CH, JM, ME, MONTAGE, N, PLAN, TH, TY, Y, card, poker } from "./dsl";
-import type { PokerSpec, Scenes, Step } from "./types";
+import { A, BOSS, CH, JM, ME, MONTAGE, N, PLAN, TH, TY, Y, card, match, poker } from "./dsl";
+import type { MatchSpec, PokerSpec, Scenes, Step } from "./types";
+
+/** 진짜 헤즈업 — 파라솔 사탕 판 (에이미 과외 복습) · 오픈 전 이쑤시개 판 (연서) */
+const MATCH_A2: MatchSpec = {
+  title: "파라솔 사탕 판 — 에이미",
+  opp: "amy",
+  hands: 4,
+  stack: 30,
+  unit: "사탕",
+  eff: { win: { trustA: 1 }, lose: { affA: 1 }, even: { affA: 1 } },
+  lines: { start: "사탕 서른 개씩. 선배님이라고 봐주면 죽어.", win: "으…! 다음 과외 때 복수할 거야.", lose: "봤지? 봤지?!", even: "비겼다. 이것도 이긴 걸로 쳐." },
+};
+const MATCH_Y2: MatchSpec = {
+  title: "오픈 전 이쑤시개 판 — 연서",
+  opp: "yeonseo",
+  hands: 4,
+  stack: 30,
+  unit: "이쑤시개",
+  eff: { win: { trustY: 1 }, lose: { affY: 1 }, even: { affY: 1 } },
+  lines: { start: "공정하게 해요. 이건 정해진 숫자 없는 판이에요.", win: "…계산이 틀렸어요. 기분 좋게요.", lose: "제 거네요. 다음엔 딜러님이 이길 거예요. 확률상.", even: "반반이에요." },
+};
 
 // ---------------- 스토리 포커 각본 ----------------
 /** D12 에이미 — 사탕 내기. 에이미는 스페이드 플러시 드로(8s7s) 실패 → 리버 블러프. 나는 J 원 페어(A 키커). 콜하면 이김 */
@@ -57,6 +77,7 @@ const POKER_AMY_BET: PokerSpec = {
       board: 5,
       opp: "올인! 사탕 전부!",
       tell: "목소리가 크다. 입에 문 사탕을 와작 깨문다. 리버의 하트 3이 떨어지는 순간, 스페이드만 보던 눈이 한 번 굳었다.",
+      tellId: "amyLoud",
       acts: [
         {
           label: "콜 (블러프다)",
@@ -1565,7 +1586,7 @@ export const W2: Scenes = {
     N("드르륵. 카드가 처음으로 가지런히 한 줄로 섞였다."),
     A("…됐다. 방금 됐어!", "smile"),
     A("반은 네 손이었지만, 소리는 내 거야.", "smug"),
-    { t: "goto", to: "a2_q2_end" },
+    { t: "goto", to: "a2_q2_mt" },
   ],
   a2_q2_show: [
     N("맞은편에서 천천히, 소리가 나게 섞어 보였다. 카드가 물처럼 흘러 한 덩어리가 됐다."),
@@ -1575,6 +1596,31 @@ export const W2: Scenes = {
     { t: "sfx", id: "shuffle" },
     N("열한 번째 시도에서, 그녀 손에서 처음으로 드르륵 소리가 났다."),
     A("들었어? 들었지?!", "shout", "smile"),
+    { t: "goto", to: "a2_q2_mt" },
+  ],
+  a2_q2_mt: [
+    { t: "dist", who: "amy", dist: 0 },
+    A("이제 실전. 방금 섞은 걸로 한 판 하자. 사탕으로.", "smug"),
+    ME("칩은 안 걸어."),
+    A("알아. 그래서 사탕이잖아. 테이블 말고 파라솔이고. 이건 포커가 아니라 과외 복습이야.", "base"),
+    match("a2Candy", MATCH_A2),
+    { t: "when", cond: { v: "mini_a2Candy", op: "==", n: 2 }, to: "a2_q2_mt_w" },
+    { t: "when", cond: { v: "mini_a2Candy", op: "==", n: 0 }, to: "a2_q2_mt_l", else: "a2_q2_mt_e" },
+  ],
+  a2_q2_mt_w: [
+    A("…선배님 너무하네. 복습인데 봐주지도 않고.", "pout"),
+    A("근데 이상하다. 사탕 잃었는데 기분 안 나빠. 칩이었으면 지금쯤 손 떨렸을 텐데.", "base"),
+    { t: "goto", to: "a2_q2_end" },
+  ],
+  a2_q2_mt_l: [
+    A("이겼다! 선배님 이겼어!", "shout", "smile"),
+    A("…설마 봐줬어? 봐줬으면 죽어.", "smug"),
+    ME("사탕이라도 안 봐줘."),
+    A("그럼 진짜 이긴 거네. 수첩에 적어 둘래.", "smile"),
+    { t: "goto", to: "a2_q2_end" },
+  ],
+  a2_q2_mt_e: [
+    A("비겼네. 사탕 서른 개 그대로. 수첩엔 '0'이라고 적을게. 제일 좋은 숫자.", "smile"),
     { t: "goto", to: "a2_q2_end" },
   ],
   a2_q2_end: [
@@ -3146,6 +3192,28 @@ export const W2: Scenes = {
     { t: "dist", who: "yeonseo", dist: 1 },
     Y("다음엔 딜러님 차례예요. 네 가지 준비해 와요. 하나만 진짜로.", "base"),
     Y("…진짜 하나는, 제 얘기였으면 좋겠어요.", "whisper", "blush"),
+    Y("오픈까지 아직 한 시간 있어요. 한 판만 해요. 칩 말고 이걸로.", "base"),
+    N("그녀가 이모 주방에서 가져온 이쑤시개 통을 열어, 테이블 위에 반씩 나눴다."),
+    Y("끝나면 전부 통에 돌려놔야 해요. 이모가 세거든요.", "base"),
+    match("y2Pick", MATCH_Y2),
+    { t: "when", cond: { v: "mini_y2Pick", op: "==", n: 2 }, to: "y2_q3_mt_w" },
+    { t: "when", cond: { v: "mini_y2Pick", op: "==", n: 0 }, to: "y2_q3_mt_l", else: "y2_q3_mt_e" },
+  ],
+  y2_q3_mt_w: [
+    Y("…졌어요.", "surprise"),
+    Y("딜러님 손은 앉아 있어도 안 읽혀요. 서 있을 때보다 더요.", "away"),
+    { t: "goto", to: "y2_q3_out" },
+  ],
+  y2_q3_mt_l: [
+    Y("제가 이겼어요. 계산대로예요.", "smile"),
+    Y("…근데 이겨도 하나도 안 무서운 판은 처음이에요.", "whisper", "blush"),
+    { t: "goto", to: "y2_q3_out" },
+  ],
+  y2_q3_mt_e: [
+    Y("비겼어요. 둘 다 안 잃은 판. …이런 판도 있네요.", "base"),
+    { t: "goto", to: "y2_q3_out" },
+  ],
+  y2_q3_out: [
     N("직원 문 열리는 소리. 그녀가 카드를 쓸어 담고 구석 자리로 갔다. 걸음이 평소보다 반 박자 빨랐다."),
     { t: "hide" },
     BACK2,

@@ -191,6 +191,8 @@ export interface PokerStreet {
   opp?: string;
   /** 읽을 수 있는 버릇 묘사 (텔) */
   tell?: string;
+  /** 이 텔이 읽기 노트의 어떤 버릇인지 (tells.ts id) — 알고 있으면 해석이 같이 뜸 */
+  tellId?: string;
   acts: PokerAct[];
 }
 export interface PokerSpec {
@@ -204,6 +206,27 @@ export interface PokerSpec {
   streets: PokerStreet[];
   /** 결과별 마무리 한 줄 */
   ending?: Partial<Record<"win" | "lose" | "fold" | "split", string>>;
+}
+
+/**
+ * 진짜 헤즈업: 무작위 카드 · 칩 싸움. 상대 AI 성향 + 버릇(아는 버릇이면 해석이 뜸)
+ * 점수(mini_<key>): 칩이 늘었으면 2 · 비슷하면 1 · 줄었으면 0
+ */
+export interface MatchSpec {
+  title: string;
+  opp: CharKey;
+  /** 핸드 수 (먼저 칩이 다 떨어지면 끝) */
+  hands: number;
+  /** 시작 칩 (양쪽 같음, 빅 블라인드 = 2) */
+  stack: number;
+  /** 판돈 이름 (사탕 · 성냥 · 칩) */
+  unit: string;
+  /** 진 경우 다시 하기 버튼 */
+  retry?: boolean;
+  /** 결과별 효과 */
+  eff?: Partial<Record<"win" | "even" | "lose", Eff>>;
+  /** 상대 대사 (시작 · 끝) — 판 중간 대사는 캐릭터 성향 기본값 */
+  lines?: Partial<Record<"start" | "win" | "lose" | "even", string>>;
 }
 
 /** 몽타주 한 컷 (사진처럼 기울어진 폴라로이드): 배경 + 인물(선택) + 손글씨 한 줄 */
@@ -239,6 +262,7 @@ export type Step =
   | { t: "mini"; kind: "deal"; key: string }
   | { t: "mini"; kind: "tell"; key: string; tell: TellSpec }
   | { t: "mini"; kind: "poker"; key: string; poker: PokerSpec }
+  | { t: "mini"; kind: "match"; key: string; match: MatchSpec }
   | { t: "phone"; from: CharKey; msgs: string[]; replies: Opt[]; ignore: Eff }
   | { t: "free"; prompt: string; opts: Opt[]; big?: boolean }
   | { t: "sfx"; id: SfxId }

@@ -10,8 +10,26 @@
  *   에이미: 츤데레 상투구 금지 → 내기 · 도발 · 행동 · 돌직구 후 장난으로 도망 / 연서: 존댓말 · 마른 유머 · 확률 언어
  * 수치: affA/affY 호감 · trustA/trustY 신뢰 · tilt · skill 딜러 실력 · ignoreA 읽씹 · atWork 근무 중 앉은 횟수
  */
-import { A, BOSS, CH, JM, ME, N, PLAN, TH, TY, Y, card, poker } from "./dsl";
-import type { PokerSpec, Scenes, Step } from "./types";
+import { A, BOSS, CH, JM, ME, N, PLAN, TH, TY, Y, card, match, poker } from "./dsl";
+import type { MatchSpec, PokerSpec, Scenes, Step } from "./types";
+
+/** 진짜 헤즈업 — 오픈 전 연습 판 (판돈 없음 · 사탕) */
+const MATCH_TY: MatchSpec = {
+  title: "오픈 전 사탕 판 — 태양",
+  opp: "taeyang",
+  hands: 4,
+  stack: 30,
+  unit: "사탕",
+  lines: { start: "형, 사탕 서른 개씩! 봐주기 없기예요!", win: "…형 진짜 사기캐예요.", lose: "사탕 부자 됐다!", even: "비겼다! 이것도 이긴 걸로 칠게요!" },
+};
+const MATCH_JM: MatchSpec = {
+  title: "오픈 전 사탕 판 — 정민",
+  opp: "jeongmin",
+  hands: 4,
+  stack: 30,
+  unit: "사탕",
+  lines: { start: "데이터 수집을 시작하겠습니다. 기록상, 공정한 판입니다.", win: "…표본이 부족했습니다. 다시 하겠습니다.", lose: "예상 범위 안입니다.", even: "오차 범위 안입니다." },
+};
 
 // ---------------- 스토리 포커 각본 ----------------
 /** D2 — 에이미의 도전. 에이미는 셋(포켓 7 + 보드 7), 나는 AK (턴까지 탑 페어 탑 키커, 리버 A 로 탑 투페어). 턴에서 읽으면 접고, 콜하면 진다 */
@@ -37,6 +55,7 @@ const POKER_AMY_DARE: PokerSpec = {
       board: 3,
       opp: "…체크.",
       tell: "갑자기 조용해졌다. 트윈테일 끝을 손가락에 꼭 감고 있다.",
+      tellId: "amyLoud",
       acts: [
         { label: "베팅", to: 2, think: "탑 페어 탑 키커. 보통은 이긴다. 보통은." },
         { label: "체크", to: 2 },
@@ -46,6 +65,7 @@ const POKER_AMY_DARE: PokerSpec = {
       board: 4,
       opp: "…올인.",
       tell: "숨을 참는다. 눈이 칩이 아니라 내 손을 본다. 아까 시끄러울 때랑 정반대다.",
+      tellId: "amyLoud",
       acts: [
         {
           label: "콜",
@@ -104,6 +124,7 @@ const POKER_YEON_EMPTY: PokerSpec = {
       board: 5,
       opp: "…올인. 칩은 없지만요.",
       tell: "말하기 직전, 장갑 낀 손끝이 테이블을 두 번 두드렸다.",
+      tellId: "yeonTap",
       acts: [
         {
           label: "콜 (블러프다)",
@@ -1489,6 +1510,29 @@ export const W1: Scenes = {
     JM("이미 세 명 봤습니다. 이모 포함."),
     N("카드를 줍는 동안 태양이 웃으며 말했다."),
     TY("형 손은 진짜 뭔가 달라요. 카드가 형 말을 들어요."),
+    TY("형, 그럼 셔플 말고 한 판 해요! 돈 말고 사탕으로. 오픈 전이니까 괜찮잖아요."),
+    ME("딜러는 안 앉아요."),
+    JM("오픈 전, 직원끼리, 판돈 없음. 규정 위반 아닙니다. 기록상."),
+    JM("참고로 태양 씨는 좋은 패를 받으면 콧노래를 부릅니다. 본인만 모릅니다."),
+    TY("야! 그걸 왜 말해!"),
+    { t: "set", eff: { tTY: 1 } },
+    match("tyPrac", MATCH_TY),
+    { t: "when", cond: { v: "mini_tyPrac", op: "==", n: 2 }, to: "s2_mt_w" },
+    { t: "when", cond: { v: "mini_tyPrac", op: "==", n: 0 }, to: "s2_mt_l", else: "s2_mt_e" },
+  ],
+  s2_mt_w: [
+    TY("형… 콧노래 얘기 듣고 나서 저 한 번도 안 불렀는데요?"),
+    JM("세 번 불렀습니다. 녹음했습니다."),
+    BACK,
+  ],
+  s2_mt_l: [
+    TY("이겼다! 형 이겼어요! 정민아 기록해!"),
+    JM("기록했습니다. 참고로 사탕 판 승률은 운이 7할입니다."),
+    TY("운도 실력이야!"),
+    BACK,
+  ],
+  s2_mt_e: [
+    TY("비겼어요? 사탕 판에서 비기는 것도 재주예요, 형."),
     BACK,
   ],
   s_ev3: [
@@ -1524,6 +1568,30 @@ export const W1: Scenes = {
     TY("정민아, 역대 2위는 누군데?"),
     JM("연서 씨입니다. 단, 연서 씨는 장갑을 끼고 이 속도입니다."),
     TY("(크게 웃는다) 형, 장갑 끼고 다시 해 봐요."),
+    JM("…딜러분. 한 판 부탁드립니다. 속도 말고 판단 데이터가 필요합니다."),
+    TY("형, 꿀팁. 정민이는 블러프할 때 '기록상'을 안 붙여요."),
+    JM("…그런 버릇은 없습니다."),
+    TY("방금도 안 붙였잖아!"),
+    { t: "set", eff: { tJM: 1 } },
+    match("jmPrac", MATCH_JM),
+    { t: "when", cond: { v: "mini_jmPrac", op: "==", n: 2 }, to: "s4_mt_w" },
+    { t: "when", cond: { v: "mini_jmPrac", op: "==", n: 0 }, to: "s4_mt_l", else: "s4_mt_e" },
+  ],
+  s4_mt_w: [
+    JM("…기록상, 오늘 판단 데이터는 충분합니다. 결론, 딜러분은 앉으면 안 되는 사람입니다."),
+    TY("그거 칭찬이야, 정민아?"),
+    JM("경고입니다. 손님들이 다 잃으니까요."),
+    BACK,
+  ],
+  s4_mt_l: [
+    JM("기록상, 제가 이겼습니다. 딜러분 손은 빠른데, 판단은 사람 쪽을 너무 봅니다."),
+    TY("그게 무슨 말이야?"),
+    JM("카드보다 상대 얼굴을 먼저 본다는 뜻입니다. 딜러로는 장점, 플레이어로는 약점입니다."),
+    BACK,
+  ],
+  s4_mt_e: [
+    JM("무승부. 기록상 가장 재미없는 결과입니다."),
+    TY("재밌었는데?"),
     BACK,
   ],
 

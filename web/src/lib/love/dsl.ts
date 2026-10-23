@@ -7,6 +7,7 @@ import {
   type Mood,
   MOODS,
   type PokerSpec,
+  type MatchSpec,
   type Step,
   type Who,
 } from "./types";
@@ -35,6 +36,8 @@ export const poker = (key: string, spec: PokerSpec): Step => ({
   key,
   poker: spec,
 });
+/** 진짜 헤즈업 한 판 (무작위 카드) */
+export const match = (key: string, spec: MatchSpec): Step => ({ t: "mini", kind: "match", key, match: spec });
 
 /** 하루 일정 카드 (free 슬롯용): 카드 제목 · 장소 · 이동 장면 · 누구/아이콘 · 오르는 것 */
 export const card = (

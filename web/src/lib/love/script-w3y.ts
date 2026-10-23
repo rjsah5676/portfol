@@ -21,8 +21,19 @@
  *   이김 + ★(meta_ledger · yeonLedger · yAmyCall, 레일 밑 아빠 공책) → true / 이김 + 독점(affY≥18 · trustY≤9 · yeonJealous≥2) → obsess
  *   / 이김 → good / 짐 · 폴드 → sad
  */
-import { A, BOSS, CH, FACE, JM, ME, MONTAGE, N, TH, TY, Y, poker } from "./dsl";
-import type { PokerSpec, Scenes } from "./types";
+import { A, BOSS, CH, FACE, JM, ME, MONTAGE, N, TH, TY, Y, match, poker } from "./dsl";
+import type { MatchSpec, PokerSpec, Scenes } from "./types";
+
+/** 진짜 헤즈업 — 마감 후 박하사탕 판 (17일차) */
+const MATCH_Y3: MatchSpec = {
+  title: "마감 후 박하사탕 판 — 연서",
+  opp: "yeonseo",
+  hands: 4,
+  stack: 30,
+  unit: "사탕",
+  eff: { win: { trustY: 1 }, lose: { affY: 1 }, even: { affY: 1 } },
+  lines: { start: "휴식 시간 15분으론 손이 다 안 보여요. 오늘은 앉아 있는 손을 볼게요.", win: "…졌어요. 기분 좋게요.", lose: "제 거예요. 입이 덜 쓰겠네요.", even: "반반이에요. 박하사탕도, 입 쓴 것도." },
+};
 
 // ---------------- 스토리 포커 각본 ----------------
 /**
@@ -59,6 +70,7 @@ const POKER_Y_RIGGED: PokerSpec = {
       board: 4,
       opp: "베팅할게요. …조금 크게.",
       tell: "8이 깔리는 순간, 물잔 가장자리의 손가락 세 개가 한 번 까딱였다. 버릇처럼.",
+      tellId: "bossGlass",
       acts: [
         { label: "콜", to: 3, think: "풀하우스. 킹 셋에 8 둘. 그런데 저 손가락은 뭘 보고 움직인 거지." },
         { label: "레이즈", to: 3, say: "좋아요. 올리세요, 더." },
@@ -68,6 +80,7 @@ const POKER_Y_RIGGED: PokerSpec = {
       board: 5,
       opp: "올인. 이 판은 여기까지 하죠.",
       tell: "또 8이다. 웃음이 평소와 똑같다. 손가락 세 개는 아직 물잔 위에 있다. 너무 잘 맞는 보드다. 너무.",
+      tellId: "bossGlass",
       acts: [
         {
           label: "콜",
@@ -118,6 +131,7 @@ const POKER_Y_FINAL: PokerSpec = {
       board: 3,
       opp: "베팅할게요.",
       tell: "하트 두 장이 깔리자, 사장이 물잔을 끌어당겼다. 손가락은 컵 옆에 가만히 있다. 올릴 데가 없다.",
+      tellId: "bossGlass",
       acts: [
         { label: "콜", to: 2, think: "잭 세 장. 저 사람은 하트를 기다린다. 기다리는 사람의 베팅이다." },
         { label: "레이즈", to: 2, say: "…서두르네요." },
@@ -940,7 +954,7 @@ export const W3Y: Scenes = {
     Y("…내일도 앉을 거예요. 휴식 시간 15분. 매일.", "whisper", "blush"),
     TY("(멀리서) 형! 15분 지났어요! 정민이가 쟀어요!"),
     { t: "hide" },
-    { t: "goto", to: "y3_d17_ph" },
+    { t: "goto", to: "y3_d17_mt" },
   ],
   y3_d17n_plain: [
     Y("…낮에 전화 왔죠. 대부 회사.", "base"),
@@ -951,6 +965,43 @@ export const W3Y: Scenes = {
     N("그녀가 작은 사탕 하나를 카운터 위로 밀었다. 박하사탕."),
     Y("이모 주방에서 집어 왔어요. 그 전화 받은 날은 입이 써요. 저도 알아요.", "away"),
     { t: "goto", to: "y3_d17n_seat" },
+  ],
+  y3_d17_mt: [
+    { t: "day", day: 17, slot: "마감 후" },
+    { t: "bgm", id: "yeonseo" },
+    { t: "bg", id: "pub" },
+    N("마감 후. 의자를 다 올렸는데, 카운터 앞 그 의자 하나만 내려와 있었다. 그 위에 박하사탕 한 줌이 반씩 나뉘어 있다."),
+    { t: "show", who: "yeonseo", pos: "c", dist: 0 },
+    Y("한 판만 해요. 이걸로요.", "base"),
+    { t: "when", cond: { v: "yMatch", op: ">=", n: 1 }, to: "y3_d17_mt_m", else: "y3_d17_mt_go" },
+  ],
+  y3_d17_mt_m: [
+    ME("성냥이 아니라요?"),
+    Y("성냥은 진짜 판 할 때 쓰는 거예요. 이건 연습이에요.", "away"),
+    { t: "goto", to: "y3_d17_mt_go" },
+  ],
+  y3_d17_mt_go: [
+    match("y3Mint", MATCH_Y3),
+    { t: "when", cond: { v: "mini_y3Mint", op: "==", n: 2 }, to: "y3_d17_mt_w" },
+    { t: "when", cond: { v: "mini_y3Mint", op: "==", n: 0 }, to: "y3_d17_mt_l", else: "y3_d17_mt_e" },
+  ],
+  y3_d17_mt_w: [
+    Y("…졌어요. 낮에 안 좋은 전화 받은 손 맞아요? 하나도 안 흔들렸어요.", "surprise"),
+    Y("이긴 사람이 사탕 다 가져가요. 입 쓴 날엔 그게 필요해요.", "base"),
+    { t: "goto", to: "y3_d17_mt_x" },
+  ],
+  y3_d17_mt_l: [
+    Y("제가 이겼어요. 딜러님은 질 때 귀가 먼저 빨개져요. 기록해 둘게요.", "smile"),
+    { t: "goto", to: "y3_d17_mt_x" },
+  ],
+  y3_d17_mt_e: [
+    Y("비겼어요. 반반. …이런 결과가 제일 오래 기억나요.", "base"),
+    { t: "goto", to: "y3_d17_mt_x" },
+  ],
+  y3_d17_mt_x: [
+    N("그녀가 남은 박하사탕을 내 앞치마 주머니에 털어 넣고, 의자를 테이블 위에 올렸다. 마지막 의자였다."),
+    { t: "hide" },
+    { t: "goto", to: "y3_d17_ph" },
   ],
   y3_d17_ph: [
     { t: "bg", id: "room" },
@@ -975,7 +1026,7 @@ export const W3Y: Scenes = {
     {
       t: "phone",
       from: "yeonseo",
-      msgs: ["박하사탕 먹었어요?", "이모가 하나 없어진 거 알아요. 셌대요.", "이 가게는 다 세는 사람뿐이에요."],
+      msgs: ["박하사탕 먹었어요?", "이모가 한 줌 없어진 거 알아요. 셌대요.", "이 가게는 다 세는 사람뿐이에요."],
       replies: [
         { text: "먹었어요. 입이 덜 써요", eff: { affY: 1 } },
         { text: "이모한테 같이 혼나요", eff: { affY: 1, trustY: 1 } },

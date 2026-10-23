@@ -101,7 +101,7 @@ const IDLE: Partial<Record<CharKey, Tiered>> = {
   amy: [
     [
       { text: "야, 졸아? 내 얘기 지루해?", face: "pout" },
-      { text: "여보세요~ 지구에서 부릅니다~", face: "smug" },
+      { text: "…딜러? 듣고 있어?", face: "pout" },
     ],
     [
       { text: "멍 때리지 말고 대답해!", face: "pout" },

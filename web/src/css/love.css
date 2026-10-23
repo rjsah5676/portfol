@@ -453,46 +453,216 @@
   cursor: default;
 }
 
-/* 메시지 */
+/* 메시지 — 스마트폰 프레임 */
 .lv-phone {
+  --acc: #ffd27a;
+  --head: linear-gradient(180deg, #232a44, #1a1f33);
   position: absolute;
-  right: 8%;
-  top: 8%;
-  bottom: 8%;
-  width: 28%;
+  right: 9%;
+  top: 4%;
+  bottom: 4%;
+  width: 27%;
   display: flex;
   flex-direction: column;
-  padding: 1.3cqw;
-  border: 0.3cqw solid #222;
-  border-radius: 2cqw;
-  background: linear-gradient(180deg, #1c2236, #12151f);
-  box-shadow: 0 1cqw 3cqw #000b;
-  animation: lv-up 0.35s ease;
+  overflow: hidden;
+  border-radius: 3.2cqw;
+  background: #0e111b;
+  box-shadow:
+    0 0 0 0.35cqw #2b2f3a,
+    0 0 0 0.55cqw #6b7080,
+    0 0 0 0.7cqw #1a1c22,
+    0 1.5cqw 4cqw #000c,
+    inset 0 0 0 0.12cqw #ffffff14;
+  animation: lv-phone-in 0.45s cubic-bezier(0.2, 0.9, 0.25, 1.05);
 }
-@keyframes lv-up {
+.lv-phone-a {
+  --acc: #8fd3ff;
+  --head: linear-gradient(180deg, #2a4b78, #1f3557);
+}
+.lv-phone-y {
+  --acc: #c9b6ff;
+  --head: linear-gradient(180deg, #2c2744, #1c1930);
+}
+@keyframes lv-phone-in {
   from {
-    transform: translateY(6%);
+    transform: translateY(10%) rotate(3deg);
     opacity: 0;
   }
 }
+.lv-phone-island {
+  position: absolute;
+  left: 50%;
+  top: 0.8cqw;
+  width: 7cqw;
+  height: 1.7cqw;
+  transform: translateX(-50%);
+  border-radius: 99px;
+  background: #000;
+  z-index: 3;
+}
+.lv-phone-status {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.9cqw 2.2cqw 0.2cqw;
+  font-size: 0.95cqw;
+  font-weight: 700;
+  color: #fff;
+  background: var(--head);
+}
+.lv-phone-head {
+  display: flex;
+  align-items: center;
+  gap: 0.8cqw;
+  padding: 0.7cqw 1.2cqw 0.8cqw;
+  background: var(--head);
+  border-bottom: 0.1cqw solid #ffffff14;
+  color: #fff;
+}
+.lv-phone-ava {
+  width: 2.9cqw;
+  height: 2.9cqw;
+  border-radius: 50%;
+  object-fit: cover;
+  box-shadow: 0 0 0 0.15cqw var(--acc);
+}
+.lv-phone-ava-s {
+  width: 2cqw;
+  height: 2cqw;
+  flex: none;
+  border-radius: 50%;
+  object-fit: cover;
+}
+.lv-phone-chat {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55cqw;
+  overflow-y: auto;
+  padding: 1cqw 1cqw 0.8cqw;
+  scrollbar-width: none;
+  background:
+    radial-gradient(circle at 20% 15%, #ffffff0a 0 18%, transparent 19%),
+    radial-gradient(circle at 80% 60%, #ffffff08 0 22%, transparent 23%),
+    linear-gradient(180deg, #151a2b, #10131f);
+}
+.lv-phone-date {
+  align-self: center;
+  margin-bottom: 0.3cqw;
+  border-radius: 99px;
+  background: #ffffff14;
+  padding: 0.15cqw 0.9cqw;
+  font-size: 0.85cqw;
+  color: #ffffffa0;
+}
 .lv-bubble {
-  align-self: flex-start;
-  max-width: 85%;
-  padding: 0.6cqw 1cqw;
-  border-radius: 1cqw 1cqw 1cqw 0.2cqw;
+  max-width: 78%;
+  padding: 0.55cqw 0.9cqw;
+  border-radius: 1.1cqw 1.1cqw 1.1cqw 0.25cqw;
   background: #fff;
-  color: #222;
-  font-size: 1.25cqw;
-  animation: lv-up 0.25s ease;
+  color: #1d1f26;
+  font-size: 1.18cqw;
+  line-height: 1.45;
+  word-break: keep-all;
+  box-shadow: 0 0.15cqw 0.4cqw #0005;
+  animation: lv-bubble-in 0.28s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+  transform-origin: left bottom;
+}
+@keyframes lv-bubble-in {
+  from {
+    transform: scale(0.6);
+    opacity: 0;
+  }
+}
+.lv-bubble-me {
+  border-radius: 1.1cqw 1.1cqw 0.25cqw 1.1cqw;
+  background: var(--acc);
+  color: #121420;
+  font-weight: 600;
+  transform-origin: right bottom;
+}
+.lv-bubble-photo {
+  overflow: hidden;
+  padding: 0;
+  width: 70%;
+}
+.lv-photo-pic {
+  display: flex;
+  height: 6cqw;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #ffd9e4, #c9e6ff);
+  font-size: 2cqw;
+}
+.lv-typing {
+  display: flex;
+  gap: 0.3cqw;
+  padding: 0.75cqw 0.9cqw;
+}
+.lv-typing i {
+  width: 0.55cqw;
+  height: 0.55cqw;
+  border-radius: 50%;
+  background: #8a8f9c;
+  animation: lv-dot 1s ease-in-out infinite;
+}
+.lv-typing i:nth-child(2) {
+  animation-delay: 0.15s;
+}
+.lv-typing i:nth-child(3) {
+  animation-delay: 0.3s;
+}
+@keyframes lv-dot {
+  0%,
+  60%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.5;
+  }
+  30% {
+    transform: translateY(-0.35cqw);
+    opacity: 1;
+  }
+}
+.lv-phone-input {
+  padding: 0.8cqw 1cqw 1.4cqw;
+  background: #161a28;
+  border-top: 0.1cqw solid #ffffff12;
+}
+.lv-phone-field {
+  border-radius: 99px;
+  background: #ffffff10;
+  padding: 0.55cqw 1.1cqw;
+  font-size: 1cqw;
+  color: #ffffff55;
 }
 .lv-reply {
-  padding: 0.6cqw 0.8cqw;
-  border-radius: 0.8cqw;
-  background: #ffd27a;
-  color: #1a1206;
-  font-size: 1.2cqw;
-  font-weight: 700;
+  padding: 0.55cqw 0.9cqw;
+  border: 0.1cqw solid var(--acc);
+  border-radius: 1cqw;
+  background: #ffffff0d;
+  color: #fff;
+  font-size: 1.12cqw;
+  font-weight: 600;
   text-align: left;
+  transition:
+    background 0.15s,
+    transform 0.15s;
+}
+.lv-reply:hover {
+  background: var(--acc);
+  color: #121420;
+  transform: translateX(-0.2cqw);
+}
+.lv-reply-ignore {
+  margin-top: 0.5cqw;
+  width: 100%;
+  font-size: 0.95cqw;
+  color: #ffffff66;
+  text-decoration: underline;
+  text-underline-offset: 0.2cqw;
+}
+.lv-reply-ignore:hover {
+  color: #ffffffaa;
 }
 
 /* 미니게임 */
@@ -744,7 +914,7 @@
   position: absolute;
   left: 0;
   right: 0;
-  top: 1%;
+  top: 4.5%;
   height: 152%;
   margin: 0 auto;
   pointer-events: none;
@@ -1500,3 +1670,107 @@
 .lv-polaroid-text { padding: 0.7cqw 0.2cqw 1cqw; text-align: center; font-size: 1.45cqw; color: #3b3040; font-family: "Nanum Pen Script", "Gaegu", cursive; }
 .lv-montage-cap { position: absolute; bottom: 7cqw; font-size: 1.7cqw; color: #ffe2b0; text-shadow: 0 0.2cqw 0.6cqw #000; animation: lv-fadein 0.6s ease-out both; }
 @keyframes lv-polaroid-in { from { opacity: 0; transform: translateY(-3cqw) rotate(0deg) scale(1.08); } }
+
+/* ---- 포커 · 대결: 보기 쉽게 ---- */
+/* 지금 족보 이름 (내 패 위 · 상대 패 위) */
+.lv-sp-hand {
+  position: absolute;
+  z-index: 5;
+  border: 0.1cqw solid #c9a25a88;
+  border-radius: 99px;
+  background: #0b1026dd;
+  padding: 0.25cqw 1.1cqw;
+  font-size: 1.2cqw;
+  font-weight: 800;
+  color: #fff3d6;
+  white-space: nowrap;
+  box-shadow: 0 0.3cqw 0.8cqw #0009;
+  animation: lv-fadein 0.35s ease;
+}
+.lv-sp-pot {
+  margin-left: 0.8cqw;
+  border: 0.12cqw solid #c9a25a99;
+  border-radius: 99px;
+  background: #000a;
+  padding: 0.35cqw 1cqw;
+  font-size: 1.15cqw;
+  font-weight: 900;
+  color: #ffd27a;
+  white-space: nowrap;
+}
+.lv-sp-stack {
+  position: absolute;
+  z-index: 5;
+  border: 0.1cqw solid #c9a25a77;
+  border-radius: 0.6cqw;
+  background: #0b1026cc;
+  padding: 0.35cqw 0.9cqw;
+  font-size: 1.15cqw;
+  color: #e9d9b0;
+  white-space: nowrap;
+}
+.lv-sp-stack b {
+  font-size: 1.45cqw;
+  color: #fff3d6;
+}
+/* 차례 표시 (버튼 위) */
+.lv-sp-turn {
+  border-radius: 99px;
+  background: #ffd27a;
+  padding: 0.2cqw 1cqw;
+  font-size: 1.05cqw;
+  font-weight: 900;
+  color: #1b1408;
+  animation: lv-turn 1.4s ease-in-out infinite;
+}
+@keyframes lv-turn {
+  50% {
+    box-shadow: 0 0 1.2cqw #ffd27a;
+  }
+}
+/* 왼쪽: 이 상대 버릇 노트 */
+.lv-sp-book {
+  max-width: 24cqw;
+  border: 0.12cqw solid #c9a25a66;
+  border-radius: 0.6cqw;
+  background: #0b1026bb;
+  padding: 0.6cqw 0.9cqw;
+  backdrop-filter: blur(3px);
+}
+/* 족보표 */
+.lv-sp-help {
+  position: absolute;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #000a;
+}
+.lv-sp-help-in {
+  width: 42cqw;
+  border: 0.14cqw solid #c9a25a;
+  border-radius: 1cqw;
+  background: linear-gradient(180deg, #121a3cf5, #090d22f8);
+  padding: 1.6cqw 2cqw;
+  box-shadow: 0 1cqw 3cqw #000c;
+}
+/* 읽기 노트 토스트 */
+.lv-tellup {
+  position: absolute;
+  left: 50%;
+  top: 13%;
+  z-index: 28;
+  transform: translateX(-50%);
+  border: 0.12cqw solid #c9a25a;
+  border-radius: 0.7cqw;
+  background: #0d1226f0;
+  padding: 0.6cqw 1.8cqw;
+  font-size: 1.35cqw;
+  font-weight: 700;
+  color: #fff3d6;
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: 0 0 1.4cqw #ffd27a55;
+  animation: lv-stageup 3.6s ease both;
+}

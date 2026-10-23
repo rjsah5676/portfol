@@ -27,6 +27,7 @@ import {
 } from "@/lib/love/assets";
 import {
   type GState,
+  check,
   goScene,
   ignorePhone,
   initState,
@@ -52,7 +53,8 @@ import {
   SUBS,
   type Who,
 } from "@/lib/love/types";
-import { DealMini, StoryPoker, TellMini } from "./Minis";
+import { DealMini, HeadsUp, StoryPoker, TellMini } from "./Minis";
+import { TELLS, knownTellIds, tellById } from "@/lib/love/tells";
 import { useStage } from "./Stage";
 import VoiceReview, { type VoiceRow } from "./VoiceReview";
 import AssetReview from "./AssetReview";
@@ -344,7 +346,7 @@ export default function LoveApp() {
     // 스토리 포커 중엔 전용 곡, 배드 엔딩 카드엔 짧은 코다
     const endKind = b?.k === "ending" ? ENDINGS.find((e) => e.id === b.id)?.kind : null;
     bgm(
-      b?.k === "mini" && b.step.kind === "poker"
+      b?.k === "mini" && (b.step.kind === "poker" || b.step.kind === "match")
         ? "spoker"
         : endKind === "bad"
           ? "badend"
@@ -509,7 +511,9 @@ export default function LoveApp() {
   useEffect(() => {
     if (block?.k !== "phone") return;
     if (phoneShown >= block.step.msgs.length) return;
-    const id = window.setTimeout(() => setPhoneShown((n) => n + 1), 650);
+    // 긴 메시지일수록 '입력 중…'이 조금 더 길게
+    const next = block.step.msgs[phoneShown] ?? "";
+    const id = window.setTimeout(() => setPhoneShown((n) => n + 1), Math.min(1500, 550 + next.length * 28));
     return () => window.clearTimeout(id);
   }, [block, phoneShown]);
 
@@ -651,6 +655,31 @@ export default function LoveApp() {
       }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [affA, affY, phase]);
+  // 읽기 노트: 새 버릇을 알게 되면 토스트
+  const [tellUp, setTellUp] = useState<{ id: string; n: number } | null>(null);
+  const tellRef = useRef<string[] | null>(null);
+  const tellKey = s ? knownTellIds(s.vars).join(",") : "";
+  useEffect(() => {
+    if (phase !== "game" || !s) {
+      tellRef.current = null;
+      return;
+    }
+    const now = knownTellIds(s.vars);
+    const prev = tellRef.current;
+    tellRef.current = now;
+    if (!prev) return;
+    const fresh = now.find((id) => !prev.includes(id));
+    if (fresh) {
+      setTellUp({ id: fresh, n: Date.now() });
+      play("paper");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tellKey, phase]);
+  useEffect(() => {
+    if (!tellUp) return;
+    const id = window.setTimeout(() => setTellUp(null), 3600);
+    return () => window.clearTimeout(id);
+  }, [tellUp]);
   useEffect(() => {
     if (!stageUp) return;
     const id = window.setTimeout(() => setStageUp(null), 3200);
@@ -900,6 +929,11 @@ export default function LoveApp() {
             {disp.day && !hideUi && (
               <RelHud vars={s.vars} onOpen={() => setPanel("rel")} />
             )}
+            {tellUp && tellById(tellUp.id) && (
+              <div key={tellUp.n} className="lv-tellup">
+                <span className="text-[#ffd27a]">✎ 읽기 노트</span> {NAME[tellById(tellUp.id)!.who]} — {tellById(tellUp.id)!.name}
+              </div>
+            )}
             {stageUp && (
               <div key={stageUp.n} className={`lv-stageup ${stageUp.who === "amy" ? "lv-heart-a" : "lv-heart-y"}`}>
                 <span>♥</span> {NAME[stageUp.who]} — 「{STAGE_NAME[stageUp.who][stageUp.stage]}」
@@ -1063,45 +1097,17 @@ export default function LoveApp() {
 
             {/* 메시지 */}
             {block?.k === "phone" && (
-              <div
-                className="absolute inset-0 z-30 bg-black/40"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <div className="lv-phone">
-                  <div className="flex items-center gap-[0.8cqw] border-b border-white/10 pb-[0.8cqw]">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    {FACE_ICON[block.step.from] && (
-                      <img
-                        src={FACE_ICON[block.step.from]}
-                        alt=""
-                        className="h-[3cqw] w-[3cqw] rounded-full"
-                      />
-                    )}
-                    <b className="text-[1.5cqw]">{NAME[block.step.from]}</b>
-                  </div>
-                  <div className="flex flex-1 flex-col gap-[0.6cqw] overflow-hidden py-[1cqw]">
-                    {block.step.msgs.slice(0, phoneShown).map((m) => (
-                      <div key={m} className="lv-bubble">
-                        {m}
-                      </div>
-                    ))}
-                  </div>
-                  {phoneShown >= block.step.msgs.length && (
-                    <div className="flex flex-col gap-[0.5cqw]">
-                      {block.step.replies.map((o) => (
-                        <button key={o.text} className="lv-reply" onClick={() => choose(o)}>
-                          {o.text}
-                        </button>
-                      ))}
-                      <button
-                        className="lv-reply opacity-60"
-                        onClick={() => setS(ignorePhone(s, block.step.ignore))}
-                      >
-                        (읽고 답장 안 하기)
-                      </button>
-                    </div>
-                  )}
-                </div>
+              <div className="absolute inset-0 z-30 bg-black/45" onClick={(e) => e.stopPropagation()}>
+                <Phone
+                  key={s.seq}
+                  from={block.step.from}
+                  msgs={block.step.msgs.map(sub)}
+                  shown={phoneShown}
+                  replies={block.step.replies}
+                  slot={disp.day?.slot}
+                  onReply={choose}
+                  onIgnore={() => setS(ignorePhone(s, block.step.ignore))}
+                />
               </div>
             )}
 
@@ -1115,6 +1121,18 @@ export default function LoveApp() {
                     spec={block.step.poker}
                     play={play}
                     bg={disp.bg === "black" ? "pub" : disp.bg}
+                    vars={s.vars}
+                    outfit={disp.outfit?.[block.step.poker.opp]}
+                    onDone={(n, eff) => setS(miniDone(s, block.step.key, n, eff))}
+                  />
+                ) : block.step.kind === "match" ? (
+                  <HeadsUp
+                    key={s.seq}
+                    spec={block.step.match}
+                    play={play}
+                    bg={disp.bg === "black" ? "pub" : disp.bg}
+                    vars={s.vars}
+                    outfit={disp.outfit?.[block.step.match.opp]}
                     onDone={(n, eff) => setS(miniDone(s, block.step.key, n, eff))}
                   />
                 ) : (
@@ -1666,6 +1684,7 @@ function RelPanel({ vars }: { vars: Record<string, number> }) {
           </div>
         );
       })}
+      <TellNotes vars={vars} />
       <div className="lv-relcard col-span-2 !flex-row !justify-around">
         <div>
           <div className="text-[1.2cqw] text-white/55">딜러 실력</div>
@@ -1677,6 +1696,165 @@ function RelPanel({ vars }: { vars: Record<string, number> }) {
           <div className="text-[1.2cqw] text-white/55">마음 상태</div>
           <div className="text-[1.6cqw] text-white/85">{tiltName(vars)}</div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+/** 메신저 화면: 스마트폰 프레임 · 상태 표시줄 · 입력 중 표시 · 사진 말풍선 · 답장 (보낸 말풍선이 잠깐 보인 뒤 진행) */
+const SLOT_TIME: Record<string, string> = {
+  새벽: "03:12",
+  아침: "08:40",
+  낮: "13:25",
+  저녁: "19:05",
+  "밤 근무": "22:30",
+  "마감 후": "02:14",
+  자정: "00:07",
+  밤: "23:48",
+  "해 질 녘": "19:40",
+};
+function Phone({
+  from,
+  msgs,
+  shown,
+  replies,
+  slot,
+  onReply,
+  onIgnore,
+}: {
+  from: CharKey;
+  msgs: string[];
+  shown: number;
+  replies: Opt[];
+  slot?: string;
+  onReply: (o: Opt) => void;
+  onIgnore: () => void;
+}) {
+  const [sent, setSent] = useState<string | null>(null);
+  const done = shown >= msgs.length;
+  const time = (slot && SLOT_TIME[slot]) || "23:48";
+  const list = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    list.current?.scrollTo({ top: list.current.scrollHeight, behavior: "smooth" });
+  }, [shown, sent]);
+  const send = (o: Opt) => {
+    if (sent) return;
+    setSent(o.text);
+    window.setTimeout(() => onReply(o), 750);
+  };
+  return (
+    <div className={`lv-phone ${from === "amy" ? "lv-phone-a" : from === "yeonseo" ? "lv-phone-y" : ""}`}>
+      <div className="lv-phone-island" />
+      <div className="lv-phone-status">
+        <span>{time}</span>
+        <span className="tracking-[0.15em]">▂▄▆ ◔ ▮▮▮</span>
+      </div>
+      <div className="lv-phone-head">
+        <span className="text-[1.6cqw] text-white/60">‹</span>
+        {FACE_ICON[from] && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={FACE_ICON[from]} alt="" className="lv-phone-ava" />
+        )}
+        <div className="leading-tight">
+          <b className="text-[1.35cqw]">{NAME[from]}</b>
+          <div className="text-[0.85cqw] text-white/55">{done ? "방금" : "입력 중…"}</div>
+        </div>
+      </div>
+      <div ref={list} className="lv-phone-chat">
+        <div className="lv-phone-date">{slot ?? "오늘"}</div>
+        {msgs.slice(0, shown).map((m, i) => {
+          const photo = m.startsWith("[사진]");
+          return (
+            <div key={i} className="flex items-end gap-[0.5cqw]">
+              {FACE_ICON[from] && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={FACE_ICON[from]} alt="" className={`lv-phone-ava-s ${i ? "invisible" : ""}`} />
+              )}
+              {photo ? (
+                <div className="lv-bubble lv-bubble-photo">
+                  <div className="lv-photo-pic">📷</div>
+                  <div className="px-[0.6cqw] py-[0.4cqw] text-[1.05cqw]">{m.replace("[사진]", "").trim()}</div>
+                </div>
+              ) : (
+                <div className="lv-bubble">{m}</div>
+              )}
+              {i === shown - 1 && <span className="mb-[0.2cqw] text-[0.8cqw] text-white/40">{time}</span>}
+            </div>
+          );
+        })}
+        {!done && (
+          <div className="flex items-end gap-[0.5cqw]">
+            {FACE_ICON[from] && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={FACE_ICON[from]} alt="" className={`lv-phone-ava-s ${shown ? "invisible" : ""}`} />
+            )}
+            <div className="lv-bubble lv-typing">
+              <i />
+              <i />
+              <i />
+            </div>
+          </div>
+        )}
+        {sent && (
+          <div className="flex justify-end">
+            <div className="lv-bubble lv-bubble-me">{sent}</div>
+          </div>
+        )}
+      </div>
+      <div className="lv-phone-input">
+        {done && !sent ? (
+          <>
+            <div className="mb-[0.3cqw] text-[0.85cqw] text-white/45">답장 고르기</div>
+            <div className="flex flex-col gap-[0.45cqw]">
+              {replies.map((o) => (
+                <button key={o.text} className="lv-reply" onClick={() => send(o)}>
+                  {o.text}
+                </button>
+              ))}
+            </div>
+            <button className="lv-reply-ignore" onClick={onIgnore}>
+              읽고 답장 안 하기
+            </button>
+          </>
+        ) : (
+          <div className="lv-phone-field">{sent ? "전송됨" : "메시지 입력"}</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** 관계 화면 아래: 읽기 노트 — 사람별로 알게 된 버릇 (모르는 건 ??? + 힌트) */
+function TellNotes({ vars }: { vars: Record<string, number> }) {
+  const whos = [...new Set(TELLS.map((t) => t.who))];
+  const got = TELLS.filter((t) => check(t.need, vars)).length;
+  return (
+    <div className="lv-relcard col-span-2 !items-stretch !text-left">
+      <div className="flex items-baseline justify-between">
+        <div className="text-[1.6cqw] font-bold text-[#ffd27a]">✎ 읽기 노트</div>
+        <div className="text-[1.15cqw] text-white/55">
+          {got} / {TELLS.length} · 포커에서 상대 버릇이 보이면 뜻이 같이 떠요
+        </div>
+      </div>
+      <div className="mt-[0.6cqw] grid grid-cols-2 gap-x-[2cqw] gap-y-[0.8cqw]">
+        {whos.map((who) => (
+          <div key={who}>
+            <div className="text-[1.25cqw] font-bold" style={{ color: NAME_COLOR[who] }}>
+              {NAME[who]}
+            </div>
+            {TELLS.filter((t) => t.who === who).map((t) =>
+              check(t.need, vars) ? (
+                <div key={t.id} className="text-[1.15cqw] leading-[1.5] text-white/90">
+                  · <b>{t.name}</b> <span className="text-white/60">— {t.meaning}</span>
+                </div>
+              ) : (
+                <div key={t.id} className="text-[1.1cqw] leading-[1.5] text-white/35">
+                  · ??? <span className="text-[1cqw]">({t.hint})</span>
+                </div>
+              )
+            )}
+          </div>
+        ))}
       </div>
     </div>
   );
