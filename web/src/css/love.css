@@ -1302,3 +1302,72 @@
     transform: translateY(-160%);
   }
 }
+
+/* ===== 스토리 포커 카드: ANIME POKER 카드(PlayingCard)를 그대로 씀 — poker.css 전체 대신 카드 규칙만 ===== */
+@font-face {
+  font-family: "Barlow Condensed";
+  src: url("../fonts/BarlowCondensed-SemiBold.woff2") format("woff2");
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+.lv-root .pk-card {
+  --w: 44px;
+  position: relative;
+  display: inline-block;
+  vertical-align: top;
+  flex: none;
+  width: var(--w);
+  aspect-ratio: 5 / 7;
+  border-radius: calc(var(--w) * 0.1);
+  background: linear-gradient(180deg, #fffdf8, #f3eee3);
+  color: #17181c;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.6) inset,
+    0 0 0 1px rgba(0, 0, 0, 0.25),
+    0 0.35cqw 0.9cqw rgba(0, 0, 0, 0.5);
+  line-height: 1;
+  user-select: none;
+  overflow: hidden;
+  transition: filter 0.3s ease, box-shadow 0.3s ease;
+}
+.lv-root .pk-card[data-red="1"] {
+  color: #e0323a;
+}
+.lv-root .pk-card[data-back="1"] {
+  background-size: cover;
+  background-position: center;
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.35),
+    0 0.35cqw 0.9cqw rgba(0, 0, 0, 0.5);
+}
+.lv-root .pk-card[data-dim="1"] {
+  filter: brightness(0.55) saturate(0.6);
+}
+.lv-root .pk-card .pk-face {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.lv-root .pk-card .pk-idx {
+  font-family: "Barlow Condensed", "Arial Narrow", sans-serif;
+  font-weight: 600;
+  font-size: 40px;
+}
+.lv-root .pk-card .pk-idx-10 {
+  font-size: 40px;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .lv-root .pk-deal {
+    animation: lv-pk-deal 0.32s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+  }
+}
+@keyframes lv-pk-deal {
+  from {
+    opacity: 0;
+    translate: 0 -40%;
+    scale: 0.7;
+  }
+}

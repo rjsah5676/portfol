@@ -256,6 +256,8 @@ export function preloadList(): { img: string[]; audio: string[]; voice: string[]
   for (const u of Object.values(FACE_ICON)) if (u) img.add(u);
   for (const c of Object.values(CG)) img.add(c.src);
   img.add(CARD_BACK);
+  // 스토리 포커 J · Q · K 그림 (ANIME POKER 카드 그대로)
+  for (const s of "shdc") for (const r of "jqk") img.add(`${P}/card/court-${s}-${r}.webp`);
   img.add(TITLE.bg);
   img.add(TITLE.logo);
   return {

@@ -9,7 +9,7 @@ import { NAME, NAME_COLOR } from "@/lib/love/assets";
 import { findLine } from "@/lib/love/engine";
 import { SCENES } from "@/lib/love/script";
 import type { Who } from "@/lib/love/types";
-import { VOICE_ALL, VOICE_TAKE, voiceFile } from "@/lib/love/voices";
+import { VOICE_REVIEW, VOICE_TAKE, voiceFile } from "@/lib/love/voices";
 
 export interface VoiceRow {
   n: number;
@@ -25,7 +25,7 @@ export interface VoiceRow {
 }
 
 export const voiceRows = (): VoiceRow[] =>
-  VOICE_ALL.map((v, k) => {
+  VOICE_REVIEW.map((v, k) => {
     const loc = findLine(v.text);
     const ctx: VoiceRow["ctx"] = [];
     let after: VoiceRow["after"] = null;

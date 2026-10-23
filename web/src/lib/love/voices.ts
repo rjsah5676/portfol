@@ -5,6 +5,7 @@
  */
 import type { CharKey } from "./types";
 import { GEN_LINES } from "./voices-gen";
+import { EMO_LINES } from "./voices-emo";
 
 export interface VoiceLine {
   id: string;
@@ -62,11 +63,14 @@ export const VOICE_TAKE: Record<string, "a" | "b"> = {};
 /** 음성 붙은 줄 전부 — 핵심 대사(A/B 두 테이크) + 풀보이스 줄(한 테이크, 다시 뽑으면 <id>b) */
 export const VOICE_ALL: VoiceLine[] = [...VOICE_LINES, ...GEN_LINES.map((g) => ({ ...g, gen: true }))];
 
+/** 검수 화면용: 지금 쓰는 감정 소리 먼저, 그다음 대사 음성 전부 */
+export const VOICE_REVIEW: VoiceLine[] = [...EMO_LINES.map((e) => ({ ...e, gen: true })), ...VOICE_ALL];
+
 /** 줄 → 파일 이름 (확장자 없이) */
 export const voiceFile = (v: { id: string; gen?: boolean }, take: "a" | "b" = VOICE_TAKE[v.id] ?? "a") =>
   v.gen ? `${v.id}${take === "b" ? "b" : ""}` : `${v.id}${take}`;
 
-/** 대사 텍스트 → 음성 파일 */
+/** 대사 텍스트 → 음성 파일. 지금은 감정 소리만 (대사 음성은 검수 뒤에 VOICE_ALL 로 되돌림) */
 export const VOICE_BY_TEXT: Record<string, string> = Object.fromEntries(
-  VOICE_ALL.map((v) => [v.text, `/love/voice/${voiceFile(v)}.mp3`])
+  EMO_LINES.map((v) => [v.text, `/love/voice/${v.id}.mp3`])
 );

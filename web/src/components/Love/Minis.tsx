@@ -8,6 +8,7 @@
 import { type CSSProperties, useCallback, useEffect, useRef, useState } from "react";
 import type { TellSpec } from "@/lib/love/types";
 import { BG, CARD_BACK, NAME, STAND } from "@/lib/love/assets";
+import { PlayingCard } from "@/components/Poker/parts";
 
 const SEATS = [
   { x: 50, y: 84 },
@@ -247,13 +248,9 @@ export function TellMini({ tell, onDone }: { tell: TellSpec; onDone: (correct: n
 }
 
 // ================= 스토리 포커 =================
-const SUIT: Record<string, { s: string; red: boolean }> = {
-  s: { s: "♠", red: false },
-  h: { s: "♥", red: true },
-  d: { s: "♦", red: true },
-  c: { s: "♣", red: false },
-};
-/** 카드 한 장. w = 폭(cqw). 글자 크기도 폭에 맞춰 줄어듦 */
+/** "Ah" → ANIME POKER 카드 번호 (숫자 × 4 + 무늬, 무늬 순서 s h d c) */
+const toCard = (c: string) => "23456789TJQKA".indexOf(c[0]) * 4 + "shdc".indexOf(c[1]);
+/** 카드 한 장 — ANIME POKER 와 같은 앞면(SVG 숫자 · 무늬, J Q K 는 캐릭터 그림) · 뒷면. w = 폭(cqw) */
 function Card({
   c,
   back,
@@ -267,41 +264,15 @@ function Card({
   dim?: boolean;
   style?: CSSProperties;
 }) {
-  const box: CSSProperties = { width: `${w}cqw`, ...style };
-  if (back || !c)
-    return (
-      <img
-        src={CARD_BACK}
-        alt=""
-        style={box}
-        className={`aspect-[5/7] rounded-[0.4cqw] shadow-[0_0.3cqw_0.8cqw_#0009] transition-opacity ${dim ? "opacity-30" : ""}`}
-      />
-    );
-  const r = c[0] === "T" ? "10" : c[0];
-  const su = SUIT[c[1]];
   return (
-    <div
-      style={box}
-      className={`lv-card aspect-[5/7] ${su.red ? "text-[#d0263b]" : "text-[#16181f]"}`}
-    >
-      <span
-        className="absolute left-[9%] top-[5%] flex flex-col items-center font-black leading-none"
-        style={{ fontSize: `${w * 0.27}cqw` }}
-      >
-        {r}
-        <span style={{ fontSize: `${w * 0.2}cqw` }}>{su.s}</span>
-      </span>
-      <span className="leading-none" style={{ fontSize: `${w * 0.46}cqw` }}>
-        {su.s}
-      </span>
-      <span
-        className="absolute bottom-[5%] right-[9%] flex rotate-180 flex-col items-center font-black leading-none"
-        style={{ fontSize: `${w * 0.27}cqw` }}
-      >
-        {r}
-        <span style={{ fontSize: `${w * 0.2}cqw` }}>{su.s}</span>
-      </span>
-    </div>
+    <PlayingCard
+      card={back || !c ? null : toCard(c)}
+      tier={2}
+      dim={dim}
+      deal
+      className="lv-pk"
+      style={{ "--w": `${w}cqw`, ...style } as CSSProperties}
+    />
   );
 }
 const PHASE: Record<number, string> = { 0: "PREFLOP", 3: "FLOP", 4: "TURN", 5: "RIVER" };

@@ -54,12 +54,19 @@ import {
 import { DealMini, StoryPoker, TellMini } from "./Minis";
 import { useStage } from "./Stage";
 import VoiceReview, { type VoiceRow } from "./VoiceReview";
+import AssetReview from "./AssetReview";
 
 /** 개발 중에만 쓰는 주소 옵션 (?scene= · ?review=voices) */
 const devParam = (k: string): string | null =>
   process.env.NODE_ENV !== "production" && typeof window !== "undefined"
     ? new URLSearchParams(window.location.search).get(k)
     : null;
+/** 음성 검수 화면은 배포 사이트에서도 열림 (?review=voices, 메뉴엔 없음) */
+const reviewParam = (): "voices" | "assets" | null => {
+  if (typeof window === "undefined") return null;
+  const v = new URLSearchParams(window.location.search).get("review");
+  return v === "voices" || v === "assets" ? v : null;
+};
 
 // ---------- 저장소 (실패해도 조용히) ----------
 const LS = {
@@ -228,7 +235,7 @@ function useSound(muted: boolean, cfg: Cfg) {
   return { play, bgm, voice, voiceEnd, rain };
 }
 
-type Phase = "title" | "name" | "game" | "gallery" | "review";
+type Phase = "title" | "name" | "game" | "gallery" | "review" | "assets";
 type Panel = null | "log" | "save" | "load" | "config";
 
 export default function LoveApp() {
@@ -293,7 +300,9 @@ export default function LoveApp() {
     setMuted(LS.get(KEY.mute) === "1");
     setCfgState(readCfg());
     // 그림 · 소리는 Stage 의 공용 로딩 화면(GameLoader)이 다 받은 뒤라 여기선 바로 타이틀
-    if (devParam("review")) setPhase("review");
+    const rv = reviewParam();
+    if (rv === "voices") setPhase("review");
+    if (rv === "assets") setPhase("assets");
     // 음성은 화면이 뜬 뒤 6개씩 뒤에서 받아 둠 (브라우저 캐시에 들어가서 대사 넘길 때 바로 재생)
     const { voice } = preloadList();
     let i = 0;
@@ -776,6 +785,9 @@ export default function LoveApp() {
             onBack={() => setPhase("title")}
           />
         )}
+
+        {/* ===== 그림 에셋 보기 (?review=assets) ===== */}
+        {phase === "assets" && <AssetReview onBack={() => setPhase("title")} />}
 
         {/* ===== 본편 ===== */}
         {phase === "game" && s && disp && (
