@@ -25,11 +25,11 @@ const faces = (who: string, list: Face[]) =>
 export const STAND: Record<CharKey, StandSet> = {
   yeonseo: {
     base: `${B}/char/yeonseo-base.webp`,
-    faces: faces("yeonseo", ["away", "smile", "cold", "surprise", "sad", "blush"]),
+    faces: faces("yeonseo", ["away", "smile", "cold", "surprise", "sad", "blush", "cry", "laugh", "angry"]),
   },
   amy: {
     base: `${B}/char/amy-base.webp`,
-    faces: faces("amy", ["smile", "pout", "surprise", "sad", "blush", "smug"]),
+    faces: faces("amy", ["smile", "pout", "surprise", "sad", "blush", "smug", "angry"]),
   },
   // 서브 캐릭터 — 표정은 기본 + 하나만
   boss: { base: `${B}/char/boss-base.webp`, faces: faces("boss", ["cold"]) },
@@ -229,9 +229,15 @@ export const BGM: Record<BgmId, string | null> = {
   daily: `${B}/sound/bgm-daily.aac`,
   comic: `${B}/sound/bgm-comic.aac`,
   badend: `${B}/sound/bgm-badend.aac`,
+  summer: `${B}/sound/bgm-summer.aac`,
+  dawn: `${B}/sound/bgm-dawn.aac`,
+  truth: `${B}/sound/bgm-truth.aac`,
+  tilt: `${B}/sound/bgm-tilt.aac`,
+  finale: `${B}/sound/bgm-finale.aac`,
+  ending: `${B}/sound/bgm-ending.aac`,
 };
-/** 한 번만 재생하고 멈추는 곡 */
-export const BGM_ONCE: BgmId[] = ["badend"];
+/** 한 번만 재생하고 멈추는 곡 (엔딩 곡은 끝맺음이 있어서 반복 안 함) */
+export const BGM_ONCE: BgmId[] = ["badend", "ending"];
 
 export const CARD_BACK = `${P}/card/back-mid.webp`;
 

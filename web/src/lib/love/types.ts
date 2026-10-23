@@ -119,7 +119,14 @@ export type BgmId =
   | "confide"
   | "daily"
   | "comic"
-  | "badend";
+  | "badend"
+  // 3~4주차 (사용자 제미나이 제작)
+  | "summer"
+  | "dawn"
+  | "truth"
+  | "tilt"
+  | "finale"
+  | "ending";
 
 export type Vars = Record<string, number>;
 /** 더하기 효과 (affA: +1 같은 것) */

@@ -348,7 +348,9 @@ export default function LoveApp() {
         ? "spoker"
         : endKind === "bad"
           ? "badend"
-          : s.disp.bgm
+          : endKind === "true"
+            ? "ending"
+            : s.disp.bgm
     );
     if (b?.k === "say") {
       setReadNow(seen.current.has(lineKey(s)));
@@ -1621,6 +1623,12 @@ const MUSIC: [BgmId, string][] = [
   ["night", "마감 후"],
   ["vip", "지하"],
   ["allin", "올인"],
+  ["summer", "장마 사이, 여름"],
+  ["dawn", "파래지는 창"],
+  ["truth", "5년 전 그 판"],
+  ["tilt", "기울어진 테이블"],
+  ["finale", "새벽 네 시, 마지막 판"],
+  ["ending", "비 그친 다음 날 아침"],
   ["badend", "배드 엔딩"],
 ];
 
