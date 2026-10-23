@@ -18,6 +18,7 @@ import {
   NAME,
   NAME_COLOR,
   OUTFITS,
+  FACE_NEAR,
   SFX,
   STAND,
   TITLE,
@@ -1344,7 +1345,7 @@ function Sprite({
   pos,
   dist,
   dim,
-  face,
+  face: want,
   fxKind,
   fxN,
   sub,
@@ -1367,6 +1368,8 @@ function Sprite({
 }) {
   // 의상 차분이 있으면 그 옷, 없으면 기본 옷
   const set = (outfit && OUTFITS[who]?.[outfit]) || STAND[who];
+  // 그 옷에 없는 표정은 가까운 표정으로 (울음 → 슬픔, 소리 내 웃음 → 미소 …), 그것도 없으면 기본
+  const face = [want, ...(FACE_NEAR[want] ?? [])].find((f) => f === "base" || set.faces[f]) ?? "base";
   const body = useRef<HTMLDivElement>(null);
 
   // 폴짝 · 흔들림 (다시 그리지 않고 애니메이션만)

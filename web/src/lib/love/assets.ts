@@ -38,6 +38,20 @@ export const STAND: Record<CharKey, StandSet> = {
   chunhee: { base: `${B}/char/chunhee-base.webp`, faces: faces("chunhee", ["smile"]) },
 };
 
+/** 그림이 없는 표정일 때 대신 쓸 가까운 표정 (앞에서부터) — 연서엔 pout · smug, 에이미엔 away · cold 가 없어서 */
+export const FACE_NEAR: Partial<Record<Face, Face[]>> = {
+  cry: ["sad"],
+  laugh: ["smile"],
+  angry: ["cold", "pout", "sad"],
+  wink: ["smug", "smile"],
+  pout: ["away", "blush"],
+  smug: ["smile"],
+  away: ["sad", "cold"],
+  cold: ["sad", "pout"],
+  blush: ["smile"],
+  surprise: [],
+};
+
 /**
  * 의상 차분 — 그림이 있는 것만 등록 (없으면 기본 옷으로 보임). 표정은 그 옷 그림에 있는 것만, 없는 표정은 그 옷의 base
  * 파일: char/<who>-<outfit>-base.webp · char/<who>-<outfit>-<face>.webp

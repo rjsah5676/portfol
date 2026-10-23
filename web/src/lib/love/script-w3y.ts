@@ -7,11 +7,11 @@
  * 새 수치: vipOpen · riskY · vipDealer · rigKnow(+meta_rigKnow) · twoTimer · yeonJealous 질투 · yeonPen 빨간 볼펜
  *          yeonSea 여름 바다 · yeonLedger 장부 같이 들기 · yeonRun 같이 도망 · yeonAlone 혼자 남기 · yeonAmy D24 에이미에게 감
  *          yAmyCall 에이미 아빠 장부 부탁(★) · yJmNote 정민 노트 받음
- * 엔딩 판정(D28): tilt≥4 me_fall → vipDealer dealer → clash → yeonAlone sad → riskY≥6 vanish → 테이블
- *       이김 + ★장부(meta_ledger · yeonLedger · yAmyCall) → true / 이김 + 독점(affY≥15 · trustY≤9 · yeonJealous≥2) → obsess
+ * 엔딩 판정(D28): tilt≥7 me_fall → vipDealer dealer → clash → yeonAlone sad → riskY≥6 vanish → 테이블
+ *       이김 + ★장부(meta_ledger · yeonLedger · yAmyCall) → true / 이김 + 독점(affY≥18 · trustY≤9 · yeonJealous≥2) → obsess
  *       / 이김 → good / 짐 · 폴드 → sad
  */
-import { A, BOSS, CH, JM, ME, N, TH, TY, Y, poker } from "./dsl";
+import { A, BOSS, CH, FACE, JM, ME, N, TH, TY, Y, poker } from "./dsl";
 import type { PokerSpec, Scenes } from "./types";
 
 // ---------------- 스토리 포커 각본 ----------------
@@ -454,7 +454,7 @@ export const W3Y: Scenes = {
     { t: "bgm", id: "heart" },
     { t: "dist", who: "yeonseo", dist: 2 },
     { t: "cg", id: "y_wall" },
-    N("현관 옆 벽. 그녀가 거기 등을 기대고 서서, 고개를 숙인 채 내 셔츠 밑단을 쥐고 있었다. 장갑 낀 쪽 손으로."),
+    N("현관 옆 벽. 그녀가 거기 기대어 쪼그려 앉은 채, 고개를 숙이고 내 셔츠 자락을 쥐고 있었다. 장갑 낀 쪽 손으로."),
     N("세게 쥔 것도 아니다. 손가락 두 개로 천 끝을 겨우 잡고 있을 뿐이다. 그런데 한 발도 움직일 수 없었다."),
     Y("…가지 마요.", "shake", "sad"),
     N("떨리는 목소리였다. 무표정한 얼굴 그대로, 목소리만 떨렸다. 안경 너머의 눈은 바닥만 보고 있다."),
@@ -462,7 +462,7 @@ export const W3Y: Scenes = {
     Y("…오늘만요. 커피 식을 때까지만.", "whisper", "blush"),
     {
       t: "choice",
-      prompt: "셔츠 밑단을 쥔 손가락이 떨린다.",
+      prompt: "셔츠 자락을 쥔 손가락이 떨린다.",
       opts: [
         { text: "(운동화를 벗는다. 그리고 그 손 위에 손을 얹는다)", eff: { affY: 2 } },
         { text: "\"안 가요. 커피 식어도.\"", eff: { affY: 1, trustY: 1 } },
@@ -1114,11 +1114,12 @@ export const W3Y: Scenes = {
     N("그녀가 계단 난간에 기대섰다. 그리고 갑자기, 어깨가 떨리기 시작했다."),
     TH("…우는 줄 알았다."),
     Y("…후, 후후.", "shake", "smile"),
-    Y("아하하…! 아하하하!", "shout", "smile"),
+    Y("아하하…! 아하하하!", "shout", "laugh"),
     N("웃음소리였다. 텅 빈 홀에 울릴 만큼 큰. 처음 듣는 소리였다. 7년 동안 이 건물 어디에서도 난 적 없을 소리."),
     Y("봤어요? 아, 못 봤구나. 사장님 얼굴. 손가락 세 개 펴 놓고, 그대로 굳었어요.", "smile"),
     Y("7년 동안 그 손가락만 봤는데. 오늘은 안 봤어요. 하나도.", "smile"),
-    Y("이상해요. 하나도 안 무서워요. 지금은요. 내일은 무섭겠지만. …아하하.", "smile"),
+    Y("이상해요. 하나도 안 무서워요. 지금은요. 내일은 무섭겠지만. …아하하.", "laugh"),
+    FACE("yeonseo", "cry"),
     N("웃다가, 그녀의 눈에서 눈물이 한 방울 떨어졌다. 웃는 얼굴 그대로. 그녀는 그걸 닦지도 않고 나를 봤다."),
     {
       t: "choice",
@@ -1447,8 +1448,9 @@ export const W3Y: Scenes = {
     TH("의자에 앉았다. 3년 만에. 펠트의 감촉이 손바닥에 닿는 순간, 손은 전부 기억해 냈다."),
     N("옆에서 누군가 숨죽여 울고 있다. 테이블 끝, 하우스 플레이어의 자리 뒤에 선 사람."),
     { t: "show", who: "yeonseo", pos: "r", dist: 0 },
+    FACE("yeonseo", "cry"),
     N("연서였다. 무표정한 얼굴 그대로, 눈물만 흘리고 있었다. 소리도 없이. 7년 동안 울지 않는 법만 연습한 사람이."),
-    Y("…왜 왔어요. 바보.", "whisper", "sad"),
+    Y("…왜 왔어요. 바보.", "whisper", "cry"),
     TH("고개를 돌리면 안 된다. 지금 돌리면, 진다. …그래도 한 번만 봤다."),
     BOSS("규칙은 간단해요. 한 판. {name} 씨가 이기면, 연서 씨 장부랑 {name} 씨 장부, 둘 다 여기서 찢죠."),
     BOSS("지면, 연서 씨는 첫차 타고 부산으로. {name} 씨는 오늘부로 이 가게 문턱을 못 넘고요."),
@@ -1613,7 +1615,7 @@ export const W3Y: Scenes = {
     N("젖은 보도블록의 금을 밟지 않으려고 걸음을 고르던 그녀가, 웅덩이 하나를 그냥 밟았다. 물이 튀었다. 그녀의 하얀 운동화에도, 내 바지에도."),
     Y("…아.", "surprise"),
     N("그리고 그녀가 웃었다. 소리 내서. 흉터 진 맨손으로 내 손을 잡고, 비 그친 골목이 울리도록."),
-    Y("아하하. …들었어요? 저 이제 이렇게 웃어요.", "heart", "smile"),
+    Y("아하하. …들었어요? 저 이제 이렇게 웃어요.", "heart", "laugh"),
     TH("처음 들은 웃음소리였다. 그 계단 위의 새벽 이후로, 몇 번을 들어도 매번 처음 같았다."),
     { t: "set", eff: { meta_trueY: 1 } },
     { t: "ending", id: "yeon_true" },
@@ -1709,7 +1711,7 @@ export const W3Y: Scenes = {
     { t: "dist", who: "yeonseo", dist: 2 },
     N("어느 밤, 퇴근한 내 손을 그녀가 맨손으로 잡았다. 흉터 진 손바닥이 내 손등을 덮었다. 꽉. 카드를 쥐던 힘으로."),
     Y("…다른 사람 테이블엔 서지 마요.", "whisper", "base"),
-    Y("저 말고 다른 사람한테 카드 돌리지 마요.", "whisper", "cold"),
+    Y("저 말고 다른 사람한테 카드 돌리지 마요.", "whisper", "angry"),
     Y("그 손, 제 거잖아요. 장부 반을 버리고 산 거예요.", "whisper", "cold"),
     N("목소리는 평평했다. 테이블 밑에서 두 번 두드리는 손가락도 없었다. 블러프가 아니었다."),
     TH("…읽을 수 있었다. 처음부터. 그녀는 나를 믿은 적이 없고, 그저 놓치기 싫었을 뿐이라는 걸."),
