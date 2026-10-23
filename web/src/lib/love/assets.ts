@@ -192,7 +192,7 @@ export const PORTRAIT: Record<string, [number, number, number, number]> = {
   "taeyang": [0.3687, 0.4299, 0.1035, 0.1545],
   "yeonseo-bare": [0.3727, 0.4822, 0.1055, 0.1536],
   "yeonseo": [0.2539, 0.4382, 0.0905, 0.118],
-  "yeonseo-knit": [0.3695, 0.4848, 0.1056, 0.1537],
+  "yeonseo-knit": [0.2227, 0.5276, 0.0998, 0.118],
 };
 /** 이름표 무늬 (트럼프 문양) */
 export const SUIT: Record<Who, string> = {
