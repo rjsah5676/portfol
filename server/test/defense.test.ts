@@ -1,3 +1,4 @@
+import { SIM_KEY } from "../../web/src/lib/defense/simrev";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { ENGR_PITY, engrOutcome, rollEngr } from "../../web/src/lib/defense/engrave";
 import { B, BALANCE_VER, LAST_WAVE, countOf, sec } from "../../web/src/lib/defense/balance";
@@ -619,6 +620,15 @@ describe("픽셀 글리치 디펜스 서버", () => {
     await expect(c.rpc("defense.finish", { run, log })).rejects.toThrow();
     const rank = await c.rpc("defense.rank", { limit: 10 });
     expect(rank.rows[0].wave).toBe(g.boards[0].result!.wave);
+    c.close();
+  });
+
+  it("판 도중 업데이트(시뮬 열쇠가 바뀜)면 다시 돌리지 않고 거절 · 시작 응답에 열쇠", async () => {
+    const c = await member();
+    const st = await c.rpc("defense.start");
+    expect(st.rev).toBe(SIM_KEY);
+    await srv.db.col("defense_runs").updateOne({ _id: st.run } as never, { $set: { rev: "0.old", at: new Date(Date.now() - 3600_000) } });
+    await expect(c.rpc("defense.finish", { run: st.run, log: [[5, 0, { t: "quit" }]] })).rejects.toMatchObject({ code: "RANK_REJECTED" });
     c.close();
   });
 

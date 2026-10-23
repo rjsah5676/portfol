@@ -36,6 +36,7 @@ import {
   type MpStanding,
 } from "@/realtime/defense";
 import Codex from "./Codex";
+import { SIM_KEY } from "@/lib/defense/simrev";
 import { Controller } from "./controller";
 import Hub, { Cur, curTip, type HubTab } from "./Hub";
 import { setTheme } from "./render";
@@ -158,6 +159,12 @@ export default function DefenseApp() {
     if (member) {
       try {
         const r = await startRun(mode);
+        // 서버가 새 규칙인데 이 화면은 옛 규칙이면 (업데이트 뒤 새로고침 안 함) 끝낼 때 기록이 안 맞음 → 새로고침부터
+        if (r.rev && r.rev !== SIM_KEY) {
+          setNote("게임이 업데이트됐어요 — 새로고침할게요");
+          window.location.reload();
+          return;
+        }
         seed = r.seed;
         run = r.run;
         lo = r.loadout;

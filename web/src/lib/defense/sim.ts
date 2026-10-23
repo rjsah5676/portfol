@@ -613,11 +613,11 @@ function toMap(b: Board) {
   x.camp = { k: "map" };
   b.phase = "break";
 }
-/** 전쟁 깃발: 강화 합이 before → 지금 사이에 N 의 배수를 넘은 만큼 그 세력 레전드 */
+/** 전쟁 깃발: 그 세력 강화 레벨이 before → 지금 사이에 N 의 배수를 넘은 만큼 그 세력 레전드 (2026-10-23: 세 세력 합 → 세력마다) */
 function warTick(b: Board, before: number, faction: Faction) {
   const N = b.mods.warEvery;
-  if (!N) return;
-  const now = b.up.knight + b.up.mech + b.up.arcane;
+  if (!N || faction === "hidden") return;
+  const now = b.up[faction];
   for (let k = Math.floor(before / N); k < Math.floor(now / N); k++) {
     relicLegend(b, faction);
     b.ev?.push({ t: "relicProc", id: "war_banner" });
@@ -1196,9 +1196,9 @@ export function apply(g: Game, p: number, cmd: Cmd): string | null {
       const cost = upCost(b, cmd.k);
       if (b.gold < cost) return "골드가 모자라요";
       b.gold -= cost;
-      const upSum = b.up.knight + b.up.mech + b.up.arcane;
+      const upBefore = b.up[cmd.k];
       b.up[cmd.k]++;
-      if (cmd.k !== "hidden") warTick(b, upSum, cmd.k);
+      if (cmd.k !== "hidden") warTick(b, upBefore, cmd.k);
       if (cmd.k === "hidden") b.dirty = true; // 키메라 버프가 히든 강화를 받음
       return null;
     }
@@ -2308,12 +2308,13 @@ function die(g: Game, b: Board, e: Enemy): boolean {
     b.seized = [];
     gold = Math.floor((B.bossGold.base + B.bossGold.per * b.wave) * b.mods.bossGold);
     b.free += b.mods.bossFree;
-    // 전쟁 깃발: 보스를 잡으면 세 세력 강화 + (공짜) — 강화 합이 N 의 배수를 넘으면 필드에 가장 많은 세력 레전드
-    if (b.mods.warFree) {
-      const upSum = b.up.knight + b.up.mech + b.up.arcane;
-      for (const f of FACTIONS) b.up[f as "knight"] = Math.min(B.up.max, b.up[f as "knight"] + b.mods.warFree);
-      warTick(b, upSum, b.mono ?? pick(b.rng, FACTIONS));
-    }
+    // 전쟁 깃발: 보스를 잡으면 세 세력 강화 + (공짜) — 그 세력 강화가 N 의 배수를 넘으면 그 세력 레전드
+    if (b.mods.warFree)
+      for (const f of FACTIONS) {
+        const before = b.up[f as "knight"];
+        b.up[f as "knight"] = Math.min(B.up.max, before + b.mods.warFree);
+        warTick(b, before, f);
+      }
     const stones = B.bossStones + Math.floor(b.wave / 20) + (b.patch === "gambler" ? 1 : 0) + b.cx.bossStones;
     b.stones += stones;
     const tk = B.bossTicket[b.wave];

@@ -8,6 +8,7 @@ import { newId } from "../ids";
 import { pictureOf } from "../users";
 import type { Ctx } from "../realtime/gateway";
 import { BALANCE_VER, TPS } from "../../../web/src/lib/defense/balance";
+import { SIM_KEY } from "../../../web/src/lib/defense/simrev";
 import { HASH_TICKS, MAX_LOG, MAX_SPEED, MAX_TICKS, TICKS_PER_TURN, TURN_MS, scoreOf, validLog, type LogEntry } from "../../../web/src/lib/defense/replay";
 import { isCmd, type Cmd, type Result } from "../../../web/src/lib/defense/sim";
 import { DAILY_RULE, cleanLoadout, kstDayKey, seasonOf, seasonScore, type Loadout, type RunMode } from "../../../web/src/lib/defense/progress";
@@ -64,6 +65,8 @@ interface RunDoc {
   uid: string;
   seed: number;
   ver: string;
+  /** 시작할 때의 시뮬 열쇠 (simrev.ts) — 끝낼 때 다르면 그 사이 업데이트 */
+  rev?: string;
   at: Date;
   used: boolean;
   mode?: "season" | "daily" | "town";
@@ -249,9 +252,9 @@ export function registerDefense({ gateway, db, points }: Deps) {
       const lo = cleanLoadout(DAILY_RULE);
       const seed = dailySeed(day);
       const at = new Date();
-      await runs.insertOne({ _id, uid, seed, ver: BALANCE_VER, at, used: false, mode, lo, board: dailyKey(day), day });
+      await runs.insertOne({ _id, uid, seed, ver: BALANCE_VER, rev: SIM_KEY, at, used: false, mode, lo, board: dailyKey(day), day });
       plays.start({ _id, at, mode, ver: BALANCE_VER, board: dailyKey(day), seed, uids: [uid], nicks: [nick], lo: [lo] });
-      return { run: _id, seed, ver: BALANCE_VER, mode, loadout: lo, day };
+      return { run: _id, seed, ver: BALANCE_VER, rev: SIM_KEY, mode, loadout: lo, day };
     }
     const seed = randomInt(1, 2 ** 31 - 1);
     if (mode === "town") {
@@ -260,18 +263,18 @@ export function registerDefense({ gateway, db, points }: Deps) {
       if (!lo.town) throw new AppError("NEED", "글리치 원정은 메인에서 오염 단계를 더 열면 열려요.", 409);
       const board = townKey();
       const at = new Date();
-      await runs.insertOne({ _id, uid, seed, ver: BALANCE_VER, at, used: false, mode, lo, board });
+      await runs.insertOne({ _id, uid, seed, ver: BALANCE_VER, rev: SIM_KEY, at, used: false, mode, lo, board });
       plays.start({ _id, at, mode, ver: BALANCE_VER, board, seed, uids: [uid], nicks: [nick], lo: [lo] });
-      return { run: _id, seed, ver: BALANCE_VER, mode, loadout: lo };
+      return { run: _id, seed, ver: BALANCE_VER, rev: SIM_KEY, mode, loadout: lo };
     }
     const lo = await meta.loadoutOf(uid);
     // 보물방: 쌓인 웨이브만큼 확률 → 뜨면 이 판 로드아웃에 열릴 웨이브를 적어 둠 (기록 검증도 같은 로드아웃으로)
     lo.treasure = await meta.rollTreasure(uid, lo.glitch);
     const board = seasonKey();
     const at = new Date();
-    await runs.insertOne({ _id, uid, seed, ver: BALANCE_VER, at, used: false, mode, lo, board });
+    await runs.insertOne({ _id, uid, seed, ver: BALANCE_VER, rev: SIM_KEY, at, used: false, mode, lo, board });
     plays.start({ _id, at, mode, ver: BALANCE_VER, board, seed, uids: [uid], nicks: [nick], lo: [lo] });
-    return { run: _id, seed, ver: BALANCE_VER, mode, loadout: lo };
+    return { run: _id, seed, ver: BALANCE_VER, rev: SIM_KEY, mode, loadout: lo };
   });
 
   // 판 도중 메뉴로 나감 — 플레이 기록에만 적음 (이어하기로 다시 끝내면 done 으로 바뀜). 검증 · 보상 없음
@@ -294,6 +297,11 @@ export function registerDefense({ gateway, db, points }: Deps) {
     if (!doc) throw new AppError("RANK_REJECTED", "이미 끝났거나 없는 판이에요.", 400);
     if (doc.ver !== BALANCE_VER) throw new AppError("RANK_REJECTED", "밸런스가 바뀌어서 이 판은 기록할 수 없어요.", 400);
     if (Date.now() - doc.at.getTime() > RUN_TTL_MS) throw new AppError("RANK_REJECTED", "너무 오래된 판이에요.", 400);
+    // 판 도중 업데이트: 옛 판을 새 규칙으로 다시 돌리면 결과가 달라짐 (이긴 판이 진 판 · 첫 클리어 보상 없음) → 돌리지 않고 알려 줌 (열쇠가 없는 옛 판은 예전처럼)
+    if (doc.rev && doc.rev !== SIM_KEY) {
+      plays.rejected(run, log, `rev ${doc.rev} → ${SIM_KEY}`);
+      throw new AppError("RANK_REJECTED", "판 도중 게임이 업데이트돼서 이 판은 기록할 수 없어요. 새로고침한 뒤 다시 해 주세요.", 409);
+    }
     const mode = doc.mode === "daily" ? ("daily" as const) : doc.mode === "town" ? ("town" as const) : ("season" as const);
     const lo = doc.lo ?? null;
     const out = await verifier.run({ seed: doc.seed, players: 1, log, loadouts: [lo] }).catch((e: Error) => {

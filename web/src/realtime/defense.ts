@@ -25,7 +25,7 @@ export interface DefenseRankRow {
 }
 
 export type RankBoard = "season" | "daily" | "town";
-export type RunStart = { run: string; seed: number; ver: string; mode: RankBoard; loadout: Loadout; day?: string };
+export type RunStart = { run: string; seed: number; ver: string; rev?: string; mode: RankBoard; loadout: Loadout; day?: string };
 export const startRun = (mode: RankBoard = "season") => rpc<RunStart>("defense.start", { mode });
 export type FinishOut = {
   result: Result;
