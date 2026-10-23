@@ -81,7 +81,13 @@ export type CgId =
   | "end_amy_good"
   | "end_yeon_true"
   | "end_yeon_good"
-  | "end_grand";
+  | "end_grand"
+  // CG 확장 (그림 오기 전까지 assets 에서 pending — 대본에 자리는 이미 있음)
+  | "a_hand"
+  | "a_cry"
+  | "a_kiss"
+  | "y_door"
+  | "y_win";
 export type SfxId =
   | "chip"
   | "deal"

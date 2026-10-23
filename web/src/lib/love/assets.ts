@@ -115,6 +115,8 @@ export const CG: Record<
     video?: string;
     /** 차분 — { 이름: 그림 } (같은 구도에서 표정 · 상태만 다른 그림). 대본: { t: "cgv", v: 이름 } */
     vars?: Record<string, string>;
+    /** 그림이 아직 없음 — 대본의 이 CG 는 건너뜀 (그림 넣고 이 줄만 지우면 켜짐) */
+    pending?: boolean;
   }
 > = {
   y_closet: { src: `${B}/cg/y-closet.webp`, title: "비품 창고, 숨 쉬지 마요", who: "yeonseo" },
@@ -143,32 +145,45 @@ export const CG: Record<
     who: "yeonseo",
   },
   end_grand: { src: `${B}/cg/end-grand.webp`, title: "ENDING · All In", who: "amy" },
+  // ---- CG 확장 (claude/2026-10-24-love-cg-expansion-plan.md) — 그림 오면 pending 지우고 vars 채우기 ----
+  a_hand: { src: `${B}/cg/a-hand.webp`, title: "소매에서 손가락까지", who: "amy", pending: true },
+  a_cry: { src: `${B}/cg/a-cry.webp`, title: "숫자 웃기다", who: "amy", pending: true },
+  a_kiss: { src: `${B}/cg/a-kiss.webp`, title: "거짓말, 처음이야", who: "amy", pending: true },
+  y_door: { src: `${B}/cg/y-door.webp`, title: "손바닥 하나만큼", who: "yeonseo", pending: true },
+  y_win: { src: `${B}/cg/y-win.webp`, title: "제일 맛있는 물", who: "yeonseo", pending: true },
 };
 /** CG 차분 그림 주소 (없는 이름이면 원본) */
 export const cgSrc = (id: CgId, v?: string | null) => (v && CG[id].vars?.[v]) || CG[id].src;
 /** 갤러리 · 본 장면 기록용 키 ("a_kiss" / "a_kiss~close") */
 export const cgKey = (id: CgId, v?: string | null) => (v ? `${id}~${v}` : id);
 
-export const CG_ORDER: CgId[] = [
+export const CG_ORDER: CgId[] = (
+  [
   "a_booth",
   "a_door",
   "a_shoulder",
-  "a_summer",
   "a_tshirt",
+  "a_hand",
+  "a_summer",
+  "a_cry",
+  "a_kiss",
   "a_morning",
   "end_amy_good",
   "end_amy_true",
   "y_closet",
   "y_umbrella",
+  "y_door",
   "y_name",
-  "y_summer",
-  "y_glove",
   "y_wall",
+  "y_glove",
+  "y_summer",
   "y_dawn",
+  "y_win",
   "end_yeon_good",
   "end_yeon_true",
   "end_grand",
-];
+  ] as CgId[]
+).filter((id) => !CG[id].pending);
 
 /** 이름표 옆 동그란 얼굴 (카메오는 포커 프로필 재사용) */
 export const FACE_ICON: Partial<Record<Who, string>> = {
@@ -315,6 +330,7 @@ export function preloadList(): { img: string[]; audio: string[]; voice: string[]
   for (const u of Object.values(BG)) if (u) img.add(u);
   for (const u of Object.values(FACE_ICON)) if (u) img.add(u);
   for (const c of Object.values(CG)) {
+    if (c.pending) continue;
     img.add(c.src);
     for (const v of Object.values(c.vars ?? {})) img.add(v);
   }

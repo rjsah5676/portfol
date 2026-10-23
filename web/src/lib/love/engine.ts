@@ -3,6 +3,7 @@
  * 상태 전체가 JSON 이라 세이브 = 상태 저장
  */
 import { SCENES, START } from "./script";
+import { CG } from "./assets";
 import {
   type BgId,
   type BgmId,
@@ -174,6 +175,8 @@ export function run(s0: GState): GState {
         s.disp.outfit = { ...s.disp.outfit, [st.who]: st.id };
         break;
       case "cg":
+        // 그림이 아직 없는 CG 는 건너뜀 (스탠딩 그대로)
+        if (st.id && CG[st.id].pending) break;
         s.disp.cg = st.id;
         s.disp.cgv = st.id ? (st.v ?? null) : null;
         s.disp.cgcam = st.id ? (st.cam ?? null) : null;
