@@ -270,7 +270,7 @@ export default function LoveApp() {
   const [heartPop, setHeartPop] = useState<{ who: "amy" | "yeonseo"; n: number } | null>(null);
   const [hideUi, setHideUi] = useState(false);
   /** 선택지가 떠도 직전 대사를 대사창에 남겨 둠 (무슨 말에 대한 선택인지 보이게) */
-  const lastSay = useRef<{ who: Who; mood: string; text: string } | null>(null);
+  const [lastSay, setLastSay] = useState<{ who: Who; mood: string; text: string } | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [phoneShown, setPhoneShown] = useState(0);
   /** 방치 · 터치 반응 (말풍선 + 잠깐 표정) */
@@ -360,8 +360,8 @@ export default function LoveApp() {
             ? "ending"
             : s.disp.bgm
     );
-    if (b?.k === "say") lastSay.current = { who: b.who, mood: b.mood, text: b.text };
-    else if (b && b.k !== "choice") lastSay.current = null;
+    if (b?.k === "say") setLastSay({ who: b.who, mood: b.mood, text: b.text });
+    else if (b && b.k !== "choice") setLastSay(null);
     if (b?.k === "say") {
       setReadNow(seen.current.has(lineKey(s)));
       setTyped(0);
@@ -980,14 +980,14 @@ export default function LoveApp() {
             )}
 
             {/* 선택지 아래 직전 대사 (흐리게 · 넘김 표시 없이) */}
-            {block?.k === "choice" && !hideUi && lastSay.current && (
+            {block?.k === "choice" && !hideUi && lastSay && (
               <Dialogue
                 key="box-under-choice"
-                who={lastSay.current.who}
-                mood={lastSay.current.mood === "whisper" || lastSay.current.mood === "think" ? lastSay.current.mood : "normal"}
-                name={sub(NAME[lastSay.current.who])}
-                portrait={portraitStyle(lastSay.current.who, disp)}
-                text={sub(lastSay.current.text)}
+                who={lastSay.who}
+                mood={lastSay.mood === "whisper" || lastSay.mood === "think" ? lastSay.mood : "normal"}
+                name={sub(NAME[lastSay.who])}
+                portrait={portraitStyle(lastSay.who, disp)}
+                text={sub(lastSay.text)}
                 done={false}
               />
             )}
@@ -1121,7 +1121,7 @@ export default function LoveApp() {
             {/* 선택지 */}
             {block?.k === "choice" && (
               <div
-                className={`absolute inset-0 z-30 flex flex-col items-center justify-center gap-[1cqw] ${lastSay.current ? "pb-[13cqw]" : ""} ${block.big ? "bg-black/55" : "bg-black/35"}`}
+                className={`absolute inset-0 z-30 flex flex-col items-center justify-center gap-[1cqw] ${lastSay ? "pb-[13cqw]" : ""} ${block.big ? "bg-black/55" : "bg-black/35"}`}
                 onClick={(e) => e.stopPropagation()}
               >
                 {block.big && <BranchBanner onSave={() => setPanel("save")} />}
