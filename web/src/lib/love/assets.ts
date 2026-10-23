@@ -181,7 +181,7 @@ export const NAME: Record<Who, string> = {
 export const PORTRAIT: Record<string, [number, number, number, number]> = {
   "amy": [0.4688, 0.4722, 0.1129, 0.1511],
   "amy-tshirt": [0.3677, 0.4754, 0.1062, 0.1535],
-  "boss": [0.3442, 0.421, 0.1035, 0.1535],
+  "boss": [0.3442, 0.43, 0.095, 0.12], // 사장은 머리가 작게 그려져서 더 확대
   "chunhee": [0.4078, 0.4114, 0.1436, 0.146],
   "jeongmin": [0.3309, 0.4068, 0.1041, 0.1534],
   "taeyang": [0.3687, 0.4299, 0.1035, 0.1545],

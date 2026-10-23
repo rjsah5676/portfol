@@ -1,7 +1,7 @@
 "use client";
 
 /*
- * 올인 러브 (가제) — ANIME POKER 외전 미연시 · M1 프로토
+ * 올인 러브 (가제) — ANIME POKER 외전 미연시 · 1.0 알파
  * 로딩(진행률) → 타이틀 → 이름 → 본편. 대본은 lib/love/script.ts, 실행기는 lib/love/engine.ts
  * 저장: localStorage (못 쓰는 환경이어도 게임은 그대로 돌아감)
  */
@@ -834,7 +834,7 @@ export default function LoveApp() {
                   </button>
                 </div>
                 <div className="absolute bottom-[2.2%] right-[2%] text-[1cqw] text-[#e9d9b0]/70">
-                  ◇ M1 프로토 · Ver. 0.1
+                  ◇ Ver. 1.0 알파
                 </div>
               </div>
             )}
