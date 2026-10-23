@@ -52,6 +52,7 @@ import {
   type Who,
 } from "@/lib/love/types";
 import { DealMini, StoryPoker, TellMini } from "./Minis";
+import { useStage } from "./Stage";
 import VoiceReview, { type VoiceRow } from "./VoiceReview";
 
 /** 개발 중에만 쓰는 주소 옵션 (?scene= · ?review=voices) */
@@ -227,12 +228,12 @@ function useSound(muted: boolean, cfg: Cfg) {
   return { play, bgm, voice, voiceEnd, rain };
 }
 
-type Phase = "loading" | "title" | "name" | "game" | "gallery" | "review";
+type Phase = "title" | "name" | "game" | "gallery" | "review";
 type Panel = null | "log" | "save" | "load" | "config";
 
 export default function LoveApp() {
-  const [phase, setPhase] = useState<Phase>("loading");
-  const [prog, setProg] = useState(0);
+  const [phase, setPhase] = useState<Phase>("title");
+  const stage = useStage();
   const [s, setS] = useState<GState | null>(null);
   const [name, setName] = useState("한도윤");
   const [typed, setTyped] = useState(0);
@@ -267,7 +268,8 @@ export default function LoveApp() {
   const [readNow, setReadNow] = useState(false);
   const seen = useRef<Set<string>>(new Set());
   const wrap = useRef<HTMLDivElement>(null);
-  const { play, bgm, voice, voiceEnd, rain } = useSound(muted, cfg);
+  // 폰 안내 화면(전체화면 · 가로 돌리기)이 덮고 있는 동안은 소리 없음
+  const { play, bgm, voice, voiceEnd, rain } = useSound(muted || stage.gate, cfg);
   // 비 오는 골목(CG 없을 때) · 비 CG 동안 빗소리
   const rainOn =
     phase === "game" && !!s && ((s.disp.bg === "alley" && !s.disp.cg) || (!!s.disp.cg && RAIN_CG.includes(s.disp.cg)));
@@ -290,35 +292,23 @@ export default function LoveApp() {
     if (n) setName(n);
     setMuted(LS.get(KEY.mute) === "1");
     setCfgState(readCfg());
-    const { img, audio, voice } = preloadList();
-    const total = img.length + audio.length;
-    let done = 0;
-    // 음성은 화면이 다 뜬 뒤 6개씩 뒤에서 받아 둠 (브라우저 캐시에 들어가서 대사 넘길 때 바로 재생)
-    const warmVoices = () => {
-      let i = 0;
-      const next = (): void => {
-        const u = voice[i++];
-        if (u) fetch(u).then(next, next);
-      };
+    // 그림 · 소리는 Stage 의 공용 로딩 화면(GameLoader)이 다 받은 뒤라 여기선 바로 타이틀
+    if (devParam("review")) setPhase("review");
+    // 음성은 화면이 뜬 뒤 6개씩 뒤에서 받아 둠 (브라우저 캐시에 들어가서 대사 넘길 때 바로 재생)
+    const { voice } = preloadList();
+    let i = 0;
+    let alive = true;
+    const next = (): void => {
+      const u = voice[i++];
+      if (u && alive) fetch(u).then(next, next);
+    };
+    const t = window.setTimeout(() => {
       for (let k = 0; k < 6; k++) next();
+    }, 400);
+    return () => {
+      alive = false;
+      window.clearTimeout(t);
     };
-    const tick = () => {
-      done++;
-      setProg(Math.round((done / total) * 100));
-      if (done >= total) {
-        window.setTimeout(() => setPhase(devParam("review") ? "review" : "title"), 250);
-        window.setTimeout(warmVoices, 400);
-      }
-    };
-    img.forEach((u) => {
-      const im = new Image();
-      im.onload = tick;
-      im.onerror = tick;
-      im.src = u;
-    });
-    audio.forEach((u) => {
-      fetch(u).then(tick, tick);
-    });
   }, []);
 
   // 사이트 퀵메뉴(≡) 버튼이 게임 오른쪽 아래 버튼(블러프다 · 레이즈 등)을 가려서 이 페이지에선 숨김
@@ -662,12 +652,8 @@ export default function LoveApp() {
     }
     return best?.n ?? null;
   }, [phase]);
-  const toggleFull = () => {
-    const el = wrap.current;
-    if (!el) return;
-    if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
-    else el.requestFullscreen?.().catch(() => {});
-  };
+  // 전체화면은 무대(Stage)가 맡음 — 진짜 전체화면 / 아이폰은 화면 덮기
+  const toggleFull = () => stage.toggleFs();
   const toggleMute = () => {
     setMuted((m) => {
       LS.set(KEY.mute, m ? "0" : "1");
@@ -705,22 +691,6 @@ export default function LoveApp() {
           else setHideUi((v) => !v);
         }}
       >
-        {/* ===== 로딩 ===== */}
-        {phase === "loading" && (
-          <div className="absolute inset-0 grid place-items-center bg-[#0b0806]">
-            <div className="w-[46%] text-center">
-              <div className="lv-logo text-[4.2cqw]">올인 러브</div>
-              <div className="mt-[1.4cqw] h-[0.7cqw] overflow-hidden rounded-full bg-white/10">
-                <div
-                  className="h-full bg-gradient-to-r from-[#c9a25a] to-[#ffd27a] transition-all"
-                  style={{ width: `${prog}%` }}
-                />
-              </div>
-              <div className="mt-[0.8cqw] text-[1.3cqw] text-white/60">불러오는 중 {prog}%</div>
-            </div>
-          </div>
-        )}
-
         {/* ===== 타이틀 ===== */}
         {(phase === "title" || phase === "name" || phase === "gallery") && (
           <div className="absolute inset-0">
@@ -1277,7 +1247,6 @@ export default function LoveApp() {
 
         {toast && <div className="lv-toast">{toast}</div>}
       </div>
-      <div className="lv-rotate">가로로 돌려 주세요</div>
     </div>
   );
 }

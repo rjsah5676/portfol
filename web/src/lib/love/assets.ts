@@ -29,7 +29,7 @@ export const STAND: Record<CharKey, StandSet> = {
   },
   amy: {
     base: `${B}/char/amy-base.webp`,
-    faces: faces("amy", ["smile", "pout", "surprise", "sad", "blush", "smug", "angry"]),
+    faces: faces("amy", ["smile", "pout", "surprise", "sad", "blush", "smug", "angry", "cry", "wink"]),
   },
   // 서브 캐릭터 — 표정은 기본 + 하나만
   boss: { base: `${B}/char/boss-base.webp`, faces: faces("boss", ["cold"]) },

@@ -3,7 +3,7 @@
 .lv-root {
   position: relative;
   width: 100%;
-  max-width: 1280px;
+  /* 크기는 무대(Stage.tsx)가 16:9 로 정해 줌 — 전체화면에서도 꽉 차게 */
   margin: 0 auto;
   background: #000;
   user-select: none;
