@@ -1,0 +1,48 @@
+/*
+ * 올인 러브 — 관계 단계 · 딜러 실력 (화면에 보이는 성장)
+ * 수치(affA · affY · skill · tilt)는 대본 eff 로만 바뀌고, 화면엔 단계 이름 + 하트 · 별로만 보여 줌
+ */
+import type { Vars } from "./types";
+
+export type Heroine = "amy" | "yeonseo";
+export const AFF: Record<Heroine, string> = { amy: "affA", yeonseo: "affY" };
+
+/** 호감 단계 경계 (0 ~ 5단계) */
+export const STAGE_AT = [0, 3, 7, 12, 18, 24] as const;
+export const stageOf = (aff: number): number => STAGE_AT.filter((x) => aff >= x).length - 1;
+export const heroStage = (v: Vars, who: Heroine): number => stageOf(v[AFF[who]] ?? 0);
+
+export const STAGE_NAME: Record<Heroine, readonly string[]> = {
+  amy: ["시끄러운 손님", "단골 손님", "편의점 친구", "신경 쓰이는 애", "내 편", "특별한 사람"],
+  yeonseo: ["구석 자리 손님", "말을 거는 손님", "비밀을 아는 사이", "신경 쓰이는 사람", "기대는 사람", "특별한 사람"],
+};
+/** 단계별 지금 그녀의 마음 (관계 화면 한 줄) */
+export const STAGE_LINE: Record<Heroine, readonly string[]> = {
+  amy: [
+    "딜러 얼굴보다 칩을 더 본다.",
+    "테이블에 오면 일단 딜러부터 찾는다.",
+    "편의점 계산대 너머로 먼저 말을 건다.",
+    "이긴 날도 진 날도 제일 먼저 너한테 말하고 싶다.",
+    "무서운 얘기도 너한테는 꺼낼 수 있다.",
+    "4주 전엔 몰랐던 얼굴로 웃는다.",
+  ],
+  yeonseo: [
+    "딜러를 본다. 정확히는, 딜러의 손을.",
+    "짧은 존댓말이 하루에 한 번씩 늘어난다.",
+    "가게 사람들은 모르는 얼굴을 너한테만 보여 준다.",
+    "구석 자리에서 시선이 자꾸 딜러 쪽으로 온다.",
+    "장갑 낀 손이 네 소매를 먼저 잡는다.",
+    "7년 만에, 소리 내서 웃는다.",
+  ],
+};
+
+/** 딜러 실력 (셔플 연습 · 근무로 오름) */
+export const SKILL_AT = [0, 2, 4, 7, 10] as const;
+export const skillOf = (v: Vars): number => SKILL_AT.filter((x) => (v.skill ?? 0) >= x).length - 1;
+export const SKILL_NAME = ["녹슨 손", "굳은 손", "풀린 손", "예전의 손", "전설의 손"] as const;
+
+/** 마음 상태 (틸트) */
+export const tiltName = (v: Vars): string => {
+  const t = v.tilt ?? 0;
+  return t <= 1 ? "차분함" : t <= 3 ? "조금 흔들림" : t <= 5 ? "위태로움" : "테이블이 부른다";
+};

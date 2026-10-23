@@ -1,9 +1,9 @@
 /*
  * 올인 러브 — 살아 있는 스탠딩: 방치 · 터치 반응 대사
  * 호감(affY / affA) 단계마다 다르게. 같은 단계 안에선 무작위
- * 말투: 연서 = 존댓말 · 짧고 건조함 / 에이미 = 반말 · 장난 · 츤데레
+ * 말투: 연서 = 존댓말 · 짧고 건조함 / 에이미 = 반말 · 장난
  */
-import type { CharKey, Face, Vars } from "./types";
+import type { BgmId, CharKey, Face, Vars } from "./types";
 
 export interface ReactLine {
   text: string;
@@ -14,10 +14,10 @@ export interface ReactLine {
 type Tiered = [low: ReactLine[], mid: ReactLine[], high: ReactLine[]];
 
 const AFF: Partial<Record<CharKey, string>> = { yeonseo: "affY", amy: "affA" };
-/** 호감 단계: 0 낮음 · 1 보통(3 이상) · 2 높음(7 이상) */
+/** 호감 단계: 0 낮음 · 1 보통(7 이상) · 2 높음(12 이상) — rel.ts 관계 단계와 맞춤 */
 const tier = (who: CharKey, v: Vars) => {
   const n = v[AFF[who] ?? ""] ?? 0;
-  return n >= 7 ? 2 : n >= 3 ? 1 : 0;
+  return n >= 12 ? 2 : n >= 7 ? 1 : 0;
 };
 const pickOne = <T,>(a: T[]): T => a[Math.floor(Math.random() * a.length)];
 
@@ -25,7 +25,7 @@ const TOUCH_HEAD: Partial<Record<CharKey, Tiered>> = {
   yeonseo: [
     [
       { text: "…손 치워요.", face: "cold" },
-      { text: "근무 중이에요.", face: "cold" },
+      { text: "…용건 있어요?", face: "cold" },
     ],
     [
       { text: "…뭐 하는 거예요.", face: "away" },
@@ -42,7 +42,7 @@ const TOUCH_HEAD: Partial<Record<CharKey, Tiered>> = {
       { text: "뭐야, 갑자기?", face: "surprise" },
     ],
     [
-      { text: "…헤헤. 아니, 좋아서 웃은 거 아니거든?", face: "blush" },
+      { text: "…헤헤. 방금 웃은 거 못 본 걸로 해.", face: "blush" },
       { text: "더 해도 되는데? …아, 방금 건 취소!", face: "blush" },
     ],
     [
@@ -95,7 +95,7 @@ const IDLE: Partial<Record<CharKey, Tiered>> = {
     ],
     [
       { text: "…그렇게 보면 일 못 해요.", face: "blush", heart: true },
-      { text: "{name} 씨. …불러 봤어요.", face: "smile", heart: true },
+      { text: "딜러님. …그냥 불러 봤어요.", face: "smile", heart: true },
     ],
   ],
   amy: [
@@ -109,10 +109,15 @@ const IDLE: Partial<Record<CharKey, Tiered>> = {
     ],
     [
       { text: "…왜 그렇게 쳐다봐. 부끄럽게.", face: "blush", heart: true },
-      { text: "{name}, 딴생각하면 삐진다?", face: "pout" },
+      { text: "딜러, 딴생각하면 삐진다?", face: "pout" },
     ],
   ],
 };
+
+/** 방치 · 터치 반응은 가벼운 장면에서만 (CG · 무거운 BGM · 무음 연출 중엔 끔) */
+const LIGHT: BgmId[] = ["pub", "amy", "yeonseo", "daily", "comic", "summer"];
+export const lightMood = (s: { disp: { cg?: unknown; bgm: BgmId | null } }) =>
+  !s.disp.cg && !!s.disp.bgm && LIGHT.includes(s.disp.bgm);
 
 const FALLBACK: ReactLine = { text: "…?", face: "base" };
 

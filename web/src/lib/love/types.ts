@@ -144,6 +144,18 @@ export interface Opt {
   cond?: Cond;
   /** 숨은 선택지 표시 (금색) */
   secret?: boolean;
+  /** 하루 일정 카드 (free 슬롯에서): 누구를 만나는지 · 무엇이 오르는지 */
+  card?: PlanCard;
+}
+
+/** 일정 카드: who 가 있으면 그 히로인 얼굴 + 관계 하트, 없으면 icon */
+export interface PlanCard {
+  who?: "amy" | "yeonseo";
+  icon?: string;
+  /** 장소 · 한 줄 설명 */
+  place: string;
+  /** 오르는 것 미리보기 (예: "실력 ✦" · "마음 안정") */
+  hint?: string;
 }
 
 export interface TellSpec {
@@ -194,7 +206,19 @@ export interface PokerSpec {
   ending?: Partial<Record<"win" | "lose" | "fold" | "split", string>>;
 }
 
+/** 몽타주 한 컷 (사진처럼 기울어진 폴라로이드): 배경 + 인물(선택) + 손글씨 한 줄 */
+export interface Shot {
+  bg: BgId;
+  who?: CharKey;
+  face?: Face;
+  outfit?: Outfit;
+  /** 사진 아래 손글씨 (짧게) */
+  text?: string;
+}
+
 export type Step =
+  /** 데이트 · 하루 요약 같은 '사진 몽타주' (새 CG 없이 이벤트 느낌) — 2~4컷, 클릭하면 다음 */
+  | { t: "montage"; shots: Shot[]; caption?: string }
   | { t: "bg"; id: BgId }
   | { t: "show"; who: CharKey; pos?: Pos; dist?: Dist; face?: Face }
   | { t: "dist"; who: CharKey; dist: Dist }

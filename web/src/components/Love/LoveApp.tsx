@@ -37,7 +37,8 @@ import {
   pick,
   run,
 } from "@/lib/love/engine";
-import { type ReactLine, idleLine, touchLine } from "@/lib/love/reactions";
+import { type ReactLine, idleLine, lightMood, touchLine } from "@/lib/love/reactions";
+import { type Heroine, SKILL_NAME, STAGE_LINE, STAGE_NAME, heroStage, skillOf, tiltName } from "@/lib/love/rel";
 import { VOICE_BY_TEXT } from "@/lib/love/voices";
 import {
   type BgmId,
@@ -236,7 +237,7 @@ function useSound(muted: boolean, cfg: Cfg) {
 }
 
 type Phase = "title" | "name" | "game" | "gallery" | "review" | "assets";
-type Panel = null | "log" | "save" | "load" | "config";
+type Panel = null | "log" | "save" | "load" | "config" | "rel";
 
 export default function LoveApp() {
   const [phase, setPhase] = useState<Phase>("title");
@@ -449,8 +450,18 @@ export default function LoveApp() {
       setS(next(s));
     } else if (b.k === "day" || b.k === "title") {
       setS(next(s));
+    } else if (b.k === "montage") {
+      play("click");
+      setS(next(s));
     }
   }, [s, panel, typed, sub, markSeen, play]);
+
+  // 몽타주: 스킵 중이면 바로 넘김 (평소엔 클릭)
+  useEffect(() => {
+    if (block?.k !== "montage" || !skip) return;
+    const id = window.setTimeout(advance, 300);
+    return () => window.clearTimeout(id);
+  }, [block, advance, skip]);
 
   // 날짜 · 제목 카드는 잠깐 보여 주고 자동으로 넘어감
   useEffect(() => {
@@ -521,6 +532,7 @@ export default function LoveApp() {
   useEffect(() => {
     if (phase !== "game" || !s || block?.k !== "say" || typing || panel || auto || skip || hideUi)
       return;
+    if (!lightMood(s)) return;
     const on: CharKey[] = (Object.keys(s.disp.chars) as CharKey[]).filter(
       (k) => k === "yeonseo" || k === "amy"
     );
@@ -542,6 +554,7 @@ export default function LoveApp() {
       // 그림 가장자리 투명한 곳은 빼고 가운데 몸통 쪽만
       if (Math.abs(x - (r.left + r.width / 2)) > r.width * 0.32) continue;
       const head = (y - r.top) / r.height < HEAD_Y + 0.03;
+      if (!lightMood(s)) return true;
       showReact(who, touchLine(who, head ? "head" : "body", s.vars), s.seq);
       return true;
     }
@@ -617,6 +630,32 @@ export default function LoveApp() {
     const id = window.setTimeout(() => setHeartPop(null), 1600);
     return () => window.clearTimeout(id);
   }, [heartPop]);
+  // 관계 단계가 오르면 위에 한 줄 알림 (대본 set 으로 오른 것도)
+  const [stageUp, setStageUp] = useState<{ who: Heroine; stage: number; n: number } | null>(null);
+  const stageRef = useRef<Record<Heroine, number> | null>(null);
+  const affA = s?.vars.affA ?? 0;
+  const affY = s?.vars.affY ?? 0;
+  useEffect(() => {
+    if (phase !== "game" || !s) {
+      stageRef.current = null;
+      return;
+    }
+    const now = { amy: heroStage(s.vars, "amy"), yeonseo: heroStage(s.vars, "yeonseo") };
+    const prev = stageRef.current;
+    stageRef.current = now;
+    if (!prev) return;
+    for (const who of ["amy", "yeonseo"] as Heroine[])
+      if (now[who] > prev[who]) {
+        setStageUp({ who, stage: now[who], n: Date.now() });
+        play("heart");
+      }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [affA, affY, phase]);
+  useEffect(() => {
+    if (!stageUp) return;
+    const id = window.setTimeout(() => setStageUp(null), 3200);
+    return () => window.clearTimeout(id);
+  }, [stageUp]);
   const labelOf = (st: GState) => {
     const d = st.disp.day ? `DAY ${st.disp.day.d} · ${st.disp.day.slot}` : "프롤로그";
     const t = st.block?.k === "say" ? sub(st.block.text).slice(0, 26) : "";
@@ -858,6 +897,14 @@ export default function LoveApp() {
                 <span className="text-[#ffd27a]">♠</span> DAY {disp.day.d} · {disp.day.slot}
               </div>
             )}
+            {disp.day && !hideUi && (
+              <RelHud vars={s.vars} onOpen={() => setPanel("rel")} />
+            )}
+            {stageUp && (
+              <div key={stageUp.n} className={`lv-stageup ${stageUp.who === "amy" ? "lv-heart-a" : "lv-heart-y"}`}>
+                <span>♥</span> {NAME[stageUp.who]} — 「{STAGE_NAME[stageUp.who][stageUp.stage]}」
+              </div>
+            )}
 
             {/* 대사 */}
             {block?.k === "say" && !hideUi && (
@@ -984,11 +1031,32 @@ export default function LoveApp() {
                   {block.prompt}
                 </div>
                 <div className="flex gap-[1.5cqw]">
-                  {block.opts.map((o) => (
-                    <button key={o.text} className="lv-free" onClick={() => choose(o)}>
-                      {sub(o.text)}
-                    </button>
-                  ))}
+                  {block.opts.map((o) =>
+                    o.card ? (
+                      <button key={o.text} className="lv-plan" onClick={() => choose(o)}>
+                        <div className="lv-plan-icon">
+                          {o.card.who && FACE_ICON[o.card.who] ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={FACE_ICON[o.card.who]} alt="" />
+                          ) : (
+                            <span>{o.card.icon ?? "◆"}</span>
+                          )}
+                        </div>
+                        <div className="lv-plan-title">{sub(o.text)}</div>
+                        <div className="lv-plan-place">{o.card.place}</div>
+                        {o.card.who && (
+                          <div className={`lv-plan-hearts ${o.card.who === "amy" ? "lv-heart-a" : "lv-heart-y"}`}>
+                            {hearts(heroStage(s.vars, o.card.who))}
+                          </div>
+                        )}
+                        {o.card.hint && <div className="lv-plan-hint">{o.card.hint}</div>}
+                      </button>
+                    ) : (
+                      <button key={o.text} className="lv-free" onClick={() => choose(o)}>
+                        {sub(o.text)}
+                      </button>
+                    )
+                  )}
                 </div>
               </div>
             )}
@@ -1066,6 +1134,9 @@ export default function LoveApp() {
                 </div>
                 <div className="text-[2cqw] text-[#ffd27a]">{block.slot}</div>
               </div>
+            )}
+            {block?.k === "montage" && (
+              <Montage key={s.seq} shots={block.shots} caption={block.caption} onShutter={() => play("shutter")} />
             )}
             {block?.k === "title" && (
               <div className="absolute inset-0 z-40 grid place-items-center bg-black">
@@ -1211,7 +1282,9 @@ export default function LoveApp() {
                     ? "저장"
                     : panel === "config"
                       ? "환경 설정"
-                      : "불러오기"}
+                      : panel === "rel"
+                        ? "관계"
+                        : "불러오기"}
               </b>
               <button className="lv-btn-ghost" onClick={() => setPanel(null)}>
                 닫기
@@ -1219,6 +1292,8 @@ export default function LoveApp() {
             </div>
             {panel === "config" ? (
               <ConfigPanel cfg={cfg} setCfg={setCfg} onTest={() => play("chip")} />
+            ) : panel === "rel" ? (
+              s && <RelPanel vars={s.vars} />
             ) : panel === "log" ? (
               <LogList log={log} sub={sub} onVoice={(u) => voice(u)} />
             ) : (
@@ -1551,6 +1626,57 @@ function Dialogue({
       >
         {mood === "think" ? `(${text}${done ? ")" : ""}` : text}
         {done && <span className="lv-next">◆</span>}
+      </div>
+    </div>
+  );
+}
+
+/** 하트 5칸 (단계 0 ~ 5) */
+const hearts = (n: number) => "♥".repeat(n) + "♡".repeat(5 - n);
+
+/** 왼쪽 위 날짜 아래: 두 히로인 관계 하트 · 실력 (누르면 관계 화면) */
+function RelHud({ vars, onOpen }: { vars: Record<string, number>; onOpen: () => void }) {
+  return (
+    <button className="lv-relhud" onClick={(e) => (e.stopPropagation(), onOpen())} title="관계 보기">
+      <span className="lv-heart-a">{hearts(heroStage(vars, "amy"))}</span>
+      <span className="lv-heart-y">{hearts(heroStage(vars, "yeonseo"))}</span>
+      <span className="text-[#ffd27a]">{"✦".repeat(skillOf(vars) + 1)}</span>
+    </button>
+  );
+}
+
+/** 관계 화면: 단계 이름 · 지금 마음 · 실력 · 마음 상태 */
+function RelPanel({ vars }: { vars: Record<string, number> }) {
+  return (
+    <div className="grid flex-1 grid-cols-2 gap-[1.6cqw] overflow-y-auto">
+      {(["amy", "yeonseo"] as Heroine[]).map((who) => {
+        const st = heroStage(vars, who);
+        return (
+          <div key={who} className="lv-relcard">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            {FACE_ICON[who] && <img src={FACE_ICON[who]} alt="" className="h-[7cqw] w-[7cqw] rounded-full" />}
+            <div className="text-[1.9cqw] font-bold" style={{ color: NAME_COLOR[who] }}>
+              {NAME[who]}
+            </div>
+            <div className={`text-[2cqw] tracking-[0.2em] ${who === "amy" ? "lv-heart-a" : "lv-heart-y"}`}>
+              {hearts(st)}
+            </div>
+            <div className="text-[1.5cqw] text-[#ffd27a]">「{STAGE_NAME[who][st]}」</div>
+            <div className="text-[1.3cqw] leading-[1.6] text-white/80">{STAGE_LINE[who][st]}</div>
+          </div>
+        );
+      })}
+      <div className="lv-relcard col-span-2 !flex-row !justify-around">
+        <div>
+          <div className="text-[1.2cqw] text-white/55">딜러 실력</div>
+          <div className="text-[1.6cqw] text-[#ffd27a]">
+            {"✦".repeat(skillOf(vars) + 1)} {SKILL_NAME[skillOf(vars)]}
+          </div>
+        </div>
+        <div>
+          <div className="text-[1.2cqw] text-white/55">마음 상태</div>
+          <div className="text-[1.6cqw] text-white/85">{tiltName(vars)}</div>
+        </div>
       </div>
     </div>
   );
@@ -1951,6 +2077,44 @@ function StaffRoll({ title, onDone }: { title: string; onDone: () => void }) {
       <div className="absolute bottom-[3%] right-[3%] text-[1cqw] text-white/35">
         클릭해서 넘기기
       </div>
+    </div>
+  );
+}
+
+/** 사진 몽타주: 폴라로이드가 한 장씩 기울어져 놓임 (배경 + 인물 상반신 + 손글씨) */
+function Montage({ shots, caption, onShutter }: { shots: import("@/lib/love/types").Shot[]; caption?: string; onShutter: () => void }) {
+  const [n, setN] = useState(0);
+  useEffect(() => {
+    if (n >= shots.length) return;
+    const id = window.setTimeout(() => {
+      onShutter();
+      setN((x) => x + 1);
+    }, n === 0 ? 250 : 650);
+    return () => window.clearTimeout(id);
+  }, [n, shots.length, onShutter]);
+  const tilt = [-7, 5, -3, 8];
+  return (
+    <div className="lv-montage">
+      <div className="lv-montage-row">
+        {shots.slice(0, n).map((sh, i) => {
+          const bg = BG[sh.bg];
+          const set = sh.who ? (sh.outfit && OUTFITS[sh.who]?.[sh.outfit]) || STAND[sh.who] : null;
+          const img = set ? (sh.face && sh.face !== "base" && set.faces[sh.face]) || set.base : null;
+          return (
+            <div key={i} className="lv-polaroid" style={{ transform: `rotate(${tilt[i % 4]}deg)` }}>
+              <div
+                className="lv-polaroid-pic"
+                style={bg ? { backgroundImage: `url("${bg}")` } : { background: BG_FALLBACK[sh.bg] }}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                {img && <img src={img} alt="" className="lv-polaroid-char" draggable={false} />}
+              </div>
+              {sh.text && <div className="lv-polaroid-text">{sh.text}</div>}
+            </div>
+          );
+        })}
+      </div>
+      {caption && n >= shots.length && <div className="lv-montage-cap">{caption}</div>}
     </div>
   );
 }

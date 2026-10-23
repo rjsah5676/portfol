@@ -35,3 +35,25 @@ export const poker = (key: string, spec: PokerSpec): Step => ({
   key,
   poker: spec,
 });
+
+/** 하루 일정 카드 (free 슬롯용): 카드 제목 · 장소 · 이동 장면 · 누구/아이콘 · 오르는 것 */
+export const card = (
+  text: string,
+  place: string,
+  to: string,
+  o: { who?: "amy" | "yeonseo"; icon?: string; hint?: string; eff?: Record<string, number>; cond?: import("./types").Cond } = {}
+): import("./types").Opt => ({
+  text,
+  to,
+  ...(o.eff && { eff: o.eff }),
+  ...(o.cond && { cond: o.cond }),
+  card: { place, ...(o.who && { who: o.who }), ...(o.icon && { icon: o.icon }), ...(o.hint && { hint: o.hint }) },
+});
+/** 하루 낮 일정 고르기 */
+export const PLAN = (prompt: string, opts: import("./types").Opt[]): Step => ({ t: "free", prompt, opts });
+/** 사진 몽타주 (2~4컷): MONTAGE([{ bg: "arcade", who: "amy", face: "smile", text: "곰 생일" }, …], "그날의 사진") */
+export const MONTAGE = (shots: import("./types").Shot[], caption?: string): Step => ({
+  t: "montage",
+  shots,
+  ...(caption && { caption }),
+});

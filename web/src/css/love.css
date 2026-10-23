@@ -1168,7 +1168,7 @@
   color: #7fd3ff;
 }
 .lv-heart-y {
-  color: #8fa8ff;
+  color: #c3a6ff;
 }
 @keyframes lv-heart-pop {
   0% {
@@ -1371,3 +1371,132 @@
     scale: 0.7;
   }
 }
+
+/* ===== 관계 하트 HUD · 단계 상승 · 일정 카드 · 관계 화면 ===== */
+.lv-relhud {
+  position: absolute;
+  left: 1.6cqw;
+  top: 4.9cqw;
+  z-index: 15;
+  display: flex;
+  gap: 0.9cqw;
+  padding: 0.3cqw 0.9cqw;
+  border: 0.1cqw solid #c9a25a88;
+  border-radius: 99px;
+  background: #0d1226cc;
+  font-size: 1.05cqw;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+}
+.lv-relhud:hover {
+  border-color: #ffd27a;
+}
+.lv-stageup {
+  position: absolute;
+  left: 50%;
+  top: 7%;
+  z-index: 28;
+  transform: translateX(-50%);
+  padding: 0.7cqw 2cqw;
+  border: 0.12cqw solid currentColor;
+  border-radius: 99px;
+  background: #0d1226ee;
+  font-size: 1.5cqw;
+  font-weight: 700;
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: 0 0 1.6cqw currentColor;
+  animation: lv-stageup 3.2s ease both;
+}
+.lv-stageup span {
+  margin-right: 0.4cqw;
+}
+@keyframes lv-stageup {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -40%) scale(0.9);
+  }
+  12%,
+  80% {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1);
+  }
+  100% {
+    opacity: 0;
+  }
+}
+.lv-plan {
+  display: flex;
+  width: 17cqw;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5cqw;
+  padding: 1.6cqw 1cqw 1.3cqw;
+  border: 0.15cqw solid #c9a25a;
+  border-radius: 1cqw;
+  background: linear-gradient(180deg, #1b2448, #0b1028);
+  transition:
+    transform 0.15s,
+    box-shadow 0.15s;
+}
+.lv-plan:hover {
+  transform: translateY(-0.5cqw);
+  box-shadow: 0 0 1.4cqw #ffd27a55;
+}
+.lv-plan-icon {
+  display: grid;
+  width: 6cqw;
+  height: 6cqw;
+  place-items: center;
+  overflow: hidden;
+  border: 0.12cqw solid #c9a25a88;
+  border-radius: 50%;
+  background: #0d1226;
+  font-size: 2.8cqw;
+}
+.lv-plan-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.lv-plan-title {
+  font-size: 1.55cqw;
+  font-weight: 700;
+}
+.lv-plan-place {
+  font-size: 1.05cqw;
+  color: #ffffffa0;
+}
+.lv-plan-hearts {
+  font-size: 1.15cqw;
+  letter-spacing: 0.1em;
+}
+.lv-plan-hint {
+  margin-top: 0.2cqw;
+  padding: 0.2cqw 0.8cqw;
+  border-radius: 99px;
+  background: #ffd27a22;
+  color: #ffd27a;
+  font-size: 1cqw;
+}
+.lv-relcard {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.6cqw;
+  padding: 1.8cqw;
+  border: 0.12cqw solid #c9a25a66;
+  border-radius: 1cqw;
+  background: #0d1226cc;
+  text-align: center;
+}
+
+/* ---------- 사진 몽타주 ---------- */
+.lv-montage { position: absolute; inset: 0; z-index: 35; display: grid; place-items: center; background: rgba(8, 6, 12, 0.72); }
+.lv-montage-row { display: flex; gap: 2.2cqw; align-items: center; justify-content: center; }
+.lv-polaroid { width: 22cqw; padding: 0.9cqw 0.9cqw 0; background: #f7f3ea; border-radius: 0.3cqw; box-shadow: 0 1.2cqw 2.6cqw rgba(0, 0, 0, 0.55); animation: lv-polaroid-in 0.45s ease-out both; }
+.lv-polaroid-pic { position: relative; aspect-ratio: 4 / 3.4; overflow: hidden; background-size: cover; background-position: center; }
+.lv-polaroid-char { position: absolute; left: 50%; top: 5%; height: 200%; transform: translateX(-50%); object-fit: contain; pointer-events: none; }
+.lv-polaroid-text { padding: 0.7cqw 0.2cqw 1cqw; text-align: center; font-size: 1.45cqw; color: #3b3040; font-family: "Nanum Pen Script", "Gaegu", cursive; }
+.lv-montage-cap { position: absolute; bottom: 7cqw; font-size: 1.7cqw; color: #ffe2b0; text-shadow: 0 0.2cqw 0.6cqw #000; animation: lv-fadein 0.6s ease-out both; }
+@keyframes lv-polaroid-in { from { opacity: 0; transform: translateY(-3cqw) rotate(0deg) scale(1.08); } }

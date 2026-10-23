@@ -18,6 +18,7 @@ import {
   type Outfit,
   type Pos,
   type SfxId,
+  type Shot,
   type Step,
   SUBS,
   type Vars,
@@ -63,6 +64,7 @@ export type Block =
   | { k: "phone"; step: Extract<Step, { t: "phone" }> }
   | { k: "free"; prompt: string; opts: Opt[]; big?: boolean }
   | { k: "title"; text: string; sub?: string }
+  | { k: "montage"; shots: Shot[]; caption?: string }
   | { k: "day"; d: number; slot: string }
   | { k: "ending"; id: EndingId }
   | { k: "end"; text: string; sub?: string }
@@ -129,7 +131,16 @@ export function run(s0: GState): GState {
       return s;
     }
     const steps = SCENES[s.scene];
-    if (!steps) throw new Error(`없는 장면: ${s.scene}`);
+    if (!steps) {
+      // 개편으로 없어진 1주차 장면(예전 세이브) → 그날 아침부터 다시
+      const day = /^d([1-7])/.exec(s.scene)?.[1];
+      if (day && SCENES[`d${day}`]) {
+        s.scene = `d${day}`;
+        s.i = 0;
+        continue;
+      }
+      throw new Error(`없는 장면: ${s.scene}`);
+    }
     const st = steps[s.i];
     if (!st) {
       // 장면 끝까지 갔는데 이어지는 게 없으면 타이틀로
@@ -200,6 +211,8 @@ export function run(s0: GState): GState {
         break;
       case "day":
         s.disp.cg = null;
+        // 오늘 날짜 (대본에서 dayNo 로 읽음: 낮 일정이 끝나면 그날 저녁으로 돌아가기)
+        s.vars = { ...s.vars, dayNo: st.day };
         // 시간대가 바뀌면 옷도 기본으로 (단, 장갑 벗은 "bare"는 한 번 벗으면 계속)
         if (s.disp.outfit)
           s.disp.outfit = Object.fromEntries(
@@ -261,6 +274,9 @@ export function run(s0: GState): GState {
         return s;
       case "title":
         s.block = { k: "title", text: st.text, sub: st.sub };
+        return s;
+      case "montage":
+        s.block = { k: "montage", shots: st.shots, caption: st.caption };
         return s;
       case "ending":
         s.block = { k: "ending", id: st.id };
