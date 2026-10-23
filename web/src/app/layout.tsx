@@ -14,6 +14,7 @@ import ServerNotice from "@/components/ServerNotice";
 import SiteNoticeBar from "@/components/SiteNoticeBar";
 import PointToast from "@/components/Points/PointToast";
 import TrafficBeacon from "@/components/TrafficBeacon";
+import AudioGuard from "@/components/AudioGuard";
 import { AuthProvider } from "@/lib/AuthContext";
 import { ModalProvider } from "@/components/Modal/ModalProvider";
 import { SITE_URL, SITE_NAME, SITE_DESCRIPTION, OG_IMAGE } from "@/lib/seo";
@@ -93,6 +94,7 @@ export default function RootLayout({
             <QuickMenu />
             <SocialRoot />
             <TrafficBeacon />
+            <AudioGuard />
             <ServerNotice />
             <PointToast />
           </ModalProvider>
