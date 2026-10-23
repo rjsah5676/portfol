@@ -905,6 +905,14 @@ describe("픽셀 글리치 디펜스 서버", () => {
     expect(f.fslots).toBe(1);
     expect(f.cores).toBe(500 - FRES_COST[0]);
     await c.rpc("defense.load", { res: ["g_gold", "k_drill"], relics: [], glitch: 0 });
+    // 장착 프리셋: 지금 장착을 저장 · 이름만 바꾸기 · 칸 범위 밖은 거절
+    const ps = await c.rpc("defense.preset", { i: 1 });
+    expect(ps.presets[1]).toMatchObject({ name: "프리셋 2", res: ["g_gold", "k_drill"], relics: [] });
+    expect(ps.presets[0]).toBeNull();
+    const rn = await c.rpc("defense.preset", { i: 1, name: "보스용", rename: true });
+    expect(rn.presets[1]).toMatchObject({ name: "보스용", res: ["g_gold", "k_drill"] });
+    await expect(c.rpc("defense.preset", { i: 0, name: "x", rename: true })).rejects.toThrow();
+    await expect(c.rpc("defense.preset", { i: 3 })).rejects.toThrow();
     // 유물 상자: 같은 유물이 또 나오면 조각
     let shards = 0;
     for (let i = 0; i < 12; i++) {

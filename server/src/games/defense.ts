@@ -409,6 +409,7 @@ export function registerDefense({ gateway, db, points }: Deps) {
   gateway.rpc("defense.store.sell", (ctx, raw) => (member(ctx), meta.storeSell(ctx.uid, id.parse(raw).id)));
   gateway.rpc("defense.pack.buy", (ctx, raw) => (member(ctx), meta.packBuy(ctx.uid, id.parse(raw).id)));
   gateway.rpc("defense.load", (ctx, raw) => (member(ctx), meta.setLoad(ctx.uid, raw)));
+  gateway.rpc("defense.preset", (ctx, raw) => (member(ctx), meta.savePreset(ctx.uid, raw)));
   gateway.rpc("defense.theme", (ctx, raw) => (member(ctx), meta.setTheme(ctx.uid, id.parse(raw).id)));
   gateway.rpc("defense.quest.claim", (ctx, raw) => (member(ctx), meta.questClaim(ctx.uid, id.parse(raw).id)));
   gateway.rpc("defense.pass.claim", (ctx) => (member(ctx), meta.passClaim(ctx.uid)));

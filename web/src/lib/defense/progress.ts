@@ -191,6 +191,15 @@ export const RELIC_SLOTS = 3;
 /** 오염 RELIC_SLOT4_WIN 단계를 클리어하면 일반 유물 칸 +1 */
 export const RELIC_SLOT4_WIN = 30;
 export const RELIC_SLOTS_MAX = 4;
+/** 장착 프리셋 칸 수 · 프리셋 (연구 · 유물 · 치트 연구 · 원정 칸 — 오염 단계는 안 담음) */
+export const PRESET_MAX = 3;
+export interface LoadPreset {
+  name: string;
+  res: string[];
+  relics: string[];
+  cheat?: string;
+  trelic?: string;
+}
 export const relicSlotsOf = (glitchWin: number) => (glitchWin >= RELIC_SLOT4_WIN ? RELIC_SLOTS_MAX : RELIC_SLOTS);
 /** 원정 유물 (글리치 원정 첫 클리어로만) — 일반 3칸과 따로 원정 칸 1칸 */
 export const isTownRelic = (id: string) => RELIC[id]?.from === "town";

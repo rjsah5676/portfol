@@ -104,6 +104,8 @@ export interface DefenseProfile {
   resLv?: Record<string, number>;
   relicLv?: Record<string, number>;
   load: { res: string[]; relics: string[]; glitch: number; cheat?: string; town?: number; trelic?: string };
+  /** 장착 프리셋 (빈 칸은 null) */
+  presets?: ({ name: string; res: string[]; relics: string[]; cheat?: string; trelic?: string } | null)[];
   /** 해피 타운: 클리어한 단계 · 단계별 최고 웨이브 (클리어 = LAST_WAVE + 1) */
   townDone?: number[];
   tbest?: Record<string, number>;
@@ -195,6 +197,8 @@ export const meta = {
   storeSell: (id: string) => P("defense.store.sell", { id }),
   packBuy: (id: string) => P("defense.pack.buy", { id }),
   setLoad: (load: { res: string[]; relics: string[]; glitch: number; cheat?: string; town?: number; trelic?: string }) => P("defense.load", load),
+  /** 지금 장착을 프리셋 i 칸에 저장 */
+  savePreset: (i: number, name?: string, rename?: boolean) => P("defense.preset", { i, ...(name && { name }), ...(rename && { rename }) }),
   cheatResBuy: (id: string) => P("defense.cheatres.buy", { id }),
   setTheme: (id: string) => P("defense.theme", { id }),
   questClaim: (id: string) => P("defense.quest.claim", { id }),

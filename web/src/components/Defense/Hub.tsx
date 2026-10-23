@@ -49,6 +49,7 @@ import {
   isTownRelic,
   relicSlotsOf,
   RELIC_SLOTS_MAX,
+  PRESET_MAX,
   RELIC_SLOT4_WIN,
   RELIC_PASSIVE,
   DEEP_RELIC_WIN,
@@ -349,6 +350,76 @@ export function growthDots(p: DefenseProfile) {
   return { units, res, relic, engr, total: units + res + relic + engr };
 }
 
+/**
+ * 장착 프리셋 (2026-10-23): 연구 · 유물 · 치트 연구 · 원정 칸을 3칸에 저장 · 한 번에 불러오기 (오염 단계는 그대로).
+ * 불러올 때 지금 없는 것 · 칸이 모자란 것은 빼고 껴요.
+ */
+function PresetRow({ p, act, busy }: TabProps) {
+  const L = p.load;
+  const ps = Array.from({ length: PRESET_MAX }, (_, i) => p.presets?.[i] ?? null);
+  const same = (a: string[], b: string[]) => a.length === b.length && a.every((x) => b.includes(x));
+  const isGen = (id: string) => RES[id]?.group === "general";
+  const fit = (x: NonNullable<(typeof ps)[number]>) => {
+    const gen = x.res.filter((r) => p.res.includes(r) && isGen(r)).slice(0, RES_SLOTS);
+    const fac = x.res.filter((r) => p.res.includes(r) && !isGen(r)).slice(0, p.fslots);
+    const relics = x.relics.filter((r) => p.relics.includes(r) && !isTownRelic(r)).slice(0, relicSlotsOf(p.glitchWin));
+    const cheat = x.cheat && (p.cheatRes ?? []).includes(x.cheat) ? x.cheat : "";
+    const trelic = x.trelic && p.relics.includes(x.trelic) ? x.trelic : "";
+    const res = [...gen, ...fac];
+    const lost = x.res.length + x.relics.length + (x.cheat ? 1 : 0) + (x.trelic ? 1 : 0) - (res.length + relics.length + (cheat ? 1 : 0) + (trelic ? 1 : 0));
+    return { res, relics, cheat, trelic, lost };
+  };
+  const curTrelic = L.trelic || "";
+  return (
+    <div>
+      <H sub="지금 장착(연구 · 유물 · 치트 연구 · 원정 칸)을 저장해 두고 한 번에 바꿔 껴요 · 오염 단계는 그대로">프리셋</H>
+      <div className="grid grid-cols-3 gap-1.5">
+        {ps.map((x, i) => {
+          const on = !!x && same(x.res, L.res) && same(x.relics, L.relics.filter((r) => !isTownRelic(r))) && (x.cheat ?? "") === (L.cheat ?? "") && (x.trelic ?? "") === curTrelic;
+          const f = x ? fit(x) : null;
+          return (
+            <div key={i} className="flex min-w-0 flex-col gap-1">
+              <Btn
+                tone={on ? "cyan" : x ? "main" : "ghost"}
+                disabled={busy || !x || on}
+                className="min-w-0 px-2 py-1.5 text-left"
+                title={x ? `${x.name} — 유물 ${x.relics.map((r) => RELIC[r]?.name ?? r).join(" · ") || "없음"} / 연구 ${x.res.map((r) => RES[r]?.name ?? r).join(" · ") || "없음"}${f!.lost ? ` · 지금 못 끼는 ${f!.lost}개는 빼고 껴요` : ""}` : "빈 칸"}
+                onClick={() => x && f && void act(() => meta.setLoad({ ...L, res: f.res, relics: f.relics, cheat: f.cheat, trelic: f.trelic }), `「${x.name}」 장착`)}
+              >
+                <b className="block truncate text-[13px]">{x ? x.name : `빈 칸 ${i + 1}`}</b>
+                <span className="block truncate text-[12px] opacity-80">{x ? (on ? "장착 중" : `유물 ${x.relics.length} · 연구 ${x.res.length}${f!.lost ? ` · ${f!.lost}개 못 낌` : ""}`) : "아래 「저장」"}</span>
+              </Btn>
+              <div className="flex gap-1">
+                <button
+                  type="button"
+                  disabled={busy}
+                  className="flex-1 text-[12px] text-[var(--dim)] underline disabled:opacity-40"
+                  onClick={() => void act(() => meta.savePreset(i), `${x?.name ?? `프리셋 ${i + 1}`}에 저장했어요`)}
+                >
+                  {x ? "덮어쓰기" : "저장"}
+                </button>
+                {x && (
+                  <button
+                    type="button"
+                    disabled={busy}
+                    className="text-[12px] text-[var(--dim)] underline disabled:opacity-40"
+                    onClick={() => {
+                      const name = window.prompt("프리셋 이름 (12자까지)", x.name)?.trim();
+                      if (name) void act(() => meta.savePreset(i, name.slice(0, 12), true), "이름을 바꿨어요");
+                    }}
+                  >
+                    이름
+                  </button>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function LoadTab({ p, act, busy }: TabProps) {
   const L = p.load;
   const save = (load: DefenseProfile["load"]) => act(() => meta.setLoad(load));
@@ -456,6 +527,7 @@ function LoadTab({ p, act, busy }: TabProps) {
           )}
         </p>
       </div>
+      <PresetRow p={p} act={act} busy={busy} />
       {/* 2026-10-21: 유물 장착이 연구 · 치트 연구 밑에 묻혀 있던 것 → 오염 단계 바로 밑으로 */}
       <div>
         <H sub={`장착 ${L.relics.filter((x) => !isTownRelic(x)).length}/${slots}${slots < RELIC_SLOTS_MAX ? ` (오염 ${RELIC_SLOT4_WIN} 클리어로 ${RELIC_SLOTS_MAX}칸)` : ""} · 가진 유물 보유 효과: 모든 피해 +${relicPassive(Object.fromEntries(p.relics.map((id) => [id, p.relicLv?.[id] ?? 1])))}% (장착 안 해도)`}>유물 장착</H>

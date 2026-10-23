@@ -38,6 +38,8 @@ import {
   RES_SLOTS,
   RELIC_SLOTS,
   RELIC_SLOTS_MAX,
+  PRESET_MAX,
+  type LoadPreset,
   RELIC_SLOT4_WIN,
   relicSlotsOf,
   isTownRelic,
@@ -118,6 +120,8 @@ export interface Profile {
   relicLv?: Record<string, number>;
   /** 장착 (시즌 판 · 멀티에 들고 감) */
   load: { res: string[]; relics: string[]; glitch: number; cheat?: string; town?: number; trelic?: string };
+  /** 장착 프리셋 (연구 · 유물 · 치트 연구 · 원정 칸 — 오염 단계는 안 담음) · PRESET_MAX 칸 */
+  presets?: (LoadPreset | null)[];
   /** 해피 타운: 클리어한 단계들 (첫 클리어 보상) · 단계별 최고 웨이브 (클리어 = LAST_WAVE + 1) */
   townDone?: number[];
   tbest?: Record<string, number>;
@@ -1006,6 +1010,26 @@ export function createDefenseMeta(db: Database, points: Points, now: () => numbe
         const town = v.town ?? p.load.town;
         need(!v.town || v.town <= townAvail(p.glitchOpen, p.townDone ?? []), "아직 열리지 않은 원정 단계예요 (메인 오염 · 아래 단계 클리어).");
         p.load = { res: [...new Set(v.res)], relics: [...new Set(v.relics)], glitch: v.glitch, cheat, ...(town && { town }), ...(trelic && { trelic }) };
+        return wire(uid, p);
+      });
+    },
+
+    /** 지금 장착을 프리셋 i 칸에 저장 (이름은 선택) · rename 이면 이름만 바꿈 */
+    savePreset(uid: string, raw: unknown) {
+      const v = z.object({ i: z.number().int().min(0).max(PRESET_MAX - 1), name: z.string().trim().max(12).optional(), rename: z.boolean().optional() }).parse(raw);
+      return edit(uid, async (p) => {
+        const ps = [...(p.presets ?? [])];
+        while (ps.length < PRESET_MAX) ps.push(null);
+        if (v.rename) {
+          const cur = ps[v.i];
+          need(!!cur && !!v.name, "빈 칸이에요.");
+          ps[v.i] = { ...cur!, name: v.name! };
+          p.presets = ps;
+          return wire(uid, p);
+        }
+        const L = p.load;
+        ps[v.i] = { name: v.name || ps[v.i]?.name || `프리셋 ${v.i + 1}`, res: [...L.res], relics: [...L.relics], ...(L.cheat && { cheat: L.cheat }), ...(L.trelic && { trelic: L.trelic }) };
+        p.presets = ps;
         return wire(uid, p);
       });
     },
