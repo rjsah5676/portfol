@@ -60,6 +60,10 @@ export const FACE_NEAR: Partial<Record<Face, Face[]>> = {
 export const OUTFITS: Partial<Record<CharKey, Partial<Record<Outfit, StandSet>>>> = {
   amy: {
     tshirt: { base: `${B}/char/amy-tshirt-base.webp`, faces: faces("amy-tshirt", ["blush", "smile", "pout"]) },
+    store: {
+      base: `${B}/char/amy-store-base.webp`,
+      faces: faces("amy-store", ["smile", "pout", "smug", "surprise", "sad", "blush"]),
+    },
   },
   yeonseo: {
     knit: { base: `${B}/char/yeonseo-knit-base.webp`, faces: faces("yeonseo-knit", ["away", "blush", "smile"]) },
@@ -180,6 +184,7 @@ export const NAME: Record<Who, string> = {
  *  표정 그림은 같은 캔버스라 같은 값. 의상은 캔버스가 달라 따로 (없으면 기본 옷 값) */
 export const PORTRAIT: Record<string, [number, number, number, number]> = {
   "amy": [0.4688, 0.4722, 0.1129, 0.1511],
+  "amy-store": [0.4277, 0.433, 0.1057, 0.153],
   "amy-tshirt": [0.3677, 0.4754, 0.1062, 0.1535],
   "boss": [0.3442, 0.43, 0.095, 0.12], // 사장은 머리가 작게 그려져서 더 확대
   "chunhee": [0.4078, 0.4114, 0.1436, 0.146],

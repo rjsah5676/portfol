@@ -492,6 +492,7 @@ export const W3A: Scenes = {
     { t: "day", day: 16, slot: "낮" },
     { t: "bgm", id: "amy" },
     { t: "bg", id: "store" },
+    { t: "outfit", who: "amy", id: "store" },
     { t: "sfx", id: "chime" },
     { t: "show", who: "amy", pos: "c", dist: 0 },
     A("어서 오세… 아, 딜러. 손님으로 계산대 앞에 서 있으니까 어색하다.", "surprise"),
@@ -1843,6 +1844,7 @@ export const W3A: Scenes = {
     { t: "day", day: 23, slot: "낮" },
     { t: "bgm", id: "daily" },
     { t: "bg", id: "store" },
+    { t: "outfit", who: "amy", id: "store" },
     { t: "sfx", id: "chime" },
     N("화요일 낮. 편의점 계산대에 트윈테일이 돌아와 있다. 나를 보자 바코드 찍던 손이 한 박자 멈췄다."),
     { t: "show", who: "amy", pos: "c", dist: 0 },
@@ -2193,6 +2195,7 @@ export const W3A: Scenes = {
   ],
   a4_d25_cold: [
     { t: "bg", id: "store" },
+    { t: "outfit", who: "amy", id: "store" },
     { t: "sfx", id: "chime" },
     { t: "bgm", id: "amy" },
     N("목요일 아침. 편의점 계산대 너머, 평소의 트윈테일. 눈 밑만 평소가 아니다."),
