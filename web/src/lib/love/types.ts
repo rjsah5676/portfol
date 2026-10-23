@@ -82,7 +82,28 @@ export type CgId =
   | "end_yeon_good"
   | "end_grand";
 export type SfxId =
-  "chip" | "deal" | "shuffle" | "click" | "win" | "lose" | "phone" | "heart" | "stamp";
+  | "chip"
+  | "deal"
+  | "shuffle"
+  | "click"
+  | "win"
+  | "lose"
+  | "phone"
+  | "heart"
+  | "stamp"
+  // 미연시 전용 (일레븐랩스 SFX)
+  | "door"
+  | "glass"
+  | "keypad"
+  | "heels"
+  | "thunder"
+  | "umbrella"
+  | "shutter"
+  | "splash"
+  | "wave"
+  | "blackout"
+  | "paper"
+  | "crane";
 export type BgmId =
   | "pub"
   | "vip"

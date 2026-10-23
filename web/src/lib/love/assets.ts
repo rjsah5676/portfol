@@ -177,7 +177,7 @@ export const NAME_COLOR: Record<Who, string> = {
   chunhee: "#f0a8a0",
 };
 
-/** 임시 소리 — 포커 소리 재사용 (나중에 전용 소리로 교체) */
+/** 효과음 — 칩 · 카드 · 징글은 포커 소리, 나머지는 미연시 전용(일레븐랩스 SFX, B 테이크는 .love-src/sfx-b) */
 export const SFX: Record<SfxId, string> = {
   chip: `${P}/sound/sfx-chip-1.mp3`,
   deal: `${P}/sound/sfx-deal-1.mp3`,
@@ -185,10 +185,24 @@ export const SFX: Record<SfxId, string> = {
   click: `${P}/sound/sfx-press-ui.mp3`,
   win: `${P}/sound/jingle-win.mp3`,
   lose: `${P}/sound/jingle-lose.mp3`,
-  phone: `${P}/sound/sfx-turn.mp3`,
-  heart: `${P}/sound/sfx-tick.mp3`,
+  phone: `${B}/sfx/phone.mp3`,
+  heart: `${B}/sfx/heart.mp3`,
   stamp: `${P}/sound/sfx-stamp.mp3`,
+  door: `${B}/sfx/door.mp3`,
+  glass: `${B}/sfx/glass.mp3`,
+  keypad: `${B}/sfx/keypad.mp3`,
+  heels: `${B}/sfx/heels.mp3`,
+  thunder: `${B}/sfx/thunder.mp3`,
+  umbrella: `${B}/sfx/umbrella.mp3`,
+  shutter: `${B}/sfx/shutter.mp3`,
+  splash: `${B}/sfx/splash.mp3`,
+  wave: `${B}/sfx/wave.mp3`,
+  blackout: `${B}/sfx/blackout.mp3`,
+  paper: `${B}/sfx/paper.mp3`,
+  crane: `${B}/sfx/crane.mp3`,
 };
+/** 비 오는 골목 · 비 CG 동안 깔리는 빗소리 루프 */
+export const RAIN_LOOP = `${B}/sfx/rain-loop.mp3`;
 /** 포커 BGM 그대로(펍 감성) + 미연시 전용 BGM(Gemini 제작) */
 export const BGM: Record<BgmId, string | null> = {
   pub: `${P}/sound/bgm-lobby1.mp3`,
@@ -231,7 +245,9 @@ export function preloadList(): { img: string[]; audio: string[]; voice: string[]
   img.add(TITLE.logo);
   return {
     img: [...img],
-    audio: [...new Set([...Object.values(SFX), ...Object.values(BGM).filter((u): u is string => !!u)])],
+    audio: [
+      ...new Set([...Object.values(SFX), RAIN_LOOP, ...Object.values(BGM).filter((u): u is string => !!u)]),
+    ],
     // 음성(600줄+ · 수십 MB)은 로딩 막대에 안 넣고 타이틀부터 뒤에서 차례로 받아 둠 — 아직 못 받은 줄은 그 자리에서 받아 재생
     voice: [...new Set(Object.values(VOICE_BY_TEXT))],
   };

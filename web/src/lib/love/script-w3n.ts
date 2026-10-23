@@ -402,6 +402,7 @@ export const W3N: Scenes = {
     N("에이미는 이모가 건넨 수건을 머리에 뒤집어쓰고 앉았다."),
     { t: "show", who: "amy", pos: "l", dist: 0 },
     { t: "show", who: "yeonseo", pos: "r", dist: 0 },
+    { t: "sfx", id: "door" },
     N("뒷문이 열렸다. 연서가 젖은 우산을 접으며 들어왔다. 장갑을 낀 손도, 벗은 손도 아니었다. 장갑은 주머니에 쥐여 있었다."),
     A("…왜 왔어요.", "pout"),
     Y("…우산이 하나밖에 없어서요. 4주 전처럼.", "base"),

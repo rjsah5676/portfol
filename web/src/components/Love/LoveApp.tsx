@@ -19,6 +19,7 @@ import {
   NAME_COLOR,
   OUTFITS,
   FACE_NEAR,
+  RAIN_LOOP,
   SFX,
   STAND,
   TITLE,
@@ -198,7 +199,32 @@ function useSound(muted: boolean, cfg: Cfg) {
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  return { play, bgm, voice, voiceEnd };
+  // 빗소리 루프 (비 오는 골목 · 비 CG) — 효과음 음량을 따름
+  const rainEl = useRef<HTMLAudioElement | null>(null);
+  const rainVol = () => (mute.current ? 0 : 0.35 * vol.current.sfx);
+  const rain = useCallback((on: boolean) => {
+    if (!on) {
+      rainEl.current?.pause();
+      rainEl.current = null;
+      return;
+    }
+    if (rainEl.current) {
+      rainEl.current.volume = rainVol();
+      return;
+    }
+    const a = new Audio(RAIN_LOOP);
+    a.loop = true;
+    a.volume = rainVol();
+    rainEl.current = a;
+    a.play().catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  useEffect(() => {
+    if (rainEl.current) rainEl.current.volume = rainVol();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [muted, cfg]);
+  useEffect(() => () => rainEl.current?.pause(), []);
+  return { play, bgm, voice, voiceEnd, rain };
 }
 
 type Phase = "loading" | "title" | "name" | "game" | "gallery" | "review";
@@ -241,7 +267,11 @@ export default function LoveApp() {
   const [readNow, setReadNow] = useState(false);
   const seen = useRef<Set<string>>(new Set());
   const wrap = useRef<HTMLDivElement>(null);
-  const { play, bgm, voice, voiceEnd } = useSound(muted, cfg);
+  const { play, bgm, voice, voiceEnd, rain } = useSound(muted, cfg);
+  // 비 오는 골목(CG 없을 때) · 비 CG 동안 빗소리
+  const rainOn =
+    phase === "game" && !!s && ((s.disp.bg === "alley" && !s.disp.cg) || (!!s.disp.cg && RAIN_CG.includes(s.disp.cg)));
+  useEffect(() => rain(rainOn), [rainOn, rain]);
 
   const sub = useCallback((t: string) => t.replaceAll("{name}", name), [name]);
   const flash = (t: string) => {
