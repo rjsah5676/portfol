@@ -772,6 +772,7 @@ export const W3Y: Scenes = {
     { t: "goto", to: "y3_d16_night_end" },
   ],
   y3_d16_circ: [
+    { t: "sfx", id: "pen" },
     N("현관 앞에서, 그녀가 달력 쪽으로 돌아서 볼펜 뚜껑을 열었다. 오늘 날짜에 조심스럽게 동그라미."),
     Y("…역시 X처럼 보여요. 검은색이라.", "smile"),
     ME("동그라미 맞아요. 제 눈엔."),
@@ -800,6 +801,7 @@ export const W3Y: Scenes = {
     ME("그럼 다른 거 쳐요. 동그라미."),
     Y("그건 무슨 표시인데요.", "base"),
     ME("빚이랑 상관없이, 괜찮았던 날."),
+    { t: "sfx", id: "pen" },
     N("그녀가 아주 천천히 동그라미를 그렸다. 검은 볼펜이라, 멀리서 보면 X처럼도 보였다."),
     Y("…첫 번째예요. 7년 만에.", "whisper", "smile"),
     { t: "set", eff: { yCircle: 1, yCircles: 1 } },
@@ -867,11 +869,13 @@ export const W3Y: Scenes = {
     { t: "goto", to: "y3_d17_lie_e" },
   ],
   y3_d17_lie_e: [
+    { t: "sfx", id: "pen" },
     N("일어서던 그녀가 멈추더니, 표 귀퉁이 '실기 1회 불합격' 옆에 검은 볼펜으로 작은 동그라미를 그렸다."),
     Y("…거짓말 관리 시작한 날이에요. 이것도 동그라미예요.", "whisper", "blush"),
     { t: "hide" },
     { t: "bgm", id: "amy" },
     { t: "bg", id: "store" },
+    { t: "sfx", id: "chime" },
     N("출근길 편의점. 계산대 너머에서 에이미가 바코드 스캐너를 총처럼 겨눴다."),
     { t: "show", who: "amy", pos: "c", dist: 0 },
     A("손 들어. 딜러 검문이야.", "smug"),
@@ -1623,6 +1627,7 @@ export const W3Y: Scenes = {
   ],
   y3_summer_train: [
     { t: "hide" },
+    { t: "sfx", id: "train" },
     { t: "bg", id: "sea" },
     { t: "bgm", id: "yeonseo" },
     N("기차로 두 시간, 버스로 이십 분. 방파제 끝에 빨간 등대 하나가 서 있다."),
@@ -2054,6 +2059,7 @@ export const W3Y: Scenes = {
     TY("(크게 웃는다) 정민이가 백업을 참았어. 형, 이거 진짜 큰일인가 봐요."),
     { t: "bgm", id: "amy" },
     { t: "bg", id: "store" },
+    { t: "sfx", id: "chime" },
     N("출근길 편의점. 에이미가 계산대에 턱을 괴고 있다가, 내가 들어가자 벌떡 일어났다."),
     { t: "show", who: "amy", pos: "c", dist: 0 },
     A("딜러. 사장님이 내일 밤에 아빠 자리 보여 준대. 보기만.", "base"),
@@ -2088,6 +2094,7 @@ export const W3Y: Scenes = {
   y4_d23_no: [
     A("…다들 그래. 이유는 안 알려 주고 가지 말래.", "sad"),
     A("알았어. 고민은 해 볼게. 계산대 정산하면서.", "base"),
+    { t: "sfx", id: "scan" },
     N("그녀가 스캐너로 아무것도 없는 계산대를 한 번 찍었다. 삑."),
     { t: "hide" },
     { t: "goto", to: "y4_d23_call" },
@@ -2788,6 +2795,7 @@ export const W3Y: Scenes = {
     CH("알아도 말 안 해. 그건 그 애가 직접 말해야지. 너한테."),
     { t: "bgm", id: "amy" },
     { t: "bg", id: "store" },
+    { t: "sfx", id: "chime" },
     N("돌아가는 길, 편의점. 계산대 너머의 에이미가 나를 보자마자 스캐너를 내려놓았다."),
     { t: "show", who: "amy", pos: "c", dist: 0 },
     A("딜러. …그 언니, 진짜 그만둬?", "base"),
@@ -3206,6 +3214,7 @@ export const W3Y: Scenes = {
     { t: "hide" },
     { t: "bg", id: "black" },
     { t: "bgm", id: "confide" },
+    { t: "sfx", id: "siren" },
     MONTAGE(
       [
         { bg: "alley", text: "새벽 골목, 경찰차 두 대" },

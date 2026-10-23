@@ -671,7 +671,7 @@ export default function LoveApp() {
     const fresh = now.find((id) => !prev.includes(id));
     if (fresh) {
       setTellUp({ id: fresh, n: Date.now() });
-      play("paper");
+      play("pencil");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tellKey, phase]);
@@ -1107,6 +1107,7 @@ export default function LoveApp() {
                   slot={disp.day?.slot}
                   onReply={choose}
                   onIgnore={() => setS(ignorePhone(s, block.step.ignore))}
+                  play={play}
                 />
               </div>
             )}
@@ -1721,6 +1722,7 @@ function Phone({
   slot,
   onReply,
   onIgnore,
+  play,
 }: {
   from: CharKey;
   msgs: string[];
@@ -1729,8 +1731,14 @@ function Phone({
   slot?: string;
   onReply: (o: Opt) => void;
   onIgnore: () => void;
+  play: (id: SfxId) => void;
 }) {
   const [sent, setSent] = useState<string | null>(null);
+  // 말풍선 하나 뜰 때마다 톡 (첫 줄은 벨소리와 겹치니 생략)
+  useEffect(() => {
+    if (shown > 1) play("pop");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shown]);
   const done = shown >= msgs.length;
   const time = (slot && SLOT_TIME[slot]) || "23:48";
   const list = useRef<HTMLDivElement>(null);
@@ -1739,6 +1747,7 @@ function Phone({
   }, [shown, sent]);
   const send = (o: Opt) => {
     if (sent) return;
+    play("send");
     setSent(o.text);
     window.setTimeout(() => onReply(o), 750);
   };

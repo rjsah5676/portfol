@@ -209,6 +209,23 @@ export const SFX: Record<SfxId, string> = {
   blackout: `${B}/sfx/blackout.mp3`,
   paper: `${B}/sfx/paper.mp3`,
   crane: `${B}/sfx/crane.mp3`,
+  chime: `${B}/sfx/chime.mp3`,
+  scan: `${B}/sfx/scan.mp3`,
+  boil: `${B}/sfx/boil.mp3`,
+  siren: `${B}/sfx/siren.mp3`,
+  train: `${B}/sfx/train.mp3`,
+  steps: `${B}/sfx/steps.mp3`,
+  pen: `${B}/sfx/pen.mp3`,
+  candy: `${B}/sfx/candy.mp3`,
+  clap: `${B}/sfx/clap.mp3`,
+  cardflip: `${B}/sfx/cardflip.mp3`,
+  allin: `${B}/sfx/allin.mp3`,
+  potwin: `${B}/sfx/potwin.mp3`,
+  fold: `${B}/sfx/fold.mp3`,
+  knock: `${B}/sfx/knock.mp3`,
+  pop: `${B}/sfx/pop.mp3`,
+  send: `${B}/sfx/send.mp3`,
+  pencil: `${B}/sfx/pencil.mp3`,
 };
 /** 비 오는 골목 · 비 CG 동안 깔리는 빗소리 루프 */
 export const RAIN_LOOP = `${B}/sfx/rain-loop.mp3`;

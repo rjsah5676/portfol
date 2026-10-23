@@ -8,7 +8,7 @@
  *  HeadsUp — 진짜 헤즈업 (무작위 카드 · 칩 싸움 · 버릇 단서)
  */
 import { type CSSProperties, useCallback, useEffect, useRef, useState } from "react";
-import type { BgId, CharKey, Eff, Face, MatchSpec, Outfit, PokerAct, PokerSpec, TellSpec, Vars } from "@/lib/love/types";
+import type { BgId, CharKey, Eff, Face, MatchSpec, Outfit, PokerAct, PokerSpec, SfxId, TellSpec, Vars } from "@/lib/love/types";
 import { BG, CARD_BACK, FACE_NEAR, NAME, OUTFITS, STAND } from "@/lib/love/assets";
 import { bestFive, madeOf } from "@/lib/poker/cards";
 import { check } from "@/lib/love/engine";
@@ -49,7 +49,7 @@ export function DealMini({
   play,
 }: {
   onDone: (score: number) => void;
-  play: (id: "deal" | "chip" | "lose") => void;
+  play: (id: SfxId) => void;
 }) {
   const [round, setRound] = useState(0);
   const [cur, setCur] = useState(0);
@@ -395,7 +395,7 @@ export function StoryPoker({
 }: {
   spec: PokerSpec;
   onDone: (score: number, eff?: Eff) => void;
-  play: (id: "deal" | "chip" | "lose" | "win") => void;
+  play: (id: SfxId) => void;
   /** 그 장면 배경 (VIP 룸 · 빈 펍 등) — 없으면 펍 */
   bg?: BgId;
   vars: Vars;
@@ -427,7 +427,10 @@ export function StoryPoker({
       at(500 + SD.btn, () => setSd(5));
     } else {
       let t = SD.flip;
-      at(t, () => setSd(1));
+      at(t, () => {
+        play("cardflip");
+        setSd(1);
+      });
       for (let n = street.board + 1; n <= 5; n++) {
         t += SD.card;
         const k = n === 1 || n === 2 ? 3 : n;
@@ -439,7 +442,10 @@ export function StoryPoker({
       at((t += SD.names), () => setSd(3));
       at((t += SD.banner), () => {
         setSd(4);
-        if (res.r === "win") play("win");
+        if (res.r === "win") {
+          play("potwin");
+          window.setTimeout(() => play("win"), 450);
+        }
         if (res.r === "lose") play("lose");
       });
       at(t + SD.btn, () => setSd(5));
@@ -450,7 +456,7 @@ export function StoryPoker({
 
   const choose = (a: PokerAct) => {
     if (react || res) return;
-    play(a.result === "fold" ? "deal" : "chip");
+    play(a.result === "fold" ? "fold" : "chip");
     if (a.eff)
       for (const [k, n] of Object.entries(a.eff)) eff.current[k] = (eff.current[k] ?? 0) + n;
     setReact({ say: a.say, think: a.think });
@@ -615,6 +621,14 @@ const ACT_NAME: Record<ActKind, string> = {
   raise: "레이즈",
   allin: "올인",
 };
+const ACT_SFX: Record<ActKind, SfxId> = {
+  fold: "fold",
+  check: "knock",
+  call: "chip",
+  bet: "chip",
+  raise: "chip",
+  allin: "allin",
+};
 type HuPhase = "intro" | "play" | "showdown" | "handEnd" | "done";
 
 export function HeadsUp({
@@ -627,7 +641,7 @@ export function HeadsUp({
 }: {
   spec: MatchSpec;
   onDone: (score: number, eff?: Eff) => void;
-  play: (id: "deal" | "chip" | "lose" | "win") => void;
+  play: (id: SfxId) => void;
   bg?: BgId;
   vars: Vars;
   outfit?: Outfit;
@@ -702,7 +716,7 @@ export function HeadsUp({
       const a = aiAct(x, who);
       const prev = x.shown;
       act(x, "opp", a.k, a.to);
-      play(a.k === "fold" || a.k === "check" ? "deal" : "chip");
+      play(ACT_SFX[a.k]);
       setSay(pick(CHAT[who]?.[a.k]) ?? ACT_NAME[a.k]);
       setCue(cueFor(who, a.read));
       advance(x, prev);
@@ -714,7 +728,7 @@ export function HeadsUp({
     const x = clone(h);
     const prev = x.shown;
     act(x, "me", k, to);
-    play(k === "fold" || k === "check" ? "deal" : "chip");
+    play(ACT_SFX[k]);
     setMine(ACT_NAME[k] + (k === "bet" || k === "raise" ? ` ${to}` : ""));
     setCue(null);
     setBusy(true);
@@ -729,7 +743,10 @@ export function HeadsUp({
     let t = 500;
     if (x.over!.by === "showdown") {
       setVis(prevShown);
-      later((t += SD.flip), () => setSd(1));
+      later((t += SD.flip), () => {
+        play("cardflip");
+        setSd(1);
+      });
       for (let n = Math.max(prevShown, 2) + 1; n <= 5; n++) {
         const k = n < 3 ? 3 : n;
         later((t += SD.card), () => {
@@ -743,7 +760,8 @@ export function HeadsUp({
       setSd(4);
       setFace(w === "opp" ? "smug" : w === "me" ? "pout" : undefined);
       setSay(pick(CHAT[who]?.[w === "opp" ? "winHand" : w === "me" ? "loseHand" : "call"]) ?? "");
-      if (w === "me") play("win");
+      // 판마다는 칩 쓸어 오는 소리 · 대결 전체를 이겼을 때만 승리 징글
+      if (w === "me") play("potwin");
       else if (w === "opp") play("lose");
       setStacks(settle(x));
     });
