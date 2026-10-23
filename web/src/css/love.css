@@ -11,6 +11,8 @@
   /* 대사 · UI = 프리텐다드, 서술 · 이름표 = 고운바탕 (서술과 말소리를 글꼴로 구분) */
   --lv-sans: "Pretendard Variable", Pretendard, "Noto Sans KR", "Malgun Gothic", system-ui, sans-serif;
   --lv-serif: "Gowun Batang", "Nanum Myeongjo", "Noto Serif KR", serif;
+  /* 서술 전용: 획 대비가 뚜렷한 나눔명조 — 대사(프리텐다드)와 한눈에 갈리게 */
+  --lv-narr: "Nanum Myeongjo", "Batang", "Noto Serif KR", serif;
   font-family: var(--lv-sans);
 }
 .lv-root:fullscreen {
@@ -254,19 +256,19 @@
 }
 .lv-text {
   font-weight: 500;
-  font-size: 1.85cqw;
-  line-height: 1.65;
+  font-size: 2cqw;
+  line-height: 1.6;
   letter-spacing: 0.01em;
   word-break: keep-all;
   text-shadow: 0 0.1cqw 0.3cqw #000;
 }
 /* 서술: 기울임 대신 바탕체 (한글 가짜 기울임은 지저분해 보임) */
 .lv-t-narr {
-  font-family: var(--lv-serif);
-  font-weight: 400;
-  font-size: 1.8cqw;
-  color: #ece4d0;
-  letter-spacing: 0.02em;
+  font-family: var(--lv-narr);
+  font-weight: 700;
+  font-size: 1.95cqw;
+  color: #e6d3a6;
+  letter-spacing: 0.03em;
 }
 .lv-t-think {
   color: #cfc6b0;
@@ -1177,6 +1179,40 @@
 .lv-title-btn:nth-child(4) {
   animation-delay: 0.24s;
 }
+.lv-title-btn:nth-child(5) {
+  animation-delay: 0.32s;
+}
+/* 엔딩 · 회상 모은 수 — 왼쪽 문양과 짝을 이루는 오른쪽 배지 (라벨 가운데 정렬은 그대로) */
+.lv-title-count {
+  position: absolute;
+  right: 1.2cqw;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25cqw;
+  height: 1.9cqw;
+  padding: 0 0.65cqw;
+  border: 0.08cqw solid #c9a25a99;
+  border-radius: 99px;
+  background: #070b1ccc;
+  font-family: var(--lv-sans);
+  font-size: 0.95cqw;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
+  color: #e9d9b0bb;
+}
+.lv-title-count b {
+  font-weight: 800;
+  color: #ffd27a;
+}
+.lv-title-count i {
+  font-style: normal;
+  font-size: 0.85cqw;
+  color: #c9a25a;
+}
 .lv-title-btn:hover:not(:disabled) {
   transform: scale(1.04);
   background: linear-gradient(180deg, #24306a, #121a3e);
@@ -2005,4 +2041,9 @@
 }
 .lv-bare {
   font-weight: 600;
+}
+
+/* 카운트 배지가 붙은 버튼은 라벨이 배지와 겹치지 않게 살짝 왼쪽으로 */
+.lv-title-btn:has(.lv-title-count) {
+  padding-right: 3.2cqw;
 }

@@ -824,10 +824,12 @@ export default function LoveApp() {
                     <span className="lv-suit">⚙</span>환경 설정
                   </button>
                   <button className="lv-title-btn" onClick={() => setPhase("gallery")}>
-                    <span className="lv-suit">♣</span>엔딩 · 회상{" "}
-                    <small className="ml-[0.4cqw] text-[1cqw] text-[#e9d9b0]/70">
-                      {endings.length + cgs.length}/{ENDINGS.length + CG_ORDER.length}
-                    </small>
+                    <span className="lv-suit">♣</span>엔딩 · 회상
+                    <span className="lv-title-count">
+                      <b>{endings.length + cgs.length}</b>
+                      <i>/</i>
+                      {ENDINGS.length + CG_ORDER.length}
+                    </span>
                   </button>
                 </div>
                 <div className="absolute bottom-[2.2%] right-[2%] text-[1cqw] text-[#e9d9b0]/70">

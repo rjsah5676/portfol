@@ -114,20 +114,20 @@ export const NAV_GROUPS: NavGroup[] = [
         featured: true,
       },
       {
+        href: "/games/love",
+        image: imgLove,
+        label: "올인 러브",
+        desc: "홀덤펍 딜러의 4주, ANIME POKER 외전 미연시 · 풀 CG · 엔딩 18종",
+        icon: "px:love",
+        featured: true,
+      },
+      {
         href: "/games/sketch",
         image: imgSketch,
         label: "DOODLE PARTY",
         desc: "그림 맞히기 · 가짜 화가 · 그림 릴레이, 최대 8명 그림 파티게임",
         icon: "🎨",
         featured: true,
-      },
-      {
-        href: "/games/love",
-        image: imgLove,
-        label: "올인 러브",
-        desc: "홀덤펍 딜러의 4주, ANIME POKER 외전 미연시 · 풀 CG · 엔딩 18종",
-        icon: "💘",
-        featured: true, // 메인 큰 칸 6개 맞춤 — 멜론 게임 자리 (TABLE TOWN 은 빌드에서 뺌 — archive/)
       },
       {
         href: "/games/melongame",

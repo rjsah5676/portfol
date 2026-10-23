@@ -27,7 +27,7 @@ export default function Layout({ children }: { children: ReactNode }) {
       />
       <link
         rel="stylesheet"
-        href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&display=swap"
+        href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=Nanum+Myeongjo:wght@400;700&display=swap"
         precedence="default"
       />
       {children}
