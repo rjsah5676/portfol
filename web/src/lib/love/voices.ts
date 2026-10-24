@@ -6,6 +6,7 @@
 import type { CharKey } from "./types";
 import { GEN_LINES } from "./voices-gen";
 import { EMO_LINES } from "./voices-emo";
+import { V2_LINES } from "./voices-v2";
 
 export interface VoiceLine {
   id: string;
@@ -66,18 +67,23 @@ export const VOICE_TAKE: Record<string, "a" | "b"> = {};
 export const VOICE_ALL: VoiceLine[] = [...VOICE_LINES, ...GEN_LINES.map((g) => ({ ...g, gen: true }))];
 
 /** 검수 화면용: 지금 쓰는 감정 소리 먼저, 그다음 대사 음성 전부 */
-export const VOICE_REVIEW: VoiceLine[] = [...EMO_LINES.map((e) => ({ ...e, gen: true })), ...VOICE_ALL];
+export const VOICE_REVIEW: VoiceLine[] = [
+  ...EMO_LINES.map((e) => ({ ...e, gen: true })),
+  ...V2_LINES.map((e) => ({ ...e, gen: true })),
+  ...VOICE_ALL,
+];
 
 /** 줄 → 파일 이름 (확장자 없이) */
 export const voiceFile = (v: { id: string; gen?: boolean; file?: string }, take: "a" | "b" = VOICE_TAKE[v.id] ?? "a") =>
   v.file ?? (v.gen ? `${v.id}${take === "b" ? "b" : ""}` : `${v.id}${take}`);
 
-/** 대사 텍스트 → 음성 파일. 지금은 감정 소리만 (대사 음성은 검수 뒤에 VOICE_ALL 로 되돌림) */
+/** 대사 텍스트 → 음성 파일. 감정 소리 + 2차 대사 음성(V2) — 같은 대사면 감정 소리가 먼저 */
+const PLAYED: VoiceLine[] = [...V2_LINES, ...EMO_LINES];
 export const VOICE_BY_TEXT: Record<string, string> = Object.fromEntries(
-  EMO_LINES.map((v) => [v.text, `/love/voice/${v.file ?? v.id}.mp3`])
+  PLAYED.map((v) => [v.text, `/love/voice/${v.file ?? v.id}.mp3`])
 );
 /** 말한 사람 + 대사 → 음성 (같은 대사를 둘이 할 때 — 예: 에이미 · 연서 둘 다 "……네?") */
 const VOICE_BY_WHO: Record<string, string> = Object.fromEntries(
-  EMO_LINES.map((v) => [`${v.who}|${v.text}`, `/love/voice/${v.file ?? v.id}.mp3`])
+  PLAYED.map((v) => [`${v.who}|${v.text}`, `/love/voice/${v.file ?? v.id}.mp3`])
 );
 export const voiceOf = (who: string, text: string): string | undefined => VOICE_BY_WHO[`${who}|${text}`];
