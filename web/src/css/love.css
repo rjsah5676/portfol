@@ -2184,3 +2184,97 @@
     transform: scale(1.07) translate(-1%, 0);
   }
 }
+
+/* ===== CG 연출: 심장 박동 · 흑백 · 천천히 ===== */
+.lv-cg-cam {
+  transition:
+    transform 1.6s cubic-bezier(0.45, 0, 0.2, 1),
+    filter 2.6s ease;
+}
+/* 두-근: 화면이 미세하게 뛰고 가장자리가 붉게 조여듦 (0.9초 박자) */
+.lv-cg-pulse .lv-cg-cam {
+  animation: lv-beat 0.9s ease-out infinite;
+}
+@keyframes lv-beat {
+  0% {
+    scale: 1;
+  }
+  12% {
+    scale: 1.018;
+  }
+  24% {
+    scale: 1.004;
+  }
+  36% {
+    scale: 1.012;
+  }
+  60%,
+  100% {
+    scale: 1;
+  }
+}
+.lv-cg-pulse::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse at center, transparent 45%, rgb(90 10 30 / 0.55) 100%);
+  animation: lv-beat-vig 0.9s ease-out infinite;
+}
+@keyframes lv-beat-vig {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  14% {
+    opacity: 1;
+  }
+  38% {
+    opacity: 0.75;
+  }
+}
+/* 흑백: 시간이 멈춘 순간 — 빛 입자 · 제목도 숨김 */
+.lv-cg-mono .lv-cg-cam {
+  filter: grayscale(1) contrast(1.08) brightness(0.88);
+  transition:
+    transform 3s cubic-bezier(0.45, 0, 0.2, 1),
+    filter 1.4s ease;
+}
+.lv-cg-mono .lv-cg-motes,
+.lv-cg-mono .lv-cg-title {
+  opacity: 0;
+  transition: opacity 1s;
+}
+/* 천천히: 흑백에서 돌아올 때 차분 · 카메라가 느리게 */
+.lv-cg-slow .lv-cg-var {
+  transition: opacity 2.6s ease;
+}
+.lv-cg-slow .lv-cg-cam {
+  transition:
+    transform 3.2s cubic-bezier(0.45, 0, 0.2, 1),
+    filter 2.6s ease;
+}
+/* 흑백 순간의 서술(대사창 없는 글)은 화면 가운데, 명조로 천천히 */
+.lv-cgmono .lv-bare {
+  bottom: 44%;
+  font-family: var(--lv-narr);
+  font-size: 2.3cqw;
+  letter-spacing: 0.08em;
+  color: #f4f1ea;
+  animation: lv-bare-in 1.2s ease both;
+}
+@keyframes lv-bare-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.6cqw);
+    filter: blur(3px);
+  }
+}
+
+/* 살아 있는 CG 영상: 차분이 뜨면 서서히 사라짐 (차분과 같은 속도) */
+.lv-cg-video {
+  transition: opacity 0.55s ease;
+}
+.lv-cg-slow .lv-cg-video {
+  transition: opacity 2.6s ease;
+}

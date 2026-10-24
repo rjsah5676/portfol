@@ -282,7 +282,9 @@ export type Step =
   /** 이벤트 CG 켜기 (null = 끄고 스탠딩으로). v = 처음부터 보여 줄 차분, cam = 처음 카메라 */
   | { t: "cg"; id: CgId | null; v?: string; cam?: CgCam }
   /** 켜져 있는 CG 의 차분만 바꿈 (번쩍임 없이 크로스페이드 · null = 원본) — 대사 흐름 따라 표정 바꾸기 */
-  | { t: "cgv"; v: string | null }
+  | { t: "cgv"; v: string | null; slow?: boolean }
+  /** CG 연출: pulse = 심장 박동(화면이 미세하게 뛰고 두근 소리) · mono = 흑백(시간이 멈춘 순간, 서술은 화면 가운데). 아무것도 없으면 끔 */
+  | { t: "cgfx"; pulse?: boolean; mono?: boolean }
   /** CG 카메라: 그림의 한 점(x, y = 0~1)을 z 배로 확대해 천천히 이동 (null = 전체 보기) */
   | { t: "cgcam"; cam: CgCam | null }
   /** 회상 필터: 종이 질감 · 세피아 · 손글씨 캡션 (text 없이 켜도 됨, off = 끄기). 날이 바뀌면 자동으로 꺼짐 */

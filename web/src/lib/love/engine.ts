@@ -76,6 +76,8 @@ export interface Display {
   cgv?: string | null;
   /** CG 카메라 (없으면 전체 보기) */
   cgcam?: CgCam | null;
+  /** CG 연출 (심장 박동 · 흑백) · 차분/카메라를 천천히 바꿀지 */
+  cgfx?: { pulse?: boolean; mono?: boolean; slow?: boolean } | null;
   /** 회상 필터 — 켜져 있으면 캡션 글 (빈 글 = 캡션 없이 필터만) */
   memory?: string | null;
   /** 연서가 장갑을 벗었음 (한 번 벗으면 계속 — 날이 바뀌면 "bare" 로 돌아감, 장갑 낀 드레스는 안 입음) */
@@ -219,10 +221,17 @@ export function run(s0: GState): GState {
         s.disp.cg = st.id;
         s.disp.cgv = st.id ? (st.v ?? null) : null;
         s.disp.cgcam = st.id ? (st.cam ?? null) : null;
+        s.disp.cgfx = null;
         if (st.id) s.fx = [...s.fx, "heart"];
         break;
       case "cgv":
-        if (s.disp.cg) s.disp.cgv = st.v;
+        if (s.disp.cg) {
+          s.disp.cgv = st.v;
+          s.disp.cgfx = { ...s.disp.cgfx, slow: !!st.slow };
+        }
+        break;
+      case "cgfx":
+        if (s.disp.cg) s.disp.cgfx = { pulse: st.pulse, mono: st.mono, slow: s.disp.cgfx?.slow };
         break;
       case "cgcam":
         if (s.disp.cg) s.disp.cgcam = st.cam;
@@ -247,6 +256,7 @@ export function run(s0: GState): GState {
           s.disp.cg = null;
           s.disp.cgv = null;
           s.disp.cgcam = null;
+          s.disp.cgfx = null;
         }
         break;
       case "set":
@@ -275,6 +285,7 @@ export function run(s0: GState): GState {
         s.disp.cg = null;
         s.disp.cgv = null;
         s.disp.cgcam = null;
+        s.disp.cgfx = null;
         s.disp.memory = null;
         // 오늘 날짜 (대본에서 dayNo 로 읽음: 낮 일정이 끝나면 그날 저녁으로 돌아가기)
         s.vars = { ...s.vars, dayNo: st.day };

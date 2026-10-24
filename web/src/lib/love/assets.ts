@@ -155,6 +155,7 @@ export const CG: Record<
     title: "거짓말, 처음이야",
     who: "amy",
     tight: true,
+    video: `${B}/cg/a-kiss.mp4`,
     vars: { kiss: `${B}/cg/a-kiss-kiss.webp`, after: `${B}/cg/a-kiss-after.webp` },
   },
   y_door: { src: `${B}/cg/y-door.webp`, title: "손바닥 하나만큼", who: "yeonseo", pending: true },
@@ -330,6 +331,7 @@ export const TITLE = { bg: `${B}/ui/title-bg.webp`, logo: `${B}/ui/title-logo.we
 /** 로딩 화면에서 전부 받는 목록 */
 export function preloadList(): { img: string[]; audio: string[]; voice: string[] } {
   const img = new Set<string>();
+  const vid = new Set<string>();
   for (const c of [
     ...Object.values(STAND),
     ...Object.values(OUTFITS).flatMap((o) => Object.values(o ?? {})),
@@ -341,6 +343,7 @@ export function preloadList(): { img: string[]; audio: string[]; voice: string[]
     if (c.pending) continue;
     img.add(c.src);
     for (const v of Object.values(c.vars ?? {})) img.add(v);
+    if (c.video) vid.add(c.video);
   }
   img.add(CARD_BACK);
   // 스토리 포커 J · Q · K 그림 (ANIME POKER 카드 그대로)
@@ -350,7 +353,13 @@ export function preloadList(): { img: string[]; audio: string[]; voice: string[]
   return {
     img: [...img],
     audio: [
-      ...new Set([...Object.values(SFX), RAIN_LOOP, ...Object.values(BGM).filter((u): u is string => !!u)]),
+      ...new Set([
+        ...Object.values(SFX),
+        RAIN_LOOP,
+        ...Object.values(BGM).filter((u): u is string => !!u),
+        // 살아 있는 CG 영상도 로딩 때 받아 둠 (fetch → HTTP 캐시)
+        ...vid,
+      ]),
     ],
     // 음성(600줄+ · 수십 MB)은 로딩 막대에 안 넣고 타이틀부터 뒤에서 차례로 받아 둠 — 아직 못 받은 줄은 그 자리에서 받아 재생
     voice: [...new Set(Object.values(VOICE_BY_TEXT))],

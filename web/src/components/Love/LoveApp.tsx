@@ -796,7 +796,7 @@ export default function LoveApp() {
   return (
     <div ref={wrap} className="lv-root" style={{ "--lv-box": cfg.box } as React.CSSProperties}>
       <div
-        className={`lv-stage ${phase === "game" && disp?.memory != null ? "lv-mem-on" : ""}`}
+        className={`lv-stage ${phase === "game" && disp?.memory != null ? "lv-mem-on" : ""} ${phase === "game" && disp?.cg && disp.cgfx?.mono ? "lv-cgmono" : ""}`}
         onClick={() => phase === "game" && !hideUi && advance()}
         // 우클릭 = 대사창 숨기기 (휠은 페이지 스크롤과 겹쳐서 지난 대사에 안 씀 — L 키 · LOG 버튼)
         onContextMenu={(e) => {
@@ -948,7 +948,16 @@ export default function LoveApp() {
                 />
               );
             })}
-            {disp.cg && <CgView key={disp.cg} id={disp.cg} v={disp.cgv} cam={disp.cgcam} />}
+            {disp.cg && (
+              <CgView
+                key={disp.cg}
+                id={disp.cg}
+                v={disp.cgv}
+                cam={disp.cgcam}
+                fx={disp.cgfx}
+                beatVol={muted ? 0 : cfg.sfx}
+              />
+            )}
             {disp.memory != null && <MemoryFx text={disp.memory} />}
             {liveReact && !disp.cg && disp.chars[liveReact.who] && (
               <ReactBubble
@@ -1502,14 +1511,63 @@ const RAIN_CG: CgId[] = ["y_umbrella", "a_door"];
  * 이벤트 CG: 하얗게 번쩍 → 흐릿하게 확대된 그림이 천천히 초점 잡히며 줌 아웃 · 위아래 시네마 띠 ·
  * 떠다니는 빛 입자 · 오른쪽 위에 잠깐 장면 제목
  */
-function CgView({ id, v, cam }: { id: CgId; v?: string | null; cam?: CgCam | null }) {
+/** 심장 박동 소리 — 낮은 '두-근' 두 번 (파일 없이 즉석 합성) */
+let beatCtx: AudioContext | null = null;
+function heartbeat(vol: number) {
+  if (vol <= 0 || typeof window === "undefined") return;
+  try {
+    beatCtx ??= new AudioContext();
+    const ctx = beatCtx;
+    if (ctx.state === "suspended") void ctx.resume();
+    const thump = (at: number, gain: number) => {
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.type = "sine";
+      o.frequency.setValueAtTime(62, at);
+      o.frequency.exponentialRampToValueAtTime(38, at + 0.16);
+      g.gain.setValueAtTime(0.0001, at);
+      g.gain.exponentialRampToValueAtTime(gain, at + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, at + 0.22);
+      o.connect(g).connect(ctx.destination);
+      o.start(at);
+      o.stop(at + 0.25);
+    };
+    const t = ctx.currentTime + 0.01;
+    thump(t, 0.9 * vol);
+    thump(t + 0.27, 0.55 * vol);
+  } catch {}
+}
+
+function CgView({
+  id,
+  v,
+  cam,
+  fx,
+  beatVol = 1,
+}: {
+  id: CgId;
+  v?: string | null;
+  cam?: CgCam | null;
+  fx?: { pulse?: boolean; mono?: boolean; slow?: boolean } | null;
+  beatVol?: number;
+}) {
   const c = CG[id];
+  // 심장 박동: 켜져 있는 동안 0.9초마다 두근 (CSS 맥박과 같은 박자)
+  const pulse = !!fx?.pulse;
+  useEffect(() => {
+    if (!pulse) return;
+    heartbeat(beatVol);
+    const t = window.setInterval(() => heartbeat(beatVol), 900);
+    return () => window.clearInterval(t);
+  }, [pulse, beatVol]);
   // 카메라: 그림의 (x, y) 를 화면 가운데로 옮긴 뒤 z 배 — 바뀔 때마다 천천히 이동
   const camStyle = cam
     ? { transform: `scale(${cam.z}) translate(${(0.5 - cam.x) * 100}%, ${(0.5 - cam.y) * 100}%)` }
     : undefined;
   return (
-    <div className={`lv-cg ${c.tight ? "lv-cg-tight" : ""}`}>
+    <div
+      className={`lv-cg ${c.tight ? "lv-cg-tight" : ""} ${pulse ? "lv-cg-pulse" : ""} ${fx?.mono ? "lv-cg-mono" : ""} ${fx?.slow ? "lv-cg-slow" : ""}`}
+    >
       <div className="lv-cg-cam" style={camStyle}>
       <div className="lv-cg-img" style={{ backgroundImage: `url("${c.src}")` }}>
         {/* 차분: 모두 겹쳐 두고 지금 것만 보이게 — 바뀌면 크로스페이드 */}
@@ -1522,14 +1580,15 @@ function CgView({ id, v, cam }: { id: CgId; v?: string | null; cam?: CgCam | nul
         ))}
         {/* 살아 있는 CG (그록 루프 mp4) — 있으면 정지 그림 위에서 재생 */}
         {/* 차분이 떠 있으면 영상은 숨김 (영상이 차분 그림을 덮지 않게) */}
-        {c.video && !(v && c.vars?.[v]) && (
+        {c.video && (
           <video
             src={c.video}
             autoPlay
             loop
             muted
             playsInline
-            className="absolute inset-0 h-full w-full object-cover"
+            className="lv-cg-video absolute inset-0 h-full w-full object-cover"
+            style={{ opacity: v && c.vars?.[v] ? 0 : 1 }}
           />
         )}
       </div>
