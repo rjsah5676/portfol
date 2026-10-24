@@ -64,10 +64,14 @@ export const OUTFITS: Partial<Record<CharKey, Partial<Record<Outfit, StandSet>>>
       base: `${B}/char/amy-store-base.webp`,
       faces: faces("amy-store", ["smile", "pout", "smug", "surprise", "sad", "blush", "wink"]),
     },
+    swim: { base: `${B}/char/amy-swim-base.webp`, faces: faces("amy-swim", ["smile", "pout", "blush", "smug"]) },
+    home: { base: `${B}/char/amy-home-base.webp`, faces: faces("amy-home", ["surprise", "blush", "pout", "sad"]) },
   },
   yeonseo: {
     knit: { base: `${B}/char/yeonseo-knit-base.webp`, faces: faces("yeonseo-knit", ["away", "blush", "smile"]) },
     bare: { base: `${B}/char/yeonseo-bare-base.webp`, faces: faces("yeonseo-bare", ["away", "smile", "blush", "sad"]) },
+    summer: { base: `${B}/char/yeonseo-summer-base.webp`, faces: faces("yeonseo-summer", ["smile", "blush", "surprise", "laugh"]) },
+    dress: { base: `${B}/char/yeonseo-dress-base.webp`, faces: faces("yeonseo-dress", ["cold", "away", "sad", "blush"]) },
   },
 };
 
@@ -219,16 +223,20 @@ export const NAME: Record<Who, string> = {
 /** 대사창 초상 카드: 스탠딩 그림에서 얼굴만 잘라 보여 줌 — [가로/세로 비, 얼굴 중심 x, 얼굴 중심 y, 자를 정사각형 한 변] (그림 높이 대비).
  *  표정 그림은 같은 캔버스라 같은 값. 의상은 캔버스가 달라 따로 (없으면 기본 옷 값) */
 export const PORTRAIT: Record<string, [number, number, number, number]> = {
-  "amy": [0.3802, 0.4897, 0.086, 0.1266],
-  "amy-store": [0.3372, 0.473, 0.1014, 0.1263],
-  "amy-tshirt": [0.2813, 0.5111, 0.0982, 0.1263],
+  "amy": [0.3715, 0.4831, 0.1051, 0.1306],
+  "amy-store": [0.3377, 0.4677, 0.1208, 0.0966],
+  "amy-tshirt": [0.2821, 0.5035, 0.117, 0.0976],
   "boss": [0.3403, 0.414, 0.0859, 0.1257],
   "chunhee": [0.4167, 0.4238, 0.1059, 0.1212],
   "jeongmin": [0.3099, 0.4321, 0.0855, 0.0879],
   "taeyang": [0.3255, 0.4257, 0.0806, 0.0979],
-  "yeonseo-bare": [0.2539, 0.4382, 0.0905, 0.118],
-  "yeonseo": [0.2539, 0.4382, 0.0905, 0.118],
-  "yeonseo-knit": [0.2227, 0.5276, 0.0998, 0.118],
+  "yeonseo-bare": [0.2535, 0.4303, 0.1079, 0.0903],
+  "yeonseo": [0.2535, 0.4303, 0.1079, 0.0903],
+  "amy-swim": [0.2925, 0.4828, 0.1264, 0.1277],
+  "amy-home": [0.2812, 0.5537, 0.1274, 0.1198],
+  "yeonseo-summer": [0.2266, 0.4981, 0.1049, 0.0911],
+  "yeonseo-dress": [0.2431, 0.5169, 0.1037, 0.0914],
+  "yeonseo-knit": [0.2352, 0.552, 0.1005, 0.1048],
 };
 /** 이름표 무늬 (트럼프 문양) */
 export const SUIT: Record<Who, string> = {
