@@ -211,8 +211,11 @@ export function run(s0: GState): GState {
         let id = st.id;
         if (st.who === "yeonseo") {
           if (id === "bare") s.disp.bareY = true;
+          // 같은 시간대 안에서 다시 끼면(기본 · 드레스 · 니트 · 원피스) 장갑 낀 상태로 되돌림
+          else if (!s.vars.yGloveOff && ["default", "dress", "knit", "summer"].includes(id)) s.disp.bareY = false;
           // 장갑 벗은 뒤엔 장갑 낀 옷(기본 · 드레스) 대신 장갑 벗은 기본
-          if (s.disp.bareY && (id === "default" || id === "dress")) id = "bare";
+          // 장갑을 아예 안 끼기로 한 뒤(yGloveOff)엔 장갑 낀 옷(기본 · 드레스) 대신 장갑 벗은 기본
+          if (s.vars.yGloveOff && (id === "default" || id === "dress")) id = "bare";
         }
         s.disp.outfit = { ...s.disp.outfit, [st.who]: id };
         break;
@@ -292,8 +295,8 @@ export function run(s0: GState): GState {
         // 오늘 날짜 (대본에서 dayNo 로 읽음: 낮 일정이 끝나면 그날 저녁으로 돌아가기)
         s.vars = { ...s.vars, dayNo: st.day };
         // 시간대가 바뀌면 옷도 기본으로 (단, 장갑 벗은 "bare"는 한 번 벗으면 계속)
-        // (예전 저장 파일은 bareY 가 없어서 지금 옷이 bare 인지로도 판정)
-        if (s.disp.outfit?.yeonseo === "bare") s.disp.bareY = true;
+        // 장갑은 그 장면에서만 벗음 — 다음 시간대엔 다시 낌. 아예 안 끼기로 한 뒤(yGloveOff)부터만 계속 맨손
+        s.disp.bareY = !!s.vars.yGloveOff;
         s.disp.outfit = s.disp.bareY ? { yeonseo: "bare" } : {};
         s.disp.day = { d: st.day, slot: st.slot };
         s.block = { k: "day", d: st.day, slot: st.slot };
@@ -324,6 +327,11 @@ export function run(s0: GState): GState {
             ...c,
             face: st.face ?? c.rest ?? REST[st.who as CharKey],
           };
+        // 엔딩 크레딧용 기록: 히로인과 나눈 대사 수 (_ 로 시작하는 수치는 흐름에 안 씀)
+        if (st.who === "amy" || st.who === "yeonseo") {
+          const k = st.who === "amy" ? "_lA" : "_lY";
+          s.vars = { ...s.vars, [k]: (s.vars[k] ?? 0) + 1 };
+        }
         s.block = { k: "say", who: st.who, text: st.text, mood: st.mood ?? "normal" };
         return s;
       }
@@ -372,7 +380,7 @@ export const next = (s: GState): GState => run({ ...s, i: s.i + 1 });
 
 /** 선택지 · 자유 슬롯 · 메시지 답장 고르기 */
 export function pick(s: GState, opt: Opt): GState {
-  const vars = addEff(s.vars, opt.eff);
+  const vars = addEff(s.vars, { ...opt.eff, _ch: 1 });
   if (opt.to) return run({ ...s, vars, scene: opt.to, i: 0 });
   return run({ ...s, vars, i: s.i + 1 });
 }
@@ -384,7 +392,7 @@ export function ignorePhone(s: GState, eff: Eff): GState {
 
 /** 미니게임 결과 기록 후 다음으로 (mini_<key> = 점수) */
 export function miniDone(s: GState, key: string, score: number, eff?: Eff): GState {
-  return run({ ...s, vars: addEff({ ...s.vars, [`mini_${key}`]: score }, eff), i: s.i + 1 });
+  return run({ ...s, vars: addEff({ ...s.vars, [`mini_${key}`]: score }, { ...eff, _mini: 1 }), i: s.i + 1 });
 }
 
 /** 반성회 장면으로 */

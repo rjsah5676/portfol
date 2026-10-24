@@ -80,6 +80,8 @@ export const OUTFITS: Partial<Record<CharKey, Partial<Record<Outfit, StandSet>>>
 export const BG: Record<BgId, string | null> = {
   pub: `${B}/bg/pub-night.webp`,
   alley: `${B}/bg/alley-rain.webp`,
+  // 비 그친 아침 골목 — 전용 그림이 오기 전까진 같은 골목에 아침 색보정 (LoveApp Bg)
+  alley_after: `${B}/bg/alley-rain.webp`,
   vip: `${B}/bg/vip.webp`,
   store: `${B}/bg/store.webp`,
   arcade: `${B}/bg/arcade.webp`,
@@ -96,6 +98,7 @@ export const BG: Record<BgId, string | null> = {
 export const BG_FALLBACK: Record<BgId, string> = {
   pub: "linear-gradient(180deg,#2a1d14,#120c08)",
   alley: "linear-gradient(180deg,#141a26,#06080d)",
+  alley_after: "linear-gradient(180deg,#f2d6a8,#6a7c90)",
   vip: "linear-gradient(180deg,#2a0d12,#080203)",
   store: "linear-gradient(180deg,#e9eef2,#b9c4cc)",
   arcade: "linear-gradient(180deg,#3a1f4a,#120a1c)",
@@ -309,6 +312,15 @@ export const SFX: Record<SfxId, string> = {
   buzz: `${B}/sfx/buzz.mp3`,
   send: `${B}/sfx/send.mp3`,
   pencil: `${B}/sfx/pencil.mp3`,
+  chair: `${B}/sfx/chair.mp3`,
+  tags: `${B}/sfx/tags.mp3`,
+  can: `${B}/sfx/can.mp3`,
+  keys: `${B}/sfx/keys.mp3`,
+  doorbell: `${B}/sfx/doorbell.mp3`,
+  microwave: `${B}/sfx/microwave.mp3`,
+  chain: `${B}/sfx/chain.mp3`,
+  tape: `${B}/sfx/tape.mp3`,
+  sizzle: `${B}/sfx/sizzle.mp3`,
 };
 /** 비 오는 골목 · 비 CG 동안 깔리는 빗소리 루프 */
 export const RAIN_LOOP = `${B}/sfx/rain-loop.mp3`;

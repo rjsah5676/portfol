@@ -63,6 +63,8 @@ import { TELLS, knownTellIds, tellById } from "@/lib/love/tells";
 import { useStage } from "./Stage";
 import VoiceReview, { type VoiceRow } from "./VoiceReview";
 import AssetReview from "./AssetReview";
+import { useAuth } from "@/lib/AuthContext";
+import { type Guide, makeGuide } from "@/lib/love/route";
 
 /** 개발 중에만 쓰는 주소 옵션 (?scene= · ?review=voices) */
 const devParam = (k: string): string | null =>
@@ -102,6 +104,8 @@ const KEY = {
   seen: "love:seen",
   name: "love:name",
   mute: "love:mute",
+  /** 관리자 엔딩 길잡이 목표 */
+  guide: "love:guide",
 };
 interface SaveData {
   s: GState;
@@ -245,11 +249,26 @@ function useSound(muted: boolean, cfg: Cfg) {
   return { play, bgm, voice, voiceEnd, rain };
 }
 
-type Phase = "title" | "name" | "game" | "gallery" | "review" | "assets";
+type Phase = "title" | "name" | "game" | "gallery" | "review" | "assets" | "credits";
 type Panel = null | "log" | "save" | "load" | "config" | "rel";
 
 export default function LoveApp() {
   const [phase, setPhase] = useState<Phase>("title");
+  // ---------- 관리자: 엔딩 길잡이 · 크레딧 미리 보기 ----------
+  const auth = useAuth();
+  const isAdmin = auth.admin || devParam("admin") === "1";
+  const [guideTarget, setGuideTargetState] = useState<EndingId | null>(null);
+  const setGuideTarget = (t: EndingId | null) => {
+    setGuideTargetState(t);
+    LS.set(KEY.guide, t ?? "");
+  };
+  const [guide, setGuide] = useState<Guide | null>(null);
+  /** 엔딩에 닿은 순간의 이번 판 기록 (크레딧 롤) */
+  const [rollStats, setRollStats] = useState<RollStats | null>(null);
+  const [guideRes, setGuideRes] = useState<{ seq: number; cands: number[]; ok: boolean[] } | null>(null);
+  const [creditPreview, setCreditPreview] = useState<EndingId | null>(null);
+  /** 이번 판 플레이 시간 (초) — 선택할 때 · 저장할 때 대본 수치 _sec 에 더함 */
+  const playMs = useRef(0);
   const stage = useStage();
   const [s, setS] = useState<GState | null>(null);
   const [name, setName] = useState("한도윤");
@@ -321,6 +340,7 @@ export default function LoveApp() {
   useEffect(() => {
     try {
       setEndings(JSON.parse(LS.get(KEY.endings) ?? "[]"));
+      setGuideTargetState((LS.get(KEY.guide) || null) as EndingId | null);
       setCgs(JSON.parse(LS.get(KEY.cg) ?? "[]"));
       setCgvs(JSON.parse(LS.get(KEY.cgv) ?? "[]"));
       seen.current = new Set(JSON.parse(LS.get(KEY.seen) ?? "[]"));
@@ -422,8 +442,9 @@ export default function LoveApp() {
       setPhase("title");
     }
     if (b?.k === "ending") {
-      // 트루 엔딩은 스태프 롤이 끝난 뒤 카드가 나오므로 도장 소리도 그때 (StaffRoll onDone)
-      if (ENDINGS.find((e) => e.id === b.id)?.kind !== "true")
+      setRollStats(statsOf(withTimePeek(s), cgs, endings));
+      // 크레딧 롤이 있는 엔딩은 롤이 끝난 뒤 카드가 나오므로 도장 소리도 그때 (CreditRoll onDone)
+      if (!ROLL_KINDS.includes(ENDINGS.find((e) => e.id === b.id)?.kind ?? ""))
         window.setTimeout(() => play("stamp"), 4400);
       setEndings((e) => {
         if (e.includes(b.id)) return e;
@@ -701,6 +722,50 @@ export default function LoveApp() {
     };
   }, [phase, advance, panel, askExit]);
 
+  // ---------- 플레이 시간 · 길잡이 ----------
+  /** 쌓인 플레이 시간을 대본 수치(_sec)에 넣은 상태 */
+  const withTime = (st: GState): GState => {
+    const add = Math.floor(playMs.current / 1000);
+    if (!add) return st;
+    playMs.current -= add * 1000;
+    return { ...st, vars: { ...st.vars, _sec: (st.vars._sec ?? 0) + add } };
+  };
+  /** 쌓인 시간을 더해 보기만 (상태는 그대로) */
+  const withTimePeek = (st: GState): GState => ({
+    ...st,
+    vars: { ...st.vars, _sec: (st.vars._sec ?? 0) + Math.floor(playMs.current / 1000) },
+  });
+  useEffect(() => {
+    if (phase !== "game") return;
+    const id = window.setInterval(() => {
+      if (document.visibilityState === "visible") playMs.current += 1000;
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, [phase]);
+  // 길잡이: 선택지 · 메시지 · 미니게임이 뜨면 목표 엔딩에 닿는 후보를 찾음 (관리자만)
+  const guideKey = s && phase === "game" && guide && s.block && ["choice", "free", "phone", "mini"].includes(s.block.k) ? s.seq : null;
+  useEffect(() => {
+    if (guideKey == null || !s || !guide) return;
+    let alive = true;
+    const g = guide;
+    g.check({ scene: s.scene, i: s.i, vars: s.vars }, 1500, () => alive).then((r) => {
+      if (alive) setGuideRes({ seq: guideKey, cands: r.cands, ok: r.ok });
+    });
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [guideKey]);
+  /** 길잡이 결과로 후보 하나가 보여야 하는지 (길잡이 꺼짐 · 계산 중 · 아무것도 못 찾음 → 다 보임) */
+  const guideOn = !!guide && phase === "game";
+  const guideReady = guideOn && guideRes?.seq === s?.seq;
+  const guideAny = guideReady && guideRes!.ok.some(Boolean);
+  const guideShow = (c: number) => {
+    if (!guideReady || !guideAny) return true;
+    const i = guideRes!.cands.indexOf(c);
+    return i < 0 || guideRes!.ok[i];
+  };
+
   // ---------- 동작 ----------
   const newGame = () => {
     LS.set(KEY.name, name);
@@ -710,6 +775,8 @@ export default function LoveApp() {
     // 개발 중에만: ?scene=d4 로 원하는 장면부터 테스트
     const dev = devParam("scene");
     const st0 = { ...initState(), vars: readMeta() };
+    playMs.current = 0;
+    setGuide(guideTarget && isAdmin ? makeGuide(guideTarget) : null);
     setS(run(dev ? { ...st0, scene: dev, i: 0 } : st0));
     setReviewId(null);
     setPhase("game");
@@ -735,7 +802,7 @@ export default function LoveApp() {
     if (!s) return;
     play("chip");
     markSeen();
-    setS(pick(s, o));
+    setS(pick(withTime(s), o));
     // 호감이 오른 선택이면 그 히로인 색 하트가 잠깐 떠오름 (수치는 안 보여 줌)
     const up = (o.eff?.affA ?? 0) > 0 ? "amy" : (o.eff?.affY ?? 0) > 0 ? "yeonseo" : null;
     if (up) setHeartPop({ who: up, n: Date.now() });
@@ -803,7 +870,7 @@ export default function LoveApp() {
   };
   const save = (n: string) => {
     if (!s) return;
-    const data: SaveData = { s, name, ts: Date.now(), label: labelOf(s) };
+    const data: SaveData = { s: withTime(s), name, ts: Date.now(), label: labelOf(s) };
     LS.set(KEY.save(n), JSON.stringify(data));
     flash(n === "q" ? "퀵세이브" : `${n}번에 저장`);
     setPanel(null);
@@ -814,6 +881,8 @@ export default function LoveApp() {
     setName(d.name);
     setLog([]);
     setS({ ...d.s, seq: d.s.seq + 1, fx: [] });
+    playMs.current = 0;
+    setGuide(guideTarget && isAdmin ? makeGuide(guideTarget) : null);
     setPhase("game");
     setPanel(null);
   };
@@ -923,6 +992,25 @@ export default function LoveApp() {
                 <div className="absolute bottom-[2.2%] right-[2%] text-[1cqw] text-[#e9d9b0]/70">
                   ◇ Ver. 1.0 알파
                 </div>
+                {isAdmin && (
+                  <div className="lv-admin-box" onClick={(e) => e.stopPropagation()}>
+                    <div className="lv-admin-h">관리자 · 엔딩 길잡이</div>
+                    <select
+                      value={guideTarget ?? ""}
+                      onChange={(e) => setGuideTarget((e.target.value || null) as EndingId | null)}
+                    >
+                      <option value="">끔 (모든 선택지)</option>
+                      {ENDINGS.map((e) => (
+                        <option key={e.id} value={e.id}>
+                          #{e.no} {e.title} ({KIND_KO[e.kind]})
+                        </option>
+                      ))}
+                    </select>
+                    <div className="lv-admin-sub">
+                      켜 두고 처음부터 · 불러오기 하면 그 엔딩으로 가는 선택지만 보여요
+                    </div>
+                  </div>
+                )}
               </div>
             )}
             {phase === "name" && (
@@ -950,12 +1038,31 @@ export default function LoveApp() {
                 got={endings}
                 cgs={cgs}
                 cgvs={cgvs}
+                isAdmin={isAdmin}
+                onCredit={(id) => {
+                  setCreditPreview(id);
+                  setPhase("credits");
+                }}
                 onBack={() => setPhase("title")}
                 onPlay={(id) => bgm(id)}
               />
             )}
           </div>
         )}
+
+        {/* ===== 관리자: 엔딩별 크레딧 미리 보기 ===== */}
+        {phase === "credits" && creditPreview && (() => {
+          const e = ENDINGS.find((x) => x.id === creditPreview)!;
+          return (
+            <CreditRoll
+              ending={e}
+              name={name}
+              stats={{ sec: 0, lA: 0, lY: 0, ch: 0, mini: 0, cg: cgs.length, cgAll: CG_ORDER.length, end: endings.length, endAll: ENDINGS.length, preview: true }}
+              photos={rollPhotos(e.id, CG_ORDER)}
+              onDone={() => setPhase("gallery")}
+            />
+          );
+        })()}
 
         {/* ===== 음성 검수 (개발 중) ===== */}
         {phase === "review" && (
@@ -1249,10 +1356,12 @@ export default function LoveApp() {
                     {rb.prompt}
                   </div>
                 )}
-                {rb.opts.map((o) => (
+                {guideOn && <GuideNote target={guide!.target} ready={guideReady} any={guideAny} />}
+                {rb.opts.map((o, oi) => guideShow(oi) && (
                   <button
                     key={o.text}
                     className={`lv-choice ${o.secret ? "lv-choice-secret" : ""}`}
+                    disabled={guideOn && !guideReady}
                     onClick={() => choose(o)}
                   >
                     {o.secret && <span className="mr-[0.6cqw] text-[#ffd27a]">★</span>}
@@ -1272,8 +1381,9 @@ export default function LoveApp() {
                 <div className="mb-[1.5cqw] text-[2cqw] font-bold text-[#ffd27a]">
                   {rb.prompt}
                 </div>
+                {guideOn && <GuideNote target={guide!.target} ready={guideReady} any={guideAny} />}
                 <div className="flex gap-[1.5cqw]">
-                  {rb.opts.map((o) =>
+                  {rb.opts.map((o, oi) => !guideShow(oi) ? null :
                     o.card ? (
                       <button key={o.text} className="lv-plan" onClick={() => choose(o)}>
                         <div className="lv-plan-icon">
@@ -1306,12 +1416,18 @@ export default function LoveApp() {
             {/* 메시지 */}
             {rb?.k === "phone" && (
               <div className="lv-phone-dim absolute inset-0 z-30 bg-black/45" onClick={(e) => e.stopPropagation()}>
+                {guideOn && (
+                  <div className="absolute left-1/2 top-[3%] -translate-x-1/2">
+                    <GuideNote target={guide!.target} ready={guideReady} any={guideAny} />
+                  </div>
+                )}
                 <Phone
                   key={s.seq}
                   from={rb.step.from}
                   msgs={rb.step.msgs.map(sub)}
                   shown={phoneShown}
-                  replies={rb.step.replies}
+                  replies={rb.step.replies.filter((_, ri) => guideShow(ri))}
+                  noIgnore={!guideShow(-1)}
                   slot={disp.day?.slot}
                   onReply={choose}
                   onIgnore={() => setS(ignorePhone(s, rb.step.ignore))}
@@ -1320,6 +1436,20 @@ export default function LoveApp() {
               </div>
             )}
 
+            {/* 관리자 길잡이: 미니게임을 목표에 맞는 점수로 바로 넘기기 */}
+            {rb?.k === "mini" && guideOn && (
+              <div className="lv-guide-mini" onClick={(e) => e.stopPropagation()}>
+                <GuideNote target={guide!.target} ready={guideReady} any={guideAny} />
+                {guideReady &&
+                  guideRes!.cands.map((c, ci) =>
+                    guideRes!.ok[ci] || !guideAny ? (
+                      <button key={c} className="lv-btn-ghost" onClick={() => setS(miniDone(s, rb.step.key, c))}>
+                        점수 {c}로 넘기기
+                      </button>
+                    ) : null
+                  )}
+              </div>
+            )}
             {/* 미니게임 */}
             {rb?.k === "mini" && (
               <div onClick={(e) => e.stopPropagation()}>
@@ -1377,10 +1507,13 @@ export default function LoveApp() {
             )}
 
             {curtain && <div key={curtain.n} className={`lv-curtain lv-curtain-${curtain.kind}`} />}
-            {/* 트루 · 그랜드 엔딩은 엔딩 카드 전에 스태프 롤 (클릭하면 넘김) */}
-            {ending && ending.kind === "true" && rolled !== s.seq && (
-              <StaffRoll
-                title={ending.title}
+            {/* 제대로 된 엔딩(트루 · 굿 · 그랜드)은 엔딩 카드 전에 크레딧 롤 (클릭 = 빨리, 넘기기 버튼) */}
+            {ending && ROLL_KINDS.includes(ending.kind) && rolled !== s.seq && (
+              <CreditRoll
+                ending={ending}
+                name={name}
+                stats={rollStats ?? statsOf(s, cgs, endings)}
+                photos={rollPhotos(ending.id, cgs)}
                 onDone={() => {
                   setRolled(s.seq);
                   window.setTimeout(() => play("stamp"), 4400);
@@ -1388,7 +1521,7 @@ export default function LoveApp() {
               />
             )}
             {/* 엔딩 */}
-            {ending && (ending.kind !== "true" || rolled === s.seq) && (
+            {ending && (!ROLL_KINDS.includes(ending.kind) || rolled === s.seq) && (
               <div
                 className="lv-end-wrap absolute inset-0 z-40 grid place-items-center"
                 onClick={(e) => e.stopPropagation()}
@@ -1568,6 +1701,10 @@ export default function LoveApp() {
 
 // ---------- 부품 ----------
 /** 배경 — 장소가 바뀌면 이전 배경 위로 새 배경이 천천히 겹쳐 들어옴 (크로스페이드) */
+/** 같은 그림을 다른 시간대로 쓸 때의 색보정 */
+const BG_GRADE: Partial<Record<keyof typeof BG, string>> = {
+  alley_after: "brightness(1.18) saturate(1.05) sepia(0.22) hue-rotate(-8deg)",
+};
 function Bg({ id, blur }: { id: keyof typeof BG; blur: number }) {
   const [prev, setPrev] = useState<{ cur: keyof typeof BG; old: keyof typeof BG | null }>({
     cur: id,
@@ -1582,7 +1719,9 @@ function Bg({ id, blur }: { id: keyof typeof BG; blur: number }) {
         className={`absolute inset-0 bg-cover bg-center transition-[filter] duration-700 ${fade ? "lv-bg-in" : ""}`}
         style={{
           ...(u ? { backgroundImage: `url("${u}")` } : { background: BG_FALLBACK[bid] }),
-          filter: blur ? `blur(${blur * 3}px) brightness(${1 - blur * 0.13})` : undefined,
+          filter:
+            [blur ? `blur(${blur * 3}px) brightness(${1 - blur * 0.13})` : "", BG_GRADE[bid] ?? ""].join(" ").trim() ||
+            undefined,
           transform: blur ? "scale(1.04)" : undefined,
         }}
       />
@@ -2072,6 +2211,7 @@ function Phone({
   slot,
   onReply,
   onIgnore,
+  noIgnore,
   play,
 }: {
   from: CharKey;
@@ -2081,6 +2221,8 @@ function Phone({
   slot?: string;
   onReply: (o: Opt) => void;
   onIgnore: () => void;
+  /** 관리자 길잡이: 무시하면 목표 엔딩에 못 감 → 무시 버튼 숨김 */
+  noIgnore?: boolean;
   play: (id: SfxId) => void;
 }) {
   const [sent, setSent] = useState<string | null>(null);
@@ -2178,9 +2320,11 @@ function Phone({
                 </button>
               ))}
             </div>
-            <button className="lv-reply-ignore" onClick={onIgnore}>
-              읽고 답장 안 하기
-            </button>
+            {!noIgnore && (
+              <button className="lv-reply-ignore" onClick={onIgnore}>
+                읽고 답장 안 하기
+              </button>
+            )}
           </>
         ) : (
           <div className="lv-phone-field">{sent ? "전송됨" : "메시지 입력"}</div>
@@ -2266,12 +2410,16 @@ const MUSIC: [BgmId, string][] = [
 ];
 
 function Gallery({
+  isAdmin,
+  onCredit,
   got,
   cgs,
   cgvs,
   onBack,
   onPlay,
 }: {
+  isAdmin?: boolean;
+  onCredit?: (id: EndingId) => void;
   got: EndingId[];
   cgs: CgId[];
   cgvs: string[];
@@ -2516,6 +2664,11 @@ function Gallery({
               <div className="mt-[0.3cqw] text-[0.95cqw] text-white/60">
                 {ok ? e.copy : `조건: ${e.hint}`}
               </div>
+              {isAdmin && ROLL_KINDS.includes(e.kind) && (
+                <button className="lv-admin-credit" onClick={() => onCredit?.(e.id)}>
+                  크레딧 보기
+                </button>
+              )}
             </div>
           );
         })}
@@ -2709,46 +2862,222 @@ function SlotThumb({ s }: { s: GState }) {
   );
 }
 
-/** 스태프 롤 — 트루 엔딩 직전. 아래에서 위로 천천히, 클릭하면 바로 넘김 */
-function StaffRoll({ title, onDone }: { title: string; onDone: () => void }) {
+/** 크레딧 롤이 나오는 엔딩 (시시한 엔딩엔 없음) */
+const ROLL_KINDS: string[] = ["true", "good"];
+const KIND_KO: Record<string, string> = { true: "트루", good: "굿", normal: "노멀", bad: "배드", hidden: "히든" };
+type RollStats = {
+  sec: number;
+  lA: number;
+  lY: number;
+  ch: number;
+  mini: number;
+  cg: number;
+  cgAll: number;
+  end: number;
+  endAll: number;
+  preview?: boolean;
+};
+const statsOf = (st: GState, cgs: CgId[], endings: EndingId[]): RollStats => ({
+  sec: st.vars._sec ?? 0,
+  lA: st.vars._lA ?? 0,
+  lY: st.vars._lY ?? 0,
+  ch: st.vars._ch ?? 0,
+  mini: st.vars._mini ?? 0,
+  cg: cgs.length,
+  cgAll: CG_ORDER.length,
+  end: endings.length,
+  endAll: ENDINGS.length,
+});
+/** 그 엔딩 루트에서 본 CG (앨범 사진) — 다른 엔딩의 엔딩 CG 는 빼고 */
+function rollPhotos(id: EndingId, seen: CgId[]): { src: string; title: string }[] {
+  const who = id.startsWith("amy") ? "amy" : id.startsWith("yeon") ? "yeonseo" : null;
+  const own = `end_${id}`;
+  return CG_ORDER.filter(
+    (c) => seen.includes(c) && (!who || CG[c].who === who) && (!c.startsWith("end_") || c === own)
+  ).map((c) => ({ src: CG[c].src, title: CG[c].title }));
+}
+const fmtTime = (sec: number) => {
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  return h ? `${h}시간 ${m}분` : `${Math.max(1, m)}분`;
+};
+
+/**
+ * 엔딩 크레딧 — 아래에서 위로 천천히 흐르고, 그 루트에서 본 CG 가 앨범 사진처럼 좌우에 끼어 지나감.
+ * 클릭(누르고 있기)하면 4배 빠르게, 오른쪽 아래 버튼 · Esc 로 바로 넘김. 끝에 이번 판 기록.
+ */
+function CreditRoll({
+  ending,
+  name,
+  stats,
+  photos,
+  onDone,
+}: {
+  ending: (typeof ENDINGS)[number];
+  name: string;
+  stats: RollStats;
+  photos: { src: string; title: string }[];
+  onDone: () => void;
+}) {
+  const inner = useRef<HTMLDivElement>(null);
+  const box = useRef<HTMLDivElement>(null);
+  const fast = useRef(false);
+  const done = useRef(false);
+  const finish = useCallback(() => {
+    if (done.current) return;
+    done.current = true;
+    onDone();
+  }, [onDone]);
   useEffect(() => {
-    const id = window.setTimeout(onDone, 21000);
-    return () => window.clearTimeout(id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-  const rows: [string, string][] = [
-    ["", "올인 러브"],
-    ["", "ANIME POKER 외전"],
-    ["", ""],
-    ["기획 · 시나리오 · 개발", "Gunmo"],
-    ["", ""],
-    ["연서", "무표정의 하우스 플레이어"],
+    let raf = 0;
+    let y = 0;
+    let last = performance.now();
+    const tick = (t: number) => {
+      const dt = Math.min(64, t - last);
+      last = t;
+      const H = box.current?.clientHeight ?? 600;
+      const total = (inner.current?.scrollHeight ?? 0) + H;
+      // 화면 높이 기준 속도 — 어느 화면에서나 비슷한 길이 (약 70초)
+      y += (H / 11000) * dt * (fast.current ? 4 : 1);
+      if (inner.current) inner.current.style.transform = `translateY(${H - y}px)`;
+      if (y >= total) return finish();
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    const key = (e: KeyboardEvent) => e.key === "Escape" && finish();
+    window.addEventListener("keydown", key);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener("keydown", key);
+    };
+  }, [finish]);
+  const who = (n: string) => n.replace("{name}", name || "당신");
+  const STAFF: [string, string][] = [
+    ["기획 · 시나리오 · 개발", "Lee G.M"],
+    ["포커 룰 감수 (본인도 가끔 짐)", "Lee G.M"],
+    ["CG 연출 · 컷 검수", "Lee G.M"],
+    ["연서 장갑이 오른손에 있는지 매번 확인한 사람", "Lee G.M"],
+    ["그록이랑 장갑 갖고 싸운 사람", "Lee G.M (전적 비공개)"],
+    ["에이미 머리카락 한 올 한 올 이어 붙인 사람", "Lee G.M"],
+    ["라이브 CG 눈 깜빡임 세던 사람", "Lee G.M"],
+    ["작업하느라 밤 샌 사람", "Lee G.M"],
+    ["커피 소비 담당", "Lee G.M (측정 불가)"],
+    ["버그 제작", "Lee G.M"],
+    ["버그 수리", "Lee G.M (아마도)"],
+    ["음악 · 효과음 · 목소리", "Lee G.M & 기계 친구들"],
+    ["빗소리", "하늘"],
+    ["김치찌개 레시피", "춘희 이모 (영업 비밀)"],
+    ["칩 닦기", "{name}"],
+  ];
+  const CAST: [string, string][] = [
+    ["연서", "숫자로 말하는 하우스 플레이어"],
     ["에이미", "딱히, 네 편은 아니거든"],
-    ["백상현", "HOUSE 사장"],
+    ["백상현", "HOUSE 사장 · 늘 웃는 얼굴"],
+    ["춘희 이모", "HOUSE 주방 · 빨대는 늘 두 개"],
     ["태양 · 정민", "펍 단골 (from ANIME POKER)"],
-    ["춘희 이모", "HOUSE 주방"],
-    ["", ""],
-    ["", "그리고 끝까지 테이블을 지켜 준 당신"],
+    ["{name}", "딜러 · 그리고 당신"],
+  ];
+  // 크레딧 줄 사이사이에 사진 한 장씩 (좌우 번갈아)
+  const rows: React.ReactNode[] = [];
+  let p = 0;
+  const photo = () => {
+    const ph = photos[p];
+    if (!ph) return null;
+    const side = p % 2 === 0 ? "l" : "r";
+    p++;
+    return (
+      <figure key={`p${p}`} className={`lv-roll-photo lv-roll-photo-${side}`} style={{ rotate: `${side === "l" ? -3.5 : 3}deg` }}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={ph.src} alt="" />
+        <figcaption>{ph.title}</figcaption>
+      </figure>
+    );
+  };
+  const section = (title: string, list: [string, string][], every: number) => {
+    rows.push(
+      <div key={`h${title}`} className="lv-roll-h">
+        {title}
+      </div>
+    );
+    list.forEach(([a, b], i) => {
+      rows.push(
+        <div key={`${title}${i}`} className="lv-roll-row">
+          <div className="lv-roll-a">{who(a)}</div>
+          <div className="lv-roll-b">{who(b)}</div>
+        </div>
+      );
+      if ((i + 1) % every === 0) rows.push(photo());
+    });
+  };
+  section("STAFF", STAFF, 2);
+  section("CAST", CAST, 2);
+  while (p < photos.length) rows.push(photo());
+  const rec: [string, string][] = [
+    ["플레이 시간", stats.preview ? "—" : fmtTime(stats.sec)],
+    ["에이미와 나눈 대화", `${stats.lA}줄`],
+    ["연서와 나눈 대화", `${stats.lY}줄`],
+    ["고른 선택지", `${stats.ch}번`],
+    ["테이블에 앉은 판", `${stats.mini}판`],
+    ["모은 장면", `${stats.cg} / ${stats.cgAll}`],
+    ["모은 엔딩", `${stats.end} / ${stats.endAll}`],
   ];
   return (
     <div
+      ref={box}
       className="lv-roll absolute inset-0 z-[45] overflow-hidden bg-black"
-      onClick={(e) => (e.stopPropagation(), onDone())}
+      onPointerDown={(e) => (e.stopPropagation(), (fast.current = true))}
+      onPointerUp={() => (fast.current = false)}
+      onPointerLeave={() => (fast.current = false)}
+      onClick={(e) => e.stopPropagation()}
     >
-      <div className="lv-roll-inner">
-        {rows.map(([a, b], i) => (
-          <div key={i} className="mb-[1.6cqw] text-center">
-            {a && <div className="text-[1.1cqw] tracking-[0.3em] text-[#c9a25a]">{a}</div>}
-            <div className={i < 2 ? "lv-logo text-[3.4cqw]" : "text-[1.8cqw] text-white/85"}>
-              {b}
+      <div ref={inner} className="lv-roll-track">
+        <div className="lv-logo text-center text-[4.2cqw]">올인 러브</div>
+        <div className="mt-[0.4cqw] text-center text-[1.2cqw] tracking-[0.4em] text-[#c9a25a]">ANIME POKER 외전</div>
+        <div className="mt-[3cqw] text-center text-[1.1cqw] tracking-[0.5em] text-white/45">
+          ENDING {String(ending.no).padStart(2, "0")} · {KIND_KO[ending.kind]}
+        </div>
+        <div className="mt-[0.6cqw] text-center text-[3cqw] font-black text-[#ffd27a]">{ending.title}</div>
+        <div className="mx-auto mt-[0.8cqw] w-[40%] text-center text-[1.3cqw] text-white/70">{ending.copy}</div>
+        <div className="h-[10cqw]" />
+        {rows}
+        <div className="lv-roll-h mt-[6cqw]">이번 판 기록</div>
+        <div className="lv-roll-rec">
+          {rec.map(([a, b]) => (
+            <div key={a} className="lv-roll-row">
+              <div className="lv-roll-a">{a}</div>
+              <div className="lv-roll-b">{b}</div>
             </div>
-          </div>
-        ))}
-        <div className="mt-[6cqw] text-center text-[2.4cqw] font-black text-[#ffd27a]">{title}</div>
+          ))}
+        </div>
+        <div className="lv-roll-h mt-[6cqw]">SPECIAL THANKS</div>
+        <div className="text-center text-[1.6cqw] text-white/85">ANIME POKER 를 해 준 모든 분</div>
+        <div className="mt-[1cqw] text-center text-[1.6cqw] text-white/85">그리고 끝까지 테이블을 지켜 준 당신</div>
+        <div className="mt-[12cqw] text-center text-[2.6cqw] font-black tracking-[0.2em] text-[#ffd27a]">
+          THANK YOU FOR PLAYING
+        </div>
+        <div className="h-[30cqw]" />
       </div>
-      <div className="absolute bottom-[3%] right-[3%] text-[1cqw] text-white/35">
-        클릭해서 넘기기
+      <div className="pointer-events-none absolute bottom-[3%] left-[3%] text-[0.95cqw] text-white/35">
+        누르고 있으면 빨리 감기
       </div>
+      <button
+        className="absolute bottom-[3%] right-[3%] text-[1cqw] text-white/45 hover:text-white"
+        onPointerDown={(e) => e.stopPropagation()}
+        onClick={(e) => (e.stopPropagation(), finish())}
+      >
+        넘기기 ▶
+      </button>
+    </div>
+  );
+}
+
+/** 관리자 길잡이 상태 한 줄 */
+function GuideNote({ target, ready, any }: { target: EndingId; ready: boolean; any: boolean }) {
+  const e = ENDINGS.find((x) => x.id === target);
+  return (
+    <div className={`lv-guide-note ${ready && !any ? "lv-guide-bad" : ""}`}>
+      🧭 {e ? e.title : target} ·{" "}
+      {!ready ? "길 찾는 중…" : any ? "그 엔딩으로 가는 선택지만 보여 줘요" : "길을 못 찾았어요 (전부 보여 줌)"}
     </div>
   );
 }

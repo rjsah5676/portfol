@@ -47,6 +47,8 @@ export type Dist = 0 | 1 | 2;
 export type BgId =
   | "pub"
   | "alley"
+  /** 비 그친 아침 골목 (빗소리 · 빗줄기 없음) */
+  | "alley_after"
   | "vip"
   | "store"
   | "arcade"
@@ -129,7 +131,17 @@ export type SfxId =
   | "knock"
   | "buzz"
   | "send"
-  | "pencil";
+  | "pencil"
+  // 3차 (직접 합성 — public/love/sfx)
+  | "chair"
+  | "tags"
+  | "can"
+  | "keys"
+  | "doorbell"
+  | "microwave"
+  | "chain"
+  | "tape"
+  | "sizzle";
 export type BgmId =
   | "pub"
   | "vip"

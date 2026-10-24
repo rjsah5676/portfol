@@ -1605,18 +1605,140 @@
   content: "읽음  ♦ ♣";
 }
 
-/* ===== 스태프 롤 ===== */
-.lv-roll-inner {
+/* ===== 엔딩 크레딧 롤 (아래에서 위로 · 앨범 사진) ===== */
+.lv-roll {
+  cursor: default;
+  background: radial-gradient(ellipse at 50% 40%, #16110c 0%, #000 70%);
+}
+.lv-roll-track {
   position: absolute;
   left: 0;
   right: 0;
-  top: 100%;
-  animation: lv-roll 20s linear forwards;
+  top: 0;
+  will-change: transform;
 }
-@keyframes lv-roll {
-  to {
-    transform: translateY(-160%);
-  }
+.lv-roll-h {
+  margin: 4cqw 0 1.6cqw;
+  text-align: center;
+  font-size: 1.15cqw;
+  letter-spacing: 0.55em;
+  color: #c9a25a;
+}
+.lv-roll-row {
+  margin: 0 auto 1.25cqw;
+  width: 46%;
+  text-align: center;
+}
+.lv-roll-a {
+  font-size: 1cqw;
+  letter-spacing: 0.12em;
+  color: rgb(233 217 176 / 0.6);
+}
+.lv-roll-b {
+  margin-top: 0.15cqw;
+  font-size: 1.75cqw;
+  color: rgb(255 255 255 / 0.9);
+}
+.lv-roll-rec .lv-roll-b {
+  color: #ffd27a;
+}
+/* 앨범 사진: 흰 테두리 폴라로이드, 좌우 번갈아 · 살짝 기울어짐 */
+.lv-roll-photo {
+  position: relative;
+  width: 27%;
+  margin: 1.5cqw 0 2.5cqw;
+  padding: 0.7cqw 0.7cqw 2.6cqw;
+  background: #f4efe4;
+  box-shadow: 0 1.2cqw 3cqw rgb(0 0 0 / 0.65);
+}
+.lv-roll-photo-l {
+  margin-left: 7%;
+}
+.lv-roll-photo-r {
+  margin-left: auto;
+  margin-right: 7%;
+}
+.lv-roll-photo img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+}
+.lv-roll-photo figcaption {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0.65cqw;
+  text-align: center;
+  font-family: var(--lv-narr, serif);
+  font-size: 1.05cqw;
+  color: #4a3d2c;
+}
+
+/* ===== 관리자: 엔딩 길잡이 ===== */
+.lv-admin-box {
+  position: absolute;
+  left: 2%;
+  bottom: 2.4%;
+  width: 22cqw;
+  padding: 0.8cqw 1cqw;
+  border: 1px solid rgb(201 162 90 / 0.6);
+  border-radius: 0.6cqw;
+  background: rgb(0 0 0 / 0.72);
+  font-size: 1cqw;
+  color: #e9d9b0;
+}
+.lv-admin-h {
+  margin-bottom: 0.4cqw;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+}
+.lv-admin-box select {
+  width: 100%;
+  padding: 0.3cqw 0.4cqw;
+  border-radius: 0.3cqw;
+  background: #111;
+  color: #fff;
+  font-size: 1cqw;
+}
+.lv-admin-sub {
+  margin-top: 0.4cqw;
+  font-size: 0.85cqw;
+  color: rgb(255 255 255 / 0.5);
+}
+.lv-admin-credit {
+  margin-top: 0.5cqw;
+  padding: 0.2cqw 0.6cqw;
+  border: 1px solid rgb(201 162 90 / 0.7);
+  border-radius: 0.3cqw;
+  font-size: 0.85cqw;
+  color: #ffd27a;
+}
+.lv-guide-note {
+  margin-bottom: 0.4cqw;
+  padding: 0.3cqw 0.9cqw;
+  border-radius: 99px;
+  background: rgb(20 60 40 / 0.85);
+  font-size: 1cqw;
+  color: #b8f5cf;
+}
+.lv-guide-bad {
+  background: rgb(80 20 20 / 0.85);
+  color: #ffc4c4;
+}
+.lv-guide-mini {
+  position: absolute;
+  left: 50%;
+  top: 2%;
+  z-index: 60;
+  display: flex;
+  translate: -50% 0;
+  align-items: center;
+  gap: 0.6cqw;
+}
+.lv-choice:disabled {
+  opacity: 0.45;
+  cursor: wait;
 }
 
 /* ===== 스토리 포커 카드: ANIME POKER 카드(PlayingCard)를 그대로 씀 — poker.css 전체 대신 카드 규칙만 ===== */
