@@ -65,10 +65,10 @@ export const OUTFITS: Partial<Record<CharKey, Partial<Record<Outfit, StandSet>>>
       faces: faces("amy-store", ["smile", "pout", "smug", "surprise", "sad", "blush", "wink"]),
     },
     swim: { base: `${B}/char/amy-swim-base.webp`, faces: faces("amy-swim", ["smile", "pout", "blush", "smug"]) },
-    home: { base: `${B}/char/amy-home-base.webp`, faces: faces("amy-home", ["surprise", "blush", "pout", "sad"]) },
+    home: { base: `${B}/char/amy-home-base.webp`, faces: faces("amy-home", ["surprise", "blush", "pout", "sad", "smile", "smug"]) },
   },
   yeonseo: {
-    knit: { base: `${B}/char/yeonseo-knit-base.webp`, faces: faces("yeonseo-knit", ["away", "blush", "smile"]) },
+    knit: { base: `${B}/char/yeonseo-knit-base.webp`, faces: faces("yeonseo-knit", ["away", "blush", "smile", "sad", "surprise"]) },
     bare: { base: `${B}/char/yeonseo-bare-base.webp`, faces: faces("yeonseo-bare", ["away", "smile", "blush", "sad", "laugh", "cry", "cold", "surprise", "angry"]) },
     summer: { base: `${B}/char/yeonseo-summer-base.webp`, faces: faces("yeonseo-summer", ["smile", "blush", "surprise", "laugh"]) },
     summerbare: { base: `${B}/char/yeonseo-summerbare-base.webp`, faces: faces("yeonseo-summerbare", ["smile", "blush", "surprise", "laugh"]) },
