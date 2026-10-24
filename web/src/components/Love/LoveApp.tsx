@@ -200,17 +200,37 @@ function useSound(muted: boolean, cfg: Cfg) {
     a.volume = Math.min(1, 0.6 * vol.current.sfx);
     a.play().catch(() => {});
   }, []);
+  // 곡 전환은 크로스페이드 (뚝 끊기지 않게): 이전 곡 1.2초에 걸쳐 줄이고, 새 곡 1.6초에 걸쳐 올림
+  const ramps = useRef(new Map<HTMLAudioElement, number>());
+  const ramp = (a: HTMLAudioElement, to: () => number, ms: number, done?: () => void) => {
+    const old = ramps.current.get(a);
+    if (old) window.clearInterval(old);
+    const from = a.volume;
+    const t0 = performance.now();
+    const id = window.setInterval(() => {
+      const t = Math.min(1, (performance.now() - t0) / ms);
+      a.volume = Math.max(0, Math.min(1, from + (to() - from) * t));
+      if (t >= 1) {
+        window.clearInterval(id);
+        ramps.current.delete(a);
+        done?.();
+      }
+    }, 40);
+    ramps.current.set(a, id);
+  };
   const bgm = useCallback((id: BgmId | null) => {
     if (cur.current === id) return;
     cur.current = id;
-    bgmEl.current?.pause();
+    const prev = bgmEl.current;
+    if (prev) ramp(prev, () => 0, id ? 1200 : 1000, () => prev.pause());
     bgmEl.current = null;
     const url = id ? BGM[id] : null;
     if (!id || !url) return;
     const a = new Audio(url);
     a.loop = !BGM_ONCE.includes(id);
-    a.volume = bgmVol();
+    a.volume = 0;
     bgmEl.current = a;
+    ramp(a, () => (voiceEl.current && !voiceEl.current.ended ? bgmVol() * 0.4 : bgmVol()), 1600);
     // 자동 재생이 막히면(첫 화면) 첫 클릭 때 다시 시도
     a.play().catch(() => {
       const retry = () => {
@@ -530,6 +550,21 @@ export default function LoveApp() {
     } else if (viewDisp.cg) setCgGhost(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewDisp]);
+
+  // CG 가 처음 뜨는 순간엔 대사창을 1.5초 숨겨 그림만 보여 줌 (클릭하면 바로 대사창)
+  const [cgIntro, setCgIntro] = useState<number | null>(null);
+  const cgNow = viewDisp?.cg ?? null;
+  const cgPrevRef = useRef<CgId | null>(null);
+  useEffect(() => {
+    const prev = cgPrevRef.current;
+    cgPrevRef.current = cgNow;
+    if (!cgNow || prev === cgNow || skip) return;
+    const n = Date.now();
+    setCgIntro(n);
+    const id = window.setTimeout(() => setCgIntro((c) => (c === n ? null : c)), 1500);
+    return () => window.clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cgNow]);
 
   const block = s?.block ?? null;
   const fullText = block?.k === "say" ? sub(block.text) : "";
@@ -938,7 +973,11 @@ export default function LoveApp() {
     <div ref={wrap} className="lv-root" style={{ "--lv-box": cfg.box } as React.CSSProperties}>
       <div
         className={`lv-stage ${phase === "game" && disp?.memory != null ? "lv-mem-on" : ""} ${phase === "game" && disp?.cg && disp.cgfx?.mono ? "lv-cgmono" : ""}`}
-        onClick={() => phase === "game" && !hideUi && !held && advance()}
+        onClick={() => {
+          if (phase !== "game" || hideUi || held) return;
+          if (cgIntro) return setCgIntro(null);
+          advance();
+        }}
         // 우클릭 = 대사창 숨기기 (휠은 페이지 스크롤과 겹쳐서 지난 대사에 안 씀 — L 키 · LOG 버튼)
         onContextMenu={(e) => {
           if (phase !== "game") return;
@@ -1190,6 +1229,7 @@ export default function LoveApp() {
 
             {/* 대사 */}
             {rb?.k === "say" && !hideUi && (
+              <div className={`lv-dlg-gate ${cgIntro ? "lv-dlg-hold" : ""}`}>
               <Dialogue
                 key={rb.mood === "shake" || rb.mood === "shout" ? s.seq : "box"}
                 who={rb.who}
@@ -1203,6 +1243,7 @@ export default function LoveApp() {
                 }
                 read={readNow}
               />
+              </div>
             )}
 
             {/* 선택지 아래 직전 대사 (흐리게 · 넘김 표시 없이) */}

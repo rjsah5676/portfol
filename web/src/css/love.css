@@ -2711,3 +2711,12 @@
   min-height: 0;
 }
 .lv-gal-pager { flex: none; }
+
+/* CG 가 처음 뜰 때 대사창 잠깐 숨김 → 서서히 */
+.lv-dlg-gate {
+  transition: opacity 0.6s ease;
+}
+.lv-dlg-hold {
+  opacity: 0;
+  pointer-events: none;
+}
