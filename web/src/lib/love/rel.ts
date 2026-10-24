@@ -7,10 +7,22 @@ import type { Vars } from "./types";
 export type Heroine = "amy" | "yeonseo";
 export const AFF: Record<Heroine, string> = { amy: "affA", yeonseo: "affY" };
 
-/** 호감 단계 경계 (0 ~ 5단계) */
-export const STAGE_AT = [0, 3, 7, 12, 18, 24] as const;
-export const stageOf = (aff: number): number => STAGE_AT.filter((x) => aff >= x).length - 1;
-export const heroStage = (v: Vars, who: Heroine): number => stageOf(v[AFF[who]] ?? 0);
+/**
+ * 호감 단계 경계 (0 ~ 5단계) — 히로인마다 대본 수치 크기가 달라 따로 잡음.
+ * 한 사람만 챙길 때 ♥1 3일 · ♥2 5일 · ♥3 9~10일 · ♥4 2주차 끝~16일 무렵,
+ * ♥5 는 수치만으로는 안 열림: 그 히로인 루트(routeA/routeY)에 들어가 4주차(22일~)가 돼야 함.
+ */
+export const STAGE_AT: Record<Heroine, readonly number[]> = {
+  amy: [0, 5, 16, 32, 50, 70],
+  yeonseo: [0, 4, 10, 20, 30, 40],
+};
+const ROUTE: Record<Heroine, string> = { amy: "routeA", yeonseo: "routeY" };
+export const stageOf = (aff: number, who: Heroine = "amy"): number => STAGE_AT[who].filter((x) => aff >= x).length - 1;
+export const heroStage = (v: Vars, who: Heroine): number => {
+  const st = stageOf(v[AFF[who]] ?? 0, who);
+  const open = (v[ROUTE[who]] ?? 0) >= 1 && (v.dayNo ?? 0) >= 22;
+  return st >= 5 && !open ? 4 : st;
+};
 
 export const STAGE_NAME: Record<Heroine, readonly string[]> = {
   amy: ["시끄러운 손님", "단골 손님", "편의점 친구", "신경 쓰이는 애", "내 편", "특별한 사람"],
