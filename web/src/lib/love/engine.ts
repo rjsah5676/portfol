@@ -48,6 +48,20 @@ export const REST: Record<CharKey, Face> = {
   jeongmin: "base",
   chunhee: "base",
 };
+/** 장소 옷 — 이 배경에 들어가면 자동으로 입는 옷 */
+const PLACE_OUTFIT: Partial<Record<BgId, Partial<Record<CharKey, Outfit>>>> = {
+  waterpark: { amy: "swim" },
+  amyroom: { amy: "home" },
+  sea: { yeonseo: "summer" },
+  vip: { yeonseo: "dress" },
+};
+/** 장소 옷을 입고 있어도 되는 배경 (밖으로 나가면 벗음) */
+const PLACE_OUTFIT_BG: Partial<Record<Outfit, BgId[]>> = {
+  swim: ["waterpark"],
+  home: ["amyroom"],
+  summer: ["sea"],
+  dress: ["vip"],
+};
 const AUTO_LEAVE = 4;
 export interface Display {
   bg: BgId;
@@ -64,6 +78,8 @@ export interface Display {
   cgcam?: CgCam | null;
   /** 회상 필터 — 켜져 있으면 캡션 글 (빈 글 = 캡션 없이 필터만) */
   memory?: string | null;
+  /** 연서가 장갑을 벗었음 (한 번 벗으면 계속 — 날이 바뀌면 "bare" 로 돌아감, 장갑 낀 드레스는 안 입음) */
+  bareY?: boolean;
 }
 export type Block =
   | { k: "say"; who: Who; text: string; mood: Mood }
@@ -156,9 +172,25 @@ export function run(s0: GState): GState {
       return s;
     }
     switch (st.t) {
-      case "bg":
+      case "bg": {
         s.disp.bg = st.id;
+        // 장소 옷: 그 장소에 가면 자동으로 갈아입고, 다른 장소로 가면 벗음 (black = 장면 전환이라 그대로)
+        if (st.id !== "black") {
+          const o: Partial<Record<CharKey, Outfit>> = { ...s.disp.outfit };
+          for (const [k, id] of Object.entries(o) as [CharKey, Outfit][])
+            if (PLACE_OUTFIT_BG[id] && !PLACE_OUTFIT_BG[id]!.includes(st.id))
+              o[k] = k === "yeonseo" && s.disp.bareY ? "bare" : undefined;
+          for (const [k, id] of Object.entries(PLACE_OUTFIT[st.id] ?? {}) as [CharKey, Outfit][]) {
+            const cur = o[k];
+            // 직접 갈아입힌 옷(편의점 · 티셔츠 · 니트)이 있으면 그대로
+            if (cur && cur !== "default" && cur !== "bare") continue;
+            if (k === "yeonseo" && s.disp.bareY && id === "dress") continue;
+            o[k] = id;
+          }
+          s.disp.outfit = Object.fromEntries(Object.entries(o).filter(([, v]) => v)) as typeof o;
+        }
         break;
+      }
       case "show": {
         const f = st.face ?? REST[st.who];
         const pos = st.pos ?? s.disp.chars[st.who]?.pos ?? "c";
@@ -171,9 +203,16 @@ export function run(s0: GState): GState {
         s.disp.chars[st.who] = { pos, dist: st.dist ?? 0, face: f, rest: f };
         break;
       }
-      case "outfit":
-        s.disp.outfit = { ...s.disp.outfit, [st.who]: st.id };
+      case "outfit": {
+        let id = st.id;
+        if (st.who === "yeonseo") {
+          if (id === "bare") s.disp.bareY = true;
+          // 장갑 벗은 뒤엔 장갑 낀 옷(기본 · 드레스) 대신 장갑 벗은 기본
+          if (s.disp.bareY && (id === "default" || id === "dress")) id = "bare";
+        }
+        s.disp.outfit = { ...s.disp.outfit, [st.who]: id };
         break;
+      }
       case "cg":
         // 그림이 아직 없는 CG 는 건너뜀 (스탠딩 그대로)
         if (st.id && CG[st.id].pending) break;
@@ -240,10 +279,9 @@ export function run(s0: GState): GState {
         // 오늘 날짜 (대본에서 dayNo 로 읽음: 낮 일정이 끝나면 그날 저녁으로 돌아가기)
         s.vars = { ...s.vars, dayNo: st.day };
         // 시간대가 바뀌면 옷도 기본으로 (단, 장갑 벗은 "bare"는 한 번 벗으면 계속)
-        if (s.disp.outfit)
-          s.disp.outfit = Object.fromEntries(
-            Object.entries(s.disp.outfit).filter(([, o]) => o === "bare")
-          );
+        // (예전 저장 파일은 bareY 가 없어서 지금 옷이 bare 인지로도 판정)
+        if (s.disp.outfit?.yeonseo === "bare") s.disp.bareY = true;
+        s.disp.outfit = s.disp.bareY ? { yeonseo: "bare" } : {};
         s.disp.day = { d: st.day, slot: st.slot };
         s.block = { k: "day", d: st.day, slot: st.slot };
         return s;

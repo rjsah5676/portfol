@@ -117,6 +117,8 @@ export const CG: Record<
     vars?: Record<string, string>;
     /** 그림이 아직 없음 — 대본의 이 CG 는 건너뜀 (그림 넣고 이 줄만 지우면 켜짐) */
     pending?: boolean;
+    /** 머리가 그림 위 끝에 닿는 CG — 위쪽 시네마 띠를 빼고 확대 연출을 아래 기준으로 (머리 안 잘리게) */
+    tight?: boolean;
   }
 > = {
   y_closet: { src: `${B}/cg/y-closet.webp`, title: "비품 창고, 숨 쉬지 마요", who: "yeonseo" },
@@ -148,7 +150,13 @@ export const CG: Record<
   // ---- CG 확장 (claude/2026-10-24-love-cg-expansion-plan.md) — 그림 오면 pending 지우고 vars 채우기 ----
   a_hand: { src: `${B}/cg/a-hand.webp`, title: "소매에서 손가락까지", who: "amy", pending: true },
   a_cry: { src: `${B}/cg/a-cry.webp`, title: "숫자 웃기다", who: "amy", pending: true },
-  a_kiss: { src: `${B}/cg/a-kiss.webp`, title: "거짓말, 처음이야", who: "amy", pending: true },
+  a_kiss: {
+    src: `${B}/cg/a-kiss.webp`,
+    title: "거짓말, 처음이야",
+    who: "amy",
+    tight: true,
+    vars: { kiss: `${B}/cg/a-kiss-kiss.webp`, after: `${B}/cg/a-kiss-after.webp` },
+  },
   y_door: { src: `${B}/cg/y-door.webp`, title: "손바닥 하나만큼", who: "yeonseo", pending: true },
   y_win: { src: `${B}/cg/y-win.webp`, title: "제일 맛있는 물", who: "yeonseo", pending: true },
 };
@@ -213,10 +221,10 @@ export const PORTRAIT: Record<string, [number, number, number, number]> = {
   "amy": [0.3802, 0.4897, 0.086, 0.1266],
   "amy-store": [0.3372, 0.473, 0.1014, 0.1263],
   "amy-tshirt": [0.2813, 0.5111, 0.0982, 0.1263],
-  "boss": [0.3442, 0.43, 0.095, 0.12], // 사장은 머리가 작게 그려져서 더 확대
-  "chunhee": [0.4078, 0.4114, 0.1436, 0.146],
-  "jeongmin": [0.3309, 0.4068, 0.1041, 0.1534],
-  "taeyang": [0.3687, 0.4299, 0.1035, 0.1545],
+  "boss": [0.3403, 0.414, 0.0859, 0.1257],
+  "chunhee": [0.4167, 0.4238, 0.1059, 0.1212],
+  "jeongmin": [0.3099, 0.4321, 0.0855, 0.0879],
+  "taeyang": [0.3255, 0.4257, 0.0806, 0.0979],
   "yeonseo-bare": [0.2539, 0.4382, 0.0905, 0.118],
   "yeonseo": [0.2539, 0.4382, 0.0905, 0.118],
   "yeonseo-knit": [0.2227, 0.5276, 0.0998, 0.118],

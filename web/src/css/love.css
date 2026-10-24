@@ -270,8 +270,12 @@
   color: #e6d3a6;
   letter-spacing: 0.03em;
 }
+/* 속마음: 기울임 + 옅은 하늘빛 — 대사(흰색) · 서술(금빛 명조)과 한눈에 구분 */
 .lv-t-think {
-  color: #cfc6b0;
+  font-style: italic;
+  font-weight: 400;
+  color: #b8c6ec;
+  letter-spacing: 0.02em;
 }
 .lv-t-whisper {
   font-size: 1.55cqw;
@@ -2108,8 +2112,10 @@
   font-family: "Nanum Pen Script", "Gaegu", cursive;
   font-size: 3.2cqw;
   line-height: 1.15;
-  color: #5a4128;
-  text-shadow: 0 0 0.6cqw rgb(255 248 230 / 0.9);
+  color: #3f2a16;
+  text-shadow:
+    0 0 0.5cqw rgb(255 248 230 / 0.95),
+    0 0 1.2cqw rgb(255 244 220 / 0.8);
   transform: rotate(2deg);
   animation: lv-memory-cap 1.4s ease 0.4s both;
 }
@@ -2161,4 +2167,20 @@
   font-size: 1.1cqw;
   font-variant-numeric: tabular-nums;
   color: #f3e6c4;
+}
+
+/* 머리가 위 끝에 닿는 CG: 확대 기준을 아래쪽으로 (위로 밀려 잘리지 않게) */
+.lv-cg-tight .lv-cg-img {
+  transform-origin: 50% 100%;
+  animation:
+    lv-cg-in 2.4s cubic-bezier(0.2, 0.7, 0.2, 1) both,
+    lv-cg-drift-tight 22s ease-in-out 2.4s infinite alternate;
+}
+@keyframes lv-cg-drift-tight {
+  from {
+    transform: scale(1.04);
+  }
+  to {
+    transform: scale(1.07) translate(-1%, 0);
+  }
 }

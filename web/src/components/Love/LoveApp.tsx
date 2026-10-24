@@ -1509,7 +1509,7 @@ function CgView({ id, v, cam }: { id: CgId; v?: string | null; cam?: CgCam | nul
     ? { transform: `scale(${cam.z}) translate(${(0.5 - cam.x) * 100}%, ${(0.5 - cam.y) * 100}%)` }
     : undefined;
   return (
-    <div className="lv-cg">
+    <div className={`lv-cg ${c.tight ? "lv-cg-tight" : ""}`}>
       <div className="lv-cg-cam" style={camStyle}>
       <div className="lv-cg-img" style={{ backgroundImage: `url("${c.src}")` }}>
         {/* 차분: 모두 겹쳐 두고 지금 것만 보이게 — 바뀌면 크로스페이드 */}
@@ -1521,14 +1521,15 @@ function CgView({ id, v, cam }: { id: CgId; v?: string | null; cam?: CgCam | nul
           />
         ))}
         {/* 살아 있는 CG (그록 루프 mp4) — 있으면 정지 그림 위에서 재생 */}
-        {c.video && (
+        {/* 차분이 떠 있으면 영상은 숨김 (영상이 차분 그림을 덮지 않게) */}
+        {c.video && !(v && c.vars?.[v]) && (
           <video
             src={c.video}
             autoPlay
             loop
             muted
             playsInline
-            className="h-full w-full object-cover"
+            className="absolute inset-0 h-full w-full object-cover"
           />
         )}
       </div>
@@ -1547,7 +1548,7 @@ function CgView({ id, v, cam }: { id: CgId; v?: string | null; cam?: CgCam | nul
           />
         ))}
       </div>
-      <div className="lv-cg-bar lv-cg-bar-t" />
+      {!c.tight && <div className="lv-cg-bar lv-cg-bar-t" />}
       <div className="lv-cg-bar lv-cg-bar-b" />
       <div className="lv-cg-title">
         <span className={c.who === "amy" ? "text-[#7fd3ff]" : "text-[#8fa8ff]"}>♥</span> EVENT ·{" "}
