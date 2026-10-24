@@ -1659,7 +1659,7 @@ function CgView({
     : undefined;
   return (
     <div
-      className={`lv-cg ${leaving ? "lv-cg-out" : ""} ${c.tight ? "lv-cg-tight" : ""} ${pulse ? "lv-cg-pulse" : ""} ${fx?.mono ? "lv-cg-mono" : ""} ${fx?.slow ? "lv-cg-slow" : ""}`}
+      className={`lv-cg ${leaving ? "lv-cg-out" : ""} ${c.video ? "lv-cg-live" : ""} ${c.tight ? "lv-cg-tight" : ""} ${pulse ? "lv-cg-pulse" : ""} ${fx?.mono ? "lv-cg-mono" : ""} ${fx?.slow ? "lv-cg-slow" : ""}`}
     >
       <div className="lv-cg-cam" style={camStyle}>
       <div className="lv-cg-img" style={{ backgroundImage: `url("${c.src}")` }}>

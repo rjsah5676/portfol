@@ -2385,3 +2385,9 @@
   animation-delay: 0.12s;
   animation-fill-mode: both;
 }
+
+/* 살아 있는 CG(영상): 그림 자체가 움직이니 천천히 확대되는 드리프트는 끔 — 영상 위에 확대가 겹치면 화면이 떨려 보임 */
+.lv-cg-live .lv-cg-img,
+.lv-cg-live.lv-cg-tight .lv-cg-img {
+  animation: lv-cg-in 2.4s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
