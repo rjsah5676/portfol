@@ -372,9 +372,9 @@ export const CARD_BACK = `${P}/card/back-mid.webp`;
 export const TITLE = { bg: `${B}/ui/title-bg.webp`, logo: `${B}/ui/title-logo.webp` };
 /** 엔딩을 깨면 열리는 타이틀 (그림 · 곡). bg 가 null 이면 그림은 아직 없음 → 기본 그림 + 곡만 바뀜 */
 export const TITLE_ALT: Record<"amy" | "yeon" | "grand", { end: EndingId; bg: string | null; bgm: BgmId; label: string }> = {
-  amy: { end: "amy_true", bg: null, bgm: "amy_ace", label: "에이미" },
-  yeon: { end: "yeon_true", bg: null, bgm: "yeon_ace", label: "연서" },
-  grand: { end: "grand", bg: null, bgm: "morning", label: "그랜드" },
+  amy: { end: "amy_true", bg: `${B}/ui/title-amy.webp`, bgm: "amy_ace", label: "에이미" },
+  yeon: { end: "yeon_true", bg: `${B}/ui/title-yeon.webp`, bgm: "yeon_ace", label: "연서" },
+  grand: { end: "grand", bg: `${B}/ui/title-grand.webp`, bgm: "morning", label: "그랜드" },
 };
 
 /** 로딩 화면에서 전부 받는 목록 */
