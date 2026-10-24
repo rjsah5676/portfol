@@ -45,7 +45,7 @@ import {
 } from "@/lib/love/engine";
 import { type ReactLine, idleLine, lightMood, touchLine } from "@/lib/love/reactions";
 import { type Heroine, SKILL_NAME, STAGE_LINE, STAGE_NAME, heroStage, skillOf, tiltName } from "@/lib/love/rel";
-import { VOICE_BY_TEXT } from "@/lib/love/voices";
+import { voiceOf } from "@/lib/love/voices";
 import {
   type BgmId,
   type CgCam,
@@ -506,7 +506,7 @@ export default function LoveApp() {
       setTyped(0);
       setLog((l) => [...l.slice(-199), { who: b.who, text: b.text, st: s }]);
       if (skip) voice(null);
-      else voiceLine(VOICE_BY_TEXT[b.text] ?? null);
+      else voiceLine(voiceOf(b.who, b.text) ?? null);
     }
     // 회차 기억: meta_ 로 시작하는 수치는 다음 회차에도 남음 (진엔딩 잠금 해제 정보 등)
     const metaNew = Object.entries(s.vars).filter(
@@ -1419,7 +1419,7 @@ export default function LoveApp() {
                 text={fullText.slice(0, typed)}
                 done={!typing}
                 onReplay={
-                  VOICE_BY_TEXT[rb.text] ? () => voice(VOICE_BY_TEXT[rb.text]) : undefined
+                  voiceOf(rb.who, rb.text) ? () => voice(voiceOf(rb.who, rb.text)!) : undefined
                 }
                 read={readNow}
               />
@@ -3540,7 +3540,7 @@ function LogList({
               <span>▶ 선택</span> {sub(l.text)}
             </div>
           );
-        const v = VOICE_BY_TEXT[l.text];
+        const v = voiceOf(l.who, l.text);
         return (
           <div key={i} className="lv-log-line flex gap-[0.6cqw] text-[1.45cqw] leading-relaxed">
             <span className="w-[2.2cqw] shrink-0">

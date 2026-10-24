@@ -76,3 +76,8 @@ export const voiceFile = (v: { id: string; gen?: boolean; file?: string }, take:
 export const VOICE_BY_TEXT: Record<string, string> = Object.fromEntries(
   EMO_LINES.map((v) => [v.text, `/love/voice/${v.file ?? v.id}.mp3`])
 );
+/** 말한 사람 + 대사 → 음성 (같은 대사를 둘이 할 때 — 예: 에이미 · 연서 둘 다 "……네?") */
+const VOICE_BY_WHO: Record<string, string> = Object.fromEntries(
+  EMO_LINES.map((v) => [`${v.who}|${v.text}`, `/love/voice/${v.file ?? v.id}.mp3`])
+);
+export const voiceOf = (who: string, text: string): string | undefined => VOICE_BY_WHO[`${who}|${text}`];
