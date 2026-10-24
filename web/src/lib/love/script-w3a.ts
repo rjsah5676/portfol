@@ -86,7 +86,7 @@ const POKER_AMY_LAST: PokerSpec = {
       tell: "조용하다. 트윈테일 끝을 손가락에 천천히 감는다. 센 패를 쥔 사람처럼. …그런데 감는 손이 너무 정성스럽다. 다른 손은 테이블 밑에서 군번줄을 하얗게 쥐고 있다.",
       acts: [
         {
-          label: "콜 (흉내다)",
+          label: "콜 (머리 감는 건 연기다)",
           result: "win",
           score: 2,
           eff: { trustA: 1, gambleA: -2 },
@@ -94,7 +94,7 @@ const POKER_AMY_LAST: PokerSpec = {
           think: "머리는 보여 주려고 감았다. 진짜는 테이블 밑, 군번줄을 쥔 손이다.",
         },
         {
-          label: "폴드",
+          label: "폴드 (진짜 센 패다)",
           result: "fold",
           score: 1,
           eff: { gambleA: 2 },
