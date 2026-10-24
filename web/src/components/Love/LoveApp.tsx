@@ -2278,10 +2278,52 @@ function Gallery({
   const [track, setTrack] = useState<BgmId>("title");
   const [view, setView] = useState<CgId | null>(null);
   const [page, setPage] = useState(0);
-  // 크게 보기: 원본 + 본 차분 순서대로 (클릭 = 다음, 마지막에서 닫힘)
+  // 회상 CG: 히로인별로 거르고 4x3 씩 페이지 넘김
+  const [who, setWho] = useState<"all" | "amy" | "yeonseo">("all");
+  const [gp, setGp] = useState(0);
+  const PER = 12;
+  const list = CG_ORDER.filter((id) => who === "all" || CG[id].who === who);
+  const gpages = Math.max(1, Math.ceil(list.length / PER));
+  const gpage = Math.min(gp, gpages - 1);
+  const shown = list.slice(gpage * PER, gpage * PER + PER);
+  const seenIn = (ids: CgId[]) => ids.filter((id) => cgs.includes(id)).length;
+  // 크게 보기: 원본 + 본 차분 순서대로 (좌우 화살표 · 클릭 = 다음)
   const pages = view
     ? [null, ...Object.keys(CG[view].vars ?? {}).filter((k) => cgvs.includes(cgKey(view, k)))]
     : [];
+  // 본 CG 끼리 이어서 넘기기 (크게 보기에서 마지막 차분 다음 → 다음 CG)
+  const seenList = list.filter((id) => cgs.includes(id));
+  const step = (d: 1 | -1) => {
+    if (!view) return;
+    const np = page + d;
+    if (np >= 0 && np < pages.length) return setPage(np);
+    const i = seenList.indexOf(view) + d;
+    if (i < 0 || i >= seenList.length) return;
+    const nid = seenList[i];
+    const nvars = Object.keys(CG[nid].vars ?? {}).filter((k) => cgvs.includes(cgKey(nid, k)));
+    setView(nid);
+    setPage(d === 1 ? 0 : nvars.length);
+    setGp(Math.floor(list.indexOf(nid) / PER));
+  };
+  useEffect(() => {
+    if (tab !== "cg") return;
+    const onKey = (e: KeyboardEvent) => {
+      if (view) {
+        if (e.key === "ArrowRight" || e.key === " ") step(1);
+        else if (e.key === "ArrowLeft") step(-1);
+        else if (e.key === "Escape") setView(null);
+        else return;
+      } else {
+        if (e.key === "ArrowRight") setGp((p) => Math.min(gpages - 1, p + 1));
+        else if (e.key === "ArrowLeft") setGp((p) => Math.max(0, p - 1));
+        else return;
+      }
+      e.preventDefault();
+      e.stopPropagation();
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  });
   return (
     <div className="absolute inset-0 flex flex-col p-[2.5cqw]">
       <div className="mb-[1.2cqw] flex items-center gap-[1.2cqw]">
@@ -2309,43 +2351,104 @@ function Gallery({
         </button>
       </div>
       {tab === "cg" && (
-        <div className="grid flex-1 grid-cols-3 content-start gap-[1.2cqw]">
-          {CG_ORDER.map((id) => {
-            const ok = cgs.includes(id);
-            return (
+        <div
+          className="flex min-h-0 flex-1 flex-col"
+          onWheel={(e) => {
+            if (Math.abs(e.deltaY) < 20) return;
+            setGp((p) => Math.max(0, Math.min(gpages - 1, p + (e.deltaY > 0 ? 1 : -1))));
+          }}
+        >
+          <div className="lv-gal-filter">
+            {(
+              [
+                ["all", "전체", CG_ORDER],
+                ["amy", "에이미", CG_ORDER.filter((id) => CG[id].who === "amy")],
+                ["yeonseo", "연서", CG_ORDER.filter((id) => CG[id].who === "yeonseo")],
+              ] as const
+            ).map(([k, label, ids]) => (
               <button
-                key={id}
-                className={`lv-gal-cg ${ok ? "" : "lv-gal-cg-locked"}`}
-                disabled={!ok}
+                key={k}
+                className={`lv-gal-chip ${k === "amy" ? "lv-gal-chip-a" : k === "yeonseo" ? "lv-gal-chip-y" : ""} ${who === k ? "lv-gal-chip-on" : ""}`}
                 onClick={() => {
-                  setView(id);
-                  setPage(0);
+                  setWho(k);
+                  setGp(0);
                 }}
               >
-                {ok ? (
-                  <span
-                    className="lv-gal-cg-img"
-                    style={{ backgroundImage: `url("${CG[id].src}")` }}
-                  />
-                ) : (
-                  <span className="lv-gal-cg-q">?</span>
-                )}
-                {ok && Object.keys(CG[id].vars ?? {}).length > 0 && (
-                  <span className="lv-gal-cg-n">
-                    {1 + Object.keys(CG[id].vars ?? {}).filter((k) => cgvs.includes(cgKey(id, k))).length}
-                    <i>/</i>
-                    {1 + Object.keys(CG[id].vars ?? {}).length}
-                  </span>
-                )}
-                <span className="lv-gal-cg-cap">
-                  <span className={CG[id].who === "amy" ? "text-[#7fd3ff]" : "text-[#8fa8ff]"}>
-                    ♥
-                  </span>{" "}
-                  {ok ? CG[id].title : "아직 못 본 장면"}
-                </span>
+                {k !== "all" && <span className="lv-gal-chip-suit">{k === "amy" ? "♥" : "♠"}</span>}
+                {label}
+                <i>
+                  {seenIn([...ids])}/{ids.length}
+                </i>
               </button>
-            );
-          })}
+            ))}
+          </div>
+          <div key={`${who}-${gpage}`} className="lv-gal-grid">
+            {shown.map((id) => {
+              const ok = cgs.includes(id);
+              const nv = Object.keys(CG[id].vars ?? {}).length;
+              return (
+                <button
+                  key={id}
+                  className={`lv-gal-cg ${ok ? "" : "lv-gal-cg-locked"}`}
+                  disabled={!ok}
+                  onClick={() => {
+                    setView(id);
+                    setPage(0);
+                  }}
+                >
+                  {ok ? (
+                    <span className="lv-gal-cg-img" style={{ backgroundImage: `url("${CG[id].src}")` }} />
+                  ) : (
+                    <span className="lv-gal-cg-q">
+                      <span className={CG[id].who === "amy" ? "text-[#7fd3ff]/25" : "text-[#8fa8ff]/25"}>
+                        {CG[id].who === "amy" ? "♥" : "♠"}
+                      </span>
+                    </span>
+                  )}
+                  {ok && (CG[id].video || nv > 0) && (
+                    <span className="lv-gal-cg-n">
+                      {CG[id].video && <b>LIVE</b>}
+                      {nv > 0 && (
+                        <>
+                          {1 + Object.keys(CG[id].vars ?? {}).filter((k) => cgvs.includes(cgKey(id, k))).length}                          <span className="opacity-55">/</span>
+                          {1 + nv}
+                        </>
+                      )}
+                    </span>
+                  )}
+                  <span className="lv-gal-cg-cap">
+                    <span className={CG[id].who === "amy" ? "text-[#7fd3ff]" : "text-[#8fa8ff]"}>
+                      {CG[id].who === "amy" ? "♥" : "♠"}
+                    </span>{" "}
+                    {ok ? CG[id].title : "아직 못 본 장면"}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+          {gpages > 1 && (
+            <div className="lv-gal-pager">
+              <button className="lv-gal-arrow" disabled={gpage === 0} onClick={() => setGp(gpage - 1)} aria-label="이전 쪽">
+                ‹
+              </button>
+              <div className="flex items-center gap-[0.6cqw]">
+                {Array.from({ length: gpages }, (_, i) => (
+                  <button
+                    key={i}
+                    className={`lv-gal-dot ${i === gpage ? "lv-gal-dot-on" : ""}`}
+                    onClick={() => setGp(i)}
+                    aria-label={`${i + 1}쪽`}
+                  />
+                ))}
+              </div>
+              <span className="lv-gal-pno">
+                {gpage + 1} / {gpages}
+              </span>
+              <button className="lv-gal-arrow" disabled={gpage === gpages - 1} onClick={() => setGp(gpage + 1)} aria-label="다음 쪽">
+                ›
+              </button>
+            </div>
+          )}
         </div>
       )}
       {tab === "music" && (
@@ -2366,18 +2469,38 @@ function Gallery({
         </div>
       )}
       {view && (
-        <button
-          className="absolute inset-0 z-50 bg-black bg-contain bg-center bg-no-repeat"
-          style={{ backgroundImage: `url("${cgSrc(view, pages[page])}")` }}
-          onClick={() => (page + 1 < pages.length ? setPage(page + 1) : setView(null))}
-          aria-label={page + 1 < pages.length ? "다음 차분" : "닫기"}
-        >
-          {pages.length > 1 && (
-            <span className="lv-gal-view-n">
-              {page + 1} / {pages.length}
-            </span>
+        <div className="lv-gal-view" onClick={() => step(1)}>
+          {pages[page] == null && CG[view].video ? (
+            <video key={view} src={CG[view].video} autoPlay loop muted playsInline className="lv-gal-view-media" />
+          ) : (
+            <div
+              key={`${view}-${page}`}
+              className="lv-gal-view-media lv-gal-view-img"
+              style={{ backgroundImage: `url("${cgSrc(view, pages[page])}")` }}
+            />
           )}
-        </button>
+          <div className="lv-gal-view-bar" onClick={(e) => e.stopPropagation()}>
+            <span className={CG[view].who === "amy" ? "text-[#7fd3ff]" : "text-[#8fa8ff]"}>
+              {CG[view].who === "amy" ? "♥" : "♠"}
+            </span>
+            <span className="lv-gal-view-title">{CG[view].title}</span>
+            {pages.length > 1 && (
+              <span className="lv-gal-view-n">
+                {page + 1} / {pages.length}
+              </span>
+            )}
+            <span className="flex-1" />
+            <button className="lv-gal-arrow" onClick={() => step(-1)} aria-label="이전">
+              ‹
+            </button>
+            <button className="lv-gal-arrow" onClick={() => step(1)} aria-label="다음">
+              ›
+            </button>
+            <button className="lv-gal-close" onClick={() => setView(null)} aria-label="닫기">
+              ✕
+            </button>
+          </div>
+        </div>
       )}
       <div className={`grid flex-1 grid-cols-6 gap-[0.8cqw] ${tab === "end" ? "" : "hidden"}`}>
         {ENDINGS.map((e) => {
