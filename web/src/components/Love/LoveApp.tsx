@@ -1687,7 +1687,8 @@ function CgView({
       </div>
       </div>
       <div className="lv-cg-vignette" />
-      {RAIN_CG.includes(id) && <div className="lv-rain" />}
+      {/* 영상 CG 는 영상 안에 비가 있어서 덧그린 빗줄기는 생략 */}
+      {RAIN_CG.includes(id) && !c.video && <div className="lv-rain" />}
       <div className="lv-cg-motes">
         {Array.from({ length: 14 }, (_, i) => (
           <i
