@@ -1645,6 +1645,8 @@ function CgView({
   beatVol?: number;
 }) {
   const c = CG[id];
+  // 라이브 영상: 처음 불러올 땐 재생이 시작된 뒤에야 보이게 (정지 그림 → 영상으로 바뀌는 순간 튀지 않게)
+  const [vidReady, setVidReady] = useState<string | null>(null);
   // 심장 박동: 켜져 있는 동안 0.9초마다 두근 (CSS 맥박과 같은 박자)
   const pulse = !!fx?.pulse;
   useEffect(() => {
@@ -1675,13 +1677,15 @@ function CgView({
         {/* 차분이 떠 있으면 영상은 숨김 (영상이 차분 그림을 덮지 않게) */}
         {c.video && (
           <video
+            key={c.video}
             src={c.video}
+            onPlaying={() => setVidReady(c.video ?? null)}
             autoPlay
             loop
             muted
             playsInline
             className="lv-cg-video absolute inset-0 h-full w-full object-cover"
-            style={{ opacity: v && c.vars?.[v] ? 0 : 1 }}
+            style={{ opacity: (v && c.vars?.[v]) || vidReady !== c.video ? 0 : 1 }}
           />
         )}
       </div>

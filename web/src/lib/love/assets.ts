@@ -162,7 +162,7 @@ export const CG: Record<
   a_cry: { src: `${B}/cg/a-cry.webp`, title: "숫자 웃기다", who: "amy", vars: { cry: `${B}/cg/a-cry-cry.webp` } },
   a_kiss: {
     src: `${B}/cg/a-kiss.webp`,
-    title: "거짓말, 처음이야",
+    title: "사실은, 처음이야",
     who: "amy",
     tight: true,
     video: `${B}/cg/a-kiss.mp4`,

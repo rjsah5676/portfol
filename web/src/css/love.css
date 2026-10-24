@@ -2387,9 +2387,22 @@
 }
 
 /* 살아 있는 CG(영상): 그림 자체가 움직이니 천천히 확대되는 드리프트는 끔 — 영상 위에 확대가 겹치면 화면이 떨려 보임 */
+/* 라이브 CG 는 등장할 때도 크기 변화 · 흐림 없이 서서히 (영상이 커지며 흔들려 보이지 않게) */
 .lv-cg-live .lv-cg-img,
 .lv-cg-live.lv-cg-tight .lv-cg-img {
-  animation: lv-cg-in 2.4s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  animation: lv-cg-in-live 1.4s ease both;
+}
+@keyframes lv-cg-in-live {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+/* 라이브 CG 위의 심장 박동: 화면은 흔들지 않고 가장자리 붉은 맥박 · 소리만 */
+.lv-cg-live.lv-cg-pulse .lv-cg-cam {
+  animation: none;
 }
 
 /* ===== 회상 갤러리 (새 디자인) ===== */
