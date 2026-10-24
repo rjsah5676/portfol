@@ -40,7 +40,7 @@ export const VOICE_LINES: VoiceLine[] = [
   { id: "yeonseo-18", who: "yeonseo", text: "…믿는다고, 했죠.", tag: "[whispers]" },
   // ---- 에이미 ----
   { id: "amy-01", who: "amy", text: "…뭐? 그게 왜 떠?! 그게 왜 거기서 뜨냐고!", tag: "[shouting]" },
-  { id: "amy-02", who: "amy", text: "팁. 딜러 손은 빠르더라. 그건 인정.", tag: "[embarrassed]" },
+  { id: "amy-02", who: "amy", text: "이건 팁. 딜러 손 빠르더라. 그건 인정.", tag: "[embarrassed]" },
   { id: "amy-03", who: "amy", text: "써, 써 있긴 뭐가 써 있어!", tag: "[embarrassed]" },
   { id: "amy-04", who: "amy", text: "딱히 다른 뜻은 없거든! 연애 같은 거 해 본 적도 없고, 해 보고 싶지도 않으니까!", tag: "[embarrassed]" },
   { id: "amy-05", who: "amy", text: "…에이미. 그냥 에이미. 이상한 거 붙이면 죽어.", tag: "[embarrassed]" },
