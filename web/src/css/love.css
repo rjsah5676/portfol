@@ -695,10 +695,28 @@
   font-weight: 600;
   transform-origin: right bottom;
 }
+.lv-read {
+  margin-bottom: 0.2cqw;
+  font-size: 0.8cqw;
+  font-weight: 700;
+  color: #ffd84a;
+  transition: color 0.3s;
+}
+.lv-read.on {
+  color: #ffffff66;
+  font-weight: 500;
+  animation: lv-bubble-in 0.28s ease-out;
+}
 .lv-bubble-photo {
   overflow: hidden;
   padding: 0;
   width: 70%;
+}
+.lv-bubble-pic img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
 }
 .lv-photo-pic {
   display: flex;
@@ -3077,8 +3095,8 @@
   animation: lv-noti 0.5s 0.15s cubic-bezier(0.2, 0.9, 0.25, 1.1) both;
 }
 .lv-lock-noti img { width: 2.8cqw; height: 2.8cqw; border-radius: 0.7cqw; object-fit: cover; flex-shrink: 0; }
-.lv-lock-noti span { display: flex; min-width: 0; flex-direction: column; gap: 0.1cqw; }
-.lv-lock-noti b { display: flex; justify-content: space-between; color: #fff; font-size: 1.05cqw; }
+.lv-lock-noti span { display: flex; flex: 1; min-width: 0; flex-direction: column; gap: 0.1cqw; }
+.lv-lock-noti b { display: flex; align-items: baseline; justify-content: space-between; gap: 0.6cqw; color: #fff; font-size: 1.05cqw; }
 .lv-lock-noti b small { color: #ffffff80; font-weight: 400; font-size: 0.85cqw; }
 .lv-lock-noti em { overflow: hidden; color: #ffffffe0; font-style: normal; font-size: 1cqw; white-space: nowrap; text-overflow: ellipsis; }
 .lv-lock-noti > span > small { color: #ffffff80; font-size: 0.8cqw; }

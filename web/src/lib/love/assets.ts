@@ -320,6 +320,7 @@ export const SFX: Record<SfxId, string> = {
   send: `${B}/sfx/send.mp3`,
   pencil: `${B}/sfx/pencil.mp3`,
   chair: `${B}/sfx/chair.mp3`,
+  chair2: `${B}/sfx/chair2.mp3`,
   tags: `${B}/sfx/tags.mp3`,
   can: `${B}/sfx/can.mp3`,
   keys: `${B}/sfx/keys.mp3`,
@@ -572,3 +573,13 @@ export const ENDINGS: EndingInfo[] = [
     hint: "???",
   },
 ];
+
+/** 문자 속 사진: "[사진] 설명" 의 설명 → 이미지. 파일이 없으면 폰이 자리표시(📷)로 대신 보여 줌 */
+export const PHOTO: Record<string, string> = {
+  "박스 안에서 자는 회색 고양이": `${B}/photo/cat.webp`,
+  "책상 위 하늘색 곰": `${B}/photo/bear.webp`,
+  "계산대 옆에 세워 둔 바나나우유 하나": `${B}/photo/milk.webp`,
+  "어두운 계단, 문 아래로 새어 나오는 불빛": `${B}/photo/stairs.webp`,
+  "젖은 골목 위로 파란 하늘": `${B}/photo/sky.webp`,
+  "장판 걷은 시멘트 바닥 위에 깐 돗자리": `${B}/photo/mat.webp`,
+};

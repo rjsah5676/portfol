@@ -19,6 +19,7 @@ import {
   NAME_COLOR,
   OUTFITS,
   FACE_NEAR,
+  PHOTO,
   PORTRAIT,
   SUIT,
   RAIN_LOOP,
@@ -1666,12 +1667,18 @@ export default function LoveApp() {
                   from={rb.step.from}
                   msgs={rb.step.msgs.map(sub)}
                   shown={phoneShown}
-                  replies={rb.step.replies.filter((_, ri) => guideShow(ri))}
+                  replies={rb.step.replies
+                    .filter((_, ri) => guideShow(ri))
+                    .map((o) => (o.back ? { ...o, back: o.back.map(sub) } : o))}
                   noIgnore={!guideShow(-1)}
                   slot={disp.day?.slot}
                   open={phoneOpen || skip}
                   onOpen={() => setPhoneOpen(true)}
-                  onReply={choose}
+                  onReply={(o) => {
+                    choose(o);
+                    const who = rb.step.from;
+                    if (o.back?.length) setLog((l) => [...l, ...o.back!.map((text) => ({ who, text }))].slice(-200));
+                  }}
                   onIgnore={() => setS(ignorePhone(s, rb.step.ignore))}
                   play={play}
                 />
@@ -2575,6 +2582,11 @@ function Phone({
   play: (id: SfxId) => void;
 }) {
   const [sent, setSent] = useState<string | null>(null);
+  // 보낸 뒤: 안 읽음 "1" → 잠시 뒤 "읽음" → 그다음에야 이야기로 (바로 넘어가면 허전함)
+  const [read, setRead] = useState(false);
+  // 상대 답장: 읽음 → 입력 중… → 말풍선 하나씩 → 잠깐 머문 뒤 이야기로
+  const [back, setBack] = useState<string[]>([]);
+  const [backTyping, setBackTyping] = useState(false);
   // 문자가 올 때마다 폰이 부르르 — 진동 소리 + 흔들림 (첫 줄은 벨소리와 겹치니 소리만 생략)
   const [buzz, setBuzz] = useState(false);
   useEffect(() => {
@@ -2590,12 +2602,35 @@ function Phone({
   const list = useRef<HTMLDivElement>(null);
   useEffect(() => {
     list.current?.scrollTo({ top: list.current.scrollHeight, behavior: "smooth" });
-  }, [shown, sent]);
+  }, [shown, sent, back, backTyping]);
+  const timers = useRef<number[]>([]);
+  useEffect(() => () => timers.current.forEach((t) => window.clearTimeout(t)), []);
   const send = (o: Opt) => {
     if (sent) return;
+    const at = (ms: number, f: () => void) => timers.current.push(window.setTimeout(f, ms));
+    // "(…)" 는 보내는 말이 아니라 행동 — 화면을 쥐는 건 말풍선 없이 잠깐 머문 뒤 넘어가고,
+    // "(…녹음해서 보낸다)" 같은 건 음성 메시지 말풍선으로
+    const act = o.text.startsWith("(");
+    if (act && !o.text.includes("보낸다")) {
+      setSent(" ");
+      at(1100, () => onReply(o));
+      return;
+    }
     play("send");
-    setSent(o.text);
-    window.setTimeout(() => onReply(o), 750);
+    setSent(act ? "🎙 음성 메시지 0:07" : o.text);
+    at(1000, () => setRead(true));
+    const lines = o.back ?? [];
+    let t = 1000;
+    lines.forEach((line, i) => {
+      at(t + 350, () => setBackTyping(true));
+      t += 350 + Math.min(1700, 700 + line.length * 45);
+      at(t, () => {
+        setBackTyping(false);
+        setBack((b) => [...b, line]);
+        play("buzz");
+      });
+    });
+    at(t + (lines.length ? 1700 : 1300), () => onReply(o));
   };
   // 잠금 화면: 알림 배너가 뜨고, 누르거나 1.4초 뒤 대화방으로
   useEffect(() => {
@@ -2646,7 +2681,7 @@ function Phone({
         )}
         <div className="leading-tight">
           <b className="text-[1.35cqw]">{NAME[from]}</b>
-          <div className="text-[0.85cqw] text-white/55">{done ? "방금" : "입력 중…"}</div>
+          <div className="text-[0.85cqw] text-white/55">{done && !backTyping ? "방금" : "입력 중…"}</div>
         </div>
       </div>
       <div ref={list} className="lv-phone-chat">
@@ -2660,10 +2695,7 @@ function Phone({
                 <img src={FACE_ICON[from]} alt="" className={`lv-phone-ava-s ${i ? "invisible" : ""}`} />
               )}
               {photo ? (
-                <div className="lv-bubble lv-bubble-photo">
-                  <div className="lv-photo-pic">📷</div>
-                  <div className="px-[0.6cqw] py-[0.4cqw] text-[1.05cqw]">{m.replace("[사진]", "").trim()}</div>
-                </div>
+                <PhotoBubble cap={m.replace("[사진]", "").trim()} />
               ) : (
                 <div className="lv-bubble">{m}</div>
               )}
@@ -2684,9 +2716,35 @@ function Phone({
             </div>
           </div>
         )}
-        {sent && (
-          <div className="flex justify-end">
+        {sent?.trim() && (
+          <div className="flex items-end justify-end gap-[0.4cqw]">
+            <span className={`lv-read ${read ? "on" : ""}`}>{read ? "읽음" : "1"}</span>
             <div className="lv-bubble lv-bubble-me">{sent}</div>
+          </div>
+        )}
+        {back.map((m, i) => (
+          <div key={`b${i}`} className="flex items-end gap-[0.5cqw]">
+            {FACE_ICON[from] && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={FACE_ICON[from]} alt="" className={`lv-phone-ava-s ${i ? "invisible" : ""}`} />
+            )}
+            <div className="lv-bubble">{m}</div>
+            {i === back.length - 1 && !backTyping && (
+              <span className="mb-[0.2cqw] text-[0.8cqw] text-white/40">{time}</span>
+            )}
+          </div>
+        ))}
+        {backTyping && (
+          <div className="flex items-end gap-[0.5cqw]">
+            {FACE_ICON[from] && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={FACE_ICON[from]} alt="" className={`lv-phone-ava-s ${back.length ? "invisible" : ""}`} />
+            )}
+            <div className="lv-bubble lv-typing">
+              <i />
+              <i />
+              <i />
+            </div>
           </div>
         )}
       </div>
@@ -2708,9 +2766,28 @@ function Phone({
             )}
           </>
         ) : (
-          <div className="lv-phone-field">{sent ? "전송됨" : "메시지 입력"}</div>
+          <div className="lv-phone-field">{sent?.trim() ? "전송됨" : "메시지 입력"}</div>
         )}
       </div>
+    </div>
+  );
+}
+
+/** 문자 속 사진: 그림이 있으면 사진처럼, 없거나 못 불러오면 📷 자리표시 + 설명 */
+function PhotoBubble({ cap }: { cap: string }) {
+  const src = PHOTO[cap];
+  const [bad, setBad] = useState(false);
+  if (src && !bad)
+    return (
+      <div className="lv-bubble lv-bubble-photo lv-bubble-pic">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={src} alt={cap} onError={() => setBad(true)} />
+      </div>
+    );
+  return (
+    <div className="lv-bubble lv-bubble-photo">
+      <div className="lv-photo-pic">📷</div>
+      <div className="px-[0.6cqw] py-[0.4cqw] text-[1.05cqw]">{cap}</div>
     </div>
   );
 }

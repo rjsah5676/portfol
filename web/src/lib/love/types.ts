@@ -140,6 +140,7 @@ export type SfxId =
   | "pencil"
   // 3차 (직접 합성 — public/love/sfx)
   | "chair"
+  | "chair2"
   | "tags"
   | "can"
   | "keys"
@@ -195,6 +196,8 @@ export interface Opt {
   to?: string;
   /** 조건이 맞을 때만 보임 (텔 읽기로 열리는 숨은 선택지 등) */
   cond?: Cond;
+  /** 문자 답장 뒤 상대가 보내는 답 (1~2줄). 전화 선택지에서만 씀 */
+  back?: string[];
   /** 숨은 선택지 표시 (금색) */
   secret?: boolean;
   /** 하루 일정 카드 (free 슬롯에서): 누구를 만나는지 · 무엇이 오르는지 */
