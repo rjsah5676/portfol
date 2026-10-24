@@ -242,7 +242,7 @@ export const PORTRAIT: Record<string, [number, number, number, number]> = {
   "yeonseo": [0.2578, 0.4304, 0.1094, 0.0915],
   "amy-swim": [0.2925, 0.482, 0.126, 0.1278],
   "amy-home": [0.2812, 0.5545, 0.1273, 0.1201],
-  "yeonseo-summer": [0.2292, 0.4992, 0.106, 0.0921],
+  "yeonseo-summer": [0.2274, 0.5, 0.1049, 0.0911],
   "yeonseo-dress": [0.2439, 0.5171, 0.1055, 0.0915],
   "yeonseo-knit": [0.2431, 0.5605, 0.1016, 0.1062],
 };
