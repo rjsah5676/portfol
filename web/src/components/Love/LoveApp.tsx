@@ -25,6 +25,7 @@ import {
   SFX,
   STAND,
   TITLE,
+  TITLE_ALT,
   cgKey,
   cgSrc,
   preloadList,
@@ -361,6 +362,19 @@ export default function LoveApp() {
   /** 오른쪽 위 나가기 → 확인 창 */
   const [askExit, setAskExit] = useState(false);
   const [endings, setEndings] = useState<EndingId[]>([]);
+  /** 타이틀 버전: 깬 트루 · 그랜드 엔딩마다 열림. 기본 = 그랜드 > 가장 최근에 깬 트루, 고른 건 기억 */
+  const [titlePick, setTitlePick] = useState<keyof typeof TITLE_ALT | "base" | null>(null);
+  useEffect(() => {
+    const v = LS.get("love:titlev");
+    if (v) setTitlePick(v as keyof typeof TITLE_ALT | "base");
+  }, []);
+  const titleOpen = (Object.keys(TITLE_ALT) as (keyof typeof TITLE_ALT)[]).filter((k) => endings.includes(TITLE_ALT[k].end));
+  const titleAuto = titleOpen.includes("grand")
+    ? "grand"
+    : ([...endings].reverse().map((e) => titleOpen.find((k) => TITLE_ALT[k].end === e)).find(Boolean) ?? null);
+  const titleV = titlePick === "base" ? null : titlePick && titleOpen.includes(titlePick) ? titlePick : titleAuto;
+  const titleBg = (titleV && TITLE_ALT[titleV].bg) || TITLE.bg;
+  const titleBgm: BgmId = titleV ? TITLE_ALT[titleV].bgm : "title";
   /** 본 이벤트 CG (회상 갤러리) */
   const [cgs, setCgs] = useState<CgId[]>([]);
   const [cgvs, setCgvs] = useState<string[]>([]);
@@ -465,8 +479,9 @@ export default function LoveApp() {
 
   // ---------- 타이틀 · 이름 · 엔딩 수집 화면은 메인 테마 ----------
   useEffect(() => {
-    if (phase === "title" || phase === "name" || phase === "gallery") bgm("title");
-  }, [phase, bgm]);
+    if (phase === "title" || phase === "name") bgm(titleBgm);
+    else if (phase === "gallery") bgm("title");
+  }, [phase, bgm, titleBgm]);
 
   // ---------- 상태가 바뀔 때: 소리 · 백로그 · 타자 효과 초기화 ----------
   useEffect(() => {
@@ -1119,7 +1134,7 @@ export default function LoveApp() {
             <div
               className="absolute inset-0 bg-cover bg-center transition-[filter] duration-500"
               style={{
-                backgroundImage: `url("${TITLE.bg}")`,
+                backgroundImage: `url("${titleBg}")`,
                 filter: phase !== "title" ? "blur(4px) brightness(.55)" : undefined,
               }}
             />
@@ -1158,16 +1173,29 @@ export default function LoveApp() {
                   <div className="lv-title-clear" title="트루 · 그랜드 엔딩">
                     {(
                       [
-                        ["amy_true", "♥", "에이미"],
-                        ["yeon_true", "♠", "연서"],
-                        ["grand", "★", "그랜드"],
+                        ["amy", "♥"],
+                        ["yeon", "♠"],
+                        ["grand", "★"],
                       ] as const
-                    ).map(([id, ic, l]) => (
-                      <span key={id} className={endings.includes(id) ? "lv-clear-on" : ""}>
-                        <b>{ic}</b>
-                        {l}
-                      </span>
-                    ))}
+                    ).map(([k, ic]) => {
+                      const on = titleOpen.includes(k);
+                      return (
+                        <button
+                          key={k}
+                          disabled={!on}
+                          className={`${on ? "lv-clear-on" : ""} ${titleV === k ? "lv-clear-sel" : ""}`}
+                          title={on ? (titleV === k ? "기본 타이틀로" : "이 타이틀로 바꾸기") : "트루 엔딩을 보면 열려요"}
+                          onClick={() => {
+                            const v = titleV === k ? "base" : k;
+                            setTitlePick(v);
+                            LS.set("love:titlev", v);
+                          }}
+                        >
+                          <b>{ic}</b>
+                          {TITLE_ALT[k].label}
+                        </button>
+                      );
+                    })}
                   </div>
                 )}
                 <button className="lv-title-story" onClick={() => setPanel("story")}>

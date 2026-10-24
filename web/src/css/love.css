@@ -3211,3 +3211,19 @@
 .lv-log-line:hover .lv-log-jump { opacity: 1; }
 .lv-log-jump:hover { color: #ffd27a; border-color: #ffd27a; }
 @media (hover: none) { .lv-log-jump { opacity: 0.7; } }
+.lv-title-clear button {
+  display: flex;
+  align-items: center;
+  gap: 0.3cqw;
+  padding: 0.25cqw 0.8cqw;
+  border: 0.08cqw solid #ffffff22;
+  border-radius: 99px;
+  background: #0b1028b3;
+  color: #ffffff40;
+  font-size: 0.9cqw;
+  letter-spacing: 0.06em;
+  transition: background 0.15s, box-shadow 0.15s;
+}
+.lv-title-clear button.lv-clear-on { border-color: #ffd27a; color: #ffd27a; }
+.lv-title-clear button.lv-clear-on:hover { background: #2a2410cc; }
+.lv-title-clear button.lv-clear-sel { background: #ffd27a; color: #1a1406; box-shadow: 0 0 1cqw #ffd27a88; }

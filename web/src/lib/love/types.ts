@@ -53,6 +53,8 @@ export type BgId =
   | "alley_night"
   /** 재래시장 (비) */
   | "market"
+  | "room_day"
+  | "room_night"
   | "vip"
   | "store"
   | "arcade"

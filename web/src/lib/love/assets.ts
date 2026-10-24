@@ -2,7 +2,7 @@
  * 올인 러브 — 그림 · 소리 목록. 주소만 채우면 화면에 바로 입혀짐 (null = 임시 모양)
  * 게임은 로딩 화면에서 전부 받은 뒤 시작 (진행률 막대)
  */
-import type { BgId, BgmId, CgId, CharKey, EndingInfo, Face, Outfit, SfxId, Who } from "./types";
+import type { BgId, BgmId, CgId, CharKey, EndingId, EndingInfo, Face, Outfit, SfxId, Who } from "./types";
 import { VOICE_BY_TEXT } from "./voices";
 
 const B = "/love";
@@ -87,6 +87,8 @@ export const BG: Record<BgId, string | null> = {
   store: `${B}/bg/store.webp`,
   arcade: `${B}/bg/arcade.webp`,
   room: `${B}/bg/room.webp`,
+  room_day: `${B}/bg/room-day.webp`,
+  room_night: `${B}/bg/room-night.webp`,
   officetel: `${B}/bg/officetel.webp`,
   karaoke: `${B}/bg/karaoke.webp`,
   pocha: `${B}/bg/pocha.webp`,
@@ -106,6 +108,8 @@ export const BG_FALLBACK: Record<BgId, string> = {
   store: "linear-gradient(180deg,#e9eef2,#b9c4cc)",
   arcade: "linear-gradient(180deg,#3a1f4a,#120a1c)",
   room: "linear-gradient(180deg,#3a3140,#18141c)",
+  room_day: "linear-gradient(180deg,#9fb8d8,#d9c9b0)",
+  room_night: "linear-gradient(180deg,#1a1f3a,#0c0e18)",
   officetel: "linear-gradient(180deg,#2c3038,#121418)",
   karaoke: "linear-gradient(180deg,#3a1450,#12061c)",
   pocha: "linear-gradient(180deg,#4a2a12,#140a04)",
@@ -366,6 +370,12 @@ export const CARD_BACK = `${P}/card/back-mid.webp`;
 
 /** 타이틀 화면: 키아트(캐릭터 + 펍, UI 없음) · 로고(누끼) */
 export const TITLE = { bg: `${B}/ui/title-bg.webp`, logo: `${B}/ui/title-logo.webp` };
+/** 엔딩을 깨면 열리는 타이틀 (그림 · 곡). bg 가 null 이면 그림은 아직 없음 → 기본 그림 + 곡만 바뀜 */
+export const TITLE_ALT: Record<"amy" | "yeon" | "grand", { end: EndingId; bg: string | null; bgm: BgmId; label: string }> = {
+  amy: { end: "amy_true", bg: null, bgm: "amy_ace", label: "에이미" },
+  yeon: { end: "yeon_true", bg: null, bgm: "yeon_ace", label: "연서" },
+  grand: { end: "grand", bg: null, bgm: "morning", label: "그랜드" },
+};
 
 /** 로딩 화면에서 전부 받는 목록 */
 export function preloadList(): { img: string[]; audio: string[]; voice: string[] } {

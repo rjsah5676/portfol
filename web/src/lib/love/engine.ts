@@ -148,6 +148,17 @@ const addEff = (v: Vars, eff?: Eff): Vars => {
 };
 
 /** 현재 위치부터 막히는 줄(대사 · 선택지 등)이 나올 때까지 실행 */
+/** 원룸 배경: 시간대별 (대본은 그냥 "room") */
+const ROOMS: BgId[] = ["room", "room_day", "room_night"];
+const roomFor = (slot?: string): BgId =>
+  !slot
+    ? "room"
+    : ["낮", "오전", "아침", "오후", "휴식 시간"].includes(slot)
+      ? "room_day"
+      : ["밤 근무", "마감 후", "새벽", "밤", "자정"].includes(slot)
+        ? "room_night"
+        : "room";
+
 export function run(s0: GState): GState {
   const s: GState = {
     ...s0,
@@ -179,18 +190,20 @@ export function run(s0: GState): GState {
     }
     switch (st.t) {
       case "bg": {
+        // 원룸은 시간대에 맞는 그림으로 (낮 · 밤 · 노을)
+        const bid: BgId = st.id === "room" ? roomFor(s.disp.day?.slot) : st.id;
         // 장소가 바뀌면 말하다가 자동으로 나와 있던 서브 캐릭터(태양 · 정민 등)는 그 장소에 두고 감
-        if (st.id !== s.disp.bg)
+        if (bid !== s.disp.bg)
           for (const k of Object.keys(s.disp.chars) as CharKey[])
             if (s.disp.chars[k]?.auto !== undefined) delete s.disp.chars[k];
-        s.disp.bg = st.id;
+        s.disp.bg = bid;
         // 장소 옷: 그 장소에 가면 자동으로 갈아입고, 다른 장소로 가면 벗음 (black = 장면 전환이라 그대로)
-        if (st.id !== "black") {
+        if (bid !== "black") {
           const o: Partial<Record<CharKey, Outfit>> = { ...s.disp.outfit };
           for (const [k, id] of Object.entries(o) as [CharKey, Outfit][])
-            if (PLACE_OUTFIT_BG[id] && !PLACE_OUTFIT_BG[id]!.includes(st.id))
+            if (PLACE_OUTFIT_BG[id] && !PLACE_OUTFIT_BG[id]!.includes(bid))
               o[k] = k === "yeonseo" && s.disp.bareY ? "bare" : undefined;
-          for (const [k, id] of Object.entries(PLACE_OUTFIT[st.id] ?? {}) as [CharKey, Outfit][]) {
+          for (const [k, id] of Object.entries(PLACE_OUTFIT[bid] ?? {}) as [CharKey, Outfit][]) {
             const cur = o[k];
             // 직접 갈아입힌 옷(편의점 · 티셔츠 · 니트)이 있으면 그대로
             if (cur && cur !== "default" && cur !== "bare") continue;
@@ -307,6 +320,7 @@ export function run(s0: GState): GState {
         s.disp.bareY = !!s.vars.yGloveOff;
         s.disp.outfit = s.disp.bareY ? { yeonseo: "bare" } : {};
         s.disp.day = { d: st.day, slot: st.slot };
+        if (ROOMS.includes(s.disp.bg)) s.disp.bg = roomFor(st.slot);
         s.block = { k: "day", d: st.day, slot: st.slot };
         return s;
       case "say": {
