@@ -60,6 +60,7 @@ const PLACE_OUTFIT_BG: Partial<Record<Outfit, BgId[]>> = {
   swim: ["waterpark"],
   home: ["amyroom"],
   summer: ["sea"],
+  summerbare: ["sea"],
   dress: ["vip"],
 };
 const AUTO_LEAVE = 4;
@@ -187,7 +188,8 @@ export function run(s0: GState): GState {
             // 직접 갈아입힌 옷(편의점 · 티셔츠 · 니트)이 있으면 그대로
             if (cur && cur !== "default" && cur !== "bare") continue;
             if (k === "yeonseo" && s.disp.bareY && id === "dress") continue;
-            o[k] = id;
+            // 장갑 벗은 뒤 바다에 가면 맨손 원피스
+            o[k] = k === "yeonseo" && s.disp.bareY && id === "summer" ? "summerbare" : id;
           }
           s.disp.outfit = Object.fromEntries(Object.entries(o).filter(([, v]) => v)) as typeof o;
         }

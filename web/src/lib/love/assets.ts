@@ -71,6 +71,7 @@ export const OUTFITS: Partial<Record<CharKey, Partial<Record<Outfit, StandSet>>>
     knit: { base: `${B}/char/yeonseo-knit-base.webp`, faces: faces("yeonseo-knit", ["away", "blush", "smile"]) },
     bare: { base: `${B}/char/yeonseo-bare-base.webp`, faces: faces("yeonseo-bare", ["away", "smile", "blush", "sad"]) },
     summer: { base: `${B}/char/yeonseo-summer-base.webp`, faces: faces("yeonseo-summer", ["smile", "blush", "surprise", "laugh"]) },
+    summerbare: { base: `${B}/char/yeonseo-summerbare-base.webp`, faces: faces("yeonseo-summerbare", ["smile", "blush", "surprise", "laugh"]) },
     dress: { base: `${B}/char/yeonseo-dress-base.webp`, faces: faces("yeonseo-dress", ["cold", "away", "sad", "blush"]) },
   },
 };
@@ -125,9 +126,9 @@ export const CG: Record<
     tight?: boolean;
   }
 > = {
-  y_closet: { src: `${B}/cg/y-closet.webp`, title: "비품 창고, 숨 쉬지 마요", who: "yeonseo" },
-  y_umbrella: { src: `${B}/cg/y-umbrella.webp`, title: "그냥 비 오니까요", who: "yeonseo" },
-  y_name: { src: `${B}/cg/y-name.webp`, title: "이름 하나, 올인보다", who: "yeonseo" },
+  y_closet: { src: `${B}/cg/y-closet.webp`, title: "비품 창고, 숨 쉬지 마요", who: "yeonseo", video: `${B}/cg/y-closet.mp4`, vars: { blush: `${B}/cg/y-closet-blush.webp` } },
+  y_umbrella: { src: `${B}/cg/y-umbrella.webp`, title: "그냥 비 오니까요", who: "yeonseo", video: `${B}/cg/y-umbrella.mp4`, vars: { smile: `${B}/cg/y-umbrella-smile.webp` } },
+  y_name: { src: `${B}/cg/y-name.webp`, title: "이름 하나, 올인보다", who: "yeonseo", video: `${B}/cg/y-name.mp4`, vars: { away: `${B}/cg/y-name-away.webp`, smile: `${B}/cg/y-name-smile.webp` } },
   a_booth: { src: `${B}/cg/a-booth.webp`, title: "마지막 한 장", who: "amy", vars: { blush: `${B}/cg/a-booth-blush.webp` } },
   a_door: {
     src: `${B}/cg/a-door.webp`,
@@ -140,10 +141,11 @@ export const CG: Record<
   a_summer: { src: `${B}/cg/a-summer.webp`, title: "한여름의 에이미", who: "amy", video: `${B}/cg/a-summer.mp4`, vars: { blush: `${B}/cg/a-summer-blush.webp` } },
   a_tshirt: { src: `${B}/cg/a-tshirt.webp`, title: "비 오는 날, 내 티셔츠", who: "amy", video: `${B}/cg/a-tshirt.mp4`, vars: { pout: `${B}/cg/a-tshirt-pout.webp`, blush: `${B}/cg/a-tshirt-blush.webp` } },
   a_morning: { src: `${B}/cg/a-morning.webp`, title: "트윈테일을 푼 아침", who: "amy", video: `${B}/cg/a-morning.mp4`, vars: { smile: `${B}/cg/a-morning-smile.webp` } },
-  y_summer: { src: `${B}/cg/y-summer.webp`, title: "한여름의 연서", who: "yeonseo" },
+  y_summer: { src: `${B}/cg/y-summer.webp`, title: "한여름의 연서", who: "yeonseo", video: `${B}/cg/y-summer.mp4`, vars: { blush: `${B}/cg/y-summer-blush.webp` } },
   y_glove: { src: `${B}/cg/y-glove.webp`, title: "장갑을 벗은 손", who: "yeonseo" },
-  y_wall: { src: `${B}/cg/y-wall.webp`, title: "가지 마요", who: "yeonseo" },
-  y_dawn: { src: `${B}/cg/y-dawn.webp`, title: "출근하기 싫은 새벽", who: "yeonseo" },
+  y_wall: { src: `${B}/cg/y-wall.webp`, title: "가지 마요", who: "yeonseo", video: `${B}/cg/y-wall.mp4`, vars: { cry: `${B}/cg/y-wall-cry.webp` } },
+  y_kiss: { src: `${B}/cg/y-kiss.webp`, title: "현관 불이 켜지기 전에", who: "yeonseo", tight: true, video: `${B}/cg/y-kiss.mp4`, vars: { kiss: `${B}/cg/y-kiss-kiss.webp`, after: `${B}/cg/y-kiss-after.webp` } },
+  y_dawn: { src: `${B}/cg/y-dawn.webp`, title: "출근하기 싫은 새벽", who: "yeonseo", video: `${B}/cg/y-dawn.mp4`, vars: { smile: `${B}/cg/y-dawn-smile.webp` } },
   end_amy_true: { src: `${B}/cg/end-amy-true.webp`, title: "ENDING · Your Side", who: "amy", video: `${B}/cg/end-amy-true.mp4`, vars: { smile: `${B}/cg/end-amy-true-smile.webp` } },
   end_amy_good: {
     src: `${B}/cg/end-amy-good.webp`,
@@ -152,13 +154,9 @@ export const CG: Record<
     title: "ENDING · 작은 방, 큰 침대",
     who: "amy",
   },
-  end_yeon_true: { src: `${B}/cg/end-yeon-true.webp`, title: "ENDING · Tell", who: "yeonseo" },
-  end_yeon_good: {
-    src: `${B}/cg/end-yeon-good.webp`,
-    title: "ENDING · 바닷가 마을",
-    who: "yeonseo",
-  },
-  end_grand: { src: `${B}/cg/end-grand.webp`, title: "ENDING · All In", who: "amy" },
+  end_yeon_true: { src: `${B}/cg/end-yeon-true.webp`, title: "ENDING · Tell", who: "yeonseo", video: `${B}/cg/end-yeon-true.mp4`, vars: { laugh: `${B}/cg/end-yeon-true-laugh.webp` } },
+  end_yeon_good: { src: `${B}/cg/end-yeon-good.webp`, title: "ENDING · 바닷가 마을", who: "yeonseo", video: `${B}/cg/end-yeon-good.mp4`, vars: { smile: `${B}/cg/end-yeon-good-smile.webp` } },
+  end_grand: { src: `${B}/cg/end-grand.webp`, title: "ENDING · All In", who: "amy", video: `${B}/cg/end-grand.mp4`, vars: { laugh: `${B}/cg/end-grand-laugh.webp` } },
   // ---- CG 확장 (claude/2026-10-24-love-cg-expansion-plan.md) — 그림 오면 pending 지우고 vars 채우기 ----
   a_hand: { src: `${B}/cg/a-hand.webp`, title: "소매에서 손가락까지", who: "amy", video: `${B}/cg/a-hand.mp4` },
   a_cry: { src: `${B}/cg/a-cry.webp`, title: "숫자 웃기다", who: "amy", vars: { cry: `${B}/cg/a-cry-cry.webp` } },
@@ -170,8 +168,8 @@ export const CG: Record<
     video: `${B}/cg/a-kiss.mp4`,
     vars: { kiss: `${B}/cg/a-kiss-kiss.webp`, after: `${B}/cg/a-kiss-after.webp` },
   },
-  y_door: { src: `${B}/cg/y-door.webp`, title: "손바닥 하나만큼", who: "yeonseo", pending: true },
-  y_win: { src: `${B}/cg/y-win.webp`, title: "제일 맛있는 물", who: "yeonseo", pending: true },
+  y_door: { src: `${B}/cg/y-door.webp`, title: "손바닥 하나만큼", who: "yeonseo", vars: { blush: `${B}/cg/y-door-blush.webp` } },
+  y_win: { src: `${B}/cg/y-win.webp`, title: "제일 맛있는 물", who: "yeonseo", video: `${B}/cg/y-win.mp4`, vars: { smile: `${B}/cg/y-win-smile.webp`, water: `${B}/cg/y-win-water.webp` } },
 };
 /** CG 차분 그림 주소 (없는 이름이면 원본) */
 export const cgSrc = (id: CgId, v?: string | null) => (v && CG[id].vars?.[v]) || CG[id].src;
@@ -198,6 +196,7 @@ export const CG_ORDER: CgId[] = (
   "y_wall",
   "y_glove",
   "y_summer",
+  "y_kiss",
   "y_dawn",
   "y_win",
   "end_yeon_good",
@@ -242,7 +241,8 @@ export const PORTRAIT: Record<string, [number, number, number, number]> = {
   "yeonseo": [0.2578, 0.4304, 0.1094, 0.0915],
   "amy-swim": [0.2925, 0.482, 0.126, 0.1278],
   "amy-home": [0.2812, 0.5545, 0.1273, 0.1201],
-  "yeonseo-summer": [0.2274, 0.5, 0.1049, 0.0911],
+  "yeonseo-summer": [0.2873, 0.5199, 0.1175, 0.0895],
+  "yeonseo-summerbare": [0.2873, 0.5199, 0.1175, 0.0895],
   "yeonseo-dress": [0.2439, 0.5171, 0.1055, 0.0915],
   "yeonseo-knit": [0.2431, 0.5605, 0.1016, 0.1062],
 };

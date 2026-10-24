@@ -41,7 +41,7 @@ export type Face =
 export type Pos = "l" | "c" | "r";
 /** 스탠딩 의상: 에이미 tshirt(내 티셔츠) · 연서 knit(오피스텔 안경 니트) · bare(장갑 벗은 근무복) */
 /** store = 편의점 조끼(안에 연회색 큰 티) · down = 머리 푼 티셔츠 · swim = 수영복 · knitbare = 니트 맨손 · summer = 여름 원피스 */
-export type Outfit = "default" | "tshirt" | "knit" | "bare" | "store" | "down" | "swim" | "knitbare" | "summer" | "home" | "dress";
+export type Outfit = "default" | "tshirt" | "knit" | "bare" | "store" | "down" | "swim" | "knitbare" | "summer" | "summerbare" | "home" | "dress";
 /** 거리 3단계: 0 평소(허벅지까지) · 1 상반신 · 2 얼굴 클로즈업 */
 export type Dist = 0 | 1 | 2;
 export type BgId =
@@ -75,6 +75,7 @@ export type CgId =
   | "y_summer"
   | "y_glove"
   | "y_wall"
+  | "y_kiss"
   | "y_dawn"
   // 엔딩
   | "end_amy_true"
