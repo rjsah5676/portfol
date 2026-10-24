@@ -136,9 +136,9 @@ export const CG: Record<
     video: `${B}/cg/a-door.mp4`,
     vars: { close: `${B}/cg/a-door-close.webp` },
   },
-  a_shoulder: { src: `${B}/cg/a-shoulder.webp`, title: "유료 어깨", who: "amy" },
-  a_summer: { src: `${B}/cg/a-summer.webp`, title: "한여름의 에이미", who: "amy" },
-  a_tshirt: { src: `${B}/cg/a-tshirt.webp`, title: "비 오는 날, 내 티셔츠", who: "amy" },
+  a_shoulder: { src: `${B}/cg/a-shoulder.webp`, title: "유료 어깨", who: "amy", vars: { close: `${B}/cg/a-shoulder-close.webp` } },
+  a_summer: { src: `${B}/cg/a-summer.webp`, title: "한여름의 에이미", who: "amy", video: `${B}/cg/a-summer.mp4`, vars: { blush: `${B}/cg/a-summer-blush.webp` } },
+  a_tshirt: { src: `${B}/cg/a-tshirt.webp`, title: "비 오는 날, 내 티셔츠", who: "amy", video: `${B}/cg/a-tshirt.mp4`, vars: { pout: `${B}/cg/a-tshirt-pout.webp`, blush: `${B}/cg/a-tshirt-blush.webp` } },
   a_morning: { src: `${B}/cg/a-morning.webp`, title: "트윈테일을 푼 아침", who: "amy" },
   y_summer: { src: `${B}/cg/y-summer.webp`, title: "한여름의 연서", who: "yeonseo" },
   y_glove: { src: `${B}/cg/y-glove.webp`, title: "장갑을 벗은 손", who: "yeonseo" },
@@ -158,7 +158,7 @@ export const CG: Record<
   },
   end_grand: { src: `${B}/cg/end-grand.webp`, title: "ENDING · All In", who: "amy" },
   // ---- CG 확장 (claude/2026-10-24-love-cg-expansion-plan.md) — 그림 오면 pending 지우고 vars 채우기 ----
-  a_hand: { src: `${B}/cg/a-hand.webp`, title: "소매에서 손가락까지", who: "amy", pending: true },
+  a_hand: { src: `${B}/cg/a-hand.webp`, title: "소매에서 손가락까지", who: "amy", video: `${B}/cg/a-hand.mp4` },
   a_cry: { src: `${B}/cg/a-cry.webp`, title: "숫자 웃기다", who: "amy", pending: true },
   a_kiss: {
     src: `${B}/cg/a-kiss.webp`,
@@ -229,20 +229,20 @@ export const NAME: Record<Who, string> = {
 /** 대사창 초상 카드: 스탠딩 그림에서 얼굴만 잘라 보여 줌 — [가로/세로 비, 얼굴 중심 x, 얼굴 중심 y, 자를 정사각형 한 변] (그림 높이 대비).
  *  표정 그림은 같은 캔버스라 같은 값. 의상은 캔버스가 달라 따로 (없으면 기본 옷 값) */
 export const PORTRAIT: Record<string, [number, number, number, number]> = {
-  "amy": [0.3715, 0.4831, 0.1051, 0.1306],
-  "amy-store": [0.3377, 0.4677, 0.1208, 0.0966],
-  "amy-tshirt": [0.2821, 0.5035, 0.117, 0.0976],
+  "amy": [0.3724, 0.4849, 0.105, 0.1305],
+  "amy-store": [0.3377, 0.4689, 0.1211, 0.0965],
+  "amy-tshirt": [0.2839, 0.5035, 0.1168, 0.0977],
   "boss": [0.3403, 0.414, 0.0859, 0.1257],
   "chunhee": [0.4167, 0.4238, 0.1059, 0.1212],
   "jeongmin": [0.3099, 0.4321, 0.0855, 0.0879],
   "taeyang": [0.3255, 0.4257, 0.0806, 0.0979],
-  "yeonseo-bare": [0.2535, 0.4303, 0.1079, 0.0903],
-  "yeonseo": [0.2535, 0.4303, 0.1079, 0.0903],
-  "amy-swim": [0.2925, 0.4828, 0.1264, 0.1277],
-  "amy-home": [0.2812, 0.5537, 0.1274, 0.1198],
-  "yeonseo-summer": [0.2266, 0.4981, 0.1049, 0.0911],
-  "yeonseo-dress": [0.2431, 0.5169, 0.1037, 0.0914],
-  "yeonseo-knit": [0.2352, 0.552, 0.1005, 0.1048],
+  "yeonseo-bare": [0.2587, 0.4308, 0.1095, 0.0918],
+  "yeonseo": [0.2578, 0.4304, 0.1094, 0.0915],
+  "amy-swim": [0.2925, 0.482, 0.126, 0.1278],
+  "amy-home": [0.2812, 0.5545, 0.1273, 0.1201],
+  "yeonseo-summer": [0.2292, 0.4992, 0.106, 0.0921],
+  "yeonseo-dress": [0.2439, 0.5171, 0.1055, 0.0915],
+  "yeonseo-knit": [0.2431, 0.5605, 0.1016, 0.1062],
 };
 /** 이름표 무늬 (트럼프 문양) */
 export const SUIT: Record<Who, string> = {
