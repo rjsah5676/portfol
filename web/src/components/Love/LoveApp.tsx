@@ -5,7 +5,7 @@
  * 로딩(진행률) → 타이틀 → 이름 → 본편. 대본은 lib/love/script.ts, 실행기는 lib/love/engine.ts
  * 저장: localStorage (못 쓰는 환경이어도 게임은 그대로 돌아감)
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   BG,
   BG_FALLBACK,
@@ -147,8 +147,23 @@ export interface Cfg {
   skipAll: boolean;
   /** 시간제한 선택지 끄기 (침묵도 버튼으로 고를 수 있음) */
   noTimer: boolean;
+  /** 다음 대사로 넘겨도 음성은 끝까지 (다음 음성이 시작될 때만 끊김) */
+  voiceKeep: boolean;
+  /** 대사 글자 크기 배율 */
+  fs: number;
 }
-const CFG0: Cfg = { text: 3, auto: 3, bgm: 0.7, sfx: 0.8, voice: 1, box: 0.85, skipAll: false, noTimer: false };
+const CFG0: Cfg = {
+  text: 3,
+  auto: 3,
+  bgm: 0.7,
+  sfx: 0.8,
+  voice: 1,
+  box: 0.85,
+  skipAll: false,
+  noTimer: false,
+  voiceKeep: true,
+  fs: 1,
+};
 const readCfg = (): Cfg => {
   try {
     return { ...CFG0, ...(JSON.parse(LS.get(KEY.cfg) ?? "{}") as Partial<Cfg>) };
@@ -268,11 +283,39 @@ function useSound(muted: boolean, cfg: Cfg) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [muted, cfg]);
   useEffect(() => () => rainEl.current?.pause(), []);
-  return { play, bgm, voice, voiceEnd, rain };
+  /** 대사 한 줄의 음성: 음성 없는 줄이면 설정에 따라 이전 음성을 끝까지 둠 */
+  const voiceLine = useCallback(
+    (url: string | null) => {
+      if (!url && vol.current.voiceKeep) return;
+      voice(url);
+    },
+    [voice]
+  );
+  /** 음악실용: 지금 곡 위치 · 일시정지 · 이동 */
+  const bgmCtl = useMemo(
+    () => ({
+      pos: (): [number, number, boolean] => {
+        const a = bgmEl.current;
+        return a ? [a.currentTime, a.duration || 0, a.paused] : [0, 0, true];
+      },
+      toggle: () => {
+        const a = bgmEl.current;
+        if (!a) return;
+        if (a.paused) a.play().catch(() => {});
+        else a.pause();
+      },
+      seek: (r: number) => {
+        const a = bgmEl.current;
+        if (a && a.duration) a.currentTime = r * a.duration;
+      },
+    }),
+    []
+  );
+  return { play, bgm, voice, voiceLine, voiceEnd, rain, bgmCtl };
 }
 
 type Phase = "title" | "name" | "game" | "gallery" | "review" | "assets" | "credits";
-type Panel = null | "log" | "save" | "load" | "config" | "rel";
+type Panel = "story" | null | "log" | "save" | "load" | "config" | "rel";
 
 export default function LoveApp() {
   const [phase, setPhase] = useState<Phase>("title");
@@ -297,7 +340,10 @@ export default function LoveApp() {
   const [typed, setTyped] = useState(0);
   const [auto, setAuto] = useState(false);
   const [skip, setSkip] = useState(false);
-  const [log, setLog] = useState<{ who: Who; text: string }[]>([]);
+  const wheelAt = useRef(0);
+  const hoverEl = useRef<HTMLButtonElement | null>(null);
+  const hoverAt = useRef(0);
+  const [log, setLog] = useState<LogLine[]>([]);
   const [panel, setPanel] = useState<Panel>(null);
   /** 오른쪽 위 나가기 → 확인 창 */
   const [askExit, setAskExit] = useState(false);
@@ -346,7 +392,7 @@ export default function LoveApp() {
   const seen = useRef<Set<string>>(new Set());
   const wrap = useRef<HTMLDivElement>(null);
   // 폰 안내 화면(전체화면 · 가로 돌리기)이 덮고 있는 동안은 소리 없음
-  const { play, bgm, voice, voiceEnd, rain } = useSound(muted || stage.gate, cfg);
+  const { play, bgm, voice, voiceLine, voiceEnd, rain, bgmCtl } = useSound(muted || stage.gate, cfg);
   // 비 오는 골목(CG 없을 때) · 비 CG 동안 빗소리
   const rainOn =
     phase === "game" && !!s && ((s.disp.bg === "alley" && !s.disp.cg) || (!!s.disp.cg && RAIN_CG.includes(s.disp.cg)));
@@ -429,7 +475,8 @@ export default function LoveApp() {
       setReadNow(seen.current.has(lineKey(s)));
       setTyped(0);
       setLog((l) => [...l.slice(-199), { who: b.who, text: b.text }]);
-      voice(skip ? null : (VOICE_BY_TEXT[b.text] ?? null));
+      if (skip) voice(null);
+      else voiceLine(VOICE_BY_TEXT[b.text] ?? null);
     }
     // 회차 기억: meta_ 로 시작하는 수치는 다음 회차에도 남음 (진엔딩 잠금 해제 정보 등)
     const metaNew = Object.entries(s.vars).filter(
@@ -743,6 +790,11 @@ export default function LoveApp() {
       if ((e.key === "h" || e.key === "H") && !panel) setHideUi((v) => !v);
       if ((e.key === "a" || e.key === "A") && !panel) setAuto((v) => !v);
       if ((e.key === "l" || e.key === "L" || e.key === "ArrowUp") && !panel) setPanel("log");
+      // 숫자 1~9 = 그 번호 선택지 · 일정 카드
+      if (/^[1-9]$/.test(e.key) && !panel) {
+        const bs = wrap.current?.querySelectorAll<HTMLButtonElement>(".lv-choice:not(:disabled), .lv-plan, .lv-free");
+        bs?.[Number(e.key) - 1]?.click();
+      }
       if ((e.code === "Space" || e.code === "Enter") && !panel) {
         e.preventDefault();
         advance();
@@ -839,6 +891,7 @@ export default function LoveApp() {
     if (!s) return;
     play("chip");
     markSeen();
+    setLog((l) => [...l.slice(-199), { who: "me", text: o.text, pick: true }]);
     setS(pick(withTime(s), o));
     // 호감이 오른 선택이면 그 히로인 색 하트가 잠깐 떠오름 (수치는 안 보여 줌)
     const up = (o.eff?.affA ?? 0) > 0 ? "amy" : (o.eff?.affY ?? 0) > 0 ? "yeonseo" : null;
@@ -909,6 +962,8 @@ export default function LoveApp() {
     if (!s) return;
     const data: SaveData = { s: withTime(s), name, ts: Date.now(), label: labelOf(s) };
     LS.set(KEY.save(n), JSON.stringify(data));
+    play("save");
+    if (n === "q") setHasQuick(true);
     flash(n === "q" ? "퀵세이브" : `${n}번에 저장`);
     setPanel(null);
   };
@@ -918,6 +973,8 @@ export default function LoveApp() {
     setName(d.name);
     setLog([]);
     setS({ ...d.s, seq: d.s.seq + 1, fx: [] });
+    // 불러온 직후 "지난 이야기" 한 장: 어디였는지 + 저장 직전 대사
+    setRecap({ s: d.s, n: Date.now() });
     playMs.current = 0;
     setGuide(guideTarget && isAdmin ? makeGuide(guideTarget) : null);
     setPhase("game");
@@ -937,6 +994,18 @@ export default function LoveApp() {
     load(n);
     flash("직전 선택지로 돌아왔어요");
   };
+  const [hasQuick, setHasQuick] = useState(false);
+  const [recap, setRecap] = useState<{ s: GState; n: number } | null>(null);
+  useEffect(() => {
+    if (!recap) return;
+    const id = window.setTimeout(() => setRecap(null), 3600);
+    return () => window.clearTimeout(id);
+  }, [recap]);
+  /** 저장 칸 덮어쓰기 확인 */
+  const [askOver, setAskOver] = useState<string | null>(null);
+  useEffect(() => {
+    if (phase === "game") setHasQuick(!!readSave("q"));
+  }, [phase]);
   const latestSave = useMemo(() => {
     if (phase !== "title") return null;
     let best: { n: string; ts: number } | null = null;
@@ -972,7 +1041,7 @@ export default function LoveApp() {
   const ending = rb?.k === "ending" ? ENDINGS.find((e) => e.id === rb.id) : null;
 
   return (
-    <div ref={wrap} className="lv-root" style={{ "--lv-box": cfg.box } as React.CSSProperties}>
+    <div ref={wrap} className="lv-root" style={{ "--lv-box": cfg.box, "--lv-fs": cfg.fs } as React.CSSProperties}>
       <div
         className={`lv-stage ${phase === "game" && disp?.memory != null ? "lv-mem-on" : ""} ${phase === "game" && disp?.cg && disp.cgfx?.mono ? "lv-cgmono" : ""}`}
         onClick={() => {
@@ -980,7 +1049,31 @@ export default function LoveApp() {
           if (cgIntro) return setCgIntro(null);
           advance();
         }}
-        // 우클릭 = 대사창 숨기기 (휠은 페이지 스크롤과 겹쳐서 지난 대사에 안 씀 — L 키 · LOG 버튼)
+        // 메뉴 버튼 소리: 마우스를 올리면 작은 틱, 누르면 확정음 (선택지 · 카드 · 미니게임은 자체 소리)
+        onPointerOver={(e) => {
+          if (e.pointerType !== "mouse") return;
+          const b = (e.target as HTMLElement).closest<HTMLButtonElement>("button:not(:disabled)");
+          if (b === hoverEl.current) return;
+          hoverEl.current = b;
+          if (!b || b.closest(".lv-mini, .lv-sp") || Date.now() - hoverAt.current < 45) return;
+          hoverAt.current = Date.now();
+          play("hover");
+        }}
+        onClickCapture={(e) => {
+          const b = (e.target as HTMLElement).closest<HTMLButtonElement>("button:not(:disabled)");
+          if (!b || b.closest(".lv-mini, .lv-sp, .lv-phone") || b.matches(".lv-choice, .lv-plan, .lv-free, .lv-voice, .lv-slot, [data-nosfx]")) return;
+          play("select");
+        }}
+        // 휠: 전체화면에서만 (창 모드에선 페이지 스크롤과 겹침) — 위 = 지난 대사, 아래 = 다음
+        onWheel={(e) => {
+          if (phase !== "game" || !document.fullscreenElement || hideUi || held || panel) return;
+          const now = Date.now();
+          if (now - wheelAt.current < 280) return;
+          wheelAt.current = now;
+          if (e.deltaY < 0) setPanel("log");
+          else if (e.deltaY > 0) advance();
+        }}
+        // 우클릭 = 대사창 숨기기
         onContextMenu={(e) => {
           if (phase !== "game") return;
           e.preventDefault();
@@ -1030,6 +1123,25 @@ export default function LoveApp() {
                     </span>
                   </button>
                 </div>
+                {endings.length > 0 && (
+                  <div className="lv-title-clear" title="트루 · 그랜드 엔딩">
+                    {(
+                      [
+                        ["amy_true", "♥", "에이미"],
+                        ["yeon_true", "♠", "연서"],
+                        ["grand", "★", "그랜드"],
+                      ] as const
+                    ).map(([id, ic, l]) => (
+                      <span key={id} className={endings.includes(id) ? "lv-clear-on" : ""}>
+                        <b>{ic}</b>
+                        {l}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                <button className="lv-title-story" onClick={() => setPanel("story")}>
+                  <span>◇</span> 줄거리 · 인물
+                </button>
                 <div className="absolute bottom-[2.2%] right-[2%] text-[1cqw] text-[#e9d9b0]/70">
                   ◇ Ver. 1.0 알파
                 </div>
@@ -1056,6 +1168,11 @@ export default function LoveApp() {
             )}
             {phase === "name" && (
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-[1.2cqw]">
+                <div className="lv-name-teaser">
+                  <p>3년 전, 손이 제일 빠른 꾼이었던 남자.</p>
+                  <p>다시는 테이블에 앉지 않겠다고 정한 그가, 홀덤펍 「HOUSE」의 딜러가 된다.</p>
+                  <button onClick={() => setPanel("story")}>줄거리 · 인물 먼저 보기 ›</button>
+                </div>
                 <div className="text-[1.8cqw] text-white/85">주인공 이름</div>
                 <input
                   value={name}
@@ -1086,6 +1203,7 @@ export default function LoveApp() {
                 }}
                 onBack={() => setPhase("title")}
                 onPlay={(id) => bgm(id)}
+                ctl={bgmCtl}
               />
             )}
           </div>
@@ -1269,10 +1387,10 @@ export default function LoveApp() {
                   <QBtn onClick={() => setPanel("save")}>SAVE</QBtn>
                   <QBtn onClick={() => setPanel("load")}>LOAD</QBtn>
                   <i className="lv-qm-sep" />
-                  <QBtn title="빠른 저장 (슬롯 하나)" onClick={() => save("q")}>
+                  <QBtn title="빠른 저장 (슬롯 하나)" nosfx onClick={() => save("q")}>
                     Q.SAVE
                   </QBtn>
-                  <QBtn title="빠른 저장한 곳 불러오기" onClick={() => load("q")}>
+                  <QBtn title="빠른 저장한 곳 불러오기" disabled={!hasQuick} onClick={() => load("q")}>
                     Q.LOAD
                   </QBtn>
                 </div>
@@ -1445,7 +1563,7 @@ export default function LoveApp() {
                   {rb.prompt}
                 </div>
                 {guideOn && <GuideNote target={guide!.target} ready={guideReady} any={guideAny} />}
-                <div className="flex gap-[1.5cqw]">
+                <div className="lv-free-wrap flex gap-[1.5cqw]">
                   {rb.opts.map((o, oi) => !guideShow(oi) ? null :
                     o.card ? (
                       <button key={o.text} className="lv-plan" onClick={() => choose(o)}>
@@ -1696,7 +1814,7 @@ export default function LoveApp() {
         {/* ===== 백로그 · 저장 · 불러오기 ===== */}
         {panel && (
           <div
-            className="absolute inset-0 z-[60] flex flex-col bg-black/85 p-[2.5cqw]"
+            className="lv-panel absolute inset-0 z-[60] flex flex-col bg-[#05070f]/92 p-[2.5cqw] backdrop-blur-[4px]"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="mb-[1.2cqw] flex items-center justify-between">
@@ -1709,31 +1827,36 @@ export default function LoveApp() {
                       ? "환경 설정"
                       : panel === "rel"
                         ? "관계"
-                        : "불러오기"}
+                        : panel === "story"
+                          ? "줄거리 · 인물"
+                          : "불러오기"}
               </b>
               <button className="lv-btn-ghost" onClick={() => setPanel(null)}>
                 닫기
               </button>
             </div>
-            {panel === "config" ? (
+            {panel === "story" ? (
+              <StoryPanel />
+            ) : panel === "config" ? (
               <ConfigPanel cfg={cfg} setCfg={setCfg} onTest={() => play("chip")} />
             ) : panel === "rel" ? (
               s && <RelPanel vars={s.vars} />
             ) : panel === "log" ? (
-              <LogList log={log} sub={sub} onVoice={(u) => voice(u)} />
+              <LogList log={log} sub={sub} onVoice={(u) => voice(u)} onClose={() => setPanel(null)} />
             ) : (
-              <div className="grid flex-1 grid-cols-3 gap-[1cqw] overflow-y-auto">
+              <div className="grid flex-1 auto-rows-min grid-cols-4 gap-[1cqw] overflow-y-auto pr-[0.6cqw]">
                 {[...SLOTS, "q", ...(panel === "load" ? ["a1", "a2", "a3"] : [])].map((n) => {
                   const d = readSave(n);
                   const can = panel === "save" ? n !== "q" && phase === "game" : !!d;
                   return (
+                    <Fragment key={n}>
+                      {n === "a1" && <div className="lv-slot-sec">자동 저장 · 선택지 직전</div>}
                     <button
-                      key={n}
                       disabled={!can}
                       className={`lv-slot ${n.startsWith("a") ? "lv-slot-auto" : ""}`}
-                      onClick={() => (panel === "save" ? save(n) : load(n))}
+                      onClick={() => (panel === "save" ? (d ? setAskOver(n) : save(n)) : load(n))}
                     >
-                      {d && <SlotThumb s={d.s} />}
+                      {d ? <SlotThumb s={d.s} /> : <div className="lv-slot-thumb lv-slot-empty">♠</div>}
                       <div className="text-[1.2cqw] text-[#ffd27a]">
                         {n === "q"
                           ? "QUICK"
@@ -1745,11 +1868,13 @@ export default function LoveApp() {
                         {d ? d.label : "비어 있음"}
                       </div>
                       {d && (
-                        <div className="mt-[0.3cqw] text-[1cqw] text-white/45">
-                          {new Date(d.ts).toLocaleString("ko-KR")}
+                        <div className="mt-[0.3cqw] flex justify-between gap-[0.6cqw] text-[1cqw] text-white/45">
+                          <span>{new Date(d.ts).toLocaleString("ko-KR")}</span>
+                          {(d.s.vars._sec ?? 0) > 0 && <span>플레이 {fmtTime(d.s.vars._sec ?? 0)}</span>}
                         </div>
                       )}
                     </button>
+                    </Fragment>
                   );
                 })}
               </div>
@@ -1757,6 +1882,44 @@ export default function LoveApp() {
           </div>
         )}
 
+        {recap && phase === "game" && (
+          <div key={recap.n} className="lv-recap" onClick={(e) => (e.stopPropagation(), setRecap(null))}>
+            <small>지난 이야기</small>
+            <b>{recap.s.disp.day ? `DAY ${recap.s.disp.day.d} · ${recap.s.disp.day.slot}` : "프롤로그"}</b>
+            {(["amy", "yeonseo"] as const).map((h) => (
+              <p key={h}>
+                <em style={{ color: NAME_COLOR[h] }}>{NAME[h]}</em>
+                <span className={h === "amy" ? "lv-heart-a" : "lv-heart-y"}>{hearts(heroStage(recap.s.vars, h))}</span>
+                「{STAGE_NAME[h][heroStage(recap.s.vars, h)]}」
+              </p>
+            ))}
+            {(recap.s.vars._sec ?? 0) > 0 && <p className="lv-recap-time">플레이 {fmtTime(recap.s.vars._sec ?? 0)}</p>}
+          </div>
+        )}
+        {askOver && (
+          <div className="lv-confirm z-[75]" onClick={() => setAskOver(null)}>
+            <div className="lv-confirm-card" onClick={(e) => e.stopPropagation()}>
+              <b className="lv-confirm-title">
+                {askOver === "q" ? "빠른 저장" : `${askOver}번`} 칸에 덮어쓸까요?
+              </b>
+              <div className="text-[1.15cqw] text-white/55">{readSave(askOver)?.label}</div>
+              <div className="lv-confirm-btns">
+                <button className="lv-btn-ghost" onClick={() => setAskOver(null)}>
+                  취소
+                </button>
+                <button
+                  className="lv-btn-gold"
+                  onClick={() => {
+                    save(askOver);
+                    setAskOver(null);
+                  }}
+                >
+                  덮어쓰기
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
         {toast && <div className="lv-toast">{toast}</div>}
       </div>
     </div>
@@ -2177,14 +2340,25 @@ function QBtn({
   onClick,
   on,
   title,
+  nosfx,
+  disabled,
 }: {
   children: React.ReactNode;
   onClick: () => void;
   on?: boolean;
   title?: string;
+  nosfx?: boolean;
+  disabled?: boolean;
 }) {
   return (
-    <button className={`lv-qb ${on ? "lv-qb-on" : ""}`} onClick={onClick} title={title} aria-pressed={on}>
+    <button
+      className={`lv-qb ${on ? "lv-qb-on" : ""}`}
+      onClick={onClick}
+      title={title}
+      aria-pressed={on}
+      disabled={disabled}
+      data-nosfx={nosfx || undefined}
+    >
       {children}
     </button>
   );
@@ -2475,6 +2649,40 @@ const MUSIC: [BgmId, string][] = [
   ["badend", "배드 엔딩"],
 ];
 
+type MusicCtl = { pos: () => [number, number, boolean]; toggle: () => void; seek: (r: number) => void };
+const mmss = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
+/** 음악실 아래 재생 막대: 지금 곡 · 진행(눌러서 이동) · 이전/재생·멈춤/다음 */
+function MusicBar({ ctl, title, onStep }: { ctl: MusicCtl; title: string; onStep: (d: number) => void }) {
+  const [p, setP] = useState<[number, number, boolean]>([0, 0, true]);
+  useEffect(() => {
+    const id = window.setInterval(() => setP(ctl.pos()), 250);
+    return () => window.clearInterval(id);
+  }, [ctl]);
+  const [t, d, paused] = p;
+  return (
+    <div className="lv-mbar">
+      <button onClick={() => onStep(-1)} title="이전 곡">⏮</button>
+      <button className="lv-mbar-play" onClick={ctl.toggle} title={paused ? "재생" : "멈춤"}>
+        {paused ? "▶" : "❚❚"}
+      </button>
+      <button onClick={() => onStep(1)} title="다음 곡">⏭</button>
+      <div className="lv-mbar-title">♪ {title}</div>
+      <div
+        className="lv-mbar-track"
+        onClick={(e) => {
+          const r = e.currentTarget.getBoundingClientRect();
+          ctl.seek((e.clientX - r.left) / r.width);
+        }}
+      >
+        <i style={{ width: `${d ? (t / d) * 100 : 0}%` }} />
+      </div>
+      <div className="lv-mbar-time">
+        {mmss(t)} / {d ? mmss(d) : "-:--"}
+      </div>
+    </div>
+  );
+}
+
 function Gallery({
   isAdmin,
   onCredit,
@@ -2483,6 +2691,7 @@ function Gallery({
   cgvs,
   onBack,
   onPlay,
+  ctl,
 }: {
   isAdmin?: boolean;
   onCredit?: (id: EndingId) => void;
@@ -2491,6 +2700,7 @@ function Gallery({
   cgvs: string[];
   onBack: () => void;
   onPlay: (id: BgmId) => void;
+  ctl: MusicCtl;
 }) {
   const [tab, setTab] = useState<"end" | "cg" | "music">("end");
   const [track, setTrack] = useState<BgmId>("title");
@@ -2670,7 +2880,8 @@ function Gallery({
         </div>
       )}
       {tab === "music" && (
-        <div className="grid flex-1 grid-cols-3 content-start gap-[0.8cqw]">
+        <div className="flex min-h-0 flex-1 flex-col gap-[1cqw]">
+        <div className="grid flex-1 grid-cols-3 content-start gap-[0.8cqw] overflow-y-auto pr-[0.6cqw]">
           {MUSIC.map(([id, t], i) => (
             <button
               key={id}
@@ -2684,6 +2895,17 @@ function Gallery({
               {t}
             </button>
           ))}
+        </div>
+          <MusicBar
+            ctl={ctl}
+            title={MUSIC.find(([id]) => id === track)?.[1] ?? ""}
+            onStep={(d) => {
+              const i = MUSIC.findIndex(([id]) => id === track);
+              const nx = MUSIC[(i + d + MUSIC.length) % MUSIC.length][0];
+              setTrack(nx);
+              onPlay(nx);
+            }}
+          />
         </div>
       )}
       {view && (
@@ -2724,8 +2946,19 @@ function Gallery({
         {ENDINGS.map((e) => {
           const ok = got.includes(e.id);
           return (
-            <div key={e.id} className={`lv-cell lv-k-${e.kind} ${ok ? "" : "lv-cell-locked"}`}>
-              <div className="text-[0.95cqw] text-white/50">#{e.no}</div>
+            <div
+              key={e.id}
+              className={`lv-cell lv-k-${e.kind} ${ok ? "" : "lv-cell-locked"}`}
+              style={
+                ok && (`end_${e.id}` as CgId) in CG
+                  ? ({ "--cell-bg": `url("${CG[`end_${e.id}` as CgId].src}")` } as React.CSSProperties)
+                  : undefined
+              }
+            >
+              <div className="flex items-center justify-between text-[0.95cqw] text-white/50">
+                #{e.no}
+                {ok && <span className="lv-cell-kind">{KIND_KO[e.kind]}</span>}
+              </div>
               <div className="mt-[0.3cqw] text-[1.3cqw] font-bold">{ok ? e.title : "???"}</div>
               <div className="mt-[0.3cqw] text-[0.95cqw] text-white/60">
                 {ok ? e.copy : `조건: ${e.hint}`}
@@ -2827,6 +3060,42 @@ function ConfigPanel({
         slider(cfg.box, (n) => setCfg({ box: n }), 30)
       )}
       {row(
+        "대사 글자 크기",
+        <>
+          {([
+            [0.9, "작게"],
+            [1, "보통"],
+            [1.12, "크게"],
+          ] as const).map(([v, l]) => (
+            <button
+              key={v}
+              className={`lv-cfg-step ${cfg.fs === v ? "lv-cfg-on" : ""}`}
+              onClick={() => setCfg({ fs: v })}
+            >
+              {l}
+            </button>
+          ))}
+        </>
+      )}
+      {row(
+        "넘길 때 음성",
+        <>
+          <button
+            className={`lv-cfg-step ${cfg.voiceKeep ? "lv-cfg-on" : ""}`}
+            onClick={() => setCfg({ voiceKeep: true })}
+          >
+            끝까지 듣기
+          </button>
+          <button
+            className={`lv-cfg-step ${!cfg.voiceKeep ? "lv-cfg-on" : ""}`}
+            onClick={() => setCfg({ voiceKeep: false })}
+          >
+            바로 끊기
+          </button>
+        </>,
+        "다음 음성이 나오면 그때 끊겨요"
+      )}
+      {row(
         "스킵",
         <>
           <button
@@ -2864,29 +3133,114 @@ function ConfigPanel({
       )}
       <div className="mt-[1.2cqw] text-[1.05cqw] leading-relaxed text-white/45">
         단축키 — 스페이스 · 엔터 · 클릭: 다음 / Ctrl: 누르는 동안 스킵 / H · 우클릭: 대사창 숨기기 /
-        A: 오토 / L · ↑: 지난 대사 / Esc: 창 닫기
+        A: 오토 / L · ↑: 지난 대사 / 1~9: 선택지 고르기 / Esc: 창 닫기 / 전체화면에선 휠 ↑ 지난 대사 · 휠 ↓ 다음
       </div>
     </div>
   );
 }
 
 /** 지난 대사 — 음성 있는 줄은 ♪ 로 다시 듣기, 열면 맨 아래(최근)부터 */
+/** 줄거리 · 인물 — 1주차 초반까지만 (스포일러 없음) */
+const STORY_TEXT = [
+  "3년 전, 사람들은 그를 \"손이 제일 빠른 꾼\"이라고 불렀다. 큰 판에서 한 번에 무너진 뒤 그는 규칙 하나를 정했다. 다시는 테이블에 앉지 않는다.",
+  "남은 건 빚, 그리고 혼자 셔플을 하는 손가락 버릇뿐.",
+  "그리고 지금, 성수동 골목 2층 홀덤펍 「HOUSE」. 딜러 알바 첫날.",
+  "매일 밤 시끄럽게 지고 가는 금발 대학생과, 매일 밤 말없이 이기고 가는 검은 장갑의 여자. 월급 후한 사장, 밥부터 퍼 주는 주방 이모, 시끄러운 단골 둘. 그리고 지하에는 소문만 무성한 VIP룸.",
+  "딜러는 보이지 않는 게 일인데. 첫날부터, 둘이나 나를 봤다.",
+];
+const STORY_CAST: { who: Who; name: string; tag: string; line: string; quote: string }[] = [
+  {
+    who: "amy",
+    name: "에이미",
+    tag: "22 · 대학생 · 편의점 알바",
+    line: "매일 밤 7·2로 올인하고 지는 단골. 지면 뾰로통, 이기면 세상을 다 가진 얼굴. 목에는 낡은 군번줄.",
+    quote: "\"오늘은 무조건 내가 이겨.\"",
+  },
+  {
+    who: "yeonseo",
+    name: "연서",
+    tag: "29 · 구석 자리 단골",
+    line: "큰 판은 한 번도 지지 않는 손님. 오른손에만 낀 검은 레이스 장갑, 칩은 손가락 세 개로 쌓는다. 첫날부터 딜러의 버릇을 알아봤다.",
+    quote: "\"셔플할 때 엄지가 먼저 나가네요.\"",
+  },
+];
+const STORY_SUBS: { who: Who; name: string; line: string }[] = [
+  { who: "boss", name: "백상현", line: "「HOUSE」 사장. 늘 웃는 신사. \"테이블은 공평해요.\"" },
+  { who: "chunhee", name: "춘희 이모", line: "주방 이모. 주인공의 3년 전을 아는 유일한 어른" },
+  { who: "taeyang", name: "태양", line: "허세 담당 단골. 기적을 믿는다" },
+  { who: "jeongmin", name: "정민", line: "측정 담당 단골. 모든 걸 기록한다" },
+];
+function StoryPanel() {
+  return (
+    <div className="lv-story flex-1 overflow-y-auto pr-[1cqw]">
+      <div className="lv-story-text">
+        {STORY_TEXT.map((p, i) => (
+          <p key={i}>{p}</p>
+        ))}
+      </div>
+      <div className="lv-story-cast">
+        {STORY_CAST.map((c) => (
+          <div key={c.who} className="lv-story-card" style={{ "--nc": NAME_COLOR[c.who] } as React.CSSProperties}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            {FACE_ICON[c.who] && <img src={FACE_ICON[c.who]} alt="" />}
+            <div>
+              <b>{c.name}</b>
+              <small>{c.tag}</small>
+              <p>{c.line}</p>
+              <q>{c.quote}</q>
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="lv-story-subs">
+        {STORY_SUBS.map((c) => (
+          <div key={c.who}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            {FACE_ICON[c.who] && <img src={FACE_ICON[c.who]} alt="" />}
+            <span>
+              <b>{c.name}</b> {c.line}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+type LogLine = { who: Who; text: string; pick?: boolean };
 function LogList({
   log,
   sub,
   onVoice,
+  onClose,
 }: {
-  log: { who: Who; text: string }[];
+  log: LogLine[];
   sub: (t: string) => string;
   onVoice: (u: string) => void;
+  onClose: () => void;
 }) {
   const box = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (box.current) box.current.scrollTop = box.current.scrollHeight;
   }, []);
   return (
-    <div ref={box} className="flex-1 space-y-[0.8cqw] overflow-y-auto pr-[1cqw]">
+    <div
+      ref={box}
+      className="flex-1 space-y-[0.8cqw] overflow-y-auto pr-[1cqw]"
+      // 전체화면에서 맨 아래까지 내린 뒤 휠을 한 번 더 내리면 닫힘 (미연시 백로그 관례)
+      onWheel={(e) => {
+        const el = box.current;
+        if (!el || e.deltaY <= 0 || !document.fullscreenElement) return;
+        if (el.scrollTop + el.clientHeight >= el.scrollHeight - 2) onClose();
+      }}
+    >
       {log.map((l, i) => {
+        if (l.pick)
+          return (
+            <div key={i} className="lv-log-pick">
+              <span>▶ 선택</span> {sub(l.text)}
+            </div>
+          );
         const v = VOICE_BY_TEXT[l.text];
         return (
           <div key={i} className="flex gap-[0.6cqw] text-[1.45cqw] leading-relaxed">

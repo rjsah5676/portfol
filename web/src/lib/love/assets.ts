@@ -325,6 +325,9 @@ export const SFX: Record<SfxId, string> = {
   tape: `${B}/sfx/tape.mp3`,
   sizzle: `${B}/sfx/sizzle.mp3`,
   tick: `${B}/sfx/tick.mp3`,
+  hover: `${B}/sfx/hover.mp3`,
+  select: `${B}/sfx/select.mp3`,
+  save: `${B}/sfx/save.mp3`,
 };
 /** 비 오는 골목 · 비 CG 동안 깔리는 빗소리 루프 */
 export const RAIN_LOOP = `${B}/sfx/rain-loop.mp3`;

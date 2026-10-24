@@ -146,7 +146,10 @@ export type SfxId =
   | "chain"
   | "tape"
   | "sizzle"
-  | "tick";
+  | "tick"
+  | "hover"
+  | "select"
+  | "save";
 export type BgmId =
   | "pub"
   | "vip"

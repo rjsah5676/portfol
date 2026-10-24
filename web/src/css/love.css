@@ -14,6 +14,9 @@
   /* 서술 전용: 획 대비가 뚜렷한 나눔명조 — 대사(프리텐다드)와 한눈에 갈리게 */
   --lv-narr: "Nanum Myeongjo", "Batang", "Noto Serif KR", serif;
   font-family: var(--lv-sans);
+  /* 커서: 평소 = 남색 화살표(금색 테), 누를 수 있는 곳 = 금색 화살표 */
+  --lv-cur: url("data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%2724%27 height=%2724%27 viewBox=%270 0 24 24%27%3E%3Cpath d=%27M2.5 2 L2.5 19 L7 15 L10.2 21.6 L13 20.3 L9.9 13.9 L16 13.9 Z%27 fill=%27%23121a3e%27 stroke=%27%23ffd27a%27 stroke-width=%271.5%27 stroke-linejoin=%27round%27/%3E%3C/svg%3E") 3 2, default;
+  --lv-cur-hand: url("data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%2724%27 height=%2724%27 viewBox=%270 0 24 24%27%3E%3Cpath d=%27M2.5 2 L2.5 19 L7 15 L10.2 21.6 L13 20.3 L9.9 13.9 L16 13.9 Z%27 fill=%27%23ffd27a%27 stroke=%27%232a1d05%27 stroke-width=%271.5%27 stroke-linejoin=%27round%27/%3E%3Cpath d=%27M18.5 13.5 L19.5 16.5 L22.5 17.5 L19.5 18.5 L18.5 21.5 L17.5 18.5 L14.5 17.5 L17.5 16.5 Z%27 fill=%27%23fff4d0%27 stroke=%27%232a1d05%27 stroke-width=%270.8%27 stroke-linejoin=%27round%27/%3E%3C/svg%3E") 3 2, pointer;
 }
 .lv-root:fullscreen {
   max-width: none;
@@ -30,7 +33,7 @@
   overflow: hidden;
   container-type: inline-size;
   color: #fff;
-  cursor: pointer;
+  cursor: var(--lv-cur);
 }
 .lv-root:fullscreen .lv-stage {
   width: min(100vw, 177.78vh);
@@ -264,7 +267,7 @@
 }
 .lv-text {
   font-weight: 500;
-  font-size: 2cqw;
+  font-size: calc(2cqw * var(--lv-fs, 1));
   line-height: 1.6;
   letter-spacing: 0.01em;
   word-break: keep-all;
@@ -383,7 +386,7 @@
   color: #ffd27a;
   font-size: 1.1cqw;
   line-height: 1;
-  cursor: pointer;
+  cursor: var(--lv-cur-hand);
 }
 .lv-voice:hover {
   background: #c9a25a;
@@ -502,7 +505,7 @@
 }
 .lv-menu-btn:disabled {
   opacity: 0.4;
-  cursor: default;
+  cursor: var(--lv-cur);
 }
 .lv-btn-gold,
 .lv-btn-ghost {
@@ -530,7 +533,7 @@
 }
 .lv-btn-gold:disabled {
   opacity: 0.4;
-  cursor: default;
+  cursor: var(--lv-cur);
 }
 
 /* 메시지 — 스마트폰 프레임 */
@@ -779,7 +782,7 @@
 
 /* 미니게임 */
 .lv-mini {
-  cursor: default;
+  cursor: var(--lv-cur);
   animation: lv-fadein 0.3s ease;
 }
 .lv-mini-title {
@@ -921,7 +924,7 @@
 }
 .lv-slot:disabled {
   opacity: 0.4;
-  cursor: default;
+  cursor: var(--lv-cur);
 }
 .lv-slot:hover:not(:disabled) {
   border-color: #ffd27a;
@@ -1020,7 +1023,7 @@
 .lv-sp {
   background-size: cover;
   background-position: center;
-  cursor: default;
+  cursor: var(--lv-cur);
 }
 .lv-sp-opp {
   position: absolute;
@@ -1234,7 +1237,7 @@
 }
 .lv-title-btn:disabled {
   opacity: 0.45;
-  cursor: default;
+  cursor: var(--lv-cur);
 }
 .lv-suit {
   position: absolute;
@@ -1437,7 +1440,7 @@
 }
 .lv-gal-cg-locked {
   border-color: rgba(255, 255, 255, 0.1);
-  cursor: default;
+  cursor: var(--lv-cur);
 }
 .lv-gal-cg-q {
   position: absolute;
@@ -1607,7 +1610,7 @@
 
 /* ===== 엔딩 크레딧 롤 (아래에서 위로 · 앨범 사진) ===== */
 .lv-roll {
-  cursor: default;
+  cursor: var(--lv-cur);
   background: radial-gradient(ellipse at 50% 40%, #16110c 0%, #000 70%);
 }
 .lv-roll-track {
@@ -1824,7 +1827,7 @@
   background: #0d1226cc;
   font-size: 1.05cqw;
   letter-spacing: 0.08em;
-  cursor: pointer;
+  cursor: var(--lv-cur-hand);
 }
 .lv-relhud:hover {
   border-color: #ffd27a;
@@ -2080,9 +2083,12 @@
     background 0.15s,
     color 0.15s;
 }
-.lv-qb:hover {
+.lv-qb:hover:not(:disabled) {
   opacity: 1;
   background: #ffffff10;
+}
+.lv-qb:disabled {
+  opacity: 0.2;
 }
 .lv-qb:focus-visible {
   opacity: 1;
@@ -2144,7 +2150,7 @@
   place-items: center;
   background: #05081acc;
   animation: lv-fadein 0.18s ease;
-  cursor: default;
+  cursor: var(--lv-cur);
 }
 .lv-confirm-card {
   display: grid;
@@ -2618,7 +2624,7 @@
   transition: background 0.2s, opacity 0.2s;
 }
 .lv-gal-arrow:hover:not(:disabled) { background: rgba(255, 210, 122, 0.18); }
-.lv-gal-arrow:disabled { opacity: 0.25; cursor: default; }
+.lv-gal-arrow:disabled { opacity: 0.25; cursor: var(--lv-cur); }
 .lv-gal-dot {
   width: 0.7cqw;
   height: 0.7cqw;
@@ -2643,7 +2649,7 @@
   inset: 0;
   z-index: 50;
   background: #000;
-  cursor: pointer;
+  cursor: var(--lv-cur-hand);
   animation: lv-fadein 0.3s ease both;
 }
 .lv-gal-view-media {
@@ -2671,7 +2677,7 @@
   background: linear-gradient(0deg, rgba(0, 0, 0, 0.78), transparent);
   color: #f3e6c8;
   font-size: 1.25cqw;
-  cursor: default;
+  cursor: var(--lv-cur);
   opacity: 0;
   transition: opacity 0.25s;
 }
@@ -2762,4 +2768,287 @@
 .lv-choice-silent {
   opacity: 0.8;
   font-style: italic;
+}
+
+/* ===== 커서 · 누름 반응 · 스크롤바 (공통) ===== */
+/* 누를 수 있는 것 = 금색 화살표, 나머지 = 기본 화살표. :where 로 우선순위 0 — 개별 규칙(잠긴 칸 등)이 이김 */
+:where(.lv-stage) :where(button, a[href], select, label, summary, [role="button"], input[type="range"], input[type="checkbox"]) {
+  cursor: var(--lv-cur-hand);
+}
+:where(.lv-stage) :where(button:disabled, select:disabled, input:disabled) {
+  cursor: var(--lv-cur);
+}
+:where(.lv-stage) :where(input[type="text"], input:not([type]), textarea) {
+  cursor: text;
+}
+/* 누르는 순간 살짝 눌림 (transform 과 따로 노는 translate 라 hover 확대와 안 부딪힘) */
+:where(.lv-stage) :where(button:not(:disabled)):active {
+  translate: 0 0.12cqw;
+  filter: brightness(0.9);
+}
+/* 스크롤바: 얇은 금색 막대 · 투명 트랙 (기본 흰 스크롤바 대신) */
+.lv-root ::-webkit-scrollbar {
+  width: 0.55cqw;
+  height: 0.55cqw;
+}
+.lv-root ::-webkit-scrollbar-track {
+  background: #ffffff0a;
+  border-radius: 99px;
+}
+.lv-root ::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #ffd27a, #c9a25a);
+  border: 0.12cqw solid transparent;
+  background-clip: padding-box;
+  border-radius: 99px;
+}
+.lv-root ::-webkit-scrollbar-thumb:hover {
+  background: #ffe2a3;
+  background-clip: padding-box;
+}
+.lv-root ::-webkit-scrollbar-corner {
+  background: transparent;
+}
+@supports not selector(::-webkit-scrollbar) {
+  .lv-root * {
+    scrollbar-width: thin;
+    scrollbar-color: #c9a25a #ffffff0a;
+  }
+}
+
+/* ===== 줄거리 · 인물 ===== */
+.lv-title-story {
+  position: absolute;
+  right: 2%;
+  bottom: 6.4%;
+  padding: 0.5cqw 1.2cqw;
+  border: 0.1cqw solid #c9a25a99;
+  border-radius: 99px;
+  background: #0b1028cc;
+  color: #f3e6c4;
+  font-size: 1.1cqw;
+  letter-spacing: 0.08em;
+  transition: border-color 0.15s, background 0.15s, color 0.15s;
+  animation: lv-up 0.6s 0.4s ease both;
+}
+.lv-title-story span { color: #c9a25a; }
+.lv-title-story:hover { border-color: #ffd27a; background: #172042; color: #ffd27a; }
+.lv-name-teaser {
+  max-width: 46cqw;
+  margin-bottom: 1.4cqw;
+  text-align: center;
+  font-family: var(--lv-narr);
+  color: #e9dcc0;
+  font-size: 1.35cqw;
+  line-height: 1.8;
+  text-shadow: 0 0.15cqw 0.5cqw #000;
+  animation: lv-fadein 0.6s ease both;
+}
+.lv-name-teaser button {
+  margin-top: 0.6cqw;
+  font-family: var(--lv-sans);
+  font-size: 1.05cqw;
+  color: #c9a25a;
+  letter-spacing: 0.06em;
+  border-bottom: 0.08cqw solid transparent;
+}
+.lv-name-teaser button:hover { color: #ffd27a; border-bottom-color: #ffd27a; }
+.lv-story {
+  display: grid;
+  grid-template-columns: 1.1fr 1fr;
+  gap: 1.4cqw 2.4cqw;
+  align-content: start;
+}
+.lv-story-text {
+  grid-row: span 2;
+  font-family: var(--lv-narr);
+  color: #ece0c6;
+  font-size: 1.45cqw;
+  line-height: 1.95;
+}
+.lv-story-text p + p { margin-top: 1cqw; }
+.lv-story-text p:last-child { color: #ffd27a; }
+.lv-story-cast { display: grid; gap: 1cqw; }
+.lv-story-card {
+  display: flex;
+  gap: 1.1cqw;
+  padding: 1cqw 1.2cqw;
+  border: 0.1cqw solid color-mix(in srgb, var(--nc) 55%, transparent);
+  border-radius: 0.8cqw;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--nc) 14%, #0b1028), #0b1028e6);
+}
+.lv-story-card img {
+  width: 6.4cqw;
+  height: 6.4cqw;
+  border-radius: 50%;
+  border: 0.15cqw solid var(--nc);
+  object-fit: cover;
+  flex-shrink: 0;
+}
+.lv-story-card b { color: var(--nc); font-size: 1.6cqw; margin-right: 0.6cqw; }
+.lv-story-card small { color: #ffffff80; font-size: 0.95cqw; }
+.lv-story-card p { margin-top: 0.3cqw; color: #ffffffd9; font-size: 1.15cqw; line-height: 1.6; }
+.lv-story-card q { display: block; margin-top: 0.3cqw; color: #ffd27a; font-size: 1.1cqw; quotes: none; }
+.lv-story-subs { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6cqw 1cqw; align-content: start; }
+.lv-story-subs > div { display: flex; align-items: center; gap: 0.6cqw; font-size: 1cqw; color: #ffffffb3; line-height: 1.4; }
+.lv-story-subs img { width: 3.2cqw; height: 3.2cqw; border-radius: 50%; border: 0.1cqw solid #c9a25a88; object-fit: cover; flex-shrink: 0; }
+.lv-story-subs b { color: #f3e6c4; }
+
+/* 저장 칸: 빈 칸도 같은 크기 그림 자리 · 자동 저장 구분선 */
+.lv-slot-empty {
+  display: grid;
+  place-items: center;
+  border: 0.1cqw dashed #c9a25a44;
+  background: repeating-linear-gradient(135deg, #ffffff05 0 0.6cqw, transparent 0.6cqw 1.2cqw);
+  color: #c9a25a55;
+  font-size: 2.4cqw;
+}
+.lv-slot-sec {
+  grid-column: 1 / -1;
+  margin-top: 0.6cqw;
+  padding-bottom: 0.3cqw;
+  border-bottom: 0.08cqw solid #c9a25a44;
+  color: #c9a25a;
+  font-size: 1.1cqw;
+  letter-spacing: 0.1em;
+}
+.lv-slot { transition: border-color 0.15s, transform 0.15s, box-shadow 0.15s; }
+.lv-slot:hover:not(:disabled) { transform: translateY(-0.15cqw); box-shadow: 0 0.5cqw 1.4cqw #000a, 0 0 0 0.1cqw #ffd27a55; }
+
+/* 불러온 직후 "지난 이야기" 카드 */
+.lv-recap {
+  position: absolute;
+  left: 2%;
+  top: 15%;
+  z-index: 72;
+  width: 24cqw;
+  padding: 1cqw 1.4cqw;
+  border: 0.1cqw solid #c9a25a99;
+  border-radius: 0.8cqw;
+  background: linear-gradient(180deg, #121a3ef2, #0a0f26f2);
+  box-shadow: 0 0.8cqw 2.4cqw #000c;
+  animation: lv-recap 3.6s ease both;
+}
+.lv-recap small { display: block; color: #c9a25a; font-size: 0.95cqw; letter-spacing: 0.3em; }
+.lv-recap b { display: block; margin-top: 0.2cqw; color: #ffd27a; font-size: 1.5cqw; }
+.lv-recap p { display: flex; align-items: center; gap: 0.5cqw; margin-top: 0.35cqw; color: #ffffffcc; font-size: 1.1cqw; line-height: 1.5; }
+.lv-recap em { width: 3.6cqw; font-style: normal; font-weight: 700; }
+.lv-recap .lv-recap-time { color: #ffffff70; font-size: 0.95cqw; }
+@keyframes lv-recap {
+  0% { opacity: 0; transform: translateY(-0.6cqw); }
+  10%, 82% { opacity: 1; transform: none; }
+  100% { opacity: 0; }
+}
+
+/* 엔딩 칸: 본 엔딩은 엔딩 CG 를 깔고 종류 배지 */
+.lv-cell {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  background: var(--cell-bg, none) center / cover, #0b1028d9;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+.lv-cell::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(180deg, #0b1028cc, #0b1028f2 70%);
+}
+.lv-cell:not(.lv-cell-locked):hover { transform: translateY(-0.15cqw); box-shadow: 0 0 1.2cqw color-mix(in srgb, var(--k) 40%, transparent); }
+.lv-cell-kind {
+  padding: 0.05cqw 0.6cqw;
+  border: 0.08cqw solid var(--k);
+  border-radius: 99px;
+  color: var(--k);
+  font-size: 0.85cqw;
+  font-weight: 700;
+}
+
+/* 음악실 재생 막대 */
+.lv-mbar {
+  display: flex;
+  align-items: center;
+  gap: 0.8cqw;
+  padding: 0.8cqw 1.2cqw;
+  border: 0.1cqw solid #c9a25a66;
+  border-radius: 99px;
+  background: #0b1028e6;
+}
+.lv-mbar button {
+  width: 2.6cqw;
+  height: 2.6cqw;
+  border-radius: 50%;
+  color: #f3e6c4;
+  font-size: 1.1cqw;
+  transition: background 0.15s, color 0.15s;
+}
+.lv-mbar button:hover { background: #ffffff14; color: #ffd27a; }
+.lv-mbar .lv-mbar-play { background: #c9a25a; color: #0b1028; }
+.lv-mbar .lv-mbar-play:hover { background: #ffd27a; color: #0b1028; }
+.lv-mbar-title { width: 22cqw; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: #ffd27a; font-size: 1.2cqw; }
+.lv-mbar-track { position: relative; flex: 1; height: 0.5cqw; border-radius: 99px; background: #ffffff1f; cursor: var(--lv-cur-hand); }
+.lv-mbar-track i { position: absolute; inset: 0 auto 0 0; border-radius: 99px; background: linear-gradient(90deg, #c9a25a, #ffd27a); }
+.lv-mbar-time { width: 7cqw; text-align: right; color: #ffffff80; font-size: 1cqw; font-variant-numeric: tabular-nums; }
+.lv-log-pick {
+  margin-left: 2.8cqw;
+  padding: 0.3cqw 0.9cqw;
+  border-left: 0.2cqw solid #ffd27a;
+  background: linear-gradient(90deg, #ffd27a1f, transparent 70%);
+  color: #ffe2a3;
+  font-size: 1.35cqw;
+}
+.lv-log-pick span { color: #c9a25a; font-size: 1cqw; letter-spacing: 0.1em; margin-right: 0.4cqw; }
+
+/* 타이틀: 트루 · 그랜드 클리어 표시 (진행할수록 하나씩 켜짐) */
+.lv-title-clear {
+  position: absolute;
+  left: 2%;
+  top: 3%;
+  display: flex;
+  gap: 0.6cqw;
+  animation: lv-up 0.6s 0.5s ease both;
+}
+.lv-title-clear span {
+  display: flex;
+  align-items: center;
+  gap: 0.3cqw;
+  padding: 0.25cqw 0.8cqw;
+  border: 0.08cqw solid #ffffff22;
+  border-radius: 99px;
+  background: #0b1028b3;
+  color: #ffffff40;
+  font-size: 0.9cqw;
+  letter-spacing: 0.06em;
+}
+.lv-title-clear b { font-size: 1cqw; }
+.lv-title-clear .lv-clear-on {
+  border-color: #ffd27a;
+  color: #ffd27a;
+  box-shadow: 0 0 0.8cqw #ffd27a55;
+}
+
+/* 선택지 · 일정 카드 번호 (숫자 키로 고를 수 있음) — 마우스 있는 화면만 */
+@media (hover: hover) {
+  .lv-choice-in, .lv-free-wrap { counter-reset: lvch; }
+  .lv-choice:not(:disabled), .lv-plan, .lv-free { position: relative; counter-increment: lvch; }
+  .lv-choice:not(:disabled)::before,
+  .lv-plan::before,
+  .lv-free::before {
+    content: counter(lvch);
+    position: absolute;
+    left: 0.9cqw;
+    top: 50%;
+    translate: 0 -50%;
+    width: 1.5cqw;
+    height: 1.5cqw;
+    display: grid;
+    place-items: center;
+    border: 0.08cqw solid #c9a25a88;
+    border-radius: 0.3cqw;
+    color: #c9a25acc;
+    font-size: 0.9cqw;
+    font-weight: 700;
+    font-family: var(--lv-sans);
+  }
+  .lv-plan::before { top: 0.9cqw; translate: none; }
 }
