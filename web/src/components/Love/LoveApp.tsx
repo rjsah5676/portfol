@@ -1202,7 +1202,7 @@ export default function LoveApp() {
                   <span>◇</span> 줄거리 · 인물
                 </button>
                 <div className="absolute bottom-[2.2%] right-[2%] text-[1cqw] text-[#e9d9b0]/70">
-                  ◇ Ver. 1.0 알파
+                  ◇ Ver. 1.0 베타
                 </div>
                 {isAdmin && (
                   <div className="lv-admin-box" onClick={(e) => e.stopPropagation()}>
