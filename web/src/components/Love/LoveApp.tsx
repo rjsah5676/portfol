@@ -279,6 +279,20 @@ export default function LoveApp() {
   const [lastSay, setLastSay] = useState<{ who: Who; mood: string; text: string } | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [phoneShown, setPhoneShown] = useState(0);
+  /** 장면 전환 커튼 — 장소가 바뀌면 검게 닫혔다가 새 장면으로 열림 (닫히는 동안은 이전 장면을 그대로 보여 줌) */
+  const [curtain, setCurtain] = useState<{ n: number; kind: "dip" | "in" } | null>(null);
+  const [held, setHeld] = useState<GState | null>(null);
+  const heldRef = useRef(false);
+  useEffect(() => {
+    heldRef.current = !!held;
+  }, [held]);
+  const shownRef = useRef<GState | null>(null);
+  const curN = useRef(0);
+  /** 퇴장 페이드: 방금 사라진 캐릭터 · CG 를 잠깐 더 그려서 서서히 사라지게 */
+  const [ghosts, setGhosts] = useState<{ k: CharKey; c: NonNullable<GState["disp"]["chars"][CharKey]>; outfit?: Outfit; n: number }[]>([]);
+  const [cgGhost, setCgGhost] = useState<{ id: CgId; v?: string | null; n: number } | null>(null);
+  const prevDisp = useRef<GState["disp"] | null>(null);
+  const ghostN = useRef(0);
   /** 방치 · 터치 반응 (말풍선 + 잠깐 표정) */
   const [react, setReact] = useState<(ReactLine & { who: CharKey; n: number; seq: number }) | null>(
     null
@@ -440,6 +454,62 @@ export default function LoveApp() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [s?.seq]);
 
+  // ---------- 장면 전환 커튼 ----------
+  // 게임에 들어올 때: 검은 화면에서 천천히 열림
+  useEffect(() => {
+    if (phase !== "game") {
+      shownRef.current = null;
+      return;
+    }
+    const n = ++curN.current;
+    setCurtain({ n, kind: "in" });
+    // 첫 대사는 화면이 거의 열린 뒤에 타자 시작
+    const t0 = window.setTimeout(() => setTyped(0), 650);
+    const t = window.setTimeout(() => setCurtain((c) => (c?.n === n ? null : c)), 1500);
+    return () => {
+      window.clearTimeout(t0);
+      window.clearTimeout(t);
+    };
+  }, [phase]);
+  // 장소가 바뀔 때: 이전 장면을 잡아 둔 채 검게 닫고 → 새 장면으로 바꾼 뒤 → 열림 (스킵 중엔 바로)
+  useEffect(() => {
+    if (phase !== "game" || !s) return;
+    const prev = shownRef.current;
+    shownRef.current = s;
+    if (!prev || skip || prev.disp.bg === s.disp.bg) return;
+    const n = ++curN.current;
+    setHeld(prev);
+    setCurtain({ n, kind: "dip" });
+    window.setTimeout(() => {
+      if (curN.current !== n) return;
+      setHeld(null);
+      setTyped(0);
+    }, 460);
+    window.setTimeout(() => setCurtain((c) => (c?.n === n ? null : c)), 1250);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [s?.seq]);
+  // 퇴장 페이드 (같은 장소 안에서만 — 장소가 바뀌면 커튼이 덮음)
+  const viewDisp = (held ?? s)?.disp ?? null;
+  useEffect(() => {
+    const prev = prevDisp.current;
+    prevDisp.current = viewDisp;
+    if (!prev || !viewDisp || prev.bg !== viewDisp.bg || skip) return;
+    const n = ++ghostN.current;
+    const gone = (Object.keys(prev.chars) as CharKey[]).filter((k) => !viewDisp.chars[k]);
+    if (gone.length) {
+      setGhosts((g) => [
+        ...g.filter((x) => !gone.includes(x.k) && !viewDisp.chars[x.k]),
+        ...gone.map((k) => ({ k, c: prev.chars[k]!, outfit: prev.outfit?.[k], n })),
+      ]);
+      window.setTimeout(() => setGhosts((g) => g.filter((x) => x.n !== n)), 480);
+    }
+    if (prev.cg && !viewDisp.cg) {
+      setCgGhost({ id: prev.cg, v: prev.cgv, n });
+      window.setTimeout(() => setCgGhost((c) => (c?.n === n ? null : c)), 750);
+    } else if (viewDisp.cg) setCgGhost(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewDisp]);
+
   const block = s?.block ?? null;
   const fullText = block?.k === "say" ? sub(block.text) : "";
   const typing = block?.k === "say" && typed < fullText.length;
@@ -472,7 +542,7 @@ export default function LoveApp() {
   }, [s]);
 
   const advance = useCallback(() => {
-    if (!s || panel) return;
+    if (!s || panel || heldRef.current) return;
     const b = s.block;
     if (!b) return;
     if (b.k === "say") {
@@ -780,7 +850,9 @@ export default function LoveApp() {
   };
 
   // ---------- 그리기 ----------
-  const disp = s?.disp;
+  const disp = viewDisp ?? undefined;
+  // 커튼이 닫히는 동안엔 새 대사 · 선택지 · 폰 등을 아직 안 보여 줌
+  const rb = held ? null : block;
   // 서브 캐릭터를 먼저 그려서(뒤쪽) 히로인이 앞에 오게
   const chars = disp
     ? (Object.entries(disp.chars) as [CharKey, NonNullable<(typeof disp.chars)[CharKey]>][]).sort(
@@ -790,14 +862,14 @@ export default function LoveApp() {
       )
     : [];
   const maxDist = chars.reduce((m, [, c]) => Math.max(m, c.dist), 0);
-  const speaker = block?.k === "say" ? block.who : null;
-  const ending = block?.k === "ending" ? ENDINGS.find((e) => e.id === block.id) : null;
+  const speaker = rb?.k === "say" ? rb.who : null;
+  const ending = rb?.k === "ending" ? ENDINGS.find((e) => e.id === rb.id) : null;
 
   return (
     <div ref={wrap} className="lv-root" style={{ "--lv-box": cfg.box } as React.CSSProperties}>
       <div
         className={`lv-stage ${phase === "game" && disp?.memory != null ? "lv-mem-on" : ""} ${phase === "game" && disp?.cg && disp.cgfx?.mono ? "lv-cgmono" : ""}`}
-        onClick={() => phase === "game" && !hideUi && advance()}
+        onClick={() => phase === "game" && !hideUi && !held && advance()}
         // 우클릭 = 대사창 숨기기 (휠은 페이지 스크롤과 겹쳐서 지난 대사에 안 씀 — L 키 · LOG 버튼)
         onContextMenu={(e) => {
           if (phase !== "game") return;
@@ -915,6 +987,22 @@ export default function LoveApp() {
                 ← 음성 목록
               </button>
             )}
+            {ghosts
+              .filter((g) => !disp.chars[g.k])
+              .map((g) => (
+                <Sprite
+                  key={g.k}
+                  who={g.k}
+                  pos={g.c.pos}
+                  dist={g.c.dist}
+                  face={(g.c.face as Face) ?? "base"}
+                  fxN={0}
+                  dim={false}
+                  sub={(SUBS as readonly string[]).includes(g.k) && g.k !== "boss"}
+                  outfit={g.outfit}
+                  leaving
+                />
+              ))}
             {chars.map(([k, c]) => {
               const pos = chars.length === 1 && c.dist > 0 ? "c" : c.pos;
               const face: Face =
@@ -924,8 +1012,8 @@ export default function LoveApp() {
                 liveReact?.who === k
                   ? { kind: "hop" as const, n: liveReact.n }
                   : speaker === k &&
-                      block?.k === "say" &&
-                      (block.mood === "shake" || block.mood === "shout")
+                      rb?.k === "say" &&
+                      (rb.mood === "shake" || rb.mood === "shout")
                     ? { kind: "shake" as const, n: s.seq }
                     : speaker === k && face === "surprise"
                       ? { kind: "hop" as const, n: s.seq }
@@ -948,7 +1036,7 @@ export default function LoveApp() {
                 />
               );
             })}
-            {disp.cg && (
+            {disp.cg ? (
               <CgView
                 key={disp.cg}
                 id={disp.cg}
@@ -957,6 +1045,8 @@ export default function LoveApp() {
                 fx={disp.cgfx}
                 beatVol={muted ? 0 : cfg.sfx}
               />
+            ) : (
+              cgGhost && <CgView key={cgGhost.id} id={cgGhost.id} v={cgGhost.v} leaving beatVol={0} />
             )}
             {disp.memory != null && <MemoryFx text={disp.memory} />}
             {liveReact && !disp.cg && disp.chars[liveReact.who] && (
@@ -992,24 +1082,24 @@ export default function LoveApp() {
             )}
 
             {/* 대사 */}
-            {block?.k === "say" && !hideUi && (
+            {rb?.k === "say" && !hideUi && (
               <Dialogue
-                key={block.mood === "shake" || block.mood === "shout" ? s.seq : "box"}
-                who={block.who}
-                mood={block.mood}
-                name={sub(NAME[block.who])}
-                portrait={portraitStyle(block.who, disp)}
+                key={rb.mood === "shake" || rb.mood === "shout" ? s.seq : "box"}
+                who={rb.who}
+                mood={rb.mood}
+                name={sub(NAME[rb.who])}
+                portrait={portraitStyle(rb.who, disp)}
                 text={fullText.slice(0, typed)}
                 done={!typing}
                 onReplay={
-                  VOICE_BY_TEXT[block.text] ? () => voice(VOICE_BY_TEXT[block.text]) : undefined
+                  VOICE_BY_TEXT[rb.text] ? () => voice(VOICE_BY_TEXT[rb.text]) : undefined
                 }
                 read={readNow}
               />
             )}
 
             {/* 선택지 아래 직전 대사 (흐리게 · 넘김 표시 없이) */}
-            {block?.k === "choice" && !hideUi && lastSay && (
+            {rb?.k === "choice" && !hideUi && lastSay && (
               <Dialogue
                 key="box-under-choice"
                 who={lastSay.who}
@@ -1022,7 +1112,7 @@ export default function LoveApp() {
             )}
 
             {/* 하단 빠른 메뉴 — 왼쪽은 저장 · 불러오기, 오른쪽은 읽기 (테두리 없는 글자 버튼) */}
-            {!hideUi && (block?.k === "say" || block?.k === "choice") && (
+            {!hideUi && (rb?.k === "say" || rb?.k === "choice") && (
               <>
                 <div className="lv-qm lv-qm-l" onClick={(e) => e.stopPropagation()}>
                   <QBtn onClick={() => setPanel("save")}>SAVE</QBtn>
@@ -1148,18 +1238,18 @@ export default function LoveApp() {
             )}
 
             {/* 선택지 */}
-            {block?.k === "choice" && (
+            {rb?.k === "choice" && (
               <div
-                className={`absolute inset-0 z-30 flex flex-col items-center justify-center gap-[1cqw] ${lastSay ? "pb-[13cqw]" : ""} ${block.big ? "bg-black/55" : "bg-black/35"}`}
+                className={`lv-choice-in absolute inset-0 z-30 flex flex-col items-center justify-center gap-[1cqw] ${lastSay ? "pb-[13cqw]" : ""} ${rb.big ? "bg-black/55" : "bg-black/35"}`}
                 onClick={(e) => e.stopPropagation()}
               >
-                {block.big && <BranchBanner onSave={() => setPanel("save")} />}
-                {block.prompt && (
+                {rb.big && <BranchBanner onSave={() => setPanel("save")} />}
+                {rb.prompt && (
                   <div className="mb-[0.5cqw] text-[1.6cqw] text-white/85 [text-shadow:0_2px_6px_#000]">
-                    {block.prompt}
+                    {rb.prompt}
                   </div>
                 )}
-                {block.opts.map((o) => (
+                {rb.opts.map((o) => (
                   <button
                     key={o.text}
                     className={`lv-choice ${o.secret ? "lv-choice-secret" : ""}`}
@@ -1173,17 +1263,17 @@ export default function LoveApp() {
             )}
 
             {/* 자유 슬롯 */}
-            {block?.k === "free" && (
+            {rb?.k === "free" && (
               <div
                 className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-black/55"
                 onClick={(e) => e.stopPropagation()}
               >
-                {block.big && <BranchBanner onSave={() => setPanel("save")} />}
+                {rb.big && <BranchBanner onSave={() => setPanel("save")} />}
                 <div className="mb-[1.5cqw] text-[2cqw] font-bold text-[#ffd27a]">
-                  {block.prompt}
+                  {rb.prompt}
                 </div>
                 <div className="flex gap-[1.5cqw]">
-                  {block.opts.map((o) =>
+                  {rb.opts.map((o) =>
                     o.card ? (
                       <button key={o.text} className="lv-plan" onClick={() => choose(o)}>
                         <div className="lv-plan-icon">
@@ -1214,78 +1304,79 @@ export default function LoveApp() {
             )}
 
             {/* 메시지 */}
-            {block?.k === "phone" && (
-              <div className="absolute inset-0 z-30 bg-black/45" onClick={(e) => e.stopPropagation()}>
+            {rb?.k === "phone" && (
+              <div className="lv-phone-dim absolute inset-0 z-30 bg-black/45" onClick={(e) => e.stopPropagation()}>
                 <Phone
                   key={s.seq}
-                  from={block.step.from}
-                  msgs={block.step.msgs.map(sub)}
+                  from={rb.step.from}
+                  msgs={rb.step.msgs.map(sub)}
                   shown={phoneShown}
-                  replies={block.step.replies}
+                  replies={rb.step.replies}
                   slot={disp.day?.slot}
                   onReply={choose}
-                  onIgnore={() => setS(ignorePhone(s, block.step.ignore))}
+                  onIgnore={() => setS(ignorePhone(s, rb.step.ignore))}
                   play={play}
                 />
               </div>
             )}
 
             {/* 미니게임 */}
-            {block?.k === "mini" && (
+            {rb?.k === "mini" && (
               <div onClick={(e) => e.stopPropagation()}>
-                {block.step.kind === "deal" ? (
-                  <DealMini play={play} onDone={(n) => setS(miniDone(s, block.step.key, n))} />
-                ) : block.step.kind === "poker" ? (
+                {rb.step.kind === "deal" ? (
+                  <DealMini play={play} onDone={(n) => setS(miniDone(s, rb.step.key, n))} />
+                ) : rb.step.kind === "poker" ? (
                   <StoryPoker
-                    spec={block.step.poker}
+                    spec={rb.step.poker}
                     play={play}
                     bg={disp.bg === "black" ? "pub" : disp.bg}
                     vars={s.vars}
-                    outfit={disp.outfit?.[block.step.poker.opp]}
-                    onDone={(n, eff) => setS(miniDone(s, block.step.key, n, eff))}
+                    outfit={disp.outfit?.[rb.step.poker.opp]}
+                    onDone={(n, eff) => setS(miniDone(s, rb.step.key, n, eff))}
                   />
-                ) : block.step.kind === "match" ? (
+                ) : rb.step.kind === "match" ? (
                   <HeadsUp
                     key={s.seq}
-                    spec={block.step.match}
+                    spec={rb.step.match}
                     play={play}
                     bg={disp.bg === "black" ? "pub" : disp.bg}
                     vars={s.vars}
-                    outfit={disp.outfit?.[block.step.match.opp]}
-                    onDone={(n, eff) => setS(miniDone(s, block.step.key, n, eff))}
+                    outfit={disp.outfit?.[rb.step.match.opp]}
+                    onDone={(n, eff) => setS(miniDone(s, rb.step.key, n, eff))}
                   />
                 ) : (
                   <TellMini
-                    tell={block.step.tell}
-                    onDone={(n) => setS(miniDone(s, block.step.key, n))}
+                    tell={rb.step.tell}
+                    onDone={(n) => setS(miniDone(s, rb.step.key, n))}
                   />
                 )}
               </div>
             )}
 
             {/* 날짜 · 제목 카드 */}
-            {block?.k === "day" && (
+            {rb?.k === "day" && (
               <div className="lv-daycard">
                 <div className="text-[6cqw] font-black tracking-widest text-white">
-                  DAY {block.d}
+                  DAY {rb.d}
                 </div>
-                <div className="text-[2cqw] text-[#ffd27a]">{block.slot}</div>
+                <div className="text-[2cqw] text-[#ffd27a]">{rb.slot}</div>
               </div>
             )}
-            {block?.k === "montage" && (
-              <Montage key={s.seq} shots={block.shots} caption={block.caption} onShutter={() => play("shutter")} />
+            {rb?.k === "montage" && (
+              <Montage key={s.seq} shots={rb.shots} caption={rb.caption} onShutter={() => play("shutter")} />
             )}
-            {block?.k === "title" && (
+            {rb?.k === "title" && (
               <div className="absolute inset-0 z-40 grid place-items-center bg-black">
                 <div className="lv-fadein text-center">
-                  <div className="text-[4.5cqw] font-black text-white">{block.text}</div>
-                  {block.sub && (
-                    <div className="mt-[0.6cqw] text-[1.6cqw] text-white/60">{block.sub}</div>
+                  <div className="text-[4.5cqw] font-black text-white">{rb.text}</div>
+                  {rb.sub && (
+                    <div className="mt-[0.6cqw] text-[1.6cqw] text-white/60">{rb.sub}</div>
                   )}
                 </div>
               </div>
             )}
 
+            {curtain && <div key={curtain.n} className={`lv-curtain lv-curtain-${curtain.kind}`} />}
             {/* 트루 · 그랜드 엔딩은 엔딩 카드 전에 스태프 롤 (클릭하면 넘김) */}
             {ending && ending.kind === "true" && rolled !== s.seq && (
               <StaffRoll
@@ -1544,7 +1635,9 @@ function CgView({
   cam,
   fx,
   beatVol = 1,
+  leaving,
 }: {
+  leaving?: boolean;
   id: CgId;
   v?: string | null;
   cam?: CgCam | null;
@@ -1566,7 +1659,7 @@ function CgView({
     : undefined;
   return (
     <div
-      className={`lv-cg ${c.tight ? "lv-cg-tight" : ""} ${pulse ? "lv-cg-pulse" : ""} ${fx?.mono ? "lv-cg-mono" : ""} ${fx?.slow ? "lv-cg-slow" : ""}`}
+      className={`lv-cg ${leaving ? "lv-cg-out" : ""} ${c.tight ? "lv-cg-tight" : ""} ${pulse ? "lv-cg-pulse" : ""} ${fx?.mono ? "lv-cg-mono" : ""} ${fx?.slow ? "lv-cg-slow" : ""}`}
     >
       <div className="lv-cg-cam" style={camStyle}>
       <div className="lv-cg-img" style={{ backgroundImage: `url("${c.src}")` }}>
@@ -1658,7 +1751,10 @@ function Sprite({
   sub,
   side,
   outfit,
+  leaving,
 }: {
+  /** 퇴장 중 (서서히 사라짐) */
+  leaving?: boolean;
   outfit?: Outfit;
   who: CharKey;
   pos: "l" | "c" | "r";
@@ -1712,7 +1808,7 @@ function Sprite({
 
   return (
     <div
-      className="lv-char-in absolute"
+      className={`${leaving ? "lv-char-out" : "lv-char-in"} absolute`}
       style={{
         left: `${side ? POS_X_SIDE[pos] : POS_X[pos]}%`,
         top: `${DIST_TOP[dist] + (sub ? 8 : 0)}%`,
@@ -1730,15 +1826,9 @@ function Sprite({
       <div ref={body} className="h-full">
         {set.base ? (
           <div className="lv-breathe relative h-full" data-who={who}>
-            {/* 표정 그림이 원본이라 윤곽이 조금씩 달라서, 표정이 떠 있는 동안 기본 그림은 숨김 (크기 기준으로만 남김) */}
+            {/* 기본 그림은 늘 깔아 둠 (표정 그림은 같은 실루엣이라 위에 겹치기만) — 표정이 바뀔 때 비치거나 깜빡이지 않게 */}
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={set.base}
-              alt={NAME[who]}
-              draggable={false}
-              className="h-full w-auto max-w-none transition-opacity duration-200"
-              style={{ opacity: set.faces[face] ? 0 : 1 }}
-            />
+            <img src={set.base} alt={NAME[who]} draggable={false} className="h-full w-auto max-w-none" />
             {(Object.entries(set.faces) as [Face, string][]).map(([f, u]) => (
               // eslint-disable-next-line @next/next/no-img-element
               <img
@@ -1746,8 +1836,7 @@ function Sprite({
                 src={u}
                 alt=""
                 draggable={false}
-                className="lv-face"
-                style={{ opacity: face === f ? 1 : 0 }}
+                className={`lv-face ${face === f ? "lv-face-on" : ""}`}
               />
             ))}
             {/* 평소 얼굴이면 숨쉬기 라이브 루프(있을 때만)를 그 그림 위에 겹쳐 재생 */}
@@ -1758,8 +1847,7 @@ function Sprite({
                 loop
                 muted
                 playsInline
-                className="lv-face transition-opacity duration-200"
-                style={{ opacity: face === set.live.face ? 1 : 0 }}
+                className={`lv-face ${face === set.live.face ? "lv-face-on" : ""}`}
               />
             )}
           </div>

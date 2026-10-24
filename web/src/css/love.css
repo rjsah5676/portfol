@@ -76,7 +76,15 @@
   width: auto;
   max-width: none;
   pointer-events: none;
-  transition: opacity 0.18s ease;
+  opacity: 0;
+  z-index: 1;
+  /* 사라지는 표정은 새 표정이 다 올라온 뒤에 꺼짐 (그 사이 비치지 않게) */
+  transition: opacity 0s linear 0.24s;
+}
+.lv-face.lv-face-on {
+  opacity: 1;
+  z-index: 2;
+  transition: opacity 0.22s ease;
 }
 .lv-face-blink {
   transition: opacity 0.04s linear;
@@ -142,7 +150,7 @@
   place-items: center;
   align-content: center;
   background: radial-gradient(ellipse at center, #0d1226cc, #000e);
-  animation: lv-fadein 0.4s ease;
+  animation: lv-daycard-in 0.9s ease both;
 }
 
 /* 대사창 */
@@ -2280,4 +2288,100 @@
 }
 .lv-cg-slow .lv-cg-video {
   transition: opacity 2.6s ease;
+}
+
+@keyframes lv-daycard-in {
+  from {
+    opacity: 0;
+    letter-spacing: 0.3em;
+  }
+}
+
+/* ---- 장면 전환 ---- */
+/* 커튼: 장소가 바뀔 때 검게 닫혔다 열림 · 게임 시작 때 검은 화면에서 열림 */
+.lv-curtain {
+  position: absolute;
+  inset: 0;
+  z-index: 46;
+  background: #000;
+  pointer-events: none;
+}
+.lv-curtain-dip {
+  animation: lv-curtain-dip 1.25s ease both;
+}
+@keyframes lv-curtain-dip {
+  0% {
+    opacity: 0;
+  }
+  36%,
+  46% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+.lv-curtain-in {
+  animation: lv-curtain-in 1.5s ease both;
+}
+@keyframes lv-curtain-in {
+  0%,
+  20% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+/* 캐릭터 퇴장 */
+.lv-char-out {
+  animation: lv-char-out 0.45s ease-in both;
+  pointer-events: none;
+}
+@keyframes lv-char-out {
+  to {
+    opacity: 0;
+    transform: translateX(-50%) translateY(0.8%);
+  }
+}
+.lv-mem-on .lv-char-out {
+  filter: sepia(0.6) saturate(0.65) contrast(0.92) brightness(1.04);
+}
+/* CG 퇴장: 천천히 흐려지며 사라짐 */
+.lv-cg.lv-cg-out {
+  animation: lv-cg-out 0.7s ease both;
+  pointer-events: none;
+}
+@keyframes lv-cg-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+/* 선택지 · 메시지: 어두운 막이 서서히 깔리고 내용이 뒤따라 */
+.lv-choice-in {
+  animation: lv-fadein 0.35s ease both;
+}
+.lv-choice-in > * {
+  animation: lv-choice-rise 0.4s ease both;
+}
+.lv-choice-in > *:nth-child(2) { animation-delay: 0.06s; }
+.lv-choice-in > *:nth-child(3) { animation-delay: 0.12s; }
+.lv-choice-in > *:nth-child(4) { animation-delay: 0.18s; }
+.lv-choice-in > *:nth-child(5) { animation-delay: 0.24s; }
+@keyframes lv-choice-rise {
+  from {
+    opacity: 0;
+    transform: translateY(0.6cqw);
+  }
+}
+.lv-phone-dim {
+  animation: lv-fadein 0.4s ease both;
+}
+.lv-phone-dim .lv-phone {
+  animation-duration: 0.6s;
+  animation-delay: 0.12s;
+  animation-fill-mode: both;
 }
