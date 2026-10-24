@@ -14,6 +14,8 @@ export interface VoiceLine {
   tag?: string;
   /** 풀보이스 자동 생성 줄 (테이크 하나) */
   gen?: boolean;
+  /** 소리 파일 이름 (없으면 id) — 감정 소리처럼 한 파일을 여러 줄에서 쓸 때 */
+  file?: string;
 }
 
 export const VOICE_LINES: VoiceLine[] = [
@@ -67,10 +69,10 @@ export const VOICE_ALL: VoiceLine[] = [...VOICE_LINES, ...GEN_LINES.map((g) => (
 export const VOICE_REVIEW: VoiceLine[] = [...EMO_LINES.map((e) => ({ ...e, gen: true })), ...VOICE_ALL];
 
 /** 줄 → 파일 이름 (확장자 없이) */
-export const voiceFile = (v: { id: string; gen?: boolean }, take: "a" | "b" = VOICE_TAKE[v.id] ?? "a") =>
-  v.gen ? `${v.id}${take === "b" ? "b" : ""}` : `${v.id}${take}`;
+export const voiceFile = (v: { id: string; gen?: boolean; file?: string }, take: "a" | "b" = VOICE_TAKE[v.id] ?? "a") =>
+  v.file ?? (v.gen ? `${v.id}${take === "b" ? "b" : ""}` : `${v.id}${take}`);
 
 /** 대사 텍스트 → 음성 파일. 지금은 감정 소리만 (대사 음성은 검수 뒤에 VOICE_ALL 로 되돌림) */
 export const VOICE_BY_TEXT: Record<string, string> = Object.fromEntries(
-  EMO_LINES.map((v) => [v.text, `/love/voice/${v.id}.mp3`])
+  EMO_LINES.map((v) => [v.text, `/love/voice/${v.file ?? v.id}.mp3`])
 );

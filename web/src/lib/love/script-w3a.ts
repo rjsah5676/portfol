@@ -1530,7 +1530,7 @@ export const W3A: Scenes = {
     { t: "show", who: "amy", pos: "c", dist: 1 },
     A("딜러. 나 오늘 멋있었지? 솔직히.", "smug"),
     ME("…멋있었어."),
-    A("헤헤. 거봐. 그동안은 몸풀기였어.", "smile"),
+    A("에헤헤. 거봐. 그동안은 몸풀기였어.", "smile"),
     { t: "when", cond: { v: "a3Ribbon", op: ">=", n: 1 }, to: "a3_d20_rib", else: "a3_d20_night2" },
   ],
   // 리본 부적 회수 (D19 "내일 끝나면 돌려받을 거야") — 돌려받지 않고 하루 더: D21 대패의 복선
