@@ -145,8 +145,10 @@ export interface Cfg {
   box: number;
   /** 안 읽은 대사도 스킵 */
   skipAll: boolean;
+  /** 시간제한 선택지 끄기 (침묵도 버튼으로 고를 수 있음) */
+  noTimer: boolean;
 }
-const CFG0: Cfg = { text: 3, auto: 3, bgm: 0.7, sfx: 0.8, voice: 1, box: 0.85, skipAll: false };
+const CFG0: Cfg = { text: 3, auto: 3, bgm: 0.7, sfx: 0.8, voice: 1, box: 0.85, skipAll: false, noTimer: false };
 const readCfg = (): Cfg => {
   try {
     return { ...CFG0, ...(JSON.parse(LS.get(KEY.cfg) ?? "{}") as Partial<Cfg>) };
@@ -1096,6 +1098,7 @@ export default function LoveApp() {
             <CreditRoll
               ending={e}
               name={name}
+              onMusic={() => bgm("credits")}
               stats={{ sec: 0, lA: 0, lY: 0, ch: 0, mini: 0, cg: cgs.length, cgAll: CG_ORDER.length, end: endings.length, endAll: ENDINGS.length, preview: true }}
               photos={rollPhotos(e.id, CG_ORDER)}
               onDone={() => setPhase("gallery")}
@@ -1398,6 +1401,15 @@ export default function LoveApp() {
                   </div>
                 )}
                 {guideOn && <GuideNote target={guide!.target} ready={guideReady} any={guideAny} />}
+                {rb.timer && rb.timeout && !cfg.noTimer && !guideOn && (
+                  <ChoiceTimer
+                    key={s.seq}
+                    sec={rb.timer}
+                    paused={!!panel || hideUi}
+                    onTick={() => play("tick")}
+                    onEnd={() => choose(rb.timeout!)}
+                  />
+                )}
                 {rb.opts.map((o, oi) => guideShow(oi) && (
                   <button
                     key={o.text}
@@ -1409,6 +1421,16 @@ export default function LoveApp() {
                     {sub(o.text)}
                   </button>
                 ))}
+                {/* 타이머를 끈 경우 · 관리자 길잡이: 침묵도 버튼으로 */}
+                {rb.timer && rb.timeout && (cfg.noTimer || guideOn) && guideShow(rb.opts.length) && (
+                  <button
+                    className="lv-choice lv-choice-silent"
+                    disabled={guideOn && !guideReady}
+                    onClick={() => choose(rb.timeout!)}
+                  >
+                    {sub(rb.timeout.text)}
+                  </button>
+                )}
               </div>
             )}
 
@@ -1553,6 +1575,7 @@ export default function LoveApp() {
               <CreditRoll
                 ending={ending}
                 name={name}
+                onMusic={() => bgm("credits")}
                 stats={rollStats ?? statsOf(s, cgs, endings)}
                 photos={rollPhotos(ending.id, cgs)}
                 onDone={() => {
@@ -1743,9 +1766,7 @@ export default function LoveApp() {
 // ---------- 부품 ----------
 /** 배경 — 장소가 바뀌면 이전 배경 위로 새 배경이 천천히 겹쳐 들어옴 (크로스페이드) */
 /** 같은 그림을 다른 시간대로 쓸 때의 색보정 */
-const BG_GRADE: Partial<Record<keyof typeof BG, string>> = {
-  alley_after: "brightness(1.18) saturate(1.05) sepia(0.22) hue-rotate(-8deg)",
-};
+const BG_GRADE: Partial<Record<keyof typeof BG, string>> = {};
 function Bg({ id, blur }: { id: keyof typeof BG; blur: number }) {
   const [prev, setPrev] = useState<{ cur: keyof typeof BG; old: keyof typeof BG | null }>({
     cur: id,
@@ -2447,6 +2468,10 @@ const MUSIC: [BgmId, string][] = [
   ["tilt", "기울어진 테이블"],
   ["finale", "새벽 네 시, 마지막 판"],
   ["ending", "비 그친 다음 날 아침"],
+  ["morning", "젖은 골목, 맑은 하늘"],
+  ["amy_ace", "에이미 — 처음 듣는 목소리"],
+  ["yeon_ace", "연서 — 장갑을 벗은 손"],
+  ["credits", "엔딩 크레딧"],
   ["badend", "배드 엔딩"],
 ];
 
@@ -2819,6 +2844,24 @@ function ConfigPanel({
         </>,
         "Ctrl을 누르고 있어도 스킵돼요"
       )}
+      {row(
+        "시간제한 선택지",
+        <>
+          <button
+            className={`lv-cfg-step ${!cfg.noTimer ? "lv-cfg-on" : ""}`}
+            onClick={() => setCfg({ noTimer: false })}
+          >
+            켬 (10초)
+          </button>
+          <button
+            className={`lv-cfg-step ${cfg.noTimer ? "lv-cfg-on" : ""}`}
+            onClick={() => setCfg({ noTimer: true })}
+          >
+            끔
+          </button>
+        </>,
+        "끄면 '침묵'도 선택지로 나와요"
+      )}
       <div className="mt-[1.2cqw] text-[1.05cqw] leading-relaxed text-white/45">
         단축키 — 스페이스 · 엔터 · 클릭: 다음 / Ctrl: 누르는 동안 스킵 / H · 우클릭: 대사창 숨기기 /
         A: 오토 / L · ↑: 지난 대사 / Esc: 창 닫기
@@ -2953,7 +2996,9 @@ function CreditRoll({
   stats,
   photos,
   onDone,
+  onMusic,
 }: {
+  onMusic?: () => void;
   ending: (typeof ENDINGS)[number];
   name: string;
   stats: RollStats;
@@ -2964,6 +3009,10 @@ function CreditRoll({
   const box = useRef<HTMLDivElement>(null);
   const fast = useRef(false);
   const done = useRef(false);
+  useEffect(() => {
+    onMusic?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const finish = useCallback(() => {
     if (done.current) return;
     done.current = true;
@@ -3108,6 +3157,61 @@ function CreditRoll({
       >
         넘기기 ▶
       </button>
+    </div>
+  );
+}
+
+/** 시간제한 선택지: 줄어드는 바 + 1초마다 똑딱, 마지막 3초는 붉게. 창이 열려 있으면 멈춤 */
+function ChoiceTimer({
+  sec,
+  paused,
+  onTick,
+  onEnd,
+}: {
+  sec: number;
+  paused: boolean;
+  onTick: () => void;
+  onEnd: () => void;
+}) {
+  const [left, setLeft] = useState(sec * 1000);
+  const pausedRef = useRef(paused);
+  useEffect(() => {
+    pausedRef.current = paused;
+  }, [paused]);
+  const cb = useRef({ onTick, onEnd });
+  useEffect(() => {
+    cb.current = { onTick, onEnd };
+  });
+  useEffect(() => {
+    let raf = 0;
+    let last = performance.now();
+    let rest = sec * 1000;
+    let lastSec = sec;
+    const tick = (t: number) => {
+      const dt = t - last;
+      last = t;
+      if (!pausedRef.current) rest -= dt;
+      if (rest <= 0) {
+        setLeft(0);
+        cb.current.onEnd();
+        return;
+      }
+      const s = Math.ceil(rest / 1000);
+      if (s < lastSec) {
+        lastSec = s;
+        cb.current.onTick();
+      }
+      setLeft(rest);
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [sec]);
+  const r = left / (sec * 1000);
+  return (
+    <div className={`lv-timer ${left < 3000 ? "lv-timer-hot" : ""}`}>
+      <div className="lv-timer-bar" style={{ transform: `scaleX(${r})` }} />
+      <div className="lv-timer-n">{Math.ceil(left / 1000)}</div>
     </div>
   );
 }

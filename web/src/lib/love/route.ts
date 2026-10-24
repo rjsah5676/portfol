@@ -61,7 +61,11 @@ export function advance(n0: RNode): [RNode, RDecision] {
       case "day":
         vars = { ...vars, dayNo: st.day };
         break;
-      case "choice":
+      case "choice": {
+        // 시간제한 선택지의 침묵도 후보 하나 (번호 = 보이는 선택지 수)
+        const os = st.opts.filter((o) => !o.cond || check(o.cond, vars));
+        return [{ scene, i, vars }, { k: "opts", opts: st.timer && st.timeout ? [...os, st.timeout] : os }];
+      }
       case "free":
         return [{ scene, i, vars }, { k: "opts", opts: st.opts.filter((o) => !o.cond || check(o.cond, vars)) }];
       case "phone":

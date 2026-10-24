@@ -13,7 +13,7 @@
  * 새 수치: amyJob aTeachP aIg8~13(그날 밤 읽씹) a2Sing amyPhoto2 a2Calm a2ImoT amyImo a2Bet a2Bear amyPromise a2Prom a2D14
  *          yeonHome yPh bonusKeep y2Like y2First y2ChipQ yeonName yeonEnvelope yeonBelieve yIg8~12 · n2Join(1 에이미 · 2 연서)
  */
-import { A, BOSS, CH, JM, ME, MONTAGE, N, PLAN, TH, TY, Y, card, match, poker } from "./dsl";
+import { A, BOSS, CH, JM, ME, MONTAGE, N, PLAN, TH, TIMED, TY, Y, card, match, poker } from "./dsl";
 import type { MatchSpec, PokerSpec, Scenes, Step } from "./types";
 
 /** 진짜 헤즈업 — 파라솔 사탕 판 (에이미 과외 복습) · 오픈 전 이쑤시개 판 (연서) */
@@ -1352,7 +1352,7 @@ export const W2: Scenes = {
   ],
   a2_d14_win: [
     { t: "bgm", id: "amy" },
-    { t: "bg", id: "alley" },
+    { t: "bg", id: "alley_after" },
     N("오후 두 시. 우산을 돌려주러 반지하 앞까지 갔다. 문을 두드리기 전에, 발목 높이의 창문이 드르륵 열렸다."),
     { t: "show", who: "amy", pos: "c", dist: 1 },
     A("…발소리로 알았어. 너 걸음 소리 칩 쌓는 소리 같아. 탁, 탁, 탁.", "base"),
@@ -1935,7 +1935,7 @@ export const W2: Scenes = {
     { t: "goto", to: "w2_i2" },
   ],
   w2_i1: [
-    { t: "bg", id: "alley" },
+    { t: "bg", id: "market" },
     N("오후의 재래시장. 이모는 호박 두 개를 두고 가게 사장님과 십오 분째 줄다리기를 했다."),
     CH("이 집은 셋째 주마다 깎아 줘. 오늘은 둘째 주지만, 이모 얼굴 보면 셋째 주 같대."),
     ME("그건 깎아 준 게 아니라 이모가 우기신 거 아니에요?"),
@@ -2211,7 +2211,7 @@ export const W2: Scenes = {
   ],
   y2_d8n_cat: [
     { t: "day", day: 8, slot: "마감 후" },
-    { t: "bg", id: "alley" },
+    { t: "bg", id: "alley_night" },
     { t: "bgm", id: "night" },
     { t: "sfx", id: "can" },
     N("마감 후. 골목 박스 앞에 통조림을 따서 놓았다. 회색 고양이가 나를 한참 보다가, 그녀 대신인 걸 납득한 얼굴로 먹기 시작했다."),
@@ -2401,7 +2401,7 @@ export const W2: Scenes = {
   y2_d10: [
     { t: "day", day: 10, slot: "낮" },
     { t: "bgm", id: "comic" },
-    { t: "bg", id: "alley" },
+    { t: "bg", id: "market" },
     N("수요일 오후. 이모가 무릎이 쑤신다며 장보기 짐꾼으로 나를 불렀다. 시장 입구에 가 보니 짐꾼이 하나 더 있었다."),
     { t: "show", who: "yeonseo", pos: "r", dist: 0 },
     Y("이모가 저도 불렀어요. 짐꾼이 둘이면 두부를 두 모 살 수 있대요.", "base"),
@@ -2648,7 +2648,7 @@ export const W2: Scenes = {
   // D12 (금) — 붕어빵 · 봉투
   y2_d12: [
     { t: "day", day: 12, slot: "낮" },
-    { t: "bgm", id: "yeonseo" },
+    { t: "bgm", id: "morning" },
     { t: "bg", id: "room" },
     N("금요일 아침. 창밖 골목이 다 젖어 있는데, 하늘은 거짓말처럼 맑다."),
     { t: "sfx", id: "phone" },
@@ -2689,7 +2689,7 @@ export const W2: Scenes = {
     { t: "goto", to: "y2_d12_fish" },
   ],
   y2_d12_fish: [
-    { t: "bg", id: "alley" },
+    { t: "bg", id: "alley_after" },
     N("역 앞 골목, 한여름에도 불을 켜 두는 붕어빵 수레. 그녀가 천 원짜리 두 장을 접어 쥐고 기다리고 있었다."),
     { t: "show", who: "yeonseo", pos: "c", dist: 0 },
     Y("여름에 붕어빵 굽는 데는 이 동네에 여기 하나예요. 희귀 표본이에요.", "base"),
@@ -2700,9 +2700,9 @@ export const W2: Scenes = {
     ME("결론은요?"),
     Y("결론. '꼬리까지 들어 있는 날도 있다.' 오늘처럼요.", "smile"),
     MONTAGE([
-      { bg: "alley", who: "yeonseo", face: "base", text: "실험 표본 5" },
-      { bg: "alley", who: "yeonseo", face: "surprise", text: "꼬리까지 팥 · 40%" },
-      { bg: "alley", text: "젖은 골목, 맑은 하늘" },
+      { bg: "alley_after", who: "yeonseo", face: "base", text: "실험 표본 5" },
+      { bg: "alley_after", who: "yeonseo", face: "surprise", text: "꼬리까지 팥 · 40%" },
+      { bg: "alley_after", text: "젖은 골목, 맑은 하늘" },
     ], "금요일 다섯 시 · 역 앞"),
     N("팥이 꼬리까지 든 반쪽 하나를, 그녀가 내 쪽으로 내밀었다."),
     Y("결과 공유예요. 연구 윤리상.", "away"),
@@ -2747,7 +2747,7 @@ export const W2: Scenes = {
     TY("…콜라는 내가 살게."),
     { t: "hide", who: "amy" },
     { t: "bgm", id: "yeonseo" },
-    { t: "bg", id: "alley" },
+    { t: "bg", id: "alley_night" },
     { t: "show", who: "yeonseo", pos: "c", dist: 0 },
     { t: "sfx", id: "steps" },
     N("휴식 시간. 비상계단에서 연서가 하얀 봉투 하나를 내밀었다."),
@@ -2918,15 +2918,26 @@ export const W2: Scenes = {
     N("세지 않았다. 그녀도 일어나지 않았다. 처마에서 떨어진 빗물이 계단을 한 칸씩 적셨다."),
     Y("내일 밤, 아래층에서 보고해요.", "whisper", "base"),
     Y("…어떤 말을 듣더라도, 저를 믿을 수 있어요?", "whisper", "sad"),
-    {
-      t: "choice",
-      big: true,
-      prompt: "어깨 위의 무게가 대답을 기다린다.",
-      opts: [
+    TIMED(
+      "어깨 위의 무게가 대답을 기다린다.",
+      [
         { text: "\"믿어요.\"", eff: { affY: 1, trustY: 1, yeonBelieve: 1 }, to: "y2_d13_yes" },
         { text: "\"무슨 말을 하는데요?\"", eff: { yeonAsk: 1 }, to: "y2_d13_ask" },
       ],
-    },
+      { text: "(아무 말도 못 한다)", eff: { trustY: 1, yeonSilent: 1 }, to: "y2_d13_silent" },
+      10,
+      true
+    ),
+  ],
+  // 시간제한 침묵 — '믿어요'를 쉽게 못 한 망설임. 연서에겐 오히려 거짓 없는 대답
+  y2_d13_silent: [
+    N("대답이 목에 걸렸다. '믿어요' 세 글자가, 그녀가 묻는 무게에 비해 너무 가벼웠다."),
+    N("빗물이 한 칸 더 내려왔다. 어깨 위에서 그녀가 숨을 한 번 길게 골랐다."),
+    Y("…대답 안 하네요.", "whisper", "base"),
+    Y("다행이에요. 바로 믿는다고 했으면, 저 오늘 밤 그 말을 밤새 계산했을 거예요.", "whisper", "sad"),
+    Y("망설인 사람이 믿어 주는 게 제일 무거워요. …그 무게는, 내일 밤 확인할게요.", "whisper", "away"),
+    N("그녀는 끝내 고개를 들지 않았다. 대답하지 못한 어깨에, 기댄 무게만 조금 더 실렸다."),
+    { t: "goto", to: "y2_d13_end" },
   ],
   y2_d13_yes: [
     Y("…쉽게 믿네요. 딜러님 같은 사람이.", "whisper", "surprise"),
@@ -3068,8 +3079,17 @@ export const W2: Scenes = {
     Y("…!", "surprise"),
     N("그녀의 눈이 커졌다. 무표정이, 그 자리에서 깨졌다."),
     { t: "when", cond: { v: "yeonBelieve", op: ">=", n: 1 }, to: "y2_d14_believe" },
+    { t: "when", cond: { v: "yeonSilent", op: ">=", n: 1 }, to: "y2_d14_silent" },
     { t: "when", cond: { v: "yeonAsk", op: ">=", n: 1 }, to: "y2_d14_ask" },
     N("그녀는 아무 말도 하지 않았다. 나도. 둘 사이로 지하의 찬 공기만 올라왔다."),
+    { t: "goto", to: "y3_d15" },
+  ],
+  y2_d14_silent: [
+    TH("'저를 믿을 수 있어요?' 어제 나는 대답하지 못했다. 그 침묵이, 지금 이 문 앞에서 그녀의 얼굴에 걸려 있었다."),
+    Y("…어제 대답 안 한 거, 잘한 거예요.", "whisper", "sad"),
+    Y("믿는다고 했으면, 지금 딜러님 얼굴 보기가 더 힘들었을 거예요.", "whisper", "away"),
+    N("그녀가 내 옆을 지나 계단을 올라갔다. 세 칸쯤 오르다 멈추고, 돌아보지 않은 채 말했다."),
+    Y("…이번엔 대답해 줘요. 다음에 물을 때는요.", "whisper", "base"),
     { t: "goto", to: "y3_d15" },
   ],
   y2_d14_ask: [
@@ -3097,7 +3117,7 @@ export const W2: Scenes = {
   // Q1 — 뒷골목 고양이 (이름이 없으면 이번에 붙일 수 있음)
   y2_q1: [
     { t: "bgm", id: "yeonseo" },
-    { t: "bg", id: "alley" },
+    { t: "bg", id: "alley_after" },
     N("펍 건물 뒤 골목. 박스 더미 앞에 그녀가 쪼그려 앉아 있다. 장갑 안 낀 쪽 손에 고등어 통조림."),
     { t: "show", who: "yeonseo", pos: "c", dist: 0 },
     { t: "when", cond: { v: "dayNo", op: "==", n: 9 }, to: "y2_q1_9" },
@@ -3441,7 +3461,7 @@ export const W2: Scenes = {
     MONTAGE([
       { bg: "pub", text: "비어 있는 바 카운터 끝자리" },
       { bg: "store", text: "골목 끝 편의점 불빛" },
-      { bg: "alley", text: "아무도 없는 비상계단" },
+      { bg: "alley_night", text: "아무도 없는 비상계단" },
     ], "수요일 밤 · 목요일 낮"),
     N("수요일 밤이 지나고, 목요일 낮이 지나갔다. 카드는 섞이고, 나눠지고, 걷혔다."),
     { t: "day", day: 11, slot: "밤 근무" },
@@ -3626,7 +3646,7 @@ export const W2: Scenes = {
   n2_yeon_d: [
     { t: "set", eff: { n2y: 1 } },
     { t: "bgm", id: "yeonseo" },
-    { t: "bg", id: "alley" },
+    { t: "bg", id: "alley_after" },
     N("펍 건물 뒤 골목. 비상계단 아래에 그녀가 서 있었다."),
     { t: "show", who: "yeonseo", pos: "c", dist: 0 },
     { t: "when", cond: { v: "yeonDay", op: ">=", n: 1 }, to: "n2_yeon_d_k" },

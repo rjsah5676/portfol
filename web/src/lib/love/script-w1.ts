@@ -1244,8 +1244,8 @@ export const W1: Scenes = {
   // Y1 — 뒷골목 고양이
   y_ev1: [
     { t: "bgm", id: "yeonseo" },
-    { t: "bg", id: "alley" },
-    N("펍 건물 뒤 골목. 비에 젖은 박스 더미 앞에 누가 쪼그려 앉아 있다."),
+    { t: "bg", id: "alley_after" },
+    N("비 그친 펍 건물 뒤 골목. 젖은 박스 더미 앞에 누가 쪼그려 앉아 있다."),
     { t: "show", who: "yeonseo", pos: "c", dist: 0 },
     N("연서다. 장갑 안 낀 쪽 손으로 고등어 통조림을 박스 앞에 밀어 두고 있다. 박스 안에서 회색 새끼 고양이가 고개를 내민다."),
     Y("…보지 마요.", "blush"),
@@ -1653,7 +1653,7 @@ export const W1: Scenes = {
   go_imo: [
     { t: "set", eff: { imoDay: 1, tilt: -1 } },
     { t: "bgm", id: "confide" },
-    { t: "bg", id: "alley" },
+    { t: "bg", id: "market" },
     { t: "when", cond: { v: "imoDay", op: "==", n: 1 }, to: "i_ev1" },
     { t: "when", cond: { v: "imoDay", op: "==", n: 2 }, to: "i_ev2" },
     { t: "goto", to: "i_ev3" },

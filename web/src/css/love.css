@@ -2720,3 +2720,46 @@
   opacity: 0;
   pointer-events: none;
 }
+
+/* 시간제한 선택지 */
+.lv-timer {
+  position: relative;
+  width: 34cqw;
+  height: 0.55cqw;
+  margin-bottom: 0.6cqw;
+  border-radius: 99px;
+  background: rgb(255 255 255 / 0.15);
+  overflow: visible;
+}
+.lv-timer-bar {
+  position: absolute;
+  inset: 0;
+  border-radius: 99px;
+  background: linear-gradient(90deg, #c9a25a, #ffd27a);
+  transform-origin: left center;
+}
+.lv-timer-hot .lv-timer-bar {
+  background: linear-gradient(90deg, #b8323e, #ff6b6b);
+  animation: lv-timer-pulse 0.5s ease-in-out infinite alternate;
+}
+@keyframes lv-timer-pulse {
+  to {
+    opacity: 0.55;
+  }
+}
+.lv-timer-n {
+  position: absolute;
+  right: -2.4cqw;
+  top: 50%;
+  translate: 0 -50%;
+  font-size: 1.2cqw;
+  font-weight: 800;
+  color: #ffd27a;
+}
+.lv-timer-hot .lv-timer-n {
+  color: #ff8a8a;
+}
+.lv-choice-silent {
+  opacity: 0.8;
+  font-style: italic;
+}

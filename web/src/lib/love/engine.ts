@@ -86,7 +86,7 @@ export interface Display {
 }
 export type Block =
   | { k: "say"; who: Who; text: string; mood: Mood }
-  | { k: "choice"; prompt?: string; opts: Opt[]; big?: boolean }
+  | { k: "choice"; prompt?: string; opts: Opt[]; big?: boolean; timer?: number; timeout?: Opt }
   | { k: "mini"; step: Extract<Step, { t: "mini" }> }
   | { k: "phone"; step: Extract<Step, { t: "phone" }> }
   | { k: "free"; prompt: string; opts: Opt[]; big?: boolean }
@@ -341,6 +341,7 @@ export function run(s0: GState): GState {
           prompt: st.prompt,
           big: st.big,
           opts: st.opts.filter((o) => !o.cond || check(o.cond, s.vars)),
+          ...(st.timer && st.timeout && { timer: st.timer, timeout: st.timeout }),
         };
         return s;
       case "free":

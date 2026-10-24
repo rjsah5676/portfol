@@ -52,6 +52,17 @@ export const card = (
   ...(o.cond && { cond: o.cond }),
   card: { place, ...(o.who && { who: o.who }), ...(o.icon && { icon: o.icon }), ...(o.hint && { hint: o.hint }) },
 });
+/**
+ * 시간제한 선택지 (기본 10초): 안 고르면 silence(침묵) 을 고른 걸로 — 침묵에도 전용 장면을 이어 줄 것
+ * TIMED("붙잡을까?", [opt, opt], { text: "(아무 말도 못 한다)", to: "x_silent" })
+ */
+export const TIMED = (
+  prompt: string,
+  opts: import("./types").Opt[],
+  silence: import("./types").Opt,
+  timer = 10,
+  big?: boolean
+): Step => ({ t: "choice", prompt, opts, timer, timeout: silence, ...(big && { big }) });
 /** 하루 낮 일정 고르기 */
 export const PLAN = (prompt: string, opts: import("./types").Opt[]): Step => ({ t: "free", prompt, opts });
 /** 사진 몽타주 (2~4컷): MONTAGE([{ bg: "arcade", who: "amy", face: "smile", text: "곰 생일" }, …], "그날의 사진") */

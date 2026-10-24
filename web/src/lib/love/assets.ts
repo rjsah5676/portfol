@@ -69,7 +69,7 @@ export const OUTFITS: Partial<Record<CharKey, Partial<Record<Outfit, StandSet>>>
   },
   yeonseo: {
     knit: { base: `${B}/char/yeonseo-knit-base.webp`, faces: faces("yeonseo-knit", ["away", "blush", "smile"]) },
-    bare: { base: `${B}/char/yeonseo-bare-base.webp`, faces: faces("yeonseo-bare", ["away", "smile", "blush", "sad"]) },
+    bare: { base: `${B}/char/yeonseo-bare-base.webp`, faces: faces("yeonseo-bare", ["away", "smile", "blush", "sad", "laugh", "cry", "cold", "surprise", "angry"]) },
     summer: { base: `${B}/char/yeonseo-summer-base.webp`, faces: faces("yeonseo-summer", ["smile", "blush", "surprise", "laugh"]) },
     summerbare: { base: `${B}/char/yeonseo-summerbare-base.webp`, faces: faces("yeonseo-summerbare", ["smile", "blush", "surprise", "laugh"]) },
     dress: { base: `${B}/char/yeonseo-dress-base.webp`, faces: faces("yeonseo-dress", ["cold", "away", "sad", "blush"]) },
@@ -80,8 +80,9 @@ export const OUTFITS: Partial<Record<CharKey, Partial<Record<Outfit, StandSet>>>
 export const BG: Record<BgId, string | null> = {
   pub: `${B}/bg/pub-night.webp`,
   alley: `${B}/bg/alley-rain.webp`,
-  // 비 그친 아침 골목 — 전용 그림이 오기 전까진 같은 골목에 아침 색보정 (LoveApp Bg)
-  alley_after: `${B}/bg/alley-rain.webp`,
+  alley_after: `${B}/bg/alley-morning.webp`,
+  alley_night: `${B}/bg/alley-night.webp`,
+  market: `${B}/bg/market.webp`,
   vip: `${B}/bg/vip.webp`,
   store: `${B}/bg/store.webp`,
   arcade: `${B}/bg/arcade.webp`,
@@ -99,6 +100,8 @@ export const BG_FALLBACK: Record<BgId, string> = {
   pub: "linear-gradient(180deg,#2a1d14,#120c08)",
   alley: "linear-gradient(180deg,#141a26,#06080d)",
   alley_after: "linear-gradient(180deg,#f2d6a8,#6a7c90)",
+  alley_night: "linear-gradient(180deg,#1a1d2e,#08090f)",
+  market: "linear-gradient(180deg,#3a3026,#14100c)",
   vip: "linear-gradient(180deg,#2a0d12,#080203)",
   store: "linear-gradient(180deg,#e9eef2,#b9c4cc)",
   arcade: "linear-gradient(180deg,#3a1f4a,#120a1c)",
@@ -321,6 +324,7 @@ export const SFX: Record<SfxId, string> = {
   chain: `${B}/sfx/chain.mp3`,
   tape: `${B}/sfx/tape.mp3`,
   sizzle: `${B}/sfx/sizzle.mp3`,
+  tick: `${B}/sfx/tick.mp3`,
 };
 /** 비 오는 골목 · 비 CG 동안 깔리는 빗소리 루프 */
 export const RAIN_LOOP = `${B}/sfx/rain-loop.mp3`;
@@ -347,9 +351,13 @@ export const BGM: Record<BgmId, string | null> = {
   tilt: `${B}/sound/bgm-tilt.aac`,
   finale: `${B}/sound/bgm-finale.aac`,
   ending: `${B}/sound/bgm-ending.aac`,
+  amy_ace: `${B}/sound/bgm-amy-ace.aac`,
+  yeon_ace: `${B}/sound/bgm-yeon-ace.aac`,
+  credits: `${B}/sound/bgm-credits.aac`,
+  morning: `${B}/sound/bgm-morning.aac`,
 };
 /** 한 번만 재생하고 멈추는 곡 (엔딩 곡은 끝맺음이 있어서 반복 안 함) */
-export const BGM_ONCE: BgmId[] = ["badend", "ending"];
+export const BGM_ONCE: BgmId[] = ["badend", "ending", "credits"];
 
 export const CARD_BACK = `${P}/card/back-mid.webp`;
 

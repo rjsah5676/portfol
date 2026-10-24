@@ -49,6 +49,10 @@ export type BgId =
   | "alley"
   /** 비 그친 아침 골목 (빗소리 · 빗줄기 없음) */
   | "alley_after"
+  /** 비 안 오는 밤 골목 */
+  | "alley_night"
+  /** 재래시장 (비) */
+  | "market"
   | "vip"
   | "store"
   | "arcade"
@@ -141,7 +145,8 @@ export type SfxId =
   | "microwave"
   | "chain"
   | "tape"
-  | "sizzle";
+  | "sizzle"
+  | "tick";
 export type BgmId =
   | "pub"
   | "vip"
@@ -164,7 +169,12 @@ export type BgmId =
   | "truth"
   | "tilt"
   | "finale"
-  | "ending";
+  | "ending"
+  // 10-25 (사용자 제작): 결정적 순간 테마 · 엔딩 크레딧 · 비 그친 아침
+  | "amy_ace"
+  | "yeon_ace"
+  | "credits"
+  | "morning";
 
 export type Vars = Record<string, number>;
 /** 더하기 효과 (affA: +1 같은 것) */
@@ -306,7 +316,8 @@ export type Step =
   | { t: "outfit"; who: CharKey; id: Outfit }
   | { t: "hide"; who?: CharKey }
   | { t: "say"; who: Who; text: string; mood?: Mood; face?: Face }
-  | { t: "choice"; prompt?: string; opts: Opt[]; big?: boolean }
+  /** timer = 제한 시간(초) — 안 고르면 timeout(침묵) 을 고른 걸로. 침묵에도 전용 대사 · 결과를 씀 */
+  | { t: "choice"; prompt?: string; opts: Opt[]; big?: boolean; timer?: number; timeout?: Opt }
   | { t: "set"; eff: Eff }
   | { t: "goto"; to: string }
   | { t: "when"; cond: Cond; to: string; else?: string }
