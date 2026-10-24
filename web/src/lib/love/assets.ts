@@ -139,14 +139,16 @@ export const CG: Record<
   a_shoulder: { src: `${B}/cg/a-shoulder.webp`, title: "유료 어깨", who: "amy", vars: { close: `${B}/cg/a-shoulder-close.webp` } },
   a_summer: { src: `${B}/cg/a-summer.webp`, title: "한여름의 에이미", who: "amy", video: `${B}/cg/a-summer.mp4`, vars: { blush: `${B}/cg/a-summer-blush.webp` } },
   a_tshirt: { src: `${B}/cg/a-tshirt.webp`, title: "비 오는 날, 내 티셔츠", who: "amy", video: `${B}/cg/a-tshirt.mp4`, vars: { pout: `${B}/cg/a-tshirt-pout.webp`, blush: `${B}/cg/a-tshirt-blush.webp` } },
-  a_morning: { src: `${B}/cg/a-morning.webp`, title: "트윈테일을 푼 아침", who: "amy" },
+  a_morning: { src: `${B}/cg/a-morning.webp`, title: "트윈테일을 푼 아침", who: "amy", video: `${B}/cg/a-morning.mp4`, vars: { smile: `${B}/cg/a-morning-smile.webp` } },
   y_summer: { src: `${B}/cg/y-summer.webp`, title: "한여름의 연서", who: "yeonseo" },
   y_glove: { src: `${B}/cg/y-glove.webp`, title: "장갑을 벗은 손", who: "yeonseo" },
   y_wall: { src: `${B}/cg/y-wall.webp`, title: "가지 마요", who: "yeonseo" },
   y_dawn: { src: `${B}/cg/y-dawn.webp`, title: "출근하기 싫은 새벽", who: "yeonseo" },
-  end_amy_true: { src: `${B}/cg/end-amy-true.webp`, title: "ENDING · Your Side", who: "amy" },
+  end_amy_true: { src: `${B}/cg/end-amy-true.webp`, title: "ENDING · Your Side", who: "amy", video: `${B}/cg/end-amy-true.mp4`, vars: { smile: `${B}/cg/end-amy-true-smile.webp` } },
   end_amy_good: {
     src: `${B}/cg/end-amy-good.webp`,
+    video: `${B}/cg/end-amy-good.mp4`,
+    vars: { blush: `${B}/cg/end-amy-good-blush.webp` },
     title: "ENDING · 작은 방, 큰 침대",
     who: "amy",
   },
@@ -159,7 +161,7 @@ export const CG: Record<
   end_grand: { src: `${B}/cg/end-grand.webp`, title: "ENDING · All In", who: "amy" },
   // ---- CG 확장 (claude/2026-10-24-love-cg-expansion-plan.md) — 그림 오면 pending 지우고 vars 채우기 ----
   a_hand: { src: `${B}/cg/a-hand.webp`, title: "소매에서 손가락까지", who: "amy", video: `${B}/cg/a-hand.mp4` },
-  a_cry: { src: `${B}/cg/a-cry.webp`, title: "숫자 웃기다", who: "amy", pending: true },
+  a_cry: { src: `${B}/cg/a-cry.webp`, title: "숫자 웃기다", who: "amy", vars: { cry: `${B}/cg/a-cry-cry.webp` } },
   a_kiss: {
     src: `${B}/cg/a-kiss.webp`,
     title: "거짓말, 처음이야",
