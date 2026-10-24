@@ -3052,3 +3052,162 @@
   }
   .lv-plan::before { top: 0.9cqw; translate: none; }
 }
+
+/* ===== 폰: 잠금 화면 알림 ===== */
+.lv-phone-lock {
+  align-items: center;
+  padding: 3.4cqw 1.2cqw 1.6cqw;
+  background:
+    radial-gradient(ellipse at 50% 0%, color-mix(in srgb, var(--acc) 30%, transparent), transparent 60%),
+    linear-gradient(180deg, #161b30, #0b0e1a);
+  cursor: var(--lv-cur-hand);
+}
+.lv-lock-time { margin-top: 1.4cqw; font-size: 4.2cqw; font-weight: 300; letter-spacing: 0.04em; color: #fff; }
+.lv-lock-date { margin-top: -0.2cqw; font-size: 1.05cqw; color: #ffffffa0; }
+.lv-lock-noti {
+  display: flex;
+  gap: 0.7cqw;
+  width: 100%;
+  margin-top: 2cqw;
+  padding: 0.8cqw;
+  border-radius: 1.1cqw;
+  background: #ffffff24;
+  backdrop-filter: blur(6px);
+  text-align: left;
+  animation: lv-noti 0.5s 0.15s cubic-bezier(0.2, 0.9, 0.25, 1.1) both;
+}
+.lv-lock-noti img { width: 2.8cqw; height: 2.8cqw; border-radius: 0.7cqw; object-fit: cover; flex-shrink: 0; }
+.lv-lock-noti span { display: flex; min-width: 0; flex-direction: column; gap: 0.1cqw; }
+.lv-lock-noti b { display: flex; justify-content: space-between; color: #fff; font-size: 1.05cqw; }
+.lv-lock-noti b small { color: #ffffff80; font-weight: 400; font-size: 0.85cqw; }
+.lv-lock-noti em { overflow: hidden; color: #ffffffe0; font-style: normal; font-size: 1cqw; white-space: nowrap; text-overflow: ellipsis; }
+.lv-lock-noti > span > small { color: #ffffff80; font-size: 0.8cqw; }
+.lv-lock-hint { margin-top: auto; color: #ffffff70; font-size: 0.9cqw; letter-spacing: 0.1em; animation: lv-blink 1.6s infinite; }
+@keyframes lv-noti {
+  from { opacity: 0; transform: translateY(-1.2cqw) scale(0.96); }
+}
+
+/* ===== 걸려 오는 전화 ===== */
+.lv-call {
+  align-items: center;
+  padding: 3.6cqw 1.2cqw 1.6cqw;
+  background:
+    radial-gradient(ellipse at 50% 30%, #3a4a7a 0%, transparent 65%),
+    linear-gradient(180deg, #1b2240, #0b0e1a);
+  animation: lv-phone-in 0.45s cubic-bezier(0.2, 0.9, 0.25, 1.05), lv-ring 1.2s 0.45s ease-in-out infinite;
+}
+.lv-call-label { color: #ffffff90; font-size: 0.95cqw; letter-spacing: 0.08em; }
+.lv-call-ava { position: relative; margin-top: 2cqw; width: 8cqw; height: 8cqw; }
+.lv-call-ava img, .lv-call-ava span {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+  background: #2a3157;
+  color: #ffffff80;
+  font-size: 3cqw;
+  border: 0.15cqw solid #ffffff40;
+}
+.lv-call-ava i {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 0.15cqw solid #8fd3ff;
+  animation: lv-ripple 1.8s ease-out infinite;
+}
+.lv-call-ava i + i { animation-delay: 0.9s; }
+@keyframes lv-ripple { from { transform: scale(1); opacity: 0.8; } to { transform: scale(1.7); opacity: 0; } }
+@keyframes lv-ring {
+  0%, 60%, 100% { rotate: 0deg; }
+  65% { rotate: -1.5deg; } 70% { rotate: 1.5deg; } 75% { rotate: -1.5deg; } 80% { rotate: 1.5deg; } 85% { rotate: 0deg; }
+}
+.lv-call-name { margin-top: 1.4cqw; color: #fff; font-size: 2.2cqw; }
+.lv-call-sub { color: #ffffff90; font-size: 1cqw; }
+.lv-call-btns { display: flex; justify-content: space-around; width: 100%; margin-top: auto; margin-bottom: 1cqw; }
+.lv-call-btns > * {
+  display: grid;
+  place-items: center;
+  width: 4.4cqw;
+  height: 4.4cqw;
+  border-radius: 50%;
+  color: #fff;
+  font-size: 2cqw;
+}
+.lv-call-no { background: #e5484d; opacity: 0.25; }
+.lv-call-yes { background: #30b85a; box-shadow: 0 0 0 0 #30b85a88; animation: lv-yes 1.4s infinite; transition: transform 0.15s; }
+.lv-call-yes:hover { transform: scale(1.08); }
+@keyframes lv-yes { 70% { box-shadow: 0 0 0 1.2cqw #30b85a00; } 100% { box-shadow: 0 0 0 0 #30b85a00; } }
+
+/* 통화 중 표시 */
+.lv-callchip {
+  position: absolute;
+  left: 50%;
+  top: 2.4%;
+  z-index: 25;
+  display: flex;
+  align-items: center;
+  gap: 0.5cqw;
+  padding: 0.35cqw 1cqw 0.35cqw 0.5cqw;
+  translate: -50% 0;
+  border-radius: 99px;
+  background: #0b1a12e6;
+  border: 0.08cqw solid #30b85a99;
+  color: #d9ffe6;
+  font-size: 1cqw;
+  animation: lv-fadein 0.3s ease;
+}
+.lv-callchip i { width: 0.6cqw; height: 0.6cqw; margin-left: 0.3cqw; border-radius: 50%; background: #30b85a; animation: lv-blink 1.2s infinite; }
+.lv-callchip img { width: 1.8cqw; height: 1.8cqw; border-radius: 50%; object-fit: cover; }
+.lv-callchip span { color: #9be8b4; font-variant-numeric: tabular-nums; }
+.lv-mbar .lv-mbar-mode {
+  width: auto;
+  height: auto;
+  padding: 0.35cqw 0.9cqw;
+  border: 0.08cqw solid #c9a25a77;
+  border-radius: 99px;
+  font-size: 0.95cqw;
+  white-space: nowrap;
+}
+
+/* 회상 CG 확대 보기 */
+.lv-zoom { position: absolute; inset: 0; overflow: hidden; touch-action: none; }
+.lv-zoom-inner { position: absolute; inset: 0; transition: transform 0.12s ease-out; will-change: transform; }
+.lv-zoom-on { cursor: grab; }
+.lv-zoom-on:active { cursor: grabbing; }
+.lv-zoom-reset, .lv-zoom-hint {
+  position: absolute;
+  right: 1.4cqw;
+  top: 1.4cqw;
+  padding: 0.35cqw 1cqw;
+  border-radius: 99px;
+  background: #000000a0;
+  color: #f3e6c4;
+  font-size: 1cqw;
+}
+.lv-zoom-hint { opacity: 0; transition: opacity 0.25s; pointer-events: none; }
+.lv-gal-view:hover .lv-zoom-hint { opacity: 0.8; }
+.lv-zoom-reset { border: 0.08cqw solid #c9a25a; }
+.lv-zoom-reset:hover { color: #ffd27a; }
+/* 지난 대사: 줄에 마우스를 올리면 '여기로' */
+.lv-log-line { position: relative; border-radius: 0.4cqw; padding-right: 7cqw; }
+.lv-log-line:hover { background: #ffffff08; }
+.lv-log-jump {
+  position: absolute;
+  right: 0.4cqw;
+  top: 50%;
+  translate: 0 -50%;
+  padding: 0.15cqw 0.8cqw;
+  border: 0.08cqw solid #c9a25a88;
+  border-radius: 99px;
+  color: #c9a25a;
+  font-size: 0.9cqw;
+  opacity: 0;
+  transition: opacity 0.15s, color 0.15s, border-color 0.15s;
+}
+.lv-log-line:hover .lv-log-jump { opacity: 1; }
+.lv-log-jump:hover { color: #ffd27a; border-color: #ffd27a; }
+@media (hover: none) { .lv-log-jump { opacity: 0.7; } }

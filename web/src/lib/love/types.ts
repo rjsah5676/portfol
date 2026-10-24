@@ -318,6 +318,10 @@ export type Step =
   /** 옷 갈아입기 (다음에 바꿀 때까지 유지, "default" = 기본) */
   | { t: "outfit"; who: CharKey; id: Outfit }
   | { t: "hide"; who?: CharKey }
+  /** 걸려 오는 전화 — 받기를 눌러야 다음으로. who 가 없으면 이름만(모르는 번호 등) */
+  | { t: "call"; name: string; who?: CharKey }
+  /** 통화 끝 (통화 중 표시 끔) */
+  | { t: "hangup" }
   | { t: "say"; who: Who; text: string; mood?: Mood; face?: Face }
   /** timer = 제한 시간(초) — 안 고르면 timeout(침묵) 을 고른 걸로. 침묵에도 전용 대사 · 결과를 씀 */
   | { t: "choice"; prompt?: string; opts: Opt[]; big?: boolean; timer?: number; timeout?: Opt }

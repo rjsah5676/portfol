@@ -235,6 +235,8 @@ function useSound(muted: boolean, cfg: Cfg) {
     }, 40);
     ramps.current.set(a, id);
   };
+  const musicMode = useRef<MusicMode | null>(null);
+  const musicEnd = useRef<(() => void) | null>(null);
   const bgm = useCallback((id: BgmId | null) => {
     if (cur.current === id) return;
     cur.current = id;
@@ -244,7 +246,11 @@ function useSound(muted: boolean, cfg: Cfg) {
     const url = id ? BGM[id] : null;
     if (!id || !url) return;
     const a = new Audio(url);
-    a.loop = !BGM_ONCE.includes(id);
+    a.loop = musicMode.current ? musicMode.current === "one" : !BGM_ONCE.includes(id);
+    // 음악실의 '전체 반복 · 셔플': 곡이 끝나면 다음 곡을 음악실이 고름
+    a.onended = () => {
+      if (bgmEl.current === a && musicMode.current) musicEnd.current?.();
+    };
     a.volume = 0;
     bgmEl.current = a;
     ramp(a, () => (voiceEl.current && !voiceEl.current.ended ? bgmVol() * 0.4 : bgmVol()), 1600);
@@ -308,6 +314,13 @@ function useSound(muted: boolean, cfg: Cfg) {
         const a = bgmEl.current;
         if (a && a.duration) a.currentTime = r * a.duration;
       },
+      /** 음악실 반복 방식 (null = 게임 기본) · 곡이 끝났을 때 부를 함수 */
+      setMode: (m: MusicMode | null, onEnd?: () => void) => {
+        musicMode.current = m;
+        musicEnd.current = onEnd ?? null;
+        const a = bgmEl.current;
+        if (a) a.loop = m ? m === "one" : !BGM_ONCE.includes(cur.current as BgmId);
+      },
     }),
     []
   );
@@ -366,6 +379,8 @@ export default function LoveApp() {
   const [lastSay, setLastSay] = useState<{ who: Who; mood: string; text: string } | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [phoneShown, setPhoneShown] = useState(0);
+  /** 잠금 화면 알림을 눌러(또는 잠시 뒤) 대화방이 열렸는지 — 열린 뒤부터 말풍선이 하나씩 */
+  const [phoneOpen, setPhoneOpen] = useState(false);
   /** 장면 전환 커튼 — 장소가 바뀌면 검게 닫혔다가 새 장면으로 열림 (닫히는 동안은 이전 장면을 그대로 보여 줌) */
   const [curtain, setCurtain] = useState<{ n: number; kind: "dip" | "in" } | null>(null);
   const [held, setHeld] = useState<GState | null>(null);
@@ -474,7 +489,7 @@ export default function LoveApp() {
     if (b?.k === "say") {
       setReadNow(seen.current.has(lineKey(s)));
       setTyped(0);
-      setLog((l) => [...l.slice(-199), { who: b.who, text: b.text }]);
+      setLog((l) => [...l.slice(-199), { who: b.who, text: b.text, st: s }]);
       if (skip) voice(null);
       else voiceLine(VOICE_BY_TEXT[b.text] ?? null);
     }
@@ -503,6 +518,7 @@ export default function LoveApp() {
       });
     if (b?.k === "phone") {
       setPhoneShown(0);
+      setPhoneOpen(false);
       play("phone");
     }
     if (b?.k === "goTitle") {
@@ -718,13 +734,13 @@ export default function LoveApp() {
 
   // 메시지 말풍선 하나씩
   useEffect(() => {
-    if (block?.k !== "phone") return;
+    if (block?.k !== "phone" || !(phoneOpen || skip)) return;
     if (phoneShown >= block.step.msgs.length) return;
     // 긴 메시지일수록 '입력 중…'이 조금 더 길게
     const next = block.step.msgs[phoneShown] ?? "";
     const id = window.setTimeout(() => setPhoneShown((n) => n + 1), Math.min(1500, 550 + next.length * 28));
     return () => window.clearTimeout(id);
-  }, [block, phoneShown]);
+  }, [block, phoneShown, phoneOpen, skip]);
 
   // ---------- 살아 있는 스탠딩: 반응 ----------
   const showReact = useCallback(
@@ -972,6 +988,8 @@ export default function LoveApp() {
     if (!d) return flash("저장된 게 없어요");
     setName(d.name);
     setLog([]);
+    // 불러오기 전 화면의 대사가 선택지 밑에 남지 않게
+    setLastSay(null);
     setS({ ...d.s, seq: d.s.seq + 1, fx: [] });
     // 불러온 직후 "지난 이야기" 한 장: 어디였는지 + 저장 직전 대사
     setRecap({ s: d.s, n: Date.now() });
@@ -1001,6 +1019,19 @@ export default function LoveApp() {
     const id = window.setTimeout(() => setRecap(null), 3600);
     return () => window.clearTimeout(id);
   }, [recap]);
+  /** 지난 대사 → 그 줄로 되돌아가기 확인 (log 번호) */
+  const [askJump, setAskJump] = useState<number | null>(null);
+  const jumpToLine = (i: number) => {
+    const st = log[i]?.st;
+    if (!st || !s) return;
+    voice(null);
+    setLastSay(null);
+    setLog((l) => l.slice(0, i));
+    // 플레이 시간은 지금까지 그대로 (되감아도 시간은 흐른 것)
+    setS({ ...st, vars: { ...st.vars, _sec: withTime(s).vars._sec ?? 0 }, seq: s.seq + 1, fx: [] });
+    setPanel(null);
+    flash("그 대사로 돌아왔어요");
+  };
   /** 저장 칸 덮어쓰기 확인 */
   const [askOver, setAskOver] = useState<string | null>(null);
   useEffect(() => {
@@ -1610,12 +1641,31 @@ export default function LoveApp() {
                   replies={rb.step.replies.filter((_, ri) => guideShow(ri))}
                   noIgnore={!guideShow(-1)}
                   slot={disp.day?.slot}
+                  open={phoneOpen || skip}
+                  onOpen={() => setPhoneOpen(true)}
                   onReply={choose}
                   onIgnore={() => setS(ignorePhone(s, rb.step.ignore))}
                   play={play}
                 />
               </div>
             )}
+
+            {/* 걸려 오는 전화 */}
+            {rb?.k === "call" && (
+              <div className="lv-phone-dim absolute inset-0 z-30 bg-black/45" onClick={(e) => e.stopPropagation()}>
+                <IncomingCall
+                  key={s.seq}
+                  name={rb.name}
+                  who={rb.who}
+                  onAccept={() => {
+                    play("click");
+                    setS(next(s));
+                  }}
+                />
+              </div>
+            )}
+            {/* 통화 중 */}
+            {disp?.call && rb?.k !== "call" && <CallChip key={disp.call.name} name={disp.call.name} who={disp.call.who} />}
 
             {/* 관리자 길잡이: 미니게임을 목표에 맞는 점수로 바로 넘기기 */}
             {rb?.k === "mini" && guideOn && (
@@ -1842,7 +1892,13 @@ export default function LoveApp() {
             ) : panel === "rel" ? (
               s && <RelPanel vars={s.vars} />
             ) : panel === "log" ? (
-              <LogList log={log} sub={sub} onVoice={(u) => voice(u)} onClose={() => setPanel(null)} />
+              <LogList
+                log={log}
+                sub={sub}
+                onVoice={(u) => voice(u)}
+                onClose={() => setPanel(null)}
+                onJump={phase === "game" ? (i) => setAskJump(i) : undefined}
+              />
             ) : (
               <div className="grid flex-1 auto-rows-min grid-cols-4 gap-[1cqw] overflow-y-auto pr-[0.6cqw]">
                 {[...SLOTS, "q", ...(panel === "load" ? ["a1", "a2", "a3"] : [])].map((n) => {
@@ -1882,6 +1938,31 @@ export default function LoveApp() {
           </div>
         )}
 
+        {askJump != null && (
+          <div className="lv-confirm z-[75]" onClick={() => setAskJump(null)}>
+            <div className="lv-confirm-card" onClick={(e) => e.stopPropagation()}>
+              <b className="lv-confirm-title">이 대사로 돌아갈까요?</b>
+              <div className="max-w-[40cqw] text-center text-[1.15cqw] text-white/60">
+                「{sub(log[askJump]?.text ?? "")}」
+                <br />그 뒤로 고른 선택은 다시 고를 수 있어요. 저장한 칸은 그대로예요.
+              </div>
+              <div className="lv-confirm-btns">
+                <button className="lv-btn-ghost" onClick={() => setAskJump(null)}>
+                  취소
+                </button>
+                <button
+                  className="lv-btn-gold"
+                  onClick={() => {
+                    jumpToLine(askJump);
+                    setAskJump(null);
+                  }}
+                >
+                  돌아가기
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
         {recap && phase === "game" && (
           <div key={recap.n} className="lv-recap" onClick={(e) => (e.stopPropagation(), setRecap(null))}>
             <small>지난 이야기</small>
@@ -2445,6 +2526,8 @@ function Phone({
   shown,
   replies,
   slot,
+  open,
+  onOpen,
   onReply,
   onIgnore,
   noIgnore,
@@ -2455,6 +2538,8 @@ function Phone({
   shown: number;
   replies: Opt[];
   slot?: string;
+  open: boolean;
+  onOpen: () => void;
   onReply: (o: Opt) => void;
   onIgnore: () => void;
   /** 관리자 길잡이: 무시하면 목표 엔딩에 못 감 → 무시 버튼 숨김 */
@@ -2484,6 +2569,38 @@ function Phone({
     setSent(o.text);
     window.setTimeout(() => onReply(o), 750);
   };
+  // 잠금 화면: 알림 배너가 뜨고, 누르거나 1.4초 뒤 대화방으로
+  useEffect(() => {
+    if (open) return;
+    const id = window.setTimeout(onOpen, 1400);
+    return () => window.clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+  if (!open)
+    return (
+      <div
+        className={`lv-phone lv-phone-lock ${from === "amy" ? "lv-phone-a" : from === "yeonseo" ? "lv-phone-y" : ""}`}
+        onClick={onOpen}
+      >
+        <div className="lv-phone-island" />
+        <div className="lv-lock-time">{time}</div>
+        <div className="lv-lock-date">{slot ?? "오늘"}</div>
+        <button className="lv-lock-noti" onClick={onOpen}>
+          {FACE_ICON[from] && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={FACE_ICON[from]} alt="" />
+          )}
+          <span>
+            <b>
+              {NAME[from]} <small>지금</small>
+            </b>
+            <em>{msgs[0]?.startsWith("[사진]") ? "사진을 보냈습니다." : msgs[0]}</em>
+            {msgs.length > 1 && <small>메시지 {msgs.length}개</small>}
+          </span>
+        </button>
+        <div className="lv-lock-hint">눌러서 열기</div>
+      </div>
+    );
   return (
     <div
       className={`lv-phone ${from === "amy" ? "lv-phone-a" : from === "yeonseo" ? "lv-phone-y" : ""} ${buzz ? "lv-phone-buzz" : ""}`}
@@ -2570,6 +2687,60 @@ function Phone({
   );
 }
 
+/** 걸려 오는 전화: 이름 · 얼굴 · 받기 (거절 없음 — 이야기는 받아야 이어짐) */
+function IncomingCall({ name, who, onAccept }: { name: string; who?: CharKey; onAccept: () => void }) {
+  const icon = who ? FACE_ICON[who] : undefined;
+  return (
+    <div className="lv-phone lv-call">
+      <div className="lv-phone-island" />
+      <div className="lv-call-label">{icon ? "휴대전화" : "발신번호 표시"}</div>
+      <div className="lv-call-ava">
+        {icon ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={icon} alt="" />
+        ) : (
+          <span>?</span>
+        )}
+        <i />
+        <i />
+      </div>
+      <b className="lv-call-name">{name}</b>
+      <div className="lv-call-sub">전화가 왔습니다…</div>
+      <div className="lv-call-btns">
+        <span className="lv-call-no" title="받아야 이어져요">✕</span>
+        <button className="lv-call-yes" onClick={onAccept} title="받기" aria-label="받기">
+          <svg viewBox="0 0 24 24" width="55%" height="55%" fill="currentColor" aria-hidden="true">
+            <path d="M6.6 10.8a15.1 15.1 0 0 0 6.6 6.6l2.2-2.2a1 1 0 0 1 1-.25 11.4 11.4 0 0 0 3.6.57 1 1 0 0 1 1 1V20a1 1 0 0 1-1 1A17 17 0 0 1 3 4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1c0 1.25.2 2.45.57 3.57a1 1 0 0 1-.25 1z" />
+          </svg>
+        </button>
+      </div>
+      <div className="lv-lock-hint">받기</div>
+    </div>
+  );
+}
+/** 통화 중 표시 (위 가운데): 이름 · 경과 시간 */
+function CallChip({ name, who }: { name: string; who?: CharKey }) {
+  const [sec, setSec] = useState(0);
+  useEffect(() => {
+    const id = window.setInterval(() => setSec((n) => n + 1), 1000);
+    return () => window.clearInterval(id);
+  }, []);
+  const icon = who ? FACE_ICON[who] : undefined;
+  return (
+    <div className="lv-callchip">
+      <i />
+      {icon && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={icon} alt="" />
+      )}
+      통화 중 · {name}
+      <span>
+        {String(Math.floor(sec / 60)).padStart(2, "0")}:{String(sec % 60).padStart(2, "0")}
+      </span>
+    </div>
+  );
+}
+
 /** 관계 화면 아래: 읽기 노트 — 사람별로 알게 된 버릇 (모르는 건 ??? + 힌트) */
 function TellNotes({ vars }: { vars: Record<string, number> }) {
   const whos = [...new Set(TELLS.map((t) => t.who))];
@@ -2649,11 +2820,27 @@ const MUSIC: [BgmId, string][] = [
   ["badend", "배드 엔딩"],
 ];
 
-type MusicCtl = { pos: () => [number, number, boolean]; toggle: () => void; seek: (r: number) => void };
+type MusicMode = "one" | "all" | "shuffle";
+type MusicCtl = {
+  pos: () => [number, number, boolean];
+  toggle: () => void;
+  seek: (r: number) => void;
+  setMode: (m: MusicMode | null, onEnd?: () => void) => void;
+};
+const MODE_LABEL: Record<MusicMode, string> = { one: "🔂 한 곡 반복", all: "🔁 전체 반복", shuffle: "🔀 섞어 듣기" };
 const mmss = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 /** 음악실 아래 재생 막대: 지금 곡 · 진행(눌러서 이동) · 이전/재생·멈춤/다음 */
-function MusicBar({ ctl, title, onStep }: { ctl: MusicCtl; title: string; onStep: (d: number) => void }) {
+function MusicBar({ ctl, title, onStep }: { ctl: MusicCtl; title: string; onStep: (d: number | "rand") => void }) {
   const [p, setP] = useState<[number, number, boolean]>([0, 0, true]);
+  const [mode, setMode] = useState<MusicMode>("one");
+  const stepRef = useRef(onStep);
+  useEffect(() => {
+    stepRef.current = onStep;
+  });
+  useEffect(() => {
+    ctl.setMode(mode, () => stepRef.current(mode === "shuffle" ? "rand" : 1));
+  }, [ctl, mode]);
+  useEffect(() => () => ctl.setMode(null), [ctl]);
   useEffect(() => {
     const id = window.setInterval(() => setP(ctl.pos()), 250);
     return () => window.clearInterval(id);
@@ -2679,6 +2866,85 @@ function MusicBar({ ctl, title, onStep }: { ctl: MusicCtl; title: string; onStep
       <div className="lv-mbar-time">
         {mmss(t)} / {d ? mmss(d) : "-:--"}
       </div>
+      <button
+        className="lv-mbar-mode"
+        onClick={() => setMode((m) => (m === "one" ? "all" : m === "all" ? "shuffle" : "one"))}
+        title="반복 방식 바꾸기"
+      >
+        {MODE_LABEL[mode]}
+      </button>
+    </div>
+  );
+}
+
+/** 회상 CG 확대 보기: 휠 · 더블클릭 = 확대(그 지점 기준), 확대 중 드래그 = 이동, 확대 안 했을 때 클릭 = 다음 장 */
+function ZoomMedia({ children, onTap }: { children: React.ReactNode; onTap: () => void }) {
+  const [z, setZ] = useState({ s: 1, x: 0, y: 0 });
+  const box = useRef<HTMLDivElement>(null);
+  const drag = useRef<{ px: number; py: number; x: number; y: number; moved: boolean } | null>(null);
+  const clamp = (s: number, x: number, y: number) => {
+    const m = (s - 1) / 2; // 가장자리 밖으로 안 나가게 (비율 단위)
+    return { s, x: Math.max(-m, Math.min(m, x)), y: Math.max(-m, Math.min(m, y)) };
+  };
+  const zoomAt = (ns: number, cx: number, cy: number) => {
+    const r = box.current?.getBoundingClientRect();
+    if (!r) return;
+    const s2 = Math.max(1, Math.min(3, ns));
+    // 커서 아래 지점이 그대로 있도록 이동량 보정 (화면 비율 좌표)
+    const fx = (cx - r.left) / r.width - 0.5;
+    const fy = (cy - r.top) / r.height - 0.5;
+    setZ((o) => clamp(s2, fx - ((fx - o.x) * s2) / o.s, fy - ((fy - o.y) * s2) / o.s));
+  };
+  return (
+    <div
+      ref={box}
+      className={`lv-zoom ${z.s > 1 ? "lv-zoom-on" : ""}`}
+      onWheel={(e) => {
+        e.stopPropagation();
+        zoomAt(z.s * (e.deltaY < 0 ? 1.18 : 1 / 1.18), e.clientX, e.clientY);
+      }}
+      onDoubleClick={(e) => {
+        e.stopPropagation();
+        if (z.s > 1) setZ({ s: 1, x: 0, y: 0 });
+        else zoomAt(2, e.clientX, e.clientY);
+      }}
+      onPointerDown={(e) => {
+        drag.current = { px: e.clientX, py: e.clientY, x: z.x, y: z.y, moved: false };
+        (e.currentTarget as HTMLDivElement).setPointerCapture(e.pointerId);
+      }}
+      onPointerMove={(e) => {
+        const d = drag.current;
+        const r = box.current?.getBoundingClientRect();
+        if (!d || !r) return;
+        const dx = e.clientX - d.px;
+        const dy = e.clientY - d.py;
+        if (Math.abs(dx) + Math.abs(dy) > 4) d.moved = true;
+        if (z.s > 1 && d.moved) setZ((o) => clamp(o.s, d.x + dx / r.width, d.y + dy / r.height));
+      }}
+      onPointerUp={() => {
+        const d = drag.current;
+        drag.current = null;
+        // 확대 안 한 상태에서 그냥 누르면 다음 장 (확대 중엔 클릭으로 안 넘어감)
+        if (d && !d.moved && z.s === 1) window.setTimeout(onTap, 0);
+      }}
+    >
+      <div
+        className="lv-zoom-inner"
+        style={{ transform: `translate(${z.x * 100}%, ${z.y * 100}%) scale(${z.s})` }}
+      >
+        {children}
+      </div>
+      {z.s > 1 ? (
+        <button
+          className="lv-zoom-reset"
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => (e.stopPropagation(), setZ({ s: 1, x: 0, y: 0 }))}
+        >
+          {Math.round(z.s * 100)}% · 원래대로
+        </button>
+      ) : (
+        <div className="lv-zoom-hint">휠 · 더블클릭으로 확대</div>
+      )}
     </div>
   );
 }
@@ -2901,7 +3167,8 @@ function Gallery({
             title={MUSIC.find(([id]) => id === track)?.[1] ?? ""}
             onStep={(d) => {
               const i = MUSIC.findIndex(([id]) => id === track);
-              const nx = MUSIC[(i + d + MUSIC.length) % MUSIC.length][0];
+              const j = d === "rand" ? (i + 1 + Math.floor(Math.random() * (MUSIC.length - 1))) % MUSIC.length : i + d;
+              const nx = MUSIC[(j + MUSIC.length) % MUSIC.length][0];
               setTrack(nx);
               onPlay(nx);
             }}
@@ -2909,16 +3176,17 @@ function Gallery({
         </div>
       )}
       {view && (
-        <div className="lv-gal-view" onClick={() => step(1)}>
-          {pages[page] == null && CG[view].video ? (
-            <video key={view} src={CG[view].video} autoPlay loop muted playsInline className="lv-gal-view-media" />
-          ) : (
-            <div
-              key={`${view}-${page}`}
-              className="lv-gal-view-media lv-gal-view-img"
-              style={{ backgroundImage: `url("${cgSrc(view, pages[page])}")` }}
-            />
-          )}
+        <div className="lv-gal-view">
+          <ZoomMedia key={`${view}-${page}`} onTap={() => step(1)}>
+            {pages[page] == null && CG[view].video ? (
+              <video src={CG[view].video} autoPlay loop muted playsInline className="lv-gal-view-media" />
+            ) : (
+              <div
+                className="lv-gal-view-media lv-gal-view-img"
+                style={{ backgroundImage: `url("${cgSrc(view, pages[page])}")` }}
+              />
+            )}
+          </ZoomMedia>
           <div className="lv-gal-view-bar" onClick={(e) => e.stopPropagation()}>
             <span className={CG[view].who === "amy" ? "text-[#7fd3ff]" : "text-[#8fa8ff]"}>
               {CG[view].who === "amy" ? "♥" : "♠"}
@@ -3207,17 +3475,20 @@ function StoryPanel() {
   );
 }
 
-type LogLine = { who: Who; text: string; pick?: boolean };
+/** 지난 대사 한 줄 — st = 그 대사가 떴을 때의 상태 (그 줄로 되돌아가기) */
+type LogLine = { who: Who; text: string; pick?: boolean; st?: GState };
 function LogList({
   log,
   sub,
   onVoice,
   onClose,
+  onJump,
 }: {
   log: LogLine[];
   sub: (t: string) => string;
   onVoice: (u: string) => void;
   onClose: () => void;
+  onJump?: (i: number) => void;
 }) {
   const box = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -3243,7 +3514,7 @@ function LogList({
           );
         const v = VOICE_BY_TEXT[l.text];
         return (
-          <div key={i} className="flex gap-[0.6cqw] text-[1.45cqw] leading-relaxed">
+          <div key={i} className="lv-log-line flex gap-[0.6cqw] text-[1.45cqw] leading-relaxed">
             <span className="w-[2.2cqw] shrink-0">
               {v && (
                 <button className="lv-voice !static" title="다시 듣기" onClick={() => onVoice(v)}>
@@ -3265,6 +3536,11 @@ function LogList({
                 {sub(l.text)}
               </span>
             </span>
+            {onJump && l.st && i < log.length - 1 && (
+              <button className="lv-log-jump" title="이 대사로 돌아가기" onClick={() => onJump(i)}>
+                ↩ 여기로
+              </button>
+            )}
           </div>
         );
       })}

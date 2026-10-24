@@ -83,6 +83,8 @@ export interface Display {
   memory?: string | null;
   /** 연서가 장갑을 벗었음 (한 번 벗으면 계속 — 날이 바뀌면 "bare" 로 돌아감, 장갑 낀 드레스는 안 입음) */
   bareY?: boolean;
+  /** 통화 중 — 위에 '통화 중 · 이름 00:00' 표시 */
+  call?: { name: string; who?: CharKey } | null;
 }
 export type Block =
   | { k: "say"; who: Who; text: string; mood: Mood }
@@ -95,7 +97,8 @@ export type Block =
   | { k: "day"; d: number; slot: string }
   | { k: "ending"; id: EndingId }
   | { k: "end"; text: string; sub?: string }
-  | { k: "goTitle" };
+  | { k: "goTitle" }
+  | { k: "call"; name: string; who?: CharKey };
 
 export interface GState {
   scene: string;
@@ -176,6 +179,10 @@ export function run(s0: GState): GState {
     }
     switch (st.t) {
       case "bg": {
+        // 장소가 바뀌면 말하다가 자동으로 나와 있던 서브 캐릭터(태양 · 정민 등)는 그 장소에 두고 감
+        if (st.id !== s.disp.bg)
+          for (const k of Object.keys(s.disp.chars) as CharKey[])
+            if (s.disp.chars[k]?.auto !== undefined) delete s.disp.chars[k];
         s.disp.bg = st.id;
         // 장소 옷: 그 장소에 가면 자동으로 갈아입고, 다른 장소로 가면 벗음 (black = 장면 전환이라 그대로)
         if (st.id !== "black") {
@@ -287,6 +294,7 @@ export function run(s0: GState): GState {
         s.disp.bgm = st.id;
         break;
       case "day":
+        s.disp.call = null;
         s.disp.cg = null;
         s.disp.cgv = null;
         s.disp.cgcam = null;
@@ -358,6 +366,15 @@ export function run(s0: GState): GState {
       case "phone":
         s.block = { k: "phone", step: st };
         return s;
+      case "call":
+        // 받기 전까지 멈춤 (화면: 전화 수신 창) — 받으면 다음 줄부터 '통화 중'
+        s.block = { k: "call", name: st.name, who: st.who };
+        s.disp.call = { name: st.name, who: st.who };
+        s.fx = [...s.fx, "phone"];
+        return s;
+      case "hangup":
+        s.disp.call = null;
+        break;
       case "title":
         s.block = { k: "title", text: st.text, sub: st.sub };
         return s;
