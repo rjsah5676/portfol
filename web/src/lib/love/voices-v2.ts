@@ -1459,7 +1459,7 @@ export const V2_LINES: VoiceLine[] = [
   { id: "a4-3c19830665", who: "amy", text: "……알았어. 연습한 대로.", tag: "[reluctant] ......알았어. 연습한 대로." },
   { id: "a4-3f05d71abc", who: "amy", text: "이겼어. 이겼어! 아빠 자리에서!", tag: "[ecstatic, shouting] 이겼어. 이겼어! 아빠 자리에서!" },
   { id: "a4-b365d5b057", who: "amy", text: "I did it! 봤어? 아빠가 못 이긴 테이블이야!", tag: "[ecstatic, shouting] I did it! 봤어? 아빠가 못 이긴 테이블이야!" },
-  { id: "a4-eb36b26178", who: "amy", text: "딜러. 나 오늘 멋있었지? 솔직히.", tag: "[tipsy, smug] 딜러. 나 오늘 멋있었지? 솔직히." },
+  { id: "a4-eb36b26178ww", who: "amy", text: "딜러. 나 오늘 멋있었지? 솔직히.", tag: "[tipsy, smug] 딜러어. 나 오늘 멋있었지? 솔직히." },
   { id: "a4-bc7b2b15b0", who: "amy", text: "판 내내 네 손목 봤어. 하늘색 보이니까 손이 덜 떨렸어.", tag: "[tipsy, shy] 판 내내, 네 손목 봤어. 하늘색 보이니까, 손이 덜 떨렸어." },
   { id: "a4-554c48c15f", who: "amy", text: "돌려받으려고 했는데… 하루만 더 차고 있어.", tag: "[soft] 돌려받으려고 했는데... 하루만 더 차고 있어." },
   { id: "a4-1801d0a6bf", who: "amy", text: "…이모님이? 나 주라고?", tag: "[surprised, touched] ...이모님이? 나 주라고?" },
