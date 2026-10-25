@@ -10,6 +10,7 @@ import { banGuard, createModeration } from "../moderation";
 import { adminEconomyRouter } from "./adminEconomy";
 import { adminMembersRouter } from "./adminMembers";
 import { noticeRouters } from "./notice";
+import { loveRouters } from "./love";
 import { mailAdminRouter, mailRouter } from "./mail";
 import { meRouter } from "./me";
 import { pointsRouter } from "./points";
@@ -129,6 +130,9 @@ export function createApp(deps: Deps, { pokerRank, pokerBuyRank, rhythmFiles, ..
   const notice = noticeRouters(deps);
   app.use("/api/notice", notice.pub);
   app.use("/api/admin/notice", notice.admin);
+  const love = loveRouters(deps);
+  app.use("/api/love", love.pub);
+  app.use("/api/admin/love", love.admin);
   app.use("/api/admin/economy", adminEconomyRouter(deps));
   app.use("/api/admin/members", adminMembersRouter(deps, mod));
   app.use("/api/admin/reports", socialAdminRouter(deps));

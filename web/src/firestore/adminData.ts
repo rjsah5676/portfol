@@ -388,6 +388,10 @@ export const getUserPointLog = (uid: string) =>
 /** 디펜스 데이터 (프로필 · 랭킹 · 판 기록) 개수 / 모두 지우기 — GP 는 그대로 */
 export const getDefenseStats = () =>
   api<{ profiles: number; ranks: number; runs: number }>("/api/admin/defense/stats", { auth: true });
+/** 올인 러브(미연시) 데이터 초기화 시각 — 게임이 시작할 때 이보다 오래된 브라우저 기록을 지움 */
+export const getLoveReset = () => api<{ at: number }>("/api/love/reset", { timeoutMs: 5000 });
+export const resetLove = () =>
+  api<{ at: number }>("/api/admin/love/reset", { method: "POST", body: { confirm: "미연시 초기화" }, auth: true });
 export const resetDefense = () =>
   api<Record<string, number>>("/api/admin/defense/reset", {
     method: "POST",

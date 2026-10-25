@@ -67,6 +67,7 @@ import VoiceReview, { type VoiceRow } from "./VoiceReview";
 import AssetReview from "./AssetReview";
 import { useAuth } from "@/lib/AuthContext";
 import { type Guide, makeGuide } from "@/lib/love/route";
+import { api } from "@/lib/api/http";
 
 /** 개발 중에만 쓰는 주소 옵션 (?scene= · ?review=voices) */
 const devParam = (k: string): string | null =>
@@ -108,7 +109,39 @@ const KEY = {
   mute: "love:mute",
   /** 관리자 엔딩 길잡이 목표 */
   guide: "love:guide",
+  /** 이 브라우저 기록이 언제 기준인지 (관리자 '미연시 초기화' 시각과 비교) */
+  resetAt: "love:resetAt",
 };
+/** 초기화해도 남기는 것: 설정 · 음소거 · 기준 시각 */
+const KEEP_ON_RESET = new Set<string>([KEY.cfg, KEY.mute, KEY.resetAt]);
+const loveDataKeys = (): string[] => {
+  try {
+    return Object.keys(window.localStorage).filter((k) => k.startsWith("love:") && !KEEP_ON_RESET.has(k));
+  } catch {
+    return [];
+  }
+};
+/**
+ * 관리자가 초기화한 시각보다 오래된 기록이면 지움 (지웠으면 true → 새로고침).
+ * 기준 시각이 없는 브라우저: 기록이 없으면 지금이 기준(새로 시작), 기록이 있으면 초기화 이전 것으로 봄.
+ */
+async function applyLoveReset(): Promise<boolean> {
+  const have = loveDataKeys();
+  let mine = Number(LS.get(KEY.resetAt) ?? "0") || 0;
+  if (!mine && !have.length) {
+    mine = Date.now();
+    LS.set(KEY.resetAt, String(mine));
+  }
+  const { at } = await api<{ at: number }>("/api/love/reset", { timeoutMs: 5000 });
+  if (!at || at <= mine) return false;
+  for (const k of have) {
+    try {
+      window.localStorage.removeItem(k);
+    } catch {}
+  }
+  LS.set(KEY.resetAt, String(at));
+  return have.length > 0;
+}
 interface SaveData {
   s: GState;
   name: string;
@@ -472,6 +505,15 @@ export default function LoveApp() {
       alive = false;
       window.clearTimeout(t);
     };
+  }, []);
+  // 관리자 '미연시 초기화' 이후 처음 들어온 브라우저면 예전 기록을 지우고 새로 시작
+  useEffect(() => {
+    applyLoveReset().then(
+      (wiped) => {
+        if (wiped) window.location.reload();
+      },
+      () => {}
+    );
   }, []);
 
   // 사이트 퀵메뉴(≡) 버튼이 게임 오른쪽 아래 버튼(블러프다 · 레이즈 등)을 가려서 이 페이지에선 숨김

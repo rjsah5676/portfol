@@ -85,4 +85,16 @@ describe("관리자 보강", () => {
     await srv.http("/api/admin/notice", { method: "DELETE", token: admin });
     expect((await srv.http("/api/notice")).body.notice).toBeNull();
   });
+
+  it("미연시 초기화: 관리자만, 확인 문구가 맞아야 하고, 누구나 시각을 읽음", async () => {
+    const admin = await srv.adminToken();
+    const user = await member();
+    const go = (token: string, confirm: string) => srv.http("/api/admin/love/reset", { method: "POST", token, body: { confirm } });
+    expect((await srv.http("/api/love/reset")).body.at).toBe(0);
+    expect((await go(user.token, "미연시 초기화")).status).not.toBe(200);
+    expect((await go(admin, "초기화")).status).toBe(400);
+    const r = await go(admin, "미연시 초기화");
+    expect(r.body.at).toBeGreaterThan(0);
+    expect((await srv.http("/api/love/reset")).body.at).toBe(r.body.at);
+  });
 });
