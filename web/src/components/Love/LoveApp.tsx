@@ -150,7 +150,7 @@ export interface Cfg {
   /** 시간제한 선택지 끄기 (침묵도 버튼으로 고를 수 있음) */
   noTimer: boolean;
   /** 다음 대사로 넘겨도 음성은 끝까지 (다음 음성이 시작될 때만 끊김) */
-  voiceKeep: boolean;
+  voiceHold: boolean;
   /** 대사 글자 크기 배율 */
   fs: number;
 }
@@ -163,7 +163,7 @@ const CFG0: Cfg = {
   box: 0.85,
   skipAll: false,
   noTimer: false,
-  voiceKeep: true,
+  voiceHold: false,
   fs: 1,
 };
 const readCfg = (): Cfg => {
@@ -294,7 +294,7 @@ function useSound(muted: boolean, cfg: Cfg) {
   /** 대사 한 줄의 음성: 음성 없는 줄이면 설정에 따라 이전 음성을 끝까지 둠 */
   const voiceLine = useCallback(
     (url: string | null) => {
-      if (!url && vol.current.voiceKeep) return;
+      if (!url && vol.current.voiceHold) return;
       voice(url);
     },
     [voice]
@@ -3454,19 +3454,19 @@ function ConfigPanel({
         "넘길 때 음성",
         <>
           <button
-            className={`lv-cfg-step ${cfg.voiceKeep ? "lv-cfg-on" : ""}`}
-            onClick={() => setCfg({ voiceKeep: true })}
+            className={`lv-cfg-step ${cfg.voiceHold ? "lv-cfg-on" : ""}`}
+            onClick={() => setCfg({ voiceHold: true })}
           >
             끝까지 듣기
           </button>
           <button
-            className={`lv-cfg-step ${!cfg.voiceKeep ? "lv-cfg-on" : ""}`}
-            onClick={() => setCfg({ voiceKeep: false })}
+            className={`lv-cfg-step ${!cfg.voiceHold ? "lv-cfg-on" : ""}`}
+            onClick={() => setCfg({ voiceHold: false })}
           >
             바로 끊기
           </button>
         </>,
-        "다음 음성이 나오면 그때 끊겨요"
+        "끝까지 듣기를 고르면 넘겨도 음성이 끝까지 나와요"
       )}
       {row(
         "스킵",
