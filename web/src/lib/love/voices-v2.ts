@@ -487,7 +487,7 @@ export const V2_LINES: VoiceLine[] = [
   { id: "a4-448b45b167", who: "amy", text: "앉으러 온 거 아니야. 구경하러 왔어. 손님 말고 구경꾼으로.", tag: "[casual] 앉으러 온 거 아니야. [short pause] 구경하러 왔어. 손님 말고, 구경꾼으로." },
   { id: "a4-7cc58857a1", who: "amy", text: "딜러 일하는 거 구경하는 구경꾼. 입장료는 콜라값이야.", tag: "[playful] 딜러 일하는 거 구경하는 구경꾼. [chuckles] 입장료는 콜라값이야." },
   { id: "a4-6855e0ec8e", who: "amy", text: "그럼 혼잣말할게. …딜러 오늘 셔츠 다렸네. 혼잣말이야.", tag: "[playful] 그럼 혼잣말할게. [short pause] ...딜러, 오늘 셔츠 다렸네. 혼잣말이야." },
-  { id: "a4-40f2ceb696w", who: "amy", text: "태양은 귀 막아.", tag: "[sulky] 태양은 귀, [short pause] 막아." },
+  { id: "a4-40f2ceb696", who: "amy", text: "태양은 귀 막아.", tag: "[sulky] 태양은, 귀 막아." },
   { id: "a4-b87f8345cb", who: "amy", text: "…아빠를, 아세요?", tag: "[surprised] ...아빠를, 아세요?" },
   { id: "a4-5fee3dc50f", who: "amy", text: "…언니가 뭔데요?", tag: "[sulky] ...언니가 뭔데요?" },
   { id: "a4-caa71ab955", who: "amy", text: "있거든요. 편의점 우산. 직원 할인으로 산 거.", tag: "[sulky] 있거든요. [short pause] 편의점 우산. 직원 할인으로 산 거." },
