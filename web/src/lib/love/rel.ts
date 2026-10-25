@@ -58,3 +58,30 @@ export const tiltName = (v: Vars): string => {
   const t = v.tilt ?? 0;
   return t <= 1 ? "차분함" : t <= 3 ? "조금 흔들림" : t <= 5 ? "위태로움" : "테이블이 부른다";
 };
+
+/**
+ * 방치 감소 — 날이 바뀔 때, 사흘 넘게 호감이 한 번도 안 오른 히로인은 호감 -1 (다시 사흘 뒤에 또 확인)
+ * 그 히로인 루트에 들어갔거나 호감이 0 이하면 안 깎음. _dcA · _dcY 는 깎인 횟수 (화면에서 금 간 하트 띄우는 신호)
+ */
+export const DECAY_GAP = 3;
+const DK: Record<Heroine, [string, string, string]> = { amy: ["_lastA", "_pA", "_dcA"], yeonseo: ["_lastY", "_pY", "_dcY"] };
+export function dayDecay(v: Vars, day: number): Vars {
+  if (!day || v._dd === day) return v;
+  const o: Vars = { ...v, _dd: day };
+  for (const who of ["amy", "yeonseo"] as Heroine[]) {
+    const [L, P, D] = DK[who];
+    const k = AFF[who];
+    const a = o[k] ?? 0;
+    if (o[L] === undefined || a > (o[P] ?? 0)) o[L] = day;
+    o[P] = a;
+    if ((o[ROUTE_V[who]] ?? 0) >= 1 || a <= 0) continue;
+    if (day - o[L] >= DECAY_GAP) {
+      o[k] = a - 1;
+      o[P] = a - 1;
+      o[L] = day;
+      o[D] = (o[D] ?? 0) + 1;
+    }
+  }
+  return o;
+}
+const ROUTE_V: Record<Heroine, string> = { amy: "routeA", yeonseo: "routeY" };

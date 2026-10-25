@@ -217,7 +217,7 @@ const A3_PLAN_D18 = [
 const A3_PLAN_D20 = [
   card("에이미와 점심", "시장 떡볶이 포장마차", "a3_p2_amy", { who: "amy", hint: "에이미 ♥ · 진정", eff: { affA: 1, gambleA: -1, a3Plan2: 1 } }),
   card("빈 펍 셔플", "오픈 전 펍", "a3_p2_shuf", { icon: "🂡", hint: "손 안정 · 눈 ✦", eff: { tilt: -1, skill: 1, a3Plan2: 2 } }),
-  card("연서", "펍 비상계단 (잠깐)", "a3_p2_yeon", { who: "yeonseo", hint: "연서 ♥", eff: { affY: 1, a3Plan2: 3 } }),
+  card("연서", "펍 비상계단 (잠깐)", "a3_p2_yeon", { who: "yeonseo", hint: "연서 ♥ · 에이미 서운", eff: { affY: 1, affA: -1, a3Plan2: 3 } }),
 ];
 /** D23 오전 (공책 찾기 전날 / '잊자' 다음 날) · a4Plan3: 1 이모 · 2 태양 · 3 에이미 → 콜백 D27 오후 펍 · 저녁 반지하 */
 const A4_PLAN_D23 = [
@@ -424,7 +424,7 @@ export const W3A: Scenes = {
       t: "choice",
       prompt: "군번줄이 그녀 손가락을 하얗게 조이고 있다.",
       opts: [
-        { text: "\"그 테이블은 이기게 해 줄 때만 이겨. 그다음엔 가져가.\"", eff: { trustA: 1 }, to: "a3_d15_warn" },
+        { text: "\"그 테이블은 이기게 해 줄 때만 이겨. 그다음엔 가져가.\"", eff: { trustA: 1, affA: -1 }, to: "a3_d15_warn" },
         { text: "(감긴 군번줄을 한 바퀴씩 풀어 준다)", eff: { affA: 2, aHeart: 1 }, to: "a3_d15_tag" },
       ],
     },
@@ -545,7 +545,7 @@ export const W3A: Scenes = {
       t: "choice",
       prompt: "수첩 위의 '시드 20만'.",
       opts: [
-        { text: "\"그 20만 원, 월세 칸으로 옮겨. 그 테이블에서 두 배는 없어.\"", eff: { trustA: 1 }, to: "a3_d16_stop" },
+        { text: "\"그 20만 원, 월세 칸으로 옮겨. 그 테이블에서 두 배는 없어.\"", eff: { trustA: 1, affA: -1 }, to: "a3_d16_stop" },
         { text: "\"가는 건 안 말릴게. 대신 내가 뒤에 서 있을게.\"", eff: { affA: 1, trustA: 1, gambleA: -1 }, to: "a3_d16_stand" },
         { text: "\"그럼 지지 않는 법부터 배워. 마감 후에 가르쳐 줄게.\"", eff: { affA: 1, tilt: 1, gambleA: 1, a3Teach: 1 }, to: "a3_d16_teach" },
       ],

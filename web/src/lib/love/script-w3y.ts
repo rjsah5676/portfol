@@ -183,7 +183,7 @@ const Y3_D17_CARDS = [
 ];
 const Y3_D21_CARDS = [
   card("연서", "한강 둔치", "y3_p21_yeon", { who: "yeonseo", hint: "연서 ♥", eff: { affY: 1, y3P21: 1 } }),
-  card("에이미", "대학가 인형뽑기 (잠깐)", "y3_p21_amy", { who: "amy", hint: "에이미 ♥", eff: { affA: 1, y3P21: 2 } }),
+  card("에이미", "대학가 인형뽑기 (잠깐)", "y3_p21_amy", { who: "amy", hint: "에이미 ♥ · 연서 서운", eff: { affA: 1, affY: -1, y3P21: 2 } }),
   card("태양의 고민 상담", "포장마차", "y3_p21_ty", { icon: "🍢", hint: "손 안정", eff: { tilt: -1, y3P21: 3 } }),
 ];
 const Y4_D23_CARDS = [
@@ -193,7 +193,7 @@ const Y4_D23_CARDS = [
 ];
 const Y4_D25_CARDS = [
   card("연서", "문구점 · 메시지", "y4_p25_yeon", { who: "yeonseo", hint: "연서 ♥", eff: { affY: 1, y4P25: 1 } }),
-  card("에이미", "편의점 (잠깐)", "y4_p25_amy", { who: "amy", hint: "에이미 ♥", eff: { affA: 1, trustA: 1, y4P25: 2 } }),
+  card("에이미", "편의점 (잠깐)", "y4_p25_amy", { who: "amy", hint: "에이미 ♥ · 연서 서운", eff: { affA: 1, trustA: 1, affY: -1, y4P25: 2 } }),
   card("일요일 작전회의", "포장마차 · 태양 · 정민", "y4_p25_jm", { icon: "📓", hint: "위험 ↓", eff: { riskY: -1, y4P25: 3 } }),
 ];
 
@@ -293,7 +293,7 @@ export const W3Y: Scenes = {
       t: "choice",
       prompt: "그녀가 담배를 쥔 손을 무릎 위에 내려놓는다.",
       opts: [
-        { text: "\"…그 말, 믿어도 돼요?\"", cond: { v: "yeonNote", op: "<=", n: 0 }, eff: { trustY: 1 }, to: "y3_d15_ex_q" },
+        { text: "\"…그 말, 믿어도 돼요?\"", cond: { v: "yeonNote", op: "<=", n: 0 }, eff: { trustY: 1, affY: -1 }, to: "y3_d15_ex_q" },
         { text: "\"믿는다고 했어요. 그대로예요.\"", cond: { v: "yeonNote", op: ">=", n: 1 }, eff: { trustY: 1 }, to: "y3_d15_ex_b" },
         { text: "\"화난 거 아니에요. 놀란 거예요.\"", eff: { affY: 1 }, to: "y3_d15_ex_s" },
       ],
@@ -685,7 +685,7 @@ export const W3Y: Scenes = {
         {
           text: "\"아래층 판은… 어떻게 돌아가요? 전부 말해 줘요.\"",
           cond: { v: "vipOpen", op: "<=", n: 0 },
-          eff: { trustY: 1, riskY: 1, rigKnow: 1, meta_rigKnow: 1 },
+          eff: { trustY: 1, riskY: 1, rigKnow: 1, meta_rigKnow: 1, affY: -1 },
           to: "y3_d16_rig",
         },
       ],
@@ -996,7 +996,7 @@ export const W3Y: Scenes = {
       prompt: "에이미가 스캐너 버튼을 딸깍거린다.",
       opts: [
         { text: "\"알았어. 마감하면 연락해.\"", eff: { affA: 1, yeonJealous: 1 }, to: "y3_d17_yes" },
-        { text: "\"태양한테 부탁해 둘게. 걔 그 시간에 한가해.\"", eff: { trustA: 1 }, to: "y3_d17_no" },
+        { text: "\"태양한테 부탁해 둘게. 걔 그 시간에 한가해.\"", eff: { trustA: 1, affA: -1 }, to: "y3_d17_no" },
       ],
     },
   ],
@@ -1282,7 +1282,7 @@ export const W3Y: Scenes = {
       prompt: "그녀가 비상등 아래서 장갑 낀 손을 쥐었다 편다.",
       opts: [
         { text: "\"제 손, 그렇게 비싸지 않아요.\"", eff: { affY: 1 }, to: "y3_d18_cheap" },
-        { text: "\"왜요? 반이면 몇 년은 빨리 끝나는데.\"", eff: { trustY: 1 }, to: "y3_d18_why" },
+        { text: "\"왜요? 반이면 몇 년은 빨리 끝나는데.\"", eff: { trustY: 1, affY: -1 }, to: "y3_d18_why" },
       ],
     },
   ],
@@ -2332,7 +2332,7 @@ export const W3Y: Scenes = {
       t: "choice",
       prompt: "에이미가 목에 건 군번줄을 만지작거린다.",
       opts: [
-        { text: "\"…갈게. 혼자 내려가지 마.\"", eff: { affA: 1, twoTimer: 1, yeonJealous: 1 }, to: "y4_d23_yes" },
+        { text: "\"…갈게. 혼자 내려가지 마.\"", eff: { affA: 1, affY: -1, twoTimer: 1, yeonJealous: 1 }, to: "y4_d23_yes" },
         { text: "\"내일은 가지 마. 그 자리, 보기만 하는 자리가 아니야.\"", eff: { trustA: 1 }, to: "y4_d23_no" },
       ],
     },

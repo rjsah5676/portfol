@@ -696,7 +696,7 @@ export const W1: Scenes = {
       prompt: "그녀가 똑바로 본다.",
       opts: [
         { text: "\"모르는 사람이네요.\"", eff: { affY: 1 }, to: "d3_deny" },
-        { text: "(대답 대신 카드를 돌린다)", eff: { trustY: 1 }, to: "d3_silent" },
+        { text: "(대답 대신 카드를 돌린다)", eff: { trustY: 1, affY: -1 }, to: "d3_silent" },
         { text: "\"연서 씨는 왜 매일 혼자 와요?\"", eff: { affY: 1, trustY: 1 }, to: "d3_ask" },
       ],
     },
@@ -1910,7 +1910,7 @@ export const W1: Scenes = {
       opts: [
         { text: "\"괜찮아요?\"", eff: { affY: 1, trustY: 1 }, to: "d4_y_ask" },
         { text: "(따뜻한 물로 바꿔 따라 준다)", eff: { affY: 2 }, to: "d4_y_warm" },
-        { text: "(못 본 척 마감을 계속한다)", to: "d4_y_skip" },
+        { text: "(못 본 척 마감을 계속한다)", eff: { affY: -1 }, to: "d4_y_skip" },
       ],
     },
   ],
@@ -2109,7 +2109,7 @@ export const W1: Scenes = {
       t: "choice",
       prompt: "비가 계단 난간을 두드린다.",
       opts: [
-        { text: "\"오늘 태양 씨, 끝까지 밀었죠.\"", eff: { trustY: 1 }, to: "d5_back_ask" },
+        { text: "\"오늘 태양 씨, 끝까지 밀었죠.\"", eff: { trustY: 1, affY: -1 }, to: "d5_back_ask" },
         { text: "(말없이 한 칸 아래 계단에 앉는다)", eff: { affY: 1 }, to: "d5_back_sit" },
         { text: "(주머니의 사탕을 담배 옆에 내민다)", eff: { affY: 2 }, to: "d5_back_candy" },
       ],
@@ -2496,7 +2496,7 @@ export const W1: Scenes = {
       t: "choice",
       prompt: "뭐라고 할까.",
       opts: [
-        { text: "\"이기는 날이 제일 위험해. 당분간 큰 판은 하지 마.\"", eff: { trustA: 2 }, to: "d6_tteok_warn" },
+        { text: "\"이기는 날이 제일 위험해. 당분간 큰 판은 하지 마.\"", eff: { trustA: 2, affA: -1 }, to: "d6_tteok_warn" },
         { text: "\"…아빠, 같이 찾아보자.\"", eff: { affA: 2, trustA: 1 }, to: "d6_tteok_find" },
       ],
     },
@@ -2767,7 +2767,7 @@ export const W1: Scenes = {
       opts: [
         { text: "\"가지 마. 오늘은 안 돼.\"", eff: { trustA: 1 }, to: "d7_stop" },
         { text: "\"아래층은 위층이랑 달라. 알고 가.\"", eff: { trustA: 1, affA: 1 }, to: "d7_warn" },
-        { text: "(아무 말 하지 않는다)", eff: { gambleA: 1 }, to: "d7_silent" },
+        { text: "(아무 말 하지 않는다)", eff: { gambleA: 1, affA: -1 }, to: "d7_silent" },
       ],
     },
   ],

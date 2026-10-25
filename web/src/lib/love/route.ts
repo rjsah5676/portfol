@@ -6,6 +6,7 @@
  * 화면(배경 · 인물 · 소리)은 전혀 안 건드림.
  */
 import { check } from "./engine";
+import { dayDecay } from "./rel";
 import { SCENES } from "./script";
 import type { Eff, EndingId, Opt, Step, Vars } from "./types";
 
@@ -59,7 +60,7 @@ export function advance(n0: RNode): [RNode, RDecision] {
         break;
       }
       case "day":
-        vars = { ...vars, dayNo: st.day };
+        vars = dayDecay({ ...vars, dayNo: st.day }, st.day);
         break;
       case "choice": {
         // 시간제한 선택지의 침묵도 후보 하나 (번호 = 보이는 선택지 수)

@@ -389,6 +389,8 @@ export default function LoveApp() {
     });
   /** 호감이 오르면 구석에 작은 하트 */
   const [heartPop, setHeartPop] = useState<{ who: "amy" | "yeonseo"; n: number } | null>(null);
+  /** 호감이 깎이면 (선택 · 방치) 금 간 회색 하트 — 수치는 안 보여 줌 */
+  const [heartDown, setHeartDown] = useState<{ who: "amy" | "yeonseo"; n: number } | null>(null);
   const [hideUi, setHideUi] = useState(false);
   /** 선택지가 떠도 직전 대사를 대사창에 남겨 둠 (무슨 말에 대한 선택인지 보이게) */
   const [lastSay, setLastSay] = useState<{ who: Who; mood: string; text: string } | null>(null);
@@ -928,12 +930,41 @@ export default function LoveApp() {
     // 호감이 오른 선택이면 그 히로인 색 하트가 잠깐 떠오름 (수치는 안 보여 줌)
     const up = (o.eff?.affA ?? 0) > 0 ? "amy" : (o.eff?.affY ?? 0) > 0 ? "yeonseo" : null;
     if (up) setHeartPop({ who: up, n: Date.now() });
+    const down = (o.eff?.affA ?? 0) < 0 ? "amy" : (o.eff?.affY ?? 0) < 0 ? "yeonseo" : null;
+    if (down) {
+      setHeartDown({ who: down, n: Date.now() });
+      play("fold");
+    }
   };
   useEffect(() => {
     if (!heartPop) return;
     const id = window.setTimeout(() => setHeartPop(null), 1600);
     return () => window.clearTimeout(id);
   }, [heartPop]);
+  useEffect(() => {
+    if (!heartDown) return;
+    const id = window.setTimeout(() => setHeartDown(null), 1900);
+    return () => window.clearTimeout(id);
+  }, [heartDown]);
+  // 방치 감소 (사흘 넘게 안 만나면 -1): 엔진이 _dcA · _dcY 를 올리면 금 간 하트
+  const dcA = s?.vars._dcA ?? 0;
+  const dcY = s?.vars._dcY ?? 0;
+  const dcRef = useRef<[number, number] | null>(null);
+  useEffect(() => {
+    if (phase !== "game") {
+      dcRef.current = null;
+      return;
+    }
+    const prev = dcRef.current;
+    dcRef.current = [dcA, dcY];
+    if (!prev) return;
+    const who = dcA > prev[0] ? "amy" : dcY > prev[1] ? "yeonseo" : null;
+    if (who) {
+      setHeartDown({ who, n: Date.now() });
+      play("fold");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dcA, dcY, phase]);
   // 관계 단계가 오르면 위에 한 줄 알림 (대본 set 으로 오른 것도)
   const [stageUp, setStageUp] = useState<{ who: Heroine; stage: number; n: number } | null>(null);
   const stageRef = useRef<Record<Heroine, number> | null>(null);
@@ -1486,6 +1517,15 @@ export default function LoveApp() {
                 className={`lv-heart-pop ${heartPop.who === "amy" ? "lv-heart-a" : "lv-heart-y"}`}
               >
                 ♥
+              </div>
+            )}
+            {heartDown && (
+              <div
+                key={heartDown.n}
+                className={`lv-heart-down ${heartDown.who === "amy" ? "lv-heart-a" : "lv-heart-y"} ${heartPop ? "lv-heart-down-2" : ""}`}
+              >
+                <span className="lv-heart-down-l">♥</span>
+                <span className="lv-heart-down-r">♥</span>
               </div>
             )}
             <div className="lv-top-right" onClick={(e) => e.stopPropagation()}>

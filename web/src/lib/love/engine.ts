@@ -4,6 +4,7 @@
  */
 import { SCENES, START } from "./script";
 import { CG } from "./assets";
+import { dayDecay } from "./rel";
 import {
   type BgId,
   type BgmId,
@@ -314,7 +315,7 @@ export function run(s0: GState): GState {
         s.disp.cgfx = null;
         s.disp.memory = null;
         // 오늘 날짜 (대본에서 dayNo 로 읽음: 낮 일정이 끝나면 그날 저녁으로 돌아가기)
-        s.vars = { ...s.vars, dayNo: st.day };
+        s.vars = dayDecay({ ...s.vars, dayNo: st.day }, st.day);
         // 시간대가 바뀌면 옷도 기본으로 (단, 장갑 벗은 "bare"는 한 번 벗으면 계속)
         // 장갑은 그 장면에서만 벗음 — 다음 시간대엔 다시 낌. 아예 안 끼기로 한 뒤(yGloveOff)부터만 계속 맨손
         s.disp.bareY = !!s.vars.yGloveOff;

@@ -809,7 +809,7 @@ export const W2: Scenes = {
       prompt: "손바닥 밑에 한 줄이 숨어 있다.",
       opts: [
         { text: "(손등을 톡 들어 본다)", eff: { affA: 2 }, to: "a2_d11_peek" },
-        { text: "(못 본 척 시계를 본다. 7분 남았다)", eff: { trustA: 1 }, to: "a2_d11_watch" },
+        { text: "(못 본 척 시계를 본다. 7분 남았다)", eff: { trustA: 1, affA: -1 }, to: "a2_d11_watch" },
       ],
     },
   ],

@@ -662,8 +662,8 @@ export const W3N: Scenes = {
       big: true,
       prompt: "닫힌 문과, 남은 사람.",
       opts: [
-        { text: "(에이미를 따라 나간다)", eff: { affA: 1, g4A: 1 }, to: "g4_d24_amy" },
-        { text: "(연서 곁에 남는다)", eff: { affY: 1, g4Y: 1 }, to: "g4_d24_yeon" },
+        { text: "(에이미를 따라 나간다)", eff: { affA: 1, affY: -1, g4A: 1 }, to: "g4_d24_amy" },
+        { text: "(연서 곁에 남는다)", eff: { affY: 1, affA: -1, g4Y: 1 }, to: "g4_d24_yeon" },
       ],
     },
   ],
@@ -912,8 +912,8 @@ export const W3N: Scenes = {
     N("마감. 사장이 계단을 내려간 뒤에도, 그 웃음이 홀에 남아 있는 것 같았다."),
     TH("이틀 남았다. 오늘 밤은, 어디에 있을까."),
     PLAN("마감 후엔 어디로 갈까?", [
-      card("연서", "비상계단 · 역까지", "g4c_walk", { who: "yeonseo", hint: "연서 ♥", eff: { affY: 1, trustY: 1, gcWalk: 1 } }),
-      card("에이미", "포장마차 · 떡볶이", "g4c_pocha", { who: "amy", hint: "에이미 ♥", eff: { affA: 1, trustA: 1, gcPocha: 1 } }),
+      card("연서", "비상계단 · 역까지", "g4c_walk", { who: "yeonseo", hint: "연서 ♥ · 에이미 서운", eff: { affY: 1, trustY: 1, affA: -1, gcWalk: 1 } }),
+      card("에이미", "포장마차 · 떡볶이", "g4c_pocha", { who: "amy", hint: "에이미 ♥ · 연서 서운", eff: { affA: 1, trustA: 1, affY: -1, gcPocha: 1 } }),
       card("정민의 수첩", "빈 홀 · 날짜 맞추기", "g4c_jm", { icon: "📓", hint: "증거 ✦", eff: { trustA: 1, trustY: 1, gcJm: 1 } }),
     ]),
   ],

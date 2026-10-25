@@ -1525,6 +1525,73 @@
   }
 }
 
+/* 호감이 깎일 때: 히로인 색이 빠진 하트가 반으로 갈라져 아래로 가라앉음 */
+.lv-heart-down {
+  position: absolute;
+  left: 3%;
+  top: 9%;
+  z-index: 27;
+  width: 3cqw;
+  height: 3.6cqw;
+  font-size: 3cqw;
+  line-height: 1;
+  pointer-events: none;
+  animation: lv-heart-down 1.9s ease-in both;
+}
+.lv-heart-down-2 {
+  left: 7%;
+}
+.lv-heart-down-l,
+.lv-heart-down-r {
+  position: absolute;
+  inset: 0;
+  color: color-mix(in srgb, currentColor 35%, #8b8e99);
+  text-shadow: 0 0 0.6cqw #0008;
+}
+.lv-heart-down-l {
+  clip-path: polygon(0 0, 52% 0, 40% 30%, 56% 52%, 44% 100%, 0 100%);
+  animation: lv-crack-l 1.9s ease-in both;
+}
+.lv-heart-down-r {
+  clip-path: polygon(52% 0, 100% 0, 100% 100%, 44% 100%, 56% 52%, 40% 30%);
+  animation: lv-crack-r 1.9s ease-in both;
+}
+@keyframes lv-heart-down {
+  0% {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  15% {
+    opacity: 1;
+    transform: scale(1.05);
+  }
+  30% {
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(2.4cqw);
+  }
+}
+@keyframes lv-crack-l {
+  0%,
+  35% {
+    transform: none;
+  }
+  100% {
+    transform: translate(-0.5cqw, 0.3cqw) rotate(-12deg);
+  }
+}
+@keyframes lv-crack-r {
+  0%,
+  35% {
+    transform: none;
+  }
+  100% {
+    transform: translate(0.5cqw, 0.3cqw) rotate(12deg);
+  }
+}
+
 /* ===== 환경 설정 ===== */
 .lv-cfg-step {
   padding: 0.45cqw 1cqw;
