@@ -2949,7 +2949,7 @@ export const W2: Scenes = {
   ],
   y2_d13_yes: [
     Y("…쉽게 믿네요. 딜러님 같은 사람이.", "whisper", "surprise"),
-    Y("그래서 무서워요. 제가 그 믿음보다 나쁜 사람일까 봐서요.", "whisper", "sad"),
+    Y("그래서 무서워요. 제가 그 믿음보다 나쁜 사람일까 봐요.", "whisper", "sad"),
     ME("그럼 그 믿음만큼 좋은 사람 해요."),
     Y("…그런 방법도 있네요. 수첩에 적어 둘게요.", "whisper", "smile"),
     { t: "goto", to: "y2_d13_end" },
