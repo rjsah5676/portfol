@@ -11,8 +11,8 @@
   /* 대사 · UI = 프리텐다드, 서술 · 이름표 = 고운바탕 (서술과 말소리를 글꼴로 구분) */
   --lv-sans: "Pretendard Variable", Pretendard, "Noto Sans KR", "Malgun Gothic", system-ui, sans-serif;
   --lv-serif: "Gowun Batang", "Nanum Myeongjo", "Noto Serif KR", serif;
-  /* 서술 전용: 획 대비가 뚜렷한 나눔명조 — 대사(프리텐다드)와 한눈에 갈리게 */
-  --lv-narr: "Nanum Myeongjo", "Batang", "Noto Serif KR", serif;
+  /* 서술 전용: 고운바탕 — 대사(프리텐다드)와 한눈에 갈리게. 나눔명조 굵은체는 쌓·꽉·닳 같은 글자가 뭉개져서 바꿈 */
+  --lv-narr: "Gowun Batang", "Nanum Myeongjo", "Batang", "Noto Serif KR", serif;
   font-family: var(--lv-sans);
   /* 커서: 평소 = 남색 화살표(금색 테), 누를 수 있는 곳 = 금색 화살표 */
   --lv-cur: url("data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%2724%27 height=%2724%27 viewBox=%270 0 24 24%27%3E%3Cpath d=%27M2.5 2 L2.5 19 L7 15 L10.2 21.6 L13 20.3 L9.9 13.9 L16 13.9 Z%27 fill=%27%23121a3e%27 stroke=%27%23ffd27a%27 stroke-width=%271.5%27 stroke-linejoin=%27round%27/%3E%3C/svg%3E") 3 2, default;
@@ -1136,6 +1136,7 @@
     inset 0 0 0 0.1cqw #ffe39a66;
 }
 .lv-sp-result {
+  font-family: "Barlow Condensed", "Arial Narrow", sans-serif;
   text-shadow:
     0 0 1.5cqw #000,
     0 0.3cqw 0.6cqw #000;

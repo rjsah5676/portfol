@@ -80,7 +80,7 @@ const POKER_AMY_BET: PokerSpec = {
       tellId: "amyLoud",
       acts: [
         {
-          label: "콜 (블러프다)",
+          label: "콜",
           result: "win",
           score: 2,
           eff: { trustA: 1 },
@@ -145,7 +145,7 @@ const POKER_YEON_Q: PokerSpec = {
       tell: "말하기 직전, 장갑 낀 손끝이 테이블을 두 번 두드렸다. 그리고 손이 곧장 무릎 아래로 숨었다.",
       acts: [
         {
-          label: "콜 (블러프다)",
+          label: "콜",
           result: "lose",
           score: 0,
           eff: { affY: 1 },
@@ -153,7 +153,7 @@ const POKER_YEON_Q: PokerSpec = {
           think: "두드린 손만 봤다. 그다음에 숨은 손은 못 봤다.",
         },
         {
-          label: "폴드 (진짜다)",
+          label: "폴드",
           result: "fold",
           score: 3,
           eff: { trustY: 1 },
@@ -189,7 +189,7 @@ const POKER_YEON_Q0: PokerSpec = {
       tell: "말하기 직전, 장갑 낀 손끝이 테이블을 두 번 두드렸다. 그리고 손이 곧장 무릎 아래로 숨었다.",
       acts: [
         {
-          label: "콜 (블러프다)",
+          label: "콜",
           result: "lose",
           score: 0,
           eff: { affY: 1 },
@@ -197,7 +197,7 @@ const POKER_YEON_Q0: PokerSpec = {
           think: "두드린 손만 봤다. 그다음에 숨은 손은 못 봤다.",
         },
         {
-          label: "폴드 (진짜다)",
+          label: "폴드",
           result: "fold",
           score: 3,
           eff: { trustY: 1 },

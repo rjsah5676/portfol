@@ -86,7 +86,7 @@ const POKER_AMY_LAST: PokerSpec = {
       tell: "조용하다. 트윈테일 끝을 손가락에 천천히 감는다. 센 패를 쥔 사람처럼. …그런데 감는 손이 너무 정성스럽다. 다른 손은 테이블 밑에서 군번줄을 하얗게 쥐고 있다.",
       acts: [
         {
-          label: "콜 (머리 감는 건 연기다)",
+          label: "콜",
           result: "win",
           score: 2,
           eff: { trustA: 1, gambleA: -2 },
@@ -94,7 +94,7 @@ const POKER_AMY_LAST: PokerSpec = {
           think: "머리는 보여 주려고 감았다. 진짜는 테이블 밑, 군번줄을 쥔 손이다.",
         },
         {
-          label: "폴드 (진짜 센 패다)",
+          label: "폴드",
           result: "fold",
           score: 1,
           eff: { gambleA: 2 },
@@ -162,14 +162,14 @@ const POKER_BOSS_A: PokerSpec = {
       tellId: "bossGlass",
       acts: [
         {
-          label: "콜 (킹 풀하우스다)",
+          label: "콜",
           result: "lose",
           score: 0,
           say: "포카드예요. …3년 전이랑 같은 얼굴이시네요, {name} 씨.",
           think: "리버의 7. 이 덱은 처음부터 이 한 장을 위해 쌓여 있었다.",
         },
         {
-          label: "폴드 (손가락을 믿는다)",
+          label: "폴드",
           result: "fold",
           score: 3,
           say: "…접어요? 킹 풀하우스를?",

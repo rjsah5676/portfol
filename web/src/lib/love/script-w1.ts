@@ -76,7 +76,7 @@ const POKER_AMY_DARE: PokerSpec = {
           think: "조용할 때가 진짜였다. 머리보다 손이 먼저 칩을 밀었다.",
         },
         {
-          label: "폴드 (읽었다)",
+          label: "폴드",
           result: "fold",
           score: 3,
           eff: { readA: 1, trustA: 1 },
@@ -127,7 +127,7 @@ const POKER_YEON_EMPTY: PokerSpec = {
       tellId: "yeonTap",
       acts: [
         {
-          label: "콜 (블러프다)",
+          label: "콜",
           result: "win",
           score: 2,
           eff: { trustY: 2, knowY: 1 },

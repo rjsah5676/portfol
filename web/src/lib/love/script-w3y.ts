@@ -152,7 +152,7 @@ const POKER_Y_FINAL: PokerSpec = {
       tell: "스페이드 킹. 또 하트가 아니다. 말이 먼저 나왔다. 웃음은 반 박자 뒤에 따라왔다.",
       acts: [
         {
-          label: "콜 (블러프다)",
+          label: "콜",
           result: "win",
           score: 2,
           say: "……",

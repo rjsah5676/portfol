@@ -477,7 +477,7 @@ export function StoryPoker({
     );
   };
 
-  const RES_TXT = { win: "이겼다", lose: "졌다", fold: "접었다", split: "비겼다" } as const;
+  const RES_TXT = { win: "WIN", lose: "LOSE", fold: "FOLD", split: "SPLIT" } as const;
   const shown = res ? (res.r === "fold" ? street.board : Math.max(runTo, street.board)) : street.board;
   const vis = board.slice(0, shown);
   const theirsOpen = !!res && res.r !== "fold" && sd >= 1;
@@ -576,7 +576,7 @@ export function StoryPoker({
         </div>
       )}
       {/* 결과 */}
-      {res && sd >= 4 && (
+      {res && sd >= 4 && res.r !== "fold" && (
         <div
           className={`lv-sp-result absolute left-1/2 top-[42%] -translate-x-1/2 text-[4.2cqw] font-black ${res.r === "win" ? "text-[#ffd27a]" : res.r === "lose" ? "text-[#ff8a8a]" : "text-white/85"}`}
         >
@@ -908,7 +908,7 @@ export function HeadsUp({
       {w && phase !== "done" && (
         <div className={`lv-sp-result absolute left-1/2 top-[42%] -translate-x-1/2 text-[3.6cqw] font-black ${w === "me" ? "text-[#ffd27a]" : w === "opp" ? "text-[#ff8a8a]" : "text-white/85"}`}>
           {w === "me" ? "팟을 가져왔다" : w === "opp" ? `${NAME[who]}의 팟` : "나눠 가졌다"}
-          <div className="text-center text-[1.3cqw] font-bold text-white/75">{h?.over?.by === "fold" ? (w === "me" ? "상대가 접었다" : "내가 접었다") : ""}</div>
+          <div className="text-center text-[1.3cqw] font-bold text-white/75">{h?.over?.by === "fold" ? (w === "me" ? "상대 FOLD" : "FOLD") : ""}</div>
         </div>
       )}
       {/* 최종 결과 */}
