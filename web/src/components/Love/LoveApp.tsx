@@ -177,6 +177,9 @@ const TYPE_MS = [0, 46, 34, 24, 14, 0];
 const AUTO_MUL = [0, 1.7, 1.3, 1, 0.75, 0.5];
 
 // ---------- 소리 ----------
+/** 캐릭터별 음성 크기: 연서(y*-.mp3)는 에이미보다 약 2.7dB 크게 녹음돼 있어 0.7배(약 -3dB)로 맞춤 */
+const voiceGain = (url: string) => (/\/y\d+-[^/]*\.mp3$/.test(url) ? 0.7 : 1);
+
 function useSound(muted: boolean, cfg: Cfg) {
   const mute = useRef(muted);
   const vol = useRef(cfg);
@@ -188,7 +191,8 @@ function useSound(muted: boolean, cfg: Cfg) {
     vol.current = cfg;
     if (bgmEl.current)
       bgmEl.current.volume = voiceEl.current && !voiceEl.current.ended ? bgmVol() * 0.4 : bgmVol();
-    if (voiceEl.current) voiceEl.current.volume = Math.min(1, 0.95 * cfg.voice);
+    if (voiceEl.current)
+      voiceEl.current.volume = Math.min(1, 0.95 * cfg.voice * voiceGain(voiceEl.current.src));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [muted, cfg]);
   // 핵심 대사 음성: 하나만 재생, 재생 중엔 BGM 살짝 줄임
@@ -201,7 +205,7 @@ function useSound(muted: boolean, cfg: Cfg) {
     if (bgmEl.current) bgmEl.current.volume = bgmVol();
     if (!url || mute.current || vol.current.voice <= 0) return;
     const a = new Audio(url);
-    a.volume = Math.min(1, 0.95 * vol.current.voice);
+    a.volume = Math.min(1, 0.95 * vol.current.voice * voiceGain(url));
     voiceEl.current = a;
     a.onloadedmetadata = () => {
       voiceEnd.current = Date.now() + a.duration * 1000;
