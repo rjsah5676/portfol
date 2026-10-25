@@ -518,7 +518,7 @@ export const V2_LINES: VoiceLine[] = [
   { id: "y4-3e09ab4340", who: "yeonseo", text: "알면서 나왔어요.", tag: "[low voice] [softly] 알면서 나왔어요." },
   { id: "y4-66690571cc", who: "yeonseo", text: "딜러님 주머니에 성냥 있죠?", tag: "[low voice] [matter-of-fact] 딜러님 주머니에 성냥 있죠?" },
   { id: "y4-f99fc4de39", who: "yeonseo", text: "…그거, 다음 판 약속이에요. 오늘 밤 아래층에서 무슨 일이 있어도, 그 약속은 그대로예요.", tag: "[whispers] ...그거, 다음 판 약속이에요. [short pause] 오늘 밤 아래층에서 무슨 일이 있어도, 그 약속은 그대로예요." },
-  { id: "y4-b04943e9bfw", who: "yeonseo", text: "다음 주 달력에, 동그라미 칠 칸 하나 비워 뒀어요.", tag: "[low voice] [quietly] 다음 주 달력에, 동그라미칠 칸 하나 비워 뒀어요." },
+  { id: "y4-b04943e9bfww", who: "yeonseo", text: "다음 주 달력에, 동그라미 칠 칸 하나 비워 뒀어요.", tag: "[low voice, softly] 다음 주 달력에... 동그라미칠 칸, 하나 비워 뒀어요." },
   { id: "y4-51b8dcb210", who: "yeonseo", text: "…아직 몰라요. 오늘 밤 아래층에서 무슨 일이 있어도, 그 칸은 비워 둘 거예요.", tag: "[whispers] ...아직 몰라요. [short pause] 오늘 밤 아래층에서 무슨 일이 있어도, 그 칸은 비워 둘 거예요." },
   { id: "y4-feddc3b963", who: "yeonseo", text: "…어제 대답 안 한 거, 잘한 거예요.", tag: "[whispers] [sad] ...어제 대답 안 한 거, 잘한 거예요." },
   { id: "y4-03afc8d631", who: "yeonseo", text: "믿는다고 했으면, 지금 딜러님 얼굴 보기가 더 힘들었을 거예요.", tag: "[whispers] 믿는다고 했으면, [short pause] 지금 딜러님 얼굴 보기가 더 힘들었을 거예요." },
