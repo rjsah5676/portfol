@@ -133,7 +133,7 @@ export default function Stage({ children }: { children: ReactNode }) {
                 touchAction: "none",
               }}
             >
-              <GameLoader tasks={baseballTasks} title="PIXEL BASEBALL" accent="#FF8A3D" className="absolute inset-0">
+              <GameLoader tasks={baseballTasks} title="픽셀 프로야구" accent="#FF8A3D" className="absolute inset-0">
                 {children}
               </GameLoader>
             </div>

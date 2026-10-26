@@ -33,7 +33,11 @@ export function evaluate(s: GameState, p: Pitch, d: SwingDecision | null, rng: R
     return { call: inZone(at.x, at.y) ? "strike" : "ball", at, bad: false };
   }
   const b = batter(s);
-  const sw = swing({ pitch: p, at, e: d.e, bats: b.bats, hit: b.hit, power: b.power, bunt: d.bunt, special: d.special }, rng);
+  // 육성 특수능력 (득점권 · 2스트라이크)
+  const risp = s.bases[1] !== null || s.bases[2] !== null;
+  const hit = Math.max(1, b.hit + (risp ? b.sit?.rispHit ?? 0 : 0) + (s.strikes >= 2 ? b.sit?.twoK ?? 0 : 0));
+  const power = Math.max(1, b.power + (risp ? b.sit?.rispPow ?? 0 : 0));
+  const sw = swing({ pitch: p, at, e: d.e, bats: b.bats, hit, power, bunt: d.bunt, special: d.special }, rng);
   if (sw.kind === "whiff") return { call: "swingMiss", at, sw, bad: true };
   if (sw.kind === "foul") return { call: "foul", at, sw, bad: false };
   const fs = s.sides[fieldSide(s)];

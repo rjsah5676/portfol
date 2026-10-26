@@ -9,7 +9,8 @@
  */
 import { cpuGauge, cpuPlan, cpuSwing, cpuUseSpecial, SPEED_SCALE, type Diff } from "@/lib/baseball/ai";
 import { timingLabel, timingWindow } from "@/lib/baseball/contact";
-import { BP_PITCHER, CHARS, TEAM_DEFS, charById, cutinUrl, faceUrl, makeTeam, type CharId, type Pitcher } from "@/lib/baseball/data";
+import { BP_PITCHER, CHARS, TEAM_DEFS, charById, cutinUrl, faceUrl, makeTeam, swingOf, type CharId, type Pitcher } from "@/lib/baseball/data";
+import { advanceToMyPA, mySide, newCareerGame, slotName, type CareerSetup, type MyPA } from "@/lib/baseball/careerGame";
 import {
   BAT_BUNT, BAT_IDLE, BAT_LOAD, BAT_SWING, BATS, BATTER_RIG, HAIR, HELMETS, PIT_IDLE, PIT_THROW, PITCH_RELEASE_T, PITCHER_RIG,
   SKIN_TONES, SWING_HIT_T, baseSkin,
@@ -26,7 +27,7 @@ import { clamp, lerp, makeRng, smooth, type Rng } from "@/lib/baseball/rng";
 import { sfx } from "./sfx";
 import { CAM, DH, DW, battingBg, drawFieldFrame, fieldBg, fproj, proj } from "./view";
 
-export type Mode = "game" | "derby";
+export type Mode = "game" | "derby" | "career";
 
 export interface MatchCfg {
   mode: Mode;
@@ -38,6 +39,8 @@ export interface MatchCfg {
   myPit: CharId;
   /** 홈런더비 타자 */
   derbyChar?: CharId;
+  /** 육성 경기: 팀 · 내 타순 (내 타석만 직접, 나머지는 빠르게) */
+  career?: CareerSetup;
   seed?: number;
 }
 
@@ -199,6 +202,12 @@ export class Match {
   pitAnimT = 0;
 
   // 홈런더비
+  /** 육성: 내 타석 수 · 돌발미션 성공 수 */
+  paCount = 0;
+  missionsOk = 0;
+  myPAs: MyPA[] = [];
+  private rbiBefore = 0;
+
   derby = { outs: 0, dist: 0, hr: 0, nextBoss: 500, boss: null as CharId | null, bossLeft: 0, longest: 0 };
 
   constructor(cfg: MatchCfg, onUi: (u: UiState) => void) {
@@ -219,7 +228,7 @@ export class Match {
       const ch = charById(cfg.derbyChar ?? cfg.myBat);
       myTeam = { ...myTeam, batters: myTeam.batters.map(() => ({ name: ch.name, num: 1, pos: "마", bats: ch.bats, ...ch.bat, special: ch.id })) };
     }
-    this.s = newGame({
+    this.s = cfg.career ? newCareerGame(cfg.career) : newGame({
       innings: cfg.innings,
       diff: cfg.diff,
       userHome: cfg.mode === "derby" ? true : cfg.userHome,
@@ -233,7 +242,13 @@ export class Match {
     this.batSkin = baseSkin();
     this.pitSkin = baseSkin();
     this.ui = this.makeUi();
-    this.setBanner(cfg.mode === "derby" ? "HOME RUN DERBY" : "PLAY BALL!", cfg.mode === "derby" ? "아웃 10개까지 · 비거리 합" : `${this.s.opts.away.name} vs ${this.s.opts.home.name}`, "#ffcf4a", 1.6, true);
+    this.setBanner(
+      cfg.mode === "derby" ? "HOME RUN DERBY" : "PLAY BALL!",
+      cfg.mode === "derby" ? "아웃 10개까지 · 비거리 합" : cfg.career ? `${slotName(cfg.career.myIdx)} 타자로 출전 · 내 타석만 직접 쳐요` : `${this.s.opts.away.name} vs ${this.s.opts.home.name}`,
+      "#ffcf4a",
+      1.6,
+      true
+    );
     sfx.cheer(0.6);
   }
 
@@ -266,8 +281,9 @@ export class Match {
     const b = this.batterNow;
     const p = this.pitcherNow;
     const us = this.userSide();
-    const hero = ub ? !!b.special : !!p.special;
-    const sp = hero ? (ub ? charById(b.special!) : charById(p.special!)) : null;
+    const bSw = swingOf(b);
+    const hero = ub ? !!bSw : !!p.special;
+    const sp = hero ? (ub ? charById(bSw!) : charById(p.special!)) : null;
     const fsd = this.s.sides[fieldSide(this.s)];
     return {
       phase: this.phase,
@@ -321,7 +337,28 @@ export class Match {
   private beginPA() {
     const s = this.s;
     if (s.over) return this.finish();
-    if (this.cfg.mode === "game" && !this.userBat) {
+    if (this.cfg.career) {
+      // 내 타석까지 빠르게 진행
+      const sc = [...s.score];
+      const inn = s.inning;
+      advanceToMyPA(s, this.cfg.career.myIdx, this.rng);
+      if (s.over) return this.finish();
+      cpuManage(s, fieldSide(s));
+      this.rbiBefore = s.sides[batSide(s)].bat[this.cfg.career.myIdx].rbi;
+      if (this.paCount++ > 0) {
+        const me = mySide(s);
+        const got = s.score[me] - sc[me];
+        const lost = s.score[1 - me] - sc[1 - me];
+        const runners = s.bases.filter((x) => x !== null).length;
+        this.setBanner(
+          `${s.inning}회${s.top ? "초" : "말"} · 내 타석`,
+          `${inn !== s.inning || got || lost ? `그 사이 우리 +${got} · 상대 +${lost} · ` : ""}${s.outs}아웃${runners ? ` · 주자 ${runners}명` : ""}`,
+          "#ffcf4a",
+          1.4,
+          true
+        );
+      }
+    } else if (this.cfg.mode === "game" && !this.userBat) {
       // (사용자 투수) 지치면 자동 교체 안내만 · 0 이면 강제
       const sd = s.sides[fieldSide(s)];
       if (sd.stamina <= 0) {
@@ -355,7 +392,7 @@ export class Match {
     this.batFrom = undefined;
     this.pitAnim = PIT_IDLE;
     this.updateSkins();
-    const m = this.cfg.mode === "game" ? maybeMission(s, this.rng) : null;
+    const m = this.cfg.mode !== "derby" ? maybeMission(s, this.rng) : null;
     if (m) {
       s.mission = m;
       sfx.mission();
@@ -369,9 +406,11 @@ export class Match {
     const fsd = this.s.sides[fieldSide(this.s)];
     const p = this.pitcherNow;
     const bc = b.special ? charById(b.special) : null;
-    this.batSkin = { ...baseSkin(), helmet: bc ? HELMETS.hero : HELMETS.basic, bat: bc ? BATS.hero : this.rng() < 0.3 ? BATS.metal : BATS.wood };
+    // 육성 선수: 필살을 배웠으면 그 캐릭터 색 배트
+    const lc = !bc && b.learned ? charById(b.learned) : null;
+    this.batSkin = { ...baseSkin(), helmet: bc ? HELMETS.hero : HELMETS.basic, bat: bc || lc ? BATS.hero : this.rng() < 0.3 ? BATS.metal : BATS.wood };
     this.pitSkin = baseSkin();
-    this.batColors = colorsFor(bs.team, bs.order * 7 + 3, b.num, b.special ? bc!.name : b.name, bc?.color);
+    this.batColors = colorsFor(bs.team, bs.order * 7 + 3, b.num, b.special ? bc!.name : b.name, (bc ?? lc)?.color);
     const pc = p.special ? charById(p.special) : null;
     this.pitColors = colorsFor(this.cfg.mode === "derby" ? TEAM_DEFS[1] : fsd.team, fsd.pitcher * 5 + 1, p.num, p.name, pc?.color);
     if (pc) this.pitColors.team = pc.color;
@@ -399,7 +438,7 @@ export class Match {
       const risp = this.s.bases[1] !== null || this.s.bases[2] !== null;
       if (this.cfg.mode === "derby") this.cpuUseSp = !!this.derby.boss;
       else this.cpuUseSp = !!p.special && cpuUseSpecial(fsd.ballLeft, this.s.inning, this.s.strikes, risp, this.rng);
-      if (this.cpuUseSp && this.cfg.mode === "game") fsd.ballLeft--;
+      if (this.cpuUseSp && this.cfg.mode !== "derby") fsd.ballLeft--;
       if (this.cfg.mode === "derby" && !this.derby.boss) {
         // 배팅볼: 존 안 · 느긋하게
         this.target = { x: this.rng.gauss() * 0.1, y: 0.8 + this.rng.gauss() * 0.12 };
@@ -448,8 +487,8 @@ export class Match {
       const b = this.batterNow;
       const fbDur = 17 / (p.velo / 3.6) / this.speedScale;
       const cs = cpuSwing(b, pc, plateCross(pc), this.s.strikes, this.s.balls, this.cfg.diff, this.rng, fbDur);
-      const useSwingSp = !!b.special && cs.swing && this.rng() < 0.3 && this.s.sides[batSide(this.s)].swingLeft > 0;
-      this.decision = { swing: cs.swing, e: cs.e, bunt: false, special: useSwingSp ? b.special : undefined };
+      const useSwingSp = !!swingOf(b) && cs.swing && this.rng() < 0.3 && this.s.sides[batSide(this.s)].swingLeft > 0;
+      this.decision = { swing: cs.swing, e: cs.e, bunt: false, special: useSwingSp ? swingOf(b) : undefined };
       if (useSwingSp) this.s.sides[batSide(this.s)].swingLeft--;
       if (cs.swing) {
         this.outcome = evaluate(this.s, pc, this.decision, this.rng);
@@ -471,7 +510,7 @@ export class Match {
     const dur = p?.dur ?? 0.6;
     const e = tf + SWING_HIT_T - dur;
     const b = this.batterNow;
-    this.decision = { swing: true, e, bunt: this.buntArmed, special: this.spArmed ? b.special : undefined };
+    this.decision = { swing: true, e, bunt: this.buntArmed, special: this.spArmed ? swingOf(b) : undefined };
     this.swingStart = tf;
     if (this.phase === "windup") {
       // 아직 공 없음 → 헛스윙 처리는 공이 나온 뒤
@@ -505,12 +544,13 @@ export class Match {
     const us = this.userSide();
     if (this.userBat) {
       const b = this.batterNow;
-      if (!b.special || this.phase !== "ready") return;
+      const sw = swingOf(b);
+      if (!sw || this.phase !== "ready") return;
       if (this.spArmed) return;
-      if (this.cfg.mode === "game" && us.swingLeft <= 0) return;
+      if (this.cfg.mode !== "derby" && us.swingLeft <= 0) return;
       this.spArmed = true;
-      if (this.cfg.mode === "game") us.swingLeft--;
-      const c = charById(b.special);
+      if (this.cfg.mode !== "derby") us.swingLeft--;
+      const c = charById(sw);
       this.showCutin(c.id, c.swing.name, c.swing.desc, "bat");
       this.afterCutin = "ready";
     } else {
@@ -765,7 +805,12 @@ export class Match {
       const sub = res.runs ? `+${res.runs}점` : undefined;
       this.setBanner(res.text, sub, col, 1.5, big || res.runs > 0);
       if (res.kind === "K") (this.userBat ? sfx.groan : () => sfx.cheer(0.7))();
+      if (this.cfg.career && this.userBat) {
+        const ln = this.s.sides[batSide(this.s)].bat[this.cfg.career.myIdx];
+        this.myPAs.push({ inning: this.s.inning, text: res.text, kind: res.kind, rbi: ln.rbi - this.rbiBefore, mission: res.mission ? { ok: res.mission.ok, pt: 0 } : undefined });
+      }
       if (res.mission) {
+        if (res.mission.ok) this.missionsOk++;
         this.popup(DW / 2, 150, res.mission.text, res.mission.ok ? "#ffd23f" : "#ff9a7a");
         (res.mission.ok ? sfx.missionOk : sfx.missionNg)();
       }
@@ -798,6 +843,15 @@ export class Match {
     }
     const meIdx = s.opts.userHome ? 1 : 0;
     const win = s.winner === -1 ? null : s.winner === meIdx;
+    if (this.cfg.career) {
+      // 육성 경기: 기록은 육성 쪽에서 (연습 경기 저장값은 안 건드림)
+      const ln = s.sides[meIdx].bat[this.cfg.career.myIdx];
+      const line = `${ln.ab}타수 ${ln.h}안타${ln.hr ? ` ${ln.hr}홈런` : ""}${ln.rbi ? ` ${ln.rbi}타점` : ""}`;
+      this.ui = { ...this.makeUi(), over: { win, score: [s.score[0], s.score[1]], mvp: line, pt: s.pt } };
+      this.onUi(this.ui);
+      if (win) sfx.homerun();
+      return;
+    }
     const pt = s.pt + (win ? 100 : win === null ? 50 : 30) + s.score[meIdx] * 5;
     this.save.pt += pt;
     this.save.games++;
@@ -965,7 +1019,7 @@ export class Match {
     this.timingText = "";
     this.buntArmed = false;
     // 필살타법은 휘둘렀을 때만 소모 (그냥 보낸 공이면 다음 공에 그대로)
-    if (this.cfg.mode === "game" && swung) this.spArmed = false;
+    if (this.cfg.mode !== "derby" && swung) this.spArmed = false;
     this.useBallSp = false;
     this.batAnim = BAT_IDLE;
     this.batAnimT = 0;
@@ -983,6 +1037,10 @@ export class Match {
     }
     if (!r) return this.toPitchNext();
     if (r.gameOver || this.s.over) return this.finish();
+    if (this.cfg.career) {
+      if (r.halfOver) nextHalf(this.s);
+      return this.beginPA();
+    }
     if (r.halfOver) {
       const s = this.s;
       const nextTop = !s.top;
@@ -1669,7 +1727,7 @@ export class Match {
     ctx.textAlign = "left";
     ctx.fillStyle = "#ffcf4a";
     ctx.font = '800 13px "Nanum Gothic", sans-serif';
-    ctx.fillText(`돌발 미션!  성공하면 +${m.pt} PT · 마구/필살 +1`, x + 106, y + 32);
+    ctx.fillText(`돌발 미션!  성공하면 +${m.pt} 코인 · 마구/필살 +1`, x + 106, y + 32);
     ctx.fillStyle = "#fff";
     ctx.font = '22px "Jua", "Nanum Gothic", sans-serif';
     ctx.fillText(`"${m.text}"`, x + 106, y + 66);
@@ -1849,13 +1907,14 @@ export class Match {
     ctx.fillStyle = "rgba(255,255,255,0.65)";
     ctx.font = '700 11px "Nanum Gothic", sans-serif';
     const today = this.cfg.mode === "derby" ? "" : ` · 오늘 ${ln.ab}타수 ${ln.h}안타`;
+    const learned = !hero && b.learned ? charById(b.learned) : null;
     ctx.fillText(`${bs.order + 1}번 ${b.bats === "L" ? "좌타" : "우타"}${today}`, tx, y + 42);
     this.statBar(ctx, tx, y + 50, "히트", b.hit, "#7dff9a");
     this.statBar(ctx, tx, y + 64, "파워", b.power, "#ff7a5c");
     this.statBar(ctx, tx, y + 78, "주루", b.run, "#7ad7ff");
-    if (hero && this.cfg.mode === "game") {
+    if ((hero || learned) && this.cfg.mode !== "derby") {
       const left = this.s.sides[batSide(this.s)].swingLeft;
-      ctx.fillStyle = hero.color;
+      ctx.fillStyle = (hero ?? learned)!.color;
       ctx.font = '700 11px "Nanum Gothic", sans-serif';
       ctx.fillText(`필살 ${"★".repeat(left)}${"☆".repeat(Math.max(0, 3 - left))}`, x + 12, y + 92);
     }

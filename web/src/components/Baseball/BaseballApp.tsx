@@ -1,63 +1,21 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { DIFF_NAME, type Diff } from "@/lib/baseball/ai";
 import { CHARS, charById, faceUrl, type CharId } from "@/lib/baseball/data";
 import { DH, DW, useStage } from "./Stage";
 import { Match, loadSave, type MatchCfg, type Save, type UiState } from "./match";
 import { isMuted, setMuted, sfx } from "./sfx";
+import { ACCENT, Btn, MenuBg, Modal, font } from "./ui";
+import CareerMode from "./Career";
+import { finishDirect } from "./careerStore";
 
 /*
- * PIXEL BASEBALL (가제) M1 — 메뉴 · 경기 화면(캔버스) · 조작 버튼.
+ * 픽셀 프로야구 — 메뉴 · 경기 화면(캔버스) · 조작 버튼.
  * 경기 로직 · 그리기는 match.ts, 규칙은 lib/baseball.
  */
 
-type Screen = "title" | "setup" | "derby" | "howto" | "play";
-
-const ACCENT = "#FF8A3D";
-const font = { title: "font-['Black_Han_Sans',sans-serif]", body: "font-['Nanum_Gothic',sans-serif]" };
-
-function Btn({
-  children,
-  onClick,
-  color = ACCENT,
-  className = "",
-  active,
-  disabled,
-  style,
-}: {
-  children: ReactNode;
-  onClick?: () => void;
-  color?: string;
-  className?: string;
-  active?: boolean;
-  disabled?: boolean;
-  style?: CSSProperties;
-}) {
-  return (
-    <button
-      type="button"
-      disabled={disabled}
-      onPointerDown={(e) => e.stopPropagation()}
-      onClick={(e) => {
-        e.stopPropagation();
-        if (disabled) return;
-        sfx.ui();
-        onClick?.();
-      }}
-      className={`cursor-pointer rounded-xl border-2 font-bold transition-[transform,background-color] active:translate-y-[1px] disabled:cursor-not-allowed disabled:opacity-35 ${className}`}
-      style={{
-        borderColor: active ? color : `${color}66`,
-        background: active ? `${color}` : `linear-gradient(180deg, ${color}2e, ${color}12)`,
-        color: active ? "#111" : "#fff",
-        boxShadow: active ? `0 0 18px ${color}88` : "0 3px 0 rgba(0,0,0,0.45)",
-        ...style,
-      }}
-    >
-      {children}
-    </button>
-  );
-}
+type Screen = "title" | "setup" | "derby" | "howto" | "play" | "career";
 
 function CharCard({ id, sel, onPick, mode }: { id: CharId; sel: boolean; onPick: () => void; mode: "bat" | "pit" }) {
   const c = charById(id);
@@ -106,20 +64,41 @@ export default function BaseballApp() {
   return (
     <div className={`relative h-full w-full overflow-hidden bg-[#0b0e1c] text-white ${font.body}`} style={{ width: DW, height: DH }}>
       {screen === "play" && cfg ? (
-        <Play key={run} cfg={cfg} onExit={() => setScreen("title")} onAgain={() => start({ ...cfg, seed: undefined })} />
+        <Play
+          key={run}
+          cfg={cfg}
+          onExit={() => setScreen(cfg.career ? "career" : "title")}
+          onAgain={() => start({ ...cfg, seed: undefined })}
+          onCareerDone={(mm) => {
+            const s = mm.s;
+            const me = s.opts.userHome ? 1 : 0;
+            finishDirect(
+              { line: s.sides[me].bat[cfg.career!.myIdx], win: s.winner < 0 ? null : s.winner === me, missionPt: s.pt, missions: mm.missionsOk, direct: true },
+              mm.myPAs,
+              `${s.opts.away.short} ${s.score[0]} : ${s.score[1]} ${s.opts.home.short}`
+            );
+            setScreen("career");
+          }}
+        />
+      ) : screen === "career" ? (
+        <CareerMode onExit={() => setScreen("title")} onPlay={start} />
       ) : (
         <MenuBg>
           {screen === "title" && (
             <div className="flex h-full flex-col items-center justify-center gap-5">
               <div className="text-center">
                 <div className={`${font.title} text-[64px] leading-none tracking-wide`} style={{ color: ACCENT, textShadow: "0 5px 0 #000, 0 0 30px rgba(255,138,61,0.5)" }}>
-                  PIXEL BASEBALL
+                  픽셀 프로야구
                 </div>
-                <div className="mt-2 text-[14px] text-white/60">가제 · M1 프로토 — 게임빌 프로야구 손맛 재현 판정용</div>
+                <div className="mt-2 text-[14px] text-white/60">타이밍 한 방, 마구 한 방 — 픽셀파이트 마선수들이 뛰는 야구</div>
               </div>
+              <Btn className={`${font.title} w-[432px] py-4 text-[28px]`} onClick={() => setScreen("career")}>
+                육성 모드
+                <span className="block font-['Nanum_Gothic'] text-[12px] font-normal opacity-80">나만의 선수를 5시즌 키워서 명예의 전당으로</span>
+              </Btn>
               <div className="flex gap-3">
-                <Btn className={`${font.title} w-[210px] py-4 text-2xl`} onClick={() => setScreen("setup")}>
-                  경기 하기
+                <Btn className={`${font.title} w-[210px] py-4 text-2xl`} color="#7ad7ff" onClick={() => setScreen("setup")}>
+                  연습 경기
                 </Btn>
                 <Btn className={`${font.title} w-[210px] py-4 text-2xl`} color="#ffd23f" onClick={() => setScreen("derby")}>
                   홈런 더비
@@ -129,7 +108,7 @@ export default function BaseballApp() {
                 조작법
               </Btn>
               <div className="font-mono text-[13px] text-white/50">
-                PT {save.pt.toLocaleString()} · {save.games}경기 {save.wins}승 · 더비 최고 {save.derbyBest.toLocaleString()}m
+                코인 {save.pt.toLocaleString()} · {save.games}경기 {save.wins}승 · 더비 최고 {save.derbyBest.toLocaleString()}m
               </div>
             </div>
           )}
@@ -268,7 +247,7 @@ export default function BaseballApp() {
                 <div className="col-span-2 rounded-xl border border-white/10 bg-white/[0.03] p-4">
                   <div className={`${font.title} mb-2 text-lg text-[#FF8A3D]`}>그 밖에</div>
                   <p>수비 · 주루는 자동 (물리로 판정 — 타구 속도 · 각도 · 수비 위치 · 주자 발). 필드 화면은 터치하면 빨리감기.</p>
-                  <p>돌발미션: 감독 · 주장 · 선배가 갑자기 미션을 줘요. 성공하면 PT + 마구/필살 1번 더.</p>
+                  <p>돌발미션: 감독 · 주장 · 선배가 갑자기 미션을 줘요. 성공하면 코인 + 마구/필살 1번 더.</p>
                   <p>마구는 궤적이 정해져 있어요 — 컷인에 나오는 힌트대로 치면 칠 수 있어요.</p>
                 </div>
               </div>
@@ -293,20 +272,8 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
-function MenuBg({ children }: { children: ReactNode }) {
-  return (
-    <div className="relative h-full w-full" style={{ background: "radial-gradient(ellipse at 50% 120%, #2a6b3a 0%, #13301f 35%, #0b0e1c 70%)" }}>
-      <div
-        className="pointer-events-none absolute inset-0 opacity-[0.08]"
-        style={{ backgroundImage: "linear-gradient(90deg, #fff 1px, transparent 1px), linear-gradient(#fff 1px, transparent 1px)", backgroundSize: "32px 32px" }}
-      />
-      <div className="relative h-full">{children}</div>
-    </div>
-  );
-}
-
 // ───────────── 경기 화면 ─────────────
-function Play({ cfg, onExit, onAgain }: { cfg: MatchCfg; onExit: () => void; onAgain: () => void }) {
+function Play({ cfg, onExit, onAgain, onCareerDone }: { cfg: MatchCfg; onExit: () => void; onAgain: () => void; onCareerDone: (m: Match) => void }) {
   const { k, fs, canFs, toggleFs } = useStage();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const matchRef = useRef<Match | null>(null);
@@ -446,7 +413,7 @@ function Play({ cfg, onExit, onAgain }: { cfg: MatchCfg; onExit: () => void; onA
                     <span className="block text-[11px] font-normal opacity-80">{ui.spName} · K</span>
                   </Btn>
                 )}
-                {ui.mode === "game" && (
+                {ui.mode !== "derby" && (
                   <Btn active={ui.bunt} disabled={!(ui.phase === "ready" || ui.phase === "windup")} className="py-2 text-[14px]" color="#7ad7ff" onClick={() => m?.toggleBunt()}>
                     번트 <span className="text-[11px] font-normal opacity-70">B</span>
                   </Btn>
@@ -569,7 +536,7 @@ function Play({ cfg, onExit, onAgain }: { cfg: MatchCfg; onExit: () => void; onA
               소리 {muted ? "켜기" : "끄기"}
             </Btn>
             <Btn className="py-2 text-sm" color="#ff7a7a" onClick={onExit}>
-              메뉴로 나가기 (기록 안 남음)
+              {cfg.career ? "나가기 (남은 경기는 자동 진행으로 반영)" : "메뉴로 나가기 (기록 안 남음)"}
             </Btn>
           </div>
         </Modal>
@@ -593,10 +560,18 @@ function Play({ cfg, onExit, onAgain }: { cfg: MatchCfg; onExit: () => void; onA
                 {m?.s.opts.away.short} {ui.over.score[0]} : {ui.over.score[1]} {m?.s.opts.home.short}
               </div>
               {m && <LineScore m={m} />}
-              {ui.over.mvp && <div className="mt-2 text-[14px] text-white/80">MVP · {ui.over.mvp}</div>}
+              {ui.over.mvp && <div className="mt-2 text-[14px] text-white/80">{cfg.career ? `오늘 내 기록 · ${ui.over.mvp}` : `MVP · ${ui.over.mvp}`}</div>}
             </>
           )}
-          <div className="mt-2 text-[15px] text-[#ffd23f]">+{ui.over.pt} PT</div>
+          {cfg.career ? (
+            <div className="mt-4 flex justify-center">
+              <Btn className={`${font.title} px-10 py-3 text-xl`} onClick={() => m && onCareerDone(m)}>
+                육성 화면으로 (결과 반영)
+              </Btn>
+            </div>
+          ) : (
+          <>
+          <div className="mt-2 text-[15px] text-[#ffd23f]">+{ui.over.pt} 코인</div>
           <div className="mt-4 flex justify-center gap-3">
             <Btn className="px-6 py-2.5 text-lg" onClick={onAgain}>
               다시 하기
@@ -605,6 +580,8 @@ function Play({ cfg, onExit, onAgain }: { cfg: MatchCfg; onExit: () => void; onA
               메뉴로
             </Btn>
           </div>
+          </>
+          )}
         </Modal>
       )}
     </div>
@@ -646,13 +623,5 @@ function LineScore({ m }: { m: Match }) {
         ))}
       </tbody>
     </table>
-  );
-}
-
-function Modal({ children, wide }: { children: ReactNode; wide?: boolean }) {
-  return (
-    <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/60" onPointerDown={(e) => e.stopPropagation()}>
-      <div className={`${wide ? "w-[560px]" : "w-[340px]"} rounded-2xl border-2 border-white/15 bg-[#11152a] p-6 text-center shadow-2xl`}>{children}</div>
-    </div>
   );
 }

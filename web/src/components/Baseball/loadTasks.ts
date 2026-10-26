@@ -6,7 +6,7 @@ import { CHARS, cutinUrl, faceUrl } from "@/lib/baseball/data";
 import { keyed, type LoadTask } from "@/lib/preload";
 
 const FONTS = ['16px "Black Han Sans"', '16px "Jua"', '700 16px "JetBrains Mono"', '800 16px "JetBrains Mono"', '700 16px "Nanum Gothic"', '800 16px "Nanum Gothic"'];
-const FONT_TEXT = "PIXEL BASEBALL 스트라이크 볼 파울 헛스윙 삼진 안타 홈런 2루타 3루타 아웃 득점 0123456789 km/h 마구 필살타법 미션";
+const FONT_TEXT = "픽셀 프로야구 나만의 리그 훈련 휴식 외출 상점 은퇴 스트라이크 볼 파울 헛스윙 삼진 안타 홈런 2루타 3루타 아웃 득점 0123456789 km/h 마구 필살타법 미션";
 const fontsTask = keyed("baseball:fonts", () =>
   typeof document === "undefined" || !document.fonts
     ? Promise.resolve()

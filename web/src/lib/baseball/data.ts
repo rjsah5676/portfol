@@ -131,7 +131,14 @@ export interface Batter {
   run: number;
   def: number;
   special?: CharId;
+  /** 육성 선수가 픽셀파이트 캐릭터에게 배운 필살타법 (겉모습은 그대로, 필살만) */
+  learned?: CharId;
+  /** 상황 특수능력 (육성): 득점권 맞히기 · 파워, 2스트라이크 맞히기 */
+  sit?: { rispHit?: number; rispPow?: number; twoK?: number };
 }
+
+/** 필살타법을 쓸 수 있으면 그 캐릭터 (마타자 · 배운 선수) */
+export const swingOf = (b: Batter): CharId | undefined => b.special ?? b.learned;
 
 export interface Pitcher {
   name: string;
