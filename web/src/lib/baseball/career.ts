@@ -39,9 +39,9 @@ export const TYPES: Record<BatType, { name: string; desc: string; pos: string; a
 export const TALENTS = [
   { g: "F", w: 0.08, mul: 0.6, limit: 230 },
   { g: "D", w: 0.17, mul: 0.75, limit: 380 },
-  { g: "C", w: 0.3, mul: 0.88, limit: 720 },
-  { g: "B", w: 0.27, mul: 1.0, limit: 880 },
-  { g: "A", w: 0.13, mul: 1.3, limit: 1060 },
+  { g: "C", w: 0.3, mul: 0.88, limit: 680 },
+  { g: "B", w: 0.27, mul: 1.0, limit: 830 },
+  { g: "A", w: 0.13, mul: 1.3, limit: 1000 },
   { g: "S", w: 0.05, mul: 1.4, limit: 1090 },
   { g: "SS", w: 0, mul: 1.65, limit: 1300 },
 ] as const;
@@ -54,8 +54,14 @@ export const RETIRE_FROM = 7;
 export const GAMES = 30;
 export const GAMES_PER_WEEK = 2;
 export const WEEKS = GAMES / GAMES_PER_WEEK;
+/** 스프링캠프 · 비시즌 날 수 (하루 = 경기 없는 관리 한 번) */
 export const CAMP_TURNS = 3;
 export const OFF_TURNS = 2;
+
+/** 행동력 (원작 ACTIVE): 최대 10칸 · 경기마다 +3 · 캠프 · 비시즌 하루 +6 · 시즌 시작 가득 */
+export const ACTIVE_MAX = 10;
+export const ACTIVE_PER_GAME = 3;
+export const ACTIVE_PER_DAY = 6;
 const START_AGE = 19;
 /** 연차별 성장 배율 (전성기 3~5년차 · 8년차부터 둔해짐) */
 const AGE_GROW = [1.0, 1.05, 1.12, 1.12, 1.12, 1.06, 1.0, 0.88, 0.76, 0.64];
@@ -72,9 +78,9 @@ export const TRAINS: Record<TrainKey, { name: string; desc: string; cost: number
 };
 export const TRAIN_KEYS: TrainKey[] = ["hit", "power", "run", "def", "special"];
 /** 훈련 한 번 기본 성장 (재능 · 타입 · 컨디션 · 높을수록 덜 오름 반영 전) */
-export const BASE_GAIN = 3.3;
+export const BASE_GAIN = 2.7;
 /** 밸런스 손잡이 (시뮬에서 바꿔 보기) */
-export const TUNE = { gameXp: 0.21, train: 1 };
+export const TUNE = { gameXp: 0.19, train: 1 };
 /** 훈련 레벨: 같은 훈련 TRAIN_LV_EVERY 번마다 +1 (최대 5) · 레벨당 효율 +10% */
 export const TRAIN_LV_EVERY = 8;
 /** 필살타법 레벨: 필살 훈련 SP_EVERY 번마다 +1 (최대 5) — 경기당 횟수 2 + 레벨 */
@@ -133,38 +139,38 @@ export interface Skill {
 
 export const SKILLS = {
   // 찬스
-  clutch: { name: "찬스 강함", desc: "득점권에서 맞히기 +70", val: 3, tag: "clutch", fx: { sit: { rispHit: 70 } } },
-  solver: { name: "해결사", desc: "득점권에서 파워 +70", val: 3, tag: "clutch", fx: { sit: { rispPow: 70 } } },
-  gamer: { name: "승부사", desc: "7회부터 맞히기 · 파워 +45", val: 3, tag: "clutch", fx: { sit: { late: 45 } } },
-  sk_ivan: { name: "철곰 근력", desc: "득점권에서 파워 +90", val: 4, tag: "clutch", noPick: true, fx: { sit: { rispPow: 90 } } },
+  clutch: { name: "찬스 강함", desc: "득점권에서 맞히기 +70", val: 2, tag: "clutch", fx: { sit: { rispHit: 70 } } },
+  solver: { name: "해결사", desc: "득점권에서 파워 +70", val: 2, tag: "clutch", fx: { sit: { rispPow: 70 } } },
+  gamer: { name: "승부사", desc: "7회부터 맞히기 · 파워 +45", val: 2, tag: "clutch", fx: { sit: { late: 45 } } },
+  sk_ivan: { name: "철곰 근력", desc: "득점권에서 파워 +90", val: 3, tag: "clutch", noPick: true, fx: { sit: { rispPow: 90 } } },
   // 컨택
-  precise: { name: "정교함", desc: "경기 맞히기 +40", val: 3, tag: "contact", fx: { add: { hit: 40 } } },
-  study: { name: "타격 연구", desc: "타격 훈련 효율 +18%", val: 3, tag: "contact", fx: { train: { hit: 0.18 } } },
-  sk_soyoung: { name: "채찍 손목", desc: "2스트라이크에서 맞히기 +90", val: 4, tag: "contact", noPick: true, fx: { sit: { twoK: 90 } } },
-  sk_forte: { name: "시간 감각", desc: "경기 맞히기 +40 · 부상 기간 -30%", val: 4, tag: "contact", noPick: true, fx: { add: { hit: 40 }, injuryDur: -0.3 } },
+  precise: { name: "정교함", desc: "경기 맞히기 +40", val: 2, tag: "contact", fx: { add: { hit: 40 } } },
+  study: { name: "타격 연구", desc: "타격 훈련 효율 +18%", val: 2, tag: "contact", fx: { train: { hit: 0.18 } } },
+  sk_soyoung: { name: "채찍 손목", desc: "2스트라이크에서 맞히기 +90", val: 3, tag: "contact", noPick: true, fx: { sit: { twoK: 90 } } },
+  sk_forte: { name: "시간 감각", desc: "경기 맞히기 +40 · 부상 기간 -30%", val: 3, tag: "contact", noPick: true, fx: { add: { hit: 40 }, injuryDur: -0.3 } },
   // 파워
-  fullswing: { name: "풀스윙", desc: "경기 파워 +45", val: 3, tag: "power", fx: { add: { power: 45 } } },
-  muscle: { name: "근력 체질", desc: "근력 훈련 효율 +18%", val: 3, tag: "power", fx: { train: { power: 0.18 } } },
-  slugger: { name: "장타 본능", desc: "홈런 경험치 +60%", val: 3, tag: "power", fx: { hrXp: 0.6 } },
-  sk_igna: { name: "업화의 힘", desc: "경기 파워 +45", val: 4, tag: "power", noPick: true, fx: { add: { power: 45 } } },
+  fullswing: { name: "풀스윙", desc: "경기 파워 +45", val: 2, tag: "power", fx: { add: { power: 45 } } },
+  muscle: { name: "근력 체질", desc: "근력 훈련 효율 +18%", val: 2, tag: "power", fx: { train: { power: 0.18 } } },
+  slugger: { name: "장타 본능", desc: "홈런 경험치 +60%", val: 2, tag: "power", fx: { hrXp: 0.6 } },
+  sk_igna: { name: "업화의 힘", desc: "경기 파워 +45", val: 3, tag: "power", noPick: true, fx: { add: { power: 45 } } },
   // 스피드
-  track: { name: "육상부 출신", desc: "주루 훈련 효율 +18%", val: 3, tag: "speed", fx: { train: { run: 0.18 } } },
-  dash: { name: "스타트 대시", desc: "경기 주루 +45", val: 3, tag: "speed", fx: { add: { run: 45 } } },
-  sk_kai: { name: "질풍 주루", desc: "경기 주루 +50", val: 4, tag: "speed", noPick: true, fx: { add: { run: 50 } } },
+  track: { name: "육상부 출신", desc: "주루 훈련 효율 +18%", val: 2, tag: "speed", fx: { train: { run: 0.18 } } },
+  dash: { name: "스타트 대시", desc: "경기 주루 +45", val: 2, tag: "speed", fx: { add: { run: 45 } } },
+  sk_kai: { name: "질풍 주루", desc: "경기 주루 +50", val: 3, tag: "speed", noPick: true, fx: { add: { run: 50 } } },
   // 수비
-  glovework: { name: "수비 달인", desc: "수비 훈련 효율 +18%", val: 3, tag: "def", fx: { train: { def: 0.18 } } },
-  arm: { name: "강견", desc: "경기 수비 +45", val: 3, tag: "def", fx: { add: { def: 45 } } },
-  sk_zena: { name: "번개 반사", desc: "경기 수비 +50", val: 4, tag: "def", noPick: true, fx: { add: { def: 50 } } },
+  glovework: { name: "수비 달인", desc: "수비 훈련 효율 +18%", val: 2, tag: "def", fx: { train: { def: 0.18 } } },
+  arm: { name: "강견", desc: "경기 수비 +45", val: 2, tag: "def", fx: { add: { def: 45 } } },
+  sk_zena: { name: "번개 반사", desc: "경기 수비 +50", val: 3, tag: "def", noPick: true, fx: { add: { def: 50 } } },
   // 근성
-  grit: { name: "끈질김", desc: "2스트라이크에서 맞히기 +70", val: 3, tag: "grit", fx: { sit: { twoK: 70 } } },
-  iron: { name: "강철 몸", desc: "부상 확률 -40%", val: 3, tag: "grit", fx: { injury: -0.4 } },
-  bounce: { name: "오뚝이", desc: "부상 기간 -40%", val: 3, tag: "grit", fx: { injuryDur: -0.4 } },
+  grit: { name: "끈질김", desc: "2스트라이크에서 맞히기 +70", val: 2, tag: "grit", fx: { sit: { twoK: 70 } } },
+  iron: { name: "강철 몸", desc: "부상 확률 -40%", val: 2, tag: "grit", fx: { injury: -0.4 } },
+  bounce: { name: "오뚝이", desc: "부상 기간 -40%", val: 2, tag: "grit", fx: { injuryDur: -0.4 } },
   // 행운
-  lucky: { name: "행운아", desc: "훈련 대성공 +6%", val: 3, tag: "luck", fx: { great: 0.06 } },
+  lucky: { name: "행운아", desc: "훈련 대성공 +6%", val: 2, tag: "luck", fx: { great: 0.06 } },
   star: { name: "스타성", desc: "인기도 +40%", val: 2, tag: "luck", fx: { fame: 0.4 } },
   biz: { name: "사업 수완", desc: "수당 · 연봉 자금 +30%", val: 2, tag: "luck", fx: { money: 0.3 } },
-  sk_lily: { name: "평정심", desc: "컨디션이 덜 떨어짐 · 슬럼프 무시", val: 4, tag: "luck", noPick: true, fx: { calm: true, slump: -1 } },
-  sk_gunmo: { name: "데이터 야구", desc: "모든 훈련 효율 +8%", val: 4, tag: "luck", noPick: true, fx: { train: { all: 0.08 } } },
+  sk_lily: { name: "평정심", desc: "컨디션이 덜 떨어짐 · 슬럼프 무시", val: 3, tag: "luck", noPick: true, fx: { calm: true, slump: -1 } },
+  sk_gunmo: { name: "데이터 야구", desc: "모든 훈련 효율 +8%", val: 3, tag: "luck", noPick: true, fx: { train: { all: 0.08 } } },
   // 양날
   glass: { name: "유리 몸 천재", desc: "모든 훈련 +18% / 부상 확률 +60%", val: 2, risk: true, fx: { train: { all: 0.18 }, injury: 0.6 } },
   gambler: { name: "도박꾼", desc: "자금 +60% / 슬럼프 2배", val: 2, risk: true, fx: { money: 0.6, slump: 1 } },
@@ -175,21 +181,21 @@ export const SKILLS = {
   clutchBad: { name: "찬스 약함", desc: "득점권에서 맞히기 -60", val: -6, bad: true, noPick: true, fx: { sit: { rispHit: -60 } } },
   fragile: { name: "부상 체질", desc: "부상 확률 +50%", val: -6, bad: true, noPick: true, fx: { injury: 0.5 } },
   // 세트 (같은 태그 3장)
-  set_clutch: { name: "클러치 히터", desc: "찬스 세트: 득점권 맞히기 · 파워 +60", val: 8, set: "clutch", noPick: true, fx: { sit: { rispHit: 60, rispPow: 60 } } },
-  set_contact: { name: "타격 기계", desc: "컨택 세트: 경기 맞히기 +60", val: 8, set: "contact", noPick: true, fx: { add: { hit: 60 } } },
-  set_power: { name: "거포 각성", desc: "파워 세트: 경기 파워 +60 · 홈런 경험치 +40%", val: 8, set: "power", noPick: true, fx: { add: { power: 60 }, hrXp: 0.4 } },
-  set_speed: { name: "바람의 아들", desc: "스피드 세트: 경기 주루 +80", val: 8, set: "speed", noPick: true, fx: { add: { run: 80 } } },
-  set_def: { name: "골든 글러브", desc: "수비 세트: 경기 수비 +80 · 감독 신뢰 깎임 절반", val: 8, set: "def", noPick: true, fx: { add: { def: 80 }, trust: -0.5 } },
-  set_grit: { name: "불굴", desc: "근성 세트: 컨디션 최악 없음 · 부상 기간 절반", val: 8, set: "grit", noPick: true, fx: { condFloor: true, injuryDur: -0.5 } },
-  set_luck: { name: "럭키 가이", desc: "행운 세트: 각성 확률 3배 · 대성공 +5%", val: 8, set: "luck", noPick: true, fx: { awaken: 2, great: 0.05 } },
+  set_clutch: { name: "클러치 히터", desc: "찬스 세트: 득점권 맞히기 · 파워 +60", val: 6, set: "clutch", noPick: true, fx: { sit: { rispHit: 60, rispPow: 60 } } },
+  set_contact: { name: "타격 기계", desc: "컨택 세트: 경기 맞히기 +60", val: 6, set: "contact", noPick: true, fx: { add: { hit: 60 } } },
+  set_power: { name: "거포 각성", desc: "파워 세트: 경기 파워 +60 · 홈런 경험치 +40%", val: 6, set: "power", noPick: true, fx: { add: { power: 60 }, hrXp: 0.4 } },
+  set_speed: { name: "바람의 아들", desc: "스피드 세트: 경기 주루 +80", val: 6, set: "speed", noPick: true, fx: { add: { run: 80 } } },
+  set_def: { name: "골든 글러브", desc: "수비 세트: 경기 수비 +80 · 감독 신뢰 깎임 절반", val: 6, set: "def", noPick: true, fx: { add: { def: 80 }, trust: -0.5 } },
+  set_grit: { name: "불굴", desc: "근성 세트: 컨디션 최악 없음 · 부상 기간 절반", val: 6, set: "grit", noPick: true, fx: { condFloor: true, injuryDur: -0.5 } },
+  set_luck: { name: "럭키 가이", desc: "행운 세트: 각성 확률 3배 · 대성공 +5%", val: 6, set: "luck", noPick: true, fx: { awaken: 2, great: 0.05 } },
 } satisfies Record<string, Skill>;
 export type SkillId = keyof typeof SKILLS;
 export const skill = (id: SkillId): Skill => SKILLS[id];
 export const SKILL_IDS = Object.keys(SKILLS) as SkillId[];
 
 /** 필살타법을 배우면 종합 + (레벨당 더) */
-export const LEARNED_VAL = 8;
-export const SP_LV_VAL = 3;
+export const LEARNED_VAL = 6;
+export const SP_LV_VAL = 2;
 
 /** 태그 장수 (세트 · 나쁜 것 · 양날 빼고) */
 export function tagCount(c: Pick<Career, "skills">) {
@@ -426,8 +432,12 @@ export interface Career {
   tCount: Record<TrainKey, number>;
   gear: Partial<Record<GearId, number>>;
   bag: Partial<Record<ConsumableId, number>>;
-  /** 이번 턴에 소모품을 썼나 (턴마다 하나) */
+  /** 이번 관리 기간에 소모품을 썼나 (관리 기간마다 하나) */
   usedItem: boolean;
+  /** 행동력 (0 ~ ACTIVE_MAX) */
+  active: number;
+  /** 이번 관리 기간에 이미 한 지도 ❗ (char:id · ev:event) */
+  done: string[];
   charmNext: boolean;
   bonds: Partial<Record<CharId, number>>;
   injury: Injury | null;
@@ -511,6 +521,8 @@ export function newCareer(o: NewCareerOpts): Career {
     gear: {},
     bag: {},
     usedItem: false,
+    active: ACTIVE_MAX,
+    done: [],
     charmNext: false,
     bonds: {},
     injury: null,
@@ -580,8 +592,8 @@ export function statGrade(v: number) {
  * [종합, 그 이상인 비율]
  */
 export const PCT_TABLE: [number, number][] = [
-  [950, 0.005], [900, 0.01], [850, 0.045], [800, 0.075], [750, 0.115], [700, 0.16], [650, 0.255], [600, 0.365], [550, 0.48],
-  [500, 0.585], [450, 0.66], [400, 0.73], [350, 0.86], [300, 0.91], [250, 0.995], [0, 1],
+  [950, 0.001], [900, 0.005], [850, 0.035], [800, 0.055], [750, 0.105], [700, 0.16], [650, 0.24], [600, 0.36], [550, 0.48],
+  [500, 0.585], [450, 0.7], [400, 0.755], [350, 0.825], [300, 0.905], [250, 0.975], [200, 0.995], [0, 1],
 ];
 export function topPct(ovr: number) {
   for (let i = 0; i < PCT_TABLE.length - 1; i++) {
@@ -648,8 +660,8 @@ export function stepOf(c: Career): Step {
 const campTurns = (c: Career) => CAMP_TURNS + (hasGp(c, "camp") ? 1 : 0);
 /** 지금 구간 설명 */
 export function whenText(c: Career) {
-  if (c.phase === "camp") return `${c.season}년차 스프링캠프 ${c.slot + 1}/${campTurns(c)}`;
-  if (c.phase === "off") return `${c.season}년차 비시즌 ${c.slot + 1}/${OFF_TURNS}`;
+  if (c.phase === "camp") return `${c.season}년차 캠프 ${c.slot + 1}/${campTurns(c)}일`;
+  if (c.phase === "off") return `${c.season}년차 비시즌 ${c.slot + 1}/${OFF_TURNS}일`;
   if (c.phase === "season") {
     const g = c.week * GAMES_PER_WEEK + c.gameInWeek + 1;
     return c.slot >= 1 ? `${c.season}년차 ${g}/${GAMES}경기` : `${c.season}년차 ${c.week + 1}주차 관리`;
@@ -677,12 +689,35 @@ function tickInjury(c: Career) {
   }
 }
 
-/** 턴 끝 → 다음 구간으로 */
-function endTurn(c: Career) {
+const addActive = (c: Career, d: number) => (c.active = clamp(c.active + d, 0, ACTIVE_MAX));
+/** 이 행동에 드는 행동력 */
+export function costOf(a: Action): number {
+  switch (a.kind) {
+    case "train":
+      return a.key === "special" ? 5 : 4;
+    case "meet":
+      return 5;
+    case "event":
+      return a.event === "secret" ? 6 : 5;
+    default:
+      return 3;
+  }
+}
+export const MIN_COST = 3;
+
+/** 관리 끝 → 경기로 (시즌) / 다음 날로 (캠프 · 비시즌) */
+export function advance(c: Career) {
+  if (stepOf(c) !== "turn") throw new Error("관리 차례 아님");
   c.turn++;
-  c.slot++;
   c.usedItem = false;
+  c.done = [];
+  if (c.phase === "season") {
+    c.slot = 1;
+    return;
+  }
+  c.slot++;
   tickInjury(c);
+  addActive(c, ACTIVE_PER_DAY);
   if (c.phase === "camp" && c.slot >= campTurns(c)) {
     c.phase = "season";
     c.slot = 0;
@@ -693,6 +728,7 @@ function endTurn(c: Career) {
     c.season++;
     c.phase = "camp";
     c.slot = 0;
+    c.active = ACTIVE_MAX;
     pushLog(c, `${c.season}년차 스프링캠프 시작.`);
   }
 }
@@ -902,7 +938,7 @@ export function spotsOf(c: Career): Spot[] {
       out.push({ place: SPOT_EVENTS[e].place, event: e });
     }
   }
-  return out;
+  return out.filter((sp) => !c.done.includes(sp.char ? `char:${sp.char}` : `ev:${sp.event}`));
 }
 
 /** 캐릭터 만나기 (인연 단계 진행, 2단계는 고르기) */
@@ -1096,8 +1132,9 @@ export const CLINIC_PRICE = 250;
 
 /** 할 수 없으면 이유 (화면에 그대로) */
 export function whyNot(c: Career, a: Action): string | null {
-  if (stepOf(c) !== "turn") return "지금은 턴이 아니에요";
+  if (stepOf(c) !== "turn") return "지금은 관리 차례가 아니에요";
   if (c.injury && !(a.kind === "rest" || a.kind === "clinic" || a.kind === "care")) return "부상 중엔 숙소 · 병원만";
+  if (c.active < costOf(a)) return `행동력이 모자라요 (⚡${costOf(a)} 필요)`;
   if (a.kind === "train" && a.key === "special" && !c.learned) return "필살타법을 배워야 열려요 (캐릭터 인연 4단계)";
   if (a.kind === "clinic" && c.money < CLINIC_PRICE) return "자금이 모자라요";
   if (a.kind === "clinic" && !c.injury && c.stamina >= 70) return "아픈 데가 없어요";
@@ -1114,6 +1151,7 @@ export function act(c: Career, a: Action): TurnOut {
   if (why) throw new Error(why);
   const rng = turnRng(c);
   let out: TurnOut;
+  addActive(c, -costOf(a));
   const s0 = snap(c);
   switch (a.kind) {
     case "train":
@@ -1143,10 +1181,12 @@ export function act(c: Career, a: Action): TurnOut {
     }
     case "meet": {
       const sp = spotsOf(c).find((s) => s.char === a.char)!;
+      c.done.push(`char:${a.char}`);
       out = meet(c, a.char, sp.place, rng);
       break;
     }
     case "event":
+      c.done.push(`ev:${a.event}`);
       out = spotEvent(c, a.event, rng);
       break;
     case "stroll":
@@ -1159,7 +1199,7 @@ export function act(c: Career, a: Action): TurnOut {
   const ev = out.extra ?? (out.tone === "injury" ? undefined : randomEvent(c, rng));
   if (ev) out.extra = ev;
   pushLog(c, out.title, ...(out.extra ? [out.extra.title] : []));
-  endTurn(c);
+  c.turn++;
   return out;
 }
 
@@ -1265,7 +1305,7 @@ export function buy(c: Career, id: ConsumableId): string {
 /** 소모품 쓰기 — 턴마다 하나만 */
 export function consumeItem(c: Career, id: ConsumableId): string {
   if (!(c.bag[id] ?? 0)) return "없어요";
-  if (c.usedItem) return "이번 턴엔 이미 하나 썼어요";
+  if (c.usedItem) return "이번 관리 때 이미 하나 썼어요";
   if (id === "rehab" && !c.injury) return "부상일 때만 써요";
   if (id === "charm" && c.charmNext) return "이미 썼어요";
   c.bag[id]! -= 1;
@@ -1372,11 +1412,13 @@ export function applyGame(c: Career, g: GameIn | null): GameSummary {
   c.turn++;
   c.usedItem = false;
   tickInjury(c);
+  addActive(c, ACTIVE_PER_GAME);
   c.gameInWeek++;
   if (c.gameInWeek >= GAMES_PER_WEEK) {
     c.gameInWeek = 0;
     c.week++;
     c.slot = 0;
+    c.done = [];
     if (c.week >= WEEKS) c.phase = "seasonEnd";
   }
   return { title, lines, delta: diffOf(c, a), dnp: !g, grade };
@@ -1568,6 +1610,19 @@ export function botAction(c: Career, pol: Policy, rng: Rng): Action {
   } else key = rng.pick(STAT_KEYS);
   return { kind: "train", key };
 }
+/** 봇 관리: 할 행동 (null = 경기 진행 · 다음 날). 행동력이 넘칠 것 같으면 싼 행동이라도 씀 */
+export function botTurn(c: Career, pol: Policy, rng: Rng): Action | null {
+  if (c.active < MIN_COST) return null;
+  const a = botAction(c, pol, rng);
+  if (!whyNot(c, a)) return a;
+  const income = c.phase === "season" ? ACTIVE_PER_GAME * GAMES_PER_WEEK : ACTIVE_PER_DAY;
+  if (c.active + income > ACTIVE_MAX) {
+    const r: Action = c.stamina < 75 ? { kind: "rest" } : { kind: "care" };
+    if (!whyNot(c, r)) return r;
+  }
+  return null;
+}
+
 /** 봇 상점: 주력 장비 먼저 올리고, 체력 모자라면 드링크 */
 export function botShop(c: Career) {
   const best = [...STAT_KEYS].sort((a, b) => TYPES[c.type].apt[b] - TYPES[c.type].apt[a]);

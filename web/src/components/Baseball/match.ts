@@ -73,6 +73,10 @@ export interface UiState {
   fast: boolean;
   over: null | { win: boolean | null; score: [number, number]; mvp: string; pt: number; derby?: { dist: number; hr: number; best: number } };
   paused: boolean;
+  /** 배속 (경기 안에서도 바꿈) */
+  speed: number;
+  /** 육성 경기: 지금 방식 · 다음 타석부터 바뀔 방식 */
+  career: null | { mode: "direct" | "highlight"; next: "direct" | "highlight" | "auto" | null };
 }
 
 interface Banner {
@@ -206,6 +210,8 @@ export class Match {
   pitAnimT = 0;
 
   // 홈런더비
+  /** 육성: 다음 타석부터 바꿀 진행 방식 (지금 타석은 그대로 — 결과 보고 도망 못 가게) */
+  afterMode: "direct" | "highlight" | "auto" | null = null;
   /** 육성: 내 타석 수 · 돌발미션 성공 수 */
   paCount = 0;
   missionsOk = 0;
@@ -310,6 +316,8 @@ export class Match {
       fast: this.fast,
       over: this.ui?.over ?? null,
       paused: this.paused,
+      speed: this.cfg.speed ?? 1,
+      career: this.cfg.career ? { mode: this.cfg.highlight ? "highlight" : "direct", next: this.afterMode } : null,
     };
   }
   private pushUi() {
@@ -342,10 +350,17 @@ export class Match {
     const s = this.s;
     if (s.over) return this.finish();
     if (this.cfg.career) {
-      // 내 타석까지 빠르게 진행
+      // 다음 타석부터 바꾸기로 한 방식 적용
+      let allAuto = false;
+      if (this.afterMode) {
+        if (this.afterMode === "auto") allAuto = true;
+        else this.cfg.highlight = this.afterMode === "highlight";
+        this.afterMode = null;
+      }
+      // 내 타석까지 빠르게 진행 (남은 경기 자동이면 끝까지)
       const sc = [...s.score];
       const inn = s.inning;
-      const autos = advanceToMyPA(s, this.cfg.career.myIdx, this.rng, this.cfg.highlight ? botHook(this.cfg.diff) : undefined, this.myPAs.filter((p) => !p.auto).length);
+      const autos = advanceToMyPA(s, this.cfg.career.myIdx, this.rng, this.cfg.highlight || allAuto ? botHook(this.cfg.diff) : undefined, this.myPAs.filter((p) => !p.auto).length, allAuto);
       this.myPAs.push(...autos);
       if (s.over) return this.finish();
       cpuManage(s, fieldSide(s));
@@ -640,6 +655,19 @@ export class Match {
   }
   setPaused(p: boolean) {
     this.paused = p;
+    this.pushUi();
+  }
+
+  /** 배속 바꾸기 (저장은 화면 쪽) */
+  setSpeed(v: number) {
+    this.cfg.speed = v;
+    this.pushUi();
+  }
+  /** 육성: 다음 타석부터 진행 방식 (같은 걸 다시 누르면 취소) */
+  setAfterMode(m: "direct" | "highlight" | "auto") {
+    if (!this.cfg.career) return;
+    const cur = this.cfg.highlight ? "highlight" : "direct";
+    this.afterMode = this.afterMode === m || m === cur ? null : m;
     this.pushUi();
   }
 

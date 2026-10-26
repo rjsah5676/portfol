@@ -7,7 +7,7 @@
  *   같은 시드 · 같은 성향으로 GP 부스트 0 vs 전부 를 비교해서 GP 몫(≤ 30%) 확인
  */
 import {
-  act, applyGame, botAction, botPick, botShop, canPlay, careerBatter, choose, choosePick, decideRetire, endSeason, newCareer, ovrOf, spUses, stepOf,
+  act, advance, applyGame, botTurn, botPick, botShop, canPlay, careerBatter, choose, choosePick, decideRetire, endSeason, newCareer, ovrOf, spUses, stepOf,
   TALENTS, GP_IDS, TUNE, type BatType, type Career, type GpId, type Policy,
 } from "../src/lib/baseball/career";
 import { botHook, careerSetup, humanHook, playCareerGame } from "../src/lib/baseball/careerGame";
@@ -66,8 +66,12 @@ export function run(i: number, gp: GpId[], over: Partial<Persona> = {}) {
     else if (st === "pick") choosePick(c, botPick(c, rng));
     else if (st === "retireAsk") decideRetire(c, c.season >= ps.pol.retireAt);
     else if (st === "turn") {
-      const o = act(c, botAction(c, ps.pol, rng));
-      if (o.tone === "injury" || o.extra?.tone === "injury") injuries++;
+      const a = botTurn(c, ps.pol, rng);
+      if (!a) advance(c);
+      else {
+        const o = act(c, a);
+        if (o.tone === "injury" || o.extra?.tone === "injury") injuries++;
+      }
     } else if (st === "game") {
       if (canPlay(c)) {
         const setup = careerSetup(c.seed, c.season, c.week * 2 + c.gameInWeek, careerBatter(c), c.trust, diff, spUses(c));

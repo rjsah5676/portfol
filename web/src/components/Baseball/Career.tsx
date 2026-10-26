@@ -7,10 +7,10 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { DIFF_NAME, type Diff } from "@/lib/baseball/ai";
 import {
-  BONDS, BOND_AT, CLINIC_PRICE, COND_NAME, CONSUMABLES, CONSUMABLE_IDS, DEEP_MAX, GAMES, GAME_GRADES, GEAR, GEAR_IDS, GEAR_TIER, GP_BOOSTS, GP_IDS,
+  ACTIVE_MAX, ACTIVE_PER_DAY, ACTIVE_PER_GAME, BONDS, BOND_AT, CLINIC_PRICE, MIN_COST, COND_NAME, CONSUMABLES, CONSUMABLE_IDS, DEEP_MAX, GAMES, GAME_GRADES, GEAR, GEAR_IDS, GEAR_TIER, GP_BOOSTS, GP_IDS,
   INJURY_NAME, LEARNED_VAL, MAX_SEASONS, OFF_TURNS, PLACES, PLACE_IDS, RETIRE_FROM, SPOT_EVENTS, STAT_KEYS, STAT_NAME, TAG_COLOR, TAG_NAME, TRAINS,
-  TRAIN_KEYS, TYPES, act, age, avg, bondStage, buy, buyGear, canPlay, choose, choosePick, consumeItem, decideRetire, deepCount, endSeason,
-  fmtAvg, gameNo, gearNext, gradeOf, newCareer, ops, ovrOf, retireCard, skill, spLv, spUses, spotsOf, statGrade, stepOf, tagCount, talentName,
+  TRAIN_KEYS, TYPES, act, advance, age, avg, bondStage, buy, buyGear, canPlay, choose, choosePick, consumeItem, decideRetire, deepCount, endSeason,
+  costOf, fmtAvg, gameNo, gearNext, gradeOf, newCareer, ops, ovrOf, retireCard, skill, spLv, spUses, spotsOf, statGrade, stepOf, tagCount, talentName,
   trainLv, trainMul, trainRisk, whenText, whyNot,
   type Action, type BatType, type Career, type ConsumableId, type Delta, type GearId, type GpId, type HofEntry, type PlaceId, type SeasonSummary,
   type SkillId, type Spot, type StatKey, type Tag, type TurnOut,
@@ -92,6 +92,13 @@ export default function CareerMode({ onExit, onPlay }: { onExit: () => void; onP
     const q = [out, ...(out.extra && !out.extra.stub ? [out.extra] : [])];
     setQueue(q);
     playTone(q[0].tone);
+  };
+  const doAdvance = () => {
+    if (!c || stepOf(c) !== "turn") return;
+    const n = clone(c);
+    advance(n);
+    commit(n);
+    sfx.ui();
   };
   const doChoose = (i: 0 | 1) => {
     if (!c) return;
@@ -207,6 +214,7 @@ export default function CareerMode({ onExit, onPlay }: { onExit: () => void; onP
             onMode={changeMode}
             onBack={() => setView("home")}
             onPlace={(place) => (place === "mall" ? setModal("shop") : setModal({ place }))}
+            onAdvance={doAdvance}
             onShop={() => setModal("shop")}
             onRecords={() => setModal("records")}
             onPlay={playGame}
@@ -532,6 +540,7 @@ function Hub(p: {
   onMode: (m: PlayMode) => void;
   onBack: () => void;
   onPlace: (place: PlaceId) => void;
+  onAdvance: () => void;
   onShop: () => void;
   onRecords: () => void;
   onPlay: () => void;
@@ -551,17 +560,17 @@ function Hub(p: {
         <div className={`${font.title} text-[20px] whitespace-nowrap`}>{whenText(c)}</div>
         <Schedule c={c} />
         <div className="ml-auto flex items-center gap-1.5">
-          <span className="mr-1 text-[11px] text-white/50">배속</span>
+          <span className="mr-0.5 text-[11px] whitespace-nowrap text-white/50">배속</span>
           {SPEEDS.map((v) => (
-            <Btn key={v} active={p.speed === v} className="px-2 py-0.5 font-mono text-[12px]" color="#7dff9a" onClick={() => p.onSpeed(v)}>
+            <Btn key={v} active={p.speed === v} className="px-1.5 py-0.5 font-mono text-[11.5px] whitespace-nowrap" color="#7dff9a" onClick={() => p.onSpeed(v)}>
               ×{v}
             </Btn>
           ))}
-          <span className="ml-2 font-mono text-[14px] font-bold text-[#ffd23f]">₩ {c.money.toLocaleString()}만</span>
-          <Btn className="px-3 py-1 text-[13px]" color="#ffd23f" onClick={p.onShop}>
+          <span className="ml-1.5 font-mono text-[13px] font-bold whitespace-nowrap text-[#ffd23f]">₩{c.money.toLocaleString()}만</span>
+          <Btn className="px-2.5 py-1 text-[13px] whitespace-nowrap" color="#ffd23f" onClick={p.onShop}>
             상점
           </Btn>
-          <Btn className="px-3 py-1 text-[13px]" color="#7ad7ff" onClick={p.onRecords}>
+          <Btn className="px-2.5 py-1 text-[13px] whitespace-nowrap" color="#7ad7ff" onClick={p.onRecords}>
             기록
           </Btn>
         </div>
@@ -573,11 +582,11 @@ function Hub(p: {
           <StatusRow c={c} />
           {c.injury && (
             <div className="rounded-xl border-2 border-[#ff5a5a]/60 bg-[#ff5a5a]/10 px-3 py-1 text-[12.5px] text-[#ffb0b0]">
-              🩹 {INJURY_NAME[c.injury.kind]} — {c.injury.left}턴 남음 (경기도 1턴). 숙소 · 병원만 갈 수 있고 경기는 결장. 상점 「재활 치료」로 줄일 수 있어요.
+              🩹 {INJURY_NAME[c.injury.kind]} — 복귀까지 {c.injury.left} (경기 · 캠프 하루마다 1씩). 숙소 · 병원만 갈 수 있고 경기는 결장. 병원 치료 · 상점 「재활 치료」로 줄일 수 있어요.
             </div>
           )}
           {step === "turn" || step === "pending" || step === "pick" || step === "retireAsk" ? (
-            <TownMap c={c} onPlace={p.onPlace} />
+            <TownMap c={c} onPlace={p.onPlace} onAdvance={p.onAdvance} />
           ) : step === "game" ? (
             <GameCard c={c} mode={p.mode} onMode={p.onMode} onPlay={p.onPlay} onAutoWeek={p.onAutoWeek} onSitOut={p.onSitOut} />
           ) : step === "seasonEnd" ? (
@@ -728,7 +737,7 @@ function Schedule({ c }: { c: Career }) {
       {Array.from({ length: GAMES }, (_, i) => (
         <div
           key={i}
-          className="h-[10px] w-[6px] rounded-[2px]"
+          className="h-[10px] w-[4px] rounded-[1px]"
           style={{ background: i < done ? "#FF8A3D" : i === done && c.phase === "season" ? "#ffd23f" : "rgba(255,255,255,0.12)", marginLeft: i && i % 2 === 0 ? 2 : 0 }}
         />
       ))}
@@ -756,8 +765,10 @@ function Gauge({ label, value, pct, color }: { label: string; value: string; pct
 }
 
 /** 시내 지도: 장소 버튼 + 이번 주 ❗ (캐릭터 얼굴 · 이벤트) */
-function TownMap({ c, onPlace }: { c: Career; onPlace: (p: PlaceId) => void }) {
+function TownMap({ c, onPlace, onAdvance }: { c: Career; onPlace: (p: PlaceId) => void; onAdvance: () => void }) {
   const spots = spotsOf(c);
+  const season = c.phase === "season";
+  const out = c.active < MIN_COST;
   const at = (p: PlaceId) => spots.find((s) => s.place === p);
   const injured = !!c.injury;
   return (
@@ -767,7 +778,25 @@ function TownMap({ c, onPlace }: { c: Career; onPlace: (p: PlaceId) => void }) {
         <path d="M5 44 H95 M50 10 V95 M5 72 H95" stroke="rgba(255,255,255,0.12)" strokeWidth="3" fill="none" />
         <path d="M5 44 H95 M50 10 V95 M5 72 H95" stroke="rgba(255,255,255,0.25)" strokeWidth="0.4" strokeDasharray="2 2" fill="none" />
       </svg>
-      <div className="absolute top-1.5 left-3 text-[11px] text-white/45">이번 주 관리 턴 1번 — 장소를 골라요 · ❗ 는 이번 주에만</div>
+      {/* 행동력 (원작 ACTIVE) */}
+      <div className="absolute top-2 left-3 z-10 flex items-center gap-2 rounded-xl border border-white/15 bg-black/60 px-3 py-1.5">
+        <span className={`${font.title} text-[15px] text-[#ffd23f]`}>⚡ 행동력</span>
+        <div className="flex gap-[3px]">
+          {Array.from({ length: ACTIVE_MAX }, (_, i) => (
+            <div key={i} className="h-[14px] w-[11px] rounded-[3px]" style={{ background: i < c.active ? "#ffd23f" : "rgba(255,255,255,0.12)", boxShadow: i < c.active ? "0 0 6px #ffd23f88" : undefined }} />
+          ))}
+        </div>
+        <span className="font-mono text-[14px] font-bold">
+          {c.active}/{ACTIVE_MAX}
+        </span>
+        <span className="text-[11px] text-white/50">{season ? `경기마다 +${ACTIVE_PER_GAME}` : `하루 지나면 +${ACTIVE_PER_DAY}`} · 남으면 넘어가요</span>
+      </div>
+      <div className="absolute top-2 right-3 z-10 flex flex-col items-end gap-1">
+        <Btn className={`${font.title} px-4 py-2 text-[17px]`} color={out ? ACCENT : "#7ad7ff"} active={out} onClick={onAdvance}>
+          {season ? "경기 진행 ▶" : "다음 날 ▶"}
+        </Btn>
+        <span className="text-[10.5px] text-white/50">{out ? "행동력이 모자라요" : "❗ 는 이번에만 · 남은 행동력은 다음으로"}</span>
+      </div>
       {PLACE_IDS.map((id) => {
         const pl = PLACES[id];
         const s = at(id);
@@ -820,7 +849,8 @@ function PlaceModal({ c, place, onClose, onAct }: { c: Career; place: PlaceId; o
   const pl = PLACES[place];
   const spot: Spot | undefined = spotsOf(c).find((s) => s.place === place);
   const risk = trainRisk(c);
-  const opt = (a: Action, title: string, sub: string, foot: string, color: string, extra?: ReactNode) => {
+  const opt = (a: Action, title: string, sub: string, foot0: string, color: string, extra?: ReactNode) => {
+    const foot = `⚡${costOf(a)} · ${foot0}`;
     const why = whyNot(c, a);
     return (
       <Btn key={title} disabled={!!why} color={color} className="flex flex-col items-start gap-0.5 px-3 py-2 text-left" onClick={() => onAct(a)}>
@@ -918,7 +948,7 @@ function PlaceModal({ c, place, onClose, onAct }: { c: Career; place: PlaceId; o
     <Modal w={place === "ground" ? 820 : 560} onClose={onClose}>
       <div className="mb-3 flex items-center justify-between">
         <div className={`${font.title} text-[26px]`}>
-          {pl.icon} {pl.name}
+          {pl.icon} {pl.name} <span className="ml-2 font-mono text-[15px] text-[#ffd23f]">⚡ {c.active}/{ACTIVE_MAX}</span>
         </div>
         <Btn className="px-3 py-1 text-[13px]" color="#8b93b8" onClick={onClose}>
           닫기

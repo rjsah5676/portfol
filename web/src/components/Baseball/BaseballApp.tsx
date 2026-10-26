@@ -8,7 +8,7 @@ import { Match, loadSave, type MatchCfg, type Save, type UiState } from "./match
 import { isMuted, setMuted, sfx } from "./sfx";
 import { ACCENT, Btn, MenuBg, Modal, font } from "./ui";
 import CareerMode from "./Career";
-import { finishDirect, loadSpeed } from "./careerStore";
+import { SPEEDS, finishDirect, loadSpeed, saveSpeed } from "./careerStore";
 
 /*
  * 픽셀 프로야구 — 메뉴 · 경기 화면(캔버스) · 조작 버튼.
@@ -477,6 +477,23 @@ function Play({ cfg, onExit, onAgain, onCareerDone }: { cfg: MatchCfg; onExit: (
                 </Btn>
               </>
             )}
+            <Btn
+              className="px-3 py-1.5 font-mono text-[13px]"
+              color="#7dff9a"
+              onClick={() => {
+                const i = SPEEDS.indexOf(ui.speed as (typeof SPEEDS)[number]);
+                const v = SPEEDS[(i + 1) % SPEEDS.length];
+                saveSpeed(v);
+                m?.setSpeed(v);
+              }}
+            >
+              배속 ×{ui.speed}
+            </Btn>
+            {ui.career && (
+              <Btn className="px-3 py-1.5 text-[13px]" color={ui.career.next ? "#ffd23f" : "#8b93b8"} active={!!ui.career.next} onClick={() => pause(true)}>
+                {ui.career.next ? `다음 타석부터 ${ui.career.next === "auto" ? "자동" : ui.career.next === "highlight" ? "하이라이트" : "직접"}` : ui.career.mode === "highlight" ? "하이라이트 중" : "직접 출전 중"}
+              </Btn>
+            )}
             <Btn className="px-3 py-1.5 text-[13px]" color="#8b93b8" onClick={() => pause(true)}>
               ❚❚ 메뉴
             </Btn>
@@ -525,6 +542,40 @@ function Play({ cfg, onExit, onAgain, onCareerDone }: { cfg: MatchCfg; onExit: (
             <Btn className="py-2.5 text-lg" onClick={() => pause(false)}>
               계속하기
             </Btn>
+            {ui?.career && (
+              <div className="rounded-xl border border-white/10 bg-black/30 p-2">
+                <div className="mb-1.5 text-[12px] text-white/60">남은 타석 진행 방식 — 지금 타석이 끝난 다음부터 적용</div>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {(["direct", "highlight", "auto"] as const).map((k) => {
+                    const cur = ui.career!.mode === k && !ui.career!.next;
+                    const next = ui.career!.next === k;
+                    return (
+                      <Btn key={k} active={cur || next} color={k === "auto" ? "#7ad7ff" : next ? "#ffd23f" : ACCENT} className="px-1 py-1.5 text-[12px] leading-tight" onClick={() => m?.setAfterMode(k)}>
+                        {k === "direct" ? "직접" : k === "highlight" ? "하이라이트" : "끝까지 자동"}
+                        <span className="block text-[10px] font-normal opacity-75">{cur ? "지금" : next ? "다음 타석부터" : k === "auto" ? "남은 타석 스킵" : "찬스만 직접"}</span>
+                      </Btn>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+            <div className="flex items-center justify-center gap-1">
+              <span className="mr-1 text-[12px] text-white/60">배속</span>
+              {SPEEDS.map((v) => (
+                <Btn
+                  key={v}
+                  active={ui?.speed === v}
+                  color="#7dff9a"
+                  className="px-2 py-1 font-mono text-[12px]"
+                  onClick={() => {
+                    saveSpeed(v);
+                    m?.setSpeed(v);
+                  }}
+                >
+                  ×{v}
+                </Btn>
+              ))}
+            </div>
             <Btn
               className="py-2 text-sm"
               color="#7ad7ff"

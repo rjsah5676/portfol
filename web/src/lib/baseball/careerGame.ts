@@ -254,7 +254,7 @@ export function isKeyPA(s: GameState) {
  * 내 타석 전까지 빠르게 진행 (내 타석이 오면 멈춤) — 화면 직접 출전에서도 씀.
  * autoMine 을 주면 하이라이트 모드: 내 타석이라도 찬스가 아니면 그 훅으로 자동으로 치고 계속 (결과는 돌려줌)
  */
-export function advanceToMyPA(s: GameState, myIdx: number, rng: Rng, autoMine?: SwingHook, directSoFar = 0): MyPA[] {
+export function advanceToMyPA(s: GameState, myIdx: number, rng: Rng, autoMine?: SwingHook, directSoFar = 0, allAuto = false): MyPA[] {
   const autoPAs: MyPA[] = [];
   let guard = 0;
   while (!s.over && guard++ < 600) {
@@ -266,7 +266,7 @@ export function advanceToMyPA(s: GameState, myIdx: number, rng: Rng, autoMine?: 
         if (m) s.mission = m;
       }
       // 찬스가 한 번도 없었으면 7회부터 내 타석은 직접 (경기당 최소 한 타석)
-      if (isKeyPA(s) || (s.inning >= 7 && directSoFar === 0)) break;
+      if (!allAuto && (isKeyPA(s) || (s.inning >= 7 && directSoFar === 0))) break;
       const before = s.sides[mySide(s)].bat[myIdx].rbi;
       const inning = s.inning;
       const pa = enginePA(s, rng, autoMine);
