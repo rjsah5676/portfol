@@ -1221,6 +1221,23 @@ export default function LoveApp() {
     load(n);
     flash("직전 선택지로 돌아왔어요");
   };
+  // 터치 화면: 「◀ 선택지」는 두 번 눌러야 돌아감 (선택지 누르다 잘못 닿는 것 방지)
+  const [backArm, setBackArm] = useState(false);
+  useEffect(() => {
+    if (!backArm) return;
+    const id = window.setTimeout(() => setBackArm(false), 2500);
+    return () => window.clearTimeout(id);
+  }, [backArm]);
+  const tapBack = () => {
+    const coarse = typeof window !== "undefined" && !!window.matchMedia?.("(pointer: coarse)").matches;
+    if (coarse && !backArm) {
+      setBackArm(true);
+      flash("한 번 더 누르면 직전 선택지로 돌아가요");
+      return;
+    }
+    setBackArm(false);
+    backToChoice();
+  };
   const [hasQuick, setHasQuick] = useState(false);
   const [recap, setRecap] = useState<{ s: GState; n: number } | null>(null);
   useEffect(() => {
@@ -1679,8 +1696,8 @@ export default function LoveApp() {
                   </QBtn>
                 </div>
                 <div className="lv-qm lv-qm-r" onClick={(e) => e.stopPropagation()}>
-                  <QBtn title="직전 선택지로 돌아가기" onClick={backToChoice}>
-                    ◀ 선택지
+                  <QBtn title="직전 선택지로 돌아가기" on={backArm} onClick={tapBack}>
+                    {backArm ? "◀ 한 번 더" : "◀ 선택지"}
                   </QBtn>
                   <QBtn title="지난 대사 (L)" onClick={() => setPanel("log")}>
                     LOG
