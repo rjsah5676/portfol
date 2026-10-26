@@ -22,6 +22,8 @@ export interface CareerSetup {
   userHome: boolean;
   diff: Diff;
   innings: number;
+  /** 경기당 내 필살타법 횟수 (배운 레벨) */
+  spUses?: number;
 }
 
 /** 감독 신뢰 → 타순 (낮으면 하위 타순 · 높으면 중심 타선) */
@@ -31,7 +33,7 @@ export function slotOf(trust: number) {
 export const slotName = (i: number) => `${i + 1}번`;
 
 /** 시즌마다 같은 동료 · 매주 다른 상대 (시드로 고정) */
-export function careerSetup(seed: number, season: number, week: number, me: Batter, trust: number, diff: Diff): CareerSetup {
+export function careerSetup(seed: number, season: number, week: number, me: Batter, trust: number, diff: Diff, spUses?: number): CareerSetup {
   const rTeam = makeRng((seed ^ (season * 0x9e37)) >>> 0);
   const ids = CHARS.map((c) => c.id);
   const mateBat = ids[(seed + season) % ids.length];
@@ -56,17 +58,19 @@ export function careerSetup(seed: number, season: number, week: number, me: Batt
   const slot = slotOf(trust);
   rest.splice(slot, 0, me);
   my.batters = rest;
-  return { my, opp, myIdx: slot, userHome: rOpp() < 0.5, diff, innings: 9 };
+  return { my, opp, myIdx: slot, userHome: rOpp() < 0.5, diff, innings: 9, spUses };
 }
 
 export function newCareerGame(st: CareerSetup): GameState {
-  return newGame({
+  const s = newGame({
     innings: st.innings,
     diff: st.diff,
     userHome: st.userHome,
     away: st.userHome ? st.opp : st.my,
     home: st.userHome ? st.my : st.opp,
   });
+  if (st.spUses !== undefined) s.sides[st.userHome ? 1 : 0].swingLeft = st.spUses;
+  return s;
 }
 
 export const mySide = (s: GameState) => (s.opts.userHome ? 1 : 0);
@@ -226,6 +230,8 @@ export interface MyPA {
   kind: PAResult["kind"];
   rbi: number;
   mission?: { ok: boolean; pt: number };
+  /** 하이라이트 모드에서 자동으로 친 타석 */
+  auto?: boolean;
 }
 
 export interface CareerGameOut {
@@ -237,26 +243,54 @@ export interface CareerGameOut {
   missionPt: number;
 }
 
-/** 내 타석 전까지 빠르게 진행 (내 타석이 오면 멈춤) — 화면 직접 출전에서도 씀 */
-export function advanceToMyPA(s: GameState, myIdx: number, rng: Rng) {
+/** 하이라이트 타석: 득점권 · 7회부터 2점 차 이내 · 돌발미션 */
+export function isKeyPA(s: GameState) {
+  const risp = s.bases[1] !== null || s.bases[2] !== null;
+  const close = s.inning >= 7 && Math.abs(s.score[0] - s.score[1]) <= 2;
+  return risp || close || !!s.mission;
+}
+
+/**
+ * 내 타석 전까지 빠르게 진행 (내 타석이 오면 멈춤) — 화면 직접 출전에서도 씀.
+ * autoMine 을 주면 하이라이트 모드: 내 타석이라도 찬스가 아니면 그 훅으로 자동으로 치고 계속 (결과는 돌려줌)
+ */
+export function advanceToMyPA(s: GameState, myIdx: number, rng: Rng, autoMine?: SwingHook, directSoFar = 0): MyPA[] {
+  const autoPAs: MyPA[] = [];
   let guard = 0;
-  while (!s.over && !isMyPA(s, myIdx) && guard++ < 400) {
+  while (!s.over && guard++ < 600) {
+    if (isMyPA(s, myIdx)) {
+      if (!autoMine) break;
+      cpuManage(s, fieldSide(s));
+      if (!s.mission) {
+        const m = maybeMission(s, rng);
+        if (m) s.mission = m;
+      }
+      // 찬스가 한 번도 없었으면 7회부터 내 타석은 직접 (경기당 최소 한 타석)
+      if (isKeyPA(s) || (s.inning >= 7 && directSoFar === 0)) break;
+      const before = s.sides[mySide(s)].bat[myIdx].rbi;
+      const inning = s.inning;
+      const pa = enginePA(s, rng, autoMine);
+      autoPAs.push({ inning, text: pa.text, kind: pa.kind, rbi: s.sides[mySide(s)].bat[myIdx].rbi - before, auto: true });
+      if (pa.halfOver && !s.over) nextHalf(s);
+      continue;
+    }
     cpuManage(s, fieldSide(s));
     const pa = quickPA(s, rng);
     if (pa.halfOver && !s.over) nextHalf(s);
   }
+  return autoPAs;
 }
 
 /** 경기 한 판 통째로 (자동 · 시뮬) */
-export function playCareerGame(st: CareerSetup, hook: SwingHook, rng: Rng): CareerGameOut {
+export function playCareerGame(st: CareerSetup, hook: SwingHook, rng: Rng, autoMine?: SwingHook): CareerGameOut {
   const s = newCareerGame(st);
   const pas: MyPA[] = [];
   let missionPt = 0;
   for (let guard = 0; guard < 60 && !s.over; guard++) {
-    advanceToMyPA(s, st.myIdx, rng);
+    pas.push(...advanceToMyPA(s, st.myIdx, rng, autoMine, pas.filter((p) => !p.auto).length));
     if (s.over) break;
     cpuManage(s, fieldSide(s));
-    const m = maybeMission(s, rng);
+    const m = s.mission ?? maybeMission(s, rng);
     if (m) s.mission = m;
     const before = s.sides[mySide(s)].bat[st.myIdx].rbi;
     const inning = s.inning;

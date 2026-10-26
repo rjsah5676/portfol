@@ -2,17 +2,17 @@
  * 육성 저장 (프로토: 이 브라우저 localStorage) — 진행 중인 선수 1명 + 명예의 전당.
  * 서버 저장은 다음 단계 (랭킹 · 구단으로 넘기기).
  */
-import { applyGame, careerBatter, hofEntry, type Career, type GameIn, type GameSummary, type HofEntry } from "@/lib/baseball/career";
+import { applyGame, careerBatter, hofEntry, spUses, type Career, type GameIn, type GameSummary, type HofEntry } from "@/lib/baseball/career";
 import { botHook, careerSetup, playCareerGame, type CareerSetup, type MyPA } from "@/lib/baseball/careerGame";
 import { makeRng } from "@/lib/baseball/rng";
 
-const KEY = "pxb:career:v1";
+const KEY = "pxb:career:v2";
 const HOF = "pxb:hof:v1";
 
 export function loadCareer(): Career | null {
   try {
     const c = JSON.parse(localStorage.getItem(KEY) ?? "null");
-    return c && c.v === 1 ? (c as Career) : null;
+    return c && c.v === 2 ? (c as Career) : null;
   } catch {
     return null;
   }
@@ -42,7 +42,41 @@ export function addHof(c: Career) {
 }
 
 /** 이번 주 경기 세팅 */
-export const setupOf = (c: Career): CareerSetup => careerSetup(c.seed, c.season, c.week, careerBatter(c), c.trust, c.diff);
+export const setupOf = (c: Career): CareerSetup =>
+  careerSetup(c.seed, c.season, c.week * 2 + c.gameInWeek, careerBatter(c), c.trust, c.diff, spUses(c));
+
+/* 배속 (육성 화면 · 경기 화면 공용, 이 브라우저) */
+const SPEED = "pxb:speed";
+export const SPEEDS = [1, 1.5, 2, 3] as const;
+export function loadSpeed(): number {
+  try {
+    const v = Number(localStorage.getItem(SPEED));
+    return (SPEEDS as readonly number[]).includes(v) ? v : 1;
+  } catch {
+    return 1;
+  }
+}
+export function saveSpeed(v: number) {
+  try {
+    localStorage.setItem(SPEED, String(v));
+  } catch {}
+}
+/** 경기 진행 방식 (기억해 둠) */
+export type PlayMode = "direct" | "highlight" | "auto";
+const MODE = "pxb:playmode";
+export function loadMode(): PlayMode {
+  try {
+    const v = localStorage.getItem(MODE);
+    return v === "direct" || v === "auto" ? v : "highlight";
+  } catch {
+    return "highlight";
+  }
+}
+export function saveMode(v: PlayMode) {
+  try {
+    localStorage.setItem(MODE, v);
+  } catch {}
+}
 
 /** 경기 끝나고 육성 화면에 띄울 요약 (화면이 바뀌어도 남게 모듈에 둠) */
 export interface GameReport {

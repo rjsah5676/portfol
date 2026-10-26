@@ -10,7 +10,7 @@
 import { cpuGauge, cpuPlan, cpuSwing, cpuUseSpecial, SPEED_SCALE, type Diff } from "@/lib/baseball/ai";
 import { timingLabel, timingWindow } from "@/lib/baseball/contact";
 import { BP_PITCHER, CHARS, TEAM_DEFS, charById, cutinUrl, faceUrl, makeTeam, swingOf, type CharId, type Pitcher } from "@/lib/baseball/data";
-import { advanceToMyPA, mySide, newCareerGame, slotName, type CareerSetup, type MyPA } from "@/lib/baseball/careerGame";
+import { advanceToMyPA, botHook, mySide, newCareerGame, slotName, type CareerSetup, type MyPA } from "@/lib/baseball/careerGame";
 import {
   BAT_BUNT, BAT_IDLE, BAT_LOAD, BAT_SWING, BATS, BATTER_RIG, HAIR, HELMETS, PIT_IDLE, PIT_THROW, PITCH_RELEASE_T, PITCHER_RIG,
   SKIN_TONES, SWING_HIT_T, baseSkin,
@@ -41,6 +41,10 @@ export interface MatchCfg {
   derbyChar?: CharId;
   /** 육성 경기: 팀 · 내 타순 (내 타석만 직접, 나머지는 빠르게) */
   career?: CareerSetup;
+  /** 하이라이트: 내 타석도 찬스 · 돌발미션 · 7회부터 접전일 때만 직접 (나머지는 봇이 침) */
+  highlight?: boolean;
+  /** 배속 — 투구 · 스윙 타이밍은 그대로, 결과 · 수비 · 공수 교대 같은 기다림만 빨라짐 */
+  speed?: number;
   seed?: number;
 }
 
@@ -341,7 +345,8 @@ export class Match {
       // 내 타석까지 빠르게 진행
       const sc = [...s.score];
       const inn = s.inning;
-      advanceToMyPA(s, this.cfg.career.myIdx, this.rng);
+      const autos = advanceToMyPA(s, this.cfg.career.myIdx, this.rng, this.cfg.highlight ? botHook(this.cfg.diff) : undefined, this.myPAs.filter((p) => !p.auto).length);
+      this.myPAs.push(...autos);
       if (s.over) return this.finish();
       cpuManage(s, fieldSide(s));
       this.rbiBefore = s.sides[batSide(s)].bat[this.cfg.career.myIdx].rbi;
@@ -350,9 +355,10 @@ export class Match {
         const got = s.score[me] - sc[me];
         const lost = s.score[1 - me] - sc[1 - me];
         const runners = s.bases.filter((x) => x !== null).length;
+        const autoTxt = autos.length ? `내 자동 타석: ${autos.map((a) => a.text).join(" · ")} · ` : "";
         this.setBanner(
-          `${s.inning}회${s.top ? "초" : "말"} · 내 타석`,
-          `${inn !== s.inning || got || lost ? `그 사이 우리 +${got} · 상대 +${lost} · ` : ""}${s.outs}아웃${runners ? ` · 주자 ${runners}명` : ""}`,
+          `${s.inning}회${s.top ? "초" : "말"} · ${this.cfg.highlight ? "찬스!" : "내 타석"}`,
+          `${autoTxt}${inn !== s.inning || got || lost ? `그 사이 우리 +${got} · 상대 +${lost} · ` : ""}${s.outs}아웃${runners ? ` · 주자 ${runners}명` : ""}`,
           "#ffcf4a",
           1.4,
           true
@@ -392,7 +398,7 @@ export class Match {
     this.batFrom = undefined;
     this.pitAnim = PIT_IDLE;
     this.updateSkins();
-    const m = this.cfg.mode !== "derby" ? maybeMission(s, this.rng) : null;
+    const m = this.cfg.mode !== "derby" ? s.mission ?? maybeMission(s, this.rng) : null;
     if (m) {
       s.mission = m;
       sfx.mission();
@@ -868,7 +874,9 @@ export class Match {
   // ───────────── 시간 ─────────────
   update(dtRaw: number) {
     if (this.paused) return;
-    const dt = Math.min(dtRaw, 1 / 20);
+    // 배속: 타이밍이 걸린 구간(준비 · 와인드업 · 공 · 컨택 · 조준 · 게이지)은 그대로
+    const timed = this.phase === "ready" || this.phase === "windup" || this.phase === "flight" || this.phase === "contact" || this.phase === "rewind" || this.phase === "aim" || this.phase === "gauge";
+    const dt = Math.min(dtRaw, 1 / 20) * (timed ? 1 : this.cfg.speed ?? 1);
     this.time += dt;
     this.pt += dt;
     if (this.banner) {

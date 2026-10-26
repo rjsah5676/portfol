@@ -8,7 +8,7 @@ import { Match, loadSave, type MatchCfg, type Save, type UiState } from "./match
 import { isMuted, setMuted, sfx } from "./sfx";
 import { ACCENT, Btn, MenuBg, Modal, font } from "./ui";
 import CareerMode from "./Career";
-import { finishDirect } from "./careerStore";
+import { finishDirect, loadSpeed } from "./careerStore";
 
 /*
  * 픽셀 프로야구 — 메뉴 · 경기 화면(캔버스) · 조작 버튼.
@@ -56,7 +56,7 @@ export default function BaseballApp() {
   }, [screen]);
 
   const start = (c: MatchCfg) => {
-    setCfg(c);
+    setCfg({ speed: loadSpeed(), ...c });
     setRun((n) => n + 1);
     setScreen("play");
   };
