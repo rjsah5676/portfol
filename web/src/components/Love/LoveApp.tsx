@@ -4790,6 +4790,7 @@ function CoachMark({
   const [tip, setTip] = useState<{ w: number; h: number } | null>(null);
   const [imgOk, setImgOk] = useState(!!guide.img);
   // 대상 둘레 어디에도 안 들어갈 때: 1 = 그림 빼기 → 2 = 예시 줄도 빼기 (다시 재서 맞춤)
+  // 3 = 빽빽 모드: 가로로 꽉 · 버튼을 제목 줄로 · 남는 칸만큼만 높이 (넘치면 안에서 스크롤)
   const [compact, setCompact] = useState(0);
   const miss = useRef(onMiss);
   const tipEl = useRef<HTMLDivElement | null>(null);
@@ -4836,7 +4837,8 @@ function CoachMark({
   const m = Math.max(8, W * 0.012);
   // 가로로 짧은 화면(가로 폰): 그림을 왼쪽에 두는 옆 배치 · 넓게
   const short = H < 520;
-  const bw = short ? Math.min(W * 0.72, 600) : W < 900 ? W * 0.62 : Math.min(Math.max(W * 0.38, 340), 540);
+  const tight = compact >= 3;
+  const bw = tight ? Math.min(W - 2 * Math.max(8, W * 0.012), 760) : short ? Math.min(W * 0.72, 600) : W < 900 ? W * 0.62 : Math.min(Math.max(W * 0.38, 340), 540);
   const th = tip?.h ?? 0;
   const tw = tip?.w ?? bw;
   const tx = box.x - pad,
@@ -4858,9 +4860,15 @@ function CoachMark({
   const anyFit = order.some(fits);
   const hasImg = !!guide.img && imgOk;
   const hasEx = !!guide.ex?.(vars);
-  if (tip && !anyFit && ((compact === 0 && hasImg) || (compact <= 1 && hasEx))) setCompact(compact === 0 && hasImg ? 1 : 2);
-  const side: Side =
-    order.find(fits) ?? (order.slice().sort((a, b) => room[b] / (b === "below" || b === "above" ? th || 1 : tw) - room[a] / (a === "below" || a === "above" ? th || 1 : tw))[0]);
+  if (tip && !anyFit && compact < 3) setCompact(compact === 0 && hasImg ? 1 : compact <= 1 && hasEx ? 2 : 3);
+  // 빽빽 모드는 위 · 아래 중 넓은 쪽에만, 그 칸 높이까지만
+  const side: Side = tight
+    ? room.below >= room.above
+      ? "below"
+      : "above"
+    : (order.find(fits) ??
+      order.slice().sort((a, b) => room[b] / (b === "below" || b === "above" ? th || 1 : tw) - room[a] / (a === "below" || a === "above" ? th || 1 : tw))[0]);
+  const maxH = tight ? Math.max(72, room[side]) : H - 2 * m;
   const clampX = (x: number) => Math.max(m, Math.min(x, W - m - tw));
   const clampY = (y: number) => Math.max(m, Math.min(y, H - m - th));
   let left: number, top: number;
@@ -4883,8 +4891,8 @@ function CoachMark({
       <div className="lv-coach-hole" style={{ left: tx, top: ty, width: tW, height: tH }} />
       <div
         ref={tipEl}
-        className={`lv-coach-tip ${short && !compact ? "lv-coach-tip-row" : ""}`}
-        style={{ left, top, width: bw, maxHeight: H - 2 * m, visibility: tip ? undefined : "hidden" }}
+        className={`lv-coach-tip ${short && !compact ? "lv-coach-tip-row" : ""}${tight ? " lv-coach-tight" : ""}`}
+        style={{ left, top, width: bw, maxHeight: maxH, visibility: tip ? undefined : "hidden" }}
       >
         <i
           className={`lv-coach-arrow lv-coach-arrow-${side}`}

@@ -3592,6 +3592,13 @@
   color: #fff3d6;
 }
 .lv-coach-ok:hover { border-color: #ffd27a; }
+/* 빽빽 모드 (작은 가로 화면에서 대상이 가운데를 다 차지할 때) */
+.lv-coach-tight { padding-top: max(8px, 0.8cqw); padding-bottom: max(8px, 0.8cqw); }
+.lv-coach-tight .lv-coach-body { min-height: 0; }
+.lv-coach-tight b { padding-right: 76px; }
+.lv-coach-tight ol { margin-top: 2px; gap: 1px; }
+.lv-coach-tight li { line-height: 1.38; }
+.lv-coach-tight .lv-coach-ok { position: absolute; top: max(6px, 0.6cqw); right: max(8px, 0.8cqw); margin: 0; min-height: 30px; padding: 3px 14px; }
 /* 관계 화면 새 소식 점 (열어 보면 꺼짐) */
 .lv-new-dot {
   position: absolute;
