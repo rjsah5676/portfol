@@ -62,6 +62,7 @@ import {
 } from "@/lib/love/types";
 import { DealMini, HeadsUp, StoryPoker, TellMini } from "./Minis";
 import { TELLS, knownTellIds, tellById, tellKnown } from "@/lib/love/tells";
+import { MIND, type MindWho, isMindKey, mindGot, mindTotal } from "@/lib/love/mind";
 import { useStage } from "./Stage";
 import VoiceReview, { type VoiceRow } from "./VoiceReview";
 import AssetReview from "./AssetReview";
@@ -741,7 +742,7 @@ export default function LoveApp() {
       setS(next(s));
     } else if (b.k === "day" || b.k === "title") {
       setS(next(s));
-    } else if (b.k === "montage") {
+    } else if (b.k === "montage" || b.k === "recall") {
       play("click");
       setS(next(s));
     }
@@ -749,7 +750,7 @@ export default function LoveApp() {
 
   // 몽타주: 스킵 중이면 바로 넘김 (평소엔 클릭)
   useEffect(() => {
-    if (block?.k !== "montage" || !skip) return;
+    if ((block?.k !== "montage" && block?.k !== "recall") || !skip) return;
     const id = window.setTimeout(advance, 300);
     return () => window.clearTimeout(id);
   }, [block, advance, skip]);
@@ -973,6 +974,8 @@ export default function LoveApp() {
     play("chip");
     markSeen();
     setLog((l) => [...l.slice(-199), { who: "me", text: o.text, pick: true }]);
+    // 마음 읽기: 그 사람을 알아본 선택이면 연필 소리 하나 (숫자 · 하트 변화 없음)
+    if (Object.keys(o.eff ?? {}).some((k) => isMindKey(k) && !((s.vars[k] ?? 0) >= 1))) play("pencil");
     setS(pick(withTime(s), o));
     // 호감이 오른 선택이면 그 히로인 색 하트가 잠깐 떠오름 (수치는 안 보여 줌)
     const up = (o.eff?.affA ?? 0) > 0 ? "amy" : (o.eff?.affY ?? 0) > 0 ? "yeonseo" : null;
@@ -1040,6 +1043,27 @@ export default function LoveApp() {
       }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [affA, affY, phase]);
+  // 마음 읽기: 날이 바뀌면 어제 알게 된 것 한 줄씩 (그날 새로 켜진 마음 플래그만)
+  const [mindDay, setMindDay] = useState<{ day: number; items: typeof MIND; n: number } | null>(null);
+  const dayNoRef = useRef<number | null>(null);
+  const dayNo = s?.vars.dayNo ?? 0;
+  useEffect(() => {
+    if (phase !== "game" || !s) {
+      dayNoRef.current = null;
+      return;
+    }
+    const prev = dayNoRef.current;
+    dayNoRef.current = dayNo;
+    if (prev === null || dayNo <= prev) return;
+    const items = MIND.filter((m) => s.vars[`_md_${m.id}`] === prev && (s.vars[m.id] ?? 0) >= 1);
+    if (items.length) setMindDay({ day: prev, items, n: Date.now() });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dayNo, phase]);
+  useEffect(() => {
+    if (!mindDay) return;
+    const id = window.setTimeout(() => setMindDay(null), 5200);
+    return () => window.clearTimeout(id);
+  }, [mindDay]);
   // 읽기 노트: 새 버릇을 알게 되면 토스트
   const [tellUp, setTellUp] = useState<{ id: string; n: number } | null>(null);
   const tellRef = useRef<string[] | null>(null);
@@ -1487,6 +1511,16 @@ export default function LoveApp() {
                 <span className="text-[#ffd27a]">✎ 읽기 노트</span> {NAME[tellById(tellUp.id)!.who]} — {tellById(tellUp.id)!.name}
               </div>
             )}
+            {mindDay && (
+              <div key={mindDay.n} className="lv-mindday" onClick={(e) => (e.stopPropagation(), setMindDay(null))}>
+                <small>DAY {mindDay.day} · 알게 된 것</small>
+                {mindDay.items.map((m) => (
+                  <p key={m.id}>
+                    <em style={{ color: NAME_COLOR[m.who] }}>✎ {NAME[m.who]}</em> {m.note}
+                  </p>
+                ))}
+              </div>
+            )}
             {stageUp && (
               <div key={stageUp.n} className={`lv-stageup ${stageUp.who === "amy" ? "lv-heart-a" : "lv-heart-y"}`}>
                 <span>♥</span> {NAME[stageUp.who]} — 「{STAGE_NAME[stageUp.who][stageUp.stage]}」
@@ -1691,11 +1725,12 @@ export default function LoveApp() {
                 {rb.opts.map((o, oi) => guideShow(oi) && (
                   <button
                     key={o.text}
-                    className={`lv-choice ${o.secret ? "lv-choice-secret" : ""}`}
+                    className={`lv-choice ${o.secret ? "lv-choice-secret" : ""} ${o.read ? "lv-choice-read" : ""}`}
                     disabled={guideOn && !guideReady}
                     onClick={() => choose(o)}
                   >
                     {o.secret && <span className="mr-[0.6cqw] text-[#ffd27a]">★</span>}
+                    {o.read && <span className="mr-[0.6cqw] text-[#ffe2a0]">✎</span>}
                     {sub(o.text)}
                   </button>
                 ))}
@@ -1860,6 +1895,18 @@ export default function LoveApp() {
             )}
             {rb?.k === "montage" && (
               <Montage key={s.seq} shots={rb.shots} caption={rb.caption} onShutter={() => play("shutter")} />
+            )}
+            {rb?.k === "recall" && (
+              <div key={s.seq} className="lv-recall">
+                <div className="lv-recall-t" style={{ color: NAME_COLOR[rb.who] }}>
+                  네가 알아준 것들
+                </div>
+                {rb.caps.map((c, i) => (
+                  <div key={c} className="lv-recall-c" style={{ animationDelay: `${0.6 + i * 0.45}s` }}>
+                    {c}
+                  </div>
+                ))}
+              </div>
             )}
             {rb?.k === "title" && (
               <div className="absolute inset-0 z-40 grid place-items-center bg-black">
@@ -2626,6 +2673,7 @@ function RelPanel({ vars }: { vars: Record<string, number> }) {
           </div>
         );
       })}
+      <MindNotes vars={vars} />
       <TellNotes vars={vars} />
       <div className="lv-relcard col-span-2 !flex-row !justify-around">
         <div>
@@ -2947,6 +2995,40 @@ function CallChip({ name, who }: { name: string; who?: CharKey }) {
 }
 
 /** 관계 화면 아래: 읽기 노트 — 사람별로 알게 된 버릇 (모르는 건 ??? + 힌트) */
+/** 마음 읽기: 그녀에 대해 아는 것 (모르는 칸은 ??? + 몇 주차) */
+function MindNotes({ vars }: { vars: Record<string, number> }) {
+  return (
+    <div className="lv-relcard col-span-2 !items-stretch !text-left">
+      <div className="text-[1.6cqw] font-bold text-[#ffd27a]">✎ 그녀에 대해 아는 것</div>
+      <div className="mt-[0.6cqw] grid grid-cols-2 gap-x-[2cqw] gap-y-[0.8cqw]">
+        {(["amy", "yeonseo"] as MindWho[]).map((who) => (
+          <div key={who}>
+            <div className="flex items-baseline justify-between">
+              <span className="text-[1.25cqw] font-bold" style={{ color: NAME_COLOR[who] }}>
+                {NAME[who]}
+              </span>
+              <span className="text-[1.05cqw] text-white/50">
+                {mindGot(vars, who).length} / {mindTotal(who)}
+              </span>
+            </div>
+            {MIND.filter((m) => m.who === who).map((m) =>
+              (vars[m.id] ?? 0) >= 1 ? (
+                <div key={m.id} className="text-[1.15cqw] leading-[1.5] text-white/90">
+                  · {m.note}
+                </div>
+              ) : (
+                <div key={m.id} className="text-[1.1cqw] leading-[1.5] text-white/35">
+                  · ??? <span className="text-[1cqw]">({m.week}주차)</span>
+                </div>
+              )
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function TellNotes({ vars }: { vars: Record<string, number> }) {
   const whos = [...new Set(TELLS.map((t) => t.who))];
   const got = TELLS.filter((t) => check(t.need, vars)).length;

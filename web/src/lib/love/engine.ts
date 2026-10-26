@@ -5,6 +5,7 @@
 import { SCENES, START } from "./script";
 import { CG } from "./assets";
 import { dayDecay } from "./rel";
+import { isMindKey, mindGot, withMind } from "./mind";
 import {
   type BgId,
   type BgmId,
@@ -95,6 +96,7 @@ export type Block =
   | { k: "free"; prompt: string; opts: Opt[]; big?: boolean }
   | { k: "title"; text: string; sub?: string }
   | { k: "montage"; shots: Shot[]; caption?: string }
+  | { k: "recall"; who: "amy" | "yeonseo"; caps: string[] }
   | { k: "day"; d: number; slot: string }
   | { k: "ending"; id: EndingId }
   | { k: "end"; text: string; sub?: string }
@@ -145,7 +147,7 @@ const addEff = (v: Vars, eff?: Eff): Vars => {
   if (!eff) return v;
   const o = { ...v };
   for (const [k, n] of Object.entries(eff)) o[k] = (o[k] ?? 0) + n;
-  return o;
+  return Object.keys(eff).some(isMindKey) ? withMind(v, o) : o;
 };
 
 /** 현재 위치부터 막히는 줄(대사 · 선택지 등)이 나올 때까지 실행 */
@@ -397,6 +399,12 @@ export function run(s0: GState): GState {
       case "montage":
         s.block = { k: "montage", shots: st.shots, caption: st.caption };
         return s;
+      case "recall": {
+        const caps = mindGot(s.vars, st.who).map((m) => m.cap);
+        if (!caps.length) break;
+        s.block = { k: "recall", who: st.who, caps };
+        return s;
+      }
       case "ending":
         s.block = { k: "ending", id: st.id };
         return s;

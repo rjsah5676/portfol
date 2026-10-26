@@ -62,6 +62,22 @@ export const TELLS: Tell[] = [
     hint: "사장의 웃음 말고 왼손을 볼 것",
   },
   {
+    id: "amyTap",
+    who: "amy",
+    name: "어깨 두 번",
+    meaning: "에이미가 뒤에서 어깨를 두 번 두드리면: 이제 일어나. 이기고 있어도.",
+    need: { v: "mindA", op: ">=", n: 8 },
+    hint: "에이미를 끝까지 알아볼 것",
+  },
+  {
+    id: "yeonDeal",
+    who: "yeonseo",
+    name: "딜러 연서의 손끝 한 번",
+    meaning: "7년 동안 사장에게 보내던 손끝 신호. 오늘 처음으로 반대쪽에 보낸다 — 저 사람, 지금 비어 있어요.",
+    need: { v: "mindY", op: ">=", n: 8 },
+    hint: "연서를 끝까지 알아볼 것",
+  },
+  {
     id: "tyHum",
     who: "taeyang",
     name: "콧노래",

@@ -150,6 +150,8 @@ const POKER_Y_FINAL: PokerSpec = {
       board: 5,
       opp: "…올인. 끝내죠, 이제.",
       tell: "스페이드 킹. 또 하트가 아니다. 말이 먼저 나왔다. 웃음은 반 박자 뒤에 따라왔다.",
+      tell2: "딜러 자리의 연서가, 덱 위를 손끝으로 한 번 두드렸다. 사장 쪽이 아니라, 내 쪽을 보면서.",
+      tellId2: "yeonDeal",
       acts: [
         {
           label: "콜",
@@ -333,7 +335,7 @@ export const W3Y: Scenes = {
       prompt: "철제 계단이 오후 햇볕에 데워져 있다.",
       opts: [
         { text: "\"안 받아요. 딜러는 위층에서 충분해요.\"", eff: { trustY: 1, yPromise: 1 }, to: "y3_d15_promise" },
-        { text: "\"…그거 부탁 맞는데요.\"", eff: { affY: 2 }, to: "y3_d15_tease" },
+        { text: "\"…그거 부탁 맞는데요.\"", eff: { affY: 2, mY09: 1 }, to: "y3_d15_tease" },
       ],
     },
   ],
@@ -1163,7 +1165,7 @@ export const W3Y: Scenes = {
       prompt: "주먹 두 개가 카운터 위에 놓여 있다.",
       opts: [
         { text: "(그녀 얼굴을 본다)", eff: { affY: 1 }, to: "y3_d18_face" },
-        { text: "\"장갑 낀 쪽이요. 그쪽이 더 꽉 쥐어져 있어요.\"", eff: { trustY: 1 }, to: "y3_d18_hand" },
+        { text: "\"장갑 낀 쪽이요. 그쪽이 더 꽉 쥐어져 있어요.\"", eff: { trustY: 1, mY10: 1 }, to: "y3_d18_hand" },
       ],
     },
   ],
@@ -1670,7 +1672,7 @@ export const W3Y: Scenes = {
       opts: [
         { text: "\"같이 가요. 다 끝나면.\"", eff: { affY: 1 }, to: "y3_d20_sea1" },
         { text: "\"다 끝나는 날, 기차표는 제가 끊을게요.\"", eff: { trustY: 1, yRound: 1 }, to: "y3_d20_sea2" },
-        { text: "\"비 그친 다음 날 아침에 가요. 첫차로.\"", eff: { affY: 2 }, to: "y3_d20_sea3" },
+        { text: "\"비 그친 다음 날 아침에 가요. 첫차로.\"", eff: { affY: 2, mY11: 1 }, to: "y3_d20_sea3" },
       ],
     },
   ],
@@ -2090,7 +2092,7 @@ export const W3Y: Scenes = {
       t: "choice",
       prompt: "계단 아래 담배 한 개비가 굴러가 멈춘다.",
       opts: [
-        { text: "\"수요일까지 안 물을게요.\"", eff: { trustY: 1 }, to: "y3_d21_a" },
+        { text: "\"수요일까지 안 물을게요.\"", eff: { trustY: 1, mY12: 1 }, to: "y3_d21_a" },
         { text: "(떨어진 담배를 주워, 그녀 손에 쥐여 준다)", eff: { affY: 1 }, to: "y3_d21_b" },
       ],
     },
@@ -2419,7 +2421,7 @@ export const W3Y: Scenes = {
       t: "choice",
       prompt: "수화기 너머로 그녀가 숨을 고른다.",
       opts: [
-        { text: "(책상 위 카드를 집어, 수화기 가까이에서 섞는다)", eff: { affY: 2 }, to: "y4_d23_c1" },
+        { text: "(책상 위 카드를 집어, 수화기 가까이에서 섞는다)", eff: { affY: 2, mY13: 1 }, to: "y4_d23_c1" },
         { text: "\"내일, 다 들을게요. 무슨 얘기든.\"", eff: { trustY: 1 }, to: "y4_d23_c2" },
         { text: "\"늦었어요. 내일 들을게요. 이제 자요.\"", eff: { affY: -1 }, to: "y4_d23_c3" },
       ],
@@ -2488,6 +2490,13 @@ export const W3Y: Scenes = {
       opts: [
         { text: "(그 손 위에 손을 얹는다) \"오늘 밤, 연서 씨 옆에 있을게요.\"", eff: { affY: 2, trustY: 2 }, to: "y4_stay" },
         {
+          text: "(장갑을 살짝 걷어, 손바닥 흉터 위에 카드 한 장을 올린다)",
+          read: true,
+          cond: { v: "mindY", op: ">=", n: 8 },
+          eff: { affY: 2, trustY: 2, yScarCard: 1 },
+          to: "y4_read",
+        },
+        {
           text: "\"…에이미한테 가 볼게요. 혼자 내려가게 둘 순 없어요.\"",
           eff: { affA: 2, twoTimer: 1, yeonJealous: 2, affY: -1, yeonAmy: 1 },
           to: "y4_amy",
@@ -2501,6 +2510,15 @@ export const W3Y: Scenes = {
         },
       ],
     },
+  ],
+  // 마음 읽기 결정적 순간 ② — 그녀 언어(카드 · 숫자)로 "나쁜 손이 아니다"
+  y4_read: [
+    N("장갑을 반쯤 걷었다. 카드 모서리 모양의 흉터. 그 위에 카드 한 장을 올렸다. 모서리가 꼭 맞았다."),
+    Y("…뭐 하는 거예요?", "surprise"),
+    ME("딱 맞네요. 이건 카드를 너무 꽉 쥔 손이지, 나쁜 손이 아니에요."),
+    Y("…7년 동안, 그렇게 계산해 준 사람은 없었어요.", "sad"),
+    Y("오늘 밤 그 자리에 서도, 이 카드는 쥐고 있을게요. 꽉 말고, 이만큼만.", "base"),
+    { t: "goto", to: "y4_stay2" },
   ],
   y4_stay: [
     N("장갑 위에 손을 얹었다. 그녀가 움찔했지만, 손을 빼지 않았다."),
@@ -3617,7 +3635,7 @@ export const W3Y: Scenes = {
       t: "choice",
       prompt: "검은 장부가 사장의 손에 있다. 테이블 끝, 손수건이 걸린 의자.",
       opts: [
-        { text: "(그 의자 앞, 테이블 레일 밑으로 손을 뻗는다)", secret: true, cond: { v: "meta_ledger", op: ">=", n: 1 }, to: "end_yeon_true" },
+        { text: "(그 의자 앞, 테이블 레일 밑으로 손을 뻗는다)", secret: true, cond: { all: [{ v: "meta_ledger", op: ">=", n: 1 }, { v: "mindY", op: ">=", n: 9 }] }, to: "end_yeon_true" },
         { text: "(연서의 손을 잡고 일어선다)", to: "y4_win_end" },
       ],
     },
@@ -3772,6 +3790,7 @@ export const W3Y: Scenes = {
     Y("세지 마요. 이제 세는 건 그만할래요. 다 셀 수 없을 만큼 할 거니까.", "heart", "smile"),
     TH("몇 번을 들어도, 그 웃음소리는 매번 처음 듣는 것 같았다."),
     { t: "set", eff: { meta_trueY: 1 } },
+    { t: "recall", who: "yeonseo" },
     { t: "ending", id: "yeon_true" },
   ],
   end_yeon_good: [
@@ -3825,6 +3844,7 @@ export const W3Y: Scenes = {
     Y("안 숨겨요. 이 마을엔 이 손 읽으려는 사람이 없으니까요.", "base"),
     { t: "cgv", v: "smile" },
     Y("…그러니까 보세요, 그럼. 실컷.", "heart", "smile"),
+    { t: "recall", who: "yeonseo" },
     { t: "ending", id: "yeon_good" },
   ],
   end_yeon_sad: [

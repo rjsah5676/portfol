@@ -269,9 +269,9 @@ export const W2: Scenes = {
       prompt: "영수증 뒷면의 숫자들. 금요일까지 나흘.",
       opts: [
         { text: "\"월세는 내가 좀 빌려줄게.\"", eff: { affA: -1 }, to: "a2_d8_lend" },
-        { text: "\"저번에 본 '야간 알바 구함', 아직 붙어 있더라.\"", cond: { v: "amyDay", op: ">=", n: 4 }, eff: { trustA: 2 }, to: "a2_d8_job" },
-        { text: "\"이 편의점, 야간 알바 구한대. 유리문에 붙어 있어.\"", cond: { v: "amyDay", op: "<=", n: 3 }, eff: { trustA: 2 }, to: "a2_d8_job" },
-        { text: "\"외상은 사장한테 같이 가서, 갚는 날짜부터 정하자.\"", eff: { trustA: 1 }, to: "a2_d8_boss" },
+        { text: "\"저번에 본 '야간 알바 구함', 아직 붙어 있더라.\"", cond: { v: "amyDay", op: ">=", n: 4 }, eff: { trustA: 2, mA03: 1 }, to: "a2_d8_job" },
+        { text: "\"이 편의점, 야간 알바 구한대. 유리문에 붙어 있어.\"", cond: { v: "amyDay", op: "<=", n: 3 }, eff: { trustA: 2, mA03: 1 }, to: "a2_d8_job" },
+        { text: "\"외상은 사장한테 같이 가서, 갚는 날짜부터 정하자.\"", eff: { trustA: 1, mA03: 1 }, to: "a2_d8_boss" },
       ],
     },
   ],
@@ -441,6 +441,24 @@ export const W2: Scenes = {
     A("어서 오세요! …아, 딜러네. 어서 오지 마세요.", "pout"),
     N("그녀가 가슴께에 단 명찰을 손가락으로 톡톡 쳤다. '에이미'. 트윈테일은 그대로다. 면접을 그 머리로 통과했다는 뜻이다."),
     A("봐, 명찰. 사흘 수습이지만 이름은 진짜야.", "smug"),
+    N("삼각김밥 냉장 칸 앞. 출근 전에 먹을 거 두 개."),
+    {
+      t: "choice",
+      prompt: "계산대 너머에서 트윈테일이 이쪽을 힐끔거린다.",
+      opts: [
+        { text: "(참치마요 두 개)", eff: { mA13: 1 }, to: "a2_d9_eve_tm" },
+        { text: "(전주비빔 두 개)", to: "a2_d9_eve_pay" },
+        { text: "(제일 싼 걸로 두 개)", to: "a2_d9_eve_pay" },
+      ],
+    },
+  ],
+  // 마음 읽기 mA13: 1주차에 들은 "참치마요, 내가 제일 좋아하는 거"
+  a2_d9_eve_tm: [
+    { t: "sfx", id: "scan" },
+    N("참치마요 두 개를 계산대에 올렸다. 바코드를 찍던 손이 반 박자 멈췄다. 입꼬리가 아주 조금 올라갔다."),
+    { t: "when", cond: { v: "amyDay", op: ">=", n: 1 }, to: "a2_d9_eve_k", else: "a2_d9_eve_n" },
+  ],
+  a2_d9_eve_pay: [
     { t: "sfx", id: "scan" },
     N("삼각김밥 두 개를 계산대에 올렸다. 그녀가 바코드를 찍다 말고 눈을 가늘게 떴다."),
     { t: "when", cond: { v: "amyDay", op: ">=", n: 1 }, to: "a2_d9_eve_k", else: "a2_d9_eve_n" },
@@ -672,7 +690,7 @@ export const W2: Scenes = {
       opts: [
         { text: "\"화풀이하러 가자. 내가 쏠게.\"", eff: { affA: 2 }, to: "a2_karaoke" },
         { text: "\"괜찮아, 신경 쓰지 마. 그런 사람은 잊어버려.\"", eff: { affA: -1 }, to: "a2_d10_ok" },
-        { text: "(말없이 옆에 쪼그려 앉는다)", eff: { trustA: 1 }, to: "a2_d10_sit" },
+        { text: "(말없이 옆에 쪼그려 앉는다)", eff: { trustA: 1, mA04: 1 }, to: "a2_d10_sit" },
       ],
     },
   ],
@@ -1723,8 +1741,8 @@ export const W2: Scenes = {
       t: "choice",
       prompt: "마지막 동전이다.",
       opts: [
-        { text: "\"머리랑 귀 사이. 세 번째엔 집게 힘이 세져.\" (말로만 돕는다)", eff: { trustA: 1 }, to: "a2_q3_tip" },
-        { text: "(아무 말 없이 뒤에서 지켜본다)", eff: { affA: 1 }, to: "a2_q3_watch" },
+        { text: "\"머리랑 귀 사이. 세 번째엔 집게 힘이 세져.\" (말로만 돕는다)", eff: { trustA: 1, mA05: 1 }, to: "a2_q3_tip" },
+        { text: "(아무 말 없이 뒤에서 지켜본다)", eff: { affA: 1, mA05: 1 }, to: "a2_q3_watch" },
         { text: "\"줘 봐. 내가 뽑아 줄게.\" (레버를 잡으려 한다)", eff: { affA: -1 }, to: "a2_q3_grab" },
       ],
     },
@@ -2165,7 +2183,7 @@ export const W2: Scenes = {
       t: "choice",
       prompt: "테이블 위의 카드 한 벌.",
       opts: [
-        { text: "(침대 옆에 앉아, 천천히 소리가 나게 섞는다)", eff: { affY: 2 }, to: "y2_d8_shuffle" },
+        { text: "(침대 옆에 앉아, 천천히 소리가 나게 섞는다)", eff: { affY: 2, mY05: 1 }, to: "y2_d8_shuffle" },
         { text: "(섞기 전에 이불부터 어깨까지 끌어 올려 준다)", eff: { affY: 1, trustY: 1 }, to: "y2_d8_blanket" },
       ],
     },
@@ -2595,7 +2613,7 @@ export const W2: Scenes = {
       prompt: "그녀 앞에 빈 잔이 있다.",
       opts: [
         { text: "\"여기선 아무도 안 읽어요. 저 빼고.\"", eff: { affY: 2 }, to: "y2_d11_drink" },
-        { text: "(그녀 잔에 물을 따른다)", eff: { trustY: 2 }, to: "y2_d11_water" },
+        { text: "(그녀 잔에 물을 따른다)", eff: { trustY: 2, mY06: 1 }, to: "y2_d11_water" },
       ],
     },
   ],
@@ -2925,7 +2943,7 @@ export const W2: Scenes = {
       prompt: "어깨 사이의 손바닥 하나만큼.",
       opts: [
         { text: "(그 거리를 좁혀, 장갑 낀 손을 잡는다)", eff: { affY: 2 }, to: "y2_d13_hand" },
-        { text: "\"저도 계산 틀려요. 연서 씨가 오는 날마다.\"", eff: { affY: 1, trustY: 1 }, to: "y2_d13_word" },
+        { text: "\"저도 계산 틀려요. 연서 씨가 오는 날마다.\"", eff: { affY: 1, trustY: 1, mY07: 1 }, to: "y2_d13_word" },
         { text: "\"무서워하지 마요. 제가 다 막아 줄게요.\"", eff: { affY: -1 }, to: "y2_d13_promise" },
       ],
     },
@@ -2960,6 +2978,13 @@ export const W2: Scenes = {
       [
         { text: "\"믿어요.\"", eff: { affY: 1, trustY: 1, yeonBelieve: 1 }, to: "y2_d13_yes" },
         { text: "\"무슨 말을 하는데요?\"", eff: { yeonAsk: 1 }, to: "y2_d13_ask" },
+        {
+          text: "(대답 대신, 그녀 손등을 손끝으로 두 번 두드린다)",
+          read: true,
+          cond: { v: "mindY", op: ">=", n: 4 },
+          eff: { affY: 1, trustY: 2, yeonBelieve: 1, yTapBack: 1 },
+          to: "y2_d13_tap",
+        },
       ],
       { text: "(아무 말도 못 한다)", eff: { trustY: 1, yeonSilent: 1 }, to: "y2_d13_silent" },
       10,
@@ -2986,6 +3011,15 @@ export const W2: Scenes = {
   y2_d13_ask: [
     Y("…말할 수 없어요. 지금 말하면, 그게 거짓말이 될 수도 있어서.", "whisper", "away"),
     Y("그냥 기억해 줘요. 오늘 이걸 물어본 게, 저였다는 거.", "whisper", "sad"),
+    { t: "goto", to: "y2_d13_end" },
+  ],
+  // 마음 읽기 결정적 순간 ① — 그녀의 '봐 달라' 신호를 그대로 돌려줌
+  y2_d13_tap: [
+    N("장갑 낀 손등을, 손끝으로 두 번. 톡, 톡."),
+    Y("…그거, 제 버릇이에요.", "whisper", "surprise"),
+    Y("봐 달라고 할 때 하는 거. 아무한테도 들킨 적 없는데.", "whisper", "blush"),
+    ME("봤어요. 처음부터."),
+    Y("…그럼 대답은 들은 걸로 할게요. 말보다 정확하니까.", "whisper", "blush"),
     { t: "goto", to: "y2_d13_end" },
   ],
   y2_d13_end: [
@@ -3300,7 +3334,7 @@ export const W2: Scenes = {
       t: "choice",
       prompt: "엎어진 카드 네 장. 진짜는 하나.",
       opts: [
-        { text: "\"셋째.\"", eff: { affY: 2 }, to: "y2_q3_3" },
+        { text: "\"셋째.\"", eff: { affY: 2, mY08: 1 }, to: "y2_q3_3" },
         { text: "\"둘째.\"", eff: { trustY: 1 }, to: "y2_q3_2" },
         { text: "\"넷째.\"", to: "y2_q3_4" },
       ],

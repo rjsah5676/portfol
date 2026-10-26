@@ -160,6 +160,8 @@ const POKER_BOSS_A: PokerSpec = {
       opp: "올인할게요.",
       tell: "웃는 얼굴. 늘 그렇듯이. 그런데 펠트 위 왼손, 손가락 세 개가 테이블을 두 번 두드린다.",
       tellId: "bossGlass",
+      tell2: "어깨에 작은 손가락이 닿는다. 톡, 톡. 두 번.",
+      tellId2: "amyTap",
       acts: [
         {
           label: "콜",
@@ -768,7 +770,7 @@ export const W3A: Scenes = {
       t: "choice",
       prompt: "그녀가 젖은 가방에 짐을 쑤셔 넣는다.",
       opts: [
-        { text: "\"우리 집 가자. 걸어서 십 분이야.\"", eff: { affA: 2, aHeart: 1 }, to: "a3_d17_go" },
+        { text: "\"우리 집 가자. 걸어서 십 분이야.\"", eff: { affA: 2, aHeart: 1, mA06: 1 }, to: "a3_d17_go" },
         { text: "\"찜질방비는 내가 낼게. 오늘은 따뜻한 데서 자.\"", eff: { affA: -1 }, to: "a3_d17_sauna" },
       ],
     },
@@ -1718,8 +1720,15 @@ export const W3A: Scenes = {
     TIMED(
       "그녀의 펜 끝이 서명란 위에 있다.",
       [
-        { text: "(차용증 위에 손을 덮는다) \"…나랑 올라가자.\"", eff: { trustA: 2 }, to: "a3_d21_hand" },
+        { text: "(차용증 위에 손을 덮는다) \"…나랑 올라가자.\"", eff: { trustA: 2, mA07: 1 }, to: "a3_d21_hand" },
         { text: "\"사장님. 그 이야기, 제가 대신 듣죠.\" (막아선다)", eff: { trustA: 1, affA: 1, tilt: 1, a3Block: 1 }, to: "a3_d21_block" },
+        {
+          text: "(펜 대신 그녀 손을 잡는다) \"'괜찮아' 두 번 했어.\"",
+          read: true,
+          cond: { v: "mindA", op: ">=", n: 4 },
+          eff: { trustA: 2, affA: 1, gambleA: -1, a3Held: 1 },
+          to: "a3_d21_held",
+        },
       ],
       { text: "(목이 잠겨 아무 말도 나오지 않는다)", eff: { a3Froze: 1, affA: 1 }, to: "a3_d21_froze" },
       10,
@@ -1756,6 +1765,15 @@ export const W3A: Scenes = {
     A("너 앉는 거 보는 게, 내가 지는 것보다 싫어.", "shake", "sad"),
     { t: "sfx", id: "pen" },
     N("그녀가 내 팔을 밀어내고 서명란에 이름을 썼다. 내가 다시 막기 전에."),
+    { t: "goto", to: "a3_d21_sign" },
+  ],
+  // 마음 읽기 결정적 순간 ① — 서명은 막지 못해도, 그 애 손을 놓지 않는다 (서명 뒤 도박욕 상쇄)
+  a3_d21_held: [
+    N("펜을 쥔 손을, 그대로 잡았다. 차갑고, 조금 떨리고 있었다."),
+    A("…그걸 왜 다 듣고 있어.", "sad"),
+    A("안 괜찮아. 진짜 하나도 안 괜찮아.", "cry"),
+    A("근데 이번 한 번만 들을게. 아빠 이야기. 다 듣고 나면, 네 손 잡고 올라갈게. 약속해.", "sad"),
+    N("그녀가 내 손을 쥔 채, 다른 손으로 이름을 썼다. 작고, 삐뚤게. 쓰는 내내 손을 놓지 않았다."),
     { t: "goto", to: "a3_d21_sign" },
   ],
   a3_d21_sign: [
@@ -1846,7 +1864,7 @@ export const W3A: Scenes = {
       t: "choice",
       prompt: "시멘트 바닥 위의 숫자.",
       opts: [
-        { text: "(옆에 앉아 수첩을 가져온다) \"같이 세자. 시간 말고, 주 단위로.\"", eff: { trustA: 2, gambleA: -1 }, to: "a4_d22_count" },
+        { text: "(옆에 앉아 수첩을 가져온다) \"같이 세자. 시간 말고, 주 단위로.\"", eff: { trustA: 2, gambleA: -1, mA08: 1 }, to: "a4_d22_count" },
         { text: "(말없이 끌어안는다)", eff: { affA: 2, aHeart: 1 }, to: "a4_d22_hug" },
       ],
     },
@@ -2018,7 +2036,7 @@ export const W3A: Scenes = {
       t: "choice",
       prompt: "문고리에 걸어 둘 봉지.",
       opts: [
-        { text: "(딸기우유 두 개, 삼각김밥 하나)", eff: { affA: 1 }, to: "a4_p3_amy_s" },
+        { text: "(딸기우유 두 개, 삼각김밥 하나)", eff: { affA: 1, mA09: 1 }, to: "a4_p3_amy_s" },
         { text: "(바나나우유 두 개, 삼각김밥 하나)", to: "a4_p3_amy_b" },
         { text: "(따뜻한 캔커피 두 개, 삼각김밥 하나)", to: "a4_p3_amy_b" },
       ],
@@ -2284,7 +2302,7 @@ export const W3A: Scenes = {
       big: true,
       prompt: "이제는, 어느 쪽으로든 뛸 수 있다.",
       opts: [
-        { text: "에이미를 쫓아간다", eff: { a4Stay: 1, affA: 1 }, to: "a4_d24_stay" },
+        { text: "에이미를 쫓아간다", eff: { a4Stay: 1, affA: 1, mA10: 1 }, to: "a4_d24_stay" },
         { text: "연서에게 간다", eff: { a4Yeon: 1, twoTimer: 1, affY: 1, affA: -2, gambleA: 1 }, to: "a4_d24_ygo" },
         { text: "혼자 있는다 — 지금은 누구에게도 할 말이 없다", eff: { a4Alone: 1, gambleA: 1 }, to: "a4_d24_alone" },
         {
@@ -2350,7 +2368,7 @@ export const W3A: Scenes = {
       from: "amy",
       msgs: ["혼자 있어", "괜찮아", "괜찮아"],
       replies: [
-        { text: "두 번 말하면 안 괜찮은 거잖아", back: ["…그런 건 왜 기억하고 있어"], eff: { trustA: 1, a4Call: 1 } },
+        { text: "두 번 말하면 안 괜찮은 거잖아", back: ["…그런 건 왜 기억하고 있어"], eff: { trustA: 1, a4Call: 1, mA10: 1 } },
         { text: "내일 갈게", back: ["안 와도 돼. 나 아침 근무야"], eff: { affA: 1 } },
       ],
       ignore: {},
@@ -2365,7 +2383,7 @@ export const W3A: Scenes = {
       t: "choice",
       prompt: "답장 칸이 깜빡인다.",
       opts: [
-        { text: "\"두 번 말하면 안 괜찮은 거잖아\" (보낸다)", eff: { trustA: 1, a4Call: 1 } },
+        { text: "\"두 번 말하면 안 괜찮은 거잖아\" (보낸다)", eff: { trustA: 1, a4Call: 1, mA10: 1 } },
         { text: "(답장 없이 화면을 끈다)", eff: { gambleA: 1 } },
       ],
     },
@@ -2621,6 +2639,13 @@ export const W3A: Scenes = {
         { text: "\"버릇을 읽어도 카드는 못 바꿔. 그 판은 리버까지 정해져 있어.\"", eff: { trustA: 1 }, to: "a4_d25_cards" },
         { text: "\"이기러 가지 마. 끝내러 가. 그건 내가 같이 할게.\"", eff: { affA: 1, trustA: 1, gambleA: -1 }, to: "a4_d25_end" },
         { text: "\"…그래. 네가 이길 수도 있어.\"", eff: { gambleA: 2 }, to: "a4_d25_yes" },
+        {
+          text: "\"아빠 마지막 이야기, 사장 입 말고 아빠 공책으로 듣자. 마지막 장까지 같이.\"",
+          read: true,
+          cond: { all: [{ v: "mindA", op: ">=", n: 6 }, { v: "amyLedger", op: ">=", n: 1 }] },
+          eff: { trustA: 2, affA: 1, gambleA: -2, a4Read: 1 },
+          to: "a4_d25_read",
+        },
       ],
     },
   ],
@@ -2645,6 +2670,13 @@ export const W3A: Scenes = {
     A("…그치? 그치! 너도 그렇게 생각하지?", "smile"),
     A("이기고 와서 떡볶이 쏠게. 제일 매운 걸로.", "smile"),
     TH("7·2를 밀던 첫날 그 얼굴이 돌아왔다. 이번엔 내가 등을 밀었다."),
+    { t: "goto", to: "a4_d25_y" },
+  ],
+  // 마음 읽기 결정적 순간 ② — 앉지 않고도 아빠 이야기를 들을 길
+  a4_d25_read: [
+    A("…공책으로?", "surprise"),
+    A("사장님 입으로 듣는 아빠는… 맨날 지는 사람이었어. 공책 속 아빠는 다 알고 있던 사람이고.", "base"),
+    A("응. 아빠 얘기는 아빠한테 들을래. …너 진짜 이상해. 나도 모르는 나를 자꾸 맞혀.", "blush"),
     { t: "goto", to: "a4_d25_y" },
   ],
   a4_d25_y: [
@@ -2734,10 +2766,10 @@ export const W3A: Scenes = {
       t: "choice",
       prompt: "그녀가 볼펜을 내민다.",
       opts: [
-        { text: "('같이 아침 먹기 — 안 탄 팬케이크로')", cond: { v: "a4Stay", op: ">=", n: 1 }, eff: { affA: 2 }, to: "a4_d26_w1" },
-        { text: "('같이 아침 먹기 — 네가 감으로 끓인 라면')", cond: { v: "a4Stay", op: "<=", n: 0 }, eff: { affA: 2 }, to: "a4_d26_w1r" },
+        { text: "('같이 아침 먹기 — 안 탄 팬케이크로')", cond: { v: "a4Stay", op: ">=", n: 1 }, eff: { affA: 2, mA11: 1 }, to: "a4_d26_w1" },
+        { text: "('같이 아침 먹기 — 네가 감으로 끓인 라면')", cond: { v: "a4Stay", op: "<=", n: 0 }, eff: { affA: 2, mA11: 1 }, to: "a4_d26_w1r" },
         { text: "('테이블엔 안 앉기. 둘 다')", eff: { trustA: 2, gambleA: -1 }, to: "a4_d26_w2" },
-        { text: "('3년 전 상자, 같이 열기')", cond: { v: "a3Box", op: "<=", n: 0 }, eff: { trustA: 2 }, to: "a4_d26_w3" },
+        { text: "('3년 전 상자, 같이 열기')", cond: { v: "a3Box", op: "<=", n: 0 }, eff: { trustA: 2, mA11: 1 }, to: "a4_d26_w3" },
       ],
     },
   ],
@@ -3023,13 +3055,13 @@ export const W3A: Scenes = {
         {
           text: "\"내가 앉는다. 너는 내 뒤에 서 있어. 이번엔 네가 어깨 두 번 두드려.\"",
           cond: { v: "a3Tap", op: ">=", n: 1 },
-          eff: { trustA: 2, a4Me: 1 },
+          eff: { trustA: 2, a4Me: 1, mA12: 1 },
           to: "a4_d27_me",
         },
         {
           text: "\"내가 앉는다. 너는 뒤에 서 있다가, 일어날 때 되면 내 어깨를 두 번 두드려.\"",
           cond: { v: "a3Tap", op: "<=", n: 0 },
-          eff: { trustA: 2, a4Me: 1 },
+          eff: { trustA: 2, a4Me: 1, mA12: 1 },
           to: "a4_d27_me",
         },
         { text: "\"같이 앉자. 둘이면 이길 수 있어.\"", eff: { affA: 1, tilt: 1, a4Both: 1 }, to: "a4_d27_both" },
@@ -3235,6 +3267,7 @@ export const W3A: Scenes = {
               { v: "amyLedger", op: ">=", n: 1 },
               { v: "a4Stay", op: ">=", n: 1 },
               { v: "a4Both", op: "<=", n: 0 },
+              { v: "mindA", op: ">=", n: 9 },
             ],
           },
           to: "a4_d28_true",
@@ -3297,7 +3330,7 @@ export const W3A: Scenes = {
     A("……일어나. 두 번 했잖아.", "shake", "sad"),
     A("이기고 있어도 일어나는 거라며. 너 지금 지고 있잖아. 그러니까 더 일어나.", "shake", "sad"),
     N("일어섰다. 3년 만에 앉은 이 방 의자는 생각보다 금방 식었다."),
-    { t: "when", cond: { all: [{ v: "a4Kiss", op: ">=", n: 1 }, { v: "trustA", op: ">=", n: 10 }] }, to: "end_amy_good" },
+    { t: "when", cond: { all: [{ v: "a4Kiss", op: ">=", n: 1 }, { v: "trustA", op: ">=", n: 10 }, { v: "mindA", op: ">=", n: 7 }] }, to: "end_amy_good" },
     { t: "goto", to: "end_amy_friend" },
   ],
   a4_d28_lose: [
@@ -3403,6 +3436,7 @@ export const W3A: Scenes = {
     TH("아빠를 찾는 일은 아직 끝나지 않았다. 다만 이제 그 애는, 그 일을 혼자 하지 않는다."),
     TH("그리고 나는 오늘도 테이블 건너편에 서 있다. 앉지 않아도, 지지 않는 자리에."),
     { t: "set", eff: { meta_trueA: 1 } },
+    { t: "recall", who: "amy" },
     { t: "ending", id: "amy_true" },
   ],
   end_amy_good: [
@@ -3435,6 +3469,7 @@ export const W3A: Scenes = {
     A("…정가로 두 번 말했어. 기억 안 나면 너 손해야.", "heart", "blush"),
     { t: "cg", id: null },
     TH("판은 끝났다. 숙제는 남았다. 그리고 그 숙제를, 둘이서 나눠 하고 있다."),
+    { t: "recall", who: "amy" },
     { t: "ending", id: "amy_good" },
   ],
   end_amy_friend: [

@@ -701,7 +701,7 @@ export const W1: Scenes = {
       prompt: "그녀가 똑바로 본다.",
       opts: [
         { text: "\"모르는 사람이네요.\"", eff: { affY: 1 }, to: "d3_deny" },
-        { text: "(대답 대신 카드를 돌린다)", eff: { affY: 1, trustY: 1 }, to: "d3_silent" },
+        { text: "(대답 대신 카드를 돌린다)", eff: { affY: 1, trustY: 1, mY01: 1 }, to: "d3_silent" },
         { text: "\"연서 씨는 왜 매일 혼자 와요?\"", eff: { trustY: 1 }, to: "d3_ask" },
       ],
     },
@@ -1221,7 +1221,7 @@ export const W1: Scenes = {
       prompt: "세 입 다 먹었다. 정답은?",
       opts: [
         { text: "\"2번.\" (제일 매웠다)", eff: { affA: 1 }, to: "a4_wrong" },
-        { text: "\"3번.\" (맵기 전에 단맛이 먼저 왔다)", eff: { trustA: 1, affA: 1 }, to: "a4_right" },
+        { text: "\"3번.\" (맵기 전에 단맛이 먼저 왔다)", eff: { trustA: 1, affA: 1, mA01: 1 }, to: "a4_right" },
         { text: "(눈가리개를 슬쩍 들어 본다)", eff: { affA: -1 }, to: "a4_peek" },
       ],
     },
@@ -1454,7 +1454,7 @@ export const W1: Scenes = {
       opts: [
         { text: "\"잘 어울리는데요.\"", eff: { affY: 1 }, to: "y3_r1" },
         { text: "\"파스는 손 때문이에요?\"", eff: { trustY: 1, affY: 1 }, to: "y3_r2" },
-        { text: "(눈을 감고 셋을 센다)", eff: { affY: 2 }, to: "y3_r3" },
+        { text: "(눈을 감고 셋을 센다)", eff: { affY: 2, mY02: 1 }, to: "y3_r3" },
         { text: "\"컵라면이요? 몸 생각 좀 하셔야겠는데요.\"", eff: { affY: -1 }, to: "y3_r4" },
       ],
     },
@@ -1936,7 +1936,7 @@ export const W1: Scenes = {
       t: "choice",
       opts: [
         { text: "\"괜찮아요?\"", eff: { trustY: 1 }, to: "d4_y_ask" },
-        { text: "(따뜻한 물로 바꿔 따라 준다)", eff: { affY: 2 }, to: "d4_y_warm" },
+        { text: "(따뜻한 물로 바꿔 따라 준다)", eff: { affY: 2, mY03: 1 }, to: "d4_y_warm" },
         { text: "(못 본 척 마감을 계속한다)", eff: { affY: -1 }, to: "d4_y_skip" },
       ],
     },
@@ -2137,7 +2137,7 @@ export const W1: Scenes = {
       prompt: "비가 계단 난간을 두드린다.",
       opts: [
         { text: "\"오늘 태양 씨, 끝까지 밀었죠.\"", eff: { trustY: 1, affY: -1 }, to: "d5_back_ask" },
-        { text: "(말없이 한 칸 아래 계단에 앉는다)", eff: { affY: 1 }, to: "d5_back_sit" },
+        { text: "(말없이 한 칸 아래 계단에 앉는다)", eff: { affY: 1, mY04: 1 }, to: "d5_back_sit" },
         { text: "(주머니의 사탕을 담배 옆에 내민다)", eff: { affY: 2 }, to: "d5_back_candy" },
       ],
     },
@@ -2526,7 +2526,7 @@ export const W1: Scenes = {
       prompt: "뭐라고 할까.",
       opts: [
         { text: "\"이기는 날이 제일 위험해. 당분간 큰 판은 하지 마.\"", eff: { trustA: 2, affA: -1 }, to: "d6_tteok_warn" },
-        { text: "\"…아빠, 같이 찾아보자.\"", eff: { affA: 2, trustA: 1 }, to: "d6_tteok_find" },
+        { text: "\"…아빠, 같이 찾아보자.\"", eff: { affA: 2, trustA: 1, mA02: 1 }, to: "d6_tteok_find" },
       ],
     },
   ],

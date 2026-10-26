@@ -2419,5 +2419,17 @@ const V2_P5: VoiceLine[] = [
 ];
 const V2_P6: VoiceLine[] = [
   { id: "y6-cd11", who: "yeonseo", text: "…그럼 그날로 해요. 비 오는 날마다, 다음 날을 기다릴게요.", tag: "[soft] [shy] ...그럼 그날로 해요. [soft] 비 오는 날마다, 다음 날을 기다릴게요." },
+  { id: "y6-md01", who: "yeonseo", text: "…그거, 제 버릇이에요.", tag: "[whispers] [surprised] ...그거, 제 버릇이에요." },
+  { id: "y6-md02", who: "yeonseo", text: "봐 달라고 할 때 하는 거. 아무한테도 들킨 적 없는데.", tag: "[whispers] [shy] 봐 달라고 할 때 하는 거. [whispers] 아무한테도 들킨 적 없는데." },
+  { id: "y6-md03", who: "yeonseo", text: "…그럼 대답은 들은 걸로 할게요. 말보다 정확하니까.", tag: "[whispers] [shy] ...그럼 대답은 들은 걸로 할게요. [whispers] 말보다 정확하니까." },
+  { id: "y6-md04", who: "yeonseo", text: "…뭐 하는 거예요?", tag: "[surprised] ...뭐 하는 거예요?" },
+  { id: "y6-md05", who: "yeonseo", text: "…7년 동안, 그렇게 계산해 준 사람은 없었어요.", tag: "[sad] [quiet] ...칠 년 동안, 그렇게 계산해 준 사람은 없었어요." },
+  { id: "y6-md06", who: "yeonseo", text: "오늘 밤 그 자리에 서도, 이 카드는 쥐고 있을게요. 꽉 말고, 이만큼만.", tag: "[quiet] [resolute] 오늘 밤 그 자리에 서도, 이 카드는 쥐고 있을게요. [soft] 꽉 말고, 이만큼만." },
+  { id: "a5-md07b", who: "amy", text: "…그걸 왜 다 듣고 있어.", tag: "[sad] [shaky] ...그걸 왜 다 듣고 있어." },
+  { id: "a5-md08", who: "amy", text: "안 괜찮아. 진짜 하나도 안 괜찮아.", tag: "[crying] 안 괜찮아. [crying] 진짜 하나도 안 괜찮아." },
+  { id: "a5-md09", who: "amy", text: "근데 이번 한 번만 들을게. 아빠 이야기. 다 듣고 나면, 네 손 잡고 올라갈게. 약속해.", tag: "[sniffles] 근데 이번 한 번만 들을게, 아빠 이야기. [sad] 다 듣고 나면, 네 손 잡고 올라갈게. [resolute] 약속해." },
+  { id: "a5-md10", who: "amy", text: "…공책으로?", tag: "[surprised] ...공책으로?" },
+  { id: "a5-md11", who: "amy", text: "사장님 입으로 듣는 아빠는… 맨날 지는 사람이었어. 공책 속 아빠는 다 알고 있던 사람이고.", tag: "[thoughtful] 사장님 입으로 듣는 아빠는... 맨날 지는 사람이었어. [soft] 공책 속 아빠는, 다 알고 있던 사람이고." },
+  { id: "a5-md12", who: "amy", text: "응. 아빠 얘기는 아빠한테 들을래. …너 진짜 이상해. 나도 모르는 나를 자꾸 맞혀.", tag: "[determined] 응. 아빠 얘기는 아빠한테 들을래. [flustered] ...너 진짜 이상해. 나도 모르는 나를 자꾸 맞혀." },
 ];
 export const V2_LINES: VoiceLine[] = [...V2_P0, ...V2_P1, ...V2_P2, ...V2_P3, ...V2_P4, ...V2_P5, ...V2_P6];

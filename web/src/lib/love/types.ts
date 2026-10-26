@@ -200,6 +200,8 @@ export interface Opt {
   back?: string[];
   /** 숨은 선택지 표시 (금색) */
   secret?: boolean;
+  /** 마음 읽기로 열린 선택지 표시 (✎) — cond 로 mindA · mindY 문턱을 걸어 둔 결정적 순간 */
+  read?: boolean;
   /** 하루 일정 카드 (free 슬롯에서): 누구를 만나는지 · 무엇이 오르는지 */
   card?: PlanCard;
 }
@@ -249,6 +251,9 @@ export interface PokerStreet {
   tell?: string;
   /** 이 텔이 읽기 노트의 어떤 버릇인지 (tells.ts id) — 알고 있으면 해석이 같이 뜸 */
   tellId?: string;
+  /** 두 번째로 보이는 신호 (히로인의 신호 등) — tellId2 버릇을 알면 해석이 같이 뜸 */
+  tell2?: string;
+  tellId2?: string;
   acts: PokerAct[];
 }
 export interface PokerSpec {
@@ -344,6 +349,8 @@ export type Step =
   | { t: "free"; prompt: string; opts: Opt[]; big?: boolean }
   | { t: "sfx"; id: SfxId }
   | { t: "bgm"; id: BgmId | null }
+  /** 「네가 알아준 것들」 — 그 히로인에 대해 알아본 순간들을 한 줄씩 (하나도 없으면 건너뜀) */
+  | { t: "recall"; who: "amy" | "yeonseo" }
   | { t: "ending"; id: EndingId }
   | { t: "end"; text: string; sub?: string };
 

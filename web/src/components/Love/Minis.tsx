@@ -483,6 +483,8 @@ export function StoryPoker({
   const theirsOpen = !!res && res.r !== "fold" && sd >= 1;
   const known = street.tellId ? tellKnown(street.tellId, vars) : false;
   const tellInfo = street.tellId ? tellById(street.tellId) : undefined;
+  const known2 = street.tellId2 ? tellKnown(street.tellId2, vars) : false;
+  const tellInfo2 = street.tellId2 ? tellById(street.tellId2) : undefined;
 
   // 대사창: 상대 반응 > 결과 문장 > 거리별 상대 대사
   // 결과가 정해진 행동의 반응 대사는 결과가 뜬 뒤에 (쇼다운 전에 말해 버리면 김이 샘)
@@ -571,6 +573,16 @@ export function StoryPoker({
           {note.k === "노트" && tellInfo && (
             <div className="mt-[0.5cqw] border-t border-white/15 pt-[0.5cqw] text-[1.05cqw] leading-[1.5] text-[#ffe2a0]">
               → {tellInfo.name}. {tellInfo.meaning}
+            </div>
+          )}
+          {note.k !== "속마음" && street.tell2 && (
+            <div className="mt-[0.5cqw] border-t border-white/15 pt-[0.5cqw] text-[1.15cqw] leading-[1.5] text-white/90">
+              {street.tell2}
+              {known2 && tellInfo2 && (
+                <div className="mt-[0.3cqw] text-[1.05cqw] text-[#ffe2a0]">
+                  → {tellInfo2.name}. {tellInfo2.meaning}
+                </div>
+              )}
             </div>
           )}
         </div>
