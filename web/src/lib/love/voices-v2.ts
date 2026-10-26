@@ -2155,7 +2155,7 @@ const V2_P5: VoiceLine[] = [
   { id: "y6-64283f1c42", who: "yeonseo", text: "오늘은 X예요. 열한 시 사십 분이니까.", tag: "[cold] [flat] 오늘은 엑스예요. 열한 시 사십 분이니까." },
   { id: "y6-f7e753a211", who: "yeonseo", text: "…다른 사람 테이블엔 서지 마요.", tag: "[quiet] [cold] [intense] ...다른 사람 테이블엔, 서지 마요." },
   { id: "y6-963df764cc", who: "yeonseo", text: "저 말고 다른 사람한테 카드 돌리지 마요.", tag: "[jealous] [sulky] 저 말고 다른 사람한테, 카드 돌리지 마요." },
-  { id: "y6-f969371e68", who: "yeonseo", text: "그 손, 제 거예요. 장부 반을 버리고 산 거예요.", tag: "[cold] [possessive] 그 손, 제 거예요. 장부 반을 버리고, 산 거예요." },
+  { id: "y6-f969371e68b", who: "yeonseo", text: "그 손, 제 거예요. 장부의 반을 버리고 산 거예요.", tag: "[cold] [possessive] 그 손, 제 거예요. 장부의 반을 버리고 산 거예요." },
   { id: "y6-ee7a91dd89", who: "yeonseo", text: "장부는 사장님한테 돌려줬어요. 딜러님이 앞치마를 안 벗길래, 들고 갈 이유가 없어졌어요.", tag: "[cold] [flat] 장부는, 사장님한테 돌려줬어요. 딜러님이 앞치마를 안 벗길래, 들고 갈 이유가 없어졌어요." },
   { id: "y6-794c5ab359", who: "yeonseo", text: "…같은 편이네요. 이제.", tag: "[cold] [wry] ...같은 편이네요. 이제." },
   { id: "y6-2ceedea237", who: "yeonseo", text: "딜러님이 돌리고, 제가 받고. 사장님이 제일 좋아하는 그림이에요.", tag: "[cold] [bitter] 딜러님이 돌리고, 제가 받고. 사장님이 제일 좋아하는 그림이에요." },
