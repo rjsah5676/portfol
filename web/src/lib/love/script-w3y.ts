@@ -3317,7 +3317,14 @@ export const W3Y: Scenes = {
     // 독점 엔딩 조건을 채운 경로: 질투가 한 줄 새어 나옴 (복선)
     {
       t: "when",
-      cond: { all: [{ v: "affY", op: ">=", n: 18 }, { v: "trustY", op: "<=", n: 9 }, { v: "yeonJealous", op: ">=", n: 2 }] },
+      cond: {
+        all: [
+          { v: "affY", op: ">=", n: 18 },
+          { v: "trustY", op: "<=", n: 9 },
+          { v: "yeonJealous", op: ">=", n: 2 },
+          { v: "mindY", op: "<=", n: 5 },
+        ],
+      },
       to: "y4_d27_ph_o",
     },
     {
@@ -3640,13 +3647,39 @@ export const W3Y: Scenes = {
       ],
     },
   ],
+  // 판정 순서: ① 집착 (호감은 높은데 신뢰 · 이해가 낮고 질투) → ② 판은 이겼지만 그녀를 끝까지 못 읽음 → ③ 굿
   y4_win_end: [
     {
       t: "when",
-      cond: { all: [{ v: "affY", op: ">=", n: 18 }, { v: "trustY", op: "<=", n: 9 }, { v: "yeonJealous", op: ">=", n: 2 }] },
+      cond: {
+        all: [
+          { v: "affY", op: ">=", n: 18 },
+          { v: "trustY", op: "<=", n: 9 },
+          { v: "yeonJealous", op: ">=", n: 2 },
+          { v: "mindY", op: "<=", n: 5 },
+        ],
+      },
       to: "end_yeon_obsess",
-      else: "end_yeon_good",
     },
+    { t: "when", cond: { v: "mindY", op: "<", n: 7 }, to: "y4_win_miss", else: "end_yeon_good" },
+  ],
+  // 이긴 판, 놓친 사람 — 장부는 찢었지만, 그녀가 말하기 전에 먼저 알아본 적이 없었다
+  y4_win_miss: [
+    { t: "bg", id: "alley_after" },
+    { t: "bgm", id: "dawn" },
+    N("지하 계단을 올라왔다. 그녀는 반 걸음 뒤에서 걸었다. 4주 내내, 그 거리였다."),
+    { t: "show", who: "yeonseo", pos: "c", dist: 1 },
+    Y("…이겼네요. 딜러님이.", "base"),
+    Y("장부는 찢었는데요. 이상하게, 할 말이 하나도 안 떠올라요.", "away"),
+    ME("…무슨 말이요?"),
+    Y("그거예요. 딜러님은 늘 그렇게 물었어요. 제가 말하기 전에 먼저 알아본 적은… 없었어요.", "cold"),
+    Y("나쁜 뜻 아니에요. 7년 동안 아무도 안 읽어 준 사람은, 읽어 주는 사람 옆에 있고 싶은가 봐요.", "sad"),
+    N("그녀가 주머니에서 장갑 한 짝을 꺼내 꼈다. 펠트 위에 두고 온 것과 똑같은, 여분이었다."),
+    Y("첫차 시간이에요. 고마웠어요. 진짜로.", "base"),
+    { t: "hide" },
+    TH("판은 이겼다. 그 사람은, 끝까지 못 읽었다."),
+    { t: "set", eff: { yMiss: 1 } },
+    { t: "goto", to: "end_yeon_sad" },
   ],
   y4_lose: [
     { t: "bgm", id: null },
@@ -3853,7 +3886,17 @@ export const W3Y: Scenes = {
     { t: "bgm", id: "rain" },
     N("그 일요일 첫차에, 그녀는 탔다."),
     { t: "bg", id: "pub" },
+    { t: "when", cond: { v: "yMiss", op: ">=", n: 1 }, to: "end_yeon_sad_m", else: "end_yeon_sad_d" },
+  ],
+  end_yeon_sad_m: [
+    N("장부가 찢긴 뒤로 빚은 없었다. 그래도 나는 다른 동네의 다른 펍에서 카드를 돌렸다. 앉지 않았다. 한 번도."),
+    { t: "goto", to: "end_yeon_sad_w" },
+  ],
+  end_yeon_sad_d: [
     N("나는 다른 동네의 다른 펍에서 카드를 돌렸다. 빚은 시급으로 조금씩 줄었다. 앉지 않았다. 한 번도."),
+    { t: "goto", to: "end_yeon_sad_w" },
+  ],
+  end_yeon_sad_w: [
     N("몇 년 뒤의 겨울. 손님 없는 평일 밤, 태양이 오랜만에 찾아와 바 카운터에 앉았다."),
     TY("형네 가게 TV는 왜 맨날 포커예요? 일하는 데서까지 포커 보면 안 질려요?"),
     TY("…어? 형. 저 딜러."),

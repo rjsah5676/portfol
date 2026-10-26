@@ -350,7 +350,7 @@ export type Step =
   | { t: "sfx"; id: SfxId }
   | { t: "bgm"; id: BgmId | null }
   /** 「네가 알아준 것들」 — 그 히로인에 대해 알아본 순간들을 한 줄씩 (하나도 없으면 건너뜀) */
-  | { t: "recall"; who: "amy" | "yeonseo" }
+  | { t: "recall"; who: "amy" | "yeonseo" | "both" }
   | { t: "ending"; id: EndingId }
   | { t: "end"; text: string; sub?: string };
 

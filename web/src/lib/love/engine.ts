@@ -5,7 +5,7 @@
 import { SCENES, START } from "./script";
 import { CG } from "./assets";
 import { dayDecay } from "./rel";
-import { isMindKey, mindGot, withMind } from "./mind";
+import { isMindKey, recallCaps, withMind } from "./mind";
 import {
   type BgId,
   type BgmId,
@@ -96,7 +96,7 @@ export type Block =
   | { k: "free"; prompt: string; opts: Opt[]; big?: boolean }
   | { k: "title"; text: string; sub?: string }
   | { k: "montage"; shots: Shot[]; caption?: string }
-  | { k: "recall"; who: "amy" | "yeonseo"; caps: string[] }
+  | { k: "recall"; who: "amy" | "yeonseo" | "both"; caps: string[] }
   | { k: "day"; d: number; slot: string }
   | { k: "ending"; id: EndingId }
   | { k: "end"; text: string; sub?: string }
@@ -400,7 +400,7 @@ export function run(s0: GState): GState {
         s.block = { k: "montage", shots: st.shots, caption: st.caption };
         return s;
       case "recall": {
-        const caps = mindGot(s.vars, st.who).map((m) => m.cap);
+        const caps = recallCaps(s.vars, st.who);
         if (!caps.length) break;
         s.block = { k: "recall", who: st.who, caps };
         return s;

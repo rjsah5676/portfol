@@ -62,7 +62,7 @@ import {
 } from "@/lib/love/types";
 import { DealMini, HeadsUp, StoryPoker, TellMini } from "./Minis";
 import { TELLS, knownTellIds, tellById, tellKnown } from "@/lib/love/tells";
-import { MIND, type MindWho, isMindKey, mindGot, mindTotal } from "@/lib/love/mind";
+import { MIND, isMindKey, mindGot, mindTotal } from "@/lib/love/mind";
 import { useStage } from "./Stage";
 import VoiceReview, { type VoiceRow } from "./VoiceReview";
 import AssetReview from "./AssetReview";
@@ -1516,7 +1516,10 @@ export default function LoveApp() {
                 <small>DAY {mindDay.day} · 알게 된 것</small>
                 {mindDay.items.map((m) => (
                   <p key={m.id}>
-                    <em style={{ color: NAME_COLOR[m.who] }}>✎ {NAME[m.who]}</em> {m.note}
+                    <em style={{ color: m.who === "both" ? "#ffd27a" : NAME_COLOR[m.who] }}>
+                      ✎ {m.who === "both" ? "두 사람" : NAME[m.who]}
+                    </em>{" "}
+                    {m.note}
                   </p>
                 ))}
               </div>
@@ -1898,7 +1901,7 @@ export default function LoveApp() {
             )}
             {rb?.k === "recall" && (
               <div key={s.seq} className="lv-recall">
-                <div className="lv-recall-t" style={{ color: NAME_COLOR[rb.who] }}>
+                <div className="lv-recall-t" style={{ color: rb.who === "both" ? "#ffd27a" : NAME_COLOR[rb.who] }}>
                   네가 알아준 것들
                 </div>
                 {rb.caps.map((c, i) => (
@@ -3001,7 +3004,7 @@ function MindNotes({ vars }: { vars: Record<string, number> }) {
     <div className="lv-relcard col-span-2 !items-stretch !text-left">
       <div className="text-[1.6cqw] font-bold text-[#ffd27a]">✎ 그녀에 대해 아는 것</div>
       <div className="mt-[0.6cqw] grid grid-cols-2 gap-x-[2cqw] gap-y-[0.8cqw]">
-        {(["amy", "yeonseo"] as MindWho[]).map((who) => (
+        {(["amy", "yeonseo"] as const).map((who) => (
           <div key={who}>
             <div className="flex items-baseline justify-between">
               <span className="text-[1.25cqw] font-bold" style={{ color: NAME_COLOR[who] }}>
@@ -3024,6 +3027,27 @@ function MindNotes({ vars }: { vars: Record<string, number> }) {
             )}
           </div>
         ))}
+        {(mindGot(vars, "both").length > 0 || ((vars.meta_trueA ?? 0) >= 1 && (vars.meta_trueY ?? 0) >= 1)) && (
+          <div className="col-span-2">
+            <div className="flex items-baseline justify-between">
+              <span className="text-[1.25cqw] font-bold text-[#ffd27a]">두 사람</span>
+              <span className="text-[1.05cqw] text-white/50">
+                {mindGot(vars, "both").length} / {mindTotal("both")}
+              </span>
+            </div>
+            {MIND.filter((m) => m.who === "both").map((m) =>
+              (vars[m.id] ?? 0) >= 1 ? (
+                <div key={m.id} className="text-[1.15cqw] leading-[1.5] text-white/90">
+                  · {m.note}
+                </div>
+              ) : (
+                <div key={m.id} className="text-[1.1cqw] leading-[1.5] text-white/35">
+                  · ??? <span className="text-[1cqw]">(셋이서 · {m.week}주차)</span>
+                </div>
+              )
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

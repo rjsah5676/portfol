@@ -664,8 +664,15 @@ export const W3N: Scenes = {
       opts: [
         { text: "(에이미를 따라 나간다)", eff: { affA: 1, affY: -1, g4A: 1 }, to: "g4_d24_amy" },
         { text: "(연서 곁에 남는다)", eff: { affY: 1, affA: -1, g4Y: 1 }, to: "g4_d24_yeon" },
+        { text: "(가운데 칩을 연서 손에 쥐여 주고, 말없이 에이미를 따라 나간다)", eff: { affA: 1, g4A: 1, mG01: 1 }, to: "g4_d24_chipboth" },
       ],
     },
+  ],
+  // 마음 읽기 mG01 — 말없이 따라와 주길 바라는 사람, 스스로는 칩을 못 집는 사람
+  g4_d24_chipboth: [
+    N("가운데 남은 칩을 집어, 연서 손바닥에 올려 두었다. 그녀는 돌려주지도, 쥐지도 않고 손가락만 천천히 오므렸다."),
+    N("그리고 문을 열었다. 아무 말도 하지 않았다. 하지 말라던 말이었으니까."),
+    { t: "goto", to: "g4_d24_amy" },
   ],
   g4_d24_amy: [
     { t: "hide" },
@@ -1094,7 +1101,7 @@ export const W3N: Scenes = {
       prompt: "그녀가 군번줄을 꼭 쥔다.",
       opts: [
         { text: "\"아빠가 진 날 팁 준 거. 너도 첫날 나한테 그랬잖아.\"", eff: { affA: 1, gAmy: 1, gBond: 1 }, to: "g4_d25_tip" },
-        { text: "\"미워해도 돼. 같이 앉는 거랑 용서하는 건 별개야.\"", eff: { trustA: 1, gAmy: 1, gBond: 1 }, to: "g4_d25_hate" },
+        { text: "\"미워해도 돼. 같이 앉는 거랑 용서하는 건 별개야.\"", eff: { trustA: 1, gAmy: 1, gBond: 1, mG02: 1 }, to: "g4_d25_hate" },
         { text: "\"연서 씨를 용서해 줘.\"", eff: { affA: -1 }, to: "g4_d25_force" },
       ],
     },
@@ -1306,6 +1313,29 @@ export const W3N: Scenes = {
     A("언니 그릇엔 두부가 왜 두 개야? 차별이야.", "pout"),
     Y("7년 치 단골 할인이에요.", "base"),
     CH("넌 국물 한 국자 더 줬잖아. 덜 맵게. 그게 더 비싼 거야."),
+    {
+      t: "choice",
+      prompt: "에이미가 연서 그릇의 두부를 노려본다.",
+      opts: [
+        { text: "(내 그릇 두부를, 부서지지 않게 에이미 그릇으로 옮긴다)", eff: { mG03: 1 }, to: "g4_d26_tofu_ok" },
+        { text: "(연서 씨 그릇에서 두부 하나를 에이미 쪽으로 옮긴다)", to: "g4_d26_tofu_y" },
+        { text: "(못 들은 척, 내 찌개를 먹는다)", to: "g4_d26_b2" },
+      ],
+    },
+  ],
+  // 마음 읽기 mG03 — 공평한 걸 좋아하는 사람, 온전한 걸 좋아하는 사람
+  g4_d26_tofu_ok: [
+    N("젓가락 끝으로 조심스럽게. 두부는 모서리 하나 깨지지 않았다."),
+    CH("어머. 안 부서졌네. 손 쓰는 애는 다르다니까.", "smile"),
+    N("에이미가 공평해졌다는 얼굴로 두부를 집었다. 연서는 자기 그릇의 두부 두 개를 한 번 내려다보고, 나를 봤다."),
+    { t: "goto", to: "g4_d26_b2" },
+  ],
+  g4_d26_tofu_y: [
+    N("젓가락이 닿자 두부가 반으로 갈라졌다."),
+    N("연서가 아무 말 없이, 갈라진 반쪽을 오래 내려다봤다. 에이미도 받은 두부에 젓가락을 대지 않았다."),
+    { t: "goto", to: "g4_d26_b2" },
+  ],
+  g4_d26_b2: [
     { t: "bgm", id: "spoker" },
     Y("아래층 판이 어떻게 돌아가는지, 에이미 씨도 알아야 해요. 전부 말할게요.", "base"),
     { t: "when", cond: { v: "rigKnow", op: ">=", n: 1 }, to: "g4_d26_rk" },
@@ -1376,7 +1406,7 @@ export const W3N: Scenes = {
       t: "choice",
       prompt: "작전이 정해졌다. 마지막으로 한마디.",
       opts: [
-        { text: "\"끝나면 김치찌개. 셋이서, 여기서.\"", eff: { affA: 1, affY: 1, g4Stew: 1, gBond: 1 }, to: "g4_d26_stew" },
+        { text: "\"끝나면 김치찌개. 셋이서, 여기서.\"", eff: { affA: 1, affY: 1, g4Stew: 1, gBond: 1, mG04: 1 }, to: "g4_d26_stew" },
         { text: "\"누구 하나 다치면, 그 자리에서 판 엎어요.\"", eff: { trustA: 1, trustY: 1, g4Flip: 1 }, to: "g4_d26_flip" },
       ],
     },
@@ -2218,6 +2248,8 @@ export const W3N: Scenes = {
             any: [
               { v: "meta_grand", op: ">=", n: 1 },
               { all: [{ v: "gBond", op: ">=", n: 3 }, { v: "trustA", op: ">=", n: 10 }, { v: "trustY", op: ">=", n: 10 }] },
+              // 마음 읽기: 두 사람 몫 네 순간을 다 알아봤으면 신뢰 수치 대신 열림
+              { all: [{ v: "mindG", op: ">=", n: 4 }, { v: "gBond", op: ">=", n: 2 }] },
             ],
           },
           to: "end_data0",
@@ -2325,6 +2357,7 @@ export const W3N: Scenes = {
     N("에이미가 사탕 봉지를 테이블에 쏟았다. 연서가 카드를 섞었다. 엄지가 먼저 나가는 셔플. 내 버릇을 따라 한 것이다."),
     TH("셋이서 끝낸 판 다음에도, 테이블은 남았다. 이번엔 아무도 아무것도 잃지 않는 테이블이."),
     { t: "set", eff: { meta_grand: 1 } },
+    { t: "recall", who: "both" },
     { t: "ending", id: "grand" },
   ],
   g4_ep_yeon: [
@@ -2408,6 +2441,7 @@ export const W3N: Scenes = {
     A("야, 딜러. 언니 울리면 죽어. 이번엔 진짜로.", "base"),
     TH("셋이서 끝낸 판 다음에도, 테이블은 남았다. 이번엔 아무도 아무것도 잃지 않는 테이블이."),
     { t: "set", eff: { meta_grand: 1 } },
+    { t: "recall", who: "both" },
     { t: "ending", id: "grand" },
   ],
 
