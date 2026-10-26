@@ -1,0 +1,658 @@
+"use client";
+
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { DIFF_NAME, type Diff } from "@/lib/baseball/ai";
+import { CHARS, charById, faceUrl, type CharId } from "@/lib/baseball/data";
+import { DH, DW, useStage } from "./Stage";
+import { Match, loadSave, type MatchCfg, type Save, type UiState } from "./match";
+import { isMuted, setMuted, sfx } from "./sfx";
+
+/*
+ * PIXEL BASEBALL (가제) M1 — 메뉴 · 경기 화면(캔버스) · 조작 버튼.
+ * 경기 로직 · 그리기는 match.ts, 규칙은 lib/baseball.
+ */
+
+type Screen = "title" | "setup" | "derby" | "howto" | "play";
+
+const ACCENT = "#FF8A3D";
+const font = { title: "font-['Black_Han_Sans',sans-serif]", body: "font-['Nanum_Gothic',sans-serif]" };
+
+function Btn({
+  children,
+  onClick,
+  color = ACCENT,
+  className = "",
+  active,
+  disabled,
+  style,
+}: {
+  children: ReactNode;
+  onClick?: () => void;
+  color?: string;
+  className?: string;
+  active?: boolean;
+  disabled?: boolean;
+  style?: CSSProperties;
+}) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onPointerDown={(e) => e.stopPropagation()}
+      onClick={(e) => {
+        e.stopPropagation();
+        if (disabled) return;
+        sfx.ui();
+        onClick?.();
+      }}
+      className={`cursor-pointer rounded-xl border-2 font-bold transition-[transform,background-color] active:translate-y-[1px] disabled:cursor-not-allowed disabled:opacity-35 ${className}`}
+      style={{
+        borderColor: active ? color : `${color}66`,
+        background: active ? `${color}` : `linear-gradient(180deg, ${color}2e, ${color}12)`,
+        color: active ? "#111" : "#fff",
+        boxShadow: active ? `0 0 18px ${color}88` : "0 3px 0 rgba(0,0,0,0.45)",
+        ...style,
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
+function CharCard({ id, sel, onPick, mode }: { id: CharId; sel: boolean; onPick: () => void; mode: "bat" | "pit" }) {
+  const c = charById(id);
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        sfx.ui();
+        onPick();
+      }}
+      className="group relative flex w-[104px] cursor-pointer flex-col items-center overflow-hidden rounded-xl border-2 bg-[#11152a] pb-1.5 transition-transform hover:-translate-y-0.5"
+      style={{ borderColor: sel ? c.color : "rgba(255,255,255,0.1)", boxShadow: sel ? `0 0 16px ${c.color}99` : undefined }}
+      title={mode === "bat" ? `${c.swing.name} — ${c.swing.desc}` : `${c.ball.name} — ${c.ball.hint}`}
+    >
+      <img src={faceUrl(id)} alt={c.name} className="h-[82px] w-full object-cover object-top" draggable={false} />
+      <span className={`${font.title} mt-1 text-[15px]`} style={{ color: c.color }}>
+        {c.name}
+      </span>
+      <span className="px-1 text-center text-[10.5px] leading-tight text-white/70">{mode === "bat" ? c.swing.name : c.ball.name}</span>
+    </button>
+  );
+}
+
+export default function BaseballApp() {
+  const [screen, setScreen] = useState<Screen>("title");
+  const [save, setSave] = useState<Save>({ pt: 0, derbyBest: 0, games: 0, wins: 0 });
+  const [diff, setDiff] = useState<Diff>(0);
+  const [innings, setInnings] = useState(3);
+  const [home, setHome] = useState(true);
+  const [myBat, setMyBat] = useState<CharId>("kai");
+  const [myPit, setMyPit] = useState<CharId>("lily");
+  const [derbyChar, setDerbyChar] = useState<CharId>("ivan");
+  const [cfg, setCfg] = useState<MatchCfg | null>(null);
+  const [run, setRun] = useState(0);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 브라우저 저장값
+    setSave(loadSave());
+  }, [screen]);
+
+  const start = (c: MatchCfg) => {
+    setCfg(c);
+    setRun((n) => n + 1);
+    setScreen("play");
+  };
+
+  return (
+    <div className={`relative h-full w-full overflow-hidden bg-[#0b0e1c] text-white ${font.body}`} style={{ width: DW, height: DH }}>
+      {screen === "play" && cfg ? (
+        <Play key={run} cfg={cfg} onExit={() => setScreen("title")} onAgain={() => start({ ...cfg, seed: undefined })} />
+      ) : (
+        <MenuBg>
+          {screen === "title" && (
+            <div className="flex h-full flex-col items-center justify-center gap-5">
+              <div className="text-center">
+                <div className={`${font.title} text-[64px] leading-none tracking-wide`} style={{ color: ACCENT, textShadow: "0 5px 0 #000, 0 0 30px rgba(255,138,61,0.5)" }}>
+                  PIXEL BASEBALL
+                </div>
+                <div className="mt-2 text-[14px] text-white/60">가제 · M1 프로토 — 게임빌 프로야구 손맛 재현 판정용</div>
+              </div>
+              <div className="flex gap-3">
+                <Btn className={`${font.title} w-[210px] py-4 text-2xl`} onClick={() => setScreen("setup")}>
+                  경기 하기
+                </Btn>
+                <Btn className={`${font.title} w-[210px] py-4 text-2xl`} color="#ffd23f" onClick={() => setScreen("derby")}>
+                  홈런 더비
+                </Btn>
+              </div>
+              <Btn className="w-[160px] py-2 text-sm" color="#7ad7ff" onClick={() => setScreen("howto")}>
+                조작법
+              </Btn>
+              <div className="font-mono text-[13px] text-white/50">
+                PT {save.pt.toLocaleString()} · {save.games}경기 {save.wins}승 · 더비 최고 {save.derbyBest.toLocaleString()}m
+              </div>
+            </div>
+          )}
+
+          {screen === "setup" && (
+            <div className="flex h-full flex-col gap-3 px-8 py-5">
+              <div className="flex items-center justify-between">
+                <span className={`${font.title} text-[28px]`} style={{ color: ACCENT }}>
+                  경기 설정
+                </span>
+                <Btn className="px-4 py-1.5 text-sm" color="#8b93b8" onClick={() => setScreen("title")}>
+                  ← 뒤로
+                </Btn>
+              </div>
+              <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+                <Row label="봇 난이도">
+                  {([0, 1, 2] as Diff[]).map((d) => (
+                    <Btn key={d} active={diff === d} className="px-4 py-1.5 text-sm" onClick={() => setDiff(d)}>
+                      {DIFF_NAME[d]}
+                    </Btn>
+                  ))}
+                </Row>
+                <Row label="이닝">
+                  {[3, 6, 9].map((n) => (
+                    <Btn key={n} active={innings === n} className="px-4 py-1.5 text-sm" onClick={() => setInnings(n)}>
+                      {n}회
+                    </Btn>
+                  ))}
+                </Row>
+                <Row label="우리 팀">
+                  <Btn active={!home} className="px-4 py-1.5 text-sm" onClick={() => setHome(false)}>
+                    원정 (먼저 공격)
+                  </Btn>
+                  <Btn active={home} className="px-4 py-1.5 text-sm" onClick={() => setHome(true)}>
+                    홈 (먼저 수비)
+                  </Btn>
+                </Row>
+              </div>
+              <p className="text-[12px] text-white/50">
+                {diff === 0 ? "초급: 공이 느리고, 공이 들어올 자리가 처음부터 보임 (이글아이)" : diff === 1 ? "중급: 보통 속도 · 공이 반쯤 왔을 때 들어올 자리가 보임" : "고급: 빠름 · 표시 없음 · 봇이 잘 치고 잘 던짐"}
+              </p>
+              <div>
+                <div className="mb-1.5 text-[13px] font-bold text-white/80">
+                  마타자 <span className="font-normal text-white/45">— 4번 타자 · 필살타법 (경기당 3번)</span>
+                </div>
+                <div className="flex gap-2">
+                  {CHARS.map((c) => (
+                    <CharCard key={c.id} id={c.id} mode="bat" sel={myBat === c.id} onPick={() => setMyBat(c.id)} />
+                  ))}
+                </div>
+              </div>
+              <div>
+                <div className="mb-1.5 text-[13px] font-bold text-white/80">
+                  마투수 <span className="font-normal text-white/45">— 불펜 · 마구 (경기당 3번 · 언제든 교체로 등판)</span>
+                </div>
+                <div className="flex gap-2">
+                  {CHARS.map((c) => (
+                    <CharCard key={c.id} id={c.id} mode="pit" sel={myPit === c.id} onPick={() => setMyPit(c.id)} />
+                  ))}
+                </div>
+              </div>
+              <div className="mt-auto flex items-center justify-between">
+                <span className="text-[12px] text-white/55">
+                  {charById(myBat).name}: {charById(myBat).swing.desc} · {charById(myPit).name}: {charById(myPit).ball.hint}
+                </span>
+                <Btn className={`${font.title} px-10 py-2.5 text-xl`} onClick={() => start({ mode: "game", diff, innings, userHome: home, myBat, myPit })}>
+                  PLAY BALL
+                </Btn>
+              </div>
+            </div>
+          )}
+
+          {screen === "derby" && (
+            <div className="flex h-full flex-col gap-4 px-8 py-6">
+              <div className="flex items-center justify-between">
+                <span className={`${font.title} text-[28px]`} style={{ color: "#ffd23f" }}>
+                  홈런 더비
+                </span>
+                <Btn className="px-4 py-1.5 text-sm" color="#8b93b8" onClick={() => setScreen("title")}>
+                  ← 뒤로
+                </Btn>
+              </div>
+              <p className="text-[13px] leading-relaxed text-white/70">
+                홈런이 아니면 전부 아웃 (스트라이크를 그냥 보내도 아웃) · 아웃 10개까지 비거리 합계.
+                <br />
+                500m 마다 <b className="text-white">마투수가 난입</b>해서 마구를 2개 던져요. 가운데 담장 너머 <b className="text-[#ffd23f]">GOLD 보드</b>를 넘기면 +300m.
+              </p>
+              <Row label="봇 난이도(공 속도)">
+                {([0, 1, 2] as Diff[]).map((d) => (
+                  <Btn key={d} active={diff === d} className="px-4 py-1.5 text-sm" onClick={() => setDiff(d)}>
+                    {DIFF_NAME[d]}
+                  </Btn>
+                ))}
+              </Row>
+              <div>
+                <div className="mb-1.5 text-[13px] font-bold text-white/80">타자 (필살타법은 매 타석 쓸 수 있어요)</div>
+                <div className="flex gap-2">
+                  {CHARS.map((c) => (
+                    <CharCard key={c.id} id={c.id} mode="bat" sel={derbyChar === c.id} onPick={() => setDerbyChar(c.id)} />
+                  ))}
+                </div>
+              </div>
+              <div className="mt-auto flex justify-end">
+                <Btn className={`${font.title} px-10 py-2.5 text-xl`} color="#ffd23f" onClick={() => start({ mode: "derby", diff, innings: 1, userHome: true, myBat: derbyChar, myPit: "lily", derbyChar })}>
+                  시작
+                </Btn>
+              </div>
+            </div>
+          )}
+
+          {screen === "howto" && (
+            <div className="flex h-full flex-col gap-3 px-10 py-6">
+              <div className="flex items-center justify-between">
+                <span className={`${font.title} text-[28px]`} style={{ color: "#7ad7ff" }}>
+                  조작법
+                </span>
+                <Btn className="px-4 py-1.5 text-sm" color="#8b93b8" onClick={() => setScreen("title")}>
+                  ← 뒤로
+                </Btn>
+              </div>
+              <div className="grid grid-cols-2 gap-4 text-[13.5px] leading-relaxed text-white/80">
+                <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
+                  <div className={`${font.title} mb-2 text-lg text-[#ffd23f]`}>타격</div>
+                  <p>공이 홈플레이트에 닿는 순간에 맞춰 <Key>Space</Key> 또는 <b>화면 아무 데나 터치</b>.</p>
+                  <p>빠르면 당겨 치고(우타 → 왼쪽), 늦으면 밀어 쳐요. 가운데 맞추면 <b className="text-[#ffd23f]">PERFECT</b>.</p>
+                  <p>존 밖 공(볼)은 휘두르면 빗맞아요 — 참으면 볼넷.</p>
+                  <p><Key>B</Key> 번트 자세 · <Key>K</Key> 필살타법 (마타자만, 투구 전에)</p>
+                </div>
+                <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
+                  <div className={`${font.title} mb-2 text-lg text-[#7ad7ff]`}>투구</div>
+                  <p>① 구종 <Key>1</Key>~<Key>4</Key> ② 코스: 존을 누르거나 끌기 · <Key>←↑↓→</Key></p>
+                  <p>③ <Key>Space</Key>/던지기 → 게이지가 오르내림 → 다시 눌러 멈추기.</p>
+                  <p><b className="text-[#ffd23f]">MAX</b> 근처면 빠르고 날카로운 공, 너무 낮으면 <b className="text-[#ff7a7a]">실투</b>(한가운데로 밋밋).</p>
+                  <p>지치면 게이지가 빨라져요 → <b>교체</b> 버튼 · 마투수면 <Key>M</Key> 마구.</p>
+                </div>
+                <div className="col-span-2 rounded-xl border border-white/10 bg-white/[0.03] p-4">
+                  <div className={`${font.title} mb-2 text-lg text-[#FF8A3D]`}>그 밖에</div>
+                  <p>수비 · 주루는 자동 (물리로 판정 — 타구 속도 · 각도 · 수비 위치 · 주자 발). 필드 화면은 터치하면 빨리감기.</p>
+                  <p>돌발미션: 감독 · 주장 · 선배가 갑자기 미션을 줘요. 성공하면 PT + 마구/필살 1번 더.</p>
+                  <p>마구는 궤적이 정해져 있어요 — 컷인에 나오는 힌트대로 치면 칠 수 있어요.</p>
+                </div>
+              </div>
+            </div>
+          )}
+        </MenuBg>
+      )}
+    </div>
+  );
+}
+
+function Key({ children }: { children: ReactNode }) {
+  return <kbd className="mx-0.5 rounded border border-white/25 border-b-[3px] bg-white/[0.08] px-1.5 font-mono text-[11px]">{children}</kbd>;
+}
+
+function Row({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="flex items-center gap-2">
+      <span className="w-[84px] text-[13px] font-bold text-white/70">{label}</span>
+      {children}
+    </div>
+  );
+}
+
+function MenuBg({ children }: { children: ReactNode }) {
+  return (
+    <div className="relative h-full w-full" style={{ background: "radial-gradient(ellipse at 50% 120%, #2a6b3a 0%, #13301f 35%, #0b0e1c 70%)" }}>
+      <div
+        className="pointer-events-none absolute inset-0 opacity-[0.08]"
+        style={{ backgroundImage: "linear-gradient(90deg, #fff 1px, transparent 1px), linear-gradient(#fff 1px, transparent 1px)", backgroundSize: "32px 32px" }}
+      />
+      <div className="relative h-full">{children}</div>
+    </div>
+  );
+}
+
+// ───────────── 경기 화면 ─────────────
+function Play({ cfg, onExit, onAgain }: { cfg: MatchCfg; onExit: () => void; onAgain: () => void }) {
+  const { k, fs, canFs, toggleFs } = useStage();
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const matchRef = useRef<Match | null>(null);
+  const [m, setM] = useState<Match | null>(null);
+  const [ui, setUi] = useState<UiState | null>(null);
+  const [menu, setMenu] = useState(false);
+  const [bullpen, setBullpen] = useState(false);
+  const [muted, setMute] = useState(isMuted());
+  const down = useRef(false);
+
+  useEffect(() => {
+    const m = new Match(cfg, setUi);
+    matchRef.current = m;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 처음 상태
+    setUi(m.ui);
+    setM(m);
+    // 개발 중 자동 테스트용 (배포 빌드엔 안 들어감)
+    if (process.env.NODE_ENV !== "production") (window as unknown as { __pxb?: Match }).__pxb = m;
+    let raf = 0;
+    let last = performance.now();
+    const loop = (now: number) => {
+      const dt = (now - last) / 1000;
+      last = now;
+      m.update(dt);
+      const cv = canvasRef.current;
+      if (cv) {
+        const ctx = cv.getContext("2d");
+        if (ctx) {
+          const q = cv.width / DW;
+          ctx.setTransform(q, 0, 0, q, 0, 0);
+          ctx.imageSmoothingEnabled = true;
+          m.draw(ctx, q);
+        }
+      }
+      raf = requestAnimationFrame(loop);
+    };
+    raf = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(raf);
+  }, [cfg]);
+
+  // 캔버스 해상도 = 화면 픽셀
+  useEffect(() => {
+    const cv = canvasRef.current;
+    if (!cv || !k) return;
+    const q = Math.min(3, Math.max(1, k * (window.devicePixelRatio || 1)));
+    cv.width = Math.round(DW * q);
+    cv.height = Math.round(DH * q);
+  }, [k]);
+
+  const toDesign = useCallback((e: { clientX: number; clientY: number }) => {
+    const r = canvasRef.current!.getBoundingClientRect();
+    return { x: ((e.clientX - r.left) / r.width) * DW, y: ((e.clientY - r.top) / r.height) * DH };
+  }, []);
+
+  // 키보드
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const m = matchRef.current;
+      if (!m || e.repeat) return;
+      if (e.key === "Escape") {
+        setMenu((v) => {
+          m.setPaused(!v);
+          return !v;
+        });
+        return;
+      }
+      if (m.paused) return;
+      const k = e.key.toLowerCase();
+      if (k === " " || k === "j" || k === "enter") {
+        e.preventDefault();
+        if (m.ui.userBat) m.pressSwing();
+        else if (m.phase === "field") m.skipField();
+        else m.pressThrow();
+      } else if (k === "b") m.toggleBunt();
+      else if (k === "k" || k === "m") m.toggleSpecial();
+      else if (["1", "2", "3", "4"].includes(k)) m.selectKind(Number(k) - 1);
+      else if (k === "arrowleft" || k === "a") (e.preventDefault(), m.moveAim(-1, 0));
+      else if (k === "arrowright" || k === "d") (e.preventDefault(), m.moveAim(1, 0));
+      else if (k === "arrowup" || k === "w") (e.preventDefault(), m.moveAim(0, 1));
+      else if (k === "arrowdown" || k === "s") (e.preventDefault(), m.moveAim(0, -1));
+      else if (k === "f") m.toggleFast();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  const pause = (v: boolean) => {
+    setMenu(v);
+    m?.setPaused(v);
+  };
+
+  return (
+    <div className="relative h-full w-full">
+      <canvas
+        ref={canvasRef}
+        width={DW}
+        height={DH}
+        className="absolute inset-0 block"
+        style={{ width: DW, height: DH, touchAction: "none" }}
+        onPointerDown={(e) => {
+          const mm = matchRef.current;
+          if (!mm) return;
+          down.current = true;
+          const p = toDesign(e);
+          if (mm.phase === "aim" && !mm.ui.userBat) mm.aimAt(p.x, p.y);
+          else mm.tap(p.x, p.y);
+        }}
+        onPointerMove={(e) => {
+          const mm = matchRef.current;
+          if (!mm || !down.current || mm.phase !== "aim" || mm.ui.userBat) return;
+          const p = toDesign(e);
+          mm.aimAt(p.x, p.y);
+        }}
+        onPointerUp={() => {
+          down.current = false;
+        }}
+      />
+
+      {ui && !ui.over && (
+        <>
+          {/* 오른쪽 조작 칸 (필드 화면 · 결과 문구 동안은 숨김) */}
+          <div
+            className="absolute top-[124px] right-3 flex w-[150px] flex-col gap-2 transition-opacity"
+            style={{ opacity: ["field", "result", "change", "contact", "intro"].includes(ui.phase) ? 0 : 1, pointerEvents: ["field", "result", "change", "contact", "intro"].includes(ui.phase) ? "none" : undefined }}
+          >
+            {ui.userBat && (
+              <>
+                {ui.spHero && (
+                  <Btn
+                    active={ui.spArmed}
+                    disabled={ui.phase !== "ready" || ui.spArmed || ui.spLeft <= 0}
+                    className={`${font.title} py-2 text-[15px] leading-tight`}
+                    color="#ff5fb4"
+                    onClick={() => m?.toggleSpecial()}
+                  >
+                    {ui.spArmed ? "필살 준비!" : `필살타법 ${ui.mode === "derby" ? "" : `(${ui.spLeft})`}`}
+                    <span className="block text-[11px] font-normal opacity-80">{ui.spName} · K</span>
+                  </Btn>
+                )}
+                {ui.mode === "game" && (
+                  <Btn active={ui.bunt} disabled={!(ui.phase === "ready" || ui.phase === "windup")} className="py-2 text-[14px]" color="#7ad7ff" onClick={() => m?.toggleBunt()}>
+                    번트 <span className="text-[11px] font-normal opacity-70">B</span>
+                  </Btn>
+                )}
+                <Btn
+                  disabled={!ui.canSwing}
+                  className={`${font.title} h-[96px] text-[30px]`}
+                  color={ACCENT}
+                  onClick={() => m?.pressSwing()}
+                  style={{ borderRadius: 999 }}
+                >
+                  SWING
+                  <span className="block font-['Nanum_Gothic'] text-[11px] font-normal opacity-75">Space · 화면 터치</span>
+                </Btn>
+              </>
+            )}
+            {!ui.userBat && (
+              <>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {ui.kinds.map((kd, i) => (
+                    <Btn key={kd.id} active={ui.kind === i} disabled={!ui.aiming} className="py-1.5 text-[13px]" color="#7ad7ff" onClick={() => m?.selectKind(i)}>
+                      <span className="block text-[10px] font-normal opacity-60">{i + 1}</span>
+                      {kd.name}
+                    </Btn>
+                  ))}
+                </div>
+                {ui.spHero && (
+                  <Btn active={ui.spArmed} disabled={!(ui.aiming || ui.gauging) || (ui.spLeft <= 0 && !ui.spArmed)} className={`${font.title} py-1.5 text-[14px] leading-tight`} color="#ff5fb4" onClick={() => m?.toggleSpecial()}>
+                    마구 ({ui.spLeft})<span className="block text-[11px] font-normal opacity-80">{ui.spName} · M</span>
+                  </Btn>
+                )}
+                <Btn
+                  disabled={!(ui.aiming || ui.gauging)}
+                  className={`${font.title} h-[78px] text-[26px]`}
+                  color={ui.gauging ? "#ffd23f" : ACCENT}
+                  active={ui.gauging}
+                  onClick={() => m?.pressThrow()}
+                  style={{ borderRadius: 999 }}
+                >
+                  {ui.gauging ? "STOP!" : "던지기"}
+                  <span className="block font-['Nanum_Gothic'] text-[11px] font-normal opacity-75">Space</span>
+                </Btn>
+                {ui.mode === "game" && (
+                  <Btn disabled={!ui.aiming} className="py-1.5 text-[13px]" color="#8b93b8" onClick={() => setBullpen(true)}>
+                    투수 교체
+                  </Btn>
+                )}
+              </>
+            )}
+          </div>
+
+          {/* 아래: 메뉴 · 빨리감기 (필드 화면에선 홈플레이트를 안 가리게 오른쪽 위로) */}
+          <div className={`absolute flex gap-2 ${ui.fieldPlaying ? "top-[118px] right-3 flex-col items-end" : "bottom-3 left-1/2 -translate-x-1/2"}`}>
+            {ui.fieldPlaying && (
+              <>
+                <Btn active={ui.fast} className="px-3 py-1.5 text-[13px]" color="#7dff9a" onClick={() => m?.toggleFast()}>
+                  ▶▶ 빨리
+                </Btn>
+                <Btn className="px-3 py-1.5 text-[13px]" color="#7dff9a" onClick={() => m?.skipField()}>
+                  건너뛰기
+                </Btn>
+              </>
+            )}
+            <Btn className="px-3 py-1.5 text-[13px]" color="#8b93b8" onClick={() => pause(true)}>
+              ❚❚ 메뉴
+            </Btn>
+            {canFs && (
+              <Btn className="px-3 py-1.5 text-[13px]" color="#8b93b8" onClick={toggleFs}>
+                {fs ? "창 모드" : "⛶"}
+              </Btn>
+            )}
+          </div>
+        </>
+      )}
+
+      {bullpen && ui && (
+        <Modal>
+          <div className={`${font.title} mb-3 text-2xl`}>투수 교체</div>
+          <div className="flex flex-col gap-2">
+            {ui.bullpen.map((p) => (
+              <Btn
+                key={p.idx}
+                disabled={p.used || p.cur}
+                className="flex items-center justify-between px-4 py-2 text-left text-[14px]"
+                color={p.hero ? "#ff5fb4" : "#7ad7ff"}
+                onClick={() => {
+                  m?.changePitcherTo(p.idx);
+                  setBullpen(false);
+                }}
+              >
+                <span>
+                  {p.hero && "★ "}
+                  {p.name}
+                </span>
+                <span className="text-[12px] font-normal opacity-70">{p.cur ? "던지는 중" : p.used ? "강판" : p.role}</span>
+              </Btn>
+            ))}
+          </div>
+          <Btn className="mt-3 w-full py-2 text-sm" color="#8b93b8" onClick={() => setBullpen(false)}>
+            닫기
+          </Btn>
+        </Modal>
+      )}
+
+      {menu && (
+        <Modal>
+          <div className={`${font.title} mb-4 text-3xl`}>일시정지</div>
+          <div className="flex flex-col gap-2">
+            <Btn className="py-2.5 text-lg" onClick={() => pause(false)}>
+              계속하기
+            </Btn>
+            <Btn
+              className="py-2 text-sm"
+              color="#7ad7ff"
+              onClick={() => {
+                setMuted(!muted);
+                setMute(!muted);
+              }}
+            >
+              소리 {muted ? "켜기" : "끄기"}
+            </Btn>
+            <Btn className="py-2 text-sm" color="#ff7a7a" onClick={onExit}>
+              메뉴로 나가기 (기록 안 남음)
+            </Btn>
+          </div>
+        </Modal>
+      )}
+
+      {ui?.over && (
+        <Modal wide>
+          {ui.over.derby ? (
+            <>
+              <div className={`${font.title} text-[40px] text-[#ffd23f]`}>{ui.over.derby.dist.toLocaleString()}m</div>
+              <div className="mt-1 text-white/70">
+                홈런 {ui.over.derby.hr}개 · 최고 기록 {ui.over.derby.best.toLocaleString()}m
+              </div>
+            </>
+          ) : (
+            <>
+              <div className={`${font.title} text-[44px]`} style={{ color: ui.over.win ? "#ffd23f" : ui.over.win === null ? "#fff" : "#ff7a7a" }}>
+                {ui.over.win ? "승리!" : ui.over.win === null ? "무승부" : "패배"}
+              </div>
+              <div className="font-mono text-2xl">
+                {m?.s.opts.away.short} {ui.over.score[0]} : {ui.over.score[1]} {m?.s.opts.home.short}
+              </div>
+              {m && <LineScore m={m} />}
+              {ui.over.mvp && <div className="mt-2 text-[14px] text-white/80">MVP · {ui.over.mvp}</div>}
+            </>
+          )}
+          <div className="mt-2 text-[15px] text-[#ffd23f]">+{ui.over.pt} PT</div>
+          <div className="mt-4 flex justify-center gap-3">
+            <Btn className="px-6 py-2.5 text-lg" onClick={onAgain}>
+              다시 하기
+            </Btn>
+            <Btn className="px-6 py-2.5 text-lg" color="#8b93b8" onClick={onExit}>
+              메뉴로
+            </Btn>
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+function LineScore({ m }: { m: Match }) {
+  const s = m.s;
+  const n = Math.max(s.opts.innings, s.line[0].length, s.line[1].length);
+  const cols = Array.from({ length: n }, (_, i) => i);
+  return (
+    <table className="mx-auto mt-3 border-collapse font-mono text-[13px]">
+      <thead>
+        <tr className="text-white/50">
+          <th className="px-2 text-left font-normal" />
+          {cols.map((i) => (
+            <th key={i} className="w-6 font-normal">
+              {i + 1}
+            </th>
+          ))}
+          <th className="px-2 font-normal">R</th>
+          <th className="px-2 font-normal">H</th>
+        </tr>
+      </thead>
+      <tbody>
+        {[0, 1].map((t) => (
+          <tr key={t}>
+            <td className="px-2 text-left font-bold" style={{ color: t ? s.opts.home.color : s.opts.away.color }}>
+              {t ? s.opts.home.short : s.opts.away.short}
+            </td>
+            {cols.map((i) => (
+              <td key={i} className="text-center text-white/85">
+                {s.line[t][i] ?? (t === 1 && i === n - 1 && s.winner === 1 ? "X" : "")}
+              </td>
+            ))}
+            <td className="px-2 text-center font-bold">{s.score[t]}</td>
+            <td className="px-2 text-center text-white/70">{s.sides[t].hits}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+function Modal({ children, wide }: { children: ReactNode; wide?: boolean }) {
+  return (
+    <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/60" onPointerDown={(e) => e.stopPropagation()}>
+      <div className={`${wide ? "w-[560px]" : "w-[340px]"} rounded-2xl border-2 border-white/15 bg-[#11152a] p-6 text-center shadow-2xl`}>{children}</div>
+    </div>
+  );
+}

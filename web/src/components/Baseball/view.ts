@@ -1,0 +1,446 @@
+/**
+ * 그리기 — 1024 × 576 디자인 좌표 (무대가 화면에 맞춰 키움).
+ *   타석 화면: 포수 뒤 시점 원근 (공 · 그림자 · 스트라이크 존 · 투수 · 타자 리그)
+ *   필드 화면: 경기장 전체를 비스듬히 내려다봄 (타구 · 수비 · 주자)
+ * 배경은 한 번 그려서 캐시.
+ */
+import { BASES, FENCE_H, HOME_POS, fenceDist, type Frame } from "@/lib/baseball/play";
+import { BALL_R, ZONE } from "@/lib/baseball/pitch";
+
+export const DW = 1024;
+export const DH = 576;
+
+// ───────────── 타석 원근 ─────────────
+// Dc 를 키워 투수 쪽 원근을 눌러 줌 (공 · 마구가 멀리서도 보이게) — 존 크기는 F/Dc 로 같음
+export const CAM = { F: 1107, Dc: 4.5, camH: 1.6, Y0: 200, cx: 512 };
+export function proj(x: number, y: number, z: number) {
+  const s = CAM.F / (z + CAM.Dc);
+  return { x: CAM.cx + x * s, y: CAM.Y0 - (y - CAM.camH) * s, s };
+}
+export const MOUND = proj(0, 0, 18.4);
+
+// ───────────── 필드 ─────────────
+export const FV = { S: 3.95, ox: 512, oy: 552, k: 0.84, kh: 0.9 };
+export function fproj(x: number, y: number, h = 0) {
+  return { x: FV.ox + x * FV.S, y: FV.oy - y * FV.S * FV.k - h * FV.S * FV.kh };
+}
+
+let bgCanvas: HTMLCanvasElement | null = null;
+let bgKey = "";
+let fieldCanvas: HTMLCanvasElement | null = null;
+let fieldKey = "";
+
+function crowd(ctx: CanvasRenderingContext2D, x0: number, y0: number, x1: number, y1: number, seed: number, rows: number) {
+  let s = seed;
+  const rnd = () => {
+    s = (s * 16807) % 2147483647;
+    return s / 2147483647;
+  };
+  const cols = ["#f4d35e", "#ee6352", "#59cd90", "#3fa7d6", "#fac05e", "#f79d84", "#ffffff", "#c8a2ff", "#ff7a3d"];
+  for (let r = 0; r < rows; r++) {
+    const yy = y0 + ((y1 - y0) * r) / rows;
+    const step = 4 + r * 0.25;
+    for (let x = x0; x < x1; x += step) {
+      ctx.fillStyle = cols[Math.floor(rnd() * cols.length)];
+      ctx.globalAlpha = 0.55 + rnd() * 0.35;
+      ctx.fillRect(x + rnd() * 2, yy + rnd() * 2, 2.2 + r * 0.06, 2.6 + r * 0.06);
+    }
+  }
+  ctx.globalAlpha = 1;
+}
+
+/** 타석 배경 (하늘 · 관중석 · 외야 · 내야 · 마운드 · 홈) */
+export function battingBg(q: number, night: boolean): HTMLCanvasElement {
+  const key = `${q}:${night}`;
+  if (bgCanvas && bgKey === key) return bgCanvas;
+  const c = document.createElement("canvas");
+  c.width = Math.round(DW * q);
+  c.height = Math.round(DH * q);
+  const g = c.getContext("2d")!;
+  g.scale(q, q);
+  // 하늘
+  const sky = g.createLinearGradient(0, 0, 0, 200);
+  if (night) {
+    sky.addColorStop(0, "#070b1f");
+    sky.addColorStop(1, "#1f2a5c");
+  } else {
+    sky.addColorStop(0, "#5fb0ff");
+    sky.addColorStop(1, "#bfe3ff");
+  }
+  g.fillStyle = sky;
+  g.fillRect(0, 0, DW, 200);
+  // 조명탑
+  if (night) {
+    for (const lx of [120, 904]) {
+      g.fillStyle = "#2b3150";
+      g.fillRect(lx - 3, 40, 6, 90);
+      g.fillStyle = "#fff8d6";
+      g.shadowColor = "#fff3b0";
+      g.shadowBlur = 30;
+      g.fillRect(lx - 26, 30, 52, 14);
+      g.shadowBlur = 0;
+    }
+  }
+  // 관중석 (외야 펜스 뒤 계단)
+  const fy = proj(0, FENCE_H, 118).y;
+  g.fillStyle = night ? "#1b1f36" : "#3a4466";
+  g.fillRect(0, 108, DW, fy - 108);
+  crowd(g, 0, 112, DW, fy - 6, 7, 12);
+  // 전광판
+  g.fillStyle = "#111522";
+  g.fillRect(412, 22, 200, 36);
+  g.strokeStyle = "#ffcf4a";
+  g.lineWidth = 2;
+  g.strokeRect(412, 22, 200, 36);
+  g.fillStyle = "#ffcf4a";
+  g.font = '16px "Black Han Sans", sans-serif';
+  g.textAlign = "center";
+  g.fillText("PIXEL STADIUM", 512, 46);
+  // 펜스
+  g.fillStyle = "#1d5a3a";
+  g.fillRect(0, fy, DW, CAM.Y0 + 6 - fy);
+  g.fillStyle = "#ffd23f";
+  g.fillRect(0, fy, DW, 2);
+  // 잔디 (원근 줄무늬)
+  for (let i = 0; i < 26; i++) {
+    const z0 = 118 - i * 4.6;
+    const z1 = z0 - 4.6;
+    const y0 = proj(0, 0, Math.max(z0, 0.1)).y;
+    const y1 = proj(0, 0, Math.max(z1, 0.1)).y;
+    g.fillStyle = i % 2 ? "#3f9a4c" : "#46a854";
+    g.fillRect(0, y0, DW, y1 - y0 + 1);
+  }
+  g.fillStyle = "#46a854";
+  g.fillRect(0, proj(0, 0, 0.1).y, DW, DH);
+  // 내야 흙 (다이아몬드)
+  const poly = (pts: [number, number][], fill: string) => {
+    g.beginPath();
+    pts.forEach(([x, z], i) => {
+      const p = proj(x, 0, z);
+      if (i) g.lineTo(p.x, p.y);
+      else g.moveTo(p.x, p.y);
+    });
+    g.closePath();
+    g.fillStyle = fill;
+    g.fill();
+  };
+  // 흙 부채꼴
+  const arc: [number, number][] = [];
+  for (let a = -48; a <= 48; a += 4) {
+    const r = 29;
+    arc.push([Math.sin((a * Math.PI) / 180) * r, Math.cos((a * Math.PI) / 180) * r + 0.0]);
+  }
+  poly([[0, -1.5], ...arc], "#c8925a");
+  // 내야 잔디
+  poly([[0, 1.6], [17.6, 19.4], [0, 37], [-17.6, 19.4]], "#4caf5a");
+  // 베이스 라인
+  g.strokeStyle = "rgba(255,255,255,0.85)";
+  g.lineWidth = 2;
+  for (const s of [1, -1]) {
+    const a = proj(0, 0, 0.4);
+    const b = proj(s * 70, 0, 70);
+    g.beginPath();
+    g.moveTo(a.x, a.y);
+    g.lineTo(b.x, b.y);
+    g.stroke();
+  }
+  // 베이스
+  for (const [bx, bz] of [[19.4, 19.4], [0, 38.8], [-19.4, 19.4]] as [number, number][]) {
+    const p = proj(bx, 0, bz);
+    g.fillStyle = "#fff";
+    g.fillRect(p.x - p.s * 0.25, p.y - p.s * 0.12, p.s * 0.5, p.s * 0.24);
+  }
+  // 마운드
+  const m = proj(0, 0, 18.4);
+  g.fillStyle = "#c08550";
+  g.beginPath();
+  g.ellipse(m.x, m.y, 2.7 * m.s, 2.7 * m.s * 0.22, 0, 0, Math.PI * 2);
+  g.fill();
+  g.fillStyle = "#fff";
+  g.fillRect(m.x - 0.3 * m.s, m.y - 2, 0.6 * m.s, 2);
+  // 타석 흙 · 홈플레이트
+  const hp = proj(0, 0, 0.2);
+  g.fillStyle = "#c8925a";
+  g.beginPath();
+  g.ellipse(hp.x, hp.y + 30, 330, 70, 0, 0, Math.PI * 2);
+  g.fill();
+  g.strokeStyle = "rgba(255,255,255,0.75)";
+  g.lineWidth = 3;
+  for (const s of [-1, 1]) {
+    const a = proj(s * 0.45, 0, 0.6);
+    const b = proj(s * 1.35, 0, 0.6);
+    const d = proj(s * 1.35, 0, -0.6);
+    const e = proj(s * 0.45, 0, -0.6);
+    g.beginPath();
+    g.moveTo(a.x, a.y);
+    g.lineTo(b.x, b.y);
+    g.lineTo(d.x, d.y);
+    g.lineTo(e.x, e.y);
+    g.stroke();
+  }
+  const pl = [proj(-0.215, 0, 0.43), proj(0.215, 0, 0.43), proj(0.215, 0, 0.2), proj(0, 0, 0), proj(-0.215, 0, 0.2)];
+  g.fillStyle = "#fafafa";
+  g.beginPath();
+  pl.forEach((p, i) => (i ? g.lineTo(p.x, p.y) : g.moveTo(p.x, p.y)));
+  g.closePath();
+  g.fill();
+  bgCanvas = c;
+  bgKey = key;
+  return c;
+}
+
+/** 필드 배경 */
+export function fieldBg(q: number, night: boolean): HTMLCanvasElement {
+  const key = `${q}:${night}`;
+  if (fieldCanvas && fieldKey === key) return fieldCanvas;
+  const c = document.createElement("canvas");
+  c.width = Math.round(DW * q);
+  c.height = Math.round(DH * q);
+  const g = c.getContext("2d")!;
+  g.scale(q, q);
+  g.fillStyle = night ? "#121633" : "#2c3557";
+  g.fillRect(0, 0, DW, DH);
+  // 관중석 (펜스 바깥 띠)
+  g.save();
+  g.beginPath();
+  for (let a = -55; a <= 55; a += 2) {
+    const r = fenceDist(Math.max(-45, Math.min(45, a))) + 30;
+    const p = fproj(Math.sin((a * Math.PI) / 180) * r, Math.cos((a * Math.PI) / 180) * r);
+    if (a === -55) g.moveTo(p.x, p.y);
+    else g.lineTo(p.x, p.y);
+  }
+  for (let a = 55; a >= -55; a -= 2) {
+    const r = fenceDist(Math.max(-45, Math.min(45, a))) + 2;
+    const p = fproj(Math.sin((a * Math.PI) / 180) * r, Math.cos((a * Math.PI) / 180) * r, FENCE_H);
+    g.lineTo(p.x, p.y);
+  }
+  g.closePath();
+  g.fillStyle = night ? "#1f2547" : "#45507a";
+  g.fill();
+  g.clip();
+  crowd(g, 0, 0, DW, 260, 11, 34);
+  g.restore();
+  // 잔디
+  g.beginPath();
+  const fair: { x: number; y: number }[] = [];
+  for (let a = -45; a <= 45; a += 1.5) {
+    const r = fenceDist(a);
+    fair.push(fproj(Math.sin((a * Math.PI) / 180) * r, Math.cos((a * Math.PI) / 180) * r));
+  }
+  const home = fproj(0, -4);
+  g.moveTo(home.x, home.y);
+  fair.forEach((p) => g.lineTo(p.x, p.y));
+  g.closePath();
+  const grass = g.createLinearGradient(0, 260, 0, DH);
+  grass.addColorStop(0, "#3d9a4a");
+  grass.addColorStop(1, "#4fb85c");
+  g.fillStyle = grass;
+  g.fill();
+  // 잔디 줄무늬
+  g.save();
+  g.clip();
+  for (let i = 0; i < 14; i++) {
+    g.fillStyle = i % 2 ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.035)";
+    const y0 = fproj(0, i * 9).y;
+    const y1 = fproj(0, (i + 1) * 9).y;
+    g.fillRect(0, y1, DW, y0 - y1);
+  }
+  g.restore();
+  // 펜스 (높이 있는 벽)
+  g.fillStyle = "#1d5a3a";
+  g.beginPath();
+  fair.forEach((p, i) => (i ? g.lineTo(p.x, p.y) : g.moveTo(p.x, p.y)));
+  for (let a = 45; a >= -45; a -= 1.5) {
+    const r = fenceDist(a);
+    const p = fproj(Math.sin((a * Math.PI) / 180) * r, Math.cos((a * Math.PI) / 180) * r, FENCE_H);
+    g.lineTo(p.x, p.y);
+  }
+  g.closePath();
+  g.fill();
+  g.strokeStyle = "#ffd23f";
+  g.lineWidth = 1.5;
+  g.beginPath();
+  for (let a = -45; a <= 45; a += 1.5) {
+    const r = fenceDist(a);
+    const p = fproj(Math.sin((a * Math.PI) / 180) * r, Math.cos((a * Math.PI) / 180) * r, FENCE_H);
+    if (a === -45) g.moveTo(p.x, p.y);
+    else g.lineTo(p.x, p.y);
+  }
+  g.stroke();
+  // 내야 흙
+  g.beginPath();
+  const h0 = fproj(0, -2);
+  g.moveTo(h0.x, h0.y);
+  for (let a = -45; a <= 45; a += 3) {
+    const p = fproj(Math.sin((a * Math.PI) / 180) * 29, Math.cos((a * Math.PI) / 180) * 29);
+    g.lineTo(p.x, p.y);
+  }
+  g.closePath();
+  g.fillStyle = "#c8925a";
+  g.fill();
+  g.beginPath();
+  const dia = [fproj(0, 1.5), fproj(17.6, 19.4), fproj(0, 37.2), fproj(-17.6, 19.4)];
+  dia.forEach((p, i) => (i ? g.lineTo(p.x, p.y) : g.moveTo(p.x, p.y)));
+  g.closePath();
+  g.fillStyle = "#4caf5a";
+  g.fill();
+  // 마운드
+  const m = fproj(0, 18.4);
+  g.fillStyle = "#c08550";
+  g.beginPath();
+  g.ellipse(m.x, m.y, 2.8 * FV.S, 2.8 * FV.S * FV.k, 0, 0, Math.PI * 2);
+  g.fill();
+  // 파울라인
+  g.strokeStyle = "rgba(255,255,255,0.9)";
+  g.lineWidth = 1.5;
+  for (const s of [1, -1]) {
+    const a = fproj(0, 0);
+    const b = fproj((s * 98) / Math.SQRT2, 98 / Math.SQRT2);
+    g.beginPath();
+    g.moveTo(a.x, a.y);
+    g.lineTo(b.x, b.y);
+    g.stroke();
+  }
+  // 베이스
+  BASES.slice(0, 4).forEach(([x, y], i) => {
+    const p = fproj(x, y);
+    g.fillStyle = "#fff";
+    g.save();
+    g.translate(p.x, p.y);
+    g.scale(1, FV.k);
+    g.rotate(Math.PI / 4);
+    const s = i === 0 ? 5 : 4.5;
+    g.fillRect(-s, -s, s * 2, s * 2);
+    g.restore();
+  });
+  fieldCanvas = c;
+  fieldKey = key;
+  return c;
+}
+
+/** 작은 사람 (필드) */
+export function drawTiny(ctx: CanvasRenderingContext2D, x: number, y: number, body: string, cap: string, run: number, state = 0, glove = false) {
+  const bob = Math.sin(run * 14) * (run ? 1.5 : 0);
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.fillStyle = "rgba(0,0,0,0.28)";
+  ctx.beginPath();
+  ctx.ellipse(0, 0, 7, 2.6, 0, 0, Math.PI * 2);
+  ctx.fill();
+  // 다리 (SD: 짧게)
+  ctx.strokeStyle = "#e9ecf2";
+  ctx.lineWidth = 3.4;
+  const sw = run ? Math.sin(run * 14) * 3 : 0;
+  ctx.beginPath();
+  ctx.moveTo(-2.4, -6);
+  ctx.lineTo(-2.4 + sw, 0);
+  ctx.moveTo(2.4, -6);
+  ctx.lineTo(2.4 - sw, 0);
+  ctx.stroke();
+  // 몸
+  ctx.fillStyle = body;
+  ctx.strokeStyle = "rgba(10,12,22,0.9)";
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.roundRect(-5.5, -14 + bob, 11, 9, 3.5);
+  ctx.fill();
+  ctx.stroke();
+  // 머리 (크게)
+  ctx.fillStyle = "#f2cfae";
+  ctx.beginPath();
+  ctx.arc(0, -21 + bob, 7, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = cap;
+  ctx.beginPath();
+  ctx.arc(0, -22 + bob, 7.1, Math.PI, 0);
+  ctx.fill();
+  ctx.fillStyle = "#1a1a24";
+  ctx.fillRect(-3, -20 + bob, 1.6, 2.4);
+  ctx.fillRect(1.6, -20 + bob, 1.6, 2.4);
+  if (glove) {
+    ctx.fillStyle = "#8a4b22";
+    ctx.beginPath();
+    ctx.arc(7, -10 + bob, 3, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  if (state === 1) {
+    // 기절 (해골 말풍선)
+    ctx.fillStyle = "#fff";
+    ctx.beginPath();
+    ctx.arc(9, -34, 7, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#222";
+    ctx.font = "10px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("☠", 9, -30);
+  } else if (state === 2) {
+    ctx.fillStyle = "#3B9CFF";
+    ctx.fillRect(-7, -36, 4, 9);
+    ctx.fillRect(1, -36, 4, 9);
+  } else if (state === 3) {
+    ctx.strokeStyle = "#FFD43B";
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(-8, -30);
+    ctx.lineTo(-3, -26);
+    ctx.lineTo(-6, -24);
+    ctx.lineTo(0, -19);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+/** 필드 한 프레임 */
+export function drawFieldFrame(
+  ctx: CanvasRenderingContext2D,
+  f: Frame,
+  def: { body: string; cap: string },
+  off: { body: string; cap: string },
+  trail: { x: number; y: number; h: number }[],
+  special?: string
+) {
+  // 공 그림자 · 수비 · 주자 · 공 순 (y 순으로 겹침)
+  const items: { y: number; draw: () => void }[] = [];
+  for (let i = 0; i < 9; i++) {
+    const p = fproj(f.fx[i * 2], f.fx[i * 2 + 1]);
+    const st = f.fs[i];
+    const moving = 1;
+    items.push({ y: p.y, draw: () => drawTiny(ctx, p.x, p.y, def.body, def.cap, moving * f.t, st, true) });
+  }
+  for (const r of f.rs) {
+    if (r.st === 2) continue;
+    const p = fproj(r.x, r.y);
+    items.push({ y: p.y, draw: () => drawTiny(ctx, p.x, p.y, off.body, off.cap, r.st === 0 ? f.t : 0) });
+  }
+  items.sort((a, b) => a.y - b.y);
+  // 그림자
+  const sh = fproj(f.bx, f.by);
+  ctx.fillStyle = "rgba(0,0,0,0.35)";
+  ctx.beginPath();
+  ctx.ellipse(sh.x, sh.y, 3.2, 1.6, 0, 0, Math.PI * 2);
+  ctx.fill();
+  for (const it of items) it.draw();
+  // 꼬리
+  if (trail.length > 1) {
+    ctx.strokeStyle = special === "igna" ? "rgba(255,120,40,0.7)" : special === "zena" ? "rgba(255,230,80,0.8)" : "rgba(255,255,255,0.55)";
+    ctx.lineWidth = special ? 4 : 2;
+    ctx.beginPath();
+    trail.forEach((t, i) => {
+      const p = fproj(t.x, t.y, t.h);
+      if (i) ctx.lineTo(p.x, p.y);
+      else ctx.moveTo(p.x, p.y);
+    });
+    ctx.stroke();
+  }
+  const b = fproj(f.bx, f.by, f.bh);
+  ctx.fillStyle = "#fff";
+  ctx.strokeStyle = "#222";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.arc(b.x, b.y, 3.2 + Math.min(4, f.bh * 0.12), 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+}
+
+export { BALL_R, HOME_POS, ZONE };
