@@ -52,10 +52,6 @@ export function Btn({
 export function MenuBg({ children }: { children: ReactNode }) {
   return (
     <div className="relative h-full w-full" style={{ background: "radial-gradient(ellipse at 50% 120%, #2a6b3a 0%, #13301f 35%, #0b0e1c 70%)" }}>
-      <div
-        className="pointer-events-none absolute inset-0 opacity-[0.08]"
-        style={{ backgroundImage: "linear-gradient(90deg, #fff 1px, transparent 1px), linear-gradient(#fff 1px, transparent 1px)", backgroundSize: "32px 32px" }}
-      />
       <div className="relative h-full">{children}</div>
     </div>
   );

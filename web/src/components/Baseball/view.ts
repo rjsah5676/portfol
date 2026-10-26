@@ -86,6 +86,22 @@ export function battingBg(q: number, night: boolean): HTMLCanvasElement {
   g.fillStyle = night ? "#1b1f36" : "#3a4466";
   g.fillRect(0, 108, DW, fy - 108);
   crowd(g, 0, 112, DW, fy - 6, 7, 12);
+  // 관중은 살짝 눌러서 공보다 튀지 않게
+  g.fillStyle = night ? "rgba(8,10,24,0.38)" : "rgba(20,28,52,0.32)";
+  g.fillRect(0, 108, DW, fy - 108);
+  // 백스크린 (센터 뒤 어두운 벽 — 실제 구장처럼 투수 손에서 나오는 공이 잘 보이게)
+  {
+    const bx0 = 352;
+    const bx1 = 672;
+    const top = 92;
+    const bs = g.createLinearGradient(0, top, 0, CAM.Y0 + 6);
+    bs.addColorStop(0, night ? "#0b1024" : "#18233f");
+    bs.addColorStop(1, night ? "#121a33" : "#22304f");
+    g.fillStyle = bs;
+    g.fillRect(bx0, top, bx1 - bx0, CAM.Y0 + 6 - top);
+    g.fillStyle = "rgba(255,255,255,0.06)";
+    g.fillRect(bx0, top, bx1 - bx0, 2);
+  }
   // 전광판
   g.fillStyle = "#111522";
   g.fillRect(412, 22, 200, 36);
@@ -98,9 +114,11 @@ export function battingBg(q: number, night: boolean): HTMLCanvasElement {
   g.fillText("PIXEL STADIUM", 512, 46);
   // 펜스
   g.fillStyle = "#1d5a3a";
-  g.fillRect(0, fy, DW, CAM.Y0 + 6 - fy);
+  g.fillRect(0, fy, 352, CAM.Y0 + 6 - fy);
+  g.fillRect(672, fy, DW - 672, CAM.Y0 + 6 - fy);
   g.fillStyle = "#ffd23f";
-  g.fillRect(0, fy, DW, 2);
+  g.fillRect(0, fy, 352, 2);
+  g.fillRect(672, fy, DW - 672, 2);
   // 잔디 (원근 줄무늬)
   for (let i = 0; i < 26; i++) {
     const z0 = 118 - i * 4.6;

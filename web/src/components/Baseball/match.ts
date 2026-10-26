@@ -414,6 +414,8 @@ export class Match {
     const pc = p.special ? charById(p.special) : null;
     this.pitColors = colorsFor(this.cfg.mode === "derby" ? TEAM_DEFS[1] : fsd.team, fsd.pitcher * 5 + 1, p.num, p.name, pc?.color);
     if (pc) this.pitColors.team = pc.color;
+    // 투수 바지는 원정 회색 (흰 공이 흰 바지 위에서 안 보이던 문제)
+    this.pitColors.pants = "#8e95a8";
   }
   batColors: RigColors = colorsFor(TEAM_DEFS[0], 0, 0, "");
   pitColors: RigColors = colorsFor(TEAM_DEFS[1], 0, 0, "");
@@ -1318,9 +1320,9 @@ export class Match {
     const sp = p.special;
     // 그림자
     const g = proj(v.x, 0, Math.max(v.z, 0.2));
-    ctx.fillStyle = "rgba(0,0,0,0.3)";
+    ctx.fillStyle = "rgba(0,0,0,0.42)";
     ctx.beginPath();
-    ctx.ellipse(g.x, g.y, Math.max(2, 0.05 * g.s), Math.max(1, 0.018 * g.s), 0, 0, Math.PI * 2);
+    ctx.ellipse(g.x, g.y, Math.max(3.5, 0.06 * g.s), Math.max(1.5, 0.022 * g.s), 0, 0, Math.PI * 2);
     ctx.fill();
     // 꼬리
     for (let i = 6; i >= 1; i--) {
@@ -1343,13 +1345,18 @@ export class Match {
       ctx.globalAlpha = 1;
     }
     const b = toScreen(v.x, v.y, v.z, v.u);
-    const r = Math.max(4.6, BALLR_PX(b.s));
-    // 멀리 있을 땐 흰 빛무리 (공 놓치지 않게)
-    if (b.s < 140 && v.vis > 0.3) {
-      ctx.fillStyle = `rgba(255,255,255,${0.18 * v.vis})`;
+    const r = Math.max(5.4, BALLR_PX(b.s));
+    // 멀리 있을 땐 어두운 테두리 + 흰 빛무리 (밝은 배경 · 어두운 배경 어디서든 공이 떠 보이게)
+    if (b.s < 160 && v.vis > 0.3) {
+      ctx.fillStyle = `rgba(10,14,30,${0.42 * v.vis})`;
       ctx.beginPath();
-      ctx.arc(b.x, b.y, r * 2.4, 0, Math.PI * 2);
+      ctx.arc(b.x, b.y, r * 1.75, 0, Math.PI * 2);
       ctx.fill();
+      ctx.strokeStyle = `rgba(255,255,255,${0.35 * v.vis})`;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(b.x, b.y, r * 2.5, 0, Math.PI * 2);
+      ctx.stroke();
     }
     if (v.inHand) {
       // 이반: 손에서 기모으기
