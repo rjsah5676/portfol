@@ -77,9 +77,25 @@ function noise(dur: number, vol: number, f: number, q = 1, type: BiquadFilterTyp
 export const sfx = {
   swing: () => noise(0.16, 0.25, 900, 0.8, "bandpass", 0, 0.04),
   /** 정타 (q 0 ~ 1) — 좋을수록 높고 단단한 "딱" */
-  crack: (q: number) => {
-    tone("square", 1800 + q * 900, 600, 0.05, 0.35 * (0.5 + q));
-    noise(0.09, 0.6 * (0.5 + q * 0.5), 2600 + q * 1500, 1.2, "bandpass");
+  crack: (q: number, perfect = false) => {
+    // 같은 소리 반복감 줄이기 ±5%
+    const j = 0.95 + Math.random() * 0.1;
+    if (perfect) {
+      // 날카로운 「딱!」 + 묵직한 저음 + 0.25초 뒤 함성
+      tone("square", 2900 * j, 900, 0.045, 0.5);
+      noise(0.08, 0.85, 4200 * j, 1.6, "bandpass");
+      tone("sine", 140 * j, 45, 0.22, 0.8);
+      noise(1.4, 0.16, 1100, 0.4, "bandpass", 0.25, 0.25);
+      return;
+    }
+    if (q < 0.35) {
+      // 빗맞음: 둔탁
+      noise(0.07, 0.45, 900 * j, 1.0, "bandpass");
+      tone("triangle", 500 * j, 250, 0.05, 0.15);
+      return;
+    }
+    tone("square", (1800 + q * 900) * j, 600, 0.05, 0.35 * (0.5 + q));
+    noise(0.09, 0.6 * (0.5 + q * 0.5), (2600 + q * 1500) * j, 1.2, "bandpass");
     tone("sine", 160, 60, 0.14, 0.5 * q);
   },
   foul: () => {

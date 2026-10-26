@@ -203,6 +203,17 @@ export class Match {
   cutin: null | { id: CharId; title: string; sub: string; t: number; side: "bat" | "pit" } = null;
   shake = 0;
   flash = 0;
+  /** 히트스톱 (남은 초) — 공 · 배트만 멈춤 */
+  hitStop = 0;
+  /** 홈런 연출: 슬로모션 · 줌 (남은 초) */
+  slowmo = 0;
+  zoomT = 0;
+  /** 타이밍 오차 ms (+ 늦음) */
+  timingMs = 0;
+  /** 타구 정보 (타구속도 · 비거리) */
+  batInfo: { text: string; t: number } | null = null;
+  /** 움직임 줄이기 (흔들림 · 줌 끔) */
+  reduceMotion = typeof window !== "undefined" && !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
   particles: { x: number; y: number; vx: number; vy: number; life: number; c: string }[] = [];
   paused = false;
 
@@ -582,6 +593,7 @@ export class Match {
     }
     const W = timingWindow(b.hit, this.buntArmed, !!this.decision.special);
     this.timingText = timingLabel(e, W);
+    this.timingMs = Math.round(e * 1000);
     this.timingColor = this.timingText === "PERFECT" ? "#ffd23f" : this.timingText === "GOOD" ? "#7dff9a" : "#ff9a7a";
     this.pushUi();
   }
@@ -993,7 +1005,28 @@ export class Match {
     if (this.paused) return;
     // 배속: 타이밍이 걸린 구간(준비 · 와인드업 · 공 · 컨택 · 조준 · 게이지)은 그대로
     const timed = this.phase === "ready" || this.phase === "windup" || this.phase === "flight" || this.phase === "contact" || this.phase === "rewind" || this.phase === "aim" || this.phase === "gauge";
-    const dt = Math.min(dtRaw, 1 / 20) * (timed ? 1 : this.cfg.speed ?? 1);
+    let dt = Math.min(dtRaw, 1 / 20) * (timed ? 1 : this.cfg.speed ?? 1);
+    // 히트스톱: 공 · 배트 · 진행만 멈추고 흔들림 · 플래시 · 파티클은 계속
+    if (this.hitStop > 0) {
+      this.hitStop -= dt;
+      this.shake = Math.max(0, this.shake - dt);
+      this.flash = Math.max(0, this.flash - dt * 3);
+      for (const p of this.particles) {
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+        p.life -= dt;
+      }
+      return;
+    }
+    if (this.slowmo > 0) {
+      this.slowmo -= dt;
+      dt *= 0.5;
+    }
+    this.zoomT = Math.max(0, this.zoomT - dt);
+    if (this.batInfo) {
+      this.batInfo.t += dt;
+      if (this.batInfo.t > 1.8) this.batInfo = null;
+    }
     this.time += dt;
     this.pt += dt;
     if (this.banner) {
@@ -1071,13 +1104,23 @@ export class Match {
           this.contactShown = true;
           if (this.outcome.call === "bip") {
             const q = this.outcome.sw?.kind === "bip" ? this.outcome.sw.ball.c : 0.5;
-            sfx.crack(q);
-            this.flash = 0.25 + q * 0.4;
-            this.shake = 0.12 + q * 0.2;
+            const perfect = this.outcome.sw?.kind === "bip" && this.outcome.sw.ball.perfect;
+            sfx.crack(q, perfect);
+            // 등급별 손맛: PERFECT 히트스톱 80ms + 플래시 · 정타 40ms · 빗맞음 없음
+            this.hitStop = perfect ? 0.08 : q > 0.6 ? 0.04 : 0;
+            this.flash = perfect ? 0.55 : 0.12 + q * 0.3;
+            this.shake = this.reduceMotion ? 0 : perfect ? 0.32 : 0.08 + q * 0.16;
             this.setPhase("contact");
             if (this.outcome.sw?.kind === "bip") {
               const pr = predictBall(this.outcome.sw.ball);
               this.hitPath = pr.pts.slice(0, 40).map((pp) => ({ x: pp.x, y: pp.y, h: pp.h }));
+              const kmh = Math.round(this.outcome.sw.ball.ev * 3.6);
+              this.batInfo = { text: `타구 ${kmh}km/h${pr.land > 30 ? ` · 비거리 ${Math.round(pr.land)}m` : ""}`, t: 0 };
+              // 홈런은 슬로모션 + 줌
+              if (pr.hr && !this.reduceMotion) {
+                this.slowmo = perfect ? 0.45 : 0.25;
+                this.zoomT = 0.6;
+              }
             }
             const at = proj(this.outcome.at.x, this.outcome.at.y, 0);
             for (let i = 0; i < 18; i++) {
@@ -1231,6 +1274,13 @@ export class Match {
   draw(ctx: CanvasRenderingContext2D, q: number) {
     ctx.save();
     if (this.shake > 0) ctx.translate((this.rng() - 0.5) * this.shake * 30, (this.rng() - 0.5) * this.shake * 30);
+    if (this.zoomT > 0) {
+      // 홈런: 타석 쪽으로 살짝 당겼다 풀기
+      const z = 1 + 0.12 * Math.sin((this.zoomT / 0.6) * Math.PI);
+      ctx.translate(512, 300);
+      ctx.scale(z, z);
+      ctx.translate(-512, -300);
+    }
     const fieldView = this.phase === "field" || (this.phase === "result" && this.frames.length > 0 && this.lastWasField());
     if (fieldView) this.drawField(ctx, q);
     else this.drawBatting(ctx, q);
@@ -1418,6 +1468,26 @@ export class Match {
       ctx.strokeText(this.timingText, 512, 296);
       ctx.fillStyle = this.timingColor;
       ctx.fillText(this.timingText, 512, 296);
+      // 얼마나 빨랐나 늦었나 (ms)
+      if (this.timingText !== "PERFECT") {
+        const ms = `${this.timingMs > 0 ? "늦음 +" : "빠름 "}${this.timingMs}ms`;
+        ctx.font = '700 14px "JetBrains Mono", monospace';
+        ctx.lineWidth = 4;
+        ctx.strokeText(ms, 512, 318);
+        ctx.fillText(ms, 512, 318);
+      }
+    }
+    if (this.batInfo && this.userBat) {
+      const a = 1 - smooth(1.3, 1.8, this.batInfo.t);
+      ctx.globalAlpha = a;
+      ctx.font = '700 15px "JetBrains Mono", monospace';
+      ctx.textAlign = "center";
+      const w = ctx.measureText(this.batInfo.text).width + 20;
+      ctx.fillStyle = "rgba(0,0,0,0.6)";
+      ctx.fillRect(512 - w / 2, 330, w, 26);
+      ctx.fillStyle = "#ffd23f";
+      ctx.fillText(this.batInfo.text, 512, 348);
+      ctx.globalAlpha = 1;
     }
     if (this.phase === "gauge" || (this.phase === "aim" && !this.userBat)) this.drawGauge(ctx);
     if (this.phase === "rewind") {
@@ -1449,8 +1519,25 @@ export class Match {
     ctx.beginPath();
     ctx.ellipse(g.x, g.y, Math.max(3.5, 0.06 * g.s), Math.max(1.5, 0.022 * g.s), 0, 0, Math.PI * 2);
     ctx.fill();
-    // 꼬리
+    // 예측 링 (파워프로식): 일반 구종은 비행 40%, 마구는 70% 지점부터. 변화구는 「꺾이기 전」 자리를 가리켜 막판 변화가 느껴지게
+    if (this.userBat && this.cfg.diff < 2 && !v.inHand && v.u < 1) {
+      const show = sp ? 0.7 : 0.4;
+      if (v.u >= show) {
+        const breaking = p.kind !== "FB" && !sp;
+        const px = p.target.x - (breaking ? p.brk.x * 0.55 : 0);
+        const py = p.target.y - (breaking ? p.brk.y * 0.55 : 0);
+        const r0 = proj(px, py, 0);
+        const a = smooth(show, show + 0.12, v.u) * 0.55;
+        ctx.strokeStyle = `rgba(255,255,255,${a})`;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(r0.x, r0.y, Math.max(9, BALLR_PX(r0.s) * 1.6), 0, Math.PI * 2);
+        ctx.stroke();
+      }
+    }
+    // 꼬리 (마구는 마지막 25% 꼬리를 꺼서 늦은 변화를 숨김)
     for (let i = 6; i >= 1; i--) {
+      if (sp && v.u > 0.75) break;
       const vt = pitchAt(p, Math.max(0, t - i * 0.016));
       if (vt.inHand) continue;
       const a = toScreen(vt.x, vt.y, vt.z, vt.u);
