@@ -2167,7 +2167,7 @@ const V2_P5: VoiceLine[] = [
   { id: "y6-21bb1a01bfc", who: "yeonseo", text: "사장님이 저한테 한 말이에요. 7년 전에. 토씨 하나 안 틀리고.", tag: "[devastated] 사장님이, 저한테 한 말이에요. 칠 년 전에... 토씨 하나, 안 틀리고." },
   { id: "y6-48cb9ea77b", who: "yeonseo", text: "에이미 씨야말로요.", tag: "[cold] 에이미 씨야말로요." },
   { id: "y6-7667747221", who: "yeonseo", text: "하우스 자리는 제 자리예요. 오늘도 앉으래요.", tag: "[cold] [deadpan] 하우스 자리는, 제 자리예요. 오늘도 앉으래요." },
-  { id: "y6-34eb7fb6a0", who: "yeonseo", text: "…그리고 딜러님 얼굴, 판 전에 한 번 보고 싶었어요.", tag: "[quiet] [vulnerable] ...그리고 딜러님 얼굴, 판 전에 한 번 보고 싶었어요." },
+  { id: "y6-34eb7fb6a0u", who: "yeonseo", text: "…그리고 딜러님 얼굴, 판 시작하기 전에 한 번 보고 싶었어요.", tag: "(직접 생성) [quiet] [vulnerable] ...그리고 딜러님 얼굴, 판 시작하기 전에 한 번 보고 싶었어요." },
   { id: "y6-d4e056471d", who: "yeonseo", text: "수요일 밤에, 저한테 왔었어요. 비 맞고. 에이미 씨가 뛰쳐나간 그 밤에요.", tag: "[cold] [deliberate] 수요일 밤에, 저한테 왔었어요. 비 맞고. 에이미 씨가 뛰쳐나간, 그 밤에요." },
   { id: "y6-1a6768a893", who: "yeonseo", text: "에이미 씨 얘기 할 때 딜러님 얼굴이랑, 저랑 있을 때 얼굴. 똑같았어요.", tag: "[cold] [quiet] 에이미 씨 얘기 할 때 딜러님 얼굴이랑, 저랑 있을 때 얼굴. 똑같았어요." },
   { id: "y6-8045615772", who: "yeonseo", text: "…저는 알았어요. 딜러님이 누구 쪽을 먼저 보는지.", tag: "[sad] [quiet] ...저는 알았어요. 딜러님이, 누구 쪽을 먼저 보는지." },

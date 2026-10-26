@@ -360,7 +360,7 @@ export const W3N: Scenes = {
   end_clash_a: [
     A("아빠 자리 판이잖아요. 내가 안 오면 누가 와요?", "pout"),
     Y("하우스 자리는 제 자리예요. 오늘도 앉으래요.", "base"),
-    Y("…그리고 딜러님 얼굴, 판 전에 한 번 보고 싶었어요.", "whisper", "sad"),
+    Y("…그리고 딜러님 얼굴, 판 시작하기 전에 한 번 보고 싶었어요.", "whisper", "sad"),
     A("언니가 왜요? 언니가 왜 딜러 얼굴을 봐요?", "surprise"),
     { t: "when", cond: { v: "a4Yeon", op: ">=", n: 1 }, to: "end_clash_a_y", else: "end_clash_a_n" },
   ],
