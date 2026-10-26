@@ -12,7 +12,7 @@ import {
   TRAIN_KEYS, TYPES, act, advance, age, autoBattle, avg, buy, buyGear, canPlay, careerBatter, choose, choosePick, consumeItem, decideRetire, endSeason, finishBattle, trainersOf,
   costOf, fmtAvg, gameNo, gearNext, gradeOf, newCareer, ops, ovrOf, retireCard, skill, spLv, spUses, spotsOf, statGrade, stepOf, tagCount, talentName,
   trainLv, trainMul, trainRisk, whenText, whyNot,
-  type Action, type BatType, type Career, type ConsumableId, type Delta, type GearId, type GpId, type HofEntry, type PlaceId, type SeasonSummary,
+  type Action, type BatType, type Career, type ConsumableId, type Delta, type GearId, type HofEntry, type PlaceId, type SeasonSummary,
   type SkillId, type Spot, type StatKey, type Tag, type TurnOut,
 } from "@/lib/baseball/career";
 import { slotName, slotOf } from "@/lib/baseball/careerGame";
@@ -20,7 +20,8 @@ import { TEAM_DEFS, charById, faceUrl, type CharId } from "@/lib/baseball/data";
 import { SPECIAL_DAY, ROLE, type BondId } from "@/lib/baseball/bonds";
 import { makeRng } from "@/lib/baseball/rng";
 import { BattleModal, BondCard, BondsModal, BoonPickModal, DeckStep, Hint, VnScene, artUrl, recommendDeck } from "./CareerBonds";
-import { BAT_IDLE, BATS, BATTER_RIG, HELMETS, baseSkin } from "@/lib/baseball/figures";
+import { BAT_IDLE, BATS, BATTER_RIG, HELMETS, PITCHER_RIG, PIT_IDLE, baseSkin } from "@/lib/baseball/figures";
+import { DEFAULT_LOOK, LOOK_KEYS, LOOK_LABEL, LOOK_OPTS, SKINS, lookColors, lookSkin, type Look } from "@/lib/baseball/look";
 import { drawRig, pose } from "@/lib/baseball/rig";
 import {
   SPEEDS, addHof, affStart, autoGame, bondLevel, loadBondXp, loadCareer, loadHof, loadMode, loadSpeed, saveCareer, saveMode, saveSpeed, setupOf, takeBattle, takeReport, type GameReport, type PlayMode,
@@ -454,11 +455,12 @@ function Create({ hof, onBack, onStart }: { hof: HofEntry[]; onBack: () => void;
   const [bats, setBats] = useState<"R" | "L">("R");
   const [type, setType] = useState<BatType>("contact");
   const [diff, setDiff] = useState<Diff>(1);
-  const [gp, setGp] = useState<GpId[]>([]);
+  const [look, setLook] = useState<Look>(() => ({ ...DEFAULT_LOOK, hair: Math.floor(Math.random() * 3), face: Math.floor(Math.random() * 3) }));
+  const [tab, setTab] = useState<"look" | "base">("look");
   const t = TYPES[type];
   const start = () => {
     const lg = legacy ? hof.find((h) => h.id === legacy.id) : undefined;
-    onStart({ name, num, bats, type, diff, gp, deck: deck.length === DECK_SIZE ? deck : recommendDeck(type), legacy: lg ? { name: lg.name, skill: legacy?.skill, stats: lg.stats } : undefined });
+    onStart({ name, num, bats, type, diff, look, deck: deck.length === DECK_SIZE ? deck : recommendDeck(type), legacy: lg ? { name: lg.name, skill: legacy?.skill, stats: lg.stats } : undefined });
   };
   const head = (
     <div className="flex items-center justify-between">
@@ -487,9 +489,49 @@ function Create({ hof, onBack, onStart }: { hof: HofEntry[]; onBack: () => void;
         </div>
       </div>
     );
+  const lookTab = (
+    <div className="flex flex-1 flex-col gap-2">
+      {LOOK_KEYS.map((k) => (
+        <div key={k} className="flex items-center gap-2">
+          <span className="w-[56px] text-[13px] font-bold text-white/70">{LOOK_LABEL[k]}</span>
+          {LOOK_OPTS[k].map((nm, i) => (
+            <Btn key={nm} active={look[k] === i} className="flex w-[118px] items-center justify-center gap-1.5 py-1.5 text-[13px]" onClick={() => setLook({ ...look, [k]: i })}>
+              {k === "skin" && <span className="inline-block h-[14px] w-[14px] rounded-full border border-black/40" style={{ background: SKINS[i].c }} />}
+              {nm}
+            </Btn>
+          ))}
+          <span className="flex w-[90px] items-center justify-center rounded-xl border-2 border-dashed border-white/15 py-1.5 text-[11.5px] text-white/35" title="스킨 (나중에)">
+            🔒 스킨
+          </span>
+        </div>
+      ))}
+      <div className="text-[11.5px] text-white/45">외형은 능력치에 영향 없어요 · 유니폼은 우리 팀 전체가 같이 입어요</div>
+    </div>
+  );
   return (
     <div className="flex h-full flex-col gap-2.5 px-7 py-4">
       {head}
+      <div className="flex min-h-0 flex-1 gap-4">
+        <div className="flex w-[210px] shrink-0 flex-col items-center rounded-2xl border border-white/10 bg-gradient-to-b from-[#2a6b3a]/30 to-black/30 p-2">
+          <Figure look={look} num={num} name={name} bats={bats} front w={170} h={200} />
+          <div className="mt-1 flex items-end gap-2">
+            <Figure look={look} num={num} name={name} bats={bats} w={80} h={100} />
+            <div className="pb-2 text-[11px] text-white/50">
+              타석 뒷모습
+              <br />#{num} {name}
+            </div>
+          </div>
+        </div>
+        <div className="flex min-w-0 flex-1 flex-col gap-2">
+          <div className="flex gap-1.5">
+            <Btn active={tab === "look"} className="px-4 py-1 text-[13px]" onClick={() => setTab("look")}>
+              외형
+            </Btn>
+            <Btn active={tab === "base"} className="px-4 py-1 text-[13px]" onClick={() => setTab("base")}>
+              기본 · 타입
+            </Btn>
+          </div>
+          {tab === "look" ? lookTab : (
       <div className="flex gap-5">
         <div className="flex flex-col gap-2.5">
           <Field label="이름">
@@ -530,7 +572,16 @@ function Create({ hof, onBack, onStart }: { hof: HofEntry[]; onBack: () => void;
           <div className="pl-[68px] text-[11px] text-white/45">경기 공 속도 · 상대 실력 (성장 규칙은 같아요)</div>
         </div>
         <div className="flex flex-1 flex-col gap-1.5">
-          <div className="text-[13px] font-bold text-white/70">타입</div>
+          <div className="flex items-center gap-2">
+            <span className="text-[13px] font-bold text-white/70">포지션</span>
+            <Btn active className="px-3 py-0.5 text-[12.5px]">
+              타자
+            </Btn>
+            <Btn disabled className="px-3 py-0.5 text-[12.5px]" color="#8b93b8">
+              투수 · 준비 중
+            </Btn>
+            <span className="ml-2 text-[13px] font-bold text-white/70">타입</span>
+          </div>
           <div className="grid grid-cols-5 gap-1.5">
             {(Object.keys(TYPES) as BatType[]).map((k) => (
               <Btn key={k} active={type === k} className="py-2 text-[14px]" onClick={() => setType(k)}>
@@ -556,36 +607,27 @@ function Create({ hof, onBack, onStart }: { hof: HofEntry[]; onBack: () => void;
               ))}
             </div>
           </div>
-          <div className="mt-1 flex items-center justify-between">
-            <span className="text-[13px] font-bold text-white/70">GP 부스트 (이번 선수만)</span>
-            <span className="rounded bg-[#ffd23f]/15 px-2 py-0.5 text-[11px] text-[#ffd23f]">프로토 체험 — GP 안 빠짐 · 결과 영향 10% 안팎</span>
+          <div className="mt-1 text-[13px] font-bold text-white/70">코치진</div>
+          <div className="grid grid-cols-5 gap-1.5">
+            {GP_IDS.map((id) => (
+              <div key={id} className="rounded-lg border border-white/12 bg-black/30 px-2 py-1.5 text-left text-[11.5px] leading-tight">
+                <span className="block text-[13px] font-bold">
+                  {GP_BOOSTS[id].name} <span className="text-[#7ad7ff]">C</span>
+                </span>
+                <span className="block text-white/65">{GP_BOOSTS[id].desc("C")}</span>
+              </div>
+            ))}
           </div>
-          <div className="grid grid-cols-4 gap-1.5">
-            {GP_IDS.map((id) => {
-              const on = gp.includes(id);
-              const g = GP_BOOSTS[id];
-              return (
-                <Btn
-                  key={id}
-                  active={on}
-                  color="#ffd23f"
-                  className="px-2 py-1.5 text-left text-[12px] leading-tight"
-                  onClick={() => setGp((v) => (on ? v.filter((x) => x !== id) : [...v, id]))}
-                >
-                  <span className="block text-[13px]">{g.name}</span>
-                  <span className="block font-normal opacity-80">{g.desc}</span>
-                  <span className="block font-mono text-[11px] opacity-70">{g.price} GP</span>
-                </Btn>
-              );
-            })}
-          </div>
+        </div>
+      </div>
+          )}
         </div>
       </div>
       <div className="mt-auto flex items-center justify-between rounded-xl border border-white/10 bg-black/30 px-4 py-2.5">
         <div className="text-[12.5px] leading-relaxed text-white/60">
           19세 입단 · 한 해 {GAMES}경기 · {RETIRE_FROM}년차부터 은퇴를 고를 수 있고 {MAX_SEASONS}년차엔 은퇴. 숨은 재능은 1년차가 끝나면 알려 줘요.
           <br />
-          결과는 운 · 선택 · 실력에 따라 갈려요 (중앙값 550 정도 · 잘 풀리면 800+ · 안 풀리면 300~400대).
+          결과는 운 · 선택 · 실력에 따라 갈려요 (중앙값 500 정도 · 잘 풀리면 800+ · 안 풀리면 300~400대).
         </div>
         <Btn className={`${font.title} ml-4 shrink-0 px-8 py-3 text-2xl`} disabled={!name} onClick={() => setStepNo(2)}>
           다음 ▶
@@ -615,8 +657,13 @@ function Bar({ v, color, max = 999, h = 7 }: { v: number; color: string; max?: n
 /* ─────────────── 선수 그림 (등 뒤 · 등번호 · 이름) ─────────────── */
 
 function Portrait({ c, w = 120, h = 150 }: { c: Career; w?: number; h?: number }) {
+  return <Figure look={c.look} num={c.num} name={c.name} bats={c.bats} learned={c.learned} metal={!!c.gear.bat} w={w} h={h} />;
+}
+
+/** 내 선수 그림 — 뒤(타석 자세) / 앞(정면 · 외형 미리보기) */
+function Figure({ look, num, name, bats, learned, metal, front, w, h }: { look: Look; num: number; name: string; bats: "R" | "L"; learned?: CharId; metal?: boolean; front?: boolean; w: number; h: number }) {
   const ref = useRef<HTMLCanvasElement>(null);
-  const batTier = c.gear.bat ?? 0;
+  const key = JSON.stringify(look);
   useEffect(() => {
     const cv = ref.current;
     if (!cv) return;
@@ -625,24 +672,34 @@ function Portrait({ c, w = 120, h = 150 }: { c: Career; w?: number; h?: number }
     cv.height = h * q;
     const ctx = cv.getContext("2d")!;
     const team = TEAM_DEFS[0];
-    const lc = c.learned ? charById(c.learned) : null;
-    const skin = { ...baseSkin(), helmet: HELMETS.basic, bat: lc ? BATS.hero : batTier ? BATS.metal : BATS.wood };
-    const colors = { team: team.color, dark: team.dark, skin: "#eec29e", hair: "#1d1a22", pants: "#eef0f4", accent: lc?.color ?? "#f2f2f2", num: String(c.num), name: c.name, flip: c.bats === "L" };
+    const lc = learned ? charById(learned) : null;
+    const base = { ...baseSkin(), helmet: HELMETS.basic, bat: lc ? BATS.hero : metal ? BATS.metal : BATS.wood };
+    let skin = lookSkin(base, look, { heroBat: !!lc });
+    if (front) skin = { ...skin, cap: skin.hairFront, mitt: skin.hand };
+    const colors = lookColors({ team: team.color, dark: team.dark, skin: "#eec29e", hair: "#1d1a22", pants: "#eef0f4", accent: lc?.color ?? "#f2f2f2", num: String(num), name, flip: bats === "L" }, look);
     let raf = 0;
     const t0 = performance.now();
     const loop = (now: number) => {
       const t = (now - t0) / 1000;
       ctx.setTransform(q, 0, 0, q, 0, 0);
       ctx.clearRect(0, 0, w, h);
-      const ps = pose(BATTER_RIG, BAT_IDLE, t);
-      // 방망이 끝 ~ 발끝이 다 들어오게 (머리 · 방망이 안 잘리게)
-      const sc = h / 215;
-      drawRig(ctx, BATTER_RIG, ps, skin, colors, w / 2 + (c.bats === "L" ? 1 : -1) * w * 0.06, h - 64 * sc, sc, c.bats === "L");
+      if (front) {
+        const ps = pose(PITCHER_RIG, PIT_IDLE, t);
+        // 발끝 ~ 머리 꼭대기가 다 들어오게
+        const sc = h / 225;
+        drawRig(ctx, PITCHER_RIG, ps, skin, colors, w / 2, h - 72 * sc, sc, false);
+      } else {
+        const ps = pose(BATTER_RIG, BAT_IDLE, t);
+        // 방망이 끝 ~ 발끝이 다 들어오게 (머리 · 방망이 안 잘리게)
+        const sc = h / 215;
+        drawRig(ctx, BATTER_RIG, ps, skin, colors, w / 2 + (bats === "L" ? 1 : -1) * w * 0.06, h - 64 * sc, sc, bats === "L");
+      }
       raf = requestAnimationFrame(loop);
     };
     raf = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(raf);
-  }, [c.num, c.name, c.bats, c.learned, batTier, w, h]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- look 은 key 로 비교
+  }, [key, num, name, bats, learned, metal, front, w, h]);
   return <canvas ref={ref} style={{ width: w, height: h }} />;
 }
 
@@ -749,7 +806,7 @@ function Hub(p: {
       )}
       {!p.quiet && step === "turn" && Object.keys(trainersOf(c)).length > 0 && c.turn > 2 && (
         <Hint k="mate" title="함께 훈련">
-          운동장 훈련 버튼에 얼굴이 붙어 있으면 그 사람이 같이 해 줘요 — 효율 ×1.2 이상 + 호감 +3. 이번 관리 기간에 한 번만!
+          운동장 훈련 버튼에 얼굴이 붙어 있으면 그 사람이 같이 해 줘요 — 효율 ×1.3 이상 + 호감 +3. 이번 관리 기간에 한 번만!
         </Hint>
       )}
     </div>
@@ -1016,7 +1073,7 @@ function PlaceModal({ c, place, onClose, onAct }: { c: Career; place: PlaceId; o
           {TRAIN_KEYS.map((k) => {
             const t = TRAINS[k];
             const mate = trainersOf(c)[k];
-            const mm = mate ? 1.2 + Math.min(0.25, (c.aff[mate] ?? 0) / 400) : 1;
+            const mm = mate ? 1.3 + Math.min(0.3, (c.aff[mate] ?? 0) / 330) : 1;
             const mul = trainMul(c, k) * mm;
             return opt(
               { kind: "train", key: k },
@@ -1559,7 +1616,7 @@ function RecordsModal({ c, onClose }: { c: Career; onClose: () => void }) {
         인연:{" "}
         {c.deck.map((id) => `${charById(id).name} ${c.bonds[id] ?? 0}/${BOND_MAX} · 호감 ${c.aff[id] ?? 0}`).join(" · ")}
       </div>
-      {c.gp.length > 0 && <div className="mt-1 text-left text-[12px] text-[#ffd23f]/80">GP 부스트: {c.gp.map((g) => GP_BOOSTS[g].name).join(" · ")}</div>}
+      {c.gp.length > 0 && <div className="mt-1 text-left text-[12px] text-[#7ad7ff]/80">코치진: {c.gp.map((g) => `${GP_BOOSTS[g]?.name ?? g} C`).join(" · ")}</div>}
       <Btn className="mt-3 w-full py-2" color="#8b93b8" onClick={onClose}>
         닫기
       </Btn>

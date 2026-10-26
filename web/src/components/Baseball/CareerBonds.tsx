@@ -360,7 +360,7 @@ export function DeckStep({
             추천으로 채우기
           </Btn>
         </div>
-        <div className="mt-0.5 text-[11.5px] text-white/50">덱에 넣은 사람만 지도에 나타나고 · 자기 훈련에 「함께 훈련」 하러 와요 (효율 ×1.2~). 듀오 축복은 덱 조합으로 열려요.</div>
+        <div className="mt-0.5 text-[11.5px] text-white/50">덱에 넣은 사람만 지도에 나타나고 · 자기 훈련에 「함께 훈련」 하러 와요 (효율 ×1.3~1.6). 듀오 축복은 덱 조합으로 열려요.</div>
         <div className="mt-1.5 grid grid-cols-4 gap-2">
           {BOND_IDS.map((bid) => {
             const ch = charById(bid);

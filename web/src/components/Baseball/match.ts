@@ -22,6 +22,7 @@ import {
 import { PITCHES, ZONE, inZone, makePitch, pitchAt, plateCross, type Pitch, type PitchKind } from "@/lib/baseball/pitch";
 import { predictBall, type FieldEvent, type Frame } from "@/lib/baseball/play";
 import { commit, evaluate, type Outcome, type SwingDecision } from "@/lib/baseball/resolve";
+import { lookColors, lookSkin, uniColors } from "@/lib/baseball/look";
 import { boneTip, drawRig, pose, type Anim, type RigColors, type Skin } from "@/lib/baseball/rig";
 import { clamp, lerp, makeRng, smooth, type Rng } from "@/lib/baseball/rng";
 import { sfx } from "./sfx";
@@ -447,8 +448,16 @@ export class Match {
     this.batSkin = { ...baseSkin(), helmet: bc ? HELMETS.hero : HELMETS.basic, bat: bc || lc ? BATS.hero : this.rng() < 0.3 ? BATS.metal : BATS.wood };
     this.pitSkin = baseSkin();
     this.batColors = colorsFor(bs.team, bs.order * 7 + 3, b.num, b.special ? bc!.name : b.name, (bc ?? lc)?.color);
+    // 육성: 내 선수 외형 · 우리 팀 유니폼
+    const myLook = this.cfg.career?.my.batters.find((x) => x.look)?.look ?? this.cfg.bond?.batter.look;
+    const meIdx = this.s.opts.userHome ? 1 : 0;
+    if (b.look) {
+      this.batSkin = lookSkin(this.batSkin, b.look, { heroBat: !!lc });
+      this.batColors = lookColors(this.batColors, b.look);
+    } else if (myLook && this.cfg.career && batSide(this.s) === meIdx) this.batColors = uniColors(this.batColors, myLook);
     const pc = p.special ? charById(p.special) : null;
     this.pitColors = colorsFor(this.cfg.mode === "derby" ? TEAM_DEFS[1] : fsd.team, fsd.pitcher * 5 + 1, p.num, p.name, pc?.color);
+    if (myLook && this.cfg.career && fieldSide(this.s) === meIdx) this.pitColors = uniColors(this.pitColors, myLook);
     if (pc) this.pitColors.team = pc.color;
     // 투수 바지는 원정 회색 (흰 공이 흰 바지 위에서 안 보이던 문제)
     this.pitColors.pants = "#8e95a8";

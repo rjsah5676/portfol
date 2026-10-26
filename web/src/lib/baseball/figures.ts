@@ -225,6 +225,7 @@ const limb = (w0: number, w1: number, fill: (c: RigColors) => string, stripe?: (
 });
 /** 머리 파츠는 SD 비율로 크게 (원래 그림 기준 1.55배) */
 const HEAD = 1.55;
+export const HEAD_SCALE = HEAD;
 const headShape = (paint: P): Attachment =>
   shape((ctx, c) => {
     ctx.scale(HEAD, HEAD);
@@ -425,7 +426,7 @@ export const HELMETS: Record<string, Attachment> = {
   }),
 };
 
-const batShape = (wood: string, tip: string, glow?: (c: RigColors) => string): Attachment =>
+export const batShape = (wood: string, tip: string, glow?: (c: RigColors) => string): Attachment =>
   shape((ctx, c) => {
     ctx.scale(0.84, 1.3);
     if (glow) {

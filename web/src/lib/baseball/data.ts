@@ -146,6 +146,8 @@ export interface Batter {
   learned?: CharId;
   /** 상황 특수능력 (육성): 득점권 맞히기 · 파워, 2스트라이크 맞히기 */
   sit?: { rispHit?: number; rispPow?: number; twoK?: number; late?: number };
+  /** 육성 선수 외형 (헤어 · 얼굴 · 피부 · 배트 · 유니폼) */
+  look?: { hair: number; face: number; skin: number; bat: number; uni: number };
 }
 
 /** 필살타법을 쓸 수 있으면 그 캐릭터 (마타자 · 배운 선수) */

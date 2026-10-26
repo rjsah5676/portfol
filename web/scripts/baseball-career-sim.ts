@@ -114,7 +114,7 @@ function share() {
   const grid: number[][] = [];
   for (let k = 0; k < K; k++) {
     const row: number[] = [];
-    for (let m = 0; m < M; m++) row.push(run(m, [], skilled(k / (K - 1))).ovr);
+    for (let m = 0; m < M; m++) row.push(run(m, [...GP_IDS], skilled(k / (K - 1))).ovr);
     grid.push(row);
     console.log(`실력 ${(k / (K - 1)).toFixed(2)}: 평균 ${Math.round(row.reduce((a, b) => a + b, 0) / M)} · p10 ${[...row].sort((a, b) => a - b)[Math.floor(M * 0.1)]} · p90 ${[...row].sort((a, b) => a - b)[Math.floor(M * 0.9)]}`);
   }
@@ -139,13 +139,37 @@ function share() {
   console.log(`분산: 실력 ${(vS / vT * 100).toFixed(0)}% · 운 ${(vL / vT * 100).toFixed(0)}% · 상호작용 ${((1 - (vS + vL) / vT) * 100).toFixed(0)}%`);
   console.log(`폭(2σ): 실력 ${sS.toFixed(0)} · 운 ${sL.toFixed(0)} · GP +${sG.toFixed(0)} → 몫 실력 ${(sS / tot * 100).toFixed(0)} / 운 ${(sL / tot * 100).toFixed(0)} / GP ${(sG / tot * 100).toFixed(0)}`);
 }
+/** 코치 · 인연 몫 (COACH=1): 같은 선수로 코치 없음 / C / S · 인연 끔 비교 */
+function coachShare() {
+  const M = Number(process.env.M ?? 40);
+  const avgOf = (f: () => number[]) => {
+    const v = f();
+    return v.reduce((a, b) => a + b, 0) / v.length;
+  };
+  const runs = (gp: GpId[] | undefined, coach: "C" | "S", noBond: boolean) => {
+    TUNE.coach = coach;
+    TUNE.noBond = noBond;
+    const out = Array.from({ length: M }, (_, m) => run(m, gp ?? [...GP_IDS]).ovr);
+    TUNE.coach = "C";
+    TUNE.noBond = false;
+    return out;
+  };
+  const none = avgOf(() => runs([], "C", false));
+  const c = avgOf(() => runs(undefined, "C", false));
+  const sAll = avgOf(() => runs(undefined, "S", false));
+  const noBondC = avgOf(() => runs(undefined, "C", true));
+  console.log(`코치 없음 ${none.toFixed(0)} · 전부 C ${c.toFixed(0)} · 전부 S ${sAll.toFixed(0)} · 인연 끔(C) ${noBondC.toFixed(0)}`);
+  console.log(`코치 몫: C ${(((c - none) / c) * 100).toFixed(1)}% · S ${(((sAll - none) / sAll) * 100).toFixed(1)}%  |  인연 몫 ${(((c - noBondC) / c) * 100).toFixed(1)}% (+${(c - noBondC).toFixed(0)}) vs 코치 S-없음 +${(sAll - none).toFixed(0)}`);
+}
+
 if (process.env.SHARE) share();
+else if (process.env.COACH) coachShare();
 else main();
 
 function main() {
   const t0 = Date.now();
   const base: ReturnType<typeof run>[] = [];
-  for (let i = 0; i < N; i++) base.push(run(i, []));
+  for (let i = 0; i < N; i++) base.push(run(i, [...GP_IDS]));
   const o0 = base.map((r) => r.ovr).sort((a, b) => a - b);
   console.log(`${N}명 · 난이도 ${diff} · ${((Date.now() - t0) / 1000).toFixed(0)}초`);
   console.log("백분위      p3   p10   p25   p50   p75   p90   p97   p99  max");
@@ -171,14 +195,14 @@ function main() {
   console.log(`통산 평균 타율 ${(base.reduce((a, r) => a + r.c.total.h / Math.max(1, r.c.total.ab), 0) / N).toFixed(3)}  HR ${avgOf((c) => c.total.hr)}  경기 ${avgOf((c) => c.total.g)}  신뢰 ${avgOf((c) => c.trust)}`);
   console.log(`자금: 쓴 돈 ${(base.reduce((a, r) => a + r.spent, 0) / N).toFixed(0)} · 남은 돈 ${avgOf((c) => c.money)} · 장비 단계 합 ${avgOf((c) => Object.values(c.gear).reduce((a, b) => a + (b ?? 0), 0))}`);
 
-  // GP: 같은 선수 GP 0 vs 전부
+  // 코치: 같은 선수 코치 없음 vs 전부 C (기본)
   {
     const a: number[] = [];
     const b: number[] = [];
     let share = 0;
     for (let i = 0; i < NGP; i++) {
-      const x = base[i].ovr;
-      const y = run(i, [...GP_IDS]).ovr;
+      const x = run(i, []).ovr;
+      const y = base[i].ovr;
       a.push(x);
       b.push(y);
       share += Math.max(0, y - x) / Math.max(1, y);
