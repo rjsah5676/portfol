@@ -1544,7 +1544,7 @@ export const W2: Scenes = {
       prompt: "그녀가 득의양양하게 마지막 숫자에 밑줄을 긋는다.",
       opts: [
         { text: "(늦게나마 살짝 고개를 젓는다)", eff: { trustA: 1 }, to: "a2_q1_no" },
-        { text: "\"…맞아. 완벽해.\"", eff: { affA: 1 }, to: "a2_q1_yes" },
+        { text: "\"…맞아. 완벽해.\"", eff: { affA: -1 }, to: "a2_q1_yes" },
       ],
     },
   ],
@@ -1792,7 +1792,7 @@ export const W2: Scenes = {
       t: "choice",
       prompt: "그녀가 덱을 테이블 가운데 내려놓는다.",
       opts: [
-        { text: "\"스페이드 에이스.\"", eff: { affY: 1 }, to: "a2_ycam_a" },
+        { text: "\"스페이드 에이스.\"", to: "a2_ycam_a" },
         { text: "\"…하트 7.\" (마지막 셔플에서 그녀 손목이 반 박자 늦었다)", cond: { v: "skill", op: ">=", n: 4 }, secret: true, eff: { trustY: 1, affY: 1 }, to: "a2_ycam_s" },
         { text: "\"모르겠어요.\"", eff: { trustY: 1 }, to: "a2_ycam_c" },
       ],

@@ -194,7 +194,7 @@ export const W1: Scenes = {
       opts: [
         { text: "\"7·2로 올인은… 용감했어요.\"", eff: { affA: 2 }, to: "d1_r1" },
         { text: "\"다음엔 이길 거예요. 아마.\"", eff: { affA: 1, trustA: 1 }, to: "d1_r2" },
-        { text: "(아무 말 없이 칩만 정리한다)", eff: { affY: 1 }, to: "d1_r3" },
+        { text: "(아무 말 없이 칩만 정리한다)", eff: { affY: 1, affA: -1 }, to: "d1_r3" },
       ],
     },
   ],
@@ -1380,7 +1380,7 @@ export const W1: Scenes = {
       t: "choice",
       opts: [
         { text: "\"앉으면, 다시 일어나지 못할 것 같아서요.\"", eff: { trustY: 2, affY: 1 }, to: "y2_lose_r1" },
-        { text: "\"딜러니까요.\"", to: "y2_lose_r2" },
+        { text: "\"딜러니까요.\"", eff: { affY: -1 }, to: "y2_lose_r2" },
       ],
     },
   ],
@@ -1805,7 +1805,7 @@ export const W1: Scenes = {
       prompt: "그녀가 콜라 캔 너머로 빤히 본다.",
       opts: [
         { text: "\"앉아 봤는데, 나랑 안 맞았어.\"", eff: { trustA: 1 }, to: "d4_why1" },
-        { text: "\"카드 만지는 게 좋아서.\"", eff: { affA: 1 }, to: "d4_why2" },
+        { text: "\"카드 만지는 게 좋아서.\"", to: "d4_why2" },
       ],
     },
   ],
@@ -2410,7 +2410,7 @@ export const W1: Scenes = {
       t: "choice",
       opts: [
         { text: "\"일부러 졌죠. 에이미한테 이기는 맛 보여 주라고.\"", eff: { trustY: 2, affY: 1 }, secret: true, to: "d6_read_hit" },
-        { text: "(모른 척한다)", eff: { affY: 1 }, to: "d6_read_quiet" },
+        { text: "(모른 척한다)", to: "d6_read_quiet" },
       ],
     },
   ],
