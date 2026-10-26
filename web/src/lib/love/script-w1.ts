@@ -245,8 +245,13 @@ export const W1: Scenes = {
       opts: [
         { text: "\"딜러들은 다 그렇게 섞어요.\"", eff: { affY: 1 }, to: "d1_y1" },
         { text: "\"잘 보시네요.\"", eff: { trustY: 1 }, to: "d1_y2" },
+        { text: "\"손님은 카드나 보시죠.\"", eff: { affY: -1 }, to: "d1_y3" },
       ],
     },
+  ],
+  d1_y3: [
+    Y("…네. 실례했어요.", "cold"),
+    { t: "goto", to: "d1_y_end" },
   ],
   d1_y1: [
     Y("아니요. 열에 아홉은 검지가 먼저 나가요.", "base"),
@@ -1097,8 +1102,14 @@ export const W1: Scenes = {
       opts: [
         { text: "\"나한테 자랑해. 박수 쳐 줄게.\"", eff: { affA: 2, trustA: 1 }, to: "a2_r1" },
         { text: "(아무 말 없이 보폭을 맞춘다)", eff: { trustA: 1 }, to: "a2_r2" },
+        { text: "\"그럼 이제 그만 뽑아. 방도 좁다며.\"", eff: { affA: -1 }, to: "a2_r3" },
       ],
     },
+  ],
+  a2_r3: [
+    A("…그런 얘기 하는 거 아니거든. 분위기 좀 읽어, 딜러.", "pout"),
+    N("그녀가 곰을 품에 고쳐 안고, 몇 걸음 말없이 걸었다."),
+    { t: "goto", to: "a2_end" },
   ],
   a2_r1: [
     A("진짜? 박수 크게 쳐야 돼. 아빠만큼.", "smile"),
@@ -1142,8 +1153,13 @@ export const W1: Scenes = {
       opts: [
         { text: "(끝까지 눈을 본다)", eff: { affA: 2 }, to: "a3_hold" },
         { text: "\"너 지금 코 벌렁거려.\"", eff: { affA: 1, trustA: 1 }, to: "a3_joke" },
+        { text: "(먼저 시선을 피한다)", eff: { affA: -1 }, to: "a3_away" },
       ],
     },
+  ],
+  a3_away: [
+    A("아, 뭐야. 먼저 도망가? 상대가 안 되잖아. …바나나우유는 네가 사.", "pout"),
+    { t: "goto", to: "a3_end" },
   ],
   a3_hold: [
     N("이십 초. 그녀의 눈가가 조금씩 붉어진다."),
@@ -1206,8 +1222,13 @@ export const W1: Scenes = {
       opts: [
         { text: "\"2번.\" (제일 매웠다)", eff: { affA: 1 }, to: "a4_wrong" },
         { text: "\"3번.\" (맵기 전에 단맛이 먼저 왔다)", eff: { trustA: 1, affA: 1 }, to: "a4_right" },
+        { text: "(눈가리개를 슬쩍 들어 본다)", eff: { affA: -1 }, to: "a4_peek" },
       ],
     },
+  ],
+  a4_peek: [
+    A("야! 눈가리개 왜 들어? 무효야, 무효. 내 정성 무효.", "pout"),
+    { t: "goto", to: "a4_end" },
   ],
   a4_wrong: [
     A("땡! 2번은 그냥 김치라면이야. 네가 맵찔이인 거야.", "smile"),
@@ -1434,8 +1455,13 @@ export const W1: Scenes = {
         { text: "\"잘 어울리는데요.\"", eff: { affY: 2 }, to: "y3_r1" },
         { text: "\"파스는 손 때문이에요?\"", eff: { trustY: 1, affY: 1 }, to: "y3_r2" },
         { text: "(눈을 감고 셋을 센다)", eff: { affY: 1 }, to: "y3_r3" },
+        { text: "\"컵라면이요? 몸 생각 좀 하셔야겠는데요.\"", eff: { affY: -1 }, to: "y3_r4" },
       ],
     },
+  ],
+  y3_r4: [
+    Y("…딜러님이 제 건강까지 세요?", "cold"),
+    { t: "goto", to: "y3_b" },
   ],
   y3_r1: [
     Y("…놀리는 거죠? 슬리퍼에 컵라면인데.", "blush"),

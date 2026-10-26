@@ -510,8 +510,13 @@ export const W3Y: Scenes = {
       opts: [
         { text: "\"3년 전 그 판도… 이렇게 했어요?\"", eff: { trustY: 1 }, to: "y3_vip_past" },
         { text: "(그녀 손에서 덱을 받아, 방금 그 손을 따라 해 본다)", eff: { affY: 1 }, to: "y3_vip_hand" },
+        { text: "\"…이 방, 오래 있으면 안 될 것 같아요. 나가요.\"", eff: { affY: -1 }, to: "y3_vip_out" },
       ],
     },
+  ],
+  y3_vip_out: [
+    Y("…네. 보여 주는 데 7년 걸렸는데, 보는 건 1분이면 충분하죠.", "sad"),
+    { t: "goto", to: "y3_vip_end" },
   ],
   y3_vip_past: [
     Y("…저는 그 판에 없었어요. 그건 진짜예요.", "base"),
@@ -2396,8 +2401,13 @@ export const W3Y: Scenes = {
       opts: [
         { text: "(책상 위 카드를 집어, 수화기 가까이에서 섞는다)", eff: { affY: 2 }, to: "y4_d23_c1" },
         { text: "\"내일, 다 들을게요. 무슨 얘기든.\"", eff: { trustY: 1 }, to: "y4_d23_c2" },
+        { text: "\"늦었어요. 내일 들을게요. 이제 자요.\"", eff: { affY: -1 }, to: "y4_d23_c3" },
       ],
     },
+  ],
+  y4_d23_c3: [
+    Y("…네. 효율적이네요. 딜러님답게.", "sad"),
+    { t: "goto", to: "y4_d23_c_end" },
   ],
   y4_d23_c1: [
     { t: "sfx", id: "shuffle" },

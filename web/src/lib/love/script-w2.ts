@@ -473,8 +473,14 @@ export const W2: Scenes = {
       opts: [
         { text: "\"심심하면 불러. 카드 섞는 거 가르쳐 줄게.\"", eff: { affA: 2, aTeachP: 1 }, to: "a2_d9_teach" },
         { text: "\"그 손, 지금 자리가 딱 맞아. 잘하고 있어.\"", eff: { trustA: 2 }, to: "a2_d9_good" },
+        { text: "\"동전 그만 굴려. 칩 만지는 손이랑 똑같아.\"", eff: { affA: -1 }, to: "a2_d9_nag" },
       ],
     },
+  ],
+  a2_d9_nag: [
+    A("…알아. 알아서 하고 있거든.", "pout"),
+    A("잔소리는 수첩이 해 줘. 너까지 안 해도 돼.", "base"),
+    { t: "goto", to: "a2_d9_eve_end" },
   ],
   a2_d9_teach: [
     A("진짜? 딜러 셔플 과외? 수업료 비싸?", "surprise"),
@@ -1709,8 +1715,14 @@ export const W2: Scenes = {
       opts: [
         { text: "\"머리랑 귀 사이. 세 번째엔 집게 힘이 세져.\" (말로만 돕는다)", eff: { trustA: 1 }, to: "a2_q3_tip" },
         { text: "(아무 말 없이 뒤에서 지켜본다)", eff: { affA: 1 }, to: "a2_q3_watch" },
+        { text: "\"줘 봐. 내가 뽑아 줄게.\" (레버를 잡으려 한다)", eff: { affA: -1 }, to: "a2_q3_grab" },
       ],
     },
+  ],
+  a2_q3_grab: [
+    A("손 떼! 이번엔 혼자 뽑을 거라고 했잖아.", "angry"),
+    N("그녀가 내 손을 탁 쳐 내고, 혼자 레버를 두 번 톡톡 밀었다."),
+    { t: "goto", to: "a2_q3_end" },
   ],
   a2_q3_tip: [
     A("말로만. 손은 안 대고. 그건 반칙 아니야. 인정해.", "base"),
@@ -3223,8 +3235,13 @@ export const W2: Scenes = {
       opts: [
         { text: "(뒤에서 그녀 손목을 잡아 각도를 잡아 준다)", eff: { affY: 2 }, to: "y2_q2_wrist" },
         { text: "\"손목 말고 검지로 회전을 줘요.\" (말로만)", eff: { trustY: 1 }, to: "y2_q2_word" },
+        { text: "\"그건 연습해야 늘어요. 다음에 혼자 해 봐요.\"", eff: { affY: -1 }, to: "y2_q2_self" },
       ],
     },
+  ],
+  y2_q2_self: [
+    Y("…가르쳐 달라고 한 건데. 됐어요. 혼자 할게요.", "away"),
+    { t: "goto", to: "y2_q2_end" },
   ],
   y2_q2_wrist: [
     { t: "dist", who: "yeonseo", dist: 1 },
@@ -3366,8 +3383,14 @@ export const W2: Scenes = {
       opts: [
         { text: "(하나를 그녀 쪽으로 밀어 둔다)", eff: { affA: 1 }, to: "y2_acam_give" },
         { text: "\"수첩 잘 쓰고 있어?\"", eff: { trustA: 1 }, to: "y2_acam_note" },
+        { text: "\"1+1은 손님 혜택이잖아. 둘 다 가져갈게.\"", eff: { affA: -1 }, to: "y2_acam_take" },
       ],
     },
+  ],
+  y2_acam_take: [
+    A("…와. 진짜 둘 다 가져가네.", "pout"),
+    A("농담인 거 알면서 그러는 거지? 그럼 알바생 저녁은 폐기 도시락이다.", "base"),
+    { t: "goto", to: "y2_acam_end" },
   ],
   y2_acam_give: [
     A("…진짜 놓고 가네. 농담 반이었는데.", "surprise"),
