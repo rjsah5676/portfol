@@ -2278,7 +2278,7 @@ const V2_P5: VoiceLine[] = [
   { id: "y6-c73d0ea971", who: "yeonseo", text: "…그저께 같이 쓴 우산, 아직 현관에 펴 뒀어요. 끝나면 같이 접어요.", tag: "[soft] ...그저께 같이 쓴 우산, 아직 현관에 펴 뒀어요. 끝나면, 같이 접어요." },
   { id: "y6-7c14d8dde0", who: "yeonseo", text: "태양 씨가 소리 지른 1초요. 사장님 눈이 물잔에서 떨어진 건 그때 한 번뿐이었어요.", tag: "[cold] [composed] 태양 씨가 소리 지른, 일 초요. 사장님 눈이 물잔에서 떨어진 건, 그때 한 번뿐이었어요." },
   { id: "y6-93e4f5dea0", who: "yeonseo", text: "…불은, 이걸 붙이려고 아껴 뒀나 봐요.", tag: "[faint smile] ...불은, 이걸 붙이려고 아껴 뒀나 봐요." },
-  { id: "y6-5664eb7186", who: "yeonseo", text: "7년 쓰고 반 남았던 거요. …나머지 반은, 이걸 붙이려고 아껴 뒀나 봐요.", tag: "[faint smile] 칠 년 쓰고, 반 남았던 거요. ...나머지 반은, 이걸 붙이려고 아껴 뒀나 봐요." },
+  { id: "y6-5664eb7186u", who: "yeonseo", text: "7년 쓰고 반 정도 남았던 거요. …나머지 반은, 이걸 붙이려고 아껴 뒀나 봐요.", tag: "(직접 생성) [faint smile] 칠 년 쓰고, 반 정도 남았던 거요. ...나머지 반은, 이걸 붙이려고 아껴 뒀나 봐요." },
   { id: "y6-bdac06fc61f", who: "yeonseo", text: "경찰서에 가져갈 거예요. 제 이름이랑 같이.", tag: "[calm] [resolute] 경찰서에 가져갈 거예요, 제 이름이랑 같이." },
   { id: "y6-6a112c2246", who: "yeonseo", text: "알아요. 그래서 가요.", tag: "[calm] [resolute] 알아요. 그래서 가요." },
   { id: "y6-9e9d39674f", who: "yeonseo", text: "다음 카드, 말해 볼까요?", tag: "[cold] 다음 카드, 말해 볼까요?" },
