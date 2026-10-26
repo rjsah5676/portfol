@@ -608,7 +608,7 @@ const cloneF = (f: Fighter): Fighter => ({ ...f, hist: f.hist.slice(), enc: f.en
  * 이 빌드의 게임 데이터 지문 (캐릭터 성능·맵) — 온라인에서 서로 다른 빌드끼리 붙었는지 확인.
  * 계산 방식(sim.ts)만 바꿨을 땐 SIM_REV를 올릴 것.
  */
-const SIM_REV = 34;
+const SIM_REV = 35;
 export const BUILD_ID = (() => {
   const str = SIM_REV + JSON.stringify(CHARS.map((c) => [c.hp, c.walk, c.jumpVx, c.dash, c.cd, c.glide, c.hurt, c.width, c.moves])) + JSON.stringify(MAPS.map((m) => [m.plats, m.spawn]));
   let h = 2166136261;
@@ -1777,10 +1777,13 @@ function chargeArmored(d: Fighter) {
   return !!m.charge?.armor && d.t >= m.charge.at && d.t < m.startup + m.active;
 }
 
-function canBlock(s: State, d: Fighter, fromX: number) {
+/** 몸 공격이 이 거리(px) 안 — 바로 위 · 겹침 — 에서 오면 방향 없음 (어느 쪽을 봐도 막음) */
+const GUARD_DEAD = 6;
+function canBlock(s: State, d: Fighter, from: number) {
   if (airborneS(s, d)) return false;
-  // 막기는 앞뒤 다 막음 (뒤로 걷다 막아도, 발밑 기둥도) — 막으면 때린 쪽으로 돌아봄
-  void fromX;
+  // 방향이 있는 공격(몸 · 날아오는 탄)은 그쪽을 보고 있어야 막음 — 뒤에서 오면 못 막음 (10.26).
+  // 방향이 없는 것(발밑 불기둥 같은 소환 · 바로 위에서 내리찍기)은 어느 쪽을 봐도 막음. 막는 중에 좌우로 돌아볼 수 있음
+  if (from !== 0 && from !== d.face) return false;
   return d.st === "block" || ((d.st === "idle" || d.st === "walk") && holding(d, IN.D));
 }
 
@@ -1867,9 +1870,11 @@ interface PreHit {
 }
 
 /** a가 d를 m으로 때림 (src = 판정 위치 x, 탄이면 탄 위치). pre = 서로 동시에 맞을 때 때린 쪽의 원래 상태 */
-function applyHit(s: State, ai: number, m: MoveDef, srcX: number, mid: MoveId, pre?: PreHit) {
+function applyHit(s: State, ai: number, m: MoveDef, srcX: number, mid: MoveId, pre?: PreHit, fromSide?: number) {
   const a = s.p[ai];
   const d = s.p[1 - ai];
+  // 공격이 오는 쪽 (d 기준 1 오른쪽 · -1 왼쪽 · 0 방향 없음) — 안 주면 판정 출처가 거의 겹치면(바로 위) 방향 없음
+  const from = fromSide ?? (Math.abs(srcX - d.x) < GUARD_DEAD * SUB ? 0 : srcX > d.x ? 1 : -1);
   // d가 밀려날 방향: 판정 반대쪽 — 판정이 바로 발밑(소환 기둥)이면 때린 쪽 반대로
   const dir = d.x > srcX ? 1 : d.x < srcX ? -1 : d.x >= a.x ? 1 : -1;
   if (!m.proj && !m.summon) a.hit = 1;
@@ -1910,8 +1915,8 @@ function applyHit(s: State, ai: number, m: MoveDef, srcX: number, mid: MoveId, p
     return;
   }
   // 가드 부수기 (끝까지 모은 철곰권): 막고 있어도 그냥 맞음
-  if (m.crush && canBlock(s, d, srcX)) s.ev.push({ k: "crush", p: ai, x: d.x, h: d.h + 40 * SUB, v: 0 });
-  if (mid !== "T" && !m.crush && !m.bsod && canBlock(s, d, srcX)) {
+  if (m.crush && canBlock(s, d, from)) s.ev.push({ k: "crush", p: ai, x: d.x, h: d.h + 40 * SUB, v: 0 });
+  if (mid !== "T" && !m.crush && !m.bsod && canBlock(s, d, from)) {
     // 저스트 가드: 가드를 올린 지 JUST_T 프레임 안에 막으면 경직 반, 깎임 없음, 게이지 보너스
     const wasBlocking = d.st === "block";
     // (↓를 새로 눌러야 함 — 다운·경직 중부터 누르고만 있던 가드는 보통 가드)
@@ -2352,7 +2357,7 @@ function projectiles(s: State) {
       }
       if (at >= 0 && at % sm.every === 0 && h && overlap(projRect(p, s), h)) {
         const last = at + sm.every >= sm.life;
-        applyHit(s, p.o, last ? X : { ...X, kd: false }, p.x, "X");
+        applyHit(s, p.o, last ? X : { ...X, kd: false }, p.x, "X", undefined, 0);
       }
       continue;
     }
@@ -2364,7 +2369,7 @@ function projectiles(s: State) {
       if (p.t % (pd.every ?? 8) === 1 && h && overlap(projRect(p, s), h)) {
         p.n--;
         // 밀어내는 쪽은 파도가 나아가는 쪽 (파도 가운데가 상대를 지나치면 거꾸로 당겨져 남은 타가 빗나가던 것)
-        applyHit(s, p.o, { ...pm, multi: pd.every ?? 8, kd: !!pm.kd && p.n <= 0 }, d.x - Math.sign(p.vx) * SUB, p.mv ? "X" : "S");
+        applyHit(s, p.o, { ...pm, multi: pd.every ?? 8, kd: !!pm.kd && p.n <= 0 }, d.x - Math.sign(p.vx) * SUB, p.mv ? "X" : "S", undefined, -Math.sign(p.vx));
         if (p.n <= 0) p.life = 0;
       }
     } else if (pd.boomer) {
@@ -2372,11 +2377,11 @@ function projectiles(s: State) {
       const leg = Math.sign(p.vx) === (p.d ?? 1) ? 1 : 2;
       if (!((p.hb ?? 0) & leg) && h && overlap(projRect(p, s), h)) {
         p.hb = (p.hb ?? 0) | leg;
-        applyHit(s, p.o, pm, p.x - p.vx * 4, "S");
+        applyHit(s, p.o, pm, p.x - p.vx * 4, "S", undefined, -Math.sign(p.vx));
       }
       if (p.x < -60 * SUB || p.x > (VIEW_W + 60) * SUB) p.life = 0;
     } else if (h && overlap(projRect(p, s), h)) {
-      applyHit(s, p.o, pm, p.x - p.vx * 4, p.mv ? "X" : "S");
+      applyHit(s, p.o, pm, p.x - p.vx * 4, p.mv ? "X" : "S", undefined, -Math.sign(p.vx));
       p.life = 0;
     }
     if (!pd.boomer && (p.x < -20 * SUB || p.x > (VIEW_W + 20) * SUB)) p.life = 0;

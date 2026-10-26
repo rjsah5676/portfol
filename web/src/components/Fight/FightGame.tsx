@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { CHARS } from "@/lib/fight/chars";
 import { MAPS } from "@/lib/fight/maps";
-import { AI_ID, AI_LEVELS, FightAI, aiForRating, aiLevelFor } from "@/lib/fight/ai";
+import { AI_ID, AI_LEVELS, FightAI, aiForRating, aiLevelFor, guardFace } from "@/lib/fight/ai";
 import {
   BUILD_ID,
   IN,
@@ -656,7 +656,8 @@ export default function FightGame() {
             const g = guardRef.current;
             if (s.p[1].combo > 0) guardAfter = 120;
             else if (guardAfter > 0) guardAfter--;
-            p2 = g === "all" || (g === "after" && guardAfter > 0) ? IN.D : 0;
+            // (가드는 보는 쪽만 막으니 허수아비는 때리러 온 쪽으로 돌아보며 막음)
+            p2 = g === "all" || (g === "after" && guardAfter > 0) ? guardFace(s, 1, IN.D) : 0;
           } else p2 = ai.next(s, 1);
           if (aiMode && s.phase !== "over") aiLog.push(p1);
           step(s, [p1, p2]);

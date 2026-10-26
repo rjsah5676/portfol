@@ -242,7 +242,7 @@ export function aiForRating(r: number, charId?: string): AILevel {
  * AI 지문: 랭크전 봇전은 서버가 같은 경기를 다시 돌려 확인하니, 브라우저와 서버의 AI가 똑같아야 함.
  * 단계 값·보정·콤보 길은 자동으로 들어가고, next() 같은 판단 코드를 바꿨으면 AI_REV 를 올릴 것.
  */
-const AI_REV = 16;
+const AI_REV = 17;
 export const AI_ID = (() => {
   const str = AI_REV + JSON.stringify([AI_LEVELS, RANK_TIERS, AI_RATING, ADJ_AT, CHAR_ADJ, ROUTES, ROUTE_CAP, HUMAN]);
   let h = 0x811c9dc5;
@@ -316,6 +316,24 @@ type Oki = "bait" | "throw" | "aa" | "meaty";
 const K = { every: 2, W: 24, WV: 40, thr: 4, plan: 8, range: 70, worst: 0.4 };
 /** 일어나는 동작 프레임 (sim RISE_T 와 같게) */
 const RISE_T = 14;
+
+/**
+ * 가드는 오는 쪽을 보고 있어야 막힘 (10.26) — 가드(↓)만 누르는 입력이면 오는 쪽(상대 몸 · 나에게 날아오는 탄 중 가까운 쪽)으로
+ * 돌아보게 방향키를 붙이고, 이미 그쪽을 보면 방향키를 뗌. 내다보기 시뮬에서도 양쪽 다 이렇게 막는다고 봄 (연습 허수아비도 씀)
+ */
+export function guardFace(s: State, me: 0 | 1, inp: number): number {
+  if (!(inp & IN.D) || inp & (IN.A | IN.B | IN.C | IN.X | IN.J)) return inp;
+  const f = s.p[me];
+  const o = s.p[1 - me];
+  if (isAir(s, f)) return inp;
+  let side = o.x > f.x ? 1 : -1;
+  let near = Math.abs(o.x - f.x);
+  for (const p of s.proj)
+    if (p.k === 0 && p.o !== me && p.vx !== 0 && Math.sign(p.vx) === Math.sign(f.x - p.x) && Math.abs(p.x - f.x) < near && Math.abs(p.h - f.h - 30 * SUB) < 60 * SUB)
+      ((near = Math.abs(p.x - f.x)), (side = p.vx > 0 ? -1 : 1));
+  inp &= ~(IN.L | IN.R);
+  return side !== f.face ? inp | (side > 0 ? IN.R : IN.L) : inp;
+}
 
 export class FightAI {
   private r: () => number;
@@ -463,6 +481,7 @@ export class FightAI {
         if (this.respect === null) this.respect = this.r() < L.antiAir * 0.6 + (L.read ?? 0) * 0.3;
         if (this.respect) out = (out & ~(IN.A | IN.B | IN.L | IN.R)) | away;
       }
+      out = guardFace(s, me, out);
       this.lastPress = out & (IN.A | IN.B | IN.C | IN.X | IN.J);
       // 방금 톡 했던 방향을 다시 누르면 대시가 나감 → 대시 거리 안에 낭떠러지면 이번엔 안 누름
       if (!isAir(s, f) && !this.crossTo && f.st !== "dash") {
@@ -1657,7 +1676,8 @@ export class FightAI {
           // 읽기에선 상대가 때리는 버릇이면 연타로 봄 (7프레임마다 다시 누름)
           const mash = weighted && rep === IN.A && k > 2 && (k - 2) % 7 === 0;
           const oi = (!weighted && ri === 0) || k < 2 ? held : k === 2 || mash ? rep : rep & (IN.L | IN.R | IN.D);
-          step(t, me === 0 ? [c[k], oi] : [oi, c[k]]);
+          const mi = guardFace(t, me, c[k]), oj = guardFace(t, (1 - me) as 0 | 1, oi);
+          step(t, me === 0 ? [mi, oj] : [oj, mi]);
           if (t.phase !== "fight") break;
         }
         const dealt = op0 - t.p[1 - me].hp,
