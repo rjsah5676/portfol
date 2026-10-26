@@ -7,20 +7,23 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { DIFF_NAME, type Diff } from "@/lib/baseball/ai";
 import {
-  ACTIVE_MAX, ACTIVE_PER_DAY, ACTIVE_PER_GAME, BONDS, BOND_AT, CLINIC_PRICE, MIN_COST, COND_NAME, CONSUMABLES, CONSUMABLE_IDS, DEEP_MAX, GAMES, GAME_GRADES, GEAR, GEAR_IDS, GEAR_TIER, GP_BOOSTS, GP_IDS,
+  ACTIVE_MAX, ACTIVE_PER_DAY, ACTIVE_PER_GAME, BOND_MAX, CLINIC_PRICE, MIN_COST, COND_NAME, CONSUMABLES, CONSUMABLE_IDS, DECK_SIZE, GAMES, GAME_GRADES, GEAR, GEAR_IDS, GEAR_TIER, GP_BOOSTS, GP_IDS,
   INJURY_NAME, LEARNED_VAL, MAX_SEASONS, OFF_TURNS, PLACES, PLACE_IDS, RETIRE_FROM, SPOT_EVENTS, STAT_KEYS, STAT_NAME, TAG_COLOR, TAG_NAME, TRAINS,
-  TRAIN_KEYS, TYPES, act, advance, age, avg, bondStage, buy, buyGear, canPlay, choose, choosePick, consumeItem, decideRetire, deepCount, endSeason,
+  TRAIN_KEYS, TYPES, act, advance, age, autoBattle, avg, buy, buyGear, canPlay, careerBatter, choose, choosePick, consumeItem, decideRetire, endSeason, finishBattle, trainersOf,
   costOf, fmtAvg, gameNo, gearNext, gradeOf, newCareer, ops, ovrOf, retireCard, skill, spLv, spUses, spotsOf, statGrade, stepOf, tagCount, talentName,
   trainLv, trainMul, trainRisk, whenText, whyNot,
   type Action, type BatType, type Career, type ConsumableId, type Delta, type GearId, type GpId, type HofEntry, type PlaceId, type SeasonSummary,
   type SkillId, type Spot, type StatKey, type Tag, type TurnOut,
 } from "@/lib/baseball/career";
 import { slotName, slotOf } from "@/lib/baseball/careerGame";
-import { TEAM_DEFS, charById, faceUrl } from "@/lib/baseball/data";
+import { TEAM_DEFS, charById, faceUrl, type CharId } from "@/lib/baseball/data";
+import { SPECIAL_DAY, ROLE, type BondId } from "@/lib/baseball/bonds";
+import { makeRng } from "@/lib/baseball/rng";
+import { BattleModal, BondCard, BondsModal, BoonPickModal, DeckStep, Hint, VnScene, artUrl, recommendDeck } from "./CareerBonds";
 import { BAT_IDLE, BATS, BATTER_RIG, HELMETS, baseSkin } from "@/lib/baseball/figures";
 import { drawRig, pose } from "@/lib/baseball/rig";
 import {
-  SPEEDS, addHof, autoGame, loadCareer, loadHof, loadMode, loadSpeed, saveCareer, saveMode, saveSpeed, setupOf, takeReport, type GameReport, type PlayMode,
+  SPEEDS, addHof, affStart, autoGame, bondLevel, loadBondXp, loadCareer, loadHof, loadMode, loadSpeed, saveCareer, saveMode, saveSpeed, setupOf, takeBattle, takeReport, type GameReport, type PlayMode,
 } from "./careerStore";
 import type { MatchCfg } from "./match";
 import { sfx } from "./sfx";
@@ -47,7 +50,9 @@ export default function CareerMode({ onExit, onPlay }: { onExit: () => void; onP
   const [queue, setQueue] = useState<TurnOut[]>([]);
   const [reports, setReports] = useState<GameReport[]>([]);
   const [season, setSeason] = useState<SeasonSummary | null>(null);
-  const [modal, setModal] = useState<null | "shop" | "records" | "newConfirm" | { place: PlaceId }>(null);
+  const [modal, setModal] = useState<null | "shop" | "records" | "bonds" | "newConfirm" | "epilogue" | { place: PlaceId }>(null);
+  /** 큐 맨 앞 결과의 미연시 장면을 봤나 */
+  const [vnSeen, setVnSeen] = useState(false);
   const [toast, setToast] = useState("");
   const [speed, setSpeed] = useState(1);
   const [mode, setMode] = useState<PlayMode>("highlight");
@@ -65,6 +70,11 @@ export default function CareerMode({ onExit, onPlay }: { onExit: () => void; onP
     setHof(loadHof());
     setSpeed(loadSpeed());
     setMode(loadMode());
+    const bt = takeBattle();
+    if (bt) {
+      setQueue([bt, ...(bt.extra ? [bt.extra] : [])]);
+      setView("hub");
+    }
     if (rep) {
       setReports([rep]);
       setView("hub");
@@ -89,9 +99,10 @@ export default function CareerMode({ onExit, onPlay }: { onExit: () => void; onP
     const out = act(n, a);
     commit(n);
     setModal(null);
-    const q = [out, ...(out.extra && !out.extra.stub ? [out.extra] : [])];
+    const q = [out, ...(out.extra && !out.extra.stub ? [out.extra] : [])].filter((o) => !o.stub || o.vn);
     setQueue(q);
-    playTone(q[0].tone);
+    setVnSeen(false);
+    if (q[0]) playTone(q[0].tone);
   };
   const doAdvance = () => {
     if (!c || stepOf(c) !== "turn") return;
@@ -100,12 +111,38 @@ export default function CareerMode({ onExit, onPlay }: { onExit: () => void; onP
     commit(n);
     sfx.ui();
   };
-  const doChoose = (i: 0 | 1) => {
+  const doChoose = (i: number) => {
     if (!c) return;
     const n = clone(c);
     const out = choose(n, i);
     commit(n);
     setQueue([out]);
+    setVnSeen(false);
+    playTone(out.tone);
+  };
+  /** 인연 대결: 직접 (경기 화면) / 자동 */
+  const battleDirect = () => {
+    if (!c?.battle) return;
+    const bt = c.battle;
+    const ch = charById(bt.char);
+    onPlay({
+      mode: "derby",
+      diff: c.diff,
+      innings: 1,
+      userHome: true,
+      myBat: "kai",
+      myPit: "lily",
+      speed,
+      bond: { char: bt.char, pitches: bt.pitches, need: bt.need, magic: bt.magic, batter: careerBatter(c), title: `${ch.name}와 ${bt.kind === "final" ? "필살 전수 대결" : "대결"}` },
+    });
+  };
+  const battleAuto = () => {
+    if (!c?.battle) return;
+    const n = clone(c);
+    const out = finishBattle(n, autoBattle(n, makeRng((n.seed * 31 + n.turn * 7 + n.battle!.tries) >>> 0)), true);
+    commit(n);
+    setQueue([out, ...(out.extra ? [out.extra] : [])]);
+    setVnSeen(false);
     playTone(out.tone);
   };
   const doPick = (i: number) => {
@@ -175,7 +212,11 @@ export default function CareerMode({ onExit, onPlay }: { onExit: () => void; onP
           c={c}
           onBack={onExit}
           onContinue={() => setView("hub")}
-          onNew={() => (c && c.phase !== "retired" ? setModal("newConfirm") : setView("create"))}
+          onNew={() => {
+            setHof(loadHof());
+            if (c && c.phase !== "retired") setModal("newConfirm");
+            else setView("create");
+          }}
           onHof={() => {
             setHof(loadHof());
             setView("hof");
@@ -185,8 +226,9 @@ export default function CareerMode({ onExit, onPlay }: { onExit: () => void; onP
       {view === "create" && (
         <Create
           onBack={() => setView("home")}
+          hof={hof}
           onStart={(o) => {
-            commit(newCareer(o));
+            commit(newCareer({ ...o, affStart: affStart() }));
             setView("hub");
             sfx.cheer(0.7);
           }}
@@ -199,7 +241,11 @@ export default function CareerMode({ onExit, onPlay }: { onExit: () => void; onP
           <Retire
             c={c}
             onHome={() => setView("home")}
-            onNew={() => setView("create")}
+            onNew={() => {
+              setHof(loadHof());
+              setView("create");
+            }}
+            onEpilogue={() => setModal("epilogue")}
             onHof={() => {
               setHof(loadHof());
               setView("hof");
@@ -217,6 +263,8 @@ export default function CareerMode({ onExit, onPlay }: { onExit: () => void; onP
             onAdvance={doAdvance}
             onShop={() => setModal("shop")}
             onRecords={() => setModal("records")}
+            onBonds={() => setModal("bonds")}
+            quiet={overlayBusy || !!modal}
             onPlay={playGame}
             onAutoWeek={() => autoWeek(true)}
             onSitOut={() => autoWeek(false)}
@@ -225,11 +273,42 @@ export default function CareerMode({ onExit, onPlay }: { onExit: () => void; onP
         ))}
 
       {/* 결과 팝업들 (턴 결과 → 경기 → 시즌 → 이벤트 고르기 → 특수능력 고르기 → 은퇴 물어보기) */}
-      {queue.length > 0 && <TurnModal out={queue[0]} onNext={() => setQueue((q) => q.slice(1))} />}
+      {queue.length > 0 &&
+        (queue[0].vn && !vnSeen ? (
+          <VnScene
+            key={c?.turn + queue[0].title}
+            char={queue[0].vn.char}
+            skin={queue[0].vn.skin}
+            lines={queue[0].vn.lines}
+            title={queue[0].title}
+            result={queue[0].stub || queue[0].lines.length > 2 ? undefined : queue[0]}
+            onDone={() => {
+              if (queue[0].stub || queue[0].lines.length > 2) setVnSeen(true);
+              else {
+                setQueue((q) => q.slice(1));
+                setVnSeen(false);
+              }
+            }}
+          />
+        ) : queue[0].stub ? null : (
+          <TurnModal
+            out={queue[0]}
+            onNext={() => {
+              setQueue((q) => q.slice(1));
+              setVnSeen(false);
+            }}
+          />
+        ))}
       {!queue.length && reports.length > 0 && <ReportModal r={reports[0]} more={reports.length - 1} onClose={() => setReports((r) => r.slice(1))} />}
       {!queue.length && !reports.length && season && c && <SeasonModal s={season} c={c} onClose={() => setSeason(null)} />}
-      {!overlayBusy && view === "hub" && c && step === "pending" && <ChoiceModal c={c} onPick={doChoose} />}
-      {!overlayBusy && view === "hub" && c && step === "pick" && <PickModal c={c} onPick={doPick} />}
+      {!overlayBusy && view === "hub" && c && step === "pending" &&
+        (c.pending?.scene && c.pending.char ? (
+          <VnScene key={`${c.turn}-${c.pending.char}`} char={c.pending.char} lines={c.pending.scene.lines} title={c.pending.title} choices={c.pending.choices} onChoose={doChoose} />
+        ) : (
+          <ChoiceModal c={c} onPick={doChoose} />
+        ))}
+      {!overlayBusy && view === "hub" && c && step === "pick" && (c.pick?.boon ? <BoonPickModal c={c} onPick={doPick} /> : <PickModal c={c} onPick={doPick} />)}
+      {!overlayBusy && view === "hub" && c && step === "battle" && <BattleModal c={c} onDirect={battleDirect} onAuto={battleAuto} />}
       {!overlayBusy && view === "hub" && c && step === "retireAsk" && <RetireAskModal c={c} onAnswer={doRetire} />}
 
       {modal && typeof modal === "object" && c && <PlaceModal c={c} place={modal.place} onClose={() => setModal(null)} onAct={doAct} />}
@@ -258,6 +337,10 @@ export default function CareerMode({ onExit, onPlay }: { onExit: () => void; onP
         />
       )}
       {modal === "records" && c && <RecordsModal c={c} onClose={() => setModal(null)} />}
+      {modal === "bonds" && c && <BondsModal c={c} onClose={() => setModal(null)} />}
+      {modal === "epilogue" && c && retireCard(c).partner && (
+        <VnScene char={retireCard(c).partner!} lines={[retireCard(c).epilogue!]} title="에필로그" onDone={() => setModal(null)} />
+      )}
       {modal === "newConfirm" && (
         <Modal>
           <div className={`${font.title} mb-2 text-2xl`}>새로 시작할까요?</div>
@@ -356,7 +439,16 @@ function Home({ c, onBack, onContinue, onNew, onHof }: { c: Career | null; onBac
 
 /* ─────────────── 선수 만들기 ─────────────── */
 
-function Create({ onBack, onStart }: { onBack: () => void; onStart: (o: Parameters<typeof newCareer>[0]) => void }) {
+function Create({ hof, onBack, onStart }: { hof: HofEntry[]; onBack: () => void; onStart: (o: Parameters<typeof newCareer>[0]) => void }) {
+  const [stepNo, setStepNo] = useState<1 | 2>(1);
+  const [deck, setDeck] = useState<BondId[]>([]);
+  const [legacy, setLegacy] = useState<{ id: string; skill?: SkillId } | null>(null);
+  const [levels] = useState(() => {
+    const x = loadBondXp();
+    const out: Partial<Record<CharId, number>> = {};
+    for (const k of Object.keys(x) as CharId[]) out[k] = bondLevel(x[k] ?? 0);
+    return out;
+  });
   const [name, setName] = useState(() => NAMES[Math.floor(Math.random() * NAMES.length)]);
   const [num, setNum] = useState(() => 10 + Math.floor(Math.random() * 60));
   const [bats, setBats] = useState<"R" | "L">("R");
@@ -364,16 +456,40 @@ function Create({ onBack, onStart }: { onBack: () => void; onStart: (o: Paramete
   const [diff, setDiff] = useState<Diff>(1);
   const [gp, setGp] = useState<GpId[]>([]);
   const t = TYPES[type];
+  const start = () => {
+    const lg = legacy ? hof.find((h) => h.id === legacy.id) : undefined;
+    onStart({ name, num, bats, type, diff, gp, deck: deck.length === DECK_SIZE ? deck : recommendDeck(type), legacy: lg ? { name: lg.name, skill: legacy?.skill, stats: lg.stats } : undefined });
+  };
+  const head = (
+    <div className="flex items-center justify-between">
+      <span className={`${font.title} text-[28px]`} style={{ color: ACCENT }}>
+        새 선수 만들기 <span className="ml-2 text-[15px] text-white/50">{stepNo === 1 ? "1 선수 → 2 인연 덱" : "1 선수 → "}<b className={stepNo === 2 ? "text-white" : ""}>{stepNo === 2 ? "2 인연 덱" : ""}</b></span>
+      </span>
+      <Btn className="px-4 py-1.5 text-sm" color="#8b93b8" onClick={stepNo === 2 ? () => setStepNo(1) : onBack}>
+        ← 뒤로
+      </Btn>
+    </div>
+  );
+  if (stepNo === 2)
+    return (
+      <div className="flex h-full flex-col gap-2.5 px-7 py-4">
+        {head}
+        <DeckStep type={type} deck={deck} setDeck={setDeck} levels={levels} hof={hof} legacy={legacy} setLegacy={setLegacy} />
+        <div className="flex items-center justify-between rounded-xl border border-white/10 bg-black/30 px-4 py-2.5">
+          <div className="text-[12.5px] leading-relaxed text-white/60">
+            {deck.length < DECK_SIZE ? `${DECK_SIZE - deck.length}명 더 고르거나 그냥 시작하면 추천 덱으로 가요.` : `덱: ${deck.map((d) => charById(d).name).join(" · ")}`}
+            <br />
+            은퇴하면 덱 사람들 호감이 「인연 레벨」로 쌓여서 다음 선수는 처음부터 더 친하게 시작해요.
+          </div>
+          <Btn className={`${font.title} ml-4 shrink-0 px-8 py-3 text-2xl`} disabled={!name} onClick={start}>
+            입단!
+          </Btn>
+        </div>
+      </div>
+    );
   return (
     <div className="flex h-full flex-col gap-2.5 px-7 py-4">
-      <div className="flex items-center justify-between">
-        <span className={`${font.title} text-[28px]`} style={{ color: ACCENT }}>
-          새 선수 만들기
-        </span>
-        <Btn className="px-4 py-1.5 text-sm" color="#8b93b8" onClick={onBack}>
-          ← 뒤로
-        </Btn>
-      </div>
+      {head}
       <div className="flex gap-5">
         <div className="flex flex-col gap-2.5">
           <Field label="이름">
@@ -442,7 +558,7 @@ function Create({ onBack, onStart }: { onBack: () => void; onStart: (o: Paramete
           </div>
           <div className="mt-1 flex items-center justify-between">
             <span className="text-[13px] font-bold text-white/70">GP 부스트 (이번 선수만)</span>
-            <span className="rounded bg-[#ffd23f]/15 px-2 py-0.5 text-[11px] text-[#ffd23f]">프로토 체험 — GP 안 빠짐 · 육성 영향 30% 이하로 묶음</span>
+            <span className="rounded bg-[#ffd23f]/15 px-2 py-0.5 text-[11px] text-[#ffd23f]">프로토 체험 — GP 안 빠짐 · 결과 영향 10% 안팎</span>
           </div>
           <div className="grid grid-cols-4 gap-1.5">
             {GP_IDS.map((id) => {
@@ -469,10 +585,10 @@ function Create({ onBack, onStart }: { onBack: () => void; onStart: (o: Paramete
         <div className="text-[12.5px] leading-relaxed text-white/60">
           19세 입단 · 한 해 {GAMES}경기 · {RETIRE_FROM}년차부터 은퇴를 고를 수 있고 {MAX_SEASONS}년차엔 은퇴. 숨은 재능은 1년차가 끝나면 알려 줘요.
           <br />
-          결과는 운 · 선택 · 실력에 따라 크게 갈려요 (중앙값 500 정도 · 잘 풀리면 800+ · 안 풀리면 200대).
+          결과는 운 · 선택 · 실력에 따라 갈려요 (중앙값 550 정도 · 잘 풀리면 800+ · 안 풀리면 300~400대).
         </div>
-        <Btn className={`${font.title} ml-4 shrink-0 px-8 py-3 text-2xl`} disabled={!name} onClick={() => onStart({ name, num, bats, type, diff, gp })}>
-          입단!
+        <Btn className={`${font.title} ml-4 shrink-0 px-8 py-3 text-2xl`} disabled={!name} onClick={() => setStepNo(2)}>
+          다음 ▶
         </Btn>
       </div>
     </div>
@@ -543,6 +659,9 @@ function Hub(p: {
   onAdvance: () => void;
   onShop: () => void;
   onRecords: () => void;
+  onBonds: () => void;
+  /** 팝업이 떠 있음 (힌트 숨김) */
+  quiet?: boolean;
   onPlay: () => void;
   onAutoWeek: () => void;
   onSitOut: () => void;
@@ -570,6 +689,9 @@ function Hub(p: {
           <Btn className="px-2.5 py-1 text-[13px] whitespace-nowrap" color="#ffd23f" onClick={p.onShop}>
             상점
           </Btn>
+          <Btn className="px-2.5 py-1 text-[13px] whitespace-nowrap" color="#ff7ae0" onClick={p.onBonds}>
+            인연
+          </Btn>
           <Btn className="px-2.5 py-1 text-[13px] whitespace-nowrap" color="#7ad7ff" onClick={p.onRecords}>
             기록
           </Btn>
@@ -585,7 +707,7 @@ function Hub(p: {
               🩹 {INJURY_NAME[c.injury.kind]} — 복귀까지 {c.injury.left} (경기 · 캠프 하루마다 1씩). 숙소 · 병원만 갈 수 있고 경기는 결장. 병원 치료 · 상점 「재활 치료」로 줄일 수 있어요.
             </div>
           )}
-          {step === "turn" || step === "pending" || step === "pick" || step === "retireAsk" ? (
+          {step === "turn" || step === "pending" || step === "pick" || step === "battle" || step === "retireAsk" ? (
             <TownMap c={c} onPlace={p.onPlace} onAdvance={p.onAdvance} />
           ) : step === "game" ? (
             <GameCard c={c} mode={p.mode} onMode={p.onMode} onPlay={p.onPlay} onAutoWeek={p.onAutoWeek} onSitOut={p.onSitOut} />
@@ -615,6 +737,21 @@ function Hub(p: {
           </div>
         </div>
       </div>
+      {!p.quiet && step === "turn" && c.turn === 0 && (
+        <Hint k="hub" title="관리 턴 — 지도에서 장소를 눌러요">
+          ⚡ 행동력이 남아 있는 동안 훈련 · 휴식 · 만남을 해요. 다 쓰면(또는 그만하려면) 오른쪽 위 「{c.phase === "season" ? "경기 진행" : "다음 날"} ▶」. 체력 40 아래로 훈련하면 부상이 확 늘어요.
+        </Hint>
+      )}
+      {!p.quiet && step === "turn" && c.turn > 0 && spotsOf(c).some((s) => s.char) && (
+        <Hint k="bond" title="❗ 인연이 나타났어요">
+          얼굴이 뜬 장소에 가면 그 사람과 이야기가 이어져요. 대답에 따라 호감이 오르고, 그 사람다운 답을 고르면 「이해」가 쌓여요. 상단 「인연」에서 진행 상황을 볼 수 있어요.
+        </Hint>
+      )}
+      {!p.quiet && step === "turn" && Object.keys(trainersOf(c)).length > 0 && c.turn > 2 && (
+        <Hint k="mate" title="함께 훈련">
+          운동장 훈련 버튼에 얼굴이 붙어 있으면 그 사람이 같이 해 줘요 — 효율 ×1.2 이상 + 호감 +3. 이번 관리 기간에 한 번만!
+        </Hint>
+      )}
     </div>
   );
 }
@@ -767,6 +904,7 @@ function Gauge({ label, value, pct, color }: { label: string; value: string; pct
 /** 시내 지도: 장소 버튼 + 이번 주 ❗ (캐릭터 얼굴 · 이벤트) */
 function TownMap({ c, onPlace, onAdvance }: { c: Career; onPlace: (p: PlaceId) => void; onAdvance: () => void }) {
   const spots = spotsOf(c);
+  const mates = trainersOf(c);
   const season = c.phase === "season";
   const out = c.active < MIN_COST;
   const at = (p: PlaceId) => spots.find((s) => s.place === p);
@@ -829,8 +967,15 @@ function TownMap({ c, onPlace, onAdvance }: { c: Career; onPlace: (p: PlaceId) =
               <div className="mt-0.5 flex items-center gap-1">
                 <img src={faceUrl(ch.id)} alt={ch.name} className="h-[26px] w-[26px] rounded-md object-cover object-top" />
                 <span className="text-[11.5px] font-bold" style={{ color: ch.color }}>
-                  ❗ {ch.name}
+                  {s?.special ? "🎁" : "❗"} {ch.name}
                 </span>
+              </div>
+            ) : id === "ground" && Object.keys(mates).length ? (
+              <div className="mt-0.5 flex items-center gap-1">
+                {Object.values(mates).map((m) => (
+                  <img key={m} src={faceUrl(m!)} alt="" className="h-[22px] w-[22px] rounded-md object-cover object-top" style={{ outline: `1.5px solid ${charById(m!).color}` }} />
+                ))}
+                <span className="text-[10.5px] font-bold text-[#7dff9a]">함께 훈련</span>
               </div>
             ) : ev ? (
               <span className="mt-0.5 text-[11.5px] font-bold text-[#ffd23f]">❗ {ev.name}</span>
@@ -870,13 +1015,21 @@ function PlaceModal({ c, place, onClose, onAct }: { c: Career; place: PlaceId; o
         <div className="grid grid-cols-5 gap-2">
           {TRAIN_KEYS.map((k) => {
             const t = TRAINS[k];
-            const mul = trainMul(c, k);
+            const mate = trainersOf(c)[k];
+            const mm = mate ? 1.2 + Math.min(0.25, (c.aff[mate] ?? 0) / 400) : 1;
+            const mul = trainMul(c, k) * mm;
             return opt(
               { kind: "train", key: k },
               t.name,
               t.desc,
               k === "special" ? `체력 -${t.cost} · 필살 Lv${spLv(c) || "-"}` : `체력 -${t.cost} · Lv${trainLv(c, k)} · 효율 ×${mul.toFixed(2)}`,
-              k === "special" ? "#ff5fb4" : STAT_COLOR[k as StatKey]
+              k === "special" ? "#ff5fb4" : STAT_COLOR[k as StatKey],
+              mate ? (
+                <span className="mt-0.5 flex items-center gap-1 text-[11px] font-bold" style={{ color: charById(mate).color }}>
+                  <img src={faceUrl(mate)} alt="" className="h-[20px] w-[20px] rounded object-cover object-top" />
+                  {charById(mate).name}와 함께 ×{mm.toFixed(2)}
+                </span>
+              ) : undefined
             );
           })}
         </div>
@@ -904,38 +1057,24 @@ function PlaceModal({ c, place, onClose, onAct }: { c: Career; place: PlaceId; o
   } else if (place === "hospital") {
     body = <div className="grid grid-cols-1 gap-2">{opt({ kind: "clinic" }, "치료", c.injury ? "부상 남은 기간 -2턴" : "피로 회복 (체력 70 아래일 때)", `자금 -${CLINIC_PRICE}만 · 체력 +30`, "#ff9a9a")}</div>;
   } else if (spot?.char) {
-    const ch = charById(spot.char);
-    const v = c.bonds[ch.id] ?? 0;
-    const st = bondStage(v);
-    const next = BOND_AT.find((x) => x > v);
-    const nextName = st >= 4 ? "인연 완료 — 가볍게 놀기" : st >= 3 ? `다음: 필살타법 「${ch.swing.name}」 전수` : st >= 2 ? `다음: 특수능력 「${skill(`sk_${ch.id}` as SkillId).name}」` : st === 1 ? "다음: 고르기 이벤트" : "처음 만남";
-    body = (
-      <div className="flex gap-3">
-        <img src={faceUrl(ch.id)} alt={ch.name} className="h-[120px] w-[110px] shrink-0 rounded-xl object-cover object-top" style={{ outline: `3px solid ${ch.color}` }} />
-        <div className="flex flex-1 flex-col gap-2 text-left">
-          <div>
-            <div className={`${font.title} text-[22px]`} style={{ color: ch.color }}>
-              {ch.name} <span className="text-[13px] text-white/55">· {STAT_NAME[BONDS[ch.id].stat]} 키워 줌</span>
-            </div>
-            <div className="mt-0.5 flex items-center gap-1 text-[12px] text-white/70">
-              인연
-              {Array.from({ length: BOND_AT[3] }, (_, i) => (
-                <span key={i} style={{ color: i < v ? ch.color : "rgba(255,255,255,0.25)" }}>
-                  {BOND_AT.includes(i + 1) ? "◆" : "•"}
-                </span>
-              ))}
-              <span className="ml-1">
-                {v}/{BOND_AT[3]}
-                {next ? ` · ${next - v}번 더 만나면` : ""}
-              </span>
-            </div>
-            <div className="text-[12px] text-white/60">{nextName}</div>
-            <div className="text-[11px] text-white/40">
-              깊은 인연(3단계 이상)은 {DEEP_MAX}명까지 · 지금 {deepCount(c)}명
-            </div>
+    const bid = spot.char;
+    const ch = charById(bid);
+    const sd = SPECIAL_DAY[ROLE[bid]];
+    body = spot.special ? (
+      <div className="flex gap-3 text-left">
+        <img src={artUrl(sd.skin[bid] ?? bid)} alt={ch.name} className="h-[200px] w-auto shrink-0 object-contain" />
+        <div className="flex flex-1 flex-col gap-2">
+          <div className={`${font.title} text-[24px]`} style={{ color: ch.color }}>
+            🎁 {sd.title}
           </div>
-          {opt({ kind: "meet", char: ch.id }, `${ch.name} 만나기`, "인연 진행 · 기분 전환", "체력 +10 · 컨디션 +1", ch.color)}
+          <div className="text-[13px] text-white/75">올해 가장 가까웠던 {ch.name}와 특별한 하루. 호감 +10 · 컨디션 크게 ↑ · 체력 +30 · {ch.name}의 축복 하나.</div>
+          {opt({ kind: "meet", char: bid }, `${ch.name}와 ${sd.title}`, "1년에 한 번", "비시즌 첫날에만", ch.color)}
         </div>
+      </div>
+    ) : (
+      <div className="flex flex-col gap-2">
+        <BondCard c={c} id={bid} />
+        {opt({ kind: "meet", char: bid }, `${ch.name} 만나기`, (c.bonds[bid] ?? 0) >= BOND_MAX ? "같이 놀기 · 호감 · 능력치 조금" : "다음 이야기 진행", "체력 +8 · 컨디션 +1", ch.color)}
       </div>
     );
   } else if (spot?.event) {
@@ -1418,10 +1557,7 @@ function RecordsModal({ c, onClose }: { c: Career; onClose: () => void }) {
       </div>
       <div className="mt-1 text-left text-[12px] text-white/55">
         인연:{" "}
-        {Object.entries(c.bonds)
-          .filter(([, v]) => (v ?? 0) > 0)
-          .map(([id, v]) => `${charById(id as Parameters<typeof charById>[0]).name} ${v}/${BOND_AT[3]}`)
-          .join(" · ") || "없음"}
+        {c.deck.map((id) => `${charById(id).name} ${c.bonds[id] ?? 0}/${BOND_MAX} · 호감 ${c.aff[id] ?? 0}`).join(" · ")}
       </div>
       {c.gp.length > 0 && <div className="mt-1 text-left text-[12px] text-[#ffd23f]/80">GP 부스트: {c.gp.map((g) => GP_BOOSTS[g].name).join(" · ")}</div>}
       <Btn className="mt-3 w-full py-2" color="#8b93b8" onClick={onClose}>
@@ -1433,7 +1569,7 @@ function RecordsModal({ c, onClose }: { c: Career; onClose: () => void }) {
 
 /* ─────────────── 은퇴 · 명예의 전당 ─────────────── */
 
-function Retire({ c, onHome, onNew, onHof }: { c: Career; onHome: () => void; onNew: () => void; onHof: () => void }) {
+function Retire({ c, onHome, onNew, onHof, onEpilogue }: { c: Career; onHome: () => void; onNew: () => void; onHof: () => void; onEpilogue: () => void }) {
   const r = retireCard(c);
   const t = r.total;
   const awardText = [...new Set(r.awards)].map((a) => `${a}${r.awards.filter((x) => x === a).length > 1 ? ` ×${r.awards.filter((x) => x === a).length}` : ""}`).join(" · ");
@@ -1491,7 +1627,15 @@ function Retire({ c, onHome, onNew, onHof }: { c: Career; onHome: () => void; on
             {c.salary.toLocaleString()}만원
           </div>
         </div>
-        <div className="text-[12px] text-white/45">명예의 전당에 올라갔어요 (이 브라우저). 서버 랭킹 · 나만의 구단으로 데려가기는 다음 단계예요.</div>
+        {r.partner && (
+          <button type="button" onClick={onEpilogue} className="flex cursor-pointer items-center gap-2 rounded-xl border-2 px-3 py-1.5 text-left" style={{ borderColor: charById(r.partner).color, background: `${charById(r.partner).color}1c` }}>
+            <img src={faceUrl(r.partner)} alt="" className="h-[40px] w-[38px] rounded-md object-cover object-top" />
+            <span className="flex-1 text-[13px]">
+              <b style={{ color: charById(r.partner).color }}>파트너 {charById(r.partner).name}</b> — 에필로그 보기 ▶
+            </span>
+          </button>
+        )}
+        <div className="text-[12px] text-white/45">명예의 전당에 올라갔어요 · 덱 사람들 인연 레벨이 쌓였어요. 이 선수의 특수능력은 다음 선수에게 「선배의 유산」으로 물려줄 수 있어요.</div>
         <div className="mt-1 flex gap-2">
           <Btn className={`${font.title} flex-1 py-3 text-xl`} onClick={onNew}>
             새 선수 키우기

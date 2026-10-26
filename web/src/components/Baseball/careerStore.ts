@@ -2,17 +2,18 @@
  * 육성 저장 (프로토: 이 브라우저 localStorage) — 진행 중인 선수 1명 + 명예의 전당.
  * 서버 저장은 다음 단계 (랭킹 · 구단으로 넘기기).
  */
-import { applyGame, careerBatter, hofEntry, spUses, type Career, type GameIn, type GameSummary, type HofEntry } from "@/lib/baseball/career";
+import { applyGame, careerBatter, finishBattle, hofEntry, spUses, type Career, type GameIn, type GameSummary, type HofEntry, type TurnOut } from "@/lib/baseball/career";
+import { CHARS, type CharId } from "@/lib/baseball/data";
 import { botHook, careerSetup, playCareerGame, type CareerSetup, type MyPA } from "@/lib/baseball/careerGame";
 import { makeRng } from "@/lib/baseball/rng";
 
-const KEY = "pxb:career:v2";
+const KEY = "pxb:career:v3";
 const HOF = "pxb:hof:v1";
 
 export function loadCareer(): Career | null {
   try {
     const c = JSON.parse(localStorage.getItem(KEY) ?? "null");
-    return c && c.v === 2 ? (c as Career) : null;
+    return c && c.v === 3 ? (c as Career) : null;
   } catch {
     return null;
   }
@@ -33,7 +34,10 @@ export function loadHof(): HofEntry[] {
   }
 }
 export function addHof(c: Career) {
-  const list = loadHof().filter((e) => e.id !== c.id);
+  const all = loadHof();
+  // 인연 레벨 (판을 넘어 쌓임): 처음 명예의 전당에 오를 때 덱 사람들 호감만큼
+  if (!all.some((e) => e.id === c.id)) addBondXp(c);
+  const list = all.filter((e) => e.id !== c.id);
   list.push(hofEntry(c));
   list.sort((a, b) => b.ovr - a.ovr);
   try {
@@ -113,4 +117,47 @@ export function finishDirect(g: GameIn, pas: MyPA[], score: string) {
   const sum = applyGame(c, g);
   saveCareer(c);
   lastReport = { sum, pas, score, auto: false };
+}
+
+/* ─────────────── 인연 레벨 (판을 넘어 쌓임) ─────────────── */
+const BXP = "pxb:bondxp:v1";
+/** 레벨당 필요 경험치 · 최대 레벨 · 레벨당 시작 호감 */
+export const BOND_LV = { per: 120, max: 6, aff: 5 } as const;
+export function loadBondXp(): Partial<Record<CharId, number>> {
+  try {
+    const v = JSON.parse(localStorage.getItem(BXP) ?? "{}");
+    return v && typeof v === "object" ? v : {};
+  } catch {
+    return {};
+  }
+}
+export const bondLevel = (xp: number) => Math.min(BOND_LV.max, Math.floor(xp / BOND_LV.per));
+function addBondXp(c: Career) {
+  const x = loadBondXp();
+  for (const id of c.deck) x[id] = (x[id] ?? 0) + (c.aff[id] ?? 0) + (c.bonds[id] ?? 0) * 5;
+  try {
+    localStorage.setItem(BXP, JSON.stringify(x));
+  } catch {}
+}
+/** 새 선수 시작 호감 (인연 레벨 × 5) */
+export function affStart(): Partial<Record<CharId, number>> {
+  const x = loadBondXp();
+  const out: Partial<Record<CharId, number>> = {};
+  for (const ch of CHARS) out[ch.id] = bondLevel(x[ch.id] ?? 0) * BOND_LV.aff;
+  return out;
+}
+
+/* ─────────────── 인연 대결 (직접) ─────────────── */
+let lastBattle: TurnOut | null = null;
+export const takeBattle = () => {
+  const r = lastBattle;
+  lastBattle = null;
+  return r;
+};
+/** 직접 친 인연 대결 반영 */
+export function finishBond(pts: number) {
+  const c = loadCareer();
+  if (!c || !c.battle) return;
+  lastBattle = finishBattle(c, pts);
+  saveCareer(c);
 }

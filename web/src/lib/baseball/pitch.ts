@@ -193,6 +193,10 @@ function applySpecial(p: Pitch, id: CharId, s: number, rng: Rng) {
       p.kmh = 151;
       p.tl = timeline([{ du: 1, kmh: 151 }], s);
       break;
+    case "mei":
+      p.kmh = 168;
+      p.tl = timeline([{ du: 0.62, kmh: 128, tag: "split" }, { hold: 0.12, tag: "merge" }, { du: 0.38, kmh: 168 }], s);
+      break;
     case "forte":
       p.kmh = 165;
       p.tl = timeline(
@@ -325,6 +329,20 @@ export function pitchAt(p: Pitch, t: number): BallView {
       v.vis = clamp(1 - hide + flick * hide, 0, 1);
       v.tag = "buffer";
       v.tagK = clamp(u / 0.97, 0, 1);
+      break;
+    }
+    case "mei": {
+      // 만두 셋이 공 둘레를 빙글빙글 (진짜도 같이 돎) → 합쳐지며 김 퐁 → 곧장 들어옴
+      if (s.tag === "split") {
+        const open = smooth(0.04, 0.2, u) * (1 - smooth(0.5, 0.62, u));
+        const r = 0.42 * open;
+        const a0 = t * 9 + p.seed * 6;
+        const pos = (k: number) => ({ x: Math.cos(a0 + (k * Math.PI * 2) / 3) * r, y: Math.sin(a0 + (k * Math.PI * 2) / 3) * r * 0.8 });
+        const real = pos(0);
+        v.ghosts = [1, 2].map((k) => ({ x: v.x + pos(k).x, y: v.y + pos(k).y, z: v.z, a: 1 }));
+        v.x += real.x;
+        v.y += real.y;
+      }
       break;
     }
     case "forte":

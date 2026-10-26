@@ -9,7 +9,7 @@
  */
 import { cpuGauge, cpuPlan, cpuSwing, cpuUseSpecial, SPEED_SCALE, type Diff } from "@/lib/baseball/ai";
 import { timingLabel, timingWindow } from "@/lib/baseball/contact";
-import { BP_PITCHER, CHARS, TEAM_DEFS, charById, cutinUrl, faceUrl, makeTeam, swingOf, type CharId, type Pitcher } from "@/lib/baseball/data";
+import { BP_PITCHER, CHARS, TEAM_DEFS, charById, cutinUrl, faceUrl, makeTeam, swingOf, type Batter, type CharId, type Pitcher } from "@/lib/baseball/data";
 import { advanceToMyPA, botHook, mySide, newCareerGame, slotName, type CareerSetup, type MyPA } from "@/lib/baseball/careerGame";
 import {
   BAT_BUNT, BAT_IDLE, BAT_LOAD, BAT_SWING, BATS, BATTER_RIG, HAIR, HELMETS, PIT_IDLE, PIT_THROW, PITCH_RELEASE_T, PITCHER_RIG,
@@ -45,6 +45,11 @@ export interface MatchCfg {
   highlight?: boolean;
   /** 배속 — 투구 · 스윙 타이밍은 그대로, 결과 · 수비 · 공수 교대 같은 기다림만 빨라짐 */
   speed?: number;
+  /**
+   * 인연 대결 (mode "derby" 로 돌림): 그 캐릭터가 공 N개를 던지고 내 육성 선수가 침.
+   * 안타 1점 · 홈런 2점, need 점이면 승리. magic = 마구를 던지는 공 순서 (0부터). 볼(안 친 것)은 다시 던짐.
+   */
+  bond?: { char: CharId; pitches: number; need: number; magic: readonly number[]; batter: Batter; title: string };
   seed?: number;
 }
 
@@ -71,7 +76,7 @@ export interface UiState {
   bullpen: { idx: number; name: string; role: string; hero: boolean; used: boolean; cur: boolean }[];
   fieldPlaying: boolean;
   fast: boolean;
-  over: null | { win: boolean | null; score: [number, number]; mvp: string; pt: number; derby?: { dist: number; hr: number; best: number } };
+  over: null | { win: boolean | null; score: [number, number]; mvp: string; pt: number; derby?: { dist: number; hr: number; best: number }; bond?: { pts: number; need: number } };
   paused: boolean;
   /** 배속 (경기 안에서도 바꿈) */
   speed: number;
@@ -219,6 +224,8 @@ export class Match {
   private rbiBefore = 0;
 
   derby = { outs: 0, dist: 0, hr: 0, nextBoss: 500, boss: null as CharId | null, bossLeft: 0, longest: 0 };
+  /** 인연 대결: 던진 공 · 점수 · 볼 수 · 공마다 결과 */
+  bondSt = { idx: 0, pts: 0, balls: 0, marks: [] as ("hit" | "hr" | "out" | null)[] };
 
   constructor(cfg: MatchCfg, onUi: (u: UiState) => void) {
     this.cfg = cfg;
@@ -234,7 +241,13 @@ export class Match {
     const cpuPit = this.rng.pick(left.filter((c) => c.id !== cpuBat)).id;
     let myTeam = makeTeam(mine, this.rng, { bat: cfg.myBat, pit: cfg.myPit });
     const cpuTeam = makeTeam(cpuDef, this.rng, { bat: cpuBat, pit: cpuPit });
-    if (cfg.mode === "derby") {
+    if (cfg.bond) {
+      const b = cfg.bond.batter;
+      myTeam = { ...myTeam, batters: myTeam.batters.map(() => ({ ...b })) };
+      this.derby.boss = cfg.bond.char;
+      this.derby.bossLeft = 999;
+      this.bondSt.marks = Array.from({ length: cfg.bond.pitches }, () => null);
+    } else if (cfg.mode === "derby") {
       const ch = charById(cfg.derbyChar ?? cfg.myBat);
       myTeam = { ...myTeam, batters: myTeam.batters.map(() => ({ name: ch.name, num: 1, pos: "마", bats: ch.bats, ...ch.bat, special: ch.id })) };
     }
@@ -248,13 +261,15 @@ export class Match {
     if (cfg.mode === "derby") {
       this.s.top = false;
       this.s.line[1][0] = 0;
+      // 인연 대결: 필살타법은 한 번
+      if (cfg.bond) this.s.sides[1].swingLeft = cfg.bond.batter.learned ? 1 : 0;
     }
     this.batSkin = baseSkin();
     this.pitSkin = baseSkin();
     this.ui = this.makeUi();
     this.setBanner(
-      cfg.mode === "derby" ? "HOME RUN DERBY" : "PLAY BALL!",
-      cfg.mode === "derby" ? "아웃 10개까지 · 비거리 합" : cfg.career ? `${slotName(cfg.career.myIdx)} 타자로 출전 · 내 타석만 직접 쳐요` : `${this.s.opts.away.name} vs ${this.s.opts.home.name}`,
+      cfg.bond ? cfg.bond.title : cfg.mode === "derby" ? "HOME RUN DERBY" : "PLAY BALL!",
+      cfg.bond ? `${charById(cfg.bond.char).name}의 공 ${cfg.bond.pitches}개 · ${cfg.bond.need}점이면 승리 (안타 1 · 홈런 2)` : cfg.mode === "derby" ? "아웃 10개까지 · 비거리 합" : cfg.career ? `${slotName(cfg.career.myIdx)} 타자로 출전 · 내 타석만 직접 쳐요` : `${this.s.opts.away.name} vs ${this.s.opts.home.name}`,
       "#ffcf4a",
       1.6,
       true
@@ -303,7 +318,7 @@ export class Match {
       bunt: this.buntArmed,
       spArmed: ub ? this.spArmed : this.useBallSp,
       spHero: hero && (this.cfg.mode !== "derby" || ub),
-      spLeft: this.cfg.mode === "derby" ? (ub ? 99 : 0) : ub ? us.swingLeft : us.ballLeft,
+      spLeft: this.cfg.bond ? (ub ? us.swingLeft : 0) : this.cfg.mode === "derby" ? (ub ? 99 : 0) : ub ? us.swingLeft : us.ballLeft,
       spName: sp ? (ub ? sp.swing.name : sp.ball.name) : "",
       kinds: p.rep.map((k) => ({ id: k, name: PITCHES[k].name })),
       kind: this.kindIdx,
@@ -459,7 +474,8 @@ export class Match {
       this.quality = cpuGauge(this.cfg.diff, this.rng);
       const fsd = this.s.sides[fieldSide(this.s)];
       const risp = this.s.bases[1] !== null || this.s.bases[2] !== null;
-      if (this.cfg.mode === "derby") this.cpuUseSp = !!this.derby.boss;
+      if (this.cfg.bond) this.cpuUseSp = this.cfg.bond.magic.includes(this.bondSt.idx);
+      else if (this.cfg.mode === "derby") this.cpuUseSp = !!this.derby.boss;
       else this.cpuUseSp = !!p.special && cpuUseSpecial(fsd.ballLeft, this.s.inning, this.s.strikes, risp, this.rng);
       if (this.cpuUseSp && this.cfg.mode !== "derby") fsd.ballLeft--;
       if (this.cfg.mode === "derby" && !this.derby.boss) {
@@ -570,9 +586,10 @@ export class Match {
       const sw = swingOf(b);
       if (!sw || this.phase !== "ready") return;
       if (this.spArmed) return;
-      if (this.cfg.mode !== "derby" && us.swingLeft <= 0) return;
+      const counted = this.cfg.mode !== "derby" || !!this.cfg.bond;
+      if (counted && us.swingLeft <= 0) return;
       this.spArmed = true;
-      if (this.cfg.mode !== "derby") us.swingLeft--;
+      if (counted) us.swingLeft--;
       const c = charById(sw);
       this.showCutin(c.id, c.swing.name, c.swing.desc, "bat");
       this.afterCutin = "ready";
@@ -745,6 +762,9 @@ export class Match {
       case "forte":
         sfx.tick();
         break;
+      case "mei":
+        sfx.wind();
+        break;
       default:
         sfx.ui();
     }
@@ -781,7 +801,44 @@ export class Match {
     this.finishPitch();
   }
 
+  /** 인연 대결 한 구 */
+  private bondResolve(o: Outcome) {
+    const B = this.cfg.bond!;
+    const st = this.bondSt;
+    const name = charById(B.char).name;
+    let text = "";
+    let color = "#fff";
+    if (o.call === "ball" && st.balls < 3) {
+      st.balls++;
+      text = "볼 — 다시 던진다";
+      color = "#7ad7ff";
+    } else {
+      let mark: "hit" | "hr" | "out" = "out";
+      if (o.call === "bip" && o.field?.hr) {
+        mark = "hr";
+        st.pts += 2;
+        text = "홈런! +2";
+        color = "#ffd23f";
+      } else if (o.call === "bip" && !o.bad) {
+        mark = "hit";
+        st.pts += 1;
+        text = "안타! +1";
+        color = "#7dff9a";
+      } else text = o.call === "bip" ? "잡혔다" : o.call === "foul" ? "파울" : o.call === "swingMiss" ? "헛스윙" : o.call === "ball" ? "볼" : "스트라이크";
+      st.marks[st.idx] = mark;
+      st.idx++;
+    }
+    const left = B.pitches - st.idx;
+    const won = st.pts >= B.need;
+    const lost = !won && st.pts + left * 2 < B.need;
+    this.setBanner(text, won ? `${name}에게 이겼다!` : lost ? "…졌다" : `${st.pts}/${B.need}점 · 남은 공 ${left}`, color, 1.3, true);
+    if (o.call === "bip" && o.field?.hr) sfx.cheer(0.8);
+    this.setPhase("result");
+    this.pending = won || lost || left <= 0 ? { kind: "OUT", text, runs: 0, halfOver: true, gameOver: true } : null;
+  }
+
   private derbyResolve(o: Outcome) {
+    if (this.cfg.bond) return this.bondResolve(o);
     const d = this.derby;
     let out = false;
     let text = "";
@@ -866,6 +923,12 @@ export class Match {
     if (this.phase === "over") return;
     this.setPhase("over");
     const s = this.s;
+    if (this.cfg.bond) {
+      const st = this.bondSt;
+      this.ui = { ...this.makeUi(), over: { win: st.pts >= this.cfg.bond.need, score: [0, 0], mvp: "", pt: 0, bond: { pts: st.pts, need: this.cfg.bond.need } } };
+      this.onUi(this.ui);
+      return;
+    }
     if (this.cfg.mode === "derby") {
       const d = this.derby;
       const pt = Math.round(d.dist / 20);
@@ -1376,7 +1439,8 @@ export class Match {
       for (const gh of v.ghosts) {
         const a = toScreen(gh.x, gh.y, gh.z, v.u);
         ctx.globalAlpha = gh.a;
-        this.drawFireBall(ctx, a.x, a.y, Math.max(6, 0.08 * a.s), false);
+        if (sp === "mei") this.drawBun(ctx, a.x, a.y, Math.max(6, 0.075 * a.s));
+        else this.drawFireBall(ctx, a.x, a.y, Math.max(6, 0.08 * a.s), false);
       }
       ctx.globalAlpha = 1;
     }
@@ -1407,6 +1471,21 @@ export class Match {
     switch (sp) {
       case "igna":
         this.drawFireBall(ctx, b.x, b.y, r * 1.6, true);
+        break;
+      case "mei":
+        if (v.tag === "split") this.drawBun(ctx, b.x, b.y, Math.max(6, 0.075 * b.s));
+        else this.drawBall(ctx, b.x, b.y, r);
+        if (v.tag === "merge") {
+          // 합쳐지며 김 퐁 (치는 신호)
+          const k = v.tagK ?? 0;
+          ctx.fillStyle = `rgba(255,255,255,${0.75 * (1 - k)})`;
+          for (let i = 0; i < 6; i++) {
+            const a = (i / 6) * Math.PI * 2 + this.time * 3;
+            ctx.beginPath();
+            ctx.arc(b.x + Math.cos(a) * r * (1.5 + k * 3), b.y + Math.sin(a) * r * (1.2 + k * 2) - k * 10, r * (0.8 + k), 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
         break;
       case "lily": {
         const bub = v.tag === "bubble";
@@ -1517,6 +1596,35 @@ export class Match {
       ctx.arc(x + r * 1.1, y, r * 0.8, Math.PI - 0.8, Math.PI + 0.8);
       ctx.stroke();
     }
+  }
+
+  /** 메이: 만두 (분신) */
+  private drawBun(ctx: CanvasRenderingContext2D, x: number, y: number, r: number) {
+    ctx.fillStyle = "#fff8ea";
+    ctx.strokeStyle = "rgba(60,40,20,0.85)";
+    ctx.lineWidth = Math.max(1.5, r * 0.16);
+    ctx.beginPath();
+    ctx.ellipse(x, y + r * 0.15, r * 1.25, r * 0.95, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    // 주름
+    ctx.strokeStyle = "rgba(150,110,70,0.9)";
+    ctx.lineWidth = Math.max(1, r * 0.1);
+    for (let i = -2; i <= 2; i++) {
+      ctx.beginPath();
+      ctx.moveTo(x + i * r * 0.18, y - r * 0.55);
+      ctx.quadraticCurveTo(x + i * r * 0.35, y - r * 0.1, x + i * r * 0.5, y + r * 0.2);
+      ctx.stroke();
+    }
+    // 김
+    ctx.strokeStyle = "rgba(255,255,255,0.7)";
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(x - r * 0.3, y - r * 1.1);
+    ctx.quadraticCurveTo(x - r * 0.6, y - r * 1.6, x - r * 0.2, y - r * 2.1);
+    ctx.moveTo(x + r * 0.3, y - r * 1.1);
+    ctx.quadraticCurveTo(x, y - r * 1.6, x + r * 0.4, y - r * 2.1);
+    ctx.stroke();
   }
 
   private drawFireBall(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, real: boolean) {
@@ -1784,6 +1892,49 @@ export class Match {
   private drawHud(ctx: CanvasRenderingContext2D) {
     const s = this.s;
     ctx.textAlign = "left";
+    if (this.cfg.bond) {
+      const B = this.cfg.bond;
+      const ch = charById(B.char);
+      const st = this.bondSt;
+      this.panel(ctx, 12, 12, 270, 70);
+      ctx.fillStyle = ch.color;
+      ctx.font = '18px "Black Han Sans", sans-serif';
+      ctx.fillText(B.title, 24, 38);
+      ctx.fillStyle = "#fff";
+      ctx.font = '700 15px "JetBrains Mono", monospace';
+      ctx.fillText(`${st.pts} / ${B.need}점`, 24, 64);
+      // 공 N칸 (마구는 테두리)
+      const w = 30;
+      this.panel(ctx, DW - 20 - B.pitches * w - 16, 12, B.pitches * w + 16, 46);
+      for (let i = 0; i < B.pitches; i++) {
+        const x = DW - 20 - B.pitches * w + i * w + 7;
+        const m = st.marks[i];
+        ctx.fillStyle = m === "hr" ? "#ffd23f" : m === "hit" ? "#7dff9a" : m === "out" ? "#ff4d6d" : "rgba(255,255,255,0.18)";
+        ctx.beginPath();
+        ctx.arc(x, 35, 9, 0, Math.PI * 2);
+        ctx.fill();
+        if (B.magic.includes(i)) {
+          ctx.strokeStyle = ch.color;
+          ctx.lineWidth = 2.5;
+          ctx.stroke();
+        }
+        if (i === st.idx && !m) {
+          ctx.strokeStyle = "#fff";
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          ctx.arc(x, 35, 12.5, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+      }
+      if (B.magic.includes(st.idx)) {
+        this.panel(ctx, DW - 262, 64, 250, 40);
+        ctx.fillStyle = ch.color;
+        ctx.font = '16px "Black Han Sans", sans-serif';
+        ctx.fillText(`다음 공: 마구 「${ch.ball.name}」`, DW - 248, 90);
+      }
+      this.batterCard(ctx);
+      return;
+    }
     if (this.cfg.mode === "derby") {
       const d = this.derby;
       this.panel(ctx, 12, 12, 250, 70);

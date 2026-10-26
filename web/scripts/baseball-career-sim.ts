@@ -7,7 +7,7 @@
  *   같은 시드 · 같은 성향으로 GP 부스트 0 vs 전부 를 비교해서 GP 몫(≤ 30%) 확인
  */
 import {
-  act, advance, applyGame, botTurn, botPick, botShop, canPlay, careerBatter, choose, choosePick, decideRetire, endSeason, newCareer, ovrOf, spUses, stepOf,
+  act, advance, applyGame, autoBattle, botChoose, botDeck, botTurn, botPick, botShop, canPlay, careerBatter, choose, choosePick, decideRetire, endSeason, finishBattle, newCareer, ovrOf, spUses, stepOf,
   TALENTS, GP_IDS, TUNE, type BatType, type Career, type GpId, type Policy,
 } from "../src/lib/baseball/career";
 import { botHook, careerSetup, humanHook, playCareerGame } from "../src/lib/baseball/careerGame";
@@ -24,9 +24,11 @@ const NSK = Number(process.argv[5] ?? Math.min(N, 40));
 const TYPES: BatType[] = ["contact", "power", "speed", "defense", "all"];
 type Mode = "direct" | "highlight" | "auto";
 
-interface Persona {
+export interface Persona {
   pol: Policy;
   sigma: number;
+  /** 미연시에서 그 사람다운 답 고를 확률 */
+  insight: number;
   type: BatType;
   mode: Mode;
 }
@@ -44,6 +46,7 @@ function persona(i: number): Persona {
       retireAt: r() < 0.6 ? 10 : 7 + Math.floor(r() * 3),
     },
     sigma: (30 + r() * 80) / 1000,
+    insight: 0.15 + r() * 0.7,
     type: TYPES[i % TYPES.length],
     mode: m < 0.2 ? "direct" : m < 0.8 ? "highlight" : "auto",
   };
@@ -51,7 +54,7 @@ function persona(i: number): Persona {
 
 export function run(i: number, gp: GpId[], over: Partial<Persona> = {}) {
   const ps = { ...persona(i), ...over };
-  const c: Career = newCareer({ name: `봇${i}`, num: 10, bats: i % 3 ? "R" : "L", type: ps.type, diff, gp, seed: 777 + i * 1013 });
+  const c: Career = newCareer({ name: `봇${i}`, num: 10, bats: i % 3 ? "R" : "L", type: ps.type, diff, gp, seed: 777 + i * 1013, deck: botDeck(ps.type, makeRng(55 + i)) });
   const rng = makeRng(31337 + i * 7);
   const talent0 = c.talent;
   let injuries = 0;
@@ -62,7 +65,8 @@ export function run(i: number, gp: GpId[], over: Partial<Persona> = {}) {
     const m0 = c.money;
     if (ps.pol.shop) botShop(c);
     spent += Math.max(0, m0 - c.money);
-    if (st === "pending") choose(c, rng() < ps.pol.bold ? 0 : 1);
+    if (st === "pending") choose(c, c.pending?.scene ? botChoose(c, rng, ps.insight) : rng() < ps.pol.bold ? 0 : 1);
+    else if (st === "battle") finishBattle(c, autoBattle(c, rng, ps.sigma), true);
     else if (st === "pick") choosePick(c, botPick(c, rng));
     else if (st === "retireAsk") decideRetire(c, c.season >= ps.pol.retireAt);
     else if (st === "turn") {
@@ -89,61 +93,113 @@ export function run(i: number, gp: GpId[], over: Partial<Persona> = {}) {
 }
 
 const pct = (arr: number[], p: number) => arr[Math.min(arr.length - 1, Math.floor(p * arr.length))];
-const t0 = Date.now();
-const base: ReturnType<typeof run>[] = [];
-for (let i = 0; i < N; i++) base.push(run(i, []));
-const o0 = base.map((r) => r.ovr).sort((a, b) => a - b);
-console.log(`${N}명 · 난이도 ${diff} · ${((Date.now() - t0) / 1000).toFixed(0)}초`);
-console.log("백분위      p3   p10   p25   p50   p75   p90   p97   p99  max");
-const row = (name: string, a: number[]) =>
-  console.log(name.padEnd(10), [0.03, 0.1, 0.25, 0.5, 0.75, 0.9, 0.97, 0.99].map((p) => String(pct(a, p)).padStart(5)).join(" "), String(a[a.length - 1]).padStart(4));
-row("전체", o0);
-console.log(`800+ ${(o0.filter((v) => v >= 800).length / N * 100).toFixed(1)}%  900+ ${(o0.filter((v) => v >= 900).length / N * 100).toFixed(2)}%  ≤200 ${(o0.filter((v) => v <= 200).length / N * 100).toFixed(1)}%`);
-const by = <K extends string | number>(key: (r: ReturnType<typeof run>) => K) => {
-  const m = new Map<K, number[]>();
-  for (const r of base) m.set(key(r), [...(m.get(key(r)) ?? []), r.ovr]);
-  return [...m.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1)).map(([k, v]) => `${k}:${Math.round(v.reduce((a, b) => a + b, 0) / v.length)}(${v.length})`).join("  ");
-};
-console.log("재능별 평균", by((r) => TALENTS[r.talent0].g));
-console.log("경기 방식", by((r) => r.mode));
-console.log("체력관리별", by((r) => (r.pol.restBelow < 30 ? "a무리" : r.pol.restBelow < 45 ? "b보통" : "c신중")));
-console.log("은퇴 연차", by((r) => r.c.seasons.length));
-console.log("각성", by((r) => (r.c.awakened ? "O" : "X")));
-console.log("부상횟수", by((r) => Math.min(r.injuries, 6)));
-console.log("타입", by((r) => r.c.type));
-console.log("세트 수", by((r) => r.c.skills.filter((s) => s.startsWith("set_")).length));
-const avgOf = (f: (c: Career) => number) => (base.reduce((a, r) => a + f(r.c), 0) / N).toFixed(1);
-console.log(`평균 스탯 hit ${avgOf((c) => c.stats.hit)} pow ${avgOf((c) => c.stats.power)} run ${avgOf((c) => c.stats.run)} def ${avgOf((c) => c.stats.def)} · 특수능력 ${avgOf((c) => c.skills.length)} · 필살 ${avgOf((c) => (c.learned ? 1 : 0))} · 인기도 ${avgOf((c) => c.fame)}`);
-console.log(`통산 평균 타율 ${(base.reduce((a, r) => a + r.c.total.h / Math.max(1, r.c.total.ab), 0) / N).toFixed(3)}  HR ${avgOf((c) => c.total.hr)}  경기 ${avgOf((c) => c.total.g)}  신뢰 ${avgOf((c) => c.trust)}`);
-console.log(`자금: 쓴 돈 ${(base.reduce((a, r) => a + r.spent, 0) / N).toFixed(0)} · 남은 돈 ${avgOf((c) => c.money)} · 장비 단계 합 ${avgOf((c) => Object.values(c.gear).reduce((a, b) => a + (b ?? 0), 0))}`);
 
-// GP: 같은 선수 GP 0 vs 전부
-{
-  const a: number[] = [];
-  const b: number[] = [];
-  let share = 0;
-  for (let i = 0; i < NGP; i++) {
-    const x = base[i].ovr;
-    const y = run(i, [...GP_IDS]).ovr;
-    a.push(x);
-    b.push(y);
-    share += Math.max(0, y - x) / Math.max(1, y);
-  }
-  a.sort((p, q) => p - q);
-  b.sort((p, q) => p - q);
-  console.log(`GP (같은 선수 ${NGP}명): 백분위 p10 p50 p90 비율 ${[0.1, 0.5, 0.9].map((p) => (pct(b, p) / pct(a, p)).toFixed(2)).join(" ")} · GP 몫 평균 ${(share / NGP * 100).toFixed(1)}%`);
+/**
+ * 실력 · 운 · GP 몫 (SHARE=1): 실력 단계 K개 × 시드 M개를 다 돌려서 2원 분산분해.
+ *   실력 u (0 ~ 1) = 타이밍 σ 110 → 30ms · 체력 관리 · 몰빵 · 외출 · 미연시 눈치 · 상점 · 경기 방식(직접)
+ *   운 = 시드 (숨은 재능 · 대성공 · 부상 · 각성 · 고르기 패 · 지도)
+ *   GP = 전부 산 것 vs 안 산 것 평균 차이 / 종합
+ */
+function skilled(u: number): Partial<Persona> {
+  return {
+    sigma: (110 - 80 * u) / 1000,
+    insight: 0.1 + 0.8 * u,
+    pol: { restBelow: 22 + 22 * u, outing: 0.25 + 0.6 * u, focus: 0.35 + 0.5 * u, shop: u > 0.2, bold: 0.5, retireAt: 10 },
+    mode: "direct",
+  };
 }
-// 실력: 같은 선수 · 같은 선택, 직접 출전 타이밍만 다르게
-{
-  let a = 0, b = 0, au = 0;
-  for (let i = 0; i < NSK; i++) {
-    a += run(i, [], { sigma: 0.035, mode: "direct" }).ovr;
-    b += run(i, [], { sigma: 0.1, mode: "direct" }).ovr;
-    au += run(i, [], { mode: "auto" }).ovr;
+function share() {
+  const K = Number(process.env.K ?? 5);
+  const M = Number(process.env.M ?? 40);
+  const grid: number[][] = [];
+  for (let k = 0; k < K; k++) {
+    const row: number[] = [];
+    for (let m = 0; m < M; m++) row.push(run(m, [], skilled(k / (K - 1))).ovr);
+    grid.push(row);
+    console.log(`실력 ${(k / (K - 1)).toFixed(2)}: 평균 ${Math.round(row.reduce((a, b) => a + b, 0) / M)} · p10 ${[...row].sort((a, b) => a - b)[Math.floor(M * 0.1)]} · p90 ${[...row].sort((a, b) => a - b)[Math.floor(M * 0.9)]}`);
   }
-  console.log(`실력 (같은 선수 ${NSK}명 · 직접): σ35ms ${Math.round(a / NSK)} vs σ100ms ${Math.round(b / NSK)} · 자동만 ${Math.round(au / NSK)}`);
+  const all = grid.flat();
+  const mean = all.reduce((a, b) => a + b, 0) / all.length;
+  const rowM = grid.map((r) => r.reduce((a, b) => a + b, 0) / M);
+  const colM = Array.from({ length: M }, (_, m) => grid.reduce((a, r) => a + r[m], 0) / K);
+  const vS = rowM.reduce((a, v) => a + (v - mean) ** 2, 0) / K;
+  const vL = colM.reduce((a, v) => a + (v - mean) ** 2, 0) / M;
+  const vT = all.reduce((a, v) => a + (v - mean) ** 2, 0) / all.length;
+  // GP: 중간 실력에서 같은 시드로
+  let g0 = 0, g1 = 0;
+  const NG = Math.min(M, 30);
+  for (let m = 0; m < NG; m++) {
+    g0 += run(m, [], skilled(0.5)).ovr;
+    g1 += run(m, [...GP_IDS], skilled(0.5)).ovr;
+  }
+  const gpGain = (g1 - g0) / NG;
+  // 몫: 표준편차 기준 (실력 폭 · 운 폭 · GP 차이) — 체감은 「얼마나 흔들리나」라서 σ 로 비교
+  const sS = Math.sqrt(vS) * 2, sL = Math.sqrt(vL) * 2, sG = gpGain;
+  const tot = sS + sL + Math.max(0, sG);
+  console.log(`분산: 실력 ${(vS / vT * 100).toFixed(0)}% · 운 ${(vL / vT * 100).toFixed(0)}% · 상호작용 ${((1 - (vS + vL) / vT) * 100).toFixed(0)}%`);
+  console.log(`폭(2σ): 실력 ${sS.toFixed(0)} · 운 ${sL.toFixed(0)} · GP +${sG.toFixed(0)} → 몫 실력 ${(sS / tot * 100).toFixed(0)} / 운 ${(sL / tot * 100).toFixed(0)} / GP ${(sG / tot * 100).toFixed(0)}`);
 }
-{
-  const cuts = [950, 900, 850, 800, 750, 700, 650, 600, 550, 500, 450, 400, 350, 300, 250, 200, 150];
-  console.log("PCT_TABLE", cuts.map((v) => `[${v}, ${+(o0.filter((x) => x >= v).length / N).toFixed(4)}]`).join(", "));
+if (process.env.SHARE) share();
+else main();
+
+function main() {
+  const t0 = Date.now();
+  const base: ReturnType<typeof run>[] = [];
+  for (let i = 0; i < N; i++) base.push(run(i, []));
+  const o0 = base.map((r) => r.ovr).sort((a, b) => a - b);
+  console.log(`${N}명 · 난이도 ${diff} · ${((Date.now() - t0) / 1000).toFixed(0)}초`);
+  console.log("백분위      p3   p10   p25   p50   p75   p90   p97   p99  max");
+  const row = (name: string, a: number[]) =>
+    console.log(name.padEnd(10), [0.03, 0.1, 0.25, 0.5, 0.75, 0.9, 0.97, 0.99].map((p) => String(pct(a, p)).padStart(5)).join(" "), String(a[a.length - 1]).padStart(4));
+  row("전체", o0);
+  console.log(`800+ ${(o0.filter((v) => v >= 800).length / N * 100).toFixed(1)}%  900+ ${(o0.filter((v) => v >= 900).length / N * 100).toFixed(2)}%  ≤200 ${(o0.filter((v) => v <= 200).length / N * 100).toFixed(1)}%`);
+  const by = <K extends string | number>(key: (r: ReturnType<typeof run>) => K) => {
+    const m = new Map<K, number[]>();
+    for (const r of base) m.set(key(r), [...(m.get(key(r)) ?? []), r.ovr]);
+    return [...m.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1)).map(([k, v]) => `${k}:${Math.round(v.reduce((a, b) => a + b, 0) / v.length)}(${v.length})`).join("  ");
+  };
+  console.log("재능별 평균", by((r) => TALENTS[r.talent0].g));
+  console.log("경기 방식", by((r) => r.mode));
+  console.log("체력관리별", by((r) => (r.pol.restBelow < 30 ? "a무리" : r.pol.restBelow < 45 ? "b보통" : "c신중")));
+  console.log("은퇴 연차", by((r) => r.c.seasons.length));
+  console.log("각성", by((r) => (r.c.awakened ? "O" : "X")));
+  console.log("부상횟수", by((r) => Math.min(r.injuries, 6)));
+  console.log("타입", by((r) => r.c.type));
+  console.log("세트 수", by((r) => r.c.skills.filter((s) => s.startsWith("set_")).length));
+  const avgOf = (f: (c: Career) => number) => (base.reduce((a, r) => a + f(r.c), 0) / N).toFixed(1);
+  console.log(`평균 스탯 hit ${avgOf((c) => c.stats.hit)} pow ${avgOf((c) => c.stats.power)} run ${avgOf((c) => c.stats.run)} def ${avgOf((c) => c.stats.def)} · 특수능력 ${avgOf((c) => c.skills.length)} · 필살 ${avgOf((c) => (c.learned ? 1 : 0))} · 인기도 ${avgOf((c) => c.fame)}`);
+  console.log(`통산 평균 타율 ${(base.reduce((a, r) => a + r.c.total.h / Math.max(1, r.c.total.ab), 0) / N).toFixed(3)}  HR ${avgOf((c) => c.total.hr)}  경기 ${avgOf((c) => c.total.g)}  신뢰 ${avgOf((c) => c.trust)}`);
+  console.log(`자금: 쓴 돈 ${(base.reduce((a, r) => a + r.spent, 0) / N).toFixed(0)} · 남은 돈 ${avgOf((c) => c.money)} · 장비 단계 합 ${avgOf((c) => Object.values(c.gear).reduce((a, b) => a + (b ?? 0), 0))}`);
+
+  // GP: 같은 선수 GP 0 vs 전부
+  {
+    const a: number[] = [];
+    const b: number[] = [];
+    let share = 0;
+    for (let i = 0; i < NGP; i++) {
+      const x = base[i].ovr;
+      const y = run(i, [...GP_IDS]).ovr;
+      a.push(x);
+      b.push(y);
+      share += Math.max(0, y - x) / Math.max(1, y);
+    }
+    a.sort((p, q) => p - q);
+    b.sort((p, q) => p - q);
+    console.log(`GP (같은 선수 ${NGP}명): 백분위 p10 p50 p90 비율 ${[0.1, 0.5, 0.9].map((p) => (pct(b, p) / pct(a, p)).toFixed(2)).join(" ")} · GP 몫 평균 ${(share / NGP * 100).toFixed(1)}%`);
+  }
+  // 실력: 같은 선수 · 같은 선택, 직접 출전 타이밍만 다르게
+  {
+    let a = 0, b = 0, au = 0;
+    for (let i = 0; i < NSK; i++) {
+      a += run(i, [], { sigma: 0.035, mode: "direct" }).ovr;
+      b += run(i, [], { sigma: 0.1, mode: "direct" }).ovr;
+      au += run(i, [], { mode: "auto" }).ovr;
+    }
+    console.log(`실력 (같은 선수 ${NSK}명 · 직접): σ35ms ${Math.round(a / NSK)} vs σ100ms ${Math.round(b / NSK)} · 자동만 ${Math.round(au / NSK)}`);
+  }
+  {
+    const cuts = [950, 900, 850, 800, 750, 700, 650, 600, 550, 500, 450, 400, 350, 300, 250, 200, 150];
+    console.log("PCT_TABLE", cuts.map((v) => `[${v}, ${+(o0.filter((x) => x >= v).length / N).toFixed(4)}]`).join(", "));
+  }
+
 }

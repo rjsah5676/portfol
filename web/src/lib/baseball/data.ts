@@ -7,7 +7,7 @@
  */
 import type { PitchKind } from "./pitch";
 
-export type CharId = "kai" | "igna" | "soyoung" | "lily" | "zena" | "gunmo" | "ivan" | "forte";
+export type CharId = "kai" | "igna" | "soyoung" | "lily" | "zena" | "gunmo" | "ivan" | "forte" | "mei";
 
 export interface SpecialChar {
   id: CharId;
@@ -112,6 +112,17 @@ export const CHARS: SpecialChar[] = [
     throws: "L",
     bat: { hit: 840, power: 620, run: 800, def: 720 },
     pit: { control: 840, velo: 142, brk: 820, stamina: 320, rep: ["FB", "CB", "CH", "SL"] },
+  },
+  {
+    id: "mei",
+    name: "메이",
+    color: "#2FD6A0",
+    ball: { name: "만두 분신구", hint: "만두 셋이 빙글빙글 — 하나로 합쳐지며 김이 퐁! 피어오른 직후" },
+    swing: { name: "태극 스윙", desc: "S자로 휘는 라이너 — 수비 사이 빈틈으로 쏙" },
+    bats: "L",
+    throws: "R",
+    bat: { hit: 860, power: 640, run: 820, def: 840 },
+    pit: { control: 860, velo: 140, brk: 880, stamina: 330, rep: ["FB", "CB", "CH", "SL"] },
   },
 ];
 

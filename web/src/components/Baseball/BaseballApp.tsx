@@ -8,7 +8,7 @@ import { Match, loadSave, type MatchCfg, type Save, type UiState } from "./match
 import { isMuted, setMuted, sfx } from "./sfx";
 import { ACCENT, Btn, MenuBg, Modal, font } from "./ui";
 import CareerMode from "./Career";
-import { SPEEDS, finishDirect, loadSpeed, saveSpeed } from "./careerStore";
+import { SPEEDS, finishBond, finishDirect, loadSpeed, saveSpeed } from "./careerStore";
 
 /*
  * 픽셀 프로야구 — 메뉴 · 경기 화면(캔버스) · 조작 버튼.
@@ -67,9 +67,14 @@ export default function BaseballApp() {
         <Play
           key={run}
           cfg={cfg}
-          onExit={() => setScreen(cfg.career ? "career" : "title")}
+          onExit={() => setScreen(cfg.career || cfg.bond ? "career" : "title")}
           onAgain={() => start({ ...cfg, seed: undefined })}
           onCareerDone={(mm) => {
+            if (cfg.bond) {
+              finishBond(mm.bondSt.pts);
+              setScreen("career");
+              return;
+            }
             const s = mm.s;
             const me = s.opts.userHome ? 1 : 0;
             finishDirect(
@@ -587,7 +592,7 @@ function Play({ cfg, onExit, onAgain, onCareerDone }: { cfg: MatchCfg; onExit: (
               소리 {muted ? "켜기" : "끄기"}
             </Btn>
             <Btn className="py-2 text-sm" color="#ff7a7a" onClick={onExit}>
-              {cfg.career ? "나가기 (남은 경기는 자동 진행으로 반영)" : "메뉴로 나가기 (기록 안 남음)"}
+              {cfg.career ? "나가기 (남은 경기는 자동 진행으로 반영)" : cfg.bond ? "나가기 (다음에 다시 도전)" : "메뉴로 나가기 (기록 안 남음)"}
             </Btn>
           </div>
         </Modal>
@@ -595,7 +600,17 @@ function Play({ cfg, onExit, onAgain, onCareerDone }: { cfg: MatchCfg; onExit: (
 
       {ui?.over && (
         <Modal wide>
-          {ui.over.derby ? (
+          {ui.over.bond ? (
+            <>
+              <div className={`${font.title} text-[44px]`} style={{ color: ui.over.win ? "#ffd23f" : "#ff7a7a" }}>
+                {ui.over.win ? "승리!" : "아쉽다…"}
+              </div>
+              <div className="font-mono text-2xl">
+                {ui.over.bond.pts} / {ui.over.bond.need}점
+              </div>
+              <div className="mt-1 text-[14px] text-white/70">{ui.over.win ? "인연이 한 걸음 깊어졌다" : "다음에 만나면 다시 도전할 수 있어요"}</div>
+            </>
+          ) : ui.over.derby ? (
             <>
               <div className={`${font.title} text-[40px] text-[#ffd23f]`}>{ui.over.derby.dist.toLocaleString()}m</div>
               <div className="mt-1 text-white/70">
@@ -614,7 +629,7 @@ function Play({ cfg, onExit, onAgain, onCareerDone }: { cfg: MatchCfg; onExit: (
               {ui.over.mvp && <div className="mt-2 text-[14px] text-white/80">{cfg.career ? `오늘 내 기록 · ${ui.over.mvp}` : `MVP · ${ui.over.mvp}`}</div>}
             </>
           )}
-          {cfg.career ? (
+          {cfg.career || cfg.bond ? (
             <div className="mt-4 flex justify-center">
               <Btn className={`${font.title} px-10 py-3 text-xl`} onClick={() => m && onCareerDone(m)}>
                 육성 화면으로 (결과 반영)

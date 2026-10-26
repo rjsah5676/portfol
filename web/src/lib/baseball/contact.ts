@@ -116,6 +116,15 @@ export function swing(o: SwingIn, rng: Rng): SwingResult {
         spray = clamp(spray, -38, 38);
       }
       break;
+    case "mei": {
+      // 태극: 라이너로 휘어 수비 사이 빈틈으로
+      la = clamp(lerp(la, 13, 0.6), 5, 22);
+      const gaps = [-24, -9, 9, 24];
+      const g = gaps.reduce((a, b) => (Math.abs(b - spray) < Math.abs(a - spray) ? b : a));
+      spray = lerp(spray, g, 0.75) + rng.gauss() * 2;
+      ev += 3;
+      break;
+    }
     default:
       if (sp) ev += 2;
   }

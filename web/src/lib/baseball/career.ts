@@ -7,7 +7,8 @@
  *   외출 장소(번화가 · 공원 · 강변 · 도서관 · 방송국) — 이번 주에 나타난 픽셀파이트 캐릭터(❗)나 장소 이벤트만 만날 수 있음.
  * 로그라이크 양념: 특수능력은 3장 중 1장 고르기(시즌 끝 · S 평가 · 도서관 퀴즈) · 같은 태그 3장이면 세트 효과 · 양날 카드.
  *
- * 결과 분포(종합 0 ~ 999)는 넓게: 중앙값 ~500 · 하위 10% ~250 · 상위 3% 800+ (scripts/baseball-career-sim.ts 로 확인)
+ * 결과 분포(종합 0 ~ 999): 중앙값 ~550 · 하위 10% ~420 · 상위 5% 800+ (scripts/baseball-career-sim.ts 로 확인)
+ *   결과 몫(SHARE=1 시뮬): 실력 ~36 · 운 ~56 · GP ~8
  *   흔들림 세 갈래 — 운(숨은 재능 · 대성공 · 부상 · 각성 · 고르기 패) · 선택(훈련 몰빵 · 체력 관리 · 인연 · 상점 · 은퇴 시점) · 실력(직접 친 타석)
  * GP 부스트(판마다 고르는 것)는 같은 플레이 대비 종합 +30% 를 넘지 않게 (시뮬로 확인).
  *
@@ -15,9 +16,10 @@
  * 난수는 (시드, 턴 번호)로 정해서 새로고침해도 결과가 같음.
  */
 import type { Diff } from "./ai";
-import { CHARS, charById, type Batter, type CharId } from "./data";
+import { charById, type Batter, type CharId } from "./data";
 import type { BatLine } from "./game";
 import { clamp, makeRng, type Rng } from "./rng";
+import { BOND_IDS, BOONS, DUOS, EPILOGUE, ROLE, SPECIAL_DAY, STORY, isBond, type BondId, type Choice, type Role } from "./bonds";
 
 export type StatKey = "hit" | "power" | "run" | "def";
 export type Stats = Record<StatKey, number>;
@@ -37,12 +39,12 @@ export const TYPES: Record<BatType, { name: string; desc: string; pos: string; a
 
 /** 숨은 재능 — 1시즌 끝 스카우트 평가에서 공개. 성장 속도(mul) + 한계(limit, 가까울수록 덜 오름). SS 는 각성으로만 */
 export const TALENTS = [
-  { g: "F", w: 0.08, mul: 0.6, limit: 230 },
-  { g: "D", w: 0.17, mul: 0.75, limit: 380 },
-  { g: "C", w: 0.3, mul: 0.88, limit: 680 },
+  { g: "F", w: 0.08, mul: 0.78, limit: 480 },
+  { g: "D", w: 0.17, mul: 0.86, limit: 600 },
+  { g: "C", w: 0.3, mul: 0.93, limit: 720 },
   { g: "B", w: 0.27, mul: 1.0, limit: 830 },
-  { g: "A", w: 0.13, mul: 1.3, limit: 1000 },
-  { g: "S", w: 0.05, mul: 1.4, limit: 1090 },
+  { g: "A", w: 0.13, mul: 1.12, limit: 930 },
+  { g: "S", w: 0.05, mul: 1.24, limit: 1030 },
   { g: "SS", w: 0, mul: 1.65, limit: 1300 },
 ] as const;
 
@@ -78,7 +80,7 @@ export const TRAINS: Record<TrainKey, { name: string; desc: string; cost: number
 };
 export const TRAIN_KEYS: TrainKey[] = ["hit", "power", "run", "def", "special"];
 /** 훈련 한 번 기본 성장 (재능 · 타입 · 컨디션 · 높을수록 덜 오름 반영 전) */
-export const BASE_GAIN = 2.7;
+export const BASE_GAIN = 1.98;
 /** 밸런스 손잡이 (시뮬에서 바꿔 보기) */
 export const TUNE = { gameXp: 0.19, train: 1 };
 /** 훈련 레벨: 같은 훈련 TRAIN_LV_EVERY 번마다 +1 (최대 5) · 레벨당 효율 +10% */
@@ -118,6 +120,14 @@ export interface Fx {
   condFloor?: boolean;
   /** 떨어지는 컨디션 폭 -1 */
   calm?: boolean;
+  /** 호감 얻는 양 +% */
+  aff?: number;
+  /** 휴식 · 개인정비 체력 회복 +% */
+  rest?: number;
+  /** 훈련 실패 확률 - (0.05 = 5%p) */
+  fail?: number;
+  /** 훈련 체력 소모 -% */
+  stam?: number;
 }
 
 export interface Skill {
@@ -134,6 +144,8 @@ export interface Skill {
   set?: Tag;
   /** 고르기에 안 나옴 (인연 · 이벤트 전용) */
   noPick?: boolean;
+  /** 인연 축복 (그 사람 · 듀오면 두 사람) — 겹치면 레벨 업 (최대 3) */
+  boon?: CharId | [CharId, CharId];
   fx: Fx;
 }
 
@@ -142,25 +154,19 @@ export const SKILLS = {
   clutch: { name: "찬스 강함", desc: "득점권에서 맞히기 +70", val: 2, tag: "clutch", fx: { sit: { rispHit: 70 } } },
   solver: { name: "해결사", desc: "득점권에서 파워 +70", val: 2, tag: "clutch", fx: { sit: { rispPow: 70 } } },
   gamer: { name: "승부사", desc: "7회부터 맞히기 · 파워 +45", val: 2, tag: "clutch", fx: { sit: { late: 45 } } },
-  sk_ivan: { name: "철곰 근력", desc: "득점권에서 파워 +90", val: 3, tag: "clutch", noPick: true, fx: { sit: { rispPow: 90 } } },
   // 컨택
   precise: { name: "정교함", desc: "경기 맞히기 +40", val: 2, tag: "contact", fx: { add: { hit: 40 } } },
   study: { name: "타격 연구", desc: "타격 훈련 효율 +18%", val: 2, tag: "contact", fx: { train: { hit: 0.18 } } },
-  sk_soyoung: { name: "채찍 손목", desc: "2스트라이크에서 맞히기 +90", val: 3, tag: "contact", noPick: true, fx: { sit: { twoK: 90 } } },
-  sk_forte: { name: "시간 감각", desc: "경기 맞히기 +40 · 부상 기간 -30%", val: 3, tag: "contact", noPick: true, fx: { add: { hit: 40 }, injuryDur: -0.3 } },
   // 파워
   fullswing: { name: "풀스윙", desc: "경기 파워 +45", val: 2, tag: "power", fx: { add: { power: 45 } } },
   muscle: { name: "근력 체질", desc: "근력 훈련 효율 +18%", val: 2, tag: "power", fx: { train: { power: 0.18 } } },
   slugger: { name: "장타 본능", desc: "홈런 경험치 +60%", val: 2, tag: "power", fx: { hrXp: 0.6 } },
-  sk_igna: { name: "업화의 힘", desc: "경기 파워 +45", val: 3, tag: "power", noPick: true, fx: { add: { power: 45 } } },
   // 스피드
   track: { name: "육상부 출신", desc: "주루 훈련 효율 +18%", val: 2, tag: "speed", fx: { train: { run: 0.18 } } },
   dash: { name: "스타트 대시", desc: "경기 주루 +45", val: 2, tag: "speed", fx: { add: { run: 45 } } },
-  sk_kai: { name: "질풍 주루", desc: "경기 주루 +50", val: 3, tag: "speed", noPick: true, fx: { add: { run: 50 } } },
   // 수비
   glovework: { name: "수비 달인", desc: "수비 훈련 효율 +18%", val: 2, tag: "def", fx: { train: { def: 0.18 } } },
   arm: { name: "강견", desc: "경기 수비 +45", val: 2, tag: "def", fx: { add: { def: 45 } } },
-  sk_zena: { name: "번개 반사", desc: "경기 수비 +50", val: 3, tag: "def", noPick: true, fx: { add: { def: 50 } } },
   // 근성
   grit: { name: "끈질김", desc: "2스트라이크에서 맞히기 +70", val: 2, tag: "grit", fx: { sit: { twoK: 70 } } },
   iron: { name: "강철 몸", desc: "부상 확률 -40%", val: 2, tag: "grit", fx: { injury: -0.4 } },
@@ -169,8 +175,48 @@ export const SKILLS = {
   lucky: { name: "행운아", desc: "훈련 대성공 +6%", val: 2, tag: "luck", fx: { great: 0.06 } },
   star: { name: "스타성", desc: "인기도 +40%", val: 2, tag: "luck", fx: { fame: 0.4 } },
   biz: { name: "사업 수완", desc: "수당 · 연봉 자금 +30%", val: 2, tag: "luck", fx: { money: 0.3 } },
-  sk_lily: { name: "평정심", desc: "컨디션이 덜 떨어짐 · 슬럼프 무시", val: 3, tag: "luck", noPick: true, fx: { calm: true, slump: -1 } },
-  sk_gunmo: { name: "데이터 야구", desc: "모든 훈련 효율 +8%", val: 3, tag: "luck", noPick: true, fx: { train: { all: 0.08 } } },
+  // ── 인연 축복 (만남 2 · 6번째 · 대결 승리 · 특별한 날에 그 사람 축복 3장 중 1장, 겹치면 레벨 업) ──
+  b_kai_wind: { name: "질풍의 발", desc: "경기 주루 +40", val: 2, tag: "speed", boon: "kai", noPick: true, fx: { add: { run: 40 } } },
+  b_kai_dash: { name: "선제 돌격", desc: "7회부터 맞히기 · 파워 +35", val: 2, tag: "clutch", boon: "kai", noPick: true, fx: { sit: { late: 35 } } },
+  b_kai_read: { name: "바람 읽기", desc: "경기 맞히기 +30", val: 2, tag: "contact", boon: "kai", noPick: true, fx: { add: { hit: 30 } } },
+  b_kai_rest: { name: "새벽 강변 러닝", desc: "휴식 회복 +25% · 훈련 체력 소모 -10%", val: 2, tag: "grit", boon: "kai", noPick: true, fx: { rest: 0.25, stam: 0.1 } },
+  b_igna_swing: { name: "업화의 힘", desc: "경기 파워 +45", val: 2, tag: "power", boon: "igna", noPick: true, fx: { add: { power: 45 } } },
+  b_igna_forge: { name: "단련의 불꽃", desc: "근력 훈련 효율 +15%", val: 2, tag: "power", boon: "igna", noPick: true, fx: { train: { power: 0.15 } } },
+  b_igna_spark: { name: "불꽃 승부", desc: "득점권에서 파워 +60", val: 2, tag: "clutch", boon: "igna", noPick: true, fx: { sit: { rispPow: 60 } } },
+  b_igna_heat: { name: "뜨거운 심장", desc: "훈련 실패 확률 -6%p", val: 2, tag: "grit", boon: "igna", noPick: true, fx: { fail: 0.06 } },
+  b_soy_fix: { name: "자세 교정", desc: "타격 훈련 효율 +15%", val: 2, tag: "contact", boon: "soyoung", noPick: true, fx: { train: { hit: 0.15 } } },
+  b_soy_class: { name: "특별 수업", desc: "모든 훈련 효율 +5%", val: 2, tag: "luck", boon: "soyoung", noPick: true, fx: { train: { all: 0.05 } } },
+  b_soy_watch: { name: "끝까지 보기", desc: "2스트라이크에서 맞히기 +70", val: 2, tag: "grit", boon: "soyoung", noPick: true, fx: { sit: { twoK: 70 } } },
+  b_soy_sticker: { name: "칭찬 스티커", desc: "훈련 대성공 +5%", val: 2, tag: "luck", boon: "soyoung", noPick: true, fx: { great: 0.05 } },
+  b_lily_shade: { name: "우산 그늘", desc: "부상 확률 -30%", val: 2, tag: "grit", boon: "lily", noPick: true, fx: { injury: -0.3 } },
+  b_lily_drop: { name: "물방울 마사지", desc: "휴식 회복 +30%", val: 2, tag: "grit", boon: "lily", noPick: true, fx: { rest: 0.3 } },
+  b_lily_float: { name: "둥실 타구", desc: "경기 파워 +30", val: 2, tag: "power", boon: "lily", noPick: true, fx: { add: { power: 30 } } },
+  b_lily_candy: { name: "사탕 응원", desc: "컨디션이 덜 떨어짐 · 슬럼프 무시", val: 2, tag: "luck", boon: "lily", noPick: true, fx: { calm: true, slump: -1 } },
+  b_zena_reflex: { name: "번개 반사", desc: "경기 수비 +45", val: 2, tag: "def", boon: "zena", noPick: true, fx: { add: { def: 45 } } },
+  b_zena_step: { name: "번개 스텝", desc: "주루 훈련 효율 +15%", val: 2, tag: "speed", boon: "zena", noPick: true, fx: { train: { run: 0.15 } } },
+  b_zena_zap: { name: "찌릿한 한 방", desc: "득점권에서 맞히기 +55", val: 2, tag: "clutch", boon: "zena", noPick: true, fx: { sit: { rispHit: 55 } } },
+  b_zena_prank: { name: "장난 기운", desc: "인기도 +40% · 호감 +15%", val: 2, tag: "luck", boon: "zena", noPick: true, fx: { fame: 0.4, aff: 0.15 } },
+  b_mei_steam: { name: "찜기 단련", desc: "수비 훈련 효율 +15%", val: 2, tag: "def", boon: "mei", noPick: true, fx: { train: { def: 0.15 } } },
+  b_mei_palm: { name: "태극 수비", desc: "경기 수비 +40", val: 2, tag: "def", boon: "mei", noPick: true, fx: { add: { def: 40 } } },
+  b_mei_bun: { name: "왕만두 도시락", desc: "휴식 회복 +30% · 경기 경험치 +8%", val: 2, tag: "luck", boon: "mei", noPick: true, fx: { rest: 0.3, gameXp: 0.08 } },
+  b_mei_gap: { name: "빈틈 읽기", desc: "경기 맞히기 +35", val: 2, tag: "contact", boon: "mei", noPick: true, fx: { add: { hit: 35 } } },
+  b_ivan_fist: { name: "철곰 정권", desc: "득점권에서 파워 +80", val: 2, tag: "clutch", boon: "ivan", noPick: true, fx: { sit: { rispPow: 80 } } },
+  b_ivan_body: { name: "강철 육체", desc: "부상 확률 -35%", val: 2, tag: "grit", boon: "ivan", noPick: true, fx: { injury: -0.35 } },
+  b_ivan_drill: { name: "지옥 훈련", desc: "근력 · 수비 훈련 효율 +12%", val: 2, tag: "power", boon: "ivan", noPick: true, fx: { train: { power: 0.12, def: 0.12 } } },
+  b_ivan_log: { name: "통나무 스쿼트", desc: "경기 수비 +35 · 훈련 체력 소모 -10%", val: 2, tag: "def", boon: "ivan", noPick: true, fx: { add: { def: 35 }, stam: 0.1 } },
+  b_forte_tick: { name: "째깍 타이밍", desc: "경기 맞히기 +35", val: 2, tag: "contact", boon: "forte", noPick: true, fx: { add: { hit: 35 } } },
+  b_forte_music: { name: "오르골 휴식", desc: "휴식 회복 +25% · 컨디션이 덜 떨어짐", val: 2, tag: "grit", boon: "forte", noPick: true, fx: { rest: 0.25, calm: true } },
+  b_forte_rewind: { name: "되감기 재활", desc: "부상 기간 -35%", val: 2, tag: "grit", boon: "forte", noPick: true, fx: { injuryDur: -0.35 } },
+  b_forte_top: { name: "태엽 팽이", desc: "경기 주루 +35", val: 2, tag: "speed", boon: "forte", noPick: true, fx: { add: { run: 35 } } },
+  // ── 듀오 축복 (두 사람 축복을 하나씩 가지면 둘 중 누구를 만나도 3장에 섞여 나옴) ──
+  d_kai_zena: { name: "질풍번개", desc: "경기 주루 +60 · 수비 +30", val: 5, tag: "speed", boon: ["kai", "zena"], noPick: true, fx: { add: { run: 60, def: 30 } } },
+  d_igna_ivan: { name: "용광로", desc: "경기 파워 +50 · 득점권 파워 +40", val: 5, tag: "power", boon: ["igna", "ivan"], noPick: true, fx: { add: { power: 50 }, sit: { rispPow: 40 } } },
+  d_soy_forte: { name: "정확한 시간표", desc: "경기 맞히기 +45 · 2스트라이크 맞히기 +40", val: 5, tag: "contact", boon: ["soyoung", "forte"], noPick: true, fx: { add: { hit: 45 }, sit: { twoK: 40 } } },
+  d_lily_mei: { name: "비 오는 날 만두", desc: "부상 확률 -40% · 모든 훈련 +5%", val: 5, tag: "grit", boon: ["lily", "mei"], noPick: true, fx: { injury: -0.4, train: { all: 0.05 } } },
+  d_kai_igna: { name: "불바람", desc: "7회부터 맞히기 · 파워 +50 · 경기 파워 +20", val: 5, tag: "clutch", boon: ["kai", "igna"], noPick: true, fx: { sit: { late: 50 }, add: { power: 20 } } },
+  d_zena_soy: { name: "번개 채찍", desc: "경기 맞히기 +30 · 득점권 맞히기 +45", val: 5, tag: "contact", boon: ["zena", "soyoung"], noPick: true, fx: { add: { hit: 30 }, sit: { rispHit: 45 } } },
+  d_ivan_mei: { name: "강유상제", desc: "경기 파워 +40 · 수비 +40", val: 5, tag: "power", boon: ["ivan", "mei"], noPick: true, fx: { add: { power: 40, def: 40 } } },
+  d_forte_lily: { name: "오르골 비", desc: "휴식 회복 +30% · 호감 +25% · 슬럼프 무시", val: 5, tag: "luck", boon: ["forte", "lily"], noPick: true, fx: { rest: 0.3, aff: 0.25, slump: -1 } },
   // 양날
   glass: { name: "유리 몸 천재", desc: "모든 훈련 +18% / 부상 확률 +60%", val: 2, risk: true, fx: { train: { all: 0.18 }, injury: 0.6 } },
   gambler: { name: "도박꾼", desc: "자금 +60% / 슬럼프 2배", val: 2, risk: true, fx: { money: 0.6, slump: 1 } },
@@ -207,32 +253,46 @@ export function tagCount(c: Pick<Career, "skills">) {
   return n;
 }
 
-/** 특수능력 효과 합 */
-export function fxOf(c: Pick<Career, "skills">) {
+/** 축복 레벨 배율 (Lv1 · 2 · 3) */
+export const BOON_MUL = [1, 1.5, 2];
+export const boonLv = (c: { blv?: Partial<Record<SkillId, number>> }, id: SkillId) => c.blv?.[id] ?? 1;
+const lvMul = (c: { blv?: Partial<Record<SkillId, number>> }, id: SkillId) => (skill(id).boon ? BOON_MUL[boonLv(c, id) - 1] : 1);
+
+/** 특수능력 효과 합 (축복은 레벨 배율) */
+export function fxOf(c: Pick<Career, "skills"> & { blv?: Partial<Record<SkillId, number>> }) {
   const f = {
     add: { hit: 0, power: 0, run: 0, def: 0 } as Stats,
     sit: {} as NonNullable<Batter["sit"]>,
     train: { hit: 0, power: 0, run: 0, def: 0, special: 0, all: 0 } as Record<TrainKey | "all", number>,
     injury: 0, injuryDur: 0, great: 0, gameXp: 0, hrXp: 0, money: 0, fame: 0, awaken: 0, slump: 0, trust: 0, condFloor: false, calm: false,
+    aff: 0, rest: 0, fail: 0, stam: 0,
   };
   for (const id of c.skills) {
     const x = skill(id).fx;
-    for (const k of STAT_KEYS) f.add[k] += x.add?.[k] ?? 0;
-    if (x.sit) for (const [k, v] of Object.entries(x.sit) as [keyof typeof f.sit, number][]) f.sit[k] = (f.sit[k] ?? 0) + v;
-    if (x.train) for (const [k, v] of Object.entries(x.train) as [TrainKey | "all", number][]) f.train[k] += v;
-    f.injury += x.injury ?? 0;
-    f.injuryDur += x.injuryDur ?? 0;
-    f.great += x.great ?? 0;
-    f.gameXp += x.gameXp ?? 0;
-    f.hrXp += x.hrXp ?? 0;
-    f.money += x.money ?? 0;
-    f.fame += x.fame ?? 0;
-    f.awaken += x.awaken ?? 0;
+    const m = lvMul(c, id);
+    for (const k of STAT_KEYS) f.add[k] += (x.add?.[k] ?? 0) * m;
+    if (x.sit) for (const [k, v] of Object.entries(x.sit) as [keyof typeof f.sit, number][]) f.sit[k] = (f.sit[k] ?? 0) + v * m;
+    if (x.train) for (const [k, v] of Object.entries(x.train) as [TrainKey | "all", number][]) f.train[k] += v * m;
+    f.injury += (x.injury ?? 0) * m;
+    f.injuryDur += (x.injuryDur ?? 0) * m;
+    f.great += (x.great ?? 0) * m;
+    f.gameXp += (x.gameXp ?? 0) * m;
+    f.hrXp += (x.hrXp ?? 0) * m;
+    f.money += (x.money ?? 0) * m;
+    f.fame += (x.fame ?? 0) * m;
+    f.awaken += (x.awaken ?? 0) * m;
     f.slump += x.slump ?? 0;
     f.trust += x.trust ?? 0;
     f.condFloor ||= !!x.condFloor;
     f.calm ||= !!x.calm;
+    f.aff += (x.aff ?? 0) * m;
+    f.rest += (x.rest ?? 0) * m;
+    f.fail += (x.fail ?? 0) * m;
+    f.stam += (x.stam ?? 0) * m;
   }
+  f.injury = Math.max(-0.85, f.injury);
+  f.injuryDur = Math.max(-0.8, f.injuryDur);
+  f.stam = Math.min(0.5, f.stam);
   return f;
 }
 
@@ -323,17 +383,35 @@ export const BONDS: Record<CharId, Bond> = {
     stat: "power", place: "시베리아식 사우나", pick: ["철곰 근력 훈련", "사우나에서 버티기"],
     lines: ["거대한 그림자. 이반이 통나무를 들고 있다.", "\"힘. 힘이 전부다.\"", "\"찬스에서 곰처럼. 한 방이면 된다.\"", "\"철곰 스윙. 맞으면 끝이다.\""],
   },
+  mei: {
+    stat: "def", place: "딤섬 가게 뒷마당", pick: ["태극권 수련", "만두 빚기"],
+    lines: ["찜기를 든 메이.", "\"힘을 빼. 공도 그래.\"", "\"빈틈은 늘 있어.\"", "\"태극 스윙. 수비 사이로 쏙.\""],
+  },
   forte: {
     stat: "hit", place: "시계탑 아래", pick: ["타이밍 연습", "시계 소리 듣기"],
     lines: ["째깍째깍. 포르테가 시계탑 위에 앉아 있다.", "\"타이밍이란 시간을 아는 거야.\"", "\"0.01초가 보이기 시작하면 다 맞혀.\"", "\"되감기 스윙. 한 번은 다시 칠 수 있어.\""],
   },
 };
 
-/** 인연 단계가 열리는 만남 횟수 (1 만남 · 2 고르기 · 3 특수능력 · 4 필살 전수) */
-export const BOND_AT = [1, 3, 5, 8];
-/** 그 단계가 열리는 최소 연차 (원작처럼 몇 년차에 열리는 이벤트) */
-export const BOND_SEASON = [1, 1, 2, 3];
-export const bondStage = (visits: number) => BOND_AT.filter((v) => visits >= v).length;
+/** 한 사람과의 만남 줄기 (8번) — 몇 번째 만남이 무슨 장면인지 */
+export type BeatKind = "talk" | "boon" | "mini" | "final";
+export const BEATS: BeatKind[] = ["talk", "boon", "talk", "mini", "talk", "boon", "talk", "final"];
+export const BEAT_NAME: Record<BeatKind, string> = { talk: "이야기", boon: "인연 축복", mini: "가벼운 대결", final: "필살 전수 대결" };
+export const BOND_MAX = BEATS.length;
+/** 그 만남이 열리는 최소 연차 */
+export const VISIT_SEASON = [1, 1, 2, 2, 3, 3, 4, 4];
+/** 한 시즌에 한 사람과 나아갈 수 있는 이야기 수 (나머지 만남은 어울리기) */
+export const BEATS_PER_SEASON = 2;
+/** 그 만남이 열리는 최소 호감 (모자라면 그냥 어울리기 — 호감만 오름) */
+export const VISIT_AFF = [0, 0, 10, 18, 28, 36, 44, 52];
+/** 인연 덱 (육성에 데려가는 사람 수) */
+export const DECK_SIZE = 3;
+/** 대결: 공 수 · 필요 점수 (안타 1 · 홈런 2) · 몇 번째 공이 마구인지 */
+export const BATTLES = {
+  mini: { pitches: 3, need: 1, magic: [2] },
+  final: { pitches: 5, need: 3, magic: [1, 3, 4] },
+} as const;
+export const roleOf = (id: BondId): Role => ROLE[id];
 
 /* ─────────────── 상점 (경기 수당 · 연봉으로 번 자금, 단위 만원) ─────────────── */
 
@@ -365,8 +443,8 @@ export const GEAR_TIER = [
 
 export type GpId = "trainer" | "charmGp" | "medic" | "camp";
 export const GP_BOOSTS: Record<GpId, { name: string; desc: string; price: number }> = {
-  trainer: { name: "개인 트레이너", desc: "모든 훈련 효율 +8%", price: 300 },
-  charmGp: { name: "황금 부적", desc: "대성공 확률 +5% · 각성 확률 1.5배", price: 300 },
+  trainer: { name: "개인 트레이너", desc: "모든 훈련 효율 +15%", price: 300 },
+  charmGp: { name: "황금 부적", desc: "대성공 확률 +8% · 각성 확률 1.5배", price: 300 },
   medic: { name: "메디컬 팀", desc: "부상 확률 -35% · 부상 기간 -40%", price: 200 },
   camp: { name: "해외 전지훈련", desc: "매년 스프링캠프 턴 +1", price: 200 },
 };
@@ -393,20 +471,34 @@ export interface SeasonRec {
 export type Phase = "camp" | "season" | "seasonEnd" | "off" | "retired";
 
 export interface Pending {
-  kind: "bond" | "coach" | "night" | "press";
+  kind: "scene" | "coach" | "night" | "press";
   char?: CharId;
   title: string;
   text: string;
-  choices: [string, string];
+  choices: string[];
+  /** 미연시 장면: 대사 · 고르기 (반응 · 호감 · 이해) */
+  scene?: { lines: string[]; opts: Choice[]; beat: number };
 }
 export interface PickState {
   /** 어디서 생긴 고르기 (화면 제목) */
   from: string;
   options: SkillId[];
+  /** 인연 축복 고르기 (누구의) */
+  boon?: BondId;
+}
+/** 인연 대결 대기 중 (화면에서 직접 치거나 자동) */
+export interface BattleReq {
+  char: BondId;
+  kind: "mini" | "final";
+  pitches: number;
+  need: number;
+  magic: readonly number[];
+  /** 진 횟수 (다시 도전) */
+  tries: number;
 }
 
 export interface Career {
-  v: 2;
+  v: 3;
   id: string;
   seed: number;
   name: string;
@@ -439,7 +531,24 @@ export interface Career {
   /** 이번 관리 기간에 이미 한 지도 ❗ (char:id · ev:event) */
   done: string[];
   charmNext: boolean;
-  bonds: Partial<Record<CharId, number>>;
+  /** 만남 횟수 (줄기 진행 0 ~ 8) */
+  bonds: Partial<Record<BondId, number>>;
+  /** 인연 덱 — 이 판에 데려온 사람들 (지도 · 함께 훈련에 나옴) */
+  deck: BondId[];
+  /** 호감 0 ~ 100 */
+  aff: Partial<Record<BondId, number>>;
+  /** 이해 (그 사람다운 답을 고른 수) */
+  know: Partial<Record<BondId, number>>;
+  /** 축복 레벨 (1 ~ 3) */
+  blv: Partial<Record<SkillId, number>>;
+  /** 인연 대결 대기 */
+  battle: BattleReq | null;
+  /** 특별한 날을 보낸 연차 */
+  specials: number[];
+  /** 이번 시즌 그 사람과 나아간 이야기 수 */
+  bcount: Partial<Record<BondId, number>>;
+  /** 이어받은 선배 (계승) */
+  legacy?: { name: string; skill?: SkillId };
   injury: Injury | null;
   awakened: boolean;
   gp: GpId[];
@@ -479,6 +588,12 @@ export interface NewCareerOpts {
   diff: Diff;
   gp?: GpId[];
   seed?: number;
+  /** 인연 덱 (없으면 시드로 3명) */
+  deck?: CharId[];
+  /** 판을 넘어 쌓인 인연 레벨 → 시작 호감 */
+  affStart?: Partial<Record<CharId, number>>;
+  /** 선배의 유산 (은퇴 선수 하나에게서 특수능력 하나 · 능력치 조금) */
+  legacy?: { name: string; skill?: SkillId; stats: Stats };
 }
 
 export function newCareer(o: NewCareerOpts): Career {
@@ -495,9 +610,17 @@ export function newCareer(o: NewCareerOpts): Career {
   }
   const t = TYPES[o.type];
   const stats = {} as Stats;
-  for (const k of STAT_KEYS) stats[k] = Math.round(t.start[k] * (0.85 + rng() * 0.3));
+  for (const k of STAT_KEYS) stats[k] = Math.round(t.start[k] * (0.85 + rng() * 0.3) + (o.legacy ? legacyBonus(o.legacy.stats[k]) : 0));
+  let deck: BondId[] = (o.deck ?? []).filter((id, i, a): id is BondId => isBond(id) && a.indexOf(id) === i).slice(0, DECK_SIZE);
+  if (deck.length < DECK_SIZE) {
+    const rest = BOND_IDS.filter((id) => !deck.includes(id));
+    while (deck.length < DECK_SIZE) deck = [...deck, rest.splice(Math.floor(rng() * rest.length), 1)[0]];
+  }
+  const aff: Partial<Record<BondId, number>> = {};
+  for (const id of deck) aff[id] = clamp(Math.round(o.affStart?.[id] ?? 0), 0, 30);
+  const skills: SkillId[] = o.legacy?.skill && !skill(o.legacy.skill).set && !skill(o.legacy.skill).bad ? [o.legacy.skill] : [];
   return {
-    v: 2,
+    v: 3,
     id: seed.toString(36),
     seed,
     name: o.name,
@@ -509,7 +632,7 @@ export function newCareer(o: NewCareerOpts): Career {
     talent,
     talentKnown: false,
     limit: TALENTS[talent].limit,
-    skills: [],
+    skills,
     spXp: 0,
     stamina: 100,
     cond: 2,
@@ -525,6 +648,14 @@ export function newCareer(o: NewCareerOpts): Career {
     done: [],
     charmNext: false,
     bonds: {},
+    deck,
+    aff,
+    know: {},
+    blv: {},
+    battle: null,
+    specials: [],
+    bcount: {},
+    legacy: o.legacy ? { name: o.legacy.name, skill: skills[0] } : undefined,
     injury: null,
     awakened: false,
     gp: o.gp ?? [],
@@ -547,6 +678,9 @@ export function newCareer(o: NewCareerOpts): Career {
   };
 }
 
+/** 선배의 유산 — 선배 능력치에서 시작 능력치에 더해 주는 양 (최대 +40) */
+export const legacyBonus = (v: number) => Math.round(clamp((v - 300) * 0.06, 0, 40));
+
 /* ─────────────── 계산 ─────────────── */
 
 export const age = (c: Career) => START_AGE + c.season - 1;
@@ -556,10 +690,10 @@ export const spLv = (c: Career) => (c.learned ? Math.min(5, 1 + Math.floor(c.spX
 /** 경기당 필살타법 횟수 */
 export const spUses = (c: Career) => (c.learned ? 2 + spLv(c) : 0);
 
-export function ovrOf(c: Pick<Career, "stats" | "skills" | "learned" | "spXp">) {
+export function ovrOf(c: Pick<Career, "stats" | "skills" | "learned" | "spXp"> & { blv?: Partial<Record<SkillId, number>> }) {
   const s = c.stats;
   let v = ((s.hit + s.power) * 1.05 + (s.run + s.def) * 0.95) / 4;
-  for (const id of c.skills) v += skill(id).val;
+  for (const id of c.skills) v += skill(id).val * lvMul(c, id);
   if (c.learned) v += LEARNED_VAL + (Math.min(5, 1 + Math.floor((c.spXp ?? 0) / SP_EVERY)) - 1) * SP_LV_VAL;
   return Math.round(clamp(v, 0, 999));
 }
@@ -592,8 +726,8 @@ export function statGrade(v: number) {
  * [종합, 그 이상인 비율]
  */
 export const PCT_TABLE: [number, number][] = [
-  [950, 0.001], [900, 0.005], [850, 0.035], [800, 0.055], [750, 0.105], [700, 0.16], [650, 0.24], [600, 0.36], [550, 0.48],
-  [500, 0.585], [450, 0.7], [400, 0.755], [350, 0.825], [300, 0.905], [250, 0.975], [200, 0.995], [0, 1],
+  [950, 0.001], [900, 0.003], [850, 0.0063], [800, 0.05], [750, 0.0875], [700, 0.1625], [650, 0.2437], [600, 0.375], [550, 0.5062],
+  [500, 0.6375], [450, 0.825], [400, 0.925], [350, 0.9875], [300, 0.998], [0, 1],
 ];
 export function topPct(ovr: number) {
   for (let i = 0; i < PCT_TABLE.length - 1; i++) {
@@ -646,11 +780,12 @@ export function careerBatter(c: Career): Batter {
 
 /* ─────────────── 진행 ─────────────── */
 
-export type Step = "turn" | "game" | "seasonEnd" | "retired" | "pending" | "pick" | "retireAsk";
+export type Step = "turn" | "game" | "seasonEnd" | "retired" | "pending" | "pick" | "battle" | "retireAsk";
 export function stepOf(c: Career): Step {
   if (c.phase === "retired") return "retired";
   if (c.pending) return "pending";
   if (c.pick) return "pick";
+  if (c.battle) return "battle";
   if (c.askRetire) return "retireAsk";
   if (c.phase === "seasonEnd") return "seasonEnd";
   if (c.phase === "season" && c.slot >= 1) return "game";
@@ -752,6 +887,10 @@ export interface TurnOut {
   stub?: boolean;
   /** 이 결과에 나온 캐릭터 (얼굴) */
   char?: CharId;
+  /** 미연시 장면 (전신 그림 + 대사) */
+  vn?: { char: CharId; lines: string[]; skin?: string };
+  /** 호감 변화 */
+  aff?: number;
 }
 
 function snap(c: Career) {
@@ -821,8 +960,8 @@ export function trainRisk(c: Career) {
   const fx = fxOf(c);
   return {
     injury: injuryP(c),
-    fail: clamp(0.05 + (Math.max(0, 50 - c.stamina) / 50) * 0.3, 0, 0.5),
-    great: 0.09 + c.cond * 0.025 + (c.charmNext ? 0.25 : 0) + (hasGp(c, "charmGp") ? 0.05 : 0) + fx.great,
+    fail: clamp(0.05 + (Math.max(0, 50 - c.stamina) / 50) * 0.3 - fx.fail, 0, 0.5),
+    great: 0.09 + c.cond * 0.025 + (c.charmNext ? 0.25 : 0) + (hasGp(c, "charmGp") ? 0.08 : 0) + fx.great,
   };
 }
 
@@ -835,7 +974,7 @@ export function trainMul(c: Career, k: TrainKey) {
     (1 + (trainLv(c, k) - 1) * 0.1) *
     (1 + (tier ? GEAR_TIER[tier - 1].train : 0)) *
     Math.max(0.3, 1 + fx.train[k] + fx.train.all) *
-    (hasGp(c, "trainer") ? 1.08 : 1)
+    (hasGp(c, "trainer") ? 1.15 : 1)
   );
 }
 
@@ -844,8 +983,9 @@ function train(c: Career, k: TrainKey, rng: Rng): TurnOut {
   const t = TRAINS[k];
   const a = snap(c);
   const lines: string[] = [];
+  const cost = t.cost * (1 - fxOf(c).stam);
   if (rng() < injuryP(c)) {
-    addStamina(c, -t.cost);
+    addStamina(c, -cost);
     const l = hurt(c, rng, c.stamina < 15);
     c.charmNext = false;
     return { title: `${t.name} 중 부상!`, tone: "injury", lines: l, delta: diffOf(c, a) };
@@ -854,9 +994,18 @@ function train(c: Career, k: TrainKey, rng: Rng): TurnOut {
   c.charmNext = false;
   const r = rng();
   const tone: TurnOut["tone"] = r < failP ? "fail" : r < failP + greatP ? "great" : "ok";
-  const mul = (tone === "fail" ? 0.3 : tone === "great" ? 2 : 1) * COND_TRAIN[c.cond] * trainMul(c, k) * (0.85 + rng() * 0.3);
+  // 함께 훈련 (인연 덱 캐릭터가 이 훈련에 와 있으면)
+  const mate = k !== "special" ? trainersOf(c)[k] : undefined;
+  let mateMul = 1;
+  if (mate) {
+    mateMul = 1.2 + Math.min(0.25, (c.aff[mate] ?? 0) / 400);
+    c.done.push(`tr:${mate}`);
+    const d = addAff(c, mate, 3);
+    lines.push(`${charById(mate).name}와 함께 훈련! 효율 ×${mateMul.toFixed(2)} · 호감 +${d}`);
+  }
+  const mul = (tone === "fail" ? 0.3 : tone === "great" ? 2 : 1) * COND_TRAIN[c.cond] * trainMul(c, k) * mateMul * (0.85 + rng() * 0.3);
   for (const [sk, w] of Object.entries(t.gain) as [StatKey, number][]) grow(c, sk, BASE_GAIN * w * mul * TUNE.train);
-  addStamina(c, -t.cost);
+  addStamina(c, -cost);
   c.tCount[k]++;
   if (k === "special") {
     const before = spLv(c);
@@ -867,65 +1016,75 @@ function train(c: Career, k: TrainKey, rng: Rng): TurnOut {
   if (tone === "great") addCond(c, rng() < 0.3 ? 1 : 0);
   const title = tone === "great" ? `${t.name} 대성공!` : tone === "fail" ? `${t.name} 실패…` : t.name;
   if (tone === "fail") lines.unshift("몸이 무거워서 집중이 안 됐다.");
-  return { title, tone, lines, delta: diffOf(c, a) };
+  return { title, tone, lines, delta: diffOf(c, a), char: mate };
 }
 
 /* ─────────────── 이번 주 지도 (등장 캐릭터 · 장소 이벤트) ─────────────── */
 
 export interface Spot {
   place: PlaceId;
-  char?: CharId;
+  char?: BondId;
   event?: SpotEvent;
+  /** 특별한 날 */
+  special?: boolean;
 }
 
-/** 깊은 인연(3단계 이상)은 이 수만큼만 — 누구와 깊어질지가 선택 */
-export const DEEP_MAX = 3;
-export const deepCount = (c: Career) => CHARS.filter((x) => (c.bonds[x.id] ?? 0) >= BOND_AT[2]).length;
+/** 호감 올리기 (축복 보너스 반영) — 실제 오른 값 */
+function addAff(c: Career, id: BondId, d: number) {
+  const before = c.aff[id] ?? 0;
+  const v = d > 0 ? d * (1 + fxOf(c).aff) : d;
+  c.aff[id] = clamp(Math.round(before + v), 0, 100);
+  return c.aff[id]! - before;
+}
 
-/** 다음 만남이 열 단계가 연차 조건 · 깊은 인연 수에 막혔나 (막히면 지도에 안 뜸) — 이유 */
-export function bondLock(c: Career, id: CharId): string | null {
+/** 다음 만남이 연차에 막혔나 — 이유 (막히면 지도에 안 뜸) */
+export function bondLock(c: Career, id: BondId): string | null {
   const v = c.bonds[id] ?? 0;
-  const next = BOND_AT.findIndex((at) => at > v);
-  if (next < 0) return null;
-  if (v + 1 !== BOND_AT[next]) return null;
-  if (c.season < BOND_SEASON[next]) return `${BOND_SEASON[next]}년차부터`;
-  if (next === 2 && deepCount(c) >= DEEP_MAX) return `깊은 인연은 ${DEEP_MAX}명까지`;
+  if (v >= BOND_MAX) return null;
+  if (c.season < VISIT_SEASON[v]) return `${VISIT_SEASON[v]}년차부터`;
   return null;
 }
-const bondLocked = (c: Career, id: CharId) => !!bondLock(c, id);
+/** 다음 만남 미리보기 (지도 · 인연 화면) */
+export function nextBeat(c: Career, id: BondId): { kind: BeatKind | "hang"; why?: string } {
+  const v = c.bonds[id] ?? 0;
+  if (v >= BOND_MAX) return { kind: "hang" };
+  if (c.battle?.char === id) return { kind: BEATS[v] };
+  if (c.season < VISIT_SEASON[v]) return { kind: "hang", why: `${VISIT_SEASON[v]}년차부터` };
+  if ((c.aff[id] ?? 0) < VISIT_AFF[v]) return { kind: "hang", why: `호감 ${VISIT_AFF[v]} 필요` };
+  if ((c.bcount[id] ?? 0) >= BEATS_PER_SEASON) return { kind: "hang", why: "다음 시즌에" };
+  return { kind: BEATS[v] };
+}
 
-/** 이번 관리 턴에 지도에 뜨는 것 (시드 · 연차 · 주 · 인연으로 정해짐 — 새로고침해도 같음) */
-export function spotsOf(c: Career): Spot[] {
+/** 이번 관리 기간에 지도에 뜨는 것 (시드 · 연차 · 주 · 인연으로 정해짐 — 새로고침해도 같음) */
+function layout(c: Career) {
   const rng = makeRng((c.seed * 7919 + c.season * 104729 + (c.phase === "season" ? c.week : 100 + c.slot + (c.phase === "off" ? 50 : 0)) * 1009) >>> 0);
   const free = [...SPOT_IDS];
   const take = () => free.splice(Math.floor(rng() * free.length), 1)[0];
   const out: Spot[] = [];
-  // 캐릭터 1 ~ 2명: 진행 중인 인연이 더 잘 뜸, 연차에 막힌 사람은 안 뜸, 다 끝난 사람은 가끔
-  const pool = CHARS.map((x) => x.id).filter((id) => !bondLocked(c, id));
-  const w = (id: CharId) => {
-    const v = c.bonds[id] ?? 0;
-    return v >= BOND_AT[3] ? 0.25 : v > 0 ? 2.5 : 1;
-  };
-  const n = rng() < 0.45 ? 2 : 1;
-  for (let i = 0; i < n && pool.length; i++) {
-    let r = rng() * pool.reduce((s, id) => s + w(id), 0);
-    let pick = pool[0];
-    for (const id of pool) {
-      r -= w(id);
-      if (r <= 0) {
-        pick = id;
-        break;
-      }
+  const trainers: Partial<Record<TrainKey, BondId>> = {};
+  // 비시즌 첫날: 특별한 날 (덱에서 호감 제일 높은 사람, 40 이상)
+  const top = topAff(c);
+  if (c.phase === "off" && c.slot === 0 && top && (c.aff[top] ?? 0) >= 40 && !c.specials.includes(c.season)) {
+    free.splice(free.indexOf("downtown"), 1);
+    out.push({ place: "downtown", char: top, special: true });
+  }
+  // 덱 사람마다: 외출 장소에 나오거나(❗) · 자기 훈련에 함께 오거나 · 안 나옴
+  for (const id of c.deck) {
+    if (out.some((x) => x.char === id)) continue;
+    const r = rng();
+    const quiet = nextBeat(c, id).kind === "hang";
+    if (r < (quiet ? 0.22 : 0.45)) out.push({ place: take(), char: id });
+    else if (r < 0.75) {
+      const k = BONDS[id].stat as TrainKey;
+      if (!trainers[k]) trainers[k] = id;
     }
-    pool.splice(pool.indexOf(pick), 1);
-    out.push({ place: take(), char: pick });
   }
   // 장소 이벤트 (40% · 퀴즈쇼는 드물게)
   if (rng() < 0.4) {
     const evs = (Object.keys(SPOT_EVENTS) as SpotEvent[]).filter((e) => free.includes(SPOT_EVENTS[e].place) && (e !== "cf" || c.fame >= 300) && (e !== "signing" || c.fame >= 150));
     const ew = (e: SpotEvent) => (e === "quiz" ? 0.35 : 1);
     if (evs.length) {
-      let r = rng() * evs.reduce((a, e) => a + ew(e), 0);
+      let r = rng() * evs.reduce((s, e) => s + ew(e), 0);
       let e = evs[0];
       for (const x of evs) {
         r -= ew(x);
@@ -938,48 +1097,90 @@ export function spotsOf(c: Career): Spot[] {
       out.push({ place: SPOT_EVENTS[e].place, event: e });
     }
   }
-  return out.filter((sp) => !c.done.includes(sp.char ? `char:${sp.char}` : `ev:${sp.event}`));
+  return { spots: out, trainers };
+}
+export function spotsOf(c: Career): Spot[] {
+  return layout(c).spots.filter((sp) => !c.done.includes(sp.char ? `char:${sp.char}` : `ev:${sp.event}`));
+}
+/** 이번 관리 기간 「함께 훈련」 — 훈련 종류 → 와 있는 사람 (한 번 같이 하면 돌아감) */
+export function trainersOf(c: Career): Partial<Record<TrainKey, BondId>> {
+  const t = layout(c).trainers;
+  for (const k of Object.keys(t) as TrainKey[]) if (c.done.includes(`tr:${t[k]}`)) delete t[k];
+  return t;
+}
+/** 덱에서 호감 제일 높은 사람 */
+export function topAff(c: Career): BondId | undefined {
+  return [...c.deck].sort((a, b) => (c.aff[b] ?? 0) - (c.aff[a] ?? 0))[0];
 }
 
-/** 캐릭터 만나기 (인연 단계 진행, 2단계는 고르기) */
-function meet(c: Career, id: CharId, place: PlaceId, rng: Rng): TurnOut {
+/** 캐릭터 만나기 — 줄기 진행 (이야기 · 축복 · 대결), 호감 모자라면 어울리기 */
+function meet(c: Career, id: BondId, place: PlaceId, rng: Rng): TurnOut {
   const a = snap(c);
   const ch = charById(id);
   const b = BONDS[id];
-  const visits = c.bonds[id] ?? 0;
-  addStamina(c, 10);
-  addCond(c, 1);
+  const v = c.bonds[id] ?? 0;
   const where = PLACES[place].name;
-  if (visits >= BOND_AT[3]) {
+  addStamina(c, 8);
+  addCond(c, 1);
+  const nb = nextBeat(c, id);
+  if (nb.kind === "hang") {
     grow(c, b.stat, 6);
-    return { title: `${ch.name}와 한때`, tone: "ok", lines: [`${where}에서 ${ch.name}와 즐거운 시간.`], delta: diffOf(c, a), char: id };
+    const d = addAff(c, id, v >= BOND_MAX ? 4 : 7);
+    const lines = v >= BOND_MAX ? [`${where}에서 ${ch.name}와 즐거운 시간.`] : [`${where}에서 ${ch.name}와 어울렸다.`, `(다음 이야기는 ${nb.why})`];
+    return { title: `${ch.name}와 한때`, tone: "ok", lines, delta: diffOf(c, a), char: id, aff: d };
   }
-  c.bonds[id] = visits + 1;
-  const stage = BOND_AT.indexOf(visits + 1) + 1;
-  if (stage === 0) {
-    grow(c, b.stat, 7);
-    return { title: `${ch.name} · ${where}`, tone: "ok", lines: [`${ch.name}와 같이 시간을 보냈다. (인연 ${visits + 1}/${BOND_AT[3]})`], delta: diffOf(c, a), char: id };
+  const beat = STORY[id][v];
+  const title = `${ch.name} · ${BEAT_NAME[nb.kind]}`;
+  if (nb.kind !== "mini" && nb.kind !== "final") c.bcount[id] = (c.bcount[id] ?? 0) + 1;
+  if (nb.kind === "talk") {
+    const opts: Choice[] = [...(beat.choices ?? [])];
+    if (beat.special && (c.know[id] ?? 0) >= beat.special.need) opts.push(beat.special.choice);
+    c.bonds[id] = v + 1;
+    c.pending = { kind: "scene", char: id, title, text: beat.lines[beat.lines.length - 1], choices: opts.map((o) => o.text), scene: { lines: beat.lines, opts, beat: v } };
+    return { title, tone: "event", lines: [], delta: diffOf(c, a), char: id, stub: true };
   }
-  const lines = [b.lines[stage - 1]];
-  if (stage === 1) {
+  if (nb.kind === "boon") {
+    c.bonds[id] = v + 1;
     grow(c, b.stat, 10);
-  } else if (stage === 2) {
-    c.pending = { kind: "bond", char: id, title: `${ch.name} · ${where}`, text: b.lines[1], choices: b.pick };
-    return { title: `${ch.name} · ${where}`, tone: "event", lines, delta: diffOf(c, a), char: id };
-  } else if (stage === 3) {
-    grow(c, b.stat, 14);
-    lines.push(...gainSkill(c, `sk_${id}` as SkillId));
-  } else {
-    grow(c, b.stat, 26);
-    for (const k of STAT_KEYS) if (k !== b.stat) grow(c, k, 6);
-    if (!c.learned) {
-      c.learned = id;
-      lines.push(`필살타법 「${ch.swing.name}」 전수! 경기당 ${spUses(c)}번 · 운동장에서 「필살타법 훈련」이 열렸다.`);
-    } else lines.push(`이미 「${charById(c.learned).swing.name}」을 익혀서 이번엔 능력치만 올랐다.`);
-    const aw = tryAwaken(c, rng, 0.02);
-    if (aw) return { title: `${ch.name}의 마지막 가르침`, tone: "event", lines, delta: diffOf(c, a), extra: aw, char: id };
+    const d = addAff(c, id, 5);
+    makeBoonPick(c, id, rng, `${ch.name}의 축복`);
+    return { title, tone: "event", lines: [`${ch.name}의 축복 — 하나를 고를 수 있다.`], delta: diffOf(c, a), char: id, aff: d, vn: { char: id, lines: beat.lines } };
   }
-  return { title: `${ch.name} · ${where}`, tone: "event", lines, delta: diffOf(c, a), char: id };
+  // 대결 (이기면 다음 줄기)
+  const B = BATTLES[nb.kind];
+  c.battle = { char: id, kind: nb.kind, pitches: B.pitches, need: B.need, magic: B.magic, tries: c.battle?.char === id ? c.battle.tries : 0 };
+  return { title, tone: "event", lines: [`${ch.name}의 공 ${B.pitches}개 · ${B.need}점 이상이면 승리 (안타 1 · 홈런 2)`], delta: diffOf(c, a), char: id, vn: { char: id, lines: beat.lines } };
+}
+
+/** 특별한 날 (비시즌 첫날, 호감 1위) */
+function specialDay(c: Career, id: BondId, rng: Rng): TurnOut {
+  const a = snap(c);
+  const ch = charById(id);
+  const sd = SPECIAL_DAY[ROLE[id]];
+  c.specials.push(c.season);
+  addCond(c, 2);
+  addStamina(c, 30);
+  const d = addAff(c, id, 10);
+  makeBoonPick(c, id, rng, `${sd.title} — ${ch.name}의 선물`);
+  return { title: `${sd.title} · ${ch.name}`, tone: "event", lines: [`호감 +${d} · 컨디션 ↑ · 축복 하나를 고를 수 있다.`], delta: diffOf(c, a), char: id, aff: d, vn: { char: id, lines: sd.lines(ch.name), skin: sd.skin[id] } };
+}
+
+/** 인연 축복 3장 — 그 사람 축복(겹치면 레벨 업) + 조건 맞는 듀오 */
+function makeBoonPick(c: Career, id: BondId, rng: Rng, from: string) {
+  const own = (x: SkillId) => c.skills.includes(x);
+  const lv = (x: SkillId) => (own(x) ? boonLv(c, x) : 0);
+  const mine = (BOONS[id] as SkillId[]).filter((x) => lv(x) < 3);
+  const hasFrom = (who: BondId) => (BOONS[who] as SkillId[]).some(own);
+  const duos = DUOS.filter((d) => (d.a === id || d.b === id) && hasFrom(d.a) && hasFrom(d.b) && lv(d.id as SkillId) < 3).map((d) => d.id as SkillId);
+  const opts: SkillId[] = [];
+  if (duos.length && rng() < 0.6) opts.push(rng.pick(duos));
+  const pool = [...mine];
+  while (opts.length < 3 && pool.length) opts.push(pool.splice(Math.floor(rng() * pool.length), 1)[0]);
+  if (!opts.length) {
+    makePick(c, rng, from);
+    return;
+  }
+  c.pick = { from, options: opts, boon: id };
 }
 
 /** 장소 이벤트 */
@@ -1060,16 +1261,92 @@ export function choosePick(c: Career, i: number): TurnOut {
   c.pick = null;
   if (i < 0 || !p.options[i]) return { title: "넘겼다", tone: "ok", lines: ["이번엔 아무것도 안 골랐다."], delta: diffOf(c, a) };
   const id = p.options[i];
-  const lines = gainSkill(c, id);
+  let lines: string[];
+  if (skill(id).boon && c.skills.includes(id)) {
+    c.blv[id] = Math.min(3, boonLv(c, id) + 1);
+    lines = [`축복 「${skill(id).name}」 Lv${c.blv[id]}! (효과 ×${BOON_MUL[c.blv[id]! - 1]})`];
+  } else {
+    lines = gainSkill(c, id);
+    // 이해가 깊으면 새 축복이 Lv2 로 시작
+    if (p.boon && skill(id).boon && (c.know[p.boon] ?? 0) >= 3) {
+      c.blv[id] = 2;
+      lines.push(`이해 보너스 — 처음부터 Lv2!`);
+    }
+  }
+  if (p.boon) addAff(c, p.boon, 2);
   pushLog(c, `${p.from}: 「${skill(id).name}」`);
-  return { title: skill(id).name, tone: lines.length > 1 ? "great" : "event", lines, delta: diffOf(c, a) };
+  return { title: skill(id).name, tone: lines.length > 1 ? "great" : "event", lines, delta: diffOf(c, a), char: p.boon };
+}
+
+/* ─────────────── 인연 대결 ─────────────── */
+
+/**
+ * 대결 결과 반영 — pts = 점수 (안타 1 · 홈런 2).
+ * 이기면 줄기 진행: 가벼운 대결 → 축복 고르기 · 필살 전수 대결 → 필살타법 (이미 있으면 축복 레벨 업 고르기). 지면 다음 만남에 다시.
+ */
+export function finishBattle(c: Career, pts: number, auto = false): TurnOut {
+  const bt = c.battle;
+  if (!bt) throw new Error("대결 없음");
+  const rng = turnRng(c, 23 + bt.tries);
+  const a = snap(c);
+  const id = bt.char;
+  const ch = charById(id);
+  const b = BONDS[id];
+  c.battle = null;
+  const lines: string[] = [`${pts}점 / ${bt.need}점${auto ? " (자동)" : ""}`];
+  let aff: number;
+  if (pts < bt.need) {
+    bt.tries++;
+    grow(c, b.stat, 5);
+    aff = addAff(c, id, 3);
+    lines.push(`${ch.name}: "아직이야. 다음에 또 와."`, "(다음에 만나면 다시 도전)");
+    pushLog(c, `${ch.name}와 대결 패배 (${pts}점)`);
+    return { title: `${ch.name}와 대결 — 패배`, tone: "fail", lines, delta: diffOf(c, a), char: id, aff };
+  }
+  c.bonds[id] = (c.bonds[id] ?? 0) + 1;
+  c.bcount[id] = (c.bcount[id] ?? 0) + 1;
+  aff = addAff(c, id, bt.kind === "final" ? 10 : 7);
+  let extra: TurnOut | undefined;
+  if (bt.kind === "mini") {
+    grow(c, b.stat, 14);
+    makeBoonPick(c, id, rng, `${ch.name}에게 이겼다! 축복`);
+    lines.push(`${ch.name}: "…좋아, 인정."`, "축복 하나를 고를 수 있다.");
+  } else {
+    grow(c, b.stat, 26);
+    for (const k of STAT_KEYS) if (k !== b.stat) grow(c, k, 6);
+    if (!c.learned) {
+      c.learned = id;
+      lines.push(`필살타법 「${ch.swing.name}」 전수! 경기당 ${spUses(c)}번 · 운동장에서 「필살타법 훈련」이 열렸다.`);
+    } else {
+      lines.push(`이미 「${charById(c.learned).swing.name}」을 익혀서 — 대신 ${ch.name}의 축복을 하나 더.`);
+      makeBoonPick(c, id, rng, `${ch.name}의 마지막 가르침`);
+    }
+    extra = tryAwaken(c, rng, 0.02);
+  }
+  pushLog(c, `${ch.name}와 대결 승리 (${pts}점)`);
+  return { title: `${ch.name}와 대결 — 승리!`, tone: "great", lines, delta: diffOf(c, a), char: id, aff, extra };
+}
+
+/** 대결 자동 (봇 · 「자동으로」) — 맞히기 · 파워 · 실력(σ)으로 공마다 안타/홈런 확률 */
+export function autoBattle(c: Career, rng: Rng, sigma = 0.075): number {
+  const bt = c.battle;
+  if (!bt) return 0;
+  const bb = careerBatter(c);
+  const skillF = clamp(1.35 - sigma * 6, 0.6, 1.25);
+  let pts = 0;
+  for (let i = 0; i < bt.pitches; i++) {
+    const magic = bt.magic.includes(i);
+    const pHit = clamp((0.2 + bb.hit / 2200) * skillF * (magic ? 0.6 : 1), 0.05, 0.75);
+    if (rng() < pHit) pts += rng() < clamp(0.06 + bb.power / 2600, 0.05, 0.45) ? 2 : 1;
+  }
+  return pts;
 }
 
 /* ─────────────── 무작위 이벤트 ─────────────── */
 
 function randomEvent(c: Career, rng: Rng): TurnOut | undefined {
-  if (c.pending || c.pick || c.injury) return;
-  const done = Math.min(2, Object.values(c.bonds).filter((v) => (v ?? 0) >= BOND_AT[3]).length);
+  if (c.pending || c.pick || c.battle || c.injury) return;
+  const done = Math.min(2, Object.values(c.bonds).filter((v) => (v ?? 0) >= BOND_MAX).length);
   const aw = tryAwaken(c, rng, 0.00005 * (c.cond === 4 ? 2.5 : 1) * (1 + done * 0.6));
   if (aw) return aw;
   if (rng() > 0.22) return;
@@ -1124,7 +1401,7 @@ export type Action =
   | { kind: "rest" }
   | { kind: "care" }
   | { kind: "clinic" }
-  | { kind: "meet"; char: CharId }
+  | { kind: "meet"; char: BondId }
   | { kind: "event"; event: SpotEvent }
   | { kind: "stroll"; place: PlaceId };
 
@@ -1135,7 +1412,7 @@ export function whyNot(c: Career, a: Action): string | null {
   if (stepOf(c) !== "turn") return "지금은 관리 차례가 아니에요";
   if (c.injury && !(a.kind === "rest" || a.kind === "clinic" || a.kind === "care")) return "부상 중엔 숙소 · 병원만";
   if (c.active < costOf(a)) return `행동력이 모자라요 (⚡${costOf(a)} 필요)`;
-  if (a.kind === "train" && a.key === "special" && !c.learned) return "필살타법을 배워야 열려요 (캐릭터 인연 4단계)";
+  if (a.kind === "train" && a.key === "special" && !c.learned) return "필살타법을 배워야 열려요 (인연 「필살 전수 대결」)";
   if (a.kind === "clinic" && c.money < CLINIC_PRICE) return "자금이 모자라요";
   if (a.kind === "clinic" && !c.injury && c.stamina >= 70) return "아픈 데가 없어요";
   const spots = spotsOf(c);
@@ -1158,12 +1435,12 @@ export function act(c: Career, a: Action): TurnOut {
       out = train(c, a.key, rng);
       break;
     case "rest":
-      addStamina(c, c.injury ? 30 : 45);
+      addStamina(c, (c.injury ? 30 : 45) * (1 + fxOf(c).rest));
       if (rng() < 0.35) addCond(c, 1);
       out = { title: c.injury ? "숙소에서 요양" : "휴식", tone: "ok", lines: [c.injury ? "몸을 추슬렀다." : "푹 쉬었다."], delta: diffOf(c, s0) };
       break;
     case "care":
-      addStamina(c, 20);
+      addStamina(c, 20 * (1 + fxOf(c).rest));
       addCond(c, 1);
       out = { title: "개인정비", tone: "ok", lines: ["장비 손질 · 스트레칭 · 영상 복기."], delta: diffOf(c, s0) };
       break;
@@ -1182,7 +1459,7 @@ export function act(c: Career, a: Action): TurnOut {
     case "meet": {
       const sp = spotsOf(c).find((s) => s.char === a.char)!;
       c.done.push(`char:${a.char}`);
-      out = meet(c, a.char, sp.place, rng);
+      out = sp.special ? specialDay(c, a.char, rng) : meet(c, a.char, sp.place, rng);
       break;
     }
     case "event":
@@ -1204,7 +1481,7 @@ export function act(c: Career, a: Action): TurnOut {
 }
 
 /** 고르기 이벤트 답 */
-export function choose(c: Career, pick: 0 | 1): TurnOut {
+export function choose(c: Career, pick: number): TurnOut {
   const p = c.pending;
   if (!p) throw new Error("고를 이벤트 없음");
   const rng = turnRng(c, 7);
@@ -1212,17 +1489,16 @@ export function choose(c: Career, pick: 0 | 1): TurnOut {
   c.pending = null;
   const lines: string[] = [];
   let tone: TurnOut["tone"] = "event";
-  if (p.kind === "bond") {
-    const b = BONDS[p.char!];
-    if (pick === 0) {
-      grow(c, b.stat, 22);
-      addStamina(c, -15);
-      lines.push("같이 땀을 흘렸다. 확 늘었다!");
-    } else {
-      addStamina(c, 15);
-      addCond(c, 1);
-      lines.push("편하게 이야기를 나눴다. 마음이 가벼워졌다.");
-    }
+  let aff: number | undefined;
+  if (p.kind === "scene" && p.scene) {
+    const id = p.char as BondId;
+    const o = p.scene.opts[pick] ?? p.scene.opts[0];
+    aff = addAff(c, id, o.aff);
+    if (o.know) c.know[id] = (c.know[id] ?? 0) + 1;
+    grow(c, BONDS[id].stat, 6 + o.aff * 0.6);
+    lines.push(`호감 ${aff >= 0 ? "+" : ""}${aff}${o.know ? " · 마음이 통했다 (이해 +1)" : ""}`);
+    pushLog(c, `${p.title}: ${o.text}`);
+    return { title: p.title, tone: o.know ? "great" : "event", lines, delta: diffOf(c, a), char: id, aff, vn: { char: id, lines: [`▶ ${o.text}`, o.reply] } };
   } else if (p.kind === "coach") {
     if (pick === 0) {
       if (rng() < injuryP(c) * 1.5) {
@@ -1333,11 +1609,11 @@ export interface GameIn {
 }
 /** 경기 평가 S ~ D (성장 배율) */
 export const GAME_GRADES = [
-  { g: "S", xp: 1.7, color: "#ff7ae0" },
-  { g: "A", xp: 1.3, color: "#ffcf4a" },
+  { g: "S", xp: 2.5, color: "#ff7ae0" },
+  { g: "A", xp: 1.65, color: "#ffcf4a" },
   { g: "B", xp: 1.0, color: "#7dff9a" },
-  { g: "C", xp: 0.65, color: "#7ad7ff" },
-  { g: "D", xp: 0.35, color: "#9a9a9a" },
+  { g: "C", xp: 0.55, color: "#7ad7ff" },
+  { g: "D", xp: 0.25, color: "#9a9a9a" },
 ] as const;
 export function gameGrade(l: BatLine, missions: number) {
   const singles = l.h - l.d2 - l.d3 - l.hr;
@@ -1499,6 +1775,7 @@ export function endSeason(c: Career): SeasonSummary {
   c.seasons.push(rec);
   for (const k of ["g", "pa", "ab", "h", "d2", "d3", "hr", "rbi", "bb", "k", "r"] as const) c.total[k] += L[k];
   c.line = emptyLine();
+  c.bcount = {};
   c.turn++;
   const retire = c.season >= MAX_SEASONS;
   const canRetire = !retire && c.season >= RETIRE_FROM;
@@ -1545,7 +1822,9 @@ export function retireCard(c: Career) {
   if (c.awakened) nick.push("각성자");
   if (c.learned) nick.push(`${charById(c.learned).name}의 제자`);
   if (!nick.length) nick.push(ovr >= 500 ? "성실한 프로" : "만년 유망주");
-  return { ovr, grade: gradeOf(ovr), top: topPct(ovr), nick, awards, total: t };
+  const top = topAff(c);
+  const partner = top && (c.aff[top] ?? 0) >= 50 ? top : undefined;
+  return { ovr, grade: gradeOf(ovr), top: topPct(ovr), nick, awards, total: t, partner, epilogue: partner ? EPILOGUE[partner] : undefined };
 }
 
 /* ─────────────── 명예의 전당 (프로토: 이 브라우저) ─────────────── */
@@ -1563,12 +1842,18 @@ export interface HofEntry {
   seasons: number;
   at: number;
   gp: number;
+  /** 물려줄 수 있는 특수능력 (세트 · 나쁜 것 · 축복 빼고) */
+  skills?: SkillId[];
+  /** 파트너 (은퇴 에필로그) */
+  partner?: CharId;
 }
+/** 계승할 수 있는 특수능력인가 */
+export const inheritable = (id: SkillId) => !skill(id).set && !skill(id).bad && !skill(id).boon;
 export function hofEntry(c: Career): HofEntry {
   const r = retireCard(c);
   const st = {} as Stats;
   for (const k of STAT_KEYS) st[k] = Math.round(c.stats[k]);
-  return { id: c.id, name: c.name, type: c.type, ovr: r.ovr, grade: r.grade.g, nick: r.nick[0], stats: st, hr: c.total.hr, avg: avg(c.total), seasons: c.seasons.length, at: Date.now(), gp: c.gp.length };
+  return { id: c.id, name: c.name, type: c.type, ovr: r.ovr, grade: r.grade.g, nick: r.nick[0], stats: st, hr: c.total.hr, avg: avg(c.total), seasons: c.seasons.length, at: Date.now(), gp: c.gp.length, skills: c.skills.filter(inheritable), partner: r.partner };
 }
 
 /* ─────────────── 봇 육성 (자동 진행 · 밸런스 시뮬) ─────────────── */
@@ -1595,7 +1880,7 @@ export function botAction(c: Career, pol: Policy, rng: Rng): Action {
   if (c.stamina < pol.restBelow) return rng() < 0.8 ? { kind: "rest" } : { kind: "care" };
   const spots = spotsOf(c);
   if (rng() < pol.outing) {
-    const going = spots.filter((s) => s.char && (c.bonds[s.char] ?? 0) < BOND_AT[3]);
+    const going = spots.filter((s) => s.char && ((c.bonds[s.char] ?? 0) < BOND_MAX || s.special));
     if (going.length) return { kind: "meet", char: rng.pick(going).char! };
     const ev = spots.find((s) => s.event && (s.event !== "secret" || c.stamina > 50));
     if (ev && rng() < 0.6) return { kind: "event", event: ev.event! };
@@ -1638,6 +1923,26 @@ export function botShop(c: Career) {
     buy(c, "drink");
     consumeItem(c, "drink");
   } else if (c.bag.charm && !c.charmNext && !c.usedItem) consumeItem(c, "charm");
+}
+/** 봇 미연시 답: insight 확률로 그 사람다운 답(이해), 아니면 아무거나 */
+export function botChoose(c: Career, rng: Rng, insight: number): number {
+  const p = c.pending;
+  if (!p) return 0;
+  if (p.scene) {
+    const k = p.scene.opts.findIndex((o, i) => o.know && i === p.scene!.opts.length - 1 && p.scene!.opts.length > 2 && !!STORY[p.char as BondId][p.scene!.beat].special);
+    if (k >= 0 && rng() < insight + 0.2) return k;
+    const kn = p.scene.opts.findIndex((o) => o.know);
+    if (kn >= 0 && rng() < insight) return kn;
+    return Math.floor(rng() * p.scene.opts.length);
+  }
+  return rng() < 0.5 ? 0 : 1;
+}
+/** 봇 덱: 타입 주력 능력치를 키워 주는 사람 위주 */
+export function botDeck(type: BatType, rng: Rng): BondId[] {
+  const apt = TYPES[type].apt;
+  const ids = [...BOND_IDS];
+  const sc = new Map(ids.map((id) => [id, apt[BONDS[id].stat] + rng() * 0.6] as const));
+  return ids.sort((a, b) => sc.get(b)! - sc.get(a)!).slice(0, DECK_SIZE);
 }
 /** 봇 고르기: 세트에 가까운 태그 > 양날 아닌 것 */
 export function botPick(c: Career, rng: Rng): number {
