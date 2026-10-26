@@ -5,6 +5,9 @@
 import { CHARS, SUB } from "@/lib/fight/chars";
 import { MAPS } from "@/lib/fight/maps";
 import {
+  NEG_PEN,
+  NEG_T,
+  NEG_WARN,
   VIEW_H,
   VIEW_W,
   isAir as isAirF,
@@ -758,6 +761,15 @@ export class FightRenderer {
         this.flash = 5;
         this.flashColor = "#FFD6E8";
         this.shake = Math.max(this.shake, 4);
+      } else if (e.k === "neg") {
+        // 소극성: 경고 (작은 노란 글자) · 페널티 (크게, 붉은 고리 + 화면 번쩍)
+        if (e.v === 0) this.parts.push({ x, y, vx: 0, vy: -0.4, life: 40, max: 40, color: "#FFD34D", size: 1.1, kind: "text", text: "소극적!" });
+        else {
+          this.parts.push({ x, y: y - 6, vx: 0, vy: -0.35, life: 60, max: 60, color: "#FF5C5C", size: 1.5, kind: "text", text: "소극성 페널티" });
+          this.parts.push({ x, y: y + 30, vx: 0, vy: 0, life: 18, max: 18, color: "#FF8A8A", size: 34, kind: "ring" });
+          this.flash = Math.max(this.flash, 3);
+          this.flashColor = "#FFB4B4";
+        }
       } else if (e.k === "immune") {
         // 상태 이상 면역 (풀린 지 2초 안 / 이미 걸린 채): 피해만 들어감
         this.parts.push({ x, y, vx: 0, vy: -0.45, life: 34, max: 34, color: "#C4B5FD", size: 1.2, kind: "text", text: "IMMUNE" });
@@ -942,6 +954,18 @@ export class FightRenderer {
       g.font = "bold 8px ui-monospace, monospace";
       g.fillText("⚡낙인", x, zy);
       g.fillRect(x - 12, zy + 2, Math.min(24, (24 * f.zap) / 120), 1.5);
+      g.globalAlpha = 1;
+    }
+    if (f.negT > 0 || f.neg >= NEG_WARN) {
+      // 소극성: 페널티 중이면 붉은 「소극적」 + 남은 시간 막대, 경고 중이면 깜빡이는 노란 「소극적?」 + 페널티까지 차는 막대
+      const ny = y - 14 - (f.shock > 0 ? 10 : 0) - (f.burn > 0 ? 10 : 0) - (f.zap > 0 ? 10 : 0);
+      const pen = f.negT > 0;
+      g.globalAlpha = pen ? 1 : 0.6 + 0.4 * Math.sin(this.tagF * 0.5);
+      g.fillStyle = pen ? "#FF5C5C" : "#FFD34D";
+      g.font = "bold 8px ui-monospace, monospace";
+      g.fillText(pen ? "😴소극적" : "⚠소극적?", x, ny);
+      const k = pen ? f.negT / NEG_T : (f.neg - NEG_WARN) / (NEG_PEN - NEG_WARN);
+      g.fillRect(x - 12, ny + 2, Math.max(1, 24 * Math.min(1, k)), 1.5);
       g.globalAlpha = 1;
     }
     g.restore();

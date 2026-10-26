@@ -96,6 +96,7 @@ export const BG: Record<BgId, string | null> = {
   amyroom: `${B}/bg/amyroom.webp`,
   sea: `${B}/bg/sea.webp`,
   waterpark: `${B}/bg/waterpark.webp`,
+  market_day: `${B}/bg/market_day.webp`,
   black: null,
 };
 /**
@@ -103,16 +104,50 @@ export const BG: Record<BgId, string | null> = {
  * (LoveApp 의 SmallIcon 이 그림을 불러 보고, 실패하면 이모지) → 그림은 public/love/ui/ 에 이 이름으로 넣기만 하면 켜짐
  * 요청서: dep86-schedule/ASSET-REQUEST.md
  */
-export const ICON: Record<"itemStraw" | "itemMint" | "cardNote" | "cardWalk", { src: string; emoji: string; name: string }> = {
+export const ICON: Record<
+  "itemStraw" | "itemMint" | "cardNote" | "cardWalk" | "cardShuffle" | "cardImo" | "cardTool" | "cardRest",
+  { src: string; emoji: string; name: string }
+> = {
   itemStraw: { src: `${B}/ui/item-strawberry-candy.webp`, emoji: "🍬", name: "딸기 사탕" },
   itemMint: { src: `${B}/ui/item-mint-candy.webp`, emoji: "🍥", name: "박하사탕" },
   cardNote: { src: `${B}/ui/card-note.webp`, emoji: "✎", name: "노트 정리" },
   cardWalk: { src: `${B}/ui/card-walk.webp`, emoji: "🍬", name: "동네 한 바퀴" },
+  cardShuffle: { src: `${B}/ui/card-shuffle.webp`, emoji: "🂡", name: "셔플 · 복기" },
+  cardImo: { src: `${B}/ui/card-imo.webp`, emoji: "🍲", name: "이모 장보기 · 주방" },
+  cardTool: { src: `${B}/ui/card-tool.webp`, emoji: "🔧", name: "철물점" },
+  cardRest: { src: `${B}/ui/card-rest.webp`, emoji: "🛏", name: "한숨 자기" },
 };
 export type IconId = keyof typeof ICON;
 export const ITEMS = ["itemStraw", "itemMint"] as const;
-/** 일정 카드 장면 id → 그림 아이콘 (혼자 하는 준비 카드만) */
-export const planIcon = (scene: string): IconId | null => (/_note$/.test(scene) ? "cardNote" : /_walk$/.test(scene) ? "cardWalk" : null);
+/** 일정 카드 장면 id → 그림 아이콘 (그림이 없으면 카드의 원래 이모지) */
+const PLAN_ICON: Record<string, IconId> = {
+  go_shuffle: "cardShuffle",
+  w2_shuf: "cardShuffle",
+  a3_p2_shuf: "cardShuffle",
+  y3_p17_shuf: "cardShuffle",
+  a4_p4_river: "cardShuffle",
+  y4_p23_shuf: "cardShuffle",
+  g4c_eye: "cardShuffle",
+  go_imo: "cardImo",
+  w2_imo: "cardImo",
+  a4_p3_imo: "cardImo",
+  y3_p17_imo: "cardImo",
+  y4_p23_imo: "cardImo",
+  g4c_imo: "cardImo",
+  a3_p1_tool: "cardTool",
+  g4c_nap: "cardRest",
+};
+export const planIcon = (scene: string): IconId | null =>
+  /_note$/.test(scene) ? "cardNote" : /_walk$/.test(scene) ? "cardWalk" : (PLAN_ICON[scene] ?? null);
+/** 배경 그림이 아직 없을 때 대신 깔 배경 (CSS 여러 겹: 새 그림이 있으면 위에 덮임) */
+const BG_ALT: Partial<Record<BgId, BgId>> = { market_day: "market" };
+/** 배경 CSS backgroundImage 값 (없으면 null → 그라데이션) */
+export const bgImage = (id: BgId): string | null => {
+  const u = BG[id];
+  if (!u) return null;
+  const alt = BG_ALT[id] ? BG[BG_ALT[id]!] : null;
+  return alt ? `url("${u}"), url("${alt}")` : `url("${u}")`;
+};
 
 export const BG_FALLBACK: Record<BgId, string> = {
   pub: "linear-gradient(180deg,#2a1d14,#120c08)",
@@ -133,6 +168,7 @@ export const BG_FALLBACK: Record<BgId, string> = {
   amyroom: "linear-gradient(180deg,#3a3448,#16141c)",
   sea: "linear-gradient(180deg,#f2a86a,#2a4a6a)",
   waterpark: "linear-gradient(180deg,#8fd8ff,#2a8ac8)",
+  market_day: "linear-gradient(180deg,#c9bfae,#5a5246)",
   black: "#000",
 };
 
@@ -416,6 +452,7 @@ export function preloadList(): { img: string[]; audio: string[]; voice: string[]
   for (const s of "shdc") for (const r of "jqk") img.add(`${P}/card/court-${s}-${r}.webp`);
   img.add(TITLE.bg);
   img.add(TITLE.logo);
+  for (const c of Object.values(ICON)) img.add(c.src);
   return {
     img: [...img],
     audio: [

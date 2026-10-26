@@ -66,6 +66,8 @@ export type BgId =
   | "amyroom"
   | "sea"
   | "waterpark"
+  /** 비 그친 오후 재래시장 (동네 한 바퀴 · 박하사탕) — 그림 없으면 market 으로 */
+  | "market_day"
   | "black";
 /** 이벤트 CG (핵심 장면 한 장 그림 — 스탠딩 대신 화면 전체) */
 export type CgId =

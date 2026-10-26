@@ -33,6 +33,7 @@ import {
   type IconId,
   ITEMS,
   planIcon,
+  bgImage,
   preloadList,
 } from "@/lib/love/assets";
 import {
@@ -49,7 +50,7 @@ import {
   run,
 } from "@/lib/love/engine";
 import { type ReactLine, idleLine, lightMood, touchLine } from "@/lib/love/reactions";
-import { type Heroine, SKILL_LINE, SKILL_NAME, STAGE_LINE, STAGE_NAME, heroStage, skillOf, tiltName } from "@/lib/love/rel";
+import { type Heroine, SKILL_LINE, SKILL_NAME, SKILL_PRO, STAGE_LINE, STAGE_NAME, heroStage, skillOf, tiltName } from "@/lib/love/rel";
 import { voiceOf } from "@/lib/love/voices";
 import {
   type BgmId,
@@ -2060,7 +2061,7 @@ export default function LoveApp() {
                             // eslint-disable-next-line @next/next/no-img-element
                             <img src={FACE_ICON[o.card.who]} alt="" />
                           ) : o.to && planIcon(o.to) ? (
-                            <SmallIcon id={planIcon(o.to)!} />
+                            <SmallIcon id={planIcon(o.to)!} fallback={o.card.icon} />
                           ) : (
                             <span>{o.card.icon ?? "◆"}</span>
                           )}
@@ -2444,7 +2445,7 @@ export default function LoveApp() {
         )}
         {/* 처음 가이드 (코치마크) */}
         {coachId && phase === "game" && GUIDE[coachId] && (
-          <CoachMark key={coachId} root={wrap} guide={GUIDE[coachId]} onOk={() => coachNext(true)} onMiss={() => coachNext(false)} />
+          <CoachMark key={coachId} root={wrap} guide={GUIDE[coachId]} vars={s?.vars ?? {}} onOk={() => coachNext(true)} onMiss={() => coachNext(false)} />
         )}
         {recap && phase === "game" && (
           <div key={recap.n} className="lv-recap" onClick={(e) => (e.stopPropagation(), setRecap(null))}>
@@ -2494,11 +2495,11 @@ export default function LoveApp() {
 /** 배경 — 장소가 바뀌면 이전 배경 위로 새 배경이 천천히 겹쳐 들어옴 (크로스페이드) */
 /** 같은 그림을 다른 시간대로 쓸 때의 색보정 */
 /** 작은 그림 아이콘: 그림을 불러 보고, 없으면(실패) 이모지 — 그림 파일만 넣으면 바뀜 */
-function SmallIcon({ id, className }: { id: IconId; className?: string }) {
+function SmallIcon({ id, className, fallback }: { id: IconId; className?: string; fallback?: string }) {
   const [st, setSt] = useState<"wait" | "ok" | "none">("wait");
   return (
     <>
-      {st !== "ok" && <span className={`lv-icon-emoji ${className ?? ""}`}>{ICON[id].emoji}</span>}
+      {st !== "ok" && <span className={`lv-icon-emoji ${className ?? ""}`}>{fallback ?? ICON[id].emoji}</span>}
       {st !== "none" && (
         // eslint-disable-next-line @next/next/no-img-element
         <img
@@ -2521,13 +2522,13 @@ function Bg({ id, blur }: { id: keyof typeof BG; blur: number }) {
   });
   if (prev.cur !== id) setPrev({ cur: id, old: prev.cur });
   const layer = (bid: keyof typeof BG, fade: boolean) => {
-    const u = BG[bid];
+    const u = bgImage(bid);
     return (
       <div
         key={`${bid}-${fade ? "in" : "out"}`}
         className={`absolute inset-0 bg-cover bg-center transition-[filter] duration-700 ${fade ? "lv-bg-in" : ""}`}
         style={{
-          ...(u ? { backgroundImage: `url("${u}")` } : { background: BG_FALLBACK[bid] }),
+          ...(u ? { backgroundImage: u } : { background: BG_FALLBACK[bid] }),
           filter:
             [blur ? `blur(${blur * 3}px) brightness(${1 - blur * 0.13})` : "", BG_GRADE[bid] ?? ""].join(" ").trim() ||
             undefined,
@@ -4245,14 +4246,14 @@ function LogList({
 /** 저장 칸 미리보기: 그때 배경(또는 CG) + 서 있던 캐릭터 */
 function SlotThumb({ s }: { s: GState }) {
   const cg = s.disp.cg ? cgSrc(s.disp.cg, s.disp.cgv) : null;
-  const bg = BG[s.disp.bg];
+  const bg = bgImage(s.disp.bg);
   const ks = (Object.keys(s.disp.chars) as CharKey[]).filter((k) => STAND[k].base);
   return (
     <div
       className="lv-slot-thumb"
       style={
         cg || bg
-          ? { backgroundImage: `url("${cg ?? bg}")` }
+          ? { backgroundImage: cg ? `url("${cg}")` : bg! }
           : { background: BG_FALLBACK[s.disp.bg] }
       }
     >
@@ -4567,14 +4568,14 @@ function Montage({ shots, caption, onShutter }: { shots: import("@/lib/love/type
     <div className="lv-montage">
       <div className="lv-montage-row">
         {shots.slice(0, n).map((sh, i) => {
-          const bg = BG[sh.bg];
+          const bg = bgImage(sh.bg);
           const set = sh.who ? (sh.outfit && OUTFITS[sh.who]?.[sh.outfit]) || STAND[sh.who] : null;
           const img = set ? (sh.face && sh.face !== "base" && set.faces[sh.face]) || set.base : null;
           return (
             <div key={i} className="lv-polaroid" style={{ transform: `rotate(${tilt[i % 4]}deg)` }}>
               <div
                 className="lv-polaroid-pic"
-                style={bg ? { backgroundImage: `url("${bg}")` } : { background: BG_FALLBACK[sh.bg] }}
+                style={bg ? { backgroundImage: bg } : { background: BG_FALLBACK[sh.bg] }}
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 {img && <img src={img} alt="" className="lv-polaroid-char" draggable={false} />}
@@ -4590,39 +4591,208 @@ function Montage({ shots, caption, onShutter }: { shots: import("@/lib/love/type
 }
 
 /**
- * 처음 가이드 (코치마크) — 대상 UI(sel) 를 밝히고 주변을 어둡게, 한두 문장 + "알겠어".
+ * 처음 가이드 (코치마크) — 대상 UI(sel) 를 밝히고 주변을 진하게 어둡게, 말풍선 + 화살표로 연결.
+ * 말풍선: 실제 화면을 잘라 둔 예시 그림(img, 없거나 못 불러오면 생략) · 제목 · 단계 ①②③ · 예시 한 줄 · "알겠어"
+ * 문장은 지금 세이브(vars)로 채울 수 있으면 채움 (예: "에이미 노트의 다음 ??? 칸은 2주차 일이야")
  * 대상이 지금 화면에 없으면(숨김 · 아직 안 그려짐) 잠깐 찾아보다가 다음 기회로 넘김 (본 걸로 안 침)
  */
-const GUIDE: Record<string, { sel: string; title: string; text: string }> = {
-  talk: { sel: '[data-coach="talk"]', title: "한마디", text: "판 시작 전에 말을 걸 수 있어. 뭐라고 하느냐에 따라 상대 버릇이 달라져." },
-  react: { sel: '[data-coach="book"]', title: "반응 단서", text: "방금 반응이 노트에 적혔어. 결전에서 단서 카드로 쓸 수 있어." },
-  combo: { sel: '[data-coach="combo"]', title: "✎ 단서 조합", text: "아는 단서 두 장을 맞물려 봐. 맞으면 길이 열려. 기회는 두 번, 틀리면 상대가 경계해." },
-  mindday: { sel: ".lv-mindday", title: "알게 된 것", text: "그녀를 제대로 알아본 날은 여기 남아. 이게 쌓여야 끝이 달라져." },
-  relnote: { sel: '[data-coach="mindnotes"]', title: "그녀에 대해 아는 것", text: "??? 칸은 아직 놓친 순간이야. 주차가 힌트야." },
-  secret: { sel: ".lv-choice-secret", title: "★ 선택지", text: "모은 단서나 지난 회차로 열린 선택지야." },
-  read: { sel: ".lv-choice-read", title: "✎ 선택지", text: "그녀를 알아본 만큼 열리는 선택지야. 단서로 열리는 ★ 와는 달라." },
-  tell: { sel: ".lv-choice-tell", title: "읽기 노트", text: "아는 버릇이면 뜻이 같이 떠. 믿을지는 네가 정해." },
-  relhud: { sel: '[data-coach="relhud"]', title: "관계", text: "여기 누르면 두 사람과의 관계랑 그녀 노트. 키보드 R 도 돼." },
-  plan: { sel: ".lv-free-wrap", title: "오늘 할 일", text: "히로인만 만나지 말고 혼자 하는 준비(셔플 연습 · 노트 정리 · 동네 한 바퀴)도 섞어 봐. 데이트도 포커도 달라져. 카드 아래 글자가 얻는 거야." },
-  skill: { sel: ".lv-skillup", title: "딜러 실력", text: "셔플이 쌓이면 손이 돌아와. 매치에서 버릇이 잘 보이고, '예전의 손'부터는 새 한마디랑 결전 보험이 생겨." },
-  hint: { sel: ".lv-noteup", title: "노트 힌트", text: "노트 정리로 그녀 노트 ??? 칸에 힌트가 생겼어. 답은 아니고 방향이야. 다시 보려면 왼쪽 위 하트 줄(관계 화면 · R)." },
-  prep: { sel: ".lv-choice-prep, .lv-dlg-gate", title: "✦ 준비해 둔 덕분", text: "혼자 해 둔 준비(셔플 연습 · 동네 한 바퀴 · 노트 정리 · 근무 팁) 덕분에 달라진 순간이야." },
-  item: { sel: ".lv-noteup", title: "주머니 속 물건", text: "혼자 산 작은 물건은, 다음에 히로인을 만날 때 '건네기'(✦)로 나와. 그녀 취향이면 마음이 움직여." },
+type CoachVars = Record<string, number>;
+interface CoachGuide {
+  sel: string;
+  title: string;
+  /** 단계 (한 줄씩) — 2~4개 */
+  steps: (v: CoachVars) => string[];
+  /** 예시 한 줄 (선택) */
+  ex?: (v: CoachVars) => string | null;
+  /** 실제 화면에서 잘라 둔 예시 그림 (public/love/guide) */
+  img?: string;
+}
+const G = "/love/guide";
+/** 가장 최근에 받은 노트 힌트 */
+const coachLastHint = (v: CoachVars) =>
+  MIND.filter((m) => (v[`h_${m.id}`] ?? 0) >= 1 && !((v[m.id] ?? 0) >= 1)).sort(
+    (a, b) => (v[`_hd_${b.id}`] ?? 0) - (v[`_hd_${a.id}`] ?? 0)
+  )[0];
+const NUM = ["①", "②", "③", "④"];
+const GUIDE: Record<string, CoachGuide> = {
+  plan: {
+    sel: ".lv-free-wrap",
+    title: "오늘 할 일 — 일정 카드",
+    img: `${G}/plan.webp`,
+    steps: () => [
+      "하루에 카드 한 장. 누구를 만날지, 혼자 무엇을 준비할지 골라.",
+      "카드 맨 아래 금색 글자가 그 카드로 얻는 거야.",
+      "히로인만 만나기보다 셔플 연습 · 노트 정리 · 동네 한 바퀴를 섞으면 데이트도 포커도 달라져.",
+    ],
+    ex: () => "예) 셔플 연습 → 딜러 실력 ✦ · 동네 한 바퀴 → 그녀에게 건넬 물건",
+  },
+  relhud: {
+    sel: '[data-coach="relhud"]',
+    title: "관계 · 그녀 노트 열기",
+    img: `${G}/relpanel.webp`,
+    steps: () => [
+      "왼쪽 위 하트 줄을 누르면 관계 화면이 열려. (PC는 R 키)",
+      "파란 하트는 에이미, 보라 하트는 연서, 금색 ✦ 는 딜러 실력이야.",
+      "빨간 점이 붙으면 노트에 새로 적힌 게 있다는 뜻이야.",
+    ],
+  },
+  relnote: {
+    sel: '[data-coach="mindnotes"]',
+    title: "그녀 노트 — 그녀에 대해 아는 것",
+    img: `${G}/mindnotes.webp`,
+    steps: () => [
+      "그녀를 제대로 알아본 순간은 문장으로 채워져.",
+      "아직 못 알아본 순간은 ??? 로 남아.",
+      "??? 옆 'N주차'는 그 순간이 있는 주야. 그 주에 그녀를 만날 때 말과 행동을 잘 봐.",
+      "「노트 정리」 카드를 고르면 ??? 칸 하나에 방향 힌트가 붙어.",
+    ],
+  },
+  mindday: {
+    sel: ".lv-mindday",
+    title: "알게 된 것",
+    img: `${G}/mindday.webp`,
+    steps: () => [
+      "그녀를 제대로 알아본 날엔, 다음 날 아침 이렇게 한 줄이 남아.",
+      "이런 순간이 쌓여야 엔딩이 달라져. 호감(하트)과는 따로 세.",
+      "모아 둔 건 관계 화면의 그녀 노트(「그녀에 대해 아는 것」)에서 다시 볼 수 있어.",
+    ],
+  },
+  read: {
+    sel: ".lv-choice-read",
+    title: "✎ 선택지 — 그녀를 알아본 만큼",
+    img: `${G}/choice-read.webp`,
+    steps: () => [
+      "연노랑 ✎ 선택지는 그녀 노트에 쌓인 만큼 열려.",
+      "맞히면 그녀가 알아봐 준 걸 기억해. 다음 날 아침 '알게 된 것'에 남아.",
+      "단서로 열리는 금색 ★ 선택지와는 다른 거야.",
+    ],
+  },
+  secret: {
+    sel: ".lv-choice-secret",
+    title: "★ 선택지 — 단서로 열린 길",
+    img: `${G}/choice-secret.webp`,
+    steps: () => [
+      "금색 ★ 선택지는 모은 단서나 지난 회차의 기억이 있어야만 보여.",
+      "고르면 이야기가 숨은 길로 갈 수 있어. 진엔딩도 이쪽이야.",
+      "이번에 못 본 ★ 은 다음 회차에 다시 노려 봐.",
+    ],
+  },
+  tell: {
+    sel: ".lv-choice-tell",
+    title: "버릇 읽기 — 읽기 노트",
+    img: `${G}/choice-tell.webp`,
+    steps: () => [
+      "상대 버릇이 보이면, 아는 버릇은 선택지 위에 뜻이 같이 떠.",
+      "뜻은 읽기 노트에 모아 둔 그대로야. 관계 화면에서 다시 볼 수 있어.",
+      "믿고 따를지, 의심할지는 네가 정해. 버릇도 가끔 거짓말을 해.",
+    ],
+  },
+  talk: {
+    sel: '[data-coach="talk"]',
+    title: "판 전에 한마디 — 테이블 토크",
+    img: `${G}/talk.webp`,
+    steps: (v) => [
+      "매치가 시작되기 전, 이 줄에서 상대에게 한마디를 건넬 수 있어.",
+      "말에 따라 상대 성향이 바뀌어. 도발하면 허세가 늘고, 내기를 걸면 진지해져.",
+      "상대가 반응하면 그 반응이 '반응 단서'로 노트에 남아. 결전에서 쓸 수 있어.",
+      ...(skillOf(v) >= SKILL_PRO ? ["딜러 실력 「예전의 손」이라 ✦ 고급 한마디도 쓸 수 있어. 그 판은 버릇이 다 보여."] : []),
+    ],
+    ex: () => "예) 에이미에게 \"이번 판 지면 딸기우유.\" → 좋은 패일 때 버릇이 확실히 보여",
+  },
+  react: {
+    sel: '[data-coach="book"]',
+    title: "반응 단서",
+    img: `${G}/react.webp`,
+    steps: () => [
+      "방금 상대가 보인 반응이 노트(이 책)에 적혔어.",
+      "반응 단서는 마지막 결전에서 단서 카드로 쓸 수 있어.",
+      "모은 반응은 관계 화면 「읽기 노트」에 사람별로 남아.",
+    ],
+  },
+  combo: {
+    sel: '[data-coach="combo"]',
+    title: "✎ 단서 조합",
+    img: `${G}/combo.webp`,
+    steps: (v) => [
+      "이 버튼을 누르고, 아는 단서 카드 두 장을 골라 맞물려 봐.",
+      "맞는 짝이면 이 판을 뒤집는 ✎ 행동이 열려.",
+      skillOf(v) >= SKILL_PRO
+        ? "기회는 두 번. 「예전의 손」이라 첫 실수 한 번은 상대가 못 봐."
+        : "기회는 두 번. 틀리면 상대가 경계해서 마음이 흔들려.",
+    ],
+    ex: () => "예) 상대가 보인 버릇 + 이야기에서 얻은 단서 → 숨은 뜻",
+  },
+  skill: {
+    sel: ".lv-skillup",
+    title: "딜러 실력이 올랐어",
+    img: `${G}/skill.webp`,
+    steps: (v) => [
+      `지금은 ${skillOf(v) + 1}단계 「${SKILL_NAME[skillOf(v)]}」. 셔플 연습 · 복기 같은 혼자 준비로 올라.`,
+      "단계가 오를수록 매치에서 상대 버릇이 더 정확하게, 더 많이 보여.",
+      "4단계 「예전의 손」부터 ✦ 고급 한마디와 결전 보험(첫 실수 한 번)이 생겨.",
+    ],
+  },
+  hint: {
+    sel: ".lv-noteup",
+    title: "노트 힌트",
+    img: `${G}/hint.webp`,
+    steps: (v) => {
+      const m = coachLastHint(v);
+      return [
+        m && m.who !== "both"
+          ? `「노트 정리」로 ${NAME[m.who]} 노트의 ??? 칸 하나에 힌트가 붙었어. (그 칸은 ${m.week}주차 일)`
+          : "「노트 정리」로 그녀 노트의 ??? 칸 하나에 힌트가 붙었어.",
+        "답이 아니라 방향이야. 그 장면이 오면 이 문장을 떠올려 봐.",
+        "다시 보려면 왼쪽 위 하트 줄 → 그녀 노트(「그녀에 대해 아는 것」).",
+      ];
+    },
+  },
+  item: {
+    sel: ".lv-noteup",
+    title: "주머니 속 물건",
+    img: `${G}/item.webp`,
+    steps: () => [
+      "동네 한 바퀴에서 산 물건이 주머니에 들어갔어.",
+      "다음에 히로인을 만나면 민트색 ✦ '건네기' 선택지가 떠.",
+      "그녀 취향에 맞는 물건이면 마음이 움직여. 누가 뭘 좋아했는지 떠올려 봐.",
+    ],
+    ex: (v) => {
+      const has = ITEMS.filter((k) => (v[k] ?? 0) >= 1).map((k) => ICON[k].name);
+      return has.length ? `지금 주머니: ${has.join(" · ")}` : null;
+    },
+  },
+  prep: {
+    sel: ".lv-choice-prep, .lv-dlg-gate",
+    title: "✦ 준비해 둔 덕분",
+    img: `${G}/prep.webp`,
+    steps: () => [
+      "민트색 ✦ 는 미리 해 둔 혼자 준비 덕분에 열린 순간이야.",
+      "셔플 연습(실력) · 근무 팁 · 동네 한 바퀴 물건 · 노트 정리가 이렇게 돌아와.",
+      "같은 데이트라도 준비에 따라 장면이 달라져.",
+    ],
+  },
 };
 
 function CoachMark({
   root,
   guide,
+  vars,
   onOk,
   onMiss,
 }: {
   root: React.RefObject<HTMLDivElement | null>;
-  guide: { sel: string; title: string; text: string };
+  guide: CoachGuide;
+  vars: CoachVars;
   onOk: () => void;
   onMiss: () => void;
 }) {
   const [box, setBox] = useState<{ x: number; y: number; w: number; h: number; W: number; H: number } | null>(null);
+  const [tip, setTip] = useState<{ w: number; h: number } | null>(null);
+  const [imgOk, setImgOk] = useState(!!guide.img);
+  // 대상 둘레 어디에도 안 들어갈 때: 1 = 그림 빼기 → 2 = 예시 줄도 빼기 (다시 재서 맞춤)
+  const [compact, setCompact] = useState(0);
   const miss = useRef(onMiss);
+  const tipEl = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     miss.current = onMiss;
   });
@@ -4652,22 +4822,93 @@ function CoachMark({
       window.removeEventListener("resize", onResize);
     };
   }, [root, guide.sel]);
+  // 말풍선 크기는 그려 본 뒤에 잼 (그림이 늦게 불러와져도 다시 맞춤)
+  useEffect(() => {
+    const el = tipEl.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setTip({ w: el.offsetWidth, h: el.offsetHeight }));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [box]);
   if (!box) return null;
-  const pad = Math.max(4, box.W * 0.005);
-  // 말풍선: 대상 아래(위쪽 절반에 있으면) 또는 위. 가로는 화면 안으로 (모바일 폭에선 거의 꽉 차게)
-  const bw = box.W < 720 ? box.W * 0.86 : Math.min(box.W * 0.36, 460);
-  const left = Math.max(box.W * 0.02, Math.min(box.x + box.w / 2 - bw / 2, box.W * 0.98 - bw));
-  const below = box.y + box.h / 2 < box.H / 2;
-  const top = below ? box.y + box.h + pad * 3 : box.y - pad * 3;
+  const { W, H } = box;
+  const pad = Math.max(5, W * 0.006);
+  const m = Math.max(8, W * 0.012);
+  // 가로로 짧은 화면(가로 폰): 그림을 왼쪽에 두는 옆 배치 · 넓게
+  const short = H < 520;
+  const bw = short ? Math.min(W * 0.72, 600) : W < 900 ? W * 0.62 : Math.min(Math.max(W * 0.38, 340), 540);
+  const th = tip?.h ?? 0;
+  const tw = tip?.w ?? bw;
+  const tx = box.x - pad,
+    ty = box.y - pad,
+    tW = box.w + pad * 2,
+    tH = box.h + pad * 2;
+  const cx = tx + tW / 2,
+    cy = ty + tH / 2;
+  const gap = Math.max(14, W * 0.016);
+  type Side = "below" | "above" | "right" | "left";
+  const room: Record<Side, number> = {
+    below: H - (ty + tH) - gap - m,
+    above: ty - gap - m,
+    right: W - (tx + tW) - gap - m,
+    left: tx - gap - m,
+  };
+  const fits = (s: Side) => (s === "below" || s === "above" ? room[s] >= th : room[s] >= tw && th <= H - 2 * m);
+  const order: Side[] = cy < H / 2 ? ["below", "above", "right", "left"] : ["above", "below", "right", "left"];
+  const anyFit = order.some(fits);
+  const hasImg = !!guide.img && imgOk;
+  const hasEx = !!guide.ex?.(vars);
+  if (tip && !anyFit && ((compact === 0 && hasImg) || (compact <= 1 && hasEx))) setCompact(compact === 0 && hasImg ? 1 : 2);
+  const side: Side =
+    order.find(fits) ?? (order.slice().sort((a, b) => room[b] / (b === "below" || b === "above" ? th || 1 : tw) - room[a] / (a === "below" || a === "above" ? th || 1 : tw))[0]);
+  const clampX = (x: number) => Math.max(m, Math.min(x, W - m - tw));
+  const clampY = (y: number) => Math.max(m, Math.min(y, H - m - th));
+  let left: number, top: number;
+  if (side === "below" || side === "above") {
+    left = clampX(cx - tw / 2);
+    top = side === "below" ? ty + tH + gap : ty - gap - th;
+    top = clampY(top);
+  } else {
+    top = clampY(cy - th / 2);
+    left = side === "right" ? tx + tW + gap : tx - gap - tw;
+    left = Math.max(m, Math.min(left, W - m - tw));
+  }
+  // 화살표: 말풍선 가장자리에서 대상 쪽으로
+  const ax = Math.max(18, Math.min(cx - left, tw - 18));
+  const ay = Math.max(18, Math.min(cy - top, th - 18));
+  const steps = guide.steps(vars);
+  const ex = compact >= 2 ? null : (guide.ex?.(vars) ?? null);
   return (
     <div className="lv-coach" onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}>
-      <div className="lv-coach-hole" style={{ left: box.x - pad, top: box.y - pad, width: box.w + pad * 2, height: box.h + pad * 2 }} />
-      <div className="lv-coach-tip" style={{ left, top, width: bw, transform: below ? undefined : "translateY(-100%)" }}>
-        <b>{guide.title}</b>
-        <p>{guide.text}</p>
-        <button className="lv-coach-ok" onClick={onOk}>
-          알겠어
-        </button>
+      <div className="lv-coach-hole" style={{ left: tx, top: ty, width: tW, height: tH }} />
+      <div
+        ref={tipEl}
+        className={`lv-coach-tip ${short && !compact ? "lv-coach-tip-row" : ""}`}
+        style={{ left, top, width: bw, maxHeight: H - 2 * m, visibility: tip ? undefined : "hidden" }}
+      >
+        <i
+          className={`lv-coach-arrow lv-coach-arrow-${side}`}
+          style={side === "below" || side === "above" ? { left: ax } : { top: ay }}
+        />
+        {guide.img && imgOk && !compact && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img className="lv-coach-img" src={guide.img} alt="" onError={() => setImgOk(false)} />
+        )}
+        <div className="lv-coach-body">
+          <b>{guide.title}</b>
+          <ol>
+            {steps.map((t, i) => (
+              <li key={i}>
+                <span>{NUM[i] ?? "·"}</span>
+                {t}
+              </li>
+            ))}
+          </ol>
+          {ex && <p className="lv-coach-ex">{ex}</p>}
+          <button className="lv-coach-ok" onClick={onOk}>
+            알겠어
+          </button>
+        </div>
       </div>
     </div>
   );

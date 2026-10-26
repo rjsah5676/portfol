@@ -667,14 +667,15 @@ export default function FightGame() {
             // 허수아비가 낭떠러지로 떨어지면 처음 자리(시작 위치)로 — 보통 대전처럼 떨어진 자리 위에서 다시 내려오면
             // 가만히 있는 허수아비는 또 떨어지기만 함
             if (s.ev.some((e) => e.k === "fall" && e.p === 1)) s.p[1] = newMatch([s.p[0].ch, s.p[1].ch], s.map).p[1];
-            for (let k = 0; k < 2; k++) s.p[k].hp = CHARS[s.p[k].ch].hp;
+            // (연습 · 튜토리얼은 소극성 페널티 없음 — 멀리 서 있는 허수아비가 걸리던 것)
+            for (let k = 0; k < 2; k++) ((s.p[k].hp = CHARS[s.p[k].ch].hp), (s.p[k].neg = 0), (s.p[k].negT = 0));
             s.p[0].meter = METER_MAX;
             s.timer = ROUND_SEC * 60;
             fm?.syncHp(s);
           }
           if (tutorial) {
             // 체력 무한 · 시간 멈춤 (게이지는 단계마다 tutorial 이 정함)
-            for (let k = 0; k < 2; k++) s.p[k].hp = CHARS[s.p[k].ch].hp;
+            for (let k = 0; k < 2; k++) ((s.p[k].hp = CHARS[s.p[k].ch].hp), (s.p[k].neg = 0), (s.p[k].negT = 0));
             s.timer = ROUND_SEC * 60;
             if (tutorial.update(s)) setTutView(tutorial.view());
             if (tutorial.finished && !tutReported) ((tutReported = true), void tutorialDone());
@@ -725,6 +726,10 @@ export default function FightGame() {
           else if (e.k === "encore") sfxForte("encore");
           else if (e.k === "catch") sfxForte("catch");
           else if (e.k === "timeStop") sfxStatus("pause");
+          else if (e.k === "neg") {
+            if (e.v) sfxCounter();
+            else sfxTech();
+          }
           else if (e.k === "super") {
             sfxSuper();
             const cut = { ch: s.p[e.p].ch, right: e.p === 1, key: s.f, skin: skinNow[e.p] };

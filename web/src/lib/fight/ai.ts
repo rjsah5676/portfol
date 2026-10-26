@@ -4,7 +4,7 @@
  * 오프라인 전용이라 결정론일 필요는 없지만, 같은 시드면 같은 행동을 하도록 자체 난수를 씀.
  */
 import { CHARS, SUB, type CharDef, type MoveDef } from "./chars";
-import { IN, VIEW_H, WALL_L, WALL_R, clone, isAir, mapOf, platBelow, step, type Fighter, type State } from "./sim";
+import { IN, NEG_WARN, VIEW_H, WALL_L, WALL_R, clone, isAir, mapOf, platBelow, step, type Fighter, type State } from "./sim";
 import type { Plat } from "./maps";
 import { ROUTES, type ComboRoute, type Starter } from "./combos";
 
@@ -242,7 +242,7 @@ export function aiForRating(r: number, charId?: string): AILevel {
  * AI 지문: 랭크전 봇전은 서버가 같은 경기를 다시 돌려 확인하니, 브라우저와 서버의 AI가 똑같아야 함.
  * 단계 값·보정·콤보 길은 자동으로 들어가고, next() 같은 판단 코드를 바꿨으면 AI_REV 를 올릴 것.
  */
-const AI_REV = 17;
+const AI_REV = 18;
 export const AI_ID = (() => {
   const str = AI_REV + JSON.stringify([AI_LEVELS, RANK_TIERS, AI_RATING, ADJ_AT, CHAR_ADJ, ROUTES, ROUTE_CAP, HUMAN]);
   let h = 0x811c9dc5;
@@ -482,6 +482,11 @@ export class FightAI {
         if (this.respect) out = (out & ~(IN.A | IN.B | IN.L | IN.R)) | away;
       }
       out = guardFace(s, me, out);
+      // 소극성 점수가 경고 근처면 땅에서 물러나기를 그만두고, 멀리서 서 있으면 다가감 (페널티 피하기, 10.26)
+      if (f.neg >= NEG_WARN * 0.75 && !isAir(s, f) && !(out & IN.D)) {
+        out &= ~away;
+        if (!(out & (IN.L | IN.R | IN.A | IN.B | IN.C | IN.X | IN.J)) && dist > 200) out |= toward;
+      }
       this.lastPress = out & (IN.A | IN.B | IN.C | IN.X | IN.J);
       // 방금 톡 했던 방향을 다시 누르면 대시가 나감 → 대시 거리 안에 낭떠러지면 이번엔 안 누름
       if (!isAir(s, f) && !this.crossTo && f.st !== "dash") {

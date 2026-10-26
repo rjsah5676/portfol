@@ -3500,7 +3500,7 @@
   transform: translateY(-0.15cqw);
   box-shadow: 0 0 1cqw #ffe2a066;
 }
-/* ===== 처음 가이드 (코치마크) ===== */
+/* ===== 처음 가이드 (코치마크) — 진한 어둠 · 굵은 금테 · 맥박 · 화살표 · 예시 그림 · 단계 ①②③ ===== */
 .lv-coach {
   position: absolute;
   inset: 0;
@@ -3509,31 +3509,85 @@
 }
 .lv-coach-hole {
   position: absolute;
-  border: 0.18cqw solid #ffd27a;
-  border-radius: 0.8cqw;
-  box-shadow: 0 0 0 200vmax #000000a8, 0 0 1.6cqw #ffd27a88;
+  border: max(3px, 0.28cqw) solid #ffd27a;
+  border-radius: max(6px, 0.8cqw);
+  box-shadow: 0 0 0 200vmax #000000cc, 0 0 1.6cqw #ffd27aaa, inset 0 0 1cqw #ffd27a55;
   pointer-events: none;
-  animation: lv-fadein 0.3s ease both;
+  animation: lv-fadein 0.3s ease both, lv-coach-pulse 1.6s ease-in-out 0.3s infinite;
+}
+@keyframes lv-coach-pulse {
+  0%, 100% { box-shadow: 0 0 0 200vmax #000000cc, 0 0 1.2cqw #ffd27a99, inset 0 0 0.8cqw #ffd27a44; }
+  50% { box-shadow: 0 0 0 200vmax #000000cc, 0 0 2.8cqw #ffd27aee, inset 0 0 1.4cqw #ffd27a77; }
 }
 .lv-coach-tip {
   position: absolute;
-  border: 0.14cqw solid #c9a25a;
-  border-radius: 0.9cqw;
-  background: linear-gradient(180deg, #141d44fa, #0a0f28fa);
-  padding: 1cqw 1.4cqw;
-  box-shadow: 0 0.8cqw 2.4cqw #000d;
+  display: flex;
+  flex-direction: column;
+  gap: max(6px, 0.7cqw);
+  overflow: visible;
+  border: max(2px, 0.16cqw) solid #ffd27a;
+  border-radius: max(8px, 0.9cqw);
+  background: linear-gradient(180deg, #172150fa, #0a0f28fa);
+  padding: max(10px, 1.1cqw) max(12px, 1.4cqw);
+  box-shadow: 0 0.8cqw 2.4cqw #000d, 0 0 1.4cqw #ffd27a33;
   animation: lv-fadein 0.35s ease both;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+  line-break: strict;
 }
-.lv-coach-tip b { display: block; font-size: 1.4cqw; color: #ffd27a; }
-.lv-coach-tip p { margin-top: 0.35cqw; font-size: 1.3cqw; line-height: 1.55; color: #fff3d6; }
+.lv-coach-tip-row { flex-direction: row; align-items: flex-start; }
+.lv-coach-body { display: flex; min-width: 0; flex: 1; flex-direction: column; overflow-y: auto; max-height: 100%; }
+.lv-coach-img {
+  display: block;
+  width: 100%;
+  max-height: 11cqw;
+  object-fit: contain;
+  border: 1px solid #c9a25a88;
+  border-radius: max(5px, 0.6cqw);
+  background: #05070f;
+}
+.lv-coach-tip-row .lv-coach-img { width: 38%; max-height: none; flex: none; align-self: center; }
+.lv-coach-tip b { display: block; font-size: clamp(14px, 1.55cqw, 22px); line-height: 1.35; color: #ffd27a; }
+.lv-coach-tip ol { margin-top: max(4px, 0.45cqw); display: flex; flex-direction: column; gap: max(3px, 0.3cqw); }
+.lv-coach-tip li {
+  display: flex;
+  gap: max(5px, 0.45cqw);
+  font-size: clamp(12.5px, 1.28cqw, 18px);
+  line-height: 1.5;
+  color: #fff3d6;
+}
+.lv-coach-tip li > span { flex: none; color: #ffd27a; font-weight: 700; }
+.lv-coach-ex {
+  margin-top: max(5px, 0.5cqw);
+  border-left: max(2px, 0.2cqw) solid #ffd27a88;
+  padding-left: max(6px, 0.6cqw);
+  font-size: clamp(11.5px, 1.12cqw, 16px);
+  line-height: 1.45;
+  color: #ffe2a0cc;
+}
+/* 화살표: 말풍선 가장자리 → 대상 */
+.lv-coach-arrow {
+  position: absolute;
+  width: max(14px, 1.3cqw);
+  height: max(14px, 1.3cqw);
+  border: inherit;
+  background: #141d46;
+  transform: translate(-50%, -50%) rotate(45deg);
+  pointer-events: none;
+}
+.lv-coach-arrow-below { top: 0; border-right: none !important; border-bottom: none !important; }
+.lv-coach-arrow-above { top: 100%; border-left: none !important; border-top: none !important; background: #0b1029; }
+.lv-coach-arrow-right { left: 0; border-top: none !important; border-right: none !important; }
+.lv-coach-arrow-left { left: 100%; border-bottom: none !important; border-left: none !important; }
 .lv-coach-ok {
   display: block;
-  margin: 0.8cqw 0 0 auto;
-  border: 0.12cqw solid #c9a25a;
-  border-radius: 0.6cqw;
-  background: #1d2a5c;
-  padding: 0.5cqw 1.6cqw;
-  font-size: 1.2cqw;
+  margin: max(8px, 0.8cqw) 0 0 auto;
+  min-height: 34px;
+  border: max(2px, 0.14cqw) solid #ffd27a;
+  border-radius: max(6px, 0.6cqw);
+  background: #23336e;
+  padding: max(5px, 0.5cqw) max(16px, 1.8cqw);
+  font-size: clamp(13px, 1.25cqw, 18px);
   font-weight: 700;
   color: #fff3d6;
 }

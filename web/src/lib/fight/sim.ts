@@ -240,6 +240,10 @@ export interface Fighter {
   gcT: number;
   /** 건모 Alt+F4 뒤 게이지 덜 얻는 남은 프레임 */
   mnerf: number;
+  /** 소극성 점수 (도망 · 멀리서 가만히 쌓이고, 다가가기 · 공격 · 맞히기로 줄어듦) — NEG_WARN 경고, NEG_PEN 이면 페널티 */
+  neg: number;
+  /** 소극성 페널티 남은 프레임: 받는 피해 NEG_DMG% 더 (그동안 소극성 점수는 안 쌓임) */
+  negT: number;
   /** 띄워진 상태 (잡기·약 4단 마무리): 떨어지는 속도가 느려 공중 콤보를 넣기 쉬움, 땅에 닿으면 0 */
   float: number;
   /** 띄워진 채로 맞고 있는 프레임 (float 1·2, 땅에 닿으면 0) — 2초 넘으면 점점 빨리 떨어짐 */
@@ -375,7 +379,9 @@ export type EvKind =
   | "catch"
   | "encore"
   /** 시간 정지 (포르테 되감기 낙하) — v = 프레임 */
-  | "timeStop";
+  | "timeStop"
+  /** 소극성: v 0 경고 · 1 페널티 (p = 받는 쪽) */
+  | "neg";
 export interface Ev {
   k: EvKind;
   /** 관련 플레이어 (hit/block은 때린 쪽) */
@@ -512,6 +518,8 @@ function newFighter(ch: number, side: 0 | 1, map: MapDef): Fighter {
     jumps: 0,
     gcT: 0,
     mnerf: 0,
+    neg: 0,
+    negT: 0,
     float: 0,
     floatT: 0,
     juggle: 0,
@@ -608,7 +616,7 @@ const cloneF = (f: Fighter): Fighter => ({ ...f, hist: f.hist.slice(), enc: f.en
  * 이 빌드의 게임 데이터 지문 (캐릭터 성능·맵) — 온라인에서 서로 다른 빌드끼리 붙었는지 확인.
  * 계산 방식(sim.ts)만 바꿨을 땐 SIM_REV를 올릴 것.
  */
-const SIM_REV = 35;
+const SIM_REV = 36;
 export const BUILD_ID = (() => {
   const str = SIM_REV + JSON.stringify(CHARS.map((c) => [c.hp, c.walk, c.jumpVx, c.dash, c.cd, c.glide, c.hurt, c.width, c.moves])) + JSON.stringify(MAPS.map((m) => [m.plats, m.spawn]));
   let h = 2166136261;
@@ -658,6 +666,8 @@ export function hash(s: State): number {
     mix(f.hit);
     mix(f.kd);
     mix(f.airDash);
+    mix(f.neg);
+    mix(f.negT);
     mix(f.airUsed);
     mix(f.airK);
     mix(f.airS);
@@ -2517,6 +2527,60 @@ function rewindDive(s: State, i: number) {
   s.ev.push({ k: "rewind", p: i, x: f.x, h: f.h, v: 0 });
 }
 
+/**
+ * 소극성 페널티 (10.26, 길티기어 네거티브 페널티처럼): 앞선 채 도망만 다니며 시간을 끄는 것 막기.
+ * 내 힘으로 상대에게서 멀어지면(걷기 · 대시 · 점프) 점수 +NEG_AWAY, 멀리(NEG_FAR px 넘게) 가만히 +1,
+ * 다가가면 −NEG_TOW, 기술을 내는 동안 −NEG_ATK, 상대를 맞히면 −NEG_HIT. 맞거나 막거나 넘어진 동안은 그대로.
+ * NEG_WARN 넘으면 경고(머리 위 「소극적」), NEG_PEN 이면 페널티 — 상대 게이지 +NEG_METER, NEG_T 동안 받는 피해 +NEG_DMG%
+ * (사람 경기 기록 240분: 페널티 18번 — 주로 콤보 뒤 계속 빠지며 버티던 판, 봇은 1번)
+ */
+const NEG_AWAY = 2;
+const NEG_TOW = 3;
+const NEG_ATK = 2;
+const NEG_HIT = 60;
+const NEG_FAR = 300;
+const NEG_WARN = 240;
+const NEG_PEN = 420;
+const NEG_T = 600;
+const NEG_DMG = 20;
+const NEG_METER = 25;
+function passive(s: State, hp0: number[]) {
+  for (let i = 0; i < 2; i++) {
+    const f = s.p[i];
+    // 페널티 중: 이번 프레임 받은 피해에 NEG_DMG% 더 (KO 될 수 있음)
+    const lost = hp0[i] - f.hp;
+    if (f.negT > 0 && lost > 0) f.hp = Math.max(0, f.hp - Math.trunc((lost * NEG_DMG) / 100));
+  }
+  for (let i = 0; i < 2; i++) {
+    const f = s.p[i];
+    const o = s.p[1 - i];
+    if (f.negT > 0) {
+      f.negT--;
+      continue;
+    }
+    const was = f.neg;
+    const dx = (o.x - f.x) / SUB;
+    const dir = Math.abs(dx) < 20 ? 0 : dx > 0 ? 1 : -1;
+    if (f.st === "atk") f.neg -= NEG_ATK;
+    else if (f.st === "idle" || f.st === "walk" || f.st === "dash" || f.st === "jump") {
+      const v = f.vx * dir;
+      if (v > 200) f.neg -= NEG_TOW;
+      else if (v < -200) f.neg += NEG_AWAY;
+      else if (Math.abs(dx) > NEG_FAR) f.neg += 1;
+    }
+    if (hp0[1 - i] > o.hp) f.neg -= NEG_HIT;
+    f.neg = Math.max(0, Math.min(NEG_PEN, f.neg));
+    if (was < NEG_WARN && f.neg >= NEG_WARN) s.ev.push({ k: "neg", p: i, x: f.x, h: f.h + 70 * SUB, v: 0 });
+    if (f.neg >= NEG_PEN) {
+      f.neg = 0;
+      f.negT = NEG_T;
+      o.meter = Math.min(METER_MAX, o.meter + NEG_METER);
+      s.ev.push({ k: "neg", p: i, x: f.x, h: f.h + 70 * SUB, v: 1 });
+    }
+  }
+}
+export { NEG_WARN, NEG_PEN, NEG_T };
+
 /** 포르테 「앙코르」: 맞힌 타격 기록 · 필살기가 맞으면 기록한 타격을 같은 박자로 다시 넣음 */
 function encoreStep(s: State) {
   for (let i = 0; i < 2; i++) {
@@ -2637,6 +2701,7 @@ export function step(s: State, input: [number, number]): State {
     return s;
   }
 
+  const hpF = [s.p[0].hp, s.p[1].hp];
   if (s.phase === "fight") {
     s.pt++;
     if (s.timer > 0) s.timer--;
@@ -2660,6 +2725,8 @@ export function step(s: State, input: [number, number]): State {
       const f = s.p[i];
       if (f.zap > 0 && --f.zap === 0) zapBurst(s, 1 - i);
     }
+    hpF[0] = s.p[0].hp;
+    hpF[1] = s.p[1].hp;
     control(s, 0);
     control(s, 1);
   } else {
@@ -2683,6 +2750,7 @@ export function step(s: State, input: [number, number]): State {
       if (f.st === "atk" && f.mv === "S" && f.aerial && moveOf(f)?.rwDive && (f.hit || (f.dive && f.rwH - f.h > 260 * SUB))) rewindDive(s, i);
     }
     encoreStep(s);
+    passive(s, hpF);
     // 경직에서 풀린 프레임에 안 맞았으면 콤보 끝
     for (const f of s.p) {
       if (f.recov && f.st !== "hit" && f.st !== "down") f.combo = 0;
