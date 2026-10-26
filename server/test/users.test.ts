@@ -200,7 +200,8 @@ describe("회원 기록", () => {
     await b.rpc("fight.join", { id, nick: "b", ch: 0 });
     const start = () => a.rpc<string>("fight.startMatch", { id, chars: [0, 1], map: 0, delay: 2, maxRb: 12 });
     const fightOf = async (t: string) => (await s.http("/api/me/summary", { token: t })).body.stats.online?.fight;
-    const settle = () => new Promise((r) => setTimeout(r, 150)); // 기록은 응답을 기다리지 않고 저장됨
+    const settle = () => new Promise((r) => setTimeout(r, 150));
+    const POLL = { timeout: 5000, interval: 50 }; // 기록은 응답을 기다리지 않고 저장됨
 
     // 1) 둘 다 "1P 승" → 하나 승 1, 둘 패 1 (같은 신고를 또 보내도 한 번만)
     let m = await start();
@@ -210,9 +211,9 @@ describe("회원 기록", () => {
     expect(await fightOf(aToken)).toBeUndefined(); // 한쪽만 알렸으면 아직
     await b.rpc("fight.result", { id, match: m, winner: 0 });
     await a.rpc("fight.endMatch", { id, match: m });
-    await settle();
-    expect(await fightOf(aToken)).toEqual({ w: 1 });
-    expect(await fightOf(bToken)).toEqual({ l: 1 });
+    // 기록은 비동기로 저장돼서 CI 처럼 느린 곳에선 150ms 안에 안 끝날 수 있음 → 될 때까지 기다림
+    await expect.poll(() => fightOf(aToken), POLL).toEqual({ w: 1 });
+    await expect.poll(() => fightOf(bToken), POLL).toEqual({ l: 1 });
 
     // 2) 서로 다르게 알림 → 기록 안 함
     m = await start();
@@ -224,17 +225,15 @@ describe("회원 기록", () => {
     // 3) 1P가 경기 중에 기권 → 2P 승
     m = await start();
     await a.rpc("fight.forfeit", { id, match: m });
-    await settle();
-    expect(await fightOf(aToken)).toEqual({ w: 1, l: 1 });
-    expect(await fightOf(bToken)).toEqual({ l: 1, w: 1 });
+    await expect.poll(() => fightOf(aToken), POLL).toEqual({ w: 1, l: 1 });
+    await expect.poll(() => fightOf(bToken), POLL).toEqual({ l: 1, w: 1 });
 
     // 4) 경기 중에 2P가 방을 나가고 1P가 경기를 끝냄 → 1P 승
     m = await start();
     await b.rpc("fight.leave", { id });
     await a.rpc("fight.endMatch", { id, match: m });
-    await settle();
-    expect(await fightOf(aToken)).toEqual({ w: 2, l: 1 });
-    expect(await fightOf(bToken)).toEqual({ l: 2, w: 1 });
+    await expect.poll(() => fightOf(aToken), POLL).toEqual({ w: 2, l: 1 });
+    await expect.poll(() => fightOf(bToken), POLL).toEqual({ l: 2, w: 1 });
 
     // 판 수: 격투는 시작한 경기 수(4)로만 셈 (승패 기록은 따로 안 더함)
     expect((await s.http("/api/me", { token: aToken })).body.profile.plays).toBe(4);

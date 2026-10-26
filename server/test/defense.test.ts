@@ -661,7 +661,10 @@ describe("픽셀 글리치 디펜스 서버", () => {
     expect(await b.rpc("defense.hash", { id, tick: 0, h: 123 })).toEqual({ ok: true });
     await expect(a.rpc("defense.hash", { id, tick: 7, h: 1 })).rejects.toThrow();
     await new Promise((r) => setTimeout(r, HASH_TICKS * (TURN_MS / TICKS_PER_TURN) + 300));
-    await a.rpc("defense.hash", { id, tick: HASH_TICKS, h: 1 });
+    // 느린 곳(CI · 테스트 여러 개 동시)에선 턴이 늦게 넘어가 아직 '안 뿌린 tick' 이라 거절될 수 있음 → 받아 줄 때까지 다시 보냄
+    await expect
+      .poll(() => a.rpc("defense.hash", { id, tick: HASH_TICKS, h: 1 }).then(() => true, () => false), { timeout: 5000, interval: 100 })
+      .toBe(true);
     expect(await b.rpc("defense.hash", { id, tick: HASH_TICKS, h: 2 })).toEqual({ ok: false });
     const ds = await sa.wait((e) => e.t === "desync", 3000);
     expect(ds.d.tick).toBe(HASH_TICKS);
