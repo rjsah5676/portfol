@@ -27,6 +27,7 @@ export const MIND: MindMoment[] = [
   { id: "mA04", who: "amy", week: 2, note: "울 때 '괜찮아'는 싫어한다. 옆에 있어 주면 된다.", cap: "차양 아래, 나란히." },
   { id: "mA05", who: "amy", week: 2, note: "대신 해 주면 화낸다. 혼자 해내는 걸 봐 주길 바란다.", cap: "혼자 뽑은 곰." },
   { id: "mA13", who: "amy", week: 2, note: "삼각김밥은 참치마요. 그거 하나면 기분이 풀린다.", cap: "참치마요 두 개." },
+  { id: "mA14", who: "amy", week: 2, note: "사탕은 딸기 맛. 받으면 꼭 갚겠다고 한다.", cap: "딸기 사탕 한 봉지." },
   { id: "mA06", who: "amy", week: 3, note: "돈을 대신 내주면 싫어한다. 같이 있을 곳이면 된다.", cap: "걸어서 십 분." },
   { id: "mA07", who: "amy", week: 3, note: "'괜찮아'를 두 번 하면, 안 괜찮은 거다.", cap: "차용증 위의 손." },
   { id: "mA08", who: "amy", week: 4, note: "숫자는 적어 두면 덜 무섭다. 같이 세면 더.", cap: "스물여섯 주." },
@@ -42,6 +43,7 @@ export const MIND: MindMoment[] = [
   { id: "mY06", who: "yeonseo", week: 2, note: "표정이 생길까 봐 술을 안 마신다. 물로 건배하면 된다.", cap: "물로 한 건배." },
   { id: "mY07", who: "yeonseo", week: 2, note: "약속보다 숫자를 믿는다. 같은 쪽으로 틀리면, 오차가 아니다.", cap: "같은 쪽으로 틀린 계산." },
   { id: "mY08", who: "yeonseo", week: 2, note: "거짓말 칸에 진짜를 숨긴다.", cap: "셋째, 하트 에이스." },
+  { id: "mY14", who: "yeonseo", week: 2, note: "사탕은 박하. 이모 말고는 아무도 몰랐던 취향.", cap: "박하사탕 한 봉지." },
   { id: "mY09", who: "yeonseo", week: 3, note: "두 번 두드리면, 봐 달라는 신호다.", cap: "받지 마요, 두 번." },
   { id: "mY10", who: "yeonseo", week: 3, note: "얼굴은 거짓말을 한다. 손을 보면 된다.", cap: "장갑 낀 쪽." },
   { id: "mY11", who: "yeonseo", week: 3, note: "비 그친 다음 날 아침을 제일 좋아한다.", cap: "비 그친 다음 날 아침." },
@@ -68,6 +70,90 @@ export const recallCaps = (v: Vars, who: MindWho) =>
  * 효과를 더한 뒤 호출: 새로 켜진 마음 플래그는 그날 날짜(_md_<id>)를 남기고, mindA · mindY 를 다시 셈
  * (통계용 _ 수치라 흐름 · 길잡이 비교에는 안 끼어듦)
  */
+/**
+ * 혼자 하는 '노트 정리'로 얻는 '노트 힌트' (정답은 아니고 방향만). 일정 카드가 mHint (· 대상 지정 mHintA · mHintY · mHintG) 를 주면
+ * 아직 못 알아본 순간 중 '다음에 올 것'(지금 주차 이후 먼저) 하나에 h_<id> 가 켜지고, 그녀 노트 ??? 칸에 이 문장이 보임
+ */
+export const MIND_HINT: Record<string, string> = {
+  mA01: "에이미는 장난을 걸어 올 때, 대충 받아 주면 시시해한다.",
+  mA02: "에이미 목소리가 커질 때, 그 말을 그대로 믿진 말 것.",
+  mA03: "에이미는 돈 얘기에 예민한 것 같다. 빌려주는 건 특히.",
+  mA04: "에이미가 울 때 필요한 건 말이 아닐지도 모른다.",
+  mA05: "에이미는 혼자 해내고 싶은 일에 손대는 걸 싫어한다.",
+  mA13: "에이미가 제일 좋아하는 삼각김밥이 있다더라.",
+  mA14: "에이미가 좋아하는 사탕 맛이 있다. 연서가 '금발 손님 취향'이라고 한 그 맛.",
+  mA06: "에이미 앞에서 지갑을 먼저 여는 건, 생각보다 조심할 일이다.",
+  mA07: "에이미가 같은 말을 두 번 하면, 한 번 더 들어 볼 것.",
+  mA08: "에이미는 숫자를 무서워한다. 혼자 세게 두지 말 것.",
+  mA09: "에이미가 늘 사는 우유랑, 진짜 좋아하는 우유는 다르다.",
+  mA10: "에이미는 숨을 때도 어디 있는지 흘린다.",
+  mA11: "에이미 리스트에는 비워 둔 칸이 있다. 무엇을 같이 했는지 떠올려 볼 것.",
+  mA12: "에이미랑 둘만의 신호를 정해 두면, 마지막에 쓸모가 있다.",
+  mY01: "연서는 캐묻는 사람한테 닫힌다. 대답 대신 할 수 있는 게 있다.",
+  mY02: "연서의 부탁은 늘 작다. 작다고 넘기면 안 된다.",
+  mY03: "연서가 떨 때는 말보다 따뜻한 게 먼저다.",
+  mY04: "연서 옆에서는 묻지 않는 쪽이 편하다고 한다.",
+  mY05: "연서가 잠들 때 필요한 소리가 있다.",
+  mY06: "연서는 술을 안 마시는 이유가 있다. 억지로 권하지 말 것.",
+  mY07: "연서한테 약속은 숫자보다 가볍다.",
+  mY08: "연서는 거짓말 칸에 진짜를 숨기는 버릇이 있다.",
+  mY09: "연서의 손끝을 볼 것. 말과 다른 걸 말할 때가 있다.",
+  mY10: "연서를 읽을 때는 얼굴보다 손이다.",
+  mY11: "연서가 제일 좋아하는 아침이 있다. 2주차 어느 밤에 말했다.",
+  mY12: "연서가 '묻지 마요'라고 할 때, 서두르지 말 것.",
+  mY13: "연서를 안심시키는 건 목소리보다 다른 소리다.",
+  mY14: "연서가 좋아하는 사탕이 있다. 이모가 계산하다 말고 옆 가게에서 집어 주던 맛.",
+  mG01: "둘이 엇갈릴 때, 한 사람은 따라와 주길, 한 사람은 누가 집어 주길 기다린다.",
+  mG02: "에이미는 용서를 남이 정해 주는 걸 싫어하고, 연서는 용서받을 생각이 없다.",
+  mG03: "두 사람이 '좋다'고 하는 기준이 다르다. 하나는 나누는 쪽, 하나는 지키는 쪽.",
+  mG04: "둘 다 오래 못 가져 본 게 있다. 아주 평범한 것.",
+};
+const IS_HINT = /^mHint[AYG]?$/;
+export const isHintKey = (k: string) => IS_HINT.test(k);
+/** 힌트가 켜진(아직 못 알아본) 순간들 */
+export const mindHinted = (v: Vars, who: MindWho) =>
+  MIND.filter((m) => m.who === who && (v[`h_${m.id}`] ?? 0) >= 1 && !((v[m.id] ?? 0) >= 1));
+/**
+ * 힌트 받기: 받을 사람(A · Y · G, 없으면 지금 루트 → 호감이 높은 쪽) 의 아직 모르고 힌트도 없는 순간 중
+ * 지금 주차 이후 것을 먼저, 없으면 앞 주차 것. 고른 순간에 h_<id> · 그날 날짜 _hd_<id>
+ */
+export function withHint(prev: Vars, next: Vars, keys: string[]): Vars {
+  const week = Math.max(1, Math.ceil((next.dayNo ?? 1) / 7));
+  for (const k of keys) {
+    if (!IS_HINT.test(k)) continue;
+    const n = Math.max(0, (next[k] ?? 0) - (prev[k] ?? 0));
+    const who: MindWho =
+      k === "mHintA"
+        ? "amy"
+        : k === "mHintY"
+          ? "yeonseo"
+          : k === "mHintG"
+            ? "both"
+            : (next.routeA ?? 0) >= 1
+              ? "amy"
+              : (next.routeY ?? 0) >= 1
+                ? "yeonseo"
+                : (next.affA ?? 0) > (next.affY ?? 0)
+                  ? "amy"
+                  : "yeonseo";
+    for (let i = 0; i < n; i++) {
+      const open = MIND.filter((m) => m.who === who && !((next[m.id] ?? 0) >= 1) && !((next[`h_${m.id}`] ?? 0) >= 1));
+      const pick = open.find((m) => m.week >= week) ?? open[open.length - 1];
+      if (!pick) break;
+      next[`h_${pick.id}`] = 1;
+      next[`_hd_${pick.id}`] = next.dayNo ?? 0;
+    }
+  }
+  return next;
+}
+/** 엔진 · 길잡이 공용: 효과를 더한 뒤 마음 · 힌트 처리 */
+export function mindFx(prev: Vars, next: Vars, keys: string[]): Vars {
+  let r = next;
+  if (keys.some(isMindKey)) r = withMind(prev, r);
+  if (keys.some(isHintKey)) r = withHint(prev, r, keys);
+  return r;
+}
+
 export function withMind(prev: Vars, next: Vars): Vars {
   let changed = false;
   for (const m of MIND)

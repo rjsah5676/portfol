@@ -23,6 +23,7 @@ import {
   PERSONA,
   READ_TXT,
   TALK,
+  TALK_PRO,
   act,
   aiAct,
   cueFor,
@@ -37,6 +38,7 @@ import {
 } from "@/lib/love/holdem";
 import { PlayingCard } from "@/components/Poker/parts";
 import { REACT_CLUES, cluesKnown, pairHit, reactOf } from "@/lib/love/clues";
+import { SKILL_ACC, SKILL_PRO, SKILL_SHOW, skillOf } from "@/lib/love/rel";
 
 const SEATS = [
   { x: 50, y: 84 },
@@ -427,6 +429,8 @@ export function StoryPoker({
   const eff = useRef<Record<string, number>>({});
   /** 결전 단서 조합: 남은 기회 · 열린 거리 · 고르는 창 · 고른 카드 · 경계 한마디 · 맞물린 속마음 · 결과 문장 */
   const [chances, setChances] = useState(2);
+  /** 딜러 실력 '예전의 손' 이상: 첫 실수 한 번은 사장이 못 봄 (기회 · 틸트 그대로) */
+  const [guard, setGuard] = useState(skillOf(vars) >= SKILL_PRO);
   const [unlocked, setUnlocked] = useState<number | null>(null);
   const [pickOpen, setPickOpen] = useState(false);
   const [sel, setSel] = useState<string[]>([]);
@@ -452,6 +456,10 @@ export function StoryPoker({
       play("pencil");
       setUnlocked(st);
       setHitTxt(combo.hit);
+    } else if (guard) {
+      play("knock");
+      setGuard(false);
+      setHitTxt("손이 먼저 멈췄다. 사장은 못 봤다. …예전의 손이 한 번 막아 줬다. 다음엔 없다.");
     } else {
       play("knock");
       setChances((c) => c - 1);
@@ -618,7 +626,15 @@ export function StoryPoker({
       {note && (
         <div key={note.t} className="lv-sp-note absolute right-[2%] top-[3%] w-[27%]">
           <div className="mb-[0.4cqw] text-[1cqw] font-bold tracking-[0.15em] text-[#ffd27a]">
-            {note.k === "속마음" ? "◇ 속마음" : note.k === "조합" ? "✎ 단서가 맞물렸다" : note.k === "노트" ? "✎ 읽기 노트" : "◎ 관찰"}
+            {note.k === "속마음"
+              ? "◇ 속마음"
+              : note.k === "조합"
+                ? unlocked === st
+                  ? "✎ 단서가 맞물렸다"
+                  : "✦ 예전의 손"
+                : note.k === "노트"
+                  ? "✎ 읽기 노트"
+                  : "◎ 관찰"}
           </div>
           <div className="text-[1.15cqw] leading-[1.5] text-white/90">{note.t}</div>
           {note.k === "노트" && tellInfo && (
@@ -663,7 +679,7 @@ export function StoryPoker({
             disabled={!!warn}
             onClick={() => setPickOpen(true)}
           >
-            ✎ 단서 조합 <span className="text-[0.95cqw] text-white/55">· 기회 {chances}</span>
+            ✎ 단서 조합 <span className="text-[0.95cqw] text-white/55">· 기회 {chances}{guard ? " · ✦ 보험" : ""}</span>
           </button>
         )}
         <div className="flex gap-[0.7cqw]">
@@ -693,7 +709,10 @@ export function StoryPoker({
           <div className="lv-combo-box" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-baseline justify-between">
               <div className="text-[1.6cqw] font-bold text-[#ffd27a]">✎ 단서 조합</div>
-              <div className="text-[1.05cqw] text-white/55">두 장을 맞물려 봐 · 남은 기회 {chances} · 틀리면 상대가 경계한다</div>
+              <div className="text-[1.05cqw] text-white/55">
+                두 장을 맞물려 봐 · 남은 기회 {chances}
+                {guard ? " · ✦ 예전의 손: 첫 실수는 사장이 못 봄" : " · 틀리면 상대가 경계한다"}
+              </div>
             </div>
             <div className="lv-combo-grid">
               {clues.map((c) => (
@@ -784,7 +803,9 @@ export function HeadsUp({
   useEffect(() => () => timers.current.forEach((x) => window.clearTimeout(x)), []);
 
   // ---- 테이블 토크 (판마다 한 번, 내 첫 행동 전) · 반응 단서 ----
-  const talks: Talk[] = TALK[who] ?? [];
+  /** 딜러 실력: 버릇 정확도 · 숨긴 버릇 보일 확률 · '예전의 손'부터 고급 한마디 */
+  const sk = skillOf(vars);
+  const talks: Talk[] = [...(TALK[who] ?? []), ...(sk >= SKILL_PRO && TALK_PRO[who] ? [TALK_PRO[who]!] : [])];
   /** 그 히로인 마음 4 이상이면 버릇 정확도 +0.1 (아는 만큼 읽힘) */
   const mindBonus = (who === "amy" && (vars.mindA ?? 0) >= 4) || (who === "yeonseo" && (vars.mindY ?? 0) >= 4) ? 0.1 : 0;
   const [talked, setTalked] = useState(false);
@@ -796,6 +817,8 @@ export function HeadsUp({
   const modNow = (): Mod | undefined => {
     const m: Mod = { ...(handTalk.current?.mod ?? {}) };
     if (mindBonus) m.acc = (m.acc ?? 0) + mindBonus;
+    if (SKILL_ACC[sk]) m.acc = (m.acc ?? 0) + SKILL_ACC[sk];
+    if (m.show !== undefined && SKILL_SHOW[sk]) m.show = Math.min(1, m.show + SKILL_SHOW[sk]);
     return Object.keys(m).length ? m : undefined;
   };
   const sayTalk = (t: Talk) => {
@@ -1121,7 +1144,8 @@ export function HeadsUp({
             <div className="lv-talk" data-coach="talk">
               <span className="lv-talk-h">한마디</span>
               {talks.map((t) => (
-                <button key={t.id} className="lv-talk-btn" onClick={() => sayTalk(t)}>
+                <button key={t.id} className={`lv-talk-btn ${t.id === "pro" ? "lv-talk-pro" : ""}`} onClick={() => sayTalk(t)}>
+                  {t.id === "pro" && <span className="mr-[0.4cqw] text-[#ffd27a]">✦</span>}
                   {t.label}
                 </button>
               ))}

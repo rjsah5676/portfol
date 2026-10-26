@@ -11,6 +11,7 @@
  * 수치: affA/affY 호감 · trustA/trustY 신뢰 · tilt · skill 딜러 실력 · ignoreA 읽씹 · atWork 근무 중 앉은 횟수
  */
 import { A, BOSS, CH, JM, ME, N, PLAN, TH, TY, Y, card, match, poker } from "./dsl";
+import { giftHook, giftScenes, noteCard, noteScene, walkCard, walkScene } from "./solo";
 import type { MatchSpec, PokerSpec, Scenes, Step } from "./types";
 
 /** 진짜 헤즈업 — 오픈 전 연습 판 (판돈 없음 · 사탕) */
@@ -158,11 +159,16 @@ const BACK: Step = { t: "goto", to: "after_plan" };
 const PLAN_CARDS = [
   card("에이미", "편의점 · 대학가", "go_amy", { who: "amy", hint: "에이미 ♥", cond: { v: "amyDay", op: "<=", n: 3 } }),
   card("연서", "펍 뒷골목 · 빈 펍", "go_yeon", { who: "yeonseo", hint: "연서 ♥", cond: { v: "yeonDay", op: "<=", n: 3 } }),
-  card("셔플 연습", "원룸 책상", "go_shuffle", { icon: "🂡", hint: "딜러 실력 ✦" }),
+  card("셔플 연습", "원룸 책상", "go_shuffle", { icon: "🂡", hint: "딜러 실력 ✦ · 버릇이 잘 보임" }),
   card("이모 장보기", "재래시장", "go_imo", { icon: "🍲", hint: "마음 안정", cond: { v: "dayNo", op: ">=", n: 3 } }),
+  noteCard("go_note", { all: [{ v: "dayNo", op: ">=", n: 3 }, { v: "note1Day", op: "<=", n: 0 }] }, { note1Day: 1 }),
+  walkCard("go_walk", { all: [{ v: "dayNo", op: ">=", n: 3 }, { v: "walk1Day", op: "<=", n: 0 }] }, { walk1Day: 1 }),
 ];
 
 export const W1: Scenes = {
+  // 혼자 하는 준비: 노트 정리 (그녀 노트 힌트 1) · 동네 한 바퀴 (건넬 물건 하나)
+  ...noteScene("go_note", BACK),
+  ...walkScene("go_walk", BACK),
   // ================= 1일차 — 첫 근무 (첫 화면 3줄 안에 에이미) =================
   d1: [
     { t: "day", day: 1, slot: "밤 근무" },
@@ -1004,12 +1010,17 @@ export const W1: Scenes = {
     BACK,
   ],
   // A2 — 인형뽑기 · 사진 부스
+  ...giftScenes("a_ev2", "amy", 1),
   a_ev2: [
     { t: "bgm", id: "amy" },
     { t: "bg", id: "arcade" },
     N("메신저에 '복수'가 위치 하나를 보냈다. 대학가 인형뽑기 가게. 그리고 한 줄. '긴급. 지원 요청.'"),
     { t: "show", who: "amy", pos: "c", dist: 0 },
     A("왔다, 지원군!", "smile"),
+    giftHook("a_ev2", "amy", 1),
+    { t: "goto", to: "a_ev2_gx" },
+  ],
+  a_ev2_gx: [
     A("이 곰 봐. 세 번째 시도까지 왔어. 집게가 일부러 힘 빼는 거야, 완전 사기.", "pout"),
     N("유리 안에 하늘색 곰 인형 하나. 그녀 점퍼랑 같은 색이다."),
     ME("사기 아니야. 집게 힘은 정해진 횟수마다 세져. 확률이야."),
@@ -1133,11 +1144,16 @@ export const W1: Scenes = {
     BACK,
   ],
   // A3 — 파라솔 포커페이스 특훈
+  ...giftScenes("a_ev3", "amy", 1),
   a_ev3: [
     { t: "bgm", id: "amy" },
     { t: "bg", id: "store" },
     N("편의점 앞 파라솔. 에이미가 손거울을 보며 얼굴을 찌푸렸다 폈다 하고 있다."),
     { t: "show", who: "amy", pos: "c", dist: 0 },
+    giftHook("a_ev3", "amy", 1),
+    { t: "goto", to: "a_ev3_gx" },
+  ],
+  a_ev3_gx: [
     A("딜러, 마침 잘 왔다. 나 지금 포커페이스 특훈 중이야.", "smug"),
     ME("거울 보고?"),
     A("거울은 표정이 안 바뀌어서 상대가 안 돼. 네가 해.", "base"),
@@ -1205,11 +1221,16 @@ export const W1: Scenes = {
     BACK,
   ],
   // A4 — 편의점 신상 라면 블라인드 테스트
+  ...giftScenes("a_ev4", "amy", 1),
   a_ev4: [
     { t: "bgm", id: "comic" },
     { t: "bg", id: "store" },
     N("편의점 창가 자리. 에이미 앞에 컵라면 세 개가 일렬로 놓여 있다. 전부 뚜껑에 매직으로 번호."),
     { t: "show", who: "amy", pos: "c", dist: 0 },
+    giftHook("a_ev4", "amy", 1),
+    { t: "goto", to: "a_ev4_gx" },
+  ],
+  a_ev4_gx: [
     A("딜러, 블라인드 테스트 하자. 신상 세 개 중에 '불닭 신상' 맞히기.", "smug"),
     A("맞히면 내가 퇴근길 야식 쏜다. 틀리면 네가 쏴.", "smug"),
     ME("너 야식 쏠 돈 있어?"),
@@ -1317,6 +1338,7 @@ export const W1: Scenes = {
     BACK,
   ],
   // Y2 — 빈 펍, 칩 없는 판
+  ...giftScenes("y_ev2", "yeonseo", 1),
   y_ev2: [
     { t: "bgm", id: "yeonseo" },
     { t: "bg", id: "pub" },
@@ -1327,6 +1349,10 @@ export const W1: Scenes = {
     Y("…일찍 왔네요."),
     ME("연서 씨도요."),
     Y("저는 매일 이 시간에 와요. 오늘은 관객이 생겼네요.", "base"),
+    giftHook("y_ev2", "yeonseo", 1),
+    { t: "goto", to: "y_ev2_gx" },
+  ],
+  y_ev2_gx: [
     { t: "when", cond: { v: "goldChip", op: ">=", n: 1 }, to: "y2_chip" },
     { t: "goto", to: "y2_main" },
   ],
@@ -1441,6 +1467,7 @@ export const W1: Scenes = {
     BACK,
   ],
   // Y3 — 편의점 슬리퍼
+  ...giftScenes("y_ev3", "yeonseo", 1),
   y_ev3: [
     { t: "bgm", id: "yeonseo" },
     { t: "bg", id: "store" },
@@ -1451,6 +1478,10 @@ export const W1: Scenes = {
     Y("…딜러님.", "surprise"),
     { t: "dist", who: "yeonseo", dist: 1 },
     Y("이 차림은 못 본 걸로 해요. 3초 줄게요.", "blush"),
+    giftHook("y_ev3", "yeonseo", 1),
+    { t: "goto", to: "y_ev3_gx" },
+  ],
+  y_ev3_gx: [
     {
       t: "choice",
       opts: [

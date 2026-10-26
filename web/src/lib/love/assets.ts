@@ -98,6 +98,22 @@ export const BG: Record<BgId, string | null> = {
   waterpark: `${B}/bg/waterpark.webp`,
   black: null,
 };
+/**
+ * 작은 그림 아이콘 (주머니 물건 · 혼자 하는 준비 카드) — 파일이 아직 없으면 화면은 이모지로 대신 보여 줌
+ * (LoveApp 의 SmallIcon 이 그림을 불러 보고, 실패하면 이모지) → 그림은 public/love/ui/ 에 이 이름으로 넣기만 하면 켜짐
+ * 요청서: dep86-schedule/ASSET-REQUEST.md
+ */
+export const ICON: Record<"itemStraw" | "itemMint" | "cardNote" | "cardWalk", { src: string; emoji: string; name: string }> = {
+  itemStraw: { src: `${B}/ui/item-strawberry-candy.webp`, emoji: "🍬", name: "딸기 사탕" },
+  itemMint: { src: `${B}/ui/item-mint-candy.webp`, emoji: "🍥", name: "박하사탕" },
+  cardNote: { src: `${B}/ui/card-note.webp`, emoji: "✎", name: "노트 정리" },
+  cardWalk: { src: `${B}/ui/card-walk.webp`, emoji: "🍬", name: "동네 한 바퀴" },
+};
+export type IconId = keyof typeof ICON;
+export const ITEMS = ["itemStraw", "itemMint"] as const;
+/** 일정 카드 장면 id → 그림 아이콘 (혼자 하는 준비 카드만) */
+export const planIcon = (scene: string): IconId | null => (/_note$/.test(scene) ? "cardNote" : /_walk$/.test(scene) ? "cardWalk" : null);
+
 export const BG_FALLBACK: Record<BgId, string> = {
   pub: "linear-gradient(180deg,#2a1d14,#120c08)",
   alley: "linear-gradient(180deg,#141a26,#06080d)",

@@ -29,6 +29,10 @@ import {
   TITLE_ALT,
   cgKey,
   cgSrc,
+  ICON,
+  type IconId,
+  ITEMS,
+  planIcon,
   preloadList,
 } from "@/lib/love/assets";
 import {
@@ -45,7 +49,7 @@ import {
   run,
 } from "@/lib/love/engine";
 import { type ReactLine, idleLine, lightMood, touchLine } from "@/lib/love/reactions";
-import { type Heroine, SKILL_NAME, STAGE_LINE, STAGE_NAME, heroStage, skillOf, tiltName } from "@/lib/love/rel";
+import { type Heroine, SKILL_LINE, SKILL_NAME, STAGE_LINE, STAGE_NAME, heroStage, skillOf, tiltName } from "@/lib/love/rel";
 import { voiceOf } from "@/lib/love/voices";
 import {
   type BgmId,
@@ -62,7 +66,7 @@ import {
 } from "@/lib/love/types";
 import { DealMini, HeadsUp, StoryPoker, TellMini } from "./Minis";
 import { TELLS, knownTellIds, tellById, tellKnown } from "@/lib/love/tells";
-import { MIND, isMindKey, mindGot, mindTotal } from "@/lib/love/mind";
+import { MIND, MIND_HINT, isMindKey, mindGot, mindTotal } from "@/lib/love/mind";
 import { REACT_CLUES, reactOf } from "@/lib/love/clues";
 import { useStage } from "./Stage";
 import VoiceReview, { type VoiceRow } from "./VoiceReview";
@@ -1160,11 +1164,83 @@ export default function LoveApp() {
     const id = window.setTimeout(() => setStageUp(null), 3200);
     return () => window.clearTimeout(id);
   }, [stageUp]);
+  // 딜러 실력 단계가 오르면 한 줄 (그 단계 효과까지) — 처음이면 가이드
+  const [skillUp, setSkillUp] = useState<{ stage: number; n: number } | null>(null);
+  const skillRef = useRef<number | null>(null);
+  const skNow = s ? skillOf(s.vars) : 0;
+  useEffect(() => {
+    if (phase !== "game" || !s) {
+      skillRef.current = null;
+      return;
+    }
+    const prev = skillRef.current;
+    skillRef.current = skNow;
+    if (prev !== null && skNow > prev) {
+      setSkillUp({ stage: skNow, n: Date.now() });
+      play("pencil");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [skNow, phase]);
+  useEffect(() => {
+    if (!skillUp || coachId === "skill") return;
+    const id = window.setTimeout(() => setSkillUp(null), 4200);
+    return () => window.clearTimeout(id);
+  }, [skillUp, coachId]);
+  useEffect(() => {
+    if (skillUp) coach("skill");
+  }, [skillUp, coach]);
+  // 노트 힌트 (노트 정리) · 반응 단서(카드로 얻은 것 포함) · 주머니 물건(동네 한 바퀴) · 결전 단서(혼자 복기): 새로 생기면 한 줄
+  const [noteUp, setNoteUp] = useState<{ head: string; text: string; n: number; icon?: IconId } | null>(null);
+  const hintIds = s ? MIND.filter((m) => (s.vars[`h_${m.id}`] ?? 0) >= 1).map((m) => m.id) : [];
+  const reactIds = s ? REACT_CLUES.filter((c) => (s.vars[c.id] ?? 0) >= 1).map((c) => c.id) : [];
+  const itemIds: string[] = s ? ITEMS.filter((k) => (s.vars[k] ?? 0) >= 1) : [];
+  const rigOn = s ? (s.vars.rigSeen ?? 0) >= 1 : false;
+  const noteKeyStr = `${hintIds.join(",")}|${reactIds.join(",")}|${itemIds.join(",")}|${rigOn}`;
+  const noteKeyRef = useRef<{ h: string[]; r: string[]; it: string[]; rig: boolean } | null>(null);
+  useEffect(() => {
+    if (phase !== "game" || !s) {
+      noteKeyRef.current = null;
+      return;
+    }
+    const prev = noteKeyRef.current;
+    noteKeyRef.current = { h: hintIds, r: reactIds, it: itemIds, rig: rigOn };
+    if (!prev) return;
+    const h = hintIds.find((id) => !prev.h.includes(id));
+    const r = reactIds.find((id) => !prev.r.includes(id));
+    const it = itemIds.find((id) => !prev.it.includes(id)) as (typeof ITEMS)[number] | undefined;
+    if (it) {
+      setNoteUp({ head: `주머니 · ${ICON[it].name}`, text: "다음에 그녀를 만나면 건넬 수 있다. 누구 취향이었는지 떠올려 보자.", n: Date.now(), icon: it });
+      play("pencil");
+      coach("item");
+    } else if (rigOn && !prev.rig) {
+      setNoteUp({ head: "✎ 결전 단서 카드 · 바꿔치기", text: "딜러 손이 칩 트레이 쪽으로 반 뼘 내려가면, 덱이 바뀐다.", n: Date.now() });
+      play("pencil");
+    } else if (h) {
+      const m = MIND.find((x) => x.id === h)!;
+      setNoteUp({ head: `✎ 노트 힌트 · ${m.who === "both" ? "두 사람" : NAME[m.who]}`, text: MIND_HINT[h] ?? "", n: Date.now() });
+      play("pencil");
+      coach("hint");
+    } else if (r) {
+      // 매치에서 알아낸 건 매치 화면이 이미 알려 줌 — 일정 카드처럼 다른 데서 생긴 것만
+      if (s.block?.k !== "mini") {
+        setNoteUp({ head: "✎ 반응 단서", text: REACT_CLUES.find((c) => c.id === r)?.text ?? "", n: Date.now() });
+        play("pencil");
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [noteKeyStr, phase]);
+  useEffect(() => {
+    if (!noteUp || coachId === "hint" || coachId === "item") return;
+    const id = window.setTimeout(() => setNoteUp(null), 4200);
+    return () => window.clearTimeout(id);
+  }, [noteUp, coachId]);
 
   // 관계 화면 새 소식: 하트 단계 · 그녀 노트 · 읽기 노트 · 반응 단서가 늘면 점 (열어 보면 꺼짐)
   const [relNew, setRelNew] = useState(false);
   const noteCount = s
-    ? knownTellIds(s.vars).length + REACT_CLUES.filter((c) => (s.vars[c.id] ?? 0) >= 1).length + MIND.filter((m) => (s.vars[m.id] ?? 0) >= 1).length
+    ? knownTellIds(s.vars).length +
+      REACT_CLUES.filter((c) => (s.vars[c.id] ?? 0) >= 1).length +
+      MIND.filter((m) => (s.vars[m.id] ?? 0) >= 1 || (s.vars[`h_${m.id}`] ?? 0) >= 1).length
     : 0;
   const noteRef = useRef<number | null>(null);
   useEffect(() => {
@@ -1316,6 +1392,15 @@ export default function LoveApp() {
   const rb = held ? null : block;
   const secretOpen = rb?.k === "choice" && rb.opts.some((o) => o.secret);
   const readOpen = rb?.k === "choice" && rb.opts.some((o) => o.read);
+  // 일정 고르기 · ✦ 준비해 둔 덕분(선택지 · 서술) 첫 등장
+  const planOpen = rb?.k === "free";
+  const prepOpen = (rb?.k === "choice" && rb.opts.some((o) => o.prep)) || (rb?.k === "say" && rb.text.startsWith("✦"));
+  useEffect(() => {
+    if (planOpen) coach("plan");
+  }, [planOpen, coach]);
+  useEffect(() => {
+    if (prepOpen) coach("prep");
+  }, [prepOpen, coach]);
   // ★ 와 ✎ 가 같이 처음 뜨면 ★ 먼저, ✎ 는 줄 서서 다음에
   useEffect(() => {
     if (secretOpen) coach("secret");
@@ -1657,8 +1742,7 @@ export default function LoveApp() {
             {mindDay && (
               <div
                 key={mindDay.n}
-                className="lv-mindday"
-                style={{ animationPlayState: coachId === "mindday" ? "paused" : undefined }}
+                className={`lv-mindday${coachId === "mindday" ? " lv-hold" : ""}`}
                 onClick={(e) => (e.stopPropagation(), setMindDay(null))}
               >
                 <small>DAY {mindDay.day} · 알게 된 것</small>
@@ -1670,6 +1754,21 @@ export default function LoveApp() {
                     {m.note}
                   </p>
                 ))}
+              </div>
+            )}
+            {skillUp && (
+              <div
+                key={`skill-${skillUp.n}`}
+                className={`lv-skillup${coachId === "skill" ? " lv-hold" : ""}`}
+              >
+                <b>✦ 딜러 실력 — 「{SKILL_NAME[skillUp.stage]}」</b>
+                <span>{SKILL_LINE[skillUp.stage]}</span>
+              </div>
+            )}
+            {noteUp && (
+              <div key={`note-${noteUp.n}`} className={`lv-noteup${coachId === "hint" || coachId === "item" ? " lv-hold" : ""}`}>
+                {noteUp.icon && <SmallIcon id={noteUp.icon} className="lv-noteup-icon" />}
+                <b>{noteUp.head}</b> {noteUp.text}
               </div>
             )}
             {stageUp && (
@@ -1918,12 +2017,13 @@ export default function LoveApp() {
                 {rb.opts.map((o, oi) => guideShow(oi) && (
                   <button
                     key={o.text}
-                    className={`lv-choice ${o.secret ? "lv-choice-secret" : ""} ${o.read ? "lv-choice-read" : ""}`}
+                    className={`lv-choice ${o.secret ? "lv-choice-secret" : ""} ${o.read ? "lv-choice-read" : ""} ${o.prep ? "lv-choice-prep" : ""}`}
                     disabled={guideOn && !guideReady}
                     onClick={() => choose(o)}
                   >
                     {o.secret && <span className="mr-[0.6cqw] text-[#ffd27a]">★</span>}
                     {o.read && <span className="mr-[0.6cqw] text-[#ffe2a0]">✎</span>}
+                    {o.prep && <span className="mr-[0.6cqw] text-[#9fe0c4]">✦</span>}
                     {sub(o.text)}
                   </button>
                 ))}
@@ -1959,6 +2059,8 @@ export default function LoveApp() {
                           {o.card.who && FACE_ICON[o.card.who] ? (
                             // eslint-disable-next-line @next/next/no-img-element
                             <img src={FACE_ICON[o.card.who]} alt="" />
+                          ) : o.to && planIcon(o.to) ? (
+                            <SmallIcon id={planIcon(o.to)!} />
                           ) : (
                             <span>{o.card.icon ?? "◆"}</span>
                           )}
@@ -2391,6 +2493,26 @@ export default function LoveApp() {
 // ---------- 부품 ----------
 /** 배경 — 장소가 바뀌면 이전 배경 위로 새 배경이 천천히 겹쳐 들어옴 (크로스페이드) */
 /** 같은 그림을 다른 시간대로 쓸 때의 색보정 */
+/** 작은 그림 아이콘: 그림을 불러 보고, 없으면(실패) 이모지 — 그림 파일만 넣으면 바뀜 */
+function SmallIcon({ id, className }: { id: IconId; className?: string }) {
+  const [st, setSt] = useState<"wait" | "ok" | "none">("wait");
+  return (
+    <>
+      {st !== "ok" && <span className={`lv-icon-emoji ${className ?? ""}`}>{ICON[id].emoji}</span>}
+      {st !== "none" && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={ICON[id].src}
+          alt=""
+          className={className}
+          style={st === "wait" ? { display: "none" } : undefined}
+          onLoad={() => setSt("ok")}
+          onError={() => setSt("none")}
+        />
+      )}
+    </>
+  );
+}
 const BG_GRADE: Partial<Record<keyof typeof BG, string>> = {};
 function Bg({ id, blur }: { id: keyof typeof BG; blur: number }) {
   const [prev, setPrev] = useState<{ cur: keyof typeof BG; old: keyof typeof BG | null }>({
@@ -2903,10 +3025,30 @@ function RelPanel({ vars }: { vars: Record<string, number> }) {
           <div className="text-[1.6cqw] text-[#ffd27a]">
             {"✦".repeat(skillOf(vars) + 1)} {SKILL_NAME[skillOf(vars)]}
           </div>
+          <div className="max-w-[34cqw] text-[1.05cqw] leading-[1.45] text-white/60">{SKILL_LINE[skillOf(vars)]}</div>
         </div>
         <div>
           <div className="text-[1.2cqw] text-white/55">마음 상태</div>
           <div className="text-[1.6cqw] text-white/85">{tiltName(vars)}</div>
+        </div>
+        <div>
+          <div className="text-[1.2cqw] text-white/55">주머니</div>
+          <div className="flex items-center gap-[0.5cqw] text-[1.4cqw] text-white/85">
+            {ITEMS.some((k) => (vars[k] ?? 0) >= 1)
+              ? ITEMS.filter((k) => (vars[k] ?? 0) >= 1).map((k) => (
+                  <span key={k} className="flex items-center gap-[0.3cqw]">
+                    <SmallIcon id={k} className="h-[2cqw] w-[2cqw]" />
+                    {ICON[k].name}
+                  </span>
+                ))
+              : "비어 있음"}
+          </div>
+          <div className="max-w-[24cqw] text-[1.05cqw] leading-[1.45] text-white/60">동네 한 바퀴에서 산 물건 · 다음에 그녀를 만나면 건넬 수 있다</div>
+          {(vars.tip ?? 0) >= 1 && (
+            <div className="mt-[0.3cqw] text-[1.05cqw] text-[#ffd27a]/80">
+              근무 팁 봉투 {vars.tip}개 · {(vars.tip ?? 0) >= 3 ? "넉넉하다. 쓸 데가 생길 것 같다" : "손이 풀리면 더 받는다"}
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -3237,6 +3379,10 @@ function MindNotes({ vars }: { vars: Record<string, number> }) {
               (vars[m.id] ?? 0) >= 1 ? (
                 <div key={m.id} className="text-[1.15cqw] leading-[1.5] text-white/90">
                   · {m.note}
+                </div>
+              ) : (vars[`h_${m.id}`] ?? 0) >= 1 ? (
+                <div key={m.id} className="text-[1.1cqw] leading-[1.5] text-[#ffe2a0]/75">
+                  · <b>힌트</b> {MIND_HINT[m.id]} <span className="text-[1cqw] text-white/35">({m.week}주차)</span>
                 </div>
               ) : (
                 <div key={m.id} className="text-[1.1cqw] leading-[1.5] text-white/35">
@@ -4457,6 +4603,11 @@ const GUIDE: Record<string, { sel: string; title: string; text: string }> = {
   read: { sel: ".lv-choice-read", title: "✎ 선택지", text: "그녀를 알아본 만큼 열리는 선택지야. 단서로 열리는 ★ 와는 달라." },
   tell: { sel: ".lv-choice-tell", title: "읽기 노트", text: "아는 버릇이면 뜻이 같이 떠. 믿을지는 네가 정해." },
   relhud: { sel: '[data-coach="relhud"]', title: "관계", text: "여기 누르면 두 사람과의 관계랑 그녀 노트. 키보드 R 도 돼." },
+  plan: { sel: ".lv-free-wrap", title: "오늘 할 일", text: "히로인만 만나지 말고 혼자 하는 준비(셔플 연습 · 노트 정리 · 동네 한 바퀴)도 섞어 봐. 데이트도 포커도 달라져. 카드 아래 글자가 얻는 거야." },
+  skill: { sel: ".lv-skillup", title: "딜러 실력", text: "셔플이 쌓이면 손이 돌아와. 매치에서 버릇이 잘 보이고, '예전의 손'부터는 새 한마디랑 결전 보험이 생겨." },
+  hint: { sel: ".lv-noteup", title: "노트 힌트", text: "노트 정리로 그녀 노트 ??? 칸에 힌트가 생겼어. 답은 아니고 방향이야. 다시 보려면 왼쪽 위 하트 줄(관계 화면 · R)." },
+  prep: { sel: ".lv-choice-prep, .lv-dlg-gate", title: "✦ 준비해 둔 덕분", text: "혼자 해 둔 준비(셔플 연습 · 동네 한 바퀴 · 노트 정리 · 근무 팁) 덕분에 달라진 순간이야." },
+  item: { sel: ".lv-noteup", title: "주머니 속 물건", text: "혼자 산 작은 물건은, 다음에 히로인을 만날 때 '건네기'(✦)로 나와. 그녀 취향이면 마음이 움직여." },
 };
 
 function CoachMark({

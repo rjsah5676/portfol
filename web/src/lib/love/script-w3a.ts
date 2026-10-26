@@ -26,6 +26,7 @@
  *                 포커 패배 또는 a4Both → end_amy_ruin · 접고 살아남음 + a4Kiss + trustA≥10 → end_amy_good · 그 외 → end_amy_friend
  */
 import { A, BOSS, CH, JM, ME, N, PLAN, TH, TIMED, TY, Y, card, match, poker } from "./dsl";
+import { giftHook, giftScenes, noteCard, noteScene, walkCard, walkScene } from "./solo";
 import type { MatchSpec, PokerSpec, Scenes, TellSpec } from "./types";
 
 /** 진짜 헤즈업 — 마감 후 사탕 판 (16일차) */
@@ -258,12 +259,13 @@ const TELL_BOSS_DEAL: TellSpec = {
 const A3_PLAN_D18 = [
   card("편의점 들르기", "편의점 (에이미 근무 중)", "a3_p1_amy", { who: "amy", hint: "에이미 ♥", eff: { affA: 2, a3Plan1: 2 } }),
   card("이모 가게 정리", "물 빠진 펍", "a3_p1_imo", { icon: "🧹", hint: "마음 안정", eff: { trustA: 1, tilt: -1, a3Plan1: 1 } }),
-  card("철물점", "골목 끝 철물점", "a3_p1_tool", { icon: "🔧", hint: "신뢰 ✦", eff: { trustA: 2, a3Plan1: 3 } }),
+  card("철물점", "골목 끝 철물점", "a3_p1_tool", { icon: "🔧", hint: "신뢰 ✦ · 나중에 쓸모 있음", eff: { trustA: 2, a3Plan1: 3 } }),
+  walkCard("a3_p1_walk", undefined, { a3Plan1: 4 }),
 ];
 /** D20 낮 (아빠 자리 첫날) · a3Plan2: 1 에이미 · 2 셔플(조작 원리 체득 → a3Rig) · 3 연서 → 콜백 D27 밤 */
 const A3_PLAN_D20 = [
   card("에이미와 점심", "시장 떡볶이 포장마차", "a3_p2_amy", { who: "amy", hint: "에이미 ♥ · 진정", eff: { affA: 1, gambleA: -1, a3Plan2: 1 } }),
-  card("빈 펍 셔플", "오픈 전 펍", "a3_p2_shuf", { icon: "🂡", hint: "손 안정 · 눈 ✦", eff: { tilt: -1, skill: 1, a3Plan2: 2 } }),
+  card("빈 펍 셔플", "오픈 전 펍", "a3_p2_shuf", { icon: "🂡", hint: "딜러 실력 ✦ · 손 안정", eff: { tilt: -1, skill: 1, a3Plan2: 2 } }),
   card("연서", "펍 비상계단 (잠깐)", "a3_p2_yeon", { who: "yeonseo", hint: "연서 ♥ · 에이미 서운", eff: { affY: 1, affA: -1, a3Plan2: 3 } }),
 ];
 /** D23 오전 (공책 찾기 전날 / '잊자' 다음 날) · a4Plan3: 1 이모 · 2 태양 · 3 에이미 → 콜백 D27 오후 펍 · 저녁 반지하 */
@@ -271,16 +273,20 @@ const A4_PLAN_D23 = [
   card("이모 장보기", "재래시장 · 주방", "a4_p3_imo", { icon: "🍳", hint: "마음 안정 · 신뢰", eff: { trustA: 1, tilt: -1, a4Plan3: 1 } }),
   card("태양 과외", "오픈 전 펍", "a4_p3_ty", { icon: "🎲", hint: "웃음 · 손 안정", eff: { tilt: -2, a4Plan3: 2 } }),
   card("반지하 문고리", "에이미 반지하 앞", "a4_p3_amy", { who: "amy", hint: "에이미 ♥", eff: { affA: 1, trustA: 1, a4Plan3: 3 } }),
+  noteCard("a4_p3_note", undefined, { a4Plan3: 4 }),
 ];
 /** D26 오후 (마지막 내기 전) · a4Plan4: 1 혼자 숙제(팬케이크/라면) · 2 리버 복기 · 3 정민 백업 → 콜백 D28 새벽 테이블 */
 const A4_PLAN_D26 = [
   card("팬케이크 연습", "원룸 주방", "a4_p4_cake", { icon: "🥞", hint: "에이미 ♥", eff: { affA: 2, a4Plan4: 1 }, cond: { v: "a4Stay", op: ">=", n: 1 } }),
   card("라면 연습", "원룸 주방", "a4_p4_ramen", { icon: "🍜", hint: "에이미 ♥", eff: { affA: 2, a4Plan4: 1 }, cond: { v: "a4Stay", op: "<=", n: 0 } }),
-  card("리버 복기", "불 꺼진 펍", "a4_p4_river", { icon: "🂡", hint: "손 안정 · 눈 ✦", eff: { tilt: -2, a4Plan4: 2 } }),
+  card("리버 복기", "불 꺼진 펍", "a4_p4_river", { icon: "🂡", hint: "딜러 실력 ✦ · 결전 단서 카드", eff: { tilt: -2, skill: 1, a4Plan4: 2, rigSeen: 1 } }),
   card("정민에게 부탁", "펍 창고 · CCTV 앞", "a4_p4_jm", { icon: "📼", hint: "신뢰 ✦", eff: { trustA: 2, a4Plan4: 3 } }),
 ];
 
 export const W3A: Scenes = {
+  // 혼자 하는 준비 (D18 동네 한 바퀴 · D23 노트 정리)
+  ...walkScene("a3_p1_walk", { t: "goto", to: "a3_d18_day" }),
+  ...noteScene("a4_p3_note", { t: "goto", to: "a4_d23_route" }),
   // =====================================================================
   // ======================= 에이미 루트 — 3주차 ==========================
   // =====================================================================
@@ -1422,6 +1428,7 @@ export const W3A: Scenes = {
     PLAN("자정 전까지, 뭘 할까?", A3_PLAN_D20),
   ],
   // 일정 카드 ② — 아빠 자리 첫날 낮
+  ...giftScenes("a3_p2_amy", "amy", 3),
   a3_p2_amy: [
     { t: "bg", id: "pocha" },
     { t: "bgm", id: "amy" },
@@ -1430,6 +1437,10 @@ export const W3A: Scenes = {
     A("배 안 고파. 긴장해서 그런 거 아니야. 아침을 많이 먹어서야.", "pout"),
     ME("아침 뭐 먹었는데?"),
     A("……바나나우유. 반 개.", "sad"),
+    giftHook("a3_p2_amy", "amy", 3),
+    { t: "goto", to: "a3_p2_amy_gx" },
+  ],
+  a3_p2_amy_gx: [
     N("떡 하나를 그녀 접시로 옮겼다. 그녀가 한참 내려다보다가, 입에 넣었다."),
     A("…맵다. 근데 맵다는 생각만 하니까, 오늘 밤 생각이 안 나.", "smile"),
     A("마지막 하나는 남겨 둬. 오늘 밤 이기면 먹을 거야.", "base"),
@@ -2871,6 +2882,21 @@ export const W3A: Scenes = {
     N("첫 판은 탔다. 두 번째도 탔다. 세 번째에 계량컵을 치우고, 그냥 손이 가는 만큼 부었다."),
     N("세 번째 판은 타지 않았다. 모양은 그 애 머리처럼 한쪽으로 쏠렸다."),
     TH("탄 두 장은 내가 먹었다. 그 사람이 왜 맨날 탄 쪽을 먹었는지, 조금 알 것 같았다."),
+    { t: "when", cond: { v: "tip", op: ">=", n: 3 }, to: "a4_p4_tip" },
+    { t: "goto", to: "a4_d26_night" },
+  ],
+  // ✦ 준비 → 데이트: 근무 팁(셔플 실력으로 받은 팁)을 모아 둔 덕분
+  a4_p4_tip: [
+    N("✦ 근무 팁을 모아 둔 봉투를 열었다. 내일 아침 장 볼 돈이 넉넉했다. 이번엔 제일 좋은 걸로."),
+    { t: "set", eff: { affA: 1, aTipUsed: 1 } },
+    { t: "when", cond: { all: [{ v: "h_mA09", op: ">=", n: 1 }, { v: "mA09", op: "<=", n: 0 }] }, to: "a4_p4_tipm" },
+    { t: "goto", to: "a4_d26_night" },
+  ],
+  // ✦ 노트 정리(힌트) + 근무 팁 → 마음 순간 한 번 더
+  a4_p4_tipm: [
+    N("✦ 수첩에 그려 둔 물음표가 생각났다. 그녀가 늘 사는 우유랑, 진짜 좋아하는 우유는 다르다."),
+    N("장바구니에 바나나우유 대신 딸기우유 두 개를 넣었다. 내일 아침 팬 옆에 둘 것."),
+    { t: "set", eff: { mA09: 1 } },
     { t: "goto", to: "a4_d26_night" },
   ],
   a4_p4_ramen: [
@@ -2881,6 +2907,7 @@ export const W3A: Scenes = {
     { t: "sfx", id: "boil" },
     N("첫 냄비는 한강이 됐다. 두 번째는 사막이었다. 세 번째에 겨우, 싱겁지만 먹을 만한 라면이 됐다."),
     TH("싱거운 걸 맛있다고 하는 법. 그것도 연습이 필요하다."),
+    { t: "when", cond: { v: "tip", op: ">=", n: 3 }, to: "a4_p4_tip" },
     { t: "goto", to: "a4_d26_night" },
   ],
   a4_p4_river: [
@@ -2893,6 +2920,9 @@ export const W3A: Scenes = {
     { t: "sfx", id: "fold" },
     N("빈 의자 앞에서 백 번쯤 카드를 엎었다. 손가락 두 번에, 손을 떼는 연습."),
     TH("이길 패를 버리는 연습. 3년 전엔 한 번도 해 본 적이 없었다."),
+    N("마지막으로, 3년 전 그 판을 처음부터 다시 돌렸다. 턴과 리버 사이에서 손이 멈췄다."),
+    TH("…딜러 손. 칩 트레이 쪽으로 반 뼘 내려갔었다. 그 반 뼘 뒤로, 덱 두께가 달랐다."),
+    TH("버릇이 아니라 손이다. 일요일엔 사장 손가락이 아니라, 그 손을 본다."),
     { t: "goto", to: "a4_d26_night" },
   ],
   a4_p4_jm: [
@@ -3058,6 +3088,13 @@ export const W3A: Scenes = {
     { t: "when", cond: { v: "a3Plan1", op: "==", n: 1 }, to: "a4_d27_cb1_imo" },
     { t: "when", cond: { v: "a3Plan1", op: "==", n: 2 }, to: "a4_d27_cb1_amy" },
     { t: "when", cond: { v: "a3Plan1", op: "==", n: 3 }, to: "a4_d27_cb1_tool" },
+    { t: "when", cond: { all: [{ v: "a3Plan1", op: "==", n: 4 }, { v: "giftA", op: ">=", n: 1 }] }, to: "a4_d27_cb1_walk" },
+    { t: "goto", to: "a4_d27_cb3" },
+  ],
+  // ✦ 혼자 동네 한 바퀴 → 건넨 사탕
+  a4_d27_cb1_walk: [
+    N("✦ 그녀 가방 앞주머니에서 분홍 봉지가 바스락거렸다. 내가 동네 한 바퀴 돌다 사 온 딸기 사탕. 반쯤 남아 있었다."),
+    TH("…아껴 먹고 있었구나."),
     { t: "goto", to: "a4_d27_cb3" },
   ],
   a4_d27_cb1_imo: [
@@ -3071,6 +3108,8 @@ export const W3A: Scenes = {
     { t: "goto", to: "a4_d27_cb3" },
   ],
   a4_d27_cb1_tool: [
+    N("✦ 18일차, 물난리 다음 날 철물점에서 사 둔 것이었다."),
+    { t: "set", eff: { trustA: 1 } },
     N("그녀가 싱크대 밑에서 제습제 두 통이 든 봉지를 꺼냈다."),
     A("그리고 이거. 장판 깔던 아저씨가 방구석에서 찾았대. 제습제 두 통. 영수증까지 봉지에 같이.", "pout"),
     A("계산은 네 전문이라며. 이번엔 내가 셌어. 갚을 거야. 이자 없이.", "base"),
@@ -3079,11 +3118,16 @@ export const W3A: Scenes = {
   // 일정 카드 ③(D23) 에이미 콜백
   a4_d27_cb3: [
     { t: "when", cond: { v: "a4Plan3", op: "==", n: 3 }, to: "a4_d27_cb3_amy" },
+    { t: "when", cond: { v: "a4Plan3", op: "==", n: 4 }, to: "a4_d27_cb3_note" },
     { t: "goto", to: "a4_d27_shirt" },
   ],
   a4_d27_cb3_amy: [
     A("…화요일에 문고리에 걸린 딸기우유. 비밀 하나 날린 값이라며.", "base"),
     A("날린 게 아니었네. 네가 주워 간 거였네.", "blush"),
+    { t: "goto", to: "a4_d27_shirt" },
+  ],
+  a4_d27_cb3_note: [
+    TH("…화요일 아침, 수첩에 그린 물음표 하나. 그 칸을 오늘 그녀 얼굴에서 조금 채웠다."),
     { t: "goto", to: "a4_d27_shirt" },
   ],
   a4_d27_shirt: [

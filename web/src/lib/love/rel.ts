@@ -53,6 +53,21 @@ export const STAGE_LINE: Record<Heroine, readonly string[]> = {
 export const SKILL_AT = [0, 2, 4, 7, 10] as const;
 export const skillOf = (v: Vars): number => Math.max(0, SKILL_AT.filter((x) => (v.skill ?? 0) >= x).length - 1);
 export const SKILL_NAME = ["녹슨 손", "굳은 손", "풀린 손", "예전의 손", "전설의 손"] as const;
+/**
+ * 딜러 실력 = 읽기 포커 능력치. 셔플 · 복기 카드로 오름
+ * 매치: 버릇 정확도 +SKILL_ACC · 숨긴 버릇이 보일 확률 +SKILL_SHOW / 3단계(예전의 손)부터 고급 한마디 · 결전 단서 조합 첫 실수 보험
+ */
+export const SKILL_ACC = [0, 0.03, 0.06, 0.1, 0.14] as const;
+export const SKILL_SHOW = [0, 0, 0.25, 0.4, 0.6] as const;
+/** 고급 한마디 · 결전 보험이 열리는 단계 */
+export const SKILL_PRO = 3;
+export const SKILL_LINE = [
+  "아직 손이 굳어 있다. 버릇은 보이는 만큼만.",
+  "매치에서 상대 버릇이 조금 더 정확하게 읽힌다.",
+  "버릇이 더 정확하게 읽히고, 숨긴 버릇도 가끔 보인다.",
+  "매치에 고급 한마디가 생긴다. 결전 단서 조합의 첫 실수는 사장이 못 본다.",
+  "숨긴 버릇까지 거의 다 보인다. 고급 한마디 · 결전 보험 그대로.",
+] as const;
 
 /** 마음 상태 (틸트) */
 export const tiltName = (v: Vars): string => {

@@ -3619,3 +3619,47 @@
 .lv-mmenu-close {
   color: #c9a25a;
 }
+
+/* ===== 일정 활동: 실력 단계 · 노트 힌트 · ✦ 준비해 둔 덕분 ===== */
+.lv-skillup,
+.lv-noteup {
+  position: absolute;
+  left: 50%;
+  z-index: 28;
+  max-width: 60cqw;
+  transform: translateX(-50%);
+  border: 0.12cqw solid #c9a25a;
+  border-radius: 0.7cqw;
+  background: #0d1226f0;
+  padding: 0.6cqw 1.8cqw;
+  color: #fff3d6;
+  text-align: center;
+  pointer-events: none;
+  box-shadow: 0 0 1.4cqw #ffd27a55;
+  animation: lv-stageup 4.2s ease both;
+}
+.lv-skillup { top: 19%; }
+.lv-noteup { top: 25%; font-size: 1.2cqw; }
+.lv-skillup b { display: block; font-size: 1.35cqw; color: #ffd27a; }
+.lv-skillup span { display: block; margin-top: 0.2cqw; font-size: 1.1cqw; color: #ffffffcc; }
+.lv-noteup b { color: #ffd27a; margin-right: 0.4cqw; }
+/* ✦ 준비해 둔 덕분에 열린 선택지 (★ 금색 · ✎ 연노랑과 구분되는 민트) */
+.lv-choice-prep {
+  border-color: #9fe0c499;
+  box-shadow: inset 0.25cqw 0 0 #9fe0c4;
+}
+.lv-talk-pro {
+  border-color: #ffd27a;
+}
+.lv-noteup-icon { display: inline-block; height: 2.2cqw; width: 2.2cqw; margin-right: 0.5cqw; vertical-align: middle; object-fit: contain; }
+/* 일정 카드 5~6장 (혼자 하는 준비 카드 추가): 한 줄에 들어가게 줄임 */
+.lv-free-wrap:has(> .lv-plan:nth-child(5)) { gap: 1cqw; }
+.lv-free-wrap:has(> .lv-plan:nth-child(5)) > .lv-plan { width: 14.6cqw; padding: 1.3cqw 0.7cqw 1.1cqw; }
+.lv-free-wrap:has(> .lv-plan:nth-child(6)) > .lv-plan { width: 13.4cqw; }
+.lv-free-wrap:has(> .lv-plan:nth-child(5)) .lv-plan-icon { width: 5cqw; height: 5cqw; font-size: 2.4cqw; }
+.lv-free-wrap:has(> .lv-plan:nth-child(5)) .lv-plan-title { font-size: 1.4cqw; }
+.lv-free-wrap:has(> .lv-plan:nth-child(5)) .lv-plan-place,
+.lv-free-wrap:has(> .lv-plan:nth-child(5)) .lv-plan-hint { font-size: 0.95cqw; }
+/* 가이드가 이 알림을 가리키는 동안: 애니메이션 없이 그대로 보이게 (일시정지하면 첫 프레임=투명에서 멈춤) */
+.lv-hold { animation: none !important; }
+.lv-icon-emoji { display: inline-grid; place-items: center; width: auto !important; height: auto !important; }

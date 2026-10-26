@@ -14,6 +14,7 @@
  *          yeonHome yPh bonusKeep y2Like y2First y2ChipQ yeonName yeonEnvelope yeonBelieve yIg8~12 · n2Join(1 에이미 · 2 연서)
  */
 import { A, BOSS, CH, JM, ME, MONTAGE, N, PLAN, TH, TIMED, TY, Y, card, match, poker } from "./dsl";
+import { giftHook, giftScenes, noteCard, noteScene, walkCard, walkScene } from "./solo";
 import type { MatchSpec, PokerSpec, Scenes, Step } from "./types";
 
 /** 진짜 헤즈업 — 파라솔 사탕 판 (에이미 과외 복습) · 오픈 전 이쑤시개 판 (연서) */
@@ -214,24 +215,32 @@ const POKER_YEON_Q0: PokerSpec = {
 // ---------------- 낮 일정 ----------------
 /** 낮 일정이 끝나면 루트별 저녁으로 */
 const BACK2: Step = { t: "goto", to: "w2_back" };
-const SHUF_CARD = card("셔플 연습", "원룸 책상 · 오픈 전 펍", "w2_shuf", { icon: "🂡", hint: "딜러 실력 ✦", cond: { v: "sh2Day", op: "<=", n: 2 } });
+const SHUF_CARD = card("셔플 연습", "원룸 책상 · 오픈 전 펍", "w2_shuf", { icon: "🂡", hint: "딜러 실력 ✦ · 버릇이 잘 보임", cond: { v: "sh2Day", op: "<=", n: 2 } });
 const IMO_CARD = card("이모 장보기", "재래시장 · 주방", "w2_imo", { icon: "🍲", hint: "마음 안정", cond: { v: "imo2Day", op: "<=", n: 1 } });
+const NOTE2 = noteCard("w2_note", { v: "note2Day", op: "<=", n: 1 }, { note2Day: 1 });
+const WALK2 = walkCard("w2_walk", { v: "walk2Day", op: "<=", n: 1 }, { walk2Day: 1 });
 const A2_CARDS = [
   card("에이미", "한강 · 편의점 · 대학가", "a2_go", { who: "amy", hint: "에이미 ♥", cond: { v: "a2Day", op: "<=", n: 2 } }),
   card("연서", "오픈 전 빈 펍 (잠깐)", "a2_ycam", { who: "yeonseo", hint: "연서 ♥", cond: { v: "y2cam", op: "<=", n: 0 } }),
   SHUF_CARD,
+  NOTE2,
+  WALK2,
   IMO_CARD,
 ];
 const Y2_CARDS = [
   card("연서", "뒷골목 · 한강 · 빈 펍", "y2_go", { who: "yeonseo", hint: "연서 ♥", cond: { v: "y2Day", op: "<=", n: 2 } }),
   card("에이미", "편의점 (잠깐)", "y2_acam", { who: "amy", hint: "에이미 ♥", cond: { all: [{ v: "a2cam", op: "<=", n: 0 }, { v: "dayNo", op: "<=", n: 11 }] } }),
   SHUF_CARD,
+  NOTE2,
+  WALK2,
   IMO_CARD,
 ];
 const N2_CARDS = [
   card("에이미", "편의점", "n2_amy_d", { who: "amy", hint: "에이미 ♥", cond: { v: "n2a", op: "<=", n: 0 } }),
   card("연서", "펍 뒷골목", "n2_yeon_d", { who: "yeonseo", hint: "연서 ♥", cond: { v: "n2y", op: "<=", n: 0 } }),
   SHUF_CARD,
+  NOTE2,
+  WALK2,
   IMO_CARD,
 ];
 
@@ -1528,12 +1537,17 @@ export const W2: Scenes = {
     { t: "goto", to: "a2_q3" },
   ],
   // Q1 — 한강 둔치 확률 과제
+  ...giftScenes("a2_q1", "amy", 2),
   a2_q1: [
     { t: "bgm", id: "amy" },
     { t: "bg", id: "hangang" },
     N("메신저에 '복수'가 위치를 찍었다. 학교 뒤 한강 둔치. 그리고 한 줄. '수학 구조대 출동 바람. 보수는 라면'."),
     { t: "show", who: "amy", pos: "c", dist: 0 },
     A("왔다, 구조대!", "smile"),
+    giftHook("a2_q1", "amy", 2),
+    { t: "goto", to: "a2_q1_gx" },
+  ],
+  a2_q1_gx: [
     { t: "when", cond: { v: "dayNo", op: "==", n: 13 }, to: "a2_q1_13" },
     { t: "when", cond: { v: "dayNo", op: "==", n: 11 }, to: "a2_q1_h", else: "a2_q1_c" },
   ],
@@ -1614,11 +1628,16 @@ export const W2: Scenes = {
     BACK2,
   ],
   // Q2 — 파라솔 셔플 과외 (9일차 '손이 심심해' 이후)
+  ...giftScenes("a2_q2", "amy", 2),
   a2_q2: [
     { t: "bgm", id: "amy" },
     { t: "bg", id: "store" },
     N("알바 시작 두 시간 전. 편의점 앞 파라솔에 카드 한 벌을 올려놓자, 그녀가 두 손을 비볐다."),
     { t: "show", who: "amy", pos: "c", dist: 0 },
+    giftHook("a2_q2", "amy", 2),
+    { t: "goto", to: "a2_q2_gx" },
+  ],
+  a2_q2_gx: [
     { t: "when", cond: { v: "dayNo", op: "==", n: 13 }, to: "a2_q2_13" },
     { t: "when", cond: { v: "dayNo", op: "==", n: 11 }, to: "a2_q2_h", else: "a2_q2_0" },
   ],
@@ -1653,8 +1672,26 @@ export const W2: Scenes = {
       opts: [
         { text: "(뒤에서 그녀 손 위에 손을 겹쳐 잡는다)", eff: { affA: 2 }, to: "a2_q2_hand" },
         { text: "(맞은편에서 천천히 시범을 보인다)", eff: { trustA: 1 }, to: "a2_q2_show" },
+        {
+          text: "(폭포처럼 한 장씩 떨어지는 브리지를 보여 준다)",
+          prep: true,
+          cond: { v: "skill", op: ">=", n: 4 },
+          eff: { affA: 2, trustA: 1, aBridge: 1, mA05: 1 },
+          to: "a2_q2_bridge",
+        },
       ],
     },
+  ],
+  // ✦ 준비 → 데이트: 셔플 연습(딜러 실력 4)을 해 둔 손이라 시범이 한 번에
+  a2_q2_bridge: [
+    N("✦ 셔플 연습해 둔 손. 리플이 끝나자, 카드가 폭포처럼 한 장씩 떨어져 한 덩어리가 됐다."),
+    A("…예쁘다.", "surprise"),
+    A("카드 말고. 아니, 카드도. 소리가.", "blush"),
+    ME("따라 해 봐."),
+    { t: "sfx", id: "shuffle" },
+    N("시범은 한 번뿐. 그다음엔 손을 대지 않고 보기만 했다. 일곱 번째 시도에서, 그녀 손에서 처음으로 드르륵 소리가 났다."),
+    A("들었어? 들었지?!", "shout", "smile"),
+    { t: "goto", to: "a2_q2_mt" },
   ],
   a2_q2_hand: [
     { t: "dist", who: "amy", dist: 1 },
@@ -1717,6 +1754,7 @@ export const W2: Scenes = {
     BACK2,
   ],
   // Q3 — 토요일 인형뽑기 (12일차 다음 날에만)
+  ...giftScenes("a2_q3", "amy", 2),
   a2_q3: [
     { t: "bgm", id: "amy" },
     { t: "bg", id: "arcade" },
@@ -1724,6 +1762,10 @@ export const W2: Scenes = {
     { t: "show", who: "amy", pos: "c", dist: 0 },
     A("오늘은 생각 안 하는 날. 어제 일은 내일 생각할 거야.", "base"),
     A("이건 생활비 아니고 오락비. 수첩에 칸 따로 만들었어. 딱 세 판만 할 거야.", "smug"),
+    giftHook("a2_q3", "amy", 2),
+    { t: "goto", to: "a2_q3_gx" },
+  ],
+  a2_q3_gx: [
     { t: "when", cond: { v: "amyDate", op: ">=", n: 1 }, to: "a2_q3_k" },
     A("목표는 저 작은 곰. 내 손으로만 뽑을 거야. 너는 구경만 해.", "smug"),
     { t: "goto", to: "a2_q3_b" },
@@ -1870,6 +1912,9 @@ export const W2: Scenes = {
   // =====================================================================
   // ====================== 공용 낮 일정 (w2_*) ===========================
   // =====================================================================
+  // 혼자 하는 준비: 노트 정리 (그녀 노트 힌트 1) · 동네 한 바퀴 (건넬 물건 하나)
+  ...noteScene("w2_note", BACK2),
+  ...walkScene("w2_walk", BACK2),
   w2_back: [
     { t: "hide" },
     { t: "when", cond: { v: "routeA", op: ">=", n: 1 }, to: "a2_after_plan" },
@@ -3189,11 +3234,16 @@ export const W2: Scenes = {
     { t: "goto", to: "y2_q3" },
   ],
   // Q1 — 뒷골목 고양이 (이름이 없으면 이번에 붙일 수 있음)
+  ...giftScenes("y2_q1", "yeonseo", 2),
   y2_q1: [
     { t: "bgm", id: "yeonseo" },
     { t: "bg", id: "alley_after" },
     N("펍 건물 뒤 골목. 박스 더미 앞에 그녀가 쪼그려 앉아 있다. 장갑 안 낀 쪽 손에 고등어 통조림."),
     { t: "show", who: "yeonseo", pos: "c", dist: 0 },
+    giftHook("y2_q1", "yeonseo", 2),
+    { t: "goto", to: "y2_q1_gx" },
+  ],
+  y2_q1_gx: [
     { t: "when", cond: { v: "dayNo", op: "==", n: 9 }, to: "y2_q1_9" },
     { t: "goto", to: "y2_q1_b" },
   ],
@@ -3270,11 +3320,16 @@ export const W2: Scenes = {
     BACK2,
   ],
   // Q2 — 한강 물수제비 (D11 · D13)
+  ...giftScenes("y2_q2", "yeonseo", 2),
   y2_q2: [
     { t: "bgm", id: "yeonseo" },
     { t: "bg", id: "hangang" },
     N("오후의 한강. 그녀가 메시지로 보낸 건 장소 하나와 문장 하나였다. '물수제비, 확률이 궁금해요.'"),
     { t: "show", who: "yeonseo", pos: "c", dist: 0 },
+    giftHook("y2_q2", "yeonseo", 2),
+    { t: "goto", to: "y2_q2_gx" },
+  ],
+  y2_q2_gx: [
     Y("돌의 각도가 20도일 때 제일 많이 튄대요. 논문에서 봤어요.", "base"),
     N("그녀가 납작한 돌을 골라 던졌다. 퐁. 한 번에 가라앉았다."),
     Y("……논문이 틀렸어요.", "cold"),
@@ -3321,11 +3376,16 @@ export const W2: Scenes = {
     BACK2,
   ],
   // Q3 — 빈 펍 '진실 하나' (D13 에만)
+  ...giftScenes("y2_q3", "yeonseo", 2),
   y2_q3: [
     { t: "bgm", id: "yeonseo" },
     { t: "bg", id: "pub" },
     N("오픈 두 시간 전. 불 꺼진 펍. 그녀가 카드 네 장을 엎어 테이블에 늘어놓았다."),
     { t: "show", who: "yeonseo", pos: "c", dist: 0 },
+    giftHook("y2_q3", "yeonseo", 2),
+    { t: "goto", to: "y2_q3_gx" },
+  ],
+  y2_q3_gx: [
     Y("게임 하나 해요. 제가 네 가지를 말할 테니까, 진짜는 하나. 맞히면 딜러님이 이겨요.", "base"),
     ME("좋아요."),
     Y("첫째. 저는 김치찌개를 싫어해요.", "base"),
@@ -3701,6 +3761,7 @@ export const W2: Scenes = {
     { t: "goto", to: "y2_d12_eve" },
   ],
   // 아무도 루트 낮 일정 만남 (각 1회)
+  ...giftScenes("n2_amy_d", "amy", 2),
   n2_amy_d: [
     { t: "set", eff: { n2a: 1 } },
     { t: "bgm", id: "amy" },
@@ -3710,6 +3771,10 @@ export const W2: Scenes = {
     N("편의점. 계산대 너머에서 트윈테일이 바코드를 찍고 있었다. 명찰 '에이미'."),
     { t: "show", who: "amy", pos: "c", dist: 0 },
     A("어서 오세… 아.", "surprise"),
+    giftHook("n2_amy_d", "amy", 2),
+    { t: "goto", to: "n2_amy_d_gx" },
+  ],
+  n2_amy_d_gx: [
     { t: "when", cond: { v: "dayNo", op: "==", n: 9 }, to: "n2_amy_d9" },
     A("…낮 대타야. 원래 저녁 타임. …뭐. 삼각김밥 사러 왔으면 사.", "base"),
     { t: "goto", to: "n2_amy_d_b" },
@@ -3728,12 +3793,17 @@ export const W2: Scenes = {
     { t: "hide" },
     BACK2,
   ],
+  ...giftScenes("n2_yeon_d", "yeonseo", 2),
   n2_yeon_d: [
     { t: "set", eff: { n2y: 1 } },
     { t: "bgm", id: "yeonseo" },
     { t: "bg", id: "alley_after" },
     N("펍 건물 뒤 골목. 비상계단 아래에 그녀가 서 있었다."),
     { t: "show", who: "yeonseo", pos: "c", dist: 0 },
+    giftHook("n2_yeon_d", "yeonseo", 2),
+    { t: "goto", to: "n2_yeon_d_gx" },
+  ],
+  n2_yeon_d_gx: [
     { t: "when", cond: { v: "yeonDay", op: ">=", n: 1 }, to: "n2_yeon_d_k" },
     Y("…딜러님. 여긴 왜요?", "base"),
     { t: "goto", to: "n2_yeon_d_b" },

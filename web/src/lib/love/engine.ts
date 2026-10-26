@@ -5,7 +5,7 @@
 import { SCENES, START } from "./script";
 import { CG } from "./assets";
 import { dayDecay } from "./rel";
-import { isMindKey, recallCaps, withMind } from "./mind";
+import { mindFx, recallCaps } from "./mind";
 import {
   type BgId,
   type BgmId,
@@ -147,7 +147,7 @@ const addEff = (v: Vars, eff?: Eff): Vars => {
   if (!eff) return v;
   const o = { ...v };
   for (const [k, n] of Object.entries(eff)) o[k] = (o[k] ?? 0) + n;
-  return Object.keys(eff).some(isMindKey) ? withMind(v, o) : o;
+  return mindFx(v, o, Object.keys(eff));
 };
 
 /** 현재 위치부터 막히는 줄(대사 · 선택지 등)이 나올 때까지 실행 */

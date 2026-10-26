@@ -831,7 +831,7 @@ export const W3N: Scenes = {
     PLAN("오늘 오전엔 뭘 할까?", [
       card("이모 주방", "펍 주방 · 파 썰기", "g4c_imo", { icon: "🍲", hint: "마음 안정", eff: { tilt: -1, gcImo: 1 } }),
       card("연서", "역 앞 골목 · 붕어빵", "g4c_bung", { who: "yeonseo", hint: "연서 ♥", eff: { affY: 1, trustY: 1, gcBung: 1 } }),
-      card("거울 앞 반 뼘", "원룸 · 카드 두 벌", "g4c_eye", { icon: "🂡", hint: "눈 ✦ · 긴장", eff: { tilt: 1, gEye: 1 } }),
+      card("거울 앞 반 뼘", "원룸 · 카드 두 벌", "g4c_eye", { icon: "🂡", hint: "딜러 실력 ✦ · 긴장", eff: { tilt: 1, skill: 1, gEye: 1 } }),
     ]),
   ],
   g4c_imo: [

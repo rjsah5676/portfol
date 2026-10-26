@@ -37,7 +37,7 @@ export const STORY_CLUES: Clue[] = [
   { id: "c_father", kind: "story", name: "아빠 공책", text: "'딜러 손은 깨끗하다. 카드가 처음부터 그렇게 온다.' 아래층 판은 리버까지 정해져 있다.", need: on("amyLedger") },
   { id: "c_luck", kind: "story", name: "깔아 둔 운", text: "20일차 VIP. 지는 판은 작고 이기는 판은 컸다. 그날 에이미의 운은 사장이 깔아 둔 것이었다.", need: on("a3Rig") },
   { id: "c_deck", kind: "story", name: "섞지 않은 덱", text: "21일차, 내 손으로 섞지 않은 덱을 돌렸다. 그 방의 마지막 카드는 처음부터 정해져 있다.", need: on("a3Deck") },
-  { id: "c_rig", kind: "story", name: "바꿔치기", text: "딜러 손이 칩 트레이 쪽으로 반 뼘 내려가면, 덱이 바뀐다.", need: { any: [on("rigKnow"), on("meta_rigKnow")] } },
+  { id: "c_rig", kind: "story", name: "바꿔치기", text: "딜러 손이 칩 트레이 쪽으로 반 뼘 내려가면, 덱이 바뀐다.", need: { any: [on("rigKnow"), on("meta_rigKnow"), on("rigSeen")] } },
   { id: "c_ledgerY", kind: "story", name: "연서의 수첩", text: "7년 치 판. 날짜, 손님, 사장 손가락 수. 짜인 판은 늘 같은 모양이었다.", need: on("yeonLedger") },
   { id: "c_cooler", kind: "story", name: "시나리오 — 쿨러", text: "마지막 판은 늘 풀하우스 대 포카드. 연서 수첩에 스물세 번.", need: on("cCooler") },
   { id: "c_swapBack", kind: "story", name: "되돌린 덱", text: "그 1초 동안 연서가 덱을 되돌렸다. 사장은 아직 자기 덱인 줄 안다.", need: on("gSwap") },

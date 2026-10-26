@@ -202,6 +202,8 @@ export interface Opt {
   secret?: boolean;
   /** 마음 읽기로 열린 선택지 표시 (✎) — cond 로 mindA · mindY 문턱을 걸어 둔 결정적 순간 */
   read?: boolean;
+  /** 준비해 둔 덕분에 열린 선택지 표시 (✦) — 혼자 하는 준비(셔플 실력 · 근무 팁 · 동네 한 바퀴 물건 등)로 열림 */
+  prep?: boolean;
   /** 하루 일정 카드 (free 슬롯에서): 누구를 만나는지 · 무엇이 오르는지 */
   card?: PlanCard;
 }

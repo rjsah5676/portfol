@@ -68,7 +68,7 @@ export interface Mod {
   /** 버릇이 겉으로 보일 확률 (없으면 늘 보임, 0.25 = 거의 숨김) */
   show?: number;
   /** 이 속마음일 땐 그 판 동안 버릇이 확실히(정확하게) 나옴 */
-  sure?: "strong" | "bluff";
+  sure?: "strong" | "bluff" | "both";
 }
 export interface Talk {
   id: string;
@@ -103,6 +103,13 @@ export const TALK: Partial<Record<CharKey, Talk[]>> = {
     { id: "taunt", label: "\"오늘은 오차 크게 나겠는데요?\"", reply: ["…오차는 제 전문입니다.", "도발은 효과가 없습니다."], mod: { bluff: 0.2, sure: "bluff" }, clue: "rcJ2", seen: "bluff" },
     { id: "praise", label: "\"정민 씨 계산은 정확하던데요.\"", reply: ["사실입니다.", "…감사합니다. 기록해 두겠습니다."], mod: { aggr: 0.15 } },
   ],
+};
+/** 고급 한마디 — 딜러 실력 '예전의 손'(SKILL_PRO) 부터. 그 판 동안 버릇이 숨김없이 · 정확하게 다 나옴 (반응 단서는 없음) */
+export const TALK_PRO: Partial<Record<CharKey, Talk>> = {
+  amy: { id: "pro", label: "\"너 지금 트윈테일 끝 감으려고 했지?\"", reply: ["…뭐? 안 감았거든!", "아, 보지 마! 손 보지 마!"], mod: { sure: "both", show: 1 } },
+  yeonseo: { id: "pro", label: "(말 대신, 셔플 소리만 천천히 들려준다)", reply: ["……그 소리, 반칙이에요.", "…집중이 안 되네요."], mod: { sure: "both", show: 1, bluff: -0.05 } },
+  taeyang: { id: "pro", label: "\"콧노래 녹음해도 돼요?\"", reply: ["형!! 저 콧노래 안 했어요!", "에이, 그런 거 없어요. 흥얼~ 아."], mod: { sure: "both", show: 1 } },
+  jeongmin: { id: "pro", label: "\"기록상, 지금 그 판은 몇 퍼센트예요?\"", reply: ["…기록상, 말씀드릴 수 없습니다.", "…답변은 생략하겠습니다."], mod: { sure: "both", show: 1 } },
 };
 const clamp01 = (x: number) => Math.max(0, Math.min(1, x));
 /** 토크로 바뀐 그 판의 성향 */
@@ -413,8 +420,9 @@ export function cueFor(
 ): { look: "strong" | "bluff"; text: string; hidden?: boolean } | null {
   if (read === "mid") return null;
   const p = PERSONA[who] ? withMod(PERSONA[who]!, mod) : undefined;
-  if (mod?.show !== undefined && mod.sure !== read && r() > mod.show) return { look: read, text: "", hidden: true };
-  const sure = mod?.sure === read;
+  const sureHere = mod?.sure === read || mod?.sure === "both";
+  if (mod?.show !== undefined && !sureHere && r() > mod.show) return { look: read, text: "", hidden: true };
+  const sure = sureHere;
   const look: "strong" | "bluff" = !sure && p && r() > p.acc ? (read === "strong" ? "bluff" : "strong") : read;
   const text = pick(CUE[who]?.[look], r);
   return text ? { look, text } : null;

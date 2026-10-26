@@ -2436,5 +2436,12 @@ const V2_P6: VoiceLine[] = [
   { id: "y6-wm03", who: "yeonseo", text: "그거예요. 딜러님은 늘 그렇게 물었어요. 제가 말하기 전에 먼저 알아본 적은… 없었어요.", tag: "[cold] 그거예요. 딜러님은 늘 그렇게 물었어요. [quiet] 제가 말하기 전에 먼저 알아본 적은... 없었어요." },
   { id: "y6-wm04", who: "yeonseo", text: "나쁜 뜻 아니에요. 7년 동안 아무도 안 읽어 준 사람은, 읽어 주는 사람 옆에 있고 싶은가 봐요.", tag: "[soft] 나쁜 뜻 아니에요. [sad] 칠 년 동안 아무도 안 읽어 준 사람은, 읽어 주는 사람 옆에 있고 싶은가 봐요." },
   { id: "y6-wm05", who: "yeonseo", text: "첫차 시간이에요. 고마웠어요. 진짜로.", tag: "[quiet] 첫차 시간이에요. [soft] 고마웠어요, 진짜로." },
+  { id: "a5-it01", who: "amy", text: "…딸기? 너 내 취향 어떻게 알았어?", tag: "[surprised] ...딸기? [curious] 너 내 취향 어떻게 알았어?" },
+  { id: "a5-it02", who: "amy", text: "이건 공짜 아니야. 다음에 사탕으로 갚을 거야.", tag: "[flustered] 이건 공짜 아니야. [pouty] 다음에 사탕으로 갚을 거야." },
+  { id: "a5-it03", who: "amy", text: "또 딸기야? …너 나 길들이는 중이지.", tag: "[smug] 또 딸기야? [teasing] ...너 나 길들이는 중이지." },
+  { id: "a5-it04", who: "amy", text: "박하? 이거 할머니 사탕이잖아. …그래도 먹을게.", tag: "[pouty] 박하? 이거 할머니 사탕이잖아. [grudging] ...그래도 먹을게." },
+  { id: "y6-it05", who: "yeonseo", text: "…박하사탕이요.", tag: "[surprised] [quiet] ...박하사탕이요." },
+  { id: "y6-it06", who: "yeonseo", text: "이모가 사 주던 거예요. 그거 아는 사람, 이모 말고 처음이에요.", tag: "[soft] 이모가 사 주던 거예요. [shy] 그거 아는 사람, 이모 말고 처음이에요." },
+  { id: "y6-it07", who: "yeonseo", text: "…또 박하사탕. 이제 주머니에 이거 없으면 허전하겠어요.", tag: "[deadpan] ...또 박하사탕. [dry] 이제 주머니에 이거 없으면 허전하겠어요." },
 ];
 export const V2_LINES: VoiceLine[] = [...V2_P0, ...V2_P1, ...V2_P2, ...V2_P3, ...V2_P4, ...V2_P5, ...V2_P6];

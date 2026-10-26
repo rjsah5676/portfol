@@ -7,7 +7,7 @@
  */
 import { check } from "./engine";
 import { dayDecay } from "./rel";
-import { isMindKey, withMind } from "./mind";
+import { mindFx } from "./mind";
 import { SCENES } from "./script";
 import type { Eff, EndingId, Opt, Step, Vars } from "./types";
 
@@ -21,7 +21,7 @@ const addEff = (v: Vars, eff?: Eff): Vars => {
   if (!eff) return v;
   const o = { ...v };
   for (const [k, n] of Object.entries(eff)) o[k] = (o[k] ?? 0) + n;
-  return Object.keys(eff).some(isMindKey) ? withMind(v, o) : o;
+  return mindFx(v, o, Object.keys(eff));
 };
 /** 통계용(_로 시작) 수치는 흐름과 무관 — 빼고 비교 */
 const clean = (v: Vars): Vars => Object.fromEntries(Object.entries(v).filter(([k, x]) => x && !k.startsWith("_")));

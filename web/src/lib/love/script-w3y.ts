@@ -22,6 +22,7 @@
  *   / 이김 → good / 짐 · 폴드 → sad
  */
 import { A, BOSS, CH, FACE, JM, ME, MONTAGE, N, PLAN, TH, TIMED, TY, Y, card, match, poker } from "./dsl";
+import { giftHook, giftScenes, noteCard, noteScene, walkCard, walkScene } from "./solo";
 import type { MatchSpec, PokerSpec, Scenes } from "./types";
 
 /** 진짜 헤즈업 — 마감 후 박하사탕 판 (17일차) */
@@ -68,6 +69,7 @@ const POKER_Y_RIGGED: PokerSpec = {
         pairs: [
           ["yeonTap", "c_ledgerY"],
           ["rcY2", "c_ledgerY"],
+          ["yeonTap", "c_rig"],
         ],
         hit: "연서가 봐 달라고 두드린 건 딜러의 손이다. 수첩 일곱 권에 적힌 짜인 판도, 늘 그 손에서 시작했다.",
         act: {
@@ -93,6 +95,7 @@ const POKER_Y_RIGGED: PokerSpec = {
         pairs: [
           ["yeonTap", "c_ledgerY"],
           ["rcY2", "c_ledgerY"],
+          ["yeonTap", "c_rig"],
         ],
         hit: "연서가 봐 달라고 두드린 건 딜러의 손이다. 수첩 일곱 권에 적힌 짜인 판도, 늘 그 손에서 시작했다.",
         act: {
@@ -229,19 +232,21 @@ const POKER_Y_FINAL: PokerSpec = {
 // ---------------- 3~4주차 낮 일정 카드 (D17 · D21 · D23 · D25) ----------------
 // 고른 카드는 y3P17 · y3P21 · y4P23 · y4P25 (1~3) 에 남고, D28 지하 계단(y4_d28_steps)에서 한 줄씩 회수
 const Y3_D17_CARDS = [
-  card("셔플 연습", "원룸 책상", "y3_p17_shuf", { icon: "🂡", hint: "손 안정", eff: { tilt: -1, y3P17: 1 } }),
+  card("셔플 연습", "원룸 책상", "y3_p17_shuf", { icon: "🂡", hint: "딜러 실력 ✦ · 손 안정", eff: { tilt: -1, skill: 1, y3P17: 1 } }),
   card("이모 장보기", "재래시장", "y3_p17_imo", { icon: "🍲", hint: "이모의 귀띔", eff: { trustY: 1, y3P17: 2 } }),
   card("정민의 기록 수업", "오픈 전 빈 펍", "y3_p17_jm", { icon: "📓", hint: "눈치 ✦", eff: { riskY: -1, y3P17: 3 } }),
+  walkCard("y3_p17_walk", undefined, { y3P17: 4 }),
 ];
 const Y3_D21_CARDS = [
   card("연서", "한강 둔치", "y3_p21_yeon", { who: "yeonseo", hint: "연서 ♥", eff: { affY: 1, y3P21: 1 } }),
   card("에이미", "대학가 인형뽑기 (잠깐)", "y3_p21_amy", { who: "amy", hint: "에이미 ♥ · 연서 서운", eff: { affA: 1, affY: -1, y3P21: 2 } }),
   card("태양의 고민 상담", "포장마차", "y3_p21_ty", { icon: "🍢", hint: "손 안정", eff: { tilt: -1, y3P21: 3 } }),
+  noteCard("y3_p21_note", undefined, { y3P21: 4 }),
 ];
 const Y4_D23_CARDS = [
   card("연서", "오피스텔 1203호 문 앞", "y4_p23_yeon", { who: "yeonseo", hint: "연서 ♥ · 위험", eff: { affY: 1, riskY: 1, y4P23: 1 } }),
   card("이모 주방 돕기", "오픈 전 주방", "y4_p23_imo", { icon: "🍲", hint: "이모의 귀띔", eff: { trustY: 1, y4P23: 2 } }),
-  card("3년 전 그 판 복기", "원룸 책상", "y4_p23_shuf", { icon: "🂡", hint: "손 안정", eff: { tilt: -1, y4P23: 3 } }),
+  card("3년 전 그 판 복기", "원룸 책상", "y4_p23_shuf", { icon: "🂡", hint: "딜러 실력 ✦ · 결전 단서 카드", eff: { tilt: -1, skill: 1, y4P23: 3, rigSeen: 1 } }),
 ];
 const Y4_D25_CARDS = [
   card("연서", "문구점 · 메시지", "y4_p25_yeon", { who: "yeonseo", hint: "연서 ♥", eff: { affY: 1, y4P25: 1 } }),
@@ -250,6 +255,9 @@ const Y4_D25_CARDS = [
 ];
 
 export const W3Y: Scenes = {
+  // 혼자 하는 준비 (D17 동네 한 바퀴 · D21 노트 정리)
+  ...walkScene("y3_p17_walk", { t: "goto", to: "y3_d17_eve" }),
+  ...noteScene("y3_p21_note", { t: "goto", to: "y3_d21_night" }),
   // =====================================================================
   // ======================== 연서 루트 — 3주차 ===========================
   // =====================================================================
@@ -2002,6 +2010,7 @@ export const W3Y: Scenes = {
     N("일요일 낮. 가게는 저녁에야 연다. 오랜만에 아무 약속 없는 낮이다."),
     PLAN("일요일 낮엔 뭘 할까?", Y3_D21_CARDS),
   ],
+  ...giftScenes("y3_p21_yeon", "yeonseo", 3),
   y3_p21_yeon: [
     { t: "bgm", id: "yeonseo" },
     { t: "bg", id: "hangang" },
@@ -2011,6 +2020,10 @@ export const W3Y: Scenes = {
     ME("일요일 낮에 나와 본 적 없어요?"),
     Y("일요일 낮엔 자요. 토요일 밤에 진 숫자만큼.", "base"),
     Y("근데 오늘은 눈이 일찍 떠졌어요. 이상하게, 셀 게 없어서.", "away"),
+    giftHook("y3_p21_yeon", "yeonseo", 3),
+    { t: "goto", to: "y3_p21_yeon_gx" },
+  ],
+  y3_p21_yeon_gx: [
     N("강바람에 앞머리가 날렸다. 그녀가 진주 핀을 한 번 고쳐 꽂았다."),
     ME("그럼 오늘은 이거 세요. 옆에 있는 사람 수."),
     Y("…한 명이요. 세기 쉬워서 좋네요.", "blush"),
@@ -2357,6 +2370,8 @@ export const W3Y: Scenes = {
   ],
   y4_p23_shuf_0: [
     TH("몇 번을 돌려도 같은 데서 막힌다. 턴과 리버 사이. 거기 뭐가 있었는지, 나는 아직 모른다."),
+    N("열 번째쯤, 카드 대신 그날 딜러 손을 떠올렸다. 턴과 리버 사이, 칩 트레이 쪽으로 반 뼘 내려가 있었다."),
+    TH("…그 반 뼘 뒤로 덱 두께가 달랐다. 왜인지는 몰라도, 손은 기억한다."),
     N("다만 이번엔 카드를 덮지 않았다. 모르는 칸을 모르는 채로 두고, 끝까지 봤다."),
     TH("…3년 동안은 이 판을 내 손 탓으로만 돌렸다. 오늘은 그 칸 하나만큼, 덜 탓하기로 했다."),
     { t: "goto", to: "y4_d23_eve" },
@@ -2923,6 +2938,15 @@ export const W3Y: Scenes = {
     { t: "bgm", id: "confide" },
     { t: "bg", id: "room" },
     N("출근길 문구점에서 빨간 볼펜 리필심을 한 통 샀다. 열두 개. 사진을 찍어 보냈다."),
+    { t: "when", cond: { v: "tip", op: ">=", n: 3 }, to: "y4_p25_tip", else: "y4_p25_y2" },
+  ],
+  // ✦ 준비 → 데이트: 모아 둔 근무 팁으로 볼펜 한 자루 더
+  y4_p25_tip: [
+    N("✦ 모아 둔 팁 봉투가 생각보다 두꺼웠다. 리필심 옆에, 제일 좋은 빨간 볼펜 한 자루를 같이 샀다."),
+    { t: "set", eff: { affY: 1, yTipUsed: 1 } },
+    { t: "goto", to: "y4_p25_y2" },
+  ],
+  y4_p25_y2: [
     { t: "sfx", id: "send" },
     {
       t: "phone",
@@ -3188,6 +3212,15 @@ export const W3Y: Scenes = {
     Y("…마지막으로 한 번만, 섞어 줘요. 여기서.", "base"),
     { t: "sfx", id: "shuffle" },
     N("반쯤 빈 방에서 카드를 섞었다. 리플, 브리지. 소리가 벽에 부딪혀 두 번씩 돌아왔다."),
+    { t: "when", cond: { v: "skill", op: ">=", n: 7 }, to: "y4_d26_sk", else: "y4_d26_end2" },
+  ],
+  // ✦ 준비 → 데이트: 셔플을 쌓아 '예전의 손'이 돌아왔음
+  y4_d26_sk: [
+    N("✦ 매일 셔플해 둔 손. 리플이 한 번도 걸리지 않았다. 마지막 한 장이 그녀 손바닥 위에 정확히 내려앉았다."),
+    { t: "set", eff: { affY: 1, ySkillShuf: 1 } },
+    { t: "goto", to: "y4_d26_end2" },
+  ],
+  y4_d26_end2: [
     Y("…역시 제일 좋은 소리예요. 이 방에서 들은 소리 중에.", "whisper", "smile"),
     N("돌아가는 길, 그녀가 현관까지 따라 나왔다."),
     Y("마지막으로 하나 알려 줄게요. 7년 치 중에 제일 비싼 거.", "base"),
@@ -3503,13 +3536,16 @@ export const W3Y: Scenes = {
     { t: "when", cond: { v: "y3P17", op: "==", n: 1 }, to: "y4_d28_s17a" },
     { t: "when", cond: { v: "y3P17", op: "==", n: 2 }, to: "y4_d28_s17b" },
     { t: "when", cond: { v: "y3P17", op: "==", n: 3 }, to: "y4_d28_s17c" },
+    { t: "when", cond: { v: "y3P17", op: "==", n: 4 }, to: "y4_d28_s17d" },
     { t: "goto", to: "y4_d28_s21" },
   ],
   y4_d28_s17a: [TH("…수요일 낮, 바닥에 떨어진 카드 두 장. 열 번째부터는 안 떨어졌다. 오늘도 안 떨어질 것이다."), { t: "goto", to: "y4_d28_s21" }],
   y4_d28_s17b: [TH("…혀끝에 아직 박하 향이 남아 있는 것 같다. 쓴 건 그대로인데, 덜 쓰다."), { t: "goto", to: "y4_d28_s21" }],
   y4_d28_s17c: [TH("…정민이 그랬다. 들킬 거면, 웃으면서. 계단 중간에서 입꼬리를 한 번 올려 봤다."), { t: "goto", to: "y4_d28_s21" }],
+  y4_d28_s17d: [TH("…수요일 낮, 혼자 돈 동네. 시장 골목에서 박하 냄새가 났었다. 지금 이 계단에서도 조금."), { t: "goto", to: "y4_d28_s21" }],
   y4_d28_s21: [
     { t: "when", cond: { v: "y3P21", op: "==", n: 1 }, to: "y4_d28_s21a" },
+    { t: "when", cond: { v: "y3P21", op: "==", n: 4 }, to: "y4_d28_s21d" },
     { t: "when", cond: { v: "y3P21", op: "==", n: 2 }, to: "y4_d28_s21b" },
     { t: "when", cond: { v: "y3P21", op: "==", n: 3 }, to: "y4_d28_s21c" },
     { t: "goto", to: "y4_d28_s23" },
@@ -3517,6 +3553,7 @@ export const W3Y: Scenes = {
   y4_d28_s21a: [TH("…한강 벤치. 옆에 있는 사람 수, 한 명. 그 숫자를 데리러 간다."), { t: "goto", to: "y4_d28_s23" }],
   y4_d28_s21b: [TH("…에이미가 품에 밀어 넣은 곰 인형. '용기 값.' 오늘은 내가 그 값을 치를 차례다."), { t: "goto", to: "y4_d28_s23" }],
   y4_d28_s21c: [TH("…태양이 그랬다. 형 얼굴, 앉고 싶은 사람 얼굴이라고. 오늘은 앉아야 하는 사람 얼굴이다. 그 둘은 다르다."), { t: "goto", to: "y4_d28_s23" }],
+  y4_d28_s21d: [TH("…일요일 아침, 수첩에 그린 물음표 하나. 오늘은 그 칸을 채우러 내려간다."), { t: "goto", to: "y4_d28_s23" }],
   y4_d28_s23: [
     { t: "when", cond: { v: "y4P23", op: "==", n: 1 }, to: "y4_d28_s23a" },
     { t: "when", cond: { v: "y4P23", op: "==", n: 2 }, to: "y4_d28_s23b" },
