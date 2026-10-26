@@ -33,6 +33,7 @@ const MATCH_A3: MatchSpec = {
   title: "마감 후 사탕 판 — 에이미",
   opp: "amy",
   hands: 4,
+  retry: true,
   stack: 30,
   unit: "사탕",
   eff: { win: { trustA: 1 }, lose: { affA: 1 }, even: { affA: 1 } },
@@ -134,6 +135,22 @@ const POKER_BOSS_A: PokerSpec = {
       board: 3,
       opp: "체크할게요.",
       tell: "사장이 물잔을 끌어당긴다. 손가락 세 개가 유리잔 가장자리에 걸렸다가 거둬진다.",
+      combo: {
+        pairs: [
+          ["c_father", "c_luck"],
+          ["c_father", "c_deck"],
+          ["bossGlass", "c_rig"],
+        ],
+        hit: "카드가 처음부터 그렇게 온다. 그 방의 운은 사장이 깔아 둔 거다. 킹 셋이든 뭐든, 이 판은 리버까지 이미 끝나 있다.",
+        act: {
+          label: "지금 접는다 — 리버까지 정해진 판",
+          result: "fold",
+          score: 3,
+          say: "…벌써요? 킹 셋인데?",
+          think: "앉아서 질 판에, 끝까지 앉아 있을 이유는 없다.",
+          endLine: "카드를 엎어 밀었다. 사장의 웃음이 처음으로 한 박자 늦게 따라왔다.",
+        },
+      },
       acts: [
         { label: "베팅", to: 2, think: "킹 셋. 지금은 내가 앞선다. 지금은." },
         {
@@ -150,6 +167,22 @@ const POKER_BOSS_A: PokerSpec = {
       board: 4,
       opp: "콜할게요. …그리고 체크.",
       tell: "웃음이 아주 조금 커진다. 왼손이 테이블 위로 올라와 펠트 위에 가만히 놓인다.",
+      combo: {
+        pairs: [
+          ["c_father", "c_luck"],
+          ["c_father", "c_deck"],
+          ["bossGlass", "c_rig"],
+        ],
+        hit: "카드가 처음부터 그렇게 온다. 그 방의 운은 사장이 깔아 둔 거다. 킹 셋이든 뭐든, 이 판은 리버까지 이미 끝나 있다.",
+        act: {
+          label: "지금 접는다 — 리버까지 정해진 판",
+          result: "fold",
+          score: 3,
+          say: "…벌써요? 킹 셋인데?",
+          think: "앉아서 질 판에, 끝까지 앉아 있을 이유는 없다.",
+          endLine: "카드를 엎어 밀었다. 사장의 웃음이 처음으로 한 박자 늦게 따라왔다.",
+        },
+      },
       acts: [
         { label: "베팅", to: 3 },
         { label: "체크", to: 3 },
@@ -162,6 +195,17 @@ const POKER_BOSS_A: PokerSpec = {
       tellId: "bossGlass",
       tell2: "어깨에 작은 손가락이 닿는다. 톡, 톡. 두 번.",
       tellId2: "amyTap",
+      combo: {
+        pairs: [["amyTap", "c_deck"]],
+        hit: "어깨에 두 번. 섞지 않은 덱의 마지막 장은 처음부터 정해져 있다. 그 애는 그걸 몰라도, 일어날 때는 안다.",
+        act: {
+          label: "일어난다 — 그 애 신호",
+          result: "fold",
+          score: 3,
+          say: "…접어요? 킹 풀하우스를?",
+          think: "킹 풀하우스. 3년 전이었다면 절대 못 접었을 패다. 오늘은 어깨 위의 손이 먼저 안다.",
+        },
+      },
       acts: [
         {
           label: "콜",
@@ -180,6 +224,7 @@ const POKER_BOSS_A: PokerSpec = {
       ],
     },
   ],
+  comboFail: ["…뭘 그렇게 계산하세요? 3년 전엔 안 그랬잖아요.", "하하. 생각이 길어지면 손이 굳어요."],
   ending: {
     lose: "사장이 7 두 장을 펠트 위에 가지런히 내려놓았다. 칩이 천천히 맞은편으로 쓸려 갔다.",
     fold: "카드를 엎어 밀었다. 사장의 웃음이 반 박자 늦게 따라왔다.",

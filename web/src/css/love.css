@@ -1906,12 +1906,15 @@
   top: 4.9cqw;
   z-index: 15;
   display: flex;
+  align-items: center;
   gap: 0.9cqw;
-  padding: 0.3cqw 0.9cqw;
+  /* 누르기 쉽게: 높이 최소 3.4cqw (1280px 기준 약 44px) */
+  min-height: 3.4cqw;
+  padding: 0.5cqw 1.2cqw;
   border: 0.1cqw solid #c9a25a88;
   border-radius: 99px;
   background: #0d1226cc;
-  font-size: 1.05cqw;
+  font-size: 1.2cqw;
   letter-spacing: 0.08em;
   cursor: var(--lv-cur-hand);
 }
@@ -3395,4 +3398,163 @@
 @keyframes lv-recall-c {
   from { opacity: 0; transform: translateY(0.5cqw); }
   to { opacity: 1; transform: none; }
+}
+
+/* ===== 읽기 포커: 테이블 토크 · 반응 단서 · 단서 조합 ===== */
+.lv-talk {
+  display: flex;
+  flex-basis: 100%;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 0.5cqw;
+  margin-bottom: 0.3cqw;
+}
+.lv-talk-h {
+  font-size: 1cqw;
+  letter-spacing: 0.2em;
+  color: #ffd27a;
+}
+.lv-talk-btn {
+  max-width: 30cqw;
+  border: 0.1cqw solid #c9a25a99;
+  border-radius: 99px;
+  background: #0b1026dd;
+  padding: 0.45cqw 1.1cqw;
+  font-size: 1.1cqw;
+  color: #fff3d6;
+  text-align: left;
+  transition: border-color 0.12s, transform 0.12s;
+}
+.lv-talk-btn:hover {
+  border-color: #ffd27a;
+  transform: translateY(-0.1cqw);
+}
+.lv-clueup {
+  position: absolute;
+  left: 50%;
+  top: 14%;
+  z-index: 45;
+  max-width: 56cqw;
+  transform: translateX(-50%);
+  border: 0.12cqw solid #c9a25a;
+  border-radius: 0.7cqw;
+  background: #0d1226f0;
+  padding: 0.6cqw 1.6cqw;
+  font-size: 1.25cqw;
+  color: #fff3d6;
+  box-shadow: 0 0 1.4cqw #ffd27a55;
+  pointer-events: none;
+  animation: lv-stageup 3.4s ease both;
+}
+.lv-sp-combo {
+  min-width: 0;
+  font-size: 1.2cqw;
+  border-color: #ffe2a099;
+}
+.lv-sp-combo-ready {
+  animation: lv-combo-glow 1.8s ease-in-out infinite;
+}
+@keyframes lv-combo-glow {
+  0%, 100% { box-shadow: 0 0.4cqw 1cqw #000b, 0 0 0.4cqw #ffe2a033; }
+  50% { box-shadow: 0 0.4cqw 1cqw #000b, 0 0 1.4cqw #ffe2a0aa; }
+}
+.lv-sp-btn-read {
+  border-color: #ffe2a0;
+  box-shadow: 0 0.4cqw 1cqw #000b, 0 0 1.2cqw #ffe2a088;
+}
+.lv-combo-box {
+  width: min(70cqw, 94%);
+  max-height: 86%;
+  overflow-y: auto;
+  border: 0.14cqw solid #c9a25a;
+  border-radius: 1cqw;
+  background: linear-gradient(180deg, #121a3cf7, #090d22fa);
+  padding: 1.4cqw 1.8cqw;
+  box-shadow: 0 1cqw 3cqw #000c;
+}
+.lv-combo-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(19cqw, 1fr));
+  gap: 0.8cqw;
+  margin-top: 1cqw;
+}
+.lv-combo-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2cqw;
+  border: 0.12cqw solid #c9a25a66;
+  border-radius: 0.6cqw;
+  background: #0b1026;
+  padding: 0.7cqw 0.9cqw;
+  text-align: left;
+  transition: border-color 0.12s, transform 0.12s;
+}
+.lv-combo-card small { font-size: 0.85cqw; letter-spacing: 0.12em; color: #c9a25a; }
+.lv-combo-card b { font-size: 1.2cqw; color: #fff3d6; }
+.lv-combo-card span { font-size: 0.95cqw; line-height: 1.45; color: #ffffffa6; }
+.lv-combo-card:hover { border-color: #ffd27a; }
+.lv-combo-on {
+  border-color: #ffe2a0;
+  background: #1d2a5c;
+  transform: translateY(-0.15cqw);
+  box-shadow: 0 0 1cqw #ffe2a066;
+}
+/* ===== 처음 가이드 (코치마크) ===== */
+.lv-coach {
+  position: absolute;
+  inset: 0;
+  z-index: 95;
+  overflow: hidden;
+}
+.lv-coach-hole {
+  position: absolute;
+  border: 0.18cqw solid #ffd27a;
+  border-radius: 0.8cqw;
+  box-shadow: 0 0 0 200vmax #000000a8, 0 0 1.6cqw #ffd27a88;
+  pointer-events: none;
+  animation: lv-fadein 0.3s ease both;
+}
+.lv-coach-tip {
+  position: absolute;
+  border: 0.14cqw solid #c9a25a;
+  border-radius: 0.9cqw;
+  background: linear-gradient(180deg, #141d44fa, #0a0f28fa);
+  padding: 1cqw 1.4cqw;
+  box-shadow: 0 0.8cqw 2.4cqw #000d;
+  animation: lv-fadein 0.35s ease both;
+}
+.lv-coach-tip b { display: block; font-size: 1.4cqw; color: #ffd27a; }
+.lv-coach-tip p { margin-top: 0.35cqw; font-size: 1.3cqw; line-height: 1.55; color: #fff3d6; }
+.lv-coach-ok {
+  display: block;
+  margin: 0.8cqw 0 0 auto;
+  border: 0.12cqw solid #c9a25a;
+  border-radius: 0.6cqw;
+  background: #1d2a5c;
+  padding: 0.5cqw 1.6cqw;
+  font-size: 1.2cqw;
+  font-weight: 700;
+  color: #fff3d6;
+}
+.lv-coach-ok:hover { border-color: #ffd27a; }
+/* 관계 화면 새 소식 점 (열어 보면 꺼짐) */
+.lv-new-dot {
+  position: absolute;
+  top: -0.35cqw;
+  right: -0.7cqw;
+  width: 0.7cqw;
+  height: 0.7cqw;
+  border-radius: 50%;
+  background: #ff6b7f;
+  box-shadow: 0 0 0 0 #ff6b7f99;
+  animation: lv-new-pulse 1.6s ease-out infinite;
+}
+.lv-new-dot-hud {
+  top: 0.1cqw;
+  right: 0.2cqw;
+}
+@keyframes lv-new-pulse {
+  0% { box-shadow: 0 0 0 0 #ff6b7fbb; }
+  80%, 100% { box-shadow: 0 0 0 0.8cqw #ff6b7f00; }
 }

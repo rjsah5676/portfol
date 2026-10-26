@@ -56,6 +56,67 @@ export const CUE: Partial<Record<CharKey, Record<"strong" | "bluff", string[]>>>
   },
 };
 
+/**
+ * 테이블 토크 — 판마다 한 번, 내 첫 행동 전에 거는 한마디. 그 판 동안만 상대 성향(Persona)을 바꿈.
+ * clue: 그 판에서 반응이 실제로 보이면(seen) 노트에 '반응 단서'로 적힘 (플래그 rcXX → 세이브에 남음 · clues.ts)
+ */
+export interface Mod {
+  aggr?: number;
+  bluff?: number;
+  loose?: number;
+  acc?: number;
+  /** 버릇이 겉으로 보일 확률 (없으면 늘 보임, 0.25 = 거의 숨김) */
+  show?: number;
+  /** 이 속마음일 땐 그 판 동안 버릇이 확실히(정확하게) 나옴 */
+  sure?: "strong" | "bluff";
+}
+export interface Talk {
+  id: string;
+  /** 버튼 글자 (내 말 · 행동) */
+  label: string;
+  /** 상대 대답 (말풍선, 음성 없음) */
+  reply: string[];
+  mod: Mod;
+  /** 반응 단서 플래그 */
+  clue?: string;
+  /** 반응 확인 조건: 그 겉모습 버릇이 떴을 때 · any = 아무 버릇 · hide = 버릇이 숨겨졌을 때 */
+  seen?: "strong" | "bluff" | "any" | "hide";
+}
+export const TALK: Partial<Record<CharKey, Talk[]>> = {
+  amy: [
+    { id: "taunt", label: "\"쫄았지? 오늘도 7·2 기다려?\"", reply: ["뭐? 쫄긴 누가! 이번 판 다 걸어 줄게!", "하, 두고 봐. 지금 레이즈할 거니까."], mod: { bluff: 0.25, aggr: 0.1, sure: "bluff" }, clue: "rcA1", seen: "bluff" },
+    { id: "praise", label: "\"오늘 손 좋은데?\"", reply: ["그치? 오늘 나 좀 되는 날이야!", "헤헤. 칭찬받으면 더 세게 건다?"], mod: { aggr: 0.25, loose: 0.1 }, clue: "rcA2", seen: "any" },
+    { id: "bet", label: "\"이번 판 지면 딸기우유.\"", reply: ["콜! 큰 거로!", "…좋아. 이번 건 진지하게 할 거야."], mod: { bluff: -0.15, acc: 0.1, sure: "strong" }, clue: "rcA3", seen: "strong" },
+  ],
+  yeonseo: [
+    { id: "praise", label: "\"오늘도 계산 정확하네요.\"", reply: ["…칭찬은 계산에 없어요.", "그런 말 하면, 표정 관리를 더 해야 돼요."], mod: { show: 0.25, bluff: -0.05 }, clue: "rcY1", seen: "hide" },
+    { id: "wait", label: "(아무 말 없이, 그녀가 먼저 움직이길 기다린다)", reply: ["……", "…기다리는 거, 반칙이에요."], mod: { sure: "bluff", bluff: 0.05 }, clue: "rcY2", seen: "bluff" },
+    { id: "taunt", label: "\"확률로는 오늘 질 텐데요?\"", reply: ["그럼 확률대로 해 볼게요.", "…좋아요. 들어갈 판만 들어갈게요."], mod: { loose: -0.25, bluff: -0.1, aggr: 0.1, sure: "strong" }, clue: "rcY3", seen: "strong" },
+  ],
+  taeyang: [
+    { id: "ask", label: "\"그 패 좋아요?\"", reply: ["형, 그걸 왜 물어봐요! 좋죠! 아마도! 진짜로요!", "에이 형, 비밀이에요. 근데 좋아요. 아마."], mod: { bluff: 0.15, sure: "bluff" }, clue: "rcT1", seen: "bluff" },
+    { id: "praise", label: "\"오늘 감 좋네요.\"", reply: ["진짜요? 흥얼흥얼~ 아, 소리 났어요?", "형이 그러니까 기분 좋은데요!"], mod: { aggr: 0.2, sure: "strong" }, clue: "rcT2", seen: "strong" },
+    { id: "record", label: "\"정민 씨가 이 판 기록한대요.\"", reply: ["야, 정민아! 그럼 잘해야 되잖아!", "기록이요? 으, 긴장된다."], mod: { aggr: -0.1, loose: -0.15 } },
+  ],
+  jeongmin: [
+    { id: "record", label: "\"이 판도 기록하실 거죠?\"", reply: ["물론입니다. 기록상, 모든 판은 기록됩니다.", "기록하겠습니다. 기록상."], mod: { acc: 0.1, show: 1 }, clue: "rcJ1", seen: "any" },
+    { id: "taunt", label: "\"오늘은 오차 크게 나겠는데요?\"", reply: ["…오차는 제 전문입니다.", "도발은 효과가 없습니다."], mod: { bluff: 0.2, sure: "bluff" }, clue: "rcJ2", seen: "bluff" },
+    { id: "praise", label: "\"정민 씨 계산은 정확하던데요.\"", reply: ["사실입니다.", "…감사합니다. 기록해 두겠습니다."], mod: { aggr: 0.15 } },
+  ],
+};
+const clamp01 = (x: number) => Math.max(0, Math.min(1, x));
+/** 토크로 바뀐 그 판의 성향 */
+export const withMod = (p: Persona, m?: Mod): Persona =>
+  m
+    ? {
+        ...p,
+        aggr: clamp01(p.aggr + (m.aggr ?? 0)),
+        bluff: clamp01(p.bluff + (m.bluff ?? 0)),
+        loose: clamp01(p.loose + (m.loose ?? 0)),
+        acc: clamp01(p.acc + (m.acc ?? 0)),
+      }
+    : p;
+
 /** 버릇을 알 때 붙는 해석 */
 export const READ_TXT: Partial<Record<CharKey, Record<"strong" | "bluff", string>>> = {
   amy: { strong: "조용하면 진짜. 좋은 패다.", bluff: "시끄러우면 블러프." },
@@ -298,8 +359,8 @@ export const nameOf = (hole: number[], board: number[]) =>
   board.length >= 3 ? handName(evaluate([...hole, ...board])) : "";
 
 /** AI 결정: 행동 + 속마음 분류 */
-export function aiAct(h: Hand, who: CharKey, r = Math.random): { k: ActKind; to?: number; read: Read } {
-  const p = PERSONA[who] ?? PERSONA.jeongmin!;
+export function aiAct(h: Hand, who: CharKey, r = Math.random, mod?: Mod): { k: ActKind; to?: number; read: Read } {
+  const p = withMod(PERSONA[who] ?? PERSONA.jeongmin!, mod);
   const board = h.board.slice(0, h.shown);
   const eq = equity(h.opp, board, 260, r);
   const ops = options(h, "opp");
@@ -340,11 +401,21 @@ export function aiAct(h: Hand, who: CharKey, r = Math.random): { k: ActKind; to?
   return { k: "fold", read: "mid" };
 }
 
-/** 버릇 단서: 진짜 속마음(read) → 겉모습. acc 확률로 맞고, 아니면 반대 버릇(헛버릇) */
-export function cueFor(who: CharKey, read: Read, r = Math.random): { look: "strong" | "bluff"; text: string } | null {
+/**
+ * 버릇 단서: 진짜 속마음(read) → 겉모습. acc 확률로 맞고, 아니면 반대 버릇(헛버릇)
+ * mod.show 확률로만 보임 (안 보이면 hidden) · mod.sure 와 속마음이 같으면 확실히 맞게 나옴
+ */
+export function cueFor(
+  who: CharKey,
+  read: Read,
+  r = Math.random,
+  mod?: Mod
+): { look: "strong" | "bluff"; text: string; hidden?: boolean } | null {
   if (read === "mid") return null;
-  const p = PERSONA[who];
-  const look: "strong" | "bluff" = p && r() > p.acc ? (read === "strong" ? "bluff" : "strong") : read;
+  const p = PERSONA[who] ? withMod(PERSONA[who]!, mod) : undefined;
+  if (mod?.show !== undefined && mod.sure !== read && r() > mod.show) return { look: read, text: "", hidden: true };
+  const sure = mod?.sure === read;
+  const look: "strong" | "bluff" = !sure && p && r() > p.acc ? (read === "strong" ? "bluff" : "strong") : read;
   const text = pick(CUE[who]?.[look], r);
   return text ? { look, text } : null;
 }

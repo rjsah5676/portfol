@@ -29,6 +29,7 @@ const MATCH_Y3: MatchSpec = {
   title: "마감 후 박하사탕 판 — 연서",
   opp: "yeonseo",
   hands: 4,
+  retry: true,
   stack: 30,
   unit: "사탕",
   eff: { win: { trustY: 1 }, lose: { affY: 1 }, even: { affY: 1 } },
@@ -61,6 +62,23 @@ const POKER_Y_RIGGED: PokerSpec = {
       board: 3,
       opp: "체크.",
       tell: "딜러가 칩을 정리하는 손이 이상하게 느리다. 무엇이 이상한지는 모르겠다.",
+      tell2: "하우스 자리의 연서가 펠트를 손끝으로 톡, 톡. 두 번. 시선은 딜러의 손에 가 있다.",
+      tellId2: "yeonTap",
+      combo: {
+        pairs: [
+          ["yeonTap", "c_ledgerY"],
+          ["rcY2", "c_ledgerY"],
+        ],
+        hit: "연서가 봐 달라고 두드린 건 딜러의 손이다. 수첩 일곱 권에 적힌 짜인 판도, 늘 그 손에서 시작했다.",
+        act: {
+          label: "딜러 손목을 잡는다",
+          result: "fold",
+          score: 3,
+          say: "…하하. 손이 먼저 움직이네요.",
+          think: "카드보다 먼저, 딜러의 손을 봤다. 3년 전에 못 본 그 반 뼘.",
+          endLine: "판이 멈췄다. 딜러의 손이, 무릎 위의 덱과 함께 굳었다.",
+        },
+      },
       acts: [
         { label: "베팅", to: 2, think: "킹 세 장. 지금 이 보드에서 나보다 센 패는 없다." },
         { label: "체크", to: 2 },
@@ -71,6 +89,21 @@ const POKER_Y_RIGGED: PokerSpec = {
       opp: "베팅할게요. …조금 크게.",
       tell: "8이 깔리는 순간, 물잔 가장자리의 손가락 세 개가 한 번 까딱였다. 버릇처럼.",
       tellId: "bossGlass",
+      combo: {
+        pairs: [
+          ["yeonTap", "c_ledgerY"],
+          ["rcY2", "c_ledgerY"],
+        ],
+        hit: "연서가 봐 달라고 두드린 건 딜러의 손이다. 수첩 일곱 권에 적힌 짜인 판도, 늘 그 손에서 시작했다.",
+        act: {
+          label: "딜러 손목을 잡는다",
+          result: "fold",
+          score: 3,
+          say: "…하하. 손이 먼저 움직이네요.",
+          think: "카드보다 먼저, 딜러의 손을 봤다. 3년 전에 못 본 그 반 뼘.",
+          endLine: "판이 멈췄다. 딜러의 손이, 무릎 위의 덱과 함께 굳었다.",
+        },
+      },
       acts: [
         { label: "콜", to: 3, think: "풀하우스. 킹 셋에 8 둘. 그런데 저 손가락은 뭘 보고 움직인 거지." },
         { label: "레이즈", to: 3, say: "좋아요. 올리세요, 더." },
@@ -99,6 +132,7 @@ const POKER_Y_RIGGED: PokerSpec = {
       ],
     },
   ],
+  comboFail: ["…뭘 그렇게 보세요? 카드는 거기 없는데요.", "하하. 계산이 길어지면 손이 굳어요."],
   ending: {
     lose: "사장이 칩을 끌어갔다. 딜러는 끝까지 고개를 들지 않았다.",
     fold: "사장이 카드를 뒤집어 보였다. 클로버 8과 에이스. 보드의 8 세 장과 합쳐 8 포카드. 따라갔어도 졌다.",
@@ -150,6 +184,21 @@ const POKER_Y_FINAL: PokerSpec = {
       board: 5,
       opp: "…올인. 끝내죠, 이제.",
       tell: "스페이드 킹. 또 하트가 아니다. 말이 먼저 나왔다. 웃음은 반 박자 뒤에 따라왔다.",
+      tellId: "bossLaugh",
+      combo: {
+        pairs: [
+          ["bossLaugh", "yeonDeal"],
+          ["bossLaugh", "rcY2"],
+        ],
+        hit: "말이 웃음보다 먼저 나왔다. 그리고 딜러 자리의 손끝 한 번. 7년 동안 사장에게 가던 신호가, 처음으로 내 쪽을 향했다.",
+        act: {
+          label: "콜 — 말이 먼저 나왔다",
+          result: "win",
+          score: 2,
+          say: "……",
+          think: "두 사람이 같은 걸 가리킨다. 저 올인은 비어 있다.",
+        },
+      },
       tell2: "딜러 자리의 연서가, 덱 위를 손끝으로 한 번 두드렸다. 사장 쪽이 아니라, 내 쪽을 보면서.",
       tellId2: "yeonDeal",
       acts: [
@@ -170,6 +219,7 @@ const POKER_Y_FINAL: PokerSpec = {
       ],
     },
   ],
+  comboFail: ["…뭘 그렇게 보세요? 카드는 거기 없는데요.", "하하. 계산이 길어지면 손이 굳어요."],
   ending: {
     win: "사장이 카드를 뒤집었다. 하트 에이스와 하트 4. 하트는 끝내 오지 않았다. 처음으로, 그의 얼굴에서 웃음이 사라졌다.",
     fold: "사장이 카드를 덮은 채 칩을 끌어갔다. 그 패가 뭐였는지, 나는 끝내 보지 못했다.",
@@ -3142,6 +3192,7 @@ export const W3Y: Scenes = {
     N("돌아가는 길, 그녀가 현관까지 따라 나왔다."),
     Y("마지막으로 하나 알려 줄게요. 7년 치 중에 제일 비싼 거.", "base"),
     Y("사장님은 이길 때, 웃고 나서 말해요. 블러프일 때는 말이 먼저 나와요. 웃음은 반 박자 뒤에.", "base"),
+    { t: "set", eff: { tLaugh: 1 } },
     Y("7년 동안 딱 두 번 봤어요. 말이 먼저 나오는 거.", "away"),
     ME("그걸 왜 지금 알려 줘요?"),
     Y("…혹시 몰라서요. 딜러님이 그 의자에 앉게 될 확률, 0이 아니라서.", "sad"),
@@ -3555,6 +3606,9 @@ export const W3Y: Scenes = {
     N("딜러의 손이 멈췄다. 처음으로 고개를 들어 사장을 봤다."),
     ME("그리고 사장님. 물잔에서 손가락 내려놓으시죠. 오늘은 신호 받을 사람이 없어요."),
     N("물잔 가장자리 위, 손가락 세 개가 굳었다."),
+    { t: "goto", to: "y4_d28_call2" },
+  ],
+  y4_d28_call2: [
     Y("……봤어요? 그걸.", "whisper", "surprise"),
     ME("봤어요. 이번엔 전부."),
     BOSS("…연서 씨가 많이 가르쳐 줬네요."),
@@ -3577,7 +3631,16 @@ export const W3Y: Scenes = {
     N("사장이 물잔 가장자리에 손가락을 올렸다. 하나, 둘, 셋. 연서가 그 손가락을 보고, 눈을 감았다."),
     { t: "sfx", id: "deal" },
     poker("yFinal", POKER_Y_RIGGED),
+    { t: "when", cond: { v: "mini_yFinal", op: "==", n: 3 }, to: "y4_d28_caught" },
     { t: "goto", to: "y4_lose" },
+  ],
+  // 단서 조합으로 바꿔치기를 잡아냄 (판 중간) → 딜러 교체 · 공정한 판으로
+  y4_d28_caught: [
+    N("손이 먼저 움직였다. 칩 트레이 위에서, 딜러의 손목을 붙잡았다."),
+    ME("이 판, 처음부터 다시 하죠. 방금 무릎 위로 내려간 덱 말고, 제가 컷한 덱으로."),
+    N("물잔 가장자리 위, 손가락 세 개가 굳었다."),
+    { t: "set", eff: { rigKnow: 1, meta_rigKnow: 1, yCaught: 1 } },
+    { t: "goto", to: "y4_d28_call2" },
   ],
   y4_win: [
     { t: "bgm", id: null },

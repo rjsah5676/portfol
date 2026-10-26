@@ -16,10 +16,13 @@ import { TELLS, tellById, tellKnown } from "@/lib/love/tells";
 import {
   type ActKind,
   type Hand,
+  type Mod,
   type Seat,
+  type Talk,
   CHAT,
   PERSONA,
   READ_TXT,
+  TALK,
   act,
   aiAct,
   cueFor,
@@ -33,6 +36,7 @@ import {
   toCall,
 } from "@/lib/love/holdem";
 import { PlayingCard } from "@/components/Poker/parts";
+import { REACT_CLUES, cluesKnown, pairHit, reactOf } from "@/lib/love/clues";
 
 const SEATS = [
   { x: 50, y: 84 },
@@ -356,12 +360,13 @@ function RankHelp({ onClose }: { onClose: () => void }) {
   );
 }
 
-/** 왼쪽 가운데: 이 상대에 대해 아는 버릇 (항상 보임) */
-function TellBook({ who, vars }: { who: CharKey; vars: Vars }) {
+/** 왼쪽 가운데: 이 상대에 대해 아는 버릇 + 반응 단서 (항상 보임). extra = 이번 판에 막 알아낸 반응 */
+function TellBook({ who, vars, extra = [] }: { who: CharKey; vars: Vars; extra?: string[] }) {
   const list = TELLS.filter((t) => t.who === who);
-  if (!list.length) return null;
+  const reacts = reactOf(who).filter((c) => check(c.need, vars) || extra.includes(c.id));
+  if (!list.length && !reacts.length) return null;
   return (
-    <div className="lv-sp-book">
+    <div className="lv-sp-book" data-coach="book">
       <div className="mb-[0.3cqw] text-[0.95cqw] font-bold tracking-[0.12em] text-[#ffd27a]">
         ✎ {NAME[who]} 노트
       </div>
@@ -377,6 +382,11 @@ function TellBook({ who, vars }: { who: CharKey; vars: Vars }) {
           </div>
         )
       )}
+      {reacts.map((c) => (
+        <div key={c.id} className="text-[1cqw] leading-[1.45] text-white/90">
+          · <b className="text-[#ffe2a0]">반응</b> {c.name}
+        </div>
+      ))}
     </div>
   );
 }
@@ -392,6 +402,7 @@ export function StoryPoker({
   bg,
   vars,
   outfit,
+  coach,
 }: {
   spec: PokerSpec;
   onDone: (score: number, eff?: Eff) => void;
@@ -400,6 +411,8 @@ export function StoryPoker({
   bg?: BgId;
   vars: Vars;
   outfit?: Outfit;
+  /** 처음 가이드 (코치마크) 띄우기 */
+  coach?: (id: string) => void;
 }) {
   const bgUrl = (bg && BG[bg]) || BG.pub;
   const [st, setSt] = useState(0);
@@ -412,7 +425,42 @@ export function StoryPoker({
   const [runTo, setRunTo] = useState(0);
   const [help, setHelp] = useState(false);
   const eff = useRef<Record<string, number>>({});
+  /** 결전 단서 조합: 남은 기회 · 열린 거리 · 고르는 창 · 고른 카드 · 경계 한마디 · 맞물린 속마음 · 결과 문장 */
+  const [chances, setChances] = useState(2);
+  const [unlocked, setUnlocked] = useState<number | null>(null);
+  const [pickOpen, setPickOpen] = useState(false);
+  const [sel, setSel] = useState<string[]>([]);
+  const [warn, setWarn] = useState<string | null>(null);
+  const [hitTxt, setHitTxt] = useState<string | null>(null);
+  const [endLine, setEndLine] = useState<string | undefined>(undefined);
   const street = spec.streets[st];
+  const clues = cluesKnown(vars);
+  const combo = street.combo;
+  const showCombo = !!combo && clues.length > 0 && chances > 0 && !res && !react && unlocked !== st;
+  const comboReady = !!combo && combo.pairs.some(([a, b]) => clues.some((c) => c.id === a) && clues.some((c) => c.id === b));
+  useEffect(() => {
+    if (showCombo) coach?.("combo");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showCombo]);
+  useEffect(() => {
+    setHitTxt(null);
+  }, [st]);
+  const tryCombo = () => {
+    if (!combo || sel.length !== 2) return;
+    setPickOpen(false);
+    if (pairHit(combo.pairs, sel[0], sel[1])) {
+      play("pencil");
+      setUnlocked(st);
+      setHitTxt(combo.hit);
+    } else {
+      play("knock");
+      setChances((c) => c - 1);
+      eff.current.tilt = (eff.current.tilt ?? 0) + 1;
+      setWarn(pick(spec.comboFail) ?? "…뭘 그렇게 계산하세요? 표정에 다 보여요.");
+      window.setTimeout(() => setWarn(null), 1900);
+    }
+    setSel([]);
+  };
   const mine = spec.mine.map(toCard);
   const theirs = spec.theirs.map(toCard);
   const board = spec.board.map(toCard);
@@ -456,6 +504,7 @@ export function StoryPoker({
 
   const choose = (a: PokerAct) => {
     if (react || res) return;
+    setEndLine(a.endLine);
     play(a.result === "fold" ? "fold" : "chip");
     if (a.eff)
       for (const [k, n] of Object.entries(a.eff)) eff.current[k] = (eff.current[k] ?? 0) + n;
@@ -489,11 +538,13 @@ export function StoryPoker({
   // 대사창: 상대 반응 > 결과 문장 > 거리별 상대 대사
   // 결과가 정해진 행동의 반응 대사는 결과가 뜬 뒤에 (쇼다운 전에 말해 버리면 김이 샘)
   const resSay = res && sd >= 4 ? react?.say : undefined;
-  const line = res ? (sd >= 4 ? resSay || spec.ending?.[res.r] || "" : "") : (react?.say ?? street.opp ?? "");
-  const speaker = (res ? !!resSay : !!(react?.say || street.opp)) ? NAME[spec.opp] : "";
+  const line = warn ?? (res ? (sd >= 4 ? resSay || endLine || spec.ending?.[res.r] || "" : "") : (react?.say ?? street.opp ?? ""));
+  const speaker = warn || (res ? !!resSay : !!(react?.say || street.opp)) ? NAME[spec.opp] : "";
   const note = react?.think
     ? { k: "속마음", t: react.think }
-    : !res && street.tell
+    : hitTxt && !res
+      ? { k: "조합", t: hitTxt }
+      : !res && street.tell
       ? { k: known ? "노트" : "관찰", t: street.tell }
       : null;
   const phase = res ? (res.r === "fold" ? "FOLD" : "SHOWDOWN") : (PHASE[street.board] ?? "");
@@ -567,7 +618,7 @@ export function StoryPoker({
       {note && (
         <div key={note.t} className="lv-sp-note absolute right-[2%] top-[3%] w-[27%]">
           <div className="mb-[0.4cqw] text-[1cqw] font-bold tracking-[0.15em] text-[#ffd27a]">
-            {note.k === "속마음" ? "◇ 속마음" : note.k === "노트" ? "✎ 읽기 노트" : "◎ 관찰"}
+            {note.k === "속마음" ? "◇ 속마음" : note.k === "조합" ? "✎ 단서가 맞물렸다" : note.k === "노트" ? "✎ 읽기 노트" : "◎ 관찰"}
           </div>
           <div className="text-[1.15cqw] leading-[1.5] text-white/90">{note.t}</div>
           {note.k === "노트" && tellInfo && (
@@ -575,7 +626,7 @@ export function StoryPoker({
               → {tellInfo.name}. {tellInfo.meaning}
             </div>
           )}
-          {note.k !== "속마음" && street.tell2 && (
+          {note.k !== "속마음" && note.k !== "조합" && street.tell2 && (
             <div className="mt-[0.5cqw] border-t border-white/15 pt-[0.5cqw] text-[1.15cqw] leading-[1.5] text-white/90">
               {street.tell2}
               {known2 && tellInfo2 && (
@@ -605,20 +656,71 @@ export function StoryPoker({
       {/* 오른쪽 아래: 행동 버튼 */}
       <div className="absolute bottom-[4%] right-[2%] flex flex-col items-end gap-[0.5cqw]">
         {!res && !react && <div className="lv-sp-turn">내 차례</div>}
+        {showCombo && (
+          <button
+            data-coach="combo"
+            className={`lv-sp-btn lv-sp-combo ${comboReady ? "lv-sp-combo-ready" : ""}`}
+            disabled={!!warn}
+            onClick={() => setPickOpen(true)}
+          >
+            ✎ 단서 조합 <span className="text-[0.95cqw] text-white/55">· 기회 {chances}</span>
+          </button>
+        )}
         <div className="flex gap-[0.7cqw]">
           {res ? (
             <button className="lv-sp-btn disabled:opacity-40" disabled={sd < 5} onClick={() => onDone(res.score, eff.current)}>
               <span className="text-[#ffd27a]">▶</span> 계속
             </button>
           ) : (
-            street.acts.map((a, i) => (
-              <button key={a.label} className="lv-sp-btn disabled:opacity-40" disabled={!!react} onClick={() => choose(a)}>
-                <span className={i % 2 ? "text-[#ff6b7f]" : "text-[#e9d9b0]"}>{ACT_SUIT[i % 4]}</span> {a.label}
-              </button>
-            ))
+            <>
+              {combo && unlocked === st && (
+                <button className="lv-sp-btn lv-sp-btn-read disabled:opacity-40" disabled={!!react} onClick={() => choose(combo.act)}>
+                  <span className="text-[#ffe2a0]">✎</span> {combo.act.label}
+                </button>
+              )}
+              {street.acts.map((a, i) => (
+                <button key={a.label} className="lv-sp-btn disabled:opacity-40" disabled={!!react || !!warn} onClick={() => choose(a)}>
+                  <span className={i % 2 ? "text-[#ff6b7f]" : "text-[#e9d9b0]"}>{ACT_SUIT[i % 4]}</span> {a.label}
+                </button>
+              ))}
+            </>
           )}
         </div>
       </div>
+      {/* 단서 조합 창: 카드 두 장 고르기 */}
+      {pickOpen && (
+        <div className="lv-combo absolute inset-0 z-50 flex items-center justify-center bg-black/65" onClick={() => setPickOpen(false)}>
+          <div className="lv-combo-box" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-baseline justify-between">
+              <div className="text-[1.6cqw] font-bold text-[#ffd27a]">✎ 단서 조합</div>
+              <div className="text-[1.05cqw] text-white/55">두 장을 맞물려 봐 · 남은 기회 {chances} · 틀리면 상대가 경계한다</div>
+            </div>
+            <div className="lv-combo-grid">
+              {clues.map((c) => (
+                <button
+                  key={c.id}
+                  className={`lv-combo-card ${sel.includes(c.id) ? "lv-combo-on" : ""}`}
+                  onClick={() =>
+                    setSel((s) => (s.includes(c.id) ? s.filter((x) => x !== c.id) : s.length < 2 ? [...s, c.id] : [s[1], c.id]))
+                  }
+                >
+                  <small>{c.kind === "tell" ? "버릇" : c.kind === "story" ? "이야기" : "반응"}{c.who ? ` · ${NAME[c.who]}` : ""}</small>
+                  <b>{c.name}</b>
+                  <span>{c.text}</span>
+                </button>
+              ))}
+            </div>
+            <div className="mt-[1cqw] flex justify-end gap-[0.7cqw]">
+              <button className="lv-sp-btn" onClick={() => setPickOpen(false)}>
+                닫기
+              </button>
+              <button className="lv-sp-btn disabled:opacity-40" disabled={sel.length !== 2} onClick={tryCombo}>
+                <span className="text-[#ffe2a0]">✎</span> 맞물려 본다
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {help && <RankHelp onClose={() => setHelp(false)} />}
     </div>
   );
@@ -650,6 +752,7 @@ export function HeadsUp({
   bg,
   vars,
   outfit,
+  coach,
 }: {
   spec: MatchSpec;
   onDone: (score: number, eff?: Eff) => void;
@@ -657,6 +760,7 @@ export function HeadsUp({
   bg?: BgId;
   vars: Vars;
   outfit?: Outfit;
+  coach?: (id: string) => void;
 }) {
   const who = spec.opp;
   const bgUrl = (bg && BG[bg]) || BG.pub;
@@ -679,6 +783,51 @@ export function HeadsUp({
   const later = (ms: number, f: () => void) => timers.current.push(window.setTimeout(f, ms));
   useEffect(() => () => timers.current.forEach((x) => window.clearTimeout(x)), []);
 
+  // ---- 테이블 토크 (판마다 한 번, 내 첫 행동 전) · 반응 단서 ----
+  const talks: Talk[] = TALK[who] ?? [];
+  /** 그 히로인 마음 4 이상이면 버릇 정확도 +0.1 (아는 만큼 읽힘) */
+  const mindBonus = (who === "amy" && (vars.mindA ?? 0) >= 4) || (who === "yeonseo" && (vars.mindY ?? 0) >= 4) ? 0.1 : 0;
+  const [talked, setTalked] = useState(false);
+  const handTalk = useRef<Talk | null>(null);
+  const handSeen = useRef<{ strong?: boolean; bluff?: boolean; any?: boolean; hide?: boolean }>({});
+  const learned = useRef<Set<string>>(new Set());
+  const [learnedList, setLearnedList] = useState<string[]>([]);
+  const [clueUp, setClueUp] = useState<{ text: string; n: number } | null>(null);
+  const modNow = (): Mod | undefined => {
+    const m: Mod = { ...(handTalk.current?.mod ?? {}) };
+    if (mindBonus) m.acc = (m.acc ?? 0) + mindBonus;
+    return Object.keys(m).length ? m : undefined;
+  };
+  const sayTalk = (t: Talk) => {
+    if (talked) return;
+    play("click");
+    handTalk.current = t;
+    setTalked(true);
+    setMine(t.label);
+    setSay(pick(t.reply) ?? "");
+  };
+  /** 판이 끝나면: 건 말의 반응이 실제로 보였는지 → 처음이면 반응 단서로 기록 */
+  const checkClue = () => {
+    const t = handTalk.current;
+    if (!t?.clue || learned.current.has(t.clue) || (vars[t.clue] ?? 0) >= 1) return;
+    const seen = handSeen.current;
+    if (!(t.seen === "any" ? seen.any : t.seen ? seen[t.seen] : false)) return;
+    learned.current.add(t.clue);
+    setLearnedList([...learned.current]);
+    const c = REACT_CLUES.find((x) => x.id === t.clue);
+    if (c) {
+      setClueUp({ text: c.text, n: Date.now() });
+      play("pencil");
+      later(3400, () => setClueUp(null));
+      coach?.("react");
+    }
+  };
+  const talkOpen = phase === "play" && !!h && h.toAct === "me" && !busy && !talked && !h.acted.me && talks.length > 0;
+  useEffect(() => {
+    if (talkOpen) coach?.("talk");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [talkOpen]);
+
   const total = spec.hands;
   const clone = (x: Hand): Hand => ({
     ...x,
@@ -698,6 +847,9 @@ export function HeadsUp({
     setMine("");
     setSay("");
     setPhase("play");
+    handTalk.current = null;
+    handSeen.current = {};
+    setTalked(false);
     if (nh.toAct === "opp") aiTurn(nh);
   };
 
@@ -725,12 +877,20 @@ export function HeadsUp({
   const aiTurn = (x: Hand) => {
     setBusy(true);
     later(900, () => {
-      const a = aiAct(x, who);
+      const mod = modNow();
+      const a = aiAct(x, who, Math.random, mod);
       const prev = x.shown;
       act(x, "opp", a.k, a.to);
       play(ACT_SFX[a.k]);
       setSay(pick(CHAT[who]?.[a.k]) ?? ACT_NAME[a.k]);
-      setCue(cueFor(who, a.read));
+      const c = cueFor(who, a.read, Math.random, mod);
+      if (c?.hidden) {
+        handSeen.current.hide = true;
+        setCue(null);
+      } else {
+        if (c) handSeen.current = { ...handSeen.current, [c.look]: true, any: true };
+        setCue(c);
+      }
       advance(x, prev);
     });
   };
@@ -739,6 +899,7 @@ export function HeadsUp({
     if (!h || busy || h.toAct !== "me" || h.over) return;
     const x = clone(h);
     const prev = x.shown;
+    setTalked(true);
     act(x, "me", k, to);
     play(ACT_SFX[k]);
     setMine(ACT_NAME[k] + (k === "bet" || k === "raise" ? ` ${to}` : ""));
@@ -750,6 +911,7 @@ export function HeadsUp({
   const finish = (x: Hand, prevShown: number) => {
     setBusy(true);
     setH(clone(x));
+    checkClue();
     setPhase("showdown");
     const w = x.over!.winner;
     let t = 500;
@@ -903,8 +1065,14 @@ export function HeadsUp({
             족보표
           </button>
         </div>
-        <TellBook who={who} vars={vars} />
+        <TellBook who={who} vars={vars} extra={learnedList} />
       </div>
+      {/* 반응 단서를 처음 알아냈을 때 */}
+      {clueUp && (
+        <div key={clueUp.n} className="lv-clueup">
+          <span className="text-[#ffd27a]">✎ 반응 단서</span> {clueUp.text}
+        </div>
+      )}
       {/* 오른쪽 위: 지금 보인 버릇 */}
       {cue && phase === "play" && (
         <div key={cue.text} className="lv-sp-note absolute right-[2%] top-[3%] w-[27%]">
@@ -949,6 +1117,16 @@ export function HeadsUp({
               <span className="text-[#ffd27a]">▶</span> 시작 ({total}판 · {unit} {spec.stack}개)
             </button>
           )}
+          {talkOpen && (
+            <div className="lv-talk" data-coach="talk">
+              <span className="lv-talk-h">한마디</span>
+              {talks.map((t) => (
+                <button key={t.id} className="lv-talk-btn" onClick={() => sayTalk(t)}>
+                  {t.label}
+                </button>
+              ))}
+            </div>
+          )}
           {ops.map((o, i) => (
             <button key={o.k} className="lv-sp-btn" onClick={() => meAct(o.k, o.to)}>
               <span className={i % 2 ? "text-[#ff6b7f]" : "text-[#e9d9b0]"}>{ACT_SUIT[i % 4]}</span> {btnLabel(o)}
@@ -966,7 +1144,15 @@ export function HeadsUp({
                   <span className="text-[#ff6b7f]">↻</span> 한 번 더
                 </button>
               )}
-              <button className="lv-sp-btn" onClick={() => onDone(r === "win" ? 2 : r === "even" ? 1 : 0, spec.eff?.[r])}>
+              <button
+                className="lv-sp-btn"
+                onClick={() =>
+                  onDone(r === "win" ? 2 : r === "even" ? 1 : 0, {
+                    ...spec.eff?.[r],
+                    ...Object.fromEntries([...learned.current].map((k) => [k, 1])),
+                  })
+                }
+              >
                 <span className="text-[#ffd27a]">▶</span> 계속
               </button>
             </>

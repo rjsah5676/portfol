@@ -78,6 +78,14 @@ export const TELLS: Tell[] = [
     hint: "연서를 끝까지 알아볼 것",
   },
   {
+    id: "bossLaugh",
+    who: "boss",
+    name: "말이 먼저, 웃음이 나중",
+    meaning: "이길 땐 웃고 나서 말한다. 블러프일 땐 말이 먼저 나오고, 웃음이 반 박자 뒤에 따라온다.",
+    need: on("tLaugh"),
+    hint: "사장을 7년 본 사람에게 들을 것",
+  },
+  {
     id: "tyHum",
     who: "taeyang",
     name: "콧노래",

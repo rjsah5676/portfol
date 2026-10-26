@@ -241,6 +241,15 @@ export interface PokerAct {
   say?: string;
   /** 고른 직후 주인공 속마음 */
   think?: string;
+  /** 결과 문장을 이 행동만 따로 (없으면 spec.ending) */
+  endLine?: string;
+}
+/** 결전 「✎ 단서 조합」: 이 거리에서 맞는 단서 두 장(pairs 중 하나)을 고르면 act 가 열림 */
+export interface PokerCombo {
+  pairs: [string, string][];
+  act: PokerAct;
+  /** 맞물렸을 때 속마음 */
+  hit: string;
 }
 export interface PokerStreet {
   /** 이 거리에서 보이는 보드 카드 수 (0 · 3 · 4 · 5) */
@@ -254,6 +263,7 @@ export interface PokerStreet {
   /** 두 번째로 보이는 신호 (히로인의 신호 등) — tellId2 버릇을 알면 해석이 같이 뜸 */
   tell2?: string;
   tellId2?: string;
+  combo?: PokerCombo;
   acts: PokerAct[];
 }
 export interface PokerSpec {
@@ -267,6 +277,8 @@ export interface PokerSpec {
   streets: PokerStreet[];
   /** 결과별 마무리 한 줄 */
   ending?: Partial<Record<"win" | "lose" | "fold" | "split", string>>;
+  /** 단서 조합이 틀렸을 때 상대 한마디 (경계) */
+  comboFail?: string[];
 }
 
 /**

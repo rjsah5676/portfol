@@ -63,6 +63,7 @@ import {
 import { DealMini, HeadsUp, StoryPoker, TellMini } from "./Minis";
 import { TELLS, knownTellIds, tellById, tellKnown } from "@/lib/love/tells";
 import { MIND, isMindKey, mindGot, mindTotal } from "@/lib/love/mind";
+import { REACT_CLUES, reactOf } from "@/lib/love/clues";
 import { useStage } from "./Stage";
 import VoiceReview, { type VoiceRow } from "./VoiceReview";
 import AssetReview from "./AssetReview";
@@ -110,6 +111,8 @@ const KEY = {
   mute: "love:mute",
   /** 관리자 엔딩 길잡이 목표 */
   guide: "love:guide",
+  /** 처음 가이드(코치마크) 본 기록 — 미연시 초기화 때 같이 지워짐 (새로 시작하는 사람에겐 다시 보여 줌) */
+  coach: "love:coach",
   /** 이 브라우저 기록이 언제 기준인지 (관리자 '미연시 초기화' 시각과 비교) */
   resetAt: "love:resetAt",
 };
@@ -860,6 +863,13 @@ export default function LoveApp() {
   useEffect(() => {
     if (phase !== "game") return;
     const down = (e: KeyboardEvent) => {
+      if (coachRef.current) {
+        if (e.key === "Enter" || e.code === "Space" || e.key === "Escape") {
+          e.preventDefault();
+          coachNext(true);
+        }
+        return;
+      }
       // Esc: 열린 창 닫기 → 아무 창도 없으면 나가기 확인
       if (e.key === "Escape") {
         if (askExit) setAskExit(false);
@@ -872,6 +882,8 @@ export default function LoveApp() {
       if ((e.key === "h" || e.key === "H") && !panel) setHideUi((v) => !v);
       if ((e.key === "a" || e.key === "A") && !panel) setAuto((v) => !v);
       if ((e.key === "l" || e.key === "L" || e.key === "ArrowUp") && !panel) setPanel("log");
+      // R = 관계 · 그녀 노트 (열려 있으면 닫기)
+      if ((e.key === "r" || e.key === "R") && (!panel || panel === "rel")) setPanel(panel === "rel" ? null : "rel");
       // 숫자 1~9 = 그 번호 선택지 · 일정 카드
       if (/^[1-9]$/.test(e.key) && !panel) {
         const bs = wrap.current?.querySelectorAll<HTMLButtonElement>(".lv-choice:not(:disabled), .lv-plan, .lv-free");
@@ -1022,6 +1034,47 @@ export default function LoveApp() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dcA, dcY, phase]);
+  // ---- 처음 가이드 (코치마크): 새 시스템을 처음 만날 때 한 번씩. 대상 UI 를 밝히고 한두 문장 + "알겠어" ----
+  const coachSeen = useRef<Set<string> | null>(null);
+  const coachRef = useRef<string | null>(null);
+  const coachQ = useRef<string[]>([]);
+  const [coachId, setCoachId] = useState<string | null>(null);
+  const seenCoach = () => {
+    if (!coachSeen.current) {
+      try {
+        coachSeen.current = new Set(JSON.parse(LS.get(KEY.coach) ?? "[]") as string[]);
+      } catch {
+        coachSeen.current = new Set();
+      }
+    }
+    return coachSeen.current;
+  };
+  const coach = useCallback((id: string) => {
+    if (!GUIDE[id] || seenCoach().has(id) || coachRef.current === id || coachQ.current.includes(id)) return;
+    if (coachRef.current) {
+      coachQ.current.push(id);
+      return;
+    }
+    coachRef.current = id;
+    setCoachId(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  /** ok = 봤음으로 기록 · 아니면(대상이 화면에 없음) 다음 기회에 다시 */
+  const coachNext = (ok: boolean) => {
+    const id = coachRef.current;
+    if (ok && id) {
+      seenCoach().add(id);
+      LS.set(KEY.coach, JSON.stringify([...seenCoach()]));
+    }
+    const nx = coachQ.current.shift() ?? null;
+    coachRef.current = nx;
+    setCoachId(nx);
+  };
+  const resetCoach = () => {
+    coachSeen.current = new Set();
+    LS.set(KEY.coach, "[]");
+    flash("가이드를 처음부터 다시 보여 줄게요");
+  };
   // 관계 단계가 오르면 위에 한 줄 알림 (대본 set 으로 오른 것도)
   const [stageUp, setStageUp] = useState<{ who: Heroine; stage: number; n: number } | null>(null);
   const stageRef = useRef<Record<Heroine, number> | null>(null);
@@ -1055,15 +1108,17 @@ export default function LoveApp() {
     const prev = dayNoRef.current;
     dayNoRef.current = dayNo;
     if (prev === null || dayNo <= prev) return;
+    coach("relhud");
     const items = MIND.filter((m) => s.vars[`_md_${m.id}`] === prev && (s.vars[m.id] ?? 0) >= 1);
     if (items.length) setMindDay({ day: prev, items, n: Date.now() });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dayNo, phase]);
   useEffect(() => {
-    if (!mindDay) return;
-    const id = window.setTimeout(() => setMindDay(null), 5200);
+    if (!mindDay || coachId === "mindday") return;
+    const id = window.setTimeout(() => setMindDay(null), coachId === null ? 5200 : 2600);
     return () => window.clearTimeout(id);
-  }, [mindDay]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mindDay, coachId]);
   // 읽기 노트: 새 버릇을 알게 되면 토스트
   const [tellUp, setTellUp] = useState<{ id: string; n: number } | null>(null);
   const tellRef = useRef<string[] | null>(null);
@@ -1094,6 +1149,35 @@ export default function LoveApp() {
     const id = window.setTimeout(() => setStageUp(null), 3200);
     return () => window.clearTimeout(id);
   }, [stageUp]);
+
+  // 관계 화면 새 소식: 하트 단계 · 그녀 노트 · 읽기 노트 · 반응 단서가 늘면 점 (열어 보면 꺼짐)
+  const [relNew, setRelNew] = useState(false);
+  const noteCount = s
+    ? knownTellIds(s.vars).length + REACT_CLUES.filter((c) => (s.vars[c.id] ?? 0) >= 1).length + MIND.filter((m) => (s.vars[m.id] ?? 0) >= 1).length
+    : 0;
+  const noteRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (phase !== "game") {
+      noteRef.current = null;
+      return;
+    }
+    if (noteRef.current !== null && noteCount > noteRef.current) setRelNew(true);
+    noteRef.current = noteCount;
+  }, [noteCount, phase]);
+  useEffect(() => {
+    if (stageUp) {
+      setRelNew(true);
+      coach("relhud");
+    }
+  }, [stageUp, coach]);
+  useEffect(() => {
+    if (panel !== "rel") return;
+    setRelNew(false);
+    coach("relnote");
+  }, [panel, coach]);
+  useEffect(() => {
+    if (mindDay) coach("mindday");
+  }, [mindDay, coach]);
   const labelOf = (st: GState) => {
     const d = st.disp.day ? `DAY ${st.disp.day.d} · ${st.disp.day.slot}` : "프롤로그";
     const t = st.block?.k === "say" ? sub(st.block.text).slice(0, 26) : "";
@@ -1184,6 +1268,19 @@ export default function LoveApp() {
   const disp = viewDisp ?? undefined;
   // 커튼이 닫히는 동안엔 새 대사 · 선택지 · 폰 등을 아직 안 보여 줌
   const rb = held ? null : block;
+  const secretOpen = rb?.k === "choice" && rb.opts.some((o) => o.secret);
+  const readOpen = rb?.k === "choice" && rb.opts.some((o) => o.read);
+  // ★ 와 ✎ 가 같이 처음 뜨면 ★ 먼저, ✎ 는 줄 서서 다음에
+  useEffect(() => {
+    if (secretOpen) coach("secret");
+  }, [secretOpen, coach]);
+  const tellOpen = rb?.k === "choice" && !!rb.tell && !!s && tellKnown(rb.tell, s.vars);
+  useEffect(() => {
+    if (readOpen) coach("read");
+  }, [readOpen, coach]);
+  useEffect(() => {
+    if (tellOpen) coach("tell");
+  }, [tellOpen, coach]);
   // 서브 캐릭터를 먼저 그려서(뒤쪽) 히로인이 앞에 오게
   const chars = disp
     ? (Object.entries(disp.chars) as [CharKey, NonNullable<(typeof disp.chars)[CharKey]>][]).sort(
@@ -1504,7 +1601,7 @@ export default function LoveApp() {
               </div>
             )}
             {disp.day && !hideUi && (
-              <RelHud vars={s.vars} onOpen={() => setPanel("rel")} />
+              <RelHud vars={s.vars} dot={relNew} onOpen={() => setPanel("rel")} />
             )}
             {tellUp && tellById(tellUp.id) && (
               <div key={tellUp.n} className="lv-tellup">
@@ -1512,7 +1609,12 @@ export default function LoveApp() {
               </div>
             )}
             {mindDay && (
-              <div key={mindDay.n} className="lv-mindday" onClick={(e) => (e.stopPropagation(), setMindDay(null))}>
+              <div
+                key={mindDay.n}
+                className="lv-mindday"
+                style={{ animationPlayState: coachId === "mindday" ? "paused" : undefined }}
+                onClick={(e) => (e.stopPropagation(), setMindDay(null))}
+              >
                 <small>DAY {mindDay.day} · 알게 된 것</small>
                 {mindDay.items.map((m) => (
                   <p key={m.id}>
@@ -1582,6 +1684,12 @@ export default function LoveApp() {
                   </QBtn>
                   <QBtn title="지난 대사 (L)" onClick={() => setPanel("log")}>
                     LOG
+                  </QBtn>
+                  <QBtn title="두 사람과의 관계 · 그녀 노트 (R)" onClick={() => setPanel("rel")}>
+                    <span className="relative">
+                      관계
+                      {relNew && <i className="lv-new-dot" />}
+                    </span>
                   </QBtn>
                   <i className="lv-qm-sep" />
                   <QBtn title="자동 넘김 (A)" on={auto} onClick={() => setAuto((a) => !a)}>
@@ -1866,6 +1974,7 @@ export default function LoveApp() {
                     bg={disp.bg === "black" ? "pub" : disp.bg}
                     vars={s.vars}
                     outfit={disp.outfit?.[rb.step.poker.opp]}
+                    coach={coach}
                     onDone={(n, eff) => setS(miniDone(s, rb.step.key, n, eff))}
                   />
                 ) : rb.step.kind === "match" ? (
@@ -1876,6 +1985,7 @@ export default function LoveApp() {
                     bg={disp.bg === "black" ? "pub" : disp.bg}
                     vars={s.vars}
                     outfit={disp.outfit?.[rb.step.match.opp]}
+                    coach={coach}
                     onDone={(n, eff) => setS(miniDone(s, rb.step.key, n, eff))}
                   />
                 ) : (
@@ -2073,7 +2183,7 @@ export default function LoveApp() {
             {panel === "story" ? (
               <StoryPanel />
             ) : panel === "config" ? (
-              <ConfigPanel cfg={cfg} setCfg={setCfg} onTest={() => play("chip")} />
+              <ConfigPanel cfg={cfg} setCfg={setCfg} onTest={() => play("chip")} onCoach={resetCoach} />
             ) : panel === "rel" ? (
               s && <RelPanel vars={s.vars} />
             ) : panel === "log" ? (
@@ -2147,6 +2257,10 @@ export default function LoveApp() {
               </div>
             </div>
           </div>
+        )}
+        {/* 처음 가이드 (코치마크) */}
+        {coachId && phase === "game" && GUIDE[coachId] && (
+          <CoachMark key={coachId} root={wrap} guide={GUIDE[coachId]} onOk={() => coachNext(true)} onMiss={() => coachNext(false)} />
         )}
         {recap && phase === "game" && (
           <div key={recap.n} className="lv-recap" onClick={(e) => (e.stopPropagation(), setRecap(null))}>
@@ -2645,9 +2759,16 @@ function IconBtn({ children, onClick, title }: { children: React.ReactNode; onCl
 const hearts = (n: number) => "♥".repeat(n) + "♡".repeat(5 - n);
 
 /** 왼쪽 위 날짜 아래: 두 히로인 관계 하트 · 실력 (누르면 관계 화면) */
-function RelHud({ vars, onOpen }: { vars: Record<string, number>; onOpen: () => void }) {
+function RelHud({ vars, onOpen, dot }: { vars: Record<string, number>; onOpen: () => void; dot?: boolean }) {
   return (
-    <button className="lv-relhud" onClick={(e) => (e.stopPropagation(), onOpen())} title="관계 보기">
+    <button
+      className="lv-relhud"
+      data-coach="relhud"
+      onClick={(e) => (e.stopPropagation(), onOpen())}
+      title="관계 · 그녀 노트 (R)"
+      aria-label="관계 · 그녀 노트 열기 (R)"
+    >
+      {dot && <i className="lv-new-dot lv-new-dot-hud" />}
       <span className="lv-heart-a">{hearts(heroStage(vars, "amy"))}</span>
       <span className="lv-heart-y">{hearts(heroStage(vars, "yeonseo"))}</span>
       <span className="text-[#ffd27a]">{"✦".repeat(skillOf(vars) + 1)}</span>
@@ -3001,7 +3122,7 @@ function CallChip({ name, who }: { name: string; who?: CharKey }) {
 /** 마음 읽기: 그녀에 대해 아는 것 (모르는 칸은 ??? + 몇 주차) */
 function MindNotes({ vars }: { vars: Record<string, number> }) {
   return (
-    <div className="lv-relcard col-span-2 !items-stretch !text-left">
+    <div className="lv-relcard col-span-2 !items-stretch !text-left" data-coach="mindnotes">
       <div className="text-[1.6cqw] font-bold text-[#ffd27a]">✎ 그녀에 대해 아는 것</div>
       <div className="mt-[0.6cqw] grid grid-cols-2 gap-x-[2cqw] gap-y-[0.8cqw]">
         {(["amy", "yeonseo"] as const).map((who) => (
@@ -3081,6 +3202,13 @@ function TellNotes({ vars }: { vars: Record<string, number> }) {
                 </div>
               )
             )}
+            {reactOf(who)
+              .filter((c) => check(c.need, vars))
+              .map((c) => (
+                <div key={c.id} className="text-[1.15cqw] leading-[1.5] text-white/90">
+                  · <b className="text-[#ffe2a0]">반응</b> <span className="text-white/60">{c.text}</span>
+                </div>
+              ))}
           </div>
         ))}
       </div>
@@ -3560,10 +3688,13 @@ function ConfigPanel({
   cfg,
   setCfg,
   onTest,
+  onCoach,
 }: {
   cfg: Cfg;
   setCfg: (p: Partial<Cfg>) => void;
   onTest: () => void;
+  /** 처음 가이드 다시 보기 */
+  onCoach?: () => void;
 }) {
   // 컴포넌트가 아니라 그냥 함수로 그림 (렌더마다 새 컴포넌트가 되면 슬라이더 드래그가 끊김)
   const row = (label: string, children: React.ReactNode, hint?: string) => (
@@ -3674,6 +3805,14 @@ function ConfigPanel({
         </>,
         "끝까지 듣기를 고르면 넘겨도 음성이 끝까지 나와요"
       )}
+      {onCoach &&
+        row(
+          "처음 가이드",
+          <button className="lv-cfg-step" onClick={onCoach}>
+            다시 보기
+          </button>,
+          "새 시스템을 처음 만날 때 뜨는 안내를 처음부터 다시 보여 줘요"
+        )}
       {row(
         "스킵",
         <>
@@ -4202,6 +4341,85 @@ function Montage({ shots, caption, onShutter }: { shots: import("@/lib/love/type
         })}
       </div>
       {caption && n >= shots.length && <div className="lv-montage-cap">{caption}</div>}
+    </div>
+  );
+}
+
+/**
+ * 처음 가이드 (코치마크) — 대상 UI(sel) 를 밝히고 주변을 어둡게, 한두 문장 + "알겠어".
+ * 대상이 지금 화면에 없으면(숨김 · 아직 안 그려짐) 잠깐 찾아보다가 다음 기회로 넘김 (본 걸로 안 침)
+ */
+const GUIDE: Record<string, { sel: string; title: string; text: string }> = {
+  talk: { sel: '[data-coach="talk"]', title: "한마디", text: "판 시작 전에 말을 걸 수 있어. 뭐라고 하느냐에 따라 상대 버릇이 달라져." },
+  react: { sel: '[data-coach="book"]', title: "반응 단서", text: "방금 반응이 노트에 적혔어. 결전에서 단서 카드로 쓸 수 있어." },
+  combo: { sel: '[data-coach="combo"]', title: "✎ 단서 조합", text: "아는 단서 두 장을 맞물려 봐. 맞으면 길이 열려. 기회는 두 번, 틀리면 상대가 경계해." },
+  mindday: { sel: ".lv-mindday", title: "알게 된 것", text: "그녀를 제대로 알아본 날은 여기 남아. 이게 쌓여야 끝이 달라져." },
+  relnote: { sel: '[data-coach="mindnotes"]', title: "그녀에 대해 아는 것", text: "??? 칸은 아직 놓친 순간이야. 주차가 힌트야." },
+  secret: { sel: ".lv-choice-secret", title: "★ 선택지", text: "모은 단서나 지난 회차로 열린 선택지야." },
+  read: { sel: ".lv-choice-read", title: "✎ 선택지", text: "그녀를 알아본 만큼 열리는 선택지야. 단서로 열리는 ★ 와는 달라." },
+  tell: { sel: ".lv-choice-tell", title: "읽기 노트", text: "아는 버릇이면 뜻이 같이 떠. 믿을지는 네가 정해." },
+  relhud: { sel: '[data-coach="relhud"]', title: "관계", text: "여기 누르면 두 사람과의 관계랑 그녀 노트. 키보드 R 도 돼." },
+};
+
+function CoachMark({
+  root,
+  guide,
+  onOk,
+  onMiss,
+}: {
+  root: React.RefObject<HTMLDivElement | null>;
+  guide: { sel: string; title: string; text: string };
+  onOk: () => void;
+  onMiss: () => void;
+}) {
+  const [box, setBox] = useState<{ x: number; y: number; w: number; h: number; W: number; H: number } | null>(null);
+  const miss = useRef(onMiss);
+  useEffect(() => {
+    miss.current = onMiss;
+  });
+  useEffect(() => {
+    let tries = 0;
+    let raf = 0;
+    const find = () => {
+      const r = root.current;
+      const el = r?.querySelector<HTMLElement>(guide.sel);
+      const b = el?.getBoundingClientRect();
+      if (!r || !el || !b || b.width === 0) {
+        if (++tries > 45) miss.current();
+        else raf = window.requestAnimationFrame(find);
+        return;
+      }
+      const a = r.getBoundingClientRect();
+      setBox({ x: b.left - a.left, y: b.top - a.top, w: b.width, h: b.height, W: a.width, H: a.height });
+    };
+    raf = window.requestAnimationFrame(find);
+    const onResize = () => {
+      tries = 0;
+      find();
+    };
+    window.addEventListener("resize", onResize);
+    return () => {
+      window.cancelAnimationFrame(raf);
+      window.removeEventListener("resize", onResize);
+    };
+  }, [root, guide.sel]);
+  if (!box) return null;
+  const pad = Math.max(4, box.W * 0.005);
+  // 말풍선: 대상 아래(위쪽 절반에 있으면) 또는 위. 가로는 화면 안으로 (모바일 폭에선 거의 꽉 차게)
+  const bw = box.W < 720 ? box.W * 0.86 : Math.min(box.W * 0.36, 460);
+  const left = Math.max(box.W * 0.02, Math.min(box.x + box.w / 2 - bw / 2, box.W * 0.98 - bw));
+  const below = box.y + box.h / 2 < box.H / 2;
+  const top = below ? box.y + box.h + pad * 3 : box.y - pad * 3;
+  return (
+    <div className="lv-coach" onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}>
+      <div className="lv-coach-hole" style={{ left: box.x - pad, top: box.y - pad, width: box.w + pad * 2, height: box.h + pad * 2 }} />
+      <div className="lv-coach-tip" style={{ left, top, width: bw, transform: below ? undefined : "translateY(-100%)" }}>
+        <b>{guide.title}</b>
+        <p>{guide.text}</p>
+        <button className="lv-coach-ok" onClick={onOk}>
+          알겠어
+        </button>
+      </div>
     </div>
   );
 }
