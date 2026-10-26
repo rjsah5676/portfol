@@ -2293,7 +2293,7 @@ const V2_P5: VoiceLine[] = [
   { id: "y6-72c0469e10", who: "yeonseo", text: "장부는 종이죠. 맞아요. 그런데 저는 종이가 아니에요.", tag: "[calm] [firm] 장부는 종이죠. 맞아요. 그런데 저는, 종이가 아니에요." },
   { id: "y6-cc99b7b25ff", who: "yeonseo", text: "7년 동안 제가 앉은 판, 전부 외워요. 날짜, 상대, 사장님이 정한 숫자.", tag: "[calm] [firm] 칠 년 동안 제가 앉은 판, 전부 외워요, 날짜, 상대, 사장님이 정한 숫자." },
   { id: "y6-e6a4a31917f", who: "yeonseo", text: "알아요. 그래서 가요. 오늘 아침에.", tag: "[calm] [resolute] 알아요. 그래서 가요, 오늘 아침에." },
-  { id: "y6-cf178b7304", who: "yeonseo", text: "…비 그친 다음 날 아침이에요.", tag: "[soft] [surprised] ...비 그친 다음 날 아침이에요." },
+  { id: "y6-cf178b7304u", who: "yeonseo", text: "…비 그친 다음 날 아침이에요.", tag: "[soft] [surprised] ...비 그친 다음 날 아침이에요." },
   { id: "y6-1ef01ba8bd", who: "yeonseo", text: "골목은 다 젖었는데 하늘은 맑은 거. 제가 제일 좋아하는 아침이에요.", tag: "[warm] [smiling] 골목은 다 젖었는데, 하늘은 맑은 거. 제가 제일 좋아하는 아침이에요." },
   { id: "y6-d13f0a5a75f", who: "yeonseo", text: "에이미 씨는 의외로 조용하네요. 오늘은.", tag: "[dry] [teasing] 에이미 씨는, 의외로 조용하네요, 오늘은." },
   { id: "y6-98e1b1d8cd", who: "yeonseo", text: "둘 다요. 오늘은 계산이 맞았어요.", tag: "[soft] [smiling] 둘 다요. 오늘은, 계산이 맞았어요." },
