@@ -329,7 +329,8 @@ export type Step =
   | { t: "hangup" }
   | { t: "say"; who: Who; text: string; mood?: Mood; face?: Face }
   /** timer = 제한 시간(초) — 안 고르면 timeout(침묵) 을 고른 걸로. 침묵에도 전용 대사 · 결과를 씀 */
-  | { t: "choice"; prompt?: string; opts: Opt[]; big?: boolean; timer?: number; timeout?: Opt }
+  /** tell = 읽기 노트 버릇 id — 그 버릇을 알고 있으면 선택지 위에 해석이 같이 뜸 (모르면 아무것도 안 뜸) */
+  | { t: "choice"; prompt?: string; opts: Opt[]; big?: boolean; timer?: number; timeout?: Opt; tell?: string }
   | { t: "set"; eff: Eff }
   | { t: "goto"; to: string }
   | { t: "when"; cond: Cond; to: string; else?: string }

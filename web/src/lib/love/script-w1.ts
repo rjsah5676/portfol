@@ -701,8 +701,8 @@ export const W1: Scenes = {
       prompt: "그녀가 똑바로 본다.",
       opts: [
         { text: "\"모르는 사람이네요.\"", eff: { affY: 1 }, to: "d3_deny" },
-        { text: "(대답 대신 카드를 돌린다)", eff: { trustY: 1, affY: -1 }, to: "d3_silent" },
-        { text: "\"연서 씨는 왜 매일 혼자 와요?\"", eff: { affY: 1, trustY: 1 }, to: "d3_ask" },
+        { text: "(대답 대신 카드를 돌린다)", eff: { affY: 1, trustY: 1 }, to: "d3_silent" },
+        { text: "\"연서 씨는 왜 매일 혼자 와요?\"", eff: { trustY: 1 }, to: "d3_ask" },
       ],
     },
   ],
@@ -1452,9 +1452,9 @@ export const W1: Scenes = {
     {
       t: "choice",
       opts: [
-        { text: "\"잘 어울리는데요.\"", eff: { affY: 2 }, to: "y3_r1" },
+        { text: "\"잘 어울리는데요.\"", eff: { affY: 1 }, to: "y3_r1" },
         { text: "\"파스는 손 때문이에요?\"", eff: { trustY: 1, affY: 1 }, to: "y3_r2" },
-        { text: "(눈을 감고 셋을 센다)", eff: { affY: 1 }, to: "y3_r3" },
+        { text: "(눈을 감고 셋을 센다)", eff: { affY: 2 }, to: "y3_r3" },
         { text: "\"컵라면이요? 몸 생각 좀 하셔야겠는데요.\"", eff: { affY: -1 }, to: "y3_r4" },
       ],
     },
@@ -1692,6 +1692,7 @@ export const W1: Scenes = {
     CH("그 애 처음 왔을 때 손에 붕대를 감고 왔어. 카드를 너무 꽉 쥐었대나."),
     CH("스물두 살이었나. 그날 밥 한 숟갈도 못 먹더니, 다음 날부터 김치찌개만 먹더라. 그것만 넘어간다고."),
     CH("그래서 7년째 김치찌개 끓여. 두부는 꼭 많이."),
+    CH("그리고 그 애한테 괜찮냐고는 묻지 마. 묻으면 괜찮다고 해. 그럴 땐 그냥 따뜻한 거 하나 갖다줘."),
     ME("이모가 다 큰 사람 밥 챙기는 거, 유명하던데요."),
     CH("다 큰 사람이 제일 밥을 안 챙겨. 너도 그렇고."),
     N("무 다섯 개는 생각보다 무거웠다. 이모는 내가 다 들 때까지 아무것도 들지 않았다."),
@@ -1934,7 +1935,7 @@ export const W1: Scenes = {
     {
       t: "choice",
       opts: [
-        { text: "\"괜찮아요?\"", eff: { affY: 1, trustY: 1 }, to: "d4_y_ask" },
+        { text: "\"괜찮아요?\"", eff: { trustY: 1 }, to: "d4_y_ask" },
         { text: "(따뜻한 물로 바꿔 따라 준다)", eff: { affY: 2 }, to: "d4_y_warm" },
         { text: "(못 본 척 마감을 계속한다)", eff: { affY: -1 }, to: "d4_y_skip" },
       ],
@@ -2517,9 +2518,11 @@ export const W1: Scenes = {
     { t: "goto", to: "d6_tteok_c" },
   ],
   d6_tteok_c: [
+    N("목소리가 갑자기 한 톤 커졌다. 젓가락이 접시 가장자리를 달그락달그락 두드린다."),
     A("그래도 나는 아빠랑 달라. 나는 이기니까. 오늘처럼.", "smile"),
     {
       t: "choice",
+      tell: "amyLoud",
       prompt: "뭐라고 할까.",
       opts: [
         { text: "\"이기는 날이 제일 위험해. 당분간 큰 판은 하지 마.\"", eff: { trustA: 2, affA: -1 }, to: "d6_tteok_warn" },

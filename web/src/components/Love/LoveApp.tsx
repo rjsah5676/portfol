@@ -61,7 +61,7 @@ import {
   type Who,
 } from "@/lib/love/types";
 import { DealMini, HeadsUp, StoryPoker, TellMini } from "./Minis";
-import { TELLS, knownTellIds, tellById } from "@/lib/love/tells";
+import { TELLS, knownTellIds, tellById, tellKnown } from "@/lib/love/tells";
 import { useStage } from "./Stage";
 import VoiceReview, { type VoiceRow } from "./VoiceReview";
 import AssetReview from "./AssetReview";
@@ -428,6 +428,7 @@ export default function LoveApp() {
   const [heartPop, setHeartPop] = useState<{ who: "amy" | "yeonseo"; n: number } | null>(null);
   /** 호감이 깎이면 (선택 · 방치) 금 간 회색 하트 — 수치는 안 보여 줌 */
   const [heartDown, setHeartDown] = useState<{ who: "amy" | "yeonseo"; n: number } | null>(null);
+  const [tiltFx, setTiltFx] = useState<number | null>(null);
   const [hideUi, setHideUi] = useState(false);
   /** 선택지가 떠도 직전 대사를 대사창에 남겨 둠 (무슨 말에 대한 선택인지 보이게) */
   const [lastSay, setLastSay] = useState<{ who: Who; mood: string; text: string } | null>(null);
@@ -981,7 +982,14 @@ export default function LoveApp() {
       setHeartDown({ who: down, n: Date.now() });
       play("fold");
     }
+    // 함정 대가: 손이 테이블을 기억하는 선택(틸트 · 에이미 도박욕)이면 화면 가장자리가 잠깐 어두워지고 미세하게 흔들림 (수치는 안 보여 줌)
+    if ((o.eff?.tilt ?? 0) > 0 || (o.eff?.gambleA ?? 0) > 0) setTiltFx(Date.now());
   };
+  useEffect(() => {
+    if (!tiltFx) return;
+    const id = window.setTimeout(() => setTiltFx(null), 1500);
+    return () => window.clearTimeout(id);
+  }, [tiltFx]);
   useEffect(() => {
     if (!heartPop) return;
     const id = window.setTimeout(() => setHeartPop(null), 1600);
@@ -1565,6 +1573,7 @@ export default function LoveApp() {
                 ♥
               </div>
             )}
+            {tiltFx && <div key={tiltFx} className="lv-tiltfx" />}
             {heartDown && (
               <div
                 key={heartDown.n}
@@ -1662,6 +1671,11 @@ export default function LoveApp() {
                 {rb.prompt && (
                   <div className="mb-[0.5cqw] text-[1.6cqw] text-white/85 [text-shadow:0_2px_6px_#000]">
                     {rb.prompt}
+                  </div>
+                )}
+                {rb.tell && tellKnown(rb.tell, s.vars) && tellById(rb.tell) && (
+                  <div className="lv-choice-tell">
+                    <span className="text-[#ffd27a]">✎ {tellById(rb.tell)!.name}</span> — {tellById(rb.tell)!.meaning}
                   </div>
                 )}
                 {guideOn && <GuideNote target={guide!.target} ready={guideReady} any={guideAny} />}

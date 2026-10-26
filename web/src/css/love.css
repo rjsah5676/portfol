@@ -3313,3 +3313,33 @@
 .lv-title-clear button.lv-clear-on { border-color: #ffd27a; color: #ffd27a; }
 .lv-title-clear button.lv-clear-on:hover { background: #2a2410cc; }
 .lv-title-clear button.lv-clear-sel { background: #ffd27a; color: #1a1406; box-shadow: 0 0 1cqw #ffd27a88; }
+
+/* 선택지 위 읽기 노트 해석 (그 버릇을 알 때만) */
+.lv-choice-tell {
+  max-width: 62cqw;
+  margin-bottom: 0.4cqw;
+  padding: 0.45cqw 1.2cqw;
+  border-left: 0.25cqw solid #ffd27a;
+  background: #0009;
+  font-size: 1.25cqw;
+  line-height: 1.5;
+  color: #fffc;
+  text-shadow: 0 1px 4px #000;
+}
+/* 함정 대가: 가장자리가 잠깐 어두워지고 화면이 미세하게 떨림 */
+.lv-tiltfx {
+  position: absolute;
+  inset: 0;
+  z-index: 26;
+  pointer-events: none;
+  background: radial-gradient(ellipse at center, transparent 55%, #3a0a0acc 100%);
+  animation: lv-tiltfx 1.5s ease-out both;
+}
+@keyframes lv-tiltfx {
+  0% { opacity: 0; transform: translateX(0); }
+  12% { opacity: 1; transform: translateX(-0.25cqw); }
+  20% { transform: translateX(0.25cqw); }
+  28% { transform: translateX(-0.15cqw); }
+  36% { transform: translateX(0); }
+  100% { opacity: 0; }
+}

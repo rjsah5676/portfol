@@ -2408,5 +2408,16 @@ const V2_P5: VoiceLine[] = [
   { id: "y6-neg11", who: "yeonseo", text: "…가르쳐 달라고 한 건데. 됐어요. 혼자 할게요.", tag: "[hurt] ...가르쳐 달라고 한 건데. [cold] 됐어요. 혼자 할게요." },
   { id: "y6-neg12", who: "yeonseo", text: "…네. 보여 주는 데 7년 걸렸는데, 보는 건 1분이면 충분하죠.", tag: "[hurt] [quiet] ...네. 보여 주는 데 칠 년 걸렸는데, 보는 건 일 분이면 충분하죠." },
   { id: "y6-neg13", who: "yeonseo", text: "…네. 효율적이네요. 딜러님답게.", tag: "[hurt] ...네. 효율적이네요, 딜러님답게." },
+  { id: "a5-cd09", who: "amy", text: "…그 말 제일 싫어. '괜찮아, 신경 쓰지 마.'", tag: "[sulky] ...그 말 제일 싫어. [mocking] '괜찮아, 신경 쓰지 마.'" },
+  { id: "a5-cd10", who: "amy", text: "그 말 들으면 더 신경 쓰이거든. 나만 바보 된 것 같고.", tag: "[upset] 그 말 들으면 더 신경 쓰이거든. [sad] 나만 바보 된 것 같고." },
+  { id: "a5-cd11", who: "amy", text: "됐어. 노래방 가자. 화풀이할 거야. …계산은 네가.", tag: "[sniffles] 됐어. 노래방 가자, 화풀이할 거야. [pouty] ...계산은 네가." },
+  { id: "y6-cd06", who: "yeonseo", text: "…그 말, 사장님도 했어요. 7년 전에. 한 판만 이기면 다 막아 준다고.", tag: "[cold] ...그 말, 사장님도 했어요, 칠 년 전에. [bitter] 한 판만 이기면, 다 막아 준다고." },
+  { id: "y6-cd07", who: "yeonseo", text: "막아 준다는 말엔 숫자가 없어요. 그래서 무서운 거예요.", tag: "[flat] 막아 준다는 말엔 숫자가 없어요. [quiet] 그래서 무서운 거예요." },
+  { id: "y6-cd08", who: "yeonseo", text: "…어떻게 알았어요? 제가 제일 좋아하는 아침인데.", tag: "[surprised] ...어떻게 알았어요? [soft] 제가 제일 좋아하는 아침인데." },
+  { id: "y6-cd09", who: "yeonseo", text: "…그걸 기억해요?", tag: "[surprised] [quiet] ...그걸 기억해요?" },
+  { id: "y6-cd10", who: "yeonseo", text: "대답하는 데 십이 초 걸린 거요. 딜러님은 그런 걸 안 잊어버리네요.", tag: "[soft] 대답하는 데 십이 초 걸린 거요. [shy] 딜러님은 그런 걸 안 잊어버리네요." },
 ];
-export const V2_LINES: VoiceLine[] = [...V2_P0, ...V2_P1, ...V2_P2, ...V2_P3, ...V2_P4, ...V2_P5];
+const V2_P6: VoiceLine[] = [
+  { id: "y6-cd11", who: "yeonseo", text: "…그럼 그날로 해요. 비 오는 날마다, 다음 날을 기다릴게요.", tag: "[soft] [shy] ...그럼 그날로 해요. [soft] 비 오는 날마다, 다음 날을 기다릴게요." },
+];
+export const V2_LINES: VoiceLine[] = [...V2_P0, ...V2_P1, ...V2_P2, ...V2_P3, ...V2_P4, ...V2_P5, ...V2_P6];
