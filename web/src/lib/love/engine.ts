@@ -224,8 +224,13 @@ export function run(s0: GState): GState {
         // 자동으로 나와 있던 서브 캐릭터가 그 자리에 있으면 옆으로 비켜 줌
         for (const k of Object.keys(s.disp.chars) as CharKey[]) {
           const ch = s.disp.chars[k];
-          if (k !== st.who && ch?.auto !== undefined && ch.pos === pos)
-            s.disp.chars[k] = { ...ch, pos: pos === "r" ? "l" : "r" };
+          if (k !== st.who && ch?.auto !== undefined && ch.pos === pos) {
+            // 비켜 줄 자리에도 다른 사람이 서 있으면 겹치지 않게 그냥 들어감 (대사창 초상은 그대로 보임)
+            const alt: Pos = pos === "r" ? "l" : "r";
+            const taken = Object.entries(s.disp.chars).some(([o, c]) => o !== k && o !== st.who && c?.pos === alt);
+            if (taken) delete s.disp.chars[k];
+            else s.disp.chars[k] = { ...ch, pos: alt };
+          }
         }
         s.disp.chars[st.who] = { pos, dist: st.dist ?? 0, face: f, rest: f };
         break;
@@ -340,9 +345,10 @@ export function run(s0: GState): GState {
           if (!cur) {
             const others = Object.keys(s.disp.chars) as CharKey[];
             const used = new Set(others.map((o) => s.disp.chars[o]!.pos));
-            const pos: Pos =
-              others.length === 0 ? "c" : !used.has("r") ? "r" : !used.has("l") ? "l" : "r";
-            s.disp.chars[k] = { pos, dist: 0, face: REST[k], rest: REST[k], auto: 0 };
+            // 이미 둘 이상 서 있으면 스탠딩은 띄우지 않음 (겹침 방지 — 대사창 초상으로 누가 말하는지 보임)
+            const pos: Pos | null =
+              others.length === 0 ? "c" : others.length >= 2 ? null : !used.has("r") ? "r" : !used.has("l") ? "l" : null;
+            if (pos) s.disp.chars[k] = { pos, dist: 0, face: REST[k], rest: REST[k], auto: 0 };
           } else if (cur.auto !== undefined) s.disp.chars[k] = { ...cur, auto: 0 };
         }
         // 말하는 캐릭터: 지정한 표정, 없으면 기본 얼굴로 (듣는 쪽은 직전 표정 유지 = 리액션)

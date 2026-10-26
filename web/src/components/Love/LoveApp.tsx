@@ -401,6 +401,17 @@ export default function LoveApp() {
   const hoverAt = useRef(0);
   const [log, setLog] = useState<LogLine[]>([]);
   const [panel, setPanel] = useState<Panel>(null);
+  // 터치 화면(모바일): 하단 작은 글자 메뉴 대신 큰 버튼 메뉴 한 장
+  const [touch, setTouch] = useState(false);
+  const [qmOpen, setQmOpen] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia?.("(pointer: coarse)");
+    if (!mq) return;
+    const f = () => setTouch(mq.matches);
+    f();
+    mq.addEventListener?.("change", f);
+    return () => mq.removeEventListener?.("change", f);
+  }, []);
   /** 오른쪽 위 나가기 → 확인 창 */
   const [askExit, setAskExit] = useState(false);
   const [endings, setEndings] = useState<EndingId[]>([]);
@@ -1238,6 +1249,24 @@ export default function LoveApp() {
     setBackArm(false);
     backToChoice();
   };
+  /** 터치 메뉴 시트 버튼 */
+  const mmenu = (k: MmKey) => {
+    play("click");
+    setQmOpen(false);
+    if (k === "save") setPanel("save");
+    else if (k === "load") setPanel("load");
+    else if (k === "qsave") save("q");
+    else if (k === "qload") load("q");
+    else if (k === "back") backToChoice();
+    else if (k === "log") setPanel("log");
+    else if (k === "rel") setPanel("rel");
+    else if (k === "auto") setAuto((v) => !v);
+    else if (k === "skip") setSkip((v) => !v);
+    else if (k === "hide") {
+      setHideUi(true);
+      setTouchHint(true);
+    }
+  };
   const [hasQuick, setHasQuick] = useState(false);
   const [recap, setRecap] = useState<{ s: GState; n: number } | null>(null);
   useEffect(() => {
@@ -1621,7 +1650,7 @@ export default function LoveApp() {
               <RelHud vars={s.vars} dot={relNew} onOpen={() => setPanel("rel")} />
             )}
             {tellUp && tellById(tellUp.id) && (
-              <div key={tellUp.n} className="lv-tellup">
+              <div key={`tell-${tellUp.n}`} className="lv-tellup">
                 <span className="text-[#ffd27a]">✎ 읽기 노트</span> {NAME[tellById(tellUp.id)!.who]} — {tellById(tellUp.id)!.name}
               </div>
             )}
@@ -1644,7 +1673,7 @@ export default function LoveApp() {
               </div>
             )}
             {stageUp && (
-              <div key={stageUp.n} className={`lv-stageup ${stageUp.who === "amy" ? "lv-heart-a" : "lv-heart-y"}`}>
+              <div key={`stage-${stageUp.n}`} className={`lv-stageup ${stageUp.who === "amy" ? "lv-heart-a" : "lv-heart-y"}`}>
                 <span>♥</span> {NAME[stageUp.who]} — 「{STAGE_NAME[stageUp.who][stageUp.stage]}」
               </div>
             )}
@@ -1682,7 +1711,7 @@ export default function LoveApp() {
             )}
 
             {/* 하단 빠른 메뉴 — 왼쪽은 저장 · 불러오기, 오른쪽은 읽기 (테두리 없는 글자 버튼) */}
-            {!hideUi && (rb?.k === "say" || rb?.k === "choice") && (
+            {!hideUi && !touch && (rb?.k === "say" || rb?.k === "choice") && (
               <>
                 <div className="lv-qm lv-qm-l" onClick={(e) => e.stopPropagation()}>
                   <QBtn onClick={() => setPanel("save")}>SAVE</QBtn>
@@ -1729,20 +1758,56 @@ export default function LoveApp() {
             )}
             {heartPop && (
               <div
-                key={heartPop.n}
+                key={`hp-${heartPop.n}`}
                 className={`lv-heart-pop ${heartPop.who === "amy" ? "lv-heart-a" : "lv-heart-y"}`}
               >
                 ♥
               </div>
             )}
-            {tiltFx && <div key={tiltFx} className="lv-tiltfx" />}
+            {tiltFx && <div key={`tilt-${tiltFx}`} className="lv-tiltfx" />}
             {heartDown && (
               <div
-                key={heartDown.n}
+                key={`hd-${heartDown.n}`}
                 className={`lv-heart-down ${heartDown.who === "amy" ? "lv-heart-a" : "lv-heart-y"} ${heartPop ? "lv-heart-down-2" : ""}`}
               >
                 <span className="lv-heart-down-l">♥</span>
                 <span className="lv-heart-down-r">♥</span>
+              </div>
+            )}
+            {touch && !hideUi && (rb?.k === "say" || rb?.k === "choice") && (
+              <button
+                type="button"
+                className="lv-mmenu-btn"
+                aria-label="메뉴"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  play("click");
+                  setQmOpen(true);
+                }}
+              >
+                <span aria-hidden="true">☰</span> 메뉴
+                {relNew && <i className="lv-new-dot" />}
+              </button>
+            )}
+            {touch && qmOpen && (
+              <div className="lv-mmenu" onClick={(e) => (e.stopPropagation(), setQmOpen(false))}>
+                <div className="lv-mmenu-sheet" onClick={(e) => e.stopPropagation()}>
+                  {MM_ITEMS.map(([k, label]) => (
+                    <button
+                      key={k}
+                      type="button"
+                      className="lv-mmenu-item"
+                      disabled={k === "qload" && !hasQuick}
+                      onClick={() => mmenu(k)}
+                    >
+                      {k === "auto" && auto ? "자동 넘김 끄기" : k === "skip" && skip ? "스킵 끄기" : label}
+                      {k === "rel" && relNew && <i className="lv-new-dot" />}
+                    </button>
+                  ))}
+                  <button type="button" className="lv-mmenu-item lv-mmenu-close" onClick={() => setQmOpen(false)}>
+                    닫기
+                  </button>
+                </div>
               </div>
             )}
             <div className="lv-top-right" onClick={(e) => e.stopPropagation()}>
@@ -2773,7 +2838,23 @@ function IconBtn({ children, onClick, title }: { children: React.ReactNode; onCl
 }
 
 /** 하트 5칸 (단계 0 ~ 5) */
-const hearts = (n: number) => "♥".repeat(n) + "♡".repeat(5 - n);
+type MmKey = "save" | "load" | "qsave" | "qload" | "back" | "log" | "rel" | "auto" | "skip" | "hide";
+const MM_ITEMS: [MmKey, string][] = [
+  ["save", "저장"],
+  ["load", "불러오기"],
+  ["qsave", "빠른 저장"],
+  ["qload", "빠른 불러오기"],
+  ["back", "◀ 직전 선택지"],
+  ["log", "지난 대사"],
+  ["rel", "관계 · 그녀 노트"],
+  ["auto", "자동 넘김"],
+  ["skip", "읽은 대사 스킵"],
+  ["hide", "그림만 보기"],
+];
+const hearts = (n: number) => {
+  const k = Math.max(0, Math.min(5, Math.floor(n) || 0));
+  return "♥".repeat(k) + "♡".repeat(5 - k);
+};
 
 /** 왼쪽 위 날짜 아래: 두 히로인 관계 하트 · 실력 (누르면 관계 화면) */
 function RelHud({ vars, onOpen, dot }: { vars: Record<string, number>; onOpen: () => void; dot?: boolean }) {
@@ -3007,7 +3088,7 @@ function Phone({
         )}
         {sent?.trim() && (
           <div className="flex items-end justify-end gap-[0.4cqw]">
-            <span className={`lv-read ${read ? "on" : ""}`}>{read ? "읽음" : "1"}</span>
+            <span className={`lv-rcpt ${read ? "on" : ""}`}>{read ? "읽음" : "1"}</span>
             <div className="lv-bubble lv-bubble-me">{sent}</div>
           </div>
         )}

@@ -17,7 +17,8 @@ export const STAGE_AT: Record<Heroine, readonly number[]> = {
   yeonseo: [0, 4, 10, 20, 30, 40],
 };
 const ROUTE: Record<Heroine, string> = { amy: "routeA", yeonseo: "routeY" };
-export const stageOf = (aff: number, who: Heroine = "amy"): number => STAGE_AT[who].filter((x) => aff >= x).length - 1;
+export const stageOf = (aff: number, who: Heroine = "amy"): number =>
+  Math.max(0, STAGE_AT[who].filter((x) => aff >= x).length - 1);
 export const heroStage = (v: Vars, who: Heroine): number => {
   const st = stageOf(v[AFF[who]] ?? 0, who);
   const open = (v[ROUTE[who]] ?? 0) >= 1 && (v.dayNo ?? 0) >= 22;
@@ -50,7 +51,7 @@ export const STAGE_LINE: Record<Heroine, readonly string[]> = {
 
 /** 딜러 실력 (셔플 연습 · 근무로 오름) */
 export const SKILL_AT = [0, 2, 4, 7, 10] as const;
-export const skillOf = (v: Vars): number => SKILL_AT.filter((x) => (v.skill ?? 0) >= x).length - 1;
+export const skillOf = (v: Vars): number => Math.max(0, SKILL_AT.filter((x) => (v.skill ?? 0) >= x).length - 1);
 export const SKILL_NAME = ["녹슨 손", "굳은 손", "풀린 손", "예전의 손", "전설의 손"] as const;
 
 /** 마음 상태 (틸트) */

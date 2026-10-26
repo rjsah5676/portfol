@@ -695,14 +695,14 @@
   font-weight: 600;
   transform-origin: right bottom;
 }
-.lv-read {
+.lv-rcpt {
   margin-bottom: 0.2cqw;
   font-size: 0.8cqw;
   font-weight: 700;
   color: #ffd84a;
   transition: color 0.3s;
 }
-.lv-read.on {
+.lv-rcpt.on {
   color: #ffffff66;
   font-weight: 500;
   animation: lv-bubble-in 0.28s ease-out;
@@ -3557,4 +3557,65 @@
 @keyframes lv-new-pulse {
   0% { box-shadow: 0 0 0 0 #ff6b7fbb; }
   80%, 100% { box-shadow: 0 0 0 0.8cqw #ff6b7f00; }
+}
+
+/* ===== 터치 화면: 메뉴 버튼 하나 + 큰 버튼 시트 (작은 글자 메뉴 오터치 방지) ===== */
+.lv-mmenu-btn {
+  position: absolute;
+  right: 3%;
+  bottom: 3.2%;
+  z-index: 33;
+  display: flex;
+  align-items: center;
+  gap: 0.6cqw;
+  min-height: 4.4cqw;
+  padding: 0.8cqw 1.8cqw;
+  border: 0.12cqw solid #c9a25a99;
+  border-radius: 99px;
+  background: #0b1028d9;
+  font-family: var(--lv-sans);
+  font-size: 1.7cqw;
+  font-weight: 600;
+  color: #f3e6c8;
+  box-shadow: 0 0.3cqw 1cqw #0008;
+}
+.lv-mmenu {
+  position: absolute;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #000a;
+}
+.lv-mmenu-sheet {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1.2cqw;
+  width: min(82cqw, 100%);
+  padding: 2cqw;
+  border: 0.12cqw solid #c9a25a66;
+  border-radius: 1.2cqw;
+  background: linear-gradient(180deg, #172044f5, #0b1028f5);
+}
+.lv-mmenu-item {
+  position: relative;
+  min-height: 7cqw;
+  padding: 1cqw;
+  border: 0.12cqw solid #c9a25a55;
+  border-radius: 0.8cqw;
+  background: #ffffff0d;
+  font-family: var(--lv-sans);
+  font-size: 1.9cqw;
+  font-weight: 600;
+  color: #fff;
+}
+.lv-mmenu-item:active {
+  background: #c9a25a33;
+}
+.lv-mmenu-item:disabled {
+  opacity: 0.35;
+}
+.lv-mmenu-close {
+  color: #c9a25a;
 }
