@@ -419,7 +419,8 @@ export function simulatePlay(inp: FieldIn, rng: Rng): FieldOut {
   const R: Runner[] = [];
   const bat: Runner = {
     id: inp.batter.id, isBatter: true, from: 0, s: 0, target: 1,
-    speed: (6.9 + (inp.batter.run / 1000) * 1.8) * (ball.bunt ? 1.04 : 1),
+    // 출발 · 스윙 뒤 균형 흔들림 (같은 발이라도 타석마다 조금씩 다름 → 내야안타가 문턱이 아니라 확률로)
+    speed: (7.05 + (inp.batter.run / 1000) * 1.4) * (ball.bunt ? 1.04 : 1) * (1 + Math.max(-0.08, Math.min(0.08, rng.gauss() * 0.04))),
     st: "run", forced: true, waitFly: false, scoredAt: -1,
   };
   R.push(bat);
@@ -430,7 +431,7 @@ export function simulatePlay(inp: FieldIn, rng: Rng): FieldOut {
     for (let k = 1; k < b; k++) if (!inp.bases[k - 1]) forced = false;
     R.push({
       id: r.id, isBatter: false, from: b, s: b, target: forced ? b + 1 : b,
-      speed: 6.9 + (r.run / 1000) * 1.8, st: forced ? "run" : "stand", forced, waitFly: false, scoredAt: -1,
+      speed: 7.05 + (r.run / 1000) * 1.4, st: forced ? "run" : "stand", forced, waitFly: false, scoredAt: -1,
     });
   }
   const twoOuts = inp.outs >= 2;
@@ -720,7 +721,8 @@ export function simulatePlay(inp: FieldIn, rng: Rng): FieldOut {
           fielded = true;
           fielder = chaser;
           ballHolder = chaser;
-          f.readyAt = t + (p.air ? 0.45 : chaser >= 6 ? 0.75 : 0.35);
+          // 포구 → 송구 준비: 수비가 좋을수록 빠르고, 공을 빼는 데 흔들림이 있음 (발 빠른 타자의 내야안타가 「확률」로 나오게)
+          f.readyAt = t + (p.air ? 0.45 : chaser >= 6 ? 0.75 : 0.3 + (1 - (inp.def[chaser] ?? 500) / 1000) * 0.12 + Math.abs(rng.gauss()) * 0.12);
           if (p.air) {
             caught = true;
             if (diveCatch) events.push({ t, kind: "dive", x: f.x, y: f.y, text: "필살수비!" });

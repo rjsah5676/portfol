@@ -7,19 +7,19 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { DIFF_NAME, type Diff } from "@/lib/baseball/ai";
 import {
-  ACTIVE_MAX, ACTIVE_PER_DAY, ACTIVE_PER_GAME, BOND_MAX, CLINIC_PRICE, MIN_COST, COND_NAME, CONSUMABLES, CONSUMABLE_IDS, DECK_SIZE, GAMES, GAME_GRADES, GEAR, GEAR_IDS, GEAR_TIER, GP_BOOSTS, GP_IDS,
+  ACTIVE_MAX, ACTIVE_PER_DAY, ACTIVE_PER_GAME, BEATS, BEAT_NAME, BOND_MAX, CLINIC_PRICE, MIN_COST, COND_NAME, CONSUMABLES, CONSUMABLE_IDS, DECK_SIZE, GAMES, GAME_GRADES, GEAR, GEAR_IDS, GEAR_TIER, GP_BOOSTS, GP_IDS,
   INJURY_NAME, LEARNED_VAL, MAX_SEASONS, OFF_TURNS, PLACES, PLACE_IDS, RETIRE_FROM, SPOT_EVENTS, STAT_KEYS, STAT_NAME, TAG_COLOR, TAG_NAME, TRAINS,
   TRAIN_KEYS, TYPES, act, advance, age, autoBattle, avg, buy, buyGear, canPlay, careerBatter, choose, choosePick, consumeItem, decideRetire, endSeason, finishBattle, trainersOf,
-  costOf, fmtAvg, gameNo, gearNext, gradeOf, newCareer, ops, ovrOf, retireCard, skill, spLv, spUses, spotsOf, statGrade, stepOf, tagCount, talentName,
+  awardRace, costOf, fmtAvg, gameNo, gearNext, gradeOf, newCareer, ops, ovrOf, retireCard, skill, spLv, spUses, spotsOf, statGrade, stepOf, tagCount, talentName,
   trainLv, trainMul, trainRisk, whenText, whyNot,
   type Action, type BatType, type Career, type ConsumableId, type Delta, type GearId, type HofEntry, type PlaceId, type SeasonSummary,
   type SkillId, type Spot, type StatKey, type Tag, type TurnOut,
 } from "@/lib/baseball/career";
 import { slotName, slotOf } from "@/lib/baseball/careerGame";
 import { TEAM_DEFS, charById, faceUrl, type CharId } from "@/lib/baseball/data";
-import { SPECIAL_DAY, ROLE, type BondId } from "@/lib/baseball/bonds";
+import { SPECIAL_DAY, ROLE, isBond, type BondId } from "@/lib/baseball/bonds";
 import { makeRng } from "@/lib/baseball/rng";
-import { BattleModal, BondCard, BondsModal, BoonPickModal, DeckStep, Hint, VnScene, artUrl, recommendDeck } from "./CareerBonds";
+import { BattleModal, BondCard, BondPanel, BondsModal, BoonPickModal, DeckStep, GuideModal, Hint, VnScene, artUrl, recommendDeck } from "./CareerBonds";
 import { BAT_IDLE, BATS, BATTER_RIG, HELMETS, PITCHER_RIG, PIT_IDLE, baseSkin } from "@/lib/baseball/figures";
 import { DEFAULT_LOOK, LOOK_KEYS, LOOK_LABEL, LOOK_OPTS, SKINS, lookColors, lookSkin, type Look } from "@/lib/baseball/look";
 import { drawRig, pose } from "@/lib/baseball/rig";
@@ -51,7 +51,7 @@ export default function CareerMode({ onExit, onPlay }: { onExit: () => void; onP
   const [queue, setQueue] = useState<TurnOut[]>([]);
   const [reports, setReports] = useState<GameReport[]>([]);
   const [season, setSeason] = useState<SeasonSummary | null>(null);
-  const [modal, setModal] = useState<null | "shop" | "records" | "bonds" | "newConfirm" | "epilogue" | { place: PlaceId }>(null);
+  const [modal, setModal] = useState<null | "shop" | "records" | "bonds" | "guide" | "newConfirm" | "epilogue" | { place: PlaceId }>(null);
   /** 큐 맨 앞 결과의 미연시 장면을 봤나 */
   const [vnSeen, setVnSeen] = useState(false);
   const [toast, setToast] = useState("");
@@ -265,6 +265,7 @@ export default function CareerMode({ onExit, onPlay }: { onExit: () => void; onP
             onShop={() => setModal("shop")}
             onRecords={() => setModal("records")}
             onBonds={() => setModal("bonds")}
+            onGuide={() => setModal("guide")}
             quiet={overlayBusy || !!modal}
             onPlay={playGame}
             onAutoWeek={() => autoWeek(true)}
@@ -282,6 +283,9 @@ export default function CareerMode({ onExit, onPlay }: { onExit: () => void; onP
             skin={queue[0].vn.skin}
             lines={queue[0].vn.lines}
             title={queue[0].title}
+            place={queue[0].vn.place}
+            seenKey={queue[0].vn.key}
+            panel={c && isBond(queue[0].vn.char) && c.deck.includes(queue[0].vn.char) ? <BondPanel c={c} id={queue[0].vn.char} label={queue[0].title.split(" · ")[1]} /> : undefined}
             result={queue[0].stub || queue[0].lines.length > 2 ? undefined : queue[0]}
             onDone={() => {
               if (queue[0].stub || queue[0].lines.length > 2) setVnSeen(true);
@@ -300,11 +304,32 @@ export default function CareerMode({ onExit, onPlay }: { onExit: () => void; onP
             }}
           />
         ))}
-      {!queue.length && reports.length > 0 && <ReportModal r={reports[0]} more={reports.length - 1} onClose={() => setReports((r) => r.slice(1))} />}
-      {!queue.length && !reports.length && season && c && <SeasonModal s={season} c={c} onClose={() => setSeason(null)} />}
+      {!queue.length && reports.length > 0 && c && <ReportModal c={c} r={reports[0]} more={reports.length - 1} onClose={() => setReports((r) => r.slice(1))} />}
+      {!queue.length && !reports.length && season && c && <SeasonModal
+          s={season}
+          c={c}
+          onClose={() => setSeason(null)}
+          onReroll={() => {
+            saveCareer(null);
+            setC(null);
+            setSeason(null);
+            setHof(loadHof());
+            setView("create");
+          }}
+        />}
       {!overlayBusy && view === "hub" && c && step === "pending" &&
         (c.pending?.scene && c.pending.char ? (
-          <VnScene key={`${c.turn}-${c.pending.char}`} char={c.pending.char} lines={c.pending.scene.lines} title={c.pending.title} choices={c.pending.choices} onChoose={doChoose} />
+          <VnScene
+            key={`${c.turn}-${c.pending.char}`}
+            char={c.pending.char}
+            lines={c.pending.scene.lines}
+            title={c.pending.title}
+            choices={c.pending.choices}
+            onChoose={doChoose}
+            place={c.pending.scene.place}
+            seenKey={`${c.pending.char}:${c.pending.scene.beat}`}
+            panel={isBond(c.pending.char) ? <BondPanel c={c} id={c.pending.char} label={`${BEAT_NAME[BEATS[c.pending.scene.beat]]} ${c.pending.scene.beat + 1}/${BOND_MAX}`} /> : undefined}
+          />
         ) : (
           <ChoiceModal c={c} onPick={doChoose} />
         ))}
@@ -339,6 +364,7 @@ export default function CareerMode({ onExit, onPlay }: { onExit: () => void; onP
       )}
       {modal === "records" && c && <RecordsModal c={c} onClose={() => setModal(null)} />}
       {modal === "bonds" && c && <BondsModal c={c} onClose={() => setModal(null)} />}
+      {modal === "guide" && <GuideModal onClose={() => setModal(null)} />}
       {modal === "epilogue" && c && retireCard(c).partner && (
         <VnScene char={retireCard(c).partner!} lines={[retireCard(c).epilogue!]} title="에필로그" onDone={() => setModal(null)} />
       )}
@@ -627,7 +653,7 @@ function Create({ hof, onBack, onStart }: { hof: HofEntry[]; onBack: () => void;
         <div className="text-[12.5px] leading-relaxed text-white/60">
           19세 입단 · 한 해 {GAMES}경기 · {RETIRE_FROM}년차부터 은퇴를 고를 수 있고 {MAX_SEASONS}년차엔 은퇴. 숨은 재능은 1년차가 끝나면 알려 줘요.
           <br />
-          결과는 운 · 선택 · 실력에 따라 갈려요 (중앙값 500 정도 · 잘 풀리면 800+ · 안 풀리면 300~400대).
+          결과는 운 · 선택 · 실력에 따라 갈려요 (보통 450~550 · 잘 풀리면 600~700대 · 코치까지 다 갖추면 그 위).
         </div>
         <Btn className={`${font.title} ml-4 shrink-0 px-8 py-3 text-2xl`} disabled={!name} onClick={() => setStepNo(2)}>
           다음 ▶
@@ -717,6 +743,7 @@ function Hub(p: {
   onShop: () => void;
   onRecords: () => void;
   onBonds: () => void;
+  onGuide: () => void;
   /** 팝업이 떠 있음 (힌트 숨김) */
   quiet?: boolean;
   onPlay: () => void;
@@ -749,16 +776,18 @@ function Hub(p: {
           <Btn className="px-2.5 py-1 text-[13px] whitespace-nowrap" color="#ff7ae0" onClick={p.onBonds}>
             인연
           </Btn>
+          <Btn className="px-2 py-1 text-[13px] whitespace-nowrap" color="#8b93b8" onClick={p.onGuide}>
+            ?
+          </Btn>
           <Btn className="px-2.5 py-1 text-[13px] whitespace-nowrap" color="#7ad7ff" onClick={p.onRecords}>
             기록
           </Btn>
         </div>
       </div>
 
-      <div className="flex min-h-0 flex-1 gap-3 p-3">
+      <div className="flex min-h-0 flex-1 gap-2.5 p-2.5">
         <PlayerCard c={c} />
         <div className="flex min-w-0 flex-1 flex-col gap-2">
-          <StatusRow c={c} />
           {c.injury && (
             <div className="rounded-xl border-2 border-[#ff5a5a]/60 bg-[#ff5a5a]/10 px-3 py-1 text-[12.5px] text-[#ffb0b0]">
               🩹 {INJURY_NAME[c.injury.kind]} — 복귀까지 {c.injury.left} (경기 · 캠프 하루마다 1씩). 숙소 · 병원만 갈 수 있고 경기는 결장. 병원 치료 · 상점 「재활 치료」로 줄일 수 있어요.
@@ -793,6 +822,7 @@ function Hub(p: {
             ))}
           </div>
         </div>
+        <SideStatus c={c} />
       </div>
       {!p.quiet && step === "turn" && c.turn === 0 && (
         <Hint k="hub" title="관리 턴 — 지도에서 장소를 눌러요">
@@ -818,14 +848,14 @@ function PlayerCard({ c }: { c: Career }) {
   const gr = gradeOf(ovr);
   const tc = tagCount(c);
   return (
-    <div className="flex w-[290px] shrink-0 flex-col rounded-2xl border-2 border-white/10 bg-[#0e1226]/90 p-3">
+    <div className="flex w-[252px] shrink-0 flex-col rounded-2xl border-2 border-white/10 bg-[#0e1226]/90 p-2.5">
       <div className="flex gap-2">
         <div className="shrink-0 rounded-xl bg-gradient-to-b from-[#2a6b3a]/40 to-transparent">
           <Portrait c={c} w={96} h={124} />
         </div>
         <div className="min-w-0 flex-1">
           <div className={`${font.title} truncate text-[21px] leading-tight`}>{c.name}</div>
-          <div className="text-[12px] text-white/60">
+          <div className="truncate text-[11px] text-white/60">
             #{c.num} · {TYPES[c.type].name} · {c.bats === "R" ? "우타" : "좌타"} · {age(c)}세
           </div>
           <div className="text-[12px] text-white/60">
@@ -902,24 +932,55 @@ function SkillChip({ id }: { id: SkillId }) {
   );
 }
 
-function StatusRow({ c }: { c: Career }) {
+/** 오른쪽 열: 상태 게이지 (세로) · 다음 경기 · 수상 레이스 */
+function SideStatus({ c }: { c: Career }) {
   const slot = slotOf(c.trust);
+  const COND = ["#ff5a5a", "#ff9a7a", "#fff", "#7dff9a", "#ffd23f"];
+  const season = c.phase === "season";
+  const st = season ? setupOfSafe(c) : null;
+  const ace = st?.opp.pitchers.find((pp) => pp.special);
+  const race = season && c.line.g >= 3 ? awardRace(c)[0] : null;
   return (
-    <div className="grid grid-cols-4 gap-2">
+    <div className="flex w-[172px] shrink-0 flex-col gap-1.5">
       <Gauge label="체력" value={`${Math.round(c.stamina)}`} pct={c.stamina} color={c.stamina < 30 ? "#ff5a5a" : c.stamina < 50 ? "#ffd23f" : "#7dff9a"} />
       <div className="rounded-xl border border-white/10 bg-black/30 px-3 py-1.5">
         <div className="flex justify-between text-[12px] text-white/60">
           <span>컨디션</span>
-          <b style={{ color: ["#ff5a5a", "#ff9a7a", "#fff", "#7dff9a", "#ffd23f"][c.cond] }}>{COND_NAME[c.cond]}</b>
+          <b style={{ color: COND[c.cond] }}>{COND_NAME[c.cond]}</b>
         </div>
         <div className="mt-1 flex gap-1">
           {[0, 1, 2, 3, 4].map((i) => (
-            <div key={i} className="h-[7px] flex-1 rounded-full" style={{ background: i <= c.cond ? ["#ff5a5a", "#ff9a7a", "#fff", "#7dff9a", "#ffd23f"][c.cond] : "rgba(255,255,255,0.1)" }} />
+            <div key={i} className="h-[7px] flex-1 rounded-full" style={{ background: i <= c.cond ? COND[c.cond] : "rgba(255,255,255,0.1)" }} />
           ))}
         </div>
       </div>
-      <Gauge label="감독 신뢰" value={`${Math.round(c.trust)} · ${slotName(slot)}`} pct={c.trust} color="#7ad7ff" />
+      <Gauge label="감독 신뢰" value={slotName(slot)} pct={c.trust} color="#7ad7ff" />
       <Gauge label="인기도" value={Math.round(c.fame).toLocaleString()} pct={Math.min(100, (c.fame / 3000) * 100)} color="#ff7ae0" />
+      {st && (
+        <div className="rounded-xl border border-[#FF8A3D]/40 bg-black/30 px-2.5 py-1.5 text-[12px]">
+          <div className="flex justify-between text-white/55">
+            <span>다음 경기</span>
+            <span>{gameNo(c) + 1}/{GAMES}</span>
+          </div>
+          <div className="truncate font-bold">
+            vs <span style={{ color: st.opp.color }}>{st.opp.name}</span>
+          </div>
+          {ace?.special && (
+            <div className="mt-0.5 flex items-center gap-1.5">
+              <img src={faceUrl(ace.special)} alt="" className="h-[26px] w-[24px] rounded object-cover object-top" style={{ outline: `1.5px solid ${charById(ace.special).color}` }} />
+              <span className="truncate text-[11px] text-white/65">마투수 {ace.name}</span>
+            </div>
+          )}
+          <div className="mt-0.5 text-[11.5px]">
+            나: <b className="text-[#ffd23f]">{slotName(st.myIdx)} 타자</b>
+          </div>
+        </div>
+      )}
+      {race && (
+        <div className="rounded-xl border px-2.5 py-1.5 text-[11.5px]" style={{ borderColor: race.lead ? "#ffd23f" : "rgba(255,255,255,0.12)", background: race.lead ? "#ffd23f14" : "rgba(0,0,0,0.3)" }}>
+          👑 {race.title} {race.lead ? <b className="text-[#ffd23f]">1위 페이스</b> : <span className="text-white/65">{race.fmt(Math.abs(race.gap))}{race.unit} 차</span>}
+        </div>
+      )}
     </div>
   );
 }
@@ -974,17 +1035,17 @@ function TownMap({ c, onPlace, onAdvance }: { c: Career; onPlace: (p: PlaceId) =
         <path d="M5 44 H95 M50 10 V95 M5 72 H95" stroke="rgba(255,255,255,0.25)" strokeWidth="0.4" strokeDasharray="2 2" fill="none" />
       </svg>
       {/* 행동력 (원작 ACTIVE) */}
-      <div className="absolute top-2 left-3 z-10 flex items-center gap-2 rounded-xl border border-white/15 bg-black/60 px-3 py-1.5">
-        <span className={`${font.title} text-[15px] text-[#ffd23f]`}>⚡ 행동력</span>
+      <div className="absolute top-2 left-3 z-10 flex items-center gap-2 rounded-xl border border-white/15 bg-black/60 px-2.5 py-1.5" title={`${season ? `경기마다 +${ACTIVE_PER_GAME}` : `하루 지나면 +${ACTIVE_PER_DAY}`} · 남으면 넘어가요`}>
+        <span className={`${font.title} text-[15px] text-[#ffd23f]`}>⚡</span>
         <div className="flex gap-[3px]">
           {Array.from({ length: ACTIVE_MAX }, (_, i) => (
-            <div key={i} className="h-[14px] w-[11px] rounded-[3px]" style={{ background: i < c.active ? "#ffd23f" : "rgba(255,255,255,0.12)", boxShadow: i < c.active ? "0 0 6px #ffd23f88" : undefined }} />
+            <div key={i} className="h-[14px] w-[10px] rounded-[3px]" style={{ background: i < c.active ? "#ffd23f" : "rgba(255,255,255,0.12)", boxShadow: i < c.active ? "0 0 6px #ffd23f88" : undefined }} />
           ))}
         </div>
         <span className="font-mono text-[14px] font-bold">
           {c.active}/{ACTIVE_MAX}
         </span>
-        <span className="text-[11px] text-white/50">{season ? `경기마다 +${ACTIVE_PER_GAME}` : `하루 지나면 +${ACTIVE_PER_DAY}`} · 남으면 넘어가요</span>
+        <span className="text-[10.5px] text-white/50">{season ? `경기마다 +${ACTIVE_PER_GAME}` : `하루 +${ACTIVE_PER_DAY}`}</span>
       </div>
       <div className="absolute top-2 right-3 z-10 flex flex-col items-end gap-1">
         <Btn className={`${font.title} px-4 py-2 text-[17px]`} color={out ? ACCENT : "#7ad7ff"} active={out} onClick={onAdvance}>
@@ -1354,6 +1415,9 @@ function PickModal({ c, onPick }: { c: Career; onPick: (i: number) => void }) {
       <button type="button" className="mt-3 cursor-pointer text-[12px] text-white/40 underline" onClick={() => onPick(-1)}>
         안 고르고 넘기기
       </button>
+      <Hint k="pick" title="특수능력 고르기">
+        3장 중 1장! 카드 위 태그(찬스 · 컨택 · 파워 …)가 같은 걸 3장 모으면 세트 효과가 붙어요. 주황 테두리 양날 카드는 강하지만 대가가 있어요.
+      </Hint>
     </Modal>
   );
 }
@@ -1381,52 +1445,120 @@ function RetireAskModal({ c, onAnswer }: { c: Career; onAnswer: (yes: boolean) =
   );
 }
 
-function ReportModal({ r, more, onClose }: { r: GameReport; more: number; onClose: () => void }) {
+function ReportModal({ c, r, more, onClose }: { c: Career; r: GameReport; more: number; onClose: () => void }) {
   const g = r.sum.grade !== undefined ? GAME_GRADES[r.sum.grade] : undefined;
+  const win = r.sum.win;
+  const d = r.sum.delta;
+  const race = awardRace(c)[0];
+  const done = gameNo(c) || (c.phase !== "season" ? GAMES : 0);
+  const PA_COLOR: Record<string, string> = { HR: "#ffd23f", HIT: "#7dff9a", BB: "#7ad7ff", K: "#ff8a8a" };
   return (
-    <Modal w={500} onClose={onClose}>
-      <div className="flex items-center justify-center gap-3">
+    <Modal w={780} onClose={onClose}>
+      {/* 머리: 평가 · 승패 · 점수 */}
+      <div className="flex items-center justify-center gap-4">
         {g && (
-          <span className={`${font.title} text-[46px] leading-none`} style={{ color: g.color }}>
+          <span className={`${font.title} text-[64px] leading-none`} style={{ color: g.color, textShadow: `0 0 24px ${g.color}66` }}>
             {g.g}
           </span>
         )}
         <div className="text-left">
-          <div className="text-[12px] text-white/50">{r.sum.dnp ? "결장" : `경기 평가 · ${r.auto ? "자동 진행" : "직접 출전"}`}</div>
-          <div className={`${font.title} text-[20px] leading-tight`}>{r.sum.title.replace(/^\[.\]\s*/, "")}</div>
+          <div className={`${font.title} text-[30px] leading-tight`} style={{ color: win ? "#ffd23f" : win === false ? "#ff9a9a" : "#fff" }}>
+            {r.sum.dnp ? "결장" : win ? "팀 승리!" : win === false ? "팀 패배" : "무승부"}
+          </div>
+          <div className="font-mono text-[16px] text-white/75">{r.score}</div>
+          <div className="text-[11.5px] text-white/45">{r.auto ? "자동 진행" : "직접 출전"}{r.note ? ` · ${r.note}` : ""}</div>
         </div>
       </div>
-      <div className="mt-1 font-mono text-[15px] text-white/70">{r.score}</div>
-      {r.note && <div className="mt-1 text-[12px] text-[#ffb0b0]">{r.note}</div>}
-      {r.pas.length > 0 && (
-        <div className="mx-auto mt-2 flex max-w-[380px] flex-col gap-0.5 rounded-lg bg-black/30 px-3 py-1.5 text-left text-[13px]">
-          {r.pas.map((pa, i) => (
-            <div key={i} className="flex justify-between" style={{ opacity: pa.auto ? 0.6 : 1 }}>
-              <span className="text-white/50">{pa.inning}회</span>
-              <span className="flex-1 px-3" style={{ color: pa.kind === "HR" ? "#ffd23f" : pa.kind === "HIT" ? "#7dff9a" : pa.kind === "BB" ? "#7ad7ff" : pa.kind === "K" ? "#ff8a8a" : "#fff" }}>
-                {pa.text}
-                {pa.rbi ? ` (${pa.rbi}타점)` : ""}
-                {pa.auto ? " · 자동" : ""}
+      <div className="mt-3 flex gap-3 text-left">
+        {/* 내 타석 */}
+        <div className="flex w-[300px] shrink-0 flex-col gap-1">
+          <div className="text-[12px] font-bold text-white/60">내 타석</div>
+          {r.pas.length ? (
+            r.pas.map((pa, i) => (
+              <div key={i} className="flex items-center gap-2 rounded-lg border px-2 py-1 text-[13px]" style={{ borderColor: pa.kind === "HR" ? "#ffd23f88" : "rgba(255,255,255,0.1)", background: pa.kind === "HR" ? "#ffd23f14" : "rgba(0,0,0,0.25)", opacity: pa.auto ? 0.7 : 1 }}>
+                <span className="w-[30px] text-white/50">{pa.inning}회</span>
+                <span className="flex-1 font-bold" style={{ color: PA_COLOR[pa.kind] ?? "#fff" }}>
+                  {pa.text}
+                  {pa.rbi ? ` ${pa.rbi}타점` : ""}
+                </span>
+                {pa.mission && <span className={pa.mission.ok ? "text-[11px] text-[#ffd23f]" : "text-[11px] text-white/40"}>{pa.mission.ok ? "미션✓" : "미션✗"}</span>}
+                <span className="rounded px-1.5 text-[10.5px]" style={{ background: pa.auto ? "rgba(255,255,255,0.1)" : "#7ad7ff33", color: pa.auto ? "#bbb" : "#7ad7ff" }}>
+                  {pa.auto ? "자동" : "직접"}
+                </span>
+              </div>
+            ))
+          ) : (
+            <div className="rounded-lg bg-black/25 px-2 py-2 text-[12.5px] text-white/50">벤치에서 응원했다</div>
+          )}
+        </div>
+        {/* 오늘의 성장 */}
+        <div className="flex flex-1 flex-col gap-1.5 rounded-xl border border-white/10 bg-black/25 p-2.5">
+          <div className="flex items-center justify-between text-[12px] font-bold text-white/60">
+            <span>오늘의 성장</span>
+            {g && (
+              <span>
+                경기 평가 <b style={{ color: g.color }}>{g.g}</b> → 경험치 <b style={{ color: g.color }}>×{g.xp}</b>
               </span>
-              {pa.mission && <span className={pa.mission.ok ? "text-[#ffd23f]" : "text-white/40"}>{pa.mission.ok ? "미션 ✓" : "미션 ✗"}</span>}
-            </div>
-          ))}
+            )}
+          </div>
+          {STAT_KEYS.map((k) => {
+            const v = Math.round(c.stats[k]);
+            const dv = d.stats[k] ?? 0;
+            return (
+              <div key={k} className="flex items-center gap-2 text-[12.5px]">
+                <span className="w-[42px] text-white/65">{STAT_NAME[k]}</span>
+                <div className="relative h-[9px] flex-1 overflow-hidden rounded-full bg-white/10">
+                  <div className="absolute inset-y-0 left-0 rounded-full" style={{ width: `${((v - dv) / 999) * 100}%`, background: STAT_COLOR[k] }} />
+                  {dv > 0 && <div className="absolute inset-y-0 rounded-full bg-white" style={{ left: `${((v - dv) / 999) * 100}%`, width: `${Math.max(0.6, (dv / 999) * 100)}%` }} />}
+                </div>
+                <span className="w-[30px] text-right font-mono">{v}</span>
+                <span className="w-[34px] font-mono text-[#7dff9a]">{dv > 0 ? `+${dv}` : ""}</span>
+              </div>
+            );
+          })}
+          <div className="mt-1 flex flex-wrap gap-1.5 text-[11.5px] font-bold">
+            {!r.sum.dnp && <span className="rounded-md bg-[#ffd23f22] px-2 py-0.5 text-[#ffd23f]">⚡ 행동력 +{ACTIVE_PER_GAME}</span>}
+            {d.money > 0 && <span className="rounded-md bg-white/10 px-2 py-0.5">자금 +{d.money}만</span>}
+            {d.trust !== 0 && <span className="rounded-md bg-white/10 px-2 py-0.5" style={{ color: d.trust > 0 ? "#7ad7ff" : "#ff9a9a" }}>감독 신뢰 {d.trust > 0 ? "+" : ""}{d.trust}</span>}
+            {d.fame > 0 && <span className="rounded-md bg-white/10 px-2 py-0.5 text-[#ff9ad5]">인기도 +{d.fame}</span>}
+            {d.cond !== 0 && <span className="rounded-md bg-white/10 px-2 py-0.5">컨디션 {d.cond > 0 ? "▲" : "▼"}</span>}
+          </div>
+          {r.sum.lines.length > 0 && <div className="text-[12px] text-white/70">{r.sum.lines.join(" · ")}</div>}
         </div>
-      )}
-      <div className="mt-2 flex flex-col gap-0.5 text-[13px] text-white/75">
-        {r.sum.lines.map((l, i) => (
-          <div key={i}>{l}</div>
-        ))}
       </div>
-      <DeltaChips d={r.sum.delta} />
-      <Btn className="mt-4 w-full py-2.5 text-lg" onClick={onClose}>
-        {more ? `다음 경기 결과 (${more})` : "확인"}
+      {/* 시즌 진행 · 수상 레이스 */}
+      <div className="mt-2.5 flex items-center gap-3 rounded-xl border border-white/10 bg-black/25 px-3 py-2 text-left">
+        <div className="flex-1">
+          <div className="flex justify-between text-[11.5px] text-white/55">
+            <span>시즌 진행</span>
+            <span>
+              {done}/{GAMES} · 타율 {fmtAvg(avg(c.line))} · {c.line.hr}홈런 · {c.line.rbi}타점
+            </span>
+          </div>
+          <div className="mt-1 flex gap-[3px]">
+            {Array.from({ length: GAMES }, (_, i) => (
+              <div key={i} className="h-[7px] flex-1 rounded-full" style={{ background: i < done ? "#FF8A3D" : "rgba(255,255,255,0.12)" }} />
+            ))}
+          </div>
+        </div>
+        {c.line.g >= 3 && race && (
+          <div className="rounded-lg border px-2.5 py-1 text-[12px]" style={{ borderColor: race.lead ? "#ffd23f" : "rgba(255,255,255,0.2)", background: race.lead ? "#ffd23f1c" : "transparent" }}>
+            👑 {race.title} 레이스 <b style={{ color: race.lead ? "#ffd23f" : "#fff" }}>{race.lead ? "1위 페이스!" : `1위 페이스와 ${race.fmt(Math.abs(race.gap))}${race.unit} 차`}</b>
+            <div className="text-[10.5px] text-white/50">
+              나 {race.fmt(race.mine)} · 1위 페이스 {race.fmt(race.pace)}
+            </div>
+          </div>
+        )}
+      </div>
+      <Btn className={`${font.title} mt-3 w-full py-2.5 text-[20px]`} onClick={onClose}>
+        {more ? `다음 경기 결과 ▶ (${more})` : "확인"}
       </Btn>
     </Modal>
   );
 }
 
-function SeasonModal({ s, c, onClose }: { s: SeasonSummary; c: Career; onClose: () => void }) {
+function SeasonModal({ s, c, onClose, onReroll }: { s: SeasonSummary; c: Career; onClose: () => void; onReroll: () => void }) {
+  const [ask, setAsk] = useState(false);
   const L = s.line;
   return (
     <Modal w={540}>
@@ -1478,9 +1610,35 @@ function SeasonModal({ s, c, onClose }: { s: SeasonSummary; c: Career; onClose: 
         종합 {ovrOf(c)} ({gradeOf(ovrOf(c)).g})
         {s.retire ? " · 10년 커리어 끝" : ` · 다음: 시즌 보상 고르기${s.canRetire ? " → 은퇴할지 고르기" : ""} → 비시즌 ${OFF_TURNS}턴`}
       </div>
-      <Btn className="mt-4 w-full py-2.5 text-lg" color="#ffd23f" onClick={onClose}>
-        {s.retire ? "은퇴식으로" : "다음"}
-      </Btn>
+      {s.talentReveal && c.season === 1 && !s.retire ? (
+        ask ? (
+          <div className="mt-3 rounded-xl border border-[#ff7a7a]/50 bg-[#ff7a7a]/10 p-2 text-[13px]">
+            {c.name}를 보내고 새 선수를 만들까요? (이 선수는 기록에 안 남아요)
+            <div className="mt-2 flex gap-2">
+              <Btn className="flex-1 py-2" color="#ff7a7a" onClick={onReroll}>
+                새 선수 만들기
+              </Btn>
+              <Btn className="flex-1 py-2" color="#8b93b8" onClick={() => setAsk(false)}>
+                취소
+              </Btn>
+            </div>
+          </div>
+        ) : (
+          <div className="mt-4 flex gap-2">
+            <Btn className={`${font.title} flex-[2] py-2.5 text-lg`} color="#ffd23f" onClick={onClose}>
+              이 선수로 계속 ▶
+            </Btn>
+            <Btn className="flex-1 py-2.5 text-[13px]" color="#8b93b8" onClick={() => setAsk(true)}>
+              재능 다시 뽑기
+              <span className="block text-[10.5px] font-normal opacity-70">새 선수로 처음부터</span>
+            </Btn>
+          </div>
+        )
+      ) : (
+        <Btn className="mt-4 w-full py-2.5 text-lg" color="#ffd23f" onClick={onClose}>
+          {s.retire ? "은퇴식으로" : "다음"}
+        </Btn>
+      )}
     </Modal>
   );
 }

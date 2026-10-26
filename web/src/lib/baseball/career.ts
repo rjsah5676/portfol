@@ -7,8 +7,9 @@
  *   외출 장소(번화가 · 공원 · 강변 · 도서관 · 방송국) — 이번 주에 나타난 픽셀파이트 캐릭터(❗)나 장소 이벤트만 만날 수 있음.
  * 로그라이크 양념: 특수능력은 3장 중 1장 고르기(시즌 끝 · S 평가 · 도서관 퀴즈) · 같은 태그 3장이면 세트 효과 · 양날 카드.
  *
- * 결과 분포(종합 0 ~ 999): 중앙값 ~520 · 하위 10% ~425 · 상위 2% 800+ (scripts/baseball-career-sim.ts 로 확인)
- *   결과 몫(SHARE=1): 실력 ~37 · 운 ~55 · 코치(C) ~8 · 코치 S 풀강 ~20% < 인연 ~29% (COACH=1)
+ * 결과 분포(종합 0 ~ 999, 코치 C 기준): 중앙값 ~485 · 하위 10% ~390 · 상위 10% ~585 · 최고 ~730 (촘촘하게)
+ *   코치 S 풀강: 중앙값 ~590 · 운까지 다 터지면 ~870~900. 999 는 사실상 불가 (scripts/baseball-career-sim.ts)
+ *   결과 몫(SHARE=1): 실력 ~40 · 운 ~60 (코치 C = 효과 없음) · 코치 S 풀강 ~20% < 인연 ~29% (COACH=1)
  *   흔들림 세 갈래 — 운(숨은 재능 · 대성공 · 부상 · 각성 · 고르기 패) · 선택(훈련 몰빵 · 체력 관리 · 인연 · 상점 · 은퇴 시점) · 실력(직접 친 타석)
  * GP 부스트(판마다 고르는 것)는 같은 플레이 대비 종합 +30% 를 넘지 않게 (시뮬로 확인).
  *
@@ -31,7 +32,7 @@ export const STAT_NAME: Record<StatKey, string> = { hit: "맞히기", power: "�
 
 export type BatType = "contact" | "power" | "speed" | "defense" | "all";
 export const TYPES: Record<BatType, { name: string; desc: string; pos: string; apt: Stats; start: Stats }> = {
-  contact: { name: "교타자", desc: "맞히기가 잘 자람", pos: "2B", apt: { hit: 1.5, power: 0.92, run: 1.08, def: 1.04 }, start: { hit: 160, power: 85, run: 125, def: 115 } },
+  contact: { name: "교타자", desc: "맞히기가 잘 자람", pos: "2B", apt: { hit: 1.55, power: 0.95, run: 1.1, def: 1.06 }, start: { hit: 160, power: 85, run: 125, def: 115 } },
   power: { name: "거포", desc: "파워가 잘 자람 · 발은 느림", pos: "1B", apt: { hit: 0.84, power: 1.12, run: 0.82, def: 0.92 }, start: { hit: 105, power: 170, run: 85, def: 105 } },
   speed: { name: "준족", desc: "주루 · 수비가 잘 자람", pos: "CF", apt: { hit: 1.12, power: 0.88, run: 1.5, def: 1.18 }, start: { hit: 125, power: 75, run: 180, def: 125 } },
   defense: { name: "수비형", desc: "수비가 잘 자람", pos: "SS", apt: { hit: 1.02, power: 0.88, run: 1.08, def: 1.4 }, start: { hit: 115, power: 85, run: 125, def: 180 } },
@@ -40,13 +41,13 @@ export const TYPES: Record<BatType, { name: string; desc: string; pos: string; a
 
 /** 숨은 재능 — 1시즌 끝 스카우트 평가에서 공개. 성장 속도(mul) + 한계(limit, 가까울수록 덜 오름). SS 는 각성으로만 */
 export const TALENTS = [
-  { g: "F", w: 0.08, mul: 0.78, limit: 390 },
-  { g: "D", w: 0.17, mul: 0.86, limit: 495 },
-  { g: "C", w: 0.3, mul: 0.93, limit: 595 },
-  { g: "B", w: 0.27, mul: 1.0, limit: 695 },
-  { g: "A", w: 0.13, mul: 1.15, limit: 850 },
-  { g: "S", w: 0.05, mul: 1.3, limit: 1000 },
-  { g: "SS", w: 0, mul: 1.65, limit: 1300 },
+  { g: "F", w: 0.08, mul: 0.8, limit: 400 },
+  { g: "D", w: 0.17, mul: 0.88, limit: 465 },
+  { g: "C", w: 0.3, mul: 0.94, limit: 535 },
+  { g: "B", w: 0.27, mul: 1.0, limit: 605 },
+  { g: "A", w: 0.13, mul: 1.1, limit: 690 },
+  { g: "S", w: 0.05, mul: 1.2, limit: 790 },
+  { g: "SS", w: 0, mul: 1.35, limit: 880 },
 ] as const;
 
 /* ─────────────── 일정 ─────────────── */
@@ -448,19 +449,21 @@ export const GEAR_TIER = [
 export type GpId = "hitCoach" | "powCoach" | "runCoach" | "defCoach" | "cheer";
 /** 코치 등급 (지금은 전부 C · 뽑기가 붙으면 등급별로 뽑힘) */
 export type CoachGrade = "C" | "B" | "A" | "S";
-/** train = 그 훈련 효율 · limit = 그 능력치 한계 끌어올림 · rest = 치어리더 회복 */
+/** train = 그 훈련 효율 · limit = 그 능력치 한계 끌어올림 · rest = 치어리더 회복. C = 기본(효과 없음) */
 export const COACH_GRADE: Record<CoachGrade, { train: number; limit: number; rest: number }> = {
-  C: { train: 0.12, limit: 0.06, rest: 0.15 },
-  B: { train: 0.2, limit: 0.16, rest: 0.22 },
-  A: { train: 0.32, limit: 0.34, rest: 0.3 },
-  S: { train: 0.45, limit: 0.53, rest: 0.38 },
+  C: { train: 0, limit: 0, rest: 0 },
+  B: { train: 0.15, limit: 0.17, rest: 0.13 },
+  A: { train: 0.3, limit: 0.34, rest: 0.25 },
+  S: { train: 0.4, limit: 0.47, rest: 0.38 },
 };
+const coachDesc = (g: CoachGrade, train: string, stat: string) =>
+  COACH_GRADE[g].train ? `${train} +${Math.round(COACH_GRADE[g].train * 100)}% · ${stat} 한계 +${Math.round(COACH_GRADE[g].limit * 100)}%` : `기본 — 등급이 오르면 ${train} · ${stat} 한계 ↑`;
 export const GP_BOOSTS: Record<GpId, { name: string; desc: (g: CoachGrade) => string; price: number; train?: TrainKey }> = {
-  hitCoach: { name: "타격 코치", desc: (g) => `타격 훈련 +${Math.round(COACH_GRADE[g].train * 100)}% · 맞히기 한계 +${Math.round(COACH_GRADE[g].limit * 100)}%`, price: 250, train: "hit" },
-  powCoach: { name: "근력 코치", desc: (g) => `근력 훈련 +${Math.round(COACH_GRADE[g].train * 100)}% · 파워 한계 +${Math.round(COACH_GRADE[g].limit * 100)}%`, price: 250, train: "power" },
-  runCoach: { name: "주루 코치", desc: (g) => `주루 훈련 +${Math.round(COACH_GRADE[g].train * 100)}% · 주루 한계 +${Math.round(COACH_GRADE[g].limit * 100)}%`, price: 250, train: "run" },
-  defCoach: { name: "수비 코치", desc: (g) => `수비 훈련 +${Math.round(COACH_GRADE[g].train * 100)}% · 수비 한계 +${Math.round(COACH_GRADE[g].limit * 100)}%`, price: 250, train: "def" },
-  cheer: { name: "치어리더", desc: (g) => `휴식 · 개인정비 회복 +${Math.round(COACH_GRADE[g].rest * 100)}%`, price: 200 },
+  hitCoach: { name: "타격 코치", desc: (g) => coachDesc(g, "타격 훈련", "맞히기"), price: 250, train: "hit" },
+  powCoach: { name: "근력 코치", desc: (g) => coachDesc(g, "근력 훈련", "파워"), price: 250, train: "power" },
+  runCoach: { name: "주루 코치", desc: (g) => coachDesc(g, "주루 훈련", "주루"), price: 250, train: "run" },
+  defCoach: { name: "수비 코치", desc: (g) => coachDesc(g, "수비 훈련", "수비"), price: 250, train: "def" },
+  cheer: { name: "치어리더", desc: (g) => (COACH_GRADE[g].rest ? `휴식 · 개인정비 회복 +${Math.round(COACH_GRADE[g].rest * 100)}%` : "기본 — 등급이 오르면 휴식 회복 ↑"), price: 200 },
 };
 /** 이 판 코치 등급 (지금은 C 고정 · 시뮬은 TUNE.coach 로 바꿔 봄) */
 export const coachGrade = (_c: Career, _id: GpId): CoachGrade => TUNE.coach;
@@ -493,7 +496,7 @@ export interface Pending {
   text: string;
   choices: string[];
   /** 미연시 장면: 대사 · 고르기 (반응 · 호감 · 이해) */
-  scene?: { lines: string[]; opts: Choice[]; beat: number };
+  scene?: { lines: string[]; opts: Choice[]; beat: number; place?: PlaceId };
 }
 export interface PickState {
   /** 어디서 생긴 고르기 (화면 제목) */
@@ -746,8 +749,8 @@ export function statGrade(v: number) {
  * [종합, 그 이상인 비율]
  */
 export const PCT_TABLE: [number, number][] = [
-  [950, 0.0005], [900, 0.002], [850, 0.005], [800, 0.02], [750, 0.03], [700, 0.075], [650, 0.175], [600, 0.27], [550, 0.44],
-  [500, 0.59], [450, 0.8], [400, 0.935], [350, 0.995], [0, 1],
+  [950, 0.00002], [900, 0.0001], [850, 0.0005], [800, 0.002], [750, 0.005], [700, 0.01], [650, 0.03], [600, 0.065], [550, 0.175],
+  [500, 0.415], [450, 0.685], [400, 0.86], [350, 0.98], [300, 0.998], [0, 1],
 ];
 export function topPct(ovr: number) {
   for (let i = 0; i < PCT_TABLE.length - 1; i++) {
@@ -916,7 +919,7 @@ export interface TurnOut {
   /** 이 결과에 나온 캐릭터 (얼굴) */
   char?: CharId;
   /** 미연시 장면 (전신 그림 + 대사) */
-  vn?: { char: CharId; lines: string[]; skin?: string };
+  vn?: { char: CharId; lines: string[]; skin?: string; place?: PlaceId; key?: string };
   /** 호감 변화 */
   aff?: number;
 }
@@ -1162,7 +1165,7 @@ function meet(c: Career, id: BondId, place: PlaceId, rng: Rng): TurnOut {
     const opts: Choice[] = [...(beat.choices ?? [])];
     if (beat.special && (c.know[id] ?? 0) >= beat.special.need) opts.push(beat.special.choice);
     c.bonds[id] = v + 1;
-    c.pending = { kind: "scene", char: id, title, text: beat.lines[beat.lines.length - 1], choices: opts.map((o) => o.text), scene: { lines: beat.lines, opts, beat: v } };
+    c.pending = { kind: "scene", char: id, title, text: beat.lines[beat.lines.length - 1], choices: opts.map((o) => o.text), scene: { lines: beat.lines, opts, beat: v, place } };
     return { title, tone: "event", lines: [], delta: diffOf(c, a), char: id, stub: true };
   }
   if (nb.kind === "boon") {
@@ -1170,12 +1173,12 @@ function meet(c: Career, id: BondId, place: PlaceId, rng: Rng): TurnOut {
     grow(c, b.stat, 14);
     const d = addAff(c, id, 5);
     makeBoonPick(c, id, rng, `${ch.name}의 축복`);
-    return { title, tone: "event", lines: [`${ch.name}의 축복 — 하나를 고를 수 있다.`], delta: diffOf(c, a), char: id, aff: d, vn: { char: id, lines: beat.lines } };
+    return { title, tone: "event", lines: [`${ch.name}의 축복 — 하나를 고를 수 있다.`], delta: diffOf(c, a), char: id, aff: d, vn: { char: id, lines: beat.lines, place, key: `${id}:${v}` } };
   }
   // 대결 (이기면 다음 줄기)
   const B = BATTLES[nb.kind];
   c.battle = { char: id, kind: nb.kind, pitches: B.pitches, need: B.need, magic: B.magic, tries: c.battle?.char === id ? c.battle.tries : 0 };
-  return { title, tone: "event", lines: [`${ch.name}의 공 ${B.pitches}개 · ${B.need}점 이상이면 승리 (안타 1 · 홈런 2)`], delta: diffOf(c, a), char: id, vn: { char: id, lines: beat.lines } };
+  return { title, tone: "event", lines: [`${ch.name}의 공 ${B.pitches}개 · ${B.need}점 이상이면 승리 (안타 1 · 홈런 2)`], delta: diffOf(c, a), char: id, vn: { char: id, lines: beat.lines, place, key: `${id}:${v}` } };
 }
 
 /** 특별한 날 (비시즌 첫날, 호감 1위) */
@@ -1249,8 +1252,8 @@ function tryAwaken(c: Career, rng: Rng, p: number): TurnOut | undefined {
   const a = snap(c);
   c.awakened = true;
   c.talent = Math.min(TALENTS.length - 1, c.talent + 1);
-  c.limit = TALENTS[c.talent].limit + 60;
-  for (const k of STAT_KEYS) grow(c, k, 40);
+  c.limit = TALENTS[c.talent].limit + 40;
+  for (const k of STAT_KEYS) grow(c, k, 30);
   addCond(c, 4);
   c.talentKnown = true;
   return { title: "각성!", tone: "awaken", lines: ["몸 안에서 뭔가가 깨어났다…!", `숨은 재능이 ${TALENTS[c.talent].g}급으로 올랐다 · 한계 돌파!`], delta: diffOf(c, a) };
@@ -1643,7 +1646,7 @@ export const GAME_GRADES = [
 ] as const;
 /** 경기 평가 가중치 — 타입마다 「제 몫」을 다르게 봄 (준족은 출루 · 득점, 거포는 장타) */
 const GRADE_W: Record<BatType, { s: number; xb: number; hr: number; bb: number; r: number; base: number }> = {
-  contact: { s: 1.45, xb: 1.75, hr: 2.3, bb: 0.95, r: 0.5, base: 0.25 },
+  contact: { s: 1.55, xb: 1.8, hr: 2.3, bb: 1.0, r: 0.55, base: 0.35 },
   power: { s: 0.85, xb: 1.5, hr: 2.2, bb: 0.6, r: 0.4, base: 0 },
   speed: { s: 1.3, xb: 1.9, hr: 2.4, bb: 0.9, r: 0.9, base: 0.2 },
   defense: { s: 1.15, xb: 1.7, hr: 2.4, bb: 0.7, r: 0.6, base: 0.4 },
@@ -1662,6 +1665,7 @@ export interface GameSummary {
   delta: Delta;
   dnp: boolean;
   grade?: number;
+  win?: boolean | null;
 }
 
 /** 이번 경기에 나가나 (부상이면 못 나감) */
@@ -1732,7 +1736,7 @@ export function applyGame(c: Career, g: GameIn | null): GameSummary {
     c.done = [];
     if (c.week >= WEEKS) c.phase = "seasonEnd";
   }
-  return { title, lines, delta: diffOf(c, a), dnp: !g, grade };
+  return { title, lines, delta: diffOf(c, a), dnp: !g, grade, win };
 }
 
 /* ─────────────── 시즌 결산 · 은퇴 ─────────────── */
@@ -1761,6 +1765,26 @@ export interface SeasonSummary {
   canRetire: boolean;
 }
 
+/** 이번 시즌 리그 1위 기록 (시드 · 연차로 정해짐) — 타이틀 기준 */
+export function leagueBest(c: Pick<Career, "seed" | "season">) {
+  const r = makeRng((c.seed * 31 + c.season * 977 + 5) >>> 0);
+  return { avg: 0.35 + r() * 0.05, hr: 11 + Math.floor(r() * 6), rbi: 34 + Math.floor(r() * 10) };
+}
+/** 수상 레이스 — 지금까지 경기 수 기준 1위 페이스와 내 기록 */
+export function awardRace(c: Career) {
+  const best = leagueBest(c);
+  const k = Math.max(1, c.line.g) / GAMES;
+  const L = c.line;
+  const rows = [
+    { title: "홈런왕", mine: L.hr, pace: Math.round(best.hr * k), unit: "개", fmt: (v: number) => String(v) },
+    { title: "타점왕", mine: L.rbi, pace: Math.round(best.rbi * k), unit: "타점", fmt: (v: number) => String(v) },
+    { title: "타격왕", mine: avg(L), pace: best.avg, unit: "", fmt: (v: number) => fmtAvg(v) },
+  ];
+  return rows
+    .map((r) => ({ ...r, lead: r.mine >= r.pace, gap: r.pace - r.mine }))
+    .sort((a, b) => (a.lead === b.lead ? a.gap / Math.max(0.001, a.pace) - b.gap / Math.max(0.001, b.pace) : a.lead ? -1 : 1));
+}
+
 export function endSeason(c: Career): SeasonSummary {
   if (c.phase !== "seasonEnd") throw new Error("시즌 결산 차례 아님");
   const rng = turnRng(c, 11);
@@ -1768,10 +1792,11 @@ export function endSeason(c: Career): SeasonSummary {
   const awards: string[] = [];
   const lines: string[] = [];
   const pa = L.pa;
-  // 리그 1위 기록은 해마다 조금씩 다름 (30경기 시즌)
-  if (pa >= 80 && avg(L) >= 0.35 + rng() * 0.05) awards.push("타격왕");
-  if (L.hr >= 11 + Math.floor(rng() * 6)) awards.push("홈런왕");
-  if (L.rbi >= 34 + Math.floor(rng() * 10)) awards.push("타점왕");
+  // 리그 1위 기록은 해마다 조금씩 다름 (30경기 시즌 · 시즌 중 「수상 레이스」와 같은 값)
+  const best = leagueBest(c);
+  if (pa >= 80 && avg(L) >= best.avg) awards.push("타격왕");
+  if (L.hr >= best.hr) awards.push("홈런왕");
+  if (L.rbi >= best.rbi) awards.push("타점왕");
   if (c.season === 1 && pa >= 50 && ops(L) >= 0.78) awards.push("신인왕");
   if (awards.length >= 2 || (pa >= 80 && ops(L) >= 1.0)) awards.push("MVP");
   if (awards.length) {

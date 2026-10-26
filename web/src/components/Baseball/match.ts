@@ -483,7 +483,16 @@ export class Match {
       this.quality = cpuGauge(this.cfg.diff, this.rng);
       const fsd = this.s.sides[fieldSide(this.s)];
       const risp = this.s.bases[1] !== null || this.s.bases[2] !== null;
-      if (this.cfg.bond) this.cpuUseSp = this.cfg.bond.magic.includes(this.bondSt.idx);
+      if (this.cfg.bond) {
+        this.cpuUseSp = this.cfg.bond.magic.includes(this.bondSt.idx);
+        // 예고한 구종 그대로 (인텐트): 직구 / 변화구
+        const intent = this.bondIntent();
+        if (intent !== "magic") {
+          const fb = p.rep.indexOf("FB");
+          const brk = p.rep.map((k, i) => (k === "FB" ? -1 : i)).filter((i) => i >= 0);
+          this.kindIdx = intent === "fast" ? Math.max(0, fb) : brk.length ? brk[(this.bondSt.idx + this.bondSt.balls) % brk.length] : 0;
+        }
+      }
       else if (this.cfg.mode === "derby") this.cpuUseSp = !!this.derby.boss;
       else this.cpuUseSp = !!p.special && cpuUseSpecial(fsd.ballLeft, this.s.inning, this.s.strikes, risp, this.rng);
       if (this.cpuUseSp && this.cfg.mode !== "derby") fsd.ballLeft--;
@@ -808,6 +817,14 @@ export class Match {
       return;
     }
     this.finishPitch();
+  }
+
+  /** 인연 대결: 다음 공 예고 (직구 · 변화구 · 마구) */
+  bondIntent(): "fast" | "break" | "magic" {
+    const B = this.cfg.bond!;
+    const i = this.bondSt.idx;
+    if (B.magic.includes(i)) return "magic";
+    return (i * 37 + this.bondSt.balls * 13 + B.char.length * 11) % 5 < 3 ? "fast" : "break";
   }
 
   /** 인연 대결 한 구 */
@@ -1935,11 +1952,30 @@ export class Match {
           ctx.stroke();
         }
       }
-      if (B.magic.includes(st.idx)) {
-        this.panel(ctx, DW - 262, 64, 250, 40);
-        ctx.fillStyle = ch.color;
-        ctx.font = '16px "Black Han Sans", sans-serif';
-        ctx.fillText(`다음 공: 마구 「${ch.ball.name}」`, DW - 248, 90);
+      if (st.idx < B.pitches) {
+        // 다음 공 예고 (슬더스 인텐트처럼)
+        const it = this.bondIntent();
+        this.panel(ctx, DW - 262, 64, 250, 44);
+        const chips: ["fast" | "break" | "magic", string][] = [["fast", "직구"], ["break", "변화구"], ["magic", "마구"]];
+        chips.forEach(([k, label], j) => {
+          const x = DW - 252 + j * 78;
+          const on = k === it;
+          ctx.fillStyle = on ? (k === "magic" ? ch.color : "#ffd23f") : "rgba(255,255,255,0.1)";
+          ctx.beginPath();
+          ctx.roundRect(x, 72, 70, 28, 8);
+          ctx.fill();
+          ctx.fillStyle = on ? "#111" : "rgba(255,255,255,0.5)";
+          ctx.font = '700 13px "Nanum Gothic", sans-serif';
+          ctx.textAlign = "center";
+          ctx.fillText(label, x + 35, 91);
+        });
+        ctx.textAlign = "left";
+        if (it === "magic") {
+          this.panel(ctx, DW - 262, 112, 250, 34);
+          ctx.fillStyle = ch.color;
+          ctx.font = '14px "Black Han Sans", sans-serif';
+          ctx.fillText(`「${ch.ball.name}」`, DW - 250, 134);
+        }
       }
       this.batterCard(ctx);
       return;

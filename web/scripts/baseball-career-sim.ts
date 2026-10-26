@@ -143,7 +143,8 @@ function share() {
 function coachShare() {
   const M = Number(process.env.M ?? 40);
   const avgOf = (f: () => number[]) => {
-    const v = f();
+    const v = f().sort((a, b) => a - b);
+    console.log(`  p10 ${v[Math.floor(v.length * 0.1)]} · p50 ${v[Math.floor(v.length / 2)]} · p90 ${v[Math.floor(v.length * 0.9)]} · max ${v[v.length - 1]}`);
     return v.reduce((a, b) => a + b, 0) / v.length;
   };
   const runs = (gp: GpId[] | undefined, coach: "C" | "S", noBond: boolean) => {

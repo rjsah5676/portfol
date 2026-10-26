@@ -2,8 +2,9 @@
  * 육성 저장 (프로토: 이 브라우저 localStorage) — 진행 중인 선수 1명 + 명예의 전당.
  * 서버 저장은 다음 단계 (랭킹 · 구단으로 넘기기).
  */
-import { applyGame, careerBatter, finishBattle, hofEntry, spUses, type Career, type GameIn, type GameSummary, type HofEntry, type TurnOut } from "@/lib/baseball/career";
+import { GP_IDS, applyGame, careerBatter, finishBattle, hofEntry, spUses, type Career, type GameIn, type GameSummary, type HofEntry, type TurnOut } from "@/lib/baseball/career";
 import { CHARS, type CharId } from "@/lib/baseball/data";
+import { DEFAULT_LOOK } from "@/lib/baseball/look";
 import { botHook, careerSetup, playCareerGame, type CareerSetup, type MyPA } from "@/lib/baseball/careerGame";
 import { makeRng } from "@/lib/baseball/rng";
 
@@ -13,10 +14,23 @@ const HOF = "pxb:hof:v1";
 export function loadCareer(): Career | null {
   try {
     const c = JSON.parse(localStorage.getItem(KEY) ?? "null");
-    return c && c.v === 3 ? (c as Career) : null;
+    return c && c.v === 3 ? normalize(c as Career) : null;
   } catch {
     return null;
   }
+}
+/** 예전 저장에 없던 칸 채우기 (v3 안에서 늘어난 것들) */
+function normalize(c: Career): Career {
+  c.bcount ??= {};
+  c.look ??= { ...DEFAULT_LOOK };
+  c.specials ??= [];
+  c.know ??= {};
+  c.aff ??= {};
+  c.blv ??= {};
+  c.battle ??= null;
+  c.gp = (c.gp ?? []).filter((g) => GP_IDS.includes(g));
+  if (!c.gp.length) c.gp = [...GP_IDS];
+  return c;
 }
 export function saveCareer(c: Career | null) {
   try {
