@@ -18,12 +18,20 @@ export const CAM = { F: 688.7, Dc: 2.268, camH: 0.472, Y0: 331.7, cx: 512 };
 /**
  * 공 · 존 카메라 (BC): 구장 그림 카메라(CAM)와 따로 — 타자 그림(실제 비율보다 작음)에 맞춰 존을 가슴 ~ 무릎에 두고,
  * 투수 그림 손(화면 y ≈ 229)에서 공이 나가 존으로 「내려오며」 들어오게 푼 값.
- *   맞춘 것: 존 정사각 153px (위 265 · 아래 418, 폭은 그림 홈플레이트 크기 그대로) · 공 놓는 점(1.62m, 투수판) = 손 229 · 투수판(0.25m) = 그림 투수판 339
+ *   맞춘 것: 존 정사각 153px (위 265 · 아래 418, 폭은 그림 홈플레이트 크기 그대로) · 공 놓는 점(투수판) = 손 229
  *   → 홈 뒤 6.6m · 눈높이 0.85m. 손이 화면에서 높이 1.05m 공 자리라 그보다 낮은 공은 계속 내려옴 (높은 공은 직선 그대로 조금 올라감)
  *   (예전 손 249 · F 1546 · Dc 5.09 · camH 0.815 · Y0 302 → 1m 넘는 볼이 홈 앞에서 솟아 보여 투수 키를 1.22배)
  * 땅(높이 0)은 구장 그림 카메라 그대로 (그림자 · 땅에 튄 공), 높이 0 ~ 0.43m 사이는 섞음.
  */
-export const BC = { F: 2015.3, Dc: 6.635, camH: 0.8524, Y0: 290.69 };
+export const BC = { F: 2015.3, Dc: 6.635, camH: 1.0555, Y0: 229 };
+/**
+ * ↑ 눈높이 = 공 놓는 높이(1.0555m, pitch.ts RELEASE_H) — 2.5등신이라 존이 무릎 0.47 ~ 어깨 0.9m 인 우리 비율로 투수가 공을 놓는 높이.
+ * 손(공 놓는 점)이 딱 수평선(Y0 = 손 229)에 오니 그보다 낮게 오는 공은 비행 내내 화면에서 내려오기만 함.
+ * (예전 눈높이 0.85 · 놓는 높이 1.62 → 눈보다 높은 공이 다가오며 화면에서 떠올라 보였음, 느린 공 · 커브일수록 오래)
+ * 존(위 265 · 아래 418) · 크기 · 손 위치는 그대로.
+ */
+/** 투수 그림 발 자리 (투수판) — 공 카메라와 따로 고정 (예전 BC 로 맞춘 자리) */
+export const PITCHER_FEET = { x: 512, y: 339.15 };
 const SB_HOME = BC.F / BC.Dc;
 const clamp01 = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v);
 export function proj(x: number, y: number, z: number) {
@@ -41,6 +49,25 @@ export function proj(x: number, y: number, z: number) {
   return { x: gx + (bx - gx) * w, y: gy + (by - gy) * w, s: s + (sb - s) * w };
 }
 export const MOUND = proj(0, 0, 18.4);
+
+/**
+ * 날아오는 공의 그림자 — 공과 같은 원근(BC 의 F · Dc)으로, 땅 높이만 따로 맞춘 카메라.
+ * 예전엔 그림자를 구장 그림 카메라(CAM)로 그려서, 공 ↔ 그림자 간격이 비행 중 줄었다가 홈 앞에서 다시 벌어짐
+ * → 눈이 그림자로 높이를 읽어 「막판에 공이 떠오르는」 것처럼 보였음.
+ * 이 카메라는 홈(z 0) · 투수판(z 18.4)에서 구장 그림 땅과 딱 맞고, 그 사이에선 간격이 거리에 따라 계속 커짐.
+ */
+const SHC = (() => {
+  const g0 = CAM.Y0 + CAM.camH * (CAM.F / CAM.Dc); // 구장 그림 땅: 홈
+  const g1 = CAM.Y0 + CAM.camH * (CAM.F / (18.4 + CAM.Dc)); // 투수판
+  const s0 = BC.F / BC.Dc;
+  const s1 = BC.F / (18.4 + BC.Dc);
+  const camH = (g0 - g1) / (s0 - s1);
+  return { camH, Y0: g0 - camH * s0 };
+})();
+export function shadowProj(x: number, z: number) {
+  const s = BC.F / (Math.max(z, -3) + BC.Dc);
+  return { x: CAM.cx + x * s, y: SHC.Y0 + SHC.camH * Math.min(s, SB_HOME), s };
+}
 /** 홈플레이트 면(z 0)의 화면 좌표 → 월드 (x, 높이) — 공 · 존 카메라 기준 (코스 정하기) */
 export function unprojPlate(sx: number, sy: number) {
   const sb = BC.F / BC.Dc;

@@ -42,7 +42,7 @@ export function cpuPlan(p: Pitcher, balls: number, strikes: number, bats: "R" | 
     // 유인구: 바깥 · 낮은 쪽
     const side = rng() < 0.62 ? away : -away;
     x = side * (ZONE.x + 0.06 + rng() * 0.14);
-    y = PITCHES[kind].by < -0.2 ? ZONE.y0 - 0.06 - rng() * 0.12 : ZONE.y0 + 0.1 + rng() * 0.45;
+    y = PITCHES[kind].low ? ZONE.y0 - 0.06 - rng() * 0.12 : ZONE.y0 + 0.1 + rng() * 0.45;
     if (rng() < 0.35) {
       x = rng.gauss() * 0.1;
       y = rng() < 0.6 ? ZONE.y0 - 0.12 - rng() * 0.1 : ZONE.y1 + 0.1;

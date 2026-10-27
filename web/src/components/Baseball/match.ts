@@ -32,12 +32,15 @@ import { boneTip, drawRig, pose, type Anim, type RigColors, type Skin } from "@/
 import { clamp, lerp, makeRng, smooth, type Rng } from "@/lib/baseball/rng";
 import pitcherThrowData from "@/data/baseball/pitcher-throw.json";
 import { sfx } from "./sfx";
-import { DH, DW, battingBg, drawFieldFrame, fieldBg, fproj, proj, unprojPlate } from "./view";
+import { DH, DW, PITCHER_FEET, battingBg, drawFieldFrame, fieldBg, fproj, proj, shadowProj, unprojPlate } from "./view";
 import { drawCatcher, drawPvBatter, drawPvPitcher, drawPvZone, drawUmpire, pvBackground, pvCam, pvProj, pvUnproj, type PvBatPose } from "./pitchView";
 
 /** 투수 그림 (pitcher-set.webp): 발 기준점 · 크기 (키 ≈ 115px, 목업 크기) */
 // scale: 낮은 정면 시점 구장(bat-low)의 투수판 크기에 맞춤 (예전 0.229 → 0.16) → 0.1956: 키 1.22배로 공 놓는 손을 20px 위로
 //   (손이 존 위 끝과 거의 같은 높이라 높은 볼이 홈 앞에서 솟아 보였음 — 발은 투수판 그대로, view.ts BC 도 손 229 에 맞춤)
+/** 날아오는 공 꼬리 길이 (초) · 나눌 점 수 */
+const TRAIL_SEC = 0.13;
+const TRAIL_N = 18;
 const PITCHER_STILL = { src: "/baseball/sprites/pitcher-set.webp", ax: 85, ay: 503, scale: 0.1956 };
 /**
  * 투구 줄 (그록 영상 → scripts/baseball-pitcher-video.py): 세트 → 다리 들기 → 내딛기 → 공 놓기(PITCH_RELEASE_T) → 팔로스루.
@@ -1515,7 +1518,7 @@ export class Match {
     const p = this.pitch;
     // 투수
     // 투수판(높이 0.25m) 위 · 크기는 구장 그림 목업 기준 (키 ≈ 135px)
-    const mp = proj(0, 0.25, 18.4);
+    const mp = PITCHER_FEET;
     const pitcherScale = 0.77;
     const pps = pose(PITCHER_RIG, this.pitAnim, this.pitAnim === PIT_THROW ? (this.pitAnimT * PIT_RIG_RELEASE_T) / PITCH_RELEASE_T : this.pitAnimT);
     const pFlip = this.pitcherNow.throws === "L";
@@ -1932,28 +1935,29 @@ export class Match {
     if (v.u > 1.25 || this.hbpHit) return;
     const sp = p.special;
     // 그림자
-    const g = pj(v.x, 0, Math.max(v.z, 0.2));
+    // 타석 화면은 공과 같은 원근의 그림자 (shadowProj — 공이 떠 보이던 원인), 투수 뷰는 그 카메라 그대로
+    const g = pj === proj ? shadowProj(v.x, Math.max(v.z, 0.2)) : pj(v.x, 0, Math.max(v.z, 0.2));
     ctx.fillStyle = "rgba(0,0,0,0.42)";
     ctx.beginPath();
     ctx.ellipse(g.x, g.y, Math.max(3.5, 0.06 * g.s), Math.max(1.5, 0.022 * g.s), 0, 0, Math.PI * 2);
     ctx.fill();
     // (예측 링은 뺌 — 공 둘레에 원이 생기는 건 실제 야구에 없음. 노리는 자리는 컨택존 · 초급 이글아이 점으로)
-    // 모션 블러 꼬리 (속도감 — 프로야구 스피리츠식): 최근 0.05초 자취를 가늘어지는 흰 띠로.
-    // 빠른 공일수록 같은 시간에 더 멀리 가니 꼬리가 길어짐. 마구는 마지막 25% 꼬리를 꺼서 늦은 변화를 숨김
+    // 꼬리 (속도감 + 휘는 길): 최근 TRAIL_SEC 자취를 가늘어지는 띠로 — 길게 남겨야 변화구가 휘는 곡선이 눈에 남음
+    // (예전 0.05초는 거의 점이라 궤적이 안 읽혔음). 마구는 마지막 25% 꼬리를 꺼서 늦은 변화를 숨김
     if (!(sp && v.u > 0.75) && !v.inHand) {
       const pts: { x: number; y: number; r: number }[] = [];
-      for (let i = 8; i >= 0; i--) {
-        const vt = pitchAt(p, Math.max(0, t - i * 0.0065));
+      for (let i = TRAIL_N; i >= 0; i--) {
+        const vt = pitchAt(p, Math.max(0, t - (i * TRAIL_SEC) / TRAIL_N));
         if (vt.inHand) continue;
         const a = toScreen(vt.x, vt.y, vt.z, vt.u);
         pts.push({ x: a.x, y: a.y, r: Math.max(2.6, BALLR_PX(a.s)) });
       }
       for (let i = 1; i < pts.length; i++) {
         const k = i / (pts.length - 1);
-        ctx.globalAlpha = 0.26 * k * k * v.vis;
+        ctx.globalAlpha = 0.3 * Math.pow(k, 1.6) * v.vis;
         ctx.strokeStyle = sp ? charById(sp).color : "#ffffff";
         ctx.lineCap = "round";
-        ctx.lineWidth = pts[i].r * 1.7 * (0.35 + 0.65 * k);
+        ctx.lineWidth = pts[i].r * 1.7 * (0.15 + 0.85 * k);
         ctx.beginPath();
         ctx.moveTo(pts[i - 1].x, pts[i - 1].y);
         ctx.lineTo(pts[i].x, pts[i].y);
