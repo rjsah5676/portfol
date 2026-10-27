@@ -10,7 +10,7 @@
 import { cpuGauge, cpuPlan, cpuSwing, cpuUseSpecial, SPEED_SCALE, type Diff } from "@/lib/baseball/ai";
 import { CZ_RANGE, contactZone, timingLabel, timingWindow } from "@/lib/baseball/contact";
 import { BP_PITCHER, TEAM_DEFS, charById, cutinUrl, faceUrl, makeTeam, swingOf, type Batter, type CharId, type Pitcher, type Team } from "@/lib/baseball/data";
-import { advanceToMyPA, botHook, mySide, newCareerGame, slotName, type CareerSetup, type MyPA } from "@/lib/baseball/careerGame";
+import { advanceToMyPA, botHook, mySide, newCareerGame, quickPA, slotName, type CareerSetup, type MyPA } from "@/lib/baseball/careerGame";
 import {
   BAT_BUNT, BAT_IDLE, BAT_LOAD, BAT_SWING, BATS, BATTER_RIG, HAIR, HELMETS, PIT_IDLE, PIT_RIG_RELEASE_T, PIT_THROW, PITCH_RELEASE_T, PITCHER_RIG,
   SKIN_TONES, SWING_HIT_T, baseSkin,
@@ -69,6 +69,8 @@ export interface MatchCfg {
   /** 정해진 두 팀으로 (구단 · 온라인 대결) — 없으면 기본 팀 vs 아무 팀. mine = 사용자 팀 */
   teams?: { mine: Team; cpu: Team };
   seed?: number;
+  /** 연습 경기: 한쪽만 직접 — "bat" 공격만(수비 이닝은 자동) · "pit" 수비만(공격 이닝은 자동). 없으면 둘 다 */
+  only?: "bat" | "pit";
   /** 관리자 테스트: 상대(봇) 투수 전원 구속 · 변화를 이 능력치(0~1000)로 (없으면 원래 값) */
   testPit?: { velo?: number; brk?: number };
 }
@@ -401,7 +403,7 @@ export class Match {
   }
 
   // ───────────── 타석 준비 ─────────────
-  private beginPA() {
+  private beginPA(): void {
     const s = this.s;
     if (s.over) return this.finish();
     if (this.cfg.career) {
@@ -434,6 +436,22 @@ export class Match {
           true
         );
       }
+    } else if (this.cfg.mode === "game" && this.cfg.only && (this.cfg.only === "bat") !== this.userBat) {
+      // 연습 경기 한쪽만: 내가 안 하는 이닝은 빠르게 확률로 진행하고 결과만 띄움
+      const me = s.opts.userHome ? 1 : 0;
+      const sc = [...s.score];
+      const half = `${s.inning}회${s.top ? "초" : "말"}`;
+      const atk = batSide(s) === me;
+      s.mission = null;
+      while (!s.over && (this.cfg.only === "bat") !== this.userBat) {
+        cpuManage(s, fieldSide(s));
+        const pa = quickPA(s, this.rng);
+        if (pa.halfOver && !s.over) nextHalf(s);
+      }
+      const d = atk ? s.score[me] - sc[me] : s.score[1 - me] - sc[1 - me];
+      this.setBanner(`${half} ${atk ? "우리 공격" : "상대 공격"} (자동)`, d ? `${d}점 ${atk ? "냈어요" : "줬어요"}` : atk ? "무득점" : "무실점", atk ? "#7dff9a" : "#7ad7ff", 1.4, true);
+      if (s.over) return this.finish();
+      return this.beginPA();
     } else if (this.cfg.mode === "game" && !this.userBat) {
       // (사용자 투수) 지치면 자동 교체 안내만 · 0 이면 강제
       const sd = s.sides[fieldSide(s)];

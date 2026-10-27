@@ -36,6 +36,8 @@ export default function BaseballApp() {
   const [diff, setDiff] = useState<Diff>(0);
   const [innings, setInnings] = useState(3);
   const [home, setHome] = useState(true);
+  /** 연습 경기: 한쪽만 직접 (공격만 · 수비만), 없으면 둘 다 */
+  const [only, setOnly] = useState<"bat" | "pit" | undefined>(undefined);
   const [cfg, setCfg] = useState<MatchCfg | null>(null);
   const [run, setRun] = useState(0);
   /** 내 구단 (없으면 첫 방문 → 구단 고르기) */
@@ -101,10 +103,10 @@ export default function BaseballApp() {
     setFoe(null);
     setOverNote(null);
     const c = loadClub();
-    if (!c) return start({ mode: "game", diff, innings, userHome: home, testPit });
+    if (!c) return start({ mode: "game", diff, innings, userHome: home, only, testPit });
     const rng = makeRng();
     const def = rng.pick(CLUB_DEFS.filter((d) => d.id !== c.teamId));
-    start({ mode: "game", diff, innings, userHome: home, teams: { mine: buildTeam(c), cpu: ghostTeam(def, teamRating(c), rng) }, testPit });
+    start({ mode: "game", diff, innings, userHome: home, teams: { mine: buildTeam(c), cpu: ghostTeam(def, teamRating(c), rng) }, only, testPit });
   };
 
   return (
@@ -263,6 +265,13 @@ export default function BaseballApp() {
                   {[3, 6, 9].map((n) => (
                     <Btn key={n} active={innings === n} className="px-4 py-1.5 text-sm" onClick={() => setInnings(n)}>
                       {n}회
+                    </Btn>
+                  ))}
+                </Row>
+                <Row label="직접 할 것">
+                  {([[undefined, "공격 · 수비 둘 다"], ["bat", "공격만 (타격)"], ["pit", "수비만 (투구)"]] as const).map(([v, label]) => (
+                    <Btn key={label} active={only === v} className="px-4 py-1.5 text-sm" onClick={() => setOnly(v)}>
+                      {label}
                     </Btn>
                   ))}
                 </Row>
