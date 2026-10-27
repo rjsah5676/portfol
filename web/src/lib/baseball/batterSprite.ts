@@ -161,6 +161,8 @@ const RETURN_T = 0.16;
 const STRIDE_RUSH = 0.05;
 const STRIDE = swingData.stride as [number, number][];
 const BAT_SEQ = swingData.bat as [number, number][];
+/** json bat 시간표의 임팩트 시각 (scripts/baseball-batter-video.py 의 SWING_HIT_T) */
+const BAT_SEQ_HIT = 0.15;
 const strideCell = (p: number) => {
   let c = STRIDE[0][0];
   for (const [cell, q] of STRIDE) if (q <= p + 1e-6) c = cell;
@@ -173,7 +175,7 @@ export function strideProg(t: number) {
 }
 const kickCell = (t: number) => Math.min(KICK_TOP, Math.max(0, Math.round(ease((t - LIFT_AT) / LIFT_TOTAL) * KICK_TOP)));
 /**
- * 스윙 줄 — 레그킥 최고점에서 바로: 발 내림 → 배트 끌고 나옴 → 임팩트(SWING_HIT_T 0.15초) → 뻗음 → 팔로스루.
+ * 스윙 줄 — 레그킥 최고점에서 바로: 발 내림 → 배트 끌고 나옴 → 임팩트(SWING_HIT_T) → 뻗음 → 팔로스루.
  * 원본: 그록 영상 (첫 · 중간 · 마지막 키프레임에 우리 그림을 넣어 사이를 채운 것) → scripts/baseball-batter-video.py
  */
 /** 장별 시간표 [칸, 이 시간까지] — scripts/baseball-batter-video.py 가 영상 프레임 → 실제 스윙 시간으로 바꿔 json 에 씀 */
@@ -193,8 +195,9 @@ export function batterFrame(a: Anim, t: number, sp = 1): number {
     const HIT = SWING_HIT_T;
     const rem = (1 - Math.min(1, Math.max(0, sp))) * STRIDE_RUSH;
     if (t < rem) return SWING_BASE + strideCell(sp + (1 - sp) * (t / rem));
-    // 남은 내딛기에 쓴 만큼 배트를 조금 빨리 돌려 임팩트는 항상 버튼 뒤 0.15초
-    const tb = t < HIT ? ((t - rem) * HIT) / (HIT - rem) : t;
+    // json 시간표는 임팩트 0.15초(BAT_SEQ_HIT) 기준 — 버튼 → 임팩트(SWING_HIT_T)에 맞춰 줄여 돌리고, 임팩트 뒤는 원래 속도
+    // (남은 내딛기에 쓴 만큼 배트를 조금 빨리 돌려 임팩트는 항상 버튼 뒤 SWING_HIT_T)
+    const tb = t < HIT ? ((t - rem) * BAT_SEQ_HIT) / (HIT - rem) : BAT_SEQ_HIT + (t - HIT);
     return SWING_BASE + (BAT_SEQ.find(([, e]) => tb < e) ?? BAT_SEQ[BAT_SEQ.length - 1])[0];
   }
   if (a === BAT_SWING) return pick(SWING, t);

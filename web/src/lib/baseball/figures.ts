@@ -85,12 +85,12 @@ export const BAT_LOAD: Anim = {
 };
 
 /**
- * 스윙 누르고 공 맞기까지 (초) = 실제 프로 타자의 다운스윙 시작 → 임팩트 시간.
- *   Blast Motion 「Time to Contact」 MLB 평균 0.149초 (프로 0.13~0.17)
- *   Escamilla 외 2009: 손이 앞으로 나오기 시작 → 공 맞음 0.14 ± 0.02초 (대학 · 프로)
+ * 스윙 누르고 공 맞기까지 (초). 실제 프로 다운스윙은 0.15초쯤(Blast Motion time to contact)이지만
+ * 그대로 두면 공이 6m 넘게 남았을 때(보통 속도 비행의 2/3) 눌러야 PERFECT 라 「보고 나가면」 못 맞힘 → 게임용으로 0.08초.
+ * 스윙 그림은 batterSprite 가 임팩트 칸이 이 시간에 오게 줄여서 돌림.
  * 아래 BAT_SWING 리그 키(0.07에 맞춤)는 그림이 안 왔을 때만 쓰는 예비라 그대로 둠.
  */
-export const SWING_HIT_T = 0.15;
+export const SWING_HIT_T = 0.08;
 export const BAT_SWING: Anim = {
   dur: 0.55,
   loop: false,
