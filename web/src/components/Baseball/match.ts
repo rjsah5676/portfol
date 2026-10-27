@@ -236,7 +236,6 @@ export class Match {
   /** 타석에 들어설 때 (또 2스트라이크 · 득점권 · 7회 이후처럼 상황이 맞을 때) 경기 능력치 특수능력 발동 연출 */
   boostFx: { t: number; items: { name: string; text: string }[]; bonus: { hit: number; power: number; run: number }; head: string } | null = null;
   private lastStrikes = 0;
-  timingColor = "#fff";
   pitchInfo = "";
   lastCall = "";
 
@@ -263,7 +262,8 @@ export class Match {
   slowmo = 0;
   zoomT = 0;
   /** 타이밍 오차 ms (+ 늦음) */
-  timingMs = 0;
+  /** 타이밍 오차 / 맞힘 창 (0 = 딱 맞음, ±1 = 창 끝) */
+  timingR = 0;
   /** 타구 정보 (타구속도 · 비거리) */
   batInfo: { text: string; t: number } | null = null;
   /** 움직임 줄이기 (흔들림 · 줌 끔) */
@@ -734,8 +734,7 @@ export class Match {
     const W = timingWindow(b.hit, this.buntArmed, !!this.decision.special);
     this.timingText = timingLabel(e, W);
     this.timingT = 0;
-    this.timingMs = Math.round(e * 1000);
-    this.timingColor = this.timingText === "PERFECT" ? "#ffd23f" : this.timingText === "GOOD" ? "#7dff9a" : "#ff9a7a";
+    this.timingR = e / W;
     this.pushUi();
   }
   /** 지금 스윙이 빈 스윙(판정 없음)인지 — 끝나면 하던 자세(대기 · 레그킥)로 돌아감 */
@@ -1843,24 +1842,8 @@ export class Match {
       ctx.fillStyle = "#fff";
       ctx.fillText(this.pitchInfo, ix + 8, z0.y + 15);
     }
-    // PERFECT · GOOD 은 안 띄움 (잘 맞혀도 아웃이면 기분만 나쁨) — 빠름 · 늦음만
-    if (this.timingText && this.timingText !== "PERFECT" && this.timingText !== "GOOD" && this.userBat && (this.phase === "flight" || this.phase === "contact" || this.phase === "call")) {
-      ctx.font = '26px "Black Han Sans", sans-serif';
-      ctx.textAlign = "center";
-      ctx.lineWidth = 5;
-      ctx.strokeStyle = "rgba(0,0,0,0.7)";
-      ctx.strokeText(this.timingText, 512, 296);
-      ctx.fillStyle = this.timingColor;
-      ctx.fillText(this.timingText, 512, 296);
-      ctx.textAlign = "center";
-      ctx.fillStyle = this.timingColor;
-      // 얼마나 빨랐나 늦었나 (ms)
-      const ms = `${this.timingMs > 0 ? "늦음 +" : "빠름 "}${this.timingMs}ms`;
-      ctx.font = '700 14px "JetBrains Mono", monospace';
-      ctx.lineWidth = 4;
-      ctx.strokeText(ms, 512, 318);
-      ctx.fillText(ms, 512, 318);
-    }
+    // 스윙 타이밍 게이지 (홈플레이트 아래): 가운데 = 딱 맞음, 왼쪽 빠름 · 오른쪽 늦음 — 판정선으로만 보여 줌
+    if (this.timingText && this.userBat && (this.phase === "flight" || this.phase === "contact" || this.phase === "call" || this.phase === "result")) this.drawTimingBar(ctx);
     if (this.batInfo && this.userBat) {
       const a = 1 - smooth(1.3, 1.8, this.batInfo.t);
       ctx.globalAlpha = a;
@@ -2660,8 +2643,12 @@ export class Match {
     }
     this.scoreBoard(ctx);
     this.countBoard(ctx);
-    this.batterCard(ctx);
-    this.pitcherCard(ctx);
+    // 타자 · 투수 카드는 타석 · 투구 화면에서만 (치고 난 뒤 수비 화면에선 가림)
+    const fieldView = this.phase === "field" || (this.phase === "result" && this.frames.length > 0 && this.lastWasField());
+    if (!fieldView) {
+      this.batterCard(ctx);
+      this.pitcherCard(ctx);
+    }
     if (this.userBat && BOOST_PHASES.includes(this.phase)) this.drawBoosts(ctx);
     // 미션 진행 중
     if (s.mission && this.phase !== "mission") {
@@ -2704,6 +2691,55 @@ export class Match {
       ctx.drawImage(im, -w / 2, -h, w, h);
       ctx.restore();
     }
+  }
+
+  private drawTimingBar(ctx: CanvasRenderingContext2D) {
+    const t = this.timingT;
+    const a = Math.min(1, t / 0.08) * (1 - smooth(1.5, 1.9, t));
+    if (a <= 0) return;
+    const cx = 512, y = 540, w = 240, h = 8;
+    const R = 1.5;
+    const xOf = (r: number) => cx + (clamp(r, -R, R) / R) * (w / 2);
+    ctx.save();
+    ctx.globalAlpha = a;
+    // 판
+    ctx.fillStyle = "rgba(6,10,24,0.72)";
+    ctx.beginPath();
+    ctx.roundRect(cx - w / 2 - 34, y - 9, w + 68, h + 18, 9);
+    ctx.fill();
+    // 구간: 바깥(헛스윙) · 빠름/늦음 · 좋음 · 딱
+    const band = (r0: number, r1: number, col: string) => {
+      ctx.fillStyle = col;
+      ctx.fillRect(xOf(r0), y, xOf(r1) - xOf(r0), h);
+    };
+    band(-R, R, "rgba(255,90,90,0.55)");
+    band(-1, 1, "rgba(255,160,80,0.75)");
+    band(-0.45, 0.45, "rgba(110,230,140,0.85)");
+    band(-0.15, 0.15, "#ffd23f");
+    ctx.strokeStyle = "rgba(255,255,255,0.35)";
+    ctx.lineWidth = 1;
+    ctx.strokeRect(xOf(-R), y, w, h);
+    ctx.fillStyle = "rgba(255,255,255,0.7)";
+    ctx.font = '800 10px "Nanum Gothic", sans-serif';
+    ctx.textAlign = "right";
+    ctx.fillText("빠름", cx - w / 2 - 5, y + 8);
+    ctx.textAlign = "left";
+    ctx.fillText("늦음", cx + w / 2 + 5, y + 8);
+    // 판정선: 가운데서 미끄러져 그 자리에 박힘
+    const k = 1 - Math.pow(1 - Math.min(1, t / 0.18), 3);
+    const mx = cx + (xOf(this.timingR) - cx) * k;
+    ctx.fillStyle = "#fff";
+    ctx.shadowColor = "rgba(0,0,0,0.8)";
+    ctx.shadowBlur = 4;
+    ctx.fillRect(mx - 1.5, y - 6, 3, h + 12);
+    ctx.beginPath();
+    ctx.moveTo(mx - 6, y - 12);
+    ctx.lineTo(mx + 6, y - 12);
+    ctx.lineTo(mx, y - 5);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+    ctx.textAlign = "left";
   }
 
   /** HUD 판 (목업: 짙은 남색 그라데이션 + 파란 테두리 · 윗변 밝은 줄) */
