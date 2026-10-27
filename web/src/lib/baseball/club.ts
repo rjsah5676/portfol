@@ -26,6 +26,8 @@ const W_BAT = { hit: 0.32, power: 0.28, def: 0.22, run: 0.18 } as const;
 const W_PIT = { control: 0.34, brk: 0.34, velo: 0.22, stamina: 0.1 } as const;
 /** 구속 → 0~1000 */
 export const veloN = (kmh: number) => clamp(((kmh - 120) / 45) * 1000, 0, 1000);
+/** 구속 능력치(0~1000) → km/h (veloN 의 반대) */
+export const veloKmh = (n: number) => Math.round(120 + (n / 1000) * 45);
 export const batOvr = (b: { hit: number; power: number; run: number; def: number }) =>
   Math.round(b.hit * W_BAT.hit + b.power * W_BAT.power + b.def * W_BAT.def + b.run * W_BAT.run);
 export const pitOvr = (p: { control: number; brk: number; velo: number; stamina: number }) =>

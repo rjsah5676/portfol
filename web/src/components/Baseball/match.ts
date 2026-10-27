@@ -21,6 +21,7 @@ import {
 } from "@/lib/baseball/game";
 import { PITCHES, ZONE, inZone, makePitch, pitchAt, plateCross, type Pitch, type PitchKind } from "@/lib/baseball/pitch";
 import { predictBall, type FieldEvent, type Frame } from "@/lib/baseball/play";
+import { veloKmh } from "@/lib/baseball/club";
 import { batterShift, commit, effectiveHit, evaluate, hitByPitch, type Outcome, type SwingDecision } from "@/lib/baseball/resolve";
 import { lookColors, lookSkin, uniColors } from "@/lib/baseball/look";
 import { batterFrame, drawBatter, KICK_HOLD_T, KICK_STEP_T, preloadBatter, strideProg, type SpriteLook } from "@/lib/baseball/batterSprite";
@@ -67,6 +68,8 @@ export interface MatchCfg {
   /** 정해진 두 팀으로 (구단 · 온라인 대결) — 없으면 기본 팀 vs 아무 팀. mine = 사용자 팀 */
   teams?: { mine: Team; cpu: Team };
   seed?: number;
+  /** 관리자 테스트: 상대(봇) 투수 전원 구속 · 변화를 이 능력치(0~1000)로 (없으면 원래 값) */
+  testPit?: { velo?: number; brk?: number };
 }
 
 export type Phase =
@@ -268,7 +271,9 @@ export class Match {
     const cpuDef = this.rng.pick(others);
     // 마선수 없음 — 캐릭터는 인연(대결)에서만 던지고 침
     let myTeam = cfg.teams?.mine ?? makeTeam(mine, this.rng);
-    const cpuTeam = cfg.teams?.cpu ?? makeTeam(cpuDef, this.rng);
+    let cpuTeam = cfg.teams?.cpu ?? makeTeam(cpuDef, this.rng);
+    const tp = cfg.testPit;
+    if (tp) cpuTeam = { ...cpuTeam, pitchers: cpuTeam.pitchers.map((pp) => ({ ...pp, velo: tp.velo ? veloKmh(tp.velo) : pp.velo, brk: tp.brk ?? pp.brk })) };
     if (cfg.bond) {
       const b = cfg.bond.batter;
       myTeam = { ...myTeam, batters: myTeam.batters.map(() => ({ ...b })) };

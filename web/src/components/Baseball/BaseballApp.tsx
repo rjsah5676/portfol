@@ -9,7 +9,7 @@ import { ACCENT, Btn, MenuBg, Modal, font } from "./ui";
 import CareerMode from "./Career";
 import { SPEEDS, finishBond, finishDirect, loadSpeed, saveSpeed } from "./careerStore";
 import { CLUB_DEFS, clubDefById } from "@/lib/baseball/data";
-import { buildTeam, findGhosts, ghostTeam, gradeOf, teamRating, type Club, type Ghost } from "@/lib/baseball/club";
+import { buildTeam, findGhosts, veloKmh, ghostTeam, gradeOf, teamRating, type Club, type Ghost } from "@/lib/baseball/club";
 import { makeRng } from "@/lib/baseball/rng";
 import { createClub, loadClub, recordOnline, saveClub } from "./clubStore";
 import ClubScreen from "./Club";
@@ -17,6 +17,11 @@ import { Emblem, GradeChip } from "./clubUi";
 import Online from "./Online";
 import Shop from "./Shop";
 import TeamPick from "./TeamPick";
+import { useAuth } from "@/lib/AuthContext";
+
+/** 개발 서버에서만 주소 옵션 (?admin=1) */
+const devAdmin = () => process.env.NODE_ENV !== "production" && typeof window !== "undefined" && new URLSearchParams(window.location.search).get("admin") === "1";
+const TEST_LV = [0, 300, 500, 700, 900] as const;
 
 /*
  * 픽셀 프로야구 — 메뉴 · 경기 화면(캔버스) · 조작 버튼.
@@ -39,6 +44,26 @@ export default function BaseballApp() {
   /** 지금 경기의 온라인 상대 (없으면 연습 · 더비) */
   const [foe, setFoe] = useState<Ghost | null>(null);
   const [overNote, setOverNote] = useState<string | null>(null);
+  // 관리자 테스트: 상대 투수 구속 · 변화 고정 (0 = 원래 값)
+  const auth = useAuth();
+  const isAdmin = auth.admin || devAdmin();
+  const [tVelo, setTVelo] = useState(0);
+  const [tBrk, setTBrk] = useState(0);
+  const testPit = isAdmin && (tVelo || tBrk) ? { velo: tVelo || undefined, brk: tBrk || undefined } : undefined;
+  const testRows = isAdmin && (
+    <div className="flex flex-col gap-1.5 rounded-lg border border-[#ff6b6b]/40 bg-[#ff6b6b]/[0.06] px-3 py-2">
+      <span className="text-[11px] font-bold text-[#ff8a8a]">관리자 테스트 · 상대 투수 전원</span>
+      {([["구속", tVelo, setTVelo], ["변화", tBrk, setTBrk]] as const).map(([label, v, set]) => (
+        <Row key={label} label={label}>
+          {TEST_LV.map((n) => (
+            <Btn key={n} active={v === n} className="px-3 py-1 text-[13px]" onClick={() => set(n)}>
+              {n ? (label === "구속" ? `${n} (${veloKmh(n)}km)` : n) : "원래"}
+            </Btn>
+          ))}
+        </Row>
+      ))}
+    </div>
+  );
   const first = useRef(true);
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- 브라우저 저장값
@@ -76,10 +101,10 @@ export default function BaseballApp() {
     setFoe(null);
     setOverNote(null);
     const c = loadClub();
-    if (!c) return start({ mode: "game", diff, innings, userHome: home });
+    if (!c) return start({ mode: "game", diff, innings, userHome: home, testPit });
     const rng = makeRng();
     const def = rng.pick(CLUB_DEFS.filter((d) => d.id !== c.teamId));
-    start({ mode: "game", diff, innings, userHome: home, teams: { mine: buildTeam(c), cpu: ghostTeam(def, teamRating(c), rng) } });
+    start({ mode: "game", diff, innings, userHome: home, teams: { mine: buildTeam(c), cpu: ghostTeam(def, teamRating(c), rng) }, testPit });
   };
 
   return (
@@ -268,6 +293,7 @@ export default function BaseballApp() {
               ) : (
                 <p className="text-[12px] text-white/45">내 구단을 고르면 우리 팀이 내 구단 선수들로 바뀌어요</p>
               )}
+              {testRows}
               <div className="mt-auto flex items-center justify-end">
                 <Btn className={`${font.title} px-10 py-2.5 text-xl`} onClick={playPractice}>
                   PLAY BALL
@@ -298,8 +324,9 @@ export default function BaseballApp() {
                   </Btn>
                 ))}
               </Row>
+              {testRows}
               <div className="mt-auto flex justify-end">
-                <Btn className={`${font.title} px-10 py-2.5 text-xl`} color="#ffd23f" onClick={() => start({ mode: "derby", diff, innings: 1, userHome: true })}>
+                <Btn className={`${font.title} px-10 py-2.5 text-xl`} color="#ffd23f" onClick={() => start({ mode: "derby", diff, innings: 1, userHome: true, testPit })}>
                   시작
                 </Btn>
               </div>
