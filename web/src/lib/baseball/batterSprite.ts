@@ -134,27 +134,27 @@ const SWING: [string, number][] = [
 /** 투수 와인드업에 맞춘 로드 → 레그킥 → 착지 (착지 자세로 기다림) */
 const LOAD: [string, number][] = [["load1", 0.07], ["load2", 0.13], ["kick1", 0.19], ["kick2", 0.25], ["plant1", 0.31], ["plant", 99]];
 /**
- * 새 그림 레그킥 줄 칸 (0 = 대기 1칸 … 끝 = 최고점) — 공 놓기 0.1초 전에 다리를 들기 시작해 최고점으로 공을 기다림.
- * 스윙하면 최고점에서 바로 스윙 줄로 이어지고(SWING_SEQ), 안 치고 보내면 판정이 난 뒤 match 가 시계를
- * KICK_STEP_T 로 넘겨 든 순서를 거꾸로 밟아 내림. 칸 수는 batter-load.json 을 따름 (사이 장 늘려도 코드 그대로).
+ * 새 그림 레그킥 줄 칸 (0 = 대기 1칸 … 끝 = 최고점) — 그록 영상에서 다리가 올라가는 구간만 (0~14프레임,
+ * 끝 칸 발 높이 = 정해둔 최고점 높이). 공 놓기 0.1초 전에 들기 시작해 처음 · 끝을 부드럽게 늦추며
+ * 공이 올 즈음 최고점에 닿음 (뚝 멈추는 느낌 없이). 스윙하면 그 자리에서 바로 스윙 줄로(SWING_SEQ),
+ * 안 치고 보내면 판정 뒤 match 가 시계를 KICK_STEP_T 로 넘겨 올린 길을 그대로 되밟아 내림.
  */
 export const KICK_STEP_T = 5;
 /** 레그킥 최고점에서 버티는 구간 안의 아무 시각 (빈 스윙 끝나고 공이 날아오는 중이면 여기로 돌아옴) */
 export const KICK_HOLD_T = 2;
 /** 들기 시작 = 공 놓기(PITCH_RELEASE_T 0.74초) 0.1초 전 */
 const LIFT_AT = 0.64;
-/** 대기 → 최고점 걸리는 시간 */
-const LIFT_TOTAL = 0.34;
+/** 대기 → 최고점 (공 놓은 뒤 보통 스윙 시작 즈음까지 — 빠른 공이면 거의 다 든 자리에서 스윙으로) */
+const LIFT_TOTAL = 0.5;
 /** 안 치고 보낼 때 내리는 데 걸리는 시간 */
-const LOWER_TOTAL = 0.31;
+const LOWER_TOTAL = 0.42;
 const KICK_TOP = loadData.n - 1;
-const KICK: [number, number][] = (() => {
-  const out: [number, number][] = [[0, LIFT_AT]];
-  for (let c = 1, t = LIFT_AT; c < KICK_TOP; c++) out.push([c, (t += LIFT_TOTAL / KICK_TOP)]);
-  out.push([KICK_TOP, KICK_STEP_T]);
-  for (let c = KICK_TOP - 1, u = KICK_STEP_T; c >= 0; c--) out.push([c, c === 0 ? 99 : (u += LOWER_TOTAL / KICK_TOP)]);
-  return out;
-})();
+/** 처음 · 끝 느리게 (0..1 → 0..1) */
+const ease = (u: number) => (u <= 0 ? 0 : u >= 1 ? 1 : u * u * (3 - 2 * u));
+const kickCell = (t: number) => {
+  const k = t < KICK_STEP_T ? ease((t - LIFT_AT) / LIFT_TOTAL) : 1 - ease((t - KICK_STEP_T) / LOWER_TOTAL);
+  return Math.min(KICK_TOP, Math.max(0, Math.round(k * KICK_TOP)));
+};
 /**
  * 스윙 줄 — 레그킥 최고점에서 바로: 발 내림 → 배트 끌고 나옴 → 임팩트(SWING_HIT_T 0.15초) → 뻗음 → 팔로스루.
  * 원본: 그록 영상 (첫 · 중간 · 마지막 키프레임에 우리 그림을 넣어 사이를 채운 것) → scripts/baseball-batter-video.py
@@ -173,7 +173,7 @@ export function batterFrame(a: Anim, t: number): number {
   if (a === BAT_LOAD) {
     // 다리 들기 전 · 다 내린 뒤엔 대기 동작을 그대로 (와인드업 동안 멈춰 있지 않게)
     if (t < LIFT_AT || t >= KICK_STEP_T + LOWER_TOTAL) return IDX.stance;
-    return KICK_BASE + (KICK.find(([, e]) => t < e) ?? KICK[KICK.length - 1])[0];
+    return KICK_BASE + kickCell(t);
   }
   if (a === BAT_BUNT) return IDX.bunt;
   // 대기: 방망이 까딱
