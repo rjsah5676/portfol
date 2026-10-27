@@ -83,6 +83,11 @@ export type CgId =
   | "s_open"
   | "s_note"
   | "s_choker"
+  | "s_kiss"
+  | "s_fold"
+  | "end_sera_true"
+  | "end_sera_good"
+  | "end_sera_lock"
   // 1~2주차
   | "y_closet"
   | "y_umbrella"
@@ -413,6 +418,10 @@ export type EndingId =
   | "clash"
   | "fired"
   | "ghost"
+  | "sera_true"
+  | "sera_good"
+  | "sera_lock"
+  | "sera_read"
   | "data0";
 
 export interface EndingInfo {

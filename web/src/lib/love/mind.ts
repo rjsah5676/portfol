@@ -1,7 +1,7 @@
 /*
  * 올인 러브 — 마음 읽기 (그 사람을 알아본 순간)
  * 호감(하트)은 설렘, 마음은 이해. 그 히로인만의 정답을 고르면 플래그(mA01~ · mY01~)가 켜지고,
- * mindA · mindY 는 켜진 플래그 수로 엔진이 계산함 (대본은 플래그만 켬 — 두 번 세지지 않음)
+ * mindA · mindY · mindS 는 켜진 플래그 수로 엔진이 계산함 (대본은 플래그만 켬 — 두 번 세지지 않음)
  * 화면: 숫자 없음. 그 자리 반응 + 연필 소리, 다음 날 아침 "알게 된 것" 한 줄, 관계 화면 「그녀에 대해 아는 것」,
  * 결정적 순간에 열리는 ✎ 선택지, 엔딩 직전 「네가 알아준 것들」
  */
@@ -60,6 +60,9 @@ export const MIND: MindMoment[] = [
   { id: "mS08", who: "sera", week: 2, note: "돈은 싫어한다. 다 잃은 밤엔 옆에 있어 주면 된다.", cap: "마감은 딜러가." },
   { id: "mS09", who: "sera", week: 3, note: "이기는 법은 이미 안다. 혼자 해내는 걸 옆에서 세어 주면 된다.", cap: "하나, 둘, 지금." },
   { id: "mS10", who: "sera", week: 3, note: "주는 건 좋아하지만, 3년을 통째로 넘기면 무너진다. '같이'가 정답.", cap: "곰 옆에 두고, 같이 펴요." },
+  { id: "mS12", who: "sera", week: 4, note: "혼자 주면 빚이 되고, 같이 주면 그냥 전해 주는 것.", cap: "같이 갖다줘요." },
+  { id: "mS13", who: "sera", week: 4, note: "대단한 이유보다, 이유 없이 먼저 움직인 손을 믿는다.", cap: "손이 먼저 움직였어요." },
+  { id: "mS14", who: "sera", week: 4, note: "돈도 칩도 아니다. 그날 두드린 손을 걸면 된다.", cap: "내 손이요." },
   { id: "mS11", who: "sera", week: 3, note: "'접어요'는 허락이 아니라 끝이다. 아직 살아야 할 때는 '아직'.", cap: "아직요." },
   { id: "mG01", who: "both", week: 4, note: "말없이 따라와 주길 바라는 사람과, 스스로는 칩을 못 집는 사람.", cap: "가운데 남은 칩." },
   { id: "mG02", who: "both", week: 4, note: "미워할 시간이 필요한 사람과, 용서받을 생각이 없는 사람.", cap: "같이 앉는 것과 용서는 별개." },
@@ -176,6 +179,7 @@ export function withMind(prev: Vars, next: Vars): Vars {
   if (!changed) return next;
   next.mindA = mindGot(next, "amy").length;
   next.mindY = mindGot(next, "yeonseo").length;
+  next.mindS = mindGot(next, "sera").length;
   next.mindG = mindGot(next, "both").length;
   return next;
 }
