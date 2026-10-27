@@ -40,13 +40,57 @@ post = sorted(set([F_HIT + 3, F_HIT + 6, F_HIT + 9] + list(range(F_HIT + 13, F_E
 pick = pre + bat + post
 
 
+# ── 실제 배트 스윙 시간 (배트 무게중심이 움직인 거리로 시간을 매김) ──
+# · 디딤발 착지 → 임팩트 0.19~0.20초, 숙련 타자의 배트 속도는 착지 뒤 거의 일정하다가 임팩트 0.1초 전부터
+#   급하게 올라 임팩트 순간 최고 (ISBS 일본 프로 타자 200Hz 촬영). 버튼 → 임팩트는 SWING_HIT_T 0.15초
+#   (Blast Motion time to contact 0.15초) — 레그킥을 스윙 직전까지 버티는 게임 규칙이라 착지는 버튼 뒤 T_PLANT 에 끝냄
+# · 배트 출발 ~ 임팩트: 일정하게 빨라짐(거리 ∝ 시간²) → 임팩트에서 제일 빠름
+# · 임팩트 뒤: 임팩트 속도에서 이어서 서서히 멈춤(거리 = 1 - (1-τ)³), 속도가 끊기지 않게 길이를 맞춤
+T_PLANT = 0.05
+
+
+def bat_center(path):
+    a = np.asarray(Image.open(path).convert("RGB")).astype(float) / 255
+    mx = a.max(-1); mn = a.min(-1); d = np.maximum(mx - mn, 1e-6); sat = d / np.maximum(mx, 1e-6)
+    r, g, b = a[..., 0], a[..., 1], a[..., 2]
+    hue = np.where(mx == r, ((g - b) / d) % 6, np.where(mx == g, (b - r) / d + 2, (r - g) / d + 4)) * 60
+    wood = (hue > 18) & (hue < 38) & (sat > 0.25) & (sat < 0.7) & (mx > 0.75)
+    lab, n = ndimage.label(wood)
+    if not n:
+        return None
+    sz = ndimage.sum(wood, lab, range(1, n + 1))
+    if sz.max() < 300:
+        return None
+    ys, xs = np.where(lab == int(np.argmax(sz)) + 1)
+    return xs.mean(), ys.mean()
+
+
+cs = {f: bat_center(fs[f]) for f in range(F_BAT, F_END + 1)}
+known = [f for f in cs if cs[f] is not None]
+xy = np.array([np.interp(range(F_BAT, F_END + 1), known, [cs[f][j] for f in known]) for j in (0, 1)]).T
+xy = ndimage.median_filter(xy, size=(5, 1), mode="nearest")
+dist = np.r_[0, np.cumsum(np.hypot(*np.diff(xy, axis=0).T))]  # dist[f - F_BAT]
+
+
+def prog(f, a, b):
+    """a~b 구간 진행도: 배트 이동 거리 75% + 프레임 25% (배트가 가려지거나 멈춘 칸이 0초가 되지 않게)"""
+    da, db = dist[a - F_BAT], dist[b - F_BAT]
+    return 0.75 * (dist[f - F_BAT] - da) / max(db - da, 1e-6) + 0.25 * (f - a) / max(b - a, 1)
+
+
+S_PRE = dist[F_HIT - F_BAT]
+S_POST = dist[F_END - F_BAT] - S_PRE
+# 임팩트 속도: 앞 구간 2·S_PRE/구간길이 = 뒤 구간 3·S_POST/T_POST
+T_POST = float(np.clip(1.5 * (SWING_HIT_T - T_PLANT) * S_POST / S_PRE, 0.22, 0.42))
+print("bat path pre", int(S_PRE), "post", int(S_POST), "T_POST", round(T_POST, 3))
+
+
 def tmap(f):
     if f <= F_BAT:
-        return 0.04 * f / max(F_BAT, 1)
+        return T_PLANT * f / max(F_BAT, 1)
     if f <= F_HIT:
-        return 0.04 + (SWING_HIT_T - 0.04) * (f - F_BAT) / (F_HIT - F_BAT)
-    u = (f - F_HIT) / (F_END - F_HIT)
-    return SWING_HIT_T + 0.3 * u ** 1.4
+        return T_PLANT + (SWING_HIT_T - T_PLANT) * prog(f, F_BAT, F_HIT) ** 0.5
+    return SWING_HIT_T + T_POST * (1 - (1 - prog(f, F_HIT, F_END)) ** (1 / 3))
 
 
 idm = json.load(open("src/data/baseball/batter-idle.json"))
