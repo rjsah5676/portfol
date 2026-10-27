@@ -139,6 +139,8 @@ const LOAD: [string, number][] = [["load1", 0.07], ["load2", 0.13], ["kick1", 0.
  * KICK_STEP_T 로 넘겨 든 순서를 거꾸로 밟아 내림. 칸 수는 batter-load.json 을 따름 (사이 장 늘려도 코드 그대로).
  */
 export const KICK_STEP_T = 5;
+/** 레그킥 최고점에서 버티는 구간 안의 아무 시각 (빈 스윙 끝나고 공이 날아오는 중이면 여기로 돌아옴) */
+export const KICK_HOLD_T = 2;
 /** 들기 시작 = 공 놓기(PITCH_RELEASE_T 0.74초) 0.1초 전 */
 const LIFT_AT = 0.64;
 /** 대기 → 최고점 걸리는 시간 */

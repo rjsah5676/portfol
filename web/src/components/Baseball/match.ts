@@ -23,7 +23,9 @@ import { PITCHES, ZONE, inZone, makePitch, pitchAt, plateCross, type Pitch, type
 import { predictBall, type FieldEvent, type Frame } from "@/lib/baseball/play";
 import { commit, evaluate, type Outcome, type SwingDecision } from "@/lib/baseball/resolve";
 import { lookColors, lookSkin, uniColors } from "@/lib/baseball/look";
-import { batterFrame, drawBatter, KICK_STEP_T, preloadBatter, type SpriteLook } from "@/lib/baseball/batterSprite";
+import { batterFrame, drawBatter, KICK_HOLD_T, KICK_STEP_T, preloadBatter, type SpriteLook } from "@/lib/baseball/batterSprite";
+/** 빈 스윙 한 번 길이 (이 시간 지나면 다시 휘두를 수 있고, 하던 자세로 돌아감) */
+const FREE_SWING_T = 0.5;
 import { BATCOL } from "@/lib/baseball/look";
 import { boneTip, drawRig, pose, type Anim, type RigColors, type Skin } from "@/lib/baseball/rig";
 import { clamp, lerp, makeRng, smooth, type Rng } from "@/lib/baseball/rng";
@@ -327,7 +329,7 @@ export class Match {
       phase: this.phase,
       mode: this.cfg.mode,
       userBat: ub,
-      canSwing: ub && (this.phase === "ready" || this.phase === "windup" || this.phase === "flight") && this.swingStart < 0,
+      canSwing: ub && this.swingStart < 0 && (this.phase === "ready" || this.phase === "windup" || this.phase === "flight" || this.phase === "call" || this.phase === "result"),
       bunt: this.buntArmed,
       spArmed: ub ? this.spArmed : this.useBallSp,
       spHero: hero && (this.cfg.mode !== "derby" || ub),
@@ -438,6 +440,7 @@ export class Match {
     this.batAnim = BAT_IDLE;
     this.batAnimT = 0;
     this.batFrom = undefined;
+    this.freeSwing = false;
     this.pitAnim = PIT_IDLE;
     this.updateSkins();
     const m = this.cfg.mode !== "derby" ? s.mission ?? maybeMission(s, this.rng) : null;
@@ -550,7 +553,7 @@ export class Match {
     this.setPhase("windup");
     this.pitAnim = PIT_THROW;
     this.pitAnimT = 0;
-    if (this.userBat && this.swingStart < 0 && !this.buntArmed) this.playBat(BAT_LOAD);
+    if (this.userBat && this.swingStart < 0 && !this.buntArmed && !this.freeSwing) this.playBat(BAT_LOAD);
   }
 
   private release() {
@@ -584,22 +587,24 @@ export class Match {
   pressSwing() {
     if (this.paused) return;
     if (this.phase === "mission") return this.skipMission();
+    // 공이 나온 뒤 한 번 휘둘렀으면 그 공은 끝
     if (!this.userBat || this.swingStart >= 0) return;
-    if (this.phase !== "flight" && this.phase !== "windup") return;
-    const p = this.pitch;
-    // 공이 나오기 전 스윙 = 헛스윙 (너무 빠름)
-    const tf = this.phase === "windup" ? -(PITCH_RELEASE_T - this.pt) : this.tf;
-    const dur = p?.dur ?? 0.6;
-    const e = tf + SWING_HIT_T - dur;
     const b = this.batterNow;
-    this.decision = { swing: true, e, bunt: this.buntArmed, special: this.spArmed ? swingOf(b) : undefined };
-    this.swingStart = tf;
-    if (this.phase === "windup") {
-      // 아직 공 없음 → 헛스윙 처리는 공이 나온 뒤
-      this.swingEarly = true;
-    } else {
-      this.outcome = evaluate(this.s, p!, this.decision, this.rng);
+    if (this.phase !== "flight") {
+      // 공 던지기 전 · 공 지나가 판정 난 뒤 = 빈 스윙 (판정 없음, 몇 번이든)
+      const free = this.phase === "ready" || this.phase === "windup" || this.phase === "call" || this.phase === "result";
+      if (!free || this.buntArmed || (this.batAnim === BAT_SWING && this.batAnimT < FREE_SWING_T)) return;
+      this.freeSwing = true;
+      this.playBat(BAT_SWING);
+      sfx.swing(0.8 + (b.power / 1000) * 0.4);
+      return;
     }
+    const p = this.pitch!;
+    const e = this.tf + SWING_HIT_T - p.dur;
+    this.decision = { swing: true, e, bunt: this.buntArmed, special: this.spArmed ? swingOf(b) : undefined };
+    this.swingStart = this.tf;
+    this.freeSwing = false;
+    this.outcome = evaluate(this.s, p, this.decision, this.rng);
     this.computeTilt();
     if (!this.buntArmed) {
       this.playBat(BAT_SWING);
@@ -611,7 +616,8 @@ export class Match {
     this.timingColor = this.timingText === "PERFECT" ? "#ffd23f" : this.timingText === "GOOD" ? "#7dff9a" : "#ff9a7a";
     this.pushUi();
   }
-  swingEarly = false;
+  /** 지금 스윙이 빈 스윙(판정 없음)인지 — 끝나면 하던 자세(대기 · 레그킥)로 돌아감 */
+  freeSwing = false;
 
   toggleBunt() {
     if (!this.userBat || this.swingStart >= 0 || this.cfg.mode === "derby") return;
@@ -775,15 +781,8 @@ export class Match {
 
   private resolveFlight() {
     const p = this.pitch!;
-    if (!this.outcome) {
-      // 안 휘두름 (또는 공 나오기 전에 휘두름)
-      if (this.swingEarly && this.decision) {
-        this.outcome = { call: "swingMiss", at: plateCross(p), bad: true };
-      } else {
-        this.outcome = evaluate(this.s, p, null, this.rng);
-      }
-    }
-    this.swingEarly = false;
+    // 안 휘두름
+    if (!this.outcome) this.outcome = evaluate(this.s, p, null, this.rng);
   }
 
   private specialSound(id: CharId, when: "start") {
@@ -1047,6 +1046,13 @@ export class Match {
     if (this.impact && (this.impact.t += dt) > 0.22) this.impact = null;
     // 리그 애니
     this.batAnimT += dt;
+    // 빈 스윙이 끝나면 하던 자세로: 와인드업 중이면 레그킥 시계에 맞춰, 공이 날아오는 중이면 최고점, 그 밖엔 대기
+    if (this.freeSwing && this.batAnim === BAT_SWING && this.batAnimT > FREE_SWING_T) {
+      this.freeSwing = false;
+      const kick = this.userBat && !this.buntArmed && (this.phase === "windup" || this.phase === "flight");
+      this.playBat(kick ? BAT_LOAD : BAT_IDLE);
+      if (kick) this.batAnimT = this.phase === "windup" ? this.pt : KICK_HOLD_T;
+    }
     // 안 치고 보내면 판정(볼 · 스트라이크)이 난 뒤에야 레그킥을 내림 — 공이 날아오는 동안은 최고점으로 버팀
     if (this.batAnim === BAT_LOAD && this.batAnimT < KICK_STEP_T && this.phase !== "windup" && this.phase !== "flight") this.batAnimT = KICK_STEP_T;
     if (this.batFrom) {
@@ -1193,6 +1199,7 @@ export class Match {
     this.useBallSp = false;
     this.batAnim = BAT_IDLE;
     this.batAnimT = 0;
+    this.freeSwing = false;
     this.pitAnim = PIT_IDLE;
     this.toPitch();
   }
