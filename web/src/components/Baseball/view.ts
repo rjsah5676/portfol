@@ -23,9 +23,7 @@ export const CAM = { F: 688.7, Dc: 2.268, camH: 0.472, Y0: 331.7, cx: 512 };
  * 땅(높이 0)은 구장 그림 카메라 그대로 (그림자 · 땅에 튄 공), 높이 0 ~ 0.43m 사이는 섞음.
  */
 export const BC = { F: 1546, Dc: 5.09, camH: 0.815, Y0: 302 };
-const SB_RUB = BC.F / (18.44 + BC.Dc);
 const SB_HOME = BC.F / BC.Dc;
-const HIGH_DAMP = 1.0;
 const clamp01 = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v);
 export function proj(x: number, y: number, z: number) {
   const s = CAM.F / (z + CAM.Dc);
@@ -35,10 +33,10 @@ export function proj(x: number, y: number, z: number) {
   if (w === 0) return { x: gx, y: gy, s };
   const sb = BC.F / (Math.max(z, -3) + BC.Dc);
   const bx = CAM.cx + x * sb;
-  // 존 위 끝(0.9m) 넘는 높은 공는 홈에 가까워질수록 위로 솟아 보이는 걸 눌러 줌 — 존은 그대로, 높은 볼도 손 높이 아래로 들어옴
+  // 한 카메라 원근 그대로라 직선으로 날아온 공은 화면에서도 직선 (예전엔 높은 공을 눌러 주는 보정 때문에 직구가 휘어 보였음)
   // 홈 지나 포수 쪽(z < 0)은 위아래 원근을 홈에서 멈춤 — 안 친 공이 미트로 가며 위 · 아래로 튀어 보이지 않게 (크기 · 좌우는 계속 커짐)
   const sv = Math.min(sb, SB_HOME);
-  const by = BC.Y0 - (y - BC.camH) * sv + (y > 0.9 ? HIGH_DAMP * (y - 0.9) * (sv - SB_RUB) : 0);
+  const by = BC.Y0 - (y - BC.camH) * sv;
   return { x: gx + (bx - gx) * w, y: gy + (by - gy) * w, s: s + (sb - s) * w };
 }
 export const MOUND = proj(0, 0, 18.4);
