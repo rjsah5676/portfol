@@ -133,26 +133,27 @@ const SWING: [string, number][] = [
 /** 투수 와인드업에 맞춘 로드 → 레그킥 → 착지 (착지 자세로 기다림) */
 const LOAD: [string, number][] = [["load1", 0.07], ["load2", 0.13], ["kick1", 0.19], ["kick2", 0.25], ["plant1", 0.31], ["plant", 99]];
 /**
- * 새 그림 레그킥 줄 칸 (0 = 대기 1칸 … 6 = 최고점) — 공 놓기 0.1초 전에 다리를 들기 시작해 최고점으로 공을 기다림.
- * 내릴 때는 든 순서를 거꾸로 빠르게: 스윙이면 임팩트(0.07초) 전에 착지(STRIDE), 안 치고 보내면 공이 홈에 오기 0.1초 전에
- * match 가 시계를 KICK_STEP_T 로 넘겨 내림.
+ * 새 그림 레그킥 줄 칸 (0 = 대기 1칸 … 끝 = 최고점) — 공 놓기 0.1초 전에 다리를 들기 시작해 최고점으로 공을 기다림.
+ * 내릴 때는 든 순서를 거꾸로: 스윙이면 임팩트(0.07초) 전에 착지(STRIDE), 안 치고 보내면 공이 홈에 오기 0.1초 전에
+ * match 가 시계를 KICK_STEP_T 로 넘겨 내림. 칸 수는 batter-load.json 을 따름 (사이 장 늘려도 코드 그대로).
  */
 export const KICK_STEP_T = 5;
 /** 들기 시작 = 공 놓기(PITCH_RELEASE_T 0.74초) 0.1초 전 */
 const LIFT_AT = 0.64;
-const LIFT_DT = [0.07, 0.07, 0.06, 0.06, 0.06]; // 1~5칸 머무는 시간 (들기 = 0.32초)
-/** 안 치고 보낼 때 내리는 한 칸 시간 (0.05 × 5칸 = 0.25초) */
-const LOWER_DT = 0.05;
+/** 대기 → 최고점 걸리는 시간 */
+const LIFT_TOTAL = 0.24;
+/** 안 치고 보낼 때 내리는 데 걸리는 시간 */
+const LOWER_TOTAL = 0.22;
+const KICK_TOP = loadData.n - 1;
 const KICK: [number, number][] = (() => {
   const out: [number, number][] = [[0, LIFT_AT]];
-  let t = LIFT_AT;
-  LIFT_DT.forEach((d, i) => out.push([i + 1, (t += d)]));
-  out.push([6, KICK_STEP_T]);
-  for (let c = 5, u = KICK_STEP_T; c >= 0; c--) out.push([c, c === 0 ? 99 : (u += LOWER_DT)]);
+  for (let c = 1, t = LIFT_AT; c < KICK_TOP; c++) out.push([c, (t += LIFT_TOTAL / KICK_TOP)]);
+  out.push([KICK_TOP, KICK_STEP_T]);
+  for (let c = KICK_TOP - 1, u = KICK_STEP_T; c >= 0; c--) out.push([c, c === 0 ? 99 : (u += LOWER_TOTAL / KICK_TOP)]);
   return out;
 })();
-/** 스윙 첫머리 = 최고점에서 든 순서 거꾸로 내리기 (0.012초씩 → 0.07초 임팩트 전에 착지) — 스윙 그림 나오기 전까지는 대기 1칸으로 버팀 */
-const STRIDE: [number, number][] = [5, 4, 3, 2, 1, 0].map((c, i) => [c, c === 0 ? 99 : (i + 1) * 0.012] as [number, number]);
+/** 스윙 첫머리 = 최고점에서 든 순서 거꾸로 내리기 (0.07초 임팩트 전에 착지) — 스윙 그림 나오기 전까지는 대기 1칸으로 버팀 */
+const STRIDE: [number, number][] = Array.from({ length: KICK_TOP }, (_, i) => KICK_TOP - 1 - i).map((c, i) => [c, c === 0 ? 99 : ((i + 1) * 0.06) / KICK_TOP] as [number, number]);
 /** batterFrame 이 새 그림 레그킥 칸을 돌려줄 때 더하는 값 (옛 프레임 번호와 안 겹치게) */
 const KICK_BASE = 1000;
 const pick = (tbl: [string, number][], t: number) => IDX[(tbl.find(([, e]) => t < e) ?? tbl[tbl.length - 1])[0]];
