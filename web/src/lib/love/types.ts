@@ -79,6 +79,7 @@ export type BgId =
 export type CgId =
   // v4 세라
   | "s_keypad"
+  | "past"
   | "s_open"
   | "s_note"
   // 1~2주차
