@@ -193,7 +193,8 @@ const pick = (tbl: [string, number][], t: number) => IDX[(tbl.find(([, e]) => t 
 export function batterFrame(a: Anim, t: number, sp = 1): number {
   if (a === BAT_SWING && stillImg()) {
     const HIT = SWING_HIT_T;
-    const rem = (1 - Math.min(1, Math.max(0, sp))) * STRIDE_RUSH;
+    // 남은 내딛기는 임팩트 시간의 60% 안에서 (STRIDE_RUSH 가 SWING_HIT_T 보다 길면 배트 돌 시간이 0 이 됨)
+    const rem = (1 - Math.min(1, Math.max(0, sp))) * Math.min(STRIDE_RUSH, HIT * 0.6);
     if (t < rem) return SWING_BASE + strideCell(sp + (1 - sp) * (t / rem));
     // json 시간표는 임팩트 0.15초(BAT_SEQ_HIT) 기준 — 버튼 → 임팩트(SWING_HIT_T)에 맞춰 줄여 돌리고, 임팩트 뒤는 원래 속도
     // (남은 내딛기에 쓴 만큼 배트를 조금 빨리 돌려 임팩트는 항상 버튼 뒤 SWING_HIT_T)
