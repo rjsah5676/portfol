@@ -5,7 +5,6 @@
  * 결과는 이 브라우저에 승패 · 대전 점수로 저장.
  */
 import { useState } from "react";
-import { DIFF_NAME } from "@/lib/baseball/ai";
 import { clubDefById } from "@/lib/baseball/data";
 import { batOvr, findGhosts, gradeOf, nextStarter, pitOvr, teamRating, type Club, type Ghost } from "@/lib/baseball/club";
 import { ACCENT, Btn, font } from "./ui";
@@ -161,7 +160,7 @@ export default function Online({
                         <span className="font-mono text-[16px] font-bold">{o.rating}</span>
                       </div>
                       <span className="mt-1 rounded px-1.5 text-[11px] font-bold text-[#111]" style={{ background: t.color }}>
-                        {t.name} · 봇 {DIFF_NAME[o.tier]}
+                        {t.name}
                       </span>
                       <div className="mt-1 w-full truncate text-[10.5px] text-white/55">간판 {o.star}</div>
                       <div className="mt-0.5 font-mono text-[11px]">

@@ -247,16 +247,16 @@ export function drawUmpire(g: CanvasRenderingContext2D, c: PvCam, side: number) 
   const p = pvProj(c, side * 0.32, 0, -1.9);
   const s = p.s;
   shadow(g, p.x, p.y, 0.38 * s);
+  // 무릎 굽혀 허리 숙인 자세 (머리가 포수 머리 바로 위로 보일 만큼만)
   g.fillStyle = "#6b7184";
-  rr(g, p.x - 0.24 * s, p.y - 0.7 * s, 0.2 * s, 0.68 * s, 0.06 * s);
-  rr(g, p.x + 0.04 * s, p.y - 0.7 * s, 0.2 * s, 0.68 * s, 0.06 * s);
+  rr(g, p.x - 0.24 * s, p.y - 0.58 * s, 0.2 * s, 0.56 * s, 0.06 * s);
+  rr(g, p.x + 0.04 * s, p.y - 0.58 * s, 0.2 * s, 0.56 * s, 0.06 * s);
   g.fillStyle = "#1e2740";
-  rr(g, p.x - 0.3 * s, p.y - 1.22 * s, 0.6 * s, 0.6 * s, 0.16 * s);
+  rr(g, p.x - 0.3 * s, p.y - 1.06 * s, 0.6 * s, 0.54 * s, 0.16 * s);
   g.fillStyle = "#151b2e";
-  rr(g, p.x - 0.33 * s, p.y - 1.2 * s, 0.14 * s, 0.4 * s, 0.06 * s);
-  rr(g, p.x + 0.19 * s, p.y - 1.2 * s, 0.14 * s, 0.4 * s, 0.06 * s);
-  // 머리: 모자 + 마스크
-  const hy = p.y - 1.33 * s;
+  rr(g, p.x - 0.33 * s, p.y - 1.02 * s, 0.14 * s, 0.38 * s, 0.06 * s);
+  rr(g, p.x + 0.19 * s, p.y - 1.02 * s, 0.14 * s, 0.38 * s, 0.06 * s);
+  const hy = p.y - 1.17 * s;
   g.fillStyle = "#e3b48f";
   g.beginPath();
   g.arc(p.x, hy, 0.12 * s, 0, Math.PI * 2);

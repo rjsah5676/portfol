@@ -32,3 +32,9 @@ desktop.ini
 # TABLE TOWN 작업용 원본 · 옮기기 파일 (게임이 쓰는 건 web/public/town 에 있음)
 web/assets/town-snd/
 web/assets/town-src/
+
+# 야구 효과음 원본 (일레븐랩스 받은 그대로 · 게임이 쓰는 건 web/public/baseball/sfx)
+.baseball-sfx-src/
+
+# Claude 작업 트리 (병렬 작업용 임시 worktree)
+.claude/worktrees/

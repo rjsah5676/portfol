@@ -61,13 +61,13 @@ export function contactZone(hit: number) {
  */
 export const CZ_RANGE = { x: 0.2, y0: ZONE.mid - 0.17, y1: ZONE.mid + 0.17 };
 /**
- * 컨택존 배율: 존 가운데 1.08 → 존 끝 0.96 (잘 노리면 덤), 밖으로 멀어질수록 줄어 최저 0.3
+ * 컨택존 배율: 존 가운데 1.08 → 존 끝 0.96 (잘 노리면 덤), 밖으로 멀어질수록 줄어 최저 0.4
  * (존 밖이라고 무조건 헛스윙 · 아웃은 아님 — 타이밍이 좋으면 빗맞은 안타 · 파울은 나옴)
  */
 export function zoneFactor(at: { x: number; y: number }, cz: { x: number; y: number }, hit: number) {
   const { hw, hh } = contactZone(hit);
   const dn = Math.hypot((at.x - cz.x) / hw, (at.y - cz.y) / hh);
-  return { k: dn <= 1 ? 1.08 - 0.12 * dn * dn : Math.max(0.3, 0.96 - 0.5 * (dn - 1)), dn };
+  return { k: dn <= 1 ? 1.08 - 0.12 * dn * dn : Math.max(0.4, 0.96 - 0.35 * (dn - 1)), dn };
 }
 
 /** 타이밍 창 (초) */

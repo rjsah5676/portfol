@@ -481,8 +481,9 @@ function Create({ hof, onBack, onStart }: { hof: HofEntry[]; onBack: () => void;
   const [bats, setBats] = useState<"R" | "L">("R");
   const [type, setType] = useState<BatType>("contact");
   const [diff, setDiff] = useState<Diff>(1);
-  const [look, setLook] = useState<Look>(() => ({ ...DEFAULT_LOOK, hair: Math.floor(Math.random() * 3), face: Math.floor(Math.random() * 3) }));
-  const [tab, setTab] = useState<"look" | "base">("look");
+  // 외형 커스터마이징은 잠금 (경기 그림이 아직 한 가지라 골라도 안 바뀜) — 기본 외형 고정
+  const look: Look = DEFAULT_LOOK;
+  const [tab, setTab] = useState<"look" | "base">("base");
   const t = TYPES[type];
   const start = () => {
     const lg = legacy ? hof.find((h) => h.id === legacy.id) : undefined;
@@ -516,12 +517,16 @@ function Create({ hof, onBack, onStart }: { hof: HofEntry[]; onBack: () => void;
       </div>
     );
   const lookTab = (
-    <div className="flex flex-1 flex-col gap-2">
+    <div className="relative flex flex-1 flex-col gap-2">
+      <div className="absolute inset-0 z-10 flex flex-col items-center justify-center rounded-xl bg-black/55 text-center backdrop-blur-[1px]">
+        <div className={`${font.title} text-[26px] text-white/90`}>🔒 커스터마이징 준비 중</div>
+        <div className="mt-1 text-[12.5px] text-white/60">헤어 · 얼굴 · 피부 · 배트 · 유니폼 꾸미기는 다음 업데이트에서 열려요</div>
+      </div>
       {LOOK_KEYS.map((k) => (
-        <div key={k} className="flex items-center gap-2">
+        <div key={k} className="flex items-center gap-2 opacity-40">
           <span className="w-[56px] text-[13px] font-bold text-white/70">{LOOK_LABEL[k]}</span>
           {LOOK_OPTS[k].map((nm, i) => (
-            <Btn key={nm} active={look[k] === i} className="flex w-[118px] items-center justify-center gap-1.5 py-1.5 text-[13px]" onClick={() => setLook({ ...look, [k]: i })}>
+            <Btn key={nm} disabled active={look[k] === i} className="flex w-[118px] items-center justify-center gap-1.5 py-1.5 text-[13px]">
               {k === "skin" && <span className="inline-block h-[14px] w-[14px] rounded-full border border-black/40" style={{ background: SKINS[i].c }} />}
               {nm}
             </Btn>
@@ -550,8 +555,8 @@ function Create({ hof, onBack, onStart }: { hof: HofEntry[]; onBack: () => void;
         </div>
         <div className="flex min-w-0 flex-1 flex-col gap-2">
           <div className="flex gap-1.5">
-            <Btn active={tab === "look"} className="px-4 py-1 text-[13px]" onClick={() => setTab("look")}>
-              외형
+            <Btn active={tab === "look"} className="px-4 py-1 text-[13px]" color="#8b93b8" onClick={() => setTab("look")}>
+              🔒 외형
             </Btn>
             <Btn active={tab === "base"} className="px-4 py-1 text-[13px]" onClick={() => setTab("base")}>
               기본 · 타입
@@ -604,7 +609,7 @@ function Create({ hof, onBack, onStart }: { hof: HofEntry[]; onBack: () => void;
               타자
             </Btn>
             <Btn disabled className="px-3 py-0.5 text-[12.5px]" color="#8b93b8">
-              투수 · 준비 중
+              🔒 투수 육성 · 잠금
             </Btn>
             <span className="ml-2 text-[13px] font-bold text-white/70">타입</span>
           </div>

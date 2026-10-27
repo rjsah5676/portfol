@@ -52,6 +52,9 @@ export default function BaseballApp() {
   }, [screen]);
 
   const start = (c: MatchCfg) => {
+    // 온라인 상대 · 결과 줄은 그 판에만 (더비 · 육성 · 연습 경기 결과가 대전 기록에 들어가던 문제)
+    setFoe(null);
+    setOverNote(null);
     setCfg({ speed: loadSpeed(), ...c });
     setRun((n) => n + 1);
     setScreen("play");
@@ -64,9 +67,9 @@ export default function BaseballApp() {
   const playOnline = (g: Ghost, inn: number, userHome: boolean) => {
     const c = loadClub();
     if (!c) return;
+    // 난이도(공 속도 · 이글아이)는 중급 고정 — 상대 강함은 상대 구단 능력치로만
+    start({ mode: "game", diff: 1, innings: inn, userHome, teams: { mine: buildTeam(c), cpu: g.team } });
     setFoe(g);
-    setOverNote(null);
-    start({ mode: "game", diff: g.tier as Diff, innings: inn, userHome, teams: { mine: buildTeam(c), cpu: g.team } });
   };
   /** 연습 경기: 구단이 있으면 우리 팀 = 내 구단, 상대 = 비슷한 전력 AI 구단 */
   const playPractice = () => {
@@ -86,7 +89,19 @@ export default function BaseballApp() {
           key={run}
           cfg={cfg}
           onExit={() => setScreen(cfg.career || cfg.bond ? "career" : foe ? "online" : "title")}
-          onAgain={() => (foe ? playOnline(foe, cfg.innings, cfg.userHome) : cfg.teams ? playPractice() : start({ ...cfg, seed: undefined }))}
+          onAgain={() => (foe ? setScreen("online") : cfg.teams ? playPractice() : start({ ...cfg, seed: undefined }))}
+          online={!!foe}
+          onAbandon={
+            foe
+              ? (mm) => {
+                  // 온라인: 공을 하나라도 던진 뒤 나가면 패배로 기록 (지고 있을 때 도망 방지)
+                  if (mm.ui.over || !mm.s.sides.some((sd) => sd.pit.some((pp) => pp.pitches > 0))) return;
+                  recordOnline(foe, false, `${mm.s.score[0]}:${mm.s.score[1]}`);
+                  const c = loadClub();
+                  setGhosts(c ? findGhosts(c) : null);
+                }
+              : undefined
+          }
           note={overNote}
           onOver={
             foe
@@ -352,6 +367,8 @@ function Play({
   onCareerDone,
   onOver,
   note,
+  online,
+  onAbandon,
 }: {
   cfg: MatchCfg;
   onExit: () => void;
@@ -361,6 +378,10 @@ function Play({
   onOver?: (win: boolean | null, score: string) => void;
   /** 결과 창에 덧붙일 줄 */
   note?: string | null;
+  /** 온라인 대전 (다시 하기 대신 새 상대 · 나가면 패배) */
+  online?: boolean;
+  /** 경기 도중 나감 (온라인 패배 기록) */
+  onAbandon?: (m: Match) => void;
 }) {
   const { k, fs, canFs, toggleFs } = useStage();
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -721,8 +742,15 @@ function Play({
             >
               소리 {muted ? "켜기" : "끄기"}
             </Btn>
-            <Btn className="py-2 text-sm" color="#ff7a7a" onClick={onExit}>
-              {cfg.career ? "나가기 (남은 경기는 자동 진행으로 반영)" : cfg.bond ? "나가기 (다음에 다시 도전)" : "메뉴로 나가기 (기록 안 남음)"}
+            <Btn
+              className="py-2 text-sm"
+              color="#ff7a7a"
+              onClick={() => {
+                if (m) onAbandon?.(m);
+                onExit();
+              }}
+            >
+              {cfg.career ? "나가기 (남은 경기는 자동 진행으로 반영)" : cfg.bond ? "나가기 (다음에 다시 도전)" : online ? "나가기 (던진 공이 있으면 패배로 기록)" : "메뉴로 나가기 (기록 안 남음)"}
             </Btn>
           </div>
         </Modal>
@@ -771,7 +799,7 @@ function Play({
           {note && <div className="mt-1 text-[14px] font-bold text-[#7dff9a]">{note}</div>}
           <div className="mt-4 flex justify-center gap-3">
             <Btn className="px-6 py-2.5 text-lg" onClick={onAgain}>
-              다시 하기
+              {online ? "새 상대 찾기" : "다시 하기"}
             </Btn>
             <Btn className="px-6 py-2.5 text-lg" color="#8b93b8" onClick={onExit}>
               메뉴로
@@ -849,6 +877,15 @@ function MovePad({ active, onMove }: { active: boolean; onMove: (x: number, y: n
     setKnob({ x: 0, y: 0 });
     onMove(0, 0);
   };
+  // 공이 출발해 패드가 꺼지거나 화면이 바뀌면 입력을 꼭 풀어 줌 (다음 공 때 타자가 혼자 미끄러지지 않게)
+  const endRef = useRef(end);
+  useEffect(() => {
+    endRef.current = end;
+  });
+  useEffect(() => {
+    if (!active) endRef.current();
+  }, [active]);
+  useEffect(() => () => endRef.current(), []);
   return (
     <div
       ref={ref}
@@ -863,6 +900,7 @@ function MovePad({ active, onMove }: { active: boolean; onMove: (x: number, y: n
       }}
       onPointerUp={end}
       onPointerCancel={end}
+      onLostPointerCapture={end}
     >
       <div className="pointer-events-none absolute top-1/2 left-1/2 text-center text-[10px] font-bold text-white/45" style={{ transform: "translate(-50%, -50%)", marginTop: -R - 2 }}>
         ▲

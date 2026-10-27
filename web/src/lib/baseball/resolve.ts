@@ -35,10 +35,19 @@ export interface Outcome {
  */
 export function hitByPitch(at: { x: number; y: number }, bats: "R" | "L", shift = 0) {
   const inside = bats === "R" ? -at.x : at.x;
-  return inside > 0.52 - shift && at.y > 0.15 && at.y < 1.75;
+  // 컨택존을 바깥쪽 끝까지 옮겨도 몸은 조금만 붙음 (0.52 → 최소 0.46m) — 몸쪽 유인구가 줄줄이 사구가 되지 않게
+  const edge = Math.max(0.46, 0.52 - shift * 0.3);
+  return inside > edge && at.y > 0.15 && at.y < 1.75;
 }
-/** 컨택존을 옮긴 만큼 타자가 플레이트 쪽으로 붙은 거리 (+ 붙음) */
+/** 컨택존을 옮긴 거리 중 플레이트 쪽 성분 (+ 붙음) — 몸 판정엔 30%만 반영 (hitByPitch) */
 export const batterShift = (bats: "R" | "L", cz?: { x: number; y: number }) => (cz ? (bats === "R" ? cz.x : -cz.x) : 0);
+
+/** 이 상황의 실제 히트 (득점권 · 2스트라이크 · 7회 이후 특수능력 포함) — 판정 · 컨택존 크기 표시가 같은 값을 씀 */
+export function effectiveHit(s: GameState, b: { hit: number; sit?: { rispHit?: number; twoK?: number; late?: number } }) {
+  const risp = s.bases[1] !== null || s.bases[2] !== null;
+  const late = s.inning >= 7 ? b.sit?.late ?? 0 : 0;
+  return Math.max(1, b.hit + (risp ? b.sit?.rispHit ?? 0 : 0) + (s.strikes >= 2 ? b.sit?.twoK ?? 0 : 0) + late);
+}
 
 export function evaluate(s: GameState, p: Pitch, d: SwingDecision | null, rng: Rng, cz?: { x: number; y: number }): Outcome {
   const at = plateCross(p);
@@ -51,7 +60,7 @@ export function evaluate(s: GameState, p: Pitch, d: SwingDecision | null, rng: R
   // 육성 특수능력 (득점권 · 2스트라이크)
   const risp = s.bases[1] !== null || s.bases[2] !== null;
   const late = s.inning >= 7 ? b.sit?.late ?? 0 : 0;
-  const hit = Math.max(1, b.hit + (risp ? b.sit?.rispHit ?? 0 : 0) + (s.strikes >= 2 ? b.sit?.twoK ?? 0 : 0) + late);
+  const hit = effectiveHit(s, b);
   const power = Math.max(1, b.power + (risp ? b.sit?.rispPow ?? 0 : 0) + late);
   const sw = swing({ pitch: p, at, e: d.e, bats: b.bats, hit, power, bunt: d.bunt, special: d.special, cz: d.cz }, rng);
   if (sw.kind === "whiff") return { call: "swingMiss", at, sw, bad: true };

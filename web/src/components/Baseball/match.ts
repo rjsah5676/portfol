@@ -21,7 +21,7 @@ import {
 } from "@/lib/baseball/game";
 import { PITCHES, ZONE, inZone, makePitch, pitchAt, plateCross, type Pitch, type PitchKind } from "@/lib/baseball/pitch";
 import { predictBall, type FieldEvent, type Frame } from "@/lib/baseball/play";
-import { batterShift, commit, evaluate, hitByPitch, type Outcome, type SwingDecision } from "@/lib/baseball/resolve";
+import { batterShift, commit, effectiveHit, evaluate, hitByPitch, type Outcome, type SwingDecision } from "@/lib/baseball/resolve";
 import { lookColors, lookSkin, uniColors } from "@/lib/baseball/look";
 import { batterFrame, drawBatter, KICK_HOLD_T, KICK_STEP_T, preloadBatter, type SpriteLook } from "@/lib/baseball/batterSprite";
 /** 빈 스윙 한 번 길이 (이 시간 지나면 다시 휘두를 수 있고, 하던 자세로 돌아감) */
@@ -608,10 +608,11 @@ export class Match {
       const useSwingSp = !!swingOf(b) && cs.swing && this.rng() < 0.3 && this.s.sides[batSide(this.s)].swingLeft > 0;
       // CPU 컨택존: 공이 올 자리를 반쯤 읽고 노림 (히트 · 난이도가 높을수록 잘 읽음)
       const at = plateCross(pc);
-      const read = clamp(0.3 + (b.hit / 1000) * 0.35 + this.cfg.diff * 0.1, 0, 0.9);
+      // (실제 공 자리를 다 알면 반칙이라 절반 남짓만 · 흔들림도 넉넉히)
+      const read = clamp(0.2 + (b.hit / 1000) * 0.3 + this.cfg.diff * 0.08, 0, 0.66);
       this.cpuCz = {
-        x: clamp(at.x * read + this.rng.gauss() * 0.06, -CZ_RANGE.x, CZ_RANGE.x),
-        y: clamp(ZONE.mid + (at.y - ZONE.mid) * read + this.rng.gauss() * 0.05, CZ_RANGE.y0, CZ_RANGE.y1),
+        x: clamp(at.x * read + this.rng.gauss() * 0.08, -CZ_RANGE.x, CZ_RANGE.x),
+        y: clamp(ZONE.mid + (at.y - ZONE.mid) * read + this.rng.gauss() * 0.07, CZ_RANGE.y0, CZ_RANGE.y1),
       };
       this.decision = { swing: cs.swing, e: cs.e, bunt: false, special: useSwingSp ? swingOf(b) : undefined, cz: this.cpuCz };
       if (useSwingSp) this.s.sides[batSide(this.s)].swingLeft--;
@@ -875,9 +876,9 @@ export class Match {
     const righty = this.shownBatter.bats !== "L";
     const side = (e < 0 ? -1 : 1) * (righty ? 1 : -1);
     const r = () => this.rng();
-    let vx = tip ? side * (0.8 + r() * 1.5) : side * (5 + r() * 7);
-    let vy = tip ? -(15 + r() * 4) : -(3 + r() * 7);
-    let vh = tip ? 1.5 + r() * 2 : 9 + r() * 9;
+    let vx = tip ? side * (0.8 + r() * 1.5) : side * (2.5 + r() * 4);
+    let vy = tip ? -(15 + r() * 4) : -(2 + r() * 5);
+    let vh = tip ? 1.5 + r() * 2 : 6 + r() * 7;
     let x = at.x;
     let y = 0.1;
     let h = at.y;
@@ -1287,7 +1288,7 @@ export class Match {
           }
         }
         // 몸에 맞는 공: 안 휘두른 공이 타자 몸 자리에 닿는 순간 (플레이트 직전) — 퍽 + 흔들림, 공은 거기서 멈춤
-        if (!this.hbpHit && !this.decision?.swing && !p.special && this.tf >= p.dur * 0.97) {
+        if (!this.hbpHit && this.cfg.mode !== "derby" && !this.decision?.swing && !p.special && this.tf >= p.dur * 0.97) {
           const bats = this.shownBatter.bats;
           if (hitByPitch(plateCross(p), bats, batterShift(bats, this.czNow()))) {
             this.hbpHit = true;
@@ -1547,7 +1548,7 @@ export class Match {
     // 컨택존 (사용자 타자): 히트가 높을수록 넓음 · 투구 전 상하좌우로 옮김 — 존에 맞을수록 잘 맞음
     if (this.userBat && ["ready", "windup", "flight", "contact", "call"].includes(this.phase)) {
       const b = this.shownBatter;
-      const { hw, hh } = contactZone(b.hit);
+      const { hw, hh } = contactZone(effectiveHit(this.s, b));
       const a = proj(this.cz.x - hw, this.cz.y + hh, 0);
       const c = proj(this.cz.x + hw, this.cz.y - hh, 0);
       const fade = this.phase === "contact" || this.phase === "call" ? 0.45 : 1;
@@ -1599,22 +1600,29 @@ export class Match {
       ctx.fillText(inz ? "스트라이크 존" : "유인구", t.x, t.y + 34);
     }
 
-    // 이글아이 (초급 · 중급): 공이 들어올 자리
+    // 이글아이 (초급 · 중급): 공이 들어올 자리 — 원 대신 작은 노란 점 + 십자 (공 둘레 원처럼 보이지 않게)
     if (p && this.userBat && this.phase === "flight" && !p.special) {
       const u = this.tf / p.dur;
       const show = this.cfg.diff === 0 ? 1 : this.cfg.diff === 1 ? smooth(0.45, 0.6, u) : 0;
       if (show > 0) {
         const at = plateCross(p);
         const c = proj(at.x, at.y, 0);
-        ctx.globalAlpha = show * 0.85;
+        ctx.globalAlpha = show * 0.8;
+        ctx.fillStyle = "rgba(255,210,63,0.35)";
+        ctx.beginPath();
+        ctx.arc(c.x, c.y, 6, 0, Math.PI * 2);
+        ctx.fill();
         ctx.strokeStyle = "#ffd23f";
         ctx.lineWidth = 2;
-        const rr = 14 + Math.max(0, 1 - u) * 26;
         ctx.beginPath();
-        ctx.arc(c.x, c.y, rr, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.arc(c.x, c.y, 10, 0, Math.PI * 2);
+        ctx.moveTo(c.x - 10, c.y);
+        ctx.lineTo(c.x - 4, c.y);
+        ctx.moveTo(c.x + 4, c.y);
+        ctx.lineTo(c.x + 10, c.y);
+        ctx.moveTo(c.x, c.y - 10);
+        ctx.lineTo(c.x, c.y - 4);
+        ctx.moveTo(c.x, c.y + 4);
+        ctx.lineTo(c.x, c.y + 10);
         ctx.stroke();
         ctx.globalAlpha = 1;
       }
@@ -1896,22 +1904,7 @@ export class Match {
     ctx.beginPath();
     ctx.ellipse(g.x, g.y, Math.max(3.5, 0.06 * g.s), Math.max(1.5, 0.022 * g.s), 0, 0, Math.PI * 2);
     ctx.fill();
-    // 예측 링 (파워프로식): 일반 구종은 비행 40%, 마구는 70% 지점부터. 변화구는 「꺾이기 전」 자리를 가리켜 막판 변화가 느껴지게
-    if (this.userBat && this.cfg.diff < 2 && !v.inHand && v.u < 1) {
-      const show = sp ? 0.7 : 0.4;
-      if (v.u >= show) {
-        const breaking = p.kind !== "FB" && !sp;
-        const px = p.target.x - (breaking ? p.brk.x * 0.55 : 0);
-        const py = p.target.y - (breaking ? p.brk.y * 0.55 : 0);
-        const r0 = proj(px, py, 0);
-        const a = smooth(show, show + 0.12, v.u) * 0.55;
-        ctx.strokeStyle = `rgba(255,255,255,${a})`;
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.arc(r0.x, r0.y, Math.max(9, BALLR_PX(r0.s) * 1.6), 0, Math.PI * 2);
-        ctx.stroke();
-      }
-    }
+    // (예측 링은 뺌 — 공 둘레에 원이 생기는 건 실제 야구에 없음. 노리는 자리는 컨택존 · 초급 이글아이 점으로)
     // 모션 블러 꼬리 (속도감 — 프로야구 스피리츠식): 최근 0.05초 자취를 가늘어지는 흰 띠로.
     // 빠른 공일수록 같은 시간에 더 멀리 가니 꼬리가 길어짐. 마구는 마지막 25% 꼬리를 꺼서 늦은 변화를 숨김
     if (!(sp && v.u > 0.75) && !v.inHand) {
