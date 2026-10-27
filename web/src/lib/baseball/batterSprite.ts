@@ -170,7 +170,11 @@ const pick = (tbl: [string, number][], t: number) => IDX[(tbl.find(([, e]) => t 
 export function batterFrame(a: Anim, t: number): number {
   if (a === BAT_SWING && stillImg()) return SWING_BASE + (SWING_SEQ.find(([, e]) => t < e) ?? SWING_SEQ[SWING_SEQ.length - 1])[0];
   if (a === BAT_SWING) return pick(SWING, t);
-  if (a === BAT_LOAD) return KICK_BASE + (KICK.find(([, e]) => t < e) ?? KICK[KICK.length - 1])[0];
+  if (a === BAT_LOAD) {
+    // 다리 들기 전 · 다 내린 뒤엔 대기 동작을 그대로 (와인드업 동안 멈춰 있지 않게)
+    if (t < LIFT_AT || t >= KICK_STEP_T + LOWER_TOTAL) return IDX.stance;
+    return KICK_BASE + (KICK.find(([, e]) => t < e) ?? KICK[KICK.length - 1])[0];
+  }
   if (a === BAT_BUNT) return IDX.bunt;
   // 대기: 방망이 까딱
   return t % 1.6 < 0.8 ? IDX.stance : IDX.waggle;
@@ -331,7 +335,9 @@ export function drawBatter(ctx: CanvasRenderingContext2D, frame: number, lk: Spr
     } else {
       const idle = frame === IDX.stance || frame === IDX.waggle;
       const cell = idle ? idleCell(typeof performance !== "undefined" ? performance.now() / 1000 : 0) : 0;
-      ctx.drawImage(tintedStill(st, lk), cell * IDLE.CW, 0, IDLE.CW, IDLE.CH, -IDLE.ax, -IDLE.ay, IDLE.CW, IDLE.CH);
+      // 대기 줄은 여러 줄 (한 줄에 cols 칸)
+      const cols = IDLE.cols ?? IDLE.n;
+      ctx.drawImage(tintedStill(st, lk), (cell % cols) * IDLE.CW, Math.floor(cell / cols) * IDLE.CH, IDLE.CW, IDLE.CH, -IDLE.ax, -IDLE.ay, IDLE.CW, IDLE.CH);
     }
     ctx.restore();
     return true;
