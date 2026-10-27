@@ -212,6 +212,8 @@ export class Match {
   /** 움직임 줄이기 (흔들림 · 줌 끔) */
   reduceMotion = typeof window !== "undefined" && !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
   particles: { x: number; y: number; vx: number; vy: number; life: number; c: string }[] = [];
+  /** 임팩트 순간 터지는 링 · 빛살 (t 는 0 → 0.22초) */
+  impact: { x: number; y: number; t: number; q: number; perfect: boolean } | null = null;
   paused = false;
 
   // 리그
@@ -600,7 +602,7 @@ export class Match {
     this.computeTilt();
     if (!this.buntArmed) {
       this.playBat(BAT_SWING);
-      sfx.swing();
+      sfx.swing(0.8 + (b.power / 1000) * 0.4);
     }
     const W = timingWindow(b.hit, this.buntArmed, !!this.decision.special);
     this.timingText = timingLabel(e, W);
@@ -1048,6 +1050,7 @@ export class Match {
       p.life -= dt;
     }
     this.particles = this.particles.filter((p) => p.life > 0);
+    if (this.impact && (this.impact.t += dt) > 0.22) this.impact = null;
     // 리그 애니
     this.batAnimT += dt;
     if (this.batFrom) {
@@ -1097,21 +1100,28 @@ export class Match {
         // CPU 스윙 시작
         if (!this.userBat && this.decision?.swing && this.swingStart >= 0 && this.tf >= this.swingStart && this.batAnim !== BAT_SWING) {
           this.playBat(BAT_SWING);
-          sfx.swing();
+          sfx.swing(0.8 + (this.batterNow.power / 1000) * 0.4);
         }
         if (p.special === "lily" && Math.abs(this.tf - (p.tl?.segs[0].t1 ?? 0)) < dt) sfx.pop();
         if (p.special === "zena" && Math.floor(this.tf * 9) !== Math.floor((this.tf - dt) * 9) && this.tf < p.dur * 0.85) sfx.zap();
         if (p.special === "forte" && Math.floor(this.tf * 8) !== Math.floor((this.tf - dt) * 8)) sfx.tick();
         // 맞는 순간
         const hitT = this.swingStart + SWING_HIT_T;
+        // 헛스윙: 바람 빠지는 소리 + 살짝 흔들림 (몸이 돌아가는 힘)
+        if (this.outcome?.call === "swingMiss" && !this.contactShown && this.swingStart > -10 && this.tf >= hitT) {
+          this.contactShown = true;
+          sfx.whiff();
+          if (!this.reduceMotion) this.shake = Math.max(this.shake, 0.07);
+        }
         if (this.outcome && !this.contactShown && this.swingStart > -10 && this.tf >= hitT && this.outcome.call !== "swingMiss") {
           this.contactShown = true;
           if (this.outcome.call === "bip") {
             const q = this.outcome.sw?.kind === "bip" ? this.outcome.sw.ball.c : 0.5;
             const perfect = this.outcome.sw?.kind === "bip" && this.outcome.sw.ball.perfect;
             sfx.crack(q, perfect);
-            // 등급별 손맛: PERFECT 히트스톱 80ms + 플래시 · 정타 40ms · 빗맞음 없음
-            this.hitStop = perfect ? 0.08 : q > 0.6 ? 0.04 : 0;
+            // 등급별 손맛: PERFECT 히트스톱 110ms + 플래시 · 정타 60ms · 빗맞음 25ms (멈춘 화면 = 임팩트 자세)
+            this.hitStop = perfect ? 0.11 : q > 0.6 ? 0.06 : 0.025;
+            this.impact = { x: 0, y: 0, t: 0, q, perfect };
             this.flash = perfect ? 0.55 : 0.12 + q * 0.3;
             this.shake = this.reduceMotion ? 0 : perfect ? 0.32 : 0.08 + q * 0.16;
             this.setPhase("contact");
@@ -1127,6 +1137,8 @@ export class Match {
               }
             }
             const at = proj(this.outcome.at.x, this.outcome.at.y, 0);
+            this.impact.x = at.x;
+            this.impact.y = at.y;
             for (let i = 0; i < 18; i++) {
               const a = this.rng() * Math.PI * 2;
               const v = 120 + this.rng() * 260;
@@ -1138,7 +1150,7 @@ export class Match {
         }
         if (this.tf >= p.dur + 0.1) {
           if (!this.contactShown || this.outcome?.call !== "foul") {
-            if (!this.outcome || this.outcome.call !== "foul") sfx.mitt();
+            if (!this.outcome || this.outcome.call !== "foul") sfx.mitt(this.outcome?.call === "swingMiss" || this.outcome?.call === "strike");
           }
           this.resolveFlight();
           this.afterPitch();
@@ -1445,8 +1457,36 @@ export class Match {
     ctx.ellipse(bx, by + 150, 110, 18, 0, 0, Math.PI * 2);
     ctx.fill();
     // 픽셀 타자 (그림 불러오기 전엔 코드 리그)
-    if (!drawBatter(ctx, batterFrame(this.batAnim, this.batAnimT), this.batLook, bx, by, sc, lefty)) drawRig(ctx, BATTER_RIG, bps, this.batSkin, this.batColors, bx, by, sc, lefty);
+    if (!drawBatter(ctx, batterFrame(this.batAnim, this.batAnimT), this.batLook, bx, by, sc, lefty, this.batAnim === BAT_SWING && !this.reduceMotion ? 1 : 0)) drawRig(ctx, BATTER_RIG, bps, this.batSkin, this.batColors, bx, by, sc, lefty);
 
+    // 임팩트: 링 + 빛살 (히트스톱 동안은 멈춘 채 크게)
+    if (this.impact) {
+      const im = this.impact;
+      const u = im.t / 0.22;
+      const R = (im.perfect ? 26 : 16 + im.q * 10) * (0.5 + u * 1.6);
+      ctx.save();
+      ctx.globalAlpha = 1 - u;
+      ctx.strokeStyle = im.perfect ? "#ffd23f" : "#ffffff";
+      ctx.lineWidth = (im.perfect ? 6 : 4) * (1 - u) + 1;
+      ctx.beginPath();
+      ctx.arc(im.x, im.y, R, 0, Math.PI * 2);
+      ctx.stroke();
+      const n = im.perfect ? 10 : 7;
+      ctx.lineWidth = im.perfect ? 4 : 3;
+      for (let i = 0; i < n; i++) {
+        const a = (i / n) * Math.PI * 2 + 0.3;
+        ctx.beginPath();
+        ctx.moveTo(im.x + Math.cos(a) * R * 0.9, im.y + Math.sin(a) * R * 0.9);
+        ctx.lineTo(im.x + Math.cos(a) * R * (1.5 + (i % 2) * 0.5), im.y + Math.sin(a) * R * (1.5 + (i % 2) * 0.5));
+        ctx.stroke();
+      }
+      ctx.fillStyle = "#fff";
+      ctx.globalAlpha = Math.max(0, 1 - u * 2.5);
+      ctx.beginPath();
+      ctx.arc(im.x, im.y, R * 0.55, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
     // 파티클
     for (const pt of this.particles) {
       ctx.globalAlpha = Math.min(1, pt.life * 3);
