@@ -124,6 +124,11 @@ export type SfxId =
   | "door"
   | "glass"
   | "keypad"
+  // v4 (10-28 일레븐랩스): 왼손 두 번 · 초커 자물쇠 · 세라 메시지 · 카드 받기
+  | "tap2"
+  | "padlock"
+  | "seraMsg"
+  | "cardCatch"
   | "heels"
   | "thunder"
   | "umbrella"

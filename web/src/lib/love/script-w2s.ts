@@ -543,6 +543,7 @@ export const W2S: Scenes = {
     { t: "bg", id: "sera_room" },
     { t: "sfx", id: "heart" },
     { t: "cg", id: "past" },
+    { t: "sfx", id: "tap2" },
     TH("…검은 머리 여자애. 스무 살. 테이블 끝. 내가 왼손으로 두 번 두드린, 그 판에서 유일하게 살아 나간 사람."),
     { t: "cg", id: null },
     { t: "show", who: "sera", pos: "c", dist: 1 },

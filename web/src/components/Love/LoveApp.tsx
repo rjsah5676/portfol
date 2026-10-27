@@ -606,7 +606,8 @@ export default function LoveApp() {
     if (b?.k === "phone") {
       setPhoneShown(0);
       setPhoneOpen(false);
-      play("phone");
+      // 세라 메시지는 전용 알림음 (오르골 두 음)
+      play(b.step.from === "sera" ? "seraMsg" : "phone");
     }
     if (b?.k === "goTitle") {
       voice(null);
