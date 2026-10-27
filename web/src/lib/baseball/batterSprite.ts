@@ -161,7 +161,7 @@ const KICK: [number, number][] = (() => {
  *   사이 장은 앞뒤 두 장 첨부해 중간 자세를 콕 집어 뽑음 → scripts/baseball-batter-strip.py
  * 원본: scripts/baseball-batter-swing.py (시트 + 따로 고친 칸)
  */
-const SWING_SEQ: [number, number][] = [[0, 0.025], [1, 0.05], [2, 0.085], [3, 0.11], [4, 0.18], [5, 0.22], [6, 0.26], [7, 99]];
+const SWING_SEQ: [number, number][] = [[0, 0.03], [1, 0.062], [2, 0.084], [3, 0.11], [4, 0.18], [5, 0.22], [6, 0.26], [7, 99]];
 const SWING_BASE = 2000;
 /** batterFrame 이 새 그림 레그킥 칸을 돌려줄 때 더하는 값 (옛 프레임 번호와 안 겹치게) */
 const KICK_BASE = 1000;
