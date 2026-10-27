@@ -493,6 +493,10 @@ function Play({
     const onKey = (e: KeyboardEvent) => {
       const m = matchRef.current;
       if (!m) return;
+      // 경기 중엔 스페이스 · 방향키로 페이지가 스크롤되지 않게 — 꾹 누름(반복) · 일시정지 중에도 (예전엔 그때 스크롤됐음)
+      const el = e.target as HTMLElement | null;
+      const typing = !!el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable);
+      if (!typing && (e.key === " " || e.key.startsWith("Arrow"))) e.preventDefault();
       const k0 = e.key.toLowerCase();
       if (DIRS[k0] && m.ui.userBat && !m.paused) {
         e.preventDefault();
