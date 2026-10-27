@@ -29,11 +29,20 @@ const FREE_SWING_T = 0.5;
 import { BATCOL } from "@/lib/baseball/look";
 import { boneTip, drawRig, pose, type Anim, type RigColors, type Skin } from "@/lib/baseball/rig";
 import { clamp, lerp, makeRng, smooth, type Rng } from "@/lib/baseball/rng";
+import pitcherThrowData from "@/data/baseball/pitcher-throw.json";
 import { sfx } from "./sfx";
 import { CAM, DH, DW, battingBg, drawFieldFrame, fieldBg, fproj, proj } from "./view";
 
 /** 투수 그림 (pitcher-set.webp): 발 기준점 · 크기 (키 ≈ 115px, 목업 크기) */
 const PITCHER_STILL = { src: "/baseball/sprites/pitcher-set.webp", ax: 85, ay: 503, scale: 0.229 };
+/**
+ * 투구 줄 (그록 영상 → scripts/baseball-pitcher-video.py): 세트 → 다리 들기 → 내딛기 → 공 놓기(PITCH_RELEASE_T) → 팔로스루.
+ * 영상 캔버스 = 세트 그림 × 520/506 × 1.1 이라 캔버스 1px = PITCHER_STILL.scale / 1.1304 게임 px, 줄 칸은 캔버스 × cell.
+ * hand = 공 놓는 자리 (캔버스 px, 축발 기준)
+ */
+const PITCHER_THROW = { src: "/baseball/sprites/pitcher-throw.webp", ...pitcherThrowData };
+const PIT_CANVAS_PX = PITCHER_STILL.scale / ((520 / 506) * 1.1);
+const PIT_THROW_SEQ = pitcherThrowData.seq as [number, number][];
 
 export type Mode = "game" | "derby" | "career";
 
@@ -1330,7 +1339,19 @@ export class Match {
     const pFlip = this.pitcherNow.throws === "L";
     // 투수 그림 (지피티 세트 자세 1장, 발 = 투수판) — 없으면 코드 리그
     const pim = img(PITCHER_STILL.src);
-    if (pim.complete && pim.naturalWidth) {
+    const tim = img(PITCHER_THROW.src);
+    const throwSprite = tim.complete && tim.naturalWidth > 0;
+    if (this.pitAnim === PIT_THROW && throwSprite) {
+      const T = PITCHER_THROW;
+      const c = (PIT_THROW_SEQ.find(([, e]) => this.pitAnimT < e) ?? PIT_THROW_SEQ[PIT_THROW_SEQ.length - 1])[0];
+      const k = PIT_CANVAS_PX / T.cell;
+      ctx.save();
+      ctx.imageSmoothingQuality = "high";
+      ctx.translate(mp.x, mp.y);
+      ctx.scale(pFlip ? -k : k, k);
+      ctx.drawImage(tim, c * T.CW, 0, T.CW, T.CH, -T.ax, -T.ay, T.CW, T.CH);
+      ctx.restore();
+    } else if (pim.complete && pim.naturalWidth) {
       ctx.save();
       ctx.imageSmoothingQuality = "high";
       ctx.translate(mp.x, mp.y);
@@ -1341,7 +1362,10 @@ export class Match {
     // 손 위치 (공 놓는 점)
     const relPs = pose(PITCHER_RIG, PIT_THROW, PITCH_RELEASE_T);
     const [hx, hy] = boneTip(PITCHER_RIG, relPs, "handT", 1);
-    const hand = { x: mp.x + (pFlip ? -hx : hx) * pitcherScale, y: mp.y - 56 * pitcherScale + hy * pitcherScale };
+    const hand =
+      throwSprite && PITCHER_THROW.hand
+        ? { x: mp.x + (pFlip ? -1 : 1) * PITCHER_THROW.hand[0] * PIT_CANVAS_PX, y: mp.y + PITCHER_THROW.hand[1] * PIT_CANVAS_PX }
+        : { x: mp.x + (pFlip ? -hx : hx) * pitcherScale, y: mp.y - 56 * pitcherScale + hy * pitcherScale };
     // 이반 기모으기 · 손에 든 공
     if (this.phase === "windup" || (p && this.tf < 0.02)) {
       // 아무것도
@@ -1420,8 +1444,8 @@ export class Match {
     // 공
     const ballBefore = p && this.phase === "flight";
     if (ballBefore && p) this.drawPitchBall(ctx, p, hand);
-    if (this.phase === "windup" && this.pitAnimT > 0.2) {
-      // 손에 든 공
+    if (this.phase === "windup" && this.pitAnimT > 0.2 && !img(PITCHER_THROW.src).naturalWidth) {
+      // 손에 든 공 (코드 리그일 때만 — 투구 줄 그림엔 공이 그려져 있음)
       const ps = pose(PITCHER_RIG, this.pitAnim, this.pitAnimT);
       const [ax, ay] = boneTip(PITCHER_RIG, ps, "handT", 1);
       ctx.fillStyle = "#fff";
