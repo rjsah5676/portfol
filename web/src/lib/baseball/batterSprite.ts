@@ -9,6 +9,7 @@
  */
 import data from "@/data/baseball/batter-v3.json";
 import idleData from "@/data/baseball/batter-idle.json";
+import loadData from "@/data/baseball/batter-load.json";
 import { BAT_BUNT, BAT_LOAD, BAT_SWING } from "./figures";
 import type { Anim } from "./rig";
 
@@ -131,12 +132,18 @@ const SWING: [string, number][] = [
 ];
 /** 투수 와인드업에 맞춘 로드 → 레그킥 → 착지 (착지 자세로 기다림) */
 const LOAD: [string, number][] = [["load1", 0.07], ["load2", 0.13], ["kick1", 0.19], ["kick2", 0.25], ["plant1", 0.31], ["plant", 99]];
+/** 새 그림 레그킥 줄 칸 [칸, 이 시간까지] — 와인드업 0.74초에 맞춤: 대기 → 들기 → 최고점(머묾) → 내딛기 → 착지(공 기다림) */
+const KICK: [number, number][] = [[0, 0.12], [1, 0.24], [2, 0.44], [3, 0.56], [4, 0.64], [5, 99]];
+/** batterFrame 이 새 그림 레그킥 칸을 돌려줄 때 더하는 값 (옛 프레임 번호와 안 겹치게) */
+const KICK_BASE = 1000;
 const pick = (tbl: [string, number][], t: number) => IDX[(tbl.find(([, e]) => t < e) ?? tbl[tbl.length - 1])[0]];
 
 /** 애니 + 시간 → 프레임 */
 export function batterFrame(a: Anim, t: number): number {
   if (a === BAT_SWING) return pick(SWING, t);
-  if (a === BAT_LOAD) return pick(LOAD, t);
+  if (a === BAT_LOAD) return KICK_BASE + (KICK.find(([, e]) => t < e) ?? KICK[KICK.length - 1])[0];
+  // 스윙 그림이 아직 없어 착지 자세로 버팀 (대기 자세로 튀지 않게)
+  if (a === BAT_SWING && stillImg()) return KICK_BASE + KICK[KICK.length - 1][0];
   if (a === BAT_BUNT) return IDX.bunt;
   // 대기: 방망이 까딱
   return t % 1.6 < 0.8 ? IDX.stance : IDX.waggle;
@@ -205,14 +212,19 @@ function idleCell(t: number) {
   }
   return 0;
 }
+/** 레그킥 줄 (scripts/baseball-batter-load.py + tween) — 대기 줄과 같은 배율 · 같은 기준점(땅 딛은 가까운 발) */
+const KICKS = { src: "/baseball/sprites/batter-load.webp", ...loadData };
 let still: HTMLImageElement | null = null;
 let stillMask: HTMLImageElement | null = null;
+let kickImg: HTMLImageElement | null = null;
 function stillImg() {
   if (!still && typeof Image !== "undefined") {
     still = new Image();
     still.src = IDLE.src;
     stillMask = new Image();
     stillMask.src = IDLE.mask;
+    kickImg = new Image();
+    kickImg.src = KICKS.src;
   }
   return still && still.complete && still.naturalWidth ? still : null;
 }
@@ -268,15 +280,21 @@ function tintedStill(st: HTMLImageElement, lk: SpriteLook): CanvasImageSource {
 export function drawBatter(ctx: CanvasRenderingContext2D, frame: number, lk: SpriteLook, x: number, y: number, sc: number, flip = false, trail = 0): boolean {
   const st = stillImg();
   if (st) {
-    const idle = frame === IDX.stance || frame === IDX.waggle;
-    const cell = idle ? idleCell(typeof performance !== "undefined" ? performance.now() / 1000 : 0) : 0;
     const s = sc * IDLE.scale;
     ctx.save();
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = "high";
     ctx.translate(x, y + FOOT_Y * sc);
     ctx.scale(flip ? -s : s, s);
-    ctx.drawImage(tintedStill(st, lk), cell * IDLE.CW, 0, IDLE.CW, IDLE.CH, -IDLE.ax, -IDLE.ay, IDLE.CW, IDLE.CH);
+    const ki = kickImg;
+    if (frame >= KICK_BASE && ki && ki.complete && ki.naturalWidth) {
+      const cell = Math.min(frame - KICK_BASE, KICKS.n - 1);
+      ctx.drawImage(ki, cell * KICKS.CW, 0, KICKS.CW, KICKS.CH, -KICKS.ax, -KICKS.ay, KICKS.CW, KICKS.CH);
+    } else {
+      const idle = frame === IDX.stance || frame === IDX.waggle;
+      const cell = idle ? idleCell(typeof performance !== "undefined" ? performance.now() / 1000 : 0) : 0;
+      ctx.drawImage(tintedStill(st, lk), cell * IDLE.CW, 0, IDLE.CW, IDLE.CH, -IDLE.ax, -IDLE.ay, IDLE.CW, IDLE.CH);
+    }
     ctx.restore();
     return true;
   }
