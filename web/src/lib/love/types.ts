@@ -72,6 +72,7 @@ export type BgId =
   | "waterpark"
   /** 비 그친 오후 재래시장 (동네 한 바퀴 · 박하사탕) — 그림 없으면 market 으로 */
   | "market_day"
+  | "sera_room"
   | "black";
 /** 이벤트 CG (핵심 장면 한 장 그림 — 스탠딩 대신 화면 전체) */
 export type CgId =
@@ -184,6 +185,9 @@ export type BgmId =
   | "ending"
   // 10-25 (사용자 제작): 결정적 순간 테마 · 엔딩 크레딧 · 비 그친 아침
   | "amy_ace"
+  // 10-28 (사용자 제작): 세라 테마 · 분홍 간판 펍
+  | "sera"
+  | "sera_pink"
   | "yeon_ace"
   | "credits"
   | "morning";

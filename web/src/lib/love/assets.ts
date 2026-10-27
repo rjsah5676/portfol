@@ -104,6 +104,8 @@ export const BG: Record<BgId, string | null> = {
   sea: `${B}/bg/sea.webp`,
   waterpark: `${B}/bg/waterpark.webp`,
   market_day: `${B}/bg/market_day.webp`,
+  /** 세라 집 — 전용 배경(bg-sera-room) 오기 전까지 오피스텔 그림 임시 */
+  sera_room: `${B}/bg/officetel.webp`,
   black: null,
 };
 /**
@@ -169,6 +171,7 @@ export const BG_FALLBACK: Record<BgId, string> = {
   room_day: "linear-gradient(180deg,#9fb8d8,#d9c9b0)",
   room_night: "linear-gradient(180deg,#1a1f3a,#0c0e18)",
   officetel: "linear-gradient(180deg,#2c3038,#121418)",
+  sera_room: "linear-gradient(180deg,#3a2232,#140a12)",
   karaoke: "linear-gradient(180deg,#3a1450,#12061c)",
   pocha: "linear-gradient(180deg,#4a2a12,#140a04)",
   hangang: "linear-gradient(180deg,#1a2440,#05070f)",
@@ -424,6 +427,8 @@ export const BGM: Record<BgmId, string | null> = {
   finale: `${B}/sound/bgm-finale.aac`,
   ending: `${B}/sound/bgm-ending.aac`,
   amy_ace: `${B}/sound/bgm-amy-ace.aac`,
+  sera: `${B}/sound/bgm-sera.aac`,
+  sera_pink: `${B}/sound/bgm-sera-pink.aac`,
   yeon_ace: `${B}/sound/bgm-yeon-ace.aac`,
   credits: `${B}/sound/bgm-credits.aac`,
   morning: `${B}/sound/bgm-morning.aac`,

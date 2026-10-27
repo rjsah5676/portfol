@@ -260,7 +260,7 @@ export const W1: Scenes = {
   // 마감 후 — 세라의 한 판 (밤 근무 한 결정)
   d1_close: [
     { t: "day", day: 1, slot: "마감 후" },
-    { t: "bgm", id: "night" },
+    { t: "bgm", id: "sera" },
     N("새벽 한 시, 마감. 의자를 테이블 위에 올리는데, 끝자리에 아직 한 사람이 앉아 있다."),
     { t: "show", who: "sera", pos: "c", dist: 1 },
     S("딜러님이랑 한 판만 해도 돼요? 사탕으로.", "smile"),
@@ -533,7 +533,7 @@ export const W1: Scenes = {
   ],
   // 2일차 세라 — 마지막 판, 그리고 "저랑은요?"
   d2_sera: [
-    { t: "bgm", id: "pub" },
+    { t: "bgm", id: "sera" },
     { t: "bg", id: "pub" },
     N("마감 십 분 전. 문이 열리고, 어제 그 분홍 머리가 들어왔다. 정확히 마지막 판 시간에."),
     { t: "show", who: "sera", pos: "c", dist: 0 },
@@ -715,6 +715,7 @@ export const W1: Scenes = {
   // 3일차 세라 — 아이스 아메리카노
   d3_sera: [
     { t: "bg", id: "pub" },
+    { t: "bgm", id: "sera" },
     N("마지막 판. 분홍 머리 손님이 오늘은 컵 두 개를 들고 들어왔다."),
     { t: "show", who: "sera", pos: "c", dist: 0 },
     S("아이스 아메리카노, 샷 추가. 맞죠? 어제 마감할 때 마시던 거.", "smile"),
@@ -2869,6 +2870,7 @@ export const W1: Scenes = {
   ],
   // 세라 루트 입구 (루트 본편은 다음 작업)
   r_sera: [
+    { t: "bgm", id: "sera" },
     { t: "hide", who: "amy" },
     { t: "hide", who: "yeonseo" },
     { t: "show", who: "sera", pos: "c", dist: 1 },
@@ -2881,7 +2883,8 @@ export const W1: Scenes = {
     S("……접으라고 해 줄 사람이 있을 때까지, 안 접기로 했어요.", "smile"),
     S("그게 딜러님이면 좋겠다. 아, 지금 한 말은 농담이에요. 반은.", "smile"),
     TH("왜일까. 그 말이, 3년 전 어딘가에서 들은 소리처럼 귀에 걸렸다."),
-    { t: "end", text: "1주차 끝 · 세라 루트", sub: "세라 루트 본편은 다음 작업에서 이어져요." },
+    { t: "title", text: "2주차", sub: "세라 — 마지막 판의 손님" },
+    { t: "goto", to: "s2_d8" },
   ],
 
   r_amy: [

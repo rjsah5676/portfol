@@ -4,6 +4,7 @@
  */
 import { W1 } from "./script-w1";
 import { W2 } from "./script-w2";
+import { W2S } from "./script-w2s";
 import { W3A } from "./script-w3a";
 import { W3N } from "./script-w3n";
 import { W3Y } from "./script-w3y";
@@ -11,4 +12,4 @@ import type { Scenes } from "./types";
 
 export const START = "d1";
 
-export const SCENES: Scenes = { ...W1, ...W2, ...W3A, ...W3Y, ...W3N };
+export const SCENES: Scenes = { ...W1, ...W2, ...W2S, ...W3A, ...W3Y, ...W3N };

@@ -3502,6 +3502,8 @@ const MUSIC: [BgmId, string][] = [
   ["finale", "새벽 네 시, 마지막 판"],
   ["ending", "비 그친 다음 날 아침"],
   ["morning", "젖은 골목, 맑은 하늘"],
+  ["sera", "세라 — 마지막 판의 손님"],
+  ["sera_pink", "분홍 간판"],
   ["amy_ace", "에이미 — 처음 듣는 목소리"],
   ["yeon_ace", "연서 — 장갑을 벗은 손"],
   ["credits", "엔딩 크레딧"],

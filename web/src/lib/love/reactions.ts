@@ -158,7 +158,7 @@ const IDLE: Partial<Record<CharKey, Tiered>> = {
 };
 
 /** 방치 · 터치 반응은 가벼운 장면에서만 (CG · 무거운 BGM · 무음 연출 중엔 끔) */
-const LIGHT: BgmId[] = ["pub", "amy", "yeonseo", "daily", "comic", "summer"];
+const LIGHT: BgmId[] = ["pub", "amy", "yeonseo", "sera", "daily", "comic", "summer"];
 export const lightMood = (s: { disp: { cg?: unknown; bgm: BgmId | null } }) =>
   !s.disp.cg && !!s.disp.bgm && LIGHT.includes(s.disp.bgm);
 
