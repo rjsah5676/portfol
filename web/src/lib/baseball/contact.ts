@@ -10,7 +10,7 @@
 import type { CharId } from "./data";
 import type { Rng } from "./rng";
 import { clamp, lerp } from "./rng";
-import { ZONE, type Pitch } from "./pitch";
+import { BALL_R, ZONE, type Pitch } from "./pitch";
 
 export interface BattedBall {
   /** 타구 속도 m/s */
@@ -43,6 +43,31 @@ export interface SwingIn {
   bunt: boolean;
   /** 필살타법 */
   special?: CharId;
+  /** 컨택존 가운데 (사용자 · CPU 타자가 투구 전에 옮겨 둔 자리). 없으면 존 영향 없음 (자동 진행 시뮬) */
+  cz?: { x: number; y: number };
+}
+
+/**
+ * 컨택존 (마구마구식) — 타자가 투구 전에 옮겨 두는 「노리는 자리」. 반폭 · 반높이 (m).
+ * 히트가 높을수록 넓음: 히트 999 → 스트라이크 존(공 반지름 포함)의 95% · 500 → 63% · 250 → 46%.
+ */
+export function contactZone(hit: number) {
+  const k = 0.3 + 0.65 * clamp(hit / 1000, 0, 1);
+  return { hw: (ZONE.x + BALL_R) * k, hh: ((ZONE.y1 - ZONE.y0) / 2 + BALL_R) * k };
+}
+/**
+ * 컨택존 가운데가 움직일 수 있는 범위 (과하지 않게) — 좌우 ±0.2m · 위아래 ±0.17m.
+ * 제일 좁은 존(히트 0, 반폭 0.08m)도 끝까지 옮기면 존 구석(0.25m)에 닿는 정도. 타자 그림은 화면에서 좌우 57px · 위아래 49px 까지
+ */
+export const CZ_RANGE = { x: 0.2, y0: ZONE.mid - 0.17, y1: ZONE.mid + 0.17 };
+/**
+ * 컨택존 배율: 존 가운데 1.08 → 존 끝 0.96 (잘 노리면 덤), 밖으로 멀어질수록 줄어 최저 0.3
+ * (존 밖이라고 무조건 헛스윙 · 아웃은 아님 — 타이밍이 좋으면 빗맞은 안타 · 파울은 나옴)
+ */
+export function zoneFactor(at: { x: number; y: number }, cz: { x: number; y: number }, hit: number) {
+  const { hw, hh } = contactZone(hit);
+  const dn = Math.hypot((at.x - cz.x) / hw, (at.y - cz.y) / hh);
+  return { k: dn <= 1 ? 1.08 - 0.12 * dn * dn : Math.max(0.3, 0.96 - 0.5 * (dn - 1)), dn };
 }
 
 /** 타이밍 창 (초) */
@@ -63,9 +88,11 @@ export function swing(o: SwingIn, rng: Rng): SwingResult {
   const ql = sp === "soyoung" ? 1 : clamp(1 - dist / 0.2, 0, 1);
   // 좋은 공(게이지 MAX)은 정타가 덜 나옴 · 마구는 더
   const pq = o.pitch.special ? 0.12 : o.pitch.mistake ? -0.15 : o.pitch.quality * 0.16;
-  let c = qt * ql * (1.06 - pq);
-  const perfect = r < 0.15 && ql > 0.75;
-  if (perfect) c = Math.max(c, 0.92 * ql);
+  const z = o.cz ? zoneFactor(o.at, o.cz, o.hit) : { k: 1, dn: 0 };
+  let c = qt * ql * z.k * (1.06 - pq);
+  // PERFECT 는 타이밍 + 컨택존 안쪽(가운데 쪽)일 때만
+  const perfect = r < 0.15 && ql > 0.75 && z.dn < 0.85;
+  if (perfect) c = Math.max(c, 0.92 * ql * Math.min(1, z.k));
   c = clamp(c, 0, 1);
   if (c < 0.1) return { kind: "whiff", e: o.e };
 

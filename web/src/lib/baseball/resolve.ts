@@ -16,10 +16,12 @@ export interface SwingDecision {
   e: number;
   bunt: boolean;
   special?: CharId;
+  /** 컨택존 가운데 (투구 전에 옮겨 둔 자리) */
+  cz?: { x: number; y: number };
 }
 
 export interface Outcome {
-  call: "ball" | "strike" | "swingMiss" | "foul" | "bip";
+  call: "ball" | "strike" | "swingMiss" | "foul" | "bip" | "hbp";
   at: { x: number; y: number };
   sw?: SwingResult;
   field?: FieldOut;
@@ -27,9 +29,22 @@ export interface Outcome {
   bad: boolean;
 }
 
-export function evaluate(s: GameState, p: Pitch, d: SwingDecision | null, rng: Rng): Outcome {
+/**
+ * 몸에 맞는 공: 몸쪽으로 크게 빠져 타자 몸이 있는 자리를 지나는 공 (안 휘둘렀을 때).
+ * 타자 몸 안쪽 끝 = 플레이트 가운데에서 0.52m (타석 안쪽 선 0.15m + 몸 앞). 타자가 플레이트 쪽으로 붙으면(shift +) 그만큼 가까워짐.
+ */
+export function hitByPitch(at: { x: number; y: number }, bats: "R" | "L", shift = 0) {
+  const inside = bats === "R" ? -at.x : at.x;
+  return inside > 0.52 - shift && at.y > 0.15 && at.y < 1.75;
+}
+/** 컨택존을 옮긴 만큼 타자가 플레이트 쪽으로 붙은 거리 (+ 붙음) */
+export const batterShift = (bats: "R" | "L", cz?: { x: number; y: number }) => (cz ? (bats === "R" ? cz.x : -cz.x) : 0);
+
+export function evaluate(s: GameState, p: Pitch, d: SwingDecision | null, rng: Rng, cz?: { x: number; y: number }): Outcome {
   const at = plateCross(p);
   if (!d || !d.swing) {
+    const b = batter(s);
+    if (!p.special && hitByPitch(at, b.bats, batterShift(b.bats, d?.cz ?? cz))) return { call: "hbp", at, bad: false };
     return { call: inZone(at.x, at.y) ? "strike" : "ball", at, bad: false };
   }
   const b = batter(s);
@@ -38,7 +53,7 @@ export function evaluate(s: GameState, p: Pitch, d: SwingDecision | null, rng: R
   const late = s.inning >= 7 ? b.sit?.late ?? 0 : 0;
   const hit = Math.max(1, b.hit + (risp ? b.sit?.rispHit ?? 0 : 0) + (s.strikes >= 2 ? b.sit?.twoK ?? 0 : 0) + late);
   const power = Math.max(1, b.power + (risp ? b.sit?.rispPow ?? 0 : 0) + late);
-  const sw = swing({ pitch: p, at, e: d.e, bats: b.bats, hit, power, bunt: d.bunt, special: d.special }, rng);
+  const sw = swing({ pitch: p, at, e: d.e, bats: b.bats, hit, power, bunt: d.bunt, special: d.special, cz: d.cz }, rng);
   if (sw.kind === "whiff") return { call: "swingMiss", at, sw, bad: true };
   if (sw.kind === "foul") return { call: "foul", at, sw, bad: false };
   const fs = s.sides[fieldSide(s)];
@@ -68,5 +83,5 @@ export function evaluate(s: GameState, p: Pitch, d: SwingDecision | null, rng: R
 export function commit(s: GameState, o: Outcome): PAResult | null {
   pitchThrown(s);
   if (o.call === "bip" && o.field) return applyPlay(s, o.field);
-  return callPitch(s, o.call as "ball" | "strike" | "swingMiss" | "foul");
+  return callPitch(s, o.call as "ball" | "strike" | "swingMiss" | "foul" | "hbp");
 }

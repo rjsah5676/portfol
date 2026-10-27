@@ -164,7 +164,8 @@ export function pitchThrown(s: GameState) {
 }
 
 /** 공 · 스트라이크 · 파울 (타석이 끝나면 결과) */
-export function callPitch(s: GameState, call: "ball" | "strike" | "swingMiss" | "foul"): PAResult | null {
+export function callPitch(s: GameState, call: "ball" | "strike" | "swingMiss" | "foul" | "hbp"): PAResult | null {
+  if (call === "hbp") return walk(s, true);
   if (call === "ball") {
     s.balls++;
     if (s.balls >= 4) return walk(s);
@@ -187,7 +188,8 @@ export function callPitch(s: GameState, call: "ball" | "strike" | "swingMiss" | 
   return null;
 }
 
-function walk(s: GameState): PAResult {
+/** 볼넷 · 몸에 맞는 공 (기록은 볼넷 칸에 같이 셈) */
+function walk(s: GameState, hbp = false): PAResult {
   const bs = s.sides[batSide(s)];
   const fs = s.sides[fieldSide(s)];
   bs.bat[bs.order].pa++;
@@ -204,7 +206,8 @@ function walk(s: GameState): PAResult {
   }
   b[0] = bs.order;
   bs.bat[bs.order].rbi += scored.length;
-  return endPA(s, { kind: "BB", text: scored.length ? "밀어내기 볼넷" : "볼넷", runs: scored.length }, 0, scored.length, scored, b);
+  const text = hbp ? (scored.length ? "밀어내기 사구" : "몸에 맞는 공!") : scored.length ? "밀어내기 볼넷" : "볼넷";
+  return endPA(s, { kind: "BB", text, runs: scored.length }, 0, scored.length, scored, b);
 }
 
 /** 인플레이 결과 반영 */

@@ -424,9 +424,37 @@ function Play({
 
   // 키보드
   useEffect(() => {
+    // 타자 이동 (컨택존): 누르고 있는 방향키 · WASD
+    const held = new Set<string>();
+    const DIRS: Record<string, [number, number]> = { arrowleft: [-1, 0], a: [-1, 0], arrowright: [1, 0], d: [1, 0], arrowup: [0, 1], w: [0, 1], arrowdown: [0, -1], s: [0, -1] };
+    const pushMove = () => {
+      const m = matchRef.current;
+      if (!m) return;
+      let x = 0;
+      let y = 0;
+      for (const k of held) {
+        x += DIRS[k][0];
+        y += DIRS[k][1];
+      }
+      m.setBatMove(x, y);
+    };
+    const onUp = (e: KeyboardEvent) => {
+      const k = e.key.toLowerCase();
+      if (held.delete(k)) pushMove();
+    };
     const onKey = (e: KeyboardEvent) => {
       const m = matchRef.current;
-      if (!m || e.repeat) return;
+      if (!m) return;
+      const k0 = e.key.toLowerCase();
+      if (DIRS[k0] && m.ui.userBat && !m.paused) {
+        e.preventDefault();
+        if (!held.has(k0)) {
+          held.add(k0);
+          pushMove();
+        }
+        return;
+      }
+      if (e.repeat) return;
       if (e.key === "Escape") {
         setMenu((v) => {
           m.setPaused(!v);
@@ -450,8 +478,18 @@ function Play({
       else if (k === "arrowdown" || k === "s") (e.preventDefault(), m.moveAim(0, -1));
       else if (k === "f") m.toggleFast();
     };
+    const onBlur = () => {
+      held.clear();
+      pushMove();
+    };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    window.addEventListener("keyup", onUp);
+    window.addEventListener("blur", onBlur);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("keyup", onUp);
+      window.removeEventListener("blur", onBlur);
+    };
   }, []);
 
   const pause = (v: boolean) => {
@@ -558,6 +596,9 @@ function Play({
               </>
             )}
           </div>
+
+          {/* 타자 이동 패드 (터치) — 투구 전에 끌어서 타자 · 컨택존 옮기기 */}
+          {ui.userBat && <MovePad active={ui.canMove} onMove={(x, y) => m?.setBatMove(x, y)} />}
 
           {/* 아래: 메뉴 · 빨리감기 (필드 화면에선 홈플레이트를 안 가리게 오른쪽 위로) */}
           <div className={`absolute flex gap-2 ${ui.fieldPlaying ? "top-[118px] right-3 flex-col items-end" : "bottom-3 left-1/2 -translate-x-1/2"}`}>
@@ -779,5 +820,58 @@ function LineScore({ m }: { m: Match }) {
         ))}
       </tbody>
     </table>
+  );
+}
+
+/** 타자 이동 패드: 가운데 원을 끌면 그 방향으로 (화면 위 = 위). 손 떼면 멈춤 */
+function MovePad({ active, onMove }: { active: boolean; onMove: (x: number, y: number) => void }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [knob, setKnob] = useState({ x: 0, y: 0 });
+  const R = 46;
+  const move = (e: { clientX: number; clientY: number }) => {
+    const el = ref.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    const k = r.width / (R * 2 + 24);
+    let dx = (e.clientX - (r.left + r.width / 2)) / k;
+    let dy = (e.clientY - (r.top + r.height / 2)) / k;
+    const l = Math.hypot(dx, dy);
+    if (l > R) {
+      dx = (dx / l) * R;
+      dy = (dy / l) * R;
+    }
+    setKnob({ x: dx, y: dy });
+    // 가운데 살짝은 안 움직임 (손 떨림)
+    const n = Math.hypot(dx, dy) / R;
+    onMove(n < 0.18 ? 0 : dx / R, n < 0.18 ? 0 : -dy / R);
+  };
+  const end = () => {
+    setKnob({ x: 0, y: 0 });
+    onMove(0, 0);
+  };
+  return (
+    <div
+      ref={ref}
+      className="absolute left-4 select-none rounded-full border-2 border-white/25 bg-black/35 transition-opacity"
+      style={{ bottom: 128, width: R * 2 + 24, height: R * 2 + 24, opacity: active ? 1 : 0.35, touchAction: "none", pointerEvents: active ? undefined : "none" }}
+      onPointerDown={(e) => {
+        e.currentTarget.setPointerCapture(e.pointerId);
+        move(e);
+      }}
+      onPointerMove={(e) => {
+        if (e.buttons || e.pointerType === "touch") move(e);
+      }}
+      onPointerUp={end}
+      onPointerCancel={end}
+    >
+      <div className="pointer-events-none absolute top-1/2 left-1/2 text-center text-[10px] font-bold text-white/45" style={{ transform: "translate(-50%, -50%)", marginTop: -R - 2 }}>
+        ▲
+      </div>
+      <div
+        className="pointer-events-none absolute top-1/2 left-1/2 rounded-full border-2 border-[#ffc46e] bg-[#ffc46e]/30"
+        style={{ width: 40, height: 40, transform: `translate(calc(-50% + ${knob.x}px), calc(-50% + ${knob.y}px))` }}
+      />
+      <div className="pointer-events-none absolute -bottom-5 left-1/2 -translate-x-1/2 whitespace-nowrap text-[10px] text-white/55">타자 이동 · 방향키</div>
+    </div>
   );
 }

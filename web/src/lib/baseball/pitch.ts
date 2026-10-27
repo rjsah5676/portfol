@@ -151,7 +151,8 @@ export function makePitch(
     special: o.special,
     kmh: Math.round(velo),
     dur: RELEASE_Z / mps(velo) / speedScale,
-    release: { x: hand * 0.55, y: 1.78 },
+    // 놓는 점 = 투구 그림(pitcher-throw) 공 놓는 손 자리 (세트 위치 투수판 위, 머리 위로 뻗은 손) — 손에서 바로 나가게
+    release: { x: hand * 0.1, y: 1.62 },
     target: { x: tx, y: ty },
     brk: { x: hand * def.bx * brkMul, y: def.by * brkMul },
     late: def.late,
