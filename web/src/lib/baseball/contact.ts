@@ -49,10 +49,11 @@ export interface SwingIn {
 
 /**
  * 컨택존 (마구마구식) — 타자가 투구 전에 옮겨 두는 「노리는 자리」. 반폭 · 반높이 (m).
- * 히트가 높을수록 넓음: 히트 999 → 스트라이크 존(공 반지름 포함)의 95% · 500 → 63% · 250 → 46%.
+ * 히트가 높을수록 넓음 (스트라이크 존 · 공 반지름 포함 기준 가로세로 배율):
+ *   히트 300 → 0.34 (존 9칸 중 1칸의 1.2배) · 500 → 0.53 · 700 → 0.71 · 900 → 0.90 · 999 → 0.99. 최저 0.2
  */
 export function contactZone(hit: number) {
-  const k = 0.3 + 0.65 * clamp(hit / 1000, 0, 1);
+  const k = clamp(0.34 + ((hit - 300) / 600) * 0.56, 0.2, 1);
   return { hw: (ZONE.x + BALL_R) * k, hh: ((ZONE.y1 - ZONE.y0) / 2 + BALL_R) * k };
 }
 /**
@@ -60,14 +61,39 @@ export function contactZone(hit: number) {
  * 타자 그림은 화면에서 좌우 40px · 아래 34px 까지 (위로는 거의 안 움직임 — match.batterPos)
  */
 export const CZ_RANGE = { x: 0.14, y0: ZONE.mid - 0.12, y1: ZONE.mid + 0.12 };
+/** 공이 스트라이크 존(공 반지름 포함 — 걸치면 스트라이크)에서 벗어난 거리 m. 스트라이크면 0 */
+export function offZone(at: { x: number; y: number }) {
+  const dx = Math.max(0, Math.abs(at.x) - (ZONE.x + BALL_R));
+  const dy = Math.max(0, ZONE.y0 - BALL_R - at.y, at.y - (ZONE.y1 + BALL_R));
+  return Math.hypot(dx, dy);
+}
 /**
- * 컨택존 배율: 존 가운데 1.08 → 존 끝 0.96 (잘 노리면 덤), 밖으로 멀어질수록 줄어 최저 0.4
- * (존 밖이라고 무조건 헛스윙 · 아웃은 아님 — 타이밍이 좋으면 빗맞은 안타 · 파울은 나옴)
+ * 볼 정도 · 터무니없는 볼 기준 (offZone 거리, m)
+ * - BALL_FULL: 이만큼 빠지면 완전히 「볼」 (그 사이는 스트라이크 쪽에 가깝게 섞음)
+ * - 터무니없는 볼: 그림 격자 끝에서 공 2개 빠지면 시작 → 3개면 완전히 (공 지름 0.074)
  */
-export function zoneFactor(at: { x: number; y: number }, cz: { x: number; y: number }, hit: number) {
+export const BALL_FULL = 0.06;
+export const WILD_FROM = 2 * 2 * BALL_R - BALL_R;
+export const WILD_FULL = 3 * 2 * BALL_R - BALL_R;
+
+/**
+ * 공 위치 × 컨택존 → 맞히는 질 q (타이밍 질과 곱함). dn = 컨택존 가운데에서 거리 (1 = 네모 끝)
+ * 순서: 스트 · 컨택존 가운데 (1.06) > 스트 · 존 안 (끝 0.96)
+ *     > 스트 · 존 밖 근처 (dn 1~1.5: 0.96~0.76) = 볼 · 가운데 근처 (dn 0~0.4: 0.84~0.72)
+ *     > 스트 · 존 밖 멀리 (dn 2~: 0.56~0.4) = 볼 · 존 안 (dn 0.5~1: 0.68~0.44)
+ *     > 볼 · 존 밖 (빠르게 0 → 헛스윙 · 파울) · 터무니없는 볼 (×0.25 → 안타 거의 없음)
+ */
+export function locQuality(at: { x: number; y: number }, cz: { x: number; y: number }, hit: number, anywhere = false) {
   const { hw, hh } = contactZone(hit);
-  const dn = Math.hypot((at.x - cz.x) / hw, (at.y - cz.y) / hh);
-  return { k: dn <= 1 ? 1.08 - 0.12 * dn * dn : Math.max(0.4, 0.96 - 0.35 * (dn - 1)), dn };
+  // 화면의 네모 컨택존과 같게: 가로 · 세로 중 더 먼 쪽 (네모 안이면 dn ≤ 1)
+  const dn = Math.max(Math.abs(at.x - cz.x) / hw, Math.abs(at.y - cz.y) / hh);
+  const sd = anywhere ? 0 : offZone(at);
+  const b = clamp(sd / BALL_FULL, 0, 1);
+  const w = clamp((sd - WILD_FROM) / (WILD_FULL - WILD_FROM), 0, 1);
+  const strike = dn <= 1 ? 1.06 - 0.1 * dn * dn : Math.max(0.4, 0.96 - 0.4 * (dn - 1));
+  const ball = dn <= 1 ? 0.84 - 0.4 * Math.pow(dn, 1.3) : 0.44 * Math.exp(-3 * (dn - 1));
+  const q = lerp(strike, ball, b) * lerp(1, 0.25, w);
+  return { q, dn, b, w, sd };
 }
 
 /** 타이밍 창 (초) */
@@ -81,18 +107,28 @@ export function swing(o: SwingIn, rng: Rng): SwingResult {
   const e = sp === "violet" ? o.e * 0.5 : o.e;
   const r = Math.abs(e) / W;
   const qt = r >= 1 ? 0 : 1 - Math.pow(r, 1.6);
-  // 존 밖 거리
-  const dx = Math.max(0, Math.abs(o.at.x) - (ZONE.x + 0.09));
-  const dy = Math.max(0, ZONE.y0 - 0.08 - o.at.y, o.at.y - (ZONE.y1 + 0.06));
-  const dist = Math.hypot(dx, dy);
-  const ql = sp === "soyoung" ? 1 : clamp(1 - dist / 0.2, 0, 1);
   // 좋은 공(게이지 MAX)은 정타가 덜 나옴 · 마구는 더
   const pq = o.pitch.special ? 0.12 : o.pitch.mistake ? -0.15 : o.pitch.quality * 0.16;
-  const z = o.cz ? zoneFactor(o.at, o.cz, o.hit) : { k: 1, dn: 0 };
-  let c = qt * ql * z.k * (1.06 - pq);
-  // PERFECT 는 타이밍 + 컨택존 안쪽(가운데 쪽)일 때만
-  const perfect = r < 0.15 && ql > 0.75 && z.dn < 0.85;
-  if (perfect) c = Math.max(c, 0.92 * ql * Math.min(1, z.k));
+  let q: number;
+  let dn = 0.5;
+  let wild = 0;
+  let outCz = false;
+  if (o.cz) {
+    const L = locQuality(o.at, o.cz, o.hit, sp === "soyoung");
+    q = L.q;
+    dn = L.dn;
+    wild = L.w;
+    outCz = L.dn > 1;
+  } else {
+    // 컨택존 없음 (자동 진행 시뮬): 존 밖 거리만
+    const dx = Math.max(0, Math.abs(o.at.x) - (ZONE.x + 0.09));
+    const dy = Math.max(0, ZONE.y0 - 0.08 - o.at.y, o.at.y - (ZONE.y1 + 0.06));
+    q = sp === "soyoung" ? 1 : clamp(1 - Math.hypot(dx, dy) / 0.2, 0, 1);
+  }
+  let c = qt * q * (1.06 - pq);
+  // PERFECT 는 타이밍 + 공 위치 좋음 + 컨택존 안쪽(가운데 쪽)일 때만
+  const perfect = r < 0.15 && q > 0.85 && dn < 0.85;
+  if (perfect) c = Math.max(c, 0.92 * Math.min(1, q));
   c = clamp(c, 0, 1);
   if (c < 0.1) return { kind: "whiff", e: o.e };
 
@@ -110,8 +146,9 @@ export function swing(o: SwingIn, rng: Rng): SwingResult {
     return { kind: "bip", e: o.e, ball };
   }
 
-  // 빗맞음 → 대부분 파울
-  if (c < 0.3 && rng.chance(0.72 - c)) return { kind: "foul", e: o.e, c, tip: c < 0.18 };
+  // 빗맞음 → 대부분 파울. 터무니없는 볼은 앞으로 거의 안 감 (컨택존 밖이면 아예)
+  const foulP = wild > 0.5 ? (outCz ? 1 : 0.9) : 0.72 - c;
+  if (c < 0.3 && rng.chance(foulP)) return { kind: "foul", e: o.e, c, tip: c < 0.18 };
 
   const side = o.bats === "R" ? 1 : -1;
   let spray = (e / W) * 58 * side + o.at.x * 38 + rng.gauss() * (3 + 9 * (1 - c));
@@ -126,6 +163,8 @@ export function swing(o: SwingIn, rng: Rng): SwingResult {
   const pm = o.pitch.kmh / 3.6;
   let ev = 20 + Math.pow(c, 1.3) * (15.5 + (o.power / 1000) * 14) + pm * 0.08 * c;
   if (perfect) ev += 4;
+  // 컨택존 정가운데일수록 세게 (존 안에서만, 최대 +2.5m/s)
+  if (o.cz && dn < 1) ev += 2.5 * (1 - dn * dn) * c;
 
   switch (sp) {
     case "kai":
