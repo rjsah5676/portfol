@@ -2,6 +2,7 @@
 야구 인연 캐릭터 그림 넣기 (초록 #00FF00 배경 → 투명)
   python3 scripts/baseball-char-art.py <id> <전신.png> <프로필.png> <대표색 #rrggbb> [얼굴 가운데 x 비율]
 출력: public/baseball/char/<id>.webp (전신, 투명, 여백 잘라냄) · <id>-face.webp (얼굴, 대표색 어두운 배경)
+  프로필 자리에 - 를 주면 전신만 갈아 끼움 (얼굴은 그대로)
 """
 import sys
 import numpy as np
@@ -42,6 +43,8 @@ x0, x1 = max(0, xs.min() - pad), min(al.shape[1], xs.max() + pad)
 im = Image.fromarray((np.dstack([rgb, al])[y0:y1, x0:x1] * 255).round().astype(np.uint8), "RGBA")
 im.save(OUT + cid + ".webp", quality=92, method=6)
 print("full", im.size)
+if prof == "-":
+    sys.exit(0)
 
 rgb, al = key(prof)
 H, W = al.shape
