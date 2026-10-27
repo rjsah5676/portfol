@@ -2,7 +2,7 @@
  * 봇: 투구 고르기 · 게이지 · 타자 스윙 판단 + 사람 흉내(밸런스 시뮬용).
  * 난이도 초급 · 중급 · 고급 = 0 · 1 · 2.
  */
-import type { Batter, Pitcher } from "./data";
+import { playStat, type Batter, type Pitcher } from "./data";
 import type { Pitch, PitchKind } from "./pitch";
 import { PITCHES, ZONE, inZone } from "./pitch";
 import type { Rng } from "./rng";
@@ -76,7 +76,8 @@ export interface CpuSwing {
  */
 export function cpuSwing(b: Batter, p: Pitch, at: { x: number; y: number }, strikes: number, balls: number, diff: Diff, rng: Rng, fbDur: number): CpuSwing {
   const zone = inZone(at.x, at.y);
-  const eye = [0.45, 0.6, 0.72][diff] + (b.hit / 1000) * 0.15;
+  const hit = playStat(b, b.hit);
+  const eye = [0.45, 0.6, 0.72][diff] + (hit / 1000) * 0.15;
   let sw: number;
   if (zone) sw = 0.62 + eye * 0.25 + (strikes >= 2 ? 0.18 : 0) - (balls >= 3 ? 0.1 : 0);
   else {
@@ -86,13 +87,13 @@ export function cpuSwing(b: Batter, p: Pitch, at: { x: number; y: number }, stri
   if (p.mistake) sw += 0.2;
   if (p.special) sw = zone ? 0.9 : 0.7;
   const swing = rng() < sw;
-  const W = timingWindow(b.hit, false, false);
+  const W = timingWindow(hit, false, false);
   // 타이밍 흔들림: 실력(난이도 · 히트) + 공 질 + 직구 기다리다 속은 정도
-  const skill = [1.15, 0.92, 0.74][diff] * (1.2 - (b.hit / 1000) * 0.45);
+  const skill = [1.15, 0.92, 0.74][diff] * (1.2 - (hit / 1000) * 0.45);
   let sigma = W * 1.0 * skill * (1 + p.quality * 0.35);
   let bias = 0;
   const slow = p.dur - fbDur;
-  if (slow > 0) bias -= slow * (0.35 - (b.hit / 1000) * 0.15); // 느린 공 → 일찍 휘두름
+  if (slow > 0) bias -= slow * (0.35 - (hit / 1000) * 0.15); // 느린 공 → 일찍 휘두름
   if (p.special) {
     sigma *= 1.7;
     bias += (rng() - 0.5) * W * 1.4;

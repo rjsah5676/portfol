@@ -116,8 +116,9 @@ export function CardView({
   onClick?: () => void;
   draggable?: boolean;
 }) {
+  const staff = card.kind === "coach" || card.kind === "cheer";
   const ovr = ovrOf(card);
-  const g = gradeOf(ovr);
+  const g = staff ? card.grade : gradeOf(ovr);
   const gc = GRADE_COLOR[g];
   const ss = g === "SS";
   const hof = card.kind === "bat" && card.hof;
@@ -141,9 +142,12 @@ export function CardView({
         {/* 위: 등급 · 종합 */}
         <div className="flex items-center justify-between px-1.5 pt-1">
           <GradeChip g={g} />
-          <span className={`${font.title} text-[20px] leading-none`} style={{ color: gc, textShadow: "0 2px 0 #000" }}>
-            {ovr}
-          </span>
+          {/* 코치 · 치어리더는 등급만 (점수 없음) */}
+          {!staff && (
+            <span className={`${font.title} text-[20px] leading-none`} style={{ color: gc, textShadow: "0 2px 0 #000" }}>
+              {ovr}
+            </span>
+          )}
         </div>
         {/* 실루엣 */}
         <div className="relative mx-1.5 mt-1 h-[48px] overflow-hidden rounded-md" style={{ background: `linear-gradient(180deg, ${teamColor}40, ${teamColor}10)` }}>
@@ -176,10 +180,14 @@ export function CardView({
           {(card.kind === "coach" || card.kind === "cheer") && (
             <div className="rounded-md bg-white/[0.06] px-1.5 py-1 text-[10.5px] leading-snug text-white/85">
               {card.kind === "coach" ? "코치 효과" : "응원 효과"}
-              <span className="block font-bold text-[#7dff9a]">
-                {card.buff.map((b) => `${BUFF_NAME[b]} +${buffOf(card)}`).join(" · ")}
-              </span>
-              <span className="text-[9.5px] text-white/45">{card.buff.some((b) => b === "control" || b === "brk") ? "투수 전원" : "타자 전원"}</span>
+              {card.kind === "coach" ? (
+                <>
+                  <span className="block font-bold text-[#7dff9a]">{card.buff.map((b) => `${BUFF_NAME[b]} +${buffOf(card)}`).join(" · ")}</span>
+                  <span className="text-[9.5px] text-white/45">{card.buff.some((b) => b === "control" || b === "brk") ? "투수 전원" : "타자 전원"}</span>
+                </>
+              ) : (
+                <span className="block text-white/50">준비 중</span>
+              )}
             </div>
           )}
         </div>

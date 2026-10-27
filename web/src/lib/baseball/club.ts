@@ -65,7 +65,7 @@ export interface PitCard {
   stamina: number;
   rep: PitchKind[];
 }
-/** 코치 · 치어리더: 경기 팀 능력치에 작은 보너스 */
+/** 코치: 경기 팀 능력치에 작은 보너스 (등급만 있음, 점수 없음) · 치어리더: 아직 효과 없음 (자리만) */
 export type BuffStat = "hit" | "power" | "run" | "def" | "control" | "brk";
 export const BUFF_NAME: Record<BuffStat, string> = { hit: "맞히기", power: "파워", run: "주루", def: "수비", control: "제구", brk: "변화" };
 export interface StaffCard {
@@ -74,15 +74,50 @@ export interface StaffCard {
   name: string;
   /** 직함 (타격 코치 · 응원단장 …) */
   title: string;
-  ovr: number;
+  grade: Grade;
   buff: BuffStat[];
+}
+/** 처음 코치 4명 (수비 능력치는 빼는 중이라 수비 코치 없음) */
+export const COACH_DEFS: [string, BuffStat[]][] = [
+  ["타격 코치", ["hit"]],
+  ["장타 코치", ["power"]],
+  ["주루 코치", ["run"]],
+  ["투수 코치", ["control", "brk"]],
+];
+/** 예전 저장 (점수 · 수비 코치 · 치어리더 보너스) → 지금 규칙 */
+export function migrateStaff(c: Card): boolean {
+  if (!isStaff(c)) return false;
+  const old = c as StaffCard & { ovr?: number };
+  let ch = false;
+  if (!old.grade) {
+    old.grade = gradeOf(old.ovr ?? 250);
+    ch = true;
+  }
+  if (old.ovr !== undefined) {
+    delete old.ovr;
+    ch = true;
+  }
+  if (c.kind === "coach" && c.buff.includes("def")) {
+    c.title = "장타 코치";
+    c.buff = ["power"];
+    ch = true;
+  }
+  if (c.kind === "cheer" && c.buff.length) {
+    c.buff = [];
+    ch = true;
+  }
+  return ch;
 }
 export type Card = BatCard | PitCard | StaffCard;
 
-export const ovrOf = (c: Card) => (c.kind === "bat" ? batOvr(c) : c.kind === "pit" ? pitOvr(c) : c.ovr);
+/** 코치 · 치어리더는 점수가 없어서 정렬 · 등급 칸용 대표값만 (화면엔 안 보임) */
+const GRADE_REP: Record<Grade, number> = { C: 250, B: 400, A: 600, S: 775, SS: 900 };
+export const isStaff = (c: Card): c is StaffCard => c.kind === "coach" || c.kind === "cheer";
+export const ovrOf = (c: Card) => (c.kind === "bat" ? batOvr(c) : c.kind === "pit" ? pitOvr(c) : GRADE_REP[c.grade]);
 export const gradeOfCard = (c: Card) => gradeOf(ovrOf(c));
-/** 코치 · 치어리더 보너스 크기: 종합 25당 +1 (C 등급 ≈ +8 ~ +11), 치어리더는 절반 */
-export const buffOf = (c: StaffCard) => Math.round(c.ovr / 25 / (c.kind === "cheer" ? 2 : 1));
+/** 코치 보너스: 등급마다 C +1 · B +2 · A +3 · S +4 · SS +5. 치어리더는 0 (다른 쓰임새 정할 때까지) */
+const GRADE_BUFF: Record<Grade, number> = { C: 1, B: 2, A: 3, S: 4, SS: 5 };
+export const buffOf = (c: StaffCard) => (c.kind === "cheer" ? 0 : GRADE_BUFF[c.grade]);
 
 /* ─────────────── 구단 ─────────────── */
 
@@ -210,19 +245,8 @@ export function newClub(teamId: string, seed = (Math.random() * 2 ** 32) >>> 0):
   const rotation = Array.from({ length: 5 }, () => pit("SP"));
   const bullpen = Array.from({ length: 4 }, () => pit("RP"));
   const closer = pit("CL");
-  const coachDefs: [string, BuffStat[]][] = [
-    ["타격 코치", ["hit"]],
-    ["투수 코치", ["control", "brk"]],
-    ["수비 코치", ["def"]],
-    ["주루 코치", ["run"]],
-  ];
-  const coaches: StaffCard[] = coachDefs.map(([title, buff]) => ({ kind: "coach", id: id("s"), name: name(), title, ovr: ovrC(), buff }));
-  const cheerDefs: [string, BuffStat[]][] = [
-    ["응원단장", ["power"]],
-    ["치어리더", ["hit"]],
-    ["치어리더", ["control"]],
-  ];
-  const cheers: StaffCard[] = cheerDefs.map(([title, buff]) => ({ kind: "cheer", id: id("s"), name: name(CHEER_GIVEN), title, ovr: ovrC(), buff }));
+  const coaches: StaffCard[] = COACH_DEFS.map(([title, buff]) => ({ kind: "coach", id: id("s"), name: name(), title, grade: "C", buff }));
+  const cheers: StaffCard[] = ["응원단장", "치어리더", "치어리더"].map((title) => ({ kind: "cheer", id: id("s"), name: name(CHEER_GIVEN), title, grade: "C", buff: [] }));
   cards.push(...starters, ...bench, ...rotation, ...bullpen, closer, ...coaches, ...cheers);
   return {
     v: 1,
@@ -344,7 +368,7 @@ export function staffBuffs(club: Club): Record<BuffStat, number> {
   const out: Record<BuffStat, number> = { hit: 0, power: 0, run: 0, def: 0, control: 0, brk: 0 };
   for (const id of [...club.slots.coach, ...club.slots.cheer]) {
     const c = cardById(club, id);
-    if (c && (c.kind === "coach" || c.kind === "cheer")) for (const b of c.buff) out[b] += buffOf(c);
+    if (c && isStaff(c)) for (const b of c.buff) out[b] += buffOf(c);
   }
   return out;
 }

@@ -2,7 +2,7 @@
  * 구단 저장 (게스트도 됨: 이 브라우저 localStorage) — 카드 · 타선 · 대전 기록.
  * 서버 저장 · 실시간 매칭은 다음 단계.
  */
-import { AREA_KIND, LINEUP_POS, SLOTS, cardById, newClub, syncHof, type Area, type Club, type Ghost } from "@/lib/baseball/club";
+import { AREA_KIND, LINEUP_POS, SLOTS, cardById, migrateStaff, newClub, syncHof, type Area, type Club, type Ghost } from "@/lib/baseball/club";
 import { loadHof } from "./careerStore";
 
 const KEY = "pxb:club:v1";
@@ -19,9 +19,11 @@ export function loadClub(): Club | null {
   if (!c) return null;
   c.record ??= { w: 0, l: 0, d: 0, rating: 1000, log: [] };
   c.nextSp ??= 0;
+  let staffChanged = false;
+  for (const k of c.cards) if (migrateStaff(k)) staffChanged = true;
   const hofChanged = syncHof(c, loadHof());
   if (!repair(c)) return null;
-  if (hofChanged) saveClub(c);
+  if (hofChanged || staffChanged) saveClub(c);
   return c;
 }
 

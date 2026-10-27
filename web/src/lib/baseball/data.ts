@@ -152,7 +152,16 @@ export interface Batter {
   sit?: { rispHit?: number; rispPow?: number; twoK?: number; late?: number };
   /** 육성 선수 외형 (헤어 · 얼굴 · 피부 · 배트 · 유니폼) */
   look?: { hair: number; face: number; skin: number; bat: number; uni: number };
+  /** 육성 선수: 다 같이 낮은 능력치에서 시작하니 경기에선 편차를 줄여 씀 (playStat) */
+  grow?: boolean;
 }
+
+/**
+ * 경기에 쓰는 타자 능력치. 육성 선수는 330 + 0.6 × 능력치 —
+ * 150 → 420 · 300 → 510 · 500 → 630 · 999 → 929 (낮을 때도 어느 정도 치고, 키울수록 덜 벌어짐)
+ */
+export const GROW = { base: 330, k: 0.6 };
+export const playStat = (b: { grow?: boolean }, v: number) => (b.grow ? Math.round(GROW.base + v * GROW.k) : v);
 
 /** 필살타법을 쓸 수 있으면 그 캐릭터 (마타자 · 배운 선수) */
 export const swingOf = (b: Batter): CharId | undefined => b.special ?? b.learned;

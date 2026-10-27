@@ -806,6 +806,7 @@ export function careerBatter(c: Career): Batter {
     learned: c.learned,
     sit: fx.sit,
     look: c.look,
+    grow: true,
   };
 }
 

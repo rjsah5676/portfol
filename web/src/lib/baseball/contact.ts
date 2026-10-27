@@ -96,6 +96,9 @@ export function locQuality(at: { x: number; y: number }, cz: { x: number; y: num
   return { q, dn, b, w, sd };
 }
 
+/** 타구 속도 (m/s) = base + c^1.3 × (c + 파워/1000 × pow) + 구속 몫 + 정타 덤 pf */
+export const EV = { base: 22, c: 16.3, pow: 4.2, pf: 4.7, laMid: 14, la0: 15, laPow: 7, laSd: 7, laCurve: 3, pfT0: 0.15, pfT1: 0.45 };
+
 /** 타이밍 창 (초) */
 export const timingWindow = (hit: number, bunt: boolean, special: boolean) =>
   (0.074 + (hit / 1000) * 0.05) * (bunt ? 1.9 : 1) * (special ? 1.55 : 1);
@@ -110,7 +113,8 @@ export function swing(o: SwingIn, rng: Rng): SwingResult {
   // 좋은 공(게이지 MAX)은 정타가 덜 나옴 · 마구는 더
   const pq = o.pitch.special ? 0.12 : o.pitch.mistake ? -0.15 : o.pitch.quality * 0.16;
   let q: number;
-  let dn = 0.5;
+  // 컨택존 없음(자동 진행 시뮬)은 「대충 잘 노린」 정도로 침 (dn 0.4 와 같게)
+  let dn = 0.4;
   let wild = 0;
   let outCz = false;
   if (o.cz) {
@@ -123,12 +127,16 @@ export function swing(o: SwingIn, rng: Rng): SwingResult {
     // 컨택존 없음 (자동 진행 시뮬): 존 밖 거리만
     const dx = Math.max(0, Math.abs(o.at.x) - (ZONE.x + 0.09));
     const dy = Math.max(0, ZONE.y0 - 0.08 - o.at.y, o.at.y - (ZONE.y1 + 0.06));
-    q = sp === "soyoung" ? 1 : clamp(1 - Math.hypot(dx, dy) / 0.2, 0, 1);
+    q = (sp === "soyoung" ? 1 : clamp(1 - Math.hypot(dx, dy) / 0.2, 0, 1)) * 1.04;
   }
   let c = qt * q * (1.06 - pq);
   // PERFECT 는 타이밍 + 공 위치 좋음 + 컨택존 안쪽(가운데 쪽)일 때만
+  // 정타 정도 pf (0 ~ 1): 타이밍 · 컨택존 가운데 · 공 위치가 좋을수록 부드럽게 올라감 (문턱 하나로 확 바뀌지 않게)
+  const pf =
+    clamp((EV.pfT1 - r) / (EV.pfT1 - EV.pfT0), 0, 1) * clamp((1 - dn) / 0.3, 0, 1) * clamp((q - 0.7) / 0.2, 0, 1);
+  // PERFECT 표시 · 필살 연출은 거의 꽉 찬 정타만
   const perfect = r < 0.15 && q > 0.85 && dn < 0.85;
-  if (perfect) c = Math.max(c, 0.92 * Math.min(1, q));
+  c = Math.max(c, lerp(c, 0.92 * Math.min(1, q), pf));
   c = clamp(c, 0, 1);
   if (c < 0.1) return { kind: "whiff", e: o.e };
 
@@ -156,15 +164,16 @@ export function swing(o: SwingIn, rng: Rng): SwingResult {
   // 존 높이(0.43m)에 맞춘 기울기 — 존 위 끝 ≈ +13°, 아래 끝 ≈ -13°
   const base = 6 + (o.at.y - ZONE.mid) * 62 + rng.gauss() * 20;
   // 정타: 힘센 타자일수록 띄워서 담장 쪽 (힘 500 → 23° · 1000 → 29°)
-  const ideal = perfect ? 17 + (o.power / 1000) * 12 + rng.gauss() * 5 : 22 + rng.gauss() * 7;
+  // 덜 정타면 라이너 쪽 (밋밋한 뜬공아웃 대신), 정타일수록 힘센 타자는 띄워서 담장 쪽
+  const ideal = lerp(EV.laMid + rng.gauss() * EV.laSd, EV.la0 + (o.power / 1000) * EV.laPow + rng.gauss() * 5, Math.pow(pf, EV.laCurve));
   let la = lerp(base, ideal, Math.pow(c, 1.4));
   // 빗맞으면 위아래로 크게 (팝플라이 · 땅볼)
   if (c < 0.45 && rng.chance(0.5)) la += (rng() < 0.5 ? -1 : 1) * rng.range(15, 35) * (1 - c);
   const pm = o.pitch.kmh / 3.6;
-  let ev = 20 + Math.pow(c, 1.3) * (15.5 + (o.power / 1000) * 14) + pm * 0.08 * c;
-  if (perfect) ev += 4;
+  let ev = EV.base + Math.pow(c, 1.3) * (EV.c + (o.power / 1000) * EV.pow) + pm * 0.08 * c;
+  ev += EV.pf * pf;
   // 컨택존 정가운데일수록 세게 (존 안에서만, 최대 +2.5m/s)
-  if (o.cz && dn < 1) ev += 2.5 * (1 - dn * dn) * c;
+  if (dn < 1) ev += 2.5 * (1 - dn * dn) * c;
 
   switch (sp) {
     case "kai":

@@ -8,7 +8,7 @@ import { applyPlay, batSide, batter, callPitch, fieldSide, pitchThrown } from ".
 import { simulatePlay, type FieldOut } from "./play";
 import { inZone, plateCross, type Pitch } from "./pitch";
 import type { Rng } from "./rng";
-import type { CharId } from "./data";
+import { playStat, type CharId } from "./data";
 
 export interface SwingDecision {
   swing: boolean;
@@ -43,10 +43,10 @@ export function hitByPitch(at: { x: number; y: number }, bats: "R" | "L", shift 
 export const batterShift = (bats: "R" | "L", cz?: { x: number; y: number }) => (cz ? (bats === "R" ? cz.x : -cz.x) : 0);
 
 /** 이 상황의 실제 히트 (득점권 · 2스트라이크 · 7회 이후 특수능력 포함) — 판정 · 컨택존 크기 표시가 같은 값을 씀 */
-export function effectiveHit(s: GameState, b: { hit: number; sit?: { rispHit?: number; twoK?: number; late?: number } }) {
+export function effectiveHit(s: GameState, b: { hit: number; grow?: boolean; sit?: { rispHit?: number; twoK?: number; late?: number } }) {
   const risp = s.bases[1] !== null || s.bases[2] !== null;
   const late = s.inning >= 7 ? b.sit?.late ?? 0 : 0;
-  return Math.max(1, b.hit + (risp ? b.sit?.rispHit ?? 0 : 0) + (s.strikes >= 2 ? b.sit?.twoK ?? 0 : 0) + late);
+  return Math.max(1, playStat(b, b.hit) + (risp ? b.sit?.rispHit ?? 0 : 0) + (s.strikes >= 2 ? b.sit?.twoK ?? 0 : 0) + late);
 }
 
 export function evaluate(s: GameState, p: Pitch, d: SwingDecision | null, rng: Rng, cz?: { x: number; y: number }): Outcome {
@@ -61,7 +61,7 @@ export function evaluate(s: GameState, p: Pitch, d: SwingDecision | null, rng: R
   const risp = s.bases[1] !== null || s.bases[2] !== null;
   const late = s.inning >= 7 ? b.sit?.late ?? 0 : 0;
   const hit = effectiveHit(s, b);
-  const power = Math.max(1, b.power + (risp ? b.sit?.rispPow ?? 0 : 0) + late);
+  const power = Math.max(1, playStat(b, b.power) + (risp ? b.sit?.rispPow ?? 0 : 0) + late);
   const sw = swing({ pitch: p, at, e: d.e, bats: b.bats, hit, power, bunt: d.bunt, special: d.special, cz: d.cz }, rng);
   if (sw.kind === "whiff") return { call: "swingMiss", at, sw, bad: true };
   if (sw.kind === "foul") return { call: "foul", at, sw, bad: false };
@@ -76,8 +76,8 @@ export function evaluate(s: GameState, p: Pitch, d: SwingDecision | null, rng: R
   const field = simulatePlay(
     {
       ball: sw.ball,
-      bases: s.bases.map((id, k) => (id === null ? null : { id, base: k + 1, run: bs.team.batters[id].run })),
-      batter: { id: bs.order, run: b.run },
+      bases: s.bases.map((id, k) => (id === null ? null : { id, base: k + 1, run: playStat(bs.team.batters[id], bs.team.batters[id].run) })),
+      batter: { id: bs.order, run: playStat(b, b.run) },
       outs: s.outs,
       def,
     },

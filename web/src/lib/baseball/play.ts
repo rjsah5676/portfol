@@ -29,12 +29,16 @@ export const HOME_POS: [number, number][] = [
   [9, 39],
   [-17, 26],
   [-9.5, 39],
-  [-33, 80],
-  [0, 95],
-  [33, 80],
+  [-32, 78],
+  [0, 92],
+  [32, 78],
 ];
 export const POS_NAME = ["투수", "포수", "1루수", "2루수", "3루수", "유격수", "좌익수", "중견수", "우익수"];
 
+/** 외야수 기본 달리기 (m/s, 수비 500 이면 +0.8) — 얕은 뜬공 · 빗맞은 라이너가 다 안타가 되지 않게 */
+const OF_SPEED = 6.4;
+/** 주자 달리기 (m/s): 주루 300 → 7.36 · 500 → 7.8 · 900 → 8.68 (주루가 2 · 3루타 · 내야안타에 잘 드러나게) */
+export const runSpeed = (run: number) => 6.7 + (run / 1000) * 2.2;
 export const FENCE_H = 3.2;
 /** 펜스까지 거리 (방향 ° 기준: 좌우 파울폴 98m · 가운데 118m) */
 export const fenceDist = (phiDeg: number) => 98 + 20 * Math.cos(clamp(phiDeg, -45, 45) * 2 * (Math.PI / 180));
@@ -184,13 +188,15 @@ export function predictBall(b: BattedBall): { pts: BallPt[]; hr: boolean; foul: 
       }
       h = 0;
       if (vh < -1.6) {
+        // 낮게 깔려 튀는 땅볼은 속도를 덜 잃음 (높이 떠서 꽂힌 공만 크게 죽음)
+        const keep = -vh < 0.6 * Math.hypot(vx, vy) ? 0.86 : 0.7;
         vh = -vh * 0.36;
-        vx *= 0.7;
-        vy *= 0.7;
+        vx *= keep;
+        vy *= keep;
       } else {
         vh = 0;
         const s = Math.hypot(vx, vy);
-        const dec = (Math.hypot(x, y) > 32 ? 3.0 : 5.5) * DT;
+        const dec = (Math.hypot(x, y) > 32 ? 3.0 : 4.2) * DT;
         if (s <= dec) {
           vx = 0;
           vy = 0;
@@ -287,10 +293,12 @@ export function simulatePlay(inp: FieldIn, rng: Rng): FieldOut {
     const d = inp.def[i] ?? 500;
     return {
       x, y,
-      speed: (i === 1 ? 5.4 : i === 0 ? 5.8 : i >= 6 ? 5.7 : 5.9) + (d / 1000) * 1.6,
+      speed: (i === 1 ? 5.4 : i === 0 ? 5.8 : i >= 6 ? OF_SPEED : 5.9) + (d / 1000) * 1.6,
       arm: (i >= 6 ? 23 : 27) + (d / 1000) * 9,
       tx: x, ty: y,
-      goAt: 0.2 + (1 - d / 1000) * 0.15 + reactAdd + (Math.abs(ball.la) < 10 && i < 6 ? -0.05 : 0),
+      goAt: 0.2 + (1 - d / 1000) * 0.15 + reactAdd
+        // 땅볼: 투수는 투구 마무리 동작 때문에 늦고, 내야수는 첫발 · 옆걸음이라 생각보다 못 닿음
+        + (ball.la < 10 ? (i === 0 ? 0.15 : 0) : 0),
       stunUntil: 0, readyAt: 0, role: "idle", coverBase: -1,
     };
   });
@@ -310,7 +318,8 @@ export function simulatePlay(inp: FieldIn, rng: Rng): FieldOut {
     return t + d / f.speed - t0;
   };
 
-  const REACH = 1.15;
+  // 팔 닿는 거리: 땅볼은 글러브를 바닥에 대야 해서 짧음
+  const REACH = ball.la < 10 ? 1.0 : 1.15;
   const CATCH_H = 2.45;
 
   /** 수비수 f 가 t0 이후 공을 처음 잡을 수 있는 점 */
@@ -420,7 +429,7 @@ export function simulatePlay(inp: FieldIn, rng: Rng): FieldOut {
   const bat: Runner = {
     id: inp.batter.id, isBatter: true, from: 0, s: 0, target: 1,
     // 출발 · 스윙 뒤 균형 흔들림 (같은 발이라도 타석마다 조금씩 다름 → 내야안타가 문턱이 아니라 확률로)
-    speed: (7.05 + (inp.batter.run / 1000) * 1.4) * (ball.bunt ? 1.04 : 1) * (1 + Math.max(-0.08, Math.min(0.08, rng.gauss() * 0.04))),
+    speed: (runSpeed(inp.batter.run)) * (ball.bunt ? 1.04 : 1) * (1 + Math.max(-0.08, Math.min(0.08, rng.gauss() * 0.04))),
     st: "run", forced: true, waitFly: false, scoredAt: -1,
   };
   R.push(bat);
@@ -431,7 +440,7 @@ export function simulatePlay(inp: FieldIn, rng: Rng): FieldOut {
     for (let k = 1; k < b; k++) if (!inp.bases[k - 1]) forced = false;
     R.push({
       id: r.id, isBatter: false, from: b, s: b, target: forced ? b + 1 : b,
-      speed: 7.05 + (r.run / 1000) * 1.4, st: forced ? "run" : "stand", forced, waitFly: false, scoredAt: -1,
+      speed: runSpeed(r.run), st: forced ? "run" : "stand", forced, waitFly: false, scoredAt: -1,
     });
   }
   const twoOuts = inp.outs >= 2;

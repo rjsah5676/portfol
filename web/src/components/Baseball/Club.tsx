@@ -294,9 +294,9 @@ export default function ClubScreen({ club, coin, onChange, onBack }: { club: Clu
               <div className="mt-1 text-[11px] font-bold text-white/50">치어리더</div>
               {club.slots.cheer.map((_, i) => slot({ area: "cheer", i }, <span className="w-[30px] text-[11px] font-bold text-[#ff8ad1]">응원</span>))}
               <div className="mt-auto rounded-lg border border-[#7dff9a]/30 bg-[#7dff9a]/[0.06] p-2 text-[11.5px] leading-relaxed text-white/80">
-                <b className="text-[#7dff9a]">경기 보너스 합계</b> (경기에 나가는 선수 전원)
+                <b className="text-[#7dff9a]">코치 보너스 합계</b> (경기에 나가는 선수 전원 · 치어리더 효과는 준비 중)
                 <div className="mt-0.5 flex flex-wrap gap-x-3">
-                  {(Object.keys(buffs) as (keyof typeof buffs)[]).map((k) => (
+                  {(Object.keys(buffs) as (keyof typeof buffs)[]).filter((k) => k !== "def").map((k) => (
                     <span key={k}>
                       {BUFF_NAME[k]} <b className="font-mono text-[#7dff9a]">+{buffs[k]}</b>
                     </span>
@@ -436,7 +436,8 @@ function SlotRow({
   const [over, setOver] = useState(false);
   const c = cardById(club, club.slots[at.area][at.i]);
   const ovr = c ? ovrOf(c) : 0;
-  const g = gradeOf(ovr);
+  const staff = !!c && (c.kind === "coach" || c.kind === "cheer");
+  const g = c && (c.kind === "coach" || c.kind === "cheer") ? c.grade : gradeOf(ovr);
   return (
     <div
       role="button"
@@ -482,7 +483,7 @@ function SlotRow({
           {!compact && <span className="shrink-0 text-[10px] text-white/50">{rowInfo(c)}</span>}
           {extra}
           <GradeChip g={g} />
-          <span className="w-[28px] shrink-0 text-right font-mono text-[12px] font-bold text-white/90">{ovr}</span>
+          <span className="w-[28px] shrink-0 text-right font-mono text-[12px] font-bold text-white/90">{staff ? "" : ovr}</span>
         </>
       ) : (
         <span className="flex-1 text-[11.5px] text-white/35">빈 칸 — 눌러서 넣기</span>
@@ -494,5 +495,6 @@ function SlotRow({
 function rowInfo(c: Card): string {
   if (c.kind === "bat") return `${c.pos} ${c.bats === "R" ? "우" : "좌"}타 · 맞${c.hit} 파${c.power}`;
   if (c.kind === "pit") return `${c.throws === "R" ? "우" : "좌"}투 ${c.velo}km · 제${c.control} 변${c.brk}`;
+  if (c.kind === "cheer") return `${c.title} · 효과 준비 중`;
   return `${c.title} · ${c.buff.map((b) => `${BUFF_NAME[b]}+${buffOf(c)}`).join(" ")}`;
 }

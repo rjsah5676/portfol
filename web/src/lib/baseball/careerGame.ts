@@ -3,7 +3,7 @@
  * 화면(직접 출전) · 자동 진행 · 밸런스 시뮬이 같이 씀.
  */
 import { cpuGauge, cpuPlan, cpuSwing, cpuUseSpecial, humanSwing, SPEED_SCALE, type Diff } from "./ai";
-import { TEAM_DEFS, makeTeam, swingOf, type Batter, type CharId, type Team } from "./data";
+import { TEAM_DEFS, makeTeam, playStat, swingOf, type Batter, type CharId, type Team } from "./data";
 import {
   batSide, batter as curBatter, callPitch, cpuManage, fieldSide, maybeMission, newGame, nextHalf, pitchThrown, pitcher as curPitcher,
   stamina01, applyPlay, type BatLine, type GameState, type PAResult,
@@ -76,15 +76,16 @@ export function quickPA(s: GameState, rng: Rng): PAResult {
   const b = curBatter(s);
   const p = curPitcher(s);
   for (let i = 0; i < 4; i++) pitchThrown(s);
-  const x = (b.hit - (p.control + p.brk) / 2) / 1000;
-  const pw = b.power / 1000;
+  const bHit = playStat(b, b.hit);
+  const x = (bHit - (p.control + p.brk) / 2) / 1000;
+  const pw = playStat(b, b.power) / 1000;
   const tired = 1 - stamina01(s);
   const pK = clamp(0.17 - x * 0.18 - tired * 0.04, 0.06, 0.32);
   const pBB = clamp(0.08 + tired * 0.04, 0.05, 0.14);
   const pHR = clamp(0.006 + pw * pw * 0.06, 0.004, 0.08);
-  const p3B = 0.004 + (b.run / 1000) * 0.006;
+  const p3B = 0.004 + (playStat(b, b.run) / 1000) * 0.006;
   const p2B = 0.035 + pw * 0.025;
-  const p1B = clamp(0.14 + x * 0.14 + (b.hit / 1000) * 0.03, 0.08, 0.26);
+  const p1B = clamp(0.14 + x * 0.14 + (bHit / 1000) * 0.03, 0.08, 0.26);
   let r = rng();
   if ((r -= pK) < 0) {
     s.strikes = 2;
