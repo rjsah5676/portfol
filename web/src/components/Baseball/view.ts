@@ -16,38 +16,36 @@ export const DH = 576;
 // → 홈 뒤 2.3m · 눈높이 0.47m · 수평선 58%. 예전(bat-dusk): F 2471 · Dc 8.62 · camH 1.094 · Y0 181.4
 export const CAM = { F: 688.7, Dc: 2.268, camH: 0.472, Y0: 331.7, cx: 512 };
 /**
- * 존 내림: 타자 그림을 원래 크기(실제 비율보다 작게)로 두면서 존이 타자 가슴 ~ 무릎에 오게, 공 · 존은 「더 높은 카메라」로 봄.
- *   - 높이 0.43m(존 아래 끝) 위의 것: 눈높이 CAM_V 카메라 (구장 그림 카메라 0.47m 보다 높음 → 존이 홈플레이트 쪽으로 내려옴)
- *   - 땅(높이 0): 구장 그림 카메라 그대로 (그림자 · 땅에 튄 공이 그림 바닥에 맞게), 그 사이는 섞음
- *   - 수평선 위치를 투수판 쪽으로 갈수록 맞춰서 투수판(z 18.44)에선 두 카메라가 같은 자리 → 투수는 그림의 투수판 위에 그대로
- * 원근이 그대로라 공이 가라앉았다 뜨지 않고 내려오기만 함 (예전엔 z 에 비례해 화면 px 를 내려서 언더핸드처럼 떴음)
+ * 공 · 존 카메라 (BC): 구장 그림 카메라(CAM)와 따로 — 타자 그림(실제 비율보다 작음)에 맞춰 존을 가슴 ~ 무릎에 두고,
+ * 투수 그림 손(화면 y ≈ 249)에서 공이 나가 존으로 「내려오며」 들어오게 푼 값.
+ *   맞춘 것: 존 정사각 153px (위 265 · 아래 418, 폭은 그림 홈플레이트 크기 그대로) · 공 놓는 점(1.62m, 투수판) = 손 249 · 투수판(0.25m) = 그림 투수판 339
+ *   → 홈 뒤 5.1m · 눈높이 0.82m (그림 카메라보다 멀고 높음 → 공이 계속 내려옴, 존 위 끝 공만 홈 앞에서 수평)
+ * 땅(높이 0)은 구장 그림 카메라 그대로 (그림자 · 땅에 튄 공), 높이 0 ~ 0.43m 사이는 섞음.
  */
-export const ZONE_DROP = 58;
-const CAM_V = 0.709;
-const S0 = CAM.F / CAM.Dc;
-const S_RUB = CAM.F / (18.44 + CAM.Dc);
-const DY_A = ZONE_DROP - (CAM_V - CAM.camH) * S0;
-const DY_B = -(DY_A + (CAM_V - CAM.camH) * S_RUB) / 18.44;
+export const BC = { F: 1546, Dc: 5.09, camH: 0.815, Y0: 302 };
+const SB_RUB = BC.F / (18.44 + BC.Dc);
+const SB_HOME = BC.F / BC.Dc;
+const HIGH_DAMP = 1.0;
 const clamp01 = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v);
-/** 높이 y · 거리 z 에서 공 · 존 카메라가 구장 카메라보다 아래로 그리는 px */
-/** 눈높이보다 높은 공이 홈 가까이서 위로 솟아 보이는 걸 이만큼 누름 (0 = 원근 그대로) — 높은 공도 내려오면서 들어오게 */
-const RISE_DAMP = 0.4;
-const dropAt = (y: number, z: number, s: number) => {
-  if (z >= 18.44) return 0;
-  const ss = Math.min(s, S0);
-  return (DY_A + DY_B * Math.max(0, z) + (CAM_V - CAM.camH) * ss) * clamp01(y / 0.43) + RISE_DAMP * Math.max(0, y - CAM_V) * (ss - S_RUB);
-};
 export function proj(x: number, y: number, z: number) {
   const s = CAM.F / (z + CAM.Dc);
-  return { x: CAM.cx + x * s, y: CAM.Y0 - (y - CAM.camH) * s + dropAt(y, z, s), s };
+  const gx = CAM.cx + x * s;
+  const gy = CAM.Y0 - (y - CAM.camH) * s;
+  const w = clamp01(y / 0.43);
+  if (w === 0) return { x: gx, y: gy, s };
+  const sb = BC.F / (Math.max(z, -3) + BC.Dc);
+  const bx = CAM.cx + x * sb;
+  // 존 위 끝(0.9m) 넘는 높은 공는 홈에 가까워질수록 위로 솟아 보이는 걸 눌러 줌 — 존은 그대로, 높은 볼도 손 높이 아래로 들어옴
+  // 홈 지나 포수 쪽(z < 0)은 위아래 원근을 홈에서 멈춤 — 안 친 공이 미트로 가며 위 · 아래로 튀어 보이지 않게 (크기 · 좌우는 계속 커짐)
+  const sv = Math.min(sb, SB_HOME);
+  const by = BC.Y0 - (y - BC.camH) * sv + (y > 0.9 ? HIGH_DAMP * (y - 0.9) * (sv - SB_RUB) : 0);
+  return { x: gx + (bx - gx) * w, y: gy + (by - gy) * w, s: s + (sb - s) * w };
 }
 export const MOUND = proj(0, 0, 18.4);
-/** 홈플레이트 면(z 0)의 화면 좌표 → 월드 (x, 높이) — proj 의 존 내림까지 되돌림 */
+/** 홈플레이트 면(z 0)의 화면 좌표 → 월드 (x, 높이) — 공 · 존 카메라 기준 (코스 정하기) */
 export function unprojPlate(sx: number, sy: number) {
-  const s = CAM.F / CAM.Dc;
-  let y = CAM.camH - (sy - CAM.Y0) / s;
-  for (let i = 0; i < 6; i++) y = CAM.camH - (sy - CAM.Y0 - dropAt(y, 0, s)) / s;
-  return { x: (sx - CAM.cx) / s, y };
+  const sb = BC.F / BC.Dc;
+  return { x: (sx - CAM.cx) / sb, y: BC.camH - (sy - BC.Y0) / sb };
 }
 
 // ───────────── 필드 ─────────────

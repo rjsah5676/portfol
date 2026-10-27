@@ -23,7 +23,7 @@ import { PITCHES, ZONE, inZone, makePitch, pitchAt, plateCross, type Pitch, type
 import { predictBall, type FieldEvent, type Frame } from "@/lib/baseball/play";
 import { batterShift, commit, effectiveHit, evaluate, hitByPitch, type Outcome, type SwingDecision } from "@/lib/baseball/resolve";
 import { lookColors, lookSkin, uniColors } from "@/lib/baseball/look";
-import { batterFrame, drawBatter, KICK_HOLD_T, KICK_STEP_T, preloadBatter, type SpriteLook } from "@/lib/baseball/batterSprite";
+import { batterFrame, drawBatter, KICK_HOLD_T, KICK_STEP_T, preloadBatter, strideProg, type SpriteLook } from "@/lib/baseball/batterSprite";
 /** 빈 스윙 한 번 길이 (이 시간 지나면 다시 휘두를 수 있고, 하던 자세로 돌아감) */
 const FREE_SWING_T = 0.5;
 import { BATCOL } from "@/lib/baseball/look";
@@ -385,7 +385,10 @@ export class Match {
   private popup(x: number, y: number, text: string, color = "#fff") {
     this.popups.push({ x, y, text, color, t: 0 });
   }
+  /** 스윙 버튼 때 스트라이드(디딤발 내딛기) 진행도 — 1 이면 배트만 돌림 */
+  private swingSp = 1;
   private playBat(a: Anim) {
+    if (a === BAT_SWING) this.swingSp = this.batAnim === BAT_LOAD ? strideProg(this.batAnimT) : 0;
     this.batFrom = { a: this.batAnim, t: this.batAnimT, k: 0 };
     this.batAnim = a;
     this.batAnimT = 0;
@@ -864,9 +867,11 @@ export class Match {
     // 위로 옮길 땐 타자가 화면 위(= 투수 쪽 앞)로 떠 보여서 20%만 — 좌우 · 아래는 그대로
     const S0 = proj(0, 0, 0).s;
     const dy = this.cz.y - ZONE.mid;
-    const ox = this.userBat ? this.cz.x * S0 : 0;
+    // 플레이트 쪽으로는 35%만 (다 따라가면 스윙 때 디딤발이 홈플레이트를 밟음) — 바깥쪽은 그대로
+    const inward = lefty ? this.cz.x < 0 : this.cz.x > 0;
+    const ox = this.userBat ? this.cz.x * S0 * (inward ? 0.35 : 1) : 0;
     const oy = this.userBat ? -dy * S0 * (dy > 0 ? 0.2 : 1) : 0;
-    return { x: (lefty ? 684 : 340) + ox, y: 394 + oy, sc: 2.25, lefty };
+    return { x: (lefty ? 702 : 322) + ox, y: 394 + oy, sc: 2.25, lefty };
   }
 
   /** 타석 화면 타구가 홈 뒤(카메라 쪽)로 오는지 — 파울팁 · 뒤로 뜬 파울 */
@@ -1684,7 +1689,7 @@ export class Match {
       ctx.restore();
     }
     // 픽셀 타자 (그림 불러오기 전엔 코드 리그)
-    if (!drawBatter(ctx, batterFrame(this.batAnim, this.batAnimT), this.batLook, bx, by, sc, lefty, this.batAnim === BAT_SWING && !this.reduceMotion ? 1 : 0)) drawRig(ctx, BATTER_RIG, bps, this.batSkin, this.batColors, bx, by, sc, lefty);
+    if (!drawBatter(ctx, batterFrame(this.batAnim, this.batAnimT, this.swingSp), this.batLook, bx, by, sc, lefty, this.batAnim === BAT_SWING && !this.reduceMotion ? 1 : 0)) drawRig(ctx, BATTER_RIG, bps, this.batSkin, this.batColors, bx, by, sc, lefty);
 
     // 임팩트: 링 + 빛살 (히트스톱 동안은 멈춘 채 크게)
     if (this.impact) {
