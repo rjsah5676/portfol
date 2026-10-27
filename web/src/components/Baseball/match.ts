@@ -30,6 +30,9 @@ import { clamp, lerp, makeRng, smooth, type Rng } from "@/lib/baseball/rng";
 import { sfx } from "./sfx";
 import { CAM, DH, DW, battingBg, drawFieldFrame, fieldBg, fproj, proj } from "./view";
 
+/** 투수 그림 (pitcher-set.webp): 발 기준점 · 크기 (키 ≈ 115px, 목업 크기) */
+const PITCHER_STILL = { src: "/baseball/sprites/pitcher-set.webp", ax: 85, ay: 503, scale: 0.229 };
+
 export type Mode = "game" | "derby" | "career";
 
 export interface MatchCfg {
@@ -767,7 +770,7 @@ export class Match {
   private batterPos() {
     const lefty = this.batterNow.bats === "L";
     // 구장 그림의 왼쪽 · 오른쪽 타석 가운데에 발이 오게
-    return { x: lefty ? 724 : 300, y: 372, sc: 2.25, lefty };
+    return { x: lefty ? 728 : 296, y: 394, sc: 2.25, lefty };
   }
 
   private resolveFlight() {
@@ -1315,7 +1318,16 @@ export class Match {
     const pitcherScale = 0.9;
     const pps = pose(PITCHER_RIG, this.pitAnim, this.pitAnimT);
     const pFlip = this.pitcherNow.throws === "L";
-    drawRig(ctx, PITCHER_RIG, pps, this.pitSkin, this.pitColors, mp.x, mp.y - 56 * pitcherScale, pitcherScale, pFlip);
+    // 투수 그림 (지피티 세트 자세 1장, 발 = 투수판) — 없으면 코드 리그
+    const pim = img(PITCHER_STILL.src);
+    if (pim.complete && pim.naturalWidth) {
+      ctx.save();
+      ctx.imageSmoothingQuality = "high";
+      ctx.translate(mp.x, mp.y);
+      ctx.scale(pFlip ? -PITCHER_STILL.scale : PITCHER_STILL.scale, PITCHER_STILL.scale);
+      ctx.drawImage(pim, -PITCHER_STILL.ax, -PITCHER_STILL.ay);
+      ctx.restore();
+    } else drawRig(ctx, PITCHER_RIG, pps, this.pitSkin, this.pitColors, mp.x, mp.y - 56 * pitcherScale, pitcherScale, pFlip);
     // 손 위치 (공 놓는 점)
     const relPs = pose(PITCHER_RIG, PIT_THROW, PITCH_RELEASE_T);
     const [hx, hy] = boneTip(PITCHER_RIG, relPs, "handT", 1);
@@ -1431,11 +1443,22 @@ export class Match {
       anim = { ...anim, tracks: { ...anim.tracks, bat: add(anim.tracks.bat) } };
     }
     const bps = pose(BATTER_RIG, anim, this.batAnimT, this.batFrom);
-    // 그림자
-    ctx.fillStyle = "rgba(0,0,0,0.25)";
-    ctx.beginPath();
-    ctx.ellipse(bx, by + 150, 110, 18, 0, 0, Math.PI * 2);
-    ctx.fill();
+    // 그림자: 발바닥 바로 밑에 작고 옅게 (떠 보이지 않게)
+    {
+      const fy = by + 58 * sc;
+      const g = ctx.createRadialGradient(bx, fy, 0, bx, fy, 70);
+      g.addColorStop(0, "rgba(0,0,0,0.28)");
+      g.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = g;
+      ctx.save();
+      ctx.translate(bx, fy);
+      ctx.scale(1, 0.18);
+      ctx.translate(-bx, -fy);
+      ctx.beginPath();
+      ctx.arc(bx, fy, 70, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
     // 픽셀 타자 (그림 불러오기 전엔 코드 리그)
     if (!drawBatter(ctx, batterFrame(this.batAnim, this.batAnimT), this.batLook, bx, by, sc, lefty, this.batAnim === BAT_SWING && !this.reduceMotion ? 1 : 0)) drawRig(ctx, BATTER_RIG, bps, this.batSkin, this.batColors, bx, by, sc, lefty);
 
