@@ -250,7 +250,7 @@ export const CG: Record<
   },
   y_door: { src: `${B}/cg/y-door.webp`, title: "손바닥 하나만큼", who: "yeonseo", vars: { blush: `${B}/cg/y-door-blush.webp` } },
   // ---- v4 세라 ----
-  past: { src: `${B}/cg/past.webp`, title: "3년 전, 왼손 두 번", who: "sera" },
+  past: { src: `${B}/cg/past.webp`, title: "3년 전, 왼손 두 번", who: "sera", vars: { fold: `${B}/cg/past-fold.webp` } },
   s_open: { src: `${B}/cg/s-open.webp`, title: "저 이거예요", who: "sera", tight: true },
   s_keypad: { src: `${B}/cg/s-keypad.webp`, title: "보지도 않고 네 자리", who: "sera" },
   s_note: { src: `${B}/cg/s-note.webp`, title: "첫 장은 딜러님이 봐요", who: "sera", tight: true },
