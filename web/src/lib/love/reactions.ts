@@ -24,7 +24,7 @@ const pickOne = <T,>(a: T[]): T => a[Math.floor(Math.random() * a.length)];
 const TOUCH_HEAD: Partial<Record<CharKey, Tiered>> = {
   sera: [
     [
-      { text: "어? 쓰다듬어 주는 거예요? …한 번 더요.", face: "smile" },
+      { text: "어? 쓰다듬어 주는 거예요? …한 번 더요.", face: "blush" },
       { text: "손님 머리 만지면 안 되는 거 아니에요? 저는 좋지만요.", face: "smile" },
     ],
     [
@@ -32,7 +32,7 @@ const TOUCH_HEAD: Partial<Record<CharKey, Tiered>> = {
       { text: "더 해 주면, 저 오늘 안 갈 거예요.", face: "smile" },
     ],
     [
-      { text: "…딜러님 손, 역시 예뻐요.", face: "smile", heart: true },
+      { text: "…딜러님 손, 역시 예뻐요.", face: "heart", heart: true },
       { text: "이거, 저한테만 해요. 약속.", face: "smile", heart: true },
     ],
   ],
@@ -69,7 +69,7 @@ const TOUCH_HEAD: Partial<Record<CharKey, Tiered>> = {
 const TOUCH_BODY: Partial<Record<CharKey, Tiered>> = {
   sera: [
     [
-      { text: "앗. 딜러님 먼저 만졌어요. 이제 저도 만져도 되는 거죠?", face: "smile" },
+      { text: "앗. 딜러님 먼저 만졌어요. 이제 저도 만져도 되는 거죠?", face: "surprise" },
       { text: "…지금 제 쪽으로 온 거죠? 그렇게 알게요.", face: "smile" },
     ],
     [
@@ -77,7 +77,7 @@ const TOUCH_BODY: Partial<Record<CharKey, Tiered>> = {
       { text: "후후. 심장 소리 들려요? 저 지금 콜이에요.", face: "smile", heart: true },
     ],
     [
-      { text: "……조금만 더 이러고 있어요.", face: "smile", heart: true },
+      { text: "……조금만 더 이러고 있어요.", face: "blush", heart: true },
       { text: "놓으면 안 돼요. 놓으면, 제가 잡을 거예요.", face: "smile", heart: true },
     ],
   ],
@@ -115,7 +115,7 @@ const IDLE: Partial<Record<CharKey, Tiered>> = {
   // 세라: 존댓말 · 늘 웃음 · 집요함 (3주차 전엔 '모르는 걸 아는' 대사 금지)
   sera: [
     [
-      { text: "…저 보고 있었죠? 괜찮아요. 저도 보고 있었어요.", face: "smile" },
+      { text: "…저 보고 있었죠? 괜찮아요. 저도 보고 있었어요.", face: "smug" },
       { text: "기다리는 거 잘해요. 3분이든, 3년이든.", face: "smile" },
     ],
     [
@@ -123,7 +123,7 @@ const IDLE: Partial<Record<CharKey, Tiered>> = {
       { text: "가만히 있으면, 저 그냥 계속 볼 거예요?", face: "smile" },
     ],
     [
-      { text: "…이대로 시간 멈추면 좋겠다.", face: "smile", heart: true },
+      { text: "…이대로 시간 멈추면 좋겠다.", face: "heart", heart: true },
       { text: "딜러님이 아무 말 안 해도, 저는 안 가요.", face: "smile", heart: true },
     ],
   ],

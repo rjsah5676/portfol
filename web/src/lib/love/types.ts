@@ -37,7 +37,11 @@ export type Face =
   | "cry"
   | "laugh"
   | "angry"
-  | "wink";
+  | "wink"
+  /** 세라: 하이라이트 없는 눈 (얀데레 — 3주차부터) */
+  | "empty"
+  /** 세라: 하트 눈 */
+  | "heart";
 export type Pos = "l" | "c" | "r";
 /** 스탠딩 의상: 에이미 tshirt(내 티셔츠) · 연서 knit(오피스텔 안경 니트) · bare(장갑 벗은 근무복) */
 /** store = 편의점 조끼(안에 연회색 큰 티) · down = 머리 푼 티셔츠 · swim = 수영복 · knitbare = 니트 맨손 · summer = 여름 원피스 */
