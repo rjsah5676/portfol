@@ -19,7 +19,7 @@ import {
   batSide, batter as curBatter, changePitcher, cpuManage, fieldSide, maybeMission, mvp, newGame, nextHalf, pitcher as curPitcher,
   stamina01, staminaMax, userBatting, type GameState, type PAResult,
 } from "@/lib/baseball/game";
-import { PITCHES, ZONE, inZone, makePitch, pitchAt, plateCross, type Pitch, type PitchKind } from "@/lib/baseball/pitch";
+import { PITCHES, ZONE, inZone, makePitch, mistakeChance, pitchAt, plateCross, type Pitch, type PitchKind } from "@/lib/baseball/pitch";
 import { predictBall, type FieldEvent, type Frame } from "@/lib/baseball/play";
 import { veloKmh } from "@/lib/baseball/club";
 import { batterShift, commit, effectiveHit, evaluate, hitByPitch, type Outcome, type SwingDecision } from "@/lib/baseball/resolve";
@@ -38,6 +38,8 @@ import { drawCatcher, drawPvBatter, drawPvPitcher, drawPvZone, drawUmpire, pvBac
 /** 투수 그림 (pitcher-set.webp): 발 기준점 · 크기 (키 ≈ 115px, 목업 크기) */
 // scale: 낮은 정면 시점 구장(bat-low)의 투수판 크기에 맞춤 (예전 0.229 → 0.16) → 0.1956: 키 1.22배로 공 놓는 손을 20px 위로
 //   (손이 존 위 끝과 거의 같은 높이라 높은 볼이 홈 앞에서 솟아 보였음 — 발은 투수판 그대로, view.ts BC 도 손 229 에 맞춤)
+/** 실투: 「! 실투」 보여 주고 와인드업 시작까지 쉬는 시간 (초) */
+const MISTAKE_TELL = 0.5;
 /** 날아오는 공 꼬리 길이 (초) · 나눌 점 수 */
 const TRAIL_SEC = 0.13;
 const TRAIL_N = 18;
@@ -612,10 +614,21 @@ export class Match {
     this.setPhase("cutin");
   }
 
+  /** 이번 공 실투 (와인드업 전에 정함 — 「! 실투」를 먼저 보여 주고 0.5초 뒤에 던짐) */
+  private mistakeNext = false;
   private goWindup() {
     this.setPhase("windup");
     this.pitAnim = PIT_THROW;
     this.pitAnimT = 0;
+    // 실투: 예전엔 공 놓는 순간 「! 실투」가 손 앞에 떠서 공을 가렸음 → 와인드업 전에 위쪽에 띄우고 0.5초 쉬었다 던짐
+    const sp = this.userBat ? this.cpuUseSp : this.useBallSp;
+    const st = this.cfg.mode === "derby" ? 1 : stamina01(this.s);
+    this.mistakeNext = !sp && (this.quality < 0.22 || this.rng() < mistakeChance(this.pitcherNow.control, st));
+    if (this.mistakeNext) {
+      this.popup(DW / 2, 150, "! 실투", "#ff5a5a");
+      this.pt = -MISTAKE_TELL;
+      this.pitAnimT = -MISTAKE_TELL;
+    }
     // 타자는 내가 치든 CPU 가 치든 와인드업에 맞춰 레그킥
     if (this.swingStart < 0 && !this.buntArmed && !this.freeSwing) this.playBat(BAT_LOAD);
   }
@@ -625,10 +638,9 @@ export class Match {
     const kind = p.rep[this.kindIdx] ?? "FB";
     const special = this.userBat ? (this.cpuUseSp ? p.special : undefined) : this.useBallSp ? p.special : undefined;
     const st = this.cfg.mode === "derby" ? 1 : stamina01(this.s);
-    this.pitch = makePitch(p, { kind, target: this.target, quality: this.quality, special }, this.speedScale, this.rng, st);
+    // 실투 (마구마구식 「!」): 가운데 느린 직구 — 치는 쪽엔 기회, 던지는 쪽엔 경고 (goWindup 에서 미리 정하고 띄움)
+    this.pitch = makePitch(p, { kind, target: this.target, quality: this.quality, special, mistake: this.mistakeNext }, this.speedScale, this.rng, st);
     if (special) this.specialSound(special, "start");
-    // 실투 (마구마구식 「!」): 가운데 느린 직구 — 치는 쪽엔 기회, 던지는 쪽엔 경고
-    if (this.pitch.mistake) this.popup(DW / 2, 230, "! 실투", "#ff5a5a");
     this.tf = 0;
     this.setPhase("flight");
     const pc = this.pitch;

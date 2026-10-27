@@ -150,7 +150,7 @@ export const mistakeChance = (control: number, stamina01: number) =>
 
 export function makePitch(
   pitcher: Pitcher,
-  o: { kind: PitchKind; target: { x: number; y: number }; quality: number; special?: CharId },
+  o: { kind: PitchKind; target: { x: number; y: number }; quality: number; special?: CharId; /** 실투를 미리 정해 둠 (화면: 「! 실투」 띄우고 0.5초 뒤 던짐) */ mistake?: boolean },
   speedScale: number,
   rng: Rng,
   stamina01 = 1
@@ -159,7 +159,7 @@ export function makePitch(
   const q = clamp(o.quality, 0, 1);
   const tired = stamina01 < 0.25 ? (0.25 - stamina01) * 2 : 0; // 0 ~ 0.5
   // 실투: 게이지 바닥 · 또는 제구가 낮고 지칠수록 가끔 손에서 빠짐 (마구마구식 「!」)
-  const mistake = !o.special && (q < 0.22 || rng() < mistakeChance(pitcher.control, stamina01));
+  const mistake = !o.special && (o.mistake ?? (q < 0.22 || rng() < mistakeChance(pitcher.control, stamina01)));
   // 제구: 게이지가 나쁠수록 · 제구가 낮을수록 · 지칠수록 목표에서 벗어남 (제구 300 ≈ 12cm · 900 ≈ 4cm, 게이지 0.7 기준)
   const err = (1 - q) * 0.1 + (1 - pitcher.control / 1000) * 0.14 + tired * 0.12;
   let tx = o.target.x + rng.gauss() * err;
