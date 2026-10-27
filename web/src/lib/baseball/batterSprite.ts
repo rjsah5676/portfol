@@ -132,8 +132,13 @@ const SWING: [string, number][] = [
 ];
 /** 투수 와인드업에 맞춘 로드 → 레그킥 → 착지 (착지 자세로 기다림) */
 const LOAD: [string, number][] = [["load1", 0.07], ["load2", 0.13], ["kick1", 0.19], ["kick2", 0.25], ["plant1", 0.31], ["plant", 99]];
-/** 새 그림 레그킥 줄 칸 [칸, 이 시간까지] — 와인드업 0.74초에 맞춤: 대기 → 들기 → 최고점(머묾) → 내딛기 → 착지(공 기다림) */
-const KICK: [number, number][] = [[0, 0.12], [1, 0.24], [2, 0.44], [3, 0.56], [4, 0.64], [5, 99]];
+/**
+ * 새 그림 레그킥 줄 칸 [칸, 이 시간까지] — 와인드업(릴리스 0.74초) 직전에 다리를 들어 최고점으로 공을 기다림.
+ * 내리는 건 스윙이 맡음 (STRIDE). 스윙 안 하고 보내면 공이 지나갈 즈음(≈1.1초) 알아서 내딛음.
+ */
+const KICK: [number, number][] = [[0, 0.36], [1, 0.52], [2, 1.12], [3, 1.18], [4, 1.22], [5, 99]];
+/** 스윙 첫머리 = 최고점에서 내딛기 (임팩트 0.07초 전에 착지) — 스윙 그림 나오기 전까지는 착지 자세로 버팀 */
+const STRIDE: [number, number][] = [[3, 0.025], [4, 0.045], [5, 99]];
 /** batterFrame 이 새 그림 레그킥 칸을 돌려줄 때 더하는 값 (옛 프레임 번호와 안 겹치게) */
 const KICK_BASE = 1000;
 const pick = (tbl: [string, number][], t: number) => IDX[(tbl.find(([, e]) => t < e) ?? tbl[tbl.length - 1])[0]];
@@ -142,8 +147,7 @@ const pick = (tbl: [string, number][], t: number) => IDX[(tbl.find(([, e]) => t 
 export function batterFrame(a: Anim, t: number): number {
   if (a === BAT_SWING) return pick(SWING, t);
   if (a === BAT_LOAD) return KICK_BASE + (KICK.find(([, e]) => t < e) ?? KICK[KICK.length - 1])[0];
-  // 스윙 그림이 아직 없어 착지 자세로 버팀 (대기 자세로 튀지 않게)
-  if (a === BAT_SWING && stillImg()) return KICK_BASE + KICK[KICK.length - 1][0];
+  if (a === BAT_SWING && stillImg()) return KICK_BASE + (STRIDE.find(([, e]) => t < e) ?? STRIDE[STRIDE.length - 1])[0];
   if (a === BAT_BUNT) return IDX.bunt;
   // 대기: 방망이 까딱
   return t % 1.6 < 0.8 ? IDX.stance : IDX.waggle;
