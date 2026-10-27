@@ -220,13 +220,8 @@ function swoosh(ctx: CanvasRenderingContext2D, frame: number, k: number) {
  *   원본: scripts/baseball-batter-idle.py (시트 → 줄 · 마스크 · 기준점 json)
  */
 const IDLE = { src: "/baseball/sprites/batter-idle.webp", mask: "/baseball/sprites/batter-idle-mask.png", ...idleData, scale: 0.289 };
-/** 대기 순서 [칸, 초] — 칸 수(batter-idle.json)대로 1→끝→1 왕복, 양 끝은 살짝 머묾 · 1칸이면 그대로 */
-const IDLE_SEQ: [number, number][] = (() => {
-  const n = idleData.n;
-  if (n <= 1) return [[0, 1]];
-  const ping = [...Array.from({ length: n }, (_, i) => i), ...Array.from({ length: n - 2 }, (_, i) => n - 2 - i)];
-  return ping.map((c) => [c, c === 0 || c === n - 1 ? 0.26 : 0.12] as [number, number]);
-})();
+/** 대기 순서 [칸, 초] — 6칸 1→6→1 왕복 (그린 3장 + 사이 3장), 양 끝은 살짝 머묾 */
+const IDLE_SEQ: [number, number][] = [0, 1, 2, 3, 4, 5, 4, 3, 2, 1].map((c) => [c, c === 0 || c === 5 ? 0.26 : 0.12] as [number, number]);
 const IDLE_LEN = IDLE_SEQ.reduce((a, [, d]) => a + d, 0);
 function idleCell(t: number) {
   let u = t % IDLE_LEN;
