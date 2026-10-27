@@ -8,6 +8,7 @@
  * 기준점 · 등번호 · 배트 끝: src/data/baseball/batter-v3.json (compose.py 가 씀)
  */
 import data from "@/data/baseball/batter-v3.json";
+import idleData from "@/data/baseball/batter-idle.json";
 import { BAT_BUNT, BAT_LOAD, BAT_SWING } from "./figures";
 import type { Anim } from "./rig";
 
@@ -188,18 +189,30 @@ function swoosh(ctx: CanvasRenderingContext2D, frame: number, k: number) {
  * 그림이 아직 없으면 false (부르는 쪽이 코드 리그로 그림).
  */
 /**
- * 새 타자 그림 시험 중 (지피티 통짜 그림, 대기 자세 1장) — 있으면 모든 프레임을 이걸로 그림.
- * 스윙 · 스윙 후 그림이 오면 프레임 표로 바꿀 것.
+ * 새 타자 그림 (지피티 통짜, 대기 동작 5칸 한 줄) — 있으면 모든 애니를 이걸로 그림.
+ *   대기 = 칸을 시간표대로 돌림 (배트 까딱 + 무릎 · 어깨 리듬), 그 밖(로드 · 스윙 · 번트)은 아직 1칸.
+ *   원본: scripts/baseball-batter-idle.py (시트 → 줄 · 마스크 · 기준점 json)
  */
-const STILL = { src: "/baseball/sprites/batter-stance.webp", mask: "/baseball/sprites/batter-stance-mask.png", ax: 96, ay: 693, scale: 0.289, ref: 0.941 };
+const IDLE = { src: "/baseball/sprites/batter-idle.webp", mask: "/baseball/sprites/batter-idle-mask.png", ...idleData, scale: 0.289 };
+/** 대기 순서 [칸, 초] — 1 → 2 → 1 → 3 → 4 → 5 → 4 → 3 */
+const IDLE_SEQ: [number, number][] = [[0, 0.3], [1, 0.18], [0, 0.16], [2, 0.14], [3, 0.22], [4, 0.18], [3, 0.14], [2, 0.14]];
+const IDLE_LEN = IDLE_SEQ.reduce((a, [, d]) => a + d, 0);
+function idleCell(t: number) {
+  let u = t % IDLE_LEN;
+  for (const [c, d] of IDLE_SEQ) {
+    if (u < d) return c;
+    u -= d;
+  }
+  return 0;
+}
 let still: HTMLImageElement | null = null;
 let stillMask: HTMLImageElement | null = null;
 function stillImg() {
   if (!still && typeof Image !== "undefined") {
     still = new Image();
-    still.src = STILL.src;
+    still.src = IDLE.src;
     stillMask = new Image();
-    stillMask.src = STILL.mask;
+    stillMask.src = IDLE.mask;
   }
   return still && still.complete && still.naturalWidth ? still : null;
 }
@@ -238,7 +251,7 @@ function tintedStill(st: HTMLImageElement, lk: SpriteLook): CanvasImageSource {
     if (wh + wt < 0.01) continue;
     const col = wh >= wt ? ch : ct;
     const w = Math.max(wh, wt);
-    const k = Math.max(d[i], d[i + 1], d[i + 2]) / 255 / STILL.ref;
+    const k = Math.max(d[i], d[i + 1], d[i + 2]) / 255 / IDLE.ref;
     const hi = Math.max(0, k - 1) * 0.6;
     for (let j = 0; j < 3; j++) {
       const v = Math.min(1, col[j] * k + hi) * 255;
@@ -253,13 +266,15 @@ function tintedStill(st: HTMLImageElement, lk: SpriteLook): CanvasImageSource {
 export function drawBatter(ctx: CanvasRenderingContext2D, frame: number, lk: SpriteLook, x: number, y: number, sc: number, flip = false, trail = 0): boolean {
   const st = stillImg();
   if (st) {
-    const s = sc * STILL.scale;
+    const idle = frame === IDX.stance || frame === IDX.waggle;
+    const cell = idle ? idleCell(typeof performance !== "undefined" ? performance.now() / 1000 : 0) : 0;
+    const s = sc * IDLE.scale;
     ctx.save();
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = "high";
     ctx.translate(x, y + FOOT_Y * sc);
     ctx.scale(flip ? -s : s, s);
-    ctx.drawImage(tintedStill(st, lk), -STILL.ax, -STILL.ay);
+    ctx.drawImage(tintedStill(st, lk), cell * IDLE.CW, 0, IDLE.CW, IDLE.CH, -IDLE.ax, -IDLE.ay, IDLE.CW, IDLE.CH);
     ctx.restore();
     return true;
   }
