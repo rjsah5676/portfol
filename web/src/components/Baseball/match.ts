@@ -770,7 +770,7 @@ export class Match {
   private batterPos() {
     const lefty = this.batterNow.bats === "L";
     // 구장 그림의 왼쪽 · 오른쪽 타석 가운데에 발이 오게
-    return { x: lefty ? 728 : 296, y: 394, sc: 2.25, lefty };
+    return { x: lefty ? 684 : 340, y: 394, sc: 2.25, lefty };
   }
 
   private resolveFlight() {
