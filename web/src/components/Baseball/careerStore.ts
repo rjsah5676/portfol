@@ -2,7 +2,7 @@
  * 육성 저장 (프로토: 이 브라우저 localStorage) — 진행 중인 선수 1명 + 명예의 전당.
  * 서버 저장은 다음 단계 (랭킹 · 구단으로 넘기기).
  */
-import { CAREER_DIFF, SKILLS, applyGame, careerBatter, finishBattle, hofEntry, spUses, type Career, type GameIn, type GameSummary, type HofEntry, type TurnOut } from "@/lib/baseball/career";
+import { BONDS, CAREER_DIFF, SKILLS, applyGame, careerBatter, finishBattle, hofEntry, spUses, type Career, type GameIn, type GameSummary, type HofEntry, type TurnOut } from "@/lib/baseball/career";
 import { CHARS, type CharId } from "@/lib/baseball/data";
 import { DEFAULT_LOOK } from "@/lib/baseball/look";
 import { botHook, careerSetup, playCareerGame, type CareerSetup, type MyPA } from "@/lib/baseball/careerGame";
@@ -77,7 +77,10 @@ export function addHof(c: Career) {
 
 /** 이번 주 경기 세팅 */
 export const setupOf = (c: Career): CareerSetup =>
-  careerSetup(c.seed, c.season, c.week * 2 + c.gameInWeek, careerBatter(c), c.trust, c.diff, spUses(c));
+  careerSetup(c.seed, c.season, c.week * 2 + c.gameInWeek, careerBatter(c), c.trust, c.diff, spUses(c), bondCharsOf(c));
+/** 인연 특별 미션을 줄 덱 캐릭터 (그 사람이 키워 주는 능력치 쪽을 요구) */
+export const bondCharsOf = (c: Career): CareerSetup["bondChars"] => c.deck.map((id) => [id, BONDS[id].stat]);
+const missionResults = (pas: MyPA[]) => pas.filter((p) => p.mission).map((p) => ({ ok: p.mission!.ok, partial: p.mission!.partial, char: p.mission!.char }));
 
 /* 배속 (육성 화면 · 경기 화면 공용, 이 브라우저) */
 const SPEED = "pxb:speed";
@@ -132,7 +135,7 @@ export function autoGame(c: Career, note?: string): GameReport {
   const st = setupOf(c);
   const g = playCareerGame(st, botHook(c.diff), makeRng((c.seed * 7 + c.turn * 131) >>> 0));
   c.inGame = false;
-  const sum = applyGame(c, { line: g.line, win: g.win, missionPt: g.missionPt, missions: g.pas.filter((p) => p.mission?.ok).length, direct: false });
+  const sum = applyGame(c, { line: g.line, win: g.win, missionPt: g.missionPt, missions: g.pas.filter((p) => p.mission?.ok).length, results: missionResults(g.pas), direct: false });
   const s = g.s;
   const r: GameReport = { sum, pas: g.pas, score: `${s.opts.away.short} ${s.score[0]} : ${s.score[1]} ${s.opts.home.short}`, auto: true, note };
   saveCareer(c);
@@ -144,7 +147,7 @@ export function finishDirect(g: GameIn, pas: MyPA[], score: string) {
   const c = loadCareer();
   if (!c || !c.inGame) return;
   c.inGame = false;
-  const sum = applyGame(c, g);
+  const sum = applyGame(c, { ...g, results: missionResults(pas) });
   saveCareer(c);
   lastReport = { sum, pas, score, auto: false };
 }

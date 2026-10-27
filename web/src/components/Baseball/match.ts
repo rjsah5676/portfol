@@ -1090,12 +1090,12 @@ export class Match {
       if (res.kind === "K") (this.userBat ? sfx.groan : () => sfx.cheer(0.7))();
       if (this.cfg.career && this.userBat) {
         const ln = this.s.sides[batSide(this.s)].bat[this.cfg.career.myIdx];
-        this.myPAs.push({ inning: this.s.inning, text: res.text, kind: res.kind, rbi: ln.rbi - this.rbiBefore, mission: res.mission ? { ok: res.mission.ok, pt: 0 } : undefined });
+        this.myPAs.push({ inning: this.s.inning, text: res.text, kind: res.kind, rbi: ln.rbi - this.rbiBefore, mission: res.mission ? { ok: res.mission.ok, pt: 0, partial: res.mission.partial, char: res.mission.char } : undefined });
       }
       if (res.mission) {
         if (res.mission.ok) this.missionsOk++;
-        this.popup(DW / 2, 150, res.mission.text, res.mission.ok ? "#ffd23f" : "#ff9a7a");
-        (res.mission.ok ? sfx.missionOk : sfx.missionNg)();
+        this.popup(DW / 2, 150, res.mission.text, res.mission.ok ? "#ffd23f" : res.mission.partial ? "#ffcf9a" : "#ff9a7a");
+        (res.mission.ok || res.mission.partial ? sfx.missionOk : sfx.missionNg)();
       }
       this.setPhase("result");
     } else {
@@ -2418,25 +2418,36 @@ export class Match {
     const x = 252;
     const y = 360;
     ctx.fillStyle = "rgba(10,12,22,0.92)";
-    ctx.strokeStyle = NPC_COLOR[m.who] ?? "#fff";
+    const mc = m.char ? charById(m.char).color : NPC_COLOR[m.who] ?? "#fff";
+    ctx.strokeStyle = mc;
     ctx.lineWidth = 3;
     ctx.beginPath();
     ctx.roundRect(x, y, 520, 104, 14);
     ctx.fill();
     ctx.stroke();
-    // 말하는 사람 (간단 얼굴)
-    ctx.fillStyle = NPC_COLOR[m.who] ?? "#fff";
-    ctx.beginPath();
-    ctx.roundRect(x + 14, y + 14, 76, 76, 12);
-    ctx.fill();
-    ctx.fillStyle = "#1a1a24";
-    ctx.font = '26px "Black Han Sans", sans-serif';
-    ctx.textAlign = "center";
-    ctx.fillText(m.who, x + 52, y + 61);
-    ctx.textAlign = "left";
-    ctx.fillStyle = "#ffcf4a";
+    // 말하는 사람 (인연 캐릭터면 얼굴 그림 · 아니면 간단 얼굴)
+    const fim = m.char ? img(faceUrl(m.char)) : null;
+    if (fim && fim.complete && fim.naturalWidth) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.roundRect(x + 14, y + 14, 76, 76, 12);
+      ctx.clip();
+      ctx.drawImage(fim, x + 14, y + 14, 76, 76 * (fim.naturalHeight / fim.naturalWidth));
+      ctx.restore();
+    } else {
+      ctx.fillStyle = mc;
+      ctx.beginPath();
+      ctx.roundRect(x + 14, y + 14, 76, 76, 12);
+      ctx.fill();
+      ctx.fillStyle = "#1a1a24";
+      ctx.font = '26px "Black Han Sans", sans-serif';
+      ctx.textAlign = "center";
+      ctx.fillText(m.who, x + 52, y + 61);
+      ctx.textAlign = "left";
+    }
+    ctx.fillStyle = m.char ? mc : "#ffcf4a";
     ctx.font = '800 13px "Nanum Gothic", sans-serif';
-    ctx.fillText(`돌발 미션!  성공하면 +${m.pt} 코인 · 마구/필살 +1`, x + 106, y + 32);
+    ctx.fillText(m.char ? `${m.who}의 특별 미션!  성공 +${m.pt} 코인 · 호감 ↑ (실패하면 호감 ↓)` : `돌발 미션!  성공 +${m.pt} 코인 · 마구/필살 +1 (실패하면 감독 신뢰 ↓)`, x + 106, y + 32);
     ctx.fillStyle = "#fff";
     ctx.font = '22px "Jua", "Nanum Gothic", sans-serif';
     ctx.fillText(`"${m.text}"`, x + 106, y + 66);
@@ -2612,7 +2623,7 @@ export class Match {
     // 미션 진행 중
     if (s.mission && this.phase !== "mission") {
       this.panel(ctx, 262, 12, 300, 30);
-      ctx.fillStyle = NPC_COLOR[s.mission.who] ?? "#ffcf4a";
+      ctx.fillStyle = s.mission.char ? charById(s.mission.char).color : NPC_COLOR[s.mission.who] ?? "#ffcf4a";
       ctx.font = '700 13px "Nanum Gothic", sans-serif';
       ctx.fillText(`미션 · ${s.mission.who}: ${s.mission.text}`, 272, 32);
     }

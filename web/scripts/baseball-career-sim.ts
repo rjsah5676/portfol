@@ -8,7 +8,7 @@
  */
 import {
   act, advance, applyGame, autoBattle, botChoose, botDeck, botTurn, botPick, botShop, canPlay, careerBatter, choose, choosePick, decideRetire, endSeason, finishBattle, newCareer, ovrOf, spUses, stepOf,
-  TALENTS, GP_IDS, TUNE, type BatType, type Career, type GpId, type Policy,
+  BONDS, TALENTS, GP_IDS, TUNE, type BatType, type Career, type GpId, type Policy,
 } from "../src/lib/baseball/career";
 import { botHook, careerSetup, humanHook, playCareerGame } from "../src/lib/baseball/careerGame";
 import type { Diff } from "../src/lib/baseball/ai";
@@ -83,14 +83,14 @@ export function run(i: number, gp: GpId[], over: Partial<Persona> = {}) {
       }
     } else if (st === "game") {
       if (canPlay(c)) {
-        const setup = careerSetup(c.seed, c.season, c.week * 2 + c.gameInWeek, careerBatter(c), c.trust, diff, spUses(c));
+        const setup = careerSetup(c.seed, c.season, c.week * 2 + c.gameInWeek, careerBatter(c), c.trust, diff, spUses(c), c.deck.map((id) => [id, BONDS[id].stat]));
         const me = humanHook(ps.sigma);
         const bot = botHook(diff);
         const g =
           ps.mode === "auto"
             ? playCareerGame(setup, bot, makeRng(c.seed + c.turn * 101))
             : playCareerGame(setup, me, makeRng(c.seed + c.turn * 101), ps.mode === "highlight" ? bot : undefined);
-        applyGame(c, { line: g.line, win: g.win, missionPt: g.missionPt, missions: g.pas.filter((p) => p.mission?.ok).length, direct: ps.mode !== "auto" });
+        applyGame(c, { line: g.line, win: g.win, missionPt: g.missionPt, missions: g.pas.filter((p) => p.mission?.ok).length, results: g.pas.filter((p) => p.mission).map((p) => ({ ok: p.mission!.ok, partial: p.mission!.partial, char: p.mission!.char })), direct: ps.mode !== "auto" });
       } else applyGame(c, null);
     } else if (st === "seasonEnd") endSeason(c);
   }

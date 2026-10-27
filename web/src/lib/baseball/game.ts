@@ -2,7 +2,7 @@
  * 경기 규칙 · 상태 (볼카운트 · 아웃 · 주자 · 점수 · 이닝 · 기록 · 투수 체력 · 마구/필살 횟수 · 돌발미션).
  * 화면(BaseballApp)과 밸런스 시뮬(scripts)이 같이 씀 — 여기엔 그리기 · 시간이 없음.
  */
-import type { Batter, Pitcher, Team } from "./data";
+import { charById, type Batter, type CharId, type Pitcher, type Team } from "./data";
 import type { FieldOut } from "./play";
 import type { Rng } from "./rng";
 import type { Diff } from "./ai";
@@ -48,6 +48,8 @@ export interface Side {
 export type MissionKind = "hit" | "xbh" | "hr" | "rbi" | "k" | "zero";
 export interface Mission {
   who: string;
+  /** 인연 특별 미션 (육성 — 덱 캐릭터가 줌): 성공하면 호감 ↑ · 실패하면 호감 ↓ */
+  char?: CharId;
   kind: MissionKind;
   text: string;
   /** 성공하면 마구 · 필살 +1 과 코인 */
@@ -64,6 +66,8 @@ export interface GameOpts {
   userHome: boolean;
   away: Team;
   home: Team;
+  /** 육성: 인연 특별 미션을 줄 수 있는 덱 캐릭터 [id, 노리는 쪽("hit" 타격 · "power" 파워 · "run" 주루)] */
+  bondChars?: [CharId, "hit" | "power" | "run"][];
 }
 
 export interface GameState {
@@ -154,7 +158,7 @@ export interface PAResult {
   /** 이 타석으로 이닝 · 경기가 끝났나 */
   halfOver: boolean;
   gameOver: boolean;
-  mission?: { ok: boolean; text: string };
+  mission?: { ok: boolean; text: string; /** 빡센 미션(홈런 · 장타)에서 안타는 쳤음 — 코인 조금 · 실패 패널티 없음 */ partial?: boolean; char?: CharId };
 }
 
 export function pitchThrown(s: GameState) {
@@ -291,7 +295,11 @@ function endPA(s: GameState, r: Omit<PAResult, "halfOver" | "gameOver">, outs: n
     }
     if (done !== null) {
       s.mission = null;
-      res.mission = { ok: done, text: done ? `미션 성공! +${m.pt} 코인` : "미션 실패…" };
+      // 홈런 · 장타 미션은 빡세니까 안타라도 치면 살짝 보상 (코인 1/4 · 실패 패널티 없음)
+      const partial = !done && (m.kind === "hr" || m.kind === "xbh") && (r.kind === "HIT" || r.kind === "HR");
+      const partPt = Math.round(m.pt / 4);
+      res.mission = { ok: done, partial, char: m.char, text: done ? `미션 성공! +${m.pt} 코인` : partial ? `아쉽지만 안타! +${partPt} 코인` : "미션 실패…" };
+      if (partial) s.pt += partPt;
       if (done) {
         s.pt += m.pt;
         const us = s.sides[s.opts.userHome ? 1 : 0];
@@ -394,6 +402,16 @@ export function maybeMission(s: GameState, rng: Rng): Mission | null {
   if (userBatting(s)) {
     const p = (risp ? 0.32 : 0.06) + (late && close ? 0.12 : 0);
     if (rng() > p) return null;
+    // 인연 특별 미션 (육성 · 덱 캐릭터, 1/3): 그 사람이 키워 주는 쪽을 요구 · 코인 1.5배
+    const bc = s.opts.bondChars;
+    if (bc?.length && rng() < 0.34) {
+      const [id, stat] = rng.pick(bc);
+      const who = charById(id).name;
+      const base = { who, char: id, untilInningEnd: false, startScore };
+      if (stat === "power") return s.bases[0] === null && rng() < 0.4 ? { ...base, kind: "hr", text: "담장 넘겨 봐. 네 힘이면 돼.", pt: 120 } : { ...base, kind: "xbh", text: "장타 하나. 보여 줘.", pt: 75 };
+      if (stat === "run" && risp) return { ...base, kind: "rbi", text: "주자 불러들여. 발로 만든 점수!", pt: 45 };
+      return risp && rng() < 0.5 ? { ...base, kind: "rbi", text: "한 점만. 네가 해내는 거 보고 싶어.", pt: 45 } : { ...base, kind: "hit", text: "안타 하나만. 나 보고 있어.", pt: 40 };
+    }
     const who = rng.pick(NPC);
     if (risp && rng() < 0.55) return { who, kind: "rbi", text: "주자 불러들여! 한 점만 내 봐", pt: 30, untilInningEnd: false, startScore };
     if (s.bases[0] === null && rng() < 0.3) return { who, kind: "hr", text: "여기서 한 방! 홈런 치면 보너스다", pt: 80, untilInningEnd: false, startScore };

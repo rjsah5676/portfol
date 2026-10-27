@@ -24,6 +24,8 @@ export interface CareerSetup {
   innings: number;
   /** 경기당 내 필살타법 횟수 (배운 레벨) */
   spUses?: number;
+  /** 인연 특별 미션을 줄 덱 캐릭터 */
+  bondChars?: GameState["opts"]["bondChars"];
 }
 
 /** 감독 신뢰 → 타순 (낮으면 하위 타순 · 높으면 중심 타선) */
@@ -33,7 +35,7 @@ export function slotOf(trust: number) {
 export const slotName = (i: number) => `${i + 1}번`;
 
 /** 시즌마다 같은 동료 · 매주 다른 상대 (시드로 고정) */
-export function careerSetup(seed: number, season: number, week: number, me: Batter, trust: number, diff: Diff, spUses?: number): CareerSetup {
+export function careerSetup(seed: number, season: number, week: number, me: Batter, trust: number, diff: Diff, spUses?: number, bondChars?: CareerSetup["bondChars"]): CareerSetup {
   const rTeam = makeRng((seed ^ (season * 0x9e37)) >>> 0);
   // 마선수 없음 — 캐릭터는 인연에서만
   const my = makeTeam(TEAM_DEFS[0], rTeam);
@@ -53,7 +55,7 @@ export function careerSetup(seed: number, season: number, week: number, me: Batt
   const slot = slotOf(trust);
   rest.splice(slot, 0, me);
   my.batters = rest;
-  return { my, opp, myIdx: slot, userHome: rOpp() < 0.5, diff, innings: 9, spUses };
+  return { my, opp, myIdx: slot, userHome: rOpp() < 0.5, diff, innings: 9, spUses, bondChars };
 }
 
 export function newCareerGame(st: CareerSetup): GameState {
@@ -63,6 +65,7 @@ export function newCareerGame(st: CareerSetup): GameState {
     userHome: st.userHome,
     away: st.userHome ? st.opp : st.my,
     home: st.userHome ? st.my : st.opp,
+    bondChars: st.bondChars,
   });
   if (st.spUses !== undefined) s.sides[st.userHome ? 1 : 0].swingLeft = st.spUses;
   return s;
@@ -225,7 +228,7 @@ export interface MyPA {
   text: string;
   kind: PAResult["kind"];
   rbi: number;
-  mission?: { ok: boolean; pt: number };
+  mission?: { ok: boolean; pt: number; partial?: boolean; char?: CharId };
   /** 하이라이트 모드에서 자동으로 친 타석 */
   auto?: boolean;
 }
@@ -293,7 +296,7 @@ export function playCareerGame(st: CareerSetup, hook: SwingHook, rng: Rng, autoM
     const pa = enginePA(s, rng, hook);
     const rbi = s.sides[mySide(s)].bat[st.myIdx].rbi - before;
     if (pa.mission?.ok && m) missionPt += m.pt;
-    pas.push({ inning, text: pa.text, kind: pa.kind, rbi, mission: pa.mission && m ? { ok: pa.mission.ok, pt: m.pt } : undefined });
+    pas.push({ inning, text: pa.text, kind: pa.kind, rbi, mission: pa.mission && m ? { ok: pa.mission.ok, pt: m.pt, partial: pa.mission.partial, char: m.char } : undefined });
     if (pa.halfOver && !s.over) nextHalf(s);
   }
   const ms = mySide(s);

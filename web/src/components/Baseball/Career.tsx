@@ -1481,7 +1481,12 @@ function ReportModal({ c, r, more, onClose }: { c: Career; r: GameReport; more: 
                   {pa.text}
                   {pa.rbi ? ` ${pa.rbi}타점` : ""}
                 </span>
-                {pa.mission && <span className={pa.mission.ok ? "text-[11px] text-[#ffd23f]" : "text-[11px] text-white/40"}>{pa.mission.ok ? "미션✓" : "미션✗"}</span>}
+                {pa.mission && (
+                  <span className={pa.mission.ok ? "text-[11px] text-[#ffd23f]" : pa.mission.partial ? "text-[11px] text-[#ffcf9a]" : "text-[11px] text-white/40"}>
+                    {pa.mission.char ? `${charById(pa.mission.char).name} 미션` : "미션"}
+                    {pa.mission.ok ? "✓" : pa.mission.partial ? "△" : "✗"}
+                  </span>
+                )}
                 <span className="rounded px-1.5 text-[10.5px]" style={{ background: pa.auto ? "rgba(255,255,255,0.1)" : "#7ad7ff33", color: pa.auto ? "#bbb" : "#7ad7ff" }}>
                   {pa.auto ? "자동" : "직접"}
                 </span>

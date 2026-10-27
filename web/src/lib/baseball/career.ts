@@ -1655,6 +1655,8 @@ export interface GameIn {
   missionPt: number;
   /** 돌발미션 성공 수 */
   missions: number;
+  /** 미션 결과 하나씩 (실패 패널티 · 인연 미션 호감) — 없으면 성공 수만 */
+  results?: { ok: boolean; partial?: boolean; char?: CharId }[];
   /** 직접 쳤나 (자동이면 false) */
   direct: boolean;
 }
@@ -1736,6 +1738,17 @@ export function applyGame(c: Career, g: GameIn | null): GameSummary {
     else if (l.h >= 3) lines.push("맹타! 감독이 엄지를 들었다.");
     else if (l.h === 0) lines.push("오늘은 안 풀렸다…");
     if (g.missions) lines.push(`돌발미션 ${g.missions}개 성공!`);
+    // 미션 실패 패널티: 감독 신뢰 ↓ (안타라도 친 빡센 미션은 봐줌) · 인연 미션은 그 사람 호감 ↑↓
+    const fails = (g.results ?? []).filter((r) => !r.ok && !r.partial).length;
+    if (fails) {
+      addTrust(c, -1.5 * fails);
+      lines.push(`미션 실패 ${fails}개… 감독 신뢰가 조금 떨어졌다.`);
+    }
+    for (const r of g.results ?? []) {
+      if (!r.char || !isBond(r.char)) continue;
+      const d = addAff(c, r.char, r.ok ? 6 : r.partial ? 2 : -3);
+      lines.push(`${charById(r.char).name}의 미션 ${r.ok ? "성공" : r.partial ? "아쉬움" : "실패"} — 호감 ${d >= 0 ? `+${d}` : d}`);
+    }
     // S 평가면 가끔 특수능력 고르기
     if (grade === 0 && rng() < 0.04 && c.mvpPicks < 3) {
       c.mvpPicks++;
