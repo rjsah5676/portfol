@@ -84,8 +84,11 @@ export const BAT_LOAD: Anim = {
   },
 };
 
-/** 스윙: 0.06초에 공 맞는 자리 · 이후 팔로스루 */
-export const SWING_HIT_T = 0.07;
+/**
+ * 스윙 누르고 공 맞기까지 (초). 그림 스윙 앞 4장(발 내림 · 내딛기 · 배트 끌고 나옴 · 돌아 나옴)이 장당 2프레임 이상 보이게 0.12.
+ * 아래 BAT_SWING 리그 키(0.07에 맞춤)는 그림이 안 왔을 때만 쓰는 예비라 그대로 둠.
+ */
+export const SWING_HIT_T = 0.12;
 export const BAT_SWING: Anim = {
   dur: 0.55,
   loop: false,
