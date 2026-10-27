@@ -194,8 +194,8 @@ function swoosh(ctx: CanvasRenderingContext2D, frame: number, k: number) {
  *   원본: scripts/baseball-batter-idle.py (시트 → 줄 · 마스크 · 기준점 json)
  */
 const IDLE = { src: "/baseball/sprites/batter-idle.webp", mask: "/baseball/sprites/batter-idle-mask.png", ...idleData, scale: 0.289 };
-/** 대기 순서 [칸, 초] — 10칸 중 3장만 천천히 (자주 바꾸면 그림 디테일이 꿈틀거려 보임) */
-const IDLE_SEQ: [number, number][] = [[0, 0.42], [3, 0.3], [6, 0.42], [3, 0.3]];
+/** 대기 순서 [칸, 초] — 그림 한 장을 휘어 만든 16칸 (scripts/baseball-batter-warp.py), 들어갔다 나오는 한 바퀴 */
+const IDLE_SEQ: [number, number][] = Array.from({ length: idleData.n }, (_, i) => [i, 0.09] as [number, number]);
 const IDLE_LEN = IDLE_SEQ.reduce((a, [, d]) => a + d, 0);
 function idleCell(t: number) {
   let u = t % IDLE_LEN;
