@@ -253,6 +253,7 @@ export const CG: Record<
   past: { src: `${B}/cg/past.webp`, title: "3년 전, 왼손 두 번", who: "sera", vars: { fold: `${B}/cg/past-fold.webp` } },
   s_open: { src: `${B}/cg/s-open.webp`, title: "저 이거예요", who: "sera", tight: true },
   s_keypad: { src: `${B}/cg/s-keypad.webp`, title: "보지도 않고 네 자리", who: "sera" },
+  s_choker: { src: `${B}/cg/s-choker.webp`, title: "이거 잠그면, 저 접을게요", who: "sera" },
   s_note: { src: `${B}/cg/s-note.webp`, title: "첫 장은 딜러님이 봐요", who: "sera", tight: true },
   y_win: { src: `${B}/cg/y-win.webp`, title: "제일 맛있는 물", who: "yeonseo", video: `${B}/cg/y-win.mp4`, vars: { smile: `${B}/cg/y-win-smile.webp`, water: `${B}/cg/y-win-water.webp` } },
 };
@@ -293,6 +294,7 @@ export const CG_ORDER: CgId[] = (
   "s_open",
   "s_keypad",
   "s_note",
+  "s_choker",
   "end_grand",
   ] as CgId[]
 ).filter((id) => !CG[id].pending);
@@ -454,6 +456,7 @@ export const BGM: Record<BgmId, string | null> = {
   amy_ace: `${B}/sound/bgm-amy-ace.aac`,
   sera: `${B}/sound/bgm-sera.aac`,
   sera_pink: `${B}/sound/bgm-sera-pink.aac`,
+  sera_dark: `${B}/sound/bgm-sera-dark.aac`,
   yeon_ace: `${B}/sound/bgm-yeon-ace.aac`,
   credits: `${B}/sound/bgm-credits.aac`,
   morning: `${B}/sound/bgm-morning.aac`,

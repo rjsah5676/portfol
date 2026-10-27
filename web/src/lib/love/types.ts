@@ -82,6 +82,7 @@ export type CgId =
   | "past"
   | "s_open"
   | "s_note"
+  | "s_choker"
   // 1~2주차
   | "y_closet"
   | "y_umbrella"
@@ -199,6 +200,7 @@ export type BgmId =
   // 10-28 (사용자 제작): 세라 테마 · 분홍 간판 펍
   | "sera"
   | "sera_pink"
+  | "sera_dark"
   | "yeon_ace"
   | "credits"
   | "morning";
