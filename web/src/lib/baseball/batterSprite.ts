@@ -191,7 +191,7 @@ function swoosh(ctx: CanvasRenderingContext2D, frame: number, k: number) {
  * 새 타자 그림 시험 중 (지피티 통짜 그림, 대기 자세 1장) — 있으면 모든 프레임을 이걸로 그림.
  * 스윙 · 스윙 후 그림이 오면 프레임 표로 바꿀 것.
  */
-const STILL = { src: "/baseball/sprites/batter-stance.webp", ax: 102, ay: 591, scale: 0.295 };
+const STILL = { src: "/baseball/sprites/batter-stance.webp", ax: 96, ay: 693, scale: 0.289 };
 let still: HTMLImageElement | null = null;
 function stillImg() {
   if (!still && typeof Image !== "undefined") {

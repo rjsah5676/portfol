@@ -766,7 +766,8 @@ export class Match {
 
   private batterPos() {
     const lefty = this.batterNow.bats === "L";
-    return { x: lefty ? 706 : 318, y: 423, sc: 2.25, lefty };
+    // 구장 그림의 왼쪽 · 오른쪽 타석 가운데에 발이 오게
+    return { x: lefty ? 724 : 300, y: 372, sc: 2.25, lefty };
   }
 
   private resolveFlight() {
@@ -1309,8 +1310,9 @@ export class Match {
     ctx.drawImage(battingBg(q, this.night), 0, 0, DW, DH);
     const p = this.pitch;
     // 투수
-    const pitcherScale = 1.0;
-    const mp = proj(0, 0, 18.4);
+    // 투수판(높이 0.25m) 위 · 크기는 구장 그림 목업 기준 (키 ≈ 135px)
+    const mp = proj(0, 0.25, 18.4);
+    const pitcherScale = 0.9;
     const pps = pose(PITCHER_RIG, this.pitAnim, this.pitAnimT);
     const pFlip = this.pitcherNow.throws === "L";
     drawRig(ctx, PITCHER_RIG, pps, this.pitSkin, this.pitColors, mp.x, mp.y - 56 * pitcherScale, pitcherScale, pFlip);

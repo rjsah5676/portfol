@@ -11,8 +11,8 @@ export const DW = 1024;
 export const DH = 576;
 
 // ───────────── 타석 원근 ─────────────
-// Dc 를 키워 투수 쪽 원근을 눌러 줌 (공 · 마구가 멀리서도 보이게) — 존 크기는 F/Dc 로 같음
-export const CAM = { F: 1107, Dc: 4.5, camH: 1.6, Y0: 200, cx: 512 };
+// 구장 그림(bat-dusk)에 맞춘 값: 홈플레이트 앞면(폭 0.43m) · 투수판(폭 0.61m, 높이 0.25m) 위치를 그림에서 재서 풀었음
+export const CAM = { F: 2471, Dc: 8.62, camH: 1.094, Y0: 181.4, cx: 512 };
 export function proj(x: number, y: number, z: number) {
   const s = CAM.F / (z + CAM.Dc);
   return { x: CAM.cx + x * s, y: CAM.Y0 - (y - CAM.camH) * s, s };
@@ -49,10 +49,33 @@ function crowd(ctx: CanvasRenderingContext2D, x0: number, y0: number, x1: number
   ctx.globalAlpha = 1;
 }
 
+/** 구장 그림 (지피티 · 저녁) — 있으면 코드로 그린 배경 대신 이걸 씀 */
+export const STADIUM_SRC = "/baseball/stadium/bat-dusk.webp";
+let stadium: HTMLImageElement | null = null;
+function stadiumImg() {
+  if (!stadium && typeof Image !== "undefined") {
+    stadium = new Image();
+    stadium.src = STADIUM_SRC;
+  }
+  return stadium && stadium.complete && stadium.naturalWidth ? stadium : null;
+}
+
 /** 타석 배경 (하늘 · 관중석 · 외야 · 내야 · 마운드 · 홈) */
 export function battingBg(q: number, night: boolean): HTMLCanvasElement {
-  const key = `${q}:${night}`;
+  const st = stadiumImg();
+  const key = `${q}:${night}:${st ? 1 : 0}`;
   if (bgCanvas && bgKey === key) return bgCanvas;
+  if (st) {
+    const c = document.createElement("canvas");
+    c.width = Math.round(DW * q);
+    c.height = Math.round(DH * q);
+    const g = c.getContext("2d")!;
+    g.imageSmoothingQuality = "high";
+    g.drawImage(st, 0, 0, c.width, c.height);
+    bgCanvas = c;
+    bgKey = key;
+    return c;
+  }
   const c = document.createElement("canvas");
   c.width = Math.round(DW * q);
   c.height = Math.round(DH * q);
