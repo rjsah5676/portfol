@@ -4,6 +4,7 @@
 - 첫 칸은 대기 줄(batter-idle) 1칸을 그대로 씀 → 대기 → 레그킥이 튀지 않게
 - 배율: 헬멧 폭을 대기 1칸 헬멧 폭에 맞춤 (몸이 펴지거나 굽어도 헬멧 크기는 같아야 하니까)
 - 기준점: 맨 아래 50px 안의 불투명 범위 가운데 (= 땅 딛은 가까운 발)
+- 신발 색: 지피티가 장마다 갈색 · 검정을 오가서 대기 1칸 신발 색으로 맞춤
 """
 import json, sys
 import numpy as np
@@ -52,6 +53,28 @@ for spec in SRCS:
     im = im.resize((max(1, round(im.width * k)), max(1, round(im.height * k))), Image.LANCZOS)
     print(path.split("/")[-1], "scale", round(k, 3))
     frames.append((im, ax * k, ay * k))
+
+
+def shoe_mask(a):
+    """신발 = 아래 25% 안의 어두운 픽셀 (흰 밑창 · 주황 양말 빼고: 양말은 파랑이 거의 0)"""
+    al = a[..., 3] > 128
+    rows = np.where(al.any(1))[0]
+    m = al & (a[..., :3].max(-1) < 150) & (a[..., 2] >= a[..., 1] * 0.7)
+    m[: rows.min() + int((rows.max() - rows.min()) * 0.75)] = False
+    return m
+
+
+# 신발 색 맞추기: 칸마다 신발 픽셀 중앙값을 대기 1칸 신발 색으로 (채널별 배율)
+a0 = np.asarray(frames[0][0]).astype(np.float32)
+ref_shoe = np.median(a0[..., :3][shoe_mask(a0)], 0)
+for i in range(1, len(frames)):
+    im, ax, ay = frames[i]
+    a = np.asarray(im).astype(np.float32)
+    m = shoe_mask(a)
+    if m.sum() > 50:
+        k = ref_shoe / np.maximum(np.median(a[..., :3][m], 0), 1)
+        a[..., :3][m] = np.clip(a[..., :3][m] * k, 0, 255)
+        frames[i] = (Image.fromarray(a.round().astype(np.uint8), "RGBA"), ax, ay)
 left = max(ax for _, ax, _ in frames) + 4
 right = max(im.width - ax for im, ax, _ in frames) + 4
 up = max(ay for _, _, ay in frames) + 4
